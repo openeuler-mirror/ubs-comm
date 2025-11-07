@@ -1,0 +1,1 @@
+[参考OpenEuler社区统一contribution guide](https://www.openeuler.openatom.cn/zh/community/contribution/detail)

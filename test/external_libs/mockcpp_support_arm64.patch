@@ -1,0 +1,877 @@
+diff --git a/include/mockcpp/ApiHookFunctor.h b/include/mockcpp/ApiHookFunctor.h
+index a860a95..6a77488 100644
+--- a/include/mockcpp/ApiHookFunctor.h
++++ b/include/mockcpp/ApiHookFunctor.h
+@@ -20,6 +20,7 @@
+ 
+ #include <mockcpp/mockcpp.h>
+ #include <mockcpp/GlobalMockObject.h>
++#include <mockcpp/ArgumentsMacroHelpers.h>
+ 
+ MOCKCPP_NS_START
+ 
+@@ -30,20 +31,21 @@ struct ApiHookFunctor
+ };
+ 
+ const std::string empty_caller("");
+-#define __MOCKCPP_API_HOOK_FUNCTOR_DEF(n, CallingConvention) \
+-template <typename R DECL_TEMPLATE_ARGS(n), unsigned int Seq> \
+-struct ApiHookFunctor<R CallingConvention (DECL_ARGS(n)), Seq> \
++
++#define __MOCKCPP_C_API_HOOK_FUNCTOR_DEF(n, CallingConvention) \
++template<typename R DECL_TEMPLATE_ARGS(n), unsigned int Seq> \
++struct ApiHookFunctor<R (CallingConvention *)(DECL_ARGS(n)), Seq> \
+ { \
+ private: \
+-   typedef R CallingConvention F (DECL_ARGS(n)); \
++   typedef R (CallingConvention *F) (DECL_ARGS(n)); \
+  \
+    static R CallingConvention hook(DECL_PARAMS_LIST(n)) \
+    { \
+-      return GlobalMockObject::instance.invoke<R>(apiAddress) \
+-                                (empty_caller DECL_REST_PARAMS(n)); \
++     return GlobalMockObject::instance.invoke<R>(apiAddress) \
++      (empty_caller, RefAny() DECL_REST_PARAMS(n)); \
+    } \
+  \
+-   static bool appliedBy(F* api) \
++   static bool appliedBy(F api) \
+    { return apiAddress == reinterpret_cast<void*>(api); } \
+  \
+    static void* getHook() \
+@@ -53,51 +55,112 @@ private: \
+    { if(--refCount == 0) apiAddress = 0; } \
+ public: \
+  \
+-   static void* getApiHook(F* api) \
++   static void* getApiHook(F api) \
++   { \
++     if(!appliedBy(api)) return 0; \
++     ++refCount; \
++     return getHook(); \
++   } \
++ \
++   static void* applyApiHook(F api) \
++   { \
++     if(apiAddress != 0) return 0; \
++     apiAddress = reinterpret_cast<void*>(api); \
++     refCount = 1; \
++     return getHook(); \
++   } \
++ \
++   static bool freeApiHook(void* hook) \
++   { \
++     if(getHook() != hook) return false; \
++     freeHook(); \
++     return true; \
++   } \
++private: \
++   static void* apiAddress; \
++   static unsigned int refCount; \
++}; \
++template<typename R DECL_TEMPLATE_ARGS(n), unsigned int Seq> \
++void* ApiHookFunctor<R (CallingConvention *)(DECL_ARGS(n)), Seq>::apiAddress = 0; \
++template<typename R DECL_TEMPLATE_ARGS(n), unsigned int Seq> \
++unsigned int ApiHookFunctor<R (CallingConvention *)(DECL_ARGS(n)), Seq>::refCount = 0
++
++/* For C++ method */
++#define __MOCKCPP_CXX_API_HOOK_FUNCTOR_DEF(n, CallingConvention, ConstConvention) \
++template<typename C, typename R DECL_TEMPLATE_ARGS(n), unsigned int Seq> \
++struct ApiHookFunctor<R (CallingConvention C::*)(DECL_ARGS(n)) ConstConvention, Seq> \
++{ \
++private: \
++   typedef ApiHookFunctor<R (CallingConvention C::*)(DECL_ARGS(n)) ConstConvention, Seq> ThisType; \
++   typedef R (CallingConvention C::*F) (DECL_ARGS(n)) ConstConvention; \
++ \
++   R CallingConvention hook(DECL_PARAMS_LIST(n)) \
++   { \
++     C *This = reinterpret_cast<C *>(this); \
++     return GlobalMockObject::instance.invoke<R>(apiAddress) \
++      (empty_caller, This DECL_REST_PARAMS(n)); \
++   } \
++ \
++   static bool appliedBy(F api) \
++   { return apiAddress == Details::methodToAddr(api); } \
++ \
++   static void* getHook() \
++   { return Details::methodToAddr(&ThisType::hook); } \
++ \
++   static void freeHook() \
++   { if(--refCount == 0) apiAddress = 0; } \
++public: \
++ \
++   static void* getApiHook(F api) \
+    { \
+-      if(! appliedBy(api)) return 0; \
+-      ++refCount; \
+-      return getHook(); \
++     if(!appliedBy(api)) return 0; \
++     ++refCount; \
++     return getHook(); \
+    } \
+  \
+-   static void* applyApiHook(F* api) \
++   static void* applyApiHook(F api) \
+    { \
+-      if(apiAddress != 0) return 0; \
+-      apiAddress = reinterpret_cast<void*>(api); \
+-      refCount = 1; \
+-      return getHook(); \
++     if(apiAddress != 0) return 0; \
++     apiAddress = Details::methodToAddr(api); \
++     refCount = 1; \
++     return getHook(); \
+    } \
+  \
+    static bool freeApiHook(void* hook) \
+    { \
+-       if(getHook() != hook) return false; \
+-       freeHook(); \
+-       return true; \
++     if(getHook() != hook) return false; \
++     freeHook(); \
++     return true; \
+    } \
+ private: \
+    static void* apiAddress; \
+    static unsigned int refCount; \
+ }; \
+-template <typename R DECL_TEMPLATE_ARGS(n), unsigned int Seq> \
+-void* ApiHookFunctor<R CallingConvention (DECL_ARGS(n)), Seq>::apiAddress = 0; \
+-template <typename R DECL_TEMPLATE_ARGS(n), unsigned int Seq> \
+-unsigned int ApiHookFunctor<R CallingConvention (DECL_ARGS(n)), Seq>::refCount = 0 
++template<typename C, typename R DECL_TEMPLATE_ARGS(n), unsigned int Seq> \
++void* ApiHookFunctor<R (CallingConvention C::*)(DECL_ARGS(n)) ConstConvention, Seq>::apiAddress = 0; \
++template<typename C, typename R DECL_TEMPLATE_ARGS(n), unsigned int Seq> \
++unsigned int ApiHookFunctor<R (CallingConvention C::*)(DECL_ARGS(n)) ConstConvention, Seq>::refCount = 0
+ 
+-#if defined(_MSC_VER)
+-// TODO: ApiHook related tests failed on VS2019.
+-// [  ERROR   ] TestApiHook.h:66: hardware exception STATUS_ILLEGAL_INSTRUCTION raised in setup or running test
+-// [  ERROR   ] TestApiHook.h:66 : hardware exception STATUS_ACCESS_VIOLATION raised in teardown
+-#if _MSC_VER >= 1920    // VS 2019 
++#ifdef WIN32
++#if defined(_MSC_VER) && defined(BUILD_FOR_X86)
+ #define MOCKCPP_API_HOOK_FUNCTOR_DEF(n) \
+-__MOCKCPP_API_HOOK_FUNCTOR_DEF(n, __stdcall)
++__MOCKCPP_C_API_HOOK_FUNCTOR_DEF(n, ); \
++__MOCKCPP_C_API_HOOK_FUNCTOR_DEF(n, __stdcall); \
++__MOCKCPP_CXX_API_HOOK_FUNCTOR_DEF(n, , ); \
++__MOCKCPP_CXX_API_HOOK_FUNCTOR_DEF(n, , const); \
++__MOCKCPP_CXX_API_HOOK_FUNCTOR_DEF(n, __stdcall, ); \
++__MOCKCPP_CXX_API_HOOK_FUNCTOR_DEF(n, __stdcall, const)
+ #else
+ #define MOCKCPP_API_HOOK_FUNCTOR_DEF(n) \
+-__MOCKCPP_API_HOOK_FUNCTOR_DEF(n, ); \
+-__MOCKCPP_API_HOOK_FUNCTOR_DEF(n, __stdcall) 
++__MOCKCPP_C_API_HOOK_FUNCTOR_DEF(n, ); \
++__MOCKCPP_CXX_API_HOOK_FUNCTOR_DEF(n, , ); \
++__MOCKCPP_CXX_API_HOOK_FUNCTOR_DEF(n, , const)
+ #endif
+ #else
+ #define MOCKCPP_API_HOOK_FUNCTOR_DEF(n) \
+-__MOCKCPP_API_HOOK_FUNCTOR_DEF(n, )
++__MOCKCPP_C_API_HOOK_FUNCTOR_DEF(n, ); \
++__MOCKCPP_CXX_API_HOOK_FUNCTOR_DEF(n, , ); \
++__MOCKCPP_CXX_API_HOOK_FUNCTOR_DEF(n, , const)
+ #endif
+ 
+ MOCKCPP_API_HOOK_FUNCTOR_DEF(0);
+diff --git a/include/mockcpp/ApiHookGenerator.h b/include/mockcpp/ApiHookGenerator.h
+index 569d20f..beb04a9 100644
+--- a/include/mockcpp/ApiHookGenerator.h
++++ b/include/mockcpp/ApiHookGenerator.h
+@@ -26,7 +26,7 @@ MOCKCPP_NS_START
+ template <typename F, unsigned int Seq>
+ struct ApiHookGenerator
+ {
+-    static void* findApiHook(F* api)
++    static void* findApiHook(F api)
+     {
+         void* hook;
+ 
+@@ -36,7 +36,7 @@ struct ApiHookGenerator
+         return hook;
+     }
+ 
+-    static void* appyApiHook(F* api)
++    static void* appyApiHook(F api)
+     {
+        void* hook;
+ 
+@@ -61,10 +61,10 @@ private:
+ template <typename F>
+ struct ApiHookGenerator<F, 0>
+ {
+-    static void* findApiHook(F* api)
++    static void* findApiHook(F api)
+     { return 0; }
+ 
+-    static void* appyApiHook(F* api)
++    static void* appyApiHook(F api)
+     { 
+         oss_t oss;
+         
+diff --git a/include/mockcpp/ApiHookHolderFactory.h b/include/mockcpp/ApiHookHolderFactory.h
+index 6105caf..a40e3e1 100644
+--- a/include/mockcpp/ApiHookHolderFactory.h
++++ b/include/mockcpp/ApiHookHolderFactory.h
+@@ -27,7 +27,7 @@ struct ApiHookHolder;
+ struct ApiHookHolderFactory
+ {
+    template <typename F>
+-   static ApiHookHolder* create(F* api)
++   static ApiHookHolder* create(F api)
+    {
+       return new ParameterizedApiHookHolder<F>(api);
+    }
+diff --git a/include/mockcpp/ApiHookMocker.h b/include/mockcpp/ApiHookMocker.h
+index 3d7c963..5c11422 100644
+--- a/include/mockcpp/ApiHookMocker.h
++++ b/include/mockcpp/ApiHookMocker.h
+@@ -21,18 +21,119 @@
+ #include <mockcpp/mockcpp.h>
+ #include <mockcpp/GlobalMockObject.h>
+ #include <mockcpp/ApiHookHolderFactory.h>
++#include <mockcpp/ArgumentsMacroHelpers.h>
++#include <mockcpp/MethodInfoReader.h>
++#include <mockcpp/DelegatedMethodGetter.h>
+ 
+ MOCKCPP_NS_START
+ 
+-template <typename API>
+-InvocationMockBuilderGetter mockAPI(const std::string& name, API* api)
++struct mockAPIauto {};
++template<typename API = mockAPIauto> struct mockAPI;
++
++template<typename API> struct mockAPI
+ {
++  static InvocationMockBuilderGetter get(
++    const std::string& name, const std::string& type, API api)
++  {
++    return MOCKCPP_NS::GlobalMockObject::instance.method
++      ( type.empty() ? name : name + " #" + type + "#"
++      , Details::methodToAddr(api)
++      , ApiHookHolderFactory::create(api));
++  }
++
++  template<typename C>
++  static InvocationMockBuilderGetter get_virtual(
++    const std::string& name, const std::string& type, const C *c, API api)
++  {
++    void ***vtbl = (void ***)c;
++    std::pair<unsigned int, unsigned int> indices =
++      getIndicesOfMethod<C, API>(api);
++    union { void *_addr; API _api; };
++    _addr = (*vtbl)[indices.second];
+     return MOCKCPP_NS::GlobalMockObject::instance.method
+-                 ( name
+-                 , reinterpret_cast<const void*>(api)
+-                 , ApiHookHolderFactory::create(api));
+-}
++      ( type.empty() ? name : name + " #" + type + "#"
++      , _addr
++      , ApiHookHolderFactory::create(_api));
++  }
++
++  template<typename C>
++  static InvocationMockBuilderGetter get_virtual(
++    const std::string& name, const std::string& type, const C &c, API api)
++  {
++    return get_virtual(name, type, &c, api);
++  }
++};  // struct mockAPI
++
++template<> struct mockAPI<mockAPIauto>
++{
++#define __MOCKCPP_C_API_GET_FUNCTION_DEF(n, CallingConvention) \
++  template<typename R DECL_TEMPLATE_ARGS(n)> \
++  static InvocationMockBuilderGetter get( \
++    const std::string& name, const std::string& type, R (CallingConvention *api)(DECL_ARGS(n))) \
++  { \
++    typedef R (CallingConvention *API)(DECL_ARGS(n)); \
++    return mockAPI<API>::get(name, type, api); \
++  }
++
++#define __MOCKCPP_CXX_API_GET_FUNCTION_DEF(n, CallingConvention, ConstMethod) \
++  template<typename R, typename C DECL_TEMPLATE_ARGS(n)> \
++  static InvocationMockBuilderGetter get( \
++    const std::string& name, const std::string& type, R (CallingConvention C::*api)(DECL_ARGS(n)) ConstMethod) \
++  { \
++    typedef R (CallingConvention C::*API)(DECL_ARGS(n)) ConstMethod; \
++    return mockAPI<API>::get(name, type, api); \
++  } \
++  template<typename R, typename C DECL_TEMPLATE_ARGS(n)> \
++  static InvocationMockBuilderGetter get_virtual( \
++    const std::string& name, const std::string& type, const C *c, R (CallingConvention C::*api)(DECL_ARGS(n)) ConstMethod) \
++  { \
++    typedef R (CallingConvention C::*API)(DECL_ARGS(n)) ConstMethod; \
++    return mockAPI<API>::get_virtual(name, type, c, api); \
++  } \
++  template<typename R, typename C DECL_TEMPLATE_ARGS(n)> \
++  static InvocationMockBuilderGetter get_virtual( \
++    const std::string& name, const std::string& type, const C &c, R (CallingConvention C::*api)(DECL_ARGS(n)) ConstMethod) \
++  { \
++    typedef R (CallingConvention C::*API)(DECL_ARGS(n)) ConstMethod; \
++    return mockAPI<API>::get_virtual(name, type, c, api); \
++  }
++
++#ifdef WIN32
++#if defined(_MSC_VER) && defined(BUILD_FOR_X86)
++#define MOCKCPP_API_GET_FUNCTION_DEF(n) \
++  __MOCKCPP_C_API_GET_FUNCTION_DEF(n, ); \
++  __MOCKCPP_C_API_GET_FUNCTION_DEF(n, __stdcall); \
++  __MOCKCPP_CXX_API_GET_FUNCTION_DEF(n, , ); \
++  __MOCKCPP_CXX_API_GET_FUNCTION_DEF(n, , const); \
++  __MOCKCPP_CXX_API_GET_FUNCTION_DEF(n, __stdcall, ); \
++  __MOCKCPP_CXX_API_GET_FUNCTION_DEF(n, __stdcall, const)
++#else
++#define MOCKCPP_API_GET_FUNCTION_DEF(n) \
++  __MOCKCPP_C_API_GET_FUNCTION_DEF(n, ); \
++  __MOCKCPP_CXX_API_GET_FUNCTION_DEF(n, , ); \
++  __MOCKCPP_CXX_API_GET_FUNCTION_DEF(n, , const)
++#endif
++#else
++#define MOCKCPP_API_GET_FUNCTION_DEF(n) \
++  __MOCKCPP_C_API_GET_FUNCTION_DEF(n, ); \
++  __MOCKCPP_CXX_API_GET_FUNCTION_DEF(n, , ); \
++  __MOCKCPP_CXX_API_GET_FUNCTION_DEF(n, , const)
++#endif
+ 
++  MOCKCPP_API_GET_FUNCTION_DEF(0);
++  MOCKCPP_API_GET_FUNCTION_DEF(1);
++  MOCKCPP_API_GET_FUNCTION_DEF(2);
++  MOCKCPP_API_GET_FUNCTION_DEF(3);
++  MOCKCPP_API_GET_FUNCTION_DEF(4);
++  MOCKCPP_API_GET_FUNCTION_DEF(5);
++  MOCKCPP_API_GET_FUNCTION_DEF(6);
++  MOCKCPP_API_GET_FUNCTION_DEF(7);
++  MOCKCPP_API_GET_FUNCTION_DEF(8);
++  MOCKCPP_API_GET_FUNCTION_DEF(9);
++  MOCKCPP_API_GET_FUNCTION_DEF(10);
++  MOCKCPP_API_GET_FUNCTION_DEF(11);
++  MOCKCPP_API_GET_FUNCTION_DEF(12);
++};  // struct mockAPI<mockAPIauto>
+ 
+ MOCKCPP_NS_END
+ 
+diff --git a/include/mockcpp/ChainableMockMethod.h b/include/mockcpp/ChainableMockMethod.h
+index ba37e20..a23cf54 100644
+--- a/include/mockcpp/ChainableMockMethod.h
++++ b/include/mockcpp/ChainableMockMethod.h
+@@ -39,6 +39,7 @@ struct ChainableMockMethodBase
+     {}
+ 
+     RT operator()( const std::string& nameOfCaller
++                 , const RefAny& pThisPointer = RefAny()
+                  , const RefAny& p01 = RefAny()
+                  , const RefAny& p02 = RefAny()
+                  , const RefAny& p03 = RefAny()
+@@ -57,7 +58,7 @@ struct ChainableMockMethodBase
+ 
+ 	try {
+ 		const Any& result = \
+-		invokable->invoke( nameOfCaller
++		invokable->invoke( nameOfCaller, pThisPointer
+                             , p01, p02, p03, p04, p05, p06
+                             , p07, p08, p09, p10, p11, p12
+                             , resultProvider);
+diff --git a/include/mockcpp/ChainableMockMethodCore.h b/include/mockcpp/ChainableMockMethodCore.h
+index 98df8d7..217ef4c 100644
+--- a/include/mockcpp/ChainableMockMethodCore.h
++++ b/include/mockcpp/ChainableMockMethodCore.h
+@@ -46,6 +46,7 @@ public:
+     // Method
+     const Any& 
+         invoke( const std::string& nameOfCaller
++              , const RefAny& pThisPointer
+               , const RefAny& p1 
+               , const RefAny& p2
+               , const RefAny& p3
+diff --git a/include/mockcpp/GlobalMockObject.h b/include/mockcpp/GlobalMockObject.h
+index 7d2046a..1746966 100644
+--- a/include/mockcpp/GlobalMockObject.h
++++ b/include/mockcpp/GlobalMockObject.h
+@@ -42,6 +42,21 @@ struct GlobalMockObject
+    static MockObjectType instance;
+ };
+ 
++namespace Details {
++  template<typename Method>
++  void *methodToAddr(Method m)
++  {
++    union
++    {
++      void *addr_;
++      Method m_;
++    };
++
++    m_ = m;
++    return addr_;
++  }
++}  // namespace Details
++
+ MOCKCPP_NS_END
+ 
+ #endif
+diff --git a/include/mockcpp/GnuMethodInfoReader.h b/include/mockcpp/GnuMethodInfoReader.h
+index 0945ad7..7fb3358 100644
+--- a/include/mockcpp/GnuMethodInfoReader.h
++++ b/include/mockcpp/GnuMethodInfoReader.h
+@@ -73,6 +73,10 @@ GnuMethodDescription getGnuDescOfVirtualMethod(Method input)
+ 	MethodDescriptionUnion<ExpectedMethodType> m;
+ 	m.method = input;
+ 
++#if defined(__arm__) || defined(__aarch64__)
++   m.desc.u.index++;
++#endif
++
+    oss_t oss;
+    oss << "Virtual method address should be odd, please make sure the method "
+        << TypeString<Method>::value() << " is a virtual method";
+diff --git a/include/mockcpp/Invocation.h b/include/mockcpp/Invocation.h
+index 03393bd..bab3477 100644
+--- a/include/mockcpp/Invocation.h
++++ b/include/mockcpp/Invocation.h
+@@ -32,6 +32,7 @@ struct InvocationImpl;
+ struct Invocation
+ {
+     Invocation(const std::string nameOfCaller
++             , const RefAny& pThisPointer = RefAny()
+              , const RefAny& p01 = RefAny()
+              , const RefAny& p02 = RefAny()
+              , const RefAny& p03 = RefAny()
+@@ -48,8 +49,12 @@ struct Invocation
+ 
+     virtual ~Invocation();
+ 
++    RefAny& getThisPointer(void) const;
++
+     RefAny& getParameter(const unsigned int i) const;
+ 
++    RefAny& getParameterWithThis(const unsigned int i) const;
++
+     std::string getNameOfCaller() const;
+ 
+     std::string toString(void) const;
+diff --git a/include/mockcpp/Invokable.h b/include/mockcpp/Invokable.h
+index a1b78d7..145ba7b 100644
+--- a/include/mockcpp/Invokable.h
++++ b/include/mockcpp/Invokable.h
+@@ -35,6 +35,7 @@ struct Invokable
+ {
+     virtual const Any&
+         invoke( const std::string& nameOfCaller
++              , const RefAny& pThisPointer
+               , const RefAny& p1
+               , const RefAny& p2
+               , const RefAny& p3
+diff --git a/include/mockcpp/JmpCode.h b/include/mockcpp/JmpCode.h
+index 26f77b0..ed0fac6 100644
+--- a/include/mockcpp/JmpCode.h
++++ b/include/mockcpp/JmpCode.h
+@@ -33,6 +33,7 @@ struct JmpCode
+     
+     void*  getCodeData() const;
+     size_t getCodeSize() const;
++    void flushCache() const;
+ private:
+ 	JmpCodeImpl* This;
+ };
+diff --git a/include/mockcpp/ParameterizedApiHookHolder.h b/include/mockcpp/ParameterizedApiHookHolder.h
+index 39b7670..0142ac0 100644
+--- a/include/mockcpp/ParameterizedApiHookHolder.h
++++ b/include/mockcpp/ParameterizedApiHookHolder.h
+@@ -30,7 +30,7 @@ struct ParameterizedApiHookHolder
+ {
+    const static unsigned int maxSeq = 10;
+ 
+-   ParameterizedApiHookHolder(F* api) 
++   ParameterizedApiHookHolder(F api)
+    {
+       (m_hook = ApiHookGenerator<F, maxSeq>::findApiHook(api)) ||
+       (m_hook = ApiHookGenerator<F, maxSeq>::appyApiHook(api)); 
+diff --git a/include/mockcpp/mockcpp.h b/include/mockcpp/mockcpp.h
+index 306bc7a..8cc385d 100644
+--- a/include/mockcpp/mockcpp.h
++++ b/include/mockcpp/mockcpp.h
+@@ -39,7 +39,11 @@
+ #endif
+ 
+ 
+-#if  ( defined (__LP64__) \
++#if  defined (__aarch64__)
++#define BUILD_FOR_AARCH64
++#elif defined (__arm__)
++#define BUILD_FOR_ARM32
++#elif ( defined (__LP64__) \
+     || defined (__64BIT__) \
+     || defined (_LP64) \
+     || ((defined(__WORDSIZE)) && (__WORDSIZE == 64)) \
+diff --git a/include/mockcpp/mokc.h b/include/mockcpp/mokc.h
+index 800a766..95a0f0a 100644
+--- a/include/mockcpp/mokc.h
++++ b/include/mockcpp/mokc.h
+@@ -27,7 +27,9 @@
+ #    define MOCKER(api) MOCKCPP_NS::GlobalMockObject::instance.method(#api)
+ #  else
+ #    include <mockcpp/ApiHookMocker.h>
+-#    define MOCKER(api) MOCKCPP_NS::mockAPI(#api, api)
++#    define MOCKER(api, ...) MOCKCPP_NS::mockAPI<__VA_ARGS__>::get(#api, ""#__VA_ARGS__, api)
++#    define MOCKER_CPP(api, ...) MOCKCPP_NS::mockAPI<__VA_ARGS__>::get(#api, ""#__VA_ARGS__, api)
++#    define MOCKER_CPP_VIRTUAL(obj, api, ...) MOCKCPP_NS::mockAPI<__VA_ARGS__>::get_virtual(#api, ""#__VA_ARGS__, obj, api)
+ #  endif
+ 
+ USING_MOCKCPP_NS
+diff --git a/src/ChainableMockMethodCore.cpp b/src/ChainableMockMethodCore.cpp
+index c254c0f..4aa4190 100644
+--- a/src/ChainableMockMethodCore.cpp
++++ b/src/ChainableMockMethodCore.cpp
+@@ -149,6 +149,7 @@ ChainableMockMethodCore::getName() const
+ const Any&
+ ChainableMockMethodCore::invoke
+              ( const std::string& nameOfCaller
++             , const RefAny& pThisPointer
+              , const RefAny& p1
+              , const RefAny& p2
+              , const RefAny& p3
+@@ -163,7 +164,7 @@ ChainableMockMethodCore::invoke
+              , const RefAny& p12
+              , SelfDescribe* &resultProvider)
+ {
+-    Invocation inv(nameOfCaller,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12);
++    Invocation inv(nameOfCaller,pThisPointer,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12);
+     return This->invoke(inv, resultProvider);
+ }
+ 
+diff --git a/src/Invocation.cpp b/src/Invocation.cpp
+index 17019f5..c27d1cc 100644
+--- a/src/Invocation.cpp
++++ b/src/Invocation.cpp
+@@ -35,6 +35,7 @@ struct InvocationImpl
+ {
+     std::vector<RefAny> parameters;
+     std::string nameOfCaller;
++    RefAny thisPointer;
+ 
+     std::string toString(void) const;
+ 
+@@ -70,6 +71,7 @@ std::string InvocationImpl::toString() const
+ 
+ Invocation::Invocation(
+                      const std::string name
++                   , const RefAny& pThisPointer
+                    , const RefAny& p1
+                    , const RefAny& p2
+                    , const RefAny& p3
+@@ -85,6 +87,7 @@ Invocation::Invocation(
+    )
+    : This(new InvocationImpl(name))
+ {
++    This->thisPointer = pThisPointer;
+     INIT_PARAMETER(1);
+     INIT_PARAMETER(2);
+     INIT_PARAMETER(3);
+@@ -106,6 +109,11 @@ Invocation::~Invocation()
+ }
+ 
+ ////////////////////////////////////////////////////////////////
++RefAny& Invocation::getThisPointer(void) const
++{
++  return This->thisPointer;
++}
++
+ RefAny& Invocation::getParameter(const unsigned int i) const
+ {
+     if (i < 1 || i > maxNumOfParameters )
+@@ -116,6 +124,21 @@ RefAny& Invocation::getParameter(const unsigned int i) const
+     return This->parameters[i-1];
+ }
+ 
++RefAny& Invocation::getParameterWithThis(const unsigned int i) const
++{
++  if (This->thisPointer.empty())
++  {
++    return getParameter(i);
++  }
++
++  if (1 == i)
++  {
++    return This->thisPointer;
++  }
++
++  return getParameter(i - 1);
++}
++
+ ////////////////////////////////////////////////////////////////
+ std::string Invocation::toString(void) const
+ {
+diff --git a/src/JmpCode.cpp b/src/JmpCode.cpp
+index 35794fb..f64abb5 100644
+--- a/src/JmpCode.cpp
++++ b/src/JmpCode.cpp
+@@ -30,6 +30,7 @@ struct JmpCodeImpl
+    ////////////////////////////////////////////////
+    JmpCodeImpl(const void* from, const void* to)
+    {
++      m_from = from;
+       ::memcpy(m_code, jmpCodeTemplate, JMP_CODE_SIZE);
+       SET_JMP_CODE(m_code, from, to);
+    }
+@@ -47,7 +48,14 @@ struct JmpCodeImpl
+    }
+ 
+    ////////////////////////////////////////////////
++   void flushCache() const
++   {
++      FLUSH_CACHE((const char *)m_from, JMP_CODE_SIZE);
++   }
+ 
++   ////////////////////////////////////////////////
++
++   const void *m_from;
+    unsigned char m_code[JMP_CODE_SIZE];
+ };
+ 
+@@ -77,5 +85,11 @@ JmpCode::getCodeSize() const
+    return This->getCodeSize();
+ }
+ 
+-MOCKCPP_NS_END
++///////////////////////////////////////////////////
++void
++JmpCode::flushCache() const
++{
++   return This->flushCache();
++}
+ 
++MOCKCPP_NS_END
+diff --git a/src/JmpCodeAARCH64.h b/src/JmpCodeAARCH64.h
+new file mode 100644
+index 0000000..2d741c0
+--- /dev/null
++++ b/src/JmpCodeAARCH64.h
+@@ -0,0 +1,69 @@
++/***
++   mockcpp is a C/C++ mock framework.
++   Copyright [2008] [Darwin Yuan <darwin.yuan@gmail.com>]
++                    [Chen Guodong <sinojelly@gmail.com>]
++   Licensed under the Apache License, Version 2.0 (the "License");
++   you may not use this file except in compliance with the License.
++   You may obtain a copy of the License at
++
++      http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++***/
++#ifndef __MOCKCPP_JMP_CODE_AARCH64_H__
++#define __MOCKCPP_JMP_CODE_AARCH64_H__
++
++#include <asm/unistd.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <sys/ioctl.h>
++#include <sys/mman.h>
++#include <sys/prctl.h>
++#include <sys/stat.h>
++#include <sys/syscall.h>
++
++MOCKCPP_NS_START
++
++struct l2cache_addr_range {
++   uintptr_t start;
++   uintptr_t end;
++};
++
++MOCKCPP_NS_END
++
++#define ADDR_ALIGN_UP(addr) ((((addr) + ((4096) - 1)) & (~((4096) - 1))) & 0xffffffffffffffff)
++#define ADDR_ALIGN_DOWN(addr) (((addr) & (~((4096) - 1))) & 0xffffffffffffffff)
++#define OUTER_CACHE_INV_RANGE _IOWR('S', 0x00, struct l2cache_addr_range)
++#define OUTER_CACHE_CLEAN_RANGE _IOWR('S', 0x01, struct l2cache_addr_range)
++#define OUTER_CACHE_FLUSH_RANGE _IOWR('S', 0x02, struct l2cache_addr_range)
++#define L1_INV_I_CACHE _IOWR('S', 0x03, struct l2cache_addr_range)
++#define D_TO_I_CACHE_FLUSH_RANGE _IOWR('S', 0x04, struct l2cache_addr_range)
++
++const unsigned char jmpCodeTemplate[] =
++   { 0x57, 0x00, 0x00, 0x58, 0xe0, 0x02, 0x1f, 0xd6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
++
++#define SET_SJMP_CODE(base, from, to) do { \
++      using instruct_t = signed int; \
++      instruct_t offset = (intptr_t)to - (intptr_t)from; \
++      offset = ((offset >> 2) & 0x03FFFFFF) | 0x14000000; \
++      *(instruct_t *)(base) = offset; \
++   } while(0)
++
++#define SET_JMP_CODE(base, from, to) do { \
++      *(void **)(base + 8) = (void *)to; \
++   } while(0)
++
++#define FLUSH_CACHE(from, length) do { \
++   struct l2cache_addr_range usr_data; \
++   usr_data.start = ADDR_ALIGN_DOWN((unsigned long long)from); \
++   usr_data.end = ADDR_ALIGN_UP((unsigned long long)from) + length; \
++   __builtin___clear_cache((char *)usr_data.start, (char *)usr_data.end); \
++} while (0)
++
++#endif
+diff --git a/src/JmpCodeARM32.h b/src/JmpCodeARM32.h
+new file mode 100644
+index 0000000..1eec42b
+--- /dev/null
++++ b/src/JmpCodeARM32.h
+@@ -0,0 +1,36 @@
++/***
++   mockcpp is a C/C++ mock framework.
++   Copyright [2008] [Darwin Yuan <darwin.yuan@gmail.com>]
++                    [Chen Guodong <sinojelly@gmail.com>]
++   Licensed under the Apache License, Version 2.0 (the "License");
++   you may not use this file except in compliance with the License.
++   You may obtain a copy of the License at
++
++      http://www.apache.org/licenses/LICENSE-2.0
++
++   Unless required by applicable law or agreed to in writing, software
++   distributed under the License is distributed on an "AS IS" BASIS,
++   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++   See the License for the specific language governing permissions and
++   limitations under the License.
++***/
++#ifndef __MOCKCPP_JMP_CODE_ARM32_H__
++#define __MOCKCPP_JMP_CODE_ARM32_H__
++
++#include <stdlib.h>
++
++const unsigned char jmpCodeTemplate[] =
++   { 0xEA, 0x00, 0x00, 0x00 };
++
++#define SET_JMP_CODE(base, from, to) do { \
++       int offset = (int)to - (int)from - 8; \
++       offset = (offset >> 2) & 0x00FFFFFF; \
++       int code = *(int *)(base) | offset; \
++       *(int *)(base) = changeByteOrder(code); \
++   } while(0)
++
++#define FLUSH_CACHE(from, length) do { \
++   ::system("echo 3 > /proc/sys/vm/drop_caches"); \
++} while (0)
++
++#endif
+diff --git a/src/JmpCodeArch.h b/src/JmpCodeArch.h
+index 26abd73..53353eb 100644
+--- a/src/JmpCodeArch.h
++++ b/src/JmpCodeArch.h
+@@ -19,11 +19,29 @@
+ 
+ #include <mockcpp/mockcpp.h>
+ 
++template <typename T>
++inline T changeByteOrder(const T v) {
++   enum { S = sizeof(T) };
++   T rst = v;
++   char *p = (char *)&rst;
++   char tmp = 0;
++   for (unsigned int i = 0; i < S / 2; ++i) {
++      tmp = p[i];
++      p[i] = p[S - i - 1];
++      p [S - i - 1] = tmp;
++   }
++
++   return rst;
++}
++
+ #if BUILD_FOR_X64
+ # include "JmpCodeX64.h"
+ #elif BUILD_FOR_X86
+ # include "JmpCodeX86.h"
++#elif defined(BUILD_FOR_ARM32)
++# include "JmpCodeARM32.h"
++#elif defined(BUILD_FOR_AARCH64)
++# include "JmpCodeAARCH64.h"
+ #endif
+ 
+ #endif
+-
+diff --git a/src/JmpCodeX64.h b/src/JmpCodeX64.h
+index 198507a..e5b4f31 100644
+--- a/src/JmpCodeX64.h
++++ b/src/JmpCodeX64.h
+@@ -27,5 +27,6 @@ const unsigned char jmpCodeTemplate[]  =
+        *(uintptr_t *)(base + 6) = (uintptr_t)to; \
+    } while(0)
+ 
+-#endif
++#define FLUSH_CACHE(from, length) ((void)0)
+ 
++#endif
+diff --git a/src/JmpCodeX86.h b/src/JmpCodeX86.h
+index ebdc526..a06a02e 100644
+--- a/src/JmpCodeX86.h
++++ b/src/JmpCodeX86.h
+@@ -23,5 +23,6 @@ const unsigned char jmpCodeTemplate[]  = { 0xE9, 0x00, 0x00, 0x00, 0x00 };
+             (unsigned long long)to - (unsigned long long)from - sizeof(jmpCodeTemplate); \
+    } while(0)
+ 
+-#endif
++#define FLUSH_CACHE(from, length) ((void)0)
+ 
++#endif
+diff --git a/src/JmpOnlyApiHook.cpp b/src/JmpOnlyApiHook.cpp
+index d4cfa68..964828f 100644
+--- a/src/JmpOnlyApiHook.cpp
++++ b/src/JmpOnlyApiHook.cpp
+@@ -68,6 +68,7 @@ struct JmpOnlyApiHookImpl
+    void changeCode(const void* data)
+    {
+       CodeModifier::modify(const_cast<void*>(m_api), data, m_jmpCode.getCodeSize());
++      m_jmpCode.flushCache();
+    }
+ 
+    /////////////////////////////////////////////////////
+diff --git a/src/UnixCodeModifier.cpp b/src/UnixCodeModifier.cpp
+index ab4014e..e1fbe75 100644
+--- a/src/UnixCodeModifier.cpp
++++ b/src/UnixCodeModifier.cpp
+@@ -18,27 +18,32 @@
+ #include <string.h>
+ #include <inttypes.h>
+ #include <sys/mman.h>
++#include <unistd.h>
+ 
+ #include <mockcpp/CodeModifier.h>
++#include "JmpCodeArch.h"
+ 
+ #define PAGE_ALIGN_BITS  12
+ 
+ //////////////////////////////////////////////////////////////////
+ #define PAGE_SIZE   (1 << PAGE_ALIGN_BITS)
+-#define ALIGN_TO_PAGE_BOUNDARY(addr) (void*) (((uintptr_t)addr) & (~((1<<(PAGE_ALIGN_BITS))-1)))
++#define ALIGN_TO_PAGE_BOUNDARY(addr, page_size) (void*) (((uintptr_t)addr) & (~((page_size)-1)))
+ //////////////////////////////////////////////////////////////////
+ 
+ MOCKCPP_NS_START
+ 
+ bool CodeModifier::modify(void *dest, const void *src, size_t size)
+ {
+-    if(::mprotect(ALIGN_TO_PAGE_BOUNDARY(dest), PAGE_SIZE * 2, PROT_EXEC | PROT_WRITE | PROT_READ ) != 0)
+-    {  
+-       return false; 
++    unsigned int page_size = getpagesize();
++
++    if (::mprotect(ALIGN_TO_PAGE_BOUNDARY(dest, page_size), page_size * 2, PROT_EXEC | PROT_WRITE | PROT_READ) != 0) {
++        return false;
+     }
+ 
+     ::memcpy(dest, src, size);
+ 
++    FLUSH_CACHE(dest, size);
++
+ 
+ #if 0
+ 	#if BUILD_FOR_X86
