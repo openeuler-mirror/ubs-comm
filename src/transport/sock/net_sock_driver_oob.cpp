@@ -1592,17 +1592,5 @@ NResult NetDriverSockWithOOB::MultiRailNewConnection(OOBTCPConnection &conn)
     NN_LOG_ERROR("Invalid operation, TCP is not supported by MultiRail");
     return NN_ERROR;
 }
-
-void *NetDriverSockWithOOB::MapAndRegVaForUB(unsigned long memid, uint64_t &va)
-{
-    NN_LOG_ERROR("operation is not supported in tcp");
-    return nullptr;
-}
-
-NResult NetDriverSockWithOOB::UnmapVaForUB(uint64_t &va)
-{
-    NN_LOG_ERROR("operation is not supported in tcp");
-    return NN_ERROR;
-}
 }
 }

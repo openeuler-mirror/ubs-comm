@@ -56,11 +56,6 @@ public:
         uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0, uint64_t ctx = 0) override;
 
     NResult MultiRailNewConnection(OOBTCPConnection &conn);
-
-    void *MapAndRegVaForUB(unsigned long memid, uint64_t &va) override;
-
-    NResult UnmapVaForUB(uint64_t &va) override;
-
     void DestroyEndpoint(UBSHcomNetEndpointPtr &ep) override;
     void DestroyEndpointById(uint64_t id);
     inline NetMemPoolFixedPtr GetOpCtxMemPool()

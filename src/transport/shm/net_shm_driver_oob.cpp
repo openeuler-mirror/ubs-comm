@@ -1614,17 +1614,5 @@ void NetDriverShmWithOOB::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
     mMrChecker.UnRegister(mr->GetLKey());
     mr->UnInitialize();
 }
-
-void *NetDriverShmWithOOB::MapAndRegVaForUB(unsigned long memid, uint64_t &va)
-{
-    NN_LOG_ERROR("operation is not supported in shm");
-    return nullptr;
-}
-
-NResult NetDriverShmWithOOB::UnmapVaForUB(uint64_t &va)
-{
-    NN_LOG_ERROR("operation is not supported in shm");
-    return NN_ERROR;
-}
 }
 }

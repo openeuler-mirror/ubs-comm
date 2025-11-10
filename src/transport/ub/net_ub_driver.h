@@ -49,10 +49,6 @@ public:
     NResult CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr, unsigned long memid) override;
     void DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr) override;
 
-    void *MapAndRegVaForUB(unsigned long memid, uint64_t &va) override;
-
-    NResult UnmapVaForUB(uint64_t &va) override;
-
     inline NResult ValidateMemoryRegion(uint64_t lKey, uintptr_t address, uint64_t size)
     {
         return NN_OK;
@@ -105,7 +101,6 @@ protected:
     MemoryRegionChecker mMrChecker;
     uint32_t mHeartBeatIdleTime = NN_NO8;
     uint32_t mHeartBeatProbeInterval = NN_NO1;
-    std::map<uint64_t, UBVaSge> mMapVaSgeForUB;
 private:
     NResult CreateSendMr(uint8_t slave);
     NResult ImportRemotePA(unsigned long memid);

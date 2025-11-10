@@ -54,10 +54,6 @@ public:
 
     void DestroyEndpoint(UBSHcomNetEndpointPtr &ep) override;
 
-    void *MapAndRegVaForUB(unsigned long memid, uint64_t &va) override;
-
-    NResult UnmapVaForUB(uint64_t &va) override;
-
     inline RDMAMemoryRegionFixedBuffer *GetDriverSendMr() const
     {
         return mDriverSendMR;

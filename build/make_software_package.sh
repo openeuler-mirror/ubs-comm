@@ -52,7 +52,7 @@ echo "${HCOM_LOG_TAG} HCOM install directory: ${HCOM_INSTALL_DIR}"
 [[ -z "${HCOM_PRODUCT_VERSION}" ]] && HCOM_PRODUCT_VERSION="24.4"
 [[ -z "${HCOM_COMPONENT_VERSION}" ]] && HCOM_COMPONENT_VERSION="1.0.0"
 [[ -z "${HCOM_PACKAGE_PATH}" ]] && HCOM_PACKAGE_PATH="${HCOM_ROOT_DIR}/dist"
-[[ -z "${ARCH}" ]] && ARCH="aarch64"
+[[ -z "${HCOM_BUILD_OS_ARCH}" ]] && HCOM_BUILD_OS_ARCH="aarch64"
 HCOM_COMPONENT_COMMIT_ID=""
 if [ -d "${HCOM_ROOT_DIR}/.git" ] || (cd "${HCOM_ROOT_DIR}" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
     HCOM_COMPONENT_COMMIT_ID=$(cd "${HCOM_ROOT_DIR}" && git rev-parse HEAD 2>/dev/null)
@@ -61,11 +61,11 @@ fi
 # hcom is published by BoostKit
 cd "${HCOM_PACKAGE_PATH}"
 
-if [[ -z "${OS}" || -z "${ARCH}" ]]; then
+if [[ -z "${OS}" || -z "${HCOM_BUILD_OS_ARCH}" ]]; then
     echo "${HCOM_LOG_TAG} env OS or env ARCH is empty!"
     HCOM_PACKAGE_NAME="BoostKit-${HCOM_COMPONENT_NAME}_${HCOM_COMPONENT_VERSION}_${HCOM_BUILD_OS_ARCH}"
 else
-    HCOM_PACKAGE_NAME="BoostKit-${HCOM_COMPONENT_NAME}_${HCOM_COMPONENT_VERSION}_${OS}_${ARCH}"
+    HCOM_PACKAGE_NAME="BoostKit-${HCOM_COMPONENT_NAME}_${HCOM_COMPONENT_VERSION}_${OS}_${HCOM_BUILD_OS_ARCH}"
 fi
 
 [[ -n "${HCOM_PACKAGE_NAME}" ]] && rm -rf "${HCOM_PACKAGE_NAME}"
@@ -168,7 +168,7 @@ base_rpmbuild_cmd="rpmbuild --define \"package_name ${HCOM_PACKAGE_NAME}\" -bb h
 eval "$base_rpmbuild_cmd"
 
 if [[ "${HCOM_BUILD_TYPE,,}" == "debug" ]]; then
-    cp ~/rpmbuild/RPMS/${ARCH}/OCK-CommunicationSuite_HCOM_Debug-2.0.0-B099*.rpm "${HCOM_ROOT_DIR}/dist/OCK-CommunicationSuite_HCOM_Debug_2.0.0_${OS}-${ARCH}.rpm"
+    cp ~/rpmbuild/RPMS/${HCOM_BUILD_OS_ARCH}/OCK-CommunicationSuite_HCOM_Debug-2.0.0-B099*.rpm "${HCOM_ROOT_DIR}/dist/OCK-CommunicationSuite_HCOM_Debug_2.0.0_${OS}-${HCOM_BUILD_OS_ARCH}.rpm"
 else
-    cp ~/rpmbuild/RPMS/${ARCH}/OCK-CommunicationSuite_HCOM-2.0.0-B099*.rpm "${HCOM_ROOT_DIR}/dist/OCK-CommunicationSuite_HCOM_2.0.0_${OS}-${ARCH}.rpm"
+    cp ~/rpmbuild/RPMS/${HCOM_BUILD_OS_ARCH}/OCK-CommunicationSuite_HCOM-2.0.0-B099*.rpm "${HCOM_ROOT_DIR}/dist/OCK-CommunicationSuite_HCOM_2.0.0_${OS}-${HCOM_BUILD_OS_ARCH}.rpm"
 fi

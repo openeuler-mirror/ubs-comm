@@ -22,10 +22,6 @@ namespace ock {
 namespace hcom {
 #define NET_FLAGS_BIT(i) (1UL << (i))
 
-#define SLAVE1_PHYSICAL_ADDRESS 0x286f00000000 // hard-coded PA on slave1
-#define SLAVE2_PHYSICAL_ADDRESS 0x686f00000000 // hard-coded PA on slave2
-#define OBMM_SIZE 1 << 27 // 128M
-
 constexpr const uint32_t NET_SGE_MAX_SIZE = 524288000;
 constexpr const uint32_t NET_STR_ERROR_BUF_SIZE = 128;
 constexpr const uint32_t NET_SGE_MAX_IOV = 4;
@@ -118,7 +114,6 @@ struct UBSHcomNetTransSgeIov {
     uint64_t lKey = 0;
     uint64_t rKey = 0;
     uint32_t size = 0;
-    unsigned long memid = 0; // indicate obmm memory used by urma in rndv
     void *srcSeg;            // ptr to description of src mem seg for urma
     void *dstSeg;            // ptr to description of dst mem seg for urma
 

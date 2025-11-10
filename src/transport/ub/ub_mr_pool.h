@@ -14,7 +14,6 @@
 #define HCOM_UB_MR_POOL_H
 #ifdef UB_BUILD_ENABLED
 #include <sys/mman.h>
-#include "libobmm.h"
 
 #include "hcom.h"
 #include "ub_common.h"
@@ -56,7 +55,6 @@ public:
 
     UResult Initialize() override;
     UResult InitializeForOneSide();
-    UResult InitializeWithPA(unsigned long memid);
     void UnInitialize() override;
     inline UBSHcomNetDriverProtocol GetProtocol()
     {
@@ -92,7 +90,6 @@ protected:
 protected:
     urma_target_seg_t *mMemSeg = nullptr;
     unsigned long mMemid = 0;
-    int mMemFd = 0; // InitializeWithPA obmm open fd
     static uint64_t gPageSize;
 };
 }

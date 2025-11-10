@@ -604,18 +604,6 @@ void NetDriverRDMA::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
     mMrChecker.UnRegister(mr->GetLKey());
     mr->UnInitialize();
 }
-
-void *NetDriverRDMA::MapAndRegVaForUB(unsigned long memid, uint64_t &va)
-{
-    NN_LOG_ERROR("operation is not supported in rdma");
-    return nullptr;
-}
-
-NResult NetDriverRDMA::UnmapVaForUB(uint64_t &va)
-{
-    NN_LOG_ERROR("operation is not supported in rdma");
-    return NN_ERROR;
-}
 } // namespace hcom
 }
 #endif

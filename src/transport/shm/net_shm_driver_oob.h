@@ -67,10 +67,6 @@ public:
     NResult SendExchangeInfo(OOBTCPConnection &conn, ShmConnExchangeInfo &exInfo);
     NResult ReceiveExchangeInfo(OOBTCPConnection &conn, ShmConnExchangeInfo &exInfo);
 
-    void *MapAndRegVaForUB(unsigned long memid, uint64_t &va) override;
-
-    NResult UnmapVaForUB(uint64_t &va) override;
-
     inline NResult ValidateMemoryRegion(uint64_t lKey, uintptr_t address, uint64_t size)
     {
         return mMrChecker.Validate(lKey, address, size);

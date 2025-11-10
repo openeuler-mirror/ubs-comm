@@ -1405,7 +1405,8 @@ int NetDriverUBWithOob::SendFinishedCB(UBOpContextInfo *ctx)
     } else if (ctx->opType == UBOpContextInfo::SEND_RAW_SGL) {
         return SendRawSglFinishedCB(ctx, requestCtx);
     } else if (ctx->opType == UBOpContextInfo::SEND_SGL_INLINE) {
-        return SendSglInlineFinishedCB(ctx, requestCtx);
+        auto worker = reinterpret_cast<UBWorker *>(ctx->ubJetty->GetUpContext1());
+        return SendSglInlineFinishedCB(ctx, requestCtx, worker);
     } else {
         NN_LOG_WARN("Unreachable path");
     }
@@ -1559,8 +1560,8 @@ void NetDriverUBWithOob::ProcessEpError(uintptr_t ep)
     auto qp = endpointPtr->GetQp();
     qp->Stop();
 
-    NN_LOG_WARN("Handle Ep state " << NEPStateToString(endpointPtr->State().Get()) << ", Ep id " << endpointPtr->Id() <<
-        " , try call Ep broken handle");
+    NN_LOG_WARN("Handle Ep state " << UBSHcomNEPStateToString(endpointPtr->State().Get()) << ", Ep id " <<
+        endpointPtr->Id() << " , try call Ep broken handle");
     mEndPointBrokenHandler(endpointPtr);
 }
 

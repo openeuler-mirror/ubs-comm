@@ -221,6 +221,9 @@ include_directories(${HCOM_SRC_DIR}/src/under_api/verbs
                     ${JAVA_HOME}/include
                     ${JAVA_HOME}/include/linux)
 
+if (BUILD_WITH_UB)
+    include_directories(${HCOM_SRC_DIR}/3rdparty/)
+endif ()
 # Reset the prefix path if user doesn't provide one.
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set_property(CACHE CMAKE_INSTALL_PREFIX PROPERTY VALUE ${PROJECT_BINARY_DIR})

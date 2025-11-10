@@ -15,7 +15,6 @@
 #include "net_ub_driver.h"
 #include "net_ub_endpoint.h"
 #include "openssl_api_wrapper.h"
-#include "under_api/obmm/obmm_api_wrapper.h"
 #include "ub_common.h"
 #include "ub_mr_fixed_buf.h"
 #include "ub_worker.h"
@@ -547,13 +546,6 @@ void NetDriverUB::UnInitializeInner()
 
     DestroyClientLB();
     ClearWorkers();
-    if (!mMapVaSgeForUB.empty()) {
-        for (const auto &pair : mMapVaSgeForUB) {
-            uint64_t va = pair.first;
-            UnmapVaForUB(va);
-        }
-        mMapVaSgeForUB.clear();
-    }
 }
 
 #define DRIVER_CHECK_HANDLES()                                                                               \
@@ -717,18 +709,6 @@ void NetDriverUB::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
     }
 
     mr->UnInitialize();
-}
-
-void *NetDriverUB::MapAndRegVaForUB(unsigned long memid, uint64_t &va)
-{
-    NN_LOG_ERROR("operation not supported in non-hccs NetDriverUB ");
-    return nullptr;
-}
-
-NResult NetDriverUB::UnmapVaForUB(uint64_t &va)
-{
-    NN_LOG_ERROR("operation not supported in non-hccs NetDriverUB ");
-    return NN_ERROR;
 }
 }
 }

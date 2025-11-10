@@ -34,7 +34,6 @@
 
 #ifdef UB_BUILD_ENABLED
 #include "net_ub_driver_oob.h"
-#include "obmm_api_wrapper.h"
 #endif
 
 namespace ock {

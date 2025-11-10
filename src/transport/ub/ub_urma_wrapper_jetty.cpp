@@ -14,7 +14,6 @@
 #include "hcom_env.h"
 #include "ub_urma_wrapper_jetty.h"
 #include "ub_worker.h"
-#include "under_api/obmm/obmm_api_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -110,7 +109,7 @@ UResult UBJetty::Stop()
         urma_jfr_attr_t jfr_attr = {};
         jfr_attr.mask = JFR_STATE;
         jfr_attr.state = URMA_JFR_STATE_ERROR;
-        result = HcomUrma::ModifyJfr(mJfr, &jfr_attr);
+        auto result = HcomUrma::ModifyJfr(mJfr, &jfr_attr);
         if (result != UB_OK) {
             NN_LOG_ERROR("Fail to modify jfr to URMA_JFR_STATE_ERROR, urma result is " << result);
             return result;

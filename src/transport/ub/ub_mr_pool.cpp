@@ -15,7 +15,6 @@
 #include "ub_common.h"
 #include "ub_mr_pool.h"
 #include "under_api/urma/urma_api_wrapper.h"
-#include "under_api/obmm/obmm_api_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -187,28 +186,6 @@ UResult UBMemoryRegion::InitializeForOneSide()
     mMemSeg = tmpMR;
     mLKey = (static_cast<uint64_t>(tokenValue) << NN_NO32) | (tmpMR->seg.token_id);
 
-    return UB_OK;
-}
-
-UResult UBMemoryRegion::InitializeWithPA(unsigned long memid)
-{
-    int fd_e = HcomObmm::ObmmOpen(memid);
-    if (fd_e < 0) {
-        NN_LOG_ERROR("Failed to get fd with memid " << memid << " errno " << errno);
-        return UB_MEMORY_ALLOCATE_FAILED;
-    }
-    mMemFd = fd_e;
-    auto tmpBuf = mmap(NULL, mSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd_e, 0);
-    if (tmpBuf == MAP_FAILED) {
-        char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("mmap error: " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
-        close(fd_e);
-        return UB_MEMORY_ALLOCATE_FAILED;
-    }
-
-    mBuf = reinterpret_cast<uintptr_t>(tmpBuf);
-    mGetBufWithMapping = true;
     return UB_OK;
 }
 

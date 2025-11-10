@@ -2225,10 +2225,6 @@ public:
      */
     bool IsInited() const;
 
-    virtual void *MapAndRegVaForUB(unsigned long memid, uint64_t &va) = 0;
-
-    virtual NResult UnmapVaForUB(uint64_t &va) = 0;
-
     static void DumpObjectStatistics();
 
     void SetPeerDevId(uint8_t index);
