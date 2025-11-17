@@ -773,8 +773,8 @@ public:
                         return SS_TCP_RETRY;
                     }
                     if (errno == 0) {
-                        NN_LOG_ERROR("Failed to PostSendSgl to peer in sock: " << mId << " name: " << mName << " with "
-                            << mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                        NN_LOG_ERROR("Failed to PostSendSgl to peer in sock: " << mId << " name: " << mName <<
+                            " with " << mSendTimeoutSecond << " second timeout, " << ret << " is sent");
                         return SS_TIMEOUT;
                     }
                     char buf[NET_STR_ERROR_BUF_SIZE] = {0};

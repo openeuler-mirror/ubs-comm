@@ -13,10 +13,9 @@
 #ifdef RDMA_BUILD_ENABLED
 #include <gtest/gtest.h>
 #include "mockcpp/mockcpp.hpp"
-#include "test_rdma_c.hpp"
-#include "capi/hcom_c.h"
-#include "string.h"
+#include "cstring"
 #include "hcom.h"
+#include "capi/hcom_c.h"
 #include "common/net_util.h"
 #include "transport/rdma/verbs/net_rdma_sync_endpoint.h"
 #include "transport/rdma/verbs/net_rdma_async_endpoint.h"
@@ -26,6 +25,7 @@
 #include "fake_ibv.h"
 #include "transport/rdma/verbs/net_rdma_driver.h"
 #include "ut_helper.h"
+#include "test_rdma_c.h"
 
 TestCaseRdmaC::TestCaseRdmaC() {}
 
@@ -237,12 +237,12 @@ bool CServerCreateDriver()
 
     bzero(&options, sizeof(Net_DriverOptions));
     options.mode = C_EVENT_POLLING;
-    options.mrSendReceiveSegSize = 1024;
-    options.mrSendReceiveSegCount = 8192;
+    options.mrSendReceiveSegSize = NN_NO1024;
+    options.mrSendReceiveSegCount = NN_NO8192;
     options.enableTls = enableTls;
     options.cipherSuite = cipherSuite;
     strcpy(options.netDeviceIpMask, ipSeg);
-    sprintf(options.workerGroupsCpuSet, "%u-%u", 20, 20);
+    sprintf(options.workerGroupsCpuSet, "%u-%u", NN_NO20, NN_NO20);
 
     Net_DriverRegisterEpHandler(cServerDriver, C_EP_NEW, &SNewEndPoint, 1);
     Net_DriverRegisterEpHandler(cServerDriver, C_EP_BROKEN, &SEndPointBroken, 1);
@@ -569,25 +569,25 @@ static bool CCreateDriver()
 
     bzero(&options, sizeof(Net_DriverOptions));
     options.mode = C_EVENT_POLLING;
-    options.mrSendReceiveSegSize = 2048;
-    options.mrSendReceiveSegCount = 8192;
+    options.mrSendReceiveSegSize = NN_NO2048;
+    options.mrSendReceiveSegCount = NN_NO8192;
     strcpy(options.netDeviceIpMask, ipSeg);
-    options.qpSendQueueSize = 512;
-    options.qpReceiveQueueSize = 512;
+    options.qpSendQueueSize = NN_NO512;
+    options.qpReceiveQueueSize = NN_NO512;
     options.version = 1;
     options.enableTls = enableTls;
     options.cipherSuite = cipherSuite;
 
-    Net_DriverRegisterEpHandler(cDriver, C_EP_BROKEN, &CEndPointBroken, 2);
-    Net_DriverRegisterOpHandler(cDriver, C_OP_REQUEST_RECEIVED, &CRequestReceived, 2);
-    Net_DriverRegisterOpHandler(cDriver, C_OP_REQUEST_POSTED, &CRequestPosted, 2);
-    Net_DriverRegisterOpHandler(cDriver, C_OP_READWRITE_DONE, &COneSideDone, 2);
+    Net_DriverRegisterEpHandler(cDriver, C_EP_BROKEN, &CEndPointBroken, NN_NO2);
+    Net_DriverRegisterOpHandler(cDriver, C_OP_REQUEST_RECEIVED, &CRequestReceived, NN_NO2);
+    Net_DriverRegisterOpHandler(cDriver, C_OP_REQUEST_POSTED, &CRequestPosted, NN_NO2);
+    Net_DriverRegisterOpHandler(cDriver, C_OP_READWRITE_DONE, &COneSideDone, NN_NO2);
 
     if (enableTls) {
         Net_DriverRegisterTLSCb(cDriver, &CCertCallback, &CPrivateKeyCallback, &CCACallback);
     }
 
-    auto handle = Net_DriverRegisterIdleHandler(cDriver, &CIdle, 2);
+    auto handle = Net_DriverRegisterIdleHandler(cDriver, &CIdle, NN_NO2);
     EXPECT_NE(handle, 0);
 
     Net_DriverSetOobIpAndPort(cDriver, "0.0.0.0", C_RDMA_LISTEN_PORT);

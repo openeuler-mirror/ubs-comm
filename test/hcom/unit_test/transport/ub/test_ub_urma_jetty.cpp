@@ -107,13 +107,13 @@ TEST_F(TestUbUrmaJetty, UnInitializeSuccess)
     jfc->IncreaseRef();
     urma_jfr_t mJfr{};
     jetty->mJfr = &mJfr;
-
+    int urmaErr = 11;
     MOCKER_CPP(&Enabled).stubs().will(returnValue(false));
     MOCKER_CPP(&HcomUrma::UnbindJetty).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::UnimportJetty).stubs().will(returnValue(0));
-    MOCKER_CPP(&HcomUrma::DeleteJetty).stubs().will(returnValue(11));
-    MOCKER_CPP(&HcomUrma::DeleteJfr).stubs().will(returnValue(11));
-    MOCKER_CPP(&HcomUrma::DeleteJfc).stubs().will(returnValue(11));
+    MOCKER_CPP(&HcomUrma::DeleteJetty).stubs().will(returnValue(urmaErr));
+    MOCKER_CPP(&HcomUrma::DeleteJfr).stubs().will(returnValue(urmaErr));
+    MOCKER_CPP(&HcomUrma::DeleteJfc).stubs().will(returnValue(urmaErr));
     MOCKER_CPP(&UBContext::UnInitialize).stubs().will(returnValue(0));
     EXPECT_EQ(jetty->UnInitialize(), 0);
 }
@@ -131,13 +131,13 @@ TEST_F(TestUbUrmaJetty, UnInitializeHB)
     auto remoteMr = new (std::nothrow) UBMemoryRegion("remoteMr", nullptr, 0, 0, 0);
     jetty->mHBLocalMr = localMr;
     jetty->mHBRemoteMr = remoteMr;
-
+    int urmaErr = 11;
     MOCKER_CPP(&Enabled).stubs().will(returnValue(false));
     MOCKER_CPP(&HcomUrma::UnbindJetty).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::UnimportJetty).stubs().will(returnValue(0));
-    MOCKER_CPP(&HcomUrma::DeleteJetty).stubs().will(returnValue(11));
-    MOCKER_CPP(&HcomUrma::DeleteJfr).stubs().will(returnValue(11));
-    MOCKER_CPP(&HcomUrma::DeleteJfc).stubs().will(returnValue(11));
+    MOCKER_CPP(&HcomUrma::DeleteJetty).stubs().will(returnValue(urmaErr));
+    MOCKER_CPP(&HcomUrma::DeleteJfr).stubs().will(returnValue(urmaErr));
+    MOCKER_CPP(&HcomUrma::DeleteJfc).stubs().will(returnValue(urmaErr));
     MOCKER_CPP(&UBContext::UnInitialize).stubs().will(returnValue(0));
     MOCKER_CPP(&UBJetty::DestroyHBMemoryRegion).stubs().will(ignoreReturnValue());
     EXPECT_EQ(jetty->UnInitialize(), 0);
@@ -183,17 +183,17 @@ TEST_F(TestUbUrmaJetty, PostReceive)
 TEST_F(TestUbUrmaJetty, PostSendSglInlineJettyNull)
 {
     jetty->mUrmaJetty = nullptr;
-    EXPECT_EQ(jetty->PostSendSglInline(nullptr, 10, 10), UB_QP_NOT_INITIALIZED);
+    EXPECT_EQ(jetty->PostSendSglInline(nullptr, NN_NO10, NN_NO10), UB_QP_NOT_INITIALIZED);
 }
 
 TEST_F(TestUbUrmaJetty, PostSendSglInlineJettyFail)
 {
     jetty->mUrmaJetty = &UrmaJetty;
     UBSHcomNetTransDataIov iov[1];
+    uint64_t testKey = 123;
     iov[0].address = 0X1234;
-    iov[0].key = 123;
-    iov[0].size = 10;
-
+    iov[0].key = testKey;
+    iov[0].size = NN_NO10;
     MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
         .stubs().will(returnValue(1)).then(returnValue(0));
     EXPECT_EQ(jetty->PostSendSglInline(iov, 1, 0), UB_QP_POST_SEND_FAILED);

@@ -15,11 +15,11 @@
 #include <memory>
 #include <unistd.h>
 #include <utility>
-#include "htracer_service.h"
 #include "htracer_msg.h"
 #include "htracer_service_helper.h"
 #include "htracer_utils.h"
 #include "htracer_manager.h"
+#include "htracer_service.h"
 
 namespace ock {
 namespace hcom {

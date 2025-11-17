@@ -9,8 +9,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef _TEST_RDMA_HPP_
-#define _TEST_RDMA_HPP_
+#ifndef TEST_RDMA_HPP_
+#define TEST_RDMA_HPP_
 #include <gtest/gtest.h>
 
 class TestCaseRdma : public testing::Test {
@@ -22,5 +22,3 @@ protected:
 };
 
 #endif
-
-

@@ -12,9 +12,9 @@
 
 #include <mutex>
 #include <set>
-#include "cmd_helper.h"
 #include "htracer_utils.h"
 #include "htracer_client.h"
+#include "cmd_helper.h"
 
 #define INVALID_SERVICE_ID (0xFFFF)
 

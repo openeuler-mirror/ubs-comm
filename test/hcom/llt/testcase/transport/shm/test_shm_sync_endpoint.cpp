@@ -83,7 +83,7 @@ static int OneSideDone(const UBSHcomNetRequestContext &ctx)
 static bool RegSglMem(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov mrInfo[],
     std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
 {
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < NN_NO4; ++i) {
         UBSHcomNetMemoryRegionPtr mr;
         auto result = driver->CreateMemoryRegion(NN_NO16, mr);
         if (result != NN_OK) {
@@ -127,7 +127,7 @@ static bool RegReadWriteMem(UBSHcomNetDriver *driver, TestRegMrInfo mrInfo[],
 static bool RegReadWriteSglMem(UBSHcomNetDriver *driver, TestRegMrInfo mrInfo[],
     std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
 {
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < NN_NO4; ++i) {
         UBSHcomNetMemoryRegionPtr mr;
         auto result = driver->CreateMemoryRegion(NN_NO16, mr);
         if (result != NN_OK) {
@@ -191,7 +191,6 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(cons
     auto name = "serverSync_ep_" + std::to_string(g_nameSeed++);
 
     driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM, name, true);
-
     if (driver == nullptr) {
         NN_LOG_ERROR("failed to create serverDriver already created");
         return false;
@@ -298,8 +297,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRetry)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -313,11 +311,11 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRetry)
     result = ep->PostSend(1, req);
     EXPECT_EQ(SH_OK, result);
 
-    result = ep->WaitCompletion(2);
+    result = ep->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
 
     UBSHcomNetResponseContext respCtx {};
-    result = ep->Receive(2, respCtx);
+    result = ep->Receive(NN_NO2, respCtx);
     std::string resp((char *)respCtx.Message()->Data(), respCtx.Header().dataLength);
     NN_LOG_INFO("server response received - " << respCtx.Header().opCode << ", dataLen " <<
         respCtx.Header().dataLength);
@@ -347,8 +345,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendFail2)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -380,8 +377,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendFail3)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -411,8 +407,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendFail4)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -442,8 +437,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendFail5)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -454,12 +448,11 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendFail5)
     std::string value = "hello world";
     UBSHcomNetTransRequest req((void *)(const_cast<char *>(value.c_str())), value.length(), 0);
 
-    MOCKER_CPP(&ShmDataChannel::TryOccupyWithWait).defaults().will(returnValue(305));
+    MOCKER_CPP(&ShmDataChannel::TryOccupyWithWait).defaults().will(returnValue(SH_NOT_INITIALIZED));
     result = ep->PostSend(1, req);
     EXPECT_EQ(SH_NOT_INITIALIZED, result);
 
-
-    UBSHcomNetTransOpInfo innerOpInfo(2, 0, 0, NTH_TWO_SIDE);
+    UBSHcomNetTransOpInfo innerOpInfo(NN_NO2, 0, 0, NTH_TWO_SIDE);
     result = ep->PostSend(1, req, innerOpInfo);
     EXPECT_EQ(SH_NOT_INITIALIZED, result);
 
@@ -478,8 +471,7 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRetry1)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -493,10 +485,10 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRetry1)
 
     result = ep->PostSend(1, req);
     EXPECT_EQ(SH_OK, result);
-    result = ep->WaitCompletion(2);
+    result = ep->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
-    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).defaults().will(returnValue(301));
-    result = ep->Receive(2, respCtx);
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).defaults().will(returnValue(SH_PARAM_INVALID));
+    result = ep->Receive(NN_NO2, respCtx);
     EXPECT_EQ(SH_PARAM_INVALID, result);
 
     ep->Close();
@@ -511,8 +503,7 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRetry2)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -526,10 +517,10 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRetry2)
 
     result = ep->PostSend(1, req);
     EXPECT_EQ(SH_OK, result);
-    result = ep->WaitCompletion(2);
+    result = ep->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
-    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).defaults().will(returnValue(305));
-    result = ep->Receive(2, respCtx);
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).defaults().will(returnValue(SH_NOT_INITIALIZED));
+    result = ep->Receive(NN_NO2, respCtx);
     EXPECT_EQ(SH_NOT_INITIALIZED, result);
 
     ep->Close();
@@ -544,8 +535,7 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRetry3)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -559,10 +549,10 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRetry3)
 
     result = ep->PostSend(1, req);
     EXPECT_EQ(SH_OK, result);
-    result = ep->WaitCompletion(2);
+    result = ep->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
     MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).defaults().will(returnValue(false));
-    result = ep->Receive(2, respCtx);
+    result = ep->Receive(NN_NO2, respCtx);
     EXPECT_EQ(NN_MALLOC_FAILED, result);
 
     ep->Close();
@@ -577,8 +567,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawRetry)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
     EXPECT_TRUE(res);
     res = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(res);
@@ -590,7 +579,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawRetry)
     result = ep->PostSendRaw(req, 1);
     EXPECT_EQ(SH_OK, result);
 
-    result = ep->WaitCompletion(2);
+    result = ep->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
 
     UBSHcomNetResponseContext respCtx {};
@@ -600,7 +589,9 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawRetry)
         respCtx.Header().dataLength);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&ShmSyncEndpoint::PostSend).defaults().will(returnObjectList(301, 314));
+    MOCKER_CPP(&ShmSyncEndpoint::PostSend)
+        .defaults()
+        .will(returnObjectList(SH_PARAM_INVALID, SH_SEND_COMPLETION_CALLBACK_FAILURE));
     result = ep->PostSendRaw(req, 1);
     EXPECT_EQ(SH_PARAM_INVALID, result);
 
@@ -619,8 +610,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglRetry)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
 
-    bool createRes;
-    createRes = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
+    bool createRes = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
     EXPECT_TRUE(createRes);
     createRes = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(createRes);
@@ -640,11 +630,13 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglRetry)
     result = ep->ReceiveRawSgl(respCtx);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&ShmSyncEndpoint::PostSendRawSgl).defaults().will(returnObjectList(301, 314));
-    result = ep->PostSendRawSgl(req, 2);
+    MOCKER_CPP(&ShmSyncEndpoint::PostSendRawSgl)
+        .defaults()
+        .will(returnObjectList(SH_PARAM_INVALID, SH_SEND_COMPLETION_CALLBACK_FAILURE));
+    result = ep->PostSendRawSgl(req, NN_NO2);
     EXPECT_EQ(SH_PARAM_INVALID, result);
 
-    result = ep->PostSendRawSgl(req, 2);
+    result = ep->PostSendRawSgl(req, NN_NO2);
     EXPECT_EQ(SH_SEND_COMPLETION_CALLBACK_FAILURE, result);
 
     DestoryMem(clientDriver, mrs);
@@ -660,8 +652,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglRetry1)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool createRes;
-    createRes = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
+    bool createRes = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
     EXPECT_TRUE(createRes);
     createRes = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(createRes);
@@ -675,7 +666,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglRetry1)
 
     UBSHcomNetTransSglRequest req(clientMrInfo, iovCnt, 0);
     MOCKER_CPP(&ShmChannel::EQEventEnqueue).defaults().will(returnValue(-1));
-    result = ep->PostSendRawSgl(req, 2);
+    result = ep->PostSendRawSgl(req, NN_NO2);
     EXPECT_EQ(SH_RETRY_FULL, result);
 
     DestoryMem(clientDriver, mrs);
@@ -690,8 +681,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglRetry2)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool createRes;
-    createRes = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
+    bool createRes = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
     EXPECT_TRUE(createRes);
     createRes = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(createRes);
@@ -703,8 +693,8 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglRetry2)
     EXPECT_TRUE(res);
 
     UBSHcomNetTransSglRequest req(clientMrInfo, iovCnt, 0);
-    MOCKER_CPP(&ShmSyncEndpoint::FillSglCtx).defaults().will(returnValue(301));
-    result = ep->PostSendRawSgl(req, 2);
+    MOCKER_CPP(&ShmSyncEndpoint::FillSglCtx).defaults().will(returnValue(SH_PARAM_INVALID));
+    result = ep->PostSendRawSgl(req, NN_NO2);
     EXPECT_EQ(SH_PARAM_INVALID, result);
 
     DestoryMem(clientDriver, mrs);
@@ -721,8 +711,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail1)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -741,7 +730,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail1)
         .will(returnValue(0))
         .then(returnValue(-1));
 
-    result = ep->PostSendRawSgl(req, 2);
+    result = ep->PostSendRawSgl(req, NN_NO2);
     EXPECT_EQ(SH_SEND_COMPLETION_CALLBACK_FAILURE, result);
 
     DestoryMem(clientDriver, mrs);
@@ -758,8 +747,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail2)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -777,7 +765,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail2)
         .defaults()
         .will(returnObjectList(0, -1));
 
-    result = ep->PostSendRawSgl(req, 2);
+    result = ep->PostSendRawSgl(req, NN_NO2);
     EXPECT_EQ(SH_SEND_COMPLETION_CALLBACK_FAILURE, result);
 
     DestoryMem(clientDriver, mrs);
@@ -793,8 +781,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail3)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -809,7 +796,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail3)
     EXPECT_TRUE(res);
 
     UBSHcomNetTransSglRequest req(clientMrInfo, iovCnt, NN_NO29);
-    result = ep->PostSendRawSgl(req, 2);
+    result = ep->PostSendRawSgl(req, NN_NO2);
     EXPECT_EQ(SH_PARAM_INVALID, result);
 
     DestoryMem(clientDriver, mrs);
@@ -825,8 +812,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail4)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -857,8 +843,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail5)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -874,7 +859,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail5)
 
     UBSHcomNetTransSglRequest req(clientMrInfo, iovCnt, NN_NO16);
     MOCKER_CPP(&UBSHcomNetAtomicState<UBSHcomNetEndPointState>::Compare).defaults().will(returnValue(false));
-    result = ep->PostSendRawSgl(req, 2);
+    result = ep->PostSendRawSgl(req, NN_NO2);
     EXPECT_EQ(NN_EP_NOT_ESTABLISHED, result);
 
     DestoryMem(clientDriver, mrs);
@@ -890,8 +875,7 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail6)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -906,8 +890,8 @@ TEST_F(TestShmSyncEndpoint, SyncPostSendRawSglFail6)
     EXPECT_TRUE(res);
 
     UBSHcomNetTransSglRequest req(clientMrInfo, iovCnt, NN_NO16);
-    MOCKER_CPP(&MemoryRegionChecker::Validate).defaults().will(returnValue(100));
-    result = ep->PostSendRawSgl(req, 2);
+    MOCKER_CPP(&MemoryRegionChecker::Validate).defaults().will(returnValue(NN_INVALID_LKEY));
+    result = ep->PostSendRawSgl(req, NN_NO2);
     EXPECT_EQ(NN_INVALID_LKEY, result);
 
     DestoryMem(clientDriver, mrs);
@@ -923,8 +907,7 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRawRetry1)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSendRaw, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -942,8 +925,8 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRawRetry1)
     EXPECT_EQ(SH_OK, result);
     result = ep->WaitCompletion(-1);
     EXPECT_EQ(SH_OK, result);
-    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).defaults().will(returnValue(301));
-    result = ep->ReceiveRaw(2, respCtx);
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).defaults().will(returnValue(SH_PARAM_INVALID));
+    result = ep->ReceiveRaw(NN_NO2, respCtx);
     EXPECT_EQ(SH_PARAM_INVALID, result);
 
     DestoryMem(clientDriver, mrs);
@@ -959,8 +942,7 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRawRetry2)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -976,10 +958,10 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRawRetry2)
     UBSHcomNetResponseContext respCtx {};
     result = ep->PostSendRawSgl(req, 1);
     EXPECT_EQ(SH_OK, result);
-    result = ep->WaitCompletion(2);
+    result = ep->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
-    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).defaults().will(returnValue(305));
-    result = ep->ReceiveRaw(2, respCtx);
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).defaults().will(returnValue(SH_NOT_INITIALIZED));
+    result = ep->ReceiveRaw(NN_NO2, respCtx);
     EXPECT_EQ(SH_NOT_INITIALIZED, result);
 
     DestoryMem(clientDriver, mrs);
@@ -995,8 +977,7 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRawRetry3)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -1012,10 +993,10 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRawRetry3)
     UBSHcomNetResponseContext respCtx {};
     result = ep->PostSendRawSgl(req, 1);
     EXPECT_EQ(SH_OK, result);
-    result = ep->WaitCompletion(2);
+    result = ep->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
-    MOCKER_CPP(&ShmSyncEndpoint::Receive).defaults().will(returnValue(306));
-    result = ep->Receive(2, respCtx);
+    MOCKER_CPP(&ShmSyncEndpoint::Receive).defaults().will(returnValue(SH_TIME_OUT));
+    result = ep->Receive(NN_NO2, respCtx);
     EXPECT_EQ(SH_TIME_OUT, result);
 
     DestoryMem(clientDriver, mrs);
@@ -1031,8 +1012,7 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRawRetry4)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -1048,11 +1028,11 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRawRetry4)
     UBSHcomNetResponseContext respCtx {};
     result = ep->PostSendRawSgl(req, 1);
     EXPECT_EQ(SH_OK, result);
-    result = ep->WaitCompletion(2);
+    result = ep->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
     MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed, bool (UBSHcomNetMessage::*)(uint32_t))
         .defaults().will(returnValue(false));
-    result = ep->Receive(2, respCtx);
+    result = ep->Receive(NN_NO2, respCtx);
     EXPECT_EQ(NN_MALLOC_FAILED, result);
 
     DestoryMem(clientDriver, mrs);
@@ -1068,8 +1048,7 @@ TEST_F(TestShmSyncEndpoint, PostReadWriteSgl)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSglServer, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSglServer, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -1149,8 +1128,7 @@ TEST_F(TestShmSyncEndpoint, PostReadWriteSglFail)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSglServer, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSglServer, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -1186,7 +1164,7 @@ TEST_F(TestShmSyncEndpoint, PostReadWriteSglFail)
         iov[i].size = getRemoteMrInfo[i].size;
     }
 
-    UBSHcomNetTransSglRequest req(iov, NN_NO4, 17);
+    UBSHcomNetTransSglRequest req(iov, NN_NO4, NN_NO17);
 
     result = ep->PostRead(req);
     EXPECT_EQ(SH_PARAM_INVALID, result);
@@ -1205,8 +1183,7 @@ TEST_F(TestShmSyncEndpoint, GetFromLocalMapFail)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSglServer, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSglServer, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -1262,8 +1239,7 @@ TEST_F(TestShmSyncEndpoint, PostReadWrite)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedServer, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedServer, options);
     EXPECT_TRUE(res);
 
     res = CreateSyncClientDriver(clientDriver, options);
@@ -1308,7 +1284,6 @@ TEST_F(TestShmSyncEndpoint, PostReadWrite)
     result = ep->PostWrite(req);
     EXPECT_EQ(SH_OK, result);
 
-
     MOCKER_CPP(&ShmSyncEndpoint::PostRead,
         HResult(ShmSyncEndpoint::*)(ShmChannel *, const UBSHcomNetTransRequest &, ShmMRHandleMap &))
         .defaults()
@@ -1342,8 +1317,7 @@ TEST_F(TestShmSyncEndpoint, PostReadWriteFail)
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
 
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedServer, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedServer, options);
     EXPECT_TRUE(res);
     res = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(res);
@@ -1367,14 +1341,14 @@ TEST_F(TestShmSyncEndpoint, PostReadWriteFail)
     result = ep->Receive(NN_NO2, respCtx);
     EXPECT_EQ(SH_OK, result);
     memcpy(getRemoteMrInfo, respCtx.Message()->Data(), respCtx.Message()->DataLen());
-
+    uint16_t testUpCtxSize = 18;
     UBSHcomNetTransRequest req;
     req.lAddress = syncClientMrInfo[0].lAddress;
     req.rAddress = getRemoteMrInfo[0].lAddress;
     req.lKey = syncClientMrInfo[0].lKey;
     req.rKey = getRemoteMrInfo[0].lKey;
     req.size = getRemoteMrInfo[0].size;
-    req.upCtxSize = 18;
+    req.upCtxSize = testUpCtxSize;
     NN_LOG_INFO("req "
         << "req.lAddress: " << req.lAddress << " req.rAddress: " << req.rAddress << " req.lKey: " << req.lKey <<
         " req.rKey: " << req.rKey << " req.size:" << req.size);
@@ -1396,8 +1370,7 @@ TEST_F(TestShmSyncEndpoint, GetRemoteMrFdsFail)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriverOptions options {};
 
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedServer, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedServer, options);
     EXPECT_TRUE(res);
     res = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(res);
@@ -1433,7 +1406,7 @@ TEST_F(TestShmSyncEndpoint, GetRemoteMrFdsFail)
         << "req.lAddress: " << req.lAddress << " req.rAddress: " << req.rAddress << " req.lKey: " << req.lKey <<
         " req.rKey: " << req.rKey << " req.size:" << req.size);
 
-    MOCKER_CPP(&ShmChannel::GetRemoteMrFds).defaults().will(returnValue(306));
+    MOCKER_CPP(&ShmChannel::GetRemoteMrFds).defaults().will(returnValue(SH_TIME_OUT));
     result = ep->PostWrite(req);
     EXPECT_EQ(SH_TIME_OUT, result);
 
@@ -1452,8 +1425,7 @@ TEST_F(TestShmSyncEndpoint, NetSyncEndpointShmFuncation)
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
 
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
     res = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(res);
@@ -1476,8 +1448,7 @@ TEST_F(TestShmSyncEndpoint, GetRemoteUdsIdInfo)
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
 
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
     res = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(res);
@@ -1504,8 +1475,7 @@ TEST_F(TestShmSyncEndpoint, GetRemoteUdsIdInfoFail1)
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
 
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
     res = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(res);
@@ -1530,8 +1500,7 @@ TEST_F(TestShmSyncEndpoint, GetRemoteUdsIdInfoFail2)
     UBSHcomNetDriverOptions options {};
     options.mode = NET_EVENT_POLLING;
 
-    bool res;
-    res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
+    bool res = CreateServerDriver(serverDriver, RequestReceivedSend, options);
     EXPECT_TRUE(res);
     res = CreateSyncClientDriver(clientDriver, options);
     EXPECT_TRUE(res);

@@ -10,27 +10,27 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "test_pure_functions.h"
+#include "hcom_num_def.h"
 
-
+constexpr uint32_t NN_NO11 = 11;
 TestPureFunctions::TestPureFunctions() {}
 
 void TestPureFunctions::SetUp() {}
 
 void TestPureFunctions::TearDown() {}
-
 #if 0
 #include "hcom_securec.h"
 using namespace ock::hcom;
 TEST_F(TestPureFunctions, Memcpy_s)
 {
-    auto src = (int *)malloc(sizeof(int) * 10);
-    for (int i = 0; i < 10; ++i) {
+    auto src = (int *)malloc(sizeof(int) * NN_NO10);
+    for (int i = 0; i < NN_NO10; ++i) {
         src[i] = i;
     }
-    auto dst = (int *)malloc(sizeof(int) * 8);
-    bzero(dst, sizeof(int) * 8);
-    for (int i = 0; i < 8; ++i) {
-        dst[i] = 11;
+    auto dst = (int *)malloc(sizeof(int) * NN_NO8);
+    bzero(dst, sizeof(int) * NN_NO8);
+    for (int i = 0; i < NN_NO8; ++i) {
+        dst[i] = NN_NO11;
     }
 
     auto ret = memcpy_s(nullptr, 0, nullptr, 0);
@@ -41,7 +41,7 @@ TEST_F(TestPureFunctions, Memcpy_s)
 
     ret = memcpy_s(dst, 0x7fffffffUL + 1, src, 0);
     EXPECT_EQ(ret, SEC_ERANGE);
-    EXPECT_EQ(dst[0], 11);
+    EXPECT_EQ(dst[0], NN_NO11);
 
     ret = memcpy_s(nullptr, 1, src, 0);
     EXPECT_EQ(ret, SEC_EINVAL);
@@ -49,27 +49,27 @@ TEST_F(TestPureFunctions, Memcpy_s)
     ret = memcpy_s(dst, sizeof(int), nullptr, 0);
     EXPECT_EQ(ret, SEC_EINVAL_AND_RESET);
     EXPECT_EQ(dst[0], 0);
-    EXPECT_EQ(dst[1], 11);
+    EXPECT_EQ(dst[1], NN_NO11);
 
-    dst[0] = 11;
-    ret = memcpy_s(dst, sizeof(int), src, sizeof(int) * 2);
+    dst[0] = NN_NO11;
+    ret = memcpy_s(dst, sizeof(int), src, sizeof(int) * NN_NO2);
     EXPECT_EQ(ret, SEC_ERANGE_AND_RESET);
     EXPECT_EQ(dst[0], 0);
-    EXPECT_EQ(dst[1], 11);
+    EXPECT_EQ(dst[1], NN_NO11);
 
-    dst[0] = 11;
-    ret = memcpy_s(dst, sizeof(int) * 2, dst + 1, sizeof(int) * 2);
+    dst[0] = NN_NO11;
+    ret = memcpy_s(dst, sizeof(int) * NN_NO2, dst + 1, sizeof(int) * NN_NO2);
     EXPECT_EQ(ret, SEC_EOVERLAP_AND_RESET);
     EXPECT_EQ(dst[0], 0);
     EXPECT_EQ(dst[1], 0);
 
-    dst[0] = 11;
-    dst[1] = 11;
-    ret = memcpy_s(dst, sizeof(int) * 8, src, sizeof(int) * 4);
+    dst[0] = NN_NO11;
+    dst[1] = NN_NO11;
+    ret = memcpy_s(dst, sizeof(int) * NN_NO8, src, sizeof(int) * NN_NO4);
     EXPECT_EQ(ret, EOK);
     EXPECT_EQ(dst[0], 0);
-    EXPECT_EQ(dst[3], 3);
-    EXPECT_EQ(dst[4], 11);
+    EXPECT_EQ(dst[NN_NO3], NN_NO3);
+    EXPECT_EQ(dst[NN_NO4], NN_NO11);
 }
 
 TEST_F(TestPureFunctions, Strcpy_s)
@@ -84,25 +84,25 @@ TEST_F(TestPureFunctions, Strcpy_s)
     EXPECT_EQ(result, SEC_EINVAL);
     result = strcpy_s(nullptr, 1, src);
     EXPECT_EQ(result, SEC_EINVAL);
-    result = strcpy_s(dst, 8, nullptr);
+    result = strcpy_s(dst, NN_NO8, nullptr);
     EXPECT_EQ(result, SEC_EINVAL_AND_RESET);
     EXPECT_EQ(dst[0], '\0');
     EXPECT_EQ(dst[1], 'z');
     dst[0] = 'z';
-    result = strcpy_s(dst, 7, src);
+    result = strcpy_s(dst, NN_NO7, src);
     EXPECT_EQ(result, SEC_ERANGE_AND_RESET);
     EXPECT_EQ(dst[0], '\0');
     EXPECT_EQ(dst[1], 'z');
     dst[0] = 'z';
-    result = strcpy_s(dst, 6, &(dst[4]));
+    result = strcpy_s(dst, NN_NO6, &(dst[NN_NO4]));
     EXPECT_EQ(result, SEC_EOVERLAP_AND_RESET);
     EXPECT_EQ(dst[0], '\0');
     EXPECT_EQ(dst[1], 'z');
     dst[0] = 'z';
-    result = strcpy_s(dst, 8, src);
+    result = strcpy_s(dst, NN_NO8, src);
     EXPECT_EQ(result, EOK);
     EXPECT_EQ(dst[0], 'a');
-    EXPECT_EQ(dst[6], 'g');
-    EXPECT_EQ(dst[7], '\0');
+    EXPECT_EQ(dst[NN_NO6], 'g');
+    EXPECT_EQ(dst[NN_NO7], '\0');
 }
 #endif

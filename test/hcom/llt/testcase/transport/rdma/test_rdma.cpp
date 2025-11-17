@@ -13,8 +13,7 @@
 #ifdef RDMA_BUILD_ENABLED
 #include <gtest/gtest.h>
 #include "mockcpp/mockcpp.hpp"
-#include "test_rdma.hpp"
-#include "string.h"
+#include "cstring"
 #include "hcom.h"
 #include "common/net_util.h"
 #include "transport/rdma/verbs/net_rdma_sync_endpoint.h"
@@ -25,6 +24,7 @@
 #include "fake_ibv.h"
 #include "transport/rdma/verbs/net_rdma_driver.h"
 #include "ut_helper.h"
+#include "test_rdma.h"
 
 TestCaseRdma::TestCaseRdma() {}
 
@@ -110,7 +110,7 @@ int ServerRequestReceived(const UBSHcomNetRequestContext &ctx)
             }
 
             NN_LOG_INFO("request rsp Mr info");
-            for (uint16_t i = 0; i < 4; i++) {
+            for (uint16_t i = 0; i < NN_NO4; i++) {
                 NN_LOG_TRACE_INFO("idx:" << i << " key:" << serverLocalMrInfo[i].lKey << " address:" <<
                     serverLocalMrInfo[i].lAddress << " size" << serverLocalMrInfo[i].size);
             }
@@ -125,7 +125,7 @@ int ServerRequestReceived(const UBSHcomNetRequestContext &ctx)
                 return result;
             }
         } else if (ctx.Header().opCode == SET_MR) {
-            for (uint16_t i = 0; i < 4; i++) {
+            for (uint16_t i = 0; i < NN_NO4; i++) {
                 memset(reinterpret_cast<void *>(serverLocalMrInfo[i].lAddress), 0, NN_NO16);
             }
             uint64_t rspData = 0;
@@ -178,12 +178,12 @@ bool ServerCreateDriver()
 
     UBSHcomNetDriverOptions options {};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING; // 只支持EVENT模式
-    options.mrSendReceiveSegSize = 1024;
-    options.mrSendReceiveSegCount = 1024;
+    options.mrSendReceiveSegSize = NN_NO1024;
+    options.mrSendReceiveSegCount = NN_NO1024;
     options.enableTls = false;
     options.SetNetDeviceIpMask(ipSeg);
     NN_LOG_INFO("set ip mask " << options.netDeviceIpMask);
-    options.prePostReceiveSizePerQP = 32;
+    options.prePostReceiveSizePerQP = NN_NO32;
 
     serverDriver->RegisterNewEPHandler(
         std::bind(&ServerNewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -212,7 +212,7 @@ bool ServerCreateDriver()
 
 bool ServerRegSglMem()
 {
-    for (uint16_t i = 0; i < 4; i++) {
+    for (uint16_t i = 0; i < NN_NO4; i++) {
         UBSHcomNetMemoryRegionPtr mr;
         auto result = serverDriver->CreateMemoryRegion(NN_NO16, mr);
         if (result != NN_OK) {
@@ -299,8 +299,8 @@ bool ClientCreateDriver()
 
     UBSHcomNetDriverOptions options {};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING; // 只支持EVENT模式
-    options.mrSendReceiveSegSize = 1024;
-    options.mrSendReceiveSegCount = 1024;
+    options.mrSendReceiveSegSize = NN_NO1024;
+    options.mrSendReceiveSegCount = NN_NO1024;
     options.heartBeatIdleTime = 1;
     options.heartBeatProbeInterval = 1;
     options.enableTls = false;

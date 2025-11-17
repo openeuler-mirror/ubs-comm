@@ -11,9 +11,9 @@
  */
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
-#include "test_sock.hpp"
 #include "hcom.h"
 #include "ut_helper.h"
+#include "test_sock.h"
 
 using namespace ock::hcom;
 TestCaseSock::TestCaseSock() {}

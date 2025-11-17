@@ -35,7 +35,7 @@ private:
     NetMemPoolFixedPtr ctxMemPool = nullptr;
     HcomServiceCtxStorePtr mCtxStore = nullptr;
     HcomPeriodicManagerPtr mPeriodicMgr = nullptr;
-    NetPgTablePtr mPgtable = nullptr;
+    netPgTablePtr mPgtable = nullptr;
     UBSHcomNetWorkerIndex workerIndex{};
     UBSHcomNetEndpointPtr ep = nullptr;
     NetMemPoolFixedOptions options = {};
@@ -115,7 +115,7 @@ TEST_F(TestNetChannelImp, TestSendInner)
     ASSERT_EQ(channel->SendInner(req, nullptr), SER_NOT_ESTABLISHED);
 
     Callback *callback = UBSHcomNewCallback([]
-            (UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); }, std::placeholders::_1);
+        (UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); }, std::placeholders::_1);
     ASSERT_EQ(channel->SendInner(req, callback), SER_INVALID_PARAM);
 
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),

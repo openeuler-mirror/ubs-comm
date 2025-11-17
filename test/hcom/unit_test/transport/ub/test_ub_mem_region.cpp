@@ -78,9 +78,9 @@ TEST_F(TestUbMemRegion, GetVa)
 {
     uint64_t va;
     uint64_t vaLen;
-    uint32_t token_id;
+    uint32_t tokenId;
 
-    EXPECT_NO_FATAL_FAILURE(MemRegion->GetVa(va, vaLen, token_id));
+    EXPECT_NO_FATAL_FAILURE(MemRegion->GetVa(va, vaLen, tokenId));
     EXPECT_EQ(va, 0);
 }
 

@@ -17,7 +17,7 @@ using namespace ock::hcom;
 
 #define BASE_IP "127.0.0.1"
 #define IP_SEG "127.0.0.0/16"
-int ipPort = 6550;
+int g_ipPort = 6550;
 static UBSHcomNetEndpointPtr serverEp;
 
 static int NewEndPoint(const std::string &ipPort, const UBSHcomNetEndpointPtr &newEP, const std::string &payload)
@@ -228,20 +228,20 @@ TEST_F(TestSecure, OneWayCase1)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     /* client is registered, return invalid */
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_ONE_WAY;
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_1", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderInvalid, nullptr);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderInvalid, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
 
     /* 1-1 server validator is registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_1", true);
-    SetCB(sDriver, ipPort, true, nullptr, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, nullptr, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -250,7 +250,7 @@ TEST_F(TestSecure, OneWayCase1)
 
     /* server validator is not registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_1", true);
-    SetCB(sDriver, ipPort, true, nullptr, ValidatorValid);
+    SetCB(sDriver, g_ipPort, true, nullptr, ValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -259,7 +259,7 @@ TEST_F(TestSecure, OneWayCase1)
 
     /* 1-3 server validator is registered, return invalid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_1", true);
-    SetCB(sDriver, ipPort, true, nullptr, AuthValidatorInvalid);
+    SetCB(sDriver, g_ipPort, true, nullptr, AuthValidatorInvalid);
     sDriver->Initialize(options);
     sDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -268,7 +268,7 @@ TEST_F(TestSecure, OneWayCase1)
 
     /* 1-2 server validator is not registered, set nullptr */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_1", true);
-    SetCB(sDriver, ipPort, true, nullptr, nullptr);
+    SetCB(sDriver, g_ipPort, true, nullptr, nullptr);
     sDriver->Initialize(options);
     sDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -285,20 +285,20 @@ TEST_F(TestSecure, OneWayCase2)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     /* client provider is registered, return valid */
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_ONE_WAY;
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_2", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidOne, nullptr);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidOne, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
 
     /* 2-1 server validator is not registered, set nullptr */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_2", true);
-    SetCB(sDriver, ipPort, true, nullptr, nullptr);
+    SetCB(sDriver, g_ipPort, true, nullptr, nullptr);
     sDriver->Initialize(options);
     sDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -307,7 +307,7 @@ TEST_F(TestSecure, OneWayCase2)
 
     /* 2-2 server validator is not registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_2", true);
-    SetCB(sDriver, ipPort, true, nullptr, ValidatorValid);
+    SetCB(sDriver, g_ipPort, true, nullptr, ValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -324,20 +324,20 @@ TEST_F(TestSecure, OneWayCase3)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     /* client provider is registered, return valid */
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_ONE_WAY;
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_3", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidOne, nullptr);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidOne, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
 
     /* 3-1 server validator is registered, return invalid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_3", true);
-    SetCB(sDriver, ipPort, true, nullptr, AuthValidatorInvalid);
+    SetCB(sDriver, g_ipPort, true, nullptr, AuthValidatorInvalid);
     sDriver->Initialize(options);
     sDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -360,13 +360,13 @@ TEST_F(TestSecure, OneWayCase4)
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_ONE_WAY;
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_4", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidOne, nullptr);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidOne, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
 
     /* 4-1 server validator is registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_4", true);
-    SetCB(sDriver, ipPort, true, nullptr, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, nullptr, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
@@ -386,20 +386,20 @@ TEST_F(TestSecure, OneWayCase5)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     /* server validator is registered, return valid */
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_ONE_WAY;
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_5", true);
-    SetCB(sDriver, ipPort, true, nullptr, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, nullptr, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 5-1 client provider is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_5", false);
-    SetCB(cDriver, ipPort, false, ProviderValid, nullptr);
+    SetCB(cDriver, g_ipPort, false, ProviderValid, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -408,7 +408,7 @@ TEST_F(TestSecure, OneWayCase5)
 
     /* 5-2 client provider is nullptr */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_5", false);
-    SetCB(cDriver, ipPort, false, nullptr, nullptr);
+    SetCB(cDriver, g_ipPort, false, nullptr, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -425,20 +425,20 @@ TEST_F(TestSecure, OneWayCase6)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_ONE_WAY;
     /* server validator is registered, but return invalid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_6", true);
-    SetCB(sDriver, ipPort, true, nullptr, AuthValidatorInvalid);
+    SetCB(sDriver, g_ipPort, true, nullptr, AuthValidatorInvalid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 6-1 client provider is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_6", false);
-    SetCB(cDriver, ipPort, false, ProviderValid, nullptr);
+    SetCB(cDriver, g_ipPort, false, ProviderValid, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -447,7 +447,7 @@ TEST_F(TestSecure, OneWayCase6)
 
     /* 6-2 client provider is nullptr */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_6", false);
-    SetCB(cDriver, ipPort, false, nullptr, nullptr);
+    SetCB(cDriver, g_ipPort, false, nullptr, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -463,20 +463,20 @@ TEST_F(TestSecure, OneWayCase7)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_ONE_WAY;
     /* server validator is not registered, but return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_7", true);
-    SetCB(sDriver, ipPort, true, nullptr, ValidatorValid);
+    SetCB(sDriver, g_ipPort, true, nullptr, ValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 7-1 client provider is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_7", false);
-    SetCB(cDriver, ipPort, false, ProviderValid, nullptr);
+    SetCB(cDriver, g_ipPort, false, ProviderValid, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -485,7 +485,7 @@ TEST_F(TestSecure, OneWayCase7)
 
     /* 7-2 client provider is nullptr */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_7", false);
-    SetCB(cDriver, ipPort, false, nullptr, nullptr);
+    SetCB(cDriver, g_ipPort, false, nullptr, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -495,13 +495,13 @@ TEST_F(TestSecure, OneWayCase7)
 
     /* server validator is nullptr */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_one_case_7", true);
-    SetCB(sDriver, ipPort, true, nullptr, nullptr);
+    SetCB(sDriver, g_ipPort, true, nullptr, nullptr);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 7-3 client provider is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_7", false);
-    SetCB(cDriver, ipPort, false, ProviderValid, nullptr);
+    SetCB(cDriver, g_ipPort, false, ProviderValid, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -510,7 +510,7 @@ TEST_F(TestSecure, OneWayCase7)
 
     /* 7-4 client provider is nullptr */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_one_case_7", false);
-    SetCB(cDriver, ipPort, false, nullptr, nullptr);
+    SetCB(cDriver, g_ipPort, false, nullptr, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -526,20 +526,20 @@ TEST_F(TestSecure, TwoWayCase8)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_TWO_WAY;
     /* server provider is registered, but return invalid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_two_case_8", true);
-    SetCB(sDriver, ipPort, true, SecInfoProviderInvalid, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, SecInfoProviderInvalid, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 8-1 client validator is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_8", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, ValidatorValid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, ValidatorValid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -548,7 +548,7 @@ TEST_F(TestSecure, TwoWayCase8)
 
     /* 8-2 client validator is not registered, set nullptr */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_8", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, nullptr);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -564,20 +564,20 @@ TEST_F(TestSecure, TwoWayCase9)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_TWO_WAY;
     /* server provider is registered, but return invalid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_two_case_9", true);
-    SetCB(sDriver, ipPort, true, SecInfoProviderInvalid, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, SecInfoProviderInvalid, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 9-1 client validator is registered, return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_9", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, AuthValidatorValid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, AuthValidatorValid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -586,7 +586,7 @@ TEST_F(TestSecure, TwoWayCase9)
 
     /* 9-2 client validator is registered, return invalid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_9", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, AuthValidatorInvalid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, AuthValidatorInvalid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -602,20 +602,20 @@ TEST_F(TestSecure, TwoWayCase10)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_TWO_WAY;
     /* server provider is registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_two_case_10", true);
-    SetCB(sDriver, ipPort, true, SecInfoProviderValidTwo, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, SecInfoProviderValidTwo, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 10-1 client validator is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_10", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, ValidatorValid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, ValidatorValid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -624,7 +624,7 @@ TEST_F(TestSecure, TwoWayCase10)
 
     /* 10-2 client validator is not registered, set nullptr */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_10", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, nullptr);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -640,20 +640,20 @@ TEST_F(TestSecure, TwoWayCase11)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_TWO_WAY;
     /* server provider is registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_two_case_11", true);
-    SetCB(sDriver, ipPort, true, SecInfoProviderValidTwo, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, SecInfoProviderValidTwo, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 11-1 client validator is not registered, set nullptr */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_11", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, AuthValidatorInvalid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, AuthValidatorInvalid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -669,20 +669,20 @@ TEST_F(TestSecure, TwoWayCase12)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_TWO_WAY;
     /* server provider is registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_two_case_12", true);
-    SetCB(sDriver, ipPort, true, SecInfoProviderValidTwo, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, SecInfoProviderValidTwo, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 12-1 client validator is not registered, set nullptr */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_12", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, AuthValidatorValid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, AuthValidatorValid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -698,20 +698,20 @@ TEST_F(TestSecure, TwoWayCase13)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_TWO_WAY;
     /* server provider is not registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_two_case_13", true);
-    SetCB(sDriver, ipPort, true, ProviderValid, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, ProviderValid, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 13-1 client validator is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_13", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, ValidatorValid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, ValidatorValid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -720,7 +720,7 @@ TEST_F(TestSecure, TwoWayCase13)
 
     /* 13-2 client validator is not registered, but return invalid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_13", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, nullptr);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -737,20 +737,20 @@ TEST_F(TestSecure, TwoWayCase14)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_TWO_WAY;
     /* server provider is not registered, set nullptr */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_two_case_14", true);
-    SetCB(sDriver, ipPort, true, nullptr, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, nullptr, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 14-1 client validator is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_14", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, ValidatorValid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, ValidatorValid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -759,7 +759,7 @@ TEST_F(TestSecure, TwoWayCase14)
 
     /* 14-2 client validator is not registered, but return invalid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_14", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, nullptr);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -776,20 +776,20 @@ TEST_F(TestSecure, TwoWayCase15)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_TWO_WAY;
     /* server provider is not registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_two_case_15", true);
-    SetCB(sDriver, ipPort, true, ProviderValid, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, ProviderValid, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 15-1 client validator is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_15", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, AuthValidatorValid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, AuthValidatorValid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -798,7 +798,7 @@ TEST_F(TestSecure, TwoWayCase15)
 
     /* 15-2 client validator is not registered, but return invalid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_15", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, AuthValidatorInvalid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, AuthValidatorInvalid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -815,20 +815,20 @@ TEST_F(TestSecure, TwoWayCase16)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     options.secType = ock::hcom::NET_SEC_VALID_TWO_WAY;
     /* server provider is not registered, set nullptr */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_two_case_16", true);
-    SetCB(sDriver, ipPort, true, nullptr, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, nullptr, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 
     /* 16-1 client validator is not registered, but return valid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_16", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, AuthValidatorValid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, AuthValidatorValid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -837,7 +837,7 @@ TEST_F(TestSecure, TwoWayCase16)
 
     /* 16-2 client validator is not registered, but return invalid */
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_two_case_16", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValidTwo, AuthValidatorInvalid);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValidTwo, AuthValidatorInvalid);
     cDriver->Initialize(options);
     cDriver->Start();
     result = cDriver->Connect("hello world", clientEp, 0);
@@ -854,19 +854,19 @@ TEST_F(TestSecure, TokenEmptyString)
     UBSHcomNetDriver *cDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     NResult result = NN_OK;
-    ipPort++;
+    g_ipPort++;
 
     /* client provider is registered, return valid */
     UBSHcomNetDriverOptions options;
     SetDriverOptions(options);
     cDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "client_empty_string", false);
-    SetCB(cDriver, ipPort, false, SecInfoProviderValid, nullptr);
+    SetCB(cDriver, g_ipPort, false, SecInfoProviderValid, nullptr);
     cDriver->Initialize(options);
     cDriver->Start();
 
     /* server validator is registered, return valid */
     sDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "server_empty_string", true);
-    SetCB(sDriver, ipPort, true, nullptr, AuthValidatorValid);
+    SetCB(sDriver, g_ipPort, true, nullptr, AuthValidatorValid);
     sDriver->Initialize(options);
     sDriver->Start();
 

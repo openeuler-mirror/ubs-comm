@@ -67,7 +67,8 @@ bool ServiceWriteLatTest::Initialize()
     // create NetService
     UBSHcomServiceNewChannelHandler funcNewChannel = bind(&ServiceWriteLatTest::NewChannel, this, std::placeholders::_1,
         std::placeholders::_2, std::placeholders::_3);
-    UBSHcomServiceRecvHandler funcReqReceived = bind(&ServiceWriteLatTest::RequestReceived, this, std::placeholders::_1);
+    UBSHcomServiceRecvHandler funcReqReceived =
+        bind(&ServiceWriteLatTest::RequestReceived, this, std::placeholders::_1);
     UBSHcomServiceChannelBrokenHandler funcChBroken = bind(&ServiceWriteLatTest::ChannelBroken, this,
         std::placeholders::_1);
 

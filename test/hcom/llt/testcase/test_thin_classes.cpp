@@ -13,8 +13,8 @@
 #include <unordered_set>
 
 #include "net_obj_pool.h"
-#include "test_thin_classes.h"
 #include "ut_helper.h"
+#include "test_thin_classes.h"
 
 using namespace ock::hcom;
 TestCaseThinClasses::TestCaseThinClasses() {}
@@ -54,7 +54,9 @@ TEST_F(TestCaseThinClasses, NetUId)
 
 TEST_F(TestCaseThinClasses, NetRef)
 {
-    OBJ_LIFE_CYCLE olc(NONE), olc1(NONE), olc2(NONE);
+    OBJ_LIFE_CYCLE olc(NONE);
+    OBJ_LIFE_CYCLE olc1(NONE);
+    OBJ_LIFE_CYCLE olc2(NONE);
     auto obj = new NoisyObj(olc);
     auto obj1 = new NoisyObj(olc1);
     EXPECT_EQ(olc, INIT);

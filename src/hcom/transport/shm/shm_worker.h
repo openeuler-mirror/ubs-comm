@@ -192,7 +192,7 @@ private:
     HResult SendLocalEvent(uintptr_t ctx, ShmChannel *ch, ShmOpContextInfo::ShmOpType type);
 
 private:
-    static std::atomic<uint64_t> GLOBAL_WORKER_INDEX;
+    static std::atomic<uint64_t> shmWorkerIndex;
 
 private:
     std::string mName;

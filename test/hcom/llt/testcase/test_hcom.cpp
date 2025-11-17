@@ -10,12 +10,12 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include "test_hcom.hpp"
 #include "transport/rdma/verbs/net_rdma_driver.h"
 #include "transport/rdma/verbs/net_rdma_driver_oob.h"
 #include "common/net_util.h"
 #include "ut_helper.h"
 #include "net_trace.h"
+#include "test_hcom.h"
 
 using namespace ock::hcom;
 
@@ -58,8 +58,8 @@ void TestHcom::SetUp()
     }
 #endif
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING; // 只支持EVENT模式
-    options.mrSendReceiveSegSize = 1024;
-    options.mrSendReceiveSegCount = 1024;
+    options.mrSendReceiveSegSize = NN_NO1024;
+    options.mrSendReceiveSegCount = NN_NO1024;
     options.enableTls = false;
     options.SetNetDeviceIpMask(IP_SEG);
 }
@@ -74,12 +74,13 @@ static void Log(int level, const char *msg)
     struct timeval tv {};
     char strTime[24];
 
-    gettimeofday(&tv, nullptr);
-    strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S.", localtime(&tv.tv_sec));
+    (void)gettimeofday(&tv, nullptr);
+    (void)strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S.", localtime(&tv.tv_sec));
 
     static  std::string levelInfo[4] = {"debug", "info", "warn", "error"};
 
-    std::cout << strTime << tv.tv_usec << " " << levelInfo[level & 3] << " " << msg << " ExteralLogFunc" << std::endl;
+    std::cout << strTime << tv.tv_usec << " " << levelInfo[level & NN_NO3] << " " << msg <<
+        " ExteralLogFunc" << std::endl;
 }
 
 TEST_F(TestHcom, InstanceOfTcpProtocolSuccess)
@@ -88,8 +89,8 @@ TEST_F(TestHcom, InstanceOfTcpProtocolSuccess)
     UBSHcomNetDriverDeviceInfo deviceInfo;
     bool ret = tcpDriver->LocalSupport(ock::hcom::TCP, deviceInfo);
     EXPECT_EQ(true, ret);
-
-    tcpDriver->OobIpAndPort(BASE_IP, 9989);
+    uint16_t testPort = 9989;
+    tcpDriver->OobIpAndPort(BASE_IP, testPort);
     tcpDriver->Initialize(options);
     tcpDriver->RegisterEPBrokenHandler(std::bind(&EndPointBroken, std::placeholders::_1));
     tcpDriver->RegisterNewReqHandler(std::bind(&RequestReceived, std::placeholders::_1));
@@ -107,8 +108,8 @@ TEST_F(TestHcom, InstanceOfUdsProtocolSuccess)
     UBSHcomNetDriverDeviceInfo deviceInfo;
     bool ret = udsDriver->LocalSupport(ock::hcom::UDS, deviceInfo);
     EXPECT_EQ(true, ret);
-
-    udsDriver->OobIpAndPort(BASE_IP, 9989);
+    uint16_t testPort = 9989;
+    udsDriver->OobIpAndPort(BASE_IP, testPort);
     udsDriver->Initialize(options);
     udsDriver->RegisterEPBrokenHandler(std::bind(&EndPointBroken, std::placeholders::_1));
     udsDriver->RegisterNewReqHandler(std::bind(&RequestReceived, std::placeholders::_1));
@@ -136,8 +137,8 @@ TEST_F(TestHcom, InstanceOfRDMAProtocolSuccess)
     UBSHcomNetDriverDeviceInfo deviceInfo;
     bool ret = rdmaDriver->LocalSupport(ock::hcom::RDMA, deviceInfo);
     EXPECT_EQ(true, ret);
-
-    rdmaDriver->OobIpAndPort(BASE_IP, 9989);
+    uint16_t testPort = 9989;
+    rdmaDriver->OobIpAndPort(BASE_IP, testPort);
     rdmaDriver->Initialize(options);
     rdmaDriver->RegisterEPBrokenHandler(std::bind(&EndPointBroken, std::placeholders::_1));
     rdmaDriver->RegisterNewReqHandler(std::bind(&RequestReceived, std::placeholders::_1));
@@ -151,8 +152,7 @@ TEST_F(TestHcom, InstanceOfRDMAProtocolSuccess)
 
 TEST_F(TestHcom, InstanceOfOtherProtocolFailed)
 {
-    UBSHcomNetDriverProtocol driverProtocol;
-    driverProtocol = (UBSHcomNetDriverProtocol)100;
+    UBSHcomNetDriverProtocol driverProtocol = (UBSHcomNetDriverProtocol)NN_NO100;
 
     auto otherDriver = UBSHcomNetDriver::Instance(driverProtocol, "otherServer", true);
     EXPECT_EQ(nullptr, otherDriver);
@@ -162,8 +162,7 @@ TEST_F(TestHcom, InstanceOfOtherProtocolFailed)
 TEST_F(TestHcom, LocalSupportOtherFailed)
 {
     auto otherDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA, "rServer", true);
-    UBSHcomNetDriverProtocol driverProtocol;
-    driverProtocol = (UBSHcomNetDriverProtocol)100;
+    UBSHcomNetDriverProtocol driverProtocol = (UBSHcomNetDriverProtocol)NN_NO100;
 
     UBSHcomNetDriverDeviceInfo deviceInfo;
     bool ret = otherDriver->LocalSupport(driverProtocol, deviceInfo);

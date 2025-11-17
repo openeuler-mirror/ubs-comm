@@ -27,25 +27,25 @@ TEST_F(TestCaseRingBuffer, NetRingBuffer_Ser_OK)
 {
     NResult result;
     bool ret;
-    NetRingBuffer<int> ringBuffer(4);
-    EXPECT_EQ(ringBuffer.Capacity(), 4);
+    NetRingBuffer<int> ringBuffer(NN_NO4);
+    EXPECT_EQ(ringBuffer.Capacity(), NN_NO4);
     result = ringBuffer.Initialize();
     EXPECT_EQ(result, NN_OK);
     ret = ringBuffer.PushBack(1);
     EXPECT_EQ(ret, true);
-    ringBuffer.PushBack(2);
-    EXPECT_EQ(ringBuffer.Size(), 2);
+    ringBuffer.PushBack(NN_NO2);
+    EXPECT_EQ(ringBuffer.Size(), NN_NO2);
     int a = 0;
     ringBuffer.PopFront(a);
     EXPECT_EQ(a, 1);
     ringBuffer.PopFront(a);
-    EXPECT_EQ(a, 2);
+    EXPECT_EQ(a, NN_NO2);
     EXPECT_EQ(ringBuffer.Size(), 0);
-    ringBuffer.PushFront(2);
+    ringBuffer.PushFront(NN_NO2);
     ringBuffer.PushFront(1);
     ringBuffer.PushFront(0);
-    int *b = new int[2];
-    ret = ringBuffer.PopFrontN(b, 2);
+    int *b = new int[NN_NO2];
+    ret = ringBuffer.PopFrontN(b, NN_NO2);
     EXPECT_EQ(ret, true);
     EXPECT_EQ(b[0], 0);
     EXPECT_EQ(b[1], 1);
@@ -63,7 +63,7 @@ TEST_F(TestCaseRingBuffer, NetRingBuffer_Ser_Fail)
     result = zringBuffer.Initialize();
     EXPECT_NE(result, NN_OK);
 
-    NetRingBuffer<int> ringBuffer(2);
+    NetRingBuffer<int> ringBuffer(NN_NO2);
     result = ringBuffer.Initialize();
     EXPECT_EQ(result, NN_OK);
 
@@ -71,9 +71,9 @@ TEST_F(TestCaseRingBuffer, NetRingBuffer_Ser_Fail)
     EXPECT_EQ(ret, true);
     ret = ringBuffer.PushBack(1);
     EXPECT_EQ(ret, true);
-    ret = ringBuffer.PushBack(2);
+    ret = ringBuffer.PushBack(NN_NO2);
     EXPECT_EQ(ret, false);
-    EXPECT_EQ(ringBuffer.Size(), 2);
+    EXPECT_EQ(ringBuffer.Size(), NN_NO2);
 
     int a = -1;
     ret = ringBuffer.PopFront(a);
@@ -91,13 +91,12 @@ TEST_F(TestCaseRingBuffer, NetRingBuffer_Ser_Fail)
     ringBuffer.PushBack(1);
     int *b = new int[2];
     b[0] = -1;
-    ret = ringBuffer.PopFrontN(b, 3);
+    ret = ringBuffer.PopFrontN(b, NN_NO3);
     EXPECT_EQ(ret, false);
     EXPECT_EQ(b[0], -1);
 
     delete[] b;
 }
-
 
 TEST_F(TestCaseRingBuffer, NetRingBuffer_Con_OK)
 {

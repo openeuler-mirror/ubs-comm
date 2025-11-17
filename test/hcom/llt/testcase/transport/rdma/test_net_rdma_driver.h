@@ -9,19 +9,17 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-
-#ifndef _TEST_RDMA_TLS_HPP_
-#define _TEST_RDMA_TLS_HPP_
+#ifndef TEST_NET_RDMA_DRIVER_HPP_
+#define TEST_NET_RDMA_DRIVER_HPP_
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
-class TestCaseRdmaTLS : public testing::Test {
+class TestNetDriverRDMA : public testing::Test {
 public:
-    TestCaseRdmaTLS();
+    TestNetDriverRDMA();
     virtual void SetUp(void);
     virtual void TearDown(void);
 
 protected:
 };
-
 #endif

@@ -36,8 +36,7 @@ TEST_F(TestCaseNetTrace, TestTraceLevel2)
     TRACE_DELAY_BEGIN(SOCK_DRIVER_CREATE_WORKER_RESOURCE);
     TRACE_DELAY_END(SOCK_DRIVER_CREATE_WORKER_RESOURCE, 0);
 
-    std::string dumpStr;
-    dumpStr = NetTrace::TraceDump();
+    std::string dumpStr = NetTrace::TraceDump();
 
     NN_LOG_INFO(dumpStr);
 }

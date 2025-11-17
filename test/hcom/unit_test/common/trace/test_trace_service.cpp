@@ -32,24 +32,24 @@ constexpr uint32_t TRACE_ID_2 = TRACE_ID(2, NN_NO0);
 
 TEST_F(TestService, test_one_trace_service_start_return_true_shutdown_return_true)
 {
-    traceService = new HTracerService();
-    EXPECT_EQ(traceService->StartUp("1234"), NN_OK);
+    g_traceService = new HTracerService();
+    EXPECT_EQ(g_traceService->StartUp("1234"), NN_OK);
 
-    traceService->ShutDown();
+    g_traceService->ShutDown();
 
-    delete traceService;
-    traceService = nullptr;
+    delete g_traceService;
+    g_traceService = nullptr;
 }
 
 TEST_F(TestService, test_one_trace_service_create_port_return_false_when_used_and_return_true_when_new_port)
 {
-    traceService = new HTracerService();
-    EXPECT_EQ(traceService->StartUp("12345"), NN_OK);
-    EXPECT_EQ(traceService->StartUp("12346"), NN_OK);
+    g_traceService = new HTracerService();
+    EXPECT_EQ(g_traceService->StartUp("12345"), NN_OK);
+    EXPECT_EQ(g_traceService->StartUp("12346"), NN_OK);
 
-    traceService->ShutDown();
-    delete traceService;
-    traceService = nullptr;
+    g_traceService->ShutDown();
+    delete g_traceService;
+    g_traceService = nullptr;
 }
 
 TEST_F(TestService, test_get_traceinfo_give_normal_value_id_return_normal_value)
@@ -107,8 +107,8 @@ TEST_F(TestService, test_get_traceinfo_give_invalid_value_return_all_records)
     auto tTranceInfos = TracerServiceHelper::GetTraceInfos(INVALID_SERVICE_ID,
         0, TraceManager::IsLatencyQuantileEnable());
 
-    EXPECT_EQ(tTranceInfos.size(), 2);
-    for (int i = 0; i < 2; i++) {
+    EXPECT_EQ(tTranceInfos.size(), NN_NO2);
+    for (int i = 0; i < NN_NO2; i++) {
         EXPECT_EQ(tTranceInfos[i].begin, 1);
         EXPECT_NE(tTranceInfos[i].total, 0);
         EXPECT_EQ(tTranceInfos[i].goodEnd, 1);
@@ -119,42 +119,42 @@ TEST_F(TestService, test_get_traceinfo_give_invalid_value_return_all_records)
 
 TEST_F(TestService, test_sent_response_return_ok)
 {
-    traceService = new HTracerService();
-    EXPECT_EQ(traceService->StartUp("33333"), NN_OK);
+    g_traceService = new HTracerService();
+    EXPECT_EQ(g_traceService->StartUp("33333"), NN_OK);
     Message response(nullptr, 0);
 }
 
 
 TEST_F(TestService, test_sent_request_nullptr_return_false)
 {
-    traceService = new HTracerService();
-    EXPECT_EQ(traceService->StartUp("33331"), NN_OK);
+    g_traceService = new HTracerService();
+    EXPECT_EQ(g_traceService->StartUp("33331"), NN_OK);
     Message response(nullptr, 0);
     Message request(nullptr, 0);
-    traceService->ShutDown();
-    delete traceService;
-    traceService = nullptr;
+    g_traceService->ShutDown();
+    delete g_traceService;
+    g_traceService = nullptr;
 }
 
 TEST_F(TestService, test_sent_response_nullptr_return_ok)
 {
-    traceService = new HTracerService();
-    EXPECT_EQ(traceService->StartUp("33334"), NN_OK);
+    g_traceService = new HTracerService();
+    EXPECT_EQ(g_traceService->StartUp("33334"), NN_OK);
     Message response(nullptr, 0);
 
     int32_t recvBufferSize = 1024;
     char *recvBuffer = static_cast<char *>(malloc(recvBufferSize));
     Message request(recvBuffer, recvBufferSize);
 
-    traceService->ShutDown();
-    delete traceService;
-    traceService = nullptr;
+    g_traceService->ShutDown();
+    delete g_traceService;
+    g_traceService = nullptr;
 }
 
 TEST_F(TestService, test_sent_request_opcode_TRACE_OP_MODIFY_return_true)
 {
-    traceService = new HTracerService();
-    EXPECT_EQ(traceService->StartUp("33335"), NN_OK);
+    g_traceService = new HTracerService();
+    EXPECT_EQ(g_traceService->StartUp("33335"), NN_OK);
     Message response(nullptr, 0);
 
     QueryTraceInfoRequest *queryRequest =
@@ -162,15 +162,15 @@ TEST_F(TestService, test_sent_request_opcode_TRACE_OP_MODIFY_return_true)
     queryRequest->serviceId = 1;
     queryRequest->opcode = INVALID_OPCODE;
     Message request(queryRequest, sizeof(QueryTraceInfoRequest));
-    traceService->ShutDown();
-    delete traceService;
-    traceService = nullptr;
+    g_traceService->ShutDown();
+    delete g_traceService;
+    g_traceService = nullptr;
 }
 
 TEST_F(TestService, test_sent_request_opcode_TRACE_OP_QUERY_return_true)
 {
-    traceService = new HTracerService();
-    EXPECT_EQ(traceService->StartUp("33336"), NN_OK);
+    g_traceService = new HTracerService();
+    EXPECT_EQ(g_traceService->StartUp("33336"), NN_OK);
     Message response(nullptr, 0);
 
     QueryTraceInfoRequest *queryRequest =
@@ -178,9 +178,9 @@ TEST_F(TestService, test_sent_request_opcode_TRACE_OP_QUERY_return_true)
     queryRequest->serviceId = 1;
 
     Message request(queryRequest, sizeof(queryRequest));
-    traceService->ShutDown();
-    delete traceService;
-    traceService = nullptr;
+    g_traceService->ShutDown();
+    delete g_traceService;
+    g_traceService = nullptr;
 }
 
 TEST_F(TestService, TestTraceManagerBegin)
@@ -197,9 +197,9 @@ TEST_F(TestService, TestBuildMessage)
 TEST_F(TestService, TestCentroidList)
 {
     CentroidList lst {2};
-    EXPECT_EQ(lst.Insert(1, 2), InsertResultCode::NO_NEED_COMPERSS);
-    EXPECT_EQ(lst.Insert(1, 2), InsertResultCode::NEED_COMPERSS);
-    EXPECT_EQ(lst.Insert(-1, 2), InsertResultCode::NO_NEED_COMPERSS);
+    EXPECT_EQ(lst.Insert(1, NN_NO2), InsertResultCode::NO_NEED_COMPERSS);
+    EXPECT_EQ(lst.Insert(1, NN_NO2), InsertResultCode::NEED_COMPERSS);
+    EXPECT_EQ(lst.Insert(-1, NN_NO2), InsertResultCode::NO_NEED_COMPERSS);
 }
 
 TEST_F(TestService, TestCentroid_GetMean)
@@ -225,8 +225,8 @@ TEST_F(TestService, TestCentroidList_GetAndSetCentroids)
 
 TEST_F(TestService, TestTdigest)
 {
-    Tdigest tdigest(100);
-    for (int i = 1; i <= 100; i++) {
+    Tdigest tdigest(NN_NO100);
+    for (int i = 1; i <= NN_NO100; i++) {
         tdigest.Insert(i);
     }
     tdigest.Merge();

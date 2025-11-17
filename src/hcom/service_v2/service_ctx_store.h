@@ -82,9 +82,9 @@ public:
             i.reserve(HASH_BUCKET_SIZE);
         }
 
-        NN_LOG_INFO("Initialized context store, flatten capacity "
-                    << mFlatCapacity << ", versionAndSeqMask " << mSeqNoAndVersionMask << ", seqNoMask " << mSeqNoMask
-                    << ", seqNoAndVersionIndex " << mSeqNoAndVersionIndex);
+        NN_LOG_INFO("Initialized context store, flatten capacity " <<
+                    mFlatCapacity << ", versionAndSeqMask " << mSeqNoAndVersionMask << ", seqNoMask " <<
+                    mSeqNoMask << ", seqNoAndVersionIndex " << mSeqNoAndVersionIndex);
 
         return SER_OK;
     }

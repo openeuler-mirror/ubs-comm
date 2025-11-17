@@ -647,7 +647,8 @@ int ubs_hcom_service_destroy(ubs_hcom_service service, const char *name)
     return reinterpret_cast<UBSHcomService *>(service)->Destroy(name);
 }
 
-int ubs_hcom_service_connect(ubs_hcom_service service, const char *serverUrl, ubs_hcom_channel *channel, ubs_hcom_service_connect_options options)
+int ubs_hcom_service_connect(ubs_hcom_service service, const char *serverUrl, ubs_hcom_channel *channel,
+    ubs_hcom_service_connect_options options)
 {
     VALIDATE_SERVICE(service);
     if (NN_UNLIKELY(serverUrl == nullptr)) {

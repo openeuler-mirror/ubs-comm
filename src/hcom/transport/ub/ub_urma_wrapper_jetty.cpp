@@ -104,7 +104,7 @@ UResult UBJetty::Stop()
         worker->mJettyPtrMap.Emplace(mUrmaJettyId, this);
     }
 
-    //jfr 为 error 后不会再收到对端发来的数据。
+    // jfr 为 error 后不会再收到对端发来的数据。
     if (mJfr != nullptr) {
         urma_jfr_attr_t jfr_attr = {};
         jfr_attr.mask = JFR_STATE;

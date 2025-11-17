@@ -342,8 +342,7 @@ union Ep2ChanUpCtx {
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "chPtr " << ptr << ", epIdx " << epIdx << ", whole "
-            << wholeUpCtx;
+        oss << "chPtr " << ptr << ", epIdx " << epIdx << ", whole " << wholeUpCtx;
         return oss.str();
     }
 };
@@ -501,9 +500,9 @@ union HcomSeqNo {
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "HcomSeqNo info=[wholeSeq: " << wholeSeq << ", isResp: " << isResp
-            << ", fromFlat: " << fromFlat << ", version: " << version
-            << ", realSeq: " << realSeq << "]";
+        oss << "HcomSeqNo info=[wholeSeq: " << wholeSeq << ", isResp: " << isResp <<
+            ", fromFlat: " << fromFlat << ", version: " << version <<
+            ", realSeq: " << realSeq << "]";
         return oss.str();
     }
 

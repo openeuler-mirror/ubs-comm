@@ -35,7 +35,7 @@ public:
     void SetUp() const;
     void TearDown() const;
 
-    ock::hcom::HTracerService *traceService = nullptr;
+    ock::hcom::HTracerService *g_traceService = nullptr;
 };
 }
 }

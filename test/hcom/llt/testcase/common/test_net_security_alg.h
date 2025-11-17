@@ -9,17 +9,17 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef _TEST_RDMA_HEARTBEAT__HPP_
-#define _TEST_RDMA_HEARTBEAT__HPP_
+#ifndef TEST_NET_SECURITY_ALG_HPP_
+#define TEST_NET_SECURITY_ALG_HPP_
 #include <gtest/gtest.h>
+#include <mockcpp/mockcpp.hpp>
 
-class TestCaseRDMAHeartBeat : public testing::Test {
+class TestNetSecurityAlg : public testing::Test {
 public:
-    TestCaseRDMAHeartBeat();
+    TestNetSecurityAlg();
     virtual void SetUp(void);
     virtual void TearDown(void);
 
 protected:
 };
-
 #endif

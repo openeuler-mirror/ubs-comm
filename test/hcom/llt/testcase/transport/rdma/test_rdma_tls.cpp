@@ -15,9 +15,9 @@
 #include "hcom.h"
 #include "hcom_utils.h"
 #include "common/net_util.h"
-#include "string.h"
-#include "test_rdma_tls.hpp"
+#include "cstring"
 #include "ut_helper.h"
+#include "test_rdma_tls.h"
 
 using namespace ock::hcom;
 
@@ -51,7 +51,7 @@ std::string syncReplyValue = "sync response by server value";
 std::string asyncSendValue = "async send value";
 std::string asyncSendRawValue = "async send raw value";
 std::string syncSendRawValue = "sync send raw value";
-
+uint16_t testPort = 9998;
 using TestOpCode = enum {
     CHECK_ASYNC_RESPONSE = 1,
     CHECK_SYNC_RESPONSE,
@@ -283,7 +283,7 @@ bool ServerCreateDriverWithInvalidTls()
 
     setServerDriverCallback(invalidTlsDriver, InvalidCertCallback, InvalidCACallback, InvalidPrivateKeyCallback);
 
-    invalidTlsDriver->OobIpAndPort(BASE_IP, 9998);
+    invalidTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(invalidTlsDriver);
 }
@@ -333,7 +333,7 @@ bool ServerCreateDriverTlsNotSameCACert()
     setServerDriverCallback(notSameCaTlsDriver, VerifyFailedCertCallback, VerifyFailedCACallback,
         VerifyFailedPrivateKeyCallback);
 
-    notSameCaTlsDriver->OobIpAndPort(BASE_IP, 9998);
+    notSameCaTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(notSameCaTlsDriver);
 }
@@ -381,7 +381,7 @@ bool ServerCreateDriverTlsWithExpiredCert()
     setServerDriverCallback(certExpiredTlsDriver, ExpiredCertCertCallback, ExpiredCertCACallback,
         ExpiredCertPrivateKeyCallback);
 
-    certExpiredTlsDriver->OobIpAndPort(BASE_IP, 9998);
+    certExpiredTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(certExpiredTlsDriver);
 }
@@ -425,14 +425,13 @@ bool ServerCreateDriverTlsWithRevokedCert()
         return false;
     }
 
-
     options.SetNetDeviceIpMask(tlsIpSeg);
     NN_LOG_INFO("set ip mask " << options.netDeviceIpMask);
 
     setServerDriverCallback(certRevokedTlsDriver, RevokedCertCertCallback, RevokedCertCACallback,
         RevokedCertPrivateKeyCallback);
 
-    certRevokedTlsDriver->OobIpAndPort(BASE_IP, 9998);
+    certRevokedTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(certRevokedTlsDriver);
 }
@@ -481,7 +480,7 @@ bool ServerCreateDriverTlsWithCVerifyByNone()
     setServerDriverCallback(cVerifyByNoneTlsDriver, CliVerifyByNoneCertCallback, CliVerifyByNoneACallback,
         CliVerifyByNonePrivateKeyCallback);
 
-    cVerifyByNoneTlsDriver->OobIpAndPort(BASE_IP, 9998);
+    cVerifyByNoneTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(cVerifyByNoneTlsDriver);
 }
@@ -532,7 +531,7 @@ bool ServerCreateDriverTlsWithMultiLevelCert()
     setServerDriverCallback(multiLevelCertTlsDriver, MultiLevelCertCallback, MultiLevelCACallback,
         MultiLevelPrivateKeyCallback);
 
-    multiLevelCertTlsDriver->OobIpAndPort(BASE_IP, 9998);
+    multiLevelCertTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(multiLevelCertTlsDriver);
 }
@@ -583,7 +582,7 @@ bool ServerCreateDriverTlsWithAbnormalCertChain()
     setServerDriverCallback(abnormalCertChainDriver, AbnormalCertChainCertCallback, AbnormalCertChainCACallback,
         AbnormalCertChainPrivateKeyCallback);
 
-    abnormalCertChainDriver->OobIpAndPort(BASE_IP, 9998);
+    abnormalCertChainDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(abnormalCertChainDriver);
 }
@@ -632,7 +631,7 @@ bool ServerCreateDriverTlsWithNormalCertChain()
     setServerDriverCallback(normalCertChainDriver, NormalCertChainCertCallback, NormalCertChainCACallback,
         NormalCertChainPrivateKeyCallback);
 
-    normalCertChainDriver->OobIpAndPort(BASE_IP, 9998);
+    normalCertChainDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(normalCertChainDriver);
 }
@@ -664,7 +663,7 @@ bool ServerCreateDriverTlsCustomVerify()
 
     setServerDriverCallback(customVerifyTlsDriver, CertCallback, CustomVerifyCACallback, PrivateKeyCallback);
 
-    customVerifyTlsDriver->OobIpAndPort(BASE_IP, 9998);
+    customVerifyTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(customVerifyTlsDriver);
 }
@@ -688,7 +687,7 @@ bool ServerCreateDriverWithTls()
 
     setServerDriverCallback(tlsDriver, CertCallback, CACallback, PrivateKeyCallback);
 
-    tlsDriver->OobIpAndPort(BASE_IP, 9998);
+    tlsDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsDriver);
 }
@@ -798,7 +797,7 @@ bool ClientCreateDriverWithTls()
     }
     setClientDriverCallback(tlsClientDriver, &ClientCertCallback, &ClientCACallback, &ClientPrivateKeyCallback);
 
-    tlsClientDriver->OobIpAndPort(BASE_IP, 9998);
+    tlsClientDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientDriver);
 }
@@ -890,7 +889,6 @@ void TlsSyncRequests()
         return;
     }
 
-
     if ((result = tlsClientSyncEp->WaitCompletion(0)) != 0) {
         NN_LOG_INFO("failed to wait completion, result " << result);
         return;
@@ -916,7 +914,6 @@ void TlsSyncSendRawRequests()
         NN_LOG_INFO("failed to post message to data to server");
         return;
     }
-
 
     if ((result = tlsClientSyncEp->WaitCompletion(0)) != 0) {
         NN_LOG_INFO("failed to wait completion, result " << result);
@@ -974,7 +971,7 @@ bool ClientCreateDriverWithTlsExpiredCert()
     setClientDriverCallback(tlsClientCertExpiredDriver, &CertExpiredClientCertCallback, &CertExpiredClientCACallback,
         &CertExpiredClientPrivateKeyCallback);
 
-    tlsClientCertExpiredDriver->OobIpAndPort(BASE_IP, 9998);
+    tlsClientCertExpiredDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientCertExpiredDriver);
 }
@@ -1037,8 +1034,7 @@ bool ClientCreateDriverWithTlsRevokedCert()
     setClientDriverCallback(tlsClientCertRevokedDriver, &CertRevokedClientCertCallback, &CertRevokedClientCACallback,
         &CertRevokedClientPrivateKeyCallback);
 
-
-    tlsClientCertRevokedDriver->OobIpAndPort(BASE_IP, 9998);
+    tlsClientCertRevokedDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientCertRevokedDriver);
 }
@@ -1101,7 +1097,7 @@ bool ClientCreateDriverWithTlsVerifyByNone()
     setClientDriverCallback(tlsClientVerifyByNoneDriver, &VerifyByNoneClientCertCallback, &VerifyByNoneClientCACallback,
         &VerifyByNoneClientPrivateKeyCallback);
 
-    tlsClientVerifyByNoneDriver->OobIpAndPort(BASE_IP, 9998);
+    tlsClientVerifyByNoneDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientVerifyByNoneDriver);
 }
@@ -1167,7 +1163,7 @@ bool ClientCreateDriverWithTlsMultiLevelCert()
     setClientDriverCallback(tlsClientMultiLevelCertDriver, &MultiLevelClientCertCallback, &MultiLevelClientCACallback,
         &MultiLevelClientPrivateKeyCallback);
 
-    tlsClientMultiLevelCertDriver->OobIpAndPort(BASE_IP, 9998);
+    tlsClientMultiLevelCertDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientMultiLevelCertDriver);
 }
@@ -1231,7 +1227,7 @@ bool ClientCreateDriverWithTlsAbnormalCertChain()
     setClientDriverCallback(tlsClientAbnormalCertChainDriver, &AbnormalClientCertChainCallback,
         &AbnormalClientCertChainCACallback, &AbnormalClientCertChainPrivateKeyCallback);
 
-    tlsClientAbnormalCertChainDriver->OobIpAndPort(BASE_IP, 9998);
+    tlsClientAbnormalCertChainDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientAbnormalCertChainDriver);
 }
@@ -1296,7 +1292,7 @@ bool ClientCreateDriverWithTlsNormalCertChain()
     setClientDriverCallback(tlsClientNormalCertChainDriver, &NormalClientCertChainCallback,
         &NormalClientCertChainCACallback, &NormalClientCertChainPrivateKeyCallback);
 
-    tlsClientNormalCertChainDriver->OobIpAndPort(BASE_IP, 9998);
+    tlsClientNormalCertChainDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientNormalCertChainDriver);
 }
@@ -1344,7 +1340,7 @@ bool ClientCreateDriverWithTlsCustomVerify()
     setClientDriverCallback(tlsClientCustomVerifyTlsDriver, &ClientCertCallback, &CustomVerifyClientCACallback,
         &ClientPrivateKeyCallback);
 
-    tlsClientCustomVerifyTlsDriver->OobIpAndPort(BASE_IP, 9998);
+    tlsClientCustomVerifyTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientCustomVerifyTlsDriver);
 }
@@ -1373,9 +1369,9 @@ void TestCaseRdmaTLS::SetUp()
     MOCKER(ReadRoCEVersionFromFile).stubs().will(returnValue(0));
 
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING; // 只支持EVENT模式
-    options.mrSendReceiveSegSize = 1024;
-    options.mrSendReceiveSegCount = 1024;
-    options.prePostReceiveSizePerQP = 32;
+    options.mrSendReceiveSegSize = NN_NO1024;
+    options.mrSendReceiveSegCount = NN_NO1024;
+    options.prePostReceiveSizePerQP = NN_NO32;
     options.enableTls = true;
     options.cipherSuite = ock::hcom::AES_GCM_256;
     setenv("HCOM_CONNECTION_RETRY_TIMES", "1", 1);

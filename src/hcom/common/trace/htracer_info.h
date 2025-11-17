@@ -18,9 +18,9 @@
 #include <mutex>
 #include <cstring>
 #include <sys/cdefs.h>
+#include <iostream>
 #include "htracer_utils.h"
 #include "htracer_tdigest.h"
-#include <iostream>
 
 #define SERVICE_ID(TP_ID_) (((TP_ID_) >> 16) & 0xFFFF)
 #define INNER_ID(TP_ID_) ((TP_ID_) & 0xFFFF)

@@ -2,8 +2,8 @@
 * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
 * t-digest algorithm used to implement tpX(e.g tp99 tp 90)
 */
-#ifndef _HTRACER_3RDPARTY_T_DIGEST_H
-#define _HTRACER_3RDPARTY_T_DIGEST_H
+#ifndef HTRACER_3RDPARTY_T_DIGEST_H
+#define HTRACER_3RDPARTY_T_DIGEST_H
 
 #include <algorithm>
 #include <cmath>
@@ -362,4 +362,4 @@ private:
 }
 }
 
-#endif  // _HTRACER_3RDPARTY_T_DIGEST_H
+#endif  // HTRACER_3RDPARTY_T_DIGEST_H

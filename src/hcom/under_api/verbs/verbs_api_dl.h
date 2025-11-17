@@ -19,7 +19,7 @@
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
+#include <cstring>
 
 #include "hcom_def.h"
 

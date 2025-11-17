@@ -25,4 +25,4 @@ public:
     }
     void TearDown() {}
 };
-#endif //HCOM_TEST_SECURE_H
+#endif // HCOM_TEST_SECURE_H

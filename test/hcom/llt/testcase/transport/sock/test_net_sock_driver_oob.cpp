@@ -16,8 +16,8 @@
 #include "hcom.h"
 #include "mockcpp/mockcpp.hpp"
 #include "sock_common.h"
-#include "test_net_sock_driver_oob.h"
 #include "ut_helper.h"
+#include "test_net_sock_driver_oob.h"
 
 using namespace ock::hcom;
 
@@ -150,7 +150,7 @@ void SetCB(UBSHcomNetDriver *driver)
 
 bool RegisterMemory(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov iovs[])
 {
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < NN_NO4; i++) {
         auto &iov = iovs[i];
         UBSHcomNetMemoryRegionPtr mr;
         auto result = driver->CreateMemoryRegion(NN_NO8, mr);
@@ -168,7 +168,7 @@ bool RegisterMemory(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov iovs[])
 
 bool RegisterMemoryWithAddress(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov iovs[])
 {
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < NN_NO16; i++) {
         auto &iov = iovs[i];
         UBSHcomNetMemoryRegionPtr mr;
         auto tmpBuf = memalign(1024, NN_NO8);
@@ -191,7 +191,7 @@ void TestNetSockDriverOob::SetUp()
     SockOobValidateTlsCert();
     sockOptions.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     sockOptions.SetNetDeviceIpMask(IP_SEG);
-    sockOptions.pollingBatchSize = 16;
+    sockOptions.pollingBatchSize = NN_NO16;
     sockOptions.SetWorkerGroups("1");
     sockOptions.SetWorkerGroupsCpuSet("1-1");
     sockOptions.enableTls = false;
@@ -230,10 +230,12 @@ void TestNetSockDriverOob::TearDown()
 
 TEST_F(TestNetSockDriverOob, InitSuccess)
 {
-    sockOptions.workerThreadPriority = -21;
+    int testWorkerThreadPriority1 = -21;
+    int testWorkerThreadPriority2 = -21;
+    sockOptions.workerThreadPriority = testWorkerThreadPriority1;
     NResult result = sockServerDriver->Initialize(sockOptions);
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
-    sockOptions.workerThreadPriority = 21;
+    sockOptions.workerThreadPriority = testWorkerThreadPriority2;
     result = sockServerDriver->Initialize(sockOptions);
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
     sockOptions.workerThreadPriority = 1;
@@ -288,7 +290,7 @@ TEST_F(TestNetSockDriverOob, InitFailWithoutSetListeningIpAndPort)
 {
     sockOptions.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     sockOptions.SetNetDeviceIpMask(IP_SEG);
-    sockOptions.pollingBatchSize = 16;
+    sockOptions.pollingBatchSize = NN_NO16;
     sockOptions.SetWorkerGroups("1");
     sockOptions.SetWorkerGroupsCpuSet("1-1");
     sockOptions.enableTls = false;
@@ -311,7 +313,7 @@ TEST_F(TestNetSockDriverOob, InitFailWithFailToInitWorker)
 TEST_F(TestNetSockDriverOob, InitFailWithTLSCipherSuiteUnknown)
 {
     sockOptions.enableTls = true;
-    sockOptions.cipherSuite = ock::hcom::UBSHcomNetCipherSuite(4);
+    sockOptions.cipherSuite = ock::hcom::UBSHcomNetCipherSuite(NN_NO4);
     auto result = sockServerDriver->Initialize(sockOptions);
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
     result = sockClientDriver->Initialize(sockOptions);
@@ -423,7 +425,7 @@ TEST_F(TestNetSockDriverOob, ConnectUdsSuccess)
     file.close();
     sockOptions.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     sockOptions.SetNetDeviceIpMask(IP_SEG);
-    sockOptions.pollingBatchSize = 16;
+    sockOptions.pollingBatchSize = NN_NO16;
     sockOptions.SetWorkerGroups("1");
     sockOptions.SetWorkerGroupsCpuSet("1-1");
     sockOptions.enableTls = false;
@@ -484,10 +486,11 @@ TEST_F(TestNetSockDriverOob, ConnectFailWithPayloadOversize)
     sockClientDriver->Initialize(sockOptions);
     sockClientDriver->Start();
     char payload[1030];
+    uint16_t index = 1029;
     for (char &i : payload) {
         i = '1';
     }
-    payload[1029] = '\0';
+    payload[index] = '\0';
     NResult result = sockClientDriver->Connect(payload, ep, 0);
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
 }
@@ -505,9 +508,10 @@ TEST_F(TestNetSockDriverOob, ConnectFail)
 
 TEST_F(TestNetSockDriverOob, ConnectFailWithMagicMismatch)
 {
+    uint16_t testMagic = 104;
     sockServerDriver->Initialize(sockOptions);
     sockServerDriver->Start();
-    sockOptions.magic = 104;
+    sockOptions.magic = testMagic;
     sockClientDriver->Initialize(sockOptions);
     sockClientDriver->Start();
     NResult result = sockClientDriver->Connect("hello world", ep, 0);
@@ -571,9 +575,10 @@ TEST_F(TestNetSockDriverOob, ConnectSyncFail)
 
 TEST_F(TestNetSockDriverOob, ConnectSyncFailWithMagicMismatch)
 {
+    uint16_t testMagic = 104;
     sockServerDriver->Initialize(sockOptions);
     sockServerDriver->Start();
-    sockOptions.magic = 104;
+    sockOptions.magic = testMagic;
     sockClientDriver->Initialize(sockOptions);
     sockClientDriver->Start();
     NResult result = sockClientDriver->Connect("hello world", ep, NET_EP_SELF_POLLING);
@@ -590,7 +595,7 @@ TEST_F(TestNetSockDriverOob, SendSuccess)
     static char data[100] = {};
     UBSHcomNetTransRequest req((void *)(data), sizeof(data), 0);
     req.upCtxSize = NN_NO16;
-    for (auto i = 0; i < 16; i++) {
+    for (auto i = 0; i < NN_NO16; i++) {
         req.upCtxData[i] = 'a';
     }
     NResult result = ep->PostSend(1, req);
@@ -643,7 +648,7 @@ TEST_F(TestNetSockDriverOob, ReadWriteSglSuccess)
     }
     UBSHcomNetTransSglRequest req(iov, NN_NO4, 0);
     req.upCtxSize = NN_NO16;
-    for (auto i = 0; i < 16; i++) {
+    for (auto i = 0; i < NN_NO16; i++) {
         req.upCtxData[i] = 'a';
     }
     NResult result = ep->PostRead(req);
@@ -672,7 +677,7 @@ TEST_F(TestNetSockDriverOob, SendRawSglSuccess)
     }
     UBSHcomNetTransSglRequest req(iov, NN_NO4, 0);
     req.upCtxSize = NN_NO16;
-    for (auto i = 0; i < 16; i++) {
+    for (auto i = 0; i < NN_NO16; i++) {
         req.upCtxData[i] = 'a';
     }
     NResult result = ep->PostSendRawSgl(req, 1);

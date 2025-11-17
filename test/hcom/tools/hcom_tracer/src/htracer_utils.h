@@ -13,8 +13,6 @@
 #ifndef HTRACE_UTILS_H
 #define HTRACE_UTILS_H
 
-#include "securec.h"
-#include "hcom/hcom_num_def.h"
 #include <vector>
 #include <cstring>
 #include <memory>
@@ -24,6 +22,8 @@
 #include <sys/stat.h>
 #include <sstream>
 #include <linux/limits.h>
+#include "securec.h"
+#include "hcom/hcom_num_def.h"
 
 namespace ock {
 namespace hcom {

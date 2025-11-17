@@ -9,17 +9,19 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef _TEST_NET_SECURITY_ALG_HPP_
-#define _TEST_NET_SECURITY_ALG_HPP_
+
+#ifndef TEST_RDMA_TLS_HPP_
+#define TEST_RDMA_TLS_HPP_
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
-class TestNetSecurityAlg : public testing::Test {
+class TestCaseRdmaTLS : public testing::Test {
 public:
-    TestNetSecurityAlg();
+    TestCaseRdmaTLS();
     virtual void SetUp(void);
     virtual void TearDown(void);
 
 protected:
 };
+
 #endif

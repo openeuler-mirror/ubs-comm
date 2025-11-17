@@ -16,7 +16,7 @@
 
 namespace ock {
 namespace hcom {
-constexpr uint64_t gAddressMask = 0xFFFFFFFFFFFF; /* mask for key */
+constexpr uint64_t G_ADDRESS_MASK = 0xFFFFFFFFFFFF; /* mask for key */
 
 /*
  * @brief Spin lock entry in bucket
@@ -123,42 +123,42 @@ struct NetHashBucket {
          * expand the loop, instead of put them into a for/while loop for performance
          */
         uint64_t oldValue = subBuck[NN_NO0];
-        if ((oldValue & gAddressMask) == address) {
+        if ((oldValue & G_ADDRESS_MASK) == address) {
             __sync_bool_compare_and_swap(&subBuck[NN_NO0], oldValue, 0);
             timesOfBaseSize = GetSize(oldValue);
             return true;
         }
 
         oldValue = subBuck[NN_NO1];
-        if ((oldValue & gAddressMask) == address) {
+        if ((oldValue & G_ADDRESS_MASK) == address) {
             __sync_bool_compare_and_swap(&subBuck[NN_NO1], oldValue, 0);
             timesOfBaseSize = GetSize(oldValue);
             return true;
         }
 
         oldValue = subBuck[NN_NO2];
-        if ((oldValue & gAddressMask) == address) {
+        if ((oldValue & G_ADDRESS_MASK) == address) {
             __sync_bool_compare_and_swap(&subBuck[NN_NO2], oldValue, 0);
             timesOfBaseSize = GetSize(oldValue);
             return true;
         }
 
         oldValue = subBuck[NN_NO3];
-        if ((oldValue & gAddressMask) == address) {
+        if ((oldValue & G_ADDRESS_MASK) == address) {
             __sync_bool_compare_and_swap(&subBuck[NN_NO3], oldValue, 0);
             timesOfBaseSize = GetSize(oldValue);
             return true;
         }
 
         oldValue = subBuck[NN_NO4];
-        if ((oldValue & gAddressMask) == address) {
+        if ((oldValue & G_ADDRESS_MASK) == address) {
             __sync_bool_compare_and_swap(&subBuck[NN_NO4], oldValue, 0);
             timesOfBaseSize = GetSize(oldValue);
             return true;
         }
 
         oldValue = subBuck[NN_NO5];
-        if ((oldValue & gAddressMask) == address) {
+        if ((oldValue & G_ADDRESS_MASK) == address) {
             __sync_bool_compare_and_swap(&subBuck[NN_NO5], oldValue, 0);
             timesOfBaseSize = GetSize(oldValue);
             return true;

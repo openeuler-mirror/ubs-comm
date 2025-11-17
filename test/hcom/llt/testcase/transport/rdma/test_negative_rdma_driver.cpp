@@ -33,7 +33,8 @@ void TestNegativeRdmaDriver::TearDown()
 TEST_F(TestNegativeRdmaDriver, FakeBusyPolling)
 {
     NResult result;
-    UBSHcomNetDriver *driver, *server;
+    UBSHcomNetDriver *server = nullptr;
+    UBSHcomNetDriver *driver = nullptr;
     result = UTHelper::GetDriver(server, DRIVER_STATE_START, true);
     UT_CHECK_RESULT_OK(result)
 }
@@ -42,7 +43,8 @@ TEST_F(TestNegativeRdmaDriver, UseBeforeInit)
 {
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriver *driver, *server;
+    UBSHcomNetDriver *server = nullptr;
+    UBSHcomNetDriver *driver = nullptr;
     result = UTHelper::GetDriver(server, DRIVER_STATE_START, true);
     UT_CHECK_RESULT_OK(result)
     UT_CHECK_RESULT_NOT_NULL(server)
@@ -77,7 +79,8 @@ TEST_F(TestNegativeRdmaDriver, DestroyUnownedMr)
 {
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriver *driver, *driver1;
+    UBSHcomNetDriver *driver;
+    UBSHcomNetDriver *driver1;
 
     result = UTHelper::GetDriver(driver, DRIVER_STATE_INIT, false);
     UT_CHECK_RESULT_OK(result)
@@ -102,7 +105,8 @@ TEST_F(TestNegativeRdmaDriver, UseAfterStop)
 {
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriver *driver, *server;
+    UBSHcomNetDriver *server = nullptr;
+    UBSHcomNetDriver *driver = nullptr;
     result = UTHelper::GetDriver(server, DRIVER_STATE_STOP, true);
     UT_CHECK_RESULT_OK(result)
     result = UTHelper::GetDriver(driver, DRIVER_STATE_STOP, false);
@@ -134,7 +138,8 @@ TEST_F(TestNegativeRdmaDriver, UseAfterUninit)
 {
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriver *driver, *server;
+    UBSHcomNetDriver *server = nullptr;
+    UBSHcomNetDriver *driver = nullptr;
     result = UTHelper::GetDriver(server, DRIVER_STATE_START, true);
     UT_CHECK_RESULT_OK(result)
     result = UTHelper::GetDriver(driver, DRIVER_STATE_UNINIT, false);

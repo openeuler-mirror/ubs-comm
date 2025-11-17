@@ -16,9 +16,9 @@
 #include "service_ctx_store.h"
 #include "hcom_service.h"
 #include "net_service_default_imp.h"
-#include "test_service_io.h"
 #include "test_service_common.h"
 #include "rdma_common.h"
+#include "test_service_io.h"
 
 using namespace ock::hcom;
 TestCaseServiceIO::TestCaseServiceIO() {}
@@ -93,9 +93,6 @@ int OneSideDownRequest(NetServiceContext context)
 }
 
 UBSHcomNetMemoryAllocatorPtr memPtr = nullptr;
-uint64_t memSize = 1024 * 1024 * 128;
-void *address = nullptr;
-
 int RndvAllocate(uint64_t size, uintptr_t &outAddress, uint32_t &outKey)
 {
     outKey = memPtr->MrKey();
@@ -335,8 +332,7 @@ TEST_F(TestCaseServiceIO, ALL_IO)
     server->Stop();
     NetService::DestroyInstance(client->Name());
     NetService::DestroyInstance(server->Name());
-    std::string dumpStr;
-    dumpStr = NetService::TraceLog();
+    std::string dumpStr = NetService::TraceLog();
     NN_LOG_INFO(dumpStr);
 }
 

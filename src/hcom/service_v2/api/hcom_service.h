@@ -38,7 +38,8 @@ public:
      * @param opt service创建需要的配置项
      * @return UBSHcomService* 返回创建好的service
      */
-    static UBSHcomService* Create(UBSHcomServiceProtocol t, const std::string &name, const UBSHcomServiceOptions &opt = {});
+    static UBSHcomService* Create(UBSHcomServiceProtocol t, const std::string &name,
+        const UBSHcomServiceOptions &opt = {});
 
     /**
      * @brief 销毁service
@@ -76,7 +77,8 @@ public:
      * @param opt 建链配置项
      * @return int32_t 成功：0；失败：错误码
      */
-    virtual int32_t Connect(const std::string &serverUrl, UBSHcomChannelPtr &ch, const UBSHcomConnectOptions &opt = {}) = 0;
+    virtual int32_t Connect(const std::string &serverUrl, UBSHcomChannelPtr &ch,
+        const UBSHcomConnectOptions &opt = {}) = 0;
 
     /**
      * @brief 断开链接

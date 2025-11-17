@@ -42,7 +42,7 @@ private:
     static int CaCallbackWrapper(X509_STORE_CTX *ctx, void *arg);
     static X509_CRL *LoadCertRevokeListFile(const char *crlFile);
     static int DefaultSslCertVerify(X509_STORE_CTX *x509ctx, const char *arg);
-    static int PskFindCallbackWrapper(SSL *ssl, const unsigned char *identity, size_t identity_len, SSL_SESSION **sess);
+    static int PskFindCallbackWrapper(SSL *ssl, const unsigned char *identity, size_t identityLen, SSL_SESSION **sess);
     static int PskUseCallbackWrapper(SSL *ssl, const EVP_MD *md, const unsigned char **id, size_t *idlen,
         SSL_SESSION **sess);
     static UBSHcomPskFindSessionCb mOpenSslPskFindSessionCb;

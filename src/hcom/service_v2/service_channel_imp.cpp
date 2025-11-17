@@ -82,13 +82,13 @@ SerResult HcomChannelImp::Initialize(std::vector<UBSHcomNetEndpointPtr> &ep, uin
     periodicMgrPtr->IncreaseRef();
     mPeriodicMgr = periodicMgr;
 
-    auto NetPgTablePtr = reinterpret_cast<NetPgTable *>(pgTable);
-    if (NN_UNLIKELY(NetPgTablePtr == nullptr)) {
+    auto netPgTablePtr = reinterpret_cast<NetPgTable *>(pgTable);
+    if (NN_UNLIKELY(netPgTablePtr == nullptr)) {
         NN_LOG_ERROR("Invalid pgTable ptr is null");
         ForceUnInitialize();
         return SER_INVALID_PARAM;
     }
-    NetPgTablePtr->IncreaseRef();
+    netPgTablePtr->IncreaseRef();
     mPgtable = pgTable;
 
     ret = InitializeEp(ep);
@@ -388,8 +388,7 @@ inline SerResult HcomChannelImp::ResponseWorkerPollEp(uintptr_t rspCtx, UBSHcomN
 
     uint32_t epIndex = rspCtx >> 32;
     if (NN_UNLIKELY(epIndex >= mEpInfo->epSize)) {
-        NN_LOG_ERROR("Invalid ep index " << epIndex << " over ep size "
-                                         << mEpInfo->epSize);
+        NN_LOG_ERROR("Invalid ep index " << epIndex << " over ep size " << mEpInfo->epSize);
         return SER_INVALID_PARAM;
     }
 
@@ -819,8 +818,8 @@ SerResult HcomChannelImp::AsyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
         result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
             sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("AsyncSendSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum
-                                                                        << "] failed");
+            NN_LOG_ERROR("AsyncSendSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
+                         "] failed");
 
             DestroyTimerContext(context);
             return result;
@@ -1167,8 +1166,8 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
         result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
             sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("SyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum
-                                                                       << "] failed");
+            NN_LOG_ERROR("SyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
+                         "] failed");
             DestroyTimerContext(context);
             return result;
         }
@@ -1482,8 +1481,8 @@ SerResult HcomChannelImp::AsyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
         result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
             sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("AsyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum
-                                                                        << "] failed");
+            NN_LOG_ERROR("AsyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
+                         "] failed");
             DestroyTimerContext(context);
             return result;
         }
@@ -1719,8 +1718,8 @@ SerResult HcomChannelImp::AsyncReplySplitWithWorkerPoll(const UBSHcomReplyContex
         result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
             sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("AsyncReplySplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum
-                                                                         << "] failed");
+            NN_LOG_ERROR("AsyncReplySplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
+                         "] failed");
 
             DestroyTimerContext(context);
             return result;
@@ -2314,20 +2313,20 @@ int32_t HcomChannelImp::SetTwoSideThreshold(const UBSHcomTwoSideThreshold &thres
             return SER_INVALID_PARAM;
         }
         mRndvThreshold = threshold.rndvThreshold;
-        NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << mUserSplitSendThreshold
-                                                                        << ", Rndv Threshold is: " << mRndvThreshold);
+        NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << mUserSplitSendThreshold <<
+                    ", Rndv Threshold is: " << mRndvThreshold);
         return SER_OK;
     }
 
     if (threshold.splitThreshold < NN_NO128) {
-        NN_LOG_ERROR("The split threshold (" << threshold.splitThreshold
-                                                << ") is less than 128, SplitSend may not work properly");
+        NN_LOG_ERROR("The split threshold (" << threshold.splitThreshold <<
+            ") is less than 128, SplitSend may not work properly");
         return SER_INVALID_PARAM;
     }
 
     if (threshold.splitThreshold > mMaxSendRecvDataSize) {
-        NN_LOG_ERROR("The split threshold (" << threshold.splitThreshold << ") is larger than SegSize ("
-                                                << mMaxSendRecvDataSize << "), SplitSend will fail to post request");
+        NN_LOG_ERROR("The split threshold (" << threshold.splitThreshold << ") is larger than SegSize (" <<
+            mMaxSendRecvDataSize << "), SplitSend will fail to post request");
         return SER_INVALID_PARAM;
     }
 
@@ -2351,8 +2350,8 @@ int32_t HcomChannelImp::SetTwoSideThreshold(const UBSHcomTwoSideThreshold &thres
 
     mRndvThreshold = threshold.rndvThreshold;
 
-    NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << threshold.splitThreshold
-                                                                    << ", Rndv Threshold is: " << mRndvThreshold);
+    NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << threshold.splitThreshold <<
+        ", Rndv Threshold is: " << mRndvThreshold);
     return SER_OK;
 }
 }

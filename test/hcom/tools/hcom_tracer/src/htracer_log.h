@@ -49,8 +49,8 @@ public:
         gettimeofday(&tv, nullptr);
         strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S.", localtime(&tv.tv_sec));
 
-        std::cout << "[" << strTime << tv.tv_usec << "]"
-                  << "[" << levelName[level] << "]" << oss.str() << std::endl;
+        std::cout << "[" << strTime << tv.tv_usec << "]" <<
+            "[" << levelName[level] << "]" << oss.str() << std::endl;
     }
 
 private:

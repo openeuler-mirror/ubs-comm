@@ -166,10 +166,10 @@ static void SetCB(UBSHcomNetDriver *driver, bool isServer, uint8_t reqHandlerMod
         case 1:
             driver->RegisterNewReqHandler(std::bind(&RequestReceivedWithSend, std::placeholders::_1));
             break;
-        case 2:
+        case NN_NO2:
             driver->RegisterNewReqHandler(std::bind(&RequestReceivedSglClient, std::placeholders::_1));
             break;
-        case 3:
+        case NN_NO3:
             driver->RegisterNewReqHandler(std::bind(&RequestReceivedSglServer, std::placeholders::_1));
             break;
     }
@@ -189,7 +189,7 @@ static void SetDriverOptions(UBSHcomNetDriverOptions &sockOptions)
 {
     sockOptions.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     sockOptions.SetNetDeviceIpMask(IP_SEG);
-    sockOptions.pollingBatchSize = 16;
+    sockOptions.pollingBatchSize = NN_NO16;
     sockOptions.enableTls = false;
     sockOptions.SetWorkerGroups("1");
     sockOptions.SetWorkerGroupsCpuSet("10-10");
@@ -238,8 +238,7 @@ TEST_F(TestSockWrapper, SockInitializeSuccess)
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
     SockWorkerOptions sockWorkerOptions {};
-    SResult result;
-    result = sock->Initialize(sockWorkerOptions);
+    SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_OK, result);
     NetFunc::NN_SafeCloseFd(connFd);
 }
@@ -253,8 +252,7 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidType)
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
     SockWorkerOptions sockWorkerOptions {};
-    SResult result;
-    result = sock->Initialize(sockWorkerOptions);
+    SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_PARAM_INVALID, result);
     NetFunc::NN_SafeCloseFd(connFd);
 }
@@ -268,8 +266,7 @@ TEST_F(TestSockWrapper, SockInitializeTwice)
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
     SockWorkerOptions sockWorkerOptions {};
-    SResult result;
-    result = sock->Initialize(sockWorkerOptions);
+    SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_OK, result);
     result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_OK, result);
@@ -300,8 +297,7 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidReceiveBuf)
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
     SockWorkerOptions sockWorkerOptions {};
     MOCKER(setsockopt).defaults().will(returnValue(-1));
-    SResult result;
-    result = sock->Initialize(sockWorkerOptions);
+    SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_TCP_SET_OPTION_FAILED, result);
     NetFunc::NN_SafeCloseFd(connFd);
 }
@@ -330,8 +326,7 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithUDS)
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
     SockWorkerOptions sockWorkerOptions {};
-    SResult result;
-    result = sock->Initialize(sockWorkerOptions);
+    SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(NN_OK, result);
     NetFunc::NN_SafeCloseFd(connFd);
 }
@@ -349,8 +344,7 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithExpand)
     sockWorkerOptions.keepaliveIdleTime = -1;
     sockWorkerOptions.keepaliveProbeInterval = -1;
     sockWorkerOptions.keepaliveProbeTimes = -1;
-    SResult result;
-    result = sock->Initialize(sockWorkerOptions);
+    SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_TCP_SET_OPTION_FAILED, result);
     NetFunc::NN_SafeCloseFd(connFd);
 }
@@ -411,8 +405,7 @@ TEST_F(TestSockWrapper, SockSendFailedWithInvalidFdBuf)
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
     SockWorkerOptions sockWorkerOptions {};
-    SResult result;
-    result = sock->Initialize(sockWorkerOptions);
+    SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_OK, result);
     void *tmpBuf1 = nullptr;
     result = sock->Send(tmpBuf1, 0);
@@ -625,18 +618,18 @@ TEST_F(TestSockWrapper, SockPostReceiveHeaderSuccess)
     UBSHcomNetDriver *serverDriver = nullptr;
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
-
+    uint16_t testPort = 9990;
     UBSHcomNetDriverOptions sockOptions {};
     SetDriverOptions(sockOptions);
     NResult result;
     serverDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "sock-server-9000", true);
     SetCB(serverDriver, true, 1);
-    serverDriver->OobIpAndPort(BASE_IP, 9990);
+    serverDriver->OobIpAndPort(BASE_IP, testPort);
     serverDriver->Initialize(sockOptions);
     serverDriver->Start();
 
     clientDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "sock-client-9000", false);
-    clientDriver->OobIpAndPort(BASE_IP, 9990);
+    clientDriver->OobIpAndPort(BASE_IP, testPort);
     sockOptions.dontStartWorkers = true;
     clientDriver->Initialize(sockOptions);
     clientDriver->Start();
@@ -648,7 +641,7 @@ TEST_F(TestSockWrapper, SockPostReceiveHeaderSuccess)
     UBSHcomNetTransRequest req((void *)(data), sizeof(data), 0);
     result = clientEp->PostSend(1, req);
     EXPECT_EQ(SS_OK, result);
-    result = clientEp->Receive(2, respCtx);
+    result = clientEp->Receive(NN_NO2, respCtx);
     EXPECT_EQ(SS_OK, result);
 
     CloseDriver(serverDriver);
@@ -664,11 +657,11 @@ TEST_F(TestSockWrapper, SockPostWriteSglSuccess)
     UBSHcomNetDriverOptions sockOptions {};
     SetDriverOptions(sockOptions);
     NResult result;
-
+    uint16_t testPort = 9992;
     sem_init(&sem_sock, 0, 0);
     serverDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "sock-server-9992", true);
-    SetCB(serverDriver, true, 3);
-    serverDriver->OobIpAndPort(BASE_IP, 9992);
+    SetCB(serverDriver, true, NN_NO3);
+    serverDriver->OobIpAndPort(BASE_IP, testPort);
     serverDriver->Initialize(sockOptions);
     result = serverDriver->Start();
     EXPECT_EQ(result, SS_OK);
@@ -676,8 +669,8 @@ TEST_F(TestSockWrapper, SockPostWriteSglSuccess)
     CreateServerMR(serverDriver, serverMrs);
 
     clientDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "sock-client-9992", false);
-    SetCB(clientDriver, false, 2);
-    clientDriver->OobIpAndPort(BASE_IP, 9992);
+    SetCB(clientDriver, false, NN_NO2);
+    clientDriver->OobIpAndPort(BASE_IP, testPort);
     clientDriver->Initialize(sockOptions);
     clientDriver->Start();
     clientDriver->Connect("hello world", clientEp, 0);
@@ -723,18 +716,18 @@ TEST_F(TestSockWrapper, SockPostWriteSglFailedRead)
     UBSHcomNetDriverOptions sockOptions {};
     SetDriverOptions(sockOptions);
     sem_init(&sem_sock, 0, 0);
-
+    uint16_t testPort = 9993;
     serverDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "sock-server-9993", true);
-    SetCB(serverDriver, true, 3);
-    serverDriver->OobIpAndPort(BASE_IP, 9993);
+    SetCB(serverDriver, true, NN_NO3);
+    serverDriver->OobIpAndPort(BASE_IP, testPort);
     serverDriver->Initialize(sockOptions);
     serverDriver->Start();
     std::vector<UBSHcomNetMemoryRegionPtr> serverMrs;
     CreateServerMR(serverDriver, serverMrs);
 
     clientDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "sock-client-9993", false);
-    SetCB(clientDriver, false, 2);
-    clientDriver->OobIpAndPort(BASE_IP, 9993);
+    SetCB(clientDriver, false, NN_NO2);
+    clientDriver->OobIpAndPort(BASE_IP, testPort);
     clientDriver->Initialize(sockOptions);
     clientDriver->Start();
     clientDriver->Connect("hello world", clientEp, 0);
@@ -783,8 +776,7 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidAliveTime)
     sockWorkerOptions.keepaliveIdleTime = -1;
     sockWorkerOptions.keepaliveProbeInterval = -1;
     sockWorkerOptions.keepaliveProbeTimes = -1;
-    SResult result;
-    result = sock->Initialize(sockWorkerOptions);
+    SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_TCP_SET_OPTION_FAILED, result);
     NetFunc::NN_SafeCloseFd(connFd);
 }
@@ -798,19 +790,19 @@ TEST_F(TestSockWrapper, SockPostWriteSglFailedWrite)
     NResult result;
     UBSHcomNetDriverOptions sockOptions {};
     SetDriverOptions(sockOptions);
-
+    uint16_t testPort = 9994;
     sem_init(&sem_sock, 0, 0);
     serverDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "sock-server-9994", true);
-    SetCB(serverDriver, true, 3);
-    serverDriver->OobIpAndPort(BASE_IP, 9994);
+    SetCB(serverDriver, true, NN_NO3);
+    serverDriver->OobIpAndPort(BASE_IP, testPort);
     serverDriver->Initialize(sockOptions);
     serverDriver->Start();
     std::vector<UBSHcomNetMemoryRegionPtr> serverMrs;
     CreateServerMR(serverDriver, serverMrs);
 
     clientDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "sock-client-9994", false);
-    SetCB(clientDriver, false, 2);
-    clientDriver->OobIpAndPort(BASE_IP, 9994);
+    SetCB(clientDriver, false, NN_NO2);
+    clientDriver->OobIpAndPort(BASE_IP, testPort);
     clientDriver->Initialize(sockOptions);
     clientDriver->Start();
     clientDriver->Connect("hello world", clientEp, 0);

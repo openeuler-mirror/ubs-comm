@@ -189,7 +189,6 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, uint16_t port,
     auto name = "server-" + std::to_string(port);
 
     driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, name, true);
-
     if (driver == nullptr) {
         NN_LOG_ERROR("failed to create serverDriver already created");
         return false;
@@ -199,7 +198,7 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, uint16_t port,
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.SetNetDeviceIpMask(IP_SEG);
     options.enableTls = enableTls;
-    options.mrSendReceiveSegCount = 10;
+    options.mrSendReceiveSegCount = NN_NO10;
     options.mrSendReceiveSegSize = segSize;
     options.tcpSendBufSize = buffSize;
     options.tcpReceiveBufSize = buffSize;
@@ -298,7 +297,7 @@ static bool CreateClientDriverSync(UBSHcomNetDriver *&driver, uint16_t port, uin
     }
     UBSHcomNetDriverOptions options {};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
-    options.mrSendReceiveSegCount = 10;
+    options.mrSendReceiveSegCount = NN_NO10;
     options.mrSendReceiveSegSize = segSize;
     options.dontStartWorkers = true;
     options.tcpSendBufSize = buffSize;
@@ -344,11 +343,11 @@ TEST_F(TestNetSockEndpoint, PostSendRetry)
 {
     UBSHcomNetEndpointPtr ep = nullptr;
     NResult result;
-
+    uint16_t port = 9911;
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-    CreateServerDriver(serverDriver, 9911, RequestReceived, false);
-    CreateClientDriver(clientDriver, 9911, RequestReceived, false);
+    CreateServerDriver(serverDriver, port, RequestReceived, false);
+    CreateClientDriver(clientDriver, port, RequestReceived, false);
 
     clientDriver->Connect("hello server", ep, 0);
 
@@ -367,7 +366,9 @@ TEST_F(TestNetSockEndpoint, PostSendRetry)
     result = ep->PostSend(1, req, innerOpInfo);
     EXPECT_EQ(SS_OK, result);
 
-    MOCKER_CPP(&SockWorker::PostSend).defaults().will(returnObjectList(413, 400, 413, 400));
+    MOCKER_CPP(&SockWorker::PostSend)
+        .defaults()
+        .will(returnObjectList(SS_TCP_RETRY, SS_OK, SS_TCP_RETRY, SS_OK));
     result = ep->PostSend(1, req);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -378,10 +379,10 @@ TEST_F(TestNetSockEndpoint, PostSendRetry)
     EXPECT_EQ(NN_INVALID_OPERATION, result);
 
     UBSHcomNetResponseContext respCtx {};
-    result = ep->Receive(2, respCtx);
+    result = ep->Receive(NN_NO2, respCtx);
     EXPECT_EQ(NN_INVALID_OPERATION, result);
 
-    result = ep->ReceiveRaw(2, respCtx);
+    result = ep->ReceiveRaw(NN_NO2, respCtx);
     EXPECT_EQ(NN_INVALID_OPERATION, result);
 
     CloseDriver(clientDriver, serverDriver);
@@ -394,9 +395,9 @@ TEST_F(TestNetSockEndpoint, PostSendRawRetry)
 
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    CreateServerDriver(serverDriver, 9912, RequestReceived, false);
-    CreateClientDriver(clientDriver, 9912, RequestReceived, false);
+    uint16_t port = 9912;
+    CreateServerDriver(serverDriver, port, RequestReceived, false);
+    CreateClientDriver(clientDriver, port, RequestReceived, false);
 
     clientDriver->Connect("hello world", ep, 0);
     ep->DefaultTimeout(1);
@@ -405,7 +406,7 @@ TEST_F(TestNetSockEndpoint, PostSendRawRetry)
     result = ep->PostSendRaw(req, 1);
     EXPECT_EQ(SS_OK, result);
 
-    MOCKER_CPP(&SockWorker::PostSend).defaults().will(returnObjectList(413, 400));
+    MOCKER_CPP(&SockWorker::PostSend).defaults().will(returnObjectList(SS_TCP_RETRY, SS_OK));
     result = ep->PostSendRaw(req, 0);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -419,9 +420,9 @@ TEST_F(TestNetSockEndpoint, PostSendRawSglRetry)
 
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    CreateServerDriver(serverDriver, 9913, RequestReceived, false);
-    CreateClientDriver(clientDriver, 9913, RequestReceived, false);
+    uint16_t port = 9913;
+    CreateServerDriver(serverDriver, port, RequestReceived, false);
+    CreateClientDriver(clientDriver, port, RequestReceived, false);
 
     clientDriver->Connect("hello server", ep, 0);
     ep->DefaultTimeout(1);
@@ -444,7 +445,7 @@ TEST_F(TestNetSockEndpoint, PostSendRawSglRetry)
     EXPECT_EQ(SS_OK, result);
     sem_wait(&sem);
 
-    MOCKER_CPP(&SockWorker::PostSendRawSgl).defaults().will(returnObjectList(413, 400));
+    MOCKER_CPP(&SockWorker::PostSendRawSgl).defaults().will(returnObjectList(SS_TCP_RETRY, SS_OK));
     result = ep->PostSendRawSgl(req, 0);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -457,12 +458,11 @@ TEST_F(TestNetSockEndpoint, PostReadWriteRetry)
     UBSHcomNetEndpointPtr ep = nullptr;
     NResult result;
 
-
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    CreateServerDriver(serverDriver, 9914, RequestReceivedSglServer, false);
-    CreateClientDriver(clientDriver, 9914, RequestReceivedSglClient, false);
+    uint16_t port = 9914;
+    CreateServerDriver(serverDriver, port, RequestReceivedSglServer, false);
+    CreateClientDriver(clientDriver, port, RequestReceivedSglClient, false);
 
     clientDriver->Connect("hello server", ep, 0);
 
@@ -510,14 +510,14 @@ TEST_F(TestNetSockEndpoint, PostReadWriteRetry)
     MOCKER_CPP(&SockWorker::PostRead, SResult(SockWorker::*)(Sock *, SockTransHeader &,
         const UBSHcomNetTransRequest &))
         .defaults()
-        .will(returnObjectList(413, 400));
+        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
     result = ep->PostRead(req);
     EXPECT_EQ(SS_ERROR, result);
 
     MOCKER_CPP(&SockWorker::PostWrite, SResult(SockWorker::*)(Sock *, SockTransHeader &,
         const UBSHcomNetTransRequest &))
         .defaults()
-        .will(returnObjectList(413, 400));
+        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
     result = ep->PostWrite(req);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -531,12 +531,11 @@ TEST_F(TestNetSockEndpoint, PostReadWriteSglRetry)
     UBSHcomNetEndpointPtr ep = nullptr;
     NResult result;
 
-
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    CreateServerDriver(serverDriver, 9915, RequestReceivedSglServer, false);
-    CreateClientDriver(clientDriver, 9915, RequestReceivedSglClient, false);
+    uint16_t port = 9915;
+    CreateServerDriver(serverDriver, port, RequestReceivedSglServer, false);
+    CreateClientDriver(clientDriver, port, RequestReceivedSglClient, false);
 
     clientDriver->Connect("hello server", ep, 0);
     ep->DefaultTimeout(1);
@@ -583,14 +582,14 @@ TEST_F(TestNetSockEndpoint, PostReadWriteSglRetry)
     MOCKER_CPP(&SockWorker::PostRead, SResult(SockWorker::*)(Sock *, SockTransHeader &,
         const UBSHcomNetTransSglRequest &))
         .defaults()
-        .will(returnObjectList(413, 400));
+        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
     result = ep->PostRead(reqRead);
     EXPECT_EQ(SS_ERROR, result);
 
     MOCKER_CPP(&SockWorker::PostWrite, SResult(SockWorker::*)(Sock *, SockTransHeader &,
         const UBSHcomNetTransSglRequest &))
         .defaults()
-        .will(returnObjectList(413, 400));
+        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
     result = ep->PostWrite(reqRead);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -606,12 +605,11 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRetry)
 
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    bool res;
-    res = CreateServerDriver(serverDriver, 9916, RequestReceivedServer, false);
+    uint16_t port = 9916;
+    bool res = CreateServerDriver(serverDriver, port, RequestReceivedServer, false);
     EXPECT_TRUE(res);
 
-    res = CreateClientDriverSync(clientDriver, 9916);
+    res = CreateClientDriverSync(clientDriver, port);
     EXPECT_TRUE(res);
 
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
@@ -626,7 +624,7 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRetry)
     EXPECT_EQ(SS_OK, result);
 
     UBSHcomNetResponseContext respCtx {};
-    result = ep->Receive(2, respCtx);
+    result = ep->Receive(NN_NO2, respCtx);
     std::string resp((char *)respCtx.Message()->Data(), respCtx.Header().dataLength);
     NN_LOG_INFO("server response received - " << respCtx.Header().opCode << ", dataLen " <<
         respCtx.Header().dataLength);
@@ -638,8 +636,8 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRetry)
 
     MOCKER_CPP(&Sock::PostSend, SResult(Sock::*)(SockTransHeader &, const UBSHcomNetTransRequest &))
         .defaults()
-        .will(returnObjectList(413, 400, 413, 400));
-    result = ep->PostSend(3, req);
+        .will(returnObjectList(SS_TCP_RETRY, SS_OK, SS_TCP_RETRY, SS_OK));
+    result = ep->PostSend(NN_NO3, req);
     EXPECT_EQ(SS_ERROR, result);
 
     result = ep->PostSend(1, req, innerOpInfo);
@@ -656,27 +654,27 @@ TEST_F(TestNetSockEndpoint, SyncReceiveRetry)
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
 
-    bool res;
-    res = CreateServerDriver(serverDriver, 9917, RequestReceived, false);
+    uint16_t port = 9917;
+    bool res = CreateServerDriver(serverDriver, port, RequestReceived, false);
     EXPECT_TRUE(res);
 
-    res = CreateClientDriverSync(clientDriver, 9917);
+    res = CreateClientDriverSync(clientDriver, port);
     EXPECT_TRUE(res);
 
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
 
     UBSHcomNetResponseContext respCtx {};
 
-    MOCKER_CPP(&Sock::PostReceiveHeader).defaults().will(returnObjectList(400, 0, 0));
-    result = ep->Receive(4, respCtx);
+    MOCKER_CPP(&Sock::PostReceiveHeader).defaults().will(returnObjectList(SS_OK, 0, 0));
+    result = ep->Receive(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
     MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).defaults().will(returnObjectList(false, true));
-    result = ep->Receive(6, respCtx);
+    result = ep->Receive(NN_NO6, respCtx);
     EXPECT_EQ(NN_MALLOC_FAILED, result);
 
-    MOCKER_CPP(&Sock::PostReceiveBody).defaults().will(returnValue(400));
-    result = ep->Receive(4, respCtx);
+    MOCKER_CPP(&Sock::PostReceiveBody).defaults().will(returnValue(SS_OK));
+    result = ep->Receive(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
     CloseDriver(clientDriver, serverDriver);
@@ -687,14 +685,12 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRawRetry)
     UBSHcomNetEndpointPtr ep = nullptr;
     NResult result;
 
-
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    bool res;
-    res = CreateServerDriver(serverDriver, 9918, RequestReceivedServer, false);
+    uint16_t port = 9918;
+    bool res = CreateServerDriver(serverDriver, port, RequestReceivedServer, false);
     EXPECT_TRUE(res);
-    res = CreateClientDriverSync(clientDriver, 9918);
+    res = CreateClientDriverSync(clientDriver, port);
     EXPECT_TRUE(res);
 
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
@@ -727,11 +723,10 @@ TEST_F(TestNetSockEndpoint, SyncReceiveRawRetry)
 
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    bool res;
-    res = CreateServerDriver(serverDriver, 9919, RequestReceivedServer, false);
+    uint16_t port = 9919;
+    bool res = CreateServerDriver(serverDriver, port, RequestReceivedServer, false);
     EXPECT_TRUE(res);
-    res = CreateClientDriverSync(clientDriver, 9919);
+    res = CreateClientDriverSync(clientDriver, port);
     EXPECT_TRUE(res);
 
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
@@ -739,16 +734,16 @@ TEST_F(TestNetSockEndpoint, SyncReceiveRawRetry)
     std::string msg = "Hello server, this is a message";
     UBSHcomNetResponseContext respCtx {};
 
-    MOCKER_CPP(&Sock::PostReceiveHeader).defaults().will(returnObjectList(400, 0, 0));
-    result = ep->ReceiveRaw(4, respCtx);
+    MOCKER_CPP(&Sock::PostReceiveHeader).defaults().will(returnObjectList(SS_OK, 0, 0));
+    result = ep->ReceiveRaw(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
     MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).defaults().will(returnObjectList(false, true));
-    result = ep->ReceiveRaw(6, respCtx);
+    result = ep->ReceiveRaw(NN_NO6, respCtx);
     EXPECT_EQ(NN_MALLOC_FAILED, result);
 
-    MOCKER_CPP(&Sock::PostReceiveBody).defaults().will(returnValue(400));
-    result = ep->ReceiveRaw(4, respCtx);
+    MOCKER_CPP(&Sock::PostReceiveBody).defaults().will(returnValue(SS_OK));
+    result = ep->ReceiveRaw(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
     CloseDriver(clientDriver, serverDriver);
@@ -759,14 +754,12 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRawSglRetry)
     UBSHcomNetEndpointPtr ep = nullptr;
     NResult result;
 
-
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    bool createRes;
-    createRes = CreateServerDriver(serverDriver, 9920, RequestReceivedServer, false);
+    uint16_t port = 9920;
+    bool createRes = CreateServerDriver(serverDriver, port, RequestReceivedServer, false);
     EXPECT_TRUE(createRes);
-    createRes = CreateClientDriverSync(clientDriver, 9920);
+    createRes = CreateClientDriverSync(clientDriver, port);
     EXPECT_TRUE(createRes);
 
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
@@ -795,7 +788,7 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRawSglRetry)
 
     MOCKER_CPP(&Sock::PostSendSgl, SResult(Sock::*)(SockTransHeader &, const UBSHcomNetTransSglRequest &))
         .defaults()
-        .will(returnObjectList(413, 400));
+        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
     result = ep->PostSendRawSgl(req, 0);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -810,11 +803,10 @@ TEST_F(TestNetSockEndpoint, SyncPostReadWriteRetry)
 
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    bool createRes;
-    createRes = CreateServerDriver(serverDriver, 9921, RequestReceivedSglServer, false);
+    uint16_t port = 9921;
+    bool createRes = CreateServerDriver(serverDriver, port, RequestReceivedSglServer, false);
     EXPECT_TRUE(createRes);
-    createRes = CreateClientDriverSync(clientDriver, 9921);
+    createRes = CreateClientDriverSync(clientDriver, port);
     EXPECT_TRUE(createRes);
 
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
@@ -883,11 +875,10 @@ TEST_F(TestNetSockEndpoint, SyncPostReadWriteSglRetry)
 
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    bool createRes;
-    createRes = CreateServerDriver(serverDriver, 9922, RequestReceivedSglServer, false);
+    uint16_t port = 9922;
+    bool createRes = CreateServerDriver(serverDriver, port, RequestReceivedSglServer, false);
     EXPECT_TRUE(createRes);
-    createRes = CreateClientDriverSync(clientDriver, 9922);
+    createRes = CreateClientDriverSync(clientDriver, port);
     EXPECT_TRUE(createRes);
 
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
@@ -975,9 +966,9 @@ TEST_F(TestNetSockEndpoint, EpEncrypt)
 
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
-    CreateServerDriver(serverDriver, 9923, RequestReceivedSglServer, true);
-    CreateClientDriver(clientDriver, 9923, RequestReceivedSglClient, true);
+    uint16_t port = 9923;
+    CreateServerDriver(serverDriver, port, RequestReceivedSglServer, true);
+    CreateClientDriver(clientDriver, port, RequestReceivedSglClient, true);
 
     auto ret = clientDriver->Connect("hello server", ep, 0);
     ASSERT_EQ(ret, NN_OK);
@@ -1005,9 +996,9 @@ TEST_F(TestNetSockEndpoint, EpEncrypt)
 
     clientDriver = nullptr;
     serverDriver = nullptr;
-
-    CreateServerDriver(serverDriver, 9924, RequestReceivedSglServer, false);
-    CreateClientDriver(clientDriver, 9924, RequestReceivedSglClient, false);
+    port = 9924;
+    CreateServerDriver(serverDriver, port, RequestReceivedSglServer, false);
+    CreateClientDriver(clientDriver, port, RequestReceivedSglClient, false);
 
     clientDriver->Connect("hello server", ep, 0);
     value = "EpEncrypt";
@@ -1049,12 +1040,12 @@ TEST_F(TestNetSockEndpoint, SyncPostSendTimeout)
 
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetDriver *serverDriver = nullptr;
-
+    uint16_t port = 9925;
     bool res;
     uint32_t segSize = 3 * 1024 * 1024;
-    res = CreateServerDriver(serverDriver, 9925, RequestReceivedServer, false, segSize, 1);
+    res = CreateServerDriver(serverDriver, port, RequestReceivedServer, false, segSize, 1);
     EXPECT_TRUE(res);
-    res = CreateClientDriverSync(clientDriver, 9925, segSize, 1);
+    res = CreateClientDriverSync(clientDriver, port, segSize, 1);
     EXPECT_TRUE(res);
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
     UBSHcomNetResponseContext respCtx{};
@@ -1069,8 +1060,8 @@ TEST_F(TestNetSockEndpoint, SyncPostSendTimeout)
 
     result = ep->Receive(-1, respCtx);
     EXPECT_EQ(SS_OK, result);
-
-    static char data1[2 * 1024 * 1024] = "sock_pp_client";
+    uint32_t size1 = 2 * 1024 * 1024;
+    static char data1[size1] = "sock_pp_client";
     UBSHcomNetTransRequest req1((void *)(data1), sizeof(data1), 0);
 
     epOptions.sendTimeout = 0;

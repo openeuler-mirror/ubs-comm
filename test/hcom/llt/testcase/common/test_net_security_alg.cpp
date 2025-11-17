@@ -13,7 +13,7 @@
 #include "hcom.h"
 #include "common/net_security_alg.h"
 #include "common/net_util.h"
-#include "test_net_security_alg.hpp"
+#include "test_net_security_alg.h"
 
 using namespace ock::hcom;
 

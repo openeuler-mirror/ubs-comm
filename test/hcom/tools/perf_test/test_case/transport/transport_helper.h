@@ -10,8 +10,8 @@
 
 namespace hcom {
 namespace perftest {
-using NewEpHandler =
-    std::function<int(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep, const std::string &payload)>;
+using NewEpHandler = std::function<int(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
+    const std::string &payload)>;
 using EpBrokenHandler = std::function<void(const ock::hcom::UBSHcomNetEndpointPtr &ep)>;
 using ReqRecvHandler = std::function<int(const ock::hcom::UBSHcomNetRequestContext &ctx)>;
 using OneSideDoneHandler = std::function<int(const ock::hcom::UBSHcomNetRequestContext &ctx)>;

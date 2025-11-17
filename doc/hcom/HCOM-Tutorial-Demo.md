@@ -687,7 +687,7 @@ channel-\>Send(req, nullptr)
 #include <string>
 #include <unistd.h>
 #include <getopt.h>
-#include <stdio.h>
+#include <cstdio>
 #include <iostream>
 
 #include "hcom/hcom_service.h"
@@ -1083,7 +1083,7 @@ int main(int argc, char *argv[])
 #include <getopt.h>
 #include <semaphore.h>
 #include <thread>
-#include <stdio.h>
+#include <cstdio>
 #include "hcom/hcom_service.h"
 #include "hcom/hcom_service_context.h"
 #include "hcom/hcom.h"

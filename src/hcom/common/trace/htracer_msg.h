@@ -113,14 +113,14 @@ struct TTraceInfo {
 
     std::string ToString(TracePointTimeUnit unit = MICRO_SECOND) const
     {
-        static uint64_t TIME_UNIT_STEP[TP_TIME_UNIT] = {
+        static uint64_t timeUnitStep[TP_TIME_UNIT] = {
             1,
             NN_NO1000,
             NN_NO1000000,
             NN_NO1000000000
         };
 
-        static std::string TIME_UNIT_NAME[TP_TIME_UNIT] = {
+        static std::string timeUnitName[TP_TIME_UNIT] = {
             "ns",
             "us",
             "ms",
@@ -130,8 +130,8 @@ struct TTraceInfo {
         std::ostringstream os(str);
         os.flags(std::ios::fixed);
         os.precision(NN_NO3);
-        auto unitStep = TIME_UNIT_STEP[unit];
-        auto unitName = TIME_UNIT_NAME[unit];
+        auto unitStep = timeUnitStep[unit];
+        auto unitName = timeUnitName[unit];
         os << "[" << std::left << std::setw(NN_NO50) << name << "]"
            << "\t" << std::left << std::setw(NN_NO15) << begin << "\t"
            << std::left << std::setw(NN_NO15) << goodEnd << "\t"

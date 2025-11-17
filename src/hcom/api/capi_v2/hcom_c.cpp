@@ -264,7 +264,8 @@ int ubs_hcom_mem_allocator_get_free_size(ubs_hcom_memory_allocator allocator, ui
     return SER_OK;
 }
 
-int ubs_hcom_mem_allocator_allocate(ubs_hcom_memory_allocator allocator, uint64_t size, uintptr_t *address, uint64_t *key)
+int ubs_hcom_mem_allocator_allocate(ubs_hcom_memory_allocator allocator, uint64_t size, uintptr_t *address,
+    uint64_t *key)
 {
     VALIDATE_ALLOCATOR(allocator);
     VALIDATE_NOT_NULL(address, "Invalid out address");
@@ -996,7 +997,7 @@ int ubs_hcom_ep_post_send(ubs_hcom_endpoint ep, uint16_t opcode, ubs_hcom_send_r
     return reinterpret_cast<UBSHcomNetEndpoint *>(ep)->PostSend(opcode, transReq);
 }
 
-int ubs_hcom_ep_post_send_with_opinfo(ubs_hcom_endpoint ep, uint16_t opcode, ubs_hcom_send_request *req, 
+int ubs_hcom_ep_post_send_with_opinfo(ubs_hcom_endpoint ep, uint16_t opcode, ubs_hcom_send_request *req,
     ubs_hcom_opinfo *opInfo)
 {
     VALIDATE_EP(ep);

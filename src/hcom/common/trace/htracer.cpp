@@ -17,7 +17,7 @@
 namespace ock {
 namespace hcom {
 
-static HTracerService *traceService = nullptr;
+static HTracerService *g_traceService = nullptr;
 #ifdef HTRACER_ENABLED
 bool TraceManager::mEnable = true;
 #else
@@ -49,18 +49,18 @@ static void HtracerRegisterInterface(void)
 
 int32_t HTracerInit(const std::string &serverName)
 {
-    if (traceService != nullptr) {
+    if (g_traceService != nullptr) {
         return SER_OK;
     }
 
     HtracerRegisterInterface();
 
-    traceService = new (std::nothrow) HTracerService();
-    if (traceService == nullptr) {
-        NN_LOG_WARN("[HTRACER] failed to malloc traceService");
+    g_traceService = new (std::nothrow) HTracerService();
+    if (g_traceService == nullptr) {
+        NN_LOG_WARN("[HTRACER] failed to malloc g_traceService");
         return SER_ERROR;
     }
-    traceService->StartUp(serverName);
+    g_traceService->StartUp(serverName);
 
     auto ins = TraceManager::Instance();
     if (ins == nullptr) {
@@ -73,10 +73,10 @@ int32_t HTracerInit(const std::string &serverName)
 
 void HTracerExit(void)
 {
-    if (traceService != nullptr) {
-        traceService->ShutDown();
-        delete traceService;
-        traceService = nullptr;
+    if (g_traceService != nullptr) {
+        g_traceService->ShutDown();
+        delete g_traceService;
+        g_traceService = nullptr;
     }
     g_htraceInit = false;
 }

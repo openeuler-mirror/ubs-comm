@@ -13,8 +13,7 @@
 
 namespace ock {
 namespace hcom {
-std::atomic<uint16_t> NormalMemoryRegion::KEY_ID(0);
-std::atomic<uint32_t> NormalMemoryRegion::LOCAL_KEY_INDEX(0);
+std::atomic<uint32_t> NormalMemoryRegion::shmLocalKeyIndex(0);
 
 NResult NormalMemoryRegion::Create(const std::string &name, uint64_t size, NormalMemoryRegion *&buf)
 {
@@ -65,7 +64,7 @@ NResult NormalMemoryRegion::Initialize()
             return NN_INVALID_PARAM;
         }
 
-        mLKey = LOCAL_KEY_INDEX.fetch_add(1);
+        mLKey = shmLocalKeyIndex.fetch_add(1);
         mInited = true;
 
         /* don't do bzero to external memory, because this may clean user's data */
@@ -81,7 +80,7 @@ NResult NormalMemoryRegion::Initialize()
 
     bzero(tmpBuf, mSize);
     mBuf = reinterpret_cast<uintptr_t>(tmpBuf);
-    mLKey = LOCAL_KEY_INDEX.fetch_add(1);
+    mLKey = shmLocalKeyIndex.fetch_add(1);
     mInited = true;
     return NN_OK;
 }

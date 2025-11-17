@@ -10,7 +10,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <semaphore.h>
 #define protected public
 #include "hcom_service.h"
@@ -121,7 +121,7 @@ static int RequestReceived(ubs_hcom_service_context ctx, uint64_t usrCtx)
     }
     if (opInfo.opCode == 0) {
         printf("receive msg, op code 0");
-    } else if (opInfo.opCode == 2) {
+    } else if (opInfo.opCode == NN_NO2) {
         Service_Message req = { capiRemoteMrInfo, sizeof(capiRemoteMrInfo) };
         Service_OpInfo sendOpInfo = opInfo;
 
@@ -172,7 +172,7 @@ static int OneSideDone(ubs_hcom_service_context ctx, uint64_t usrCtx)
 
 int RegCapiSglMem(Net_Service driver, TestRegMrInfo capiMrInfo[], std::vector<ubs_hcom_memory_region> &mrs)
 {
-    for (uint16_t i = 0; i < 4; i++) {
+    for (uint16_t i = 0; i < NN_NO4; i++) {
         ubs_hcom_memory_region mrArray;
         int result = ubs_hcom_service_register_memory_region(driver, dataSize, &mrArray);
         if (result != 0) {
@@ -257,8 +257,8 @@ int CreateCapiService(ubs_hcom_service_request_handler receiveCb)
     ubs_hcom_service_options capiOptions;
     bzero(&capiOptions, sizeof(ubs_hcom_service_options));
     capiOptions.mode = C_SERVICE_BUSY_POLLING;
-    capiOptions.mrSendReceiveSegSize = 1024 + dataSize;
-    capiOptions.mrSendReceiveSegCount = 8192;
+    capiOptions.mrSendReceiveSegSize = NN_NO1024 + dataSize;
+    capiOptions.mrSendReceiveSegCount = NN_NO8192;
     capiOptions.enableTls = false;
     strcpy(capiOptions.netDeviceIpMask, capiIpSeg);
     sprintf(capiOptions.workerGroups, "%u", 1);
@@ -306,8 +306,8 @@ int CreateCapiClient()
     ubs_hcom_service_options capiOptions;
     bzero(&capiOptions, sizeof(ubs_hcom_service_options));
     capiOptions.mode = C_SERVICE_BUSY_POLLING;
-    capiOptions.mrSendReceiveSegSize = 1024 + dataSize;
-    capiOptions.mrSendReceiveSegCount = 8192;
+    capiOptions.mrSendReceiveSegSize = NN_NO1024 + dataSize;
+    capiOptions.mrSendReceiveSegCount = NN_NO8192;
     capiOptions.enableTls = false;
     strcpy(capiOptions.netDeviceIpMask, capiIpSeg);
     sprintf(capiOptions.workerGroups, "%u", 1);
@@ -355,20 +355,20 @@ TEST_F(TestCapiService, ServiceGetMemoryRegionInfo)
     CreateCapiService(&RequestReceived);
     ubs_hcom_memory_region mr;
     int result = ubs_hcom_service_register_memory_region(0, dataSize, &mr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = ubs_hcom_service_register_memory_region(service, dataSize, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = ubs_hcom_service_register_memory_region(service, 0, &mr);
-    EXPECT_EQ(103, result);
+    EXPECT_EQ(NN_INVALID_PARAM, result);
 
     result = ubs_hcom_service_register_memory_region(service, dataSize, &mr);
     EXPECT_EQ(0, result);
 
     ubs_hcom_mr_info mrInfo;
     result = ubs_hcom_service_get_memory_region_info(0, &mrInfo);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = ubs_hcom_service_get_memory_region_info(mr, &mrInfo);
     EXPECT_EQ(0, result);
@@ -386,17 +386,17 @@ TEST_F(TestCapiService, ChannelPostSend)
     Net_Channel clientChannel = 0;
 
     result = ubs_hcom_service_connect(0, udsName, oobPort, "hello service c", &clientChannel, &capiOptions);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = ubs_hcom_service_connect(client, udsName, oobPort, nullptr, &clientChannel, &capiOptions);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = ubs_hcom_service_connect(client, udsName, oobPort, "hello service c", nullptr, &capiOptions);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
-    capiOptions.epSize = 19;
+    capiOptions.epSize = NN_NO19;
     result = ubs_hcom_service_connect(client, udsName, oobPort, "hello service c", &clientChannel, &capiOptions);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     capiOptions.epSize = 1;
     result = ubs_hcom_service_connect(client, udsName, oobPort, "hello service c", &clientChannel, &capiOptions);
@@ -430,31 +430,31 @@ TEST_F(TestCapiService, ChannelPostSend)
     sem_destroy(&asyncParam.sem);
 
     result = Channel_PostSend(0, &opInfo, &message, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_PostSend(clientChannel, nullptr, &message, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_PostSend(clientChannel, &opInfo, nullptr, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
-    MOCKER_CPP(&NetChannel::SendInner).stubs().will(returnValue(501));
+    MOCKER_CPP(&NetChannel::SendInner).stubs().will(returnValue(SER_INVALID_PARAM));
     result = Channel_PostSend(clientChannel, &opInfo, &message, &cb);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     /* postsendRaw */
     result = Channel_PostSendRaw(clientChannel, &message, NULL);
     EXPECT_EQ(0, result);
 
     result = Channel_PostSendRaw(0, &message, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_PostSendRaw(clientChannel, nullptr, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
-    MOCKER_CPP(&NetChannel::SendRawInner).defaults().will(returnValue(501));
+    MOCKER_CPP(&NetChannel::SendRawInner).defaults().will(returnValue(SER_INVALID_PARAM));
     result = Channel_PostSendRaw(clientChannel, &message, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     GlobalMockObject::verify();
 
@@ -477,7 +477,7 @@ TEST_F(TestCapiService, ChannelPostSend)
     rsp.size = sizeof(getRemoteMrInfo);
 
     Service_OpInfo reqInfo = { 0, 0, 0, 0 };
-    reqInfo.opCode = 2;
+    reqInfo.opCode = NN_NO2;
 
     Service_OpInfo rspInfo = { 0, 0, 0, 0 };
 
@@ -500,14 +500,14 @@ TEST_F(TestCapiService, ChannelPostSend)
     EXPECT_EQ(0, result);
 
     result = Channel_PostSendRawSgl(0, &request, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_PostSendRawSgl(clientChannel, nullptr, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
-    MOCKER_CPP(&NetChannel::SendRawSglInner).defaults().will(returnValue(501));
+    MOCKER_CPP(&NetChannel::SendRawSglInner).defaults().will(returnValue(SER_INVALID_PARAM));
     result = Channel_PostSendRawSgl(clientChannel, &request, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
     DestoryCapiSglMem(client, mrClient);
     DestoryCapiSglMem(service, mrService);
 
@@ -526,20 +526,20 @@ TEST_F(TestCapiService, ChannelPostSend)
     EXPECT_EQ(0, result);
 
     result = Channel_SyncCall(0, &reqInfo, &req, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCall(clientChannel, nullptr, &req, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCall(clientChannel, &reqInfo, nullptr, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCall(clientChannel, &reqInfo, &req, &rspInfo, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
-    MOCKER_CPP(&NetChannel::SyncCallInner).defaults().will(returnValue(501));
+    MOCKER_CPP(&NetChannel::SyncCallInner).defaults().will(returnValue(SER_INVALID_PARAM));
     result = Channel_SyncCall(clientChannel, &reqInfo, &req, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     GlobalMockObject::verify();
 
@@ -562,23 +562,23 @@ TEST_F(TestCapiService, ChannelPostSend)
     EXPECT_EQ(0, result);
 
     result = Channel_AsyncCall(0, &opInfo, &req, &cb);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_AsyncCall(clientChannel, nullptr, &req, &cb);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_AsyncCall(clientChannel, &opInfo, nullptr, &cb);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_AsyncCall(clientChannel, &opInfo, &req, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     sem_wait(&asyncParam.sem);
     sem_destroy(&asyncParam.sem);
 
-    MOCKER_CPP(&NetChannel::AsyncCallInner).defaults().will(returnValue(501));
+    MOCKER_CPP(&NetChannel::AsyncCallInner).defaults().will(returnValue(SER_INVALID_PARAM));
     result = Channel_AsyncCall(channel, &opInfo, &req, &cb);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     GlobalMockObject::verify();
 
@@ -592,17 +592,17 @@ TEST_F(TestCapiService, ChannelPostSend)
     EXPECT_EQ(0, result);
 
     result = Channel_SyncCallRaw(0, &req, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCallRaw(clientChannel, nullptr, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCallRaw(clientChannel, &req, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
-    MOCKER_CPP(&NetChannel::SyncCallRawInner).defaults().will(returnValue(501));
+    MOCKER_CPP(&NetChannel::SyncCallRawInner).defaults().will(returnValue(SER_INVALID_PARAM));
     result = Channel_SyncCallRaw(clientChannel, &req, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     GlobalMockObject::verify();
 
@@ -617,12 +617,11 @@ TEST_F(TestCapiService, ChannelPostSend)
     req.data = data;
     req.size = dataSize;
 
-
     rsp.data = getRemoteMrInfo;
     rsp.size = sizeof(getRemoteMrInfo);
 
     reqInfo = { 0, 0, 0, 0 };
-    reqInfo.opCode = 2;
+    reqInfo.opCode = NN_NO2;
     rspInfo = { 0, 0, 0, 0 };
 
     result = Channel_SyncCall(clientChannel, &reqInfo, &req, &rspInfo, &rsp);
@@ -647,17 +646,17 @@ TEST_F(TestCapiService, ChannelPostSend)
     EXPECT_EQ(0, result);
 
     result = Channel_SyncCallRawSgl(0, &reqRawSgl2, &rspRawSgl);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCallRawSgl(clientChannel, nullptr, &rspRawSgl);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCallRawSgl(clientChannel, &reqRawSgl2, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
-    MOCKER_CPP(&NetChannel::SyncCallRawSglInner).defaults().will(returnValue(501));
+    MOCKER_CPP(&NetChannel::SyncCallRawSglInner).defaults().will(returnValue(SER_INVALID_PARAM));
     result = Channel_SyncCallRawSgl(clientChannel, &reqRawSgl2, &rspRawSgl);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     DestoryCapiSglMem(client, mrClient);
     DestoryCapiSglMem(service, mrService);
@@ -678,23 +677,23 @@ TEST_F(TestCapiService, ChannelPostSend)
     rsp.size = sizeof(getRemoteMrInfo);
 
     reqInfo = { 0, 0, 0, 0 };
-    reqInfo.opCode = 2;
+    reqInfo.opCode = NN_NO2;
     rspInfo = { 0, 0, 0, 0 };
 
     result = Channel_SyncCall(clientChannel, &reqInfo, &req, &rspInfo, &rsp);
     EXPECT_EQ(0, result);
 
     result = Channel_SyncCall(clientChannel, &reqInfo, &req, &rspInfo, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCall(clientChannel, nullptr, &req, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCall(0, &reqInfo, &req, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncCall(clientChannel, &reqInfo, nullptr, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     Service_Request reqWrite;
     reqWrite.lAddress = capiLocalMrInfo[0].lAddress;
@@ -708,16 +707,16 @@ TEST_F(TestCapiService, ChannelPostSend)
     EXPECT_EQ(0, result);
 
     result = Channel_Write(0, &reqWrite, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_Write(clientChannel, nullptr, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     MOCKER_CPP(&NetChannel::WriteInner, int (NetChannel::*)(const NetServiceRequest &, const NetCallback *))
         .defaults()
-        .will(returnValue(501));
+        .will(returnValue(SER_INVALID_PARAM));
     result = Channel_Write(clientChannel, &reqWrite, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     GlobalMockObject::verify();
 
@@ -730,16 +729,16 @@ TEST_F(TestCapiService, ChannelPostSend)
     EXPECT_EQ(0, result);
 
     result = Channel_WriteSgl(0, &reqSgl, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_WriteSgl(clientChannel, nullptr, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     MOCKER_CPP(&NetChannel::WriteSglInner, int (NetChannel::*)(const NetServiceSglRequest &, const NetCallback *))
         .defaults()
-        .will(returnValue(501));
+        .will(returnValue(SER_INVALID_PARAM));
     result = Channel_WriteSgl(clientChannel, &reqSgl, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     GlobalMockObject::verify();
 
@@ -748,16 +747,16 @@ TEST_F(TestCapiService, ChannelPostSend)
     EXPECT_EQ(0, result);
 
     result = Channel_Read(0, &reqWrite, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_Read(clientChannel, nullptr, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     MOCKER_CPP(&NetChannel::ReadInner, int (NetChannel::*)(const NetServiceRequest &, const NetCallback *))
         .defaults()
-        .will(returnValue(501));
+        .will(returnValue(SER_INVALID_PARAM));
     result = Channel_Read(clientChannel, &reqWrite, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     GlobalMockObject::verify();
 
@@ -766,16 +765,16 @@ TEST_F(TestCapiService, ChannelPostSend)
     EXPECT_EQ(0, result);
 
     result = Channel_ReadSgl(0, &reqSgl, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_ReadSgl(clientChannel, nullptr, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     MOCKER_CPP(&NetChannel::ReadSglInner, int (NetChannel::*)(const NetServiceSglRequest &, const NetCallback *))
         .defaults()
-        .will(returnValue(501));
+        .will(returnValue(SER_INVALID_PARAM));
     result = Channel_ReadSgl(clientChannel, &reqSgl, NULL);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     DestoryCapiSglMem(client, mrClient);
     DestoryCapiSglMem(service, mrService);
@@ -849,7 +848,8 @@ TEST_F(TestCapiService, ServiceContextTest)
 
     Net_Channel clientChannel;
     capiOptions.epSize = 1;
-    auto result = ubs_hcom_service_connect(client, udsName, oobPort, "hello service c context", &clientChannel, &capiOptions);
+    auto result = ubs_hcom_service_connect(client, udsName, oobPort, "hello service c context", &clientChannel,
+        &capiOptions);
     EXPECT_EQ(0, result);
 
     char testData[512];

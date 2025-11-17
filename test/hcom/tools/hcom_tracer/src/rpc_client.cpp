@@ -18,9 +18,9 @@
 #include <sys/unistd.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include "rpc_client.h"
 #include "htracer_log.h"
 #include "htracer_utils.h"
+#include "rpc_client.h"
 
 std::string RpcClient::serverName = "udx_server";
 

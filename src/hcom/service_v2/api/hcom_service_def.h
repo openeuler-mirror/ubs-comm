@@ -27,7 +27,8 @@ constexpr uint16_t MAX_MULTI_RAIL_NUM = 4;
 using SerResult = int;
 using UBSHcomDriverSecInfoProvider = std::function<int(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type,
     char *&output, uint32_t &outLen, bool &needAutoFree)>;
-using UBSHcomDriverSecInfoValidator = std::function<int(uint64_t ctx, int64_t flag, const char *input, uint32_t inputLen)>;
+using UBSHcomDriverSecInfoValidator =
+    std::function<int(uint64_t ctx, int64_t flag, const char *input, uint32_t inputLen)>;
 using UBSHcomWorkerMode = UBSHcomNetDriverWorkingMode;
 using UBSHcomChTypeIndex = uint16_t;
 using UBSHcomCipherSuite = UBSHcomNetCipherSuite;

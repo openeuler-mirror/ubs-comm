@@ -11,7 +11,9 @@
  */
 
 #include "net_addr_size_map.h"
+#include "hcom_num_def.h"
 #include "test_address_size_hash_map.h"
+#include "hcom_num_def.h"
 
 using namespace ock::hcom;
 
@@ -22,7 +24,7 @@ void TestAddress2SizeHashmap::TearDown() {}
 TEST_F(TestAddress2SizeHashmap, PutRemove)
 {
     NetAddress2SizeHashMap<NetHeapAllocator> hMap {};
-    auto result = hMap.Initialize(1024);
+    auto result = hMap.Initialize(NN_NO1024);
     ASSERT_EQ(result, 0);
     result = hMap.Put(1, 1);
     ASSERT_EQ(result, 0);
@@ -36,8 +38,8 @@ TEST_F(TestAddress2SizeHashmap, PutRemove)
 TEST_F(TestAddress2SizeHashmap, DoubleInitialize)
 {
     NetAddress2SizeHashMap<NetHeapAllocator> hMap {};
-    hMap.Initialize(1024);
-    auto result = hMap.Initialize(1024);
+    hMap.Initialize(NN_NO1024);
+    auto result = hMap.Initialize(NN_NO1024);
     ASSERT_EQ(result, 0);
     hMap.UnInitialize();
 }
@@ -47,47 +49,47 @@ TEST_F(TestAddress2SizeHashmap, HashBucketPutAndRemove)
     NetHashBucket netHashBucket;
     auto result = netHashBucket.Put(1, 1);
     ASSERT_EQ(result, 1);
-    result = netHashBucket.Put(2, 2);
+    result = netHashBucket.Put(NN_NO2, NN_NO2);
     ASSERT_EQ(result, 1);
-    result = netHashBucket.Put(3, 3);
+    result = netHashBucket.Put(NN_NO3, NN_NO3);
     ASSERT_EQ(result, 1);
-    result = netHashBucket.Put(4, 4);
+    result = netHashBucket.Put(NN_NO4, NN_NO4);
     ASSERT_EQ(result, 1);
-    result = netHashBucket.Put(5, 5);
+    result = netHashBucket.Put(NN_NO5, NN_NO5);
     ASSERT_EQ(result, 1);
-    result = netHashBucket.Put(6, 6);
+    result = netHashBucket.Put(NN_NO6, NN_NO6);
     ASSERT_EQ(result, 1);
-    result = netHashBucket.Put(7, 7);
+    result = netHashBucket.Put(NN_NO7, NN_NO7);
     ASSERT_EQ(result, 0);
     uint32_t size = 0;
     result = netHashBucket.Remove(1, size);
     ASSERT_EQ(result, 1);
     ASSERT_EQ(size, 1);
-    result = netHashBucket.Remove(2, size);
+    result = netHashBucket.Remove(NN_NO2, size);
     ASSERT_EQ(result, 1);
-    ASSERT_EQ(size, 2);
-    result = netHashBucket.Remove(3, size);
+    ASSERT_EQ(size, NN_NO2);
+    result = netHashBucket.Remove(NN_NO3, size);
     ASSERT_EQ(result, 1);
-    ASSERT_EQ(size, 3);
-    result = netHashBucket.Remove(4, size);
+    ASSERT_EQ(size, NN_NO3);
+    result = netHashBucket.Remove(NN_NO4, size);
     ASSERT_EQ(result, 1);
-    ASSERT_EQ(size, 4);
-    result = netHashBucket.Remove(5, size);
+    ASSERT_EQ(size, NN_NO4);
+    result = netHashBucket.Remove(NN_NO5, size);
     ASSERT_EQ(result, 1);
-    ASSERT_EQ(size, 5);
-    result = netHashBucket.Remove(6, size);
+    ASSERT_EQ(size, NN_NO5);
+    result = netHashBucket.Remove(NN_NO6, size);
     ASSERT_EQ(result, 1);
-    ASSERT_EQ(size, 6);
-    result = netHashBucket.Remove(7, size);
+    ASSERT_EQ(size, NN_NO6);
+    result = netHashBucket.Remove(NN_NO7, size);
     ASSERT_EQ(result, 0);
 }
 
 TEST_F(TestAddress2SizeHashmap, RemoveAbsentAddress)
 {
     NetAddress2SizeHashMap<NetHeapAllocator> hMap {};
-    hMap.Initialize(1024);
+    hMap.Initialize(NN_NO1024);
     uint32_t size = 0;
     auto result = hMap.Remove(1, size);
-    ASSERT_EQ(result, 100);
+    ASSERT_EQ(result, NN_NO100);
     hMap.UnInitialize();
 }

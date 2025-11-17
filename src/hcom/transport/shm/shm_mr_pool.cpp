@@ -14,7 +14,7 @@
 
 namespace ock {
 namespace hcom {
-std::atomic<uint32_t> ShmMemoryRegion::LOCAL_KEY_INDEX(0);
+std::atomic<uint32_t> ShmMemoryRegion::shmLocalKeyIndex(0);
 
 NResult ShmMemoryRegion::Create(const std::string &name, uint64_t size, ShmMemoryRegion *&buf)
 {
@@ -120,7 +120,7 @@ inline uint32_t ShmMemoryRegion::GenerateKey()
 
     // 混合PID、索引和时间哈希
     uint32_t mix =
-        hashCount(pid) ^ hashCount(LOCAL_KEY_INDEX.fetch_add(1)) ^ (static_cast<uint32_t>(time(nullptr)) & 0xFFFF);
+        hashCount(pid) ^ hashCount(shmLocalKeyIndex.fetch_add(1)) ^ (static_cast<uint32_t>(time(nullptr)) & 0xFFFF);
 
     // 二次混合确保均匀分布
     return (mix ^ (mix >> NN_NO16)) * 0x45d9f3b;

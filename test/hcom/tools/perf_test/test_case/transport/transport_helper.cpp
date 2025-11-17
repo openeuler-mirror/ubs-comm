@@ -8,7 +8,8 @@ namespace hcom {
 namespace perftest {
 using namespace ock::hcom;
 
-static int NewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep, const std::string &payload)
+static int NewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
+    const std::string &payload)
 {
     return 0;
 }

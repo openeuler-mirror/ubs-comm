@@ -82,7 +82,7 @@ void SetCallBack(UBSHcomNetDriver *driver)
 bool RegisterShmMemory(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov iovs[],
     std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
 {
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < NN_NO4; i++) {
         auto &iov = iovs[i];
         UBSHcomNetMemoryRegionPtr mr;
         auto result = driver->CreateMemoryRegion(NN_NO8, mr);
@@ -111,7 +111,7 @@ void TestShmDriverOob::SetUp()
 {
     shmOptions.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     shmOptions.SetNetDeviceIpMask(IP_SEG);
-    shmOptions.pollingBatchSize = 16;
+    shmOptions.pollingBatchSize = NN_NO16;
     shmOptions.SetWorkerGroups("1");
     shmOptions.SetWorkerGroupsCpuSet("1-1");
     shmOptions.dontStartWorkers = false;
@@ -182,7 +182,7 @@ TEST_F(TestShmDriverOob, InitSuccessWithBusyPolling)
 
 TEST_F(TestShmDriverOob, InitFailWithInvaildParam)
 {
-    shmOptions.qpSendQueueSize = 4;
+    shmOptions.qpSendQueueSize = NN_NO4;
     NResult result = shmServerDriver->Initialize(shmOptions);
     shmOptions.qpSendQueueSize = NN_NO256;
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
@@ -261,7 +261,7 @@ TEST_F(TestShmDriverOob, CreateMemoryRegionInitializeFail)
 {
     shmServerDriver->Initialize(shmOptions);
     UBSHcomNetMemoryRegionPtr mr;
-    MOCKER_CPP(&ShmHandle::Initialize).defaults().will(returnValue(301));
+    MOCKER_CPP(&ShmHandle::Initialize).defaults().will(returnValue(SH_PARAM_INVALID));
     NResult result = shmServerDriver->CreateMemoryRegion(16, mr);
     EXPECT_EQ(NNCode::NN_NOT_INITIALIZED, result);
 }
@@ -338,10 +338,11 @@ TEST_F(TestShmDriverOob, ConnectFailWithPayloadOversize)
     shmClientDriver->Initialize(shmOptions);
     shmClientDriver->Start();
     char payload[1030];
+    uint16_t index = 1029;
     for (char &i : payload) {
         i = '1';
     }
-    payload[1029] = '\0';
+    payload[index] = '\0';
     NResult result = shmClientDriver->Connect(UDSNAME, 0, payload, shmEp);
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
 }
@@ -359,9 +360,10 @@ TEST_F(TestShmDriverOob, ConnectFail)
 
 TEST_F(TestShmDriverOob, ConnectFailWithMagicMismatch)
 {
+    uint16_t testMagic = 104;
     shmServerDriver->Initialize(shmOptions);
     shmServerDriver->Start();
-    shmOptions.magic = 104;
+    shmOptions.magic = testMagic;
     shmClientDriver->Initialize(shmOptions);
     shmClientDriver->Start();
     NResult result = shmClientDriver->Connect(UDSNAME, 0, "halo", shmEp);
@@ -409,9 +411,10 @@ TEST_F(TestShmDriverOob, ConnectSyncFail1)
 
 TEST_F(TestShmDriverOob, ConnectSyncFailWithMagicMismatch)
 {
+    uint16_t testMagic = 104;
     shmServerDriver->Initialize(shmOptions);
     shmServerDriver->Start();
-    shmOptions.magic = 104;
+    shmOptions.magic = testMagic;
     shmClientDriver->Initialize(shmOptions);
     shmClientDriver->Start();
     NResult result = shmClientDriver->Connect(UDSNAME, 0, "halo", shmEp, NET_EP_SELF_POLLING);
@@ -464,7 +467,7 @@ TEST_F(TestShmDriverOob, SendSuccess)
     static char data[900] = {};
     UBSHcomNetTransRequest req((void *)(data), sizeof(data), 0);
     req.upCtxSize = NN_NO16;
-    for (auto i = 0; i < 16; i++) {
+    for (auto i = 0; i < NN_NO16; i++) {
         req.upCtxData[i] = 'a';
     }
     NResult result = shmEp->PostSend(1, req);
@@ -494,7 +497,7 @@ TEST_F(TestShmDriverOob, SendRawSglSuccess)
     }
     UBSHcomNetTransSglRequest req(iov, NN_NO4, 0);
     req.upCtxSize = NN_NO16;
-    for (auto i = 0; i < 16; i++) {
+    for (auto i = 0; i < NN_NO16; i++) {
         req.upCtxData[i] = 'a';
     }
     NResult result = shmEp->PostSendRawSgl(req, 1);

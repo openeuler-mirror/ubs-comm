@@ -29,7 +29,8 @@ TEST_F(TestLoadBalance, OK)
     sem_t sem;
     bool result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriver *server = nullptr, *client = nullptr;
+    UBSHcomNetDriver *server = nullptr;
+    UBSHcomNetDriver *client = nullptr;
     std::unordered_map<uintptr_t, sem_t *> semMap;
     Handlers handlers {};
     handlers.receivedHandler = [&](const UBSHcomNetRequestContext &ctx) -> int {
@@ -59,7 +60,8 @@ TEST_F(TestLoadBalance, WrongGroups)
     sem_t sem;
     bool result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriver *server = nullptr, *client = nullptr;
+    UBSHcomNetDriver *server = nullptr;
+    UBSHcomNetDriver *client = nullptr;
     std::unordered_map<uintptr_t, sem_t *> semMap;
     Handlers handlers {};
     handlers.receivedHandler = [&](const UBSHcomNetRequestContext &ctx) -> int {
@@ -85,7 +87,8 @@ TEST_F(TestLoadBalance, WrongPolicy)
     sem_t sem;
     bool result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriver *server = nullptr, *client = nullptr;
+    UBSHcomNetDriver *server = nullptr;
+    UBSHcomNetDriver *client = nullptr;
     std::unordered_map<uintptr_t, sem_t *> semMap;
     Handlers handlers {};
     handlers.receivedHandler = [&](const UBSHcomNetRequestContext &ctx) -> int {

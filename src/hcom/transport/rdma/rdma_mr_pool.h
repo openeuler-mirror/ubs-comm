@@ -46,7 +46,7 @@ public:
         return nullptr;
     }
 
-    void GetVa(uint64_t &va, uint64_t &va_len, uint32_t &token_id) override
+    void GetVa(uint64_t &va, uint64_t &vaLen, uint32_t &tokenId) override
     {
         return;
     }

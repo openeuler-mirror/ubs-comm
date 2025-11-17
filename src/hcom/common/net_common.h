@@ -58,14 +58,14 @@ class NetFunc {
 public:
     static inline uint32_t CalcHeaderCrc32(UBSHcomNetTransHeader *header)
     {
-        static const uint32_t LENGTH = sizeof(UBSHcomNetTransHeader) - sizeof(uint32_t);
-        return NetCrc32::CalcCrc32(reinterpret_cast<uint8_t *>(header) + sizeof(uint32_t), LENGTH);
+        static const uint32_t netTransHeaderlength = sizeof(UBSHcomNetTransHeader) - sizeof(uint32_t);
+        return NetCrc32::CalcCrc32(reinterpret_cast<uint8_t *>(header) + sizeof(uint32_t), netTransHeaderlength);
     }
 
     static inline uint32_t CalcHeaderCrc32(UBSHcomNetTransHeader &header)
     {
-        static const uint32_t LENGTH = sizeof(UBSHcomNetTransHeader) - sizeof(uint32_t);
-        return NetCrc32::CalcCrc32(reinterpret_cast<uint8_t *>(&header) + sizeof(uint32_t), LENGTH);
+        static const uint32_t netTransHeaderlength = sizeof(UBSHcomNetTransHeader) - sizeof(uint32_t);
+        return NetCrc32::CalcCrc32(reinterpret_cast<uint8_t *>(&header) + sizeof(uint32_t), netTransHeaderlength);
     }
 
     static inline bool ValidateHeaderCrc32(UBSHcomNetTransHeader *header)
@@ -231,14 +231,14 @@ public:
 
     static bool NN_Stof(const std::string &str, float &value)
     {
-        constexpr float EPSINON = 0.000001;
+        constexpr float epsinon = 0.000001;
         char *remain = nullptr;
         errno = 0;
         value = std::strtof(str.c_str(), &remain);
         if (remain == nullptr || strlen(remain) > 0 ||
-            ((value - HUGE_VALF) >= -EPSINON && (value - HUGE_VALF) <= EPSINON && errno == ERANGE)) {
+            ((value - HUGE_VALF) >= -epsinon && (value - HUGE_VALF) <= epsinon && errno == ERANGE)) {
             return false;
-        } else if ((value >= -EPSINON && value <= EPSINON) && (str != "0.0")) {
+        } else if ((value >= -epsinon && value <= epsinon) && (str != "0.0")) {
             return false;
         }
         return true;

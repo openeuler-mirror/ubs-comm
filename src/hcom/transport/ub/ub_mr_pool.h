@@ -34,11 +34,11 @@ public:
         return mMemSeg;
     }
 
-    void GetVa(uint64_t &va, uint64_t &va_len, uint32_t &token_id) override
+    void GetVa(uint64_t &va, uint64_t &vaLen, uint32_t &tokenId) override
     {
         va = mMemSeg->seg.ubva.va;
-        va_len = mMemSeg->seg.len;
-        token_id = mMemSeg->seg.token_id;
+        vaLen = mMemSeg->seg.len;
+        tokenId = mMemSeg->seg.token_id;
     }
 
 public:

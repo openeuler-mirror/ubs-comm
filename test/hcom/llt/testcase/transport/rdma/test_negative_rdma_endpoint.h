@@ -15,15 +15,14 @@
 #include "hcom.h"
 using namespace ock::hcom;
 class TestNegativeRdmaEndpoint : public testing::Test {
+public:
+    TestNegativeRdmaEndpoint();
+    virtual void SetUp(void);
+    virtual void TearDown(void);
 protected:
     UBSHcomNetDriver *client = nullptr;
     UBSHcomNetDriver *server = nullptr;
     UBSHcomNetMemoryRegionPtr clientMr;
     UBSHcomNetMemoryRegionPtr serverMr;
-
-public:
-    TestNegativeRdmaEndpoint();
-    virtual void SetUp(void);
-    virtual void TearDown(void);
 };
 #endif // HCOM_LLT_TEST_NEGATIVE_RDMA_ENDPOINT_H

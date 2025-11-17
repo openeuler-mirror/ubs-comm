@@ -11,10 +11,10 @@
  */
 #include <thread>
 
-#include "test_blocking_queue.h"
 #include "hcom_def.h"
 #include "net_obj_pool.h"
 #include "ut_helper.h"
+#include "test_blocking_queue.h"
 
 using namespace ock::hcom;
 TestCaseBlockingQueue::TestCaseBlockingQueue() {}
@@ -31,8 +31,9 @@ TEST_F(TestCaseBlockingQueue, Serial)
     NetBlockingQueue<DummyObj> queue(2);
     result = queue.Initialize();
     EXPECT_EQ(result, NN_OK);
-    DummyObj obj0(0), obj1(1), obj2(2);
-
+    DummyObj obj0(0);
+    DummyObj obj1(1);
+    DummyObj obj2(2);
     ret = queue.Enqueue(obj1);
     EXPECT_EQ(ret, true);
     ret = queue.EnqueueFirst(obj0);
@@ -42,7 +43,8 @@ TEST_F(TestCaseBlockingQueue, Serial)
     ret = queue.EnqueueFirst(obj2);
     EXPECT_EQ(ret, false);
 
-    DummyObj obj3, obj4;
+    DummyObj obj3;
+    DummyObj obj4;
     ret = queue.Dequeue(obj3);
     EXPECT_EQ(ret, true);
     EXPECT_EQ(obj3.tag, 0);
@@ -58,10 +60,15 @@ TEST_F(TestCaseBlockingQueue, Concurrency)
     NetBlockingQueue<DummyObj> queue(3);
     result = queue.Initialize();
     EXPECT_EQ(result, NN_OK);
-    DummyObj obj0(0), obj1(1), obj2(2), obj3(3);
+    DummyObj obj0(0);
+    DummyObj obj1(1);
+    DummyObj obj2(2);
+    DummyObj obj3(3);
 
     std::thread th([&]() {
-        DummyObj obj0, obj1, obj2;
+        DummyObj obj0;
+        DummyObj obj1;
+        DummyObj obj2;
         bool ret;
         ret = queue.Dequeue(obj0);
         EXPECT_EQ(ret, true);

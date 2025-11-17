@@ -35,7 +35,7 @@ using X509_STORE = struct x509_store;
 using EVP_MD = struct evp_md_st;
 using SSL_SESSION = struct ssl_session_st;
 
-using SSL_psk_find_session_cb_func = int (*)(SSL *ssl, const unsigned char *identity, size_t identity_len,
+using SSL_psk_find_session_cb_func = int (*)(SSL *ssl, const unsigned char *identity, size_t identityLen,
     SSL_SESSION **sess);
 using SSL_psk_use_session_cb_func = int (*)(SSL *ssl, const EVP_MD *md, const unsigned char **id, size_t *idlen,
     SSL_SESSION **sess);

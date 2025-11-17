@@ -57,14 +57,14 @@ UBSHcomNetDriver *CreateDriver(std::string name, bool isOobServer, UBSHcomNetDri
     UBSHcomNetDriver *innerDriver = nullptr;
     std::string ipSeg = IP_SEG;
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING; // 只支持EVENT模式
-    options.mrSendReceiveSegSize = 1024;
-    options.mrSendReceiveSegCount = 1024;
+    options.mrSendReceiveSegSize = NN_NO1024;
+    options.mrSendReceiveSegCount = NN_NO1024;
     options.secType = secType;
     options.enableTls = false;
     options.SetNetDeviceIpMask(ipSeg);
-
+    uint16_t testPort = 9989;
     innerDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA, name, isOobServer);
-    innerDriver->OobIpAndPort(BASE_IP, 9989);
+    innerDriver->OobIpAndPort(BASE_IP, testPort);
 
     innerDriver->RegisterNewEPHandler(
         std::bind(&NewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -145,8 +145,7 @@ TEST_F(TestNetDriverRDMA, InitWithoutIpMaskFailed)
 
 TEST_F(TestNetDriverRDMA, InitWithInvalidTypeFailed)
 {
-    NetDriverOobType x;
-    x = (NetDriverOobType)9;
+    NetDriverOobType x = (NetDriverOobType)NN_NO9;
     options.oobType = x;
     NResult result = driver->Initialize(options);
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
@@ -155,7 +154,8 @@ TEST_F(TestNetDriverRDMA, InitWithInvalidTypeFailed)
 
 TEST_F(TestNetDriverRDMA, StartSuccess)
 {
-    options.eventPollingTimeout = 1000;
+    uint32_t testTimeout = 1000;
+    options.eventPollingTimeout = testTimeout;
     NResult result = driver->Initialize(options);
     result = driver->Start();
     EXPECT_EQ(NNCode::NN_OK, result);
@@ -240,8 +240,8 @@ TEST_F(TestNetDriverRDMA, DriverOobConnectWithoutClientCbFailed)
     driver->Start();
 
     UBSHcomNetDriver *oobC = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA, "c", true);
-
-    oobC->OobIpAndPort(BASE_IP, 9989);
+    uint16_t testPort = 9989;
+    oobC->OobIpAndPort(BASE_IP, testPort);
     oobC->Initialize(options);
     NResult result = oobC->Start();
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
@@ -255,10 +255,10 @@ TEST_F(TestNetDriverRDMA, DriverOobConnectSuccess)
 {
     driver->Initialize(options);
     driver->Start();
-
+    uint16_t testPort = 9989;
     UBSHcomNetDriver *oobC = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA, "cSuccess", false);
 
-    oobC->OobIpAndPort(BASE_IP, 9989);
+    oobC->OobIpAndPort(BASE_IP, testPort);
     oobC->Initialize(options);
     oobC->RegisterNewEPHandler(
         std::bind(&NewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -330,7 +330,6 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecSuccess)
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
     EXPECT_EQ(NNCode::NN_OK, result);
-
 
     auto cDriver = CreateDriver("twoWaySecClient", false);
     cDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
@@ -616,10 +615,10 @@ TEST_F(TestNetDriverRDMA, DriverOobConnectSendReceiveFailed)
     options.secType = NET_SEC_VALID_TWO_WAY;
     driver->Initialize(options);
     driver->Start();
-
+    uint16_t testPort = 9989;
     UBSHcomNetDriver *oobC = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA, "cSendReceiveFailed", false);
 
-    oobC->OobIpAndPort(BASE_IP, 9989);
+    oobC->OobIpAndPort(BASE_IP, testPort);
     oobC->Initialize(options);
     oobC->RegisterNewEPHandler(
         std::bind(&NewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));

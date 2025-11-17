@@ -14,22 +14,22 @@
 #include <string>
 #include <thread>
 #include <fstream>
-#include "cmd_handler.h"
 #include "cmd_helper.h"
 #include "htracer_client.h"
 #include "htracer_utils.h"
 #include "hcom/hcom_num_def.h"
+#include "cmd_handler.h"
 
 using namespace ock::hcom;
 
-static CmdHelper cmdHelper;
+static CmdHelper g_cmdHelper;
 
 void HTracerCliHelper::Initialize()
 {
     std::map<std::string, std::shared_ptr<CmdHandler>> cmdHandlers = { { "show", std::make_shared<ShowCmdHandler>() },
                                                                        { "reset", std::make_shared<ResetCmdHandler>() },
                                                                        { "conf", std::make_shared<ConfCmdHandler>() } };
-    cmdHelper.UpdateHost();
+    g_cmdHelper.UpdateHost();
     cmdHandlers.swap(mCmdHandlers);
 }
 
@@ -91,7 +91,7 @@ double ShowCmdHandler::ParseDoubleOption(const std::vector<std::string> &cmds, c
     double defaultValue, double min, double max)
 {
     auto param = HTracerUtils::GetCmdOption(cmds, opt);
-    if (param.empty()){
+    if (param.empty()) {
         return defaultValue;
     }
     double val = std::atof(param.c_str());
@@ -101,8 +101,8 @@ double ShowCmdHandler::ParseDoubleOption(const std::vector<std::string> &cmds, c
 void ShowCmdHandler::ProcessTraceData(std::ostream &out, double quantile)
 {
     std::map<std::string, TTraceInfo> sumTraceInfoMap;
-    cmdHelper.UpdateHost(quantile);
-    auto hostInfo = cmdHelper.GetHostInfo();
+    g_cmdHelper.UpdateHost(quantile);
+    auto hostInfo = g_cmdHelper.GetHostInfo();
     auto &processes = hostInfo.GetAllProcesses();
     for (const auto &process : processes) {
         auto &traceInfos = process.second->GetAllTraceInfos();
@@ -125,10 +125,10 @@ void ShowCmdHandler::ProcessTraceData(std::ostream &out, double quantile)
 std::string ShowCmdHandler::HelpInfo()
 {
     std::stringstream ss;
-    ss << "\t -i print interval. "<< std::endl
-      << "\t -n number of times. "<< std::endl
-      << "\t -d dump trace point information. -d /opt/dump.text " << std::endl
-      << "\t -tp show percentile of latency, need to use \'conf -p\' to enable it first!" << std::endl;
+    ss << "\t -i print interval. "<< std::endl <<
+      "\t -n number of times. "<< std::endl <<
+      "\t -d dump trace point information. -d /opt/dump.text " << std::endl <<
+      "\t -tp show percentile of latency, need to use \'conf -p\' to enable it first!" << std::endl;
     return ss.str();
 }
 
@@ -167,7 +167,7 @@ SerCode ResetCmdHandler::Handle(std::vector<std::string> cmds)
         return SER_ERROR;
     }
 
-    cmdHelper.ResetTraceInfo();
+    g_cmdHelper.ResetTraceInfo();
 
     return SER_OK;
 }
@@ -213,7 +213,7 @@ SerCode ConfCmdHandler::Handle(std::vector<std::string> cmds)
     }
 
     HandlerConfPara confPara(enable, enableTp, enableLog, logPath);
-    cmdHelper.EnableTrace(confPara);
+    g_cmdHelper.EnableTrace(confPara);
     return SER_OK;
 }
 

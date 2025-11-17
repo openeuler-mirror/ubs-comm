@@ -1449,7 +1449,8 @@ int32_t HcomServiceImp::ServiceRequestReceived(const UBSHcomRequestContext &ctx)
         auto ctxStorePtr = ch->GetCtxStore();
         if (NN_UNLIKELY(ctxStorePtr->GetSeqNoAndRemove(ctx.Header().seqNo, tmp) != SER_OK)) {
             HcomSeqNo dumpSeq(ctx.Header().seqNo);
-            NN_LOG_ERROR("UBSHcomService Channel " << ch->GetId() << " fetch " << dumpSeq.ToString() << " context failed");
+            NN_LOG_ERROR("UBSHcomService Channel " << ch->GetId() << " fetch " << dumpSeq.ToString() <<
+                " context failed");
             return SER_ERROR;
         }
 

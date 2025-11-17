@@ -41,7 +41,8 @@ private:
             if (ctx->cnt < ctx->mIterations) {
                 ++ctx->cnt;
                 ock::hcom::Callback *newCallback = ock::hcom::UBSHcomNewCallback(
-                    [this](ock::hcom::UBSHcomServiceContext &context) { this->ccnt.fetch_add(1); }, std::placeholders::_1);
+                    [this](ock::hcom::UBSHcomServiceContext &context) { this->ccnt.fetch_add(1); },
+                    std::placeholders::_1);
                 if (newCallback == nullptr) {
                     LOG_ERROR("Create callback failed");
                     sem_post(&mSem);

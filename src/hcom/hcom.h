@@ -686,7 +686,8 @@ protected:
 
     bool IsNeedSendHb() const;
 
-    virtual NResult PostSendSglInline(uint16_t opCode, const UBSHcomNetTransRequest &request, const UBSHcomNetTransOpInfo &opInfo)
+    virtual NResult PostSendSglInline(uint16_t opCode, const UBSHcomNetTransRequest &request,
+        const UBSHcomNetTransOpInfo &opInfo)
     {
         return PostSend(opCode, request, opInfo);
     }
@@ -718,8 +719,9 @@ protected:
     friend class NetHeartbeat;
 
     // 服务层拆包专用，上层用户在调用时应当保证 extHeaderType != RAW
-    virtual NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, const UBSHcomNetTransOpInfo &opInfo,
-                             const UBSHcomExtHeaderType extHeaderType, const void *extHeader, uint32_t extHeaderSize)
+    virtual NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
+        const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType, const void *extHeader,
+        uint32_t extHeaderSize)
     {
         NN_LOG_WARN("PostSend with header unimplemented yet!!!");
         return NN_ERROR;
@@ -1129,7 +1131,7 @@ public:
 
     virtual void *GetMemorySeg() = 0;
 
-    virtual void GetVa(uint64_t &va, uint64_t &va_len, uint32_t &token_id) = 0;
+    virtual void GetVa(uint64_t &va, uint64_t &vaLen, uint32_t &tokenId) = 0;
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
@@ -1509,8 +1511,8 @@ enum UBSHcomNetDriverSecType : uint8_t {
  * @param outLen           [out] secure info length
  * @param needAutoFree     [out] secure info need to auto free in hcom or not
  */
-using UBSHcomNetDriverEndpointSecInfoProvider = std::function<int(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type,
-    char *&output, uint32_t &outLen, bool &needAutoFree)>;
+using UBSHcomNetDriverEndpointSecInfoProvider = std::function<int(uint64_t ctx, int64_t &flag,
+    UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen, bool &needAutoFree)>;
 
 /**
  * @brief ValidateSecInfo callback function, when oob connect build, this function will be called to validate auth info
@@ -1543,13 +1545,13 @@ using UBSHcomPskUseSessionCb =
  *
  * @param ssl               [in] SSL connection pointer
  * @param identity          [in] Client's identity (provided by the client)
- * @param identity_len      [in] Length of the client's identity
+ * @param identityLen      [in] Length of the client's identity
  * @param sess              [out] SSL session
  *
  * @return int              1 on success or 0 on failure
  */
 using UBSHcomPskFindSessionCb =
-    std::function<int(void *ssl, const unsigned char *identity, size_t identity_len, void **sess)>;
+    std::function<int(void *ssl, const unsigned char *identity, size_t identityLen, void **sess)>;
 
 std::string &UBSHcomNetDriverSecTypeToString(UBSHcomNetDriverSecType v);
 

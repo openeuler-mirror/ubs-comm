@@ -13,10 +13,6 @@
 #ifndef HTRACE_UTILS_H
 #define HTRACE_UTILS_H
 
-#include "securec.h"
-#include "hcom_num_def.h"
-#include "htracer_tdigest.h"
-#include "net_common.h"
 #include <vector>
 #include <cstring>
 #include <memory>
@@ -26,6 +22,10 @@
 #include <sys/stat.h>
 #include <sstream>
 #include <linux/limits.h>
+#include "securec.h"
+#include "hcom_num_def.h"
+#include "htracer_tdigest.h"
+#include "net_common.h"
 
 namespace ock {
 namespace hcom {
@@ -44,7 +44,7 @@ public:
     static std::string CurrentTime()
     {
         time_t rawTime;
-        time(&rawTime);
+        (void)time(&rawTime);
         auto tmInfo = localtime(&rawTime);
         std::stringstream ss;
         ss << std::setfill('0') << std::setw(NN_NO4) << std::right << (NN_NO1900 + tmInfo->tm_year) << "-" <<

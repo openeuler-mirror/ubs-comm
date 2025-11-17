@@ -36,7 +36,7 @@ public:
         return nullptr;
     }
 
-    void GetVa(uint64_t &va, uint64_t &va_len, uint32_t &token_id) override
+    void GetVa(uint64_t &va, uint64_t &vaLen, uint32_t &tokenId) override
     {
         return;
     }
@@ -45,8 +45,7 @@ private:
     std::mutex mMutex;
     bool mInited = false;
 
-    static std::atomic<uint16_t> KEY_ID;
-    static std::atomic<uint32_t> LOCAL_KEY_INDEX;
+    static std::atomic<uint32_t> shmLocalKeyIndex;
 };
 
 /* ***************************************************************************************************** */

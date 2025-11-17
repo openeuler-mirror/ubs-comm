@@ -6867,7 +6867,7 @@ void UBSHcomNetDriver::RegisterPskFindSessionCb(const UBSHcomPskFindSessionCb &c
 
     函数定义
 
-using UBSHcomPskFindSessionCb = std::function\<int(void \*ssl, const unsigned char \*identity, size_t identity_len, void \*\*sess)\>;
+using UBSHcomPskFindSessionCb = std::function\<int(void \*ssl, const unsigned char \*identity, size_t identityLen, void \*\*sess)\>;
 
 8.  参数说明
 
@@ -6877,7 +6877,7 @@ using UBSHcomPskFindSessionCb = std::function\<int(void \*ssl, const unsigned ch
 |--------------|----------|----------|--------------------------|
 | ssl          | void\*   | 入参     | SSL连接对象。            |
 | identity     | char \*  | 入参     | 预共享密钥身份标识。     |
-| identity_len | size_t   | 入参     | 预共享密钥身份标识长度。 |
+| identityLen | size_t   | 入参     | 预共享密钥身份标识长度。 |
 | sess         | void\*   | 出参     | SSL会话对象。            |
 
 9.  返回值

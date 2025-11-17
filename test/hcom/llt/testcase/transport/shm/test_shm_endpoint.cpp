@@ -64,7 +64,7 @@ static int OneSideDone(const UBSHcomNetRequestContext &ctx)
 static bool RegSglMem(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov mrInfo[],
     std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
 {
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < NN_NO4; ++i) {
         UBSHcomNetMemoryRegionPtr mr;
         auto result = driver->CreateMemoryRegion(NN_NO16, mr);
         if (result != NN_OK) {
@@ -109,7 +109,7 @@ static bool RegReadWriteMem(UBSHcomNetDriver *driver, TestRegMrInfo mrInfo[],
 static bool RegReadWriteSglMem(UBSHcomNetDriver *driver, TestRegMrInfo mrInfo[],
     std::vector<UBSHcomNetMemoryRegionPtr> &mrReadWrite)
 {
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < NN_NO4; ++i) {
         UBSHcomNetMemoryRegionPtr mr;
         auto result = driver->CreateMemoryRegion(NN_NO16, mr);
         if (result != NN_OK) {
@@ -193,7 +193,6 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(cons
     auto name = "server_ep_" + std::to_string(g_nameSeed++);
 
     driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM, name, true);
-
     if (driver == nullptr) {
         NN_LOG_ERROR("failed to create asyncServerDriver already created");
         return false;
@@ -317,7 +316,7 @@ TEST_F(TestShmEndpoint, PostSendRetry)
     result = ep->PostSend(1, req);
     EXPECT_EQ(SH_OK, result);
 
-    UBSHcomNetTransOpInfo innerOpInfo(2, 0, 0, NTH_TWO_SIDE);
+    UBSHcomNetTransOpInfo innerOpInfo(NN_NO2, 0, 0, NTH_TWO_SIDE);
     result = ep->PostSend(1, req, innerOpInfo);
     EXPECT_EQ(SH_OK, result);
 
@@ -354,7 +353,7 @@ TEST_F(TestShmEndpoint, PostSendRetry)
 
     GlobalMockObject::verify();
 
-    MOCKER_CPP(&ShmDataChannel::TryOccupyWithWait).defaults().will(returnValue(305));
+    MOCKER_CPP(&ShmDataChannel::TryOccupyWithWait).defaults().will(returnValue(SH_NOT_INITIALIZED));
     result = ep->PostSend(1, req);
     EXPECT_EQ(SH_NOT_INITIALIZED, result);
 
@@ -460,13 +459,13 @@ TEST_F(TestShmEndpoint, PostSendRawSglRetry)
 
     GlobalMockObject::verify();
 
-    MOCKER_CPP(&MemoryRegionChecker::Validate).defaults().will(returnValue(100));
+    MOCKER_CPP(&MemoryRegionChecker::Validate).defaults().will(returnValue(NN_INVALID_LKEY));
     result = ep->PostSendRawSgl(reqSgl, 1);
     EXPECT_EQ(NN_INVALID_LKEY, result);
 
     GlobalMockObject::verify();
 
-    MOCKER_CPP(&ShmDataChannel::TryOccupyWithWait).defaults().will(returnValue(305));
+    MOCKER_CPP(&ShmDataChannel::TryOccupyWithWait).defaults().will(returnValue(SH_NOT_INITIALIZED));
     result = ep->PostSendRawSgl(reqSgl, 1);
     EXPECT_EQ(SH_NOT_INITIALIZED, result);
 
@@ -559,7 +558,7 @@ TEST_F(TestShmEndpoint, PostReadWrite)
     MOCKER_CPP(&ShmQueue<ShmEvent>::EnqueueAndNotify, int32_t(ShmQueue<ShmEvent>::*)(ShmEvent &))
         .stubs()
         .will(returnValue(-1));
-    MOCKER_CPP(&ShmChannel::RemoveOpCtxInfo).defaults().will(returnValue(317));
+    MOCKER_CPP(&ShmChannel::RemoveOpCtxInfo).defaults().will(returnValue(SH_OP_CTX_REMOVED));
     result = ep->PostRead(req);
     EXPECT_EQ(SH_SEND_COMPLETION_CALLBACK_FAILURE, result);
 
@@ -641,7 +640,7 @@ TEST_F(TestShmEndpoint, PostReadWriteSgl)
 
     ShmHandlePtr localMrHandle = nullptr;
     MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap).defaults().will(returnValue(localMrHandle));
-    MOCKER_CPP(&ShmChannel::RemoveOpCtxInfo).defaults().will(returnValue(317));
+    MOCKER_CPP(&ShmChannel::RemoveOpCtxInfo).defaults().will(returnValue(SH_OP_CTX_REMOVED));
     result = ep->PostRead(req);
     EXPECT_EQ(SH_ERROR, result);
 
@@ -650,7 +649,7 @@ TEST_F(TestShmEndpoint, PostReadWriteSgl)
     MOCKER_CPP(&ShmQueue<ShmEvent>::EnqueueAndNotify, int32_t(ShmQueue<ShmEvent>::*)(ShmEvent &))
         .defaults()
         .will(returnValue(-1));
-    MOCKER_CPP(&ShmChannel::RemoveOpCtxInfo).defaults().will(returnValue(317));
+    MOCKER_CPP(&ShmChannel::RemoveOpCtxInfo).defaults().will(returnValue(SH_OP_CTX_REMOVED));
     result = ep->PostRead(req);
     EXPECT_EQ(SH_SEND_COMPLETION_CALLBACK_FAILURE, result);
 

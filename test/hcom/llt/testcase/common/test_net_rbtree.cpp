@@ -10,10 +10,10 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <thread>
-#include "test_net_rbtree.h"
 #include "hcom_def.h"
 #include "common/net_rb_tree.h"
 #include "hcom_utils.h"
+#include "test_net_rbtree.h"
 
 using namespace ock::hcom;
 
@@ -233,7 +233,7 @@ TEST_F(TestNetRbTree, Serial)
         ASSERT_EQ(ret, true);
     }
 
-    std::cout << "RbTree insert avg cost:" << totalTime / 10 / 10000 << "ns" << std::endl;
+    std::cout << "RbTree insert avg cost:" << (totalTime / 10 / 10000) << "ns" << std::endl;
 }
 
 TEST_F(TestNetRbTree, EraseColorLeft)

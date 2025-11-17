@@ -16,7 +16,7 @@
 #include <execinfo.h>
 #include <infiniband/verbs.h>
 #include <pthread.h>
-#include <string.h>
+#include <cstring>
 
 #include "hcom_log.h"
 

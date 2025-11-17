@@ -66,17 +66,17 @@ static void ConcurrentRoutine(UBSHcomNetMemoryAllocatorPtr ptr, const int count,
 
 TEST_F(TestMemoryAllocator, Serial)
 {
-    for (int k = 0; k < 4; ++k) {
+    for (int k = 0; k < NN_NO4; ++k) {
         bool res = false;
         auto address = memalign(NN_NO4096, SIZE);
         UBSHcomNetMemoryAllocatorPtr ptr;
         UBSHcomNetMemoryAllocatorOptions options;
         options.address = reinterpret_cast<uintptr_t>(address);
         options.size = SIZE;
-        options.minBlockSize = 4096;
+        options.minBlockSize = NN_NO4096;
         UBSHcomNetMemoryAllocator::Create(ock::hcom::DYNAMIC_SIZE, options, ptr);
         uint64_t addr = 0;
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < NN_NO4; ++i) {
             auto expectSize = SIZE / ((i % 2) * 2 + 2) - 16;
             res = ptr->Allocate(expectSize, addr);
             ASSERT_EQ(res, NN_OK);
@@ -95,13 +95,13 @@ TEST_F(TestMemoryAllocator, GetSizeNoAlign)
     UBSHcomNetMemoryAllocatorPtr ptr;
     UBSHcomNetMemoryAllocatorOptions options;
     options.address = reinterpret_cast<uintptr_t>(address);
-    options.size = SIZE * 16;
-    options.minBlockSize = 4096;
+    options.size = SIZE * NN_NO16;
+    options.minBlockSize = NN_NO4096;
     UBSHcomNetMemoryAllocator::Create(ock::hcom::DYNAMIC_SIZE, options, ptr);
     uint64_t addr = 0;
     uint64_t addrs[16];
     uint64_t sizes[16];
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < NN_NO4; ++i) {
         auto expectSize = random() % SIZE + 1;
         res = ptr->Allocate(expectSize, addr);
         ASSERT_EQ(res, NN_OK);
@@ -109,7 +109,7 @@ TEST_F(TestMemoryAllocator, GetSizeNoAlign)
         sizes[i] = expectSize;
     }
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < NN_NO4; ++i) {
         addr = addrs[i];
         auto expectSize = sizes[i];
         uint64_t retSize;
@@ -126,11 +126,11 @@ TEST_F(TestMemoryAllocator, SerialAlign4k)
     UBSHcomNetMemoryAllocatorOptions options;
     options.address = reinterpret_cast<uintptr_t>(address);
     options.size = SIZE;
-    options.minBlockSize = 4096;
+    options.minBlockSize = NN_NO4096;
     options.alignedAddress = true;
     UBSHcomNetMemoryAllocator::Create(ock::hcom::DYNAMIC_SIZE, options, ptr);
     uint64_t addr = 0;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < NN_NO4; ++i) {
         auto expectSize = NN_NO4096;
         ptr->Allocate(expectSize, addr);
         EXPECT_EQ(addr % NN_NO4096, 0);
@@ -146,25 +146,25 @@ TEST_F(TestMemoryAllocator, SimpleConcurrent)
     UBSHcomNetMemoryAllocatorOptions options;
     options.address = reinterpret_cast<uintptr_t>(address);
     options.size = size;
-    options.minBlockSize = 4096;
+    options.minBlockSize = NN_NO4096;
     options.alignedAddress = true;
     UBSHcomNetMemoryAllocator::Create(ock::hcom::DYNAMIC_SIZE, options, ptr);
     std::vector<std::thread> ths;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < NN_NO4; ++i) {
         std::thread th([&]() {
-            for (int j = 0; j < 4; ++j) {
+            for (int j = 0; j < NN_NO4; ++j) {
                 uint64_t addr;
-                auto res = ptr->Allocate(8192, addr);
+                auto res = ptr->Allocate(NN_NO8192, addr);
                 ASSERT_EQ(res, NN_OK);
             }
         });
         ths.push_back(std::move(th));
     }
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < NN_NO4; ++i) {
         ths[i].join();
     }
     uint64_t addr;
-    auto res = ptr->Allocate(8192, addr);
+    auto res = ptr->Allocate(NN_NO8192, addr);
     ASSERT_NE(res, NN_OK);
 }
 
@@ -173,7 +173,7 @@ TEST_F(TestMemoryAllocator, Concurrent)
     std::atomic_uint64_t allocCost { 0 };
     std::atomic_uint64_t freeCost { 0 };
 
-    for (int k = 0; k < 4; ++k) {
+    for (int k = 0; k < NN_NO4; ++k) {
         const auto threadCount = 10;
         const auto blockCount = 20;
         auto totalSize = SIZE * blockCount * threadCount;
@@ -183,7 +183,7 @@ TEST_F(TestMemoryAllocator, Concurrent)
         UBSHcomNetMemoryAllocatorOptions options;
         options.address = reinterpret_cast<uintptr_t>(address);
         options.size = totalSize;
-        options.minBlockSize = 4096;
+        options.minBlockSize = NN_NO4096;
         options.alignedAddress = true;
         UBSHcomNetMemoryAllocator::Create(ock::hcom::DYNAMIC_SIZE, options, ptr);
 
@@ -205,17 +205,17 @@ TEST_F(TestMemoryAllocator, PerfSerialWithRandomSize)
 {
     auto bigSize = SIZE << 4;
 
-    for (int k = 0; k < 4; ++k) {
+    for (int k = 0; k < NN_NO4; ++k) {
         bool res = false;
         auto address = memalign(NN_NO4096, bigSize);
         UBSHcomNetMemoryAllocatorPtr ptr;
         UBSHcomNetMemoryAllocatorOptions options;
         options.address = reinterpret_cast<uintptr_t>(address);
         options.size = bigSize;
-        options.minBlockSize = 4096;
+        options.minBlockSize = NN_NO4096;
         UBSHcomNetMemoryAllocator::Create(ock::hcom::DYNAMIC_SIZE, options, ptr);
         uint64_t addr = 0;
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < NN_NO4; ++i) {
             auto expectSize = random() % bigSize - 16;
             res = ptr->Allocate(expectSize, addr);
             ASSERT_EQ(res, NN_OK);
@@ -239,8 +239,8 @@ TEST_F(TestMemoryAllocator, CompareToNudeMalloc)
     UBSHcomNetMemoryAllocatorPtr ptr;
     UBSHcomNetMemoryAllocatorOptions options;
     options.address = reinterpret_cast<uintptr_t>(address);
-    options.size = SIZE * 16;
-    options.minBlockSize = 4096;
+    options.size = SIZE * NN_NO16;
+    options.minBlockSize = NN_NO4096;
     UBSHcomNetMemoryAllocator::Create(ock::hcom::DYNAMIC_SIZE, options, ptr);
     for (int i = 0; i < loopCount; ++i) {
         auto esize = (random() % block) * NN_NO256;
@@ -257,18 +257,18 @@ TEST_F(TestMemoryAllocator, CompareToNudeMalloc)
         auto nuAllocCost = MONOTONIC_TIME_NS();
         auto addr1 = malloc(esize);
         nuAllocCost = MONOTONIC_TIME_NS() - nuAllocCost;
-        cost[2] += nuAllocCost;
+        cost[NN_NO2] += nuAllocCost;
 
         auto nuFreeCost = MONOTONIC_TIME_NS();
         free(addr1);
         nuFreeCost = MONOTONIC_TIME_NS() - nuFreeCost;
-        cost[3] += nuFreeCost;
+        cost[NN_NO3] += nuFreeCost;
     }
 
-    NN_LOG_INFO("ma alloc cost:" << cost[0] / loopCount << "ns, "
-                                 << "ma free cost:" << cost[1] / loopCount << "ns, "
-                                 << "na free cost:" << cost[2] / loopCount << "ns, "
-                                 << "na free cost:" << cost[3] / loopCount << "ns");
+    NN_LOG_INFO("ma alloc cost:" << cost[NN_NO0] / loopCount << "ns, " <<
+                "ma free cost:" << cost[NN_NO1] / loopCount << "ns, " <<
+                "na free cost:" << cost[NN_NO2] / loopCount << "ns, " <<
+                "na free cost:" << cost[NN_NO3] / loopCount << "ns");
 }
 
 TEST_F(TestMemoryAllocator, PerfConcurrentWithRandomSize)
@@ -288,7 +288,7 @@ TEST_F(TestMemoryAllocator, PerfConcurrentWithRandomSize)
     UBSHcomNetMemoryAllocatorOptions options;
     options.address = reinterpret_cast<uintptr_t>(address);
     options.size = totalSize;
-    options.minBlockSize = 4096;
+    options.minBlockSize = NN_NO4096;
     UBSHcomNetMemoryAllocator::Create(ock::hcom::DYNAMIC_SIZE, options, ptr);
 
     std::vector<std::thread> threads;

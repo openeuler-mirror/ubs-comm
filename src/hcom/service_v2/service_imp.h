@@ -37,7 +37,7 @@ using NetDriverPtr = NetRef<UBSHcomNetDriver>;
 using HcomPeriodicManagerPtr = NetRef<HcomPeriodicManager>;
 using HcomServiceCtxStorePtr = NetRef<HcomServiceCtxStore>;
 using ConnectingEpInfoPtr = NetRef<HcomConnectingEpInfo>;
-using NetPgTablePtr = NetRef<NetPgTable>;
+using netPgTablePtr = NetRef<NetPgTable>;
 
 struct HcomServiceImpOptions {
     UBSHcomTlsOptions tlsOption;
@@ -492,7 +492,7 @@ private:
                                                     to each other */
     std::vector<uint8_t> mUseId;               /* local driver Index has been used */
     uint32_t mDriverIndex = 0;
-    NetPgTablePtr mPgtable = nullptr;
+    netPgTablePtr mPgtable = nullptr;
     bool mEnableMrCache = false;        //  mr into pgTable for management
 };
 

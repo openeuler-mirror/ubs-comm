@@ -216,7 +216,6 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(cons
     auto name = "server_tls_" + std::to_string(g_nameSeed++);
 
     driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM, name, true);
-
     if (driver == nullptr) {
         NN_LOG_ERROR("failed to create tlsShmSDriver already created");
         return false;
@@ -263,7 +262,6 @@ static bool CreateServerDriverSend(UBSHcomNetDriver *&driver, int (*reqHandler)(
     auto name = "server_tls_" + std::to_string(g_nameSeed++);
 
     driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM, name, true);
-
     if (driver == nullptr) {
         NN_LOG_ERROR("failed to create tlsShmSDriver already created");
         return false;
@@ -834,7 +832,6 @@ TEST_F(TestShmTls, SyncPostTlsReadWrite)
     EXPECT_EQ(SH_OK, result);
     memcpy(&getRemoteMrInfo, respCtx.Message()->Data(), respCtx.Message()->DataLen());
 
-
     UBSHcomNetTransRequest req;
     size_t encryptLen = SetClientEncryptValue();
     req.lAddress = tlsClientMrInfo.lAddress;
@@ -845,7 +842,6 @@ TEST_F(TestShmTls, SyncPostTlsReadWrite)
 
     result = tlsShmClientEp->PostRead(req);
     EXPECT_EQ(SH_OK, result);
-
 
     void *readValue = reinterpret_cast<void *>(req.lAddress);
     size_t rawLen = tlsShmClientEp->EstimatedDecryptLen(req.size);
@@ -971,7 +967,6 @@ TEST_F(TestShmTls, SyncPostTlsDecryptFail)
     result = tlsShmClientEp->Receive(NN_NO2, respCtx);
     EXPECT_EQ(SH_OK, result);
     memcpy(&getRemoteMrInfo, respCtx.Message()->Data(), respCtx.Message()->DataLen());
-
 
     UBSHcomNetTransRequest req;
     size_t encryptLen = SetClientEncryptValue();

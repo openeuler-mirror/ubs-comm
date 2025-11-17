@@ -50,8 +50,8 @@ void FakeThread(OOBTCPServer *This)
 
 TEST_F(TestNetOob, OOBTCPServerStart)
 {
-    ock::hcom::OOBTCPServer oobServer("192.168.100.204", 9444);
-
+    uint16_t testPort = 9444;
+    ock::hcom::OOBTCPServer oobServer("192.168.100.204", testPort);
     oobServer.mStarted = true;
     std::thread tmpThread(&FakeThread, &oobServer);
     oobServer.mAcceptThread = std::move(tmpThread);
@@ -65,24 +65,28 @@ TEST_F(TestNetOob, OOBTCPServerStart)
 
 TEST_F(TestNetOob, OOBTCPServerStop)
 {
-    ock::hcom::OOBTCPServer oobServer("192.168.100.204", 9444);
+    uint16_t testPort = 9444;
+    uint16_t testUdsPerm = 600;
+    ock::hcom::OOBTCPServer oobServer("192.168.100.204", testPort);
     oobServer.mStarted = true;
     std::thread tmpThread(&FakeThread, &oobServer);
     oobServer.mAcceptThread = std::move(tmpThread);
     oobServer.mOobType = NET_OOB_UDS;
-    oobServer.mUdsPerm = 600;
+    oobServer.mUdsPerm = testUdsPerm;
     EXPECT_EQ(oobServer.Stop(), static_cast<int>(NN_INVALID_PARAM));
     oobServer.mStarted = false;
 }
 
 TEST_F(TestNetOob, OOBTCPServerStop1)
 {
-    ock::hcom::OOBTCPServer oobServer("192.168.100.204", 9444);
+    uint16_t testPort = 9444;
+    uint16_t testUdsPerm = 600;
+    ock::hcom::OOBTCPServer oobServer("192.168.100.204", testPort);
     oobServer.mStarted = true;
     std::thread tmpThread(&FakeThread, &oobServer);
     oobServer.mAcceptThread = std::move(tmpThread);
     oobServer.mOobType = NET_OOB_UDS;
-    oobServer.mUdsPerm = 600;
+    oobServer.mUdsPerm = testUdsPerm;
     MOCKER_CPP(CanonicalPath).stubs().will(returnValue(true));
 
     EXPECT_EQ(oobServer.Stop(), static_cast<int>(NN_INVALID_PARAM));
@@ -113,10 +117,10 @@ TEST_F(TestNetOob, ConnectWithFdSocket)
 {
     int fd = 0;
     int err = 0;
-
+    uint16_t testPort = 2233;
     MOCKER(::socket).stubs().will(returnValue(static_cast<int>(-1)));
 
-    err = OOBTCPClient::ConnectWithFd("127.0.0.1", 2233, fd);
+    err = OOBTCPClient::ConnectWithFd("127.0.0.1", testPort, fd);
     EXPECT_EQ(err, NN_OOB_CLIENT_SOCKET_ERROR);
 }
 
@@ -124,10 +128,10 @@ TEST_F(TestNetOob, ConnectWithFdConnect)
 {
     int fd = 0;
     int err = 0;
-
+    uint16_t testPort = 2233;
     MOCKER(::sleep).stubs().will(returnValue(static_cast<int>(0)));
     MOCKER(::connect).stubs().will(returnValue(static_cast<int>(-1)));
-    err = OOBTCPClient::ConnectWithFd("127.0.0.1", 2233, fd);
+    err = OOBTCPClient::ConnectWithFd("127.0.0.1", testPort, fd);
     EXPECT_EQ(err, NN_OOB_CLIENT_SOCKET_ERROR);
 }
 
@@ -135,15 +139,15 @@ TEST_F(TestNetOob, ConnectWithFdRecv)
 {
     int fd = 0;
     int err = 0;
-
+    uint16_t testPort = 2233;
     MOCKER(::sleep).stubs().will(returnValue(static_cast<int>(0)));
     MOCKER(::connect).stubs().will(returnValue(static_cast<int>(0)));
     MOCKER(::recv)
             .stubs()
             .will(returnValue(static_cast<int>(-1)))
-            .then(returnValue(static_cast<int>(4)));
+            .then(returnValue(static_cast<int>(NN_NO4)));
 
-    err = OOBTCPClient::ConnectWithFd("127.0.0.1", 2233, fd);
+    err = OOBTCPClient::ConnectWithFd("127.0.0.1", testPort, fd);
     EXPECT_EQ(err, NN_OK);
 }
 }  // namespace hcom

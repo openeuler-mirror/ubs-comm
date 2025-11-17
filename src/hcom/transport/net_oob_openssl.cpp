@@ -169,10 +169,10 @@ int OOBOpenSSLConnection::CaCallbackWrapper(X509_STORE_CTX *x509ctx, void *arg)
     return checkSuccess;
 }
 
-int OOBOpenSSLConnection::PskFindCallbackWrapper(SSL *ssl, const unsigned char *identity, size_t identity_len,
+int OOBOpenSSLConnection::PskFindCallbackWrapper(SSL *ssl, const unsigned char *identity, size_t identityLen,
     SSL_SESSION **sess)
 {
-    return mOpenSslPskFindSessionCb(ssl, identity, identity_len, reinterpret_cast<void **>(sess));
+    return mOpenSslPskFindSessionCb(ssl, identity, identityLen, reinterpret_cast<void **>(sess));
 }
 
 int OOBOpenSSLConnection::PskUseCallbackWrapper(SSL *ssl, const EVP_MD *md, const unsigned char **id, size_t *idlen,

@@ -15,7 +15,7 @@
 
 namespace ock {
 namespace hcom {
-std::atomic<uint64_t> ShmWorker::GLOBAL_WORKER_INDEX(0);
+std::atomic<uint64_t> ShmWorker::shmWorkerIndex(0);
 
 ShmWorker::ShmWorker(const std::string &name, const UBSHcomNetWorkerIndex &index, const ShmWorkerOptions &options,
     const NetMemPoolFixedPtr &opMemPool, const NetMemPoolFixedPtr &opCtxMemPool, const NetMemPoolFixedPtr &sglOpMemPool)
@@ -87,7 +87,7 @@ HResult ShmWorker::CreateEventQueue()
     }
 
     /* get id and data size */
-    auto id = GLOBAL_WORKER_INDEX++;
+    auto id = shmWorkerIndex++;
     uint64_t dataSize = ShmEventQueue::MemSize(mOptions.eventQueueLength);
 
     /* create handle for event queue */

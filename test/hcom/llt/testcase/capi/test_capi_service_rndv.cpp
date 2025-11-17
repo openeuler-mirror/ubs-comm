@@ -70,7 +70,7 @@ uint64_t memSizeRndv = 1024 * 1024 * 128;
 
 int PrepareMemAllocator()
 {
-    addressRndv = memalign(4096, memSizeRndv);
+    addressRndv = memalign(NN_NO4096, memSizeRndv);
     if (addressRndv == NULL) {
         NN_LOG_ERROR("Failed to alloc memory, maybe lack of spare memory in system.");
         return -1;
@@ -79,11 +79,11 @@ int PrepareMemAllocator()
     Net_MemoryAllocatorOptions options1;
     options1.address = (uintptr_t)addressRndv;
     options1.size = memSizeRndv;
-    options1.minBlockSize = 4096;
+    options1.minBlockSize = NN_NO4096;
     options1.alignedAddress = 1;
-    options1.cacheTierCount = 10;
-    options1.cacheBlockCountPerTier = 8;
-    options1.bucketCount = 8;
+    options1.cacheTierCount = NN_NO10;
+    options1.cacheBlockCountPerTier = NN_NO8;
+    options1.bucketCount = NN_NO8;
     options1.cacheTierPolicy = C_TIER_POWER;
 
     int result = Net_MemoryAllocatorCreate(C_DYNAMIC_SIZE_WITH_CACHE, &options1, &memAllocator);
@@ -97,7 +97,7 @@ int PrepareMemAllocator()
 
 int PrepareClientMemAllocator()
 {
-    addressClientRndv = memalign(4096, memSizeRndv);
+    addressClientRndv = memalign(NN_NO4096, memSizeRndv);
     if (addressClientRndv == NULL) {
         NN_LOG_ERROR("Failed to alloc memory, maybe lack of spare memory in system.");
         return -1;
@@ -106,11 +106,11 @@ int PrepareClientMemAllocator()
     Net_MemoryAllocatorOptions options1;
     options1.address = (uintptr_t)addressClientRndv;
     options1.size = memSizeRndv;
-    options1.minBlockSize = 4096;
+    options1.minBlockSize = NN_NO4096;
     options1.alignedAddress = 1;
-    options1.cacheTierCount = 10;
-    options1.cacheBlockCountPerTier = 8;
-    options1.bucketCount = 8;
+    options1.cacheTierCount = NN_NO10;
+    options1.cacheBlockCountPerTier = NN_NO8;
+    options1.bucketCount = NN_NO8;
     options1.cacheTierPolicy = C_TIER_POWER;
 
     int result = Net_MemoryAllocatorCreate(C_DYNAMIC_SIZE_WITH_CACHE, &options1, &memClientAllocator);
@@ -192,8 +192,8 @@ int CreateRndvService()
     bzero(&options, sizeof(ubs_hcom_service_options));
     options.enableRndv = 1;
     options.mode = C_SERVICE_BUSY_POLLING;
-    options.mrSendReceiveSegSize = 1024 + rndvSize;
-    options.mrSendReceiveSegCount = 8192;
+    options.mrSendReceiveSegSize = NN_NO1024 + rndvSize;
+    options.mrSendReceiveSegCount = NN_NO8192;
     options.enableTls = false;
     strcpy(options.netDeviceIpMask, IP_SEG);
 
@@ -253,8 +253,8 @@ int CreateRndvClient()
     bzero(&options, sizeof(ubs_hcom_service_options));
     options.enableRndv = 1;
     options.mode = C_SERVICE_BUSY_POLLING;
-    options.mrSendReceiveSegSize = 1024 + rndvSize;
-    options.mrSendReceiveSegCount = 8192;
+    options.mrSendReceiveSegSize = NN_NO1024 + rndvSize;
+    options.mrSendReceiveSegCount = NN_NO8192;
     options.enableTls = false;
     strcpy(options.netDeviceIpMask, IP_SEG);
 
@@ -294,7 +294,7 @@ void TestCapiServiceRndv::SetUp()
     setenv("HCOM_CONNECTION_RETRY_TIMES", "1", 1);
     MOCKER(ReadRoCEVersionFromFile).stubs().will(returnValue(0));
     rndvOptions = { 0, 0, C_CHANNEL_FUNC_CB, 0, 0, 0 };
-    rndvOptions.epSize = 2;
+    rndvOptions.epSize = NN_NO2;
     CreateRndvService();
     CreateRndvClient();
 }
@@ -361,19 +361,19 @@ TEST_F(TestCapiServiceRndv, CallRequest)
     EXPECT_EQ(0, result);
 
     result = Channel_SyncRndvCall(0, &reqInfo, &req, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncRndvCall(clientChannel, nullptr, &req, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncRndvCall(clientChannel, &reqInfo, nullptr, &rspInfo, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncRndvCall(clientChannel, &reqInfo, &req, nullptr, &rsp);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncRndvCall(clientChannel, &reqInfo, &req, &rspInfo, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     free(data);
     MemClientFree(addressPtr);
@@ -381,8 +381,8 @@ TEST_F(TestCapiServiceRndv, CallRequest)
 
     /* CallRawSglRequest */
     char *data1 = (char *)malloc(rndvSize);
-    Service_Request req1[2];
-    for (uint32_t i = 0; i < 2; i++) {
+    Service_Request req1[NN_NO2];
+    for (uint32_t i = 0; i < NN_NO2; i++) {
         uintptr_t addressPtr;
         uint32_t key;
 
@@ -403,19 +403,19 @@ TEST_F(TestCapiServiceRndv, CallRequest)
     EXPECT_EQ(0, result);
 
     result = Channel_SyncRndvSglCall(0, &reqInfo1, &sgl1, &rspInfo1, &rsp1);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncRndvSglCall(clientChannel, nullptr, &sgl1, &rspInfo1, &rsp1);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncRndvSglCall(clientChannel, &reqInfo1, nullptr, &rspInfo1, &rsp1);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncRndvSglCall(clientChannel, &reqInfo1, &sgl1, nullptr, &rsp1);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_SyncRndvSglCall(clientChannel, &reqInfo1, &sgl1, &rspInfo1, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     free(data1);
     MemClientFree(req1[0].lAddress);
@@ -453,18 +453,17 @@ TEST_F(TestCapiServiceRndv, CallRequest)
     sem_wait(&asyncParam2.sem);
     sem_destroy(&asyncParam2.sem);
 
-
     result = Channel_AsyncRndvCall(0, &reqInfo2, &req2, &cb2);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_AsyncRndvCall(clientChannel, nullptr, &req2, &cb2);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_AsyncRndvCall(clientChannel, &reqInfo2, nullptr, &cb2);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_AsyncRndvCall(clientChannel, &reqInfo2, &req2, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     MemClientFree(addressPtr2);
     EXPECT_EQ(0, asyncParam2.ret);
@@ -472,8 +471,8 @@ TEST_F(TestCapiServiceRndv, CallRequest)
     GlobalMockObject::verify();
 
     /* CallAsyncRawSglRequest */
-    Service_Request req3[2];
-    for (uint32_t i = 0; i < 2; i++) {
+    Service_Request req3[NN_NO2];
+    for (uint32_t i = 0; i < NN_NO2; i++) {
         uintptr_t addressPtr;
         uint32_t key;
 
@@ -500,16 +499,16 @@ TEST_F(TestCapiServiceRndv, CallRequest)
     EXPECT_EQ(0, result);
 
     result = Channel_AsyncRndvSglCall(0, &reqInfo3, &sgl3, &cb3);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_AsyncRndvSglCall(clientChannel, nullptr, &sgl3, &cb3);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_AsyncRndvSglCall(clientChannel, &reqInfo3, nullptr, &cb3);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     result = Channel_AsyncRndvSglCall(clientChannel, &reqInfo3, &sgl3, nullptr);
-    EXPECT_EQ(501, result);
+    EXPECT_EQ(SER_INVALID_PARAM, result);
 
     sem_wait(&asyncParam3.sem);
     sem_destroy(&asyncParam3.sem);
@@ -545,7 +544,7 @@ TEST_F(TestCapiServiceRndv, CallRequestInline)
     reqInfo.timeout = 1;
     Service_OpInfo rspInfo = { 0, 0, 0, 0 };
 
-    MOCKER_CPP(&HcomEnv::InlineThreshold).stubs().will(returnValue(4096));
+    MOCKER_CPP(&HcomEnv::InlineThreshold).stubs().will(returnValue(NN_NO4096));
 
     result = Channel_SyncRndvCall(clientChannel, &reqInfo, &req, &rspInfo, &rsp);
     EXPECT_EQ(0, result);
