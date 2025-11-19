@@ -226,6 +226,7 @@ NetUBAsyncEndpoint::NetUBAsyncEndpoint(uint64_t id, UBJetty *qp, NetDriverUBWith
             mJetty->GetPostSendMaxSize();
         mAllowedSize = mSegSize - sizeof(UBSHcomNetTransHeader);
         mDmSize = mDriver->mOptions.dmSegSize;
+        mSendRawAllowedSize = mSegSize < NN_NO65536 ? mSegSize : NN_NO65536;
     }
 
     if (mIsNeedSendHb && mDriver != nullptr) {
@@ -532,7 +533,7 @@ NResult NetUBAsyncEndpoint::PostSendSglInline(
 
 NResult NetUBAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo)
 {
-    POST_SEND_RAW_VALIDATION(mState, mId, mDriver, seqNo, request, mSegSize);
+    POST_SEND_RAW_VALIDATION(mState, mId, mDriver, seqNo, request, mSendRawAllowedSize);
 
     /* get mr from pool */
     NResult result = UB_OK;
@@ -595,7 +596,7 @@ NResult NetUBAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, u
 NResult NetUBAsyncEndpoint::PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo)
 {
     size_t size = 0;
-    POST_SEND_SGL_VALIDATION(mState, mId, mDriver, seqNo, request, mSegSize, size);
+    POST_SEND_SGL_VALIDATION(mState, mId, mDriver, seqNo, request, mSendRawAllowedSize, size);
     UBSHcomNetTransSglRequest sglReq = request;
     if (GetSglTseg(mDriver, sglReq) != NN_OK) {
         NN_LOG_ERROR("GetSglTseg failed");
@@ -795,6 +796,7 @@ NetUBSyncEndpoint::NetUBSyncEndpoint(uint64_t id, UBJetty *qp, UBJfc *cq, uint32
             mJetty->GetPostSendMaxSize();
         mAllowedSize = mSegSize - sizeof(UBSHcomNetTransHeader);
         mDmSize = mDriver->mOptions.dmSegSize;
+        mSendRawAllowedSize = mSegSize < NN_NO65536 ? mSegSize : NN_NO65536;
     }
 
     /* set worker index and group index to 0xFFFF */
@@ -1059,7 +1061,7 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
 
 NResult NetUBSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo)
 {
-    POST_SEND_RAW_VALIDATION(mState, mId, mDriver, seqNo, request, mSegSize);
+    POST_SEND_RAW_VALIDATION(mState, mId, mDriver, seqNo, request, mSendRawAllowedSize);
 
     /* get mr from pool */
     NResult result = UB_OK;
@@ -1175,7 +1177,7 @@ NResult NetUBSyncEndpoint::InnerPostSendSgl(const UBSendSglRWRequest &req, const
 NResult NetUBSyncEndpoint::PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo)
 {
     size_t size = 0;
-    POST_SEND_SGL_VALIDATION(mState, mId, mDriver, seqNo, request, mSegSize, size);
+    POST_SEND_SGL_VALIDATION(mState, mId, mDriver, seqNo, request, mSendRawAllowedSize, size);
 
     UBSHcomNetTransRequest tlsReq{};
     uintptr_t mrBufAddress = 0;

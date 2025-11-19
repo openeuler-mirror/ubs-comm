@@ -21,7 +21,6 @@
 #include "ub_mr_fixed_buf.h"
 #include "ub_urma_wrapper_jetty.h"
 #include "under_api/urma/urma_api_wrapper.h"
-#include "under_api/obmm/obmm_api_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -57,9 +56,10 @@ void TestUbUrmaJetty::SetUp()
     jfc->mUrmaJfc = &mUrmaJfc;
     jetty = new (std::nothrow) UBJetty(mName, 0, ctx, jfc);
     ASSERT_NE(jetty, nullptr);
-    jetty->mJettyOptions.ubcMode = UBSHcomUbcMode::Disabled;
+    jetty->mJettyOptions.ubcMode = UBSHcomUbcMode::LowLatency;
     jetty->mUrmaJetty = &UrmaJetty;
     jetty->mJettyMr = mJettyMr;
+    jetty->mState = UBJettyState::READY;
     jetty->StoreExchangeInfo(new UBJettyExchangeInfo);
     MOCKER_CPP(HcomUrma::Uninit).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBDeviceHelper::UnInitialize).stubs().will(ignoreReturnValue());
@@ -95,6 +95,7 @@ void TestUbUrmaJetty::TearDown()
         delete jetty;
         jetty = nullptr;
     }
+
     GlobalMockObject::verify();
 }
 
@@ -108,7 +109,7 @@ TEST_F(TestUbUrmaJetty, UnInitializeSuccess)
     urma_jfr_t mJfr{};
     jetty->mJfr = &mJfr;
     int urmaErr = 11;
-    MOCKER_CPP(&Enabled).stubs().will(returnValue(false));
+
     MOCKER_CPP(&HcomUrma::UnbindJetty).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::UnimportJetty).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::DeleteJetty).stubs().will(returnValue(urmaErr));
@@ -132,7 +133,7 @@ TEST_F(TestUbUrmaJetty, UnInitializeHB)
     jetty->mHBLocalMr = localMr;
     jetty->mHBRemoteMr = remoteMr;
     int urmaErr = 11;
-    MOCKER_CPP(&Enabled).stubs().will(returnValue(false));
+
     MOCKER_CPP(&HcomUrma::UnbindJetty).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::UnimportJetty).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::DeleteJetty).stubs().will(returnValue(urmaErr));
@@ -407,13 +408,13 @@ TEST_F(TestUbUrmaJetty, PostRegMrSize)
 
 TEST_F(TestUbUrmaJetty, StopParamErr)
 {
-    jetty->isStarted = false;
+    jetty->mState = UBJettyState::ERROR;
     EXPECT_EQ(jetty->Stop(), UB_OK);
 }
 
 TEST_F(TestUbUrmaJetty, Stop)
 {
-    jetty->isStarted = true;
+    jetty->mState = UBJettyState::READY;
     MOCKER(HcomUrma::ModifyJetty).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER(HcomUrma::ModifyJfr).stubs().will(returnValue(0));
     EXPECT_EQ(jetty->Stop(), 1);
@@ -422,8 +423,7 @@ TEST_F(TestUbUrmaJetty, Stop)
 
 TEST_F(TestUbUrmaJetty, StopTwo)
 {
-    jetty->isStarted = true;
-
+    jetty->mState = UBJettyState::READY;
     MOCKER(HcomUrma::ModifyJetty).stubs().will(returnValue(1));
     jetty->mUBContext->protocol = UBSHcomNetDriverProtocol::UBC;
     EXPECT_EQ(jetty->Stop(), 1);
@@ -431,8 +431,7 @@ TEST_F(TestUbUrmaJetty, StopTwo)
 
 TEST_F(TestUbUrmaJetty, StopModifyJfrFail)
 {
-    jetty->isStarted = true;
-
+    jetty->mState = UBJettyState::READY;
     urma_jfr_t tJfr;
     jetty->mJfr = &tJfr;
 
@@ -518,21 +517,9 @@ TEST_F(TestUbUrmaJetty, ChangeToReadyParamErr)
     EXPECT_EQ(jetty->ChangeToReady(exInfo), 1);
 }
 
-TEST_F(TestUbUrmaJetty, ChangeToReadyUbcUserCtlFailed)
-{
-    MOCKER_CPP(&UBJetty::SetMaxSendWrConfig).stubs().will(returnValue(0));
-    MOCKER_CPP(HcomUrma::UserCtl).stubs().will(returnValue(static_cast<urma_status_t>(1)));
-
-    UBJettyExchangeInfo exInfo{};
-
-    jetty->mUBContext->protocol = UBSHcomNetDriverProtocol::UBC;
-    EXPECT_EQ(jetty->ChangeToReady(exInfo), UB_ERROR);
-}
-
 TEST_F(TestUbUrmaJetty, ChangeToReadyUbc)
 {
     MOCKER_CPP(&UBJetty::SetMaxSendWrConfig).stubs().will(returnValue(0));
-    MOCKER_CPP(HcomUrma::UserCtl).stubs().will(returnValue(static_cast<urma_status_t>(URMA_SUCCESS)));
     MOCKER_CPP(&UBJetty::ImportAndBindJetty).stubs().will(returnValue(0));
 
     UBJettyExchangeInfo exInfo{};
@@ -550,23 +537,9 @@ TEST_F(TestUbUrmaJetty, SetMaxSendWrConfig)
     EXPECT_EQ(jetty->SetMaxSendWrConfig(exInfo), 0);
 }
 
-TEST_F(TestUbUrmaJetty, FillExchangeInfoUbcUserCtlFailed)
-{
-    MOCKER_CPP(HcomUrma::UserCtl).stubs().will(returnValue(static_cast<urma_status_t>(URMA_FAIL)));
-
-    UBJettyExchangeInfo exInfo{};
-
-    jetty->mUBContext->protocol = UBSHcomNetDriverProtocol::UBC;
-    EXPECT_EQ(jetty->FillExchangeInfo(exInfo), UB_ERROR);
-}
-
 TEST_F(TestUbUrmaJetty, FillExchangeInfoUbc)
 {
-    MOCKER_CPP(HcomUrma::UserCtl).stubs().will(returnValue(static_cast<urma_status_t>(URMA_SUCCESS)));
-
     UBJettyExchangeInfo exInfo{};
-
-    jetty->mJettyOptions.ubcMode = UBSHcomUbcMode::LowLatency;
     EXPECT_EQ(jetty->FillExchangeInfo(exInfo), UB_OK);
 }
 
@@ -584,7 +557,7 @@ TEST_F(TestUbUrmaJetty, ImportAndBindJettyErr)
     MOCKER(HcomUrma::BindJetty).stubs().will(returnValue(1));
     MOCKER(HcomUrma::UnimportJetty).stubs().will(returnValue(0));
     EXPECT_EQ(jetty->ImportAndBindJetty(), UB_QP_IMPORT_FAILED);
-    EXPECT_EQ(jetty->ImportAndBindJetty(), UB_OK);
+    EXPECT_EQ(jetty->ImportAndBindJetty(), UB_QP_BIND_FAILED);
 }
 
 TEST_F(TestUbUrmaJetty, ImportAndBindJetty)
@@ -795,6 +768,6 @@ TEST_F(TestUbUrmaJetty, GetRemoteHbInfo)
     jetty->mHBRemoteMr.Set(nullptr);
 }
 
-}
-}
+}  // namespace hcom
+}  // namespace ock
 #endif

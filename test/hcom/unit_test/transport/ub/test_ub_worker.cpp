@@ -173,8 +173,8 @@ TEST_F(TestUbWorker, Initialize)
 {
     worker->mInited = true;
     EXPECT_EQ(worker->Initialize(), UB_OK);
-    worker->mInited = false;
 
+    worker->mInited = false;
     EXPECT_EQ(worker->Initialize(), UB_PARAM_INVALID);
 }
 
@@ -287,6 +287,34 @@ TEST_F(TestUbWorker, InitializeOpCtxInfoPoolErr)
     ubCtx = nullptr;
 }
 
+TEST_F(TestUbWorker, InitializeJettyPtrMapErr)
+{
+    urma_context_t UrmaContext{};
+    UBEId eid{};
+    UBContext *ubCtx = new UBContext("ubTest", eid);
+    ubCtx->mUrmaContext = &UrmaContext;
+
+    worker->mUBContext = ubCtx;
+    ubCtx->IncreaseRef();
+
+    MOCKER_CPP(HcomUrma::Uninit).stubs().will(ignoreReturnValue());
+    MOCKER_CPP(&HcomUrma::DeleteContext).stubs().will(returnValue(URMA_SUCCESS));
+    MOCKER_CPP(&UBDeviceHelper::UnInitialize).stubs().will(ignoreReturnValue());
+    MOCKER_CPP(&UBJfc::Initialize).stubs().will(returnValue(0));
+    MOCKER_CPP(&UBOpContextInfoPool::Initialize, NResult(UBOpContextInfoPool::*)(const NetMemPoolFixedPtr &))
+        .stubs()
+        .will(returnValue(0));
+    MOCKER_CPP(&UBSglContextInfoPool::Initialize, NResult(UBSglContextInfoPool::*)(const NetMemPoolFixedPtr &))
+        .stubs()
+        .will(returnValue(0));
+    MOCKER_CPP(&mmap).stubs().will(returnValue(MAP_FAILED));
+    EXPECT_EQ(worker->Initialize(), UB_MEMORY_ALLOCATE_FAILED);
+
+    worker->mUBContext = nullptr;
+    ubCtx->mUrmaContext = nullptr;
+    delete ubCtx;
+}
+
 TEST_F(TestUbWorker, UnInitialize)
 {
     EXPECT_EQ(worker->UnInitialize(), UB_OK);
@@ -384,10 +412,10 @@ TEST_F(TestUbWorker, RePostReceive)
 
     UBOpContextInfo ctx{};
     ctx.ubJetty = qp;
-    MOCKER_CPP(&UBJetty::PostReceive).stubs().will(returnValue(1));
+    MOCKER_CPP(&UBJetty::PostReceive).stubs().will(returnValue(static_cast<UResult>(UB_NEW_OBJECT_FAILED)));
     qp->IncreaseRef();
     qp->IncreaseRef();
-    EXPECT_EQ(worker->RePostReceive(&ctx), NN_NO200);
+    EXPECT_EQ(worker->RePostReceive(&ctx), UB_NEW_OBJECT_FAILED);
 }
 
 TEST_F(TestUbWorker, PostSendParamErr)
@@ -659,17 +687,6 @@ TEST_F(TestUbWorker, CreateQP)
     delete tmpQp;
 }
 
-TEST_F(TestUbWorker, CheckJettyLiveness)
-{
-    EXPECT_FALSE(worker->CheckJettyLiveness(1));
-
-    worker->AddJettyId(1);
-    EXPECT_TRUE(worker->CheckJettyLiveness(1));
-
-    worker->RemoveJettyId(1);
-    EXPECT_FALSE(worker->CheckJettyLiveness(1));
-}
-
 TEST_F(TestUbWorker, TestPostSendSgl)
 {
     UBSHcomNetTransSglRequest req{};
@@ -682,12 +699,12 @@ TEST_F(TestUbWorker, TestPostSendSgl)
     EXPECT_EQ(worker->PostSendSgl(qp, req, tlsReq, 0, true), 0);
 }
 
-void MockRemoveOpCtxInfo(UBJetty *This, UBOpContextInfo *ctxInfo)
+void MockRemoveOpCtxInfo(UBOpContextInfo *ctxInfo)
 {
     return;
 }
 
-void MockUpdateTargetHbTime(NetUBAsyncEndpoint *This)
+void MockUpdateTargetHbTime()
 {
     return;
 }
@@ -714,64 +731,111 @@ int TestUbOneSideDone(const UBOpContextInfo *ctx)
 
 TEST_F(TestUbWorker, TestProcessPollingResult)
 {
-    urma_cr_t *wc1 = nullptr;
-    uint32_t pollCount = NN_NO1;
-    UBJetty *lastBrokenQp = nullptr;
-    urma_cr_status_t lastErrorWcStatus = URMA_CR_SUCCESS;
-    worker->ProcessPollingResult(wc1, pollCount, lastBrokenQp, lastErrorWcStatus);
-
-    auto *wc = static_cast<urma_cr_t *>(calloc(NN_NO1, sizeof(urma_cr_t)));
-    EXPECT_NE(wc, nullptr);
-    wc[0].status = URMA_CR_WR_FLUSH_ERR_DONE;
-    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
-
-    wc[0].status = URMA_CR_ACK_TIMEOUT_ERR;
-    UBOpContextInfo contextInfo{};
-    wc[0].user_ctx = reinterpret_cast<uint64_t>(&contextInfo);
-    contextInfo.ubJetty = new (std::nothrow) UBJetty("testUbJetty", NN_NO0, nullptr, nullptr);
-    EXPECT_NE(contextInfo.ubJetty, nullptr);
-    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
-
-    contextInfo.ubJetty->isStarted = true;
-    MOCKER_CPP(&UBOpContextInfo::HasInternalError).stubs().will(returnValue(false));
     MOCKER_CPP(&UBJetty::RemoveOpCtxInfo).stubs().will(invoke(MockRemoveOpCtxInfo));
-    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
-
-    contextInfo.opType = UBOpContextInfo::HB_WRITE;
-    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
-
-    contextInfo.opType = UBOpContextInfo::SEND;
-    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
-
-    lastBrokenQp = contextInfo.ubJetty;
-    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
-
-    wc[0].status = URMA_CR_SUCCESS;
-    NetUBAsyncEndpoint *ep = new (std::nothrow) NetUBAsyncEndpoint(0, nullptr, nullptr, nullptr);
-    contextInfo.ubJetty->mUpContext = reinterpret_cast<uintptr_t>(ep);
+    MOCKER_CPP(&UBJetty::Cleanup).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&NetUBAsyncEndpoint::UpdateTargetHbTime).stubs().will(invoke(MockUpdateTargetHbTime));
+    MOCKER_CPP(&NetDriverUBWithOob::ProcessEpError).stubs();
+
     worker->RegisterPostedHandler(std::bind(&TestUbRequestReceived, std::placeholders::_1));
     worker->RegisterNewRequestHandler(std::bind(&TestUbRequestPosted, std::placeholders::_1));
     worker->RegisterOneSideDoneHandler(std::bind(&TestUbOneSideDone, std::placeholders::_1));
+    worker->mJettyPtrMap.Initialize();
+
+    uint32_t pollCount = NN_NO1;
+    UBJetty *lastBrokenQp = nullptr;
+    urma_cr_status_t lastErrorWcStatus = URMA_CR_SUCCESS;
+    auto *wc = static_cast<urma_cr_t *>(calloc(NN_NO1, sizeof(urma_cr_t)));
+    auto *jetty = new (std::nothrow) UBJetty("testUbjetty", NN_NO0, nullptr, nullptr);
+    auto *driver = new (std::nothrow) NetDriverUBWithOob("testDriver", 0, UBSHcomNetDriverProtocol::UBC);
+    auto *ep = new (std::nothrow) NetUBAsyncEndpoint(0, nullptr, driver, nullptr);
+    ep->IncreaseRef(); // 存在会被 NetEndpointPtr 持有的情况
+    ASSERT_NE(wc, nullptr);
+    ASSERT_NE(jetty, nullptr);
+    ASSERT_NE(driver, nullptr);
+    ASSERT_NE(ep, nullptr);
+
+    UBOpContextInfo contextInfo{};
+    contextInfo.ubJetty = jetty;
+    contextInfo.ubJetty->mUpContext = reinterpret_cast<uintptr_t>(ep);
+
+    // 一开始正常发送
+    contextInfo.ubJetty->mState = UBJettyState::READY;
+    contextInfo.opType = UBOpContextInfo::OpType::SEND;
+    wc[0].status = URMA_CR_SUCCESS;
+    wc[0].user_ctx = reinterpret_cast<uint64_t>(&contextInfo);
     worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
 
-    contextInfo.opType = UBOpContextInfo::SGL_READ;
+    contextInfo.opType = UBOpContextInfo::OpType::RECEIVE;
     worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
 
-    contextInfo.opType = UBOpContextInfo::RECEIVE;
+    contextInfo.opType = UBOpContextInfo::OpType::SGL_READ;
     worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
+
+    // 遇到不同的连续错误
+    wc[0].status = URMA_CR_REM_ACCESS_ABORT_ERR;
+    contextInfo.opType = UBOpContextInfo::OpType::SEND;
+    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
+    EXPECT_EQ(lastBrokenQp, jetty);
+
+    wc[0].status = URMA_CR_ACK_TIMEOUT_ERR;
+    contextInfo.opType = UBOpContextInfo::OpType::SEND;
+    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
+    EXPECT_EQ(lastBrokenQp, jetty);
+    EXPECT_EQ(lastErrorWcStatus, URMA_CR_ACK_TIMEOUT_ERR);
 
     free(wc);
-    wc = nullptr;
-    if (contextInfo.ubJetty != nullptr) {
-        delete contextInfo.ubJetty;
-        contextInfo.ubJetty = nullptr;
-    }
-    if (ep != nullptr) {
-        delete ep;
-        ep = nullptr;
-    }
+    delete jetty;
+    ep->mJetty = nullptr;
+    delete ep;
 }
+
+TEST_F(TestUbWorker, TestProcessPollingResultTwo)
+{
+    MOCKER_CPP(&UBJetty::RemoveOpCtxInfo).stubs().will(invoke(MockRemoveOpCtxInfo));
+    MOCKER_CPP(&UBJetty::Cleanup).stubs().will(ignoreReturnValue());
+    MOCKER_CPP(&NetUBAsyncEndpoint::UpdateTargetHbTime).stubs().will(invoke(MockUpdateTargetHbTime));
+    MOCKER_CPP(&NetDriverUBWithOob::ProcessEpError).stubs();
+
+    worker->RegisterPostedHandler(std::bind(&TestUbRequestReceived, std::placeholders::_1));
+    worker->RegisterNewRequestHandler(std::bind(&TestUbRequestPosted, std::placeholders::_1));
+    worker->RegisterOneSideDoneHandler(std::bind(&TestUbOneSideDone, std::placeholders::_1));
+    worker->mJettyPtrMap.Initialize();
+
+    uint32_t pollCount = NN_NO1;
+    UBJetty *lastBrokenQp = nullptr;
+    urma_cr_status_t lastErrorWcStatus = URMA_CR_SUCCESS;
+    auto *wc = static_cast<urma_cr_t *>(calloc(NN_NO1, sizeof(urma_cr_t)));
+    auto *jetty = new (std::nothrow) UBJetty("testUbjetty", NN_NO0, nullptr, nullptr);
+    auto *driver = new (std::nothrow) NetDriverUBWithOob("testDriver", 0, UBSHcomNetDriverProtocol::UBC);
+    auto *ep = new (std::nothrow) NetUBAsyncEndpoint(0, nullptr, driver, nullptr);
+    ep->IncreaseRef(); // 存在会被 NetEndpointPtr 持有的情况
+    ASSERT_NE(wc, nullptr);
+    ASSERT_NE(jetty, nullptr);
+    ASSERT_NE(driver, nullptr);
+    ASSERT_NE(ep, nullptr);
+
+    // status 9 必定会导致jetty 为 error 状态
+    contextInfo.ubJetty->mState = UBJettyState::ERROR;
+    worker->mJettyPtrMap.Emplace(0, jetty);
+
+    wc[0].status = URMA_CR_ACK_TIMEOUT_ERR;
+    contextInfo.opType = UBOpContextInfo::OpType::SEND;
+    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
+
+    // 在 modify jetty error过程中可能会收到 FLUSH_ERR
+    wc[0].status = URMA_CR_WR_FLUSH_ERR;
+    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
+
+    // 最终以 FLUSH_ERR_DONE 结尾
+    wc[0].status = URMA_CR_WR_FLUSH_ERR_DONE;
+    worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
+    EXPECT_EQ(worker->mJettyPtrMap.Lookup(0), nullptr);
+
+    free(wc);
+    delete jetty;
+    ep->mJetty = nullptr;
+    delete ep;
 }
-}
+}  // namespace hcom
+}  // namespace ock
 #endif

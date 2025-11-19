@@ -647,18 +647,6 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointSetRemoteHbInfo)
     EXPECT_NO_FATAL_FAILURE(NEP->SetRemoteHbInfo(address, key, size));
 }
 
-TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointSetHbBrokenEp)
-{
-    EXPECT_NO_FATAL_FAILURE(NEP->SetHbBrokenEp());
-}
-
-TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointHbBrokenEp)
-{
-    NEP->mHbBrokenEp = false;
-    bool ret = NEP->HbBrokenEp();
-    EXPECT_EQ(ret, false);
-}
-
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointEnableEncrypt)
 {
     UBSHcomNetDriverOptions options{};

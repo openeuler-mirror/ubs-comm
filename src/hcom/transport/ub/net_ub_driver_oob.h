@@ -172,6 +172,7 @@ private:
     NetHeartbeat *mHeartBeat = nullptr;
     UBPublicJetty *mPublicJetty = nullptr;
     friend class NetHeartbeat;
+    friend class UBWorker;
 };
 }
 }

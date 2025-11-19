@@ -436,6 +436,18 @@ void HcomServiceImp::ForceStop()
 
     for (auto &driver : mDriverPtrs) {
         driver->Stop();
+    }
+
+    for (const auto& pair : mChannelMap) {
+        UBSHcomChannelPtr channel = pair.second;
+        Disconnect(channel);
+    }
+
+    if (mPeriodicMgr.Get() != nullptr) {
+        mPeriodicMgr->Stop();
+    }
+
+    for (auto &driver : mDriverPtrs) {
         driver->UnInitialize();
         UBSHcomNetDriver::DestroyInstance(driver->Name());
     }
@@ -1382,6 +1394,7 @@ void HcomServiceImp::ServiceEndPointBroken(const UBSHcomNetEndpointPtr &netEp)
     usleep(NN_NO100);
     channel->ProcessIoInBroken();
     channel->InvokeChannelBrokenCb(channel);
+    NN_LOG_INFO("Channel broken, channel id " << channel->GetId());
 
     uint16_t delayEraseTime = channel->GetDelayEraseTime();
     // default: try delay erase channel

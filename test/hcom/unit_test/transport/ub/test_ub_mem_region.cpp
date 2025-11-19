@@ -18,7 +18,6 @@
 #include "ub_common.h"
 #include "ub_mr_fixed_buf.h"
 #include "under_api/urma/urma_api_wrapper.h"
-#include "under_api/obmm/obmm_api_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -198,23 +197,6 @@ TEST_F(TestUbMemRegion, InitializeForOneSideFailTwo)
     EXPECT_EQ(MemRegion->InitializeForOneSide(), UB_MR_REG_FAILED);
 }
 
-TEST_F(TestUbMemRegion, InitializeWithPAParamErr)
-{
-    MOCKER(HcomObmm::ObmmOpen).stubs().will(returnValue(-1)).then(returnValue(1));
-    MOCKER(mmap).stubs().will(returnValue(MAP_FAILED));
-    MOCKER_CPP(close).stubs().will(returnValue(0));
-    EXPECT_EQ(MemRegion->InitializeWithPA(1), UB_MEMORY_ALLOCATE_FAILED);
-    EXPECT_EQ(MemRegion->InitializeWithPA(1), UB_MEMORY_ALLOCATE_FAILED);
-}
-
-TEST_F(TestUbMemRegion, InitializeWithPA)
-{
-    int tmp;
-
-    MOCKER(HcomObmm::ObmmOpen).stubs().will(returnValue(1));
-    MOCKER(mmap).stubs().will(returnValue(reinterpret_cast<void *>(&tmp)));
-    EXPECT_EQ(MemRegion->InitializeWithPA(1), UB_OK);
-}
 }
 }
 #endif
