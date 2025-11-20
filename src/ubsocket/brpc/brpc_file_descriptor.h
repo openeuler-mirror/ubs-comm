@@ -744,7 +744,7 @@ public:
             RPC_ADPT_VLOG_DEBUG("Post RX depth: %u\n", cur_post_rx_num);
         } while ((left_post_rx_num -= cur_post_rx_num) > 0);
 
-        int poll_cnt = 0;
+        uint32_t poll_cnt = 0;
         do {
             PollTx(m_tx.m_retrieve_threshold);
             if (umq_state_get(m_local_umqh) != QUEUE_STATE_IDLE) {

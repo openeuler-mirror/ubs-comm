@@ -42,7 +42,7 @@ class Context : public Brpc::ConfigSettings {
     }
 
     ::SocketFd *CreateSocketFd(int fd);
-    ::SocketFd *Context::CreateSocketFd(int fd, int event_fd);
+    ::SocketFd *CreateSocketFd(int fd, int event_fd);
     ::EpollFd *CreateEpollFd(int fd);
 
     static ALWAYS_INLINE int FetchAdd(void)
