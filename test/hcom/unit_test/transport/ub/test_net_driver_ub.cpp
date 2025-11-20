@@ -18,7 +18,6 @@
 #include "net_ub_driver.h"
 #include "net_ub_endpoint.h"
 #include "openssl_api_wrapper.h"
-#include "under_api/obmm/obmm_api_wrapper.h"
 #include "under_api/urma/urma_api_wrapper.h"
 #include "ub_common.h"
 #include "ub_mr_fixed_buf.h"
@@ -28,6 +27,7 @@
 namespace ock {
 namespace hcom {
 class TestNetDriverUB : public testing::Test {
+#define OBMM_SIZE 1 << 27 // 128M
 public:
     TestNetDriverUB();
     virtual void SetUp(void);
@@ -550,12 +550,6 @@ TEST_F(TestNetDriverUB, UnInitialize)
     driver->mStarted = false;
     driver->mContext = nullptr;
     EXPECT_NO_FATAL_FAILURE(driver->UnInitialize());
-}
-
-TEST_F(TestNetDriverUB, UnmapVaForUBErr)
-{
-    uint64_t va;
-    EXPECT_EQ(driver->UnmapVaForUB(va), NN_ERROR);
 }
 
 TEST_F(TestNetDriverUB, CreateMemoryRegion)

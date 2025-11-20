@@ -15,7 +15,7 @@
 #include "transport/rdma/verbs/net_rdma_driver_oob.h"
 #include "transport/rdma/verbs/net_rdma_async_endpoint.h"
 #include "common/net_util.h"
-#include "test_net_rdma_driver.hpp"
+#include "test_net_rdma_driver.h"
 #include "ut_helper.h"
 
 using namespace ock::hcom;

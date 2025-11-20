@@ -14,8 +14,10 @@
 #include <mockcpp/mockcpp.hpp>
 
 #include "hcom.h"
+#include "net_heartbeat.h"
 #include "net_rdma_driver_oob.h"
 #include "net_rdma_async_endpoint.h"
+#include "net_ub_endpoint.h"
 #include "rdma_composed_endpoint.h"
 
 namespace ock {
@@ -27,17 +29,28 @@ public:
 
     UBSHcomNetDriver *mDriver = nullptr;
     NetHeartbeat *mHb = nullptr;
+
+    UBSHcomNetDriver *mUbcDriver = nullptr;
+    NetHeartbeat *mUbcHb = nullptr;
 };
 
 void TestNetHeartbeat::SetUp()
 {
     mDriver = new (std::nothrow) NetDriverRDMAWithOob("test_driver", 1, RDMA);
+    mUbcDriver = new (std::nothrow) NetDriverRDMAWithOob("test_driver", 1, UBC);
+    ASSERT_NE(mDriver, nullptr);
+    ASSERT_NE(mUbcDriver, nullptr);
+
     mHb = new NetHeartbeat(mDriver, NN_NO60, NN_NO2);
     mDriver->IncreaseRef();
+
+    mUbcHb = new NetHeartbeat(mUbcDriver, NN_NO60, NN_NO2);
+    mUbcDriver->IncreaseRef();
 }
 
 void TestNetHeartbeat::TearDown()
 {
+    GlobalMockObject::verify();
     if (mDriver != nullptr) {
         delete mDriver;
         mDriver = nullptr;
@@ -48,7 +61,15 @@ void TestNetHeartbeat::TearDown()
         mHb = nullptr;
     }
 
-    GlobalMockObject::verify();
+    if (mUbcDriver != nullptr) {
+        delete mUbcDriver;
+        mUbcDriver = nullptr;
+    }
+
+    if (mUbcHb != nullptr) {
+        delete mUbcHb;
+        mUbcHb = nullptr;
+    }
 }
 
 TEST_F(TestNetHeartbeat, NewHeartbeatZero)
@@ -123,6 +144,30 @@ TEST_F(TestNetHeartbeat, DetectSingleEpHbStateWithOUTBrokenEp)
         EXPECT_NO_FATAL_FAILURE(mHb->DetectSingleEpHbState(dynamic_cast<NetAsyncEndpoint *>(ep),
             dynamic_cast<NetDriverRDMAWithOob *>(mDriver), req, RDMAOpContextInfo::HB_WRITE));
         EXPECT_EQ(ep->State().Compare(NEP_BROKEN), true);
+}
+
+TEST_F(TestNetHeartbeat, DetectSingleEpHbStateUBCInvalidParam)
+{
+    NetEndpoint *ep = nullptr;
+    UBSHcomNetTransRequest req {};
+    EXPECT_NO_FATAL_FAILURE(mUbcHb->DetectSingleEpHbState(dynamic_cast<NetUBAsyncEndpoint *>(ep),
+                                                          dynamic_cast<NetDriverUBWithOob *>(mUbcDriver), req,
+                                                          UBOpContextInfo::HB_WRITE));
+}
+
+TEST_F(TestNetHeartbeat, DetectSingleEpHbStateUBCWithBrokenEp)
+{
+    UBJetty *jetty = nullptr;
+    NetEndpoint *ep = new NetUBAsyncEndpoint(0, jetty, (NetDriverUBWithOob *)mUbcDriver, nullptr);
+
+    UBSHcomNetTransRequest req {};
+    MOCKER_CPP(&NetUBAsyncEndpoint::checkTargetHbTime).stubs().will(returnValue(true));
+    MOCKER_CPP(&NetUBAsyncEndpoint::HbCheckStateNormal).stubs().will(returnValue(true));
+    MOCKER_CPP(&NetDriverUBWithOob::ProcessEpError).stubs().will(ignoreReturnValue());
+
+    EXPECT_NO_FATAL_FAILURE(mUbcHb->DetectSingleEpHbState(dynamic_cast<NetUBAsyncEndpoint *>(ep),
+                                                          dynamic_cast<NetDriverUBWithOob *>(mUbcDriver), req,
+                                                          UBOpContextInfo::HB_WRITE));
 }
 }
 }

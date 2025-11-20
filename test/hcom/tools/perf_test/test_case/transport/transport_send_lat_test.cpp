@@ -20,7 +20,7 @@ int TransportSendLatTest::DoPostSend()
     if (ctx->cnt < ctx->mIterations) {
         ctx->tposted[ctx->cnt] = MONOTONIC_TIME_NS();
         UBSHcomNetTransRequest req(mDataAddr, ctx->mSize, 0);
-        int res = mEp->PostSend(OP_CODE_SEND_LAT, req);
+        int res = mEp->PostSendRaw(req, 1);
         if (res != 0) {
             LOG_ERROR("failed to send to server");
         }
@@ -46,19 +46,14 @@ int TransportSendLatTest::NewEndPoint(const std::string &ipPort, const ock::hcom
 
 int TransportSendLatTest::RequestReceived(const ock::hcom::UBSHcomNetRequestContext &ctx)
 {
-    if (ctx.Header().opCode == OP_CODE_SEND_LAT) {
-        if (mCfg.GetIsServer()) {
-            // server 直接回复相同大小的消息即可
-            UBSHcomNetTransRequest req(mDataAddr, ctx.Header().dataLength, 0);
-            int res = mEp->PostSend(OP_CODE_SEND_LAT, req);
-        } else {
-            DoPostSend();
-        }
-        return 0;
+    if (mCfg.GetIsServer()) {
+        // server 直接回复相同大小的消息即可
+        UBSHcomNetTransRequest req(mDataAddr, ctx.Header().dataLength, 0);
+        int res = mEp->PostSendRaw(req, 1);
+    } else {
+        DoPostSend();
     }
-
-    LOG_ERROR("receive unexpected opcode(=" << ctx.Header().opCode << ").");
-    return -1;
+    return 0;
 }
 
 bool TransportSendLatTest::Initialize()

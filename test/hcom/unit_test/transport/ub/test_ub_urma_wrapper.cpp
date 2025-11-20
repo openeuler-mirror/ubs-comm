@@ -21,7 +21,6 @@
 #include "ub_mr_fixed_buf.h"
 #include "ub_urma_wrapper_jetty.h"
 #include "under_api/urma/urma_api_wrapper.h"
-#include "under_api/obmm/obmm_api_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -229,6 +228,21 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetEnableDeviceCount)
     MOCKER_CPP(UBDeviceHelper::GetDeviceByIp).stubs().will(returnValue(1)).then(returnValue(0));
     UResult ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
     EXPECT_EQ(ret, 0);
+    UBDeviceHelper::G_UBDevMap.clear();
+}
+
+TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetEnableDeviceCountNoMatchedFail)
+{
+    uint16_t enableDevCount = 0;
+    std::string ipMask = "";
+    std::string ipGroup = "192.168.0.1;192.168.0.2";
+    std::vector<std::string> enableIps;
+    UBDeviceHelper::G_UBDevMap[0].active = true;
+    UBDeviceHelper::G_UBDevMap[1].active = true;
+    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(0));
+    MOCKER_CPP(UBDeviceHelper::GetDeviceByIp).stubs().will(returnValue(1));
+    UResult ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
+    EXPECT_EQ(ret, UB_DEVICE_NO_IP_MATCHED);
     UBDeviceHelper::G_UBDevMap.clear();
 }
 

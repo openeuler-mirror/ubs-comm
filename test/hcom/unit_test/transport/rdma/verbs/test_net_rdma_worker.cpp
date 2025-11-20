@@ -98,6 +98,16 @@ void TestNetRdmaWorker::TearDown()
     GlobalMockObject::verify();
 }
 
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendLKeyFail)
+{
+    name = "RdmaWorkerPostSendLKeyFail";
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(true));
+    request.lKey = UINT64_MAX;
+    int ret = mWorker->PostSend(qp, request, 0);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
+}
+
 TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSgl)
 {
     name = "NetSyncEndpointRdmaPostSendSgl";
@@ -169,6 +179,38 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglFour)
 
     ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 1);
     EXPECT_EQ(ret, 1);
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglLKeyFail)
+{
+    name = "RdmaWorkerPostSendSglLKeyFail";
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
+    MOCKER_CPP(&RDMASglContextInfoPool::Get).stubs().will(returnValue(sglCtx));
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(true));
+    request.lKey = UINT64_MAX;
+    int ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 0);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostReadLKeyFail)
+{
+    name = "RdmaWorkerPostReadLKeyFail";
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&RDMAQp::GetOneSideWr).stubs().will(returnValue(true));
+    request.lKey = UINT64_MAX;
+    int ret = mWorker->PostRead(qp, request);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostWriteLKeyFail)
+{
+    name = "RdmaWorkerPostWriteLKeyFail";
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&RDMAQp::GetOneSideWr).stubs().will(returnValue(true));
+    request.lKey = UINT64_MAX;
+    int ret = mWorker->PostWrite(qp, request);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
 }
 
 TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglInlineOne)

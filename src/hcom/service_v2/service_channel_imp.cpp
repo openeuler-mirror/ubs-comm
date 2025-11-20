@@ -1201,7 +1201,7 @@ SerResult HcomChannelImp::RndvInner(UBSHcomNetEndpoint *ep, const UBSHcomRequest
         // 根据起始地址查找lKey
         newReq.key = pgtRegion->key;
 
-        HcomServiceRndvMessage rndvMessage(mConnectTimestamp.GetRemoteTimestamp(mOptions.twoSideTimeout), req);
+        HcomServiceRndvMessage rndvMessage(mConnectTimestamp.GetRemoteTimestamp(mOptions.twoSideTimeout), newReq);
         UBSHcomNetTransRequest transReq(const_cast<void *>(reinterpret_cast<const void *>(&rndvMessage)),
             sizeof(HcomServiceRndvMessage), sizeof(SerTransContext));
         // RNDV请求 对端必须reply 不区分send和Call

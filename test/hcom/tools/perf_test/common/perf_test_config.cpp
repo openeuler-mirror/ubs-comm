@@ -117,7 +117,7 @@ bool PerfTestConfig::SelfCheck()
     if (GetSize() >= MAX_MESSAGE_SIZE) {
         LOG_WARN("Input size(=" << GetSize() << ") is larger than MAX_MESSAGE_SIZE(=" << MAX_MESSAGE_SIZE << ")"
                                 << "size is set to MAX_MESSAGE_SIZE.");
-        SetIterations(MAX_ITERATIONS);
+        SetIterations(MAX_MESSAGE_SIZE);
     }
 
     // 如果需要测试所有尺寸，则按照最大尺寸准备缓冲区

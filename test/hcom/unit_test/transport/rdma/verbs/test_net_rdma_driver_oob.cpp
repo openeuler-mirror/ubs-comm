@@ -328,6 +328,25 @@ TEST_F(TestNetRdmaDriverOob, SendFinishedCB)
     free(qp);
 }
 
+TEST_F(TestNetRdmaDriverOob, SendSglInlineFinishedCB)
+{
+    RDMAOpContextInfo ctx {};
+    ctx.opType = RDMAOpContextInfo::SEND_RAW_SGL;
+    ctx.upCtxSize = 1;
+    UBSHcomNetRequestContext netCtx{};
+    RDMAQp *qp = (RDMAQp *)malloc(sizeof(RDMAQp));
+    ctx.qp = qp;
+    ctx.qp->mUpContext = 0;
+    RDMAWorker *fakeWorker = (RDMAWorker *)malloc(sizeof(RDMAWorker));
+
+    MOCKER_CPP(&RDMAWorker::ReturnOpContextInfo).stubs().will(ignoreReturnValue());
+    testDriver->mRequestPostedHandler = MockRequestPostedHandler;
+
+    EXPECT_EQ(testDriver->SendSglInlineFinishedCB(&ctx, netCtx, fakeWorker), NN_OK);
+    free(qp);
+    free(fakeWorker);
+}
+
 TEST_F(TestNetRdmaDriverOob, ProcessErrorSendFinished)
 {
     RDMAOpContextInfo ctx {};

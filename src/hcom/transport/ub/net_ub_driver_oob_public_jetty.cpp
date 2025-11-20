@@ -553,6 +553,10 @@ NResult NetDriverUBWithOob::ServerCreateEp(UBJettyExchangeInfo &info, UBJetty *q
 
     std::string payload;
     auto payloadLen = exchangeInfo->payloadLen;
+    if ((payloadLen == 0) | (payloadLen >= NN_NO1024)) {
+        NN_LOG_ERROR("Failed to create ep in server as exchangeInfo payloadLen " << payloadLen << " is invalid");
+        return NN_PARAM_INVALID;
+    }
     if (payloadLen > 0) {
         exchangeInfo->payload[payloadLen] = '\0';
         payload = std::string(exchangeInfo->payload, payloadLen);
