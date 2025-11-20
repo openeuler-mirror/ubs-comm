@@ -51,7 +51,7 @@ void TestNetChannelImp::SetUp()
     ASSERT_NE(channel, nullptr);
     channel->SetChannelTimeOut(0, 0);
 
-    data = new char[dataSize];
+    data = new (std::nothrow) char[dataSize];
     ASSERT_NE(data, nullptr);
 
     ctxMemPool = new (std::nothrow) NetMemPoolFixed("test", options);

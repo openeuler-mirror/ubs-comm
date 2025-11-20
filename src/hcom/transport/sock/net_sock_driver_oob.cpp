@@ -614,14 +614,14 @@ NResult NetDriverSockWithOOB::Connect(const std::string &serverUrl, const std::s
 
     OOBTCPClientPtr clt;
     if (mEnableTls) {
-        auto oobSSLClient = new OOBSSLClient(type, ip, port,
+        auto oobSSLClient = new (std::nothrow) OOBSSLClient(type, ip, port,
             mTlsPrivateKeyCB, mTlsCertCB, mTlsCaCallback);
         NN_ASSERT_LOG_RETURN(oobSSLClient != nullptr, NN_NEW_OBJECT_FAILED)
         oobSSLClient->SetTlsOptions(mOptions);
         oobSSLClient->SetPSKCallback(mPskFindSessionCb, mPskUseSessionCb);
         clt = oobSSLClient;
     } else {
-        clt = new OOBTCPClient(type, ip, port);
+        clt = new (std::nothrow) OOBTCPClient(type, ip, port);
         NN_ASSERT_LOG_RETURN(clt.Get() != nullptr, NN_NEW_OBJECT_FAILED)
     }
 
@@ -656,14 +656,14 @@ NResult NetDriverSockWithOOB::Connect(const std::string &oobIp, uint16_t oobPort
 
     OOBTCPClientPtr clt;
     if (mEnableTls) {
-        auto oobSSLClient =
-            new OOBSSLClient(mOptions.oobType, oobIp, oobPort, mTlsPrivateKeyCB, mTlsCertCB, mTlsCaCallback);
+        auto oobSSLClient = new (std::nothrow) OOBSSLClient(mOptions.oobType, oobIp, oobPort, mTlsPrivateKeyCB,
+            mTlsCertCB, mTlsCaCallback);
         NN_ASSERT_LOG_RETURN(oobSSLClient != nullptr, NN_NEW_OBJECT_FAILED)
         oobSSLClient->SetTlsOptions(mOptions);
         oobSSLClient->SetPSKCallback(mPskFindSessionCb, mPskUseSessionCb);
         clt = oobSSLClient;
     } else {
-        clt = new OOBTCPClient(mOptions.oobType, oobIp, oobPort);
+        clt = new (std::nothrow) OOBTCPClient(mOptions.oobType, oobIp, oobPort);
         NN_ASSERT_LOG_RETURN(clt.Get() != nullptr, NN_NEW_OBJECT_FAILED)
     }
 
