@@ -1364,9 +1364,11 @@ int NetDriverUBWithOob::SendFinishedCB(UBOpContextInfo *ctx)
     ctx->ubJetty->ReturnPostSendWr();
     auto worker = reinterpret_cast<UBWorker *>(ctx->ubJetty->GetUpContext1());
     if (ctx->opType == UBOpContextInfo::SEND || ctx->opType == UBOpContextInfo::SEND_RAW) {
-        if (ctx->opType == UBOpContextInfo::SEND) {
-            (void)memcpy_s(&(requestCtx.mHeader), sizeof(UBSHcomNetTransHeader),
-                reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr), sizeof(UBSHcomNetTransHeader));
+        if (ctx->opType == UBOpContextInfo::SEND && NN_UNLIKELY(memcpy_s(&(requestCtx.mHeader),
+            sizeof(UBSHcomNetTransHeader), reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr),
+            sizeof(UBSHcomNetTransHeader)) != UB_OK)) {
+            NN_LOG_ERROR("Failed to copy ctx to requestCtx");
+            return NN_ERROR;
         } else {
             requestCtx.mHeader.Invalid();
         }
@@ -1382,8 +1384,11 @@ int NetDriverUBWithOob::SendFinishedCB(UBOpContextInfo *ctx)
         requestCtx.mOriginalReq.upCtxSize = ctx->upCtxSize;
 
         if (requestCtx.mOriginalReq.upCtxSize > 0 &&
-            requestCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData)) {
-            (void)memcpy_s(requestCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx, ctx->upCtxSize);
+            requestCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData) &&
+            NN_UNLIKELY(memcpy_s(requestCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx,
+            ctx->upCtxSize) != UB_OK)) {
+            NN_LOG_ERROR("Failed to copy ctx to requestCtx");
+            return NN_ERROR;
         }
 
         if (NN_UNLIKELY(!mDriverSendMR->ReturnBuffer(ctx->mrMemAddr))) {
@@ -1503,8 +1508,11 @@ int NetDriverUBWithOob::OneSideDoneCB(UBOpContextInfo *ctx)
         netCtx.mOriginalReq.upCtxSize = ctx->upCtxSize;
 
         if (netCtx.mOriginalReq.upCtxSize > 0 &&
-            netCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData)) {
-            (void)memcpy_s(netCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx, ctx->upCtxSize);
+            netCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData) &&
+            NN_UNLIKELY(memcpy_s(netCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx,
+            ctx->upCtxSize) != UB_OK)) {
+            NN_LOG_ERROR("Failed to copy ctx to requestCtx");
+            return NN_ERROR;
         }
 
         // return context to worker and ctx is not usable anymore
@@ -1675,10 +1683,18 @@ int NetDriverUBWithOob::NewRequest(UBOpContextInfo *ctx)
         if (NN_LIKELY(!mOptions.enableTls)) {
             messageReady = msg.AllocateIfNeed(tmpHeader->dataLength);
             if (NN_LIKELY(messageReady)) {
-                (void)memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
-                    sizeof(UBSHcomNetTransHeader));
-                (void)memcpy_s(msg.mBuf, tmpHeader->dataLength,
-                    reinterpret_cast<void *>(ctx->mrMemAddr + sizeof(UBSHcomNetTransHeader)), tmpHeader->dataLength);
+                if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader),
+                    tmpHeader, sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
+                    NN_LOG_ERROR("Failed to copy header");
+                    return NN_ERROR;
+                }
+
+                if (NN_UNLIKELY(memcpy_s(msg.mBuf, tmpHeader->dataLength,
+                    reinterpret_cast<void *>(ctx->mrMemAddr + sizeof(UBSHcomNetTransHeader)),
+                    tmpHeader->dataLength) != NN_OK)) {
+                    NN_LOG_ERROR("Failed to copy data");
+                    return NN_ERROR;
+                }
                 msg.mDataLen = tmpHeader->dataLength;
             }
         } else {
@@ -1740,7 +1756,11 @@ NResult NetDriverUBWithOob::NewReceivedRawRequest(UBOpContextInfo *ctx, UBSHcomN
     if (NN_LIKELY(!mOptions.enableTls)) {
         messageReady = msg.AllocateIfNeed(ctx->dataSize);
         if (NN_LIKELY(messageReady)) {
-            (void)memcpy_s(msg.mBuf, ctx->dataSize, reinterpret_cast<void *>(ctx->mrMemAddr), ctx->dataSize);
+            if (NN_UNLIKELY(memcpy_s(msg.mBuf, ctx->dataSize,
+                reinterpret_cast<void *>(ctx->mrMemAddr), ctx->dataSize) != NN_OK)) {
+                NN_LOG_ERROR("Failed to copy ctx to msg");
+                return NN_ERROR;
+            }
             msg.mDataLen = ctx->dataSize;
         }
     } else {

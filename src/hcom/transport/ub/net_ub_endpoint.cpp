@@ -160,8 +160,11 @@ namespace hcom {
                                                                                                            \
         uint32_t iovOffset = 0;                                                                            \
         for (int i = 0; i < request.iovCount; i++) {                                                       \
-            (void)memcpy_s(reinterpret_cast<void *>(tmpBuff + iovOffset), request.iov[i].size,             \
-                reinterpret_cast<const void *>(request.iov[i].lAddress), request.iov[i].size);             \
+            if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(tmpBuff + iovOffset), request.iov[i].size,   \
+                reinterpret_cast<const void *>(request.iov[i].lAddress), request.iov[i].size) != NN_OK)) { \
+                NN_LOG_ERROR("Failed to copy request to buff");                                            \
+                return NN_ERROR;                                                                           \
+            }                                                                                              \
             iovOffset += request.iov[i].size;                                                              \
         }                                                                                                  \
                                                                                                            \
@@ -296,8 +299,11 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         header->dataLength = cipherLen;
     } else {
         header->dataLength = request.size;
-        (void)memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size);
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
+            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            NN_LOG_ERROR("Failed to async post send with seq no as memcpy fail");
+            return NN_ERROR;
+        }
     }
 
     /* finally fill header crc */
@@ -367,8 +373,11 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         header->dataLength = cipherLen;
     } else {
         header->dataLength = request.size;
-        (void)memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size);
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
+            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            NN_LOG_ERROR("Failed to async post send with op info as memcpy fail");
+            return NN_ERROR;
+        }
     }
     /* finally fill header crc */
     header->headerCrc = NetFunc::CalcHeaderCrc32(header);
@@ -856,8 +865,11 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
         // copy message
         header->dataLength = request.size;
 
-        (void)memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size);
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
+            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            NN_LOG_ERROR("Failed to sync post send with seq no as memcpy fail");
+            return NN_ERROR;
+        }
     }
 
     /* finally fill header crc */
@@ -931,8 +943,11 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
         // copy message
         header->dataLength = request.size;
 
-        (void)memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size);
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
+            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            NN_LOG_ERROR("Failed to sync post send with op info as memcpy fail");
+            return NN_ERROR;
+        }
     }
 
     /* finally fill header crc */
@@ -1723,8 +1738,9 @@ NResult NetUBSyncEndpoint::InnerPostSend(const UBSendReadWriteRequest &req, urma
     ctx.opType = immData == 0 ? UBOpContextInfo::SEND : UBOpContextInfo::SEND_RAW;
     ctx.opResultType = UBOpContextInfo::SUCCESS;
     ctx.upCtxSize = req.upCtxSize;
-    if (req.upCtxSize > 0) {
-        (void)memcpy_s(ctx.upCtx, req.upCtxSize, req.upCtxData, req.upCtxSize);
+    if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx.upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != UB_OK)) {
+        NN_LOG_ERROR("Failed to copy req to ctx");
+        return UB_ERROR;
     }
     mJetty->IncreaseRef();
 
@@ -1760,8 +1776,9 @@ NResult NetUBSyncEndpoint::InnerPostRead(const UBSendReadWriteRequest &req)
     ctx.opType = UBOpContextInfo::READ;
     ctx.opResultType = UBOpContextInfo::SUCCESS;
     ctx.upCtxSize = req.upCtxSize;
-    if (req.upCtxSize > 0) {
-        (void)memcpy_s(ctx.upCtx, req.upCtxSize, req.upCtxData, req.upCtxSize);
+    if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx.upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != UB_OK)) {
+        NN_LOG_ERROR("Failed to copy req to ctx");
+        return UB_ERROR;
     }
     mJetty->IncreaseRef();
 
@@ -1798,8 +1815,9 @@ NResult NetUBSyncEndpoint::InnerPostWrite(const UBSendReadWriteRequest &req)
     ctx.opType = UBOpContextInfo::WRITE;
     ctx.opResultType = UBOpContextInfo::SUCCESS;
     ctx.upCtxSize = req.upCtxSize;
-    if (req.upCtxSize > 0) {
-        (void)memcpy_s(ctx.upCtx, req.upCtxSize, req.upCtxData, req.upCtxSize);
+    if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx.upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != UB_OK)) {
+        NN_LOG_ERROR("Failed to copy req to ctx");
+        return UB_ERROR;
     }
     mJetty->IncreaseRef();
 
