@@ -20,19 +20,22 @@
 %endif
 
 %if %{undefined rpm_version}
-    %define rpm_version 2.0.0
+    %define rpm_version 1.0.0
 %endif
 
 %if %{undefined rpm_release}
-    %define rpm_release 1
+    %define rpm_release B018
 %endif
 
 %if %{undefined rpm_build_date}
     %define rpm_build_date %(date +"%%Y-%%m-%%d-%%H:%%M:%%S")
 %endif
 
-%global package_suffix ubs-hcom
-%global debug_package %{nil}
+%if %{undefined package_name}
+    %define package_name ubs-comm
+%endif
+
+%global package_suffix ubs-comm
 
 Name:           %{package_suffix}
 Version       : %{rpm_version}
@@ -52,15 +55,17 @@ HCOM是一个适用于C/S架构应用程序的高性能通信库
 
 %package devel
 Summary: Development header files and dynamic library for HCOM
+Requires:       ubs-comm-lib = %{version}
 
 %description devel
 This package contains development header files and dynamic library for HCOM
 
-%package debuginfo
-Summary: Debuginfo for HCOM
+%package lib
+Summary: Dynamic library for HCOM
 
-%description debuginfo
-This package contains debug info of hcom.so
+%description lib
+This package contains dynamic library for HCOM
+
 %prep
 %setup -c -n %{name}_%{version}
 
@@ -86,14 +91,6 @@ cp -r %{_builddir}/%{name}_%{version}/%{package_name}/hcom/include/hcom/*  %{bui
     cp -r %{_builddir}/%{name}_%{version}/%{package_name}/hcom/bin/htracer_cli  %{buildroot}/usr/local/bin/
 %endif
 
-%files
-%defattr(-,root,root)
-%{_prefix}/lib64/*.so
-%{_prefix}/lib64/*.a
-%if %{with java_compile}
-    %{_prefix}/local/jars/hcom/*.jar
-%endif
-
 %files devel
 %defattr(-,root,root)
 %{_prefix}/include/hcom/capi/*.h
@@ -101,14 +98,15 @@ cp -r %{_builddir}/%{name}_%{version}/%{package_name}/hcom/include/hcom/*  %{bui
 %if %{with_hcom_perf} || %{with_htracer_cli}
     %{_prefix}/local/bin/*
 %endif
-%{_prefix}/lib64/*.so
-%{_prefix}/lib64/*.a
+%{_prefix}/lib64/libhcom.so
+%{_prefix}/lib64/libhcom_static.a
 %if %{with java_compile}
     %{_prefix}/local/jars/hcom/*.jar
 %endif
 
-%files debuginfo
+%files lib
 %defattr(-,root,root)
-%{_prefix}/lib64/libhcom.so.debug
+%{_prefix}/lib64/libhcom.so.0
+%{_prefix}/lib64/libhcom.so.0.0.1
 
 %define __os_install_post %{nil}

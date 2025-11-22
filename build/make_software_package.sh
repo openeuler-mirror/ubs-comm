@@ -166,4 +166,4 @@ base_rpmbuild_cmd="rpmbuild --define \"package_name ${HCOM_PACKAGE_NAME}\" -bb h
 
 # 执行最终的 rpmbuild 命令
 eval "$base_rpmbuild_cmd"
-cp ~/rpmbuild/RPMS/${HCOM_BUILD_OS_ARCH}/ubs-hcom-2.0.0*.rpm "${HCOM_ROOT_DIR}/dist/ubs-hcom-2.0.0-1.${OS}_${HCOM_BUILD_OS_ARCH}.rpm"
+cp ~/rpmbuild/RPMS/${HCOM_BUILD_OS_ARCH}/ubs-comm*.rpm "${HCOM_ROOT_DIR}/dist/"
