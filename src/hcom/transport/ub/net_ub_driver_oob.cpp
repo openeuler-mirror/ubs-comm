@@ -1364,12 +1364,13 @@ int NetDriverUBWithOob::SendFinishedCB(UBOpContextInfo *ctx)
     ctx->ubJetty->ReturnPostSendWr();
     auto worker = reinterpret_cast<UBWorker *>(ctx->ubJetty->GetUpContext1());
     if (ctx->opType == UBOpContextInfo::SEND || ctx->opType == UBOpContextInfo::SEND_RAW) {
-        if (ctx->opType == UBOpContextInfo::SEND && NN_UNLIKELY(memcpy_s(&(requestCtx.mHeader),
-            sizeof(UBSHcomNetTransHeader), reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr),
-            sizeof(UBSHcomNetTransHeader)) != UB_OK)) {
-            NN_LOG_ERROR("Failed to copy ctx to requestCtx");
-            return NN_ERROR;
-        } else {
+        if (ctx->opType == UBOpContextInfo::SEND) {
+            if (memcpy_s(&(requestCtx.mHeader), sizeof(UBSHcomNetTransHeader),
+                reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr), sizeof(UBSHcomNetTransHeader)) != NN_OK) {
+                    NN_LOG_ERROR("Failed to copy ctx to requestCtx");
+                    return NN_ERROR;
+                }
+        } else if (ctx->opType == UBOpContextInfo::SEND_RAW) {
             requestCtx.mHeader.Invalid();
         }
         PrintSendFinishDebug(requestCtx.mHeader, ctx);
