@@ -14,6 +14,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstdint>
+#include <algorithm>
 
 #include "hcom_def.h"
 #include "hcom_log.h"
