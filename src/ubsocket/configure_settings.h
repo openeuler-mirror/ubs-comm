@@ -29,6 +29,7 @@
 #define DEFAULT_TX_DEPTH          (128)
 #define DEFAULT_RX_DEPTH          (128)
 #define DEFAULT_IO_TOTAL_SIZE     (1024)    // MB
+#define IO_SIZE_MB                (1024 * 1024)
 #define DEFAULT_QBUF_BLOCK_TYPE   "default" // 8k
 #define LARGE_QBUF_BLOCK_TYPE     "large"   // 64k
 #define ENV_VAR_LOG_LEVEL         "RPC_ADPT_LOG_LEVEL"
@@ -240,7 +241,7 @@ protected:
 
         if ((env_ptr = getenv(ENV_VAR_POOL_INITIAL_SIZE)) != NULL) {
             uint64_t total_size = static_cast<uint64_t>(atoi(env_ptr));
-            m_io_total_size = total_size == 0 ? DEFAULT_IO_TOTAL_SIZE : total_size;
+            m_io_total_size = total_size == 0 ? DEFAULT_IO_TOTAL_SIZE * IO_SIZE_MB : total_size * IO_SIZE_MB;
         }
         if ((env_ptr = getenv(ENV_VAR_BLOCK_TYPE)) != NULL) {
             ReadEnvVar(env_ptr, m_block_type_str, sizeof(m_block_type_str));
@@ -274,7 +275,7 @@ protected:
     char m_block_type_str[BLOCK_TYPE_STR_LEN_MAX] = "";
     uint32_t m_tx_depth = DEFAULT_TX_DEPTH;
     uint32_t m_rx_depth = DEFAULT_RX_DEPTH;
-    uint64_t m_io_total_size = DEFAULT_IO_TOTAL_SIZE;
+    uint64_t m_io_total_size = DEFAULT_IO_TOTAL_SIZE * IO_SIZE_MB;
     util_vlog_level_t m_log_level;
     umq_trans_mode_t m_trans_mode;
     umq_buf_block_size_t m_block_type = BLOCK_SIZE_8K;
