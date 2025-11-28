@@ -19,7 +19,17 @@ else()
     set(CMAKE_CXX_FLAGS  "${CMAKE_FLAGS_PUBILC} ${CMAKE_FLAGS_x86_64} -std=c++11")
 endif()
 
-include_directories(/usr/include/ub/umdk/urpc/umq/)
+if (NOT DEFINE UMQ_INCLUDE OR UMQ_INCLUDE STREQUAL "")
+    set(UMQ_INCLUDE "/usr/include/ub/umdk/urpc/umq/")
+endif()
+if (NOT DEFINE UMQ_LIB OR UMQ_LIB STREQUAL "")
+    set(UMQ_LIB "/usr/lib64/libumq.so")
+endif()
+
+message(status "UMQ_INCLUDE: ${UMQ_INCLUDE}")
+message(status "UMQ_LIB: ${UMQ_LIB}")
+
+include_directories(${UMQ_INCLUDE})
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR} COMMON_RPC_ADPT_SRC)
 add_subdirectory(brpc)
 
