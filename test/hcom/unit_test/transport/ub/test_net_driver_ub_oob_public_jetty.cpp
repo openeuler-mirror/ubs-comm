@@ -1071,7 +1071,6 @@ TEST_F(TestNetDriverUBPublicJetty, ServerEstablishCtrlConn)
 {
     JettyConnHeader exchangeInfo{};
     MOCKER_CPP(&UBPublicJetty::StartPublicJetty).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(&UBPublicJetty::SetBondingInfo).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::ImportPublicJetty).stubs().will(returnValue(1)).then(returnValue(0));
 
     EXPECT_EQ(driver->ServerEstablishCtrlConn(nullptr, jetty), NN_PARAM_INVALID);

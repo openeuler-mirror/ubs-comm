@@ -86,18 +86,21 @@ if (NOT EXISTS ${GTEST_INSTALL_DIR})
 endif()
 
 set(HCOM_UT hcom_ut)
-add_executable(${HCOM_UT} ${SOURCE_FILES})
 
-target_include_directories(${HCOM_UT} PRIVATE ${GTEST_INSTALL_DIR}/include)
 link_directories(${GTEST_INSTALL_DIR}/lib64)
 
+message("TEST_TOOL_INSTALL_PATH: ${TEST_TOOL_INSTALL_PATH}")
 # include&link mockcpp
 set(MOCKCPP_INSTALL_DIR "${TEST_TOOL_INSTALL_PATH}/mockcpp")
 if (NOT EXISTS ${MOCKCPP_INSTALL_DIR})
     message(ERROR "MOCKCPP_INSTALL_DIR(${MOCKCPP_INSTALL_DIR}) is invalid")
 endif()
-target_include_directories(${HCOM_UT} PRIVATE ${MOCKCPP_INSTALL_DIR}/include)
 link_directories(${MOCKCPP_INSTALL_DIR}/lib)
+link_directories(${HCOM_OUTPUT_PATH}/hcom_3rdparty/libboundscheck/lib/)
+add_executable(${HCOM_UT} ${SOURCE_FILES})
+
+target_include_directories(${HCOM_UT} PRIVATE ${GTEST_INSTALL_DIR}/include)
+target_include_directories(${HCOM_UT} PRIVATE ${MOCKCPP_INSTALL_DIR}/include)
 # collect hcom source files
 target_include_directories(${HCOM_UT} PRIVATE ${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/)
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/)
@@ -116,9 +119,8 @@ target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/trans
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/common)
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/api/capi_v2)
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/common/trace)
-target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/tmp_build_dir/_deps/umdk-src/src/urma/lib/urma/core/include)
-target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/tmp_build_dir/_deps/umdk-src/src/urma/lib/urma/bond/include)
-target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/tmp_build_dir/_deps/libboundscheck-src/include)
+target_include_directories(${HCOM_UT} PRIVATE ${HCOM_OUTPUT_PATH}/hcom_3rdparty/umdk/urma/include)
+target_include_directories(${HCOM_UT} PRIVATE ${HCOM_OUTPUT_PATH}/hcom_3rdparty/libboundscheck/include)
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${HCOM_UT} PRIVATE ${HCOM_STUB_SRC_DIR})
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/api/capi_v2/)
@@ -158,7 +160,7 @@ set(CXX_FLAGS
     #-fPIC will cause failure while mocking system functions
 )
 string(REPLACE ";" " " CMAKE_CXX_FLAGS "${CXX_FLAGS}")
-set(DEPEND_LIBS rt pthread gtest gcov mockcpp dl boundscheck fake_ibv_static)
+set(DEPEND_LIBS rt pthread gtest gcov mockcpp dl fake_ibv_static boundscheck)
 target_compile_options(${HCOM_UT} PUBLIC -D_GNU_SOURCE)
 set_target_properties(${HCOM_UT} PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 set_target_properties(${HCOM_UT} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")

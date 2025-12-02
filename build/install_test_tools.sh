@@ -40,7 +40,7 @@ mkdir -p ${TEST_TOOL_BUILD_DIR}
 
 # prepare googletest
 cd ${TEST_TOOL_BUILD_DIR}
-git clone https://github.com/google/googletest.git
+git clone https://codehub.devcloud.cn-north-4.huaweicloud.com/aca5f619a7a34d3fb99b76a842fda236/googletest.git
 cd googletest
 git checkout -b release-1.12.1 release-1.12.1
 mkdir build && cd build
@@ -52,7 +52,7 @@ echo "${HCOM_LOG_TAG} googletest install to ${GTEST_INSTALL_PATH} success."
 
 # prepare mockcpp
 cd ${TEST_TOOL_BUILD_DIR}
-git clone https://github.com/sinojelly/mockcpp.git
+git clone https://codehub.devcloud.cn-north-4.huaweicloud.com/aca5f619a7a34d3fb99b76a842fda236/mockcpp.git
 cd mockcpp
 git checkout -b mockcpp_arm v2.7
 git -c user.name='Jenkins' -c user.email='jenkins@local' am --ignore-whitespace -3 ${HCOM_ROOT_DIR}/test/hcom/external_libs/mockcpp_support_arm64.patch

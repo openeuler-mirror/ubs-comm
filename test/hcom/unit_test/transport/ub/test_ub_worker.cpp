@@ -814,6 +814,7 @@ TEST_F(TestUbWorker, TestProcessPollingResultTwo)
     ASSERT_NE(driver, nullptr);
     ASSERT_NE(ep, nullptr);
 
+    UBOpContextInfo contextInfo{};
     // status 9 必定会导致jetty 为 error 状态
     contextInfo.ubJetty->mState = UBJettyState::ERROR;
     worker->mJettyPtrMap.Emplace(0, jetty);
