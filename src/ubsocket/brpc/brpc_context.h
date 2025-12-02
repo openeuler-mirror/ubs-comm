@@ -168,6 +168,12 @@ class Context : public Brpc::ConfigSettings {
             return;
         }
 
+        if (GetLogUse()) {
+            if (RpcAdptSetLogCtx() != UMQ_SUCCESS) {
+                RPC_ADPT_VLOG_WARN("Log output via printf is disabled; messages will be sent to syslog.\n");
+            }
+        }
+
         SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_UMQ);
 
         if (m_stats_enable) {

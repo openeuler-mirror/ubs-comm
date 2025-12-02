@@ -27,6 +27,8 @@
 
 util_vlog_ctx_t *RpcAdptGetLogCtx(void);
 
+int RpcAdptSetLogCtx();
+
 static ALWAYS_INLINE void RpcAdptVlogCtxSet(util_vlog_level_t level, char *vlog_name)
 {
     // use temp context to avoid modifications to default configurations caused by exceptions during context creation.

@@ -41,6 +41,7 @@
 #define ENV_VAR_STATS             "RPC_ADPT_STATS"
 #define ENV_VAR_BLOCK_TYPE        "RPC_ADPT_BLOCK_TYPE"        // default, large
 #define ENV_VAR_POOL_INITIAL_SIZE "RPC_ADPT_POOL_INITIAL_SIZE" // MB
+#define ENV_LOG_USE_PRINTF        "RPC_ADPT_LOG_USE_PRINTF" // default false
 
 template <typename T>
 class EnvStrConverter {
@@ -188,6 +189,11 @@ public:
         return m_block_type;
     }
 
+    bool GetLogUse()
+    {
+        return m_log_use_printf;
+    }
+
 protected:
     static void ReadEnvVar(char *env_ptr, char *output_str, uint32_t output_str_len)
     {
@@ -254,6 +260,11 @@ protected:
                 m_block_type = BLOCK_SIZE_8K;
             }
         }
+
+        if ((env_ptr = getenv(ENV_LOG_USE_PRINTF)) != NULL) {
+            uint32_t use_printf = static_cast<uint32_t>(atoi(env_ptr));
+            m_log_use_printf = use_printf != 0;
+        }
     }
 
     void SetSocketFdTransMode(socket_fd_trans_mode trans_mode)
@@ -284,6 +295,7 @@ protected:
     bool m_is_ipv6 = false;
     static socket_fd_trans_mode m_socket_fd_trans_mode;
     bool m_stats_enable = false;
+    bool m_log_use_printf = false;
 };
 
 #endif
