@@ -230,8 +230,9 @@ TEST_F(TestRdmaVerbsWrapper, GetMaxRdAtomic)
 {
     setenv("HCOM_MAX_RD_ATOMIC", "2", 1);
     auto ret = GetMaxRdAtomic();
+    const uint8_t RESULT = 2;
     printf("GetMaxRdAtomic ret: %d\n", ret);
-    EXPECT_EQ(ret, 2);
+    EXPECT_EQ(ret, RESULT);
 }
 
 }
