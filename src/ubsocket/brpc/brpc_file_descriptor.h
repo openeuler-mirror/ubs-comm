@@ -11,7 +11,9 @@
 #define BRPC_FILE_DESCRIPTOR_H
 
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <unordered_set>
 #include "umq_pro_api.h"
 #include "umq_errno.h"
 #include "brpc_context.h"
@@ -24,6 +26,14 @@
 #define UMQ_BIND_SYNC_MSG       "SYNC_DONE"
 #define DIVIDED_NUMBER          (2)
 #define CACHE_LINE_ALIGNMENT    (64)
+
+inline bool operator==(const umq_eid_t& a, const umq_eid_t& b) {
+    return ::memcmp(a.raw, b.raw, sizeof(a.raw)) == 0;
+}
+
+inline bool operator!=(const umq_eid_t& a, const umq_eid_t& b) {
+    return !(a==b);
+}
 
 namespace Brpc {
 
@@ -120,6 +130,36 @@ protected:
     std::vector<Statistics::Recorder> m_recorder_vec;
     int m_output_fd = -1;
     bool m_stats_enable = false;
+};
+
+struct UmqEidHash {
+    std::size_t operator()(const umq_eid_t& eid) const noexcept {
+        uint64_t h = *reinterpret_cast<const uint64_t*>(eid.raw);
+        uint64_t l = *reinterpret_cast<const uint64_t*>(eid.raw + 8);
+        return std::hash<uint64_t>{}(h) ^ (std::hash<uint64_t>{}(l) << 1);
+    }
+};
+
+class EidRegistry {
+public:
+    bool RegisterEid(const umq_eid_t& eid) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_registered_eids.insert(eid).second;
+    }
+
+    bool IsRegisteredEid(const umq_eid_t& eid) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_registered_eids.count(eid) > 0;
+    }
+
+    bool UnregisterEid(const umq_eid_t& eid) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_registered_eids.erase(eid) > 0;
+    }
+
+private:
+    mutable std::mutex m_mutex;
+    std::unordered_set<umq_eid_t, UmqEidHash> m_registered_eids;
 };
 
 class SocketFd : public ::SocketFd, public FallbackTcpMgr, public StatsMgr {
@@ -224,6 +264,44 @@ public:
         return fd;
     }
 
+    int ConnectExchangeEid(umq_eid_t *connEid){
+        Context *context = Context::GetContext();
+        if(!context->IsBonding()){
+            return 0;
+        }
+        umq_eid_t localEid = context->GetDevSrcEid();
+        if (SendSocketData(m_fd, &localEid, sizeof(umq_eid_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_eid_t)) {
+            RPC_ADPT_VLOG_ERR("Failed to send local eid message in connect, fd: %d\n", m_fd);
+            return -1;
+        }
+
+        umq_eid_t remoteEid;
+        if (RecvSocketData(
+            m_fd, &remoteEid, sizeof(umq_eid_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_eid_t)) {
+            RPC_ADPT_VLOG_ERR("Failed to receive remote eid message in connect, fd: %d\n", m_fd);
+            return -1;
+        }
+
+        *connEid = context->GetDevSrcEid();
+        if (localEid != remoteEid) {
+            umq_route_t connRoute;
+            if (GetDevRouteList(&localEid, &remoteEid, &connRoute) != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to get route list in connect, fd: %d\n", m_fd);
+                return -1;
+            }
+
+            if (RecvSocketData(
+                m_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
+                RPC_ADPT_VLOG_ERR("Failed to receive remote eid message in connect, fd: %d\n", m_fd);
+                return -1;
+            }
+
+            *connEid = connRoute.dst;
+        }
+
+        return 0;
+    }
+
     int DoConnect(void)
     {
         CpMsg local_cp_msg;
@@ -236,7 +314,13 @@ public:
             return -1;
         }
 
-        if (CreateLocalUmq() < 0) {
+        umq_eid_t connEid;
+        if (ConnectExchangeEid(&connEid) < 0) {
+            RPC_ADPT_VLOG_ERR("Failed to exchange eid in connect\n");
+            return -1;
+        }
+
+        if (CreateLocalUmq(&connEid) < 0) {
             RPC_ADPT_VLOG_ERR("Failed to create umq\n");
             return -1;
         }
@@ -807,13 +891,17 @@ private:
         uint8_t queue_bind_info[UMQ_BIND_INFO_SIZE_MAX];
     };
     
-    int CreateLocalUmq(void)
+    int CreateLocalUmq(umq_eid_t *connEid)
     {
         if (m_local_umqh != UMQ_INVALID_HANDLE) {
             return EEXIST;
         }
 
         Context *context = Context::GetContext();
+        if (context->IsBonding() && connEid == nullptr){
+            RPC_ADPT_VLOG_ERR("Failed to use eid, because eid is null\n");
+            return -1;
+        }
         umq_create_option_t queue_cfg;
         memset_s(&queue_cfg, sizeof(queue_cfg), 0, sizeof(queue_cfg));
         queue_cfg.trans_mode = context->GetTransMode();
@@ -846,11 +934,17 @@ private:
                 }     
             }
         } else if (context -> GetDevNameStr() != nullptr) {
-            queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
             if (strcpy_s(queue_cfg.dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, context->GetDevNameStr()) != EOK) {
                 RPC_ADPT_VLOG_ERR("Failed to strcpy_s device name\n");
                 return -1;
-            }  
+            }
+            if(!context->IsBonding()){
+                queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
+            } else {
+                // init use bonding dev
+                queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+                queue_cfg.dev_info.eid.eid = *connEid;
+            }
         }
 
         m_local_umqh = umq_create(&queue_cfg);
@@ -937,6 +1031,45 @@ private:
         return rx_total_len;
     }
 
+    int AcceptExchangeEid(int new_fd, umq_eid_t *connEid){
+        Context *context = Context::GetContext();
+        if(!context->IsBonding()){
+            return 0;
+        }
+
+        umq_eid_t remoteEid;
+        if (RecvSocketData(
+            new_fd, &remoteEid, sizeof(umq_eid_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_eid_t)) {
+            RPC_ADPT_VLOG_ERR("Failed to receive remote eid message in accept, fd: %d\n", new_fd);
+            return -1;
+        }
+
+        umq_eid_t localEid = context->GetDevSrcEid();
+        if (SendSocketData(new_fd, &localEid, sizeof(umq_eid_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_eid_t)) {
+            RPC_ADPT_VLOG_ERR("Failed to send local eid message in accept, fd: %d\n", new_fd);
+            return -1;
+        }
+
+        *connEid = context->GetDevSrcEid();
+        if (localEid != remoteEid) {
+            umq_route_t connRoute;
+            if (GetDevRouteList(&localEid, &remoteEid, &connRoute) != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to get route list in accept, fd: %d\n", new_fd);
+                return -1;
+            }
+
+            if (SendSocketData(
+                new_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
+                RPC_ADPT_VLOG_ERR("Failed to send connect eid message in accept, fd: %d\n", new_fd);
+                return -1;
+            }
+
+            *connEid = connRoute.src;
+        }
+
+        return 0;
+    }
+
     int DoAccept(int new_fd)
     {
         CpMsg local_cp_msg;
@@ -953,7 +1086,14 @@ private:
             return -1;
         }
 
-        if (socket_fd_obj->CreateLocalUmq() < 0) {
+        umq_eid_t connEid;
+        if (AcceptExchangeEid(new_fd, &connEid) < 0) {
+            RPC_ADPT_VLOG_ERR("Failed to exchange eid in accept\n");
+            delete socket_fd_obj;
+            return -1;
+        }
+
+        if (socket_fd_obj->CreateLocalUmq(&connEid) < 0) {
             RPC_ADPT_VLOG_ERR("Failed to create umq\n");
             delete socket_fd_obj;
             return -1;
@@ -1418,6 +1558,46 @@ private:
         return wr_cnt;
     }
 
+    int GetDevRouteList(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_t *connRoute)
+    {
+        umq_route_t route;
+        route.flag.bs.rtp = 1;
+        (void)memcpy_s(&route.src, sizeof(umq_eid_t), srcEid, sizeof(umq_eid_t));
+        (void)memcpy_s(&route.dst, sizeof(umq_eid_t), dstEid, sizeof(umq_eid_t));
+
+        umq_route_list_t route_list;
+        int ret = umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
+        if (ret!=0) {
+            RPC_ADPT_VLOG_ERR("Failed to get urma topo\n");
+            return -1;
+        }
+
+        if (route_list.len == 0) {
+            RPC_ADPT_VLOG_ERR("Failed to get urma topo is zero\n");
+            return -1;
+        }
+
+        *connRoute = route_list.buf[0];
+        if(mEidRegistry.IsRegisteredEid(*srcEid)) {
+            return 0;
+        }
+        
+        for(uint32_t i = 0;i< route_list.len; ++i){
+            umq_trans_info_t trans_info;
+            trans_info.trans_mode = UMQ_TRANS_MODE_UB;
+            trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+            trans_info.dev_info.eid.eid = route_list.buf[i].src;
+            ret = umq_dev_add(&trans_info);
+            if(ret != 0){
+                RPC_ADPT_VLOG_ERR("Failed to add umq dev\n");
+                return -1;
+            }
+        }
+
+        mEidRegistry.RegisterEid(*srcEid);
+        return 0;
+    }
+
     //common fields
     uint64_t m_local_umqh = UMQ_INVALID_HANDLE;
     uint16_t m_tx_window_capacity = 0; // the capacity of TX window size 
@@ -1426,6 +1606,7 @@ private:
     bool m_context_stats_enable = false;
     std::atomic<bool> m_closed{false};
     int m_event_fd;
+    EidRegistry mEidRegistry;
 
     // TX fields
     struct alignas(CACHE_LINE_ALIGNMENT) TxDataPlane {

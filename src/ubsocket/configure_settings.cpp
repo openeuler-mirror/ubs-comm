@@ -100,7 +100,15 @@ int ConfigSettings::ParseEnvVars()
             return -1;
         }
     }else if(strlen(m_dev_name_str) > 0){
-        RPC_ADPT_VLOG_INFO("%s: %s\n", ENV_VAR_DEV_DEV_NAME, m_dev_name_str); 
+        RPC_ADPT_VLOG_INFO("%s: %s\n", ENV_VAR_DEV_DEV_NAME, m_dev_name_str);
+        if(strlen(m_src_eid_str) > 0){
+            if(inet_pton(AF_INET6, m_src_eid_str, &(m_src_eid)) == 1){
+                RPC_ADPT_VLOG_INFO("%s: %s (eid)\n", ENV_VAR_DEV_SRC_EID, m_src_eid_str);
+            }else {
+                RPC_ADPT_VLOG_ERR("Eid is invalid. Please double check your input(%s)\n", m_src_eid_str);
+                return -1;
+            }
+        } 
     }else {
          RPC_ADPT_VLOG_ERR("No device information is provided, such as device IP or device name\n");
          return -1;

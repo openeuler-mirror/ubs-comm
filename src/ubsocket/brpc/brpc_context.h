@@ -17,6 +17,7 @@
 #include "brpc_iobuf_adapter.h"
 #include "brpc_dynsym_scanner.h"
 #include "statistics.h"
+#include "umq_types.h"
 
 namespace Brpc {
 
@@ -66,6 +67,11 @@ class Context : public Brpc::ConfigSettings {
             default:
                 break;    
         }
+    }
+
+    bool IsBonding()
+    {
+        return isBonding;
     }
 
     private:
@@ -150,7 +156,6 @@ class Context : public Brpc::ConfigSettings {
         } else if ((dev_info = GetDevNameStr()) != nullptr) {
             umq_config.trans_info[0].mem_cfg.total_size = GetIOTotalSize();
             umq_config.trans_info[0].trans_mode = GetTransMode();
-            umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
             ret = sprintf_s(umq_config.trans_info[0].dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, "%s", dev_info);
             if (ret < 0 || ret >= UMQ_DEV_NAME_SIZE) {
                 RPC_ADPT_VLOG_ERR("Failed to sprintf_s device name\n");
@@ -158,12 +163,19 @@ class Context : public Brpc::ConfigSettings {
                 SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
                 return;
             }
-            umq_config.eid_idx = GetEidIdx();
+            if (strcmp(umq_config.trans_info[0].dev_info.dev.dev_name, "bonding_dev_0") != 0){
+                umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
+                umq_config.trans_info[0].dev_info.dev.eid_idx = GetEidIdx();
+            }else{
+                umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+                umq_config.trans_info[0].dev_info.eid.eid = GetDevSrcEid();
+                isBonding = true;
+            }
         }
 
         ret = umq_init(&umq_config);
         if(ret != 0){
-            RPC_ADPT_VLOG_ERR("Failed to execute umq init");
+            RPC_ADPT_VLOG_ERR("Failed to execute umq init\n");
             ResetBrpcAllocator();
             SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
             return;
@@ -206,6 +218,7 @@ class Context : public Brpc::ConfigSettings {
     IOBuf::blockmem_deallocate_t *m_dealloc_addr = nullptr; // store scanned address of dealloc function
     IOBuf::blockmem_allocate_t m_alloc_addr_origin = nullptr; // store original alloc function address
     IOBuf::blockmem_deallocate_t m_dealloc_addr_origin = nullptr; // store original dealloc function address
+    bool isBonding = false;
 };     
 
 }

@@ -39,11 +39,12 @@
 #define ENV_VAR_DEV_DEV_NAME      "RPC_ADPT_DEV_NAME"
 #define ENV_VAR_EID_IDX           "RPC_ADPT_EID_IDX"
 #define ENV_VAR_TX_DEPTH          "RPC_ADPT_TX_DEPTH"
+#define ENV_VAR_DEV_SRC_EID       "RPC_ADPT_SRC_EID"
 #define ENV_VAR_RX_DEPTH          "RPC_ADPT_RX_DEPTH"
 #define ENV_VAR_STATS             "RPC_ADPT_STATS"
 #define ENV_VAR_BLOCK_TYPE        "RPC_ADPT_BLOCK_TYPE"        // default, large
 #define ENV_VAR_POOL_INITIAL_SIZE "RPC_ADPT_POOL_INITIAL_SIZE" // MB
-#define ENV_LOG_USE_PRINTF        "RPC_ADPT_LOG_USE_PRINTF" // default false
+#define ENV_LOG_USE_PRINTF        "RPC_ADPT_LOG_USE_PRINTF" // default 0, 0 false; 1 true
 
 template <typename T>
 class EnvStrConverter {
@@ -196,6 +197,11 @@ public:
         return m_block_type;
     }
 
+    umq_eid_t GetDevSrcEid()
+    {
+        return m_src_eid;
+    }
+
     bool GetLogUse()
     {
         return m_log_use_printf;
@@ -239,6 +245,10 @@ protected:
             both of them use default value directly*/
             uint32_t input_eid_idx = static_cast<uint32_t>(atoi(env_ptr));
             m_eid_idx = input_eid_idx == 0 ? DEFAULT_EID_IDX : input_eid_idx;
+        }
+
+        if((env_ptr = getenv(ENV_VAR_DEV_SRC_EID)) != NULL){
+            ReadEnvVar(env_ptr,m_src_eid_str,sizeof(m_src_eid_str));
         }
 
         if((env_ptr = getenv(ENV_VAR_TX_DEPTH))!=NULL){
@@ -299,6 +309,8 @@ protected:
     char m_stats_str[BOOL_STR_LEN_MAX] = "";
     char m_block_type_str[BLOCK_TYPE_STR_LEN_MAX] = "";
     uint32_t m_eid_idx = DEFAULT_EID_IDX;
+    char m_src_eid_str[BLOCK_TYPE_STR_LEN_MAX] = "";
+    umq_eid_t m_src_eid;
     uint32_t m_tx_depth = DEFAULT_TX_DEPTH;
     uint32_t m_rx_depth = DEFAULT_RX_DEPTH;
     uint64_t m_io_total_size = DEFAULT_IO_TOTAL_SIZE * IO_SIZE_MB;
