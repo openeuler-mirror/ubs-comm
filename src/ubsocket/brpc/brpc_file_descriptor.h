@@ -940,6 +940,7 @@ private:
             }
             if(!context->IsBonding()){
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
+                queue_cfg.dev_info.dev.eid_idx = GetEidIdx();
             } else {
                 // init use bonding dev
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
