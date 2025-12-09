@@ -1474,11 +1474,12 @@ private:
         return poll_num;
     }
 
-    ALWAYS_INLINE uint16_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, uint16_t unsolicited_wr_num,
+    ALWAYS_INLINE uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, uint16_t unsolicited_wr_num,
         uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num)
     {
         umq_buf_t *cur_qbuf = head_qbuf;
         umq_buf_t *last_qbuf = nullptr;
+        umq_buf_t *head_qbuf_ = head_qbuf;
         uint32_t wr_cnt = 0;
         uint16_t _unsolicited_wr_num = unsolicited_wr_num;
         uint32_t _unsolicited_bytes = unsolicited_bytes;
@@ -1513,7 +1514,9 @@ private:
             }
 
             if (buf_pro->flag.bs.complete_enable == 1) {
-                QBUF_LIST_FIRST(&m_tx.m_head_buf) = cur_qbuf;
+                /* If the last successfully posted wr has 'complete_enable' set, it means no need to cache
+                 * the posted qbuf list anymore, then reset head to nullptr */
+                head_qbuf_ = (cur_qbuf != bad_qbuf) ? cur_qbuf : nullptr;
             }
                 
             wr_cnt++;
@@ -1524,8 +1527,11 @@ private:
         m_tx.m_unsignaled_wr_num = _unsignaled_wr_num;
         m_tx.m_window_size -= wr_cnt;
 
+        QBUF_LIST_FIRST(&m_tx.m_head_buf) = head_qbuf_;
         if (last_qbuf != nullptr) {
-            QBUF_LIST_FIRST(&m_tx.m_tail_buf) = last_qbuf;
+            /* If head set to nullptr, it means no need to cache the posted qbuf list anymore, reset head
+             * to nullptr as well */
+            QBUF_LIST_FIRST(&m_tx.m_tail_buf) = (head_qbuf_ == nullptr) ? nullptr : last_qbuf;
             QBUF_LIST_NEXT(last_qbuf) = nullptr;
         }
 
@@ -1533,7 +1539,7 @@ private:
         return total_size;
     }
     
-    ALWAYS_INLINE uint16_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf)
+    ALWAYS_INLINE uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf)
     {
         umq_buf_t *cur_qbuf = head_qbuf;
         umq_buf_t *last_qbuf = nullptr;
