@@ -1133,6 +1133,8 @@ public:
 
     virtual void GetVa(uint64_t &va, uint64_t &vaLen, uint32_t &tokenId) = 0;
 
+    virtual uint8_t *GetEidRaw() = 0;
+    
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
 protected:
@@ -1881,6 +1883,12 @@ public:
     virtual NResult CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr,
                                        unsigned long memid) = 0;
 
+    virtual NResult ImportUrmaSeg(uintptr_t address, uint64_t size, uint64_t key, void **tSeg, uint8_t *eid,
+        uint32_t eidLen)
+    {
+        NN_LOG_ERROR("ImportUrmaSeg not supported in other protocol, only UBC");
+        return NN_ERROR;
+    }
     /**
      * @brief Unregister the memory region
      *

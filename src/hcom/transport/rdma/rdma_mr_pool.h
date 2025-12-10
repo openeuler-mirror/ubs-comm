@@ -50,6 +50,10 @@ public:
     {
         return;
     }
+    uint8_t *GetEidRaw() override
+    {
+        return nullptr;
+    }
 
 public:
     RDMAContext *mRDMAContext = nullptr;

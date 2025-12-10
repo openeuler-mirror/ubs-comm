@@ -1755,6 +1755,7 @@ SerResult HcomChannelImp::OneSideSyncWithSelfPoll(const UBSHcomOneSideRequest &r
         UBSHcomNetTransRequest req(request.lAddress + offset, request.rAddress + offset,
             request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size, 0);
         req.srcSeg = reinterpret_cast<void *>(request.lKey.tokens[ep->GetDevIndex()]);
+        req.dstSeg = reinterpret_cast<void *>(request.rKey.tokens[ep->GetDevIndex()]);
         if (isWrite) {
             result = ep->PostWrite(req);
         } else {
@@ -1832,6 +1833,7 @@ SerResult HcomChannelImp::OneSideSyncWithWorkerPoll(const UBSHcomOneSideRequest 
             request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size,
             sizeof(SerTransContext));
         req.srcSeg = reinterpret_cast<void *>(request.lKey.tokens[ep->GetDevIndex()]);
+        req.dstSeg = reinterpret_cast<void *>(request.rKey.tokens[ep->GetDevIndex()]);
         SetServiceTransCtx(req.upCtxData, syncContext.seqNo);
 
         if (isWrite) {
@@ -1938,6 +1940,7 @@ SerResult HcomChannelImp::OneSideAsyncWithWorkerPoll(const UBSHcomOneSideRequest
             request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size,
             sizeof(SerTransContext));
         req.srcSeg = reinterpret_cast<void *>(request.lKey.tokens[ep->GetDevIndex()]);
+        req.dstSeg = reinterpret_cast<void *>(request.rKey.tokens[ep->GetDevIndex()]);
         SetServiceTransCtx(req.upCtxData, readContext.seqNo);
 
         if (isWrite) {

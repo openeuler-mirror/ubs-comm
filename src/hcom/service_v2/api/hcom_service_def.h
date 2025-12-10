@@ -15,6 +15,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "securec.h"
+
 #include "hcom.h"
 #include "hcom_def.h"
 #include "hcom_num_def.h"
@@ -89,6 +91,7 @@ struct UBSHcomSglRequest {
 struct UBSHcomMemoryKey {
     uint64_t keys[4];
     uint64_t tokens[4];
+    uint8_t eid[16];
 };
 
 struct UBSHcomOneSideRequest {
@@ -192,6 +195,14 @@ public:
             }
             mrKey.keys[i] = mHcomMrs[i]->GetLKey();
             mrKey.tokens[i] = reinterpret_cast<uint64_t>(mHcomMrs[i]->GetMemorySeg());
+        }
+        if (mHcomMrs.size() > 0 && mHcomMrs[0]->GetEidRaw() != nullptr) {
+            auto ret = memcpy_s(mrKey.eid, sizeof(mrKey.eid), mHcomMrs[0]->GetEidRaw(), sizeof(mrKey.eid));
+            if (ret != 0) {
+                NN_LOG_WARN("memcpy eid failed");
+            }
+        } else {
+            NN_LOG_DEBUG("get eid not supported");
         }
     }
 
