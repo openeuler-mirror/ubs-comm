@@ -112,6 +112,7 @@ public:
      * @param mr 取消的mr
      */
     virtual void DestroyMemoryRegion(UBSHcomRegMemoryRegion &mr) = 0;
+    virtual int32_t ImportUrmaSeg(uintptr_t address, uint64_t size, UBSHcomMemoryKey &key) = 0;
 
     /**
      * @brief 设置RegisterMemoryRegion是否将mr信息放入pgTable管理

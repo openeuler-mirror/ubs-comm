@@ -728,6 +728,31 @@ int ubs_hcom_service_register_assign_memory_region(ubs_hcom_service service, uin
     return SER_OK;
 }
 
+int ubs_hcom_reg_seg(ubs_hcom_service service, uintptr_t address, uint64_t size, ubs_hcom_oneside_key *key)
+{
+    VALIDATE_SERVICE(service);
+ 
+    UBSHcomMemoryKey mrKey;
+    auto result = memcpy_s(&mrKey, sizeof(UBSHcomMemoryKey), key, sizeof(ubs_hcom_oneside_key));
+    if (result != 0) {
+        NN_LOG_ERROR("Failed to register seg as memcpy_s input failed");
+        return result;
+    }
+ 
+    result = reinterpret_cast<UBSHcomService *>(service)->ImportUrmaSeg(address, size, mrKey);
+    if (NN_UNLIKELY(result != NN_OK)) {
+        NN_LOG_ERROR("Failed to register seg");
+        return result;
+    }
+    result = memcpy_s(key, sizeof(ubs_hcom_oneside_key), &mrKey, sizeof(UBSHcomMemoryKey));
+    if (result != 0) {
+        NN_LOG_ERROR("Failed to register seg as memcpy_s to output failed");
+        return result;
+    }
+    NN_LOG_DEBUG("ImportUrmaSeg success with key: " << mrKey.keys[0] << ", size: " << size);
+    return SER_OK;
+}
+
 int ubs_hcom_service_get_memory_region_info(ubs_hcom_memory_region mr, ubs_hcom_mr_info *info)
 {
     VALIDATE_MR(mr);

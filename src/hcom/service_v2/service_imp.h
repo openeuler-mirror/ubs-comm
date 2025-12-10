@@ -161,6 +161,7 @@ public:
      * @return int32_t 成功：0；失败：错误码
      */
     int32_t RegisterMemoryRegion(uintptr_t address, uint64_t size, UBSHcomRegMemoryRegion &mr) override;
+    int32_t ImportUrmaSeg(uintptr_t address, uint64_t size, UBSHcomMemoryKey &key) override;
 
     /**
      * @brief memory region取消注册

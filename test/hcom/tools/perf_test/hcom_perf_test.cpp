@@ -140,7 +140,10 @@ void RunTest(const PerfTestConfig &cfg, PerfTestReportBase *report)
     report->PrintReportTail();
     pTest->UnInitialize();
 }
+}
+}
 
+using namespace hcom::perftest;
 int main(int argc, char *argv[])
 {
     // Parse parameters and check for conflicts
@@ -161,6 +164,4 @@ int main(int argc, char *argv[])
     RunTest(cfg, report);
 
     return 0;
-}
-}
 }

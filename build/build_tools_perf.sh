@@ -14,7 +14,7 @@ set -e
 readonly HCOM_LOG_TAG="[$(basename ${0})]"
 readonly CURRENT_SCRIPT_DIR=$(realpath $(dirname ${0}))
 readonly HCOM_ROOT_DIR=$(dirname ${CURRENT_SCRIPT_DIR})
-readonly HCOM_TOOLS_PERF_DIR="${HCOM_ROOT_DIR}/test/tools/perf_test/build"
+readonly HCOM_TOOLS_PERF_DIR="${HCOM_ROOT_DIR}/test/hcom/tools/perf_test/build"
 
 # default tools build type is release
 if [ "${HCOM_TOOLS_BUILD_TYPE,,}" == "debug" ]; then

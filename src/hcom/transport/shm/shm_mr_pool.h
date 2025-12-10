@@ -33,6 +33,10 @@ public:
     {
         return;
     }
+    uint8_t *GetEidRaw() override
+    {
+        return nullptr;
+    }
 
 public:
     ShmMemoryRegion(const std::string &name, bool extMem, uintptr_t extMemAddress, uint64_t size)

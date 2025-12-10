@@ -41,6 +41,11 @@ public:
         return;
     }
 
+    uint8_t *GetEidRaw() override
+    {
+        return nullptr;
+    }
+
 private:
     std::mutex mMutex;
     bool mInited = false;
