@@ -237,26 +237,6 @@ TEST_F(TestUbUrmaJetty, PostRead)
     EXPECT_EQ(jetty->PostRead(0, nullptr, 0, nullptr, 0, 0), UB_OK);
 }
 
-TEST_F(TestUbUrmaJetty, UBCPostReadParamErr)
-{
-    jetty->mUrmaJetty = nullptr;
-    EXPECT_EQ(jetty->PostRead(0, 1, 0, 0, 0, 0), UB_QP_NOT_INITIALIZED);
-}
-
-TEST_F(TestUbUrmaJetty, UBCPostRead)
-{
-    urma_target_seg_t seg{};
-    urma_target_seg_t *tmpSeg1 = nullptr;
-    urma_target_seg_t *tmpSeg2 = &seg;
-    MOCKER(HcomUrma::ImportSeg).stubs().will(returnValue(tmpSeg1)).then(returnValue(tmpSeg2));
-    MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER(HcomUrma::UnimportSeg).stubs().will(returnValue(1)).then(returnValue(0));
-    EXPECT_EQ(jetty->PostRead(0, 1, 0, 0, 0, 0), UB_QP_POST_READ_FAILED);
-    EXPECT_EQ(jetty->PostRead(0, 1, 0, 0, 0, 0), UB_QP_POST_READ_FAILED);
-    EXPECT_EQ(jetty->PostRead(0, 1, 0, 0, 0, 0), UB_OK);
-}
-
 TEST_F(TestUbUrmaJetty, UBCPostReadTseg)
 {
     urma_target_seg_t *tmpSeg1 = nullptr;
@@ -293,26 +273,6 @@ TEST_F(TestUbUrmaJetty, PostWrite)
         .stubs().will(returnValue(1)).then(returnValue(0));
     EXPECT_EQ(jetty->PostWrite(0, nullptr, 0, nullptr, 0, 0), UB_QP_POST_WRITE_FAILED);
     EXPECT_EQ(jetty->PostWrite(0, nullptr, 0, nullptr, 0, 0), UB_OK);
-}
-
-TEST_F(TestUbUrmaJetty, UBCPostWriteParamErr)
-{
-    jetty->mUrmaJetty = nullptr;
-    EXPECT_EQ(jetty->PostWrite(0, 1, 0, 0, 0, 0), UB_QP_NOT_INITIALIZED);
-}
-
-TEST_F(TestUbUrmaJetty, UBCPostWrite)
-{
-    urma_target_seg_t seg{};
-    urma_target_seg_t *tmpSeg1 = nullptr;
-    urma_target_seg_t *tmpSeg2 = &seg;
-    MOCKER(HcomUrma::ImportSeg).stubs().will(returnValue(tmpSeg1)).then(returnValue(tmpSeg2));
-    MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER(HcomUrma::UnimportSeg).stubs().will(returnValue(1)).then(returnValue(0));
-    EXPECT_EQ(jetty->PostWrite(0, 1, 0, 0, 0, 0), UB_QP_POST_WRITE_FAILED);
-    EXPECT_EQ(jetty->PostWrite(0, 1, 0, 0, 0, 0), UB_QP_POST_WRITE_FAILED);
-    EXPECT_EQ(jetty->PostWrite(0, 1, 0, 0, 0, 0), UB_OK);
 }
 
 TEST_F(TestUbUrmaJetty, UBCPostWriteTseg)

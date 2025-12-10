@@ -273,7 +273,6 @@ int ubs_hcom_channel_send(ubs_hcom_channel channel, ubs_hcom_channel_request req
 
     auto result = innerChannel->Send(request, newCallback);
     if (NN_UNLIKELY(result != SER_OK)) {
-        delete newCallback;
         return result;
     }
 
@@ -311,7 +310,6 @@ int ubs_hcom_channel_call(ubs_hcom_channel channel, ubs_hcom_channel_request req
 
     auto result = innerChannel->Call(request, response, newCallback);
     if (NN_UNLIKELY(result != SER_OK)) {
-        delete newCallback;
         return result;
     }
 
@@ -344,7 +342,6 @@ int ubs_hcom_channel_reply(ubs_hcom_channel channel, ubs_hcom_channel_request re
 
     auto result = innerChannel->Reply(replyCtx, request, newCallback);
     if (NN_UNLIKELY(result != SER_OK)) {
-        delete newCallback;
         return result;
     }
 
@@ -379,7 +376,6 @@ int ubs_hcom_channel_put(ubs_hcom_channel channel, ubs_hcom_oneside_request req,
     }
     auto result = innerChannel->Put(oneSideReq, newCallback);
     if (NN_UNLIKELY(result != SER_OK)) {
-        delete newCallback;
         return result;
     }
 
@@ -414,7 +410,6 @@ int ubs_hcom_channel_get(ubs_hcom_channel channel, ubs_hcom_oneside_request req,
     }
     auto result = innerChannel->Get(oneSideReq, newCallback);
     if (NN_UNLIKELY(result != SER_OK)) {
-        delete newCallback;
         return result;
     }
 
