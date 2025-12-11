@@ -434,7 +434,7 @@ public:
         return 65535;
     }
 
-    static const uint32_t SGE_MAX = 16;
+    static const uint32_t SGE_MAX = 6;
     // currently, the upper limit of post batch for umq is 64
     static const uint32_t POST_BATCH_MAX = 64;
     // currently, poll batch use 32 is for the balance of performance and efficiency  
