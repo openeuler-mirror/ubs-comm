@@ -36,14 +36,14 @@ static void DefaultPrintfOutput(int level, char *logMsg)
         time.tm_min, time.tm_sec, (long)tval.tv_usec, g_log_level_to_str[level], logMsg);
 }
 
-int RpcAdptSetLogCtx()
+int RpcAdptSetLogCtx(util_vlog_level_t level)
 {
     g_rpc_adpt_vlog_ctx.vlog_output_func = DefaultPrintfOutput;
 
     umq_log_config_t log_cfg = {
         .log_flag = UMQ_LOG_FLAG_FUNC | UMQ_LOG_FLAG_LEVEL,
         .func = DefaultPrintfOutput,
-        .level = UMQ_LOG_LEVEL_DEBUG
+        .level = static_cast<umq_log_level_t>(level)
     };
 
     int ret = umq_log_config_set(&log_cfg);

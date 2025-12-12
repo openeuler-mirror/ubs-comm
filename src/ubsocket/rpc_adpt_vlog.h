@@ -27,7 +27,7 @@
 
 util_vlog_ctx_t *RpcAdptGetLogCtx(void);
 
-int RpcAdptSetLogCtx();
+int RpcAdptSetLogCtx(util_vlog_level_t level);
 
 static ALWAYS_INLINE void RpcAdptVlogCtxSet(util_vlog_level_t level, char *vlog_name)
 {

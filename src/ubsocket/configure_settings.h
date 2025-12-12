@@ -227,11 +227,6 @@ protected:
         if ((env_ptr = getenv(ENV_LOG_USE_PRINTF)) != NULL) {
             uint32_t use_printf = static_cast<uint32_t>(atoi(env_ptr));
             m_log_use_printf = use_printf != 0;
-            if(m_log_use_printf){
-                if (RpcAdptSetLogCtx() != UMQ_SUCCESS) {
-                    RPC_ADPT_VLOG_WARN("Log output via printf is disabled; messages will be sent to syslog.\n");
-                }
-            }
         }
 
         if((env_ptr = getenv(ENV_VAR_LOG_LEVEL)) != NULL){

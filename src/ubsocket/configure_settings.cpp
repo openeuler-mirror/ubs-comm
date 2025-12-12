@@ -78,6 +78,11 @@ ConfigSettings::socket_fd_trans_mode ConfigSettings::m_socket_fd_trans_mode = SO
 int ConfigSettings::ParseEnvVars()
 {
     m_log_level = util_vlog_level_converter_from_str(m_log_level_str,UTIL_VLOG_LEVEL_INFO);
+    if(m_log_use_printf){
+        if (RpcAdptSetLogCtx(m_log_level) != UMQ_SUCCESS) {
+            RPC_ADPT_VLOG_WARN("Log output via printf is disabled; messages will be sent to syslog.\n");
+        }
+    }
     RpcAdptVlogCtxSet(m_log_level,nullptr);
     RPC_ADPT_VLOG_INFO("%s: %s (input: %s)\n", ENV_VAR_LOG_LEVEL, util_vlog_level_converter_to_str(m_log_level),
       strlen(m_log_level_str) > 0 ? m_log_level_str : "(null)");

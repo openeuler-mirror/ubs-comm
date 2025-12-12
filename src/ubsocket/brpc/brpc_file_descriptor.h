@@ -1568,7 +1568,6 @@ private:
     int GetDevRouteList(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_t *connRoute)
     {
         umq_route_t route;
-        route.flag.bs.rtp = 1;
         (void)memcpy_s(&route.src, sizeof(umq_eid_t), srcEid, sizeof(umq_eid_t));
         (void)memcpy_s(&route.dst, sizeof(umq_eid_t), dstEid, sizeof(umq_eid_t));
 
@@ -1584,7 +1583,18 @@ private:
             return -1;
         }
 
-        *connRoute = route_list.buf[0];
+        for(uint32_t i = 0;i< route_list.len; ++i){
+            if(route_list.buf[i].flag.bs.rtp == 1){
+                *connRoute = route_list.buf[i];
+                break;
+            }         
+        }
+
+        if(connRoute == nullptr){
+            RPC_ADPT_VLOG_ERR("Failed to find umq dev\n");
+            return -1;
+        }
+        
         if(mEidRegistry.IsRegisteredEid(*srcEid)) {
             return 0;
         }
