@@ -1333,7 +1333,6 @@ private:
             if (IsTimeout(start, timeout_ms)) {
                 /* If a timeout is triggered here, it would indicate a memory leak.
                  * In this case, processing of unsignaled wr should not continue. */
-                err_code = SocketFd::FATAL_ERROR;
                 RPC_ADPT_VLOG_DEBUG("Flush TX operation exceeded timeout period(%u ms)\n", timeout_ms);
                 break; 
             }
@@ -1370,9 +1369,10 @@ private:
                 /* WriteV ensure total_data_size equals to the sum of all data_size, thus, do not consider
                 * the situation that rest_size would not reduced to zero */
                 while (cur_qbuf && rest_size > 0) {
-                     rest_size -= (int64_t)cur_qbuf->data_size;
-                     last_qbuf = cur_qbuf;
-                     cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
+                    rest_size -= (int64_t)cur_qbuf->data_size;
+                    last_qbuf = cur_qbuf;
+                    ((Brpc::IOBuf::Block *)PtrFloorToBoundary(cur_qbuf->buf_data))->DecRef();
+                    cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
                 }
                 
                 cached_wr_cnt++;
