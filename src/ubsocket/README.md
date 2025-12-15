@@ -62,3 +62,6 @@ UBSocket通过环境变量配置通信库的各种属性
 | RPC_ADPT_READV_UNLIMITED | 是否打开readv上报限制 |
 | RPC_ADPT_BLOCK_TYPE | 内存池的最小分片 |
 | RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，应用按需配置 |
+| RPC_ADPT_EID_IDX | 使用设备的eid编号 |
+| RPC_ADPT_LOG_LEVEL | 打印的日志级别 |
+| RPC_ADPT_LOG_USE_PRINTF | 是否将日志打印到前台 |

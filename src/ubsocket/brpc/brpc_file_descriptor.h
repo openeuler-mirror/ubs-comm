@@ -525,10 +525,18 @@ public:
                     QBUF_LIST_NEXT(buf[i]) = nullptr;
                     umq_buf_free(buf[i]);
                     continue;
-                } else if (buf[i]->total_data_size == 0) {
-                    QBUF_LIST_NEXT(buf[i]) = nullptr;
-                    umq_buf_free(buf[i]);
-                    continue;
+                } else {
+                    // try to wake up tx if necessary
+                    bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
+                    if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
+                        RPC_ADPT_VLOG_ERR("write event fd%fd failed, errno: %d\n", m_event_fd, errno);
+                    }
+
+                    if (buf[i]->total_data_size == 0) {
+                        QBUF_LIST_NEXT(buf[i]) = nullptr;
+                        umq_buf_free(buf[i]);
+                        continue;
+                    }
                 }
             }
 
@@ -726,6 +734,7 @@ public:
         } else if (bad_qbuf != nullptr) {
             if (ret == -UMQ_ERR_EAGAIN) {
                 errno = EAGAIN;
+                m_tx.m_need_fc_awake.store(true, std::memory_order_relaxed);
             } else {
                 errno = EIO;
             }
@@ -742,12 +751,12 @@ public:
                 m_tx.m_unsolicited_wr_num = _unsolicited_wr_num;
                 m_tx.m_unsolicited_bytes = _unsolicited_bytes;
                 m_tx.m_unsignaled_wr_num = _unsignaled_wr_num;
-                QBUF_LIST_FIRST(&m_tx.m_head_buf) =  head_qbuf;          
+                QBUF_LIST_FIRST(&m_tx.m_head_buf) =  head_qbuf;
                 QBUF_LIST_FIRST(&m_tx.m_tail_buf) = tail_qbuf;
                 umq_buf_free(bad_qbuf);
                 tx_total_len = 0;
             } else {
-                tx_total_len = HandleBadQBuf(tx_buf_list,bad_qbuf,
+                tx_total_len = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf,
                    _unsolicited_wr_num, _unsolicited_bytes, _unsignaled_wr_num);
             }
         }
@@ -809,8 +818,8 @@ public:
 
     ALWAYS_INLINE int RearmRxInterrupt()
     {
-        umq_interrupt_option_t tx_option = { UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX };
-        return umq_rearm_interrupt(m_local_umqh, false, &tx_option);
+        umq_interrupt_option_t rx_option = { UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX };
+        return umq_rearm_interrupt(m_local_umqh, false, &rx_option);
     }
 
     ALWAYS_INLINE int RearmTxInterrupt()
@@ -1324,7 +1333,6 @@ private:
             if (IsTimeout(start, timeout_ms)) {
                 /* If a timeout is triggered here, it would indicate a memory leak.
                  * In this case, processing of unsignaled wr should not continue. */
-                err_code = SocketFd::FATAL_ERROR;
                 RPC_ADPT_VLOG_DEBUG("Flush TX operation exceeded timeout period(%u ms)\n", timeout_ms);
                 break; 
             }
@@ -1361,9 +1369,10 @@ private:
                 /* WriteV ensure total_data_size equals to the sum of all data_size, thus, do not consider
                 * the situation that rest_size would not reduced to zero */
                 while (cur_qbuf && rest_size > 0) {
-                     rest_size -= (int64_t)cur_qbuf->data_size;
-                     last_qbuf = cur_qbuf;
-                     cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
+                    rest_size -= (int64_t)cur_qbuf->data_size;
+                    last_qbuf = cur_qbuf;
+                    ((Brpc::IOBuf::Block *)PtrFloorToBoundary(cur_qbuf->buf_data))->DecRef();
+                    cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
                 }
                 
                 cached_wr_cnt++;
@@ -1474,11 +1483,12 @@ private:
         return poll_num;
     }
 
-    ALWAYS_INLINE uint16_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, uint16_t unsolicited_wr_num,
-        uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num)
+    ALWAYS_INLINE uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
+        uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num)
     {
         umq_buf_t *cur_qbuf = head_qbuf;
         umq_buf_t *last_qbuf = nullptr;
+        umq_buf_t *head_qbuf_ = last_head_qbuf;
         uint32_t wr_cnt = 0;
         uint16_t _unsolicited_wr_num = unsolicited_wr_num;
         uint32_t _unsolicited_bytes = unsolicited_bytes;
@@ -1513,7 +1523,9 @@ private:
             }
 
             if (buf_pro->flag.bs.complete_enable == 1) {
-                QBUF_LIST_FIRST(&m_tx.m_head_buf) = cur_qbuf;
+                /* If the last successfully posted wr has 'complete_enable' set, it means no need to cache
+                 * the posted qbuf list anymore, then reset head to nullptr */
+                head_qbuf_ = (cur_qbuf != bad_qbuf) ? cur_qbuf : nullptr;
             }
                 
             wr_cnt++;
@@ -1524,8 +1536,11 @@ private:
         m_tx.m_unsignaled_wr_num = _unsignaled_wr_num;
         m_tx.m_window_size -= wr_cnt;
 
+        QBUF_LIST_FIRST(&m_tx.m_head_buf) = head_qbuf_;
         if (last_qbuf != nullptr) {
-            QBUF_LIST_FIRST(&m_tx.m_tail_buf) = last_qbuf;
+            /* If head set to nullptr, it means no need to cache the posted qbuf list anymore, reset head
+             * to nullptr as well */
+            QBUF_LIST_FIRST(&m_tx.m_tail_buf) = (head_qbuf_ == nullptr) ? nullptr : last_qbuf;
             QBUF_LIST_NEXT(last_qbuf) = nullptr;
         }
 
@@ -1533,7 +1548,7 @@ private:
         return total_size;
     }
     
-    ALWAYS_INLINE uint16_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf)
+    ALWAYS_INLINE uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf)
     {
         umq_buf_t *cur_qbuf = head_qbuf;
         umq_buf_t *last_qbuf = nullptr;
@@ -1640,6 +1655,7 @@ private:
         std::atomic<int> m_epoll_event_num{0};
         int m_expect_epoll_event_num = 0;
         bool m_get_and_ack_event = false;
+        std::atomic<bool> m_need_fc_awake{false};
     } m_tx;
 
     // RX fields
