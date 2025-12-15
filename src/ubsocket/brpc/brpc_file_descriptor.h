@@ -1592,9 +1592,11 @@ private:
             return -1;
         }
 
+        int getIndex = 0;
         for(uint32_t i = 0;i< route_list.len; ++i){
             if(route_list.buf[i].flag.bs.rtp == 1){
                 *connRoute = route_list.buf[i];
+                getIndex = i;
                 break;
             }         
         }
@@ -1604,23 +1606,22 @@ private:
             return -1;
         }
 
-        if (mEidRegistry.IsRegisteredEid(*dstEid)) {
+        
+        if(mEidRegistry.IsRegisteredEid(route_list.buf[getIndex].src)) {
             return 0;
         }
 
-        for(uint32_t i = 0;i< route_list.len; ++i){
-            umq_trans_info_t trans_info;
-            trans_info.trans_mode = UMQ_TRANS_MODE_UB;
-            trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
-            trans_info.dev_info.eid.eid = route_list.buf[i].src;
-            ret = umq_dev_add(&trans_info);
-            if(ret != 0){
-                RPC_ADPT_VLOG_ERR("Failed to add umq dev\n");
-                return -1;
-            }
-        }
-
-        mEidRegistry.RegisterEid(*dstEid);
+        umq_trans_info_t trans_info;
+        trans_info.trans_mode = UMQ_TRANS_MODE_UB;
+        trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+        trans_info.dev_info.eid.eid = route_list.buf[getIndex].src;
+        ret = umq_dev_add(&trans_info);
+        if(ret != 0 && ret != -UMQ_ERR_EEXIST){
+            RPC_ADPT_VLOG_ERR("Failed to add umq dev, ret %d\n",ret);
+            return -1;
+        } 
+        
+        mEidRegistry.RegisterEid(route_list.buf[getIndex].src);
         return 0;
     }
 
