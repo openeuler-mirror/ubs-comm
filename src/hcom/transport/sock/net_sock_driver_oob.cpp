@@ -1214,6 +1214,15 @@ NResult NetDriverSockWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
 
 NResult NetDriverSockWithOOB::HandleSockError(Sock *sock)
 {
+    UBSHcomNetEndpointPtr brokenEp = reinterpret_cast<NetAsyncEndpointSock *>(sock->UpContext());
+
+    // UBWorker 线程与心跳线程只会有一个成功
+    bool process = false;
+    if (NN_UNLIKELY(!endpointPtr->EPBrokenProcessed().compare_exchange_strong(process, true))) {
+        NN_LOG_WARN("Ep id " << endpointPtr->Id() << " broken handled by other thread");
+        return;
+    }
+
     /* sock is failure and close sock */
     NN_LOG_TRACE_INFO("Sock error " << (sock)->ToString());
 
@@ -1230,7 +1239,6 @@ NResult NetDriverSockWithOOB::HandleSockError(Sock *sock)
     OOBSecureProcess::SecProcessDelEpNum(sock->mLocalIp, sock->mListenPort, sock->PeerIpPort(),
         mOobServers);
     /* remove ep */
-    UBSHcomNetEndpointPtr brokenEp = reinterpret_cast<NetAsyncEndpointSock *>(sock->UpContext());
     sock->DecreaseRef();
     NN_ASSERT_LOG_RETURN(brokenEp.Get() != nullptr, NN_ERROR);
     brokenEp->mState.Set(NEP_BROKEN);
