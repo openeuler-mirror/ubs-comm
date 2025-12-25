@@ -48,16 +48,20 @@ $ make -j8
 
 在运行程序前通过LD_PRELOAD方式加载此通信库，将Socket API转换为UB网络的通信API，如下所示：
 ```shell
-$ env LD_PRELOAD=/path/to/lib/librpc_adapter_brpc.so RPC_ADPT_TRANS_MODE=UB RPC_ADPT_DEV_NAME="udma2" RPC_ADPT_LOG_LEVEL=info RPC_ADPT_TX_DEPTH=2048 RPC_ADPT_RX_DEPTH=2048 RPC_ADPT_READV_UNLIMITED=true RPC_ADPT_BLOCK_TYPE="large" RPC_ADPT_POOL_INITIAL_SIZE=4096 ./your_program
+$ env LD_PRELOAD=/path/to/lib/librpc_adapter_brpc.so \
+RPC_ADPT_TRANS_MODE=UB \
+RPC_ADPT_DEV_NAME="bonding_dev_0" \
+RPC_ADPT_SRC_EID="xxxx:xxxx:0000:0000:0000:0000:0100:0000" \
+RPC_ADPT_LOG_LEVEL=info \
+RPC_ADPT_TX_DEPTH=2048 \
+RPC_ADPT_RX_DEPTH=2048 \
+RPC_ADPT_READV_UNLIMITED=true \
+./your_program
 ```
-若需要使能BRPC内存块为64k，则需要通过以下方式修改
-1. 修改BRPC源码`iobuf.h`iobuf.h中`DEFAULT_BLOCK_SIZE`从8192改为65536
-2. 适配ubsocket时，需要加上配置项
-```shell
-$ RPC_ADPT_BLOCK_TYPE="large" RPC_ADPT_POOL_INITIAL_SIZE=4096
-```
-UBSocket通过环境变量配置通信库的各种属性
+> 说明：
+> 通过`urma_admin show`命令，可以查询到bonding_dev_0设备对应的eid。
 
+UBSocket通过环境变量配置通信库的各种属性
 | 环境变量 | 含义 |
 | :--- | :--- |
 | RPC_ADPT_TRANS_MODE | 协议模式 |
@@ -66,8 +70,17 @@ UBSocket通过环境变量配置通信库的各种属性
 | RPC_ADPT_TX_DEPTH | 发送队列深度 |
 | RPC_ADPT_RX_DEPTH | 接受队列深度 |
 | RPC_ADPT_READV_UNLIMITED | 是否打开readv上报限制 |
-| RPC_ADPT_BLOCK_TYPE | 内存池的最小分片 |
+| RPC_ADPT_BLOCK_TYPE | 内存池的最小分片,default(8k) small(16k) medium(32k) large(64k) |
 | RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，应用按需配置 |
-| RPC_ADPT_EID_IDX | 使用设备的eid编号 |
+| RPC_ADPT_EID_IDX | 使用普通设备的eid编号 设备为普通设备时需填写 |
+| RPC_ADPT_SRC_EID | 使用bonding设备的eid 设备为bonding设备时需填写|
 | RPC_ADPT_LOG_LEVEL | 打印的日志级别 |
 | RPC_ADPT_LOG_USE_PRINTF | 是否将日志打印到前台 |
+
+## 7 其他
+若需要使能BRPC内存块为64k，则需要通过以下方式修改
+1. 修改BRPC源码`iobuf.h`iobuf.h中`DEFAULT_BLOCK_SIZE`从8192改为65536
+2. 适配ubsocket时，需要加上配置项
+```shell
+$ RPC_ADPT_BLOCK_TYPE="large" RPC_ADPT_POOL_INITIAL_SIZE=4096
+```
