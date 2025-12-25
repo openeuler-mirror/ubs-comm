@@ -32,6 +32,8 @@
 #define DEFAULT_IO_TOTAL_SIZE     (1024)    // MB
 #define IO_SIZE_MB                (1024 * 1024)
 #define DEFAULT_QBUF_BLOCK_TYPE   "default" // 8k
+#define SMALL_QBUF_BLOCK_TYPE     "small"   // 16k
+#define MEDIUM_QBUF_BLOCK_TYPE    "medium"  // 32k
 #define LARGE_QBUF_BLOCK_TYPE     "large"   // 64k
 #define ENV_VAR_LOG_LEVEL         "RPC_ADPT_LOG_LEVEL"
 #define ENV_VAR_TRANS_MODE        "RPC_ADPT_TRANS_MODE"
@@ -42,7 +44,7 @@
 #define ENV_VAR_DEV_SRC_EID       "RPC_ADPT_SRC_EID"
 #define ENV_VAR_RX_DEPTH          "RPC_ADPT_RX_DEPTH"
 #define ENV_VAR_STATS             "RPC_ADPT_STATS"
-#define ENV_VAR_BLOCK_TYPE        "RPC_ADPT_BLOCK_TYPE"        // default, large
+#define ENV_VAR_BLOCK_TYPE        "RPC_ADPT_BLOCK_TYPE"        // default, small, medium, large
 #define ENV_VAR_POOL_INITIAL_SIZE "RPC_ADPT_POOL_INITIAL_SIZE" // MB
 #define ENV_LOG_USE_PRINTF        "RPC_ADPT_LOG_USE_PRINTF" // default 0, 0 false; 1 true
 
@@ -282,6 +284,10 @@ protected:
             ReadEnvVar(env_ptr, m_block_type_str, sizeof(m_block_type_str));
             if (memcmp(m_block_type_str, DEFAULT_QBUF_BLOCK_TYPE, strlen(m_block_type_str)) == 0) {
                 m_block_type = BLOCK_SIZE_8K;
+            } else if (memcmp(m_block_type_str, SMALL_QBUF_BLOCK_TYPE, strlen(m_block_type_str)) == 0) {
+                m_block_type = BLOCK_SIZE_16K;
+            } else if (memcmp(m_block_type_str, MEDIUM_QBUF_BLOCK_TYPE, strlen(m_block_type_str)) == 0) {
+                m_block_type = BLOCK_SIZE_32K;
             } else if (memcmp(m_block_type_str, LARGE_QBUF_BLOCK_TYPE, strlen(m_block_type_str)) == 0) {
                 m_block_type = BLOCK_SIZE_64K;
             } else {
