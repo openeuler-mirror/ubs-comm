@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) Huawei Technologies Co., Ltd. 2020-2025. All rights reserved.
 
+cmake_minimum_required(VERSION 3.12.1)
+project(umq)
+
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(CMAKE_C_COMPILER "/usr/bin/gcc")
 
