@@ -30,6 +30,13 @@
 #define RETRIEVE_THRESHOLD      (1)
 #define REPORT_THRESHOLD        (1)
 
+constexpr uint64_t SIZE_8K  = 8192;
+constexpr uint64_t SIZE_16K = 16384;
+constexpr uint64_t SIZE_32K = 32768;
+constexpr uint64_t SIZE_64K = 65536;
+constexpr uint64_t MASK_DIFF = 1;
+constexpr uint64_t IOBUF_DIFF = 32;
+
 inline bool operator==(const umq_eid_t& a, const umq_eid_t& b) {
     return ::memcmp(a.raw, b.raw, sizeof(a.raw)) == 0;
 }
@@ -420,18 +427,28 @@ public:
     // adapt to brpc, brpc IOBuf block use 8k as buffer slice with a 32 bytes head, thus, RX buffer size is 8160
     uint32_t BrpcIOBufSize()
     {
-        if (Context::GetContext()->GetIOBlockType() == BLOCK_SIZE_8K) {
-            return 8160;
+        umq_buf_block_size_t blockType = Context::GetContext()->GetIOBlockType();
+        switch (blockType) {
+            case BLOCK_SIZE_8K:  return SIZE_8K - IOBUF_DIFF;
+            case BLOCK_SIZE_16K: return SIZE_16K - IOBUF_DIFF;
+            case BLOCK_SIZE_32K: return SIZE_32K - IOBUF_DIFF;
+            case BLOCK_SIZE_64K: return SIZE_64K - IOBUF_DIFF;
+            default:
+                return SIZE_8K - IOBUF_DIFF; 
         }
-        return 65504;
     }
 
     uint64_t FloorMask()
     {
-        if (Context::GetContext()->GetIOBlockType() == BLOCK_SIZE_8K) {
-            return 8191;
+        umq_buf_block_size_t blockType = Context::GetContext()->GetIOBlockType();
+        switch (blockType) {
+            case BLOCK_SIZE_8K:  return SIZE_8K - MASK_DIFF;
+            case BLOCK_SIZE_16K: return SIZE_16K - MASK_DIFF;
+            case BLOCK_SIZE_32K: return SIZE_32K - MASK_DIFF;
+            case BLOCK_SIZE_64K: return SIZE_64K - MASK_DIFF;
+            default:
+                return SIZE_8K - MASK_DIFF; 
         }
-        return 65535;
     }
 
     static const uint32_t SGE_MAX = 6;
