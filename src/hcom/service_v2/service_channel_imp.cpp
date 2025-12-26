@@ -1440,7 +1440,6 @@ SerResult HcomChannelImp::AsyncCallInner(const UBSHcomRequest &req, const Callba
     if (NN_UNLIKELY(result != SER_OK)) {
         NN_LOG_ERROR("Channel async call send failed " << result << " ep id " << ep->Id());
         DestroyTimerContext(context);
-        delete done;
         return result;
     }
     return SER_OK;
