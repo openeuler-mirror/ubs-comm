@@ -45,7 +45,7 @@ int ShmValidateTlsCert()
     }
 
     std::string currentPath = buffer;
-    shmCertPath = currentPath + "/../test/opensslcrt/normalCert1";
+    shmCertPath = currentPath + "/../test/hcom/opensslcrt/normalCert1";
 
     if (!CanonicalPath(shmCertPath)) {
         NN_LOG_ERROR("TLS cert path check failed " << shmCertPath);

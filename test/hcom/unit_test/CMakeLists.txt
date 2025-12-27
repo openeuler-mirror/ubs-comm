@@ -125,7 +125,8 @@ target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${HCOM_UT} PRIVATE ${HCOM_STUB_SRC_DIR})
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/api/capi_v2/)
 # enable gcov
-add_compile_options(-ftest-coverage -fprofile-arcs)
+target_compile_options(${HCOM_UT} PUBLIC --coverage)
+target_link_options(${HCOM_UT} PUBLIC --coverage)
 
 # Ignore access control in class(like private or protected)
 add_compile_options(-fno-access-control)

@@ -22,7 +22,7 @@ public:
     void SetUp() override
     {
         mJettyPtrMap = new (std::nothrow) JettyPtrMap;
-        ASSERT_EQ(mJettyPtrMap, nullptr);
+        ASSERT_NE(mJettyPtrMap, nullptr);
     }
 
     void TearDown() override

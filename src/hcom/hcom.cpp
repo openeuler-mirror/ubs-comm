@@ -1219,10 +1219,10 @@ std::string &UBSHcomNetDriverLBPolicyToString(UBSHcomNetDriverLBPolicy v)
 
 std::string &UBSHcomNetDriverProtocolToString(UBSHcomNetDriverProtocol v)
 {
-    static std::string driverProtocol[NN_NO6] = {"RDMA", "TCP", "UDS", "SHM", "UBC",
-                                                 "UNKNOWN PROTOCOL"};
+    static std::string driverProtocol[NN_NO8] = {"RDMA", "TCP", "UDS", "SHM", "UNKNOWN PROTOCOL", "UNKNOWN PROTOCOL",
+        "UNKNOWN PROTOCOL", "UBC"};
     static std::string unknown = "UNKNOWN PROTOCOL";
-    if (v >= NN_NO6) {
+    if (v >= NN_NO8) {
         return unknown;
     }
     return driverProtocol[v];

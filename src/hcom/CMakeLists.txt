@@ -187,9 +187,6 @@ set(HCOM_SRC_INCLUDE_PATH
 )
 
 file(GLOB_RECURSE HCOM *.cpp *.h)
-file(GLOB_RECURSE HCOM_JNI_SRCS "${HCOM_SRC_DIR}/src/hcom/api/java_sdk/*.cpp"
-                                "${HCOM_SRC_DIR}/src/hcom/api/java_sdk/*.h")
-list(REMOVE_ITEM  HCOM  ${HCOM_JNI_SRCS})
 
 file(GLOB HCOM_RDMA_COMMON "${HCOM_SRC_DIR}/src/hcom/transport/rdma/*")
 file(GLOB_RECURSE HCOM_RDMA_SRCS

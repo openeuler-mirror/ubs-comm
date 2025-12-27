@@ -1215,6 +1215,7 @@ NResult NetDriverSockWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
 NResult NetDriverSockWithOOB::HandleSockError(Sock *sock)
 {
     UBSHcomNetEndpointPtr brokenEp = reinterpret_cast<NetAsyncEndpointSock *>(sock->UpContext());
+    NN_ASSERT_LOG_RETURN(brokenEp.Get() != nullptr, NN_ERROR);
 
     // UBWorker 线程与心跳线程只会有一个成功
     bool process = false;
@@ -1240,7 +1241,6 @@ NResult NetDriverSockWithOOB::HandleSockError(Sock *sock)
         mOobServers);
     /* remove ep */
     sock->DecreaseRef();
-    NN_ASSERT_LOG_RETURN(brokenEp.Get() != nullptr, NN_ERROR);
     brokenEp->mState.Set(NEP_BROKEN);
     /* call upper function */
     mEndPointBrokenHandler(brokenEp);

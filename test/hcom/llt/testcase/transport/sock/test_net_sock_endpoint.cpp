@@ -959,7 +959,7 @@ int SockValidateTlsCert()
     }
 
     std::string currentPath = buffer;
-    certPath1 = currentPath + "/../test/opensslcrt/normalCert1";
+    certPath1 = currentPath + "/../test/hcom/opensslcrt/normalCert1";
 
     if (!CanonicalPath(certPath1)) {
         NN_LOG_ERROR("TLS cert path check failed " << certPath1);

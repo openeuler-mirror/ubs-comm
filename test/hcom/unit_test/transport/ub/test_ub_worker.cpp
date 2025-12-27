@@ -847,10 +847,11 @@ TEST_F(TestUbWorker, TestProcessPollingResultTwo)
     ASSERT_NE(ep, nullptr);
 
     UBOpContextInfo contextInfo{};
+    contextInfo.ubJetty = jetty;
     // status 9 必定会导致jetty 为 error 状态
     contextInfo.ubJetty->mState = UBJettyState::ERROR;
     worker->mJettyPtrMap.Emplace(0, jetty);
-
+    wc[0].user_ctx = reinterpret_cast<uint64_t>(&contextInfo);
     wc[0].status = URMA_CR_ACK_TIMEOUT_ERR;
     contextInfo.opType = UBOpContextInfo::OpType::SEND;
     worker->ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
