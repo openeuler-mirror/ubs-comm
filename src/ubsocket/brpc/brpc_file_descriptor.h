@@ -18,6 +18,7 @@
 #include "umq_errno.h"
 #include "brpc_context.h"
 #include "file_descriptor.h"
+#include "configure_settings.h"
 #include "qbuf_list.h"
 #include "buffer_util.h"
 #include "statistics.h"
@@ -167,9 +168,40 @@ public:
         return m_registered_eids.erase(eid) > 0;
     }
 
+    //控制建链轮询
+    //注册或者替换index值
+    void RegisterOrReplaceEidIndex(const umq_eid_t& eid, uint32_t index) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_eid_index_map[eid] = index;
+    }
+
+    // 仅检查eid是否存在（不获取值）
+    bool IsRegisteredEidIndex(const umq_eid_t& eid) const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_eid_index_map.find(eid) != m_eid_index_map.end();
+    }
+
+    //获得index值
+    bool GetEidIndex(const umq_eid_t& eid, uint32_t& index) const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        auto it = m_eid_index_map.find(eid);
+        if (it != m_eid_index_map.end()) {
+            index = it->second;
+            return true;
+        }
+        return false;
+    }
+
+    //删除 eid 及其值
+    bool UnregisterEidIndex(const umq_eid_t& eid) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_eid_index_map.erase(eid) > 0;
+    }
+
 private:
     mutable std::mutex m_mutex;
-    std::unordered_set<umq_eid_t, UmqEidHash> m_registered_eids;
+    std::unordered_set<umq_eid_t, UmqEidHash> m_registered_eids;   // 存储已经被umq_dev_add eid信息
+    std::unordered_map<umq_eid_t, uint32_t, UmqEidHash> m_eid_index_map; //控制轮询，对端bonding eid与route_list index对应关系
 };
 
 class SocketFd : public ::SocketFd, public FallbackTcpMgr, public StatsMgr {
@@ -292,14 +324,14 @@ public:
         *connEid = context->GetDevSrcEid();
         if (localEid != remoteEid) {
             umq_route_t connRoute;
-            if (GetDevRouteList(&localEid, &remoteEid, &connRoute) != 0) {
-                RPC_ADPT_VLOG_ERR("Failed to get route list in connect, fd: %d\n", m_fd);
-                return -1;
-            }
-
             if (RecvSocketData(
                 m_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
                 RPC_ADPT_VLOG_ERR("Failed to receive remote eid message in connect, fd: %d\n", m_fd);
+                return -1;
+            }
+
+            if (CheckDevAdd(connRoute.dst) != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to add dev in connect\n");
                 return -1;
             }
 
@@ -1591,8 +1623,67 @@ private:
         return wr_cnt;
     }
 
-    int GetDevRouteList(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_t *connRoute)
+    void GetBoingEidMapIndex(const umq_eid_t &dstEid, uint32_t &index)
     {
+        if(!mEidRegistry.IsRegisteredEidIndex(dstEid))
+        {
+            mEidRegistry.RegisterOrReplaceEidIndex(dstEid,0);
+        }
+
+        mEidRegistry.GetEidIndex(dstEid,index);
+    }
+
+    // Round_Robin
+    int GetRoundRobinConnEid(umq_route_list_t &route_list, const umq_eid_t *dstEid, umq_route_t *connRoute)
+    {
+        uint32_t index = 0;
+        GetBoingEidMapIndex(*dstEid,index);
+        if(index >= route_list.len){
+            index = 0;
+        }
+        
+        for(uint32_t i = 0;i< route_list.len; ++i){
+            if((route_list.buf[i].flag.bs.rtp == 1) && (i >= index)){
+                *connRoute = route_list.buf[i];
+                index = i+1;
+                break;
+            }         
+        }
+
+        mEidRegistry.RegisterOrReplaceEidIndex(*dstEid,index);
+
+        if(connRoute == nullptr){
+            RPC_ADPT_VLOG_ERR("Failed to find umq dev\n");
+            return -1;
+        }
+
+        return 0;
+    }
+
+    // todo 通过亲和性选择 Cpu_Affinity
+    
+    int CheckDevAdd(const umq_eid_t &connEid)
+    {
+        if(mEidRegistry.IsRegisteredEid(connEid)) {
+            return 0;
+        }
+
+        umq_trans_info_t trans_info;
+        trans_info.trans_mode = UMQ_TRANS_MODE_UB;
+        trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+        trans_info.dev_info.eid.eid = connEid;
+        int ret = umq_dev_add(&trans_info);
+        if(ret != 0 && ret != -UMQ_ERR_EEXIST){
+            RPC_ADPT_VLOG_ERR("Failed to add umq dev, ret %d\n",ret);
+            return -1;
+        } 
+        
+        mEidRegistry.RegisterEid(connEid);
+        return 0;
+    }
+
+    int GetDevRouteList(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_t *connRoute)
+    {       
         umq_route_t route;
         (void)memcpy_s(&route.src, sizeof(umq_eid_t), srcEid, sizeof(umq_eid_t));
         (void)memcpy_s(&route.dst, sizeof(umq_eid_t), dstEid, sizeof(umq_eid_t));
@@ -1609,36 +1700,14 @@ private:
             return -1;
         }
 
-        int getIndex = 0;
-        for(uint32_t i = 0;i< route_list.len; ++i){
-            if(route_list.buf[i].flag.bs.rtp == 1){
-                *connRoute = route_list.buf[i];
-                getIndex = i;
-                break;
-            }         
-        }
-
-        if(connRoute == nullptr){
-            RPC_ADPT_VLOG_ERR("Failed to find umq dev\n");
+        if(GetRoundRobinConnEid(route_list, dstEid, connRoute)!=0) {
             return -1;
         }
 
-        
-        if(mEidRegistry.IsRegisteredEid(route_list.buf[getIndex].src)) {
-            return 0;
-        }
-
-        umq_trans_info_t trans_info;
-        trans_info.trans_mode = UMQ_TRANS_MODE_UB;
-        trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
-        trans_info.dev_info.eid.eid = route_list.buf[getIndex].src;
-        ret = umq_dev_add(&trans_info);
-        if(ret != 0 && ret != -UMQ_ERR_EEXIST){
-            RPC_ADPT_VLOG_ERR("Failed to add umq dev, ret %d\n",ret);
+        if(CheckDevAdd(connRoute->src)!=0) {
             return -1;
-        } 
-        
-        mEidRegistry.RegisterEid(route_list.buf[getIndex].src);
+        }
+      
         return 0;
     }
 
