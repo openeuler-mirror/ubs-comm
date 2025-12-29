@@ -25,6 +25,7 @@
 #define DEV_NAME_STR_LEN_MAX      (64)
 #define TRANS_MODE_STR_LEN_MAX    (64)
 #define BLOCK_TYPE_STR_LEN_MAX    (64)
+#define DEV_SCHEDULE_POLICY_LEN_MAX (64)
 #define BOOL_STR_LEN_MAX          (8)
 #define DEFAULT_EID_IDX           (0)
 #define DEFAULT_TX_DEPTH          (128)
@@ -35,6 +36,8 @@
 #define SMALL_QBUF_BLOCK_TYPE     "small"   // 16k
 #define MEDIUM_QBUF_BLOCK_TYPE    "medium"  // 32k
 #define LARGE_QBUF_BLOCK_TYPE     "large"   // 64k
+#define DEV_SCHEDULE_POLICY_CPU_AFFINITY  "cpu"  // cpu_affinity
+#define DEV_SCHEDULE_POLICY_ROUND_ROBIN   "rr"  // round_robin
 #define ENV_VAR_LOG_LEVEL         "RPC_ADPT_LOG_LEVEL"
 #define ENV_VAR_TRANS_MODE        "RPC_ADPT_TRANS_MODE"
 #define ENV_VAR_DEV_IP            "RPC_ADPT_DEV_IP"
@@ -47,6 +50,12 @@
 #define ENV_VAR_BLOCK_TYPE        "RPC_ADPT_BLOCK_TYPE"        // default, small, medium, large
 #define ENV_VAR_POOL_INITIAL_SIZE "RPC_ADPT_POOL_INITIAL_SIZE" // MB
 #define ENV_LOG_USE_PRINTF        "RPC_ADPT_LOG_USE_PRINTF" // default 0, 0 false; 1 true
+#define ENV_SCHEDULE_POLICY       "RPC_SCHEDULE_POLICY" // cpu, rr
+
+enum dev_schedule_policy {
+    ROUND_ROBIN = 1,
+    CPU_AFFINITY
+};
 
 template <typename T>
 class EnvStrConverter {
@@ -209,6 +218,11 @@ public:
         return m_log_use_printf;
     }
 
+    dev_schedule_policy GetDevSchedulePolicy()
+    {
+        return m_dev_schedule_policy;
+    }
+
 protected:
     static void ReadEnvVar(char *env_ptr, char *output_str, uint32_t output_str_len)
     {
@@ -295,6 +309,18 @@ protected:
                 m_block_type = BLOCK_SIZE_8K;
             }
         }
+
+        if ((env_ptr = getenv(ENV_SCHEDULE_POLICY)) != NULL) {
+            ReadEnvVar(env_ptr, m_dev_schedule_policy_str, sizeof(m_dev_schedule_policy_str));
+            if (memcmp(m_dev_schedule_policy_str, DEV_SCHEDULE_POLICY_CPU_AFFINITY, strlen(m_dev_schedule_policy_str)) == 0) {
+                m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;
+            } else if (memcmp(m_dev_schedule_policy_str, DEV_SCHEDULE_POLICY_ROUND_ROBIN, strlen(m_dev_schedule_policy_str)) == 0) {
+                m_dev_schedule_policy = dev_schedule_policy::ROUND_ROBIN;
+            } else {
+                (void)strcpy_s(m_dev_schedule_policy_str, sizeof(m_dev_schedule_policy_str), DEV_SCHEDULE_POLICY_ROUND_ROBIN);
+                m_dev_schedule_policy = dev_schedule_policy::ROUND_ROBIN;
+            }
+        }
     }
 
     void SetSocketFdTransMode(socket_fd_trans_mode trans_mode)
@@ -316,6 +342,7 @@ protected:
     char m_block_type_str[BLOCK_TYPE_STR_LEN_MAX] = "";
     uint32_t m_eid_idx = DEFAULT_EID_IDX;
     char m_src_eid_str[BLOCK_TYPE_STR_LEN_MAX] = "";
+    char m_dev_schedule_policy_str[DEV_SCHEDULE_POLICY_LEN_MAX] = "";
     umq_eid_t m_src_eid;
     uint32_t m_tx_depth = DEFAULT_TX_DEPTH;
     uint32_t m_rx_depth = DEFAULT_RX_DEPTH;
@@ -329,6 +356,7 @@ protected:
     static socket_fd_trans_mode m_socket_fd_trans_mode;
     bool m_stats_enable = false;
     bool m_log_use_printf = false;
+    dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::ROUND_ROBIN;
 };
 
 #endif
