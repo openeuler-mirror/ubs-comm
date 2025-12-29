@@ -43,6 +43,15 @@ EXPOSE_C_DEFINE int socket(int domain, int type, int protocol)
         return -1;
     }
 
+    if (context->GetUsePolling()) {
+        Socket *sock = NULL;
+        if (PollingEpoll::GetInstance().SocketCreate(&sock, fd, SocketType::SOCKET_TYPE_TCP) != 0) {
+            RPC_ADPT_VLOG_ERR("SocketCreate failed \n");
+        } else {
+            PollingEpoll::GetInstance().AddSocket(fd, sock);
+        }
+    }
+
     //Delete existing objects and record new objects in the list.
     Fd<SocketFd>::OverrideFdObj(fd, socket_fd_obj);
 
@@ -117,6 +126,10 @@ EXPOSE_C_DEFINE int epoll_create(int size)
         return -1;
     }
 
+    if (context->GetUsePolling() && PollingEpoll::GetInstance().PollingEpollCreate(epoll_fd) != 0) {
+        RPC_ADPT_VLOG_ERR("PollingEpollCreate failed \n");
+    }
+
     // Delete existing objects and record new objects in the list.
     Fd<EpollFd>::OverrideFdObj(epoll_fd, epoll_fd_obj);
 
@@ -130,7 +143,10 @@ EXPOSE_C_DEFINE int epoll_ctl(int epfd, int op, int fd, struct epoll_event *even
         return OsAPiMgr::GetOriginApi()->epoll_ctl(epfd, op, fd, event);
     }
 
-    return obj->EpollCtl(op, fd, event);
+    Brpc::Context *context = Brpc::Context::GetContext();
+    bool use_polling = context == nullptr ? false : context->GetUsePolling();
+
+    return obj->EpollCtl(op, fd, event, use_polling);
 }
 
 EXPOSE_C_DEFINE int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
@@ -140,7 +156,10 @@ EXPOSE_C_DEFINE int epoll_wait(int epfd, struct epoll_event *events, int maxeven
         return OsAPiMgr::GetOriginApi()->epoll_wait(epfd, events, maxevents, timeout);
     }
 
-    return obj->EpollWait(events, maxevents, timeout);
+    Brpc::Context *context = Brpc::Context::GetContext();
+    bool use_polling = context == nullptr ? false : context->GetUsePolling();
+
+    return obj->EpollWait(events, maxevents, timeout, use_polling);
 }
 
 __attribute__((constructor)) static void rpc_adapter_brpc_init(void)

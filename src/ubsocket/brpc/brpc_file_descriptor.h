@@ -416,6 +416,17 @@ public:
             InitStatsMgr();
         }
 
+        Brpc::Context *context = Brpc::Context::GetContext();
+        if (context && context->GetUsePolling()) {
+            Socket *sock = NULL;
+            if (PollingEpoll::GetInstance().SocketCreate(&sock, m_fd, SocketType::SOCKET_TYPE_TCP_CLIENT,
+                                                         m_local_umqh) != 0) {
+                RPC_ADPT_VLOG_ERR("SocketCreate failed \n");
+            } else {
+                PollingEpoll::GetInstance().AddSocket(m_fd, sock);
+            }
+        }
+
         RPC_ADPT_VLOG_DEBUG("Connect to remote with UMQ successful, fd: %d\n", m_fd);
 
         return 0;
@@ -830,13 +841,13 @@ public:
         m_closed.store(true, std::memory_order_relaxed);
     }
 
-    ALWAYS_INLINE void NewOriginEpollIn()
+    ALWAYS_INLINE void NewOriginEpollIn(bool use_polling = false)
     {
         m_rx.m_epoll_in_msg_recv_size = 
             OsAPiMgr::GetOriginApi()->recv(m_fd, (void *)&m_rx.m_epoll_in_msg, sizeof(uint8_t), MSG_NOSIGNAL);
         if (m_rx.m_epoll_in_msg_recv_size == 0) {
             m_closed.store(true, std::memory_order_relaxed);
-        } else {
+        } else if (!use_polling) {
             RPC_ADPT_VLOG_ERR("Unexpected EPOLLIN event through TCP\n");
         }    
     }
@@ -1222,6 +1233,17 @@ private:
         // Delete existing objects and record new objects in the list.
         Fd<::SocketFd>::OverrideFdObj(new_fd, socket_fd_obj);
 
+        Brpc::Context *context = Brpc::Context::GetContext();
+        if (context && context->GetUsePolling()) {
+            Socket *sock = NULL;
+            if (PollingEpoll::GetInstance().SocketCreate(&sock, new_fd, SocketType::SOCKET_TYPE_TCP_SERVER,
+                                                         socket_fd_obj->GetLocalUmqHandle()) != 0) {
+                RPC_ADPT_VLOG_ERR("SocketCreate failed \n");
+            } else {
+                PollingEpoll::GetInstance().AddSocket(new_fd, sock);
+            }
+        }
+
         RPC_ADPT_VLOG_DEBUG("Accept to remote with UMQ successful, listen fd: %d, new fd: %d\n", m_fd, new_fd);
 
         return 0;  
@@ -1507,7 +1529,10 @@ private:
 
     ALWAYS_INLINE int UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
     {
-        int poll_num = umq_poll(m_local_umqh, UMQ_IO_RX, buf, max_buf_size);
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool use_polling = context == nullptr ? false : context->GetUsePolling();
+        int poll_num = use_polling ? PollingEpoll::GetInstance().GetAndPopQbuf(m_local_umqh, buf) :
+                                     umq_poll(m_local_umqh, UMQ_IO_RX, buf, max_buf_size);
         if (poll_num < 0 || (poll_num == 0 && m_rx.m_window_size == 0)) {
             return -1;
         }
@@ -1770,15 +1795,15 @@ public:
     
     virtual ~UmqTxEpollEvent() {}
 
-    virtual ALWAYS_INLINE
-    int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event) override
+    virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+                                                bool use_polling = false) override
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_origin_fd);
         if (socket_fd_obj != nullptr) {
             socket_fd_obj->NewTxEpollIn();
         }
 
-        return ::EpollEvent::ProcessEpollEvent(input_event, output_event);
+        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
     }
 
 private:
@@ -1813,8 +1838,8 @@ public:
         return 0;
     }
 
-    virtual ALWAYS_INLINE
-    int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event) override
+    virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+                                                bool use_polling = false) override
     {
         uint64_t cnt;
         if (eventfd_read(m_fd, &cnt) == -1) {
@@ -1828,7 +1853,7 @@ public:
             socket_fd_obj->NewTxEpollInEventFd();
         }
 
-        return ::EpollEvent::ProcessEpollEvent(input_event, output_event);
+        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
     }
 
 private:
@@ -1845,15 +1870,15 @@ public:
     
     virtual ~UmqRxEpollEvent() {}
 
-    virtual ALWAYS_INLINE
-    int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event) override
+    virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+                                                bool use_polling = false) override
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_origin_fd);
         if (socket_fd_obj != nullptr) {
             socket_fd_obj->NewRxEpollIn();
         }
 
-        return ::EpollEvent::ProcessEpollEvent(input_event, output_event);
+        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
     }
 
 private:
@@ -1916,15 +1941,15 @@ public:
         CleanUp();
     }
 
-    virtual int AddEpollEvent(int epoll_fd) override
+    virtual int AddEpollEvent(int epoll_fd, bool use_polling = false) override
     {
-        if (::EpollEvent::AddEpollEvent(epoll_fd) < 0) {
+        if (::EpollEvent::AddEpollEvent(epoll_fd, use_polling) < 0) {
             return -1;
         }
 
         // try best to add umq tx/rx epoll event
         if ((m_event.events & EPOLLOUT) && tx_epoll_event != nullptr) {
-            if (tx_epoll_event->AddEpollEvent(epoll_fd) < 0) {
+            if (tx_epoll_event->AddEpollEvent(epoll_fd, use_polling) < 0) {
                 RPC_ADPT_VLOG_WARN("Failed to add TX interrupt fd(%d) for umq, fd: %d\n",
                     tx_epoll_event->GetFd(), m_fd);
             } else {
@@ -1955,7 +1980,7 @@ public:
         }
 
         if ((m_event.events & EPOLLIN) && rx_epoll_event != nullptr) {
-            if (rx_epoll_event->AddEpollEvent(epoll_fd) < 0) {
+            if (rx_epoll_event->AddEpollEvent(epoll_fd, use_polling) < 0) {
                 RPC_ADPT_VLOG_WARN("Failed to add RX interrupt fd(%d) for umq, fd: %d\n",
                     rx_epoll_event->GetFd(), m_fd);
             } else {
@@ -1978,9 +2003,9 @@ public:
         return 0;
     }
 
-    virtual int ModEpollEvent(int epoll_fd, struct epoll_event *event) override
+    virtual int ModEpollEvent(int epoll_fd, struct epoll_event *event, bool use_polling = false) override
     {
-        if (::EpollEvent::ModEpollEvent(epoll_fd, event) < 0) {
+        if (::EpollEvent::ModEpollEvent(epoll_fd, event, use_polling) < 0) {
             return -1;
         }
 
@@ -1992,7 +2017,7 @@ public:
         // try best to modify umq tx/rx epoll event
         if (tx_epoll_event != nullptr) {
             if (!tx_epoll_event->IsAddEpollEvent() && (event->events & EPOLLOUT)) {
-                if (tx_epoll_event->AddEpollEvent(epoll_fd) < 0) {
+                if (tx_epoll_event->AddEpollEvent(epoll_fd, use_polling) < 0) {
                     RPC_ADPT_VLOG_WARN("Failed to modify(add) TX interrupt fd(%d) for umq, fd: %d\n",
                         tx_epoll_event->GetFd(), m_fd);
                 } else {
@@ -2000,7 +2025,7 @@ public:
                         tx_epoll_event->GetFd(), m_fd);
                 }
             } else if (tx_epoll_event->IsAddEpollEvent() && !(event->events & EPOLLOUT)) {
-                if (tx_epoll_event->DelEpollEvent(epoll_fd) < 0) {
+                if (tx_epoll_event->DelEpollEvent(epoll_fd, use_polling) < 0) {
                     RPC_ADPT_VLOG_WARN("Failed to modify(delete) TX interrupt fd(%d) for umq, fd: %d\n",
                         tx_epoll_event->GetFd(), m_fd);
                 } else {
@@ -2022,7 +2047,7 @@ public:
 
         if (rx_epoll_event != nullptr) {
             if (!rx_epoll_event->IsAddEpollEvent() && (event->events & EPOLLIN)) {
-                if (rx_epoll_event->AddEpollEvent(epoll_fd) < 0) {
+                if (rx_epoll_event->AddEpollEvent(epoll_fd, use_polling) < 0) {
                     RPC_ADPT_VLOG_WARN("Failed to modify(add) RX interrupt fd(%d) for umq, fd: %d\n",
                         rx_epoll_event->GetFd(), m_fd);
                 } else {
@@ -2030,7 +2055,7 @@ public:
                         rx_epoll_event->GetFd(), m_fd);
                 }
             } else if (rx_epoll_event->IsAddEpollEvent() && !(event->events & EPOLLIN)) {
-                if (rx_epoll_event->DelEpollEvent(epoll_fd) < 0) {
+                if (rx_epoll_event->DelEpollEvent(epoll_fd, use_polling) < 0) {
                     RPC_ADPT_VLOG_WARN("Failed to modify(delete) RX interrupt fd(%d) for umq, fd: %d\n",
                         rx_epoll_event->GetFd(), m_fd);
                 } else {
@@ -2043,9 +2068,9 @@ public:
         return 0;
     }
 
-    virtual int DelEpollEvent(int epoll_fd) override
+    virtual int DelEpollEvent(int epoll_fd, bool use_polling = false) override
     {
-        if (::EpollEvent::DelEpollEvent(epoll_fd) < 0) {
+        if (::EpollEvent::DelEpollEvent(epoll_fd, use_polling) < 0) {
             return -1;
         }
 
@@ -2056,19 +2081,19 @@ public:
 
         // try best to delete umq tx/rx epoll event
         if (tx_epoll_event != nullptr &&
-            tx_epoll_event->IsAddEpollEvent() && tx_epoll_event->DelEpollEvent(epoll_fd) < 0) {
+            tx_epoll_event->IsAddEpollEvent() && tx_epoll_event->DelEpollEvent(epoll_fd, use_polling) < 0) {
             RPC_ADPT_VLOG_WARN("Failed to delete TX interrupt fd(%d) for umq, fd: %d\n",
                 tx_epoll_event->GetFd(), m_fd);
         }
 
         if (event_fd_epoll_event != nullptr &&
-            event_fd_epoll_event->IsAddEpollEvent() && event_fd_epoll_event->DelEpollEvent(epoll_fd) < 0) {
+            event_fd_epoll_event->IsAddEpollEvent() && event_fd_epoll_event->DelEpollEvent(epoll_fd, use_polling) < 0) {
             RPC_ADPT_VLOG_WARN("Failed to delete TX event fd(%d) for umq, fd: %d\n",
                                tx_epoll_event->GetFd(), m_fd);
         }
 
         if (rx_epoll_event != nullptr &&
-            rx_epoll_event->IsAddEpollEvent() && rx_epoll_event->DelEpollEvent(epoll_fd) < 0) {
+            rx_epoll_event->IsAddEpollEvent() && rx_epoll_event->DelEpollEvent(epoll_fd, use_polling) < 0) {
             RPC_ADPT_VLOG_WARN("Failed to delete RX interrupt fd(%d) for umq, fd: %d\n",
                 rx_epoll_event->GetFd(), m_fd);
         }
@@ -2076,7 +2101,8 @@ public:
         return 0;
     }
 
-    virtual int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event) override
+    virtual int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+                                  bool use_polling = false) override
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_fd);
         if (input_event->events & EPOLLOUT) {
@@ -2097,16 +2123,16 @@ public:
         if ((input_event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) &&
             socket_fd_obj != nullptr && !socket_fd_obj->RxUseTcp() && socket_fd_obj->GetBindRemote()) {
             socket_fd_obj->NewOriginEpollError();
-            return ::EpollEvent::ProcessEpollEvent(input_event, output_event);
+            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
         }
 
         if ((input_event->events & EPOLLIN) &&
             socket_fd_obj != nullptr && !socket_fd_obj->RxUseTcp() && socket_fd_obj->GetBindRemote()) {
-            socket_fd_obj->NewOriginEpollIn();
-            return ::EpollEvent::ProcessEpollEvent(input_event, output_event);
+            socket_fd_obj->NewOriginEpollIn(use_polling);
+            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
         }
 
-        return ::EpollEvent::ProcessEpollEvent(input_event, output_event);
+        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
     }
 
     UmqTxEpollEvent *GetUmqTxEpollEvent()
@@ -2131,7 +2157,7 @@ public:
     
     virtual ~EpollFd() {}
 
-    virtual ALWAYS_INLINE int EpollCtlAdd(int fd, struct epoll_event *event) override
+    virtual ALWAYS_INLINE int EpollCtlAdd(int fd, struct epoll_event *event, bool use_polling = false) override
     {
         if (event == nullptr) {
             RPC_ADPT_VLOG_ERR("Invalid argument, epoll event is NULL\n");
@@ -2141,7 +2167,7 @@ public:
 
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(fd);
         if (socket_fd_obj == nullptr) {
-            return ::EpollFd::EpollCtlAdd(fd, event);
+            return ::EpollFd::EpollCtlAdd(fd, event, use_polling);
         }
 
         if (m_epoll_event_map.count(fd) > 0) {
@@ -2158,7 +2184,7 @@ public:
             return -1;
         }
 
-        if (epoll_event->AddEpollEvent(m_fd) < 0) {
+        if (epoll_event->AddEpollEvent(m_fd, use_polling) < 0) {
             delete epoll_event;
             return -1;
         }

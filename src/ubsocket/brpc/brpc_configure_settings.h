@@ -16,6 +16,7 @@
 #define ENV_VAR_BRPC_ALLOC_SYM     "RPC_ADPT_BRPC_ALLOC_SYM"
 #define ENV_VAR_BRPC_DEALLOC_SYM   "RPC_ADPT_BRPC_DEALLOC_SYM"
 #define ENV_VAR_READV_UNLIMITED    "RPC_ADPT_READV_UNLIMITED"
+#define ENV_VAR_USE_POLLING        "RPC_ADPT_USE_POLLING"
 
 namespace Brpc{
 
@@ -53,6 +54,11 @@ public:
          return m_readv_unlimited;
       }
 
+      bool GetUsePolling()
+      {
+          return m_use_polling;
+      }
+
       protected:
       int ParseEnvVars() override
       {
@@ -74,6 +80,12 @@ public:
             BoolVal::BoolConverter(m_readv_unlimited), m_readv_unlimited_str);
          }
 
+         if (strlen(m_use_polling_str) > 0) {
+             m_use_polling = BoolVal::BoolConverter(m_use_polling_str);
+             RPC_ADPT_VLOG_INFO("%s: %s (input: %s)\n", ENV_VAR_USE_POLLING, BoolVal::BoolConverter(m_use_polling),
+                                m_use_polling_str);
+         }
+
          return 0;
       }
 
@@ -91,6 +103,10 @@ public:
         if((env_ptr = getenv(ENV_VAR_READV_UNLIMITED)) != NULL){
             ReadEnvVar(env_ptr, m_readv_unlimited_str, sizeof(m_readv_unlimited_str));
         }
+
+        if ((env_ptr = getenv(ENV_VAR_USE_POLLING)) != NULL) {
+            ReadEnvVar(env_ptr, m_use_polling_str, sizeof(m_use_polling_str));
+        }
       }
        
       char m_alloc_sym_str[BRPC_SYM_STR_LEN_MAX] = "";
@@ -98,6 +114,8 @@ public:
       bool m_modify_allocator = false;
       char m_readv_unlimited_str[BOOL_STR_LEN_MAX] = "";
       bool m_readv_unlimited = false;
+      char m_use_polling_str[BOOL_STR_LEN_MAX] = "";
+      bool m_use_polling = false;
 }; 
    
 }

@@ -20,6 +20,7 @@
 
 #include "rpc_adpt_vlog.h"
 #include "socket_adapter.h"
+#include "polling_epoll.h"
 
 #define RPC_ADPT_FD_MAX      (8192)
 
@@ -282,7 +283,7 @@ class EpollEvent {
 
     virtual ~EpollEvent() {}
 
-    virtual int AddEpollEvent(int epoll_fd)
+    virtual int AddEpollEvent(int epoll_fd, bool use_polling = false)
     {
         struct epoll_event tmp_event;
         tmp_event.events = m_event.events;
@@ -297,10 +298,14 @@ class EpollEvent {
         RPC_ADPT_VLOG_DEBUG("Origin epoll control add successful, epfd: %d, fd: %d\n",epoll_fd, m_fd);
         m_add_epoll_event = true;
 
+        if (use_polling) {
+            PollingEpoll::GetInstance().EpollCtl(epoll_fd, EPOLL_CTL_ADD, m_fd, &tmp_event);
+        }
+
         return 0;
     }
 
-    virtual int ModEpollEvent(int epoll_fd, struct epoll_event *event)
+    virtual int ModEpollEvent(int epoll_fd, struct epoll_event *event, bool use_polling = false)
     {
         struct epoll_event tmp_event;
         tmp_event.events = event->events;
@@ -316,10 +321,14 @@ class EpollEvent {
             " new events: %u\n",epoll_fd, m_fd, m_event.events, event->events);
         m_event = *event;
 
+        if (use_polling) {
+            PollingEpoll::GetInstance().EpollCtl(epoll_fd, EPOLL_CTL_MOD, m_fd, &tmp_event);
+        }
+
         return 0;
     }
 
-    virtual int DelEpollEvent(int epoll_fd)
+    virtual int DelEpollEvent(int epoll_fd, bool use_polling = false)
     {
         int ret = OsAPiMgr::GetOriginApi()->epoll_ctl(epoll_fd, EPOLL_CTL_DEL, m_fd, nullptr);
         if(ret != 0){
@@ -330,10 +339,15 @@ class EpollEvent {
         RPC_ADPT_VLOG_DEBUG("Origin epoll control delete successful, epfd: %d, fd: %d\n",epoll_fd, m_fd);
         m_add_epoll_event = false;
 
+        if (use_polling) {
+            PollingEpoll::GetInstance().EpollCtl(epoll_fd, EPOLL_CTL_DEL, m_fd, nullptr);
+        }
+
         return 0;
     }
 
-    virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event)
+    virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+                                                bool use_polling = false)
     {
         output_event->events = input_event->events;
         output_event->data = m_event.data;
@@ -377,7 +391,7 @@ class EpollFd : public Fd<EpollFd> {
         }
     }
 
-    virtual ALWAYS_INLINE int EpollCtlAdd(int fd, struct epoll_event *event)
+    virtual ALWAYS_INLINE int EpollCtlAdd(int fd, struct epoll_event *event, bool use_polling = false)
     {
         if (event == nullptr) {
             RPC_ADPT_VLOG_ERR("Invalid argument, epoll event is NULL\n");
@@ -399,7 +413,7 @@ class EpollFd : public Fd<EpollFd> {
             return -1;
         }
 
-        if (epoll_event->AddEpollEvent(m_fd)) {
+        if (epoll_event->AddEpollEvent(m_fd, use_polling)) {
             delete epoll_event;
             return -1;
         }
@@ -409,7 +423,7 @@ class EpollFd : public Fd<EpollFd> {
         return 0;
     }
 
-    virtual ALWAYS_INLINE int EpollCtlMod(int fd, struct epoll_event *event)
+    virtual ALWAYS_INLINE int EpollCtlMod(int fd, struct epoll_event *event, bool use_polling = false)
     {
         if(event == nullptr){
             RPC_ADPT_VLOG_ERR("Invalid argument, epoll event is NULL\n");
@@ -423,14 +437,14 @@ class EpollFd : public Fd<EpollFd> {
         }
 
         EpollEvent *epoll_event = m_epoll_event_map[fd];
-        if (epoll_event->ModEpollEvent(m_fd, event) !=0) {
+        if (epoll_event->ModEpollEvent(m_fd, event, use_polling) !=0) {
             return -1;
         }
 
         return 0;
     }
 
-    virtual ALWAYS_INLINE int EpollCtlDel(int fd, struct epoll_event *event)
+    virtual ALWAYS_INLINE int EpollCtlDel(int fd, struct epoll_event *event, bool use_polling = false)
     {
         if (m_epoll_event_map.count(fd) == 0) {
             RPC_ADPT_VLOG_ERR("Origin epoll control delete not exist, epfd: %d, fd: %d\n", m_fd, fd);
@@ -438,7 +452,7 @@ class EpollFd : public Fd<EpollFd> {
         }
 
         EpollEvent *epoll_event = m_epoll_event_map[fd];
-        if (epoll_event->DelEpollEvent(m_fd) != 0) {
+        if (epoll_event->DelEpollEvent(m_fd, use_polling) != 0) {
             return -1;
         }
 
@@ -448,18 +462,18 @@ class EpollFd : public Fd<EpollFd> {
         return 0;
     }
 
-    virtual ALWAYS_INLINE int EpollCtl(int op, int fd, struct epoll_event *event)
+    virtual ALWAYS_INLINE int EpollCtl(int op, int fd, struct epoll_event *event, bool use_polling = false)
     {
         int ret = -1;
         switch (op){
             case EPOLL_CTL_ADD:
-                ret = EpollCtlAdd(fd, event);
+                ret = EpollCtlAdd(fd, event, use_polling);
                 break;
             case EPOLL_CTL_MOD:
-                ret = EpollCtlMod(fd, event);
+                ret = EpollCtlMod(fd, event, use_polling);
                 break;
             case EPOLL_CTL_DEL:
-                ret = EpollCtlDel(fd, event);  
+                ret = EpollCtlDel(fd, event, use_polling);
                 break; 
             default:
                 RPC_ADPT_VLOG_ERR("Invalid op code(%d), epfd: %d, fd: %d\n", op, m_fd, fd);
@@ -469,18 +483,20 @@ class EpollFd : public Fd<EpollFd> {
         return ret;
     }
 
-    virtual ALWAYS_INLINE int EpollWait(struct epoll_event *events, int maxevents, int timeout)
+    virtual ALWAYS_INLINE int EpollWait(struct epoll_event *events, int maxevents, int timeout,
+                                        bool use_polling = false)
     {
         struct epoll_event events_[maxevents];
-        int ev_num = OsAPiMgr::GetOriginApi()->epoll_wait(m_fd, events_, maxevents, timeout);
-        if(ev_num == -1){
+        int ev_num = use_polling ? PollingEpoll::GetInstance().PollingEpollWait(m_fd, events_, maxevents, timeout) :
+                                   OsAPiMgr::GetOriginApi()->epoll_wait(m_fd, events_, maxevents, timeout);
+        if (ev_num == -1) {
             return ev_num;
         }
 
         int output_idx = 0;
         for(int i = 0; i<ev_num;i++){
             EpollEvent *epoll_event = (EpollEvent *)events_[i].data.ptr;
-            output_idx += epoll_event->ProcessEpollEvent(events_ + i, events + output_idx);
+            output_idx += epoll_event->ProcessEpollEvent(events_ + i, events + output_idx, use_polling);
         }
 
         return output_idx;
