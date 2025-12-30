@@ -76,6 +76,7 @@ UBSocket通过环境变量配置通信库的各种属性
 | RPC_ADPT_SRC_EID | 使用bonding设备的eid 设备为bonding设备时需填写|
 | RPC_ADPT_LOG_LEVEL | 打印的日志级别 |
 | RPC_ADPT_LOG_USE_PRINTF | 是否将日志打印到前台 |
+| RPC_ADPT_USE_POLLING | 是否使用轮询模式，默认不使用 |
 
 ## 7 其他
 若需要使能BRPC内存块为64k，则需要通过以下方式修改
