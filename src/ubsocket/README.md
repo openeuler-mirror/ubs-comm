@@ -1,52 +1,89 @@
 # UBSocket
 
-`UBSocket`是一个基于UB网络无损适配`Socket API`接口的高性能通信库。通过使用`UBSocket`，用户无需修改原有基于`Socket API`开发的代码，即可基于UB网络进行通信加速。
-
 ## 1 简介
 
-UB是一种面向超节点的互联协议，将IO、内存访问和各类处理单元件的通信统一在同一互联技术体系，实现高性能数据搬移、资源同一管理、资源灵活组合、处理单元间高效协同和高效编程，具有高性能、低时延等特性。当前诸多业务基于传统`Socket API`进行开发，而转换为UB组网，原有业务需要基于UB接口进行二次开发，业务环境组网多种多样，适配开发工作量大。基于上述情况，提供`UBSocket`高性能通信库，无需修改原有业务代码，即可基于UB网络进行加速。
+`UBSocket`通信加速库，支持拦截TCP应用中的`POSIX Socket API`，将TCP通信转换为UB高性能通信，从而实现通信加速。使用`UBSocket`，传统TCP应用或TCP通信库可以少修改甚至不修改源码，快速使能UB通信。`UBSocket`的通信加速能力已经在[bRPC](https://brpc.apache.org/zh/docs/overview/)上验证，并取得“相对原生TCP性能提升40%+”的收益，未来将继续拓展更多场景。
 
-## 2 环境要求
+## 2 编译和使用
 
-高性能通信库`UBSocket`将`Socket`连接转化成UB连接，从而达到高性能、低时延的目的，因此需要节点间为UB组网并且节点间UB协议通信正常。同时环境上需安装`UMQ`动态库的标准安装包。
+### 2.1 底层依赖
 
-## 3 源码下载
+`UBSocket`的运行必须依赖UB硬件。此外，`UBSocket`还依赖了如下软件。
 
-```shell
-$ git clone <ubs-comm-repo-url>
-```
+- `openssl`
+- [`libboundscheck`](https://atomgit.com/openeuler/libboundscheck)
+- `urma`
 
-## 4 源码目录结构
+在编译和使用`UBSocket`前，请确保环境的软硬件符合要求。
 
-`UBSocket`源码位于`ubs-comm`目录下，如下所示：
-
-```shell
-.
-├── build
-├── doc
-├── src
-    ├── hcom      // hcom通信库源码
-    ├── ubsocket  // ubsocket通信库源码
-├── test
-└── build.sh
-```
-
-## 5 编译
-
-`UBSocket`在源码目录下提供CMakeLists进行编译，具体编译流程如下：
+在`OpenEuler`系统中，可以通过如下命令安装软件依赖。
 
 ```shell
-$ cd ./src/ubsocket
-$ mkdir build && cd build
-$ cmake ..
-$ make -j8
+yum install -y openssl
+yum install -y libboundcheck
+
+# 安装内核态urma
+modprobe ubcore  
+modprobe uburma
+
+# 安装用户态urma
+yum install -y umdk-urma*
+
+# 关闭numa balancing
+echo 0 > /proc/sys/kernel/numa_balancing
+echo "kernel.numa_balancing=0" >> /etc/sysctl.conf
+sysctl -p
 ```
 
-编译后在`build/brpc`路径下可以找到一个名为`librpc_adapter_brpc.so`的动态库，即为UBSocket高性能通信库。
+> 说明：
+>
+> - urma用户态和内核态的软件包均需要安装。urma和系统强相关，建议优先参考系统配套的urma安装指导，上述urma安装仅做参考。
+> - 非Euler系统，软件源中可能没有libboundcheck，需要源码安装。
 
-## 6 使用说明
+### 2.2 编译
 
-在运行程序前通过LD_PRELOAD方式加载此通信库，将Socket API转换为UB网络的通信API，如下所示：
+`UBSocket`归属于在`UBS Comm`项目，使用了该项目的部分公共能力，故需要分两部分编译。进行源码编译前，请先下载`UBS Comm`源码，并切换到目标分支或tag。
+
+```shell
+# 编译UMQ
+cd ubs-comm/src/hcom/umq
+mkdir build && cd build
+cmake ..
+make -j32
+```
+
+完成`UMQ`的编译后，可以得到如下目标编译产物：
+
+- `build/src/libumq.so`
+
+- `build/src/qbuf/libumq_buf.so`
+
+- `build/src/umq_ub/libumq_ub.so`
+
+
+> 说明：
+>
+> 在编译UMQ时，可以通过`-DOPENSSL_ROOT_DIR=/path/to/openssl`制定`openssl`路径。
+
+
+```shell
+# 编译ubsocket
+cd ubs-comm/src/ubsocket
+mkdir build && cd build
+cmake ..
+make -j32
+```
+
+完成`UBSocket`的编译后，可以得到`build/brpc/librpc_adapter_brpc.so`目标编译产物。
+
+> 说明：
+>
+> 在编译UBSocket时，可以通过`-DUMQ_INCLUDE=/path/to/umq_include -DUMQ_LIB=/path/to/umq_lib`来指定umq的头文件和lib库文件路径（如`=-DUMQ_INCLUDE=/prefix/ubs-comm/src/hcom/umq/include/umq/  -DUMQ_LIB=/prefix/ubs-comm/src/hcom/umq/build/src/libumq.so`）。
+
+### 2.3 使用
+
+`UBSocket`通过`LD_PRELOAD`的方式劫持TCP应用中的`POSIX Socket API`并转换为UB通信，无需修改TCP应用源码。假设TCP应用正常启动命令为`./application`，可以通过如下命令启动来使用`UBSocket`通信加速能力。
+
 ```shell
 $ env LD_PRELOAD=/path/to/lib/librpc_adapter_brpc.so \
 RPC_ADPT_TRANS_MODE=UB \
@@ -56,32 +93,47 @@ RPC_ADPT_LOG_LEVEL=info \
 RPC_ADPT_TX_DEPTH=1024 \
 RPC_ADPT_RX_DEPTH=1024 \
 RPC_ADPT_READV_UNLIMITED=true \
-./your_program
+./application
 ```
+
 > 说明：
 > 通过`urma_admin show`命令，可以查询到bonding_dev_0设备对应的eid。
 
-UBSocket通过环境变量配置通信库的各种属性
-| 环境变量 | 含义 |
-| :--- | :--- |
-| RPC_ADPT_TRANS_MODE | 协议模式 |
-| RPC_ADPT_DEV_NAME | 设备名称 |
-| RPC_ADPT_LOG_LEVEL | 日志级别 |
-| RPC_ADPT_TX_DEPTH | 发送队列深度 |
-| RPC_ADPT_RX_DEPTH | 接受队列深度 |
-| RPC_ADPT_READV_UNLIMITED | 是否打开readv上报限制 |
-| RPC_ADPT_BLOCK_TYPE | 内存池的最小分片,default(8k) small(16k) medium(32k) large(64k) |
-| RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，应用按需配置 |
-| RPC_ADPT_EID_IDX | 使用普通设备的eid编号 设备为普通设备时需填写 |
-| RPC_ADPT_SRC_EID | 使用bonding设备的eid 设备为bonding设备时需填写|
-| RPC_ADPT_LOG_LEVEL | 打印的日志级别 |
-| RPC_ADPT_LOG_USE_PRINTF | 是否将日志打印到前台 |
-| RPC_ADPT_USE_POLLING | 是否使用轮询模式，默认不使用 |
+## 3 配置项含义
 
-## 7 其他
-若需要使能BRPC内存块为64k，则需要通过以下方式修改
-1. 修改BRPC源码`iobuf.h`iobuf.h中`DEFAULT_BLOCK_SIZE`从8192改为65536
-2. 适配ubsocket时，需要加上配置项
-```shell
-$ RPC_ADPT_BLOCK_TYPE="large" RPC_ADPT_POOL_INITIAL_SIZE=4096
-```
+在启动`UBSocket`时，支持通过环境变量进行配置，各环境变量的含义如下。
+
+| 名称                       | 含义                   | 取值范围                                                     | 默认值  | 必填                                   |
+| :------------------------- | :--------------------- | :----------------------------------------------------------- | :------ | -------------------------------------- |
+| RPC_ADPT_TRANS_MODE        | 通信协议               | ub，ib                                                       | ib      | 是                                     |
+| RPC_ADPT_DEV_NAME          | 设备名称               | 根据实际场景填写设备名称；例如，udma2或者bonding_dev_0       | NA      | 是                                     |
+| RPC_ADPT_DEV_IP            | 设备名称               | 根据实际场景填写，支持ipv6和ipv4写法。`ub协议下不需要填写`   | NA      | 否                                     |
+| RPC_ADPT_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | `RPC_ADPT_DEV_NAME`为普通设备时必填    |
+| RPC_ADPT_SRC_EID           | 使用bonding设备的eid   | ub协议下，通过`urma_admin show`命令查询获得                  | NA      | `RPC_ADPT_DEV_NAME`为bonding设备时必填 |
+| RPC_ADPT_LOG_LEVEL         | 日志级别               | emerg，alert，crit，err，warn，notice，info，debug           | info    | 否                                     |
+| RPC_ADPT_LOG_USE_PRINTF    | 是否将日志打印到前台   | 0，1                                                         | 0       | 否                                     |
+| RPC_ADPT_TX_DEPTH          | 发送队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`的值） | 128     | 否                                     |
+| RPC_ADPT_RX_DEPTH          | 接受队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`的值） | 128     | 否                                     |
+| RPC_ADPT_READV_UNLIMITED   | 是否打开readv上报限制  | false，true                                                  | false   | 否                                     |
+| RPC_ADPT_BLOCK_TYPE        | 内存池的最小分片       | default，small，medium，large                                | default | 否                                     |
+| RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，单位MB | 应用按需配置                                                 | 1024    | 否                                     |
+
+>  说明：
+>
+>  - `UBSocket`支持使用bonding设备和普通udma设备，通过`urma_admin show`命令可以查看各设备信息。
+>  - 普通udma设备，需要感知网络拓扑连线，使用较复杂，通常用于开发调测。
+>  - 建议应用使用bonding设备，后续`UBSocket`会自动选择bonding设备及自动选路，进一步简化使用。
+
+
+
+## 4 其它
+
+`bRPC`内部实现了内存池管理功能，默认单个内存块大小为8K，通过增大内存块大小，可以提升大包发送性能。通过调整`bRPC源码`和调整`UBSocket`配置项可以使用大内存块传输，具体需要做如下两部分调整：
+
+- 修改BRPC源码`iobuf.h`iobuf.h中`DEFAULT_BLOCK_SIZE`，可以从8K（8192）调整为16K/32K/64K。
+- 通过`UBSocket`配置项`RPC_ADPT_BLOCK_TYPE`，相应调整`UBSocket`中内存块大小。
+
+> 说明：
+>
+> 启用更大的内存块后，可能需要消耗更多内存，可以通过`RPC_ADPT_POOL_INITIAL_SIZE`配置`UBSocket`内存池大小。
+
