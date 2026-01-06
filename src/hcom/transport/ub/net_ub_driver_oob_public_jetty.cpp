@@ -218,7 +218,6 @@ NResult NetDriverUBWithOob::PublicJettyConnect(const std::string &oobIp, uint16_
     }
 
     if (clientPublicJetty->ImportPublicJetty(remoteEid, oobPort) != 0) {
-        NN_LOG_ERROR("Failed to import remote public jetty in client");
         goto ERROR_FREE;
     }
     return NN_OK;

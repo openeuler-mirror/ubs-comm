@@ -632,7 +632,6 @@ int32_t HcomServiceImp::Connect(const std::string &serverUrl, UBSHcomChannelPtr 
 SerResult HcomServiceImp::DoConnectInner(const std::string &serverUrl, SerConnInfo &opt, const std::string &payLoad,
     std::vector<UBSHcomNetEndpointPtr> &epVector, uint32_t &totalBandWidth)
 {
-    SerResult res = SER_OK;
     opt.totalLinkCount = opt.options.linkCount * mDriverPtrs.size();
     for (int j = 0; j < static_cast<int>(mDriverPtrs.size()); ++j) {
         opt.driverIndex = mDriverPtrs[j]->GetDeviceId();
@@ -660,13 +659,12 @@ SerResult HcomServiceImp::DoConnectInner(const std::string &serverUrl, SerConnIn
             {
                 std::lock_guard<std::mutex> lockerEp(mNewEpMutex);
                 mSecInfoMap.erase(opt.channelId);
-                NN_LOG_ERROR("Failed to connect " << result);
                 return result;
             }
         }
         totalBandWidth += mDriverPtrs[j]->GetBandWidth();
     }
-    return res;
+    return SER_OK;
 }
 
 SerResult HcomServiceImp::DoConnect(const std::string &serverUrl, SerConnInfo &opt, const std::string &payLoad,
