@@ -136,4 +136,3 @@ RPC_ADPT_READV_UNLIMITED=true \
 > 说明：
 >
 > 启用更大的内存块后，可能需要消耗更多内存，可以通过`RPC_ADPT_POOL_INITIAL_SIZE`配置`UBSocket`内存池大小。
-

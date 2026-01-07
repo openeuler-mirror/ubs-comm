@@ -1,36 +1,85 @@
 cmake_minimum_required(VERSION 3.12.1)
 project(ubsocket)
 
-set(CMAKE_FLAGS_PUBILC " -Wall -Werror -Wfloat-equal -Wtrampolines -g -rdynamic -Wl,-z,noexecstack,-z,relro,-z,now \
--fno-strict-aliasing -fstack-protector-strong -fPIE -pie -fPIC -Wextra -Wno-unused-parameter -Wno-missing-field-initializers \
--Wno-type-limits -fno-common")
+option(UBSOCKET_BUILD_TESTS "Build tests" OFF)
+option(UBSOCKET_USE_SYSTEM_GTEST "Whether to use gtest on system" OFF)
 
-set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_C_FLAGS_RELEASE "-O2 -D_FORTIFY_SOURCE=2")
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -D_FORTIFY_SOURCE=2")
+# Sources for the library are specified at the end
+add_library(ubsocket OBJECT "")
 
-set(CMAKE_FLAGS_ARM64 " -march=armv8-a+crc -DUB_ARCH_ARM64")
-set(CMAKE_FLAGS_x86_64 " -msse4.2 -DUB_ARCH_X86_64")
-if("${CMAKE_HOST_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
-    set(CMAKE_C_FLAGS  "${CMAKE_FLAGS_PUBILC} ${CMAKE_FLAGS_ARM64} -std=gnu11")
-    set(CMAKE_CXX_FLAGS  "${CMAKE_FLAGS_PUBILC} ${CMAKE_FLAGS_ARM64} -std=c++11")
-else()
-    set(CMAKE_C_FLAGS  "${CMAKE_FLAGS_PUBILC} ${CMAKE_FLAGS_x86_64} -std=gnu11")
-    set(CMAKE_CXX_FLAGS  "${CMAKE_FLAGS_PUBILC} ${CMAKE_FLAGS_x86_64} -std=c++11")
+## Compile options
+target_compile_options(ubsocket
+  PRIVATE
+    -Werror
+  PUBLIC
+    -g -fPIC
+    -Wall -Wextra -Wfloat-equal -Wtrampolines -Wno-unused-parameter -Wno-missing-field-initializers -Wno-type-limits
+    -fno-strict-aliasing -fstack-protector-strong -fno-common
+
+    # arch specific
+    $<IF:$<STREQUAL:${CMAKE_HOST_SYSTEM_PROCESSOR},aarch64>,-march=armv8-a+crc -DUB_ARCH_ARM64
+                                                           ,-msse4.2 -DUB_ARCH_X86_64>
+)
+
+## Libraries
+# Link options
+target_link_options(ubsocket
+  PUBLIC
+    -rdynamic -Wl,-z,noexecstack,-z,relro,-z,now
+)
+
+# umq
+add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/umq)
+target_link_libraries(ubsocket PUBLIC umq)
+
+# dl
+target_link_libraries(ubsocket PUBLIC ${CMAKE_DL_LIBS})
+
+# boundscheck
+add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/boundscheck)
+target_link_libraries(ubsocket PUBLIC openeuler::boundscheck)
+
+## Test
+if(UBSOCKET_BUILD_TESTS)
+  # Warn on non-debug builds
+  if(NOT ${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    message(STATUS "Current build type is: ${CMAKE_BUILD_TYPE}. mockcpp may fail to work if opt is enabled.")
+  endif()
+
+  include(CTest)
+
+  if(UBSOCKET_USE_SYSTEM_GTEST)
+    find_package(GTest CONFIG)
+    if(NOT GTest_FOUND)
+      add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/gtest)
+    endif()
+  else()
+    add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/gtest)
+  endif()
+
+  add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/mockcpp)
+
+  add_subdirectory(unit_test)
 endif()
 
-if (NOT DEFINED UMQ_INCLUDE OR UMQ_INCLUDE STREQUAL "")
-    set(UMQ_INCLUDE "/usr/include/ub/umdk/urpc/umq/")
-endif()
+## Definitions
 
-if (NOT DEFINED UMQ_LIB OR UMQ_LIB STREQUAL "")
-    set(UMQ_LIB "/usr/lib64/libumq.so")
-endif()
+## Includes
+target_include_directories(ubsocket PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-message(status "UMQ_INCLUDE: ${UMQ_INCLUDE}")
-message(status "UMQ_LIB: ${UMQ_LIB}")
+## Install
 
-include_directories(${UMQ_INCLUDE})
-aux_source_directory(${CMAKE_CURRENT_LIST_DIR} COMMON_RPC_ADPT_SRC)
+## Sources
+target_sources(ubsocket
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/configure_settings.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/file_descriptor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/polling_epoll.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/rpc_adpt_vlog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/statistics.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/urpc_util.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/util_vlog.c
+)
+
+# brpc adaptor
 add_subdirectory(brpc)
-

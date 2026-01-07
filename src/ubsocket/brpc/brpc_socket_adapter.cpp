@@ -1,11 +1,9 @@
-/*
- *Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- *Description: Provide the utility for umq buffer, iov, etc
- *Author:
- *Create: 2025-07-16
- *Note:
- *History: 2025-07-16
-*/
+// Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
+// Description: Provide the utility for umq buffer, iov, etc
+// Author:
+// Create: 2025-07-16
+// Note:
+// History: 2025-07-16
 
 #include <sys/eventfd.h>
 #include <unistd.h>
@@ -162,6 +160,7 @@ EXPOSE_C_DEFINE int epoll_wait(int epfd, struct epoll_event *events, int maxeven
     return obj->EpollWait(events, maxevents, timeout, use_polling);
 }
 
+// Be cautious, global obj constructor may occur after this.
 __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
 {
     (void)OsAPiMgr::GetOriginApi();

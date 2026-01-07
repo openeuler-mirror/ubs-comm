@@ -1,0 +1,33 @@
+From 8d489c2f8d13ea22fc350e67389a46ec7a42eedd Mon Sep 17 00:00:00 2001
+From: Zhiwei Chen <2985164498@qq.com>
+Date: Tue, 6 Jan 2026 19:32:40 +0800
+Subject: [PATCH] mockcpp as sub-project
+
+---
+ src/CMakeLists.txt | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index e843915..bf64549 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -13,7 +13,7 @@ IF(NOT DEFINED MOCKCPP_ALLOW_MI)
+   SET(MOCKCPP_ALLOW_MI TRUE)
+ ENDIF(NOT DEFINED MOCKCPP_ALLOW_MI)
+
+-SET(MOCKCPP_SRC_ROOT ${CMAKE_SOURCE_DIR})
++SET(MOCKCPP_SRC_ROOT ${PROJECT_SOURCE_DIR})
+
+ IF(NOT DEFINED MOCKCPP_XUNIT)
+    SET(MOCKCPP_XUNIT STDEXCEPT)
+@@ -327,7 +327,7 @@ LINK_DIRECTORIES(${CMAKE_BINARY_DIR}/src ${CMAKE_BINARY_DIR}/tests/3rdparty/test
+
+ ADD_LIBRARY(mockcpp STATIC ${MOCKCPP_SRCS})
+
+-INCLUDE_DIRECTORIES(BEFORE ${MOCKCPP_SRC_ROOT}/include ${MOCKCPP_SRC_ROOT}/3rdparty)
++target_include_directories(mockcpp PUBLIC ${MOCKCPP_SRC_ROOT}/include ${MOCKCPP_SRC_ROOT}/3rdparty)
+
+ ADD_CUSTOM_TARGET(vtbl_related_headers DEPENDS ${MOCKCPP_VTBL_RELATED_HEADERS})
+ ADD_CUSTOM_TARGET(arg_related_headers DEPENDS ${MOCKCPP_ARG_RELATED_HEADER_FILES})
+--
+2.33.0
