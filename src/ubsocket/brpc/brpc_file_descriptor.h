@@ -515,7 +515,9 @@ public:
     static const uint8_t CONTROL_PLANE_MAGIC_NUMBER_PREFIX = 0xff;
     static const uint64_t CONTROL_PLANE_MAGIC_NUMBER_BODY = 0x52504341445054;
     static const uint32_t NEGOTIATE_TIMEOUT_MS = 10;
-    static const uint32_t CONTROL_PLANE_TIMEOUT_MS = 500;
+    // Current UB jetty handshake is synchronous that brpc acceptor can't yield from the point.
+    // Ensure the connector has at most 5s to wait from server socket.
+    static const uint32_t CONTROL_PLANE_TIMEOUT_MS = 5000;
     static const uint32_t DATA_PLANE_TIMEOUT_MS = 100;
     static const uint32_t POLL_TX_RETRY_MAX_CNT = 50;
     static const uint32_t FLUSH_TIMEOUT_MS = 200;

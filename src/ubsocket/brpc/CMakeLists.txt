@@ -1,9 +1,16 @@
-include_directories(${CMAKE_CURRENT_LIST_DIR}/../)
-aux_source_directory(${CMAKE_CURRENT_LIST_DIR} BRPC_ADPT_SRC)
+add_library(rpc_adapter_brpc
+  SHARED
+    brpc_context.cpp
+    brpc_iobuf_adapter.cpp
+    brpc_socket_adapter.cpp
+)
 
-add_library(rpc_adapter_brpc SHARED ${COMMON_RPC_ADPT_SRC} ${BRPC_ADPT_SRC})
-set_property(TARGET rpc_adapter_brpc PROPERTY CMAKE_CXX_STANDARD 11)
+target_compile_options(rpc_adapter_brpc
+  PRIVATE
+    -Werror
+)
 
-target_link_libraries(rpc_adapter_brpc PUBLIC dl boundscheck PRIVATE ${UMQ_LIB})
+target_include_directories(rpc_adapter_brpc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(rpc_adapter_brpc PUBLIC ubsocket)
 
 install(TARGETS rpc_adapter_brpc DESTINATION /usr/lib64/)

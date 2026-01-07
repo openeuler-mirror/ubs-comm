@@ -1,11 +1,9 @@
-/*
- *Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- *Description: Provide the utility for umq buffer, iov, etc
- *Author:
- *Create: 2025-07-28
- *Note:
- *History: 2025-07-28
-*/
+// Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
+// Description: Provide the utility for umq buffer, iov, etc
+// Author:
+// Create: 2025-07-28
+// Note:
+// History: 2025-07-28
 
 #include <arpa/inet.h>
 
@@ -29,21 +27,26 @@ static const EnvStrConverter<umq_trans_mode_t>::EnvStrDef g_trans_mode_def[] = {
     {UMQ_TRANS_MODE_UBMM_PLUS, "UBMM_PLUS", g_trans_mode_ubmm_plus},
 };
 
-EnvStrConverter<umq_trans_mode_t> g_trans_mode_converter = {
-    g_trans_mode_def,
-    sizeof(g_trans_mode_def) / sizeof(g_trans_mode_def[0])
-};
+EnvStrConverter<umq_trans_mode_t>& GetTransModeConverter()
+{
+    static EnvStrConverter<umq_trans_mode_t> trans_mode_converter = {
+        g_trans_mode_def,
+        sizeof(g_trans_mode_def) / sizeof(g_trans_mode_def[0])
+    };
+    return trans_mode_converter;
+}
 
 umq_trans_mode_t TransModeConverter(const char *str, umq_trans_mode_t default_trans_mode)
 {
-    return g_trans_mode_converter.EnvStrConvert(str,default_trans_mode);
+    auto& trans_mode_converter = GetTransModeConverter();
+    return trans_mode_converter.EnvStrConvert(str, default_trans_mode);
 }
 
 const char *TransModeConverter(umq_trans_mode_t trans_mode)
 {
-    return g_trans_mode_converter.EnvStrConvert(trans_mode);
+    auto& trans_mode_converter = GetTransModeConverter();
+    return trans_mode_converter.EnvStrConvert(trans_mode);
 }
-
 }
 
 namespace BoolVal{
