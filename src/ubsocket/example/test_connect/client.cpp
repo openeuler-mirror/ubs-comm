@@ -12,23 +12,24 @@
 #include <cstring>
 #include <vector>
 
-static constexpr int ARGS_NUM_2 = 2;
-static constexpr int ARGS_NUM_3 = 3;
+static constexpr int ARGS_2 = 2;
+static constexpr int ARGS_NUM = 3;
 std::string g_ip;
 int32_t g_port;
 
-static int OsdParseArgs(int argc, char *argv[])
+static int OsdParseArgs(int argc, char* argv[])
 {
-   if (argc != ARGS_NUM_3) {
+   if (argc != ARGS_NUM) {
        printf("invalid args, usage: %s <port>\n", argv[0]);
        return -1;
    }
    g_ip = std::string(argv[1]);
-   g_port = atoi(argv[ARGS_NUM_2]);
+   g_port = atoi(argv[ARGS_2]);
    return 0;
 }
 
-int SetNonBlocking(int fd) {
+int SetNonBlocking(int fd)
+{
    int flags = fcntl(fd, F_GETFL, 0);
    if (flags == -1) {
        return -1;
@@ -36,7 +37,8 @@ int SetNonBlocking(int fd) {
    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-int SetBlocking(int fd) {
+int SetBlocking(int fd)
+{
    int flags = fcntl(fd, F_GETFL, 0);
    if (flags == -1) {
        return -1;
@@ -80,8 +82,7 @@ static int Connect(bool isBlock)
        perror("connect failed");
        return -1;
    }
-   printf("connect ret %d, errno %d, %s\n", ret, errno,
-          strerror(errno));  // 期待输出connect ret 0, errno 0, Success
+   printf("connect ret %d, errno %d, %s\n", ret, errno, strerror(errno));
 
    int32_t buf = 1;
    ret = write(sockfd, &buf, sizeof(int32_t));
@@ -100,7 +101,7 @@ static int Connect(bool isBlock)
    }
    std::cout << "read from server: " << buf << std::endl;
 
-   ret = shutdown(sockfd,0);
+   ret = shutdown(sockfd, 0);
    if (ret != 0) {
        perror("shutdown failed");
        return -1;

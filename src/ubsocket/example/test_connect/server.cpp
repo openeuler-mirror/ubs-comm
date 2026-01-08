@@ -13,11 +13,13 @@
 #include <vector>
 
 static constexpr int32_t ARGS_NUM = 4;
+static constexpr int ARGS_2 = 2;
+static constexpr int ARGS_3 = 3;
 static constexpr int32_t BACKLOG = 1024;
 static constexpr int32_t MAX_EVENTS = 16;
 int32_t g_port;
-int32_t isBlock; // 0为false，1为true
-int32_t accept_type; // 0为accept，1为accept4
+int32_t g_isBlock; // 0为false，1为true
+int32_t g_accept_type; // 0为accept，1为accept4
 
 static int OsdParseArgs(int argc, char* argv[])
 {
@@ -26,12 +28,13 @@ static int OsdParseArgs(int argc, char* argv[])
        return -1;
    }
    g_port = atoi(argv[1]);
-   isBlock = atoi(argv[2]);
-   accept_type = atoi(argv[3]);
+   g_isBlock = atoi(argv[ARGS_2]);
+   g_accept_type = atoi(argv[ARGS_3]);
    return 0;
 }
 
-static int SetNonBlocking(int fd) {
+static int SetNonBlocking(int fd)
+{
    int flags = fcntl(fd, F_GETFL, 0);
    if (flags == -1) {
        return -1;
@@ -39,7 +42,8 @@ static int SetNonBlocking(int fd) {
    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-static int SetBlocking(int fd) {
+static int SetBlocking(int fd)
+{
    int flags = fcntl(fd, F_GETFL, 0);
    if (flags == -1) {
        return -1;
@@ -50,7 +54,7 @@ static int SetBlocking(int fd) {
 
 static void AcceptHandler(int sockfd, int &newfd, int epollFd)
 {
-   if (!accept_type) {
+   if (!g_accept_type) {
        newfd = accept(sockfd, nullptr, nullptr);
        if (newfd == -1) {
            perror("accept failed");
@@ -147,13 +151,13 @@ static void EventLoop(int sockfd)
    }
 }
 
-int CreateSockfd(int isBlock) {
+int CreateSockfd() {
    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
    if (sockfd < 0) {
        perror("socket failed");
        return -1;
    }
-   if (isBlock) {
+   if (g_isBlock) {
        SetBlocking(sockfd);
    } else {
        SetNonBlocking(sockfd);
@@ -179,7 +183,8 @@ int main(int argc, char *argv[])
 {
    OsdParseArgs(argc, argv);
 
-   int sockfd1 = CreateSockfd(isBlock);
-   std::cout << "create socket success, listening on port " << g_port << " sockfd " << sockfd1 << " isBlock " << isBlock << std::endl;
-   EventLoop(sockfd1);
+   int sockfd = CreateSockfd();
+   std::cout << "create socket success, listening on port " << g_port
+             << " sockfd " << sockfd << " isBlock " << g_isBlock << std::endl;
+   EventLoop(sockfd);
 }
