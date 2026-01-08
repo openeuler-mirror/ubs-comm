@@ -1017,6 +1017,15 @@ private:
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
                 queue_cfg.dev_info.eid.eid = *connEid;
             }
+        } else {
+            if (strcpy_s(queue_cfg.dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, "bonding_dev_0") != EOK) {
+                RPC_ADPT_VLOG_ERR("Failed to strcpy_s device name\n");
+                return -1;
+            }
+            if (context->IsBonding()) {
+                queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+                queue_cfg.dev_info.eid.eid = *connEid;
+            }
         }
 
         m_local_umqh = umq_create(&queue_cfg);

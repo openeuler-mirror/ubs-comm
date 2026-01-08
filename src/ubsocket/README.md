@@ -103,26 +103,26 @@ RPC_ADPT_READV_UNLIMITED=true \
 
 在启动`UBSocket`时，支持通过环境变量进行配置，各环境变量的含义如下。
 
-| 名称                       | 含义                   | 取值范围                                                     | 默认值  | 必填                                   |
-| :------------------------- | :--------------------- | :----------------------------------------------------------- | :------ | -------------------------------------- |
-| RPC_ADPT_TRANS_MODE        | 通信协议               | ub，ib                                                       | ib      | 是                                     |
-| RPC_ADPT_DEV_NAME          | 设备名称               | 根据实际场景填写设备名称；例如，udma2或者bonding_dev_0       | NA      | 是                                     |
-| RPC_ADPT_DEV_IP            | 设备名称               | 根据实际场景填写，支持ipv6和ipv4写法。`ub协议下不需要填写`   | NA      | 否                                     |
-| RPC_ADPT_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | `RPC_ADPT_DEV_NAME`为普通设备时必填    |
+| 名称                       | 含义                   | 取值范围                                                     | 默认值  | 必填                               |
+| :------------------------- | :--------------------- | :----------------------------------------------------------- | :------ |----------------------------------|
+| RPC_ADPT_TRANS_MODE        | 通信协议               | ub，ib                                                       | ib      | 是                                |
+| RPC_ADPT_DEV_NAME          | 设备名称               | 根据实际场景填写设备名称；例如，udma2或者bonding_dev_0       | NA      | 是，使用bonding设备时可以不填               |
+| RPC_ADPT_DEV_IP            | 设备名称               | 根据实际场景填写，支持ipv6和ipv4写法。`ub协议下不需要填写`   | NA      | 否                                |
+| RPC_ADPT_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | `RPC_ADPT_DEV_NAME`为普通设备时必填      |
 | RPC_ADPT_SRC_EID           | 使用bonding设备的eid   | ub协议下，通过`urma_admin show`命令查询获得                  | NA      | `RPC_ADPT_DEV_NAME`为bonding设备时必填 |
-| RPC_ADPT_LOG_LEVEL         | 日志级别               | emerg，alert，crit，err，warn，notice，info，debug           | info    | 否                                     |
-| RPC_ADPT_LOG_USE_PRINTF    | 是否将日志打印到前台   | 0，1                                                         | 0       | 否                                     |
-| RPC_ADPT_TX_DEPTH          | 发送队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`的值） | 128     | 否                                     |
-| RPC_ADPT_RX_DEPTH          | 接受队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`的值） | 128     | 否                                     |
-| RPC_ADPT_READV_UNLIMITED   | 是否打开readv上报限制  | false，true                                                  | false   | 否                                     |
-| RPC_ADPT_BLOCK_TYPE        | 内存池的最小分片       | default，small，medium，large                                | default | 否                                     |
-| RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，单位MB | 应用按需配置                                                 | 1024    | 否                                     |
+| RPC_ADPT_LOG_LEVEL         | 日志级别               | emerg，alert，crit，err，warn，notice，info，debug           | info    | 否                                |
+| RPC_ADPT_LOG_USE_PRINTF    | 是否将日志打印到前台   | 0，1                                                         | 0       | 否                                |
+| RPC_ADPT_TX_DEPTH          | 发送队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`的值） | 128     | 否                                |
+| RPC_ADPT_RX_DEPTH          | 接受队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`的值） | 128     | 否                                |
+| RPC_ADPT_READV_UNLIMITED   | 是否打开readv上报限制  | false，true                                                  | false   | 否                                |
+| RPC_ADPT_BLOCK_TYPE        | 内存池的最小分片       | default，small，medium，large                                | default | 否                                |
+| RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，单位MB | 应用按需配置                                                 | 1024    | 否                                |
 
 >  说明：
 >
 >  - `UBSocket`支持使用bonding设备和普通udma设备，通过`urma_admin show`命令可以查看各设备信息。
 >  - 普通udma设备，需要感知网络拓扑连线，使用较复杂，通常用于开发调测。
->  - 建议应用使用bonding设备，后续`UBSocket`会自动选择bonding设备及自动选路，进一步简化使用。
+>  - 建议应用使用bonding设备，`UBSocket`会自动选择bonding设备及自动选路，进一步简化使用。
 
 
 
