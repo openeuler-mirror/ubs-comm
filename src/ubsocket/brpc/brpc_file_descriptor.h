@@ -2144,8 +2144,8 @@ public:
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_fd);
         if (input_event->events & EPOLLOUT) {
-            if (socket_fd_obj != nullptr && !socket_fd_obj->UseTcp() && !socket_fd_obj->GetBindRemote()) {
-                if (socket_fd_obj->DoConnect() != 0) {
+            if (socket_fd_obj != nullptr && !socket_fd_obj->UseTcp()) {
+                if (!socket_fd_obj->GetBindRemote() && socket_fd_obj->DoConnect() != 0) {
                     RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", m_fd);
                     Fd<::SocketFd>::OverrideFdObj(m_fd, nullptr);
                     /* Clear messages that already exist on the TCP link to prevent

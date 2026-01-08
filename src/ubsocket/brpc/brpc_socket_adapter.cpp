@@ -86,7 +86,7 @@ EXPOSE_C_DEFINE int accept4(int socket, struct sockaddr *address, socklen_t *add
 {
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(socket);
     if (obj == nullptr) {
-        return OsAPiMgr::GetOriginApi()->accept(socket, address, address_len);
+        return OsAPiMgr::GetOriginApi()->accept4(socket, address, address_len, SOCK_NONBLOCK | SOCK_CLOEXEC);
     }
 
     return obj->Accept(address, address_len);
