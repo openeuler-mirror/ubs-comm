@@ -60,7 +60,7 @@ EXPOSE_C_DEFINE int socket(int domain, int type, int protocol)
 
 EXPOSE_C_DEFINE int shutdown(int fd, int how)
 {
-    return OsAPiMgr::GetOriginApi()->shutdown(fd, SHUT_RDWR);
+    return OsAPiMgr::GetOriginApi()->shutdown(fd, how);
 }
 
 
@@ -86,7 +86,7 @@ EXPOSE_C_DEFINE int accept4(int socket, struct sockaddr *address, socklen_t *add
 {
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(socket);
     if (obj == nullptr) {
-        return OsAPiMgr::GetOriginApi()->accept4(socket, address, address_len, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        return OsAPiMgr::GetOriginApi()->accept4(socket, address, address_len, flag);
     }
 
     return obj->Accept(address, address_len);
