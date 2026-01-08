@@ -260,7 +260,24 @@ public:
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
     {
         int fd = OsAPiMgr::GetOriginApi()->accept(m_fd, address, address_len);
-        if (fd < 0 || m_tx_use_tcp || m_rx_use_tcp) {
+        if (m_tx_use_tcp || m_rx_use_tcp) {
+            return fd;
+        }
+
+        if (fd < 0) {
+            /*
+            * 1. 若全连接队列不为空：
+            * a. 正常情况下，返回非负整数的fd，tcp连接已完成，则执行DoAccept，且需要等待ub连接完成再返回，
+            * b. 异常情况下，比如内存不足、文件描述符达到系统上限、客户端异常中止连接等，保持原错误码直接返回上层，由上层应用决定后续动作
+            * 2. 若全连接队列为空：
+            * a. fd为非阻塞，则返回-1，errno为EAGAIN/EWOULDBLOCK，保持原错误码直接返回上层
+            * b. fd为阻塞，则等待直到有连接完成或者触发异常，比如被信号中断，返回-1，errno为EINTR，保持原错误码直接返回上层
+            */
+            if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) {  // nonblocking
+                RPC_ADPT_VLOG_ERR("tcp accept failed, fd: %d, %d, %s\n", m_fd, errno, strerror(errno));
+                return fd;
+            }
+            RPC_ADPT_VLOG_DEBUG("tcp accept need try again, fd: %d, %d, %s\n", m_fd, errno, strerror(errno));
             return fd;
         }
 
@@ -435,8 +452,29 @@ public:
     ALWAYS_INLINE int Connect (const struct sockaddr *address, socklen_t address_len)
     {
         int ret = OsAPiMgr::GetOriginApi()->connect(m_fd, address, address_len);
-        if (ret < 0 || m_tx_use_tcp || m_rx_use_tcp) {
+        if (m_tx_use_tcp || m_rx_use_tcp) {
             return ret;
+        }
+
+        if (ret == 0) {
+            RPC_ADPT_VLOG_INFO("tcp connect succeed, fd %d\n", m_fd);
+        } else {
+            /* fd是非阻塞套接字
+            * 1. 第一次调用connect返回-1，errno为EINPROGRESS，网络正在建连；
+            * 2. 若未建连状态下，第n次对fd调用connect，n>=2，返回-1，errno为EALREADY；
+            * 3. 若建连成功，且当前不是第二次调connect，返回-1，errno为EISCONN；否则返回0（非阻塞套接字）
+            *
+            * 若ret = 0 或者errno 是EISCONN，tcp连接已完成，则执行DoConnect，且需要等待连接完成再返回，
+            * 若errno是EINPROGRESS/EALREADY，fd最终会变为连接状态，则执行DoConnect，且不需要等待ub连接完成
+            * 若errno是EINTR/EADDRNOTAVAIL/EHOSTUNREACH等错误码，tcp连接失败，则不执行DoConnect，保持原错误码直接返回上层，由上层应用决定后续动作
+            */
+            if (errno == EINPROGRESS || errno == EALREADY) {
+                RPC_ADPT_VLOG_DEBUG("tcp connect inprogress:%s, fd %d\n", strerror(errno), m_fd);
+            } else if (errno != EISCONN) {
+                RPC_ADPT_VLOG_NOTICE("tcp connect failed, errno %d, err msg: %s, fd %d\n", errno,
+                                     strerror(errno), m_fd);
+                return ret;
+            }
         }
 
         bool is_blocking = IsBlocking(m_fd);
@@ -2117,8 +2155,8 @@ public:
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_fd);
         if (input_event->events & EPOLLOUT) {
-            if (socket_fd_obj != nullptr && !socket_fd_obj->UseTcp() && !socket_fd_obj->GetBindRemote()) {
-                if (socket_fd_obj->DoConnect() != 0) {
+            if (socket_fd_obj != nullptr && !socket_fd_obj->UseTcp()) {
+                if (!socket_fd_obj->GetBindRemote() && socket_fd_obj->DoConnect() != 0) {
                     RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", m_fd);
                     Fd<::SocketFd>::OverrideFdObj(m_fd, nullptr);
                     /* Clear messages that already exist on the TCP link to prevent
