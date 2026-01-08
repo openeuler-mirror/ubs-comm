@@ -2385,5 +2385,15 @@ int32_t HcomChannelImp::SetTwoSideThreshold(const UBSHcomTwoSideThreshold &thres
         ", Rndv Threshold is: " << mRndvThreshold);
     return SER_OK;
 }
+
+void HcomChannelImp::SetUpCtx(uint64_t ctx)
+{
+    mUpCtx = ctx;
+}
+
+uint64_t HcomChannelImp::GetUpCtx()
+{
+    return mUpCtx;
+}
 }
 }
