@@ -145,12 +145,12 @@ class SocketFd : public Fd<SocketFd> {
     static const uint32_t FLUSH_SOCKET_MSG_BUFFER_LEN = 1024;
 
     static ALWAYS_INLINE bool IsBlocking(int fd) {
-        const int flags = fcntl(fd, F_GETFL, 0);
+        const int flags = OsAPiMgr::GetOriginApi()->fcntl(fd, F_GETFL, 0);
         return flags >= 0 && !(flags & O_NONBLOCK);
     }
 
     static ALWAYS_INLINE int SetNonBlocking(int fd){
-        const int flags = fcntl(fd, F_GETFL, 0);
+        const int flags = OsAPiMgr::GetOriginApi()->fcntl(fd, F_GETFL, 0);
         if(flags < 0){
             return flags;
         }
@@ -159,17 +159,17 @@ class SocketFd : public Fd<SocketFd> {
             return 0;
         }
 
-        return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        return OsAPiMgr::GetOriginApi()->fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     }
 
     static ALWAYS_INLINE int SetBlocking(int fd){
-        const int flags = fcntl(fd, F_GETFL, 0);
+        const int flags = OsAPiMgr::GetOriginApi()->fcntl(fd, F_GETFL, 0);
         if(flags < 0){
             return flags;
         }
 
         if(flags & O_NONBLOCK){
-            return fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+            return OsAPiMgr::GetOriginApi()->fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
         }
 
         return 0;    

@@ -120,6 +120,61 @@ EXPOSE_C_DEFINE ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
     return obj->WriteV(iov, iovcnt);
 }
 
+EXPOSE_C_DEFINE int fcntl(int fd, int cmd, ...)
+{
+    unsigned long int arg{ 0 };
+    va_list va;
+    va_start(va, cmd);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->fcntl(fd, cmd, arg);
+    }
+
+    return obj->Fcntl(fd, cmd, arg);
+}
+
+EXPOSE_C_DEFINE int fcntl64(int fd, int cmd, ...)
+{
+    unsigned long int arg{ 0 };
+    va_list va;
+    va_start(va, cmd);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->fcntl64(fd, cmd, arg);
+    }
+
+    return obj->Fcntl64(fd, cmd, arg);
+}
+
+EXPOSE_C_DEFINE int ioctl(int fd, unsigned long request, ...)
+{
+    unsigned long int arg{ 0 };
+    va_list va;
+    va_start(va, request);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->ioctl(fd, request, arg);
+    }
+
+    return obj->Ioctl(fd, request, arg);
+}
+
+EXPOSE_C_DEFINE int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->setsockopt(fd, level, optname, optval, optlen);
+    }
+
+    return obj->SetSockOpt(fd, level, optname, optval, optlen);
+}
+
 EXPOSE_C_DEFINE int epoll_create(int size)
 {
     int epoll_fd = OsAPiMgr::GetOriginApi()->epoll_create(size);

@@ -14,6 +14,8 @@
 #include <cstring>
 #include <iostream>
 #include <unordered_set>
+#include <fcntl.h>
+#include <sys/ioctl.h>
 #include "umq_pro_api.h"
 #include "umq_errno.h"
 #include "brpc_context.h"
@@ -874,6 +876,105 @@ public:
         }
 
         return tx_total_len;
+    }
+
+    ALWAYS_INLINE int Fcntl(int fd, int cmd, unsigned long int arg)
+    {
+        // arg can be either struct flock or int
+        int ret { 0 };
+
+        switch (cmd) {
+            case F_SETFL: // Set file status flags (O_NONBLOCK, etc.)
+                ret = OsAPiMgr::GetOriginApi()->fcntl(m_fd, cmd, arg);
+                if (ret == 0) {
+                    // Update m_isblocking based on the origin fd blocking state
+                    m_isblocking = IsBlocking(m_fd);
+                } else {
+                    RPC_ADPT_VLOG_ERR("fcntl set fd %d failed, ret is %d, errno %d\n", m_fd, ret, errno);
+                }
+                break;
+            case F_GETOWN: // Get process ID or process group ID receiving SIGIO/SIGURG signals
+            case F_GETFL:  // Get file status flags
+            case F_GETFD:  // Get file descriptor flags
+                ret = OsAPiMgr::GetOriginApi()->fcntl(m_fd, cmd, arg);
+                break;
+            case F_DUPFD:          // Duplicate file descriptor using the lowest available fd >= arg
+            case F_DUPFD_CLOEXEC:  // Duplicate file descriptor and set FD_CLOEXEC flag
+            case F_SETFD:          // Set file descriptor flags
+            case F_SETOWN:         // Set process ID or process group ID for SIGIO/SIGURG signals
+            case F_SETLK:          // Set file lock (non-blocking)
+            case F_SETLKW:         // Set file lock (blocking)
+            case F_GETLK:          // Get file lock information
+                RPC_ADPT_VLOG_ERR("fcntl fail, fd %d, cmd %d is not supported\n", m_fd, cmd);
+                break;
+            default:
+                RPC_ADPT_VLOG_WARN("fcntl, fd %d, cmd %d may be not supported\n", m_fd, cmd);
+                ret = OsAPiMgr::GetOriginApi()->fcntl(m_fd, cmd, arg);
+                break;
+        }
+        return ret;
+    }
+
+    ALWAYS_INLINE int Fcntl64(int fd, int cmd, unsigned long int arg)
+    {
+        // arg can be either struct flock or int
+        int ret { 0 };
+
+        switch (cmd) {
+            case F_SETFL:
+                ret = OsAPiMgr::GetOriginApi()->fcntl64(m_fd, cmd, arg);
+                if (ret == 0) {
+                    // Update m_isblocking based on the origin fd blocking state
+                    m_isblocking = IsBlocking(m_fd);
+                } else {
+                    RPC_ADPT_VLOG_ERR("fcntl64 set fd %d failed, ret is %d, errno %d\n", m_fd, ret, errno);
+                }
+                break;
+            case F_GETOWN: // Get process ID or process group ID receiving SIGIO/SIGURG signals
+            case F_GETFL:  // Get file status flags
+            case F_GETFD:  // Get file descriptor flags
+                ret = OsAPiMgr::GetOriginApi()->fcntl64(m_fd, cmd, arg);
+                break;
+            case F_DUPFD:          // Duplicate file descriptor using the lowest available fd >= arg
+            case F_DUPFD_CLOEXEC:  // Duplicate file descriptor and set FD_CLOEXEC flag
+            case F_SETFD:          // Set file descriptor flags
+            case F_SETOWN:         // Set process ID or process group ID for SIGIO/SIGURG signals
+            case F_SETLK:          // Set file lock (non-blocking)
+            case F_SETLKW:         // Set file lock (blocking)
+            case F_GETLK:          // Get file lock information
+                RPC_ADPT_VLOG_ERR("fcntl64 fail, fd %d, cmd %d is not supported\n", m_fd, cmd);
+                break;
+            default:
+                RPC_ADPT_VLOG_WARN("fcntl64, fd %d, cmd %d may be not supported\n", m_fd, cmd);
+                ret = OsAPiMgr::GetOriginApi()->fcntl64(m_fd, cmd, arg);
+                break;
+        }
+        return ret;
+    }
+
+    ALWAYS_INLINE int Ioctl(int fd, unsigned long request, unsigned long int arg)
+    {
+        int ret { 0 };
+
+        if (request == FIONBIO) {
+            ret = OsAPiMgr::GetOriginApi()->ioctl(m_fd, request, arg);
+            if (ret == 0) {
+                // set m_isblocking base on origin fd blocking state
+                m_isblocking = IsBlocking(m_fd);
+            } else {
+                RPC_ADPT_VLOG_ERR("ioctl set fd %d FIONBIO failed, ret is %d, errno %d\n", m_fd, ret, errno);
+            }
+        } else {
+            RPC_ADPT_VLOG_WARN("ioctl set fd %d, request %d may be not supported\n", m_fd, request);
+            ret = OsAPiMgr::GetOriginApi()->ioctl(m_fd, request, arg);
+        }
+        return ret;
+    }
+
+    ALWAYS_INLINE int SetSockOpt(int fd, int level, int optname, const void *optval, socklen_t optlen)
+    {
+        RPC_ADPT_VLOG_INFO("SetSockOpt set fd %d, level %d, optname %d\n", m_fd, level, optname);
+        return OsAPiMgr::GetOriginApi()->setsockopt(fd, level, optname, optval, optlen);
     }
 
     ALWAYS_INLINE void NewOriginEpollError()
@@ -1794,6 +1895,7 @@ private:
     std::atomic<bool> m_closed{false};
     int m_event_fd;
     EidRegistry mEidRegistry;
+    bool m_isblocking = true;
 
     // TX fields
     struct alignas(CACHE_LINE_ALIGNMENT) TxDataPlane {
