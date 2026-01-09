@@ -23,6 +23,7 @@ target_link_libraries(ubsocket_test
 target_sources(ubsocket_test
   PRIVATE
     urpc_util_test.cpp
+    urpc_adpt_vlog_test.cpp
 )
 
 add_subdirectory(brpc)
