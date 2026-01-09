@@ -150,6 +150,32 @@ EXPOSE_C_DEFINE int epoll_create(int size)
     return epoll_fd;
 }
 
+EXPOSE_C_DEFINE int epoll_create1(int flags)
+{
+    int epoll_fd = OsAPiMgr::GetOriginApi()->epoll_create1(flags);
+    if (epoll_fd < 0) {
+        return epoll_fd;
+    }
+
+    /* The 'epoll_create1()' function is only called when constructing the 'Brpc::Context'singleton, so the
+     * file descriptor (fd) is directly returned to avoid recursively constructing 'Brpc::Context'. */
+    Brpc::Context *context = Brpc::Context::GetContext();
+    if (context == nullptr) {
+        return epoll_fd;
+    }
+
+    EpollFd *epoll_fd_obj = context->CreateEpollFd(epoll_fd);
+    if (epoll_fd_obj == nullptr) {
+        OsAPiMgr::GetOriginApi()->close(epoll_fd);
+        return -1;
+    }
+
+    // Delete existing objects and record new objects in the list.
+    Fd<EpollFd>::OverrideFdObj(epoll_fd, epoll_fd_obj);
+
+    return epoll_fd;
+}
+
 EXPOSE_C_DEFINE int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
     EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
@@ -174,6 +200,17 @@ EXPOSE_C_DEFINE int epoll_wait(int epfd, struct epoll_event *events, int maxeven
     bool use_polling = context == nullptr ? false : context->GetUsePolling();
 
     return obj->EpollWait(events, maxevents, timeout, use_polling);
+}
+
+EXPOSE_C_DEFINE int epoll_pwait(int epfd, struct epoll_event *events, int maxevents, int timeout,
+                                const sigset_t *sigmask)
+{
+    EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->epoll_pwait(epfd, events, maxevents, timeout, sigmask);
+    }
+
+    return obj->EpollWait(events, maxevents, timeout);
 }
 
 // Be cautious, global obj constructor may occur after this.
