@@ -1070,6 +1070,12 @@ void ubs_hcom_service_set_ubcmode(ubs_hcom_service service, ubs_hcom_service_ubc
     reinterpret_cast<UBSHcomService *>(service)->SetUbcMode(tmpUbcMode);
 }
 
+void ubs_hcom_service_set_max_send_recv_data_cnt(ubs_hcom_service service, uint32_t maxSendRecvDataCount)
+{
+    VALIDATE_SERVICE_NO_RET(service);
+    reinterpret_cast<UBSHcomService *>(service)->SetMaxSendRecvDataCount(maxSendRecvDataCount);
+}
+
 ubs_hcom_service_context ubs_hcom_context_clone(ubs_hcom_service_context context)
 {
     VALIDATE_CONTEXT_RETURN_ZERO(context)

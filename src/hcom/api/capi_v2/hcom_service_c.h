@@ -393,6 +393,8 @@ void ubs_hcom_service_set_multirail_opt(ubs_hcom_service service, bool enable, u
 
 void ubs_hcom_service_set_ubcmode(ubs_hcom_service service, ubs_hcom_service_ubc_mode ubcMode);
 
+void ubs_hcom_service_set_max_send_recv_data_cnt(ubs_hcom_service service, uint32_t maxSendRecvDataCount);
+
 void ubs_hcom_service_set_enable_mrcache(ubs_hcom_service service, bool enableMrCache);
 
 void ubs_hcom_channel_refer(ubs_hcom_channel channel);
