@@ -39,6 +39,7 @@ constexpr uint64_t SIZE_32K = 32768;
 constexpr uint64_t SIZE_64K = 65536;
 constexpr uint64_t MASK_DIFF = 1;
 constexpr uint64_t IOBUF_DIFF = 32;
+constexpr uint16_t REFILL_THRESHOLD = 2;
 
 inline bool operator==(const umq_eid_t& a, const umq_eid_t& b) {
     return ::memcmp(a.raw, b.raw, sizeof(a.raw)) == 0;
@@ -221,7 +222,7 @@ public:
         m_tx_window_capacity = Context::GetContext()->GetTxDepth();
         m_rx_window_capacity = Context::GetContext()->GetRxDepth();
         m_tx.m_window_size = m_tx_window_capacity;
-        m_rx.m_refill_threshold = m_rx_window_capacity <= REFILL_RX_THRESHOLD ? 1 : REFILL_RX_THRESHOLD;
+        m_rx.m_refill_threshold = REFILL_THRESHOLD;
         m_tx.m_handle_threshold = HANDLE_THRESHOLD;
         m_tx.m_retrieve_threshold = RETRIEVE_THRESHOLD;
         m_tx.m_report_threshold = REPORT_THRESHOLD;
@@ -289,29 +290,12 @@ public:
             SetNonBlocking(fd);
         }
 
-        uint64_t magic_number = 0;
-        ssize_t magic_number_recv_size = 0;
-        int ret = ValidateMagicNumber(fd, magic_number, magic_number_recv_size);
-        if (ret > 0) {
-            /* IF the magic number verification fails, it is still necessary to create a socket fd object
-             * to store the magic number information, so that the received information can be reported to 
-             * the user when readv is called. */
-            SocketFd *socket_fd_obj = nullptr;
-            try {
-                socket_fd_obj = new SocketFd(fd, magic_number, (uint32_t)magic_number_recv_size);
-                Fd<::SocketFd>::OverrideFdObj(fd, socket_fd_obj);
-            } catch (std::exception& e) {
-                RPC_ADPT_VLOG_ERR("%s\n", e.what());
-                OsAPiMgr::GetOriginApi()->close(fd);
-                return -1;
-            }
-        } else if (ret == 0) {
-            if (DoAccept(fd) != 0) {
-                RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", fd);
-                /* Clear messages that already exist on the TCP link to prevent 
-                 * dirty messages from affecting user data transmission*/
-                 FlushSocketMsg(fd);
-            }
+        if (DoAccept(fd) != 0) {
+            RPC_ADPT_VLOG_ERR("Failed to establish UB connection.");
+            /* Clear messages that already exist on the TCP link to prevent dirty messages */
+            FlushSocketMsg(fd);
+            OsAPiMgr::GetOriginApi()->close(fd);
+            return -1;
         }
 
         if (is_blocking) {
@@ -366,11 +350,6 @@ public:
         CpMsg remote_cp_msg;
         char send_sync_msg[] = UMQ_BIND_SYNC_MSG;
         char recv_sync_msg[] = UMQ_BIND_SYNC_MSG;
-        if (SendSocketData(
-            m_fd, &local_cp_msg.magic_number, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
-            RPC_ADPT_VLOG_ERR("Failed to send magic number, fd: %d\n", m_fd);
-            return -1;
-        }
 
         umq_eid_t connEid;
         if (ConnectExchangeEid(&connEid) < 0) {
@@ -446,7 +425,7 @@ public:
             }
         }
 
-        RPC_ADPT_VLOG_DEBUG("Connect to remote with UMQ successful, fd: %d\n", m_fd);
+        RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", m_fd);
 
         return 0;
     }
@@ -487,7 +466,7 @@ public:
 
         ret = DoConnect();
         if (ret != 0) {
-            RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", m_fd);
+            RPC_ADPT_VLOG_ERR("Failed to establish UB connection.");
             Fd<::SocketFd>::OverrideFdObj(m_fd, nullptr);
             /* Clear messages that already exist on the TCP link to prevent 
                  * dirty messages from affecting user data transmission*/
@@ -1394,7 +1373,7 @@ private:
             }
         }
 
-        RPC_ADPT_VLOG_DEBUG("Accept to remote with UMQ successful, listen fd: %d, new fd: %d\n", m_fd, new_fd);
+        RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
 
         return 0;  
     }

@@ -13,12 +13,37 @@
 #include "file_descriptor.h"
 #include "brpc_file_descriptor.h"
 
+static bool ForceUseUB()
+{
+    static bool enable = []() {
+        const char *env = std::getenv("RPC_ADPT_UB_FORCE");
+        if (env == nullptr) {
+            return false;
+        }
+        std::string envStr(env);
+        if (envStr == "1") {
+            RPC_ADPT_VLOG_INFO("RPC_ADPT_UB_FORCE is set force use ub acceleration");
+            return true;
+        }
+        return false;
+    }();
+    return enable;
+}
+
+static bool UseUB(int domain, int type)
+{
+    bool isTCP = ((domain == AF_INET) || (domain == AF_INET6)) && (type == SOCK_STREAM);
+    if ((domain == AF_SMC) || (ForceUseUB() && isTCP)) {
+        return true;
+    }
+    return false;
+}
+
 EXPOSE_C_DEFINE int socket(int domain, int type, int protocol)
 {
     int fd = OsAPiMgr::GetOriginApi()->socket(domain, type, protocol);
-    if (!(((domain == AF_INET) || (domain == AF_INET6)) && type == SOCK_STREAM) ||
-        fd < 0) {
-            return fd;
+    if (!UseUB(domain, type) || fd < 0) {
+        return fd;
     }
 
     /* The 'socket()' function is only called when constructing the 'Brpc::Context'singleton, so the
