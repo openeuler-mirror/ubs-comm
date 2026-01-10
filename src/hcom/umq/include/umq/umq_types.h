@@ -197,6 +197,9 @@ typedef struct umq_init_cfg {
 #define UMQ_CREATE_FLAG_RX_DEPTH            (1 << 2)        // enable arg rx_depth when create umq
 #define UMQ_CREATE_FLAG_TX_DEPTH            (1 << 3)        // enable arg tx_depth when create umq
 #define UMQ_CREATE_FLAG_QUEUE_MODE          (1 << 4)        // enable arg mode when create umq
+#define UMQ_CREATE_FLAG_SHARE_RQ            (1 << 5)        // enable arg share_rq_umqh when create umq
+#define UMQ_CREATE_FLAG_UMQ_CTX             (1 << 6)        // enable arg umq_ctx when create umq
+#define UMQ_CREATE_FLAG_SUB_UMQ             (1 << 7)        // just indicates the umq is sub queue
 
 typedef struct umq_create_option {
     /*************Required paramenters start*****************/
@@ -211,6 +214,8 @@ typedef struct umq_create_option {
     uint32_t tx_buf_size;
     uint32_t rx_depth;
     uint32_t tx_depth;
+    uint64_t share_rq_umqh;
+    uint64_t umq_ctx;
 
     umq_queue_mode_t mode;      // mode of queue, QUEUE_MODE_POLLING for default
     /*************Optional paramenters end*******************/
@@ -459,6 +464,10 @@ typedef struct umq_dfx_result {
 typedef enum umq_async_event_type {
     UMQ_EVENT_QH_ERR,
     UMQ_EVENT_QH_LIMIT,
+    UMQ_EVENT_QH_RQ_ERR,
+    UMQ_EVENT_QH_RQ_LIMIT,
+    UMQ_EVENT_QH_RQ_CQ_ERR,
+    UMQ_EVENT_QH_SQ_CQ_ERR,
     UMQ_EVENT_PORT_ACTIVE,
     UMQ_EVENT_PORT_DOWN,
     UMQ_EVENT_DEV_FATAL,
@@ -496,6 +505,7 @@ typedef struct umq_route {
     umq_eid_t dst;
     umq_route_flag_t flag;
     uint32_t hops; // Only supports direct routes, currently 0
+    uint32_t chip_id;
 } umq_route_t;
 
 typedef struct umq_route_list {
@@ -529,6 +539,37 @@ typedef enum umq_mempool_import_state {
 typedef struct umq_mempool_state {
     mempool_import_state_t import_state;
 } umq_mempool_state_t;
+
+#define UMQ_MAX_EID_CNT 64
+
+typedef struct umq_eid_info {
+    umq_eid_t eid;
+    uint32_t eid_index;
+} umq_eid_info_t;
+
+typedef struct umq_dev_info {
+    char dev_name[UMQ_DEV_NAME_SIZE];
+    umq_trans_mode_t umq_trans_mode;
+    union {
+        struct {
+            umq_eid_info_t eid_list[UMQ_MAX_EID_CNT];
+            uint32_t eid_cnt;
+        } ub;
+    };
+} umq_dev_info_t;
+
+typedef struct umq_cfg_get {
+    uint32_t create_flag;         // indicates which below creation property takes effect
+    uint32_t rx_buf_size;         // size of the receive buffer
+    uint32_t tx_buf_size;         // size of the send buffer
+    uint32_t rx_depth;            // depth of the receive buffer ring
+    uint32_t tx_depth;            // depth of the send buffer ring
+    uint64_t umq_ctx;             // umq ctx
+    uint64_t share_rq_umqh;       // share jfr queue handle
+    umq_trans_mode_t trans_mode;  // transmission mode of the queue
+    umq_queue_mode_t mode;        // mode of queue, QUEUE_MODE_POLLING for default
+    umq_state_t state;            // queue state
+} umq_cfg_get_t;
 
 #ifdef __cplusplus
 }
