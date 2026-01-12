@@ -226,7 +226,11 @@ void NetTrace::Instance()
 bool NetTrace::gEnableHtrace = false;
 void NetTrace::HtraceInit(const std::string &name)
 {
-    HTracerInit(name);
+    auto ret = HTracerInit(name);
+    if (ret != 0) {
+        NN_LOG_WARN("HTracerInit failed, ret " << ret);
+        return;
+    }
     auto envString = getenv("HCOM_ENABLE_TRACE");
     if (envString != nullptr) {
         long tmp = 0;

@@ -87,6 +87,12 @@ RResult RDMAWorker::RePostReceive(RDMAOpContextInfo *ctx)
 
 RResult RDMAWorker::PostSend(RDMAQp *qp, const RDMASendReadWriteRequest &req, uint32_t immData)
 {
+    // Prevent integer truncation, safely converts uint64_t to uint32_t
+    if (NN_UNLIKELY(req.lKey > UINT32_MAX)) {
+        NN_LOG_ERROR("Failed to PostSend with RDMAWorker as lKey is larger than uint32max, lKey" << req.lKey);
+        return RR_PARAM_INVALID;
+    }
+
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Verbs Failed to PostSend with RDMAWorker " << DetailName() << " as qp is null");
         return RR_PARAM_INVALID;
@@ -107,17 +113,14 @@ RResult RDMAWorker::PostSend(RDMAQp *qp, const RDMASendReadWriteRequest &req, ui
     ctx->mrMemAddr = req.lAddress;
     ctx->dataSize = req.size;
     ctx->qpNum = qp->QpNum();
-    // Prevent integer truncation, safely converts uint64_t to uint32_t
-    if (NN_UNLIKELY(req.lKey > UINT32_MAX)) {
-        NN_LOG_ERROR("Failed to PostSend with RDMAWorker as lKey is larger than uint32max, lkey" << req.lKey);
-        return RR_PARAM_INVALID;
-    }
     ctx->lKey = static_cast<uint32_t>(req.lKey);
     ctx->opType = immData == 0 ? RDMAOpContextInfo::SEND : RDMAOpContextInfo::SEND_RAW;
     ctx->opResultType = RDMAOpContextInfo::SUCCESS;
     ctx->upCtxSize = req.upCtxSize;
     if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx->upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != RR_OK)) {
         NN_LOG_ERROR("Failed to copy req to ctx");
+        qp->ReturnPostSendWr();
+        mOpCtxInfoPool.Return(ctx);
         return RR_PARAM_INVALID;
     }
     qp->IncreaseRef();
@@ -169,6 +172,8 @@ RResult RDMAWorker::PostSendSglInline(
     ctx->upCtxSize = req.upCtxSize;
     if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx->upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != RR_OK)) {
         NN_LOG_ERROR("Failed to copy request to ctx");
+        qp->ReturnPostSendWr();
+        mOpCtxInfoPool.Return(ctx);
         return RR_PARAM_INVALID;
     }
     qp->IncreaseRef();
@@ -200,6 +205,11 @@ RResult RDMAWorker::PostSendSglInline(
 RResult RDMAWorker::PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, const RDMASendReadWriteRequest &tlsReq,
     uint32_t immData, bool isEncrypted)
 {
+    // Prevent integer truncation, safely converts uint64_t to uint32_t
+    if (NN_UNLIKELY(tlsReq.lKey > UINT32_MAX)) {
+        NN_LOG_ERROR("Failed to PostSendSgl with RDMAWorker as lKey is larger than uint32max, lKey" << tlsReq.lKey);
+        return RR_PARAM_INVALID;
+    }
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Failed to PostRead with RDMAWorker " << DetailName() << " as qp is null");
         return RR_PARAM_INVALID;
@@ -216,6 +226,7 @@ RResult RDMAWorker::PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, con
     if (NN_UNLIKELY(memcpy_s(sglCtx->iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, req.iov,
         sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != RR_OK)) {
         NN_LOG_ERROR("Failed to copy request to sglCtx");
+        mSglCtxInfoPool.Return(sglCtx);
         return RR_PARAM_INVALID;
     }
     sglCtx->iovCount = req.iovCount;
@@ -223,6 +234,7 @@ RResult RDMAWorker::PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, con
     if (req.upCtxSize > 0) {
         if (NN_UNLIKELY(memcpy_s(sglCtx->upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != RR_OK)) {
             NN_LOG_ERROR("Failed to copy request to sglCtx");
+            mSglCtxInfoPool.Return(sglCtx);
             return RR_PARAM_INVALID;
         }
     }
@@ -230,12 +242,14 @@ RResult RDMAWorker::PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, con
     auto ctx = mOpCtxInfoPool.Get();
     if (NN_UNLIKELY(ctx == nullptr)) {
         NN_LOG_ERROR("Failed to PostSend with RDMAWorker " << DetailName() << " as no reqInfo left");
+        mSglCtxInfoPool.Return(sglCtx);
         return RR_QP_CTX_FULL;
     }
 
     if (NN_UNLIKELY(!qp->GetPostSendWr())) {
         NN_LOG_ERROR("Failed to PostSend with RDMAWorker " << DetailName() << " as no post send wr left");
         mOpCtxInfoPool.Return(ctx);
+        mSglCtxInfoPool.Return(sglCtx);
         return RR_QP_POST_SEND_WR_FULL;
     }
     ctx->qp = qp;
@@ -243,11 +257,6 @@ RResult RDMAWorker::PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, con
     // if not encrypt reqTls lAddress\size\lKey is 0
     ctx->mrMemAddr = tlsReq.lAddress;
     ctx->dataSize = tlsReq.size;
-    // Prevent integer truncation, safely converts uint64_t to uint32_t
-    if (NN_UNLIKELY(tlsReq.lKey > UINT32_MAX)) {
-        NN_LOG_ERROR("Failed to PostSendSgl with RDMAWorker as lKey is larger than uint32max, lkey" << tlsReq.lKey);
-        return RR_PARAM_INVALID;
-    }
     ctx->lKey = static_cast<uint32_t>(tlsReq.lKey);
     ctx->qpNum = qp->QpNum();
     ctx->opType = RDMAOpContextInfo::SEND_RAW_SGL;
@@ -283,6 +292,12 @@ RResult RDMAWorker::PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, con
 
 RResult RDMAWorker::PostRead(RDMAQp *qp, const RDMASendReadWriteRequest &req)
 {
+    // Prevent integer truncation, safely converts uint64_t to uint32_t
+    if (NN_UNLIKELY(req.lKey > UINT32_MAX || req.rKey > UINT32_MAX)) {
+        NN_LOG_ERROR("Failed to PostRead with RDMAWorker as Key is larger than uint32max, lKey" <<
+            req.lKey << " rKey " << req.rKey);
+        return RR_PARAM_INVALID;
+    }
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Failed to PostRead with RDMAWorker " << DetailName() << " as qp is null");
         return RR_PARAM_INVALID;
@@ -303,12 +318,6 @@ RResult RDMAWorker::PostRead(RDMAQp *qp, const RDMASendReadWriteRequest &req)
     ctx->qp = qp;
     ctx->dataSize = req.size;
     ctx->qpNum = qp->QpNum();
-    // Prevent integer truncation, safely converts uint64_t to uint32_t
-    if (NN_UNLIKELY(req.lKey > UINT32_MAX || req.rKey > UINT32_MAX)) {
-        NN_LOG_ERROR("Failed to PostRead with RDMAWorker as Key is larger than uint32max, lkey" <<
-            req.lKey << " rKey " << req.rKey);
-        return RR_PARAM_INVALID;
-    }
     ctx->lKey = static_cast<uint32_t>(req.lKey);
     ctx->opType = RDMAOpContextInfo::READ;
     ctx->opResultType = RDMAOpContextInfo::SUCCESS;
@@ -316,6 +325,8 @@ RResult RDMAWorker::PostRead(RDMAQp *qp, const RDMASendReadWriteRequest &req)
     if (req.upCtxSize > 0) {
         if (NN_UNLIKELY(memcpy_s(ctx->upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != RR_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
+            qp->ReturnOneSideWr();
+            mOpCtxInfoPool.Return(ctx);
             return RR_PARAM_INVALID;
         }
     }
@@ -446,6 +457,12 @@ RResult RDMAWorker::CreateOneSideCtx(RDMASgeCtxInfo &sgeInfo, UBSHcomNetTransSge
 
 RResult RDMAWorker::PostWrite(RDMAQp *qp, const RDMASendReadWriteRequest &req, RDMAOpContextInfo::OpType type)
 {
+    // Prevent integer truncation, safely converts uint64_t to uint32_t
+    if (NN_UNLIKELY(req.lKey > UINT32_MAX || req.rKey > UINT32_MAX)) {
+        NN_LOG_ERROR("Failed to PostWrite with RDMAWorker as Key is larger than uint32max, lKey" <<
+            req.lKey << " rKey " << req.rKey);
+        return RR_PARAM_INVALID;
+    }
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Failed to PostWrite with RDMAWorker " << DetailName() << " as qp is null");
         return RR_PARAM_INVALID;
@@ -465,12 +482,6 @@ RResult RDMAWorker::PostWrite(RDMAQp *qp, const RDMASendReadWriteRequest &req, R
     ctx->mrMemAddr = req.lAddress;
     ctx->dataSize = req.size;
     ctx->qpNum = qp->QpNum();
-    // Prevent integer truncation, safely converts uint64_t to uint32_t
-    if (NN_UNLIKELY(req.lKey > UINT32_MAX || req.rKey > UINT32_MAX)) {
-        NN_LOG_ERROR("Failed to PostWrite with RDMAWorker as Key is larger than uint32max, lkey" <<
-            req.lKey << " rKey " << req.rKey);
-        return RR_PARAM_INVALID;
-    }
     ctx->lKey = static_cast<uint32_t>(req.lKey);
     ctx->opType = type;
     ctx->upCtxSize = req.upCtxSize;
@@ -478,6 +489,8 @@ RResult RDMAWorker::PostWrite(RDMAQp *qp, const RDMASendReadWriteRequest &req, R
     if (req.upCtxSize > 0) {
         if (NN_UNLIKELY(memcpy_s(ctx->upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != RR_OK)) {
             NN_LOG_ERROR("Failed to copy request to ctx");
+            qp->ReturnOneSideWr();
+            mOpCtxInfoPool.Return(ctx);
             return RR_PARAM_INVALID;
         }
     }

@@ -321,7 +321,7 @@ private:
                 if (ep != nullptr) {
                     // EP 存在时，driver必定存在。
                     auto *driver = ep->GetDriver();
-
+                    driver->ProcessEpError(jetty->GetUpContext());
                     // 从全局 EP 表中删除 EP.
                     UBSHcomNetEndpointPtr nep(ep);
                     driver->DestroyEndpoint(nep);

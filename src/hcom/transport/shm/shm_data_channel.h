@@ -267,20 +267,24 @@ public:
     {
         if (NN_UNLIKELY(!mInited)) {
             NN_LOG_WARN("Unable to mark one buck free from shm data channel " << mName << " as not initialized");
+            return;
         }
 
         if (NN_UNLIKELY(address >= mBuckEndAddress || address < mBuckBaseAddress)) {
             NN_LOG_WARN("Unable to mark one buck free from shm data channel " << mName << " as address is invalid");
+            return;
         }
 
         uint64_t tmpIndex = (address - mBuckBaseAddress) / mOptions.buckSize;
         if ((tmpIndex * mOptions.buckSize + mBuckBaseAddress) != address) {
             NN_LOG_WARN("Unable to mark one buck free from shm data channel " << mName << " as address is invalid");
+            return;
         }
 
         auto &stateData = mMeta[tmpIndex];
         if (NN_UNLIKELY(!stateData.Free())) {
             NN_LOG_WARN("Unable to mark free as is not occupied in shm data channel " << mName);
+            return;
         }
     }
 

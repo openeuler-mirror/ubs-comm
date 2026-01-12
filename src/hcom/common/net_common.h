@@ -529,7 +529,7 @@ public:
                 badConf = true;
             } else if (!NN_Stol(extractedCpuIds[0], tmpCpuIdStart) || !NN_Stol(extractedCpuIds[1], tmpCpuIdEnd)) {
                 badConf = true;
-            } else if (tmpCpuIdStart < 0 || tmpCpuIdStart >= NN_NO256  || tmpCpuIdEnd < 0 || tmpCpuIdEnd >= NN_NO256) {
+            } else if (tmpCpuIdStart < 0 || tmpCpuIdStart >= NN_NO612  || tmpCpuIdEnd < 0 || tmpCpuIdEnd >= NN_NO612) {
                 badConf = true;
             } else if (tmpCpuIdStart > tmpCpuIdEnd) {
                 badConf = true;

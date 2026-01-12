@@ -74,6 +74,7 @@ constexpr uint32_t NN_NO400 = 400;
 constexpr uint32_t NN_NO500 = 500;
 constexpr uint32_t NN_NO0600 = 0600;
 constexpr uint32_t NN_NO512 = 512;
+constexpr uint32_t NN_NO612 = 612;
 constexpr uint32_t NN_NO770 = 770;
 constexpr uint32_t NN_NO771 = 771;
 constexpr uint32_t NN_NO772 = 772;

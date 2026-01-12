@@ -252,6 +252,11 @@ UResult UBDeviceHelper::GetEnableDeviceCount(std::string ipMask, uint16_t &enabl
         }
         NN_LOG_DEBUG("gid found devIndex " << tmpEid.devIndex << ", gidIndex " << tmpEid.eidIndex);
     }
+
+    if (findIps.empty()) {
+        NN_LOG_ERROR("[UB] NoMatched Device found with ip");
+        return UB_DEVICE_NO_IP_MATCHED;
+    }
     enableDevCount = enableCount;
     enableIps = findIps;
     return result;
@@ -288,6 +293,9 @@ UResult UBDeviceHelper::GetDeviceByName(const char name[], uint8_t len, UBEId &g
 {
     std::lock_guard<std::mutex> guard(G_Mutex);
     for (auto &item : G_UBDevEidTable) {
+        if (item.second.empty()) {
+            continue;
+        }
         if (strncmp(name, item.first.c_str(), len) == 0) {
             gid = item.second[0];
             return UB_OK;

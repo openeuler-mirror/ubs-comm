@@ -135,6 +135,7 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
 
     if (result == SH_SEND_COMPLETION_CALLBACK_FAILURE) {
         NN_LOG_WARN("Post send successfully but unable to enqueue sent callback request, result " << result);
+        (void)mShmCh->DCMarkBuckFree(address);
         return result;
     }
 
@@ -223,6 +224,7 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
     } while (flag);
     if (result == SH_SEND_COMPLETION_CALLBACK_FAILURE) {
         NN_LOG_ERROR("Post send request successfully, failed to send completion callback to owner result " << result);
+        (void)mShmCh->DCMarkBuckFree(address);
         return result;
     }
     NN_LOG_ERROR("Failed to post send request, result is " << result);
@@ -294,6 +296,7 @@ NResult NetAsyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, 
 
     if (result == SH_SEND_COMPLETION_CALLBACK_FAILURE) {
         NN_LOG_ERROR("Post send request successfully, failed to send completion callback to owner,result: " << result);
+        (void)mShmCh->DCMarkBuckFree(address);
         return result;
     }
     NN_LOG_ERROR("Failed to post send request, result " << result);
@@ -390,6 +393,7 @@ NResult NetAsyncEndpointShm::PostSendRawSgl(const UBSHcomNetTransSglRequest &req
 
     if (result == SH_SEND_COMPLETION_CALLBACK_FAILURE) {
         NN_LOG_ERROR("Post send request successfully, failed to send completion callback to owner,result " << result);
+        (void)mShmCh->DCMarkBuckFree(address);
         return result;
     }
     NN_LOG_ERROR("Failed to post send request, result " << result);

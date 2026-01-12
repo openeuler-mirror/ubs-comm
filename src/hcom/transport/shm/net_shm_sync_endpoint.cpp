@@ -602,6 +602,7 @@ NResult NetSyncEndpointShm::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContex
         opCtx = ShmOpContextInfo(ch, address, mDelayHandleReceiveEvent.dataSize,
             static_cast<ShmOpContextInfo::ShmOpType>(mDelayHandleReceiveEvent.opType),
             ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);
+        immData = mDelayHandleReceiveEvent.immData;
     } else if (NN_UNLIKELY((result = mShmEp->Receive(timeout, opCtx, immData)) != NN_OK)) {
         NN_LOG_ERROR("Failed to get operation,time out");
         return result;

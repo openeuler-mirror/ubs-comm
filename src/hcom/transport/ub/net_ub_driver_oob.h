@@ -82,6 +82,7 @@ protected:
     int SendRawSglFinishedCB(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx);
     int RWSglOneSideDoneCB(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx);
     int SendSglInlineFinishedCB(UBOpContextInfo *ctx, UBSHcomNetRequestContext &requestCtx, UBWorker *worker);
+    int SendAndSendRawFinishedCB(UBOpContextInfo *ctx, UBSHcomNetRequestContext &requestCtx, UBWorker *worker);
 
     void ProcessEpError(uintptr_t ep);
     void ProcessQPError(UBOpContextInfo *ctx);
@@ -172,6 +173,7 @@ private:
     NetHeartbeat *mHeartBeat = nullptr;
     UBPublicJetty *mPublicJetty = nullptr;
     friend class NetHeartbeat;
+    friend class UBWorker;
 };
 }
 }

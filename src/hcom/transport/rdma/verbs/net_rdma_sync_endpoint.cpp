@@ -345,6 +345,7 @@ NResult NetSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uint
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
             reinterpret_cast<void *>(mrBufAddress), cipherLen)) {
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("Failed send raw message as encryption failure");
             return NN_ENCRYPT_FAILED;
         }
@@ -645,7 +646,8 @@ NResult NetSyncEndpoint::Receive(int32_t timeout, UBSHcomNetResponseContext &ctx
         if (NN_UNLIKELY(memcpy_s(&(mRespCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
             sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
             NN_LOG_WARN("Invalid operation to memcpy_s in Receive");
-            return NN_ERROR;
+            result = NN_ERROR;
+            break;
         }
         auto tmpDataAddress = reinterpret_cast<void *>(opCtx->mrMemAddr + sizeof(UBSHcomNetTransHeader));
 
@@ -661,7 +663,8 @@ NResult NetSyncEndpoint::Receive(int32_t timeout, UBSHcomNetResponseContext &ctx
             if (NN_UNLIKELY(memcpy_s(mRespMessage.mBuf, mRespMessage.GetBufLen(), tmpDataAddress,
                 tmpHeader->dataLength) != NN_OK)) {
                 NN_LOG_ERROR("Failed to copy tmpDataAddress to mRespMessage");
-                return NN_INVALID_PARAM;
+                result = NN_ERROR;
+                break;
             }
             mRespMessage.mDataLen = tmpHeader->dataLength;
         }
@@ -708,8 +711,6 @@ NResult NetSyncEndpoint::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContext &
     uint32_t immData = 0;
 
     mDemandPollingOpType = RDMAOpContextInfo::RECEIVE;
-
-    NN_LOG_TRACE_INFO("receive mDemandPollingOpType " << mDemandPollingOpType);
     if (NN_UNLIKELY(mDelayHandleReceiveCtx != nullptr)) {
         opCtx = mDelayHandleReceiveCtx;
         mDelayHandleReceiveCtx = nullptr;
@@ -752,7 +753,8 @@ NResult NetSyncEndpoint::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContext &
         } else {
             if (NN_UNLIKELY(memcpy_s(mRespMessage.mBuf, mRespMessage.GetBufLen(), tmpDataAddress, dataSize) != NN_OK)) {
                 NN_LOG_ERROR("Failed to tmpDataAddress req to mRespMessage");
-                return NN_INVALID_PARAM;
+                verbsResult = NN_INVALID_PARAM;
+                break;
             }
             mRespMessage.mDataLen = dataSize;
         }

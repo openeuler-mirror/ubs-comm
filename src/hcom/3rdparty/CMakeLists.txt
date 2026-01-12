@@ -1,3 +1,4 @@
+set(HCOM_3RDPARTY_INSTALL_DIR "${HCOM_OUTPUT_PATH}/hcom_3rdparty")
 add_subdirectory(securec)
 if (BUILD_WITH_UB)
     add_subdirectory(urma)
