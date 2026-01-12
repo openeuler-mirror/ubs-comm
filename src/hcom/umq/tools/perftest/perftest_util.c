@@ -55,7 +55,7 @@ int recv_data(int sock, uint8_t *recv_data, uint32_t recv_len)
         }
     }
 
-    LOG_PRINT("recv data done, len: %u\n", offset);
+    LOG_PRINT("recv data done, len: %d\n", offset);
     return offset;
 }
 
@@ -95,7 +95,7 @@ int send_exchange_data(int sock, exchange_info_t *info)
 
 int perftest_create_socket(perftest_config_t *cfg, struct sockaddr_storage *addr, socklen_t *addr_len, bool is_server)
 {
-    int fd;
+    int fd = -1;
 
     // 创建客户端socket
     if (is_ipv4(cfg->local_ip)) {
@@ -154,8 +154,8 @@ bool perftest_get_remote_sockaddr(perftest_config_t *cfg, struct sockaddr_storag
 
 int perftest_create_server_socket(perftest_config_t *cfg)
 {
-    struct sockaddr_storage addr;
-    socklen_t addr_len;
+    struct sockaddr_storage addr = {0};
+    socklen_t addr_len = {0};
     int fd = perftest_create_socket(cfg, &addr, &addr_len, true);
 
     int optval = 1;
@@ -244,13 +244,13 @@ int perftest_client_sync(int fd)
 {
     char msg[PERFTEST_SYNC_MSG_SIZE] = {0};
     int msg_len = send(fd, PERFTEST_SYN, strlen(PERFTEST_SYN), MSG_NOSIGNAL);
-    if (msg_len != strlen(PERFTEST_SYN)) {
+    if (msg_len != (int)strlen(PERFTEST_SYN)) {
         LOG_PRINT("send syn failed, %s\n", strerror(errno));
         return -1;
     }
 
     msg_len = recv_data(fd, (uint8_t *)msg, strlen(PERFTEST_ACK));
-    if (msg_len != strlen(PERFTEST_ACK) || memcmp(msg, PERFTEST_ACK, msg_len) != 0) {
+    if (msg_len != (int)strlen(PERFTEST_ACK) || memcmp(msg, PERFTEST_ACK, (size_t)msg_len) != 0) {
         LOG_PRINT("recv ack failed, msg %s, %s\n", msg, strerror(errno));
         return -1;
     }
@@ -264,13 +264,13 @@ int perftest_server_sync(int fd)
 {
     char msg[PERFTEST_SYNC_MSG_SIZE] = {0};
     int msg_len = recv_data(fd, (uint8_t *)msg, strlen(PERFTEST_SYN));
-    if (msg_len != strlen(PERFTEST_SYN) || memcmp(msg, PERFTEST_SYN, msg_len) != 0) {
+    if (msg_len != (int)strlen(PERFTEST_SYN) || memcmp(msg, PERFTEST_SYN, (size_t)msg_len) != 0) {
         LOG_PRINT("recv syn failed, %s\n", strerror(errno));
         return -1;
     }
 
     msg_len = send(fd, PERFTEST_ACK, strlen(PERFTEST_ACK), MSG_NOSIGNAL);
-    if (msg_len != strlen(PERFTEST_ACK)) {
+    if (msg_len != (int)strlen(PERFTEST_ACK)) {
         LOG_PRINT("send ack failed, %s\n", strerror(errno));
         return -1;
     } else {
