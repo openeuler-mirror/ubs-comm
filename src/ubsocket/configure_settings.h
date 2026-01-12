@@ -36,7 +36,7 @@
 #define SMALL_QBUF_BLOCK_TYPE     "small"   // 16k
 #define MEDIUM_QBUF_BLOCK_TYPE    "medium"  // 32k
 #define LARGE_QBUF_BLOCK_TYPE     "large"   // 64k
-#define DEV_SCHEDULE_POLICY_CPU_AFFINITY  "cpu"  // cpu_affinity
+#define DEV_SCHEDULE_POLICY_CPU_AFFINITY  "affinity"  // cpu_affinity
 #define DEV_SCHEDULE_POLICY_ROUND_ROBIN   "rr"  // round_robin
 #define ENV_VAR_LOG_LEVEL         "RPC_ADPT_LOG_LEVEL"
 #define ENV_VAR_TRANS_MODE        "RPC_ADPT_TRANS_MODE"
@@ -50,7 +50,7 @@
 #define ENV_VAR_BLOCK_TYPE        "RPC_ADPT_BLOCK_TYPE"        // default, small, medium, large
 #define ENV_VAR_POOL_INITIAL_SIZE "RPC_ADPT_POOL_INITIAL_SIZE" // MB
 #define ENV_LOG_USE_PRINTF        "RPC_ADPT_LOG_USE_PRINTF" // default 0, 0 false; 1 true
-#define ENV_SCHEDULE_POLICY       "RPC_SCHEDULE_POLICY" // cpu, rr
+#define ENV_SCHEDULE_POLICY       "RPC_SCHEDULE_POLICY" // affinity, rr
 
 enum dev_schedule_policy {
     ROUND_ROBIN = 1,
@@ -317,8 +317,9 @@ protected:
             } else if (memcmp(m_dev_schedule_policy_str, DEV_SCHEDULE_POLICY_ROUND_ROBIN, strlen(m_dev_schedule_policy_str)) == 0) {
                 m_dev_schedule_policy = dev_schedule_policy::ROUND_ROBIN;
             } else {
-                (void)strcpy_s(m_dev_schedule_policy_str, sizeof(m_dev_schedule_policy_str), DEV_SCHEDULE_POLICY_ROUND_ROBIN);
-                m_dev_schedule_policy = dev_schedule_policy::ROUND_ROBIN;
+                (void)strcpy_s(m_dev_schedule_policy_str, sizeof(m_dev_schedule_policy_str), 
+                    DEV_SCHEDULE_POLICY_CPU_AFFINITY);
+                m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;
             }
         }
     }
@@ -356,7 +357,7 @@ protected:
     static socket_fd_trans_mode m_socket_fd_trans_mode;
     bool m_stats_enable = false;
     bool m_log_use_printf = false;
-    dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::ROUND_ROBIN;
+    dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;
 };
 
 #endif
