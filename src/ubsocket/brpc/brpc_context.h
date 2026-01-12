@@ -173,12 +173,52 @@ class Context : public Brpc::ConfigSettings {
             }
         }
 
+        if (GetDevIpStr() == nullptr && GetDevNameStr() == nullptr) {
+            umq_config.trans_info[0].mem_cfg.total_size = GetIOTotalSize();
+            umq_config.trans_info[0].trans_mode = GetTransMode();
+            ret = sprintf_s(umq_config.trans_info[0].dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, "%s", "bonding_dev_0");
+            if (ret < 0 || ret >= UMQ_DEV_NAME_SIZE) {
+                RPC_ADPT_VLOG_ERR("Failed to sprintf_s device name\n");
+                ResetBrpcAllocator();
+                SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+                return;
+            }
+            umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
+            umq_config.trans_info[0].dev_info.dev.eid_idx = GetEidIdx();
+            isBonding = true;
+        }
+
         ret = umq_init(&umq_config);
         if(ret != 0){
             RPC_ADPT_VLOG_ERR("Failed to execute umq init\n");
             ResetBrpcAllocator();
             SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
             return;
+        }
+
+        if (GetDevIpStr() == nullptr && GetDevNameStr() == nullptr) {
+            umq_dev_info_t umq_dev_info = {};
+            char devName[] = "bonding_dev_0";
+            int infoGetRet = umq_dev_info_get(devName, UMQ_TRANS_MODE_UB, &umq_dev_info);
+            if (infoGetRet != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to get bonding device information\n");
+                ResetBrpcAllocator();
+                SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+                return;
+            }
+            uint32_t i = 0;
+            for (; i < umq_dev_info.ub.eid_cnt; ++i) {
+                if (umq_dev_info.ub.eid_list[i].eid_index == GetEidIdx()) {
+                    m_src_eid = umq_dev_info.ub.eid_list[i].eid;
+                    break;
+                }
+            }
+            if (i == umq_dev_info.ub.eid_cnt) {
+                RPC_ADPT_VLOG_ERR("Failed to find bonding eid\n");
+                ResetBrpcAllocator();
+                SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+                return;
+            }
         }
 
         SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_UMQ);

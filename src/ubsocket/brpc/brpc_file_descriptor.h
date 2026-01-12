@@ -14,6 +14,8 @@
 #include <cstring>
 #include <iostream>
 #include <unordered_set>
+#include <fcntl.h>
+#include <sys/ioctl.h>
 #include "umq_pro_api.h"
 #include "umq_errno.h"
 #include "brpc_context.h"
@@ -37,6 +39,7 @@ constexpr uint64_t SIZE_32K = 32768;
 constexpr uint64_t SIZE_64K = 65536;
 constexpr uint64_t MASK_DIFF = 1;
 constexpr uint64_t IOBUF_DIFF = 32;
+constexpr uint16_t REFILL_THRESHOLD = 2;
 
 inline bool operator==(const umq_eid_t& a, const umq_eid_t& b) {
     return ::memcmp(a.raw, b.raw, sizeof(a.raw)) == 0;
@@ -219,7 +222,7 @@ public:
         m_tx_window_capacity = Context::GetContext()->GetTxDepth();
         m_rx_window_capacity = Context::GetContext()->GetRxDepth();
         m_tx.m_window_size = m_tx_window_capacity;
-        m_rx.m_refill_threshold = m_rx_window_capacity <= REFILL_RX_THRESHOLD ? 1 : REFILL_RX_THRESHOLD;
+        m_rx.m_refill_threshold = REFILL_THRESHOLD;
         m_tx.m_handle_threshold = HANDLE_THRESHOLD;
         m_tx.m_retrieve_threshold = RETRIEVE_THRESHOLD;
         m_tx.m_report_threshold = REPORT_THRESHOLD;
@@ -260,7 +263,24 @@ public:
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
     {
         int fd = OsAPiMgr::GetOriginApi()->accept(m_fd, address, address_len);
-        if (fd < 0 || m_tx_use_tcp || m_rx_use_tcp) {
+        if (m_tx_use_tcp || m_rx_use_tcp) {
+            return fd;
+        }
+
+        if (fd < 0) {
+            /*
+            * 1. 若全连接队列不为空：
+            * a. 正常情况下，返回非负整数的fd，tcp连接已完成，则执行DoAccept，且需要等待ub连接完成再返回，
+            * b. 异常情况下，比如内存不足、文件描述符达到系统上限、客户端异常中止连接等，保持原错误码直接返回上层，由上层应用决定后续动作
+            * 2. 若全连接队列为空：
+            * a. fd为非阻塞，则返回-1，errno为EAGAIN/EWOULDBLOCK，保持原错误码直接返回上层
+            * b. fd为阻塞，则等待直到有连接完成或者触发异常，比如被信号中断，返回-1，errno为EINTR，保持原错误码直接返回上层
+            */
+            if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) {  // nonblocking
+                RPC_ADPT_VLOG_ERR("tcp accept failed, fd: %d, %d, %s\n", m_fd, errno, strerror(errno));
+                return fd;
+            }
+            RPC_ADPT_VLOG_DEBUG("tcp accept need try again, fd: %d, %d, %s\n", m_fd, errno, strerror(errno));
             return fd;
         }
 
@@ -270,29 +290,12 @@ public:
             SetNonBlocking(fd);
         }
 
-        uint64_t magic_number = 0;
-        ssize_t magic_number_recv_size = 0;
-        int ret = ValidateMagicNumber(fd, magic_number, magic_number_recv_size);
-        if (ret > 0) {
-            /* IF the magic number verification fails, it is still necessary to create a socket fd object
-             * to store the magic number information, so that the received information can be reported to 
-             * the user when readv is called. */
-            SocketFd *socket_fd_obj = nullptr;
-            try {
-                socket_fd_obj = new SocketFd(fd, magic_number, (uint32_t)magic_number_recv_size);
-                Fd<::SocketFd>::OverrideFdObj(fd, socket_fd_obj);
-            } catch (std::exception& e) {
-                RPC_ADPT_VLOG_ERR("%s\n", e.what());
-                OsAPiMgr::GetOriginApi()->close(fd);
-                return -1;
-            }
-        } else if (ret == 0) {
-            if (DoAccept(fd) != 0) {
-                RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", fd);
-                /* Clear messages that already exist on the TCP link to prevent 
-                 * dirty messages from affecting user data transmission*/
-                 FlushSocketMsg(fd);
-            }
+        if (DoAccept(fd) != 0) {
+            RPC_ADPT_VLOG_ERR("Failed to establish UB connection.");
+            /* Clear messages that already exist on the TCP link to prevent dirty messages */
+            FlushSocketMsg(fd);
+            OsAPiMgr::GetOriginApi()->close(fd);
+            return -1;
         }
 
         if (is_blocking) {
@@ -347,11 +350,6 @@ public:
         CpMsg remote_cp_msg;
         char send_sync_msg[] = UMQ_BIND_SYNC_MSG;
         char recv_sync_msg[] = UMQ_BIND_SYNC_MSG;
-        if (SendSocketData(
-            m_fd, &local_cp_msg.magic_number, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
-            RPC_ADPT_VLOG_ERR("Failed to send magic number, fd: %d\n", m_fd);
-            return -1;
-        }
 
         umq_eid_t connEid;
         if (ConnectExchangeEid(&connEid) < 0) {
@@ -427,7 +425,7 @@ public:
             }
         }
 
-        RPC_ADPT_VLOG_DEBUG("Connect to remote with UMQ successful, fd: %d\n", m_fd);
+        RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", m_fd);
 
         return 0;
     }
@@ -435,8 +433,29 @@ public:
     ALWAYS_INLINE int Connect (const struct sockaddr *address, socklen_t address_len)
     {
         int ret = OsAPiMgr::GetOriginApi()->connect(m_fd, address, address_len);
-        if (ret < 0 || m_tx_use_tcp || m_rx_use_tcp) {
+        if (m_tx_use_tcp || m_rx_use_tcp) {
             return ret;
+        }
+
+        if (ret == 0) {
+            RPC_ADPT_VLOG_INFO("tcp connect succeed, fd %d\n", m_fd);
+        } else {
+            /* fd是非阻塞套接字
+            * 1. 第一次调用connect返回-1，errno为EINPROGRESS，网络正在建连；
+            * 2. 若未建连状态下，第n次对fd调用connect，n>=2，返回-1，errno为EALREADY；
+            * 3. 若建连成功，且当前不是第二次调connect，返回-1，errno为EISCONN；否则返回0（非阻塞套接字）
+            *
+            * 若ret = 0 或者errno 是EISCONN，tcp连接已完成，则执行DoConnect，且需要等待连接完成再返回，
+            * 若errno是EINPROGRESS/EALREADY，fd最终会变为连接状态，则执行DoConnect，且不需要等待ub连接完成
+            * 若errno是EINTR/EADDRNOTAVAIL/EHOSTUNREACH等错误码，tcp连接失败，则不执行DoConnect，保持原错误码直接返回上层，由上层应用决定后续动作
+            */
+            if (errno == EINPROGRESS || errno == EALREADY) {
+                RPC_ADPT_VLOG_DEBUG("tcp connect inprogress:%s, fd %d\n", strerror(errno), m_fd);
+            } else if (errno != EISCONN) {
+                RPC_ADPT_VLOG_NOTICE("tcp connect failed, errno %d, err msg: %s, fd %d\n", errno,
+                                     strerror(errno), m_fd);
+                return ret;
+            }
         }
 
         bool is_blocking = IsBlocking(m_fd);
@@ -447,7 +466,7 @@ public:
 
         ret = DoConnect();
         if (ret != 0) {
-            RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", m_fd);
+            RPC_ADPT_VLOG_ERR("Failed to establish UB connection.");
             Fd<::SocketFd>::OverrideFdObj(m_fd, nullptr);
             /* Clear messages that already exist on the TCP link to prevent 
                  * dirty messages from affecting user data transmission*/
@@ -838,6 +857,105 @@ public:
         return tx_total_len;
     }
 
+    ALWAYS_INLINE int Fcntl(int fd, int cmd, unsigned long int arg)
+    {
+        // arg can be either struct flock or int
+        int ret { 0 };
+
+        switch (cmd) {
+            case F_SETFL: // Set file status flags (O_NONBLOCK, etc.)
+                ret = OsAPiMgr::GetOriginApi()->fcntl(m_fd, cmd, arg);
+                if (ret == 0) {
+                    // Update m_isblocking based on the origin fd blocking state
+                    m_isblocking = IsBlocking(m_fd);
+                } else {
+                    RPC_ADPT_VLOG_ERR("fcntl set fd %d failed, ret is %d, errno %d\n", m_fd, ret, errno);
+                }
+                break;
+            case F_GETOWN: // Get process ID or process group ID receiving SIGIO/SIGURG signals
+            case F_GETFL:  // Get file status flags
+            case F_GETFD:  // Get file descriptor flags
+                ret = OsAPiMgr::GetOriginApi()->fcntl(m_fd, cmd, arg);
+                break;
+            case F_DUPFD:          // Duplicate file descriptor using the lowest available fd >= arg
+            case F_DUPFD_CLOEXEC:  // Duplicate file descriptor and set FD_CLOEXEC flag
+            case F_SETFD:          // Set file descriptor flags
+            case F_SETOWN:         // Set process ID or process group ID for SIGIO/SIGURG signals
+            case F_SETLK:          // Set file lock (non-blocking)
+            case F_SETLKW:         // Set file lock (blocking)
+            case F_GETLK:          // Get file lock information
+                RPC_ADPT_VLOG_ERR("fcntl fail, fd %d, cmd %d is not supported\n", m_fd, cmd);
+                break;
+            default:
+                RPC_ADPT_VLOG_WARN("fcntl, fd %d, cmd %d may be not supported\n", m_fd, cmd);
+                ret = OsAPiMgr::GetOriginApi()->fcntl(m_fd, cmd, arg);
+                break;
+        }
+        return ret;
+    }
+
+    ALWAYS_INLINE int Fcntl64(int fd, int cmd, unsigned long int arg)
+    {
+        // arg can be either struct flock or int
+        int ret { 0 };
+
+        switch (cmd) {
+            case F_SETFL:
+                ret = OsAPiMgr::GetOriginApi()->fcntl64(m_fd, cmd, arg);
+                if (ret == 0) {
+                    // Update m_isblocking based on the origin fd blocking state
+                    m_isblocking = IsBlocking(m_fd);
+                } else {
+                    RPC_ADPT_VLOG_ERR("fcntl64 set fd %d failed, ret is %d, errno %d\n", m_fd, ret, errno);
+                }
+                break;
+            case F_GETOWN: // Get process ID or process group ID receiving SIGIO/SIGURG signals
+            case F_GETFL:  // Get file status flags
+            case F_GETFD:  // Get file descriptor flags
+                ret = OsAPiMgr::GetOriginApi()->fcntl64(m_fd, cmd, arg);
+                break;
+            case F_DUPFD:          // Duplicate file descriptor using the lowest available fd >= arg
+            case F_DUPFD_CLOEXEC:  // Duplicate file descriptor and set FD_CLOEXEC flag
+            case F_SETFD:          // Set file descriptor flags
+            case F_SETOWN:         // Set process ID or process group ID for SIGIO/SIGURG signals
+            case F_SETLK:          // Set file lock (non-blocking)
+            case F_SETLKW:         // Set file lock (blocking)
+            case F_GETLK:          // Get file lock information
+                RPC_ADPT_VLOG_ERR("fcntl64 fail, fd %d, cmd %d is not supported\n", m_fd, cmd);
+                break;
+            default:
+                RPC_ADPT_VLOG_WARN("fcntl64, fd %d, cmd %d may be not supported\n", m_fd, cmd);
+                ret = OsAPiMgr::GetOriginApi()->fcntl64(m_fd, cmd, arg);
+                break;
+        }
+        return ret;
+    }
+
+    ALWAYS_INLINE int Ioctl(int fd, unsigned long request, unsigned long int arg)
+    {
+        int ret { 0 };
+
+        if (request == FIONBIO) {
+            ret = OsAPiMgr::GetOriginApi()->ioctl(m_fd, request, arg);
+            if (ret == 0) {
+                // set m_isblocking base on origin fd blocking state
+                m_isblocking = IsBlocking(m_fd);
+            } else {
+                RPC_ADPT_VLOG_ERR("ioctl set fd %d FIONBIO failed, ret is %d, errno %d\n", m_fd, ret, errno);
+            }
+        } else {
+            RPC_ADPT_VLOG_WARN("ioctl set fd %d, request %d may be not supported\n", m_fd, request);
+            ret = OsAPiMgr::GetOriginApi()->ioctl(m_fd, request, arg);
+        }
+        return ret;
+    }
+
+    ALWAYS_INLINE int SetSockOpt(int fd, int level, int optname, const void *optval, socklen_t optlen)
+    {
+        RPC_ADPT_VLOG_INFO("SetSockOpt set fd %d, level %d, optname %d\n", m_fd, level, optname);
+        return OsAPiMgr::GetOriginApi()->setsockopt(fd, level, optname, optval, optlen);
+    }
+
     ALWAYS_INLINE void NewOriginEpollError()
     {
         m_closed.store(true, std::memory_order_relaxed);
@@ -1014,6 +1132,15 @@ private:
                 queue_cfg.dev_info.dev.eid_idx = context->GetEidIdx();
             } else {
                 // init use bonding dev
+                queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+                queue_cfg.dev_info.eid.eid = *connEid;
+            }
+        } else {
+            if (strcpy_s(queue_cfg.dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, "bonding_dev_0") != EOK) {
+                RPC_ADPT_VLOG_ERR("Failed to strcpy_s device name\n");
+                return -1;
+            }
+            if (context->IsBonding()) {
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
                 queue_cfg.dev_info.eid.eid = *connEid;
             }
@@ -1246,7 +1373,7 @@ private:
             }
         }
 
-        RPC_ADPT_VLOG_DEBUG("Accept to remote with UMQ successful, listen fd: %d, new fd: %d\n", m_fd, new_fd);
+        RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
 
         return 0;  
     }
@@ -1747,6 +1874,7 @@ private:
     std::atomic<bool> m_closed{false};
     int m_event_fd;
     EidRegistry mEidRegistry;
+    bool m_isblocking = true;
 
     // TX fields
     struct alignas(CACHE_LINE_ALIGNMENT) TxDataPlane {
@@ -2108,8 +2236,8 @@ public:
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_fd);
         if (input_event->events & EPOLLOUT) {
-            if (socket_fd_obj != nullptr && !socket_fd_obj->UseTcp() && !socket_fd_obj->GetBindRemote()) {
-                if (socket_fd_obj->DoConnect() != 0) {
+            if (socket_fd_obj != nullptr && !socket_fd_obj->UseTcp()) {
+                if (!socket_fd_obj->GetBindRemote() && socket_fd_obj->DoConnect() != 0) {
                     RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", m_fd);
                     Fd<::SocketFd>::OverrideFdObj(m_fd, nullptr);
                     /* Clear messages that already exist on the TCP link to prevent

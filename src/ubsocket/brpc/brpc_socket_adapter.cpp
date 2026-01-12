@@ -13,12 +13,37 @@
 #include "file_descriptor.h"
 #include "brpc_file_descriptor.h"
 
+static bool ForceUseUB()
+{
+    static bool enable = []() {
+        const char *env = std::getenv("RPC_ADPT_UB_FORCE");
+        if (env == nullptr) {
+            return false;
+        }
+        std::string envStr(env);
+        if (envStr == "1") {
+            RPC_ADPT_VLOG_INFO("RPC_ADPT_UB_FORCE is set force use ub acceleration");
+            return true;
+        }
+        return false;
+    }();
+    return enable;
+}
+
+static bool UseUB(int domain, int type)
+{
+    bool isTCP = ((domain == AF_INET) || (domain == AF_INET6)) && (type == SOCK_STREAM);
+    if ((domain == AF_SMC) || (ForceUseUB() && isTCP)) {
+        return true;
+    }
+    return false;
+}
+
 EXPOSE_C_DEFINE int socket(int domain, int type, int protocol)
 {
     int fd = OsAPiMgr::GetOriginApi()->socket(domain, type, protocol);
-    if (!(((domain == AF_INET) || (domain == AF_INET6)) && type == SOCK_STREAM) ||
-        fd < 0) {
-            return fd;
+    if (!UseUB(domain, type) || fd < 0) {
+        return fd;
     }
 
     /* The 'socket()' function is only called when constructing the 'Brpc::Context'singleton, so the
@@ -56,6 +81,12 @@ EXPOSE_C_DEFINE int socket(int domain, int type, int protocol)
     return fd;
 }
 
+EXPOSE_C_DEFINE int shutdown(int fd, int how)
+{
+    return OsAPiMgr::GetOriginApi()->shutdown(fd, how);
+}
+
+
 EXPOSE_C_DEFINE int close(int fd)
 {
     Fd<SocketFd>::OverrideFdObj(fd, nullptr);
@@ -69,6 +100,16 @@ EXPOSE_C_DEFINE int accept(int socket, struct sockaddr *address, socklen_t *addr
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(socket);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->accept(socket, address, address_len);
+    }
+
+    return obj->Accept(address, address_len);
+}
+
+EXPOSE_C_DEFINE int accept4(int socket, struct sockaddr *address, socklen_t *address_len, int flag)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(socket);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->accept4(socket, address, address_len, flag);
     }
 
     return obj->Accept(address, address_len);
@@ -102,6 +143,61 @@ EXPOSE_C_DEFINE ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
     }
 
     return obj->WriteV(iov, iovcnt);
+}
+
+EXPOSE_C_DEFINE int fcntl(int fd, int cmd, ...)
+{
+    unsigned long int arg{ 0 };
+    va_list va;
+    va_start(va, cmd);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->fcntl(fd, cmd, arg);
+    }
+
+    return obj->Fcntl(fd, cmd, arg);
+}
+
+EXPOSE_C_DEFINE int fcntl64(int fd, int cmd, ...)
+{
+    unsigned long int arg{ 0 };
+    va_list va;
+    va_start(va, cmd);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->fcntl64(fd, cmd, arg);
+    }
+
+    return obj->Fcntl64(fd, cmd, arg);
+}
+
+EXPOSE_C_DEFINE int ioctl(int fd, unsigned long request, ...)
+{
+    unsigned long int arg{ 0 };
+    va_list va;
+    va_start(va, request);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->ioctl(fd, request, arg);
+    }
+
+    return obj->Ioctl(fd, request, arg);
+}
+
+EXPOSE_C_DEFINE int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->setsockopt(fd, level, optname, optval, optlen);
+    }
+
+    return obj->SetSockOpt(fd, level, optname, optval, optlen);
 }
 
 EXPOSE_C_DEFINE int epoll_create(int size)
