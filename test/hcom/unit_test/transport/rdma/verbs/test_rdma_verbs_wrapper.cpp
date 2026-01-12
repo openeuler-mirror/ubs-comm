@@ -19,6 +19,7 @@
 #include "rdma_verbs_wrapper_qp.h"
 #include "rdma_mr_dm_buf.h"
 #include "rdma_mr_fixed_buf.h"
+#include "rdma_verbs_wrapper_ctx.h"
 
 namespace ock {
 namespace hcom {
@@ -223,6 +224,15 @@ TEST_F(TestRdmaVerbsWrapper, GetEnableDeviceCount)
 
     ret = RDMADeviceHelper::GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
     EXPECT_EQ(ret, NN_INVALID_IP);
+}
+
+TEST_F(TestRdmaVerbsWrapper, GetMaxRdAtomic)
+{
+    setenv("HCOM_MAX_RD_ATOMIC", "2", 1);
+    auto ret = GetMaxRdAtomic();
+    const uint8_t RESULT = 2;
+    printf("GetMaxRdAtomic ret: %d\n", ret);
+    EXPECT_EQ(ret, RESULT);
 }
 
 }

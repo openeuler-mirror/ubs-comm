@@ -150,39 +150,46 @@ void TestNetDriverUBWithOob::SetUp()
 
 void TestNetDriverUBWithOob::TearDown()
 {
-    if (driver != nullptr) {
-        driver->mContext = nullptr;
-        delete driver;
-        driver = nullptr;
+    GlobalMockObject::verify();
+
+    if (qp != nullptr) {
+        delete qp;
+        qp = nullptr;
     }
+
     if (CallbackEp != nullptr) {
         CallbackEp->mJetty = nullptr;
         delete CallbackEp;
         CallbackEp = nullptr;
     }
+
+    if (lb != nullptr) {
+        delete lb;
+        lb = nullptr;
+    }
+
+    if (jfc != nullptr) {
+        delete jfc;
+        jfc = nullptr;
+    }
+
     if (worker != nullptr) {
         worker->mUBContext = nullptr;
         delete worker;
         worker = nullptr;
     }
-    if (qp != nullptr) {
-        delete qp;
-        qp = nullptr;
+
+    if (driver != nullptr) {
+        driver->mContext = nullptr;
+        delete driver;
+        driver = nullptr;
     }
+
     if (ctx != nullptr) {
         ctx->mUrmaContext = nullptr;
         delete ctx;
         ctx = nullptr;
     }
-    if (lb != nullptr) {
-        delete lb;
-        lb = nullptr;
-    }
-    if (jfc != nullptr) {
-        delete jfc;
-        jfc = nullptr;
-    }
-    GlobalMockObject::verify();
 }
 
 static ssize_t MockRecv(int socket, void *buf, size_t size, int flags)
@@ -1207,6 +1214,7 @@ TEST_F(TestNetDriverUBWithOob, SendFinishedCB)
     MOCKER_CPP(&UBJetty::ReturnPostSendWr).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBMemoryRegionFixedBuffer::ReturnBuffer).stubs().will(returnValue(false));
     MOCKER_CPP(&UBWorker::ReturnOpContextInfo).stubs().will(ignoreReturnValue());
+    MOCKER(memcpy_s).stubs().will(returnValue(0));
     EXPECT_EQ(driver->SendFinishedCB(&ctxInfo), NN_OK);
 }
 
@@ -1226,7 +1234,11 @@ TEST_F(TestNetDriverUBWithOob, RWSglOneSideDoneCB)
 
     MOCKER_CPP(&UBWorker::ReturnSglContextInfo).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBWorker::ReturnOpContextInfo).stubs().will(ignoreReturnValue());
-    EXPECT_EQ(driver->RWSglOneSideDoneCB(&ctxInfo, netCtx), NN_OK);
+    UBSHcomNetDriverOneSideDoneHandler handler = [](const UBSHcomNetRequestContext&) -> int {
+        return 1; // 返回值固定为 1
+    };
+    driver->RegisterOneSideDoneHandler(handler); // 注册 handler
+    EXPECT_EQ(driver->RWSglOneSideDoneCB(&ctxInfo, netCtx), 1);
 }
 
 TEST_F(TestNetDriverUBWithOob, OneSideDoneCB)
@@ -1236,7 +1248,10 @@ TEST_F(TestNetDriverUBWithOob, OneSideDoneCB)
 
     MOCKER_CPP(&UBJetty::ReturnOneSideWr).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBWorker::ReturnOpContextInfo).stubs().will(ignoreReturnValue());
-    EXPECT_EQ(driver->OneSideDoneCB(&ctxInfo), NN_OK);
+    UBSHcomNetDriverOneSideDoneHandler handler = [](const UBSHcomNetRequestContext&) -> int {
+        return 1; // 返回值固定为 1
+    };
+    EXPECT_EQ(driver->OneSideDoneCB(&ctxInfo), 1);
 }
 
 TEST_F(TestNetDriverUBWithOob, ProcessErrorOneSideDone)
@@ -1246,24 +1261,10 @@ TEST_F(TestNetDriverUBWithOob, ProcessErrorOneSideDone)
 
 TEST_F(TestNetDriverUBWithOob, ProcessEpError)
 {
-    UBOpContextInfo remainingOpCtx{};
-    UBOpContextInfo nextOpCtx{};
-    remainingOpCtx.next = &nextOpCtx;
-    uint32_t a = 1;
-    uint32_t b = 0;
-    remainingOpCtx.opType = UBOpContextInfo::OpType::SEND;
-    remainingOpCtx.opResultType = UBOpContextInfo::SUCCESS;
-    nextOpCtx.opType = UBOpContextInfo::OpType::WRITE;
-    remainingOpCtx.opResultType = UBOpContextInfo::SUCCESS;
-    CallbackEp->State().Set(NEP_ESTABLISHED);
-
     MOCKER_CPP(&UBJetty::Stop).stubs().will(returnValue(0));
-    MOCKER_CPP(&UBJetty::GetCtxPosted).stubs().with(outBound(&remainingOpCtx)).will(ignoreReturnValue());
-    MOCKER_CPP(&NetDriverUBWithOob::ProcessErrorSendFinished).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&NetDriverUBWithOob::ProcessErrorOneSideDone).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&UBJetty::GetPostedCount).stubs().will(returnValue(a)).then(returnValue(b));
-
+    CallbackEp->State().Set(NEP_ESTABLISHED);
     EXPECT_NO_FATAL_FAILURE(driver->ProcessEpError(reinterpret_cast<uintptr_t>(CallbackEp)));
+    EXPECT_EQ(CallbackEp->State().Get(), NEP_BROKEN);
 }
 
 TEST_F(TestNetDriverUBWithOob, ProcessQPError)

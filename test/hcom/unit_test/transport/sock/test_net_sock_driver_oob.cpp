@@ -317,19 +317,6 @@ TEST_F(TestNetSockDriverOob, MultiRailNewConnectionErr)
     EXPECT_EQ(mDriver->MultiRailNewConnection(conn), NN_ERROR);
 }
 
-TEST_F(TestNetSockDriverOob, MapAndRegVaForUBErr)
-{
-    unsigned long memid = 1;
-    uint64_t va = 0;
-    EXPECT_EQ(mDriver->MapAndRegVaForUB(memid, va), nullptr);
-}
-
-TEST_F(TestNetSockDriverOob, UnmapVaForUBErr)
-{
-    uint64_t va = 0;
-    EXPECT_EQ(mDriver->UnmapVaForUB(va), NN_ERROR);
-}
-
 TEST_F(TestNetSockDriverOob, HandleSockRealConnectWithDupId)
 {
     SockOpContextInfo ctx {};

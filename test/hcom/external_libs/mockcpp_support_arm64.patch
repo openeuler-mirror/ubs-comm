@@ -1,3 +1,37 @@
+From 286f2e028a368322d8db0b63bf6d99548ede2cdd Mon Sep 17 00:00:00 2001
+From: yzh <570350928@qq.com>
+Date: Mon, 1 Dec 2025 21:21:54 +0800
+Subject: [PATCH] mockcpp_support_arm64.patch
+
+---
+ include/mockcpp/ApiHookFunctor.h             | 127 ++++++++++++++-----
+ include/mockcpp/ApiHookGenerator.h           |   8 +-
+ include/mockcpp/ApiHookHolderFactory.h       |   2 +-
+ include/mockcpp/ApiHookMocker.h              | 113 ++++++++++++++++-
+ include/mockcpp/ChainableMockMethod.h        |   3 +-
+ include/mockcpp/ChainableMockMethodCore.h    |   1 +
+ include/mockcpp/GlobalMockObject.h           |  15 +++
+ include/mockcpp/GnuMethodInfoReader.h        |   4 +
+ include/mockcpp/Invocation.h                 |   5 +
+ include/mockcpp/Invokable.h                  |   1 +
+ include/mockcpp/JmpCode.h                    |   1 +
+ include/mockcpp/ParameterizedApiHookHolder.h |   2 +-
+ include/mockcpp/mockcpp.h                    |   6 +-
+ include/mockcpp/mokc.h                       |   4 +-
+ src/ChainableMockMethodCore.cpp              |   3 +-
+ src/Invocation.cpp                           |  23 ++++
+ src/JmpCode.cpp                              |  16 ++-
+ src/JmpCodeAARCH64.h                         |  69 ++++++++++
+ src/JmpCodeARM32.h                           |  36 ++++++
+ src/JmpCodeArch.h                            |  20 ++-
+ src/JmpCodeX64.h                             |   3 +-
+ src/JmpCodeX86.h                             |   3 +-
+ src/JmpOnlyApiHook.cpp                       |   1 +
+ src/UnixCodeModifier.cpp                     |  16 ++-
+ 24 files changed, 424 insertions(+), 58 deletions(-)
+ create mode 100644 src/JmpCodeAARCH64.h
+ create mode 100644 src/JmpCodeARM32.h
+
 diff --git a/include/mockcpp/ApiHookFunctor.h b/include/mockcpp/ApiHookFunctor.h
 index a860a95..6a77488 100644
 --- a/include/mockcpp/ApiHookFunctor.h
@@ -835,18 +869,18 @@ index d4cfa68..964828f 100644
  
     /////////////////////////////////////////////////////
 diff --git a/src/UnixCodeModifier.cpp b/src/UnixCodeModifier.cpp
-index ab4014e..e1fbe75 100644
+index ab4014e..d689f8e 100644
 --- a/src/UnixCodeModifier.cpp
 +++ b/src/UnixCodeModifier.cpp
-@@ -18,27 +18,32 @@
+@@ -18,26 +18,30 @@
  #include <string.h>
  #include <inttypes.h>
  #include <sys/mman.h>
 +#include <unistd.h>
  
  #include <mockcpp/CodeModifier.h>
+-
 +#include "JmpCodeArch.h"
- 
  #define PAGE_ALIGN_BITS  12
  
  //////////////////////////////////////////////////////////////////
@@ -862,16 +896,18 @@ index ab4014e..e1fbe75 100644
 -    if(::mprotect(ALIGN_TO_PAGE_BOUNDARY(dest), PAGE_SIZE * 2, PROT_EXEC | PROT_WRITE | PROT_READ ) != 0)
 -    {  
 -       return false; 
+-    }
 +    unsigned int page_size = getpagesize();
-+
+ 
 +    if (::mprotect(ALIGN_TO_PAGE_BOUNDARY(dest, page_size), page_size * 2, PROT_EXEC | PROT_WRITE | PROT_READ) != 0) {
 +        return false;
-     }
- 
++    }
++ 
      ::memcpy(dest, src, size);
- 
++ 
 +    FLUSH_CACHE(dest, size);
-+
+ 
  
  #if 0
- 	#if BUILD_FOR_X86
+-- 
+2.27.0

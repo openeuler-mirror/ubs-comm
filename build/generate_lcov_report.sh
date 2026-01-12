@@ -14,12 +14,12 @@ HCOM_ROOT_DIR=$(dirname ${CURRENT_SCRIPT_DIR})
 echo ${CURRENT_SCRIPT_DIR}
 echo ${HCOM_ROOT_DIR}
 
-cd ${HCOM_ROOT_DIR}/build
+cd ${HCOM_ROOT_DIR}/tmp_build_dir
 # get the result of code coverage
 lcov --rc lcov_branch_coverage=1 --rc lcov_excl_br_line="LCOV_EXCL_BR_LINE|NN_LOG*" \
-    -b ../src/  -d ./test/llt/ -c -o lcov_report_llt.info
+    -b ../src/hcom/  -d ./test/hcom/llt/CMakeFiles/Hcomtest.dir/__/__/__/ -c -o lcov_report_llt.info
 lcov --rc lcov_branch_coverage=1 --rc lcov_excl_br_line="LCOV_EXCL_BR_LINE|NN_LOG*" \
-    -b ../src/  -d ./test/unit_test/ -c -o lcov_report_ut.info
+    -b ../src/hcom/  -d ./test/hcom/unit_test/CMakeFiles/hcom_ut.dir/__/__/__/ -c -o lcov_report_ut.info
 lcov --rc lcov_branch_coverage=1 -a lcov_report_llt.info -a lcov_report_ut.info -o lcov_report_all.info
 
 # filter the result, remove useless info

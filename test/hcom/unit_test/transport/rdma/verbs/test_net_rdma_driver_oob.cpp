@@ -328,6 +328,25 @@ TEST_F(TestNetRdmaDriverOob, SendFinishedCB)
     free(qp);
 }
 
+TEST_F(TestNetRdmaDriverOob, SendSglInlineFinishedCB)
+{
+    RDMAOpContextInfo ctx {};
+    ctx.opType = RDMAOpContextInfo::SEND_RAW_SGL;
+    ctx.upCtxSize = 1;
+    UBSHcomNetRequestContext netCtx{};
+    RDMAQp *qp = (RDMAQp *)malloc(sizeof(RDMAQp));
+    ctx.qp = qp;
+    ctx.qp->mUpContext = 0;
+    RDMAWorker *fakeWorker = (RDMAWorker *)malloc(sizeof(RDMAWorker));
+
+    MOCKER_CPP(&RDMAWorker::ReturnOpContextInfo).stubs().will(ignoreReturnValue());
+    testDriver->mRequestPostedHandler = MockRequestPostedHandler;
+
+    EXPECT_EQ(testDriver->SendSglInlineFinishedCB(&ctx, netCtx, fakeWorker), NN_OK);
+    free(qp);
+    free(fakeWorker);
+}
+
 TEST_F(TestNetRdmaDriverOob, ProcessErrorSendFinished)
 {
     RDMAOpContextInfo ctx {};
@@ -506,6 +525,7 @@ TEST_F(TestNetRdmaDriverOob, Connect2)
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, int &)).stubs().will(returnValue(0));
     MOCKER(::recv).stubs().will(invoke(MockRecv));
     MOCKER(::send).stubs().will(invoke(MockSend));
+    testDriver->mOptions.secType = NET_SEC_DISABLED;
     EXPECT_EQ(testDriver->ConnectSyncEp(client, payload, outEp, 0, 0, 0), RR_PARAM_INVALID);
 }
 
@@ -517,6 +537,7 @@ TEST_F(TestNetRdmaDriverOob, Connect3)
     OOBTCPClientPtr client = new (std::nothrow) OOBTCPClient(ip, 1);
     ASSERT_NE(client.Get(), nullptr);
     client->mOobType = NET_OOB_UDS;
+    testDriver->mOptions.secType = NET_SEC_DISABLED;
     RDMASyncEndpoint *rep = new (std::nothrow) RDMASyncEndpoint(ip, nullptr, BUSY_POLLING, nullptr, nullptr, 0);
     ASSERT_NE(rep, nullptr);
     testDriver->mOptions.enableMultiRail = true;
@@ -540,6 +561,7 @@ TEST_F(TestNetRdmaDriverOob, Connect4)
     RDMASyncEndpoint *rep = new (std::nothrow) RDMASyncEndpoint(ip, nullptr, BUSY_POLLING, nullptr, nullptr, 0);
     ASSERT_NE(rep, nullptr);
     testDriver->mOptions.enableMultiRail = true;
+    testDriver->mOptions.secType = NET_SEC_DISABLED;
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, int &)).stubs().will(returnValue(0));
     MOCKER(::recv).stubs().will(invoke(MockRecv));
     MOCKER(::send).stubs().will(invoke(MockSend));

@@ -122,8 +122,8 @@ void RunTest(const PerfTestConfig &cfg, PerfTestReportBase *report)
         }
     }
 
-    report->PrintReportHead();
     if (cfg.GetIsTestAllSize()) {
+        report->PrintReportHead();
         RunAllSizeTest(pTest, cfg, report);
     } else {
         PerfTestContext ctx;
@@ -133,6 +133,7 @@ void RunTest(const PerfTestConfig &cfg, PerfTestReportBase *report)
             LOG_ERROR("run test failed");
             return;
         }
+        report->PrintReportHead();
         report->PrintReportElement(&ctx);
     }
 

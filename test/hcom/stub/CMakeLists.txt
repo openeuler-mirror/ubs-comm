@@ -5,3 +5,5 @@ target_link_libraries(fake_ibv_static
         -Wl,--start-group
         pthread dl rt
         -Wl,--end-group)
+
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom)

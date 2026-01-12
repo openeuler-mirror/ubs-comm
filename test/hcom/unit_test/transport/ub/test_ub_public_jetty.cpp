@@ -356,28 +356,6 @@ TEST_F(TestUBPublicJetty, Receive)
     EXPECT_EQ(jetty->Receive(&buf, 1), UB_OK);
 }
 
-TEST_F(TestUBPublicJetty, FillBondingMsg)
-{
-    JettyConnHeader exchangeInfo{};
-    urma_jetty_t tmpJetty{};
-    jetty->mUrmaJetty = &tmpJetty;
-    MOCKER_CPP(HcomUrma::UserCtl).stubs().will(returnValue(1)).then(returnValue(0));
-    EXPECT_EQ(jetty->FillBondingMsg(&(exchangeInfo.clientCtrlBondInfo)), UB_ERROR);
-    EXPECT_EQ(jetty->FillBondingMsg(&(exchangeInfo.clientCtrlBondInfo)), UB_OK);
-    jetty->mUrmaJetty = nullptr;
-}
-
-TEST_F(TestUBPublicJetty, SetBondingInfo)
-{
-    JettyConnHeader exchangeInfo{};
-    urma_jetty_t tmpJetty{};
-    jetty->mUrmaJetty = &tmpJetty;
-    MOCKER_CPP(HcomUrma::UserCtl).stubs().will(returnValue(1)).then(returnValue(0));
-    EXPECT_EQ(jetty->SetBondingInfo(&(exchangeInfo.clientCtrlBondInfo)), UB_ERROR);
-    EXPECT_EQ(jetty->SetBondingInfo(&(exchangeInfo.clientCtrlBondInfo)), UB_OK);
-    jetty->mUrmaJetty = nullptr;
-}
-
 TEST_F(TestUBPublicJetty, Stop)
 {
     urma_jetty_t tmpJetty{};

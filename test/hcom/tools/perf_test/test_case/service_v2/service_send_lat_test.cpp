@@ -93,7 +93,7 @@ bool ServiceSendLatTest::Initialize()
     }
 
     // init data buffer
-    mDataAddr = new char[MAX_MESSAGE_SIZE];
+    mDataAddr = new (std::nothrow) char[MAX_MESSAGE_SIZE];
     if (mDataAddr == nullptr) {
         LOG_ERROR("Create data buffer failed");
         goto ERROR_HANDLE;

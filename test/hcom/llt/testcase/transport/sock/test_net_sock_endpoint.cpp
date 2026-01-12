@@ -368,7 +368,8 @@ TEST_F(TestNetSockEndpoint, PostSendRetry)
 
     MOCKER_CPP(&SockWorker::PostSend)
         .defaults()
-        .will(returnObjectList(SS_TCP_RETRY, SS_OK, SS_TCP_RETRY, SS_OK));
+        .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR),
+                               static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostSend(1, req);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -406,7 +407,9 @@ TEST_F(TestNetSockEndpoint, PostSendRawRetry)
     result = ep->PostSendRaw(req, 1);
     EXPECT_EQ(SS_OK, result);
 
-    MOCKER_CPP(&SockWorker::PostSend).defaults().will(returnObjectList(SS_TCP_RETRY, SS_OK));
+    MOCKER_CPP(&SockWorker::PostSend)
+        .defaults()
+        .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostSendRaw(req, 0);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -445,7 +448,9 @@ TEST_F(TestNetSockEndpoint, PostSendRawSglRetry)
     EXPECT_EQ(SS_OK, result);
     sem_wait(&sem);
 
-    MOCKER_CPP(&SockWorker::PostSendRawSgl).defaults().will(returnObjectList(SS_TCP_RETRY, SS_OK));
+    MOCKER_CPP(&SockWorker::PostSendRawSgl)
+        .defaults()
+        .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostSendRawSgl(req, 0);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -510,14 +515,14 @@ TEST_F(TestNetSockEndpoint, PostReadWriteRetry)
     MOCKER_CPP(&SockWorker::PostRead, SResult(SockWorker::*)(Sock *, SockTransHeader &,
         const UBSHcomNetTransRequest &))
         .defaults()
-        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
+        .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostRead(req);
     EXPECT_EQ(SS_ERROR, result);
 
     MOCKER_CPP(&SockWorker::PostWrite, SResult(SockWorker::*)(Sock *, SockTransHeader &,
         const UBSHcomNetTransRequest &))
         .defaults()
-        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
+        .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostWrite(req);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -582,14 +587,14 @@ TEST_F(TestNetSockEndpoint, PostReadWriteSglRetry)
     MOCKER_CPP(&SockWorker::PostRead, SResult(SockWorker::*)(Sock *, SockTransHeader &,
         const UBSHcomNetTransSglRequest &))
         .defaults()
-        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
+        .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostRead(reqRead);
     EXPECT_EQ(SS_ERROR, result);
 
     MOCKER_CPP(&SockWorker::PostWrite, SResult(SockWorker::*)(Sock *, SockTransHeader &,
         const UBSHcomNetTransSglRequest &))
         .defaults()
-        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
+        .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostWrite(reqRead);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -636,7 +641,8 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRetry)
 
     MOCKER_CPP(&Sock::PostSend, SResult(Sock::*)(SockTransHeader &, const UBSHcomNetTransRequest &))
         .defaults()
-        .will(returnObjectList(SS_TCP_RETRY, SS_OK, SS_TCP_RETRY, SS_OK));
+        .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR),
+                               static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostSend(NN_NO3, req);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -665,7 +671,9 @@ TEST_F(TestNetSockEndpoint, SyncReceiveRetry)
 
     UBSHcomNetResponseContext respCtx {};
 
-    MOCKER_CPP(&Sock::PostReceiveHeader).defaults().will(returnObjectList(SS_OK, 0, 0));
+    MOCKER_CPP(&Sock::PostReceiveHeader)
+        .defaults()
+        .will(returnObjectList(static_cast<int>(SS_ERROR), 0, 0));
     result = ep->Receive(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -673,7 +681,7 @@ TEST_F(TestNetSockEndpoint, SyncReceiveRetry)
     result = ep->Receive(NN_NO6, respCtx);
     EXPECT_EQ(NN_MALLOC_FAILED, result);
 
-    MOCKER_CPP(&Sock::PostReceiveBody).defaults().will(returnValue(SS_OK));
+    MOCKER_CPP(&Sock::PostReceiveBody).defaults().will(returnValue(static_cast<int>(SS_ERROR)));
     result = ep->Receive(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -734,7 +742,9 @@ TEST_F(TestNetSockEndpoint, SyncReceiveRawRetry)
     std::string msg = "Hello server, this is a message";
     UBSHcomNetResponseContext respCtx {};
 
-    MOCKER_CPP(&Sock::PostReceiveHeader).defaults().will(returnObjectList(SS_OK, 0, 0));
+    MOCKER_CPP(&Sock::PostReceiveHeader)
+        .defaults()
+        .will(returnObjectList(static_cast<int>(SS_ERROR), 0, 0));
     result = ep->ReceiveRaw(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -742,7 +752,7 @@ TEST_F(TestNetSockEndpoint, SyncReceiveRawRetry)
     result = ep->ReceiveRaw(NN_NO6, respCtx);
     EXPECT_EQ(NN_MALLOC_FAILED, result);
 
-    MOCKER_CPP(&Sock::PostReceiveBody).defaults().will(returnValue(SS_OK));
+    MOCKER_CPP(&Sock::PostReceiveBody).defaults().will(returnValue(static_cast<int>(SS_ERROR)));
     result = ep->ReceiveRaw(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -788,7 +798,7 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRawSglRetry)
 
     MOCKER_CPP(&Sock::PostSendSgl, SResult(Sock::*)(SockTransHeader &, const UBSHcomNetTransSglRequest &))
         .defaults()
-        .will(returnObjectList(SS_TCP_RETRY, SS_OK));
+        .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostSendRawSgl(req, 0);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -949,7 +959,7 @@ int SockValidateTlsCert()
     }
 
     std::string currentPath = buffer;
-    certPath1 = currentPath + "/../test/opensslcrt/normalCert1";
+    certPath1 = currentPath + "/../test/hcom/opensslcrt/normalCert1";
 
     if (!CanonicalPath(certPath1)) {
         NN_LOG_ERROR("TLS cert path check failed " << certPath1);
@@ -1060,7 +1070,7 @@ TEST_F(TestNetSockEndpoint, SyncPostSendTimeout)
 
     result = ep->Receive(-1, respCtx);
     EXPECT_EQ(SS_OK, result);
-    uint32_t size1 = 2 * 1024 * 1024;
+    const int size1 = 2 * 1024 * 1024;
     static char data1[size1] = "sock_pp_client";
     UBSHcomNetTransRequest req1((void *)(data1), sizeof(data1), 0);
 

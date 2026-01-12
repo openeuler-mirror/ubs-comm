@@ -98,6 +98,17 @@ void TestNetRdmaWorker::TearDown()
     GlobalMockObject::verify();
 }
 
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendLKeyFail)
+{
+    name = "RdmaWorkerPostSendLKeyFail";
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
+    MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(true));
+    request.lKey = UINT64_MAX;
+    int ret = mWorker->PostSend(qp, request, 0);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
+}
+
 TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSgl)
 {
     name = "NetSyncEndpointRdmaPostSendSgl";
@@ -106,6 +117,7 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSgl)
     EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
     RDMASglContextInfo *tmpSglCtx = nullptr;
     MOCKER_CPP(&RDMASglContextInfoPool::Get).stubs().will(returnValue(tmpSglCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMASglContextInfo>::Return).stubs();
     ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 0);
     EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
 }
@@ -116,6 +128,7 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglTwo)
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
 
     MOCKER_CPP(&RDMASglContextInfoPool::Get).stubs().will(returnValue(sglCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMASglContextInfo>::Return).stubs();
     int ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 0);
     EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
 
@@ -130,16 +143,18 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglThree)
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
 
     MOCKER_CPP(&RDMASglContextInfoPool::Get).stubs().will(returnValue(sglCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMASglContextInfo>::Return).stubs();
 
     RDMAOpContextInfo *tmpCtx = nullptr;
     MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(tmpCtx)).then(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
 
     MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(false));
+    MOCKER_CPP(&RDMAQp::ReturnPostSendWr).stubs();
 
     sglRequest.upCtxSize = 0;
     int ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 0);
     EXPECT_EQ(ret, static_cast<int>(RR_QP_CTX_FULL));
-    MOCKER_CPP(&RDMAOpContextInfoPool::Return).stubs().will(returnValue(0));
     ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 0);
     EXPECT_EQ(ret, static_cast<int>(RR_QP_POST_SEND_WR_FULL));
 }
@@ -151,24 +166,143 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglFour)
 
     RDMASglContextInfoPool mSglCtxInfoPool;
     MOCKER_CPP(&RDMASglContextInfoPool::Get).stubs().will(returnValue(sglCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMASglContextInfo>::Return).stubs();
 
     MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
 
     MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(true));
+    MOCKER_CPP(&RDMAQp::ReturnPostSendWr).stubs();
 
     MOCKER_CPP(&RDMAQp::PostSend).stubs().will(returnValue(1));
 
     MOCKER_CPP(&RDMAQp::PostSendSgl).stubs().will(returnValue(0));
 
-    MOCKER_CPP(&RDMAOpContextInfoPool::Return).stubs().will(returnValue(0));
-
-    MOCKER_CPP(&RDMASglContextInfoPool ::Return).stubs().will(returnValue(0));
     sglRequest.upCtxSize = 0;
     int ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 0);
     EXPECT_EQ(ret, 0);
 
     ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 1);
     EXPECT_EQ(ret, 1);
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglFive)
+{
+    name = "NetSyncEndpointRdmaPostSendSglFive";
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
+
+    RDMASglContextInfoPool mSglCtxInfoPool;
+    MOCKER_CPP(&RDMASglContextInfoPool::Get).stubs().will(returnValue(sglCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMASglContextInfo>::Return).stubs();
+
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
+
+    MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(true));
+    MOCKER_CPP(&RDMAQp::ReturnPostSendWr).stubs();
+
+    MOCKER_CPP(&RDMAQp::PostSend).stubs().will(returnValue(1));
+
+    MOCKER_CPP(&RDMAQp::PostSendSgl).stubs().will(returnValue(0));
+
+    sglRequest.upCtxSize = 1;
+    int ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 0);
+    EXPECT_EQ(ret, RR_PARAM_INVALID);
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostSend)
+{
+    name = "NetSyncEndpointRdmaPostSend";
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
+
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
+
+    MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(true));
+    MOCKER_CPP(&RDMAQp::ReturnPostSendWr).stubs();
+
+    MOCKER_CPP(&RDMAQp::PostSend).stubs().will(returnValue(1));
+
+    MOCKER_CPP(&RDMAQp::PostSendSgl).stubs().will(returnValue(0));
+
+    RDMASendReadWriteRequest req;
+    req.upCtxSize = 1;
+    int ret = mWorker->PostSend(qp, req, 0);
+    EXPECT_EQ(ret, RR_PARAM_INVALID);
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostRead)
+{
+    name = "NetSyncEndpointRdmaPostRead";
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
+
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
+
+    MOCKER_CPP(&RDMAQp::GetOneSideWr).stubs().will(returnValue(true));
+    MOCKER_CPP(&RDMAQp::ReturnOneSideWr).stubs();
+
+    MOCKER_CPP(&RDMAQp::PostRead).stubs().will(returnValue(1));
+
+    RDMASendReadWriteRequest req;
+    req.upCtxSize = 1;
+    int ret = mWorker->PostRead(qp, req);
+    EXPECT_EQ(ret, RR_PARAM_INVALID);
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostWrite)
+{
+    name = "NetSyncEndpointRdmaPostWrite";
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
+
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
+
+    MOCKER_CPP(&RDMAQp::GetOneSideWr).stubs().will(returnValue(true));
+    MOCKER_CPP(&RDMAQp::ReturnOneSideWr).stubs();
+
+    MOCKER_CPP(&RDMAQp::PostWrite).stubs().will(returnValue(1));
+
+    RDMASendReadWriteRequest req;
+    req.upCtxSize = 1;
+    int ret = mWorker->PostWrite(qp, req);
+    EXPECT_EQ(ret, RR_PARAM_INVALID);
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglLKeyFail)
+{
+    name = "RdmaWorkerPostSendSglLKeyFail";
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
+    MOCKER_CPP(&RDMASglContextInfoPool::Get).stubs().will(returnValue(sglCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMASglContextInfo>::Return).stubs();
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
+    MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(true));
+    request.lKey = UINT64_MAX;
+    int ret = mWorker->PostSendSgl(qp, sglRequest, request, 0, 0);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostReadLKeyFail)
+{
+    name = "RdmaWorkerPostReadLKeyFail";
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
+    MOCKER_CPP(&RDMAQp::GetOneSideWr).stubs().will(returnValue(true));
+    request.lKey = UINT64_MAX;
+    int ret = mWorker->PostRead(qp, request);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
+}
+
+TEST_F(TestNetRdmaWorker, RdmaWorkerPostWriteLKeyFail)
+{
+    name = "RdmaWorkerPostWriteLKeyFail";
+    MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
+    MOCKER_CPP(&RDMAQp::GetOneSideWr).stubs().will(returnValue(true));
+    request.lKey = UINT64_MAX;
+    int ret = mWorker->PostWrite(qp, request);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
 }
 
 TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglInlineOne)
@@ -189,6 +323,7 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglInlineTwo)
     uint32_t immData = 0;
     RDMAOpContextInfo *tmpRdmaCtx = nullptr;
     MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(tmpRdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
     RResult ret = mWorker->PostSendSglInline(qp, header, req, immData);
     EXPECT_EQ(ret, 232);
 }
@@ -201,7 +336,7 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglInlineThree)
     uint32_t immData = 0;
     MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
     MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(false));
-    MOCKER_CPP(&RDMAOpContextInfoPool::Return).stubs().will(returnValue(0));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
     RResult ret = mWorker->PostSendSglInline(qp, header, req, immData);
     EXPECT_EQ(ret, 230);
 }
@@ -214,6 +349,7 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglInlineFive)
     req.upCtxSize = 100;
     uint32_t immData = 0;
     MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
     MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(true));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
 
@@ -234,7 +370,7 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglInlineSix)
     MOCKER_CPP(&RDMAQp::PostSendSglInline).stubs().will(returnValue(201));
     MOCKER_CPP(&RDMAQp::ReturnPostSendWr).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&RDMAQp::DecreaseRef).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&RDMAOpContextInfoPool::Return).stubs().will(returnValue(0));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
     RResult ret = mWorker->PostSendSglInline(qp, header, req, immData);
     EXPECT_EQ(ret, 201);
 }
@@ -246,6 +382,7 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglInlineSeven)
     RDMASendReadWriteRequest req;
     uint32_t immData = 0;
     MOCKER_CPP(&RDMAOpContextInfoPool::Get).stubs().will(returnValue(rdmaCtx));
+    MOCKER_CPP(&OpContextInfoPool<RDMAOpContextInfo>::Return).stubs();
     MOCKER_CPP(&RDMAQp::GetPostSendWr).stubs().will(returnValue(true));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
     MOCKER_CPP(&RDMAQp::PostSendSglInline).stubs().will(returnValue(0));

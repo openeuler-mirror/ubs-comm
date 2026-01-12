@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <sys/poll.h>
 
+#include "securec.h"
 #include "net_monotonic.h"
 #include "net_oob_ssl.h"
 #include "net_ub_endpoint.h"
@@ -33,6 +34,7 @@ public:
 
     std::string name = "driver-public-jetty";
     NetDriverUBWithOob *driver = nullptr;
+    UBWorker *worker = nullptr;
     UBPublicJetty *jetty = nullptr;
     UBJetty *qp = nullptr;
 };
@@ -41,27 +43,37 @@ void TestNetDriverUBPublicJetty::SetUp()
 {
     driver = new (std::nothrow) NetDriverUBWithOob(name, false, UBC);
     ASSERT_NE(driver, nullptr);
+    driver->IncreaseRef();
+
     jetty = new (std::nothrow) UBPublicJetty(name, 0, nullptr, nullptr);
     ASSERT_NE(jetty, nullptr);
+    jetty->IncreaseRef();
+
     qp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
     ASSERT_NE(qp, nullptr);
+    qp->IncreaseRef();
     qp->StoreExchangeInfo(new UBJettyExchangeInfo);
+
+    UBWorkerOptions opt;
+    worker = new (std::nothrow) UBWorker(name, 0, opt, nullptr, nullptr);
+    ASSERT_NE(worker, nullptr);
+    worker->IncreaseRef();
 }
 
 void TestNetDriverUBPublicJetty::TearDown()
 {
-    if (driver != nullptr) {
-        delete driver;
-        driver = nullptr;
-    }
-    if (jetty != nullptr) {
-        delete jetty;
-        jetty = nullptr;
-    }
-    if (qp != nullptr) {
-        delete qp;
-        qp = nullptr;
-    }
+    jetty->DecreaseRef();
+    jetty = nullptr;
+
+    qp->DecreaseRef();
+    qp = nullptr;
+
+    worker->DecreaseRef();
+    worker = nullptr;
+
+    driver->DecreaseRef();
+    driver = nullptr;
+
     GlobalMockObject::verify();
 }
 
@@ -296,14 +308,12 @@ TEST_F(TestNetDriverUBPublicJetty, ClientEstablishConnOnReply)
     UBJettyExchangeInfo info{};
     MOCKER_CPP(&UBPublicJetty::Receive).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&NetDriverUBWithOob::CheckServerACK).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(&UBPublicJetty::SetBondingInfo).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::ImportPublicJetty).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&UBJetty::ChangeToReady).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::PollingCompletion).stubs().will(returnValue(0));
 
     EXPECT_EQ(driver->ClientEstablishConnOnReply(nullptr, qp, info), UB_PARAM_INVALID);
-    EXPECT_EQ(driver->ClientEstablishConnOnReply(jetty, qp, info), NN_ERROR);
     EXPECT_EQ(driver->ClientEstablishConnOnReply(jetty, qp, info), NN_ERROR);
     EXPECT_EQ(driver->ClientEstablishConnOnReply(jetty, qp, info), NN_ERROR);
     EXPECT_EQ(driver->ClientEstablishConnOnReply(jetty, qp, info), NN_ERROR);
@@ -406,12 +416,22 @@ TEST_F(TestNetDriverUBPublicJetty, FillExchMsg)
     std::string payload("hello");
 
     MOCKER_CPP(&UBJetty::FillExchangeInfo).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(&UBPublicJetty::FillBondingMsg).stubs().will(returnValue(0));
     MOCKER_CPP(memcpy_s).stubs().will(returnValue(1)).then(returnValue(0));
 
     EXPECT_EQ(driver->FillExchMsg(exchangeInfo, qp, payload, 0, jetty), 1);
     EXPECT_EQ(driver->FillExchMsg(exchangeInfo, qp, payload, 0, jetty), NN_ERROR);
     EXPECT_EQ(driver->FillExchMsg(exchangeInfo, qp, payload, 0, jetty), NN_OK);
+    free(exchangeInfo);
+}
+
+TEST_F(TestNetDriverUBPublicJetty, FillExchMsgPayloadErr)
+{
+    JettyConnHeader *exchangeInfo = (JettyConnHeader *)malloc(sizeof(JettyConnHeader) + NN_NO6);
+    std::string payload(NN_NO1024, '\0');
+
+    MOCKER_CPP(&UBJetty::FillExchangeInfo).stubs().will(returnValue(0));
+
+    EXPECT_EQ(driver->FillExchMsg(exchangeInfo, qp, payload, 0, jetty), NN_ERROR);
     free(exchangeInfo);
 }
 
@@ -429,7 +449,6 @@ TEST_F(TestNetDriverUBPublicJetty, FillExchMsgHeartBeat)
     MOCKER_CPP(&UBJetty::CreateHBMemoryRegion).stubs().will(returnValue(0));
     MOCKER_CPP(&UBJetty::GetRemoteHbInfo).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBJetty::FillExchangeInfo).stubs().will(returnValue(0));
-    MOCKER_CPP(&UBPublicJetty::FillBondingMsg).stubs().will(returnValue(0));
     MOCKER_CPP(memcpy_s).stubs().will(returnValue(0));
     EXPECT_EQ(driver->FillExchMsg(exchangeInfo, qp, payload, 0, jetty), NN_OK);
     free(exchangeInfo);
@@ -451,7 +470,6 @@ TEST_F(TestNetDriverUBPublicJetty, FillExchMsgHeartBeatErr)
     qp->mUBContext->protocol = UBSHcomNetDriverProtocol::UBC;
 
     MOCKER_CPP(&UBJetty::CreateHBMemoryRegion).stubs().will(returnValue(0)).then(returnValue(1));
-    MOCKER_CPP(&UBPublicJetty::FillBondingMsg).stubs().will(returnValue(0));
 
     EXPECT_EQ(driver->FillExchMsg(exchangeInfo, qp, payload, 0, jetty), 1);
     EXPECT_EQ(driver->FillExchMsg(exchangeInfo, qp, payload, 0, jetty), 1);
@@ -647,7 +665,6 @@ TEST_F(TestNetDriverUBPublicJetty, ServerReplyMsg)
     MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::PollingCompletion).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::GetJettyId).stubs().will(returnValue(jettyId));
-    MOCKER_CPP(&UBPublicJetty::FillBondingMsg).stubs().will(returnValue(0));
     MOCKER_CPP(&UBDeviceHelper::UnInitialize).stubs().will(ignoreReturnValue());
 
     EXPECT_EQ(driver->ServerReplyMsg(nullptr, exchangeMsg, nullptr), UB_PARAM_INVALID);
@@ -680,7 +697,6 @@ TEST_F(TestNetDriverUBPublicJetty, ServerReplyMsgHeartBeat)
     MOCKER_CPP(&UBJetty::CreateHBMemoryRegion).stubs().will(returnValue(0));
     MOCKER_CPP(&UBJetty::GetRemoteHbInfo).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBPublicJetty::GetJettyId).stubs().will(returnValue(jettyId));
-    MOCKER_CPP(&UBPublicJetty::FillBondingMsg).stubs().will(returnValue(0));
     MOCKER_CPP(&UBDeviceHelper::UnInitialize).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBJetty::FillExchangeInfo).stubs().will(returnValue(1));
 
@@ -714,7 +730,6 @@ TEST_F(TestNetDriverUBPublicJetty, ServerReplyMsgHeartBeatErr)
     MOCKER_CPP(&UBJetty::CreateHBMemoryRegion).stubs().will(returnValue(0)).then(returnValue(1));
     MOCKER_CPP(&UBJetty::GetRemoteHbInfo).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBPublicJetty::GetJettyId).stubs().will(returnValue(jettyId));
-    MOCKER_CPP(&UBPublicJetty::FillBondingMsg).stubs().will(returnValue(0));
     MOCKER_CPP(&UBDeviceHelper::UnInitialize).stubs().will(ignoreReturnValue());
 
     EXPECT_EQ(driver->ServerReplyMsg(qp, exchangeMsg, jetty), 1);
@@ -944,29 +959,97 @@ int MockNewEndPoint(const std::string &ipPort, const UBSHcomNetEndpointPtr &newE
     return 0;
 }
 
-TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpSendFail)
+template<int8_t value> UResult MockReceive(void *buf, uint32_t size)
+{
+    int8_t *data = reinterpret_cast<int8_t *>(buf);
+    *data = value;
+    return UB_OK;
+}
+
+TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpFailInvalidParam)
 {
     UBJettyExchangeInfo info = qp->GetExchangeInfo();
     JettyConnHeader exchangeInfo{};
     exchangeInfo.payloadLen = 1;
-    NetMemPoolFixed *memPool = nullptr;
-    NetMemPoolFixed *sglMemPool = nullptr;
-    UBWorkerOptions workerOptions{};
-    UBWorker *worker = new UBWorker(name, 0, workerOptions, memPool, sglMemPool);
-    ASSERT_NE(worker, nullptr);
+
+    EXPECT_EQ(driver->ServerCreateEp(info, qp, nullptr, &exchangeInfo, jetty), NN_PARAM_INVALID);
+}
+
+TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpFailInvalidPayloadLen)
+{
+    UBJettyExchangeInfo info = qp->GetExchangeInfo();
+    JettyConnHeader exchangeInfo{};
+    exchangeInfo.payloadLen = 0;
+
+    EXPECT_EQ(driver->ServerCreateEp(info, qp, worker, &exchangeInfo, jetty), NN_PARAM_INVALID);
+}
+
+TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpFailNoClientAck)
+{
+    UBJettyExchangeInfo info = qp->GetExchangeInfo();
+    JettyConnHeader exchangeInfo{};
+    exchangeInfo.payloadLen = 1;
+
+    // 没有接收到 client ack
+    MOCKER_CPP(&UBPublicJetty::Receive).stubs().will(returnValue(1));
+    EXPECT_EQ(driver->ServerCreateEp(info, qp, worker, &exchangeInfo, jetty), NN_ERROR);
+}
+
+TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpFailClientAckInvalid)
+{
+    UBJettyExchangeInfo info = qp->GetExchangeInfo();
+    JettyConnHeader exchangeInfo{};
+    exchangeInfo.payloadLen = 1;
+
+    // 接收到 client ack, 但是它不为 1
+    MOCKER_CPP(&UBPublicJetty::Receive).stubs().will(invoke(MockReceive<0>));
+    EXPECT_EQ(driver->ServerCreateEp(info, qp, worker, &exchangeInfo, jetty), NN_ERROR);
+}
+
+TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpFailNewEPHandler)
+{
+    UBJettyExchangeInfo info = qp->GetExchangeInfo();
+    JettyConnHeader exchangeInfo{};
+    exchangeInfo.payloadLen = NN_NO14;
+    (void)strncpy_s(exchangeInfo.payload, sizeof(exchangeInfo.payload), "test-handshake", NN_NO14);
 
     driver->RegisterNewEPHandler(
         std::bind(&MockNewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
+    // 接收到 client ack, 并且它为 1， 但是 NewEendpointHandler 失败了
+    MOCKER_CPP(&UBPublicJetty::Receive).stubs().will(invoke(MockReceive<1>));
+    EXPECT_EQ(driver->ServerCreateEp(info, qp, worker, &exchangeInfo, jetty), NN_ERROR);
+}
+
+TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpFailSendServerAck)
+{
+    UBJettyExchangeInfo info = qp->GetExchangeInfo();
+    JettyConnHeader exchangeInfo{};
+    exchangeInfo.payloadLen = 1;
+
+    driver->RegisterNewEPHandler(
+        std::bind(&MockNewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
+    // NewEendpointHandler 成功了, 但是发送 server ack 失败了
+    MOCKER_CPP(&UBPublicJetty::Receive).stubs().will(invoke(MockReceive<1>));
     MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(1));
-    MOCKER_CPP(&NetDriverUBWithOob::ServerHandshake).stubs().will(returnValue(0));
-    EXPECT_EQ(driver->ServerCreateEp(info, qp, nullptr, &exchangeInfo, jetty), NN_PARAM_INVALID);
-    worker->IncreaseRef();
-    qp->IncreaseRef();
-    driver->IncreaseRef();
-    EXPECT_EQ(driver->ServerCreateEp(info, qp, worker, &exchangeInfo, jetty), 0);
-    if (worker != nullptr) {
-        delete worker;
-    }
+    EXPECT_EQ(driver->ServerCreateEp(info, qp, worker, &exchangeInfo, jetty), NN_ERROR);
+}
+
+TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpFailPollCompletion)
+{
+    UBJettyExchangeInfo info = qp->GetExchangeInfo();
+    JettyConnHeader exchangeInfo{};
+    exchangeInfo.payloadLen = 1;
+
+    driver->RegisterNewEPHandler(
+        std::bind(&MockNewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
+    // 发送 client ack 成功, 但是 poll 失败了
+    MOCKER_CPP(&UBPublicJetty::Receive).stubs().will(invoke(MockReceive<1>));
+    MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(0));
+    MOCKER_CPP(&UBPublicJetty::PollingCompletion).stubs().will(returnValue(1));
+    EXPECT_EQ(driver->ServerCreateEp(info, qp, worker, &exchangeInfo, jetty), NN_ERROR);
 }
 
 TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpSuccess)
@@ -983,7 +1066,9 @@ TEST_F(TestNetDriverUBPublicJetty, ServerCreateEpSuccess)
     driver->RegisterNewEPHandler(
         std::bind(&MockNewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(0));
-    MOCKER_CPP(&NetDriverUBWithOob::ServerHandshake).stubs().will(returnValue(0));
+    MOCKER_CPP(&UBPublicJetty::Receive).stubs().will(invoke(MockReceive<1>));
+    MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(0));
+    MOCKER_CPP(&UBPublicJetty::PollingCompletion).stubs().will(returnValue(0));
     worker->IncreaseRef();
     qp->IncreaseRef();
     driver->IncreaseRef();
@@ -997,57 +1082,12 @@ TEST_F(TestNetDriverUBPublicJetty, ServerEstablishCtrlConn)
 {
     JettyConnHeader exchangeInfo{};
     MOCKER_CPP(&UBPublicJetty::StartPublicJetty).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(&UBPublicJetty::SetBondingInfo).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::ImportPublicJetty).stubs().will(returnValue(1)).then(returnValue(0));
 
     EXPECT_EQ(driver->ServerEstablishCtrlConn(nullptr, jetty), NN_PARAM_INVALID);
     EXPECT_EQ(driver->ServerEstablishCtrlConn(&exchangeInfo, jetty), NN_ERROR);
     EXPECT_EQ(driver->ServerEstablishCtrlConn(&exchangeInfo, jetty), NN_ERROR);
-    EXPECT_EQ(driver->ServerEstablishCtrlConn(&exchangeInfo, jetty), NN_ERROR);
     EXPECT_EQ(driver->ServerEstablishCtrlConn(&exchangeInfo, jetty), NN_OK);
-}
-
-TEST_F(TestNetDriverUBPublicJetty, ServerHandshakeAckFail)
-{
-    std::string payload = "hello";
-    std::string eidAndPort = "4245:4944:0000:0000:0000:0000:0100:0000";
-
-    UBSHcomNetWorkerIndex workerIndex{};
-    UBSHcomNetEndpointPtr ep = new (std::nothrow) NetUBSyncEndpoint(0, nullptr, nullptr, NN_NO4, nullptr, workerIndex);
-    driver->RegisterNewEPHandler(
-        std::bind(&MockNewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-    MOCKER_CPP(&UBPublicJetty::Receive).stubs().will(returnValue(1)).then(returnValue(0));
-
-    EXPECT_EQ(driver->ServerHandshake(ep, payload, eidAndPort, jetty), NN_ERROR);
-    EXPECT_EQ(driver->ServerHandshake(ep, payload, eidAndPort, jetty), NN_ERROR);
-}
-
-template<int8_t Value> UResult MockReceive(void *buf, uint32_t size)
-{
-    int8_t *data = reinterpret_cast<int8_t *>(buf);
-    *data = Value;
-    return UB_OK;
-}
-
-TEST_F(TestNetDriverUBPublicJetty, ServerHandshake)
-{
-    std::string payload = "hello";
-    std::string test = "test-handshake";
-    std::string eidAndPort = "4245:4944:0000:0000:0000:0000:0100:0000";
-
-    UBSHcomNetWorkerIndex workerIndex{};
-    UBSHcomNetEndpointPtr ep = new (std::nothrow) NetUBSyncEndpoint(0, nullptr, nullptr, NN_NO4, nullptr, workerIndex);
-    driver->RegisterNewEPHandler(
-        std::bind(&MockNewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-
-    MOCKER_CPP(&UBPublicJetty::Receive).stubs().will(invoke(MockReceive<1>));
-    MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(&UBPublicJetty::PollingCompletion).stubs().will(returnValue(1)).then(returnValue(0));
-
-    EXPECT_EQ(driver->ServerHandshake(ep, payload, eidAndPort, jetty), NN_ERROR);
-    EXPECT_EQ(driver->ServerHandshake(ep, payload, eidAndPort, jetty), NN_ERROR);
-    EXPECT_EQ(driver->ServerHandshake(ep, payload, eidAndPort, jetty), NN_OK);
-    EXPECT_EQ(driver->ServerHandshake(ep, test, eidAndPort, jetty), NN_ERROR);
 }
 
 template<typename T> void *NewExceptFor(size_t sz, const std::nothrow_t &)

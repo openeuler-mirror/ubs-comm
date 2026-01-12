@@ -16,7 +16,7 @@
 
 HTracerClient::HTracerClient()
 {
-    mQueryRecvBuffer = new char[mQueryRecvBufferSize];
+    mQueryRecvBuffer = new (std::nothrow) char[mQueryRecvBufferSize];
     if (mQueryRecvBuffer == nullptr) {
         LOG_ERR("failed to malloc query recv buffer");
         return;
