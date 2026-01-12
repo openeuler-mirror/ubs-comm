@@ -9,21 +9,63 @@ set(CMAKE_CXX_STANDARD 11)
 # define macro that will be used in source code
 add_compile_options(-DMOCK_VERBS -DTEST_LLT)
 
+option(BUILD_WITH_HW_CRC "Build with hardware crc" OFF)
+option(BUILD_WITH_SERVICE "Build with SERVICE" ON)
+option(BUILD_WITH_RDMA "Build with RDMA" ON)
+option(BUILD_WITH_UB "Build with UB" ON)
+option(BUILD_WITH_SHM "Build with SHM" ON)
+option(BUILD_WITH_SOCK "Build with SOCK" ON)
+option(BUILD_WITH_ALLOCATOR_PROTECTION "Build with allocator protection" OFF)
+option(BUILD_WITH_HTRACER "Build with htracer" ON)
+option(ENABLE_ARM_KP "enable arm kunpeng" OFF)
+
+if (BUILD_WITH_RDMA)
+    add_definitions(-DRDMA_BUILD_ENABLED)
+endif ()
+
+if (BUILD_WITH_SHM)
+    add_definitions(-DSHM_BUILD_ENABLED)
+endif ()
+
+if (BUILD_WITH_SOCK)
+    add_definitions(-DSOCK_BUILD_ENABLED)
+endif ()
+
+if (BUILD_WITH_UB)
+    add_definitions(-DUB_BUILD_ENABLED)
+endif ()
+
+if (BUILD_WITH_ALLOCATOR_PROTECTION)
+    add_definitions(-DALLOCATOR_PROTECTION_ENABLED)
+endif ()
+
 # collect hcom source files
-include_directories(${CMAKE_SOURCE_DIR}/src/)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/service_v2)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/service_v2/api)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/common)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/transport)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/transport/rdma)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/transport/rdma/verbs)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/transport/sock)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/transport/shm)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/transport/ub)
 aux_source_directory(service_v2/api SOURCE_FILES)
 aux_source_directory(service_v2 SOURCE_FILES)
-include_directories(${CMAKE_SOURCE_DIR}/src/api/java_sdk/jni)
-include_directories(${CMAKE_SOURCE_DIR}/src/api/java_sdk/jni/include)
-include_directories(${CMAKE_SOURCE_DIR}/src/api/java_sdk/jni/service)
-include_directories(${CMAKE_SOURCE_DIR}/src/api/java_sdk/jni/common)
-include_directories(${CMAKE_SOURCE_DIR}/src/under_api/verbs)
-file(GLOB_RECURSE SOURCE_FILES
-    ${CMAKE_SOURCE_DIR}/src/*.cpp
-    ${CMAKE_SOURCE_DIR}/src/*.h)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/under_api/verbs)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/under_api/openssl)
+include_directories(${CMAKE_SOURCE_DIR}/src/hcom/under_api/urma)
+include_directories(${HCOM_OUTPUT_PATH}/hcom_3rdparty/umdk/urma/include)
+include_directories(${HCOM_OUTPUT_PATH}/hcom_3rdparty/libboundscheck/include)
 
+file(GLOB_RECURSE SOURCE_FILES
+    ${CMAKE_SOURCE_DIR}/src/hcom/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/hcom/*.h)
+set(HCOM_STUB_SRC_DIR ${CMAKE_SOURCE_DIR}/test/hcom/stub)
 # collect hcom unittest files
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/testcase)
+include_directories(${HCOM_STUB_SRC_DIR})
 aux_source_directory(main/ SOURCE_FILES)
 aux_source_directory(testcase/ SOURCE_FILES)
 aux_source_directory(testcase/common SOURCE_FILES)
@@ -47,11 +89,37 @@ if (NOT EXISTS ${MOCKCPP_INSTALL_DIR})
 endif()
 include_directories(${MOCKCPP_INSTALL_DIR}/include)
 link_directories(${MOCKCPP_INSTALL_DIR}/lib)
+link_directories(${HCOM_OUTPUT_PATH}/hcom_3rdparty/libboundscheck/lib/)
 
 # enable gcov
 add_compile_options(-ftest-coverage -fprofile-arcs)
 
 # build hcom_ut
+set(CXX_FLAGS
+    -pipe
+    -g
+    -rdynamic
+    -Wall
+    -fms-extensions
+    -Wno-unused-parameter
+    -Wno-unused-function
+    -w -Wno-address-of-packed-member
+    -Wunused-variable
+    -Wunused-value
+    -Winvalid-pch
+    -Wcast-align
+    -Wcast-qual
+    -Wwrite-strings
+    -Wsign-compare
+    -Wfloat-equal
+    -Wextra
+    -std=c++11
+    #-fsanitize=address
+    #-fno-omit-frame-pointer
+    -fstack-protector-strong
+    #-fPIC will cause failure while mocking system functions
+)
+string(REPLACE ";" " " CMAKE_CXX_FLAGS "${CXX_FLAGS}")
 set(DEPEND_LIBS rt pthread gtest gcov mockcpp dl fake_ibv_static boundscheck)
 add_executable(Hcomtest ${SOURCE_FILES})
 target_compile_options(Hcomtest PUBLIC -D_GNU_SOURCE)

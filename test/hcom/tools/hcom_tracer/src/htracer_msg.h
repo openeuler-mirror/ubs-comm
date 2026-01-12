@@ -49,8 +49,9 @@ struct HandlerConfPara {
     HandlerConfPara(bool enable1, bool enable2, bool enable3, const std::string &path)
         : enable(enable1), enableTp(enable2), enableLog(enable3)
     {
-        if (path.size() < sizeof(logPath)) {
-            strcpy_s(logPath, path.length() + 1, path.c_str());
+        if (path.size() < sizeof(logPath) && (strcpy_s(logPath, path.length() + 1, path.c_str()) != 0)) {
+            LOG_ERR("Failed to strcpy logPath");
+            logPath[0] = '\0';
         }
     }
 };
@@ -67,7 +68,10 @@ struct TTraceInfo {
 
     explicit TTraceInfo(const char *name)
     {
-        strncpy_s(this->name, TRACE_INFO_MAX_LEN + 1, name, TRACE_INFO_MAX_LEN);
+        if (strncpy_s(this->name, TRACE_INFO_MAX_LEN + 1, name, TRACE_INFO_MAX_LEN) != 0) {
+            LOG_ERR("Failed to strncpy name");
+            this->name[0] = '\0';
+        }
     }
 
     void operator += (const TTraceInfo &other)

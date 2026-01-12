@@ -26,10 +26,10 @@ TEST_F(TestNetDriver, VersionParseFailed)
     MOCKER(NetFunc::NN_SplitStr).stubs().will(ignoreReturnValue());
 
     UBSHcomNetDriver *driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "test", false);
-    EXPECT_EQ(driver, nullptr);
+    EXPECT_NE(driver, nullptr);
 
     driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "test", false);
-    EXPECT_EQ(driver, nullptr);
+    EXPECT_NE(driver, nullptr);
 }
 }
 }

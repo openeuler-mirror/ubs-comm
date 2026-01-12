@@ -196,14 +196,14 @@ int ValidateTlsCert()
 
     std::string currentPath = buffer;
 
-    certPath = currentPath + "/../test/opensslcrt/normalCert1";
-    otherCertPath = currentPath + "/../test/opensslcrt/normalCert2";
-    expiredCertPath = currentPath + "/../test/opensslcrt/expiredCert";
-    revokedCertPath = currentPath + "/../test/opensslcrt/crlRevokedCert";
-    cliVerifyByNoneCertPath = currentPath + "/../test/opensslcrt/serExpCertCliNoCheck";
-    multiCertPath = currentPath + "/../test/opensslcrt/multiLevelCert";
-    abnormalCertChainPath = currentPath + "/../test/opensslcrt/abnormalCertChain";
-    normalCertChainPath = currentPath + "/../test/opensslcrt/normalCertChain";
+    certPath = currentPath + "/../test/hcom/opensslcrt/normalCert1";
+    otherCertPath = currentPath + "/../test/hcom/opensslcrt/normalCert2";
+    expiredCertPath = currentPath + "/../test/hcom/opensslcrt/expiredCert";
+    revokedCertPath = currentPath + "/../test/hcom/opensslcrt/crlRevokedCert";
+    cliVerifyByNoneCertPath = currentPath + "/../test/hcom/opensslcrt/serExpCertCliNoCheck";
+    multiCertPath = currentPath + "/../test/hcom/opensslcrt/multiLevelCert";
+    abnormalCertChainPath = currentPath + "/../test/hcom/opensslcrt/abnormalCertChain";
+    normalCertChainPath = currentPath + "/../test/hcom/opensslcrt/normalCertChain";
 
     if (!CanonicalPath(certPath)) {
         NN_LOG_ERROR("TLS cert path check failed " << certPath);
