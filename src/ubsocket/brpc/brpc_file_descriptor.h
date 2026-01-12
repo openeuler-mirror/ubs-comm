@@ -198,7 +198,7 @@ public:
     }
 
     //删除 eid 及其值
-    bool UnregisterEidIndex(const umq_eid_t& eid) 
+    bool UnregisterEidIndex(const umq_eid_t& eid)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_eid_index_map.erase(eid) > 0;
@@ -213,20 +213,20 @@ private:
 class RouteListRegistry {
 public:
     // 注册或者替换routeList值
-    void RegisterOrReplaceRouteList(const umq_eid_t &eid, const umq_route_list_t &routeList) 
+    void RegisterOrReplaceRouteList(const umq_eid_t &eid, const umq_route_list_t &routeList)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_route_list_map[eid] = routeList;
     }
 
     // 仅检查eid对应的routeList是否存在（不获取值）
-    bool IsRegisteredRouteList(const umq_eid_t &eid) const 
+    bool IsRegisteredRouteList(const umq_eid_t &eid) const
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_route_list_map.find(eid) != m_route_list_map.end();
     }
 
-    bool GetRouteList(const umq_eid_t &eid, umq_route_list_t &routeList) const 
+    bool GetRouteList(const umq_eid_t &eid, umq_route_list_t &routeList) const
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         auto it = m_route_list_map.find(eid);
@@ -238,7 +238,7 @@ public:
     }
 
     // 删除 RouteList
-    bool UnregisterRouteList(const umq_eid_t &eid) 
+    bool UnregisterRouteList(const umq_eid_t &eid)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_route_list_map.erase(eid) > 0;
@@ -369,14 +369,14 @@ public:
         *connEid = context->GetDevSrcEid();
         if (localEid != remoteEid) {
             dev_schedule_policy peerSchedulePolicy;
-            if (RecvSocketData(m_fd, &peerSchedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) != 
+            if (RecvSocketData(m_fd, &peerSchedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
                 sizeof(dev_schedule_policy)) {
                 RPC_ADPT_VLOG_ERR("Failed to receive remote schedule policy in connect, fd: %d\n", m_fd);
                 return -1;
             }
 
             dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
-            if (SendSocketData(m_fd, &schedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) != 
+            if (SendSocketData(m_fd, &schedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
                 sizeof(dev_schedule_policy)) {
                 RPC_ADPT_VLOG_ERR("Failed to send local policy in connect, fd: %d\n", m_fd);
                 return -1;
@@ -423,7 +423,7 @@ public:
             return ret;
         }
 
-        local_cp_msg.queue_bind_info_size = 
+        local_cp_msg.queue_bind_info_size =
             umq_bind_info_get(m_local_umqh, local_cp_msg.queue_bind_info, UMQ_BIND_INFO_SIZE_MAX);
         if (local_cp_msg.queue_bind_info_size == 0) {
             RPC_ADPT_VLOG_ERR("Failed to execute umq_bind_info_get\n");
@@ -435,7 +435,7 @@ public:
             RPC_ADPT_VLOG_ERR("Failed to send local control message, fd: %d\n", m_fd);
             return -1;
         }
-        RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n", 
+        RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             m_fd, sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
         
         if (RecvSocketData(
@@ -443,14 +443,14 @@ public:
             RPC_ADPT_VLOG_ERR("Failed to receive remote control message, fd: %d\n", m_fd);
             return -1;
         }
-        RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n", 
+        RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             m_fd, sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
 
         if (umq_bind(m_local_umqh, remote_cp_msg.queue_bind_info, remote_cp_msg.queue_bind_info_size) != UMQ_SUCCESS) {
             RPC_ADPT_VLOG_ERR("Failed to execute umq_bind\n");
             return RETRY_NEEDED;
-        }  
-        m_bind_remote = true;  
+        }
+        m_bind_remote = true;
 
         // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
         if (PrefillRx() != 0) {
@@ -1346,7 +1346,7 @@ private:
         return rx_total_len;
     }
 
-    int AcceptExchangeEid(int new_fd, umq_eid_t &connEid,umq_eid_t &remoteEid,umq_route_t &connRoute)
+    int AcceptExchangeEid(int new_fd, umq_eid_t &connEid, umq_eid_t &remoteEid, umq_route_t &connRoute)
     {
         Context *context = Context::GetContext();
         if (!context->IsBonding()) {
@@ -1368,14 +1368,14 @@ private:
         connEid = context->GetDevSrcEid();
         if (localEid != remoteEid) {
             dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
-            if (SendSocketData(new_fd, &schedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) != 
+            if (SendSocketData(new_fd, &schedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
                 sizeof(dev_schedule_policy)) {
                 RPC_ADPT_VLOG_ERR("Failed to send schedule policy in accept, fd: %d\n", new_fd);
                 return -1;
             }
 
             dev_schedule_policy peerSchedulePolicy;
-            if (RecvSocketData(new_fd, &peerSchedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) != 
+            if (RecvSocketData(new_fd, &peerSchedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
                 sizeof(dev_schedule_policy)) {
                     RPC_ADPT_VLOG_ERR("Failed to receive remote socket id in accept, fd: %d\n", new_fd);
                     return -1;
@@ -1417,7 +1417,7 @@ private:
         char send_sync_msg[] = UMQ_BIND_SYNC_MSG;
         char recv_sync_msg[] = UMQ_BIND_SYNC_MSG;
 
-        int ret=socket_fd_obj->CreateLocalUmq(&connEid);
+        int ret = socket_fd_obj->CreateLocalUmq(&connEid);
         if ((ret < 0) || (ret == RETRY_NEEDED)) {
             RPC_ADPT_VLOG_ERR("Failed to create umq\n");
             return ret;
@@ -1436,7 +1436,7 @@ private:
             RPC_ADPT_VLOG_ERR("Failed to receive remote control message, fd: %d\n", new_fd);
             return -1;
         }
-        RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n", 
+        RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             new_fd, sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
 
         if (SendSocketData(
@@ -1444,10 +1444,10 @@ private:
             RPC_ADPT_VLOG_ERR("Failed to send local control message, fd: %d\n", new_fd);
             return -1;
         }
-        RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n", 
+        RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             new_fd, sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
         
-        if (umq_bind(socket_fd_obj->GetLocalUmqHandle(), remote_cp_msg.queue_bind_info, 
+        if (umq_bind(socket_fd_obj->GetLocalUmqHandle(), remote_cp_msg.queue_bind_info,
             remote_cp_msg.queue_bind_info_size) != UMQ_SUCCESS) {
             RPC_ADPT_VLOG_ERR("Failed to execute umq_bind\n");
             return RETRY_NEEDED;
@@ -1473,7 +1473,7 @@ private:
             return -1;
         }
 
-        return 0;  
+        return 0;
     }
 
     int DoAccept(int new_fd)
@@ -1972,11 +1972,11 @@ private:
 
     void GetBondingEidMapIndex(const umq_eid_t &dstEid, uint32_t &index)
     {
-        if(!mEidRegistry.IsRegisteredEidIndex(dstEid)) {
-            mEidRegistry.RegisterOrReplaceEidIndex(dstEid,0);
+        if (!mEidRegistry.IsRegisteredEidIndex(dstEid)) {
+            mEidRegistry.RegisterOrReplaceEidIndex(dstEid, 0);
         }
 
-        mEidRegistry.GetEidIndex(dstEid,index);
+        mEidRegistry.GetEidIndex(dstEid, index);
     }
 
     // Round_Robin
@@ -2013,7 +2013,7 @@ private:
     }
 
     uint32_t GetTargetChipId(const std::vector<uint32_t>& socketIds, const std::vector<uint32_t>& chipIdList,
-        int processSocketId) 
+        int processSocketId)
     {
         auto it = std::find(socketIds.begin(), socketIds.end(), processSocketId);
         if (it == socketIds.end()) {
@@ -2029,12 +2029,12 @@ private:
     }
 
     // 通过亲和性选择 Cpu_Affinity
-    int GetCpuAffinityConnEid(umq_route_list_t &route_list, const umq_eid_t *dstEid, umq_route_t *connRoute, 
+    int GetCpuAffinityConnEid(umq_route_list_t &route_list, const umq_eid_t *dstEid, umq_route_t *connRoute,
         const std::vector<uint32_t>& socketIds, int processSocketId)
     {
         // 检查socket ID一致性。因为同平面上的两端chip_id相等，因此两端的socket id不相等，则切回轮询模式
         if (processSocketId != mPeerSocketId) {
-            return GetRoundRobinConnEid(route_list, dstEid, connRoute);       
+            return GetRoundRobinConnEid(route_list, dstEid, connRoute);
         }
 
         // 提取 chip_id 列表
@@ -2043,7 +2043,7 @@ private:
             if ((route_list.buf[i].flag.bs.rtp == 1)) {
                 uniqueChipIds.insert(route_list.buf[i].chip_id);
                 std::cout<<" index "<<i<< "chip id "<<route_list.buf[i].chip_id<<std::endl;
-            }         
+            }
         }
         std::vector<uint32_t> chipIdList(uniqueChipIds.begin(), uniqueChipIds.end());
 
@@ -2058,7 +2058,7 @@ private:
             if ((route_list.buf[i].flag.bs.rtp == 1) && (targetChipId == route_list.buf[i].chip_id)) {
                 *connRoute = route_list.buf[i];
                 return 0;
-            }         
+            }
         }
 
         RPC_ADPT_VLOG_ERR("Failed to find umq dev\n");
@@ -2097,7 +2097,7 @@ private:
     }
 
     int CheckOtherRoute(umq_route_t &otherConnRoute, umq_eid_t &dstEid, umq_route_t &connRoute)
-    {   
+    {
         if (!mRouteListRegistry.IsRegisteredRouteList(dstEid)) {
             RPC_ADPT_VLOG_ERR("Failed to check other route to connect\n");
             return -1;
@@ -2115,11 +2115,11 @@ private:
         for (uint32_t i = 0; i< routeList.len; ++i) {
             if (routeList.buf[i].chip_id != connRoute.chip_id) {
                 if (filterNum==0) {
-                    otherConnRoute = routeList.buf[i];             
+                    otherConnRoute = routeList.buf[i];
                     found = true;
                 }
                 filteredList.buf[filterNum++] = routeList.buf[i];
-            }         
+            }
         }
 
         if (!found) {
@@ -2138,9 +2138,9 @@ private:
     }
 
     int GetDevRouteList(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_list_t &filteredList)
-    {   
+    {
         if (mRouteListRegistry.GetRouteList(*dstEid, filteredList)) {
-            if(filteredList.len > 0) {
+            if (filteredList.len > 0) {
                 return 0;
             }
         }
@@ -2160,7 +2160,7 @@ private:
         for (uint32_t i = 0;i< route_list.len; ++i) {
             if (route_list.buf[i].flag.bs.rtp == 1) {
                 filteredList.buf[filterNum++] = route_list.buf[i];
-            }         
+            }
         }
         filteredList.len = filterNum;
 
@@ -2174,9 +2174,9 @@ private:
     }
 
     int DoRoute(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_t *connRoute, bool useRoundRobin)
-    {    
-        umq_route_list_t filteredList = {};   
-        if (GetDevRouteList(srcEid,dstEid, filteredList)!=0) {
+    {
+        umq_route_list_t filteredList = {};
+        if (GetDevRouteList(srcEid, dstEid, filteredList) != 0) {
             RPC_ADPT_VLOG_ERR("Failed to get dev route list\n");
             return -1;
         }
@@ -2186,7 +2186,7 @@ private:
             return -1;
         }
 
-        if(CheckDevAdd(connRoute->src)!=0) {
+        if (CheckDevAdd(connRoute->src) != 0) {
             RPC_ADPT_VLOG_ERR("Failed to check dev add\n");
             return -1;
         }

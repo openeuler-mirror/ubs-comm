@@ -76,7 +76,7 @@ std::atomic<int> Context::m_ref = {0};
 }
 
 // 解析cpulist字符串
-int Context::GetFirstCpuFromCpulist(const std::string &cpuListStr) 
+int Context::GetFirstCpuFromCpulist(const std::string &cpuListStr)
 {
     if (cpuListStr.empty()) {
         // 表示无效输入
@@ -102,9 +102,9 @@ int Context::GetFirstCpuFromCpulist(const std::string &cpuListStr)
 }
 
 // 从 CPU ID 获取其 Socket ID（physical_package_id）
-int Context::GetSocketIdOfCpu(int cpu) 
+int Context::GetSocketIdOfCpu(int cpu)
 {
-    std::string path = 
+    std::string path =
         std::string(SOCKET_ID_PERFIX_PATH) + "cpu" + std::to_string(cpu) + std::string(SOCKET_ID_SUFFIX_PATH);
     std::ifstream file(path);
     int socketId;
@@ -114,7 +114,7 @@ int Context::GetSocketIdOfCpu(int cpu)
     return -1; // 读取失败
 }
 
-std::vector<uint32_t> Context::GetSocketIdsViaNumaSysfs() 
+std::vector<uint32_t> Context::GetSocketIdsViaNumaSysfs()
 {
     // 尝试 NUMA 方式获取
     std::vector<uint32_t> numaResult = GetSocketIdsViaNuma();
@@ -128,7 +128,7 @@ std::vector<uint32_t> Context::GetSocketIdsViaNumaSysfs()
 }
 
 // NUMA 方式获取 Socket IDs
-std::vector<uint32_t> Context::GetSocketIdsViaNuma() 
+std::vector<uint32_t> Context::GetSocketIdsViaNuma()
 {
     std::set<int> socketIds;
 
@@ -168,7 +168,7 @@ std::vector<uint32_t> Context::GetSocketIdsViaNuma()
 }
 
 // CPU 扫描方式获取 Socket IDs
-std::vector<uint32_t> Context::GetSocketIdsViaCpuScan() 
+std::vector<uint32_t> Context::GetSocketIdsViaCpuScan()
 {
     std::set<int> socketIds;
 
@@ -196,14 +196,14 @@ std::vector<uint32_t> Context::GetSocketIdsViaCpuScan()
     return std::vector<uint32_t>(socketIds.begin(), socketIds.end());
 }
 
-int Context::GetCurrentProcessSocketId() 
+int Context::GetCurrentProcessSocketId()
 {
     // 获取当前进程主线程所在的 CPU
     int cpu = sched_getcpu();
     if (cpu < 0) {
         return -1;
     }
-    return GetSocketIdOfCpu(cpu); 
+    return GetSocketIdOfCpu(cpu);
 }
 
 }

@@ -196,7 +196,7 @@ class Context : public Brpc::ConfigSettings {
             umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
             umq_config.trans_info[0].dev_info.dev.eid_idx = GetEidIdx();
             isBonding = true;
-        } 
+        }
 
         if (GetDevSchedulePolicy() == dev_schedule_policy::CPU_AFFINITY) {
             m_process_socket_id = GetCurrentProcessSocketId();
@@ -206,7 +206,7 @@ class Context : public Brpc::ConfigSettings {
                 ResetBrpcAllocator();
                 SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
                 return;
-            }       
+            }
         }
 
         ret = umq_init(&umq_config);

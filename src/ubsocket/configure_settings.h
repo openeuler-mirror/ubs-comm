@@ -317,7 +317,7 @@ protected:
             } else if (memcmp(m_dev_schedule_policy_str, DEV_SCHEDULE_POLICY_ROUND_ROBIN, strlen(m_dev_schedule_policy_str)) == 0) {
                 m_dev_schedule_policy = dev_schedule_policy::ROUND_ROBIN;
             } else {
-                (void)strcpy_s(m_dev_schedule_policy_str, sizeof(m_dev_schedule_policy_str), 
+                (void)strcpy_s(m_dev_schedule_policy_str, sizeof(m_dev_schedule_policy_str),
                     DEV_SCHEDULE_POLICY_CPU_AFFINITY);
                 m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;
             }
