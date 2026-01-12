@@ -436,6 +436,18 @@ void HcomServiceImp::ForceStop()
 
     for (auto &driver : mDriverPtrs) {
         driver->Stop();
+    }
+
+    for (const auto& pair : mChannelMap) {
+        UBSHcomChannelPtr channel = pair.second;
+        Disconnect(channel);
+    }
+
+    if (mPeriodicMgr.Get() != nullptr) {
+        mPeriodicMgr->Stop();
+    }
+
+    for (auto &driver : mDriverPtrs) {
         driver->UnInitialize();
         UBSHcomNetDriver::DestroyInstance(driver->Name());
     }
@@ -620,7 +632,6 @@ int32_t HcomServiceImp::Connect(const std::string &serverUrl, UBSHcomChannelPtr 
 SerResult HcomServiceImp::DoConnectInner(const std::string &serverUrl, SerConnInfo &opt, const std::string &payLoad,
     std::vector<UBSHcomNetEndpointPtr> &epVector, uint32_t &totalBandWidth)
 {
-    SerResult res = SER_OK;
     opt.totalLinkCount = opt.options.linkCount * mDriverPtrs.size();
     for (int j = 0; j < static_cast<int>(mDriverPtrs.size()); ++j) {
         opt.driverIndex = mDriverPtrs[j]->GetDeviceId();
@@ -648,13 +659,12 @@ SerResult HcomServiceImp::DoConnectInner(const std::string &serverUrl, SerConnIn
             {
                 std::lock_guard<std::mutex> lockerEp(mNewEpMutex);
                 mSecInfoMap.erase(opt.channelId);
-                NN_LOG_ERROR("Failed to connect " << result);
                 return result;
             }
         }
         totalBandWidth += mDriverPtrs[j]->GetBandWidth();
     }
-    return res;
+    return SER_OK;
 }
 
 SerResult HcomServiceImp::DoConnect(const std::string &serverUrl, SerConnInfo &opt, const std::string &payLoad,
@@ -1382,6 +1392,7 @@ void HcomServiceImp::ServiceEndPointBroken(const UBSHcomNetEndpointPtr &netEp)
     usleep(NN_NO100);
     channel->ProcessIoInBroken();
     channel->InvokeChannelBrokenCb(channel);
+    NN_LOG_INFO("Channel broken, channel id " << channel->GetId());
 
     uint16_t delayEraseTime = channel->GetDelayEraseTime();
     // default: try delay erase channel

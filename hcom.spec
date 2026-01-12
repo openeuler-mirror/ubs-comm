@@ -109,6 +109,7 @@ cp -r %{_builddir}/%{name}_%{version}/%{package_name}/hcom/include/hcom/*  %{bui
 
 %files debuginfo
 %defattr(-,root,root)
-%{_prefix}/lib64/libhcom.so.debug
+%{_prefix}/lib64/libhcom.so.0
+%{_prefix}/lib64/libhcom.so.0.0.1
 
 %define __os_install_post %{nil}

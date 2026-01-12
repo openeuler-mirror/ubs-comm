@@ -63,6 +63,7 @@ protected:
     int SendFinished(RDMAOpContextInfo *ctx);
     int NewRequest(RDMAOpContextInfo *ctx);
     int OneSideDone(RDMAOpContextInfo *ctx);
+    int RWOneSideDoneCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, RDMAWorker *worker);
 
     NResult DoInitialize() override;
     void DoUnInitialize() override;
@@ -91,7 +92,6 @@ private:
     
     NResult NewReceivedRequestWithoutCopy(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
         UBSHcomNetMessage &msg, RDMAWorker *worker, void *dataAddress, UBSHcomNetTransHeader *header) const;
-        
     NResult SendRequestFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, RDMAWorker *worker);
     NResult SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, RDMAWorker *worker);
     NResult SendSglInlineFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, RDMAWorker *worker);

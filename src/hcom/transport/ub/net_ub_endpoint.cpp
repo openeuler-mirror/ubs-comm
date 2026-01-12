@@ -160,8 +160,12 @@ namespace hcom {
                                                                                                            \
         uint32_t iovOffset = 0;                                                                            \
         for (int i = 0; i < request.iovCount; i++) {                                                       \
-            (void)memcpy_s(reinterpret_cast<void *>(tmpBuff + iovOffset), request.iov[i].size,             \
-                reinterpret_cast<const void *>(request.iov[i].lAddress), request.iov[i].size);             \
+            if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(tmpBuff + iovOffset), request.iov[i].size,   \
+                reinterpret_cast<const void *>(request.iov[i].lAddress), request.iov[i].size) != NN_OK)) { \
+                NN_LOG_ERROR("Failed to copy request to buff");                                            \
+                (void)(mDriver)->mDriverSendMR->ReturnBuffer(tmpBuff);                                     \
+                return NN_ERROR;                                                                           \
+            }                                                                                              \
             iovOffset += request.iov[i].size;                                                              \
         }                                                                                                  \
                                                                                                            \
@@ -226,6 +230,7 @@ NetUBAsyncEndpoint::NetUBAsyncEndpoint(uint64_t id, UBJetty *qp, NetDriverUBWith
             mJetty->GetPostSendMaxSize();
         mAllowedSize = mSegSize - sizeof(UBSHcomNetTransHeader);
         mDmSize = mDriver->mOptions.dmSegSize;
+        mSendRawAllowedSize = mSegSize < NN_NO65536 ? mSegSize : NN_NO65536;
     }
 
     if (mIsNeedSendHb && mDriver != nullptr) {
@@ -238,10 +243,10 @@ NetUBAsyncEndpoint::NetUBAsyncEndpoint(uint64_t id, UBJetty *qp, NetDriverUBWith
 
 NetUBAsyncEndpoint::~NetUBAsyncEndpoint()
 {
-    // jetty 析构时要求 worker、driver都存活
+    // jetty 析构时要求 worker、driver 都存活
     if (mJetty != nullptr) {
         // 当 EP 析构时，说明它不再被用户使用、已经从全局 EP 表中被删除、上层的 channel 也被 DelayEraseChannel 真正删除。
-        // 如果存在 UBJetty 的 PostedCount > 0，说明存在过在 FLUSH_ERR_DONE 之后用户绕过了 EP 和 jetty 的状态检查进行
+        // 如果存在 UBJetty 的 PostedCount > 0, 说明存在过在 FLUSH_ERR_DONE 之后用户绕过了 EP 和 jetty 的状态检查进行
         // post 的情况。
         //
         // \see NetDriverUBWithOob::ProcessEpError
@@ -295,8 +300,12 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         header->dataLength = cipherLen;
     } else {
         header->dataLength = request.size;
-        (void)memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size);
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
+            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            NN_LOG_ERROR("Failed to async post send with seq no as memcpy fail");
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            return NN_ERROR;
+        }
     }
 
     /* finally fill header crc */
@@ -366,8 +375,12 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         header->dataLength = cipherLen;
     } else {
         header->dataLength = request.size;
-        (void)memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size);
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
+            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            NN_LOG_ERROR("Failed to async post send with op info as memcpy fail");
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            return NN_ERROR;
+        }
     }
     /* finally fill header crc */
     header->headerCrc = NetFunc::CalcHeaderCrc32(header);
@@ -532,7 +545,7 @@ NResult NetUBAsyncEndpoint::PostSendSglInline(
 
 NResult NetUBAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo)
 {
-    POST_SEND_RAW_VALIDATION(mState, mId, mDriver, seqNo, request, mSegSize);
+    POST_SEND_RAW_VALIDATION(mState, mId, mDriver, seqNo, request, mSendRawAllowedSize);
 
     /* get mr from pool */
     NResult result = UB_OK;
@@ -595,7 +608,7 @@ NResult NetUBAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, u
 NResult NetUBAsyncEndpoint::PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo)
 {
     size_t size = 0;
-    POST_SEND_SGL_VALIDATION(mState, mId, mDriver, seqNo, request, mSegSize, size);
+    POST_SEND_SGL_VALIDATION(mState, mId, mDriver, seqNo, request, mSendRawAllowedSize, size);
     UBSHcomNetTransSglRequest sglReq = request;
     if (GetSglTseg(mDriver, sglReq) != NN_OK) {
         NN_LOG_ERROR("GetSglTseg failed");
@@ -795,6 +808,7 @@ NetUBSyncEndpoint::NetUBSyncEndpoint(uint64_t id, UBJetty *qp, UBJfc *cq, uint32
             mJetty->GetPostSendMaxSize();
         mAllowedSize = mSegSize - sizeof(UBSHcomNetTransHeader);
         mDmSize = mDriver->mOptions.dmSegSize;
+        mSendRawAllowedSize = mSegSize < NN_NO65536 ? mSegSize : NN_NO65536;
     }
 
     /* set worker index and group index to 0xFFFF */
@@ -854,8 +868,12 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
         // copy message
         header->dataLength = request.size;
 
-        (void)memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size);
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
+            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            NN_LOG_ERROR("Failed to sync post send with seq no as memcpy fail");
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            return NN_ERROR;
+        }
     }
 
     /* finally fill header crc */
@@ -929,8 +947,12 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
         // copy message
         header->dataLength = request.size;
 
-        (void)memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size);
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
+            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            NN_LOG_ERROR("Failed to sync post send with op info as memcpy fail");
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            return NN_ERROR;
+        }
     }
 
     /* finally fill header crc */
@@ -1059,7 +1081,7 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
 
 NResult NetUBSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo)
 {
-    POST_SEND_RAW_VALIDATION(mState, mId, mDriver, seqNo, request, mSegSize);
+    POST_SEND_RAW_VALIDATION(mState, mId, mDriver, seqNo, request, mSendRawAllowedSize);
 
     /* get mr from pool */
     NResult result = UB_OK;
@@ -1175,7 +1197,7 @@ NResult NetUBSyncEndpoint::InnerPostSendSgl(const UBSendSglRWRequest &req, const
 NResult NetUBSyncEndpoint::PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo)
 {
     size_t size = 0;
-    POST_SEND_SGL_VALIDATION(mState, mId, mDriver, seqNo, request, mSegSize, size);
+    POST_SEND_SGL_VALIDATION(mState, mId, mDriver, seqNo, request, mSendRawAllowedSize, size);
 
     UBSHcomNetTransRequest tlsReq{};
     uintptr_t mrBufAddress = 0;
@@ -1721,8 +1743,9 @@ NResult NetUBSyncEndpoint::InnerPostSend(const UBSendReadWriteRequest &req, urma
     ctx.opType = immData == 0 ? UBOpContextInfo::SEND : UBOpContextInfo::SEND_RAW;
     ctx.opResultType = UBOpContextInfo::SUCCESS;
     ctx.upCtxSize = req.upCtxSize;
-    if (req.upCtxSize > 0) {
-        (void)memcpy_s(ctx.upCtx, req.upCtxSize, req.upCtxData, req.upCtxSize);
+    if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx.upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != UB_OK)) {
+        NN_LOG_ERROR("Failed to copy req to ctx");
+        return UB_ERROR;
     }
     mJetty->IncreaseRef();
 
@@ -1758,8 +1781,9 @@ NResult NetUBSyncEndpoint::InnerPostRead(const UBSendReadWriteRequest &req)
     ctx.opType = UBOpContextInfo::READ;
     ctx.opResultType = UBOpContextInfo::SUCCESS;
     ctx.upCtxSize = req.upCtxSize;
-    if (req.upCtxSize > 0) {
-        (void)memcpy_s(ctx.upCtx, req.upCtxSize, req.upCtxData, req.upCtxSize);
+    if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx.upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != UB_OK)) {
+        NN_LOG_ERROR("Failed to copy req to ctx");
+        return UB_ERROR;
     }
     mJetty->IncreaseRef();
 
@@ -1796,8 +1820,9 @@ NResult NetUBSyncEndpoint::InnerPostWrite(const UBSendReadWriteRequest &req)
     ctx.opType = UBOpContextInfo::WRITE;
     ctx.opResultType = UBOpContextInfo::SUCCESS;
     ctx.upCtxSize = req.upCtxSize;
-    if (req.upCtxSize > 0) {
-        (void)memcpy_s(ctx.upCtx, req.upCtxSize, req.upCtxData, req.upCtxSize);
+    if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx.upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != UB_OK)) {
+        NN_LOG_ERROR("Failed to copy req to ctx");
+        return UB_ERROR;
     }
     mJetty->IncreaseRef();
 

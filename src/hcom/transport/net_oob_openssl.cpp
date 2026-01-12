@@ -127,7 +127,7 @@ int OOBOpenSSLConnection::DefaultSslCertVerify(X509_STORE_CTX *x509ctx, const ch
         HcomSsl::X509StoreCtxSetFlags(x509ctx, (unsigned long)HcomSsl::X509_V_FLAG_CRL_CHECK);
         auto result = HcomSsl::X509StoreAddCrl(x509Store, crl);
         if (result != NN_NO1) {
-            NN_LOG_INFO("Store add crl failed ret:" << result);
+            NN_LOG_ERROR("Store add crl failed ret:" << result);
             HcomSsl::X509CrlFree(crl);
             return checkFailed;
         }
@@ -136,7 +136,7 @@ int OOBOpenSSLConnection::DefaultSslCertVerify(X509_STORE_CTX *x509ctx, const ch
 
     auto verifyResult = HcomSsl::X509VerifyCert(x509ctx);
     if (verifyResult != NN_NO1) {
-        NN_LOG_INFO("Verify failed in callback"
+        NN_LOG_ERROR("Verify failed in callback"
             << " error: " << HcomSsl::X509VerifyCertErrorString(HcomSsl::X509StoreCtxGetError(x509ctx)));
         return checkFailed;
     }
@@ -366,6 +366,7 @@ X509_CRL *OOBOpenSSLConnection::LoadCertRevokeListFile(const char *crlFile)
     if (result <= 0) {
         (void)HcomSsl::BioFree(in);
         free(realCrlPath);
+        realCrlPath = nullptr;
         return nullptr;
     }
 

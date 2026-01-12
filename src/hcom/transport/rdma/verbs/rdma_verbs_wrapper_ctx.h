@@ -33,10 +33,27 @@ inline uint8_t GetTrafficClass()
     long tmp = 0;
     NetFunc::NN_Stol(env, tmp);
     if (tmp >= 0 && tmp < NN_NO256) {
-        return tmp;
+        return static_cast<uint8_t>(tmp);
     }
 
     return tc;
+}
+
+inline uint8_t GetMaxRdAtomic()
+{
+    uint8_t rdAtomic = 1;
+    auto env = getenv("HCOM_MAX_RD_ATOMIC");
+    if (env == nullptr) {
+        return rdAtomic;
+    }
+
+    long tmp = 0;
+    NetFunc::NN_Stol(env, tmp);
+    if (tmp >= 0 && tmp < NN_NO256) {
+        return static_cast<uint8_t>(tmp);
+    }
+
+    return rdAtomic;
 }
 
 class RDMAContext {

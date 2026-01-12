@@ -233,6 +233,7 @@ public:
 
     inline NResult CompareEpNum(const std::string &ip)
     {
+        std::lock_guard<std::mutex> guard(mEpNumMutex);
         auto iter = mIpEpNumberMap.find(ip);
         if (iter == mIpEpNumberMap.end()) {
             return NN_OK;

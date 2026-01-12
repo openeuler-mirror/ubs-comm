@@ -1342,18 +1342,71 @@ int NetDriverUBWithOob::SendSglInlineFinishedCB(UBOpContextInfo *ctx, UBSHcomNet
         if (NN_UNLIKELY(memcpy_s(requestCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx, ctx->upCtxSize) !=
             UB_OK)) {
             NN_LOG_ERROR("Failed to copy req to ctx");
-            return UB_PARAM_INVALID;
+            result = UB_PARAM_INVALID;
         }
     }
     // return context to worker, and ctx is set null, not usable anymore
     worker->ReturnOpContextInfo(ctx);
     // call to callback
-    if (NN_UNLIKELY((result = mRequestPostedHandler(requestCtx)) != UB_OK)) {
+    if (result == UB_OK && NN_UNLIKELY((result = mRequestPostedHandler(requestCtx)) != UB_OK)) {
         NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName <<
             " return non-zero for receive message [dataSize " << requestCtx.mHeader.dataLength << "]");
     }
     requestCtx.mEp.Set(nullptr);
-    return NN_OK;
+    return result;
+}
+
+int NetDriverUBWithOob::SendAndSendRawFinishedCB(UBOpContextInfo *ctx, UBSHcomNetRequestContext &requestCtx,
+    UBWorker *worker)
+{
+    using NRC = UBSHcomNetRequestContext;
+    int result = 0;
+    if (ctx->opType == UBOpContextInfo::SEND && NN_UNLIKELY(memcpy_s(&(requestCtx.mHeader),
+        sizeof(UBSHcomNetTransHeader), reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr),
+        sizeof(UBSHcomNetTransHeader)) != UB_OK)) {
+        NN_LOG_ERROR("Failed to copy ctx to requestCtx");
+        result = UB_ERROR;
+    }
+
+    if (ctx->opType == UBOpContextInfo::SEND_RAW) {
+        requestCtx.mHeader.Invalid();
+    }
+    PrintSendFinishDebug(requestCtx.mHeader, ctx);
+    requestCtx.mResult = UBOpContextInfo::GetNResult(ctx->opResultType);
+    requestCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->ubJetty->GetUpContext()));
+    requestCtx.mMessage = nullptr;
+    requestCtx.mOpType = ctx->opType == UBOpContextInfo::SEND ? NRC::NN_SENT : NRC::NN_SENT_RAW;
+    requestCtx.mOriginalReq = {};
+    // if PostSend implement with one side memory, the lAddress should be valued with ctx->mrMemAddr.
+    requestCtx.mOriginalReq.lAddress = 0;
+    requestCtx.mOriginalReq.size = ctx->dataSize;
+    requestCtx.mOriginalReq.upCtxSize = ctx->upCtxSize;
+
+    if (requestCtx.mOriginalReq.upCtxSize > 0 &&
+        requestCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData) &&
+        NN_UNLIKELY(memcpy_s(requestCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx,
+        ctx->upCtxSize) != UB_OK)) {
+        NN_LOG_ERROR("Failed to copy ctx to requestCtx");
+        result = UB_ERROR;
+    }
+
+    if (NN_UNLIKELY(!mDriverSendMR->ReturnBuffer(ctx->mrMemAddr))) {
+        NN_LOG_ERROR("Failed to return mr segment back in Driver " << mName);
+    }
+
+    // return context to worker, and ctx is set null, not usable anymore
+    worker->ReturnOpContextInfo(ctx);
+    if (requestCtx.mHeader.opCode == HB_SEND_OP || requestCtx.mHeader.opCode == HB_RECV_OP) {
+        return UB_OK;
+    }
+    // call to callback
+    if (result == UB_OK && NN_UNLIKELY((result = mRequestPostedHandler(requestCtx)) != UB_OK)) {
+        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName
+        << " return non-zero for receive message [opCode: " << requestCtx.mHeader.opCode << ", dataSize "
+        << requestCtx.mHeader.dataLength << "]");
+    }
+    requestCtx.mEp.Set(nullptr);
+    return result;
 }
 
 int NetDriverUBWithOob::SendFinishedCB(UBOpContextInfo *ctx)
@@ -1364,54 +1417,16 @@ int NetDriverUBWithOob::SendFinishedCB(UBOpContextInfo *ctx)
     ctx->ubJetty->ReturnPostSendWr();
     auto worker = reinterpret_cast<UBWorker *>(ctx->ubJetty->GetUpContext1());
     if (ctx->opType == UBOpContextInfo::SEND || ctx->opType == UBOpContextInfo::SEND_RAW) {
-        if (ctx->opType == UBOpContextInfo::SEND) {
-            (void)memcpy_s(&(requestCtx.mHeader), sizeof(UBSHcomNetTransHeader),
-                reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr), sizeof(UBSHcomNetTransHeader));
-        } else {
-            requestCtx.mHeader.Invalid();
-        }
-        PrintSendFinishDebug(requestCtx.mHeader, ctx);
-        requestCtx.mResult = UBOpContextInfo::GetNResult(ctx->opResultType);
-        requestCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->ubJetty->GetUpContext()));
-        requestCtx.mMessage = nullptr;
-        requestCtx.mOpType = ctx->opType == UBOpContextInfo::SEND ? NRC::NN_SENT : NRC::NN_SENT_RAW;
-        requestCtx.mOriginalReq = {};
-        // if PostSend implement with one side memory, the lAddress should be valued with ctx->mrMemAddr.
-        requestCtx.mOriginalReq.lAddress = 0;
-        requestCtx.mOriginalReq.size = ctx->dataSize;
-        requestCtx.mOriginalReq.upCtxSize = ctx->upCtxSize;
-
-        if (requestCtx.mOriginalReq.upCtxSize > 0 &&
-            requestCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData)) {
-            (void)memcpy_s(requestCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx, ctx->upCtxSize);
-        }
-
-        if (NN_UNLIKELY(!mDriverSendMR->ReturnBuffer(ctx->mrMemAddr))) {
-            NN_LOG_ERROR("Failed to return mr segment back in Driver " << mName);
-        }
-
-        // return context to worker, and ctx is set null, not usable anymore
-        worker->ReturnOpContextInfo(ctx);
-        if (requestCtx.mHeader.opCode == HB_SEND_OP || requestCtx.mHeader.opCode == HB_RECV_OP) {
-            return NN_OK;
-        }
-        // call to callback
-        if (NN_UNLIKELY((result = mRequestPostedHandler(requestCtx)) != UB_OK)) {
-            NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName
-            << " return non-zero for receive message [opCode: " << requestCtx.mHeader.opCode << ", dataSize "
-            << requestCtx.mHeader.dataLength << "]");
-        }
-        requestCtx.mEp.Set(nullptr);
+        return SendAndSendRawFinishedCB(ctx, requestCtx, worker);
     } else if (ctx->opType == UBOpContextInfo::SEND_RAW_SGL) {
         return SendRawSglFinishedCB(ctx, requestCtx);
     } else if (ctx->opType == UBOpContextInfo::SEND_SGL_INLINE) {
-        auto worker = reinterpret_cast<UBWorker *>(ctx->ubJetty->GetUpContext1());
         return SendSglInlineFinishedCB(ctx, requestCtx, worker);
     } else {
         NN_LOG_WARN("Unreachable path");
     }
 
-    return NN_OK;
+    return result;
 }
 
 void NetDriverUBWithOob::ProcessErrorSendFinished(UBOpContextInfo *ctx)
@@ -1454,7 +1469,7 @@ int NetDriverUBWithOob::RWSglOneSideDoneCB(UBOpContextInfo *ctx, UBSHcomNetReque
     if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglContext->iov,
         sizeof(UBSHcomNetTransSgeIov) * sglContext->iovCount) != NN_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
-        return NN_INVALID_PARAM;
+        result = NN_INVALID_PARAM;
     }
     netCtx.mOriginalSglReq.iov = netCtx.iov;
     netCtx.mOriginalSglReq.iovCount = sglContext->iovCount;
@@ -1464,19 +1479,19 @@ int NetDriverUBWithOob::RWSglOneSideDoneCB(UBOpContextInfo *ctx, UBSHcomNetReque
         if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalSglReq.upCtxData, NN_NO16,
             sglContext->upCtx, sglContext->upCtxSize) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
-            return NN_INVALID_PARAM;
+            result = NN_INVALID_PARAM;
         }
     }
     worker->ReturnSglContextInfo(sglContext);
     // called to callback
-    if (NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
+    if (result == NN_OK && NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
         NN_LOG_ERROR("Call oneSideDoneHandler in Driver " << mName << " return non-zero for sgl type " << ctx->opType <<
             " done");
     }
     netCtx.mEp.Set(nullptr);
     worker->ReturnOpContextInfo(ctx);
 
-    return NN_OK;
+    return result;
 }
 
 int NetDriverUBWithOob::OneSideDoneCB(UBOpContextInfo *ctx)
@@ -1503,15 +1518,18 @@ int NetDriverUBWithOob::OneSideDoneCB(UBOpContextInfo *ctx)
         netCtx.mOriginalReq.upCtxSize = ctx->upCtxSize;
 
         if (netCtx.mOriginalReq.upCtxSize > 0 &&
-            netCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData)) {
-            (void)memcpy_s(netCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx, ctx->upCtxSize);
+            netCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData) &&
+            NN_UNLIKELY(memcpy_s(netCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx,
+            ctx->upCtxSize) != NN_OK)) {
+            NN_LOG_ERROR("Failed to copy ctx to requestCtx");
+            result = NN_ERROR;
         }
 
         // return context to worker and ctx is not usable anymore
         worker->ReturnOpContextInfo(ctx);
 
         // called to callback
-        if (NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
+        if (result == NN_OK && NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
             NN_LOG_ERROR("Call oneSideDoneHandler in Driver " << mName << " failed.");
         }
         netCtx.mEp.Set(nullptr);
@@ -1528,7 +1546,7 @@ int NetDriverUBWithOob::OneSideDoneCB(UBOpContextInfo *ctx)
         NN_LOG_WARN("Unreachable path");
     }
 
-    return NN_OK;
+    return result;
 }
 
 void NetDriverUBWithOob::ProcessErrorOneSideDone(UBOpContextInfo *ctx)
@@ -1630,6 +1648,7 @@ NResult NetDriverUBWithOob::NewRequestOnEncryption(UBOpContextInfo *ctx, UBSHcom
         if (memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
             sizeof(UBSHcomNetTransHeader)) != NN_OK) {
             NN_LOG_ERROR("Failed to memcpy to netCtx header");
+            ubWorker->RePostReceive(ctx);
             return NN_ERROR;
         }
         msg.mDataLen = decryptRawLen;
@@ -1674,11 +1693,15 @@ int NetDriverUBWithOob::NewRequest(UBOpContextInfo *ctx)
         }
         if (NN_LIKELY(!mOptions.enableTls)) {
             messageReady = msg.AllocateIfNeed(tmpHeader->dataLength);
+            if (NN_LIKELY(messageReady) && (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader),
+                tmpHeader, sizeof(UBSHcomNetTransHeader)) != NN_OK) || NN_UNLIKELY(memcpy_s(msg.mBuf,
+                tmpHeader->dataLength, reinterpret_cast<void *>(ctx->mrMemAddr + sizeof(UBSHcomNetTransHeader)),
+                tmpHeader->dataLength) != NN_OK))) {
+                NN_LOG_ERROR("Failed to copy header");
+                worker->RePostReceive(ctx);
+                return NN_ERROR;
+            }
             if (NN_LIKELY(messageReady)) {
-                (void)memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
-                    sizeof(UBSHcomNetTransHeader));
-                (void)memcpy_s(msg.mBuf, tmpHeader->dataLength,
-                    reinterpret_cast<void *>(ctx->mrMemAddr + sizeof(UBSHcomNetTransHeader)), tmpHeader->dataLength);
                 msg.mDataLen = tmpHeader->dataLength;
             }
         } else {
@@ -1740,7 +1763,11 @@ NResult NetDriverUBWithOob::NewReceivedRawRequest(UBOpContextInfo *ctx, UBSHcomN
     if (NN_LIKELY(!mOptions.enableTls)) {
         messageReady = msg.AllocateIfNeed(ctx->dataSize);
         if (NN_LIKELY(messageReady)) {
-            (void)memcpy_s(msg.mBuf, ctx->dataSize, reinterpret_cast<void *>(ctx->mrMemAddr), ctx->dataSize);
+            if (NN_UNLIKELY(memcpy_s(msg.mBuf, ctx->dataSize,
+                reinterpret_cast<void *>(ctx->mrMemAddr), ctx->dataSize) != NN_OK)) {
+                NN_LOG_ERROR("Failed to copy ctx to msg");
+                return NN_ERROR;
+            }
             msg.mDataLen = ctx->dataSize;
         }
     } else {

@@ -4,6 +4,13 @@ if(NOT DEFINED CPU_TYPE)
 endif()
 message(STATUS "CPU_TYPE: ${CPU_TYPE}")
 
+# 设置库版本（用于 soname）
+set(LIB_VERSION_MAJOR 0)
+set(LIB_VERSION_MINOR 0)
+set(LIB_VERSION_PATCH 1)
+set(LIB_VERSION "${LIB_VERSION_MAJOR}.${LIB_VERSION_MINOR}.${LIB_VERSION_PATCH}")
+set(SOVERSION "${LIB_VERSION_MAJOR}")
+
 option(BUILD_JAVA_SDK "Build java sdk" OFF)
 option(BUILD_WITH_HW_CRC "Build with hardware crc" OFF)
 option(BUILD_WITH_SERVICE "Build with SERVICE" ON)
@@ -180,9 +187,6 @@ set(HCOM_SRC_INCLUDE_PATH
 )
 
 file(GLOB_RECURSE HCOM *.cpp *.h)
-file(GLOB_RECURSE HCOM_JNI_SRCS "${HCOM_SRC_DIR}/src/hcom/api/java_sdk/*.cpp"
-                                "${HCOM_SRC_DIR}/src/hcom/api/java_sdk/*.h")
-list(REMOVE_ITEM  HCOM  ${HCOM_JNI_SRCS})
 
 file(GLOB HCOM_RDMA_COMMON "${HCOM_SRC_DIR}/src/hcom/transport/rdma/*")
 file(GLOB_RECURSE HCOM_RDMA_SRCS
@@ -212,22 +216,6 @@ if(NOT BUILD_WITH_UB)
     list(REMOVE_ITEM HCOM ${HCOM_UB_SRCS})
 endif ()
 
-# add debuginfo file for dynamic library
-function(split_debug_symbols target)
-    # 定义符号文件路径（与二进制同目录，添加.debug后缀）
-    set(debug_file "$<TARGET_FILE:${target}>.debug")
-
-    add_custom_command(TARGET ${target} POST_BUILD
-            # 1. 提取完整调试符号到单独文件
-            COMMAND ${CMAKE_OBJCOPY} --only-keep-debug "$<TARGET_FILE:${target}>" "${debug_file}"
-            # 2. 从主二进制中剥离调试符号但保留最小关联信息
-            COMMAND ${CMAKE_OBJCOPY} --strip-debug --strip-unneeded "$<TARGET_FILE:${target}>"
-            # 为可执行文件添加符号表文件的链接
-            COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=${debug_file} "$<TARGET_FILE:${target}>"
-            COMMENT "Splitting debug symbols for ${target} into ${debug_file}"
-    )
-endfunction()
-
 add_library(hcom_static_obj STATIC ${HCOM})
 target_link_libraries(hcom_static_obj
         -Wl,--start-group
@@ -252,7 +240,10 @@ target_link_libraries(hcom
         pthread dl rt boundscheck
         -Wl,--end-group)
 
-split_debug_symbols(hcom)
+set_target_properties(hcom PROPERTIES
+    VERSION ${LIB_VERSION}
+    SOVERSION ${SOVERSION}
+)
 add_subdirectory(3rdparty)
 
 target_include_directories(hcom PUBLIC ${HCOM_SRC_INCLUDE_PATH})
@@ -277,7 +268,6 @@ install(FILES ${INCLUDE_HEADERS} DESTINATION ${TARGET_INSTALL_INCLUDE} PERMISSIO
 install(FILES ${C_INCLUDE_HEADERS} DESTINATION ${TARGET_INSTALL_INCLUDE}/capi PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ)
 install(FILES ${CMAKE_BINARY_DIR}/src/hcom/libhcom_static.a DESTINATION ${TARGET_INSTALL_LIB}/ PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 install(TARGETS hcom DESTINATION ${TARGET_INSTALL_LIB}/ PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-install(FILES ${CMAKE_BINARY_DIR}/src/hcom/libhcom.so.debug DESTINATION ${TARGET_INSTALL_LIB}/ PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 
 #set wether java sdk will be built.(not implemented yet)
 if(${BUILD_JAVA_SDK} MATCHES "ON")

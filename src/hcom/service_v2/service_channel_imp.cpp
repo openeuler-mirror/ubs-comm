@@ -795,6 +795,7 @@ SerResult HcomChannelImp::AsyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
             std::placeholders::_1);
         if (!callback) {
             NN_LOG_ERROR("Async send malloc callback failed");
+            delete done;
             return SER_NEW_OBJECT_FAILED;
         }
 
@@ -803,6 +804,7 @@ SerResult HcomChannelImp::AsyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
         if (result != SER_OK) {
             NN_LOG_ERROR("Prepare timer context failed when sending [" << (segIndex + 1) << "/" << fragmentNum << "]");
             delete callback;
+            delete done;
             return result;
         }
 
@@ -822,6 +824,7 @@ SerResult HcomChannelImp::AsyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
                          "] failed");
 
             DestroyTimerContext(context);
+            delete done;
             return result;
         }
         NN_LOG_DEBUG("AsyncSendSplitWithWorkerPoll fragment [" << (segIndex + 1) << "/" << fragmentNum << "] end");
@@ -834,12 +837,14 @@ SerResult HcomChannelImp::AsyncSendInner(const UBSHcomRequest &req, const Callba
 {
     if (mOptions.selfPoll) {
         NN_LOG_ERROR("Failed to invoke async send with self poll, not support");
+        delete done;
         return SER_INVALID_PARAM;
     }
 
     UBSHcomNetEndpoint *ep = nullptr;
     SerResult result = NextWorkerPollEp(ep);
     if (NN_UNLIKELY(SER_OK != result)) {
+        delete done;
         return result;
     }
 
@@ -853,6 +858,7 @@ SerResult HcomChannelImp::AsyncSendInner(const UBSHcomRequest &req, const Callba
     TimerCtx context {};
     result = PrepareTimerContext(const_cast<Callback *>(done), mOptions.twoSideTimeout, context);
     if (result != SER_OK) {
+        delete done;
         return result;
     }
     SetServiceTransCtx(transReq.upCtxData, context.seqNo);
@@ -1142,6 +1148,7 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
                 std::placeholders::_1);
         if (!cb) {
             NN_LOG_ERROR("Sync call split malloc callback failed");
+            delete newCallback;
             return SER_NEW_OBJECT_FAILED;
         }
 
@@ -1150,6 +1157,7 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
         if (result != SER_OK) {
             NN_LOG_ERROR("Prepare timer context failed when sending [" << (segIndex + 1) << "/" << fragmentNum << "]");
             delete cb;
+            delete newCallback;
             return result;
         }
 
@@ -1169,6 +1177,7 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
             NN_LOG_ERROR("SyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
                          "] failed");
             DestroyTimerContext(context);
+            delete newCallback;
             return result;
         }
         NN_LOG_DEBUG("SyncCallSplitWithWorkerPoll fragment [" << (segIndex + 1) << "/" << fragmentNum << "] end");
@@ -1201,7 +1210,7 @@ SerResult HcomChannelImp::RndvInner(UBSHcomNetEndpoint *ep, const UBSHcomRequest
         // 根据起始地址查找lKey
         newReq.key = pgtRegion->key;
 
-        HcomServiceRndvMessage rndvMessage(mConnectTimestamp.GetRemoteTimestamp(mOptions.twoSideTimeout), req);
+        HcomServiceRndvMessage rndvMessage(mConnectTimestamp.GetRemoteTimestamp(mOptions.twoSideTimeout), newReq);
         UBSHcomNetTransRequest transReq(const_cast<void *>(reinterpret_cast<const void *>(&rndvMessage)),
             sizeof(HcomServiceRndvMessage), sizeof(SerTransContext));
         // RNDV请求 对端必须reply 不区分send和Call
@@ -1262,7 +1271,9 @@ SerResult HcomChannelImp::SyncCallWithSelfPoll(const UBSHcomRequest &req, UBSHco
 
     const uint32_t fragmentNum = EstimateFragmentNum(req.size);
     if (fragmentNum > 1) {
-        return SyncCallSplitWithSelfPoll(ep, req, fragmentNum, index, rsp);
+        ret = SyncCallSplitWithSelfPoll(ep, req, fragmentNum, index, rsp);
+        ReleaseSelfPollEp(index);
+        return ret;
     }
 
     UBSHcomNetTransRequest transReq(req.address, req.size, 0);
@@ -1381,7 +1392,6 @@ SerResult HcomChannelImp::SyncCallSplitWithSelfPoll(UBSHcomNetEndpoint *&ep, con
 
     // 对端回复的每一个小包，它们的 Header() 都是相同的.
     result = SyncCallbackWithSelfPoll(data, dataLen, ctx.Header(), rsp);
-    ReleaseSelfPollEp(index);
     if (NN_UNLIKELY(result != SER_OK)) {
         return result;
     }
@@ -1393,12 +1403,14 @@ SerResult HcomChannelImp::AsyncCallInner(const UBSHcomRequest &req, const Callba
 {
     if (mOptions.selfPoll) {
         NN_LOG_ERROR("Failed to invoke async call with self poll, not support");
+        delete done;
         return SER_INVALID_PARAM;
     }
 
     UBSHcomNetEndpoint *ep = nullptr;
     auto result = NextWorkerPollEp(ep);
     if (NN_UNLIKELY(result != SER_OK)) {
+        delete done;
         return result;
     }
 
@@ -1410,6 +1422,7 @@ SerResult HcomChannelImp::AsyncCallInner(const UBSHcomRequest &req, const Callba
     TimerCtx context {};
     result = PrepareTimerContext(const_cast<Callback *>(done), mOptions.twoSideTimeout, context);
     if (result != SER_OK) {
+        delete done;
         return result;
     }
 
@@ -1457,6 +1470,7 @@ SerResult HcomChannelImp::AsyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
             std::placeholders::_1);
         if (!cb) {
             NN_LOG_ERROR("AsyncCallInner malloc callback failed");
+            delete done;
             return SER_NEW_OBJECT_FAILED;
         }
 
@@ -1465,6 +1479,7 @@ SerResult HcomChannelImp::AsyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
         if (result != SER_OK) {
             NN_LOG_ERROR("Prepare timer context failed when sending [" << (segIndex + 1) << "/" << fragmentNum << "]");
             delete cb;
+            delete done;
             return result;
         }
 
@@ -1484,6 +1499,7 @@ SerResult HcomChannelImp::AsyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
             NN_LOG_ERROR("AsyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
                          "] failed");
             DestroyTimerContext(context);
+            delete done;
             return result;
         }
         NN_LOG_DEBUG("AsyncCallSplitWithWorkerPoll fragment [" << (segIndex + 1) << "/" << fragmentNum << "] end");
@@ -1655,6 +1671,7 @@ SerResult HcomChannelImp::AsyncReplyInner(const UBSHcomReplyContext &ctx, const 
     res = ResponseWorkerPollEp(ctx.rspCtx, ep);
     if (NN_UNLIKELY(res != SER_OK)) {
         NN_LOG_ERROR("Failed to select ep " << res);
+        delete done;
         return res;
     }
 
@@ -1695,6 +1712,7 @@ SerResult HcomChannelImp::AsyncReplySplitWithWorkerPoll(const UBSHcomReplyContex
             std::placeholders::_1);
         if (!cb) {
             NN_LOG_ERROR("Async send malloc callback failed");
+            delete done;
             return SER_NEW_OBJECT_FAILED;
         }
 
@@ -1703,6 +1721,7 @@ SerResult HcomChannelImp::AsyncReplySplitWithWorkerPoll(const UBSHcomReplyContex
         if (result != SER_OK) {
             NN_LOG_ERROR("Prepare timer context failed when sending [" << (segIndex + 1) << "/" << fragmentNum << "]");
             delete cb;
+            delete done;
             return result;
         }
 
@@ -1722,6 +1741,7 @@ SerResult HcomChannelImp::AsyncReplySplitWithWorkerPoll(const UBSHcomReplyContex
                          "] failed");
 
             DestroyTimerContext(context);
+            delete done;
             return result;
         }
         NN_LOG_DEBUG("AsyncReplySplitWithWorkerPoll fragment [" << (segIndex + 1) << "/" << fragmentNum << "] end");
@@ -2032,23 +2052,33 @@ int32_t HcomChannelImp::Get(const UBSHcomOneSideRequest &req, const Callback *do
     return ret;
 }
 
+inline void DestroyCallback(const Callback *cb)
+{
+    if (cb != nullptr) {
+        delete cb;
+    }
+}
+
 int32_t HcomChannelImp::Recv(const UBSHcomServiceContext &context, uintptr_t address, uint32_t size,
     const Callback *done)
 {
     if (context.mDataLen != sizeof(HcomServiceRndvMessage)) {
         NN_LOG_ERROR(" Received RNDV data size is incorrect, actual size " << context.mDataLen << ", expected size " <<
             sizeof(UBSHcomRequest));
+        DestroyCallback(done);
         return SER_ERROR;
     }
     HcomServiceRndvMessage *rndvMessage = static_cast<HcomServiceRndvMessage *>(context.mData);
     if (rndvMessage == nullptr || rndvMessage->request.size != size) {
         NN_LOG_ERROR(" Fail to get Request data or Request size " << size << " and processing size " <<
             (rndvMessage == nullptr ? 0 : rndvMessage->request.size) << " mismatch");
+        DestroyCallback(done);
         return SER_ERROR;
     }
 
     if (rndvMessage->IsTimeout()) {
         NN_LOG_ERROR(" Fail to recv request data due to timeout");
+        DestroyCallback(done);
         return SER_TIMEOUT;
     }
 
@@ -2058,6 +2088,7 @@ int32_t HcomChannelImp::Recv(const UBSHcomServiceContext &context, uintptr_t add
     PgtRegion *pgtRegion = pgTable->Lookup(address);
     if (pgtRegion == nullptr || !(pgtRegion->start <= address && pgtRegion->end > endAddr)) {
         NN_LOG_ERROR(" Fail to lookUp address in pgTable or req address is out of range");
+        DestroyCallback(done);
         return SER_ERROR;
     }
 
