@@ -1053,7 +1053,7 @@ public:
                 return -1;
             }
  
-            std::memcpy(current_buf->buf_data, src_ptr, copy_len); // Copy data into UMQ buffer
+            memcpy_s(current_buf->buf_data, copy_len, src_ptr, copy_len); // Copy data into UMQ buffer
             current_buf->data_size = copy_len;
             remaining_len -= copy_len;
             src_ptr += copy_len;
@@ -1260,7 +1260,7 @@ public:
  
                 if (data_size_to_copy > 0) {
                     // Copy data directly from UMQ buffer to user buffer
-                    std::memcpy(user_buf_ptr, buf_array[i]->buf_data, data_size_to_copy);
+                    memcpy_s(user_buf_ptr, data_size_to_copy, buf_array[i]->buf_data, data_size_to_copy);
                     rx_total_len += data_size_to_copy;
                     user_buf_ptr += data_size_to_copy;
                     remaining_user_buf -= data_size_to_copy;
@@ -1414,7 +1414,7 @@ public:
                 }
 
                 if (data_size_to_copy > 0) {
-                    std::memcpy(user_buf_ptr, buf_array[i]->buf_data, data_size_to_copy);
+                    memcpy_s(user_buf_ptr, data_size_to_copy, buf_array[i]->buf_data, data_size_to_copy);
                     rx_total_len += data_size_to_copy;
                     user_buf_ptr += data_size_to_copy;
                     remaining_user_buf -= data_size_to_copy;
@@ -1540,7 +1540,7 @@ public:
                 return -1;
             }
  
-            std::memcpy(current_buf->buf_data, src_ptr, copy_len); // Copy data into UMQ buffer
+            memcpy_s(current_buf->buf_data, copy_len, src_ptr, copy_len); // Copy data into UMQ buffer
             current_buf->data_size = copy_len;
             remaining_len -= copy_len;
             src_ptr += copy_len;
@@ -1729,7 +1729,7 @@ public:
                 return -1;
             }
  
-            std::memcpy(current_buf->buf_data, src_ptr, copy_len); // Copy data into UMQ buffer
+            memcpy_s(current_buf->buf_data, copy_len, src_ptr, copy_len); // Copy data into UMQ buffer
             current_buf->data_size = copy_len;
             remaining_len -= copy_len;
             src_ptr += copy_len;
@@ -1935,7 +1935,7 @@ public:
  
                 if (data_size_to_copy > 0) {
                     // Copy data directly from UMQ buffer to user buffer
-                    std::memcpy(user_buf_ptr, buf_array[i]->buf_data, data_size_to_copy);
+                    memcpy_s(user_buf_ptr, data_size_to_copy, buf_array[i]->buf_data, data_size_to_copy);
                     rx_total_len += data_size_to_copy;
                     user_buf_ptr += data_size_to_copy;
                     remaining_user_buf -= data_size_to_copy;

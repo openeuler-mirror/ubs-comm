@@ -9,102 +9,114 @@
 #include <sys/epoll.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define MAX_EVENTS 10
-#define TEST_MSG "Test message"
-
-static int set_nonblock(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) return -1;
-    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
+#define LOCAL_PORT 38472
 
 int main() {
-    printf("=== Test 1: Basic epoll_pwait functionality ===\n");
-    
-    // 创建 epoll 实例
+    printf("=== Test: epoll_pwait with TCP connection establishment only ===\n");
+
+    // ===== 1. 创建并绑定监听 socket =====
+    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (listen_fd < 0) {
+        perror("socket");
+        exit(EXIT_FAILURE);
+    }
+
+    int reuse = 1;
+    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(LOCAL_PORT);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // 127.0.0.1
+
+    if (bind(listen_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        close(listen_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(listen_fd, 1) < 0) {
+        perror("listen");
+        close(listen_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    // ===== 2. 创建 epoll 实例并添加 listen_fd =====
     int epfd = epoll_create1(0);
     if (epfd < 0) {
-        perror("epoll_create1 failed");
+        perror("epoll_create1");
+        close(listen_fd);
         exit(EXIT_FAILURE);
     }
 
-    // 使用 socketpair 创建建链（参考您的代码）
-    int sv[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0) {
-        perror("socketpair failed");
+    struct epoll_event ev;
+    ev.events = EPOLLIN;          // 监听可读：有新连接到达
+    ev.data.fd = listen_fd;
+
+    if (epoll_ctl(epfd, EPOLL_CTL_ADD, listen_fd, &ev) < 0) {
+        perror("epoll_ctl ADD");
         close(epfd);
+        close(listen_fd);
         exit(EXIT_FAILURE);
     }
 
-    int read_fd = sv[0];
-    int write_fd = sv[1];
-
-    // 设置非阻塞（参考您的做法）
-    if (set_nonblock(read_fd) < 0) {
-        perror("set_nonblock failed");
+    // ===== 3. 启动客户端连接（触发 listen_fd 可读） =====
+    int client_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_fd < 0) {
+        perror("client socket");
         close(epfd);
-        close(sv[0]);
-        close(sv[1]);
+        close(listen_fd);
         exit(EXIT_FAILURE);
     }
 
-    // 添加到 epoll（使用 LT 模式避免复杂性）
-    struct epoll_event event;
-    event.events = EPOLLIN;  // 使用 LT 模式而不是 ET
-    event.data.fd = read_fd;
-    
-    if (epoll_ctl(epfd, EPOLL_CTL_ADD, read_fd, &event) < 0) {
-        perror("epoll_ctl failed");
+    printf("Client connecting to 127.0.0.1:%d...\n", LOCAL_PORT);
+    if (connect(client_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("connect");
+        close(client_fd);
         close(epfd);
-        close(sv[0]);
-        close(sv[1]);
+        close(listen_fd);
         exit(EXIT_FAILURE);
     }
+    printf("Client connected successfully.\n");
 
-    // 发送数据
-    ssize_t sent = send(write_fd, TEST_MSG, strlen(TEST_MSG), 0);
-    if (sent < 0) {
-        perror("send failed");
-        close(epfd);
-        close(sv[0]);
-        close(sv[1]);
-        exit(EXIT_FAILURE);
-    }
-    printf("Sent %zd bytes to socket\n", sent);
-
-    // 等待事件
+    // ===== 4. 使用 epoll_pwait 等待 listen_fd 上的事件 =====
+    printf("Calling epoll_pwait (waiting for incoming connection event)...\n");
     struct epoll_event events[MAX_EVENTS];
-    printf("Calling epoll_pwait (timeout=1000ms)...\n");
-    
-    int nfds = epoll_pwait(epfd, events, MAX_EVENTS, 1000, NULL);
+    int nfds = epoll_pwait(epfd, events, MAX_EVENTS, 2000, NULL); // 2秒超时
+
     if (nfds < 0) {
         perror("epoll_pwait failed");
+        close(client_fd);
         close(epfd);
-        close(sv[0]);
-        close(sv[1]);
+        close(listen_fd);
+        exit(EXIT_FAILURE);
+    } else if (nfds == 0) {
+        fprintf(stderr, "Error: epoll_pwait timed out (no connection event)\n");
+        close(client_fd);
+        close(epfd);
+        close(listen_fd);
         exit(EXIT_FAILURE);
     }
 
-    printf("epoll_pwait returned %d events\n", nfds);
+    printf("epoll_pwait returned %d event(s)\n", nfds);
     for (int i = 0; i < nfds; i++) {
-        printf("  Event %d: fd=%d, events=IN \n", i, events[i].data.fd);
-        
-        char buffer[100];
-        ssize_t bytes_received = recv(events[i].data.fd, buffer, sizeof(buffer) - 1, 0);
-        if (bytes_received > 0) {
-            buffer[bytes_received] = '\0';
-            printf("    Received: %s\n", buffer);
+        if (events[i].data.fd == listen_fd && (events[i].events & EPOLLIN)) {
+            printf("  Event: New connection ready on listen_fd\n");
+            // 注意：我们这里只验证事件触发，**不调用 accept() 也可以**
+            // （但通常你会 accept；不过按你要求，连 accept 都可以不做）
         }
     }
 
-    // 清理资源
+    // ===== 5. 清理（注意：未 accept，但连接已建立在 backlog 中）=====
+    close(client_fd);
     close(epfd);
-    close(sv[0]);
-    close(sv[1]);
-    
+    close(listen_fd);
+
     printf("\n======================================\n");
-    printf("All tests completed!\n");
-    
+    printf("TCP connection establishment test completed!\n");
     return 0;
 }

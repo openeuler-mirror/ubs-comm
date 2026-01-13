@@ -29,17 +29,19 @@ void print_usage(const char* program_name) {
 }
 
 int main(int argc, char* argv[]) {
-    std::string server_ip = "141.61.84.79";
+    std::string server_ip;
     std::string test_name = "all";
     setenv("RPC_ADPT_USE_ZCOPY", "TRUE", 1);
-    
+
     // 解析命令行参数
+    bool server_provided = false;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         
         if (arg == "-s" || arg == "--server") {
             if (i + 1 < argc) {
                 server_ip = argv[++i];
+                server_provided = true;
             } else {
                 std::cerr << "Error: --server requires an argument" << std::endl;
                 return 1;
@@ -65,7 +67,14 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     }
-    
+
+    // 检查是否提供了 server IP
+    if (!server_provided) {
+        std::cerr << "Error: --server/-s is required." << std::endl;
+        print_usage(argv[0]);
+        return 1;
+    }
+
     std::cout << "==========================================" << std::endl;
     std::cout << "TCP All Interface Test Client" << std::endl;
     std::cout << "Server: " << server_ip << ":" << BASE_PORT << std::endl;

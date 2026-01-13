@@ -107,8 +107,8 @@ class Context : public Brpc::ConfigSettings {
             return;
         }
 
-        char *env_ptr;
-        if ((env_ptr = getenv(ENV_VAR_USE_ZCOPY)) == NULL) {
+        char *env_ptr = getenv(ENV_VAR_USE_ZCOPY);
+        if (env_ptr == NULL) {
             if(GetBrpcAllocSymStr() != nullptr && GetBrpcDeallocSymStr() != nullptr){
                 RecordApi(RTLD_DEFAULT, GetBrpcAllocSymStr(), m_alloc_addr);
                 RecordApi(RTLD_DEFAULT, GetBrpcDeallocSymStr(), m_dealloc_addr);
