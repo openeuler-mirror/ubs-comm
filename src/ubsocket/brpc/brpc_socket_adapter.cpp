@@ -120,6 +120,70 @@ EXPOSE_C_DEFINE ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
     return obj->WriteV(iov, iovcnt);
 }
 
+EXPOSE_C_DEFINE ssize_t send(int sockfd, const void *buf, size_t len, int flags)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->send(sockfd, buf, len, flags);
+    }
+ 
+    return obj->Send(buf, len, flags);
+}
+
+EXPOSE_C_DEFINE ssize_t recv(int sockfd, void *buf, size_t len, int flags)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->recv(sockfd, buf, len, flags);
+    }
+ 
+    return obj->Recv(buf, len, flags);
+}
+
+EXPOSE_C_DEFINE ssize_t read(int fildes, void *buf, size_t nbyte)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fildes);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->read(fildes, buf, nbyte);
+    }
+
+    return obj->Read(buf, nbyte);
+}
+
+EXPOSE_C_DEFINE ssize_t write(int fildes, const void *buf, size_t nbyte)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fildes);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->write(fildes, buf, nbyte);
+    }
+
+    return obj->Write(buf, nbyte);
+}
+
+EXPOSE_C_DEFINE ssize_t sendto(int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr,
+                               socklen_t addrlen)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
+    if (obj == nullptr) {
+        printf("Pandas nullptr\n");
+        return OsAPiMgr::GetOriginApi()->sendto(sockfd, buf, len, flags, dest_addr, addrlen);
+    }
+ 
+    return obj->SendTo(buf, len, flags, dest_addr, addrlen);
+}
+
+EXPOSE_C_DEFINE ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags, struct sockaddr *dest_addr,
+                               socklen_t *addrlen)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
+    if (obj == nullptr) {
+        printf("Pandas nullptr\n");
+        return OsAPiMgr::GetOriginApi()->recvfrom(sockfd, buf, len, flags, dest_addr, addrlen);
+    }
+ 
+    return obj->RecvFrom(buf, len, flags, dest_addr, addrlen);
+}
+
 EXPOSE_C_DEFINE int epoll_create(int size)
 {
     int epoll_fd = OsAPiMgr::GetOriginApi()->epoll_create(size);

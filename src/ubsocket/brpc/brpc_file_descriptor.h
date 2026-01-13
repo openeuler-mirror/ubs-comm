@@ -876,6 +876,1021 @@ public:
         return tx_total_len;
     }
 
+        ALWAYS_INLINE ssize_t Send(const void *buf, size_t len, int flags)
+    {
+        if (m_tx_use_tcp) {
+            return OsAPiMgr::GetOriginApi()->send(m_fd, buf, len, flags);
+        }
+
+        if (buf == nullptr || len == 0) {
+            errno = EINVAL;
+            return -1;
+        }
+ 
+        if (m_closed.load(std::memory_order_relaxed)) {
+            errno = EPIPE; // Broken pipe if connection is closed
+            return -1;
+        }
+ 
+        if (m_tx.m_get_and_ack_event) {
+            do {
+                if (GetAndAckEvent(UMQ_IO_TX) < 0) {
+                    errno = EIO;
+                    return -1;
+                }
+                PollTx(m_tx.m_retrieve_threshold, true); // true indicates handling event
+            } while (!m_tx.m_epoll_event_num.compare_exchange_strong(
+                    m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
+            m_tx.m_get_and_ack_event = false;
+        } else if (m_tx.m_window_size == 0) {
+            PollTx(m_tx.m_retrieve_threshold);
+            if (m_tx.m_window_size == 0) {
+                if (m_stats_enable) {
+                    UpdateStats(StatsMgr::TX_INTER_CNT, 1);
+                }
+                return DpRearmTxInterrupt();
+            }
+        }
+ 
+        uint32_t brpc_iobuf_size = BrpcIOBufSize();
+        uint32_t num_bufs_needed = (len + brpc_iobuf_size - 1) / brpc_iobuf_size;
+        uint32_t post_batch_max = (m_tx.m_window_size <= static_cast<uint32_t>(POST_BATCH_MAX)) ? m_tx.m_window_size : static_cast<uint32_t>(POST_BATCH_MAX);
+        num_bufs_needed = (num_bufs_needed < post_batch_max) ? num_bufs_needed : post_batch_max;
+        if (num_bufs_needed == 0) {
+            errno = EAGAIN;
+            return -1;
+        }
+ 
+        umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr); // Allocate list of num_bufs_needed buffers
+        if (tx_buf_list == nullptr) {
+            if (m_stats_enable) {
+                UpdateStats(StatsMgr::TX_INTER_CNT, 1);
+            }
+            return DpRearmTxInterrupt();
+        }
+ 
+        umq_buf_t *current_buf = tx_buf_list;
+        if (QBUF_LIST_EMPTY(&m_tx.m_head_buf)) {
+            QBUF_LIST_FIRST(&m_tx.m_head_buf) = current_buf;
+        } else {
+            QBUF_LIST_NEXT(QBUF_LIST_FIRST(&m_tx.m_tail_buf)) = current_buf;
+        }
+ 
+        const char* src_ptr = static_cast<const char*>(buf);
+        size_t remaining_len = len;
+        size_t copied_total = 0;
+        size_t bytes_per_buf = brpc_iobuf_size;
+ 
+        uint16_t _unsolicited_wr_num = m_tx.m_unsolicited_wr_num;
+        uint32_t _unsolicited_bytes = m_tx.m_unsolicited_bytes;
+        uint16_t _unsignaled_wr_num = m_tx.m_unsignaled_wr_num;
+        umq_buf_t *head_qbuf = QBUF_LIST_FIRST(&m_tx.m_head_buf);
+        umq_buf_t *tail_qbuf = QBUF_LIST_FIRST(&m_tx.m_tail_buf);
+ 
+        for (uint32_t i = 0; i < num_bufs_needed && remaining_len > 0; ++i) {
+            size_t copy_len = std::min(remaining_len, static_cast<size_t>(bytes_per_buf));
+            if (current_buf->buf_data == nullptr) {
+                umq_buf_free(tx_buf_list);
+                errno = ENOMEM;
+                return -1;
+            }
+ 
+            std::memcpy(current_buf->buf_data, src_ptr, copy_len); // Copy data into UMQ buffer
+            current_buf->data_size = copy_len;
+            remaining_len -= copy_len;
+            src_ptr += copy_len;
+            copied_total += copy_len;
+ 
+            if (i == 0) {
+                current_buf->total_data_size = len;
+            }
+ 
+            // Setup UMQ buffer properties (similar to WriteV)
+            current_buf->io_direction = UMQ_IO_TX;
+            umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)current_buf->qbuf_ext;
+            if (buf_pro) {
+                buf_pro->opcode = UMQ_OPC_SEND;
+                buf_pro->flag.value = 0;
+                buf_pro->remote_sge.addr = (uint64_t)current_buf->buf_data;
+                buf_pro->remote_sge.length = current_buf->data_size;
+                buf_pro->remote_sge.token_id = 0;
+                buf_pro->remote_sge.token_value = 0;
+                buf_pro->remote_sge.mempool_id = 0;
+                buf_pro->remote_sge.rsvd0 = 0;
+ 
+                if (m_tx.m_window_size == 1 || i + 1 == num_bufs_needed) {
+                    buf_pro->flag.bs.solicited_enable = 1;
+                } else {
+                    if (m_tx.m_unsolicited_wr_num > m_tx.m_report_threshold ||
+                        m_tx.m_unsolicited_bytes > UNSOLICITED_BYTES_MAX) {
+                        buf_pro->flag.bs.solicited_enable = 1;
+                    } else {
+                        ++m_tx.m_unsolicited_wr_num;
+                        m_tx.m_unsolicited_bytes += copy_len;
+                    }
+                }
+ 
+                if (buf_pro->flag.bs.solicited_enable == 1) {
+                    m_tx.m_unsolicited_wr_num = 0;
+                    m_tx.m_unsolicited_bytes = 0;
+                }
+ 
+                if (++m_tx.m_unsignaled_wr_num >= m_tx.m_report_threshold) {
+                    buf_pro->flag.bs.complete_enable = 1;
+                    buf_pro->user_ctx = (uint64_t)QBUF_LIST_FIRST(&m_tx.m_head_buf);
+                    QBUF_LIST_FIRST(&m_tx.m_head_buf) = QBUF_LIST_NEXT(current_buf);
+                    m_tx.m_unsignaled_wr_num = 0;
+                }
+            }
+ 
+            if (i + 1 < num_bufs_needed) {
+                current_buf = current_buf->qbuf_next;
+            }
+        }
+ 
+        // Update tail pointer of the TX buffer list management
+        QBUF_LIST_FIRST(&m_tx.m_tail_buf) = current_buf;
+        umq_buf_t *bad_qbuf = nullptr;
+ 
+        int post_result = umq_post(m_local_umqh, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
+        if (post_result == UMQ_SUCCESS) {
+            m_tx.m_window_size -= num_bufs_needed; // Consume window slots upon successful post
+        } else if (bad_qbuf != nullptr) {
+            // Handle partial failure
+            if (post_result == -UMQ_ERR_EAGAIN) {
+                // Operation would block, UMQ queue might be temporarily full despite window check
+                errno = EAGAIN;
+                m_tx.m_need_fc_awake.store(true, std::memory_order_relaxed);
+            } else {
+ 
+                errno = EIO;
+            }
+ 
+            umq_buf_list_t failed_list = { bad_qbuf }; // Create a temporary list head
+            umq_buf_t *cur_failed = nullptr;
+            QBUF_LIST_FOR_EACH(cur_failed, &failed_list) {
+                ((Brpc::IOBuf::Block *)PtrFloorToBoundary(cur_failed->buf_data))->DecRef();
+            }
+ 
+            if (bad_qbuf == tx_buf_list) {
+                m_tx.m_unsolicited_wr_num = _unsolicited_wr_num; // Restore saved state from before loop
+                m_tx.m_unsolicited_bytes = _unsolicited_bytes;
+                m_tx.m_unsignaled_wr_num = _unsignaled_wr_num;
+                QBUF_LIST_FIRST(&m_tx.m_head_buf) = head_qbuf;
+                QBUF_LIST_FIRST(&m_tx.m_tail_buf) = tail_qbuf;
+ 
+                umq_buf_free(bad_qbuf); // Free the failed list starting from the first bad buffer
+                copied_total = 0; // Nothing was successfully sent
+            } else {
+                copied_total = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf,
+                                             _unsolicited_wr_num, _unsolicited_bytes, _unsignaled_wr_num);
+            }
+ 
+            return static_cast<ssize_t>(copied_total);
+        } else {
+            errno = EIO;
+            return -1;
+        }
+ 
+        if (m_stats_enable) {
+            UpdateStats(StatsMgr::WRITEV_BATCH_CNT, 1); // Or a new stat for Send calls
+            UpdateStats(StatsMgr::WRITEV_BUF_CNT, num_bufs_needed); // Or a new stat for Send bufs
+            UpdateStats(StatsMgr::WRITEV_BYTES, copied_total); // Or a new stat for Send bytes
+        }
+ 
+        if ((m_tx_window_capacity - m_tx.m_window_size) >= m_tx.m_handle_threshold) {
+            PollTx(m_tx.m_retrieve_threshold);
+        }
+ 
+        return static_cast<ssize_t>(copied_total);
+ 
+    }
+ 
+    ALWAYS_INLINE ssize_t Recv(void *buf, size_t len, int flags)
+    {
+        if (m_rx_use_tcp) {
+            return OsAPiMgr::GetOriginApi()->recv(m_fd, buf, len, flags);
+        }
+ 
+        if (buf == nullptr || len == 0) {
+            errno = EINVAL;
+            return -1;
+        }
+ 
+        struct iovec single_iov = { .iov_base = buf, .iov_len = len };
+        ssize_t rx_total_len = OutputErrorMagicNumber(&single_iov, 1);
+        if (rx_total_len > 0) {
+            return rx_total_len;
+        }
+ 
+        if (m_rx.m_get_and_ack_event) {
+            if (GetAndAckEvent(UMQ_IO_RX) < 0) {
+                errno = EIO;
+                return -1;
+            }
+            m_rx.m_get_and_ack_event = false;
+        }
+ 
+        uint32_t max_buf_size;
+        if (m_rx.m_readv_unlimited) {
+            max_buf_size = UINT32_MAX;
+        } else {
+            max_buf_size = static_cast<uint32_t>(len);
+            if (max_buf_size != len) {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+ 
+        bool is_blocking = IsBlocking(m_fd);
+        umq_buf_t *buf_array[POLL_BATCH_MAX];
+        int poll_num = 0;
+ 
+        while (true) {
+            poll_num = UmqPollAndRefillRx(buf_array, POLL_BATCH_MAX);
+ 
+            if (poll_num < 0) {
+                errno = EIO;
+                return -1; // Error occurred during polling
+            } else if (poll_num > 0) {
+                break;
+            } else { // poll_num == 0
+                if (!is_blocking) {
+                    RPC_ADPT_VLOG_ERR("Recv: Non-blocking mode, no data available, setting errno = EAGAIN\n");
+                    errno = EAGAIN;
+                    return -1;
+                } else {
+                    RPC_ADPT_VLOG_DEBUG("Recv: Blocking mode, no data, polling again...\n");
+                }
+            }
+        }
+ 
+        // Process Polled Buffers and Copy Directly (only executed if poll_num > 0)
+        rx_total_len = 0; // Total bytes copied to user buffer
+        char* user_buf_ptr = static_cast<char*>(buf); // Use a pointer to track position in user buffer
+        size_t remaining_user_buf = len; // Remaining space in user buffer
+ 
+        if (poll_num > 0) {
+            for (int i = 0; i < poll_num; ++i) {
+                if (buf_array[i]->status != 0) {
+                    if (buf_array[i]->status != UMQ_BUF_FLOW_CONTROL_UPDATE) {
+                        RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
+                        QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                        umq_buf_free(buf_array[i]);
+                        continue; // Skip this invalid buffer
+                    } else {
+                        // Handle flow control update
+                        bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
+                        if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
+                            RPC_ADPT_VLOG_ERR("write event fd %d failed, errno: %d\n", m_event_fd, errno);
+                        }
+ 
+                        if (buf_array[i]->total_data_size == 0) {
+                            QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                            umq_buf_free(buf_array[i]);
+                            continue; // No data in this FC update packet
+                        }
+                    }
+                }
+ 
+                size_t data_size_to_copy = buf_array[i]->data_size;
+ 
+                // Check if user buffer has enough space for this chunk
+                if (remaining_user_buf < data_size_to_copy) {
+                    data_size_to_copy = remaining_user_buf; // Copy only what fits
+                }
+ 
+                if (data_size_to_copy > 0) {
+                    // Copy data directly from UMQ buffer to user buffer
+                    std::memcpy(user_buf_ptr, buf_array[i]->buf_data, data_size_to_copy);
+                    rx_total_len += data_size_to_copy;
+                    user_buf_ptr += data_size_to_copy;
+                    remaining_user_buf -= data_size_to_copy;
+                }
+ 
+                // Free the UMQ buffer after copying its data
+                QBUF_LIST_NEXT(buf_array[i]) = nullptr; // Ensure list termination if needed by umq_buf_free
+                umq_buf_free(buf_array[i]); // Free the UMQ buffer structure and its associated data area
+ 
+                // If user buffer is full, stop processing more buffers in this call
+                if (remaining_user_buf == 0) {
+                    RPC_ADPT_VLOG_DEBUG("Recv: User buffer is full, stopping processing of further buffers\n");
+                    break;
+                }
+            }
+        }
+ 
+        if (rx_total_len == 0) {
+            // Check for epoll event num mismatch (similar to ReadV)
+            if (!m_rx.m_epoll_event_num.compare_exchange_strong(
+                        m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
+                m_rx.m_poll = true;
+                errno = EINTR;
+                return -1;
+            }
+ 
+            if (m_stats_enable) {
+                UpdateStats(StatsMgr::RX_INTER_CNT, 1);
+            }
+ 
+            bool closed = m_closed.load(std::memory_order_relaxed);
+            if (closed == true) {
+                return 0;
+            }
+ 
+            if (RearmRxInterrupt() < 0) {
+                errno = EIO;
+                return -1;
+            }
+ 
+            errno = EAGAIN;
+            return -1;
+        }
+ 
+        if (m_stats_enable) {
+            UpdateStats(StatsMgr::READV_OUTPUT_BUF_CNT, poll_num); // Or a new stat for Recv bufs
+            UpdateStats(StatsMgr::READV_OUTPUT_BYTES, rx_total_len); // Or a new stat for Recv bytes
+ 
+        }
+ 
+        return rx_total_len;
+    }
+
+    ALWAYS_INLINE ssize_t Read(void *buf, size_t nbyte)
+    {
+        if (m_rx_use_tcp) {
+            return OsAPiMgr::GetOriginApi()->read(m_fd, buf, nbyte);
+        }
+
+        if (buf == nullptr || nbyte == 0) {
+            errno = EINVAL;
+            return -1;
+        }
+
+        if (m_closed.load(std::memory_order_relaxed)) {
+            errno = EPIPE; // Broken pipe if connection is closed
+            return -1;
+        }
+
+        struct iovec single_iov = { .iov_base = buf, .iov_len = nbyte };
+        ssize_t rx_total_len = OutputErrorMagicNumber(&single_iov, 1);
+        if (rx_total_len > 0) {
+            return rx_total_len;
+        }
+        
+        if (m_rx.m_get_and_ack_event) {
+            if (GetAndAckEvent(UMQ_IO_RX) < 0) {
+                errno = EIO;
+                return -1;
+            }
+            m_rx.m_get_and_ack_event = false;
+        }
+
+        uint32_t max_buf_size;
+        if (m_rx.m_readv_unlimited) {
+            max_buf_size = UINT32_MAX;
+        } else {
+            max_buf_size = static_cast<uint32_t>(nbyte);
+            if (max_buf_size != nbyte) {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+
+        bool is_blocking = IsBlocking(m_fd);
+        umq_buf_t *buf_array[POLL_BATCH_MAX];
+        int poll_num = 0;
+
+        while (true) {
+            poll_num = UmqPollAndRefillRx(buf_array, POLL_BATCH_MAX);
+
+            if (poll_num < 0) {
+                errno = EIO;
+                return -1;
+            } else if (poll_num > 0) {
+                break;
+            } else { // poll_num == 0
+                if (!is_blocking) {
+                    RPC_ADPT_VLOG_ERR("Read: Non-blocking mode, no data available, setting errno = EAGAIN\n");
+                    errno = EAGAIN;
+                    return -1;
+                } else {
+                    RPC_ADPT_VLOG_DEBUG("Read: Blocking mode, no data, polling again...\n");
+                }
+            }
+        }
+
+        // Process Polled Buffers and Copy Directly
+        rx_total_len = 0;
+        char* user_buf_ptr = static_cast<char*>(buf);
+        size_t remaining_user_buf = nbyte;
+
+        if (poll_num > 0) {
+            for (int i = 0; i < poll_num; ++i) {
+                if (buf_array[i]->status != 0) {
+                    if (buf_array[i]->status != UMQ_BUF_FLOW_CONTROL_UPDATE) {
+                        RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
+                        QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                        umq_buf_free(buf_array[i]);
+                        continue;
+                    } else {
+                        // Handle flow control update
+                        bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
+                        if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
+                            RPC_ADPT_VLOG_ERR("write event fd %d failed, errno: %d\n", m_event_fd, errno);
+                        }
+
+                        if (buf_array[i]->total_data_size == 0) {
+                            QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                            umq_buf_free(buf_array[i]);
+                            continue;
+                        }
+                    }
+                }
+
+                size_t data_size_to_copy = buf_array[i]->data_size;
+
+                // Check if user buffer has enough space
+                if (remaining_user_buf < data_size_to_copy) {
+                    data_size_to_copy = remaining_user_buf;
+                }
+
+                if (data_size_to_copy > 0) {
+                    std::memcpy(user_buf_ptr, buf_array[i]->buf_data, data_size_to_copy);
+                    rx_total_len += data_size_to_copy;
+                    user_buf_ptr += data_size_to_copy;
+                    remaining_user_buf -= data_size_to_copy;
+                }
+
+                QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                umq_buf_free(buf_array[i]);
+
+                if (remaining_user_buf == 0) {
+                    RPC_ADPT_VLOG_DEBUG("Read: User buffer is full, stopping processing of further buffers\n");
+                    break;
+                }
+            }
+        }
+
+        if (rx_total_len == 0) {
+            if (!m_rx.m_epoll_event_num.compare_exchange_strong(
+                        m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
+                m_rx.m_poll = true;
+                errno = EINTR;
+                return -1;
+            }
+
+            if (m_stats_enable) {
+                UpdateStats(StatsMgr::RX_INTER_CNT, 1);
+            }
+
+            bool closed = m_closed.load(std::memory_order_relaxed);
+            if (closed == true) {
+                return 0;
+            }
+
+            if (RearmRxInterrupt() < 0) {
+                errno = EIO;
+                return -1;
+            }
+
+            errno = EAGAIN;
+            return -1;
+        }
+
+        if (m_stats_enable) {
+            UpdateStats(StatsMgr::READV_OUTPUT_BUF_CNT, poll_num); // Or a new stat for Recv bufs
+            UpdateStats(StatsMgr::READV_OUTPUT_BYTES, rx_total_len); // Or a new stat for Recv bytes
+            UpdateStats(StatsMgr::READV_CACHE_BYTES, m_rx.m_block_cache.GetCacheLen());
+        }
+
+        return rx_total_len;
+    }
+
+    ALWAYS_INLINE ssize_t Write(const void *buf, size_t nbyte)
+    {
+        if (m_rx_use_tcp) {
+            return OsAPiMgr::GetOriginApi()->write(m_fd, buf, nbyte);
+        }
+
+        if (buf == nullptr || nbyte == 0) {
+            errno = EINVAL;
+            return -1;
+        }
+
+        if (m_closed.load(std::memory_order_relaxed)) {
+            errno = EPIPE; // Broken pipe if connection is closed
+            return -1;
+        }      
+        if (m_tx.m_get_and_ack_event) {
+            do {
+                if (GetAndAckEvent(UMQ_IO_TX) < 0) {
+                    errno = EIO;
+                    return -1;
+                }
+                PollTx(m_tx.m_retrieve_threshold, true); // true indicates handling event
+            } while (!m_tx.m_epoll_event_num.compare_exchange_strong(
+                    m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
+            m_tx.m_get_and_ack_event = false;
+        } else if (m_tx.m_window_size == 0) {
+            printf("[Send] window size is 0, start polling\n");
+            PollTx(m_tx.m_retrieve_threshold);
+            if (m_tx.m_window_size == 0) {
+                if (m_stats_enable) {
+                    printf("[Send] window size still 0, returning\n");
+                    UpdateStats(StatsMgr::TX_INTER_CNT, 1);
+                }
+                return DpRearmTxInterrupt();
+            }
+        }
+
+        uint32_t brpc_iobuf_size = BrpcIOBufSize();
+        uint32_t num_bufs_needed = (nbyte + brpc_iobuf_size - 1) / brpc_iobuf_size;
+        uint32_t post_batch_max = (m_tx.m_window_size <= static_cast<uint32_t>(POST_BATCH_MAX)) ? m_tx.m_window_size : static_cast<uint32_t>(POST_BATCH_MAX);
+        num_bufs_needed = (num_bufs_needed < post_batch_max) ? num_bufs_needed : post_batch_max;
+        if (num_bufs_needed == 0) {
+            errno = EAGAIN;
+            return -1;
+        }
+
+        umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr);
+        if (tx_buf_list == nullptr) {
+            if (m_stats_enable) {
+                UpdateStats(StatsMgr::TX_INTER_CNT, 1);
+            }
+            return DpRearmTxInterrupt();
+        }
+        
+        umq_buf_t *current_buf = tx_buf_list;
+
+        const char* src_ptr = static_cast<const char*>(buf);
+        size_t remaining_len = nbyte;
+        size_t copied_total = 0;
+        size_t bytes_per_buf = brpc_iobuf_size;
+
+        uint16_t _unsolicited_wr_num = m_tx.m_unsolicited_wr_num;
+        uint32_t _unsolicited_bytes = m_tx.m_unsolicited_bytes;
+        uint16_t _unsignaled_wr_num = m_tx.m_unsignaled_wr_num;
+        umq_buf_t *head_qbuf = QBUF_LIST_FIRST(&m_tx.m_head_buf);
+        umq_buf_t *tail_qbuf = QBUF_LIST_FIRST(&m_tx.m_tail_buf);
+
+        for (uint32_t i = 0; i < num_bufs_needed && remaining_len > 0; ++i) {
+            size_t copy_len = std::min(remaining_len, static_cast<size_t>(bytes_per_buf));
+            if (current_buf->buf_data == nullptr) {
+                umq_buf_free(tx_buf_list);
+                errno = ENOMEM;
+                return -1;
+            }
+ 
+            std::memcpy(current_buf->buf_data, src_ptr, copy_len); // Copy data into UMQ buffer
+            current_buf->data_size = copy_len;
+            remaining_len -= copy_len;
+            src_ptr += copy_len;
+            copied_total += copy_len;
+ 
+            if (i == 0) {
+                current_buf->total_data_size = nbyte;
+            }
+
+            // Setup UMQ buffer properties (similar to WriteV)
+            current_buf->io_direction = UMQ_IO_TX;
+            umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)current_buf->qbuf_ext;
+            if (buf_pro) {
+                buf_pro->opcode = UMQ_OPC_SEND;
+                buf_pro->flag.value = 0;
+                buf_pro->remote_sge.addr = (uint64_t)current_buf->buf_data;
+                buf_pro->remote_sge.length = current_buf->data_size;
+                buf_pro->remote_sge.token_id = 0;
+                buf_pro->remote_sge.token_value = 0;
+                buf_pro->remote_sge.mempool_id = 0;
+                buf_pro->remote_sge.rsvd0 = 0;
+ 
+                if (m_tx.m_window_size == 1 || i + 1 == num_bufs_needed) {
+                    buf_pro->flag.bs.solicited_enable = 1;
+                } else {
+                    if (m_tx.m_unsolicited_wr_num > m_tx.m_report_threshold ||
+                        m_tx.m_unsolicited_bytes > UNSOLICITED_BYTES_MAX) {
+                        buf_pro->flag.bs.solicited_enable = 1;
+                    } else {
+                        ++m_tx.m_unsolicited_wr_num;
+                        m_tx.m_unsolicited_bytes += copy_len;
+                    }
+                }
+ 
+                if (buf_pro->flag.bs.solicited_enable == 1) {
+                    m_tx.m_unsolicited_wr_num = 0;
+                    m_tx.m_unsolicited_bytes = 0;
+                }
+
+                if (++m_tx.m_unsignaled_wr_num >= m_tx.m_report_threshold) {
+                    buf_pro->flag.bs.complete_enable = 1;
+                    buf_pro->user_ctx = (uint64_t)QBUF_LIST_FIRST(&m_tx.m_head_buf);
+                    QBUF_LIST_FIRST(&m_tx.m_head_buf) = QBUF_LIST_NEXT(current_buf);
+                    m_tx.m_unsignaled_wr_num = 0;
+                }
+            }
+ 
+            if (i + 1 < num_bufs_needed) {
+                current_buf = current_buf->qbuf_next;
+            }
+        }
+
+        // Update tail pointer of the TX buffer list management
+        QBUF_LIST_FIRST(&m_tx.m_tail_buf) = current_buf;
+        umq_buf_t *bad_qbuf = nullptr;
+ 
+        int post_result = umq_post(m_local_umqh, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
+        if (post_result == UMQ_SUCCESS) {
+            m_tx.m_window_size -= num_bufs_needed; // Consume window slots upon successful post
+        } else if (bad_qbuf != nullptr) {
+            // Handle partial failure
+            if (post_result == -UMQ_ERR_EAGAIN) {
+                // Operation would block, UMQ queue might be temporarily full despite window check
+                errno = EAGAIN;
+                m_tx.m_need_fc_awake.store(true, std::memory_order_relaxed);
+            } else {
+                errno = EIO;
+            }
+ 
+            umq_buf_list_t failed_list = { bad_qbuf }; // Create a temporary list head
+            umq_buf_t *cur_failed = nullptr;
+            QBUF_LIST_FOR_EACH(cur_failed, &failed_list) {
+                ((Brpc::IOBuf::Block *)PtrFloorToBoundary(cur_failed->buf_data))->DecRef();
+            }
+ 
+            if (bad_qbuf == tx_buf_list) {
+                m_tx.m_unsolicited_wr_num = _unsolicited_wr_num; // Restore saved state from before loop
+                m_tx.m_unsolicited_bytes = _unsolicited_bytes;
+                m_tx.m_unsignaled_wr_num = _unsignaled_wr_num;
+                QBUF_LIST_FIRST(&m_tx.m_head_buf) = head_qbuf;
+                QBUF_LIST_FIRST(&m_tx.m_tail_buf) = tail_qbuf;
+ 
+                umq_buf_free(bad_qbuf); // Free the failed list starting from the first bad buffer
+                copied_total = 0; // Nothing was successfully sent
+            } else {
+                copied_total = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf,
+                                             _unsolicited_wr_num, _unsolicited_bytes, _unsignaled_wr_num);
+            }
+ 
+            return static_cast<ssize_t>(copied_total);
+        } else {
+            errno = EIO;
+            return -1;
+        }
+
+        if (m_stats_enable) {
+            UpdateStats(StatsMgr::WRITEV_BATCH_CNT, 1); // Or a new stat for Send calls
+            UpdateStats(StatsMgr::WRITEV_BUF_CNT, num_bufs_needed); // Or a new stat for Send bufs
+            UpdateStats(StatsMgr::WRITEV_BYTES, copied_total); // Or a new stat for Send bytes
+        }
+ 
+        if ((m_tx_window_capacity - m_tx.m_window_size) >= m_tx.m_handle_threshold) {
+            PollTx(m_tx.m_retrieve_threshold);
+        }
+
+        return static_cast<ssize_t>(copied_total);
+    }
+
+        ALWAYS_INLINE ssize_t SendTo(const void *buf, size_t len, int flags, const struct sockaddr *dest_addr,
+                                 socklen_t addrlen)
+    {
+        if (m_tx_use_tcp) {
+            return OsAPiMgr::GetOriginApi()->sendto(m_fd, buf, len, flags, dest_addr, addrlen);
+        }
+
+        if (buf == nullptr || len == 0) {
+            errno = EINVAL;
+            return -1;
+        }
+ 
+        if (m_closed.load(std::memory_order_relaxed)) {
+            errno = EPIPE; // Broken pipe if connection is closed
+            return -1;
+        }
+ 
+        if (m_tx.m_get_and_ack_event) {
+            do {
+                if (GetAndAckEvent(UMQ_IO_TX) < 0) {
+                    errno = EIO;
+                    return -1;
+                }
+                PollTx(m_tx.m_retrieve_threshold, true); // true indicates handling event
+            } while (!m_tx.m_epoll_event_num.compare_exchange_strong(
+                    m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
+            m_tx.m_get_and_ack_event = false;
+        } else if (m_tx.m_window_size == 0) {
+            PollTx(m_tx.m_retrieve_threshold);
+            if (m_tx.m_window_size == 0) {
+                if (m_stats_enable) {
+                    UpdateStats(StatsMgr::TX_INTER_CNT, 1);
+                }
+                return DpRearmTxInterrupt();
+            }
+        }
+ 
+        uint32_t brpc_iobuf_size = BrpcIOBufSize();
+        uint32_t num_bufs_needed = (len + brpc_iobuf_size - 1) / brpc_iobuf_size;
+        uint32_t post_batch_max = (m_tx.m_window_size <= static_cast<uint32_t>(POST_BATCH_MAX)) ? m_tx.m_window_size : static_cast<uint32_t>(POST_BATCH_MAX);
+        num_bufs_needed = (num_bufs_needed < post_batch_max) ? num_bufs_needed : post_batch_max;
+        if (num_bufs_needed == 0) {
+            errno = EAGAIN;
+            return -1;
+        }
+ 
+        umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr); // Allocate list of num_bufs_needed buffers
+        if (tx_buf_list == nullptr) {
+            if (m_stats_enable) {
+                UpdateStats(StatsMgr::TX_INTER_CNT, 1);
+            }
+            return DpRearmTxInterrupt();
+        }
+ 
+        umq_buf_t *current_buf = tx_buf_list;
+        if (QBUF_LIST_EMPTY(&m_tx.m_head_buf)) {
+            QBUF_LIST_FIRST(&m_tx.m_head_buf) = current_buf;
+        } else {
+            QBUF_LIST_NEXT(QBUF_LIST_FIRST(&m_tx.m_tail_buf)) = current_buf;
+        }
+ 
+        const char* src_ptr = static_cast<const char*>(buf);
+        size_t remaining_len = len;
+        size_t copied_total = 0;
+        size_t bytes_per_buf = brpc_iobuf_size;
+ 
+        uint16_t _unsolicited_wr_num = m_tx.m_unsolicited_wr_num;
+        uint32_t _unsolicited_bytes = m_tx.m_unsolicited_bytes;
+        uint16_t _unsignaled_wr_num = m_tx.m_unsignaled_wr_num;
+        umq_buf_t *head_qbuf = QBUF_LIST_FIRST(&m_tx.m_head_buf);
+        umq_buf_t *tail_qbuf = QBUF_LIST_FIRST(&m_tx.m_tail_buf);
+ 
+        for (uint32_t i = 0; i < num_bufs_needed && remaining_len > 0; ++i) {
+            size_t copy_len = std::min(remaining_len, static_cast<size_t>(bytes_per_buf));
+            if (current_buf->buf_data == nullptr) {
+                umq_buf_free(tx_buf_list);
+                errno = ENOMEM;
+                return -1;
+            }
+ 
+            std::memcpy(current_buf->buf_data, src_ptr, copy_len); // Copy data into UMQ buffer
+            current_buf->data_size = copy_len;
+            remaining_len -= copy_len;
+            src_ptr += copy_len;
+            copied_total += copy_len;
+ 
+            if (i == 0) {
+                current_buf->total_data_size = len;
+            }
+ 
+            // Setup UMQ buffer properties (similar to WriteV)
+            current_buf->io_direction = UMQ_IO_TX;
+            umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)current_buf->qbuf_ext;
+            if (buf_pro) {
+                buf_pro->opcode = UMQ_OPC_SEND;
+                buf_pro->flag.value = 0;
+                buf_pro->remote_sge.addr = (uint64_t)current_buf->buf_data;
+                buf_pro->remote_sge.length = current_buf->data_size;
+                buf_pro->remote_sge.token_id = 0;
+                buf_pro->remote_sge.token_value = 0;
+                buf_pro->remote_sge.mempool_id = 0;
+                buf_pro->remote_sge.rsvd0 = 0;
+ 
+                if (m_tx.m_window_size == 1 || i + 1 == num_bufs_needed) {
+                    buf_pro->flag.bs.solicited_enable = 1;
+                } else {
+                    if (m_tx.m_unsolicited_wr_num > m_tx.m_report_threshold ||
+                        m_tx.m_unsolicited_bytes > UNSOLICITED_BYTES_MAX) {
+                        buf_pro->flag.bs.solicited_enable = 1;
+                    } else {
+                        ++m_tx.m_unsolicited_wr_num;
+                        m_tx.m_unsolicited_bytes += copy_len;
+                    }
+                }
+ 
+                if (buf_pro->flag.bs.solicited_enable == 1) {
+                    m_tx.m_unsolicited_wr_num = 0;
+                    m_tx.m_unsolicited_bytes = 0;
+                }
+
+                if (++m_tx.m_unsignaled_wr_num >= m_tx.m_report_threshold) {
+                    buf_pro->flag.bs.complete_enable = 1;
+                    buf_pro->user_ctx = (uint64_t)QBUF_LIST_FIRST(&m_tx.m_head_buf);
+                    QBUF_LIST_FIRST(&m_tx.m_head_buf) = QBUF_LIST_NEXT(current_buf);
+                    m_tx.m_unsignaled_wr_num = 0;
+                }
+            }
+ 
+            if (i + 1 < num_bufs_needed) {
+                current_buf = current_buf->qbuf_next;
+            }
+        }
+ 
+        // Update tail pointer of the TX buffer list management
+        QBUF_LIST_FIRST(&m_tx.m_tail_buf) = current_buf;
+        umq_buf_t *bad_qbuf = nullptr;
+ 
+        int post_result = umq_post(m_local_umqh, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
+        if (post_result == UMQ_SUCCESS) {
+            m_tx.m_window_size -= num_bufs_needed; // Consume window slots upon successful post
+        } else if (bad_qbuf != nullptr) {
+            // Handle partial failure
+            if (post_result == -UMQ_ERR_EAGAIN) {
+                // Operation would block, UMQ queue might be temporarily full despite window check
+                errno = EAGAIN;
+                m_tx.m_need_fc_awake.store(true, std::memory_order_relaxed);
+            } else {
+                errno = EIO;
+            }
+ 
+            umq_buf_list_t failed_list = { bad_qbuf }; // Create a temporary list head
+            umq_buf_t *cur_failed = nullptr;
+            QBUF_LIST_FOR_EACH(cur_failed, &failed_list) {
+                ((Brpc::IOBuf::Block *)PtrFloorToBoundary(cur_failed->buf_data))->DecRef();
+            }
+ 
+            if (bad_qbuf == tx_buf_list) {
+                m_tx.m_unsolicited_wr_num = _unsolicited_wr_num; // Restore saved state from before loop
+                m_tx.m_unsolicited_bytes = _unsolicited_bytes;
+                m_tx.m_unsignaled_wr_num = _unsignaled_wr_num;
+                QBUF_LIST_FIRST(&m_tx.m_head_buf) = head_qbuf;
+                QBUF_LIST_FIRST(&m_tx.m_tail_buf) = tail_qbuf;
+ 
+                umq_buf_free(bad_qbuf); // Free the failed list starting from the first bad buffer
+                copied_total = 0; // Nothing was successfully sent
+            } else {
+                copied_total = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf,
+                                             _unsolicited_wr_num, _unsolicited_bytes, _unsignaled_wr_num);
+            }
+ 
+            return static_cast<ssize_t>(copied_total);
+        } else {
+            errno = EIO;
+            return -1;
+        }
+ 
+        if (m_stats_enable) {
+            UpdateStats(StatsMgr::WRITEV_BATCH_CNT, 1); // Or a new stat for Send calls
+            UpdateStats(StatsMgr::WRITEV_BUF_CNT, num_bufs_needed); // Or a new stat for Send bufs
+            UpdateStats(StatsMgr::WRITEV_BYTES, copied_total); // Or a new stat for Send bytes
+        }
+ 
+        if ((m_tx_window_capacity - m_tx.m_window_size) >= m_tx.m_handle_threshold) {
+            PollTx(m_tx.m_retrieve_threshold);
+        }
+ 
+        return static_cast<ssize_t>(copied_total);
+    }
+    
+    ALWAYS_INLINE ssize_t RecvFrom(void *buf, size_t len, int flags, struct sockaddr *src_addr,
+                                   socklen_t *addrlen)
+    {
+        if (m_rx_use_tcp) {
+            return OsAPiMgr::GetOriginApi()->recvfrom(m_fd, buf, len, flags, src_addr, addrlen);
+        }
+
+        if (buf == nullptr || len == 0) {
+            errno = EINVAL;
+            return -1;
+        }
+ 
+        struct iovec single_iov = { .iov_base = buf, .iov_len = len };
+        ssize_t rx_total_len = OutputErrorMagicNumber(&single_iov, 1);
+        if (rx_total_len > 0) {
+            return rx_total_len;
+        }
+ 
+        if (m_rx.m_get_and_ack_event) {
+            if (GetAndAckEvent(UMQ_IO_RX) < 0) {
+                errno = EIO;
+                return -1;
+            }
+            m_rx.m_get_and_ack_event = false;
+        }
+ 
+        uint32_t max_buf_size;
+        if (m_rx.m_readv_unlimited) {
+            max_buf_size = UINT32_MAX;
+        } else {
+            max_buf_size = static_cast<uint32_t>(len);
+            if (max_buf_size != len) {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+ 
+        bool is_blocking = IsBlocking(m_fd);
+        umq_buf_t *buf_array[POLL_BATCH_MAX];
+        int poll_num = 0;
+ 
+        while (true) {
+            poll_num = UmqPollAndRefillRx(buf_array, POLL_BATCH_MAX);
+ 
+            if (poll_num < 0) {
+                errno = EIO;
+                return -1; // Error occurred during polling
+            } else if (poll_num > 0) {
+                break;
+            } else { // poll_num == 0
+                if (!is_blocking) {
+                    RPC_ADPT_VLOG_ERR("Recv: Non-blocking mode, no data available, setting errno = EAGAIN\n");
+                    errno = EAGAIN;
+                    return -1;
+                } else {
+                    RPC_ADPT_VLOG_DEBUG("Recv: Blocking mode, no data, polling again...\n");
+                }
+            }
+        }
+ 
+        // Process Polled Buffers and Copy Directly (only executed if poll_num > 0)
+        rx_total_len = 0; // Total bytes copied to user buffer
+        char* user_buf_ptr = static_cast<char*>(buf); // Use a pointer to track position in user buffer
+        size_t remaining_user_buf = len; // Remaining space in user buffer
+ 
+        if (poll_num > 0) {
+            for (int i = 0; i < poll_num; ++i) {
+                if (buf_array[i]->status != 0) {
+                    if (buf_array[i]->status != UMQ_BUF_FLOW_CONTROL_UPDATE) {
+                        RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
+                        QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                        umq_buf_free(buf_array[i]);
+                        continue; // Skip this invalid buffer
+                    } else {
+                        // Handle flow control update
+                        bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
+                        if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
+                            RPC_ADPT_VLOG_ERR("write event fd %d failed, errno: %d\n", m_event_fd, errno);
+                        }
+ 
+                        if (buf_array[i]->total_data_size == 0) {
+                            QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                            umq_buf_free(buf_array[i]);
+                            continue; // No data in this FC update packet
+                        }
+                    }
+                }
+ 
+                size_t data_size_to_copy = buf_array[i]->data_size;
+ 
+                // Check if user buffer has enough space for this chunk
+                if (remaining_user_buf < data_size_to_copy) {
+                    data_size_to_copy = remaining_user_buf; // Copy only what fits
+                }
+ 
+                if (data_size_to_copy > 0) {
+                    // Copy data directly from UMQ buffer to user buffer
+                    std::memcpy(user_buf_ptr, buf_array[i]->buf_data, data_size_to_copy);
+                    rx_total_len += data_size_to_copy;
+                    user_buf_ptr += data_size_to_copy;
+                    remaining_user_buf -= data_size_to_copy;
+                }
+ 
+                // Free the UMQ buffer after copying its data
+                QBUF_LIST_NEXT(buf_array[i]) = nullptr; // Ensure list termination if needed by umq_buf_free
+                umq_buf_free(buf_array[i]); // Free the UMQ buffer structure and its associated data area
+ 
+                // If user buffer is full, stop processing more buffers in this call
+                if (remaining_user_buf == 0) {
+                    RPC_ADPT_VLOG_DEBUG("Recv: User buffer is full, stopping processing of further buffers\n");
+                    break;
+                }
+            }
+        }
+ 
+        if (rx_total_len == 0) {
+            // Check for epoll event num mismatch (similar to ReadV)
+            if (!m_rx.m_epoll_event_num.compare_exchange_strong(
+                        m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
+                m_rx.m_poll = true;
+                errno = EINTR;
+                return -1;
+            }
+ 
+            if (m_stats_enable) {
+                UpdateStats(StatsMgr::RX_INTER_CNT, 1);
+            }
+ 
+            bool closed = m_closed.load(std::memory_order_relaxed);
+            if (closed == true) {
+                return 0;
+            }
+ 
+            if (RearmRxInterrupt() < 0) {
+                errno = EIO;
+                return -1;
+            }
+ 
+            errno = EAGAIN;
+            return -1;
+        }
+ 
+        if (m_stats_enable) {
+            UpdateStats(StatsMgr::READV_OUTPUT_BUF_CNT, poll_num); // Or a new stat for Recv bufs
+            UpdateStats(StatsMgr::READV_OUTPUT_BYTES, rx_total_len); // Or a new stat for Recv bytes
+ 
+        }
+ 
+        return rx_total_len;
+    }
+
     ALWAYS_INLINE void NewOriginEpollError()
     {
         m_closed.store(true, std::memory_order_relaxed);
