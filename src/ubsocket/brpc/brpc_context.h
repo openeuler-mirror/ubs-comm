@@ -97,26 +97,29 @@ class Context : public Brpc::ConfigSettings {
             return;
         }
 
-        if(GetBrpcAllocSymStr() != nullptr && GetBrpcDeallocSymStr() != nullptr){
-            RecordApi(RTLD_DEFAULT, GetBrpcAllocSymStr(), m_alloc_addr);
-            RecordApi(RTLD_DEFAULT, GetBrpcDeallocSymStr(), m_dealloc_addr);
+        char *env_ptr;
+        if ((env_ptr = getenv(ENV_VAR_USE_ZCOPY)) == NULL) {
+            if(GetBrpcAllocSymStr() != nullptr && GetBrpcDeallocSymStr() != nullptr){
+                RecordApi(RTLD_DEFAULT, GetBrpcAllocSymStr(), m_alloc_addr);
+                RecordApi(RTLD_DEFAULT, GetBrpcDeallocSymStr(), m_dealloc_addr);
+                if(m_alloc_addr == nullptr || m_dealloc_addr == nullptr){
+                    RPC_ADPT_VLOG_WARN("Failed to load and replace allocate(%s)/deallocate(%s) "
+                        "function for brpc, try to scan ELF\n", GetBrpcAllocSymStr(), GetBrpcDeallocSymStr());
+                }
+            }
+
             if(m_alloc_addr == nullptr || m_dealloc_addr == nullptr){
-                RPC_ADPT_VLOG_WARN("Failed to load and replace allocate(%s)/deallocate(%s) "
-                    "function for brpc, try to scan ELF\n", GetBrpcAllocSymStr(), GetBrpcDeallocSymStr());
-            }
-        }
+                DynSymScanner scanner;
+                if(!scanner.ParseBrpcAllocator()){
+                    SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+                    return;
+                }
 
-        if(m_alloc_addr == nullptr || m_dealloc_addr == nullptr){
-            DynSymScanner scanner;
-            if(!scanner.ParseBrpcAllocator()){
-                SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
-                return;
+                m_alloc_addr = scanner.GetBrpcAllocSymAddr();
+                m_dealloc_addr = scanner.GetBrpcDeallocSymAddr();
             }
-
-            m_alloc_addr = scanner.GetBrpcAllocSymAddr();
-            m_dealloc_addr = scanner.GetBrpcDeallocSymAddr();
+            RecordAndSetBrpcAllocator();
         }
-        RecordAndSetBrpcAllocator();
 
         umq_init_cfg_t umq_config;
         memset_s(&umq_config, sizeof(umq_config), 0, sizeof(umq_config));

@@ -165,7 +165,6 @@ EXPOSE_C_DEFINE ssize_t sendto(int sockfd, const void *buf, size_t len, int flag
 {
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
     if (obj == nullptr) {
-        printf("Pandas nullptr\n");
         return OsAPiMgr::GetOriginApi()->sendto(sockfd, buf, len, flags, dest_addr, addrlen);
     }
  
@@ -177,11 +176,30 @@ EXPOSE_C_DEFINE ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags, s
 {
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
     if (obj == nullptr) {
-        printf("Pandas nullptr\n");
         return OsAPiMgr::GetOriginApi()->recvfrom(sockfd, buf, len, flags, dest_addr, addrlen);
     }
  
     return obj->RecvFrom(buf, len, flags, dest_addr, addrlen);
+}
+
+EXPOSE_C_DEFINE ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags)
+{
+    return OsAPiMgr::GetOriginApi()->sendmsg(sockfd, msg, flags);
+}
+
+EXPOSE_C_DEFINE ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
+{
+    return OsAPiMgr::GetOriginApi()->recvmsg(sockfd, msg, flags);
+}
+
+EXPOSE_C_DEFINE ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
+{
+    return OsAPiMgr::GetOriginApi()->sendfile64(out_fd, in_fd, offset, count);
+}
+
+EXPOSE_C_DEFINE ssize_t sendfile64(int out_fd, int in_fd, off64_t *offset, size_t count)
+{
+    return OsAPiMgr::GetOriginApi()->sendfile64(out_fd, in_fd, offset, count);
 }
 
 EXPOSE_C_DEFINE int epoll_create(int size)
