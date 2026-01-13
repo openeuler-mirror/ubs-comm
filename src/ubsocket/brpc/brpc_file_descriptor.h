@@ -812,7 +812,6 @@ public:
                     errno = EIO;
                     return -1;
                 }
-                
                 // set poll_to_empty, means poll at least m_tx.m_retrieve_threshold TX CQE
                 PollTx(m_tx.m_retrieve_threshold, true);
                 /* m_tx.m_epoll_event_num not equals to m_tx.m_expect_epoll_event_num means
@@ -1120,7 +1119,6 @@ public:
                 errno = EAGAIN;
                 m_tx.m_need_fc_awake.store(true, std::memory_order_relaxed);
             } else {
- 
                 errno = EIO;
             }
  
@@ -1136,7 +1134,6 @@ public:
                 m_tx.m_unsignaled_wr_num = _unsignaled_wr_num;
                 QBUF_LIST_FIRST(&m_tx.m_head_buf) = head_qbuf;
                 QBUF_LIST_FIRST(&m_tx.m_tail_buf) = tail_qbuf;
- 
                 umq_buf_free(bad_qbuf); // Free the failed list starting from the first bad buffer
                 copied_total = 0; // Nothing was successfully sent
             } else {
@@ -1206,7 +1203,6 @@ public:
  
         while (true) {
             poll_num = UmqPollAndRefillRx(buf_array, POLL_BATCH_MAX);
- 
             if (poll_num < 0) {
                 errno = EIO;
                 return -1; // Error occurred during polling
@@ -1308,7 +1304,6 @@ public:
         if (m_stats_enable) {
             UpdateStats(StatsMgr::READV_OUTPUT_BUF_CNT, poll_num); // Or a new stat for Recv bufs
             UpdateStats(StatsMgr::READV_OUTPUT_BYTES, rx_total_len); // Or a new stat for Recv bytes
- 
         }
  
         return rx_total_len;
@@ -1361,7 +1356,6 @@ public:
 
         while (true) {
             poll_num = UmqPollAndRefillRx(buf_array, POLL_BATCH_MAX);
-
             if (poll_num < 0) {
                 errno = EIO;
                 return -1;
@@ -1881,7 +1875,6 @@ public:
  
         while (true) {
             poll_num = UmqPollAndRefillRx(buf_array, POLL_BATCH_MAX);
- 
             if (poll_num < 0) {
                 errno = EIO;
                 return -1; // Error occurred during polling
@@ -1983,7 +1976,6 @@ public:
         if (m_stats_enable) {
             UpdateStats(StatsMgr::READV_OUTPUT_BUF_CNT, poll_num); // Or a new stat for Recv bufs
             UpdateStats(StatsMgr::READV_OUTPUT_BYTES, rx_total_len); // Or a new stat for Recv bytes
- 
         }
  
         return rx_total_len;
