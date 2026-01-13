@@ -26,7 +26,7 @@ find_package(OpenSSL REQUIRED)
 
 message(STATUS "Found OpenSSL:")
 message(STATUS "  Include: ${OPENSSL_INCLUDE_DIR}")
-message(STATUS "  Libraries: ${OPENSSL_LIBRIES}")
+message(STATUS "  Libraries: ${OPENSSL_LIBRARIES}")
 
 # FUZZ ENABLE
 if("${FUZZ}" STREQUAL "enable")

@@ -13,12 +13,37 @@
 #include "file_descriptor.h"
 #include "brpc_file_descriptor.h"
 
+static bool ForceUseUB()
+{
+    static bool enable = []() {
+        const char *env = std::getenv("RPC_ADPT_UB_FORCE");
+        if (env == nullptr) {
+            return false;
+        }
+        std::string envStr(env);
+        if (envStr == "1") {
+            RPC_ADPT_VLOG_INFO("RPC_ADPT_UB_FORCE is set force use ub acceleration");
+            return true;
+        }
+        return false;
+    }();
+    return enable;
+}
+
+static bool UseUB(int domain, int type)
+{
+    bool isTCP = ((domain == AF_INET) || (domain == AF_INET6)) && (type == SOCK_STREAM);
+    if ((domain == AF_SMC) || (ForceUseUB() && isTCP)) {
+        return true;
+    }
+    return false;
+}
+
 EXPOSE_C_DEFINE int socket(int domain, int type, int protocol)
 {
     int fd = OsAPiMgr::GetOriginApi()->socket(domain, type, protocol);
-    if (!(((domain == AF_INET) || (domain == AF_INET6)) && type == SOCK_STREAM) ||
-        fd < 0) {
-            return fd;
+    if (!UseUB(domain, type) || fd < 0) {
+        return fd;
     }
 
     /* The 'socket()' function is only called when constructing the 'Brpc::Context'singleton, so the
@@ -200,6 +225,61 @@ EXPOSE_C_DEFINE ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t co
 EXPOSE_C_DEFINE ssize_t sendfile64(int out_fd, int in_fd, off64_t *offset, size_t count)
 {
     return OsAPiMgr::GetOriginApi()->sendfile64(out_fd, in_fd, offset, count);
+}
+
+EXPOSE_C_DEFINE int fcntl(int fd, int cmd, ...)
+{
+    unsigned long int arg{ 0 };
+    va_list va;
+    va_start(va, cmd);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->fcntl(fd, cmd, arg);
+    }
+
+    return obj->Fcntl(fd, cmd, arg);
+}
+
+EXPOSE_C_DEFINE int fcntl64(int fd, int cmd, ...)
+{
+    unsigned long int arg{ 0 };
+    va_list va;
+    va_start(va, cmd);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->fcntl64(fd, cmd, arg);
+    }
+
+    return obj->Fcntl64(fd, cmd, arg);
+}
+
+EXPOSE_C_DEFINE int ioctl(int fd, unsigned long request, ...)
+{
+    unsigned long int arg{ 0 };
+    va_list va;
+    va_start(va, request);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->ioctl(fd, request, arg);
+    }
+
+    return obj->Ioctl(fd, request, arg);
+}
+
+EXPOSE_C_DEFINE int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->setsockopt(fd, level, optname, optval, optlen);
+    }
+
+    return obj->SetSockOpt(fd, level, optname, optval, optlen);
 }
 
 EXPOSE_C_DEFINE int epoll_create(int size)
