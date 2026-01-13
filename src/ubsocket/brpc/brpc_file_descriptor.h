@@ -997,7 +997,7 @@ public:
                 }
                 PollTx(m_tx.m_retrieve_threshold, true); // true indicates handling event
             } while (!m_tx.m_epoll_event_num.compare_exchange_strong(
-                    m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
+                      m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
             m_tx.m_get_and_ack_event = false;
         } else if (m_tx.m_window_size == 0) {
             PollTx(m_tx.m_retrieve_threshold);
@@ -1011,14 +1011,15 @@ public:
  
         uint32_t brpc_iobuf_size = BrpcIOBufSize();
         uint32_t num_bufs_needed = (len + brpc_iobuf_size - 1) / brpc_iobuf_size;
-        uint32_t post_batch_max = (m_tx.m_window_size <= static_cast<uint32_t>(POST_BATCH_MAX)) ? m_tx.m_window_size : static_cast<uint32_t>(POST_BATCH_MAX);
+        uint32_t post_batch_max = (m_tx.m_window_size <= static_cast<uint32_t>(POST_BATCH_MAX)) ?
+                                   m_tx.m_window_size : static_cast<uint32_t>(POST_BATCH_MAX);
         num_bufs_needed = (num_bufs_needed < post_batch_max) ? num_bufs_needed : post_batch_max;
         if (num_bufs_needed == 0) {
             errno = EAGAIN;
             return -1;
         }
  
-        umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr); // Allocate list of num_bufs_needed buffers
+        umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr);
         if (tx_buf_list == nullptr) {
             if (m_stats_enable) {
                 UpdateStats(StatsMgr::TX_INTER_CNT, 1);
@@ -1277,7 +1278,7 @@ public:
         if (rx_total_len == 0) {
             // Check for epoll event num mismatch (similar to ReadV)
             if (!m_rx.m_epoll_event_num.compare_exchange_strong(
-                        m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
+                 m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
                 m_rx.m_poll = true;
                 errno = EINTR;
                 return -1;
@@ -1426,7 +1427,7 @@ public:
 
         if (rx_total_len == 0) {
             if (!m_rx.m_epoll_event_num.compare_exchange_strong(
-                        m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
+                 m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
                 m_rx.m_poll = true;
                 errno = EINTR;
                 return -1;
@@ -1482,7 +1483,7 @@ public:
                 }
                 PollTx(m_tx.m_retrieve_threshold, true); // true indicates handling event
             } while (!m_tx.m_epoll_event_num.compare_exchange_strong(
-                    m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
+                      m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
             m_tx.m_get_and_ack_event = false;
         } else if (m_tx.m_window_size == 0) {
             printf("[Send] window size is 0, start polling\n");
@@ -1498,7 +1499,8 @@ public:
 
         uint32_t brpc_iobuf_size = BrpcIOBufSize();
         uint32_t num_bufs_needed = (nbyte + brpc_iobuf_size - 1) / brpc_iobuf_size;
-        uint32_t post_batch_max = (m_tx.m_window_size <= static_cast<uint32_t>(POST_BATCH_MAX)) ? m_tx.m_window_size : static_cast<uint32_t>(POST_BATCH_MAX);
+        uint32_t post_batch_max = (m_tx.m_window_size <= static_cast<uint32_t>(POST_BATCH_MAX)) ?
+                                   m_tx.m_window_size : static_cast<uint32_t>(POST_BATCH_MAX);
         num_bufs_needed = (num_bufs_needed < post_batch_max) ? num_bufs_needed : post_batch_max;
         if (num_bufs_needed == 0) {
             errno = EAGAIN;
@@ -1668,7 +1670,7 @@ public:
                 }
                 PollTx(m_tx.m_retrieve_threshold, true); // true indicates handling event
             } while (!m_tx.m_epoll_event_num.compare_exchange_strong(
-                    m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
+                      m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
             m_tx.m_get_and_ack_event = false;
         } else if (m_tx.m_window_size == 0) {
             PollTx(m_tx.m_retrieve_threshold);
@@ -1682,14 +1684,15 @@ public:
  
         uint32_t brpc_iobuf_size = BrpcIOBufSize();
         uint32_t num_bufs_needed = (len + brpc_iobuf_size - 1) / brpc_iobuf_size;
-        uint32_t post_batch_max = (m_tx.m_window_size <= static_cast<uint32_t>(POST_BATCH_MAX)) ? m_tx.m_window_size : static_cast<uint32_t>(POST_BATCH_MAX);
+        uint32_t post_batch_max = (m_tx.m_window_size <= static_cast<uint32_t>(POST_BATCH_MAX)) ?
+                                   m_tx.m_window_size : static_cast<uint32_t>(POST_BATCH_MAX);
         num_bufs_needed = (num_bufs_needed < post_batch_max) ? num_bufs_needed : post_batch_max;
         if (num_bufs_needed == 0) {
             errno = EAGAIN;
             return -1;
         }
  
-        umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr); // Allocate list of num_bufs_needed buffers
+        umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr);
         if (tx_buf_list == nullptr) {
             if (m_stats_enable) {
                 UpdateStats(StatsMgr::TX_INTER_CNT, 1);
@@ -1949,7 +1952,7 @@ public:
         if (rx_total_len == 0) {
             // Check for epoll event num mismatch (similar to ReadV)
             if (!m_rx.m_epoll_event_num.compare_exchange_strong(
-                        m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
+                 m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
                 m_rx.m_poll = true;
                 errno = EINTR;
                 return -1;
