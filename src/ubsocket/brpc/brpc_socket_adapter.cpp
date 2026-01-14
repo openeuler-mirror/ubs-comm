@@ -145,6 +145,88 @@ EXPOSE_C_DEFINE ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
     return obj->WriteV(iov, iovcnt);
 }
 
+EXPOSE_C_DEFINE ssize_t send(int sockfd, const void *buf, size_t len, int flags)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->send(sockfd, buf, len, flags);
+    }
+ 
+    return obj->Send(buf, len, flags);
+}
+
+EXPOSE_C_DEFINE ssize_t recv(int sockfd, void *buf, size_t len, int flags)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->recv(sockfd, buf, len, flags);
+    }
+ 
+    return obj->Recv(buf, len, flags);
+}
+
+EXPOSE_C_DEFINE ssize_t read(int fildes, void *buf, size_t nbyte)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fildes);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->read(fildes, buf, nbyte);
+    }
+
+    return obj->Read(buf, nbyte);
+}
+
+EXPOSE_C_DEFINE ssize_t write(int fildes, const void *buf, size_t nbyte)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fildes);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->write(fildes, buf, nbyte);
+    }
+
+    return obj->Write(buf, nbyte);
+}
+
+EXPOSE_C_DEFINE ssize_t sendto(int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr,
+                               socklen_t addrlen)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->sendto(sockfd, buf, len, flags, dest_addr, addrlen);
+    }
+ 
+    return obj->SendTo(buf, len, flags, dest_addr, addrlen);
+}
+
+EXPOSE_C_DEFINE ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags, struct sockaddr *dest_addr,
+                               socklen_t *addrlen)
+{
+    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->recvfrom(sockfd, buf, len, flags, dest_addr, addrlen);
+    }
+ 
+    return obj->RecvFrom(buf, len, flags, dest_addr, addrlen);
+}
+
+EXPOSE_C_DEFINE ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags)
+{
+    return OsAPiMgr::GetOriginApi()->sendmsg(sockfd, msg, flags);
+}
+
+EXPOSE_C_DEFINE ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
+{
+    return OsAPiMgr::GetOriginApi()->recvmsg(sockfd, msg, flags);
+}
+
+EXPOSE_C_DEFINE ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
+{
+    return OsAPiMgr::GetOriginApi()->sendfile64(out_fd, in_fd, offset, count);
+}
+
+EXPOSE_C_DEFINE ssize_t sendfile64(int out_fd, int in_fd, off64_t *offset, size_t count)
+{
+    return OsAPiMgr::GetOriginApi()->sendfile64(out_fd, in_fd, offset, count);
+}
+
 EXPOSE_C_DEFINE int fcntl(int fd, int cmd, ...)
 {
     unsigned long int arg{ 0 };
@@ -230,6 +312,32 @@ EXPOSE_C_DEFINE int epoll_create(int size)
     return epoll_fd;
 }
 
+EXPOSE_C_DEFINE int epoll_create1(int flags)
+{
+    int epoll_fd = OsAPiMgr::GetOriginApi()->epoll_create1(flags);
+    if (epoll_fd < 0) {
+        return epoll_fd;
+    }
+
+    /* The 'epoll_create1()' function is only called when constructing the 'Brpc::Context'singleton, so the
+     * file descriptor (fd) is directly returned to avoid recursively constructing 'Brpc::Context'. */
+    Brpc::Context *context = Brpc::Context::GetContext();
+    if (context == nullptr) {
+        return epoll_fd;
+    }
+
+    EpollFd *epoll_fd_obj = context->CreateEpollFd(epoll_fd);
+    if (epoll_fd_obj == nullptr) {
+        OsAPiMgr::GetOriginApi()->close(epoll_fd);
+        return -1;
+    }
+
+    // Delete existing objects and record new objects in the list.
+    Fd<EpollFd>::OverrideFdObj(epoll_fd, epoll_fd_obj);
+
+    return epoll_fd;
+}
+
 EXPOSE_C_DEFINE int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
     EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
@@ -254,6 +362,17 @@ EXPOSE_C_DEFINE int epoll_wait(int epfd, struct epoll_event *events, int maxeven
     bool use_polling = context == nullptr ? false : context->GetUsePolling();
 
     return obj->EpollWait(events, maxevents, timeout, use_polling);
+}
+
+EXPOSE_C_DEFINE int epoll_pwait(int epfd, struct epoll_event *events, int maxevents, int timeout,
+                                const sigset_t *sigmask)
+{
+    EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
+    if (obj == nullptr) {
+        return OsAPiMgr::GetOriginApi()->epoll_pwait(epfd, events, maxevents, timeout, sigmask);
+    }
+
+    return obj->EpollWait(events, maxevents, timeout);
 }
 
 // Be cautious, global obj constructor may occur after this.
