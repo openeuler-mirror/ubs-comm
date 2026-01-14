@@ -49,6 +49,7 @@
 #define ENV_VAR_STATS             "RPC_ADPT_STATS"
 #define ENV_VAR_BLOCK_TYPE        "RPC_ADPT_BLOCK_TYPE"        // default, small, medium, large
 #define ENV_VAR_POOL_INITIAL_SIZE "RPC_ADPT_POOL_INITIAL_SIZE" // MB
+#define ENV_VAR_USE_ZCOPY         "RPC_ADPT_USE_ZCOPY"
 #define ENV_LOG_USE_PRINTF        "RPC_ADPT_LOG_USE_PRINTF" // default 0, 0 false; 1 true
 #define ENV_SCHEDULE_POLICY       "RPC_SCHEDULE_POLICY" // affinity, rr
 
