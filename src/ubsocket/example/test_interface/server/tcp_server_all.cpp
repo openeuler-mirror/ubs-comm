@@ -18,7 +18,7 @@
 
 std::atomic<bool> running(true);
 
-void signal_handler(int sig) 
+void signal_handler(int sig)
 {
     (void)sig;  // 避免未使用参数警告
     running = false;
