@@ -18,20 +18,23 @@
 
 std::atomic<bool> running(true);
 
-void signal_handler(int sig) {
+void signal_handler(int sig) 
+{
     (void)sig;  // 避免未使用参数警告
     running = false;
     std::cout << "\nShutting down server..." << std::endl;
     return;
 }
 
-void print_usage(const char* prog_name) {
+void print_usage(const char* prog_name) 
+{
     std::cerr << "Usage: " << prog_name << " [-s IP_ADDRESS]\n";
     std::cerr << "  -s IP_ADDRESS : Server bind IP (default: 0.0.0.0)\n";
     std::cerr << "Example: " << prog_name << " -s 192.168.1.10\n";
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) 
+{
     setenv("RPC_ADPT_USE_ZCOPY", "TRUE", 1);
     (void)argc;  // 避免未使用参数警告
     (void)argv;  // 避免未使用参数警告
