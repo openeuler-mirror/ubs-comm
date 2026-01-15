@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
 
     // 解析命令行参数
     int opt;
-    while ((opt = getopt(argc, argv, "s:h")) != -1) {
+    while ((opt = getopt(argc, argv, "s")) != -1) {
         switch (opt) {
             case 's':
                 server_ip = optarg;
@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     if (inet_pton(AF_INET, server_ip, &addr.sin_addr) <= 0) {
-        perror("inet_pton failed");
+        std::cerr << "Invalid IP address: " << server_ip << std::endl;
         close(server_fd);
         return -1;
     }
