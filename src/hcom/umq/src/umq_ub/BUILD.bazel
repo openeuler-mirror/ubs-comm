@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
 
-load("//:bazel/copts.bzl", "UMQ_DEFAULT_COPTS", "UMQ_DEFAULT_LINKOPTS")
+load("//src/hcom/umq/bazel:copts.bzl", "UMQ_DEFAULT_COPTS", "UMQ_DEFAULT_LINKOPTS")
 
 cc_library(
     name = "umq_ub_lib",
@@ -15,15 +15,15 @@ cc_library(
     ],
     copts = UMQ_DEFAULT_COPTS,
     linkopts = UMQ_DEFAULT_LINKOPTS,
-    visibility = ["//umq:__subpackages__"],
+   visibility = ["//visibility:public"],
     deps = [
-        "//include:umq_headers",
-        "//include:umq_ub_headers",
-        "//util:common_util",
-        "//umq:vlog",
-        "//umq:util_id_generator",
-        "//umq/qbuf:umq_buf_lib",
-        "//umq/dfx:perf",
+        "//src/hcom/umq/include:umq_headers",
+        "//src/hcom/umq/include:umq_ub_headers",
+        "//src/hcom/umq/util:common_util",
+        "//src/hcom/umq/src:vlog",
+        "//src/hcom/umq/src:util_id_generator",
+        "//src/hcom/umq/src/qbuf:umq_buf_lib",
+        "//src/hcom/umq/src/dfx:perf",
         "@urma//:urma_headers",
         "@urma//:urma_lib",
         "@urma//:tpsa_lib",
@@ -35,6 +35,6 @@ cc_shared_library(
     deps = [
         ":umq_ub_lib",
     ],
-    dynamic_deps = ["//umq/qbuf:umq_buf"],
+    dynamic_deps = ["//src/hcom/umq/src/qbuf:umq_buf"],
     visibility = ["//visibility:public"],
 )

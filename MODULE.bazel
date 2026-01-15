@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) Huawei Technologies Co., Ltd. 2020-2026. All rights reserved.
+
+bazel_dep(name = "rules_cc", version = "0.0.9")
+
+bazel_dep(name = 'openssl', version = '3.3.2')
+single_version_override(
+    module_name = "openssl",
+    version = "3.3.2.bcr.1",
+    registry = "https://raw.githubusercontent.com/secretflow/bazel-registry/main",
+)

@@ -1,0 +1,100 @@
+# src/BUILD.bazel
+#load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+# 1. 首先，为 libboundscheck 定义一个 cc_library
+cc_library(
+    name = "boundscheck_lib",
+    srcs = glob(["libboundscheck/src/**/*.c"]),
+    hdrs = glob(["libboundscheck/include/*.h","libboundscheck/src/**/*.h","libboundscheck/src/**/*.inl",]),  # hdrs 在这里是合法的
+   
+    includes = ["libboundscheck/include"],
+    copts = ["-std=c11", "-D_GNU_SOURCE", "-fPIC"],
+    visibility = ["//visibility:public"],
+    alwayslink=True,
+)
+
+# 2. 然后，基于上面的库生成共享库
+cc_binary(
+    name = "libboundscheck.so",
+    linkshared = True,  # 关键参数：指示生成共享库
+    deps = [":boundscheck_lib"],  # 依赖上面的库
+    visibility = ["//visibility:public"],
+)
+
+cc_import(
+  name = "libboundscheck",
+#  hdrs = ["mylib.h"],
+  shared_library = ":libboundscheck.so",
+)
+
+cc_import(
+  name = "libumq",
+#  hdrs = ["mylib.h"],
+  shared_library = ":libumq.so",
+)
+
+
+
+cc_binary(
+    name = "libumq.so",
+    linkshared = True,
+    deps = [
+        "//src/hcom/umq/src:umq_lib",
+    ],
+    dynamic_deps = ["//src/hcom/umq/src/qbuf:umq_buf"],
+    visibility = ["//visibility:public"],
+)
+
+
+cc_binary(
+    name = "libubsocket.so",
+    srcs = glob([
+        "ubsocket/*.cpp",
+        "ubsocket/*.c",
+        "ubsocket/brpc/*.cpp",
+    ]) + glob([  # 头文件现在也放在 srcs 里
+        "ubsocket/*.h",
+        "ubsocket/brpc/*.h",
+    ]),
+    copts = [
+        "-D_GNU_SOURCE",
+        "-std=c++14",
+        "-fPIC",
+    ],
+    includes = [".", "ubsocket", "ubsocket/brpc"],
+    deps = [
+        ":boundscheck_lib",  # 依赖 boundscheck 库
+#        ":libumq_buf",
+        "//src/hcom/umq/src:umq_aggregate",
+        ":libumq",
+#        ":libumq_ipc",
+#        ":libumq_ub",
+    ],
+    linkshared = True, 
+    visibility = ["//visibility:public"],
+)
+cc_shared_library(
+    name = "libubsocket",
+    deps = [
+        ":libubsocket.so",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+
+# 4. 聚合目标保持不变
+filegroup(
+    name = "release_package",
+    srcs = [
+        ":libubsocket.so",
+        #":libboundscheck.so",
+      
+        ":libboundscheck",
+        "//src/hcom/umq/src:umq",
+        "//src/hcom/umq/src/qbuf:umq_buf",
+        "//src/hcom/umq/src/umq_ipc:umq_ipc",
+        "//src/hcom/umq/src/umq_ub:umq_ub",
+
+    ],
+    visibility = ["//visibility:public"],
+)
