@@ -25,17 +25,39 @@ void signal_handler(int sig) {
     return;
 }
 
+void print_usage(const char* prog_name) {
+    std::cerr << "Usage: " << prog_name << " [-s IP_ADDRESS]\n";
+    std::cerr << "  -s IP_ADDRESS : Server bind IP (default: 0.0.0.0)\n";
+    std::cerr << "Example: " << prog_name << " -s 192.168.1.10\n";
+}
+
 int main(int argc, char* argv[]) {
     setenv("RPC_ADPT_USE_ZCOPY", "TRUE", 1);
     (void)argc;  // 避免未使用参数警告
     (void)argv;  // 避免未使用参数警告
+
+    // 默认监听所有接口（0.0.0.0）
+    const char* server_ip = "0.0.0.0";
+
+    // 解析命令行参数
+    int opt;
+    while ((opt = getopt(argc, argv, "s:h")) != -1) {
+        switch (opt) {
+            case 's':
+                server_ip = optarg;
+                break;
+            default:
+                print_usage(argv[0]);
+                return EXIT_FAILURE;
+        }
+    }
     
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
     std::cout << "==========================================" << std::endl;
     std::cout << "TCP All Interface Test Server" << std::endl;
-    std::cout << "Server IP: 141.61.84.79" << std::endl;
+    std::cout << "Server IP: " << server_ip << std::endl;
     std::cout << "Listening Port: " << BASE_PORT << std::endl;
     std::cout << "Mode: Single thread, single port" << std::endl;
     std::cout << "Enabled tests:" << std::endl;
@@ -70,7 +92,7 @@ int main(int argc, char* argv[]) {
     }
     
     // 设置SO_REUSEADDR
-    int opt = 1;
+    opt = 1;
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
         perror("setsockopt failed");
         close(server_fd);
@@ -80,7 +102,11 @@ int main(int argc, char* argv[]) {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("141.61.84.79");
+    if (inet_pton(AF_INET, server_ip, &addr.sin_addr) <= 0) {
+        perror("inet_pton failed");
+        close(server_fd);
+        return -1;
+    }
     addr.sin_port = htons(BASE_PORT);
     
     if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
