@@ -94,7 +94,7 @@ private:
 
 namespace TransMode {
 
-umq_trans_mode_t TransModeConverter(const char *str, umq_trans_mode_t default_trans_mode = UMQ_TRANS_MODE_IB);
+umq_trans_mode_t TransModeConverter(const char *str, umq_trans_mode_t default_trans_mode = UMQ_TRANS_MODE_UB);
 const char *TransModeConverter(umq_trans_mode_t trans_mode);
 
 }

@@ -1,10 +1,19 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
 
-workspace(name = "com_atomgit_openeuler_umdk_urpc")
+workspace(name = "com_atomgit_openeuler_umdk_umq")
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+
+load("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
+
+
+new_local_repository(
+    name = "urma",
+    build_file = "//src/hcom/umq/third_party/urma:BUILD.bazel",
+    path = "/usr",
+)
 
 http_archive(
     name = "bazel_skylib",
@@ -85,7 +94,7 @@ rules_foreign_cc_dependencies()
 
 http_archive(
     name = "com_github_madler_zlib",  # 2017-01-15T17:57:23Z
-    build_file = "//third_party/zlib:zlib.BUILD",
+    build_file = "//src/hcom/umq/third_party/zlib:zlib.BUILD",
     sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
     strip_prefix = "zlib-1.2.11",
     urls = [
@@ -96,7 +105,7 @@ http_archive(
 
 http_archive(
     name = "openssl",  # 2021-12-14T15:45:01Z
-    build_file = "//third_party/openssl:openssl.BUILD",
+    build_file = "//src/hcom/umq/third_party/openssl:openssl.BUILD",
     sha256 = "f89199be8b23ca45fc7cb9f1d8d3ee67312318286ad030f5316aca6462db6c96",
     strip_prefix = "openssl-1.1.1m",
     urls = [
@@ -107,6 +116,6 @@ http_archive(
 
 new_local_repository(
     name = "urma",
-    build_file = "//third_party/urma:BUILD.bazel",
+    build_file = "//src/hcom/umq/third_party/urma:BUILD.bazel",
     path = "/usr",
 )
