@@ -58,7 +58,7 @@ if(UBSOCKET_BUILD_TESTS)
   endif()
 
   add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/mockcpp)
-
+  add_compile_definitons(UBSOCKET_TEST_MODE)
   add_subdirectory(unit_test)
 endif()
 

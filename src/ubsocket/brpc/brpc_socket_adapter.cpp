@@ -412,4 +412,3 @@ __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
 
 #endif
 }
-
