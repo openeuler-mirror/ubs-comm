@@ -3052,7 +3052,6 @@ private:
         for (uint32_t i = 0; i < route_list.len; ++i) {
             if ((route_list.buf[i].flag.bs.rtp == 1)) {
                 uniqueChipIds.insert(route_list.buf[i].chip_id);
-                std::cout<<" index "<<i<< "chip id "<<route_list.buf[i].chip_id<<std::endl;
             }
         }
         std::vector<uint32_t> chipIdList(uniqueChipIds.begin(), uniqueChipIds.end());
