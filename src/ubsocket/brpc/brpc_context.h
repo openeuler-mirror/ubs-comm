@@ -176,7 +176,7 @@ class Context : public Brpc::ConfigSettings {
                 SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
                 return;
             }
-            if (strcmp(umq_config.trans_info[0].dev_info.dev.dev_name, "bonding_dev_0") != 0){
+            if (strstr(umq_config.trans_info[0].dev_info.dev.dev_name, "bonding_dev") == nullptr) {
                 umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
                 umq_config.trans_info[0].dev_info.dev.eid_idx = GetEidIdx();
             }else{
