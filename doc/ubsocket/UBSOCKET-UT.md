@@ -57,14 +57,16 @@ TEST_F(FooTest, CaseName) // 测试功能的名字
 ```
 
 
-# 编译、运行
+# 编译、运行、查看覆盖率
 
 ```bash
 cd ubs-comm/src/ubsocket
 
 # 编译 ubsocket 与单元测试，注意 -DUBSOCKET_BUILD_TEST=ON 和 -DUMQ_BUF_LIB=...
+# 启用覆盖率可以通过 -DUBSOCKET_ENABLE_COVERAGE=ON
 # 如果想观察下载进度 -DFETCHCONTENT_QUIET=OFF
 cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Debug -DUBSOCKET_BUILD_TESTS=ON \
+  -DUBSOCKET_ENABLE_COVERAGE=ON \
   -DUMQ_INCLUDE=/path/to/umq -DUMQ_LIB=/path/to/libumq -DUMQ_BUF_LIB=/path/to/libumq_buf \
   -DOPENSSL_ROOT_DIR=/path/to/openssl
 cmake --build build -j32
@@ -74,6 +76,11 @@ ctest --test-dir build --output-on-failure
 
 # 如果只想运行 brpc adapter 相关的单元测试
 ctest --test-dir build --output-on-failure -R brpc
+
+# 查看覆盖率
+# 覆盖率 html 在 build/coverage_report/index.html
+# 原始 lcov 覆盖率文件在 build/coverage_filtered.info
+cmake --build build --target coverage
 ```
 
 默认情况下它会下载、编译 gtest/mockcpp.
