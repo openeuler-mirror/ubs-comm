@@ -178,7 +178,7 @@ RResult RDMAQp::ChangeToReceive(RDMAQpExchangeInfo &exInfo, struct ibv_qp_attr &
 
     attr.qp_state = IBV_QPS_RTR;
     // path_mtu should be smaller than the network mtu
-    attr.path_mtu = IBV_MTU_1024;
+    attr.path_mtu = IBV_MTU_4096;
     attr.dest_qp_num = exInfo.qpn;
     attr.rq_psn = 0;
     attr.max_dest_rd_atomic = rdAtomic;
