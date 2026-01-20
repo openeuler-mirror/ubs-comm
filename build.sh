@@ -145,6 +145,8 @@ output=$(HCOM_COMPONENT_VERSION=${HCOM_COMPONENT_VERSION} bash "${HCOM_ROOT_DIR}
 # build example and perf
 [[ "${HCOM_BUILD_EXAMPLE,,}" == "on" ]] && bash "${HCOM_ROOT_DIR}/build/build_example_perf.sh"
 
+bash "${HCOM_ROOT_DIR}/build/build_umq_and_ubsocket.sh"
+
 # 不要删除本行。因 `[[ A ]] && B` 为表达式，其返回值会返回给 shell，一旦
 # HCOM_BUILD_EXAMPLE 不为 on 就会返回 1 导致 CI 构建失败.
 echo "${HCOM_LOG_TAG} $0 succeeds"

@@ -92,6 +92,18 @@ endif()
 
 set(CMAKE_SKIP_RPATH TRUE)
 
+get_filename_component(PROJECT_ROOT_DIR ${CMAKE_SOURCE_DIR}/../../.. ABSOLUTE)
+set(URMA_INCLUDE_DIR ${PROJECT_ROOT_DIR}/dist/hcom_3rdparty/umdk/urma/include)
+message(STATUS "UMQ: URMA_INCLUDE_DIR = ${URMA_INCLUDE_DIR}")
+ 
+if(EXISTS "${URMA_INCLUDE_DIR}/uvs_api.h")
+    message(STATUS "uvs_api.h has found.")
+else()
+    message(WARNING "uvs_api.h cannot found.")
+endif()
+
+include_directories(${URMA_INCLUDE_DIR})
+
 add_subdirectory(config)
 add_subdirectory(include)
 add_subdirectory(tools)
