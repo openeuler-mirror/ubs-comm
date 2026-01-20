@@ -24,7 +24,7 @@ target_include_directories(umq_ub
         ${OPENSSL_INCLUDE_DIR}
 )
 
-target_link_libraries(umq_ub PUBLIC pthread urma tpsa PRIVATE umq_buf OpenSSL::SSL)
+target_link_libraries(umq_ub PUBLIC pthread urma PRIVATE umq_buf OpenSSL::SSL)
 install(TARGETS umq_ub DESTINATION /usr/lib64)
 
 # uninstall target
