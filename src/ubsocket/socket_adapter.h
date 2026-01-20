@@ -14,6 +14,8 @@
 #include <signal.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <stdarg.h>
+#include <stdexcept>
 #include "rpc_adpt_vlog.h"
 
 #define EXPOSE_C_DEFINE extern "C" __attribute__((visibility("default")))
@@ -72,8 +74,8 @@ typedef int (*daemon_api) (int nochdir, int noclose);
 typedef int (*sigaction_api) (int signum, const struct sigaction *act, struct sigaction *oldact);
 typedef sighandler_t (*signal_api) (int signum, sighandler_t handler);
 
-#define ORIGIN_API_DEFINE(__api_name) __api_name##_api __api_name = nullptr
-#define ORIGIN_API_DEFINE_INITIALIZER(__api_name) RecordApi(RTLD_NEXT, #__api_name, this->__api_name)
+#define ORIGIN_API_DEFINE(__api_name) __api_name##_api __api_name##_ptr = nullptr
+#define ORIGIN_API_DEFINE_INITIALIZER(__api_name) RecordApi(handle, #__api_name, this->__api_name##_ptr)
 
 /** 
  * Record the address where the symbol is loaded into memory
@@ -83,9 +85,9 @@ typedef sighandler_t (*signal_api) (int signum, sighandler_t handler);
  * @param[out] symbol: variable to record the address;
  * Return: Void
  */
- template <typename ApiType>
- void RecordApi(void *handle, const char *symbol_name, ApiType &symbol)
- {
+template <typename ApiType>
+void RecordApi(void *handle, const char *symbol_name, ApiType &symbol)
+{
     (void)dlerror();
     symbol = reinterpret_cast<ApiType>(dlsym(handle, symbol_name));
     char *dlerror_str = dlerror();
@@ -101,14 +103,157 @@ typedef sighandler_t (*signal_api) (int signum, sighandler_t handler);
     } else {
          RPC_ADPT_VLOG_DEBUG("Found for '%s()'\n", symbol_name);
     }
- }
+}
 
- class OsAPiMgr{
+class OsAPiMgr {
     public:
-    static ALWAYS_INLINE OsAPiMgr *GetOriginApi()
+    static OsAPiMgr *GetOriginApi()
     {
         static OsAPiMgr mgr;
         return &mgr;
+    }
+
+    int open(const char *file, int oflag, ...)
+    {
+        unsigned long int arg{ 0 };
+        va_list va;
+        va_start(va, oflag);
+        arg = va_arg(va, decltype(arg));
+        va_end(va);
+        return open_ptr(file, oflag, arg);
+    }
+    int socket(int domain, int type, int protocol)
+    {
+        return socket_ptr(domain, type, protocol);
+    }
+    int close(int fd)
+    {
+        return close_ptr(fd);
+    }
+    int shutdown(int fd, int how)
+    {
+        return shutdown_ptr(fd, how);
+    }
+    int accept(int socket, struct sockaddr *address, socklen_t *address_len)
+    {
+        return accept_ptr(socket, address, address_len);
+    }
+    int accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
+    {
+        return accept4_ptr(fd, addr, addrlen, flags);
+    }
+    int bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
+    {
+        return bind_ptr(fd, addr, addrlen);
+    }
+    int connect(int socket, const struct sockaddr *address, socklen_t address_len)
+    {
+        return connect_ptr(socket, address, address_len);
+    }
+    int listen(int fd, int backlog)
+    {
+        return listen_ptr(fd, backlog);
+    }
+    int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen)
+    {
+        return setsockopt_ptr(fd, level, optname, optval, optlen);
+    }
+    int fcntl(int fd, int cmd, ...)
+    {
+        unsigned long int arg{ 0 };
+        va_list va;
+        va_start(va, cmd);
+        arg = va_arg(va, decltype(arg));
+        va_end(va);
+        return fcntl_ptr(fd, cmd, arg);
+    }
+    int fcntl64(int fd, int cmd, ...)
+    {
+        unsigned long int arg{ 0 };
+        va_list va;
+        va_start(va, cmd);
+        arg = va_arg(va, decltype(arg));
+        va_end(va);
+        return fcntl64_ptr(fd, cmd, arg);
+    }
+    int ioctl(int fd, unsigned long int request, ...)
+    {
+        unsigned long int arg{ 0 };
+        va_list va;
+        va_start(va, request);
+        arg = va_arg(va, decltype(arg));
+        va_end(va);
+        return ioctl_ptr(fd, request, arg);
+    }
+    ssize_t read(int fd, void *buf, size_t nbytes)
+    {
+        return read_ptr(fd, buf, nbytes);
+    }
+    ssize_t readv(int fildes, const struct iovec *iov, int iovcnt)
+    {
+        return readv_ptr(fildes, iov, iovcnt);
+    }
+    ssize_t recv(int sockfd, void *buf, size_t size, int flags)
+    {
+        return recv_ptr(sockfd, buf, size, flags);
+    }
+    ssize_t recvmsg(int fd, struct msghdr *message, int flags)
+    {
+        return recvmsg_ptr(fd, message, flags);
+    }
+    ssize_t recvfrom(int fd, void *buf, size_t n, int flags, struct sockaddr *from, socklen_t *fromlen)
+    {
+        return recvfrom_ptr(fd, buf, n, flags, from, fromlen);
+    }
+    ssize_t write(int fd, const void *buf, size_t n)
+    {
+        return write_ptr(fd, buf, n);
+    }
+    ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
+    {
+        return writev_ptr(fildes, iov, iovcnt);
+    }
+    ssize_t send(int sockfd, const void *buf, size_t size, int flags)
+    {
+        return send_ptr(sockfd, buf, size, flags);
+    }
+    ssize_t sendmsg(int fd, const struct msghdr *message, int flags)
+    {
+        return sendmsg_ptr(fd, message, flags);
+    }
+    ssize_t sendto(int fd, const void *buf, size_t n, int flags, const struct sockaddr *to,
+                   socklen_t tolen)
+    {
+        return sendto_ptr(fd, buf, n, flags, to, tolen);
+    }
+    ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
+    {
+        return sendfile_ptr(out_fd, in_fd, offset, count);
+    }
+    ssize_t sendfile64(int out_fd, int in_fd, off64_t *offset, size_t count)
+    {
+        return sendfile64_ptr(out_fd, in_fd, offset, count);
+    }
+    int epoll_create(int size)
+    {
+        return epoll_create_ptr(size);
+    }
+    int epoll_create1(int flags)
+    {
+        return epoll_create1_ptr(flags);
+    }
+    int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
+    {
+        return epoll_ctl_ptr(epfd, op, fd, event);
+    }
+    int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
+    {
+        return epoll_wait_ptr(epfd, events, maxevents, timeout);
+    }
+    int epoll_pwait(int epfd, struct epoll_event *events,
+                    int maxevents, int timeout, const sigset_t *sigmask)
+    {
+        return epoll_pwait_ptr(epfd, events, maxevents, timeout, sigmask);
     }
 
     ORIGIN_API_DEFINE(creat);
@@ -164,6 +309,10 @@ typedef sighandler_t (*signal_api) (int signum, sighandler_t handler);
     private:
     OsAPiMgr(void)
     {
+        void *handle = dlopen ("libc.so.6", RTLD_NOW);
+        if (handle == nullptr) {
+            throw std::runtime_error("Unable to open dynamic link library");
+        }
         ORIGIN_API_DEFINE_INITIALIZER(creat);
         ORIGIN_API_DEFINE_INITIALIZER(open);
         ORIGIN_API_DEFINE_INITIALIZER(dup);
@@ -213,7 +362,13 @@ typedef sighandler_t (*signal_api) (int signum, sighandler_t handler);
         ORIGIN_API_DEFINE_INITIALIZER(daemon);
         ORIGIN_API_DEFINE_INITIALIZER(sigaction);
         ORIGIN_API_DEFINE_INITIALIZER(signal);
+
+        int ret = dlclose(handle);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR("Unable to close the dynamic link library: %s\n",
+                              dlerror());
+        }
     }
- };
+};
 
 #endif
