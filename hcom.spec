@@ -13,6 +13,12 @@
     %global with_hcom_perf 0
 %endif
 
+%global with_multicast %{?_with_multicast:%{_with_multicast}}
+# 如果没有提供，则设置默认值
+%if "%{with_multicast}" == ""
+    %global with_multicast 0
+%endif
+
 %global with_htracer_cli %{?_with_htracer_cli:%{_with_htracer_cli}}
 # 如果没有提供，则设置默认值
 %if "%{with_htracer_cli}" == ""
@@ -98,6 +104,9 @@ cp -r %{_builddir}/%{name}_%{version}/%{package_name}/hcom/include/hcom/*  %{bui
 %defattr(-,root,root)
 %{_prefix}/include/hcom/capi/*.h
 %{_prefix}/include/hcom/*.h
+%if %{with_multicast}
+    %{_prefix}/include/hcom/multicast/*.h
+%endif
 %if %{with_hcom_perf} || %{with_htracer_cli}
     %{_prefix}/local/bin/*
 %endif

@@ -112,6 +112,7 @@ constexpr uint32_t QP_TIMEOUT = 14;
 constexpr uint32_t QP_RETRY_COUNT = 7;
 constexpr uint32_t QP_RNR_RETRY = 7;
 constexpr uint32_t CQ_COUNT = 1024;
+constexpr uint32_t QP_MAX_BATCH_RETURN_WR_SIZE = 64;
 
 const std::string RDMA_EMPTY_STRING;
 
@@ -150,6 +151,7 @@ struct RDMAOpContextInfo {
         SGL_READ = 8,
         HB_WRITE = 9,
         SEND_SGL_INLINE = 10,
+        SEND_RAW_NO_CP = 11,
     };
 
     enum OpResultType : uint8_t {

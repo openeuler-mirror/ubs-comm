@@ -1352,9 +1352,13 @@ NResult NetDriverRDMAWithOob::SendRequestFinishedCB(RDMAOpContextInfo *ctx, UBSH
         }
     }
 
-    if (NN_UNLIKELY(!mDriverSendMR->ReturnBuffer(ctx->mrMemAddr))) {
-        NN_LOG_ERROR("Failed to return mr segment back in Driver " << mName);
+    // send raw no copy not use send mr buffer, so not need to return
+    if (ctx->opType != RDMAOpContextInfo::SEND_RAW_NO_CP) {
+        if (NN_UNLIKELY(!mDriverSendMR->ReturnBuffer(ctx->mrMemAddr))) {
+            NN_LOG_ERROR("Failed to return mr segment back in Driver " << mName);
+        }
     }
+
     // return context to worker, and ctx is set null, not usable anymore
     worker->ReturnOpContextInfo(ctx);
     // call to callback
@@ -1453,7 +1457,8 @@ int NetDriverRDMAWithOob::SendFinishedCB(RDMAOpContextInfo *ctx)
     ctx->qp->ReturnPostSendWr();
     auto worker = reinterpret_cast<RDMAWorker *>(ctx->qp->UpContext1());
 
-    if (ctx->opType == RDMAOpContextInfo::SEND || ctx->opType == RDMAOpContextInfo::SEND_RAW) {
+    if (ctx->opType == RDMAOpContextInfo::SEND || ctx->opType == RDMAOpContextInfo::SEND_RAW ||
+        ctx->opType == RDMAOpContextInfo::SEND_RAW_NO_CP) {
         return SendRequestFinishedCB(ctx, netCtx, worker);
     } else if (ctx->opType == RDMAOpContextInfo::SEND_RAW_SGL) {
         return SendRawSglFinishedCB(ctx, netCtx, worker);
@@ -1684,22 +1689,11 @@ NResult NetDriverRDMAWithOob::NewReceivedRawRequest(RDMAOpContextInfo *ctx, UBSH
             msg.mDataLen = decryptRawLen;
         }
     } else {
-        messageReady = msg.AllocateIfNeed(ctx->dataSize);
-        if (NN_LIKELY(messageReady)) {
-            if (NN_UNLIKELY(memcpy_s(msg.mBuf, msg.GetBufLen(), tmpDataAddress, ctx->dataSize) != NN_OK)) {
-                NN_LOG_ERROR("Failed to copy req to sglCtx");
-                return NN_INVALID_PARAM;
-            }
-            msg.mDataLen = ctx->dataSize;
-        }
+        msg.SetBuf(tmpDataAddress, ctx->dataSize);
+        msg.mDataLen = ctx->dataSize;
     }
 
     int result = 0;
-
-    // after repost the ctx cannot be used anymore
-    if (NN_UNLIKELY((result = worker->RePostReceive(ctx)) != 0)) {
-        NN_LOG_ERROR("Failed to repost receive in Driver " << mName << ", result " << result);
-    }
 
     if (NN_UNLIKELY(!messageReady)) {
         NN_LOG_ERROR("Failed to build UBSHcomNetRequestContext or message in Driver " << mName <<
@@ -1723,6 +1717,13 @@ NResult NetDriverRDMAWithOob::NewReceivedRawRequest(RDMAOpContextInfo *ctx, UBSH
             netCtx.mHeader.dataLength << "]");
     }
 
+    // after repost the ctx cannot be used anymore
+    if (NN_UNLIKELY((result = worker->RePostReceive(ctx)) != 0)) {
+        NN_LOG_ERROR("Failed to repost receive in Driver " << mName << ", result " << result);
+    }
+
+    msg.SetBuf(nullptr, 0);
+    netCtx.mMessage = nullptr;
     netCtx.mEp.Set(nullptr);
 
     return NN_OK;
@@ -1805,11 +1806,6 @@ NResult NetDriverRDMAWithOob::NewReceivedRequest(RDMAOpContextInfo *ctx, UBSHcom
 NResult NetDriverRDMAWithOob::NewReceivedRequestWithoutCopy(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
     UBSHcomNetMessage &msg, RDMAWorker *worker, void *dataAddress, UBSHcomNetTransHeader *header) const
 {
-    if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), header, sizeof(UBSHcomNetTransHeader)) !=
-        NN_OK)) {
-        NN_LOG_ERROR("Failed to copy req to sglCtx");
-        return NN_INVALID_PARAM;
-    }
     msg.SetBuf(dataAddress, header->dataLength);
     msg.mDataLen = header->dataLength;
 
@@ -1818,6 +1814,11 @@ NResult NetDriverRDMAWithOob::NewReceivedRequestWithoutCopy(RDMAOpContextInfo *c
     netCtx.mMessage = &msg;
     netCtx.mOriginalReq = {};
     netCtx.mHeader.dataLength = msg.mDataLen;
+    netCtx.mHeader.seqNo = header->seqNo;
+    netCtx.mHeader.opCode = header->opCode;
+    netCtx.mHeader.timeout = header->timeout;
+    netCtx.mHeader.flags = header->flags;
+    netCtx.mHeader.headerCrc = header->headerCrc;
     netCtx.extHeaderType = header->extHeaderType;  // 指导服务层处理
     int result = 0;
     // call to callback

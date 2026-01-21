@@ -121,14 +121,14 @@ public:
 
     void Invalidate();
 
-    ~UBSHcomServiceContext()
+    virtual ~UBSHcomServiceContext()
     {
         Invalidate();
     }
 
     UBSHcomServiceContext() = default;
 
-private:
+protected:
     UBSHcomServiceContext(const UBSHcomRequestContext &ctx, UBSHcomChannel *ch);
 
     enum DataType : uint8_t {

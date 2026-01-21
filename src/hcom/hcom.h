@@ -729,6 +729,8 @@ protected:
 
     friend class NetChannel;
     friend class HcomChannelImp;
+    friend class Publisher;
+    friend class SubscriberContext;
 
 private:
     /**
@@ -747,6 +749,11 @@ private:
      */
     void RemoteUdsIdInfo(uint32_t pid, uint32_t uid, uint32_t gid);
 
+    virtual NResult PostSendRawNoCpy(const UBSHcomNetTransRequest &request, uint32_t seqNo)
+    {
+        return NN_OK;
+    }
+
     uint32_t mLocalIp = INVALID_IP;
     uint16_t mListenPort = 0;
     uint8_t mVersion = 0;
@@ -758,6 +765,7 @@ private:
     friend class NetDriverRDMAWithOob;
     friend class NetDriverSockWithOOB;
     friend class NetDriverShmWithOOB;
+    friend class Publisher;
 #ifdef UB_BUILD_ENABLED
     friend class NetDriverUBWithOob;
 #endif
@@ -1664,6 +1672,7 @@ struct UBSHcomNetDriverOptions {
             NN_NO256;  // max send working request of qp for rdma
     uint32_t qpReceiveQueueSize =
             NN_NO256;  // max receive working request of qp for rdma
+    uint32_t qpBatchRePostSize = NN_NO1; // qp batch return wr size
     uint16_t oobConnHandleThreadCount =
             NN_NO2;  // server accept connection thread num
     uint32_t oobConnHandleQueueCap =
