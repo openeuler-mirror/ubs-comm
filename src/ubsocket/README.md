@@ -43,7 +43,7 @@ sysctl -p
 ### 2.2 编译
 
 `UBSocket`归属于在`UBS Comm`项目，使用了该项目的部分公共能力，故需要分两部分编译。进行源码编译前，请先下载`UBS Comm`源码，并切换到目标分支或tag。
-
+#### 2.2.1 cmake编译
 ```shell
 # 编译UMQ
 cd ubs-comm/src/hcom/umq
@@ -79,6 +79,24 @@ make -j32
 > 说明：
 >
 > 在编译UBSocket时，可以通过`-DUMQ_INCLUDE=/path/to/umq_include -DUMQ_LIB=/path/to/umq_lib`来指定umq的头文件和lib库文件路径（如`=-DUMQ_INCLUDE=/prefix/ubs-comm/src/hcom/umq/include/umq/  -DUMQ_LIB=/prefix/ubs-comm/src/hcom/umq/build/src/libumq.so`）。
+#### 2.2.2 bazel编译
+> 说明：
+>
+>下面编译是在蓝区外网环境下执行，因为会自动下载涉及组件和一些校验，内网环境条件执行需要进行bazel相关环境配置。
+```shell
+# bazel编译ubsocket（将ubsocket和umq一次编译出来）
+# 进入ubs-comm根目录之后，执行下面命令开始bazel编译
+bazel build --jobs=8  //src:release_package --verbose_failures --noenable_bzlmod
+```
+> 说明：
+>
+>编译出的产物在根目录bazel-bin/src目录下，产物libubsocket.so（libboundcheck与ubsocket编译在了一起，是一个so产物libubsocket.so）。
+
+`umq` 的so产物路径:
+- libumq.so    ->   ubs-comm/bazel-bin/src
+- libumq_ub.so ->   ubs-comm/bazel-bin/src/hcom/umq/src/umq_ub
+- libumq_ipc.so->   ubs-comm/bazel-bin/src/hcom/umq/src/umq_ipc
+- libumq_buf.so->   ubs-comm/bazel-bin/src/hcom/umq/src/qbuf
 
 ### 2.3 使用
 
