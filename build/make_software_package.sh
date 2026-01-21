@@ -155,6 +155,10 @@ base_rpmbuild_cmd="rpmbuild --define \"package_name ${HCOM_PACKAGE_NAME}\" -bb h
 # 添加特定于 Java SDK 的选项
 [[ "${HCOM_BUILD_JAVA_SDK}" == "ON" ]] && base_rpmbuild_cmd="${base_rpmbuild_cmd} --with java_compile"
 
+# 添加特定于 Multicast 的选项
+echo "Multicast ${HCOM_BUILD_MULTICAST}"
+[[ "${HCOM_BUILD_MULTICAST}" == "on" ]] && base_rpmbuild_cmd="${base_rpmbuild_cmd} --define \"_with_multicast 1\""
+
 # 添加特定于 htracer_cli 的选项
 [[ "${HCOM_BUILD_HTRACER,,}" == "on" ]] && base_rpmbuild_cmd="${base_rpmbuild_cmd} --define \"_with_htracer_cli 1\""
 
