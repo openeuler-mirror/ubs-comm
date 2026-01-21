@@ -290,6 +290,7 @@ RResult RDMAWorker::Stop()
             switch ((contextInfo)->opType) {                                                                           \
                 case (RDMAOpContextInfo::OpType::SEND):                                                                \
                 case (RDMAOpContextInfo::OpType::SEND_RAW):                                                            \
+                case (RDMAOpContextInfo::OpType::SEND_RAW_NO_CP):                                                      \
                 case (RDMAOpContextInfo::OpType::SEND_RAW_SGL):                                                        \
                 case (RDMAOpContextInfo::OpType::SEND_SGL_INLINE):                                                     \
                     mSendPostedHandler(contextInfo);                                                                   \

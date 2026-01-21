@@ -68,6 +68,10 @@ RResult RDMAWorker::RePostReceive(RDMAOpContextInfo *ctx)
         return RR_PARAM_INVALID;
     }
 
+    if (mOptions.qpBatchRePostSize > NN_NO1) {
+        return BatchRePostReceive(ctx);
+    }
+
     // attach context to qp firstly, because post could be finished very fast
     // if posted failed, need to remove
     ctx->qp->AddOpCtxInfo(ctx);
@@ -83,6 +87,42 @@ RResult RDMAWorker::RePostReceive(RDMAOpContextInfo *ctx)
 
     // ctx could not be used if post successfully
     return result;
+}
+
+RResult RDMAWorker::BatchRePostReceive(RDMAOpContextInfo *ctx)
+{
+    uint16_t num = ctx->qp->mDelayNum.load(std::memory_order_relaxed);
+    uint16_t batchSize = mOptions.qpBatchRePostSize;
+
+    if (num >= batchSize) {
+        NN_LOG_WARN("Batch repostReceive failed delayNum " << num << " >= batchSize " << batchSize);
+        return NN_ERROR;
+    }
+
+    ctx->qp->mDelayList[num] = ctx;
+    uint16_t newNum = ctx->qp->mDelayNum.fetch_add(1, std::memory_order_release) + 1;
+    if (newNum != batchSize) {
+        return NN_OK;
+    }
+    // batch post receive
+    auto result = ctx->qp->BatchPostReceive(ctx, batchSize, mOptions.qpMrSegSize);
+    if (NN_UNLIKELY(result != RR_OK)) {
+        // batch free context
+        for (int i = 0; i < batchSize; ++i) {
+            auto* delayCtx = ctx->qp->mDelayList[i];
+            if (!delayCtx) {
+                continue;
+            }
+            delayCtx->qp->DecreaseRef();
+            delayCtx->qp->RemoveOpCtxInfo(delayCtx);
+            ReturnOpContextInfo(delayCtx);
+            ctx->qp->mDelayList[i] = nullptr;
+        }
+        ctx->qp->mDelayNum.store(0, std::memory_order_relaxed);
+        return NN_ERROR;
+    }
+    ctx->qp->mDelayNum.store(0, std::memory_order_relaxed);
+    return NN_OK;
 }
 
 RResult RDMAWorker::PostSend(RDMAQp *qp, const RDMASendReadWriteRequest &req, uint32_t immData)
@@ -131,6 +171,56 @@ RResult RDMAWorker::PostSend(RDMAQp *qp, const RDMASendReadWriteRequest &req, ui
 
     auto result = qp->PostSend(req.lAddress, req.size, static_cast<uint32_t>(req.lKey),
         reinterpret_cast<uint64_t>(ctx), immData);
+    if (NN_UNLIKELY(result != RR_OK)) {
+        // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
+        qp->ReturnPostSendWr();
+        qp->DecreaseRef();
+        qp->RemoveOpCtxInfo(ctx);
+        mOpCtxInfoPool.Return(ctx);
+    }
+
+    // ctx could not be used if post successfully
+    return result;
+}
+
+RResult RDMAWorker::PostSendRawNoCpy(RDMAQp *qp, const RDMASendReadWriteRequest &req, uint32_t immData)
+{
+    if (NN_UNLIKELY(qp == nullptr)) {
+        NN_LOG_ERROR("Verbs Failed to PostSend with RDMAWorker " << DetailName() << " as qp is null");
+        return RR_PARAM_INVALID;
+    }
+
+    auto ctx = mOpCtxInfoPool.Get();
+    if (NN_UNLIKELY(ctx == nullptr)) {
+        NN_LOG_ERROR("Verbs Failed to PostSend with RDMAWorker " << DetailName() << " as no reqInfo left");
+        return RR_QP_CTX_FULL;
+    }
+
+    if (NN_UNLIKELY(!qp->GetPostSendWr())) {
+        NN_LOG_ERROR("Verbs Failed to PostSend with RDMAWorker " << DetailName() << " as no post send wr left");
+        mOpCtxInfoPool.Return(ctx);
+        return RR_QP_POST_SEND_WR_FULL;
+    }
+    ctx->qp = qp;
+    ctx->mrMemAddr = req.lAddress;
+    ctx->dataSize = req.size;
+    ctx->qpNum = qp->QpNum();
+    ctx->lKey = static_cast<uint32_t>(req.lKey);
+    ctx->opType = RDMAOpContextInfo::SEND_RAW_NO_CP;
+    ctx->opResultType = RDMAOpContextInfo::SUCCESS;
+    ctx->upCtxSize = req.upCtxSize;
+    if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx->upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != RR_OK)) {
+        NN_LOG_ERROR("Failed to copy req to ctx");
+        return RR_PARAM_INVALID;
+    }
+    qp->IncreaseRef();
+
+    // attach context to qp firstly, because post could be finished very fast
+    // if posted failed, need to remove
+    qp->AddOpCtxInfo(ctx);
+
+    auto result = qp->PostSend(req.lAddress, req.size, static_cast<uint32_t>(req.lKey),
+                               reinterpret_cast<uint64_t>(ctx), immData);
     if (NN_UNLIKELY(result != RR_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
         qp->ReturnPostSendWr();

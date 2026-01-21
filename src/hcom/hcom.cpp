@@ -1330,9 +1330,9 @@ NResult ValidateQueueOptions(uint32_t qpSendQueueSize, uint32_t qpReceiveQueueSi
         return NN_INVALID_PARAM;
     }
 
-    if (NN_UNLIKELY(completionQueueDepth == NN_NO0 || completionQueueDepth > NN_NO8192)) {
+    if (NN_UNLIKELY(completionQueueDepth == NN_NO0 || completionQueueDepth > NN_NO65535)) {
         NN_LOG_ERROR("Option 'completionQueueDepth' is invalid " << completionQueueDepth <<
-            " is set in driver, the valid value range is 1 ~ 8192");
+            " is set in driver, the valid value range is 1 ~ 65535");
         return NN_INVALID_PARAM;
     }
     return NN_OK;

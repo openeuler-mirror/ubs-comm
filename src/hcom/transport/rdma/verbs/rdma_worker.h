@@ -66,6 +66,7 @@ using RDMAWorkerOptions = struct RDMAWorkerOptionsStruct {
     bool dontStartWorkers = false;
     /* worker thread priority [-20,20], 20 is the lowest, -20 is the highest, 0 (default) means do not set priority */
     int threadPriority = 0;
+    uint32_t qpBatchRePostSize = NN_NO1;
 
     std::string ToString() const
     {
@@ -74,7 +75,8 @@ using RDMAWorkerOptions = struct RDMAWorkerOptionsStruct {
             ", cq size: " << completionQueueDepth << ", max post send: " << maxPostSendCountPerQP <<
             ", pre-post receive size: " << prePostReceiveSizePerQP << ", poll batch size " << pollingBatchSize <<
             ", cpu id: " << cpuId << ", qp send queue: " << qpSendQueueSize << ", qp receive queue: " <<
-            qpReceiveQueueSize << ", dontStartWorkers: " << dontStartWorkers;
+            qpReceiveQueueSize << ", qp batch repost size: " << qpBatchRePostSize <<
+            ", dontStartWorkers: " << dontStartWorkers;
         return oss.str();
     }
 
@@ -97,6 +99,7 @@ using RDMAWorkerOptions = struct RDMAWorkerOptionsStruct {
         eventPollingTimeout = opt.eventPollingTimeout;
         dontStartWorkers = opt.dontStartWorkers;
         threadPriority = opt.workerThreadPriority;
+        qpBatchRePostSize = opt.qpBatchRePostSize;
     }
 };
 
@@ -158,6 +161,8 @@ public:
     RResult CreateOneSideCtx(RDMASgeCtxInfo &sgeInfo, UBSHcomNetTransSgeIov *iov, uint32_t iovCount,
         uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead);
     RResult RePostReceive(RDMAOpContextInfo *ctx);
+    RResult BatchRePostReceive(RDMAOpContextInfo *ctx);
+    RResult PostSendRawNoCpy(RDMAQp *qp, const RDMASendReadWriteRequest &req, uint32_t immData);
 
     inline RDMAOpContextInfo *GetOpContextInfo()
     {
