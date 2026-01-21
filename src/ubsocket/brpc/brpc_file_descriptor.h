@@ -332,12 +332,29 @@ public:
             SetNonBlocking(fd);
         }
 
-        if (DoAccept(fd) != 0) {
-            RPC_ADPT_VLOG_ERR("Failed to establish UB connection.");
-            /* Clear messages that already exist on the TCP link to prevent dirty messages */
-            FlushSocketMsg(fd);
-            OsAPiMgr::GetOriginApi()->close(fd);
-            return -1;
+        uint64_t magic_number = 0;
+        ssize_t magic_number_recv_size = 0;
+        int ret = ValidateMagicNumber(fd, magic_number, magic_number_recv_size);
+        if (ret > 0) {
+            /* IF the magic number verification fails, it is still necessary to create a socket fd object
+             * to store the magic number information, so that the received information can be reported to
+             * the user when readv is called. */
+            SocketFd *socket_fd_obj = nullptr;
+            try {
+                socket_fd_obj = new SocketFd(fd, magic_number, (uint32_t)magic_number_recv_size);
+                Fd<::SocketFd>::OverrideFdObj(fd, socket_fd_obj);
+            } catch (std::exception& e) {
+                RPC_ADPT_VLOG_ERR("%s\n", e.what());
+                OsAPiMgr::GetOriginApi()->close(fd);
+                return -1;
+            }
+        } else if (ret == 0) {
+            if (DoAccept(fd) != 0) {
+                RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", fd);
+                /* Clear messages that already exist on the TCP link to prevent
+                 * dirty messages from affecting user data transmission */
+                FlushSocketMsg(fd);
+            }
         }
 
         if (is_blocking) {
@@ -476,6 +493,13 @@ public:
 
     int DoConnect(void)
     {
+        uint64_t magic_number = CONTROL_PLANE_MAGIC_NUMBER;
+        if (SendSocketData(
+            m_fd, &magic_number, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
+            RPC_ADPT_VLOG_ERR("Failed to send magic number, fd: %d\n", m_fd);
+            return -1;
+        }
+
         umq_eid_t connEid;
         if (ConnectExchangeEid(&connEid) < 0) {
             RPC_ADPT_VLOG_ERR("Failed to exchange eid in connect\n");
