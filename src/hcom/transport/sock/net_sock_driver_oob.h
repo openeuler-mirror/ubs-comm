@@ -77,6 +77,7 @@ protected:
     NResult HandleNewOobConn(OOBTCPConnection &conn);
     NResult HandleNewRequest(SockOpContextInfo &ctx);
     NResult HandleReqPosted(SockOpContextInfo *ctx);
+    NResult HandleSendRawSglReqPosted(SockOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx);
     NResult OneSideDone(SockOpContextInfo *ctx);
     NResult HandleEpClose(Sock *sock);
 

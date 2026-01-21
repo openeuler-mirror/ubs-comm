@@ -41,7 +41,12 @@ static bool UseUB(int domain, int type)
 
 EXPOSE_C_DEFINE int socket(int domain, int type, int protocol)
 {
-    int fd = OsAPiMgr::GetOriginApi()->socket(domain, type, protocol);
+    int fd = -1;
+    if (domain == AF_SMC) {
+        fd = OsAPiMgr::GetOriginApi()->socket(AF_INET, type, protocol);
+    } else {
+        fd = OsAPiMgr::GetOriginApi()->socket(domain, type, protocol);
+    }
     if (!UseUB(domain, type) || fd < 0) {
         return fd;
     }

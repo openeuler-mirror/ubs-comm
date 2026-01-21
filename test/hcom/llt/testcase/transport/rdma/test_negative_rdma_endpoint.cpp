@@ -84,7 +84,7 @@ TEST_F(TestNegativeRdmaEndpoint, AsyncEpBadReq)
     NResult result;
     UBSHcomNetEndpointPtr ep;
     client->Connect("haha", ep);
-
+    ASSERT_NE(ep.Get(), nullptr);
     // invalid sgl test
     UBSHcomNetTransSglRequest reqSgl;
     reqSgl.upCtxSize = sizeof(UBSHcomNetTransSglRequest::upCtxData) + 1;

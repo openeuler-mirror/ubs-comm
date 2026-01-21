@@ -305,3 +305,9 @@ TEST_F(TestMemoryAllocator, PerfConcurrentWithRandomSize)
     ptr->Destroy();
     free(address);
 }
+
+TEST_F(TestMemoryAllocator, ToString)
+{
+    UBSHcomNetMemoryAllocatorOptions options;
+    EXPECT_NO_FATAL_FAILURE(options.ToString());
+}

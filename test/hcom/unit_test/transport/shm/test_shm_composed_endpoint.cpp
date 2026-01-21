@@ -408,6 +408,25 @@ TEST_F(TestShmComposedEndpoint, SyncReadWriteProcessTwo)
     EXPECT_EQ(ret, 1);
 }
 
+TEST_F(TestShmComposedEndpoint, SyncReadWriteProcessLkeyFail)
+{
+    int ret;
+    // ShmSyncEndpoint create
+    ShmSyncEndpointPtr shmEp;
+    ShmSyncEndpoint::Create("SyncReadWriteProcess", NN_NO128, SHM_EVENT_POLLING, shmEp);
+    ShmSyncEndpoint *ep = shmEp.Get();
+    // param init
+    ShmMRHandleMap mrHandleMap{};
+    ShmChannelPtr ch;
+    ShmChannel::CreateAndInit("SyncReadWriteProcess", 0, NN_NO128, NN_NO4, ch);
+    ShmOpContextInfo::ShmOpType type = ShmOpContextInfo::SH_SEND;
+    ShmHandlePtr localMrHandle = nullptr;
+    UBSHcomNetTransRequest req{};
+    req.lKey  = UINT64_MAX;
+    ret = ep->PostReadWrite(ch.Get(), req, mrHandleMap, type);
+    EXPECT_EQ(ret, static_cast<int>(SH_PARAM_INVALID));
+}
+
 TEST_F(TestShmComposedEndpoint, PostReadWriteCopyFail)
 {
     int ret;

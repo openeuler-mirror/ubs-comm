@@ -110,6 +110,7 @@ HResult ShmChannelKeeper::AddShmChannel(const ShmChannelPtr &ch)
 
     if (!mShmChannels.emplace(ch->Id(), ch).second) {
         NN_LOG_ERROR("Failed to add channel " << ch->Id() << " into ShmChannelKeeper " << mName);
+        epoll_ctl(mEpollHandle, EPOLL_CTL_DEL, ch->UdsFD(), &ev);
         return SH_CH_ADD_FAILURE_IN_KEEPER;
     }
 

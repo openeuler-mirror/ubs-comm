@@ -271,10 +271,18 @@ NResult NetDriverUB::GetDeviceByName(UBEId &tmpEid)
     }
 
     NN_LOG_INFO(UBDeviceHelper::DeviceInfo());
-    // hard code
-    char name[] = "bonding";
+    // hard code, if dev_0 found, choose 0; else, choose the first device
+    char name[] = "bonding_dev_0";
     uint8_t len = strlen(name);
-    if ((result = UBDeviceHelper::GetDeviceByName(name, len, tmpEid)) != 0) {
+    result = UBDeviceHelper::GetDeviceByName(name, len, tmpEid);
+    if (result == 0) {
+        return NN_OK;
+    }
+
+    char nameBonding[] = "bonding";
+    len = strlen(nameBonding);
+    result = UBDeviceHelper::GetDeviceByName(nameBonding, len, tmpEid);
+    if (result != 0) {
         UBDeviceHelper::UnInitialize();
         NN_LOG_ERROR("Failed to get device by name");
         return result;

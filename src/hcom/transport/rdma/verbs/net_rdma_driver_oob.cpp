@@ -1323,12 +1323,12 @@ void NetDriverRDMAWithOob::ProcessErrorNewRequest(RDMAOpContextInfo *ctx)
 NResult NetDriverRDMAWithOob::SendRequestFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
     RDMAWorker *worker)
 {
-    int result = 0;
+    NResult result = 0;
     if (ctx->opType == RDMAOpContextInfo::SEND) {
         if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader),
             reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr), sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
-            return NN_INVALID_PARAM;
+            result = NN_INVALID_PARAM;
         }
     } else {
         netCtx.mHeader.Invalid();
@@ -1348,7 +1348,7 @@ NResult NetDriverRDMAWithOob::SendRequestFinishedCB(RDMAOpContextInfo *ctx, UBSH
         netCtx.mOriginalReq.upCtxSize <= sizeof(RDMASendReadWriteRequest::upCtxData)) {
         if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalReq.upCtxData, NN_NO16, ctx->upCtx, ctx->upCtxSize) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
-            return NN_INVALID_PARAM;
+            result = NN_INVALID_PARAM;
         }
     }
 
@@ -1362,19 +1362,19 @@ NResult NetDriverRDMAWithOob::SendRequestFinishedCB(RDMAOpContextInfo *ctx, UBSH
     // return context to worker, and ctx is set null, not usable anymore
     worker->ReturnOpContextInfo(ctx);
     // call to callback
-    if (NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
+    if (result == NN_OK && NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
         NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName <<
             " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
             netCtx.mHeader.dataLength << "]");
     }
     netCtx.mEp.Set(nullptr);
-    return NN_OK;
+    return result;
 }
 
 NResult NetDriverRDMAWithOob::SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
     RDMAWorker *worker)
 {
-    int result = 0;
+    NResult result = 0;
     auto sgeCtx = reinterpret_cast<RDMASgeCtxInfo *>(ctx->upCtx);
     auto sglCtx = sgeCtx->ctx;
     result = RDMAOpContextInfo::GetNResult(ctx->opResultType);
@@ -1387,7 +1387,7 @@ NResult NetDriverRDMAWithOob::SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHc
     if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglCtx->iov,
         sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
         NN_LOG_ERROR("Failed to copy request to sglCtx");
-        return NN_INVALID_PARAM;
+        result = NN_INVALID_PARAM;
     }
     netCtx.mOriginalSglReq.iov = netCtx.iov;
     netCtx.mOriginalSglReq.iovCount = sglCtx->iovCount;
@@ -1397,12 +1397,12 @@ NResult NetDriverRDMAWithOob::SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHc
         if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalSglReq.upCtxData, NN_NO16, sglCtx->upCtx, sglCtx->upCtxSize) !=
             NN_OK)) {
             NN_LOG_ERROR("Failed to copy request to sglCtx");
-            return NN_INVALID_PARAM;
+            result = NN_INVALID_PARAM;
         }
     }
     worker->ReturnSglContextInfo(sglCtx);
     // called to callback
-    if (NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
+    if (result == NN_OK && NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
         NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName << " return non-zero for sgl type " <<
             ctx->opType << " done");
     }
@@ -1414,13 +1414,13 @@ NResult NetDriverRDMAWithOob::SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHc
     }
 
     worker->ReturnOpContextInfo(ctx);
-    return NN_OK;
+    return result;
 }
 
 NResult NetDriverRDMAWithOob::SendSglInlineFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
     RDMAWorker *worker)
 {
-    int result = 0;
+    NResult result = 0;
 
     netCtx.mResult = RDMAOpContextInfo::GetNResult(ctx->opResultType);
     netCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->qp->UpContext()));
@@ -1436,19 +1436,19 @@ NResult NetDriverRDMAWithOob::SendSglInlineFinishedCB(RDMAOpContextInfo *ctx, UB
         netCtx.mOriginalReq.upCtxSize <= sizeof(RDMASendReadWriteRequest::upCtxData)) {
         if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalReq.upCtxData, NN_NO16, ctx->upCtx, ctx->upCtxSize) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
-            return NN_INVALID_PARAM;
+            result = NN_INVALID_PARAM;
         }
     }
     // return context to worker, and ctx is set null, not usable anymore
     worker->ReturnOpContextInfo(ctx);
     // call to callback
-    if (NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
+    if (result == NN_OK && NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
         NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName <<
             " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
             netCtx.mHeader.dataLength << "]");
     }
     netCtx.mEp.Set(nullptr);
-    return NN_OK;
+    return result;
 }
 
 int NetDriverRDMAWithOob::SendFinishedCB(RDMAOpContextInfo *ctx)
@@ -1481,6 +1481,41 @@ void NetDriverRDMAWithOob::ProcessErrorSendFinished(RDMAOpContextInfo *ctx)
     SendFinishedCB(ctx);
 }
 
+int NetDriverRDMAWithOob::RWOneSideDoneCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, RDMAWorker *worker)
+{
+    int result = 0;
+    // set context
+    netCtx.mResult = RDMAOpContextInfo::GetNResult(ctx->opResultType);
+    netCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->qp->UpContext()));
+    netCtx.mOpType =
+        ctx->opType == RDMAOpContextInfo::WRITE ? UBSHcomNetRequestContext::NN_WRITTEN :
+        UBSHcomNetRequestContext::NN_READ;
+    netCtx.mHeader.Invalid();
+    netCtx.mMessage = nullptr;
+    netCtx.mOriginalReq.lAddress = ctx->mrMemAddr;
+    netCtx.mOriginalReq.lKey = ctx->lKey;
+    netCtx.mOriginalReq.size = ctx->dataSize;
+    netCtx.mOriginalReq.upCtxSize = ctx->upCtxSize;
+
+    if (netCtx.mOriginalReq.upCtxSize > 0 &&
+        netCtx.mOriginalReq.upCtxSize <= sizeof(RDMASendReadWriteRequest::upCtxData)) {
+        if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalReq.upCtxData, NN_NO16, ctx->upCtx, ctx->upCtxSize) != NN_OK)) {
+            NN_LOG_ERROR("Failed to copy req to sglCtx");
+            result = NN_INVALID_PARAM;
+        }
+    }
+
+    // return context to worker and ctx is not usable anymore
+    worker->ReturnOpContextInfo(ctx);
+
+    // called to callback
+    if (result == NN_OK && NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
+        NN_LOG_ERROR("Call oneSideDoneHandler in Driver " << mName << " done");
+    }
+    netCtx.mEp.Set(nullptr);
+    return result;
+}
+
 int NetDriverRDMAWithOob::OneSideDoneCB(RDMAOpContextInfo *ctx)
 {
     int result = 0;
@@ -1488,35 +1523,7 @@ int NetDriverRDMAWithOob::OneSideDoneCB(RDMAOpContextInfo *ctx)
     auto worker = reinterpret_cast<RDMAWorker *>(ctx->qp->UpContext1());
     ctx->qp->ReturnOneSideWr();
     if (ctx->opType == RDMAOpContextInfo::WRITE || ctx->opType == RDMAOpContextInfo::READ) {
-        // set context
-        netCtx.mResult = RDMAOpContextInfo::GetNResult(ctx->opResultType);
-        netCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->qp->UpContext()));
-        netCtx.mOpType =
-            ctx->opType == RDMAOpContextInfo::WRITE ? UBSHcomNetRequestContext::NN_WRITTEN :
-            UBSHcomNetRequestContext::NN_READ;
-        netCtx.mHeader.Invalid();
-        netCtx.mMessage = nullptr;
-        netCtx.mOriginalReq.lAddress = ctx->mrMemAddr;
-        netCtx.mOriginalReq.lKey = ctx->lKey;
-        netCtx.mOriginalReq.size = ctx->dataSize;
-        netCtx.mOriginalReq.upCtxSize = ctx->upCtxSize;
-
-        if (netCtx.mOriginalReq.upCtxSize > 0 &&
-            netCtx.mOriginalReq.upCtxSize <= sizeof(RDMASendReadWriteRequest::upCtxData)) {
-            if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalReq.upCtxData, NN_NO16, ctx->upCtx, ctx->upCtxSize) != NN_OK)) {
-                NN_LOG_ERROR("Failed to copy req to sglCtx");
-                return NN_INVALID_PARAM;
-            }
-        }
-
-        // return context to worker and ctx is not usable anymore
-        worker->ReturnOpContextInfo(ctx);
-
-        // called to callback
-        if (NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
-            NN_LOG_ERROR("Call oneSideDoneHandler in Driver " << mName << " done");
-        }
-        netCtx.mEp.Set(nullptr);
+        return RWOneSideDoneCB(ctx, netCtx, worker);
     } else if (ctx->opType == RDMAOpContextInfo::SGL_WRITE || ctx->opType == RDMAOpContextInfo::SGL_READ) {
         auto sgeCtx = reinterpret_cast<RDMASgeCtxInfo *>(ctx->upCtx);
         auto sglCtx = sgeCtx->ctx;
@@ -1537,7 +1544,7 @@ int NetDriverRDMAWithOob::OneSideDoneCB(RDMAOpContextInfo *ctx)
         if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglCtx->iov,
             sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
-            return NN_INVALID_PARAM;
+            result = NN_INVALID_PARAM;
         }
         netCtx.mOriginalSglReq.iov = netCtx.iov;
         netCtx.mOriginalSglReq.iovCount = sglCtx->iovCount;
@@ -1547,12 +1554,12 @@ int NetDriverRDMAWithOob::OneSideDoneCB(RDMAOpContextInfo *ctx)
             if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalSglReq.upCtxData, NN_NO16, sglCtx->upCtx, sglCtx->upCtxSize) !=
                 NN_OK)) {
                 NN_LOG_ERROR("Failed to copy req to sglCtx");
-                return NN_INVALID_PARAM;
+                result = NN_INVALID_PARAM;
             }
         }
         worker->ReturnSglContextInfo(sglCtx);
         // called to callback
-        if (NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
+        if (result == NN_OK && NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
             NN_LOG_ERROR("Call oneSideDoneHandler in Driver " << mName << " return non-zero for sgl type " <<
                 ctx->opType << " done");
         }
@@ -1569,7 +1576,7 @@ int NetDriverRDMAWithOob::OneSideDoneCB(RDMAOpContextInfo *ctx)
         NN_LOG_WARN("Unreachable path");
     }
 
-    return NN_OK;
+    return result;
 }
 
 void NetDriverRDMAWithOob::ProcessErrorOneSideDone(RDMAOpContextInfo *ctx)

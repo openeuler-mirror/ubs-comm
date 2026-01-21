@@ -205,6 +205,8 @@ public:
     virtual int32_t GetRemoteUdsIdInfo(UBSHcomNetUdsIdInfo &idInfo) = 0;
     virtual int32_t SendFds(int fds[], uint32_t len) = 0;
     virtual int32_t ReceiveFds(int fds[], uint32_t len, int32_t timeoutSec) = 0;
+    virtual void SetUpCtx(uint64_t ctx) = 0;
+    virtual uint64_t GetUpCtx() = 0;
 
     virtual ~UBSHcomChannel() {}
     DEFINE_RDMA_REF_COUNT_FUNCTIONS

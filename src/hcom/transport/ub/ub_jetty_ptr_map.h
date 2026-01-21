@@ -12,6 +12,7 @@
 
 #ifndef HCOM_UB_JETTY_PTR_MAP_H
 #define HCOM_UB_JETTY_PTR_MAP_H
+#ifdef UB_BUILD_ENABLED
 
 #include "ub_common.h"
 #include "ub_urma_wrapper_jetty.h"
@@ -103,3 +104,4 @@ private:
 } // namespace ock
 
 #endif  // HCOM_UB_JETTY_PTR_MAP_H
+#endif

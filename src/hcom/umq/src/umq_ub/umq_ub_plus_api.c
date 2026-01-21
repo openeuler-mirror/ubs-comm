@@ -79,6 +79,11 @@ static int umq_tp_ub_plus_unbind(uint64_t umqh_tp)
     return umq_ub_unbind_impl(umqh_tp);
 }
 
+static int umq_tp_ub_plus_state_set(uint64_t umqh_tp, umq_state_t state)
+{
+    return umq_ub_state_set_impl(umqh_tp, state);
+}
+
 static umq_state_t umq_tp_ub_plus_state_get(uint64_t umqh_tp)
 {
     return umq_ub_state_get_impl(umqh_tp);
@@ -183,6 +188,16 @@ static int umq_tp_ub_plus_mempool_state_refresh(uint64_t umqh_tp, uint32_t mempo
     return umq_ub_mempool_state_refresh_impl(umqh_tp, mempool_id);
 }
 
+static int umq_tp_ub_plus_dev_info_get(char *dev_name, umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info)
+{
+    return umq_ub_dev_info_get_impl(dev_name, umq_trans_mode, umq_dev_info);
+}
+
+static int umq_tp_ub_plus_cfg_get(uint64_t umqh_tp, umq_cfg_get_t *cfg)
+{
+    return umq_ub_cfg_get_impl(umqh_tp, cfg);
+}
+
 static umq_ops_t g_umq_ub_plus_ops = {
     .mode = UMQ_TRANS_MODE_UB_PLUS,
     // control plane api
@@ -193,6 +208,7 @@ static umq_ops_t g_umq_ub_plus_ops = {
     .umq_tp_bind_info_get = umq_tp_ub_plus_bind_info_get,
     .umq_tp_bind = umq_tp_ub_plus_bind,
     .umq_tp_unbind = umq_tp_ub_plus_unbind,
+    .umq_tp_state_set = umq_tp_ub_plus_state_set,
     .umq_tp_state_get = umq_tp_ub_plus_state_get,
     .umq_tp_log_config_set = umq_tp_ub_plus_log_config_set,
     .umq_tp_log_config_reset = umq_tp_ub_plus_log_config_reset,
@@ -202,6 +218,8 @@ static umq_ops_t g_umq_ub_plus_ops = {
     .umq_tp_get_topo = umq_tp_ub_plus_get_route_list_impl,
     .umq_tp_mempool_state_get = umq_tp_ub_plus_mempool_state_get,
     .umq_tp_mempool_state_refresh = umq_tp_ub_plus_mempool_state_refresh,
+    .umq_tp_dev_info_get = umq_tp_ub_plus_dev_info_get,
+    .umq_tp_cfg_get = umq_tp_ub_plus_cfg_get,
 
     // datapath plane api
     .umq_tp_buf_alloc = umq_tp_ub_plus_buf_alloc,

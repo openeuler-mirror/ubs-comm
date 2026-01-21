@@ -12,7 +12,7 @@
 
 namespace hcom {
 namespace perftest {
-constexpr uint32_t MAX_MESSAGE_SIZE = 1048576; // 1MB = 2^20B
+constexpr uint32_t MAX_MESSAGE_SIZE = 2097152; // 2MB = 2^21B
 // option中的mrSendReceiveSegSize要配置为 MAX_MESSAGE_SIZE + HCOM_HEADER_SIZE
 // sizeof(UBSHcomNetTransHeader) = 32
 constexpr uint32_t HCOM_HEADER_SIZE = 1024;     // 需要内存对齐

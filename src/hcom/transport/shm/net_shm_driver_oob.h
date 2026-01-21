@@ -89,6 +89,7 @@ protected:
     NResult HandleNewRequest(ShmOpContextInfo &ctx, uint32_t immData);
     NResult HandleReqPosted(ShmOpCompInfo &ctx);
     NResult OneSideDone(ShmOpContextInfo *ctx);
+    NResult RWOneSideDone(ShmOpContextInfo *ctxIn, UBSHcomNetRequestContext &netCtx, ShmWorker *worker);
 
     void HandleChanelKeeperMsg(const ShmChKeeperMsgHeader &header, const ShmChannelPtr &channelPtr);
     void ProcessEpError(const ShmChannelPtr &channelPtr);

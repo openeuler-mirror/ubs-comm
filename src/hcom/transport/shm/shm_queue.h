@@ -287,7 +287,7 @@ public:
             } else {
                 clock_gettime(CLOCK_REALTIME, &semTimeout);
                 semTimeout.tv_nsec +=
-                    static_cast<long>(static_cast<long>(static_cast<uint32_t>(timeoutInMs)) * NN_NO1000000);
+                    static_cast<long long>(static_cast<long long>(static_cast<uint32_t>(timeoutInMs)) * NN_NO1000000);
                 if (semTimeout.tv_nsec >= static_cast<long>(NN_NO1000000000)) {
                     semTimeout.tv_sec += semTimeout.tv_nsec / NN_NO1000000000;
                     semTimeout.tv_nsec %= NN_NO1000000000;

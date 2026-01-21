@@ -144,6 +144,7 @@ static ALWAYS_INLINE uint64_t round_up(uint64_t size, uint64_t align)
     return (size + align - 1) & ~(align - 1);
 }
 
+/* input align equal to 2^x */
 static ALWAYS_INLINE void *floor_to_align(void *ptr, uint64_t align)
 {
     return (void *)((uint64_t)(uintptr_t)ptr & ~(align - 1));
@@ -353,11 +354,11 @@ static ALWAYS_INLINE void umq_qbuf_alloc_nodata(local_block_pool_t *local_pool, 
 }
 
 static ALWAYS_INLINE void umq_qbuf_alloc_data_with_split(local_block_pool_t *local_pool, uint32_t request_size,
-    uint32_t num, umq_buf_list_t *list, int32_t headroom_size)
+    uint32_t num, umq_buf_list_t *list, uint32_t headroom_size)
 {
     uint32_t cnt = 0;
     umq_buf_t *cur_node;
-    int32_t headroom_size_temp = headroom_size;
+    uint32_t headroom_size_temp = headroom_size;
     uint32_t total_data_size = request_size;
     uint32_t remaining_size = request_size;
     uint32_t max_data_capacity = umq_buf_size_small() - headroom_size_temp;
@@ -399,11 +400,11 @@ static ALWAYS_INLINE void umq_qbuf_alloc_data_with_split(local_block_pool_t *loc
 }
 
 static ALWAYS_INLINE void umq_qbuf_alloc_data_with_combine(local_block_pool_t *local_pool, uint32_t request_size,
-    uint32_t num, umq_buf_list_t *list, int32_t headroom_size)
+    uint32_t num, umq_buf_list_t *list, uint32_t headroom_size)
 {
     uint32_t cnt = 0;
     umq_buf_t *cur_node;
-    int32_t headroom_size_temp = headroom_size;
+    uint32_t headroom_size_temp = headroom_size;
     uint32_t total_data_size = request_size;
     uint32_t remaining_size = request_size;
     uint32_t max_data_size = umq_buf_size_small() - sizeof(umq_buf_t);
@@ -518,6 +519,20 @@ static ALWAYS_INLINE int headroom_reset(umq_buf_t *qbuf, uint16_t headroom_size,
         return headroom_reset_with_split(qbuf, headroom_size, block_size);
     }
     return headroom_reset_with_combine(qbuf, headroom_size, block_size);
+}
+
+static ALWAYS_INLINE void umq_qbuf_block_pool_init(global_block_pool_t *block_pool)
+{
+    QBUF_LIST_INIT(&block_pool->head_with_data);
+    QBUF_LIST_INIT(&block_pool->head_without_data);
+    block_pool->buf_cnt_with_data = 0;
+    block_pool->buf_cnt_without_data = 0;
+    (void)pthread_mutex_init(&block_pool->global_mutex, NULL);
+}
+
+static ALWAYS_INLINE void umq_qbuf_block_pool_uninit(global_block_pool_t *block_pool)
+{
+    pthread_mutex_destroy(&block_pool->global_mutex);
 }
 
 uint32_t umq_qbuf_headroom_get(void);

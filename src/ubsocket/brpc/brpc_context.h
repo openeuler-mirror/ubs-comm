@@ -222,9 +222,9 @@ class Context : public Brpc::ConfigSettings {
 
         if (GetDevIpStr() == nullptr && GetDevNameStr() == nullptr) {
             umq_dev_info_t umq_dev_info = {};
-            char dev_name[] = "bonding_dev_0";
-            int ret = umq_dev_info_get(dev_name, UMQ_TRANS_MODE_UB, &umq_dev_info);
-            if (ret != 0) {
+            char devName[] = "bonding_dev_0";
+            int infoGetRet = umq_dev_info_get(devName, UMQ_TRANS_MODE_UB, &umq_dev_info);
+            if (infoGetRet != 0) {
                 RPC_ADPT_VLOG_ERR("Failed to get bonding device information\n");
                 ResetBrpcAllocator();
                 SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);

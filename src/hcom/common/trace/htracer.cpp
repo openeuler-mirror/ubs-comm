@@ -65,6 +65,9 @@ int32_t HTracerInit(const std::string &serverName)
     auto ins = TraceManager::Instance();
     if (ins == nullptr) {
         NN_LOG_WARN("[HTRACER] init trace manager instance failed");
+        g_traceService->ShutDown();
+        delete g_traceService;
+        g_traceService = nullptr;
         return SER_ERROR;
     }
     g_htraceInit = true;

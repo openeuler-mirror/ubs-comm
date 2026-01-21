@@ -13,6 +13,7 @@
 
 #define HUGE_QBUF_POOL_NUM_MAX (64)
 #define HUGE_QBUF_POOL_IDX_SHIFT (1)
+#define HUGE_QBUF_HEAD_POWER_OF_TWO (7)
 
 typedef struct huge_pool_info {
     void *data_buffer;      // start address(this address must be 8K-aligned) of the data area.
@@ -46,29 +47,7 @@ typedef struct huge_pool_ctx {
     huge_pool_t pool[HUGE_QBUF_POOL_SIZE_TYPE_MAX];
 } huge_pool_ctx_t;
 
-static huge_pool_ctx_t g_huge_pool_ctx = {
-    .pool = {
-        [HUGE_QBUF_POOL_SIZE_TYPE_MID] = {
-            .pool_idx_shift = HUGE_QBUF_POOL_IDX_SHIFT,
-            .block_pool = {
-                .global_mutex = PTHREAD_MUTEX_INITIALIZER,
-            },
-        },
-        [HUGE_QBUF_POOL_SIZE_TYPE_BIG] = {
-            .pool_idx_shift = HUGE_QBUF_POOL_IDX_SHIFT + HUGE_QBUF_POOL_NUM_MAX,
-            .block_pool = {
-                .global_mutex = PTHREAD_MUTEX_INITIALIZER,
-            },
-        },
-        [HUGE_QBUF_POOL_SIZE_TYPE_HUGE] = {
-            .pool_idx_shift = HUGE_QBUF_POOL_IDX_SHIFT +
-                (HUGE_QBUF_POOL_SIZE_TYPE_HUGE * HUGE_QBUF_POOL_NUM_MAX),
-            .block_pool = {
-                .global_mutex = PTHREAD_MUTEX_INITIALIZER,
-            },
-        },
-    }
-};
+static huge_pool_ctx_t g_huge_pool_ctx = {0};
 
 static uint32_t (*g_huge_pool_size[HUGE_QBUF_POOL_SIZE_TYPE_MAX])(void) = {
     umq_buf_size_middle,
@@ -179,7 +158,8 @@ static int do_umq_huge_qbuf_config_init(huge_qbuf_pool_cfg_t *cfg)
         return -UMQ_ERR_EEXIST;
     }
 
-    QBUF_LIST_INIT(&pool->block_pool.head_with_data);
+    umq_qbuf_block_pool_init(&pool->block_pool);
+
     pool->total_size = cfg->total_size;
     pool->data_size = g_huge_pool_size[cfg->type]();
     pool->memory_init_callback = cfg->memory_init_callback;
@@ -198,6 +178,10 @@ static int do_umq_huge_qbuf_config_init(huge_qbuf_pool_cfg_t *cfg)
         pool->total_block_num = blk_num;
     }
 
+    pool->pool_idx = 0;
+    pool->pool_idx_shift = HUGE_QBUF_POOL_IDX_SHIFT +
+        (cfg->type - HUGE_QBUF_POOL_SIZE_TYPE_MID) * HUGE_QBUF_POOL_NUM_MAX;
+
     pool->inited = true;
 
     return UMQ_SUCCESS;
@@ -214,10 +198,14 @@ void umq_huge_qbuf_pool_uninit(void)
         for (uint32_t j = 0; j < pool->pool_idx; j++) {
             huge_pool_info_t *pool_info = &pool->pool_info[j];
             pool->memory_uninit_callback(pool->pool_idx_shift + j, pool_info->data_buffer);
+            pool_info->imported = false;
+            pool_info->data_buffer = NULL;
+            pool_info->header_buffer = NULL;
         }
+        umq_huge_qbuf_config_uninit(i);
     }
 
-    (void)memset(&g_huge_pool_ctx, 0, sizeof(huge_pool_ctx_t));
+    g_huge_pool_ctx.inited = false;
 }
 
 int umq_huge_qbuf_config_init(huge_qbuf_pool_cfg_t *cfg)
@@ -247,27 +235,48 @@ int umq_huge_qbuf_config_init(huge_qbuf_pool_cfg_t *cfg)
         return ret;
     }
 
-    g_huge_pool_ctx.mode = cfg->mode;
-    g_huge_pool_ctx.headroom_size = cfg->headroom_size;
-    g_huge_pool_ctx.inited = true;
-
     return ret;
 }
 
+void umq_huge_qbuf_pool_ctx_common_cfg_set(huge_qbuf_pool_cfg_t *cfg)
+{
+    g_huge_pool_ctx.mode = cfg->mode;
+    g_huge_pool_ctx.headroom_size = cfg->headroom_size;
+    g_huge_pool_ctx.inited = true;
+}
+
+void umq_huge_qbuf_config_uninit(huge_qbuf_pool_size_type_t type)
+{
+    huge_pool_t *pool = &g_huge_pool_ctx.pool[type];
+    umq_qbuf_block_pool_uninit(&pool->block_pool);
+    pool->inited = false;
+}
+
 static ALWAYS_INLINE void umq_huge_qbuf_alloc_data_with_split(huge_pool_t *pool, uint32_t request_size,
-    uint32_t num, umq_buf_list_t *list, int32_t headroom_size)
+    uint32_t num, umq_buf_list_t *list, uint32_t headroom_size)
 {
     uint32_t cnt = 0;
     umq_buf_t *cur_node;
     uint32_t blk_size = pool->block_size;
-    int32_t headroom_size_temp = headroom_size;
+    uint32_t headroom_size_temp = headroom_size;
     uint32_t total_data_size = request_size;
     uint32_t remaining_size = request_size;
     uint32_t max_data_capacity = blk_size - headroom_size_temp;
     bool first_fragment = true;
+    uint32_t last_mempool_id = UINT32_MAX;
+    huge_pool_info_t *pool_info = NULL;
+    uint32_t pool_idx = 0;
 
     QBUF_LIST_FOR_EACH(cur_node, &pool->block_pool.head_with_data) {
-        cur_node->buf_data = floor_to_align(cur_node->buf_data, blk_size) + headroom_size_temp;
+        // when the current mempool_id is equal  to last_mempool_id, there is no need to calculate pool_info
+        if (last_mempool_id != cur_node->mempool_id) {
+            last_mempool_id = cur_node->mempool_id;
+            pool_idx = last_mempool_id - pool->pool_idx_shift;
+            pool_info = &pool->pool_info[pool_idx];
+        }
+        uint64_t index = ((uint64_t)(uintptr_t)cur_node - (uint64_t)(uintptr_t)pool_info->header_buffer) >>
+                         HUGE_QBUF_HEAD_POWER_OF_TWO;
+        cur_node->buf_data = pool_info->data_buffer + index * blk_size + headroom_size_temp;
         cur_node->buf_size = blk_size + (uint32_t)sizeof(umq_buf_t);
         cur_node->headroom_size = headroom_size_temp;
         cur_node->total_data_size = total_data_size;
@@ -302,12 +311,12 @@ static ALWAYS_INLINE void umq_huge_qbuf_alloc_data_with_split(huge_pool_t *pool,
 }
 
 static ALWAYS_INLINE void umq_huge_qbuf_alloc_data_with_combine(huge_pool_t *pool, uint32_t request_size,
-    uint32_t num, umq_buf_list_t *list, int32_t headroom_size)
+    uint32_t num, umq_buf_list_t *list, uint32_t headroom_size)
 {
     uint32_t cnt = 0;
     umq_buf_t *cur_node;
     uint32_t blk_size = pool->block_size;
-    int32_t headroom_size_temp = headroom_size;
+    uint32_t headroom_size_temp = headroom_size;
     uint32_t total_data_size = request_size;
     uint32_t remaining_size = request_size;
     uint32_t max_data_size = blk_size - sizeof(umq_buf_t);
@@ -365,12 +374,12 @@ int umq_huge_qbuf_alloc(huge_qbuf_pool_size_type_t type, uint32_t request_size, 
     uint32_t headroom_size =
         (option != NULL && (option->flag & UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE) != 0) ?
             option->headroom_size : g_huge_pool_ctx.headroom_size;
-    uint32_t align_size = umq_huge_qbuf_get_size_by_type(type);
+    uint64_t align_size = umq_huge_qbuf_get_size_by_type(type);
 
     if (g_huge_pool_ctx.mode == UMQ_BUF_SPLIT) {
         actual_buf_count = num * ((request_size + headroom_size + align_size - 1) / (align_size));
     } else {
-        align_size -= sizeof(umq_buf_t);
+        align_size -= (uint64_t)sizeof(umq_buf_t);
         actual_buf_count = num * ((request_size + headroom_size + align_size - 1) / (align_size));
     }
 

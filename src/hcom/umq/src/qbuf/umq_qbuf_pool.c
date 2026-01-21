@@ -179,15 +179,13 @@ int umq_qbuf_pool_init(qbuf_pool_cfg_t *cfg)
         return -UMQ_ERR_EEXIST;
     }
 
-    (void)pthread_mutex_init(&g_qbuf_pool.block_pool.global_mutex, NULL);
-    QBUF_LIST_INIT(&g_qbuf_pool.block_pool.head_with_data);
+    umq_qbuf_block_pool_init(&g_qbuf_pool.block_pool);
     g_qbuf_pool.mode = cfg->mode;
     g_qbuf_pool.total_size = cfg->total_size;
     g_qbuf_pool.headroom_size = cfg->headroom_size;
     g_qbuf_pool.data_size = cfg->data_size;
 
     if (cfg->mode == UMQ_BUF_SPLIT) {
-        QBUF_LIST_INIT(&g_qbuf_pool.block_pool.head_without_data);
         uint32_t blk_size = umq_buf_size_small();
         uint64_t blk_num = cfg->total_size /
             ((UMQ_EMPTY_HEADER_COEFFICIENT + 1) * (uint32_t)sizeof(umq_buf_t) + blk_size);
@@ -253,6 +251,7 @@ int umq_qbuf_pool_init(qbuf_pool_cfg_t *cfg)
         g_qbuf_pool.block_pool.buf_cnt_with_data = blk_num;
         g_qbuf_pool.block_pool.buf_cnt_without_data = 0;
     } else {
+        umq_qbuf_block_pool_uninit(&g_qbuf_pool.block_pool);
         UMQ_VLOG_ERR("buf mode: %d is invalid\n", cfg->mode);
         return -UMQ_ERR_EINVAL;
     }
@@ -267,6 +266,7 @@ void umq_qbuf_pool_uninit(void)
         return;
     }
     release_thread_cache(0);
+    umq_qbuf_block_pool_uninit(&g_qbuf_pool.block_pool);
     memset(&g_qbuf_pool, 0, sizeof(qbuf_pool_t));
 }
 
@@ -377,12 +377,14 @@ umq_buf_t *umq_qbuf_data_to_head(void *data)
 
     if (g_qbuf_pool.mode == UMQ_BUF_SPLIT) {
         if (data >= g_qbuf_pool.data_buffer && data < g_qbuf_pool.header_buffer) {
-            uint32_t id = (uint32_t)(data - g_qbuf_pool.data_buffer) / g_qbuf_pool.block_size;
+            uint64_t id =
+                ((uint64_t)(uintptr_t)data - (uint64_t)(uintptr_t)g_qbuf_pool.data_buffer) / g_qbuf_pool.block_size;
             return (umq_buf_t *)(g_qbuf_pool.header_buffer + id * sizeof(umq_buf_t));
         }
     } else {
         if (data >= g_qbuf_pool.data_buffer && data < g_qbuf_pool.data_buffer + g_qbuf_pool.total_size) {
-            uint32_t id = (uint32_t)(data - g_qbuf_pool.data_buffer) / g_qbuf_pool.block_size;
+            uint64_t id =
+                ((uint64_t)(uintptr_t)data - (uint64_t)(uintptr_t)g_qbuf_pool.data_buffer) / g_qbuf_pool.block_size;
             return (umq_buf_t *)(g_qbuf_pool.data_buffer + id * g_qbuf_pool.block_size);
         }
     }
