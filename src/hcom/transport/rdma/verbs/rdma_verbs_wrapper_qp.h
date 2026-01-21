@@ -22,7 +22,6 @@
 
 namespace ock {
 namespace hcom {
-
 struct RDMAQpExchangeInfo {
     uint32_t lid = 0;
     uint32_t qpn = 0;
@@ -112,6 +111,39 @@ public:
         auto result = ibv_post_recv(mQP, &wr, &badWR);
         if (NN_UNLIKELY(result != 0)) {
             NN_LOG_ERROR("Failed to post receive request to qp " << mName << ", result " << result);
+            return RR_QP_POST_RECEIVE_FAILED;
+        }
+        return RR_OK;
+    }
+
+    inline RResult BatchPostReceive(RDMAOpContextInfo *ctx, uint16_t batchSize, uint32_t size)
+    {
+        if (NN_UNLIKELY(mQP == nullptr || batchSize <= 0)) {
+            return RR_QP_NOT_INITIALIZED;
+        }
+
+        std::vector<ibv_sge> sges(batchSize);
+        std::vector<ibv_recv_wr> wrs(batchSize);
+
+        for (int i = 0; i < batchSize; ++i) {
+            auto delayCtx = ctx->qp->mDelayList[i];
+            ctx->qp->AddOpCtxInfo(delayCtx);
+
+            sges[i].addr = delayCtx->mrMemAddr;
+            sges[i].length = size;
+            sges[i].lkey = static_cast<uint32_t>(ctx->lKey);
+
+            wrs[i].wr_id = reinterpret_cast<uint64_t>(delayCtx);
+            wrs[i].sg_list = &sges[i];
+            wrs[i].num_sge = 1;
+            wrs[i].next = (i == batchSize - 1) ? nullptr : &wrs[i + 1];
+        }
+
+        struct ibv_recv_wr *bad_wr;
+        int result = ibv_post_recv(mQP, &wrs[0], &bad_wr);
+        if (NN_UNLIKELY(result != 0)) {
+            NN_LOG_ERROR("BatchPostReceive failed on qp " << mName << ", result=" << result << " (errno: " <<
+                strerror(result) << ")");
             return RR_QP_POST_RECEIVE_FAILED;
         }
         return RR_OK;
@@ -579,6 +611,9 @@ private:
     int32_t mPostSendMaxWr = NN_NO64;
     uint32_t mPostSendMaxSize = NN_NO1024;
     int32_t mPostSendRef = NN_NO64;
+    // delay batch return wr
+    std::atomic<uint16_t> mDelayNum { 0 };
+    struct RDMAOpContextInfo *mDelayList[QP_MAX_BATCH_RETURN_WR_SIZE];
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 
     static uint32_t G_INDEX;

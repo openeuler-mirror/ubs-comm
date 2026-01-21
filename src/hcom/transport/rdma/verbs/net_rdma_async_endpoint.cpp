@@ -416,6 +416,34 @@ NResult NetAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uin
     return result;
 }
 
+NResult NetAsyncEndpoint::PostSendRawNoCpy(const UBSHcomNetTransRequest &request, uint32_t seqNo)
+{
+    NResult result = NN_OK;
+    if (NN_UNLIKELY((result = PostSendRawValidation(mState, mId, mDriver, seqNo, request, mSegSize,
+        mIsNeedEncrypt, mAes)) != NN_OK)) {
+        NN_LOG_ERROR("RDMA failed to async post send raw as validate fail");
+        return result;
+    }
+
+    auto worker = reinterpret_cast<RDMAWorker *>(mEp->Qp()->UpContext1());
+    auto sendRawAsyncFlag = true;
+    uint64_t finishTime = GetFinishTime();
+    do {
+        result = worker->PostSendRawNoCpy(mEp->Qp(), request, seqNo);
+        if (NN_LIKELY(result == RR_OK)) {
+            return NN_OK;
+        } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
+            usleep(NN_NO128);
+            continue;
+        }
+        // no retry result or timeout = 0
+        sendRawAsyncFlag = false;
+    } while (sendRawAsyncFlag);
+
+    NN_LOG_ERROR("Failed to post send raw request, result " << result);
+    return result;
+}
+
 NResult NetAsyncEndpoint::PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo)
 {
     size_t size = 0;

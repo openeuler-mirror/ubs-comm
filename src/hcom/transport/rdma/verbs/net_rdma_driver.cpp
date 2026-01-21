@@ -115,10 +115,10 @@ NResult NetDriverRDMA::ValidateOptions()
         return NN_INVALID_PARAM;
     }
 
-    if (mOptions.prePostReceiveSizePerQP > NN_NO1024) {
+    if (mOptions.prePostReceiveSizePerQP > NN_NO2048) {
         NN_LOG_WARN("Invalid option prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP <<
-            ", should be <= " << NN_NO1024 << ", set to " << NN_NO1024);
-        mOptions.prePostReceiveSizePerQP = NN_NO1024;
+            ", should be <= " << NN_NO2048 << ", set to " << NN_NO2048);
+        mOptions.prePostReceiveSizePerQP = NN_NO2048;
     }
 
     if (mOptions.maxPostSendCountPerQP == 0) {
@@ -137,6 +137,12 @@ NResult NetDriverRDMA::ValidateOptions()
         NN_LOG_WARN("Invalid option maxPostSendCountPerQP " << mOptions.maxPostSendCountPerQP <<
             ", more than prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP << " , change to equal");
         mOptions.maxPostSendCountPerQP = mOptions.prePostReceiveSizePerQP;
+    }
+
+    if (mOptions.qpBatchRePostSize == 0 || mOptions.qpBatchRePostSize > QP_MAX_BATCH_RETURN_WR_SIZE) {
+        NN_LOG_ERROR("Invalid option qpBatchRePostSize " << mOptions.qpBatchRePostSize
+        << ", should not be zero or more than " << QP_MAX_BATCH_RETURN_WR_SIZE);
+        return NN_INVALID_PARAM;
     }
 
     if (NN_UNLIKELY(ValidateAndParseOobPortRange(mOptions.oobPortRange) != NN_OK)) {

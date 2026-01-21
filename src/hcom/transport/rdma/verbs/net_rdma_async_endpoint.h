@@ -63,6 +63,7 @@ public:
      * @brief raw data to peer without opcode
      */
     NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNO) override;
+    NResult PostSendRawNoCpy(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
     NResult PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo) override;
 
     NResult PostRead(const UBSHcomNetTransSglRequest &request) override;

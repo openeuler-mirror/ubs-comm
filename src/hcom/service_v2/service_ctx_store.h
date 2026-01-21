@@ -188,6 +188,100 @@ public:
     }
 
     /*
+     * @brief Store a context pointer at a given seqNo (caller already knows the seqNo)
+     *
+     * @param ctx     [in] context pointer to store (must not be null)
+     * @param seqNo   [in] pre-assigned sequence number
+     *
+     * @return SER_OK if stored successfully
+     *         SER_INVALID_PARAM if ctx is null or seqNo is invalid
+     *         SER_STORE_SEQ_DUP if the slot is already occupied (flat) or key exists (hash)
+     */
+    template <typename T> NResult PutBySeqNo(T* ctx, uint32_t seqNo)
+    {
+        if (NN_UNLIKELY(ctx == nullptr)) {
+            return SER_INVALID_PARAM;
+        }
+
+        HcomSeqNo sn(0);
+        sn.wholeSeq = seqNo;
+
+        auto value = reinterpret_cast<uint64_t>(ctx);
+
+        if (NN_LIKELY(sn.fromFlat == 1)) {
+            // Flat path: must fit in capacity
+            if (NN_UNLIKELY(sn.realSeq >= mFlatCapacity)) {
+                return SER_INVALID_PARAM; // seqNo out of flat range
+            }
+
+            // Reconstruct the stored value: version from seqNo, ptr from ctx
+            uint64_t storedValue = (static_cast<uint64_t>(sn.version) << NN_NO58) | (value & PTR_MASK);
+
+            // Try to CAS into the bucket only if it's currently 0 (empty)
+            if (__sync_bool_compare_and_swap(&mFlatCtxBucks[sn.realSeq], 0ULL, storedValue)) {
+                return SER_OK;
+            } else {
+                // Slot already occupied
+                return SER_STORE_SEQ_DUP;
+            }
+        }
+
+        // Hash path
+        uint32_t mapIndex = sn.realSeq % HASH_COUNT;
+        sn.isResp = 0; // ensure consistent key
+
+        std::lock_guard<std::mutex> guard(mHashCtxMutex[mapIndex]);
+        auto result = mHashCtxMap[mapIndex].emplace(sn.wholeSeq, value);
+        return result.second ? SER_OK : SER_STORE_SEQ_DUP;
+    }
+
+    /*
+     * @brief Get the pointer of ctx with seqNo
+     *
+     * @param seqNo        [in] seqNo, which whole got from response and timer
+     * @param out          [out] ctx ptr
+     *
+     * @return SER_OK if successful
+     * SER_INVALID_PARAM if param is invalid
+     * SER_STORE_SEQ_NO_FOUND if seq is not existed, probably removed already
+     *
+     */
+    template <typename T> NResult GetBySeqNo(uint32_t seqNo, T *&out)
+    {
+        HcomSeqNo no(0);
+        no.wholeSeq = seqNo;
+
+        if (NN_LIKELY(no.fromFlat == 1)) {
+            if (NN_UNLIKELY(no.realSeq >= mFlatCapacity)) {
+                return SER_STORE_SEQ_NO_FOUND;
+            }
+
+            uint64_t current = __atomic_load_n(&mFlatCtxBucks[no.realSeq], __ATOMIC_ACQUIRE);
+            uint64_t value = current & PTR_MASK;
+
+            if (NN_UNLIKELY(value == 0)) {
+                return SER_STORE_SEQ_NO_FOUND;
+            }
+
+            out = reinterpret_cast<T *>(value);
+            return SER_OK;
+        }
+
+        // Hash path
+        uint32_t mapIndex = no.realSeq % HASH_COUNT;
+        no.isResp = 0;
+
+        std::lock_guard<std::mutex> guard(mHashCtxMutex[mapIndex]);
+        auto iter = mHashCtxMap[mapIndex].find(no.wholeSeq);
+        if (NN_LIKELY(iter != mHashCtxMap[mapIndex].end())) {
+            out = reinterpret_cast<T *>(iter->second & PTR_MASK);
+            return SER_OK;
+        }
+
+        return SER_STORE_SEQ_NO_FOUND;
+    }
+
+    /*
      * @brief Get the pointer of ctx with seqNo and clean it
      *
      * @param seqNo        [in] seqNo, which whole got from response and timer

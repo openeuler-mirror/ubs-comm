@@ -49,6 +49,9 @@ public:
     DECLARE_OBJ_GC(MultiRailNetChannel);
     DECLARE_OBJ_GC(NetPeriodicManager);
     DECLARE_OBJ_GC(HcomPeriodicManager);
+    DECLARE_OBJ_GC(Publisher);
+    DECLARE_OBJ_GC(MultiCastPeriodicManager);
+    DECLARE_OBJ_GC(MultiCastServiceTimer);
     DECLARE_OBJ_GC(NetMemPoolFixed);
     DECLARE_OBJ_GC(NetServiceCtxStore);
     DECLARE_OBJ_GC(HcomServiceCtxStore);

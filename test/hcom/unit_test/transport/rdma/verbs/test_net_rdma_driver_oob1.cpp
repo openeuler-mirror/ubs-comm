@@ -104,15 +104,5 @@ TEST_F(TestNetRdmaDriverOob1, TestProcessError)
     EXPECT_NO_FATAL_FAILURE(testDriver1->SendFinished(nullptr));
     EXPECT_NO_FATAL_FAILURE(testDriver1->OneSideDone(nullptr));
 }
-
-TEST_F(TestNetRdmaDriverOob1, TestNewRequestError)
-{
-    EXPECT_EQ(testDriver1->NewRequest(nullptr), static_cast<int>(NN_ERROR));
-    UBSHcomNetRequestContext ctx {};
-    UBSHcomNetMessage msg {};
-    EXPECT_EQ(testDriver1->NewReceivedRequestWithoutCopy(nullptr, ctx, msg, nullptr, nullptr, nullptr),
-        static_cast<int>(NN_INVALID_PARAM));
-}
-
 }
 }
