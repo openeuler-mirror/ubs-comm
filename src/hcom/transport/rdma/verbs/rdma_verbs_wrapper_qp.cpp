@@ -174,13 +174,14 @@ RResult RDMAQp::ChangeToReceive(RDMAQpExchangeInfo &exInfo, struct ibv_qp_attr &
 {
     RResult ret = 0;
     static uint8_t tc = GetTrafficClass();
+    static uint8_t rdAtomic = GetMaxRdAtomic();
 
     attr.qp_state = IBV_QPS_RTR;
     // path_mtu should be smaller than the network mtu
     attr.path_mtu = IBV_MTU_4096;
     attr.dest_qp_num = exInfo.qpn;
     attr.rq_psn = 0;
-    attr.max_dest_rd_atomic = 1;
+    attr.max_dest_rd_atomic = rdAtomic;
     attr.min_rnr_timer = QP_MIN_RNR_TIMER;
     attr.ah_attr.is_global = 0;
     attr.ah_attr.dlid = exInfo.lid;
@@ -209,12 +210,13 @@ RResult RDMAQp::ChangeToReceive(RDMAQpExchangeInfo &exInfo, struct ibv_qp_attr &
 
 RResult RDMAQp::ChangeToSend(struct ibv_qp_attr &attr)
 {
+    static uint8_t rdAtomic = GetMaxRdAtomic();
     attr.qp_state = IBV_QPS_RTS;
     attr.timeout = QP_TIMEOUT; // 2^14 * 4.096 us = 67108.86 us
     attr.retry_cnt = QP_RETRY_COUNT;
     attr.rnr_retry = QP_RNR_RETRY; // do later
     attr.sq_psn = 0;
-    attr.max_rd_atomic = 1;
+    attr.max_rd_atomic = rdAtomic;
 
     if (HcomIbv::ModifyQp(mQP, &attr,
         IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN |

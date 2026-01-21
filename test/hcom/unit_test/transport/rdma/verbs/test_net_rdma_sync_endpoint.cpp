@@ -405,6 +405,14 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendRawSglFail)
     NEP->mState.Set(NEP_ESTABLISHED);
 }
 
+TEST_F(TestNetRdmaSyncEndpoint, ComposedEndpointRdmaPostSendLKeyFail)
+{
+    name = "ComposedEndpointRdmaPostSendLKeyFail";
+    request.lKey = UINT64_MAX;
+    int ret = ep->PostSend(request, 0);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
+}
+
 TEST_F(TestNetRdmaSyncEndpoint, ComposedEndpointRdmaPostSendSgl)
 {
     name = "ComposedEndpointRdmaPostSendSgl";
@@ -425,6 +433,15 @@ TEST_F(TestNetRdmaSyncEndpoint, ComposedEndpointRdmaPostSendSglTwo)
     name = "ComposedEndpointRdmaPostSendSglTwo";
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0)).then(returnValue(1));
     sglRequest.upCtxSize = 1;
+    int ret = ep->PostSendSgl(sglRequest, request, 0, false);
+    EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
+}
+
+TEST_F(TestNetRdmaSyncEndpoint, ComposedEndpointRdmaPostSendSglLKeyFail)
+{
+    name = "ComposedEndpointRdmaPostSendSglLKeyFail";
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
+    request.lKey = UINT64_MAX;
     int ret = ep->PostSendSgl(sglRequest, request, 0, false);
     EXPECT_EQ(ret, static_cast<int>(RR_PARAM_INVALID));
 }

@@ -280,7 +280,13 @@ RResult RDMAWorker::Stop()
             }                                                                                                          \
                                                                                                                        \
             auto asyncEp = reinterpret_cast<NetAsyncEndpoint *>(contextInfo->qp->UpContext());                         \
-            asyncEp->UpdateTargetHbTime();                                                                             \
+            if (asyncEp == nullptr) {                                                                                  \
+                NN_LOG_ERROR("Poll cq asyncEp is null in RDMAWorker " << DetailName());                                \
+                continue;                                                                                              \
+            }                                                                                                          \
+            if (wc[i].status == IBV_WC_SUCCESS) {                                                                      \
+                asyncEp->UpdateTargetHbTime();                                                                         \
+            }                                                                                                          \
             switch ((contextInfo)->opType) {                                                                           \
                 case (RDMAOpContextInfo::OpType::SEND):                                                                \
                 case (RDMAOpContextInfo::OpType::SEND_RAW):                                                            \

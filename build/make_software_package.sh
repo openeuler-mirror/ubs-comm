@@ -10,7 +10,8 @@
 # version: 1.0.0
 # change log:
 # ***********************************************************************
-set -eo pipefail
+set -e
+(set -o pipefail) 2>/dev/null && set -o pipefail
 
 readonly HCOM_LOG_TAG="[$(basename ${0})]"
 readonly CURRENT_SCRIPT_DIR=$(cd $(dirname ${0}) && pwd)
@@ -139,8 +140,8 @@ echo "${HCOM_LOG_TAG} generate HCOM version info done"
 tar -czf "${HCOM_PACKAGE_NAME}.tar.gz" "${HCOM_PACKAGE_NAME}" 
 echo "${HCOM_LOG_TAG} make HCOM software package done.(${HCOM_PACKAGE_PATH}/${HCOM_PACKAGE_NAME}.tar.gz)"
 
-# check whether enable build rpm, default is ON.
-if [[ "${HCOM_BUILD_RPM,,}" == "off" ]]; then
+# check whether enable build rpm, default is off.
+if [[ "${HCOM_BUILD_RPM,,}" != "ON" ]]; then
     exit 0
 fi
 
@@ -170,4 +171,4 @@ echo "Multicast ${HCOM_BUILD_MULTICAST}"
 
 # 执行最终的 rpmbuild 命令
 eval "$base_rpmbuild_cmd"
-cp ~/rpmbuild/RPMS/${HCOM_BUILD_OS_ARCH}/ubs-hcom-2.0.0*.rpm "${HCOM_ROOT_DIR}/dist/ubs-hcom-2.0.0-1.${OS}_${HCOM_BUILD_OS_ARCH}.rpm"
+cp ~/rpmbuild/RPMS/${HCOM_BUILD_OS_ARCH}/ubs-comm*.rpm "${HCOM_ROOT_DIR}/dist/"

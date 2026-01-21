@@ -10,7 +10,8 @@
 # version: 1.0.0
 # change log:
 # ***********************************************************************
-set -eo pipefail
+set -e
+(set -o pipefail) 2>/dev/null && set -o pipefail
 
 readonly HCOM_LOG_TAG="[$(basename ${0})]"
 readonly CURRENT_SCRIPT_DIR=$(cd $(dirname ${0}) && pwd)

@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <vector>
 
+#include "securec.h"
 #include "net_pgtable.h"
 
 constexpr size_t AlignDown(size_t n, size_t alignment)
@@ -441,5 +442,192 @@ TEST_F(TestPgTable, CleanUpSuccess)
     mPgTable.Cleanup();
     EXPECT_EQ(mPgTable.mRootEntry.IsPresent(), false);
 }
+
+TEST_F(TestPgTable, TestPgtEntry)
+{
+    PgtEntry entry;
+    EXPECT_EQ(entry.GetRegion(), nullptr);
+    EXPECT_EQ(entry.GetDir(), nullptr);
+    entry.SetFlag(EntryFlags::REGION);
+    entry.ClearFlag(EntryFlags::REGION);
+    EXPECT_EQ(entry.GetRegion(), nullptr);
+
+    PgtRegion region;
+    region.start = 0x600800;
+    region.end = 0x603400;
+    PgtDir dir;
+    dir.count = 0;
+    MOCKER_CPP(&PgtEntry::CheckPtrValueAlign).stubs().will(returnValue(false));
+    EXPECT_EQ(entry.SetRegion(region), false);
+    EXPECT_EQ(entry.SetDir(dir), false);
+}
+
+PgtDir *pgdAllocFailed2(const PgTable &pgtable)
+{
+    return (PgtDir *)0x000001;
+}
+
+void pgdFreeFailed2(const PgTable &pgtable, PgtDir *pgdir)
+{
+    return;
+}
+
+TEST_F(TestPgTable, TestPgtDirAllocFail)
+{
+    PgTable pgTable { pgdAlloc, pgdFree };
+    const uint32_t order = 5;
+    MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(true));
+    MOCKER_CPP(&PgtEntry::SetDir).stubs().will(returnValue(false));
+    pgTable.PgtEnsureCapacity(order, NN_NO0);
+
+    MOCKER_CPP(&memset_s).stubs().will(returnValue(-1));
+    EXPECT_EQ(pgTable.PgtDirAlloc(), nullptr);
+
+    PgTable pgTable2 { pgdAllocFailed2, pgdFreeFailed2 };
+    EXPECT_EQ(pgTable2.PgtDirAlloc(), nullptr);
+
+    MOCKER_CPP(&NetPgTable::PgtExpand).stubs().will(returnValue(false));
+    pgTable2.PgtEnsureCapacity(order, NN_NO0);
+
+    pgTable2.PgtDirRelease(nullptr);
+}
+
+PgtDir *GetDirStub()
+{
+    PgtDir *dir = (PgtDir *)malloc(sizeof(PgtDir));
+    if (dir == nullptr) {
+        return nullptr;
+    }
+    dir->count = 1;
+    return dir;
+}
+
+TEST_F(TestPgTable, TestPgtShrinkFail)
+{
+    PgTable pgTable { pgdAlloc, pgdFree };
+    MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(true));
+    MOCKER_CPP(&PgtEntry::HasFlag).stubs().will(returnValue(true));
+    MOCKER_CPP(&PgtEntry::GetDir).stubs().will(invoke(GetDirStub));
+    EXPECT_EQ(pgTable.PgtShrink(), true);
+    EXPECT_EQ(pgTable.PgtShrink(), false);
+}
+
+TEST_F(TestPgTable, TestInsertPageFail)
+{
+    PgTable pgTable { pgdAlloc, pgdFree };
+    PgtAddress address = 0x000001;
+    PgtRegion region{};
+    NResult ret = pgTable.InsertPage(address, 1, region);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+    address = 0x000010;
+    ret = pgTable.InsertPage(address, 1, region);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+
+    MOCKER_CPP(&PgTable::PgtShrink).stubs().will(returnValue(false));
+    MOCKER_CPP(&PgtEntry::HasFlag).stubs().will(returnValue(true));
+    ret = pgTable.InsertPage(address, 0, region);
+    EXPECT_EQ(ret, NN_ERROR);
+
+    MOCKER_CPP(&PgTable::PgtCheckEntryDir).stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+    MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(false));
+    MOCKER_CPP(&PgtEntry::SetDir).stubs().will(returnValue(false));
+    ret = pgTable.InsertPage(address, 0, region);
+    EXPECT_EQ(ret, NN_ERROR);
+
+    PgtDir *dir = nullptr;
+    MOCKER_CPP(&PgTable::PgtDirAlloc).stubs().will(returnValue(dir));
+    ret = pgTable.InsertPage(address, 0, region);
+    EXPECT_EQ(ret, NN_ERROR);
+}
+
+bool HasFlagStub(EntryFlags flag)
+{
+    if (flag == EntryFlags::DIR) {
+        return true;
+    }
+    return false;
+}
+
+TEST_F(TestPgTable, TestRemovePageFail)
+{
+    PgTable pgTable { pgdAlloc, pgdFree };
+    PgtAddress address = 0x000001;
+    PgtRegion region{};
+    NResult ret = pgTable.RemovePage(address, 1, region);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+
+    MOCKER_CPP(&PgtEntry::HasFlag).stubs().will(returnValue(true));
+    ret = pgTable.RemovePage(address, 0, region);
+    EXPECT_EQ(ret, NN_ERROR);
+
+    GlobalMockObject::verify();
+    MOCKER_CPP(&PgtEntry::HasFlag).stubs().will(invoke(HasFlagStub));
+    ret = pgTable.RemovePage(address, 0, region);
+    EXPECT_EQ(ret, NN_ERROR);
+}
+
+TEST_F(TestPgTable, TestInsertFail)
+{
+    PgTable pgTable { pgdAlloc, pgdFree };
+    PgtRegion region{};
+    region.start = 0x000002;
+    region.end = 0x000001;
+    NResult ret = pgTable.Insert(region);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+
+    region.start = 0x000000;
+    region.end = 0x000002;
+    ret = pgTable.Insert(region);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+
+    region.start = 0x000001;
+    region.end = 0x000002;
+    ret = pgTable.Insert(region);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+
+    region.start = 0x000001;
+    region.end = 0x000010;
+    ret = pgTable.Insert(region);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+}
+
+PgtRegion *GetRegionStub()
+{
+    PgtRegion *reg = (PgtRegion *)malloc(sizeof(PgtRegion));
+    if (reg == nullptr) {
+        return nullptr;
+    }
+    reg->start = 0x000010;
+    return reg;
+}
+
+TEST_F(TestPgTable, TestLookupFail)
+{
+    PgTable pgTable { pgdAlloc, pgdFree };
+    PgtAddress address = 0x000001;
+    MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(true));
+    PgtRegion *reg = nullptr;
+    MOCKER_CPP(&PgtEntry::GetRegion).stubs().will(returnValue(reg));
+    MOCKER_CPP(&PgtEntry::HasFlag).stubs().will(returnValue(true));
+    EXPECT_EQ(pgTable.Lookup(address), nullptr);
+
+    GlobalMockObject::verify();
+    MOCKER_CPP(&PgtEntry::HasFlag).stubs().will(invoke(HasFlagStub));
+    MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(true));
+    MOCKER_CPP(&PgtEntry::GetRegion).stubs().will(invoke(GetRegionStub));
+    EXPECT_EQ(pgTable.Lookup(address), nullptr);
+
+    GlobalMockObject::verify();
+    MOCKER_CPP(&PgtEntry::HasFlag).stubs().will(invoke(HasFlagStub));
+    MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(true));
+    PgtDir *dir = nullptr;
+    MOCKER_CPP(&PgtEntry::GetDir).stubs().will(returnValue(dir));
+    EXPECT_EQ(pgTable.Lookup(address), nullptr);
+
+    GlobalMockObject::verify();
+    MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(false));
+    EXPECT_EQ(pgTable.Lookup(address), nullptr);
+}
+
 } // namespace hcom
 } // namespace ock

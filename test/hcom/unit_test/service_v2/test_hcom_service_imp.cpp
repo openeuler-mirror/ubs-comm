@@ -216,6 +216,9 @@ TEST_F(TestHcomServiceImp, TestServiceCreateOobUdsListeners)
 TEST_F(TestHcomServiceImp, TestServiceDoDestroy)
 {
     EXPECT_EQ(service->DoDestroy(name), static_cast<int>(SER_OK));
+
+    service->mStarted = true;
+    EXPECT_EQ(service->DoDestroy(name), static_cast<int>(SER_OK));
 }
 
 

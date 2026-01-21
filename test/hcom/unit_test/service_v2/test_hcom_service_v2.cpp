@@ -388,6 +388,7 @@ TEST_F(TestHcomServiceV2, TestSetTraceIdInner)
 {
 #ifdef UB_BUILD_ENABLED
     MOCKER(HcomUrma::IsLoaded).stubs().will(returnValue(false)).then(returnValue(true));
+    MOCKER(HcomUrma::LogSetThreadTag).stubs().will(ignoreReturnValue());
     std::string traceId = "This is a test trace id";
 
     EXPECT_NO_FATAL_FAILURE(SetTraceIdInner(traceId));

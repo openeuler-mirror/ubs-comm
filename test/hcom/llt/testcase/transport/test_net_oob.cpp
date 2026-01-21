@@ -559,6 +559,7 @@ static bool CreateDriver(UBSHcomNetDriver *&driver, uint16_t port, bool isServer
     options.SetWorkerGroups("1");
     options.SetWorkerGroupsCpuSet("12-12");
     options.enableTls = false;
+    options.secType = NET_SEC_DISABLED;
 
     if (isServer) {
         driver->RegisterNewEPHandler(

@@ -95,6 +95,8 @@ public:
     void SetChannelTimeOut(int16_t oneSideTimeout, int16_t twoSideTimeout) override;
     int32_t GetRemoteUdsIdInfo(UBSHcomNetUdsIdInfo &idInfo) override;
     int32_t SetTwoSideThreshold(const UBSHcomTwoSideThreshold &threshold) override;
+    void SetUpCtx(uint64_t ctx) override;
+    uint64_t GetUpCtx() override;
 
     inline void SetTraceId(const std::string &traceId) override
     {
@@ -306,7 +308,7 @@ private:
     UBSHcomServiceProtocol mProtocol = UBSHcomServiceProtocol::UNKNOWN;
     uint32_t mMaxSendRecvDataSize = 1024;
     bool mEnableMrCache = false;        //  mr into pgTable for management
-
+    uint64_t mUpCtx; // store user ctx
     friend class HcomServiceImp;
 };
 

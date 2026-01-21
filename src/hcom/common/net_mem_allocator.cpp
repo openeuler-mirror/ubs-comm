@@ -149,7 +149,7 @@ void MemoryRegion::MemoryAreaInsertNext(NetRbNode<MemoryArea> *newMa, NetRbNode<
             CAST_TO_LIST_NODE(neighMa)->RemoveSelf();
             MEM_ALLOCATOR_ATOMIC_DEC(&freeCnt[neighMa->index]);
             index = ma->data.length >> MEM_ALLOCATOR_BASE_SHIFT;
-            index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index - 1);
+            index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index > 0 ? index - 1 : 0);
             ma->data.index = index;
             CAST_TO_LIST(&freeHead[index])->Append(CAST_TO_LIST_NODE(ma));
             MEM_ALLOCATOR_ATOMIC_INC(&freeCnt[index]);
@@ -162,7 +162,7 @@ void MemoryRegion::MemoryAreaInsertNext(NetRbNode<MemoryArea> *newMa, NetRbNode<
 
     MEM_ALLOCATOR_ATOMIC_DEC(&freeCnt[ma->data.index]);
     index = ma->data.length >> MEM_ALLOCATOR_BASE_SHIFT;
-    index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index - 1);
+    index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index > 0 ? index - 1 : 0);
     ma->data.index = index;
     CAST_TO_LIST(&freeHead[index])->Append(CAST_TO_LIST_NODE(ma));
     MEM_ALLOCATOR_ATOMIC_INC(&freeCnt[index]);
@@ -393,7 +393,7 @@ NResult MemoryRegion::MemoryAreaRemove(uint64_t *startAddress, uint64_t length, 
      * calculate start index to traverse free memory list's array
      */
     index = length >> MEM_ALLOCATOR_BASE_SHIFT;
-    index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index - 1);
+    index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index > 0 ? index - 1 : 0);
 
     /*
      * traverse memory array<linkedlist> until find a memory block has enough

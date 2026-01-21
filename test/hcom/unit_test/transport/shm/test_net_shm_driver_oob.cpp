@@ -288,21 +288,6 @@ TEST_F(TestNetShmDriverOob, DestroyMemoryRegionNull)
     EXPECT_NO_FATAL_FAILURE(driver->DestroyMemoryRegion(mr));
 }
 
-TEST_F(TestNetShmDriverOob, MapAndRegVaForUBErr)
-{
-    uint64_t va = 0;
-    void *ret = driver->MapAndRegVaForUB(1, va);
-    EXPECT_EQ(ret, nullptr);
-}
-
-TEST_F(TestNetShmDriverOob, UnmapVaForUBErr)
-{
-    int ret;
-    uint64_t va = 0;
-    ret = driver->UnmapVaForUB(va);
-    EXPECT_NE(ret, 0);
-}
-
 TEST_F(TestNetShmDriverOob, HandleNewRequestChannelStateFail)
 {
     int ret;

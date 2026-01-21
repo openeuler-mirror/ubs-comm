@@ -81,6 +81,15 @@ int umq_unbind(uint64_t umqh);
 
 /**
  * User should ensure thread safety if io_lock_free is true
+ * Set umq state
+ * @param[in] umqh: umq handle
+ * @param[in] state: umq state want to set (Only Support Set ERR STATE)
+ * Return 0 on success, error code on failure
+ */
+int umq_state_set(uint64_t umqh, umq_state_t state);
+
+/**
+ * User should ensure thread safety if io_lock_free is true
  * Query umq state
  * @param[in] umqh: umq handle
  * Return umq state
@@ -294,6 +303,23 @@ int umq_mempool_state_get(uint64_t umqh, uint32_t mempool_id, umq_mempool_state_
  * Return: 0 on success, other value on error
  */
 int umq_mempool_state_refresh(uint64_t umqh, uint32_t mempool_id);
+
+/**
+ * Get device information.
+ * @param[in] dev_name: device name
+ * @param[in] umq_trans_mode: umq trans mdoe
+ * @param[out] umq_dev_info: device information
+ * Return: 0 on success, other value on error
+ */
+int umq_dev_info_get(char *dev_name, umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info);
+
+/**
+ * Query umq configuration
+ * @param[in] umqh: Queue handle
+ * @param[out] cfg: Configuration information for umq
+ * Return 0 on success, error code on failure, other value on error
+ */
+int umq_cfg_get(uint64_t umqh, umq_cfg_get_t *cfg);
 
 #ifdef __cplusplus
 }

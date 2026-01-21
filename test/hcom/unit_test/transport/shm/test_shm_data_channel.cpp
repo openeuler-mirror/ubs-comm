@@ -121,5 +121,35 @@ TEST_F(TestShmDataChannel, Initialize)
     }
 }
 
+TEST_F(TestShmDataChannel, MarkFree)
+{
+    int ret;
+    UBSHcomNetAtomicState<ShmChannelState> state{CH_NEW};
+    ShmDataChannelOptions opt(0, NN_NO256, NN_NO16, true);
+    ShmDataChannel *dc = new (std::nothrow) ShmDataChannel("TestShmDataChannel", opt, &state);
+    ASSERT_NE(dc, nullptr);
+
+    uintptr_t addr = 0;
+    dc->mInited = false;
+    EXPECT_NO_FATAL_FAILURE(dc->MarkFree(addr));
+
+    dc->mInited = true;
+    EXPECT_NO_FATAL_FAILURE(dc->MarkFree(addr));
+
+    addr = NN_NO1;
+    dc->mBuckBaseAddress = 0;
+    dc->mBuckEndAddress = NN_NO2;
+    dc->mOptions.buckSize = NN_NO5;
+    EXPECT_NO_FATAL_FAILURE(dc->MarkFree(addr));
+
+    dc->mBuckBaseAddress = 0;
+    dc->mBuckEndAddress = 0;
+    dc->mOptions.buckSize = 0;
+    dc->mInited = false;
+    if (dc != nullptr) {
+        delete dc;
+        dc = nullptr;
+    }
+}
 }  // namespace hcom
 }  // namespace ock

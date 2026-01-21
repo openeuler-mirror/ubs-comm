@@ -14,6 +14,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstdint>
+#include <algorithm>
 
 #include "hcom_def.h"
 #include "hcom_log.h"
@@ -1180,8 +1181,8 @@ std::string &UBSHcomNetMemoryAllocatorTypeToString(UBSHcomNetMemoryAllocatorType
 std::string UBSHcomNetMemoryAllocatorOptions::ToString() const
 {
     std::ostringstream oss;
-    oss << "address " << address << ", size " << size << ", minBlockSize " << minBlockSize << ", alignedAddress " <<
-        alignedAddress << ", cacheTierCount " << cacheTierCount << ", cacheBlockCountPerTier " <<
+    oss << ", size " << size << ", minBlockSize " << minBlockSize <<
+        ", cacheTierCount " << cacheTierCount << ", cacheBlockCountPerTier " <<
         cacheBlockCountPerTier << ", cacheTierPolicy " << cacheTierPolicy;
     return oss.str();
 }
@@ -1218,10 +1219,10 @@ std::string &UBSHcomNetDriverLBPolicyToString(UBSHcomNetDriverLBPolicy v)
 
 std::string &UBSHcomNetDriverProtocolToString(UBSHcomNetDriverProtocol v)
 {
-    static std::string driverProtocol[NN_NO6] = {"RDMA", "TCP", "UDS", "SHM", "UBC",
-                                                 "UNKNOWN PROTOCOL"};
+    static std::string driverProtocol[NN_NO8] = {"RDMA", "TCP", "UDS", "SHM", "UNKNOWN PROTOCOL", "UNKNOWN PROTOCOL",
+        "UNKNOWN PROTOCOL", "UBC"};
     static std::string unknown = "UNKNOWN PROTOCOL";
-    if (v >= NN_NO6) {
+    if (v >= NN_NO8) {
         return unknown;
     }
     return driverProtocol[v];

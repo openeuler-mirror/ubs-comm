@@ -237,6 +237,7 @@ private:
     uint32_t mDmSize = 0;
     uint64_t mTargetHbTime = 0;
     uint16_t mHeartBeatIdleTime = NN_NO60;
+    uint32_t mSendRawAllowedSize = 0;
 
     friend class NetDriverUBWithOob;
     friend class NetHeartbeat;
@@ -417,6 +418,7 @@ private:
     UBOpContextInfo *mDelayHandleReceiveCtx = nullptr;
     uint32_t mDelayHandleReceiveImmData = 0;
     uint32_t mDmSize = 0;
+    uint32_t mSendRawAllowedSize = 0;
 
     friend class NetDriverUBWithOob;
 };

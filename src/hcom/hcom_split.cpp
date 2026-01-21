@@ -71,6 +71,11 @@ SerResult SyncSpliceMessage(UBSHcomNetResponseContext &ctx, UBSHcomNetEndpoint *
         if (offset == 0) {
             acc.resize(totalLength);
         }
+        if (totalLength != static_cast<uint32_t>(acc.size())) {
+            NN_LOG_ERROR("SyncSpliceMessage: the totalLength does not match with the first fragment. " <<
+                totalLength << " != " << acc.size());
+            return SER_SPLIT_INVALID_MSG;
+        }
 
         // | msg1 | ... | last |
         // | msg2 | ... | ...  | last |

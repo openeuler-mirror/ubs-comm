@@ -399,7 +399,7 @@ static int umq_perftest_create_umqh(umq_perftest_config_t *cfg)
 static int umq_perftest_post_rx(umq_perftest_config_t *cfg)
 {
     umq_buf_t *buf = NULL;
-    umq_state_t umq_state;
+    umq_state_t umq_state = QUEUE_STATE_MAX;
     int poll_cnt = 0;
     if ((cfg->feature & UMQ_FEATURE_API_PRO) == 0) {
         goto WAIT_UMQ_READY;
@@ -452,14 +452,14 @@ WAIT_UMQ_READY:
 
 static inline void umq_perftest_server_qps_work_load(perftest_thread_arg_t *args)
 {
-    umq_perftest_worker_arg_t *arg = (umq_perftest_worker_arg_t *)args;
+    umq_perftest_worker_arg_t *arg = (umq_perftest_worker_arg_t *)(uintptr_t)args;
     arg->qps_arg.cfg = arg->cfg;
     umq_perftest_run_qps(arg->umqh, &arg->qps_arg);
 }
 
 static inline void umq_perftest_latency_work_load(perftest_thread_arg_t *args)
 {
-    umq_perftest_worker_arg_t *arg = (umq_perftest_worker_arg_t *)args;
+    umq_perftest_worker_arg_t *arg = (umq_perftest_worker_arg_t *)(uintptr_t)args;
     arg->lat_arg.cfg = arg->cfg;
     umq_perftest_run_latency(arg->umqh, &arg->lat_arg);
 }
@@ -747,7 +747,7 @@ int main(int argc, char *argv[])
 
     // only UB/UB_PLUS/IB/IB_PLUS support pro feature
     uint32_t trans_mode = g_umq_perftest_ctx.cfg.trans_mode;
-    if ((g_umq_perftest_ctx.cfg.feature & UMQ_FEATURE_API_PRO) &&
+    if (((g_umq_perftest_ctx.cfg.feature & UMQ_FEATURE_API_PRO) != 0) &&
         trans_mode != UMQ_TRANS_MODE_UB && trans_mode != UMQ_TRANS_MODE_IB &&
         trans_mode != UMQ_TRANS_MODE_UB_PLUS && trans_mode != UMQ_TRANS_MODE_IB_PLUS) {
         LOG_PRINT("trans_mode: %u doesn't support pro feature\n", trans_mode);
