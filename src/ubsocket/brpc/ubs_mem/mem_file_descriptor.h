@@ -109,7 +109,7 @@ public:
         m_rxState = SocketState::SOCKET_STATE_CLOSED;
         std::this_thread::sleep_for(std::chrono::milliseconds(WAIT_LOCAL_END_SLEEP_INTERVAL));
         
-        auto* shm = Context::GetContext()->GetShmMgr();
+        auto* shm = ShmMgr::GetShmMgr();
 
         shm->Unmap(&m_remoteTrxShm);
         shm->Free(&m_remoteTrxShm);
@@ -350,7 +350,7 @@ public:
             return -1;
         }
 
-        auto* shm = Context::GetContext()->GetShmMgr();
+        auto* shm = ShmMgr::GetShmMgr();
         size_t localShmLen = DATA_QUEUE_MAX_SIZE * MB_TO_BYTE;
         m_localTrxShm.len = localShmLen;
         m_localTrxShm.fd = m_fd;
@@ -486,6 +486,7 @@ public:
             int expected = POLLING_NONE;
             if (!m_pollingWriteState.compare_exchange_strong(expected, POLLING_USING,
                 std::memory_order_acq_rel)) {
+
                 // CAS 失败，检查是否进入了 CLOSING 状态
                 if (expected >= POLLING_CLOSING) {
                     return PollingErrCode::NOT_READY;
@@ -523,6 +524,7 @@ public:
     {
         // 【可重入方案】读取当前状态
         int currentState = m_pollingWriteState.load(std::memory_order_acquire);
+
         // 如果正在关闭或已关闭，直接返回
         if (currentState >= POLLING_CLOSING) {
             return PollingErrCode::NOT_READY;
@@ -594,7 +596,7 @@ private:
             return -1;
         }
 
-        auto* shm = Context::GetContext()->GetShmMgr();
+        auto* shm = ShmMgr::GetShmMgr();
 
         // Recv remote Shm info from remote
         if (RecvSocketData(new_fd, &remote_msg, sizeof(ExchangeData), CONTROL_PLANE_TIMEOUT_MS) !=

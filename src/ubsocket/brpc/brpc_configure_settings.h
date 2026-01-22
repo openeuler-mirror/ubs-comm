@@ -85,7 +85,9 @@ public:
              RPC_ADPT_VLOG_INFO("%s: %s (input: %s)\n", ENV_VAR_USE_POLLING, BoolVal::BoolConverter(m_use_polling),
                                 m_use_polling_str);
          }
-
+#ifdef UBS_SHM_BUILD_ENABLED
+             m_use_polling = true;
+#endif
          return 0;
       }
 

@@ -239,11 +239,11 @@ class SocketFd : public Fd<SocketFd> {
                 continue;
             }
 
-            if(received<=0 || errno != 0){
+            if (received <= 0 || errno != 0){
                RPC_ADPT_VLOG_ERR("Failed to receive socket message: %s, received: %u, fd: %d.\n",
                    strerror(errno), received, fd);
                 return received;
-            }else {
+            } else {
                 RPC_ADPT_VLOG_DEBUG("Receive socket message successful, fd: %d, received: %u, total: %d\n",
                     fd, received, size);
             }
@@ -275,6 +275,16 @@ class SocketFd : public Fd<SocketFd> {
     }
 
     virtual void OutputStats(std::ostringstream &oss) = 0;
+
+    virtual PollingErrCode IsShmReadable(uint32_t event)
+    {
+        return PollingErrCode::OK;
+    }
+
+    virtual PollingErrCode IsShmWriteable(uint32_t event)
+    {
+        return PollingErrCode::OK;
+    }
 };
 
 class EpollEvent {

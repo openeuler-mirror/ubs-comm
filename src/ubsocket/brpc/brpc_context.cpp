@@ -17,6 +17,7 @@
 
 #include "brpc_file_descriptor.h"
 #include "brpc_context.h"
+#include "mem_file_descriptor.h"
 
 namespace Brpc {
 
@@ -29,6 +30,7 @@ constexpr uint16_t CPU_STR_SIZE = 3;
 constexpr uint16_t NODE_STR_SIZE = 4;
 
 std::atomic<int> Context::m_ref = {0};
+std::atomic<int> Context::m_shmNameSeq;
 
 ::SocketFd *Context::CreateSocketFd(int fd, int event_fd)
 {
@@ -39,6 +41,11 @@ std::atomic<int> Context::m_ref = {0};
             case SOCKET_FD_TRANS_MODE_UMQ_ZERO_COPY:
                 socket_fd = (::SocketFd *)new Brpc::SocketFd(fd, event_fd);
                 break;
+#ifdef UBS_SHM_BUILD_ENABLED
+            case SOCKET_FD_TRANS_MODE_SHM:
+                socket_fd = (::SocketFd *)new Brpc::MemSocketFd(fd, event_fd);
+                break;
+#endif
             default:
                 break;      
         }
@@ -64,6 +71,11 @@ std::atomic<int> Context::m_ref = {0};
             case SOCKET_FD_TRANS_MODE_UMQ_ZERO_COPY:
                 epoll_fd = (::EpollFd *)new Brpc::EpollFd(fd);
                 break;
+#ifdef UBS_SHM_BUILD_ENABLED
+            case SOCKET_FD_TRANS_MODE_SHM:
+                epoll_fd = (::EpollFd *)new Brpc::MemEpollFd(fd);
+                break;
+#endif
             default:
                 break;      
         }

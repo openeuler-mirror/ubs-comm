@@ -18,6 +18,7 @@
 #include "brpc_dynsym_scanner.h"
 #include "statistics.h"
 #include "umq_types.h"
+#include "ubs_mem/shm.h"
 
 namespace Brpc {
 
@@ -63,6 +64,9 @@ class Context : public Brpc::ConfigSettings {
             case SOCKET_FD_TRANS_MODE_UMQ_ZERO_COPY:
                 umq_uninit();
                 break;
+            case SOCKET_FD_TRANS_MODE_SHM:
+                ShmMgr::GetShmMgr()->Finalize();
+                break;
             case SOCKET_FD_TRANS_MODE_TCP:
             default:
                 break;    
@@ -83,6 +87,43 @@ class Context : public Brpc::ConfigSettings {
     {
         return m_socket_ids;
     }
+
+    bool GetShmName(Shm& shm, const char* prefix) {
+        if (!prefix) {
+            return false;
+        }
+
+        uint64_t seq = m_shmNameSeq.fetch_add(1, std::memory_order_relaxed);
+
+        // prefix + seq
+        int written = std::snprintf(
+            shm.name,
+            MAX_REGION_NAME_DESC_LENGTH,
+            "%s%llu",
+            prefix,
+            static_cast<unsigned long long>(seq)
+        );
+
+        if (written < 0 || static_cast<size_t>(written) >= MAX_REGION_NAME_DESC_LENGTH) {
+            RPC_ADPT_VLOG_ERR("SHM name too long: prefix=\"%s\", seq=%llu", prefix, seq);
+            shm.name[0] = '\0';
+            return false;
+        }
+
+        return true;
+    }
+
+#ifdef UBS_SHM_BUILD_ENABLED
+    void InitShm()
+    {
+        if (!ShmMgr::GetShmMgr()->IsInitialized()) {
+            RPC_ADPT_VLOG_ERR("Failed to initialize shm for brpc\n");
+            SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+            return;
+        }
+        SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_SHM);
+    }
+#endif
 
     private:
     void RecordAndSetBrpcAllocator()
@@ -131,6 +172,13 @@ class Context : public Brpc::ConfigSettings {
             RecordAndSetBrpcAllocator();
         }
 
+        int ret = -1;
+#ifdef UBS_SHM_BUILD_ENABLED
+        ResetBrpcAllocator();
+        SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+        return;
+#endif
+
         umq_init_cfg_t umq_config;
         memset_s(&umq_config, sizeof(umq_config), 0, sizeof(umq_config));
         umq_config.feature = UMQ_FEATURE_API_PRO | UMQ_FEATURE_ENABLE_FLOW_CONTROL;
@@ -141,7 +189,6 @@ class Context : public Brpc::ConfigSettings {
         umq_config.block_cfg.small_block_size = GetIOBlockType();
 
         const char *dev_info = nullptr;
-        int ret = -1;
         if ((dev_info = GetDevIpStr()) != nullptr){
             if(IsDevIpv6()){
                 umq_config.trans_info[0].mem_cfg.total_size = GetIOTotalSize();
@@ -302,6 +349,7 @@ class Context : public Brpc::ConfigSettings {
     bool isBonding = false;
     int m_process_socket_id = -1;
     std::vector<uint32_t> m_socket_ids;
+    static std::atomic<int> m_shmNameSeq;
 };     
 
 }

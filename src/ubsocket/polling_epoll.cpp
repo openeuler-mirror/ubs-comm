@@ -11,6 +11,7 @@
 #include "socket_adapter.h"
 #include "umq_pro_api.h"
 #include "umq_api.h"
+#include "file_descriptor.h"
 
 const uint64_t SEC_TO_NSEC = 1000000000;
 const uint64_t MSEC_TO_NSEC = 1000000;
@@ -221,7 +222,24 @@ PollingErrCode PollingEpoll::IsUmqWriteable()
 
 PollingErrCode PollingEpoll::EpInEventProcess(EventPoll *eventPoll, EpItem epItem)
 {
+#ifdef UBS_SHM_BUILD_ENABLED
+    SocketFd *obj = Fd<SocketFd>::GetFdObj(epItem.fd);
+    PollingErrCode rc = PollingErrCode::OK;
+    if (obj != nullptr) {
+        while (1) {
+            rc = obj->IsShmReadable(epItem.event.events);
+            if (rc == PollingErrCode::OK) {
+                break;
+            }
+            if (rc == PollingErrCode::NOT_READY) {
+                RPC_ADPT_VLOG_WARN("Polling stop, rc %d.\n", static_cast<int>(rc));
+                break;
+            }
+        }
+    }
+#else
     PollingErrCode rc = IsUmqReadable(epItem.fd);
+#endif
     if (rc != PollingErrCode::OK) {
         return rc;
     }
@@ -231,7 +249,16 @@ PollingErrCode PollingEpoll::EpInEventProcess(EventPoll *eventPoll, EpItem epIte
 
 PollingErrCode PollingEpoll::EpOutEventProcess(EventPoll *eventPoll, EpItem epItem)
 {
+#ifdef UBS_SHM_BUILD_ENABLED
+    SocketFd *obj = Fd<SocketFd>::GetFdObj(epItem.fd);
+    PollingErrCode rc = PollingErrCode::OK;
+    if (obj != nullptr) {
+        rc = obj->IsShmWriteable(epItem.event.events);
+        RPC_ADPT_VLOG_WARN("[DEBUG] EPOUT event, writeable %d, epfd=%d, fd=%d.\n", rc, eventPoll->epfd, epItem.fd);
+    }
+#else
     PollingErrCode rc = IsUmqWriteable();
+#endif
     if (rc != PollingErrCode::OK) {
         return rc;
     }
@@ -284,6 +311,7 @@ void PollingEpoll::EpollEventProcess(EventPoll *eventPoll, struct epoll_event *e
         curNode = curNode->next;
         EpollListRemove(eventPoll->readyList, delNode->epItem.fd);
     }
+
     if (*rdCnt == maxevents) {
         return;
     }
