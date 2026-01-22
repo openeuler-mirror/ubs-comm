@@ -6,6 +6,7 @@
 # (1) UMQ_BUILD(optional, default is off) => build umq or not.(on/off)
 # (2) UBSOCKET_BUILD(optional, default is off) => build ubsocket or not.(on/off)
 # (3) UBSOCKET_UT(optional, default is off) => run ubsocket ut or not.(on/off)
+# (4) USE_URMA_STUB(optional, default is OFF) => in CI environment, use urma stub or not.(ON/OFF)
 
 # version: 1.0.0
 # change log:
@@ -26,6 +27,9 @@ echo "build ubsocket: ${UBSOCKET_BUILD}"
 UBSOCKET_UT="${UBSOCKET_UT:-off}"
 echo "run ubsocket ut: ${UBSOCKET_UT}"
 
+USE_URMA_STUB="${USE_URMA_STUB:-OFF}"
+echo "use urma stub: ${USE_URMA_STUB}"
+
 # build umq, .so will store in "./src/hcom/umq/build/src"
 function umq_build() {
     if [ "${UMQ_BUILD}" != "on" ]; then
@@ -40,7 +44,7 @@ function umq_build() {
     mkdir -p build
     cd build
 
-    if ! cmake ..; then
+    if ! cmake -DUSE_URMA_STUB="${USE_URMA_STUB}" ..; then
         echo "[Error]: umq cmake failed."
         exit 1
     fi

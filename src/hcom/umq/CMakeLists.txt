@@ -6,12 +6,14 @@ project(umq
   VERSION 0.0.1
 )
 
-option(USE_URMA_STUB "打桩选项" ON)
+option(USE_URMA_STUB "CI environment open stub: " OFF)
 message(STATUS "USE_URMA_STUB: ${USE_URMA_STUB}")
 
 if(USE_URMA_STUB)
     message(STATUS "using USE_URMA_STUB: ${USE_URMA_STUB}")
     add_subdirectory(stub/urma)
+    include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/stub/urma)
+    link_libraries(urma_stub)
 else()
     message(STATUS "not use USE_URMA_STUB: ${USE_URMA_STUB}")
 endif()

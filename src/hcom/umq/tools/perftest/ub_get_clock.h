@@ -44,10 +44,7 @@ static inline uint64_t get_cycles(void)
 #endif
 
 /* Warning: Function takes more than 200 ms to run. */
-static inline double get_cpu_mhz(bool cpu_freq_warn) {
-    (void)cpu_freq_warn;
-    return 2400.0;
-}
+extern double get_cpu_mhz(bool cpu_freq_warn);
 
 #ifdef __cplusplus
 }
