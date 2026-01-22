@@ -9,7 +9,8 @@
 
 double get_cpu_mhz_stub(bool cpu_freq_warn) {
     (void)cpu_freq_warn;
-    return 2400.0;
+    double mhz = 2400.0;
+    return mhz;
 }
 
 int urma_init(void) {
