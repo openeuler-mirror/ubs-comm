@@ -171,6 +171,8 @@ function run_ubsocket_ut_tests() {
         echo "Fail Rate: ${fail_rate}%"
     } | tee pass_rate_summary.txt
 
+    echo "Pass rate file in ${ROOT_DIR}/src/ubsocket/build/pass_rate_summary.txt."
+
     if make coverage; then
         echo "Make ubsocket coverage successfully."
         cd "${ROOT_DIR}"
