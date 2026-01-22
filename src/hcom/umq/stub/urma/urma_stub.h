@@ -12,8 +12,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-double get_cpu_mhz_stub(bool cpu_freq_warn);
-
 typedef void* urma_device_t;
 typedef void* urma_eid_t;
 

@@ -7,12 +7,6 @@
 
 #include "urma_stub.h"
 
-double get_cpu_mhz_stub(bool cpu_freq_warn) {
-    (void)cpu_freq_warn;
-    double mhz = 2400.0;
-    return mhz;
-}
-
 int urma_init(void) {
     return 0;
 }
