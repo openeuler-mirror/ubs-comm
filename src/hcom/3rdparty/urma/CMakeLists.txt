@@ -12,7 +12,7 @@ EXEC_PROGRAM(mkdir ${HCOM_BUILD_PATH} ARGS -p ${URMA_INSTALL_DIR}/include)
 if(URMA_INCLUDE_DIR)
     message(STATUS "Found system-installed umdk-urma: headers=${URMA_INCLUDE_DIR}")
     EXEC_PROGRAM(cp ${URMA_INSTALL_DIR} ARGS -rf /usr/include/ub/umdk/urma/*.h ${URMA_INSTALL_DIR}/include)
-    set(USE_SYSTEM_URMA ON)
+    set(USE_SYSTEM_URMA OFF)
 else()
     message(STATUS "umdk-urma not found in system. Fetching from source...")
     set(USE_SYSTEM_URMA OFF)
@@ -27,7 +27,7 @@ if(NOT USE_SYSTEM_URMA)
             PATHS ${URMA_INSTALL_DIR}/include/
             NO_DEFAULT_PATH
     )
-    if(NOT URMA_INCLUDE_DIR)
+    if(NOT USE_SYSTEM_URMA)
         include(FetchContent)
 
         # 假设 umdk-urma 仓库包含 urma 的头文件
