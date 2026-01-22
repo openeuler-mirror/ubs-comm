@@ -117,6 +117,7 @@ function run_ubsocket_ut_tests() {
     if cmake -S. -Bbuild \
         -DCMAKE_BUILD_TYPE=Debug \
         -DUBSOCKET_BUILD_TESTS=ON \
+        -DUBSOCKET_ENABLE_COVERAGE=ON \
         -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
         -DUMQ_LIB="${ROOT_DIR}/src/hcom/umq/build/src/libumq.so" \
         -DUMQ_BUF_LIB="${ROOT_DIR}/src/hcom/umq/build/src/qbuf/libumq_buf.so"; then
@@ -137,10 +138,20 @@ function run_ubsocket_ut_tests() {
 
     if ctest --test-dir build --output-on-failure; then
         echo "All ubsocket UT tests successfully."
+    else
+        echo "[Error]: Some ubsocket UT tests failed."
+        cd "${ROOT_DIR}"
+        exit 1
+    fi
+    
+    cd build
+
+    if make coverage; then
+        echo "Make ubsocket coverage successfully."
         cd "${ROOT_DIR}"
         return 0
     else
-        echo "[Error]: Some ubsocket UT tests failed."
+        echo "[Error]: Make ubsocket coverage failed."
         cd "${ROOT_DIR}"
         exit 1
     fi

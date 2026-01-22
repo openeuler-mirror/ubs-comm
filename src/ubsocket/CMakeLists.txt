@@ -102,8 +102,7 @@ if(UBSOCKET_ENABLE_COVERAGE)
   endif()
 
   find_program(LCOV_PATH lcov)
-  find_program(GENHTML_PATH genhtml)
-  if(LCOV_PATH AND GENHTML_PATH)
+  if(LCOV_PATH)
     add_custom_target(coverage
       # 1. Zero counters
       COMMAND ${LCOV_PATH} --directory . --zerocounters
@@ -112,21 +111,22 @@ if(UBSOCKET_ENABLE_COVERAGE)
       COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
 
       # 3. Capture coverage
-      COMMAND ${LCOV_PATH} --directory . --capture --output-file coverage.info --rc branch_coverage=1 --ignore-errors inconsistent,mismatch
+      COMMAND ${LCOV_PATH} --directory . --capture --output-file coverage.info --rc lcov_branch_coverage=1
 
       # 4. Filter coverage (remove system headers, dependencies, and build artifacts)
-      COMMAND ${LCOV_PATH} --remove coverage.info '/usr/*' '*/_deps/*' '*/build/*' --output-file coverage_filtered.info --rc branch_coverage=1 --ignore-errors inconsistent,mismatch,unused,range
+      COMMAND ${LCOV_PATH} --remove coverage.info '/usr/*' '*/_deps/*' '*/build/*' --output-file coverage_filtered.info --rc lcov_branch_coverage=1 --ignore-errors unused,range
 
-      # 5. Generate HTML report
-      COMMAND ${GENHTML_PATH} coverage_filtered.info --output-directory coverage_report --rc branch_coverage=1 --ignore-errors inconsistent,mismatch,unused
+      # 5. Generate TXT report
+      COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1 --summary coverage_filtered.info > coverage_summary.txt
+      COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1 --list coverage_filtered.info > coverage_detailed.txt
 
       # 6. Print success message
-      COMMAND ${CMAKE_COMMAND} -E echo "Coverage report generated in: ${CMAKE_BINARY_DIR}/coverage_report/index.html"
+      COMMAND ${CMAKE_COMMAND} -E echo "Coverage report generated in: ${CMAKE_BINARY_DIR}/coverage_detailed.txt"
 
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
       COMMENT "Generating code coverage report..."
     )
   else()
-    message(WARNING "lcov or genhtml not found, Coverage target will not be available.")
+    message(WARNING "lcov not found, Coverage target will not be available.")
   endif()
 endif()
