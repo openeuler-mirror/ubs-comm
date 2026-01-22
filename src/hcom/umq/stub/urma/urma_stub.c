@@ -1,4 +1,16 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ * Description: stub for urma
+ * Create: 2026
+ */
+
 #include "urma_stub.h"
+
+double get_cpu_mhz_stub(bool cpu_freq_warn) {
+    (void)cpu_freq_warn;
+    return 2400.0;
+}
 
 int urma_init(void) {
     return 0;
