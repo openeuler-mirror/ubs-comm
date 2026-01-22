@@ -40,7 +40,7 @@ constexpr uint64_t SIZE_32K = 32768;
 constexpr uint64_t SIZE_64K = 65536;
 constexpr uint64_t MASK_DIFF = 1;
 constexpr uint64_t IOBUF_DIFF = 32;
-constexpr uint16_t REFILL_THRESHOLD = 2;
+constexpr uint16_t REFILL_THRESHOLD = 32;
 constexpr int RETRY_NEEDED = 1;
 
 inline bool operator==(const umq_eid_t& a, const umq_eid_t& b) {
