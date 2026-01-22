@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 double get_cpu_mhz_stub(bool cpu_freq_warn);
 
