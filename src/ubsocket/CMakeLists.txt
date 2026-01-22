@@ -121,7 +121,8 @@ if(UBSOCKET_ENABLE_COVERAGE)
       COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1 --list coverage_filtered.info > coverage_detailed.txt
 
       # 6. Print success message
-      COMMAND ${CMAKE_COMMAND} -E echo "Coverage report generated in: ${CMAKE_BINARY_DIR}/coverage_detailed.txt"
+      COMMAND ${CMAKE_COMMAND} -E echo "Coverage summary report generated in: ${CMAKE_BINARY_DIR}/coverage_summary.txt"
+      COMMAND ${CMAKE_COMMAND} -E echo "Coverage detailed report generated in: ${CMAKE_BINARY_DIR}/coverage_detailed.txt"
 
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
       COMMENT "Generating code coverage report..."
