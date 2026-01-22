@@ -20,11 +20,11 @@ static inline uint64_t get_cycles_stub(void)
 }
 #define get_cycles get_cycles_stub
 
-static inline double get_cpu_mhz_stub(bool cpu_freq_warn) {
-    (void)cpu_freq_warn;
-    double mhz = 2400.0;
-    return mhz;
-}
-#define get_cpu_mhz get_cpu_mhz_stub
+// static inline double get_cpu_mhz_stub(bool cpu_freq_warn) {
+//     (void)cpu_freq_warn;
+//     double mhz = 2400.0;
+//     return mhz;
+// }
+// #define get_cpu_mhz get_cpu_mhz_stub
 
 #endif
