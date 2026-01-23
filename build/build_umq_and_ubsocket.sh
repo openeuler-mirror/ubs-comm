@@ -24,6 +24,10 @@ echo "build umq: ${UMQ_BUILD}"
 UBSOCKET_BUILD="${UBSOCKET_BUILD:-off}"
 echo "build ubsocket: ${UBSOCKET_BUILD}"
 
+# check whether build ubsocket, default is off
+UBSOCKET_BUILD_SHM="${UBSOCKET_BUILD_SHM:-off}"
+echo "build ubsocket shm: ${UBSOCKET_BUILD_SHM}"
+
 # check whether run ubsocket ut, default is off
 UBSOCKET_UT="${UBSOCKET_UT:-off}"
 echo "run ubsocket ut: ${UBSOCKET_UT}"
@@ -87,7 +91,7 @@ function ubsocket_build() {
     cd "${ubsocket_dir}"
 
     if cmake -S. -Bbuild \
-        -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
+        -DBUILD_WITH_UBS_SHM=${UBSOCKET_BUILD_SHM} -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
         -DUMQ_LIB="${ROOT_DIR}/src/hcom/umq/build/src/libumq.so"; then
         echo "ubsocket cmake successfully"
     else
