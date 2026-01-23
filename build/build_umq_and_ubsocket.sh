@@ -7,7 +7,8 @@
 # (2) UBSOCKET_BUILD(optional, default is off) => build ubsocket or not.(on/off)
 # (3) UBSOCKET_UT(optional, default is off) => run ubsocket ut or not.(on/off)
 # (4) USE_URMA_STUB(optional, default is OFF) => in CI environment, use urma stub or not.(ON/OFF)
-
+# (5) UBSOCKET_PASS_RATE(optional, default is off) => run ubsocket ut pass rate or not.(on/off)
+# (6) UBSOCKET_COVERAGE(optional, default is off) => run ubsocket ut coverage or not.(on/off)
 # version: 1.0.0
 # change log:
 # ***********************************************************************
@@ -27,8 +28,17 @@ echo "build ubsocket: ${UBSOCKET_BUILD}"
 UBSOCKET_UT="${UBSOCKET_UT:-off}"
 echo "run ubsocket ut: ${UBSOCKET_UT}"
 
+# when in CI environment, open it
 USE_URMA_STUB="${USE_URMA_STUB:-OFF}"
 echo "use urma stub: ${USE_URMA_STUB}"
+
+# check whether run ubsocket ut pass rate, default is off
+UBSOCKET_PASS_RATE="${UBSOCKET_PASS_RATE:-off}"
+echo "run ubsocket ut pass rate: ${UBSOCKET_PASS_RATE}"
+
+# check whether run ubsocket ut coverage, default is off
+UBSOCKET_COVERAGE="${UBSOCKET_COVERAGE:-off}"
+echo "run ubsocket ut coverage: ${UBSOCKET_COVERAGE}"
 
 # build umq, .so will store in "./src/hcom/umq/build/src"
 function umq_build() {
@@ -111,7 +121,6 @@ function run_ubsocket_ut_tests() {
     fi
 
     local ubsocket_dir="${ROOT_DIR}/src/ubsocket"
-
     cd "${ubsocket_dir}"
 
     if cmake -S. -Bbuild \
@@ -138,13 +147,24 @@ function run_ubsocket_ut_tests() {
 
     if ctest --test-dir build --output-on-failure; then
         echo "All ubsocket UT tests successfully."
+        return 0
     else
         echo "[Error]: Some ubsocket UT tests failed."
         cd "${ROOT_DIR}"
         exit 1
     fi
-    
-    cd build
+}
+# run ubsocket ut pass rate
+function run_ubsocket_pass_rate() {
+    if [ "${UBSOCKET_PASS_RATE}" != "on" ]; then
+        echo "UBSOCKET_PASS_RATE is off, skipping ubsocket ut pass rate."
+        return 0
+    fi
+
+    echo "Generating ubsocket UT pass rate report ..."
+
+    local ubsocket_dir="${ROOT_DIR}/src/ubsocket/build"
+    cd "${ubsocket_dir}"
 
     ./ubsocket_test --gtest_output=xml:./ubsocket_ut.xml
 
@@ -157,6 +177,7 @@ function run_ubsocket_ut_tests() {
         timestamp_val=$(cat ubsocket_ut.xml |grep "<testsuites "| head -n 1|awk -F "timestamp=" '{print $2}'|awk '{print $1}'|awk -F "\"" '{print $2}')
         pass_rate=$(echo "scale=2; ($tests_val - $failures_val - $errors_val) / $tests_val * 100" | bc)
         fail_rate=$(echo "scale=2; ($failures_val + $errors_val) / $tests_val * 100" | bc)
+
         echo "Tests Count: ${tests_val}"
         echo "Failure: ${failures_val}"
         echo "Disabled: ${disabled_val}"
@@ -167,11 +188,22 @@ function run_ubsocket_ut_tests() {
         echo "Fail Rate: ${fail_rate}%"
     } | tee pass_rate_summary.txt
 
-    echo "Pass rate file: ${ROOT_DIR}/src/ubsocket/build/pass_rate_summary.txt"
+    echo "Pass rate report generated in: ${ROOT_DIR}/src/ubsocket/build/pass_rate_summary.txt"
+}
+# run ubsocket ut coverage
+function run_ubsocket_coverage() {
+    if [ "${UBSOCKET_COVERAGE}" != "on" ]; then
+        echo "UBSOCKET_COVERAGE is off, skipping ubsocket ut coverage."
+        return 0
+    fi
+
+    echo "Generating ubsocket UT coverage report ..."
+
+    local ubsocket_dir="${ROOT_DIR}/src/ubsocket/build"
+    cd "${ubsocket_dir}"
 
     if make coverage; then
         echo "Make ubsocket coverage successfully."
-        cd "${ROOT_DIR}"
         return 0
     else
         echo "[Error]: Make ubsocket coverage failed."
@@ -183,3 +215,5 @@ function run_ubsocket_ut_tests() {
 umq_build
 ubsocket_build
 run_ubsocket_ut_tests
+run_ubsocket_pass_rate
+run_ubsocket_coverage

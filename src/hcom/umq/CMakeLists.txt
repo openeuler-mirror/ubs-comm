@@ -107,9 +107,9 @@ set(URMA_INCLUDE_DIR ${PROJECT_ROOT_DIR}/dist/hcom_3rdparty/umdk/urma/include)
 message(STATUS "UMQ: URMA_INCLUDE_DIR = ${URMA_INCLUDE_DIR}")
 
 if(EXISTS "${URMA_INCLUDE_DIR}/uvs_api.h")
-    message(STATUS "uvs_api.h has found.")
+    message(STATUS "uvs_api.h has found, it shows that urma comes from 3rdparty.")
 else()
-    message(WARNING "uvs_api.h cannot found.")
+    message(STATUS "uvs_api.h cannot found, it shows that urma comes from system.")
 endif()
 
 include_directories(${URMA_INCLUDE_DIR})
