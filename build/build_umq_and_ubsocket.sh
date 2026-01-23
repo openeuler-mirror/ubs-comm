@@ -163,8 +163,8 @@ function run_ubsocket_pass_rate() {
 
     echo "Generating ubsocket UT pass rate report ..."
 
-    local ubsocket_dir="${ROOT_DIR}/src/ubsocket/build"
-    cd "${ubsocket_dir}"
+    local ubsocket_build_dir="${ROOT_DIR}/src/ubsocket/build"
+    cd "${ubsocket_build_dir}"
 
     ./ubsocket_test --gtest_output=xml:./ubsocket_ut.xml
 
@@ -199,8 +199,8 @@ function run_ubsocket_coverage() {
 
     echo "Generating ubsocket UT coverage report ..."
 
-    local ubsocket_dir="${ROOT_DIR}/src/ubsocket/build"
-    cd "${ubsocket_dir}"
+    local ubsocket_build_dir="${ROOT_DIR}/src/ubsocket/build"
+    cd "${ubsocket_build_dir}"
 
     if make coverage; then
         echo "Make ubsocket coverage successfully."
