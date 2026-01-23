@@ -94,8 +94,7 @@ public:
                 if (IsTimeout(start, WAIT_LOCAL_END_SLEEP_INTERVAL)) {
                     /* The child threads are still accessing umq resources, so umq_uninit() is not actively
                      * executed here to avoid core dumps. Let the program automatically reclaim all resources. */
-                    RPC_ADPT_VLOG_WARN("MemSocketFd reclamation has exceeded the time limit and was forcefully
-                        terminated\n");
+                    RPC_ADPT_VLOG_WARN("MemSocketFd reclamation exceeds the time limit and forcefully terminated\n");
                     break;
                 }
                 std::this_thread::yield();
