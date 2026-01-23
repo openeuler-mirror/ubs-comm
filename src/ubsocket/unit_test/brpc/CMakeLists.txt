@@ -14,6 +14,7 @@ target_link_libraries(brpc_adapter_test
     mockcpp
 
     rpc_adapter_brpc
+    ubsocket
 )
 
 target_sources(brpc_adapter_test
