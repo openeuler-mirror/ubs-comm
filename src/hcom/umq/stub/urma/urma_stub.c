@@ -38,3 +38,9 @@ void* urma_common_alloc(size_t size) {
 void urma_common_free(void* ptr) {
     free(ptr);
 }
+
+double get_cpu_mhz(bool cpu_freq_warn) {
+    (void)cpu_freq_warn;
+    double mhz = 2400.0;
+    return mhz;
+}
