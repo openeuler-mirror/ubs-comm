@@ -112,8 +112,8 @@ RPC_ADPT_READV_UNLIMITED=true \
 | RPC_ADPT_SRC_EID           | 使用bonding设备的eid   | ub协议下，通过`urma_admin show`命令查询获得                  | NA      | `RPC_ADPT_DEV_NAME`为bonding设备时必填 |
 | RPC_ADPT_LOG_LEVEL         | 日志级别               | emerg，alert，crit，err，warn，notice，info，debug           | info    | 否                                |
 | RPC_ADPT_LOG_USE_PRINTF    | 是否将日志打印到前台   | 0，1                                                         | 0       | 否                                |
-| RPC_ADPT_TX_DEPTH          | 发送队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`的值） | 128     | 否                                |
-| RPC_ADPT_RX_DEPTH          | 接受队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`的值） | 128     | 否                                |
+| RPC_ADPT_TX_DEPTH          | 发送队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfs_depth`两者的最小值） | 128     | 否                                |
+| RPC_ADPT_RX_DEPTH          | 接受队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfr_depth`两者的最小值） | 128     | 否                                |
 | RPC_ADPT_READV_UNLIMITED   | 是否打开readv上报限制  | false，true                                                  | false   | 否                                |
 | RPC_ADPT_BLOCK_TYPE        | 内存池的最小分片       | default，small，medium，large                                | default | 否                                |
 | RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，单位MB | 应用按需配置                                                 | 1024    | 否                                |
