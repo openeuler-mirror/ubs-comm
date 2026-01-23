@@ -27,4 +27,9 @@ target_compile_options(rpc_adapter_brpc
 target_include_directories(rpc_adapter_brpc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(rpc_adapter_brpc PUBLIC ubsocket)
 
+set_target_properties(rpc_adapter_brpc PROPERTIES
+    VERSION ${LIB_VERSION}
+    SOVERSION ${SOVERSION}
+)
+
 install(TARGETS rpc_adapter_brpc DESTINATION /usr/lib64/)
