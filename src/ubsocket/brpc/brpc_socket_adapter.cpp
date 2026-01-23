@@ -12,6 +12,8 @@
 #include "rpc_adpt_vlog.h"
 #include "file_descriptor.h"
 #include "brpc_file_descriptor.h"
+#include "ubs_mem/mem_file_descriptor.h"
+#include "ubs_mem/shm.h"
 
 static bool ForceUseUB()
 {
@@ -102,7 +104,11 @@ EXPOSE_C_DEFINE int close(int fd)
 
 EXPOSE_C_DEFINE int accept(int socket, struct sockaddr *address, socklen_t *address_len)
 {
+#ifdef UBS_SHM_BUILD_ENABLED
+    Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(socket);
+#else
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(socket);
+#endif
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->accept(socket, address, address_len);
     }
@@ -122,7 +128,11 @@ EXPOSE_C_DEFINE int accept4(int socket, struct sockaddr *address, socklen_t *add
 
 EXPOSE_C_DEFINE int connect(int socket, const struct sockaddr *address, socklen_t address_len)
 {
+#ifdef UBS_SHM_BUILD_ENABLED
+    Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(socket);
+#else
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(socket);
+#endif
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->connect(socket, address, address_len);
     }
@@ -132,7 +142,11 @@ EXPOSE_C_DEFINE int connect(int socket, const struct sockaddr *address, socklen_
 
 EXPOSE_C_DEFINE ssize_t readv(int fildes, const struct iovec *iov, int iovcnt)
 {
+#ifdef UBS_SHM_BUILD_ENABLED
+    Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fildes);
+#else
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fildes);
+#endif
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->readv(fildes, iov, iovcnt);
     }
@@ -142,7 +156,11 @@ EXPOSE_C_DEFINE ssize_t readv(int fildes, const struct iovec *iov, int iovcnt)
 
 EXPOSE_C_DEFINE ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
 {
+#ifdef UBS_SHM_BUILD_ENABLED
+    Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fildes);
+#else
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fildes);
+#endif
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->writev(fildes, iov, iovcnt);
     }
@@ -384,5 +402,11 @@ EXPOSE_C_DEFINE int epoll_pwait(int epfd, struct epoll_event *events, int maxeve
 __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
 {
     (void)OsAPiMgr::GetOriginApi();
+#ifdef UBS_SHM_BUILD_ENABLED
+    (void)ShmMgr::GetShmMgr();
+    (void)Brpc::Context::GetContext()->InitShm();
+#elif !defined(UBSOCKET_TEST_MODE)
     (void)Brpc::Context::GetContext();
+#endif
 }
+

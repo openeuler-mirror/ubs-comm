@@ -125,6 +125,7 @@ public:
         SOCKET_FD_TRANS_MODE_TCP,
         SOCKET_FD_TRANS_MODE_UMQ,
         SOCKET_FD_TRANS_MODE_UMQ_ZERO_COPY,
+        SOCKET_FD_TRANS_MODE_SHM,
         SOCKET_FD_TRANS_MODE_MAX
     };
 
@@ -330,7 +331,8 @@ protected:
         static const char *socket_fd_trans_mode_str[SOCKET_FD_TRANS_MODE_MAX] = {
             "TCP/IP",
             "UMQ-based Acceleration",
-            "UMQ-based Acceleration with Zero-copy"
+            "UMQ-based Acceleration with Zero-copy",
+            "UB_SHM-based Acceleration"
         };
         m_socket_fd_trans_mode = trans_mode;
         RPC_ADPT_VLOG_INFO("Socket fd transport mode: %s\n", socket_fd_trans_mode_str[m_socket_fd_trans_mode]);

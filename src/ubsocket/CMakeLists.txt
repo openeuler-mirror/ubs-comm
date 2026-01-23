@@ -82,4 +82,10 @@ target_sources(ubsocket
 )
 
 # brpc adaptor
+option(BUILD_WITH_UBS_SHM "Build UBS SHM" OFF)
+if (BUILD_WITH_UBS_SHM)
+    add_definitions(-DUBS_SHM_BUILD_ENABLED)
+endif ()
+
+message(STATUS "BUILD_WITH_UBS_SHM: ${BUILD_WITH_UBS_SHM}")
 add_subdirectory(brpc)
