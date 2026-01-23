@@ -26,15 +26,22 @@ urma_eid_t urma_get_eid(urma_device_t dev, const char* addr) {
 int urma_common_init(void) {
     return 0;
 }
+
 void urma_common_cleanup(void) {
     // 空
 }
+
 int urma_get_version(void) {
     return 1;
 }
+
 void* urma_common_alloc(size_t size) {
+    if (size <= 0) {
+        return nullptr;
+    }
     return malloc(size);
 }
+
 void urma_common_free(void* ptr) {
     free(ptr);
 }
