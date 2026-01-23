@@ -13,6 +13,12 @@
     %global with_hcom_perf 0
 %endif
 
+%global with_multicast %{?_with_multicast:%{_with_multicast}}
+# 如果没有提供，则设置默认值
+%if "%{with_multicast}" == ""
+    %global with_multicast 0
+%endif
+
 %global with_htracer_cli %{?_with_htracer_cli:%{_with_htracer_cli}}
 # 如果没有提供，则设置默认值
 %if "%{with_htracer_cli}" == ""
@@ -24,7 +30,7 @@
 %endif
 
 %if %{undefined rpm_release}
-    %define rpm_release 6
+    %define rpm_release 7
 %endif
 
 %if %{undefined rpm_build_date}
@@ -163,8 +169,8 @@ ln -s librpc_adapter_brpc.so.0     %{buildroot}%{_libdir}/librpc_adapter_brpc.so
 %{_prefix}/lib64/librpc_adapter_brpc.so.0.0.1
 
 %changelog
-* Mon Jan 19 2026 Qin Jiaqi <qinjiaqi6@h-partners.com> - 1.0.0-6
-- fix tar use noncom branch.
+* Fri Jan 23 2026 Qin Jiaqi <qinjiaqi6@h-partners.com> - 1.0.0-7
+- fix tar use noncom branch, update log.
 
 * Sat Jan 17 2026 Qin Jiaqi <qinjiaqi6@h-partners.com> - 1.0.0-6
 - Add ubsocket and umq.
