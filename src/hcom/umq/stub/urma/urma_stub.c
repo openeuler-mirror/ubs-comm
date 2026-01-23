@@ -37,7 +37,7 @@ int urma_get_version(void) {
 
 void* urma_common_alloc(size_t size) {
     if (size <= 0) {
-        return nullptr;
+        return NULL;
     }
     return malloc(size);
 }
