@@ -1,3 +1,4 @@
+cmake_minimum_required(VERSION 3.14)
 option(BUILD_HCOM "Build hcom" ON)
 
 if(BUILD_HCOM)

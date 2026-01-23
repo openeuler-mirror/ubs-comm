@@ -6,6 +6,16 @@ project(umq
   VERSION 0.0.1
 )
 
+option(USE_URMA_STUB "CI environment open stub: " OFF)
+message(STATUS "USE_URMA_STUB: ${USE_URMA_STUB}")
+
+if(USE_URMA_STUB)
+    message(STATUS "using USE_URMA_STUB: ${USE_URMA_STUB}")
+    add_subdirectory(stub/urma)
+else()
+    message(STATUS "not use USE_URMA_STUB: ${USE_URMA_STUB}")
+endif()
+
 set(CMAKE_FLAGS_PUBILC " -Wall -Werror -Wfloat-equal -Wtrampolines -g -rdynamic -Wl,-z,noexecstack,-z,relro,-z,now \
 -fno-strict-aliasing -fstack-protector-strong -fPIE -pie -fPIC -Wextra -Wno-unused-parameter -Wno-missing-field-initializers \
 -Wno-type-limits -fno-common")
@@ -95,11 +105,11 @@ set(CMAKE_SKIP_RPATH TRUE)
 get_filename_component(PROJECT_ROOT_DIR ${CMAKE_SOURCE_DIR}/../../.. ABSOLUTE)
 set(URMA_INCLUDE_DIR ${PROJECT_ROOT_DIR}/dist/hcom_3rdparty/umdk/urma/include)
 message(STATUS "UMQ: URMA_INCLUDE_DIR = ${URMA_INCLUDE_DIR}")
- 
+
 if(EXISTS "${URMA_INCLUDE_DIR}/uvs_api.h")
-    message(STATUS "uvs_api.h has found.")
+    message(STATUS "uvs_api.h has found, it shows that urma comes from 3rdparty.")
 else()
-    message(WARNING "uvs_api.h cannot found.")
+    message(STATUS "uvs_api.h cannot found, it shows that urma comes from system.")
 endif()
 
 include_directories(${URMA_INCLUDE_DIR})
