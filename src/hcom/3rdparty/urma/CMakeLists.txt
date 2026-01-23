@@ -33,16 +33,18 @@ if(NOT USE_SYSTEM_URMA)
         # 假设 umdk-urma 仓库包含 urma 的头文件
         FetchContent_Declare(
                 umdk
-                GIT_REPOSITORY https://gitee.com/openeuler/umdk.git
-                GIT_TAG        master
+                GIT_REPOSITORY https://atomgit.com/openeuler/umdk.git
+                GIT_TAG        br_openEuler_24.03_LTS_SP3
         )
         FetchContent_MakeAvailable(umdk)
+        file(MAKE_DIRECTORY ${URMA_INSTALL_DIR}/include)
         execute_process(COMMAND ls -al ${umdk_SOURCE_DIR})
         foreach(dir ${URMA_INCLUDE_DIR})
             message(STATUS "URMA include directory: ${dir}")
         endforeach()
         EXEC_PROGRAM(cp ${URMA_INSTALL_DIR} ARGS -rf ${umdk_SOURCE_DIR}/src/urma/lib/urma/bond/include/*.h ${URMA_INSTALL_DIR}/include)
         EXEC_PROGRAM(cp ${URMA_INSTALL_DIR} ARGS -rf ${umdk_SOURCE_DIR}/src/urma/lib/urma/core/include/*.h ${URMA_INSTALL_DIR}/include)
+        EXEC_PROGRAM(cp ARGS -rf ${umdk_SOURCE_DIR}/src/urma/lib/uvs/core/include/*.h ${URMA_INSTALL_DIR}/include)
     else()
         message("-- URMA_INSTALL_DIR: ${URMA_INSTALL_DIR}/include/")
         message("-- URMA_INSTALL_DIR: has been built, ignored")
