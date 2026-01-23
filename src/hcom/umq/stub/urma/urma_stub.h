@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <stdbool.h>
 
 typedef void* urma_device_t;
