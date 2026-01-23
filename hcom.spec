@@ -136,6 +136,9 @@ ln -s librpc_adapter_brpc.so.0     %{buildroot}%{_libdir}/librpc_adapter_brpc.so
 %defattr(-,root,root)
 %{_prefix}/include/hcom/capi/*.h
 %{_prefix}/include/hcom/*.h
+%if %{with_multicast}
+    %{_prefix}/include/hcom/multicast/*.h
+%endif
 %if %{with_hcom_perf} || %{with_htracer_cli}
     %{_prefix}/local/bin/*
 %endif
