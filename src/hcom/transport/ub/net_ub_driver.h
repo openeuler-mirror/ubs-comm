@@ -74,9 +74,6 @@ protected:
     NResult ValidaQpQueueSizeOptions();
     NResult CreateContext();
     NResult CreateWorkers();
-    NResult GetDeviceByIp(UBEId &tmpEid);
-    NResult GetDeviceByEid(UBEId &tmpEid);
-    NResult GetDeviceByName(UBEId &tmpEid);
     void ClearWorkers();
     void UnInitializeInner();
     virtual NResult DoInitialize()

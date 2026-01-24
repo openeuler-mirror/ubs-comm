@@ -62,12 +62,6 @@ NResult NetDriverUB::Initialize(const UBSHcomNetDriverOptions &option)
         return result;
     }
 
-    if (((result = mContext->Initialize()) != 0)) {
-        NN_LOG_ERROR("UB failed to initialize ctx");
-        UnInitializeInner();
-        return result;
-    }
-
     if ((result = ValidaQpQueueSizeOptions()) != NN_OK) {
         NN_LOG_ERROR("UB failed to validate qp queue size options");
         UnInitializeInner();
@@ -187,110 +181,6 @@ NResult NetDriverUB::ValidaQpQueueSizeOptions()
     return NN_OK;
 }
 
-NResult NetDriverUB::GetDeviceByIp(UBEId &tmpEid)
-{
-    int result = 0;
-    if (mOptions.enableMultiRail) {
-        uint16_t enableCount = 0;
-        std::vector<std::string> enableIps;
-        result = UBDeviceHelper::GetEnableDeviceCount(mOptions.NetDeviceIpMask(), enableCount, enableIps,
-            mOptions.NetDeviceIpGroup());
-        if (result != NN_OK) {
-            return result;
-        }
-        mMatchIp = enableIps[mDevIndex];
-    } else {
-        // filter ip by mask
-        std::vector<std::string> filters;
-        NetFunc::NN_SplitStr(mOptions.NetDeviceIpMask(), ",", filters);
-        if (filters.empty()) {
-            NN_LOG_ERROR("Invalid ip mask '" << mOptions.netDeviceIpMask << "' by set, example '192.168.0.0/24'");
-            return NN_INVALID_IP;
-        }
-
-        std::vector<std::string> matchIps;
-        for (auto &mask : filters) {
-            FilterIp(mask, matchIps);
-        }
-
-        if (matchIps.empty()) {
-            NN_LOG_ERROR("No matched ip found with '" << mOptions.netDeviceIpMask << "', example '192.168.0.0/24'");
-            return NN_INVALID_IP;
-        }
-        // init urma devices
-        if ((result = UBDeviceHelper::Initialize()) != 0) {
-            NN_LOG_ERROR("Failed to init devices");
-            return result;
-        }
-
-        NN_LOG_INFO(UBDeviceHelper::DeviceInfo());
-
-        // choose the first matched ip
-        mMatchIp = matchIps[0];
-    }
-
-    if ((result = UBDeviceHelper::GetDeviceByIp(mMatchIp, tmpEid)) != 0) {
-        UBDeviceHelper::UnInitialize();
-        NN_LOG_ERROR("Failed to get device by ip");
-        return result;
-    }
-    return NN_OK;
-}
-
-NResult NetDriverUB::GetDeviceByEid(UBEId &tmpEid)
-{
-    int result = 0;
-    if (Protocol() != UBSHcomNetDriverProtocol::UBC) {
-        NN_LOG_ERROR("UBSHcomUbcMode should only be enabled on UBC protocol");
-        return NN_ERROR;
-    }
-
-    // init urma devices
-    if ((result = UBDeviceHelper::Initialize()) != 0) {
-        NN_LOG_ERROR("Failed to init devices");
-        return result;
-    }
-
-    NN_LOG_INFO(UBDeviceHelper::DeviceInfo());
-
-    if ((result = UBDeviceHelper::GetDeviceByEid(mOptions.netDeviceEid, tmpEid)) != 0) {
-        UBDeviceHelper::UnInitialize();
-        NN_LOG_ERROR("Failed to get device by eid");
-        return result;
-    }
-    return NN_OK;
-}
-
-NResult NetDriverUB::GetDeviceByName(UBEId &tmpEid)
-{
-    int result = 0;
-    // init urma devices
-    if ((result = UBDeviceHelper::Initialize()) != 0) {
-        NN_LOG_ERROR("Failed to init devices");
-        return result;
-    }
-
-    NN_LOG_INFO(UBDeviceHelper::DeviceInfo());
-    // hard code, if dev_0 found, choose 0; else, choose the first device
-    char name[] = "bonding_dev_0";
-    uint8_t len = strlen(name);
-    result = UBDeviceHelper::GetDeviceByName(name, len, tmpEid);
-    if (result == 0) {
-        return NN_OK;
-    }
-
-    char nameBonding[] = "bonding";
-    len = strlen(nameBonding);
-    result = UBDeviceHelper::GetDeviceByName(nameBonding, len, tmpEid);
-    if (result != 0) {
-        UBDeviceHelper::UnInitialize();
-        NN_LOG_ERROR("Failed to get device by name");
-        return result;
-    }
-
-    return NN_OK;
-}
-
 NResult NetDriverUB::CreateContext()
 {
     if (mContext != nullptr) {
@@ -298,27 +188,6 @@ NResult NetDriverUB::CreateContext()
     }
 
     int result = 0;
-    UBEId tmpEid{};
-    if (Protocol() == UBSHcomNetDriverProtocol::UBC) {
-        if (GetDeviceByName(tmpEid) != 0) {
-            NN_LOG_ERROR("Failed to get device by name");
-            return NN_ERROR;
-        }
-    } else if (mOptions.oobType == NET_OOB_UB) {
-        if (GetDeviceByEid(tmpEid) != 0) {
-            NN_LOG_ERROR("Failed to get device by eid");
-            return NN_ERROR;
-        }
-    } else {
-        if (GetDeviceByIp(tmpEid) != 0) {
-            NN_LOG_ERROR("Failed to get device by ip");
-            return NN_ERROR;
-        }
-    }
-
-    mBandWidth = tmpEid.bandWidth;
-    NN_LOG_INFO("eid found devIndex " << tmpEid.devIndex << ", eidIndex " << tmpEid.eidIndex);
-
     // create context
     if ((result = UBContext::Create(mName, tmpEid, mContext)) != 0) {
         UBDeviceHelper::UnInitialize();
@@ -330,6 +199,11 @@ NResult NetDriverUB::CreateContext()
 
     mContext->IncreaseRef();
     mContext->protocol = Protocol();
+
+    if (((result = mContext->Initialize(mBandWidth)) != 0)) {
+        NN_LOG_ERROR("UB failed to initialize ctx");
+        return result;
+    }
     return NN_OK;
 }
 
