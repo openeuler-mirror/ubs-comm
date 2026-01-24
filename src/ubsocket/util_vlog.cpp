@@ -10,6 +10,7 @@
 #include "urpc_util.h"
 #include "util_vlog.h"
 
+namespace ubsocket {
 typedef struct util_vlog_level_def {
     const char *output_name;
     const char **alias_names;
@@ -101,3 +102,5 @@ const char *util_vlog_level_converter_to_str(util_vlog_level_t level)
 {
     return g_util_vlog_level_def[level].output_name;
 }
+
+}  // namespace ubsocket

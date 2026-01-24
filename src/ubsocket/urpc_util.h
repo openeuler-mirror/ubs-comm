@@ -20,10 +20,6 @@
 #include <stdbool.h>
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #if __GNUC__ && !defined(__CHECKER__)
 #define URPC_LIKELY(CONDITION)        __builtin_expect(!!(CONDITION), 1)
 #define URPC_UNLIKELY(CONDITION)      __builtin_expect(!!(CONDITION), 0)
@@ -114,6 +110,7 @@ enum destructor_priority {
 #define NS_PER_MS 1000000
 #define NS_PER_US 1000
 
+namespace ubsocket {
 /* Undefined when x == 0 */
 static inline int urpc_count_trail_zero(uint64_t x)
 {
@@ -184,8 +181,6 @@ static inline uint64_t get_timestamp_ms(void)
 int urpc_rand_seed_init(void);
 int urpc_rand_generate(uint8_t *buf, uint32_t num);
 
-#ifdef __cplusplus
-}
-#endif
+}  // namespace ubsocket
 
 #endif

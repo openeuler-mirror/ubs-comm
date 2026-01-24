@@ -406,7 +406,10 @@ __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
     (void)ShmMgr::GetShmMgr();
     (void)Brpc::Context::GetContext()->InitShm();
 #elif !defined(UBSOCKET_TEST_MODE)
-    (void)Brpc::Context::GetContext();
+    if (getenv("LD_PRELOAD") != nullptr) {
+        (void)Brpc::Context::GetContext();
+    }
+
 #endif
 }
 
