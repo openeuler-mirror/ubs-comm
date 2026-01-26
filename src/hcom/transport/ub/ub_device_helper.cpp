@@ -24,7 +24,7 @@ std::unordered_map<urma_speed_t, uint8_t> UBDeviceHelper::G_UBDevBWTable;
 std::mutex UBDeviceHelper::G_Mutex;
 uint32_t UBDeviceHelper::PORT_NUMBER = 1;
 
-UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, uint8_t &bandWidth)
+UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx)
 {
     UResult ret = UB_OK;
     std::lock_guard<std::mutex> guard(G_Mutex);
@@ -33,7 +33,7 @@ UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, uint8_t &bandWid
         G_InitRef++;
         return ret;
     }
-    ret = DoInitialize(devAttr, bandWidth);
+    ret = DoInitialize(devAttr, bandWidth, ctx);
     return ret;
 }
 

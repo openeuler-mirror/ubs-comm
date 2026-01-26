@@ -40,7 +40,7 @@ UResult UBContext::Initialize(uint8_t &bandWidth)
         NN_LOG_ERROR("Failed to malloc for urma device attr");
         return UB_MEMORY_ALLOCATE_FAILED;
     }
-    ret = UBDeviceHelper::Initialize(mDevAttr, bandWidth);
+    ret = UBDeviceHelper::Initialize(mDevAttr, bandWidth, mUrmaContext);
     if (ret != 0) {
         NN_LOG_ERROR("Failed to initialize urma device");
         free(mDevAttr);
@@ -56,8 +56,6 @@ UResult UBContext::Initialize(uint8_t &bandWidth)
 
     mMaxJfr = mDevAttr->dev_cap.max_jfr_depth;
     mMaxJfs = mDevAttr->dev_cap.max_jfs_depth;
-
-    mUrmaContext = tmpCtx;
     return UB_OK;
 }
 

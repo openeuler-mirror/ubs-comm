@@ -35,7 +35,7 @@ struct UBEId {
 
 class UBDeviceHelper {
 public:
-    static UResult Initialize(urma_device_attr_t *devAttr, uint8_t &bandWidth);
+    static UResult Initialize(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx);
     static void UnInitialize();
     static UResult Update();
 
@@ -51,8 +51,8 @@ public:
         std::vector<std::string> &enableIps, std::string ipGroup);
 
 private:
-    static UResult DoInitialize(urma_device_attr_t *devAttr, uint8_t &bandWidth);
-    static UResult DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth);
+    static UResult DoInitialize(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx);
+    static UResult DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx);
     static void GetEidVec(const std::string &devName, uint16_t devIndex, uint32_t eidCnt, urma_eid_info_t *eidInfoList,
         std::vector<UBEId> &outGidVec, uint8_t bandWidth);
 
