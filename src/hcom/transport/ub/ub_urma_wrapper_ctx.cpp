@@ -16,9 +16,9 @@
 namespace ock {
 namespace hcom {
 
-UResult UBContext::Create(const std::string &name, const UBEId &eid, UBContext *&ctx)
+UResult UBContext::Create(const std::string &name, UBContext *&ctx)
 {
-    auto tmpCtx = new (std::nothrow) UBContext(name, eid);
+    auto tmpCtx = new (std::nothrow) UBContext(name);
     if (tmpCtx == nullptr) {
         return UB_NEW_OBJECT_FAILED;
     }
@@ -37,11 +37,10 @@ UResult UBContext::Initialize(uint8_t &bandWidth)
     UResult ret = UB_OK;
     mDevAttr = reinterpret_cast<urma_device_attr_t *>(malloc(sizeof(urma_device_attr_t)));
     if (mDevAttr == nullptr) {
-        HcomUrma::DeleteContext(tmpCtx);
         NN_LOG_ERROR("Failed to malloc for urma device attr");
         return UB_MEMORY_ALLOCATE_FAILED;
     }
-    ret = UBDeviceHelper::Initialize(mDevAttr, bandwidth);
+    ret = UBDeviceHelper::Initialize(mDevAttr, bandWidth);
     if (ret != 0) {
         NN_LOG_ERROR("Failed to initialize urma device");
         free(mDevAttr);

@@ -51,14 +51,14 @@ void UBDeviceHelper::UnInitialize()
     G_UBDevBWTable.clear();
 }
 
-UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, uint8_t &bandWidth)
+UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx)
 {
     // 后续HCOM重构时重新定义此处数值换算，目前为了不修改头文件中uint8_t bandWidth(范围0~2555)的定义,只做大致比例换算。
     G_UBDevBWTable = { { URMA_SP_10M, 1 },    { URMA_SP_100M, 1 },  { URMA_SP_1G, 1 },     { URMA_SP_2_5G, 3 },
         { URMA_SP_5G, 5 },     { URMA_SP_10G, 10 },  { URMA_SP_14G, 14 },   { URMA_SP_25G, 25 },
         { URMA_SP_40G, 40 },   { URMA_SP_50G, 50 },  { URMA_SP_100G, 100 }, { URMA_SP_200G, 200 },
         { URMA_SP_400G, 255 }, { URMA_SP_800G, 255 } };
-    auto ret = DoUpdate(devAttr, bandWidth);
+    auto ret = DoUpdate(devAttr, bandWidth, ctx);
     if (NN_UNLIKELY(ret != UB_OK)) {
         G_UBDevBWTable.clear();
         return ret;
@@ -83,7 +83,7 @@ int UBDeviceHelper::CompareName(const char name[], size_t nameLen, urma_device_t
     return -1;
 }
 
-UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth)
+UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx)
 {
     UResult ret = UB_OK;
     bool isFindDevice = false;
@@ -125,7 +125,7 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth
         NN_LOG_ERROR("Failed to get eid list");
         return UB_PARAM_INVALID;
     }
-    auto guard2 = MakeScopeExit([&devAttr]() { HcomUrma::FreeEidList(eidInfoList); });
+    auto guard2 = MakeScopeExit([&eidInfoList]() { HcomUrma::FreeEidList(eidInfoList); });
 
     // Query and process device info
     if ((ret = HcomUrma::QueryDevice(devList[devIdx], devAttr)) != 0) {
@@ -147,13 +147,15 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth
         return UB_DEVICE_OPEN_FAILED;
     }
     bandWidth = bw;
+    ctx = tmpCtx;
     return UB_OK;
 }
 
 UResult UBDeviceHelper::Update()
 {
     std::lock_guard<std::mutex> guard(G_Mutex);
-    return DoUpdate();
+    // return DoUpdate();
+    return 0;
 }
 
 void UBDeviceHelper::GetEidVec(const std::string &devName, uint16_t devIndex, uint32_t eidCnt,
@@ -172,80 +174,61 @@ void UBDeviceHelper::GetEidVec(const std::string &devName, uint16_t devIndex, ui
     }
 }
 
-UResult UBDeviceHelper::GetDeviceCount(uint16_t &deviceCount, std::vector<UBDeviceSimpleInfo> &enabledDevices)
-{
-    UResult ret = UB_OK;
-    if ((ret = Initialize()) != UB_OK) {
-        return ret;
-    }
-
-    {
-        std::lock_guard<std::mutex> guard(G_Mutex);
-        deviceCount = G_UBDevMap.size();
-        for (auto &item : G_UBDevMap) {
-            if (item.second.active) {
-                enabledDevices.push_back(item.second);
-            }
-        }
-    }
-
-    return UB_OK;
-}
-
+// 这个函数目的是获取有多少个可用设备，而不是打开设备。需要另外处理
 UResult UBDeviceHelper::GetEnableDeviceCount(std::string ipMask, uint16_t &enableDevCount,
     std::vector<std::string> &enableIps, std::string ipGroup)
 {
-    UResult result = UB_OK;
-    std::vector<std::string> matchIps;
-    // filter ip by mask
-    NetFunc::NN_SplitStr(ipGroup, ";", matchIps);
-    if (matchIps.empty()) {
-        std::vector<std::string> filters;
-        NetFunc::NN_SplitStr(ipMask, ",", filters);
-        if (filters.empty()) {
-            NN_LOG_ERROR("[UB] Invalid ip mask '" << ipMask << "' by set, example '192.168.0.0/24'");
-            return NN_INVALID_IP;
-        }
-        for (auto &mask : filters) {
-            result = FilterIp(mask, matchIps);
-        }
-        if (matchIps.empty()) {
-            NN_LOG_ERROR("[UB] No matched ip found with ipGroup or ipMask.");
-            return UB_DEVICE_NO_IP_MATCHED;
-        }
-    }
-    // init urma devices
-    if ((result = Initialize()) != 0) {
-        NN_LOG_ERROR("[UB] Failed to init devices");
-        return result;
-    }
+    enableDevCount = 1;
+    return 0;
+    // UResult result = UB_OK;
+    // std::vector<std::string> matchIps;
+    // // filter ip by mask
+    // NetFunc::NN_SplitStr(ipGroup, ";", matchIps);
+    // if (matchIps.empty()) {
+    //     std::vector<std::string> filters;
+    //     NetFunc::NN_SplitStr(ipMask, ",", filters);
+    //     if (filters.empty()) {
+    //         NN_LOG_ERROR("[UB] Invalid ip mask '" << ipMask << "' by set, example '192.168.0.0/24'");
+    //         return NN_INVALID_IP;
+    //     }
+    //     for (auto &mask : filters) {
+    //         result = FilterIp(mask, matchIps);
+    //     }
+    //     if (matchIps.empty()) {
+    //         NN_LOG_ERROR("[UB] No matched ip found with ipGroup or ipMask.");
+    //         return UB_DEVICE_NO_IP_MATCHED;
+    //     }
+    // }
+    // // init urma devices
+    // if ((result = Initialize()) != 0) {
+    //     NN_LOG_ERROR("[UB] Failed to init devices");
+    //     return result;
+    // }
 
-    NN_LOG_INFO(DeviceInfo());
-
-    uint16_t enableCount = 0;
-    std::vector<std::string> findIps;
-    // choose the  matched ip and port active
-    for (uint16_t i = 0; i < static_cast<uint16_t>(matchIps.size()); ++i) {
-        UBEId tmpEid{};
-        if ((GetDeviceByIp(matchIps[i], tmpEid)) != 0) {
-            NN_LOG_WARN("[UB] Failed to get device by ip " << matchIps[i]);
-            continue;
-        }
+    // uint16_t enableCount = 0;
+    // std::vector<std::string> findIps;
+    // // choose the  matched ip and port active
+    // for (uint16_t i = 0; i < static_cast<uint16_t>(matchIps.size()); ++i) {
+    //     UBEId tmpEid{};
+        // if ((GetDeviceByIp(matchIps[i], tmpEid)) != 0) {
+        //     NN_LOG_WARN("[UB] Failed to get device by ip " << matchIps[i]);
+        //     continue;
+        // }
         // active or not
-        if (G_UBDevMap[tmpEid.devIndex].active) {
-            enableCount++;
-            findIps.emplace_back(matchIps[i]);
-        }
-        NN_LOG_DEBUG("gid found devIndex " << tmpEid.devIndex << ", gidIndex " << tmpEid.eidIndex);
-    }
+        // if (G_UBDevMap[tmpEid.devIndex].active) {
+        //     enableCount++;
+        //     findIps.emplace_back(matchIps[i]);
+        // }
+    //     NN_LOG_DEBUG("gid found devIndex " << tmpEid.devIndex << ", gidIndex " << tmpEid.eidIndex);
+    // }
 
-    if (findIps.empty()) {
-        NN_LOG_ERROR("[UB] NoMatched Device found with ip");
-        return UB_DEVICE_NO_IP_MATCHED;
-    }
-    enableDevCount = enableCount;
-    enableIps = findIps;
-    return result;
+    // if (findIps.empty()) {
+    //     NN_LOG_ERROR("[UB] NoMatched Device found with ip");
+    //     return UB_DEVICE_NO_IP_MATCHED;
+    // }
+    // enableDevCount = enableCount;
+    // enableIps = findIps;
+    // return result;
 }
 
 UResult UBDeviceHelper::GetDeviceByIp(const std::string &ip, UBEId &gid)
@@ -370,33 +353,6 @@ UResult UBDeviceHelper::GetDeviceByAddress(const std::string &ip, struct sockadd
 
     eid = tmpEid;
     return UB_OK;
-}
-
-std::string UBDeviceHelper::DeviceInfo()
-{
-    std::ostringstream oss;
-    std::lock_guard<std::mutex> guard(G_Mutex);
-    if (!G_InitRef) {
-        oss << "UBDeviceHelper has not been initialized";
-        return oss.str();
-    }
-
-    // dump device info
-    oss << "UBDeviceHelper device info, devices: count " << G_UBDevMap.size() << ", ";
-    for (auto &item : G_UBDevMap) {
-        oss << "[" << item.second.devIndex << "," << item.second.devName << "," << item.second.active << "] ";
-    }
-
-    oss << ", gidTable: count " << G_UBDevEidTable.size() << ", ";
-    for (auto &item : G_UBDevEidTable) {
-        oss << "[deviceName " << item.first << ", ";
-        for (auto &eid : item.second) {
-            oss << "[" << eid.devIndex << "," << eid.eidIndex << "] ";
-        }
-        oss << "] ";
-    }
-
-    return oss.str();
 }
 
 uint32_t UBDeviceHelper::GetPortNumber()

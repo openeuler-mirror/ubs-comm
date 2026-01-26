@@ -47,8 +47,6 @@ public:
 
     static uint32_t GetPortNumber();
 
-    static std::string DeviceInfo();
-
     static UResult GetEnableDeviceCount(std::string ipMask, uint16_t &enableDevCount,
         std::vector<std::string> &enableIps, std::string ipGroup);
 
