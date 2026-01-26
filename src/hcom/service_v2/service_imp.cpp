@@ -182,7 +182,7 @@ SerResult HcomServiceImp::DoInitDriver()
     uint16_t driverIdx = 0;
     for (auto &driver : mDriverPtrs) {
         if (driverIdx >= mOptions.workerGroupInfos.size()) {
-            driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos[0]);
+            driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos);
         } else {
             driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos[driverIdx]);
             ++driverIdx;
@@ -1706,7 +1706,7 @@ void HcomServiceImp::ConvertHcomSerImpOptsToHcomDriOpts(const HcomServiceImpOpti
     driverOpt.secType = serviceOpt.connSecOption.secType;
     driverOpt.cipherSuite = serviceOpt.tlsOption.netCipherSuite;
     driverOpt.tlsVersion = serviceOpt.tlsOption.tlsVersion;
-    driverOpt.dontStartWorkers = serviceOpt.workerGroupInfos[0].empty();
+    driverOpt.dontStartWorkers = serviceOpt.workerGroupInfos.empty(); //
     driverOpt.mode = serviceOpt.workerGroupMode;
     driverOpt.oobType = serviceOpt.oobType;
     driverOpt.lbPolicy = serviceOpt.lbPolicy;
