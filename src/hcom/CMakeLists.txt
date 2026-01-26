@@ -166,7 +166,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
 
 # add header path and add source files
 set(HCOM_SRC_DIR ${PROJECT_SOURCE_DIR})
-set(HCOM_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/dist)
+set(HCOM_OUTPUT_PATH ${CMAKE_INSTALL_PREFIX}/dist)
 set(HCOM_BUILD_PATH ${PROJECT_SOURCE_DIR}/build)
 set(HCOM_SRC_INCLUDE_PATH
     ${HCOM_SRC_DIR}/src/hcom/under_api/verbs
