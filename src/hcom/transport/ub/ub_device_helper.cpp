@@ -311,47 +311,47 @@ UResult UBDeviceHelper::GetIfAddressByIp(const std::string &ip, struct sockaddr_
 
 UResult UBDeviceHelper::GetDeviceByAddress(const std::string &ip, struct sockaddr_in &address, UBEId &eid)
 {
-    UResult result = UB_OK;
-    if ((result = Initialize()) != UB_OK) {
-        return result;
-    }
+    // UResult result = UB_OK;
+    // if ((result = Initialize()) != UB_OK) {
+    //     return result;
+    // }
 
-    UBEId tmpEid{};
-    bool found = false;
+    // UBEId tmpEid{};
+    // bool found = false;
 
-    std::lock_guard<std::mutex> lock(G_Mutex);
-    for (auto &item : G_UBDevEidTable) {
-        for (auto &gItem : item.second) {
-            auto devI6Address = reinterpret_cast<struct in6_addr *>(gItem.urmaEid.raw);
-            auto targetAddress = address.sin_addr.s_addr;
+    // std::lock_guard<std::mutex> lock(G_Mutex);
+    // for (auto &item : G_UBDevEidTable) {
+    //     for (auto &gItem : item.second) {
+    //         auto devI6Address = reinterpret_cast<struct in6_addr *>(gItem.urmaEid.raw);
+    //         auto targetAddress = address.sin_addr.s_addr;
 
-            auto judge1 = ((devI6Address->s6_addr32[NN_NO0] | devI6Address->s6_addr32[NN_NO1]) |
-                (devI6Address->s6_addr32[NN_NO2] ^ htonl(0x0000ffff))) == 0UL;
-            /* IPv4 encoded multicast addresses */
-            auto judge2 = devI6Address->s6_addr32[NN_NO0] == htonl(0xff0e0000) &&
-                ((devI6Address->s6_addr32[NN_NO1] | (devI6Address->s6_addr32[NN_NO2] ^ htonl(0x0000ffff))) == 0UL);
-            if (!((judge1 || judge2) && devI6Address->s6_addr32[NN_NO3] == targetAddress)) {
-                // doesn't match
-                continue;
-            }
+    //         auto judge1 = ((devI6Address->s6_addr32[NN_NO0] | devI6Address->s6_addr32[NN_NO1]) |
+    //             (devI6Address->s6_addr32[NN_NO2] ^ htonl(0x0000ffff))) == 0UL;
+    //         /* IPv4 encoded multicast addresses */
+    //         auto judge2 = devI6Address->s6_addr32[NN_NO0] == htonl(0xff0e0000) &&
+    //             ((devI6Address->s6_addr32[NN_NO1] | (devI6Address->s6_addr32[NN_NO2] ^ htonl(0x0000ffff))) == 0UL);
+    //         if (!((judge1 || judge2) && devI6Address->s6_addr32[NN_NO3] == targetAddress)) {
+    //             // doesn't match
+    //             continue;
+    //         }
 
-            // match
-            if (!found) { // first found
-                tmpEid = gItem;
-                found = true;
-            } else {
-                // found new one then compare the version, higher version is better
-                tmpEid = gItem;
-            }
-        }
-    }
+    //         // match
+    //         if (!found) { // first found
+    //             tmpEid = gItem;
+    //             found = true;
+    //         } else {
+    //             // found new one then compare the version, higher version is better
+    //             tmpEid = gItem;
+    //         }
+    //     }
+    // }
 
-    if (!found) {
-        NN_LOG_ERROR("Failed to get proper gid by address for ip " << ip);
-        return UB_DEVICE_NO_IP_TO_GID_MATCHED;
-    }
+    // if (!found) {
+    //     NN_LOG_ERROR("Failed to get proper gid by address for ip " << ip);
+    //     return UB_DEVICE_NO_IP_TO_GID_MATCHED;
+    // }
 
-    eid = tmpEid;
+    // eid = tmpEid;
     return UB_OK;
 }
 
