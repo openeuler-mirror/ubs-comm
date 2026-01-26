@@ -68,7 +68,7 @@ UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, uint8_t &bandW
     return UB_OK;
 }
 
-int UBDeviceHelper::CompareName(const char name[], urma_device_t **devList, int devCount)
+int UBDeviceHelper::CompareName(const char name[], size_t nameLen, urma_device_t **devList, int devCount)
 {
     for (int i = 0; i < devCount; i++) {
         if (devList[i] == nullptr) { // should not happen
@@ -76,7 +76,7 @@ int UBDeviceHelper::CompareName(const char name[], urma_device_t **devList, int 
             continue;
         }
 
-        if (strncmp(reinterpret_cast<const char *>(devList[i]->name), name) == 0) {
+        if (strncmp(reinterpret_cast<const char *>(devList[i]->name), name, nameLen) == 0) {
             return i;
         }
     }
@@ -109,9 +109,9 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth
     G_UBDevEidTable.reserve(devCount);
     char name[] = "bonding_dev_0";
     char nameBonding[] = "bonding";
-    int devIdx = CompareName(name, devList, devCount);
+    int devIdx = CompareName(name, sizeof(name), devList, devCount);
     if (devIdx == -1) {
-        devIdx = CompareName(nameBonding, devList, devCount);
+        devIdx = CompareName(nameBonding, sizeof(nameBonding), devList, devCount);
     }
     if (devIdx == -1) {
         NN_LOG_ERROR("Failed to get proper gid by name " << name << ", or name " << nameBonding);

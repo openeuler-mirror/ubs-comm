@@ -60,7 +60,7 @@ private:
 
     static UResult GetIfAddressByIp(const std::string &ip, struct sockaddr_in &address);
     static UResult GetDeviceByAddress(const std::string &ip, struct sockaddr_in &address, UBEId &gid);
-    static int CompareName(const char name[], urma_device_t **devList, int devCount);
+    static int CompareName(const char name[], size_t nameLen, urma_device_t **devList, int devCount);
 
 private:
     static std::unordered_map<uint16_t, UBDeviceSimpleInfo> G_UBDevMap;
