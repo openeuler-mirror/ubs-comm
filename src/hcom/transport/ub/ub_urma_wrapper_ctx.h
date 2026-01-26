@@ -25,11 +25,10 @@ extern uint64_t g_connection_count;
 
 class UBContext {
 public:
-    static UResult Create(const std::string &name, const UBEId &eid, UBContext *&ctx);
+    static UResult Create(const std::string &name, UBContext *&ctx);
 
 public:
-    UBContext(const std::string &name, const UBEId &eid) : mName(name), mDevIndex(eid.devIndex),
-        mEidIndex(eid.eidIndex), mBestEid(eid)
+    UBContext(const std::string &name) : mName(name)
     {
         OBJ_GC_INCREASE(UBContext);
     }
@@ -40,7 +39,7 @@ public:
         OBJ_GC_DECREASE(UBContext);
     }
 
-    UResult Initialize();
+    UResult Initialize(uint32_t &bandWidth);
     UResult UnInitialize();
 
     void UpdateGid(const std::string &matchIp);
@@ -77,8 +76,6 @@ private:
     urma_context_t *mUrmaContext = nullptr;
     urma_device_attr_t *mDevAttr = nullptr;
     uint8_t mPortNumber = 1;
-    uint16_t mDevIndex = 0;
-    uint16_t mEidIndex = 0;
     uint32_t mMaxJfs = 0;
     uint32_t mMaxJfr = 0;
     int mMaxSge = NN_NO16;

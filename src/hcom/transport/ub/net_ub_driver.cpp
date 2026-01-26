@@ -189,7 +189,7 @@ NResult NetDriverUB::CreateContext()
 
     int result = 0;
     // create context
-    if ((result = UBContext::Create(mName, tmpEid, mContext)) != 0) {
+    if ((result = UBContext::Create(mName, mContext)) != 0) {
         UBDeviceHelper::UnInitialize();
         NN_LOG_ERROR("Failed to new ctx, result " << result);
         return result;
