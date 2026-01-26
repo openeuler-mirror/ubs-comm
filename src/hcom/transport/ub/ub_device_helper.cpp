@@ -24,7 +24,7 @@ std::unordered_map<urma_speed_t, uint8_t> UBDeviceHelper::G_UBDevBWTable;
 std::mutex UBDeviceHelper::G_Mutex;
 uint32_t UBDeviceHelper::PORT_NUMBER = 1;
 
-UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, uint32_t &bandWidth)
+UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, uint8_t &bandWidth)
 {
     UResult ret = UB_OK;
     std::lock_guard<std::mutex> guard(G_Mutex);
@@ -51,7 +51,7 @@ void UBDeviceHelper::UnInitialize()
     G_UBDevBWTable.clear();
 }
 
-UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, uint32_t &bandWidth)
+UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, uint8_t &bandWidth)
 {
     // 后续HCOM重构时重新定义此处数值换算，目前为了不修改头文件中uint8_t bandWidth(范围0~2555)的定义,只做大致比例换算。
     G_UBDevBWTable = { { URMA_SP_10M, 1 },    { URMA_SP_100M, 1 },  { URMA_SP_1G, 1 },     { URMA_SP_2_5G, 3 },
@@ -83,7 +83,7 @@ int UBDeviceHelper::CompareName(const char name[], urma_device_t **devList, int 
     return -1;
 }
 
-UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint32_t &bandWidth)
+UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth)
 {
     UResult ret = UB_OK;
     bool isFindDevice = false;

@@ -39,7 +39,7 @@ public:
         OBJ_GC_DECREASE(UBContext);
     }
 
-    UResult Initialize(uint32_t &bandWidth);
+    UResult Initialize(uint8_t &bandWidth);
     UResult UnInitialize();
 
     void UpdateGid(const std::string &matchIp);

@@ -27,7 +27,7 @@ UResult UBContext::Create(const std::string &name, const UBEId &eid, UBContext *
     return UB_OK;
 }
 
-UResult UBContext::Initialize(uint32_t &bandWidth)
+UResult UBContext::Initialize(uint8_t &bandWidth)
 {
     if (mUrmaContext != nullptr) {
         NN_LOG_INFO("UBContext " << mName << " already initialized");
