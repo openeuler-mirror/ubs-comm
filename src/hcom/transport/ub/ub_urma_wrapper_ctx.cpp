@@ -81,20 +81,20 @@ UResult UBContext::UnInitialize()
 
 void UBContext::UpdateGid(const std::string &matchIp)
 {
-    auto ret = UBDeviceHelper::Update();
-    if (NN_UNLIKELY(ret != UB_OK)) {
-        NN_LOG_ERROR("Failed to do update");
-        return;
-    }
+    // auto ret = UBDeviceHelper::Update();
+    // if (NN_UNLIKELY(ret != UB_OK)) {
+    //     NN_LOG_ERROR("Failed to do update");
+    //     return;
+    // }
 
-    UBEId tmpEid{};
-    if ((UBDeviceHelper::GetDeviceByIp(matchIp, tmpEid)) != 0) {
-        NN_LOG_ERROR("Failed to get device by ip " << matchIp);
-        return;
-    }
+    // UBEId tmpEid{};
+    // if ((UBDeviceHelper::GetDeviceByIp(matchIp, tmpEid)) != 0) {
+    //     NN_LOG_ERROR("Failed to get device by ip " << matchIp);
+    //     return;
+    // }
 
-    NN_LOG_INFO("gid found devIndex " << tmpEid.devIndex << ", gidIndex " << tmpEid.eidIndex);
-    mBestEid = tmpEid;
+    // NN_LOG_INFO("gid found devIndex " << tmpEid.devIndex << ", gidIndex " << tmpEid.eidIndex);
+    // mBestEid = tmpEid;
 }
 } // namespace hcom
 }
