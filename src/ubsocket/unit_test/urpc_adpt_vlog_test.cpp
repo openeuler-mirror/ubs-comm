@@ -60,8 +60,8 @@ public:
     }
 
 private:
-    util_vlog_ctx_t *vlogCtx;
-    util_vlog_level_t originalLevel;
+    ubsocket::util_vlog_ctx_t *vlogCtx;
+    ubsocket::util_vlog_level_t originalLevel;
     void (*originalFunction)(int, char*);
 };
 // RPC_ADPT_VLOG_ERR
