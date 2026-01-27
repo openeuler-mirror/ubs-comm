@@ -2,7 +2,9 @@ project(hcom_tests_integration)
 
 add_compile_options(-fno-access-control)
 add_compile_options(-fno-inline)
+message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
 
+set(HCOM_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/dist)
 set(HCOM_3RDPARTY_INSTALL_DIR "${HCOM_OUTPUT_PATH}/hcom_3rdparty")
 set(LIB_HTRACER_DIR "${HCOM_3RDPARTY_INSTALL_DIR}/hcom_tracer/lib")
 set(LIB_HTRACER_STATIC "${HCOM_3RDPARTY_INSTALL_DIR}/hcom_tracer/lib/libhtracer_static.a")
