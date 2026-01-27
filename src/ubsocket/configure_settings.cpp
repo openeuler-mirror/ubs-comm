@@ -59,21 +59,26 @@ static const EnvStrConverter<bool>::EnvStrDef g_bool_def[] = {
     {false,"False",g_bool_false},
 };
 
-EnvStrConverter<bool> g_bool_converter = {
-    g_bool_def,
-    sizeof(g_bool_def) / sizeof(g_bool_def[0])
-};
+EnvStrConverter<bool>& GetBoolValConverter()
+{
+    static EnvStrConverter<bool> bool_converter = {
+            g_bool_def,
+            sizeof(g_bool_def) / sizeof(g_bool_def[0])
+    };
+    return bool_converter;
+}
 
 bool BoolConverter(const char *str,bool default_bool_val)
 {
-    return g_bool_converter.EnvStrConvert(str,default_bool_val);
+    auto& bool_converter = GetBoolValConverter();
+    return bool_converter.EnvStrConvert(str, default_bool_val);
 }
 
 const char *BoolConverter(bool bool_val)
 {
-    return g_bool_converter.EnvStrConvert(bool_val);
+    auto& bool_converter = GetBoolValConverter();
+    return bool_converter.EnvStrConvert(bool_val);
 }
-
 }
 
 ConfigSettings::socket_fd_trans_mode ConfigSettings::m_socket_fd_trans_mode = SOCKET_FD_TRANS_MODE_UNSET;
@@ -125,7 +130,7 @@ int ConfigSettings::ParseEnvVars()
 
     RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_RX_DEPTH, m_rx_depth);
 
-    RPC_ADPT_VLOG_INFO("%s: %lu\n", ENV_VAR_BLOCK_TYPE, GetIOBlockTypeStr());
+    RPC_ADPT_VLOG_INFO("%s: %s\n", ENV_VAR_BLOCK_TYPE, GetIOBlockTypeStr());
     RPC_ADPT_VLOG_INFO("%s: %lu\n", ENV_VAR_POOL_INITIAL_SIZE, m_io_total_size);
 
     if(strlen(m_stats_str) > 0){
