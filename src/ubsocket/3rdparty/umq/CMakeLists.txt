@@ -3,7 +3,7 @@ if(NOT DEFINED UMQ_LIB OR UMQ_LIB STREQUAL "")
 endif()
 
 if(NOT DEFINED UMQ_INCLUDE OR UMQ_INCLUDE STREQUAL "")
-  set(UMQ_INCLUDE "/home/zhangbohao/brmerge/devcomm/ubs-comm/src/hcom/umq/include/umq")
+  set(UMQ_INCLUDE "/usr/include/ub/umdk/urpc/umq/")
 endif()
 
 if(UBSOCKET_BUILD_TESTS)
