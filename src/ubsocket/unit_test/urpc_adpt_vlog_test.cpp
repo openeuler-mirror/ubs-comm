@@ -17,6 +17,8 @@
 
 #include "rpc_adpt_vlog.h"
 
+#include "ubsocket/util_vlog.h"  
+
 class RpcAdptVlogTest : public testing::Test {
 public:
     RpcAdptVlogTest()
