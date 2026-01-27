@@ -77,8 +77,8 @@ target_sources(ubsocket
     ${CMAKE_CURRENT_SOURCE_DIR}/polling_epoll.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/rpc_adpt_vlog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/statistics.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/urpc_util.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/util_vlog.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/urpc_util.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/util_vlog.cpp
 )
 
 # brpc adaptor
