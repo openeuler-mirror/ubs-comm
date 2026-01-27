@@ -6,7 +6,9 @@
 # (1) UMQ_BUILD(optional, default is off) => build umq or not.(on/off)
 # (2) UBSOCKET_BUILD(optional, default is off) => build ubsocket or not.(on/off)
 # (3) UBSOCKET_UT(optional, default is off) => run ubsocket ut or not.(on/off)
-
+# (4) USE_URMA_STUB(optional, default is OFF) => in CI environment, use urma stub or not.(ON/OFF)
+# (5) UBSOCKET_PASS_RATE(optional, default is off) => run ubsocket ut pass rate or not.(on/off)
+# (6) UBSOCKET_COVERAGE(optional, default is off) => run ubsocket ut coverage or not.(on/off)
 # version: 1.0.0
 # change log:
 # ***********************************************************************
@@ -30,6 +32,18 @@ echo "build ubsocket shm: ${UBSOCKET_BUILD_SHM}"
 UBSOCKET_UT="${UBSOCKET_UT:-off}"
 echo "run ubsocket ut: ${UBSOCKET_UT}"
 
+# when in CI environment, open it
+USE_URMA_STUB="${USE_URMA_STUB:-OFF}"
+echo "use urma stub: ${USE_URMA_STUB}"
+
+# check whether run ubsocket ut pass rate, default is off
+UBSOCKET_PASS_RATE="${UBSOCKET_PASS_RATE:-off}"
+echo "run ubsocket ut pass rate: ${UBSOCKET_PASS_RATE}"
+
+# check whether run ubsocket ut coverage, default is off
+UBSOCKET_COVERAGE="${UBSOCKET_COVERAGE:-off}"
+echo "run ubsocket ut coverage: ${UBSOCKET_COVERAGE}"
+
 # build umq, .so will store in "./src/hcom/umq/build/src"
 function umq_build() {
     if [ "${UMQ_BUILD}" != "on" ]; then
@@ -44,7 +58,7 @@ function umq_build() {
     mkdir -p build
     cd build
 
-    if ! cmake ..; then
+    if ! cmake -DUSE_URMA_STUB="${USE_URMA_STUB}" ..; then
         echo "[Error]: umq cmake failed."
         exit 1
     fi
@@ -111,12 +125,12 @@ function run_ubsocket_ut_tests() {
     fi
 
     local ubsocket_dir="${ROOT_DIR}/src/ubsocket"
-
     cd "${ubsocket_dir}"
 
     if cmake -S. -Bbuild \
         -DCMAKE_BUILD_TYPE=Debug \
         -DUBSOCKET_BUILD_TESTS=ON \
+        -DUBSOCKET_ENABLE_COVERAGE=ON \
         -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
         -DUMQ_LIB="${ROOT_DIR}/src/hcom/umq/build/src/libumq.so" \
         -DUMQ_BUF_LIB="${ROOT_DIR}/src/hcom/umq/build/src/qbuf/libumq_buf.so"; then
@@ -137,6 +151,9 @@ function run_ubsocket_ut_tests() {
 
     if ctest --test-dir build --output-on-failure; then
         echo "All ubsocket UT tests successfully."
+        return 0
+    else
+        echo "[Error]: Some ubsocket UT tests failed."
         cd "${ROOT_DIR}"
         exit 1
     fi
