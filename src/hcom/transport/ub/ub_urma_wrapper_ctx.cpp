@@ -56,7 +56,7 @@ UResult UBContext::Initialize(uint8_t &bandWidth)
 
     mMaxJfr = mDevAttr->dev_cap.max_jfr_depth;
     mMaxJfs = mDevAttr->dev_cap.max_jfs_depth;
-    bandwidth = mBestEid.bandwidth;
+    bandWidth = mBestEid.bandWidth;
     return UB_OK;
 }
 
