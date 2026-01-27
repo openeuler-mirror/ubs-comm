@@ -33,7 +33,7 @@ TEST_F(UrpcUtilTest, Rand)
     int x = 0;
     int ret = 0;
 
-    ret = urpc_rand_generate((uint8_t *)&x, sizeof(x));
+    ret = ubsocket::urpc_rand_generate((uint8_t *)&x, sizeof(x));
     EXPECT_EQ(ret, 0);
     EXPECT_NE(x, 0);
 
