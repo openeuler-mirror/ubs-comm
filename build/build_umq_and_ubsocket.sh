@@ -170,18 +170,29 @@ function run_ubsocket_pass_rate() {
     local ubsocket_build_dir="${ROOT_DIR}/src/ubsocket/build"
     cd "${ubsocket_build_dir}"
 
-    ./ubsocket_test --gtest_output=xml:./ubsocket_ut.xml
+    ./ubsocket_test --gtest_output=xml:./ubsocket_test.xml
+    ./brpc_adapter_test --gtest_output=xml:./brpc_adapter_test.xml
+
+    files=("ubsocket_test.xml" "brpc_adapter_test.xml")
+    tests_val=0
+    failures_val=0
+    disabled_val=0
+    errors_val=0
+    time_val=0
+
+    for file in "${files[@]}"; do
+        tests_val=$((tests_val + $(grep "<testsuites " "$file" | awk -F "tests=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')))
+        failures_val=$((failures_val + $(grep "<testsuites " "$file" | awk -F "failures=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')))
+        disabled_val=$((disabled_val + $(grep "<testsuites " "$file" | awk -F "disabled=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')))
+        errors_val=$((errors_val + $(grep "<testsuites " "$file" | awk -F "errors=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')))
+        time_val=$(echo "$time_val + $(grep "<testsuites " "$file" | awk -F "time=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')" | bc)
+    done
+
+    timestamp_val=$(cat ubsocket_test.xml | grep "<testsuites " | head -n 1 | awk -F "timestamp=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}')
+    pass_rate=$(echo "scale=2; ($tests_val - $failures_val - $errors_val) / $tests_val * 100" | bc)
+    fail_rate=$(echo "scale=2; ($failures_val + $errors_val) / $tests_val * 100" | bc)
 
     {
-        tests_val=$(cat ubsocket_ut.xml |grep "<testsuites "|awk -F "tests=" '{print $2}'|awk '{print $1}'|awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')
-        failures_val=$(cat ubsocket_ut.xml |grep "<testsuites "|awk -F "failures=" '{print $2}'|awk '{print $1}'|awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')
-        disabled_val=$(cat ubsocket_ut.xml |grep "<testsuites "|awk -F "disabled=" '{print $2}'|awk '{print $1}'|awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')
-        errors_val=$(cat ubsocket_ut.xml |grep "<testsuites "|awk -F "errors=" '{print $2}'|awk '{print $1}'|awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')
-        time_val=$(cat ubsocket_ut.xml |grep "<testsuites "|awk -F "time=" '{print $2}'|awk '{print $1}'|awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')
-        timestamp_val=$(cat ubsocket_ut.xml |grep "<testsuites "| head -n 1|awk -F "timestamp=" '{print $2}'|awk '{print $1}'|awk -F "\"" '{print $2}')
-        pass_rate=$(echo "scale=2; ($tests_val - $failures_val - $errors_val) / $tests_val * 100" | bc)
-        fail_rate=$(echo "scale=2; ($failures_val + $errors_val) / $tests_val * 100" | bc)
-
         echo "Tests Count: ${tests_val}"
         echo "Failure: ${failures_val}"
         echo "Disabled: ${disabled_val}"
