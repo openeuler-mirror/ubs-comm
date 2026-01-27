@@ -1706,7 +1706,7 @@ void HcomServiceImp::ConvertHcomSerImpOptsToHcomDriOpts(const HcomServiceImpOpti
     driverOpt.secType = serviceOpt.connSecOption.secType;
     driverOpt.cipherSuite = serviceOpt.tlsOption.netCipherSuite;
     driverOpt.tlsVersion = serviceOpt.tlsOption.tlsVersion;
-    driverOpt.dontStartWorkers = serviceOpt.workerGroupInfos.empty(); //
+    driverOpt.dontStartWorkers = serviceOpt.workerGroupInfos.empty();
     driverOpt.mode = serviceOpt.workerGroupMode;
     driverOpt.oobType = serviceOpt.oobType;
     driverOpt.lbPolicy = serviceOpt.lbPolicy;
