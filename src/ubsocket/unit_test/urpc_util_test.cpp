@@ -3,6 +3,9 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
+#include "ubsocket/util_vlog.h" 
+
+
 class UrpcUtilTest : public testing::Test {
 public:
     void SetUp() override
