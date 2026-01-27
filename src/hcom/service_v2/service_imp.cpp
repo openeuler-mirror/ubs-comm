@@ -182,7 +182,7 @@ SerResult HcomServiceImp::DoInitDriver()
     uint16_t driverIdx = 0;
     for (auto &driver : mDriverPtrs) {
         if (driverIdx >= mOptions.workerGroupInfos.size()) {
-            driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos);
+            driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos[0]);
         } else {
             driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos[driverIdx]);
             ++driverIdx;
