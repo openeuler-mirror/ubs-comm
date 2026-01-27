@@ -13,13 +13,13 @@
 #include "umq_api.h"
 #include "rpc_adpt_vlog.h"
 
-static util_vlog_ctx_t g_rpc_adpt_vlog_ctx = {
-    UTIL_VLOG_LEVEL_INFO,
-    "RPC_ADPT",
-    default_vlog_output,
-    {
-        UTIL_VLOG_PRINT_PERIOD_MS,
-        UTIL_VLOG_PRINT_TIMES,
+static ubsocket::util_vlog_ctx_t g_rpc_adpt_vlog_ctx = {
+    .level = ubsocket::UTIL_VLOG_LEVEL_INFO,
+    .vlog_name = "RPC_ADPT",
+    .vlog_output_func = ubsocket::default_vlog_output,
+    .rate_limited = {
+        .interval_ms = UTIL_VLOG_PRINT_PERIOD_MS,
+        .num = UTIL_VLOG_PRINT_TIMES,
     }
 };
 
