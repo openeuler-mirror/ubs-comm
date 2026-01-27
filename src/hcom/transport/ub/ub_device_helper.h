@@ -35,7 +35,7 @@ struct UBEId {
 
 class UBDeviceHelper {
 public:
-    static UResult Initialize(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx);
+    static UResult Initialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid);
     static void UnInitialize();
     static UResult Update();
 
@@ -46,18 +46,14 @@ public:
         std::vector<std::string> &enableIps, std::string ipGroup);
 
 private:
-    static UResult DoInitialize(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx);
-    static UResult DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx);
-    static void GetEidVec(const std::string &devName, uint16_t devIndex, uint32_t eidCnt, urma_eid_info_t *eidInfoList,
-        std::vector<UBEId> &outGidVec, uint8_t bandWidth);
+    static UResult DoInitialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid);
+    static UResult DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid);
 
     static UResult GetIfAddressByIp(const std::string &ip, struct sockaddr_in &address);
     static UResult GetDeviceByAddress(const std::string &ip, struct sockaddr_in &address, UBEId &gid);
     static int CompareName(const char name[], size_t nameLen, urma_device_t **devList, int devCount);
 
 private:
-    static std::unordered_map<uint16_t, UBDeviceSimpleInfo> G_UBDevMap;
-    static std::unordered_map<std::string, std::vector<UBEId>> G_UBDevEidTable;
     static std::mutex G_Mutex;
     static uint32_t G_InitRef;
 

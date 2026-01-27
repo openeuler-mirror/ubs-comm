@@ -18,13 +18,11 @@ namespace hcom {
 
 
 uint32_t UBDeviceHelper::G_InitRef = 0;
-std::unordered_map<uint16_t, UBDeviceSimpleInfo> UBDeviceHelper::G_UBDevMap;
-std::unordered_map<std::string, std::vector<UBEId>> UBDeviceHelper::G_UBDevEidTable;
 std::unordered_map<urma_speed_t, uint8_t> UBDeviceHelper::G_UBDevBWTable;
 std::mutex UBDeviceHelper::G_Mutex;
 uint32_t UBDeviceHelper::PORT_NUMBER = 1;
 
-UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx)
+UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid)
 {
     UResult ret = UB_OK;
     std::lock_guard<std::mutex> guard(G_Mutex);
@@ -33,7 +31,7 @@ UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, uint8_t &bandWid
         G_InitRef++;
         return ret;
     }
-    ret = DoInitialize(devAttr, bandWidth, ctx);
+    ret = DoInitialize(devAttr, ctx, eid);
     return ret;
 }
 
@@ -46,19 +44,17 @@ void UBDeviceHelper::UnInitialize()
     }
     // HcomUrma::Uninit() 每个进程只能调用一次，防止一个进程多个service多次调用
     HcomUrma::Uninit();
-    G_UBDevMap.clear();
-    G_UBDevEidTable.clear();
     G_UBDevBWTable.clear();
 }
 
-UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx)
+UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid)
 {
     // 后续HCOM重构时重新定义此处数值换算，目前为了不修改头文件中uint8_t bandWidth(范围0~2555)的定义,只做大致比例换算。
     G_UBDevBWTable = { { URMA_SP_10M, 1 },    { URMA_SP_100M, 1 },  { URMA_SP_1G, 1 },     { URMA_SP_2_5G, 3 },
         { URMA_SP_5G, 5 },     { URMA_SP_10G, 10 },  { URMA_SP_14G, 14 },   { URMA_SP_25G, 25 },
         { URMA_SP_40G, 40 },   { URMA_SP_50G, 50 },  { URMA_SP_100G, 100 }, { URMA_SP_200G, 200 },
         { URMA_SP_400G, 255 }, { URMA_SP_800G, 255 } };
-    auto ret = DoUpdate(devAttr, bandWidth, ctx);
+    auto ret = DoUpdate(devAttr, ctx, eid);
     if (NN_UNLIKELY(ret != UB_OK)) {
         G_UBDevBWTable.clear();
         return ret;
@@ -83,7 +79,7 @@ int UBDeviceHelper::CompareName(const char name[], size_t nameLen, urma_device_t
     return -1;
 }
 
-UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth, urma_context_t *&ctx)
+UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid)
 {
     UResult ret = UB_OK;
     bool isFindDevice = false;
@@ -93,8 +89,6 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth
         NN_LOG_ERROR("Failed to initialize urma environment");
         return ret;
     }
-    G_UBDevMap.clear();
-    G_UBDevEidTable.clear();
 
     urma_device_t **devList = nullptr;
     int devCount = 0;
@@ -105,8 +99,6 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth
         return UB_DEVICE_FAILED_OPEN;
     }
     auto guard = MakeScopeExit([&devList]() { HcomUrma::FreeDeviceList(devList); });
-    G_UBDevMap.reserve(devCount);
-    G_UBDevEidTable.reserve(devCount);
     char name[] = "bonding_dev_0";
     char nameBonding[] = "bonding";
     int devIdx = CompareName(name, sizeof(name), devList, devCount);
@@ -146,7 +138,10 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, uint8_t &bandWidth
         NN_LOG_ERROR("Invalid device index is set for Device " << devList[devIdx]->name << ", errno " << errno);
         return UB_DEVICE_OPEN_FAILED;
     }
-    bandWidth = bw;
+    eid.devIndex = devIdx;
+    eid.eidIndex = eidInfoList[0].eid_index;
+    eid.urmaEid = eidInfoList[0].eid;
+    eid.bandWidth = bw;
     ctx = tmpCtx;
     return UB_OK;
 }
@@ -156,22 +151,6 @@ UResult UBDeviceHelper::Update()
     std::lock_guard<std::mutex> guard(G_Mutex);
     // return DoUpdate();
     return 0;
-}
-
-void UBDeviceHelper::GetEidVec(const std::string &devName, uint16_t devIndex, uint32_t eidCnt,
-    urma_eid_info_t *eidInfoList, std::vector<UBEId> &outGidVec, uint8_t bandWidth)
-{
-    UBEId eid{};
-    for (uint32_t i = 0; i < eidCnt; i++) {
-        if (eidInfoList[i].eid.in6.interface_id == 0) {
-            continue;
-        }
-        eid.devIndex = devIndex;
-        eid.eidIndex = eidInfoList[i].eid_index;
-        eid.urmaEid = eidInfoList[i].eid;
-        eid.bandWidth = bandWidth;
-        outGidVec.push_back(eid);
-    }
 }
 
 // 这个函数目的是获取有多少个可用设备，而不是打开设备。需要另外处理
