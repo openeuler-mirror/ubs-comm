@@ -402,12 +402,14 @@ EXPOSE_C_DEFINE int epoll_pwait(int epfd, struct epoll_event *events, int maxeve
 __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
 {
     (void)OsAPiMgr::GetOriginApi();
-
 #ifdef UBS_SHM_BUILD_ENABLED
     (void)ShmMgr::GetShmMgr();
     (void)Brpc::Context::GetContext()->InitShm();
 #elif !defined(UBSOCKET_TEST_MODE)
-    (void)Brpc::Context::GetContext();
+    if (getenv("LD_PRELOAD") != nullptr) {
+        (void)Brpc::Context::GetContext();
+    }
+
 #endif
 }
 

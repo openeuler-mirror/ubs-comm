@@ -13,6 +13,8 @@
 
 #define URPC_RANDOM_SEED_SIZE 48
 
+namespace ubsocket {
+
 #if defined(__x86_64__)
 #include "ub_get_clock.h"
 
@@ -82,4 +84,6 @@ int urpc_rand_generate(uint8_t *buf, uint32_t num)
     }
 
     return 0;
+}
+
 }

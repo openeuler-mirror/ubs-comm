@@ -13,14 +13,12 @@
 #include "umq_api.h"
 #include "rpc_adpt_vlog.h"
 
-static util_vlog_ctx_t g_rpc_adpt_vlog_ctx = {
-    UTIL_VLOG_LEVEL_INFO,
+static ubsocket::util_vlog_ctx_t g_rpc_adpt_vlog_ctx = {
+    ubsocket::UTIL_VLOG_LEVEL_INFO,
     "RPC_ADPT",
-    default_vlog_output,
-    {
-        UTIL_VLOG_PRINT_PERIOD_MS,
-        UTIL_VLOG_PRINT_TIMES,
-    }
+    ubsocket::default_vlog_output,
+    UTIL_VLOG_PRINT_PERIOD_MS,
+    UTIL_VLOG_PRINT_TIMES,
 };
 
 static const char *g_log_level_to_str[UMQ_LOG_LEVEL_MAX] = {"EMERG", "ALERT", "CRIT", "ERROR", "WARNING",
@@ -36,7 +34,7 @@ static void DefaultPrintfOutput(int level, char *logMsg)
         time.tm_min, time.tm_sec, (long)tval.tv_usec, g_log_level_to_str[level], logMsg);
 }
 
-int RpcAdptSetLogCtx(util_vlog_level_t level)
+int RpcAdptSetLogCtx(ubsocket::util_vlog_level_t level)
 {
     g_rpc_adpt_vlog_ctx.vlog_output_func = DefaultPrintfOutput;
 
@@ -50,7 +48,7 @@ int RpcAdptSetLogCtx(util_vlog_level_t level)
     return ret;
 }
 
-util_vlog_ctx_t *RpcAdptGetLogCtx(void)
+ubsocket::util_vlog_ctx_t *RpcAdptGetLogCtx(void)
 {
     return &g_rpc_adpt_vlog_ctx;
 }

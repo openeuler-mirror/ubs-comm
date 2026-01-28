@@ -106,7 +106,7 @@ private:
 
 namespace TransMode {
 
-umq_trans_mode_t TransModeConverter(const char *str, umq_trans_mode_t default_trans_mode = UMQ_TRANS_MODE_IB);
+umq_trans_mode_t TransModeConverter(const char *str, umq_trans_mode_t default_trans_mode = UMQ_TRANS_MODE_UB);
 const char *TransModeConverter(umq_trans_mode_t trans_mode);
 
 }
@@ -160,7 +160,7 @@ public:
         return m_rx_depth;
     }
 
-    util_vlog_level_t GetLogLevel()
+    ubsocket::util_vlog_level_t GetLogLevel()
     {
         return m_log_level;
     }
@@ -351,7 +351,7 @@ protected:
     uint32_t m_tx_depth = DEFAULT_TX_DEPTH;
     uint32_t m_rx_depth = DEFAULT_RX_DEPTH;
     uint64_t m_io_total_size = DEFAULT_IO_TOTAL_SIZE * IO_SIZE_MB;
-    util_vlog_level_t m_log_level;
+    ubsocket::util_vlog_level_t m_log_level;
     umq_trans_mode_t m_trans_mode;
     umq_buf_block_size_t m_block_type = BLOCK_SIZE_8K;
     struct sockaddr_in m_addr;

@@ -17,11 +17,12 @@
 
 #include "rpc_adpt_vlog.h"
 
+
 class RpcAdptVlogTest : public testing::Test {
 public:
     RpcAdptVlogTest()
         : vlogCtx(nullptr),
-        originalLevel(UTIL_VLOG_LEVEL_INFO),
+        originalLevel(ubsocket::UTIL_VLOG_LEVEL_INFO),
         originalFunction(nullptr)
     {
         // empty
@@ -60,14 +61,14 @@ public:
     }
 
 private:
-    util_vlog_ctx_t *vlogCtx;
-    util_vlog_level_t originalLevel;
+    ubsocket::util_vlog_ctx_t *vlogCtx;
+    ubsocket::util_vlog_level_t originalLevel;
     void (*originalFunction)(int, char*);
 };
 // RPC_ADPT_VLOG_ERR
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogErr_ShouldNotOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_CRIT, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_CRIT, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_ERR("Test error message");
     std::string output = testing::internal::GetCapturedStdout();
@@ -78,7 +79,7 @@ TEST_F(RpcAdptVlogTest, TestRpcAdptVlogErr_ShouldNotOutput)
 
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogErr_ShouldOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_ERR, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_ERR, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_ERR("Test error message");
     std::string output = testing::internal::GetCapturedStdout();
@@ -90,7 +91,7 @@ TEST_F(RpcAdptVlogTest, TestRpcAdptVlogErr_ShouldOutput)
 // RPC_ADPT_VLOG_WARN
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogWarn_ShouldNotOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_ERR, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_ERR, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_WARN("Test warning message");
     std::string output = testing::internal::GetCapturedStdout();
@@ -100,7 +101,7 @@ TEST_F(RpcAdptVlogTest, TestRpcAdptVlogWarn_ShouldNotOutput)
 
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogWarn_ShouldOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_WARN, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_WARN, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_WARN("Test warning message");
     std::string output = testing::internal::GetCapturedStdout();
@@ -111,7 +112,7 @@ TEST_F(RpcAdptVlogTest, TestRpcAdptVlogWarn_ShouldOutput)
 // RPC_ADPT_VLOG_NOTICE
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogNotice_ShouldNotOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_WARN, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_WARN, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_NOTICE("Test notice message");
     std::string output = testing::internal::GetCapturedStdout();
@@ -121,7 +122,7 @@ TEST_F(RpcAdptVlogTest, TestRpcAdptVlogNotice_ShouldNotOutput)
 
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogNotice_ShouldOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_NOTICE, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_NOTICE, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_NOTICE("Test notice message");
     std::string output = testing::internal::GetCapturedStdout();
@@ -132,7 +133,7 @@ TEST_F(RpcAdptVlogTest, TestRpcAdptVlogNotice_ShouldOutput)
 // RPC_ADPT_VLOG_INFO
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogInfo_ShouldNotOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_NOTICE, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_NOTICE, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_INFO("Test info message");
     std::string output = testing::internal::GetCapturedStdout();
@@ -142,7 +143,7 @@ TEST_F(RpcAdptVlogTest, TestRpcAdptVlogInfo_ShouldNotOutput)
 
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogInfo_ShouldOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_INFO, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_INFO, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_INFO("Test info message");
     std::string output = testing::internal::GetCapturedStdout();
@@ -153,7 +154,7 @@ TEST_F(RpcAdptVlogTest, TestRpcAdptVlogInfo_ShouldOutput)
 // RPC_ADPT_VLOG_DEBUG
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogDebug_ShouldNotOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_INFO, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_INFO, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_DEBUG("Test debug message");
     std::string output = testing::internal::GetCapturedStdout();
@@ -163,7 +164,7 @@ TEST_F(RpcAdptVlogTest, TestRpcAdptVlogDebug_ShouldNotOutput)
 
 TEST_F(RpcAdptVlogTest, TestRpcAdptVlogDebug_ShouldOutput)
 {
-    RpcAdptVlogCtxSet(UTIL_VLOG_LEVEL_DEBUG, nullptr);
+    RpcAdptVlogCtxSet(ubsocket::UTIL_VLOG_LEVEL_DEBUG, nullptr);
     testing::internal::CaptureStdout();
     RPC_ADPT_VLOG_DEBUG("Test debug message");
     std::string output = testing::internal::GetCapturedStdout();
