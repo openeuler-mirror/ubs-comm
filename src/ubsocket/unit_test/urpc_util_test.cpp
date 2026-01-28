@@ -38,10 +38,10 @@ TEST_F(UrpcUtilTest, Rand)
     EXPECT_NE(x, 0);
 
     MOCKER_CPP(&ubsocket::urpc_rand_generate).stubs().will(invoke(FakeRand));
-    ret = urpc_rand_generate((uint8_t *)&x, 1);
+    ret = ubsocket::urpc_rand_generate((uint8_t *)&x, 1);
     EXPECT_EQ(ret, -1);
 
-    ret = urpc_rand_generate((uint8_t *)&x, 4);
+    ret = ubsocket::urpc_rand_generate((uint8_t *)&x, 4);
     EXPECT_EQ(ret, 0);
     EXPECT_EQ(x, 0x11112211);
 }
