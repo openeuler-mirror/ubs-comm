@@ -22,7 +22,7 @@ class RpcAdptVlogTest : public testing::Test {
 public:
     RpcAdptVlogTest()
         : vlogCtx(nullptr),
-        ubsocket::originalLevel(ubsocket::UTIL_VLOG_LEVEL_INFO),
+        originalLevel(ubsocket::UTIL_VLOG_LEVEL_INFO),
         originalFunction(nullptr)
     {
         // empty
@@ -33,13 +33,13 @@ public:
         int utilSuccess = 0;
         int utilFail = -1;
         int setLogOutputRes = utilFail;
-        ubsocket::vlogCtx = RpcAdptGetLogCtx();
+        vlogCtx = RpcAdptGetLogCtx();
         if (vlogCtx) {
-            ubsocket::originalLevel = vlogCtx->level;
+            originalLevel = vlogCtx->level;
             originalFunction = vlogCtx->vlog_output_func;
         }
         // reset the output function for display in linux
-        setLogOutputRes = RpcAdptSetLogCtx(ubsocket::originalLevel);
+        setLogOutputRes = RpcAdptSetLogCtx(originalLevel);
         if (setLogOutputRes != utilSuccess) {
             std::cout << "RpcAdptSetLogCtx error, set log output res is: " << setLogOutputRes << std::endl;
             std::cout << "It makes your vlog only shows in syslog." << std::endl;
@@ -48,15 +48,15 @@ public:
 
     void TearDown() override
     {
-        RpcAdptVlogCtxSet(ubsocket::originalLevel, nullptr);
+        RpcAdptVlogCtxSet(originalLevel, nullptr);
 
-        if (ubsocket::vlogCtx && originalFunction) {
+        if (vlogCtx && originalFunction) {
             vlogCtx->vlog_output_func = originalFunction;
         }
 
         GlobalMockObject::verify();
 
-        ubsocket::vlogCtx = nullptr;
+        vlogCtx = nullptr;
         originalFunction = nullptr;
     }
 
