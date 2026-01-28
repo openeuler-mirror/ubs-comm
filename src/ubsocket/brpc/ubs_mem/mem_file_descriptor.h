@@ -68,6 +68,7 @@ class MemSocketFd : public ::SocketFd, public FallbackTcp {
 public:
     MemSocketFd(int fd, int event_fd) : ::SocketFd(fd)
     {
+        RPC_ADPT_VLOG_DEBUG("MemSocketFd constructor, fd: %d, event_fd: %d\n", fd, event_fd);
         m_tx_window_capacity = Context::GetContext()->GetTxDepth();
         m_rx_window_capacity = Context::GetContext()->GetRxDepth();
         m_event_fd = event_fd;
@@ -76,6 +77,8 @@ public:
 
     MemSocketFd(int fd, uint64_t magic_number, uint32_t magic_number_recv_size) : ::SocketFd(fd)
     {
+        RPC_ADPT_VLOG_DEBUG("MemSocketFd constructor, fd: %d, magic_number: %d, magic_number_recv_size: %d\n",
+            fd, magic_number, magic_number_recv_size);
         m_magic_number = magic_number;
         m_magic_number_recv_size = magic_number_recv_size;
         m_tx_use_tcp = true;
@@ -84,7 +87,7 @@ public:
 
     ~MemSocketFd()
     {
-        RPC_ADPT_VLOG_ERR("MemSocketFd deconstructor, fd: %d\n", m_fd);
+        RPC_ADPT_VLOG_DEBUG("MemSocketFd deconstructor, fd: %d\n", m_fd);
         // 【可重入方案】设置为 CLOSING，阻止新的线程进入
         int oldState = m_pollingWriteState.exchange(POLLING_CLOSING);
         if (oldState == POLLING_USING) {
@@ -121,7 +124,7 @@ public:
             OsAPiMgr::GetOriginApi()->close(m_event_fd);
             m_event_fd = -1;
         }
-        RPC_ADPT_VLOG_ERR("MemSocketFd deconstructor finished.\n");
+        RPC_ADPT_VLOG_DEBUG("MemSocketFd deconstructor finished.\n");
     }
 
     // magic number is the 0xff + ASCII of "R" + "P" + "C" + "A" + "D" + "P" + "T"
@@ -153,7 +156,7 @@ public:
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
     {
         int fd = OsAPiMgr::GetOriginApi()->accept(m_fd, address, address_len);
-        RPC_ADPT_VLOG_WARN("[DEBUG] Origin accept, fd: %d\n", fd);
+        RPC_ADPT_VLOG_DEBUG("Origin accept, fd: %d\n", fd);
         if (fd < 0 || m_tx_use_tcp || m_rx_use_tcp) {
             return fd;
         }
@@ -316,7 +319,7 @@ public:
     {
         AddrInfo localAddInfo {m_localTrxShm.addr, m_localTrxShm.len};
         AddrInfo remoteAddInfo {m_remoteTrxShm.addr, m_remoteTrxShm.len};
-        RPC_ADPT_VLOG_ERR("[InitRingBuffer] localAddInfo, addr %p, m_remoteTrxShm %p.\n",
+        RPC_ADPT_VLOG_DEBUG("[InitRingBuffer] localAddInfo, addr %p, m_remoteTrxShm %p.\n",
             m_localTrxShm.addr, m_remoteTrxShm.addr);
         m_ringbuffer = std::make_unique<RingBuffer>(option, localAddInfo, remoteAddInfo);
     }
@@ -406,7 +409,7 @@ public:
         AddrInfo remoteAddInfo {m_remoteTrxShm.addr, m_remoteTrxShm.len};
         RingBufferOpt ringBufferOpt {};
         m_ringbuffer = std::make_unique<RingBuffer>(ringBufferOpt, localAddInfo, remoteAddInfo);
-        RPC_ADPT_VLOG_WARN("[InitRingBuffer] localAddInfo, addr %p, m_remoteTrxShm %p.\n",
+        RPC_ADPT_VLOG_DEBUG("[InitRingBuffer] localAddInfo, addr %p, m_remoteTrxShm %p.\n",
             m_localTrxShm.addr, m_remoteTrxShm.addr);
 
         m_txState = SocketState::SOCKET_STATE_CONNECTED;
@@ -446,6 +449,104 @@ public:
         RPC_ADPT_VLOG_INFO("Client connection create sucess, local shmem name \"%s\", remote shmem name \"%s\".\n",
             m_localTrxShm.name, m_remoteTrxShm.name);
         return 0;
+    }
+
+    ALWAYS_INLINE int Fcntl(int fd, int cmd, unsigned long int arg)
+    {
+        // arg can be either struct flock or int
+        int ret { 0 };
+
+        switch (cmd) {
+            case F_SETFL: // Set file status flags (O_NONBLOCK, etc.)
+                ret = OsAPiMgr::GetOriginApi()->fcntl(m_fd, cmd, arg);
+                if (ret == 0) {
+                    // Update m_isblocking based on the origin fd blocking state
+                    m_isblocking = IsBlocking(m_fd);
+                } else {
+                    RPC_ADPT_VLOG_ERR("fcntl set fd %d failed, ret is %d, errno %d\n", m_fd, ret, errno);
+                }
+                break;
+            case F_GETOWN: // Get process ID or process group ID receiving SIGIO/SIGURG signals
+            case F_GETFL:  // Get file status flags
+            case F_GETFD:  // Get file descriptor flags
+                ret = OsAPiMgr::GetOriginApi()->fcntl(m_fd, cmd, arg);
+                break;
+            case F_DUPFD:          // Duplicate file descriptor using the lowest available fd >= arg
+            case F_DUPFD_CLOEXEC:  // Duplicate file descriptor and set FD_CLOEXEC flag
+            case F_SETOWN:         // Set process ID or process group ID for SIGIO/SIGURG signals
+            case F_SETLK:          // Set file lock (non-blocking)
+            case F_SETLKW:         // Set file lock (blocking)
+            case F_GETLK:          // Get file lock information
+                RPC_ADPT_VLOG_ERR("fcntl fail, fd %d, cmd %d is not supported\n", m_fd, cmd);
+                break;
+            default:
+                RPC_ADPT_VLOG_WARN("fcntl, fd %d, cmd %d may be not supported\n", m_fd, cmd);
+                ret = OsAPiMgr::GetOriginApi()->fcntl(m_fd, cmd, arg);
+                break;
+        }
+        return ret;
+    }
+
+    ALWAYS_INLINE int Fcntl64(int fd, int cmd, unsigned long int arg)
+    {
+        // arg can be either struct flock or int
+        int ret { 0 };
+
+        switch (cmd) {
+            case F_SETFL:
+                ret = OsAPiMgr::GetOriginApi()->fcntl64(m_fd, cmd, arg);
+                if (ret == 0) {
+                    // Update m_isblocking based on the origin fd blocking state
+                    m_isblocking = IsBlocking(m_fd);
+                } else {
+                    RPC_ADPT_VLOG_ERR("fcntl64 set fd %d failed, ret is %d, errno %d\n", m_fd, ret, errno);
+                }
+                break;
+            case F_GETOWN: // Get process ID or process group ID receiving SIGIO/SIGURG signals
+            case F_GETFL:  // Get file status flags
+            case F_GETFD:  // Get file descriptor flags
+                ret = OsAPiMgr::GetOriginApi()->fcntl64(m_fd, cmd, arg);
+                break;
+            case F_DUPFD:          // Duplicate file descriptor using the lowest available fd >= arg
+            case F_DUPFD_CLOEXEC:  // Duplicate file descriptor and set FD_CLOEXEC flag
+            case F_SETFD:          // Set file descriptor flags
+            case F_SETOWN:         // Set process ID or process group ID for SIGIO/SIGURG signals
+            case F_SETLK:          // Set file lock (non-blocking)
+            case F_SETLKW:         // Set file lock (blocking)
+            case F_GETLK:          // Get file lock information
+                RPC_ADPT_VLOG_ERR("fcntl64 fail, fd %d, cmd %d is not supported\n", m_fd, cmd);
+                break;
+            default:
+                RPC_ADPT_VLOG_WARN("fcntl64, fd %d, cmd %d may be not supported\n", m_fd, cmd);
+                ret = OsAPiMgr::GetOriginApi()->fcntl64(m_fd, cmd, arg);
+                break;
+        }
+        return ret;
+    }
+
+    ALWAYS_INLINE int Ioctl(int fd, unsigned long request, unsigned long int arg)
+    {
+        int ret { 0 };
+
+        if (request == FIONBIO) {
+            ret = OsAPiMgr::GetOriginApi()->ioctl(m_fd, request, arg);
+            if (ret == 0) {
+                // set m_isblocking base on origin fd blocking state
+                m_isblocking = IsBlocking(m_fd);
+            } else {
+                RPC_ADPT_VLOG_ERR("ioctl set fd %d FIONBIO failed, ret is %d, errno %d\n", m_fd, ret, errno);
+            }
+        } else {
+            RPC_ADPT_VLOG_WARN("ioctl set fd %d, request %d may be not supported\n", m_fd, request);
+            ret = OsAPiMgr::GetOriginApi()->ioctl(m_fd, request, arg);
+        }
+        return ret;
+    }
+
+    ALWAYS_INLINE int SetSockOpt(int fd, int level, int optname, const void *optval, socklen_t optlen)
+    {
+        RPC_ADPT_VLOG_INFO("SetSockOpt set fd %d, level %d, optname %d\n", m_fd, level, optname);
+        return OsAPiMgr::GetOriginApi()->setsockopt(fd, level, optname, optval, optlen);
     }
 
     ALWAYS_INLINE void NewOriginEpollError()
@@ -711,6 +812,7 @@ private:
     uint8_t m_epoll_in_msg_recv_size = 0;
     uint8_t m_epoll_in_msg = 0;
     std::atomic<int> m_pollingWriteState{POLLING_NONE};
+    bool m_isblocking = true;
 };
 
 class MemEpollEvent : public ::EpollEvent {

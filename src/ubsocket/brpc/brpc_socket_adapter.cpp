@@ -118,7 +118,11 @@ EXPOSE_C_DEFINE int accept(int socket, struct sockaddr *address, socklen_t *addr
 
 EXPOSE_C_DEFINE int accept4(int socket, struct sockaddr *address, socklen_t *address_len, int flag)
 {
+#ifdef UBS_SHM_BUILD_ENABLED
+    Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(socket);
+#else
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(socket);
+#endif
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->accept4(socket, address, address_len, flag);
     }
@@ -257,7 +261,11 @@ EXPOSE_C_DEFINE int fcntl(int fd, int cmd, ...)
     va_start(va, cmd);
     arg = va_arg(va, decltype(arg));
     va_end(va);
+#ifdef UBS_SHM_BUILD_ENABLED
+    Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fd);
+#else
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+#endif
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->fcntl(fd, cmd, arg);
     }
@@ -272,7 +280,11 @@ EXPOSE_C_DEFINE int fcntl64(int fd, int cmd, ...)
     va_start(va, cmd);
     arg = va_arg(va, decltype(arg));
     va_end(va);
+#ifdef UBS_SHM_BUILD_ENABLED
+    Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fd);
+#else
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+#endif
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->fcntl64(fd, cmd, arg);
     }
@@ -287,7 +299,11 @@ EXPOSE_C_DEFINE int ioctl(int fd, unsigned long request, ...)
     va_start(va, request);
     arg = va_arg(va, decltype(arg));
     va_end(va);
+#ifdef UBS_SHM_BUILD_ENABLED
+    Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fd);
+#else
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+#endif
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->ioctl(fd, request, arg);
     }
@@ -297,7 +313,11 @@ EXPOSE_C_DEFINE int ioctl(int fd, unsigned long request, ...)
 
 EXPOSE_C_DEFINE int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen)
 {
+#ifdef UBS_SHM_BUILD_ENABLED
+    Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fd);
+#else
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
+#endif
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->setsockopt(fd, level, optname, optval, optlen);
     }
@@ -412,4 +432,3 @@ __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
 
 #endif
 }
-

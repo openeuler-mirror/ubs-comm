@@ -897,7 +897,7 @@ index ab4014e..d689f8e 100644
 -    {  
 -       return false; 
 -    }
-+    unsigned int page_size = getpagesize();
++    uint64_t page_size = getpagesize();
  
 +    if (::mprotect(ALIGN_TO_PAGE_BOUNDARY(dest, page_size), page_size * 2, PROT_EXEC | PROT_WRITE | PROT_READ) != 0) {
 +        return false;

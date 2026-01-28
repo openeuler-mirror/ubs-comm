@@ -285,13 +285,13 @@ void PollingEpoll::EpollProcess(EventPoll *eventPoll)
         }
 
         if (curNode->epItem.event.events & EPOLLIN) {
-            if (EpInEventProcess(eventPoll, curNode->epItem) == PollingErrCode::ERR) {
+            if (EpInEventProcess(eventPoll, curNode->epItem) != PollingErrCode::OK) {
                 EpollListRemove(eventPoll->waitList, fd);
                 continue;
             }
         }
         if (curNode->epItem.event.events & EPOLLOUT) {
-            if (EpOutEventProcess(eventPoll, curNode->epItem) == PollingErrCode::ERR) {
+            if (EpOutEventProcess(eventPoll, curNode->epItem) != PollingErrCode::OK) {
                 EpollListRemove(eventPoll->waitList, fd);
                 continue;
             }

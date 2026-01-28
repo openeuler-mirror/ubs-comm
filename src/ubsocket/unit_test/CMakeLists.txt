@@ -12,6 +12,9 @@ target_compile_features(ubsocket_test
     cxx_std_17
 )
 
+# Ignore access control in class(like private or protected)
+add_compile_options(-fno-access-control)
+
 target_link_libraries(ubsocket_test
   PRIVATE
     GTest::gtest_main

@@ -14,9 +14,13 @@ target_link_libraries(brpc_adapter_test
     mockcpp
 
     rpc_adapter_brpc
+    ubsocket
 )
 
 target_sources(brpc_adapter_test
   PRIVATE
     brpc_iobuf_adapter_test.cpp
+    brpc_file_descriptor_test.cpp
+    brpc_bonding_adapter_test.cpp
+    brpc_connect_adapter_test.cpp
 )
