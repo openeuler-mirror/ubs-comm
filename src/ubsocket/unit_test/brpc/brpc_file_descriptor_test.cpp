@@ -24,7 +24,7 @@ void BrpcFileDescriptorTest::SetUp()
     setenv("RPC_ADPT_TRANS_MODE", "UB", 1);
 
     // 加载日志
-    RpcAdptSetLogCtx(UTIL_VLOG_LEVEL_INFO);
+    RpcAdptSetLogCtx(ubsocket::UTIL_VLOG_LEVEL_INFO);
 
     int fd = 1;
     uint64_t magicNumber = 10;
