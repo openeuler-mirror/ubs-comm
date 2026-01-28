@@ -10,7 +10,7 @@ public:
         setenv("RPC_ADPT_USE_ZCOPY", "true", 1);
         setenv("RPC_ADPT_UB_FORCE", "1", 1);
         setenv("RPC_ADPT_TRANS_MODE", "UB", 1);
-        RpcAdptSetLogCtx(UTIL_VLOG_LEVEL_INFO);
+        RpcAdptSetLogCtx(ubsocket::UTIL_VLOG_LEVEL_INFO);
     }
 
     void TearDown() override
