@@ -39,7 +39,7 @@ public:
             originalFunction = vlogCtx->vlog_output_func;
         }
         // reset the output function for display in linux
-        setLogOutputRes = RpcAdptSetLogCtx(originalLevel);
+        setLogOutputRes = RpcAdptSetLogCtx(ubsocket::originalLevel);
         if (setLogOutputRes != utilSuccess) {
             std::cout << "RpcAdptSetLogCtx error, set log output res is: " << setLogOutputRes << std::endl;
             std::cout << "It makes your vlog only shows in syslog." << std::endl;
