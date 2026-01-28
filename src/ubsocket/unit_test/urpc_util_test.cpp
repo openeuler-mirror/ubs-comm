@@ -3,8 +3,6 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
-
-
 class UrpcUtilTest : public testing::Test {
 public:
     void SetUp() override
