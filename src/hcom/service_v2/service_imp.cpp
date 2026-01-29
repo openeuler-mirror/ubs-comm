@@ -181,11 +181,13 @@ SerResult HcomServiceImp::DoInitDriver()
     RegisterDriverCb();
     uint16_t driverIdx = 0;
     for (auto &driver : mDriverPtrs) {
-        if (driverIdx >= mOptions.workerGroupInfos.size()) {
-            driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos[0]);
-        } else {
-            driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos[driverIdx]);
-            ++driverIdx;
+        if (!mOptions.workerGroupInfos.empty()) {
+            if (driverIdx >= mOptions.workerGroupInfos.size()) {
+                driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos[0]);
+            } else {
+                driverOpt.SetWorkerGroupsInfo(mOptions.workerGroupInfos[driverIdx]);
+                ++driverIdx;
+            }
         }
         driver->RegisterNewEPHandler(std::bind(&HcomServiceImp::ServiceHandleNewEndPoint, this,
             std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
