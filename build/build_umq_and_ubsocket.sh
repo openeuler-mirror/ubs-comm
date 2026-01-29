@@ -10,8 +10,7 @@
 # version: 1.0.0
 # change log:
 # ***********************************************************************
-set -e
-(set -o pipefail) 2>/dev/null && set -o pipefail
+set -eo pipefail
 
 readonly ROOT_DIR=$(dirname "$(realpath "$(dirname "${0}")")")
 

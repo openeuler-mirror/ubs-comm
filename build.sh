@@ -23,8 +23,7 @@
 # version: 1.0.0
 # change log:
 # ***********************************************************************
-set -e
-(set -o pipefail) 2>/dev/null && set -o pipefail
+set -eo pipefail
 
 readonly HCOM_ROOT_DIR=$(cd $(dirname ${0}) && pwd)
 readonly HCOM_BUILD_DIR="${HCOM_ROOT_DIR}/tmp_build_dir"
