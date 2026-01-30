@@ -189,21 +189,24 @@ NResult NetDriverUB::CreateContext()
 
     int result = 0;
     // create context
-    if ((result = UBContext::Create(mName, mContext)) != 0) {
-        UBDeviceHelper::UnInitialize();
+    UBContext *tmpCtx = nullptr;
+    if ((result = UBContext::Create(mName, tmpCtx)) != 0) {
         NN_LOG_ERROR("Failed to new ctx, result " << result);
         return result;
     }
 
-    NN_ASSERT_LOG_RETURN(mContext != nullptr, NN_ERROR);
+    NN_ASSERT_LOG_RETURN(tmpCtx != nullptr, NN_ERROR);
 
-    mContext->IncreaseRef();
-    mContext->protocol = Protocol();
+    tmpCtx->IncreaseRef();
+    tmpCtx->protocol = Protocol();
 
-    if (((result = mContext->Initialize(mBandWidth)) != 0)) {
+    if (((result = tmpCtx->Initialize(mBandWidth)) != 0)) {
         NN_LOG_ERROR("UB failed to initialize ctx");
+        tmpCtx->DecreaseRef();
+        tmpCtx = nullptr;
         return result;
     }
+    mContext = tmpCtx;
     return NN_OK;
 }
 

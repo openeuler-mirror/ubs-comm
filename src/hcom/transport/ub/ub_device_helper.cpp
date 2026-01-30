@@ -26,9 +26,9 @@ UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, urma_context_t *
 {
     UResult ret = UB_OK;
     std::lock_guard<std::mutex> guard(G_Mutex);
-    if (G_InitRef != 0) {
+    G_InitRef++;
+    if (G_InitRef != 1) {
         // 第二次进来直接加引用计数，防止mUBContext析构的时候调用UnInitialize时把资源直接释放
-        G_InitRef++;
         return ret;
     }
     ret = DoInitialize(devAttr, ctx, eid);
@@ -59,8 +59,6 @@ UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, urma_context_t
         G_UBDevBWTable.clear();
         return ret;
     }
-    // 第一次成功DoInitialize增加引用计数
-    G_InitRef++;
     return UB_OK;
 }
 
