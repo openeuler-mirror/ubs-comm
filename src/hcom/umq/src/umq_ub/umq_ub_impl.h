@@ -70,7 +70,7 @@ void umq_ub_ctx_uninit_impl(uint8_t *ctx);
 uint64_t umq_ub_create_impl(uint64_t umqh, uint8_t *ctx, umq_create_option_t *option);
 int32_t umq_ub_destroy_impl(uint64_t umqh);
 
-int umq_ub_bind_info_get_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size);
+uint32_t umq_ub_bind_info_get_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size);
 int umq_ub_bind_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size);
 int umq_ub_unbind_impl(uint64_t umqh);
 umq_state_t umq_ub_state_get_impl(uint64_t umqh_tp);
@@ -147,6 +147,7 @@ int umq_ub_get_route_list_impl(const umq_route_t *route, umq_route_list_t *route
 int umq_ub_user_ctl_impl(uint64_t umqh_tp, umq_user_ctl_in_t *in, umq_user_ctl_out_t *out);
 int umq_ub_mempool_state_get_impl(uint64_t umqh_tp, uint32_t mempool_id, umq_mempool_state_t *mempool_state);
 int umq_ub_mempool_state_refresh_impl(uint64_t umqh_tp, uint32_t mempool_id);
+int umq_ub_dev_info_get_impl(char *umq_dev_name, umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info);
 
 #ifdef __cplusplus
 }
