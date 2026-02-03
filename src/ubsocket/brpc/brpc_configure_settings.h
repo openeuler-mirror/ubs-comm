@@ -115,7 +115,7 @@ public:
       char m_dealloc_sym_str[BRPC_SYM_STR_LEN_MAX] = "";
       bool m_modify_allocator = false;
       char m_readv_unlimited_str[BOOL_STR_LEN_MAX] = "";
-      bool m_readv_unlimited = false;
+      bool m_readv_unlimited = true;
       char m_use_polling_str[BOOL_STR_LEN_MAX] = "";
       bool m_use_polling = false;
 }; 
