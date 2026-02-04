@@ -27,7 +27,7 @@
 #define DIVIDED_NUMBER          (2)
 #define CACHE_LINE_ALIGNMENT    (64)
 
-constexpr uint16_t REFILL_THRESHOLD = 2;
+constexpr uint16_t REFILL_THRESHOLD = 32;
 constexpr uint16_t HANDLE_THRESHOLD = 2;
 constexpr uint16_t RETRIEVE_THRESHOLD = 1;
 constexpr uint16_t REPORT_THRESHOLD = 1;
@@ -220,6 +220,23 @@ public:
         return m_local_umqh;
     }
 
+    ALWAYS_INLINE bool AutoFallbackTCP()
+    {
+        static bool enable = []() {
+            const char *env = std::getenv("RPC_AUTO_FALLBACK_TCP");
+            if (env == nullptr) {
+                return true;
+            }
+            std::string envStr(env);
+            if (envStr == "0") {
+                RPC_ADPT_VLOG_INFO("Forbidden auto fallback to tcp set\n");
+                return false;
+            }
+            return true;
+        }();
+        return enable;
+    }
+
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
     {
         int fd = OsAPiMgr::GetOriginApi()->accept(m_fd, address, address_len);
@@ -236,6 +253,11 @@ public:
         uint64_t magic_number = 0;
         ssize_t magic_number_recv_size = 0;
         int ret = ValidateMagicNumber(fd, magic_number, magic_number_recv_size);
+        if (ret > 0 && !AutoFallbackTCP()) {
+            RPC_ADPT_VLOG_ERR("Failed to accept as protocol dismatch\n");
+            OsAPiMgr::GetOriginApi()->close(fd);
+            return -1;
+        }
         if (ret > 0) {
             /* IF the magic number verification fails, it is still necessary to create a socket fd object
              * to store the magic number information, so that the received information can be reported to 
@@ -244,6 +266,7 @@ public:
             try {
                 socket_fd_obj = new SocketFd(fd, magic_number, (uint32_t)magic_number_recv_size);
                 Fd<::SocketFd>::OverrideFdObj(fd, socket_fd_obj);
+                RPC_ADPT_VLOG_WARN("Auto fallback to TCP fd: %d\n", fd);
             } catch (std::exception& e) {
                 RPC_ADPT_VLOG_ERR("%s\n", e.what());
                 OsAPiMgr::GetOriginApi()->close(fd);
@@ -379,7 +402,7 @@ public:
             InitStatsMgr();
         }
 
-        RPC_ADPT_VLOG_DEBUG("Connect to remote with UMQ successful, fd: %d\n", m_fd);
+        RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", m_fd);
 
         return 0;
     }
@@ -399,7 +422,7 @@ public:
 
         ret = DoConnect();
         if (ret != 0) {
-            RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", m_fd);
+            RPC_ADPT_VLOG_ERR("Failed to establish UB connection.");
             Fd<::SocketFd>::OverrideFdObj(m_fd, nullptr);
             /* Clear messages that already exist on the TCP link to prevent 
                  * dirty messages from affecting user data transmission*/
@@ -1175,7 +1198,7 @@ private:
         // Delete existing objects and record new objects in the list.
         Fd<::SocketFd>::OverrideFdObj(new_fd, socket_fd_obj);
 
-        RPC_ADPT_VLOG_DEBUG("Accept to remote with UMQ successful, listen fd: %d, new fd: %d\n", m_fd, new_fd);
+        RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
 
         return 0;  
     }

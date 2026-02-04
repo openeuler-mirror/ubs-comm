@@ -135,6 +135,8 @@ RPC_ADPT_READV_UNLIMITED=true \
 | RPC_ADPT_READV_UNLIMITED   | 是否打开readv上报限制  | false，true                                                  | false   | 否                                     |
 | RPC_ADPT_BLOCK_TYPE        | 内存池的最小分片       | default，small，medium，large                                | default | 否                                     |
 | RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，单位MB | 应用按需配置                                                 | 1024    | 否                                     |
+| RPC_ADPT_UB_FORCE | 是否强制使用UB协议加速TCP | 0：不强制用UB加速TCP 1：强制用UB加速TCP                                                | 0    | 否                                |
+| RPC_AUTO_FALLBACK_TCP | 协议不匹配时是否自动降级为TCP | 0, 1                                                | 1   | 否                                |
 
 >  说明：
 >
