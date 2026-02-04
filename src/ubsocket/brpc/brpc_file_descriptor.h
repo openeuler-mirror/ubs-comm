@@ -13,11 +13,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <set>
 #include <unordered_set>
 #include "umq_pro_api.h"
 #include "umq_errno.h"
 #include "brpc_context.h"
 #include "file_descriptor.h"
+#include "configure_settings.h"
 #include "qbuf_list.h"
 #include "buffer_util.h"
 #include "statistics.h"
@@ -31,6 +33,7 @@ constexpr uint16_t REFILL_THRESHOLD = 32;
 constexpr uint16_t HANDLE_THRESHOLD = 2;
 constexpr uint16_t RETRIEVE_THRESHOLD = 1;
 constexpr uint16_t REPORT_THRESHOLD = 1;
+constexpr int RETRY_NEEDED = 1;
 
 inline bool operator==(const umq_eid_t& a, const umq_eid_t& b) {
     return ::memcmp(a.raw, b.raw, sizeof(a.raw)) == 0;
@@ -147,24 +150,101 @@ struct UmqEidHash {
 
 class EidRegistry {
 public:
-    bool RegisterEid(const umq_eid_t& eid) {
+    bool RegisterEid(const umq_eid_t& eid)
+    {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_registered_eids.insert(eid).second;
     }
 
-    bool IsRegisteredEid(const umq_eid_t& eid) {
+    bool IsRegisteredEid(const umq_eid_t& eid)
+    {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_registered_eids.count(eid) > 0;
     }
 
-    bool UnregisterEid(const umq_eid_t& eid) {
+    bool UnregisterEid(const umq_eid_t& eid)
+    {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_registered_eids.erase(eid) > 0;
     }
 
+    // 控制建链轮询
+    // 注册或者替换index值
+    void RegisterOrReplaceEidIndex(const umq_eid_t& eid, uint32_t index)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_eid_index_map[eid] = index;
+    }
+
+    // 仅检查eid是否存在（不获取值）
+    bool IsRegisteredEidIndex(const umq_eid_t& eid) const
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_eid_index_map.find(eid) != m_eid_index_map.end();
+    }
+
+    // 获得index值
+    bool GetEidIndex(const umq_eid_t& eid, uint32_t& index) const
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        auto it = m_eid_index_map.find(eid);
+        if (it != m_eid_index_map.end()) {
+            index = it->second;
+            return true;
+        }
+        return false;
+    }
+
+    // 删除 eid 及其值
+    bool UnregisterEidIndex(const umq_eid_t& eid)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_eid_index_map.erase(eid) > 0;
+    }
+
 private:
     mutable std::mutex m_mutex;
-    std::unordered_set<umq_eid_t, UmqEidHash> m_registered_eids;
+    std::unordered_set<umq_eid_t, UmqEidHash> m_registered_eids;   // 存储已经被umq_dev_add eid信息
+    std::unordered_map<umq_eid_t, uint32_t, UmqEidHash> m_eid_index_map; // 控制轮询，对端bonding eid与route_list index对应关系
+};
+
+class RouteListRegistry {
+public:
+    // 注册或者替换routeList值
+    void RegisterOrReplaceRouteList(const umq_eid_t &eid, const umq_route_list_t &routeList)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_route_list_map[eid] = routeList;
+    }
+
+    // 仅检查eid对应的routeList是否存在（不获取值）
+    bool IsRegisteredRouteList(const umq_eid_t &eid) const
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_route_list_map.find(eid) != m_route_list_map.end();
+    }
+
+    bool GetRouteList(const umq_eid_t &eid, umq_route_list_t &routeList) const
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        auto it = m_route_list_map.find(eid);
+        if (it != m_route_list_map.end()) {
+            routeList = it->second;
+            return true;
+        }
+        return false;
+    }
+
+    // 删除 RouteList
+    bool UnregisterRouteList(const umq_eid_t &eid)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_route_list_map.erase(eid) > 0;
+    }
+
+private:
+    mutable std::mutex m_mutex;
+    std::unordered_map<umq_eid_t, umq_route_list_t, UmqEidHash> m_route_list_map; // 存储可用的route_list列表
 };
 
 class SocketFd : public ::SocketFd, public FallbackTcpMgr, public StatsMgr {
@@ -309,15 +389,39 @@ public:
 
         *connEid = context->GetDevSrcEid();
         if (localEid != remoteEid) {
-            umq_route_t connRoute;
-            if (GetDevRouteList(&localEid, &remoteEid, &connRoute) != 0) {
-                RPC_ADPT_VLOG_ERR("Failed to get route list in connect, fd: %d\n", m_fd);
+            dev_schedule_policy peerSchedulePolicy;
+            if (RecvSocketData(m_fd, &peerSchedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
+                sizeof(dev_schedule_policy)) {
+                RPC_ADPT_VLOG_ERR("Failed to receive remote schedule policy in connect, fd: %d\n", m_fd);
                 return -1;
             }
 
+            dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
+            if (SendSocketData(m_fd, &schedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
+                sizeof(dev_schedule_policy)) {
+                RPC_ADPT_VLOG_ERR("Failed to send local policy in connect, fd: %d\n", m_fd);
+                return -1;
+            }
+
+            if (peerSchedulePolicy == schedulePolicy && schedulePolicy == dev_schedule_policy::CPU_AFFINITY) {
+                RPC_ADPT_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY in connect, fd: %d\n", m_fd);
+                // 使用亲和策略需要发送socketId
+                int mProcessSocketId = context->GetProcessSocketId();
+                if (SendSocketData(m_fd, &mProcessSocketId, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+                    RPC_ADPT_VLOG_ERR("Failed to send local socket id in connect, fd: %d\n", m_fd);
+                    return -1;
+                }
+            }
+          
+            umq_route_t connRoute;
             if (RecvSocketData(
                 m_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
                 RPC_ADPT_VLOG_ERR("Failed to receive remote eid message in connect, fd: %d\n", m_fd);
+                return -1;
+            }
+
+            if (CheckDevAdd(connRoute.dst) != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to add dev in connect\n");
                 return -1;
             }
 
@@ -327,7 +431,7 @@ public:
         return 0;
     }
 
-    int DoConnect(void)
+    int DoUbConnect(umq_eid_t &connEid)
     {
         CpMsg local_cp_msg;
         CpMsg remote_cp_msg;
@@ -339,22 +443,17 @@ public:
             return -1;
         }
 
-        umq_eid_t connEid;
-        if (ConnectExchangeEid(&connEid) < 0) {
-            RPC_ADPT_VLOG_ERR("Failed to exchange eid in connect\n");
-            return -1;
-        }
-
-        if (CreateLocalUmq(&connEid) < 0) {
+        int ret = CreateLocalUmq(&connEid);
+        if ((ret < 0) || (ret == RETRY_NEEDED)) {
             RPC_ADPT_VLOG_ERR("Failed to create umq\n");
-            return -1;
+            return ret;
         }
 
-        local_cp_msg.queue_bind_info_size = 
-           umq_bind_info_get(m_local_umqh, local_cp_msg.queue_bind_info, UMQ_BIND_INFO_SIZE_MAX);
+        local_cp_msg.queue_bind_info_size =
+            umq_bind_info_get(m_local_umqh, local_cp_msg.queue_bind_info, UMQ_BIND_INFO_SIZE_MAX);
         if (local_cp_msg.queue_bind_info_size == 0) {
             RPC_ADPT_VLOG_ERR("Failed to execute umq_bind_info_get\n");
-            return -1;
+            return RETRY_NEEDED;
         }
         
         uint32_t len = sizeof(local_cp_msg) - sizeof(uint64_t);
@@ -362,7 +461,7 @@ public:
             RPC_ADPT_VLOG_ERR("Failed to send local control message, fd: %d\n", m_fd);
             return -1;
         }
-        RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n", 
+        RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             m_fd, sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
         
         if (RecvSocketData(
@@ -370,14 +469,14 @@ public:
             RPC_ADPT_VLOG_ERR("Failed to receive remote control message, fd: %d\n", m_fd);
             return -1;
         }
-        RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n", 
+        RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             m_fd, sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
 
         if (umq_bind(m_local_umqh, remote_cp_msg.queue_bind_info, remote_cp_msg.queue_bind_info_size) != UMQ_SUCCESS) {
             RPC_ADPT_VLOG_ERR("Failed to execute umq_bind\n");
-            return -1;
-        }  
-        m_bind_remote = true;  
+            return RETRY_NEEDED;
+        }
+        m_bind_remote = true;
 
         // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
         if (PrefillRx() != 0) {
@@ -398,6 +497,63 @@ public:
             return -1;
         }
 
+        return 0;
+    }
+
+    int DoConnect(void)
+    {
+        umq_eid_t connEid;
+        if (ConnectExchangeEid(&connEid) < 0) {
+            RPC_ADPT_VLOG_ERR("Failed to exchange eid in connect\n");
+            return -1;
+        }
+
+        int ackRet = DoUbConnect(connEid);
+        if (SendSocketData(
+            m_fd, &ackRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+            RPC_ADPT_VLOG_ERR("Failed to send ack ret, fd: %d\n", m_fd);
+            return -1;
+        }
+
+        int peerRet;
+        if (RecvSocketData(
+            m_fd, &peerRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+            RPC_ADPT_VLOG_ERR("Failed to receive peer ack ret, fd: %d\n", m_fd);
+            return -1;
+        }
+
+        // 1.用户直接指定普通设备建链，DoUbAccept等于RETRY_NEEDED，不重试
+        // 2.用户指定bonding设备建链，但如果是节点内回环场景，DoUbAccept等于RETRY_NEEDED，不重试
+        // 3.用户指定bonding设备建链，（跨节点场景）若使用get_route_list获得的eid建链，DoUbAccept等于RETRY_NEEDED，重试
+        Context *context = Context::GetContext();
+        umq_eid_t localEid = context->GetDevSrcEid();
+        if ((context->IsBonding()) && (connEid != localEid)&& (ackRet == RETRY_NEEDED || peerRet == RETRY_NEEDED)) {
+            UnbindAndFlushRemoteUmq();
+            DestroyLocalUmq();
+            // 重试
+            umq_route_t otherConnRoute;
+            if (RecvSocketData(
+                m_fd, &otherConnRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
+                RPC_ADPT_VLOG_ERR("Failed to receive remote eid message in retry connect, fd: %d\n", m_fd);
+                return -1;
+            }
+
+            if (CheckDevAdd(otherConnRoute.dst) != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to add dev in retry connect\n");
+                return -1;
+            }
+            ackRet = DoUbConnect(otherConnRoute.dst);
+            if (ackRet != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to get new connect in retry connect, fd: %d\n", m_fd);
+                return -1;
+            }
+        } else {
+            if (ackRet != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to get new connect in connect, fd: %d\n", m_fd);
+                return -1;
+            }
+        }
+        
         if (m_context_stats_enable) {
             InitStatsMgr();
         }
@@ -985,7 +1141,7 @@ private:
         m_local_umqh = umq_create(&queue_cfg);
         if (m_local_umqh == UMQ_INVALID_HANDLE) {
             RPC_ADPT_VLOG_ERR("Failed to execute umq_create failed\n");
-            return -1;
+            return RETRY_NEEDED;
         }
 
         Context::FetchAdd();
@@ -1066,13 +1222,13 @@ private:
         return rx_total_len;
     }
 
-    int AcceptExchangeEid(int new_fd, umq_eid_t *connEid){
+    int AcceptExchangeEid(int new_fd, umq_eid_t &connEid, umq_eid_t &remoteEid, umq_route_t &connRoute)
+    {
         Context *context = Context::GetContext();
-        if(!context->IsBonding()){
+        if (!context->IsBonding()) {
             return 0;
         }
 
-        umq_eid_t remoteEid;
         if (RecvSocketData(
             new_fd, &remoteEid, sizeof(umq_eid_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_eid_t)) {
             RPC_ADPT_VLOG_ERR("Failed to receive remote eid message in accept, fd: %d\n", new_fd);
@@ -1085,10 +1241,35 @@ private:
             return -1;
         }
 
-        *connEid = context->GetDevSrcEid();
+        connEid = context->GetDevSrcEid();
         if (localEid != remoteEid) {
-            umq_route_t connRoute;
-            if (GetDevRouteList(&localEid, &remoteEid, &connRoute) != 0) {
+            dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
+            if (SendSocketData(new_fd, &schedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
+                sizeof(dev_schedule_policy)) {
+                RPC_ADPT_VLOG_ERR("Failed to send schedule policy in accept, fd: %d\n", new_fd);
+                return -1;
+            }
+
+            dev_schedule_policy peerSchedulePolicy;
+            if (RecvSocketData(new_fd, &peerSchedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
+                sizeof(dev_schedule_policy)) {
+                    RPC_ADPT_VLOG_ERR("Failed to receive remote socket id in accept, fd: %d\n", new_fd);
+                    return -1;
+            }
+
+            bool useRoundRobin = true;
+            if (peerSchedulePolicy == schedulePolicy && schedulePolicy == dev_schedule_policy::CPU_AFFINITY) {
+                RPC_ADPT_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY in accept, fd: %d\n", m_fd);
+                useRoundRobin = false;
+                // 亲和策略需要接收socketId
+                if (RecvSocketData(
+                    new_fd, &mPeerSocketId, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+                    RPC_ADPT_VLOG_ERR("Failed to receive remote socket id in accept, fd: %d\n", new_fd);
+                    return -1;
+                }
+            }
+
+            if (DoRoute(&localEid, &remoteEid, &connRoute, useRoundRobin) != 0) {
                 RPC_ADPT_VLOG_ERR("Failed to get route list in accept, fd: %d\n", new_fd);
                 return -1;
             }
@@ -1099,7 +1280,73 @@ private:
                 return -1;
             }
 
-            *connEid = connRoute.src;
+            connEid = connRoute.src;
+        }
+
+        return 0;
+    }
+
+    int DoUbAccept(int new_fd, umq_eid_t &connEid, SocketFd *socket_fd_obj)
+    {
+        CpMsg local_cp_msg;
+        CpMsg remote_cp_msg;
+        char send_sync_msg[] = UMQ_BIND_SYNC_MSG;
+        char recv_sync_msg[] = UMQ_BIND_SYNC_MSG;
+
+        int ret = socket_fd_obj->CreateLocalUmq(&connEid);
+        if ((ret < 0) || (ret == RETRY_NEEDED)) {
+            RPC_ADPT_VLOG_ERR("Failed to create umq\n");
+            return ret;
+        }
+
+        local_cp_msg.queue_bind_info_size = umq_bind_info_get(
+            socket_fd_obj->GetLocalUmqHandle(), local_cp_msg.queue_bind_info, sizeof(local_cp_msg.queue_bind_info));
+        if (local_cp_msg.queue_bind_info_size == 0) {
+            RPC_ADPT_VLOG_ERR("Failed to execute umq_bind_info_get\n");
+            return RETRY_NEEDED;
+        }
+        
+        size_t len = sizeof(remote_cp_msg) - sizeof(uint64_t);
+        if (RecvSocketData(
+            new_fd, &remote_cp_msg.queue_bind_info_size, len, CONTROL_PLANE_TIMEOUT_MS) != (ssize_t)len) {
+            RPC_ADPT_VLOG_ERR("Failed to receive remote control message, fd: %d\n", new_fd);
+            return -1;
+        }
+        RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n",
+            new_fd, sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
+
+        if (SendSocketData(
+            new_fd, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local_cp_msg)) {
+            RPC_ADPT_VLOG_ERR("Failed to send local control message, fd: %d\n", new_fd);
+            return -1;
+        }
+        RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n",
+            new_fd, sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
+        
+        if (umq_bind(socket_fd_obj->GetLocalUmqHandle(), remote_cp_msg.queue_bind_info,
+            remote_cp_msg.queue_bind_info_size) != UMQ_SUCCESS) {
+            RPC_ADPT_VLOG_ERR("Failed to execute umq_bind\n");
+            return RETRY_NEEDED;
+        }
+        socket_fd_obj->SetBindRemote(true);
+
+        // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
+        if (socket_fd_obj->PrefillRx() != 0) {
+            RPC_ADPT_VLOG_ERR("Failed to fill rx buffer to umq, fd: %d\n", new_fd);
+            return -1;
+        }
+
+        if (SendSocketData(
+            new_fd, send_sync_msg, sizeof(send_sync_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(send_sync_msg)) {
+            RPC_ADPT_VLOG_ERR("Failed to send sync done message, fd: %d\n", new_fd);
+            return -1;
+        }
+
+        if (RecvSocketData(
+            new_fd, recv_sync_msg, sizeof(recv_sync_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(recv_sync_msg) ||
+            strcmp(recv_sync_msg, UMQ_BIND_SYNC_MSG) != 0) {
+            RPC_ADPT_VLOG_ERR("Failed to receive sync done message, fd: %d\n", new_fd);
+            return -1;
         }
 
         return 0;
@@ -1107,10 +1354,6 @@ private:
 
     int DoAccept(int new_fd)
     {
-        CpMsg local_cp_msg;
-        CpMsg remote_cp_msg;
-        char send_sync_msg[] = UMQ_BIND_SYNC_MSG;
-        char recv_sync_msg[] = UMQ_BIND_SYNC_MSG;
         SocketFd *socket_fd_obj = nullptr;
         int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
         try {
@@ -1122,73 +1365,64 @@ private:
         }
 
         umq_eid_t connEid;
-        if (AcceptExchangeEid(new_fd, &connEid) < 0) {
+        umq_eid_t peerBondingEid;
+        umq_route_t connRoute;
+        if (AcceptExchangeEid(new_fd, connEid, peerBondingEid, connRoute) != 0) {
             RPC_ADPT_VLOG_ERR("Failed to exchange eid in accept\n");
             delete socket_fd_obj;
             return -1;
         }
-
-        if (socket_fd_obj->CreateLocalUmq(&connEid) < 0) {
-            RPC_ADPT_VLOG_ERR("Failed to create umq\n");
-            delete socket_fd_obj;
-            return -1;
-        }
-
-        local_cp_msg.queue_bind_info_size = umq_bind_info_get(
-            socket_fd_obj->GetLocalUmqHandle(), local_cp_msg.queue_bind_info, sizeof(local_cp_msg.queue_bind_info));
-        if (local_cp_msg.queue_bind_info_size == 0) {
-            RPC_ADPT_VLOG_ERR("Failed to execute umq_bind_info_get\n");
-            delete socket_fd_obj;
-            return -1;
-        }
         
-        size_t len = sizeof(remote_cp_msg) - sizeof(uint64_t);
-        if (RecvSocketData(
-            new_fd, &remote_cp_msg.queue_bind_info_size, len, CONTROL_PLANE_TIMEOUT_MS) != (ssize_t)len) {
-            RPC_ADPT_VLOG_ERR("Failed to receive remote control message, fd: %d\n", new_fd);
-            delete socket_fd_obj;
-            return -1;
-        }
-        RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n", 
-            new_fd, sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
-
+        int ackRet = DoUbAccept(new_fd, connEid, socket_fd_obj);
         if (SendSocketData(
-            new_fd, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local_cp_msg)) {
-            RPC_ADPT_VLOG_ERR("Failed to send local control message, fd: %d\n", new_fd);
-            delete socket_fd_obj;
-            return -1;
-        }
-        RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n", 
-            new_fd, sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
-        
-        if (umq_bind(socket_fd_obj->GetLocalUmqHandle(), remote_cp_msg.queue_bind_info, 
-            remote_cp_msg.queue_bind_info_size) != UMQ_SUCCESS) {
-            RPC_ADPT_VLOG_ERR("Failed to execute umq_bind\n");
-            delete socket_fd_obj;
-            return -1;
-        }
-        socket_fd_obj->SetBindRemote(true);
-
-        // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
-        if (socket_fd_obj->PrefillRx() != 0) {
-            RPC_ADPT_VLOG_ERR("Failed to fill rx buffer to umq, fd: %d\n", new_fd);
+            new_fd, &ackRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+            RPC_ADPT_VLOG_ERR("Failed to send ack ret, fd: %d\n", new_fd);
             delete socket_fd_obj;
             return -1;
         }
 
-        if (SendSocketData(
-            new_fd, send_sync_msg, sizeof(send_sync_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(send_sync_msg)) {
-            RPC_ADPT_VLOG_ERR("Failed to send sync done message, fd: %d\n", new_fd);
-            delete socket_fd_obj;
-            return -1;
-        }
-
+        int peerRet;
         if (RecvSocketData(
-            new_fd, recv_sync_msg, sizeof(recv_sync_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(recv_sync_msg) ||
-            strcmp(recv_sync_msg, UMQ_BIND_SYNC_MSG) != 0) {
-            RPC_ADPT_VLOG_ERR("Failed to receive sync done message, fd: %d\n", new_fd);
+            new_fd, &peerRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+            RPC_ADPT_VLOG_ERR("Failed to receive peer ack ret, fd: %d\n", new_fd);
             delete socket_fd_obj;
             return -1;
+        }
+
+        // 1.用户直接指定普通设备建链，DoUbAccept等于RETRY_NEEDED，不重试
+        // 2.用户指定bonding设备建链，但如果是节点内回环场景，DoUbAccept等于RETRY_NEEDED，不重试
+        // 3.用户指定bonding设备建链，但使用get_route_list获得的eid建链（跨节点场景），DoUbAccept等于RETRY_NEEDED，重试
+        Context *context = Context::GetContext();
+        umq_eid_t localEid = context->GetDevSrcEid();
+        if ((context->IsBonding()) && (connEid != localEid)&& (ackRet == RETRY_NEEDED || peerRet == RETRY_NEEDED)) {
+            // 重试
+            socket_fd_obj->UnbindAndFlushRemoteUmq();
+            socket_fd_obj->DestroyLocalUmq();
+
+            umq_route_t otherConnRoute;
+            if (CheckOtherRoute(otherConnRoute, peerBondingEid, connRoute) != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to get other route in retry, fd: %d\n", new_fd);
+                delete socket_fd_obj;
+                return -1;
+            }
+            if (SendSocketData(
+                new_fd, &otherConnRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
+                RPC_ADPT_VLOG_ERR("Failed to send connect eid message in retry accept, fd: %d\n", new_fd);
+                return -1;
+            }
+
+            ackRet = DoUbAccept(new_fd, otherConnRoute.src, socket_fd_obj);
+            if (ackRet != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to get new connect in retry accept, fd: %d\n", new_fd);
+                delete socket_fd_obj;
+                return -1;
+            }
+        } else {
+            if (ackRet != 0) {
+                RPC_ADPT_VLOG_ERR("Failed to get new connect in accept, fd: %d\n", new_fd);
+                delete socket_fd_obj;
+                return -1;
+            }
         }
 
         if (m_context_stats_enable) {
@@ -1599,8 +1833,181 @@ private:
         return wr_cnt;
     }
 
-    int GetDevRouteList(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_t *connRoute)
+    void GetBondingEidMapIndex(const umq_eid_t &dstEid, uint32_t &index)
     {
+        if (!mEidRegistry.IsRegisteredEidIndex(dstEid)) {
+            mEidRegistry.RegisterOrReplaceEidIndex(dstEid, 0);
+        }
+
+        mEidRegistry.GetEidIndex(dstEid, index);
+    }
+
+    // Round_Robin
+    int GetRoundRobinConnEid(umq_route_list_t &route_list, const umq_eid_t *dstEid, umq_route_t *connRoute)
+    {
+        // 获取起始索引
+        uint32_t startIndex = 0;
+        GetBondingEidMapIndex(*dstEid, startIndex);
+        
+        // 确保索引在有效范围内
+        startIndex = startIndex % route_list.len;
+
+        // 从起始索引开始轮询查找
+        bool found = false;
+        for (uint32_t offset = 0; offset < route_list.len; ++offset) {
+            uint32_t currentIndex = (startIndex + offset) % route_list.len;
+            if (route_list.buf[currentIndex].flag.bs.rtp == 1) {
+                *connRoute = route_list.buf[currentIndex];
+                found = true;
+                startIndex = (currentIndex + 1) % route_list.len;  // 更新下次起始位置
+                break;
+            }
+        }
+
+        // 更新下一个轮询位置
+        mEidRegistry.RegisterOrReplaceEidIndex(*dstEid, startIndex);
+
+        if (!found) {
+            RPC_ADPT_VLOG_ERR("Failed to find umq dev\n");
+            return -1;
+        }
+
+        return 0;
+    }
+
+    uint32_t GetTargetChipId(const std::vector<uint32_t>& socketIds, const std::vector<uint32_t>& chipIdList,
+        int processSocketId)
+    {
+        auto it = std::find(socketIds.begin(), socketIds.end(), processSocketId);
+        if (it == socketIds.end()) {
+            return UINT32_MAX;  // 错误标识
+        }
+        
+        size_t index = std::distance(socketIds.begin(), it);
+        if (index >= chipIdList.size()) {
+            return UINT32_MAX;  // 索引越界
+        }
+        
+        return chipIdList[index];
+    }
+
+    // 通过亲和性选择 Cpu_Affinity
+    int GetCpuAffinityConnEid(umq_route_list_t &route_list, const umq_eid_t *dstEid, umq_route_t *connRoute,
+        const std::vector<uint32_t>& socketIds, int processSocketId)
+    {
+        // 检查socket ID一致性。因为同平面上的两端chip_id相等，因此两端的socket id不相等，则切回轮询模式
+        if (processSocketId != mPeerSocketId) {
+            return GetRoundRobinConnEid(route_list, dstEid, connRoute);
+        }
+
+        // 提取 chip_id 列表
+        std::set<uint32_t> uniqueChipIds;
+        for (uint32_t i = 0; i < route_list.len; ++i) {
+            if ((route_list.buf[i].flag.bs.rtp == 1)) {
+                uniqueChipIds.insert(route_list.buf[i].chip_id);
+                std::cout<<" index "<<i<< "chip id "<<route_list.buf[i].chip_id<<std::endl;
+            }
+        }
+        std::vector<uint32_t> chipIdList(uniqueChipIds.begin(), uniqueChipIds.end());
+
+        // 获得对应的chip_id
+        uint32_t targetChipId = GetTargetChipId(socketIds, chipIdList, processSocketId);
+        if (targetChipId == UINT32_MAX) {
+            return GetRoundRobinConnEid(route_list, dstEid, connRoute);
+        }
+   
+        // 查找匹配的eid对
+        for (uint32_t i = 0; i < route_list.len; ++i) {
+            if ((route_list.buf[i].flag.bs.rtp == 1) && (targetChipId == route_list.buf[i].chip_id)) {
+                *connRoute = route_list.buf[i];
+                return 0;
+            } 
+        }
+
+        RPC_ADPT_VLOG_ERR("Failed to find umq dev\n");
+        return -1;
+    }
+
+    int GetConnEid(umq_route_list_t &route_list, const umq_eid_t *dstEid, umq_route_t *connRoute, bool useRoundRobin)
+    {
+        Context *context = Context::GetContext();
+        if (!useRoundRobin) {
+            int processSocketId = context->GetProcessSocketId();
+            std::vector<uint32_t> socketIds = context->GetAllSocketId();
+            return GetCpuAffinityConnEid(route_list, dstEid, connRoute, socketIds, processSocketId);
+        }
+        return GetRoundRobinConnEid(route_list, dstEid, connRoute);
+    }
+    
+    int CheckDevAdd(const umq_eid_t &connEid)
+    {
+        if (mEidRegistry.IsRegisteredEid(connEid)) {
+            return 0;
+        }
+
+        umq_trans_info_t trans_info;
+        trans_info.trans_mode = UMQ_TRANS_MODE_UB;
+        trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+        trans_info.dev_info.eid.eid = connEid;
+        int ret = umq_dev_add(&trans_info);
+        if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
+            RPC_ADPT_VLOG_ERR("Failed to add umq dev, ret %d\n", ret);
+            return -1;
+        }
+        
+        mEidRegistry.RegisterEid(connEid);
+        return 0;
+    }
+
+    int CheckOtherRoute(umq_route_t &otherConnRoute, umq_eid_t &dstEid, umq_route_t &connRoute)
+    {
+        if (!mRouteListRegistry.IsRegisteredRouteList(dstEid)) {
+            RPC_ADPT_VLOG_ERR("Failed to check other route to connect\n");
+            return -1;
+        }
+
+        umq_route_list_t routeList = {};
+        if (!mRouteListRegistry.GetRouteList(dstEid, routeList)) {
+            RPC_ADPT_VLOG_ERR("Failed to get route list in map\n");
+            return -1;
+        }
+
+        umq_route_list_t filteredList = {};
+        uint32_t filterNum = 0;
+        bool found = false;
+        for (uint32_t i = 0; i< routeList.len; ++i) {
+            if (routeList.buf[i].chip_id != connRoute.chip_id) {
+                if (filterNum==0) {
+                    otherConnRoute = routeList.buf[i];
+                    found = true;
+                }
+                filteredList.buf[filterNum++] = routeList.buf[i];
+            } 
+        }
+
+        if (!found) {
+            RPC_ADPT_VLOG_ERR("Failed to find other route in map\n");
+            return -1;
+        }
+
+        filteredList.len = filterNum;
+        mRouteListRegistry.RegisterOrReplaceRouteList(dstEid, filteredList);
+
+        if (CheckDevAdd(otherConnRoute.src)!=0) {
+            return -1;
+        }
+
+        return 0;
+    }
+
+    int GetDevRouteList(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_list_t &filteredList)
+    {
+        if (mRouteListRegistry.GetRouteList(*dstEid, filteredList)) {
+            if (filteredList.len > 0) {
+                return 0;
+            }
+        }
+            
         umq_route_t route;
         (void)memcpy_s(&route.src, sizeof(umq_eid_t), srcEid, sizeof(umq_eid_t));
         (void)memcpy_s(&route.dst, sizeof(umq_eid_t), dstEid, sizeof(umq_eid_t));
@@ -1612,41 +2019,41 @@ private:
             return -1;
         }
 
-        if (route_list.len == 0) {
+        uint32_t filterNum = 0;
+        for (uint32_t i = 0;i< route_list.len; ++i) {
+            if (route_list.buf[i].flag.bs.rtp == 1) {
+                filteredList.buf[filterNum++] = route_list.buf[i];
+            }         
+        }
+        filteredList.len = filterNum;
+
+        if (filteredList.len == 0) {
             RPC_ADPT_VLOG_ERR("Failed to get urma topo is zero\n");
             return -1;
         }
 
-        int getIndex = 0;
-        for(uint32_t i = 0;i< route_list.len; ++i){
-            if(route_list.buf[i].flag.bs.rtp == 1){
-                *connRoute = route_list.buf[i];
-                getIndex = i;
-                break;
-            }         
-        }
+        mRouteListRegistry.RegisterOrReplaceRouteList(*dstEid, filteredList);
+        return 0;
+    }
 
-        if(connRoute == nullptr){
-            RPC_ADPT_VLOG_ERR("Failed to find umq dev\n");
+    int DoRoute(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_t *connRoute, bool useRoundRobin)
+    {
+        umq_route_list_t filteredList = {};
+        if (GetDevRouteList(srcEid, dstEid, filteredList) != 0) {
+            RPC_ADPT_VLOG_ERR("Failed to get dev route list\n");
             return -1;
         }
 
-        
-        if(mEidRegistry.IsRegisteredEid(route_list.buf[getIndex].src)) {
-            return 0;
+        if (GetConnEid(filteredList, dstEid, connRoute, useRoundRobin)!=0) {
+            RPC_ADPT_VLOG_ERR("Failed to get connect eid\n");
+            return -1;
         }
 
-        umq_trans_info_t trans_info;
-        trans_info.trans_mode = UMQ_TRANS_MODE_UB;
-        trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
-        trans_info.dev_info.eid.eid = route_list.buf[getIndex].src;
-        ret = umq_dev_add(&trans_info);
-        if(ret != 0 && ret != -UMQ_ERR_EEXIST){
-            RPC_ADPT_VLOG_ERR("Failed to add umq dev, ret %d\n",ret);
+        if (CheckDevAdd(connRoute->src)!=0) {
+            RPC_ADPT_VLOG_ERR("Failed to check dev add\n");
             return -1;
-        } 
-        
-        mEidRegistry.RegisterEid(route_list.buf[getIndex].src);
+        }
+
         return 0;
     }
 
@@ -1658,7 +2065,9 @@ private:
     bool m_context_stats_enable = false;
     std::atomic<bool> m_closed{false};
     int m_event_fd;
+    int mPeerSocketId = -1;
     EidRegistry mEidRegistry;
+    RouteListRegistry mRouteListRegistry;
 
     // TX fields
     struct alignas(CACHE_LINE_ALIGNMENT) TxDataPlane {

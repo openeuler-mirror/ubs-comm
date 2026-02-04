@@ -188,6 +188,16 @@ static int umq_tp_ub_plus_dev_info_get(char *dev_name, umq_trans_mode_t umq_tran
     return umq_ub_dev_info_get_impl(dev_name, umq_trans_mode, umq_dev_info);
 }
 
+static umq_dev_info_t *umq_tp_ub_plus_dev_info_list_get(umq_trans_mode_t umq_trans_mode, int *dev_num)
+{
+    return umq_ub_dev_info_list_get_impl(umq_trans_mode, dev_num);
+}
+
+static void umq_tp_ub_plus_dev_info_list_free(umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info)
+{
+    umq_ub_dev_info_list_free_impl(umq_trans_mode, umq_dev_info);
+}
+
 static umq_ops_t g_umq_ub_plus_ops = {
     .mode = UMQ_TRANS_MODE_UB_PLUS,
     // control plane api
@@ -208,6 +218,8 @@ static umq_ops_t g_umq_ub_plus_ops = {
     .umq_tp_mempool_state_get = umq_tp_ub_plus_mempool_state_get,
     .umq_tp_mempool_state_refresh = umq_tp_ub_plus_mempool_state_refresh,
     .umq_tp_dev_info_get = umq_tp_ub_plus_dev_info_get,
+    .umq_tp_dev_info_list_get = umq_tp_ub_plus_dev_info_list_get,
+    .umq_tp_dev_info_list_free = umq_tp_ub_plus_dev_info_list_free,
 
     // datapath plane api
     .umq_tp_buf_alloc = umq_tp_ub_plus_buf_alloc,

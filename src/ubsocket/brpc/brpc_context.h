@@ -74,6 +74,16 @@ class Context : public Brpc::ConfigSettings {
         return isBonding;
     }
 
+    int GetProcessSocketId()
+    {
+        return m_process_socket_id;
+    }
+
+    std::vector<uint32_t> GetAllSocketId()
+    {
+        return m_socket_ids;
+    }
+
     private:
     void RecordAndSetBrpcAllocator()
     {
@@ -173,6 +183,32 @@ class Context : public Brpc::ConfigSettings {
             }
         }
 
+        if (GetDevIpStr() == nullptr && GetDevNameStr() == nullptr) {
+            umq_config.trans_info[0].mem_cfg.total_size = GetIOTotalSize();
+            umq_config.trans_info[0].trans_mode = GetTransMode();
+            ret = sprintf_s(umq_config.trans_info[0].dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, "%s", "bonding_dev_0");
+            if (ret < 0 || ret >= UMQ_DEV_NAME_SIZE) {
+                RPC_ADPT_VLOG_ERR("Failed to sprintf_s device name\n");
+                ResetBrpcAllocator();
+                SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+                return;
+            }
+            umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
+            umq_config.trans_info[0].dev_info.dev.eid_idx = GetEidIdx();
+            isBonding = true;
+        }
+
+        if (GetDevSchedulePolicy() == dev_schedule_policy::CPU_AFFINITY) {
+            m_process_socket_id = GetCurrentProcessSocketId();
+            m_socket_ids = GetSocketIdsViaNumaSysfs();
+            if (m_socket_ids.empty() || m_process_socket_id==-1) {
+                RPC_ADPT_VLOG_ERR("Failed get socket id in cpu affinity policy.\n");
+                ResetBrpcAllocator();
+                SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+                return;
+            }
+        }
+
         ret = umq_init(&umq_config);
         if(ret != 0){
             RPC_ADPT_VLOG_ERR("Failed to execute umq init\n");
@@ -207,12 +243,37 @@ class Context : public Brpc::ConfigSettings {
         RPC_ADPT_VLOG_INFO("Context reclaimed successfully.\n");
     }
 
+    // 解析cpulist字符串，例如0~24，返回0
+    int GetFirstCpuFromCpulist(const std::string& cpuListStr);
+
+    // 从 CPU ID 获取其 Socket ID（physical_package_id）
+    int GetSocketIdOfCpu(int cpu);
+
+    // 获取所有 Socket ID
+    std::vector<uint32_t> GetSocketIdsViaNumaSysfs();
+
+    // 通过 NUMA 节点获取所有 Socket ID
+    std::vector<uint32_t> GetSocketIdsViaNuma();
+
+    // CPU 扫描方式获取 Socket IDs
+    std::vector<uint32_t> GetSocketIdsViaCpuScan();
+
+    // 获得当前进程socketID
+    int GetCurrentProcessSocketId();
+
+    static const char* CPU_LIST_PREFIX_PATH;
+    static const char* CPU_LIST_SUFFIX_PATH;
+    static const char* SOCKET_ID_PERFIX_PATH;
+    static const char* SOCKET_ID_SUFFIX_PATH;
+
     static std::atomic<int> m_ref;
     IOBuf::blockmem_allocate_t *m_alloc_addr = nullptr; // store scanned address of alloc function
     IOBuf::blockmem_deallocate_t *m_dealloc_addr = nullptr; // store scanned address of dealloc function
     IOBuf::blockmem_allocate_t m_alloc_addr_origin = nullptr; // store original alloc function address
     IOBuf::blockmem_deallocate_t m_dealloc_addr_origin = nullptr; // store original dealloc function address
     bool isBonding = false;
+    int m_process_socket_id = -1;
+    std::vector<uint32_t> m_socket_ids;
 };     
 
 }

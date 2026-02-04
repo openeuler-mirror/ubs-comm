@@ -137,6 +137,7 @@ RPC_ADPT_READV_UNLIMITED=true \
 | RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，单位MB | 应用按需配置                                                 | 1024    | 否                                     |
 | RPC_ADPT_UB_FORCE | 是否强制使用UB协议加速TCP | 0：不强制用UB加速TCP 1：强制用UB加速TCP                                                | 0    | 否                                |
 | RPC_AUTO_FALLBACK_TCP | 协议不匹配时是否自动降级为TCP | 0, 1                                                | 1   | 否                                |
+| RPC_SCHEDULE_POLICY | 设置多平面负载分担策略 | affinity，rr                                                | affinity   | 否                                |
 
 >  说明：
 >
