@@ -17,7 +17,6 @@ cc_library(
         "src/*.c",
         "util/*.c",
         "util/*.cpp",
-        "tools/**/*.c",
     ]),
     hdrs = glob([
         "src/dfx/*.h",
@@ -25,7 +24,6 @@ cc_library(
         "src/umq_ub/**/*.h",
         "src/*.h",
         "util/*.h",
-        "tools/**/*.h",
     ]),
     includes = [
         "src/dfx",
@@ -36,9 +34,6 @@ cc_library(
         "src/umq_ub/core/private",
         "src",
         "util",
-        "tools",
-        "tools/perftest",
-        "tools/perftest/umq",
     ],
     copts = UMQ_DEFAULT_STATIC_COPTS + [
         "-DUMQ_STATIC_LIB",
