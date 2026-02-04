@@ -13,6 +13,7 @@
 
 #define HUGE_QBUF_POOL_NUM_MAX (64)
 #define HUGE_QBUF_POOL_IDX_SHIFT (1)
+#define HUGE_QBUF_HEAD_POWER_OF_TWO (7)
 
 typedef struct huge_pool_info {
     void *data_buffer;      // start address(this address must be 8K-aligned) of the data area.
@@ -265,9 +266,19 @@ static ALWAYS_INLINE void umq_huge_qbuf_alloc_data_with_split(huge_pool_t *pool,
     uint32_t remaining_size = request_size;
     uint32_t max_data_capacity = blk_size - headroom_size_temp;
     bool first_fragment = true;
+    uint32_t last_mempool_id = UINT32_MAX;
+    huge_pool_info_t *pool_info = NULL;
+    uint32_t pool_idx = 0;
 
     QBUF_LIST_FOR_EACH(cur_node, &pool->block_pool.head_with_data) {
-        cur_node->buf_data = floor_to_align(cur_node->buf_data, blk_size) + headroom_size_temp;
+        // when the current mempool_id is equal  to last_mempool_id, there is no need to calculate pool_info
+        if (last_mempool_id != cur_node->mempool_id) {
+            last_mempool_id = cur_node->mempool_id;
+            pool_idx = last_mempool_id - pool->pool_idx_shift;
+            pool_info = &pool->pool_info[pool_idx];
+        }
+        uint32_t index = ((void *)cur_node - pool_info->header_buffer) >> HUGE_QBUF_HEAD_POWER_OF_TWO;
+        cur_node->buf_data = pool_info->data_buffer + index * blk_size + headroom_size_temp;
         cur_node->buf_size = blk_size + (uint32_t)sizeof(umq_buf_t);
         cur_node->headroom_size = headroom_size_temp;
         cur_node->total_data_size = total_data_size;
@@ -365,7 +376,7 @@ int umq_huge_qbuf_alloc(huge_qbuf_pool_size_type_t type, uint32_t request_size, 
     uint32_t headroom_size =
         (option != NULL && (option->flag & UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE) != 0) ?
             option->headroom_size : g_huge_pool_ctx.headroom_size;
-    uint32_t align_size = umq_huge_qbuf_get_size_by_type(type);
+    uint64_t align_size = umq_huge_qbuf_get_size_by_type(type);
 
     if (g_huge_pool_ctx.mode == UMQ_BUF_SPLIT) {
         actual_buf_count = num * ((request_size + headroom_size + align_size - 1) / (align_size));

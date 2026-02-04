@@ -549,6 +549,7 @@ uint32_t umq_bind_info_get(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info
 
     if ((bind_info == NULL) || (umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
         (umq->tp_ops->umq_tp_bind_info_get == NULL)) {
+        errno = UMQ_ERR_EINVAL;
         UMQ_VLOG_ERR("bind_info or umqh invalid\n");
         return 0;
     }
@@ -699,7 +700,7 @@ void umq_buf_free(umq_buf_t *qbuf)
 umq_buf_t *umq_buf_break_and_free(umq_buf_t *qbuf)
 {
     // break qbuf list for many batchs connected, only release the first batch.
-    umq_buf_t *next_batch_qbuf = NULL;
+    umq_buf_t *next_batch_qbuf = qbuf->qbuf_next;
     umq_buf_t *tmp_buf = qbuf;
     uint32_t rest_data_size = tmp_buf->total_data_size;
     while (tmp_buf && rest_data_size > 0) {
@@ -870,6 +871,10 @@ void umq_ack_interrupt(uint64_t umqh, uint32_t nevents, umq_interrupt_option_t *
 
 int umq_buf_split(umq_buf_t *head, umq_buf_t *node)
 {
+    if (!g_umq_inited) {
+        UMQ_VLOG_ERR("umq not initialized\n");
+        return -UMQ_ERR_EINVAL;
+    }
     if (head == NULL || node == NULL || head == node) {
         UMQ_VLOG_ERR("head or node invalid\n");
         return -UMQ_ERR_EINVAL;
@@ -924,7 +929,8 @@ int umq_async_event_fd_get(umq_trans_info_t *trans_info)
 
 int umq_get_async_event(umq_trans_info_t *trans_info, umq_async_event_t *event)
 {
-    if (trans_info == NULL || trans_info->trans_mode >= UMQ_TRANS_MODE_MAX || trans_info->trans_mode < 0) {
+    if (event == NULL || trans_info == NULL || trans_info->trans_mode >= UMQ_TRANS_MODE_MAX ||
+        trans_info->trans_mode < 0) {
         UMQ_VLOG_ERR("trans info invalid\n");
         return -UMQ_ERR_EINVAL;
     }
@@ -1080,4 +1086,30 @@ int umq_mempool_state_refresh(uint64_t umqh, uint32_t mempool_id)
     }
 
     return umq->tp_ops->umq_tp_mempool_state_refresh(umq->umqh_tp, mempool_id);
+}
+
+int umq_dev_info_get(char *dev_name, umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info)
+{
+    if (dev_name == NULL || strnlen(dev_name, UMQ_DEV_NAME_SIZE) >= UMQ_DEV_NAME_SIZE || umq_dev_info == NULL) {
+        UMQ_VLOG_ERR("invalid parameter\n");
+        return -UMQ_ERR_EINVAL;
+    }
+
+    if (umq_trans_mode >= UMQ_TRANS_MODE_MAX) {
+        UMQ_VLOG_ERR("trans info mode[%u] is invalid\n", umq_trans_mode);
+        return -UMQ_ERR_EINVAL;
+    }
+
+    umq_framework_t *umq_fw = &g_umq_fws[umq_trans_mode];
+    if (!umq_fw->enable) {
+        UMQ_VLOG_ERR("trans mode %u ops not init\n", umq_trans_mode);
+        return -UMQ_ERR_EINVAL;
+    }
+
+    if (umq_fw->tp_ops == NULL || umq_fw->tp_ops->umq_tp_dev_info_get == NULL) {
+        UMQ_VLOG_ERR("trans mode %u ops not support\n", umq_trans_mode);
+        return -UMQ_ERR_EINVAL;
+    }
+
+    return umq_fw->tp_ops->umq_tp_dev_info_get(dev_name, umq_trans_mode, umq_dev_info);
 }

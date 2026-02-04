@@ -53,7 +53,7 @@ int umq_destroy(uint64_t umqh);
  * @param[in] umqh: umq handle
  * @param[out] bind_info: buf of bind info
  * @param[in] bind_info_size: buf size of bind info
- * Return buf size of bind info get
+ * Return buf size of bind info on success, 0 on failure (get error code from errno)
  */
 uint32_t umq_bind_info_get(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size);
 
@@ -294,6 +294,15 @@ int umq_mempool_state_get(uint64_t umqh, uint32_t mempool_id, umq_mempool_state_
  * Return: 0 on success, other value on error
  */
 int umq_mempool_state_refresh(uint64_t umqh, uint32_t mempool_id);
+
+/**
+ * Get device information.
+ * @param[in] dev_name: device name
+ * @param[in] umq_trans_mode: umq trans mdoe
+ * @param[out] umq_dev_info: device information
+ * Return: 0 on success, other value on error
+ */
+int umq_dev_info_get(char *dev_name, umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info);
 
 #ifdef __cplusplus
 }
