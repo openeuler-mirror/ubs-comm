@@ -27,7 +27,7 @@
 #define DIVIDED_NUMBER          (2)
 #define CACHE_LINE_ALIGNMENT    (64)
 
-constexpr uint16_t REFILL_THRESHOLD = 2;
+constexpr uint16_t REFILL_THRESHOLD = 32;
 constexpr uint16_t HANDLE_THRESHOLD = 2;
 constexpr uint16_t RETRIEVE_THRESHOLD = 1;
 constexpr uint16_t REPORT_THRESHOLD = 1;
@@ -379,7 +379,7 @@ public:
             InitStatsMgr();
         }
 
-        RPC_ADPT_VLOG_DEBUG("Connect to remote with UMQ successful, fd: %d\n", m_fd);
+        RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", m_fd);
 
         return 0;
     }
@@ -399,7 +399,7 @@ public:
 
         ret = DoConnect();
         if (ret != 0) {
-            RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", m_fd);
+            RPC_ADPT_VLOG_ERR("Failed to establish UB connection.");
             Fd<::SocketFd>::OverrideFdObj(m_fd, nullptr);
             /* Clear messages that already exist on the TCP link to prevent 
                  * dirty messages from affecting user data transmission*/
@@ -1175,7 +1175,7 @@ private:
         // Delete existing objects and record new objects in the list.
         Fd<::SocketFd>::OverrideFdObj(new_fd, socket_fd_obj);
 
-        RPC_ADPT_VLOG_DEBUG("Accept to remote with UMQ successful, listen fd: %d, new fd: %d\n", m_fd, new_fd);
+        RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
 
         return 0;  
     }
