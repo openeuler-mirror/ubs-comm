@@ -261,6 +261,22 @@ typedef struct umq_ops {
      * Return: 0 on success, other value on error
      */
     int (*umq_tp_dev_info_get)(char *dev_name, umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info);
+
+    /**
+     * Get all devices information, umq_tp_dev_info_list_free needs to be called to free memory.
+     * @param[in] umq_trans_mode: umq trans mdoe
+     * @param[out] dev_num: device information array size
+     * Return: devices information, NULL on failure (get error code from errno)
+     */
+    umq_dev_info_t *(*umq_tp_dev_info_list_get)(umq_trans_mode_t umq_trans_mode, int *dev_num);
+
+    /**
+     * Free devices information allocated by umq_tp_dev_info_list_get.
+     * @param[in] umq_trans_mode: umq trans mdoe
+     * @param[in] umq_dev_info: device information to free
+     * Return: void
+     */
+    void (*umq_tp_dev_info_list_free)(umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info);
 } umq_ops_t;
 
 typedef umq_ops_t* (*umq_ops_get_t)(void);
