@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+#load("//:bazel/copts.bzl", "UMQ_DEFAULT_STATIC_COPTS")
+
+UMQ_DEFAULT_STATIC_COPTS = [
+  "-D_GNU_SOURCE",
+]
+
+cc_library(
+    name = "umq",
+    srcs = glob([
+        "src/dfx/*.c",
+        "src/qbuf/*.c",
+        "src/umq_ub/**/*.c",
+        "src/*.c",
+        "util/*.c",
+        "util/*.cpp",
+        "tools/**/*.c",
+    ]),
+    hdrs = glob([
+        "src/dfx/*.h",
+        "src/qbuf/*.h",
+        "src/umq_ub/**/*.h",
+        "src/*.h",
+        "util/*.h",
+        "tools/**/*.h",
+    ]),
+    includes = [
+        "src/dfx",
+        "src/qbuf",
+        "src/umq_ub",
+        "src/umq_ub/core",
+        "src/umq_ub/core/flow_control",
+        "src/umq_ub/core/private",
+        "src",
+        "util",
+        "tools",
+        "tools/perftest",
+        "tools/perftest/umq",
+    ],
+    copts = UMQ_DEFAULT_STATIC_COPTS + [
+        "-DUMQ_STATIC_LIB",
+    ],
+    linkopts = ["-lpthread", "-lurma", "-ltpsa"],
+    deps = [
+        "//src/hcom/umq/include:framework_headers",
+        "//src/hcom/umq/include:umq_headers",
+        "//src/hcom/umq/include:umq_tp_headers",
+        "//src/hcom/umq/include:umq_ub_headers",
+	# third party libs
+	"@urma//:urma_headers",
+	"@openssl//:ssl",
+	"@openssl//:crypto",
+    ],
+    features = [
+        "static_library",
+        "-pic",
+        "-supports_pic",
+    ],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)
