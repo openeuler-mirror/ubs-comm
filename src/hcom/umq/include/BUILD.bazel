@@ -11,7 +11,7 @@ cc_library(
 cc_library(
     name = "umq_headers",
     hdrs = glob(["umq/*.h","umq/**/*.h"]),
-    includes = [".","umq",],
+    includes = [".","umq","umq/umq_ub"],
     visibility = ["//visibility:public"],
 )
 

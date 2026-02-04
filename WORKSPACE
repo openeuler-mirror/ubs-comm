@@ -8,13 +8,6 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 load("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
 
-
-new_local_repository(
-    name = "urma",
-    build_file = "//src/hcom/umq/third_party/urma:BUILD.bazel",
-    path = "/usr",
-)
-
 http_archive(
     name = "bazel_skylib",
     sha256 = "bc283cdfcd526a52c3201279cda4bc298652efa898b10b4db0837dc51652756f",
@@ -118,4 +111,11 @@ new_local_repository(
     name = "urma",
     build_file = "//src/hcom/umq/third_party/urma:BUILD.bazel",
     path = "/usr",
+)
+
+git_repository(
+	name = "libboundscheck",
+	remote = "https://atomgit.com/openeuler/libboundscheck.git",
+	branch = "master",  # 或指定特定分支
+	build_file = "//src/ubsocket/3rdparty/boundscheck:BUILD.bazel",
 )
