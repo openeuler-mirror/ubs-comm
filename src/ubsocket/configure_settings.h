@@ -28,8 +28,8 @@
 #define DEV_SCHEDULE_POLICY_LEN_MAX (64)
 #define BOOL_STR_LEN_MAX          (8)
 #define DEFAULT_EID_IDX           (0)
-#define DEFAULT_TX_DEPTH          (128)
-#define DEFAULT_RX_DEPTH          (128)
+#define DEFAULT_TX_DEPTH          (1024)
+#define DEFAULT_RX_DEPTH          (1024)
 #define DEFAULT_IO_TOTAL_SIZE     (1024)    // MB
 #define IO_SIZE_MB                (1024 * 1024)
 #define DEFAULT_QBUF_BLOCK_TYPE   "default" // 8k

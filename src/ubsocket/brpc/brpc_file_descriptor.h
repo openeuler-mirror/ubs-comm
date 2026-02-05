@@ -437,11 +437,6 @@ public:
         CpMsg remote_cp_msg;
         char send_sync_msg[] = UMQ_BIND_SYNC_MSG;
         char recv_sync_msg[] = UMQ_BIND_SYNC_MSG;
-        if (SendSocketData(
-            m_fd, &local_cp_msg.magic_number, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
-            RPC_ADPT_VLOG_ERR("Failed to send magic number, fd: %d\n", m_fd);
-            return -1;
-        }
 
         int ret = CreateLocalUmq(&connEid);
         if ((ret < 0) || (ret == RETRY_NEEDED)) {
@@ -502,6 +497,13 @@ public:
 
     int DoConnect(void)
     {
+        uint64_t magic_number = CONTROL_PLANE_MAGIC_NUMBER;
+        if (SendSocketData(
+            m_fd, &magic_number, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
+            RPC_ADPT_VLOG_ERR("Failed to send magic number, fd: %d\n", m_fd);
+            return -1;
+        }
+
         umq_eid_t connEid;
         if (ConnectExchangeEid(&connEid) < 0) {
             RPC_ADPT_VLOG_ERR("Failed to exchange eid in connect\n");
