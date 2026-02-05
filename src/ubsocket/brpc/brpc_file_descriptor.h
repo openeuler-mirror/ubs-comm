@@ -515,6 +515,13 @@ public:
 
     int DoConnect(void)
     {
+        uint64_t magic_number = CONTROL_PLANE_MAGIC_NUMBER;
+        if (SendSocketData(
+            m_fd, &magic_number, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
+            RPC_ADPT_VLOG_ERR("Failed to send magic number, fd: %d\n", m_fd);
+            return -1;
+        }
+
         umq_eid_t connEid;
         if (ConnectExchangeEid(&connEid) < 0) {
             RPC_ADPT_VLOG_ERR("Failed to exchange eid in connect\n");
