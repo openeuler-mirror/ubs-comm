@@ -124,10 +124,10 @@ RPC_ADPT_READV_UNLIMITED=true \
 | 名称                       | 含义                   | 取值范围                                                     | 默认值  | 必填                                   |
 | :------------------------- | :--------------------- | :----------------------------------------------------------- | :------ | -------------------------------------- |
 | RPC_ADPT_TRANS_MODE        | 通信协议               | ub，ib                                                       | ub      | 否                                     |
-| RPC_ADPT_DEV_NAME          | 设备名称               | 根据实际场景填写设备名称；例如，udma2或者bonding_dev_0       | NA      | 是                                     |
+| RPC_ADPT_DEV_NAME          | 设备名称               | 根据实际场景填写设备名称；例如，udma2或者bonding_dev_0       | 自动获得当前环境bonding设备名称，如bonding_dev_xx      | 否                                     |
 | RPC_ADPT_DEV_IP            | 设备名称               | 根据实际场景填写，支持ipv6和ipv4写法。`ub协议下不需要填写`   | NA      | 否                                     |
-| RPC_ADPT_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | `RPC_ADPT_DEV_NAME`为普通设备时必填    |
-| RPC_ADPT_SRC_EID           | 使用bonding设备的eid   | ub协议下，通过`urma_admin show`命令查询获得                  | NA      | `RPC_ADPT_DEV_NAME`为bonding设备时必填 |
+| RPC_ADPT_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | 否    |
+| RPC_ADPT_SRC_EID           | 使用bonding设备的eid   | ub协议下，通过`urma_admin show`命令查询获得                  | 自动获得当前环境bonding设备的eid |否 |
 | RPC_ADPT_LOG_LEVEL         | 日志级别               | emerg，alert，crit，err，warn，notice，info，debug           | info    | 否                                     |
 | RPC_ADPT_LOG_USE_PRINTF    | 是否将日志打印到前台   | 0，1                                                         | 0       | 否                                     |
 | RPC_ADPT_TX_DEPTH          | 发送队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfs_depth`两者的最小值） | 1024    | 否                                     |
