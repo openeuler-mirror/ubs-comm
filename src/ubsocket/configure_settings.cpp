@@ -116,8 +116,7 @@ int ConfigSettings::ParseEnvVars()
             }
         } 
     }else {
-         RPC_ADPT_VLOG_ERR("No device information is provided, such as device IP or device name\n");
-         return -1;
+        RPC_ADPT_VLOG_WARN("No device information is provided, such as device IP or device name\n");
     } 
     
     RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_EID_IDX, m_eid_idx);
