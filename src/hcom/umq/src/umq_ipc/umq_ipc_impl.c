@@ -29,7 +29,7 @@ typedef struct umq_ipc_init_ctx {
 typedef struct umq_ipc_ring_info {
     void *addr;
     int shm_fd;
-    int shm_size;
+    uint32_t shm_size;
     char ipc_name[MAX_MSG_RING_NAME + 1];
     uint32_t tx_buf_size;
     uint32_t tx_depth;
@@ -220,9 +220,9 @@ static ALWAYS_INLINE int fill_ring_info(umq_create_option_t *option, umq_ipc_rin
         ring->tx_depth * (umq_buf_size_small() + sizeof(umq_buf_t) * (1 + UMQ_EMPTY_HEADER_COEFFICIENT));
 
     // transmit queue and manage queue size calculate
-    uint64_t post_data_size = sizeof(uint32_t) + sizeof(uint64_t);
-    uint64_t tx_post_queue_size = sizeof(shm_ring_hdr_t) + ring->tx_depth * post_data_size;
-    uint64_t rx_post_queue_size = sizeof(shm_ring_hdr_t) + ring->tx_depth * post_data_size;
+    uint64_t post_data_size = (uint64_t)(sizeof(uint32_t) + sizeof(uint64_t));
+    uint64_t tx_post_queue_size = (uint64_t)sizeof(shm_ring_hdr_t) + ring->tx_depth * post_data_size;
+    uint64_t rx_post_queue_size = (uint64_t)sizeof(shm_ring_hdr_t) + ring->tx_depth * post_data_size;
     uint64_t rounded_post_size = round_up(tx_post_queue_size + rx_post_queue_size, umq_buf_size_small());
     ring->transmit_queue_buf_size = rounded_post_size;
 
@@ -249,8 +249,7 @@ uint64_t umq_ipc_create_impl(uint64_t umqh, uint8_t *ipc_ctx, umq_create_option_
     umq_ipc_info_t *tp = (umq_ipc_info_t *)calloc(1, sizeof(umq_ipc_info_t));
     if (tp == NULL) {
         UMQ_VLOG_ERR("memory alloc failed\n");
-        umq_dec_ref(ctx->io_lock_free, &ctx->ref_cnt, 1);
-        return UMQ_INVALID_HANDLE;
+        goto DEC_REF;
     }
 
     tp->trans_mode = option->trans_mode;
@@ -286,7 +285,7 @@ uint64_t umq_ipc_create_impl(uint64_t umqh, uint8_t *ipc_ctx, umq_create_option_
     // initialize shm_qbuf
     shm_qbuf_pool_cfg_t sm_qbuf_pool_cfg = {
         .buf_addr = tp->local_ring.addr + tp->local_ring.transmit_queue_buf_size,
-        .total_size = tp->local_ring.shm_size - tp->local_ring.transmit_queue_buf_size,
+        .total_size = (uint64_t)tp->local_ring.shm_size - (uint64_t)tp->local_ring.transmit_queue_buf_size,
         .data_size = umq_buf_size_small(),
         .headroom_size = global_pool_cfg.headroom_size,
         .mode = global_pool_cfg.mode,
@@ -305,7 +304,7 @@ uint64_t umq_ipc_create_impl(uint64_t umqh, uint8_t *ipc_ctx, umq_create_option_
 
     tp->umqh = umqh;
     tp->ref_cnt = 1;
-    UMQ_VLOG_DEBUG("create ipc tp succeed\n");
+    UMQ_VLOG_INFO("create ipc tp success\n");
     return (uint64_t)(uintptr_t)tp;
 
 RELEASE_ID:
@@ -317,6 +316,8 @@ UNMAP:
 
 FREE_TP:
     free(tp);
+
+DEC_REF:
     umq_dec_ref(ctx->io_lock_free, &ctx->ref_cnt, 1);
     return UMQ_INVALID_HANDLE;
 }
@@ -346,17 +347,18 @@ int32_t umq_ipc_destroy_impl(uint64_t umqh_tp)
     umq_ipc_unmap_memory(&tp->local_ring);
     free(tp);
     umq_dec_ref(g_ipc_ctx->io_lock_free, &g_ipc_ctx->ref_cnt, 1);
-    UMQ_VLOG_DEBUG("umqh destroyed\n");
+    UMQ_VLOG_INFO("destroy ipc tp success\n");
     return UMQ_SUCCESS;
 }
 
-int32_t umq_ipc_bind_info_get_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_info_size)
+uint32_t umq_ipc_bind_info_get_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_info_size)
 {
     umq_ipc_info_t *tp = (umq_ipc_info_t *)(uintptr_t)umqh_tp;
     if (bind_info_size < sizeof(umq_ipc_bind_info_t)) {
+        errno = UMQ_ERR_EINVAL;
         UMQ_VLOG_ERR("bind_info_size[%u] is less than required size[%u]\n",
             bind_info_size, sizeof(umq_ipc_bind_info_t));
-        return -UMQ_ERR_EINVAL;
+        return 0;
     }
 
     umq_ipc_bind_info_t *tmp_info = (umq_ipc_bind_info_t *)bind_info;
@@ -448,7 +450,7 @@ int32_t umq_ipc_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_in
 
     ctx->trans_mode = UMQ_TRANS_MODE_IPC;
     tp->bind_ctx = ctx;
-    UMQ_VLOG_DEBUG("bind succeed\n");
+    UMQ_VLOG_INFO("umq ipc bind success\n");
     return UMQ_SUCCESS;
 
 DESTROY_IPC:
@@ -476,7 +478,7 @@ int32_t umq_ipc_unbind_impl(uint64_t umqh_tp)
     umq_shm_global_pool_uninit(tp->bind_ctx->qbuf_pool_handle);
     free(tp->bind_ctx);
     tp->bind_ctx = NULL;
-    UMQ_VLOG_DEBUG("unbind succeed\n");
+    UMQ_VLOG_INFO("umq ipc unbind success\n");
     return UMQ_SUCCESS;
 }
 
@@ -520,7 +522,7 @@ static ALWAYS_INLINE int enqueue_data(uint64_t umqh_tp, uint64_t *offset, uint32
 
     uint32_t sizes[num];
     for (uint32_t i = 0; i < num; i++) {
-        sizes[i] = sizeof(uint64_t);
+        sizes[i] = (uint32_t)sizeof(uint64_t);
     }
 
     int ret = msg_ring_post_tx_batch(tp->local_msg_ring, (char **)&offset, sizes, num);
@@ -651,7 +653,7 @@ int umq_tp_ipc_buf_headroom_reset_impl(umq_buf_t *qbuf, uint16_t headroom_size)
     return umq_shm_qbuf_headroom_reset(qbuf_pool_handle, qbuf, headroom_size);
 }
 
-static ALWAYS_INLINE int futex_wake(atomic_int *addr, int n)
+static ALWAYS_INLINE int futex_wake(volatile uint32_t *addr, int n)
 {
     return syscall(SYS_futex, addr, FUTEX_WAKE, n, NULL, NULL, 0);
 }
@@ -665,8 +667,8 @@ void umq_ipc_notify_impl(uint64_t umqh_tp)
     }
 
     // notify peer that some events triggered
-    atomic_store(&tp->local_msg_ring->shm_tx_ring_hdr->cq_event_flag, 1);
-    atomic_fetch_add(&tp->local_msg_ring->shm_tx_ring_hdr->pending_events, 1);
+    __atomic_store_n(&tp->local_msg_ring->shm_tx_ring_hdr->cq_event_flag, 1, __ATOMIC_SEQ_CST);
+    __atomic_fetch_add(&tp->local_msg_ring->shm_tx_ring_hdr->pending_events, 1, __ATOMIC_SEQ_CST);
     futex_wake(&tp->local_msg_ring->shm_tx_ring_hdr->cq_event_flag, 1);
 }
 
@@ -686,7 +688,7 @@ int umq_ipc_rearm_interrupt_impl(uint64_t umqh_tp, bool solicated, umq_interrupt
     return UMQ_SUCCESS;
 }
 
-static ALWAYS_INLINE int futex_wait(atomic_int *addr, int val, int timeout)
+static ALWAYS_INLINE int futex_wait(volatile uint32_t *addr, int val, int timeout)
 {
     int ret = -1;
     struct timespec ts;
@@ -706,7 +708,7 @@ static ALWAYS_INLINE int futex_wait(atomic_int *addr, int val, int timeout)
         } else if (ret == -1) {
             break;
         }
-    } while (atomic_load(addr) == val);
+    } while (__atomic_load_n(addr, __ATOMIC_SEQ_CST) == (uint32_t)val);
 
     return ret;
 }
@@ -729,7 +731,7 @@ int32_t umq_ipc_wait_interrupt_impl(uint64_t wait_umqh_tp, int time_out, umq_int
 
     int ret = futex_wait(&hdr->cq_event_flag, 0, time_out);
     if (ret == 0 || errno == EAGAIN) {
-        return atomic_load(&hdr->pending_events);
+        return __atomic_load_n(&hdr->pending_events, __ATOMIC_SEQ_CST);
     } else if (errno == ETIMEDOUT) {
         return 0;
     }
@@ -753,8 +755,8 @@ void umq_ipc_ack_interrupt_impl(uint64_t umqh_tp, uint32_t nevents, umq_interrup
     shm_ring_hdr_t *hdr = option->direction == UMQ_IO_TX ? tp->local_msg_ring->shm_tx_ring_hdr :
         tp->bind_ctx->remote_msg_ring->shm_tx_ring_hdr;
 
-    atomic_fetch_sub(&hdr->pending_events, nevents);
-    if (atomic_load(&hdr->pending_events) == 0) {
-        atomic_store(&hdr->cq_event_flag, 0);
+    __atomic_fetch_sub(&hdr->pending_events, nevents, __ATOMIC_SEQ_CST);
+    if (__atomic_load_n(&hdr->pending_events, __ATOMIC_SEQ_CST) == 0) {
+        __atomic_store_n(&hdr->cq_event_flag, 0, __ATOMIC_SEQ_CST);
     }
 }

@@ -764,23 +764,22 @@ public:
         for (int i = 0; i < poll_num; ++i) {
             // currently, umq over IB return IB cr status directly, successful = 0
             if (buf[i]->status != 0) {
-                if (buf[i]->status != UMQ_BUF_FLOW_CONTROL_UPDATE) {
+                if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                     RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf[i]->status);
                     QBUF_LIST_NEXT(buf[i]) = nullptr;
                     umq_buf_free(buf[i]);
                     continue;
                 } else {
+                    m_rx.m_window_size += 1;
                     // try to wake up tx if necessary
                     bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
                     if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
                         RPC_ADPT_VLOG_ERR("write event fd%fd failed, errno: %d\n", m_event_fd, errno);
                     }
 
-                    if (buf[i]->total_data_size == 0) {
-                        QBUF_LIST_NEXT(buf[i]) = nullptr;
-                        umq_buf_free(buf[i]);
-                        continue;
-                    }
+                    QBUF_LIST_NEXT(buf[i]) = nullptr;
+                    umq_buf_free(buf[i]);
+                    continue;
                 }
             }
 
@@ -1274,23 +1273,22 @@ public:
         if (poll_num > 0) {
             for (int i = 0; i < poll_num; ++i) {
                 if (buf_array[i]->status != 0) {
-                    if (buf_array[i]->status != UMQ_BUF_FLOW_CONTROL_UPDATE) {
+                    if (buf_array[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                         RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
                         QBUF_LIST_NEXT(buf_array[i]) = nullptr;
                         umq_buf_free(buf_array[i]);
                         continue; // Skip this invalid buffer
                     } else {
+                        m_rx.m_window_size += 1;
                         // Handle flow control update
                         bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
                         if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
                             RPC_ADPT_VLOG_ERR("write event fd %d failed, errno: %d\n", m_event_fd, errno);
                         }
- 
-                        if (buf_array[i]->total_data_size == 0) {
-                            QBUF_LIST_NEXT(buf_array[i]) = nullptr;
-                            umq_buf_free(buf_array[i]);
-                            continue; // No data in this FC update packet
-                        }
+
+                        QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                        umq_buf_free(buf_array[i]);
+                        continue;  // No data in this FC update packet
                     }
                 }
  
@@ -1427,23 +1425,22 @@ public:
         if (poll_num > 0) {
             for (int i = 0; i < poll_num; ++i) {
                 if (buf_array[i]->status != 0) {
-                    if (buf_array[i]->status != UMQ_BUF_FLOW_CONTROL_UPDATE) {
+                    if (buf_array[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                         RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
                         QBUF_LIST_NEXT(buf_array[i]) = nullptr;
                         umq_buf_free(buf_array[i]);
                         continue;
                     } else {
+                        m_rx.m_window_size += 1;
                         // Handle flow control update
                         bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
                         if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
                             RPC_ADPT_VLOG_ERR("write event fd %d failed, errno: %d\n", m_event_fd, errno);
                         }
 
-                        if (buf_array[i]->total_data_size == 0) {
-                            QBUF_LIST_NEXT(buf_array[i]) = nullptr;
-                            umq_buf_free(buf_array[i]);
-                            continue;
-                        }
+                        QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                        umq_buf_free(buf_array[i]);
+                        continue;
                     }
                 }
 
@@ -1948,23 +1945,22 @@ public:
         if (poll_num > 0) {
             for (int i = 0; i < poll_num; ++i) {
                 if (buf_array[i]->status != 0) {
-                    if (buf_array[i]->status != UMQ_BUF_FLOW_CONTROL_UPDATE) {
+                    if (buf_array[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                         RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
                         QBUF_LIST_NEXT(buf_array[i]) = nullptr;
                         umq_buf_free(buf_array[i]);
                         continue; // Skip this invalid buffer
                     } else {
+                        m_rx.m_window_size += 1;
                         // Handle flow control update
                         bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
                         if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
                             RPC_ADPT_VLOG_ERR("write event fd %d failed, errno: %d\n", m_event_fd, errno);
                         }
- 
-                        if (buf_array[i]->total_data_size == 0) {
-                            QBUF_LIST_NEXT(buf_array[i]) = nullptr;
-                            umq_buf_free(buf_array[i]);
-                            continue; // No data in this FC update packet
-                        }
+
+                        QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                        umq_buf_free(buf_array[i]);
+                        continue;  // No data in this FC update packet
                     }
                 }
  
@@ -2865,7 +2861,7 @@ private:
             }
 
             for (int i = 0; i < poll_cnt; i++) {
-                if (buf[i]->status == UMQ_BUF_FLOW_CONTROL_UPDATE) {
+                if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
                     if (eventfd_write(m_event_fd, 1) == -1) {
                         RPC_ADPT_VLOG_ERR("write event fd %d failed, errno %d\n", m_event_fd, errno);
                     }

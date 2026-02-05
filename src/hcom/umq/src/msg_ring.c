@@ -102,13 +102,13 @@ msg_ring_t *msg_ring_create(char *msg_ring_name, uint32_t msg_ring_name_len, msg
     if (opt->owner) {
         msg_ring_h->shm_tx_ring_hdr->ci = 0;
         msg_ring_h->shm_tx_ring_hdr->pi = 0;
-        atomic_init(&msg_ring_h->shm_tx_ring_hdr->cq_event_flag, 0);
-        atomic_init(&msg_ring_h->shm_tx_ring_hdr->pending_events, 0);
+        msg_ring_h->shm_tx_ring_hdr->cq_event_flag = 0;
+        msg_ring_h->shm_tx_ring_hdr->pending_events = 0;
 
         msg_ring_h->shm_rx_ring_hdr->ci = 0;
         msg_ring_h->shm_rx_ring_hdr->pi = 0;
-        atomic_init(&msg_ring_h->shm_rx_ring_hdr->cq_event_flag, 0);
-        atomic_init(&msg_ring_h->shm_rx_ring_hdr->pending_events, 0);
+        msg_ring_h->shm_rx_ring_hdr->cq_event_flag = 0;
+        msg_ring_h->shm_rx_ring_hdr->pending_events = 0;
     }
 
     msg_ring_h->tx_max_buf_size = opt->tx_max_buf_size;
@@ -205,7 +205,7 @@ int msg_ring_poll_tx(msg_ring_t *msg_ring_h, char *tx_buf, uint32_t tx_max_buf_s
 {
     shm_ring_hdr_t *tx_ring_hdr = (shm_ring_hdr_t *)msg_ring_h->shm_tx_ring_hdr;
     if (tx_ring_hdr->pi == tx_ring_hdr->ci) {
-        return -1;
+        return 0;
     }
 
     RMB();
@@ -224,7 +224,7 @@ int msg_ring_poll_tx(msg_ring_t *msg_ring_h, char *tx_buf, uint32_t tx_max_buf_s
     MB();
     tx_ring_hdr->ci = (tx_ring_hdr->ci + 1) % msg_ring_h->tx_depth;
 
-    return 0;
+    return 1;
 }
 
 int msg_ring_poll_tx_batch(msg_ring_t *msg_ring_h, char **tx_buf, uint32_t tx_max_buf_size,
@@ -294,7 +294,7 @@ int msg_ring_poll_rx(msg_ring_t *msg_ring_h, char *rx_buf, uint32_t rx_max_buf_s
 {
     shm_ring_hdr_t *rx_ring_hdr = (shm_ring_hdr_t *)msg_ring_h->shm_rx_ring_hdr;
     if (rx_ring_hdr->pi == rx_ring_hdr->ci) {
-        return -1;
+        return 0;
     }
 
     RMB();
@@ -313,7 +313,7 @@ int msg_ring_poll_rx(msg_ring_t *msg_ring_h, char *rx_buf, uint32_t rx_max_buf_s
     MB();
     rx_ring_hdr->ci = (rx_ring_hdr->ci + 1) % msg_ring_h->rx_depth;
 
-    return 0;
+    return 1;
 }
 
 int msg_ring_poll_rx_batch(msg_ring_t *msg_ring_h, char **rx_buf, uint32_t rx_max_buf_size,

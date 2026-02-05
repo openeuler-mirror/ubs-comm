@@ -6,7 +6,6 @@
 
 #include <unistd.h>
 #include <sys/queue.h>
-#include <stdatomic.h>
 
 #include "umq_errno.h"
 #include "umq_vlog.h"
@@ -51,7 +50,7 @@ typedef struct queue_local_pool {
 
 struct local_qbuf_pool {
     queue_local_pool_t *pool;
-    atomic_uint remove_ref_cnt;
+    volatile uint32_t remove_ref_cnt;
 };
 
 typedef struct register_list_node {
@@ -77,17 +76,17 @@ static __thread register_list_node_t g_register_list_node = {0};
 
 static __thread local_qbuf_pool_t g_thread_cache[UMQ_MAX_QUEUE_NUMBER] = {0};
 
-static int release_thread_cache(local_qbuf_pool_t *tls_mgmt_pool)
+static uint32_t release_thread_cache(local_qbuf_pool_t *tls_mgmt_pool)
 {
     // Avoid concurrent access between destroy queue and thread exit.
-    uint32_t ref = atomic_fetch_add_explicit(&tls_mgmt_pool->remove_ref_cnt, 1, memory_order_acq_rel);
+    uint32_t ref = __atomic_fetch_add(&tls_mgmt_pool->remove_ref_cnt, 1, __ATOMIC_ACQ_REL);
     if (ref != 0) {
         return ref;
     }
 
     queue_local_pool_t *local_pool = tls_mgmt_pool->pool;
     if (local_pool == NULL) {
-        atomic_fetch_sub_explicit(&tls_mgmt_pool->remove_ref_cnt, 1, memory_order_acq_rel);
+        __atomic_fetch_sub(&tls_mgmt_pool->remove_ref_cnt, 1, __ATOMIC_ACQ_REL);
         return 0;
     }
 
@@ -98,16 +97,20 @@ static int release_thread_cache(local_qbuf_pool_t *tls_mgmt_pool)
     // return thread local buffer storage to global pool
     (void)pthread_mutex_lock(&gblk_pool->global_mutex);
     if (lblk_pool->head_with_data.first != NULL) {
-        gblk_pool->buf_cnt_with_data += release_batch(&lblk_pool->head_with_data, &gblk_pool->head_with_data);
+        // release thread cache no need check double free
+        gblk_pool->buf_cnt_with_data += release_to_global(&lblk_pool->head_with_data,
+            &gblk_pool->head_with_data);
     }
     if (lblk_pool->head_without_data.first != NULL) {
-        gblk_pool->buf_cnt_without_data += release_batch(&lblk_pool->head_without_data, &gblk_pool->head_without_data);
+        // release thread cache no need check double free
+        gblk_pool->buf_cnt_without_data += release_to_global(&lblk_pool->head_without_data,
+            &gblk_pool->head_without_data);
     }
     (void)pthread_mutex_unlock(&gblk_pool->global_mutex);
 
     // reset local record and free resource
     tls_mgmt_pool->pool = NULL;
-    atomic_fetch_sub_explicit(&tls_mgmt_pool->remove_ref_cnt, 1, memory_order_acq_rel);
+    __atomic_fetch_sub(&tls_mgmt_pool->remove_ref_cnt, 1, __ATOMIC_ACQ_REL);
 
     free(local_pool);
 
@@ -147,8 +150,8 @@ static void unregister_all_thread_cache(qbuf_pool_t *pool)
           * on this thread cache), wait until the next thread finish the release operation */
         (void)clock_gettime(CLOCK_MONOTONIC, &start);
         uint32_t desired = ref;
-        while (!atomic_compare_exchange_weak_explicit(
-            &tls_mgmt_pool->remove_ref_cnt, &desired, 0, memory_order_release, memory_order_acquire)) {
+        while (!__atomic_compare_exchange_n(&tls_mgmt_pool->remove_ref_cnt, &desired, 0, true, __ATOMIC_RELEASE,
+                                            __ATOMIC_ACQUIRE)) {
             if (desired != ref) {
                 UMQ_VLOG_ERR("unexpected exception, actual ref: %u, desired ref: %u\n", ref, desired);
                 break;
@@ -399,38 +402,44 @@ static ALWAYS_INLINE void umq_shm_poll_and_fill_global(qbuf_pool_t *pool)
 }
 
 static void umq_shm_qbuf_alloc_data_with_split(local_block_pool_t *local_pool, uint32_t request_size,
-    uint32_t num, umq_buf_list_t *list, uint32_t headroom_size, qbuf_pool_t *pool)
+    qbuf_alloc_param_t *param, umq_buf_list_t *list, qbuf_pool_t *pool)
 {
     uint32_t cnt = 0;
     umq_buf_t *cur_node;
-    uint32_t headroom_size_temp = headroom_size;
+    uint32_t headroom_size_temp = param->headroom_size;
     uint32_t total_data_size = request_size;
     uint32_t remaining_size = request_size;
     uint32_t max_data_capacity = umq_buf_size_small() - headroom_size_temp;
     bool first_fragment = true;
 
     QBUF_LIST_FOR_EACH(cur_node, &local_pool->head_with_data) {
-        uint32_t id = buf_to_id_with_data_split(pool->header_buffer, (char *)cur_node);
+        uint64_t id = buf_to_id_with_data_split(pool->header_buffer, (char *)cur_node);
         cur_node->buf_data = pool->data_buffer + id * umq_buf_size_small() + headroom_size_temp;
         cur_node->buf_size = umq_buf_size_small() + (uint32_t)sizeof(umq_buf_t);
         cur_node->headroom_size = headroom_size_temp;
         cur_node->total_data_size = total_data_size;
         cur_node->data_size = remaining_size >= max_data_capacity ? max_data_capacity : remaining_size;
         cur_node->first_fragment = first_fragment;
+        if (cur_node->alloc_state == QBUF_ALLOC_STATE_ALLOCATED) {
+            uint64_t buf_id = umq_buf_to_id((char *)cur_node, param->shm, true);
+            UMQ_VLOG_ERR("qbuf %lu in with_data pool already allocated\n", buf_id);
+        }
+        cur_node->alloc_state = QBUF_ALLOC_STATE_ALLOCATED;
+
         remaining_size -= cur_node->data_size;
         if (remaining_size == 0) {
-            headroom_size_temp = headroom_size;
+            headroom_size_temp = param->headroom_size;
             total_data_size = request_size;
             remaining_size = request_size;
             first_fragment = true;
-            max_data_capacity = umq_buf_size_small() - headroom_size;
+            max_data_capacity = umq_buf_size_small() - param->headroom_size;
         } else {
             headroom_size_temp = 0;
             total_data_size = 0;
             first_fragment = false;
             max_data_capacity = umq_buf_size_small();
         }
-        if (++cnt == num) {
+        if (++cnt == param->actual_buf_count) {
             break;
         }
     }
@@ -442,7 +451,7 @@ static void umq_shm_qbuf_alloc_data_with_split(local_block_pool_t *local_pool, u
 
     // set output
     QBUF_LIST_FIRST(list) = head;
-    local_pool->buf_cnt_with_data -= num;
+    local_pool->buf_cnt_with_data -= param->actual_buf_count;
 }
 
 int umq_shm_qbuf_alloc(
@@ -463,18 +472,19 @@ int umq_shm_qbuf_alloc(
     local_block_pool_t *lblk_pool = &local_pool->block_pool;
     global_block_pool_t *gblk_pool = &local_pool->global_pool->block_pool;
     bool flag = (option != NULL && (option->flag & UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE) != 0);
-    uint32_t headroom_size = flag ? option->headroom_size : _pool->headroom_size;
-    uint32_t actual_buf_count;
+    qbuf_alloc_param_t param;
+    param.shm = true;
+    param.headroom_size = flag ? option->headroom_size : _pool->headroom_size;
 
     if (_pool->mode == UMQ_BUF_SPLIT) {
-        actual_buf_count =
-            num * ((request_size + headroom_size + umq_buf_size_small() - 1) >> umq_buf_size_pow_small());
+        param.actual_buf_count =
+            num * ((request_size + param.headroom_size + umq_buf_size_small() - 1) >> umq_buf_size_pow_small());
     } else {
-        uint32_t align_size = umq_buf_size_small() - sizeof(umq_buf_t);
-        actual_buf_count = num * ((request_size + headroom_size + align_size - 1) / align_size);
+        uint32_t align_size = umq_buf_size_small() - (uint32_t)sizeof(umq_buf_t);
+        param.actual_buf_count = num * ((request_size + param.headroom_size + align_size - 1) / align_size);
     }
     if (request_size == 0) {
-        if (flag && headroom_size > 0) {
+        if (flag && param.headroom_size > 0) {
             UMQ_VLOG_ERR("headroom_size not supported when request_size is 0\n");
             return -EINVAL;
         }
@@ -492,25 +502,25 @@ int umq_shm_qbuf_alloc(
             }
         }
 
-        umq_qbuf_alloc_nodata(lblk_pool, num, list);
+        umq_qbuf_alloc_nodata(lblk_pool, num, list, param.shm);
 
         return UMQ_SUCCESS;
     }
 
     // fetch from global first, if thread local qbuf is not enough for allocate operation
-    while (lblk_pool->buf_cnt_with_data < actual_buf_count) {
+    while (lblk_pool->buf_cnt_with_data < param.actual_buf_count) {
         umq_shm_poll_and_fill_global(_pool);
         if (fetch_from_global(gblk_pool, lblk_pool, true, SHM_QBUF_POOL_BATCH_CNT) <= 0) {
             UMQ_VLOG_ERR("fetch from global failed, current size: %u, alloc num: %u\n",
-                lblk_pool->buf_cnt_with_data, actual_buf_count);
+                lblk_pool->buf_cnt_with_data, param.actual_buf_count);
             return -UMQ_ERR_ENOMEM;
         }
     }
 
     if (_pool->mode == UMQ_BUF_SPLIT) {
-        umq_shm_qbuf_alloc_data_with_split(lblk_pool, request_size, actual_buf_count, list, headroom_size, _pool);
+        umq_shm_qbuf_alloc_data_with_split(lblk_pool, request_size, &param, list, _pool);
     } else {
-        umq_qbuf_alloc_data_with_combine(lblk_pool, request_size, actual_buf_count, list, headroom_size);
+        umq_qbuf_alloc_data_with_combine(lblk_pool, request_size, &param, list);
     }
 
     return UMQ_SUCCESS;
@@ -571,7 +581,7 @@ void umq_shm_qbuf_free(uint64_t pool, umq_buf_list_t *list)
     if (_pool->mode == UMQ_BUF_SPLIT &&
         (void *)QBUF_LIST_FIRST(list) >= _pool->ext_header_buffer) {
         // put buf list before head of head_without_data
-        uint32_t cnt = release_batch(list, &lblk_pool->head_without_data);
+        uint32_t cnt = release_batch(list, &lblk_pool->head_without_data, true);
         lblk_pool->buf_cnt_without_data += cnt;
 
         /* if local list node count reaches SHM_QBUF_POOL_TLS_MAX + SHM_QBUF_POOL_BATCH_CNT,
@@ -583,7 +593,7 @@ void umq_shm_qbuf_free(uint64_t pool, umq_buf_list_t *list)
         return;
     }
 
-    uint32_t cnt = release_batch(list, &lblk_pool->head_with_data);
+    uint32_t cnt = release_batch(list, &lblk_pool->head_with_data, true);
     lblk_pool->buf_cnt_with_data += cnt;
 
     /* if local list node count reaches SHM_QBUF_POOL_TLS_MAX + SHM_QBUF_POOL_BATCH_CNT,

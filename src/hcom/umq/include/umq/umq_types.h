@@ -76,11 +76,26 @@ typedef enum umq_trans_mode {
     UMQ_TRANS_MODE_MAX,
 } umq_trans_mode_t;
 
+typedef enum umq_tp_mode {
+    UMQ_TM_RC = 0,              /* Reliable connection */
+    UMQ_TM_RM,                  /* Reliable message */
+    UMQ_TM_UM,                  /* Unreliable message */
+    UMQ_TM_MAX,
+} umq_tp_mode_t;
+
+typedef enum umq_tp_type {
+    UMQ_TP_TYPE_RTP = 0,
+    UMQ_TP_TYPE_CTP,
+    UMQ_TP_TYPE_UTP,
+    UMQ_TP_TYPE_MAX,
+} umq_tp_type_t;
+
 typedef enum umq_dev_assign_mode {
     UMQ_DEV_ASSIGN_MODE_IPV4,
     UMQ_DEV_ASSIGN_MODE_IPV6,
     UMQ_DEV_ASSIGN_MODE_EID,
     UMQ_DEV_ASSIGN_MODE_DEV,
+    UMQ_DEV_ASSIGN_MODE_DUMMY, // indicates no actual dev info
     UMQ_DEV_ASSIGN_MODE_MAX
 } umq_dev_assign_mode_t;
 
@@ -158,6 +173,10 @@ typedef struct umq_flow_control_cfg {
     uint16_t initial_window;
     // notify when rx >= notify_interval, [1, rx_depth], otherwise use rx_depth / 16 by default
     uint16_t notify_interval;
+    // number of credits allocated per request for each umq
+    uint16_t credits_per_request;
+    // initial available credit for each umq
+    uint16_t initial_credit;
     // use atomic variables as flow control window
     bool use_atomic_window;
 } umq_flow_control_cfg_t;
@@ -200,6 +219,8 @@ typedef struct umq_init_cfg {
 #define UMQ_CREATE_FLAG_SHARE_RQ            (1 << 5)        // enable arg share_rq_umqh when create umq
 #define UMQ_CREATE_FLAG_UMQ_CTX             (1 << 6)        // enable arg umq_ctx when create umq
 #define UMQ_CREATE_FLAG_SUB_UMQ             (1 << 7)        // just indicates the umq is sub queue
+#define UMQ_CREATE_FLAG_TP_MODE             (1 << 8)        // enable arg tp_mode when create umq
+#define UMQ_CREATE_FLAG_TP_TYPE             (1 << 9)        // enable arg tp_type when create umq
 
 typedef struct umq_create_option {
     /*************Required paramenters start*****************/
@@ -216,8 +237,9 @@ typedef struct umq_create_option {
     uint32_t tx_depth;
     uint64_t share_rq_umqh;
     uint64_t umq_ctx;
-
     umq_queue_mode_t mode;      // mode of queue, QUEUE_MODE_POLLING for default
+    umq_tp_mode_t tp_mode;
+    umq_tp_type_t tp_type;
     /*************Optional paramenters end*******************/
 } umq_create_option_t;
 
@@ -248,7 +270,8 @@ struct umq_buf {
     uint32_t data_size;                   // size of umq buf data
     uint16_t headroom_size;               // size of umq buf headroom
     uint16_t first_fragment : 1;          // first piece of each batch buf
-    uint16_t rsvd1 : 15;
+    uint16_t alloc_state : 1;             // 0: free; 1: allocated
+    uint16_t rsvd1 : 14;
 
     uint32_t token_id : 20;               // token_id for reference operation
     uint32_t rsvd2 : 4;
@@ -276,16 +299,45 @@ typedef struct umq_alloc_option {
     uint16_t headroom_size;
 } umq_alloc_option_t;
 
+typedef struct umq_credit_pool_stats {
+    /* current actual statistics of the system */
+    uint64_t pool_idle; // the number of credits currently available in the credit pool
+    uint64_t pool_be_allocated; // the number of credits currently allocated and taken from the credit pool
+    uint64_t rsvd0[2];
+
+    /* cumulative statistics */
+    uint64_t total_pool_idle; // the total number of available credits in the current credit pool.
+    uint64_t total_pool_be_allocated; // the total number of credits currently allocated and taken from the credit pool
+    uint64_t rsvd1[2];
+
+    /* error in statistics */
+    uint64_t total_pool_post_rx_err; // the total number of invalid credits (which will cause `pool_idle` to overflow)
+    uint64_t rsvd2[2];
+} umq_credit_pool_stats_t;
+
+typedef struct umq_credit_private_stats {
+    /* current actual statistics at the queue level */
+    uint64_t queue_idle; // credits to be allocated to the peer (no practical use, always 0, reserved field)
+    uint64_t queue_be_allocated; // credits already be allocated to the peer, used for rx direction receive io
+    uint64_t queue_acquired; // credits acquired from the peer, used for tx direction send io
+    uint64_t rsvd0[2];
+
+    /* cumulative statistics at the queue level */
+    uint64_t total_queue_idle; // the total number of credits to be allocated to the peer
+    uint64_t total_queue_acquired; // the total number of credits obtained from the peer
+    uint64_t total_queue_be_allocated; // the total number of credits already be allocated to the peer
+    uint64_t total_queue_post_tx_success; // the total number of already consumed credits in the tx direction
+    uint64_t rsvd1[2];
+
+    /* error in statistics */
+    uint64_t total_queue_post_tx_err; // the total number of transmitted io that failed in the tx direction
+    uint64_t total_queue_acquired_err; // the total number of credits obtained from the peer that were invalid
+    uint64_t rsvd[4];
+} umq_credit_private_stats_t;
+
 typedef struct umq_flow_control_stats {
-    uint64_t local_rx_posted;
-    uint64_t remote_rx_window;
-    uint64_t total_local_rx_posted;
-    uint64_t total_local_rx_notified;
-    uint64_t total_local_rx_posted_error;
-    uint64_t total_remote_rx_received;
-    uint64_t total_remote_rx_consumed;
-    uint64_t total_remote_rx_received_error;
-    uint64_t total_flow_controlled_wr;
+    umq_credit_pool_stats_t pool_credit; // credit-related statistics of a main queue
+    umq_credit_private_stats_t queue_credit; // credit-related statistics of a specific queue
 } umq_flow_control_stats_t;
 
 typedef enum umq_dfx_module_id {
@@ -515,6 +567,7 @@ typedef struct umq_route_list {
 
 typedef enum umq_user_ctl_opcode {
     UMQ_OPCODE_FLOW_CONTROL_STATS_QUERY = 0,
+    UMQ_OPCODE_QBUF_POOL_INFO_QUERY,
 
     UMQ_OPCODE_MAX,
 } umq_user_ctl_opcode_t;
@@ -566,10 +619,35 @@ typedef struct umq_cfg_get {
     uint32_t tx_depth;            // depth of the send buffer ring
     uint64_t umq_ctx;             // umq ctx
     uint64_t share_rq_umqh;       // share jfr queue handle
+    uint8_t max_rx_sge;           // max sge number of receive array
+    uint8_t max_tx_sge;           // max sge number of send array
     umq_trans_mode_t trans_mode;  // transmission mode of the queue
     umq_queue_mode_t mode;        // mode of queue, QUEUE_MODE_POLLING for default
     umq_state_t state;            // queue state
 } umq_cfg_get_t;
+
+typedef struct umq_qbuf_pool_info {
+    umq_buf_mode_t mode;                      // split or combine
+    uint64_t total_size;                      // qbuf pool total size
+    uint64_t total_block_num;
+    uint32_t block_size;
+    uint32_t headroom_size;
+    uint32_t data_size;                       // combine: block_size - umq_buf_t_size, split: block_size
+    uint32_t buf_size;                        // combine: block_size, split: block_size + umq_buf_t_size
+    uint32_t umq_buf_t_size;                  // size of umq_buf_t
+    union {
+        struct {
+            uint64_t block_num_with_data;     // number of available buf in data area
+            uint64_t size_with_data;          // available buf size in data area
+            uint64_t block_num_without_data;  // number of available buf in non-data area
+            uint64_t size_without_data;       // available buf size in non-data area
+        } split;
+        struct {
+            uint64_t block_num_with_data;
+            uint64_t size_with_data;
+        } combine;
+    } available_mem;
+} umq_qbuf_pool_info_t;
 
 #ifdef __cplusplus
 }
