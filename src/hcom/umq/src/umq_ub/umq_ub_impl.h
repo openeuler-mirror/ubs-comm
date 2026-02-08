@@ -10,6 +10,7 @@
 #ifndef UMQ_UB_IMPL_H
 #define UMQ_UB_IMPL_H
 
+#include "urma_api.h"
 #include "umq_types.h"
 #include "umq_pro_types.h"
 #include "umq_ub_imm_data.h"
@@ -63,6 +64,12 @@ typedef struct ub_import_mempool_info {
     uint32_t mempool_id : 8;
     uint32_t mempool_token_value;
 } ub_import_mempool_info_t;
+
+typedef struct umq_ub_raw_dev {
+    urma_device_t *urma_dev;
+    umq_eid_t eid;
+    uint32_t eid_index;
+} umq_ub_raw_dev_t;
 
 uint8_t *umq_ub_ctx_init_impl(umq_init_cfg_t *cfg);
 void umq_ub_ctx_uninit_impl(uint8_t *ctx);
@@ -150,6 +157,15 @@ int umq_ub_mempool_state_refresh_impl(uint64_t umqh_tp, uint32_t mempool_id);
 int umq_ub_dev_info_get_impl(char *umq_dev_name, umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info);
 umq_dev_info_t *umq_ub_dev_info_list_get_impl(umq_trans_mode_t umq_trans_mode, int *dev_num);
 void umq_ub_dev_info_list_free_impl(umq_trans_mode_t umq_trans_mode, umq_dev_info_t *umq_dev_info);
+
+// dev info
+int umq_ub_dev_info_init(void);
+void umq_ub_dev_info_uninit(void);
+int umq_ub_dev_num_get(void);
+void umq_ub_dev_info_dump(umq_trans_mode_t umq_trans_mode, int num, umq_dev_info_t *out);
+int umq_ub_dev_info_dump_by_name(char *dev_name, umq_trans_mode_t umq_trans_mode, umq_dev_info_t *out);
+int umq_ub_dev_lookup_by_name(char *dev_name, uint32_t eid_idx, umq_ub_raw_dev_t *out);
+int umq_ub_dev_lookup_by_eid(umq_eid_t *eid, umq_ub_raw_dev_t *out);
 
 #ifdef __cplusplus
 }
