@@ -473,7 +473,7 @@ public:
         }
         m_bind_remote = true;
 
-        // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
+        // RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
         if (PrefillRx() != 0) {
             RPC_ADPT_VLOG_ERR("Failed to fill rx buffer to umq, fd: %d\n", m_fd);
             return -1;
@@ -1332,7 +1332,7 @@ private:
         }
         socket_fd_obj->SetBindRemote(true);
 
-        // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
+        // RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
         if (socket_fd_obj->PrefillRx() != 0) {
             RPC_ADPT_VLOG_ERR("Failed to fill rx buffer to umq, fd: %d\n", new_fd);
             return -1;
@@ -1907,7 +1907,6 @@ private:
         for (uint32_t i = 0; i < route_list.len; ++i) {
             if ((route_list.buf[i].flag.bs.rtp == 1)) {
                 uniqueChipIds.insert(route_list.buf[i].chip_id);
-                std::cout<<" index "<<i<< "chip id "<<route_list.buf[i].chip_id<<std::endl;
             }
         }
         std::vector<uint32_t> chipIdList(uniqueChipIds.begin(), uniqueChipIds.end());
