@@ -1826,6 +1826,7 @@ NResult NetDriverRDMAWithOob::NewReceivedRequestWithoutCopy(RDMAOpContextInfo *c
     netCtx.mHeader.timeout = header->timeout;
     netCtx.mHeader.flags = header->flags;
     netCtx.mHeader.headerCrc = header->headerCrc;
+    netCtx.mHeader.errorCode = header->errorCode;
     netCtx.extHeaderType = header->extHeaderType;  // 指导服务层处理
     int result = 0;
     // call to callback
