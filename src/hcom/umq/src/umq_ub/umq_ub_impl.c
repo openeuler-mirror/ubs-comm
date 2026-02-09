@@ -60,11 +60,14 @@ static util_id_allocator_t g_umq_ub_id_allocator = {0};
 
 #define UMQ_UB_MAX_REMOTE_EID_NUM 1024
 #define UMQ_UB_MIN_EID_ID 0
+#define UMQ_UB_NAMESPACE_SIZE 256
+#define UMQ_UB_NAMESPACE_PATH "/proc/self/ns/net"
 
 typedef struct remote_eid_hmap_node {
     struct urpc_hmap_node node;
     urma_eid_t eid;
     uint32_t pid;
+    char namespace[UMQ_UB_NAMESPACE_SIZE];
     uint32_t remote_eid_id;
     uint32_t ref_cnt;
 } remote_eid_hmap_node_t;
@@ -289,6 +292,7 @@ typedef struct umq_ub_bind_info {
     uint32_t rx_buf_size;
     uint32_t feature;
     uint32_t pid;
+    char namespace[UMQ_UB_NAMESPACE_SIZE];
     umq_state_t state;
 } umq_ub_bind_info_t;
 
@@ -296,6 +300,7 @@ typedef struct ub_bind_ctx {
     umq_ub_bind_info_t bind_info;
     urma_target_jetty_t *tjetty;
     uint32_t remote_pid;
+    char remote_namespace[UMQ_UB_NAMESPACE_SIZE];
     uint32_t remote_eid_id;
     uint64_t remote_notify_addr;
 } ub_bind_ctx_t;
@@ -936,7 +941,25 @@ static ALWAYS_INLINE urma_opcode_t transform_op_code(umq_opcode_t opcode)
     return URMA_OPC_SEND;
 }
 
-uint32_t umq_ub_bind_info_get_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
+static int umq_ub_get_namespace(char *namespace)
+{
+    char buf[UMQ_UB_NAMESPACE_SIZE];
+    ssize_t len = readlink(UMQ_UB_NAMESPACE_PATH, buf, sizeof(buf) - 1);
+    if (len == -1 || len > UMQ_UB_NAMESPACE_SIZE) {
+        if (errno != ENOENT) {
+            UMQ_VLOG_ERR("readlink failed %d, %s\n", errno, strerror(error));
+            return UMQ_FAIL;
+        }
+        len = 0
+        UMQ_VLOG_WARN("%s file not exist\n", UMQ_UB_NAMESPACE_PATH);
+    }
+    
+    buf[len] = '\0';
+    strcpy(namespace, buf);
+    return UMQ_SUCCESS;
+}
+
+int umq_ub_bind_info_get_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
 {
     if (bind_info_size < sizeof(umq_ub_bind_info_t)) {
         errno = UMQ_ERR_EINVAL;
@@ -961,6 +984,10 @@ uint32_t umq_ub_bind_info_get_impl(uint64_t umqh, uint8_t *bind_info, uint32_t b
     info->feature = queue->dev_ctx->feature;
     info->state = queue->state;
     info->pid = getpid();
+    if (umq_ub_get_namespace(info->namespace) != UMQ_SUCCESS) {
+        UMQ_VLOG_ERR("get name namespace failed\n")
+        return 0;
+    }
     (void)memcpy(&info->tseg, queue->dev_ctx->tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID], sizeof(urma_target_seg_t));
     info->buf_pool_mode = umq_qbuf_mode_get();
     return sizeof(umq_ub_bind_info_t);
@@ -1243,13 +1270,17 @@ static int umq_ub_eid_id_get(ub_queue_t *queue, umq_ub_bind_info_t *info, uint32
 {
     remote_imported_tseg_info_t *remote_imported_info = queue->dev_ctx->remote_imported_info;
     urma_eid_t *remote_eid = &info->jetty_id.eid;
+    uint32_t hash_namespce = urpc_hash_bytes(info->namespace, strlen(info->namespace), 0);
     uint32_t hash_eid = urpc_hash_bytes(remote_eid, sizeof(urma_eid_t), 0);
-    uint32_t hash = urpc_hash_add(hash_eid, info->pid);
+    uint32_t hash_eid_pid = urpc_hash_add(hash_eid, info->pid);
+    uint32_t hash = urpc_hash_add(hash_eid_pid, hash_namespce);
+    
     bool find = false;
     remote_eid_hmap_node_t *eid_node;
     pthread_mutex_lock(&remote_imported_info->remote_eid_id_table_lock);
     URPC_HMAP_FOR_EACH_WITH_HASH(eid_node, node, hash, &remote_imported_info->remote_eid_id_table) {
-        if ((memcmp(&eid_node->eid, remote_eid, sizeof(urma_eid_t)) == 0) && (info->pid == eid_node->pid)) {
+        if ((memcmp(&eid_node->eid, remote_eid, sizeof(urma_eid_t)) == 0) && (info->pid == eid_node->pid) &&
+            strcmp(info->namespace, eid_node->namespace) == 0) {
             find = true;
             break;
         }
@@ -1306,6 +1337,7 @@ static int umq_ub_eid_id_get(ub_queue_t *queue, umq_ub_bind_info_t *info, uint32
     eid_node->pid = info->pid;
     eid_node->remote_eid_id = eid_id;
     eid_node->ref_cnt = 1;
+    strcpy(eid_node->namespace, info->namespace);
     *remote_eid_id = eid_id;
     (void)memset(remote_imported_info->tesg_imported[eid_id], 0, sizeof(bool) * UMQ_MAX_TSEG_NUM);
     remote_imported_info->tesg_imported[eid_id][UMQ_QBUF_DEFAULT_MEMPOOL_ID] = true;
@@ -1322,14 +1354,16 @@ static int umq_ub_eid_id_release(remote_imported_tseg_info_t *remote_imported_in
         return -UMQ_ERR_EINVAL;
     }
     urma_eid_t *remote_eid = &ctx->tjetty->id.eid;
+    uint32_t hash_namespce = urpc_hash_bytes(ctx->remote_namespace, strlen(ctx->remote_namespace), 0);
     uint32_t hash_eid = urpc_hash_bytes(remote_eid, sizeof(urma_eid_t), 0);
-    uint32_t hash = urpc_hash_add(hash_eid, ctx->remote_pid);
+    uint32_t hash_eid_pid = urpc_hash_add(hash_eid, ctx->remote_eid_id);
+    uint32_t hash = urpc_hash_add(hash_eid_pid, hash_namespce);
     bool find = false;
     remote_eid_hmap_node_t *eid_node;
     pthread_mutex_lock(&remote_imported_info->remote_eid_id_table_lock);
     URPC_HMAP_FOR_EACH_WITH_HASH(eid_node, node, hash, &remote_imported_info->remote_eid_id_table) {
         if (memcmp(&eid_node->eid, remote_eid, sizeof(urma_eid_t)) == 0 && (ctx->remote_pid == eid_node->pid) &&
-            eid_node->remote_eid_id == ctx->remote_eid_id) {
+            eid_node->remote_eid_id == ctx->remote_eid_id && strcmp(ctx->remote_namespace, eid_node->namespace) == 0) {
             find = true;
             break;
         }
@@ -1402,6 +1436,7 @@ static int umq_ub_bind_inner_impl(ub_queue_t *queue, umq_ub_bind_info_t *info)
 
     ctx->remote_pid = info->pid;
     ctx->tjetty = tjetty;
+    strcpy(ctx->remote_namespace, info->namespace);
     queue->bind_ctx = ctx;
 
     if (umq_ub_eid_id_get(queue, info, &ctx->remote_eid_id) != UMQ_SUCCESS) {
