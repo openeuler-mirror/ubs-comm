@@ -32,6 +32,13 @@
 #define DEFAULT_RX_DEPTH          (1024)
 #define DEFAULT_IO_TOTAL_SIZE     (1024)    // MB
 #define IO_SIZE_MB                (1024 * 1024)
+#define UBSOCKET_TRACE_TIME_DEFAULT (10)
+#define UBSOCKET_TRACE_FILE_SIZE_DEFAULT (10)
+#define UBSOCKET_TRACE_TIME_MIN     (1)
+#define UBSOCKET_TRACE_TIME_MAX     (300)
+#define UBSOCKET_TRACE_FILE_PATH_MIN     (1)
+#define UBSOCKET_TRACE_FILE_PATH_MAX     (300)
+#define UBSOCKET_TRACE_FILE_PATH_LEN_MAX (512)
 #define DEFAULT_QBUF_BLOCK_TYPE   "default" // 8k
 #define SMALL_QBUF_BLOCK_TYPE     "small"   // 16k
 #define MEDIUM_QBUF_BLOCK_TYPE    "medium"  // 32k
@@ -52,6 +59,10 @@
 #define ENV_VAR_USE_ZCOPY         "RPC_ADPT_USE_ZCOPY"
 #define ENV_LOG_USE_PRINTF        "RPC_ADPT_LOG_USE_PRINTF" // default 0, 0 false; 1 true
 #define ENV_SCHEDULE_POLICY       "RPC_SCHEDULE_POLICY" // affinity, rr
+#define ENV_TRACE_ENABLE          "UBSOCKET_TRACE_ENABLE"
+#define ENV_TRACE_TIME            "UBSOCKET_TRACE_TIME"
+#define ENV_TRACE_FILE_PATH       "UBSOCKET_TRACE_FILE_PATH"
+#define ENV_TRACE_FILE_SIZE       "UBSOCKET_TRACE_FILE_SIZE"
 
 enum dev_schedule_policy {
     ROUND_ROBIN = 1,
@@ -225,6 +236,26 @@ public:
         return m_dev_schedule_policy;
     }
 
+    bool GetTraceEnable()
+    {
+        return m_trace_enable;
+    }
+
+    uint64_t GetUbsocketTraceTime()
+    {
+        return m_ubsocket_trace_time;
+    }
+
+    const char *GetUbsocketTraceFilePath()
+    {
+        return strlen(m_ubsocket_trace_file_path) > 0 ? m_ubsocket_trace_file_path : nullptr;
+    }
+
+    uint64_t GetUbsocketTraceFileSize()
+    {
+        return m_ubsocket_trace_file_size;
+    }
+
 protected:
     static void ReadEnvVar(char *env_ptr, char *output_str, uint32_t output_str_len)
     {
@@ -324,6 +355,33 @@ protected:
                 m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;
             }
         }
+
+        if ((env_ptr = getenv(ENV_TRACE_ENABLE)) != NULL) {
+            m_trace_enable = BoolVal::BoolConverter(env_ptr);
+        }
+
+        if ((env_ptr = getenv(ENV_TRACE_TIME)) != NULL) {
+            uint64_t ubsocket_trace_time = static_cast<uint64_t>(atoi(env_ptr));
+            if (ubsocket_trace_time >= UBSOCKET_TRACE_TIME_MIN
+                && ubsocket_trace_time <= UBSOCKET_TRACE_TIME_MAX) {
+                m_ubsocket_trace_time = ubsocket_trace_time;
+            }
+        }
+
+        if ((env_ptr = getenv(ENV_TRACE_FILE_PATH)) != NULL) {
+            ReadEnvVar(env_ptr, m_ubsocket_trace_file_path, sizeof(m_ubsocket_trace_file_path));
+        } else {
+            char default_path[] = "/tmp/ubsocket/log";
+            ReadEnvVar(default_path, m_ubsocket_trace_file_path, sizeof(m_ubsocket_trace_file_path));
+        }
+
+        if ((env_ptr = getenv(ENV_TRACE_FILE_SIZE)) != NULL) {
+            uint64_t ubsocket_trace_file_size = static_cast<uint64_t>(atoi(env_ptr));
+            if (ubsocket_trace_file_size >= UBSOCKET_TRACE_FILE_PATH_MIN
+                && ubsocket_trace_file_size <= UBSOCKET_TRACE_FILE_PATH_MAX) {
+                m_ubsocket_trace_file_size = ubsocket_trace_file_size;
+            }
+        }
     }
 
     void SetSocketFdTransMode(socket_fd_trans_mode trans_mode)
@@ -347,6 +405,9 @@ protected:
     uint32_t m_eid_idx = DEFAULT_EID_IDX;
     char m_src_eid_str[BLOCK_TYPE_STR_LEN_MAX] = "";
     char m_dev_schedule_policy_str[DEV_SCHEDULE_POLICY_LEN_MAX] = "";
+    char m_ubsocket_trace_file_path[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = "";
+    uint64_t m_ubsocket_trace_time = UBSOCKET_TRACE_TIME_DEFAULT;
+    uint64_t m_ubsocket_trace_file_size = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
     umq_eid_t m_src_eid;
     uint32_t m_tx_depth = DEFAULT_TX_DEPTH;
     uint32_t m_rx_depth = DEFAULT_RX_DEPTH;
@@ -359,6 +420,7 @@ protected:
     bool m_is_ipv6 = false;
     static socket_fd_trans_mode m_socket_fd_trans_mode;
     bool m_stats_enable = false;
+    bool m_trace_enable = false;
     bool m_log_use_printf = false;
     dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;
 };

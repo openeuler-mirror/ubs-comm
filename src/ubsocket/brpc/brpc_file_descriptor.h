@@ -76,78 +76,6 @@ protected:
     bool m_rx_use_tcp = false;
 }; 
 
-class StatsMgr {
-public:
-    enum stats_type {
-        TX_INTER_CNT,
-        RX_INTER_CNT,
-        WRITEV_BATCH_CNT,
-        WRITEV_BUF_CNT,
-        WRITEV_BYTES,
-        READV_OUTPUT_BUF_CNT,
-        READV_OUTPUT_BYTES,
-        READV_CACHE_BYTES,
-        
-        STATE_TYPE_MAX
-    };
-
-    StatsMgr(int fd) : m_output_fd(fd) {}
-
-    bool InitStatsMgr()
-    {
-        for (int i = 0; i < STATE_TYPE_MAX; ++i) {
-            try {
-                m_recorder_vec.emplace_back(GetStatsStr((enum stats_type)i));
-            } catch (std::exception& e) {
-                RPC_ADPT_VLOG_ERR("Failed to construct statistics manager, %s\n", e.what());
-                return false;
-            }
-        }
-
-        m_stats_enable = true;
-
-        return true;
-    }
-
-    // data plane interface, caller ensure input validation
-    ALWAYS_INLINE void UpdateStats(enum stats_type type, uint32_t value)
-    {
-        m_recorder_vec[type].Update(value);
-    }
-
-protected:
-    const char *GetStatsStr(enum stats_type type)
-    {
-        const static char *state_type_str[STATE_TYPE_MAX] = {
-            "tx interrupt count",
-            "rx interrupt count",
-            "writev batch count",
-            "writev buffer count",
-            "writev bytes",
-            "readv output buffer count",
-            "readv output bytes",
-            "readv cache bytes",
-        };
-
-        return state_type_str[type];
-    }
-    
-    void OutputStats(std::ostringstream &oss)
-    {
-        if (!m_stats_enable) {
-            return;
-        }
-
-        for (int i = 0; i < STATE_TYPE_MAX; ++i){
-            m_recorder_vec[i].GetInfo(m_output_fd, oss);
-        }
-    }
-
-    std::vector<Statistics::Recorder> m_recorder_vec;
-    int m_output_fd = -1;
-    bool m_stats_enable = false;
-};
-
 struct UmqEidHash {
     std::size_t operator()(const umq_eid_t& eid) const noexcept {
         uint64_t h = *reinterpret_cast<const uint64_t*>(eid.raw);
@@ -249,7 +177,7 @@ private:
     std::unordered_map<umq_eid_t, umq_route_list_t, UmqEidHash> m_route_list_map; // 存储可用的route_list列表
 };
 
-class SocketFd : public ::SocketFd, public FallbackTcpMgr, public StatsMgr {
+class SocketFd : public ::SocketFd, public FallbackTcpMgr, public Statistics::StatsMgr {
 public:
     enum error_code {
         OK,
@@ -269,8 +197,8 @@ public:
         m_tx.m_retrieve_threshold = RETRIEVE_THRESHOLD;
         m_tx.m_report_threshold = REPORT_THRESHOLD;
         m_rx.m_readv_unlimited = Context::GetContext()->GetReadvUnlimited();
-        if (Context::GetContext()->GetStatsEnable()) {
-            m_context_stats_enable = true;
+        if (Context::GetContext()->GetTraceEnable()) {
+            m_context_trace_enable = true;
         }
         m_event_fd = event_fd;
     }
@@ -382,6 +310,10 @@ public:
         if (is_blocking) {
             // reset
             SetBlocking(fd);
+        }
+
+        if (m_context_trace_enable) {
+            UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
         }
 
         return fd;
@@ -574,7 +506,7 @@ public:
             }
         }
         
-        if (m_context_stats_enable) {
+        if (m_context_trace_enable) {
             InitStatsMgr();
         }
 
@@ -639,6 +571,11 @@ public:
         if (is_blocking) {
             // reset
             SetBlocking(m_fd);
+        }
+
+        if (m_context_trace_enable) {
+            UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
+            UpdateTraceStats(StatsMgr::ACTIVE_OPEN_COUNT, 1);
         }
 
         return ret;
@@ -801,11 +738,6 @@ public:
                 errno = EINTR;
                 return -1;
             }
-            
-            if (m_stats_enable) {
-                UpdateStats(StatsMgr::RX_INTER_CNT, 1);
-            }
-
             bool closed = m_closed.load(std::memory_order_relaxed);
             if (closed == true) {
                 return 0;
@@ -820,17 +752,16 @@ public:
             errno = EAGAIN;
             return -1;
         }
-        
-        if (m_stats_enable) {
-            UpdateStats(StatsMgr::READV_OUTPUT_BUF_CNT, poll_num);
-            UpdateStats(StatsMgr::READV_OUTPUT_BYTES, rx_total_len);
-            UpdateStats(StatsMgr::READV_CACHE_BYTES, m_rx.m_block_cache.GetCacheLen());
-        }
 
         /* Set the first block as used to prevent brpc from utilizing this block,
          * and only use it as the head of the block linked list. */
         out_first_block->size = out_first_block->cap;
-        
+
+        if (m_context_trace_enable) {
+            UpdateTraceStats(StatsMgr::RX_PACKET_COUNT, 1);
+            UpdateTraceStats(StatsMgr::RX_BYTE_COUNT, rx_total_len);
+        }
+
         return rx_total_len;
     }
 
@@ -868,9 +799,6 @@ public:
         } else if (m_tx.m_window_size == 0) {
             PollTx(m_tx.m_retrieve_threshold);
             if (m_tx.m_window_size == 0) {
-                if (m_stats_enable) {
-                    UpdateStats(StatsMgr::TX_INTER_CNT, 1);
-                }
                 return DpRearmTxInterrupt();
             }
         }
@@ -902,9 +830,6 @@ public:
 
         umq_buf_t *tx_buf_list = umq_buf_alloc(0, umq_buf_cnt, UMQ_INVALID_HANDLE, nullptr);
         if (tx_buf_list == nullptr) {
-            if (m_stats_enable) {
-                UpdateStats(StatsMgr::TX_INTER_CNT, 1);
-            }
             return DpRearmTxInterrupt();
         }
 
@@ -1005,14 +930,14 @@ public:
 
         // After posting and before polling, the time for updating the count cna be concealed within the waiting period
         // for polling.
-        if (m_stats_enable) {
-            UpdateStats(StatsMgr::WRITEV_BATCH_CNT, batch);
-            UpdateStats(StatsMgr::WRITEV_BUF_CNT, umq_buf_cnt);
-            UpdateStats(StatsMgr::WRITEV_BYTES, tx_total_len);
-        }
 
         if ((m_tx_window_capacity - m_tx.m_window_size) >= m_tx.m_handle_threshold) {
             PollTx(m_tx.m_retrieve_threshold);
+        }
+
+        if (m_context_trace_enable) {
+            UpdateTraceStats(StatsMgr::TX_PACKET_COUNT, 1);
+            UpdateTraceStats(StatsMgr::TX_BYTE_COUNT, tx_total_len);
         }
 
         return tx_total_len;
@@ -1047,9 +972,6 @@ public:
         } else if (m_tx.m_window_size == 0) {
             PollTx(m_tx.m_retrieve_threshold);
             if (m_tx.m_window_size == 0) {
-                if (m_stats_enable) {
-                    UpdateStats(StatsMgr::TX_INTER_CNT, 1);
-                }
                 return DpRearmTxInterrupt();
             }
         }
@@ -1066,9 +988,6 @@ public:
  
         umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr);
         if (tx_buf_list == nullptr) {
-            if (m_stats_enable) {
-                UpdateStats(StatsMgr::TX_INTER_CNT, 1);
-            }
             return DpRearmTxInterrupt();
         }
  
@@ -1191,12 +1110,6 @@ public:
         } else {
             errno = EIO;
             return -1;
-        }
- 
-        if (m_stats_enable) {
-            UpdateStats(StatsMgr::WRITEV_BATCH_CNT, 1); // Or a new stat for Send calls
-            UpdateStats(StatsMgr::WRITEV_BUF_CNT, num_bufs_needed); // Or a new stat for Send bufs
-            UpdateStats(StatsMgr::WRITEV_BYTES, copied_total); // Or a new stat for Send bytes
         }
  
         if ((m_tx_window_capacity - m_tx.m_window_size) >= m_tx.m_handle_threshold) {
@@ -1328,10 +1241,6 @@ public:
                 return -1;
             }
  
-            if (m_stats_enable) {
-                UpdateStats(StatsMgr::RX_INTER_CNT, 1);
-            }
- 
             bool closed = m_closed.load(std::memory_order_relaxed);
             if (closed == true) {
                 return 0;
@@ -1344,11 +1253,6 @@ public:
  
             errno = EAGAIN;
             return -1;
-        }
- 
-        if (m_stats_enable) {
-            UpdateStats(StatsMgr::READV_OUTPUT_BUF_CNT, poll_num); // Or a new stat for Recv bufs
-            UpdateStats(StatsMgr::READV_OUTPUT_BYTES, rx_total_len); // Or a new stat for Recv bytes
         }
  
         return rx_total_len;
@@ -1476,10 +1380,6 @@ public:
                 return -1;
             }
 
-            if (m_stats_enable) {
-                UpdateStats(StatsMgr::RX_INTER_CNT, 1);
-            }
-
             bool closed = m_closed.load(std::memory_order_relaxed);
             if (closed == true) {
                 return 0;
@@ -1492,12 +1392,6 @@ public:
 
             errno = EAGAIN;
             return -1;
-        }
-
-        if (m_stats_enable) {
-            UpdateStats(StatsMgr::READV_OUTPUT_BUF_CNT, poll_num); // Or a new stat for Recv bufs
-            UpdateStats(StatsMgr::READV_OUTPUT_BYTES, rx_total_len); // Or a new stat for Recv bytes
-            UpdateStats(StatsMgr::READV_CACHE_BYTES, m_rx.m_block_cache.GetCacheLen());
         }
 
         return rx_total_len;
@@ -1532,10 +1426,6 @@ public:
             printf("[Send] window size is 0, start polling\n");
             PollTx(m_tx.m_retrieve_threshold);
             if (m_tx.m_window_size == 0) {
-                if (m_stats_enable) {
-                    printf("[Send] window size still 0, returning\n");
-                    UpdateStats(StatsMgr::TX_INTER_CNT, 1);
-                }
                 return DpRearmTxInterrupt();
             }
         }
@@ -1552,9 +1442,6 @@ public:
 
         umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr);
         if (tx_buf_list == nullptr) {
-            if (m_stats_enable) {
-                UpdateStats(StatsMgr::TX_INTER_CNT, 1);
-            }
             return DpRearmTxInterrupt();
         }
         
@@ -1674,12 +1561,6 @@ public:
             errno = EIO;
             return -1;
         }
-
-        if (m_stats_enable) {
-            UpdateStats(StatsMgr::WRITEV_BATCH_CNT, 1); // Or a new stat for Send calls
-            UpdateStats(StatsMgr::WRITEV_BUF_CNT, num_bufs_needed); // Or a new stat for Send bufs
-            UpdateStats(StatsMgr::WRITEV_BYTES, copied_total); // Or a new stat for Send bytes
-        }
  
         if ((m_tx_window_capacity - m_tx.m_window_size) >= m_tx.m_handle_threshold) {
             PollTx(m_tx.m_retrieve_threshold);
@@ -1718,9 +1599,6 @@ public:
         } else if (m_tx.m_window_size == 0) {
             PollTx(m_tx.m_retrieve_threshold);
             if (m_tx.m_window_size == 0) {
-                if (m_stats_enable) {
-                    UpdateStats(StatsMgr::TX_INTER_CNT, 1);
-                }
                 return DpRearmTxInterrupt();
             }
         }
@@ -1737,9 +1615,6 @@ public:
  
         umq_buf_t *tx_buf_list = umq_buf_alloc(brpc_iobuf_size, num_bufs_needed, UMQ_INVALID_HANDLE, nullptr);
         if (tx_buf_list == nullptr) {
-            if (m_stats_enable) {
-                UpdateStats(StatsMgr::TX_INTER_CNT, 1);
-            }
             return DpRearmTxInterrupt();
         }
  
@@ -1863,12 +1738,6 @@ public:
         } else {
             errno = EIO;
             return -1;
-        }
- 
-        if (m_stats_enable) {
-            UpdateStats(StatsMgr::WRITEV_BATCH_CNT, 1); // Or a new stat for Send calls
-            UpdateStats(StatsMgr::WRITEV_BUF_CNT, num_bufs_needed); // Or a new stat for Send bufs
-            UpdateStats(StatsMgr::WRITEV_BYTES, copied_total); // Or a new stat for Send bytes
         }
  
         if ((m_tx_window_capacity - m_tx.m_window_size) >= m_tx.m_handle_threshold) {
@@ -2000,10 +1869,6 @@ public:
                 return -1;
             }
  
-            if (m_stats_enable) {
-                UpdateStats(StatsMgr::RX_INTER_CNT, 1);
-            }
- 
             bool closed = m_closed.load(std::memory_order_relaxed);
             if (closed == true) {
                 return 0;
@@ -2016,11 +1881,6 @@ public:
  
             errno = EAGAIN;
             return -1;
-        }
- 
-        if (m_stats_enable) {
-            UpdateStats(StatsMgr::READV_OUTPUT_BUF_CNT, poll_num); // Or a new stat for Recv bufs
-            UpdateStats(StatsMgr::READV_OUTPUT_BYTES, rx_total_len); // Or a new stat for Recv bytes
         }
  
         return rx_total_len;
@@ -2601,7 +2461,7 @@ private:
             }
         }
 
-        if (m_context_stats_enable) {
+        if (m_context_trace_enable) {
             socket_fd_obj->InitStatsMgr();
         }
 
@@ -3250,7 +3110,7 @@ private:
     uint16_t m_tx_window_capacity = 0; // the capacity of TX window size 
     uint16_t m_rx_window_capacity = 0; // the capacity of RX window size
     bool m_bind_remote = false; // indicate whether to enable stats manager when umq is created and bound successfully
-    bool m_context_stats_enable = false;
+    bool m_context_trace_enable = false;
     std::atomic<bool> m_closed{false};
     int m_event_fd;
     int mPeerSocketId = -1;

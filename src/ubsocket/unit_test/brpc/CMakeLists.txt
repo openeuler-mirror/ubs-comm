@@ -23,4 +23,5 @@ target_sources(brpc_adapter_test
     brpc_file_descriptor_test.cpp
     brpc_bonding_adapter_test.cpp
     brpc_connect_adapter_test.cpp
+    brpc_print_stats_mgr_test.cpp
 )

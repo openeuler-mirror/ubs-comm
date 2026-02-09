@@ -19,6 +19,7 @@
 #include "statistics.h"
 #include "umq_types.h"
 #include "ubs_mem/shm.h"
+#include "print_stats_mgr.h"
 
 namespace Brpc {
 
@@ -298,6 +299,11 @@ class Context : public Brpc::ConfigSettings {
             // Get global statistics manager to invoke construction
             (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr();
         }
+
+        if (m_trace_enable) {
+            Statistics::PrintStatsMgr::StartStatsCollection(
+                GetUbsocketTraceTime(), GetUbsocketTraceFilePath(), GetUbsocketTraceFileSize());
+        }
     }
 
     virtual ~Context()
@@ -314,6 +320,10 @@ class Context : public Brpc::ConfigSettings {
         }
 
         CleanContext();
+
+        if (m_trace_enable) {
+            Statistics::PrintStatsMgr::StopStatsCollection();
+        }
 
         RPC_ADPT_VLOG_INFO("Context reclaimed successfully.\n");
     }

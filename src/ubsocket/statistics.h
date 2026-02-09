@@ -6,6 +6,8 @@
  *Note:
  *History: 2025-09-20
 */
+#ifndef STATISTICS_H
+#define STATISTICS_H
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -23,8 +25,6 @@
 #include "configure_settings.h"
 
 #define RPC_VAR         (2)
-#ifndef STATISTICS_H
-#define STATISTICS_H
 
 namespace Statistics {
 
@@ -60,19 +60,7 @@ class Recorder {
          * n: number of total input
          * M2: Intermediate quantilties used for calculating sample variance,
          * the sum of squares of differences from the current mean */
-        m_cnt++;
-        double delta = input - m_mean;
-        m_mean += delta / m_cnt;
-        double delta2 = input - m_mean;
-        m_m2 += delta * delta2;
-
-        if(input < m_min){
-            m_min = input;
-        }
-
-        if(input > m_max){
-            m_max = input;
-        }
+        m_cnt += input;
     }
 
     double GetMean()
@@ -117,21 +105,13 @@ class Recorder {
             oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd)
                 << std::setw(NAME_WIDTH_MAX) << m_name
                 << std::setw(FIELD_WIDTH_MAX) << "-"
-                << std::setw(FIELD_WIDTH_MAX) << "-"
-                << std::setw(FIELD_WIDTH_MAX) << "-"
-                << std::setw(FIELD_WIDTH_MAX) << "-"
-                << std::setw(FIELD_WIDTH_MAX) << "-"
                 << std::endl;
             return;    
         }
 
         oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd)
             << std::setw(NAME_WIDTH_MAX) << m_name
-            << std::setw(FIELD_WIDTH_MAX) << std::fixed << std::setprecision(DEFAULT_PRECISION) << m_mean
-            << std::setw(FIELD_WIDTH_MAX) << m_min
-            << std::setw(FIELD_WIDTH_MAX) << m_max
-            << std::setw(FIELD_WIDTH_MAX) << std::fixed << std::setprecision(DEFAULT_PRECISION) << GetCV()
-            << std::setw(FIELD_WIDTH_MAX) << std::scientific << std::setprecision(TOTAL_PRECISION) << m_mean * m_cnt
+            << std::setw(FIELD_WIDTH_MAX) << m_cnt
             << std::endl;
     }
 
@@ -139,10 +119,6 @@ class Recorder {
     {
         oss << std::left << std::setw(FD_WIDTH_MAX) << "fd"
             << std::setw(NAME_WIDTH_MAX) << "type"
-            << std::setw(FIELD_WIDTH_MAX) << "avg"
-            << std::setw(FIELD_WIDTH_MAX) << "min"
-            << std::setw(FIELD_WIDTH_MAX) << "max"
-            << std::setw(FIELD_WIDTH_MAX) << "cv"
             << std::setw(FIELD_WIDTH_MAX) << "total"
             << std::endl;
     }
@@ -185,6 +161,141 @@ class Recorder {
     uint32_t m_min = UINT32_MAX;
     std::string m_name;
     static uint32_t m_title_len;
+};
+
+class StatsMgr {
+public:
+    enum trace_stats_type {
+        CONN_COUNT,
+        ACTIVE_OPEN_COUNT,
+        RX_PACKET_COUNT,
+        TX_PACKET_COUNT,
+        RX_BYTE_COUNT,
+        TX_BYTE_COUNT,
+        TX_ERROR_PACKET_COUNT,
+        
+        TRACE_STATE_TYPE_MAX
+    };
+
+    StatsMgr(int fd) : m_output_fd(fd) {}
+
+    bool InitStatsMgr()
+    {
+        for (int i = 0; i < TRACE_STATE_TYPE_MAX; ++i) {
+            try {
+                m_recorder_vec.emplace_back(GetStatsStr((enum trace_stats_type)i));
+            } catch (std::exception& e) {
+                RPC_ADPT_VLOG_ERR("Failed to construct statistics manager, %s\n", e.what());
+                return false;
+            }
+        }
+
+        m_stats_enable = true;
+
+        return true;
+    }
+
+    inline static std::atomic<uint64_t> mConnCount{0};
+    inline static std::atomic<uint64_t> mActiveConnCount{0};
+    inline static std::atomic<uint64_t> mRxPacketCount{0};
+    inline static std::atomic<uint64_t> mTxPacketCount{0};
+    inline static std::atomic<uint64_t> mRxByteCount{0};
+    inline static std::atomic<uint64_t> mTxByteCount{0};
+    inline static std::atomic<uint64_t> mTxErrorPacketCount{0};
+
+    static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss) {
+        int timeBufSize = 32;
+        time_t now = time(nullptr);
+        char timeBuf[timeBufSize];
+        std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+
+        oss << "{"
+            << "\"timeStamp\":\"" << timeBuf << "\","
+            << "\"trafficRecords\":{";
+
+        oss << "\"" << "totalConnections" << "\":" << mConnCount.load() << ",";
+        oss << "\"" << "activeConnections" << "\":" << mActiveConnCount.load() << ",";
+        oss << "\"" << "sendPackets" << "\":" << mRxPacketCount.load() << ",";
+        oss << "\"" << "receivePackets" << "\":" << mTxPacketCount.load() << ",";
+        oss << "\"" << "sendBytes" << "\":" << mRxByteCount.load() << ",";
+        oss << "\"" << "receiveBytes" << "\":" << mTxByteCount.load() << ",";
+        oss << "\"" << "errorPackets" << "\":" << mTxErrorPacketCount.load() << "";
+
+        oss << "}" << "}\n";
+    }
+
+    // data plane interface, caller ensure input validation
+    ALWAYS_INLINE void UpdateTraceStats(enum trace_stats_type type, uint32_t value)
+    {
+        switch (type) {
+            case CONN_COUNT:
+                mConnCount.fetch_add(value, std::memory_order_relaxed);
+                break;
+
+            case ACTIVE_OPEN_COUNT:
+                mActiveConnCount.fetch_add(value, std::memory_order_relaxed);
+                break;
+
+            case RX_PACKET_COUNT:
+                mRxPacketCount.fetch_add(value, std::memory_order_relaxed);
+                m_recorder_vec[type].Update(value);
+                break;
+
+            case TX_PACKET_COUNT:
+                mTxPacketCount.fetch_add(value, std::memory_order_relaxed);
+                m_recorder_vec[type].Update(value);
+                break;
+
+            case RX_BYTE_COUNT:
+                mRxByteCount.fetch_add(value, std::memory_order_relaxed);
+                m_recorder_vec[type].Update(value);
+                break;
+
+            case TX_BYTE_COUNT:
+                mTxByteCount.fetch_add(value, std::memory_order_relaxed);
+                m_recorder_vec[type].Update(value);
+                break;
+
+            case TX_ERROR_PACKET_COUNT:
+                mTxErrorPacketCount.fetch_add(value, std::memory_order_relaxed);
+                m_recorder_vec[type].Update(value);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+protected:
+    const char *GetStatsStr(enum trace_stats_type type)
+    {
+        const static char *state_type_str[TRACE_STATE_TYPE_MAX] = {
+            "totalConnections",
+            "activeConnections",
+            "sendPackets",
+            "receivePackets",
+            "sendBytes",
+            "receiveBytes",
+            "errorPackets",
+        };
+
+        return state_type_str[type];
+    }
+    
+    void OutputStats(std::ostringstream &oss)
+    {
+        if (!m_stats_enable) {
+            return;
+        }
+
+        for (int i = 0; i < TRACE_STATE_TYPE_MAX; ++i) {
+            m_recorder_vec[i].GetInfo(m_output_fd, oss);
+        }
+    }
+
+    std::vector<Statistics::Recorder> m_recorder_vec;
+    int m_output_fd = -1;
+    bool m_stats_enable = false;
 };
 
 class Listener {
