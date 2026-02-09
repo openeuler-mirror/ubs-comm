@@ -81,11 +81,14 @@ struct TimerCtx {
 
 class HcomChannelImp : public UBSHcomChannel {
 public:
+    // 由于UBSHcomChannel是纯虚基类，UBSE、libvirt在ut中继承并实现了stub子类，如果基类有api增减，需要通知下游，否则影响下游门禁
     int32_t Send(const UBSHcomRequest &req, const Callback *done = nullptr) override;
     int32_t Call(const UBSHcomRequest &req, UBSHcomResponse &rsp, const Callback *done = nullptr) override;
     int32_t Reply(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback *done = nullptr) override;
     int32_t Put(const UBSHcomOneSideRequest &req, const Callback *done = nullptr) override;
     int32_t Get(const UBSHcomOneSideRequest &req, const Callback *done = nullptr) override;
+    int32_t PutV(const UBSHcomOneSideSglRequest &req, const Callback *done = nullptr) override;
+    int32_t GetV(const UBSHcomOneSideSglRequest &req, const Callback *done = nullptr) override;
     int32_t SendFds(int fds[], uint32_t len) override;
     int32_t ReceiveFds(int fds[], uint32_t len, int32_t timeoutSec) override;
     int32_t Recv(const UBSHcomServiceContext &context, uintptr_t address, uint32_t size,
@@ -222,7 +225,7 @@ private:
     SerResult NextWorkerPollEp(UBSHcomNetEndpoint *&ep, uint16_t dvrIdx = 0);
     SerResult ResponseWorkerPollEp(uintptr_t rspCtx, UBSHcomNetEndpoint *&ep);
 
-    SerResult PrepareTimerContext(Callback *cb, int16_t timeout, TimerCtx &context);
+    SerResult PrepareTimerContext(const Callback *cb, int16_t timeout, TimerCtx &context);
     void DestroyTimerContext(TimerCtx &context);
 
     Callback *GetAsyncCB(uint16_t multiNum, const Callback *done);
@@ -230,6 +233,11 @@ private:
     SerResult OneSideSyncWithSelfPoll(const UBSHcomOneSideRequest &request, bool isWrite);
     SerResult OneSideSyncWithWorkerPoll(const UBSHcomOneSideRequest &request, bool isWrite);
     SerResult OneSideAsyncWithWorkerPoll(const UBSHcomOneSideRequest &request, const Callback *done, bool isWrite);
+
+    SerResult OneSideSglInner(const UBSHcomOneSideSglRequest &request, const Callback *done, bool isWrite);
+    SerResult OneSideSglSyncWithSelfPoll(const UBSHcomOneSideSglRequest &request, bool isWrite);
+    SerResult OneSideSglSyncWithWorkerPoll(const UBSHcomOneSideSglRequest &request, bool isWrite);
+    SerResult OneSideSglAsyncWithWorkerPoll(const UBSHcomOneSideSglRequest &req, const Callback *done, bool isWrite);
     SerResult PrepareCallback(HcomServiceSelfSyncParam& syncParam, TimerCtx &syncContext);
     inline void CalculateOffsetAndSize(const UBSHcomOneSideRequest &request, UBSHcomNetEndpoint *ep,
         uint32_t &remain, uint32_t &offset, uint32_t &size)

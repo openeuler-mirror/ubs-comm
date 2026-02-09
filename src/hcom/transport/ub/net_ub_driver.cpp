@@ -595,6 +595,50 @@ void NetDriverUB::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
 
     mr->UnInitialize();
 }
+
+inline urma_target_seg_t *NetDriverUB::ImportSeg(uintptr_t addr, uint32_t bufSize, uint64_t token, urma_eid_t eid)
+{
+    uint32_t tokenId = static_cast<uint32_t>(token);
+    urma_token_t tokenValue = {static_cast<uint32_t>(token >> NN_NO32)};
+    urma_seg_t remoteSeg{};
+    remoteSeg.len = bufSize;
+    remoteSeg.ubva.va = addr;
+    remoteSeg.token_id = tokenId;
+    remoteSeg.ubva.eid = eid;
+    remoteSeg.attr.bs.token_policy = URMA_TOKEN_PLAIN_TEXT;
+ 
+    urma_import_seg_flag_t flag{};
+    flag.bs.cacheable = URMA_NON_CACHEABLE;
+    flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE;
+    flag.bs.mapping = URMA_SEG_NOMAP;
+ 
+    return HcomUrma::ImportSeg(mContext->mUrmaContext, &remoteSeg, &tokenValue, 0, flag);
+}
+ 
+NResult NetDriverUB::ImportUrmaSeg(uintptr_t address, uint64_t size, uint64_t key, void **tSeg, uint8_t *eid,
+    uint32_t eidLen)
+{
+    NN_LOG_INFO("ImportUrmaSeg, size: " << size << ", key :" << key);
+    urma_eid_t urmaEid{};
+    if (eid == nullptr || eidLen == 0) {
+        NN_LOG_ERROR("eid is null");
+        return NN_ERROR;
+    }
+    auto ret = memcpy_s(urmaEid.raw, sizeof(urma_eid_t), eid, eidLen);
+    if (ret != 0) {
+        NN_LOG_ERROR("eid is null");
+        return NN_ERROR;
+    }
+
+    urma_target_seg_t *dstSeg = ImportSeg(address, size, key, urmaEid);
+    if (dstSeg == nullptr) {
+        NN_LOG_ERROR("ImportSeg failed");
+        return NN_ERROR;
+    }
+    *tSeg = static_cast<void *>(dstSeg);
+    return NN_OK;
+}
+ 
 }
 }
 #endif

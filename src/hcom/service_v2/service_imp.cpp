@@ -897,6 +897,29 @@ int32_t HcomServiceImp::RegisterMemoryRegion(uintptr_t address, uint64_t size, U
 
     return res;
 }
+ 
+int32_t HcomServiceImp::ImportUrmaSeg(uintptr_t address, uint64_t size, UBSHcomMemoryKey &key)
+{
+    if (mDriverPtrs.size() == 0) {
+        NN_LOG_ERROR("RegisterMemoryRegion failed, as driver not created");
+        return NN_ERROR;
+    }
+    int32_t res = 0;
+    auto driver = mDriverPtrs[0].Get();
+    if (driver == nullptr) {
+        NN_LOG_ERROR("CreateMemoryRegion failed because driver empty");
+        return NN_ERROR;
+    }
+    void *tSeg = nullptr;
+    res = driver->ImportUrmaSeg(address, size, key.keys[0], &tSeg, key.eid, sizeof(key.eid));
+    if (res != 0) {
+        NN_LOG_ERROR("ImportUrmaSeg failed, res:" << res);
+        return NN_ERROR;
+    }
+    key.tokens[0] = reinterpret_cast<uint64_t>(tSeg);
+    NN_LOG_DEBUG("ImportUrmaSeg success, key.keys[0]:" << key.keys[0]);
+    return res;
+}
 
 SerResult HcomServiceImp::InsertPgTable(UBSHcomNetMemoryRegionPtr &mr)
 {

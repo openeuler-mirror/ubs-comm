@@ -406,7 +406,7 @@ inline SerResult HcomChannelImp::ResponseWorkerPollEp(uintptr_t rspCtx, UBSHcomN
     return SER_OK;
 }
 
-SerResult HcomChannelImp::PrepareTimerContext(Callback *cb, int16_t timeout, TimerCtx &context)
+SerResult HcomChannelImp::PrepareTimerContext(const Callback *cb, int16_t timeout, TimerCtx &context)
 {
     auto timerPtr = mCtxStore->GetCtxObj<HcomServiceTimer>();
     if (NN_UNLIKELY(timerPtr == nullptr)) {
@@ -1774,6 +1774,7 @@ SerResult HcomChannelImp::OneSideSyncWithSelfPoll(const UBSHcomOneSideRequest &r
         UBSHcomNetTransRequest req(request.lAddress + offset, request.rAddress + offset,
             request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size, 0);
         req.srcSeg = reinterpret_cast<void *>(request.lKey.tokens[ep->GetDevIndex()]);
+        req.dstSeg = reinterpret_cast<void *>(request.rKey.tokens[ep->GetDevIndex()]);
         if (isWrite) {
             result = ep->PostWrite(req);
         } else {
@@ -1851,6 +1852,7 @@ SerResult HcomChannelImp::OneSideSyncWithWorkerPoll(const UBSHcomOneSideRequest 
             request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size,
             sizeof(SerTransContext));
         req.srcSeg = reinterpret_cast<void *>(request.lKey.tokens[ep->GetDevIndex()]);
+        req.dstSeg = reinterpret_cast<void *>(request.rKey.tokens[ep->GetDevIndex()]);
         SetServiceTransCtx(req.upCtxData, syncContext.seqNo);
 
         if (isWrite) {
@@ -1957,6 +1959,7 @@ SerResult HcomChannelImp::OneSideAsyncWithWorkerPoll(const UBSHcomOneSideRequest
             request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size,
             sizeof(SerTransContext));
         req.srcSeg = reinterpret_cast<void *>(request.lKey.tokens[ep->GetDevIndex()]);
+        req.dstSeg = reinterpret_cast<void *>(request.rKey.tokens[ep->GetDevIndex()]);
         SetServiceTransCtx(req.upCtxData, readContext.seqNo);
 
         if (isWrite) {
@@ -2105,6 +2108,225 @@ int32_t HcomChannelImp::Recv(const UBSHcomServiceContext &context, uintptr_t add
         return ret;
     }
     return SER_OK;
+}
+
+SerResult HcomChannelImp::OneSideSglSyncWithSelfPoll(const UBSHcomOneSideSglRequest &request, bool isWrite)
+{
+    UBSHcomNetEndpoint *ep = nullptr;
+    uint32_t index = 0;
+    auto result = AcquireSelfPollEp(ep, index, mOptions.oneSideTimeout);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Channel sync oneside sgl acquire ep failed " << result << " channel id " << mOptions.id);
+        return result;
+    }
+
+    UBSHcomNetTransSgeIov iovArray[NET_SGE_MAX_IOV];
+    for (uint32_t i = 0; i < request.iovCount; i++) {
+        iovArray[i] = UBSHcomNetTransSgeIov(request.iov[i].lAddress, request.iov[i].rAddress,
+            request.iov[i].lKey.keys[0], request.iov[i].rKey.keys[0], request.iov[i].size);
+        iovArray[i].srcSeg = reinterpret_cast<void *>(request.iov[i].lKey.tokens[0]);
+        iovArray[i].dstSeg = reinterpret_cast<void *>(request.iov[i].rKey.tokens[0]);
+    }
+    UBSHcomNetTransSglRequest sglReq(iovArray, request.iovCount, 0);
+    if (isWrite) {
+        result = ep->PostWrite(sglReq);
+    } else {
+        result = ep->PostRead(sglReq);
+    }
+
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Channel sync oneside sgl failed " << result << " ep id " << ep->Id());
+        ReleaseSelfPollEp(index);
+        return result;
+    }
+
+    /* timeout = 0 will poll cq empty in self polling */
+    int32_t timeout = (mOptions.oneSideTimeout == 0 ? -1 : static_cast<int32_t>(mOptions.oneSideTimeout));
+    result = ep->WaitCompletion(timeout);
+    ReleaseSelfPollEp(index);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Channel sync oneside sgl wait complete failed " << result << " ep id " << ep->Id());
+    }
+    return result;
+}
+
+SerResult HcomChannelImp::OneSideSglSyncWithWorkerPoll(const UBSHcomOneSideSglRequest &request, bool isWrite)
+{
+    UBSHcomNetEndpoint *ep = nullptr;
+    auto result = NextWorkerPollEp(ep, 0);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Get Ep failed " << result);
+        return result;
+    }
+    
+    HcomServiceSelfSyncParam syncParam {};
+    Callback *newCallback = UBSHcomNewCallback([&syncParam](UBSHcomServiceContext &context) {
+            if (NN_UNLIKELY(context.Result() != SER_OK)) {
+                NN_LOG_ERROR("Prepare callback failed " << context.Result());
+            }
+            syncParam.Result(context.Result());
+            syncParam.Signal();
+        },
+        std::placeholders::_1);
+    if (NN_UNLIKELY(newCallback == nullptr)) {
+        NN_LOG_ERROR("Sync oneside sgl callback is nullptr");
+        return SER_NEW_OBJECT_FAILED;
+    }
+
+    TimerCtx readContext {};
+    result = PrepareTimerContext(newCallback, mOptions.oneSideTimeout, readContext);
+    if (result != SER_OK) {
+        NN_LOG_ERROR("PrepareTimerContext failed " << result);
+        DestroyCallback(newCallback);
+        return result;
+    }
+
+    UBSHcomNetTransSgeIov iovArray[NET_SGE_MAX_IOV];
+    for (uint32_t i = 0; i < request.iovCount; i++) {
+        iovArray[i] = UBSHcomNetTransSgeIov(request.iov[i].lAddress, request.iov[i].rAddress,
+            request.iov[i].lKey.keys[0], request.iov[i].rKey.keys[0], request.iov[i].size);
+        iovArray[i].srcSeg = reinterpret_cast<void *>(request.iov[i].lKey.tokens[0]);
+        iovArray[i].dstSeg = reinterpret_cast<void *>(request.iov[i].rKey.tokens[0]);
+    }
+    UBSHcomNetTransSglRequest sglReq(iovArray, request.iovCount, sizeof(SerTransContext));
+    SetServiceTransCtx(sglReq.upCtxData, readContext.seqNo);
+
+    if (isWrite) {
+        result = ep->PostWrite(sglReq);
+    } else {
+        result = ep->PostRead(sglReq);
+    }
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Channel sync oneside sgl failed " << result << " ep id " << ep->Id());
+        DestroyTimerContext(readContext);
+        return result;
+    }
+    
+    syncParam.Wait();
+    return syncParam.Result();
+}
+
+SerResult HcomChannelImp::OneSideSglAsyncWithWorkerPoll(const UBSHcomOneSideSglRequest &request, const Callback *done,
+    bool isWrite)
+{
+    UBSHcomNetEndpoint *ep = nullptr;
+    auto result = NextWorkerPollEp(ep, 0);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Get Ep failed " << result);
+        return result;
+    }
+
+    TimerCtx readContext {};
+    result = PrepareTimerContext(done, mOptions.oneSideTimeout, readContext);
+    if (result != SER_OK) {
+        NN_LOG_ERROR("PrepareTimerContext failed " << result);
+        DestroyCallback(done);
+        return result;
+    }
+
+    UBSHcomNetTransSgeIov iovArray[NET_SGE_MAX_IOV];
+    for (uint32_t i = 0; i < request.iovCount; i++) {
+        iovArray[i] = UBSHcomNetTransSgeIov(request.iov[i].lAddress, request.iov[i].rAddress,
+            request.iov[i].lKey.keys[0], request.iov[i].rKey.keys[0], request.iov[i].size);
+        iovArray[i].srcSeg = reinterpret_cast<void *>(request.iov[i].lKey.tokens[0]);
+        iovArray[i].dstSeg = reinterpret_cast<void *>(request.iov[i].rKey.tokens[0]);
+    }
+    UBSHcomNetTransSglRequest sglReq(iovArray, request.iovCount, sizeof(SerTransContext));
+    SetServiceTransCtx(sglReq.upCtxData, readContext.seqNo);
+    if (isWrite) {
+        result = ep->PostWrite(sglReq);
+    } else {
+        result = ep->PostRead(sglReq);
+    }
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Channel async oneside sgl failed " << result << " ep id " << ep->Id());
+        DestroyTimerContext(readContext);
+        return result;
+    }
+    
+    return SER_OK;
+}
+
+SerResult HcomChannelImp::OneSideSglInner(const UBSHcomOneSideSglRequest &request, const Callback *done, bool isWrite)
+{
+    if (mOptions.enableMultiRail) {
+        NN_LOG_DEBUG("Multirail not supported in oneside sgl, using single rail.");
+    }
+
+    if (mOptions.selfPoll) {
+        if (done == nullptr) {
+            return OneSideSglSyncWithSelfPoll(request, isWrite);
+        } else {
+            NN_LOG_ERROR("Failed to invoke async one side sgl op with self poll, not supported");
+            return SER_INVALID_PARAM;
+        }
+    } else {
+        if (done == nullptr) {
+            return OneSideSglSyncWithWorkerPoll(request, isWrite);
+        } else {
+            return OneSideSglAsyncWithWorkerPoll(request, done, isWrite);
+        }
+    }
+    return SER_INVALID_PARAM;
+}
+
+int32_t HcomChannelImp::PutV(const UBSHcomOneSideSglRequest &req, const Callback *done)
+{
+    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::PutV" << ", channel id = " << mOptions.id <<
+                 ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
+    VALIDATE_PARAM(OneSideSglRequest, req);
+    SerResult ret = SER_OK;
+    uint64_t timestamp = mOptions.oneSideTimeout < 0 ? UINT64_MAX : mOptions.oneSideTimeout + NetMonotonic::TimeSec();
+    do {
+        ret = FlowControl(req.Size(), mOptions.oneSideTimeout, timestamp);
+        if (NN_UNLIKELY(ret != SER_OK)) {
+            return ret;
+        }
+
+        NetTrace::TraceBegin(CHANNEL_WRITE);
+        ret = OneSideSglInner(req, done, true);
+        NetTrace::TraceEnd(CHANNEL_WRITE, ret);
+        if (NN_LIKELY(ret == SER_OK)) {
+            return SER_OK;
+        } else if (ret == SER_NEW_OBJECT_FAILED) { // do later::add retry result code
+            usleep(100UL);
+            continue;
+        } else {
+            break;
+        }
+    } while (NetMonotonic::TimeSec() < timestamp);
+
+    NN_LOG_ERROR("Failed to writev " << ret);
+    return ret;
+}
+int32_t HcomChannelImp::GetV(const UBSHcomOneSideSglRequest &req, const Callback *done)
+{
+    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::GetV" << ", channel id = " << mOptions.id <<
+                 ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
+    VALIDATE_PARAM(OneSideSglRequest, req);
+    SerResult ret = SER_OK;
+    uint64_t timestamp = mOptions.oneSideTimeout < 0 ? UINT64_MAX : mOptions.oneSideTimeout + NetMonotonic::TimeSec();
+    do {
+        ret = FlowControl(req.Size(), mOptions.oneSideTimeout, timestamp);
+        if (NN_UNLIKELY(ret != SER_OK)) {
+            return ret;
+        }
+
+        NetTrace::TraceBegin(CHANNEL_READ);
+        ret = OneSideSglInner(req, done, false);
+        NetTrace::TraceEnd(CHANNEL_READ, ret);
+        if (NN_LIKELY(ret == SER_OK)) {
+            return SER_OK;
+        } else if (ret == SER_NEW_OBJECT_FAILED) { // do later::add retry result code
+            usleep(100UL);
+            continue;
+        } else {
+            break;
+        }
+    } while (NetMonotonic::TimeSec() < timestamp);
+
+    NN_LOG_ERROR("Failed to readv " << ret);
+    return ret;
 }
 
 SerResult HcomChannelImp::FlowControl(uint64_t size, int16_t timeout, uint64_t timestamp)

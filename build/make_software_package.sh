@@ -83,7 +83,7 @@ HCOM_BUILD_TOOLS_PERF=${HCOM_BUILD_TOOLS_PERF:-off}
 if [[ "${HCOM_BUILD_TOOLS_PERF,,}" == "on" && "${HCOM_BUILD_TYPE,,}" == "release" ]]; then
     bash "${HCOM_ROOT_DIR}/build/build_tools_perf.sh"
     # copy hcom_perf
-    cp "${HCOM_ROOT_DIR}/test/tools/perf_test/build/hcom_perf" "${HCOM_PACKAGE_NAME}"/hcom/
+    cp "${HCOM_ROOT_DIR}/test/hcom/tools/perf_test/build/hcom_perf" "${HCOM_PACKAGE_NAME}"/hcom/
     echo "${HCOM_LOG_TAG} hcom build tools perf success: ${HCOM_BUILD_TOOLS_PERF}"
 fi
 

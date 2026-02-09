@@ -416,6 +416,91 @@ int ubs_hcom_channel_get(ubs_hcom_channel channel, ubs_hcom_oneside_request req,
     return SER_OK;
 }
 
+int ubs_hcom_channel_putv(ubs_hcom_channel channel, ubs_hcom_onesidesgl_request req, ubs_hcom_channel_callback *cb)
+{
+    VALIDATE_CHANNEL(channel)
+    if (req.iovCount == 0 || req.iovCount > (sizeof(req.iov) / sizeof(req.iov[0]))) {
+        NN_LOG_ERROR("Invalid param, iovCount must be in range [1, 4]");
+        return SER_INVALID_PARAM;
+    }
+
+    auto innerChannel = reinterpret_cast<UBSHcomChannel *>(channel);
+    UBSHcomOneSideRequest onesideReq[4];
+    for (uint16_t i = 0; i < req.iovCount; i++) {
+        auto ret = memcpy_s(&onesideReq[i], sizeof(onesideReq[i]), &req.iov[i], sizeof(req.iov[i]));
+        if (ret != 0) {
+            NN_LOG_ERROR("memcpy req iov failed");
+            return SER_ERROR;
+        }
+    }
+    UBSHcomOneSideSglRequest oneSideSglReq {};
+    oneSideSglReq.iov = onesideReq;
+    oneSideSglReq.iovCount = req.iovCount;
+    if (cb == nullptr) {
+        return innerChannel->PutV(oneSideSglReq, nullptr);
+    }
+
+    ubs_hcom_channel_cb_func cbFunc = cb->cb;
+    void *arg = cb->arg;
+    Callback *newCallback = UBSHcomNewCallback(
+        [cbFunc, arg]
+        (UBSHcomServiceContext &context) { cbFunc(arg, reinterpret_cast<ubs_hcom_service_context>(&context)); },
+        std::placeholders::_1);
+    if (NN_UNLIKELY(newCallback == nullptr)) {
+        NN_LOG_ERROR("ubs_hcom_channel_put malloc callback failed");
+        return SER_NEW_OBJECT_FAILED;
+    }
+    auto result = innerChannel->PutV(oneSideSglReq, newCallback);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        return result;
+    }
+
+    return SER_OK;
+}
+
+int ubs_hcom_channel_getv(ubs_hcom_channel channel, ubs_hcom_onesidesgl_request req, ubs_hcom_channel_callback *cb)
+{
+    VALIDATE_CHANNEL(channel)
+    if (req.iovCount == 0 || req.iovCount > (sizeof(req.iov) / sizeof(req.iov[0]))) {
+        NN_LOG_ERROR("Invalid param, iovCount must be in range [1, 4]");
+        return SER_INVALID_PARAM;
+    }
+
+    auto innerChannel = reinterpret_cast<UBSHcomChannel *>(channel);
+    UBSHcomOneSideRequest onesideReq[4];
+    for (uint16_t i = 0; i < req.iovCount; i++) {
+        auto ret = memcpy_s(&onesideReq[i], sizeof(onesideReq[i]), &req.iov[i], sizeof(req.iov[i]));
+        if (ret != 0) {
+            NN_LOG_ERROR("memcpy req iov failed");
+            return SER_ERROR;
+        }
+    }
+    UBSHcomOneSideSglRequest oneSideSglReq {};
+    oneSideSglReq.iov = onesideReq;
+    oneSideSglReq.iovCount = req.iovCount;
+
+    if (cb == nullptr) {
+        return innerChannel->GetV(oneSideSglReq, nullptr);
+    }
+
+    ubs_hcom_channel_cb_func cbFunc = cb->cb;
+    void *arg = cb->arg;
+    Callback *newCallback = UBSHcomNewCallback(
+        [cbFunc, arg]
+        (UBSHcomServiceContext &context) { cbFunc(arg, reinterpret_cast<ubs_hcom_service_context>(&context)); },
+        std::placeholders::_1);
+    if (NN_UNLIKELY(newCallback == nullptr)) {
+        NN_LOG_ERROR("ubs_hcom_channel_get malloc callback failed");
+        return SER_NEW_OBJECT_FAILED;
+    }
+    auto result = innerChannel->GetV(oneSideSglReq, newCallback);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        return result;
+    }
+
+    return SER_OK;
+}
+
 int ubs_hcom_channel_recv(ubs_hcom_channel channel, ubs_hcom_service_context ctx, uintptr_t address, uint32_t size,
     ubs_hcom_channel_callback *cb)
 {
@@ -720,6 +805,31 @@ int ubs_hcom_service_register_assign_memory_region(ubs_hcom_service service, uin
         return result;
     }
     *mr = reinterpret_cast<ubs_hcom_memory_region>(tmpMr);
+    return SER_OK;
+}
+
+int ubs_hcom_reg_seg(ubs_hcom_service service, uintptr_t address, uint64_t size, ubs_hcom_oneside_key *key)
+{
+    VALIDATE_SERVICE(service);
+ 
+    UBSHcomMemoryKey mrKey;
+    auto result = memcpy_s(&mrKey, sizeof(UBSHcomMemoryKey), key, sizeof(ubs_hcom_oneside_key));
+    if (result != 0) {
+        NN_LOG_ERROR("Failed to register seg as memcpy_s input failed");
+        return result;
+    }
+ 
+    result = reinterpret_cast<UBSHcomService *>(service)->ImportUrmaSeg(address, size, mrKey);
+    if (NN_UNLIKELY(result != NN_OK)) {
+        NN_LOG_ERROR("Failed to register seg");
+        return result;
+    }
+    result = memcpy_s(key, sizeof(ubs_hcom_oneside_key), &mrKey, sizeof(UBSHcomMemoryKey));
+    if (result != 0) {
+        NN_LOG_ERROR("Failed to register seg as memcpy_s to output failed");
+        return result;
+    }
+    NN_LOG_DEBUG("ImportUrmaSeg success with key: " << mrKey.keys[0] << ", size: " << size);
     return SER_OK;
 }
 

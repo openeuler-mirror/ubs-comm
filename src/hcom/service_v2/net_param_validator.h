@@ -138,6 +138,21 @@ inline bool OneSideRequestCheck(const UBSHcomOneSideRequest &req)
     return true;
 }
 
+inline bool OneSideSglRequestCheck(const UBSHcomOneSideSglRequest &req)
+{
+    if (NN_UNLIKELY(req.iov == nullptr || req.iovCount == 0 || req.iovCount > NET_SGE_MAX_IOV)) {
+        NN_LOG_ERROR("NetServiceRequest.iov or iovCount " << req.iovCount << " is invalid");
+        return false;
+    }
+    
+    for (uint32_t i = 0; i < req.iovCount; i++) {
+        if (!OneSideRequestCheck(req.iov[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 inline bool ReplyCheck(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, bool selfPoll)
 {
     if (NN_UNLIKELY(selfPoll)) {

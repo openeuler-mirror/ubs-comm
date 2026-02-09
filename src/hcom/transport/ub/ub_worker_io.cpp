@@ -309,8 +309,13 @@ UResult UBWorker::PostRead(UBJetty *qp, const UBSendReadWriteRequest &req)
     qp->AddOpCtxInfo(ctx);
 
     UResult result = UB_OK;
-    result = qp->PostRead(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress,
-        req.rKey, req.size, reinterpret_cast<uint64_t>(ctx));
+    if (mOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) {
+        result = qp->PostRead(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress,
+            reinterpret_cast<uint64_t>(req.dstSeg), req.size, reinterpret_cast<uint64_t>(ctx));
+    } else {
+        result = qp->PostRead(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress,
+            req.rKey, req.size, reinterpret_cast<uint64_t>(ctx));
+    }
     if (NN_UNLIKELY(result != UB_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
         qp->ReturnOneSideWr();

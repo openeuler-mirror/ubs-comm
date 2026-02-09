@@ -158,6 +158,26 @@ public:
     int32_t Get(const UBSHcomOneSideRequest &req);
 
     /**
+     * @brief 发送单边写SGL请求
+     *
+     * @param req 单边写SGL请求
+     * @param done nullptr：同步发送单边请求；非nullptr：异步发送单边请求，发送完成后回调函数
+     * @return int32_t 0：成功；非0：失败错误码
+     */
+    virtual int32_t PutV(const UBSHcomOneSideSglRequest &req, const Callback *done) = 0;
+    int32_t PutV(const UBSHcomOneSideSglRequest &req);
+
+    /**
+     * @brief 发送单边读SGL请求
+     *
+     * @param req 单边读SGL请求
+     * @param done nullptr：同步发送单边读请求；非nullptr：异步发送单边读请求，发送完成后回调函数
+     * @return int32_t 0：成功；非0：失败错误码
+     */
+    virtual int32_t GetV(const UBSHcomOneSideSglRequest &req, const Callback *done) = 0;
+    int32_t GetV(const UBSHcomOneSideSglRequest &req);
+
+    /**
      * @brief 只接收RNDV请求时使用,且RNDV请求接收后必须reply
      *
      * @param context: 接收到的service Context
