@@ -4,6 +4,7 @@ project(ubsocket)
 option(UBSOCKET_BUILD_TESTS "Build tests" OFF)
 option(UBSOCKET_USE_SYSTEM_GTEST "Whether to use gtest on system" OFF)
 option(UBSOCKET_ENABLE_COVERAGE "Enable code coverage" OFF)
+option(UBSOCKET_BUILD_CLI "Enable CLI component build" OFF)
 
 # Sources for the library are specified at the end
 add_library(ubsocket OBJECT "")
@@ -80,6 +81,7 @@ target_sources(ubsocket
     ${CMAKE_CURRENT_SOURCE_DIR}/statistics.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/urpc_util.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/util_vlog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cli_message.cpp
 )
 
 # brpc adaptor
@@ -90,6 +92,11 @@ endif ()
 
 message(STATUS "BUILD_WITH_UBS_SHM: ${BUILD_WITH_UBS_SHM}")
 add_subdirectory(brpc)
+
+if(UBSOCKET_BUILD_CLI)
+  message(STATUS "Building CLI component...")
+  add_subdirectory(cli)
+endif()
 
 ## Coverage
 if(UBSOCKET_ENABLE_COVERAGE)
