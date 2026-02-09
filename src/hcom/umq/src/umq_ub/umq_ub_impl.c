@@ -947,10 +947,10 @@ static int umq_ub_get_namespace(char *namespace)
     ssize_t len = readlink(UMQ_UB_NAMESPACE_PATH, buf, sizeof(buf) - 1);
     if (len == -1 || len > UMQ_UB_NAMESPACE_SIZE) {
         if (errno != ENOENT) {
-            UMQ_VLOG_ERR("readlink failed %d, %s\n", errno, strerror(error));
+            UMQ_VLOG_ERR("readlink failed %d, %s\n", errno, strerror(errno));
             return UMQ_FAIL;
         }
-        len = 0
+        len = 0;
         UMQ_VLOG_WARN("%s file not exist\n", UMQ_UB_NAMESPACE_PATH);
     }
     
@@ -959,7 +959,7 @@ static int umq_ub_get_namespace(char *namespace)
     return UMQ_SUCCESS;
 }
 
-int umq_ub_bind_info_get_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
+uint32_t umq_ub_bind_info_get_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
 {
     if (bind_info_size < sizeof(umq_ub_bind_info_t)) {
         errno = UMQ_ERR_EINVAL;
