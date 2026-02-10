@@ -119,6 +119,15 @@ uint8_t *umq_ubmm_ctx_init_impl(umq_init_cfg_t *cfg)
             continue;
         }
 
+        if (total_io_buf_size == 0) {
+            total_io_buf_size = info->mem_cfg.total_size;
+        }
+
+        if (info->dev_info.assign_mode == UMQ_DEV_ASSIGN_MODE_DUMMY) {
+            UMQ_VLOG_INFO("device info assign_mode is dummy, skip it\n");
+            continue;
+        }
+
         if (ub_init_ctx == NULL) {
             ub_init_ctx = umq_ub_ctx_init_impl(cfg);
             if (ub_init_ctx == NULL) {
@@ -126,9 +135,6 @@ uint8_t *umq_ubmm_ctx_init_impl(umq_init_cfg_t *cfg)
             }
         }
 
-        if (total_io_buf_size == 0) {
-            total_io_buf_size = info->mem_cfg.total_size;
-        }
         (void)memcpy(&g_ubmm_ctx[g_ubmm_ctx_count].trans_info, info, sizeof(umq_trans_info_t));
         g_ubmm_ctx[g_ubmm_ctx_count].io_lock_free = cfg->io_lock_free;
         g_ubmm_ctx[g_ubmm_ctx_count].feature = cfg->feature;
@@ -389,21 +395,22 @@ int32_t umq_ubmm_destroy_impl(uint64_t umqh_tp)
     return UMQ_SUCCESS;
 }
 
-int32_t umq_ubmm_bind_info_get_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_info_size)
+uint32_t umq_ubmm_bind_info_get_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_info_size)
 {
     umq_ubmm_info_t *tp = (umq_ubmm_info_t *)(uintptr_t)umqh_tp;
     if (bind_info_size < sizeof(umq_ubmm_bind_info_t)) {
+        errno = UMQ_ERR_EINVAL;
         UMQ_VLOG_ERR("bind_info_size[%u] is less than required size[%u]\n",
             bind_info_size, sizeof(umq_ubmm_bind_info_t));
-        return -UMQ_ERR_EINVAL;
+        return 0;
     }
 
-    int32_t ret = 0;
-    ret = umq_ub_bind_info_get_impl(tp->ub_handle, bind_info + sizeof(umq_ubmm_bind_info_t),
+    uint32_t ret = umq_ub_bind_info_get_impl(tp->ub_handle, bind_info + sizeof(umq_ubmm_bind_info_t),
         bind_info_size - sizeof(umq_ubmm_bind_info_t));
-    if (ret <= 0) {
+    if (ret == 0) {
+        errno = UMQ_ERR_ENODEV;
         UMQ_VLOG_ERR("umq get ub bind info failed\n");
-        return -UMQ_ERR_ENODEV;
+        return 0;
     }
 
     umq_ubmm_bind_info_t *tmp_info = (umq_ubmm_bind_info_t *)bind_info;
@@ -721,7 +728,11 @@ int umq_ubmm_plus_enqueue_impl(uint64_t umqh_tp, umq_buf_t *qbuf, umq_buf_t **ba
             *bad_qbuf = qbuf;
             return -UMQ_ERR_ENODEV;
         }
-        umq_ub_record_rendezvous_buf(tp->ub_handle, msg_id, qbuf);
+        if (umq_ub_record_rendezvous_buf(tp->ub_handle, msg_id, qbuf) != UMQ_SUCCESS) {
+            umq_buf_free(send_buf);
+            *bad_qbuf = qbuf;
+            return -UMQ_ERR_ENOMEM;
+        }
     }
 
     int ret = umq_shm_qbuf_enqueue(send_buf, umqh_tp, tp->qbuf_pool_handle, rendezvous, enqueue_data);
