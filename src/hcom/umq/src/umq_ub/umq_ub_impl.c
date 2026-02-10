@@ -1356,7 +1356,7 @@ static int umq_ub_eid_id_release(remote_imported_tseg_info_t *remote_imported_in
     urma_eid_t *remote_eid = &ctx->tjetty->id.eid;
     uint32_t hash_namespce = urpc_hash_bytes(ctx->remote_namespace, strlen(ctx->remote_namespace), 0);
     uint32_t hash_eid = urpc_hash_bytes(remote_eid, sizeof(urma_eid_t), 0);
-    uint32_t hash_eid_pid = urpc_hash_add(hash_eid, ctx->remote_eid_id);
+    uint32_t hash_eid_pid = urpc_hash_add(hash_eid, ctx->remote_pid);
     uint32_t hash = urpc_hash_add(hash_eid_pid, hash_namespce);
     bool find = false;
     remote_eid_hmap_node_t *eid_node;
