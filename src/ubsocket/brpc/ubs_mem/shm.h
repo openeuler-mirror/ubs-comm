@@ -138,7 +138,8 @@ public:
         flag = m_config.shmWrDelayComp ? flag | UBSM_FLAG_WR_DELAY_COMP : flag;
         int ret  = UbsMemAPiMgr::GetUbsMemAPiApi()->ubsmem_shmem_allocate(m_regionName, shm->name, shm->len, SHM_RIGHT_MODE, flag);
         if (ret == UBSM_ERR_ALREADY_EXIST) {
-            if (UbsMemAPiMgr::GetUbsMemAPiApi()->ubsmem_shmem_deallocate(shm->name) != 0) {
+            ret = UbsMemAPiMgr::GetUbsMemAPiApi()->ubsmem_shmem_deallocate(shm->name);
+            if (ret != 0) {
                 RPC_ADPT_VLOG_ERR("Ubsmem free origin shm name \"%s\" failed, ret %d.\n", shm->name, ret);
                 return -1;
             }
@@ -167,8 +168,13 @@ public:
 
         int ret = UbsMemAPiMgr::GetUbsMemAPiApi()->ubsmem_shmem_deallocate(shm->name);
         if (ret != 0) {
-            RPC_ADPT_VLOG_ERR("Ubsmem free shm name \"%s\" failed, ret %d.\n", shm->name, ret);
-            // TODO : Check ret=UBSM_ERROR_IN_USING or ret=UBSM_ERR_NOT_FOUND
+            if (ret == static_cast<int>(UBSM_ERR_IN_USING)) {
+                RPC_ADPT_VLOG_WARN("Ubsmem free shm name \"%s\" failed, ret %d, shm is in use.\n", shm->name, ret);
+            } else if (ret == static_cast<int>(UBSM_ERR_NOT_FOUND)) {
+                RPC_ADPT_VLOG_WARN("Ubsmem free shm name \"%s\" failed, ret %d, shm is not found.\n", shm->name, ret);
+            } else {
+                RPC_ADPT_VLOG_ERR("Ubsmem free shm name \"%s\" failed, ret %d.\n", shm->name, ret);
+            }
             return ret;
         }
 

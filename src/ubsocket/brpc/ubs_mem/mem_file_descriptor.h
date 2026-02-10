@@ -114,8 +114,8 @@ public:
         auto* shm = ShmMgr::GetShmMgr();
 
         shm->Unmap(&m_remoteTrxShm);
-        shm->Free(&m_remoteTrxShm);
         shm->Unmap(&m_localTrxShm);
+        shm->Free(&m_remoteTrxShm);
         shm->Free(&m_localTrxShm);
 
         Context::FetchSub();
