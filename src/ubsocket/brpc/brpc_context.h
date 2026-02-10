@@ -193,6 +193,8 @@ class Context : public Brpc::ConfigSettings {
         umq_config.flow_control.use_atomic_window = true;
         umq_config.block_cfg.small_block_size = GetIOBlockType();
         umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DUMMY;
+        umq_config.trans_info[0].mem_cfg.total_size = GetIOTotalSize();
+        umq_config.trans_info[0].trans_mode = GetTransMode();
 
         int ret = umq_init(&umq_config);
         if (ret != 0) {
