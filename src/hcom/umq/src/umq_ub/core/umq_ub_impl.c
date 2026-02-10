@@ -416,13 +416,13 @@ uint8_t *umq_ub_ctx_init_impl(umq_init_cfg_t *cfg)
             continue;
         }
 
+        if (total_io_buf_size == 0) {
+            total_io_buf_size = info->mem_cfg.total_size;
+        }
+
         if (info->dev_info.assign_mode == UMQ_DEV_ASSIGN_MODE_DUMMY) {
             UMQ_VLOG_INFO("device info assign_mode is dummy, skip it\n");
             continue;
-        }
-
-        if (total_io_buf_size == 0) {
-            total_io_buf_size = info->mem_cfg.total_size;
         }
 
         g_ub_ctx[g_ub_ctx_count].remote_imported_info = umq_ub_ctx_imported_info_create();
