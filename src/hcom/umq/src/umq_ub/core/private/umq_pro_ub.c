@@ -440,6 +440,7 @@ int umq_ub_post_rx_inner_impl(ub_queue_t *queue, umq_buf_t *qbuf, umq_buf_t **ba
             *bad_qbuf = (umq_buf_t *)(uintptr_t)bad_wr->user_ctx;
         } else {
             *bad_qbuf = qbuf;
+            bad_wr = recv_wr;
         }
         umq_ub_rq_posted_notifier_update(&queue->flow_control, queue,
                                          umq_ub_post_rx_failed_num(recv_wr, wr_index, *bad_qbuf));
@@ -771,17 +772,18 @@ int umq_ub_poll_tx(uint64_t umqh, umq_buf_t **buf, uint32_t buf_count)
     int32_t qbuf_cnt = 0;
     for (int i = 0; i < tx_cr_cnt; i++) {
         if (cr[i].status != URMA_CR_SUCCESS) {
-            UMQ_LIMIT_VLOG_ERR("UB TX reports cr[%d] status[%d] jetty_id[%u]\n", i, cr[i].status, cr[i].local_id);
             if (cr[i].status == URMA_CR_WR_FLUSH_ERR_DONE) {
+                UMQ_LIMIT_VLOG_INFO("UB TX reports cr[%d] status[%d] jetty_id[%u]\n", i, cr[i].status, cr[i].local_id);
                 if (queue->state == QUEUE_STATE_ERR) {
                     queue->tx_flush_done = true;
                 }
                 continue;
             }
             if (cr[i].status == URMA_CR_WR_SUSPEND_DONE) {
+                UMQ_LIMIT_VLOG_INFO("UB TX reports cr[%d] status[%d] jetty_id[%u]\n", i, cr[i].status, cr[i].local_id);
                 continue;
             }
-
+            UMQ_LIMIT_VLOG_ERR("UB TX reports cr[%d] status[%d] jetty_id[%u]\n", i, cr[i].status, cr[i].local_id);
             // recover flow control window and rx_posted
             if (cr[i].user_ctx == 0) {
                 queue->flow_control.remote_get = false;
