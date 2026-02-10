@@ -122,9 +122,11 @@ int ConfigSettings::ParseEnvVars()
                 RPC_ADPT_VLOG_ERR("Eid is invalid. Please double check your input(%s)\n", m_src_eid_str);
                 return -1;
             }
-        } 
+        }
+    } else {
+        RPC_ADPT_VLOG_WARN("No device information is provided, such as device IP or device name\n");
     }
-    
+
     RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_EID_IDX, m_eid_idx);
     RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_TX_DEPTH, m_tx_depth);
 

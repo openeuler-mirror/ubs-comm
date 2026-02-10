@@ -2916,16 +2916,16 @@ private:
         }
 
         m_rx.m_window_size -= poll_num;
-        if (m_rx_window_capacity - m_rx.m_window_size > m_rx.m_refill_threshold) {
+        if (poll_num > 0) {
             umq_alloc_option_t option = { UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(IOBuf::Block) };
-            umq_buf_t *rx_buf_list = umq_buf_alloc(BrpcIOBufSize(), m_rx.m_refill_threshold, UMQ_INVALID_HANDLE,
+            umq_buf_t *rx_buf_list = umq_buf_alloc(BrpcIOBufSize(), poll_num, UMQ_INVALID_HANDLE,
                                                    &option);
             /* do nothing when failure occurs during refilling RX,
              * try to switch to tcp/ip until poll_num & m_rx.m_window_size both equal to zero */
             if (rx_buf_list != nullptr) {
                 umq_buf_t *bad_qbuf = nullptr;
                 if (umq_post(m_local_umqh, rx_buf_list, UMQ_IO_RX, &bad_qbuf) == UMQ_SUCCESS) {
-                    m_rx.m_window_size += m_rx.m_refill_threshold;
+                    m_rx.m_window_size += poll_num;
                 } else if ((m_rx.m_window_size += HandleBadQBuf(rx_buf_list, bad_qbuf)) == 0) {
                     return -1;
                 }
