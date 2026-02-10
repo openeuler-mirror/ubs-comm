@@ -50,8 +50,6 @@ TEST_F(BrpcBondingAdapterTest, TestSetDeviceInfoSucceed)
 
     EXPECT_EQ(context->GetDevNameStr(), nullptr);
     EXPECT_EQ(context->GetDevIpStr(), nullptr);
-    EXPECT_EQ(context->IsBonding(), true);
-    EXPECT_EQ(memcmp(context->m_src_eid.raw, eid.raw, sizeof(eid.raw)), 0);
 
     delete context;
     context = nullptr;
@@ -78,7 +76,6 @@ TEST_F(BrpcBondingAdapterTest, TestGetDeviceInfoFailed)
 
     EXPECT_EQ(context->GetDevNameStr(), nullptr);
     EXPECT_EQ(context->GetDevIpStr(), nullptr);
-    EXPECT_EQ(context->IsBonding(), true);
     EXPECT_EQ(context->m_socket_fd_trans_mode, ConfigSettings::socket_fd_trans_mode::SOCKET_FD_TRANS_MODE_TCP);
 
     delete context;
@@ -115,7 +112,6 @@ TEST_F(BrpcBondingAdapterTest, TestGetEidFailed)
 
     EXPECT_EQ(context->GetDevNameStr(), nullptr);
     EXPECT_EQ(context->GetDevIpStr(), nullptr);
-    EXPECT_EQ(context->IsBonding(), true);
     EXPECT_EQ(context->m_socket_fd_trans_mode, ConfigSettings::socket_fd_trans_mode::SOCKET_FD_TRANS_MODE_TCP);
 
     delete context;

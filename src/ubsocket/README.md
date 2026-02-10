@@ -43,7 +43,7 @@ sysctl -p
 ### 2.2 编译
 
 `UBSocket`归属于在`UBS Comm`项目，使用了该项目的部分公共能力，故需要分两部分编译。进行源码编译前，请先下载`UBS Comm`源码，并切换到目标分支或tag。
-
+#### 2.2.1 cmake编译
 ```shell
 # 编译UMQ
 cd ubs-comm/src/hcom/umq
@@ -79,6 +79,24 @@ make -j32
 > 说明：
 >
 > 在编译UBSocket时，可以通过`-DUMQ_INCLUDE=/path/to/umq_include -DUMQ_LIB=/path/to/umq_lib`来指定umq的头文件和lib库文件路径（如`=-DUMQ_INCLUDE=/prefix/ubs-comm/src/hcom/umq/include/umq/  -DUMQ_LIB=/prefix/ubs-comm/src/hcom/umq/build/src/libumq.so`）。
+#### 2.2.2 bazel编译
+> 说明：
+>
+>下面编译是在蓝区外网环境下执行，因为会自动下载涉及组件和一些校验，内网环境条件执行需要进行bazel相关环境配置。
+```shell
+# bazel编译ubsocket（将ubsocket和umq一次编译出来）
+# 进入ubs-comm根目录之后，执行下面命令开始bazel编译
+bazel build --jobs=8  //src:release_package --verbose_failures --noenable_bzlmod
+```
+> 说明：
+>
+>编译出的产物在根目录bazel-bin/src目录下，产物libubsocket.so（libboundcheck与ubsocket编译在了一起，是一个so产物libubsocket.so）。
+
+`umq` 的so产物路径:
+- libumq.so    ->   ubs-comm/bazel-bin/src
+- libumq_ub.so ->   ubs-comm/bazel-bin/src/hcom/umq/src/umq_ub
+- libumq_ipc.so->   ubs-comm/bazel-bin/src/hcom/umq/src/umq_ipc
+- libumq_buf.so->   ubs-comm/bazel-bin/src/hcom/umq/src/qbuf
 
 ### 2.3 使用
 
@@ -106,16 +124,16 @@ RPC_ADPT_READV_UNLIMITED=true \
 | 名称                       | 含义                   | 取值范围                                                     | 默认值  | 必填                               |
 | :------------------------- | :--------------------- | :----------------------------------------------------------- | :------ |----------------------------------|
 | RPC_ADPT_TRANS_MODE        | 通信协议               | ub，ib                                                       | ub      | 否                                |
-| RPC_ADPT_DEV_NAME          | 设备名称               | 根据实际场景填写设备名称；例如，udma2或者bonding_dev_0       | NA      | 是，使用bonding设备时可以不填               |
+| RPC_ADPT_DEV_NAME          | 设备名称               | 根据实际场景填写设备名称；例如，udma2或者bonding_dev_0       |  自动获得当前环境bonding设备名称，如bonding_dev_xx    | 否               |
 | RPC_ADPT_DEV_IP            | 设备名称               | 根据实际场景填写，支持ipv6和ipv4写法。`ub协议下不需要填写`   | NA      | 否                                |
-| RPC_ADPT_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | `RPC_ADPT_DEV_NAME`为普通设备时必填      |
-| RPC_ADPT_SRC_EID           | 使用bonding设备的eid   | ub协议下，通过`urma_admin show`命令查询获得                  | NA      | `RPC_ADPT_DEV_NAME`为bonding设备时必填 |
+| RPC_ADPT_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | 否      |
+| RPC_ADPT_SRC_EID           | 使用bonding设备的eid   | ub协议下，通过`urma_admin show`命令查询获得                  | 自动获得当前环境bonding设备的eid      | 否 |
 | RPC_ADPT_LOG_LEVEL         | 日志级别               | emerg，alert，crit，err，warn，notice，info，debug           | info    | 否                                |
 | RPC_ADPT_LOG_USE_PRINTF    | 是否将日志打印到前台   | 0，1                                                         | 0       | 否                                |
 | RPC_ADPT_TX_DEPTH          | 发送队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfs_depth`两者的最小值） | 1024     | 否                                |
-| RPC_ADPT_RX_DEPTH          | 接受队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfr_depth`两者的最小值） | 1024     | 否                                |
+| RPC_ADPT_RX_DEPTH          | 接受队列深度           | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfs_depth`两者的最小值） | 1024     | 否                                |
 | RPC_ADPT_READV_UNLIMITED   | 是否打开readv上报限制  | false，true                                                  | true   | 否                                |
-| RPC_ADPT_BLOCK_TYPE        | 内存池的最小分片       | default，small，medium，large                                | default | 否                                |
+| RPC_ADPT_BLOCK_TYPE        | 内存池的最小分片       | default，large                                | default | 否                                |
 | RPC_ADPT_POOL_INITIAL_SIZE | IO内存的总大小，单位MB | 应用按需配置                                                 | 1024    | 否                                |
 | RPC_ADPT_UB_FORCE | 是否强制使用UB协议加速TCP | 0：不强制用UB加速TCP 1：强制用UB加速TCP                                                | 0    | 否                                |
 | RPC_SCHEDULE_POLICY | 设置多平面负载分担策略 | affinity，rr                                                | affinity   | 否                                |
