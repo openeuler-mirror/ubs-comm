@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <thread>
 #include "file_descriptor.h"
 #include "brpc_configure_settings.h"
 #include "brpc_iobuf_adapter.h"
@@ -295,6 +296,8 @@ class Context : public Brpc::ConfigSettings {
 
         SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_UMQ);
 
+        m_asyncEventThread = std::thread(&Context::AsyncEventProcess, this, umq_config);
+
         if (m_stats_enable) {
             // Get global statistics manager to invoke construction
             (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr();
@@ -308,6 +311,11 @@ class Context : public Brpc::ConfigSettings {
 
     virtual ~Context()
     {
+        m_asyncEventThreadStopFlag.store(true);
+        if (m_asyncEventThread.joinable()) {
+            m_asyncEventThread.join();
+        }
+
         m_socket_fd_trans_mode = SOCKET_FD_TRANS_MODE_UNSET;
         auto start = std::chrono::high_resolution_clock::now();
         while (m_ref.load() > 0) {
@@ -346,6 +354,9 @@ class Context : public Brpc::ConfigSettings {
     // 获得当前进程socketID
     int GetCurrentProcessSocketId();
 
+    void AsyncEventProcess(umq_init_cfg_t cfg);
+    void AsyncEventHandle(const umq_async_event_t *av);
+
     static const char* CPU_LIST_PREFIX_PATH;
     static const char* CPU_LIST_SUFFIX_PATH;
     static const char* SOCKET_ID_PERFIX_PATH;
@@ -360,8 +371,12 @@ class Context : public Brpc::ConfigSettings {
     int m_process_socket_id = -1;
     std::vector<uint32_t> m_socket_ids;
     static std::atomic<int> m_shmNameSeq;
-};     
 
-}
+    // AE 事件处理
+    std::thread m_asyncEventThread;
+    std::atomic<bool> m_asyncEventThreadStopFlag{false};
+};
+
+}  // namespace Brpc
 
 #endif

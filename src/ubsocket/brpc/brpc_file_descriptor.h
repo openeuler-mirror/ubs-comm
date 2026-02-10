@@ -702,10 +702,7 @@ public:
             // currently, umq over IB return IB cr status directly, successful = 0
             if (buf[i]->status != 0) {
                 if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
-                    RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf[i]->status);
-                    QBUF_LIST_NEXT(buf[i]) = nullptr;
-                    umq_buf_free(buf[i]);
-                    continue;
+                    HandleErrorRxCqe(buf[i]);
                 } else {
                     m_rx.m_window_size += 1;
                     // try to wake up tx if necessary
@@ -713,11 +710,11 @@ public:
                     if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
                         RPC_ADPT_VLOG_ERR("write event fd%fd failed, errno: %d\n", m_event_fd, errno);
                     }
-
-                    QBUF_LIST_NEXT(buf[i]) = nullptr;
-                    umq_buf_free(buf[i]);
-                    continue;
                 }
+
+                QBUF_LIST_NEXT(buf[i]) = nullptr;
+                umq_buf_free(buf[i]);
+                continue;
             }
 
             m_rx.m_block_cache.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
@@ -2086,6 +2083,24 @@ public:
         m_bind_remote = input;
     }
 
+    // 逻辑关闭, 实际关闭得等到 read/readv 读取到 EOF.
+    ALWAYS_INLINE void Close()
+    {
+        // 快速退出, 如果 brpc-adapter 正好在 readv/writev 中可以不经过一次 epoll_wait.
+        m_closed.store(true, std::memory_order_relaxed);
+
+        // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
+        // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
+        OsAPiMgr::GetOriginApi()->shutdown(m_fd, SHUT_RD);
+        RPC_ADPT_VLOG_DEBUG("closing socket fd=%d\n", m_fd);
+    }
+
+    // 收端异常 CQE 错误处理.
+    void HandleErrorRxCqe(umq_buf_t *buf);
+
+    // 发端异常 CQE 错误处理.
+    void HandleErrorTxCqe(umq_buf_t *buf);
+
     void *operator new(std::size_t size)
     {
         void *ptr = nullptr;
@@ -2123,13 +2138,16 @@ private:
         memset_s(&queue_cfg, sizeof(queue_cfg), 0, sizeof(queue_cfg));
         queue_cfg.trans_mode = context->GetTransMode();
         queue_cfg.create_flag = UMQ_CREATE_FLAG_TX_DEPTH | UMQ_CREATE_FLAG_RX_DEPTH |
-            UMQ_CREATE_FLAG_RX_BUF_SIZE | UMQ_CREATE_FLAG_TX_BUF_SIZE | UMQ_CREATE_FLAG_QUEUE_MODE;
+            UMQ_CREATE_FLAG_RX_BUF_SIZE | UMQ_CREATE_FLAG_TX_BUF_SIZE | UMQ_CREATE_FLAG_QUEUE_MODE |
+            UMQ_CREATE_FLAG_UMQ_CTX;
         queue_cfg.rx_depth = context->GetRxDepth();
         queue_cfg.tx_depth = context->GetTxDepth();
         queue_cfg.rx_buf_size = BrpcIOBufSize();
         queue_cfg.tx_buf_size = BrpcIOBufSize();
-        queue_cfg.mode = UMQ_MODE_INTERRUPT;  
-        
+        queue_cfg.mode = UMQ_MODE_INTERRUPT;
+        // 共享 JFR、AE 事件依赖 umq_ctx.
+        queue_cfg.umq_ctx = m_fd;
+
         int n = snprintf_s(queue_cfg.name, UMQ_NAME_MAX_LEN, UMQ_NAME_MAX_LEN - 1, "fd: %d", m_fd);
         if ((((int)UMQ_NAME_MAX_LEN - 1) < n) || (n < 0)) {
             RPC_ADPT_VLOG_ERR("Failed to set umq name\n");
@@ -2563,6 +2581,7 @@ private:
                 }
 
                 if (buf[i]->status != 0) {
+                    HandleErrorTxCqe(buf[i]);
                     ProcessErrorTxCqe(buf[i]);
                     wr_cnt++;
                     if (m_context_trace_enable) {

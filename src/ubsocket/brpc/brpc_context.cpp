@@ -15,6 +15,8 @@
 #include <dirent.h>
 #include <cstdlib>
 
+#include "urpc_util.h"
+#include "scope_exit.h"
 #include "brpc_file_descriptor.h"
 #include "brpc_context.h"
 #include "ubs_mem/mem_file_descriptor.h"
@@ -218,4 +220,169 @@ int Context::GetCurrentProcessSocketId()
     return GetSocketIdOfCpu(cpu);
 }
 
+void Context::AsyncEventProcess(umq_init_cfg_t cfg)
+{
+    int afd = umq_async_event_fd_get(cfg.trans_info);
+    if (afd == UMQ_INVALID_FD) {
+        RPC_ADPT_VLOG_ERR("Failed to get async fd\n");
+        return;
+    }
+
+    int epfd = OsAPiMgr::GetOriginApi()->epoll_create(1);
+    if (epfd < 0) {
+        RPC_ADPT_VLOG_ERR("Failed to create epoll for async events\n");
+        return;
+    }
+
+    auto guard = ubsocket::MakeScopeExit([epfd] { OsAPiMgr::GetOriginApi()->close(epfd); });
+
+    struct epoll_event interest = {EPOLLIN};
+    int ret = OsAPiMgr::GetOriginApi()->epoll_ctl(epfd, EPOLL_CTL_ADD, afd, &interest);
+    if (ret < 0) {
+        RPC_ADPT_VLOG_ERR("Failed to add epoll event\n");
+        return;
+    }
+
+    struct epoll_event ev[1];
+    while (!m_asyncEventThreadStopFlag.load()) {
+        int nevents = OsAPiMgr::GetOriginApi()->epoll_wait(epfd, ev, 1, 10);
+        if (nevents < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+
+            RPC_ADPT_VLOG_ERR("epoll_wait on async event thread error, errno=%d\n", errno);
+            break;
+        }
+
+        // timed-out
+        if (nevents == 0) {
+            continue;
+        }
+
+        umq_async_event_t av;
+        if (umq_get_async_event(cfg.trans_info, &av) == UMQ_SUCCESS) {
+            AsyncEventHandle(&av);
+            umq_ack_async_event(&av);
+        } else {
+            RPC_ADPT_VLOG_ERR("Spurious wakeup from async fd\n");
+        }
+    }
 }
+
+static void Disconnect(uint64_t umqh)
+{
+    umq_cfg_get_t cfg;
+    int ret = umq_cfg_get(umqh, &cfg);
+    if (ret != UMQ_SUCCESS) {
+        RPC_ADPT_VLOG_ERR("Unable to disconnect, as umq config get error\n");
+        return;
+    }
+
+    // 创建 UMQ 时会将 umq_ctx 设置为 brpc 原生的 socket fd.
+    int fd = static_cast<int>(cfg.umq_ctx);
+
+    ScopedWriteLock lock(Fd<::SocketFd>::GetRWLock());
+    if (auto *sockfd = Fd<::SocketFd>::GetFdObj(fd)) {
+        auto *bfd = static_cast<Brpc::SocketFd *>(sockfd);
+        bfd->Close();
+    }
+}
+
+static void DisconnectAll()
+{
+    ScopedWriteLock lock(Fd<::SocketFd>::GetRWLock());
+    auto *fdmap = Fd<::SocketFd>::GetFdObjMap();
+    for (int i = 0; i < RPC_ADPT_FD_MAX; ++i) {
+        if (auto *bfd = static_cast<Brpc::SocketFd *>(fdmap[i])) {
+            // 排除 tcp listener 等不会使用 umq 加速的 socket.
+            if (bfd->GetLocalUmqHandle() != UMQ_INVALID_HANDLE) {
+                bfd->Close();
+            }
+        }
+    }
+}
+
+void Context::AsyncEventHandle(const umq_async_event_t *av)
+{
+    umq_cfg_get_t cfg;
+    switch (av->event_type) {
+        case UMQ_EVENT_QH_RQ_CQ_ERR:
+        case UMQ_EVENT_QH_SQ_CQ_ERR:
+            Disconnect(av->element.umqh);
+            RPC_ADPT_VLOG_ERR("jfc error: disconnect umqh=%llu\n", av->element.umqh);
+            break;
+
+        case UMQ_EVENT_QH_RQ_ERR:
+            Disconnect(av->element.umqh);
+            RPC_ADPT_VLOG_ERR("jfr error: disconnect umqh=%llu\n", av->element.umqh);
+            break;
+
+        case UMQ_EVENT_QH_RQ_LIMIT:
+            umq_cfg_get(av->element.umqh, &cfg);
+            RPC_ADPT_VLOG_WARN(
+                "jfr queue depth limit: umqh=%llu rx_buf_size=%u tx_buf_size=%u rx_depth=%u tx_depth=%u\n",
+                av->element.umqh, cfg.rx_buf_size, cfg.tx_buf_size, cfg.rx_depth, cfg.tx_depth);
+            break;
+
+        case UMQ_EVENT_QH_ERR:
+            Disconnect(av->element.umqh);
+            RPC_ADPT_VLOG_ERR("jetty error: disconnect umqh=%llu\n", av->element.umqh);
+            break;
+
+        case UMQ_EVENT_QH_LIMIT:
+            RPC_ADPT_VLOG_WARN("jetty limit: Not supported yet.\n");
+            break;
+
+        case UMQ_EVENT_PORT_ACTIVE:
+            RPC_ADPT_VLOG_INFO("port active: port=%d\n", av->element.port_id);
+            break;
+
+        case UMQ_EVENT_PORT_DOWN:
+            DisconnectAll();
+            RPC_ADPT_VLOG_ERR("port down: port=%d\n", av->element.port_id);
+            break;
+
+        case UMQ_EVENT_DEV_FATAL:
+            RPC_ADPT_VLOG_WARN("dev fatal: Not supported yet.\n");
+            break;
+
+        case UMQ_EVENT_EID_CHANGE:
+            RPC_ADPT_VLOG_WARN("eid change: Not supported yet.\n");
+            break;
+
+        case UMQ_EVENT_ELR_ERR:
+            DisconnectAll();
+            RPC_ADPT_VLOG_WARN("entity level error\n");
+            break;
+
+        case UMQ_EVENT_ELR_DONE:
+            RPC_ADPT_VLOG_WARN("entity level done: Not supported yet.\n");
+            break;
+
+        case UMQ_EVENT_OTHER:
+            switch (av->trans_info.dev_info.assign_mode) {
+                case UMQ_DEV_ASSIGN_MODE_IPV4:
+                    RPC_ADPT_VLOG_WARN("Unknown async event occurred: event-type=%d ip-addr=%s\n", av->original_code,
+                                       av->trans_info.dev_info.ipv4.ip_addr);
+                    break;
+
+                case UMQ_DEV_ASSIGN_MODE_IPV6:
+                    RPC_ADPT_VLOG_WARN("Unknown async event occurred: event-type=%d ip-addr=%s\n", av->original_code,
+                                       av->trans_info.dev_info.ipv6.ip_addr);
+                    break;
+
+                case UMQ_DEV_ASSIGN_MODE_EID:
+                    RPC_ADPT_VLOG_WARN("Unknown async event occurred: event-type=%d eid=" EID_FMT "\n",
+                                       av->original_code, EID_ARGS(av->trans_info.dev_info.eid.eid));
+                    break;
+
+                default:
+                    RPC_ADPT_VLOG_ERR("unreachable!\n");
+                    break;
+            }
+            break;
+    }
+}
+
+}  // namespace Brpc
