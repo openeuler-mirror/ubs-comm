@@ -131,8 +131,8 @@ public:
     static const uint64_t CONTROL_PLANE_MAGIC_NUMBER = 0xff52504341445055;
     static const uint8_t CONTROL_PLANE_MAGIC_NUMBER_PREFIX = 0xff;
     static const uint64_t CONTROL_PLANE_MAGIC_NUMBER_BODY = 0x52504341445055;
-    static const uint32_t NEGOTIATE_TIMEOUT_MS = 1000000;
-    static const uint32_t CONTROL_PLANE_TIMEOUT_MS = 1000000;
+    static const uint32_t NEGOTIATE_TIMEOUT_MS = 1000;
+    static const uint32_t CONTROL_PLANE_TIMEOUT_MS = 5000;
 
     static int ValidateMagicNumber(int fd, uint64_t &magic_number, ssize_t &magic_number_recv_size)
     {
@@ -363,14 +363,25 @@ public:
         }
         
         // Allocate local shared memory and map it to m_localTrxShm.addr
-        shm->Malloc(&m_localTrxShm);
-        shm->Map(&m_localTrxShm);
+        int ret = shm->Malloc(&m_localTrxShm);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR("Add shmem connect malloc local shared memory name %p failed, ret %d.\n",
+                m_localTrxShm.name, ret);
+            return -1;
+        }
+
+        ret = shm->Map(&m_localTrxShm);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR("Add shmem connect map local shared memory name %p failed, ret %d.\n",
+                m_localTrxShm.name, ret);
+            return -1;
+        }
 
         memset(reinterpret_cast<char *>(m_localTrxShm.addr), 0, localShmLen);
 
         // Send local Shm info to remote
         local_msg.shmem_length = m_localTrxShm.len;
-        int ret = strncpy_s(local_msg.name, SHM_MAX_NAME_BUFF_LEN, m_localTrxShm.name, SHM_MAX_NAME_BUFF_LEN - 1);
+        ret = strncpy_s(local_msg.name, SHM_MAX_NAME_BUFF_LEN, m_localTrxShm.name, SHM_MAX_NAME_BUFF_LEN - 1);
         if (ret != 0) {
             RPC_ADPT_VLOG_ERR("Add shmem connect copy local shared memory name failed, ret %d.\n", ret);
             shm->Unmap(&m_localTrxShm);
@@ -403,7 +414,12 @@ public:
         }
 
         // Map remote shared memory to m_remoteTrxShm.addr
-        shm->Map(&m_remoteTrxShm);
+        ret = shm->Map(&m_remoteTrxShm);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR("Add shmem connect map remote shared memory name %p failed, ret %d.\n",
+                m_remoteTrxShm.name, ret);
+            return -1;
+        }
 
         AddrInfo localAddInfo {m_localTrxShm.addr, m_localTrxShm.len};
         AddrInfo remoteAddInfo {m_remoteTrxShm.addr, m_remoteTrxShm.len};
@@ -702,6 +718,7 @@ private:
         if (RecvSocketData(new_fd, &remote_msg, sizeof(ExchangeData), CONTROL_PLANE_TIMEOUT_MS) !=
             sizeof(ExchangeData)) {
             RPC_ADPT_VLOG_ERR("Accept shmem connect failed to recv remote exchange data, fd: %d.\n", new_fd);
+            delete socket_fd_obj;
             return -1;
         }
 
@@ -710,11 +727,18 @@ private:
         int ret = strncpy_s(remoteTrxShm.name, SHM_MAX_NAME_BUFF_LEN, remote_msg.name, SHM_MAX_NAME_BUFF_LEN - 1);
         if (ret != 0) {
             RPC_ADPT_VLOG_ERR("Accept shmem connect copy remote shared memory name failed, ret %d.\n", ret);
+            delete socket_fd_obj;
             return -1;
         }
 
         // Map remote shared memory to m_remoteTrxShm.addr
-        shm->Map(&remoteTrxShm);
+        ret = shm->Map(&remoteTrxShm);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR("Accept shmem connect map remote shared memory name %p failed, ret %d.\n",
+                remoteTrxShm.name, ret);
+            delete socket_fd_obj;
+            return -1;
+        }
 
         // Use config to set connectName
         size_t localShmLen = DATA_QUEUE_MAX_SIZE * MB_TO_BYTE;
@@ -724,12 +748,26 @@ private:
         if (!Context::GetContext()->GetShmName(localTrxShm, "accept")) {
             RPC_ADPT_VLOG_ERR("Failed to Get SHM name.\n");
             shm->Unmap(&remoteTrxShm);
+            delete socket_fd_obj;
             return -1;
         }
 
         // Allocate local shared memory and map it to m_localTrxShm.addr
-        shm->Malloc(&localTrxShm);
-        shm->Map(&localTrxShm);
+        ret = shm->Malloc(&localTrxShm);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR("Accept shmem connect malloc local shared memory name %p failed, ret %d.\n",
+                localTrxShm.name, ret);
+            delete socket_fd_obj;
+            return -1;
+        }
+
+        ret = shm->Map(&localTrxShm);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR("Accept shmem connect map local shared memory name %p failed, ret %d.\n",
+                localTrxShm.name, ret);
+            delete socket_fd_obj;
+            return -1;
+        }
 
         memset(reinterpret_cast<char *>(localTrxShm.addr), 0, localShmLen);
 
@@ -741,6 +779,7 @@ private:
             shm->Unmap(&localTrxShm);
             shm->Unmap(&remoteTrxShm);
             shm->Free(&localTrxShm);
+            delete socket_fd_obj;
             return -1;
         }
 
@@ -749,6 +788,7 @@ private:
             shm->Unmap(&localTrxShm);
             shm->Unmap(&remoteTrxShm);
             shm->Free(&localTrxShm);
+            delete socket_fd_obj;
             return -1;
         }
 
@@ -780,6 +820,7 @@ private:
             shm->Unmap(&localTrxShm);
             shm->Unmap(&remoteTrxShm);
             shm->Free(&localTrxShm);
+            delete socket_fd_obj;
             return -1;
         }
 
@@ -790,6 +831,7 @@ private:
             shm->Unmap(&localTrxShm);
             shm->Unmap(&remoteTrxShm);
             shm->Free(&localTrxShm);
+            delete socket_fd_obj;
             return -1;
         }
 

@@ -13,6 +13,7 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <unistd.h>
 #include "file_descriptor.h"
 #include "brpc_configure_settings.h"
 #include "brpc_iobuf_adapter.h"
@@ -90,24 +91,18 @@ class Context : public Brpc::ConfigSettings {
         return m_socket_ids;
     }
 
-    bool GetShmName(Shm& shm, const char* prefix) {
+    bool GetShmName(Shm &shm, const char *prefix)
+    {
         if (!prefix) {
             return false;
         }
 
         uint64_t seq = m_shmNameSeq.fetch_add(1, std::memory_order_relaxed);
-
-        // prefix + seq
-        int written = std::snprintf(
-            shm.name,
-            MAX_REGION_NAME_DESC_LENGTH,
-            "%s%llu",
-            prefix,
-            static_cast<unsigned long long>(seq)
-        );
-
+        pid_t pid = getpid();
+        int written = std::snprintf(shm.name, MAX_REGION_NAME_DESC_LENGTH, "%s_%d_%llu", prefix, static_cast<int>(pid),
+                                    static_cast<unsigned long long>(seq));
         if (written < 0 || static_cast<size_t>(written) >= MAX_REGION_NAME_DESC_LENGTH) {
-            RPC_ADPT_VLOG_ERR("SHM name too long: prefix=\"%s\", seq=%llu", prefix, seq);
+            RPC_ADPT_VLOG_ERR("SHM name too long: prefix=\"%s\", pid=%d, seq=%llu", prefix, pid, seq);
             shm.name[0] = '\0';
             return false;
         }
