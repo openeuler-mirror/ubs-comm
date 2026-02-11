@@ -51,8 +51,8 @@ const char *TransModeConverter(umq_trans_mode_t trans_mode)
 
 namespace BoolVal{
 
-static const char *g_bool_true[] = {"true", "1", nullptr};
-static const char *g_bool_false[] = {"false", "0", nullptr};
+static const char *g_bool_true[] = {"true", nullptr};
+static const char *g_bool_false[] = {"false", nullptr};
 
 static const EnvStrConverter<bool>::EnvStrDef g_bool_def[] = {
     {true,"True",g_bool_true},
