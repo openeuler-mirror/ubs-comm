@@ -13,10 +13,13 @@
 #include "configure_settings.h"
 
 #define BRPC_SYM_STR_LEN_MAX       (128)
+#define DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH          (1024)
 #define ENV_VAR_BRPC_ALLOC_SYM     "RPC_ADPT_BRPC_ALLOC_SYM"
 #define ENV_VAR_BRPC_DEALLOC_SYM   "RPC_ADPT_BRPC_DEALLOC_SYM"
 #define ENV_VAR_READV_UNLIMITED    "RPC_ADPT_READV_UNLIMITED"
 #define ENV_VAR_USE_POLLING        "RPC_ADPT_USE_POLLING"
+#define ENV_VAR_ENABLE_SHARE_JFR   "RPC_ADPT_ENABLE_SHARE_JFR"
+#define ENV_VAR_SHARE_JFR_RX_QUEUE_DEPTH   "RPC_ADPT_SHARE_JFR_RX_QUEUE_DEPTH"
 
 namespace Brpc{
 
@@ -59,6 +62,16 @@ public:
           return m_use_polling;
       }
 
+      bool EnableShareJfr()
+      {
+          return m_enable_share_jfr;
+      }
+
+      uint64_t GetShareJfrRxQueueDepth()
+      {
+          return m_share_jfr_rx_queue_depth;
+      }
+
       protected:
       int ParseEnvVars() override
       {
@@ -88,6 +101,12 @@ public:
 #ifdef UBS_SHM_BUILD_ENABLED
              m_use_polling = true;
 #endif
+
+         if (strlen(m_enable_share_jfr_str) > 0) {
+             m_enable_share_jfr = BoolVal::BoolConverter(m_enable_share_jfr_str);
+             RPC_ADPT_VLOG_INFO("%s: %s (input: %s)\n", ENV_VAR_ENABLE_SHARE_JFR,
+                                BoolVal::BoolConverter(m_enable_share_jfr), m_enable_share_jfr_str);
+         }
          return 0;
       }
 
@@ -109,6 +128,16 @@ public:
         if ((env_ptr = getenv(ENV_VAR_USE_POLLING)) != NULL) {
             ReadEnvVar(env_ptr, m_use_polling_str, sizeof(m_use_polling_str));
         }
+
+        if ((env_ptr = getenv(ENV_VAR_ENABLE_SHARE_JFR)) != nullptr) {
+            ReadEnvVar(env_ptr, m_enable_share_jfr_str, sizeof(m_enable_share_jfr_str));
+        }
+
+        if ((env_ptr = getenv(ENV_VAR_SHARE_JFR_RX_QUEUE_DEPTH)) != nullptr) {
+            uint64_t share_jfr_rx_queue_depth = static_cast<uint64_t>(atoi(env_ptr));
+            m_share_jfr_rx_queue_depth = share_jfr_rx_queue_depth == 0 ? DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH :
+                                                                         share_jfr_rx_queue_depth;
+        }
       }
        
       char m_alloc_sym_str[BRPC_SYM_STR_LEN_MAX] = "";
@@ -118,6 +147,9 @@ public:
       bool m_readv_unlimited = true;
       char m_use_polling_str[BOOL_STR_LEN_MAX] = "";
       bool m_use_polling = false;
+      char m_enable_share_jfr_str[BOOL_STR_LEN_MAX] = "";
+      bool m_enable_share_jfr = false;
+      uint64_t m_share_jfr_rx_queue_depth = DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH;
 }; 
    
 }

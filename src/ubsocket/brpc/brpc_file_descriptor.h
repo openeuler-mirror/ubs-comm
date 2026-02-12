@@ -20,11 +20,13 @@
 #include "umq_pro_api.h"
 #include "umq_errno.h"
 #include "brpc_context.h"
+#include "brpc_share_jfr.h"
 #include "file_descriptor.h"
 #include "configure_settings.h"
 #include "qbuf_list.h"
 #include "buffer_util.h"
 #include "statistics.h"
+#include "share_jfr_common.h"
 #include "cli_message.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
@@ -43,17 +45,26 @@ constexpr uint64_t MASK_DIFF = 1;
 constexpr uint64_t IOBUF_DIFF = 32;
 constexpr uint16_t REFILL_THRESHOLD = 32;
 constexpr int RETRY_NEEDED = 1;
-
-inline bool operator==(const umq_eid_t& a, const umq_eid_t& b) {
-    return ::memcmp(a.raw, b.raw, sizeof(a.raw)) == 0;
-}
-
-inline bool operator!=(const umq_eid_t& a, const umq_eid_t& b) {
-    return !(a==b);
-}
+// to improve the efficiency, do one ack event operation per GET_PER_ACK times get event operation(same as brpc)
+constexpr uint32_t GET_PER_ACK = 32;
+// currently, poll batch use 32 is for the balance of performance and efficiency
+constexpr uint32_t POLL_BATCH_MAX = 32;
 
 namespace Brpc {
 
+// adapt to brpc, brpc IOBuf block use 8k as buffer slice with a 32 bytes head, thus, RX buffer size is 8160
+inline uint32_t BrpcIOBufSize()
+{
+    umq_buf_block_size_t blockType = Context::GetContext()->GetIOBlockType();
+    switch (blockType) {
+        case BLOCK_SIZE_8K:  return SIZE_8K - IOBUF_DIFF;
+        case BLOCK_SIZE_16K: return SIZE_16K - IOBUF_DIFF;
+        case BLOCK_SIZE_32K: return SIZE_32K - IOBUF_DIFF;
+        case BLOCK_SIZE_64K: return SIZE_64K - IOBUF_DIFF;
+        default:
+            return SIZE_8K - IOBUF_DIFF;
+    }
+}
 class FallbackTcpMgr {
 public:
     ALWAYS_INLINE bool TxUseTcp(void)
@@ -76,14 +87,6 @@ protected:
     bool m_tx_use_tcp = false;
     bool m_rx_use_tcp = false;
 }; 
-
-struct UmqEidHash {
-    std::size_t operator()(const umq_eid_t& eid) const noexcept {
-        uint64_t h = *reinterpret_cast<const uint64_t*>(eid.raw);
-        uint64_t l = *reinterpret_cast<const uint64_t*>(eid.raw + 8);
-        return std::hash<uint64_t>{}(h) ^ (std::hash<uint64_t>{}(l) << 1);
-    }
-};
 
 class EidRegistry {
 public:
@@ -222,6 +225,16 @@ public:
             OsAPiMgr::GetOriginApi()->close(m_event_fd);
             m_event_fd = -1;
         }
+
+        if (rxQueue != nullptr) {
+            delete rxQueue;
+            rxQueue = nullptr;
+        }
+
+        if (share_jfr_rx_epoll_event != nullptr && !share_jfr_rx_epoll_event->IsAddEpollEvent()) {
+            delete share_jfr_rx_epoll_event;
+            share_jfr_rx_epoll_event = nullptr;
+        }
     }
 
     ALWAYS_INLINE int GetEventFd(void)
@@ -232,6 +245,11 @@ public:
     ALWAYS_INLINE uint64_t GetLocalUmqHandle(void)
     {
         return m_local_umqh;
+    }
+
+    ALWAYS_INLINE uint64_t GetMainUmqHandle(void)
+    {
+        return m_main_umqh;
     }
 
     ALWAYS_INLINE bool AutoFallbackTCP()
@@ -560,6 +578,8 @@ public:
 
         RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", m_fd);
 
+        PrintQbufPoolInfo();
+
         return 0;
     }
 
@@ -628,19 +648,6 @@ public:
     {
         StatsMgr::GetSocketCLIData(data);
     }
-    // adapt to brpc, brpc IOBuf block use 8k as buffer slice with a 32 bytes head, thus, RX buffer size is 8160
-    uint32_t BrpcIOBufSize()
-    {
-        umq_buf_block_size_t blockType = Context::GetContext()->GetIOBlockType();
-        switch (blockType) {
-            case BLOCK_SIZE_8K:  return SIZE_8K - IOBUF_DIFF;
-            case BLOCK_SIZE_16K: return SIZE_16K - IOBUF_DIFF;
-            case BLOCK_SIZE_32K: return SIZE_32K - IOBUF_DIFF;
-            case BLOCK_SIZE_64K: return SIZE_64K - IOBUF_DIFF;
-            default:
-                return SIZE_8K - IOBUF_DIFF; 
-        }
-    }
 
     uint64_t FloorMask()
     {
@@ -658,13 +665,9 @@ public:
     static const uint32_t SGE_MAX = 6;
     // currently, the upper limit of post batch for umq is 64
     static const uint32_t POST_BATCH_MAX = 64;
-    // currently, poll batch use 32 is for the balance of performance and efficiency  
-    static const uint32_t POLL_BATCH_MAX = 32;
     /* unsolicited bytes use the same setting as brpc
      * accumulated bytes exceed UNSOLICITED_BYTES_MAX will generate a solicited interrupt event at remote */
     static const uint32_t UNSOLICITED_BYTES_MAX = 1048576;
-    // to improve the efficiency, do one ack event operation per GET_PER_ACK times get event operation(same as brpc)
-    static const uint32_t GET_PER_ACK = 32;
     // defaultRX refill threshold. If RX depth less then REFILL_RX_THRESHOLD, then, threshold change to 1
     static const uint16_t REFILL_RX_THRESHOLD = 32;
     /* handle tx(poll tx cqe, set tx signaled, i.e.) when accumulated number equals to m_tx_window_capacity / 8 */
@@ -705,8 +708,10 @@ public:
         if (rx_total_len > 0) {
             return rx_total_len;
         }
-        
-        if (m_rx.m_get_and_ack_event) {
+
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool enable_share_jfr = context == nullptr ? false : context->EnableShareJfr();
+        if (!enable_share_jfr && m_rx.m_get_and_ack_event) {
             if (GetAndAckEvent(UMQ_IO_RX) < 0) {
                 errno = EIO;
                 return -1;
@@ -727,7 +732,7 @@ public:
         umq_buf_t *buf[POLL_BATCH_MAX];
         int poll_num = 0;
         if (m_rx.m_poll) {
-            poll_num = UmqPollAndRefillRx(buf, POLL_BATCH_MAX);
+            poll_num = GetQbuf(buf, POLL_BATCH_MAX);
             if (poll_num < 0) {
                 errno = EIO;
                 return -1;
@@ -2081,6 +2086,12 @@ public:
         }
     }
 
+    ALWAYS_INLINE int RearmShareJfrRxInterrupt()
+    {
+        umq_interrupt_option_t rx_option = { UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX };
+        return umq_rearm_interrupt(m_main_umqh, false, &rx_option);
+    }
+
     ALWAYS_INLINE int RearmRxInterrupt()
     {
         umq_interrupt_option_t rx_option = { UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX };
@@ -2095,6 +2106,14 @@ public:
 
     int PrefillRx()
     {
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool enable_share_jfr = context == nullptr ? false : context->EnableShareJfr();
+        if (enable_share_jfr && !m_need_prefill_rx) {
+            return 0;
+        }
+
+        uint64_t umq_handle = enable_share_jfr ? m_main_umqh : m_local_umqh;
+        m_need_prefill_rx = false;
         uint32_t left_post_rx_num = m_rx_window_capacity;
         uint32_t cur_post_rx_num = 0;
         umq_alloc_option_t option = { UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(IOBuf::Block) };
@@ -2107,7 +2126,7 @@ public:
             }
 
             umq_buf_t *bad_qbuf = nullptr;
-            if (umq_post(m_local_umqh, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
+            if (umq_post(umq_handle, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
                 RPC_ADPT_VLOG_ERR("Failed to post RX buffer, RX depth: %u\n", m_rx_window_capacity);
                 m_rx.m_window_size += HandleBadQBuf(rx_buf_list, bad_qbuf);
                 return -1;
@@ -2176,13 +2195,146 @@ public:
         free(ptr);
     }
 
+    ALWAYS_INLINE int UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
+    {
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool use_polling = context == nullptr ? false : context->GetUsePolling();
+        int poll_num = use_polling ? PollingEpoll::GetInstance().GetAndPopQbuf(m_local_umqh, buf) :
+                                     umq_poll(m_local_umqh, UMQ_IO_RX, buf, max_buf_size);
+        if (poll_num < 0 || (poll_num == 0 && m_rx.m_window_size == 0)) {
+            return -1;
+        }
+
+        m_rx.m_window_size -= poll_num;
+        if (m_rx_window_capacity - m_rx.m_window_size > m_rx.m_refill_threshold) {
+            umq_alloc_option_t option = { UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(IOBuf::Block) };
+            umq_buf_t *rx_buf_list = umq_buf_alloc(BrpcIOBufSize(), m_rx.m_refill_threshold, UMQ_INVALID_HANDLE,
+                                                   &option);
+            /* do nothing when failure occurs during refilling RX,
+             * try to switch to tcp/ip until poll_num & m_rx.m_window_size both equal to zero */
+            if (rx_buf_list != nullptr) {
+                umq_buf_t *bad_qbuf = nullptr;
+                if (umq_post(m_local_umqh, rx_buf_list, UMQ_IO_RX, &bad_qbuf) == UMQ_SUCCESS) {
+                    m_rx.m_window_size += m_rx.m_refill_threshold;
+                } else if ((m_rx.m_window_size += HandleBadQBuf(rx_buf_list, bad_qbuf)) == 0) {
+                    return -1;
+                }
+            }
+        }
+
+        return poll_num;
+    }
+
+    int AddQbuf(umq_buf_t *qbuf)
+    {
+        if (rxQueue == nullptr || rxQueue->Enqueue(qbuf) != 0) {
+            return -1;
+        }
+
+        return 0;
+    }
+
+    void SetShareJfrRxEpollEvent(ShareJfrRxEpollEvent *epoll_event)
+    {
+        share_jfr_rx_epoll_event = epoll_event;
+    }
+
+    ShareJfrRxEpollEvent *GetShareJfrRxEpollEvent() const
+    {
+        return share_jfr_rx_epoll_event;
+    }
+
 private:
     struct CpMsg {
         uint64_t magic_number = CONTROL_PLANE_MAGIC_NUMBER;
         uint64_t queue_bind_info_size;
         uint8_t queue_bind_info[UMQ_BIND_INFO_SIZE_MAX];
     };
-    
+
+    int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
+    {
+        if (rxQueue == nullptr) {
+            return -1;
+        }
+
+        uint32_t i = 0;
+        while (!rxQueue->IsEmpty() && i < max_buf_size) {
+            if (rxQueue->Dequeue(&buf[i]) != 0) {
+                return i + 1;
+            }
+            i++;
+        }
+
+        return i;
+    }
+
+    uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
+    {
+        std::vector<uint64_t> main_umqs;
+        if (!EidUmqTable::Get(*localEid, main_umqs)) {
+            m_need_prefill_rx = true;
+            return umq_create(cfg);
+        }
+
+        if (main_umqs.empty()) {
+            return UMQ_INVALID_HANDLE;
+        }
+
+        return main_umqs.front();
+    }
+
+    uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
+    {
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool enable_share_jfr = context == nullptr ? false : context->EnableShareJfr();
+        if (!enable_share_jfr) {
+            return umq_create(cfg);
+        }
+
+        uint64_t main_umq = GetOrCreateMainUmq(cfg, localEid);
+        if (main_umq == UMQ_INVALID_HANDLE) {
+            RPC_ADPT_VLOG_ERR("Failed to create main umq\n");
+            return UMQ_INVALID_HANDLE;
+        }
+
+        cfg->create_flag |= UMQ_CREATE_FLAG_SHARE_RQ | UMQ_CREATE_FLAG_UMQ_CTX | UMQ_CREATE_FLAG_SUB_UMQ;
+        cfg->share_rq_umqh = main_umq;
+        cfg->umq_ctx = (uint64_t)m_fd;
+        uint64_t sub_umq = umq_create(cfg);
+        if (sub_umq == UMQ_INVALID_HANDLE) {
+            RPC_ADPT_VLOG_ERR("Failed to create sub umq\n");
+            return UMQ_INVALID_HANDLE;
+        }
+
+        EidUmqTable::Add(*localEid, main_umq);
+        MainSubUmqTable::Add(main_umq, sub_umq);
+
+        m_main_umqh = main_umq;
+        uint64_t share_jfr_rx_queue_depth = context == nullptr ? DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH :
+                                                                 context->GetShareJfrRxQueueDepth();
+        rxQueue = new QbufQueue<umq_buf_t *>(share_jfr_rx_queue_depth);
+        return sub_umq;
+    }
+
+    int GetDevEid(char *dev_name, uint32_t eid_idx, umq_eid_t *eid)
+    {
+        umq_dev_info_t umq_dev_info = {};
+        int ret = umq_dev_info_get(dev_name, UMQ_TRANS_MODE_UB, &umq_dev_info);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR("Failed to get device information\n");
+            return -1;
+        }
+
+        for (uint32_t i = 0; i < umq_dev_info.ub.eid_cnt; ++i) {
+            if (umq_dev_info.ub.eid_list[i].eid_index == eid_idx) {
+                *eid = umq_dev_info.ub.eid_list[i].eid;
+                return 0;
+            }
+        }
+
+        return -1;
+    }
+
     int CreateLocalUmq(umq_eid_t *connEid)
     {
         if (m_local_umqh != UMQ_INVALID_HANDLE) {
@@ -2215,6 +2367,7 @@ private:
             return -1;
         }
 
+        umq_eid_t localEid;
         if (context->GetDevIpStr() != nullptr) {
             if (context->IsDevIpv6()) {
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_IPV6;
@@ -2237,10 +2390,16 @@ private:
             if(!context->IsBonding()){
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
                 queue_cfg.dev_info.dev.eid_idx = context->GetEidIdx();
+
+                if (GetDevEid(queue_cfg.dev_info.dev.dev_name, context->GetEidIdx(), &localEid) != 0) {
+                    RPC_ADPT_VLOG_WARN("Failed to get eid by dev name:%s and eid index:%d \n", context->GetDevNameStr(),
+                                       context->GetEidIdx());
+                }
             } else {
                 // init use bonding dev
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
                 queue_cfg.dev_info.eid.eid = *connEid;
+                localEid = *connEid;
             }
         } else {
             if (strcpy_s(queue_cfg.dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, "bonding_dev_0") != EOK) {
@@ -2268,7 +2427,7 @@ private:
             queue_cfg.tp_type = UMQ_TP_TYPE_CTP;
         }
  	 
-        m_local_umqh = umq_create(&queue_cfg);
+        m_local_umqh = CreateSubUmq(&queue_cfg, &localEid);
         if (m_local_umqh == UMQ_INVALID_HANDLE) {
             RPC_ADPT_VLOG_ERR("Failed to execute umq_create failed\n");
             return RETRY_NEEDED;
@@ -2299,7 +2458,36 @@ private:
         
         (void)umq_unbind(m_local_umqh);
         FlushTx();
-        FlushRx();
+
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool enable_share_jfr = context == nullptr ? false : context->EnableShareJfr();
+        enable_share_jfr ? FlushRxQueue() : FlushRx();
+    }
+
+    void FlushRxQueue()
+    {
+        if (rxQueue == nullptr) {
+            return;
+        }
+
+        while (!rxQueue->IsEmpty()) {
+            umq_buf_t *buf[1];
+            if (rxQueue->Dequeue(buf) != 0) {
+                return;
+            }
+            umq_buf_free(buf[0]);
+        }
+    }
+
+    void DeleteSubUmq()
+    {
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool enable_share_jfr = context == nullptr ? false : context->EnableShareJfr();
+        if (!enable_share_jfr) {
+            return;
+        }
+
+        MainSubUmqTable::RemoveSubUmq(m_main_umqh, m_local_umqh);
     }
 
     void DestroyLocalUmq(void)
@@ -2307,6 +2495,7 @@ private:
         if (m_local_umqh != UMQ_INVALID_HANDLE) {
             // need to flush
             (void)umq_destroy(m_local_umqh);
+            DeleteSubUmq();
             m_local_umqh = UMQ_INVALID_HANDLE;
             Context::FetchSub();
         }
@@ -2443,6 +2632,23 @@ private:
         }
 
         return 0;
+    }
+
+    void PrintQbufPoolInfo()
+    {
+        umq_user_ctl_in_t in = {
+            .opcode = 1,
+        };
+
+        umq_qbuf_pool_info_t qbuf_pool_info;
+        umq_user_ctl_out_t out = {
+            .addr = (uint64_t)(uintptr_t)&qbuf_pool_info,
+            .len = sizeof(umq_qbuf_pool_info_t),
+        };
+
+        umq_user_ctl(m_main_umqh, &in, &out);
+        uint64_t size_with_data = qbuf_pool_info.available_mem.split.size_with_data;
+        RPC_ADPT_VLOG_INFO("UMQ qbuf pool available buf size in data area: %lu \n", size_with_data);
     }
 
     int DoUbAccept(int new_fd, umq_eid_t &connEid, SocketFd *socket_fd_obj)
@@ -2608,6 +2814,8 @@ private:
         }
 
         RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
+
+        PrintQbufPoolInfo();
 
         return 0;  
     }
@@ -2894,31 +3102,17 @@ private:
         return 0;
     }
 
-    ALWAYS_INLINE int UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
+    ALWAYS_INLINE int GetQbuf(umq_buf_t **buf, uint32_t max_buf_size)
     {
         Brpc::Context *context = Brpc::Context::GetContext();
-        bool use_polling = context == nullptr ? false : context->GetUsePolling();
-        int poll_num = use_polling ? PollingEpoll::GetInstance().GetAndPopQbuf(m_local_umqh, buf) :
-                                     umq_poll(m_local_umqh, UMQ_IO_RX, buf, max_buf_size);
-        if (poll_num < 0 || (poll_num == 0 && m_rx.m_window_size == 0)) {
-            return -1;
+        bool enable_share_jfr = context == nullptr ? false : context->EnableShareJfr();
+        if (!enable_share_jfr) {
+            return UmqPollAndRefillRx(buf, max_buf_size);
         }
 
-        m_rx.m_window_size -= poll_num;
-        if (m_rx_window_capacity - m_rx.m_window_size > m_rx.m_refill_threshold) {
-            umq_alloc_option_t option = { UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(IOBuf::Block) };
-            umq_buf_t *rx_buf_list = umq_buf_alloc(BrpcIOBufSize(), m_rx.m_refill_threshold, UMQ_INVALID_HANDLE,
-                                                   &option);
-            /* do nothing when failure occurs during refilling RX,
-             * try to switch to tcp/ip until poll_num & m_rx.m_window_size both equal to zero */
-            if (rx_buf_list != nullptr) {
-                umq_buf_t *bad_qbuf = nullptr;
-                if (umq_post(m_local_umqh, rx_buf_list, UMQ_IO_RX, &bad_qbuf) == UMQ_SUCCESS) {
-                    m_rx.m_window_size += m_rx.m_refill_threshold;
-                } else if ((m_rx.m_window_size += HandleBadQBuf(rx_buf_list, bad_qbuf)) == 0) {
-                    return -1;
-                }
-            }
+        int poll_num = GetAndPopQbuf(buf, max_buf_size);
+        if (poll_num < 0) {
+            return -1;
         }
 
         return poll_num;
@@ -3240,16 +3434,20 @@ private:
 
     //common fields
     uint64_t m_local_umqh = UMQ_INVALID_HANDLE;
+    uint64_t m_main_umqh = UMQ_INVALID_HANDLE;
     uint16_t m_tx_window_capacity = 0; // the capacity of TX window size 
     uint16_t m_rx_window_capacity = 0; // the capacity of RX window size
     bool m_bind_remote = false; // indicate whether to enable stats manager when umq is created and bound successfully
     bool m_context_trace_enable = false;
+    bool m_need_prefill_rx = false;
     std::atomic<bool> m_closed{false};
     int m_event_fd;
     int mPeerSocketId = -1;
     EidRegistry mEidRegistry;
     bool m_isblocking = true;
     RouteListRegistry mRouteListRegistry;
+    QbufQueue<umq_buf_t *> *rxQueue = nullptr;
+    ShareJfrRxEpollEvent *share_jfr_rx_epoll_event = nullptr;
 
     // TX fields
     struct alignas(CACHE_LINE_ALIGNMENT) TxDataPlane {
@@ -3378,6 +3576,29 @@ public:
     
     virtual ~UmqRxEpollEvent() {}
 
+    int GetAndAckEvent()
+    {
+        SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_origin_fd);
+        if (socket_fd_obj == nullptr) {
+            return -1;
+        }
+
+        umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX};
+        int events = umq_get_cq_event(socket_fd_obj->GetLocalUmqHandle(), &option);
+        if (events == 0) {
+            return 0;
+        } else if (events < 0) {
+            return -1;
+        }
+
+        if ((m_event_num += events) >= GET_PER_ACK) {
+            umq_ack_interrupt(socket_fd_obj->GetLocalUmqHandle(), m_event_num, &option);
+            m_event_num = 0;
+        }
+
+        return 0;
+    }
+
     virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
                                                 bool use_polling = false) override
     {
@@ -3386,11 +3607,38 @@ public:
             socket_fd_obj->NewRxEpollIn();
         }
 
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool enable_share_jfr = context == nullptr ? false : context->EnableShareJfr();
+        if (socket_fd_obj == nullptr || !enable_share_jfr) {
+            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+        }
+
+        if (GetAndAckEvent() < 0) {
+            RPC_ADPT_VLOG_ERR("Get and ack sub umq failed, socket fd:%d \n", m_origin_fd);
+            return -1;
+        }
+
+        umq_buf_t *buf[POLL_BATCH_MAX];
+        int poll_num = umq_poll(socket_fd_obj->GetLocalUmqHandle(), UMQ_IO_RX, buf, POLL_BATCH_MAX);
+        if (poll_num <= 0) {
+            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+        }
+
+        for (int i = 0; i < poll_num; ++i) {
+            if (buf[i]->status != 0) {
+                if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
+                    socket_fd_obj->HandleErrorRxCqe(buf[i]);
+                }
+                umq_buf_free(buf[i]);
+            }
+        }
+
         return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
     }
 
 private:
     int m_origin_fd = -1;
+    uint16_t m_event_num = 0;
 };
 
 class EpollEvent : public ::EpollEvent {
@@ -3663,7 +3911,12 @@ class EpollFd : public ::EpollFd {
 public:
     EpollFd(int epoll_fd) : ::EpollFd(epoll_fd) {}
     
-    virtual ~EpollFd() {}
+    virtual ~EpollFd()
+    {
+        for (std::pair<int, ShareJfrRxEpollEvent *> kv : m_share_jfr_epoll_event_map) {
+            delete kv.second;
+        }
+    }
 
     virtual ALWAYS_INLINE int EpollCtlAdd(int fd, struct epoll_event *event, bool use_polling = false) override
     {
@@ -3687,6 +3940,7 @@ public:
         EpollEvent *epoll_event = nullptr;
         try {
             epoll_event = new EpollEvent(fd, event);
+            CreateAndAddShareJfrEpollEvent(fd, event);
         } catch (std::exception& e) {
             RPC_ADPT_VLOG_ERR("%s\n", e.what());
             return -1;
@@ -3701,8 +3955,124 @@ public:
 
         return 0;
     }
-};
 
+    virtual ALWAYS_INLINE int EpollCtlMod(int fd, struct epoll_event *event, bool use_polling = false) override
+    {
+        if (::EpollFd::EpollCtlMod(fd, event, use_polling) < 0) {
+            return -1;
+        }
+
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool enable_share_jfr = context == nullptr ? false : context->EnableShareJfr();
+        if (!enable_share_jfr) {
+            return 0;
+        }
+
+        int share_jfr_fd = GetShareJfrFd(fd);
+        if (share_jfr_fd < 0) {
+            RPC_ADPT_VLOG_ERR("Get share jfr fd failed, epfd: %d, socket fd: %d\n", m_fd, fd);
+            return -1;
+        }
+
+        if (m_share_jfr_epoll_event_map.count(share_jfr_fd) == 0) {
+            RPC_ADPT_VLOG_ERR("Share jfr rx epoll event not exist, epfd: %d, socket fd: %d, share jfr fd:%d \n", m_fd,
+                              fd, share_jfr_fd);
+            return -1;
+        }
+
+        auto share_jfr_rx_epoll_event = m_share_jfr_epoll_event_map[share_jfr_fd];
+        if (share_jfr_rx_epoll_event != nullptr &&
+            share_jfr_rx_epoll_event->ModEpollEvent(m_fd, event, use_polling) != 0) {
+            return -1;
+        }
+
+        return 0;
+    }
+
+private:
+    std::unordered_map<int, ShareJfrRxEpollEvent *> m_share_jfr_epoll_event_map;
+
+    int GetShareJfrFd(int fd)
+    {
+        SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(fd);
+        if (socket_fd_obj == nullptr) {
+            RPC_ADPT_VLOG_ERR("Get socket fd object failed, socket fd: %d\n", fd);
+            return -1;
+        }
+
+        auto main_umq = socket_fd_obj->GetMainUmqHandle();
+        if (main_umq == UMQ_INVALID_HANDLE) {
+            RPC_ADPT_VLOG_ERR("Get main umq handle failed, socket fd: %d\n", fd);
+            return -1;
+        }
+
+        umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX};
+        int share_jfr_fd = umq_interrupt_fd_get(main_umq, &rx_option);
+        if (share_jfr_fd < 0) {
+            RPC_ADPT_VLOG_ERR("Get main umq interrupt fd failed, socket fd: %d\n", fd);
+            return -1;
+        }
+
+        return share_jfr_fd;
+    }
+
+    void CreateAndAddShareJfrEpollEvent(int fd, struct epoll_event *event)
+    {
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool enable_share_jfr = context == nullptr ? false : context->EnableShareJfr();
+        if (!enable_share_jfr) {
+            return;
+        }
+
+        SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(fd);
+        if (socket_fd_obj == nullptr || !socket_fd_obj->GetBindRemote() || socket_fd_obj->UseTcp()) {
+            return;
+        }
+
+        int share_jfr_fd = GetShareJfrFd(fd);
+        if (share_jfr_fd < 0) {
+            errno = EINVAL;
+            throw std::runtime_error("Failed to get RX interrupt fd for main umq\n");
+        }
+
+        if (m_share_jfr_epoll_event_map.count(share_jfr_fd) > 0) {
+            RPC_ADPT_VLOG_DEBUG("share jfr fd:%d add duplicated, epoll fd:%d \n", share_jfr_fd, m_fd);
+            return;
+        }
+
+        if (!(event->events & EPOLLIN)) {
+            return;
+        }
+
+        ShareJfrRxEpollEvent *share_jfr_rx_epoll_event = new ShareJfrRxEpollEvent(fd, event, share_jfr_fd, m_fd,
+                                                                                  socket_fd_obj->GetMainUmqHandle());
+
+        if (share_jfr_rx_epoll_event == nullptr) {
+            return;
+        }
+        socket_fd_obj->SetShareJfrRxEpollEvent(share_jfr_rx_epoll_event);
+
+        if (share_jfr_rx_epoll_event->AddEpollEvent(m_fd) < 0) {
+            RPC_ADPT_VLOG_WARN("Failed to add share jfr RX interrupt fd(%d) for main umq, fd: %d\n",
+                               share_jfr_rx_epoll_event->GetFd(), fd);
+        } else {
+            RPC_ADPT_VLOG_DEBUG("Add share jfr RX interrupt fd(%d) for main umq successful, fd: %d\n",
+                                share_jfr_rx_epoll_event->GetFd(), fd);
+        }
+
+        if (socket_fd_obj->GetBindRemote() && !socket_fd_obj->RxUseTcp()) {
+            if (socket_fd_obj->RearmShareJfrRxInterrupt() < 0) {
+                RPC_ADPT_VLOG_WARN("Failed to rearm share jfr RX interrupt fd(%d) for main umq, fd: %d\n",
+                                   share_jfr_rx_epoll_event->GetFd(), fd);
+            } else {
+                RPC_ADPT_VLOG_DEBUG("Rearm share jfr RX interrupt fd(%d) for main umq successful, fd: %d\n",
+                                    share_jfr_rx_epoll_event->GetFd(), fd);
+            }
+        }
+
+        m_share_jfr_epoll_event_map[share_jfr_fd] = share_jfr_rx_epoll_event;
+    }
+};
 }
 
 #endif

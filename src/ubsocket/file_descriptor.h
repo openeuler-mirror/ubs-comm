@@ -366,6 +366,13 @@ class EpollEvent {
         return 1;
     }
 
+    ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *output_event)
+    {
+        output_event->events = m_event.events;
+        output_event->data = m_event.data;
+        return 1;
+    }
+
     bool IsAddEpollEvent()
     {
         return m_add_epoll_event;
@@ -512,6 +519,15 @@ class EpollFd : public Fd<EpollFd> {
         }
 
         return output_idx;
+    }
+
+    EpollEvent *Find(int fd)
+    {
+        auto iter = m_epoll_event_map.find(fd);
+        if (iter == m_epoll_event_map.end()) {
+            return nullptr;
+        }
+        return dynamic_cast<EpollEvent *>(iter->second);
     }
 
     protected:

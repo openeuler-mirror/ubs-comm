@@ -19,6 +19,7 @@
 #include "brpc_iobuf_adapter.h"
 #include "brpc_dynsym_scanner.h"
 #include "statistics.h"
+#include "share_jfr_common.h"
 #include "umq_types.h"
 #include "ubs_mem/shm.h"
 #include "print_stats_mgr.h"
@@ -323,6 +324,7 @@ class Context : public Brpc::ConfigSettings {
         }
 
         CleanContext();
+        MainSubUmqTable::Clean();
 
         if (m_trace_enable) {
             Statistics::PrintStatsMgr::StopStatsCollection();
