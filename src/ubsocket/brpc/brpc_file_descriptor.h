@@ -29,6 +29,7 @@
 #include "share_jfr_common.h"
 #include "cli_message.h"
 #include "umq_dfx_types.h"
+#include "umq_dfx_api.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
 #define UMQ_BIND_SYNC_MSG       "SYNC_DONE"
@@ -2637,19 +2638,12 @@ private:
 
     void PrintQbufPoolInfo()
     {
-        umq_user_ctl_in_t in = {
-            .opcode = 1,
-        };
-
-        umq_qbuf_pool_info_t qbuf_pool_info;
-        umq_user_ctl_out_t out = {
-            .addr = (uint64_t)(uintptr_t)&qbuf_pool_info,
-            .len = sizeof(umq_qbuf_pool_info_t),
-        };
-
-        umq_user_ctl(m_main_umqh, &in, &out);
-        uint64_t size_with_data = qbuf_pool_info.available_mem.split.size_with_data;
-        RPC_ADPT_VLOG_INFO("UMQ qbuf pool available buf size in data area: %lu \n", size_with_data);
+        umq_qbuf_pool_stats_t qbuf_pool_stats;
+        umq_stats_qbuf_pool_get(m_main_umqh, &qbuf_pool_stats);
+        if (qbuf_pool_stats.num == 1) {
+            uint64_t size_with_data = qbuf_pool_stats.qbuf_pool_info[0].available_mem.split.size_with_data;
+            RPC_ADPT_VLOG_INFO("UMQ qbuf pool available buf size in data area: %lu \n", size_with_data);
+        }
     }
 
     int DoUbAccept(int new_fd, umq_eid_t &connEid, SocketFd *socket_fd_obj)
