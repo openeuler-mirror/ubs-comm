@@ -68,6 +68,22 @@ public:
         inst->table.erase(eid);
     }
 
+    static void RemoveMainUmq(uint64_t main_umq)
+    {
+        EidUmqTable *inst = Instance();
+        std::lock_guard<std::mutex> lock(inst->mutex);
+        for (auto& [key, value] : inst->table) {
+            value.erase(std::remove(value.begin(), value.end(), main_umq), value.end());
+        }
+    }
+
+    static void Clean()
+    {
+        EidUmqTable *inst = Instance();
+        std::lock_guard<std::mutex> lock(inst->mutex);
+        inst->table.clear();
+    }
+
     EidUmqTable(const EidUmqTable&) = delete;
     EidUmqTable& operator=(const EidUmqTable&) = delete;
 
