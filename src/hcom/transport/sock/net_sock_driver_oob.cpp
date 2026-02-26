@@ -1386,6 +1386,7 @@ NResult NetDriverSockWithOOB::HandleNewRequest(SockOpContextInfo &ctx)
         netCtx.mEp.Set(reinterpret_cast<NetAsyncEndpointSock *>(ctx.sock->UpContext()));
         netCtx.mHeader = *(ctx.header);
         netCtx.mOpType = UBSHcomNetRequestContext::NN_RECEIVED;
+        netCtx.extHeaderType = ctx.header->extHeaderType;
         if (ctx.header->immData != NN_NO0) {
             netCtx.mOpType = UBSHcomNetRequestContext::NN_RECEIVED_RAW;
         }

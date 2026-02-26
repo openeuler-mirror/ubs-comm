@@ -283,7 +283,7 @@ private:
             return 1;
         }
 
-        return (mProtocol != UBSHcomServiceProtocol::UBC) ?
+        return (mProtocol != UBSHcomServiceProtocol::UBC && mProtocol != UBSHcomServiceProtocol::TCP) ?
                        1 :
                        (static_cast<uint64_t>(size) + mUserSplitSendThreshold - 1) / mUserSplitSendThreshold;
     }
