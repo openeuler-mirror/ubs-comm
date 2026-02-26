@@ -30,3 +30,7 @@ target_sources(ubsocket_test
 )
 
 add_subdirectory(brpc)
+
+if(UBSOCKET_BUILD_CLI)
+  add_subdirectory(cli)
+endif()
