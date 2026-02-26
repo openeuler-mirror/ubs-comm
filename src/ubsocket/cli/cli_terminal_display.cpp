@@ -87,6 +87,7 @@ void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
     CLIDataHeader header{};
     if (memcpy_s(&header, sizeof(CLIDataHeader), data, headerSize) != 0) {
         CLI_LOG("Failed to memcpy CLIDataHeader\n");
+        return;
     }
     uint32_t SocketNum = header.socketNum;
     uint32_t expectedSize = headerSize + SocketNum * sizeof(CLISocketData);

@@ -144,32 +144,3 @@ int CLIClient::SetSocketTimeout(int sockFd) const
     return 0;
 }
 }
-
-// 1. parser解析出src eid和dst eid 2. 传入函数进行解析和输出
-int main(int argc, char *argv[])
-{
-    Statistics::CLIArgsParser::ParsedArgs args;
-    if (!Statistics::CLIArgsParser::Parse(argc, argv, args)) {
-        return -1;
-    }
-
-    Statistics::CLIClient client("ubscli-", args.pid);
-    Statistics::TerminalDisplay player{};
-    Statistics::CLIMessage response{};
-    if (args.command == Statistics::CLICommand::STAT) {
-        client.Query(args, response);
-        player.DisplaySocketInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        while (args.watch) {
-            sleep(1);
-            client.Query(args, response);
-            player.DisplaySocketInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        }
-    } else if (args.command == Statistics::CLICommand::TOPO) {
-        client.Query(args, response);
-        player.DisplayTopoInfo(reinterpret_cast<umq_route_list_t *>(response.Data()), response.DataLen());
-    } else {
-        CLI_LOG("Invalid command\n");
-    }
-
-    return 0;
-}
