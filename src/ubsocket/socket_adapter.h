@@ -86,19 +86,35 @@ typedef sighandler_t (*signal_api) (int signum, sighandler_t handler);
  * Return: Void
  */
 template <typename ApiType>
-void RecordApi(void *handle, const char *symbol_name, ApiType &symbol)
+void RecordApi(void *handle, const char *symbol_name, ApiType &symbol,
+    ubsocket::util_vlog_level_t  log_level = ubsocket::UTIL_VLOG_LEVEL_ERR)
 {
     (void)dlerror();
     symbol = reinterpret_cast<ApiType>(dlsym(handle, symbol_name));
     char *dlerror_str = dlerror();
     if(!symbol || dlerror_str){
-        if(strcmp(symbol_name, "fcntl64")!=0){
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,  "Failed when looking for '%s', error message: %s\n",
-                symbol_name, (!dlerror_str ? "": dlerror_str));
-        } else {
-            // fcntl64 is not used in most cases, thus, print debug log
-            RPC_ADPT_VLOG_DEBUG("Failed when looking for '%s', error message: %s\n", symbol_name,
-                                (!dlerror_str ? "" : dlerror_str));
+        // fcntl64 is not used in most cases, thus, print debug log
+        if (strcmp(symbol_name, "fcntl64") == 0) {
+            log_level = ubsocket::UTIL_VLOG_LEVEL_DEBUG;
+        }
+        switch (log_level) {
+            case ubsocket::UTIL_VLOG_LEVEL_DEBUG:
+                RPC_ADPT_VLOG_DEBUG("Symbol not found when looking for '%s', message: %s\n",
+                    symbol_name, (!dlerror_str ? "" : dlerror_str));
+                break;
+            case ubsocket::UTIL_VLOG_LEVEL_INFO:
+                RPC_ADPT_VLOG_INFO("Symbol not found when looking for '%s', message: %s\n",
+                    symbol_name, (!dlerror_str ? "" : dlerror_str));
+                break;
+            case ubsocket::UTIL_VLOG_LEVEL_WARN:
+                RPC_ADPT_VLOG_WARN("Symbol not found when looking for '%s', message: %s\n",
+                    symbol_name, (!dlerror_str ? "" : dlerror_str));
+                break;
+            case ubsocket::UTIL_VLOG_LEVEL_ERR:
+            default:
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed when looking for '%s', error message: %s\n",
+                    symbol_name, (!dlerror_str ? "" : dlerror_str));
+                break;
         }
     } else {
          RPC_ADPT_VLOG_DEBUG("Found for '%s()'\n", symbol_name);

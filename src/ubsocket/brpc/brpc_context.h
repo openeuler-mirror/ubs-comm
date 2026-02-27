@@ -153,8 +153,8 @@ class Context : public Brpc::ConfigSettings {
 
         if (m_use_brpc_zcopy) {
             if(GetBrpcAllocSymStr() != nullptr && GetBrpcDeallocSymStr() != nullptr){
-                RecordApi(RTLD_DEFAULT, GetBrpcAllocSymStr(), m_alloc_addr);
-                RecordApi(RTLD_DEFAULT, GetBrpcDeallocSymStr(), m_dealloc_addr);
+                RecordApi(RTLD_DEFAULT, GetBrpcAllocSymStr(), m_alloc_addr, ubsocket::UTIL_VLOG_LEVEL_WARN);
+                RecordApi(RTLD_DEFAULT, GetBrpcDeallocSymStr(), m_dealloc_addr, ubsocket::UTIL_VLOG_LEVEL_WARN);
                 if(m_alloc_addr == nullptr || m_dealloc_addr == nullptr) {
                     RPC_ADPT_VLOG_WARN("Failed to load and replace allocate(%s)/deallocate(%s) "
                                        "function for brpc, try to scan ELF\n",

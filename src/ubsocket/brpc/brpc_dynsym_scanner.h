@@ -45,8 +45,8 @@ public:
     bool ParseBrpcAllocator()
     {
         // Try using symbols that are more likely to be correct
-        RecordApi(RTLD_DEFAULT, BRPC_ALLOC_SYMBOL_DEFAULT, m_alloc_addr);
-        RecordApi(RTLD_DEFAULT, BRPC_DEALLOC_SYMBOL_DEFAULT, m_dealloc_addr);
+        RecordApi(RTLD_DEFAULT, BRPC_ALLOC_SYMBOL_DEFAULT, m_alloc_addr, ubsocket::UTIL_VLOG_LEVEL_WARN);
+        RecordApi(RTLD_DEFAULT, BRPC_DEALLOC_SYMBOL_DEFAULT, m_dealloc_addr, ubsocket::UTIL_VLOG_LEVEL_WARN);
         if (m_alloc_addr != nullptr && m_dealloc_addr != nullptr) {
             RPC_ADPT_VLOG_INFO("Dynamic Symbol Scanner Found: %s(default), "
                                "(butil::iobuf::blockmem_allocate)\n",
