@@ -1239,7 +1239,6 @@ NResult NetDriverSockWithOOB::HandleSockError(Sock *sock)
         mOobServers);
     /* remove ep */
     sock->DecreaseRef();
-    NN_ASSERT_LOG_RETURN(brokenEp.Get() != nullptr, NN_ERROR);
     brokenEp->mState.Set(NEP_BROKEN);
     /* call upper function */
     mEndPointBrokenHandler(brokenEp);

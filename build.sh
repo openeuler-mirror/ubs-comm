@@ -14,7 +14,7 @@
 # (9) HCOM_ENABLE_ARM_KP(optional, default is on) => check kunpeng or not.(on/off)
 # (10) HCOM_TEST_TOOL_PATH(optional) => test tool install path.(mockcpp/gtest/dtfuzz)
 # (11) HCOM_CI_WORKSPACE(optional) => ci workspace, for buildInfo.properties file.
-# (12) HCOM_BUILD_RPM(optional, default is on) => build rpm.(on/off)
+# (12) HCOM_BUILD_RPM(optional, default is off) => build rpm.(on/off)
 # (13) HCOM_BUILD_TOOLS_PERF(optional, default is off) => build rpm.(on/off)
 # (14) HCOM_BUILD_HW_CRC(optional, default is off) => build with hardware based crc.(on/off)
 # (15) BUILD_HCOM(optional, default is ON) => build hcom.(ON/OFF)
@@ -109,6 +109,10 @@ echo "${HCOM_LOG_TAG} hcom build tests: ${HCOM_BUILD_TESTS}"
 # check whether enable unittest, default is off.
 BUILD_HCOM="${BUILD_HCOM:-ON}"
 echo "${HCOM_LOG_TAG} build hcom: ${BUILD_HCOM}"
+
+# check whether enable unittest, default is off.
+HCOM_BUILD_RPM="${HCOM_BUILD_RPM:-off}"
+echo "${HCOM_LOG_TAG} build rpm: ${HCOM_BUILD_RPM}"
 
 # check whether test tools are installed
 if [[ "${HCOM_BUILD_TESTS,,}" == "on" ]]; then
