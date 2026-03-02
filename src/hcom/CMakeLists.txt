@@ -191,7 +191,7 @@ set(HCOM_SRC_INCLUDE_PATH
 
 include_directories(/usr/include/ub/umdk/urma)
 link_directories(/usr/lib64)
-# add_subdirectory(umq/stub/urma)
+add_subdirectory(umq/stub/urma)
 
 file(GLOB_RECURSE HCOM *.cpp *.h)
 file(GLOB_RECURSE HCOM_JNI_SRCS "${HCOM_SRC_DIR}/src/hcom/api/java_sdk/*.cpp"
