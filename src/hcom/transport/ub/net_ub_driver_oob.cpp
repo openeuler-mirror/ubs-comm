@@ -55,6 +55,7 @@ NResult NetDriverUBWithOob::DoInitialize()
                 std::string localPrimaryEid;
                 std::string remotePrimaryEid;
                 NetFunc::NN_GetPrimaryEid(bondingEid, bondingEid, localPrimaryEid, remotePrimaryEid);
+                NN_LOG_DEBUG("Local primary eid: " << localPrimaryEid << ", Remote primary eid: " << remotePrimaryEid);
                 lOpt.Ip(localPrimaryEid);
             }
  	             
