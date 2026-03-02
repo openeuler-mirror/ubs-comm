@@ -375,7 +375,8 @@ public:
         }
         if (uvsRouteList.len == 0) {
             NN_LOG_WARN("uvs_get_route_list returned empty.");
-            return NN_INVALID_PARAM;
+            // return NN_INVALID_PARAM;
+            NN_LOG_DEBUG("continue to try.");
         }
 
         uvs_eid_t uSrcPrimaryEid = {0};
@@ -402,7 +403,7 @@ public:
             NN_LOG_ERROR("invalid url: " << url << ", must be like 127.0.0.1:9981");
             return false;
         }
-        
+
         // ipv6
         size_t colonCount = std::count(url.begin(), url.end(), ':');
         if (colonCount >= NN_NO2) {
