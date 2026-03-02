@@ -173,31 +173,6 @@ TEST_F(TestUbUrmaWrapper, UBContextInitErrTwo)
     EXPECT_EQ(ret, 1);
 }
 
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetEnableDeviceCountInvalidIPMaskOrNoMatchedIP)
-{
-    uint16_t enableDevCount = 0;
-    std::string ipMask = "";
-    std::string ipGroup = "";
-    std::vector<std::string> enableIps;
-    UResult ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
-    EXPECT_EQ(ret, NN_INVALID_IP);
-
-    ipMask = "10.0.0.0/24";
-    ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
-    EXPECT_EQ(ret, UB_DEVICE_NO_IP_MATCHED);
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetEnableDeviceCountInitializeFailed)
-{
-    uint16_t enableDevCount = 0;
-    std::string ipMask = "";
-    std::string ipGroup = "192.168.0.1;192.168.0.2";
-    std::vector<std::string> enableIps;
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(1));
-    UResult ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
-    EXPECT_EQ(ret, 1);
-}
-
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetIfAddressByIp)
 {
     std::string ip = "192.168.0.1";

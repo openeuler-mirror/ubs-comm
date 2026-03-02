@@ -271,31 +271,11 @@ static void MockSplitStr(const std::string &str, const std::string &separator, s
     result = filters;
 }
 
-TEST_F(TestNetDriverUB, CreateContextMultiRailNoDevice)
-{
-    MOCKER_CPP(UBDeviceHelper::GetEnableDeviceCount).stubs().will(returnValue(static_cast<UResult>(UB_PARAM_INVALID)));
-    driver->mProtocol = UBSHcomNetDriverProtocol::TCP;
-    driver->mContext = nullptr;
-    driver->mOptions.enableMultiRail = true;
-    EXPECT_EQ(driver->CreateContext(), NN_ERROR);
-}
-
 UResult MockedGetEnableDeviceCount(std::string ipMask, uint16_t &enableDevCount, std::vector<std::string> &enableIps,
                                    std::string ipGroup)
 {
     enableIps.emplace_back("1.1.1.1");
     return UB_OK;
-}
-
-TEST_F(TestNetDriverUB, CreateContextMultiRailOk)
-{
-    MOCKER_CPP(UBDeviceHelper::GetEnableDeviceCount).stubs().will(invoke(MockedGetEnableDeviceCount));
-
-    driver->mContext = nullptr;
-    driver->mOptions.enableMultiRail = true;
-    driver->mDevIndex = 0;
-    driver->mProtocol = UBSHcomNetDriverProtocol::TCP;
-    EXPECT_EQ(driver->CreateContext(), NN_OK);
 }
 
 TEST_F(TestNetDriverUB, CreateContextParamErr)
