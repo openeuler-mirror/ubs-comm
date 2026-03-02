@@ -298,7 +298,6 @@ void NetDriverUBWithOob::HandleAsyncEvent(urma_async_event_t *event)
             return;
         case URMA_EVENT_EID_CHANGE:
             NN_LOG_ERROR("eid change of driver " << mName);
-            mContext->UpdateGid(mMatchIp);
             return;
         case URMA_EVENT_ELR_ERR:
             NN_LOG_ERROR("elr error of driver " << mName);

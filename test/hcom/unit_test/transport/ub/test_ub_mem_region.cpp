@@ -39,7 +39,7 @@ TestUbMemRegion::TestUbMemRegion() {}
 
 void TestUbMemRegion::SetUp()
 {
-    ctx = new (std::nothrow) UBContext("ubTest", eid);
+    ctx = new (std::nothrow) UBContext("ubTest");
     ASSERT_NE(ctx, nullptr);
     ctx->mUrmaContext = &mUrmaContext;
     ctx->protocol = UBSHcomNetDriverProtocol::UBC;

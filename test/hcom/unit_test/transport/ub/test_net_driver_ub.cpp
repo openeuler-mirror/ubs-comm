@@ -56,7 +56,7 @@ void TestNetDriverUB::SetUp()
 {
     driver = new (std::nothrow) NetDriverUBWithOob(mName, true, UBSHcomNetDriverProtocol::UBC);
     ASSERT_NE(driver, nullptr);
-    ctx = new (std::nothrow) UBContext("ubTest", eid);
+    ctx = new (std::nothrow) UBContext("ubTest");
     ASSERT_NE(ctx, nullptr);
     ctx->mUrmaContext = &mUrmaContext;
     ctx->protocol = UBSHcomNetDriverProtocol::UBC;
@@ -271,32 +271,11 @@ static void MockSplitStr(const std::string &str, const std::string &separator, s
     result = filters;
 }
 
-TEST_F(TestNetDriverUB, CreateContextMultiRailNoDevice)
-{
-    MOCKER_CPP(UBDeviceHelper::GetEnableDeviceCount).stubs().will(returnValue(static_cast<UResult>(UB_PARAM_INVALID)));
-    driver->mProtocol = UBSHcomNetDriverProtocol::TCP;
-    driver->mContext = nullptr;
-    driver->mOptions.enableMultiRail = true;
-    EXPECT_EQ(driver->CreateContext(), NN_ERROR);
-}
-
 UResult MockedGetEnableDeviceCount(std::string ipMask, uint16_t &enableDevCount, std::vector<std::string> &enableIps,
                                    std::string ipGroup)
 {
     enableIps.emplace_back("1.1.1.1");
     return UB_OK;
-}
-
-TEST_F(TestNetDriverUB, CreateContextMultiRailOk)
-{
-    MOCKER_CPP(UBDeviceHelper::GetEnableDeviceCount).stubs().will(invoke(MockedGetEnableDeviceCount));
-    MOCKER_CPP(UBDeviceHelper::GetDeviceByIp).stubs().will(returnValue(static_cast<UResult>(UB_OK)));
-
-    driver->mContext = nullptr;
-    driver->mOptions.enableMultiRail = true;
-    driver->mDevIndex = 0;
-    driver->mProtocol = UBSHcomNetDriverProtocol::TCP;
-    EXPECT_EQ(driver->CreateContext(), NN_OK);
 }
 
 TEST_F(TestNetDriverUB, CreateContextParamErr)
@@ -335,7 +314,6 @@ TEST_F(TestNetDriverUB, CreateContextInitializErr)
     MOCKER(NetFunc::NN_SplitStr).stubs().will(invoke(MockSplitStr));
     MOCKER(FilterIp).stubs().with(any(), outBound(matchIps)).will(returnValue(0));
     MOCKER(UBDeviceHelper::Initialize).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER(UBDeviceHelper::GetDeviceByIp).stubs().will(returnValue(1));
 
     EXPECT_EQ(driver->CreateContext(), NN_ERROR);
     EXPECT_EQ(driver->CreateContext(), NN_ERROR);
@@ -352,7 +330,6 @@ TEST_F(TestNetDriverUB, CreateContextCreateErr)
     MOCKER(NetFunc::NN_SplitStr).stubs().will(invoke(MockSplitStr));
     MOCKER(FilterIp).stubs().with(any(), outBound(matchIps)).will(returnValue(0));
     MOCKER(UBDeviceHelper::Initialize).stubs().will(returnValue(0));
-    MOCKER(UBDeviceHelper::GetDeviceByIp).stubs().will(returnValue(0));
     MOCKER(UBContext::Create).stubs().will(returnValue(1));
 
     EXPECT_EQ(driver->CreateContext(), 1);
@@ -369,7 +346,6 @@ TEST_F(TestNetDriverUB, CreateContextSuccess)
     MOCKER(NetFunc::NN_SplitStr).stubs().will(invoke(MockSplitStr));
     MOCKER(FilterIp).stubs().with(any(), outBound(matchIps)).will(returnValue(0));
     MOCKER(UBDeviceHelper::Initialize).stubs().will(returnValue(0));
-    MOCKER(UBDeviceHelper::GetDeviceByIp).stubs().will(returnValue(0));
     MOCKER(UBContext::Create).stubs().with(any(), any(), outBound(ctx)).will(returnValue(0));
 
     EXPECT_EQ(driver->CreateContext(), 0);
@@ -379,13 +355,11 @@ TEST_F(TestNetDriverUB, CreateContextUbcModeMismatch)
 {
     driver->mContext = nullptr;
     driver->mOptions.SetUbcMode(UBSHcomUbcMode::LowLatency);
-    MOCKER_CPP(&NetDriverUB::GetDeviceByName).stubs().will(returnValue(1));
     EXPECT_EQ(driver->CreateContext(), NN_ERROR);
 }
 
 TEST_F(TestNetDriverUB, CreateContextUbcModeOk)
 {
-    MOCKER_CPP(UBDeviceHelper::GetDeviceByEid).stubs().will(returnValue(static_cast<UResult>(UB_OK)));
     MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_OK)));
 
     driver->mContext = nullptr;
@@ -721,26 +695,6 @@ TEST_F(TestNetDriverUB, SetWorkerGroupsInfo)
     workerGroups.emplace_back(info2);
     EXPECT_EQ(opt.SetWorkerGroupsInfo(workerGroups), true);
     EXPECT_EQ(opt.SetWorkerGroupsInfo(workerGroups2), false);
-}
-
-TEST_F(TestNetDriverUB, GetDeviceByEid)
-{
-    UBEId tmpEid{};
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(UBDeviceHelper::GetDeviceByEid).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(UBDeviceHelper::UnInitialize).stubs().then(ignoreReturnValue());
-
-    driver->mProtocol = UBSHcomNetDriverProtocol::UBC;
-    EXPECT_EQ(driver->GetDeviceByEid(tmpEid), 1);
-    EXPECT_EQ(driver->GetDeviceByEid(tmpEid), 1);
-    EXPECT_EQ(driver->GetDeviceByEid(tmpEid), 0);
-}
-
-TEST_F(TestNetDriverUB, GetDeviceByName)
-{
-    UBEId tmpEid{};
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(1));
-    EXPECT_EQ(driver->GetDeviceByName(tmpEid), 1);
 }
 
 TEST_F(TestNetDriverUB, DestroyMemoryRegion)

@@ -21,6 +21,7 @@ option(BUILD_WITH_SOCK "Build with SOCK" ON)
 option(BUILD_WITH_ALLOCATOR_PROTECTION "Build with allocator protection" OFF)
 option(BUILD_WITH_HTRACER "Build with htracer" ON)
 option(ENABLE_ARM_KP "enable arm kunpeng" OFF)
+option(BUILD_WITH_MULTICAST "Build with multicast" OFF)
 
 if (ENABLE_ARM_KP)
     add_definitions(-DENABLE_ARM_KP)
@@ -184,6 +185,8 @@ set(HCOM_SRC_INCLUDE_PATH
     ${HCOM_SRC_DIR}/src/hcom/transport/ub
     ${HCOM_SRC_DIR}/src/hcom/transport/shm
     ${HCOM_SRC_DIR}/src/hcom/transport/sock
+    ${HCOM_SRC_DIR}/src/hcom/multicast
+    ${HCOM_SRC_DIR}/src/hcom/multicast/include
 )
 
 file(GLOB_RECURSE HCOM *.cpp *.h)
@@ -198,6 +201,7 @@ file(GLOB_RECURSE HCOM_SOCK_SRCS "${HCOM_SRC_DIR}/src/hcom/transport/sock/*")
 file(GLOB_RECURSE HCOM_UB_SRCS 
     "${HCOM_SRC_DIR}/src/hcom/transport/ub/*"
     "${HCOM_SRC_DIR}/src/hcom/under_api/urma/*")
+file(GLOB_RECURSE HCOM_MULTICAST_SRCS "${HCOM_SRC_DIR}/src/hcom/multicast/*")
 
 if(NOT BUILD_WITH_RDMA)
     list(REMOVE_ITEM HCOM ${HCOM_RDMA_COMMON})
@@ -216,6 +220,9 @@ if(NOT BUILD_WITH_UB)
     list(REMOVE_ITEM HCOM ${HCOM_UB_SRCS})
 endif ()
 
+if (NOT BUILD_WITH_MULTICAST)
+    list(REMOVE_ITEM HCOM ${HCOM_MULTICAST_SRCS})
+endif ()
 add_library(hcom_static_obj STATIC ${HCOM})
 target_link_libraries(hcom_static_obj
         -Wl,--start-group
@@ -264,7 +271,12 @@ file(GLOB C_INCLUDE_HEADERS api/capi_v2/hcom_c.h
 set(TARGET_INSTALL_INCLUDE ${CMAKE_INSTALL_PREFIX}/include/hcom)
 set(TARGET_INSTALL_LIB ${CMAKE_INSTALL_PREFIX}/lib)
 
+if (${BUILD_WITH_MULTICAST})
+    file(GLOB MULTICAST_INCLUDE_HEADERS multicast/include/multicast*.h)
+endif ()
+
 install(FILES ${INCLUDE_HEADERS} DESTINATION ${TARGET_INSTALL_INCLUDE} PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ)
+install(FILES ${MULTICAST_INCLUDE_HEADERS} DESTINATION ${TARGET_INSTALL_INCLUDE}/multicast PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ)
 install(FILES ${C_INCLUDE_HEADERS} DESTINATION ${TARGET_INSTALL_INCLUDE}/capi PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ)
 install(FILES ${CMAKE_BINARY_DIR}/src/hcom/libhcom_static.a DESTINATION ${TARGET_INSTALL_LIB}/ PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 install(TARGETS hcom DESTINATION ${TARGET_INSTALL_LIB}/ PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)

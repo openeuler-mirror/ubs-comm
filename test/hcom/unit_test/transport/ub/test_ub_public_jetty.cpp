@@ -35,7 +35,7 @@ public:
 
 void TestUBPublicJetty::SetUp()
 {
-    ctx = new (std::nothrow) UBContext(name, eid);
+    ctx = new (std::nothrow) UBContext(name);
     ASSERT_NE(ctx, nullptr);
     jfc = new (std::nothrow) UBJfc(name, ctx);
     ASSERT_NE(jfc, nullptr);

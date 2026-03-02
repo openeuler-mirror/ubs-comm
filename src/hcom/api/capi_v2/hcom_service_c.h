@@ -287,6 +287,7 @@ typedef struct {
 typedef struct {
     uint64_t keys[4];
     uint64_t tokens[4];
+    uint8_t eid[16];
 } ubs_hcom_oneside_key;
 
 /*
@@ -305,6 +306,11 @@ typedef struct {
     ubs_hcom_oneside_key rKey;
     uint32_t size;
 } ubs_hcom_oneside_request;
+
+typedef struct {
+    ubs_hcom_oneside_request iov[4];
+    uint16_t iovCount;
+} ubs_hcom_onesidesgl_request;
 
 typedef struct {
     uint16_t intervalTimeMs;
@@ -332,6 +338,8 @@ int ubs_hcom_service_connect(ubs_hcom_service service, const char *serverUrl, ub
 int ubs_hcom_service_disconnect(ubs_hcom_service service, ubs_hcom_channel channel);
 
 int ubs_hcom_service_register_memory_region(ubs_hcom_service service, uint64_t size, ubs_hcom_memory_region *mr);
+
+int ubs_hcom_reg_seg(ubs_hcom_service service, uintptr_t address, uint64_t size, ubs_hcom_oneside_key *key);
 
 int ubs_hcom_service_get_memory_region_info(ubs_hcom_memory_region mr, ubs_hcom_mr_info *info);
 
@@ -406,6 +414,8 @@ int ubs_hcom_channel_reply(ubs_hcom_channel channel, ubs_hcom_channel_request re
     ubs_hcom_channel_callback *cb);
 int ubs_hcom_channel_put(ubs_hcom_channel channel, ubs_hcom_oneside_request req, ubs_hcom_channel_callback *cb);
 int ubs_hcom_channel_get(ubs_hcom_channel channel, ubs_hcom_oneside_request req, ubs_hcom_channel_callback *cb);
+int ubs_hcom_channel_putv(ubs_hcom_channel channel, ubs_hcom_onesidesgl_request req, ubs_hcom_channel_callback *cb);
+int ubs_hcom_channel_getv(ubs_hcom_channel channel, ubs_hcom_onesidesgl_request req, ubs_hcom_channel_callback *cb);
 int ubs_hcom_channel_recv(ubs_hcom_channel channel, ubs_hcom_service_context ctx, uintptr_t address, uint32_t size,
     ubs_hcom_channel_callback *cb);
 int ubs_hcom_channel_send_fds(ubs_hcom_channel channel, int fds[], uint32_t len);

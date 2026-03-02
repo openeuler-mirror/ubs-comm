@@ -81,6 +81,7 @@ void PerfTestConfig::Print()
     LOG_DEBUG("protocol = " << mProtocol);
     LOG_DEBUG("mIsTestAllSize = " << mIsTestAllSize);
     LOG_DEBUG("cpuId = " << mCpuId);
+    LOG_DEBUG("ubcMode = " << static_cast<uint32_t>(mUbcMode));
 }
 
 PerfTestConfig::PerfTestConfig()
@@ -94,6 +95,7 @@ PerfTestConfig::PerfTestConfig()
     mProtocol = ock::hcom::RDMA;
     mCpuId = -1;
     mIsTestAllSize = false;
+    mUbcMode = ock::hcom::UBSHcomUbcMode::LowLatency;
 }
 
 bool PerfTestConfig::SetIsServer(const std::string &role)
@@ -141,12 +143,13 @@ bool PerfTestConfig::ParseArgs(int argc, char *argv[])
         {"iters", optional_argument, nullptr, 'n'},
         {"coreId", optional_argument, nullptr, 'c'},
         {"help", no_argument, nullptr, 'h'},
+        {"ubcMode", no_argument, nullptr, 'u'},
         {nullptr, 0, nullptr, 0},
     };
 
     int ret = 0;
     int index = 0;
-    char inputChar[] = "C:R:P:i:p:m:a:s:n:c:h";
+    char inputChar[] = "C:R:P:i:p:m:a:s:n:c:h:u:";
     while ((ret = getopt_long(argc, argv, inputChar, options, &index)) != -1) {
         switch (ret) {
             case 'C':
@@ -188,6 +191,9 @@ bool PerfTestConfig::ParseArgs(int argc, char *argv[])
                 break;
             case 'a':
                 SetIsTestAllSize(true);
+                break;
+            case 'u':
+                SetUbcMode(static_cast<ock::hcom::UBSHcomUbcMode>(strtoul(optarg, nullptr, 0)));
                 break;
             default:
                 break;

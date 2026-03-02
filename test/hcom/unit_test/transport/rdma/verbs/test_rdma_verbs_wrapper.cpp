@@ -63,19 +63,12 @@ TEST_F(TestRdmaVerbsWrapper, DeviceHelperGetEnableDeviceCountWithEmptyMatchIp)
     EXPECT_EQ(result, NN_INVALID_IP);
 }
 
-RResult MockGetDeviceByIp(const std::string &ip, RDMAGId &gid)
-{
-    gid.devIndex = 0;
-    return 0;
-}
-
 TEST_F(TestRdmaVerbsWrapper, DeviceHelperGetEnableDeviceCountWithMatchIp)
 {
     std::vector<std::string> enableIps;
     uint16_t enableCount = 0;
     MOCKER(RDMADeviceHelper::Initialize).stubs().will(returnValue(205)).then(returnValue(0));
     MOCKER_CPP(&FilterIp).stubs().will(invoke(MockFilterIp));
-    MOCKER(RDMADeviceHelper::GetDeviceByIp).stubs().will(invoke(MockGetDeviceByIp));
 
     RResult result = RDMADeviceHelper::GetEnableDeviceCount("192.168.0.0/24", enableCount, enableIps, "");
     EXPECT_EQ(result, RR_DEVICE_FAILED_OPEN);
@@ -171,11 +164,6 @@ TEST_F(TestRdmaVerbsWrapper, Initialize)
         .will(returnValue(static_cast<int>(RR_DEVICE_FAILED_OPEN)))
         .then(returnValue(static_cast<int>(RR_OK)));
     EXPECT_NO_FATAL_FAILURE(ctx.UpdateGid("IP"));
-
-    MOCKER_CPP(RDMADeviceHelper::GetDeviceByIp).stubs()
-        .will(returnValue(static_cast<int>(RR_DEVICE_FAILED_OPEN)))
-        .then(returnValue(static_cast<int>(RR_OK)));
-
     EXPECT_NO_FATAL_FAILURE(ctx.UpdateGid("IP"));
 }
 

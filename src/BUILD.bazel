@@ -1,0 +1,177 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+
+cc_library(
+    name = "boundscheck_lib",
+
+   
+    deps = ["@libboundscheck//:boundscheck",],
+#    linkstatic = True,  # 关键参数：指示生成静态库
+#    alwayslink = 1,     # 关键参数：强制包含所有符号
+)
+
+# 2. 然后，基于上面的库生成共享库
+cc_binary(
+    name = "libboundscheck.so",
+    linkshared = True,  # 关键参数：指示生成共享库
+    deps = [":boundscheck_lib"],  # 依赖上面的库
+    visibility = ["//visibility:public"],
+)
+
+cc_import(
+  name = "libboundscheck",
+#  hdrs = ["mylib.h"],
+  shared_library = ":libboundscheck.so",
+)
+
+cc_import(
+  name = "libumq",
+#  hdrs = ["mylib.h"],
+  shared_library = ":libumq.so",
+)
+
+
+
+cc_binary(
+    name = "libumq.so",
+    linkshared = True,
+    deps = [
+        "//src/hcom/umq/src:umq_lib",
+    ],
+    dynamic_deps = ["//src/hcom/umq/src/qbuf:umq_buf"],
+    visibility = ["//visibility:public"],
+)
+
+
+cc_binary(
+    name = "libubsocket.so",
+    srcs = glob([
+        "ubsocket/*.cpp",
+        "ubsocket/*.c",
+        "ubsocket/brpc/*.cpp",
+    ]) + glob([  # 头文件现在也放在 srcs 里
+        "ubsocket/*.h",
+        "ubsocket/brpc/*.h",
+    ]),
+    copts = [
+        "-D_GNU_SOURCE",
+        "-std=c++14",
+        "-fPIC",
+    ],
+    includes = [".", "ubsocket", "ubsocket/brpc"],
+    deps = [
+        ":boundscheck_lib",  # 依赖 boundscheck 库
+#        ":libumq_buf",
+        "//src/hcom/umq/src:umq_aggregate",
+        ":libumq",
+#        ":libumq_ipc",
+#        ":libumq_ub",
+    ],
+    linkshared = True, 
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "ubsocket",
+    srcs = glob([
+        "ubsocket/*.cpp",
+        "ubsocket/*.c",
+        "ubsocket/brpc/*.cpp",
+    ]) + glob([  # 头文件现在也放在 srcs 里
+        "ubsocket/*.h",
+        "ubsocket/brpc/*.h",
+        "ubsocket/brpc/**/*.h",
+    ]),
+    copts = [
+        "-D_GNU_SOURCE",
+        "-std=c++14",
+        "-fPIC",
+    ],
+    includes = [".", "ubsocket", "ubsocket/brpc"],
+    deps = [
+        ":boundscheck_lib",  # 依赖 boundscheck 库
+        "//src/hcom/umq:umq",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+load("//src/hcom/umq/bazel:copts.bzl", "UMQ_DEFAULT_STATIC_COPTS")
+
+cc_library(
+    name = "ubsocketall",
+    srcs = glob([
+        "src/hcom/umq/src/dfx/*.c",
+        "src/hcom/umq/src/qbuf/*.c",
+        "src/hcom/umq/src/umq_ub/**/*.c",
+        "src/hcom/umq/src/*.c",
+        "src/hcom/umq/util/*.c",
+        "src/hcom/umq/util/*.cpp",
+        "ubsocket/*.cpp",
+        "ubsocket/*.c",
+        "ubsocket/brpc/*.cpp",
+    ]),
+    hdrs = glob([
+        "src/hcom/umq/src/dfx/*.h",
+        "src/hcom/umq/src/qbuf/*.h",
+        "src/hcom/umq/src/umq_ub/**/*.h",
+        "src/hcom/umq/src/*.h",
+        "src/hcom/umq/util/*.h",
+        "ubsocket/*.h",
+        "ubsocket/brpc/*.h",
+    ]),
+    includes = [
+    ".", "ubsocket", "ubsocket/brpc",
+        "src/hcom/umq/src/dfx",
+        "src/hcom/umq/src/qbuf",
+        "src/hcom/umq/src/umq_ub",
+        "src/hcom/umq/src/umq_ub/core",
+        "src/hcom/umq/src/umq_ub/core/flow_control",
+        "src/hcom/umq/src/umq_ub/core/private",
+        "src/hcom/umq/src/umq_ub/core/private",
+        "src/hcom/umq/src",
+        "src/hcom/umq/util",
+    ],
+    copts = UMQ_DEFAULT_STATIC_COPTS + [
+        "-DUMQ_STATIC_LIB",
+    ],
+    linkopts = ["-lpthread"],
+    deps = [
+        "//src/hcom/umq/include:umq_headers",
+        "//src/hcom/umq/include:umq_tp_headers",
+        "//src/hcom/umq/include:umq_ub_headers",
+        "//src/hcom/umq/include/umq:umq_headers",
+        "@openssl//:ssl",
+        "@openssl//:crypto",
+        "@urma//:urma_headers",
+        "@urma//:urma_lib",
+        "@urma//:tpsa_lib",
+        "//src/hcom/umq/include:framework_headers",
+        ":boundscheck_lib",
+    ],
+    features = [
+        "static_library",
+        "-pic",
+        "-supports_pic",
+    ],
+    linkstatic = True,
+)
+
+
+
+
+
+# 4. 聚合目标保持不变
+filegroup(
+    name = "release_package",
+    srcs = [
+        ":libubsocket.so",
+        #":libboundscheck.so",
+        ":libboundscheck",
+        "//src/hcom/umq/src:umq",
+        "//src/hcom/umq/src/qbuf:umq_buf",
+        "//src/hcom/umq/src/umq_ipc:umq_ipc",
+        "//src/hcom/umq/src/umq_ub:umq_ub",
+
+    ],
+    visibility = ["//visibility:public"],
+)

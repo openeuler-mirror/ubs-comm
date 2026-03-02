@@ -16,9 +16,9 @@
 namespace ock {
 namespace hcom {
 
-UResult UBContext::Create(const std::string &name, const UBEId &eid, UBContext *&ctx)
+UResult UBContext::Create(const std::string &name, UBContext *&ctx)
 {
-    auto tmpCtx = new (std::nothrow) UBContext(name, eid);
+    auto tmpCtx = new (std::nothrow) UBContext(name);
     if (tmpCtx == nullptr) {
         return UB_NEW_OBJECT_FAILED;
     }
@@ -27,7 +27,7 @@ UResult UBContext::Create(const std::string &name, const UBEId &eid, UBContext *
     return UB_OK;
 }
 
-UResult UBContext::Initialize()
+UResult UBContext::Initialize(uint8_t &bandWidth)
 {
     if (mUrmaContext != nullptr) {
         NN_LOG_INFO("UBContext " << mName << " already initialized");
@@ -35,37 +35,16 @@ UResult UBContext::Initialize()
     }
 
     UResult ret = UB_OK;
-
-    urma_device_t **devList = nullptr;
-    int devCount = 0;
-    devList = HcomUrma::GetDeviceList(&devCount);
-    if (devList == nullptr) {
-        NN_LOG_ERROR("Failed to call get urma device list for UBContext " << mName << ", errno " << errno);
-        return UB_DEVICE_FAILED_OPEN;
-    }
-    auto guard = MakeScopeExit([&devList]() { HcomUrma::FreeDeviceList(devList); });
-    if (mDevIndex >= devCount) {
-        NN_LOG_ERROR("Invalid device index is set for UBContext " << mName);
-        return UB_DEVICE_INDEX_OVERFLOW;
-    }
-
-    urma_context_t *tmpCtx = nullptr;
-    if ((tmpCtx = HcomUrma::CreateContext(devList[mDevIndex], mEidIndex)) == nullptr) {
-        NN_LOG_ERROR("Invalid device index is set for UBContext " << mName << ", errno " << errno);
-        return UB_DEVICE_OPEN_FAILED;
-    }
-
     mDevAttr = reinterpret_cast<urma_device_attr_t *>(malloc(sizeof(urma_device_attr_t)));
     if (mDevAttr == nullptr) {
-        HcomUrma::DeleteContext(tmpCtx);
         NN_LOG_ERROR("Failed to malloc for urma device attr");
         return UB_MEMORY_ALLOCATE_FAILED;
     }
-    if ((ret = HcomUrma::QueryDevice(devList[mDevIndex], mDevAttr)) != 0) {
-        NN_LOG_ERROR("Failed to query urma device");
+    ret = UBDeviceHelper::Initialize(mDevAttr, mUrmaContext, mBestEid);
+    if (ret != 0) {
+        NN_LOG_ERROR("Failed to initialize urma device");
         free(mDevAttr);
         mDevAttr = nullptr;
-        HcomUrma::DeleteContext(tmpCtx);
         return ret;
     }
     int tmpMaxSge = std::min(mDevAttr->dev_cap.max_jfs_sge, mDevAttr->dev_cap.max_jfr_sge);
@@ -77,8 +56,7 @@ UResult UBContext::Initialize()
 
     mMaxJfr = mDevAttr->dev_cap.max_jfr_depth;
     mMaxJfs = mDevAttr->dev_cap.max_jfs_depth;
-
-    mUrmaContext = tmpCtx;
+    bandWidth = mBestEid.bandWidth;
     return UB_OK;
 }
 
@@ -100,24 +78,6 @@ UResult UBContext::UnInitialize()
     }
     UBDeviceHelper::UnInitialize();
     return UB_OK;
-}
-
-void UBContext::UpdateGid(const std::string &matchIp)
-{
-    auto ret = UBDeviceHelper::Update();
-    if (NN_UNLIKELY(ret != UB_OK)) {
-        NN_LOG_ERROR("Failed to do update");
-        return;
-    }
-
-    UBEId tmpEid{};
-    if ((UBDeviceHelper::GetDeviceByIp(matchIp, tmpEid)) != 0) {
-        NN_LOG_ERROR("Failed to get device by ip " << matchIp);
-        return;
-    }
-
-    NN_LOG_INFO("gid found devIndex " << tmpEid.devIndex << ", gidIndex " << tmpEid.eidIndex);
-    mBestEid = tmpEid;
 }
 } // namespace hcom
 }

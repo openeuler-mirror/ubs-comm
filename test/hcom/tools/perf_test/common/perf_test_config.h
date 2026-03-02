@@ -119,6 +119,16 @@ public:
         return mIpMask;
     }
 
+    ock::hcom::UBSHcomUbcMode GetUbcMode() const
+    {
+        return mUbcMode;
+    }
+
+    void SetUbcMode(ock::hcom::UBSHcomUbcMode ubcMode)
+    {
+        mUbcMode = ubcMode;
+    }
+
 private:
     // 检查参数有效性
     bool SelfCheck();
@@ -134,6 +144,7 @@ private:
     uint64_t mIterations;                   // 测试次数
     uint32_t mSize;                         // 测试的最大包大小
     bool mIsTestAllSize = false;            // 是否测试所有大小的包
+    ock::hcom::UBSHcomUbcMode mUbcMode;     // 低时延/高带宽模式选择
 };
 }
 }

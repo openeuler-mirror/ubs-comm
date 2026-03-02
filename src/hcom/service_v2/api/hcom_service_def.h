@@ -15,6 +15,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include "securec.h"
+
 #include "hcom.h"
 #include "hcom_def.h"
 #include "hcom_num_def.h"
@@ -89,6 +91,7 @@ struct UBSHcomSglRequest {
 struct UBSHcomMemoryKey {
     uint64_t keys[4];
     uint64_t tokens[4];
+    uint8_t eid[16];
 };
 
 struct UBSHcomOneSideRequest {
@@ -102,18 +105,27 @@ struct UBSHcomOneSideRequest {
 struct UBSHcomOneSideSglRequest {
     UBSHcomOneSideRequest *iov  = nullptr;
     uint16_t iovCount = 0;
-};
+
+    inline uint64_t Size() const
+    {
+        if (NN_UNLIKELY(iovCount > NET_SGE_MAX_IOV || iov == nullptr)) {
+            NN_LOG_ERROR("Invalid iov count " << iov << " or iov ptr " << iov);
+            return NN_NO0;
+        }
+
+        uint64_t size = 0;
+        for (uint16_t i = 0; i < iovCount; i++) {
+            size += iov[i].size;
+        }
+        return size;
+    }
+} __attribute__((packed));
 
 struct UBSHcomReplyContext {
     uintptr_t rspCtx = 0;
     int16_t errorCode = 0;
     UBSHcomReplyContext() = default;
     UBSHcomReplyContext(uintptr_t ctx, int16_t errCode) : rspCtx(ctx), errorCode(errCode) {}
-};
-
-struct UBSHcomIov {
-    void *address = nullptr;
-    uint32_t size = 0;
 };
 
 struct UBSHcomServiceOptions {
@@ -192,6 +204,14 @@ public:
             }
             mrKey.keys[i] = mHcomMrs[i]->GetLKey();
             mrKey.tokens[i] = reinterpret_cast<uint64_t>(mHcomMrs[i]->GetMemorySeg());
+        }
+        if (mHcomMrs.size() > 0 && mHcomMrs[0]->GetEidRaw() != nullptr) {
+            auto ret = memcpy_s(mrKey.eid, sizeof(mrKey.eid), mHcomMrs[0]->GetEidRaw(), sizeof(mrKey.eid));
+            if (ret != 0) {
+                NN_LOG_WARN("memcpy eid failed");
+            }
+        } else {
+            NN_LOG_DEBUG("get eid not supported");
         }
     }
 

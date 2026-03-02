@@ -158,6 +158,10 @@ public:
         mSendZCopy = true;
     }
 
+protected:
+    NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, const UBSHcomNetTransOpInfo &opInfo,
+                     const UBSHcomExtHeaderType extHeaderType, const void *extHeader, uint32_t extHeaderSize) override;
+
 private:
     static bool inline NeedRetry(NResult sockResult)
     {

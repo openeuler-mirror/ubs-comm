@@ -43,7 +43,7 @@ TestUbUrmaWrapper::TestUbUrmaWrapper() {}
 void TestUbUrmaWrapper::SetUp()
 {
     mUBDeviceHelper = new (std::nothrow) UBDeviceHelper();
-    ctx = new (std::nothrow) UBContext("ctx", eid);
+    ctx = new (std::nothrow) UBContext("ctx");
     jfc = new (std::nothrow) UBJfc(name, ctx, false, 0);
     resList = (urma_device_t **)malloc(sizeof(urma_device_t *));
 }
@@ -76,12 +76,15 @@ void TestUbUrmaWrapper::TearDown()
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperInitialize)
 {
     mUBDeviceHelper->G_InitRef = 1;
-    UResult ret = mUBDeviceHelper->Initialize();
+    urma_device_attr_t *devAttr = nullptr;
+    urma_context_t *ctx = nullptr;
+    UBEId eid {};
+    UResult ret = mUBDeviceHelper->Initialize(devAttr, ctx, eid);
     EXPECT_EQ(ret, UB_OK);
 
     mUBDeviceHelper->G_InitRef = 0;
     MOCKER_CPP(&UBDeviceHelper::DoInitialize).stubs().will(returnValue(0));
-    ret = mUBDeviceHelper->Initialize();
+    ret = mUBDeviceHelper->Initialize(devAttr, ctx, eid);
     EXPECT_EQ(ret, UB_OK);
 }
 
@@ -94,9 +97,13 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperUnInitialize)
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoInitialize)
 {
     MOCKER_CPP(&UBDeviceHelper::DoUpdate).stubs().will(returnValue(1)).then(returnValue(0));
-    UResult ret = mUBDeviceHelper->DoInitialize();
+    
+    urma_device_attr_t *devAttr = nullptr;
+    urma_context_t *ctx = nullptr;
+    UBEId eid {};
+    UResult ret = mUBDeviceHelper->DoInitialize(devAttr, ctx, eid);
     EXPECT_EQ(ret, 1);
-    ret = mUBDeviceHelper->DoInitialize();
+    ret = mUBDeviceHelper->DoInitialize(devAttr, ctx, eid);
     EXPECT_EQ(ret, UB_OK);
     mUBDeviceHelper->G_InitRef = 0;
 }
@@ -106,9 +113,12 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoUpdate)
     MOCKER_CPP(HcomUrma::Init).stubs().will(returnValue(0)).then(returnValue(1));
     urma_device_t **devList = nullptr;
     MOCKER_CPP(HcomUrma::GetDeviceList).stubs().will(returnValue(devList));
-    UResult ret = mUBDeviceHelper->DoUpdate();
+    urma_device_attr_t *devAttr = nullptr;
+    urma_context_t *ctx = nullptr;
+    UBEId eid {};
+    UResult ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
     EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
-    ret = mUBDeviceHelper->DoUpdate();
+    ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
     EXPECT_EQ(ret, 1);
 }
 
@@ -121,10 +131,11 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoUpdateErr)
 {
     MOCKER_CPP(&HcomUrma::Init).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::GetDeviceList).stubs().will(returnValue(resList));
-    void *devAttr = nullptr;
-    MOCKER(malloc).stubs().will(returnValue(devAttr));
+    urma_device_attr_t *devAttr = nullptr;
     MOCKER_CPP(&HcomUrma::FreeDeviceList).stubs().will(invoke(MockFreeDeviceList));
-    UResult ret = mUBDeviceHelper->DoUpdate();
+    urma_context_t *ctx = nullptr;
+    UBEId eid{};
+    UResult ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
     EXPECT_EQ(ret, UB_NEW_OBJECT_FAILED);
 }
 
@@ -140,11 +151,11 @@ TEST_F(TestUbUrmaWrapper, UBContextInitErr)
     MOCKER_CPP(&HcomUrma::GetDeviceList).stubs().will(invoke(MockGetDeviceList));
     urma_context_t tmpCtx{};
     MOCKER_CPP(&HcomUrma::CreateContext).stubs().will(returnValue(&tmpCtx));
-    void *devAttr = nullptr;
-    MOCKER(malloc).stubs().will(returnValue(devAttr));
     MOCKER_CPP(&HcomUrma::DeleteContext).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::FreeDeviceList).stubs().will(invoke(MockFreeDeviceList));
-    UResult ret = ctx->Initialize();
+    
+    uint8_t bw = 0;
+    UResult ret = ctx->Initialize(bw);
     EXPECT_EQ(ret, UB_MEMORY_ALLOCATE_FAILED);
 }
 
@@ -157,136 +168,9 @@ TEST_F(TestUbUrmaWrapper, UBContextInitErrTwo)
     MOCKER_CPP(&HcomUrma::QueryDevice).stubs().will(returnValue(1));
     MOCKER_CPP(&HcomUrma::DeleteContext).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::FreeDeviceList).stubs().will(invoke(MockFreeDeviceList));
-    UResult ret = ctx->Initialize();
+    uint8_t bw = 0;
+    UResult ret = ctx->Initialize(bw);
     EXPECT_EQ(ret, 1);
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetEidVec)
-{
-    std::string devName = "device";
-    uint16_t devIndex = 0;
-    uint32_t eidCnt = 1;
-    urma_eid_info_t eidInfoList{};
-    eidInfoList.eid.in6.interface_id = 1;
-    std::vector<UBEId> outGidVec;
-    uint8_t bandWidth = 1;
-    EXPECT_NO_FATAL_FAILURE(mUBDeviceHelper->GetEidVec(devName, devIndex, eidCnt, &eidInfoList, outGidVec, bandWidth));
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetDeviceCountInitializeFailed)
-{
-    uint16_t deviceCount = 0;
-    std::vector<UBDeviceSimpleInfo> enabledDevices;
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(1));
-    UResult ret = mUBDeviceHelper->GetDeviceCount(deviceCount, enabledDevices);
-    EXPECT_EQ(ret, 1);
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetDeviceCount)
-{
-    uint16_t deviceCount = 0;
-    std::vector<UBDeviceSimpleInfo> enabledDevices;
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(0));
-    UResult ret = mUBDeviceHelper->GetDeviceCount(deviceCount, enabledDevices);
-    EXPECT_EQ(ret, UB_OK);
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetEnableDeviceCountInvalidIPMaskOrNoMatchedIP)
-{
-    uint16_t enableDevCount = 0;
-    std::string ipMask = "";
-    std::string ipGroup = "";
-    std::vector<std::string> enableIps;
-    UResult ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
-    EXPECT_EQ(ret, NN_INVALID_IP);
-
-    ipMask = "10.0.0.0/24";
-    ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
-    EXPECT_EQ(ret, UB_DEVICE_NO_IP_MATCHED);
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetEnableDeviceCountInitializeFailed)
-{
-    uint16_t enableDevCount = 0;
-    std::string ipMask = "";
-    std::string ipGroup = "192.168.0.1;192.168.0.2";
-    std::vector<std::string> enableIps;
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(1));
-    UResult ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
-    EXPECT_EQ(ret, 1);
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetEnableDeviceCount)
-{
-    uint16_t enableDevCount = 0;
-    std::string ipMask = "";
-    std::string ipGroup = "192.168.0.1;192.168.0.2";
-    std::vector<std::string> enableIps;
-    UBDeviceHelper::G_UBDevMap[0].active = true;
-    UBDeviceHelper::G_UBDevMap[1].active = true;
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(0));
-    MOCKER_CPP(UBDeviceHelper::GetDeviceByIp).stubs().will(returnValue(1)).then(returnValue(0));
-    UResult ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
-    EXPECT_EQ(ret, 0);
-    UBDeviceHelper::G_UBDevMap.clear();
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetEnableDeviceCountNoMatchedFail)
-{
-    uint16_t enableDevCount = 0;
-    std::string ipMask = "";
-    std::string ipGroup = "192.168.0.1;192.168.0.2";
-    std::vector<std::string> enableIps;
-    UBDeviceHelper::G_UBDevMap[0].active = true;
-    UBDeviceHelper::G_UBDevMap[1].active = true;
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(0));
-    MOCKER_CPP(UBDeviceHelper::GetDeviceByIp).stubs().will(returnValue(1));
-    UResult ret = mUBDeviceHelper->GetEnableDeviceCount(ipMask, enableDevCount, enableIps, ipGroup);
-    EXPECT_EQ(ret, UB_DEVICE_NO_IP_MATCHED);
-    UBDeviceHelper::G_UBDevMap.clear();
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetIfAddressByIp)
-{
-    std::string ip = "192.168.0.1";
-    struct sockaddr_in address;
-    MOCKER_CPP(&getifaddrs).stubs().will(returnValue(1));
-    UResult ret = mUBDeviceHelper->GetIfAddressByIp(ip, address);
-    EXPECT_EQ(ret, UB_DEVICE_FAILED_GET_IP_ADDRESS);
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetDeviceByAddressInitializeFailed)
-{
-    std::string ip = "192.168.0.1";
-    struct sockaddr_in address;
-    UBEId eid;
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(1));
-    UResult ret = mUBDeviceHelper->GetDeviceByAddress(ip, address, eid);
-    EXPECT_EQ(ret, 1);
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetDeviceByAddressNoDeviceFound)
-{
-    std::string ip = "192.168.0.1";
-    struct sockaddr_in address;
-    address.sin_addr.s_addr = inet_addr(ip.c_str());
-    UBEId eid;
-    UBEId testEid;
-    testEid.devIndex = 1;
-    testEid.eidIndex = 1;
-    std::string key = std::to_string(testEid.devIndex);
-    UBDeviceHelper::G_UBDevEidTable[key].push_back(testEid);
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(0));
-    UResult ret = mUBDeviceHelper->GetDeviceByAddress(ip, address, eid);
-    EXPECT_EQ(ret, UB_DEVICE_NO_IP_TO_GID_MATCHED);
-    UBDeviceHelper::G_UBDevEidTable.clear();
-}
-
-TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetDeviceByEidNotFound)
-{
-    UBEId eid;
-    uint8_t user[URMA_EID_SIZE] = {};
-    EXPECT_EQ(UBDeviceHelper::GetDeviceByEid(user, eid), UB_DEVICE_NO_IP_TO_GID_MATCHED);
 }
 
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetPortNumber)
@@ -629,12 +513,6 @@ TEST_F(TestUbUrmaWrapper, GetNResult)
     EXPECT_EQ(UBOpContextInfo::GetNResult(opResult), NN_URMA_ACK_TIMEOUT);
 }
 
-
-TEST_F(TestUbUrmaWrapper, GetIfAddressByIp)
-{
-    struct sockaddr_in addr {};
-    EXPECT_EQ(UBDeviceHelper::GetIfAddressByIp("127.0.0.1", addr), 0);
-}
 }
 }
 #endif

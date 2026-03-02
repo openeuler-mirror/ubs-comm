@@ -40,6 +40,10 @@ public:
         vaLen = mMemSeg->seg.len;
         tokenId = mMemSeg->seg.token_id;
     }
+    uint8_t *GetEidRaw() override
+    {
+        return reinterpret_cast<uint8_t *>(&mUBContext->mBestEid.urmaEid);
+    }
 
 public:
     UBMemoryRegion() = delete;

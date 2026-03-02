@@ -69,7 +69,7 @@ TEST_F(TestNetUBOobDriver, NetUBDriverRunInUbEventThread)
     mDriver->mNeedStopEvent = true;
 
     UBContext *ubCtx = nullptr;
-    int result = UBContext::Create(name, ubEid, ubCtx);
+    int result = UBContext::Create(name, ubCtx);
     ASSERT_EQ(result, 0);
 
     ubCtx->mUrmaContext = new (std::nothrow) urma_context_t();

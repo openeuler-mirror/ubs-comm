@@ -729,6 +729,8 @@ protected:
 
     friend class NetChannel;
     friend class HcomChannelImp;
+    friend class Publisher;
+    friend class SubscriberContext;
 
 private:
     /**
@@ -747,6 +749,11 @@ private:
      */
     void RemoteUdsIdInfo(uint32_t pid, uint32_t uid, uint32_t gid);
 
+    virtual NResult PostSendRawNoCpy(const UBSHcomNetTransRequest &request, uint32_t seqNo)
+    {
+        return NN_OK;
+    }
+
     uint32_t mLocalIp = INVALID_IP;
     uint16_t mListenPort = 0;
     uint8_t mVersion = 0;
@@ -758,6 +765,7 @@ private:
     friend class NetDriverRDMAWithOob;
     friend class NetDriverSockWithOOB;
     friend class NetDriverShmWithOOB;
+    friend class Publisher;
 #ifdef UB_BUILD_ENABLED
     friend class NetDriverUBWithOob;
 #endif
@@ -1133,6 +1141,8 @@ public:
 
     virtual void GetVa(uint64_t &va, uint64_t &vaLen, uint32_t &tokenId) = 0;
 
+    virtual uint8_t *GetEidRaw() = 0;
+    
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
 protected:
@@ -1664,6 +1674,7 @@ struct UBSHcomNetDriverOptions {
             NN_NO256;  // max send working request of qp for rdma
     uint32_t qpReceiveQueueSize =
             NN_NO256;  // max receive working request of qp for rdma
+    uint32_t qpBatchRePostSize = NN_NO1; // qp batch return wr size
     uint16_t oobConnHandleThreadCount =
             NN_NO2;  // server accept connection thread num
     uint32_t oobConnHandleQueueCap =
@@ -1881,6 +1892,12 @@ public:
     virtual NResult CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr,
                                        unsigned long memid) = 0;
 
+    virtual NResult ImportUrmaSeg(uintptr_t address, uint64_t size, uint64_t key, void **tSeg, uint8_t *eid,
+        uint32_t eidLen)
+    {
+        NN_LOG_ERROR("ImportUrmaSeg not supported in other protocol, only UBC");
+        return NN_ERROR;
+    }
     /**
      * @brief Unregister the memory region
      *

@@ -196,6 +196,91 @@ NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransReq
 }
 
 NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
+                                       const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType,
+                                       const void *extHeader, uint32_t extHeaderSize)
+{
+    if (NN_UNLIKELY(extHeaderType == UBSHcomExtHeaderType::RAW)) {
+        NN_LOG_ERROR("Shouldn't use RAW type when extHeader is given.");
+        return NN_INVALID_PARAM;
+    }
+
+    if (NN_UNLIKELY(!extHeader)) {
+        NN_LOG_ERROR("The ExtHeader is invalid.");
+        return NN_INVALID_PARAM;
+    }
+
+    NResult result = NN_OK;
+    if (NN_UNLIKELY((result = StateValidation(mState, mId, mDriver, mSock)) != NN_OK)) {
+        NN_LOG_ERROR("Sock failed to async post send as state validation failed");
+        return result;
+    }
+
+    if (NN_UNLIKELY((result = BuffValidation(request)) != NN_OK)) {
+        NN_LOG_ERROR("Sock failed to async post send as buff validation failed");
+        return result;
+    }
+    OPCODE_VALIDATION();
+
+    uintptr_t mrBufAddress = 0;
+    if (NN_UNLIKELY(!mDriver->mSockDriverSendMR->GetFreeBuffer(mrBufAddress))) {
+        NN_LOG_ERROR("Failed to async post send message with opInfo as failed to get mr buffer from pool");
+        return NN_GET_BUFF_FAILED;
+    }
+    auto *sockHeader = reinterpret_cast<UBSHcomNetTransHeader *>(mrBufAddress);
+    bzero(sockHeader, sizeof(UBSHcomNetTransHeader));
+    sockHeader->opCode = opCode;
+    sockHeader->seqNo = opInfo.seqNo == 0 ? NextSeq() : opInfo.seqNo;
+    sockHeader->flags = ((uint16_t)opInfo.flags << NN_NO8) | (uint16_t)NTH_TWO_SIDE;
+    sockHeader->timeout = opInfo.timeout;
+    sockHeader->errorCode = opInfo.errorCode;
+    sockHeader->dataLength = request.size;
+    sockHeader->extHeaderType = extHeaderType;
+
+    // 拷贝上层指定的 header，此时将要发送的结构为
+    //     | UBSHcomNetTransHeader | extHeader | request body |
+    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(SockTransHeader)),
+                             mDriver->mSockDriverSendMR->GetSingleSegSize() - sizeof(SockTransHeader), extHeader,
+                             extHeaderSize) != NN_OK)) {
+        mDriver->mSockDriverSendMR->ReturnBuffer(mrBufAddress);
+        NN_LOG_ERROR("Failed to copy request header to mrBufAddress");
+        return NN_INVALID_PARAM;
+    }
+
+    // 拷贝消息主体
+    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(SockTransHeader) + extHeaderSize),
+                             mDriver->mSockDriverSendMR->GetSingleSegSize() - sizeof(SockTransHeader) - extHeaderSize,
+                             reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+        mDriver->mSockDriverSendMR->ReturnBuffer(mrBufAddress);
+        NN_LOG_ERROR("Failed to copy request body to mrBufAddress");
+        return NN_INVALID_PARAM;
+    }
+
+    /* finally fill sockHeader crc */
+    sockHeader->headerCrc = NetFunc::CalcHeaderCrc32(sockHeader);
+    auto worker = reinterpret_cast<SockWorker *>(mSock->UpContext1());
+
+    uint64_t finishTimeOpSend = GetFinishTime();
+    TRACE_DELAY_BEGIN(SOCK_EP_ASYNC_POST_SEND);
+    do {
+        result = worker->PostSend(mSock, *sockHeader, request);
+        if (result == SS_OK) {
+            TRACE_DELAY_END(SOCK_EP_ASYNC_POST_SEND, result);
+            return NN_OK;
+        } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTimeOpSend) {
+            usleep(100UL); // LWT situation is not suitable for calling system sleep
+            continue;
+        }
+        // no retry result or timeout = 0
+        break;
+    } while (true);
+
+    mDriver->mSockDriverSendMR->ReturnBuffer(mrBufAddress);
+    NN_LOG_ERROR("Failed to async post send request with opInfo, result " << result);
+    TRACE_DELAY_END(SOCK_EP_ASYNC_POST_SEND, result);
+    return result;
+}
+
+NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
     const UBSHcomNetTransOpInfo &opInfo)
 {
     NResult result = NN_OK;

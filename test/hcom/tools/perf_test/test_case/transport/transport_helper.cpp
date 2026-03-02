@@ -139,6 +139,7 @@ bool TransportHelper::FillNetDriverOption(ock::hcom::UBSHcomNetDriverOptions &op
     }
     opts.SetNetDeviceIpMask(mCfg.GetIpMask());
     opts.SetWorkerGroups("1");
+    opts.SetUbcMode(mCfg.GetUbcMode());
     opts.enableTls = 0;
     if (mCfg.GetCpuId() != -1) {
         std::string str = std::to_string(mCfg.GetCpuId()) + "-" + std::to_string(mCfg.GetCpuId());

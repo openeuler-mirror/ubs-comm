@@ -140,6 +140,7 @@ bool ServiceReadBwTest::ExchangeAddress()
         return false;
     }
 
+    mHelper.GetNetService()->ImportUrmaSeg(mReq.rAddress, mReq.size, mPeerMrInfo.lKey);
     return true;
 }
 

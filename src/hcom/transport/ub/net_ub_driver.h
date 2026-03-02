@@ -48,6 +48,8 @@ public:
     NResult CreateMemoryRegion(uintptr_t address, uint64_t size, UBSHcomNetMemoryRegionPtr &mr) override;
     NResult CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr, unsigned long memid) override;
     void DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr) override;
+    NResult ImportUrmaSeg(uintptr_t address, uint64_t size, uint64_t key, void **tSeg, uint8_t *eid,
+        uint32_t eidLen) override;
 
     inline NResult ValidateMemoryRegion(uint64_t lKey, uintptr_t address, uint64_t size)
     {
@@ -74,9 +76,6 @@ protected:
     NResult ValidaQpQueueSizeOptions();
     NResult CreateContext();
     NResult CreateWorkers();
-    NResult GetDeviceByIp(UBEId &tmpEid);
-    NResult GetDeviceByEid(UBEId &tmpEid);
-    NResult GetDeviceByName(UBEId &tmpEid);
     void ClearWorkers();
     void UnInitializeInner();
     virtual NResult DoInitialize()
@@ -92,6 +91,7 @@ protected:
     }
 
     virtual void DoStop() {}
+    urma_target_seg_t *ImportSeg(uintptr_t addr, uint32_t bufSize, uint64_t token, urma_eid_t eid);
 
 protected:
     std::string mMatchIp;

@@ -127,6 +127,7 @@ private:
             switch (remainingOpCtx->opType) {
                 case (RDMAOpContextInfo::OpType::SEND):
                 case (RDMAOpContextInfo::OpType::SEND_RAW):
+                case (RDMAOpContextInfo::OpType::SEND_RAW_NO_CP):
                 case (RDMAOpContextInfo::OpType::SEND_RAW_SGL):
                     ProcessErrorSendFinished(remainingOpCtx);
                     break;

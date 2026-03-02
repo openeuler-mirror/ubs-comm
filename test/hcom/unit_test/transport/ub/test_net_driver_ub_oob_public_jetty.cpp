@@ -441,8 +441,7 @@ TEST_F(TestNetDriverUBPublicJetty, FillExchMsgHeartBeat)
     std::string payload("hello");
     NetHeartbeat *hb = new (std::nothrow) NetHeartbeat(nullptr, 0, 0);
     driver->mHeartBeat = hb;
-    UBEId eid{};
-    UBContext *ctx = new (std::nothrow) UBContext("name", eid);
+    UBContext *ctx = new (std::nothrow) UBContext("name");
     qp->mUBContext = ctx;
     qp->mUBContext->protocol = UBSHcomNetDriverProtocol::UBC;
 
@@ -464,8 +463,7 @@ TEST_F(TestNetDriverUBPublicJetty, FillExchMsgHeartBeatErr)
     std::string payload("hello");
     NetHeartbeat *hb = new (std::nothrow) NetHeartbeat(nullptr, 0, 0);
     driver->mHeartBeat = hb;
-    UBEId eid{};
-    UBContext *ctx = new (std::nothrow) UBContext("name", eid);
+    UBContext *ctx = new (std::nothrow) UBContext("name");
     qp->mUBContext = ctx;
     qp->mUBContext->protocol = UBSHcomNetDriverProtocol::UBC;
 
@@ -655,8 +653,7 @@ TEST_F(TestNetDriverUBPublicJetty, ServerReplyMsg)
 {
     JettyConnResp exchangeMsg{};
     std::string name = "test-public-jetty";
-    UBEId eid{};
-    UBContext *ctx = new (std::nothrow) UBContext(name, eid);
+    UBContext *ctx = new (std::nothrow) UBContext(name);
     ASSERT_NE(ctx, nullptr);
     jetty->mUBContext = ctx;
     uint32_t jettyId = 0;
@@ -680,8 +677,7 @@ TEST_F(TestNetDriverUBPublicJetty, ServerReplyMsgHeartBeat)
 {
     JettyConnResp exchangeMsg{};
     std::string name = "test-public-jetty";
-    UBEId eid{};
-    UBContext *ctx = new (std::nothrow) UBContext(name, eid);
+    UBContext *ctx = new (std::nothrow) UBContext(name);
     ASSERT_NE(ctx, nullptr);
     jetty->mUBContext = ctx;
     uint32_t jettyId = 0;
@@ -689,8 +685,7 @@ TEST_F(TestNetDriverUBPublicJetty, ServerReplyMsgHeartBeat)
     ASSERT_NE(hb, nullptr);
     driver->mHeartBeat = hb;
 
-    UBEId eid2{};
-    UBContext *ctx2 = new (std::nothrow) UBContext("name", eid2);
+    UBContext *ctx2 = new (std::nothrow) UBContext("name");
     qp->mUBContext = ctx2;
     qp->mUBContext->protocol = UBSHcomNetDriverProtocol::UBC;
 
@@ -714,16 +709,14 @@ TEST_F(TestNetDriverUBPublicJetty, ServerReplyMsgHeartBeatErr)
 {
     JettyConnResp exchangeMsg{};
     std::string name = "test-public-jetty";
-    UBEId eid{};
-    UBContext *ctx = new (std::nothrow) UBContext(name, eid);
+    UBContext *ctx = new (std::nothrow) UBContext(name);
     ASSERT_NE(ctx, nullptr);
     jetty->mUBContext = ctx;
     uint32_t jettyId = 0;
     NetHeartbeat *hb = new (std::nothrow) NetHeartbeat(nullptr, 0, 0);
     ASSERT_NE(hb, nullptr);
     driver->mHeartBeat = hb;
-    UBEId eid2{};
-    UBContext *ctx2 = new (std::nothrow) UBContext("name", eid2);
+    UBContext *ctx2 = new (std::nothrow) UBContext("name");
     qp->mUBContext = ctx2;
     qp->mUBContext->protocol = UBSHcomNetDriverProtocol::UBC;
 

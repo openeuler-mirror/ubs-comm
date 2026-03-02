@@ -18,6 +18,7 @@
 # (13) HCOM_BUILD_TOOLS_PERF(optional, default is off) => build rpm.(on/off)
 # (14) HCOM_BUILD_HW_CRC(optional, default is off) => build with hardware based crc.(on/off)
 # (15) BUILD_HCOM(optional, default is ON) => build hcom.(ON/OFF)
+# (16) HCOM_BUILD_MULTICAST(optional, default is off) => build multicast or not.(on/off)
 
 # version: 1.0.0
 # change log:
@@ -89,6 +90,10 @@ echo "${HCOM_LOG_TAG} hcom build sock: ${HCOM_BUILD_SOCK}"
 HCOM_BUILD_SHM="${HCOM_BUILD_SHM:-on}"
 echo "${HCOM_LOG_TAG} hcom build shm: ${HCOM_BUILD_SHM}"
 
+# check whether build multcast module, default is off
+HCOM_BUILD_MULTICAST="${HCOM_BUILD_MULTICAST:-off}"
+echo "${HCOM_LOG_TAG} hcom build multicast: ${HCOM_BUILD_MULTICAST}"
+
 # check whether check kunpeng, default is off
 HCOM_ENABLE_ARM_KP="${HCOM_ENABLE_ARM_KP:-off}"
 echo "${HCOM_LOG_TAG} hcom enable arm kunpeng check: ${HCOM_ENABLE_ARM_KP}"
@@ -135,6 +140,7 @@ cmake -S"${HCOM_ROOT_DIR}" -B"${HCOM_BUILD_DIR}" \
     -DBUILD_WITH_RDMA=${HCOM_BUILD_RDMA} \
     -DBUILD_WITH_SOCK=${HCOM_BUILD_SOCK} \
     -DBUILD_WITH_SHM=${HCOM_BUILD_SHM} \
+    -DBUILD_WITH_MULTICAST=${HCOM_BUILD_MULTICAST} \
     -DENABLE_ARM_KP=${HCOM_ENABLE_ARM_KP} \
     -DHCOM_COMPONENT_VERSION="${HCOM_COMPONENT_VERSION}"
 
@@ -148,6 +154,8 @@ output=$(HCOM_COMPONENT_VERSION=${HCOM_COMPONENT_VERSION} bash "${HCOM_ROOT_DIR}
 
 # build example and perf
 [[ "${HCOM_BUILD_EXAMPLE,,}" == "on" ]] && bash "${HCOM_ROOT_DIR}/build/build_example_perf.sh"
+
+bash "${HCOM_ROOT_DIR}/build/build_umq_and_ubsocket.sh"
 
 # 不要删除本行。因 `[[ A ]] && B` 为表达式，其返回值会返回给 shell，一旦
 # HCOM_BUILD_EXAMPLE 不为 on 就会返回 1 导致 CI 构建失败.

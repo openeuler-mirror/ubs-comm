@@ -143,7 +143,7 @@ TEST_F(TestUbWorker, DetailName)
 TEST_F(TestUbWorker, PortNum)
 {
     UBEId eid{};
-    UBContext *ubCtx = new UBContext("ubTest", eid);
+    UBContext *ubCtx = new UBContext("ubTest");
     ubCtx->mPortNumber = 1;
     worker->mUBContext = ubCtx;
     MOCKER_CPP(HcomUrma::Uninit).stubs().will(ignoreReturnValue());
@@ -182,7 +182,7 @@ TEST_F(TestUbWorker, InitializeSuccess)
 {
     urma_context_t UrmaContext{};
     UBEId eid{};
-    UBContext *ubCtx = new UBContext("ubTest", eid);
+    UBContext *ubCtx = new UBContext("ubTest");
     ubCtx->mUrmaContext = &UrmaContext;
     worker->mUBContext = ubCtx;
     MOCKER_CPP(HcomUrma::Uninit).stubs().will(ignoreReturnValue());
@@ -209,7 +209,7 @@ TEST_F(TestUbWorker, InitializeUBJfcErr)
 {
     urma_context_t UrmaContext{};
     UBEId eid{};
-    UBContext *ubCtx = new UBContext("ubTest", eid);
+    UBContext *ubCtx = new UBContext("ubTest");
     ubCtx->mUrmaContext = &UrmaContext;
     worker->mUBContext = ubCtx;
     MOCKER_CPP(HcomUrma::Uninit).stubs().will(ignoreReturnValue());
@@ -234,7 +234,7 @@ TEST_F(TestUbWorker, InitializeSglCtxInfoPoolErr)
 {
     urma_context_t UrmaContext{};
     UBEId eid{};
-    UBContext *ubCtx = new UBContext("ubTest", eid);
+    UBContext *ubCtx = new UBContext("ubTest");
     ubCtx->mUrmaContext = &UrmaContext;
     worker->mUBContext = ubCtx;
     MOCKER_CPP(HcomUrma::Uninit).stubs().will(ignoreReturnValue());
@@ -264,7 +264,7 @@ TEST_F(TestUbWorker, InitializeOpCtxInfoPoolErr)
 {
     urma_context_t UrmaContext{};
     UBEId eid{};
-    UBContext *ubCtx = new UBContext("ubTest", eid);
+    UBContext *ubCtx = new UBContext("ubTest");
     ubCtx->mUrmaContext = &UrmaContext;
     worker->mUBContext = ubCtx;
     MOCKER_CPP(HcomUrma::Uninit).stubs().will(ignoreReturnValue());
@@ -291,7 +291,7 @@ TEST_F(TestUbWorker, InitializeJettyPtrMapErr)
 {
     urma_context_t UrmaContext{};
     UBEId eid{};
-    UBContext *ubCtx = new UBContext("ubTest", eid);
+    UBContext *ubCtx = new UBContext("ubTest");
     ubCtx->mUrmaContext = &UrmaContext;
 
     worker->mUBContext = ubCtx;

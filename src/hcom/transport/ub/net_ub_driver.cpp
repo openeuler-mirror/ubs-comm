@@ -62,12 +62,6 @@ NResult NetDriverUB::Initialize(const UBSHcomNetDriverOptions &option)
         return result;
     }
 
-    if (((result = mContext->Initialize()) != 0)) {
-        NN_LOG_ERROR("UB failed to initialize ctx");
-        UnInitializeInner();
-        return result;
-    }
-
     if ((result = ValidaQpQueueSizeOptions()) != NN_OK) {
         NN_LOG_ERROR("UB failed to validate qp queue size options");
         UnInitializeInner();
@@ -187,102 +181,6 @@ NResult NetDriverUB::ValidaQpQueueSizeOptions()
     return NN_OK;
 }
 
-NResult NetDriverUB::GetDeviceByIp(UBEId &tmpEid)
-{
-    int result = 0;
-    if (mOptions.enableMultiRail) {
-        uint16_t enableCount = 0;
-        std::vector<std::string> enableIps;
-        result = UBDeviceHelper::GetEnableDeviceCount(mOptions.NetDeviceIpMask(), enableCount, enableIps,
-            mOptions.NetDeviceIpGroup());
-        if (result != NN_OK) {
-            return result;
-        }
-        mMatchIp = enableIps[mDevIndex];
-    } else {
-        // filter ip by mask
-        std::vector<std::string> filters;
-        NetFunc::NN_SplitStr(mOptions.NetDeviceIpMask(), ",", filters);
-        if (filters.empty()) {
-            NN_LOG_ERROR("Invalid ip mask '" << mOptions.netDeviceIpMask << "' by set, example '192.168.0.0/24'");
-            return NN_INVALID_IP;
-        }
-
-        std::vector<std::string> matchIps;
-        for (auto &mask : filters) {
-            FilterIp(mask, matchIps);
-        }
-
-        if (matchIps.empty()) {
-            NN_LOG_ERROR("No matched ip found with '" << mOptions.netDeviceIpMask << "', example '192.168.0.0/24'");
-            return NN_INVALID_IP;
-        }
-        // init urma devices
-        if ((result = UBDeviceHelper::Initialize()) != 0) {
-            NN_LOG_ERROR("Failed to init devices");
-            return result;
-        }
-
-        NN_LOG_INFO(UBDeviceHelper::DeviceInfo());
-
-        // choose the first matched ip
-        mMatchIp = matchIps[0];
-    }
-
-    if ((result = UBDeviceHelper::GetDeviceByIp(mMatchIp, tmpEid)) != 0) {
-        UBDeviceHelper::UnInitialize();
-        NN_LOG_ERROR("Failed to get device by ip");
-        return result;
-    }
-    return NN_OK;
-}
-
-NResult NetDriverUB::GetDeviceByEid(UBEId &tmpEid)
-{
-    int result = 0;
-    if (Protocol() != UBSHcomNetDriverProtocol::UBC) {
-        NN_LOG_ERROR("UBSHcomUbcMode should only be enabled on UBC protocol");
-        return NN_ERROR;
-    }
-
-    // init urma devices
-    if ((result = UBDeviceHelper::Initialize()) != 0) {
-        NN_LOG_ERROR("Failed to init devices");
-        return result;
-    }
-
-    NN_LOG_INFO(UBDeviceHelper::DeviceInfo());
-
-    if ((result = UBDeviceHelper::GetDeviceByEid(mOptions.netDeviceEid, tmpEid)) != 0) {
-        UBDeviceHelper::UnInitialize();
-        NN_LOG_ERROR("Failed to get device by eid");
-        return result;
-    }
-    return NN_OK;
-}
-
-NResult NetDriverUB::GetDeviceByName(UBEId &tmpEid)
-{
-    int result = 0;
-    // init urma devices
-    if ((result = UBDeviceHelper::Initialize()) != 0) {
-        NN_LOG_ERROR("Failed to init devices");
-        return result;
-    }
-
-    NN_LOG_INFO(UBDeviceHelper::DeviceInfo());
-    // hard code
-    char name[] = "bonding";
-    uint8_t len = strlen(name);
-    if ((result = UBDeviceHelper::GetDeviceByName(name, len, tmpEid)) != 0) {
-        UBDeviceHelper::UnInitialize();
-        NN_LOG_ERROR("Failed to get device by name");
-        return result;
-    }
-
-    return NN_OK;
-}
-
 NResult NetDriverUB::CreateContext()
 {
     if (mContext != nullptr) {
@@ -290,38 +188,25 @@ NResult NetDriverUB::CreateContext()
     }
 
     int result = 0;
-    UBEId tmpEid{};
-    if (Protocol() == UBSHcomNetDriverProtocol::UBC) {
-        if (GetDeviceByName(tmpEid) != 0) {
-            NN_LOG_ERROR("Failed to get device by name");
-            return NN_ERROR;
-        }
-    } else if (mOptions.oobType == NET_OOB_UB) {
-        if (GetDeviceByEid(tmpEid) != 0) {
-            NN_LOG_ERROR("Failed to get device by eid");
-            return NN_ERROR;
-        }
-    } else {
-        if (GetDeviceByIp(tmpEid) != 0) {
-            NN_LOG_ERROR("Failed to get device by ip");
-            return NN_ERROR;
-        }
-    }
-
-    mBandWidth = tmpEid.bandWidth;
-    NN_LOG_INFO("eid found devIndex " << tmpEid.devIndex << ", eidIndex " << tmpEid.eidIndex);
-
     // create context
-    if ((result = UBContext::Create(mName, tmpEid, mContext)) != 0) {
-        UBDeviceHelper::UnInitialize();
+    UBContext *tmpCtx = nullptr;
+    if ((result = UBContext::Create(mName, tmpCtx)) != 0) {
         NN_LOG_ERROR("Failed to new ctx, result " << result);
         return result;
     }
 
-    NN_ASSERT_LOG_RETURN(mContext != nullptr, NN_ERROR);
+    NN_ASSERT_LOG_RETURN(tmpCtx != nullptr, NN_ERROR);
 
-    mContext->IncreaseRef();
-    mContext->protocol = Protocol();
+    tmpCtx->IncreaseRef();
+    tmpCtx->protocol = Protocol();
+
+    if (((result = tmpCtx->Initialize(mBandWidth)) != 0)) {
+        NN_LOG_ERROR("UB failed to initialize ctx");
+        tmpCtx->DecreaseRef();
+        tmpCtx = nullptr;
+        return result;
+    }
+    mContext = tmpCtx;
     return NN_OK;
 }
 
@@ -710,6 +595,50 @@ void NetDriverUB::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
 
     mr->UnInitialize();
 }
+
+inline urma_target_seg_t *NetDriverUB::ImportSeg(uintptr_t addr, uint32_t bufSize, uint64_t token, urma_eid_t eid)
+{
+    uint32_t tokenId = static_cast<uint32_t>(token);
+    urma_token_t tokenValue = {static_cast<uint32_t>(token >> NN_NO32)};
+    urma_seg_t remoteSeg{};
+    remoteSeg.len = bufSize;
+    remoteSeg.ubva.va = addr;
+    remoteSeg.token_id = tokenId;
+    remoteSeg.ubva.eid = eid;
+    remoteSeg.attr.bs.token_policy = URMA_TOKEN_PLAIN_TEXT;
+ 
+    urma_import_seg_flag_t flag{};
+    flag.bs.cacheable = URMA_NON_CACHEABLE;
+    flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE;
+    flag.bs.mapping = URMA_SEG_NOMAP;
+ 
+    return HcomUrma::ImportSeg(mContext->mUrmaContext, &remoteSeg, &tokenValue, 0, flag);
+}
+ 
+NResult NetDriverUB::ImportUrmaSeg(uintptr_t address, uint64_t size, uint64_t key, void **tSeg, uint8_t *eid,
+    uint32_t eidLen)
+{
+    NN_LOG_INFO("ImportUrmaSeg, size: " << size << ", key :" << key);
+    urma_eid_t urmaEid{};
+    if (eid == nullptr || eidLen == 0) {
+        NN_LOG_ERROR("eid is null");
+        return NN_ERROR;
+    }
+    auto ret = memcpy_s(urmaEid.raw, sizeof(urma_eid_t), eid, eidLen);
+    if (ret != 0) {
+        NN_LOG_ERROR("eid is null");
+        return NN_ERROR;
+    }
+
+    urma_target_seg_t *dstSeg = ImportSeg(address, size, key, urmaEid);
+    if (dstSeg == nullptr) {
+        NN_LOG_ERROR("ImportSeg failed");
+        return NN_ERROR;
+    }
+    *tSeg = static_cast<void *>(dstSeg);
+    return NN_OK;
+}
+ 
 }
 }
 #endif

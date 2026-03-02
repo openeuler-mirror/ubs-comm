@@ -374,16 +374,22 @@ public:
     /// @param rtoken      [in] 对端 MR 远程访问 key
     /// @param bufSize     [in] 读取大小
     /// @param context     [in] `UBOpContextInfo`, 事件完成时通过此 context 找回对应 Jetty 以及上层 Service 层的上下文
-    UResult PostRead(uintptr_t bufAddr, urma_target_seg_t *ltseg, uintptr_t dstBufAddr, uint64_t rtoken,
+    UResult PostRead(uintptr_t bufAddr, urma_target_seg_t *ltseg, uintptr_t dstBufAddr, uint64_t dstSeg,
         uint32_t bufSize, uint64_t context)
     {
-        if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY)) {
+        if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY || dstSeg == 0)) {
+            NN_LOG_ERROR("Failed to post read as not init or dstSeg is null");
             return UB_QP_NOT_INITIALIZED;
         }
-        urma_target_seg_t *dstSeg = ImportSeg(dstBufAddr, bufSize, rtoken);
-        if (dstSeg == nullptr) {
-            NN_LOG_ERROR("Failed to import dstSeg");
-            return UB_QP_POST_READ_FAILED;
+        urma_target_seg_t *realDstSeg = nullptr;
+        if (mJettyOptions.ubcMode == UBSHcomUbcMode::LowLatency) {
+            realDstSeg = ImportSeg(dstBufAddr, bufSize, dstSeg);
+            if (realDstSeg == nullptr) {
+                NN_LOG_ERROR("Failed to import dstSeg");
+                return UB_QP_POST_READ_FAILED;
+            }
+        } else {
+            realDstSeg = reinterpret_cast<urma_target_seg_t *>(reinterpret_cast<void *>(dstSeg));
         }
 
         urma_jfs_wr_t *bad_wr;
@@ -394,7 +400,7 @@ public:
 
         urma_sge_t dst_sge{};
         dst_sge.addr = dstBufAddr;
-        dst_sge.tseg = dstSeg;
+        dst_sge.tseg = realDstSeg;
         dst_sge.len = bufSize;
 
         urma_jfs_wr_t wr{};
@@ -408,18 +414,19 @@ public:
         wr.flag.bs.complete_enable = 1;
         wr.tjetty = mTargetJetty;
 
+        NN_LOG_DEBUG("[Request Read] ------ , bufAddr = " << bufAddr << ", ltseg = " << ltseg << ", dstBufAddr = " <<
+            dstBufAddr << ", dstSeg = " << dstSeg  << ", bufSize = " << bufSize  << ", context = " << context <<
+            UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_URMA));
         auto ret = HcomUrma::PostJettySendWr(mUrmaJetty, &wr, &bad_wr);
-        if (NN_UNLIKELY(ret != 0)) {
-            ret = HcomUrma::UnimportSeg(dstSeg);
+        if (mJettyOptions.ubcMode == UBSHcomUbcMode::LowLatency) {
+            ret = HcomUrma::UnimportSeg(realDstSeg);
             if (NN_UNLIKELY(ret != 0)) {
                 NN_LOG_WARN("Unable to unImport Seg " << mName << ", result " << ret);
             }
+        }
+        if (NN_UNLIKELY(ret != 0)) {
             NN_LOG_ERROR("Failed to post read request to jetty " << mName << ", result " << ret);
             return UB_QP_POST_READ_FAILED;
-        }
-        ret = HcomUrma::UnimportSeg(dstSeg);
-        if (NN_UNLIKELY(ret != 0)) {
-            NN_LOG_WARN("Unable to unImport Seg " << mName << ", result " << ret);
         }
         return UB_OK;
     }
@@ -548,8 +555,11 @@ public:
             src_sge[i].addr = iov[i].lAddress;
             src_sge[i].len = iov[i].size;
             src_sge[i].tseg = static_cast<urma_target_seg_t *>(iov[i].srcSeg);
-
-            dstSeg[i] = ImportSeg(iov[i].rAddress, iov[i].size, iov[i].rKey);
+            if (mJettyOptions.ubcMode == UBSHcomUbcMode::LowLatency) {
+                dstSeg[i] = ImportSeg(iov[i].rAddress, iov[i].size, iov[i].rKey);
+            } else {
+                dstSeg[i] = reinterpret_cast<urma_target_seg_t *>(iov[i].dstSeg);
+            }
             if (dstSeg[i] == nullptr) {
                 NN_LOG_ERROR("Failed to import dstSeg");
                 ret = isRead ? UB_QP_POST_READ_FAILED : UB_QP_POST_WRITE_FAILED;
@@ -586,10 +596,12 @@ public:
             }
         }
 
-        for (uint32_t index = 0; index < i; ++index) {
-            auto result = HcomUrma::UnimportSeg(dstSeg[index]);
-            if (NN_UNLIKELY(result != 0)) {
-                NN_LOG_WARN("Unable to unImport Seg " << mName << ", result " << result);
+        if (mJettyOptions.ubcMode == UBSHcomUbcMode::LowLatency) {
+            for (uint32_t index = 0; index < i; ++index) {
+                auto result = HcomUrma::UnimportSeg(dstSeg[index]);
+                if (NN_UNLIKELY(result != 0)) {
+                    NN_LOG_WARN("Unable to unImport Seg " << mName << ", result " << result);
+                }
             }
         }
         return ret;

@@ -63,6 +63,7 @@ public:
      * @brief raw data to peer without opcode
      */
     NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNO) override;
+    NResult PostSendRawNoCpy(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
     NResult PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo) override;
 
     NResult PostRead(const UBSHcomNetTransSglRequest &request) override;
@@ -245,6 +246,8 @@ private:
     {
         return reinterpret_cast<RDMAWorker *>(mEp->Qp()->UpContext1());
     }
+
+    NResult PostSendRawNoCpyEncrypt(const UBSHcomNetTransRequest &request, uint32_t seqNo);
 
     RDMAAsyncEndPoint *mEp = nullptr;
     NetDriverRDMAWithOob *mDriver = nullptr;

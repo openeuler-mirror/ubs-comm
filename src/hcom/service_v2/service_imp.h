@@ -161,6 +161,7 @@ public:
      * @return int32_t 成功：0；失败：错误码
      */
     int32_t RegisterMemoryRegion(uintptr_t address, uint64_t size, UBSHcomRegMemoryRegion &mr) override;
+    int32_t ImportUrmaSeg(uintptr_t address, uint64_t size, UBSHcomMemoryKey &key) override;
 
     /**
      * @brief memory region取消注册
@@ -210,7 +211,6 @@ public:
     /**
      * @brief 注册单边操作回调
      *
-     * @param channelTypeIdx 允许为不同channel设置不同回调，channelTypeIdx对应channel类型的下标
      * @param oneSideDoneHandler 回调函数
      */
     void RegisterOneSideHandler(const UBSHcomServiceOneSideDoneHandler &oneSideDoneHandler) override;

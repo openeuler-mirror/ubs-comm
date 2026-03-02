@@ -97,6 +97,7 @@ bool ServiceHelper::CreateService()
     }
 
     mService->SetDeviceIpMask({ mCfg.GetIpMask() });
+    mService->SetUbcMode(mCfg.GetUbcMode());
 
     mService->RegisterRecvHandler(mRecvHandler);
     mService->RegisterChannelBrokenHandler(mChBrokenHandler, ock::hcom::UBSHcomChannelBrokenPolicy::BROKEN_ALL);

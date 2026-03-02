@@ -44,7 +44,7 @@ TestUbUrmaJetty::TestUbUrmaJetty() {}
 
 void TestUbUrmaJetty::SetUp()
 {
-    ctx = new (std::nothrow) UBContext("ubTest", eid);
+    ctx = new (std::nothrow) UBContext("ubTest");
     ASSERT_NE(ctx, nullptr);
     ctx->mUrmaContext = &mUrmaContext;
 
@@ -541,11 +541,12 @@ TEST_F(TestUbUrmaJetty, CreatePollingCq)
 TEST_F(TestUbUrmaJetty, CtxInitializeParamErr)
 {
     urma_device_t **devList = nullptr;
-    EXPECT_EQ(ctx->Initialize(), UB_OK);
+    uint8_t bw = 0;
+    EXPECT_EQ(ctx->Initialize(bw), UB_OK);
 
     MOCKER(HcomUrma::GetDeviceList).stubs().will(returnValue(devList));
     ctx->mUrmaContext = nullptr;
-    EXPECT_EQ(ctx->Initialize(), UB_DEVICE_FAILED_OPEN);
+    EXPECT_EQ(ctx->Initialize(bw), UB_DEVICE_FAILED_OPEN);
 }
 
 TEST_F(TestUbUrmaJetty, CreateJettyMrErr)
