@@ -86,13 +86,13 @@ make -j32
 
 ```shell
 $ env LD_PRELOAD=/path/to/lib/librpc_adapter_brpc.so \
-RPC_ADPT_TRANS_MODE=UB \
-RPC_ADPT_DEV_NAME="bonding_dev_0" \
-RPC_ADPT_SRC_EID="xxxx:xxxx:0000:0000:0000:0000:0100:0000" \
-RPC_ADPT_LOG_LEVEL=info \
-RPC_ADPT_TX_DEPTH=1024 \
-RPC_ADPT_RX_DEPTH=1024 \
-RPC_ADPT_READV_UNLIMITED=true \
+UBSOCKET_TRANS_MODE=ub \
+UBSOCKET_DEV_NAME="bonding_dev_0" \
+UBSOCKET_SRC_EID="xxxx:xxxx:0000:0000:0000:0000:0100:0000" \
+UBSOCKET_LOG_LEVEL=info \
+UBSOCKET_TX_DEPTH=1024 \
+UBSOCKET_RX_DEPTH=1024 \
+UBSOCKET_READV_UNLIMITED=true \
 ./application
 ```
 
@@ -108,7 +108,7 @@ RPC_ADPT_READV_UNLIMITED=true \
 | UBSOCKET_TRANS_MODE        | 通信协议               | ub，ib                                                       | ub      | 否                                |
 | UBSOCKET_DEV_NAME          | 设备名称               | 根据实际场景填写设备名称；例如，udma2或者bonding_dev_0       | NA      |  否 |
 | UBSOCKET_DEV_IP            | 设备名称               | 根据实际场景填写，支持ipv6和ipv4写法。`ub协议下不需要填写`   | bonding设备     | 否                                |
-| UBSOCKET_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | `RPC_ADPT_DEV_NAME`为普通设备时必填      |
+| UBSOCKET_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | `UBSOCKET_DEV_NAME`为普通设备时必填      |
 | UBSOCKET_SRC_EID           | 使用bonding设备的eid   | ub协议下，通过`urma_admin show`命令查询获得                  | bonding设备eid| 否|
 | UBSOCKET_LOG_LEVEL         | 日志级别               | error，warn，notice，info，debug           | info    | 否                                |
 | UBSOCKET_LOG_USE_PRINTF    | 是否将日志打印到前台   | true，false                                                         | fasle      | 否                                |
@@ -117,7 +117,7 @@ RPC_ADPT_READV_UNLIMITED=true \
 | UBSOCKET_READV_UNLIMITED   | 是否打开readv上报限制  | false，true                                                  | true   | 否                                |
 | UBSOCKET_BLOCK_TYPE        | 内存池的最小分片       | default，small，medium，large                                | default | 否                                |
 | UBSOCKET_POOL_INITIAL_SIZE | IO内存的总大小，单位MB | 应用按需配置                                                 | 1024    | 否                                |
-| UBSOCKET_USE_UB_FORCE | 是否强制使用UB协议加速TCP | 0：不强制用UB加速TCP 1：强制用UB加速TCP                                                | 0    | 否                                |
+| UBSOCKET_USE_UB_FORCE | 是否强制使用UB协议加速TCP | false：不强制用UB加速TCP, true：强制用UB加速TCP                                                | false    | 否                                |
 | UBSOCKET_SCHEDULE_POLICY | 设置多平面负载分担策略 | affinity，rr                                                | affinity   | 否                                |
 | UBSOCKET_AUTO_FALLBACK_TCP | 协议不匹配时是否自动降级为TCP | false, true                                                | true  | 否                                |
 | UBSOCKET_TRACE_ENABLE      | 是否打开trace统计       | false, true                                                 | false    | 否                                |
@@ -142,8 +142,8 @@ RPC_ADPT_READV_UNLIMITED=true \
 `bRPC`内部实现了内存池管理功能，默认单个内存块大小为8K，通过增大内存块大小，可以提升大包发送性能。通过调整`bRPC源码`和调整`UBSocket`配置项可以使用大内存块传输，具体需要做如下两部分调整：
 
 - 修改BRPC源码`iobuf.h`iobuf.h中`DEFAULT_BLOCK_SIZE`，可以从8K（8192）调整为16K/32K/64K。
-- 通过`UBSocket`配置项`RPC_ADPT_BLOCK_TYPE`，相应调整`UBSocket`中内存块大小。
+- 通过`UBSocket`配置项`UBSOCKET_BLOCK_TYPE`，相应调整`UBSocket`中内存块大小。
 
 > 说明：
 >
-> 启用更大的内存块后，可能需要消耗更多内存，可以通过`RPC_ADPT_POOL_INITIAL_SIZE`配置`UBSocket`内存池大小。
+> 启用更大的内存块后，可能需要消耗更多内存，可以通过`UBSOCKET_POOL_INITIAL_SIZE`配置`UBSocket`内存池大小。
