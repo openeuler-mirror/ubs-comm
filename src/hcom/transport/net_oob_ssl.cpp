@@ -112,9 +112,8 @@ void OOBSSLServer::RunInThread()
             auto fd = ::accept(mListenFD, reinterpret_cast<struct sockaddr *>(&peerAddr), &peerLen);
             if (fd < 0) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_WARN("Invalid to accept on new socket with "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)
-                    << ", ignore and continue");
+                NN_LOG_WARN("Invalid to accept in oob ssl server on new socket with " <<
+                    NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) << ", ignore and continue");
                 continue;
             }
 
