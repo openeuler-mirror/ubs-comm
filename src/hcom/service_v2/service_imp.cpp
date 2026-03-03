@@ -700,7 +700,8 @@ SerResult HcomServiceImp::DoConnect(const std::string &serverUrl, SerConnInfo &o
     tmpChannel->SetEnableMrCache(mEnableMrCache);
 
     if (NN_UNLIKELY(tmpChannel->Initialize(epVector, reinterpret_cast<uintptr_t>(mContextMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())))) {
+        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get()),
+        mOptions.ctxStoreCapacity))) {
         for (auto &iter : epVector) {
             if (iter != nullptr) {
                 iter->Close();
@@ -1145,6 +1146,20 @@ void HcomServiceImp::SetUbcMode(UBSHcomUbcMode ubcMode)
     mOptions.ubcMode = ubcMode;
 }
 
+void HcomServiceImp::SetCtxStoreCapacity(uint32_t ctxStoreCapacity)
+{
+    if (mStarted) {
+        return;
+    }
+
+    if (ctxStoreCapacity < NN_NO128 || ctxStoreCapacity > NN_NO16777216) {
+        NN_LOG_WARN("CtxStore Capacity " << ctxStoreCapacity <<
+            " is invalid, must be in range [128, 16777216], set to 2097152");
+        return;
+    }
+    mOptions.ctxStoreCapacity = ctxStoreCapacity;
+}
+
 void HcomServiceImp::SetMaxSendRecvDataCount(uint32_t maxSendRecvDataCount)
 {
     mOptions.maxSendRecvDataCount = maxSendRecvDataCount;
@@ -1277,7 +1292,8 @@ int32_t HcomServiceImp::ServiceNewChannel(const std::string &ipPort, SerConnInfo
     }
     channel->SetEnableMrCache(mEnableMrCache);
     if (NN_UNLIKELY(channel->Initialize(ep, reinterpret_cast<uintptr_t>(mContextMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())))) {
+        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get()),
+        mOptions.ctxStoreCapacity))) {
         NN_LOG_ERROR("Failed to initialize channel");
         return SER_NEW_OBJECT_FAILED;
     }

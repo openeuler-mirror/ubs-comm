@@ -309,6 +309,13 @@ public:
      */
     virtual void SetMaxSendRecvDataCount(uint32_t maxSendRecvDataCount) = 0;
 
+    /**
+     * @brief 设置ctx store容量
+     *
+     * @param ctxStoreCapacity ctx store容量, 取值范围[128, 16777216], 默认2097152
+     */
+    virtual void SetCtxStoreCapacity(uint32_t ctxStoreCapacity) = 0;
+
     virtual ~UBSHcomService() {}
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS

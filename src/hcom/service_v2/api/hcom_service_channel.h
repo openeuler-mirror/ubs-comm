@@ -238,7 +238,7 @@ protected:
     uint32_t mUserSplitSendThreshold = UINT32_MAX;  // 用户 payload 拆包阈值，已去除额外头部大小
 private:
     virtual SerResult Initialize(std::vector<UBSHcomEndpointPtr> &ep, uintptr_t ctxMemPool, uintptr_t periodicMgr,
-        uintptr_t pgTable) = 0;
+        uintptr_t pgTable, uint32_t ctxStoreCapacity = NN_NO2097152) = 0;
     virtual void UnInitialize() = 0;
     virtual std::string ToString() = 0;
 

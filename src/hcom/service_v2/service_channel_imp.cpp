@@ -27,7 +27,7 @@ constexpr uint16_t DEFAULT_DELAY_ERASE_TIME = 1;
 
 
 SerResult HcomChannelImp::Initialize(std::vector<UBSHcomNetEndpointPtr> &ep, uintptr_t ctxMemPool,
-    uintptr_t periodicMgr, uintptr_t pgTable)
+    uintptr_t periodicMgr, uintptr_t pgTable, uint32_t ctxStoreCapacity)
 {
     std::lock_guard<std::mutex> locker(mMgrMutex);
     if (!mChState.Compare(UBSHcomChannelState::CH_NEW)) {
@@ -55,7 +55,7 @@ SerResult HcomChannelImp::Initialize(std::vector<UBSHcomNetEndpointPtr> &ep, uin
     ctxMemPoolPtr->IncreaseRef();
     mCtxMemPool = ctxMemPool;
 
-    HcomServiceCtxStore *ctxStore = new (std::nothrow) HcomServiceCtxStore(NN_NO2097152, ctxMemPoolPtr, mProtocol);
+    HcomServiceCtxStore *ctxStore = new (std::nothrow) HcomServiceCtxStore(ctxStoreCapacity, ctxMemPoolPtr, mProtocol);
     if (NN_UNLIKELY(ctxStore == nullptr)) {
         NN_LOG_ERROR("Create ctx store failed");
         ForceUnInitialize();

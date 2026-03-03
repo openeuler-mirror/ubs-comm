@@ -57,6 +57,7 @@ struct HcomServiceImpOptions {
     uint32_t maxConnCount = 250;
     uint32_t multiRailThresh = 8192;
     uint32_t timeOutDetectThreadNum = 1;
+    uint32_t ctxStoreCapacity = 2097152;
     uint16_t pollingBatchSize = 4;
     uint16_t eventPollingTimeOutUs = 500;
     uint16_t completionQueueDepth = 2048;
@@ -366,6 +367,13 @@ public:
      * @param maxSendRecvDataCount 发送数据块最大数量
      */
     void SetMaxSendRecvDataCount(uint32_t maxSendRecvDataCount) override;
+
+    /**
+     * @brief 设置ctx store容量
+     *
+     * @param ctxStoreCapacity ctx store容量, 取值范围[128, 16777216], 默认2097152
+     */
+    void SetCtxStoreCapacity(uint32_t ctxStoreCapacity) override;
 
 private:
     SerResult ValidateServiceOption();
