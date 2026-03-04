@@ -9,7 +9,7 @@ if(USE_URMA_STUB)
     add_library(tpsa ALIAS urma_stub)
 endif()
 
-if(URMA_STUB)
+if(URMA_STUB_SHARED)
     add_library(urma SHARED urma_stub.c)
     target_include_directories(urma PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
     add_library(urma_common SHARED urma_stub.c)
