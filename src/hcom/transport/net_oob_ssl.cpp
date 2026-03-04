@@ -28,16 +28,39 @@ namespace hcom {
 void OOBSSLServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr, socklen_t peerLen)
 {
     ConnectResp resp = ConnectResp::OK;
-    char ipStr[INET_ADDRSTRLEN] = {0};
-    if (inet_ntop(AF_INET, &addressIn.sin_addr, ipStr, INET_ADDRSTRLEN) == nullptr) {
-        NN_LOG_ERROR("Failed to convert ip number to string");
+
+    char ipStr[INET6_ADDRSTRLEN] = {0};
+    uint16_t peerPort = 0;
+    int family = peerAddr.ss_family;
+
+    if (family == AF_INET) {
+        const auto *a4 = reinterpret_cast<const sockaddr_in*>(&peerAddr);
+        if (inet_ntop(AF_INET, &(a4->sin_addr), ipStr, sizeof(ipStr)) == nullptr) {
+            NN_LOG_ERROR("Failed to convert ipv4 number to string");
+            resp = SERVER_INTERNAL_ERROR;
+        } else {
+            peerPort = ntohs(a4->sin_port);
+        }
+    } else if (family == AF_INET6) {
+        const auto *a6 = reinterpret_cast<const sockaddr_in6*>(&peerAddr);
+        if (inet_ntop(AF_INET6, &(a6->sin6_addr), ipStr, sizeof(ipStr)) == nullptr) {
+            NN_LOG_ERROR("Failed to convert ipv6 number to string");
+            resp = SERVER_INTERNAL_ERROR;
+        } else {
+            peerPort = ntohs(a6->sin6_port);
+        }
+    } else {
+        NN_LOG_ERROR("Unsupported address family: " << family);
         resp = SERVER_INTERNAL_ERROR;
     }
+
     auto tlsConnectCbTask = new (std::nothrow) TlsConnectCbTask(mNewConnectionHandler, fd, mWorkerLb);
     if (NN_UNLIKELY(tlsConnectCbTask == nullptr)) {
         resp = ConnectResp::CONN_ACCEPT_NEW_TASK_FAIL;
-    } else {
-        tlsConnectCbTask->SetIpPort(std::string(ipStr), ntohs(addressIn.sin_port), mListenPort);
+    } 
+
+    if (resp == ConnectResp::OK) {
+        tlsConnectCbTask->SetIpPort(std::string(ipStr), peerPort, mListenPort);
         tlsConnectCbTask->SetTlsCb(mTlsCertCb, mTlsPrivateKeyCb, mTlsCaCallback);
         tlsConnectCbTask->SetTlsOptions(mCipherSuite, mTlsVersion);
         tlsConnectCbTask->SetPSKCallback(mPskFindSessionCb, mPskUseSessionCb);
