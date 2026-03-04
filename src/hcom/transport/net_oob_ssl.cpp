@@ -54,10 +54,13 @@ void OOBSSLServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr,
         resp = SERVER_INTERNAL_ERROR;
     }
 
-    auto tlsConnectCbTask = new (std::nothrow) TlsConnectCbTask(mNewConnectionHandler, fd, mWorkerLb);
-    if (NN_UNLIKELY(tlsConnectCbTask == nullptr)) {
-        resp = ConnectResp::CONN_ACCEPT_NEW_TASK_FAIL;
-    } 
+    TlsConnectCbTask *tlsConnectCbTask =  nullptr;
+    if(resp == ConnectResp::OK) {
+        tlsConnectCbTask = new (std::nothrow) TlsConnectCbTask(mNewConnectionHandler, fd, mWorkerLb);
+        if (NN_UNLIKELY(tlsConnectCbTask == nullptr)) {
+            resp = ConnectResp::CONN_ACCEPT_NEW_TASK_FAIL;
+        }
+    }
 
     if (resp == ConnectResp::OK) {
         tlsConnectCbTask->SetIpPort(std::string(ipStr), peerPort, mListenPort);
