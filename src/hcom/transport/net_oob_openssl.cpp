@@ -247,6 +247,7 @@ NResult OOBOpenSSLConnection::InitSSL(bool isServer)
     }
     OOB_SSL_LAYER_CHECK_RET(ret <= 0, "Failed to set cipher suites to TLS context");
 
+    NN_LOG_INFO("test : commload");
     bool success = (CommLoad(isServer) == NN_OK);
     if (isServer) {
         OOB_SSL_LAYER_CHECK_RET(!success, "Failed to initialize TLS context for encryption at server");
@@ -296,50 +297,65 @@ NResult OOBOpenSSLConnection::CommLoad(bool isServer)
     int passLen = 0;
     void *keyPass = nullptr;
     UBSHcomTLSEraseKeypass erase = nullptr;
+    NN_LOG_INFO("test : 2");
     if (mCertCallback != nullptr && mKeyCallback != nullptr) {
         std::string certPath;
         bool result = mCertCallback(mIpAndPort, certPath);
         OOB_SSL_LAYER_CHECK_RET(!result, "TLS callback get CERT path failed");
         OOB_SSL_LAYER_CHECK_RET(!CanonicalPath(certPath), "get invalid cert path");
+        NN_LOG_INFO("test : 3");
 
         std::string keyPath;
         result = mKeyCallback(mIpAndPort, keyPath, keyPass, passLen, erase);
         OOB_SSL_LAYER_CHECK_RET(!result, "TLS callback get private-key path failed");
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(!CanonicalPath(keyPath), "get invalid keyPath");
+        NN_LOG_INFO("test : 4");
         /* load cert chain */
         auto ret = HcomSsl::SslCtxUseCertificateChainFile(mSslCtx, certPath.c_str());
+        NN_LOG_INFO("test : 5");
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0, "TLS use certification file chain failed");
         HcomSsl::SslCtxSetDefaultPasswdCbUserdata(mSslCtx, keyPass);
+        NN_LOG_INFO("test : 6");
         /* load private key */
         ret = HcomSsl::SslCtxUsePrivateKeyFile(mSslCtx, keyPath.c_str(), HcomSsl::SSL_FILETYPE_PEM);
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0, "TLS use private-key file failed");
+        NN_LOG_INFO("test : 7");
         /* check private key */
         ret = HcomSsl::SslCtxCheckPrivateKey(mSslCtx);
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0, "TLS check private-key failed");
+        NN_LOG_INFO("test : 8");
     }
+    NN_LOG_INFO("test : 9");
 
     /* set psk callback */
     if (mPskFindSessionCb != nullptr || mPskUseSessionCb != nullptr) {
+        NN_LOG_INFO("test : 10");
         auto ret = SetPSKCallback(isServer);
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret != NN_OK, "Failed to set psk callback");
     }
 
+    NN_LOG_INFO("test : 11");
     mSsl = HcomSsl::SslNew(mSslCtx);
     OOB_SSL_LAYER_CHECK_RET_ERASE_RET(mSsl == nullptr, "Failed to new TLS, probably out of memory");
 
+    NN_LOG_INFO("test : 12");
     auto ret = HcomSsl::SslSetFd(mSsl, mFD);
     OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0, "Failed to set fd to TLS, result " << ret);
 
+    NN_LOG_INFO("test : 13");
     /* Server will accept and Client will connect */
     ret = isServer ? HcomSsl::SslAccept(mSsl) : HcomSsl::SslConnect(mSsl);
     if (isServer) {
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0,
             "TLS Failed to accept new TLS connection, result " << ret << " failed");
     } else {
+        NN_LOG_INFO("test : 14");
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0, "TLS Failed to connect to TLS server, result " << ret << " failed");
     }
+    NN_LOG_INFO("test : 15");
 
     if (erase != nullptr) {
+        NN_LOG_INFO("test : 16");
         erase(keyPass, passLen);
     }
     return NN_OK;

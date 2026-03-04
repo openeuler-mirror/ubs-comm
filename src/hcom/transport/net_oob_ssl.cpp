@@ -259,11 +259,13 @@ NResult OOBSSLConnection::SSLClientRecvHandler(int tmpFD)
 /* OOBSSLClient */
 NResult OOBSSLClient::Connect(const std::string &ip, uint32_t port, OOBTCPConnection *&conn)
 {
+    NN_LOG_INFO("test : connect ssl");
     int fd = -1;
     auto result = ConnectWithFd(ip, port, fd);
     if (result != NN_OK) {
         return result;
     }
+    NN_LOG_INFO("test : via ssl");
 
     mOobConn = new (std::nothrow) OOBOpenSSLConnection(fd);
     if (NN_UNLIKELY(mOobConn == nullptr)) {
@@ -271,6 +273,7 @@ NResult OOBSSLClient::Connect(const std::string &ip, uint32_t port, OOBTCPConnec
         NetFunc::NN_SafeCloseFd(fd);
         return NN_NEW_OBJECT_FAILED;
     }
+    NN_LOG_INFO("test : 1");
 
     mOobConn->SetTlsOptions(mCipherSuite, mTlsVersion);
     mOobConn->SetTLSCallback(mTlsCertCb, mTlsPrivateKeyCb, mTlsCaCallback);
