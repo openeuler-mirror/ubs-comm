@@ -102,8 +102,6 @@ private:
  */
 const std::string CONST_EMPTY_STRING;
 
-
-
 using NResult = int32_t;
 
 constexpr uint16_t INVALID_WORKER_INDEX = 0xFFFF;

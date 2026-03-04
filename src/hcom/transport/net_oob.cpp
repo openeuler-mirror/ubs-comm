@@ -519,13 +519,6 @@ NResult OOBTCPServer::StartForUds()
     return NN_OK;
 }
 
-// void OOBTCPServer::DealConnectInThread(int fd, struct sockaddr_in addressIn)
-// {
-//     sockaddr_storage ss {};
-//     std::memcpy(&ss, &addressIn, sizeof(addressIn));
-//     DealConnectInThreadIpv(fd, ss, sizeof(addressIn));
-// }
-
 void OOBTCPServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr, socklen_t peerLen)
 {
     ConnectResp resp = ConnectResp::OK;

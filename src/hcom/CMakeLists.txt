@@ -191,7 +191,28 @@ set(HCOM_SRC_INCLUDE_PATH
 
 include_directories(/usr/include/ub/umdk/urma)
 link_directories(/usr/lib64)
-add_subdirectory(umq/stub/urma)
+
+option(URMA_STUB_SHARED "environment open stub: " OFF)
+message(STATUS "URMA_STUB_SHARED: ${URMA_STUB_SHARED}")
+
+find_library(URMA_LIB NAMES urma)
+find_library(TPSA_LIB NAMES tpsa)
+
+if(USE_URMA_STUB OR (URMA_LIB AND TPSA_LIB))
+    message(STATUS "found urma library: ${URMA_LIB}")
+    message(STATUS "found tpsa library: ${TPSA_LIB}")
+    set(URMA_STUB_SHARED OFF)
+else()
+    message(WARNING "urma or tpsa library not found, using stub implementation")
+    set(URMA_STUB_SHARED ON)
+endif()
+
+if(URMA_STUB_SHARED)
+    message(STATUS "using URMA_STUB_SHARED: ${URMA_STUB_SHARED}")
+    add_subdirectory(umq/stub/urma)
+else()
+    message(STATUS "not use URMA_STUB_SHARED: ${URMA_STUB_SHARED}")
+endif()
 
 file(GLOB_RECURSE HCOM *.cpp *.h)
 file(GLOB_RECURSE HCOM_JNI_SRCS "${HCOM_SRC_DIR}/src/hcom/api/java_sdk/*.cpp"
