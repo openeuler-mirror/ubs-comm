@@ -161,7 +161,7 @@ set(CXX_FLAGS
     #-fPIC will cause failure while mocking system functions
 )
 string(REPLACE ";" " " CMAKE_CXX_FLAGS "${CXX_FLAGS}")
-set(DEPEND_LIBS rt pthread gtest gcov mockcpp dl fake_ibv_static boundscheck urma tpsa)
+set(DEPEND_LIBS rt pthread gtest gcov mockcpp dl fake_ibv_static boundscheck)
 target_compile_options(${HCOM_UT} PUBLIC -D_GNU_SOURCE)
 set_target_properties(${HCOM_UT} PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 set_target_properties(${HCOM_UT} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
