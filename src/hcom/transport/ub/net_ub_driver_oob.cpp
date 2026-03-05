@@ -52,6 +52,7 @@ NResult NetDriverUBWithOob::DoInitialize()
                 if (bondingEid.empty() || !NetFunc::NN_IsUrmaEid(bondingEid)) {
                     continue;
                 }
+                NN_LOG_DEBUG("BondingEid: " << bondingEid);
                 std::string localPrimaryEid;
                 std::string remotePrimaryEid;
                 NetFunc::NN_GetPrimaryEid(bondingEid, bondingEid, localPrimaryEid, remotePrimaryEid);
