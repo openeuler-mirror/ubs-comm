@@ -323,8 +323,8 @@ public:
     {
         struct in6_addr eidIn6{};
         uint32_t size = sizeof(uint64_t); // size of uint64_t: 8
-        (void)memcpy(&eidIn6.s6_addr[0], &eid.in6.subnet_prefix, size);
-        (void)memcpy(&eidIn6.s6_addr[size], &eid.in6.interface_id, size);
+        memcpy_s(&eidIn6.s6_addr[0], size, &eid.in6.subnet_prefix, size);
+        memcpy_s(&eidIn6.s6_addr[size], size, &eid.in6.interface_id, size);
 
         strEid.resize(INET6_ADDRSTRLEN);
         if (inet_ntop(AF_INET6, &eidIn6, &strEid[0], strEid.size()) == nullptr) {
@@ -347,8 +347,8 @@ public:
         }
 
         eid = {0};
-        (void)memcpy(&eid.in6.subnet_prefix, &eidIn6.s6_addr[0], size);
-        (void)memcpy(&eid.in6.interface_id, &eidIn6.s6_addr[size], size);
+        memcpy_s(&eid.in6.subnet_prefix, size, &eidIn6.s6_addr[0], size);
+        memcpy_s(&eid.in6.interface_id, size, &eidIn6.s6_addr[size], size);
         NN_LOG_INFO("Convert string to eid success.");
 
         return NN_OK;
@@ -365,8 +365,8 @@ public:
         uvs_eid_t uDstBondingEid = {0};
         NN_StrToEid(srcBondingEid, uSrcBondingEid);
         NN_StrToEid(dstBondingEid, uDstBondingEid);
-        (void)memcpy(&uvsRoute.src, &uSrcBondingEid, sizeof(uvs_eid_t));
-        (void)memcpy(&uvsRoute.dst, &uDstBondingEid, sizeof(uvs_eid_t));
+        memcpy_s(&uvsRoute.src, sizeof(uvs_eid_t), &uSrcBondingEid, sizeof(uvs_eid_t));
+        memcpy_s(&uvsRoute.dst, sizeof(uvs_eid_t), &uDstBondingEid, sizeof(uvs_eid_t));
 
         int ret = uvs_get_route_list(&uvsRoute, &uvsRouteList);
         if (ret != 0) {
@@ -380,8 +380,8 @@ public:
 
         uvs_eid_t uSrcPrimaryEid = {0};
         uvs_eid_t uDstPrimaryEid = {0};
-        (void)memcpy(&uSrcPrimaryEid, &uvsRouteList.buf[0].src, sizeof(uvs_eid_t));
-        (void)memcpy(&uDstPrimaryEid, &uvsRouteList.buf[0].dst, sizeof(uvs_eid_t));
+        memcpy_s(&uSrcPrimaryEid, sizeof(uvs_eid_t), &uvsRouteList.buf[0].src, sizeof(uvs_eid_t));
+        memcpy_s(&uDstPrimaryEid, sizeof(uvs_eid_t), &uvsRouteList.buf[0].dst, sizeof(uvs_eid_t));
         NN_EidToStr(uSrcPrimaryEid, srcPrimaryEid);
         NN_EidToStr(uDstPrimaryEid, dstPrimaryEid);
 

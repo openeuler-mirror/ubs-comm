@@ -720,6 +720,7 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
             NN_LOG_ERROR("Failed to connect as driver not start or payload oversize");
             return NN_ERROR;
         }
+        NN_LOG_DEBUG("oobIp eid: " << oobIp << ", meid: " << mEid);
         std::string localPrimaryEid;
         std::string remotePrimaryEid;
         NetFunc::NN_GetPrimaryEid(mEid, oobIp, localPrimaryEid, remotePrimaryEid);
