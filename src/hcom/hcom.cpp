@@ -308,6 +308,10 @@ UBSHcomNetDriver *UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol t, const s
                 NN_LOG_ERROR("Failed to load urma API");
                 return nullptr;
             }
+            if (HcomTpsa::Load() != 0) {
+                NN_LOG_ERROR("Failed to load tpsa API");
+                return nullptr;
+            }
             driver = new (std::nothrow) NetDriverUBWithOob(name, startOobSvr, t);
             break;
 #else

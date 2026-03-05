@@ -31,7 +31,7 @@
 #include "net_trace.h"
 #include "net_util.h"
 #include "securec.h"
-#include "uvs_api.h"
+#include "tpsa_api_dl_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -368,13 +368,13 @@ public:
         memcpy_s(&uvsRoute.src, sizeof(uvs_eid_t), &uSrcBondingEid, sizeof(uvs_eid_t));
         memcpy_s(&uvsRoute.dst, sizeof(uvs_eid_t), &uDstBondingEid, sizeof(uvs_eid_t));
 
-        int ret = uvs_get_route_list(&uvsRoute, &uvsRouteList);
+        int ret = UvsGetRouteList(&uvsRoute, &uvsRouteList);
         if (ret != 0) {
-            NN_LOG_ERROR("uvs_get_route_list failed, ret " << ret);
+            NN_LOG_ERROR("UvsGetRouteList failed, ret " << ret);
             return NN_INVALID_PARAM;
         }
         if (uvsRouteList.len == 0) {
-            NN_LOG_WARN("uvs_get_route_list returned empty.");
+            NN_LOG_WARN("UvsGetRouteList returned empty.");
             return NN_INVALID_PARAM;
         }
 

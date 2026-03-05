@@ -189,35 +189,6 @@ set(HCOM_SRC_INCLUDE_PATH
     ${HCOM_SRC_DIR}/src/hcom/multicast/include
 )
 
-include_directories(/usr/include/ub/umdk/urma)
-link_directories(/usr/lib64)
-
-option(URMA_STUB_SHARED "environment open stub: " OFF)
-message(STATUS "URMA_STUB_SHARED: ${URMA_STUB_SHARED}")
-
-find_library(URMA_LIB NAMES urma)
-find_library(TPSA_LIB NAMES tpsa)
-
-if(USE_URMA_STUB OR (URMA_LIB AND TPSA_LIB))
-    message(STATUS "found urma library: ${URMA_LIB}")
-    message(STATUS "found tpsa library: ${TPSA_LIB}")
-    set(URMA_STUB_SHARED OFF)
-else()
-    message(WARNING "urma or tpsa library not found, using stub implementation")
-    set(URMA_STUB_SHARED ON)
-endif()
-
-if(USE_URMA_STUB)
-    add_subdirectory(umq/stub/urma)
-endif()
-
-if(URMA_STUB_SHARED)
-    message(STATUS "using URMA_STUB_SHARED: ${URMA_STUB_SHARED}")
-    add_subdirectory(umq/stub/urma)
-else()
-    message(STATUS "not use URMA_STUB_SHARED: ${URMA_STUB_SHARED}")
-endif()
-
 file(GLOB_RECURSE HCOM *.cpp *.h)
 
 file(GLOB HCOM_RDMA_COMMON "${HCOM_SRC_DIR}/src/hcom/transport/rdma/*")
@@ -255,7 +226,7 @@ endif ()
 add_library(hcom_static_obj STATIC ${HCOM})
 target_link_libraries(hcom_static_obj
         -Wl,--start-group
-        pthread dl rt boundscheck urma tpsa
+        pthread dl rt boundscheck 
         -Wl,--end-group)
 
 add_custom_command(
@@ -273,7 +244,7 @@ add_library(hcom SHARED ${HCOM})
 target_compile_options(hcom PUBLIC -Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now)
 target_link_libraries(hcom
         -Wl,--start-group
-        pthread dl rt boundscheck urma tpsa
+        pthread dl rt boundscheck 
         -Wl,--end-group)
 
 set_target_properties(hcom PROPERTIES
