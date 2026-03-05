@@ -368,7 +368,7 @@ public:
         memcpy_s(&uvsRoute.src, sizeof(uvs_eid_t), &uSrcBondingEid, sizeof(uvs_eid_t));
         memcpy_s(&uvsRoute.dst, sizeof(uvs_eid_t), &uDstBondingEid, sizeof(uvs_eid_t));
 
-        int ret = UvsGetRouteList(&uvsRoute, &uvsRouteList);
+        int ret = HcomTpsa::UvsGetRouteList(&uvsRoute, &uvsRouteList);
         if (ret != 0) {
             NN_LOG_ERROR("UvsGetRouteList failed, ret " << ret);
             return NN_INVALID_PARAM;
