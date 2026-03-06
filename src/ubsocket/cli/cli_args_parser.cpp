@@ -45,8 +45,9 @@ static bool ParseIpv6Eid(char* eidBuf, size_t bufSize, const char* arg)
     return true;
 }
 
-bool CLIArgsParser::ParseSubArgs(int argc, char *argv[], ParsedArgs &args)
+bool CLIArgsParser::Parse(int argc, char *argv[], ParsedArgs &args)
 {
+    optind = 0;
     int opt;
     while ((opt = getopt_long(argc, argv, "hwp:s:d:t:e:v:", options, nullptr)) != -1) {
         switch (opt) {
@@ -91,11 +92,6 @@ bool CLIArgsParser::ParseSubArgs(int argc, char *argv[], ParsedArgs &args)
                 return false;
         }
     }
-}
-
-bool CLIArgsParser::Parse(int argc, char *argv[], ParsedArgs &args)
-{
-    optind = 0;
     if (optind >= argc) {
         CLI_LOG("Missing command (e.g., 'topo', 'stat', 'delay')\n");
         PrintUsage(argv[0]);
@@ -107,9 +103,6 @@ bool CLIArgsParser::Parse(int argc, char *argv[], ParsedArgs &args)
         return false;
     }
     args.command = GetCmd(cmd);
-    if (!ParseSubArgs(argc, argv, args)) {
-        return false;
-    }
     return true;
 }
 

@@ -77,17 +77,19 @@ cc_library(
         "ubsocket/*.cpp",
         "ubsocket/*.c",
         "ubsocket/brpc/*.cpp",
+        "ubsocket/trace/*.cpp",
     ]) + glob([  # 头文件现在也放在 srcs 里
         "ubsocket/*.h",
         "ubsocket/brpc/*.h",
         "ubsocket/brpc/**/*.h",
+        "ubsocket/trace/*.h",
     ]),
     copts = [
         "-D_GNU_SOURCE",
         "-std=c++14",
         "-fPIC",
     ],
-    includes = [".", "ubsocket", "ubsocket/brpc"],
+    includes = [".", "ubsocket", "ubsocket/brpc", "ubsocket/trace"],
     deps = [
         ":boundscheck_lib",  # 依赖 boundscheck 库
         "//src/hcom/umq:umq",
@@ -99,15 +101,17 @@ cc_binary(
     name = "ubstat",
     srcs = glob([
         "ubsocket/cli/*.cpp",
+        "ubsocket/trace/*.cpp",
     ]) + glob([  # 头文件现在也放在 srcs 里
         "ubsocket/cli/*.h",
+        "ubsocket/trace/*.h",
     ]),
     copts = [
         "-D_GNU_SOURCE",
         "-std=c++14",
         "-fPIC"
     ],
-    includes = [".", "ubsocket", "ubsocket/brpc", "ubsocket/cli"],
+    includes = [".", "ubsocket", "ubsocket/brpc", "ubsocket/cli", "ubsocket/trace"],
     deps = [
         ":boundscheck_lib",  # 依赖 boundscheck 库
         "//src/hcom/umq:umq",
