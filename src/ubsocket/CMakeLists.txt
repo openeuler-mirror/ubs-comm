@@ -69,7 +69,7 @@ endif()
 ## Definitions
 
 ## Includes
-target_include_directories(ubsocket PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(ubsocket PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/trace)
 
 ## Install
 
@@ -84,7 +84,12 @@ target_sources(ubsocket
     ${CMAKE_CURRENT_SOURCE_DIR}/urpc_util.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/util_vlog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cli_message.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/trace/utracer.cpp
 )
+
+if (UBSOCKET_DELAY_TRACER_ENABLED)
+  add_definitions(-DUBSOCKET_DELAY_TRACER_ENABLED)
+endif ()
 
 # brpc adaptor
 option(BUILD_WITH_UBS_SHM "Build UBS SHM" OFF)

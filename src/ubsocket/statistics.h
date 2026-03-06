@@ -25,6 +25,8 @@
 #include "file_descriptor.h"
 #include "configure_settings.h"
 #include "cli_message.h"
+#include "utracer.h"
+#include "utracer_manager.h"
 
 #define RPC_VAR         (2)
 
@@ -586,6 +588,71 @@ class Listener {
         return;
     }
 
+    void DealDelayOperation(CLIDelayHeader &delayHeader,
+                            std::vector<TranTraceInfo> &tranTraceInfos, CLIControlHeader header)
+    {
+        switch (header.mType) {
+            case CLITypeParam::TRACE_OP_QUERY:
+                tranTraceInfos = GetTraceInfos(
+                    INVALID_TRACE_POINT_ID, header.mValue, UTracerManager::IsLatencyQuantileEnable());
+                delayHeader.tracePointNum = tranTraceInfos.size();
+                break;
+            case CLITypeParam::TRACE_OP_RESET:
+                ResetTraceInfos();
+                break;
+            case CLITypeParam::TRACE_OP_ENABLE_TRACE:
+                UTracerManager::SetEnable(header.GetSwitch(CLISwitchPosition::IS_TRACE_ENABLE));
+                UTracerManager::SetLatencyQuantileEnable(
+                    header.GetSwitch(CLISwitchPosition::IS_LATENCY_QUANTILE_ENABLE));
+                UTracerManager::SetEnableLog(header.GetSwitch(CLISwitchPosition::IS_TRACE_LOG_ENABLE), "");
+                break;
+            case CLITypeParam::INVALID:
+            default:
+                delayHeader.retCode = -1;
+                RPC_ADPT_VLOG_WARN("OpType error for trace operation.");
+                break;
+        }
+    }
+
+    void ProcessDelayRequest(int fd, CLIMessage &msg, CLIControlHeader header)
+    {
+        CLIDelayHeader delayHeader{};
+        std::vector<TranTraceInfo> tranTraceInfos{};
+        DealDelayOperation(delayHeader, tranTraceInfos, header);
+        uint32_t headerSize = sizeof(CLIDelayHeader);
+        uint32_t traceDataSize = delayHeader.tracePointNum * sizeof(TranTraceInfo);
+        uint32_t totalSize = headerSize + traceDataSize;
+        // malloc mem base on socket cnt
+        if (!msg.AllocateIfNeed(totalSize)) {
+            RPC_ADPT_VLOG_WARN("Failed to alloc reponsese memory\n");
+            return;
+        }
+        // collect data
+        if (memcpy_s(msg.Data(), msg.GetBufLen(), &delayHeader, headerSize) != 0) {
+            RPC_ADPT_VLOG_WARN("Failed to memcpy cli header\n");
+            return;
+        }
+        if (delayHeader.tracePointNum > 0) {
+            uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDelayHeader);
+            if (memcpy_s(data, traceDataSize, tranTraceInfos.data(), traceDataSize) != 0) {
+                RPC_ADPT_VLOG_WARN("Failed to memcpy trace data\n");
+                return;
+            }
+        }
+        header.Reset();
+        header.mDataSize = totalSize;
+        if (SocketFd::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CLIControlHeader)) {
+            RPC_ADPT_VLOG_WARN("Failed to send CLIControlHeader\n");
+            return;
+        }
+
+        if (SocketFd::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
+            RPC_ADPT_VLOG_WARN("Failed to send CLIControlHeader\n");
+            return;
+        }
+    }
+
     void Process(uint32_t events)
     {
         static CLIMessage msg{};
@@ -624,6 +691,8 @@ class Listener {
             ProcessStatRequest(fd, msg, header);
         } else if (header.mCmdId == CLICommand::TOPO) {
             ProcessTopoRequest(fd, header);
+        } else if (header.mCmdId == CLICommand::DELAY) {
+            ProcessDelayRequest(fd, msg, header);
         }
         return;
     }

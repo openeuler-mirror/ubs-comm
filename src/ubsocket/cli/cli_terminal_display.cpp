@@ -7,6 +7,7 @@
  *History: 2026-02-09
 */
 
+#include "utracer_info.h"
 #include "cli_terminal_display.h"
 
 namespace Statistics {
@@ -106,6 +107,38 @@ void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
     }
     NewLine();
     printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
+}
+
+void TerminalDisplay::DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen)
+{
+    uint32_t headerSize = sizeof(CLIDelayHeader);
+    if (dataLen < headerSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    CLIDelayHeader header{};
+    if (memcpy_s(&header, headerSize, data, headerSize) != 0) {
+        CLI_LOG("Failed to memcpy CLIDataHeader\n");
+        return;
+    }
+    if (header.retCode != 0) {
+        printf("Error occur while deal delay operation\n");
+        return;
+    }
+    uint32_t traceNum = header.tracePointNum;
+    uint32_t expectedSize = headerSize + traceNum * sizeof(TranTraceInfo);
+    if (dataLen != expectedSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    auto* traceInfos = reinterpret_cast<TranTraceInfo *>(data + headerSize);
+    for (uint32_t i = 0; i < traceNum; i++) {
+        if (i == 0) {
+            printf("%s \n", TranTraceInfo::HeaderString().data());
+        }
+        printf("%s \n", traceInfos[i].ToString().data());
+    }
+    printf("Success to deal delay operation.\n");
 }
 
 void TerminalDisplay::PrintHeader(CLIDataHeader &header)

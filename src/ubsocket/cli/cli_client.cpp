@@ -10,6 +10,7 @@
 #include "file_descriptor.h"
 #include "cli_args_parser.h"
 #include "cli_terminal_display.h"
+#include "utracer_info.h"
 #include "cli_client.h"
 
 namespace Statistics {
@@ -79,6 +80,86 @@ int CLIClient::ProcessTopo(int sockfd, CLIMessage &response, CLIArgsParser::Pars
     return 0;
 }
 
+static std::unordered_map<std::string, CLITypeParam> delayTypeNameToType = {
+    {"query", CLITypeParam::TRACE_OP_QUERY},
+    {"enable", CLITypeParam::TRACE_OP_ENABLE_TRACE},
+    {"reset", CLITypeParam::TRACE_OP_RESET},
+};
+
+CLITypeParam tranCliTypeParam(const std::string &name, CLITypeParam *type,
+                              const std::unordered_map<std::string, CLITypeParam> &nameToType)
+{
+    auto it = nameToType.find(name);
+    if (it != nameToType.end()) {
+        *type = it->second;
+        return it->second;
+    }
+    return CLITypeParam::INVALID;
+}
+
+static std::unordered_map<std::string, CLISwitchPosition> delaySwitchNameToPosition = {
+    {"trace", CLISwitchPosition::IS_TRACE_ENABLE},
+    {"quantile", CLISwitchPosition::IS_LATENCY_QUANTILE_ENABLE},
+    {"log", CLISwitchPosition::IS_TRACE_LOG_ENABLE},
+};
+
+bool dealDelayEnableParse(CLIControlHeader& header, const std::string& enable)
+{
+    std::vector<std::string> result = {};
+    UTracerUtils::SplitStr(enable, ",", result);
+    for (const auto& name : result) {
+        auto it = delaySwitchNameToPosition.find(name);
+        if (it == delaySwitchNameToPosition.end()) {
+            return false;
+        }
+        header.SetSwitch(it->second, true);
+    }
+    return true;
+}
+
+int CLIClient::ProcessDelayQuery(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args)
+{
+    CLIControlHeader header{};
+    header.Reset();
+    header.mCmdId = CLICommand::DELAY;
+    header.mValue = args.value;
+    if (tranCliTypeParam(args.type, &header.mType, delayTypeNameToType) == CLITypeParam::INVALID) {
+        CLI_LOG("Invalid type param for delay\n");
+        return -1;
+    }
+    if (header.mType == CLITypeParam::TRACE_OP_ENABLE_TRACE && !dealDelayEnableParse(header, args.enable)) {
+        CLI_LOG("Invalid enable param for delay\n");
+        return -1;
+    }
+    if (SocketFd::SendSocketData(sockfd, &header, sizeof(CLIControlHeader), cliclientIoTimeoutMs) !=
+        sizeof(CLIControlHeader)) {
+        CLI_LOG("Failed to send CLIControlHeader\n");
+        return -1;
+    }
+    if (SocketFd::RecvSocketData(sockfd, &header, sizeof(CLIControlHeader), cliclientIoTimeoutMs) !=
+        sizeof(CLIControlHeader)) {
+        CLI_LOG("Failed to recv CLIControlHeader\n");
+        return -1;
+    }
+    uint32_t payloadLen = header.mDataSize;
+    if (payloadLen == 0 || payloadLen > maxResponseSize) {
+        CLI_LOG("Invalid paylaod size: %d\n", payloadLen);
+        return -1;
+    }
+
+    if (!response.AllocateIfNeed(payloadLen)) {
+        CLI_LOG("Failed to alloc reponsese memory\n");
+        return -1;
+    }
+
+    if (SocketFd::RecvSocketData(sockfd, response.Data(), payloadLen, cliclientIoTimeoutMs) != payloadLen) {
+        CLI_LOG("Failed to recv server msg\n");
+        return -1;
+    }
+    response.SetDataLen(payloadLen);
+    return 0;
+}
+
 int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
 {
     if (!IsServerAvailable()) {
@@ -116,6 +197,10 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
 
     if (args.command == CLICommand::TOPO) {
         return ProcessTopo(sockfd, response, args);
+    }
+
+    if (args.command == CLICommand::DELAY) {
+        return ProcessDelayQuery(sockfd, response, args);
     }
     return 0;
 }

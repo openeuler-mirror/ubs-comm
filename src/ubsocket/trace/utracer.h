@@ -92,7 +92,7 @@ private:
     UbSocketTracePointId id = TP_ID;                                                                                  \
     std::string name = #TP_ID;                                                                                        \
     UbsTraceDefer defer([id, name, &tpBegin##TP_ID]() { TRACE_DELAY_DEFER_BEGIN(id, name.c_str(), tpBegin##TP_ID); }, \
-        [id, &(RET_CODE), &tpBegin##TP_ID]() { TRACE_DELAY_DEFER_END(id, (RET_CODE), tpBegin##TP_ID); });
+        [id, &RET_CODE, &tpBegin##TP_ID]() { TRACE_DELAY_DEFER_END(id, (RET_CODE), tpBegin##TP_ID); });
 }
 
 

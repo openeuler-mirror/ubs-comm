@@ -27,6 +27,9 @@ public:
         bool watch = false;
         char srcEid[INET6_ADDRSTRLEN];
         char dstEid[INET6_ADDRSTRLEN];
+        std::string type;
+        std::string enable;
+        double value = 0;
     };
 
     static bool Parse(int argc, char *argv[], ParsedArgs &args);

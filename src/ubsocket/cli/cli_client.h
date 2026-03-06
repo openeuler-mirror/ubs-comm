@@ -36,6 +36,9 @@ public:
 
     int ProcessTopo(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
 
+    int ProcessDelayQuery(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
+
+    int ProcessUmqInfo(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
 private:
     std::string mServerPath;
 };

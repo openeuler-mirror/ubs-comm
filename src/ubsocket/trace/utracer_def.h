@@ -21,6 +21,7 @@ constexpr uint32_t NN_NO2 = 2;
 constexpr uint32_t NN_NO3 = 3;
 constexpr uint32_t NN_NO4 = 4;
 constexpr uint32_t NN_NO15 = 15;
+constexpr uint32_t NN_NO20 = 20;
 constexpr uint32_t NN_NO30 = 30;
 constexpr uint32_t NN_NO50 = 50;
 constexpr uint32_t NN_NO100 = 100;

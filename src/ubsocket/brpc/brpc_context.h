@@ -23,6 +23,7 @@
 #include "umq_types.h"
 #include "ubs_mem/shm.h"
 #include "print_stats_mgr.h"
+#include "utracer.h"
 
 namespace Brpc {
 
@@ -149,6 +150,10 @@ class Context : public Brpc::ConfigSettings {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to initialize configure settings for brpc\n");
             SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
             return;
+        }
+
+        if (Statistics::UTracerInit() != 0) {
+            RPC_ADPT_VLOG_WARN("Init tracer instance failed. Delay trace will not in use!");
         }
 
         if (m_use_brpc_zcopy) {

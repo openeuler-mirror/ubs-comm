@@ -33,6 +33,7 @@
 #include "cli_message.h"
 #include "umq_dfx_types.h"
 #include "umq_dfx_api.h"
+#include "utracer.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
 #define UMQ_BIND_SYNC_MSG       "SYNC_DONE"
@@ -69,7 +70,7 @@ constexpr uint32_t GET_PER_ACK = 32;
 constexpr uint32_t POLL_BATCH_MAX = 32;
 
 namespace Brpc {
-
+using namespace Statistics;
 // adapt to brpc, brpc IOBuf block use 8k as buffer slice with a 32 bytes head, thus, RX buffer size is 8160
 inline uint32_t BrpcIOBufSize()
 {
@@ -301,6 +302,8 @@ public:
 
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
     {
+        int retCode = 0;
+        TRACE_DELAY_AUTO(BRPC_ACCEPT_CALL, retCode);
         int fd = OsAPiMgr::GetOriginApi()->accept(m_fd, address, address_len);
         if (fd >= 0 && address != nullptr) {
             SocketFd* socket_fd_obj = static_cast<SocketFd*>(Fd<::SocketFd>::GetFdObj(fd));
@@ -311,7 +314,7 @@ public:
                 m_peer_info.peer_fd = fd;
             }
         }
-
+        retCode = fd;
         if (m_tx_use_tcp || m_rx_use_tcp) {
             return fd;
         }
@@ -348,7 +351,8 @@ public:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to accept as protocol dismatch,Peer IP:%s\n",
                               GetPeerIp().c_str());
             OsAPiMgr::GetOriginApi()->close(fd);
-            return -1;
+            retCode = -1;
+            return retCode;
         }
         if (ret > 0) {
             /* IF the magic number verification fails, it is still necessary to create a socket fd object
@@ -362,7 +366,8 @@ public:
             } catch (std::exception& e) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "%s\n", e.what());
                 OsAPiMgr::GetOriginApi()->close(fd);
-                return -1;
+                retCode = -1;
+                return retCode;
             }
         } else if (ret == 0) {
             if (DoAccept(fd) != 0) {
@@ -382,7 +387,6 @@ public:
         if (m_context_trace_enable) {
             UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
         }
-
         return fd;
     }
 
@@ -687,7 +691,9 @@ public:
 
     ALWAYS_INLINE int Connect (const struct sockaddr *address, socklen_t address_len)
     {
-        int ret = OsAPiMgr::GetOriginApi()->connect(m_fd, address, address_len);
+        int ret = 0;
+        TRACE_DELAY_AUTO(BRPC_CONNECT_CALL, ret);
+        ret = OsAPiMgr::GetOriginApi()->connect(m_fd, address, address_len);
         if (address != nullptr) {
             // 使用提取的接口获取IP地址
             std::string peer_ip = ExtractIpFromSockAddr(address);
@@ -803,8 +809,12 @@ public:
 
     ALWAYS_INLINE ssize_t ReadV(const struct iovec *iov, int iovcnt)
     {
+        int retCode = -1;
+        TRACE_DELAY_AUTO(BRPC_READV_CALL, retCode);
         if (m_rx_use_tcp) {
-            return OsAPiMgr::GetOriginApi()->readv(m_fd, iov, iovcnt);
+            ssize_t size = OsAPiMgr::GetOriginApi()->readv(m_fd, iov, iovcnt);
+            retCode = size < 0 ? -1 : 0;
+            return size;
         }
 
         if (iov == nullptr || iovcnt == 0) {
@@ -817,6 +827,7 @@ public:
          * (2) when all the received message passed to caller, fallback to tcp/ip */
         ssize_t rx_total_len = OutputErrorMagicNumber(iov, iovcnt);
         if (rx_total_len > 0) {
+            retCode = 0;
             return rx_total_len;
         }
 
@@ -898,6 +909,7 @@ public:
             }
             bool closed = m_closed.load(std::memory_order_relaxed);
             if (closed == true) {
+                retCode = 0;
                 return 0;
             }
 
@@ -919,14 +931,18 @@ public:
             UpdateTraceStats(StatsMgr::RX_PACKET_COUNT, 1);
             UpdateTraceStats(StatsMgr::RX_BYTE_COUNT, rx_total_len);
         }
-
+        retCode = 0;
         return rx_total_len;
     }
 
     ALWAYS_INLINE ssize_t WriteV(const struct iovec *iov, int iovcnt)
     {
+        int retCode = -1;
+        TRACE_DELAY_AUTO(BRPC_WRITEV_CALL, retCode);
         if (m_tx_use_tcp) {
-            return OsAPiMgr::GetOriginApi()->writev(m_fd, iov, iovcnt);
+            ssize_t size = OsAPiMgr::GetOriginApi()->writev(m_fd, iov, iovcnt);
+            retCode = size < 0 ? -1 : 0;
+            return size;
         }
 
         if (iov == nullptr || iovcnt == 0) {
@@ -1098,6 +1114,7 @@ public:
             UpdateTraceStats(StatsMgr::TX_BYTE_COUNT, tx_total_len);
         }
 
+        retCode = 0;
         return tx_total_len;
     }
 

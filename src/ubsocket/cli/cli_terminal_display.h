@@ -55,6 +55,8 @@ public:
     void Refresh();
     std::string BytesToHumanReadable(uint64_t bytes);
     // topo display
+    void DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen);
+
 private:
     void DetectTerminal()
     {

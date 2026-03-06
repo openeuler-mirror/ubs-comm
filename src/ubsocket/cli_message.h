@@ -31,7 +31,22 @@ namespace Statistics {
 enum class CLICommand : uint8_t {
     INVALID = 0,
     TOPO = 1,
-    STAT = 2
+    STAT = 2,
+    DELAY = 3,
+};
+
+enum class CLITypeParam : uint8_t {
+    INVALID = 0,
+    TRACE_OP_QUERY,
+    TRACE_OP_RESET,
+    TRACE_OP_ENABLE_TRACE,
+};
+
+enum class CLISwitchPosition : uint8_t {
+    IS_TRACE_ENABLE = 0,
+    IS_LATENCY_QUANTILE_ENABLE,
+    IS_TRACE_LOG_ENABLE,
+    INVALID = 16
 };
 
 enum class CLIErrorCode : uint8_t {
@@ -45,12 +60,38 @@ struct __attribute__((packed)) CLIControlHeader {
     uint16_t mDataSize;
     umq_eid_t srcEid;
     umq_eid_t dstEid;
+    CLITypeParam mType;
+    uint16_t mSwitch;
+    double mValue;
+
+    void SetSwitch(CLISwitchPosition p, bool enable)
+    {
+        if (p >= CLISwitchPosition::INVALID) {
+            return;
+        }
+        if (enable) {
+            mSwitch |= (1 << (uint8_t)p);
+        } else {
+            mSwitch &= ~(1 << (uint8_t)p);
+        }
+    }
+
+    bool GetSwitch(CLISwitchPosition p)
+    {
+        if (p >= CLISwitchPosition::INVALID) {
+            return false;
+        }
+        return (mSwitch & (1 << (uint8_t)p)) != 0;
+    }
 
     void Reset()
     {
         mCmdId = CLICommand::INVALID;
         mErrorCode = CLIErrorCode::OK;
         mDataSize = 0;
+        mType = CLITypeParam::INVALID;
+        mSwitch = 0;
+        mValue = 0;
     }
 };
 
@@ -67,6 +108,16 @@ struct __attribute__((packed)) CLISocketData {
     uint64_t recvBytes;
     uint64_t sendBytes;
     uint64_t errorPackets;
+};
+
+struct __attribute__((packed)) CLIDelayHeader {
+    int32_t retCode;
+    uint32_t tracePointNum;
+    CLIDelayHeader()
+    {
+        retCode = 0;
+        tracePointNum = 0;
+    }
 };
 
 class CLIMessage {
