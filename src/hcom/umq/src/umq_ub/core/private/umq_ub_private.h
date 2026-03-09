@@ -155,11 +155,12 @@ typedef struct ub_flow_control {
     uint16_t initial_window;
     uint16_t notify_interval;
     uint16_t credits_per_request;
+    uint16_t max_credits_request;
     uint16_t initial_credit;
     uint16_t credit_request_threshold;
     uint16_t return_ratio;
     uint16_t min_reserved_credit;
-    uint16_t credit_multiple;
+    float credit_multiple;
     uint16_t local_tx_depth;
     uint16_t local_rx_depth;
     uint16_t remote_tx_depth;
@@ -247,7 +248,7 @@ typedef struct umq_ub_bind_dev_info {
 } umq_ub_bind_dev_info_t;
 
 typedef struct umq_ub_bind_queue_info {
-    bool is_binded;
+    uint8_t is_binded;
     urma_jetty_grp_policy_t policy;
     urma_jetty_id_t jetty_id;
     urma_order_type_t order_type;
@@ -362,6 +363,7 @@ typedef struct ub_queue {
     volatile uint32_t ref_cnt;
     volatile uint32_t require_rx_count;
     volatile uint32_t tx_outstanding;
+    volatile uint64_t packet_stats[UB_PACKET_STATS_TYPE_MAX];
     uint32_t create_flag;
     uint64_t umq_ctx;
     urma_target_seg_t **imported_tseg_list;   // read-only
@@ -501,7 +503,7 @@ typedef struct mempool_info_ctx {
     bool mempool_info_record[UMQ_MAX_TSEG_NUM];
 } mempool_info_ctx_t;
 
-void fill_big_data_ref_sge(ub_queue_t *queue, ub_ref_sge_t *ref_sge, umq_buf_t *buffer, mempool_info_ctx_t *ctx);
+int fill_big_data_ref_sge(ub_queue_t *queue, ub_ref_sge_t *ref_sge, umq_buf_t *buffer, mempool_info_ctx_t *ctx);
 void umq_ub_fill_rx_buffer(ub_queue_t *queue, int rx_cnt);
 int umq_ub_dequeue_with_poll_rx(ub_queue_t *queue, urma_cr_t *cr, umq_buf_t **buf);
 int umq_ub_dequeue_plus_with_poll_rx(uint64_t umqh_tp, urma_cr_t *cr, umq_buf_t **buf);
@@ -543,6 +545,20 @@ int umq_ub_get_urma_dev(umq_dev_assign_t *dev_info, urma_device_t **urma_dev, um
 umq_ub_ctx_t *umq_ub_get_ub_ctx_by_dev_info(umq_ub_ctx_t *ub_ctx_list, uint32_t ub_ctx_cnt, umq_dev_assign_t *dev_info);
 int umq_ub_create_urma_ctx(urma_device_t *urma_dev, uint32_t eid_index, umq_ub_ctx_t *ub_ctx);
 int umq_ub_delete_urma_ctx(umq_ub_ctx_t *ub_ctx);
+
+static ALWAYS_INLINE void umq_ub_io_packet_stats(
+    ub_queue_t *queue, ub_packet_stats_type_t type, uint32_t cnt, bool lock_free)
+{
+    if ((queue->dev_ctx->feature & UMQ_FEATURE_ENABLE_STATS) == 0) {
+        return;
+    }
+
+    if (lock_free) {
+        queue->packet_stats[type] += cnt;
+    } else {
+        (void)__atomic_add_fetch(&queue->packet_stats[type], cnt, __ATOMIC_RELAXED);
+    }
+}
 
 #ifdef __cplusplus
 }

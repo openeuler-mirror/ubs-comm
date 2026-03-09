@@ -183,8 +183,10 @@ typedef struct umq_flow_control_cfg {
     uint16_t credits_per_request;
     // initial available credit for each umq
     uint16_t initial_credit;
+    // the max number of credits allocated per request for each umq
+    uint16_t max_credits_request;
     // next request credit number = current credit request number * credit_multiple
-    uint16_t credit_multiple;
+    float credit_multiple;
     // credit return ratio divisor, return_ratio = 1: return all credit, return_ratio = 2: return half the credit
     uint16_t return_ratio;
     // minimum reserved credit, if the held credit <= min_reserved_credit, the credit will not be returned
@@ -235,6 +237,7 @@ typedef struct umq_init_cfg {
 #define UMQ_CREATE_FLAG_SUB_UMQ             (1 << 7)        // just indicates the umq is sub queue
 #define UMQ_CREATE_FLAG_TP_MODE             (1 << 8)        // enable arg tp_mode when create umq
 #define UMQ_CREATE_FLAG_TP_TYPE             (1 << 9)        // enable arg tp_type when create umq
+#define UMQ_CREATE_FLAG_PRIORITY            (1 << 10)       // enable arg priority when create umq
 
 typedef struct umq_create_option {
     /*************Required paramenters start*****************/
@@ -254,6 +257,7 @@ typedef struct umq_create_option {
     umq_queue_mode_t mode;      // mode of queue, QUEUE_MODE_POLLING for default
     umq_tp_mode_t tp_mode;
     umq_tp_type_t tp_type;
+    uint8_t priority;
     /*************Optional paramenters end*******************/
 } umq_create_option_t;
 
@@ -533,9 +537,12 @@ typedef struct umq_cfg_get {
     uint64_t share_rq_umqh;       // share jfr queue handle
     uint8_t max_rx_sge;           // max sge number of receive array
     uint8_t max_tx_sge;           // max sge number of send array
+    uint8_t priority;             // queue jetty priority
     umq_trans_mode_t trans_mode;  // transmission mode of the queue
     umq_queue_mode_t mode;        // mode of queue, QUEUE_MODE_POLLING for default
     umq_state_t state;            // queue state
+    umq_tp_type_t tp_type;        // tp_type of queue
+    umq_tp_mode_t tp_mode;        // transport mode of queue
 } umq_cfg_get_t;
 
 #ifdef __cplusplus
