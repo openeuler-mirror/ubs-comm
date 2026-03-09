@@ -267,7 +267,7 @@ UBSocket提供了两种日志输出方式，如通过环境变量UBSOCKET\_LOG\_
 -   UBSocket日志格式如下：
 
 ```
-时间戳|[日志等级]|UBSocket|[函数名][代码行号]|[日志信息]
+时间戳 [线程ID] | 日志等级 | UBSOCKET | 错误类型 | 函数名[代码行号] | 日志信息
 ```
 
 >说明： 
@@ -275,9 +275,6 @@ UBSocket提供了两种日志输出方式，如通过环境变量UBSOCKET\_LOG\_
 >-   函数名：上报该日志的函数名
 >-   代码行号：上报该日志的代码行号
 >-   日志信息：该行记录对应的日志信息，包括异常信息说明等
-
->说明：
->    UBSocket日志字段后续会持续拓展和健全，方便问题排查和故障定位。例如：新增”错误类型”等日志字段
 
 ## 6 运维指标采集
 
@@ -370,7 +367,7 @@ $ export UBSOCKET_TRACE_ENABLE=true
 -   文件输出路径：默认路径为/tmp/ubsocket/log/，支持通过环境变量指定路径
 -   文件名称：ubsocket\_kpi\_<pid\>.json; 容器内存在多个ubsockt进程时，每个UB socket会输出一份文件
 -   文件权限：640
--   文件转储：日志文件超过10M后自动归档，由客户容器内存agent负责文件的删除
+-   文件转储：日志文件超过10M后自动归档，由客户容器内的日志agent负责文件的删除
 -   文件格式：输出文件为一个json格式格式内容，格式如下：
 
     ```json
@@ -405,7 +402,7 @@ $ export UBSOCKET_TRACE_ENABLE=true
 </td>
 <td class="cellrowborder" valign="top" width="12.15%" headers="mcps1.2.5.1.3 "><p id="p191855238399"><a name="p191855238399"></a><a name="p191855238399"></a>个</p>
 </td>
-<td class="cellrowborder" valign="top" width="37.85%" headers="mcps1.2.5.1.4 "><p id="p218502373916"><a name="p218502373916"></a><a name="p218502373916"></a>UB socket作为客户端主动发起的连接数量</p>
+<td class="cellrowborder" valign="top" width="37.85%" headers="mcps1.2.5.1.4 "><p id="p218502373916"><a name="p218502373916"></a><a name="p218502373916"></a>UB socket总连接数量</p>
 </td>
 </tr>
 <tr id="row91864232394"><td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.1 "><p id="p14157159171411"><a name="p14157159171411"></a><a name="p14157159171411"></a>activeConnections</p>
@@ -414,7 +411,7 @@ $ export UBSOCKET_TRACE_ENABLE=true
 </td>
 <td class="cellrowborder" valign="top" width="12.15%" headers="mcps1.2.5.1.3 "><p id="p11862236399"><a name="p11862236399"></a><a name="p11862236399"></a>个</p>
 </td>
-<td class="cellrowborder" valign="top" width="37.85%" headers="mcps1.2.5.1.4 "><p id="p191861523183919"><a name="p191861523183919"></a><a name="p191861523183919"></a>UB socket总连接梳理</p>
+<td class="cellrowborder" valign="top" width="37.85%" headers="mcps1.2.5.1.4 "><p id="p191861523183919"><a name="p191861523183919"></a><a name="p191861523183919"></a>UB socket作为客户端主动发起的连接数量</p>
 </td>
 </tr>
 <tr id="row181864237392"><td class="cellrowborder" valign="top" width="25%" headers="mcps1.2.5.1.1 "><p id="p815775916144"><a name="p815775916144"></a><a name="p815775916144"></a>sendPackets</p>
