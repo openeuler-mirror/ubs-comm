@@ -202,6 +202,7 @@ void Test()
                 g_subScriber->Close();
                 continue;
             case 'q':
+                g_subscriberService->Stop();
                 return;
             default:
                 NN_LOG_INFO("input c:close subscriber, q mean quit");
