@@ -46,8 +46,8 @@ cc_library(
         "//src/hcom/umq/include:umq_ub_headers",
 	# third party libs
 	"@urma//:urma_headers",
-	"@openssl//:ssl",
-	"@openssl//:crypto",
+	"@boringssl//:ssl",
+	"@boringssl//:crypto",
     ],
     features = [
         "static_library",
