@@ -33,15 +33,7 @@ void OOBSSLServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr,
     uint16_t peerPort = 0;
     int family = peerAddr.ss_family;
 
-    if (family == AF_INET) {
-        const auto *a4 = reinterpret_cast<const sockaddr_in*>(&peerAddr);
-        if (inet_ntop(AF_INET, &(a4->sin_addr), ipStr, sizeof(ipStr)) == nullptr) {
-            NN_LOG_ERROR("Failed to convert ipv4 number to string");
-            resp = SERVER_INTERNAL_ERROR;
-        } else {
-            peerPort = ntohs(a4->sin_port);
-        }
-    } else if (family == AF_INET6) {
+    if (family == AF_INET6) {
         const auto *a6 = reinterpret_cast<const sockaddr_in6*>(&peerAddr);
         if (inet_ntop(AF_INET6, &(a6->sin6_addr), ipStr, sizeof(ipStr)) == nullptr) {
             NN_LOG_ERROR("Failed to convert ipv6 number to string");
@@ -50,8 +42,13 @@ void OOBSSLServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr,
             peerPort = ntohs(a6->sin6_port);
         }
     } else {
-        NN_LOG_ERROR("Unsupported address family: " << family);
-        resp = SERVER_INTERNAL_ERROR;
+        const auto *a4 = reinterpret_cast<const sockaddr_in*>(&peerAddr);
+        if (inet_ntop(AF_INET, &(a4->sin_addr), ipStr, sizeof(ipStr)) == nullptr) {
+            NN_LOG_ERROR("Failed to convert ipv4 number to string");
+            resp = SERVER_INTERNAL_ERROR;
+        } else {
+            peerPort = ntohs(a4->sin_port);
+        }
     }
 
     TlsConnectCbTask *tlsConnectCbTask =  nullptr;
