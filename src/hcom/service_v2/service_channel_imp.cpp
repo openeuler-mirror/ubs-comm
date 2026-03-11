@@ -2065,12 +2065,6 @@ inline void DestroyCallback(const Callback *cb)
 int32_t HcomChannelImp::Recv(const UBSHcomServiceContext &context, uintptr_t address, uint32_t size,
     const Callback *done)
 {
-    if (context.mDataLen != sizeof(HcomServiceRndvMessage)) {
-        NN_LOG_ERROR(" Received RNDV data size is incorrect, actual size " << context.mDataLen << ", expected size " <<
-            sizeof(UBSHcomRequest));
-        DestroyCallback(done);
-        return SER_ERROR;
-    }
     HcomServiceRndvMessage *rndvMessage = static_cast<HcomServiceRndvMessage *>(context.mData);
     if (rndvMessage == nullptr || rndvMessage->request.size != size) {
         NN_LOG_ERROR(" Fail to get Request data or Request size " << size << " and processing size " <<

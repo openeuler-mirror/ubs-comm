@@ -23,6 +23,8 @@ static const std::vector<std::pair<std::string, PERF_TEST_TYPE>> gPerfTestType =
     { "SERVICE_READ_BW", PERF_TEST_TYPE::SERVICE_READ_BW },
     { "SERVICE_WRITE_LAT", PERF_TEST_TYPE::SERVICE_WRITE_LAT },
     { "SERVICE_WRITE_BW", PERF_TEST_TYPE::SERVICE_WRITE_BW },
+    { "SERVICE_RNDV_LAT", PERF_TEST_TYPE::SERVICE_RNDV_LAT },
+    { "SERVICE_RNDV_BW", PERF_TEST_TYPE::SERVICE_RNDV_BW },
 };
 
 bool PerfTestConfig::SetType(const std::string &cmd)

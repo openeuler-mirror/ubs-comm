@@ -45,7 +45,8 @@ static inline double GetMedian(uint64_t num, double *deltaArr)
 bool PerfTestReportLat::isDuplex(const PERF_TEST_TYPE &type)
 {
     if (type == PERF_TEST_TYPE::TRANSPORT_SEND_LAT || type == PERF_TEST_TYPE::TRANSPORT_WRITE_LAT ||
-        type == PERF_TEST_TYPE::SERVICE_WRITE_LAT || type == PERF_TEST_TYPE::SERVICE_SEND_LAT) {
+        type == PERF_TEST_TYPE::SERVICE_WRITE_LAT || type == PERF_TEST_TYPE::SERVICE_SEND_LAT ||
+        type == PERF_TEST_TYPE::SERVICE_RNDV_LAT) {
         return true;
     }
     return false;

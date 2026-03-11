@@ -14,6 +14,7 @@
 #include "test_case/perf_test_factory.h"
 #include "report/perf_test_report_base.h"
 #include "report/perf_test_report_factory.h"
+#include "hcom/hcom_num_def.h"
 
 namespace hcom {
 namespace perftest {

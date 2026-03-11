@@ -98,6 +98,9 @@ bool ServiceHelper::CreateService()
 
     mService->SetDeviceIpMask({ mCfg.GetIpMask() });
     mService->SetUbcMode(mCfg.GetUbcMode());
+    mService->SetSendQueueSize(NN_NO4096);
+    mService->SetRecvQueueSize(NN_NO4096);
+    mService->SetQueuePrePostSize(NN_NO2048);
 
     mService->RegisterRecvHandler(mRecvHandler);
     mService->RegisterChannelBrokenHandler(mChBrokenHandler, ock::hcom::UBSHcomChannelBrokenPolicy::BROKEN_ALL);
@@ -111,6 +114,7 @@ bool ServiceHelper::CreateService()
     UBSHcomTlsOptions tlsOptions;
     tlsOptions.enableTls = false;
     mService->SetTlsOptions(tlsOptions);
+    mService->SetEnableMrCache(true);
 
     int result = 0;
 

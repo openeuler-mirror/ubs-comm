@@ -1516,6 +1516,12 @@ int32_t HcomServiceImp::ServiceRequestReceived(const UBSHcomRequestContext &ctx)
 
 int32_t HcomServiceImp::ServicePrivateOpHandle(UBSHcomServiceContext &ctx)
 {
+    if (ctx.mDataLen != sizeof(HcomServiceRndvMessage)) {
+        NN_LOG_ERROR(" Received RNDV data size is incorrect, actual size " << ctx.mDataLen << ", expected size " <<
+            sizeof(UBSHcomRequest));
+        return SER_ERROR;
+    }
+
     // 将context opType设置成rndv context, 回调中用户根据opType判断是否是rndv消息
     ctx.mOpType = UBSHcomRequestContext::NN_OpType::NN_RNDV;
     HcomServiceRndvMessage *rndvMessage = static_cast<HcomServiceRndvMessage *>(ctx.mData);
@@ -1525,6 +1531,7 @@ int32_t HcomServiceImp::ServicePrivateOpHandle(UBSHcomServiceContext &ctx)
     }
     // opCode 设置成发送端的请求配置
     ctx.mOpCode = rndvMessage->request.opcode;
+    ctx.mDataLen = rndvMessage->request.size;
     return SER_OK;
 }
 
