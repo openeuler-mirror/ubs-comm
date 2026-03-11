@@ -116,6 +116,7 @@ UResult UBJfc::UnInitialize()
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             NN_LOG_WARN("Unable to delete jfc " << res << ", as errno " <<
                 NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                return UB_OK;
         }
         mUrmaJfc = nullptr;
     }
