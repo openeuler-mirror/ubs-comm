@@ -1767,6 +1767,11 @@ NResult NetUBSyncEndpoint::InnerPostRead(const UBSendReadWriteRequest &req)
         NN_LOG_ERROR("Failed to PostRead with UBSyncEndpoint as qp is null");
         return UB_PARAM_INVALID;
     }
+    urma_target_seg_t *tseg = nullptr;
+    if (mDriver->GetTseg(req.lKey, tseg) != NN_OK) {
+        NN_LOG_ERROR("Failed to post read request as failed to get tseg");
+        return UB_PARAM_INVALID;
+    }
 
     static thread_local UBOpContextInfo ctx{};
     ctx.ubJetty = mJetty;
@@ -1786,10 +1791,10 @@ NResult NetUBSyncEndpoint::InnerPostRead(const UBSendReadWriteRequest &req)
     // HighBandWidth scene, local ImportSeg is pre-done, PostRead need token(req.srcSeg); remote ImportSeg is pre-done, PostRead need token(req.dstSeg)
     // LowLatency scene, local ImportSeg is pre-done, PostRead need token(req.srcSeg); remote ImportSeg is inline, PostRead need key(req.rKey)
     if (mDriver->mOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) {
-        result = mJetty->PostRead(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress,
+        result = mJetty->PostRead(req.lAddress, tseg, req.rAddress,
             reinterpret_cast<uint64_t>(req.dstSeg), req.size, reinterpret_cast<uint64_t>(&ctx));
     } else {
-        result = mJetty->PostRead(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress,
+        result = mJetty->PostRead(req.lAddress, tseg, req.rAddress,
             req.rKey, req.size, reinterpret_cast<uint64_t>(&ctx));
     }
     if (NN_UNLIKELY(result != UB_OK)) {
