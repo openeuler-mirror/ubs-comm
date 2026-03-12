@@ -45,6 +45,7 @@ SerCode RpcServer::Start(const std::string &serverName)
     if (ret != 0) {
         NN_LOG_WARN("[HTRACER] failed to memset_s sockaddr un");
         close(mSockFd);
+        mSockFd = -1;
         return SER_ERROR;
     }
     un.sun_family = AF_UNIX;
@@ -52,12 +53,14 @@ SerCode RpcServer::Start(const std::string &serverName)
     if (ret != 0) {
         NN_LOG_WARN("[HTRACER] failed to memcpy_s to sun_path");
         close(mSockFd);
+        mSockFd = -1;
         return SER_ERROR;
     }
 
     if (bind(mSockFd, reinterpret_cast<struct sockaddr *>(&un), sizeof(un)) < 0) {
         NN_LOG_WARN("[HTRACER] failed to bind socket");
         close(mSockFd);
+        mSockFd = -1;
         return SER_ERROR;
     }
 
@@ -65,6 +68,7 @@ SerCode RpcServer::Start(const std::string &serverName)
         NN_LOG_WARN("[HTRACER] listen failed");
         std::cout<<"failed to listen"<<std::endl;
         close(mSockFd);
+        mSockFd = -1;
         return SER_ERROR;
     }
 
