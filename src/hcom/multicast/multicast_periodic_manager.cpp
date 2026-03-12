@@ -162,8 +162,7 @@ void MultiCastPeriodicManager::ProcessTimeOut(uint16_t tId)
             }
             // deal with IO
             PublisherContext *pubCtx = nullptr;
-            publisher->mPubCtxStore->GetBySeqNo(timer->SeqNo(), pubCtx);
-            if (NN_UNLIKELY(pubCtx == nullptr)) {
+            if (NN_UNLIKELY(publisher->mPubCtxStore->GetSeqNoAndRemove(timer->SeqNo(), pubCtx) != SER_OK)) {
                 NN_LOG_ERROR("pubCtx is null");
                 continue;
             }
@@ -171,7 +170,6 @@ void MultiCastPeriodicManager::ProcessTimeOut(uint16_t tId)
             UpdateSubscriberRsp(pubCtx);
             callback->Run(*pubCtx);
             timer->DecreaseRef();
-            publisher->mPubCtxStore->RemoveSeqNo(timer->SeqNo());
             publisher->mPubCtxStore->Return(pubCtx);
         }
         RemoveTimerFromList(timer); /* if remove success, decrease linked list ref auto */
