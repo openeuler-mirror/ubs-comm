@@ -173,7 +173,9 @@ void TerminalDisplay::PrintSubTitle()
     printf(" ");
     PrintSubTitleItem("Send Bytes");
     PrintDelimiter();
-    PrintSubTitleItem("Errors");
+    PrintSubTitleItem("Error Packets");
+    PrintDelimiter();
+    PrintSubTitleItem("Lost Packets");
     NewLine();
 }
 
@@ -201,7 +203,9 @@ void TerminalDisplay::PrintData(CLISocketData *sockData)
     printf(" ");
     PrintDataItem("Send Bytes", BytesToHumanReadable(sockData->sendBytes), colorYellow, sockData->sendBytes == 0);
     PrintDelimiter();
-    PrintDataItem("Errors", std::to_string(sockData->errorPackets), colorRed, sockData->errorPackets == 0);
+    PrintDataItem("Error Packets", std::to_string(sockData->errorPackets), colorRed, sockData->errorPackets == 0);
+    PrintDelimiter();
+    PrintDataItem("Lost Packets", std::to_string(sockData->lostPackets), colorRed, sockData->lostPackets == 0);
     NewLine();
 }
 

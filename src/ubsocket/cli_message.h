@@ -108,6 +108,7 @@ struct __attribute__((packed)) CLISocketData {
     uint64_t recvBytes;
     uint64_t sendBytes;
     uint64_t errorPackets;
+    uint64_t lostPackets;
 };
 
 struct __attribute__((packed)) CLIDelayHeader {

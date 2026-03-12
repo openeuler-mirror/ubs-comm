@@ -182,6 +182,7 @@ public:
         RX_BYTE_COUNT,
         TX_BYTE_COUNT,
         TX_ERROR_PACKET_COUNT,
+        TX_LOST_PACKET_COUNT,
         
         TRACE_STATE_TYPE_MAX
     };
@@ -211,6 +212,7 @@ public:
     inline static std::atomic<uint64_t> mRxByteCount{0};
     inline static std::atomic<uint64_t> mTxByteCount{0};
     inline static std::atomic<uint64_t> mTxErrorPacketCount{0};
+    inline static std::atomic<uint64_t> mTxLostPacketCount{0};
 
     static uint64_t GetConnCount()
     {
@@ -238,7 +240,8 @@ public:
         oss << "\"" << "receivePackets" << "\":" << mTxPacketCount.load() << ",";
         oss << "\"" << "sendBytes" << "\":" << mRxByteCount.load() << ",";
         oss << "\"" << "receiveBytes" << "\":" << mTxByteCount.load() << ",";
-        oss << "\"" << "errorPackets" << "\":" << mTxErrorPacketCount.load() << "";
+        oss << "\"" << "errorPackets" << "\":" << mTxErrorPacketCount.load() << ",";
+        oss << "\"" << "lostPackets" << "\":" << mTxLostPacketCount.load() << "";
 
         oss << "}" << "}\n";
     }
@@ -280,6 +283,11 @@ public:
                 m_recorder_vec[type].Update(value);
                 break;
 
+            case TX_LOST_PACKET_COUNT:
+                mTxLostPacketCount.fetch_add(value, std::memory_order_relaxed);
+                m_recorder_vec[type].Update(value);
+                break;
+
             default:
                 break;
         }
@@ -296,6 +304,7 @@ protected:
             "sendBytes",
             "receiveBytes",
             "errorPackets",
+            "lostPackets",
         };
 
         return state_type_str[type];
@@ -322,6 +331,7 @@ protected:
         data->sendBytes = m_recorder_vec[TX_BYTE_COUNT].GetCnt();
         data->recvBytes = m_recorder_vec[RX_BYTE_COUNT].GetCnt();
         data->errorPackets = m_recorder_vec[TX_ERROR_PACKET_COUNT].GetCnt();
+        data->lostPackets = m_recorder_vec[TX_LOST_PACKET_COUNT].GetCnt();
     }
 
     std::vector<Statistics::Recorder> m_recorder_vec;

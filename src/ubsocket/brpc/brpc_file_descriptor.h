@@ -3059,7 +3059,11 @@ private:
                     ProcessErrorTxCqe(buf[i]);
                     wr_cnt++;
                     if (m_context_trace_enable) {
-                        UpdateTraceStats(StatsMgr::TX_ERROR_PACKET_COUNT, 1);
+                        if (buf[i]->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
+                            UpdateTraceStats(StatsMgr::TX_LOST_PACKET_COUNT, 1);
+                        } else {
+                            UpdateTraceStats(StatsMgr::TX_ERROR_PACKET_COUNT, 1);
+                        }
                     }
                     continue;
                 }
