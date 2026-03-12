@@ -43,7 +43,9 @@ UResult UBPublicJetty::ImportPublicJetty(const urma_eid_t &remoteEid, uint32_t j
         ", remote eid: " << EidToStr(remoteJetty.jetty_id.eid));
     mTargetJetty = HcomUrma::ImportJetty(mUBContext->mUrmaContext, &remoteJetty, &token);
     if (mTargetJetty == nullptr) {
-        NN_LOG_ERROR("Failed to import public jetty");
+        NN_LOG_WARN("Failed to import public jetty id: " << mUrmaJetty->jetty_id.id << ", local eid: " <<
+            EidToStr(mUrmaJetty->jetty_id.eid) << "; Remote public jetty id: " << remoteJetty.jetty_id.id <<
+            ", remote eid: " << EidToStr(remoteJetty.jetty_id.eid));
         return UB_QP_IMPORT_FAILED;
     }
     NN_LOG_INFO("Local public jetty id: " << mUrmaJetty->jetty_id.id << ", local eid: " <<

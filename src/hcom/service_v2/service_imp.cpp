@@ -597,7 +597,6 @@ int32_t HcomServiceImp::Connect(const std::string &serverUrl, UBSHcomChannelPtr 
 
     res = DoConnect(serverUrl, connInfo, opt.payload, tmpChannel);
     if (NN_UNLIKELY(res != SER_OK)) {
-        NN_LOG_ERROR("Failed to DoConnect, result: " << res);
         return res;
     }
 
@@ -678,7 +677,6 @@ SerResult HcomServiceImp::DoConnect(const std::string &serverUrl, SerConnInfo &o
     uint32_t totalBandWidth = 0;
     res = DoConnectInner(serverUrl, opt, payLoad, epVector, totalBandWidth);
     if (NN_UNLIKELY(res != SER_OK)) {
-        NN_LOG_ERROR("Failed to connect , as " << res);
         return res;
     }
 

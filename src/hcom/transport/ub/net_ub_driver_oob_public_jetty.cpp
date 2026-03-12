@@ -86,7 +86,6 @@ NResult NetDriverUBWithOob::ConnectASyncEpByPublicJetty(const std::string &oobIp
 {
     UBPublicJetty *clientPublicJetty = nullptr;
     if (PublicJettyConnect(oobIp, oobPort, clientPublicJetty) != 0) {
-        NN_LOG_ERROR("Failed to connect to server public jetty");
         if (clientPublicJetty != nullptr) {
             delete clientPublicJetty;
             clientPublicJetty = nullptr;
