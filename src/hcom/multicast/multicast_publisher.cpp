@@ -131,6 +131,11 @@ void Publisher::ForceUnInitialize()
         mCtxStore = nullptr;
     }
 
+    if (NN_LIKELY(mPubCtxStore != nullptr)) {
+        mPubCtxStore->DecreaseRef();
+        mPubCtxStore = nullptr;
+    }
+
     auto ctxMemPool = reinterpret_cast<NetMemPoolFixed *>(mCtxMemPool);
     if (NN_LIKELY(ctxMemPool != nullptr)) {
         ctxMemPool->DecreaseRef();
@@ -273,6 +278,7 @@ SerResult Publisher::Call(const UBSHcomNetTransOpInfo &opInfo, const MultiReques
     auto pubCtxPtr = mPubCtxStore->GetCtxObj<PublisherContext>();
     if (NN_UNLIKELY(pubCtxPtr == nullptr)) {
         NN_LOG_ERROR("Failed to get pub context object from memory pool.");
+        DestroyTimerContext(context);
         return SER_NEW_OBJECT_FAILED;
     }
 

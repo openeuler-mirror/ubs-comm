@@ -79,6 +79,7 @@ int32_t SubscriberService::Destroy(const std::string &name)
     SubscriberService *service = iter->second;
     if (service == nullptr) {
         NN_LOG_ERROR("Failed to destroy service, because service empty");
+        g_multicastServiceMap.erase(iter);
         return SER_ERROR;
     }
     service->Stop();
