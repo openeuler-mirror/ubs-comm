@@ -209,7 +209,10 @@ SerResult Publisher::PrepareTimerContext(MultiCastCallback *cb, int16_t timeout,
     }
 
     timerPtr->mCtxStore = mCtxStore;
-    timerPtr->mTimeout = NetMonotonic::TimeSec() + static_cast<uint64_t>(timeout);
+    // if t < 0, it means never timeout, so leave mTimeout as 0
+    if (timeout >= 0) {
+        timerPtr->mTimeout = NetMonotonic::TimeSec() + static_cast<uint64_t>(timeout);
+    }
     timerPtr->mCallback = reinterpret_cast<uintptr_t>(cb);
     timerPtr->mType = MultiCastSyncCBType::IO;
     timerPtr->mPublisher = this;
