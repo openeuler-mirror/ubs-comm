@@ -279,5 +279,8 @@ int main(int argc, char *argv[])
 
     Test();
 
+    g_subscriberService->DestroySubscriber(g_subScriber);
+    ock::hcom::SubscriberService::Destroy("Subscriber");
+
     return 0;
 }

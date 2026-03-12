@@ -86,6 +86,7 @@ $ cat build.sh | head -n 23
 # (12) HCOM_BUILD_RPM(optional, default is on) => build rpm.(on/off)
 # (13) HCOM_BUILD_TOOLS_PERF(optional, default is off) => build rpm.(on/off)
 # (14) HCOM_BUILD_HW_CRC(optional, default is off) => build with hardware based crc.(on/off)
+# (15) HCOM_BUILD_MULTICAST(optional, default is off) => build multicast or not.(on/off)
 
 # version: 1.0.0
 # change log:

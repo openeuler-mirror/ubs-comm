@@ -286,6 +286,7 @@ public:
     {
         mSubscriptionMap.clear();
         mEpMap.clear();
+        ForceUnInitialize();
     }
 
     /* *

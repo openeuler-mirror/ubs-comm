@@ -377,6 +377,9 @@ void MultiCastTest()
 
     RegisterMem();
     Test();
+
+    g_publisherService->DestroyPublisher(g_publisher);
+    ock::hcom::PublisherService::Destroy("Publisher");
 }
 
 
