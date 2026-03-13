@@ -67,6 +67,10 @@ namespace Statistics {
     {
         std::vector<TranTraceInfo> retTraceInfos;
         auto traceManager = UTracerManager::Instance();
+        if (traceManager == nullptr) {
+            return retTraceInfos; // 返回空容器，避免后续空指针解引用
+        }
+
         if (tpId == INVALID_TRACE_POINT_ID) {
             for (int i = 0; i < MAX_TRACE_POINT_NUM; ++i) {
                 auto &traceInfo = traceManager[i];
@@ -92,6 +96,10 @@ namespace Statistics {
     {
         std::vector<TranTraceInfo> retTraceInfos;
         auto traceManager = UTracerManager::Instance();
+        if (traceManager == nullptr) {
+            return;
+        }
+
         for (int i = 0; i < MAX_TRACE_POINT_NUM; ++i) {
             auto &traceInfo = traceManager[i];
             if (traceInfo.Valid()) {

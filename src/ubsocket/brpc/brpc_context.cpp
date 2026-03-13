@@ -105,10 +105,10 @@ int Context::GetFirstCpuFromCpulist(const std::string &cpuListStr)
         size_t dash = token.find('-');
         if (dash != std::string::npos) {
             // 范围形式：如 "0-3"，返回开始的数字
-            return std::atoi(token.substr(0, dash).c_str());
+            return static_cast<uint32_t>(std::stoi(token.substr(0, dash)));
         } else {
             // 单个 CPU：如 "5"，直接返回
-            return std::atoi(token.c_str());
+            return static_cast<uint32_t>(std::stoi(token));
         }
     }
     

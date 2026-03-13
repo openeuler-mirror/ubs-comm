@@ -177,25 +177,49 @@ protected:
 
     bool ParseBrpcBlockMemAllocate(const char *name)
     {
-        std::regex pattern(R"(.*(butil).*(iobuf).*(blockmem_allocate).*)");
-        if (std::regex_match(name, pattern) && (strstr(name, "asan") == NULL) && (strstr(name, "gcov") == NULL) &&
-            (strstr(name, "reset_blockmem_allocate_and_deallocate") == NULL)){
-            // to avoid regex match asan, gcov, butil::iobuf::reset_blockmem_allocate_and_deallocate()
-            return true;
+        if (!name) {
+            return false;
         }
 
-        return false;
+        const char* keywords[] = {"butil", "iobuf", "blockmem_allocate"};
+        constexpr int numKeywords = 3;
+
+        for (int i = 0; i < numKeywords; ++i) {
+            if (strstr(name, keywords[i]) == nullptr) {
+                return false;
+            }
+        }
+        
+        if (strstr(name, "asan") != nullptr ||
+            strstr(name, "gcov") != nullptr ||
+            strstr(name, "reset_blockmem_allocate_and_deallocate") != nullptr) {
+            return false;
+        }
+
+        return true;
     }
 
     bool ParseBrpcBlockMemDeallocate(const char *name)
     {
-        std::regex pattern(R"(.*(butil).*(iobuf).*(blockmem_deallocate).*)");
-        if (std::regex_match(name, pattern) && (strstr(name, "asan") == NULL) && (strstr(name, "gcov") == NULL)) {
-            // to avoid regex match asan, gcov
-            return true;
+        if (!name) {
+            return false;
         }
 
-        return false;
+        const char* keywords[] = {"butil", "iobuf", "blockmem_deallocate"};
+        constexpr int numKeywords = 3;
+
+        for (int i = 0; i < numKeywords; ++i) {
+            if (strstr(name, keywords[i]) == nullptr) {
+                return false;
+            }
+        }
+        
+        if (strstr(name, "asan") != nullptr ||
+            strstr(name, "gcov") != nullptr) {
+            return false;
+        }
+
+        return true;
     }
 
     bool ParseElfStruction()

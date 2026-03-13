@@ -106,13 +106,12 @@ public:
             }
 
             pathTmp += "/" + item;
-            if (access(pathTmp.c_str(), F_OK) != 0) {
-                mode_t old_mask = umask(0);
-                ret = mkdir(pathTmp.c_str(), S_IRWXU | S_IRGRP | S_IXGRP);
-                umask(old_mask);
-                if (ret != 0 && errno != EEXIST) {
-                    break;
-                }
+            mode_t old_mask = umask(0);
+            ret = mkdir(pathTmp.c_str(), S_IRWXU | S_IRGRP | S_IXGRP);
+            umask(old_mask);
+
+            if (ret != 0 && errno != EEXIST) {
+                break;
             }
         }
         return ret;

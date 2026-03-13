@@ -342,18 +342,30 @@ size_t RingBuffer::WriteV(const struct iovec *iov, int iovCnt)
         return -1;
     }
 
-    uint32_t totalLen = 0;
+    uint64_t totalLen = 0;
     for (int i = 0; i < iovCnt; i++) {
-        if (iov[i].iov_base != nullptr && iov[i].iov_len > 0) {
-            totalLen += iov[i].iov_len;
+        if (iov[i].iov_base == nullptr || iov[i].iov_len == 0) {
+            continue;
         }
+        if (totalLen > UINT64_MAX - iov[i].iov_len) {
+            return -1;
+        }
+
+        totalLen += iov[i].iov_len;
     }
     
+    if (totalLen > std::numeric_limits<size_t>::max()) {
+        return -1;
+    }
+
     if (totalLen == 0) {
         return 0;
     }
 
     uint32_t elementsNeeded = BytesToElements(totalLen);
+    if (elementsNeeded == 0 || elementsNeeded > mTxElemCount) {
+        return -1;
+    }
     // ===== 阶段 1: CAS 竞争预留空间 =====
     uint32_t prodHead = 0;
     uint32_t prodNext = 0;

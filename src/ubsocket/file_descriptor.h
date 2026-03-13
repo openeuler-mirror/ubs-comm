@@ -66,14 +66,6 @@ class Fd{
 
     /* This is an interface used for the data plane, and the caller can ensure that no
      * concurrency issues will arise, thus eliminating the need for locking. */
-     ALWAYS_INLINE static FdType *GetFdObj(int fd)
-     {
-        if(fd<0 || fd>=RPC_ADPT_FD_MAX){
-            return nullptr;
-        }
-
-        return m_fd_obj_map[fd];
-     }
 
      /* This is locked version of the query interface, primarily used in scenarios where
       * concurrent access cannot be guaranteed, such as when querying statistical information.*/
@@ -81,7 +73,16 @@ class Fd{
     {
         return m_rwlock;
     }
-    
+
+    ALWAYS_INLINE static FdType *GetFdObj(int fd)
+    {
+        if(fd<0 || fd>=RPC_ADPT_FD_MAX){
+            return nullptr;
+        }
+        ScopedReadLock lock(GetRWLock());
+        return m_fd_obj_map[fd];
+    }
+
     ALWAYS_INLINE static FdType **GetFdObjMap()
     {
         return m_fd_obj_map;

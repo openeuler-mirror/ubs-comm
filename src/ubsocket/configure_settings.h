@@ -14,6 +14,10 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <limits.h>
 
 #include "securec.h"
 #include "rpc_adpt_vlog.h"
@@ -324,9 +328,7 @@ protected:
         }
 
         if((env_ptr = getenv(ENV_VAR_EID_IDX))!=NULL){
-            /* atoi return 0 means (1) failed to transfer input to int; (2) user set 0;
-            both of them use default value directly*/
-            uint32_t input_eid_idx = static_cast<uint32_t>(atoi(env_ptr));
+            uint32_t input_eid_idx = static_cast<uint32_t>(std::stoi(env_ptr));
             m_eid_idx = input_eid_idx == 0 ? DEFAULT_EID_IDX : input_eid_idx;
         }
 
@@ -335,16 +337,12 @@ protected:
         }
 
         if((env_ptr = getenv(ENV_VAR_TX_DEPTH))!=NULL){
-            /* atoi return 0 means (1) failed to transfer input to int; (2) user set 0;
-            both of them use default value directly*/
-            uint32_t input_tx_depth = static_cast<uint32_t>(atoi(env_ptr));
+            uint32_t input_tx_depth = static_cast<uint32_t>(std::stoi(env_ptr));
             m_tx_depth = input_tx_depth == 0 ? DEFAULT_TX_DEPTH : input_tx_depth;
         }
 
         if((env_ptr = getenv(ENV_VAR_RX_DEPTH))!=NULL){
-            /* atoi return 0 means (1) failed to transfer input to int; (2) user set 0;
-            both of them use default value directly*/
-            uint32_t input_rx_depth = static_cast<uint32_t>(atoi(env_ptr));
+            uint32_t input_rx_depth = static_cast<uint32_t>(std::stoi(env_ptr));
             m_rx_depth = input_rx_depth == 0 ? DEFAULT_RX_DEPTH : input_rx_depth;
         }
 
@@ -353,7 +351,7 @@ protected:
         }
 
         if ((env_ptr = getenv(ENV_VAR_POOL_INITIAL_SIZE)) != NULL) {
-            uint64_t total_size = static_cast<uint64_t>(atoi(env_ptr));
+            uint64_t total_size = static_cast<uint64_t>(std::stoull(env_ptr));
             m_io_total_size = total_size == 0 ? DEFAULT_IO_TOTAL_SIZE * IO_SIZE_MB : total_size * IO_SIZE_MB;
         }
         if ((env_ptr = getenv(ENV_VAR_BLOCK_TYPE)) != NULL) {
@@ -390,22 +388,25 @@ protected:
         }
 
         if ((env_ptr = getenv(ENV_TRACE_TIME)) != NULL) {
-            uint64_t ubsocket_trace_time = static_cast<uint64_t>(atoi(env_ptr));
+            uint64_t ubsocket_trace_time = static_cast<uint64_t>(std::stoull(env_ptr));
             if (ubsocket_trace_time >= UBSOCKET_TRACE_TIME_MIN
                 && ubsocket_trace_time <= UBSOCKET_TRACE_TIME_MAX) {
                 m_ubsocket_trace_time = ubsocket_trace_time;
             }
         }
 
-        if ((env_ptr = getenv(ENV_TRACE_FILE_PATH)) != NULL) {
+        char default_path[] = "/tmp/ubsocket/log";
+        env_ptr = getenv(ENV_TRACE_FILE_PATH);
+        if (env_ptr != nullptr && env_ptr[0] == '/' && strlen(env_ptr) < UBSOCKET_TRACE_FILE_PATH_LEN_MAX &&
+            strcspn(env_ptr, " \t\n\r;\"'`&|<>()[]{}$\\") == strlen(env_ptr)) {
             ReadEnvVar(env_ptr, m_ubsocket_trace_file_path, sizeof(m_ubsocket_trace_file_path));
         } else {
-            char default_path[] = "/tmp/ubsocket/log";
             ReadEnvVar(default_path, m_ubsocket_trace_file_path, sizeof(m_ubsocket_trace_file_path));
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid TRACE_FILE_PATH, using default.\n");
         }
 
         if ((env_ptr = getenv(ENV_TRACE_FILE_SIZE)) != NULL) {
-            uint64_t ubsocket_trace_file_size = static_cast<uint64_t>(atoi(env_ptr));
+            uint64_t ubsocket_trace_file_size = static_cast<uint64_t>(std::stoull(env_ptr));
             if (ubsocket_trace_file_size >= UBSOCKET_TRACE_FILE_PATH_MIN
                 && ubsocket_trace_file_size <= UBSOCKET_TRACE_FILE_PATH_MAX) {
                 m_ubsocket_trace_file_size = ubsocket_trace_file_size;

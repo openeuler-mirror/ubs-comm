@@ -68,6 +68,10 @@ public:
         }
         Centroid centroid(mean, weight);
         centroids.emplace_back(centroid);
+
+        if (totalWeight > std::numeric_limits<uint64_t>::max() - weight) {
+            std::cerr << "totalWeight overflow risk!\n";
+        }
         totalWeight += weight;
         if (centroids.size() < centroids.capacity()) {
             return InsertResultCode::NO_NEED_COMPERSS;
@@ -86,7 +90,7 @@ public:
         return centroids.size();
     }
 
-    size_t GetTotalWeight() const
+    uint64_t GetTotalWeight() const
     {
         return totalWeight;
     }
@@ -98,7 +102,7 @@ public:
 
 private:
     std::vector<Centroid> centroids;
-    uint32_t totalWeight;
+    uint64_t totalWeight;
 };
 
 inline bool RelativelyEqual(double a, double b, double relEpsilon = 1e-8)

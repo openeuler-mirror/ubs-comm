@@ -680,13 +680,13 @@ class Listener {
         tv.tv_sec = UDS_SEND_RECV_TIMEOUT_S;
         if(OsAPiMgr::GetOriginApi()->setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0){
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to set socket send timeout option\n");
-            (void)OsAPiMgr::GetOriginApi()->close(fd);
+            // fd_guard 会自动 close
             return;
         }
 
         if(OsAPiMgr::GetOriginApi()->setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0){
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to set socket recv timeout option\n");
-            (void)OsAPiMgr::GetOriginApi()->close(fd);
+            // fd_guard 会自动 close
             return;
         }
 
