@@ -125,8 +125,13 @@ void RingBuffer::InitElementPointers()
     if (mTxAddr.addr != nullptr && mTxAddr.len > 0) {
         mTxElemCount = static_cast<uint32_t>(mTxAddr.len) / RING_ELEMENT_SIZE;
         mTxSizeMask = mTxElemCount > 0 ? mTxElemCount - 1 : 0;  // 假设 size 是 2 的幂
-        
-        mTxElements = new void *[mTxElemCount];
+        try {
+            mTxElements = new void *[mTxElemCount];
+        } catch (const std::bad_alloc& e) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Alloc mTxElements failed: %s.\n", e.what());
+            return;
+        }
+
         uint8_t *base = static_cast<uint8_t*>(mTxAddr.addr);
         
         for (uint32_t i = 0; i < mTxElemCount; i++) {
@@ -139,7 +144,12 @@ void RingBuffer::InitElementPointers()
         mRxElemCount = static_cast<uint32_t>(mRxAddr.len) / RING_ELEMENT_SIZE;
         mRxSizeMask = mRxElemCount > 0 ? mRxElemCount - 1 : 0;
         
-        mRxElements = new void *[mRxElemCount];
+        try {
+            mRxElements = new void *[mRxElemCount];
+        } catch (const std::bad_alloc& e) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Alloc mRxElements failed: %s.\n", e.what());
+            return;
+        }
         uint8_t *base = static_cast<uint8_t*>(mRxAddr.addr);
         
         for (uint32_t i = 0; i < mRxElemCount; i++) {

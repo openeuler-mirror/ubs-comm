@@ -250,7 +250,7 @@ EXPOSE_C_DEFINE int fcntl(int fd, int cmd, ...)
 
 EXPOSE_C_DEFINE int fcntl64(int fd, int cmd, ...)
 {
-    unsigned long int arg{ 0 };
+    uintptr_t arg{ 0 };
     va_list va;
     va_start(va, cmd);
     arg = va_arg(va, decltype(arg));
@@ -269,7 +269,7 @@ EXPOSE_C_DEFINE int fcntl64(int fd, int cmd, ...)
 
 EXPOSE_C_DEFINE int ioctl(int fd, unsigned long request, ...)
 {
-    unsigned long int arg{ 0 };
+    uintptr_t arg{ 0 };
     va_list va;
     va_start(va, request);
     arg = va_arg(va, decltype(arg));

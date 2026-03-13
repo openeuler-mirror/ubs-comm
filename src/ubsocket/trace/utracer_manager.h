@@ -95,6 +95,8 @@ public:
                 RPC_ADPT_VLOG_WARN("[UTRACER], prepare dum dir failed, disable dump feature!");
             }
             mDumpDir = mDefaultDir;
+            mDumpEnable = false;
+            return;
         }
         mDumpEnable = enable;
     }
@@ -160,6 +162,8 @@ private:
             int32_t ret = UTracerUtils::CreateDirectory(mDefaultDir);
             if (ret != 0) {
                 RPC_ADPT_VLOG_WARN("[UTRACER] prepare dump dir failed, disable dump feature!");
+                mDumpEnable = false;
+                return;
             }
             mDumpDir = mDefaultDir;
             return;

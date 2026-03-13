@@ -518,17 +518,23 @@ class EpollFd : public Fd<EpollFd> {
     virtual ALWAYS_INLINE int EpollWait(struct epoll_event *events, int maxevents, int timeout,
                                         bool use_polling = false)
     {
-        struct epoll_event events_[maxevents];
-        int ev_num = use_polling ? PollingEpoll::GetInstance().PollingEpollWait(m_fd, events_, maxevents, timeout) :
-                                   OsAPiMgr::GetOriginApi()->epoll_wait(m_fd, events_, maxevents, timeout);
+        if (maxevents <= 0) {
+            return -1;
+        }
+
+        std::vector<struct epoll_event> events_vec(maxevents);
+        struct epoll_event* events_ptr = events_vec.data();
+
+        int ev_num = use_polling ? PollingEpoll::GetInstance().PollingEpollWait(m_fd, events_ptr, maxevents, timeout) :
+                                   OsAPiMgr::GetOriginApi()->epoll_wait(m_fd, events_ptr, maxevents, timeout);
         if (ev_num == -1) {
             return ev_num;
         }
 
         int output_idx = 0;
-        for(int i = 0; i<ev_num;i++){
-            EpollEvent *epoll_event = (EpollEvent *)events_[i].data.ptr;
-            output_idx += epoll_event->ProcessEpollEvent(events_ + i, events + output_idx, use_polling);
+        for(int i = 0; i < ev_num; i++){
+            EpollEvent *epoll_event = (EpollEvent *)events_ptr[i].data.ptr;
+            output_idx += epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, use_polling);
         }
 
         return output_idx;

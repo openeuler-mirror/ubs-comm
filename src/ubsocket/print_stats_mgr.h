@@ -183,8 +183,10 @@ private:
     {
         std::lock_guard<std::mutex> lock(mMgrLock);
         m_running = false;
-        if (m_event_loop != nullptr && m_event_loop->joinable()) {
-            m_event_loop->join();
+        if (m_event_loop != nullptr) {
+            if (m_event_loop->joinable()) {
+                m_event_loop->join();
+            }
             delete m_event_loop;
             m_event_loop = nullptr;
         }

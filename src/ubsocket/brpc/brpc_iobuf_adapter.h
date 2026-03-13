@@ -86,7 +86,13 @@ class BlockCache {
 public:
     ALWAYS_INLINE void Insert(char *data_in, uint32_t data_size)
     {
-        IOBuf::Block *new_block = new (data_in - sizeof(IOBuf::Block)) IOBuf::Block(data_in,data_size);
+        IOBuf::Block *new_block = nullptr;
+        try {
+            new_block = new (data_in - sizeof(IOBuf::Block)) IOBuf::Block(data_in,data_size);
+        } catch (const std::exception& e) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Alloc new block failed: %s.\n", e.what());
+            return;
+        }
         if (m_head_block == nullptr) {
             m_head_block = new_block;
             m_tail_block = new_block;

@@ -133,6 +133,11 @@ public:
 
     int Malloc(Shm *shm)
     {
+        if (shm == nullptr) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Ubsmem malloc input param is invalid, shm is nullptr.\n");
+            return -1;
+        }
+
         uint64_t flag = UBSM_FLAG_ONLY_IMPORT_NONCACHE | UBSM_FLAG_MEM_ANONYMOUS;
         // Add flag means enable non-relay mode(direct mode)
         flag = m_config.shmWrDelayComp ? flag | UBSM_FLAG_WR_DELAY_COMP : flag;
@@ -163,6 +168,11 @@ public:
     
     int Free(Shm *shm)
     {
+        if (shm == nullptr) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Ubsmem free input param is invalid, shm is nullptr.\n");
+            return -1;
+        }
+
         if (shm->addr == nullptr) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Ubsmem free input params is invalid, shm->addr is nullptr.\n");
             return -1;
@@ -207,6 +217,11 @@ public:
     
     int Unmap(Shm *shm)
     {
+        if (shm == nullptr) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Ubsmem unmap input params is invalid, shm is nullptr.\n");
+            return -1;
+        }
+
         if (shm->addr == nullptr) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Ubsmem unmap input params is invalid, shm->addr is nullptr.\n");
             return -1;

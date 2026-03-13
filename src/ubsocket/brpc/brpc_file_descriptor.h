@@ -1522,6 +1522,12 @@ public:
 
         if (poll_num > 0) {
             for (int i = 0; i < poll_num; ++i) {
+                if (remaining_user_buf == 0) {
+                    RPC_ADPT_VLOG_DEBUG("Read: User buffer is full, stopping processing of further buffers\n");
+                    QBUF_LIST_NEXT(buf_array[i]) = nullptr;
+                    umq_buf_free(buf_array[i]);
+                    continue;
+                }
                 if (buf_array[i]->status != 0) {
                     if (buf_array[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                         RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
@@ -1559,11 +1565,6 @@ public:
 
                 QBUF_LIST_NEXT(buf_array[i]) = nullptr;
                 umq_buf_free(buf_array[i]);
-
-                if (remaining_user_buf == 0) {
-                    RPC_ADPT_VLOG_DEBUG("Read: User buffer is full, stopping processing of further buffers\n");
-                    break;
-                }
             }
         }
 
@@ -2929,6 +2930,7 @@ private:
                                   "Failed to send connect eid message in retry accept,Peer eid:" EID_FMT
                                   ",Peer IP:%s, fd: %d\n",
                                   EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                delete socket_fd_obj;
                 return -1;
             }
 

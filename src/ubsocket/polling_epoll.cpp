@@ -189,7 +189,13 @@ PollingErrCode PollingEpoll::AddEventIntoRdList(EpList *readyList, EpItem epItem
 PollingErrCode PollingEpoll::UmqPoll(uint64_t umqHandle)
 {
     uint32_t pollBatchMax = 32;
-    umq_buf_t **buf = new umq_buf_t *[pollBatchMax];
+    umq_buf_t **buf = nullptr;
+    try {
+        buf = new umq_buf_t *[pollBatchMax];
+    } catch (const std::bad_alloc& e) {
+        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Alloc memory failed: %s.\n", e.what());
+        return PollingErrCode::ERR;
+    }
     int poll_num = umq_poll(umqHandle, UMQ_IO_RX, buf, pollBatchMax);
     if (poll_num < 0) {
         delete[] buf;
@@ -327,6 +333,9 @@ void PollingEpoll::EpollEventProcess(EventPoll *eventPoll, struct epoll_event *e
 
 int PollingEpoll::PollingEpollWait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
+    if (timeout < -1) {
+        return -1;
+    }
     EpollSocket *epSocket = GET_EPOLL_SOCKET(g_table[epfd]);
     EventPoll *eventPoll = &epSocket->ep;
 

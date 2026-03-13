@@ -177,30 +177,55 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
     addr.sun_family = AF_UNIX;
     addr.sun_path[0] = '\0';
     if (strncpy_s(addr.sun_path + 1, sizeof(addr.sun_path) - 1, mServerPath.c_str(), sizeof(addr.sun_path) - 1) != 0) {
+        close(sockfd);
+        sockfd = -1;
         CLI_LOG("Failed to copy server path\n");
         return -1;
     }
     addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
     if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(sockfd);
+        sockfd = -1;
         CLI_LOG("Failed to connect server errno=%d, error=%s\n", errno, strerror(errno));
         return -1;
     }
 
     if (SetSocketTimeout(sockfd) != 0) {
+        close(sockfd);
+        sockfd = -1;
         CLI_LOG("SetSocketTimeout failed\n");
         return -1;
     }
 
+    int ret = 0;
     if (args.command == CLICommand::STAT) {
-        return ProcessStat(sockfd, response);
+        ret = ProcessStat(sockfd, response);
+        if (ret != 0) {
+            close(sockfd);
+            sockfd = -1;
+        }
+
+        return ret;
     }
 
     if (args.command == CLICommand::TOPO) {
-        return ProcessTopo(sockfd, response, args);
+        ret = ProcessTopo(sockfd, response, args);
+        if (ret != 0) {
+            close(sockfd);
+            sockfd = -1;
+        }
+
+        return ret;
     }
 
     if (args.command == CLICommand::DELAY) {
-        return ProcessDelayQuery(sockfd, response, args);
+        ret =  ProcessDelayQuery(sockfd, response, args);
+        if (ret != 0) {
+            close(sockfd);
+            sockfd = -1;
+        }
+
+        return ret;
     }
     return 0;
 }

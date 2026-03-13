@@ -338,22 +338,22 @@ protected:
 
         return true;
 
+    FREE_SYMBOLS:
+        free(m_symbols);
+        m_symbols = nullptr;
+
+    FREE_STRTAB_DATA:
+        free(m_strtab_data);
+        m_strtab_data = nullptr;
+
+    FREE_SHSTR:
+        free(m_shstr);
+        m_shstr = nullptr;
+
     FREE_SHDRS:
         free(m_shdrs);
         m_shdrs = nullptr;
 
-    FREE_SHSTR:
-        free(m_shstr);
-        m_shstr = nullptr; 
-
-    FREE_STRTAB_DATA:
-        free(m_strtab_data);
-        m_strtab_data = nullptr;  
-
-    FREE_SYMBOLS:
-        free(m_symbols);
-        m_symbols = nullptr; 
-        
         return false;
     }
 
