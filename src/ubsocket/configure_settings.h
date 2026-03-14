@@ -33,6 +33,8 @@
 #define BOOL_STR_LEN_MAX          (8)
 #define UB_TRANS_MODE_STR_LEN_MAX    (8)
 #define DEFAULT_EID_IDX           (0)
+#define MIN_TX_DEPTH              (64)
+#define MIN_RX_DEPTH              (64)
 #define DEFAULT_TX_DEPTH          (1024)
 #define DEFAULT_RX_DEPTH          (1024)
 #define DEFAULT_IO_TOTAL_SIZE     (1024)    // MB

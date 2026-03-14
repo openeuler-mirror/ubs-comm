@@ -134,9 +134,11 @@ int ConfigSettings::ParseEnvVars()
     }
 
     RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_EID_IDX, m_eid_idx);
-    RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_TX_DEPTH, m_tx_depth);
 
-    RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_RX_DEPTH, m_rx_depth);
+    m_tx_depth = m_tx_depth < MIN_TX_DEPTH ? DEFAULT_TX_DEPTH : m_tx_depth;
+    RPC_ADPT_VLOG_INFO("%s: %d, set the min value is %d\n", ENV_VAR_TX_DEPTH, m_tx_depth, MIN_TX_DEPTH);
+    m_rx_depth = m_rx_depth < MIN_RX_DEPTH ? DEFAULT_RX_DEPTH : m_rx_depth;
+    RPC_ADPT_VLOG_INFO("%s: %d, set the min value is %d\n", ENV_VAR_RX_DEPTH, m_rx_depth, MIN_RX_DEPTH);
 
     RPC_ADPT_VLOG_INFO("%s: %s\n", ENV_VAR_BLOCK_TYPE, GetIOBlockTypeStr());
     RPC_ADPT_VLOG_INFO("%s: %lu\n", ENV_VAR_POOL_INITIAL_SIZE, m_io_total_size);

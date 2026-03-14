@@ -2347,8 +2347,8 @@ public:
             return -1;
         }
 
-        m_rx.m_window_size -= poll_num;
-        if (m_rx_window_capacity - m_rx.m_window_size > m_rx.m_refill_threshold) {
+        m_rx.m_window_size -= static_cast<uint16_t>(poll_num);
+        if (static_cast<uint16_t>(m_rx_window_capacity - m_rx.m_window_size) > m_rx.m_refill_threshold) {
             umq_alloc_option_t option = { UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(IOBuf::Block) };
             umq_buf_t *rx_buf_list = umq_buf_alloc(BrpcIOBufSize(), m_rx.m_refill_threshold, UMQ_INVALID_HANDLE,
                                                    &option);
