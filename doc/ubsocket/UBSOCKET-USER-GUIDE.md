@@ -241,8 +241,8 @@ make -j32
 
 ```shell
 $ export LD_PRELOAD=librpc_adapter_brpc.so
-$ export UBSOCKET_LOG_USE_PRINTF=1
-$ export UBSOCKET_UB_FORCE=1
+$ export UBSOCKET_LOG_USE_PRINTF=true
+$ export UBSOCKET_UB_FORCE=true
 $ ./echo_c++_srever  # 或者./echo_c++_client
 ```
 
