@@ -233,7 +233,7 @@ NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransReq
     sockHeader->flags = ((uint16_t)opInfo.flags << NN_NO8) | (uint16_t)NTH_TWO_SIDE;
     sockHeader->timeout = opInfo.timeout;
     sockHeader->errorCode = opInfo.errorCode;
-    sockHeader->dataLength = request.size;
+    sockHeader->dataLength = request.size + extHeaderSize;
     sockHeader->extHeaderType = extHeaderType;
 
     // 拷贝上层指定的 header，此时将要发送的结构为
