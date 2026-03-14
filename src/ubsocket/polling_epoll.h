@@ -97,6 +97,9 @@ public:
         g_table[fd] = socket;
     }
 
+    /// fd 可能是 socket fd 也可能是 epoll fd
+    void RemoveSocket(int fd);
+
     int GetAndPopQbuf(uint64_t umqHandle, umq_buf_t **buf)
     {
         std::lock_guard<std::mutex> lock(g_qbuf_table_mutex);
@@ -119,6 +122,12 @@ public:
     EpList *EpollListInit(void);
 
     int PollingEpollCreate(int epfd);
+
+    void PollingEpollDestroy(EpollSocket *ep)
+    {
+        EpollListDestroy(ep->ep.waitList);
+        EpollListDestroy(ep->ep.readyList);
+    }
 
     int EpollListRemove(EpList *epList, int fd);
 

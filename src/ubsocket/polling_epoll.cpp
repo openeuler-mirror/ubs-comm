@@ -24,6 +24,37 @@ uint64_t GetCurNanoSeconds(void)
     return timestamp;
 }
 
+void PollingEpoll::RemoveSocket(int fd)
+{
+    Socket *sk = nullptr;
+    EpollSocket *ep = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_table_mutex);
+        auto iter = g_table.find(fd);
+        if (iter == g_table.end()) {
+            return;
+        }
+        sk = iter->second;
+        g_table.erase(iter);
+    }
+
+    if (sk) {
+        switch (sk->type) {
+            case SocketType::SOCKET_TYPE_EPOLL:
+                ep = GET_EPOLL_SOCKET(sk);
+                PollingEpollDestroy(ep);
+                FREE_PTR(ep);
+                break;
+
+            case SocketType::SOCKET_TYPE_TCP:
+            case SocketType::SOCKET_TYPE_TCP_CLIENT:
+            case SocketType::SOCKET_TYPE_TCP_SERVER:
+                FREE_PTR(sk);
+                break;
+        }
+    }
+}
+
 void PollingEpoll::EpollListDestroy(EpList *epList)
 {
     if (UNLIKELY(epList == nullptr)) {
