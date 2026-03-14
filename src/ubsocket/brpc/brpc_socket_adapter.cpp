@@ -74,6 +74,11 @@ EXPOSE_C_DEFINE int close(int fd)
     Fd<SocketFd>::OverrideFdObj(fd, nullptr);
     Fd<EpollFd>::OverrideFdObj(fd, nullptr);
 
+    Brpc::Context *ctx = Brpc::Context::GetContext();
+    if (ctx && ctx->GetUsePolling()) {
+        PollingEpoll::GetInstance().RemoveSocket(fd);
+    }
+
     return OsAPiMgr::GetOriginApi()->close(fd);
 }
 
@@ -407,4 +412,3 @@ __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
 
 #endif
 }
-
