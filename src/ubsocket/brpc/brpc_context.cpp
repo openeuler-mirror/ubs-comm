@@ -104,11 +104,27 @@ int Context::GetFirstCpuFromCpulist(const std::string &cpuListStr)
     if (std::getline(ss, token, ',')) {
         size_t dash = token.find('-');
         if (dash != std::string::npos) {
+            uint32_t dashStart = 0;
+            try {
+                dashStart = static_cast<uint32_t>(std::stoi(token.substr(0, dash)));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "No valid CPU detected.\n");
+                dashStart = 0;
+                return -1;
+            }
             // 范围形式：如 "0-3"，返回开始的数字
-            return static_cast<uint32_t>(std::stoi(token.substr(0, dash)));
+            return dashStart;
         } else {
             // 单个 CPU：如 "5"，直接返回
-            return static_cast<uint32_t>(std::stoi(token));
+            uint32_t tokenCPU = 0;
+            try {
+                tokenCPU = static_cast<uint32_t>(std::stoi(token));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "No valid CPU detected.\n");
+                tokenCPU = 0;
+                return -1;
+            }
+            return tokenCPU;
         }
     }
     

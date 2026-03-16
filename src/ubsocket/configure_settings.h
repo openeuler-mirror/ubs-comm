@@ -330,7 +330,13 @@ protected:
         }
 
         if((env_ptr = getenv(ENV_VAR_EID_IDX))!=NULL){
-            uint32_t input_eid_idx = static_cast<uint32_t>(std::stoi(env_ptr));
+            uint32_t input_eid_idx = 0;
+            try {
+                input_eid_idx = static_cast<uint32_t>(std::stoi(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_EID_IDX, using default.\n");
+                input_eid_idx = 0;
+            }
             m_eid_idx = input_eid_idx == 0 ? DEFAULT_EID_IDX : input_eid_idx;
         }
 
@@ -339,12 +345,24 @@ protected:
         }
 
         if((env_ptr = getenv(ENV_VAR_TX_DEPTH))!=NULL){
-            uint32_t input_tx_depth = static_cast<uint32_t>(std::stoi(env_ptr));
+            uint32_t input_tx_depth = 0;
+            try {
+                input_tx_depth = static_cast<uint32_t>(std::stoi(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_TX_DEPTH, using default.\n");
+                input_tx_depth = 0;
+            }
             m_tx_depth = input_tx_depth == 0 ? DEFAULT_TX_DEPTH : input_tx_depth;
         }
 
         if((env_ptr = getenv(ENV_VAR_RX_DEPTH))!=NULL){
-            uint32_t input_rx_depth = static_cast<uint32_t>(std::stoi(env_ptr));
+            uint32_t input_rx_depth = 0;
+            try {
+                input_rx_depth = static_cast<uint32_t>(std::stoi(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_RX_DEPTH, using default.\n");
+                input_rx_depth = 0;
+            }
             m_rx_depth = input_rx_depth == 0 ? DEFAULT_RX_DEPTH : input_rx_depth;
         }
 
@@ -353,7 +371,13 @@ protected:
         }
 
         if ((env_ptr = getenv(ENV_VAR_POOL_INITIAL_SIZE)) != NULL) {
-            uint64_t total_size = static_cast<uint64_t>(std::stoull(env_ptr));
+            uint64_t total_size = 0;
+            try {
+                total_size = static_cast<uint64_t>(std::stoull(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_POOL_INITIAL_SIZE, using default.\n");
+                total_size = 0;
+            }
             m_io_total_size = total_size == 0 ? DEFAULT_IO_TOTAL_SIZE * IO_SIZE_MB : total_size * IO_SIZE_MB;
         }
         if ((env_ptr = getenv(ENV_VAR_BLOCK_TYPE)) != NULL) {
@@ -390,7 +414,13 @@ protected:
         }
 
         if ((env_ptr = getenv(ENV_TRACE_TIME)) != NULL) {
-            uint64_t ubsocket_trace_time = static_cast<uint64_t>(std::stoull(env_ptr));
+            uint64_t ubsocket_trace_time = UBSOCKET_TRACE_TIME_DEFAULT;
+            try {
+                ubsocket_trace_time = static_cast<uint64_t>(std::stoull(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_TRACE_TIME, using default.\n");
+                ubsocket_trace_time = UBSOCKET_TRACE_TIME_DEFAULT;
+            }
             if (ubsocket_trace_time >= UBSOCKET_TRACE_TIME_MIN
                 && ubsocket_trace_time <= UBSOCKET_TRACE_TIME_MAX) {
                 m_ubsocket_trace_time = ubsocket_trace_time;
@@ -408,7 +438,12 @@ protected:
         }
 
         if ((env_ptr = getenv(ENV_TRACE_FILE_SIZE)) != NULL) {
-            uint64_t ubsocket_trace_file_size = static_cast<uint64_t>(std::stoull(env_ptr));
+            uint64_t ubsocket_trace_file_size = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
+            try {
+                ubsocket_trace_file_size = static_cast<uint64_t>(std::stoull(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_TRACE_FILE_SIZE, using default.\n");
+            }
             if (ubsocket_trace_file_size >= UBSOCKET_TRACE_FILE_PATH_MIN
                 && ubsocket_trace_file_size <= UBSOCKET_TRACE_FILE_PATH_MAX) {
                 m_ubsocket_trace_file_size = ubsocket_trace_file_size;
