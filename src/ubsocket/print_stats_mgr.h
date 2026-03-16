@@ -14,6 +14,8 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/eventfd.h>
+#include <sys/time.h>
+#include <ctime>
 #include <cmath>
 #include <thread>
 #include <limits>
@@ -111,26 +113,8 @@ private:
         mkdir(tmp_str.c_str(), DEFAULT_DIR_PERMISSION);
     }
 
-    void OutputJSON(std::ostringstream &oss)
+    void ArchiveJSON(const std::string& cleanPath, const uint32_t pid, const char* filename)
     {
-        char filename[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = {0};
-        std::string cleanPath(ubsocketTraceFilePath);
-
-        int ret = snprintf_s(filename, sizeof(filename), sizeof(filename) - 1,
-                            "%s/ubsocket_kpi_%lu.json", cleanPath.c_str(), (uint32_t)getpid());
-        if (ret < 0 || ret >= (int)sizeof(filename)) {
-            throw std::runtime_error(
-                std::string("Failed to create ubsocket kpi json") + std::to_string(ret));
-        }
-
-        FILE* fp = fopen(filename, "a");
-        if (fp) {
-            fprintf(fp, "%s\n", oss.str().c_str());
-            fclose(fp);
-        } else {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Fail to open json file: %s\n", filename);
-        }
-
         struct stat st;
         if (stat(filename, &st) == 0) {
             uint64_t currentSize = static_cast<uint64_t>(st.st_size);
@@ -141,14 +125,21 @@ private:
             if (currentSize > threshold) {
                 constexpr mode_t DEFAULT_FILE_PERMISSION = 0440;
 
-                int timeBufSize = 32;
+                constexpr int timeBufSize = 32;
                 time_t now = time(nullptr);
                 char timeBuf[timeBufSize];
-                std::strftime(timeBuf, sizeof(timeBuf), "%Y%m%d%H%M%S", std::localtime(&now));
+                struct tm timeInfo;
+                if (localtime_r(&now, &timeInfo) != nullptr) {
+                    std::strftime(timeBuf, sizeof(timeBuf), "%Y%m%d%H%M%S", &timeInfo);
+                } else {
+                    timeBuf[0] = '\0';
+                    RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to create timeStamp.\n");
+                }
+
                 char archiveFilename[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = {0};
 
                 int ret = snprintf_s(archiveFilename, sizeof(archiveFilename), sizeof(archiveFilename) - 1,
-                                "%s/ubsocket_kpi_%lu_%s.json", cleanPath.c_str(), (uint32_t)getpid(), timeBuf);
+                                "%s/ubsocket_kpi_%lu_%s.json", cleanPath.c_str(), pid, timeBuf);
                 if (ret < 0 || ret >= (int)sizeof(archiveFilename)) {
                     RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to create archive filename for kpi json\n");
                     return;
@@ -169,6 +160,31 @@ private:
                     filename, archiveFilename, st.st_size);
             }
         }
+    }
+
+    void OutputJSON(std::ostringstream &oss)
+    {
+        const uint32_t pid = (uint32_t)getpid();
+
+        char filename[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = {0};
+        std::string cleanPath(ubsocketTraceFilePath);
+
+        int ret = snprintf_s(filename, sizeof(filename), sizeof(filename) - 1,
+                            "%s/ubsocket_kpi_%lu.json", cleanPath.c_str(), pid);
+        if (ret < 0 || ret >= (int)sizeof(filename)) {
+            throw std::runtime_error(
+                std::string("Failed to create ubsocket kpi json") + std::to_string(ret));
+        }
+
+        FILE* fp = fopen(filename, "a");
+        if (fp) {
+            fprintf(fp, "%s\n", oss.str().c_str());
+            fclose(fp);
+        } else {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Fail to open json file: %s\n", filename);
+        }
+
+        ArchiveJSON(cleanPath, pid, filename);
     }
 
     void Start()

@@ -17,6 +17,8 @@
 #include <iomanip>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/time.h>
+#include <ctime>
 #include <sstream>
 #include <linux/limits.h>
 #include "securec.h"
@@ -40,17 +42,18 @@ public:
     {
         time_t rawTime;
         (void)time(&rawTime);
-        auto tmInfo = localtime(&rawTime);
-        if (tmInfo == nullptr) {
+        struct tm tmInfo;
+        struct tm* result = localtime_r(&rawTime, &tmInfo);
+        if (result == nullptr) {
             return "";
         }
         std::stringstream ss;
-        ss << std::setfill('0') << std::setw(NN_NO4) << std::right << (NN_NO1900 + tmInfo->tm_year) << "-" <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << (NN_NO1 + tmInfo->tm_mon) << "-" <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_mday << " " <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_hour << ":" <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_min << ":" <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_sec;
+        ss << std::setfill('0') << std::setw(NN_NO4) << std::right << (NN_NO1900 + tmInfo.tm_year) << "-" <<
+        std::setfill('0') << std::setw(NN_NO2) << std::right << (NN_NO1 + tmInfo.tm_mon) << "-" <<
+        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo.tm_mday << " " <<
+        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo.tm_hour << ":" <<
+        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo.tm_min << ":" <<
+        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo.tm_sec;
         return ss.str();
     }
 

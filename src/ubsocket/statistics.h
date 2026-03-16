@@ -14,6 +14,8 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/eventfd.h>
+#include <sys/time.h>
+#include <ctime>
 #include <cmath>
 #include <thread>
 #include <limits>
@@ -27,6 +29,7 @@
 #include "cli_message.h"
 #include "utracer.h"
 #include "utracer_manager.h"
+#include "net_common.h"
 
 #define RPC_VAR         (2)
 
@@ -225,10 +228,16 @@ public:
     }
 
     static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss) {
-        int timeBufSize = 32;
+        constexpr int timeBufSize = 32;
         time_t now = time(nullptr);
         char timeBuf[timeBufSize];
-        std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+        struct tm timeInfo;
+        if (localtime_r(&now, &timeInfo) != nullptr) {
+            std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &timeInfo);
+        } else {
+            timeBuf[0] = '\0';
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to create timeStamp.\n");
+        }
 
         oss << "{"
             << "\"timeStamp\":\"" << timeBuf << "\","
@@ -402,17 +411,23 @@ class Listener {
 
         m_uds_fd = OsAPiMgr::GetOriginApi()->socket(AF_UNIX, SOCK_STREAM, 0);
         if(m_uds_fd < 0){
-            throw std::runtime_error(std::string("Failed to create unix domain socket, ") + strerror(errno));
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            throw std::runtime_error(std::string("Failed to create unix domain socket, ") +
+                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
 
         if (OsAPiMgr::GetOriginApi()->bind(m_uds_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
             (void)OsAPiMgr::GetOriginApi()->close(m_uds_fd);
-            throw std::runtime_error(std::string("Failed to bind unix domain socket, ") + strerror(errno));
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            throw std::runtime_error(std::string("Failed to bind unix domain socket, ") +
+                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
 
         if (OsAPiMgr::GetOriginApi()->listen(m_uds_fd, 1) < 0) {
             (void)OsAPiMgr::GetOriginApi()->close(m_uds_fd);
-            throw std::runtime_error(std::string("Failed to listen unix domain socket, ") + strerror(errno));
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            throw std::runtime_error(std::string("Failed to listen unix domain socket, ") +
+                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
     }
 
@@ -457,7 +472,9 @@ class Listener {
 
         ev.data.fd = m_uds_fd;
         if (OsAPiMgr::GetOriginApi()->epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_uds_fd, &ev) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to add epoll control event, %s\n", strerror(errno));
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to add epoll control event, %s\n",
+                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             goto CLEAN_ALL_RESOURCE;
         }
 
@@ -672,7 +689,9 @@ class Listener {
 
         int fd = OsAPiMgr::GetOriginApi()->accept(m_uds_fd, NULL, NULL);
         if(fd<0){
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to accept connection, %s\n", strerror(errno));
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to accept connection, %s\n",
+                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return;
         }
         fd_guard tmpFd(fd);

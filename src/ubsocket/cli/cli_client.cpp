@@ -14,6 +14,7 @@
 #include "cli_terminal_display.h"
 #include "utracer_info.h"
 #include "scope_exit.h"
+#include "net_common.h"
 
 namespace Statistics {
 
@@ -186,7 +187,9 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
     }
     addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
     if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        CLI_LOG("Failed to connect server errno=%d, error=%s\n", errno, strerror(errno));
+        char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+        CLI_LOG("Failed to connect server errno=%d, error=%s\n", errno,
+            NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return -1;
     }
 

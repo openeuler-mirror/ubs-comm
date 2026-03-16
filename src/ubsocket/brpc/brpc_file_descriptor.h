@@ -34,6 +34,7 @@
 #include "umq_dfx_types.h"
 #include "umq_dfx_api.h"
 #include "utracer.h"
+#include "net_common.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
 #define UMQ_BIND_SYNC_MSG       "SYNC_DONE"
@@ -329,11 +330,15 @@ public:
             * b. fd为阻塞，则等待直到有连接完成或者触发异常，比如被信号中断，返回-1，errno为EINTR，保持原错误码直接返回上层
             */
             if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) {  // nonblocking
+                char buf[NET_STR_ERROR_BUF_SIZE] = {0};
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "tcp accept failed,Peer IP:%s, fd: %d, %d, %s\n",
-                                  GetPeerIp().c_str(), m_fd, errno, strerror(errno));
+                    GetPeerIp().c_str(), m_fd, errno,
+                        NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                 return fd;
             }
-            RPC_ADPT_VLOG_DEBUG("tcp accept need try again, fd: %d, %d, %s\n", m_fd, errno, strerror(errno));
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            RPC_ADPT_VLOG_DEBUG("tcp accept need try again, fd: %d, %d, %s\n",
+                m_fd, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return fd;
         }
 
@@ -718,10 +723,13 @@ public:
             * 若errno是EINTR/EADDRNOTAVAIL/EHOSTUNREACH等错误码，tcp连接失败，则不执行DoConnect，保持原错误码直接返回上层，由上层应用决定后续动作
             */
             if (errno == EINPROGRESS || errno == EALREADY) {
-                RPC_ADPT_VLOG_DEBUG("tcp connect inprogress:%s, fd %d\n", strerror(errno), m_fd);
+                char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+                RPC_ADPT_VLOG_DEBUG("tcp connect inprogress:%s, fd %d\n",
+                    NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), m_fd);
             } else if (errno != EISCONN) {
+                char buf[NET_STR_ERROR_BUF_SIZE] = {0};
                 RPC_ADPT_VLOG_NOTICE("tcp connect failed, errno %d, err msg: %s, fd %d\n", errno,
-                                     strerror(errno), m_fd);
+                    NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), m_fd);
                 return ret;
             }
         }
@@ -4098,6 +4106,7 @@ public:
             return ::EpollFd::EpollCtlAdd(fd, event, use_polling);
         }
 
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (m_epoll_event_map.count(fd) > 0) {
             RPC_ADPT_VLOG_WARN("Origin epoll control add duplicated, epfd: %d, fd: %d\n", m_fd, fd);
             EpollEvent *epoll_event = static_cast<Brpc::EpollEvent*>(m_epoll_event_map[fd]);

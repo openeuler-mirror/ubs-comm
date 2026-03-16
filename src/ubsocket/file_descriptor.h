@@ -22,6 +22,7 @@
 #include "socket_adapter.h"
 #include "polling_epoll.h"
 #include "cli_message.h"
+#include "net_common.h"
 
 #define RPC_ADPT_FD_MAX      (8192)
 
@@ -79,7 +80,6 @@ class Fd{
         if(fd<0 || fd>=RPC_ADPT_FD_MAX){
             return nullptr;
         }
-        ScopedReadLock lock(GetRWLock());
         return m_fd_obj_map[fd];
     }
 
@@ -184,6 +184,7 @@ class SocketFd : public Fd<SocketFd> {
         ssize_t sent = 0;
         size_t total = size;
         auto start = std::chrono::high_resolution_clock::now();
+        char errnoBuf[NET_STR_ERROR_BUF_SIZE] = {0};
         while (total != 0){
             if(IsTimeout(start, timeout_ms)){
                 return sent;
@@ -203,7 +204,7 @@ class SocketFd : public Fd<SocketFd> {
 
             if(sent<=0 || errno != 0){
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send socket message: %s, sent = %u.\n",
-                    strerror(errno), sent);
+                    NetCommon::NN_GetStrError(errno, errnoBuf, NET_STR_ERROR_BUF_SIZE), sent);
                 return sent;
             }else {
                 RPC_ADPT_VLOG_DEBUG("Send socket message successful, fd: %d, sent = %u, total: %d\n",
@@ -224,6 +225,7 @@ class SocketFd : public Fd<SocketFd> {
         ssize_t received = 0;
         size_t total = size;
         auto start = std::chrono::high_resolution_clock::now();
+        char errnoBuf[NET_STR_ERROR_BUF_SIZE] = {0};
         while (total != 0){
             if(IsTimeout(start, timeout_ms)){
                 return received;
@@ -243,7 +245,7 @@ class SocketFd : public Fd<SocketFd> {
 
             if (received <= 0 || errno != 0){
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,  "Failed to receive socket message: %s, received: %u, fd: %d.\n",
-                   strerror(errno), received, fd);
+                    NetCommon::NN_GetStrError(errno, errnoBuf, NET_STR_ERROR_BUF_SIZE), received, fd);
                 return received;
             } else {
                 RPC_ADPT_VLOG_DEBUG(
@@ -423,7 +425,7 @@ class EpollFd : public Fd<EpollFd> {
             errno = EINVAL;
             return -1;
         }
-
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (m_epoll_event_map.count(fd) > 0) {
             RPC_ADPT_VLOG_WARN("Origin epoll control add duplicated, epfd: %d, fd: %d\n", m_fd, fd);
             EpollEvent *epoll_event = m_epoll_event_map[fd];
@@ -460,7 +462,7 @@ class EpollFd : public Fd<EpollFd> {
             errno = EINVAL;
             return -1;
         }
-
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (m_epoll_event_map.count(fd) == 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Origin epoll control modify not exist, epfd: %d, fd: %d\n", m_fd,
                               fd);
@@ -477,6 +479,7 @@ class EpollFd : public Fd<EpollFd> {
 
     virtual ALWAYS_INLINE int EpollCtlDel(int fd, struct epoll_event *event, bool use_polling = false)
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (m_epoll_event_map.count(fd) == 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Origin epoll control delete not exist, epfd: %d, fd: %d\n", m_fd,
                               fd);
@@ -542,6 +545,7 @@ class EpollFd : public Fd<EpollFd> {
 
     EpollEvent *Find(int fd)
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
         auto iter = m_epoll_event_map.find(fd);
         if (iter == m_epoll_event_map.end()) {
             return nullptr;
@@ -551,6 +555,7 @@ class EpollFd : public Fd<EpollFd> {
 
     protected:
     std::unordered_map<int, EpollEvent *> m_epoll_event_map;
+    mutable std::mutex m_mutex;
 };
 
 #endif
