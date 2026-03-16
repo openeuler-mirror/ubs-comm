@@ -1,2 +1,276 @@
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@hcom_build_metadata//:defs.bzl", "HCOM_COMMIT_ID", "HCOM_COMPONENT_VERSION")
 
+package(default_visibility = ["//visibility:public"])
+
+config_setting(
+    name = "hcom_no_rdma",
+    values = {"define": "hcom_enable_rdma=0"},
+)
+
+config_setting(
+    name = "hcom_no_shm",
+    values = {"define": "hcom_enable_shm=0"},
+)
+
+config_setting(
+    name = "hcom_no_sock",
+    values = {"define": "hcom_enable_sock=0"},
+)
+
+config_setting(
+    name = "hcom_with_ub",
+    values = {"define": "hcom_enable_ub=1"},
+)
+
+config_setting(
+    name = "hcom_with_multicast",
+    values = {"define": "hcom_enable_multicast=1"},
+)
+
+config_setting(
+    name = "hcom_with_hw_crc",
+    values = {"define": "hcom_enable_hw_crc=1"},
+)
+
+config_setting(
+    name = "hcom_hw_crc_on_aarch64",
+    values = {
+        "cpu": "aarch64",
+        "define": "hcom_enable_hw_crc=1",
+    },
+)
+
+config_setting(
+    name = "hcom_with_allocator_protection",
+    values = {"define": "hcom_enable_allocator_protection=1"},
+)
+
+config_setting(
+    name = "hcom_with_arm_kp",
+    values = {"define": "hcom_enable_arm_kp=1"},
+)
+
+config_setting(
+    name = "hcom_mode_dbg",
+    values = {"compilation_mode": "dbg"},
+)
+
+config_setting(
+    name = "hcom_mode_opt",
+    values = {"compilation_mode": "opt"},
+)
+
+HCOM_BASE_SRCS = glob(
+    ["**/*.cpp"],
+    exclude = [
+        "api/java_sdk/**",
+        "transport/rdma/**",
+        "transport/shm/**",
+        "transport/sock/**",
+        "transport/ub/**",
+        "under_api/verbs/**",
+        "under_api/urma/**",
+        "multicast/**",
+        "3rdparty/**",
+        "stub/**",
+    ],
+)
+
+HCOM_RDMA_SRCS = glob([
+    "transport/rdma/**/*.cpp",
+    "under_api/verbs/verbs*.cpp",
+])
+
+HCOM_SHM_SRCS = glob(["transport/shm/**/*.cpp"])
+
+HCOM_SOCK_SRCS = glob(["transport/sock/**/*.cpp"])
+
+HCOM_UB_SRCS = glob([
+    "transport/ub/**/*.cpp",
+    "under_api/urma/*.cpp",
+])
+
+HCOM_MULTICAST_SRCS = glob(["multicast/**/*.cpp"])
+
+HCOM_ALL_SRCS = HCOM_BASE_SRCS + \
+                select({
+                    ":hcom_no_rdma": [],
+                    "//conditions:default": HCOM_RDMA_SRCS,
+                }) + \
+                select({
+                    ":hcom_no_shm": [],
+                    "//conditions:default": HCOM_SHM_SRCS,
+                }) + \
+                select({
+                    ":hcom_no_sock": [],
+                    "//conditions:default": HCOM_SOCK_SRCS,
+                }) + \
+                select({
+                    ":hcom_with_ub": HCOM_UB_SRCS,
+                    "//conditions:default": [],
+                }) + \
+                select({
+                    ":hcom_with_multicast": HCOM_MULTICAST_SRCS,
+                    "//conditions:default": [],
+                })
+
+HCOM_COMMON_HDRS = glob(
+    ["**/*.h"],
+    exclude = [
+        "api/java_sdk/**",
+        "3rdparty/**",
+        "stub/**",
+    ],
+)
+
+HCOM_DEFAULT_COPTS = [
+    "-std=c++11",
+    "-fPIC",
+    "-pipe",
+    "-Wall",
+    "-fms-extensions",
+    "-Wno-unused-parameter",
+    "-Wno-unused-function",
+    "-w",
+    "-Wno-address-of-packed-member",
+    "-Wunused-variable",
+    "-Wunused-value",
+    "-Wcast-align",
+    "-Wcast-qual",
+    "-Winvalid-pch",
+    "-Wwrite-strings",
+    "-Wsign-compare",
+    "-Wfloat-equal",
+    "-Wextra",
+    "-fstack-protector-strong",
+    "-DUSE_PROCESS_MONOTONIC",
+    "-DENABLE_OBJ_GLOBAL_STATISTICS",
+]
+
+HCOM_METADATA_COPTS = [
+    "-DHCOM_COMPONENT_VERSION=\\\"{}\\\"".format(HCOM_COMPONENT_VERSION),
+    "-DHCOM_COMMIT_ID=\\\"{}\\\"".format(HCOM_COMMIT_ID),
+]
+HCOM_DEFAULT_LINKOPTS = [
+    "-Wl,--start-group",
+    "-lpthread",
+    "-fuse-ld=gold",
+    "-ldl",
+    "-lrt",
+    "-Wl,--end-group",
+    "-Wl,--no-gc-sections",
+]
+
+HCOM_PROTOCOL_DEFINES = select({
+    ":hcom_no_rdma": [],
+    "//conditions:default": ["-DRDMA_BUILD_ENABLED"],
+}) + select({
+    ":hcom_no_shm": [],
+    "//conditions:default": ["-DSHM_BUILD_ENABLED"],
+}) + select({
+    ":hcom_no_sock": [],
+    "//conditions:default": ["-DSOCK_BUILD_ENABLED"],
+}) + select({
+    ":hcom_with_ub": ["-DUB_BUILD_ENABLED"],
+    "//conditions:default": [],
+})
+
+HCOM_EXTRA_DEFINES = select({
+    ":hcom_with_allocator_protection": ["-DALLOCATOR_PROTECTION_ENABLED"],
+    "//conditions:default": [],
+}) + select({
+    ":hcom_with_arm_kp": ["-DENABLE_ARM_KP"],
+    "//conditions:default": [],
+})
+
+HCOM_HW_CRC_COPTS = select({
+    ":hcom_with_hw_crc": ["-DUSE_HARDWARE_CRC"],
+    "//conditions:default": [],
+}) + select({
+    ":hcom_hw_crc_on_aarch64": ["-march=armv8-a+crc"],
+    "//conditions:default": [],
+})
+
+HCOM_MODE_COPTS = select({
+    ":hcom_mode_dbg": [
+        "-g",
+        "-DDEBUG",
+    ],
+    "//conditions:default": [],
+}) + select({
+    ":hcom_mode_opt": [
+        "-g",
+        "-O3",
+    ],
+    "//conditions:default": [],
+})
+
+HCOM_MODE_LINKOPTS = select({
+    ":hcom_mode_dbg": [
+        "-rdynamic",
+    ],
+    "//conditions:default": [],
+}) + select({
+    ":hcom_mode_opt": [
+        "-Wl,-z,relro,-z,now,-z,noexecstack",
+    ],
+    "//conditions:default": [],
+})
+
+HCOM_INCLUDE_DIRS = [
+    ".",
+    "under_api/verbs",
+    "under_api/urma",
+    "under_api/openssl",
+    "api",
+    "api/capi_v2",
+    "common",
+    "service_v2",
+    "service_v2/api",
+    "transport",
+    "transport/rdma",
+    "transport/rdma/verbs",
+    "transport/ub",
+    "transport/shm",
+    "transport/sock",
+    "multicast",
+    "multicast/include",
+]
+
+HCOM_COMMON_DEPS = [
+    "@libboundscheck//:boundscheck_headers",
+    "//src:libboundscheck",
+    "//src/hcom/umq:urpc_thread_closure",
+] + select({
+    ":hcom_with_ub": ["@urma//:urma_headers"],
+    "//conditions:default": [],
+})
+
+cc_library(
+    name = "hcom_static",
+    srcs = HCOM_ALL_SRCS,
+    hdrs = HCOM_COMMON_HDRS,
+    includes = HCOM_INCLUDE_DIRS,
+    copts = HCOM_DEFAULT_COPTS + HCOM_METADATA_COPTS + HCOM_PROTOCOL_DEFINES + HCOM_EXTRA_DEFINES + HCOM_HW_CRC_COPTS + HCOM_MODE_COPTS,
+    deps = HCOM_COMMON_DEPS,
+    linkopts = HCOM_DEFAULT_LINKOPTS + HCOM_MODE_LINKOPTS,
+)
+
+cc_binary(
+    name = "libhcom.so",
+    srcs = HCOM_ALL_SRCS + HCOM_COMMON_HDRS,
+    includes = HCOM_INCLUDE_DIRS,
+    copts = HCOM_DEFAULT_COPTS + HCOM_METADATA_COPTS + HCOM_PROTOCOL_DEFINES + HCOM_EXTRA_DEFINES + HCOM_HW_CRC_COPTS + HCOM_MODE_COPTS,
+    deps = HCOM_COMMON_DEPS,
+    linkopts = HCOM_DEFAULT_LINKOPTS + HCOM_MODE_LINKOPTS + ["-Wl,-soname,libhcom.so"],
+    linkshared = True,
+)
+
+filegroup(
+    name = "release_package",
+    srcs = [
+        ":hcom_static",
+        ":libhcom.so",
+    ],
+)

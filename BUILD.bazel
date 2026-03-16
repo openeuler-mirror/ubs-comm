@@ -1,16 +1,27 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) Huawei Technologies Co., Ltd. 2020-2026. All rights reserved.
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-#load("@rules_cc//cc:shared_library.bzl", "cc_shared_library")
+package(default_visibility = ["//visibility:public"])
 
-cc_binary(
-    deps = [
-        "//src/ubsocket:ubsocket",
-    ],
+alias(
+    name = "ubsocket",
+    actual = "//src:ubsocket",
 )
 
-cc_binary(
+alias(
+    name = "hcom",
+    actual = "//src/hcom:hcom_static",
+)
+
+alias(
     name = "ubstat",
-    deps = ["//src:ubstat"],  # 依赖src目录下的ubstat目标
+    actual = "//src:ubstat",
+)
+
+filegroup(
+    name = "release_package",
+    srcs = [
+        "//src:release_package",
+        "//src:hcom_release_package",
+    ],
 )

@@ -5,8 +5,8 @@ workspace(name = "com_atomgit_openeuler_umdk_umq")
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("//tools/bazel:hcom_repositories.bzl", "hcom_build_metadata_repository", "hcom_urma_repository")
 
-load("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
 
 http_archive(
     name = "bazel_skylib",
@@ -85,6 +85,10 @@ load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_depende
 
 rules_foreign_cc_dependencies()
 
+hcom_build_metadata_repository(
+    name = "hcom_build_metadata",
+    cmake_file = "//src/hcom:CMakeLists.txt",
+)
 http_archive(
     name = "com_github_madler_zlib",  # 2017-01-15T17:57:23Z
     build_file = "//src/hcom/umq/third_party/zlib:zlib.BUILD",
@@ -104,15 +108,14 @@ git_repository(
 )
 
 
-new_local_repository(
+hcom_urma_repository(
     name = "urma",
     build_file = "//src/hcom/umq/third_party/urma:BUILD.bazel",
-    path = "/usr",
 )
 
 git_repository(
 	name = "libboundscheck",
 	remote = "https://atomgit.com/openeuler/libboundscheck.git",
-	branch = "master",  # 或指定特定分支
+	branch = "master",  # optional: pin to a specific branch
 	build_file = "//src/ubsocket/3rdparty/boundscheck:BUILD.bazel",
 )

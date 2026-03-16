@@ -1,12 +1,37 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
 package(
-    default_visibility=["//visibility:public"]
+    default_visibility = ["//visibility:public"],
 )
 
-cc_import(
+cc_library(
     name = "urma_headers",
-    includes = ["/usr/include/ub/umdk/urma"],
-    system_provided = True,
+    hdrs = glob([
+        "include/ub/umdk/urma/*.h",
+        "include/ub/umdk/urma/**/*.h",
+        "include/ub/umdk/*.h",
+        "include/umdk/urma/*.h",
+        "include/umdk/urma/**/*.h",
+        "include/umdk/*.h",
+    ]),
+    includes = [
+        "include/ub/umdk/urma",
+        "include/ub/umdk",
+        "include/umdk/urma",
+        "include/umdk",
+        "include",
+    ],
+)
+
+cc_library(
+    name = "urma_lib",
+    linkopts = ["-lurma"],
+)
+
+cc_library(
+    name = "tpsa_lib",
+    linkopts = ["-ltpsa"],
 )

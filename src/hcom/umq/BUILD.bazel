@@ -57,3 +57,14 @@ cc_library(
     alwayslink = True,
     visibility = ["//visibility:public"],
 )
+
+cc_library(
+    name = "urpc_thread_closure",
+    srcs = ["util/urpc_thread_closure.cpp"],
+    hdrs = ["util/urpc_thread_closure.h"],
+    includes = ["util"],
+    # Keep PIC explicit for thread_local object usage in downstream shared links.
+    copts = ["-fPIC"],
+    alwayslink = True,
+    visibility = ["//visibility:public"],
+)

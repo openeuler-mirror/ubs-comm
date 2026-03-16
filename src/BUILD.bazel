@@ -1,4 +1,4 @@
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_import", "cc_library")
 
 
 cc_library(
@@ -22,6 +22,7 @@ cc_import(
   name = "libboundscheck",
 #  hdrs = ["mylib.h"],
   shared_library = ":libboundscheck.so",
+  visibility = ["//visibility:public"],
 )
 
 cc_import(
@@ -197,6 +198,26 @@ filegroup(
         "//src/hcom/umq/src/umq_ipc:umq_ipc",
         "//src/hcom/umq/src/umq_ub:umq_ub",
 
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "hcom",
+    deps = ["//src/hcom:hcom_static"],
+    visibility = ["//visibility:public"],
+)
+
+cc_import(
+    name = "libhcom",
+    shared_library = "//src/hcom:libhcom.so",
+)
+
+filegroup(
+    name = "hcom_release_package",
+    srcs = [
+        "//src/hcom:hcom_static",
+        "//src/hcom:libhcom.so",
     ],
     visibility = ["//visibility:public"],
 )
