@@ -3609,9 +3609,9 @@ private:
     std::atomic<bool> m_closed{false};
     int m_event_fd;
     int mPeerSocketId = -1;
-    EidRegistry mEidRegistry;
+    static EidRegistry mEidRegistry;
     bool m_isblocking = true;
-    RouteListRegistry mRouteListRegistry;
+    static RouteListRegistry mRouteListRegistry;
     QbufQueue<umq_buf_t *> *rxQueue = nullptr;
     ShareJfrRxEpollEvent *share_jfr_rx_epoll_event = nullptr;
 

@@ -4,6 +4,9 @@
 #include "brpc_file_descriptor.h"
 
 namespace Brpc {
+EidRegistry SocketFd::mEidRegistry;
+RouteListRegistry SocketFd::mRouteListRegistry;
+
 void SocketFd::HandleErrorRxCqe(umq_buf_t *buf)
 {
     switch (buf->status) {
