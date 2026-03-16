@@ -236,7 +236,7 @@ EXPOSE_C_DEFINE ssize_t sendfile64(int out_fd, int in_fd, off64_t *offset, size_
 
 EXPOSE_C_DEFINE int fcntl(int fd, int cmd, ...)
 {
-    unsigned long int arg{ 0 };
+    uintptr_t arg{ 0 };
     va_list va;
     va_start(va, cmd);
     arg = va_arg(va, decltype(arg));

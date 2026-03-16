@@ -71,7 +71,7 @@ void util_vlog_output(
     char log_msg[UTIL_VLOG_SIZE];
     int len = snprintf(log_msg, UTIL_VLOG_SIZE, "%s|%s|%s[%d]|", ctx->vlog_name, error_type_to_str(error_type),
                        function, line);
-    if (len < 0) {
+    if (len < 0 || len >= UTIL_VLOG_SIZE) {
         return;
     }
 
