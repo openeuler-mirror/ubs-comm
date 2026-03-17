@@ -512,7 +512,7 @@ protected:
     bool m_is_ipv6 = false;
     static socket_fd_trans_mode m_socket_fd_trans_mode;
     bool m_stats_enable = false;
-    bool m_trace_enable = false;
+    bool m_trace_enable = true;
     bool m_log_use_printf = false;
     bool m_use_brpc_zcopy = true;
     dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;

@@ -80,7 +80,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_USE_UB_FORCE             | 是否强制使用UB协议加速TCP                         | false：通过接口参数设置socket是否开启UB加速。<br>true：强制所有socket开启UB加速。 | false             | 否                                  |
 | UBSOCKET_SCHEDULE_POLICY          | 设置多平面负载分担策略                            | affinity：亲和策略，使用和业务线程所在CPU亲和的IODIE进行UB通信。<br>rr：轮转策略，多个socket采用round robin的策略使用不同IODIE进行UB通信。 | affinity          | 否                                  |
 | UBSOCKET_AUTO_FALLBACK_TCP        | 协议不匹配时是否自动降级为TCP                     | false, true                                                  | true              | 否                                  |
-| UBSOCKET_TRACE_ENABLE             | 是否打开trace统计                                 | false, true                                                  | false             | 否                                  |
+| UBSOCKET_TRACE_ENABLE             | 是否打开trace统计                                 | false, true                                                  | true             | 否                                  |
 | UBSOCKET_TRACE_TIME               | 控制维测数据输出间隔（单位s）                     | [1, 300]                                                     | 10                | 否                                  |
 | UBSOCKET_TRACE_FILE_PATH          | 控制维测数据输出路径                              | [1, 512]                                                     | /tmp/ubsocket/log | 否                                  |
 | UBSOCKET_TRACE_FILE_SIZE          | 控制维测数据文件大小（MB）                        | [1, 300]                                                     | 10                | 否                                  |
@@ -311,11 +311,11 @@ UBSocket提供了两种日志输出方式，如通过环境变量UBSOCKET\_LOG\_
 </td>
 <td class="cellrowborder" valign="top" width="7.519248075192481%" headers="mcps1.2.6.1.2 "><p id="p820513440611"><a name="p820513440611"></a><a name="p820513440611"></a>true/false</p>
 </td>
-<td class="cellrowborder" valign="top" width="14.44855514448555%" headers="mcps1.2.6.1.3 "><p id="p63612010859"><a name="p63612010859"></a><a name="p63612010859"></a>false</p>
+<td class="cellrowborder" valign="top" width="14.44855514448555%" headers="mcps1.2.6.1.3 "><p id="p63612010859"><a name="p63612010859"></a><a name="p63612010859"></a>true</p>
 </td>
 <td class="cellrowborder" valign="top" width="25.72742725727427%" headers="mcps1.2.6.1.4 "><p id="p11362141018517"><a name="p11362141018517"></a><a name="p11362141018517"></a>控制UB socket流量指标采集功能的开启/关闭</p>
 </td>
-<td class="cellrowborder" valign="top" width="29.187081291870815%" headers="mcps1.2.6.1.5 "><p id="p43626107515"><a name="p43626107515"></a><a name="p43626107515"></a>必须设置为true，否则无法输出日志供Filebeat采集</p>
+<td class="cellrowborder" valign="top" width="29.187081291870815%" headers="mcps1.2.6.1.5 "><p id="p43626107515"><a name="p43626107515"></a><a name="p43626107515"></a>默认设置为true。手动设置为false时无法输出日志供Filebeat采集</p>
 </td>
 </tr>
 <tr id="row191745262519"><td class="cellrowborder" valign="top" width="23.11768823117688%" headers="mcps1.2.6.1.1 "><p id="p2036215101151"><a name="p2036215101151"></a><a name="p2036215101151"></a>UBSOCKET_TRACE_TIME</p>
