@@ -71,7 +71,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_EID_IDX                  | 使用普通设备的eid编号                             | ub协议下，通过`urma_admin show`命令查询获得                  | 0                 | `RPC_ADPT_DEV_NAME`为普通设备时必填 |
 | UBSOCKET_SRC_EID                  | 使用bonding设备的eid                              | ub协议下，通过`urma_admin show`命令查询获得                  | bonding设备eid    | 否                                  |
 | UBSOCKET_LOG_LEVEL                | 日志级别（仅输出大于等于该级别的日志）            | error：错误型<br>warn：警告型<br>notice：提示型<br>info：信息型<br>debug：调试型 | info              | 否                                  |
-| UBSOCKET_LOG_USE_PRINTF           | 是否将日志打印到前台                              | true：日志在前台打印<br>false：日志不在前台打印              | fasle             | 否                                  |
+| UBSOCKET_LOG_USE_PRINTF           | 是否将日志打印到前台                              | true：日志在前台打印<br>false：日志不在前台打印              | true             | 否                                  |
 | UBSOCKET_TX_DEPTH                 | 发送队列深度                                      | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfs_depth`两者的最小值） | 1024              | 否                                  |
 | UBSOCKET_RX_DEPTH                 | 接受队列深度                                      | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfr_depth`两者的最小值） | 1024              | 否                                  |
 | UBSOCKET_READV_UNLIMITED          | 是否打开readv上报限制                             | false，true                                                  | true              | 否                                  |
