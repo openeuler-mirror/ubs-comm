@@ -302,6 +302,20 @@ public:
         }
     }
 
+    static ALWAYS_INLINE void SubMConnCount()
+    {
+        if (mConnCount.load() >= 1) {
+            mConnCount.fetch_sub(1, std::memory_order_relaxed);
+        }
+    }
+
+    static ALWAYS_INLINE void SubMActiveConnCount()
+    {
+        if (mActiveConnCount.load() >= 1) {
+            mActiveConnCount.fetch_sub(1, std::memory_order_relaxed);
+        }
+    }
+
 protected:
     const char *GetStatsStr(enum trace_stats_type type)
     {

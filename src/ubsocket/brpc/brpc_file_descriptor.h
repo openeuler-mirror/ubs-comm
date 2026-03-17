@@ -255,6 +255,13 @@ public:
             delete share_jfr_rx_epoll_event;
             share_jfr_rx_epoll_event = nullptr;
         }
+
+        if (m_context_trace_enable) {
+            SubMConnCount();
+            if (m_peer_info.type_fd == 1) {
+                SubMActiveConnCount();
+            }
+        }
     }
     ALWAYS_INLINE const std::string& GetPeerIp() const { return m_peer_info.peer_ip; }
     ALWAYS_INLINE const umq_eid_t& GetPeerEid() const { return m_peer_info.peer_eid; }
@@ -390,6 +397,7 @@ public:
         }
 
         if (m_context_trace_enable) {
+            m_peer_info.type_fd = 0;
             UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
         }
         return fd;
@@ -757,6 +765,7 @@ public:
         }
 
         if (m_context_trace_enable) {
+            m_peer_info.type_fd = 1;
             UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
             UpdateTraceStats(StatsMgr::ACTIVE_OPEN_COUNT, 1);
         }
@@ -3605,6 +3614,7 @@ private:
         std::string peer_ip;      // 对端IP地址
         umq_eid_t peer_eid;      // 对端EID
         int peer_fd;             // 对端socket fd
+        int type_fd;             // 0 server; 1 client
     } m_peer_info;
     //common fields
     uint64_t m_local_umqh = UMQ_INVALID_HANDLE;
