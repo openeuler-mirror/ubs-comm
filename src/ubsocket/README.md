@@ -111,7 +111,7 @@ UBSOCKET_READV_UNLIMITED=true \
 | UBSOCKET_EID_IDX           | 使用普通设备的eid编号  | ub协议下，通过`urma_admin show`命令查询获得                  | 0       | `UBSOCKET_DEV_NAME`为普通设备时必填      |
 | UBSOCKET_SRC_EID           | 使用bonding设备的eid   | ub协议下，通过`urma_admin show`命令查询获得                  | bonding设备eid| 否|
 | UBSOCKET_LOG_LEVEL         | 日志级别               | error，warn，notice，info，debug           | info    | 否                                |
-| UBSOCKET_LOG_USE_PRINTF    | 是否将日志打印到前台   | true，false                                                         | fasle      | 否                                |
+| UBSOCKET_LOG_USE_PRINTF    | 是否将日志打印到前台   | true，false                                                         | true      | 否                                |
 | UBSOCKET_TX_DEPTH          | 发送队列深度           | 最小值是64，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfs_depth`两者的最小值） | 1024     | 否                                |
 | UBSOCKET_RX_DEPTH          | 接受队列深度           | 最小值是64，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfr_depth`两者的最小值） | 1024     | 否                                |
 | UBSOCKET_READV_UNLIMITED   | 是否打开readv上报限制  | false，true                                                  | true   | 否                                |
