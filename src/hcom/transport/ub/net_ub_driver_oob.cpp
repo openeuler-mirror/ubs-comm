@@ -55,10 +55,13 @@ NResult NetDriverUBWithOob::DoInitialize()
                 NN_LOG_DEBUG("BondingEid: " << bondingEid);
                 std::string localPrimaryEid;
                 std::string remotePrimaryEid;
-                NetFunc::NN_GetPrimaryEid(bondingEid, bondingEid, localPrimaryEid, remotePrimaryEid);
+                NResult ret = NetFunc::NN_GetPrimaryEid(bondingEid, bondingEid, localPrimaryEid, remotePrimaryEid);
+                if (ret != NN_OK) {
+                    lOpt.Ip(bondingEid);
+                    continue;
+                }
                 NN_LOG_DEBUG("Local primary eid: " << localPrimaryEid << ", Remote primary eid: " << remotePrimaryEid);
                 lOpt.Ip(localPrimaryEid);
-                NN_LOG_DEBUG("Local primary eid: " << lOpt.Ip());
             }
  	             
             result = CreateListeners(mOptions.enableMultiRail);
@@ -724,10 +727,15 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
         NN_LOG_DEBUG("oobIp eid: " << oobIp << ", meid: " << mEid);
         std::string localPrimaryEid;
         std::string remotePrimaryEid;
-        NetFunc::NN_GetPrimaryEid(mEid, oobIp, localPrimaryEid, remotePrimaryEid);
+        NResult ret = NetFunc::NN_GetPrimaryEid(mEid, oobIp, localPrimaryEid, remotePrimaryEid);
         NN_LOG_DEBUG("Local primary eid: " << localPrimaryEid << ", Remote primary eid: " << remotePrimaryEid);
-        OOBTCPClient::mLocalEid = localPrimaryEid;
-        oobIpCopy = remotePrimaryEid;
+        if (ret != NN_OK) {
+            OOBTCPClient::mLocalEid = mEid;
+            oobIpCopy = oobIp;
+        } else {
+            OOBTCPClient::mLocalEid = localPrimaryEid;
+            oobIpCopy = remotePrimaryEid;
+        }
     }
 
     if ((flags & NET_EP_SELF_POLLING) || (flags & NET_EP_EVENT_POLLING)) {
