@@ -228,7 +228,7 @@ int umq_info_get(uint64_t umqh, umq_info_t *umq_info)
 
 int umq_info_to_str(const umq_info_t *umq_info, char *buf, int max_buf_len)
 {
-    if (umq_info == NULL || buf == NULL || max_buf_len <= 0) {
+    if (umq_info == NULL || umq_info->trans_mode >= UMQ_TRANS_MODE_MAX || buf == NULL || max_buf_len <= 0) {
         UMQ_VLOG_ERR(VLOG_UMQ, "invalid parameter\n");
         return -UMQ_ERR_EINVAL;
     }
@@ -304,7 +304,7 @@ int umq_stats_io_reset(uint64_t umqh)
 
 int umq_io_stats_to_str(const umq_packet_stats_t *packet_stats, char *buf, int max_buf_len)
 {
-    if (packet_stats == NULL || buf == NULL || max_buf_len == 0) {
+    if (packet_stats == NULL || buf == NULL || max_buf_len <= 0) {
         UMQ_VLOG_ERR(VLOG_UMQ, "invalid parameter\n");
         return -UMQ_ERR_EINVAL;
     }
