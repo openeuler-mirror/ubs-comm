@@ -154,6 +154,8 @@ void UBJetty::FillJfsCfg(urma_jfs_cfg_t *jfs_cfg)
     // HighBandwidth RM mode, LowLatency RC mode
     jfs_cfg->trans_mode = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) ? URMA_TM_RM : URMA_TM_RC;
     jfs_cfg->flag.bs.multi_path = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) ? 1 : 0;
+    jfs_cfg->priority = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth)
+                        ? mUBContext->mCtpPri : mUBContext->mRtpPri;
 }
 
 void UBJetty::FillJfrCfg(urma_jfr_cfg_t *jfr_cfg, uint32_t token)
@@ -453,6 +455,7 @@ UResult UBJetty::ImportAndBindJetty(uint32_t token)
     remoteJetty.type = URMA_JETTY;
     remoteJetty.trans_mode = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) ? URMA_TM_RM : URMA_TM_RC;
     remoteJetty.flag.bs.token_policy = URMA_TOKEN_PLAIN_TEXT;
+    remoteJetty.tp_type = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) ? URMA_CTP : URMA_RTP;
     urma_token_t tokenValue{token};
     mTargetJetty = HcomUrma::ImportJetty(mUBContext->mUrmaContext, &remoteJetty, &tokenValue);
     if (mTargetJetty == nullptr) {

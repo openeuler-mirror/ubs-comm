@@ -74,12 +74,26 @@ public:
     UBEId mBestEid{};
 
 private:
+    int GetPriByTpType(union urma_tp_type_en tp_type)
+    {
+        int pri = 0;
+        for (int i = 0; i <= URMA_MAX_PRIORITY; i++) {
+            if (tp_type.value == mDevAttr->dev_cap.priority_info[i].tp_type.value) {
+                pri = i;
+                return pri;
+            }
+        }
+        return -1;
+    }
+
     std::string mName;
     urma_context_t *mUrmaContext = nullptr;
     urma_device_attr_t *mDevAttr = nullptr;
     uint8_t mPortNumber = 1;
     uint32_t mMaxJfs = 0;
     uint32_t mMaxJfr = 0;
+    int mCtpPri = 0;
+    int mRtpPri = 0;
     int mMaxSge = NN_NO16;
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;

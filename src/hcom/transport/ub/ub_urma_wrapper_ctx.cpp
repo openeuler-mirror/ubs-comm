@@ -56,6 +56,24 @@ UResult UBContext::Initialize(uint8_t &bandWidth)
 
     mMaxJfr = mDevAttr->dev_cap.max_jfr_depth;
     mMaxJfs = mDevAttr->dev_cap.max_jfs_depth;
+
+    // get ctp and rtp default SL priority
+    union urma_tp_type_en tp_type_ctp;
+    union urma_tp_type_en tp_type_rtp;
+    tp_type_ctp.bs.ctp = 1;
+    tp_type_rtp.bs.rtp = 1;
+
+    mCtpPri = GetPriByTpType(tp_type_ctp);
+    if (mCtpPri == -1) {
+        NN_LOG_ERROR("Failed to get priority by ctp type");
+        return UB_ERROR;
+    }
+    mRtpPri = GetPriByTpType(tp_type_rtp);
+    if (mRtpPri == -1) {
+        NN_LOG_ERROR("Failed to get priority by rtp type");
+        return UB_ERROR;
+    }
+
     bandWidth = mBestEid.bandWidth;
     return UB_OK;
 }
