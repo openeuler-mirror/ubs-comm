@@ -16,13 +16,16 @@
 #include <pthread.h>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <chrono>
+#include <mutex>
 
 #include "rpc_adpt_vlog.h"
 #include "socket_adapter.h"
 #include "polling_epoll.h"
 #include "cli_message.h"
 #include "net_common.h"
+#include "ub_lock_manager.h"
 
 #define RPC_ADPT_FD_MAX      (8192)
 
@@ -57,6 +60,38 @@ class ScopedWriteLock{
     private:
     pthread_rwlock_t &m_rwlock;
 };
+
+class SocketEpollMapper {
+public:
+    explicit SocketEpollMapper(int fd) : m_fd(fd) {}
+
+    ~SocketEpollMapper() {}
+
+    void Add(int epoll_fd)
+    {
+        m_epoll_set.insert(epoll_fd);
+    }
+
+    void Del(int epoll_fd)
+    {
+        m_epoll_set.erase(epoll_fd);
+    }
+
+    void Clear();
+private:
+    int m_fd;
+    std::unordered_set<int> m_epoll_set;
+};
+
+extern std::unordered_map<int, SocketEpollMapper *> g_socket_epoll_mappers;
+
+extern UbLazyLock<UbRWLock> g_socket_epoll_lock;
+
+SocketEpollMapper* GetSocketEpollMapper(int socket_fd);
+
+bool CreateSocketEpollMapper(int socket_fd, SocketEpollMapper*& mapper);
+
+void CleanSocketEpollMapper(int socket_fd);
 
 template <typename FdType>
 class Fd{
@@ -351,9 +386,13 @@ class EpollEvent {
     {
         int ret = OsAPiMgr::GetOriginApi()->epoll_ctl(epoll_fd, EPOLL_CTL_DEL, m_fd, nullptr);
         if (ret != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Origin epoll control delete failed, epfd: %d, fd: %d\n", epoll_fd,
-                              m_fd);
-            return ret;
+            if (errno != EBADF) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Origin epoll control delete failed, "
+                    "epfd: %d, fd: %d, errno: %d\n", epoll_fd, m_fd, errno);
+                return ret;
+            }
+            RPC_ADPT_VLOG_WARN("Origin epoll control error for bad file descriptor, "
+                "epfd: %d, fd: %d\n", epoll_fd, m_fd);
         }
 
         RPC_ADPT_VLOG_DEBUG("Origin epoll control delete successful, epfd: %d, fd: %d\n", epoll_fd, m_fd);
@@ -481,9 +520,8 @@ class EpollFd : public Fd<EpollFd> {
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         if (m_epoll_event_map.count(fd) == 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Origin epoll control delete not exist, epfd: %d, fd: %d\n", m_fd,
-                              fd);
-            return -1;
+            RPC_ADPT_VLOG_DEBUG("Origin epoll control delete not exist, epfd: %d, fd: %d\n", m_fd, fd);
+            return 0;
         }
 
         EpollEvent *epoll_event = m_epoll_event_map[fd];
@@ -500,21 +538,39 @@ class EpollFd : public Fd<EpollFd> {
     virtual ALWAYS_INLINE int EpollCtl(int op, int fd, struct epoll_event *event, bool use_polling = false)
     {
         int ret = -1;
+        bool mapper_create = false;
+        SocketEpollMapper* mapper = nullptr;
+        std::lock_guard<std::mutex> guard(m_ctl_mutex);
+        if (op == EPOLL_CTL_ADD) {
+            mapper_create = CreateSocketEpollMapper(fd, mapper);
+        } else {
+            mapper = GetSocketEpollMapper(fd);
+        }
         switch (op){
             case EPOLL_CTL_ADD:
                 ret = EpollCtlAdd(fd, event, use_polling);
+                if (ret == 0 && mapper != nullptr) {
+                    mapper->Add(m_fd);
+                } else if (mapper_create) {
+                    ScopedUbWriteLock s_lock(g_socket_epoll_lock.get());
+                    g_socket_epoll_mappers.erase(fd);
+                    free(mapper);
+                    mapper = nullptr;
+                }
                 break;
             case EPOLL_CTL_MOD:
                 ret = EpollCtlMod(fd, event, use_polling);
                 break;
             case EPOLL_CTL_DEL:
                 ret = EpollCtlDel(fd, event, use_polling);
+                if (ret == 0 && mapper != nullptr) {
+                    mapper->Del(m_fd);
+                }
                 break; 
             default:
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid op code(%d), epfd: %d, fd: %d\n", op, m_fd, fd);
                 errno = EINVAL; 
         }
-
         return ret;
     }
 
@@ -553,9 +609,15 @@ class EpollFd : public Fd<EpollFd> {
         return dynamic_cast<EpollEvent *>(iter->second);
     }
 
+    std::mutex& GetCtlMutex()
+    {
+        return m_ctl_mutex;
+    }
+
     protected:
     std::unordered_map<int, EpollEvent *> m_epoll_event_map;
     mutable std::mutex m_mutex;
+    std::mutex m_ctl_mutex;
 };
 
 #endif
