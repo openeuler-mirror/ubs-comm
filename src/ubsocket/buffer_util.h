@@ -23,6 +23,12 @@ public:
         uint32_t moved_len = 0;
         if (m_iov_idx < m_iovcnt){
             if(m_iov_offset + len >= m_iov[m_iov_idx].iov_len){
+                while (m_iov_idx < m_iovcnt && m_iov[m_iov_idx].iov_len == 0) {
+                    m_iov_idx++;
+                }
+                if (m_iov_idx >= m_iovcnt) {
+                    return moved_len;
+                }
                 moved_len = m_iov[m_iov_idx].iov_len - m_iov_offset;
                 m_iov_offset = 0;
                 /* Avoid core dump caused by brpc passing in memory with a length of 0,
@@ -44,6 +50,12 @@ public:
         uint32_t moved_len = 0;
         if(m_iov_idx<m_iovcnt){
             if(m_iov_offset + len >=m_iov[m_iov_idx].iov_len){
+                while (m_iov_idx < m_iovcnt && m_iov[m_iov_idx].iov_len == 0) {
+                    m_iov_idx++;
+                }
+                if (m_iov_idx >= m_iovcnt) {
+                    return moved_len;
+                }
                 moved_len = m_iov[m_iov_idx].iov_len - m_iov_offset;
                 buf->buf_data = (char *)m_iov[m_iov_idx].iov_base + m_iov_offset;
                 buf->data_size = moved_len;
