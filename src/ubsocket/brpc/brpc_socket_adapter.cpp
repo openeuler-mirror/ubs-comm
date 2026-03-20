@@ -23,7 +23,11 @@ EXPOSE_C_DEFINE int socket(int domain, int type, int protocol)
     } else {
         fd = OsAPiMgr::GetOriginApi()->socket(domain, type, protocol);
     }
-
+    
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return fd;
+    }
+    
     /* The 'socket()' function is only called when constructing the 'Brpc::Context'singleton, so the
      * file descriptor (fd) is directly returned to avoid recursively constructing 'Brpc::Context'. */
     Brpc::Context *context = Brpc::Context::GetContext();
@@ -71,6 +75,10 @@ EXPOSE_C_DEFINE int shutdown(int fd, int how)
 
 EXPOSE_C_DEFINE int close(int fd)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->close(fd);
+    }
+    CleanSocketEpollMapper(fd);
     Fd<SocketFd>::OverrideFdObj(fd, nullptr);
     Fd<EpollFd>::OverrideFdObj(fd, nullptr);
 
@@ -84,6 +92,9 @@ EXPOSE_C_DEFINE int close(int fd)
 
 EXPOSE_C_DEFINE int accept(int socket, struct sockaddr *address, socklen_t *address_len)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->accept(socket, address, address_len);
+    }
 #ifdef UBS_SHM_BUILD_ENABLED
     Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(socket);
 #else
@@ -98,6 +109,9 @@ EXPOSE_C_DEFINE int accept(int socket, struct sockaddr *address, socklen_t *addr
 
 EXPOSE_C_DEFINE int accept4(int socket, struct sockaddr *address, socklen_t *address_len, int flag)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->accept4(socket, address, address_len, flag);
+    }
 #ifdef UBS_SHM_BUILD_ENABLED
     Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(socket);
 #else
@@ -112,6 +126,9 @@ EXPOSE_C_DEFINE int accept4(int socket, struct sockaddr *address, socklen_t *add
 
 EXPOSE_C_DEFINE int connect(int socket, const struct sockaddr *address, socklen_t address_len)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->connect(socket, address, address_len);
+    }
 #ifdef UBS_SHM_BUILD_ENABLED
     Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(socket);
 #else
@@ -126,6 +143,9 @@ EXPOSE_C_DEFINE int connect(int socket, const struct sockaddr *address, socklen_
 
 EXPOSE_C_DEFINE ssize_t readv(int fildes, const struct iovec *iov, int iovcnt)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->readv(fildes, iov, iovcnt);
+    }
 #ifdef UBS_SHM_BUILD_ENABLED
     Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fildes);
 #else
@@ -140,6 +160,9 @@ EXPOSE_C_DEFINE ssize_t readv(int fildes, const struct iovec *iov, int iovcnt)
 
 EXPOSE_C_DEFINE ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->writev(fildes, iov, iovcnt);
+    }
 #ifdef UBS_SHM_BUILD_ENABLED
     Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fildes);
 #else
@@ -154,6 +177,9 @@ EXPOSE_C_DEFINE ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
 
 EXPOSE_C_DEFINE ssize_t send(int sockfd, const void *buf, size_t len, int flags)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->send(sockfd, buf, len, flags);
+    }
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->send(sockfd, buf, len, flags);
@@ -164,6 +190,9 @@ EXPOSE_C_DEFINE ssize_t send(int sockfd, const void *buf, size_t len, int flags)
 
 EXPOSE_C_DEFINE ssize_t recv(int sockfd, void *buf, size_t len, int flags)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->recv(sockfd, buf, len, flags);
+    }
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->recv(sockfd, buf, len, flags);
@@ -174,6 +203,9 @@ EXPOSE_C_DEFINE ssize_t recv(int sockfd, void *buf, size_t len, int flags)
 
 EXPOSE_C_DEFINE ssize_t read(int fildes, void *buf, size_t nbyte)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->read(fildes, buf, nbyte);
+    }
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fildes);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->read(fildes, buf, nbyte);
@@ -184,6 +216,9 @@ EXPOSE_C_DEFINE ssize_t read(int fildes, void *buf, size_t nbyte)
 
 EXPOSE_C_DEFINE ssize_t write(int fildes, const void *buf, size_t nbyte)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->write(fildes, buf, nbyte);
+    }
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fildes);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->write(fildes, buf, nbyte);
@@ -195,6 +230,9 @@ EXPOSE_C_DEFINE ssize_t write(int fildes, const void *buf, size_t nbyte)
 EXPOSE_C_DEFINE ssize_t sendto(int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr,
                                socklen_t addrlen)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->sendto(sockfd, buf, len, flags, dest_addr, addrlen);
+    }
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->sendto(sockfd, buf, len, flags, dest_addr, addrlen);
@@ -206,6 +244,9 @@ EXPOSE_C_DEFINE ssize_t sendto(int sockfd, const void *buf, size_t len, int flag
 EXPOSE_C_DEFINE ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags, struct sockaddr *dest_addr,
                                socklen_t *addrlen)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->recvfrom(sockfd, buf, len, flags, dest_addr, addrlen);
+    }
     Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(sockfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->recvfrom(sockfd, buf, len, flags, dest_addr, addrlen);
@@ -241,6 +282,9 @@ EXPOSE_C_DEFINE int fcntl(int fd, int cmd, ...)
     va_start(va, cmd);
     arg = va_arg(va, decltype(arg));
     va_end(va);
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->fcntl(fd, cmd, arg);
+    }
 #ifdef UBS_SHM_BUILD_ENABLED
     Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fd);
 #else
@@ -260,6 +304,9 @@ EXPOSE_C_DEFINE int fcntl64(int fd, int cmd, ...)
     va_start(va, cmd);
     arg = va_arg(va, decltype(arg));
     va_end(va);
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->fcntl64(fd, cmd, arg);
+    }
 #ifdef UBS_SHM_BUILD_ENABLED
     Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fd);
 #else
@@ -279,6 +326,9 @@ EXPOSE_C_DEFINE int ioctl(int fd, unsigned long request, ...)
     va_start(va, request);
     arg = va_arg(va, decltype(arg));
     va_end(va);
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->ioctl(fd, request, arg);
+    }
 #ifdef UBS_SHM_BUILD_ENABLED
     Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fd);
 #else
@@ -293,6 +343,9 @@ EXPOSE_C_DEFINE int ioctl(int fd, unsigned long request, ...)
 
 EXPOSE_C_DEFINE int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->setsockopt(fd, level, optname, optval, optlen);
+    }
 #ifdef UBS_SHM_BUILD_ENABLED
     Brpc::MemSocketFd *obj = (Brpc::MemSocketFd *)Fd<SocketFd>::GetFdObj(fd);
 #else
@@ -308,7 +361,7 @@ EXPOSE_C_DEFINE int setsockopt(int fd, int level, int optname, const void *optva
 EXPOSE_C_DEFINE int epoll_create(int size)
 {
     int epoll_fd = OsAPiMgr::GetOriginApi()->epoll_create(size);
-    if (epoll_fd < 0) {
+    if (!Brpc::Context::GetUbEnableFlag() || epoll_fd < 0) {
         return epoll_fd;
     }
     
@@ -338,7 +391,7 @@ EXPOSE_C_DEFINE int epoll_create(int size)
 EXPOSE_C_DEFINE int epoll_create1(int flags)
 {
     int epoll_fd = OsAPiMgr::GetOriginApi()->epoll_create1(flags);
-    if (epoll_fd < 0) {
+    if (!Brpc::Context::GetUbEnableFlag() || epoll_fd < 0) {
         return epoll_fd;
     }
 
@@ -363,6 +416,9 @@ EXPOSE_C_DEFINE int epoll_create1(int flags)
 
 EXPOSE_C_DEFINE int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->epoll_ctl(epfd, op, fd, event);
+    }
     EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->epoll_ctl(epfd, op, fd, event);
@@ -376,6 +432,9 @@ EXPOSE_C_DEFINE int epoll_ctl(int epfd, int op, int fd, struct epoll_event *even
 
 EXPOSE_C_DEFINE int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->epoll_wait(epfd, events, maxevents, timeout);
+    }
     EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->epoll_wait(epfd, events, maxevents, timeout);
@@ -390,6 +449,9 @@ EXPOSE_C_DEFINE int epoll_wait(int epfd, struct epoll_event *events, int maxeven
 EXPOSE_C_DEFINE int epoll_pwait(int epfd, struct epoll_event *events, int maxevents, int timeout,
                                 const sigset_t *sigmask)
 {
+    if (!Brpc::Context::GetUbEnableFlag()) {
+        return OsAPiMgr::GetOriginApi()->epoll_pwait(epfd, events, maxevents, timeout, sigmask);
+    }
     EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->epoll_pwait(epfd, events, maxevents, timeout, sigmask);
@@ -408,6 +470,7 @@ __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
 #elif !defined(UBSOCKET_TEST_MODE)
     if (getenv("LD_PRELOAD") != nullptr) {
         (void)Brpc::Context::GetContext();
+        Brpc::Context::SetUbEnable();
     }
 
 #endif

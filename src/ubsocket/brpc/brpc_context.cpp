@@ -33,6 +33,7 @@ constexpr uint16_t NODE_STR_SIZE = 4;
 
 std::atomic<int> Context::m_ref = {0};
 std::atomic<int> Context::m_shmNameSeq;
+bool Context::m_ubEnable = false;
 
 ::SocketFd *Context::CreateSocketFd(int fd, int event_fd)
 {

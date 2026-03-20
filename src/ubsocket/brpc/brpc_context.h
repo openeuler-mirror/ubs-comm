@@ -48,6 +48,16 @@ class Context : public Brpc::ConfigSettings {
          return &context;
     }
 
+    static ALWAYS_INLINE void SetUbEnable()
+    {
+        m_ubEnable = true;
+    }
+
+    static ALWAYS_INLINE bool GetUbEnableFlag()
+    {
+        return m_ubEnable;
+    }
+
     ::SocketFd *CreateSocketFd(int fd);
     ::SocketFd *CreateSocketFd(int fd, int event_fd);
     ::EpollFd *CreateEpollFd(int fd);
@@ -415,6 +425,7 @@ class Context : public Brpc::ConfigSettings {
     int m_process_socket_id = -1;
     std::vector<uint32_t> m_socket_ids;
     static std::atomic<int> m_shmNameSeq;
+    static bool m_ubEnable;
 
     // AE 事件处理
     std::thread m_asyncEventThread;
