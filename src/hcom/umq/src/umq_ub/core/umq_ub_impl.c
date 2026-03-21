@@ -1684,6 +1684,9 @@ int umq_ub_dev_add_impl(umq_trans_info_t *info, umq_init_cfg_t *cfg)
         UMQ_VLOG_ERR(VLOG_UMQ, "calloc rx_consumed_jetty_table failed\n");
         goto FREE_UMQ_CTX_TBL;
     }
+    g_ub_ctx[g_ub_ctx_count].io_lock_free = cfg->io_lock_free;
+    g_ub_ctx[g_ub_ctx_count].feature = cfg->feature;
+    g_ub_ctx[g_ub_ctx_count].flow_control = cfg->flow_control;
     // register seg
     ret = umq_qbuf_register_seg((uint8_t *)&g_ub_ctx[g_ub_ctx_count], umq_ub_register_seg_callback);
     if (ret != UMQ_SUCCESS) {
@@ -1697,10 +1700,6 @@ int umq_ub_dev_add_impl(umq_trans_info_t *info, umq_init_cfg_t *cfg)
         UMQ_VLOG_ERR(VLOG_UMQ, "huge qbuf register seg failed, status: %d\n", ret);
         goto UNREGISTER_MEM;
     }
-
-    g_ub_ctx[g_ub_ctx_count].io_lock_free = cfg->io_lock_free;
-    g_ub_ctx[g_ub_ctx_count].feature = cfg->feature;
-    g_ub_ctx[g_ub_ctx_count].flow_control = cfg->flow_control;
     g_ub_ctx[g_ub_ctx_count].ref_cnt = 1;
     g_ub_ctx_count++;
 
@@ -1945,34 +1944,6 @@ void umq_ub_dev_info_list_free_impl(umq_trans_mode_t umq_trans_mode, umq_dev_inf
     if (umq_dev_info != NULL) {
         free(umq_dev_info);
     }
-}
-
-static umq_tp_mode_t umq_tp_mode_convert(urma_transport_mode_t tp_mode)
-{
-    switch (tp_mode) {
-        case URMA_TM_RC:
-            return UMQ_TM_RC;
-        case URMA_TM_RM:
-            return UMQ_TM_RM;
-        case URMA_TM_UM:
-            return UMQ_TM_UM;
-        default:
-            return UMQ_TM_RC;
-    };
-}
-
-static umq_tp_type_t umq_tp_type_convert(urma_tp_type_t tp_type)
-{
-    switch (tp_type) {
-        case URMA_RTP:
-            return UMQ_TP_TYPE_RTP;
-        case URMA_CTP:
-            return UMQ_TP_TYPE_CTP;
-        case URMA_UTP:
-            return UMQ_TP_TYPE_UTP;
-        default:
-            return UMQ_TP_TYPE_RTP;
-    };
 }
 
 int umq_ub_cfg_get_impl(uint64_t umqh_tp, umq_cfg_get_t *cfg)
