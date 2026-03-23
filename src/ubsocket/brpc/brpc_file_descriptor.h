@@ -4165,6 +4165,10 @@ public:
         }
 
         int share_jfr_fd = GetShareJfrFd(fd);
+        if (share_jfr_fd == 0) {
+            return 0;
+        }
+
         if (share_jfr_fd < 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Get share jfr fd failed, epfd: %d, socket fd: %d\n", m_fd, fd);
             return -1;
@@ -4193,8 +4197,8 @@ private:
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(fd);
         if (socket_fd_obj == nullptr) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Get socket fd object failed, socket fd: %d\n", fd);
-            return -1;
+            RPC_ADPT_VLOG_WARN("Get socket fd object failed, socket fd: %d\n", fd);
+            return 0;
         }
 
         auto main_umq = socket_fd_obj->GetMainUmqHandle();
