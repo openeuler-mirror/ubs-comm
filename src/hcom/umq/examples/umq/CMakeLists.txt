@@ -2,6 +2,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2020-2025. All rights reserved.
 
 include(${CMAKE_CURRENT_LIST_DIR}/connection_setup_tool/CMakeLists.txt)
+
 include_directories(/usr/include/umdk)
 include_directories(/usr/include/ub/umdk/urma)
 include_directories(/usr/include/umdk/umq)
