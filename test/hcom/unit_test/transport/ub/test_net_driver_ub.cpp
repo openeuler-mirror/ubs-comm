@@ -184,7 +184,7 @@ TEST_F(TestNetDriverUB, InitializeCtxErr)
     driver->mProtocol = UBSHcomNetDriverProtocol::UBC;
     option.mrSendReceiveSegSize = OBMM_SIZE;
 
-    EXPECT_EQ(driver->Initialize(option), 1);
+    EXPECT_EQ(driver->Initialize(option), NN_ERROR);
 }
 
 TEST_F(TestNetDriverUB, InitializeCreateWorkerErr)
@@ -286,6 +286,7 @@ TEST_F(TestNetDriverUB, CreateContextParamErr)
     filters.clear();
     driver->mProtocol = UBSHcomNetDriverProtocol::TCP;
     MOCKER(NetFunc::NN_SplitStr).stubs().will(invoke(MockSplitStr));
+    MOCKER_CPP(&UBContext::Create).stubs().will(returnValue(static_cast<int>(NN_ERROR)));
     EXPECT_EQ(driver->CreateContext(), NN_ERROR);
 }
 
@@ -298,9 +299,9 @@ TEST_F(TestNetDriverUB, CreateContextIPErr)
     driver->mProtocol = UBSHcomNetDriverProtocol::TCP;
     MOCKER(NetFunc::NN_SplitStr).stubs().will(invoke(MockSplitStr));
     MOCKER(FilterIp).stubs().with(any(), outBound(matchIps)).will(returnValue(0));
-    MOCKER(UBDeviceHelper::Initialize).stubs().will(returnValue(1));
+    MOCKER(UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_DEVICE_FAILED_OPEN)));
 
-    EXPECT_EQ(driver->CreateContext(), NN_ERROR);
+    EXPECT_EQ(driver->CreateContext(), UB_DEVICE_FAILED_OPEN);
 }
 
 TEST_F(TestNetDriverUB, CreateContextInitializErr)
@@ -313,10 +314,13 @@ TEST_F(TestNetDriverUB, CreateContextInitializErr)
     driver->mProtocol = UBSHcomNetDriverProtocol::TCP;
     MOCKER(NetFunc::NN_SplitStr).stubs().will(invoke(MockSplitStr));
     MOCKER(FilterIp).stubs().with(any(), outBound(matchIps)).will(returnValue(0));
-    MOCKER(UBDeviceHelper::Initialize).stubs().will(returnValue(1)).then(returnValue(0));
+    MOCKER(UBDeviceHelper::Initialize)
+        .stubs()
+        .will(returnValue(static_cast<UResult>(UB_DEVICE_FAILED_OPEN)))
+        .then(returnValue(static_cast<UResult>(UB_OK)));
 
-    EXPECT_EQ(driver->CreateContext(), NN_ERROR);
-    EXPECT_EQ(driver->CreateContext(), NN_ERROR);
+    EXPECT_EQ(driver->CreateContext(), UB_DEVICE_FAILED_OPEN);
+    EXPECT_EQ(driver->CreateContext(), NN_OK);
 }
 
 TEST_F(TestNetDriverUB, CreateContextCreateErr)
@@ -346,7 +350,7 @@ TEST_F(TestNetDriverUB, CreateContextSuccess)
     MOCKER(NetFunc::NN_SplitStr).stubs().will(invoke(MockSplitStr));
     MOCKER(FilterIp).stubs().with(any(), outBound(matchIps)).will(returnValue(0));
     MOCKER(UBDeviceHelper::Initialize).stubs().will(returnValue(0));
-    MOCKER(UBContext::Create).stubs().with(any(), any(), outBound(ctx)).will(returnValue(0));
+    MOCKER(UBContext::Create).stubs().with(any(), outBound(ctx)).will(returnValue(0));
 
     EXPECT_EQ(driver->CreateContext(), 0);
 }
@@ -354,8 +358,10 @@ TEST_F(TestNetDriverUB, CreateContextSuccess)
 TEST_F(TestNetDriverUB, CreateContextUbcModeMismatch)
 {
     driver->mContext = nullptr;
+    driver->mProtocol = UBSHcomNetDriverProtocol::TCP;
     driver->mOptions.SetUbcMode(UBSHcomUbcMode::LowLatency);
-    EXPECT_EQ(driver->CreateContext(), NN_ERROR);
+    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_DEVICE_FAILED_OPEN)));
+    EXPECT_EQ(driver->CreateContext(), UB_DEVICE_FAILED_OPEN);
 }
 
 TEST_F(TestNetDriverUB, CreateContextUbcModeOk)
@@ -365,7 +371,7 @@ TEST_F(TestNetDriverUB, CreateContextUbcModeOk)
     driver->mContext = nullptr;
     driver->mOptions.SetUbcMode(UBSHcomUbcMode::LowLatency);
     driver->mProtocol = UBSHcomNetDriverProtocol::UBC;
-    EXPECT_EQ(driver->CreateContext(), NN_ERROR);
+    EXPECT_EQ(driver->CreateContext(), NN_OK);
 }
 
 TEST_F(TestNetDriverUB, CreateSendMrErr)

@@ -242,19 +242,23 @@ TEST_F(TestUbUrmaJetty, UBCPostReadTseg)
     urma_target_seg_t *tmpSeg1 = nullptr;
     urma_target_seg_t seg{};
     urma_target_seg_t *tmpSeg2 = &seg;
-    MOCKER(HcomUrma::UnimportSeg).stubs().will(returnValue(1)).then(returnValue(0));
+    MOCKER(HcomUrma::UnimportSeg).stubs().will(returnValue(1)).then(returnValue(0)).then(returnValue(0));
     MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
         .stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER(HcomUrma::ImportSeg).stubs().will(returnValue(tmpSeg1)).then(returnValue(tmpSeg2));
+    MOCKER(HcomUrma::ImportSeg)
+        .stubs()
+        .will(returnValue(tmpSeg1))
+        .then(returnValue(tmpSeg2))
+        .then(returnValue(tmpSeg2));
 
     EXPECT_EQ(jetty->PostRead(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_POST_READ_FAILED);
+        static_cast<uint64_t>(1), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_POST_READ_FAILED);
 
     EXPECT_EQ(jetty->PostRead(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_POST_READ_FAILED);
+        static_cast<uint64_t>(1), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_POST_READ_FAILED);
 
     EXPECT_EQ(jetty->PostRead(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_OK);
+        static_cast<uint64_t>(1), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_OK);
 
     jetty->mUrmaJetty = nullptr;
     EXPECT_EQ(jetty->PostRead(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
@@ -540,11 +544,10 @@ TEST_F(TestUbUrmaJetty, CreatePollingCq)
 
 TEST_F(TestUbUrmaJetty, CtxInitializeParamErr)
 {
-    urma_device_t **devList = nullptr;
     uint8_t bw = 0;
     EXPECT_EQ(ctx->Initialize(bw), UB_OK);
 
-    MOCKER(HcomUrma::GetDeviceList).stubs().will(returnValue(devList));
+    MOCKER_CPP(&UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_DEVICE_FAILED_OPEN)));
     ctx->mUrmaContext = nullptr;
     EXPECT_EQ(ctx->Initialize(bw), UB_DEVICE_FAILED_OPEN);
 }

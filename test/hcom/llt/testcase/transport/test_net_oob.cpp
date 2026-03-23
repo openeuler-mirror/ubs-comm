@@ -627,7 +627,7 @@ TEST_F(TestNetOob, TestClientTcpConnect)
     OOBTCPClientPtr client = new (std::nothrow) OOBTCPClient(NET_OOB_TCP, oobIp, NN_NO8192);
     OOBTCPConnection *conn = nullptr;
     int result = client->Connect(conn);
-    EXPECT_EQ(NN_INVALID_IP, result);
+    EXPECT_EQ(NN_OOB_CLIENT_SOCKET_ERROR, result);
 }
 }
 }
