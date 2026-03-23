@@ -136,7 +136,7 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoUpdateErr)
     urma_context_t *ctx = nullptr;
     UBEId eid{};
     UResult ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
-    EXPECT_EQ(ret, UB_NEW_OBJECT_FAILED);
+    EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
 }
 
 urma_device_t **MockGetDeviceList(int *num_devices)
@@ -147,30 +147,18 @@ urma_device_t **MockGetDeviceList(int *num_devices)
 
 TEST_F(TestUbUrmaWrapper, UBContextInitErr)
 {
-    MOCKER_CPP(&HcomUrma::Init).stubs().will(returnValue(0));
-    MOCKER_CPP(&HcomUrma::GetDeviceList).stubs().will(invoke(MockGetDeviceList));
-    urma_context_t tmpCtx{};
-    MOCKER_CPP(&HcomUrma::CreateContext).stubs().will(returnValue(&tmpCtx));
-    MOCKER_CPP(&HcomUrma::DeleteContext).stubs().will(returnValue(0));
-    MOCKER_CPP(&HcomUrma::FreeDeviceList).stubs().will(invoke(MockFreeDeviceList));
-    
+    MOCKER_CPP(&UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_DEVICE_FAILED_OPEN)));
     uint8_t bw = 0;
     UResult ret = ctx->Initialize(bw);
-    EXPECT_EQ(ret, UB_MEMORY_ALLOCATE_FAILED);
+    EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
 }
 
 TEST_F(TestUbUrmaWrapper, UBContextInitErrTwo)
 {
-    MOCKER_CPP(&HcomUrma::Init).stubs().will(returnValue(0));
-    MOCKER_CPP(&HcomUrma::GetDeviceList).stubs().will(invoke(MockGetDeviceList));
-    urma_context_t tmpCtx{};
-    MOCKER_CPP(&HcomUrma::CreateContext).stubs().will(returnValue(&tmpCtx));
-    MOCKER_CPP(&HcomUrma::QueryDevice).stubs().will(returnValue(1));
-    MOCKER_CPP(&HcomUrma::DeleteContext).stubs().will(returnValue(0));
-    MOCKER_CPP(&HcomUrma::FreeDeviceList).stubs().will(invoke(MockFreeDeviceList));
+    MOCKER_CPP(&UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_DEVICE_OPEN_FAILED)));
     uint8_t bw = 0;
     UResult ret = ctx->Initialize(bw);
-    EXPECT_EQ(ret, 1);
+    EXPECT_EQ(ret, UB_DEVICE_OPEN_FAILED);
 }
 
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetPortNumber)

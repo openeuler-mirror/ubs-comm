@@ -50,6 +50,12 @@ inline NResult MockFilterIp(const std::string &ipMask, std::vector<std::string> 
     return 0;
 }
 
+inline RResult MockGetDeviceByIp(const std::string &ip, RDMAGId &gid)
+{
+    gid.devIndex = 0;
+    return RR_OK;
+}
+
 TEST_F(TestRdmaVerbsWrapper, DeviceHelperGetEnableDeviceCountWithEmptyMatchIp)
 {
     std::vector<std::string> enableIps;
@@ -76,6 +82,7 @@ TEST_F(TestRdmaVerbsWrapper, DeviceHelperGetEnableDeviceCountWithMatchIp)
     RDMADeviceSimpleInfo simpleInfo {};
     simpleInfo.active = true;
     RDMADeviceHelper::G_RDMADevMap[0] = simpleInfo;
+    MOCKER_CPP(&RDMADeviceHelper::GetDeviceByIp).stubs().will(invoke(MockGetDeviceByIp));
     result = RDMADeviceHelper::GetEnableDeviceCount("192.168.0.0/24", enableCount, enableIps, "");
     EXPECT_EQ(enableCount, 1);
     EXPECT_EQ(result, RR_OK);

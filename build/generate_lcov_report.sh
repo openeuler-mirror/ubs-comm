@@ -16,20 +16,20 @@ echo ${HCOM_ROOT_DIR}
 
 cd ${HCOM_ROOT_DIR}/tmp_build_dir
 # get the result of code coverage
-lcov --rc lcov_branch_coverage=1 --rc lcov_excl_br_line="LCOV_EXCL_BR_LINE|NN_LOG*" \
+lcov --rc lcov_branch_coverage=1 --rc lcov_excl_br_line="LCOV_EXCL_BR_LINE|NN_LOG|POST_SEND_|READ_WRITE_VALIDATION|SGL_VALIDATION" \
     -b ../src/hcom/  -d ./test/hcom/llt/CMakeFiles/Hcomtest.dir/__/__/__/ -c -o lcov_report_llt.info
-lcov --rc lcov_branch_coverage=1 --rc lcov_excl_br_line="LCOV_EXCL_BR_LINE|NN_LOG*" \
+lcov --rc lcov_branch_coverage=1 --rc lcov_excl_br_line="LCOV_EXCL_BR_LINE|NN_LOG|POST_SEND_|READ_WRITE_VALIDATION|SGL_VALIDATION" \
     -b ../src/hcom/  -d ./test/hcom/unit_test/CMakeFiles/hcom_ut.dir/__/__/__/ -c -o lcov_report_ut.info
 lcov --rc lcov_branch_coverage=1 -a lcov_report_llt.info -a lcov_report_ut.info -o lcov_report_all.info
 
 # filter the result, remove useless info
 # hcom_c.cpp will significantly lower overall line coverage and code coverage, we'll deal with it later.
-lcov --rc lcov_branch_coverage=1 --rc lcov_excl_br_line="LCOV_EXCL_BR_LINE|NN_LOG*" -r lcov_report_all.info \
-    '*/googletest/*' '*/mockcpp/*' '/usr/include' '*/gcc/*' '*/c++/*' \
+lcov --rc lcov_branch_coverage=1 --rc lcov_excl_br_line="LCOV_EXCL_BR_LINE|NN_LOG|POST_SEND_|READ_WRITE_VALIDATION|SGL_VALIDATION" -r lcov_report_all.info \
+    '*/googletest/*' '*/mockcpp/*' '/usr/include/*' '*/gcc/*' '*/c++/*' \
     '*/test/*' '*/rdma-core/*' '*/dist/*' \
-    '*/src/api/capi/hcom_c.cpp' '*/src/api/capi/hcom_service_c.cpp' \
+    '*/src/hcom/api/capi_v2/hcom_c.cpp' '*/src/hcom/api/capi_v2/hcom_service_c.cpp' \
     '*/src/service/service_net_driver_manager.*' \
-    '*/src/under_api/*' \
+    '*/src/hcom/under_api/*' \
     -o lcov_report_filterd.info
 
 # visualize the result

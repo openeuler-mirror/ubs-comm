@@ -18,6 +18,7 @@
 #include "net_common.h"
 #include "net_security_rand.h"
 #include "transport/net_oob_ssl.h"
+#include "transport/net_oob_openssl.h"
 
 namespace ock {
 namespace hcom {
@@ -177,6 +178,169 @@ TEST_F(TestNetOobSsl, NetSecretsDeserialize)
         free(dest);
         dest = nullptr;
     }
+}
+
+TEST_F(TestNetOobSsl, OpenSslInitServerMissingCallbacks)
+{
+    OOBOpenSSLConnection conn {-1};
+    MOCKER_CPP(HcomSsl::OpensslInitSsl).stubs().will(returnValue(1)).then(returnValue(1));
+
+    EXPECT_EQ(conn.InitSSL(true), static_cast<int>(NN_OOB_SSL_INIT_ERROR));
+}
+
+TEST_F(TestNetOobSsl, OpenSslInitServerInvalidCertOrKeyPath)
+{
+    const SSL_METHOD *method = reinterpret_cast<const SSL_METHOD *>(1UL);
+    SSL_CTX *ctx1 = reinterpret_cast<SSL_CTX *>(1UL);
+    SSL_CTX *ctx2 = reinterpret_cast<SSL_CTX *>(2UL);
+
+    MOCKER_CPP(HcomSsl::OpensslInitSsl).stubs().will(returnValue(1))
+        .then(returnValue(1)).then(returnValue(1)).then(returnValue(1));
+    MOCKER_CPP(HcomSsl::TlsServerMethod).stubs().will(returnValue(method)).then(returnValue(method));
+    MOCKER_CPP(HcomSsl::SslCtxNew).stubs().will(returnValue(ctx1)).then(returnValue(ctx2));
+    MOCKER_CPP(HcomSsl::SslCtxCtrl).stubs().will(returnValue(1)).then(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslCtxSetCipherSuites).stubs().will(returnValue(1)).then(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslCtxFree).stubs().will(ignoreReturnValue());
+
+    OOBOpenSSLConnection certConn {-1};
+    UBSHcomTLSCertificationCallback badCertCb =
+        [](const std::string &, std::string &path) -> bool {
+            path = "/tmp/not_exist_cert_file_for_ut.pem";
+            return true;
+        };
+    UBSHcomTLSPrivateKeyCallback dummyKeyCb =
+        [](const std::string &, std::string &path, void *&password, int &length,
+            UBSHcomTLSEraseKeypass &erase) -> bool {
+            path = "/tmp/not_used_key.pem";
+            password = nullptr;
+            length = 0;
+            erase = nullptr;
+            return true;
+        };
+    certConn.SetTLSCallback(badCertCb, dummyKeyCb, nullptr);
+    EXPECT_EQ(certConn.InitSSL(true), static_cast<int>(NN_OOB_SSL_INIT_ERROR));
+
+    bool erased = false;
+    OOBOpenSSLConnection keyConn {-1};
+    UBSHcomTLSCertificationCallback okCertCb =
+        [](const std::string &, std::string &path) -> bool {
+            path = "/etc/hosts";
+            return true;
+        };
+    UBSHcomTLSPrivateKeyCallback badKeyCb =
+        [&erased](const std::string &, std::string &path, void *&password, int &length, UBSHcomTLSEraseKeypass &erase)
+            -> bool {
+            path = "/tmp/not_exist_key_file_for_ut.pem";
+            password = reinterpret_cast<void *>(1UL);
+            length = 8;
+            erase = [&erased](void *, int) { erased = true; };
+            return true;
+        };
+    keyConn.SetTLSCallback(okCertCb, badKeyCb, nullptr);
+    EXPECT_EQ(keyConn.InitSSL(true), static_cast<int>(NN_OOB_SSL_INIT_ERROR));
+    EXPECT_EQ(erased, true);
+}
+
+TEST_F(TestNetOobSsl, OpenSslInitServerWithPskFindAndSslSetFdFail)
+{
+    OOBOpenSSLConnection conn {-1};
+    UBSHcomPskFindSessionCb pskFindCb =
+        [](void *, const unsigned char *, size_t, void **) -> int {
+            return 1;
+        };
+    conn.OOBSSLConnection::SetPSKCallback(pskFindCb, nullptr);
+
+    const SSL_METHOD *method = reinterpret_cast<const SSL_METHOD *>(3UL);
+    SSL_CTX *ctx = reinterpret_cast<SSL_CTX *>(3UL);
+    SSL *ssl = reinterpret_cast<SSL *>(3UL);
+
+    MOCKER_CPP(HcomSsl::OpensslInitSsl).stubs().will(returnValue(1)).then(returnValue(1));
+    MOCKER_CPP(HcomSsl::TlsServerMethod).stubs().will(returnValue(method));
+    MOCKER_CPP(HcomSsl::SslCtxNew).stubs().will(returnValue(ctx));
+    MOCKER_CPP(HcomSsl::SslCtxCtrl).stubs().will(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslCtxSetCipherSuites).stubs().will(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslCtxSetPskFindSessionCallback).stubs().will(ignoreReturnValue());
+    MOCKER_CPP(HcomSsl::SslNew).stubs().will(returnValue(ssl));
+    MOCKER_CPP(HcomSsl::SslSetFd).stubs().will(returnValue(0));
+    MOCKER_CPP(HcomSsl::SslShutdown).stubs().will(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslFree).stubs().will(ignoreReturnValue());
+    MOCKER_CPP(HcomSsl::SslCtxFree).stubs().will(ignoreReturnValue());
+
+    EXPECT_EQ(conn.InitSSL(true), static_cast<int>(NN_OOB_SSL_INIT_ERROR));
+}
+
+TEST_F(TestNetOobSsl, OpenSslInitClientWithPskUseAndSslSetFdFail)
+{
+    OOBOpenSSLConnection conn {-1};
+    UBSHcomPskUseSessionCb pskUseCb =
+        [](void *, const void *, const unsigned char **, size_t *, void **) -> int {
+            return 1;
+        };
+    conn.OOBSSLConnection::SetPSKCallback(nullptr, pskUseCb);
+
+    const SSL_METHOD *method = reinterpret_cast<const SSL_METHOD *>(4UL);
+    SSL_CTX *ctx = reinterpret_cast<SSL_CTX *>(4UL);
+    SSL *ssl = reinterpret_cast<SSL *>(4UL);
+
+    MOCKER_CPP(HcomSsl::OpensslInitSsl).stubs().will(returnValue(1)).then(returnValue(1));
+    MOCKER_CPP(HcomSsl::TlsClientMethod).stubs().will(returnValue(method));
+    MOCKER_CPP(HcomSsl::SslCtxNew).stubs().will(returnValue(ctx));
+    MOCKER_CPP(HcomSsl::SslCtxCtrl).stubs().will(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslCtxSetCipherSuites).stubs().will(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslCtxSetPskUseSessionCallback).stubs().will(ignoreReturnValue());
+    MOCKER_CPP(HcomSsl::SslNew).stubs().will(returnValue(ssl));
+    MOCKER_CPP(HcomSsl::SslSetFd).stubs().will(returnValue(0));
+    MOCKER_CPP(HcomSsl::SslShutdown).stubs().will(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslFree).stubs().will(ignoreReturnValue());
+    MOCKER_CPP(HcomSsl::SslCtxFree).stubs().will(ignoreReturnValue());
+
+    EXPECT_EQ(conn.InitSSL(false), static_cast<int>(NN_OOB_SSL_INIT_ERROR));
+}
+
+TEST_F(TestNetOobSsl, OpenSslInitServerTls12SetRenegotiationFail)
+{
+    OOBOpenSSLConnection conn {-1};
+    UBSHcomPskFindSessionCb pskFindCb =
+        [](void *, const unsigned char *, size_t, void **) -> int {
+            return 1;
+        };
+    conn.OOBSSLConnection::SetPSKCallback(pskFindCb, nullptr);
+    conn.SetTlsOptions(AES_GCM_128, TLS_1_2);
+
+    const SSL_METHOD *method = reinterpret_cast<const SSL_METHOD *>(5UL);
+    SSL_CTX *ctx = reinterpret_cast<SSL_CTX *>(5UL);
+
+    MOCKER_CPP(HcomSsl::OpensslInitSsl).stubs().will(returnValue(1)).then(returnValue(1));
+    MOCKER_CPP(HcomSsl::TlsServerMethod).stubs().will(returnValue(method));
+    MOCKER_CPP(HcomSsl::SslCtxNew).stubs().will(returnValue(ctx));
+    MOCKER_CPP(HcomSsl::SslCtxCtrl).stubs().will(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslCtxSetOption).stubs().will(returnValue(0));
+    MOCKER_CPP(HcomSsl::SslCtxFree).stubs().will(ignoreReturnValue());
+
+    EXPECT_EQ(conn.InitSSL(true), static_cast<int>(NN_OOB_SSL_INIT_ERROR));
+}
+
+TEST_F(TestNetOobSsl, OpenSslInitServerUnsupportedCipherSuite)
+{
+    OOBOpenSSLConnection conn {-1};
+    UBSHcomPskFindSessionCb pskFindCb =
+        [](void *, const unsigned char *, size_t, void **) -> int {
+            return 1;
+        };
+    conn.OOBSSLConnection::SetPSKCallback(pskFindCb, nullptr);
+    constexpr int kUnsupportedCipherSuiteValue = 255;
+    conn.SetTlsOptions(static_cast<UBSHcomNetCipherSuite>(kUnsupportedCipherSuiteValue), TLS_1_3);
+
+    const SSL_METHOD *method = reinterpret_cast<const SSL_METHOD *>(6UL);
+    SSL_CTX *ctx = reinterpret_cast<SSL_CTX *>(6UL);
+
+    MOCKER_CPP(HcomSsl::OpensslInitSsl).stubs().will(returnValue(1)).then(returnValue(1));
+    MOCKER_CPP(HcomSsl::TlsServerMethod).stubs().will(returnValue(method));
+    MOCKER_CPP(HcomSsl::SslCtxNew).stubs().will(returnValue(ctx));
+    MOCKER_CPP(HcomSsl::SslCtxCtrl).stubs().will(returnValue(1));
+    MOCKER_CPP(HcomSsl::SslCtxFree).stubs().will(ignoreReturnValue());
+
+    EXPECT_EQ(conn.InitSSL(true), static_cast<int>(NN_OOB_SSL_INIT_ERROR));
 }
 }
 }
