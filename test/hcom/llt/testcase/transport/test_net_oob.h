@@ -27,10 +27,8 @@ public:
 
     void SetUp()
     {
-        char path[255];
-        getcwd(path, 255);
-        std::string pathStr = path;
-        testFile = pathStr + "/test.socket";
+        // Use a short absolute path to avoid AF_UNIX sun_path overflow in deep CI workspaces.
+        testFile = "/tmp/hcom_llt_oob_" + std::to_string(::getpid()) + ".socket";
 
         setenv("HCOM_CONNECTION_RETRY_TIMES", "1", 1);
     };

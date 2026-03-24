@@ -306,21 +306,18 @@ TEST_F(TestNetDriverUB, CreateContextIPErr)
 
 TEST_F(TestNetDriverUB, CreateContextInitializErr)
 {
-    std::vector<std::string> matchIps{};
-    matchIps.emplace_back("192.168.1.1");
     driver->mContext = nullptr;
-    filters.clear();
-    filters.emplace_back("192.168.1.1");
-    driver->mProtocol = UBSHcomNetDriverProtocol::TCP;
-    MOCKER(NetFunc::NN_SplitStr).stubs().will(invoke(MockSplitStr));
-    MOCKER(FilterIp).stubs().with(any(), outBound(matchIps)).will(returnValue(0));
-    MOCKER(UBDeviceHelper::Initialize)
+    MOCKER_CPP(&UBContext::Initialize)
         .stubs()
         .will(returnValue(static_cast<UResult>(UB_DEVICE_FAILED_OPEN)))
         .then(returnValue(static_cast<UResult>(UB_OK)));
 
     EXPECT_EQ(driver->CreateContext(), UB_DEVICE_FAILED_OPEN);
     EXPECT_EQ(driver->CreateContext(), NN_OK);
+    if (driver->mContext != nullptr) {
+        driver->mContext->DecreaseRef();
+        driver->mContext = nullptr;
+    }
 }
 
 TEST_F(TestNetDriverUB, CreateContextCreateErr)
@@ -366,12 +363,16 @@ TEST_F(TestNetDriverUB, CreateContextUbcModeMismatch)
 
 TEST_F(TestNetDriverUB, CreateContextUbcModeOk)
 {
-    MOCKER_CPP(UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_OK)));
+    MOCKER_CPP(&UBContext::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_OK)));
 
     driver->mContext = nullptr;
     driver->mOptions.SetUbcMode(UBSHcomUbcMode::LowLatency);
     driver->mProtocol = UBSHcomNetDriverProtocol::UBC;
     EXPECT_EQ(driver->CreateContext(), NN_OK);
+    if (driver->mContext != nullptr) {
+        driver->mContext->DecreaseRef();
+        driver->mContext = nullptr;
+    }
 }
 
 TEST_F(TestNetDriverUB, CreateSendMrErr)
