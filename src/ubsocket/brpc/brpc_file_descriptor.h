@@ -35,6 +35,8 @@
 #include "umq_dfx_api.h"
 #include "utracer.h"
 #include "net_common.h"
+#include "ub_thread_pool.h"
+#include "ub_lock_manager.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
 #define UMQ_BIND_SYNC_MSG       "SYNC_DONE"
@@ -308,6 +310,62 @@ public:
         return (result != nullptr) ? std::string(ip_str) : "";
     }
 
+    ALWAYS_INLINE void ProcessUBConnection(int fd, UbSem* pSem)
+    {
+        bool is_blocking = IsBlocking(fd);
+        if (is_blocking) {
+            // set non_blocking to apply timeout by chrono(send/recv can be returned immediately)
+            SetNonBlocking(fd);
+        }
+
+        uint64_t magic_number = 0;
+        ssize_t magic_number_recv_size = 0;
+        int ret = ValidateMagicNumber(fd, magic_number, magic_number_recv_size);
+        Context *context = Context::GetContext();
+        if (ret > 0 && !context->AutoFallbackTCP()) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to accept as protocol dismatch,Peer IP:%s\n",
+                              GetPeerIp().c_str());
+            OsAPiMgr::GetOriginApi()->close(fd);
+            pSem->post();
+            return;
+        }
+        if (ret > 0) {
+            /* IF the magic number verification fails, it is still necessary to create a socket fd object
+             * to store the magic number information, so that the received information can be reported to
+             * the user when readv is called. */
+            SocketFd *socket_fd_obj = nullptr;
+            try {
+                socket_fd_obj = new SocketFd(fd, magic_number, (uint32_t)magic_number_recv_size);
+                Fd<::SocketFd>::OverrideFdObj(fd, socket_fd_obj);
+                RPC_ADPT_VLOG_WARN("Auto fallback to TCP,Peer IP:%s, fd: %d\n", GetPeerIp().c_str(), fd);
+            } catch (std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "%s\n", e.what());
+                OsAPiMgr::GetOriginApi()->close(fd);
+                pSem->post();
+                return;
+            }
+        } else if (ret == 0) {
+            if (DoAccept(fd) != 0) {
+                RPC_ADPT_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP", GetPeerIp().c_str(),
+                                   fd);
+                /* Clear messages that already exist on the TCP link to prevent
+                 * dirty messages from affecting user data transmission */
+                FlushSocketMsg(fd);
+            }
+        }
+
+        if (is_blocking) {
+            // reset
+            SetBlocking(fd);
+        }
+
+        if (m_context_trace_enable) {
+            m_peer_info.type_fd = 0;
+            UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
+        }
+        pSem->post();
+    }
+
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
     {
         int retCode = 0;
@@ -349,57 +407,17 @@ public:
             return fd;
         }
 
-        bool is_blocking = IsBlocking(fd);
-        if (is_blocking) {
-            // set non_blocking to apply timeout by chrono(send/recv can be returned immediately)
-            SetNonBlocking(fd);
-        }
+        auto manager = UbLockManager::instance();
+        auto sem = manager.createSem();
+        sem->init(0, 0);
 
-        uint64_t magic_number = 0;
-        ssize_t magic_number_recv_size = 0;
-        int ret = ValidateMagicNumber(fd, magic_number, magic_number_recv_size);
-        Context *context = Context::GetContext();
-        if (ret > 0 && !context->AutoFallbackTCP()) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to accept as protocol dismatch,Peer IP:%s\n",
-                              GetPeerIp().c_str());
-            OsAPiMgr::GetOriginApi()->close(fd);
-            retCode = -1;
-            return retCode;
-        }
-        if (ret > 0) {
-            /* IF the magic number verification fails, it is still necessary to create a socket fd object
-             * to store the magic number information, so that the received information can be reported to
-             * the user when readv is called. */
-            SocketFd *socket_fd_obj = nullptr;
-            try {
-                socket_fd_obj = new SocketFd(fd, magic_number, (uint32_t)magic_number_recv_size);
-                Fd<::SocketFd>::OverrideFdObj(fd, socket_fd_obj);
-                RPC_ADPT_VLOG_WARN("Auto fallback to TCP,Peer IP:%s, fd: %d\n", GetPeerIp().c_str(), fd);
-            } catch (std::exception& e) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "%s\n", e.what());
-                OsAPiMgr::GetOriginApi()->close(fd);
-                retCode = -1;
-                return retCode;
-            }
-        } else if (ret == 0) {
-            if (DoAccept(fd) != 0) {
-                RPC_ADPT_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP", GetPeerIp().c_str(),
-                                   fd);
-                /* Clear messages that already exist on the TCP link to prevent
-                 * dirty messages from affecting user data transmission */
-                FlushSocketMsg(fd);
-            }
-        }
+        auto& threadPool = UBThreadPool::GetInstance();
 
-        if (is_blocking) {
-            // reset
-            SetBlocking(fd);
-        }
-
-        if (m_context_trace_enable) {
-            m_peer_info.type_fd = 0;
-            UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
-        }
+        // submit to thread pool for asynchronous processing
+        threadPool.Submit([this, fd, pSem = sem.get()]() {
+            this->ProcessUBConnection(fd, pSem);
+        });
+        sem->wait();
         return fd;
     }
 
@@ -493,7 +511,6 @@ public:
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
             return -1;
         }
-
         ub_trans_mode remoteTransMode;
         if (RecvSocketData(m_fd, &remoteTransMode, sizeof(ub_trans_mode), CONTROL_PLANE_TIMEOUT_MS)
             != sizeof(ub_trans_mode)) {
@@ -602,7 +619,6 @@ public:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send magic number, fd: %d\n", m_fd);
             return -1;
         }
-
         if (ConnectExchangeTransMode() != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to exchange TransMode in connect,Peer IP:%s, fd: %d\n",
                               GetPeerIp().c_str(), m_fd);
@@ -815,7 +831,7 @@ public:
     static const uint32_t NEGOTIATE_TIMEOUT_MS = 10;
     // Current UB jetty handshake is synchronous that brpc acceptor can't yield from the point.
     // Ensure the connector has at most 5s to wait from server socket.
-    static const uint32_t CONTROL_PLANE_TIMEOUT_MS = 5000;
+    static const uint32_t CONTROL_PLANE_TIMEOUT_MS = 20000;
     static const uint32_t DATA_PLANE_TIMEOUT_MS = 100;
     static const uint32_t POLL_TX_RETRY_MAX_CNT = 50;
     static const uint32_t FLUSH_TIMEOUT_MS = 200;
@@ -1637,7 +1653,6 @@ public:
                       m_tx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire));
             m_tx.m_get_and_ack_event = false;
         } else if (m_tx.m_window_size == 0) {
-            printf("[Send] window size is 0, start polling\n");
             PollTx(m_tx.m_retrieve_threshold);
             if (m_tx.m_window_size == 0) {
                 return DpRearmTxInterrupt();
@@ -2703,7 +2718,6 @@ private:
     int AcceptExchangeTransMode(int new_fd)
     {
         Context *context = Context::GetContext();
-
         ub_trans_mode remoteTransMode;
         if (RecvSocketData(new_fd, &remoteTransMode, sizeof(ub_trans_mode), CONTROL_PLANE_TIMEOUT_MS)
             != sizeof(ub_trans_mode)) {
@@ -2711,7 +2725,6 @@ private:
                               new_fd);
             return -1;
         }
-
         ub_trans_mode localTransMode = context->GetUbTransMode();
         if (SendSocketData(new_fd, &localTransMode, sizeof(ub_trans_mode), CONTROL_PLANE_TIMEOUT_MS)
             != sizeof(ub_trans_mode)) {

@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <functional>
 #include <pthread.h>
+#include <semaphore.h>
 
 class UbExclusiveLock {
 public:
@@ -99,10 +100,47 @@ private:
     pthread_rwlock_t rwlock_;
 };
 
+class UbSem {
+public:
+    virtual ~UbSem() = default;
+
+    virtual int init(int pshared, unsigned int value) = 0;
+    virtual int destory() = 0;
+    virtual int wait() = 0;
+    virtual int post() = 0;
+};
+
+class DefaultSem : public UbSem {
+public:
+    int init(int pshared, unsigned int value)
+    {
+        return sem_init(&sem_, pshared, value);
+    }
+
+    int destory()
+    {
+        return sem_destroy(&sem_);
+    }
+
+    int wait()
+    {
+        return sem_wait(&sem_);
+    }
+
+    int post()
+    {
+        return sem_post(&sem_);
+    }
+
+private:
+    sem_t sem_;
+};
+
 class UbLockManager {
 public:
     using ExclusiveLockFactory = std::function<std::unique_ptr<UbExclusiveLock>()>;
     using RWLockFactory = std::function<std::unique_ptr<UbRWLock>()>;
+    using SemFactory = std::function<std::unique_ptr<UbSem>()>;
     
     static UbLockManager& instance()
     {
@@ -121,6 +159,12 @@ public:
         rwlock_factory = std::move(factory);
         rwlock_registered = true;
     }
+
+    void registerSem(SemFactory factory)
+    {
+        sem_factory = std::move(factory);
+        sem_registered = true;
+    }
     
     std::unique_ptr<UbExclusiveLock> createExclusiveLock()
     {
@@ -137,13 +181,27 @@ public:
         }
         return std::make_unique<DefaultRWLock>();
     }
-    
+
+    std::unique_ptr<UbSem> createSem()
+    {
+        if (sem_registered) {
+            printf("[fzn] use bthread sem\n");
+            return sem_factory();
+        }
+        printf("[fzn] use pthread sem\n");
+        return std::make_unique<DefaultSem>();
+    }
+
 private:
     UbLockManager() = default;
     ExclusiveLockFactory exclusive_lock_factory;
-    RWLockFactory rwlock_factory;
     bool exclusive_lock_registered = false;
+
+    RWLockFactory rwlock_factory;
     bool rwlock_registered = false;
+
+    SemFactory sem_factory;
+    bool sem_registered = false;
 };
 
 class ScopedUbExclusiveLock {
