@@ -234,6 +234,7 @@ make -j32
 > 说明：
 >
 > 在编译UBSocket时，可以通过`-DUMQ_INCLUDE=/path/to/umq_include -DUMQ_LIB=/path/to/umq_lib`来指定umq的头文件和lib库文件路径（如`=-DUMQ_INCLUDE=/prefix/ubs-comm/src/hcom/umq/include/umq/  -DUMQ_LIB=/prefix/ubs-comm/src/hcom/umq/build/src/libumq.so`）。
+> 默认情况下，ubsocket 会构建 `socket`, `accept`, `connect` 等 posix socket API 的覆盖，如果你的应用程序已使用 `ubsocket_socket`, `ubsocket_accept` 这些带有 `ubsocket_` 前缀的 API，那么可以使用 `-DUBSOCKET_ENABLE_INTERCEPT=OFF` 来关闭 `socket`, `accept` 和 `connect` 等 posix socket API 的生成以减少影响面。
 
 ### 4.5 用例执行
 
