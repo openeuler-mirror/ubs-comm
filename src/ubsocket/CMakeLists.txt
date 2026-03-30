@@ -6,6 +6,7 @@ project(ubsocket)
 option(UBSOCKET_BUILD_TESTS "Build tests" OFF)
 option(UBSOCKET_USE_SYSTEM_GTEST "Whether to use gtest on system" OFF)
 option(UBSOCKET_ENABLE_COVERAGE "Enable code coverage" OFF)
+option(UBSOCKET_ENABLE_INTERCEPT "Enable posix socket API interception" ON)
 option(UBSOCKET_BUILD_CLI "Enable CLI component build" OFF)
 
 # Sources for the library are specified at the end
@@ -67,6 +68,10 @@ if(UBSOCKET_BUILD_TESTS)
 endif()
 
 ## Definitions
+target_compile_definitions(ubsocket
+  PUBLIC
+    $<$<BOOL:${UBSOCKET_ENABLE_INTERCEPT}>:UBSOCKET_ENABLE_INTERCEPT>
+)
 
 ## Includes
 target_include_directories(ubsocket PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/trace)
