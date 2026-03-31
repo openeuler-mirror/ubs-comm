@@ -24,4 +24,7 @@ target_sources(brpc_adapter_test
     brpc_bonding_adapter_test.cpp
     brpc_connect_adapter_test.cpp
     brpc_print_stats_mgr_test.cpp
+    brpc_socket_adapter_test.cpp
+    brpc_configure_settings_test.cpp
+    share_jfr_common_test.cpp
 )
