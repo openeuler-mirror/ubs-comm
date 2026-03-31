@@ -655,8 +655,9 @@ __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
     (void)Brpc::Context::GetContext()->InitShm();
 #elif !defined(UBSOCKET_TEST_MODE)
     if (getenv("LD_PRELOAD") != nullptr) {
-        (void)Brpc::Context::GetContext();
-        Brpc::Context::SetUbEnable();
+        if (Brpc::Context::GetContext() != nullptr) {
+            Brpc::Context::SetUbEnable();
+        }
     }
 
 #endif

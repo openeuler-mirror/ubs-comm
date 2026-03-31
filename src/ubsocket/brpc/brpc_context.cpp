@@ -246,7 +246,7 @@ int Context::RegisterAsyncEvent(umq_trans_info_t info)
     }
 
     {
-        std::lock_guard<std::mutex> guard(m_asyncEventRegistryMutex);
+        ScopedUbExclusiveLocker sLock(m_asyncEventRegistryMutex);
         
         auto iter = m_asyncEventRegistry.end();
         bool inserted = false;
@@ -264,7 +264,7 @@ int Context::RegisterAsyncEvent(umq_trans_info_t info)
     if (ret < 0) {
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to add epoll event to async event epoll set.\n");
         // 回退
-        std::lock_guard<std::mutex> guard(m_asyncEventRegistryMutex);
+        ScopedUbExclusiveLocker sLock(m_asyncEventRegistryMutex);
         m_asyncEventRegistry.erase(afd);
         return -1;
     }
@@ -293,7 +293,7 @@ void Context::AsyncEventProcess()
         for (int i = 0; i < nevents; ++i) {
             const int afd = ev[i].data.fd;
 
-            std::lock_guard<std::mutex> guard(m_asyncEventRegistryMutex);
+            ScopedUbExclusiveLocker sLock(m_asyncEventRegistryMutex);
             auto iter = m_asyncEventRegistry.find(afd);
             if (iter == m_asyncEventRegistry.end()) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "The async fd %d has not been registered.\n", afd);
@@ -323,7 +323,7 @@ static void Disconnect(uint64_t umqh)
     // 创建 UMQ 时会将 umq_ctx 设置为 brpc 原生的 socket fd.
     int fd = static_cast<int>(cfg.umq_ctx);
 
-    ScopedWriteLock lock(Fd<::SocketFd>::GetRWLock());
+    ScopedUbWriteLocker lock(Fd<::SocketFd>::GetRWLock());
     if (auto *sockfd = Fd<::SocketFd>::GetFdObj(fd)) {
         auto *bfd = static_cast<Brpc::SocketFd *>(sockfd);
         bfd->Close();
@@ -332,7 +332,7 @@ static void Disconnect(uint64_t umqh)
 
 static void DisconnectAll()
 {
-    ScopedWriteLock lock(Fd<::SocketFd>::GetRWLock());
+    ScopedUbWriteLocker lock(Fd<::SocketFd>::GetRWLock());
     auto *fdmap = Fd<::SocketFd>::GetFdObjMap();
     for (int i = 0; i < RPC_ADPT_FD_MAX; ++i) {
         if (auto *bfd = static_cast<Brpc::SocketFd *>(fdmap[i])) {
@@ -424,6 +424,23 @@ void Context::AsyncEventHandle(const umq_async_event_t *av)
             }
             break;
     }
+}
+
+int Context::GlobalLockInit() {
+    g_socket_epoll_lock = g_rw_lock_ops.create();
+    if (g_socket_epoll_lock == nullptr) {
+        return -1;
+    }
+    if (Fd<::SocketFd>::GlobalFdInit() != 0) {
+        return -1;
+    }
+    if (Fd<::EpollFd>::GlobalFdInit() != 0) {
+        return -1;
+    }
+    if (Fd<Brpc::EpollFd>::GlobalFdInit() != 0) {
+        return -1;
+    }
+    return 0;
 }
 
 }  // namespace Brpc

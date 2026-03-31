@@ -89,7 +89,7 @@ target_sources(ubsocket
     ${CMAKE_CURRENT_SOURCE_DIR}/urpc_util.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/util_vlog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cli_message.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/ub_thread_pool.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ub_lock_ops.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/trace/utracer.cpp
 )
 

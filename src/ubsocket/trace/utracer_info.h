@@ -19,6 +19,7 @@
 #include "utracer_utils.h"
 #include "utracer_tdigest.h"
 #include "rpc_adpt_vlog.h"
+#include "ub_lock_ops.h"
 
 namespace Statistics {
 
@@ -27,7 +28,7 @@ public:
     __always_inline void DelayBegin(const char *tpName)
     {
         if (!isSetName) {
-            std::lock_guard<std::mutex> lock(traceLock);
+            ScopedUbExclusiveLocker sLock(traceLock.GetMutex());
             if (!isSetName) {
                 name = tpName;
                 isSetName = true;
@@ -169,7 +170,7 @@ public:
 private:
     std::string name = "";
     volatile bool isSetName = false;
-    std::mutex traceLock;
+    UbExclusiveLock traceLock;
 
     std::atomic<uint64_t> begin = {0};
     std::atomic<uint64_t> goodEnd = {0};

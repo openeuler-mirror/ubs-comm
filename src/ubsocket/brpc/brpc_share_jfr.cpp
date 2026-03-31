@@ -13,7 +13,7 @@
 template <>
 Brpc::EpollFd *Fd<Brpc::EpollFd>::m_fd_obj_map[RPC_ADPT_FD_MAX] = {0};
 template <>
-pthread_rwlock_t Fd<Brpc::EpollFd>::m_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+u_rw_lock_t* Fd<Brpc::EpollFd>::m_rwlock = nullptr;
 
 namespace Brpc {
 

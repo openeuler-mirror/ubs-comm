@@ -25,10 +25,14 @@ struct QbufQueueT {
 template <typename T>
 class QbufQueue {
 public:
-    explicit QbufQueue(struct QbufQueueT<T> *q) : m_q(q), m_isMalloc(false) {}
+    explicit QbufQueue(struct QbufQueueT<T> *q) : m_q(q), m_isMalloc(false)
+    {
+        mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+    }
 
     explicit QbufQueue(uint32_t itemNb)
     {
+        mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
         if (InitQueue(itemNb) != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Init qbuf queue failed. \n");
             return;
@@ -42,6 +46,7 @@ public:
             free(m_q);
             m_q = nullptr;
         }
+        g_external_lock_ops.destroy(mutex);
     }
 
     inline bool IsEmpty()
@@ -60,7 +65,7 @@ public:
             return -1;
         }
 
-        std::lock_guard<std::mutex> lock(mutex);
+        ScopedUbExclusiveLocker sLock(mutex);
         m_q->q[m_q->tail] = data;
         m_q->tail = (m_q->tail == m_q->itemNb - 1) ? 0 : m_q->tail + 1;
         return 0;
@@ -72,7 +77,7 @@ public:
             return -1;
         }
 
-        std::lock_guard<std::mutex> lock(mutex);
+        ScopedUbExclusiveLocker sLock(mutex);
         *data = m_q->q[m_q->head];
         m_q->head = (m_q->head == m_q->itemNb - 1) ? 0 : m_q->head + 1;
         return 0;
@@ -97,7 +102,7 @@ public:
 private:
     bool m_isMalloc;
     volatile bool m_isExit = false;
-    mutable std::mutex mutex;
+    u_external_mutex_t* mutex;
 
     size_t RoundUp(size_t size, size_t align)
     {

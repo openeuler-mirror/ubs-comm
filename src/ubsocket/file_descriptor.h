@@ -25,41 +25,9 @@
 #include "polling_epoll.h"
 #include "cli_message.h"
 #include "net_common.h"
-#include "ub_lock_manager.h"
+#include "ub_lock_ops.h"
 
 #define RPC_ADPT_FD_MAX      (8192)
-
-class ScopedReadLock{
-    public:
-    ScopedReadLock(pthread_rwlock_t &lock) : m_rwlock(lock)
-    {
-        (void)pthread_rwlock_rdlock(&m_rwlock);
-    }
-
-    ~ScopedReadLock()
-    {
-        (void)pthread_rwlock_unlock(&m_rwlock);
-    }
-
-    private:
-    pthread_rwlock_t &m_rwlock;
-};
-
-class ScopedWriteLock{
-    public:
-    ScopedWriteLock(pthread_rwlock_t &lock) : m_rwlock(lock)
-    {
-        (void)pthread_rwlock_wrlock(&m_rwlock);
-    }
-
-    ~ScopedWriteLock()
-    {
-        (void)pthread_rwlock_unlock(&m_rwlock);
-    }
-
-    private:
-    pthread_rwlock_t &m_rwlock;
-};
 
 class SocketEpollMapper {
 public:
@@ -85,7 +53,7 @@ private:
 
 extern std::unordered_map<int, SocketEpollMapper *> g_socket_epoll_mappers;
 
-extern UbLazyLock<UbRWLock> g_socket_epoll_lock;
+extern u_rw_lock_t* g_socket_epoll_lock;
 
 SocketEpollMapper* GetSocketEpollMapper(int socket_fd);
 
@@ -100,12 +68,18 @@ class Fd{
 
     virtual ~Fd() {}
 
+    ALWAYS_INLINE static int GlobalFdInit()
+    {
+        m_rwlock = g_rw_lock_ops.create();
+        return m_rwlock != nullptr ? 0 : -1;
+    }
+
     /* This is an interface used for the data plane, and the caller can ensure that no
      * concurrency issues will arise, thus eliminating the need for locking. */
 
      /* This is locked version of the query interface, primarily used in scenarios where
       * concurrent access cannot be guaranteed, such as when querying statistical information.*/
-    ALWAYS_INLINE static pthread_rwlock_t &GetRWLock()
+    ALWAYS_INLINE static u_rw_lock_t *GetRWLock()
     {
         return m_rwlock;
     }
@@ -131,7 +105,7 @@ class Fd{
 
         FdType *old_obj;
         {
-            ScopedWriteLock lock(m_rwlock);
+            ScopedUbWriteLocker lock(m_rwlock);
             old_obj = m_fd_obj_map[fd];
             m_fd_obj_map[fd] = new_obj;
         }
@@ -142,7 +116,7 @@ class Fd{
 
     ALWAYS_INLINE static void ReleaseAllFdObj(void)
     {
-        ScopedWriteLock lock(m_rwlock);
+        ScopedUbWriteLocker lock(m_rwlock);
         for(uint32_t i = 0; i < RPC_ADPT_FD_MAX; ++i){
             FdType *obj = m_fd_obj_map[i];
             m_fd_obj_map[i] = nullptr;
@@ -161,7 +135,7 @@ class Fd{
     int m_fd;
 
     private:
-    static pthread_rwlock_t m_rwlock;
+    static u_rw_lock_t* m_rwlock;
     static FdType *m_fd_obj_map[RPC_ADPT_FD_MAX];
 };
 
@@ -448,13 +422,19 @@ protected:
 
 class EpollFd : public Fd<EpollFd> {
     public:
-    EpollFd(int epoll_fd) : Fd<EpollFd>(epoll_fd) {}
+    EpollFd(int epoll_fd) : Fd<EpollFd>(epoll_fd)
+    {
+        m_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+        m_ctl_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+    }
 
     ~EpollFd()
     {
         for (std::pair<int, EpollEvent *> kv : m_epoll_event_map) {
             delete kv.second;
         }
+        g_external_lock_ops.destroy(m_ctl_mutex);
+        g_external_lock_ops.destroy(m_mutex);
     }
 
     virtual ALWAYS_INLINE int EpollCtlAdd(int fd, struct epoll_event *event, bool use_polling = false)
@@ -464,7 +444,7 @@ class EpollFd : public Fd<EpollFd> {
             errno = EINVAL;
             return -1;
         }
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         if (m_epoll_event_map.count(fd) > 0) {
             RPC_ADPT_VLOG_WARN("Origin epoll control add duplicated, epfd: %d, fd: %d\n", m_fd, fd);
             EpollEvent *epoll_event = m_epoll_event_map[fd];
@@ -501,7 +481,7 @@ class EpollFd : public Fd<EpollFd> {
             errno = EINVAL;
             return -1;
         }
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         if (m_epoll_event_map.count(fd) == 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Origin epoll control modify not exist, epfd: %d, fd: %d\n", m_fd,
                               fd);
@@ -518,7 +498,7 @@ class EpollFd : public Fd<EpollFd> {
 
     virtual ALWAYS_INLINE int EpollCtlDel(int fd, struct epoll_event *event, bool use_polling = false)
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         if (m_epoll_event_map.count(fd) == 0) {
             RPC_ADPT_VLOG_DEBUG("Origin epoll control delete not exist, epfd: %d, fd: %d\n", m_fd, fd);
             return 0;
@@ -540,7 +520,7 @@ class EpollFd : public Fd<EpollFd> {
         int ret = -1;
         bool mapper_create = false;
         SocketEpollMapper* mapper = nullptr;
-        std::lock_guard<std::mutex> guard(m_ctl_mutex);
+        ScopedUbExclusiveLocker sLock(m_ctl_mutex);
         if (op == EPOLL_CTL_ADD) {
             mapper_create = CreateSocketEpollMapper(fd, mapper);
         } else {
@@ -552,7 +532,7 @@ class EpollFd : public Fd<EpollFd> {
                 if (ret == 0 && mapper != nullptr) {
                     mapper->Add(m_fd);
                 } else if (mapper_create) {
-                    ScopedUbWriteLock s_lock(g_socket_epoll_lock.get());
+                    ScopedUbWriteLocker s_lock(g_socket_epoll_lock);
                     g_socket_epoll_mappers.erase(fd);
                     free(mapper);
                     mapper = nullptr;
@@ -601,7 +581,7 @@ class EpollFd : public Fd<EpollFd> {
 
     EpollEvent *Find(int fd)
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         auto iter = m_epoll_event_map.find(fd);
         if (iter == m_epoll_event_map.end()) {
             return nullptr;
@@ -609,15 +589,15 @@ class EpollFd : public Fd<EpollFd> {
         return dynamic_cast<EpollEvent *>(iter->second);
     }
 
-    std::mutex& GetCtlMutex()
+    u_external_mutex_t* GetCtlMutex()
     {
         return m_ctl_mutex;
     }
 
     protected:
     std::unordered_map<int, EpollEvent *> m_epoll_event_map;
-    mutable std::mutex m_mutex;
-    std::mutex m_ctl_mutex;
+    u_external_mutex_t* m_mutex;
+    u_external_mutex_t* m_ctl_mutex;
 };
 
 #endif
