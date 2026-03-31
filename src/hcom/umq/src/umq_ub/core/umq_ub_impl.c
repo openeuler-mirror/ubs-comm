@@ -1078,7 +1078,6 @@ int32_t umq_ub_destroy_impl(uint64_t umqh)
         queue->checker->umq = NULL;
         (void)util_mutex_unlock(queue->checker->lock);
     }
-    }
     free(queue);
     return UMQ_SUCCESS;
 }

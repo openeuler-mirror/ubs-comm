@@ -11,6 +11,7 @@
 
 #include "rpc_adpt_vlog.h"
 #include "ub_lock_ops.h"
+#include "umq_api.h"
 
 static u_external_mutex_t* external_lock_create(u_external_mutex_type type)
 {
@@ -227,7 +228,14 @@ int u_register_external_lock_ops(const u_external_lock_ops_t *ops)
         return -1;
     }
     g_external_lock_ops = *ops;
-    return 0;
+    umq_external_mutex_lock_ops_t umq_mutex_ops = {
+        .create = (umq_external_mutex_t *(*)(umq_external_mutex_attr_t))ops->create,
+        .destroy = (int (*)(umq_external_mutex_t *))ops->destroy,
+        .lock = (int (*)(umq_external_mutex_t *))ops->lock,
+        .unlock = (int (*)(umq_external_mutex_t *))ops->unlock,
+        .trylock = (int (*)(umq_external_mutex_t *))ops->try_lock
+    };
+    return umq_external_mutex_lock_ops_register(&umq_mutex_ops);
 }
 
 int u_register_rw_lock_ops(const u_rw_lock_ops_t *ops)
@@ -237,7 +245,16 @@ int u_register_rw_lock_ops(const u_rw_lock_ops_t *ops)
         return -1;
     }
     g_rw_lock_ops = *ops;
-    return 0;
+    umq_external_rw_lock_ops umq_rwlock_ops = {
+        .create = (umq_external_rwlock_t *(*)(void))ops->create,
+        .destroy = (int (*)(umq_external_rwlock_t *))ops->destroy,
+        .read_lock = (int (*)(umq_external_rwlock_t *))ops->lock_read,
+        .write_lock = (int (*)(umq_external_rwlock_t *))ops->lock_write,
+        .unlock = (int (*)(umq_external_rwlock_t *))ops->unlock_rw,
+        .try_read_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_read,
+        .try_write_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_write
+    };
+    return umq_external_rwlock_ops_register(&umq_rwlock_ops);
 }
 
 int u_register_semaphore_ops(const u_semaphore_ops_t *ops)
