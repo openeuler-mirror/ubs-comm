@@ -29,7 +29,7 @@ void PollingEpoll::RemoveSocket(int fd)
     Socket *sk = nullptr;
     EpollSocket *ep = nullptr;
     {
-        std::lock_guard<std::mutex> lock(g_table_mutex);
+        ScopedUbExclusiveLocker sLock(g_table_mutex);
         auto iter = g_table.find(fd);
         if (iter == g_table.end()) {
             return;

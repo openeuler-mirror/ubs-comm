@@ -510,7 +510,7 @@ class Listener {
     uint32_t GetSockNum()
     {
         uint32_t sockNum = 0;
-        ScopedReadLock lock(Fd<SocketFd>::GetRWLock());
+        ScopedUbReadLocker lock(Fd<SocketFd>::GetRWLock());
         SocketFd **socketMap = Fd<SocketFd>::GetFdObjMap();
         for (uint32_t i = 0; i < RPC_ADPT_FD_MAX; ++i) {
             if (socketMap[i] == nullptr) {
@@ -523,7 +523,7 @@ class Listener {
 
     void GetAllSocketData(CLISocketData *data, uint32_t sockNum)
     {
-        ScopedReadLock lock(Fd<SocketFd>::GetRWLock());
+        ScopedUbReadLocker lock(Fd<SocketFd>::GetRWLock());
         SocketFd **socketMap = Fd<SocketFd>::GetFdObjMap();
         uint32_t doneNum = 0;
         for (uint32_t i = 0; i < RPC_ADPT_FD_MAX && doneNum < sockNum; ++i) {
@@ -811,7 +811,7 @@ class Listener {
     {
         Statistics::Recorder::GetTitle(m_oss);
         {
-            ScopedReadLock lock(Fd<SocketFd>::GetRWLock());
+            ScopedUbReadLocker lock(Fd<SocketFd>::GetRWLock());
             SocketFd **socket_fd_obj_map = Fd<SocketFd>::GetFdObjMap();
             for (uint32_t i = 0; i < RPC_ADPT_FD_MAX; ++i){
                 if(socket_fd_obj_map[i] == nullptr){

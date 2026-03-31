@@ -87,6 +87,7 @@ private:
         ubsocketTraceFileSize(UBSOCKET_TRACE_FILE_SIZE_DEFAULT),
         m_running(false), m_event_loop(nullptr)
     {
+        mMgrLock = g_external_lock_ops.create(LT_EXCLUSIVE);
         (void)snprintf_s(ubsocketTraceFilePath, sizeof(ubsocketTraceFilePath),
                         sizeof(ubsocketTraceFilePath) - 1, "%s", "/tmp/ubsocket/log");
     }
@@ -94,6 +95,7 @@ private:
     ~PrintStatsMgr()
     {
         Stop();
+        g_external_lock_ops.destroy(mMgrLock);
     }
 
     void CreateDirectory(const char* path)
@@ -197,7 +199,7 @@ private:
 
     void Stop()
     {
-        std::lock_guard<std::mutex> lock(mMgrLock);
+        ScopedUbExclusiveLocker sLock(mMgrLock);
         m_running = false;
         if (m_event_loop != nullptr) {
             if (m_event_loop->joinable()) {
@@ -212,7 +214,7 @@ private:
     uint64_t ubsocketTraceFileSize;
     volatile bool m_running;
     std::thread *m_event_loop;
-    std::mutex mMgrLock;
+    u_external_mutex_t* mMgrLock;
     char ubsocketTraceFilePath[UBSOCKET_TRACE_FILE_PATH_LEN_MAX];
 };
 

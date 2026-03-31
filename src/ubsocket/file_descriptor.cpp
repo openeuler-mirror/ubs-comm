@@ -12,16 +12,16 @@
 template <>
 SocketFd *Fd<SocketFd>::m_fd_obj_map[RPC_ADPT_FD_MAX] = {0};
 template <>
-pthread_rwlock_t Fd<SocketFd>::m_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+u_rw_lock_t* Fd<SocketFd>::m_rwlock = nullptr;
 
 template <>
 EpollFd *Fd<EpollFd>::m_fd_obj_map[RPC_ADPT_FD_MAX] = {0};
 template <>
-pthread_rwlock_t Fd<EpollFd>::m_rwlock = PTHREAD_RWLOCK_INITIALIZER;
+u_rw_lock_t* Fd<EpollFd>::m_rwlock = nullptr;
 
 std::unordered_map<int, SocketEpollMapper *> g_socket_epoll_mappers{};
 
-UbLazyLock<UbRWLock> g_socket_epoll_lock{};
+u_rw_lock_t* g_socket_epoll_lock = nullptr;
 
 void SocketEpollMapper::Clear()
 {
@@ -30,7 +30,7 @@ void SocketEpollMapper::Clear()
         if (obj == nullptr) {
             continue;
         }
-        std::lock_guard<std::mutex> guard(obj->GetCtlMutex());
+        ScopedUbExclusiveLocker sLock(obj->GetCtlMutex());
         obj->EpollCtlDel(m_fd, nullptr);
     }
     m_epoll_set.clear();
@@ -38,7 +38,7 @@ void SocketEpollMapper::Clear()
 
 SocketEpollMapper* GetSocketEpollMapper(int socket_fd)
 {
-    ScopedUbReadLock s_lock(g_socket_epoll_lock.get());
+    ScopedUbReadLocker s_lock(g_socket_epoll_lock);
     auto iter = g_socket_epoll_mappers.find(socket_fd);
     if (iter == g_socket_epoll_mappers.end()) {
         return nullptr;
@@ -49,7 +49,7 @@ SocketEpollMapper* GetSocketEpollMapper(int socket_fd)
 bool CreateSocketEpollMapper(int socket_fd, SocketEpollMapper*& mapper)
 {
     bool result = false;
-    ScopedUbWriteLock s_lock(g_socket_epoll_lock.get());
+    ScopedUbWriteLocker s_lock(g_socket_epoll_lock);
     auto iter = g_socket_epoll_mappers.find(socket_fd);
     if (iter != g_socket_epoll_mappers.end()) {
         mapper = iter->second;
@@ -71,7 +71,7 @@ void CleanSocketEpollMapper(int socket_fd)
         return;
     }
     {
-        ScopedUbWriteLock s_lock(g_socket_epoll_lock.get());
+        ScopedUbWriteLocker s_lock(g_socket_epoll_lock);
         g_socket_epoll_mappers.erase(socket_fd);
     }
     mapper->Clear();

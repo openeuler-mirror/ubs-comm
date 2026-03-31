@@ -159,8 +159,16 @@ private:
         }
     }
 
+    static int GlobalLockInit();
+
     Context() : Brpc::ConfigSettings()
     {
+        m_asyncEventRegistryMutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+        if (GlobalLockInit() != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to initialize global lock for brpc\n");
+            SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+            return;
+        }
         if(Brpc::ConfigSettings::Init() != 0){
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to initialize configure settings for brpc\n");
             SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
@@ -308,6 +316,7 @@ private:
         if (m_trace_enable) {
             Statistics::PrintStatsMgr::StopStatsCollection();
         }
+        g_external_lock_ops.destroy(m_asyncEventRegistryMutex);
 
         RPC_ADPT_VLOG_INFO("Context reclaimed successfully.\n");
     }
@@ -449,7 +458,7 @@ private:
     static bool m_ubEnable;
 
     // AE 事件处理
-    std::mutex m_asyncEventRegistryMutex;
+    u_external_mutex_t* m_asyncEventRegistryMutex;
     std::map<int, umq_trans_info_t> m_asyncEventRegistry;
     int m_asyncEventEpollFd = -1;
     std::atomic<bool> m_asyncEventThreadStopFlag{false};

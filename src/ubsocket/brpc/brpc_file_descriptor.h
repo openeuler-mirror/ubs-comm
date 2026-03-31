@@ -35,8 +35,7 @@
 #include "umq_dfx_api.h"
 #include "utracer.h"
 #include "net_common.h"
-#include "ub_thread_pool.h"
-#include "ub_lock_manager.h"
+#include "ub_lock_ops.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
 #define UMQ_BIND_SYNC_MSG       "SYNC_DONE"
@@ -112,37 +111,42 @@ protected:
 
 class EidRegistry {
 public:
+    static EidRegistry &Instance()
+    {
+        static EidRegistry inst;
+        return inst;
+    }
     bool RegisterEid(const umq_eid_t& eid) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         return m_registered_eids.insert(eid).second;
     }
 
     bool IsRegisteredEid(const umq_eid_t& eid) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         return m_registered_eids.count(eid) > 0;
     }
 
     bool UnregisterEid(const umq_eid_t& eid) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         return m_registered_eids.erase(eid) > 0;
     }
 
     // 控制建链轮询
     // 注册或者替换index值
     void RegisterOrReplaceEidIndex(const umq_eid_t& eid, uint32_t index) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         m_eid_index_map[eid] = index;
     }
 
     // 仅检查eid是否存在（不获取值）
     bool IsRegisteredEidIndex(const umq_eid_t& eid) const {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         return m_eid_index_map.find(eid) != m_eid_index_map.end();
     }
 
     // 获得index值
     bool GetEidIndex(const umq_eid_t& eid, uint32_t& index) const {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         auto it = m_eid_index_map.find(eid);
         if (it != m_eid_index_map.end()) {
             index = it->second;
@@ -154,35 +158,48 @@ public:
     //删除 eid 及其值
     bool UnregisterEidIndex(const umq_eid_t& eid)
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         return m_eid_index_map.erase(eid) > 0;
     }
 
 private:
-    mutable std::mutex m_mutex;
-    std::unordered_set<umq_eid_t, UmqEidHash> m_registered_eids;   // 存储已经被umq_dev_add eid信息
-    std::unordered_map<umq_eid_t, uint32_t, UmqEidHash> m_eid_index_map; // 控制轮询，对端bonding eid与route_list index对应关系
+    EidRegistry()
+    {
+        m_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+    }
+    ~EidRegistry()
+    {
+        g_external_lock_ops.destroy(m_mutex);
+    }
+    u_external_mutex_t* m_mutex;
+    std::unordered_set<umq_eid_t, UmqEidHash> m_registered_eids;   // umq_dev_add eid
+    std::unordered_map<umq_eid_t, uint32_t, UmqEidHash> m_eid_index_map; // bonding eidroute_list index
 };
 
 class RouteListRegistry {
 public:
+    static RouteListRegistry &Instance()
+    {
+        static RouteListRegistry inst;
+        return inst;
+    }
     // 注册或者替换routeList值
     void RegisterOrReplaceRouteList(const umq_eid_t &eid, const umq_route_list_t &routeList)
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         m_route_list_map[eid] = routeList;
     }
 
     // 仅检查eid对应的routeList是否存在（不获取值）
     bool IsRegisteredRouteList(const umq_eid_t &eid) const
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         return m_route_list_map.find(eid) != m_route_list_map.end();
     }
 
     bool GetRouteList(const umq_eid_t &eid, umq_route_list_t &routeList) const
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         auto it = m_route_list_map.find(eid);
         if (it != m_route_list_map.end()) {
             routeList = it->second;
@@ -191,16 +208,24 @@ public:
         return false;
     }
 
-    // 删除 RouteList
+    //  RouteList
     bool UnregisterRouteList(const umq_eid_t &eid)
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         return m_route_list_map.erase(eid) > 0;
     }
 
 private:
-    mutable std::mutex m_mutex;
-    std::unordered_map<umq_eid_t, umq_route_list_t, UmqEidHash> m_route_list_map; // 存储可用的route_list列表
+    RouteListRegistry()
+    {
+        m_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+    }
+    ~RouteListRegistry()
+    {
+        g_external_lock_ops.destroy(m_mutex);
+    }
+    u_external_mutex_t* m_mutex;
+    std::unordered_map<umq_eid_t, umq_route_list_t, UmqEidHash> m_route_list_map; // route_list
 };
 
 class SocketFd : public ::SocketFd, public FallbackTcpMgr, public Statistics::StatsMgr {
@@ -310,7 +335,7 @@ public:
         return (result != nullptr) ? std::string(ip_str) : "";
     }
 
-    ALWAYS_INLINE void ProcessUBConnection(int fd, UbSem* pSem)
+    ALWAYS_INLINE void ProcessUBConnection(int fd)
     {
         bool is_blocking = IsBlocking(fd);
         if (is_blocking) {
@@ -326,7 +351,6 @@ public:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to accept as protocol dismatch,Peer IP:%s\n",
                               GetPeerIp().c_str());
             OsAPiMgr::GetOriginApi()->close(fd);
-            pSem->post();
             return;
         }
         if (ret > 0) {
@@ -341,7 +365,6 @@ public:
             } catch (std::exception& e) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "%s\n", e.what());
                 OsAPiMgr::GetOriginApi()->close(fd);
-                pSem->post();
                 return;
             }
         } else if (ret == 0) {
@@ -363,7 +386,6 @@ public:
             m_peer_info.type_fd = 0;
             UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
         }
-        pSem->post();
     }
 
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
@@ -406,18 +428,7 @@ public:
                 m_fd, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return fd;
         }
-
-        auto manager = UbLockManager::instance();
-        auto sem = manager.createSem();
-        sem->init(0, 0);
-
-        auto& threadPool = UBThreadPool::GetInstance();
-
-        // submit to thread pool for asynchronous processing
-        threadPool.Submit([this, fd, pSem = sem.get()]() {
-            this->ProcessUBConnection(fd, pSem);
-        });
-        sem->wait();
+        ProcessUBConnection(fd);
         return fd;
     }
 
@@ -3415,11 +3426,11 @@ private:
 
     void GetBondingEidMapIndex(const umq_eid_t &dstEid, uint32_t &index)
     {
-        if (!mEidRegistry.IsRegisteredEidIndex(dstEid)) {
-            mEidRegistry.RegisterOrReplaceEidIndex(dstEid, 0);
+        if (!EidRegistry::Instance().IsRegisteredEidIndex(dstEid)) {
+            EidRegistry::Instance().RegisterOrReplaceEidIndex(dstEid, 0);
         }
 
-        mEidRegistry.GetEidIndex(dstEid, index);
+        EidRegistry::Instance().GetEidIndex(dstEid, index);
     }
 
     // Round_Robin
@@ -3445,7 +3456,7 @@ private:
         }
 
         // 更新下一个轮询位置
-        mEidRegistry.RegisterOrReplaceEidIndex(*dstEid, startIndex);
+        EidRegistry::Instance().RegisterOrReplaceEidIndex(*dstEid, startIndex);
 
         if (!found) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to find umq dev\n");
@@ -3520,7 +3531,7 @@ private:
     
     int CheckDevAdd(const umq_eid_t &connEid)
     {
-        if (mEidRegistry.IsRegisteredEid(connEid)) {
+        if (EidRegistry::Instance().IsRegisteredEid(connEid)) {
             return 0;
         }
 
@@ -3539,19 +3550,19 @@ private:
             return ret;
         }
         
-        mEidRegistry.RegisterEid(connEid);
+        EidRegistry::Instance().RegisterEid(connEid);
         return 0;
     }
 
     int CheckOtherRoute(umq_route_t &otherConnRoute, umq_eid_t &dstEid, umq_route_t &connRoute)
     {
-        if (!mRouteListRegistry.IsRegisteredRouteList(dstEid)) {
+        if (!RouteListRegistry::Instance().IsRegisteredRouteList(dstEid)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to check other route to connect\n");
             return -1;
         }
 
         umq_route_list_t routeList = {};
-        if (!mRouteListRegistry.GetRouteList(dstEid, routeList)) {
+        if (!RouteListRegistry::Instance().GetRouteList(dstEid, routeList)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get route list in map\n");
             return -1;
         }
@@ -3575,7 +3586,7 @@ private:
         }
 
         filteredList.len = filterNum;
-        mRouteListRegistry.RegisterOrReplaceRouteList(dstEid, filteredList);
+        RouteListRegistry::Instance().RegisterOrReplaceRouteList(dstEid, filteredList);
 
         if (CheckDevAdd(otherConnRoute.src)!=0) {
             return -1;
@@ -3586,7 +3597,7 @@ private:
 
     int GetDevRouteList(const umq_eid_t *srcEid, const umq_eid_t *dstEid, umq_route_list_t &filteredList)
     {
-        if (mRouteListRegistry.GetRouteList(*dstEid, filteredList)) {
+        if (RouteListRegistry::Instance().GetRouteList(*dstEid, filteredList)) {
             if (filteredList.len > 0) {
                 return 0;
             }
@@ -3616,7 +3627,7 @@ private:
             return -1;
         }
 
-        mRouteListRegistry.RegisterOrReplaceRouteList(*dstEid, filteredList);
+        RouteListRegistry::Instance().RegisterOrReplaceRouteList(*dstEid, filteredList);
         return 0;
     }
 
@@ -3657,9 +3668,7 @@ private:
     std::atomic<bool> m_closed{false};
     int m_event_fd;
     int mPeerSocketId = -1;
-    static EidRegistry mEidRegistry;
     bool m_isblocking = true;
-    static RouteListRegistry mRouteListRegistry;
     QbufQueue<umq_buf_t *> *rxQueue = nullptr;
     ShareJfrRxEpollEvent *share_jfr_rx_epoll_event = nullptr;
 
@@ -4146,7 +4155,7 @@ public:
             return ::EpollFd::EpollCtlAdd(fd, event, use_polling);
         }
 
-        std::lock_guard<std::mutex> lock(m_mutex);
+        ScopedUbExclusiveLocker sLock(m_mutex);
         if (m_epoll_event_map.count(fd) > 0) {
             RPC_ADPT_VLOG_WARN("Origin epoll control add duplicated, epfd: %d, fd: %d\n", m_fd, fd);
             EpollEvent *epoll_event = static_cast<Brpc::EpollEvent*>(m_epoll_event_map[fd]);

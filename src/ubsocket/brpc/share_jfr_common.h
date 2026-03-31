@@ -38,7 +38,7 @@ public:
     static void Add(const umq_eid_t& eid, uint64_t main_umq)
     {
         EidUmqTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         auto iter = inst->table.find(eid);
         if (iter == inst->table.end()) {
             inst->table[eid] = std::vector<uint64_t>{main_umq};
@@ -51,7 +51,7 @@ public:
     static bool Get(const umq_eid_t& eid, std::vector<uint64_t>& out)
     {
         EidUmqTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         auto it = inst->table.find(eid);
         if (it != inst->table.end()) {
             out = it->second;
@@ -64,14 +64,14 @@ public:
     static void Remove(const umq_eid_t& eid)
     {
         EidUmqTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         inst->table.erase(eid);
     }
 
     static void RemoveMainUmq(uint64_t main_umq)
     {
         EidUmqTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         for (auto& [key, value] : inst->table) {
             value.erase(std::remove(value.begin(), value.end(), main_umq), value.end());
         }
@@ -80,7 +80,7 @@ public:
     static void Clean()
     {
         EidUmqTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         inst->table.clear();
     }
 
@@ -88,8 +88,14 @@ public:
     EidUmqTable& operator=(const EidUmqTable&) = delete;
 
 private:
-    EidUmqTable() = default;
-
+    EidUmqTable()
+    {
+        mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+    }
+    ~EidUmqTable()
+    {
+        g_external_lock_ops.destroy(mutex);
+    }
     static EidUmqTable *Instance()
     {
         static EidUmqTable inst;
@@ -97,7 +103,7 @@ private:
     }
 
     std::unordered_map<umq_eid_t, std::vector<uint64_t>, UmqEidHash> table;
-    mutable std::mutex mutex;
+    u_external_mutex_t* mutex;
 };
 
 class SocketFdEpollTable {
@@ -105,14 +111,14 @@ public:
     static void Set(int socket_fd, int epoll_fd)
     {
         SocketFdEpollTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         inst->table[socket_fd] = epoll_fd;
     }
 
     static bool Get(int socket_fd, int& epoll_fd)
     {
         SocketFdEpollTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         auto it = inst->table.find(socket_fd);
         if (it != inst->table.end()) {
             epoll_fd = it->second;
@@ -125,14 +131,14 @@ public:
     static bool Contains(int socket_fd)
     {
         SocketFdEpollTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         return inst->table.find(socket_fd) != inst->table.end();
     }
 
     static void Remove(int socket_fd)
     {
         SocketFdEpollTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         inst->table.erase(socket_fd);
     }
 
@@ -140,8 +146,14 @@ public:
     SocketFdEpollTable& operator=(const SocketFdEpollTable&) = delete;
 
 private:
-    SocketFdEpollTable() = default;
-
+    SocketFdEpollTable()
+    {
+        mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+    }
+    ~SocketFdEpollTable()
+    {
+        g_external_lock_ops.destroy(mutex);
+    }
     static SocketFdEpollTable *Instance()
     {
         static SocketFdEpollTable inst;
@@ -149,7 +161,7 @@ private:
     }
 
     std::map<int, int> table;
-    mutable std::mutex mutex;
+    u_external_mutex_t* mutex;
 };
 
 class MainSubUmqTable {
@@ -157,7 +169,7 @@ public:
     static void Add(uint64_t main_umq, uint64_t sub_umq)
     {
         MainSubUmqTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         auto iter = inst->table.find(main_umq);
         if (iter == inst->table.end()) {
             inst->table[main_umq] = std::vector<uint64_t>{sub_umq};
@@ -170,7 +182,7 @@ public:
     static bool GetSubUmqs(uint64_t main_umq, std::vector<uint64_t>& sub_umqs)
     {
         MainSubUmqTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         auto it = inst->table.find(main_umq);
         if (it != inst->table.end()) {
             sub_umqs = it->second;
@@ -183,14 +195,14 @@ public:
     static bool Contains(uint64_t main_umq)
     {
         MainSubUmqTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         return inst->table.find(main_umq) != inst->table.end();
     }
 
     static void RemoveSubUmq(uint64_t main_umq, uint64_t sub_umq)
     {
         MainSubUmqTable *inst = Instance();
-        std::lock_guard<std::mutex> lock(inst->mutex);
+        ScopedUbExclusiveLocker sLock(inst->mutex);
         auto iter = inst->table.find(main_umq);
         if (iter == inst->table.end()) {
             return;
@@ -204,7 +216,7 @@ public:
         decltype(table) local_table;
         {
             MainSubUmqTable *inst = Instance();
-            std::lock_guard<std::mutex> lock(inst->mutex);
+            ScopedUbExclusiveLocker sLock(inst->mutex);
             local_table = std::move(inst->table);
         }
 
@@ -222,8 +234,14 @@ public:
     MainSubUmqTable& operator=(const MainSubUmqTable&) = delete;
 
 private:
-    MainSubUmqTable() = default;
-
+    MainSubUmqTable()
+    {
+        mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+    }
+    ~MainSubUmqTable()
+    {
+        g_external_lock_ops.destroy(mutex);
+    }
     static MainSubUmqTable *Instance()
     {
         std::call_once(init_flag_, []() {
@@ -233,7 +251,7 @@ private:
     }
 
     std::map<uint64_t, std::vector<uint64_t>> table;
-    mutable std::mutex mutex;
+    u_external_mutex_t* mutex;
     static MainSubUmqTable* instance_;
     static std::once_flag init_flag_;
 };

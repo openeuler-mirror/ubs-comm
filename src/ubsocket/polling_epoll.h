@@ -18,6 +18,7 @@
 #include <sys/epoll.h>
 #include "rpc_adpt_vlog.h"
 #include "umq_types.h"
+#include "ub_lock_ops.h"
 
 struct EpItem {
     int fd;
@@ -93,7 +94,7 @@ public:
 
     void AddSocket(int fd, Socket* socket)
     {
-        std::lock_guard<std::mutex> lock(g_table_mutex);
+        ScopedUbExclusiveLocker sLock(g_table_mutex);
         g_table[fd] = socket;
     }
 
@@ -102,7 +103,7 @@ public:
 
     int GetAndPopQbuf(uint64_t umqHandle, umq_buf_t **buf)
     {
-        std::lock_guard<std::mutex> lock(g_qbuf_table_mutex);
+        ScopedUbExclusiveLocker sLock(g_qbuf_table_mutex);
         auto it = g_qbuf_table.find(umqHandle);
         if (it != g_qbuf_table.end() && !g_qbuf_table[umqHandle].empty()) {
             auto qbuf_pair = g_qbuf_table[umqHandle].front();
@@ -157,11 +158,19 @@ public:
     PollingErrCode UmqPoll(uint64_t umqHandle);
 
 private:
-    PollingEpoll() = default;
-
+    PollingEpoll()
+    {
+        g_table_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+        g_qbuf_table_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+    }
+    ~PollingEpoll()
+    {
+        g_external_lock_ops.destroy(g_qbuf_table_mutex);
+        g_external_lock_ops.destroy(g_table_mutex);
+    }
     void AddQbuf(uint64_t umqHandle, umq_buf_t** qbuf, int qbufNum)
     {
-        std::lock_guard<std::mutex> lock(g_qbuf_table_mutex);
+        ScopedUbExclusiveLocker sLock(g_qbuf_table_mutex);
         auto it = g_qbuf_table.find(umqHandle);
         if (it != g_qbuf_table.end()) {
             it->second.push(std::make_pair(qbufNum, qbuf));
@@ -175,8 +184,8 @@ private:
 
     mutable std::map<int, Socket*> g_table;
     mutable std::map<uint64_t, std::queue<std::pair<int, umq_buf_t**>>> g_qbuf_table;
-    mutable std::mutex g_table_mutex;
-    mutable std::mutex g_qbuf_table_mutex;
+    u_external_mutex_t* g_table_mutex;
+    u_external_mutex_t* g_qbuf_table_mutex;
 };
 
 #endif
