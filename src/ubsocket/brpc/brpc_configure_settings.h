@@ -17,6 +17,9 @@
 #define BRPC_SYM_STR_LEN_MAX       (128)
 #define DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH          (1024)
 #define DEFAULT_MIN_RESERVED_CREDIT          (100)
+#define DEFAULT_LINK_PRIORITY      (0)
+#define UBSOCKET_LINK_PRIORITY_MIN (0)
+#define UBSOCKET_LINK_PRIORITY_MAX (15)
 #define ENV_VAR_BRPC_ALLOC_SYM     "UBSOCKET_BRPC_ALLOC_SYM"
 #define ENV_VAR_BRPC_DEALLOC_SYM   "UBSOCKET_BRPC_DEALLOC_SYM"
 #define ENV_VAR_READV_UNLIMITED    "UBSOCKET_READV_UNLIMITED"
@@ -26,6 +29,7 @@
 #define ENV_VAR_AUTO_FALLBACK_TCP  "UBSOCKET_AUTO_FALLBACK_TCP"
 #define ENV_VAR_USE_UB_FORCE       "UBSOCKET_USE_UB_FORCE"
 #define ENV_VAR_MIN_RESERVED_CREDIT     "UBSOCKET_MIN_RESERVED_CREDIT"
+#define ENV_VAR_LINK_PRIORITY      "UBSOCKET_LINK_PRIORITY"
 
 namespace Brpc{
 
@@ -81,6 +85,11 @@ public:
       uint16_t GetMinReservedCredit()
       {
           return m_min_reserved_credit;
+      }
+
+      uint8_t GetLinkPriority()
+      {
+          return m_link_priority;
       }
  
     bool AutoFallbackTCP()
@@ -139,11 +148,28 @@ public:
              m_use_polling = true;
 #endif
 
-         if (strlen(m_enable_share_jfr_str) > 0) {
+        if (strlen(m_enable_share_jfr_str) > 0) {
             m_enable_share_jfr = BoolVal::BoolConverter(m_enable_share_jfr_str);
             RPC_ADPT_VLOG_INFO("%s: %s (input: %s)\n", ENV_VAR_ENABLE_SHARE_JFR,
                 BoolVal::BoolConverter(m_enable_share_jfr), m_enable_share_jfr_str);
-         }
+        }
+
+        if (strlen(m_link_priority_str) > 0) {
+            uint8_t input_link_prio = 0;
+            try {
+                input_link_prio = static_cast<uint8_t>(std::stoi(m_link_priority_str));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Illegal value UBSOCKET_LINK_PRIORITY, priority set to 0.\n");
+                input_link_prio = 0;
+            }
+            if (input_link_prio < UBSOCKET_LINK_PRIORITY_MIN || input_link_prio > UBSOCKET_LINK_PRIORITY_MAX) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Exceeded value UBSOCKET_LINK_PRIORITY, priority set to 0.\n");
+                input_link_prio = 0;
+            }
+            m_link_priority = input_link_prio == 0 ? DEFAULT_LINK_PRIORITY : input_link_prio;
+        }
+        RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_LINK_PRIORITY, GetLinkPriority());
+
         return 0;
       }
 
@@ -184,6 +210,10 @@ public:
                                                                          share_jfr_rx_queue_depth;
         }
 
+        if ((env_ptr = getenv(ENV_VAR_LINK_PRIORITY)) != NULL) {
+            ReadEnvVar(env_ptr, m_link_priority_str, sizeof(m_link_priority_str));
+        }
+
         if ((env_ptr = getenv(ENV_VAR_MIN_RESERVED_CREDIT)) != nullptr) {
             uint64_t min_reserved_credit = static_cast<uint16_t>(atoi(env_ptr));
             m_min_reserved_credit = min_reserved_credit == 0 ? DEFAULT_MIN_RESERVED_CREDIT :
@@ -205,6 +235,8 @@ public:
       char m_enable_share_jfr_str[BOOL_STR_LEN_MAX] = "";
       bool m_enable_share_jfr = true;
       uint64_t m_share_jfr_rx_queue_depth = DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH;
+      char m_link_priority_str[BOOL_STR_LEN_MAX] = "";
+      uint8_t m_link_priority = DEFAULT_LINK_PRIORITY;
       uint16_t m_min_reserved_credit = DEFAULT_MIN_RESERVED_CREDIT;
 }; 
    

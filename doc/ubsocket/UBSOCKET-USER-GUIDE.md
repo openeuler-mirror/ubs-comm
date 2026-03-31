@@ -88,6 +88,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_ENABLE_SHARE_JFR         | 设置是否开启共享JFR                               | false, true                                                  | true             | 否                                  |
 | UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH | 设置开启共享JFR后，每个Socket链接接收缓存队列深度 | 最小值是64，设置上限由实际机器环境决定                       | 1024              | 否                                  |
 | UBSOCKET_USE_BRPC_ZCOPY           | 是否使用brpc zcopy函数                            | false, true                                                  | true              | 否                                  |
+| UBSOCKET_LINK_PRIORITY | 设置流量优先级，按照环境配置映射到SL上 | [0, 15] | 0 | 否 |
 
 > 说明：
 >
@@ -838,3 +839,29 @@ bazel build //src:ubstat
 1. 所有命令均​**必须指定 `-p` 参数**​（进程 ID），否则无法执行查询；
 2. `stat` 命令支持 `-w` 实时监控，但禁用 `-s/-d`；`topo` 命令必须指定 `-s/-d`（IPv6 格式），但禁用 `-w`；
 3. 执行 `./ubstat -h` 可快速查看内置帮助信息。
+
+## 10 流量优先级配置说明
+
+UBSOCKET支持通过配置流量优先级，来配置URMA流量SL（服务等级）。
+
+SL（Service Level）是服务等级标签，用于区分不同的流量类型，VL（Virtual Lane）是链路上的虚拟通道，SL通过映射关系决定数据包走哪条VL（带宽），目标是通过不同的SL实现不同业务的流量隔离。
+
+SL-VL映射关系由LCNE配置，当前是一一映射，而优先级-SL映射关系由URMA维护一个映射表，用户可以查询映射表查看优先级-SL映射关系。
+
+### 10.1 SL映射表
+
+#### 10.1.1 查询
+
+`urma_admin show --whole`
+`urma_admin show --whole -d <dev>`
+
+#### 10.1.2 修改
+
+`urma_admin dev set <dev> sl --priority <priority> --sl <sl>`
+
+#### 10.1.3 SL映射表示意图
+| | | | | | | | | | | | | | | | | |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| priority | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
+| sl | 9 | 9 | 9 | 9 | 9 | 9 | 9 | 7 | 8 | 9 | 9 | 9 | 9 | 9 | 9 | 9 |
+| tp_type | RTP | RTP | RTP | RTP | RTP | RTP | RTP | CTP | CTP | RTP | RTP | RTP | RTP | RTP | RTP | RTP |

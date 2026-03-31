@@ -128,6 +128,7 @@ UBSOCKET_READV_UNLIMITED=true \
 | UBSOCKET_ENABLE_SHARE_JFR | 设置是否开启共享JFR | false, true                                              | true   | 否                                |
 | UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH | 设置开启共享JFR后，每个Socket链接接收缓存队列深度 | 最小值是64，设置上限由实际机器环境决定                                                | 1024   | 否                                |
 | UBSOCKET_USE_BRPC_ZCOPY | 是否使用brpc zcopy函数 | false, true                                               | true   | 否                                |
+| UBSOCKET_LINK_PRIORITY | 设置URMA流量SL优先级 | [0, 15] | 0 | 否 |
 
 >  说明：
 >
