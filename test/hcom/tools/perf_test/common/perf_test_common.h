@@ -25,6 +25,7 @@ public:
     uintptr_t lAddress = 0;
     uint64_t lKey = 0;
     uint32_t size = 0;
+    uint8_t eid[16] = {0};
 };
 
 }

@@ -53,6 +53,7 @@ private:
     MrInfo mPeerMrInfo;
     char *mDataAddr = nullptr;
     sem_t mSem;
+    void *mTseg = nullptr;
 };
 }
 }

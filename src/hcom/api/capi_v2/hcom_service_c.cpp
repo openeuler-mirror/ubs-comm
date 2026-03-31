@@ -1186,6 +1186,12 @@ void ubs_hcom_service_set_max_send_recv_data_cnt(ubs_hcom_service service, uint3
     reinterpret_cast<UBSHcomService *>(service)->SetMaxSendRecvDataCount(maxSendRecvDataCount);
 }
 
+void ubs_hcom_service_set_ub_priority(ubs_hcom_service service, uint32_t ubPriority)
+{
+    VALIDATE_SERVICE_NO_RET(service);
+    reinterpret_cast<UBSHcomService *>(service)->SetUbPriority(ubPriority);
+}
+
 ubs_hcom_service_context ubs_hcom_context_clone(ubs_hcom_service_context context)
 {
     VALIDATE_CONTEXT_RETURN_ZERO(context)

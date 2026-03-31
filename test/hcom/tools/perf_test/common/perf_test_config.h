@@ -131,6 +131,16 @@ public:
         mUbcMode = ubcMode;
     }
 
+    uint32_t GetUbPriority() const
+    {
+        return mUbPriority;
+    }
+
+    void SetUbPriority(uint32_t ubPriority)
+    {
+        mUbPriority = ubPriority;
+    }
+
 private:
     // 检查参数有效性
     bool SelfCheck();
@@ -147,6 +157,7 @@ private:
     uint32_t mSize;                         // 测试的最大包大小
     bool mIsTestAllSize = false;            // 是否测试所有大小的包
     ock::hcom::UBSHcomUbcMode mUbcMode;     // 低时延/高带宽模式选择
+    uint32_t mUbPriority;                   // SL优先级
 };
 }
 }

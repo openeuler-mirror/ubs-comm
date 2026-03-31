@@ -39,7 +39,7 @@ public:
         OBJ_GC_DECREASE(UBContext);
     }
 
-    UResult Initialize(uint8_t &bandWidth);
+    UResult Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUbcMode ubcMode);
     UResult UnInitialize();
 
     void UpdateGid(const std::string &matchIp);
@@ -84,6 +84,16 @@ private:
             }
         }
         return -1;
+    }
+
+    bool CheckPriByTpType(uint32_t ubPriority, union urma_tp_type_en tp_type)
+    {
+        if (ubPriority == UINT32_MAX) {
+            // return true when ubPriority is not set
+            return true;
+        }
+
+        return tp_type.value == mDevAttr->dev_cap.priority_info[ubPriority].tp_type.value;
     }
 
     std::string mName;

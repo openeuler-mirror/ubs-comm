@@ -405,6 +405,8 @@ void ubs_hcom_service_set_max_send_recv_data_cnt(ubs_hcom_service service, uint3
 
 void ubs_hcom_service_set_enable_mrcache(ubs_hcom_service service, bool enableMrCache);
 
+void ubs_hcom_service_set_ub_priority(ubs_hcom_service service, uint32_t ubPriority);
+
 void ubs_hcom_channel_refer(ubs_hcom_channel channel);
 void ubs_hcom_channel_derefer(ubs_hcom_channel channel);
 int ubs_hcom_channel_send(ubs_hcom_channel channel, ubs_hcom_channel_request req, ubs_hcom_channel_callback *cb);

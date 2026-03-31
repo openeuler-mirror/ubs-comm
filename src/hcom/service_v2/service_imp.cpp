@@ -1158,6 +1158,20 @@ void HcomServiceImp::SetCtxStoreCapacity(uint32_t ctxStoreCapacity)
     mOptions.ctxStoreCapacity = ctxStoreCapacity;
 }
 
+void HcomServiceImp::SetUbPriority(uint32_t ubPriority)
+{
+    if (mStarted) {
+        return;
+    }
+
+    if (ubPriority > NN_NO15) {
+        NN_LOG_WARN("UbPrioity " << ubPriority <<
+            " is invalid, must be in range [0, 15], use default value");
+        return;
+    }
+    mOptions.ubPriority = ubPriority;
+}
+
 void HcomServiceImp::SetMaxSendRecvDataCount(uint32_t maxSendRecvDataCount)
 {
     mOptions.maxSendRecvDataCount = maxSendRecvDataCount;
@@ -1775,6 +1789,7 @@ void HcomServiceImp::ConvertHcomSerImpOptsToHcomDriOpts(const HcomServiceImpOpti
     driverOpt.enableMultiRail = serviceOpt.enableMultiRail;
     driverOpt.mrSendReceiveSegCount = serviceOpt.maxSendRecvDataCount;
     driverOpt.ubcMode = serviceOpt.ubcMode;
+    driverOpt.ubPriority = serviceOpt.ubPriority;
 }
 
 SerResult HcomServiceImp::ExchangeTimestamp(UBSHcomChannel *channel)
