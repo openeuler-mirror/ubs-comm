@@ -1682,6 +1682,7 @@ struct UBSHcomNetDriverOptions {
     uint32_t maxConnectionNum = NN_NO250;  // max connection number
     bool enableMultiRail = false;          // enable multi rail
     uint8_t slave = 1;                     // slave 1 or 2
+    uint32_t ubPriority = UINT32_MAX;
 
     char oobPortRange[NN_NO16]{};  // port range when enable port auto selection
 

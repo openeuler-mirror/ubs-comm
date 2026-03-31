@@ -149,7 +149,8 @@ TEST_F(TestUbUrmaWrapper, UBContextInitErr)
 {
     MOCKER_CPP(&UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_DEVICE_FAILED_OPEN)));
     uint8_t bw = 0;
-    UResult ret = ctx->Initialize(bw);
+    UBSHcomUbcMode ubcMode = UBSHcomUbcMode::LowLatency;
+    UResult ret = ctx->Initialize(bw, UINT32_MAX, ubcMode);
     EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
 }
 
@@ -157,7 +158,8 @@ TEST_F(TestUbUrmaWrapper, UBContextInitErrTwo)
 {
     MOCKER_CPP(&UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_DEVICE_OPEN_FAILED)));
     uint8_t bw = 0;
-    UResult ret = ctx->Initialize(bw);
+    UBSHcomUbcMode ubcMode = UBSHcomUbcMode::LowLatency;
+    UResult ret = ctx->Initialize(bw, UINT32_MAX, ubcMode);
     EXPECT_EQ(ret, UB_DEVICE_OPEN_FAILED);
 }
 

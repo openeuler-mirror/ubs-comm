@@ -78,7 +78,8 @@ UResult UBJetty::CreateUrmaJetty(uintptr_t seg_pa, uint32_t seg_len, uint32_t se
     mUrmaJettyId = mUrmaJetty->jetty_id.id;
 
     NN_LOG_INFO("Create jetty success, jetty id: " << mUrmaJettyId << ", jfr id: " << (mJfr ? mJfr->jfr_id.id : -1) <<
-        ", jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id);
+        ", jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id << ", priority: " <<
+        static_cast<int>(jetty_cfg.jfs_cfg.priority));
     return UB_OK;
 }
 

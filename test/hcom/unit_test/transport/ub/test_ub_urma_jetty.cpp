@@ -545,11 +545,12 @@ TEST_F(TestUbUrmaJetty, CreatePollingCq)
 TEST_F(TestUbUrmaJetty, CtxInitializeParamErr)
 {
     uint8_t bw = 0;
-    EXPECT_EQ(ctx->Initialize(bw), UB_OK);
+    UBSHcomUbcMode ubcMode = UBSHcomUbcMode::HighBandwidth;
+    EXPECT_EQ(ctx->Initialize(bw, UINT32_MAX, ubcMode), UB_OK);
 
     MOCKER_CPP(&UBDeviceHelper::Initialize).stubs().will(returnValue(static_cast<UResult>(UB_DEVICE_FAILED_OPEN)));
     ctx->mUrmaContext = nullptr;
-    EXPECT_EQ(ctx->Initialize(bw), UB_DEVICE_FAILED_OPEN);
+    EXPECT_EQ(ctx->Initialize(bw, UINT32_MAX, ubcMode), UB_DEVICE_FAILED_OPEN);
 }
 
 TEST_F(TestUbUrmaJetty, CreateJettyMrErr)
