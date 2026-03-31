@@ -76,12 +76,12 @@ public:
         Context::FetchAdd();
     }
 
-    MemSocketFd(int fd, uint64_t magic_number, uint32_t magic_number_recv_size) : ::SocketFd(fd)
+    MemSocketFd(int fd, uint64_t protocol_negotiation, uint32_t protocol_negotiation_recv_size) : ::SocketFd(fd)
     {
-        RPC_ADPT_VLOG_DEBUG("MemSocketFd constructor, fd: %d, magic_number: %d, magic_number_recv_size: %d\n",
-            fd, magic_number, magic_number_recv_size);
-        m_magic_number = magic_number;
-        m_magic_number_recv_size = magic_number_recv_size;
+        RPC_ADPT_VLOG_DEBUG("MemSocketFd constructor, fd: %d, protocol_negotiation: %d, protocol_negotiation_recv_size: %d\n",
+            fd, protocol_negotiation, protocol_negotiation_recv_size);
+        m_protocol_negotiation = protocol_negotiation;
+        m_protocol_negotiation_recv_size = protocol_negotiation_recv_size;
         m_tx_use_tcp = true;
         Context::FetchAdd();
     }
@@ -129,22 +129,22 @@ public:
         RPC_ADPT_VLOG_DEBUG("MemSocketFd deconstructor finished.\n");
     }
 
-    // magic number is the 0xff + ASCII of "R" + "P" + "C" + "A" + "D" + "P" + "T"
-    static const uint64_t CONTROL_PLANE_MAGIC_NUMBER = 0xff52504341445055;
-    static const uint8_t CONTROL_PLANE_MAGIC_NUMBER_PREFIX = 0xff;
-    static const uint64_t CONTROL_PLANE_MAGIC_NUMBER_BODY = 0x52504341445055;
+    // protocol negotiation is the 0xff + ASCII of "R" + "P" + "C" + "A" + "D" + "P" + "T"
+    static const uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445055;
+    static const uint8_t CONTROL_PLANE_PROTOCOL_NEGOTIATION_PREFIX = 0xff;
+    static const uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION_BODY = 0x52504341445055;
     static const uint32_t NEGOTIATE_TIMEOUT_MS = 5000;
     static const uint32_t CONTROL_PLANE_TIMEOUT_MS = 5000;
 
-    static int ValidateMagicNumber(int fd, uint64_t &magic_number, ssize_t &magic_number_recv_size)
+    static int ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size)
     {
-        magic_number_recv_size = RecvSocketData(fd, &magic_number, sizeof(magic_number), NEGOTIATE_TIMEOUT_MS);
-        if (magic_number_recv_size <= 0) {
+        protocol_negotiation_recv_size = RecvSocketData(fd, &protocol_negotiation, sizeof(protocol_negotiation), NEGOTIATE_TIMEOUT_MS);
+        if (protocol_negotiation_recv_size <= 0) {
             return -1;
         }
         
-        if (magic_number_recv_size != sizeof(magic_number) || magic_number != CONTROL_PLANE_MAGIC_NUMBER) {
-            return magic_number_recv_size;
+        if (protocol_negotiation_recv_size != sizeof(protocol_negotiation) || protocol_negotiation != CONTROL_PLANE_PROTOCOL_NEGOTIATION) {
+            return protocol_negotiation_recv_size;
         }
 
         return 0;
@@ -179,16 +179,16 @@ public:
             SetNonBlocking(fd);
         }
 
-        uint64_t magic_number = 0;
-        ssize_t magic_number_recv_size = 0;
-        int ret = ValidateMagicNumber(fd, magic_number, magic_number_recv_size);
+        uint64_t protocol_negotiation = 0;
+        ssize_t protocol_negotiation_recv_size = 0;
+        int ret = ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
         if (ret > 0) {
-            /* IF the magic number verification fails, it is still necessary to create a socket fd object
-             * to store the magic number information, so that the received information can be reported to
+            /* IF the protocol negotiation verification fails, it is still necessary to create a socket fd object
+             * to store the protocol negotiation information, so that the received information can be reported to
              * the user when readv is called. */
             MemSocketFd *socket_fd_obj = nullptr;
             try {
-                socket_fd_obj = new MemSocketFd(fd, magic_number, (uint32_t)magic_number_recv_size);
+                socket_fd_obj = new MemSocketFd(fd, protocol_negotiation, (uint32_t)protocol_negotiation_recv_size);
                 Fd<::SocketFd>::OverrideFdObj(fd, socket_fd_obj);
             } catch (std::exception& e) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,  "%s\n", e.what());
@@ -360,9 +360,9 @@ public:
         char send_sync_msg[] = BIND_SYNC_MSG;
         char recv_sync_msg[] = BIND_SYNC_MSG;
 
-        // Use magic number to check TCP link
-        if (SendSocketData(m_fd, &local_msg.magic_number, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,  "Add shmem connect failed to send magic number, fd: %d.\n", m_fd);
+        // Use protocol negotiation to check TCP link
+        if (SendSocketData(m_fd, &local_msg.protocol_negotiation, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,  "Add shmem connect failed to send protocol negotiation, fd: %d.\n", m_fd);
             return -1;
         }
 
@@ -710,7 +710,7 @@ public:
 
 private:
     struct ExchangeData {
-        uint64_t magic_number = CONTROL_PLANE_MAGIC_NUMBER;
+        uint64_t protocol_negotiation = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
         size_t shmem_length;
         char name[SHM_MAX_NAME_BUFF_LEN] = {0};
     };
@@ -876,8 +876,8 @@ private:
     uint16_t m_tx_window_capacity = 0; // the capacity of TX window size
     uint16_t m_rx_window_capacity = 0; // the capacity of RX window size
     int m_event_fd;
-    uint64_t m_magic_number = 0;
-    uint32_t m_magic_number_recv_size = 0;
+    uint64_t m_protocol_negotiation = 0;
+    uint32_t m_protocol_negotiation_recv_size = 0;
     std::unique_ptr<RingBuffer> m_ringbuffer;
     std::atomic<bool> m_closed{false};
     uint8_t m_epoll_in_msg_recv_size = 0;

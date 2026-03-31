@@ -232,10 +232,10 @@ public:
         m_rx.m_remaining_size = 0;
     }
 
-    SocketFd(int fd, uint64_t magic_number, uint32_t magic_number_recv_size) : ::SocketFd(fd), StatsMgr(fd)
+    SocketFd(int fd, uint64_t protocol_negotiation, uint32_t protocol_negotiation_recv_size) : ::SocketFd(fd), StatsMgr(fd)
     {
-        m_tx.m_magic_number = magic_number;
-        m_tx.m_magic_number_recv_size = magic_number_recv_size;
+        m_tx.m_protocol_negotiation = protocol_negotiation;
+        m_tx.m_protocol_negotiation_recv_size = protocol_negotiation_recv_size;
         m_tx_use_tcp = true;
     }
 
@@ -318,9 +318,9 @@ public:
             SetNonBlocking(fd);
         }
 
-        uint64_t magic_number = 0;
-        ssize_t magic_number_recv_size = 0;
-        int ret = ValidateMagicNumber(fd, magic_number, magic_number_recv_size);
+        uint64_t protocol_negotiation = 0;
+        ssize_t protocol_negotiation_recv_size = 0;
+        int ret = ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
         Context *context = Context::GetContext();
         if (ret > 0 && !context->AutoFallbackTCP()) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to accept as protocol dismatch,Peer IP:%s\n",
@@ -330,12 +330,12 @@ public:
             return;
         }
         if (ret > 0) {
-            /* IF the magic number verification fails, it is still necessary to create a socket fd object
-             * to store the magic number information, so that the received information can be reported to
+            /* IF the protocol negotiation verification fails, it is still necessary to create a socket fd object
+             * to store the protocol negotiation information, so that the received information can be reported to
              * the user when readv is called. */
             SocketFd *socket_fd_obj = nullptr;
             try {
-                socket_fd_obj = new SocketFd(fd, magic_number, (uint32_t)magic_number_recv_size);
+                socket_fd_obj = new SocketFd(fd, protocol_negotiation, (uint32_t)protocol_negotiation_recv_size);
                 Fd<::SocketFd>::OverrideFdObj(fd, socket_fd_obj);
                 RPC_ADPT_VLOG_WARN("Auto fallback to TCP,Peer IP:%s, fd: %d\n", GetPeerIp().c_str(), fd);
             } catch (std::exception& e) {
@@ -615,12 +615,13 @@ public:
 
     int DoConnect(void)
     {
-        uint64_t magic_number = CONTROL_PLANE_MAGIC_NUMBER;
+        uint64_t protocol_negotiation = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
         if (SendSocketData(
-            m_fd, &magic_number, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send magic number, fd: %d\n", m_fd);
+            m_fd, &protocol_negotiation, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send protocol negotiation, fd: %d\n", m_fd);
             return -1;
         }
+
         if (ConnectExchangeTransMode() != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to exchange TransMode in connect,Peer IP:%s, fd: %d\n",
                               GetPeerIp().c_str(), m_fd);
@@ -826,10 +827,10 @@ public:
     static const uint16_t HANDLE_TX_THRESHOLD_RATIO_DIVISOR = 4;
     /* process up to m_tx_window capacity / 16 tx cqe each time */
     static const uint16_t RETRIEVE_TX_THRESHOLD_RATIO_DIVISOR = 8;
-    // magic number is the 0xff + ASCII of "R" + "P" + "C" + "A" + "D" + "P" + "T"
-    static const uint64_t CONTROL_PLANE_MAGIC_NUMBER = 0xff52504341445054;
-    static const uint8_t CONTROL_PLANE_MAGIC_NUMBER_PREFIX = 0xff;
-    static const uint64_t CONTROL_PLANE_MAGIC_NUMBER_BODY = 0x52504341445054;
+    // protocol negotiation is the 0xff + ASCII of "R" + "P" + "C" + "A" + "D" + "P" + "T"
+    static const uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445054;
+    static const uint8_t CONTROL_PLANE_PROTOCOL_NEGOTIATION_PREFIX = 0xff;
+    static const uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION_BODY = 0x52504341445054;
     static const uint32_t NEGOTIATE_TIMEOUT_MS = 10;
     // Current UB jetty handshake is synchronous that brpc acceptor can't yield from the point.
     // Ensure the connector has at most 5s to wait from server socket.
@@ -857,8 +858,8 @@ public:
             return -1;
         }
 
-        /* if socket failed to pass magic number validation, then
-         * (1) pass the received magic number as message to caller;
+        /* if socket failed to pass protocol negotiation validation, then
+         * (1) pass the received protocol negotiation as message to caller;
          * (2) when all the received message passed to caller, fallback to tcp/ip */
         ssize_t rx_total_len = OutputErrorMagicNumber(iov, iovcnt);
         if (rx_total_len > 0) {
@@ -2422,7 +2423,7 @@ public:
 
 private:
     struct CpMsg {
-        uint64_t magic_number = CONTROL_PLANE_MAGIC_NUMBER;
+        uint64_t protocol_negotiation = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
         uint64_t queue_bind_info_size;
         uint8_t queue_bind_info[UMQ_BIND_INFO_SIZE_MAX];
     };
@@ -2677,16 +2678,16 @@ private:
         }
     }
 
-    static int ValidateMagicNumber(int fd, uint64_t &magic_number, ssize_t &magic_number_recv_size)
+    static int ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size)
     {
-        magic_number_recv_size = 
-           RecvSocketData(fd, &magic_number, sizeof(magic_number), NEGOTIATE_TIMEOUT_MS);
-        if (magic_number_recv_size <= 0) {
+        protocol_negotiation_recv_size = 
+           RecvSocketData(fd, &protocol_negotiation, sizeof(protocol_negotiation), NEGOTIATE_TIMEOUT_MS);
+        if (protocol_negotiation_recv_size <= 0) {
             return -1;
         }
         
-        if (magic_number_recv_size != sizeof(magic_number) || magic_number != CONTROL_PLANE_MAGIC_NUMBER) {
-            return magic_number_recv_size;
+        if (protocol_negotiation_recv_size != sizeof(protocol_negotiation) || protocol_negotiation != CONTROL_PLANE_PROTOCOL_NEGOTIATION) {
+            return protocol_negotiation_recv_size;
         }
 
         return 0;
@@ -2694,23 +2695,23 @@ private:
 
     ALWAYS_INLINE ssize_t OutputErrorMagicNumber(const struct iovec *iov, int iovcnt)
     {
-        if (m_tx.m_magic_number_recv_size == 0) {
+        if (m_tx.m_protocol_negotiation_recv_size == 0) {
             return 0;
         }
 
         ssize_t rx_total_len = 0;
         int iov_idx = 0;
         do {
-            size_t copy_size = iov[iov_idx].iov_len < m_tx.m_magic_number_recv_size ?
-                iov[iov_idx].iov_len : m_tx.m_magic_number_recv_size;
+            size_t copy_size = iov[iov_idx].iov_len < m_tx.m_protocol_negotiation_recv_size ?
+                iov[iov_idx].iov_len : m_tx.m_protocol_negotiation_recv_size;
             (void)memcpy_s(iov[iov_idx++].iov_base, copy_size,
-                (char *)&m_tx.m_magic_number + m_tx.m_magic_number_offset, copy_size);
-            m_tx.m_magic_number_recv_size -= copy_size;
-            m_tx.m_magic_number_offset += copy_size;
+                (char *)&m_tx.m_protocol_negotiation + m_tx.m_protocol_negotiation_offset, copy_size);
+            m_tx.m_protocol_negotiation_recv_size -= copy_size;
+            m_tx.m_protocol_negotiation_offset += copy_size;
             rx_total_len += copy_size;        
-        } while (m_tx.m_magic_number_recv_size > 0 && iov_idx < iovcnt);
+        } while (m_tx.m_protocol_negotiation_recv_size > 0 && iov_idx < iovcnt);
 
-        if (m_tx.m_magic_number_recv_size == 0) {
+        if (m_tx.m_protocol_negotiation_recv_size == 0) {
             m_rx_use_tcp = true;
         }
 
@@ -3656,9 +3657,9 @@ private:
 
     // TX fields
     struct alignas(CACHE_LINE_ALIGNMENT) TxDataPlane {
-        uint64_t m_magic_number = 0;
-        uint32_t m_magic_number_recv_size = 0;
-        uint32_t m_magic_number_offset = 0;
+        uint64_t m_protocol_negotiation = 0;
+        uint32_t m_protocol_negotiation_recv_size = 0;
+        uint32_t m_protocol_negotiation_offset = 0;
         /* m_tx.m_head_buf -> |umq_buf 0| -> |umq_buf 1| -> ... -> |umq_buf n| <- m_tx.m_tailbuf */
         umq_buf_list_t m_head_buf = {0};
         umq_buf_list_t m_tail_buf = {0};
