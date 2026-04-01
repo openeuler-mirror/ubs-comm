@@ -227,7 +227,7 @@ public:
         return mActiveConnCount.load(std::memory_order_relaxed);
     }
 
-    static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss) {
+    static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss, uint32_t pid) {
         constexpr int timeBufSize = 32;
         time_t now = time(nullptr);
         char timeBuf[timeBufSize];
@@ -241,6 +241,7 @@ public:
 
         oss << "{"
             << "\"timeStamp\":\"" << timeBuf << "\","
+            << "\"pid\":\"" << pid << "\","
             << "\"trafficRecords\":{";
 
         oss << "\"" << "totalConnections" << "\":" << mConnCount.load() << ",";
@@ -252,7 +253,7 @@ public:
         oss << "\"" << "errorPackets" << "\":" << mTxErrorPacketCount.load() << ",";
         oss << "\"" << "lostPackets" << "\":" << mTxLostPacketCount.load() << "";
 
-        oss << "}" << "}\n";
+        oss << "}" << "}";
     }
 
     // data plane interface, caller ensure input validation

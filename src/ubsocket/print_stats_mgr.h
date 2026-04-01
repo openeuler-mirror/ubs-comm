@@ -40,7 +40,7 @@ public:
     {
         std::ostringstream m_oss;
         PrintStatsMgr* mgr = GetPrintStatsMgr();
-        StatsMgr::OutputAllStats(m_oss);
+        StatsMgr::OutputAllStats(m_oss, mgr->pidVal);
         mgr->OutputJSON(m_oss);
     }
 
@@ -58,6 +58,7 @@ public:
         PrintStatsMgr* mgr = GetPrintStatsMgr();
         mgr->ubsocketTraceTime = traceTime;
         mgr->ubsocketTraceFileSize = traceFileSize;
+        mgr->pidVal = (uint32_t)getpid();
 
         if (tracePath) {
             int n = snprintf_s(mgr->ubsocketTraceFilePath, sizeof(mgr->ubsocketTraceFilePath),
@@ -85,7 +86,7 @@ public:
 private:
     PrintStatsMgr() : ubsocketTraceTime(UBSOCKET_TRACE_TIME_DEFAULT),
         ubsocketTraceFileSize(UBSOCKET_TRACE_FILE_SIZE_DEFAULT),
-        m_running(false), m_event_loop(nullptr)
+        m_running(false), m_event_loop(nullptr), pidVal(0)
     {
         mMgrLock = g_external_lock_ops.create(LT_EXCLUSIVE);
         (void)snprintf_s(ubsocketTraceFilePath, sizeof(ubsocketTraceFilePath),
@@ -141,7 +142,7 @@ private:
                 char archiveFilename[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = {0};
 
                 int ret = snprintf_s(archiveFilename, sizeof(archiveFilename), sizeof(archiveFilename) - 1,
-                                "%s/ubsocket_kpi_%lu_%s.json", cleanPath.c_str(), pid, timeBuf);
+                                "%s/ubsocket_kpi_%s.json", cleanPath.c_str(), timeBuf);
                 if (ret < 0 || ret >= (int)sizeof(archiveFilename)) {
                     RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to create archive filename for kpi json\n");
                     return;
@@ -166,13 +167,13 @@ private:
 
     void OutputJSON(std::ostringstream &oss)
     {
-        const uint32_t pid = (uint32_t)getpid();
+        const uint32_t pid = pidVal;
 
         char filename[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = {0};
         std::string cleanPath(ubsocketTraceFilePath);
 
         int ret = snprintf_s(filename, sizeof(filename), sizeof(filename) - 1,
-                            "%s/ubsocket_kpi_%lu.json", cleanPath.c_str(), pid);
+                            "%s/ubsocket_kpi.json", cleanPath.c_str());
         if (ret < 0 || ret >= (int)sizeof(filename)) {
             throw std::runtime_error(
                 std::string("Failed to create ubsocket kpi json") + std::to_string(ret));
@@ -214,6 +215,7 @@ private:
     uint64_t ubsocketTraceFileSize;
     volatile bool m_running;
     std::thread *m_event_loop;
+    uint32_t pidVal;
     u_external_mutex_t* mMgrLock;
     char ubsocketTraceFilePath[UBSOCKET_TRACE_FILE_PATH_LEN_MAX];
 };

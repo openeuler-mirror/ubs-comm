@@ -351,7 +351,7 @@ UBSocket提供了两种日志输出方式，如通过环境变量UBSOCKET\_LOG\_
 </td>
 <td class="cellrowborder" valign="top" width="25.72742725727427%" headers="mcps1.2.6.1.4 "><p id="p2482210182011"><a name="p2482210182011"></a><a name="p2482210182011"></a>控制UB Socket输出流量指标文件的大小</p>
 </td>
-<td class="cellrowborder" valign="top" width="29.187081291870815%" headers="mcps1.2.6.1.5 "><p id="p24820106206"><a name="p24820106206"></a><a name="p24820106206"></a>默认10MB，可根据客户监控需求调整；超过大小指标文件会进程转储，转储文件格式为ubsocket_kpi_&lt;pid&gt;.timestamp.json</p>
+<td class="cellrowborder" valign="top" width="29.187081291870815%" headers="mcps1.2.6.1.5 "><p id="p24820106206"><a name="p24820106206"></a><a name="p24820106206"></a>默认10MB，可根据客户监控需求调整；超过大小指标文件会进程转储，转储文件格式为ubsocket_kpi_timestamp.json</p>
 </td>
 </tr>
 </tbody>
@@ -367,7 +367,7 @@ $ export UBSOCKET_TRACE_ENABLE=true
 开启UB socket流量指标采集功能后，UB socket会定期输出性能数据，其中格式和内容如下：
 
 -   文件输出路径：默认路径为/tmp/ubsocket/log/，支持通过环境变量指定路径
--   文件名称：ubsocket\_kpi\_<pid\>.json; 容器内存在多个ubsockt进程时，每个UB socket会输出一份文件
+-   文件名称：ubsocket\_kpi\.json; 容器内存在多个ubsockt进程时，每个UB socket会输出到同一份文件
 -   文件权限：640
 -   文件转储：日志文件超过10M后自动归档，由客户容器内的日志agent负责文件的删除
 -   文件格式：输出文件为一个json格式格式内容，格式如下：

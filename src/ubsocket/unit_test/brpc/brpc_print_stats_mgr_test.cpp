@@ -72,15 +72,13 @@ TEST_F(PrintStatsMgrTest, FileOutput)
 
     WaitForFile();
 
-    std::string pattern = testDir + "/ubsocket_kpi_*.json";
     std::vector<std::string> matchingFiles;
 
     try {
         for (const auto& entry : std::filesystem::directory_iterator(testDir)) {
             if (entry.is_regular_file()) {
                 std::string filename = entry.path().filename().string();
-                std::regex re("^ubsocket_kpi_.*\\.json$");
-                if (std::regex_match(filename, re)) {
+                if (filename == "ubsocket_kpi.json") {
                     matchingFiles.push_back(entry.path().string());
                 }
             }
