@@ -2652,7 +2652,7 @@ private:
  	        "RM_CTP",
  	        "RC_CTP"
  	    };
- 	    RPC_ADPT_VLOG_INFO("trans_mode: %s\n", trans_mode_str[trans_mode]);
+        RPC_ADPT_VLOG_INFO("trans_mode result is: %s\n", trans_mode_str[trans_mode]);
         if (trans_mode == RC_TP) {
             queue_cfg.tp_mode = UMQ_TM_RC;
             queue_cfg.tp_type = UMQ_TP_TYPE_RTP;
