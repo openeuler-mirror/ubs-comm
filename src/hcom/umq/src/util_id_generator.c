@@ -30,7 +30,6 @@ int util_id_allocator_init(util_id_allocator_t *id_allocator, uint32_t max_num, 
         free(id_allocator->available_ids);
         return -ENOMEM;
     }
-
     return 0;
 }
 

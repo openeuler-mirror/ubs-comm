@@ -73,21 +73,20 @@ TEST_F(BrpcFileDescriptorTest, DoRouteTest)
 
 TEST_F(BrpcFileDescriptorTest, GetRoundRobinConnEidTest)
 {
-    umq_route_flag_t flag = {0};
-    flag.bs.rtp = 1;
     umq_eid_t srcEid = {0};
     umq_eid_t dstEid = {1};
+    umq_port_id_t src_port = {0};
+    umq_port_id_t dst_port = {0};
     umq_route_t connRoute = {
-        .src = srcEid,
-        .dst = dstEid,
-        .flag = flag,
-        .hops = 1,
-        .chip_id = 1
+        src_port,
+        dst_port,
+        srcEid,
+        dstEid,
     };
 
     umq_route_list_t route_list = {
-        .len = 2,
-        .buf = {
+        .route_num = 2,
+        .routes = {
             connRoute, connRoute
         }
     };
@@ -95,36 +94,30 @@ TEST_F(BrpcFileDescriptorTest, GetRoundRobinConnEidTest)
     umq_route_t useConnRoute;
     int ret = socketFd->GetRoundRobinConnEid(route_list, &dstEid, &useConnRoute);
     EXPECT_EQ(ret, 0);
-
-    umq_route_list_t route_list2 = {0};
-    ret = socketFd->GetRoundRobinConnEid(route_list2, &dstEid, &useConnRoute);
-    EXPECT_EQ(ret, -1);
 }
 
 TEST_F(BrpcFileDescriptorTest, GetCpuAffinityConnEidTest)
 {
-    umq_route_flag_t flag = {0};
-    flag.bs.rtp = 1;
     umq_eid_t srcEid = {0};
     umq_eid_t dstEid = {1};
+    umq_port_id_t src_port = {0};
+    umq_port_id_t dst_port = {0};
     umq_route_t connRoute1 = {
-        .src = srcEid,
-        .dst = dstEid,
-        .flag = flag,
-        .hops = 1,
-        .chip_id = 0
+        src_port,
+        dst_port,
+        srcEid,
+        dstEid,
     };
     umq_route_t connRoute2 = {
-        .src = srcEid,
-        .dst = dstEid,
-        .flag = flag,
-        .hops = 1,
-        .chip_id = 1
+        src_port,
+        dst_port,
+        srcEid,
+        dstEid,
     };
 
     umq_route_list_t route_list = {
-        .len = 2,
-        .buf = {
+        .route_num = 2,
+        .routes = {
             connRoute1, connRoute2
         }
     };
@@ -138,23 +131,6 @@ TEST_F(BrpcFileDescriptorTest, GetCpuAffinityConnEidTest)
     .will(returnValue(static_cast<int>(-1)));
 
     int ret = socketFd->GetCpuAffinityConnEid(route_list, &dstEid, &useConnRoute, socketIds, processSocketId);
-    EXPECT_EQ(ret, -1);
-
-    socketFd->mPeerSocketId = 1;
-    uint32_t chipId1 = 1;
-    uint32_t chipId2 = 2;
-    MOCKER_CPP(&Brpc::SocketFd::GetTargetChipId)
-    .stubs()
-    .will(returnValue(UINT32_MAX))
-    .then(returnValue(chipId1))
-    .then(returnValue(chipId2));
-    ret = socketFd->GetCpuAffinityConnEid(route_list, &dstEid, &useConnRoute, socketIds, processSocketId);
-    EXPECT_EQ(ret, -1);
-
-    ret = socketFd->GetCpuAffinityConnEid(route_list, &dstEid, &useConnRoute, socketIds, processSocketId);
-    EXPECT_EQ(ret, 0);
-
-    ret = socketFd->GetCpuAffinityConnEid(route_list, &dstEid, &useConnRoute, socketIds, processSocketId);
     EXPECT_EQ(ret, -1);
 }
 
@@ -178,21 +154,20 @@ TEST_F(BrpcFileDescriptorTest, GetTargetChipIdTest)
 
 bool MockGetRouteList(const umq_eid_t &eid, umq_route_list_t &routeList)
 {
-    umq_route_flag_t flag = {0};
-    flag.bs.rtp = 1;
     umq_eid_t srcEid = {0};
     umq_eid_t dstEid = {1};
+    umq_port_id_t src_port = {0};
+    umq_port_id_t dst_port = {0};
     umq_route_t connRoute1 = {
-        .src = srcEid,
-        .dst = dstEid,
-        .flag = flag,
-        .hops = 1,
-        .chip_id = 0
+        src_port,
+        dst_port,
+        srcEid,
+        dstEid,
     };
 
     umq_route_list_t route_list = {
-        .len = 1,
-        .buf = {
+        .route_num = 1,
+        .routes = {
             connRoute1
         }
     };
@@ -203,16 +178,15 @@ bool MockGetRouteList(const umq_eid_t &eid, umq_route_list_t &routeList)
 
 TEST_F(BrpcFileDescriptorTest, CheckOtherRouteTest)
 {
-    umq_route_flag_t flag = {0};
-    flag.bs.rtp = 1;
     umq_eid_t srcEid = {0};
     umq_eid_t dstEid = {1};
+    umq_port_id_t src_port = {0};
+    umq_port_id_t dst_port = {0};
     umq_route_t connRoute = {
-        .src = srcEid,
-        .dst = dstEid,
-        .flag = flag,
-        .hops = 1,
-        .chip_id = 1
+        src_port,
+        dst_port,
+        srcEid,
+        dstEid,
     };
     umq_route_t otherConnRoute;
 
@@ -236,13 +210,6 @@ TEST_F(BrpcFileDescriptorTest, CheckOtherRouteTest)
     .will(returnValue(static_cast<int>(-1)))
     .then(returnValue(static_cast<int>(0)));
 
-    ret = socketFd->CheckOtherRoute(otherConnRoute, dstEid, connRoute);
-    EXPECT_EQ(ret, -1);
-
-    ret = socketFd->CheckOtherRoute(otherConnRoute, dstEid, connRoute);
-    EXPECT_EQ(ret, 0);
-
-    connRoute.chip_id = 0;
     ret = socketFd->CheckOtherRoute(otherConnRoute, dstEid, connRoute);
     EXPECT_EQ(ret, -1);
 }

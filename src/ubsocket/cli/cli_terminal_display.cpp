@@ -51,8 +51,8 @@ void TerminalDisplay::DisplayTopoInfo(umq_route_list_t *routeList, const uint32_
         CLI_LOG("Invalid data\n");
         return;
     }
-    uint32_t num = routeList->len;
-    umq_route_t *data = routeList->buf;
+    uint32_t num = routeList->route_num;
+    umq_route_t *data = routeList->routes;
     if (num == 0) {
         CLI_LOG("Filter num is zero no topo data");
         return;
@@ -62,11 +62,11 @@ void TerminalDisplay::DisplayTopoInfo(umq_route_list_t *routeList, const uint32_
     for (uint32_t i = 0; i < num; i++) {
         char srcEid[INET6_ADDRSTRLEN] = {0};
         char dstEid[INET6_ADDRSTRLEN] = {0};
-        if (In6AddrToFullStr(reinterpret_cast<struct in6_addr *>(&data->src), srcEid, sizeof(srcEid)) == nullptr) {
+        if (In6AddrToFullStr(reinterpret_cast<struct in6_addr *>(&data->src_eid), srcEid, sizeof(srcEid)) == nullptr) {
             CLI_LOG("Convert src to full format failed\n");
             return;
         }
-        if (In6AddrToFullStr(reinterpret_cast<struct in6_addr *>(&data->dst), dstEid, sizeof(dstEid)) == nullptr) {
+        if (In6AddrToFullStr(reinterpret_cast<struct in6_addr *>(&data->dst_eid), dstEid, sizeof(dstEid)) == nullptr) {
             CLI_LOG("Convert dst to full format failed\n");
             return;
         }

@@ -28,8 +28,8 @@ TEST_F(CLITerminalDisplayTest, DisplayTopoInfo)
     TerminalDisplay display{};
     umq_route_t validRouteBuf{};
     umq_route_list_t testRouteList{};
-    testRouteList.len = 1;
-    testRouteList.buf[0] = validRouteBuf;
+    testRouteList.route_num = 1;
+    testRouteList.routes[0] = validRouteBuf;
 
     const uint32_t validDataLen = sizeof(umq_route_list_t);
     const uint32_t invalidDataLen = validDataLen - 1;
@@ -39,9 +39,9 @@ TEST_F(CLITerminalDisplayTest, DisplayTopoInfo)
     MOCKER_CPP(&TerminalDisplay::NewLine).stubs();
 
     EXPECT_NO_FATAL_FAILURE(display.DisplayTopoInfo(&testRouteList, validDataLen));
-    testRouteList.len = 0;
+    testRouteList.route_num = 0;
     EXPECT_NO_FATAL_FAILURE(display.DisplayTopoInfo(&testRouteList, validDataLen));
-    testRouteList.len = 1;
+    testRouteList.route_num = 1;
     EXPECT_NO_FATAL_FAILURE(display.DisplayTopoInfo(&testRouteList, validDataLen));
     EXPECT_NO_FATAL_FAILURE(display.DisplayTopoInfo(&testRouteList, validDataLen));
     EXPECT_NO_FATAL_FAILURE(display.DisplayTopoInfo(&testRouteList, validDataLen));

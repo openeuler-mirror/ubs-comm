@@ -12,6 +12,7 @@
 
 #include <shared_mutex>
 #include "umq_types.h"
+#include "ub_lock_ops.h"
 
 inline bool operator==(const umq_eid_t& a, const umq_eid_t& b)
 {

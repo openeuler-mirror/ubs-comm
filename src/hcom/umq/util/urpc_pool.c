@@ -54,7 +54,7 @@ void urpc_pool_thread_closure(uint64_t arg __attribute__((unused)))
         }
         g_urpc_pool_ctx[i].local = NULL;
         g_urpc_pool_ctx[i].global_pool = NULL;
-         (void)util_mutex_unlock(pool->lock);
+        (void)util_mutex_unlock(pool->lock);
     }
 }
 

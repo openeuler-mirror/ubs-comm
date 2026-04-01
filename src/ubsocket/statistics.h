@@ -597,10 +597,11 @@ class Listener {
 
     void ProcessTopoRequest(int fd, CLIControlHeader &header)
     {
-        umq_route_t route{};
-        route.src = header.srcEid;
-        route.dst = header.dstEid;
-   
+        umq_route_key_t route{};
+        route.src_bonding_eid = header.srcEid;
+        route.dst_bonding_eid = header.dstEid;
+        route.tp_type = UMQ_TP_TYPE_RTP;
+
         umq_route_list_t route_list;
         int ret = umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
         if (ret != 0) {
@@ -609,14 +610,12 @@ class Listener {
         }
         umq_route_list_t filteredList{};
         uint32_t filterNum = 0;
-        for (uint32_t i = 0;i< route_list.len; ++i) {
-            if (route_list.buf[i].flag.bs.rtp == 1) {
-                filteredList.buf[filterNum++] = route_list.buf[i];
-            }
+        for (uint32_t i = 0;i< route_list.route_num; ++i) {
+            filteredList.routes[filterNum++] = route_list.routes[i];
         }
 
-        filteredList.len = filterNum;
-        if (filteredList.len == 0) {
+        filteredList.route_num = filterNum;
+        if (filteredList.route_num == 0) {
             RPC_ADPT_VLOG_INFO("Failed to get urma topo is zero\n");
             return;
         }
