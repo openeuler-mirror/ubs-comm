@@ -71,6 +71,7 @@ private:
     MrInfo clientMrInfo;
     MrInfo serverMrInfo;
     sem_t mSem;
+    void *mTseg = nullptr;
 };
 }
 }

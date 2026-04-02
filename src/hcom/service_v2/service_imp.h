@@ -58,6 +58,7 @@ struct HcomServiceImpOptions {
     uint32_t multiRailThresh = 8192;
     uint32_t timeOutDetectThreadNum = 1;
     uint32_t ctxStoreCapacity = 2097152;
+    uint32_t ubPriority = UINT32_MAX;
     uint16_t pollingBatchSize = 4;
     uint16_t eventPollingTimeOutUs = 500;
     uint16_t completionQueueDepth = 2048;
@@ -374,6 +375,13 @@ public:
      * @param ctxStoreCapacity ctx store容量, 取值范围[128, 16777216], 默认2097152
      */
     void SetCtxStoreCapacity(uint32_t ctxStoreCapacity) override;
+
+    /**
+     * @brief 设置SL优先级
+     *
+     * @param ubPriority SL优先级, 取值范围[0， 15]
+     */
+    void SetUbPriority(uint32_t ubPriority) override;
 
 private:
     SerResult ValidateServiceOption();

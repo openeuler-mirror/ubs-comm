@@ -316,6 +316,13 @@ public:
      */
     virtual void SetCtxStoreCapacity(uint32_t ctxStoreCapacity) = 0;
 
+    /**
+     * @brief 设置SL优先级
+     *
+     * @param ubPriority SL优先级, 取值范围[0， 15]
+     */
+    virtual void SetUbPriority(uint32_t ubPriority) = 0;
+
     virtual ~UBSHcomService() {}
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS

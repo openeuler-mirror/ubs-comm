@@ -84,6 +84,7 @@ void PerfTestConfig::Print()
     LOG_DEBUG("mIsTestAllSize = " << mIsTestAllSize);
     LOG_DEBUG("cpuId = " << mCpuId);
     LOG_DEBUG("ubcMode = " << static_cast<uint32_t>(mUbcMode));
+    LOG_DEBUG("ubPriority = " << mUbPriority);
 }
 
 PerfTestConfig::PerfTestConfig()
@@ -98,6 +99,7 @@ PerfTestConfig::PerfTestConfig()
     mCpuId = -1;
     mIsTestAllSize = false;
     mUbcMode = ock::hcom::UBSHcomUbcMode::LowLatency;
+    mUbPriority = UINT32_MAX;
 }
 
 bool PerfTestConfig::SetIsServer(const std::string &role)
@@ -146,12 +148,13 @@ bool PerfTestConfig::ParseArgs(int argc, char *argv[])
         {"coreId", optional_argument, nullptr, 'c'},
         {"help", no_argument, nullptr, 'h'},
         {"ubcMode", no_argument, nullptr, 'u'},
+        {"priority", no_argument, nullptr, 'r'},
         {nullptr, 0, nullptr, 0},
     };
 
     int ret = 0;
     int index = 0;
-    char inputChar[] = "C:R:P:i:p:m:a:s:n:c:h:u:";
+    char inputChar[] = "C:R:P:i:p:m:a:s:n:c:h:u:r:";
     while ((ret = getopt_long(argc, argv, inputChar, options, &index)) != -1) {
         switch (ret) {
             case 'C':
@@ -196,6 +199,9 @@ bool PerfTestConfig::ParseArgs(int argc, char *argv[])
                 break;
             case 'u':
                 SetUbcMode(static_cast<ock::hcom::UBSHcomUbcMode>(strtoul(optarg, nullptr, 0)));
+                break;
+            case 'r':
+                SetUbPriority(static_cast<uint32_t>(strtoul(optarg, nullptr, 0)));
                 break;
             default:
                 break;

@@ -542,11 +542,12 @@ TEST_F(TestUbUrmaJetty, CtxInitializeParamErr)
 {
     urma_device_t **devList = nullptr;
     uint8_t bw = 0;
-    EXPECT_EQ(ctx->Initialize(bw), UB_OK);
+    UBSHcomUbcMode ubcMode = UBSHcomUbcMode::HighBandwidth;
+    EXPECT_EQ(ctx->Initialize(bw, UINT32_MAX, ubcMode), UB_OK);
 
     MOCKER(HcomUrma::GetDeviceList).stubs().will(returnValue(devList));
     ctx->mUrmaContext = nullptr;
-    EXPECT_EQ(ctx->Initialize(bw), UB_DEVICE_FAILED_OPEN);
+    EXPECT_EQ(ctx->Initialize(bw, UINT32_MAX, ubcMode), UB_DEVICE_FAILED_OPEN);
 }
 
 TEST_F(TestUbUrmaJetty, CreateJettyMrErr)

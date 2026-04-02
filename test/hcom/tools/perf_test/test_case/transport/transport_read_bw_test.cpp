@@ -23,6 +23,7 @@ int TransportReadBwTest::DoPostRead()
     req.lKey = mPostMrInfo.lKey;
     req.rKey = mPeerMrInfo.lKey;
     req.size = ctx->mSize;
+    req.dstSeg = mTseg;
     ctx->tposted[0] = MONOTONIC_TIME_NS();
     for (uint64_t i = 0; i < ctx->mIterations; ++i) {
         int res = mEp->PostRead(req);
@@ -49,6 +50,11 @@ int TransportReadBwTest::RequestReceived(const ock::hcom::UBSHcomNetRequestConte
         if (memcpy_s(&mPeerMrInfo, sizeof(mPeerMrInfo), ctx.Message()->Data(), ctx.Message()->DataLen()) != 0) {
             LOG_ERROR("memcpy_s failed");
             return -1;
+        }
+        if (mCfg.GetUbcMode() == ock::hcom::UBSHcomUbcMode::HighBandwidth &&
+            mCfg.GetProtocol() == ock::hcom::UBSHcomNetDriverProtocol::UBC) {
+            mHelper.GetNetDriver()->ImportUrmaSeg(mPeerMrInfo.lAddress, mPeerMrInfo.size, mPeerMrInfo.lKey, &mTseg,
+                mPeerMrInfo.eid, sizeof(mPeerMrInfo.eid));
         }
         sem_post(&mSem);
         return result;

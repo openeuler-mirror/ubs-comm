@@ -201,7 +201,7 @@ NResult NetDriverUB::CreateContext()
     tmpCtx->IncreaseRef();
     tmpCtx->protocol = Protocol();
 
-    if (((result = tmpCtx->Initialize(mBandWidth)) != 0)) {
+    if (((result = tmpCtx->Initialize(mBandWidth, mOptions.ubPriority, mOptions.ubcMode)) != 0)) {
         NN_LOG_ERROR("UB failed to initialize ctx");
         tmpCtx->DecreaseRef();
         tmpCtx = nullptr;
