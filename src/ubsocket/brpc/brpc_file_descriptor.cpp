@@ -10,6 +10,10 @@ void SocketFd::HandleErrorRxCqe(umq_buf_t *buf)
         case UMQ_BUF_SUCCESS:
             return;
 
+        case UMQ_FAKE_BUF_FC_ERR:
+            RPC_ADPT_VLOG_ERR(ubsocket::UMQ_CQE, "cqe error: flow control failed\n");
+            break;
+
         case UMQ_BUF_UNSUPPORTED_OPCODE_ERR:
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_CQE, "cqe error: unsupported opcode\n");
             break;
@@ -94,6 +98,10 @@ void SocketFd::HandleErrorTxCqe(umq_buf_t *buf)
     switch (buf->status) {
         case UMQ_BUF_SUCCESS:
             return;
+
+        case UMQ_FAKE_BUF_FC_ERR:
+            RPC_ADPT_VLOG_ERR(ubsocket::UMQ_CQE, "cqe error: flow control failed\n");
+            break;
 
         case UMQ_BUF_UNSUPPORTED_OPCODE_ERR:
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_CQE, "cqe error: unsupported opcode\n");

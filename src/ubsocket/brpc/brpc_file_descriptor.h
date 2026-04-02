@@ -962,6 +962,9 @@ public:
             // currently, umq over IB return IB cr status directly, successful = 0
             if (buf[i]->status != 0) {
                 if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
+                    if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+                        m_flow_control_failed = true;
+                    }
                     HandleErrorRxCqe(buf[i]);
                 } else {
                     m_rx.m_window_size += 1;
@@ -1002,6 +1005,11 @@ public:
             if (closed == true) {
                 retCode = 0;
                 return 0;
+            }
+
+            if (m_flow_control_failed == true) {
+                errno = EIO;
+                return -1;
             }
 
             if (RearmRxInterrupt() < 0) {
@@ -1471,6 +1479,9 @@ public:
             if (buf_array[i]->status != 0) {
                 if (buf_array[i]->status != UMQ_BUF_FLOW_CONTROL_UPDATE) {
                     RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
+                    if (buf_array[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+                        m_flow_control_failed = true;
+                    }
                     QBUF_LIST_NEXT(buf_array[i]) = nullptr;
                     umq_buf_free(buf_array[i]);
                     continue;
@@ -1522,6 +1533,11 @@ public:
                         m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
                 m_rx.m_poll = true;
                 errno = EINTR;
+                return -1;
+            }
+
+            if (m_flow_control_failed == true) {
+                errno = EIO;
                 return -1;
             }
  
@@ -1622,6 +1638,9 @@ public:
                 if (buf_array[i]->status != 0) {
                     if (buf_array[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                         RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
+                        if (buf_array[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+                            m_flow_control_failed = true;
+                        }
                         QBUF_LIST_NEXT(buf_array[i]) = nullptr;
                         umq_buf_free(buf_array[i]);
                         continue;
@@ -1664,6 +1683,11 @@ public:
                  m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
                 m_rx.m_poll = true;
                 errno = EINTR;
+                return -1;
+            }
+
+            if (m_flow_control_failed == true) {
+                errno = EIO;
                 return -1;
             }
 
@@ -2104,6 +2128,9 @@ public:
                 if (buf_array[i]->status != 0) {
                     if (buf_array[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                         RPC_ADPT_VLOG_DEBUG("RX CQE is invalid, status: %d\n", buf_array[i]->status);
+                        if (buf_array[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+                            m_flow_control_failed = true;
+                        }
                         QBUF_LIST_NEXT(buf_array[i]) = nullptr;
                         umq_buf_free(buf_array[i]);
                         continue; // Skip this invalid buffer
@@ -2155,6 +2182,11 @@ public:
                  m_rx.m_expect_epoll_event_num, 0, std::memory_order_release, std::memory_order_acquire)) {
                 m_rx.m_poll = true;
                 errno = EINTR;
+                return -1;
+            }
+
+            if (m_flow_control_failed == true) {
+                errno = EIO;
                 return -1;
             }
  
@@ -3876,6 +3908,7 @@ private:
     bool m_bind_remote = false; // indicate whether to enable stats manager when umq is created and bound successfully
     bool m_context_trace_enable = false;
     bool m_need_prefill_rx = false;
+    bool m_flow_control_failed = false;
     std::atomic<bool> m_closed{false};
     int m_event_fd;
     int mPeerSocketId = -1;

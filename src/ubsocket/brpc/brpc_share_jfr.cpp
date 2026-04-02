@@ -147,6 +147,9 @@ int ShareJfrRxEpollEvent::ProcessEpollEvent(struct epoll_event *input_event, str
     std::set<int> socket_fds;
     for (int i = 0; i < poll_num; ++i) {
         umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)buf[i]->qbuf_ext;
+        if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UMQ_CQE, "Unreachable flow control.\n");
+        }
         int socket_fd = buf_pro->umq_ctx;
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(socket_fd);
         if (socket_fd_obj == nullptr) {
