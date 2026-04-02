@@ -140,6 +140,11 @@ bool ServiceReadBwTest::ExchangeAddress()
         return false;
     }
 
+    if (mCfg.GetUbcMode() == ock::hcom::UBSHcomUbcMode::HighBandwidth &&
+        mCfg.GetProtocol() == ock::hcom::UBSHcomNetDriverProtocol::UBC) {
+        mHelper.GetNetService()->ImportUrmaSeg(mReq.rAddress, mReq.size, mPeerMrInfo.lKey);
+    }
+
     return true;
 }
 

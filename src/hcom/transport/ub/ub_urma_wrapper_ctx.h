@@ -39,7 +39,7 @@ public:
         OBJ_GC_DECREASE(UBContext);
     }
 
-    UResult Initialize(uint8_t &bandWidth);
+    UResult Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUbcMode ubcMode);
     UResult UnInitialize();
 
     void UpdateGid(const std::string &matchIp);
@@ -74,12 +74,36 @@ public:
     UBEId mBestEid{};
 
 private:
+    int GetPriByTpType(union urma_tp_type_en tp_type)
+    {
+        int pri = 0;
+        for (int i = 0; i <= URMA_MAX_PRIORITY; i++) {
+            if (tp_type.value == mDevAttr->dev_cap.priority_info[i].tp_type.value) {
+                pri = i;
+                return pri;
+            }
+        }
+        return -1;
+    }
+
+    bool CheckPriByTpType(uint32_t ubPriority, union urma_tp_type_en tp_type)
+    {
+        if (ubPriority == UINT32_MAX) {
+            // return true when ubPriority is not set
+            return true;
+        }
+
+        return tp_type.value == mDevAttr->dev_cap.priority_info[ubPriority].tp_type.value;
+    }
+
     std::string mName;
     urma_context_t *mUrmaContext = nullptr;
     urma_device_attr_t *mDevAttr = nullptr;
     uint8_t mPortNumber = 1;
     uint32_t mMaxJfs = 0;
     uint32_t mMaxJfr = 0;
+    int mCtpPri = 0;
+    int mRtpPri = 0;
     int mMaxSge = NN_NO16;
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;

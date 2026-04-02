@@ -102,6 +102,10 @@ bool ServiceHelper::CreateService()
     mService->SetRecvQueueSize(NN_NO4096);
     mService->SetQueuePrePostSize(NN_NO2048);
 
+    if (mCfg.GetUbPriority() != UINT32_MAX) {
+        mService->SetUbPriority(mCfg.GetUbPriority());
+    }
+
     mService->RegisterRecvHandler(mRecvHandler);
     mService->RegisterChannelBrokenHandler(mChBrokenHandler, ock::hcom::UBSHcomChannelBrokenPolicy::BROKEN_ALL);
     mService->RegisterSendHandler(mSendHandler);

@@ -36,6 +36,7 @@ UResult UBPublicJetty::ImportPublicJetty(const urma_eid_t &remoteEid, uint32_t j
     remoteJetty.jetty_id.eid = remoteEid;
     remoteJetty.trans_mode = URMA_TM_RM;
     remoteJetty.type = URMA_JETTY;
+    remoteJetty.tp_type = URMA_CTP;
     urma_token_t token{0};
 
     NN_LOG_INFO("Local public jetty id: " << mUrmaJetty->jetty_id.id << ", local eid: " <<
@@ -64,6 +65,7 @@ void UBPublicJetty::FillJfsCfg(urma_jfs_cfg_t *jfs_cfg)
     jfs_cfg->max_sge = static_cast<uint8_t>(mUBContext->mMaxSge);
     jfs_cfg->flag.value = 0;
     jfs_cfg->flag.bs.multi_path = 1;
+    jfs_cfg->priority = mUBContext->mCtpPri;
 }
 
 void UBPublicJetty::FillJfrCfg(urma_jfr_cfg_t *jfr_cfg)

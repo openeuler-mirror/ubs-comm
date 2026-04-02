@@ -27,7 +27,7 @@ UResult UBContext::Create(const std::string &name, UBContext *&ctx)
     return UB_OK;
 }
 
-UResult UBContext::Initialize(uint8_t &bandWidth)
+UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUbcMode ubcMode)
 {
     if (mUrmaContext != nullptr) {
         NN_LOG_INFO("UBContext " << mName << " already initialized");
@@ -56,6 +56,47 @@ UResult UBContext::Initialize(uint8_t &bandWidth)
 
     mMaxJfr = mDevAttr->dev_cap.max_jfr_depth;
     mMaxJfs = mDevAttr->dev_cap.max_jfs_depth;
+
+    // get ctp and rtp default SL priority
+    union urma_tp_type_en tp_type_ctp {};
+    union urma_tp_type_en tp_type_rtp {};
+    tp_type_ctp.bs.ctp = 1;
+    tp_type_rtp.bs.rtp = 1;
+
+    mCtpPri = GetPriByTpType(tp_type_ctp);
+    if (mCtpPri == -1) {
+        NN_LOG_ERROR("Failed to get priority by ctp type");
+        return UB_ERROR;
+    }
+    mRtpPri = GetPriByTpType(tp_type_rtp);
+    if (mRtpPri == -1) {
+        NN_LOG_ERROR("Failed to get priority by rtp type");
+        return UB_ERROR;
+    }
+
+    if (ubcMode == UBSHcomUbcMode::HighBandwidth) {
+        if (!CheckPriByTpType(ubPriority, tp_type_ctp)) {
+            NN_LOG_ERROR("UbPriority " << ubPriority <<
+                " is invalid, please set priority with ctp type when ubc mode is high bandwidth");
+            return UB_ERROR;
+        }
+        // if user set priority, use user set priority, else use ctp default priority
+        if (ubPriority != UINT32_MAX) {
+            mCtpPri = ubPriority;
+        }
+    }
+    if (ubcMode == UBSHcomUbcMode::LowLatency) {
+        if (!CheckPriByTpType(ubPriority, tp_type_rtp)) {
+            NN_LOG_ERROR("UbPriority " << ubPriority <<
+                " is invalid, please set priority with rtp type when ubc mode is low latency");
+            return UB_ERROR;
+        }
+        // if user set priority, use user set priority, else use rtp default priority
+        if (ubPriority != UINT32_MAX) {
+            mRtpPri = ubPriority;
+        }
+    }
+
     bandWidth = mBestEid.bandWidth;
     return UB_OK;
 }

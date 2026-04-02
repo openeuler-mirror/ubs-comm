@@ -155,8 +155,9 @@ TEST_F(TestUbUrmaWrapper, UBContextInitErr)
     MOCKER_CPP(&HcomUrma::FreeDeviceList).stubs().will(invoke(MockFreeDeviceList));
     
     uint8_t bw = 0;
-    UResult ret = ctx->Initialize(bw);
-    EXPECT_EQ(ret, UB_MEMORY_ALLOCATE_FAILED);
+    UBSHcomUbcMode ubcMode = UBSHcomUbcMode::LowLatency;
+    UResult ret = ctx->Initialize(bw, UINT32_MAX, ubcMode);
+    EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
 }
 
 TEST_F(TestUbUrmaWrapper, UBContextInitErrTwo)
@@ -169,8 +170,9 @@ TEST_F(TestUbUrmaWrapper, UBContextInitErrTwo)
     MOCKER_CPP(&HcomUrma::DeleteContext).stubs().will(returnValue(0));
     MOCKER_CPP(&HcomUrma::FreeDeviceList).stubs().will(invoke(MockFreeDeviceList));
     uint8_t bw = 0;
-    UResult ret = ctx->Initialize(bw);
-    EXPECT_EQ(ret, 1);
+    UBSHcomUbcMode ubcMode = UBSHcomUbcMode::LowLatency;
+    UResult ret = ctx->Initialize(bw, UINT32_MAX, ubcMode);
+    EXPECT_EQ(ret, UB_DEVICE_OPEN_FAILED);
 }
 
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperGetPortNumber)

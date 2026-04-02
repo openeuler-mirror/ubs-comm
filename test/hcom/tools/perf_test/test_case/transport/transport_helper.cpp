@@ -1,8 +1,9 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
-#include "test_case/transport/transport_helper.h"
+#include "securec.h"
 #include "common/perf_test_logger.h"
+#include "test_case/transport/transport_helper.h"
 
 namespace hcom {
 namespace perftest {
@@ -145,6 +146,9 @@ bool TransportHelper::FillNetDriverOption(ock::hcom::UBSHcomNetDriverOptions &op
         std::string str = std::to_string(mCfg.GetCpuId()) + "-" + std::to_string(mCfg.GetCpuId());
         opts.SetWorkerGroupsCpuSet(str);
     }
+    if (mCfg.GetUbPriority() != UINT32_MAX) {
+        opts.ubPriority = mCfg.GetUbPriority();
+    }
     return true;
 }
 
@@ -165,6 +169,12 @@ bool TransportHelper::CreateMemoryRegion(MrInfo &mrInfo)
     mrInfo.lAddress = mr->GetAddress();
     mrInfo.lKey = mr->GetLKey();
     mrInfo.size = MAX_MESSAGE_SIZE;
+    if (mCfg.GetProtocol() == ock::hcom::UBSHcomNetDriverProtocol::UBC) {
+        if (memcpy_s(mrInfo.eid, sizeof(mrInfo.eid), mr->GetEidRaw(), NN_NO16) != 0) {
+            LOG_ERROR("memcpy eid failed");
+            return false;
+        }
+    }
     mMrVector.emplace_back(mr);
     LOG_DEBUG("register addr: " << mrInfo.lAddress << ", lKey = " << mrInfo.lKey << ", size = " << MAX_MESSAGE_SIZE);
     return true;

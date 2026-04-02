@@ -29,6 +29,11 @@ int TransportReadLatTest::RequestReceived(const ock::hcom::UBSHcomNetRequestCont
             LOG_ERROR("memcpy_s failed");
             return -1;
         }
+        if (mCfg.GetUbcMode() == ock::hcom::UBSHcomUbcMode::HighBandwidth &&
+            mCfg.GetProtocol() == ock::hcom::UBSHcomNetDriverProtocol::UBC) {
+            mHelper.GetNetDriver()->ImportUrmaSeg(serverMrInfo.lAddress, serverMrInfo.size, serverMrInfo.lKey, &mTseg,
+                serverMrInfo.eid, sizeof(serverMrInfo.eid));
+        }
         sem_post(&mSem);
         return result;
     }
@@ -155,6 +160,7 @@ bool TransportReadLatTest::RunTest(PerfTestContext *ctx)
     mReq.lKey = clientMrInfo.lKey;
     mReq.rKey = serverMrInfo.lKey;
     mReq.size = ctx->mSize;
+    mReq.dstSeg = mTseg;
     if (!mCfg.GetIsServer()) {
         DoPostRead();
     }
