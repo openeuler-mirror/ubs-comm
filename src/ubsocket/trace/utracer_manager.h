@@ -112,15 +112,6 @@ private:
         UTracerInfo *instance = new (std::nothrow) UTracerInfo [MAX_TRACE_POINT_NUM];
         if (instance == nullptr) {
             return nullptr;
-        } else {
-            auto ret = memset_s(instance, sizeof(UTracerInfo) * MAX_TRACE_POINT_NUM,
-                                0x0, sizeof(UTracerInfo) * MAX_TRACE_POINT_NUM);
-            if (ret != 0) {
-                RPC_ADPT_VLOG_WARN("[UTRACER] Failed to memset_s to instance.");
-                delete[] instance;
-                instance = nullptr;
-                return nullptr;
-            }
         }
         return instance;
     }

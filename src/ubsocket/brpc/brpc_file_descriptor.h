@@ -12,7 +12,6 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
 #include <set>
 #include <unordered_set>
 #include <fcntl.h>
@@ -20,6 +19,7 @@
 #include <arpa/inet.h>
 #include <string>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include "umq_pro_api.h"
 #include "umq_errno.h"
 #include "brpc_context.h"
@@ -38,7 +38,6 @@
 #include "ub_lock_ops.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
-#define UMQ_BIND_SYNC_MSG       "SYNC_DONE"
 #define DIVIDED_NUMBER          (2)
 #define CACHE_LINE_ALIGNMENT    (64)
 #define HANDLE_THRESHOLD        (2)
@@ -393,6 +392,12 @@ public:
         int retCode = 0;
         TRACE_DELAY_AUTO(BRPC_ACCEPT_CALL, retCode);
         int fd = OsAPiMgr::GetOriginApi()->accept(m_fd, address, address_len);
+        if (fd >= 0) {
+            int tcpNoDelayRet = SetTcpNoDelay(fd);
+            if (tcpNoDelayRet != 0) {
+                RPC_ADPT_VLOG_WARN("Set TCP_NODELAY failed, fd %d, ret %d, errno %d\n", fd, tcpNoDelayRet, errno);
+            }
+        }
         if (fd >= 0 && address != nullptr) {
             SocketFd* socket_fd_obj = static_cast<SocketFd*>(Fd<::SocketFd>::GetFdObj(fd));
             if (socket_fd_obj) {
@@ -432,160 +437,69 @@ public:
         return fd;
     }
 
-    int ConnectExchangeSocketIDs(void)
+    int FillLocalSocketIdsForNegotiate(Context *context, uint32_t *socket_ids, uint32_t &socket_id_count)
     {
-        // 发送本端的all socket ids
-        Context *context = Context::GetContext();
-        std::vector<uint32_t> sendAllSocketIds = context->GetAllSocketId();
-
-        // 发送本端的all socket ids
-        uint32_t count = static_cast<uint32_t>(sendAllSocketIds.size());
-        size_t dataSize = count * sizeof(uint32_t);
-
-        if (SendSocketData(m_fd, &count, sizeof(count), CONTROL_PLANE_TIMEOUT_MS) != sizeof(count)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                "Failed to send local all socket ids in connect,Peer IP:%s, fd: %d\n",
-                GetPeerIp().c_str(), m_fd);
+        std::vector<uint32_t> ids = context->GetAllSocketId();
+        if (ids.empty() || ids.size() > NEGOTIATE_SOCKET_ID_MAX_NUM) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid local socket ids, size %zu, Peer IP:%s, fd: %d\n",
+                              ids.size(), GetPeerIp().c_str(), m_fd);
             return -1;
         }
-        if (SendSocketData(m_fd, sendAllSocketIds.data(), dataSize, CONTROL_PLANE_TIMEOUT_MS)
-            != static_cast<ssize_t>(dataSize)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                "Failed to send local all socket ids in connect,Peer IP:%s, fd: %d\n",
-                GetPeerIp().c_str(), m_fd);
-            return -1;
+        socket_id_count = static_cast<uint32_t>(ids.size());
+        for (uint32_t i = 0; i < socket_id_count; ++i) {
+            socket_ids[i] = ids[i];
         }
-
-        // 打印
-        std::ostringstream oss;
-        oss << "Successfully send all socket ids in connect: ";
-        for (size_t i = 0; i < sendAllSocketIds.size(); ++i) {
-            if (i > 0) {
-                oss << ", ";
-            }
-            oss << sendAllSocketIds[i];
-        }
-        RPC_ADPT_VLOG_INFO("%s\n", oss.str().c_str());
         return 0;
     }
 
-    int ConnectExchangeEid(umq_eid_t *connEid){
+    int ConnectNegotiate(umq_eid_t *connEid)
+    {
         Context *context = Context::GetContext();
-        if(!context->IsBonding()){
+        NegotiateReq req {};
+        NegotiateRsp rsp {};
+        req.magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
+        req.trans_mode = context->GetUbTransMode();
+        req.is_bonding = context->IsBonding() ? 1 : 0;
+        req.enable_share_jfr = context->EnableShareJfr() ? 1 : 0;
+        req.schedule_policy = static_cast<uint8_t>(context->GetDevSchedulePolicy());
+        req.has_socket_id = context->GetDevSchedulePolicy() == dev_schedule_policy::CPU_AFFINITY ? 1 : 0;
+        req.process_socket_id = context->GetProcessSocketId();
+        req.local_eid = context->GetDevSrcEid();
+        if (req.is_bonding != 0 &&
+            FillLocalSocketIdsForNegotiate(context, req.socket_ids, req.socket_id_count) != 0) {
+            return -1;
+        }
+        if (SendSocketData(m_fd, &req, sizeof(req), CONTROL_PLANE_TIMEOUT_MS) != static_cast<int>(sizeof(req))) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send negotiate request in connect,Peer IP:%s, fd: %d\n",
+                GetPeerIp().c_str(), m_fd);
+            return -1;
+        }
+        if (RecvSocketData(m_fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) != static_cast<int>(sizeof(rsp))) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                "Failed to receive negotiate response in connect,Peer IP:%s, fd: %d\n", GetPeerIp().c_str(), m_fd);
+            return -1;
+        }
+        if (rsp.ret_code != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to negotiate in connect, peer ret %d, Peer IP:%s, fd: %d\n",
+                rsp.ret_code, GetPeerIp().c_str(), m_fd);
+            return -1;
+        }
+        ub_trans_mode local = context->GetUbTransMode();
+        if (rsp.peer_trans_mode != local) {
+            context->SetUbTransMode(rsp.peer_trans_mode < local ? rsp.peer_trans_mode : local);
+        }
+        m_peer_info.peer_eid = rsp.peer_eid;
+        *connEid = context->GetDevSrcEid();
+        if (rsp.has_route == 0) {
             return 0;
         }
-        umq_eid_t localEid = context->GetDevSrcEid();
-        if (SendSocketData(m_fd, &localEid, sizeof(umq_eid_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_eid_t)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send local eid message in connect,Peer IP:%s, fd: %d\n",
-                              GetPeerIp().c_str(), m_fd);
+        if (CheckDevAdd(rsp.conn_route.dst_eid) != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to add dev in connect,Peer IP:%s, fd: %d\n",
+                GetPeerIp().c_str(), m_fd);
             return -1;
         }
-
-        umq_eid_t remoteEid;
-        if (RecvSocketData(
-            m_fd, &remoteEid, sizeof(umq_eid_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_eid_t)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to receive remote eid message in connect,Peer IP:%s, fd: %d\n",
-                              GetPeerIp().c_str(), m_fd);
-            return -1;
-        }
-        // 保存对端EID
-        m_peer_info.peer_eid = remoteEid;
-
-        *connEid = context->GetDevSrcEid();
-
-        if (ConnectExchangeSocketIDs() != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to send all socket ids in connect,Peer IP:%s, fd: %d\n",
-                              GetPeerIp().c_str(), m_fd);
-            return -1;
-        }
-
-        bool enable_share_jfr = context == nullptr ? true : context->EnableShareJfr();
-        if (enable_share_jfr || localEid != remoteEid) {
-            dev_schedule_policy peerSchedulePolicy;
-            if (RecvSocketData(m_fd, &peerSchedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
-                sizeof(dev_schedule_policy)) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to receive remote schedule policy in connect,Peer IP:%s, fd: %d\n",
-                                  GetPeerIp().c_str(), m_fd);
-                return -1;
-            }
-
-            dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
-            if (SendSocketData(m_fd, &schedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
-                sizeof(dev_schedule_policy)) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send local policy in connect,Peer IP:%s, fd: %d\n",
-                                  GetPeerIp().c_str(), m_fd);
-                return -1;
-            }
-
-            if (peerSchedulePolicy == schedulePolicy && schedulePolicy == dev_schedule_policy::CPU_AFFINITY) {
-                RPC_ADPT_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY in connect,Peer IP:%s, fd: %d\n",
-                                   GetPeerIp().c_str(), m_fd);
-                // 使用亲和策略需要发送socketId
-                int mProcessSocketId = context->GetProcessSocketId();
-                if (SendSocketData(m_fd, &mProcessSocketId, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
-                    RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                      "Failed to send local socket id in connect,Peer IP:%s, fd: %d\n",
-                                      GetPeerIp().c_str(), m_fd);
-                    return -1;
-                }
-            }
-          
-            umq_route_t connRoute;
-            if (RecvSocketData(
-                m_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to receive remote eid message in connect,Peer IP:%s, fd: %d\n",
-                                  GetPeerIp().c_str(), m_fd);
-                return -1;
-            }
-
-            if (CheckDevAdd(connRoute.dst_eid) != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to add dev in connect,Peer IP:%s, fd: %d\n",
-                                  GetPeerIp().c_str(), m_fd);
-                return -1;
-            }
-            // 保存对端EID
-            m_peer_info.peer_eid = connRoute.src_eid;
-            *connEid = connRoute.dst_eid;
-        }
-
-        return 0;
-    }
-
-    int ConnectExchangeTransMode()
-    {
-        Context *context = Context::GetContext();
-
-        ub_trans_mode localTransMode = context->GetUbTransMode();
-        if (SendSocketData(m_fd, &localTransMode, sizeof(ub_trans_mode), CONTROL_PLANE_TIMEOUT_MS)
-            != sizeof(ub_trans_mode)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to send local TransMode message in connect,Peer eid:" EID_FMT
-                              ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return -1;
-        }
-        ub_trans_mode remoteTransMode;
-        if (RecvSocketData(m_fd, &remoteTransMode, sizeof(ub_trans_mode), CONTROL_PLANE_TIMEOUT_MS)
-            != sizeof(ub_trans_mode)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to receive remote TransMode message in connect,Peer eid:" EID_FMT
-                              ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return -1;
-        }
-
-        if (localTransMode != remoteTransMode) {
-            if (remoteTransMode < localTransMode) {
-                context->SetUbTransMode(remoteTransMode);
-            } else {
-                context->SetUbTransMode(localTransMode);
-            }
-        }
-
+        m_peer_info.peer_eid = rsp.conn_route.src_eid;
+        *connEid = rsp.conn_route.dst_eid;
         return 0;
     }
 
@@ -593,10 +507,9 @@ public:
     {
         CpMsg local_cp_msg;
         CpMsg remote_cp_msg;
-        char send_sync_msg[] = UMQ_BIND_SYNC_MSG;
-        char recv_sync_msg[] = UMQ_BIND_SYNC_MSG;
+        int ret = 0;
 
-        int ret = CreateLocalUmq(&connEid);
+        ret = CreateLocalUmq(&connEid);
         if ((ret < 0) || (ret == RETRY_NEEDED)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
@@ -611,7 +524,7 @@ public:
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
             return RETRY_NEEDED;
         }
-        
+
         uint32_t len = sizeof(local_cp_msg) - sizeof(uint64_t);
         if (SendSocketData(m_fd, &local_cp_msg.queue_bind_info_size, len, CONTROL_PLANE_TIMEOUT_MS) != len) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
@@ -621,7 +534,7 @@ public:
         }
         RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             m_fd, sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
-        
+
         if (RecvSocketData(
             m_fd, &remote_cp_msg, sizeof(remote_cp_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(remote_cp_msg)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
@@ -648,44 +561,14 @@ public:
             return -1;
         }
 
-        if (SendSocketData(
-            m_fd, send_sync_msg, sizeof(send_sync_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(send_sync_msg)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to send sync done message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return -1;
-        }
-
-        if (RecvSocketData(
-            m_fd, recv_sync_msg, sizeof(recv_sync_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(recv_sync_msg) ||
-            strcmp(recv_sync_msg, UMQ_BIND_SYNC_MSG) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to receive sync done message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return -1;
-        }
-
         return 0;
     }
 
     int DoConnect(void)
     {
-        uint64_t protocol_negotiation = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
-        if (SendSocketData(
-            m_fd, &protocol_negotiation, sizeof(uint64_t), NEGOTIATE_TIMEOUT_MS) != sizeof(uint64_t)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send protocol negotiation, fd: %d\n", m_fd);
-            return -1;
-        }
-
-        if (ConnectExchangeTransMode() != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to exchange TransMode in connect,Peer IP:%s, fd: %d\n",
-                              GetPeerIp().c_str(), m_fd);
-            return -1;
-        }
-
         umq_eid_t connEid;
-        if (ConnectExchangeEid(&connEid) < 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to exchange eid in connect,Peer IP:%s, fd: %d\n",
+        if (ConnectNegotiate(&connEid) < 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to negotiate in connect,Peer IP:%s, fd: %d\n",
                               GetPeerIp().c_str(), m_fd);
             return -1;
         }
@@ -693,19 +576,18 @@ public:
         int ackRet = DoUbConnect(connEid);
         if (ackRet != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to receive sync done message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                              "Failed to finish ub bind in connect,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
         }
-        if (SendSocketData(
-            m_fd, &ackRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+
+        if (SendSocketData(m_fd, &ackRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send ack ret,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
             return -1;
         }
 
         int peerRet;
-        if (RecvSocketData(
-            m_fd, &peerRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+        if (RecvSocketData(m_fd, &peerRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                               "Failed to receive peer ack ret,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
@@ -737,6 +619,7 @@ public:
                                   EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
                 return -1;
             }
+
             ackRet = DoUbConnect(otherConnRoute.dst_eid);
             if (ackRet != 0) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
@@ -817,6 +700,10 @@ public:
         }
 
         bool is_blocking = IsBlocking(m_fd);
+        int tcpNoDelayRet = SetTcpNoDelay(m_fd);
+        if (tcpNoDelayRet != 0) {
+            RPC_ADPT_VLOG_WARN("Set TCP_NODELAY failed, fd %d, ret %d, errno %d\n", m_fd, tcpNoDelayRet, errno);
+        }
         if (is_blocking) {
             // set non_blocking to apply timeout by chrono(send/recv can be returned immediately)
             SetNonBlocking(m_fd);
@@ -884,12 +771,11 @@ public:
     static const uint16_t RETRIEVE_TX_THRESHOLD_RATIO_DIVISOR = 8;
     // protocol negotiation is the 0xff + ASCII of "R" + "P" + "C" + "A" + "D" + "P" + "T"
     static const uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445054;
-    static const uint8_t CONTROL_PLANE_PROTOCOL_NEGOTIATION_PREFIX = 0xff;
-    static const uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION_BODY = 0x52504341445054;
     static const uint32_t NEGOTIATE_TIMEOUT_MS = 10;
     // Current UB jetty handshake is synchronous that brpc acceptor can't yield from the point.
     // Ensure the connector has at most 5s to wait from server socket.
     static const uint32_t CONTROL_PLANE_TIMEOUT_MS = 20000;
+    static const uint32_t NEGOTIATE_SOCKET_ID_MAX_NUM = 256;
     static const uint32_t DATA_PLANE_TIMEOUT_MS = 100;
     static const uint32_t POLL_TX_RETRY_MAX_CNT = 50;
     static const uint32_t FLUSH_TIMEOUT_MS = 200;
@@ -2308,6 +2194,12 @@ public:
         return OsAPiMgr::GetOriginApi()->setsockopt(fd, level, optname, optval, optlen);
     }
 
+    ALWAYS_INLINE int SetTcpNoDelay(int fd)
+    {
+        int on = 1;
+        return SetSockOpt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+    }
+
     ALWAYS_INLINE void NewOriginEpollError()
     {
         m_closed.store(true, std::memory_order_relaxed);
@@ -2407,9 +2299,11 @@ public:
             usleep(WAIT_UMQ_READY_TIMEOUT_US);
         } while (poll_cnt++ < WAIT_UMQ_READY_ROUND);
 
-        if (umq_state_get(m_local_umqh) != QUEUE_STATE_READY) {
+        int local_umq_state = QUEUE_STATE_IDLE;
+        local_umq_state = umq_state_get(m_local_umqh);
+        if (local_umq_state != QUEUE_STATE_READY) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Wait umq to be ready failed, umq state %d\n",
-                              umq_state_get(m_local_umqh));
+                              local_umq_state);
             return -1;
         }
 
@@ -2513,6 +2407,28 @@ private:
         uint64_t protocol_negotiation = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
         uint64_t queue_bind_info_size;
         uint8_t queue_bind_info[UMQ_BIND_INFO_SIZE_MAX];
+    };
+
+    struct NegotiateReq {
+        uint64_t magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
+        ub_trans_mode trans_mode = RC_TP;
+        uint8_t is_bonding = 0;
+        uint8_t enable_share_jfr = 0;
+        uint8_t schedule_policy = static_cast<uint8_t>(dev_schedule_policy::ROUND_ROBIN);
+        uint8_t has_socket_id = 0;
+        int32_t process_socket_id = -1;
+        umq_eid_t local_eid = {};
+        uint32_t socket_id_count = 0;
+        uint32_t socket_ids[NEGOTIATE_SOCKET_ID_MAX_NUM] = {0};
+    };
+
+    struct NegotiateRsp {
+        int32_t ret_code = 0;
+        ub_trans_mode peer_trans_mode = RC_TP;
+        uint8_t has_route = 0;
+        uint8_t reserved[3] = {0};
+        umq_eid_t peer_eid = {};
+        umq_route_t conn_route = {};
     };
 
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
@@ -2813,146 +2729,85 @@ private:
         return rx_total_len;
     }
 
-    int AcceptExchangeTransMode(int new_fd)
+    void BuildAcceptRouteInfo(Context *context, const NegotiateReq &req, int new_fd,
+                              umq_eid_t &connEid, umq_eid_t &remoteEid, umq_route_t &connRoute, NegotiateRsp &rsp)
     {
-        Context *context = Context::GetContext();
-        ub_trans_mode remoteTransMode;
-        if (RecvSocketData(new_fd, &remoteTransMode, sizeof(ub_trans_mode), CONTROL_PLANE_TIMEOUT_MS)
-            != sizeof(ub_trans_mode)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to receive remote TransMode message in accept, fd: %d\n",
-                              new_fd);
-            return -1;
-        }
-        ub_trans_mode localTransMode = context->GetUbTransMode();
-        if (SendSocketData(new_fd, &localTransMode, sizeof(ub_trans_mode), CONTROL_PLANE_TIMEOUT_MS)
-            != sizeof(ub_trans_mode)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send local TransMode message in connect, fd: %d\n",
-                              new_fd);
-            return -1;
-        }
-
-        if (localTransMode != remoteTransMode) {
-            if (remoteTransMode < localTransMode) {
-                context->SetUbTransMode(remoteTransMode);
-            } else {
-                context->SetUbTransMode(localTransMode);
-            }
-        }
-
-        return 0;
-    }
-
-    int AcceptExchangeSocketIDs(int new_fd)
-    {
-        // 接收对端的all socket ids
-        uint32_t count = 0;
-        if (RecvSocketData(new_fd, &count, sizeof(count), CONTROL_PLANE_TIMEOUT_MS) != sizeof(count)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to receive remote all socket ids in accept, fd: %d\n",
-                new_fd);
-            return -1;
-        }
-
-        if (count == 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid peer socket count, fd: %d\n", new_fd);
-            return -1;
-        }
-        // 接收对端的all socket ids
-        mPeerAllSocketIds.resize(count);
-        size_t peerDataSize = count * sizeof(uint32_t);
-        ssize_t allSocketRet = RecvSocketData(new_fd, mPeerAllSocketIds.data(), peerDataSize, CONTROL_PLANE_TIMEOUT_MS);
-        if (allSocketRet < 0 || static_cast<size_t>(allSocketRet) != peerDataSize) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to receive remote all socket ids in accept, fd: %d\n",
-                    new_fd);
-            return -1;
-        }
-        // 打印
-        std::ostringstream oss;
-        oss << "Successfully get all socket ids in accept: ";
-        for (size_t i = 0; i < mPeerAllSocketIds.size(); ++i) {
-            if (i > 0) {
-                oss << ", ";
-            }
-            oss << mPeerAllSocketIds[i];
-        }
-        RPC_ADPT_VLOG_INFO("%s\n", oss.str().c_str());
-        return 0;
-    }
-
-    int AcceptExchangeEid(int new_fd, umq_eid_t &connEid, umq_eid_t &remoteEid, umq_route_t &connRoute)
-    {
-        Context *context = Context::GetContext();
-        if (!context->IsBonding()) {
-            return 0;
-        }
-
-        if (RecvSocketData(
-            new_fd, &remoteEid, sizeof(umq_eid_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_eid_t)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to receive remote eid message in accept, fd: %d\n", new_fd);
-            return -1;
-        }
-
-        umq_eid_t localEid = context->GetDevSrcEid();
-        if (SendSocketData(new_fd, &localEid, sizeof(umq_eid_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_eid_t)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send local eid message in accept, fd: %d\n", new_fd);
-            return -1;
-        }
-
-        // 保存对端EID
+        remoteEid = req.local_eid;
         m_peer_info.peer_eid = remoteEid;
-        connEid = context->GetDevSrcEid();
+        bool useRoundRobin = true;
+        dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
+        dev_schedule_policy peerSchedulePolicy = static_cast<dev_schedule_policy>(req.schedule_policy);
+        if (peerSchedulePolicy != dev_schedule_policy::ROUND_ROBIN &&
+            peerSchedulePolicy != dev_schedule_policy::CPU_AFFINITY) {
+            peerSchedulePolicy = dev_schedule_policy::ROUND_ROBIN;
+        }
+        if (peerSchedulePolicy == schedulePolicy && schedulePolicy == dev_schedule_policy::CPU_AFFINITY &&
+            req.has_socket_id != 0) {
+            RPC_ADPT_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY in accept, fd: %d\n", m_fd);
+            useRoundRobin = false;
+            mPeerSocketId = req.process_socket_id;
+        }
+        if (!context->EnableShareJfr() && connEid == remoteEid) {
+            return;
+        }
+        int ret = DoRoute(&connEid, &remoteEid, &connRoute, useRoundRobin);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get route list in accept, fd: %d\n", new_fd);
+            rsp.ret_code = ret;
+            return;
+        }
+        rsp.has_route = 1;
+        rsp.conn_route = connRoute;
+        rsp.peer_eid = connRoute.src_eid;
+        m_peer_info.peer_eid = connRoute.dst_eid;
+        connEid = connRoute.src_eid;
+    }
 
-        if (AcceptExchangeSocketIDs(new_fd) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to get all socket ids in accept,Peer IP:%s, fd: %d\n",
-                              GetPeerIp().c_str(), m_fd);
+    int AcceptNegotiate(int new_fd, umq_eid_t &connEid, umq_eid_t &remoteEid, umq_route_t &connRoute)
+    {
+        Context *context = Context::GetContext();
+        NegotiateReq req {};
+        NegotiateRsp rsp {};
+        char *req_buf = reinterpret_cast<char *>(&req) + sizeof(req.magic_number);
+        size_t req_remain_size = sizeof(req) - sizeof(req.magic_number);
+        if (RecvSocketData(new_fd, req_buf, req_remain_size, CONTROL_PLANE_TIMEOUT_MS) !=
+            static_cast<int>(req_remain_size)) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to receive negotiate request in accept, fd: %d\n", new_fd);
             return -1;
         }
-
-        bool enable_share_jfr = context == nullptr ? true : context->EnableShareJfr();
-        if (enable_share_jfr || localEid != remoteEid) {
-            dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
-            if (SendSocketData(new_fd, &schedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
-                sizeof(dev_schedule_policy)) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send schedule policy in accept, fd: %d\n", new_fd);
-                return -1;
-            }
-
-            dev_schedule_policy peerSchedulePolicy;
-            if (RecvSocketData(new_fd, &peerSchedulePolicy, sizeof(dev_schedule_policy), CONTROL_PLANE_TIMEOUT_MS) !=
-                sizeof(dev_schedule_policy)) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to receive remote socket id in accept, fd: %d\n", new_fd);
-                return -1;
-            }
-
-            bool useRoundRobin = true;
-            if (peerSchedulePolicy == schedulePolicy && schedulePolicy == dev_schedule_policy::CPU_AFFINITY) {
-                RPC_ADPT_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY in accept, fd: %d\n", m_fd);
-                useRoundRobin = false;
-                // 亲和策略需要接收socketId
-                if (RecvSocketData(
-                    new_fd, &mPeerSocketId, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
-                    RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to receive remote socket id in accept, fd: %d\n",
-                                      new_fd);
-                    return -1;
-                }
-            }
-
-            if (DoRoute(&localEid, &remoteEid, &connRoute, useRoundRobin) != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get route list in accept, fd: %d\n", new_fd);
-                return -1;
-            }
-
-            if (SendSocketData(
-                new_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send connect eid message in accept, fd: %d\n", new_fd);
-                return -1;
-            }
-            // 保存对端EID
-            m_peer_info.peer_eid = connRoute.dst_eid;
-            connEid = connRoute.src_eid;
+        ub_trans_mode local_trans_mode = context->GetUbTransMode();
+        rsp.peer_trans_mode = local_trans_mode;
+        if (req.trans_mode != local_trans_mode) {
+            context->SetUbTransMode(req.trans_mode < local_trans_mode ? req.trans_mode : local_trans_mode);
         }
-
-        return 0;
+        rsp.ret_code = (context->IsBonding() == (req.is_bonding != 0)) ? 0 : -1;
+        connEid = context->GetDevSrcEid();
+        rsp.peer_eid = connEid;
+        mPeerAllSocketIds.clear();
+        if (rsp.ret_code == 0 && req.is_bonding != 0) {
+            if (req.socket_id_count == 0 || req.socket_id_count > NEGOTIATE_SOCKET_ID_MAX_NUM) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid peer socket count %u in accept, fd: %d\n",
+                                  req.socket_id_count, new_fd);
+                rsp.ret_code = -1;
+            } else {
+                mPeerAllSocketIds.assign(req.socket_ids, req.socket_ids + req.socket_id_count);
+                std::ostringstream oss;
+                const char *separator = "";
+                for (uint32_t socket_id : mPeerAllSocketIds) {
+                    oss << separator << socket_id;
+                    separator = ", ";
+                }
+                RPC_ADPT_VLOG_INFO("Successfully get all socket ids in accept: %s\n", oss.str().c_str());
+            }
+        }
+        if (rsp.ret_code == 0 && req.is_bonding != 0) {
+            BuildAcceptRouteInfo(context, req, new_fd, connEid, remoteEid, connRoute, rsp);
+        }
+        if (SendSocketData(new_fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) != static_cast<int>(sizeof(rsp))) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send negotiate response in accept, fd: %d\n", new_fd);
+            return -1;
+        }
+        return rsp.ret_code == 0 ? 0 : -1;
     }
 
     void PrintQbufPoolInfo()
@@ -2969,8 +2824,6 @@ private:
     {
         CpMsg local_cp_msg;
         CpMsg remote_cp_msg;
-        char send_sync_msg[] = UMQ_BIND_SYNC_MSG;
-        char recv_sync_msg[] = UMQ_BIND_SYNC_MSG;
 
         int ret = socket_fd_obj->CreateLocalUmq(&connEid);
         if ((ret < 0) || (ret == RETRY_NEEDED)) {
@@ -2984,7 +2837,7 @@ private:
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to execute umq_bind_info_get\n");
             return RETRY_NEEDED;
         }
-        
+
         size_t len = sizeof(remote_cp_msg) - sizeof(uint64_t);
         if (RecvSocketData(
             new_fd, &remote_cp_msg.queue_bind_info_size, len, CONTROL_PLANE_TIMEOUT_MS) != (ssize_t)len) {
@@ -3001,7 +2854,7 @@ private:
         }
         RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             new_fd, sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
-        
+
         if (umq_bind(socket_fd_obj->GetLocalUmqHandle(), remote_cp_msg.queue_bind_info,
             remote_cp_msg.queue_bind_info_size) != UMQ_SUCCESS) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to execute umq_bind\n");
@@ -3012,19 +2865,6 @@ private:
         // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
         if (socket_fd_obj->PrefillRx() != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to fill rx buffer to umq, fd: %d\n", new_fd);
-            return -1;
-        }
-
-        if (SendSocketData(
-            new_fd, send_sync_msg, sizeof(send_sync_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(send_sync_msg)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send sync done message, fd: %d\n", new_fd);
-            return -1;
-        }
-
-        if (RecvSocketData(
-            new_fd, recv_sync_msg, sizeof(recv_sync_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(recv_sync_msg) ||
-            strcmp(recv_sync_msg, UMQ_BIND_SYNC_MSG) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to receive sync done message, fd: %d\n", new_fd);
             return -1;
         }
 
@@ -3043,26 +2883,19 @@ private:
             return -1;
         }
 
-        if (AcceptExchangeTransMode(new_fd) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to exchange TransMode in accept\n");
-            delete socket_fd_obj;
-            return -1;
-        }
-
         umq_eid_t connEid;
         umq_eid_t peerBondingEid;
         umq_route_t connRoute;
-        if (AcceptExchangeEid(new_fd, connEid, peerBondingEid, connRoute) != 0) {
+        if (AcceptNegotiate(new_fd, connEid, peerBondingEid, connRoute) != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to exchange eid in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                              "Failed to negotiate in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
             delete socket_fd_obj;
             return -1;
         }
-        
+
         int ackRet = DoUbAccept(new_fd, connEid, socket_fd_obj);
-        if (SendSocketData(
-            new_fd, &ackRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+        if (SendSocketData(new_fd, &ackRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send ack ret,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
             delete socket_fd_obj;
@@ -3070,8 +2903,7 @@ private:
         }
 
         int peerRet;
-        if (RecvSocketData(
-            new_fd, &peerRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
+        if (RecvSocketData(new_fd, &peerRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                               "Failed to receive peer ack ret,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
