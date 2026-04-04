@@ -46,7 +46,9 @@ public:
             return;
         }
 
-        iter->second.emplace_back(main_umq);
+        if (std::find(iter->second.begin(), iter->second.end(), main_umq) == iter->second.end()) {
+            iter->second.emplace_back(main_umq);
+        }
     }
 
     static bool Get(const umq_eid_t& eid, std::vector<uint64_t>& out)
@@ -85,6 +87,12 @@ public:
         inst->table.clear();
     }
 
+    static u_external_mutex_t* GetMainMutex()
+    {
+        EidUmqTable *inst = Instance();
+        return inst->main_mutex;
+    }
+
     EidUmqTable(const EidUmqTable&) = delete;
     EidUmqTable& operator=(const EidUmqTable&) = delete;
 
@@ -92,10 +100,12 @@ private:
     EidUmqTable()
     {
         mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+        main_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
     }
     ~EidUmqTable()
     {
         g_external_lock_ops.destroy(mutex);
+        g_external_lock_ops.destroy(main_mutex);
     }
     static EidUmqTable *Instance()
     {
@@ -105,6 +115,7 @@ private:
 
     std::unordered_map<umq_eid_t, std::vector<uint64_t>, UmqEidHash> table;
     u_external_mutex_t* mutex;
+    u_external_mutex_t* main_mutex;
 };
 
 class SocketFdEpollTable {

@@ -2452,8 +2452,11 @@ private:
     {
         std::vector<uint64_t> main_umqs;
         if (!EidUmqTable::Get(*localEid, main_umqs)) {
-            m_need_prefill_rx = true;
-            return umq_create(cfg);
+            uint64_t ret = umq_create(cfg);
+            if (ret != UMQ_INVALID_HANDLE) {
+                m_need_prefill_rx = true;
+            }
+            return ret;
         }
 
         if (main_umqs.empty()) {
@@ -2471,9 +2474,11 @@ private:
             return umq_create(cfg);
         }
 
+        ScopedUbExclusiveLocker sLock(EidUmqTable::GetMainMutex());
         uint64_t main_umq = GetOrCreateMainUmq(cfg, localEid);
         if (main_umq == UMQ_INVALID_HANDLE) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to create main umq\n");
+            m_need_prefill_rx = false;
             return UMQ_INVALID_HANDLE;
         }
 
@@ -2483,6 +2488,7 @@ private:
         uint64_t sub_umq = umq_create(cfg);
         if (sub_umq == UMQ_INVALID_HANDLE) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to create sub umq\n");
+            m_need_prefill_rx = false;
             return UMQ_INVALID_HANDLE;
         }
 
@@ -2490,9 +2496,6 @@ private:
         MainSubUmqTable::Add(main_umq, sub_umq);
 
         m_main_umqh = main_umq;
-        uint64_t share_jfr_rx_queue_depth = context == nullptr ? DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH :
-                                                                 context->GetShareJfrRxQueueDepth();
-        rxQueue = new QbufQueue<umq_buf_t *>(share_jfr_rx_queue_depth);
         return sub_umq;
     }
 
@@ -2619,6 +2622,14 @@ private:
         if (m_local_umqh == UMQ_INVALID_HANDLE) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to execute umq_create failed\n");
             return RETRY_NEEDED;
+        }
+
+        uint64_t share_jfr_rx_queue_depth = context == nullptr ? DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH :
+                                                                 context->GetShareJfrRxQueueDepth();
+        rxQueue = new QbufQueue<umq_buf_t *>(share_jfr_rx_queue_depth);
+        if (rxQueue == nullptr) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to init share jfr rx queue for fd: %d \n", m_fd);
+            return -1;
         }
 
         Context::FetchAdd();
