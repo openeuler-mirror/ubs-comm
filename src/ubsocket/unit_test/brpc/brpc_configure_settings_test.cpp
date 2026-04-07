@@ -43,7 +43,6 @@ protected:
         unsetenv("UBSOCKET_ENABLE_SHARE_JFR");
         unsetenv("UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH");
         unsetenv("UBSOCKET_AUTO_FALLBACK_TCP");
-        unsetenv("UBSOCKET_USE_UB_FORCE");
     }
 };
 
@@ -102,18 +101,6 @@ TEST_F(BrpcConfigureSettingsTest, Init_ParsesBooleanAndDepthEnvValues)
     EXPECT_EQ(settings.EnableShareJfr(), false);
     EXPECT_EQ(settings.GetShareJfrRxQueueDepth(), K_SHARE_JFR_RX_QUEUE_DEPTH);
     EXPECT_EQ(settings.AutoFallbackTCP(), false);
-}
-
-TEST_F(BrpcConfigureSettingsTest, Init_UseUbForceControlsTcpDecision)
-{
-    setenv("UBSOCKET_USE_UB_FORCE", "true", K_ENV_SET_OVERWRITE);
-
-    Brpc::ConfigSettings settings;
-    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
-
-    EXPECT_EQ(settings.UseUB(AF_INET, SOCK_STREAM), true);
-    EXPECT_EQ(settings.UseUB(AF_INET6, SOCK_STREAM), true);
-    EXPECT_EQ(settings.UseUB(AF_INET, SOCK_DGRAM), false);
 }
 
 TEST_F(BrpcConfigureSettingsTest, Init_ZeroShareJfrDepthFallsBackToDefault)

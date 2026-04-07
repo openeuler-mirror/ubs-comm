@@ -77,7 +77,6 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_READV_UNLIMITED          | 是否打开readv上报限制                             | false，true                                                  | true              | 否                                  |
 | UBSOCKET_BLOCK_TYPE               | 内存池的最小分片                                  |default：8k，small：16k，medium：32k，large：64k               | default           | 否                                  |
 | UBSOCKET_POOL_INITIAL_SIZE        | IO内存的总大小，单位MB                            | 应用按需配置                                                 | 1024              | 否                                  |
-| UBSOCKET_USE_UB_FORCE             | 是否强制使用UB协议加速TCP                         | false：通过接口参数设置socket是否开启UB加速。<br>true：强制所有socket开启UB加速。 | false             | 否                                  |
 | UBSOCKET_SCHEDULE_POLICY          | 设置多平面负载分担策略                            | affinity：亲和策略，使用和业务线程所在CPU亲和的IODIE进行UB通信。<br>rr：轮转策略，多个socket采用round robin的策略使用不同IODIE进行UB通信。 | affinity          | 否                                  |
 | UBSOCKET_AUTO_FALLBACK_TCP        | 协议不匹配时是否自动降级为TCP                     | false, true                                                  | true              | 否                                  |
 | UBSOCKET_TRACE_ENABLE             | 是否打开trace统计                                 | false, true                                                  | true             | 否                                  |
@@ -89,6 +88,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH | 设置开启共享JFR后，每个Socket链接接收缓存队列深度 | 最小值是64，设置上限由实际机器环境决定                       | 1024              | 否                                  |
 | UBSOCKET_USE_BRPC_ZCOPY           | 是否使用brpc zcopy函数                            | false, true                                                  | true              | 否                                  |
 | UBSOCKET_LINK_PRIORITY | 设置流量优先级，按照环境配置映射到SL上 | [0, 15] | 0 | 否 |
+| UBSOCKET_ENABLE | 是否启用 ubsocket 加速 | false, true | false | 否 |
 
 > 说明：
 >
@@ -244,7 +244,6 @@ make -j32
 ```shell
 $ export LD_PRELOAD=librpc_adapter_brpc.so
 $ export UBSOCKET_LOG_USE_PRINTF=true
-$ export UBSOCKET_UB_FORCE=true
 $ ./echo_c++_srever  # 或者./echo_c++_client
 ```
 

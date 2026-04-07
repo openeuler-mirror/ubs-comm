@@ -142,8 +142,6 @@ public:
         if (strlen(m_use_ub_force_str) > 0) {
             m_use_ub_force = BoolVal::BoolConverter(m_use_ub_force_str);
         }      
-        RPC_ADPT_VLOG_INFO("%s: %s (input: %s)\n", ENV_VAR_USE_UB_FORCE, BoolVal::BoolConverter(m_use_ub_force),
-            strlen(m_use_ub_force_str) > 0 ? m_use_ub_force_str:"(null)");
 #ifdef UBS_SHM_BUILD_ENABLED
              m_use_polling = true;
 #endif
