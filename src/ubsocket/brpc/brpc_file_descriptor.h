@@ -3937,6 +3937,10 @@ public:
         umq_buf_t *buf[POLL_BATCH_MAX];
         int poll_num = umq_poll(socket_fd_obj->GetLocalUmqHandle(), UMQ_IO_RX, buf, POLL_BATCH_MAX);
         if (poll_num <= 0) {
+            if (socket_fd_obj->RearmRxInterrupt() < 0) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Rearm sub umq failed, socket fd:%d \n", m_origin_fd);
+                return -1;
+            }
             return 0;
         }
 
