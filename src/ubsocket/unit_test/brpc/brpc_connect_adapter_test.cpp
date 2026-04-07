@@ -4,6 +4,11 @@
 #include "brpc_file_descriptor.h"
 #include "rpc_adpt_vlog.h"
 
+// Named constants to avoid magic numbers (G.CNS.02)
+namespace {
+static const int SETENV_OVERWRITE = 1;
+} // namespace
+
 class BrpcConnectAdapterTest : public testing::Test {
 public:
     void SetUp() override
@@ -128,7 +133,7 @@ void MockAsyncEventProcess(umq_init_cfg_t cfg)
 
 TEST_F(BrpcConnectAdapterTest, TestAcceptSucceed)
 {
-    setenv("UBSOCKET_TRANS_MODE", "ubmm", 1);
+    setenv("UBSOCKET_TRANS_MODE", "ubmm", SETENV_OVERWRITE);
     struct sockaddr *address = nullptr;
     socklen_t *address_len = nullptr;
     MOCKER_CPP(umq_init)

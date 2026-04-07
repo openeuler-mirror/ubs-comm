@@ -19,6 +19,8 @@ constexpr int K_ENV_SET_OVERWRITE = 1;
 constexpr int K_CONFIG_INIT_OK = 0;
 constexpr int K_CONFIG_INIT_FAIL = -1;
 constexpr uint64_t K_SHARE_JFR_RX_QUEUE_DEPTH = 4096;
+constexpr int K_LINK_PRIORITY_VAL_5 = 5;
+constexpr uint64_t K_MIN_RESERVED_CREDIT_VAL_200 = 200;
 }  // namespace
 
 class BrpcConfigureSettingsTest : public testing::Test {
@@ -113,3 +115,202 @@ TEST_F(BrpcConfigureSettingsTest, Init_ZeroShareJfrDepthFallsBackToDefault)
     EXPECT_EQ(settings.GetShareJfrRxQueueDepth(), static_cast<uint64_t>(DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH));
 }
 
+TEST_F(BrpcConfigureSettingsTest, Init_LinkPriorityValid)
+{
+    setenv("UBSOCKET_LINK_PRIORITY", "5", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.GetLinkPriority(), K_LINK_PRIORITY_VAL_5);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_LinkPriorityOutOfRange)
+{
+    setenv("UBSOCKET_LINK_PRIORITY", "20", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    // Should fall back to default
+    EXPECT_EQ(settings.GetLinkPriority(), DEFAULT_LINK_PRIORITY);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_MinReservedCredit)
+{
+    setenv("UBSOCKET_MIN_RESERVED_CREDIT", "200", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.GetMinReservedCredit(), K_MIN_RESERVED_CREDIT_VAL_200);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_MinReservedCreditZero)
+{
+    setenv("UBSOCKET_MIN_RESERVED_CREDIT", "0", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.GetMinReservedCredit(), DEFAULT_MIN_RESERVED_CREDIT);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_OnlyAllocSymSet)
+{
+    setenv("UBSOCKET_BRPC_ALLOC_SYM", "alloc_sym", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    EXPECT_EQ(settings.Init(), K_CONFIG_INIT_FAIL);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_OnlyDeallocSymSet)
+{
+    setenv("UBSOCKET_BRPC_DEALLOC_SYM", "dealloc_sym", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    EXPECT_EQ(settings.Init(), K_CONFIG_INIT_FAIL);
+}
+
+TEST_F(BrpcConfigureSettingsTest, UseUB_AFSMC)
+{
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.UseUB(AF_SMC, SOCK_STREAM), true);
+}
+
+TEST_F(BrpcConfigureSettingsTest, UseUB_AFInet6)
+{
+    setenv("UBSOCKET_USE_UB_FORCE", "true", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.UseUB(AF_INET6, SOCK_STREAM), true);
+}
+
+TEST_F(BrpcConfigureSettingsTest, UseUB_SockDgram)
+{
+    setenv("UBSOCKET_USE_UB_FORCE", "true", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    // DGRAM should not use UB
+    EXPECT_EQ(settings.UseUB(AF_INET, SOCK_DGRAM), false);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_LinkPriorityNegative)
+{
+    setenv("UBSOCKET_LINK_PRIORITY", "-1", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    // Should use default for invalid values
+    EXPECT_EQ(settings.GetLinkPriority(), DEFAULT_LINK_PRIORITY);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_LinkPriorityInvalidString)
+{
+    setenv("UBSOCKET_LINK_PRIORITY", "invalid", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    // Should use default for invalid values
+    EXPECT_EQ(settings.GetLinkPriority(), DEFAULT_LINK_PRIORITY);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_EnableShareJfrTrue)
+{
+    setenv("UBSOCKET_ENABLE_SHARE_JFR", "true", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.EnableShareJfr(), true);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_EnableShareJfrFalse)
+{
+    setenv("UBSOCKET_ENABLE_SHARE_JFR", "false", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.EnableShareJfr(), false);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_AutoFallbackTcpTrue)
+{
+    setenv("UBSOCKET_AUTO_FALLBACK_TCP", "true", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.AutoFallbackTCP(), true);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_UsePollingTrue)
+{
+    setenv("UBSOCKET_USE_POLLING", "true", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.GetUsePolling(), true);
+}
+
+TEST_F(BrpcConfigureSettingsTest, Init_ReadvUnlimitedFalse)
+{
+    setenv("UBSOCKET_READV_UNLIMITED", "false", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.GetReadvUnlimited(), false);
+}
+
+TEST_F(BrpcConfigureSettingsTest, UseUB_WithoutForceFlag)
+{
+    // Ensure clean environment - unset any previous UBSOCKET_USE_UB_FORCE
+    unsetenv("UBSOCKET_USE_UB_FORCE");
+
+    // Without UBSOCKET_USE_UB_FORCE, AF_INET should not use UB
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.UseUB(AF_INET, SOCK_STREAM), false);
+    EXPECT_EQ(settings.UseUB(AF_INET6, SOCK_STREAM), false);
+}
+
+TEST_F(BrpcConfigureSettingsTest, UseUB_DifferentSocketTypes)
+{
+    setenv("UBSOCKET_USE_UB_FORCE", "true", K_ENV_SET_OVERWRITE);
+
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    // Only SOCK_STREAM should use UB
+    EXPECT_EQ(settings.UseUB(AF_INET, SOCK_STREAM), true);
+    EXPECT_EQ(settings.UseUB(AF_INET, SOCK_DGRAM), false);
+    EXPECT_EQ(settings.UseUB(AF_INET, SOCK_RAW), false);
+}
+
+TEST_F(BrpcConfigureSettingsTest, GetBrpcAllocSymStr_NullWhenNotSet)
+{
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.GetBrpcAllocSymStr(), nullptr);
+}
+
+TEST_F(BrpcConfigureSettingsTest, GetBrpcDeallocSymStr_NullWhenNotSet)
+{
+    Brpc::ConfigSettings settings;
+    ASSERT_EQ(settings.Init(), K_CONFIG_INIT_OK);
+
+    EXPECT_EQ(settings.GetBrpcDeallocSymStr(), nullptr);
+}

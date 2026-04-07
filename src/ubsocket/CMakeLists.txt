@@ -76,6 +76,12 @@ target_compile_definitions(ubsocket
 ## Includes
 target_include_directories(ubsocket PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/trace)
 
+# For x86 builds, include ub_get_clock.h from umq tools/perftest
+if(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+  target_include_directories(ubsocket PUBLIC ${PROJECT_SOURCE_DIR}/../hcom/umq/tools/perftest)
+endif()
+
+
 ## Install
 
 ## Sources
@@ -134,15 +140,17 @@ if(UBSOCKET_ENABLE_COVERAGE)
       COMMAND ${LCOV_PATH} --directory . --capture --output-file coverage.info --rc lcov_branch_coverage=1
 
       # 4. Filter coverage (remove system headers, dependencies, and build artifacts)
-      COMMAND ${LCOV_PATH} --remove coverage.info '/usr/*' '*/_deps/*' '*/build/*' --output-file coverage_filtered.info --rc lcov_branch_coverage=1 --ignore-errors unused,range
+      COMMAND ${LCOV_PATH} --remove coverage.info '/usr/*' '*/_deps/*' '*/build/*' '*/unit_test/*' --output-file coverage_filtered.info --rc lcov_branch_coverage=1 --ignore-errors unused,range
 
       # 5. Generate TXT report
       COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1 --summary coverage_filtered.info > coverage_summary.txt
       COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1 --list coverage_filtered.info > coverage_detailed.txt
+      COMMAND genhtml coverage_filtered.info -o coverage_html_report
 
       # 6. Print success message
       COMMAND ${CMAKE_COMMAND} -E echo "Coverage summary report generated in: ${CMAKE_BINARY_DIR}/coverage_summary.txt"
       COMMAND ${CMAKE_COMMAND} -E echo "Coverage detailed report generated in: ${CMAKE_BINARY_DIR}/coverage_detailed.txt"
+      COMMAND ${CMAKE_COMMAND} -E echo "Coverage html report generated in: ${CMAKE_BINARY_DIR}/coverage_html_report"
 
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
       COMMENT "Generating code coverage report..."

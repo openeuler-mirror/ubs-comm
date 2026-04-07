@@ -20,5 +20,8 @@ target_include_directories(common_util
         ${CMAKE_SOURCE_DIR}/urma/lib/urma/core/include
         ${CMAKE_SOURCE_DIR}/urma/common/include
     PRIVATE
+        # ub_get_clock.h lives under umq/tools/perftest; use a relative path so it works
+        # whether umq is built standalone or as a subdirectory of another project.
+        ${CMAKE_CURRENT_LIST_DIR}/../tools/perftest
         ${OPENSSL_INCLUDE_DIR}
 )

@@ -11,7 +11,9 @@ include_directories(${CMAKE_CURRENT_LIST_DIR})
 include(${CMAKE_SOURCE_DIR}/src/dfx/CMakeLists.txt)
 
 add_subdirectory(qbuf)
-add_subdirectory(umq_ub)
+if(NOT USE_URMA_STUB)
+    add_subdirectory(umq_ub)
+endif()
 add_subdirectory(umq_ipc)
 
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR} UMQ_LIB_DIR_SRCS)
@@ -27,7 +29,11 @@ set_target_properties(umq PROPERTIES
     C_STANDARD 11
 )
 
-target_link_libraries(umq PUBLIC common_util PUBLIC pthread rt PRIVATE urma umq_buf)
+if(USE_URMA_STUB)
+    target_link_libraries(umq PUBLIC common_util PUBLIC pthread rt PRIVATE urma_stub umq_buf)
+else()
+    target_link_libraries(umq PUBLIC common_util PUBLIC pthread rt PRIVATE urma umq_buf)
+endif()
 install(TARGETS umq DESTINATION /usr/lib64)
 
 if(NOT TARGET uninstall)

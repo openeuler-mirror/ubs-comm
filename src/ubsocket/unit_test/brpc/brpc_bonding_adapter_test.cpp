@@ -3,6 +3,11 @@
 
 #include "brpc_context.h"
 
+// Named constants to avoid magic numbers (G.CNS.02)
+namespace {
+static const int SETENV_OVERWRITE = 1;
+} // namespace
+
 class BrpcBondingAdapterTest : public testing::Test {
 public:
     void SetUp() override

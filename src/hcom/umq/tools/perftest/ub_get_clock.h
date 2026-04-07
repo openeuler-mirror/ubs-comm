@@ -43,7 +43,12 @@ static inline uint64_t get_cycles(void)
 #warning get_cycles not implemented
 #endif
 
-/* Warning: Function takes more than 200 ms to run. */
+/*
+ * Returns effective MHz (cycles per microsecond).
+ *
+ * x86_64: first call may take ~200ms (TSC calibration).
+ * aarch64: reads cntfrq_el0; cost is small.
+ */
 extern double get_cpu_mhz(bool cpu_freq_warn);
 
 #ifdef __cplusplus

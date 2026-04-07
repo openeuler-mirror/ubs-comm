@@ -27,6 +27,13 @@ target_sources(ubsocket_test
   PRIVATE
     urpc_util_test.cpp
     urpc_adpt_vlog_test.cpp
+    file_descriptor_test.cpp
+    polling_epoll_test.cpp
+    configure_settings_test.cpp
+    ub_lock_ops_test.cpp
+    cli_message_test.cpp
+    statistics_test.cpp
+    print_stats_mgr_test.cpp
 )
 
 add_subdirectory(brpc)

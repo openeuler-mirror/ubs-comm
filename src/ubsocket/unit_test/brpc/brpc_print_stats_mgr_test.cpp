@@ -95,3 +95,104 @@ TEST_F(PrintStatsMgrTest, FileOutput)
 
     Statistics::PrintStatsMgr::StopStatsCollection();
 }
+
+TEST_F(PrintStatsMgrTest, GetPrintStatsMgr_ReturnsValidInstance)
+{
+    Statistics::PrintStatsMgr* mgr = Statistics::PrintStatsMgr::GetPrintStatsMgr();
+    EXPECT_NE(mgr, nullptr);
+}
+
+TEST_F(PrintStatsMgrTest, ProcessStats_DoesNotCrash)
+{
+    Statistics::PrintStatsMgr* mgr = Statistics::PrintStatsMgr::GetPrintStatsMgr();
+    mgr->ProcessStats();
+    // Should not crash
+}
+
+TEST_F(PrintStatsMgrTest, StartStatsCollection_WithNullPath)
+{
+    uint64_t traceTime = 1;
+    uint64_t traceFileSize = 1;
+
+    Statistics::PrintStatsMgr::StartStatsCollection(traceTime, nullptr, traceFileSize);
+    // Should use default path
+
+    Statistics::PrintStatsMgr::StopStatsCollection();
+}
+
+TEST_F(PrintStatsMgrTest, StartStatsCollection_MultipleCalls)
+{
+    uint64_t traceTime = 1;
+    uint64_t traceFileSize = 1;
+
+    Statistics::PrintStatsMgr::StartStatsCollection(traceTime, testDir.c_str(), traceFileSize);
+    Statistics::PrintStatsMgr::StartStatsCollection(traceTime, testDir.c_str(), traceFileSize);
+    // Multiple calls should be safe
+
+    Statistics::PrintStatsMgr::StopStatsCollection();
+}
+
+TEST_F(PrintStatsMgrTest, StopStatsCollection_WithoutStart)
+{
+    Statistics::PrintStatsMgr::StopStatsCollection();
+    // Should be safe
+}
+
+TEST_F(PrintStatsMgrTest, StopStatsCollection_MultipleCalls)
+{
+    uint64_t traceTime = 1;
+    uint64_t traceFileSize = 1;
+
+    Statistics::PrintStatsMgr::StartStatsCollection(traceTime, testDir.c_str(), traceFileSize);
+    Statistics::PrintStatsMgr::StopStatsCollection();
+    Statistics::PrintStatsMgr::StopStatsCollection();
+    // Multiple stops should be safe
+}
+
+TEST_F(PrintStatsMgrTest, StartStatsCollection_ShortTraceTime)
+{
+    uint64_t traceTime = 1;
+    uint64_t traceFileSize = 1;
+
+    Statistics::PrintStatsMgr::StartStatsCollection(traceTime, testDir.c_str(), traceFileSize);
+
+    Statistics::PrintStatsMgr::StopStatsCollection();
+}
+
+TEST_F(PrintStatsMgrTest, StartStatsCollection_LargeFileSize)
+{
+    uint64_t traceTime = 1;
+    uint64_t traceFileSize = 1000;  // 1000 MB
+
+    Statistics::PrintStatsMgr::StartStatsCollection(traceTime, testDir.c_str(), traceFileSize);
+
+    Statistics::PrintStatsMgr::StopStatsCollection();
+}
+
+TEST_F(PrintStatsMgrTest, ProcessStats_MultipleCalls)
+{
+    Statistics::PrintStatsMgr* mgr = Statistics::PrintStatsMgr::GetPrintStatsMgr();
+    mgr->ProcessStats();
+    mgr->ProcessStats();
+    mgr->ProcessStats();
+    // Multiple calls should be safe
+}
+
+TEST_F(PrintStatsMgrTest, StartStopSequence)
+{
+    uint64_t traceTime = 1;
+    uint64_t traceFileSize = 1;
+
+    Statistics::PrintStatsMgr::StartStatsCollection(traceTime, testDir.c_str(), traceFileSize);
+    Statistics::PrintStatsMgr::StopStatsCollection();
+
+    Statistics::PrintStatsMgr::StartStatsCollection(traceTime, testDir.c_str(), traceFileSize);
+    Statistics::PrintStatsMgr::StopStatsCollection();
+}
+
+TEST_F(PrintStatsMgrTest, GetPrintStatsMgr_SameInstance)
+{
+    Statistics::PrintStatsMgr* mgr1 = Statistics::PrintStatsMgr::GetPrintStatsMgr();
+    Statistics::PrintStatsMgr* mgr2 = Statistics::PrintStatsMgr::GetPrintStatsMgr();
+    EXPECT_EQ(mgr1, mgr2);
+}
