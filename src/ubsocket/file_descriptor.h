@@ -196,6 +196,7 @@ class SocketFd : public Fd<SocketFd> {
         char errnoBuf[NET_STR_ERROR_BUF_SIZE] = {0};
         while (total != 0){
             if(IsTimeout(start, timeout_ms)){
+                errno = ETIMEDOUT;
                 return sent;
             }
 
@@ -237,6 +238,7 @@ class SocketFd : public Fd<SocketFd> {
         char errnoBuf[NET_STR_ERROR_BUF_SIZE] = {0};
         while (total != 0){
             if(IsTimeout(start, timeout_ms)){
+                errno = ETIMEDOUT;
                 return received;
             }
 
