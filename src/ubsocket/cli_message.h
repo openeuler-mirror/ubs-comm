@@ -103,6 +103,10 @@ struct __attribute__((packed)) CLIDataHeader {
 
 struct __attribute__((packed)) CLISocketData {
     uint64_t socketId;
+    uint64_t createTime;
+    char remoteIp[UMQ_IPV6_SIZE];
+    uint8_t localEid[UMQ_EID_SIZE];
+    uint8_t remoteEid[UMQ_EID_SIZE];
     uint64_t recvPackets;
     uint64_t sendPackets;
     uint64_t recvBytes;

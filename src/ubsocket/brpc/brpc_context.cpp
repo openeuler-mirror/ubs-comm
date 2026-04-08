@@ -90,6 +90,16 @@ bool Context::m_ubEnable = false;
     return epoll_fd;
 }
 
+// 判断是否ub链接
+bool Context::IsProtocolByUb(int fd)
+{
+    SocketFd *sockfd = (SocketFd *)Fd<::SocketFd>::GetFdObj(fd);
+    if (sockfd == nullptr || sockfd->UseTcp()) {
+        return false;
+    }
+    return true;
+}
+
 // 解析cpulist字符串
 int Context::GetFirstCpuFromCpulist(const std::string &cpuListStr)
 {
