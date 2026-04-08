@@ -36,6 +36,8 @@
 #include "utracer.h"
 #include "net_common.h"
 #include "ub_lock_ops.h"
+#include "scope_exit.h"
+#include "error.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
 #define DIVIDED_NUMBER          (2)
@@ -85,6 +87,27 @@ inline uint32_t BrpcIOBufSize()
             return SIZE_8K - IOBUF_DIFF;
     }
 }
+
+// 描述在 Connect/Accept 间的握手状态
+enum class UBHandshakeState : uint32_t {
+    kOK = 0,
+    // 初次握手
+    kSTART = 1,
+    // 初次握手失败，再次尝试
+    kRETRY = 2,
+    // 再次握手失败，用以通知客户端需要降级成 TCP
+    kRETRY_FAILED_CHECK_OTHER_ROUTE = 3,
+    // UB 握手失败，降级至 TCP
+    kDEGRADE = 4,
+    // UB 握手失败
+    kFAILED = 6,
+};
+
+struct OtherRouteMessage {
+    UBHandshakeState ub_handshake_state;
+    umq_route_t other_route;
+};
+
 class FallbackTcpMgr {
 public:
     ALWAYS_INLINE bool TxUseTcp(void)
@@ -358,12 +381,17 @@ public:
                 return;
             }
         } else if (ret == 0) {
-            if (DoAccept(fd) != 0) {
-                RPC_ADPT_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP", GetPeerIp().c_str(),
-                                   fd);
-                /* Clear messages that already exist on the TCP link to prevent
-                 * dirty messages from affecting user data transmission */
-                FlushSocketMsg(fd);
+            auto err = DoAccept(fd);
+            if (!IsOk(err)) {
+                if (Degradable(err)) {
+                    // 降级至 TCP，客户端可正确工作，不应清理数据.
+                } else {
+                    RPC_ADPT_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP\n",
+                                       GetPeerIp().c_str(), fd);
+                    // Clear messages that already exist on the TCP link to prevent
+                    // dirty messages from affecting user data transmission
+                    FlushSocketMsg(fd);
+                }
             }
         }
 
@@ -495,14 +523,13 @@ public:
         return 0;
     }
 
-    int DoUbConnect(umq_eid_t &connEid)
+    ubsocket::Error DoUbConnect(umq_eid_t &connEid)
     {
         CpMsg local_cp_msg;
         CpMsg remote_cp_msg;
-        int ret = 0;
 
-        ret = CreateLocalUmq(&connEid);
-        if ((ret < 0) || (ret == RETRY_NEEDED)) {
+        ubsocket::Error ret = CreateLocalUmq(&connEid);
+        if (!IsOk(ret)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
             return ret;
@@ -514,7 +541,7 @@ public:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                               "Failed to execute umq_bind_info_get,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return RETRY_NEEDED;
+            return ubsocket::Error::kUMQ_BIND_INFO_GET | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
         }
 
         uint32_t len = sizeof(local_cp_msg) - sizeof(uint64_t);
@@ -522,7 +549,7 @@ public:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                               "Failed to send local control message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return -1;
+            return ubsocket::FromRaw(errno);
         }
         RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             m_fd, sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
@@ -532,7 +559,7 @@ public:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                               "Failed to receive remote control message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return -1;
+            return ubsocket::FromRaw(errno);
         }
         RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             m_fd, sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
@@ -541,7 +568,7 @@ public:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                               "Failed to execute umq_bind,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return RETRY_NEEDED;
+            return ubsocket::Error::kUMQ_BIND | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
         }
         m_bind_remote = true;
 
@@ -550,10 +577,10 @@ public:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                               "Failed to fill rx buffer to umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return -1;
+            return ubsocket::Error::kUBSOCKET_PREFILL_RX;
         }
 
-        return 0;
+        return ubsocket::Error::kOK;
     }
 
     int DoConnect(void)
@@ -566,70 +593,156 @@ public:
         }
         m_conn_info.conn_eid = connEid;
 
-        int ackRet = DoUbConnect(connEid);
-        if (ackRet != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to finish ub bind in connect,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-        }
-
-        if (SendSocketData(m_fd, &ackRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send ack ret,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return -1;
-        }
-
-        int peerRet;
-        if (RecvSocketData(m_fd, &peerRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to receive peer ack ret,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-            return -1;
-        }
-
-        // 1.用户直接指定普通设备建链，DoUbAccept等于RETRY_NEEDED，不重试
-        // 2.用户指定bonding设备建链，但如果是节点内回环场景，DoUbAccept等于RETRY_NEEDED，不重试
-        // 3.用户指定bonding设备建链，（跨节点场景）若使用get_route_list获得的eid建链，DoUbAccept等于RETRY_NEEDED，重试
+        // 1. 用户直接指定普通设备建链，不重试、可降级
+        // 2. 用户指定 bonding 设备建链，但如果是节点内回环场景，不重试、可降级
+        // 3. 用户指定 bonding 设备建链，跨节点场景返回 retryable 错误，优先重试，如果重试仍旧失败则降级
         Context *context = Context::GetContext();
         umq_eid_t localEid = context->GetDevSrcEid();
-        if ((context->IsBonding()) && (connEid != localEid)&& (ackRet == RETRY_NEEDED || peerRet == RETRY_NEEDED)) {
-            UnbindAndFlushRemoteUmq();
-            DestroyLocalUmq();
-            // 重试
-            umq_route_t otherConnRoute;
-            if (RecvSocketData(
-                m_fd, &otherConnRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to receive remote eid message in retry connect,Peer eid:" EID_FMT
-                                  ",Peer IP:%s, fd: %d\n",
-                                  EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-                return -1;
-            }
 
-            if (CheckDevAdd(otherConnRoute.dst_eid) != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to add dev in retry connect,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                                  EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-                return -1;
-            }
+        bool ok = false;
+        bool degradable = false;
+        ubsocket::Error ackRet;
+        ubsocket::Error peerRet;
+        OtherRouteMessage otherRouteMessage;
+        UBHandshakeState state = UBHandshakeState::kSTART;
+        while (!ok) {
+            switch (state) {
+                case UBHandshakeState::kOK:
+                    ok = true;
+                    break;
 
-            ackRet = DoUbConnect(otherConnRoute.dst_eid);
-            if (ackRet != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to get new connect in retry connect,Peer eid:" EID_FMT
-                                  ",Peer IP:%s, fd: %d\n",
-                                  EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-                return -1;
-            }
-        } else {
-            if (ackRet != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to get new connect in connect,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                                  EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-                return -1;
+                case UBHandshakeState::kSTART:
+                    ackRet = DoUbConnect(connEid);
+                    if (Degradable(ackRet) && !Context::GetContext()->Degradable()) {
+                        ackRet = ackRet - ubsocket::Error::kDEGRADABLE;
+                        RPC_ADPT_VLOG_INFO("ubsocket can be degraded to TCP, but users turn UBSOCKET_DEGRADE off.\n");
+                    }
+
+                    if (!IsOk(ackRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to finish ub bind in connect, Peer eid:" EID_FMT
+                                          ", Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                    }
+
+                    if (SendSocketData(m_fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ackRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        return -1;
+                    }
+
+                    if (RecvSocketData(m_fd, &peerRet, sizeof(peerRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(peerRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        return -1;
+                    }
+
+                    // 记录两端是否都支持降级
+                    degradable = Degradable(ackRet) || Degradable(peerRet);
+                    if (context->IsBonding() && connEid != localEid && (Retryable(ackRet) || Retryable(peerRet))) {
+                        state = UBHandshakeState::kRETRY;
+                    } else if (degradable) {
+                        state = UBHandshakeState::kDEGRADE;
+                    } else if (!IsOk(ackRet) || !IsOk(peerRet)) {
+                        state = UBHandshakeState::kFAILED;
+                    } else {
+                        state = UBHandshakeState::kOK;
+                    }
+                    break;
+
+                case UBHandshakeState::kRETRY:
+                    UnbindAndFlushRemoteUmq();
+                    DestroyLocalUmq();
+
+                    if (RecvSocketData(m_fd, &otherRouteMessage, sizeof(otherRouteMessage), CONTROL_PLANE_TIMEOUT_MS) !=
+                        sizeof(otherRouteMessage)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to receive remote eid message in retry connect,Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        return -1;
+                    }
+
+                    // 服务端 CheckOtherRoute 失败
+                    if (otherRouteMessage.ub_handshake_state != UBHandshakeState::kRETRY) {
+                        RPC_ADPT_VLOG_INFO("Server CheckOtherRoute failed, try to degrade to TCP.\n");
+                        state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
+                        break;
+                    }
+
+                    connEid = otherRouteMessage.other_route.dst_eid;
+                    if (CheckDevAdd(connEid) != 0) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to add dev in retry connect,Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        // 如果直接退出会导致服务端卡在 RecvSocketData 上
+                        ackRet = ubsocket::Error::kUMQ_DEV_ADD | ubsocket::Error::kDEGRADABLE;
+                    } else {
+                        ackRet = ubsocket::Error::kOK;
+                    }
+
+                    // 保留在 CheckDevAdd 阶段时的错误
+                    ackRet = ackRet | DoUbConnect(connEid);
+                    if (Degradable(ackRet) && !Context::GetContext()->Degradable()) {
+                        ackRet = ackRet - ubsocket::Error::kDEGRADABLE;
+                        RPC_ADPT_VLOG_INFO("ubsocket can be degraded to TCP, but users turn UBSOCKET_DEGRADE off.\n");
+                    }
+
+                    if (!IsOk(ackRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to finish ub bind in connect, Peer eid:" EID_FMT
+                                          ", Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                    }
+
+                    if (SendSocketData(m_fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ackRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        return -1;
+                    }
+
+                    if (RecvSocketData(m_fd, &peerRet, sizeof(peerRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(peerRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        return -1;
+                    }
+
+                    degradable = Degradable(ackRet) || Degradable(peerRet);
+                    if (degradable) {
+                        state = UBHandshakeState::kDEGRADE;
+                    } else if (!IsOk(ackRet) || !IsOk(peerRet)) {
+                        state = UBHandshakeState::kFAILED;
+                    } else {
+                        state = UBHandshakeState::kOK;
+                    }
+                    break;
+
+                case UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE:
+                    if (degradable) {
+                        state = UBHandshakeState::kDEGRADE;
+                    } else {
+                        state = UBHandshakeState::kFAILED;
+                    }
+                    break;
+
+                case UBHandshakeState::kDEGRADE:
+                    Fd<::SocketFd>::OverrideFdObj(m_fd, nullptr);
+                    RPC_ADPT_VLOG_INFO("ubsocket is degraded to TCP.\n");
+                    return 0;
+
+                case UBHandshakeState::kFAILED:
+                    RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                      "Failed to get new connect in connect, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                      EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                    return -1;
             }
         }
-        
+
         if (m_context_trace_enable) {
             InitStatsMgr();
         }
@@ -653,7 +766,7 @@ public:
         return 0;
     }
 
-    ALWAYS_INLINE int Connect (const struct sockaddr *address, socklen_t address_len)
+    ALWAYS_INLINE int Connect(const struct sockaddr *address, socklen_t address_len)
     {
         int ret = 0;
         TRACE_DELAY_AUTO(BRPC_CONNECT_CALL, ret);
@@ -2531,17 +2644,15 @@ private:
         return -1;
     }
 
-    int CreateLocalUmq(umq_eid_t *connEid)
+    ubsocket::Error CreateLocalUmq(umq_eid_t *connEid)
     {
         if (m_local_umqh != UMQ_INVALID_HANDLE) {
-            return EEXIST;
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Create umq on a created umq.\n");
+            return ubsocket::FromRaw(EEXIST);
         }
 
-        Context *context = Context::GetContext();
-        if (context->IsBonding() && connEid == nullptr){
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to use eid, because eid is null\n");
-            return -1;
-        }
+        auto *context = Context::GetContext();
+
         umq_create_option_t queue_cfg;
         memset_s(&queue_cfg, sizeof(queue_cfg), 0, sizeof(queue_cfg));
         queue_cfg.trans_mode = context->GetTransMode();
@@ -2561,7 +2672,7 @@ private:
         int n = snprintf_s(queue_cfg.name, UMQ_NAME_MAX_LEN, UMQ_NAME_MAX_LEN - 1, "fd: %d", m_fd);
         if ((((int)UMQ_NAME_MAX_LEN - 1) < n) || (n < 0)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to set umq name\n");
-            return -1;
+            return ubsocket::Error::kUBSOCKET_SET_DEV_INFO;
         }
 
         umq_eid_t localEid;
@@ -2570,19 +2681,19 @@ private:
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_IPV6;
                 if (strcpy_s(queue_cfg.dev_info.ipv6.ip_addr, UMQ_IPV6_SIZE, context->GetDevIpStr()) != EOK) {
                     RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to strcpy_s device ipv6 address\n");
-                    return -1;
-                } 
+                    return ubsocket::Error::kUBSOCKET_SET_DEV_INFO;
+                }
             } else {
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_IPV4;
                 if (strcpy_s(queue_cfg.dev_info.ipv4.ip_addr, UMQ_IPV4_SIZE, context->GetDevIpStr()) != EOK) {
                     RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to strcpy_s device ipv4 address\n");
-                    return -1;
-                }     
+                    return ubsocket::Error::kUBSOCKET_SET_DEV_INFO;
+                }
             }
         } else if (context -> GetDevNameStr() != nullptr) {
             if (strcpy_s(queue_cfg.dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, context->GetDevNameStr()) != EOK) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to strcpy_s device name\n");
-                return -1;
+                return ubsocket::Error::kUBSOCKET_SET_DEV_INFO;
             }
             if(!context->IsBonding()){
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
@@ -2601,7 +2712,7 @@ private:
         } else {
             if (strcpy_s(queue_cfg.dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, "bonding_dev_0") != EOK) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to strcpy_s device name\n");
-                return -1;
+                return ubsocket::Error::kUBSOCKET_SET_DEV_INFO;
             }
             if (context->IsBonding()) {
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
@@ -2630,11 +2741,11 @@ private:
             queue_cfg.tp_mode = UMQ_TM_RC;
             queue_cfg.tp_type = UMQ_TP_TYPE_CTP;
         }
- 	 
+
         m_local_umqh = CreateSubUmq(&queue_cfg, &localEid);
         if (m_local_umqh == UMQ_INVALID_HANDLE) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to execute umq_create failed\n");
-            return RETRY_NEEDED;
+            return ubsocket::Error::kUMQ_CREATE | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
         }
 
         uint64_t share_jfr_rx_queue_depth = context == nullptr ? DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH :
@@ -2642,12 +2753,12 @@ private:
         rxQueue = new QbufQueue<umq_buf_t *>(share_jfr_rx_queue_depth);
         if (rxQueue == nullptr) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to init share jfr rx queue for fd: %d \n", m_fd);
-            return -1;
+            return ubsocket::Error::kUBSOCKET_INIT_SHARED_JFR_RX_QUEUE;
         }
 
         Context::FetchAdd();
 
-        return 0;
+        return ubsocket::Error::kOK;
     }
 
     void UnbindAndFlushRemoteUmq()
@@ -2844,13 +2955,13 @@ private:
         }
     }
 
-    int DoUbAccept(int new_fd, umq_eid_t &connEid, SocketFd *socket_fd_obj)
+    ubsocket::Error DoUbAccept(int new_fd, umq_eid_t &connEid, SocketFd *socket_fd_obj)
     {
         CpMsg local_cp_msg;
         CpMsg remote_cp_msg;
 
-        int ret = socket_fd_obj->CreateLocalUmq(&connEid);
-        if ((ret < 0) || (ret == RETRY_NEEDED)) {
+        ubsocket::Error ret = socket_fd_obj->CreateLocalUmq(&connEid);
+        if (!IsOk(ret)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to create umq\n");
             return ret;
         }
@@ -2859,14 +2970,14 @@ private:
             socket_fd_obj->GetLocalUmqHandle(), local_cp_msg.queue_bind_info, sizeof(local_cp_msg.queue_bind_info));
         if (local_cp_msg.queue_bind_info_size == 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to execute umq_bind_info_get\n");
-            return RETRY_NEEDED;
+            return ubsocket::Error::kUMQ_BIND_INFO_GET | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
         }
 
         size_t len = sizeof(remote_cp_msg) - sizeof(uint64_t);
         if (RecvSocketData(
             new_fd, &remote_cp_msg.queue_bind_info_size, len, CONTROL_PLANE_TIMEOUT_MS) != (ssize_t)len) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to receive remote control message, fd: %d\n", new_fd);
-            return -1;
+            return ubsocket::FromRaw(errno);
         }
         RPC_ADPT_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             new_fd, sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
@@ -2874,7 +2985,7 @@ private:
         if (SendSocketData(
             new_fd, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local_cp_msg)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send local control message, fd: %d\n", new_fd);
-            return -1;
+            return ubsocket::FromRaw(errno);
         }
         RPC_ADPT_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n",
             new_fd, sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
@@ -2882,20 +2993,20 @@ private:
         if (umq_bind(socket_fd_obj->GetLocalUmqHandle(), remote_cp_msg.queue_bind_info,
             remote_cp_msg.queue_bind_info_size) != UMQ_SUCCESS) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to execute umq_bind\n");
-            return RETRY_NEEDED;
+            return ubsocket::Error::kUMQ_BIND | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
         }
         socket_fd_obj->SetBindRemote(true);
 
         // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
         if (socket_fd_obj->PrefillRx() != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to fill rx buffer to umq, fd: %d\n", new_fd);
-            return -1;
+            return ubsocket::Error::kUBSOCKET_PREFILL_RX;
         }
 
-        return 0;
+        return ubsocket::Error::kOK;
     }
 
-    int DoAccept(int new_fd)
+    ubsocket::Error DoAccept(int new_fd)
     {
         SocketFd *socket_fd_obj = nullptr;
         int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -2904,8 +3015,10 @@ private:
         } catch (std::exception& e) {
             OsAPiMgr::GetOriginApi()->close(event_fd);
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "%s\n", e.what());
-            return -1;
+            return ubsocket::Error::kUBSOCKET_NEW_SOCKET_FD;
         }
+
+        auto sockCleaner = ubsocket::MakeScopeExit([socket_fd_obj]() { delete socket_fd_obj; });
 
         umq_eid_t connEid;
         umq_eid_t peerBondingEid;
@@ -2914,71 +3027,166 @@ private:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                               "Failed to negotiate in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                               EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-            delete socket_fd_obj;
-            return -1;
-        }
-        m_conn_info.conn_eid = connEid;
-        
-        int ackRet = DoUbAccept(new_fd, connEid, socket_fd_obj);
-        if (SendSocketData(new_fd, &ackRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send ack ret,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-            delete socket_fd_obj;
-            return -1;
+            return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
         }
 
-        int peerRet;
-        if (RecvSocketData(new_fd, &peerRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to receive peer ack ret,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-            delete socket_fd_obj;
-            return -1;
-        }
-
-        // 1.用户直接指定普通设备建链，DoUbAccept等于RETRY_NEEDED，不重试
-        // 2.用户指定bonding设备建链，但如果是节点内回环场景，DoUbAccept等于RETRY_NEEDED，不重试
-        // 3.用户指定bonding设备建链，但使用get_route_list获得的eid建链（跨节点场景），DoUbAccept等于RETRY_NEEDED，重试
         Context *context = Context::GetContext();
         umq_eid_t localEid = context->GetDevSrcEid();
-        if ((context->IsBonding()) && (connEid != localEid)&& (ackRet == RETRY_NEEDED || peerRet == RETRY_NEEDED)) {
-            // 重试
-            socket_fd_obj->UnbindAndFlushRemoteUmq();
-            socket_fd_obj->DestroyLocalUmq();
 
-            umq_route_t otherConnRoute;
-            if (CheckOtherRoute(otherConnRoute, peerBondingEid, connRoute) != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to get other route in retry,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                                  EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-                delete socket_fd_obj;
-                return -1;
-            }
-            if (SendSocketData(
-                new_fd, &otherConnRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to send connect eid message in retry accept,Peer eid:" EID_FMT
-                                  ",Peer IP:%s, fd: %d\n",
-                                  EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-                delete socket_fd_obj;
-                return -1;
-            }
+        // 1. 用户直接指定普通设备建链，失败不重试、可降级
+        // 2. 用户指定 bonding 设备建链，但如果是节点内回环场景，失败不重试、可降级
+        // 3. 用户指定 bonding 设备建链，跨节点场景返回 retryable 错误
+        //   - 优先重试，如果重试过程中失败则降级
+        //   - 如果无法重试，则尝试降级
+        //   - 如果无法降级，则返回失败
+        bool ok = false;
+        bool degradable = false;
+        ubsocket::Error ackRet;
+        ubsocket::Error peerRet;
+        umq_route_t otherConnRoute;
+        OtherRouteMessage otherRouteMessage;
+        UBHandshakeState state = UBHandshakeState::kSTART;
+        while (!ok) {
+            switch (state) {
+                case UBHandshakeState::kOK:
+                    ok = true;
+                    break;
 
-            ackRet = DoUbAccept(new_fd, otherConnRoute.src_eid, socket_fd_obj);
-            if (ackRet != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to get new connect in retry accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                                  EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-                delete socket_fd_obj;
-                return -1;
-            }
-        } else {
-            if (ackRet != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                  "Failed to get new connect in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                                  EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-                delete socket_fd_obj;
-                return -1;
+                case UBHandshakeState::kSTART:
+                    ackRet = DoUbAccept(new_fd, connEid, socket_fd_obj);
+                    if (Degradable(ackRet) && !Context::GetContext()->Degradable()) {
+                        ackRet = ackRet - ubsocket::Error::kDEGRADABLE;
+                        RPC_ADPT_VLOG_INFO("ubsocket can be degraded to TCP, but users turn UBSOCKET_DEGRADE off.\n");
+                    }
+
+                    if (!IsOk(ackRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to finish ub bind in accept, Peer eid:" EID_FMT
+                                          ", Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                    }
+
+                    if (SendSocketData(new_fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ackRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                        return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
+                    }
+
+                    if (RecvSocketData(new_fd, &peerRet, sizeof(peerRet), CONTROL_PLANE_TIMEOUT_MS) !=
+                        sizeof(peerRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                        return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
+                    }
+
+                    // 记录两端是否都支持降级
+                    degradable = Degradable(ackRet) || Degradable(peerRet);
+                    if (context->IsBonding() && connEid != localEid && (Retryable(ackRet) || Retryable(peerRet))) {
+                        state = UBHandshakeState::kRETRY;
+                    } else if (degradable) {
+                        state = UBHandshakeState::kDEGRADE;
+                    } else if (!IsOk(ackRet) || !IsOk(peerRet)) {
+                        state = UBHandshakeState::kFAILED;
+                    } else {
+                        state = UBHandshakeState::kOK;
+                    }
+                    break;
+
+                case UBHandshakeState::kRETRY:
+                    socket_fd_obj->UnbindAndFlushRemoteUmq();
+                    socket_fd_obj->DestroyLocalUmq();
+
+                    if (CheckOtherRoute(otherConnRoute, peerBondingEid, connRoute) != 0) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to get other route in retry,Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                        state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
+                        break;
+                    }
+
+                    otherRouteMessage.ub_handshake_state = UBHandshakeState::kRETRY;
+                    otherRouteMessage.other_route = connRoute;
+                    if (SendSocketData(new_fd, &otherRouteMessage, sizeof(otherRouteMessage),
+                                       CONTROL_PLANE_TIMEOUT_MS) != sizeof(otherRouteMessage)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to send connect eid message in retry accept,Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                        return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
+                    }
+
+                    connEid = otherConnRoute.src_eid;
+                    ackRet = DoUbAccept(new_fd, connEid, socket_fd_obj);
+                    if (Degradable(ackRet) && !Context::GetContext()->Degradable()) {
+                        ackRet = ackRet - ubsocket::Error::kDEGRADABLE;
+                        RPC_ADPT_VLOG_INFO("ubsocket can be degraded to TCP, but users turn UBSOCKET_DEGRADE off.\n");
+                    }
+
+                    if (!IsOk(ackRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to finish ub bind in retry accept, Peer eid:" EID_FMT
+                                          ", Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                    }
+
+                    if (SendSocketData(new_fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ackRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to send ack ret in retry accept, Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                        return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
+                    }
+
+                    if (RecvSocketData(new_fd, &peerRet, sizeof(peerRet), CONTROL_PLANE_TIMEOUT_MS) !=
+                        sizeof(peerRet)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                        return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
+                    }
+
+                    degradable = Degradable(ackRet) || Degradable(peerRet);
+                    if (degradable) {
+                        state = UBHandshakeState::kDEGRADE;
+                    } else if (!IsOk(ackRet) || !IsOk(peerRet)) {
+                        state = UBHandshakeState::kFAILED;
+                    } else {
+                        state = UBHandshakeState::kOK;
+                    }
+                    break;
+
+                case UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE:
+                    // 当服务端在 kRETRY 错误时会进入 kRETRY_FAILED. 但是客户端仍处于 kRETRY 阶段，需要发送信令通知客户
+                    // 端. 此种情况下 other_route 字段不可用
+                    otherRouteMessage.ub_handshake_state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
+                    if (SendSocketData(new_fd, &otherRouteMessage, sizeof(otherRouteMessage),
+                                       CONTROL_PLANE_TIMEOUT_MS) != sizeof(otherRouteMessage)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to send connect eid message in retry accept,Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                    }
+
+                    if (degradable) {
+                        state = UBHandshakeState::kDEGRADE;
+                    } else {
+                        state = UBHandshakeState::kFAILED;
+                    }
+                    break;
+
+                case UBHandshakeState::kDEGRADE:
+                    // 不调用 OverrideFdObj，当此连接上有请求时直接使用裸 socket API.
+                    RPC_ADPT_VLOG_INFO("ubsocket is degraded to TCP.\n");
+                    return ubsocket::Error::kUBSOCKET_UB_ACCEPT | ubsocket::Error::kDEGRADABLE;
+
+                case UBHandshakeState::kFAILED:
+                    RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                      "Failed to get new connect in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                      EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                    return ubsocket::Error::kUBSOCKET_UB_ACCEPT;
             }
         }
 
@@ -2987,6 +3195,7 @@ private:
         }
 
         // Delete existing objects and record new objects in the list.
+        sockCleaner.Deactivate();
         Fd<::SocketFd>::OverrideFdObj(new_fd, socket_fd_obj);
 
         if (context && context->GetUsePolling()) {
@@ -3004,7 +3213,7 @@ private:
 
         PrintQbufPoolInfo();
 
-        return 0;  
+        return ubsocket::Error::kOK;
     }
 
     ALWAYS_INLINE void *PtrFloorToBoundary(void *ptr)

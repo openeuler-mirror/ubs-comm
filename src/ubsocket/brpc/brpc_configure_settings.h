@@ -30,6 +30,7 @@
 #define ENV_VAR_USE_UB_FORCE       "UBSOCKET_USE_UB_FORCE"
 #define ENV_VAR_MIN_RESERVED_CREDIT     "UBSOCKET_MIN_RESERVED_CREDIT"
 #define ENV_VAR_LINK_PRIORITY      "UBSOCKET_LINK_PRIORITY"
+#define ENV_VAR_DEGRADE            "UBSOCKET_DEGRADE"
 
 namespace Brpc{
 
@@ -97,6 +98,11 @@ public:
         return m_auto_fallback_tcp;
     }
 
+    bool Degradable()
+    {
+        return m_degrade;
+    }
+
     bool UseUB(int domain, int type)
     {
         bool isTCP = ((domain == AF_INET) || (domain == AF_INET6)) && (type == SOCK_STREAM);
@@ -154,6 +160,12 @@ public:
                 BoolVal::BoolConverter(m_enable_share_jfr), m_enable_share_jfr_str);
         }
 
+        if (strlen(m_degrade_str) > 0) {
+            m_degrade = BoolVal::BoolConverter(m_degrade_str);
+            RPC_ADPT_VLOG_INFO("%s: %s (input: %s)\n", ENV_VAR_DEGRADE, BoolVal::BoolConverter(m_degrade),
+                               m_degrade_str);
+        }
+
         if (strlen(m_link_priority_str) > 0) {
             uint8_t input_link_prio = 0;
             try {
@@ -208,6 +220,10 @@ public:
             ReadEnvVar(env_ptr, m_enable_share_jfr_str, sizeof(m_enable_share_jfr_str));
         }
 
+        if ((env_ptr = getenv(ENV_VAR_DEGRADE)) != nullptr) {
+            ReadEnvVar(env_ptr, m_degrade_str, sizeof(m_degrade_str));
+        }
+
         if ((env_ptr = getenv(ENV_VAR_SHARE_JFR_RX_QUEUE_DEPTH)) != nullptr) {
             uint64_t share_jfr_rx_queue_depth = static_cast<uint64_t>(atoi(env_ptr));
             m_share_jfr_rx_queue_depth = share_jfr_rx_queue_depth == 0 ? DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH :
@@ -238,6 +254,8 @@ public:
       bool m_use_ub_force = false;
       char m_enable_share_jfr_str[BOOL_STR_LEN_MAX] = "";
       bool m_enable_share_jfr = true;
+      char m_degrade_str[BOOL_STR_LEN_MAX] = "";
+      bool m_degrade = false;
       uint64_t m_share_jfr_rx_queue_depth = DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH;
       char m_link_priority_str[BOOL_STR_LEN_MAX] = "";
       uint8_t m_link_priority = DEFAULT_LINK_PRIORITY;
