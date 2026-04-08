@@ -165,6 +165,17 @@ void TerminalDisplay::PrintSubTitle()
 {
     PrintSubTitleItem("SocketFd");
     PrintDelimiter();
+    PrintSubTitleItem("Creation Time");
+    printf("      ");
+    PrintDelimiter();
+    PrintSubTitleItem("Remote Ip");
+    PrintDelimiter();
+    PrintSubTitleItem("Local Eid");
+    printf("                              ");
+    PrintDelimiter();
+    PrintSubTitleItem("Romote Eid");
+    printf("                             ");
+    PrintDelimiter();
     PrintSubTitleItem("Recv Packets");
     printf(" ");
     PrintSubTitleItem("Send Packets");
@@ -194,6 +205,14 @@ void TerminalDisplay::PrintDelimiter()
 void TerminalDisplay::PrintData(CLISocketData *sockData)
 {
     PrintDataItem("SocketFd", std::to_string(sockData->socketId), colorRed, false);
+    PrintDelimiter();
+    PrintDataItem("Creation Time", ConvertTimeToString(sockData->createTime), colorGrey, false);
+    PrintDelimiter();
+    PrintDataItem("Remote Ip", ConvertCharArrayToIP(sockData->remoteIp), colorGrey, false);
+    PrintDelimiter();
+    PrintDataItem("Local Eid", ConvertEidToString(sockData->localEid, UMQ_EID_SIZE), colorBlue, false);
+    PrintDelimiter();
+    PrintDataItem("Remote Eid", ConvertEidToString(sockData->remoteEid, UMQ_EID_SIZE), colorBlue, false);
     PrintDelimiter();
     PrintDataItem("Recv Packets", std::to_string(sockData->recvPackets), colorGreen, sockData->recvPackets == 0);
     printf(" ");
@@ -240,6 +259,40 @@ std::string TerminalDisplay::BytesToHumanReadable(uint64_t bytes)
     }
     std::stringstream ss;
     ss << std::fixed << std::setprecision(byteDataPrecision) << value << units[index];
+    return ss.str();
+}
+
+std::string TerminalDisplay::ConvertTimeToString(uint64_t timestamp)
+{
+    struct tm time_struct;
+    time_t time_seconds = static_cast<time_t>(timestamp);
+    localtime_r(&time_seconds, &time_struct);
+    char buffer[80];
+    (void)strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &time_struct);
+    return std::string(buffer);
+}
+
+std::string TerminalDisplay::ConvertCharArrayToIP(const char* ipArray)
+{
+    char ipStr[INET6_ADDRSTRLEN];
+    if (inet_ntop(AF_INET, ipArray, ipStr, sizeof(ipStr)) == NULL) {
+        if (inet_ntop(AF_INET6, ipArray, ipStr, sizeof(ipStr)) == NULL) {
+            return "Invalid IP";
+        }
+    }
+    return std::string(ipStr);
+}
+
+std::string TerminalDisplay::ConvertEidToString(const uint8_t* eidArray, size_t length)
+{
+    std::stringstream ss;
+    for (size_t i = 0; i < length; i += 2) {
+        uint16_t val = (eidArray[i] << 8) | eidArray[i+1];
+        ss << std::setw(4) << std::setfill('0') << std::hex << static_cast<int>(val);
+        if (i != length - 2) {
+            ss << ":";
+        }
+    }
     return ss.str();
 }
 }

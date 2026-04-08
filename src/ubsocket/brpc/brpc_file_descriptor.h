@@ -289,23 +289,13 @@ public:
             }
         }
     }
+
     ALWAYS_INLINE const std::string& GetPeerIp() const { return m_peer_info.peer_ip; }
     ALWAYS_INLINE const umq_eid_t& GetPeerEid() const { return m_peer_info.peer_eid; }
     ALWAYS_INLINE int GetPeerFd() const { return m_peer_info.peer_fd; }
-    ALWAYS_INLINE int GetEventFd(void)
-    {
-        return m_event_fd;
-    }
-
-    ALWAYS_INLINE uint64_t GetLocalUmqHandle(void)
-    {
-        return m_local_umqh;
-    }
-
-    ALWAYS_INLINE uint64_t GetMainUmqHandle(void)
-    {
-        return m_main_umqh;
-    }
+    ALWAYS_INLINE int GetEventFd(void) { return m_event_fd; }
+    ALWAYS_INLINE uint64_t GetLocalUmqHandle(void) { return m_local_umqh; }
+    ALWAYS_INLINE uint64_t GetMainUmqHandle(void) { return m_main_umqh; }
 
     /**
      * @brief 从sockaddr结构体提取IP地址字符串
@@ -330,6 +320,7 @@ public:
             result = inet_ntop(AF_INET6, &addr_in6->sin6_addr, ip_str, INET6_ADDRSTRLEN);
             m_peer_info.peer_ip = ip_str;
         }
+        RPC_ADPT_VLOG_INFO("CLIData: IP STR:%s\n", ip_str);
 
         return (result != nullptr) ? std::string(ip_str) : "";
     }
@@ -405,6 +396,7 @@ public:
                 std::string peer_ip = ExtractIpFromSockAddr(address);
                 // 对端fd就是accept返回的fd
                 m_peer_info.peer_fd = fd;
+                m_conn_info.create_time = std::chrono::system_clock::now();
             }
         }
         retCode = fd;
@@ -572,6 +564,7 @@ public:
                               GetPeerIp().c_str(), m_fd);
             return -1;
         }
+        m_conn_info.conn_eid = connEid;
 
         int ackRet = DoUbConnect(connEid);
         if (ackRet != 0) {
@@ -652,6 +645,7 @@ public:
             }
         }
 
+        m_conn_info.create_time = std::chrono::system_clock::now();
         RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", m_fd);
 
         PrintQbufPoolInfo();
@@ -669,6 +663,7 @@ public:
             std::string peer_ip = ExtractIpFromSockAddr(address);
             // 对端fd就是accept返回的fd
             m_peer_info.peer_fd = m_fd;
+            m_conn_info.create_time = std::chrono::system_clock::now();
         }
 
         if (m_tx_use_tcp || m_rx_use_tcp) {
@@ -742,6 +737,24 @@ public:
     virtual void GetSocketCLIData(Statistics::CLISocketData *data)
     {
         StatsMgr::GetSocketCLIData(data);
+
+        auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+            m_conn_info.create_time.time_since_epoch());
+        data->createTime = static_cast<uint64_t>(duration.count());
+
+        if (strcpy_s(data->remoteIp, sizeof(data->remoteIp), m_peer_info.peer_ip.c_str()) != 0) {
+            RPC_ADPT_VLOG_WARN("Failed to strcpy remote ip\n");
+        }
+
+        if (memcpy_s(data->localEid, sizeof(data->localEid), m_conn_info.conn_eid.raw, UMQ_EID_SIZE) != 0) {
+            RPC_ADPT_VLOG_WARN("Failed to memcpy local eid\n");
+        }
+
+        if (memcpy_s(data->remoteEid, sizeof(data->remoteEid), m_peer_info.peer_eid.raw, UMQ_EID_SIZE) != 0) {
+            RPC_ADPT_VLOG_WARN("Failed to memcpy remote eid\n");
+        }
+        RPC_ADPT_VLOG_INFO("CLIData: Peer IP:%s, Local eid:" EID_FMT ", Peer eid:" EID_FMT "\n",
+            GetPeerIp().c_str(), EID_ARGS(m_conn_info.conn_eid), EID_ARGS(GetPeerEid()));
     }
 
     uint64_t FloorMask()
@@ -2904,7 +2917,8 @@ private:
             delete socket_fd_obj;
             return -1;
         }
-
+        m_conn_info.conn_eid = connEid;
+        
         int ackRet = DoUbAccept(new_fd, connEid, socket_fd_obj);
         if (SendSocketData(new_fd, &ackRet, sizeof(int), CONTROL_PLANE_TIMEOUT_MS) != sizeof(int)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send ack ret,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
@@ -2985,6 +2999,7 @@ private:
             }
         }
 
+        m_conn_info.create_time = std::chrono::system_clock::now();
         RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
 
         PrintQbufPoolInfo();
@@ -3763,6 +3778,10 @@ private:
     uint32_t dst_port_eid_remain; // 备
     QbufQueue<umq_buf_t *> *rxQueue = nullptr;
     ShareJfrRxEpollEvent *share_jfr_rx_epoll_event = nullptr;
+    struct ConnInfo {
+        umq_eid_t conn_eid;
+        std::chrono::system_clock::time_point create_time;
+    } m_conn_info;
 
     // TX fields
     struct alignas(CACHE_LINE_ALIGNMENT) TxDataPlane {

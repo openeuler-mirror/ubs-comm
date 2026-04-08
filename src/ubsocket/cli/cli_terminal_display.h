@@ -54,6 +54,9 @@ public:
     void NewLine();
     void Refresh();
     std::string BytesToHumanReadable(uint64_t bytes);
+    std::string ConvertTimeToString(uint64_t timestamp);
+    std::string ConvertCharArrayToIP(const char* ipArray);
+    std::string ConvertEidToString(const uint8_t* eidArray, size_t length);
     // topo display
     void DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen);
 
