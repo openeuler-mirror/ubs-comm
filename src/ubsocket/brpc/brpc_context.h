@@ -94,6 +94,9 @@ public:
         }
     }
 
+    // 判断是否ub链接
+    static bool IsProtocolByUb(int fd);
+
     bool IsBonding()
     {
         return isBonding;
@@ -424,9 +427,6 @@ private:
         umq_dev_info_list_free(transMode, umqDevInfo);
         return 0;
     }
-
-    // 判断是否ub链接
-    bool IsProtocolByUb(int fd);
 
     // 解析cpulist字符串，例如0~24，返回0
     int GetFirstCpuFromCpulist(const std::string& cpuListStr);

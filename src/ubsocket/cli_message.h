@@ -20,6 +20,7 @@
 #include <arpa/inet.h>
 #include <sstream>
 #include <iomanip>
+#include <securec.h>
 #include "umq_types.h"
 
 #define CLI_LOG(fmt, ...) \
@@ -158,6 +159,14 @@ public:
     uint32_t GetBufLen() const
     {
         return mBufLen;
+    }
+
+    void ResetBuf() const
+    {
+        if (mBuf == nullptr || mBufLen == 0) {
+            return;
+        }
+        memset_s(mBuf, mBufLen, 0, mBufLen);
     }
 
     bool AllocateIfNeed(uint32_t newSize);

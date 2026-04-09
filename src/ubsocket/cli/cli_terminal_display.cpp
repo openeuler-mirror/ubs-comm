@@ -208,7 +208,7 @@ void TerminalDisplay::PrintData(CLISocketData *sockData)
     PrintDelimiter();
     PrintDataItem("Creation Time", ConvertTimeToString(sockData->createTime), colorGrey, false);
     PrintDelimiter();
-    PrintDataItem("Remote Ip", ConvertCharArrayToIP(sockData->remoteIp), colorGrey, false);
+    PrintDataItem("Remote Ip", sockData->remoteIp, colorGrey, false);
     PrintDelimiter();
     PrintDataItem("Local Eid", ConvertEidToString(sockData->localEid, UMQ_EID_SIZE), colorBlue, false);
     PrintDelimiter();
@@ -270,17 +270,6 @@ std::string TerminalDisplay::ConvertTimeToString(uint64_t timestamp)
     char buffer[80];
     (void)strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &time_struct);
     return std::string(buffer);
-}
-
-std::string TerminalDisplay::ConvertCharArrayToIP(const char* ipArray)
-{
-    char ipStr[INET6_ADDRSTRLEN];
-    if (inet_ntop(AF_INET, ipArray, ipStr, sizeof(ipStr)) == NULL) {
-        if (inet_ntop(AF_INET6, ipArray, ipStr, sizeof(ipStr)) == NULL) {
-            return "Invalid IP";
-        }
-    }
-    return std::string(ipStr);
 }
 
 std::string TerminalDisplay::ConvertEidToString(const uint8_t* eidArray, size_t length)

@@ -337,18 +337,15 @@ public:
         if (address->sa_family == AF_INET) {
             struct sockaddr_in* addr_in = (struct sockaddr_in*)address;
             result = inet_ntop(AF_INET, &addr_in->sin_addr, ip_str, INET_ADDRSTRLEN);
-            m_peer_info.peer_ip = ip_str;
         } else if (address->sa_family == AF_INET6) {
             struct sockaddr_in6* addr_in6 = (struct sockaddr_in6*)address;
             result = inet_ntop(AF_INET6, &addr_in6->sin6_addr, ip_str, INET6_ADDRSTRLEN);
-            m_peer_info.peer_ip = ip_str;
         }
-        RPC_ADPT_VLOG_INFO("CLIData: IP STR:%s\n", ip_str);
 
         return (result != nullptr) ? std::string(ip_str) : "";
     }
 
-    ALWAYS_INLINE void ProcessUBConnection(int fd)
+    ALWAYS_INLINE void ProcessUBConnection(int fd, const std::string& peerIp)
     {
         bool is_blocking = IsBlocking(fd);
         if (is_blocking) {
@@ -381,7 +378,7 @@ public:
                 return;
             }
         } else if (ret == 0) {
-            auto err = DoAccept(fd);
+            auto err = DoAccept(fd, peerIp);
             if (!IsOk(err)) {
                 if (Degradable(err)) {
                     // 降级至 TCP，客户端可正确工作，不应清理数据.
@@ -417,14 +414,16 @@ public:
                 RPC_ADPT_VLOG_WARN("Set TCP_NODELAY failed, fd %d, ret %d, errno %d\n", fd, tcpNoDelayRet, errno);
             }
         }
+        std::string peerIp;
         if (fd >= 0 && address != nullptr) {
+            // 使用提取的接口获取IP地址
+            peerIp = ExtractIpFromSockAddr(address);
             SocketFd* socket_fd_obj = static_cast<SocketFd*>(Fd<::SocketFd>::GetFdObj(fd));
             if (socket_fd_obj) {
-                // 使用提取的接口获取IP地址
-                std::string peer_ip = ExtractIpFromSockAddr(address);
+                socket_fd_obj->m_peer_info.peer_ip = peerIp;
                 // 对端fd就是accept返回的fd
-                m_peer_info.peer_fd = fd;
-                m_conn_info.create_time = std::chrono::system_clock::now();
+                socket_fd_obj->m_peer_info.peer_fd = fd;
+                socket_fd_obj->m_conn_info.create_time = std::chrono::system_clock::now();
             }
         }
         retCode = fd;
@@ -453,7 +452,7 @@ public:
                 m_fd, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return fd;
         }
-        ProcessUBConnection(fd);
+        ProcessUBConnection(fd, peerIp);
         return fd;
     }
 
@@ -793,6 +792,7 @@ public:
         if (address != nullptr) {
             // 使用提取的接口获取IP地址
             std::string peer_ip = ExtractIpFromSockAddr(address);
+            m_peer_info.peer_ip = peer_ip;
             // 对端fd就是accept返回的fd
             m_peer_info.peer_fd = m_fd;
             m_conn_info.create_time = std::chrono::system_clock::now();
@@ -885,8 +885,6 @@ public:
         if (memcpy_s(data->remoteEid, sizeof(data->remoteEid), m_peer_info.peer_eid.raw, UMQ_EID_SIZE) != 0) {
             RPC_ADPT_VLOG_WARN("Failed to memcpy remote eid\n");
         }
-        RPC_ADPT_VLOG_INFO("CLIData: Peer IP:%s, Local eid:" EID_FMT ", Peer eid:" EID_FMT "\n",
-            GetPeerIp().c_str(), EID_ARGS(m_conn_info.conn_eid), EID_ARGS(GetPeerEid()));
     }
 
     uint64_t FloorMask()
@@ -2881,7 +2879,7 @@ private:
         return rx_total_len;
     }
 
-    int AcceptNegotiate(int new_fd, umq_eid_t &connEid, dev_schedule_policy &peerSchedulePolicy)
+    int AcceptNegotiate(int new_fd, umq_eid_t &connEid, umq_eid_t &dstEid, dev_schedule_policy &peerSchedulePolicy)
     {
         Context *context = Context::GetContext();
         dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
@@ -2922,7 +2920,7 @@ private:
             }
         }
         if (rsp.ret_code == 0 && req.is_bonding != 0) {
-            m_peer_info.peer_eid = req.local_eid;
+            dstEid = req.local_eid;
             peerSchedulePolicy = static_cast<dev_schedule_policy>(req.schedule_policy);
             if ((peerSchedulePolicy == dev_schedule_policy::CPU_AFFINITY || peerSchedulePolicy ==
                 dev_schedule_policy::CPU_AFFINITY_PRIORITY) && req.has_socket_id != 0) {
@@ -2954,7 +2952,7 @@ private:
         }
  	
         // 保存对端EID
-        m_peer_info.peer_eid = connRoute.src_eid;
+        dstEid = connRoute.src_eid;
         connEid = connRoute.dst_eid;
         return rsp.ret_code == 0 ? 0 : -1;
     }
@@ -3020,12 +3018,15 @@ private:
         return ubsocket::Error::kOK;
     }
 
-    ubsocket::Error DoAccept(int new_fd)
+    ubsocket::Error DoAccept(int new_fd, const std::string& peerIp)
     {
         SocketFd *socket_fd_obj = nullptr;
         int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
         try {
             socket_fd_obj = new SocketFd(new_fd, event_fd);
+            socket_fd_obj->m_peer_info.peer_ip = peerIp;
+            socket_fd_obj->m_peer_info.peer_fd = new_fd;
+            socket_fd_obj->m_peer_info.type_fd = 0;
         } catch (std::exception& e) {
             OsAPiMgr::GetOriginApi()->close(event_fd);
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "%s\n", e.what());
@@ -3035,15 +3036,18 @@ private:
         auto sockCleaner = ubsocket::MakeScopeExit([socket_fd_obj]() { delete socket_fd_obj; });
 
         umq_eid_t connEid;
+        umq_eid_t dstEid;
         Context *context = Context::GetContext();
         umq_eid_t localEid = context->GetDevSrcEid();
         dev_schedule_policy peerSchedulePolicy = dev_schedule_policy::ROUND_ROBIN;
-        if (AcceptNegotiate(new_fd, connEid, peerSchedulePolicy) != 0) {
+        if (AcceptNegotiate(new_fd, connEid, dstEid, peerSchedulePolicy) != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                 "Failed to negotiate in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                 EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
             return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
         }
+        socket_fd_obj->m_peer_info.peer_eid = dstEid;
+        socket_fd_obj->m_conn_info.conn_eid = connEid;
 
         // 1. 用户直接指定普通设备建链，失败不重试、可降级
         // 2. 用户指定 bonding 设备建链，但如果是节点内回环场景，失败不重试、可降级
@@ -3216,7 +3220,7 @@ private:
             }
         }
 
-        m_conn_info.create_time = std::chrono::system_clock::now();
+        socket_fd_obj->m_conn_info.create_time = std::chrono::system_clock::now();
         RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
 
         PrintQbufPoolInfo();

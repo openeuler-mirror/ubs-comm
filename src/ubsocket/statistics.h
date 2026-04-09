@@ -571,6 +571,7 @@ class Listener {
             RPC_ADPT_VLOG_INFO("Failed to alloc reponsese memory\n");
             return;
         }
+        msg.ResetBuf();
         CLIDataHeader CLIheader{};
         CLIheader.socketNum = sockNum;
         CLIheader.connNum = StatsMgr::GetConnCount();
@@ -668,6 +669,7 @@ class Listener {
             RPC_ADPT_VLOG_WARN("Failed to alloc reponsese memory\n");
             return;
         }
+        msg.ResetBuf();
         // collect data
         if (memcpy_s(msg.Data(), msg.GetBufLen(), &delayHeader, headerSize) != 0) {
             RPC_ADPT_VLOG_WARN("Failed to memcpy cli header\n");
@@ -696,7 +698,7 @@ class Listener {
 
     void Process(uint32_t events)
     {
-        static CLIMessage msg{};
+        CLIMessage msg{};
         if ((events & ((uint32_t)EPOLLERR | EPOLLHUP)) != 0){
             return;
         }
