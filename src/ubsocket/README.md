@@ -118,7 +118,7 @@ UBSOCKET_READV_UNLIMITED=true \
 | UBSOCKET_BLOCK_TYPE        | 内存池的最小分片       | default，small，medium，large                                | default | 否                                |
 | UBSOCKET_POOL_INITIAL_SIZE | IO内存的总大小，单位MB | 应用按需配置                                                 | 1024    | 否                                |
 | UBSOCKET_USE_UB_FORCE | 是否强制使用UB协议加速TCP | false：不强制用UB加速TCP, true：强制用UB加速TCP                                                | false    | 否                                |
-| UBSOCKET_SCHEDULE_POLICY | 设置多平面负载分担策略 | affinity，rr                                                | affinity   | 否                                |
+| UBSOCKET_SCHEDULE_POLICY | 设置多平面负载分担策略 | affinity_priority, affinity，rr                                                | affinity_priority   | 否                                |
 | UBSOCKET_AUTO_FALLBACK_TCP | 协议不匹配时是否自动降级为TCP | false, true                                                | true  | 否                                |
 | UBSOCKET_TRACE_ENABLE      | 是否打开trace统计       | false, true                                                 | true    | 否                                |
 | UBSOCKET_TRACE_TIME        | 控制维测数据输出间隔（单位s）   | [1, 300]                                                    | 10       | 否                               |

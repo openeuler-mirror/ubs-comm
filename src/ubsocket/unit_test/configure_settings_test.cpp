@@ -324,7 +324,7 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_GetDevSchedulePolicy)
 {
     ConfigSettings config;
     dev_schedule_policy policy = config.GetDevSchedulePolicy();
-    EXPECT_EQ(policy, dev_schedule_policy::CPU_AFFINITY);
+    EXPECT_EQ(policy, dev_schedule_policy::CPU_AFFINITY_PRIORITY);
 }
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_IsDevIpv6)
@@ -748,7 +748,7 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_GetDevSchedulePolicy_Default)
 {
     ConfigSettings config;
     dev_schedule_policy policy = config.GetDevSchedulePolicy();
-    EXPECT_EQ(policy, dev_schedule_policy::CPU_AFFINITY);
+    EXPECT_EQ(policy, dev_schedule_policy::CPU_AFFINITY_PRIORITY);
 }
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_IsDevIpv6_Default)
@@ -1026,14 +1026,25 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_Init_SchedulePolicyRR)
     unsetenv("UBSOCKET_SCHEDULE_POLICY");
 }
 
+TEST_F(ConfigureSettingsTest, ConfigSettings_Init_SchedulePolicyAffinityPriority)
+{
+    setenv("UBSOCKET_SCHEDULE_POLICY", "affinity_priority", SETENV_OVERWRITE);
+
+    ConfigSettings config;
+    EXPECT_EQ(config.Init(), 0);
+    EXPECT_EQ(config.GetDevSchedulePolicy(), dev_schedule_policy::CPU_AFFINITY_PRIORITY);
+
+    unsetenv("UBSOCKET_SCHEDULE_POLICY");
+}
+
 TEST_F(ConfigureSettingsTest, ConfigSettings_Init_SchedulePolicyInvalid)
 {
     setenv("UBSOCKET_SCHEDULE_POLICY", "invalid", SETENV_OVERWRITE);
 
     ConfigSettings config;
     EXPECT_EQ(config.Init(), 0);
-    // Invalid policy should fall back to CPU_AFFINITY
-    EXPECT_EQ(config.GetDevSchedulePolicy(), dev_schedule_policy::CPU_AFFINITY);
+    // Invalid policy should fall back to CPU_AFFINITY_PRIORITY
+    EXPECT_EQ(config.GetDevSchedulePolicy(), dev_schedule_policy::CPU_AFFINITY_PRIORITY);
 
     unsetenv("UBSOCKET_SCHEDULE_POLICY");
 }

@@ -51,6 +51,7 @@
 #define MEDIUM_QBUF_BLOCK_TYPE    "medium"  // 32k
 #define LARGE_QBUF_BLOCK_TYPE     "large"   // 64k
 #define DEV_SCHEDULE_POLICY_CPU_AFFINITY  "affinity"  // cpu_affinity
+#define DEV_SCHEDULE_POLICY_CPU_AFFINITY_PRIORITY  "affinity_priority"  // cpu_affinity_priority
 #define DEV_SCHEDULE_POLICY_ROUND_ROBIN   "rr"  // round_robin
 #define ENV_VAR_LOG_LEVEL         "UBSOCKET_LOG_LEVEL"
 #define ENV_VAR_TRANS_MODE        "UBSOCKET_TRANS_MODE"
@@ -65,7 +66,7 @@
 #define ENV_VAR_POOL_INITIAL_SIZE "UBSOCKET_POOL_INITIAL_SIZE" // MB
 #define ENV_VAR_USE_ZCOPY         "UBSOCKET_USE_BRPC_ZCOPY"
 #define ENV_LOG_USE_PRINTF        "UBSOCKET_LOG_USE_PRINTF" // default 0, 0 false; 1 true
-#define ENV_SCHEDULE_POLICY       "UBSOCKET_SCHEDULE_POLICY" // affinity, rr
+#define ENV_SCHEDULE_POLICY       "UBSOCKET_SCHEDULE_POLICY" // affinity_priority， affinity, rr
 #define ENV_TRACE_ENABLE          "UBSOCKET_TRACE_ENABLE"
 #define ENV_TRACE_TIME            "UBSOCKET_TRACE_TIME"
 #define ENV_TRACE_FILE_PATH       "UBSOCKET_TRACE_FILE_PATH"
@@ -74,7 +75,8 @@
 
 enum dev_schedule_policy {
     ROUND_ROBIN = 1,
-    CPU_AFFINITY
+    CPU_AFFINITY = 2,
+    CPU_AFFINITY_PRIORITY = 3,
 };
 
 enum ub_trans_mode {
@@ -404,13 +406,17 @@ protected:
             ReadEnvVar(env_ptr, m_dev_schedule_policy_str, sizeof(m_dev_schedule_policy_str));
             if (memcmp(m_dev_schedule_policy_str, DEV_SCHEDULE_POLICY_CPU_AFFINITY, strlen(m_dev_schedule_policy_str)) == 0) {
                 m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;
+            } else if (memcmp(m_dev_schedule_policy_str, DEV_SCHEDULE_POLICY_CPU_AFFINITY_PRIORITY,
+                strlen(m_dev_schedule_policy_str)) == 0) {
+                m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
             } else if (memcmp(m_dev_schedule_policy_str, DEV_SCHEDULE_POLICY_ROUND_ROBIN, strlen(m_dev_schedule_policy_str)) == 0) {
                 m_dev_schedule_policy = dev_schedule_policy::ROUND_ROBIN;
             } else {
                 (void)strcpy_s(m_dev_schedule_policy_str, sizeof(m_dev_schedule_policy_str),
-                    DEV_SCHEDULE_POLICY_CPU_AFFINITY);
-                m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;
+                    DEV_SCHEDULE_POLICY_CPU_AFFINITY_PRIORITY);
+                m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
             }
+            RPC_ADPT_VLOG_INFO("Current policy type: %s", m_dev_schedule_policy_str);
         }
 
         if ((env_ptr = getenv(ENV_TRACE_ENABLE)) != NULL) {
@@ -519,7 +525,7 @@ protected:
     bool m_trace_enable = true;
     bool m_log_use_printf = true;
     bool m_use_brpc_zcopy = true;
-    dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY;
+    dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
     ub_trans_mode m_ub_trans_mode = ub_trans_mode::RC_TP;
 };
 

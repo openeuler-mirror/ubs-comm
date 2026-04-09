@@ -267,7 +267,8 @@ private:
             return;
         }
 
-        if (GetDevSchedulePolicy() == dev_schedule_policy::CPU_AFFINITY) {
+        if (GetDevSchedulePolicy() == dev_schedule_policy::CPU_AFFINITY ||
+            GetDevSchedulePolicy() == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
             m_process_socket_id = GetCurrentProcessSocketId();
             m_socket_ids = GetSocketIdsViaNumaSysfs();
             if (m_socket_ids.empty() || m_process_socket_id==-1) {
