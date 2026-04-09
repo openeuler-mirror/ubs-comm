@@ -865,8 +865,8 @@ int umq_ub_shared_credit_return_req_send(ub_queue_t *queue)
     if (return_credit == 0) {
         return_credit = 1;
     }
-    if (remote_credit - return_credit <= fc->return_threshold) {
-        return_credit = remote_credit - fc->return_threshold;
+    if (remote_credit - return_credit <= return_threshold) {
+        return_credit = remote_credit - return_threshold;
     }
     urma_jetty_t *jetty  = queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL];
     urma_target_jetty_t *tjetty = queue->bind_ctx->tjetty[UB_QUEUE_JETTY_FLOW_CONTROL];
