@@ -472,20 +472,23 @@ public:
         return 0;
     }
 
-    int ConnectNegotiate(umq_eid_t *connEid)
+    int ConnectNegotiate(umq_eid_t *connEid, umq_route_t &connRoute, umq_eid_t &remoteEid)
     {
         Context *context = Context::GetContext();
+        umq_eid_t localEid = context->GetDevSrcEid();
+        dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
         NegotiateReq req {};
         NegotiateRsp rsp {};
         req.magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
         req.trans_mode = context->GetUbTransMode();
         req.is_bonding = context->IsBonding() ? 1 : 0;
         req.enable_share_jfr = context->EnableShareJfr() ? 1 : 0;
-        req.schedule_policy = static_cast<uint8_t>(context->GetDevSchedulePolicy());
-        req.has_socket_id = context->GetDevSchedulePolicy() == dev_schedule_policy::CPU_AFFINITY ? 1 : 0;
+        req.schedule_policy = static_cast<uint8_t>(schedulePolicy);
+        req.has_socket_id = ((schedulePolicy == dev_schedule_policy::CPU_AFFINITY) ||
+            (schedulePolicy == dev_schedule_policy::CPU_AFFINITY_PRIORITY)) ? 1 : 0;
         req.process_socket_id = context->GetProcessSocketId();
-        req.local_eid = context->GetDevSrcEid();
-        if (req.is_bonding != 0 &&
+        req.local_eid = localEid;
+        if (req.is_bonding != 0 && (req.has_socket_id == 1) &&
             FillLocalSocketIdsForNegotiate(context, req.socket_ids, req.socket_id_count) != 0) {
             return -1;
         }
@@ -508,18 +511,29 @@ public:
         if (rsp.peer_trans_mode != local) {
             context->SetUbTransMode(rsp.peer_trans_mode < local ? rsp.peer_trans_mode : local);
         }
-        m_peer_info.peer_eid = rsp.peer_eid;
-        *connEid = context->GetDevSrcEid();
-        if (rsp.has_route == 0) {
-            return 0;
+
+        bool useRoundRobin = true;
+        if (schedulePolicy == dev_schedule_policy::CPU_AFFINITY || schedulePolicy ==
+            dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
+            RPC_ADPT_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY: %d in connect, fd: %d\n",
+                static_cast<int>(schedulePolicy), m_fd);
+            useRoundRobin = false;
         }
-        if (CheckDevAdd(rsp.conn_route.dst_eid) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to add dev in connect,Peer IP:%s, fd: %d\n",
-                GetPeerIp().c_str(), m_fd);
+
+        remoteEid = rsp.local_eid;
+        if (DoRoute(&localEid, &remoteEid, &connRoute, useRoundRobin) != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get route list in connect, fd: %d\n", m_fd);
             return -1;
         }
-        m_peer_info.peer_eid = rsp.conn_route.src_eid;
-        *connEid = rsp.conn_route.dst_eid;
+
+        if (SendSocketData(
+            m_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send connect eid message in connect, fd: %d\n", m_fd);
+            return -1;
+        }
+
+        m_peer_info.peer_eid = connRoute.dst_eid;
+        *connEid = connRoute.src_eid;
         return 0;
     }
 
@@ -586,7 +600,9 @@ public:
     int DoConnect(void)
     {
         umq_eid_t connEid;
-        if (ConnectNegotiate(&connEid) < 0) {
+        umq_route_t connRoute;
+        umq_eid_t peerBondingEid;
+        if (ConnectNegotiate(&connEid, connRoute, peerBondingEid) < 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to negotiate in connect,Peer IP:%s, fd: %d\n",
                               GetPeerIp().c_str(), m_fd);
             return -1;
@@ -603,8 +619,10 @@ public:
         bool degradable = false;
         ubsocket::Error ackRet;
         ubsocket::Error peerRet;
+        umq_route_t otherConnRoute;
         OtherRouteMessage otherRouteMessage;
         UBHandshakeState state = UBHandshakeState::kSTART;
+        dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
         while (!ok) {
             switch (state) {
                 case UBHandshakeState::kOK:
@@ -647,56 +665,56 @@ public:
                         state = UBHandshakeState::kOK;
                     }
                     break;
-
                 case UBHandshakeState::kRETRY:
+                    if (schedulePolicy == dev_schedule_policy::CPU_AFFINITY) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                            "CPU_AFFINITY:%d failed, connect no need to retry,Peer eid:" EID_FMT
+                            ",Peer IP:%s, fd: %d\n",
+                            static_cast<int>(schedulePolicy), EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        return -1;
+                    }
                     UnbindAndFlushRemoteUmq();
                     DestroyLocalUmq();
 
-                    if (RecvSocketData(m_fd, &otherRouteMessage, sizeof(otherRouteMessage), CONTROL_PLANE_TIMEOUT_MS) !=
-                        sizeof(otherRouteMessage)) {
+                    if (CheckOtherRoute(otherConnRoute, peerBondingEid, connRoute) != 0) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to receive remote eid message in retry connect,Peer eid:" EID_FMT
+                                          "Failed to get other route in retry,Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
+                        break;
+                    }
+
+                    otherRouteMessage.ub_handshake_state = UBHandshakeState::kRETRY;
+                    otherRouteMessage.other_route = otherConnRoute;
+                    if (SendSocketData(m_fd, &otherRouteMessage, sizeof(otherRouteMessage),
+                                       CONTROL_PLANE_TIMEOUT_MS) != sizeof(otherRouteMessage)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to send connect eid message in retry connect, Peer eid:" EID_FMT
                                           ",Peer IP:%s, fd: %d\n",
                                           EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
                         return -1;
                     }
 
-                    // 服务端 CheckOtherRoute 失败
-                    if (otherRouteMessage.ub_handshake_state != UBHandshakeState::kRETRY) {
-                        RPC_ADPT_VLOG_INFO("Server CheckOtherRoute failed, try to degrade to TCP.\n");
-                        state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
-                        break;
-                    }
-
-                    connEid = otherRouteMessage.other_route.dst_eid;
-                    if (CheckDevAdd(connEid) != 0) {
-                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to add dev in retry connect,Peer eid:" EID_FMT
-                                          ",Peer IP:%s, fd: %d\n",
-                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-                        // 如果直接退出会导致服务端卡在 RecvSocketData 上
-                        ackRet = ubsocket::Error::kUMQ_DEV_ADD | ubsocket::Error::kDEGRADABLE;
-                    } else {
-                        ackRet = ubsocket::Error::kOK;
-                    }
-
-                    // 保留在 CheckDevAdd 阶段时的错误
-                    ackRet = ackRet | DoUbConnect(connEid);
+                    connEid = otherConnRoute.src_eid;
+                    ackRet = DoUbConnect(connEid);
                     if (!IsOk(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to finish ub bind in connect, Peer eid:" EID_FMT
+                                          "Failed to finish ub bind in retry connect, Peer eid:" EID_FMT
                                           ", Peer IP:%s, fd: %d\n",
                                           EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
                     }
 
                     if (SendSocketData(m_fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                          "Failed to send ack ret in retry connect, Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
                                           EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
                         return -1;
                     }
 
-                    if (RecvSocketData(m_fd, &peerRet, sizeof(peerRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(peerRet)) {
+                    if (RecvSocketData(m_fd, &peerRet, sizeof(peerRet), CONTROL_PLANE_TIMEOUT_MS) !=
+                        sizeof(peerRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                                           "Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                                           EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
@@ -713,6 +731,17 @@ public:
                     break;
 
                 case UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE:
+                    // 当客户端在 kRETRY 错误时会进入 kRETRY_FAILED_CHECK_OTHER_ROUTE， 但是服务端仍处于 kRETRY 阶段，
+                    // 需要发送信令通知服务端， 此种情况下 other_route 字段不可用
+                    otherRouteMessage.ub_handshake_state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
+                    if (SendSocketData(m_fd, &otherRouteMessage, sizeof(otherRouteMessage),
+                                       CONTROL_PLANE_TIMEOUT_MS) != sizeof(otherRouteMessage)) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                          "Failed to send connect eid message in retry connect,Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                    }
+
                     if (degradable) {
                         state = UBHandshakeState::kDEGRADE;
                     } else {
@@ -2541,10 +2570,8 @@ private:
     struct NegotiateRsp {
         int32_t ret_code = 0;
         ub_trans_mode peer_trans_mode = RC_TP;
-        uint8_t has_route = 0;
         uint8_t reserved[3] = {0};
-        umq_eid_t peer_eid = {};
-        umq_route_t conn_route = {};
+        umq_eid_t local_eid = {};
     };
 
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
@@ -2854,43 +2881,12 @@ private:
         return rx_total_len;
     }
 
-    void BuildAcceptRouteInfo(Context *context, const NegotiateReq &req, int new_fd,
-                              umq_eid_t &connEid, umq_eid_t &remoteEid, umq_route_t &connRoute, NegotiateRsp &rsp)
-    {
-        remoteEid = req.local_eid;
-        m_peer_info.peer_eid = remoteEid;
-        bool useRoundRobin = true;
-        dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
-        dev_schedule_policy peerSchedulePolicy = static_cast<dev_schedule_policy>(req.schedule_policy);
-        if (peerSchedulePolicy != dev_schedule_policy::ROUND_ROBIN &&
-            peerSchedulePolicy != dev_schedule_policy::CPU_AFFINITY) {
-            peerSchedulePolicy = dev_schedule_policy::ROUND_ROBIN;
-        }
-        if (peerSchedulePolicy == schedulePolicy && schedulePolicy == dev_schedule_policy::CPU_AFFINITY &&
-            req.has_socket_id != 0) {
-            RPC_ADPT_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY in accept, fd: %d\n", m_fd);
-            useRoundRobin = false;
-            mPeerSocketId = req.process_socket_id;
-        }
-        if (!context->EnableShareJfr() && connEid == remoteEid) {
-            return;
-        }
-        int ret = DoRoute(&connEid, &remoteEid, &connRoute, useRoundRobin);
-        if (ret != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get route list in accept, fd: %d\n", new_fd);
-            rsp.ret_code = ret;
-            return;
-        }
-        rsp.has_route = 1;
-        rsp.conn_route = connRoute;
-        rsp.peer_eid = connRoute.src_eid;
-        m_peer_info.peer_eid = connRoute.dst_eid;
-        connEid = connRoute.src_eid;
-    }
-
-    int AcceptNegotiate(int new_fd, umq_eid_t &connEid, umq_eid_t &remoteEid, umq_route_t &connRoute)
+    int AcceptNegotiate(int new_fd, umq_eid_t &connEid, dev_schedule_policy &peerSchedulePolicy)
     {
         Context *context = Context::GetContext();
+        dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
+        bool has_socket_id = ((schedulePolicy == dev_schedule_policy::CPU_AFFINITY) ||
+            (schedulePolicy == dev_schedule_policy::CPU_AFFINITY_PRIORITY)) ? 1 : 0;
         NegotiateReq req {};
         NegotiateRsp rsp {};
         char *req_buf = reinterpret_cast<char *>(&req) + sizeof(req.magic_number);
@@ -2907,9 +2903,9 @@ private:
         }
         rsp.ret_code = (context->IsBonding() == (req.is_bonding != 0)) ? 0 : -1;
         connEid = context->GetDevSrcEid();
-        rsp.peer_eid = connEid;
+        rsp.local_eid = connEid;
         mPeerAllSocketIds.clear();
-        if (rsp.ret_code == 0 && req.is_bonding != 0) {
+        if (rsp.ret_code == 0 && req.is_bonding != 0 && has_socket_id == 1 && req.has_socket_id == 1) {
             if (req.socket_id_count == 0 || req.socket_id_count > NEGOTIATE_SOCKET_ID_MAX_NUM) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid peer socket count %u in accept, fd: %d\n",
                                   req.socket_id_count, new_fd);
@@ -2926,12 +2922,40 @@ private:
             }
         }
         if (rsp.ret_code == 0 && req.is_bonding != 0) {
-            BuildAcceptRouteInfo(context, req, new_fd, connEid, remoteEid, connRoute, rsp);
+            m_peer_info.peer_eid = req.local_eid;
+            peerSchedulePolicy = static_cast<dev_schedule_policy>(req.schedule_policy);
+            if ((peerSchedulePolicy == dev_schedule_policy::CPU_AFFINITY || peerSchedulePolicy ==
+                dev_schedule_policy::CPU_AFFINITY_PRIORITY) && req.has_socket_id != 0) {
+                RPC_ADPT_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY: %d in connect, fd: %d\n",
+                    static_cast<int>(peerSchedulePolicy), new_fd);
+                mPeerSocketId = req.process_socket_id;
+            }
+            rsp.local_eid = connEid;
         }
         if (SendSocketData(new_fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) != static_cast<int>(sizeof(rsp))) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send negotiate response in accept, fd: %d\n", new_fd);
             return -1;
         }
+
+        umq_route_t connRoute;
+        if (RecvSocketData(
+            new_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                "Failed to receive remote eid message in accept, Peer IP:%s, fd: %d\n",
+                GetPeerIp().c_str(), new_fd);
+            return -1;
+        }
+
+        int checkResult = CheckDevAdd(connRoute.dst_eid);
+        if (checkResult != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to add dev in accept, Peer IP:%s, fd: %d\n",
+                GetPeerIp().c_str(), new_fd);
+            return -1;
+        }
+ 	
+        // 保存对端EID
+        m_peer_info.peer_eid = connRoute.src_eid;
+        connEid = connRoute.dst_eid;
         return rsp.ret_code == 0 ? 0 : -1;
     }
 
@@ -3011,17 +3035,15 @@ private:
         auto sockCleaner = ubsocket::MakeScopeExit([socket_fd_obj]() { delete socket_fd_obj; });
 
         umq_eid_t connEid;
-        umq_eid_t peerBondingEid;
-        umq_route_t connRoute;
-        if (AcceptNegotiate(new_fd, connEid, peerBondingEid, connRoute) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                              "Failed to negotiate in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                              EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-            return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
-        }
-
         Context *context = Context::GetContext();
         umq_eid_t localEid = context->GetDevSrcEid();
+        dev_schedule_policy peerSchedulePolicy = dev_schedule_policy::ROUND_ROBIN;
+        if (AcceptNegotiate(new_fd, connEid, peerSchedulePolicy) != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                "Failed to negotiate in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+            return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
+        }
 
         // 1. 用户直接指定普通设备建链，失败不重试、可降级
         // 2. 用户指定 bonding 设备建链，但如果是节点内回环场景，失败不重试、可降级
@@ -3033,7 +3055,6 @@ private:
         bool degradable = false;
         ubsocket::Error ackRet;
         ubsocket::Error peerRet;
-        umq_route_t otherConnRoute;
         OtherRouteMessage otherRouteMessage;
         UBHandshakeState state = UBHandshakeState::kSTART;
         while (!ok) {
@@ -3084,42 +3105,56 @@ private:
                     break;
 
                 case UBHandshakeState::kRETRY:
+                    if (peerSchedulePolicy == dev_schedule_policy::CPU_AFFINITY) {
+                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                            "CPU_AFFINITY: %d failed, accept no need to retry,Peer eid:" EID_FMT
+                            ",Peer IP:%s, fd: %d\n",
+                            static_cast<int>(peerSchedulePolicy),
+                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        return ubsocket::Error::kUBSOCKET_UB_ACCEPT;
+                    }
                     socket_fd_obj->UnbindAndFlushRemoteUmq();
                     socket_fd_obj->DestroyLocalUmq();
 
-                    if (CheckOtherRoute(otherConnRoute, peerBondingEid, connRoute) != 0) {
+                    if (RecvSocketData(new_fd, &otherRouteMessage, sizeof(otherRouteMessage),
+                        CONTROL_PLANE_TIMEOUT_MS) != sizeof(otherRouteMessage)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to get other route in retry,Peer eid:" EID_FMT
-                                          ",Peer IP:%s, fd: %d\n",
-                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                            "Failed to receive remote eid message in retry accept, Peer eid:" EID_FMT
+                            ",Peer IP:%s, fd: %d\n",
+                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                        return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
+                    }
+
+                    // 服务端 CheckOtherRoute 失败
+                    if (otherRouteMessage.ub_handshake_state != UBHandshakeState::kRETRY) {
+                        RPC_ADPT_VLOG_INFO("Server CheckOtherRoute failed, try to degrade to TCP.\n");
                         state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
                         break;
                     }
 
-                    otherRouteMessage.ub_handshake_state = UBHandshakeState::kRETRY;
-                    otherRouteMessage.other_route = otherConnRoute;
-                    if (SendSocketData(new_fd, &otherRouteMessage, sizeof(otherRouteMessage),
-                                       CONTROL_PLANE_TIMEOUT_MS) != sizeof(otherRouteMessage)) {
+                    connEid = otherRouteMessage.other_route.dst_eid;
+                    if (CheckDevAdd(connEid) != 0) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to send connect eid message in retry accept,Peer eid:" EID_FMT
+                                          "Failed to add dev in retry accept,Peer eid:" EID_FMT
                                           ",Peer IP:%s, fd: %d\n",
-                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-                        return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                        ackRet = ubsocket::Error::kUMQ_DEV_ADD | ubsocket::Error::kDEGRADABLE;
+                    } else {
+                        ackRet = ubsocket::Error::kOK;
                     }
 
-                    connEid = otherConnRoute.src_eid;
-                    ackRet = DoUbAccept(new_fd, connEid, socket_fd_obj);
+                    // 保留在 CheckDevAdd 阶段时的错误
+                    ackRet = ackRet | DoUbAccept(new_fd, connEid, socket_fd_obj);
                     if (!IsOk(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to finish ub bind in retry accept, Peer eid:" EID_FMT
+                                          "Failed to finish ub bind in accept, Peer eid:" EID_FMT
                                           ", Peer IP:%s, fd: %d\n",
-                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
                     }
 
                     if (SendSocketData(new_fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to send ack ret in retry accept, Peer eid:" EID_FMT
-                                          ",Peer IP:%s, fd: %d\n",
+                                          "Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                                           EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
                         return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
                     }
@@ -3127,7 +3162,8 @@ private:
                     if (RecvSocketData(new_fd, &peerRet, sizeof(peerRet), CONTROL_PLANE_TIMEOUT_MS) !=
                         sizeof(peerRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                          "Failed to receive peer ack ret, Peer eid:" EID_FMT
+                                          ",Peer IP:%s, fd: %d\n",
                                           EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
                         return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
                     }
@@ -3142,17 +3178,6 @@ private:
                     break;
 
                 case UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE:
-                    // 当服务端在 kRETRY 错误时会进入 kRETRY_FAILED. 但是客户端仍处于 kRETRY 阶段，需要发送信令通知客户
-                    // 端. 此种情况下 other_route 字段不可用
-                    otherRouteMessage.ub_handshake_state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
-                    if (SendSocketData(new_fd, &otherRouteMessage, sizeof(otherRouteMessage),
-                                       CONTROL_PLANE_TIMEOUT_MS) != sizeof(otherRouteMessage)) {
-                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                          "Failed to send connect eid message in retry accept,Peer eid:" EID_FMT
-                                          ",Peer IP:%s, fd: %d\n",
-                                          EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
-                    }
-
                     if (degradable) {
                         state = UBHandshakeState::kDEGRADE;
                     } else {
@@ -3654,11 +3679,6 @@ private:
     int GetCpuAffinityConnEid(umq_route_list_t &route_list, const umq_eid_t *dstEid, umq_route_t *connRoute,
         const std::vector<uint32_t>& socketIds, int processSocketId)
     {
-        // 检查socket ID一致性。因为同平面上的两端chip_id相等，因此两端的socket id不相等，则切回轮询模式
-        if (processSocketId != mPeerSocketId) {
-            return GetRoundRobinConnEid(route_list, dstEid, connRoute);
-        }
-
         // 提取 chip_id 列表
         std::set<uint32_t> uniqueChipIds;
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
