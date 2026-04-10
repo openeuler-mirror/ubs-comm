@@ -36,9 +36,9 @@
 extern "C" {
 #endif
 
-#define UMQ_MAX_ID_NUM (1 << 16)
+#define UMQ_MAX_MSG_ID_NUM (1 << 5)
 #define UMQ_CONTINUE_FLAG 1
-#define UMQ_MAX_TSEG_NUM (1 + (64 * HUGE_QBUF_POOL_SIZE_TYPE_MAX))
+#define UMQ_MAX_TSEG_NUM (1024)
 #define UMQ_UB_RW_SEGMENT_LEN 64 // ub_queue read/write buf splited 64B for each module, such as mem import/flow control
 #define HUGE_QBUF_BUFFER_INC_BATCH 64
 #define UMQ_QBUF_ALIGN_SIZE 4096
