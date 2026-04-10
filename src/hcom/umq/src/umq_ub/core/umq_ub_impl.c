@@ -568,6 +568,9 @@ uint32_t umq_ub_timer_timeout_get(void)
     return g_umq_monitor_slots.timeout_us;
 }
 
+static int umq_ub_register_seg_callback(uint8_t *ctx, uint16_t mempool_id, void *addr, uint64_t size);
+static void umq_ub_unregister_seg_callback(uint8_t *ctx, uint16_t mempool_id);
+
 uint8_t *umq_ub_ctx_init_impl(umq_init_cfg_t *cfg)
 {
     if (g_umq_ub_inited) {
@@ -666,6 +669,14 @@ uint8_t *umq_ub_ctx_init_impl(umq_init_cfg_t *cfg)
         .data_size = umq_buf_size_small(),
         .headroom_size = cfg->headroom_size,
         .mode = cfg->buf_mode,
+        .expansion_mem_size_max = cfg->buf_pool_cfg.expansion_mem_size_max,
+        .expansion_block_count = cfg->buf_pool_cfg.expansion_block_count,
+        .seg_ops = {
+            .register_seg_callback = umq_ub_register_seg_callback,
+            .unregister_seg_callback = umq_ub_unregister_seg_callback,
+        },
+        .expansion_pool_id_min = HUGE_QBUF_POOL_MEMPOOL_ID_MAX,
+        .expansion_pool_cnt_max = UMQ_MAX_TSEG_NUM - HUGE_QBUF_POOL_MEMPOOL_ID_MAX
     };
     ret = umq_qbuf_pool_init(&qbuf_cfg);
     if (ret != UMQ_SUCCESS && ret != -UMQ_ERR_EEXIST) {
@@ -723,6 +734,7 @@ void umq_ub_ctx_uninit_impl(uint8_t *ctx)
 {
     umq_ub_check_idle_queue_timer_delete();
     umq_ub_queue_ctx_list_uninit();
+    umq_qbuf_pool_uninit();
     umq_ub_ctx_t *context = (umq_ub_ctx_t *)ctx;
     if (context != g_ub_ctx) {
         UMQ_VLOG_ERR(VLOG_UMQ, "uninit failed, ub_ctx is invalid\n");
@@ -747,7 +759,6 @@ void umq_ub_ctx_uninit_impl(uint8_t *ctx)
         context[i].rx_consumed_jetty_table = NULL;
     }
 
-    umq_qbuf_pool_uninit();
     umq_io_buf_free();
     umq_ub_id_allocator_uninit();
     umq_ub_dev_info_uninit();
@@ -1494,7 +1505,7 @@ int umq_ub_queue_addr_list_alloc(ub_queue_t *queue)
         return UMQ_SUCCESS;
     }
 
-    queue->addr_list = umq_buf_alloc(UMQ_MAX_ID_NUM * sizeof(uint64_t), 1, UMQ_INVALID_HANDLE, NULL);
+    queue->addr_list = umq_buf_alloc(UMQ_MAX_MSG_ID_NUM * sizeof(uint64_t), 1, UMQ_INVALID_HANDLE, NULL);
     if (queue->addr_list == NULL) {
         UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "eid: " EID_FMT ", jetty_id: %u, umq_buf_alloc for addr_list failed\n",
             EID_ARGS(queue->jetty[UB_QUEUE_JETTY_IO]->jetty_id.eid), queue->jetty[UB_QUEUE_JETTY_IO]->jetty_id.id);
@@ -1681,21 +1692,51 @@ void umq_ub_async_event_ack(umq_async_event_t *event)
 
 static int umq_ub_register_seg_callback(uint8_t *ctx, uint16_t mempool_id, void *addr, uint64_t size)
 {
-    if (ctx == NULL || addr == NULL || size == 0) {
+    if (addr == NULL || size == 0) {
         UMQ_VLOG_ERR(VLOG_UMQ, "invalid parameter\n");
         return -UMQ_ERR_EINVAL;
     }
-    return umq_ub_register_seg((umq_ub_ctx_t *)(uintptr_t)ctx, mempool_id, addr, size);
+    if (ctx != NULL) {
+        return umq_ub_register_seg((umq_ub_ctx_t *)(uintptr_t)ctx, mempool_id, addr, size);
+    }
+
+    if (g_ub_ctx == NULL || g_ub_ctx_count == 0) {
+        UMQ_VLOG_DEBUG(VLOG_UMQ, "no device need register memory\n");
+        return UMQ_SUCCESS;
+    }
+
+    int ret;
+    uint32_t idx = 0;
+    for (idx = 0; idx < g_ub_ctx_count; idx++) {
+        ret = umq_ub_register_seg(&g_ub_ctx[idx], mempool_id, addr, size);
+        if (ret != UMQ_SUCCESS) {
+            UMQ_VLOG_ERR(VLOG_UMQ, "register sge failed, status: %d, dev idx %u, eid: " EID_FMT "\n",
+                ret, idx, EID_ARGS(g_ub_ctx[idx].dev_info.eid.eid));
+           goto ROLLBACK;
+        }
+    }
+    return UMQ_SUCCESS;
+
+ROLLBACK:
+    for (uint32_t i = 0; i < idx; i++) {
+        umq_ub_unregister_seg(&g_ub_ctx[i], 1, mempool_id);
+    }
+    return ret;
 }
 
-static int umq_ub_unregister_seg_callback(uint8_t *ctx, uint16_t mempool_id)
+static void umq_ub_unregister_seg_callback(uint8_t *ctx, uint16_t mempool_id)
 {
-    if (ctx == NULL) {
-        UMQ_VLOG_ERR(VLOG_UMQ, "invalid parameter\n");
-        return -UMQ_ERR_EINVAL;
+    if (ctx != NULL) {
+        umq_ub_unregister_seg((umq_ub_ctx_t *)(uintptr_t)ctx, 1, mempool_id);
+        return;
     }
-    umq_ub_unregister_seg((umq_ub_ctx_t *)(uintptr_t)ctx, 1, mempool_id);
-    return UMQ_SUCCESS;
+    
+    if (g_ub_ctx == NULL || g_ub_ctx_count == 0) {
+        UMQ_VLOG_INFO(VLOG_UMQ, "no device need unregister memory\n");
+        return;
+    }
+
+    umq_ub_unregister_seg(g_ub_ctx, g_ub_ctx_count, mempool_id);
 }
 
 int umq_ub_dev_add_impl(umq_trans_info_t *info, umq_init_cfg_t *cfg)
@@ -1738,15 +1779,19 @@ int umq_ub_dev_add_impl(umq_trans_info_t *info, umq_init_cfg_t *cfg)
     g_ub_ctx[g_ub_ctx_count].io_lock_free = cfg->io_lock_free;
     g_ub_ctx[g_ub_ctx_count].feature = cfg->feature;
     g_ub_ctx[g_ub_ctx_count].flow_control = cfg->flow_control;
+
+    mempool_segment_ops_t sge_ops = {
+        .register_seg_callback = umq_ub_register_seg_callback,
+        .unregister_seg_callback = umq_ub_unregister_seg_callback
+    };
     // register seg
-    ret = umq_qbuf_register_seg((uint8_t *)&g_ub_ctx[g_ub_ctx_count], umq_ub_register_seg_callback);
+    ret = umq_qbuf_register_seg((uint8_t *)&g_ub_ctx[g_ub_ctx_count], &sge_ops);
     if (ret != UMQ_SUCCESS) {
         UMQ_VLOG_ERR(VLOG_UMQ, "qbuf register seg failed\n");
         goto FREE_UMQ_CTX_RX_CONSUMED_TBL;
     }
 
-    ret = umq_huge_qbuf_register_seg((uint8_t *)&g_ub_ctx[g_ub_ctx_count],
-        umq_ub_register_seg_callback, umq_ub_unregister_seg_callback);
+    ret = umq_huge_qbuf_register_seg((uint8_t *)&g_ub_ctx[g_ub_ctx_count], &sge_ops);
     if (ret != UMQ_SUCCESS) {
         UMQ_VLOG_ERR(VLOG_UMQ, "huge qbuf register seg failed, status: %d\n", ret);
         goto UNREGISTER_MEM;
@@ -1757,7 +1802,7 @@ int umq_ub_dev_add_impl(umq_trans_info_t *info, umq_init_cfg_t *cfg)
     return UMQ_SUCCESS;
 
 UNREGISTER_MEM:
-    (void)umq_qbuf_unregister_seg((uint8_t *)&g_ub_ctx[g_ub_ctx_count], umq_ub_unregister_seg_callback);
+    umq_qbuf_unregister_seg((uint8_t *)&g_ub_ctx[g_ub_ctx_count], &sge_ops);
 
 FREE_UMQ_CTX_RX_CONSUMED_TBL:
     free((void*)g_ub_ctx[g_ub_ctx_count].rx_consumed_jetty_table);
@@ -1988,8 +2033,7 @@ int umq_ub_mempool_state_refresh_impl(uint64_t umqh_tp, uint32_t mempool_id)
     }
 
     umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)send_buf->qbuf_ext;
-    umq_ub_imm_t imm = {.mem_import = {
-        .umq_private = UMQ_UB_IMM_PRIVATE, .type = IMM_TYPE_MEM, .sub_type = IMM_TYPE_MEM_IMPORT}};
+    umq_ub_imm_t imm = {.mem_import = {.type = IMM_TYPE_MEM_IMPORT}};
     buf_pro->imm_data = imm.value;
     buf_pro->opcode = UMQ_OPC_SEND_IMM;
 

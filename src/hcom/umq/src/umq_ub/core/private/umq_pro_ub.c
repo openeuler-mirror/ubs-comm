@@ -19,6 +19,8 @@
 #include "umq_qbuf_pool.h"
 #include "umq_ub_private.h"
 
+#define UMQ_UB_FC_UNDATE_FAKE_BUF_SIZE 128 // in combind mode, buffer size more than umq_buf_t needs to be allocated
+
 int rx_buf_ctx_list_init(rx_buf_ctx_list_t *rx_buf_ctx_list, uint32_t ctx_num)
 {
     void *addr = calloc(ctx_num, sizeof(rx_buf_ctx_t));
@@ -524,20 +526,18 @@ static int umq_ub_on_rx_done(ub_queue_t *queue, urma_cr_t *cr, umq_buf_t *rx_buf
         buf_pro->umq_ctx = 0;
     }
     umq_ub_imm_t imm = {.value = cr->imm_data};
-    if (imm.bs.umq_private == 0) {
+    if (imm.bs.type == IMM_TYPE_USER) {
         buf_pro->imm_data = imm.value;
         goto OUT;
     }
 
     switch (imm.bs.type) {
-        case IMM_TYPE_MEM:
-            if (imm.mem_import.sub_type == IMM_TYPE_MEM_IMPORT) {
-                if (umq_ub_data_plan_import_mem((uint64_t)(uintptr_t)real_queue, rx_buf, 0, false) != UMQ_SUCCESS) {
-                    *qbuf_status = UMQ_IMPORT_TSEG_FAILED;
-                    break;
-                }
-                *qbuf_status = UMQ_IMPORT_TSEG_SUCCESS;
+        case IMM_TYPE_MEM_IMPORT:
+            if (umq_ub_data_plan_import_mem((uint64_t)(uintptr_t)real_queue, rx_buf, 0, false) != UMQ_SUCCESS) {
+                *qbuf_status = UMQ_IMPORT_TSEG_FAILED;
+                break;
             }
+            *qbuf_status = UMQ_IMPORT_TSEG_SUCCESS;
             break;
         default:
             break;
@@ -574,13 +574,13 @@ static int process_rx_msg(urma_cr_t *cr, umq_buf_t *buf, ub_queue_t *queue, umq_
                 ret = UMQ_CONTINUE_FLAG;
             } else {
                 umq_ub_imm_t imm = {.value = cr->imm_data};
-                if (imm.bs.umq_private == 0) {
+                if (imm.bs.type == IMM_TYPE_USER) {
                     umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)buf->qbuf_ext;
                     buf_pro->imm_data = imm.value;
                     return UMQ_SUCCESS;
                 }
 
-                if (imm.mem_import.type == IMM_TYPE_MEM && imm.mem_import.sub_type == IMM_TYPE_MEM_IMPORT_DONE) {
+                if (imm.bs.type == IMM_TYPE_MEM_IMPORT_DONE) {
                     if (imm.mem_import.mempool_id >= UMQ_MAX_TSEG_NUM) {
                         UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "eid: " EID_FMT ", jetty_id: %u, mempool id exceed maxinum\n",
                             EID_ARGS(*eid), id);
@@ -675,7 +675,8 @@ static inline void umq_perf_record_write_poll(umq_perf_record_type_t type, uint6
 
 static uint32_t umq_ub_fill_fc_buf(umq_buf_t **buf, umq_buf_status_t status)
 {
-    umq_buf_t *fc_buf = umq_buf_alloc(0, 1, UMQ_INVALID_HANDLE, NULL);
+    uint32_t request = (umq_qbuf_mode_get() == UMQ_BUF_SPLIT) ? 0 : UMQ_UB_FC_UNDATE_FAKE_BUF_SIZE;
+    umq_buf_t *fc_buf = umq_buf_alloc(request, 1, UMQ_INVALID_HANDLE, NULL);
     if (fc_buf == NULL) {
         return 0;
     }
@@ -688,12 +689,8 @@ static uint32_t umq_ub_fill_fc_buf(umq_buf_t **buf, umq_buf_status_t status)
 
 static uint32_t umq_ub_process_fc_msg(ub_queue_t *queue, umq_ub_imm_t imm, umq_buf_t **buf)
 {
-    if (imm.bs.type != IMM_TYPE_FLOW_CONTROL) {
-        return 0;
-    }
-
     uint32_t ret = 0;
-    switch (imm.flow_control.sub_type) {
+    switch (imm.bs.type) {
         case IMM_TYPE_FC_CREDIT_REQ: {
             if (umq_ub_shared_credit_req_handle(queue, &imm) != UMQ_SUCCESS) {
                 ret = umq_ub_fill_fc_buf(buf, UMQ_FAKE_BUF_FC_ERR);
@@ -719,11 +716,8 @@ static uint32_t umq_ub_process_fc_msg(ub_queue_t *queue, umq_ub_imm_t imm, umq_b
 
 static void umq_ub_fill_rx_buff_post_process(ub_queue_t *queue, umq_ub_imm_t imm)
 {
-    if (imm.bs.type != IMM_TYPE_FLOW_CONTROL) {
-        return;
-    }
     ub_flow_control_t *fc = &queue->flow_control;
-    switch (imm.flow_control.sub_type) {
+    switch (imm.bs.type) {
         case IMM_TYPE_FC_CREDIT_REP:
              umq_ub_permission_release(fc);
             break;
@@ -905,18 +899,18 @@ static int process_tx_msg(umq_buf_t *buf, ub_queue_t *queue)
 {
     umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)buf->qbuf_ext;
     umq_ub_imm_t imm = {.value = buf_pro->imm_data};
-    if (imm.bs.umq_private == 0) {
+    if (imm.bs.type == IMM_TYPE_USER) {
         return UMQ_SUCCESS;
     }
 
     switch (buf_pro->opcode) {
         case UMQ_OPC_WRITE_IMM:
-            if (imm.bs.type == IMM_TYPE_MEM && imm.mem_import.sub_type == IMM_TYPE_MEM_IMPORT_DONE) {
+            if (imm.bs.type == IMM_TYPE_MEM_IMPORT_DONE) {
                 return UMQ_CONTINUE_FLAG;
             }
             break;
         case UMQ_OPC_SEND_IMM:
-            if (imm.bs.type == IMM_TYPE_MEM && imm.mem_import.sub_type == IMM_TYPE_MEM_IMPORT) {
+            if (imm.bs.type == IMM_TYPE_MEM_IMPORT) {
                 umq_buf_free(buf);
                 return UMQ_CONTINUE_FLAG;
             }
