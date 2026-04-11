@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <pthread.h>
 #include <sstream>
 #include <unordered_map>
@@ -304,6 +305,11 @@ class SocketFd : public Fd<SocketFd> {
     }
 };
 
+enum class FdType : uint32_t {
+    SOCKET_FD = 0,
+    EVENT_FD = 1,
+};
+
 class EpollEvent {
     public:
     EpollEvent(int fd, struct epoll_event *event) : m_fd(fd), m_event(*event) {}
@@ -416,10 +422,70 @@ class EpollEvent {
         return m_event.data.ptr;
     }
 
+    FdType GetFdType()
+    {
+        return m_fd_type;
+    }
+
 protected:
     int m_fd;
     struct epoll_event m_event;
     bool m_add_epoll_event = false;
+    FdType m_fd_type = FdType::SOCKET_FD;
+};
+
+class DelEventFdEpollEvent : public ::EpollEvent {
+public:
+    DelEventFdEpollEvent(int event_fd, struct epoll_event *event) : EpollEvent(event_fd, event)
+    {
+        m_fd_type = FdType::EVENT_FD;
+    }
+
+    virtual ~DelEventFdEpollEvent()
+    {
+        if (m_fd >= 0) {
+            OsAPiMgr::GetOriginApi()->close(m_fd);
+            m_fd = -1;
+        }
+    }
+
+    int AddEpollEvent(int epoll_fd)
+    {
+        struct epoll_event tmp_event;
+        tmp_event.events = EPOLLIN;
+        tmp_event.data.ptr = (void *)(uintptr_t)this;
+
+        int ret = OsAPiMgr::GetOriginApi()->epoll_ctl(epoll_fd, EPOLL_CTL_ADD, m_fd, &tmp_event);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Add delete event fd failed, epfd: %d, delete event fd: %d\n",
+                              epoll_fd, m_fd);
+            return ret;
+        }
+
+        RPC_ADPT_VLOG_DEBUG("Add delete event fd successful, epfd: %d, delete event fd: %d\n", epoll_fd, m_fd);
+        m_add_epoll_event = true;
+
+        return 0;
+    }
+
+    void WakeUp()
+    {
+        uint64_t notification = 1;
+        if (eventfd_write(m_fd, notification) < 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Wakeup delete event fd: %d failed.\n", m_fd);
+        }
+    }
+
+    ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+                                        bool use_polling = false)
+    {
+        uint64_t cnt;
+        if (eventfd_read(m_fd, &cnt) == -1) {
+            RPC_ADPT_VLOG_WARN("read delete event fd %d failed, errno %d\n", m_fd, errno);
+        }
+
+        return 0;
+    }
 };
 
 class EpollFd : public Fd<EpollFd> {
@@ -428,6 +494,9 @@ class EpollFd : public Fd<EpollFd> {
     {
         m_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
         m_ctl_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+        m_del_event_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+
+        CreateAndAddDelEventFd();
     }
 
     ~EpollFd()
@@ -437,6 +506,18 @@ class EpollFd : public Fd<EpollFd> {
         }
         g_external_lock_ops.destroy(m_ctl_mutex);
         g_external_lock_ops.destroy(m_mutex);
+        g_external_lock_ops.destroy(m_del_event_mutex);
+
+        if (m_del_event_fd_epoll_event != nullptr) {
+            delete m_del_event_fd_epoll_event;
+            m_del_event_fd_epoll_event = nullptr;
+        }
+
+        ScopedUbExclusiveLocker sLock(m_del_event_mutex);
+        for (std::pair<int, EpollEvent *> kv : m_delete_event_map) {
+            delete kv.second;
+        }
+        m_delete_event_map.clear();
     }
 
     virtual ALWAYS_INLINE int EpollCtlAdd(int fd, struct epoll_event *event, bool use_polling = false)
@@ -501,18 +582,23 @@ class EpollFd : public Fd<EpollFd> {
     virtual ALWAYS_INLINE int EpollCtlDel(int fd, struct epoll_event *event, bool use_polling = false)
     {
         ScopedUbExclusiveLocker sLock(m_mutex);
-        if (m_epoll_event_map.count(fd) == 0) {
+        auto iter = m_epoll_event_map.find(fd);
+        if (iter == m_epoll_event_map.end()) {
             RPC_ADPT_VLOG_DEBUG("Origin epoll control delete not exist, epfd: %d, fd: %d\n", m_fd, fd);
             return 0;
         }
 
-        EpollEvent *epoll_event = m_epoll_event_map[fd];
+        EpollEvent *epoll_event = iter->second;
         if (epoll_event->DelEpollEvent(m_fd, use_polling) != 0) {
             return -1;
         }
 
-        delete epoll_event;
         m_epoll_event_map.erase(fd);
+        // 1. Add EpollEvent to m_delete_event_map.
+        // 2. epoll_wait is triggered through the event fd, where the actual deletion operation is performed.
+        // This is done to resolve the timing issue when accessing EpollEvent during the epoll_wait.
+        AddDelEpollEvent(fd, epoll_event);
+        WakeUpDelEventFd();
 
         return 0;
     }
@@ -573,9 +659,26 @@ class EpollFd : public Fd<EpollFd> {
         }
 
         int output_idx = 0;
+        bool clear_flag = false;
         for(int i = 0; i < ev_num; i++){
             EpollEvent *epoll_event = (EpollEvent *)events_ptr[i].data.ptr;
-            output_idx += epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, use_polling);
+            if (epoll_event->GetFdType() == FdType::SOCKET_FD) {
+                // If socket fd, and has been removed from epoll, skip
+                if (!epoll_event->IsAddEpollEvent()) {
+                    continue;
+                }
+
+                output_idx += epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, use_polling);
+            } else if (epoll_event->GetFdType() == FdType::EVENT_FD) {
+                // If event fd, the EpollEvent needs to be deleted.
+                // The deletion is first marked, and the actual deletion is performed after the loop ends.
+                epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, use_polling);
+                clear_flag = true;
+            }
+        }
+
+        if (clear_flag) {
+            ClearDelEpollEvent();
         }
 
         return output_idx;
@@ -598,8 +701,51 @@ class EpollFd : public Fd<EpollFd> {
 
     protected:
     std::unordered_map<int, EpollEvent *> m_epoll_event_map;
+    std::unordered_map<int, EpollEvent *> m_delete_event_map;
     u_external_mutex_t* m_mutex;
     u_external_mutex_t* m_ctl_mutex;
+    u_external_mutex_t* m_del_event_mutex;
+    DelEventFdEpollEvent *m_del_event_fd_epoll_event = nullptr;
+
+    int CreateAndAddDelEventFd()
+    {
+        int del_event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+        struct epoll_event ev;
+        m_del_event_fd_epoll_event = new(std::nothrow) DelEventFdEpollEvent(del_event_fd, &ev);
+        if (m_del_event_fd_epoll_event->AddEpollEvent(m_fd)) {
+            delete m_del_event_fd_epoll_event;
+            m_del_event_fd_epoll_event = nullptr;
+            return -1;
+        }
+
+        RPC_ADPT_VLOG_DEBUG("create and add delete event fd success. \n");
+        return 0;
+    }
+
+    void WakeUpDelEventFd()
+    {
+        if (m_del_event_fd_epoll_event == nullptr) {
+            RPC_ADPT_VLOG_WARN("Wake up delete event fd failed. \n");
+            return;
+        }
+
+        m_del_event_fd_epoll_event->WakeUp();
+    }
+
+    void AddDelEpollEvent(int fd, EpollEvent *epoll_event)
+    {
+        ScopedUbExclusiveLocker sLock(m_del_event_mutex);
+        m_delete_event_map[fd] = epoll_event;
+    }
+
+    void ClearDelEpollEvent()
+    {
+        ScopedUbExclusiveLocker sLock(m_del_event_mutex);
+        for (std::pair<int, EpollEvent *> kv : m_delete_event_map) {
+            delete kv.second;
+        }
+        m_delete_event_map.clear();
+    }
 };
 
 #endif
