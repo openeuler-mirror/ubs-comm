@@ -670,7 +670,13 @@ public:
                             "CPU_AFFINITY:%d failed, connect no need to retry,Peer eid:" EID_FMT
                             ",Peer IP:%s, fd: %d\n",
                             static_cast<int>(schedulePolicy), EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-                        return -1;
+
+                        if (degradable) {
+                            state = UBHandshakeState::kDEGRADE;
+                        } else {
+                            state = UBHandshakeState::kFAILED;
+                        }
+                        break;
                     }
                     UnbindAndFlushRemoteUmq();
                     DestroyLocalUmq();
@@ -3115,7 +3121,13 @@ private:
                             ",Peer IP:%s, fd: %d\n",
                             static_cast<int>(peerSchedulePolicy),
                             EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
-                        return ubsocket::Error::kUBSOCKET_UB_ACCEPT;
+
+                        if (degradable) {
+                            state = UBHandshakeState::kDEGRADE;
+                        } else {
+                            state = UBHandshakeState::kFAILED;
+                        }
+                        break;
                     }
                     socket_fd_obj->UnbindAndFlushRemoteUmq();
                     socket_fd_obj->DestroyLocalUmq();
@@ -3129,9 +3141,9 @@ private:
                         return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
                     }
 
-                    // 服务端 CheckOtherRoute 失败
+                    // 客户端 CheckOtherRoute 失败
                     if (otherRouteMessage.ub_handshake_state != UBHandshakeState::kRETRY) {
-                        RPC_ADPT_VLOG_INFO("Server CheckOtherRoute failed, try to degrade to TCP.\n");
+                        RPC_ADPT_VLOG_INFO("Client CheckOtherRoute failed, try to degrade to TCP.\n");
                         state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
                         break;
                     }
