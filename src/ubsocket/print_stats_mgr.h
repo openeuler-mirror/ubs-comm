@@ -79,6 +79,7 @@ public:
     {
         PrintStatsMgr* mgr = GetPrintStatsMgr();
         if (mgr->m_running) {
+            sleep(mgr->ubsocketTraceTime);
             mgr->Stop();
         }
     }

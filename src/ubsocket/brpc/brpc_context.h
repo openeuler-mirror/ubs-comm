@@ -297,6 +297,10 @@ private:
 
     virtual ~Context()
     {
+        if (m_trace_enable) {
+            Statistics::PrintStatsMgr::StopStatsCollection();
+        }
+
         // 通知 AE 线程关闭
         m_asyncEventThreadStopFlag.store(true);
         if (m_asyncEventThread.joinable()) {
@@ -321,9 +325,6 @@ private:
         CleanContext();
         MainSubUmqTable::Clean();
 
-        if (m_trace_enable) {
-            Statistics::PrintStatsMgr::StopStatsCollection();
-        }
         g_external_lock_ops.destroy(m_asyncEventRegistryMutex);
 
         RPC_ADPT_VLOG_INFO("Context reclaimed successfully.\n");
