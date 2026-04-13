@@ -142,6 +142,8 @@ int ConfigSettings::ParseEnvVars()
 
     RPC_ADPT_VLOG_INFO("%s: %s\n", ENV_VAR_BLOCK_TYPE, GetIOBlockTypeStr());
     RPC_ADPT_VLOG_INFO("%s: %lu\n", ENV_VAR_POOL_INITIAL_SIZE, m_io_total_size);
+    RPC_ADPT_VLOG_INFO("%s: %lu\n", ENV_VAR_POOL_MAX_SIZE, m_expansion_mem_size_max);
+    RPC_ADPT_VLOG_INFO("%s: %lu\n", ENV_VAR_BUF_POOL_DEPTH, m_tls_qbuf_pool_depth);
 
     if (strlen(m_stats_str) > 0) {
         m_stats_enable = BoolVal::BoolConverter(m_stats_str);
