@@ -600,11 +600,13 @@ int32_t HcomServiceImp::Connect(const std::string &serverUrl, UBSHcomChannelPtr 
         return res;
     }
 
-    res = ExchangeTimestamp(tmpChannel.Get());
-    if (NN_UNLIKELY(res != SER_OK)) {
-        NN_LOG_ERROR("Failed to exchange timestamp in service connect");
-        Disconnect(tmpChannel);
-        return res;
+    if (HcomEnv::RndvThreshold() != UINT32_MAX) {
+        res = ExchangeTimestamp(tmpChannel.Get());
+        if (NN_UNLIKELY(res != SER_OK)) {
+            NN_LOG_ERROR("Failed to exchange timestamp in service connect");
+            Disconnect(tmpChannel);
+            return res;
+        }
     }
 
     std::string uuid;

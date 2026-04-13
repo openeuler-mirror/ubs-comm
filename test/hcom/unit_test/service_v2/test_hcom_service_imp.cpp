@@ -243,6 +243,7 @@ TEST_F(TestHcomServiceImp, TestServiceConnect)
     service->mStarted = true;
     EXPECT_EQ(service->Connect("tcp://" + serviceIpInfo + ":" + oobPort, ch, opt), static_cast<int>(SER_INVALID_PARAM));
 
+    MOCKER_CPP(HcomEnv::RndvThreshold).stubs().will(returnValue(NN_NO65536));
     MOCKER_CPP(&HcomServiceImp::ExchangeTimestamp)
         .stubs()
         .will(returnValue(static_cast<int>(SER_TIMEOUT)))
@@ -996,6 +997,7 @@ TEST_F(TestHcomServiceImp, TestServiceConnectFailed)
         .stubs()
         .will(invoke(MockDoConnect));
     service->mStarted = true;
+    MOCKER_CPP(HcomEnv::RndvThreshold).stubs().will(returnValue(NN_NO65536));
     MOCKER_CPP(&HcomServiceImp::ExchangeTimestamp)
         .stubs()
         .will(returnValue(static_cast<int>(SER_TIMEOUT)))
