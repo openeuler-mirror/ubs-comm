@@ -230,6 +230,8 @@ private:
         umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DUMMY;
         umq_config.trans_info[0].mem_cfg.total_size = GetIOTotalSize();
         umq_config.trans_info[0].trans_mode = GetTransMode();
+        umq_config.buf_pool_cfg.umq_buf_pool_max_size = GetPoolMaxSize();
+        umq_config.buf_pool_cfg.tls_qbuf_pool_depth = GetBufPoolDepth();
 
         int ret = umq_init(&umq_config);
         if (ret != 0) {

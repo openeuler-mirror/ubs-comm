@@ -38,6 +38,8 @@
 #define DEFAULT_TX_DEPTH          (1024)
 #define DEFAULT_RX_DEPTH          (1024)
 #define DEFAULT_IO_TOTAL_SIZE     (1024)    // MB
+#define DEFAULT_POOL_MAX_SIZE     (2048ULL)  // MB
+#define DEFAULT_BUF_POOL_DEPTH    (12000ULL)
 #define IO_SIZE_MB                (1024 * 1024)
 #define UBSOCKET_TRACE_TIME_DEFAULT (10)
 #define UBSOCKET_TRACE_FILE_SIZE_DEFAULT (10)
@@ -62,8 +64,10 @@
 #define ENV_VAR_DEV_SRC_EID       "UBSOCKET_SRC_EID"
 #define ENV_VAR_RX_DEPTH          "UBSOCKET_RX_DEPTH"
 #define ENV_VAR_STATS             "UBSOCKET_STATS_CLI"
-#define ENV_VAR_BLOCK_TYPE        "UBSOCKET_BLOCK_TYPE"        // default, small, medium, large
-#define ENV_VAR_POOL_INITIAL_SIZE "UBSOCKET_POOL_INITIAL_SIZE" // MB
+#define ENV_VAR_BLOCK_TYPE        "UBSOCKET_BLOCK_TYPE"         // default, small, medium, large
+#define ENV_VAR_POOL_INITIAL_SIZE "UBSOCKET_POOL_INITIAL_SIZE"  // MB
+#define ENV_VAR_POOL_MAX_SIZE     "UBSOCKET_POOL_MAX_SIZE"      // MB
+#define ENV_VAR_BUF_POOL_DEPTH    "UBSOCKET_BUF_POOL_DEPTH"
 #define ENV_VAR_USE_ZCOPY         "UBSOCKET_USE_BRPC_ZCOPY"
 #define ENV_LOG_USE_PRINTF        "UBSOCKET_LOG_USE_PRINTF" // default 0, 0 false; 1 true
 #define ENV_SCHEDULE_POLICY       "UBSOCKET_SCHEDULE_POLICY" // affinity_priority， affinity, rr
@@ -228,6 +232,16 @@ public:
         return m_io_total_size;
     }
 
+    uint64_t GetPoolMaxSize()
+    {
+        return m_expansion_mem_size_max;
+    }
+
+    uint64_t GetBufPoolDepth()
+    {
+        return m_tls_qbuf_pool_depth;
+    }
+
     const char *GetIOBlockTypeStr()
     {
         return strlen(m_block_type_str) > 0 ? m_block_type_str : DEFAULT_QBUF_BLOCK_TYPE;
@@ -386,6 +400,30 @@ protected:
             }
             m_io_total_size = total_size == 0 ? DEFAULT_IO_TOTAL_SIZE * IO_SIZE_MB : total_size * IO_SIZE_MB;
         }
+
+        if ((env_ptr = getenv(ENV_VAR_POOL_MAX_SIZE)) != NULL) {
+            uint64_t expansion_mem_size_max = 0;
+            try {
+                expansion_mem_size_max = static_cast<uint64_t>(std::stoull(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_POOL_MAX_SIZE, using default.\n");
+                expansion_mem_size_max = 0;
+            }
+            m_expansion_mem_size_max = expansion_mem_size_max == 0 ? \
+                DEFAULT_POOL_MAX_SIZE * IO_SIZE_MB : expansion_mem_size_max * IO_SIZE_MB;
+        }
+
+        if ((env_ptr = getenv(ENV_VAR_BUF_POOL_DEPTH)) != NULL) {
+            uint64_t tls_qbuf_pool_depth = 0;
+            try {
+                tls_qbuf_pool_depth = static_cast<uint64_t>(std::stoull(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_BUF_POOL_DEPTH, using default.\n");
+                tls_qbuf_pool_depth = 0;
+            }
+            m_tls_qbuf_pool_depth = tls_qbuf_pool_depth == 0 ? DEFAULT_BUF_POOL_DEPTH : tls_qbuf_pool_depth;
+        }
+
         if ((env_ptr = getenv(ENV_VAR_BLOCK_TYPE)) != NULL) {
             ReadEnvVar(env_ptr, m_block_type_str, sizeof(m_block_type_str));
             if (memcmp(m_block_type_str, DEFAULT_QBUF_BLOCK_TYPE, strlen(m_block_type_str)) == 0) {
@@ -514,6 +552,9 @@ protected:
     uint32_t m_tx_depth = DEFAULT_TX_DEPTH;
     uint32_t m_rx_depth = DEFAULT_RX_DEPTH;
     uint64_t m_io_total_size = DEFAULT_IO_TOTAL_SIZE * IO_SIZE_MB;
+    // maximum memory allowed for expansion, default 2048MB
+    uint64_t m_expansion_mem_size_max = DEFAULT_POOL_MAX_SIZE * IO_SIZE_MB;
+    uint64_t m_tls_qbuf_pool_depth = DEFAULT_BUF_POOL_DEPTH;
     ubsocket::util_vlog_level_t m_log_level;
     umq_trans_mode_t m_trans_mode;
     umq_buf_block_size_t m_block_type = BLOCK_SIZE_8K;
