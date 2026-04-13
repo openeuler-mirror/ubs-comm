@@ -388,7 +388,7 @@ class EpollEvent {
     }
 
     virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
-                                                bool use_polling = false)
+                                                int maxevents, bool use_polling = false)
     {
         output_event->events = input_event->events;
         output_event->data = m_event.data;
@@ -477,7 +477,7 @@ public:
     }
 
     ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
-                                        bool use_polling = false)
+                                        int maxevents, bool use_polling = false)
     {
         uint64_t cnt;
         if (eventfd_read(m_fd, &cnt) == -1) {
@@ -668,11 +668,12 @@ class EpollFd : public Fd<EpollFd> {
                     continue;
                 }
 
-                output_idx += epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, use_polling);
+                output_idx += epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, maxevents,
+                                                             use_polling);
             } else if (epoll_event->GetFdType() == FdType::EVENT_FD) {
                 // If event fd, the EpollEvent needs to be deleted.
                 // The deletion is first marked, and the actual deletion is performed after the loop ends.
-                epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, use_polling);
+                epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, maxevents, use_polling);
                 clear_flag = true;
             }
         }

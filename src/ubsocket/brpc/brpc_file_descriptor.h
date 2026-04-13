@@ -4064,14 +4064,14 @@ public:
     virtual ~UmqTxEpollEvent() {}
 
     virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
-                                                bool use_polling = false) override
+                                                int maxevents, bool use_polling = false) override
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_origin_fd);
         if (socket_fd_obj != nullptr) {
             socket_fd_obj->NewTxEpollIn();
         }
 
-        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, maxevents, use_polling);
     }
 
 private:
@@ -4108,7 +4108,7 @@ public:
     }
 
     virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
-                                                bool use_polling = false) override
+                                                int maxevents, bool use_polling = false) override
     {
         uint64_t cnt;
         if (eventfd_read(m_fd, &cnt) == -1) {
@@ -4122,7 +4122,7 @@ public:
             socket_fd_obj->NewTxEpollInEventFd();
         }
 
-        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, maxevents, use_polling);
     }
 
 private:
@@ -4163,7 +4163,7 @@ public:
     }
 
     virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
-                                                bool use_polling = false) override
+                                                int maxevents, bool use_polling = false) override
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_origin_fd);
         if (socket_fd_obj != nullptr) {
@@ -4173,7 +4173,7 @@ public:
         Brpc::Context *context = Brpc::Context::GetContext();
         bool enable_share_jfr = context == nullptr ? true : context->EnableShareJfr();
         if (socket_fd_obj == nullptr || !enable_share_jfr) {
-            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, maxevents, use_polling);
         }
 
         if (GetAndAckEvent() < 0) {
@@ -4200,7 +4200,7 @@ public:
             }
         }
 
-        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, maxevents, use_polling);
     }
 
 private:
@@ -4424,7 +4424,7 @@ public:
         return 0;
     }
 
-    virtual int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+    virtual int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event, int max_events,
                                   bool use_polling = false) override
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(m_fd);
@@ -4446,16 +4446,16 @@ public:
         if ((input_event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) &&
             socket_fd_obj != nullptr && !socket_fd_obj->RxUseTcp() && socket_fd_obj->GetBindRemote()) {
             socket_fd_obj->NewOriginEpollError();
-            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, max_events, use_polling);
         }
 
         if ((input_event->events & EPOLLIN) &&
             socket_fd_obj != nullptr && !socket_fd_obj->RxUseTcp() && socket_fd_obj->GetBindRemote()) {
             socket_fd_obj->NewOriginEpollIn(use_polling);
-            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, max_events, use_polling);
         }
 
-        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, max_events, use_polling);
     }
 
     UmqTxEpollEvent *GetUmqTxEpollEvent()

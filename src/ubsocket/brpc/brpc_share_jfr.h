@@ -32,7 +32,7 @@ public:
 
     virtual int AddEpollEvent(int epoll_fd);
     virtual ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
-                                                bool use_polling = false) override;
+                                                int max_events, bool use_polling = false) override;
     void WakeUp();
 
 private:
@@ -58,7 +58,7 @@ public:
     virtual int AddEpollEvent(int epoll_fd, bool use_polling = false) override;
     virtual int ModEpollEvent(int epoll_fd, struct epoll_event *event, bool use_polling = false) override;
     virtual int DelEpollEvent(int epoll_fd, bool use_polling = false) override;
-    virtual int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+    virtual int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event, int maxevents,
                                   bool use_polling = false) override;
 
     ShareJfrEventFdEpollEvent *GetEventFdEpollEvent() const
@@ -85,4 +85,4 @@ private:
 
 }
 
-#endif
+#endif

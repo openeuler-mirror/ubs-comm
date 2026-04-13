@@ -942,7 +942,7 @@ public:
         return 0;
     }
 
-    virtual int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+    virtual int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event, int maxevents,
                                   bool use_polling = false) override
     {
         MemSocketFd *socket_fd_obj = (MemSocketFd *)Fd<::SocketFd>::GetFdObj(m_fd);
@@ -963,16 +963,16 @@ public:
         if ((input_event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) &&
             socket_fd_obj != nullptr && !socket_fd_obj->RxUseTcp()) {
             socket_fd_obj->NewOriginEpollError();
-            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, maxevents, use_polling);
         }
 
         if ((input_event->events & EPOLLIN) &&
             socket_fd_obj != nullptr && !socket_fd_obj->RxUseTcp()) {
             socket_fd_obj->NewOriginEpollIn(use_polling);
-            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+            return ::EpollEvent::ProcessEpollEvent(input_event, output_event, maxevents, use_polling);
         }
 
-        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+        return ::EpollEvent::ProcessEpollEvent(input_event, output_event, maxevents, use_polling);
     }
 };
 

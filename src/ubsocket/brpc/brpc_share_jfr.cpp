@@ -39,7 +39,7 @@ int ShareJfrEventFdEpollEvent::AddEpollEvent(int epoll_fd)
 }
 
 int ShareJfrEventFdEpollEvent::ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
-                                                 bool use_polling)
+                                                 int max_events, bool use_polling)
 {
     uint64_t cnt;
     if (eventfd_read(m_fd, &cnt) == -1) {
@@ -51,7 +51,7 @@ int ShareJfrEventFdEpollEvent::ProcessEpollEvent(struct epoll_event *input_event
         socket_fd_obj->NewRxEpollIn();
     }
 
-    return ::EpollEvent::ProcessEpollEvent(input_event, output_event, use_polling);
+    return ::EpollEvent::ProcessEpollEvent(input_event, output_event, max_events, use_polling);
 }
 
 void ShareJfrEventFdEpollEvent::WakeUp()
@@ -130,10 +130,16 @@ int ShareJfrRxEpollEvent::DelEpollEvent(int epoll_fd, bool use_polling)
 }
 
 int ShareJfrRxEpollEvent::ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
-                                            bool use_polling)
+                                            int max_events, bool use_polling)
 {
-    umq_buf_t *buf[POLL_BATCH_MAX];
-    int poll_num = PollShareJfrAndRefillRx(buf, POLL_BATCH_MAX);
+    if (max_events <= 0) {
+        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Param max_events: %d invalid, need greater than 0, share jfr fd: %d\n",
+                          max_events, m_fd);
+        return -1;
+    }
+
+    umq_buf_t *buf[max_events];
+    int poll_num = PollShareJfrAndRefillRx(buf, max_events);
     if (poll_num < 0) {
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to poll umq of share jfr, share jfr fd: %d\n", m_fd);
         return -1;

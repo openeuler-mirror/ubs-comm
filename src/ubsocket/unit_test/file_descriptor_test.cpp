@@ -261,7 +261,7 @@ TEST_F(EpollEventTest, ProcessEpollEvent)
     input_event.data.ptr = &event;
 
     struct epoll_event output_event;
-    int count = event.ProcessEpollEvent(&input_event, &output_event);
+    int count = event.ProcessEpollEvent(&input_event, &output_event, 0);
     EXPECT_EQ(count, FD_EPOLL_1);
 }
 
