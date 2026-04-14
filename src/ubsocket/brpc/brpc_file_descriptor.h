@@ -660,16 +660,18 @@ public:
 
                     // 如果服务端支持降级则客户端需要配合
                     degradable = Degradable(peerRet);
-                    if (context->IsBonding() && connEid != localEid && (Retryable(ackRet) || Retryable(peerRet))) {
+                    if (IsOk(ackRet) && IsOk(peerRet)) {
+                        state = UBHandshakeState::kOK;
+                    } else if (context->IsBonding() && connEid != localEid &&
+                               (Retryable(ackRet) || Retryable(peerRet))) {
                         state = UBHandshakeState::kRETRY;
                     } else if (degradable) {
                         state = UBHandshakeState::kDEGRADE;
-                    } else if (!IsOk(ackRet) || !IsOk(peerRet)) {
-                        state = UBHandshakeState::kFAILED;
                     } else {
-                        state = UBHandshakeState::kOK;
+                        state = UBHandshakeState::kFAILED;
                     }
                     break;
+
                 case UBHandshakeState::kRETRY:
                     if (schedulePolicy == dev_schedule_policy::CPU_AFFINITY) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
@@ -732,18 +734,19 @@ public:
                         return -1;
                     }
 
-                    if (degradable) {
-                        state = UBHandshakeState::kDEGRADE;
-                    } else if (!IsOk(ackRet) || !IsOk(peerRet)) {
-                        state = UBHandshakeState::kFAILED;
-                    } else {
+                    degradable = Degradable(peerRet);
+                    if (IsOk(ackRet) && IsOk(peerRet)) {
                         state = UBHandshakeState::kOK;
+                    } else if (degradable) {
+                        state = UBHandshakeState::kDEGRADE;
+                    } else {
+                        state = UBHandshakeState::kFAILED;
                     }
                     break;
 
                 case UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE:
-                    // 当客户端在 kRETRY 错误时会进入 kRETRY_FAILED_CHECK_OTHER_ROUTE， 但是服务端仍处于 kRETRY 阶段，
-                    // 需要发送信令通知服务端， 此种情况下 other_route 字段不可用
+                    // 客户端在 kRETRY 错误时会进入 kRETRY_FAILED_CHECK_OTHER_ROUTE，但是服务端仍处于 kRETRY 阶段，
+                    // 需要发送信令通知服务端，此种情况下 other_route 字段不可用
                     otherRouteMessage.ub_handshake_state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
                     if (SendSocketData(m_fd, &otherRouteMessage, sizeof(otherRouteMessage),
                                        CONTROL_PLANE_TIMEOUT_MS) != sizeof(otherRouteMessage)) {
@@ -3146,14 +3149,15 @@ private:
 
                     // 服务端判断是否可降级
                     degradable = Degradable(ackRet);
-                    if (context->IsBonding() && connEid != localEid && (Retryable(ackRet) || Retryable(peerRet))) {
+                    if (IsOk(ackRet) && IsOk(peerRet)) {
+                        state = UBHandshakeState::kOK;
+                    } else if (context->IsBonding() && connEid != localEid &&
+                               (Retryable(ackRet) || Retryable(peerRet))) {
                         state = UBHandshakeState::kRETRY;
                     } else if (degradable) {
                         state = UBHandshakeState::kDEGRADE;
-                    } else if (!IsOk(ackRet) || !IsOk(peerRet)) {
-                        state = UBHandshakeState::kFAILED;
                     } else {
-                        state = UBHandshakeState::kOK;
+                        state = UBHandshakeState::kFAILED;
                     }
                     break;
 
@@ -3204,6 +3208,10 @@ private:
 
                     // 保留在 CheckDevAdd 阶段时的错误
                     ackRet = ackRet | DoUbAccept(new_fd, connEid, socket_fd_obj);
+                    if (Degradable(ackRet) && !Context::GetContext()->Degradable()) {
+                        ackRet = ackRet - ubsocket::Error::kDEGRADABLE;
+                    }
+
                     if (!IsOk(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                                           "Failed to finish ub bind in accept, Peer eid:" EID_FMT
@@ -3227,12 +3235,13 @@ private:
                         return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
                     }
 
-                    if (degradable) {
-                        state = UBHandshakeState::kDEGRADE;
-                    } else if (!IsOk(ackRet) || !IsOk(peerRet)) {
-                        state = UBHandshakeState::kFAILED;
-                    } else {
+                    degradable = Degradable(ackRet);
+                    if (IsOk(ackRet) && IsOk(peerRet)) {
                         state = UBHandshakeState::kOK;
+                    } else if (degradable) {
+                        state = UBHandshakeState::kDEGRADE;
+                    } else {
+                        state = UBHandshakeState::kFAILED;
                     }
                     break;
 
