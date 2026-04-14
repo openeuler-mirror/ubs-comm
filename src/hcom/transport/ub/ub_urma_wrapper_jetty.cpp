@@ -249,8 +249,8 @@ UResult UBJetty::UnInitialize()
         }
         if ((result = HcomUrma::DeleteJetty(mUrmaJetty)) != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to delete jetty id " << mUrmaJettyId << ", result " << result << ", errno " <<
-                NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_WARN("Unable to delete jetty id " << mUrmaJettyId << ", result " << result << ", as " <<
+                 NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         } else {
             NN_LOG_INFO("Delete jetty success, jetty id: " << mUrmaJettyId);
         }
@@ -260,7 +260,7 @@ UResult UBJetty::UnInitialize()
     if (mJfr != nullptr) {
         if ((result = HcomUrma::DeleteJfr(mJfr)) != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to delete jfr " << result << ", as errno " <<
+            NN_LOG_WARN("Unable to delete jfr " << result << ", as " <<
                 NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
         mJfr = nullptr;

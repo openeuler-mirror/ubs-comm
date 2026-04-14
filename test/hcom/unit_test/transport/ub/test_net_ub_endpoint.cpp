@@ -591,6 +591,77 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawSgl)
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
 }
 
+
+TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawSglEncryptCopyErr)
+{
+    uint32_t key = sglRequest.iov[0].lKey;
+    mDriver->mMapTseg.emplace(key, nullptr);
+    NEP->mIsNeedEncrypt = true;
+
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+        .stubs()
+        .will(invoke(MockGetFreeBuffer));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
+
+    int ret = NEP->PostSendRawSgl(sglRequest, 1);
+    EXPECT_EQ(ret, static_cast<int>(NN_ERROR));
+}
+
+TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawSglEncryptSecondGetBufferErr)
+{
+    uint32_t key = sglRequest.iov[0].lKey;
+    mDriver->mMapTseg.emplace(key, nullptr);
+    NEP->mIsNeedEncrypt = true;
+
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+        .stubs()
+        .will(invoke(MockGetFreeBuffer))
+        .then(returnValue(false));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
+
+    int ret = NEP->PostSendRawSgl(sglRequest, 1);
+    EXPECT_EQ(ret, static_cast<int>(NN_GET_BUFF_FAILED));
+}
+
+TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawSglEncryptEncryptFail)
+{
+    uint32_t key = sglRequest.iov[0].lKey;
+    mDriver->mMapTseg.emplace(key, nullptr);
+    NEP->mIsNeedEncrypt = true;
+
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+        .stubs()
+        .will(invoke(MockGetFreeBuffer))
+        .then(invoke(MockGetFreeBuffer));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
+    MOCKER_CPP(&AesGcm128::Encrypt,
+               bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+        .stubs()
+        .will(returnValue(false));
+
+    int ret = NEP->PostSendRawSgl(sglRequest, 1);
+    EXPECT_EQ(ret, static_cast<int>(NN_ENCRYPT_FAILED));
+}
+
+TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawSglEncryptPostFail)
+{
+    uint32_t key = sglRequest.iov[0].lKey;
+    mDriver->mMapTseg.emplace(key, nullptr);
+    NEP->mIsNeedEncrypt = true;
+
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+        .stubs()
+        .will(invoke(MockGetFreeBuffer));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
+    MOCKER_CPP(&AesGcm128::Encrypt,
+               bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+        .stubs()
+        .will(returnValue(true));
+    MOCKER_CPP(&UBWorker::PostSendSgl).stubs().will(returnValue(1));
+
+    int ret = NEP->PostSendRawSgl(sglRequest, 1);
+    EXPECT_EQ(ret, static_cast<int>(NN_NO1));
+}
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointSetEpOption)
 {
     UBSHcomEpOptions epOptions;
@@ -1321,6 +1392,77 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawSgl)
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
 }
 
+
+TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawSglEncryptCopyErr)
+{
+    uint32_t key = sglRequest.iov[0].lKey;
+    mDriver->mMapTseg.emplace(key, nullptr);
+    NEP->mIsNeedEncrypt = true;
+
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+        .stubs()
+        .will(invoke(MockGetFreeBuffer));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
+
+    int ret = NEP->PostSendRawSgl(sglRequest, 1);
+    EXPECT_EQ(ret, static_cast<int>(NN_ERROR));
+}
+
+TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawSglEncryptSecondGetBufferErr)
+{
+    uint32_t key = sglRequest.iov[0].lKey;
+    mDriver->mMapTseg.emplace(key, nullptr);
+    NEP->mIsNeedEncrypt = true;
+
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+        .stubs()
+        .will(invoke(MockGetFreeBuffer))
+        .then(returnValue(false));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
+
+    int ret = NEP->PostSendRawSgl(sglRequest, 1);
+    EXPECT_EQ(ret, static_cast<int>(NN_GET_BUFF_FAILED));
+}
+
+TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawSglEncryptEncryptFail)
+{
+    uint32_t key = sglRequest.iov[0].lKey;
+    mDriver->mMapTseg.emplace(key, nullptr);
+    NEP->mIsNeedEncrypt = true;
+
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+        .stubs()
+        .will(invoke(MockGetFreeBuffer))
+        .then(invoke(MockGetFreeBuffer));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
+    MOCKER_CPP(&AesGcm128::Encrypt,
+               bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+        .stubs()
+        .will(returnValue(false));
+
+    int ret = NEP->PostSendRawSgl(sglRequest, 1);
+    EXPECT_EQ(ret, static_cast<int>(NN_ENCRYPT_FAILED));
+}
+
+TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawSglEncryptInnerPostFail)
+{
+    uint32_t key = sglRequest.iov[0].lKey;
+    mDriver->mMapTseg.emplace(key, nullptr);
+    NEP->mIsNeedEncrypt = true;
+
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+        .stubs()
+        .will(invoke(MockGetFreeBuffer));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
+    MOCKER_CPP(&AesGcm128::Encrypt,
+               bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+        .stubs()
+        .will(returnValue(true));
+    MOCKER_CPP(&NetUBSyncEndpoint::InnerPostSendSgl).stubs().will(returnValue(1));
+
+    int ret = NEP->PostSendRawSgl(sglRequest, 1);
+    EXPECT_EQ(ret, static_cast<int>(NN_NO1));
+}
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointWaitCompletionErr)
 {
     MOCKER_CPP(&NetUBSyncEndpoint::PollingCompletion).stubs().will(returnValue(1));

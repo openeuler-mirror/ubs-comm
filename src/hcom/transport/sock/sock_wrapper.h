@@ -1277,7 +1277,7 @@ public:
             /* ECONNRESET is broken during io, SUCCESS is broken during idle time. */                             \
             if (errno == ECONNRESET || errno == 0) {                                                              \
                 NN_LOG_WARN("Sock " << mId << " does not receive data header, connection "                        \
-                                    << " reset by peer, errno " << errno);                                        \
+                                    << " reset by peer");                                                         \
                 return SockOpContextInfo::SS_RESET_BY_PEER; /* socket is closed by peer, socket is error */       \
             }                                                                                                     \
             /* if errno is eagain is normal, need to continue to receive */                                       \
@@ -1320,7 +1320,7 @@ public:
             /* ECONNRESET is broken during io, SUCCESS is broken during idle time. */                               \
             if (errno == ECONNRESET || errno == 0) {                                                                \
                 NN_LOG_WARN("Sock " << mId << " does not receive data body, connection "                            \
-                                    << " reset by peer, errno " << errno);                                          \
+                                    << " reset by peer");                                                           \
                 return SockOpContextInfo::SS_RESET_BY_PEER; /* socket is closed by peer, socket is error */         \
             }                                                                                                       \
             /* if errno is eagain is normal, need to continue to receive */                                         \

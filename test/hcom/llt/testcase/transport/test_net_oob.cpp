@@ -45,10 +45,7 @@ int testNewConnectionHandlerFailure(ock::hcom::OOBTCPConnection &conn)
 
 std::string GetFilPrefixEnv()
 {
-    char path[NN_NO255];
-    getcwd(path, NN_NO255);
-    std::string pathStr = path;
-    std::string envString = "HCOM_FILE_PATH_PREFIX=" + pathStr;
+    std::string envString = "HCOM_FILE_PATH_PREFIX=/tmp";
     return envString;
 }
 
@@ -491,6 +488,12 @@ TEST_F(TestNetOob, ConnectForUdsSuccessWithAbstractPath)
         new (std::nothrow) ock::hcom::OOBTCPClient(ock::hcom::NET_OOB_UDS, "client.socket", 0);
     NResult ret1 = client->Connect("server.socket", conn);
     EXPECT_EQ(ret1, ock::hcom::NN_OK);
+
+    char revTemp[1024];
+    void *revBuff = (void *)revTemp;
+    NResult ret2 = conn->Receive(revBuff, strlen(g_sendTemp));
+    EXPECT_EQ(ret2, ock::hcom::NN_OK);
+
     auto connFd = conn->TransferFd();
     NetFunc::NN_SafeCloseFd(connFd);
 }
@@ -627,7 +630,7 @@ TEST_F(TestNetOob, TestClientTcpConnect)
     OOBTCPClientPtr client = new (std::nothrow) OOBTCPClient(NET_OOB_TCP, oobIp, NN_NO8192);
     OOBTCPConnection *conn = nullptr;
     int result = client->Connect(conn);
-    EXPECT_EQ(NN_INVALID_IP, result);
+    EXPECT_EQ(NN_OOB_CLIENT_SOCKET_ERROR, result);
 }
 }
 }

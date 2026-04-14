@@ -23,6 +23,8 @@
 
 namespace ock {
 namespace hcom {
+constexpr size_t K_TOO_LARGE_PAYLOAD_SIZE = NN_NO1024 + NN_NO1;
+
 class TestNetShmDriverOob : public testing::Test {
 public:
     TestNetShmDriverOob();
@@ -581,6 +583,81 @@ TEST_F(TestNetShmDriverOob, ProcessEpErrorOneSideRemaining)
     EXPECT_NO_FATAL_FAILURE(driver->ProcessEpError(ch));
 }
 
+TEST_F(TestNetShmDriverOob, ConnectServerUrlPayloadTooLarge)
+{
+    int ret;
+    std::string payload(K_TOO_LARGE_PAYLOAD_SIZE, 'a');
+    UBSHcomNetEndpointPtr ep;
+    std::string serverUrl = "uds://name";
+
+    driver->mInited = true;
+    driver->mStarted = true;
+    ret = driver->Connect(serverUrl, payload, ep, 0, 0, 0, 0);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+}
+
+TEST_F(TestNetShmDriverOob, ConnectOobPayloadTooLarge)
+{
+    int ret;
+    std::string payload(K_TOO_LARGE_PAYLOAD_SIZE, 'a');
+    UBSHcomNetEndpointPtr ep;
+
+    driver->mInited = true;
+    driver->mStarted = true;
+    ret = driver->Connect("name", 0, payload, ep, 0, 0, 0, 0);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+}
+
+TEST_F(TestNetShmDriverOob, ConnectServerUrlNotUdsType)
+{
+    int ret;
+    std::string payload = "ok";
+    UBSHcomNetEndpointPtr ep;
+
+    driver->mInited = true;
+    driver->mStarted = true;
+    ret = driver->Connect("tcp://127.0.0.1:9981", payload, ep, 0, 0, 0, 0);
+    EXPECT_EQ(ret, NN_INVALID_PARAM);
+}
+
+TEST_F(TestNetShmDriverOob, ConnectOobNotStarted)
+{
+    int ret;
+    std::string payload = "ok";
+    UBSHcomNetEndpointPtr ep;
+
+    driver->mInited = true;
+    driver->mStarted = false;
+    ret = driver->Connect("name", 0, payload, ep, 0, 0, 0, 0);
+    EXPECT_EQ(ret, NN_ERROR);
+}
+
+TEST_F(TestNetShmDriverOob, ConnectServerUrlValidateFail)
+{
+    int ret;
+    std::string payload = "ok";
+    UBSHcomNetEndpointPtr ep;
+
+    driver->mInited = true;
+    driver->mStarted = true;
+    MOCKER_CPP(NetFunc::NN_ValidateUrl).stubs().will(returnValue(static_cast<int>(NN_PARAM_INVALID)));
+    ret = driver->Connect("uds://name", payload, ep, 0, 0, 0, 0);
+    EXPECT_EQ(ret, NN_PARAM_INVALID);
+}
+
+TEST_F(TestNetShmDriverOob, ConnectOobClientGrpNoOutOfRange)
+{
+    int ret;
+    std::string payload = "ok";
+    UBSHcomNetEndpointPtr ep;
+
+    driver->mInited = true;
+    driver->mStarted = true;
+    driver->mWorkerGroups.clear();
+    ret = driver->Connect("name", 0, payload, ep, 0, 0, 1, 0);
+    EXPECT_EQ(ret, NN_ERROR);
+}
+
 TEST_F(TestNetShmDriverOob, Connect)
 {
     int ret;
@@ -593,7 +670,6 @@ TEST_F(TestNetShmDriverOob, Connect)
     ret = driver->Connect(payload, ep, 0, 0, 0);
     EXPECT_NE(ret, NN_OK);
 }
-
 TEST_F(TestNetShmDriverOob, Connect2)
 {
     int ret;

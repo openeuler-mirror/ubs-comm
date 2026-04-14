@@ -371,12 +371,13 @@ TEST_F(TestNetChannelImp, TestDestroyTimerCtx)
     delete timer;
 }
 
-SerResult MockPrepareTimerCtx(Callback *cb, int16_t timeout, TimerCtx &context)
+SerResult MockPrepareTimerCtx(const Callback *cb, int16_t timeout, TimerCtx &context)
 {
     if (cb != nullptr) {
+        auto *mutableCb = const_cast<Callback *>(cb);
         UBSHcomServiceContext ctx {};
         ctx.mResult = SER_OK;
-        cb->Run(ctx);
+        mutableCb->Run(ctx);
     }
     return SER_OK;
 }
