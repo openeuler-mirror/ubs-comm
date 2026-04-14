@@ -480,7 +480,7 @@ int32_t HcomChannelImp::Send(const UBSHcomRequest &req, const Callback *done)
         }
     } while (NetMonotonic::TimeSec() < timestamp);
 
-    NN_LOG_WARN("Failed to Send, error code: " << result);
+    NN_LOG_WARN("Failed to Send, result code: " << result);
     return result;
 }
 
@@ -1530,7 +1530,7 @@ int32_t HcomChannelImp::Reply(const UBSHcomReplyContext &ctx, const UBSHcomReque
             break;
         }
     } while (NetMonotonic::TimeSec() < timestamp);
-    NN_LOG_WARN("Failed to reply, error code: " << ret);
+    NN_LOG_WARN("Failed to reply, ret code: " << ret);
     return ret;
 }
 
