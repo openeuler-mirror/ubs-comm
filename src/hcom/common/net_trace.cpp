@@ -237,7 +237,7 @@ void NetTrace::HtraceInit(const std::string &name)
         if (NetFunc::NN_Stol(envString, tmp) && tmp >= LEVEL0 && tmp <= LEVEL1) {
             gEnableHtrace = static_cast<bool>(tmp);
         } else {
-            NN_LOG_WARN("Set env 'HCOM_ENABLE_TRACE' error, the value can be 0 or 1. ");
+            NN_LOG_WARN("Failed to set env 'HCOM_ENABLE_TRACE', the value can be 0 or 1. ");
         }
     } else {
         NN_LOG_INFO("Default diseable trace. ");

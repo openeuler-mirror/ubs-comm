@@ -167,10 +167,10 @@ void ShmChannelKeeper::RunInThread()
                 continue;
             }
         } catch (std::runtime_error &ex) {
-            NN_LOG_WARN("Got runtime error in ShmChannelKeeper::RunInThread '" << ex.what() <<
+            NN_LOG_WARN("Got runtime fail in ShmChannelKeeper::RunInThread '" << ex.what() <<
                 "', ignore and continue");
         } catch (...) {
-            NN_LOG_WARN("Got unknown error in ShmChannelKeeper::RunInThread, ignore and continue");
+            NN_LOG_WARN("Got unknown fail in ShmChannelKeeper::RunInThread, ignore and continue");
         }
     }
 
