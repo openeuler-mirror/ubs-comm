@@ -45,6 +45,7 @@ public:
         : EpollEvent(share_jfr_fd, event), m_origin_fd(fd), m_epoll_fd(epoll_fd), m_main_umq(main_umq)
     {
         m_event.events = EPOLLIN | EPOLLET;
+        m_fd_type = FdType::SHARE_JFR_FD;
     }
 
     virtual ~ShareJfrRxEpollEvent()

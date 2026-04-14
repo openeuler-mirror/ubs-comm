@@ -308,6 +308,7 @@ class SocketFd : public Fd<SocketFd> {
 enum class FdType : uint32_t {
     SOCKET_FD = 0,
     EVENT_FD = 1,
+    SHARE_JFR_FD = 2,
 };
 
 class EpollEvent {
@@ -658,10 +659,16 @@ class EpollFd : public Fd<EpollFd> {
             return ev_num;
         }
 
+        std::map<EpollEvent*, int> share_jfr_events;
         int output_idx = 0;
         bool clear_flag = false;
         for(int i = 0; i < ev_num; i++){
             EpollEvent *epoll_event = (EpollEvent *)events_ptr[i].data.ptr;
+            if (epoll_event->GetFdType() == FdType::SHARE_JFR_FD) {
+                share_jfr_events[epoll_event] = i;
+                continue;
+            }
+
             if (epoll_event->GetFdType() == FdType::SOCKET_FD) {
                 // If socket fd, and has been removed from epoll, skip
                 if (!epoll_event->IsAddEpollEvent()) {
@@ -675,6 +682,19 @@ class EpollFd : public Fd<EpollFd> {
                 // The deletion is first marked, and the actual deletion is performed after the loop ends.
                 epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, maxevents, use_polling);
                 clear_flag = true;
+            }
+        }
+
+        if (maxevents - output_idx > 0) {
+            int share_jfr_num = static_cast<int>(share_jfr_events.size());
+            int poll_batch = std::max(1, (maxevents - output_idx) / share_jfr_num);
+            for (const auto &pair : share_jfr_events) {
+                if (!pair.first->IsAddEpollEvent()) {
+                    continue;
+                }
+
+                output_idx += pair.first->ProcessEpollEvent(events_ptr + pair.second, events + output_idx, poll_batch,
+                                                            use_polling);
             }
         }
 
