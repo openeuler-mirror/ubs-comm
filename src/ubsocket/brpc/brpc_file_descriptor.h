@@ -20,6 +20,7 @@
 #include <string>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <array>
 #include "umq_pro_api.h"
 #include "umq_errno.h"
 #include "brpc_context.h"
@@ -71,6 +72,11 @@ constexpr int RETRY_NEEDED = 1;
 constexpr uint32_t GET_PER_ACK = 32;
 // currently, poll batch use 32 is for the balance of performance and efficiency
 constexpr uint32_t POLL_BATCH_MAX = 32;
+
+constexpr uint8_t MAX_PORT_COUNT = 8;
+constexpr uint32_t NUM_PORTS_2 = 2;
+constexpr uint32_t NUM_PORTS_7 = 7;
+constexpr uint32_t DOUBLED_FACTOR = 2;
 
 namespace Brpc {
 using namespace Statistics;
@@ -2403,6 +2409,38 @@ public:
         return umq_rearm_interrupt(m_local_umqh, true, &tx_option);
     }
 
+    uint32_t getLeftPostRxNum(bool enable_share_jfr)
+    {
+        uint32_t left_post_rx_num = 0;
+        // 开共享jfr
+        if (enable_share_jfr) {
+            if (mUsedPorts.num == 0) {
+                left_post_rx_num = m_rx_window_capacity;
+            } else if (
+                (mUsedPorts.num == NUM_PORTS_2 && mTopoType == UMQ_TOPO_TYPE_CLOS)
+                || (mUsedPorts.num == NUM_PORTS_7 && mTopoType == UMQ_TOPO_TYPE_FULLMESH_1D)
+            ) {
+                left_post_rx_num = m_rx_window_capacity * mUsedPorts.num * DOUBLED_FACTOR;
+            } else {
+                left_post_rx_num = 0;
+            }
+            RPC_ADPT_VLOG_INFO("Enable JFR, rx num is: %u\n", left_post_rx_num);
+        } else { // 不开共享jfr
+            if (mUsedPorts.num <= 1) {
+                left_post_rx_num = m_rx_window_capacity;
+            } else if (
+                (mUsedPorts.num == NUM_PORTS_2 && mTopoType == UMQ_TOPO_TYPE_CLOS)
+                || (mUsedPorts.num == NUM_PORTS_7 && mTopoType == UMQ_TOPO_TYPE_FULLMESH_1D)
+            ) {
+                left_post_rx_num = m_rx_window_capacity * mUsedPorts.num;
+            } else {
+                left_post_rx_num = 0;
+            }
+            RPC_ADPT_VLOG_INFO("Not enable JFR, rx num is: %u\n", left_post_rx_num);
+        }
+        return left_post_rx_num;
+    }
+    
     int PrefillRx()
     {
         Brpc::Context *context = Brpc::Context::GetContext();
@@ -2413,7 +2451,12 @@ public:
 
         uint64_t umq_handle = enable_share_jfr ? m_main_umqh : m_local_umqh;
         m_need_prefill_rx = false;
-        uint32_t left_post_rx_num = m_rx_window_capacity;
+        uint32_t left_post_rx_num = getLeftPostRxNum(enable_share_jfr);
+        if (left_post_rx_num == 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to set rx window capacity\n");
+            return -1;
+        }
+       
         uint32_t cur_post_rx_num = 0;
         umq_alloc_option_t option = { UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(IOBuf::Block) };
         do {
@@ -3923,6 +3966,8 @@ private:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get dev route list\n");
             return -1;
         }
+        mTopoType = filteredList.topo_type;
+        RPC_ADPT_VLOG_INFO("Topo type's value is: %d\n", mTopoType);
         if (filteredList.topo_type == UMQ_TOPO_TYPE_FULLMESH_1D) {
             if (GetConnEid(filteredList, dstEid, connRoute, useRoundRobin)!=0) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get connect eid\n");
@@ -3933,6 +3978,7 @@ private:
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to check dev add\n");
                 return -1;
             }
+            // fm不走bond，所以mUsedPorts.num保持为0
         } else {
             std::vector<umq_route_t> mainRoutes;
             umq_route_t connMainRoute;
@@ -3948,10 +3994,12 @@ private:
                 return -1;
             }
             *connRoute = connMainRoute;
-            src_port_eid_main = connMainRoute.src_port.value;
-            dst_port_eid_main = connMainRoute.dst_port.value;
-            src_port_eid_remain = connBackRoute.src_port.value;
-            dst_port_eid_remain = connBackRoute.dst_port.value;
+            std::vector<umq_port_id_t> ports = {
+                connMainRoute.src_port,
+                connBackRoute.src_port,
+            };
+            std::copy(ports.begin(), ports.end(), mUsedPortArray.begin());
+            mUsedPorts.num = static_cast<uint8_t>(ports.size());
             if (CheckDevAdd(connMainRoute.src_eid) != 0) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to check main dev add\n");
                 return -1;
@@ -3984,10 +4032,12 @@ private:
     int mPeerSocketId = -1;
     std::vector<uint32_t> mPeerAllSocketIds;
     bool m_isblocking = true;
-    uint32_t src_port_eid_main; // 主
-    uint32_t dst_port_eid_main; // 主
-    uint32_t src_port_eid_remain; // 备
-    uint32_t dst_port_eid_remain; // 备
+    umq_topo_type_t mTopoType = UMQ_TOPO_TYPE_FULLMESH_1D;
+    static std::array<umq_port_id_t, MAX_PORT_COUNT> mUsedPortArray;
+    umq_used_ports_t mUsedPorts = {
+        .port = mUsedPortArray.data(),
+        .num = 0
+    };
     QbufQueue<umq_buf_t *> *rxQueue = nullptr;
     ShareJfrRxEpollEvent *share_jfr_rx_epoll_event = nullptr;
     struct ConnInfo {
