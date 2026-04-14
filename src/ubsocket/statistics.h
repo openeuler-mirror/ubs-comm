@@ -259,6 +259,10 @@ public:
     // data plane interface, caller ensure input validation
     ALWAYS_INLINE void UpdateTraceStats(enum trace_stats_type type, uint32_t value)
     {
+        if (!m_stats_enable) {
+            return;
+        }
+
         switch (type) {
             case CONN_COUNT:
                 mConnCount.fetch_add(value, std::memory_order_relaxed);
