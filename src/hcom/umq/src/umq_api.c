@@ -243,6 +243,16 @@ static umq_framework_t g_umq_fws[UMQ_TRANS_MODE_MAX] = {
     },
 };
 
+umq_dfx_ops_t *umq_get_dfx_tp_ops(umq_trans_mode_t trans_mode)
+{
+    umq_framework_t *umq_fw = &g_umq_fws[trans_mode];
+    if (!umq_fw->enable) {
+        UMQ_VLOG_ERR(VLOG_UMQ, "trans mode %u ops not init\n", trans_mode);
+        return NULL;
+    }
+    return umq_fw->dfx_tp_ops;
+}
+
 static int umq_fw_log_config_set(umq_log_config_t *config)
 {
     uint8_t fw_i = 0;
@@ -860,11 +870,6 @@ umq_buf_t *umq_buf_alloc(uint32_t request_size, uint32_t request_qbuf_num, uint6
     return umq->tp_ops->umq_tp_buf_alloc(request_size, request_qbuf_num, umq->umqh_tp, option);
 }
 
-static inline bool is_huge_mempool_pool(uint32_t mempool_id)
-{
-    return (mempool_id > UMQ_QBUF_DEFAULT_MEMPOOL_ID && mempool_id < HUGE_QBUF_POOL_MEMPOOL_ID_MAX);
-}
-
 void umq_buf_free(umq_buf_t *qbuf)
 {
     if (!g_umq_inited || qbuf == NULL) {
@@ -976,7 +981,7 @@ int umq_buf_headroom_reset(umq_buf_t *qbuf, uint16_t headroom_size)
     }
 
     if (qbuf->umqh == UMQ_INVALID_HANDLE) {
-        if (qbuf->mempool_id == UMQ_QBUF_DEFAULT_MEMPOOL_ID) {
+        if (!is_huge_mempool_pool(qbuf->mempool_id)) {
             return umq_qbuf_headroom_reset(qbuf, headroom_size);
         } else {
             return umq_huge_qbuf_headroom_reset(qbuf, headroom_size);
