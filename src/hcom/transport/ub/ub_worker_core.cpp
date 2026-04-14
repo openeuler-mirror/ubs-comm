@@ -311,7 +311,7 @@ void UBWorker::RunInThread()
     if (mOptions.threadPriority != 0) {
         if (NN_UNLIKELY(setpriority(PRIO_PROCESS, 0, mOptions.threadPriority) != 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to set worker thread priority in ub worker " << mName << ", errno:" <<
+            NN_LOG_WARN("Unable to set worker thread priority in ub worker " << mName << ", as " <<
                 NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         }
     }
