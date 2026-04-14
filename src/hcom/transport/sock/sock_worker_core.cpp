@@ -232,8 +232,8 @@ void SockWorker::RunInThread(int16_t cpuId)
     if (mOptions.threadPriority != 0) {
         if (NN_UNLIKELY(setpriority(PRIO_PROCESS, 0, mOptions.threadPriority) != 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to set worker thread priority in sock worker " << mName << ", errno:" << errno <<
-                " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_WARN("Unable to set worker thread priority in sock worker " << mName <<
+                ", as " << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         }
     }
 

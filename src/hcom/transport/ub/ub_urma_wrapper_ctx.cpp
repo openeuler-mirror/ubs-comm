@@ -107,7 +107,7 @@ UResult UBContext::UnInitialize()
         int res = 0;
         if ((res = HcomUrma::DeleteContext(mUrmaContext)) != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to delete UB Context " << res << ", as errno " <<
+            NN_LOG_WARN("Unable to delete UB Context " << res << ", as " <<
                 NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
         mUrmaContext = nullptr;

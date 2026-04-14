@@ -12,14 +12,27 @@
 
 
 #include "test_trace_service.h"
+#include <atomic>
 #include <vector>
 #include <cstdlib>
 #include <cstdio>
+#include <unistd.h>
 #include "htracer.h"
 
 
 namespace ock {
 namespace hcom {
+
+namespace {
+std::atomic<uint32_t> g_traceSockSeq(0);
+
+std::string GenTraceServerName(const std::string &prefix)
+{
+    uint32_t seq = g_traceSockSeq.fetch_add(1, std::memory_order_relaxed);
+    return prefix + "_" + std::to_string(::getpid()) + "_" + std::to_string(seq);
+}
+} // namespace
+
 void TestService::SetUp() const {}
 void TestService::TearDown() const {}
 
@@ -33,7 +46,7 @@ constexpr uint32_t TRACE_ID_2 = TRACE_ID(2, NN_NO0);
 TEST_F(TestService, test_one_trace_service_start_return_true_shutdown_return_true)
 {
     g_traceService = new HTracerService();
-    EXPECT_EQ(g_traceService->StartUp("1234"), NN_OK);
+    EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_service_start")), NN_OK);
 
     g_traceService->ShutDown();
 
@@ -44,8 +57,8 @@ TEST_F(TestService, test_one_trace_service_start_return_true_shutdown_return_tru
 TEST_F(TestService, test_one_trace_service_create_port_return_false_when_used_and_return_true_when_new_port)
 {
     g_traceService = new HTracerService();
-    EXPECT_EQ(g_traceService->StartUp("12345"), NN_OK);
-    EXPECT_EQ(g_traceService->StartUp("12346"), NN_OK);
+    EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_service_port_a")), NN_OK);
+    EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_service_port_b")), NN_OK);
 
     g_traceService->ShutDown();
     delete g_traceService;
@@ -55,7 +68,7 @@ TEST_F(TestService, test_one_trace_service_create_port_return_false_when_used_an
 TEST_F(TestService, test_get_traceinfo_give_normal_value_id_return_normal_value)
 {
     EnableHtrace(true);
-    EXPECT_EQ(HTracerInit("30000"), NN_OK);
+    EXPECT_EQ(HTracerInit(GenTraceServerName("trace_init_normal")), NN_OK);
     TRACE_DELAY_BEGIN(TRACE_ID_0);
     TRACE_DELAY_END(TRACE_ID_0, 0);
     TRACE_DELAY_BEGIN(TRACE_ID_2);
@@ -83,7 +96,7 @@ TEST_F(TestService, test_get_traceinfo_give_normal_value_id_return_normal_value)
 
 TEST_F(TestService, test_get_traceinfo_give_morethan_MAX_SERVICE_NUM_return_empty)
 {
-    EXPECT_EQ(HTracerInit("30001"), NN_OK);
+    EXPECT_EQ(HTracerInit(GenTraceServerName("trace_init_max_service")), NN_OK);
     TRACE_DELAY_BEGIN(TRACE_ID_0);
     TRACE_DELAY_END(TRACE_ID_0, 0);
     TRACE_DELAY_BEGIN(TRACE_ID_2);
@@ -99,7 +112,7 @@ TEST_F(TestService, test_get_traceinfo_give_morethan_MAX_SERVICE_NUM_return_empt
 TEST_F(TestService, test_get_traceinfo_give_invalid_value_return_all_records)
 {
     TracerServiceHelper::ResetTraceInfos();
-    EXPECT_EQ(HTracerInit("30002"), NN_OK);
+    EXPECT_EQ(HTracerInit(GenTraceServerName("trace_init_invalid")), NN_OK);
     TRACE_DELAY_BEGIN(TRACE_ID_0);
     TRACE_DELAY_END(TRACE_ID_0, 0);
     TRACE_DELAY_BEGIN(TRACE_ID_2);
@@ -120,15 +133,18 @@ TEST_F(TestService, test_get_traceinfo_give_invalid_value_return_all_records)
 TEST_F(TestService, test_sent_response_return_ok)
 {
     g_traceService = new HTracerService();
-    EXPECT_EQ(g_traceService->StartUp("33333"), NN_OK);
+    EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_send_rsp")), NN_OK);
     Message response(nullptr, 0);
+    g_traceService->ShutDown();
+    delete g_traceService;
+    g_traceService = nullptr;
 }
 
 
 TEST_F(TestService, test_sent_request_nullptr_return_false)
 {
     g_traceService = new HTracerService();
-    EXPECT_EQ(g_traceService->StartUp("33331"), NN_OK);
+    EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_send_req_null")), NN_OK);
     Message response(nullptr, 0);
     Message request(nullptr, 0);
     g_traceService->ShutDown();
@@ -139,7 +155,7 @@ TEST_F(TestService, test_sent_request_nullptr_return_false)
 TEST_F(TestService, test_sent_response_nullptr_return_ok)
 {
     g_traceService = new HTracerService();
-    EXPECT_EQ(g_traceService->StartUp("33334"), NN_OK);
+    EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_send_rsp_null")), NN_OK);
     Message response(nullptr, 0);
 
     int32_t recvBufferSize = 1024;
@@ -154,7 +170,7 @@ TEST_F(TestService, test_sent_response_nullptr_return_ok)
 TEST_F(TestService, test_sent_request_opcode_TRACE_OP_MODIFY_return_true)
 {
     g_traceService = new HTracerService();
-    EXPECT_EQ(g_traceService->StartUp("33335"), NN_OK);
+    EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_op_modify")), NN_OK);
     Message response(nullptr, 0);
 
     QueryTraceInfoRequest *queryRequest =
@@ -170,7 +186,7 @@ TEST_F(TestService, test_sent_request_opcode_TRACE_OP_MODIFY_return_true)
 TEST_F(TestService, test_sent_request_opcode_TRACE_OP_QUERY_return_true)
 {
     g_traceService = new HTracerService();
-    EXPECT_EQ(g_traceService->StartUp("33336"), NN_OK);
+    EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_op_query")), NN_OK);
     Message response(nullptr, 0);
 
     QueryTraceInfoRequest *queryRequest =

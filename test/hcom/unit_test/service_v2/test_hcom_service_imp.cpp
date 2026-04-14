@@ -75,7 +75,7 @@ TEST_F(TestHcomServiceImp, TestServiceAddTcpOobListener)
 {
     EXPECT_EQ(service->AddTcpOobListener(serviceIpInfo + ":" + oobPort, 1), static_cast<int>(SER_OK));
     EXPECT_EQ(service->AddTcpOobListener(serviceIpInfo + oobPort, 1), static_cast<int>(SER_INVALID_PARAM));
-    EXPECT_EQ(service->AddTcpOobListener("127.127.127.127.127:" + oobPort, 1), static_cast<int>(SER_INVALID_PARAM));
+    EXPECT_EQ(service->AddTcpOobListener("127.0.0.1:abc", 1), static_cast<int>(SER_INVALID_PARAM));
     EXPECT_EQ(service->AddTcpOobListener(serviceIpInfo + ":" + oobPort, 1), static_cast<int>(SER_INVALID_PARAM));
 }
 
@@ -947,7 +947,8 @@ TEST_F(TestHcomServiceImp, TestServiceGetIpAddressByIpPort)
     uint32_t ip;
     EXPECT_EQ(service->GetIpAddressByIpPort(serviceIpInfo, ip), static_cast<int>(SER_OK));
     service->mOptions.protocol = RDMA;
-    EXPECT_EQ(service->GetIpAddressByIpPort(serviceIpInfo, ip), static_cast<int>(SER_INVALID_PARAM));
+    EXPECT_EQ(service->GetIpAddressByIpPort(serviceIpInfo, ip), static_cast<int>(SER_OK));
+    EXPECT_EQ(service->GetIpAddressByIpPort("invalid_ip:1", ip), static_cast<int>(SER_INVALID_PARAM));
 }
 
 TEST_F(TestHcomServiceImp, TestServiceRegisterDriverCb)
