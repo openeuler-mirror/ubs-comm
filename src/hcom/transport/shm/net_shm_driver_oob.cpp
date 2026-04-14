@@ -427,7 +427,7 @@ void NetDriverShmWithOOB::ClearShmLeftFile()
         if (flock(tmpFd, LOCK_EX | LOCK_NB) == 0) {
             if (NN_UNLIKELY(shm_unlink(ent->d_name) != 0)) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_TRACE_INFO("Failed to remove file:" << ent->d_name << " error "
+                NN_LOG_TRACE_INFO("Failed to remove file:" << ent->d_name << " reason "
                         << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                 (void)buf;
                 NetFunc::NN_SafeCloseFd(tmpFd);
