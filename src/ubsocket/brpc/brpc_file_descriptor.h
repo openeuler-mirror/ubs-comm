@@ -3312,7 +3312,11 @@ private:
             cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
         }
 
-        QBUF_LIST_NEXT(last_qbuf) = nullptr;
+        // 如果是一个 read OP, 那么它的 left_size=0.
+        if (last_qbuf != nullptr) {
+            QBUF_LIST_NEXT(last_qbuf) = nullptr;
+        }
+
         umq_buf_free(first_qbuf);
     }
 
@@ -3343,7 +3347,10 @@ private:
             return -1;
         }
 
-        QBUF_LIST_NEXT(last_qbuf) = nullptr;
+        // 如果是一个 read OP, 那么它的 left_size=0.
+        if (last_qbuf != nullptr) {
+            QBUF_LIST_NEXT(last_qbuf) = nullptr;
+        }
         umq_buf_free(start_qbuf);
 
         return wr_cnt;
