@@ -377,42 +377,34 @@ public:
         std::string &srcPrimaryEid, std::string &dstPrimaryEid)
     {
         NN_LOG_DEBUG("srcBondingEid: " << srcBondingEid << ", dstBondingEid: " << dstBondingEid);
-        uvs_route_t uvsRoute{};
-        uvs_route_list_t uvsRouteList = {0};
+        uvs_path_set_t uvsPathSet = {};
 
         uvs_eid_t uSrcBondingEid = {0};
         uvs_eid_t uDstBondingEid = {0};
         NN_StrToEid(srcBondingEid, uSrcBondingEid);
         NN_StrToEid(dstBondingEid, uDstBondingEid);
-        if (NN_UNLIKELY(memcpy_s(&uvsRoute.src, sizeof(uvs_eid_t), &uSrcBondingEid, sizeof(uvs_eid_t)) != NN_OK)) {
-            NN_LOG_ERROR("Failed to copy source bonding eid to route");
-            return NN_INVALID_PARAM;
-        }
-        if (NN_UNLIKELY(memcpy_s(&uvsRoute.dst, sizeof(uvs_eid_t), &uDstBondingEid, sizeof(uvs_eid_t)) != NN_OK)) {
-            NN_LOG_ERROR("Failed to copy destination bonding eid to route");
-            return NN_INVALID_PARAM;
-        }
 
-        int ret = HcomTpsa::UvsGetRouteList(&uvsRoute, &uvsRouteList);
+        uvs_tp_type tpType = UVS_RTP;
+        int ret = HcomTpsa::UvsGetPathSet(&uSrcBondingEid, &uDstBondingEid, tpType, false, &uvsPathSet);
         if (ret != 0) {
             NN_LOG_ERROR("UvsGetRouteList failed, ret " << ret);
             return NN_INVALID_PARAM;
         }
-        if (uvsRouteList.len == 0) {
-            NN_LOG_WARN("UvsGetRouteList returned empty.");
+        if (uvsPathSet.path_count == 0) {
+            NN_LOG_WARN("UvsGetPathSet returned empty.");
             return NN_INVALID_PARAM;
         }
 
         uvs_eid_t uSrcPrimaryEid = {0};
         uvs_eid_t uDstPrimaryEid = {0};
-        if (NN_UNLIKELY(memcpy_s(&uSrcPrimaryEid, sizeof(uvs_eid_t), &uvsRouteList.buf[0].src, sizeof(uvs_eid_t)) !=
+        if (NN_UNLIKELY(memcpy_s(&uSrcPrimaryEid, sizeof(uvs_eid_t), &uvsPathSet.paths[0].src_eid, sizeof(uvs_eid_t)) !=
             NN_OK)) {
-            NN_LOG_ERROR("Failed to copy source primary eid from route list");
+            NN_LOG_ERROR("Failed to copy source primary eid from path set");
             return NN_INVALID_PARAM;
         }
-        if (NN_UNLIKELY(memcpy_s(&uDstPrimaryEid, sizeof(uvs_eid_t), &uvsRouteList.buf[0].dst, sizeof(uvs_eid_t)) !=
+        if (NN_UNLIKELY(memcpy_s(&uDstPrimaryEid, sizeof(uvs_eid_t), &uvsPathSet.paths[0].dst_eid, sizeof(uvs_eid_t)) !=
             NN_OK)) {
-            NN_LOG_ERROR("Failed to copy destination primary eid from route list");
+            NN_LOG_ERROR("Failed to copy destination primary eid from path set");
             return NN_INVALID_PARAM;
         }
         NN_EidToStr(uSrcPrimaryEid, srcPrimaryEid);
