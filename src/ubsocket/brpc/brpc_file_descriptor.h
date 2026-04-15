@@ -525,20 +525,22 @@ public:
             useRoundRobin = false;
         }
 
-        remoteEid = rsp.local_eid;
-        if (DoRoute(&localEid, &remoteEid, &connRoute, useRoundRobin) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get route list in connect, fd: %d\n", m_fd);
-            return -1;
-        }
+        if (req.is_bonding == 1) {
+            remoteEid = rsp.local_eid;
+            if (DoRoute(&localEid, &remoteEid, &connRoute, useRoundRobin) != 0) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get route list in connect, fd: %d\n", m_fd);
+                return -1;
+            }
 
-        if (SendSocketData(
-            m_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send connect eid message in connect, fd: %d\n", m_fd);
-            return -1;
-        }
+            if (SendSocketData(
+                m_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send connect eid message in connect, fd: %d\n", m_fd);
+                return -1;
+            }
 
-        m_peer_info.peer_eid = connRoute.dst_eid;
-        *connEid = connRoute.src_eid;
+            m_peer_info.peer_eid = connRoute.dst_eid;
+            *connEid = connRoute.src_eid;
+        }
         return 0;
     }
 
@@ -2986,26 +2988,27 @@ private:
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send negotiate response in accept, fd: %d\n", new_fd);
             return -1;
         }
+        if (req.is_bonding == 1) {
+            umq_route_t connRoute;
+            if (RecvSocketData(
+                new_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                    "Failed to receive remote eid message in accept, Peer IP:%s, fd: %d\n",
+                    GetPeerIp().c_str(), new_fd);
+                return -1;
+            }
 
-        umq_route_t connRoute;
-        if (RecvSocketData(
-            new_fd, &connRoute, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_route_t)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                "Failed to receive remote eid message in accept, Peer IP:%s, fd: %d\n",
-                GetPeerIp().c_str(), new_fd);
-            return -1;
+            int checkResult = CheckDevAdd(connRoute.dst_eid);
+            if (checkResult != 0) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to add dev in accept, Peer IP:%s, fd: %d\n",
+                    GetPeerIp().c_str(), new_fd);
+                return -1;
+            }
+        
+            // 保存对端EID
+            dstEid = connRoute.src_eid;
+            connEid = connRoute.dst_eid;
         }
-
-        int checkResult = CheckDevAdd(connRoute.dst_eid);
-        if (checkResult != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to add dev in accept, Peer IP:%s, fd: %d\n",
-                GetPeerIp().c_str(), new_fd);
-            return -1;
-        }
- 	
-        // 保存对端EID
-        dstEid = connRoute.src_eid;
-        connEid = connRoute.dst_eid;
         return rsp.ret_code == 0 ? 0 : -1;
     }
 
