@@ -112,12 +112,7 @@ int umq_symbol_urma_load(umq_symbol_urma_t *sym)
     LOAD_SYMBOL(sym, g_umq_urma_dlhandler, urma_str_to_eid_t, urma_str_to_eid);
 
     // UVS functions
-    LOAD_SYMBOL(sym, g_umq_tpsa_dlhandler, uvs_get_path_set_t, uvs_get_path_set);
-
-    // DFX
-    LOAD_SYMBOL(sym, g_umq_urma_dlhandler, urma_start_perf_t, urma_start_perf);
-    LOAD_SYMBOL(sym, g_umq_urma_dlhandler, urma_stop_perf_t, urma_stop_perf);
-    LOAD_SYMBOL(sym, g_umq_urma_dlhandler, urma_get_perf_info_t, urma_get_perf_info);
+    LOAD_SYMBOL(sym, g_umq_tpsa_dlhandler, uvs_get_route_list_t, uvs_get_route_list);
 
     UMQ_VLOG_INFO(VLOG_UMQ, "URMA and UVS symbols loaded successfully\n");
     return 0;
