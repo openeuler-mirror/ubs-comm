@@ -4642,8 +4642,7 @@ private:
     int GetShareJfrFd(int fd)
     {
         SocketFd *socket_fd_obj = (SocketFd *)Fd<::SocketFd>::GetFdObj(fd);
-        if (socket_fd_obj == nullptr) {
-            RPC_ADPT_VLOG_WARN("Get socket fd object failed, socket fd: %d\n", fd);
+        if (socket_fd_obj == nullptr || socket_fd_obj->UseTcp()) {
             return 0;
         }
 
