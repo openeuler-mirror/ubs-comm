@@ -234,12 +234,13 @@ typedef struct umq_buf_block_cfg {
 } umq_buf_block_cfg_t;
 
 typedef struct umq_buf_pool_cfg {
+    bool disable_scale_cap; // expansion and shrink switch
     // global pool
     uint32_t expansion_block_count;  // number of blocks per expansion, default 8K
     uint64_t umq_buf_pool_max_size; // maximum memory allowed for umq buf pool, default 2G
     // local qbuf pool cfg
-    uint64_t tls_qbuf_pool_depth;
-    uint64_t tls_expand_qbuf_pool_depth;
+    uint64_t tls_qbuf_pool_depth; // the sum of the capacities of all thread-local qbuf pools
+    uint64_t tls_expand_qbuf_pool_depth; // The maximum capacity of a single thread-local qbuf pool
 } umq_buf_pool_cfg_t;
 
 typedef struct umq_init_cfg {
@@ -603,6 +604,7 @@ typedef struct umq_cfg_get {
     uint8_t max_rx_sge;           // max sge number of receive array
     uint8_t max_tx_sge;           // max sge number of send array
     uint8_t priority;             // queue jetty priority
+    uint8_t rqe_post_factor;      // rqe post factor may > 1 when use bonding dev
     umq_trans_mode_t trans_mode;  // transmission mode of the queue
     umq_queue_mode_t mode;        // mode of queue, QUEUE_MODE_POLLING for default
     umq_state_t state;            // queue state

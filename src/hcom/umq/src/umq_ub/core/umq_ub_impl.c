@@ -676,6 +676,7 @@ uint8_t *umq_ub_ctx_init_impl(umq_init_cfg_t *cfg)
             .register_seg_callback = umq_ub_register_seg_callback,
             .unregister_seg_callback = umq_ub_unregister_seg_callback,
         },
+        .disable_scale_cap = cfg->buf_pool_cfg.disable_scale_cap,
         .expansion_pool_id_min = HUGE_QBUF_POOL_MEMPOOL_ID_MAX,
         .expansion_pool_cnt_max = UMQ_MAX_TSEG_NUM - HUGE_QBUF_POOL_MEMPOOL_ID_MAX,
         .tls_qbuf_pool_depth = cfg->buf_pool_cfg.tls_qbuf_pool_depth,
@@ -852,6 +853,16 @@ static int umq_ub_create_flow_control_resource(ub_queue_t *queue, umq_create_opt
         goto DELETE_FC_JETTY;
     }
 
+
+    // NOTICE: fc jetty don't use share jfr
+    uint8_t rqe_post_factor = queue->used_port_num == 0 ? 1 : queue->used_port_num;
+    for (uint32_t i = 0; i < UMQ_UB_FLOW_CONTORL_JETTY_DEPTH * rqe_post_factor; i++) {
+        int ret = umq_ub_fill_fc_rx_buf(queue);
+        if (ret != UMQ_SUCCESS) {
+            goto DELETE_FC_JETTY;
+        }
+    }
+
     dev_ctx->umq_ctx_jetty_table[queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL]->jetty_id.id] =
         (uint64_t)(uintptr_t)queue;
 
@@ -1014,6 +1025,9 @@ UNINIT_FLOW_CONTROL:
 DESTROY_JFR_CTX:
     umq_ub_jfr_ctx_put(queue);
 FREE_QUEUE:
+    if (queue->used_port != NULL) {
+        free(queue->used_port);
+    }
     free(queue);
 DEC_REF:
     umq_dec_ref(dev_ctx->io_lock_free, &dev_ctx->ref_cnt, 1);
@@ -1114,6 +1128,9 @@ int32_t umq_ub_destroy_impl(uint64_t umqh)
         (void)util_mutex_lock(queue->checker->lock);
         queue->checker->umq = NULL;
         (void)util_mutex_unlock(queue->checker->lock);
+    }
+    if (queue->used_port != NULL) {
+        free(queue->used_port);
     }
     free(queue);
     return UMQ_SUCCESS;
@@ -1321,7 +1338,9 @@ int umq_ub_unbind_impl(uint64_t umqh)
         urma_target_jetty_t *tjetty = bind_ctx->tjetty[UB_QUEUE_JETTY_FLOW_CONTROL];
         UMQ_VLOG_INFO(VLOG_UMQ, "local eid: " EID_FMT ", local jetty_id: %u, remote eid: " EID_FMT ", remote jetty_id:"
             " %u, unbind flowcontrol jetty\n", EID_ARGS(*eid), id, EID_ARGS(tjetty->id.eid), tjetty->id.id);
-        (void)umq_symbol_urma()->urma_unbind_jetty(queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL]);
+        if (queue->tp_mode == URMA_TM_RC) {
+            (void)umq_symbol_urma()->urma_unbind_jetty(queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL]);
+        }
         (void)umq_symbol_urma()->urma_unimport_jetty(tjetty);
         umq_modify_ubq_to_err(queue, UMQ_IO_ALL, UB_QUEUE_JETTY_FLOW_CONTROL);
     }
@@ -1330,7 +1349,9 @@ int umq_ub_unbind_impl(uint64_t umqh)
     (void)umq_ub_remote_tseg_info_release(queue->dev_ctx->remote_imported_info, bind_ctx);
     UMQ_VLOG_INFO(VLOG_UMQ, "local eid: " EID_FMT ", local jetty_id: %u, remote eid: " EID_FMT ", remote jetty_id: %u"
         ", unbind jetty\n", EID_ARGS(*eid), id, EID_ARGS(tjetty->id.eid), tjetty->id.id);
-    (void)umq_symbol_urma()->urma_unbind_jetty(queue->jetty[UB_QUEUE_JETTY_IO]);
+    if (queue->tp_mode == URMA_TM_RC) {
+        (void)umq_symbol_urma()->urma_unbind_jetty(queue->jetty[UB_QUEUE_JETTY_IO]);
+    }
     (void)umq_symbol_urma()->urma_unimport_jetty(tjetty);
     if (queue->create_flag & UMQ_CREATE_FLAG_SUB_UMQ) {
         UMQ_VLOG_DEBUG(VLOG_UMQ, "eid: " EID_FMT ", jetty_id: %u, sub umq only need set tx res error\n",
@@ -1754,7 +1775,7 @@ static void umq_ub_unregister_seg_callback(uint8_t *ctx, uint16_t mempool_id)
         umq_ub_unregister_seg((umq_ub_ctx_t *)(uintptr_t)ctx, 1, mempool_id);
         return;
     }
-    
+
     if (g_ub_ctx == NULL || g_ub_ctx_count == 0) {
         UMQ_VLOG_INFO(VLOG_UMQ, "no device need unregister memory\n");
         return;
@@ -1893,7 +1914,7 @@ int ubmm_fill_ref_sge_info(uint64_t umqh_tp, umq_buf_t *qbuf, char *ub_ref_info,
     return UMQ_SUCCESS;
 }
 
-uvs_tp_type_t umq_tp_type_convert_to_uvs(umq_tp_type_t tp_type)
+static uvs_tp_type_t umq_tp_type_convert_to_uvs(umq_tp_type_t tp_type)
 {
     switch (tp_type) {
         case UMQ_TP_TYPE_RTP:
@@ -2113,6 +2134,7 @@ int umq_ub_cfg_get_impl(uint64_t umqh_tp, umq_cfg_get_t *cfg)
     cfg->mode = queue->mode;
     cfg->state = queue->state;
     cfg->priority = queue->priority;
+    cfg->rqe_post_factor = queue->rqe_post_factor;
     cfg->tp_mode = umq_tp_mode_convert(queue->tp_mode);
     cfg->tp_type = umq_tp_type_convert(queue->tp_type);
     return UMQ_SUCCESS;

@@ -74,9 +74,6 @@ constexpr uint32_t GET_PER_ACK = 32;
 constexpr uint32_t POLL_BATCH_MAX = 32;
 
 constexpr uint8_t MAX_PORT_COUNT = 8;
-constexpr uint32_t NUM_PORTS_2 = 2;
-constexpr uint32_t NUM_PORTS_7 = 7;
-constexpr uint32_t DOUBLED_FACTOR = 2;
 
 namespace Brpc {
 using namespace Statistics;
@@ -2418,34 +2415,16 @@ public:
         return umq_rearm_interrupt(m_local_umqh, true, &tx_option);
     }
 
-    uint32_t getLeftPostRxNum(bool enable_share_jfr)
+    uint32_t getLeftPostRxNum(uint64_t umq_handle)
     {
         uint32_t left_post_rx_num = 0;
-        // 开共享jfr
-        if (enable_share_jfr) {
-            if (mUsedPorts.num == 0) {
-                left_post_rx_num = m_rx_window_capacity;
-            } else if (
-                (mUsedPorts.num == NUM_PORTS_2 && mTopoType == UMQ_TOPO_TYPE_CLOS)
-                || (mUsedPorts.num == NUM_PORTS_7 && mTopoType == UMQ_TOPO_TYPE_FULLMESH_1D)
-            ) {
-                left_post_rx_num = m_rx_window_capacity * mUsedPorts.num * DOUBLED_FACTOR;
-            } else {
-                left_post_rx_num = 0;
-            }
-            RPC_ADPT_VLOG_INFO("Enable JFR, rx num is: %u\n", left_post_rx_num);
-        } else { // 不开共享jfr
-            if (mUsedPorts.num <= 1) {
-                left_post_rx_num = m_rx_window_capacity;
-            } else if (
-                (mUsedPorts.num == NUM_PORTS_2 && mTopoType == UMQ_TOPO_TYPE_CLOS)
-                || (mUsedPorts.num == NUM_PORTS_7 && mTopoType == UMQ_TOPO_TYPE_FULLMESH_1D)
-            ) {
-                left_post_rx_num = m_rx_window_capacity * mUsedPorts.num;
-            } else {
-                left_post_rx_num = 0;
-            }
-            RPC_ADPT_VLOG_INFO("Not enable JFR, rx num is: %u\n", left_post_rx_num);
+        umq_cfg_get_t cfg = {0};
+        int res = umq_cfg_get(umq_handle, &cfg);
+        if (res != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to get umq cfg\n");
+        } else {
+            left_post_rx_num = cfg.rqe_post_factor * cfg.rx_depth;
+            RPC_ADPT_VLOG_INFO("Successfully get umq cfg, left_post_rx_num = %u\n", left_post_rx_num);
         }
         return left_post_rx_num;
     }
@@ -2460,7 +2439,7 @@ public:
 
         uint64_t umq_handle = enable_share_jfr ? m_main_umqh : m_local_umqh;
         m_need_prefill_rx = false;
-        uint32_t left_post_rx_num = getLeftPostRxNum(enable_share_jfr);
+        uint32_t left_post_rx_num = getLeftPostRxNum(umq_handle);
         if (left_post_rx_num == 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to set rx window capacity\n");
             return -1;
@@ -2645,9 +2624,12 @@ private:
 
     uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
     {
+        umq_create_option_t cfg_main;
+        memcpy_s(&cfg_main, sizeof(cfg_main), cfg, sizeof(*cfg));
+        cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
         std::vector<uint64_t> main_umqs;
         if (!EidUmqTable::Get(*localEid, main_umqs)) {
-            uint64_t ret = umq_create(cfg);
+            uint64_t ret = umq_create(&cfg_main);
             if (ret != UMQ_INVALID_HANDLE) {
                 m_need_prefill_rx = true;
             }
@@ -2737,6 +2719,7 @@ private:
         // 共享 JFR、AE 事件依赖 umq_ctx.
         queue_cfg.umq_ctx = m_fd;
         queue_cfg.priority = context->GetLinkPriority();
+        queue_cfg.used_ports = mUsedPorts;
 
         int n = snprintf_s(queue_cfg.name, UMQ_NAME_MAX_LEN, UMQ_NAME_MAX_LEN - 1, "fd: %d", m_fd);
         if ((((int)UMQ_NAME_MAX_LEN - 1) < n) || (n < 0)) {
