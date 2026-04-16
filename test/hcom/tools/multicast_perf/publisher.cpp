@@ -24,6 +24,7 @@ int32_t g_dataSize = 2048;
 int16_t g_asyncWorkerCpuId = -1;
 bool g_start = false;
 int g_threadNum = 1;
+int g_sendThreadCpuId = -1;
 int g_workerGroupNums = 1;
 int g_verbose = 0;
 int g_userChar = 0;
@@ -273,38 +274,25 @@ void Test()
     NN_LOG_INFO("input 0:mullticast, q mean quit!");
     while (true) {
         g_userChar = getchar();
-        if (g_threadNum > 1) {
-            std::vector<std::thread> threads(g_threadNum);
-            int numCores = g_threadNum;
-            g_start = false;
-            g_startTime = MONOTONIC_TIME_NS();
-            for (int i = 0; i < g_threadNum; ++i) {
-                int coreId = i % numCores;
-                threads[i] = std::thread(RunInThread, coreId);
+
+        std::vector<std::thread> threads(g_threadNum);
+        g_start = false;
+        g_startTime = MONOTONIC_TIME_NS();
+        for (int i = 0; i < g_threadNum; ++i) {
+            int cpuId = -1;
+            if (g_sendThreadCpuId > 0) {
+                cpuId = g_sendThreadCpuId + 1;
             }
-            NN_LOG_INFO("Wait for finish");
-            g_start = true;
-            for (auto &t : threads) {
-                t.join();
-            }
+            threads[i] = std::thread(RunInThread, cpuId);
+        }
+        NN_LOG_INFO("Wait for finish");
+        g_start = true;
+        for (auto &t : threads) {
+            t.join();
         }
 
         switch (g_userChar) {
             case '0':
-                if (g_threadNum > 1) {
-                    break;
-                }
-                g_startTime = MONOTONIC_TIME_NS();
-                for (int32_t i = 0; i < g_pingCount; i++) {
-                    MultiCast();
-                    while (!g_isCbDone.load() && !g_isBroken) {
-                    }
-                    g_isCbDone.store(false);
-                    if (g_isBroken) {
-                        g_isBroken = false;
-                        break;
-                    }
-                }
                 break;
             case 'l':
                 ListAllSubscribers();
@@ -396,7 +384,8 @@ int main(int argc, char *argv[])
         {"driver", required_argument, nullptr, 'd'},
         {"pingpongtimes", required_argument, nullptr, 't'},
         {"size", required_argument, nullptr, 's'},
-        {"cpuId", required_argument, nullptr, 'c'},
+        {"workerCpuId", required_argument, nullptr, 'c'},
+        {"multiSendCpuId", required_argument, nullptr, 'm'},
         {"threadnums", required_argument, nullptr, 'n'},
         {"workernums", required_argument, nullptr, 'w'},
         {"verbose", required_argument, nullptr, 'v'},
@@ -411,7 +400,8 @@ int main(int argc, char *argv[])
         "        -d, --driver,                 multicast driver protocol, 0 means RDMA, 1 means TCP\n"
         "        -t, --pingpongtimes,          ping pong times\n"
         "        -s, --size,                   max data size\n"
-        "        -c, --cpuId,                  cpu to bind\n"
+        "        -c, --workerCpuId,            worker cpu to bind\n"
+        "        -m, --multiSendCpuId,         multicast send thread cpu to bind\n"
         "        -n, --threadnums,             multicast send thread nums\n"
         "        -w, --workerGroupNums         publisher worker group nums\n"
         "        -v, --verbose                 verbose for detail\n"
@@ -422,7 +412,7 @@ int main(int argc, char *argv[])
     int ret = 0;
     int index = 0;
 
-    std::string str = "i:p:d:t:s:c:n:w:v:T:C:";
+    std::string str = "i:p:d:t:s:c:m:n:w:v:T:C:";
     while ((ret = getopt_long(argc, argv, str.c_str(), options, &index)) != -1) {
         switch (ret) {
             case 'i':
@@ -443,6 +433,9 @@ int main(int argc, char *argv[])
                 break;
             case 'c':
                 g_asyncWorkerCpuId = static_cast<int16_t>(strtoul(optarg, nullptr, 0));
+                break;
+            case 'm':
+                g_sendThreadCpuId = static_cast<int16_t>(strtoul(optarg, nullptr, -1));
                 break;
             case 'n':
                 g_threadNum = static_cast<int32_t>(strtoul(optarg, nullptr, 0));
