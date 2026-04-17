@@ -399,11 +399,6 @@ public:
             // reset
             SetBlocking(fd);
         }
-
-        if (m_context_trace_enable) {
-            m_peer_info.type_fd = 0;
-            UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
-        }
     }
 
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
@@ -3290,6 +3285,11 @@ private:
 
         socket_fd_obj->m_conn_info.create_time = std::chrono::system_clock::now();
         RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
+
+        if (m_context_trace_enable) {
+            m_peer_info.type_fd = 0;
+            UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
+        }
 
         PrintQbufPoolInfo();
 
