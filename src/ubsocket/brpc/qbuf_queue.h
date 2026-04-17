@@ -30,11 +30,12 @@ public:
         mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
     }
 
-    explicit QbufQueue(uint32_t itemNb)
+    explicit QbufQueue(uint32_t itemNb) : m_isMalloc(false), m_isExit(false)
     {
         mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
         if (InitQueue(itemNb) != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Init qbuf queue failed. \n");
+            m_isExit = true;
             return;
         }
     }
@@ -83,20 +84,6 @@ public:
         return 0;
     }
 
-    uint32_t UsedNb()
-    {
-        return m_q->tail + m_q->itemNb - m_q->head;
-    }
-
-    uint32_t FreeNb()
-    {
-        if (m_q->head > m_q->tail) {
-            return m_q->head - m_q->tail;
-        }
-
-        return m_q->head + m_q->itemNb - 1 - m_q->tail;
-    }
-
     struct QbufQueueT<T> *m_q;
 
 private:
@@ -112,7 +99,7 @@ private:
     int InitQueue(size_t itemNb)
     {
         size_t pageSize = sysconf(_SC_PAGESIZE);
-        size_t headLen = sizeof(struct QbufQueueT<T>) + (itemNb + 1) * sizeof(umq_buf_t);
+        size_t headLen = sizeof(struct QbufQueueT<T>) + (itemNb + 1) * sizeof(T);
         headLen = RoundUp(headLen, pageSize);
         m_q = reinterpret_cast<struct QbufQueueT<T> *>(memalign(pageSize, headLen));
         if (m_q == nullptr) {
