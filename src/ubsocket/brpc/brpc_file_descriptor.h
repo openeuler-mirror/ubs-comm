@@ -1215,9 +1215,14 @@ public:
         if (ret == UMQ_SUCCESS) {
             m_tx.m_window_size -= batch;
         } else if (bad_qbuf != nullptr) {
+            // Handle partial failure
             if (ret == -UMQ_ERR_EAGAIN) {
+                // Operation would block, UMQ queue might be temporarily full despite window check
                 errno = EAGAIN;
                 m_tx.m_need_fc_awake.store(true, std::memory_order_relaxed);
+            } else if (ret == -UMQ_ERR_EFLOWCTL) {
+                errno = EIO;
+                return -1;
             } else {
                 errno = EIO;
             }
@@ -1400,6 +1405,9 @@ public:
                 // Operation would block, UMQ queue might be temporarily full despite window check
                 errno = EAGAIN;
                 m_tx.m_need_fc_awake.store(true, std::memory_order_relaxed);
+            } else if (post_result == -UMQ_ERR_EFLOWCTL) {
+                errno = EIO;
+                return -1;
             } else {
                 errno = EIO;
             }
@@ -1886,6 +1894,9 @@ public:
                 // Operation would block, UMQ queue might be temporarily full despite window check
                 errno = EAGAIN;
                 m_tx.m_need_fc_awake.store(true, std::memory_order_relaxed);
+            } else if (post_result == -UMQ_ERR_EFLOWCTL) {
+                errno = EIO;
+                return -1;
             } else {
                 errno = EIO;
             }
@@ -2064,6 +2075,9 @@ public:
                 // Operation would block, UMQ queue might be temporarily full despite window check
                 errno = EAGAIN;
                 m_tx.m_need_fc_awake.store(true, std::memory_order_relaxed);
+            } else if (post_result == -UMQ_ERR_EFLOWCTL) {
+                errno = EIO;
+                return -1;
             } else {
                 errno = EIO;
             }
