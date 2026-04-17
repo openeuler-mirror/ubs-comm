@@ -371,7 +371,7 @@ public:
             try {
                 socket_fd_obj = new SocketFd(fd, protocol_negotiation, (uint32_t)protocol_negotiation_recv_size);
                 Fd<::SocketFd>::OverrideFdObj(fd, socket_fd_obj);
-                RPC_ADPT_VLOG_WARN("Auto fallback to TCP,Peer IP:%s, fd: %d\n", GetPeerIp().c_str(), fd);
+                RPC_ADPT_VLOG_WARN("Auto fallback to TCP,Peer IP:%s, fd: %d\n", peerIp.c_str(), fd);
             } catch (std::exception& e) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "%s\n", e.what());
                 OsAPiMgr::GetOriginApi()->close(fd);
