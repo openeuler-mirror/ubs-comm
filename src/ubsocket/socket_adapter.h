@@ -16,6 +16,8 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdexcept>
+#include <sys/socket.h>
+
 #include "rpc_adpt_vlog.h"
 
 #define EXPOSE_C_DEFINE extern "C" __attribute__((visibility("default")))
