@@ -160,6 +160,7 @@ enum class Error : uint32_t {
     kUBSOCKET_NEW_SOCKET_FD,
     kUBSOCKET_TCP_EXCHANGE,
     kUBSOCKET_UB_ACCEPT,
+    kUBSOCKET_NO_MAIN_UMQ,
     kUBSOCKET_MAX,
 
     // 特殊标记位，可与上述 2 种错误共存

@@ -572,6 +572,25 @@ public:
         }
         m_bind_remote = true;
 
+        if (Context::GetContext()->EnableShareJfr()) {
+            // 强依赖当前实现，一个 eid 只对应一个主 umq. 如果后续逻辑有变更，需同步修改。
+            auto main_umq = EidUmqTable::GetFirst(connEid);
+            if (main_umq == nullptr) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "The main umq is removed by other thread.\n");
+                return ubsocket::Error::kUBSOCKET_NO_MAIN_UMQ;
+            }
+
+            return main_umq->EnsurePrefilled([this]() {
+                if (PrefillRx() != 0) {
+                    RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                                      "Failed to fill rx buffer to main umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                      EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                    return ubsocket::Error::kUBSOCKET_PREFILL_RX;
+                }
+                return ubsocket::Error::kOK;
+            });
+        }
+
         // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
         if (PrefillRx() != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
@@ -2482,18 +2501,12 @@ public:
     {
         Brpc::Context *context = Brpc::Context::GetContext();
         bool enable_share_jfr = context == nullptr ? true : context->EnableShareJfr();
-        if (enable_share_jfr && !m_need_prefill_rx) {
-            return 0;
-        }
-
         uint64_t umq_handle = enable_share_jfr ? m_main_umqh : m_local_umqh;
-        m_need_prefill_rx = false;
         uint32_t left_post_rx_num = getLeftPostRxNum(umq_handle);
         if (left_post_rx_num == 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to set rx window capacity\n");
             return -1;
         }
-       
         uint32_t cur_post_rx_num = 0;
         umq_alloc_option_t option = { UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(IOBuf::Block) };
         do {
@@ -2694,23 +2707,21 @@ private:
 
     uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
     {
-        umq_create_option_t cfg_main;
-        memcpy_s(&cfg_main, sizeof(cfg_main), cfg, sizeof(*cfg));
-        cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
-        std::vector<uint64_t> main_umqs;
+        std::vector<std::shared_ptr<MainUmqState>> main_umqs;
         if (!EidUmqTable::Get(*localEid, main_umqs)) {
-            uint64_t ret = umq_create(&cfg_main);
-            if (ret != UMQ_INVALID_HANDLE) {
-                m_need_prefill_rx = true;
-            }
-            return ret;
+            umq_create_option_t cfg_main;
+            memcpy_s(&cfg_main, sizeof(cfg_main), cfg, sizeof(*cfg));
+            cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
+
+            return umq_create(&cfg_main);
         }
 
         if (main_umqs.empty()) {
             return UMQ_INVALID_HANDLE;
         }
 
-        return main_umqs.front();
+        // 当前实现 eid 实际只对应 1 个主 umq, 故同一 eid 拿到的主 umq 都是相同的.
+        return main_umqs.front()->GetUmqHandle();
     }
 
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
@@ -2725,7 +2736,6 @@ private:
         uint64_t main_umq = GetOrCreateMainUmq(cfg, localEid);
         if (main_umq == UMQ_INVALID_HANDLE) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to create main umq\n");
-            m_need_prefill_rx = false;
             return UMQ_INVALID_HANDLE;
         }
 
@@ -2735,7 +2745,6 @@ private:
         uint64_t sub_umq = umq_create(cfg);
         if (sub_umq == UMQ_INVALID_HANDLE) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to create sub umq\n");
-            m_need_prefill_rx = false;
             return UMQ_INVALID_HANDLE;
         }
 
@@ -2876,7 +2885,7 @@ private:
 
         uint64_t share_jfr_rx_queue_depth = context == nullptr ? DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH :
                                                                  context->GetShareJfrRxQueueDepth();
-        rxQueue = new QbufQueue<umq_buf_t *>(share_jfr_rx_queue_depth);
+        rxQueue = new (std::nothrow) QbufQueue<umq_buf_t *>(share_jfr_rx_queue_depth);
         if (rxQueue == nullptr) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to init share jfr rx queue for fd: %d \n", m_fd);
             return ubsocket::Error::kUBSOCKET_INIT_SHARED_JFR_RX_QUEUE;
@@ -3120,6 +3129,23 @@ private:
             return ubsocket::Error::kUMQ_BIND | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
         }
         socket_fd_obj->SetBindRemote(true);
+
+        if (Context::GetContext()->EnableShareJfr()) {
+            // 强依赖当前实现，一个 eid 只对应一个主 umq. 如果后续逻辑有变更，需同步修改。
+            auto main_umq = EidUmqTable::GetFirst(connEid);
+            if (main_umq == nullptr) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "The main umq state is removed by other thread.\n");
+                return ubsocket::Error::kUBSOCKET_NO_MAIN_UMQ;
+            }
+
+            return main_umq->EnsurePrefilled([socket_fd_obj, new_fd]() {
+                if (socket_fd_obj->PrefillRx() != 0) {
+                    RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to fill rx buffer to main umq, fd: %d\n", new_fd);
+                    return ubsocket::Error::kUBSOCKET_PREFILL_RX;
+                }
+                return ubsocket::Error::kOK;
+            });
+        }
 
         // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
         if (socket_fd_obj->PrefillRx() != 0) {
@@ -4122,7 +4148,6 @@ private:
     uint16_t m_rx_window_capacity = 0; // the capacity of RX window size
     bool m_bind_remote = false; // indicate whether to enable stats manager when umq is created and bound successfully
     bool m_context_trace_enable = false;
-    bool m_need_prefill_rx = false;
     bool m_flow_control_failed = false;
     std::atomic<bool> m_closed{false};
     int m_event_fd;

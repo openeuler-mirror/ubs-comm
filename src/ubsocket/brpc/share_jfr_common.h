@@ -10,7 +10,17 @@
 #ifndef SHARE_JFR_COMMON_H
 #define SHARE_JFR_COMMON_H
 
-#include <shared_mutex>
+#include <map>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <cstring>
+#include <memory>
+#include <type_traits>
+
+#include "error.h"
+#include "umq_types.h"
 #include "umq_types.h"
 #include "ub_lock_ops.h"
 
@@ -34,24 +44,65 @@ struct UmqEidHash {
     }
 };
 
+class MainUmqState : public std::enable_shared_from_this<MainUmqState> {
+public:
+    MainUmqState(uint64_t umqh) : m_umqh(umqh), m_mutex(g_external_lock_ops.create(LT_EXCLUSIVE))
+    {
+    }
+
+    MainUmqState(const MainUmqState &rhs) = default;
+    MainUmqState &operator=(const MainUmqState &rhs) = default;
+
+    uint64_t GetUmqHandle() const
+    {
+        return m_umqh;
+    }
+
+    template<typename F>
+    ubsocket::Error EnsurePrefilled(const F &f)
+    {
+        if (!__atomic_load_n(&m_prefilled, __ATOMIC_ACQUIRE)) {
+            ScopedUbExclusiveLocker lock(m_mutex);
+            if (!__atomic_load_n(&m_prefilled, __ATOMIC_ACQUIRE)) {
+                ubsocket::Error ret = f();
+                if (!IsOk(ret)) {
+                    return ret;
+                }
+
+                __atomic_store_n(&m_prefilled, true, __ATOMIC_RELEASE);
+            }
+        }
+        return ubsocket::Error::kOK;
+    }
+
+private:
+    uint64_t m_umqh;
+    u_external_mutex_t *m_mutex = nullptr;
+    bool m_prefilled = false;
+};
+
+inline bool operator==(const MainUmqState& lhs, const MainUmqState& rhs)
+{
+    return lhs.GetUmqHandle() == rhs.GetUmqHandle();
+}
+
 class EidUmqTable {
 public:
-    static void Add(const umq_eid_t& eid, uint64_t main_umq)
+    static void Add(const umq_eid_t &eid, uint64_t main_umq)
     {
         EidUmqTable *inst = Instance();
         ScopedUbExclusiveLocker sLock(inst->mutex);
-        auto iter = inst->table.find(eid);
-        if (iter == inst->table.end()) {
-            inst->table[eid] = std::vector<uint64_t>{main_umq};
-            return;
-        }
 
-        if (std::find(iter->second.begin(), iter->second.end(), main_umq) == iter->second.end()) {
-            iter->second.emplace_back(main_umq);
+        auto &vec = inst->table[eid];
+        auto it = std::find_if(vec.begin(), vec.end(), [main_umq](const std::shared_ptr<MainUmqState> &state) {
+            return state->GetUmqHandle() == main_umq;
+        });
+        if (it == vec.end()) {
+            vec.emplace_back(std::make_shared<MainUmqState>(main_umq));
         }
     }
 
-    static bool Get(const umq_eid_t& eid, std::vector<uint64_t>& out)
+    static bool Get(const umq_eid_t &eid, std::vector<std::shared_ptr<MainUmqState>> &out)
     {
         EidUmqTable *inst = Instance();
         ScopedUbExclusiveLocker sLock(inst->mutex);
@@ -62,6 +113,17 @@ public:
         }
 
         return false;
+    }
+
+    static std::shared_ptr<MainUmqState> GetFirst(const umq_eid_t &eid)
+    {
+        auto *inst = Instance();
+        ScopedUbExclusiveLocker lock(inst->mutex);
+        auto it = inst->table.find(eid);
+        if (it != inst->table.end()) {
+            return it->second[0];
+        }
+        return {};
     }
 
     static void Remove(const umq_eid_t& eid)
@@ -75,8 +137,12 @@ public:
     {
         EidUmqTable *inst = Instance();
         ScopedUbExclusiveLocker sLock(inst->mutex);
-        for (auto& [key, value] : inst->table) {
-            value.erase(std::remove(value.begin(), value.end(), main_umq), value.end());
+        for (auto &[key, value] : inst->table) {
+            value.erase(std::remove_if(value.begin(), value.end(),
+                                       [main_umq](const std::shared_ptr<MainUmqState> &state) {
+                                           return state->GetUmqHandle() == main_umq;
+                                       }),
+                        value.end());
         }
     }
 
@@ -113,9 +179,9 @@ private:
         return &inst;
     }
 
-    std::unordered_map<umq_eid_t, std::vector<uint64_t>, UmqEidHash> table;
-    u_external_mutex_t* mutex;
-    u_external_mutex_t* main_mutex;
+    std::unordered_map<umq_eid_t, std::vector<std::shared_ptr<MainUmqState>>, UmqEidHash> table;
+    u_external_mutex_t *mutex;
+    u_external_mutex_t *main_mutex;
 };
 
 class SocketFdEpollTable {

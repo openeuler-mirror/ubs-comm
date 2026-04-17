@@ -6,7 +6,6 @@
 
 #include <sys/eventfd.h>
 #include <unistd.h>
-#include <bits/types/sigset_t.h>
 
 #include "socket_adapter.h"
 
