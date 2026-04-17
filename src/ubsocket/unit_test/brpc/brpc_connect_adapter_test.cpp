@@ -42,7 +42,7 @@ TEST_F(BrpcConnectAdapterTest, TestConnectFailed)
 {
     const struct sockaddr *address = nullptr;
     socklen_t address_len = 0;
-    MOCKER_CPP(&OsAPiMgr::connect)
+    MOCKER_CPP(&OsAPiMgr::sendto)
             .stubs()
             .will(returnValue(int(-1)));
 
