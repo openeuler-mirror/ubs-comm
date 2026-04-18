@@ -16,7 +16,6 @@ EXPOSE_C_DEFINE int UB_API_WRAP(shutdown)(int fd, int how);
 EXPOSE_C_DEFINE int UB_API_WRAP(close)(int fd);
 EXPOSE_C_DEFINE int UB_API_WRAP(accept)(int socket, struct sockaddr *address, socklen_t *address_len);
 EXPOSE_C_DEFINE int UB_API_WRAP(accept4)(int socket, struct sockaddr *address, socklen_t *address_len, int flag);
-EXPOSE_C_DEFINE int UB_API_WRAP(listen)(int fd, int backlog);
 EXPOSE_C_DEFINE int UB_API_WRAP(connect)(int socket, const struct sockaddr *address, socklen_t address_len);
 EXPOSE_C_DEFINE ssize_t UB_API_WRAP(readv)(int fildes, const struct iovec *iov, int iovcnt);
 EXPOSE_C_DEFINE ssize_t UB_API_WRAP(writev)(int fildes, const struct iovec *iov, int iovcnt);

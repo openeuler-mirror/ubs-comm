@@ -25,11 +25,11 @@ EXPOSE_C_DEFINE int UB_API_WRAP(socket)(int domain, int type, int protocol)
     } else {
         fd = OsAPiMgr::GetOriginApi()->socket(domain, type, protocol);
     }
-
+    
     if (!Brpc::Context::GetUbEnableFlag()) {
         return fd;
     }
-
+    
     /* The 'socket()' function is only called when constructing the 'Brpc::Context'singleton, so the
      * file descriptor (fd) is directly returned to avoid recursively constructing 'Brpc::Context'. */
     Brpc::Context *context = Brpc::Context::GetContext();
@@ -124,18 +124,6 @@ EXPOSE_C_DEFINE int UB_API_WRAP(accept4)(int socket, struct sockaddr *address, s
     }
 
     return obj->Accept(address, address_len);
-}
-
-EXPOSE_C_DEFINE int UB_API_WRAP(listen)(int fd, int backlog)
-{
-    if (!Brpc::Context::GetUbEnableFlag()) {
-        return OsAPiMgr::GetOriginApi()->listen(fd, backlog);
-    }
-    Brpc::SocketFd *obj = (Brpc::SocketFd *)Fd<SocketFd>::GetFdObj(fd);
-    if (obj == nullptr) {
-        return OsAPiMgr::GetOriginApi()->listen(fd, backlog);
-    }
-    return obj->Listen(backlog);
 }
 
 EXPOSE_C_DEFINE int UB_API_WRAP(connect)(int socket, const struct sockaddr *address, socklen_t address_len)
@@ -524,11 +512,6 @@ EXPOSE_C_DEFINE int accept(int socket, struct sockaddr *address, socklen_t *addr
 EXPOSE_C_DEFINE int accept4(int socket, struct sockaddr *address, socklen_t *address_len, int flags)
 {
     return UB_API_WRAP(accept4)(socket, address, address_len, flags);
-}
-
-EXPOSE_C_DEFINE int listen(int fd, int backlog)
-{
-    return UB_API_WRAP(listen)(fd, backlog);
 }
 
 EXPOSE_C_DEFINE int connect(int socket, const struct sockaddr *address, socklen_t address_len)
