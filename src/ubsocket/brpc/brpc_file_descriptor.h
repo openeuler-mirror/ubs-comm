@@ -3374,8 +3374,8 @@ private:
         RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
 
         if (m_context_trace_enable) {
+            socket_fd_obj->UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
             m_peer_info.type_fd = 0;
-            UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
         }
 
         PrintQbufPoolInfo();
