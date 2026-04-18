@@ -477,7 +477,7 @@ static urma_target_jetty_t *umq_ub_connect_jetty(ub_queue_t *queue, umq_ub_bind_
             .flag.bs.token_policy =
                 token_policy_get((queue->dev_ctx->feature & UMQ_FEATURE_ENABLE_TOKEN_POLICY) != 0),
             .flag.bs.order_type = info->queue_info->order_type,
-            .flag.bs.share_tp = 1,
+            .flag.bs.share_tp = (queue->tp_mode == URMA_TM_RM),
             .flag.bs.has_drv_ext = ((queue->create_flag & UMQ_CREATE_FLAG_USED_PORTS) != 0),
             .tp_type = info->queue_info->tp_type},
         .jetty = queue->jetty[i],
@@ -1639,14 +1639,21 @@ int umq_ub_register_seg(umq_ub_ctx_t *ctx, uint16_t mempool_id, void *addr, uint
 
 void umq_ub_unregister_seg(umq_ub_ctx_t *ctx_list, uint32_t ctx_cnt, uint16_t mempool_id)
 {
+    urma_target_seg_t *tseg;
     for (uint32_t i = 0; i < ctx_cnt; i++) {
-        if (ctx_list[i].tseg_list[mempool_id] != NULL) {
-            urma_status_t status = umq_symbol_urma()->urma_unregister_seg(ctx_list[i].tseg_list[mempool_id]);
-            if (status != URMA_SUCCESS) {
-                UMQ_VLOG_ERR(VLOG_UMQ_URMA_API, "urma_unregister_seg for ub ctx[%u] failed, status: %d\n", i, status);
-            }
+        pthread_spin_lock(&ctx_list[i].tseg_list_lock);
+        if (ctx_list[i].tseg_list[mempool_id] == NULL) {
+            pthread_spin_unlock(&ctx_list[i].tseg_list_lock);
+            continue;
         }
+        tseg = ctx_list[i].tseg_list[mempool_id];
         ctx_list[i].tseg_list[mempool_id] = NULL;
+        pthread_spin_unlock(&ctx_list[i].tseg_list_lock);
+
+        urma_status_t status = umq_symbol_urma()->urma_unregister_seg(tseg);
+        if (status != URMA_SUCCESS) {
+            UMQ_VLOG_ERR(VLOG_UMQ_URMA_API, "urma_unregister_seg for ub ctx[%u] failed, status: %d\n", i, status);
+        }
     }
 }
 
@@ -2479,7 +2486,8 @@ static int umq_ub_send_big_data(ub_queue_t *queue, umq_buf_t **buffer)
     while ((*buffer) && rest_size != 0) {
         if (mempool_info_size < (umq_imm_head->mempool_num * sizeof(ub_import_mempool_info_t))) {
             UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "eid: " EID_FMT ", jetty_id: %u, the buf num [%d] mempool info num [%u] "
-                "exceeds the maximum limit [%u]\n", EID_ARGS(*eid), id, ref_sge_cnt, umq_imm_head->mempool_num);
+                "exceeds the maximum limit [%u]\n", EID_ARGS(*eid), id, ref_sge_cnt, umq_imm_head->mempool_num,
+                mempool_info_size / sizeof(ub_import_mempool_info_t));
             goto FREE_BUF;
         }
 
