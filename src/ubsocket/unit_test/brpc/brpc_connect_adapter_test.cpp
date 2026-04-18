@@ -42,9 +42,18 @@ TEST_F(BrpcConnectAdapterTest, TestConnectFailed)
 {
     const struct sockaddr *address = nullptr;
     socklen_t address_len = 0;
+    MOCKER_CPP(&Brpc::SocketFd::IsBlocking)
+             .stubs()
+             .will(returnValue(bool(true)));
+    MOCKER_CPP(&OsAPiMgr::setsockopt)
+         .stubs()
+         .will(returnValue(0));
     MOCKER_CPP(&OsAPiMgr::sendto)
+             .stubs()
+             .will(returnValue(ssize_t(-1)));
+    MOCKER_CPP(&Brpc::SocketFd::IsTfoConnection)
             .stubs()
-            .will(returnValue(int(-1)));
+            .will(returnValue(true));
 
     // m_tx_use_tcp or m_rx_use_tcp is true,ret=-1
     socketfd->m_tx_use_tcp = true;
@@ -79,10 +88,17 @@ TEST_F(BrpcConnectAdapterTest, TestConnectSucceed)
 {
     const struct sockaddr *address = nullptr;
     socklen_t address_len = 0;
-    MOCKER_CPP(&OsAPiMgr::connect)
+
+    MOCKER_CPP(&OsAPiMgr::setsockopt)
+        .stubs()
+        .will(returnValue(0));
+    MOCKER_CPP(&OsAPiMgr::sendto)
             .stubs()
-            .will(returnValue(int(0)))
-            .then(returnValue(int(-1)));
+            .will(returnValue(ssize_t(0)))
+            .then(returnValue(ssize_t(-1)));
+    MOCKER_CPP(&Brpc::SocketFd::IsTfoConnection)
+           .stubs()
+           .will(returnValue(bool(true)));
     MOCKER_CPP(&SocketFd::IsBlocking)
             .stubs()
             .will(returnValue(bool(false)));

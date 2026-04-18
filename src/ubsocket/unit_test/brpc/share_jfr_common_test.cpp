@@ -161,17 +161,17 @@ TEST_F(ShareJfrCommonTest, EidUmqTableAddGetRemoveAndRemoveMainUmq)
     Brpc::EidUmqTable::Add(eidA, K_EID_UMQ_TABLE_MAIN_ENTRY_A_1);
     Brpc::EidUmqTable::Add(eidB, K_EID_UMQ_TABLE_MAIN_ENTRY_B_0);
 
-    std::vector<uint64_t> out {};
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out {};
     ASSERT_TRUE(Brpc::EidUmqTable::Get(eidA, out));
     ASSERT_EQ(out.size(), K_EID_UMQ_TABLE_EXPECTED_ENTRIES_COUNT_0);
-    EXPECT_EQ(out[0], K_EID_UMQ_TABLE_MAIN_ENTRY_A_0);
-    EXPECT_EQ(out[1], K_EID_UMQ_TABLE_MAIN_ENTRY_A_1);
+    EXPECT_EQ(out[0]->GetUmqHandle(), K_EID_UMQ_TABLE_MAIN_ENTRY_A_0);
+    EXPECT_EQ(out[1]->GetUmqHandle(), K_EID_UMQ_TABLE_MAIN_ENTRY_A_1);
 
     Brpc::EidUmqTable::RemoveMainUmq(K_EID_UMQ_TABLE_MAIN_ENTRY_A_0);
     out.clear();
     ASSERT_TRUE(Brpc::EidUmqTable::Get(eidA, out));
     ASSERT_EQ(out.size(), K_EID_UMQ_TABLE_EXPECTED_ENTRIES_COUNT_1);
-    EXPECT_EQ(out[0], K_EID_UMQ_TABLE_MAIN_ENTRY_A_1);
+    EXPECT_EQ(out[0]->GetUmqHandle(), K_EID_UMQ_TABLE_MAIN_ENTRY_A_1);
 
     Brpc::EidUmqTable::Remove(eidA);
     out.clear();
@@ -240,7 +240,7 @@ TEST_F(ShareJfrCommonTest, MainSubUmqTable_RemoveSubUmq_NotFound)
 TEST_F(ShareJfrCommonTest, EidUmqTable_Get_NotFound)
 {
     umq_eid_t eid = MakeEid(K_EID_SEED_99);
-    std::vector<uint64_t> out;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out {};
     EXPECT_FALSE(Brpc::EidUmqTable::Get(eid, out));
 }
 
@@ -296,13 +296,13 @@ TEST_F(ShareJfrCommonTest, EidUmqTable_AddMultipleUmqs)
     Brpc::EidUmqTable::Add(eid, K_EID_UMQ_1003);
     Brpc::EidUmqTable::Add(eid, K_EID_UMQ_1004);
 
-    std::vector<uint64_t> out;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out {};
     ASSERT_TRUE(Brpc::EidUmqTable::Get(eid, out));
     EXPECT_EQ(out.size(), 4u);
-    EXPECT_EQ(out[K_EID_OUT_IDX_0], K_EID_UMQ_1001);
-    EXPECT_EQ(out[K_EID_OUT_IDX_1], K_EID_UMQ_1002);
-    EXPECT_EQ(out[K_EID_OUT_IDX_2], K_EID_UMQ_1003);
-    EXPECT_EQ(out[K_EID_OUT_IDX_3], K_EID_UMQ_1004);
+    EXPECT_EQ(out[K_EID_OUT_IDX_0]->GetUmqHandle(), K_EID_UMQ_1001);
+    EXPECT_EQ(out[K_EID_OUT_IDX_1]->GetUmqHandle(), K_EID_UMQ_1002);
+    EXPECT_EQ(out[K_EID_OUT_IDX_2]->GetUmqHandle(), K_EID_UMQ_1003);
+    EXPECT_EQ(out[K_EID_OUT_IDX_3]->GetUmqHandle(), K_EID_UMQ_1004);
 
     Brpc::EidUmqTable::Remove(eid);
 }
@@ -319,10 +319,10 @@ TEST_F(ShareJfrCommonTest, EidUmqTable_RemoveMainUmq_Multiple)
     Brpc::EidUmqTable::RemoveMainUmq(K_EID_UMQ_2001);
     Brpc::EidUmqTable::RemoveMainUmq(K_EID_UMQ_2003);
 
-    std::vector<uint64_t> out;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out {};
     ASSERT_TRUE(Brpc::EidUmqTable::Get(eid, out));
     EXPECT_EQ(out.size(), 1u);
-    EXPECT_EQ(out[0], K_EID_UMQ_2002);
+    EXPECT_EQ(out[0]->GetUmqHandle(), K_EID_UMQ_2002);
 
     Brpc::EidUmqTable::Remove(eid);
 }
@@ -337,9 +337,9 @@ TEST_F(ShareJfrCommonTest, EidUmqTable_MultipleEids)
     Brpc::EidUmqTable::Add(eid2, K_EID_UMQ_3002);
     Brpc::EidUmqTable::Add(eid3, K_EID_UMQ_3003);
 
-    std::vector<uint64_t> out1;
-    std::vector<uint64_t> out2;
-    std::vector<uint64_t> out3;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out1;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out2;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out3;
     EXPECT_TRUE(Brpc::EidUmqTable::Get(eid1, out1));
     EXPECT_TRUE(Brpc::EidUmqTable::Get(eid2, out2));
     EXPECT_TRUE(Brpc::EidUmqTable::Get(eid3, out3));
@@ -363,8 +363,8 @@ TEST_F(ShareJfrCommonTest, EidUmqTable_Clean)
 
     Brpc::EidUmqTable::Clean();
 
-    std::vector<uint64_t> out1;
-    std::vector<uint64_t> out2;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out1;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out2;
     EXPECT_FALSE(Brpc::EidUmqTable::Get(eid1, out1));
     EXPECT_FALSE(Brpc::EidUmqTable::Get(eid2, out2));
 }
@@ -479,7 +479,7 @@ TEST_F(ShareJfrCommonTest, EidUmqTable_AddSameEidMultipleTimes)
     Brpc::EidUmqTable::Add(eid, K_EID_UMQ_10001);
     Brpc::EidUmqTable::Add(eid, K_EID_UMQ_20001);  // Add different umq for same eid
 
-    std::vector<uint64_t> out;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out {};
     ASSERT_TRUE(Brpc::EidUmqTable::Get(eid, out));
     EXPECT_EQ(out.size(), 2u);  // Both entries should be added
 
@@ -497,7 +497,7 @@ TEST_F(ShareJfrCommonTest, EidUmqTable_RemoveMainUmq_Partial)
     // Remove only one
     Brpc::EidUmqTable::RemoveMainUmq(K_EID_UMQ_20002);
 
-    std::vector<uint64_t> out;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out {};
     ASSERT_TRUE(Brpc::EidUmqTable::Get(eid, out));
     EXPECT_EQ(out.size(), 2u);
 
@@ -587,7 +587,7 @@ TEST_F(ShareJfrCommonTest, EidUmqTable_GetAfterRemove)
     Brpc::EidUmqTable::Add(eid, K_EID_UMQ_30001);
     Brpc::EidUmqTable::Remove(eid);
 
-    std::vector<uint64_t> out;
+    std::vector<std::shared_ptr<Brpc::MainUmqState>> out {};
     EXPECT_FALSE(Brpc::EidUmqTable::Get(eid, out));
 }
 

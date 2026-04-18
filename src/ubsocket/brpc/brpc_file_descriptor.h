@@ -389,7 +389,7 @@ public:
         }
     }
 
-    ALWAYS_INLINE int IsTfoConnection(const int &fd)
+    static bool IsTfoConnection(const int &fd)
     {
         tcp_info info{};
         socklen_t len = sizeof(info);
@@ -398,7 +398,7 @@ public:
             // check TCPI_OPT_SYN_DATA
             is_tfo_connection = (info.tcpi_options & TCPI_OPT_SYN_DATA) != 0;
         }
-        RPC_ADPT_VLOG_INFO("Current tcpi_options: 0x%x, tfo connection: %s \n",info.tcpi_options,
+        RPC_ADPT_VLOG_INFO("Current tcpi_options: 0x%x, tfo connection: %s \n", info.tcpi_options,
             is_tfo_connection ? "true" : "false");
         return is_tfo_connection;
     }
@@ -801,7 +801,7 @@ public:
 
     ALWAYS_INLINE int Listen(int backlog)
     {
-        RPC_ADPT_VLOG_INFO("Enable Server TFO, with QLen", backlog);
+        RPC_ADPT_VLOG_INFO("Enable Server TFO, with QLen %d\n", backlog);
         // enable tfo
         if (SetSockOpt(m_fd, SOL_TCP, TCP_FASTOPEN, &backlog, sizeof(backlog)) < 0) {
             RPC_ADPT_VLOG_WARN("Unable to enable server TFO");
@@ -823,11 +823,13 @@ public:
         if (!is_blocking) {
             SetBlocking(m_fd);
         }
+
         constexpr int fast_open = 1;
         OsAPiMgr::GetOriginApi()->setsockopt(m_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
         ssize_t sendto_ret = OsAPiMgr::GetOriginApi()->sendto(
             m_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
-        if (errno != 0) {
+        ret = sendto_ret < 0 ? -1 : 0;
+        if (ret < 0 && errno != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             RPC_ADPT_VLOG_NOTICE("TFO sendto[1] failed, errno %d, err msg: %s, fd %d\n", errno,
                 NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), m_fd);
@@ -840,17 +842,24 @@ public:
             OsAPiMgr::GetOriginApi()->setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
             sendto_ret = OsAPiMgr::GetOriginApi()->sendto(
                 tmp_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
-            if (errno != 0) {
+            ret = sendto_ret < 0 ? -1 : 0;
+            if (ret < 0 && errno != 0) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
                 RPC_ADPT_VLOG_NOTICE("TFO sendto[2] failed, errno %d, err msg: %s, fd %d\n", errno,
-                    NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), m_fd);
+                    NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd);
             }
 
-            dup3(tmp_fd, m_fd, O_CLOEXEC);
+            int dup3_ret = dup3(tmp_fd, m_fd, O_CLOEXEC);
             OsAPiMgr::GetOriginApi()->close(tmp_fd);
+            if (dup3_ret < 0) {
+                char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "dup3 failed, errno %d, err msg: %s, tmp_fd %d, m_fd %d\n", errno,
+                    NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd, m_fd);
+                return -1;
+            }
         } else {
             // 已经是tfo连接，继续处理
-            RPC_ADPT_VLOG_INFO("TFO Cookie exists, continue...");
+            RPC_ADPT_VLOG_INFO("TFO Cookie exists, continue...\n");
         }
 
         if (!is_blocking) {
@@ -866,7 +875,6 @@ public:
             m_conn_info.create_time = std::chrono::system_clock::now();
         }
 
-        ret = sendto_ret < 0 ? -1 : 0;
         if (m_tx_use_tcp || m_rx_use_tcp || !IsTfoConnection(m_fd)) {
             return ret;
         }
