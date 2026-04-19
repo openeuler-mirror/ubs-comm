@@ -148,6 +148,13 @@ static ALWAYS_INLINE bool IsTimeout(TimePoint &start, uint32_t timeout_ms)
     return duration.count()>timeout_ms;
 }
 
+enum class FdType : uint32_t {
+    SOCKET_FD = 0,
+    EVENT_FD = 1,
+    SHARE_JFR_FD = 2,
+    NATIVE_SOCKET_FD = 3,
+};
+
 class SocketFd : public Fd<SocketFd> {
     public:
     SocketFd(int fd) : Fd<SocketFd>(fd) {}
@@ -303,12 +310,19 @@ class SocketFd : public Fd<SocketFd> {
     {
         return PollingErrCode::OK;
     }
-};
 
-enum class FdType : uint32_t {
-    SOCKET_FD = 0,
-    EVENT_FD = 1,
-    SHARE_JFR_FD = 2,
+    void SetFdType(FdType type)
+    {
+        m_fd_type = type;
+    }
+
+    FdType GetFdType()
+    {
+        return m_fd_type;
+    }
+
+private:
+    FdType m_fd_type = FdType::SOCKET_FD;
 };
 
 class EpollEvent {

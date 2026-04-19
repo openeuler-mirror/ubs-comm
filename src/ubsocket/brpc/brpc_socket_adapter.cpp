@@ -63,6 +63,8 @@ EXPOSE_C_DEFINE int UB_API_WRAP(socket)(int domain, int type, int protocol)
         }
     }
 
+    socket_fd_obj->SetFdType(FdType::NATIVE_SOCKET_FD);
+
     // Delete existing objects and record new objects in the list.
     Fd<SocketFd>::OverrideFdObj(fd, socket_fd_obj);
 

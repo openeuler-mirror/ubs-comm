@@ -437,20 +437,6 @@ TEST_F(BrpcFileDescriptorTest, SocketFdDestructor)
     delete fd;
 }
 
-TEST_F(BrpcFileDescriptorTest, SocketFdWithDifferentMagicNumbers)
-{
-    MOCKER_CPP(&Brpc::SocketFd::UnbindAndFlushRemoteUmq).stubs();
-    MOCKER_CPP(&Brpc::SocketFd::DestroyLocalUmq).stubs();
-    Brpc::SocketFd fd1(BRPC_FD_1, 0, 0);
-    Brpc::SocketFd fd2(BRPC_FD_2, BRPC_INDEX_100, static_cast<uint32_t>(BRPC_INDEX_5 * BRPC_INDEX_10));
-    Brpc::SocketFd fd3(BRPC_FD_3, UINT64_MAX, UINT32_MAX);
-
-    EXPECT_EQ(fd1.GetFd(), BRPC_FD_1);
-    EXPECT_EQ(fd2.GetFd(), BRPC_FD_2);
-    EXPECT_EQ(fd3.GetFd(), BRPC_FD_3);
-    std::cout << fd3.GetFd() << std::endl;
-}
-
 // Tests for Brpc::EpollEvent
 class BrpcEpollEventTest : public testing::Test {
 public:

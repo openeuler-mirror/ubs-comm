@@ -521,7 +521,7 @@ class Listener {
         ScopedUbReadLocker lock(Fd<SocketFd>::GetRWLock());
         SocketFd **socketMap = Fd<SocketFd>::GetFdObjMap();
         for (uint32_t i = 0; i < RPC_ADPT_FD_MAX; ++i) {
-            if (socketMap[i] == nullptr) {
+            if (socketMap[i] == nullptr || socketMap[i]->GetFdType() == FdType::NATIVE_SOCKET_FD) {
                 continue;
             }
             sockNum++;
@@ -535,7 +535,7 @@ class Listener {
         SocketFd **socketMap = Fd<SocketFd>::GetFdObjMap();
         uint32_t doneNum = 0;
         for (uint32_t i = 0; i < RPC_ADPT_FD_MAX && doneNum < sockNum; ++i) {
-            if (socketMap[i] == nullptr) {
+            if (socketMap[i] == nullptr || socketMap[i]->GetFdType() == FdType::NATIVE_SOCKET_FD) {
                 continue;
             }
             data->socketId = i;

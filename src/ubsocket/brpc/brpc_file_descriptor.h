@@ -811,6 +811,7 @@ public:
 
     ALWAYS_INLINE int Connect(const struct sockaddr *address, socklen_t address_len)
     {
+        SetFdType(FdType::SOCKET_FD);
         int ret = 0;
         TRACE_DELAY_AUTO(BRPC_CONNECT_CALL, ret);
         // 判断TCPI_OPT_SYN_DATA，如果已置位则复用
@@ -1323,7 +1324,7 @@ public:
         }
 
         if (m_context_trace_enable) {
-            UpdateTraceStats(StatsMgr::TX_PACKET_COUNT, 1);
+            UpdateTraceStats(StatsMgr::TX_BYTE_COUNT, tx_total_len);
         }
 
         retCode = 0;
