@@ -617,6 +617,8 @@ public:
         umq_eid_t connEid;
         umq_route_t connRoute;
         umq_eid_t peerBondingEid;
+        m_route_backup_src_eid = {};
+        mTopoType = UMQ_TOPO_TYPE_FULLMESH_1D;
         if (ConnectNegotiate(&connEid, connRoute, peerBondingEid) < 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                 "Failed to negotiate in connect,Peer IP:%s, fd: %d\n",
@@ -633,7 +635,7 @@ public:
         // 3. 用户指定 bonding 设备建链，跨节点场景返回 retryable 错误，优先重试，如果重试仍旧失败则降级
         bool ok = false;
         bool degradable = false;
-        ubsocket::Error ackRet;
+        ubsocket::Error ackRet = ubsocket::Error::kOK;
         ubsocket::Error peerRet;
         umq_route_t otherConnRoute;
         OtherRouteMessage otherRouteMessage;
@@ -647,7 +649,13 @@ public:
 
                 case UBHandshakeState::kSTART:
                     // 作为客户端，它的 Degradable 属性对于是否降级不生效. Degradable 仅当角色为服务端时生效
-                    ackRet = DoUbConnect(connEid);
+                    if (context->IsBonding()) {
+                        ackRet = CheckRouteDevAddForConnect(connEid);
+                    }
+                    
+                    if (IsOk(ackRet)) {
+                        ackRet = DoUbConnect(connEid);
+                    }
                     if (!IsOk(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                             "Failed to finish ub bind in connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
@@ -949,6 +957,29 @@ public:
         }
 
         return ret;
+    }
+
+    ubsocket::Error CheckRouteDevAddForConnect(const umq_eid_t &connEid)
+    {
+        if (CheckDevAdd(connEid) != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                "Failed to check main dev add in connect, target eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                EID_ARGS(connEid), GetPeerIp().c_str(), m_fd);
+            return ubsocket::Error::kUMQ_DEV_ADD;
+        }
+
+        if (mTopoType == UMQ_TOPO_TYPE_FULLMESH_1D) {
+            return ubsocket::Error::kOK;
+        }
+
+        if (CheckDevAdd(m_route_backup_src_eid) != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                "Failed to check backup dev add in connect, target eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                EID_ARGS(m_route_backup_src_eid), GetPeerIp().c_str(), m_fd);
+            return ubsocket::Error::kUMQ_DEV_ADD;
+        }
+
+        return ubsocket::Error::kOK;
     }
 
     virtual void OutputStats(std::ostringstream &oss) 
@@ -2953,7 +2984,7 @@ private:
         if (req->is_bonding != 0 && (req->has_socket_id == 1) &&
             FillLocalSocketIdsForNegotiate(context, req->socket_ids, req->socket_id_count) != 0) {
             return -1;
-            }
+        }
         return 0;
     }
 
@@ -4439,12 +4470,8 @@ private:
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get connect eid\n");
                 return -1;
             }
-
-            if (CheckDevAdd(connRoute->src_eid) != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to check dev add\n");
-                return -1;
-            }
             // fm不走bond，所以mUsedPorts.num保持为0
+            mUsedPorts.num = 0;
         } else {
             std::vector<umq_route_t> mainRoutes;
             umq_route_t connMainRoute;
@@ -4466,14 +4493,7 @@ private:
             };
             std::copy(ports.begin(), ports.end(), mUsedPortArray.begin());
             mUsedPorts.num = static_cast<uint8_t>(ports.size());
-            if (CheckDevAdd(connMainRoute.src_eid) != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to check main dev add\n");
-                return -1;
-            }
-            if (CheckDevAdd(connBackRoute.src_eid) != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to check back dev add\n");
-                return -1;
-            }
+            m_route_backup_src_eid = connBackRoute.src_eid;
         }
 
         return 0;
@@ -4498,6 +4518,7 @@ private:
     std::vector<uint32_t> mPeerAllSocketIds;
     bool m_isblocking = true;
     umq_topo_type_t mTopoType = UMQ_TOPO_TYPE_FULLMESH_1D;
+    umq_eid_t m_route_backup_src_eid; // 备
     static std::array<umq_port_id_t, MAX_PORT_COUNT> mUsedPortArray;
     umq_used_ports_t mUsedPorts = {
         .port = mUsedPortArray.data(),
