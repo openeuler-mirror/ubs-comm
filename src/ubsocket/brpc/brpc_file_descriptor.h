@@ -584,7 +584,7 @@ public:
 
         if (Context::GetContext()->EnableShareJfr()) {
             // 强依赖当前实现，一个 eid 只对应一个主 umq. 如果后续逻辑有变更，需同步修改。
-            auto main_umq = EidUmqTable::GetFirst(connEid);
+            auto main_umq = EidUmqTable::GetFirst(m_conn_info.conn_eid);
             if (main_umq == nullptr) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "The main umq is removed by other thread.\n");
                 return ubsocket::Error::kUBSOCKET_NO_MAIN_UMQ;
@@ -3121,6 +3121,7 @@ private:
                         "Failed to get eid by dev name:%s and eid index:%d \n",
                         context->GetDevNameStr(), context->GetEidIdx());
                 }
+                m_conn_info.conn_eid = localEid;
             } else {
                 // init use bonding dev
                 queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
@@ -3448,7 +3449,7 @@ private:
 
         if (Context::GetContext()->EnableShareJfr()) {
             // 强依赖当前实现，一个 eid 只对应一个主 umq. 如果后续逻辑有变更，需同步修改。
-            auto main_umq = EidUmqTable::GetFirst(connEid);
+            auto main_umq = EidUmqTable::GetFirst(socket_fd_obj->m_conn_info.conn_eid);
             if (main_umq == nullptr) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "The main umq state is removed by other thread.\n");
                 return ubsocket::Error::kUBSOCKET_NO_MAIN_UMQ;
