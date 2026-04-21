@@ -1051,13 +1051,13 @@ public:
     ALWAYS_INLINE ssize_t ReadV(const struct iovec *iov, int iovcnt)
     {
         int retCode = -1;
-        TRACE_DELAY_AUTO(BRPC_READV_CALL, retCode);
         if (m_rx_use_tcp) {
             ssize_t size = OsAPiMgr::GetOriginApi()->readv(m_fd, iov, iovcnt);
             retCode = size < 0 ? -1 : 0;
             return size;
         }
 
+        TRACE_DELAY_AUTO(BRPC_READV_CALL, retCode);
         if (iov == nullptr || iovcnt == 0) {
             errno = EINVAL;
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
@@ -1209,13 +1209,13 @@ public:
     ALWAYS_INLINE ssize_t WriteV(const struct iovec *iov, int iovcnt)
     {
         int retCode = -1;
-        TRACE_DELAY_AUTO(BRPC_WRITEV_CALL, retCode);
         if (m_tx_use_tcp) {
             ssize_t size = OsAPiMgr::GetOriginApi()->writev(m_fd, iov, iovcnt);
             retCode = size < 0 ? -1 : 0;
             return size;
         }
 
+        TRACE_DELAY_AUTO(BRPC_WRITEV_CALL, retCode);
         if (iov == nullptr || iovcnt == 0) {
             errno = EINVAL;
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
