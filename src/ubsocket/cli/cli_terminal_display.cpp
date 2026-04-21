@@ -147,6 +147,7 @@ void TerminalDisplay::PrintHeader(CLIDataHeader &header)
     PrintItem("Total Sockets", header.socketNum);
     PrintItem("Connect Calls", header.connNum);
     PrintItem("Active Conns", header.activeConn);
+    PrintItem("ReTx Count", header.reTxCount);
     NewLine();
 }
 

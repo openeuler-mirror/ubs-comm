@@ -100,6 +100,7 @@ struct __attribute__((packed)) CLIDataHeader {
     uint32_t socketNum;
     uint32_t connNum;
     uint32_t activeConn;
+    uint32_t reTxCount;
 };
 
 struct __attribute__((packed)) CLISocketData {

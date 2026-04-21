@@ -211,6 +211,7 @@ public:
 
     inline static std::atomic<uint64_t> mConnCount{0};
     inline static std::atomic<uint64_t> mActiveConnCount{0};
+    inline static std::atomic<uint64_t> mReTxCount{0};
     inline static std::atomic<uint64_t> mRxPacketCount{0};
     inline static std::atomic<uint64_t> mTxPacketCount{0};
     inline static std::atomic<uint64_t> mRxByteCount{0};
@@ -226,6 +227,11 @@ public:
     static uint64_t GetActiveConnCount()
     {
         return mActiveConnCount.load(std::memory_order_relaxed);
+    }
+
+    static uint64_t GetReTxCount()
+    {
+        return mReTxCount.load(std::memory_order_relaxed);
     }
 
     static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss, uint32_t pid) {
@@ -247,6 +253,7 @@ public:
 
         oss << "\"" << "totalConnections" << "\":" << mConnCount.load() << ",";
         oss << "\"" << "activeConnections" << "\":" << mActiveConnCount.load() << ",";
+        oss << "\"" << "reTxCount" << "\":" << mReTxCount.load() << ",";
         oss << "\"" << "sendPackets" << "\":" << mTxPacketCount.load() << ",";
         oss << "\"" << "receivePackets" << "\":" << mRxPacketCount.load() << ",";
         oss << "\"" << "sendBytes" << "\":" << mTxByteCount.load() << ",";
@@ -256,6 +263,8 @@ public:
 
         oss << "}" << "}";
     }
+
+    static void UpdateReTxCount(umq_trans_mode_t umq_trans_mode);
 
     // data plane interface, caller ensure input validation
     ALWAYS_INLINE void UpdateTraceStats(enum trace_stats_type type, uint32_t value)
@@ -561,13 +570,19 @@ class Listener {
             return;
         }
 
-        for (int i = 0; i < ev_num; i++){
-            if (events[i].data.fd == m_wakeup_fd){
+        ProcessEpollEvents(events, ev_num);
+    }
+
+    virtual void ProcessEpollEvents(const struct epoll_event *events, const int evNum)
+    {
+        for (int i = 0; i < evNum; i++) {
+            if (events[i].data.fd == m_wakeup_fd) {
                 /* The current epoll event reported from the wakeup fd only indicates that
                  * the program needs to exit as soon as possible, so it directly returns. */
-                 AckWakeupEpoll();
-                 return;
-            }else if(events[i].data.fd == m_uds_fd) {
+                AckWakeupEpoll();
+                return;
+            }
+            if (events[i].data.fd == m_uds_fd) {
                 Process(events[i].events);
             }
         }
@@ -590,6 +605,7 @@ class Listener {
         CLIheader.socketNum = sockNum;
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
+        CLIheader.reTxCount = StatsMgr::GetReTxCount();
         // collect data
         if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to memcpy cli header\n");
@@ -859,29 +875,37 @@ class Listener {
  * avoid creating and occupying unnecessary memory when the statistic-related functionality is not enabled. */
  class GlobalStatsMgr final : public Listener {
     public:
-    static ALWAYS_INLINE GlobalStatsMgr *GetGlobalStatsMgr()
+    static ALWAYS_INLINE GlobalStatsMgr *GetGlobalStatsMgr(const umq_trans_mode_t trans_mode)
     {
-        static GlobalStatsMgr mgr;
+        static GlobalStatsMgr mgr(trans_mode);
         return &mgr;
     }
 
-    static void GlobalStatsMgrEventLoop()
+    static void GlobalStatsMgrEventLoop(const umq_trans_mode_t trans_mode)
     {
-        GlobalStatsMgr *mgr = GetGlobalStatsMgr();
+        GlobalStatsMgr *mgr = GetGlobalStatsMgr(trans_mode);
         while(m_running){
             mgr->Poll();
         }
     }
 
-    private:
-    GlobalStatsMgr()
+    void ProcessEpollEvents(const epoll_event *events, const int evNum) override
     {
+        // get urma perf info and update
+        StatsMgr::UpdateReTxCount(m_trans_mode);
+        Listener::ProcessEpollEvents(events, evNum);
+    }
+
+    private:
+    explicit GlobalStatsMgr(umq_trans_mode_t trans_mode)
+    {
+        m_trans_mode = trans_mode;
         if (InternalEpollEnable() != 0){
             throw std::runtime_error("Failed to enable internal epoll logic");
         }
 
         try {
-            m_event_loop = new std::thread(GlobalStatsMgrEventLoop);
+            m_event_loop = new std::thread(GlobalStatsMgrEventLoop, trans_mode);
         } catch (const std::exception& e) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "%s\n", e.what());
             throw std::runtime_error("Failed to launch internal thread for statistics");
@@ -900,6 +924,7 @@ class Listener {
 
     std::thread *m_event_loop = nullptr;
     static volatile bool m_running;
+    umq_trans_mode_t m_trans_mode;
  };
 
 };

@@ -40,6 +40,7 @@ public:
     {
         std::ostringstream m_oss;
         PrintStatsMgr* mgr = GetPrintStatsMgr();
+        StatsMgr::UpdateReTxCount(mgr->m_trans_mode);
         StatsMgr::OutputAllStats(m_oss, mgr->pidVal);
         mgr->OutputJSON(m_oss);
     }
@@ -53,12 +54,14 @@ public:
         }
     }
 
-    static void StartStatsCollection(uint64_t traceTime, const char *tracePath, uint64_t traceFileSize)
+    static void StartStatsCollection(uint64_t traceTime, const char *tracePath, uint64_t traceFileSize,
+        const umq_trans_mode_t trans_mode = UMQ_TRANS_MODE_UB)
     {
         PrintStatsMgr* mgr = GetPrintStatsMgr();
         mgr->ubsocketTraceTime = traceTime;
         mgr->ubsocketTraceFileSize = traceFileSize;
         mgr->pidVal = (uint32_t)getpid();
+        mgr->m_trans_mode = trans_mode;
 
         if (tracePath) {
             int n = snprintf_s(mgr->ubsocketTraceFilePath, sizeof(mgr->ubsocketTraceFilePath),
@@ -219,6 +222,7 @@ private:
     uint32_t pidVal;
     u_external_mutex_t* mMgrLock;
     char ubsocketTraceFilePath[UBSOCKET_TRACE_FILE_PATH_LEN_MAX];
+    umq_trans_mode_t m_trans_mode;
 };
 
 };

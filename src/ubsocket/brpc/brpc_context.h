@@ -292,12 +292,12 @@ private:
 
         if (m_stats_enable) {
             // Get global statistics manager to invoke construction
-            (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr();
+            (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr(transMode);
         }
 
         if (m_trace_enable) {
             Statistics::PrintStatsMgr::StartStatsCollection(
-                GetUbsocketTraceTime(), GetUbsocketTraceFilePath(), GetUbsocketTraceFileSize());
+                GetUbsocketTraceTime(), GetUbsocketTraceFilePath(), GetUbsocketTraceFileSize(), transMode);
         }
     }
 
