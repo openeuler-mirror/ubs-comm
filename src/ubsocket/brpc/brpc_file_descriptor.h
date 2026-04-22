@@ -1112,6 +1112,19 @@ public:
     // max wait 1s for umq ready
     static const uint32_t WAIT_UMQ_READY_ROUND = 10000;
 
+    void WakeUpTx()
+    {
+        bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
+        if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
+            char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                              "eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
+                              ", peer ip: %s, errno: %d, errmsg: %s\n",
+                              m_event_fd, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno,
+                              NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+        }
+    }
+
     ALWAYS_INLINE ssize_t ReadV(const struct iovec *iov, int iovcnt)
     {
         int retCode = -1;
@@ -4798,7 +4811,10 @@ public:
             if (buf[i]->status != 0) {
                 if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                     socket_fd_obj->HandleErrorRxCqe(buf[i]);
+                } else {
+                    socket_fd_obj->WakeUpTx();
                 }
+                QBUF_LIST_NEXT(buf[i]) = nullptr;
                 umq_buf_free(buf[i]);
             }
         }
