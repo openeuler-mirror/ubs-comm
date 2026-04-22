@@ -83,7 +83,6 @@ EXPOSE_C_DEFINE int UB_API_WRAP(shutdown)(int fd, int how)
     return OsAPiMgr::GetOriginApi()->shutdown(fd, how);
 }
 
-
 EXPOSE_C_DEFINE int UB_API_WRAP(close)(int fd)
 {
     if (!Brpc::Context::GetUbEnableFlag()) {
@@ -703,7 +702,6 @@ __attribute__((constructor)) static void rpc_adapter_brpc_init(void)
             Brpc::Context::SetUbEnable();
         }
     }
-
 #endif
 }
 

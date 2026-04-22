@@ -20,6 +20,8 @@
 #define DEFAULT_LINK_PRIORITY      (-1)
 #define UBSOCKET_LINK_PRIORITY_MIN (0)
 #define UBSOCKET_LINK_PRIORITY_MAX (15)
+#define UBSOCKET_THREAD_POOL_SIZE_DEFAULT (1)
+#define UBSOCKET_THREAD_POOL_SIZE_MAX (64)
 #define ENV_VAR_BRPC_ALLOC_SYM     "UBSOCKET_BRPC_ALLOC_SYM"
 #define ENV_VAR_BRPC_DEALLOC_SYM   "UBSOCKET_BRPC_DEALLOC_SYM"
 #define ENV_VAR_READV_UNLIMITED    "UBSOCKET_READV_UNLIMITED"
@@ -31,6 +33,8 @@
 #define ENV_VAR_MIN_RESERVED_CREDIT     "UBSOCKET_MIN_RESERVED_CREDIT"
 #define ENV_VAR_LINK_PRIORITY      "UBSOCKET_LINK_PRIORITY"
 #define ENV_VAR_DEGRADE            "UBSOCKET_DEGRADE"
+#define ENV_VAR_ASYNC_ACCEPT       "UBSOCKET_ASYNC_ACCEPT"
+#define ENV_VAR_THREAD_POOL_SIZE   "UBSOCKET_THREAD_POOL_SIZE"
 
 namespace Brpc {
 
@@ -103,6 +107,16 @@ public:
         return m_degrade;
     }
 
+    bool UseAsyncAccept()
+    {
+        return m_use_async_accept;
+    }
+
+    uint32_t ThreadPoolSize()
+    {
+        return m_thread_pool_size;
+    }
+
     bool UseUB(int domain, int type)
     {
         bool isTCP = ((domain == AF_INET) || (domain == AF_INET6)) && (type == SOCK_STREAM);
@@ -146,6 +160,12 @@ protected:
         RPC_ADPT_VLOG_INFO("%s: %s (input: %s)\n", ENV_VAR_AUTO_FALLBACK_TCP,
             BoolVal::BoolConverter(m_auto_fallback_tcp),
             strlen(m_auto_fallback_tcp_str) > 0 ? m_auto_fallback_tcp_str : "(null)");
+        
+        if (strlen(m_use_async_accept_str) > 0) {
+            m_use_async_accept = BoolVal::BoolConverter(m_use_async_accept_str);
+        }
+        RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_ASYNC_ACCEPT, (int)m_use_async_accept);
+        RPC_ADPT_VLOG_INFO("%s: %u\n", ENV_VAR_THREAD_POOL_SIZE, m_thread_pool_size);
 
         if (strlen(m_use_ub_force_str) > 0) {
             m_use_ub_force = BoolVal::BoolConverter(m_use_ub_force_str);
@@ -249,6 +269,21 @@ protected:
             m_min_reserved_credit = min_reserved_credit == 0 ? DEFAULT_MIN_RESERVED_CREDIT :
                 min_reserved_credit;
         }
+
+        if ((env_ptr = getenv(ENV_VAR_ASYNC_ACCEPT)) != NULL) {
+            if (strcmp(env_ptr, "true") != 0 && strcmp(env_ptr, "false") != 0) {
+                printf(
+                    "WARNING: Flag 'UBSOCKET_ASYNC_ACCEPT' has wrong input type. Using default value : false.\n");
+            } else {
+                ReadEnvVar(env_ptr, m_use_async_accept_str, sizeof(m_use_async_accept_str));
+            }
+        }
+        if ((env_ptr = getenv(ENV_VAR_THREAD_POOL_SIZE)) != NULL) {
+            m_thread_pool_size = static_cast<uint32_t>(atoi(env_ptr));
+            if (m_thread_pool_size > UBSOCKET_THREAD_POOL_SIZE_MAX) {
+                m_thread_pool_size = UBSOCKET_THREAD_POOL_SIZE_MAX;
+            }
+        }
     }
     
     char m_alloc_sym_str[BRPC_SYM_STR_LEN_MAX] = "";
@@ -262,10 +297,13 @@ protected:
     bool m_auto_fallback_tcp = true;
     char m_use_ub_force_str[BOOL_STR_LEN_MAX] = "";
     bool m_use_ub_force = false;
+    char m_use_async_accept_str[BOOL_STR_LEN_MAX] = "";
+    bool m_use_async_accept = false;
     char m_enable_share_jfr_str[BOOL_STR_LEN_MAX] = "";
     bool m_enable_share_jfr = true;
     char m_degrade_str[BOOL_STR_LEN_MAX] = "";
     bool m_degrade = false;
+    uint32_t m_thread_pool_size = UBSOCKET_THREAD_POOL_SIZE_DEFAULT;
     uint64_t m_share_jfr_rx_queue_depth = DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH;
     char m_link_priority_str[BOOL_STR_LEN_MAX] = "";
     int8_t m_link_priority = DEFAULT_LINK_PRIORITY;

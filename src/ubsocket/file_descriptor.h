@@ -32,23 +32,39 @@
 
 class SocketEpollMapper {
 public:
-    explicit SocketEpollMapper(int fd) : m_fd(fd) {}
+    explicit SocketEpollMapper(int fd) : m_fd(fd)
+    {
+        m_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+    }
 
     ~SocketEpollMapper() {}
 
     void Add(int epoll_fd)
     {
+        ScopedUbExclusiveLocker sLock(m_mutex);
         m_epoll_set.insert(epoll_fd);
     }
 
     void Del(int epoll_fd)
     {
+        ScopedUbExclusiveLocker sLock(m_mutex);
         m_epoll_set.erase(epoll_fd);
+    }
+
+    int QueryFirst()
+    {
+        ScopedUbExclusiveLocker sLock(m_mutex);
+        if (m_epoll_set.empty()) {
+            return -1;
+        } else {
+            return *m_epoll_set.begin();
+        }
     }
 
     void Clear();
 private:
     int m_fd;
+    u_external_mutex_t* m_mutex = nullptr;
     std::unordered_set<int> m_epoll_set;
 };
 
@@ -153,6 +169,7 @@ enum class FdType : uint32_t {
     EVENT_FD = 1,
     SHARE_JFR_FD = 2,
     NATIVE_SOCKET_FD = 3,
+    READY_FD = 4,
 };
 
 class SocketFd : public Fd<SocketFd> {
@@ -521,15 +538,69 @@ public:
     }
 };
 
+class AcceptReadyFdEpollEvent : public ::EpollEvent {
+public:
+    AcceptReadyFdEpollEvent(int event_fd, struct epoll_event *event) : EpollEvent(event_fd, event)
+    {
+        m_fd_type = FdType::READY_FD;
+    }
+
+    virtual ~AcceptReadyFdEpollEvent()
+    {
+        if (m_fd >= 0) {
+            OsAPiMgr::GetOriginApi()->close(m_fd);
+            m_fd = -1;
+        }
+    }
+
+    int AddEpollEvent(int epoll_fd)
+    {
+        struct epoll_event tmp_event;
+        tmp_event.events = EPOLLIN;
+        tmp_event.data.ptr = (void *)(uintptr_t)this;
+
+        int ret = OsAPiMgr::GetOriginApi()->epoll_ctl(epoll_fd, EPOLL_CTL_ADD, m_fd, &tmp_event);
+        if (ret != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Add ready event fd failed, epfd: %d, ready event fd: %d\n",
+                              epoll_fd, m_fd);
+            return ret;
+        }
+
+        RPC_ADPT_VLOG_DEBUG("Add ready event fd successful, epfd: %d, ready event fd: %d\n", epoll_fd, m_fd);
+        m_add_epoll_event = true;
+
+        return 0;
+    }
+
+    void WakeUp()
+    {
+        uint64_t notification = 1;
+        if (eventfd_write(m_fd, notification) < 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Wakeup ready event fd: %d failed.\n", m_fd);
+        }
+    }
+
+    ALWAYS_INLINE int ProcessEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event,
+                                        int maxevents, bool use_polling = false)
+    {
+        uint64_t cnt;
+        if (eventfd_read(m_fd, &cnt) == -1) {
+            RPC_ADPT_VLOG_WARN("read ready event fd %d failed, errno %d\n", m_fd, errno);
+        }
+        return 0;
+    }
+};
+
 class EpollFd : public Fd<EpollFd> {
     public:
     EpollFd(int epoll_fd) : Fd<EpollFd>(epoll_fd)
     {
         m_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
         m_ctl_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
-        m_del_event_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
+        m_inner_event_mutex = g_external_lock_ops.create(LT_EXCLUSIVE);
 
         CreateAndAddDelEventFd();
+        CreateAndAddReadyEventFd();
     }
 
     ~EpollFd()
@@ -537,20 +608,23 @@ class EpollFd : public Fd<EpollFd> {
         for (std::pair<int, EpollEvent *> kv : m_epoll_event_map) {
             delete kv.second;
         }
-        g_external_lock_ops.destroy(m_ctl_mutex);
-        g_external_lock_ops.destroy(m_mutex);
-        g_external_lock_ops.destroy(m_del_event_mutex);
 
         if (m_del_event_fd_epoll_event != nullptr) {
             delete m_del_event_fd_epoll_event;
             m_del_event_fd_epoll_event = nullptr;
         }
 
-        ScopedUbExclusiveLocker sLock(m_del_event_mutex);
-        for (std::pair<int, EpollEvent *> kv : m_delete_event_map) {
-            delete kv.second;
+        {
+            ScopedUbExclusiveLocker sLock(m_inner_event_mutex);
+            for (std::pair<int, EpollEvent *> kv : m_delete_event_map) {
+                delete kv.second;
+            }
+            m_delete_event_map.clear();
         }
-        m_delete_event_map.clear();
+
+        g_external_lock_ops.destroy(m_ctl_mutex);
+        g_external_lock_ops.destroy(m_mutex);
+        g_external_lock_ops.destroy(m_inner_event_mutex);
     }
 
     virtual ALWAYS_INLINE int EpollCtlAdd(int fd, struct epoll_event *event, bool use_polling = false)
@@ -732,6 +806,8 @@ class EpollFd : public Fd<EpollFd> {
                 // The deletion is first marked, and the actual deletion is performed after the loop ends.
                 epoll_event->ProcessEpollEvent(events_ptr + i, events + output_idx, maxevents, use_polling);
                 clear_flag = true;
+            } else if (epoll_event->GetFdType() == FdType::READY_FD) {
+                output_idx += ProcessReadyEpollEvent(events_ptr + i, events + output_idx, maxevents);
             }
         }
 
@@ -770,13 +846,44 @@ class EpollFd : public Fd<EpollFd> {
         return m_ctl_mutex;
     }
 
+    void WakeUpReadyEventFd(int fd)
+    {
+        if (m_ready_fd_epoll_event == nullptr) {
+            RPC_ADPT_VLOG_WARN("Wake up ready event fd failed. \n");
+            return;
+        }
+        {
+            ScopedUbExclusiveLocker sLock(m_inner_event_mutex);
+            m_ready_event_queue.push(fd);
+        }
+
+        m_ready_fd_epoll_event->WakeUp();
+    }
+
+    int ProcessReadyEpollEvent(struct epoll_event *input_event, struct epoll_event *output_event, int maxevents)
+    {
+        int num = 0;
+        ScopedUbExclusiveLocker sLock(m_inner_event_mutex);
+        while (!m_ready_event_queue.empty() && num < maxevents) {
+            int fd = m_ready_event_queue.front();
+            m_ready_event_queue.pop();
+            auto it = m_epoll_event_map.find(fd);
+            if (it != m_epoll_event_map.end()) {
+                num += it->second->ProcessEpollEvent(output_event);
+            }
+        }
+        return num;
+    }
+
     protected:
     std::unordered_map<int, EpollEvent *> m_epoll_event_map;
     std::unordered_map<int, EpollEvent *> m_delete_event_map;
+    std::queue<int> m_ready_event_queue;
     u_external_mutex_t* m_mutex;
     u_external_mutex_t* m_ctl_mutex;
-    u_external_mutex_t* m_del_event_mutex;
+    u_external_mutex_t* m_inner_event_mutex;
     DelEventFdEpollEvent *m_del_event_fd_epoll_event = nullptr;
+    AcceptReadyFdEpollEvent *m_ready_fd_epoll_event = nullptr;
 
     int CreateAndAddDelEventFd()
     {
@@ -796,6 +903,26 @@ class EpollFd : public Fd<EpollFd> {
         return 0;
     }
 
+    int CreateAndAddReadyEventFd()
+    {
+        int ready_event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+        if (ready_event_fd < 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "create ready event fd failed, epfd: %d\n", m_fd);
+            return -1;
+        }
+        struct epoll_event ev;
+        m_ready_fd_epoll_event = new(std::nothrow) AcceptReadyFdEpollEvent(ready_event_fd, &ev);
+        if (m_ready_fd_epoll_event->AddEpollEvent(m_fd)) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "add ready event fd failed, epfd: %d\n", m_fd);
+            delete m_ready_fd_epoll_event;
+            m_ready_fd_epoll_event = nullptr;
+            return -1;
+        }
+
+        RPC_ADPT_VLOG_DEBUG("create and add ready event fd success. \n");
+        return 0;
+    }
+
     void WakeUpDelEventFd()
     {
         if (m_del_event_fd_epoll_event == nullptr) {
@@ -808,13 +935,13 @@ class EpollFd : public Fd<EpollFd> {
 
     void AddDelEpollEvent(int fd, EpollEvent *epoll_event)
     {
-        ScopedUbExclusiveLocker sLock(m_del_event_mutex);
+        ScopedUbExclusiveLocker sLock(m_inner_event_mutex);
         m_delete_event_map[fd] = epoll_event;
     }
 
     void ClearDelEpollEvent()
     {
-        ScopedUbExclusiveLocker sLock(m_del_event_mutex);
+        ScopedUbExclusiveLocker sLock(m_inner_event_mutex);
         for (std::pair<int, EpollEvent *> kv : m_delete_event_map) {
             delete kv.second;
         }

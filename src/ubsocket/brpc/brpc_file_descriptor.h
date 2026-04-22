@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <set>
+#include <tuple>
 #include <unordered_set>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -39,6 +40,7 @@
 #include "ub_lock_ops.h"
 #include "scope_exit.h"
 #include "error.h"
+#include "brpc_thread_pool.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
 #define DIVIDED_NUMBER          (2)
@@ -267,6 +269,7 @@ public:
         QBUF_LIST_INIT(&m_tx.m_tail_buf);
         QBUF_LIST_INIT(&m_rx.m_umq_buf_cache_head);
         QBUF_LIST_INIT(&m_rx.m_umq_buf_cache_tail);
+        m_async_accept_info.lock = g_external_lock_ops.create(LT_EXCLUSIVE);
         m_tx_window_capacity = Context::GetContext()->GetTxDepth();
         m_rx_window_capacity = Context::GetContext()->GetRxDepth();
         m_tx.m_window_size = m_tx_window_capacity;
@@ -292,6 +295,10 @@ public:
 
     virtual ~SocketFd()
     {
+        while (m_async_accept_info.asyncTaskNum.load() != 0) {
+            usleep(100);
+        }
+
         UnbindAndFlushRemoteUmq();
         DestroyLocalUmq();
         if (m_event_fd >= 0) {
@@ -302,6 +309,10 @@ public:
         if (rxQueue != nullptr) {
             delete rxQueue;
             rxQueue = nullptr;
+        }
+
+        if (m_async_accept_info.lock != nullptr) {
+            g_external_lock_ops.destroy(m_async_accept_info.lock);
         }
 
         if (share_jfr_rx_epoll_event != nullptr && !share_jfr_rx_epoll_event->IsAddEpollEvent()) {
@@ -408,8 +419,26 @@ public:
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
     {
         int retCode = 0;
+        int fd = -1;
         TRACE_DELAY_AUTO(BRPC_ACCEPT_CALL, retCode);
-        int fd = OsAPiMgr::GetOriginApi()->accept(m_fd, address, address_len);
+        if (Context::GetContext()->UseAsyncAccept()) {
+            ScopedUbExclusiveLocker sLock(m_async_accept_info.lock);
+            if (!m_async_accept_info.ready_queue.empty()) {
+                auto tmp = m_async_accept_info.ready_queue.front();
+                m_async_accept_info.ready_queue.pop();
+                fd = std::get<0>(tmp);
+                if (address != nullptr) {
+                    *address = std::get<1>(tmp);
+                    *address_len = std::get<2>(tmp);
+                }
+                RPC_ADPT_VLOG_DEBUG("found ready fd, return directly, fd %d\n", fd);
+                return fd;
+            }
+        }
+
+        struct sockaddr addr_tmp;
+        socklen_t len_tmp;
+        fd = OsAPiMgr::GetOriginApi()->accept(m_fd, &addr_tmp, &len_tmp);
         if (fd >= 0) {
             // 前置判断，如果不是TFO连接，作为普通TCP连接处理
             if (!IsTfoConnection(fd)) {
@@ -420,8 +449,11 @@ public:
                 RPC_ADPT_VLOG_WARN("Set TCP_NODELAY failed, fd %d, ret %d, errno %d\n", fd, tcpNoDelayRet, errno);
             }
         }
+
         std::string peerIp;
         if (fd >= 0 && address != nullptr) {
+            *address = addr_tmp;
+            *address_len = len_tmp;
             // 使用提取的接口获取IP地址
             peerIp = ExtractIpFromSockAddr(address);
             SocketFd* socket_fd_obj = static_cast<SocketFd*>(Fd<::SocketFd>::GetFdObj(fd));
@@ -459,8 +491,40 @@ public:
                 m_fd, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return fd;
         }
-        ProcessUBConnection(fd, peerIp);
-        return fd;
+
+        if (Context::GetContext()->UseAsyncAccept()) {
+            auto exec_ret = ExecutorService::GetExecutorService()->Execute([this, fd, addr_tmp, len_tmp]() {
+                    RPC_ADPT_VLOG_DEBUG("async accept start. fd:%d\n", fd);
+                    std::string ip = ExtractIpFromSockAddr(&addr_tmp);
+                    ProcessUBConnection(fd, ip);
+                    {
+                        ScopedUbExclusiveLocker sLock(m_async_accept_info.lock);
+                        m_async_accept_info.ready_queue.push(std::make_tuple(fd, addr_tmp, len_tmp));
+                    }
+                    
+                    SocketEpollMapper* mapper = GetSocketEpollMapper(m_fd);
+                    int epoll_fd = mapper->QueryFirst();
+                    if (epoll_fd >= 0) {
+                        EpollFd *obj = Fd<EpollFd>::GetFdObj(epoll_fd);
+                        obj->WakeUpReadyEventFd(m_fd);
+                    }
+                    m_async_accept_info.asyncTaskNum.fetch_sub(1U);
+                    RPC_ADPT_VLOG_DEBUG("async accept success. fd:%d\n", fd);
+                });
+            if (exec_ret == true) {
+                m_async_accept_info.asyncTaskNum.fetch_add(1U);
+            } else {
+                RPC_ADPT_VLOG_WARN("submit async accept task failed, use sync accept. fd:%d\n", fd);
+                ProcessUBConnection(fd, peerIp);
+                return fd;
+            }
+
+            errno = EAGAIN;
+            return -1;
+        } else {
+            ProcessUBConnection(fd, peerIp);
+            return fd;
+        }
     }
 
     int FillLocalSocketIdsForNegotiate(Context *context, uint32_t *socket_ids, uint32_t &socket_id_count)
@@ -4504,6 +4568,12 @@ private:
         int peer_fd;             // 对端socket fd
         int type_fd;             // 0 server; 1 client
     } m_peer_info;
+
+    struct AsyncAcceptInfo {
+        std::queue<std::tuple<int, struct sockaddr, socklen_t> > ready_queue;
+        std::atomic<int32_t> asyncTaskNum{0U};
+        u_external_mutex_t* lock = nullptr;
+    } m_async_accept_info;
     //common fields
     uint64_t m_local_umqh = UMQ_INVALID_HANDLE;
     uint64_t m_main_umqh = UMQ_INVALID_HANDLE;
