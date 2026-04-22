@@ -9,15 +9,16 @@
 
 #include <sys/eventfd.h>
 
-#include "urma_api.h"
-#include "umq_symbol_private.h"
 #include "perf.h"
-#include "umq_vlog.h"
 #include "umq_errno.h"
+#include "umq_inner.h"
+#include "umq_qbuf_pool.h"
+#include "umq_symbol_private.h"
 #include "umq_ub_flow_control.h"
 #include "umq_ub_imm_data.h"
-#include "umq_qbuf_pool.h"
 #include "umq_ub_private.h"
+#include "umq_vlog.h"
+#include "urma_api.h"
 
 #define UMQ_UB_FC_UNDATE_FAKE_BUF_SIZE 128 // in combind mode, buffer size more than umq_buf_t needs to be allocated
 
@@ -231,10 +232,12 @@ int umq_ub_post_tx(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
     uint16_t wr_index = 0;
     uint16_t max_tx = 0;
     bool opcode_consume_rqe = false;
+    bool user_send_imm = false;
     uint32_t max_send_size =
         (queue->remote_rx_buf_size > queue->tx_buf_size) ? queue->tx_buf_size : queue->remote_rx_buf_size;
 
     *bad_qbuf = NULL;
+    umq_buf_t *real_buf = NULL;
     while (buffer) {
         umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)buffer->qbuf_ext;
         umq_opcode_t opcode = buf_pro->opcode;
@@ -245,6 +248,9 @@ int umq_ub_post_tx(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
             ret = -UMQ_ERR_EINVAL;
             *bad_qbuf = qbuf;
             goto ERROR;
+        }
+        if (!user_send_imm) {
+            user_send_imm = (opcode == UMQ_OPC_SEND_IMM);
         }
         sges_ptr = sges[wr_index];
         uint32_t sge_num = 0;
@@ -261,7 +267,24 @@ int umq_ub_post_tx(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
             sges_ptr->addr = (uint64_t)(uintptr_t)buffer->buf_data;
             sges_ptr->len = buffer->data_size;
             sges_ptr->user_tseg = NULL;
-            sges_ptr->tseg = tseg_list[buffer->mempool_id];
+            if (buffer->mempool_without_data == 1) {
+                real_buf = umq_data_to_head(buffer->buf_data);
+                if (real_buf == NULL) {
+                    UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "eid: " EID_FMT ", jetty_id: %u, get real buf failed\n",
+                        EID_ARGS(*eid), id);
+                    ret = -UMQ_ERR_EINVAL;
+                    goto ERROR;
+                }
+            } else {
+                real_buf = buffer;
+            }
+            sges_ptr->tseg = tseg_list[real_buf->mempool_id];
+            if (sges_ptr->tseg == NULL) {
+                UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "eid: " EID_FMT ", jetty_id: %u, mempool %u tseg not exist\n",
+                    EID_ARGS(*eid), id, real_buf->mempool_id);
+                ret = -UMQ_ERR_EINVAL;
+                goto ERROR;
+            }
             sges_ptr++;
 
             if (rest_size < buffer->data_size) { // if cannot add up to total_size, return fail
@@ -320,6 +343,9 @@ int umq_ub_post_tx(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
 
     urma_jfs_wr_t *bad_wr = NULL;
     uint64_t start_timestamp = umq_perf_get_start_timestamp();
+    if (user_send_imm) {
+        umq_io_perf_process(UMQ_PERF_RECORD_TRANSPORT_POST_SEND, qbuf);
+    }
     urma_status_t status = umq_symbol_urma()->urma_post_jetty_send_wr(queue->jetty[UB_QUEUE_JETTY_IO], urma_wr, &bad_wr);
     umq_perf_record_write(UMQ_PERF_RECORD_TRANSPORT_POST_SEND, start_timestamp);
     if (status != URMA_SUCCESS) {
@@ -352,6 +378,10 @@ RECOVER_WINDOW:
         max_tx - umq_ub_tx_failed_num(urma_wr, max_tx, *bad_qbuf), queue->dev_ctx->io_lock_free);
 
 ERROR:
+    if (user_send_imm && (ret == -UMQ_ERR_EAGAIN)) {
+        umq_io_perf_process(UMQ_PERF_RECORD_TRANSPORT_POST_SEND_EAGAIN, qbuf);
+    }
+
     return ret;
 }
 
@@ -453,6 +483,11 @@ int umq_ub_post_rx_inner_impl(ub_queue_t *queue, umq_buf_t *qbuf, umq_buf_t **ba
             sges_ptr->len = buffer->data_size;
             sges_ptr->user_tseg = NULL;
             sges_ptr->tseg = tseg_list[buffer->mempool_id];
+            if (sges_ptr->tseg == NULL) {
+                UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "eid: " EID_FMT ", jetty_id: %u, mempool %u tseg not exist\n",
+                    EID_ARGS(*eid), id, buffer->mempool_id);
+                goto PUT_CUR_RX_CTX;
+            }
             sges_ptr++;
 
             if (rest_size < buffer->data_size) { // if cannot add up to total_size, return fail
@@ -569,6 +604,7 @@ static int umq_ub_on_rx_done(ub_queue_t *queue, urma_cr_t *cr, umq_buf_t *rx_buf
     umq_ub_imm_t imm = {.value = cr->imm_data};
     if (imm.bs.type == IMM_TYPE_USER) {
         buf_pro->imm_data = imm.value;
+        umq_io_perf_process(UMQ_PERF_RECORD_TRANSPORT_POLL_RX, rx_buf);
         goto OUT;
     }
 

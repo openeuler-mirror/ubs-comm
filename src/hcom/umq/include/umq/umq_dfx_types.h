@@ -197,6 +197,8 @@ typedef enum umq_perf_record_type {
     UMQ_PERF_RECORD_TRANSPORT_POST_SEND,
     /* record point for transport post recv in umq_enqueue and umq_post */
     UMQ_PERF_RECORD_TRANSPORT_POST_RECV,
+    /* record point for transport post send get eagain in umq_enqueue and umq_post */
+    UMQ_PERF_RECORD_TRANSPORT_POST_SEND_EAGAIN,
     /* record point for transport poll tx in umq_dequeue and umq_poll */
     UMQ_PERF_RECORD_TRANSPORT_POLL_TX,
     /* record point for transport poll rx in umq_dequeue and umq_poll */
@@ -237,6 +239,8 @@ typedef struct umq_perf_stats_cfg {
     uint64_t thresh_array[UMQ_PERF_QUANTILE_MAX_NUM]; // quantile values list
     uint32_t thresh_num; // number of valid quantiles
 } umq_perf_stats_cfg_t;
+
+typedef void (*umq_io_perf_callback_t)(umq_perf_record_type_t record_type, umq_buf_t *qbuf);
 
 #ifdef __cplusplus
 }
