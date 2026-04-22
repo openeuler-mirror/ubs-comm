@@ -16,6 +16,7 @@ static constexpr int IPV6_HEXTET_COUNT = 8;
 static constexpr int IPV6_MAX_COLONS = 7;
 static constexpr int IPV6_HEXTET_BYTE_COUNT = 2;
 static constexpr int BYTE_BIT_WIDTH = 8;
+static constexpr int MAX_FLOW_CONTROL_STR = 4096;
 
 char* In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufSize)
 {
@@ -103,6 +104,43 @@ void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
     CLISocketData* sockData = reinterpret_cast<CLISocketData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
         PrintData(sockData);
+        sockData += 1;
+    }
+    NewLine();
+    printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
+}
+
+void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataLen)
+{
+    uint32_t headerSize = sizeof(CLIDataHeader);
+    if (dataLen < headerSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    CLIDataHeader header{};
+    if (memcpy_s(&header, sizeof(CLIDataHeader), data, headerSize) != 0) {
+        CLI_LOG("Failed to memcpy CLIDataHeader\n");
+        return;
+    }
+    uint32_t SocketNum = header.socketNum;
+    uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIFlowControlData);
+    if (dataLen != expectedSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    // print data
+    Refresh();
+    PrintHeader(header);
+
+    char fcStatStr[MAX_FLOW_CONTROL_STR] = {};
+    CLIFlowControlData* sockData = reinterpret_cast<CLIFlowControlData *>(data + headerSize);
+    for (uint32_t i = 0; i < SocketNum; i++) {
+        if (umq_flow_control_stats_to_str(&(sockData->umqFlowControlStat),
+            fcStatStr, MAX_FLOW_CONTROL_STR) < 0) {
+                CLI_LOG("Failed to generate flow control info string\n");
+            }
+        printf("Socket %d:\n", i);
+        printf("%s", fcStatStr);
         sockData += 1;
     }
     NewLine();

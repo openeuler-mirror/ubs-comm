@@ -21,7 +21,7 @@
 #include <sstream>
 #include <iomanip>
 #include <securec.h>
-#include "umq_types.h"
+#include "umq_dfx_types.h"
 
 #define CLI_LOG(fmt, ...) \
 do { \
@@ -34,6 +34,7 @@ enum class CLICommand : uint8_t {
     TOPO = 1,
     STAT = 2,
     DELAY = 3,
+    FC = 4,
 };
 
 enum class CLITypeParam : uint8_t {
@@ -115,6 +116,12 @@ struct __attribute__((packed)) CLISocketData {
     uint64_t sendBytes;
     uint64_t errorPackets;
     uint64_t lostPackets;
+};
+
+struct CLIFlowControlData {
+    uint64_t socketId;
+    uint64_t createTime;
+    umq_flow_control_stats_t umqFlowControlStat;
 };
 
 struct __attribute__((packed)) CLIDelayHeader {

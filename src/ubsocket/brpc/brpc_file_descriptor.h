@@ -1051,6 +1051,18 @@ public:
         StatsMgr::OutputStats(oss);
     }
 
+    virtual void GetSocketFlowControlData(Statistics::CLIFlowControlData *data)
+    {
+        auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+            m_conn_info.create_time.time_since_epoch());
+        data->createTime = static_cast<uint64_t>(duration.count());
+
+        if (umq_stats_flow_control_get(
+            m_local_umqh, &(data->umqFlowControlStat)) != 0) {
+            RPC_ADPT_VLOG_WARN("Failed to get umq flow control info\n");
+        }
+    }
+
     virtual void GetSocketCLIData(Statistics::CLISocketData *data)
     {
         StatsMgr::GetSocketCLIData(data);

@@ -12,6 +12,7 @@
 
 #include "securec.h"
 #include "cli_message.h"
+#include "umq_dfx_api.h"
 
 namespace Statistics {
 class TerminalDisplay {
@@ -41,6 +42,7 @@ public:
         return mIstty;
     }
     void DisplaySocketInfo(uint8_t *data, const uint32_t dataLen);
+    void DisplayFlowControlInfo(uint8_t *data, const uint32_t dataLen);
     void DisplayTopoInfo(umq_route_list_t *data, const uint32_t dataLen);
     // data display
     void PrintHeader(CLIDataHeader &header);

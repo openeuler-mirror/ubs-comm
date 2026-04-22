@@ -34,6 +34,8 @@ public:
 
     int ProcessStat(int sockfd, CLIMessage &response);
 
+    int ProcessFlowControl(int sockfd, CLIMessage &response);
+
     int ProcessTopo(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
 
     int ProcessDelayQuery(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);

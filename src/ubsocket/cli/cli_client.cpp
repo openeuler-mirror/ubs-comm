@@ -34,12 +34,45 @@ int CLIClient::ProcessStat(int sockfd, CLIMessage &response)
     }
     uint32_t payloadLen = header.mDataSize;
     if (payloadLen == 0 || payloadLen > maxResponseSize) {
-        CLI_LOG("Invalid paylaod size: %d\n", payloadLen);
+        CLI_LOG("Invalid payload size: %d\n", payloadLen);
         return -1;
     }
 
     if (!response.AllocateIfNeed(payloadLen)) {
-        CLI_LOG("Failed to alloc reponsese memory\n");
+        CLI_LOG("Failed to alloc response memory\n");
+        return -1;
+    }
+
+    if (SocketFd::RecvSocketData(sockfd, response.Data(), payloadLen, cliclientIoTimeoutMs) != payloadLen) {
+        CLI_LOG("Failed to recv server msg\n");
+        return -1;
+    }
+    response.SetDataLen(payloadLen);
+    return 0;
+}
+
+int CLIClient::ProcessFlowControl(int sockfd, CLIMessage &response)
+{
+    CLIControlHeader header{};
+    header.mCmdId = CLICommand::FC;
+    if (SocketFd::SendSocketData(sockfd, &header, sizeof(CLIControlHeader), cliclientIoTimeoutMs) !=
+        sizeof(CLIControlHeader)) {
+        CLI_LOG("Failed to send CLIControlHeader\n");
+        return -1;
+    }
+    if (SocketFd::RecvSocketData(sockfd, &header, sizeof(CLIControlHeader), cliclientIoTimeoutMs) !=
+        sizeof(CLIControlHeader)) {
+        CLI_LOG("Failed to recv CLIControlHeader\n");
+        return -1;
+    }
+    uint32_t payloadLen = header.mDataSize;
+    if (payloadLen == 0 || payloadLen > maxResponseSize) {
+        CLI_LOG("Invalid payload size: %d\n", payloadLen);
+        return -1;
+    }
+
+    if (!response.AllocateIfNeed(payloadLen)) {
+        CLI_LOG("Failed to alloc response memory\n");
         return -1;
     }
 
@@ -201,6 +234,11 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
     int ret = 0;
     if (args.command == CLICommand::STAT) {
         ret = ProcessStat(sockfd, response);
+        return ret;
+    }
+
+    if (args.command == CLICommand::FC) {
+        ret = ProcessFlowControl(sockfd, response);
         return ret;
     }
 

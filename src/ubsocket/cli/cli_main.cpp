@@ -30,6 +30,14 @@ int main(int argc, char *argv[])
             client.Query(args, response);
             player.DisplaySocketInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
+    } else if (args.command == Statistics::CLICommand::FC) {
+        client.Query(args, response);
+        player.DisplayFlowControlInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+        while (args.watch) {
+            sleep(1);
+            client.Query(args, response);
+            player.DisplayFlowControlInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+        }
     } else if (args.command == Statistics::CLICommand::TOPO) {
         client.Query(args, response);
         player.DisplayTopoInfo(reinterpret_cast<umq_route_list_t *>(response.Data()), response.DataLen());

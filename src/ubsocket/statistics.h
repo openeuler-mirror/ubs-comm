@@ -555,6 +555,22 @@ class Listener {
         }
     }
 
+    void GetAllFlowControlData(CLIFlowControlData *data, uint32_t sockNum)
+    {
+        ScopedUbReadLocker lock(Fd<SocketFd>::GetRWLock());
+        SocketFd **socketMap = Fd<SocketFd>::GetFdObjMap();
+        uint32_t doneNum = 0;
+        for (uint32_t i = 0; i < RPC_ADPT_FD_MAX && doneNum < sockNum; ++i) {
+            if (socketMap[i] == nullptr || socketMap[i]->GetFdType() == FdType::NATIVE_SOCKET_FD) {
+                continue;
+            }
+            data->socketId = i;
+            socketMap[i]->GetSocketFlowControlData(data);
+            data += 1;
+            doneNum += 1;
+        }
+    }
+
     void Poll(void)
     {
         struct epoll_event events[MAX_EPOLL_EVENT_NUM];
@@ -597,7 +613,7 @@ class Listener {
         uint32_t totalSize = headerSize + sockDataSize;
         // malloc mem base on socket cnt
         if (!msg.AllocateIfNeed(totalSize)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to alloc reponsese memory\n");
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to alloc response memory\n");
             return;
         }
         msg.ResetBuf();
@@ -622,7 +638,45 @@ class Listener {
         }
 
         if (SocketFd::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
+            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLISocketData\n");
+            return;
+        }
+    }
+
+    void ProcessFlowControlRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
+    {
+        // collect socket count
+        uint32_t headerSize = sizeof(CLIDataHeader);
+        uint32_t sockNum = GetSockNum();
+        uint32_t sockDataSize = sockNum * sizeof(CLIFlowControlData);
+        uint32_t totalSize = headerSize + sockDataSize;
+        // malloc mem base on socket cnt
+        if (!msg.AllocateIfNeed(totalSize)) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to alloc response memory\n");
+            return;
+        }
+        msg.ResetBuf();
+        CLIDataHeader CLIheader{};
+        CLIheader.socketNum = sockNum;
+        CLIheader.connNum = StatsMgr::GetConnCount();
+        CLIheader.activeConn = StatsMgr::GetActiveConnCount();
+        // collect data
+        if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to memcpy cli header\n");
+            return;
+        }
+        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
+        GetAllFlowControlData(reinterpret_cast<CLIFlowControlData *>(data), sockNum);
+        header.Reset();
+        header.mDataSize = totalSize;
+        if (SocketFd::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CLIControlHeader)) {
             RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIControlHeader\n");
+            return;
+        }
+
+        if (SocketFd::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
+            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIFlowControlData\n");
             return;
         }
     }
@@ -721,7 +775,7 @@ class Listener {
         }
 
         if (SocketFd::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIControlHeader\n");
+            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIDelayHeader\n");
             return;
         }
     }
@@ -769,6 +823,8 @@ class Listener {
             ProcessTopoRequest(fd, header);
         } else if (header.mCmdId == CLICommand::DELAY) {
             ProcessDelayRequest(fd, msg, header);
+        } else if (header.mCmdId == CLICommand::FC) {
+            ProcessFlowControlRequest(fd, msg, header);
         }
         return;
     }
