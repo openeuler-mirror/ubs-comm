@@ -3600,7 +3600,7 @@ private:
         if (AcceptNegotiate(new_fd, connEid, dstEid, peerSchedulePolicy) != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                 "Failed to negotiate in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
             return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
         }
         socket_fd_obj->m_peer_info.peer_eid = dstEid;
@@ -3633,13 +3633,13 @@ private:
                     if (!IsOk(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                             "Failed to finish ub bind in accept, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
-                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                            EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), m_fd);
                     }
 
                     if (SendSocketData(new_fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
                             "Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                            EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
                         return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
                     }
 
@@ -3647,7 +3647,7 @@ private:
                         sizeof(peerRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
                             "Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                            EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
                         return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
                     }
 
@@ -3670,7 +3670,8 @@ private:
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                             "CPU_AFFINITY: %d failed, accept no need to retry,Peer eid:" EID_FMT
                             ",Peer IP:%s, fd: %d\n",
-                            static_cast<int>(peerSchedulePolicy), EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                            static_cast<int>(peerSchedulePolicy), EID_ARGS(socket_fd_obj->GetPeerEid()),
+                            socket_fd_obj->GetPeerIp().c_str(), m_fd);
 
                         if (degradable) {
                             state = UBHandshakeState::kDEGRADE;
@@ -3687,7 +3688,7 @@ private:
                         RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
                             "Failed to receive remote eid message in retry accept, Peer eid:" EID_FMT
                             ",Peer IP:%s, fd: %d\n",
-                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                            EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
                         return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
                     }
 
@@ -3702,7 +3703,7 @@ private:
                     if (CheckDevAdd(connEid) != 0) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                             "Failed to add dev in retry accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
+                            EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), m_fd);
                         ackRet = ubsocket::Error::kUMQ_DEV_ADD | ubsocket::Error::kDEGRADABLE;
                     } else {
                         ackRet = ubsocket::Error::kOK;
@@ -3717,13 +3718,13 @@ private:
                     if (!IsOk(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                             "Failed to finish ub bind in accept, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
-                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                            EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
                     }
 
                     if (SendSocketData(new_fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
                             "Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                            EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
                         return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
                     }
 
@@ -3731,7 +3732,7 @@ private:
                         sizeof(peerRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
                             "Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                            EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                            EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
                         return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
                     }
 
@@ -3761,7 +3762,7 @@ private:
                 case UBHandshakeState::kFAILED:
                     RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                         "Failed to get new connect in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                        EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), new_fd);
+                        EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
                     return ubsocket::Error::kUBSOCKET_UB_ACCEPT;
             }
         }
