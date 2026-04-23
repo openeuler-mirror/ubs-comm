@@ -434,7 +434,12 @@ void umq_ub_idle_queue_check(void *args)
         }
         ub_flow_control_t *fc = &queue->flow_control;
         uint16_t remote_credit = fc->ops.remote_rx_window_load(fc);
-        uint16_t return_threshold = umq_ub_fc_threashold_modify((uint16_t)fc->min_reserved_credit, fc->peer_ratio);
+        uint16_t return_threshold = 0;
+        if (fc->peer_ratio == 0) {
+            return_threshold = 0;
+        } else {
+            return_threshold = umq_ub_fc_threashold_modify((uint16_t)fc->min_reserved_credit, fc->peer_ratio);
+        }
         if (remote_credit <= return_threshold) {
             (void)util_mutex_unlock(cur_node->lock);
             continue;
@@ -2204,6 +2209,7 @@ int umq_ub_stats_io_get_impl(uint64_t umqh_tp, umq_packet_stats_t *packet_stats)
     packet_stats->send_cnt = queue->packet_stats[UB_PACKET_STATS_TYPE_SEND];
     packet_stats->send_success = queue->packet_stats[UB_PACKET_STATS_TYPE_SEND_SUCCESS];
     packet_stats->recv_cnt = queue->packet_stats[UB_PACKET_STATS_TYPE_RECV];
+    packet_stats->send_eagain_cnt = queue->packet_stats[UB_PACKET_STATS_TYPE_SEND_EAGAIN];
     packet_stats->send_error_cnt = queue->packet_stats[UB_PACKET_STATS_TYPE_SEND_ERROR];
     packet_stats->recv_error_cnt = queue->packet_stats[UB_PACKET_STATS_TYPE_RECV_ERROR];
 
