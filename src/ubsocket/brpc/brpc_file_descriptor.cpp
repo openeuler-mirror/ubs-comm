@@ -3,7 +3,6 @@
 
 #include "brpc_file_descriptor.h"
 
-std::array<umq_port_id_t, MAX_PORT_COUNT> Brpc::SocketFd::mUsedPortArray;
 namespace Brpc {
 void SocketFd::HandleErrorRxCqe(umq_buf_t *buf)
 {

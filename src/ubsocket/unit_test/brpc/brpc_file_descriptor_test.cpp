@@ -108,23 +108,24 @@ TEST_F(BrpcFileDescriptorTest, DoRouteTest)
     umq_eid_t dstEid = {};
     dstEid.raw[0] = EID_OFFSET_1;
     umq_route_t connRoute;
+    umq_route_t backRoute;
     bool useRoundRobin = false;
     
     MOCKER_CPP(&Brpc::SocketFd::GetDevRouteList)
     .stubs()
     .will(returnValue(static_cast<int>(-1)))
     .then(returnValue(static_cast<int>(0)));
-    int ret = socketFd->DoRoute(&srcEid, &dstEid, &connRoute, useRoundRobin);
+    int ret = socketFd->DoRoute(&srcEid, &dstEid, &connRoute, useRoundRobin, &backRoute);
     EXPECT_EQ(ret, RET_NEG_1);
 
     MOCKER_CPP(&Brpc::SocketFd::GetConnEid)
     .stubs()
     .will(returnValue(static_cast<int>(-1)))
     .then(returnValue(static_cast<int>(0)));
-    ret = socketFd->DoRoute(&srcEid, &dstEid, &connRoute, useRoundRobin);
+    ret = socketFd->DoRoute(&srcEid, &dstEid, &connRoute, useRoundRobin, &backRoute);
     EXPECT_EQ(ret, RET_NEG_1);
 
-    ret = socketFd->DoRoute(&srcEid, &dstEid, &connRoute, useRoundRobin);
+    ret = socketFd->DoRoute(&srcEid, &dstEid, &connRoute, useRoundRobin, &backRoute);
     EXPECT_EQ(ret, RET_OK);
 }
 
