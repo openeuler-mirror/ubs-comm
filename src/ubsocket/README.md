@@ -10,7 +10,7 @@
 
 `UBSocket`的运行必须依赖UB硬件。此外，`UBSocket`还依赖了如下软件。
 
-- `openssl`
+- `openssl` 和 `openssl-devel`
 - [`libboundscheck`](https://atomgit.com/openeuler/libboundscheck)
 - `urma`
 
@@ -19,8 +19,8 @@
 在`OpenEuler`系统中，可以通过如下命令安装软件依赖。
 
 ```shell
-yum install -y openssl
-yum install -y libboundcheck
+yum install -y openssl openssl-devel
+yum install -y libboundscheck
 
 # 安装内核态urma
 modprobe ubcore  
@@ -28,6 +28,9 @@ modprobe uburma
 
 # 安装用户态urma
 yum install -y umdk-urma*
+
+# 安装编译工具
+yum install -y gcc gcc-c++
 
 # 关闭numa balancing
 echo 0 > /proc/sys/kernel/numa_balancing
@@ -63,7 +66,7 @@ make -j32
 
 > 说明：
 >
-> 在编译UMQ时，可以通过`-DOPENSSL_ROOT_DIR=/path/to/openssl`制定`openssl`路径。
+> 在编译UMQ时，可以通过`-DOPENSSL_ROOT_DIR=/path/to/openssl`指定`openssl`路径。
 
 
 ```shell
