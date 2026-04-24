@@ -35,6 +35,7 @@ enum class CLICommand : uint8_t {
     STAT = 2,
     DELAY = 3,
     FC = 4,
+    PROBE = 5,
 };
 
 enum class CLITypeParam : uint8_t {
@@ -122,6 +123,30 @@ struct CLIFlowControlData {
     uint64_t socketId;
     uint64_t createTime;
     umq_flow_control_stats_t umqFlowControlStat;
+};
+
+struct __attribute__((packed)) CLIProbeHeader {
+    uint32_t socketNum;
+    uint32_t probeNum;
+    uint32_t reserved;
+};
+
+struct __attribute__((packed)) CLIProbeData {
+    int32_t  fd;
+
+    // --- Client Side Timestamps (纳秒) ---
+    uint64_t client_send_time_ns;
+    uint64_t client_recv_rsp_time_ns;
+    uint64_t umq_client_post_time_ns;
+    uint64_t umq_client_recv_time_ns;
+
+    // --- Server Side Timestamps (纳秒) ---
+    uint64_t server_recv_time_ns;
+    uint64_t server_rsp_time_ns;
+    uint64_t umq_server_recv_time_ns;
+    uint64_t umq_server_rsp_time_ns;
+
+    uint64_t rtt; // 最终计算出的 RTT
 };
 
 struct __attribute__((packed)) CLIDelayHeader {

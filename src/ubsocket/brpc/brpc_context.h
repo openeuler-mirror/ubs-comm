@@ -24,6 +24,7 @@
 #include "ubs_mem/shm.h"
 #include "print_stats_mgr.h"
 #include "utracer.h"
+#include "probe_manager.h"
 
 namespace Brpc {
 
@@ -233,6 +234,7 @@ private:
         umq_config.trans_info[0].trans_mode = GetTransMode();
         umq_config.buf_pool_cfg.umq_buf_pool_max_size = GetPoolMaxSize();
         umq_config.buf_pool_cfg.tls_qbuf_pool_depth = GetBufPoolDepth();
+        umq_config.io_lock_free = false;
 
         int ret = umq_init(&umq_config);
         if (ret != 0) {
@@ -299,10 +301,18 @@ private:
             Statistics::PrintStatsMgr::StartStatsCollection(
                 GetUbsocketTraceTime(), GetUbsocketTraceFilePath(), GetUbsocketTraceFileSize(), transMode);
         }
+
+        if (m_probe_enable) {
+            (void)Statistics::ProbeManager::GetInstance().Start(m_probe_time_ms, m_probe_batch, -1);
+        }
     }
 
     virtual ~Context()
     {
+        if (m_probe_enable) {
+            Statistics::ProbeManager::GetInstance().Stop();
+        }
+
         if (m_trace_enable) {
             Statistics::PrintStatsMgr::StopStatsCollection();
         }

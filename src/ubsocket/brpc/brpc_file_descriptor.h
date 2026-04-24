@@ -333,6 +333,8 @@ public:
     ALWAYS_INLINE int GetEventFd(void) { return m_event_fd; }
     ALWAYS_INLINE uint64_t GetLocalUmqHandle(void) { return m_local_umqh; }
     ALWAYS_INLINE uint64_t GetMainUmqHandle(void) { return m_main_umqh; }
+    ALWAYS_INLINE bool IsClient(void) { return m_peer_info.type_fd == 1 ? true : false; }
+    ALWAYS_INLINE uint32_t GetBrpcIoBufSize(void) { return BrpcIOBufSize(); }
 
     /**
      * @brief 从sockaddr结构体提取IP地址字符串
@@ -1131,8 +1133,8 @@ public:
             SetBlocking(m_fd);
         }
 
+        m_peer_info.type_fd = 1;
         if (m_context_trace_enable) {
-            m_peer_info.type_fd = 1;
             UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
             UpdateTraceStats(StatsMgr::ACTIVE_OPEN_COUNT, 1);
         }
@@ -1330,6 +1332,16 @@ public:
 
         uint32_t polled_size = 0;
         for (int i = 0; i < poll_num; ++i) {
+            umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf[i]->qbuf_ext);
+            if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == 1) {
+                // 处理探测包
+                Statistics::ProbeManager::GetInstance().HandleReceivedPacket(m_fd, buf[i]);
+                if (QBUF_LIST_NEXT(buf[i]) != nullptr) {
+                    RPC_ADPT_VLOG_WARN("probe buf next not null\n");
+                }
+                umq_buf_free(buf[i]);
+                continue;
+            }
             // currently, umq over IB return IB cr status directly, successful = 0
             if (buf[i]->status != 0) {
                 if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
@@ -4054,9 +4066,9 @@ private:
         socket_fd_obj->m_conn_info.create_time = std::chrono::system_clock::now();
         RPC_ADPT_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
 
+        m_peer_info.type_fd = 0;
         if (m_context_trace_enable) {
             socket_fd_obj->UpdateTraceStats(StatsMgr::CONN_COUNT, 1);
-            m_peer_info.type_fd = 0;
         }
 
         PrintQbufPoolInfo();
@@ -4128,6 +4140,37 @@ private:
         return wr_cnt;
     }
 
+    ALWAYS_INLINE void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt)
+    {
+        // 探测包错误处理
+        if (HandleProbePacket(qbuf)) {
+            return;
+        }
+
+        // 正常错误处理流程
+        HandleErrorTxCqe(qbuf);
+        ProcessErrorTxCqe(qbuf);
+        wr_cnt++;
+
+        if (m_context_trace_enable) {
+            if (qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
+                UpdateTraceStats(StatsMgr::TX_LOST_PACKET_COUNT, 1);
+            } else {
+                UpdateTraceStats(StatsMgr::TX_ERROR_PACKET_COUNT, 1);
+            }
+        }
+    }
+
+    ALWAYS_INLINE bool HandleProbePacket(umq_buf_t *qbuf)
+    {
+        umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(qbuf->qbuf_ext);
+        if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == 1) {
+            umq_buf_free(qbuf);
+            return true; // 已处理
+        }
+        return false; // 不是探测包
+    }
+
     ALWAYS_INLINE int UmqPollTx(error_code &err_code)
     {
         umq_buf_t *buf[POLL_BATCH_MAX];
@@ -4157,16 +4200,7 @@ private:
                 }
 
                 if (buf[i]->status != 0) {
-                    HandleErrorTxCqe(buf[i]);
-                    ProcessErrorTxCqe(buf[i]);
-                    wr_cnt++;
-                    if (m_context_trace_enable) {
-                        if (buf[i]->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
-                            UpdateTraceStats(StatsMgr::TX_LOST_PACKET_COUNT, 1);
-                        } else {
-                            UpdateTraceStats(StatsMgr::TX_ERROR_PACKET_COUNT, 1);
-                        }
-                    }
+                    HandleTxCqeError(buf[i], wr_cnt);
                     continue;
                 }
 
@@ -4174,7 +4208,11 @@ private:
                     first_qbuf == nullptr ? ", and umq buffer list is empty" : "");
                 continue;
             }
-
+            // 探测包
+            if (HandleProbePacket(buf[i])) {
+                continue;
+            }
+            // 正常业务包
             cur_wr_cnt = ProcessTxCqe(first_qbuf, buf[i]);
             if (cur_wr_cnt < 0) {
                 // set err_code to true to force a quick exit from current function.

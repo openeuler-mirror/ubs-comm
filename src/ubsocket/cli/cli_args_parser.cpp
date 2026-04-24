@@ -152,10 +152,10 @@ void CLIArgsParser::PrintUsage(const char* progName)
 
 bool CLIArgsParser::IsCommandValid(std::string &cmd)
 {
-    static const std::vector<std::string> cmdSet = {"stat", "topo", "delay", "umq", "fc"};
+    static const std::vector<std::string> cmdSet = {"stat", "topo", "delay", "umq", "fc", "probe"};
     auto it = std::find(cmdSet.begin(), cmdSet.end(), cmd);
     if (it == cmdSet.end()) {
-        CLI_LOG("Invalid command (e.g., 'topo', 'stat', 'delay', 'umq', 'fc')\n");
+        CLI_LOG("Invalid command (e.g., 'topo', 'stat', 'delay', 'umq', 'fc', 'probe')\n");
         return false;
     }
     return true;
@@ -171,6 +171,8 @@ CLICommand CLIArgsParser::GetCmd(std::string &cmd)
         return CLICommand::DELAY;
     } else if (cmd == "fc") {
         return CLICommand::FC;
+    } else if (cmd == "probe") {
+        return CLICommand::PROBE;
     }
     return CLICommand::INVALID;
 }

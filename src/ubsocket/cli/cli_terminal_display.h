@@ -44,6 +44,7 @@ public:
     void DisplaySocketInfo(uint8_t *data, const uint32_t dataLen);
     void DisplayFlowControlInfo(uint8_t *data, const uint32_t dataLen);
     void DisplayTopoInfo(umq_route_list_t *data, const uint32_t dataLen);
+    void DisplayProbeInfo(uint8_t *data, const uint32_t dataLen);
     // data display
     void PrintHeader(CLIDataHeader &header);
     void PrintTitle(std::string title);

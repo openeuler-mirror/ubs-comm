@@ -323,6 +323,9 @@ class SocketFd : public Fd<SocketFd> {
     virtual void OutputStats(std::ostringstream &oss) = 0;
     virtual void GetSocketCLIData(Statistics::CLISocketData *data) = 0;
     virtual void GetSocketFlowControlData(Statistics::CLIFlowControlData *data) = 0;
+    virtual uint64_t GetLocalUmqHandle(void) = 0;
+    virtual bool IsClient(void) = 0;
+    virtual uint32_t GetBrpcIoBufSize(void) = 0;
 
     virtual PollingErrCode IsShmReadable(uint32_t event)
     {

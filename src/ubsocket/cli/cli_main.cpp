@@ -46,7 +46,12 @@ int main(int argc, char *argv[])
             return 0;
         }
         player.DisplayDelayTraceInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-    } else {
+    } else if (args.command == Statistics::CLICommand::PROBE) {
+        if (client.Query(args, response) != 0) {
+            return 0;
+        }
+        player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+    }  else {
         CLI_LOG("Invalid command\n");
     }
 

@@ -91,6 +91,9 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_LINK_PRIORITY | 设置流量优先级，按照环境配置映射到SL上 | [0, 15] | -1 | 否 |
 | UBSOCKET_POOL_MAX_SIZE            | 单bRPC 进程UB 通信内存占用弹性扩容最大值，单位MB     | [UBSOCKET_POOL_INITIAL_SIZE, 6144] | 2048              | 否                                  |
 | UBSOCKET_BUF_POOL_DEPTH           | 单bRPC进程线程内存池深度                           | 应用按需配置                                                         | 12000             | 否                                  |
+| UBSOCKET_PROBE_ENABLE             | 是否打开探测功能                      | false, true                         | false             | 否                                  |
+| UBSOCKET_PROBE_TIME_MS            | 每次探测的时间间隔（单位ms）               | [1, 360000ULL]                      | 1000              | 否                                  |
+| UBSOCKET_PROBE_BATCH              | 每次探测的连接数量                     | [1, 500]                            | 10                | 否                                  |
 
 
 > 说明：
@@ -783,6 +786,7 @@ bazel build //src:ubstat
 | `stat` | 查询指定进程中每个网络套接字（socket）的详细信息   |
 | `topo` | 查询指定进程中一对 EID（网络标识符）的网络拓扑关系 |
 | `fc` | 查询指定进程中每个网络套接字（socket）的UMQ流控信息 |
+| `probe`   | 查询指定进程中探测包的打点数据和通信时延           |
 
 #### 9.3.3 全局通用选项（所有命令适用）
 

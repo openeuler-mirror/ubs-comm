@@ -48,6 +48,12 @@
 #define UBSOCKET_TRACE_FILE_PATH_MIN     (1)
 #define UBSOCKET_TRACE_FILE_PATH_MAX     (300)
 #define UBSOCKET_TRACE_FILE_PATH_LEN_MAX (512)
+#define DEFAULT_PROBE_TIME_MS        (10000) // ms
+#define UBSOCKET_PROBE_TIME_MIN      (1)     // ms
+#define UBSOCKET_PROBE_TIME_MAX      (360000ULL) // ms
+#define DEFAULT_PROBE_BATCH          (10)
+#define UBSOCKET_PROBE_BATCH_MIN     (1)
+#define UBSOCKET_PROBE_BATCH_MAX     (500)
 #define DEFAULT_QBUF_BLOCK_TYPE   "default" // 8k
 #define SMALL_QBUF_BLOCK_TYPE     "small"   // 16k
 #define MEDIUM_QBUF_BLOCK_TYPE    "medium"  // 32k
@@ -76,6 +82,9 @@
 #define ENV_TRACE_FILE_PATH       "UBSOCKET_TRACE_FILE_PATH"
 #define ENV_TRACE_FILE_SIZE       "UBSOCKET_TRACE_FILE_SIZE"
 #define ENV_UB_TRANS_MODE         "UBSOCKET_UB_TRANS_MODE"
+#define ENV_PROBE_ENABLE          "UBSOCKET_PROBE_ENABLE"
+#define ENV_PROBE_TIME_MS         "UBSOCKET_PROBE_TIME_MS"
+#define ENV_PROBE_BATCH           "UBSOCKET_PROBE_BATCH"
 
 enum dev_schedule_policy {
     ROUND_ROBIN = 1,
@@ -475,6 +484,38 @@ protected:
             }
         }
 
+        if ((env_ptr = getenv(ENV_PROBE_ENABLE)) != NULL) {
+            m_probe_enable = BoolVal::BoolConverter(env_ptr);
+        }
+
+        if ((env_ptr = getenv(ENV_PROBE_TIME_MS)) != NULL) {
+            uint64_t ubsocket_probe_time_ms = DEFAULT_PROBE_TIME_MS;
+            try {
+                ubsocket_probe_time_ms = static_cast<uint64_t>(std::stoull(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_TIME_MS, using default.\n");
+                ubsocket_probe_time_ms = UBSOCKET_TRACE_TIME_DEFAULT;
+            }
+            if (ubsocket_probe_time_ms >= UBSOCKET_PROBE_TIME_MIN
+                && ubsocket_probe_time_ms <= UBSOCKET_PROBE_TIME_MAX) {
+                            m_probe_time_ms = ubsocket_probe_time_ms;
+            }
+        }
+
+        if ((env_ptr = getenv(ENV_PROBE_BATCH)) != NULL) {
+            uint64_t ubsocket_probe_batch = DEFAULT_PROBE_TIME_MS;
+            try {
+                ubsocket_probe_batch = static_cast<uint64_t>(std::stoull(env_ptr));
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_BATCH, using default.\n");
+                ubsocket_probe_batch = UBSOCKET_TRACE_TIME_DEFAULT;
+            }
+            if (ubsocket_probe_batch >= UBSOCKET_PROBE_BATCH_MIN
+                && ubsocket_probe_batch <= UBSOCKET_PROBE_BATCH_MAX) {
+                m_probe_batch = ubsocket_probe_batch;
+            }
+        }
+
         char default_path[] = "/tmp/ubsocket/log";
         env_ptr = getenv(ENV_TRACE_FILE_PATH);
         if (env_ptr != nullptr && env_ptr[0] == '/' && strlen(env_ptr) < UBSOCKET_TRACE_FILE_PATH_LEN_MAX &&
@@ -555,6 +596,8 @@ protected:
     // maximum memory allowed for expansion, default 2048MB
     uint64_t m_expansion_mem_size_max = DEFAULT_POOL_MAX_SIZE * IO_SIZE_MB;
     uint64_t m_tls_qbuf_pool_depth = DEFAULT_BUF_POOL_DEPTH;
+    uint32_t m_probe_time_ms = DEFAULT_PROBE_TIME_MS;
+    uint32_t m_probe_batch = DEFAULT_PROBE_BATCH;
     ubsocket::util_vlog_level_t m_log_level;
     umq_trans_mode_t m_trans_mode;
     umq_buf_block_size_t m_block_type = BLOCK_SIZE_8K;
@@ -564,6 +607,7 @@ protected:
     static socket_fd_trans_mode m_socket_fd_trans_mode;
     bool m_stats_enable = false;
     bool m_trace_enable = true;
+    bool m_probe_enable = false;
     bool m_log_use_printf = true;
     bool m_use_brpc_zcopy = true;
     dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;

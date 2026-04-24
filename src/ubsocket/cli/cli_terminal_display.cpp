@@ -147,6 +147,110 @@ void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataL
     printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
 }
 
+// --- 辅助函数：打印表头 ---
+void PrintProbeHeader()
+{
+    printf("\n");
+    printf("%-8s | %-10s | %-10s | %-10s | %-12s | %-12s | %-12s\n",
+           "FD", "UBS RTT(us)", "CliΔ(us)", "SrvΔ(us)",
+           "UMQ RTT(us)", "UMQ CliΔ(us)", "UMQ SrvΔ(us)");
+    printf("---------------------------------------------------------------------------------------------------"
+           "-------------------------------\n");
+}
+
+// --- 辅助函数：打印单行概览数据 ---
+void PrintProbeRow(const CLIProbeData* probeData)
+{
+    // 1. 基础转换 (ns -> us)
+    double clientDeltaUs = (double)(probeData->client_recv_rsp_time_ns -
+                                      probeData->client_send_time_ns) / 1000.0;
+    double serverDeltaUs = (double)(probeData->server_rsp_time_ns -
+                                      probeData->server_recv_time_ns) / 1000.0;
+    double ubsRtt = clientDeltaUs - serverDeltaUs;
+
+    // 2. UMQ 差值计算 (ns -> us)
+    double umqClientDeltaUs = (double)(probeData->umq_client_recv_time_ns -
+                                            probeData->umq_client_post_time_ns) / 1000.0;
+    double umqServerDeltaUs = (double)(probeData->umq_server_rsp_time_ns -
+                                            probeData->umq_server_recv_time_ns) / 1000.0;
+
+    // 3. UMQ RTT 计算 (Client Δ - Server Δ)
+    double umqRtt = umqClientDeltaUs - umqServerDeltaUs;
+
+    // 4. 打印
+    printf("%-8d | %-10.3f | %-10.3f | %-10.3f | %-12.3f | %-12.3f | %-12.3f\n",
+           probeData->fd, ubsRtt, clientDeltaUs, serverDeltaUs,
+           ubsRtt, umqClientDeltaUs, umqServerDeltaUs);
+}
+
+// --- 辅助函数：打印详细打点信息 ---
+void PrintProbeDetails(const CLIProbeData* probeData)
+{
+    // Client 端
+    printf("  +-- [Client] ubsocket_send(ns): %-10lu | ubsocket_recv(ns): %-10lu\n",
+           probeData->client_send_time_ns, probeData->client_recv_rsp_time_ns);
+
+    // UMQ Client
+    printf("  |            umq_post(ns): %-10lu | umq_recv(ns): %-10lu\n",
+           probeData->umq_client_post_time_ns, probeData->umq_client_recv_time_ns);
+
+    // Server 端
+    printf("  +-- [Server] server_recv(ns): %-10lu | server_rsp(ns): %-10lu\n",
+           probeData->server_recv_time_ns, probeData->server_rsp_time_ns);
+
+    // UMQ Server
+    printf("  |            umq_recv(ns): %-10lu | umq_rsp(ns): %-10lu\n",
+           probeData->umq_server_recv_time_ns, probeData->umq_server_rsp_time_ns);
+
+    printf("\n"); // 分隔空行
+}
+
+// --- 主函数 ---
+void TerminalDisplay::DisplayProbeInfo(uint8_t *data, const uint32_t dataLen)
+{
+    // 1. 基础校验
+    uint32_t headerSize = sizeof(CLIProbeHeader);
+    if (dataLen < headerSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+
+    // 2. 拷贝头部
+    CLIProbeHeader header{};
+    if (memcpy_s(&header, sizeof(CLIProbeHeader), data, headerSize) != 0) {
+        CLI_LOG("Failed to memcpy CLIProbeHeader\n");
+        return;
+    }
+
+    // 3. 长度一致性校验
+    uint32_t sockNum = header.socketNum;
+    uint32_t expectedSize = headerSize + sockNum * sizeof(CLIProbeData);
+    if (dataLen != expectedSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+
+    Refresh();
+
+    // 4. 打印统计头部
+    printf("\n%s=== Probe Statistics ===%s\n", colorBold, colorReset);
+    printf("Total Probes (SocketNum): %s%u%s\n", colorBold, sockNum, colorReset);
+
+    PrintProbeHeader();
+
+    // 5. 循环处理数据
+    CLIProbeData* probeData = reinterpret_cast<CLIProbeData *>(data + headerSize);
+    for (uint32_t i = 0; i < sockNum; i++) {
+        PrintProbeRow(probeData);      // 打印概览行
+        PrintProbeDetails(probeData);  // 打印详情
+        probeData += 1;
+    }
+
+    // 6. 结束提示
+    NewLine();
+    printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
+}
+
 void TerminalDisplay::DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen)
 {
     uint32_t headerSize = sizeof(CLIDelayHeader);

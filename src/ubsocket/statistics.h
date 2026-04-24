@@ -30,6 +30,7 @@
 #include "utracer.h"
 #include "utracer_manager.h"
 #include "net_common.h"
+#include "probe_manager.h"
 
 #define RPC_VAR         (2)
 
@@ -552,6 +553,11 @@ class Listener {
         }
     }
 
+    void GetAllProbeData(CLIProbeData *data, uint32_t maxCount)
+    {
+        Statistics::ProbeManager::GetInstance().GetCLIProbeData(data, maxCount);
+    }
+
     void GetAllFlowControlData(CLIFlowControlData *data, uint32_t sockNum)
     {
         ScopedUbReadLocker lock(Fd<SocketFd>::GetRWLock());
@@ -674,6 +680,42 @@ class Listener {
 
         if (SocketFd::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
             RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIFlowControlData\n");
+            return;
+        }
+    }
+
+    void ProcessProbeRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
+    {
+        // collect socket count
+        uint32_t headerSize = sizeof(CLIProbeHeader);
+        uint32_t sockNum = GetSockNum();
+        uint32_t sockDataSize = sockNum * sizeof(CLIProbeData);
+        uint32_t totalSize = headerSize + sockDataSize;
+        // malloc mem base on socket cnt
+        if (!msg.AllocateIfNeed(totalSize)) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to alloc reponsese memory\n");
+            return;
+        }
+        msg.ResetBuf();
+        CLIProbeHeader CLIheader{};
+        CLIheader.socketNum = sockNum;
+        // collect data
+        if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to memcpy cli header\n");
+            return;
+        }
+        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIProbeHeader);
+        GetAllProbeData(reinterpret_cast<CLIProbeData *>(data), sockNum);
+        header.Reset();
+        header.mDataSize = totalSize;
+        if (SocketFd::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CLIControlHeader)) {
+            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIControlHeader\n");
+            return;
+        }
+
+        if (SocketFd::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
+            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIControlHeader\n");
             return;
         }
     }
@@ -822,6 +864,8 @@ class Listener {
             ProcessDelayRequest(fd, msg, header);
         } else if (header.mCmdId == CLICommand::FC) {
             ProcessFlowControlRequest(fd, msg, header);
+        } else if (header.mCmdId == CLICommand::PROBE) {
+            ProcessProbeRequest(fd, msg, header);
         }
         return;
     }

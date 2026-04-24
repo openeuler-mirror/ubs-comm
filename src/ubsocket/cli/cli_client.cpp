@@ -116,6 +116,39 @@ int CLIClient::ProcessTopo(int sockfd, CLIMessage &response, CLIArgsParser::Pars
     return 0;
 }
 
+int CLIClient::ProcessProbeQuery(int sockfd, CLIMessage &response)
+{
+    CLIControlHeader header{};
+    header.mCmdId = CLICommand::PROBE;
+    if (SocketFd::SendSocketData(sockfd, &header, sizeof(CLIControlHeader), cliclientIoTimeoutMs) !=
+        sizeof(CLIControlHeader)) {
+        CLI_LOG("Failed to send CLIControlHeader\n");
+        return -1;
+    }
+    if (SocketFd::RecvSocketData(sockfd, &header, sizeof(CLIControlHeader), cliclientIoTimeoutMs) !=
+        sizeof(CLIControlHeader)) {
+        CLI_LOG("Failed to recv CLIControlHeader\n");
+        return -1;
+    }
+    uint32_t payloadLen = header.mDataSize;
+    if (payloadLen == 0 || payloadLen > maxResponseSize) {
+        CLI_LOG("Invalid payload size: %d\n", payloadLen);
+        return -1;
+    }
+
+    if (!response.AllocateIfNeed(payloadLen)) {
+        CLI_LOG("Failed to alloc response memory\n");
+        return -1;
+    }
+
+    if (SocketFd::RecvSocketData(sockfd, response.Data(), payloadLen, cliclientIoTimeoutMs) != payloadLen) {
+        CLI_LOG("Failed to recv server msg\n");
+        return -1;
+    }
+    response.SetDataLen(payloadLen);
+    return 0;
+}
+
 static std::unordered_map<std::string, CLITypeParam> delayTypeNameToType = {
     {"query", CLITypeParam::TRACE_OP_QUERY},
     {"enable", CLITypeParam::TRACE_OP_ENABLE_TRACE},
@@ -249,6 +282,11 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
 
     if (args.command == CLICommand::DELAY) {
         ret =  ProcessDelayQuery(sockfd, response, args);
+        return ret;
+    }
+
+    if (args.command == CLICommand::PROBE) {
+        ret =  ProcessProbeQuery(sockfd, response);
         return ret;
     }
     return 0;
