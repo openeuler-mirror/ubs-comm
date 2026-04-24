@@ -280,7 +280,10 @@ class SocketFd : public Fd<SocketFd> {
                 continue;
             }
 
-            if (received <= 0 || errno != 0) {
+            if (received == 0) {
+                RPC_ADPT_VLOG_INFO("The connection has been closed by peer.\n");
+                return 0;
+            } else if (received < 0) {
                 RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
                     "recv() failed, ret: %zd, errno: %d, errmsg: %s, received: %zd, fd: %d\n",
                     received, errno, NetCommon::NN_GetStrError(errno, errnoBuf, NET_STR_ERROR_BUF_SIZE), received, fd);
