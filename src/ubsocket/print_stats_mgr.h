@@ -126,8 +126,6 @@ private:
         if (stat(filename, &st) == 0) {
             uint64_t currentSize = static_cast<uint64_t>(st.st_size);
             uint64_t threshold = ubsocketTraceFileSize * 1024ULL * 1024ULL;
-            RPC_ADPT_VLOG_INFO("file current size: %lu\n", currentSize);
-            RPC_ADPT_VLOG_INFO("threshold size: %lu\n", threshold);
 
             if (currentSize > threshold) {
                 constexpr mode_t DEFAULT_FILE_PERMISSION = 0440;

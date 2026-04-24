@@ -204,7 +204,6 @@ public:
         }
 
         m_stats_enable = true;
-        RPC_ADPT_VLOG_INFO("enable m_stats_enable successfully\n");
 
         return true;
     }
@@ -270,14 +269,12 @@ public:
     ALWAYS_INLINE void UpdateTraceStats(enum trace_stats_type type, uint32_t value)
     {
         if (!m_stats_enable) {
-            RPC_ADPT_VLOG_INFO("Don't start update trace stats\n");
             return;
         }
 
         switch (type) {
             case CONN_COUNT:
                 mConnCount.fetch_add(value, std::memory_order_relaxed);
-                RPC_ADPT_VLOG_INFO("total count value is %d\n", mConnCount.load());
                 break;
 
             case ACTIVE_OPEN_COUNT:
