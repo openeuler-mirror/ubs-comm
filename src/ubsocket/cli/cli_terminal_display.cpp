@@ -238,15 +238,19 @@ void TerminalDisplay::DisplayProbeInfo(uint8_t *data, const uint32_t dataLen)
 
     PrintProbeHeader();
 
-    // 5. 循环处理数据
-    CLIProbeData* probeData = reinterpret_cast<CLIProbeData *>(data + headerSize);
-    for (uint32_t i = 0; i < sockNum; i++) {
-        PrintProbeRow(probeData);      // 打印概览行
-        PrintProbeDetails(probeData);  // 打印详情
-        probeData += 1;
+    // 5. 将原始指针数据封装进 vector，统一后续处理逻辑
+    std::vector<CLIProbeData> probeDataList(
+        reinterpret_cast<CLIProbeData*>(data + headerSize), // 起始位置
+        reinterpret_cast<CLIProbeData*>(data + dataLen)     // 结束位置
+    );
+
+    // 6. 循环处理数据 (使用 range-based for 循环)
+    for (const auto& probeData : probeDataList) {
+        PrintProbeRow(&probeData);      // 打印概览行
+        PrintProbeDetails(&probeData);  // 打印详情
     }
 
-    // 6. 结束提示
+    // 7. 结束提示
     NewLine();
     printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
 }

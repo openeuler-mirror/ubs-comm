@@ -553,9 +553,9 @@ class Listener {
         }
     }
 
-    void GetAllProbeData(CLIProbeData *data, uint32_t maxCount)
+    void GetAllProbeData(std::vector<CLIProbeData>& outDataVec)
     {
-        Statistics::ProbeManager::GetInstance().GetCLIProbeData(data, maxCount);
+        Statistics::ProbeManager::GetInstance().GetCLIProbeData(outDataVec);
     }
 
     void GetAllFlowControlData(CLIFlowControlData *data, uint32_t sockNum)
@@ -686,28 +686,48 @@ class Listener {
 
     void ProcessProbeRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
     {
-        // collect socket count
+        // 1. 获取数据
+        std::vector<CLIProbeData> probeDataList;
+        GetAllProbeData(probeDataList);
+
+        uint32_t sockNum = static_cast<uint32_t>(probeDataList.size());
+
+        // 2. 计算大小并分配内存
         uint32_t headerSize = sizeof(CLIProbeHeader);
-        uint32_t sockNum = GetSockNum();
         uint32_t sockDataSize = sockNum * sizeof(CLIProbeData);
         uint32_t totalSize = headerSize + sockDataSize;
-        // malloc mem base on socket cnt
+
         if (!msg.AllocateIfNeed(totalSize)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to alloc reponsese memory\n");
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to alloc response memory\n");
             return;
         }
         msg.ResetBuf();
-        CLIProbeHeader CLIheader{};
-        CLIheader.socketNum = sockNum;
-        // collect data
-        if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
+
+        // 3. 填充 Header
+        CLIProbeHeader cliHeader{};
+        cliHeader.socketNum = sockNum;
+
+        // 拷贝 Header
+        if (memcpy_s(msg.Data(), msg.GetBufLen(), &cliHeader, headerSize) != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to memcpy cli header\n");
             return;
         }
-        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIProbeHeader);
-        GetAllProbeData(reinterpret_cast<CLIProbeData *>(data), sockNum);
+
+        // 4. 填充 Data 利用 vector 的连续内存特性，可以直接内存拷贝
+        uint8_t *dataPtr = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIProbeHeader);
+
+        if (sockNum > 0) {
+            // 一次性把整个数组拷贝过去，效率最高
+            if (memcpy_s(dataPtr, sockDataSize, probeDataList.data(), sockDataSize) != 0) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to memcpy probe data\n");
+                return;
+            }
+        }
+
+        // 5. 发送数据
         header.Reset();
         header.mDataSize = totalSize;
+
         if (SocketFd::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
             sizeof(CLIControlHeader)) {
             RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIControlHeader\n");
@@ -715,7 +735,7 @@ class Listener {
         }
 
         if (SocketFd::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIControlHeader\n");
+            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send payload data\n");
             return;
         }
     }

@@ -380,51 +380,38 @@ public:
         }
     }
 
-    uint32_t GetCLIProbeData(CLIProbeData* data, uint32_t maxCount)
+    void GetCLIProbeData(std::vector<CLIProbeData>& outDataVec)
     {
-        if (!data || maxCount == 0) {
-            return 0;
-        }
-
-        uint32_t copiedCount = 0;
-
-        // 1. 加锁保护：防止在遍历 unordered_map 时其他线程修改它（导致迭代器失效）
+        // 1. 加锁保护
         std::lock_guard<std::mutex> lock(mMutex);
 
-        // 2. 遍历 Map
-        for (const auto& pair : mRecords) {
-            if (copiedCount >= maxCount) {
-                break;
-            }
+        // 2. 预分配内存
+        outDataVec.clear(); // 确保是空的
+        outDataVec.reserve(mRecords.size());
 
+        // 3. 遍历并填充
+        for (const auto& pair : mRecords) {
             const uint32_t& fd = pair.first;
             const ProbeRecord& record = pair.second;
 
-            CLIProbeData& outData = data[copiedCount];
+            CLIProbeData item;
+            item.fd = static_cast<int32_t>(fd);
+            item.rtt = record.mLastRttNs;
 
-            // 1. 基础信息
-            outData.fd = static_cast<int32_t>(fd);
-            outData.rtt = record.mLastRttNs;
-
-            // 2. 时间戳信息 (从 mProbeInfo 拷贝)
+            // 拷贝时间戳信息
             const ProbeTimeInfo& info = record.mProbeInfo;
+            item.client_send_time_ns = info.client_send_time_ns;
+            item.client_recv_rsp_time_ns = info.client_recv_rsp_time_ns;
+            item.umq_client_post_time_ns = info.umq_client_post_time_ns;
+            item.umq_client_recv_time_ns = info.umq_client_recv_time_ns;
 
-            // Client Side
-            outData.client_send_time_ns = info.client_send_time_ns;
-            outData.client_recv_rsp_time_ns = info.client_recv_rsp_time_ns;
-            outData.umq_client_post_time_ns = info.umq_client_post_time_ns;
-            outData.umq_client_recv_time_ns = info.umq_client_recv_time_ns;
+            item.server_recv_time_ns = info.server_recv_time_ns;
+            item.server_rsp_time_ns = info.server_rsp_time_ns;
+            item.umq_server_recv_time_ns = info.umq_server_recv_time_ns;
+            item.umq_server_rsp_time_ns = info.umq_server_rsp_time_ns;
 
-            // Server Side
-            outData.server_recv_time_ns = info.server_recv_time_ns;
-            outData.server_rsp_time_ns = info.server_rsp_time_ns;
-            outData.umq_server_recv_time_ns = info.umq_server_recv_time_ns;
-            outData.umq_server_rsp_time_ns = info.umq_server_rsp_time_ns;
-
-            copiedCount++;
+            outDataVec.push_back(item);
         }
-
-        return copiedCount;
     }
 
     ~ProbeManager()
