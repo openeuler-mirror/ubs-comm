@@ -281,7 +281,7 @@ void Test()
         for (int i = 0; i < g_threadNum; ++i) {
             int cpuId = -1;
             if (g_sendThreadCpuId > 0) {
-                cpuId = g_sendThreadCpuId + 1;
+                cpuId = g_sendThreadCpuId + i;
             }
             threads[i] = std::thread(RunInThread, cpuId);
         }
@@ -435,7 +435,7 @@ int main(int argc, char *argv[])
                 g_asyncWorkerCpuId = static_cast<int16_t>(strtoul(optarg, nullptr, 0));
                 break;
             case 'm':
-                g_sendThreadCpuId = static_cast<int16_t>(strtoul(optarg, nullptr, -1));
+                g_sendThreadCpuId = static_cast<int16_t>(strtoul(optarg, nullptr, 0));
                 break;
             case 'n':
                 g_threadNum = static_cast<int32_t>(strtoul(optarg, nullptr, 0));

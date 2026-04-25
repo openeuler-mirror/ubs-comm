@@ -20,7 +20,8 @@ public:
     SerResult CreatePublisher(NetRef<Publisher> &publisher) override;
     void DestroyPublisher(NetRef<Publisher> &publisher) override;
 
-    SerResult Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler, const int cpuId) override;
+    SerResult Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler,
+        const int cpuId = -1) override;
     MulticastConfig &GetConfig() override;
     void RegisterSubscriptionExceptionHandler(const SubscriptionExceptionHandler &handler) override;
     void RegisterBrokenHandler(const MulticastEpBrokenHandler &handler);
