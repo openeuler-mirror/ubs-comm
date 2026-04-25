@@ -730,6 +730,7 @@ class Listener {
         CLIheader.socketNum = sockNum;
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
+        CLIheader.reTxCount = StatsMgr::GetReTxCount();
         // collect data
         if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to memcpy cli header\n");

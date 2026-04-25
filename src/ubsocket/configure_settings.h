@@ -85,6 +85,7 @@
 #define ENV_PROBE_ENABLE          "UBSOCKET_PROBE_ENABLE"
 #define ENV_PROBE_TIME_MS         "UBSOCKET_PROBE_TIME_MS"
 #define ENV_PROBE_BATCH           "UBSOCKET_PROBE_BATCH"
+#define ENV_UB_EPOLL_ENABLE       "UBSOCKET_UB_EPOLL_ENABLE"
 
 enum dev_schedule_policy {
     ROUND_ROBIN = 1,
@@ -299,6 +300,11 @@ public:
     ub_trans_mode GetUbTransMode()
     {
         return m_ub_trans_mode;
+    }
+
+    bool IsUbEpollEnable()
+    {
+        return m_ub_epoll_enable;
     }
 
     void SetUbTransMode(ub_trans_mode trans_mode)
@@ -538,6 +544,11 @@ protected:
                 m_ubsocket_trace_file_size = ubsocket_trace_file_size;
             }
         }
+
+        if ((env_ptr = getenv(ENV_UB_EPOLL_ENABLE)) != NULL) {
+            m_ub_epoll_enable = BoolVal::BoolConverter(env_ptr);
+        }
+
         GetEnvUbTransMode();
     }
 
@@ -610,6 +621,7 @@ protected:
     bool m_probe_enable = false;
     bool m_log_use_printf = true;
     bool m_use_brpc_zcopy = true;
+    bool m_ub_epoll_enable = false;
     dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
     ub_trans_mode m_ub_trans_mode = ub_trans_mode::RC_TP;
 };

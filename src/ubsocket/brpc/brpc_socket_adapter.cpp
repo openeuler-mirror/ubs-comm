@@ -422,7 +422,7 @@ EXPOSE_C_DEFINE int UB_API_WRAP(epoll_create)(int size)
     /* The 'epoll_create()' function is only called when constructing the 'Brpc::Context'singleton, so the
      * file descriptor (fd) is directly returned to avoid recursively constructing 'Brpc::Context'. */
     Brpc::Context *context = Brpc::Context::GetContext();
-    if (context == nullptr) {
+    if (context == nullptr || !context->IsUbEpollEnable()) {
         return epoll_fd;
     }
 
@@ -461,7 +461,7 @@ EXPOSE_C_DEFINE int UB_API_WRAP(epoll_create1)(int flags)
     /* The 'epoll_create1()' function is only called when constructing the 'Brpc::Context'singleton, so the
      * file descriptor (fd) is directly returned to avoid recursively constructing 'Brpc::Context'. */
     Brpc::Context *context = Brpc::Context::GetContext();
-    if (context == nullptr) {
+    if (context == nullptr || !context->IsUbEpollEnable()) {
         return epoll_fd;
     }
 
@@ -485,12 +485,15 @@ EXPOSE_C_DEFINE int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epol
     if (!Brpc::Context::GetUbEnableFlag()) {
         return OsAPiMgr::GetOriginApi()->epoll_ctl(epfd, op, fd, event);
     }
+    Brpc::Context *context = Brpc::Context::GetContext();
+    if (context == nullptr || !context->IsUbEpollEnable()) {
+        return OsAPiMgr::GetOriginApi()->epoll_ctl(epfd, op, fd, event);
+    }
+
     EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->epoll_ctl(epfd, op, fd, event);
     }
-
-    Brpc::Context *context = Brpc::Context::GetContext();
     bool use_polling = context == nullptr ? false : context->GetUsePolling();
 
     return obj->EpollCtl(op, fd, event, use_polling);
@@ -501,12 +504,16 @@ EXPOSE_C_DEFINE int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events
     if (!Brpc::Context::GetUbEnableFlag()) {
         return OsAPiMgr::GetOriginApi()->epoll_wait(epfd, events, maxevents, timeout);
     }
+    Brpc::Context *context = Brpc::Context::GetContext();
+    if (context == nullptr || !context->IsUbEpollEnable()) {
+        return OsAPiMgr::GetOriginApi()->epoll_wait(epfd, events, maxevents, timeout);
+    }
+
     EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->epoll_wait(epfd, events, maxevents, timeout);
     }
 
-    Brpc::Context *context = Brpc::Context::GetContext();
     bool use_polling = context == nullptr ? false : context->GetUsePolling();
 
     return obj->EpollWait(events, maxevents, timeout, use_polling);
@@ -518,6 +525,11 @@ EXPOSE_C_DEFINE int UB_API_WRAP(epoll_pwait)(int epfd, struct epoll_event *event
     if (!Brpc::Context::GetUbEnableFlag()) {
         return OsAPiMgr::GetOriginApi()->epoll_pwait(epfd, events, maxevents, timeout, sigmask);
     }
+    Brpc::Context *context = Brpc::Context::GetContext();
+    if (context == nullptr || !context->IsUbEpollEnable()) {
+        return OsAPiMgr::GetOriginApi()->epoll_pwait(epfd, events, maxevents, timeout, sigmask);
+    }
+
     EpollFd *obj = Fd<EpollFd>::GetFdObj(epfd);
     if (obj == nullptr) {
         return OsAPiMgr::GetOriginApi()->epoll_pwait(epfd, events, maxevents, timeout, sigmask);
