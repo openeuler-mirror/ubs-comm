@@ -72,7 +72,8 @@ public:
      * @param cpuId  监听线程绑定的cpuId
      * @return int32_t 成功：0；失败：错误码
      */
-    virtual int32_t Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler, const int cpuId) = 0;
+    virtual int32_t Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler,
+        const int cpuId = -1) = 0;
 
     /**
      * @brief 获取MulticastConfig，用于做高级配置
