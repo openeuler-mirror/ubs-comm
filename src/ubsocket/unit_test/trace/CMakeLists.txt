@@ -25,4 +25,5 @@ target_link_libraries(utrace_test
 target_sources(utrace_test
   PRIVATE
     utracer_test.cpp
+    utracer_tdigest_test.cpp
 )
