@@ -1272,7 +1272,7 @@ public:
         }
     }
 
-    static const uint32_t SGE_MAX = 6;
+    static const uint32_t SGE_MAX = 1;
     // currently, the upper limit of post batch for umq is 64
     static const uint32_t POST_BATCH_MAX = 64;
     /* unsolicited bytes use the same setting as brpc
