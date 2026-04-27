@@ -27,4 +27,5 @@ target_sources(brpc_adapter_test
     brpc_socket_adapter_test.cpp
     brpc_configure_settings_test.cpp
     share_jfr_common_test.cpp
+    brpc_thread_pool_test.cpp
 )
