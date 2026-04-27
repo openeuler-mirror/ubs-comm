@@ -34,6 +34,10 @@ target_sources(ubsocket_test
     cli_message_test.cpp
     statistics_test.cpp
     print_stats_mgr_test.cpp
+    scope_exit_test.cpp
+    utracer_utils_test.cpp
+    utracer_info_test.cpp
+    utracer_test.cpp
 )
 
 add_subdirectory(brpc)
