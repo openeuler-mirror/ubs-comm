@@ -42,6 +42,7 @@
 #include "scope_exit.h"
 #include "error.h"
 #include "brpc_thread_pool.h"
+#include "file_descriptor_async.h"
 #include "leaky_singleton.h"
 
 #define UMQ_BIND_INFO_SIZE_MAX  (512)
@@ -1404,7 +1405,7 @@ public:
                     m_rx.m_window_size += 1;
                     // try to wake up tx if necessary
                     bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
-                    if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
+                    if (need_fc_awake && NotifyReadable() == -1) {
                         char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                             "eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
@@ -2010,7 +2011,7 @@ public:
                 } else {
                     // try to wake up tx if necessary
                     bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
-                    if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
+                    if (need_fc_awake && NotifyReadable() == -1) {
                         char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
                         RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
                             "eventfd_write() failed, event fd: %d, errno: %d, errmsg: %s\n",
@@ -2200,7 +2201,7 @@ public:
                         m_rx.m_window_size += 1;
                         // Handle flow control update
                         bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
-                        if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
+                        if (need_fc_awake && NotifyReadable() == -1) {
                             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
                             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                                 "eventfd_write() failed, event fd: %d, errno: %d, errmsg: %s\n",
@@ -2777,7 +2778,7 @@ public:
                         m_rx.m_window_size += 1;
                         // Handle flow control update
                         bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
-                        if (need_fc_awake && eventfd_write(m_event_fd, 1) == -1) {
+                        if (need_fc_awake && NotifyReadable() == -1) {
                             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
                             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                                 "eventfd_write() failed, event fd: %d, errno: %d, errmsg: %s\n",
@@ -3218,6 +3219,18 @@ public:
     ShareJfrRxEpollEvent *GetShareJfrRxEpollEvent() const
     {
         return share_jfr_rx_epoll_event;
+    }
+
+    ALWAYS_INLINE ::EpollFd *GetAddedEpollFd(epoll_data_t &data) const
+    {
+        data = m_added_epoll_data;
+        return m_added_epoll_fd;
+    }
+
+    ALWAYS_INLINE void SetAddedEpollFd(::EpollFd *fd, const epoll_data_t &data = {})
+    {
+        m_added_epoll_fd = fd;
+        m_added_epoll_data = data;
     }
 
 private:
@@ -4427,7 +4440,7 @@ private:
 
             for (int i = 0; i < poll_cnt; i++) {
                 if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
-                    if (eventfd_write(m_event_fd, 1) == -1) {
+                    if (NotifyReadable() == -1) {
                         char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                             "eventfd_write() failed, event fd: %d, errno: %d, errmsg: %s\n",
@@ -4967,6 +4980,20 @@ private:
         std::atomic<int32_t> asyncTaskNum{0U};
         u_external_mutex_t* lock = nullptr;
     } m_async_accept_info;
+
+    int NotifyReadable()
+    {
+        if (m_added_epoll_fd == nullptr) {
+            return eventfd_write(m_event_fd, 1);
+        }
+
+        if (((async::EpollFdAsync *)m_added_epoll_fd)->AddSocketReadableEvent(m_fd, m_added_epoll_data) != 0) {
+            return -1;
+        }
+
+        return ((async::EpollFdAsync *)m_added_epoll_fd)->SetSocketsReadable();
+    }
+
     //common fields
     uint64_t m_local_umqh = UMQ_INVALID_HANDLE;
     uint64_t m_main_umqh = UMQ_INVALID_HANDLE;
@@ -4984,6 +5011,8 @@ private:
     bool m_isblocking = true;
     umq_topo_type_t mTopoType = UMQ_TOPO_TYPE_FULLMESH_1D;
     umq_eid_t m_route_backup_src_eid; // 备
+    ::EpollFd *m_added_epoll_fd{nullptr};
+    epoll_data_t m_added_epoll_data{0};
     QbufQueue<umq_buf_t *> *rxQueue = nullptr;
     ShareJfrRxEpollEvent *share_jfr_rx_epoll_event = nullptr;
     struct ConnInfo {
@@ -5187,10 +5216,7 @@ public:
             if (buf[i]->status != 0) {
                 if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                     socket_fd_obj->HandleErrorRxCqe(buf[i]);
-                } else {
-                    socket_fd_obj->WakeUpTx();
                 }
-                QBUF_LIST_NEXT(buf[i]) = nullptr;
                 umq_buf_free(buf[i]);
             }
         }

@@ -18,8 +18,8 @@
 #include "urpc_util.h"
 #include "scope_exit.h"
 #include "brpc_file_descriptor.h"
+#include "file_descriptor_async.h"
 #include "brpc_context.h"
-#include "ubs_mem/mem_file_descriptor.h"
 
 namespace Brpc {
 
@@ -72,7 +72,11 @@ bool Context::m_ubEnable = false;
         switch (m_socket_fd_trans_mode) {
             case SOCKET_FD_TRANS_MODE_UMQ:
             case SOCKET_FD_TRANS_MODE_UMQ_ZERO_COPY:
-                epoll_fd = (::EpollFd *)new Brpc::EpollFd(fd);
+                if (m_use_async_epoll_wait) {
+                    epoll_fd = (::EpollFd *)new Brpc::async::EpollFdAsync(fd);
+                } else {
+                    epoll_fd = (::EpollFd *)new Brpc::EpollFd(fd);
+                }
                 break;
 #ifdef UBS_SHM_BUILD_ENABLED
             case SOCKET_FD_TRANS_MODE_SHM:
