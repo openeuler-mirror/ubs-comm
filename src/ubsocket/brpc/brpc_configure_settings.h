@@ -35,6 +35,7 @@
 #define ENV_VAR_DEGRADE            "UBSOCKET_DEGRADE"
 #define ENV_VAR_ASYNC_ACCEPT       "UBSOCKET_ASYNC_ACCEPT"
 #define ENV_VAR_THREAD_POOL_SIZE   "UBSOCKET_THREAD_POOL_SIZE"
+#define ENV_VAR_ASYNC_EPOLL_WAIT   "UBSOCKET_ASYNC_EPOLL_WAIT"
 
 namespace Brpc {
 
@@ -112,6 +113,11 @@ public:
         return m_use_async_accept;
     }
 
+    bool UseAsyncEpollWait()
+    {
+        return m_use_async_epoll_wait;
+    }
+
     uint32_t ThreadPoolSize()
     {
         return m_thread_pool_size;
@@ -164,8 +170,13 @@ protected:
         if (strlen(m_use_async_accept_str) > 0) {
             m_use_async_accept = BoolVal::BoolConverter(m_use_async_accept_str);
         }
+
+        if (m_use_async_epoll_wait_str[0] != '\0') {
+            m_use_async_epoll_wait = BoolVal::BoolConverter(m_use_async_epoll_wait_str);
+        }
         RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_ASYNC_ACCEPT, (int)m_use_async_accept);
         RPC_ADPT_VLOG_INFO("%s: %u\n", ENV_VAR_THREAD_POOL_SIZE, m_thread_pool_size);
+        RPC_ADPT_VLOG_INFO("%s: %d\n", ENV_VAR_ASYNC_EPOLL_WAIT, (int)m_use_async_epoll_wait);
 
         if (strlen(m_use_ub_force_str) > 0) {
             m_use_ub_force = BoolVal::BoolConverter(m_use_ub_force_str);
@@ -284,6 +295,14 @@ protected:
                 m_thread_pool_size = UBSOCKET_THREAD_POOL_SIZE_MAX;
             }
         }
+
+        if ((env_ptr = getenv(ENV_VAR_ASYNC_EPOLL_WAIT)) != NULL) {
+            if (strcmp(env_ptr, "true") != 0 && strcmp(env_ptr, "false") != 0) {
+                printf("WARNING: Flag 'ENV_VAR_ASYNC_EPOLL_WAIT' has wrong input. Using default value:false.\n");
+            } else {
+                ReadEnvVar(env_ptr, m_use_async_epoll_wait_str, sizeof(m_use_async_epoll_wait_str));
+            }
+        }
     }
     
     char m_alloc_sym_str[BRPC_SYM_STR_LEN_MAX] = "";
@@ -299,6 +318,8 @@ protected:
     bool m_use_ub_force = false;
     char m_use_async_accept_str[BOOL_STR_LEN_MAX] = "";
     bool m_use_async_accept = false;
+    char m_use_async_epoll_wait_str[BOOL_STR_LEN_MAX] = "";
+    bool m_use_async_epoll_wait = false;
     char m_enable_share_jfr_str[BOOL_STR_LEN_MAX] = "";
     bool m_enable_share_jfr = true;
     char m_degrade_str[BOOL_STR_LEN_MAX] = "";

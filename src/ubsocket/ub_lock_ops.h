@@ -52,7 +52,15 @@ public:
 
     ~ScopedUbExclusiveLocker()
     {
-        g_external_lock_ops.unlock(lock_);
+        Unlock();
+    }
+
+    void Unlock()
+    {
+        if (!unlocked_) {
+            g_external_lock_ops.unlock(lock_);
+            unlocked_ = true;
+        }
     }
 
     ScopedUbExclusiveLocker(const ScopedUbExclusiveLocker&) = delete;
@@ -63,6 +71,7 @@ public:
 
 private:
     u_external_mutex_t* lock_ = nullptr;
+    bool unlocked_ = false;
 };
 
 class ScopedUbReadLocker {
@@ -74,7 +83,15 @@ public:
 
     ~ScopedUbReadLocker()
     {
-        g_rw_lock_ops.unlock_rw(rwlock_);
+        Unlock();
+    }
+
+    void Unlock()
+    {
+        if (!unlocked_) {
+            g_rw_lock_ops.unlock_rw(rwlock_);
+            unlocked_ = true;
+        }
     }
 
     ScopedUbReadLocker(const ScopedUbReadLocker&) = delete;
@@ -85,6 +102,7 @@ public:
 
 private:
     u_rw_lock_t* rwlock_ = nullptr;
+    bool unlocked_ = false;
 };
 
 class ScopedUbWriteLocker {
@@ -96,7 +114,15 @@ public:
 
     ~ScopedUbWriteLocker()
     {
-        g_rw_lock_ops.unlock_rw(rwlock_);
+        Unlock();
+    }
+
+    void Unlock()
+    {
+        if (!unlocked_) {
+            g_rw_lock_ops.unlock_rw(rwlock_);
+            unlocked_ = true;
+        }
     }
 
     ScopedUbWriteLocker(const ScopedUbWriteLocker&) = delete;
@@ -107,6 +133,7 @@ public:
 
 private:
     u_rw_lock_t* rwlock_ = nullptr;
+    bool unlocked_ = false;
 };
 
 #endif // UB_LOCK_OPS_H

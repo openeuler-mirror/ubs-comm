@@ -19,6 +19,7 @@ add_library(rpc_adapter_brpc
     brpc_iobuf_adapter.cpp
     brpc_socket_adapter.cpp
     brpc_file_descriptor.cpp
+    file_descriptor_async.cpp
     ${COMMON_RPC_ADPT_SRC} ${BRPC_ADPT_SRC} ${UBS_MEM_SRC})
 set_property(TARGET rpc_adapter_brpc PROPERTY CMAKE_CXX_STANDARD 11)
 
