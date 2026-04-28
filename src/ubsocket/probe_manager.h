@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * Description: Provide the utility for umq buffer, iov, etc
+ * Description: Provide the probe manager
  * Author:
  * Create: 2026-04-22
  * Note:
@@ -28,6 +28,7 @@
 #include "rpc_adpt_vlog.h"
 #include "urpc_util.h"
 
+#include "umq_api.h"
 #include "umq_pro_api.h"
 #include "umq_types.h"
 #include "umq_pro_types.h"
@@ -203,7 +204,7 @@ public:
      */
     static void UmqPerfCallback(umq_perf_record_type_t record_type, umq_buf_t *qbuf)
     {
-        if (!qbuf || !qbuf->qbuf_ext || !qbuf->buf_data) return;
+        if (!qbuf || !qbuf->buf_data) return;
 
         // --- 解析 umq_buf_pro_t ---
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(qbuf->qbuf_ext);
