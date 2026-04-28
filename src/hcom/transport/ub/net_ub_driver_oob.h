@@ -29,6 +29,13 @@ namespace hcom {
 #define PUBLIC_JETTY_NUM_MIN (4)
 #define PUBLIC_JETTY_NUM_MAX (1023)
 
+inline uint32_t mainRouteSrcPortEid; // 主
+inline uint32_t mainRouteDstPortEid; // 主
+inline uint32_t backRouteSrcPortEid; // 备
+inline uint32_t backRouteDstPortEid; // 备
+extern std::map<std::string, uint32_t> g_eid_port_map;
+
+
 class NetDriverUBWithOob : public NetDriverUB {
 public:
     NetDriverUBWithOob(const std::string &name, bool startOobSvr, UBSHcomNetDriverProtocol protocol)
@@ -158,6 +165,7 @@ private:
     void HandleAsyncEvent(urma_async_event_t *event);
     void RunInUBEventThread();
     void ClearJettyResource(UBJetty *qp);
+    int ChooseRoutes(std::string peerEid, uvs_path_set_t &uvsPathSet);
     inline bool ValidateRequestContext(UBOpContextInfo *ctx)
     {
         if (NN_UNLIKELY(ctx == nullptr || ctx->ubJetty == nullptr || ctx->ubJetty->GetUpContext() == 0 ||

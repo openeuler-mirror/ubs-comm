@@ -36,6 +36,7 @@ struct HcomChannelImpOptions {
     int16_t twoSideTimeout = 30;
     UBSHcomChannelCallBackType cbType = UBSHcomChannelCallBackType::CHANNEL_FUNC_CB;
     UBSHcomChannelBrokenPolicy brokenPolicy = UBSHcomChannelBrokenPolicy::BROKEN_ALL;
+    bool activateBackup = false;
     bool enableMultiRail = false;
     bool selfPoll = false;
 };

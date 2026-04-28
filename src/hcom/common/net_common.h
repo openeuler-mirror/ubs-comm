@@ -60,6 +60,8 @@ enum class NetProtocol {
     NET_UBC,
 };
 
+inline bool g_is_activate_backup = false;
+
 class NetFunc {
 public:
     static inline uint32_t CalcHeaderCrc32(UBSHcomNetTransHeader *header)
@@ -387,7 +389,7 @@ public:
         uvs_tp_type tpType = UVS_RTP;
         int ret = HcomTpsa::UvsGetPathSet(&uSrcBondingEid, &uDstBondingEid, tpType, false, &uvsPathSet);
         if (ret != 0) {
-            NN_LOG_ERROR("UvsGetRouteList failed, ret " << ret);
+            NN_LOG_ERROR("UvsGetPathSet failed, ret " << ret);
             return NN_INVALID_PARAM;
         }
         if (uvsPathSet.path_count == 0) {
@@ -414,7 +416,31 @@ public:
 
         return NN_OK;
     }
+
+    static NResult GetTopoInfo(const std::string &localEid, const std::string &peerEid, uvs_path_set_t &uvsPathSet)
+    {
+        NN_LOG_DEBUG("localEid: " << localEid << ", peerEid: " << peerEid);
+        uvsPathSet = {};
+
+        uvs_eid_t uLocalEid = {0};
+        uvs_eid_t uPeerEid = {0};
+        NN_StrToEid(localEid, uLocalEid);
+        NN_StrToEid(peerEid, uPeerEid);
+
+        uvs_tp_type tpType = UVS_RTP;
+        int ret = HcomTpsa::UvsGetPathSet(&uLocalEid, &uPeerEid, tpType, false, &uvsPathSet);
+        if (ret != 0) {
+            NN_LOG_ERROR("UvsGetPathSet failed, ret " << ret);
+            return NN_INVALID_PARAM;
+        }
+        if (uvsPathSet.path_count == 0) {
+            NN_LOG_WARN("UvsGetPathSet returned empty.");
+            return NN_INVALID_PARAM;
+        }
+        return NN_OK;
+    }
 #endif
+
     static bool NN_ConvertIpAndPort(const std::string &url, std::string &ip, uint16_t &port)
     {
         if (NN_UNLIKELY(NN_ValidateUrl(url) != NN_OK)) {

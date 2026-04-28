@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 #include "urma_types.h"
+#include "urma_ubagg.h"
 
 #define URMA_SO_PATH "liburma.so.0"
 
@@ -98,6 +99,7 @@ using URMA_LOG_GET_LEVEL = urma_vlog_level_t (*)(void);
 using URMA_LOG_SET_LEVEL = void (*)(urma_vlog_level_t level);
 using URMA_STR_TO_EID = int (*)(const char *buf, urma_eid_t *eid);
 using URMA_LOG_SET_THREAD_TAG = void (*)(const char *tag);
+
 
 class UrmaAPI {
 public:
