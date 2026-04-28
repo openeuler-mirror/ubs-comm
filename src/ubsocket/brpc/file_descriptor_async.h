@@ -163,7 +163,7 @@ public:
 
     explicit EpollFdAsync(int epoll_fd) noexcept : ::EpollFd{ epoll_fd } {}
 
-    ~EpollFdAsync() override = default;
+    ~EpollFdAsync() override;
 
     int EpollCtlAdd(int socket_fd, struct epoll_event *event, bool use_polling) override;
 
