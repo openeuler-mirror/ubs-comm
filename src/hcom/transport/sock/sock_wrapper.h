@@ -698,21 +698,6 @@ public:
         return SS_OK;
     }
 
-    inline SResult PostSendNoLock(SockTransHeader &header, const UBSHcomNetTransRequest &req)
-    {
-        struct iovec iov[NN_NO2];
-        iov[NN_NO0].iov_base = reinterpret_cast<void *>(&header);
-        iov[NN_NO0].iov_len = sizeof(SockTransHeader);
-        iov[NN_NO1].iov_base = reinterpret_cast<void *>(req.lAddress);
-        iov[NN_NO1].iov_len = req.size;
-
-        POST_SEND(iov, req.size, header.seqNo);
-
-        NN_LOG_TRACE_INFO("PostSend request successfully : sock " << mId << ", head imm data " << header.immData <<
-            ", flags " << header.flags << ", seqNo " << header.seqNo << ", data len " << header.dataLength);
-        return SS_OK;
-    }
-
     inline SResult PostSendSglSsl(SockOpContextInfo *ctx, struct iovec *iov, uint32_t iovLen = NN_NO5)
     {
         auto sendCtx = ctx->sendCtx;

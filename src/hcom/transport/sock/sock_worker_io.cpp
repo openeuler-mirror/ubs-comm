@@ -83,7 +83,7 @@ SResult SockWorker::PostSend(Sock *sock, SockTransHeader &header, const UBSHcomN
 
 SResult SockWorker::PostSendNoCpy(Sock *sock, SockTransHeader &header, const UBSHcomNetTransRequest &req)
 {
-    auto result = sock->PostSendNoLock(header, req);
+    auto result = sock->PostSend(header, req);
     // blocking post send no cpy not call upper handle
     if (result == SS_OK) {
         NN_LOG_TRACE_INFO("PostSend cb sock " << sock->Id() << " head imm data " << header.immData << ", flags " <<
