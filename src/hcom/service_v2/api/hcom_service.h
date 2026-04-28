@@ -288,6 +288,8 @@ public:
      */
     virtual void SetHeartBeatOptions(const UBSHcomHeartBeatOptions &opt) = 0;
 
+    virtual void SetActiveBackup(bool enable) = 0;
+
     /**
      * @brief Set the Multi Rail Options object
      *

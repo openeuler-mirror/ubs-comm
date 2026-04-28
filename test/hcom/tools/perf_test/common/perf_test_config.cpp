@@ -85,6 +85,7 @@ void PerfTestConfig::Print()
     LOG_DEBUG("cpuId = " << mCpuId);
     LOG_DEBUG("ubcMode = " << static_cast<uint32_t>(mUbcMode));
     LOG_DEBUG("ubPriority = " << mUbPriority);
+    LOG_DEBUG("enableActiveBackup = " << mEnableActiveBackup);
 }
 
 PerfTestConfig::PerfTestConfig()
@@ -149,6 +150,7 @@ bool PerfTestConfig::ParseArgs(int argc, char *argv[])
         {"help", no_argument, nullptr, 'h'},
         {"ubcMode", no_argument, nullptr, 'u'},
         {"priority", no_argument, nullptr, 'r'},
+        {"backup", no_argument, nullptr, 'b'},
         {nullptr, 0, nullptr, 0},
     };
 
@@ -203,6 +205,8 @@ bool PerfTestConfig::ParseArgs(int argc, char *argv[])
             case 'r':
                 SetUbPriority(static_cast<uint32_t>(strtoul(optarg, nullptr, 0)));
                 break;
+            case 'b':
+                SetEnableActiveBackup(true);
             default:
                 break;
         }

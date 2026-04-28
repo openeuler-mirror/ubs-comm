@@ -1135,6 +1135,15 @@ void HcomServiceImp::SetHeartBeatOptions(const UBSHcomHeartBeatOptions &opt)
     mOptions.heartBeatOption = opt;
 }
 
+void HcomServiceImp::SetActiveBackup(bool enable)
+{
+    mOptions.activateBackup = enable;
+    if (enable) {
+        g_is_activate_backup = true;
+    }
+    NN_LOG_INFO("Set active backup to " << (enable ? "enable" : "disable"));
+}
+
 void HcomServiceImp::SetMultiRailOptions(const UBSHcomMultiRailOptions &opt)
 {
     mOptions.enableMultiRail = opt.enable;
@@ -1788,6 +1797,7 @@ void HcomServiceImp::ConvertHcomSerImpOptsToHcomDriOpts(const HcomServiceImpOpti
     driverOpt.qpReceiveQueueSize = serviceOpt.qpRecvQueueSize;
     driverOpt.prePostReceiveSizePerQP = serviceOpt.qpPrePostSize;
     driverOpt.maxConnectionNum = serviceOpt.maxConnCount;
+    driverOpt.activateBackup = serviceOpt.activateBackup;
     driverOpt.enableMultiRail = serviceOpt.enableMultiRail;
     driverOpt.mrSendReceiveSegCount = serviceOpt.maxSendRecvDataCount;
     driverOpt.ubcMode = serviceOpt.ubcMode;

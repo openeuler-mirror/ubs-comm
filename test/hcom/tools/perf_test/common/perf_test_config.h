@@ -141,6 +141,16 @@ public:
         mUbPriority = ubPriority;
     }
 
+    bool GetEnableActiveBackup() const
+    {
+        return mEnableActiveBackup;
+    }
+
+    void SetEnableActiveBackup(bool enableActiveBackup)
+    {
+        mEnableActiveBackup = enableActiveBackup;
+    }
+
 private:
     // 检查参数有效性
     bool SelfCheck();
@@ -158,6 +168,7 @@ private:
     bool mIsTestAllSize = false;            // 是否测试所有大小的包
     ock::hcom::UBSHcomUbcMode mUbcMode;     // 低时延/高带宽模式选择
     uint32_t mUbPriority;                   // SL优先级
+    bool mEnableActiveBackup = false;       // 是否启用主备
 };
 }
 }

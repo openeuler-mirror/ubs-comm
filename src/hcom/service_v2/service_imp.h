@@ -70,7 +70,8 @@ struct HcomServiceImpOptions {
     bool enableRndv = false;
     bool tcpSendZCopy = false;
     bool startOobSvr = false;
-    bool enableMultiRail = false;
+    bool activateBackup = false; // 主备开关
+    bool enableMultiRail = false; // 关闭时才会启用主备切换功能
     NetDriverOobType oobType = NET_OOB_TCP;
     UBSHcomServiceLBPolicy lbPolicy = NET_ROUND_ROBIN;
     UBSHcomWorkerMode workerGroupMode = NET_BUSY_POLLING;
@@ -347,6 +348,13 @@ public:
      * @return int32_t
      */
     void SetHeartBeatOptions(const UBSHcomHeartBeatOptions &opt) override;
+
+    /**
+     * @brief 设置主备切换功能
+     *
+     * @param enable 主备启用设置选项
+     */
+    void SetActiveBackup(bool enable) override;
 
     /**
      * @brief Set the Multi Rail Options object

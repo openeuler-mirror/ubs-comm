@@ -1692,6 +1692,7 @@ struct UBSHcomNetDriverOptions {
     uint32_t oobConnHandleQueueCap =
             NN_NO4096;  // server accept connection queue capability
     uint32_t maxConnectionNum = NN_NO250;  // max connection number
+    bool activateBackup = false;           // enable backup
     bool enableMultiRail = false;          // enable multi rail
     uint8_t slave = 1;                     // slave 1 or 2
     uint32_t ubPriority = UINT32_MAX;

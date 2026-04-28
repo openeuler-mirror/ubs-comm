@@ -47,6 +47,25 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
         mDevAttr = nullptr;
         return ret;
     }
+
+    if (g_is_activate_backup) {
+        bondp_set_bonding_mode_in_t bondInBackup = {
+            .bonding_mode = BONDP_BONDING_MODE_ACTIVE_BACKUP,
+            .bonding_level = BONDP_BONDING_LEVEL_PORT,
+        };
+        urma_user_ctl_in_t in = {
+            .addr = (uint64_t)&bondInBackup,
+            .len = sizeof(bondInBackup),
+            .opcode = BONDP_USER_CTL_SET_BONDING_MODE
+        };
+        urma_user_ctl_out_t out = {0};
+        ret = HcomUrma::UserCtl(mUrmaContext, &in, &out);
+        if (ret != 0) {
+            NN_LOG_ERROR("Failed to set bonding mode for device , ret " << ret);
+            return ret;
+        }
+        NN_LOG_INFO("Set bonding mode for device successfully");
+    }
     int tmpMaxSge = std::min(mDevAttr->dev_cap.max_jfs_sge, mDevAttr->dev_cap.max_jfr_sge);
     mMaxSge = tmpMaxSge < mMaxSge ? tmpMaxSge : mMaxSge;
 

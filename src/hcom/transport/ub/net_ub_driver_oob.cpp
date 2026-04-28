@@ -27,6 +27,8 @@ namespace hcom {
 constexpr uint64_t MAX_OP_TIME_US = NN_NO500000; // 500 ms
 uint64_t g_connection_count = 0;
 
+std::map<std::string, uint32_t> g_eid_port_map;
+
 NResult NetDriverUBWithOob::DoInitialize()
 {
     if (mWorkers.empty()) {
@@ -396,6 +398,39 @@ void NetDriverUBWithOob::RunInUbEventThread()
     mEventStarted.store(false);
 }
 
+int NetDriverUBWithOob::ChooseRoutes(std::string peerEid, uvs_path_set_t &uvsPathSet)
+{
+    uint8_t chipId = 1; // 固定0
+    uint8_t dieId = 1; // 固定0
+    std::set<uint8_t> ports;
+    for (int pathIdx = 0; pathIdx < uvsPathSet.path_count; ++pathIdx) {
+        if (uvsPathSet.paths[pathIdx].src_port.chip_id == chipId
+            && uvsPathSet.paths[pathIdx].src_port.die_id == dieId) {
+            ports.insert(uvsPathSet.paths[pathIdx].src_port.port_idx);
+        }
+    }
+    // 主备信息留存
+    // RR轮询--port，参考ubsocket
+    std::vector<uint8_t> portVec(ports.begin(), ports.end());
+    uint32_t portIdx = 0;
+    if (g_eid_port_map.find(peerEid) == g_eid_port_map.end()) {
+        g_eid_port_map[peerEid] = 0;
+    } else {
+        portIdx = g_eid_port_map[peerEid];
+    }
+
+    if (portVec.size() == 0) {
+        NN_LOG_ERROR("No available ports for peerEid " << peerEid);
+        return NN_ERROR;
+    }
+
+    mainRouteSrcPortEid = portVec[portIdx];
+    portIdx = (portIdx + 1) % portVec.size();
+    backRouteSrcPortEid = portVec[portIdx];
+    g_eid_port_map[peerEid] = portIdx;
+    return NN_OK;
+}
+
 int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
 {
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBServer(mSecInfoProvider, mSecInfoValidator, conn, mName,
@@ -404,6 +439,62 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
     }
 
     int ret = 0;
+
+    if (!mOptions.enableMultiRail && mOptions.activateBackup) {
+        std::string peerEid;
+        uint32_t peerEidLen = 0;
+
+        ret = conn.Receive(&peerEidLen, sizeof(peerEidLen));
+        if (ret != NN_OK) {
+            NN_LOG_ERROR("Failed to receive peer eid length in Driver " << mName);
+            return ret;
+        }
+
+        peerEid.resize(peerEidLen);
+        if (peerEidLen > 0) {
+            ret = conn.Receive(&peerEid[0], peerEidLen);
+            if (ret != NN_OK) {
+                NN_LOG_ERROR("Failed to receive peer eid in Driver " << mName);
+                return ret;
+            }
+        }
+
+        std::string localEid = mEid;
+        uint32_t localEidLen = static_cast<uint32_t>(localEid.size());
+
+        ret = conn.Send(&localEidLen, sizeof(localEidLen));
+        if (ret != NN_OK) {
+            NN_LOG_ERROR("Failed to send local eid length in Driver " << mName);
+            return ret;
+        }
+        if (localEidLen > 0) {
+            auto localEidPtr = reinterpret_cast<void *>(const_cast<char *>(localEid.data()));
+            ret = conn.Send(localEidPtr, localEidLen);
+            if (ret != NN_OK) {
+                NN_LOG_ERROR("Failed to send local eid in Driver " << mName);
+                return ret;
+            }
+        }
+
+        uvs_path_set_t uvsPathSet;
+        ret = NetFunc::GetTopoInfo(localEid, peerEid, uvsPathSet);
+        if (ret != NN_OK) {
+            NN_LOG_ERROR("Failed to get topo info in Driver " << mName << ", localEid " << localEid << ", peerEid " <<
+                peerEid << ", ret " << ret);
+            return ret;
+        }
+        // CLOS  topo
+        NN_LOG_INFO("path set topo type : " << uvsPathSet.topo_type);
+        if (uvsPathSet.topo_type == UVS_TOPO_TYPE_CLOS) {
+            g_is_activate_backup = true;
+            // 开启主备
+            ret = ChooseRoutes(peerEid, uvsPathSet);
+            if (ret != NN_OK) {
+                NN_LOG_ERROR("Failed to choose routes , ret " << ret);
+                return ret;
+            }
+        }
+    }
 
     // receive server worker grpno
     auto startRecvWG = NetMonotonic::TimeUs();
@@ -792,6 +883,60 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
         mOptions.secType))) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
+    
+    if (!mOptions.enableMultiRail && mOptions.activateBackup) {
+        std::string localEid = mEid;
+        uint32_t localEidLen = static_cast<uint32_t>(localEid.size());
+
+        result = conn->Send(&localEidLen, sizeof(localEidLen));
+        if (result != NN_OK) {
+            NN_LOG_ERROR("Failed to send local eid length in Driver " << mName);
+            return result;
+        }
+        if (localEidLen > 0) {
+            auto localEidPtr = reinterpret_cast<void *>(const_cast<char *>(localEid.data()));
+            result = conn->Send(localEidPtr, localEidLen);
+            if (result != NN_OK) {
+                NN_LOG_ERROR("Failed to send local eid in Driver " << mName);
+                return result;
+            }
+        }
+
+        std::string peerEid;
+        uint32_t peerEidLen = 0;
+
+        result = conn->Receive(&peerEidLen, sizeof(peerEidLen));
+        if (result != NN_OK) {
+            NN_LOG_ERROR("Failed to receive peer eid length in Driver " << mName);
+            return result;
+        }
+
+        peerEid.resize(peerEidLen);
+        if (peerEidLen > 0) {
+            result = conn->Receive(&peerEid[0], peerEidLen);
+            if (result != NN_OK) {
+                NN_LOG_ERROR("Failed to receive peer eid in Driver " << mName);
+                return result;
+            }
+        }
+
+        uvs_path_set_t uvsPathSet;
+        result = NetFunc::GetTopoInfo(localEid, peerEid, uvsPathSet);
+        if (result != NN_OK) {
+            NN_LOG_ERROR("Failed to get topo info in Driver " << mName << ", localEid " << localEid << ", peerEid " <<
+                peerEid << ", result " << result);
+            return result;
+        }
+
+        NN_LOG_INFO("path set topo type : " << uvsPathSet.topo_type);
+        if (uvsPathSet.topo_type == UVS_TOPO_TYPE_CLOS) {
+            result = ChooseRoutes(peerEid, uvsPathSet);
+            if (result != NN_OK) {
+                NN_LOG_ERROR("Failed to choose routes , ret " << result);
+                return result;
+            }
+        }
+    }
 
     /* send connection header & grpNo */
     auto startSendGrpNo = NetMonotonic::TimeUs();
@@ -981,7 +1126,7 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
     if (NN_UNLIKELY(exchInfoTime > MAX_OP_TIME_US)) {
         NN_LOG_WARN("Exchange Info time too long: " << exchInfoTime << " us.");
     }
-
+         
     /* Create endpoint */
     auto startCreateEp = NetMonotonic::TimeUs();
     UBSHcomNetEndpointPtr ep = new (std::nothrow) NetUBAsyncEndpoint(id, jetty, this, worker);

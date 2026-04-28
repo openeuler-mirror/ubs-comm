@@ -96,6 +96,7 @@ bool ServiceHelper::CreateService()
         return false;
     }
 
+    mService->SetActiveBackup(mCfg.GetEnableActiveBackup());
     mService->SetDeviceIpMask({ mCfg.GetIpMask() });
     mService->SetUbcMode(mCfg.GetUbcMode());
     mService->SetSendQueueSize(NN_NO4096);
