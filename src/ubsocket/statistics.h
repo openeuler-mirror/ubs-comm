@@ -394,12 +394,20 @@ class Listener {
         RPC_ADPT_CMD_MAX
     };
 
+    #ifdef UBSOCKET_UNIT_TEST
+    const static uint32_t LISTENER_SEND_RECV_TIMEOUT_MS = 100;
+#else
     const static uint32_t LISTENER_SEND_RECV_TIMEOUT_MS = 8000;
+#endif
     const static uint32_t MAX_EPOLL_EVENT_NUM = 32;
     const static uint32_t MAX_EPOLL_FD_NUM = 16;
     const static uint32_t CACHE_BUFFER_LEN = 8192;
     const static uint32_t UDS_SUN_PATH_NAME_MAX = 32;
+#ifdef UBSOCKET_UNIT_TEST
+    const static uint32_t UDS_SEND_RECV_TIMEOUT_S = 1;
+#else
     const static uint32_t UDS_SEND_RECV_TIMEOUT_S = 8;
+#endif
 
     class fd_guard {
     public:
@@ -902,7 +910,7 @@ class Listener {
         }
 
         if (SocketFd::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIDelayHeader\n");
+            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIMessage data\n");
             return;
         }
     }
