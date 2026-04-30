@@ -12,6 +12,12 @@ target_compile_features(ubsocket_test
     cxx_std_17
 )
 
+# Define UBSOCKET_UNIT_TEST for shorter timeout in tests
+target_compile_definitions(ubsocket_test
+  PRIVATE
+    UBSOCKET_UNIT_TEST
+)
+
 # Ignore access control in class(like private or protected)
 add_compile_options(-fno-access-control)
 
