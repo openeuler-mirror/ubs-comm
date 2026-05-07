@@ -419,7 +419,8 @@ public:
         int retCode = 0;
         int fd = -1;
         TRACE_DELAY_AUTO(BRPC_ACCEPT_CALL, retCode);
-        if (Context::GetContext()->UseAsyncAccept()) {
+        Context *context = Context::GetContext();
+        if (context != nullptr && context->UseAsyncAccept()) {
             ScopedUbExclusiveLocker sLock(m_async_accept_info.lock);
             if (!m_async_accept_info.ready_queue.empty()) {
                 auto tmp = m_async_accept_info.ready_queue.front();
@@ -490,7 +491,8 @@ public:
             return fd;
         }
 
-        if (Context::GetContext()->UseAsyncAccept()) {
+        context = Context::GetContext();
+        if (context != nullptr && context->UseAsyncAccept()) {
             auto exec_ret = ExecutorService::GetExecutorService()->Execute([this, fd, addr_tmp, len_tmp]() {
                     RPC_ADPT_VLOG_DEBUG("async accept start. fd:%d\n", fd);
                     std::string ip = ExtractIpFromSockAddr(&addr_tmp);
@@ -4969,10 +4971,10 @@ private:
         return 0;
     }
     struct PeerInfo {
-        std::string peer_ip;      // 对端IP地址
-        umq_eid_t peer_eid;      // 对端EID
-        int peer_fd;             // 对端socket fd
-        int type_fd;             // 0 server; 1 client
+        std::string peer_ip;     // 对端IP地址
+        umq_eid_t peer_eid{};      // 对端EID
+        int peer_fd = -1;         // 对端socket fd
+        int type_fd = 0;         // 0 server; 1 client
     } m_peer_info;
 
     struct AsyncAcceptInfo {
