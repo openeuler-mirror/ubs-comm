@@ -629,10 +629,10 @@ public:
         Context *context = Context::GetContext();
 
         if (mTopoType == UMQ_TOPO_TYPE_FULLMESH_1D) {
-            ret = CreateLocalUmq(&connEid, mUsedPorts);
+            ret = CreateLocalUmq(&connEid, mUsedPorts, mTopoType);
         } else {
             umq_eid_t localEid = context->GetDevSrcEid();
-            ret = CreateLocalUmq(&localEid, mUsedPorts);
+            ret = CreateLocalUmq(&localEid, mUsedPorts, mTopoType);
         }
 
         if (!IsOk(ret)) {
@@ -3382,7 +3382,7 @@ private:
         return -1;
     }
 
-    ubsocket::Error CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts)
+    ubsocket::Error CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts, umq_topo_type_t &topoType)
     {
         if (m_local_umqh != UMQ_INVALID_HANDLE) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Create umq on a created umq.\n");
@@ -3405,7 +3405,7 @@ private:
         queue_cfg.mode = UMQ_MODE_INTERRUPT;
         // 共享 JFR、AE 事件依赖 umq_ctx.
         queue_cfg.umq_ctx = m_fd;
-        if (context->IsBonding() == 1) {
+        if (context->IsBonding() == 1 && topoType == UMQ_TOPO_TYPE_CLOS) {
             queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
             queue_cfg.used_ports = mUsedPorts;
         }
@@ -3791,10 +3791,10 @@ private:
         Context *context = Context::GetContext();
 
         if (acceptTopoType == UMQ_TOPO_TYPE_FULLMESH_1D) {
-            ret = socket_fd_obj->CreateLocalUmq(&connEid, mUsedPorts);
+            ret = socket_fd_obj->CreateLocalUmq(&connEid, mUsedPorts, acceptTopoType);
         } else {
             umq_eid_t localEid = context->GetDevSrcEid();
-            ret = socket_fd_obj->CreateLocalUmq(&localEid, mUsedPorts);
+            ret = socket_fd_obj->CreateLocalUmq(&localEid, mUsedPorts, acceptTopoType);
         }
         if (!IsOk(ret)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to create umq\n");
