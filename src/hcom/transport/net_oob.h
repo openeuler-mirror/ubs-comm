@@ -198,6 +198,11 @@ public:
         }
     }
 
+    inline void SetCpuId(int cpuId)
+    {
+        mCpuId = cpuId;
+    }
+
     inline void SetMultiRail(bool flags)
     {
         enableMultiRail = flags;
@@ -301,6 +306,7 @@ protected:
     std::atomic<bool> mThreadStarted { false };
     volatile bool mNeedStop = false;
     int mListenFD = -1;
+    int mCpuId = -1;
 
     NewConnectionHandler mNewConnectionHandler = nullptr;
     NetWorkerLB *mWorkerLb = nullptr;

@@ -146,6 +146,58 @@ SResult SockWorker::HandleReceiveCtx(SockOpContextInfo &opCtx)
     }
 }
 
+// use epoll LT, now just use in multicast for hlc mode
+#define HANDLE_SOCK_EVENT_LT(sockOpResult, doUpperCall)                                                      \
+    Sock *sock = static_cast<Sock *>(oneEv.data.ptr);                                                        \
+    if (NN_UNLIKELY(sock == nullptr)) {                                                                      \
+        NN_LOG_ERROR("Sock is null in polled event for sock worker " << mName);                              \
+        continue;                                                                                            \
+    }                                                                                                        \
+                                                                                                             \
+    static thread_local SockOpContextInfo opCtx {};                                                          \
+    if (oneEv.events & EPOLLIN) {                                                                            \
+        if (NN_LIKELY(((sockOpResult) = sock->HandleIn((doUpperCall)))) == SockOpContextInfo::SS_NO_ERROR) { \
+            /* if fully receive a request */                                                                 \
+                                                                                                             \
+            if (doUpperCall) {                                                                               \
+                /* set context */                                                                            \
+                opCtx.header = sock->GetHeaderAddress();                                                     \
+                opCtx.sock = sock;                                                                           \
+                opCtx.dataAddress = sock->mReceiveBuff.DataIntPtr();                                         \
+                opCtx.dataSize = sock->mReceiveBuff.ActualDataSize();                                        \
+                opCtx.opType = SockOpContextInfo::SS_RECEIVE;                                                \
+                opCtx.errType = SockOpContextInfo::SS_NO_ERROR;                                              \
+                                                                                                             \
+                /* handle by type */                                                                         \
+                if (NN_UNLIKELY(HandleReceiveCtx(opCtx) == NN_EP_CLOSE)) {                                   \
+                    /* fd is already removed from epoll, cannot be modified again */                         \
+                    continue;                                                                                \
+                }                                                                                            \
+            }                                                                                                \
+            /* not fully received, continue to process next event */                                         \
+            continue;                                                                                        \
+        }                                                                                                    \
+        NN_LOG_TRACE_INFO("Got error " << (sockOpResult) << " on sock " << sock->Id() << " with peer " <<    \
+            sock->PeerIpPort() << " in sock worker " << mName);                                              \
+                                                                                                             \
+        /* do sock conn broken process */                                                                    \
+        bzero(&opCtx, sizeof(SockOpContextInfo));                                                            \
+        opCtx.sock = sock;                                                                                   \
+        opCtx.opType = SockOpContextInfo::SS_RECEIVE;                                                        \
+        opCtx.errType = sockOpResult;                                                                        \
+                                                                                                             \
+        /* do upper call */                                                                                  \
+        mNewRequestHandler(opCtx);                                                                           \
+        /* continue to process next event */                                                                 \
+        continue;                                                                                            \
+    }                                                                                                        \
+                                                                                                             \
+    NN_LOG_TRACE_INFO("Receive sock " << sock->Id() << " event " << oneEv.events);                           \
+    /* continue to process next event */                                                                     \
+    continue
+
+
+// use epoll ET mode
 #define HANDLE_SOCK_EVENT(sockOpResult, doUpperCall)                                                         \
     Sock *sock = static_cast<Sock *>(oneEv.data.ptr);                                                        \
     if (NN_UNLIKELY(sock == nullptr)) {                                                                      \
@@ -222,7 +274,11 @@ SResult SockWorker::HandleReceiveCtx(SockOpContextInfo &opCtx)
 #define HANDLE_EVENTS(count, sockOpResult, doUpperCall, ev)       \
     for (uint16_t i = 0; i < static_cast<uint16_t>(count); ++i) { \
         struct epoll_event &oneEv = (ev)[i];                      \
-        HANDLE_SOCK_EVENT(sockOpResult, doUpperCall);             \
+        if (mOptions.tcpEpollLT) {                                \
+            HANDLE_SOCK_EVENT_LT(sockOpResult, doUpperCall);      \
+        } else {                                                  \
+            HANDLE_SOCK_EVENT(sockOpResult, doUpperCall);         \
+        }                                                         \
     }
 
 void SockWorker::RunInThread(int16_t cpuId)

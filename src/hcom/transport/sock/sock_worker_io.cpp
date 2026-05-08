@@ -81,6 +81,20 @@ SResult SockWorker::PostSend(Sock *sock, SockTransHeader &header, const UBSHcomN
     return result;
 }
 
+SResult SockWorker::PostSendNoCpy(Sock *sock, SockTransHeader &header, const UBSHcomNetTransRequest &req)
+{
+    auto result = sock->PostSend(header, req);
+    // blocking post send no cpy not call upper handle
+    if (result == SS_OK) {
+        NN_LOG_TRACE_INFO("PostSend cb sock " << sock->Id() << " head imm data " << header.immData << ", flags " <<
+            header.flags << ", seqNo " << header.seqNo << ", data len " << header.dataLength);
+        return result;
+    }
+
+    NN_LOG_ERROR("Failed to PostSendNoCpy with sock worker " << DetailName());
+    return result;
+}
+
 SResult SockWorker::PostSendRawSgl(Sock *sock, SockTransHeader &header, const UBSHcomNetTransSglRequest &req)
 {
     if (NN_UNLIKELY(!sock->GetQueueSpace())) {

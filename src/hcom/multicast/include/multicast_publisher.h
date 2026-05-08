@@ -248,30 +248,35 @@ public:
         for (const auto &sub : allSubs) {
             subscriberRspList.emplace_back(sub.second, SubscriberRspStatus::INIT);
         }
-        repliedCount.store(0, std::memory_order_relaxed);
+        repliedCount = 0;
         return SER_OK;
     }
 
-    inline uint32_t MarkRepliedAndGetReplyCount(SubscriptionInfoPtr &sub, UBSHcomNetMessage *message)
+    inline void MarkReplied(SubscriptionInfoPtr &sub, UBSHcomNetMessage *message)
     {
         SetResponseStatus(sub, message, SubscriberRspStatus::SUCCESS);
-        return repliedCount.fetch_add(1, std::memory_order_relaxed) + 1;
+        __sync_fetch_and_add(&repliedCount, 1);
+    }
+
+    inline uint32_t GetReplyCount() const
+    {
+        return repliedCount;
     }
 
     inline void SetSendCount(uint32_t count)
     {
-        sendCount.store(count, std::memory_order_relaxed);
+        sendCount = count;
     }
 
     inline uint32_t GetSendCount() const
     {
-        return sendCount.load(std::memory_order_relaxed);
+        return sendCount;
     }
 
 private:
     // 32 byte
-    std::atomic<uint32_t> sendCount{0};
-    std::atomic<uint32_t> repliedCount{0};
+    uint32_t sendCount = 0;
+    uint32_t repliedCount = 0;
     std::vector<SubscriberRspInfo> subscriberRspList;
     friend class PublisherService;
     friend class MultiCastPeriodicManager;
@@ -320,7 +325,8 @@ public:
      */
     SubscriptionInfoPtr GetSubscribeByEpId(uint64_t id);
 
-    SerResult Initialize(uintptr_t memPool, uintptr_t pubMemPool, uintptr_t periodicMgr, uint32_t ctxStoreCapacity);
+    SerResult Initialize(uintptr_t memPool, uintptr_t pubMemPool, uintptr_t periodicMgr, uint32_t ctxStoreCapacity,
+                         UBSHcomNetDriverProtocol protocol = UBSHcomNetDriverProtocol::RDMA);
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 private:

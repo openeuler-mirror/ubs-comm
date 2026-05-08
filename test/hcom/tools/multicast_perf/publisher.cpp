@@ -18,11 +18,13 @@ constexpr uint16_t NO_SUBSCRIBER_EXIST = 501;
 
 std::string g_oobIp = "";
 uint16_t g_oobPort = 9981;
+uint16_t g_driverProtocol = 0;
 std::string g_ipSeg = "192.168.100.0/24";
 int32_t g_dataSize = 2048;
 int16_t g_asyncWorkerCpuId = -1;
 bool g_start = false;
 int g_threadNum = 1;
+int g_sendThreadCpuId = -1;
 int g_workerGroupNums = 1;
 int g_verbose = 0;
 int g_userChar = 0;
@@ -131,6 +133,10 @@ bool CreatePublisherService()
     options.completionQueueDepth = 16384; // 测试8节点8并发需要设置大一些
     options.enableTls = g_enableTls;
     options.cipherSuite = g_cipherSuite;
+    options.periodicCpuId = -1;  // 实际业务根据需要绑定超时定时器线程cpuId
+    if (g_driverProtocol == 1) {
+        options.protocol = UBSHcomNetDriverProtocol::TCP;
+    }
     g_publisherService = ock::hcom::PublisherService::Create("Publisher", options);
     if (g_publisherService == nullptr) {
         NN_LOG_ERROR("Failed to create service.");
@@ -144,7 +150,7 @@ bool CreatePublisherService()
     std::string url = "tcp://" + g_oobIp + ":" + std::to_string(g_oobPort);
 
     g_publisherService->GetConfig().SetDeviceIpMask({ g_ipSeg });
-    g_publisherService->Bind(url, NewSubscriptionCallBack);
+    g_publisherService->Bind(url, NewSubscriptionCallBack, -1);
     g_publisherService->RegisterBrokenHandler(PublisherSubscriberEpBroken);
 
     if (g_enableTls) {
@@ -268,38 +274,25 @@ void Test()
     NN_LOG_INFO("input 0:mullticast, q mean quit!");
     while (true) {
         g_userChar = getchar();
-        if (g_threadNum > 1) {
-            std::vector<std::thread> threads(g_threadNum);
-            int numCores = g_threadNum;
-            g_start = false;
-            g_startTime = MONOTONIC_TIME_NS();
-            for (int i = 0; i < g_threadNum; ++i) {
-                int coreId = i % numCores;
-                threads[i] = std::thread(RunInThread, coreId);
+
+        std::vector<std::thread> threads(g_threadNum);
+        g_start = false;
+        g_startTime = MONOTONIC_TIME_NS();
+        for (int i = 0; i < g_threadNum; ++i) {
+            int cpuId = -1;
+            if (g_sendThreadCpuId > 0) {
+                cpuId = g_sendThreadCpuId + 1;
             }
-            NN_LOG_INFO("Wait for finish");
-            g_start = true;
-            for (auto &t : threads) {
-                t.join();
-            }
+            threads[i] = std::thread(RunInThread, cpuId);
+        }
+        NN_LOG_INFO("Wait for finish");
+        g_start = true;
+        for (auto &t : threads) {
+            t.join();
         }
 
         switch (g_userChar) {
             case '0':
-                if (g_threadNum > 1) {
-                    break;
-                }
-                g_startTime = MONOTONIC_TIME_NS();
-                for (int32_t i = 0; i < g_pingCount; i++) {
-                    MultiCast();
-                    while (!g_isCbDone.load() && !g_isBroken) {
-                    }
-                    g_isCbDone.store(false);
-                    if (g_isBroken) {
-                        g_isBroken = false;
-                        break;
-                    }
-                }
                 break;
             case 'l':
                 ListAllSubscribers();
@@ -388,9 +381,11 @@ int main(int argc, char *argv[])
     struct option options[] = {
         {"ip", required_argument, nullptr, 'i'},
         {"port", required_argument, nullptr, 'p'},
+        {"driver", required_argument, nullptr, 'd'},
         {"pingpongtimes", required_argument, nullptr, 't'},
         {"size", required_argument, nullptr, 's'},
-        {"cpuId", required_argument, nullptr, 'c'},
+        {"workerCpuId", required_argument, nullptr, 'c'},
+        {"multiSendCpuId", required_argument, nullptr, 'm'},
         {"threadnums", required_argument, nullptr, 'n'},
         {"workernums", required_argument, nullptr, 'w'},
         {"verbose", required_argument, nullptr, 'v'},
@@ -402,9 +397,11 @@ int main(int argc, char *argv[])
     const char *usage = "usage\n"
         "        -i, --ip,                     coord server ip mask, e.g. 10.175.118.1;\n"
         "        -p, --port,                   coord server port, by default 9981; jetty id for UBC, e.g. 998\n"
+        "        -d, --driver,                 multicast driver protocol, 0 means RDMA, 1 means TCP\n"
         "        -t, --pingpongtimes,          ping pong times\n"
         "        -s, --size,                   max data size\n"
-        "        -c, --cpuId,                  cpu to bind\n"
+        "        -c, --workerCpuId,            worker cpu to bind\n"
+        "        -m, --multiSendCpuId,         multicast send thread cpu to bind\n"
         "        -n, --threadnums,             multicast send thread nums\n"
         "        -w, --workerGroupNums         publisher worker group nums\n"
         "        -v, --verbose                 verbose for detail\n"
@@ -415,7 +412,7 @@ int main(int argc, char *argv[])
     int ret = 0;
     int index = 0;
 
-    std::string str = "i:p:t:s:c:n:w:v:T:C:";
+    std::string str = "i:p:d:t:s:c:m:n:w:v:T:C:";
     while ((ret = getopt_long(argc, argv, str.c_str(), options, &index)) != -1) {
         switch (ret) {
             case 'i':
@@ -425,6 +422,9 @@ int main(int argc, char *argv[])
             case 'p':
                 g_oobPort = static_cast<uint16_t>(strtoul(optarg, nullptr, 0));
                 break;
+            case 'd':
+                g_driverProtocol = static_cast<uint16_t>(strtoul(optarg, nullptr, 0));
+                break;
             case 't':
                 g_pingCount = static_cast<int32_t>(strtoul(optarg, nullptr, 0));
                 break;
@@ -433,6 +433,9 @@ int main(int argc, char *argv[])
                 break;
             case 'c':
                 g_asyncWorkerCpuId = static_cast<int16_t>(strtoul(optarg, nullptr, 0));
+                break;
+            case 'm':
+                g_sendThreadCpuId = static_cast<int16_t>(strtoul(optarg, nullptr, -1));
                 break;
             case 'n':
                 g_threadNum = static_cast<int32_t>(strtoul(optarg, nullptr, 0));

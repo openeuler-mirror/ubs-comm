@@ -52,6 +52,11 @@ public:
 
     virtual void SetMaxSubscriberNum(uint32_t maxSubscriberNum) = 0;
     virtual const uint32_t GetMaxSubscriberNum() const = 0;
+
+    virtual void SetPeriodicCpuId(int cpuId) = 0;
+    virtual const int GetPeriodicCpuId() const = 0;
+
+    virtual UBSHcomNetDriverProtocol GetProtocol() const = 0;
 };
 }
 }

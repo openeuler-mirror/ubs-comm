@@ -39,6 +39,8 @@ public:
 
     NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
 
+    NResult PostSendRawNoCpy(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
+
     NResult PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo) override;
 
     NResult PostRead(const UBSHcomNetTransRequest &request) override;
@@ -187,6 +189,7 @@ private:
     NetDriverSockWithOOB *mDriver = nullptr;
 
     bool mSendZCopy = false;
+    bool mIsBlocking = false;
 
     friend class NetDriverSockWithOOB;
 };
