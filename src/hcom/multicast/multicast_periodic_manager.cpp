@@ -48,6 +48,9 @@ SerResult MultiCastPeriodicManager::Start()
         if (pthread_setname_np(tmpThread.native_handle(), ("MultiPerMgr" + std::to_string(i)).c_str()) != 0) {
             NN_LOG_WARN("Unable to set thread name of periodic manager");
         }
+
+        BIND_CPU(mCpuId, tmpThread);
+
         mWorkingThreads[i] = std::move(tmpThread);
     }
 

@@ -185,6 +185,17 @@ bool UBSHcomNetOobListenerOptions::Set(const std::string &pIp, uint16_t pp, uint
     return true;
 }
 
+bool UBSHcomNetOobListenerOptions::SetWithCpuId(const std::string &pIp, uint16_t pp, uint16_t twc, int cpuid)
+{
+    if (NN_UNLIKELY(Ip(pIp) == NN_ERROR)) {
+        return false;
+    }
+    port = pp;
+    targetWorkerCount = twc;
+    cpuId = cpuid;
+    return true;
+}
+
 bool UBSHcomNetOobListenerOptions::Set(const std::string &pIp, uint16_t pp)
 {
     return Set(pIp, pp, UINT16_MAX);
@@ -555,6 +566,10 @@ NResult UBSHcomNetDriver::CreateListeners(bool enableMultiRail)
             if (oobServer->EnableAutoPortSelection(mPortRange.first, mPortRange.second)) {
                 return NN_INVALID_PARAM;
             }
+        }
+
+        if (lOpt.cpuId != -1) {
+            oobServer->SetCpuId(lOpt.cpuId);
         }
 
         NN_LOG_TRACE_INFO(lOpt.second.Ip());

@@ -1345,6 +1345,7 @@ struct UBSHcomNetOobListenerOptions {
     uint16_t targetWorkerCount =
             UINT16_MAX; /* the count of target workers, if >= 1, the
                                        accepted socket will be attached to sub set to workers, 0 means all */
+    int cpuId = -1;       /* listening thread bind cpu id, default is -1, means not bind */
 
     /**
      * @brief Set ip/port/targetWorkerCount
@@ -1354,6 +1355,16 @@ struct UBSHcomNetOobListenerOptions {
      * @param twc          [in] target worker count to set
      */
     bool Set(const std::string &pIp, uint16_t pp, uint16_t twc);
+
+    /**
+     * @brief Set ip/port/targetWorkerCount/cpuId
+     *
+     * @param pIp          [in] ip to set
+     * @param pp           [in] port to set
+     * @param twc          [in] target worker count to set
+     * @param cpuId        [in] cpuId to set
+     */
+    bool SetWithCpuId(const std::string &pIp, uint16_t pp, uint16_t twc, int cpuid);
 
     /**
      * @brief Set ip/port/targetWorkerCount
@@ -1650,6 +1661,7 @@ struct UBSHcomNetDriverOptions {
     bool tcpEnableNoDelay = true;  // tcp TCP_NODELAY option, true in default
     bool tcpSendZCopy =
             false;  // tcp whether copy request to inner memory, false in default
+    bool tcpEpollLT = false;  // tcp epoll mode, default is ET
     /* The buffer sizes will be adjusted automatically when these two variables are 0, and the performance would be
      * better */
     uint16_t tcpSendBufSize =

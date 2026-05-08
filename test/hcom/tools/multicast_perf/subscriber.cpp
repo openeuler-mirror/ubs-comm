@@ -14,6 +14,7 @@ using namespace ock::hcom;
 int g_userChar = 0;
 std::string g_oobIp = "";
 uint16_t g_oobPort = 9981;
+uint16_t g_driverProtocol = 0;
 
 std::string g_ipSeg = "192.168.100.0/24";
 int32_t g_dataSize = 64;
@@ -115,6 +116,9 @@ bool CreateSubscriberService()
     options.publisherWrkGroupNo = g_serverGroupNo;
     options.enableTls = g_enableTls;
     options.cipherSuite = g_cipherSuite;
+    if (g_driverProtocol == 1) {
+        options.protocol = UBSHcomNetDriverProtocol::TCP;
+    }
 
     g_subscriberService = ock::hcom::SubscriberService::Create("Subscriber", options);
     if (g_subscriberService == nullptr) {
@@ -216,6 +220,7 @@ int main(int argc, char *argv[])
     struct option options[] = {
         {"ip", required_argument, nullptr, 'i'},
         {"port", required_argument, nullptr, 'p'},
+        {"driver", required_argument, nullptr, 'd'},
         {"size", required_argument, nullptr, 's'},
         {"cpuId", required_argument, nullptr, 'c'},
         {"TLS enabled", required_argument, nullptr, 'T'},
@@ -226,6 +231,7 @@ int main(int argc, char *argv[])
     const char *usage = "usage\n"
         "        -i, --ip,                     coord server ip mask, e.g. 10.175.118.1;\n"
         "        -p, --port,                   coord server port, by default 9981; jetty id for UBC, e.g. 998\n"
+        "        -d, --driver,                 multicast driver protocol, 0 means RDMA, 1 means TCP\n"
         "        -s, --size,                   max data size\n"
         "        -c, --cpuId,                  cpu to bind\n"
         "        -g, --serverWkrGroupNo,       server worker group no, default is 0\n"
@@ -236,7 +242,7 @@ int main(int argc, char *argv[])
     int ret = 0;
     int index = 0;
 
-    std::string str = "i:p:s:c:g:T:C:";
+    std::string str = "i:p:d:s:c:g:T:C:";
     while ((ret = getopt_long(argc, argv, str.c_str(), options, &index)) != -1) {
         switch (ret) {
             case 'i':
@@ -245,6 +251,9 @@ int main(int argc, char *argv[])
                 break;
             case 'p':
                 g_oobPort = static_cast<uint16_t>(strtoul(optarg, nullptr, 0));
+                break;
+            case 'd':
+                g_driverProtocol = static_cast<uint16_t>(strtoul(optarg, nullptr, 0));
                 break;
             case 's':
                 g_dataSize = static_cast<int32_t>(strtoul(optarg, nullptr, 0));

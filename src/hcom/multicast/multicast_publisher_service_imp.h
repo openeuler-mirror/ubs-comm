@@ -20,7 +20,7 @@ public:
     SerResult CreatePublisher(NetRef<Publisher> &publisher) override;
     void DestroyPublisher(NetRef<Publisher> &publisher) override;
 
-    SerResult Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler) override;
+    SerResult Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler, const int cpuId) override;
     MulticastConfig &GetConfig() override;
     void RegisterSubscriptionExceptionHandler(const SubscriptionExceptionHandler &handler) override;
     void RegisterBrokenHandler(const MulticastEpBrokenHandler &handler);
@@ -42,7 +42,7 @@ public:
 private:
     SerResult InitDriver();
     SerResult CreateResource(uint32_t threadNum);
-    SerResult AddTcpOobListener(const std::string &url, uint16_t workerCount = UINT16_MAX);
+    SerResult AddTcpOobListener(const std::string &url, int cpuId, uint16_t workerCount = UINT16_MAX);
     SerResult StartDriver();
     SerResult EpBrokenCallback(const ock::hcom::UBSHcomNetEndpointPtr &ep);
     SerResult NewSubscriptionCallback(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,

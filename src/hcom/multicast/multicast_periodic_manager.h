@@ -23,7 +23,8 @@ class MultiCastPeriodicManager;
 using MultiCastPeriodicManagerPtr = NetRef<MultiCastPeriodicManager>;
 class MultiCastPeriodicManager {
 public:
-    MultiCastPeriodicManager(uint16_t threadCount, std::string name) : mThreadCount(threadCount), mName(std::move(name))
+    MultiCastPeriodicManager(uint16_t threadCount, std::string name, int cpuId)
+        : mThreadCount(threadCount), mName(std::move(name)), mCpuId(cpuId)
     {
         OBJ_GC_INCREASE(MultiCastPeriodicManager);
     }
@@ -109,6 +110,7 @@ private:
     bool mNeedStop = true;
 
     uint16_t mThreadCount = 1;
+    int mCpuId = -1;
 
     std::string mName;
 

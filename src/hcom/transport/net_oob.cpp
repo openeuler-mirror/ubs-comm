@@ -349,6 +349,17 @@ NResult OOBTCPServer::Start()
         NN_LOG_WARN("Invalid to set thread name of oob tcp server");
     }
 
+    // set cpu id
+    cpu_set_t cpuSet;
+    if (mCpuId != -1) {
+        CPU_ZERO(&cpuSet);
+        CPU_SET(mCpuId, &cpuSet);
+        if (pthread_setaffinity_np(mAcceptThread.native_handle(), sizeof(cpuSet), &cpuSet) != 0) {
+            NN_LOG_WARN("Unable to bind net oob server " << thrName << " to cpu " << mCpuId);
+        }
+        NN_LOG_INFO("Bind net oob server " << thrName << " to cpu " << mCpuId);
+    }
+
     while (!mThreadStarted.load()) {
         usleep(NN_NO128);
     }

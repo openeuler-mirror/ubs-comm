@@ -170,6 +170,7 @@ public:
     SResult PostRead(Sock *sock, SockTransHeader &header, const UBSHcomNetTransSglRequest &request);
     SResult PostWrite(Sock *sock, SockTransHeader &header, const UBSHcomNetTransRequest &request);
     SResult PostWrite(Sock *sock, SockTransHeader &header, const UBSHcomNetTransSglRequest &request);
+    SResult PostSendNoCpy(Sock *sock, SockTransHeader &header, const UBSHcomNetTransRequest &req);
 
 #define SET_EPOLL_EVENT(selfSock, events, evNewFd) \
     do {                                           \

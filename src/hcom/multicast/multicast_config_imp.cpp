@@ -12,7 +12,7 @@ constexpr uint16_t MAX_TIME_OUT_DETECT_THREAD_NUM = 4;
 
 bool MulticastConfigImp::Init(const std::string &name, const MulticastServiceOptions &opt)
 {
-    mOptions.protocol = UBSHcomNetDriverProtocol::RDMA;
+    mOptions.protocol = opt.protocol;
     mOptions.name = name;
     mOptions.maxSendRecvDataSize = opt.maxSendRecvDataSize;
     mOptions.maxSendRecvDataCount = opt.maxSendRecvDataCount;
@@ -34,6 +34,7 @@ bool MulticastConfigImp::Init(const std::string &name, const MulticastServiceOpt
     mOptions.qpBatchRePostSize = opt.qpBatchRePostSize;
     mOptions.enableTls = opt.enableTls;
     mOptions.cipherSuite = opt.cipherSuite;
+    mOptions.periodicCpuId = opt.periodicCpuId;
     return true;
 }
 
@@ -187,6 +188,9 @@ bool MulticastConfigImp::FillNetDriverOpt(ock::hcom::UBSHcomNetDriverOptions &dr
     driverOpt.prePostReceiveSizePerQP = mOptions.qpPrePostSize;
     driverOpt.maxConnectionNum = mOptions.maxConnCount;
     driverOpt.qpBatchRePostSize = mOptions.qpBatchRePostSize;
+
+    driverOpt.tcpSendZCopy = true;
+    driverOpt.tcpEpollLT = true;
     return true;
 }
 
@@ -258,6 +262,21 @@ void MulticastConfigImp::SetPublisherWkrGroupNo(uint8_t groupNo)
 const uint8_t MulticastConfigImp::GetPublisherWkrGroupNo() const
 {
     return mOptions.publisherGroupNo;
+}
+
+void MulticastConfigImp::SetPeriodicCpuId(int cpuId)
+{
+    mOptions.periodicCpuId = cpuId;
+}
+
+const int MulticastConfigImp::GetPeriodicCpuId() const
+{
+    return mOptions.periodicCpuId;
+}
+
+UBSHcomNetDriverProtocol MulticastConfigImp::GetProtocol() const
+{
+    return mOptions.protocol;
 }
 }
 }

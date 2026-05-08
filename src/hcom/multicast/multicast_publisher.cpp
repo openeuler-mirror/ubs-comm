@@ -82,7 +82,7 @@ HcomServiceCtxStore *CreateAndInitCtxStore(uint32_t capacity, uintptr_t memPoolR
 }
 
 SerResult Publisher::Initialize(uintptr_t memPool, uintptr_t pubMemPool, uintptr_t periodicMgr,
-    uint32_t ctxStoreCapacity)
+    uint32_t ctxStoreCapacity, UBSHcomNetDriverProtocol protocol)
 {
     std::lock_guard<std::mutex> locker(mMgrMutex);
     mState.Set(PublisherState::PUB_NEW);
@@ -95,7 +95,7 @@ SerResult Publisher::Initialize(uintptr_t memPool, uintptr_t pubMemPool, uintptr
     mTimerList = reinterpret_cast<uintptr_t>(header);
 
     // create timer ctx store
-    auto *ctxStore = CreateAndInitCtxStore(ctxStoreCapacity, memPool, UBSHcomNetDriverProtocol::RDMA);
+    auto *ctxStore = CreateAndInitCtxStore(ctxStoreCapacity, memPool, protocol);
     if (NN_UNLIKELY(ctxStore == nullptr)) {
         ForceUnInitialize();
         return SER_NEW_OBJECT_FAILED;
@@ -104,7 +104,7 @@ SerResult Publisher::Initialize(uintptr_t memPool, uintptr_t pubMemPool, uintptr
     mCtxMemPool = memPool;
 
     // create publisher subscriber rsp inf ctx store
-    auto *pubCtxStore = CreateAndInitCtxStore(ctxStoreCapacity, pubMemPool, UBSHcomNetDriverProtocol::RDMA);
+    auto *pubCtxStore = CreateAndInitCtxStore(ctxStoreCapacity, pubMemPool, protocol);
     if (NN_UNLIKELY(pubCtxStore == nullptr)) {
         ForceUnInitialize();
         return SER_NEW_OBJECT_FAILED;
@@ -375,6 +375,12 @@ bool Publisher::AddSubscription(SubscriptionInfoPtr &info)
 
     RWLockGuard(mRwLock).LockWrite();
     info->mEp->UpCtx(reinterpret_cast<uint64_t>(info.Get()));
+
+    UBSHcomEpOptions epOptions;
+    epOptions.tcpBlockingIo = true;
+    epOptions.cbByWorkerInBlocking = false;
+    info->mEp->SetEpOption(epOptions);
+
     mEpMap.emplace(info->mId, info->mEp);
     mSubscriptionMap.emplace(info->mId, info);
     mSubCount++;

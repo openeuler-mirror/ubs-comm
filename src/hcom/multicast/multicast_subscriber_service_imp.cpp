@@ -45,7 +45,7 @@ void SubscriberServiceImp::ServiceEndPointBroken(const UBSHcomNetEndpointPtr &ep
 
 SerResult SubscriberServiceImp::InitDriver()
 {
-    UBSHcomNetDriver *driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA,
+    UBSHcomNetDriver *driver = UBSHcomNetDriver::Instance(mCfg.GetProtocol(),
         mCfg.GetName(), mCfg.GetStartOobServer());
     if (driver == nullptr) {
         NN_LOG_ERROR("failed to create driver for service " << mCfg.GetName());
@@ -197,6 +197,11 @@ SerResult SubscriberServiceImp::CreateSubscriber(const std::string &serverUrl, N
         NN_LOG_ERROR("Connect to " << serverUrl << " failed, errno = " << result);
         return result;
     }
+
+    UBSHcomEpOptions epOptions;
+    epOptions.tcpBlockingIo = true;
+    epOptions.cbByWorkerInBlocking = false;
+    ep->SetEpOption(epOptions);
 
     auto *tmp = new (std::nothrow) Subscriber(ip, port, ep);
     if (NN_UNLIKELY(tmp == nullptr)) {

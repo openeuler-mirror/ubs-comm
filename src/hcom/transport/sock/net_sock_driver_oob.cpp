@@ -1340,9 +1340,16 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
             NN_LOG_ERROR("Failed to send ready signal to client, result " << result);
             break;
         }
-        if (ctx.sock->SetNonBlockingIo() != SS_OK) {
-            NN_LOG_WARN("Unable to set sock " << ctx.sock->Name() << " nonblocking io mode.");
+        childEp = ep.ToChild<NetAsyncEndpointSock>();
+        if (NN_UNLIKELY(childEp == nullptr)) {
+            NN_LOG_ERROR("ToChild failed");
             break;
+        }
+        if (!childEp->mIsBlocking) {
+            if (ctx.sock->SetNonBlockingIo() != SS_OK) {
+                NN_LOG_WARN("Unable to set sock " << ctx.sock->Name() << " nonblocking io mode.");
+                break;
+            }
         }
         /* set to established */
         ep->State().Set(NEP_ESTABLISHED);
