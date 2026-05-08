@@ -300,17 +300,22 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_GetUbTransMode)
 {
     ConfigSettings config;
     ub_trans_mode mode = config.GetUbTransMode();
-    EXPECT_EQ(mode, ub_trans_mode::RC_TP);
+    EXPECT_EQ(mode, ub_trans_mode::RM_TP);
 }
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_SetUbTransMode)
 {
     ConfigSettings config;
-    config.SetUbTransMode(ub_trans_mode::RM_TP);
+
+    setenv("UBSOCKET_UB_TRANS_MODE", "RM_TP", SETENV_OVERWRITE);
+    config.SetUbTransMode();
     EXPECT_EQ(config.GetUbTransMode(), ub_trans_mode::RM_TP);
 
-    config.SetUbTransMode(ub_trans_mode::RC_CTP);
+    setenv("UBSOCKET_UB_TRANS_MODE", "RC_CTP", SETENV_OVERWRITE);
+    config.SetUbTransMode();
     EXPECT_EQ(config.GetUbTransMode(), ub_trans_mode::RC_CTP);
+
+    unsetenv("UBSOCKET_UB_TRANS_MODE");
 }
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_GetTraceEnable)
@@ -769,21 +774,7 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_GetUbTransMode_Default)
 {
     ConfigSettings config;
     ub_trans_mode mode = config.GetUbTransMode();
-    EXPECT_EQ(mode, ub_trans_mode::RC_TP);
-}
-
-TEST_F(ConfigureSettingsTest, ConfigSettings_SetUbTransMode_Multiple)
-{
-    ConfigSettings config;
-
-    config.SetUbTransMode(ub_trans_mode::RM_TP);
-    EXPECT_EQ(config.GetUbTransMode(), ub_trans_mode::RM_TP);
-
-    config.SetUbTransMode(ub_trans_mode::RC_CTP);
-    EXPECT_EQ(config.GetUbTransMode(), ub_trans_mode::RC_CTP);
-
-    config.SetUbTransMode(ub_trans_mode::RC_TP);
-    EXPECT_EQ(config.GetUbTransMode(), ub_trans_mode::RC_TP);
+    EXPECT_EQ(mode, ub_trans_mode::RM_TP);
 }
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_GetTraceEnable_Default)

@@ -4,8 +4,8 @@
 #ifndef UBSOCKET_LEAKY_SINGLETON_H_
 #define UBSOCKET_LEAKY_SINGLETON_H_
 
-#include <mutex>
 #include <atomic>
+#include <mutex>
 
 namespace ubsocket {
 // 重要性与解决的问题：
@@ -28,7 +28,8 @@ namespace ubsocket {
 //
 // 虽然在内存检测工具(如 Valgrind)中会被标记为泄露，但对于生命周期与进程同步的单例来说，这种权衡
 // (Trade-off)是设计上故意为之，旨在换取极高的系统稳定性。
-template<typename T> class LeakySingleton {
+template <typename T>
+class LeakySingleton {
 public:
     LeakySingleton() = default;
 
@@ -47,9 +48,11 @@ private:
     static std::once_flag m_flag;
 };
 
-template<typename T> std::atomic<T *> LeakySingleton<T>::m_instance{nullptr};
+template <typename T>
+std::atomic<T *> LeakySingleton<T>::m_instance{nullptr};
 
-template<typename T> std::once_flag LeakySingleton<T>::m_flag;
-}  // namespace ubsocket
+template <typename T>
+std::once_flag LeakySingleton<T>::m_flag;
+} // namespace ubsocket
 
-#endif  // UBSOCKET_LEAKY_SINGLETON_H_
+#endif // UBSOCKET_LEAKY_SINGLETON_H_

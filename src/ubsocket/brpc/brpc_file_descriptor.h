@@ -22,7 +22,7 @@
 #include <string>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <array>
+#include <algorithm>
 #include "umq_pro_api.h"
 #include "umq_errno.h"
 #include "brpc_context.h"
@@ -561,10 +561,10 @@ public:
                 rsp.ret_code, GetPeerIp().c_str(), m_fd);
             return -1;
         }
-        ub_trans_mode local = context->GetUbTransMode();
-        if (rsp.peer_trans_mode != local) {
-            context->SetUbTransMode(rsp.peer_trans_mode < local ? rsp.peer_trans_mode : local);
-        }
+
+        // 协商 UB 传输模式
+        const ub_trans_mode defaultUbTransMode = context->GetUbTransMode();
+        SetUbTransMode(std::min(rsp.peer_trans_mode, defaultUbTransMode));
 
         bool useRoundRobin = true;
         if (schedulePolicy == dev_schedule_policy::CPU_AFFINITY || schedulePolicy ==
@@ -689,8 +689,8 @@ public:
         m_bind_remote = true;
 
         if (Context::GetContext()->EnableShareJfr()) {
-            // 强依赖当前实现，一个 eid 只对应一个主 umq. 如果后续逻辑有变更，需同步修改。
-            auto main_umq = EidUmqTable::GetFirst(m_conn_info.conn_eid);
+            // 强依赖当前实现，一个 eid 对应多个 UB 传输模式不同的 umq. 如果后续逻辑有变更，需同步修改。
+            auto main_umq = EidUmqTable::GetFirst(m_conn_info.conn_eid, GetUbTransMode());
             if (main_umq == nullptr) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "The main umq is removed by other thread.\n");
                 return ubsocket::Error::kUBSOCKET_NO_MAIN_UMQ;
@@ -3306,7 +3306,7 @@ private:
     uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
     {
         std::vector<std::shared_ptr<MainUmqState>> main_umqs;
-        if (!EidUmqTable::Get(*localEid, main_umqs)) {
+        if (!EidUmqTable::Get(*localEid, GetUbTransMode(), main_umqs)) {
             umq_create_option_t cfg_main;
             memcpy_s(&cfg_main, sizeof(cfg_main), cfg, sizeof(*cfg));
             cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
@@ -3321,7 +3321,7 @@ private:
             return UMQ_INVALID_HANDLE;
         }
 
-        // 当前实现 eid 实际只对应 1 个主 umq, 故同一 eid 拿到的主 umq 都是相同的.
+        // eid 对应多个不同 UB 传输模式的主 umq. 当前实现保证此时 main_umqs 长度为 1
         return main_umqs.front()->GetUmqHandle();
     }
 
@@ -3353,7 +3353,10 @@ private:
             return UMQ_INVALID_HANDLE;
         }
 
-        EidUmqTable::Add(*localEid, main_umq);
+        // 服务端可能设置的默认 UB 传输模式为 RM_TP, 但是它可以接收客户端为 RC_TP. 在这种情况下服务
+        // 端会与客户端协商创建 RC_TP (因为 RC_TP 优先级更高) 的 UB 连接. 因此一个 eid 可能会对应多
+        // 个主 umq，这些主 umq 的 UB 传输模式不同
+        EidUmqTable::Add(*localEid, GetUbTransMode(), main_umq);
         MainSubUmqTable::Add(main_umq, sub_umq);
 
         m_main_umqh = main_umq;
@@ -3468,14 +3471,8 @@ private:
             }
         }
 
-        ub_trans_mode trans_mode = context->GetUbTransMode();
-        static const char *trans_mode_str[RC_CTP + 1] = {
- 	        "RC_TP",
- 	        "RM_TP",
- 	        "RM_CTP",
- 	        "RC_CTP"
- 	    };
-        RPC_ADPT_VLOG_INFO("trans_mode result is: %s\n", trans_mode_str[trans_mode]);
+        const ub_trans_mode trans_mode = GetUbTransMode();
+        RPC_ADPT_VLOG_INFO("trans_mode result is: %s\n", Stringify(trans_mode));
         if (trans_mode == RC_TP) {
             queue_cfg.tp_mode = UMQ_TM_RC;
             queue_cfg.tp_type = UMQ_TP_TYPE_RTP;
@@ -3667,8 +3664,8 @@ private:
         return 0;
     }
 
-    int AcceptNegotiate(int new_fd, umq_eid_t &connEid, umq_eid_t &dstEid, dev_schedule_policy &peerSchedulePolicy,
-        umq_route_t &connRoute, umq_route_t &backRoute)
+    int AcceptNegotiate(int new_fd, SocketFd *sfd, umq_eid_t &connEid, umq_eid_t &dstEid,
+                        dev_schedule_policy &peerSchedulePolicy, umq_route_t &connRoute, umq_route_t &backRoute)
     {
         Context *context = Context::GetContext();
         dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
@@ -3685,11 +3682,12 @@ private:
                 new_fd);
             return -1;
         }
-        ub_trans_mode local_trans_mode = context->GetUbTransMode();
-        rsp.peer_trans_mode = local_trans_mode;
-        if (req.trans_mode != local_trans_mode) {
-            context->SetUbTransMode(req.trans_mode < local_trans_mode ? req.trans_mode : local_trans_mode);
-        }
+
+        // UB 传输模式优先级协商，值越小优先级越高。例如当服务端为 RM_TP 而客户端是 RC_TP 会协商至 RC_TP.
+        const ub_trans_mode defaultUbTransMode = context->GetUbTransMode();
+        rsp.peer_trans_mode = defaultUbTransMode;
+        sfd->SetUbTransMode(std::min(req.trans_mode, defaultUbTransMode));
+
         rsp.ret_code = (context->IsBonding() == (req.is_bonding != 0)) ? 0 : -1;
         connEid = context->GetDevSrcEid();
         rsp.local_eid = connEid;
@@ -3843,8 +3841,8 @@ private:
         socket_fd_obj->SetBindRemote(true);
 
         if (Context::GetContext()->EnableShareJfr()) {
-            // 强依赖当前实现，一个 eid 只对应一个主 umq. 如果后续逻辑有变更，需同步修改。
-            auto main_umq = EidUmqTable::GetFirst(socket_fd_obj->m_conn_info.conn_eid);
+            // 强依赖当前实现，一个 eid 对应多 UB 传输模式不同的 umq. 如果后续逻辑有变更，需同步修改。
+            auto main_umq = EidUmqTable::GetFirst(socket_fd_obj->m_conn_info.conn_eid, socket_fd_obj->GetUbTransMode());
             if (main_umq == nullptr) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "The main umq state is removed by other thread.\n");
                 return ubsocket::Error::kUBSOCKET_NO_MAIN_UMQ;
@@ -3901,7 +3899,7 @@ private:
         umq_route_t connRoute;
         umq_route_t backRoute;
         umq_topo_type_t acceptTopoType = UMQ_TOPO_TYPE_FULLMESH_1D;
-        if (AcceptNegotiate(new_fd, connEid, dstEid, peerSchedulePolicy, connRoute, backRoute) != 0) {
+        if (AcceptNegotiate(new_fd, socket_fd_obj, connEid, dstEid, peerSchedulePolicy, connRoute, backRoute) != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                 "Failed to negotiate in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                 EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
@@ -4840,6 +4838,16 @@ private:
         return 0;
     }
 
+    void SetUbTransMode(ub_trans_mode m)
+    {
+        m_ubTransMode = m;
+    }
+
+    ub_trans_mode GetUbTransMode() const
+    {
+        return m_ubTransMode;
+    }
+
     // CLOS组网 通过亲和性选择 Client端调用
     int GetCpuAffinityUmqRoute(umq_route_list_t &route_list,
         std::vector<umq_route_t>& mainRoutes, std::vector<umq_route_t>& backRoutes)
@@ -5011,6 +5019,7 @@ private:
     std::vector<uint32_t> mPeerAllSocketIds;
     std::vector<umq_route_t> mBackRoutes;
     bool m_isblocking = true;
+    ub_trans_mode m_ubTransMode = ub_trans_mode::RM_TP; // UB 传输模式
     umq_topo_type_t mTopoType = UMQ_TOPO_TYPE_FULLMESH_1D;
     umq_eid_t m_route_backup_src_eid; // 备
     ::EpollFd *m_added_epoll_fd{nullptr};

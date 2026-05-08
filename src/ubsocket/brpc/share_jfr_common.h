@@ -19,11 +19,11 @@
 #include <memory>
 #include <type_traits>
 
+#include "configure_settings.h"
 #include "error.h"
-#include "umq_types.h"
-#include "umq_types.h"
-#include "ub_lock_ops.h"
 #include "leaky_singleton.h"
+#include "ub_lock_ops.h"
+#include "umq_types.h"
 
 inline bool operator==(const umq_eid_t &a, const umq_eid_t &b)
 {
@@ -47,19 +47,33 @@ struct UmqEidHash {
 
 class MainUmqState : public std::enable_shared_from_this<MainUmqState> {
 public:
-    MainUmqState(uint64_t umqh) : m_umqh(umqh), m_mutex(g_external_lock_ops.create(LT_EXCLUSIVE))
+    MainUmqState(ub_trans_mode mode, uint64_t umqh)
+        : m_ubTransMode(mode),
+          m_umqh(umqh),
+          m_mutex(g_external_lock_ops.create(LT_EXCLUSIVE))
     {
     }
 
     MainUmqState(const MainUmqState &rhs) = default;
     MainUmqState &operator=(const MainUmqState &rhs) = default;
 
+    ~MainUmqState()
+    {
+        g_external_lock_ops.destroy(m_mutex);
+    }
+
+    ub_trans_mode GetUbTransMode() const
+    {
+        return m_ubTransMode;
+    }
+
     uint64_t GetUmqHandle() const
     {
         return m_umqh;
     }
 
-    template<typename F> ubsocket::Error EnsurePrefilled(const F &f)
+    template <typename F>
+    ubsocket::Error EnsurePrefilled(const F &f)
     {
         if (!__atomic_load_n(&m_prefilled, __ATOMIC_ACQUIRE)) {
             ScopedUbExclusiveLocker lock(m_mutex);
@@ -76,6 +90,7 @@ public:
     }
 
 private:
+    ub_trans_mode m_ubTransMode;
     uint64_t m_umqh;
     u_external_mutex_t *m_mutex = nullptr;
     bool m_prefilled = false;
@@ -83,23 +98,23 @@ private:
 
 inline bool operator==(const MainUmqState &lhs, const MainUmqState &rhs)
 {
-    return lhs.GetUmqHandle() == rhs.GetUmqHandle();
+    return lhs.GetUbTransMode() == rhs.GetUbTransMode() && lhs.GetUmqHandle() == rhs.GetUmqHandle();
 }
 
 class EidUmqTable : public ubsocket::LeakySingleton<EidUmqTable> {
     friend ubsocket::LeakySingleton<EidUmqTable>;
 
 public:
-    static void Add(const umq_eid_t &eid, uint64_t main_umq)
+    static void Add(const umq_eid_t &eid, ub_trans_mode mode, uint64_t main_umq)
     {
         EidUmqTable &inst = Instance();
         ScopedUbExclusiveLocker sLock(inst.mutex);
         auto &vec = inst.table[eid];
-        auto it = std::find_if(vec.begin(), vec.end(), [main_umq](const std::shared_ptr<MainUmqState> &state) {
-            return state->GetUmqHandle() == main_umq;
+        auto it = std::find_if(vec.begin(), vec.end(), [mode, main_umq](const std::shared_ptr<MainUmqState> &state) {
+            return state->GetUbTransMode() == mode && state->GetUmqHandle() == main_umq;
         });
         if (it == vec.end()) {
-            vec.emplace_back(std::make_shared<MainUmqState>(main_umq));
+            vec.emplace_back(std::make_shared<MainUmqState>(mode, main_umq));
         }
     }
 
@@ -115,14 +130,45 @@ public:
         return false;
     }
 
-    static std::shared_ptr<MainUmqState> GetFirst(const umq_eid_t &eid)
+    static bool Get(const umq_eid_t &eid, ub_trans_mode mode, std::vector<std::shared_ptr<MainUmqState>> &out)
+    {
+        EidUmqTable &inst = Instance();
+        ScopedUbExclusiveLocker sLock(inst.mutex);
+        auto it = inst.table.find(eid);
+        if (it == inst.table.end()) {
+            return false;
+        }
+
+        std::vector<std::shared_ptr<MainUmqState>> vec;
+        for (const auto &state : it->second) {
+            if (state->GetUbTransMode() == mode) {
+                vec.push_back(state);
+            }
+        }
+
+        if (vec.empty()) {
+            return false;
+        }
+
+        out = std::move(vec);
+        return true;
+    }
+
+    static std::shared_ptr<MainUmqState> GetFirst(const umq_eid_t &eid, ub_trans_mode mode)
     {
         auto &inst = Instance();
         ScopedUbExclusiveLocker lock(inst.mutex);
         auto it = inst.table.find(eid);
-        if (it != inst.table.end()) {
-            return it->second[0];
+        if (it == inst.table.end()) {
+            return {};
         }
+
+        for (const auto &state : it->second) {
+            if (state->GetUbTransMode() == mode) {
+                return state;
+            }
+        }
+
         return {};
     }
 
@@ -158,9 +204,6 @@ public:
         EidUmqTable &inst = Instance();
         return inst.main_mutex;
     }
-
-    EidUmqTable(const EidUmqTable &) = delete;
-    EidUmqTable &operator=(const EidUmqTable &) = delete;
 
 private:
     EidUmqTable()
