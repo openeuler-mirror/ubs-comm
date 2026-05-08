@@ -1,10 +1,14 @@
+add_compile_options(
+  # Ignore access control in class(like private or protected)
+  -fno-access-control
+
+  # shutup, mockcpp.
+  -w
+)
+
 add_executable(ubsocket_test "")
 add_test(NAME ubsocket_test COMMAND ubsocket_test)
 set_target_properties(ubsocket_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-
-# shutup, mockcpp.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
 
 # gtest requires c++17
 target_compile_features(ubsocket_test
@@ -17,9 +21,6 @@ target_compile_definitions(ubsocket_test
   PRIVATE
     UBSOCKET_UNIT_TEST
 )
-
-# Ignore access control in class(like private or protected)
-add_compile_options(-fno-access-control)
 
 target_link_libraries(ubsocket_test
   PRIVATE

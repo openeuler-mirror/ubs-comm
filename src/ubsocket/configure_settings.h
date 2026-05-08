@@ -100,6 +100,24 @@ enum ub_trans_mode {
     RC_CTP
 };
 
+inline const char *Stringify(ub_trans_mode m)
+{
+    switch (m) {
+        case ub_trans_mode::RC_TP:
+            return "RC_TP";
+
+        case ub_trans_mode::RM_TP:
+            return "RM_TP";
+
+        case ub_trans_mode::RM_CTP:
+            return "RM_CTP";
+
+        case ub_trans_mode::RC_CTP:
+            return "RC_CTP";
+    }
+    return "UNKNOWN-UB-TRANS-MODE";
+}
+
 template <typename T>
 class EnvStrConverter {
 public:
@@ -305,18 +323,6 @@ public:
     bool IsUbEpollEnable()
     {
         return m_ub_epoll_enable;
-    }
-
-    void SetUbTransMode(ub_trans_mode trans_mode)
-    {
-        static const char *trans_mode_str[RC_CTP + 1] = {
-            "RC_TP",
-            "RM_TP",
-            "RM_CTP",
-            "RC_CTP"
-        };
-        m_ub_trans_mode = trans_mode;
-        RPC_ADPT_VLOG_INFO("urma transport mode: %s\n", trans_mode_str[m_ub_trans_mode]);
     }
 
 protected:
@@ -549,10 +555,10 @@ protected:
             m_ub_epoll_enable = BoolVal::BoolConverter(env_ptr);
         }
 
-        GetEnvUbTransMode();
+        SetUbTransMode();
     }
 
-    void GetEnvUbTransMode()
+    void SetUbTransMode()
     {
         char *env_ptr;
         if ((env_ptr = getenv(ENV_UB_TRANS_MODE)) != NULL) {
@@ -569,6 +575,7 @@ protected:
                 (void)strcpy_s(m_ub_trans_mode_str, sizeof(m_ub_trans_mode_str), "RC_TP");
                 m_ub_trans_mode = ub_trans_mode::RC_TP;
             }
+            RPC_ADPT_VLOG_INFO("urma transport mode: %s\n", Stringify(m_ub_trans_mode));
         }
     }
 
@@ -623,7 +630,7 @@ protected:
     bool m_use_brpc_zcopy = true;
     bool m_ub_epoll_enable = false;
     dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
-    ub_trans_mode m_ub_trans_mode = ub_trans_mode::RC_TP;
+    ub_trans_mode m_ub_trans_mode = ub_trans_mode::RM_TP;
 };
 
 #endif
