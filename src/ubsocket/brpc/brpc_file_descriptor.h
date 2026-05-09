@@ -5227,7 +5227,10 @@ public:
             if (buf[i]->status != 0) {
                 if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                     socket_fd_obj->HandleErrorRxCqe(buf[i]);
+                } else {
+                    socket_fd_obj->WakeUpTx();
                 }
+                QBUF_LIST_NEXT(buf[i]) = nullptr;
                 umq_buf_free(buf[i]);
             }
         }
