@@ -575,7 +575,7 @@ public:
         }
 
         if (context->IsBonding() == 1) {
-            // 接收服务器的id
+            // 客户端接收服务器的套接字值，使得后续亲和可以做遍历
             int receiveServerSocketId = 0;
             if (RecvSocketData(m_fd, &receiveServerSocketId, sizeof(receiveServerSocketId),
                 CONTROL_PLANE_TIMEOUT_MS) != sizeof(receiveServerSocketId)) {
@@ -584,7 +584,7 @@ public:
                 return -1;
             }
             mServerSocketIdForAffinity = receiveServerSocketId;
-
+            // 客户端接收服务器的套接字数组，使得后续亲和可以做遍历
             if (ConnectExchangeSocketIDs() != 0) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                     "Failed to send all socket ids in DoConnect");
@@ -767,7 +767,7 @@ public:
                 GetPeerIp().c_str(), m_fd);
             return -1;
         }
-        // 发umq_topo_type_t过去
+        // 客户端doroute后，明确当前topo类型，将其发给服务端
         if (SendSocketData(
             m_fd, &mTopoType, sizeof(umq_topo_type_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_topo_type_t)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "send umq topo type failed\n");
@@ -795,6 +795,8 @@ public:
             .port = nullptr,
             .num = 0
         };
+        // ub降级后检查other链路时，是否检查成功的ret值
+        int checkOtherRet = 0;
         while (!ok) {
             switch (state) {
                 case UBHandshakeState::kOK:
@@ -872,11 +874,12 @@ public:
                     UnbindAndFlushRemoteUmq();
                     DestroyLocalUmq();
 
-                    if (
-                        (CheckOtherRoute(otherConnRoute, peerBondingEid, connRoute) != 0
-                        && mTopoType == UMQ_TOPO_TYPE_FULLMESH_1D)
-                        || (CLOSCheckOtherRoute(otherConnRoute, peerBondingEid, otherBackConnRoute) != 0
-                        && mTopoType == UMQ_TOPO_TYPE_CLOS)) {
+                    if (mTopoType == UMQ_TOPO_TYPE_CLOS) {
+                        checkOtherRet = CLOSCheckOtherRoute(otherConnRoute, peerBondingEid, otherBackConnRoute);
+                    } else {
+                        checkOtherRet = CheckOtherRoute(otherConnRoute, peerBondingEid, connRoute);
+                    }
+                    if (checkOtherRet != 0) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                             "Failed to get other route in retry,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                             EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), m_fd);
@@ -906,17 +909,6 @@ public:
                         .port = mUsedPortVector.data(),
                         .num = static_cast<uint8_t>(mUsedPortVector.size())
                     };
-                    RPC_ADPT_VLOG_INFO(
-                        "DoConnect down to back, main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                        otherConnRoute.src_port.bs.chip_id,
-                        otherConnRoute.src_port.bs.die_id,
-                        otherConnRoute.src_port.bs.port_idx);
-
-                    RPC_ADPT_VLOG_INFO(
-                        "DoConnect down to back, back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                        otherBackConnRoute.src_port.bs.chip_id,
-                        otherBackConnRoute.src_port.bs.die_id,
-                        otherBackConnRoute.src_port.bs.port_idx);
                     ackRet = DoUbConnect(connEid, mUsedPorts);
                     if (!IsOk(ackRet)) {
                         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
@@ -3668,9 +3660,6 @@ private:
                         dev_schedule_policy &peerSchedulePolicy, umq_route_t &connRoute, umq_route_t &backRoute)
     {
         Context *context = Context::GetContext();
-        dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
-        bool has_socket_id = ((schedulePolicy == dev_schedule_policy::CPU_AFFINITY) ||
-            (schedulePolicy == dev_schedule_policy::CPU_AFFINITY_PRIORITY)) ? 1 : 0;
         NegotiateReq req {};
         NegotiateRsp rsp {};
         char *req_buf = reinterpret_cast<char *>(&req) + sizeof(req.magic_number);
@@ -3691,16 +3680,6 @@ private:
         rsp.ret_code = (context->IsBonding() == (req.is_bonding != 0)) ? 0 : -1;
         connEid = context->GetDevSrcEid();
         rsp.local_eid = connEid;
-        if (rsp.ret_code == 0 && req.is_bonding != 0 && has_socket_id == 1 && req.has_socket_id == 1) {
-            if (req.socket_id_count == 0 || req.socket_id_count > NEGOTIATE_SOCKET_ID_MAX_NUM) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                    "Invalid peer socket count %u in accept, fd: %d\n",
-                    req.socket_id_count, new_fd);
-                rsp.ret_code = -1;
-            } else {
-                // 这里逻辑用不上了我删了
-            }
-        }
         if (rsp.ret_code == 0 && req.is_bonding != 0) {
             dstEid = req.local_eid;
             peerSchedulePolicy = static_cast<dev_schedule_policy>(req.schedule_policy);
@@ -3719,7 +3698,7 @@ private:
             return -1;
         }
         if (req.is_bonding == 1) {
-            // 把服务器的id给客户端，在客户端做遍历
+            // 把服务器的套接字值给客户端，在客户端做遍历
             int sendServerSocketId = context->GetProcessSocketId();
             if (SendSocketData(new_fd, &sendServerSocketId, sizeof(sendServerSocketId),
                 CONTROL_PLANE_TIMEOUT_MS) != sizeof(sendServerSocketId)) {
@@ -3727,7 +3706,7 @@ private:
                     "Failed to send server socket ids to connect");
                 return -1;
             }
-
+            // 把服务器的套接字数组给客户端，在客户端做遍历
             if (AcceptExchangeSocketIDs(new_fd) != 0) {
                 RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                     "Failed to get all socket ids in DoAccept");
@@ -3905,7 +3884,7 @@ private:
                 EID_ARGS(socket_fd_obj->GetPeerEid()), socket_fd_obj->GetPeerIp().c_str(), new_fd);
             return ubsocket::Error::kUBSOCKET_TCP_EXCHANGE;
         }
-        // 收type过去
+        // 服务端收到当前topo类型
         if (RecvSocketData(
             new_fd, &acceptTopoType, sizeof(umq_topo_type_t), CONTROL_PLANE_TIMEOUT_MS) != sizeof(umq_topo_type_t)) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "receive umq topo type failed\n");
@@ -3913,7 +3892,7 @@ private:
         RPC_ADPT_VLOG_INFO("receive umq topo type successfully: %d\n", acceptTopoType);
 
         socket_fd_obj->m_peer_info.peer_eid = dstEid;
-        if (acceptTopoType  == UMQ_TOPO_TYPE_FULLMESH_1D) {
+        if (acceptTopoType == UMQ_TOPO_TYPE_FULLMESH_1D) {
             socket_fd_obj->m_conn_info.conn_eid = connEid;
         } else {
             socket_fd_obj->m_conn_info.conn_eid = localEid;
@@ -4048,17 +4027,6 @@ private:
                         .port = mUsedPortVector.data(),
                         .num = static_cast<uint8_t>(mUsedPortVector.size())
                     };
-                    RPC_ADPT_VLOG_INFO(
-                        "DoAccept down to back, main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                        otherRouteMessage.other_route.src_port.bs.chip_id,
-                        otherRouteMessage.other_route.src_port.bs.die_id,
-                        otherRouteMessage.other_route.src_port.bs.port_idx);
-
-                    RPC_ADPT_VLOG_INFO(
-                        "DoAccept down to back, back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                        otherRouteMessage.other_back_route.src_port.bs.chip_id,
-                        otherRouteMessage.other_back_route.src_port.bs.die_id,
-                        otherRouteMessage.other_back_route.src_port.bs.port_idx);
                     ackRet = ackRet | DoUbAccept(new_fd, connEid, socket_fd_obj, mUsedPorts, acceptTopoType);
                     if (Degradable(ackRet) && !Context::GetContext()->Degradable()) {
                         ackRet = ackRet - ubsocket::Error::kDEGRADABLE;
@@ -4855,41 +4823,36 @@ private:
         mainRoutes.clear();
         backRoutes.clear();
 
+        // 本端的套接字，对端的套接字是mServerSocketIdForAffinity
         Context *context = Context::GetContext();
         int processSocketId = context->GetProcessSocketId();
-
+        // 本端与对端的套接字数组
         std::vector<uint32_t> socketIds = context->GetAllSocketId();
         std::vector<uint32_t> peerSocketIds = mPeerAllSocketIds;
 
+        // 本端与对端的芯片
         uint32_t processChipId = 0;
         uint32_t peerChipId = 0;
-
-        // 本端
+        // 本端与对端的芯片数组的填充，缩减为一个循环，减少开销
         std::set<uint32_t> processChipIds;
-        for (uint32_t i = 0; i < route_list.route_num; ++i) {
-            processChipIds.insert(route_list.routes[i].src_port.bs.chip_id);
-        }
-        std::vector<uint32_t> processChipIdList(processChipIds.begin(), processChipIds.end());
-        processChipId = GetTargetChipId(socketIds, processChipIdList, processSocketId);
-        RPC_ADPT_VLOG_INFO("processChipId: %u\n", processChipId);
-
-        // 对端
         std::set<uint32_t> peerChipIds;
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
+            processChipIds.insert(route_list.routes[i].src_port.bs.chip_id);
             peerChipIds.insert(route_list.routes[i].dst_port.bs.chip_id);
         }
+        // 芯片数组格式化
+        std::vector<uint32_t> processChipIdList(processChipIds.begin(), processChipIds.end());
         std::vector<uint32_t> peerChipIdList(peerChipIds.begin(), peerChipIds.end());
+        // 套接字在套接字数组的位置，也就是芯片在芯片数组的位置，从而算出本端与对端用何芯片
+        processChipId = GetTargetChipId(socketIds, processChipIdList, processSocketId);
         peerChipId = GetTargetChipId(peerSocketIds, peerChipIdList, mServerSocketIdForAffinity);
-        RPC_ADPT_VLOG_INFO("peerChipId: %u\n", peerChipId);
 
+        // 使用芯片判断亲和与不亲和
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
             if (route_list.routes[i].src_port.bs.chip_id == processChipId
                 && route_list.routes[i].dst_port.bs.chip_id == peerChipId) {
                 mainRoutes.push_back(route_list.routes[i]);
             }
-        }
-
-        for (uint32_t i = 0; i < route_list.route_num; ++i) {
             if (route_list.routes[i].src_port.bs.chip_id != processChipId
                 && route_list.routes[i].dst_port.bs.chip_id != peerChipId) {
                 backRoutes.push_back(route_list.routes[i]);
