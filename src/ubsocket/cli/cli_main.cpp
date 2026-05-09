@@ -79,10 +79,13 @@ int main(int argc, char *argv[])
             player.DisplayUmqPerfInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
     } else if (args.command == Statistics::CLICommand::PROBE) {
-        if (client.Query(args, response) != 0) {
-            return 0;
-        }
+        client.Query(args, response);
         player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+        while (args.watch) {
+            sleep(1);
+            client.Query(args, response);
+            player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+        }
     }  else {
         CLI_LOG("Invalid command\n");
     }

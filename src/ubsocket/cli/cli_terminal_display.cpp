@@ -154,8 +154,8 @@ void PrintProbeHeader()
 {
     printf("\n");
     printf("%-8s | %-10s | %-10s | %-10s | %-12s | %-12s | %-12s\n",
-           "FD", "UBS RTT(us)", "CliΔ(us)", "SrvΔ(us)",
-           "UMQ RTT(us)", "UMQ CliΔ(us)", "UMQ SrvΔ(us)");
+           "FD", "UBS RTT(ns)", "CliΔ(ns)", "SrvΔ(ns)",
+           "UMQ RTT(ns)", "UMQ CliΔ(ns)", "UMQ SrvΔ(ns)");
     printf("---------------------------------------------------------------------------------------------------"
            "-------------------------------\n");
 }
@@ -163,33 +163,33 @@ void PrintProbeHeader()
 // --- 辅助函数：打印单行概览数据 ---
 void PrintProbeRow(const CLIProbeData* probeData)
 {
-    // 1. 基础转换 (ns -> us)
-    double clientDeltaUs = (double)(probeData->client_recv_rsp_time_ns -
-                                      probeData->client_send_time_ns) / 1000.0;
-    double serverDeltaUs = (double)(probeData->server_rsp_time_ns -
-                                      probeData->server_recv_time_ns) / 1000.0;
-    double ubsRtt = clientDeltaUs - serverDeltaUs;
+    // 1. 基础转换
+    double clientDelta = (double)(probeData->client_recv_rsp_time_ns -
+                                      probeData->client_send_time_ns);
+    double serverDelta = (double)(probeData->server_rsp_time_ns -
+                                      probeData->server_recv_time_ns);
+    double ubsRtt = clientDelta - serverDelta;
 
-    // 2. UMQ 差值计算 (ns -> us)
-    double umqClientDeltaUs = (double)(probeData->umq_client_recv_time_ns -
-                                            probeData->umq_client_post_time_ns) / 1000.0;
-    double umqServerDeltaUs = (double)(probeData->umq_server_rsp_time_ns -
-                                            probeData->umq_server_recv_time_ns) / 1000.0;
+    // 2. UMQ 差值计算
+    double umqClientDelta = (double)(probeData->umq_client_recv_time_ns -
+                                            probeData->umq_client_post_time_ns);
+    double umqServerDelta = (double)(probeData->umq_server_rsp_time_ns -
+                                            probeData->umq_server_recv_time_ns);
 
     // 3. UMQ RTT 计算 (Client Δ - Server Δ)
-    double umqRtt = umqClientDeltaUs - umqServerDeltaUs;
+    double umqRtt = umqClientDelta - umqServerDelta;
 
     // 4. 打印
     printf("%-8d | %-10.3f | %-10.3f | %-10.3f | %-12.3f | %-12.3f | %-12.3f\n",
-           probeData->fd, ubsRtt, clientDeltaUs, serverDeltaUs,
-           ubsRtt, umqClientDeltaUs, umqServerDeltaUs);
+           probeData->fd, ubsRtt, clientDelta, serverDelta,
+           umqRtt, umqClientDelta, umqServerDelta);
 }
 
 // --- 辅助函数：打印详细打点信息 ---
 void PrintProbeDetails(const CLIProbeData* probeData)
 {
     // Client 端
-    printf("  +-- [Client] ubsocket_send(ns): %-10lu | ubsocket_recv(ns): %-10lu\n",
+    printf("  +-- [Client] ubsocket_client_send(ns): %-10lu | ubsocket_client_recv(ns): %-10lu\n",
            probeData->client_send_time_ns, probeData->client_recv_rsp_time_ns);
 
     // UMQ Client
@@ -197,7 +197,7 @@ void PrintProbeDetails(const CLIProbeData* probeData)
            probeData->umq_client_post_time_ns, probeData->umq_client_recv_time_ns);
 
     // Server 端
-    printf("  +-- [Server] server_recv(ns): %-10lu | server_rsp(ns): %-10lu\n",
+    printf("  +-- [Server] ubsocket_server_recv(ns): %-10lu | ubsocket_server_rsp(ns): %-10lu\n",
            probeData->server_recv_time_ns, probeData->server_rsp_time_ns);
 
     // UMQ Server
