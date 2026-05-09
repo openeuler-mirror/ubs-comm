@@ -497,7 +497,11 @@ protected:
         }
 
         if ((env_ptr = getenv(ENV_PROBE_ENABLE)) != NULL) {
-            m_probe_enable = BoolVal::BoolConverter(env_ptr);
+            try {
+                m_probe_enable = BoolVal::BoolConverter(env_ptr);
+            } catch (const std::exception& e) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_ENABLE, using default.\n");
+            }
         }
 
         if ((env_ptr = getenv(ENV_PROBE_TIME_MS)) != NULL) {
@@ -510,7 +514,9 @@ protected:
             }
             if (ubsocket_probe_time_ms >= UBSOCKET_PROBE_TIME_MIN
                 && ubsocket_probe_time_ms <= UBSOCKET_PROBE_TIME_MAX) {
-                            m_probe_time_ms = ubsocket_probe_time_ms;
+                m_probe_time_ms = ubsocket_probe_time_ms;
+            } else {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_TIME_MS, using default.\n");
             }
         }
 
@@ -525,6 +531,8 @@ protected:
             if (ubsocket_probe_batch >= UBSOCKET_PROBE_BATCH_MIN
                 && ubsocket_probe_batch <= UBSOCKET_PROBE_BATCH_MAX) {
                 m_probe_batch = ubsocket_probe_batch;
+            } else {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_BATCH, using default.\n");
             }
         }
 

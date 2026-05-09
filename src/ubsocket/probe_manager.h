@@ -151,7 +151,7 @@ public:
                 mWorkerThread.join();
             } catch (...) {
                 // 防止 join 抛出异常导致后续资源无法释放
-                RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Exception caught during thread join\n");
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Exception caught during thread join\n");
             }
         }
 
@@ -172,7 +172,7 @@ public:
         // 调用 umq 官方接口注册回调
         int ret = umq_io_perf_callback_register(&ProbeManager::UmqPerfCallback);
         if (ret != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to register umq perf callback, ret: %d\n", ret);
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to register umq perf callback, ret: %d\n", ret);
         } else {
             RPC_ADPT_VLOG_INFO("UMQ perf callback registered successfully\n");
         }
@@ -251,7 +251,7 @@ public:
 
         umq_buf_t *buf = umq_buf_alloc(payloadSize, 1, UMQ_INVALID_HANDLE, nullptr);
         if (buf == nullptr) {
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to allocate probe buffer\n");
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to allocate probe buffer\n");
             return -1;
         }
 
@@ -429,7 +429,7 @@ private:
         CPU_ZERO(&cpuset);
         CPU_SET(coreId, &cpuset);
         int rc = pthread_setaffinity_np(th.native_handle(), sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Bind core failed: %d \n", rc);
+        if (rc != 0) RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Bind core failed: %d \n", rc);
     }
 
     // 处理 Server 回包逻辑
@@ -537,7 +537,7 @@ private:
     uint32_t mProbeBatch;
     std::atomic<uint32_t> mCurrentCursor;
 
-    int mCoreId;
+    int mCoreId = -1;
     std::unordered_map<uint32_t, ProbeRecord> mRecords;
     std::mutex mMutex;
 

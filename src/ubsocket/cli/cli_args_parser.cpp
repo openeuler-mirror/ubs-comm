@@ -120,6 +120,7 @@ void CLIArgsParser::PrintUsage(const char* progName)
     printf("  umqinfo   Query UMQ configuration information in the specified process\n");
     printf("  io        Query IO packet statistics in the specified process\n");
     printf("  umq       Query UMQ performance statistics in the specified process\n");
+    printf("  probe     Query probe info in the specified process\n");
     printf("\n");
     printf("Global Options (applicable to all commands):\n");
     printf("  -p, --pid <pid>        Required, specify the process ID to query (Range: 0~%d)\n", INT32_MAX);
@@ -156,6 +157,9 @@ void CLIArgsParser::PrintUsage(const char* progName)
     printf("  [umq command only]:\n");
     printf("    -w, --watch          Optional, enable real-time monitoring (refresh umq performance info every second)\n");
     printf("\n");
+    printf("  [probe command only]:\n");
+    printf("    -w, --watch          Optional, enable real-time monitoring (refresh probe info every second)\n");
+    printf("\n");
     printf("Examples:\n");
     printf("  1. Query socket info of process 1234:\n");
     printf("     %s stat -p 1234\n", progName);
@@ -187,6 +191,10 @@ void CLIArgsParser::PrintUsage(const char* progName)
     printf("     %s umq -p 1234\n", progName);
     printf(" 15. Real-time monitor UMQ performance statistics of process 1234:\n");
     printf("     %s umq -p 1234 -w\n", progName);
+    printf(" 16. Query probe time info of process 1234:\n");
+    printf("     %s probe -p 1234\n", progName);
+    printf(" 17. Real-time monitor probe time info of process 1234:\n");
+    printf("     %s probe -p 1234 -w\n", progName);
     printf("=============================================\n");
 }
 

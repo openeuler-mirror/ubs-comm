@@ -806,12 +806,12 @@ class Listener {
 
         if (SocketFd::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
             sizeof(CLIControlHeader)) {
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send CLIControlHeader\n");
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send CLIControlHeader\n");
             return;
         }
 
         if (SocketFd::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "Failed to send payload data\n");
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send payload data\n");
             return;
         }
     }
