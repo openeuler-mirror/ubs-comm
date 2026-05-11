@@ -11,4 +11,32 @@
 #ifndef UBS_COMM_UBSOCKET_REF_H
 #define UBS_COMM_UBSOCKET_REF_H
 
+#include <cstdint>
+
+namespace ock {
+namespace ubs {
+class Referable {
+public:
+    Referable() = default;
+    virtual ~Referable() = default;
+
+    void IncreaseRef()
+    {
+        refCount_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void DecreaseRef()
+    {
+        // delete itself if reference count equal to 0
+        if (refCount_.fetch_sub(1, std::memory_order_acq_rel) == 0) {
+            delete this;
+        }
+    }
+
+protected:
+    std::atomic<int16_t> refCount_{0};
+};
+} // namespace ubs
+} // namespace ock
+
 #endif // UBS_COMM_UBSOCKET_REF_H
