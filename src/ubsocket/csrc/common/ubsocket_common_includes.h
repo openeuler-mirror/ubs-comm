@@ -11,6 +11,8 @@
 #ifndef UBS_COMM_UBSOCKET_INCLUDES_H
 #define UBS_COMM_UBSOCKET_INCLUDES_H
 
+#include <cstdint>
+
 #include "ubsocket_defines.h"
 #include "ubsocket_logger.h"
 #include "ubsocket_ref.h"
