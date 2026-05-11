@@ -656,8 +656,9 @@ class Listener {
         int ev_num = OsAPiMgr::GetOriginApi()->epoll_wait(m_epoll_fd, events, MAX_EPOLL_EVENT_NUM, -1);
         if (ev_num == -1){
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
-                "epoll_wait() failed in statistics poll, epfd: %d, maxevents: %d, timeout: %d, "
+            RPC_ADPT_VLOG_ERR(
+                ubsocket::NATIVE_SOCKET,
+                "epoll_wait() failed in statistics poll, epfd: %d, maxevents: %d, timeout: %d, errno: %d, "
                 "errmsg: %s\n",
                 m_epoll_fd, MAX_EPOLL_EVENT_NUM, -1, errno,
                 NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
