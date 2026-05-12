@@ -8,8 +8,13 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include <iostream>
+
 #include "ubsocket.h"
 #include "ubsocket_common_includes.h"
+#include "ubsocket_version.h"
+
+using namespace ock::ubs;
 
 UBS_API int ubsocket_init(u_init_options_t *options)
 {
@@ -19,6 +24,14 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 UBS_API void ubsocket_uninit(int flags)
 {
     return;
+}
+
+UBS_API const char *ubsocket_version()
+{
+    /* log full version */
+    std::cout << "full version: " << UBS_LIB_VERSION_FULL << std::endl;
+    /* return short version */
+    return UBS_LIB_VERSION;
 }
 
 UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg))

@@ -8,29 +8,21 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef UBS_COMM_UBSOCKET_DEFINES_H
-#define UBS_COMM_UBSOCKET_DEFINES_H
-
-#include <cstddef>
-#include <cstdint>
+#include "ubsocket_global_settting.h"
 
 namespace ock {
 namespace ubs {
+int GlobalSetting::UBS_ALLOWED_PROTOCOL = 0;
+bool GlobalSetting::UBS_TRACE_ENABLED = false;
+bool GlobalSetting::UBS_INITED = false;
+bool GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED = false;
+bool GlobalSetting::UBS_CONNECTOR_ASYNC_ENABLED = false;
+bool GlobalSetting::UBS_EPOLL_ASYNC_ENABLED = false;
 
-using Result = int32_t;
-
-#define UBS_API __attribute__((visibility("default")))
-#define ALWAYS_INLINE inline __attribute__((always_inline))
-
-#ifndef LIKELY
-#define LIKELY(x) (__builtin_expect(!!(x), 1) != 0)
-#endif
-
-#ifndef UNLIKELY
-#define UNLIKELY(x) (__builtin_expect(!!(x), 0) != 0)
-#endif
-
+Result GlobalSetting::Initialize()
+{
+    /* load from env */
+    return UBS_OK;
+}
 } // namespace ubs
 } // namespace ock
-
-#endif // UBS_COMM_UBSOCKET_DEFINES_H

@@ -14,6 +14,7 @@
 #include <cstdint>
 
 #include "ubsocket_defines.h"
+#include "ubsocket_errno.h"
 #include "ubsocket_logger.h"
 #include "ubsocket_ref.h"
 

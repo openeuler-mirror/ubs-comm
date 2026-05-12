@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *      http://license.coscl.org.cn/MulanPSL2
@@ -11,7 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_CONNECTION_H
 #define UBS_COMM_UBSOCKET_CONNECTION_H
 
-#include "ubsocket_common_includes.h"
+#include "ubsocket_common.h"
 
 namespace ock {
 namespace ubs {
@@ -32,9 +32,9 @@ enum SocketType : uint8_t {
 
 class Socket : public Referable {
 protected:
-    int raw_socket_ = 0;              /* fd of raw socket */
-    SocketState state_ = SOCK_INIT;   /* state of ubsocket */
-    SocketType type_ = SOCK_TYPE_TCP; /* type of ubsocket */
+    int raw_socket_ = 0;                 /* fd of raw socket */
+    SocketState state_ = SOCK_STAT_INIT; /* state of ubsocket */
+    SocketType type_ = SOCK_TYPE_TCP;    /* type of ubsocket */
 };
 } // namespace ubs
 } // namespace ock
