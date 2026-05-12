@@ -11,4 +11,77 @@
 #ifndef UBS_COMM_UBSOCKET_DATA_TX_H
 #define UBS_COMM_UBSOCKET_DATA_TX_H
 
+#include <cstdint>
+#include <sys/time.h>
+#include <array>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
+#include <atomic>
+#include "ubsocket_socket.h"
+#include "../common/buffer_util.h"
+#include "../common/ubsocket_defines.h"
+#include "../common/ubsocket_logger.h"
+#include "../common/ubsocket_global_settting.h"
+
+namespace ock {
+namespace ubs {
+// 接口层，实现 Alloc Post Free PollTx等动作
+class DataTxOps {
+public:
+    DataTxOps()
+    {
+        tx_queue_avail_num_ = globalSetting->GetTxDepth();
+    }
+
+    virtual ~DataTxOps() = 0;
+
+    // 分配发送缓冲区
+    virtual uintptr_t AllocTxBuf(uint32_t count) = 0;
+
+    // 投递发送请求
+    virtual int PostSend(uintptr_t buf_list, uint32_t batch) = 0;
+
+    virtual int PollTx() = 0;
+
+    virtual int GetAndAckEvent() = 0;
+
+    virtual uint32_t IOBufSize() = 0;
+
+protected:
+    int fd_ = -1;
+    uint16_t tx_queue_avail_num_ = 0; // current window size for TX
+    uint16_t ack_event_num_ = 0;
+    std::atomic<int> epoll_event_num_{0};
+    int expect_epoll_event_num_ = 0;
+
+    std::atomic<bool> need_fc_awake_{false};
+
+    uint64_t protocol_negotiation_ = 0;
+    uint32_t protocol_negotiation_recv_size_ = 0;
+    uint32_t protocol_negotiation_offset_ = 0;
+
+    friend class DataTx;
+};
+
+// 通用层：流控、数据切分、故障回退
+class DataTx {
+    /**
+     * @brief 构造函数
+     *
+     * @param ops 具体的协议实现 (UMQ 或 RDMA)
+     */
+    DataTx(int fd, int event_fd, std::shared_ptr<DataTxOps> ops)
+        : fd_(fd), event_fd_(event_fd), tx_ops_(std::move(ops)) {}
+
+    ALWAYS_INLINE ssize_t WriteV(const Socket &sock, const struct iovec *iov, int iovcnt);
+
+private:
+    int fd_ = -1;
+    int event_fd_ = -1;
+    std::shared_ptr<DataTxOps> tx_ops_ = nullptr;
+};
+}
+}
+
 #endif // UBS_COMM_UBSOCKET_DATA_TX_H

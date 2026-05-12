@@ -31,6 +31,17 @@ enum SocketType : uint8_t {
 };
 
 class Socket : public Referable {
+public:
+    SocketState GetSoketState() const
+    {
+        return state_;
+    }
+
+    int GetRawFD() const
+    {
+        return raw_socket_;
+    }
+
 protected:
     int raw_socket_ = 0;                 /* fd of raw socket */
     SocketState state_ = SOCK_STAT_INIT; /* state of ubsocket */
