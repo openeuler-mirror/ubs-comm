@@ -11,31 +11,58 @@
 #ifndef UBS_COMM_UBSOCKET_REF_H
 #define UBS_COMM_UBSOCKET_REF_H
 
+#include <atomic>
 #include <cstdint>
+
+#include "ubsocket_defines.h"
 
 namespace ock {
 namespace ubs {
+/*
+ * 1 base class smart ptr
+ * 2 macro for master ptr if not use base class
+ */
 class Referable {
 public:
     Referable() = default;
     virtual ~Referable() = default;
 
-    void IncreaseRef()
-    {
-        refCount_.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    void DecreaseRef()
-    {
-        // delete itself if reference count equal to 0
-        if (refCount_.fetch_sub(1, std::memory_order_acq_rel) == 0) {
-            delete this;
-        }
-    }
+    void IncreaseRef();
+    void DecreaseRef();
 
 protected:
-    std::atomic<int16_t> refCount_{0};
+    std::atomic<int16_t> ref_count_{0};
 };
+
+ALWAYS_INLINE void Referable::IncreaseRef()
+{
+    ref_count_.fetch_add(1, std::memory_order_relaxed);
+}
+
+ALWAYS_INLINE void Referable::DecreaseRef()
+{
+    // delete itself if reference count equal to 0
+    if (ref_count_.fetch_sub(1, std::memory_order_acq_rel) == 0) {
+        delete this;
+    }
+}
+
+#define DECLARE_REF_COUNT_VARIABLE std::atomic<int16_t> ref_count_{0};
+
+#define DEFINE_INCREASE_REF_FUNC                            \
+    ALWAYS_INLINE void IncreaseRef()                        \
+    {                                                       \
+        ref_count_.fetch_add(1, std::memory_order_relaxed); \
+    }
+
+#define DEFINE_DECREASE_REF_FUNC                                       \
+    ALWAYS_INLINE void IncreaseRef()                                   \
+    {                                                                  \
+        if (ref_count_.fetch_sub(1, std::memory_order_acq_rel) == 0) { \
+            delete this;                                               \
+        }                                                              \
+    }
+
 } // namespace ubs
 } // namespace ock
 

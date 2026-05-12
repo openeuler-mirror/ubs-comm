@@ -11,7 +11,8 @@
 #ifndef UBS_COMM_UBSOCKET_DEF_H
 #define UBS_COMM_UBSOCKET_DEF_H
 
-#include "stdlib.h"
+#include <stdlib.h>
+#include <sys/socket.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,10 +58,17 @@ typedef struct {
 } u_semaphore_ops_t;
 
 /*
- * structures for other things
+ * structures for ubsocket
  */
+#define UBS_PROTOL_TCP 1 << 0L
+#define UBS_PROTOL_UB_RM_TP 1 << 1L
+#define UBS_PROTOL_UB_RC_TP 1 << 2L
+
 typedef struct {
+    int allowed_protol;
 } u_init_options_t;
+
+#define UB_API_WRAP(FUNC) ubsocket_##FUNC
 
 #ifdef __cplusplus
 }
