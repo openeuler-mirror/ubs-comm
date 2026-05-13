@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_CONNECTION_H
 #define UBS_COMM_UBSOCKET_CONNECTION_H
 
+#include "dl_libc_api.h"
 #include "ubsocket_common.h"
 
 namespace ock {

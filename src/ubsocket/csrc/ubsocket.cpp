@@ -10,6 +10,7 @@
  */
 #include <iostream>
 
+#include "dl_libc_api.h"
 #include "ubsocket.h"
 #include "ubsocket_common_includes.h"
 #include "ubsocket_global_setting.h"
@@ -41,16 +42,23 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         return UBS_ERROR;
     }
 
+    /* do this under mutex */
     std::lock_guard<std::mutex> guard(GlobalSetting::MUTEX);
     if (GlobalSetting::UBS_INITED) {
         return UBS_OK;
     }
 
-    /* do initialize */
+    /* do initialization */
     /* step1: global setting */
 
-    /* step2:  */
+    /* step2: load under api */
+    auto result = LibcApi::Load();
+    if (result != UBS_OK) {
+        errno = EBADF;
+        return UBS_ERROR;
+    }
 
+    /* set initialized */
     GlobalSetting::UBS_INITED = true;
 
     return UBS_OK;

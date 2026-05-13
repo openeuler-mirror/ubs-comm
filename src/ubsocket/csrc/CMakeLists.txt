@@ -25,6 +25,11 @@ file(GLOB CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/*.cpp)
 add_library(core_objects OBJECT ${CORE_SRCS})
 target_compile_options(core_objects PRIVATE -fPIC)
 
+# under_api objects
+file(GLOB UNDER_API_SRCS ${UBSOCKET_CSRC_DIR}/under_api/*.cpp)
+add_library(under_api_objects OBJECT ${UNDER_API_SRCS})
+target_compile_options(under_api_objects PRIVATE -fPIC)
+
 ###########################################################################
 ## libraries
 # static library
@@ -32,6 +37,7 @@ add_library(ubsocket_static STATIC
         $<TARGET_OBJECTS:common_objects>
         $<TARGET_OBJECTS:entry_objects>
         $<TARGET_OBJECTS:core_objects>
+        $<TARGET_OBJECTS:under_api_objects>
 )
 set_target_properties(ubsocket_static PROPERTIES OUTPUT_NAME "ubsocket")
 
@@ -40,6 +46,7 @@ add_library(ubsocket_shared SHARED
         $<TARGET_OBJECTS:common_objects>
         $<TARGET_OBJECTS:entry_objects>
         $<TARGET_OBJECTS:core_objects>
+        $<TARGET_OBJECTS:under_api_objects>
 )
 target_link_directories(ubsocket_shared PUBLIC)
 set_target_properties(ubsocket_shared PROPERTIES OUTPUT_NAME "ubsocket")

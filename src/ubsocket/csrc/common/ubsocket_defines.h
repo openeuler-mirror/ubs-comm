@@ -13,8 +13,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdint>
 #include <cstring>
+#include <mutex>
 
 namespace ock {
 namespace ubs {
@@ -35,7 +35,7 @@ using Result = int32_t;
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
 constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 512;
-constexpr uint32_t DIVIDED_NUMBER  = 2;
+constexpr uint32_t DIVIDED_NUMBER = 2;
 constexpr uint32_t CACHE_LINE_ALIGNMENT = 64;
 constexpr uint16_t TX_HANDLE_THRESHOLD = 2;
 constexpr uint16_t TX_RETRIEVE_THRESHOLD = 1;
@@ -44,7 +44,7 @@ constexpr uint16_t TX_REFILL_THRESHOLD = 32;
 constexpr uint32_t TX_POST_BATCH_MAX = 64;
 constexpr uint32_t TX_SGE_MAX = 1;
 
-constexpr uint64_t SIZE_8K  = 8192;
+constexpr uint64_t SIZE_8K = 8192;
 constexpr uint64_t SIZE_16K = 16384;
 constexpr uint64_t SIZE_32K = 32768;
 constexpr uint64_t SIZE_64K = 65536;
