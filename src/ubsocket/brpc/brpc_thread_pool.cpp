@@ -29,7 +29,7 @@ bool ExecutorService::Start(uint32_t queueCapacity)
         return false;
     }
     threadNum_ = threadNum;
-    maxWaitingTaskNum_ = queueCapacity;
+    tasks_.Initialize(queueCapacity);
 
     for (auto i = 0U; i < threadNum_; i++) {
         auto thr = new (std::nothrow) std::thread(&ExecutorService::RunInThread, this);
@@ -65,13 +65,9 @@ bool ExecutorService::Execute(const Runnable &runnable)
     if (!started_) {
         return false;
     }
-    std::unique_lock<std::mutex> locker{tasksMutex_};
-    if (tasks_.size() >= maxWaitingTaskNum_) {
+    if (!tasks_.PushBack(runnable)) {
         return false;
     }
-    tasks_.push(runnable);
-    locker.unlock();
-    tasksCond_.notify_one();
     return true;
 }
 
@@ -99,13 +95,11 @@ void ExecutorService::ClearExistWorkerThread()
 {
     Runnable stopTask;
     stopTask.Type(RunnableType::STOP);
-
-    std::unique_lock<std::mutex> locker{tasksMutex_};
     for (auto i = 0U; i < workerThreads_.size(); i++) {
-        tasks_.push(stopTask);
+        while (!tasks_.PushBack(stopTask)) {
+            std::this_thread::yield();
+        }
     }
-    locker.unlock();
-    tasksCond_.notify_all();
 
     for (auto &thr : workerThreads_) {
         if (thr != nullptr) {
@@ -129,14 +123,10 @@ void ExecutorService::RunInThread()
     pthread_setname_np(pthread_self(), threadName.c_str());
     RPC_ADPT_VLOG_INFO("thread %s started.\n", threadName.c_str());
     while (runFlag) {
-        std::unique_lock<std::mutex> locker{tasksMutex_};
-        while (tasks_.empty()) {
-            tasksCond_.wait(locker);
+        Runnable task;
+        while (!tasks_.PopFront(task)) {
+            std::this_thread::yield();
         }
-        Runnable task(std::move(tasks_.front()));
-        tasks_.pop();
-        locker.unlock();
-
         DoRunnable(task, runFlag);
     }
     RPC_ADPT_VLOG_INFO("thread %s finished.\n", threadName.c_str());
