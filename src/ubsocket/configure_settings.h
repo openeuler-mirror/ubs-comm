@@ -497,10 +497,11 @@ protected:
         }
 
         if ((env_ptr = getenv(ENV_PROBE_ENABLE)) != NULL) {
-            try {
+            std::string str_env = env_ptr;
+            if (str_env == "true" || str_env == "false") {
                 m_probe_enable = BoolVal::BoolConverter(env_ptr);
-            } catch (const std::exception& e) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_ENABLE, using default.\n");
+            } else {
+                printf("WARNING: Invalid UBSOCKET_PROBE_ENABLE, using default.\n");
             }
         }
 
@@ -509,14 +510,22 @@ protected:
             try {
                 ubsocket_probe_time_ms = static_cast<uint64_t>(std::stoull(env_ptr));
             } catch (const std::exception& e) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_TIME_MS, using default.\n");
+                printf("WARNING: Invalid UBSOCKET_PROBE_TIME_MS, using default.\n");
                 ubsocket_probe_time_ms = UBSOCKET_TRACE_TIME_DEFAULT;
             }
+            bool is_all_digit = true;
+            size_t env_ptr_len = strnlen(env_ptr, sizeof(env_ptr));
+            for (size_t i = 0; i < env_ptr_len; ++i)
+                if (!isdigit(env_ptr[i])) {
+                    is_all_digit = false;
+                    break;
+                }
             if (ubsocket_probe_time_ms >= UBSOCKET_PROBE_TIME_MIN
-                && ubsocket_probe_time_ms <= UBSOCKET_PROBE_TIME_MAX) {
+                && ubsocket_probe_time_ms <= UBSOCKET_PROBE_TIME_MAX
+                && is_all_digit) {
                 m_probe_time_ms = ubsocket_probe_time_ms;
             } else {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_TIME_MS, using default.\n");
+                printf("WARNING: Invalid UBSOCKET_PROBE_TIME_MS, using default.\n");
             }
         }
 
@@ -525,14 +534,22 @@ protected:
             try {
                 ubsocket_probe_batch = static_cast<uint64_t>(std::stoull(env_ptr));
             } catch (const std::exception& e) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_BATCH, using default.\n");
+                printf("WARNING: Invalid UBSOCKET_PROBE_BATCH, using default.\n");
                 ubsocket_probe_batch = UBSOCKET_TRACE_TIME_DEFAULT;
             }
+            bool is_all_digit = true;
+            size_t env_ptr_len = strnlen(env_ptr, sizeof(env_ptr));
+            for (size_t i = 0; i < env_ptr_len; ++i)
+                if (!isdigit(env_ptr[i])) {
+                    is_all_digit = false;
+                    break;
+                }
             if (ubsocket_probe_batch >= UBSOCKET_PROBE_BATCH_MIN
-                && ubsocket_probe_batch <= UBSOCKET_PROBE_BATCH_MAX) {
+                && ubsocket_probe_batch <= UBSOCKET_PROBE_BATCH_MAX
+                && is_all_digit) {
                 m_probe_batch = ubsocket_probe_batch;
             } else {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid UBSOCKET_PROBE_BATCH, using default.\n");
+                printf("WARNING: Invalid UBSOCKET_PROBE_BATCH, using default.\n");
             }
         }
 
