@@ -273,6 +273,7 @@ void EpollDaemon::ProcessOneEvent(const struct epoll_event &event) noexcept
             if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                 socket_object->HandleErrorRxCqe(buf[i]);
             }
+            QBUF_LIST_NEXT(buf[i]) = nullptr;
             umq_buf_free(buf[i]);
         }
     }
@@ -296,7 +297,7 @@ void EpollDaemon::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t
 
     umq_alloc_option_t alloc_option = { UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(Brpc::IOBuf::Block) };
     umq_buf_t *rx_buf_list = umq_buf_alloc(Brpc::BrpcIOBufSize(), poll_num, UMQ_INVALID_HANDLE, &alloc_option);
-    if (UNLIKELY(rx_buf_list != nullptr)) {
+    if (LIKELY(rx_buf_list != nullptr)) {
         umq_buf_t *bad_qbuf = nullptr;
         if (umq_post(main_umq, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
             umq_buf_free(bad_qbuf);
@@ -305,7 +306,6 @@ void EpollDaemon::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t
 
     std::set<EpollFdAsync *> readable_epoll_fds;
     epoll_data_t event_data{};
-    auto event_reach_sockets = SiftSocketEventsWithUmqBuffers(buf, poll_num);
     for (auto obj : SiftSocketEventsWithUmqBuffers(buf, poll_num)) {
         auto socket_obj = (Brpc::SocketFd *)obj;
         socket_obj->NewRxEpollIn();
@@ -417,7 +417,7 @@ int EpollDaemon::GetSocketConnectInfo(int socket_fd, async::SocketConnectInfo &i
     return 0;
 }
 
-EpollFdAsync::~EpollFdAsync() noexcept
+EpollFdAsync::~EpollFdAsync()
 {
     RPC_ADPT_VLOG_INFO("async_epoll destructure invoked for fd: %d\n", m_fd);
     if (m_fd < 0 || m_socket_readable_event_fd < 0) {
@@ -476,7 +476,7 @@ int EpollFdAsync::EpollCtlAdd(int socket_fd, struct epoll_event *event, bool use
     }
 
     if ((event->events & EPOLLOUT) == EPOLLOUT) {
-        ret = AddSocketOutEvent(socket_fd, connect_info.rx_interrupt_fd, event);
+        ret = AddSocketOutEvent(socket_fd, connect_info.tx_interrupt_fd, event);
         if (ret < 0) {
             DelPureSocketEvent(socket_fd);
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll epoll_ctl(ADD:%d) failed: %d : %s\n", socket_fd, errno,
@@ -496,6 +496,10 @@ int EpollFdAsync::EpollCtlMod(int socket_fd, struct epoll_event *event, bool use
         return -1;
     }
 
+    if (Fd<::SocketFd>::GetFdObj(socket_fd) == nullptr) {
+        return epoll_ctl(m_fd, EPOLL_CTL_MOD, socket_fd, event);
+    }
+
     if (UNLIKELY((event->events & EPOLLET) == 0)) {
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll EpollCtlMod must be edge-triggered notification.\n");
         errno = EINVAL;
@@ -509,7 +513,7 @@ int EpollFdAsync::EpollCtlMod(int socket_fd, struct epoll_event *event, bool use
         return -1;
     }
 
-    if (UNLIKELY(!IsSocketEventDataExist(socket_fd))) {
+    if (ModPureSocketEvent(socket_fd, event) != 0) {
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll EpollCtlMod(socket:%d) failed, not added\n", socket_fd);
         errno = ENOENT;
         return -1;
@@ -535,6 +539,10 @@ int EpollFdAsync::EpollCtlDel(int socket_fd, struct epoll_event *event, bool use
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll DelEvent invalid args fd:%d\n", socket_fd);
         errno = EINVAL;
         return -1;
+    }
+
+    if (Fd<::SocketFd>::GetFdObj(socket_fd) == nullptr) {
+        return epoll_ctl(m_fd, EPOLL_CTL_DEL, socket_fd, nullptr);
     }
 
     EpollSocketInOutFds socket_fds;
@@ -732,6 +740,28 @@ int EpollFdAsync::AddPureSocketEvent(int socket_fd, struct epoll_event *event) n
     return 0;
 }
 
+int EpollFdAsync::ModPureSocketEvent(int socket_fd, struct epoll_event *event) noexcept
+{
+    auto event_data = GetSocketEventData(socket_fd);
+    if (event_data == nullptr) {
+        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll mod pure event for fd: %d failed: not exist\n", socket_fd);
+        errno = EINVAL;
+        return -1;
+    }
+
+    struct epoll_event pure_event {};
+    pure_event.events = event->events;
+    pure_event.data.ptr = event_data;
+    auto ret = epoll_ctl(m_fd, EPOLL_CTL_MOD, socket_fd, &pure_event);
+    if (UNLIKELY(ret < 0)) {
+        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll mod pure event for socket fd: %d failed: %d : %s\n",
+                          socket_fd, errno, strerror(errno));
+        return -1;
+    }
+
+    return 0;
+}
+
 int EpollFdAsync::DelPureSocketEvent(int socket_fd) noexcept
 {
     auto ret = epoll_ctl(m_fd, EPOLL_CTL_DEL, socket_fd, nullptr);
@@ -782,6 +812,10 @@ int EpollFdAsync::AddSocketOutEvent(int socket_fd, int event_fd, struct epoll_ev
 
 int EpollFdAsync::DelSocketOutEvent(int socket_fd, int event_fd) noexcept
 {
+    if (!RemoveSocketEventData(event_fd)) {
+        return 0;
+    }
+
     auto ret = epoll_ctl(m_fd, EPOLL_CTL_DEL, event_fd, nullptr);
     if (UNLIKELY(ret < 0)) {
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll del out event for socket event fd: %d failed: %d : %s\n",
@@ -789,7 +823,6 @@ int EpollFdAsync::DelSocketOutEvent(int socket_fd, int event_fd) noexcept
         return -1;
     }
 
-    RemoveSocketEventData(event_fd);
     return 0;
 }
 
