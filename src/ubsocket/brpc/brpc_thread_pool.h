@@ -13,6 +13,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include "ub_ring_buffer.h"
 
 namespace Brpc {
 
@@ -77,13 +78,10 @@ private:
 
 private:
     uint32_t threadNum_;
-    uint32_t maxWaitingTaskNum_;
     std::atomic<bool> started_;
     std::atomic<bool> stopped_;
     std::atomic<uint32_t> startedThreadNum_;
-    std::queue<Runnable> tasks_;
-    std::mutex tasksMutex_;
-    std::condition_variable tasksCond_;
+    UbRingBuffer<Runnable> tasks_;
     std::vector<std::thread *> workerThreads_;
     std::string name_;
 };
