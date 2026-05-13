@@ -48,6 +48,7 @@ include_directories(
         ${UBSOCKET_BASE_DIR}/csrc/common
         ${UBSOCKET_BASE_DIR}/csrc/core
         ${UBSOCKET_BASE_DIR}/csrc/profiling
+        ${UBSOCKET_BASE_DIR}/csrc/under_api
 )
 
 add_subdirectory(csrc)

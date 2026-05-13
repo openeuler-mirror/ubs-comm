@@ -18,6 +18,8 @@ namespace ubs {
 enum InnerCode : int32_t {
     UBS_OK = 0,
     UBS_ERROR = -1,
+    UBS_DL_LOAD_SYM_FAILED = -100,
+    UBS_DL_OPEN_LIB_FAILED = -101,
 };
 } // namespace ubs
 } // namespace ock
