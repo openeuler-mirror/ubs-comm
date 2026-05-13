@@ -17,6 +17,7 @@ namespace ock {
 namespace ubs {
 enum InnerCode : int32_t {
     UBS_OK = 0,
+    UBS_ERROR = -1,
 };
 } // namespace ubs
 } // namespace ock
