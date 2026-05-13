@@ -11,18 +11,18 @@
 #ifndef UBS_COMM_UBSOCKET_DATA_TX_H
 #define UBS_COMM_UBSOCKET_DATA_TX_H
 
-#include <cstdint>
 #include <sys/time.h>
 #include <array>
+#include <atomic>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
-#include <atomic>
-#include "ubsocket_socket.h"
 #include "../common/buffer_util.h"
 #include "../common/ubsocket_defines.h"
+#include "../common/ubsocket_global_setting.h"
 #include "../common/ubsocket_logger.h"
-#include "../common/ubsocket_global_settting.h"
+#include "ubsocket_socket.h"
 
 namespace ock {
 namespace ubs {

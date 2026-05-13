@@ -21,6 +21,13 @@ extern "C" {
 #endif
 
 /**
+ * @brief Set the init options to default values
+ *
+ * @param options          [in] the options to be set
+ */
+int ubsocket_init_options(u_init_options_t *options);
+
+/**
  * @brief Initialize ubsocket library
  *
  * @param options          [in] options for
@@ -39,7 +46,7 @@ void ubsocket_uninit(int flags);
  * @brief Get version of ubsocet library
  * @return version string, formated x.x.x
  */
-const char* ubsocket_version();
+const char *ubsocket_version();
 
 /**
  * @brief Set external log function

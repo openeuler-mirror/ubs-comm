@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *      http://license.coscl.org.cn/MulanPSL2
@@ -12,13 +12,48 @@
 
 #include "ubsocket.h"
 #include "ubsocket_common_includes.h"
+#include "ubsocket_global_setting.h"
 #include "ubsocket_version.h"
 
 using namespace ock::ubs;
 
+UBS_API int ubsocket_init_options(u_init_options_t *options)
+{
+    if (options == nullptr) {
+        errno = EINVAL;
+        return UBS_ERROR;
+    }
+
+    options->allowed_protocol = UBS_PROTOCOL_TCP; /* use raw tcp by default */
+    options->async_acceptor_thread_count = 0;     /* tune off by default */
+    options->async_connector_thread_count = 0;    /* tune off by default */
+    options->async_epoll_thread_count = 1;        /* tune on by default */
+    options->lock_ops = nullptr;
+    options->rw_lock_ops = nullptr;
+    options->sem_ops = nullptr;
+    return UBS_OK;
+}
+
 UBS_API int ubsocket_init(u_init_options_t *options)
 {
-    return 0;
+    if (options == nullptr) {
+        errno = EINVAL;
+        return UBS_ERROR;
+    }
+
+    std::lock_guard<std::mutex> guard(GlobalSetting::MUTEX);
+    if (GlobalSetting::UBS_INITED) {
+        return UBS_OK;
+    }
+
+    /* do initialize */
+    /* step1: global setting */
+
+    /* step2:  */
+
+    GlobalSetting::UBS_INITED = true;
+
+    return UBS_OK;
 }
 
 UBS_API void ubsocket_uninit(int flags)
