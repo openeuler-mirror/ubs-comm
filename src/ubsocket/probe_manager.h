@@ -286,6 +286,7 @@ public:
         UpdateBuffer(probeInfo, MASK_CLIENT_SEND);
         int ret = umq_post(umqh, buf, UMQ_IO_TX, &bad_qbuf);
         if (ret != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to Send Probe Packet\n");
             umq_buf_free(buf);
             return -1;
         }
@@ -325,6 +326,7 @@ public:
         umq_buf_t *bad_qbuf = nullptr;
         int ret = umq_post(sockObj->GetLocalUmqHandle(), buf, UMQ_IO_TX, &bad_qbuf);
         if (ret != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to Send Response Packet\n");
             umq_buf_free(buf);
             return -1;
         }
@@ -342,6 +344,12 @@ public:
 
         // 过滤非探针包
         if (buf_pro->imm.user_data != PROBE_USER_DATA_ID) {
+            return;
+        }
+
+        if (!mRunning.load()) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                "Probe Manager Not Running while recv probe packet. Did you Enable probe args?\n");
             return;
         }
 
