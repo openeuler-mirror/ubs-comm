@@ -182,6 +182,7 @@ private:
     void ReleaseRemovedEventsData() noexcept;
     int EnsureReadableEventFdReady() noexcept;
     int AddPureSocketEvent(int socket_fd, struct epoll_event *event) noexcept;
+    int ModPureSocketEvent(int socket_fd, struct epoll_event *event) noexcept;
     int DelPureSocketEvent(int socket_fd) noexcept;
     int AddSocketOutEvent(int socket_fd, int event_fd, struct epoll_event *event) noexcept;
     int DelSocketOutEvent(int socket_fd, int event_fd) noexcept;
@@ -190,6 +191,19 @@ private:
     {
         ScopedUbExclusiveLocker sLock(m_mutex);
         return m_socket_data.find(fd) != m_socket_data.end();
+    }
+
+    ALWAYS_INLINE EpollEventData *GetSocketEventData(int fd) noexcept
+    {
+        ScopedUbExclusiveLocker sLock(m_mutex);
+        auto pos = m_socket_data.find(fd);
+        if (pos == m_socket_data.end()) {
+            return nullptr;
+        }
+        auto res = pos->second;
+        sLock.Unlock();
+
+        return res;
     }
 
     ALWAYS_INLINE bool RemoveSocketEventData(int fd) noexcept
