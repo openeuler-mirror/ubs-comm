@@ -14,15 +14,17 @@
 
 #include <cstdlib>
 #include <cstdint>
+#include "umq_setting.h"
 #include "../ubsocket_data_rx.h"
 #include "../../common/ubsocket_defines.h"
-#include "../../../hcom/umq/include/umq/umq_api.h"
-#include "../../../hcom/umq/include/umq/umq_types.h"
-#include "../../../hcom/umq/include/umq/umq_dfx_api.h"
-#include "../../../hcom/umq/include/umq/umq_dfx_types.h"
-#include "../../../hcom/umq/include/umq/umq_errno.h"
-#include "../../../hcom/umq/include/umq/umq_pro_api.h"
-#include "../../../hcom/umq/src/qbuf/qbuf_list.h"
+#include "../../common/ubsocket_global_setting.h"
+#include "../../../../hcom/umq/include/umq/umq_api.h"
+#include "../../../../hcom/umq/include/umq/umq_types.h"
+#include "../../../../hcom/umq/include/umq/umq_dfx_api.h"
+#include "../../../../hcom/umq/include/umq/umq_dfx_types.h"
+#include "../../../../hcom/umq/include/umq/umq_errno.h"
+#include "../../../../hcom/umq/include/umq/umq_pro_api.h"
+#include "../../../../hcom/umq/src/qbuf/qbuf_list.h"
 
 namespace ock {
 namespace ubs {
@@ -40,6 +42,7 @@ private:
     void HandleErrorRxCqe(umq_buf_t *buf);
     int NotifyReadable();
     int GetAndAckEvent(umq_io_direction_t io_dir);
+    void * PtrFloorToBoundary(void *ptr) override;
 
 private:
     // --- 私有成员变量 ---

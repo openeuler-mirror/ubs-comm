@@ -17,6 +17,9 @@
 #include <memory>
 
 #include "ubsocket_core_types.h"
+#include "../iobuf/ubsocket_iobuf.h"
+#include "../common/ubsocket_defines.h"
+#include "../common/ubsocket_global_setting.h"
 
 namespace ock {
 namespace ubs {
@@ -29,11 +32,10 @@ public:
     virtual int PollRx(bool flow_control_failed) = 0;
     virtual int RearmRxInterrupt() = 0;
 
-    DEFINE_REF_OPERATION_FUNC
+protected:
+    virtual void *PtrFloorToBoundary(void *ptr) = 0;
 
 protected:
-    DECLARE_REF_COUNT_VARIABLE
-
     int fd_ = -1;
     // RX fields
     uint8_t epoll_in_msg_ = 0;
@@ -44,20 +46,19 @@ protected:
     int expect_epoll_event_num_ = 0;
     bool get_and_ack_event_ = false;
     bool poll_ = false;
-    Brpc::BlockCache block_cache_;
+    BlockCache block_cache_;
     std::atomic<bool> need_fc_awake_{false};
 
     size_t remaining_size_ = 0;
 
     friend class DataRx;
 };
-using DataRxOpsPtr = Ref<DataRxOps>;
 
 // 通用层：缓存获取数据，故障回退
 class DataRx {
 public:
     DataRx() = default;
-    DataRx(const SocketInfo &info, DataRxOpsPtr ops);
+    DataRx(const SocketInfo &info, DataRxOps *ops);
 
     ALWAYS_INLINE ssize_t ReadV(const SocketInfo &sock, const struct iovec *iov, int iovcnt);
 
@@ -70,7 +71,7 @@ private:
     int fd_ = -1;
     int event_fd_ = -1;
 
-    DataRxOpsPtr rx_ops_ = nullptr;
+    DataRxOps *rx_ops_ = nullptr;
 };
 } // namespace ubs
 } // namespace ock

@@ -14,14 +14,15 @@
 
 #include <cstdlib>
 #include <cstdint>
+#include "umq_setting.h"
 #include "../ubsocket_data_tx.h"
-#include "../../../hcom/umq/include/umq/umq_api.h"
-#include "../../../hcom/umq/include/umq/umq_types.h"
-#include "../../../hcom/umq/include/umq/umq_dfx_api.h"
-#include "../../../hcom/umq/include/umq/umq_dfx_types.h"
-#include "../../../hcom/umq/include/umq/umq_errno.h"
-#include "../../../hcom/umq/include/umq/umq_pro_api.h"
-#include "../../../hcom/umq/src/qbuf/qbuf_list.h"
+#include "../../../../hcom/umq/include/umq/umq_api.h"
+#include "../../../../hcom/umq/include/umq/umq_types.h"
+#include "../../../../hcom/umq/include/umq/umq_dfx_api.h"
+#include "../../../../hcom/umq/include/umq/umq_dfx_types.h"
+#include "../../../../hcom/umq/include/umq/umq_errno.h"
+#include "../../../../hcom/umq/include/umq/umq_pro_api.h"
+#include "../../../../hcom/umq/src/qbuf/qbuf_list.h"
 
 namespace ock {
 namespace ubs {
@@ -45,11 +46,9 @@ public:
     uintptr_t AllocTxBuf(uint32_t count) override;
 
     // 发送请求
-    int PostSend(uintptr_t buf, uint32_t batch) override;
+    int PostSend(uintptr_t buf, uint32_t batch, IovConverter cvt) override;
 
     int PollTx() override;
-
-    uint32_t IOBufSize() override;
 
 private:
     // --- 私有辅助函数 ---
@@ -62,6 +61,8 @@ private:
     int PollUmqTx(bool);
     int GetAndAckEvent(umq_io_direction_t io_dir);
     int DpRearmTxInterrupt();
+
+    bool CutLast(IovConverter cvt, uint32_t len, umq_buf_t *buf);
 private:
     // --- 私有成员变量 ---
     // umq 相关的句柄

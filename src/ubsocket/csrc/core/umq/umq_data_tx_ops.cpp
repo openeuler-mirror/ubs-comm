@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "umq_data_tx_ops.h"
+#include "../ubsocket_iobuf_adapter.h"
 
 namespace ock {
 namespace ubs {
@@ -23,7 +24,7 @@ uintptr_t UmqDataTxOps::AllocTxBuf(uint32_t count)
     return reinterpret_cast<uintptr_t>(tx_buf_list);
 }
 
-int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch)
+int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch, IovConverter cvt)
 {
     umq_buf_t *tx_buf_list = reinterpret_cast<umq_buf_t *>(buf);
     int flagEIO = -1;
@@ -41,22 +42,22 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch)
         QBUF_LIST_NEXT(QBUF_LIST_FIRST(&tail_buf_)) = cur_buf;
     }
     uint32_t tx_total_len = 0;
-    iov_converter.Reset();
+    cvt.Reset();
     for (uint32_t i = 0; i < batch; ++i) {
         umq_buf_t *cur_wr_first = next_buf;
         uint32_t moved_total_len = 0;
-        uint32_t wr_left_len = IOBufSize();
+        uint32_t wr_left_len = UmqSetting::GetIOBufSize();
         uint32_t sge_idx = 0;
         bool last = false;
         for (cur_buf = cur_wr_first; cur_buf && (next_buf = cur_buf->qbuf_next, 1); cur_buf = next_buf) {
-            last = iov_converter.CutLast(wr_left_len, cur_buf);
+            last = CutLast(cvt, wr_left_len, cur_buf);
             cur_buf->io_direction = UMQ_IO_TX;
             /* rpc adapter has replace brpc butil::iobuf::blockmem_allocate() & butil::iof::blockmem_deallocate()
              * and ensures that the starting address of the Block is aligned to an 8k boundary. */
-            ((Brpc::IOBuf::Block *)PtrFloorToBoundary(cur_buf->buf_data))->IncRef();
+            ((Block *)PtrFloorToBoundary(cur_buf->buf_data))->IncRef();
             wr_left_len -= cur_buf->data_size;
             moved_total_len += cur_buf->data_size;
-            if (last || ++sge_idx >= TX_SGE_MAX || moved_total_len >= IOBufSize()) {
+            if (last || ++sge_idx >= TX_SGE_MAX || moved_total_len >= UmqSetting::GetIOBufSize()) {
                 break;
             }
         }
@@ -70,7 +71,7 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch)
         if (tx_queue_avail_num_ == 1 || i + 1 == batch) {
             buf_pro->flag.bs.solicited_enable = 1;
         } else {
-            if (unsignaled_wr_num_ > TX_REPORT_THRESHOLD || unsolicited_bytes_ > UNSOLICITED_BYTES_MAX) {
+            if (unsignaled_wr_num_ > TX_REPORT_THRESHOLD || unsolicited_bytes_ > TX_UNSOLICITED_BYTES_MAX) {
                 buf_pro->flag.bs.solicited_enable = 1;
             } else {
                 ++unsignaled_wr_num_;
@@ -122,7 +123,7 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch)
             /* rpc adapter has replace brpc butil::iobuf::blockmem_allocate() &
              * butil::iof::blockmem_deallocate()
              * and ensures that the starting address of the Block is aligned to an 8k boundary. */
-            ((Brpc::IOBuf::Block *)PtrFloorToBoundary(cur->buf_data))->DecRef();
+            ((Block *)PtrFloorToBoundary(cur->buf_data))->DecRef();
         }
 
         if (bad_qbuf == tx_buf_list) {
@@ -148,7 +149,7 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch)
 
     // After posting and before polling, the time for updating the count cna be concealed within the waiting period
     // for polling.
-    if ((GlobalSetting::GetTxDepth() - tx_queue_avail_num_) >= TX_HANDLE_THRESHOLD) {
+    if ((GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_) >= TX_HANDLE_THRESHOLD) {
         PollUmqTx(false);
     }
     return tx_total_len;
@@ -184,18 +185,37 @@ int UmqDataTxOps::PollTx()
     return 0;
 }
 
-// adapt to brpc, brpc IOBuf block use 8k as buffer slice with a 32 bytes head, thus, RX buffer size is 8160
-inline uint32_t UmqDataTxOps::IOBufSize()
+bool UmqDataTxOps::CutLast(IovConverter cvt, uint32_t len, umq_buf_t *buf)
 {
-    umq_buf_block_size_t blockType = GlobalSetting::GetIOBlockType();
-    switch (blockType) {
-        case BLOCK_SIZE_8K:  return SIZE_8K - IOBUF_DIFF;
-        case BLOCK_SIZE_16K: return SIZE_16K - IOBUF_DIFF;
-        case BLOCK_SIZE_32K: return SIZE_32K - IOBUF_DIFF;
-        case BLOCK_SIZE_64K: return SIZE_64K - IOBUF_DIFF;
-        default:
-            return SIZE_8K - IOBUF_DIFF;
+    uint32_t moved_len = 0;
+    if (cvt.iov_idx_ < cvt.iovcnt_) {
+        if (cvt.iov_offset_ + len >= cvt.iov_[cvt.iov_idx_].iov_len) {
+            while (cvt.iov_idx_ < cvt.iovcnt_ && cvt.iov_[cvt.iov_idx_].iov_len == 0) {
+                cvt.iov_idx_++;
+            }
+            if (cvt.iov_idx_ >= cvt.iovcnt_) {
+                return moved_len;
+            }
+            moved_len = cvt.iov_[cvt.iov_idx_].iov_len - cvt.iov_offset_;
+            buf->buf_data = (char *)cvt.iov_[cvt.iov_idx_].iov_base + cvt.iov_offset_;
+            buf->data_size = moved_len;
+
+            cvt.iov_offset_ = 0;
+            /* Avoid core dump caused by brpc passing in memory with a length of 0,
+             * directly skip IOVs with a length of 0. */
+            do {
+                cvt.iov_idx_++;
+            } while (cvt.iov_idx_ < cvt.iovcnt_ && cvt.iov_[cvt.iov_idx_].iov_len == 0);
+        } else {
+            moved_len = len;
+            buf->buf_data = (char *)cvt.iov_[cvt.iov_idx_].iov_base + cvt.iov_offset_;
+            buf->data_size = moved_len;
+
+            cvt.iov_offset_ += moved_len;
+        }
     }
+
+    return cvt.iov_idx_ < cvt.iovcnt_ ? false : true;
 }
 }
 }

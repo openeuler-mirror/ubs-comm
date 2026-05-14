@@ -11,12 +11,13 @@
 
 #include "ubsocket_data_rx.h"
 #include "umq_data_rx_ops.h"
+#include "../under_api/dl_libc_api.h"
 
 namespace ock {
 namespace ubs {
-DataRx::DataRx(const SocketInfo &info, DataRxOpsPtr ops)
-    : fd_(info.raw_socket),
-      event_fd_(info.event_fd),
+DataRx::DataRx(const SocketInfo &info, DataRxOps* ops)
+    : fd_(info.raw_socket_),
+      event_fd_(info.event_fd_),
       rx_ops_(std::move(ops))
 {
 }
@@ -54,7 +55,7 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketInfo &sock, const struct iovec *
     }
 
     uint32_t max_buf_size;
-    if (GlobalSetting::GetReadvUnlimited()) {
+    if (GlobalSetting::UBS_READV_UNLIMITED) {
         max_buf_size = UINT32_MAX;
     } else {
         max_buf_size = 0;
@@ -65,7 +66,7 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketInfo &sock, const struct iovec *
 
     /* rpc adapter has replace brpc butil::iobuf::blockmem_allocate() & butil::iof::blockmem_deallocate()
      * and ensures that the starting address of the Block is aligned to an 8k boundary. */
-    IOBuf::Block *out_first_block = (Brpc::IOBuf::Block *)PtrFloorToBoundary(iov[0].iov_base);
+    Block *out_first_block = (Block *)this->PtrFloorToBoundary(iov[0].iov_base);
     rx_total_len = rx_ops_->block_cache_.CutAndInsertAfter(max_buf_size, out_first_block);
     if (rx_total_len == 0) {
         /* m_rx.epoll_event_num_ not equals to m_rx.m_expect_epoll_event_num means another epoll event is reported
