@@ -15,14 +15,14 @@ namespace ock {
 namespace ubs {
 int UmqDataRxOps::PollRx(bool flow_control_failed)
 {
-    bool enable_share_jfr = globalSetting->EnableShareJfr();
+    bool enable_share_jfr = GlobalSetting::EnableShareJfr();
     if (!enable_share_jfr && get_and_ack_event_) {
         if (GetAndAckEvent(UMQ_IO_RX) < 0) {
             errno = EIO;
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API,
-                "ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
-                NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                              "ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                              NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
             return -1;
         }
         get_and_ack_event_ = false;
@@ -36,7 +36,7 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
             errno = EIO;
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n",
-                fd_, -1, errno, NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                              fd_, -1, errno, NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
             return -1;
         } else if (poll_num == 0) {
             /* might be useful for qps performance by
@@ -72,10 +72,10 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
                 if (need_fc_awake && NotifyReadable() == -1) {
                     char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
                     RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                        "eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
-                        ", peer ip: %s, errno: %d, errmsg: %s\n",
-                        event_fd_, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno,
-                        NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                                      "eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
+                                      ", peer ip: %s, errno: %d, errmsg: %s\n",
+                                      event_fd_, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno,
+                                      NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
                 }
             }
 
@@ -83,7 +83,7 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
             umq_buf_free(buf[i]);
             continue;
         }
-        if (globalSetting->UBS_TRACE_ENABLED) {
+        if (GlobalSetting::UBS_TRACE_ENABLED) {
             UpdateTraceStats(StatsMgr::RX_PACKET_COUNT, 1);
         }
         block_cache_.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
@@ -91,5 +91,5 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
     }
     return 0;
 }
-}
-}
+} // namespace ubs
+} // namespace ock

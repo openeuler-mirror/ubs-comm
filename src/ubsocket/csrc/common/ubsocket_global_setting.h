@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_GLOBAL_SETTING_H
 #define UBS_COMM_UBSOCKET_GLOBAL_SETTING_H
 
+#include <cstddef>
 #include <cstdlib>
 #include <mutex>
 #include <string>
@@ -23,6 +24,21 @@ namespace ock {
 namespace ubs {
 class GlobalSetting {
 public:
+    /* if force fallback native os */
+    static bool NativeTcpMode() noexcept;
+
+    static bool AsyncAcceptorEnabled() noexcept;
+    static bool AsyncConnectorEnabled() noexcept;
+    static bool AsyncEpollEnabled() noexcept;
+
+    static uint16_t GetTxDepth() noexcept;
+
+public:
+    /**
+     * @brief verify setting
+     */
+    static Result VerifySetting() noexcept;
+
     /**
      * @brief Load envs
      */
@@ -32,61 +48,96 @@ public:
     GlobalSetting() = delete;
 
     /**
-      * @brief Get env with default value
-      *
-      * @tparam T            [in] type of value
-      * @param name          [in] string of the env
-      * @param out           [out] value to be set
-      * @return true has env set
+      * @brief Get env, only provide three types,
+      * use int64_t for int16_t, uint16_t, int32_t, uint32_t, int64_t
+      * use double for float and double
       */
-    template <typename T>
-    static bool GetEnv(const char *name, T &out) noexcept;
+    static bool GetEnv(const std::string &name, int64_t &out) noexcept;
+    static bool GetEnv(const std::string &name, double &out) noexcept;
+    static bool GetEnv(const std::string &name, std::string &out) noexcept;
+
+    /**
+     * @brief Add setting verify rules
+     */
+    static void AddRules() noexcept;
 
 public:
     static std::mutex MUTEX;
-    static uint32_t UBS_ALLOWED_PROTOCOL;         /* allowed protocol, from API */
-    static bool UBS_TRACE_ENABLED;                /* if enable tracing, from env */
-    static bool UBS_INITED;                       /* if ubsocket initialized, from API */
-    static bool UBS_ACCEPTOR_ASYNC_ENABLED;       /* if enable async acceptor, from API override by env */
-    static bool UBS_CONNECTOR_ASYNC_ENABLED;      /* if enable async connector, from API override by env */
-    static bool UBS_EPOLL_ASYNC_ENABLED;          /* if enable async epoll_wait, from API override by env */
-    static u_external_lock_ops_t *lock_ops;       /* external lock operations, from API */
-    static u_external_rw_lock_ops_t *rw_lock_ops; /* external lock operations, from API */
-    static u_external_semaphore_ops_t *sem_ops;   /* external lock operations, from API */
-
-private:
-    static void AddRules() noexcept;
+    static uint32_t UBS_ALLOWED_PROTOCOL;            /* allowed protocol, from API */
+    static bool UBS_NATIVE_TCP_MODE;                 /* native tcp mode, pass all logic of this library, from API */
+    static bool UBS_TRACE_ENABLED;                   /* if enable tracing, from env */
+    static bool UBS_INITED;                          /* if ubsocket initialized, from API */
+    static int16_t UBS_ACCEPTOR_ASYNC_THREAD_COUNT;  /* if enable async acceptor, from API override by env */
+    static int16_t UBS_CONNECTOR_ASYNC_THREAD_COUNT; /* if enable async connector, from API override by env */
+    static int16_t UBS_EPOLL_ASYNC_THREAD_COUNT;     /* if enable async epoll_wait, from API override by env */
 };
 
-template <typename T>
-ALWAYS_INLINE bool GlobalSetting::GetEnv(const char *name, T &out) noexcept
+ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept
 {
-    if (name == nullptr) {
-        return false;
-    }
-
-    const char *envValue = getenv(name);
+    const char *envValue = getenv(name.c_str());
     if (envValue == nullptr) {
         return false;
     }
 
     std::string envStr(envValue);
-    T result;
     try {
-        if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
-            out = static_cast<T>(std::stod(envStr));
-        } else if constexpr (std::is_integral_v<T>) {
-            out = static_cast<T>(std::stoi(envStr));
-        } else if constexpr (std::is_same_v<T, std::string>) {
-            out = envStr;
-        } else {
-            static_assert(std::is_same_v<T, float> || std::is_same_v<T, double> || std::is_integral_v<T>,
-                          "Unsupported type for GetEnv");
-        }
+        out = static_cast<int64_t>(std::stol(envStr));
         return true;
     } catch (...) {
         return false;
     }
+}
+
+ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, double &out) noexcept
+{
+    const char *envValue = getenv(name.c_str());
+    if (envValue == nullptr) {
+        return false;
+    }
+
+    std::string envStr(envValue);
+    try {
+        out = static_cast<int64_t>(std::stod(envStr));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, std::string &out) noexcept
+{
+    const char *envValue = getenv(name.c_str());
+    if (envValue == nullptr) {
+        return false;
+    }
+
+    out = envValue;
+}
+
+ALWAYS_INLINE bool GlobalSetting::NativeTcpMode() noexcept
+{
+    return UBS_NATIVE_TCP_MODE;
+}
+
+ALWAYS_INLINE bool GlobalSetting::AsyncAcceptorEnabled() noexcept
+{
+    return UBS_ACCEPTOR_ASYNC_THREAD_COUNT > 0;
+}
+
+ALWAYS_INLINE bool GlobalSetting::AsyncConnectorEnabled() noexcept
+{
+    return UBS_CONNECTOR_ASYNC_THREAD_COUNT > 0;
+}
+
+ALWAYS_INLINE bool GlobalSetting::AsyncEpollEnabled() noexcept
+{
+    return UBS_EPOLL_ASYNC_THREAD_COUNT > 0;
+}
+
+ALWAYS_INLINE uint16_t GlobalSetting::GetTxDepth() noexcept
+{
+    // TODO
+    return 0;
 }
 } // namespace ubs
 } // namespace ock

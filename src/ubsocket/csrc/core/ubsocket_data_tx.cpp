@@ -24,32 +24,28 @@ DataTx::DataTx(const SocketInfo &info, DataTxOpsPtr ops)
 ssize_t DataTx::WriteV(const SocketInfo &sock, const struct iovec *iov, int iovcnt)
 {
     int retCode = -1;
-    int flagEIO = -1;
     if (sock.State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::writev(fd_, iov, iovcnt);
         retCode = size < 0 ? -1 : 0;
         return size;
     }
 
-    TRACE_DELAY_AUTO(BRPC_WRITEV_CALL, retCode);
     if (iov == nullptr || iovcnt == 0) {
         errno = EINVAL;
-        char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        //RPC_ADPT_VLOG_ERR(UBSocket, "WriteV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
-        //                  NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
-        return -1;
+        UBS_VLOG_ERR("WriteV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                     Func::Error2Str(errno));
+        return UBS_ERROR;
     }
 
     if (sock.State() == SOCK_STAT_CLOSE) {
         errno = EPIPE;
-        char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        //  RPC_ADPT_VLOG_ERR(UBSocket, "WriteV socket is closed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
-        //                  NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
-        return -1;
+        UBS_VLOG_ERR("WriteV socket is closed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                     Func::Error2Str(errno));
+        return UBS_ERROR;
     }
 
     if (tx_ops_->PollTx() < 0) {
-        return -1;
+        return UBS_ERROR;
     }
 
     IovConverter iov_converter(iov, iovcnt);
@@ -85,8 +81,8 @@ ssize_t DataTx::WriteV(const SocketInfo &sock, const struct iovec *iov, int iovc
     }
     tx_total_len = ret;
 
-    if (globalSetting.UBS_TRACE_ENABLED) {
-        UpdateTraceStats(StatsMgr::TX_BYTE_COUNT, tx_total_len);
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        // UpdateTraceStats(StatsMgr::TX_BYTE_COUNT, tx_total_len);
     }
 
     retCode = 0;

@@ -29,7 +29,7 @@ class DataTxOps {
 public:
     DataTxOps()
     {
-        tx_queue_avail_num_ = globalSetting->GetTxDepth();
+        tx_queue_avail_num_ = GlobalSetting::GetTxDepth();
     }
 
     virtual ~DataTxOps() = default;
