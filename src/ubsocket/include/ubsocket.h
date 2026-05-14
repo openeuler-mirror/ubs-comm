@@ -54,7 +54,7 @@ const char *ubsocket_version();
  * @param func
  * @return
  */
-int ubsocket_set_logger(void (*func)(int level, const char *msg));
+int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *filename, int line));
 
 /**
  * @brief Set log level

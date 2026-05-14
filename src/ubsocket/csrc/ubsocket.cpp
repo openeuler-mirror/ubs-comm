@@ -104,10 +104,20 @@ UBS_API const char *ubsocket_version()
 
 UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg))
 {
+    /* log full version */
+    std::cout << "full version: " << UBS_LIB_VERSION_FULL << std::endl;
+    /* return short version */
+    return UBS_LIB_VERSION;
+}
+
+UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *filename, int line))
+{
+    UbsocketSetLogHandler(func);
     return 0;
 }
 
 UBS_API int ubsocket_set_log_level(int level)
 {
+    ock::ubs::Logger::Instance()->SetLogLevel(level);
     return 0;
 }
