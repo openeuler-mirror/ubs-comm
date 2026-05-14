@@ -11,7 +11,12 @@
 #ifndef UBS_COMM_UBSOCKET_INCLUDES_H
 #define UBS_COMM_UBSOCKET_INCLUDES_H
 
+#include <queue>
+#include <string>
+#include <memory>
+#include <atomic>
 #include <cstdint>
+#include <functional>
 
 #include "ubsocket_defines.h"
 #include "ubsocket_errno.h"
@@ -19,6 +24,11 @@
 #include "ubsocket_global_setting.h"
 #include "ubsocket_lock.h"
 #include "ubsocket_logger.h"
+#include "ubsocket_error.h"
 #include "ubsocket_ref.h"
+#include "ubsocket_global_settting.h"
+
+#include "../../hcom/umq/include/umq/umq_types.h"
+#include "../../hcom/umq/include/umq/umq_errno.h"
 
 #endif // UBS_COMM_UBSOCKET_INCLUDES_H

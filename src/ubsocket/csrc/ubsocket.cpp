@@ -63,6 +63,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         errno = EINVAL;
         return UBS_ERROR;
     }
+    ock::ubs::SocketSet::GetInstance().Init();
 
     /* step2: load under api */
     result = LibcApi::Load();

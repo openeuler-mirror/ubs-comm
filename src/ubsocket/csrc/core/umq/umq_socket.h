@@ -12,6 +12,9 @@
 #define UBS_COMM_UMQ_SOCKET_H
 
 #include "ubsocket_socket.h"
+#include "umq_socket_acceptor.h"
+#include "umq_socket_connector.h"
+#include "../../../hcom/umq/include/umq/umq_types.h"
 
 namespace ock {
 namespace ubs {
@@ -24,9 +27,35 @@ public:
     void UnInitialize() noexcept;
 
     uint64_t UmqHandle() const noexcept;
+    void SetLocalUmqHandle(uint64_t handle) { umq_handle_ = handle; }
+    // 绑定状态
+    bool IsBindRemote() const { return umq_is_bind_remote_; }
+    void SetBindRemote(bool bound) { umq_is_bind_remote_ = bound; }
+    bool IsBindRemote() const { return is_bonding_; }
+    void SetBindRemote(bool isBonding) { is_bonding_ = isBonding; }
+    // 传输模式
+    ub_trans_mode GetTransMode() const { return trans_mode_; }
+    void SetTransMode(ub_trans_mode mode) { trans_mode_ = mode; }
+    // 拓扑类型
+    umq_topo_type_t GetTopoType() const { return topo_type_; }
+    void SetTopoType(umq_topo_type_t type) { topo_type_ = type; }
+
+    // 封装 umq 相关操作: umq_create, umq_bind
+    Result CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts);
+    int PrefillRx();
+
+    Ref<UmqSocketAcceptorOps> umq_acceptor_ops_ = nullptr;
+    Ref<UmqSocketConnectorOps> umq_connector_ops_ = nullptr;
 
 private:
-    uint64_t umq_handle_;
+    // 链接类型相关
+    bool is_bonding_ = true;
+    ub_trans_mode trans_mode_ = RC_TP;
+    umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
+    // UMQ bind
+    bool umq_is_bind_remote_ = false;
+    // UMQ 句柄
+    uint64_t umq_handle_ = UMQ_INVALID_HANDLE;
 };
 using UmqSocketPtr = Ref<UmqSocket>;
 
@@ -34,6 +63,34 @@ ALWAYS_INLINE uint64_t UmqSocket::UmqHandle() const noexcept
 {
     return umq_handle_;
 }
+
+// UmqAcceptor 和 UmqConnector 共用结构体
+struct CpMsg {
+    uint64_t protocol_negotiation = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
+    uint64_t queue_bind_info_size;
+    uint8_t queue_bind_info[UMQ_BIND_INFO_SIZE_MAX];
+};
+
+struct NegotiateReq {
+    uint64_t magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
+    ub_trans_mode trans_mode = RC_TP;
+    uint8_t is_bonding = 0;
+    uint8_t enable_share_jfr = 0;
+    uint8_t schedule_policy = static_cast<uint8_t>(dev_schedule_policy::ROUND_ROBIN);
+    uint8_t has_socket_id = 0;
+    int32_t process_socket_id = -1;
+    umq_eid_t local_eid = {};
+    uint32_t socket_id_count = 0;
+    uint32_t socket_ids[NEGOTIATE_SOCKET_ID_MAX_NUM] = {0};
+};
+
+struct NegotiateRsp {
+    int32_t ret_code = 0;
+    ub_trans_mode peer_trans_mode = RC_TP;
+    uint8_t reserved[3] = {0};
+    umq_eid_t local_eid = {};
+};
+
 } // namespace ubs
 } // namespace ock
 
