@@ -22,7 +22,7 @@ extern "C" {
 /* 
  * structures for external mutex and semaphore
  */
-typedef void *u_external_mutex_t;
+typedef void *u_mutex_t;
 typedef void *u_rw_lock_t;
 typedef void *u_semaphore_t;
 
@@ -30,14 +30,14 @@ typedef enum {
     LT_EXCLUSIVE = 0,
     LT_RECURSIVE,
     LT_BUTT,
-} u_external_mutex_type_t;
+} u_mutex_type_t;
 
 typedef struct {
-    u_external_mutex_t *(*create)(u_external_mutex_type_t type);
-    int (*destroy)(u_external_mutex_t *m);
-    int (*lock)(u_external_mutex_t *m);
-    int (*unlock)(u_external_mutex_t *m);
-    int (*try_lock)(u_external_mutex_t *m);
+    u_mutex_t *(*create)(u_mutex_type_t type);
+    int (*destroy)(u_mutex_t *m);
+    int (*lock)(u_mutex_t *m);
+    int (*unlock)(u_mutex_t *m);
+    int (*try_lock)(u_mutex_t *m);
 } u_external_lock_ops_t;
 
 typedef struct {
