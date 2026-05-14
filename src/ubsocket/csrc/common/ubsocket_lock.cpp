@@ -16,7 +16,7 @@
 namespace ock {
 namespace ubs {
 namespace default_locks {
-static u_external_mutex_t *default_lock_create(u_external_mutex_type_t type)
+static u_mutex_t *default_lock_create(u_mutex_type_t type)
 {
     auto *mutex = new (std::nothrow) pthread_mutex_t();
     if (mutex == nullptr) {
@@ -34,10 +34,10 @@ static u_external_mutex_t *default_lock_create(u_external_mutex_type_t type)
 
     pthread_mutex_init(mutex, &attr);
     pthread_mutexattr_destroy(&attr);
-    return reinterpret_cast<u_external_mutex_t *>(mutex);
+    return reinterpret_cast<u_mutex_t *>(mutex);
 }
 
-static int default_lock_destroy(u_external_mutex_t *m)
+static int default_lock_destroy(u_mutex_t *m)
 {
     if (UNLIKELY(m == nullptr)) {
         // RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Error to execute external_lock_destroy for the pointer is nullptr \n");
@@ -51,7 +51,7 @@ static int default_lock_destroy(u_external_mutex_t *m)
     return 0;
 }
 
-static int default_lock_lock(u_external_mutex_t *m)
+static int default_lock_lock(u_mutex_t *m)
 {
     if (UNLIKELY(m == nullptr)) {
         // RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Error to execute external_lock_lock for the pointer is nullptr \n");
@@ -60,7 +60,7 @@ static int default_lock_lock(u_external_mutex_t *m)
     return pthread_mutex_lock(reinterpret_cast<pthread_mutex_t *>(m));
 }
 
-static int default_lock_unlock(u_external_mutex_t *m)
+static int default_lock_unlock(u_mutex_t *m)
 {
     if (UNLIKELY(m == nullptr)) {
         // RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Error to execute external_lock_unlock for the pointer is nullptr \n");
@@ -69,7 +69,7 @@ static int default_lock_unlock(u_external_mutex_t *m)
     return pthread_mutex_unlock(reinterpret_cast<pthread_mutex_t *>(m));
 }
 
-static int default_lock_try_lock(u_external_mutex_t *m)
+static int default_lock_try_lock(u_mutex_t *m)
 {
     if (UNLIKELY(m == nullptr)) {
         // RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Error to execute external_lock_try_lock for the pointer is nullptr \n");
