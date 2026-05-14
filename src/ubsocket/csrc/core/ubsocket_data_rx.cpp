@@ -10,14 +10,22 @@
  */
 
 #include "ubsocket_data_rx.h"
+#include "umq_data_rx_ops.h"
 
 namespace ock {
 namespace ubs {
-ALWAYS_INLINE ssize_t DataRx::ReadV(const Socket &sock, const struct iovec *iov, int iovcnt)
+DataRx::DataRx(const SocketInfo &info, DataRxOpsPtr ops)
+    : fd_(info.raw_socket),
+      event_fd_(info.event_fd),
+      rx_ops_(std::move(ops))
+{
+}
+
+ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketInfo &sock, const struct iovec *iov, int iovcnt)
 {
     int retCode = -1;
-    if (sock.GetSoketState() == SOCK_STAT_RAW_ESTABLISHED) {
-        ssize_t size = OsAPiMgr::GetOriginApi()->readv(fd_, iov, iovcnt);
+    if (sock.State() == SOCK_STAT_RAW_ESTABLISHED) {
+        ssize_t size = LibcApi::readv(fd_, iov, iovcnt);
         retCode = size < 0 ? -1 : 0;
         return size;
     }
@@ -27,7 +35,7 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const Socket &sock, const struct iovec *iov,
         errno = EINVAL;
         char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
         RPC_ADPT_VLOG_WARN("ReadV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
-            NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                           NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
         return -1;
     }
 
@@ -64,13 +72,13 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const Socket &sock, const struct iovec *iov,
          * during readv processing procedure, set m_rx.m_poll to enable poll RX operation and set errno to EINTR
          * to let brpc retry and call readv() */
         if (!rx_ops_->epoll_event_num_.compare_exchange_strong(rx_ops_->expect_epoll_event_num_, 0,
-            std::memory_order_release, std::memory_order_acquire)) {
+                                                               std::memory_order_release, std::memory_order_acquire)) {
             rx_ops_->poll_ = true;
             errno = EINTR;
             return -1;
         }
 
-        if (sock.GetSoketState() == SOCK_STAT_CLOSE) {
+        if (sock.State() == SOCK_STAT_CLOSE) {
             retCode = 0;
             return 0;
         }
@@ -79,7 +87,7 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const Socket &sock, const struct iovec *iov,
             errno = EIO;
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "ReadV flow control failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n",
-                fd_, -1, errno, NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                              fd_, -1, errno, NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
             return -1;
         }
 
@@ -87,8 +95,8 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const Socket &sock, const struct iovec *iov,
             errno = EIO;
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API,
-                "ReadV RearmRxInterrupt() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
-                NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                              "ReadV RearmRxInterrupt() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1,
+                              errno, NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
             return -1;
         }
 
@@ -107,5 +115,5 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const Socket &sock, const struct iovec *iov,
     retCode = 0;
     return rx_total_len;
 }
-}
-}
+} // namespace ubs
+} // namespace ock

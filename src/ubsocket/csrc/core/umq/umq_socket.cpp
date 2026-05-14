@@ -1,29 +1,22 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-comm is licensed under the Mulan PSL v2.
+ * ubs-hcom is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
- *      http://license.coscl.org.cn/MulanPSL2
+ * http://license.coscl.org.cn/MulanPSL2
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef UBS_COMM_UBSOCKET_ERRNO_H
-#define UBS_COMM_UBSOCKET_ERRNO_H
-
-#include "ubsocket_defines.h"
+#include "umq_socket.h"
 
 namespace ock {
 namespace ubs {
-enum InnerCode : int32_t {
-    UBS_OK = 0,
-    UBS_ERROR = -1,
-    UBS_DL_LOAD_SYM_FAILED = -100,
-    UBS_DL_OPEN_LIB_FAILED = -101,
-    UBS_INVALID_PARAM = -102,
-    UBS_MALLOC_FAILED = -103,
-};
+Result UmqSocket::Initialize() noexcept
+{
+    return UBS_OK;
+}
+
+void UmqSocket::UnInitialize() noexcept {}
 } // namespace ubs
 } // namespace ock
-
-#endif // UBS_COMM_UBSOCKET_ERRNO_H

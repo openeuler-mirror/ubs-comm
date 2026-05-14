@@ -10,15 +10,23 @@
  */
 
 #include "ubsocket_data_tx.h"
+#include "ubsocket_socket.h"
 
 namespace ock {
 namespace ubs {
-ALWAYS_INLINE ssize_t DataTx::WriteV(const Socket &sock, const struct iovec *iov, int iovcnt)
+DataTx::DataTx(const SocketInfo &info, DataTxOpsPtr ops)
+    : fd_(info.raw_socket_),
+      event_fd_(info.event_fd_),
+      tx_ops_(std::move(ops))
+{
+}
+
+ssize_t DataTx::WriteV(const SocketInfo &sock, const struct iovec *iov, int iovcnt)
 {
     int retCode = -1;
     int flagEIO = -1;
-    if (sock.GetSoketState() == SOCK_STAT_RAW_ESTABLISHED) {
-        ssize_t size = OsAPiMgr::GetOriginApi()->writev(fd_, iov, iovcnt);
+    if (sock.State() == SOCK_STAT_RAW_ESTABLISHED) {
+        ssize_t size = LibcApi::writev(fd_, iov, iovcnt);
         retCode = size < 0 ? -1 : 0;
         return size;
     }
@@ -27,16 +35,16 @@ ALWAYS_INLINE ssize_t DataTx::WriteV(const Socket &sock, const struct iovec *iov
     if (iov == nullptr || iovcnt == 0) {
         errno = EINVAL;
         char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        RPC_ADPT_VLOG_ERR(UBSocket, "WriteV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1,
-            errno, NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+        //RPC_ADPT_VLOG_ERR(UBSocket, "WriteV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+        //                  NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
         return -1;
     }
 
-    if (sock.GetSoketState() == SOCK_STAT_CLOSE) {
+    if (sock.State() == SOCK_STAT_CLOSE) {
         errno = EPIPE;
         char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        RPC_ADPT_VLOG_ERR(UBSocket, "WriteV socket is closed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1,
-            errno, NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+        //  RPC_ADPT_VLOG_ERR(UBSocket, "WriteV socket is closed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+        //                  NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
         return -1;
     }
 
@@ -47,8 +55,8 @@ ALWAYS_INLINE ssize_t DataTx::WriteV(const Socket &sock, const struct iovec *iov
     IovConverter iov_converter(iov, iovcnt);
     uint32_t input_total_len = 0;
     uint32_t batch = 0;
-    uint32_t post_batch_max =
-        tx_ops_->tx_queue_avail_num_ > TX_POST_BATCH_MAX ? TX_POST_BATCH_MAX : tx_ops_->tx_queue_avail_num_;
+    uint32_t post_batch_max = tx_ops_->tx_queue_avail_num_ > TX_POST_BATCH_MAX ? TX_POST_BATCH_MAX :
+                                                                                 tx_ops_->tx_queue_avail_num_;
     uint32_t buf_cnt = 0;
     uint32_t cut_total_len = 0;
 
@@ -58,7 +66,7 @@ ALWAYS_INLINE ssize_t DataTx::WriteV(const Socket &sock, const struct iovec *iov
         uint32_t wr_left_len = tx_ops_->IOBufSize();
         uint32_t sge_idx = 0;
         while (sge_idx++ < TX_SGE_MAX && cut_total_len < tx_ops_->IOBufSize() &&
-            ((cut_len = iov_converter.Cut(wr_left_len)) != 0)) {
+               ((cut_len = iov_converter.Cut(wr_left_len)) != 0)) {
             ++buf_cnt;
             wr_left_len -= cut_len;
             cut_total_len += cut_len;
@@ -84,5 +92,5 @@ ALWAYS_INLINE ssize_t DataTx::WriteV(const Socket &sock, const struct iovec *iov
     retCode = 0;
     return tx_total_len;
 }
-}
-}
+} // namespace ubs
+} // namespace ock

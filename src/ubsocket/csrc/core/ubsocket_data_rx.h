@@ -11,61 +11,67 @@
 #ifndef UBS_COMM_UBSOCKET_DATA_RX_H
 #define UBS_COMM_UBSOCKET_DATA_RX_H
 
-#include <cstdlib>
-#include <cstdint>
-#include <memory>
 #include <atomic>
-#include "ubsocket_socket.h"
-#include "../common/ubsocket_defines.h"
+#include <cstdint>
+#include <cstdlib>
+#include <memory>
+
+#include "ubsocket_core_types.h"
 
 namespace ock {
 namespace ubs {
 // 接口层，实现 Polltx等动作
 class DataRxOps {
 public:
-    DataRxOps() {}
+    DataRxOps() = default;
+    virtual ~DataRxOps() = default;
 
-    virtual ~DataRxOps() = 0;
     virtual int PollRx(bool flow_control_failed) = 0;
     virtual int RearmRxInterrupt() = 0;
 
+    DEFINE_REF_OPERATION_FUNC
+
 protected:
+    DECLARE_REF_COUNT_VARIABLE
+
     int fd_ = -1;
     // RX fields
     uint8_t epoll_in_msg_ = 0;
     uint8_t epoll_in_msg_recv_size_ = 0;
     uint16_t rx_queue_avail_num_ = 0; // current window size for RX
     uint16_t event_num_ = 0;
-    std::atomic<int> epoll_event_num_ { 0 };
+    std::atomic<int> epoll_event_num_{0};
     int expect_epoll_event_num_ = 0;
     bool get_and_ack_event_ = false;
     bool poll_ = false;
     Brpc::BlockCache block_cache_;
-    std::atomic<bool> need_fc_awake_ { false };
+    std::atomic<bool> need_fc_awake_{false};
 
     size_t remaining_size_ = 0;
 
     friend class DataRx;
 };
+using DataRxOpsPtr = Ref<DataRxOps>;
 
 // 通用层：缓存获取数据，故障回退
 class DataRx {
 public:
-    DataRx(int fd, int event_fd, std::shared_ptr<DataRxOps> ops)
-        : fd_(fd), event_fd_(event_fd), rx_ops_(std::move(ops)) {}
+    DataRx() = default;
+    DataRx(const SocketInfo &info, DataRxOpsPtr ops);
 
-    ALWAYS_INLINE ssize_t ReadV(const Socket &sock, const struct iovec *iov, int iovcnt);
+    ALWAYS_INLINE ssize_t ReadV(const SocketInfo &sock, const struct iovec *iov, int iovcnt);
 
 private:
     ALWAYS_INLINE ssize_t OutputErrorMagicNumber(const struct iovec *iov, int iovcnt);
+
 private:
     bool flow_control_failed_ = false;
 
     int fd_ = -1;
     int event_fd_ = -1;
 
-    std::shared_ptr<DataRxOps> rx_ops_ = nullptr;
+    DataRxOpsPtr rx_ops_ = nullptr;
 };
-}
-}
+} // namespace ubs
+} // namespace ock
 #endif // UBS_COMM_UBSOCKET_DATA_RX_H

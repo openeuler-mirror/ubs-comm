@@ -18,11 +18,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
-#include "../common/buffer_util.h"
-#include "../common/ubsocket_defines.h"
-#include "../common/ubsocket_global_setting.h"
-#include "../common/ubsocket_logger.h"
-#include "ubsocket_socket.h"
+
+#include "buffer_util.h"
+#include "ubsocket_core_types.h"
 
 namespace ock {
 namespace ubs {
@@ -34,7 +32,7 @@ public:
         tx_queue_avail_num_ = globalSetting->GetTxDepth();
     }
 
-    virtual ~DataTxOps() = 0;
+    virtual ~DataTxOps() = default;
 
     // 分配发送缓冲区
     virtual uintptr_t AllocTxBuf(uint32_t count) = 0;
@@ -48,7 +46,11 @@ public:
 
     virtual uint32_t IOBufSize() = 0;
 
+    DEFINE_REF_OPERATION_FUNC
+
 protected:
+    DECLARE_REF_COUNT_VARIABLE
+
     int fd_ = -1;
     uint16_t tx_queue_avail_num_ = 0; // current window size for TX
     uint16_t ack_event_num_ = 0;
@@ -63,25 +65,28 @@ protected:
 
     friend class DataTx;
 };
+using DataTxOpsPtr = Ref<DataTxOps>;
 
 // 通用层：流控、数据切分、故障回退
 class DataTx {
+public:
+    DataTx() = default;
+
     /**
      * @brief 构造函数
      *
      * @param ops 具体的协议实现 (UMQ 或 RDMA)
      */
-    DataTx(int fd, int event_fd, std::shared_ptr<DataTxOps> ops)
-        : fd_(fd), event_fd_(event_fd), tx_ops_(std::move(ops)) {}
+    DataTx(const SocketInfo &info, DataTxOpsPtr ops);
 
-    ALWAYS_INLINE ssize_t WriteV(const Socket &sock, const struct iovec *iov, int iovcnt);
+    ALWAYS_INLINE ssize_t WriteV(const SocketInfo &sock, const struct iovec *iov, int iovcnt);
 
 private:
     int fd_ = -1;
     int event_fd_ = -1;
-    std::shared_ptr<DataTxOps> tx_ops_ = nullptr;
+    DataTxOpsPtr tx_ops_{nullptr};
 };
-}
-}
+} // namespace ubs
+} // namespace ock
 
 #endif // UBS_COMM_UBSOCKET_DATA_TX_H

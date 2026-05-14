@@ -27,42 +27,170 @@ public:
     Referable() = default;
     virtual ~Referable() = default;
 
-    void IncreaseRef();
-    void DecreaseRef();
+    ALWAYS_INLINE void IncreaseRef()
+    {
+        ref_count_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    ALWAYS_INLINE void DecreaseRef()
+    {
+        if (ref_count_.fetch_sub(1, std::memory_order_acq_rel) == 0) {
+            delete this;
+        }
+    }
 
 protected:
     std::atomic<int16_t> ref_count_{0};
 };
 
-ALWAYS_INLINE void Referable::IncreaseRef()
-{
-    ref_count_.fetch_add(1, std::memory_order_relaxed);
-}
-
-ALWAYS_INLINE void Referable::DecreaseRef()
-{
-    // delete itself if reference count equal to 0
-    if (ref_count_.fetch_sub(1, std::memory_order_acq_rel) == 0) {
-        delete this;
-    }
-}
-
 #define DECLARE_REF_COUNT_VARIABLE std::atomic<int16_t> ref_count_{0};
 
-#define DEFINE_INCREASE_REF_FUNC                            \
-    ALWAYS_INLINE void IncreaseRef()                        \
-    {                                                       \
-        ref_count_.fetch_add(1, std::memory_order_relaxed); \
-    }
-
-#define DEFINE_DECREASE_REF_FUNC                                       \
+#define DEFINE_REF_OPERATION_FUNC                                      \
     ALWAYS_INLINE void IncreaseRef()                                   \
+    {                                                                  \
+        ref_count_.fetch_add(1, std::memory_order_relaxed);            \
+    }                                                                  \
+                                                                       \
+    ALWAYS_INLINE void DecreaseRef()                                   \
     {                                                                  \
         if (ref_count_.fetch_sub(1, std::memory_order_acq_rel) == 0) { \
             delete this;                                               \
         }                                                              \
     }
 
+template <typename T>
+class Ref {
+public:
+    Ref() noexcept = default;
+
+    /* fix: can't be explicit */
+    Ref(T *newObj) noexcept
+    {
+        /*
+         * if new obj is not null, increase reference count and assign to mObj
+         * else nothing need to do as mObj is nullptr by default
+         */
+        if (newObj != nullptr) {
+            newObj->IncreaseRef();
+            mObj = newObj;
+        }
+    }
+
+    Ref(const Ref<T> &other) noexcept
+    {
+        /*
+         * if other's obj is not null, increase reference count and assign to mObj
+         * else nothing need to do as mObj is nullptr by default
+         */
+        if (other.mObj != nullptr) {
+            other.mObj->IncreaseRef();
+            mObj = other.mObj;
+        }
+    }
+
+    Ref(Ref<T> &&other) noexcept : mObj(std::exchange(other.mObj, nullptr))
+    {
+        /*
+         * move constructor
+         * since this mObj is null, just exchange
+         */
+    }
+
+    ~Ref()
+    {
+        if (mObj != nullptr) {
+            mObj->DecreaseRef();
+        }
+    }
+
+    inline Ref<T> &operator=(T *newObj)
+    {
+        this->Set(newObj);
+        return *this;
+    }
+
+    inline Ref<T> &operator=(const Ref<T> &other)
+    {
+        if (this != &other) {
+            this->Set(other.mObj);
+        }
+        return *this;
+    }
+
+    Ref<T> &operator=(Ref<T> &&other) noexcept
+    {
+        if (this != &other) {
+            auto tmp = mObj;
+            mObj = std::__exchange(other.mObj, nullptr);
+            if (tmp != nullptr) {
+                tmp->DecreaseRef();
+            }
+        }
+        return *this;
+    }
+
+    inline bool operator==(const Ref<T> &other) const
+    {
+        return mObj == other.mObj;
+    }
+
+    inline bool operator==(T *other) const
+    {
+        return mObj == other;
+    }
+
+    inline bool operator!=(const Ref<T> &other) const
+    {
+        return mObj != other.mObj;
+    }
+
+    inline bool operator!=(T *other) const
+    {
+        return mObj != other;
+    }
+
+    inline T *operator->() const
+    {
+        return mObj;
+    }
+
+    inline T *Get() const
+    {
+        return mObj;
+    }
+
+    inline void Set(T *newObj)
+    {
+        if (newObj == mObj) {
+            return;
+        }
+
+        if (newObj != nullptr) {
+            newObj->IncreaseRef();
+        }
+
+        if (mObj != nullptr) {
+            mObj->DecreaseRef();
+        }
+
+        mObj = newObj;
+    }
+
+private:
+    T *mObj = nullptr;
+};
+
+template <typename C, typename... ARGS>
+inline Ref<C> MakeRef(ARGS... args)
+{
+    return new (std::nothrow) C(args...);
+}
+
+template <class Src, class Des>
+Ref<Des> inline RefConvert(const Ref<Src> &src)
+{
+    return Ref<Des>(dynamic_cast<Des *>(src.Get()));
+}
 } // namespace ubs
 } // namespace ock
 

@@ -9,8 +9,8 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket.h"
-#include "ubsocket_data_tx.h"
 #include "ubsocket_common_includes.h"
+#include "ubsocket_data_tx.h"
 
 UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
 {
@@ -54,7 +54,7 @@ UBS_API ssize_t UB_API_WRAP(readv)(int fildes, const struct iovec *iov, int iovc
 UBS_API ssize_t UB_API_WRAP(writev)(int fildes, const struct iovec *iov, int iovcnt)
 {
     // 1.从map根据fd获取socket , 然后获取tx
-    tx->WriteV(sock, &iov, iovcnt);
+    // tx->WriteV(sock, &iov, iovcnt);
     return 0;
 }
 
@@ -71,7 +71,7 @@ UBS_API ssize_t UB_API_WRAP(recv)(int sockfd, void *buf, size_t len, int flags)
 UBS_API ssize_t UB_API_WRAP(read)(int fildes, void *buf, size_t nbyte)
 {
     // 1.从map根据fd获取socket , 然后获取rx
-    tx->ReadV(&iov, iovcnt);
+    // tx->ReadV(&iov, iovcnt);
     return 0;
 }
 
