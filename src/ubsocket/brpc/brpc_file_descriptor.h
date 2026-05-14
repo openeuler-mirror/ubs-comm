@@ -1306,6 +1306,88 @@ public:
         }
     }
 
+    ALWAYS_INLINE void TryToWakeUpTx()
+    {
+        // try to wake up tx if necessary
+        bool needFcAwake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
+        if (needFcAwake && NotifyReadable() == -1) {
+            char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                              "eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
+                              ", peer ip: %s, errno: %d, errmsg: %s\n",
+                              m_event_fd, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno,
+                              NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+        }
+    }
+
+    ALWAYS_INLINE bool pollSubUmqRx(umq_buf_t *buf[], int i) const
+    {
+        int ret = umq_poll(m_local_umqh, UMQ_IO_RX, &buf[i], 1);
+        bool pollRxSuccess = ret > 0;
+        if (ret < 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "Failed to poll fc rx, local umq: %llu, ret: %d\n",
+                              static_cast<unsigned long long>(m_local_umqh), ret);
+        }
+        return pollRxSuccess;
+    }
+
+    ALWAYS_INLINE uint32_t ProcessReadVPolledBuffers(umq_buf_t *buf[], int poll_num)
+    {
+        auto free_buf = [](umq_buf_t* b) {
+            QBUF_LIST_NEXT(b) = nullptr;
+            umq_buf_free(b);
+        };
+
+        uint32_t polled_size = 0;
+        for (int i = 0; i < poll_num; ++i) {
+            umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf[i]->qbuf_ext);
+            if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == 1) {
+                // 处理探测包
+                ProbeManager::GetInstance().HandleReceivedPacket(m_fd, buf[i]);
+                if (QBUF_LIST_NEXT(buf[i]) != nullptr) {
+                    RPC_ADPT_VLOG_WARN("probe buf next not null\n");
+                }
+                umq_buf_free(buf[i]);
+                continue;
+            }
+            // currently, umq over IB return IB cr status directly, successful = 0
+            if (buf[i]->status != 0) {
+                if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE && buf[i]->status != UMQ_FAKE_BUF_FC_MSG) {
+                    if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+                        m_flow_control_failed = true;
+                    }
+                    HandleErrorRxCqe(buf[i]);
+                    free_buf(buf[i]);
+                    continue;
+                }
+                if (buf[i]->status == UMQ_FAKE_BUF_FC_MSG) {
+                    free_buf(buf[i]);
+                    if (!pollSubUmqRx(buf, i)) {
+                        continue;
+                    }
+
+                    if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+                        m_flow_control_failed = true;
+                        HandleErrorRxCqe(buf[i]);
+                        free_buf(buf[i]);
+                        continue;
+                    }
+                }
+
+                m_rx.m_window_size += 1;
+                TryToWakeUpTx();
+                free_buf(buf[i]);
+                continue;
+            }
+            if (m_context_trace_enable) {
+                UpdateTraceStats(RX_PACKET_COUNT, 1);
+            }
+            m_rx.m_block_cache.Insert(buf[i]->buf_data, buf[i]->data_size);
+            polled_size += buf[i]->data_size;
+        }
+        return polled_size;
+    }
+
     ALWAYS_INLINE ssize_t ReadV(const struct iovec *iov, int iovcnt)
     {
         int retCode = -1;
@@ -1375,50 +1457,7 @@ public:
                 m_rx.m_poll = false; 
             }
         }
-
-        uint32_t polled_size = 0;
-        for (int i = 0; i < poll_num; ++i) {
-            umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf[i]->qbuf_ext);
-            if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == 1) {
-                // 处理探测包
-                Statistics::ProbeManager::GetInstance().HandleReceivedPacket(m_fd, buf[i]);
-                if (QBUF_LIST_NEXT(buf[i]) != nullptr) {
-                    RPC_ADPT_VLOG_WARN("probe buf next not null\n");
-                }
-                umq_buf_free(buf[i]);
-                continue;
-            }
-            // currently, umq over IB return IB cr status directly, successful = 0
-            if (buf[i]->status != 0) {
-                if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
-                    if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
-                        m_flow_control_failed = true;
-                    }
-                    HandleErrorRxCqe(buf[i]);
-                } else {
-                    m_rx.m_window_size += 1;
-                    // try to wake up tx if necessary
-                    bool need_fc_awake = m_tx.m_need_fc_awake.exchange(false, std::memory_order_relaxed);
-                    if (need_fc_awake && NotifyReadable() == -1) {
-                        char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                        RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                            "eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
-                            ", peer ip: %s, errno: %d, errmsg: %s\n",
-                            m_event_fd, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno,
-                            NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
-                    }
-                }
-
-                QBUF_LIST_NEXT(buf[i]) = nullptr;
-                umq_buf_free(buf[i]);
-                continue;
-            }
-            if (m_context_trace_enable) {
-                UpdateTraceStats(StatsMgr::RX_PACKET_COUNT, 1);
-            }
-            m_rx.m_block_cache.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
-            polled_size += buf[i]->data_size;
-        }
+        ProcessReadVPolledBuffers(buf, poll_num);
 
         /* rpc adapter has replace brpc butil::iobuf::blockmem_allocate() & butil::iof::blockmem_deallocate()
          * and ensures that the starting address of the Block is aligned to an 8k boundary. */
@@ -5240,17 +5279,25 @@ public:
             throw std::runtime_error("Failed to get TX interrupt fd for umq\n");
         }
 
-        umq_interrupt_option_t rx_option = { UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX };
-        int rx_interrupt_fd = umq_interrupt_fd_get(socket_fd_obj->GetLocalUmqHandle(), &rx_option);
-        if (rx_interrupt_fd < 0) {
-            errno = EINVAL;
-            throw std::runtime_error("Failed to get RX interrupt fd for umq\n");
+        Brpc::Context *context = Brpc::Context::GetContext();
+        bool enableShareJfr = context == nullptr || context->EnableShareJfr();
+        // 流控共享jfr场景，子q不需要监听rx
+        int rxInterruptFd = -1;
+        if (!enableShareJfr) {
+            umq_interrupt_option_t rx_option = { UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX };
+            rxInterruptFd = umq_interrupt_fd_get(socket_fd_obj->GetLocalUmqHandle(), &rx_option);
+            if (rxInterruptFd < 0) {
+                errno = EINVAL;
+                throw std::runtime_error("Failed to get RX interrupt fd for umq\n");
+            }
         }
 
         try {
             tx_epoll_event = new UmqTxEpollEvent(fd, event, tx_interrupt_fd);
             event_fd_epoll_event = new UmqEventFdEpollEvent(fd, event, socket_fd_obj->GetEventFd());
-            rx_epoll_event = new UmqRxEpollEvent(fd, event, rx_interrupt_fd);
+            if (!enableShareJfr) {
+                rx_epoll_event = new UmqRxEpollEvent(fd, event, rxInterruptFd);
+            }
         } catch (std::exception& e) {
             CleanUp();
             throw std::runtime_error(e.what());

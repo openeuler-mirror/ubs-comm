@@ -282,12 +282,21 @@ int ShareJfrRxEpollEvent::PollShareJfrAndRefillRx(umq_buf_t **buf, uint32_t max_
         return -1;
     }
 
-    if (poll_num == 0) {
-        return 0;
+    // 计算时，排除流控的buffer
+    int fcBufCnt = 0;
+    for (int i = 0; i < poll_num; ++i) {
+        if (buf[i]->status >= UMQ_FAKE_BUF_FC_UPDATE) {
+            ++fcBufCnt;
+        }
+    }
+
+    int ioPollNum = poll_num - fcBufCnt;
+    if (ioPollNum == 0) {
+        return poll_num;
     }
 
     umq_alloc_option_t option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(IOBuf::Block)};
-    umq_buf_t *rx_buf_list = umq_buf_alloc(BrpcIOBufSize(), poll_num, UMQ_INVALID_HANDLE, &option);
+    umq_buf_t *rx_buf_list = umq_buf_alloc(BrpcIOBufSize(), ioPollNum, UMQ_INVALID_HANDLE, &option);
     if (rx_buf_list == nullptr) {
         RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API,
             "umq_buf_alloc() failed, main umq: %llu, ret: %p\n",
