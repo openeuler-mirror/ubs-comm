@@ -70,6 +70,10 @@ public:
     static int16_t UBS_ACCEPTOR_ASYNC_THREAD_COUNT;  /* if enable async acceptor, from API override by env */
     static int16_t UBS_CONNECTOR_ASYNC_THREAD_COUNT; /* if enable async connector, from API override by env */
     static int16_t UBS_EPOLL_ASYNC_THREAD_COUNT;     /* if enable async epoll_wait, from API override by env */
+    static bool UBS_ACCEPTOR_ASYNC_ENABLED;       /* if enable async acceptor, from API override by env */
+    static bool UBS_CONNECTOR_ASYNC_ENABLED;      /* if enable async connector, from API override by env */
+    static bool UBS_EPOLL_ASYNC_ENABLED;          /* if enable async epoll_wait, from API override by env */
+    static bool UBS_AUTO_FALLBACK_TCP;            /* if auto fallback to tcp, from API override by from env */
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept

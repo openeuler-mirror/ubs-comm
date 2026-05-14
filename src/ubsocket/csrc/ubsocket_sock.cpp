@@ -11,6 +11,7 @@
 #include "ubsocket.h"
 #include "ubsocket_common_includes.h"
 #include "ubsocket_data_tx.h"
+#include "ubsocket_socket.h"
 
 UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
 {
@@ -29,7 +30,14 @@ UBS_API int UB_API_WRAP(close)(int fd)
 
 UBS_API int UB_API_WRAP(accept)(int socket, struct sockaddr *address, socklen_t *address_len)
 {
-    return 0;
+    if (!ock::ubs::GlobalSetting::UBS_NATIVE_TCP_MODE) {
+        return LibcApi::accept(socket, address, address_len);
+    }
+    ock::ubs::Socket *sock = ock::ubs::SocketSet::GetInstance().GetSocket(socket);
+    if (sock == nullptr) {
+        return LibcApi::accept(socket, address, address_len);
+    }
+    return sock->Accept(*sock, address, address_len);
 }
 
 UBS_API int UB_API_WRAP(accept4)(int socket, struct sockaddr *address, socklen_t *address_len, int flag)
@@ -44,7 +52,14 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
 
 UBS_API int UB_API_WRAP(connect)(int socket, const struct sockaddr *address, socklen_t address_len)
 {
-    return 0;
+    if (!ock::ubs::GlobalSetting::UBS_NATIVE_TCP_MODE) {
+        return LibcApi::connect(socket, address, address_len);
+    }
+    ock::ubs::Socket *sock = ock::ubs::SocketSet::GetInstance().GetSocket(socket);
+    if (sock == nullptr) {
+        return LibcApi::connect(socket, address, address_len);
+    }
+    return sock->Connect(*sock, address, address_len);
 }
 UBS_API ssize_t UB_API_WRAP(readv)(int fildes, const struct iovec *iov, int iovcnt)
 {

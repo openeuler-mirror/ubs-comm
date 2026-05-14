@@ -22,6 +22,16 @@ enum InnerCode : int32_t {
     UBS_DL_OPEN_LIB_FAILED = -101,
     UBS_INVALID_PARAM = -102,
     UBS_MALLOC_FAILED = -103,
+
+    // ubsocket 相关错误
+    UBS_SET_DEV_INFO = 4097,
+    UBS_PREFILL_RX,
+    UBS_INIT_SHARED_JFR_RX_QUEUE,
+    UBS_NEW_SOCKET_FD,
+    UBS_TCP_EXCHANGE,
+    UBS_UB_ACCEPT,
+    UBS_NO_MAIN_UMQ,
+    UBS_MAX,
 };
 } // namespace ubs
 } // namespace ock

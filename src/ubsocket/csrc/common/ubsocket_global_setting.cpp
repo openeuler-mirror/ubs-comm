@@ -22,12 +22,24 @@ bool GlobalSetting::UBS_INITED = false;                      /* not inited by de
 int16_t GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;  /* disabled by default */
 int16_t GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = 0; /* disabled by default */
 int16_t GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = 1;     /* enabled by default */
+bool GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED = false;
+bool GlobalSetting::UBS_CONNECTOR_ASYNC_ENABLED = false;
+bool GlobalSetting::UBS_EPOLL_ASYNC_ENABLED = false;
+bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
 #define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPTOR_THREAD_COUNT"
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
+#define ENV_VAR_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
+
+
+/* int64 rule: name, required, min, max */
+Int64Rule RULES_INT64[] = {{ENV_TRACE_ENABLED, false, 0, 1L},
+                           {ENV_ASYNC_ACCEPTOR, false, 0, 8L},
+                           {ENV_ASYNC_CONNECTOR, false, 0, 8L},
+                           {ENV_ASYNC_EPOLL, false, 1, 1L}};
 
 /* int64 rule: name, required, min, max */
 Int64Rule RULES_INT64[] = {{ENV_TRACE_ENABLED, false, 0, 1L},

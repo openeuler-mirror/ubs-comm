@@ -34,6 +34,38 @@ using Result = int32_t;
 
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
+#define RPC_ADPT_FD_MAX      (8192)
+
+enum dev_schedule_policy {
+    ROUND_ROBIN = 1,
+    CPU_AFFINITY = 2,
+    CPU_AFFINITY_PRIORITY = 3,
+};
+
+enum ub_trans_mode {
+    RC_TP,
+    RM_TP,
+    RM_CTP,
+    RC_CTP
+};
+
+// 描述在 Connect/Accept 间的握手状态
+enum class UBHandshakeState : uint32_t {
+    kOK = 0,
+    // 初次握手
+    kSTART = 1,
+    // 初次握手失败，再次尝试
+    kRETRY = 2,
+    // 再次握手失败，用以通知客户端需要降级成 TCP
+    kRETRY_FAILED_CHECK_OTHER_ROUTE = 3,
+    // UB 握手失败，降级至 TCP
+    kDEGRADE = 4,
+    // UB 握手失败
+    kFAILED = 6,
+};
+
+#define ALWAYS_INLINE inline __attribute__((always_inline))
+
 constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 512;
 constexpr uint32_t DIVIDED_NUMBER = 2;
 constexpr uint32_t CACHE_LINE_ALIGNMENT = 64;
