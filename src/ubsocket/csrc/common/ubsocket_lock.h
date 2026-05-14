@@ -8,22 +8,29 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef UBS_COMM_UBSOCKET_ERRNO_H
-#define UBS_COMM_UBSOCKET_ERRNO_H
+#ifndef UBS_COMM_UBSOCKET_LOCK_H
+#define UBS_COMM_UBSOCKET_LOCK_H
 
+#include "ubsocket_def.h"
 #include "ubsocket_defines.h"
+#include "ubsocket_errno.h"
 
 namespace ock {
 namespace ubs {
-enum InnerCode : int32_t {
-    UBS_OK = 0,
-    UBS_ERROR = -1,
-    UBS_DL_LOAD_SYM_FAILED = -100,
-    UBS_DL_OPEN_LIB_FAILED = -101,
-    UBS_INVALID_PARAM = -102,
-    UBS_MALLOC_FAILED = -103,
+
+class LockRegistry {
+public:
+    static Result RegisterLockOps(u_external_lock_ops_t *ops);
+
+    static Result RegisterRwLockOps(u_external_rw_lock_ops_t *ops);
+
+    static Result RegisterSemOps(u_external_semaphore_ops_t *ops);
+
+    static u_external_lock_ops_t LOCK_OPS;
+    static u_external_rw_lock_ops_t RW_LOCK_OPS;
+    static u_external_semaphore_ops_t SEM_OPS;
 };
 } // namespace ubs
 } // namespace ock
 
-#endif // UBS_COMM_UBSOCKET_ERRNO_H
+#endif // UBS_COMM_UBSOCKET_LOCK_H

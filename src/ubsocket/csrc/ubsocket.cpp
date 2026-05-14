@@ -58,6 +58,31 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         return UBS_ERROR;
     }
 
+    /* step3: register lock */
+    if (options->lock_ops != nullptr) {
+        result = LockRegistry::RegisterLockOps(options->lock_ops);
+        if (result != UBS_OK) {
+            errno = EBADF;
+            return UBS_ERROR;
+        }
+    }
+
+    if (options->rw_lock_ops != nullptr) {
+        result = LockRegistry::RegisterRwLockOps(options->rw_lock_ops);
+        if (result != UBS_OK) {
+            errno = EBADF;
+            return UBS_ERROR;
+        }
+    }
+
+    if (options->sem_ops != nullptr) {
+        result = LockRegistry::RegisterSemOps(options->sem_ops);
+        if (result != UBS_OK) {
+            errno = EBADF;
+            return UBS_ERROR;
+        }
+    }
+
     /* set initialized */
     GlobalSetting::UBS_INITED = true;
 

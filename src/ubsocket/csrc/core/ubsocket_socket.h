@@ -12,41 +12,34 @@
 #define UBS_COMM_UBSOCKET_CONNECTION_H
 
 #include "dl_libc_api.h"
-#include "ubsocket_common.h"
+#include "ubsocket_core_types.h"
+#include "ubsocket_data_rx.h"
+#include "ubsocket_data_tx.h"
 
 namespace ock {
 namespace ubs {
-enum SocketState : uint8_t {
-    SOCK_STAT_INIT = 0,        /* init */
-    SOCK_STAT_RAW_ESTABLISHED, /* the raw socket established */
-    SOCK_STAT_ESTABLISHED,     /* all things established */
-    SOCK_STAT_SHUTDOWN,        /* shutdown */
-    SOCK_STAT_CLOSE,           /* closed */
-};
+class Socket;
+using SocketPtr = Ref<Socket>;
 
-enum SocketType : uint8_t {
-    SOCK_TYPE_TCP = 0, /* only contains raw socket */
-    SOCK_TYPE_UMQ,     /* an ubsocket based on umq */
-    SOCK_TYPE_RDMA,    /* an ubscoket based on rdma */
-    SOCK_TYPE_URMA_CTP /* an ubsocket based urma ctp */
-};
-
-class Socket : public Referable {
+class Socket : public SocketInfo {
 public:
-    SocketState GetSoketState() const
-    {
-        return state_;
-    }
+    static Result Create(SocketType t, SocketPtr &sock);
+    static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOpsPtr &ops);
+    static Result CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOpsPtr &ops);
 
-    int GetRawFD() const
-    {
-        return raw_socket_;
-    }
+public:
+    Socket() = default;
+    ~Socket() override = default;
+
+    virtual Result Initialize() noexcept = 0;
+    virtual void UnInitialize() noexcept = 0;
 
 protected:
-    int raw_socket_ = 0;                 /* fd of raw socket */
-    SocketState state_ = SOCK_STAT_INIT; /* state of ubsocket */
-    SocketType type_ = SOCK_TYPE_TCP;    /* type of ubsocket */
+    DataTx tx_; /* take charge of send */
+    DataRx rx_; /* take charge of receive */
+
+    friend class DataTx;
+    friend class DataRx;
 };
 } // namespace ubs
 } // namespace ock
