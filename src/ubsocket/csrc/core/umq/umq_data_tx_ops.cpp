@@ -97,7 +97,7 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch)
     int ret = umq_post(local_umqh_, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
     if (ret == UMQ_SUCCESS) {
         tx_queue_avail_num_ -= batch;
-        if (globalSetting.UBS_TRACE_ENABLED) {
+        if (GlobalSetting::UBS_TRACE_ENABLED) {
             UpdateTraceStats(StatsMgr::TX_PACKET_COUNT, 1);
         }
     } else if (bad_qbuf != nullptr) {
@@ -148,7 +148,7 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch)
 
     // After posting and before polling, the time for updating the count cna be concealed within the waiting period
     // for polling.
-    if ((globalSetting.GetTxDepth() - tx_queue_avail_num_) >= TX_HANDLE_THRESHOLD) {
+    if ((GlobalSetting::GetTxDepth() - tx_queue_avail_num_) >= TX_HANDLE_THRESHOLD) {
         PollUmqTx(false);
     }
     return tx_total_len;
@@ -187,7 +187,7 @@ int UmqDataTxOps::PollTx()
 // adapt to brpc, brpc IOBuf block use 8k as buffer slice with a 32 bytes head, thus, RX buffer size is 8160
 inline uint32_t UmqDataTxOps::IOBufSize()
 {
-    umq_buf_block_size_t blockType = globalSetting.GetIOBlockType();
+    umq_buf_block_size_t blockType = GlobalSetting::GetIOBlockType();
     switch (blockType) {
         case BLOCK_SIZE_8K:  return SIZE_8K - IOBUF_DIFF;
         case BLOCK_SIZE_16K: return SIZE_16K - IOBUF_DIFF;

@@ -50,9 +50,22 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     /* do initialization */
     /* step1: global setting */
+    GlobalSetting::AddRules();
+
+    GlobalSetting::UBS_ALLOWED_PROTOCOL = options->allowed_protocol;
+    GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = options->async_acceptor_thread_count;
+    GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = options->async_connector_thread_count;
+    GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = options->async_epoll_thread_count;
+
+    auto result = GlobalSetting::VerifySetting();
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("initialize failed as options are invalid");
+        errno = EINVAL;
+        return UBS_ERROR;
+    }
 
     /* step2: load under api */
-    auto result = LibcApi::Load();
+    result = LibcApi::Load();
     if (result != UBS_OK) {
         errno = EBADF;
         return UBS_ERROR;
@@ -102,22 +115,14 @@ UBS_API const char *ubsocket_version()
     return UBS_LIB_VERSION;
 }
 
-UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg))
-{
-    /* log full version */
-    std::cout << "full version: " << UBS_LIB_VERSION_FULL << std::endl;
-    /* return short version */
-    return UBS_LIB_VERSION;
-}
-
 UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *filename, int line))
 {
-    UbsocketSetLogHandler(func);
+    Logger::Instance().SetExternalLogFunction(func);
     return 0;
 }
 
 UBS_API int ubsocket_set_log_level(int level)
 {
-    ock::ubs::Logger::Instance()->SetLogLevel(level);
+    Logger::Instance().SetLogLevel(level);
     return 0;
 }

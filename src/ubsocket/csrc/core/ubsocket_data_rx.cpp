@@ -54,7 +54,7 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketInfo &sock, const struct iovec *
     }
 
     uint32_t max_buf_size;
-    if (globalSetting->GetReadvUnlimited()) {
+    if (GlobalSetting::GetReadvUnlimited()) {
         max_buf_size = UINT32_MAX;
     } else {
         max_buf_size = 0;
@@ -109,7 +109,7 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketInfo &sock, const struct iovec *
      * and only use it as the head of the block linked list. */
     out_first_block->size = out_first_block->cap;
 
-    if (globalSetting->UBS_TRACE_ENABLED) {
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
         UpdateTraceStats(StatsMgr::RX_BYTE_COUNT, rx_total_len);
     }
     retCode = 0;

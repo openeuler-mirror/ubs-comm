@@ -15,16 +15,43 @@
 #include <set>
 
 #include "ubsocket_defines.h"
+#include "ubsocket_functions.h"
 
 namespace ock {
 namespace ubs {
 
-template <typename DType>
-struct NumRule {
+struct Int64Rule {
+    std::string key;
     bool required = false;
-    DType min;
-    DType max;
-    DType defaultValue;
+    int64_t min;
+    int64_t max;
+
+    Int64Rule() = default;
+
+    Int64Rule(const std::string &pKey, bool pRequired, int64_t pMin, int64_t pMax)
+        : key(pKey),
+          required(pRequired),
+          min(pMin),
+          max(pMax)
+    {
+    }
+};
+
+struct FloatRule {
+    std::string key;
+    bool required = false;
+    float min;
+    float max;
+
+    FloatRule() = default;
+
+    FloatRule(const std::string &pKey, bool pRequired, float pMin, float pMax)
+        : key(pKey),
+          required(pRequired),
+          min(pMin),
+          max(pMax)
+    {
+    }
 };
 
 class Validator {
@@ -47,13 +74,12 @@ public:
     /**
      * @brief Validate the value with key
      *
-     * @tparam T           [in] data type
      * @param key          [in] key to find its rule
      * @param value        [in] value to be validated
      * @return true if passed, false if not passed, LastErrMsg() can be used to get the validation error message
      */
-    template <typename T>
-    bool Validate(const std::string key, const T &value) noexcept;
+    bool Validate(const std::string &key, int64_t value, const std::string &key4log = "") noexcept;
+    bool Validate(const std::string &key, float value, const std::string &key4log = "") noexcept;
 
     /**
      * @brief Get last error message
@@ -64,119 +90,89 @@ public:
     /**
      * @brief Add number rule
      *
-     * @tparam DType       [in] data type
-     * @param key          [in] key name
      * @param rule         [in] rule
      */
-    template <typename DType>
-    void AddNumRule(const std::string &key, const NumRule<DType> &rule) noexcept;
+    void AddNumRule(const Int64Rule &rule) noexcept;
+    void AddFloatRule(const FloatRule &rule) noexcept;
 
 private:
-    std::map<std::string, NumRule<uint32_t>> uint32_rules_;
-    std::map<std::string, NumRule<int32_t>> int32_rules_;
-    std::map<std::string, NumRule<uint64_t>> uint64_rules_;
-    std::map<std::string, NumRule<int64_t>> int64_rules_;
+    std::map<std::string, Int64Rule> int64_rules_;
+    std::map<std::string, FloatRule> float_rules_;
 
-    std::set<std::string> required_set;
+    std::set<std::string> required_set_;
 
-    std::string last_error_msg;
+    std::string last_error_msg_;
 };
 
 ALWAYS_INLINE bool Validator::Required(const std::string &key) const noexcept
 {
-    auto iter = required_set.find(key);
-    if (iter == required_set.end()) {
+    auto iter = required_set_.find(key);
+    if (iter == required_set_.end()) {
         return false;
     }
 
     return true;
 }
 
-template <typename T>
-ALWAYS_INLINE bool Validator::Validate(const std::string &key, const T &value) noexcept
+ALWAYS_INLINE bool Validator::Validate(const std::string &key, int64_t value, const std::string &key4log) noexcept
 {
-    if constexpr (std::is_same_v<T, uint32_t>) {
-        auto iter = uint32_rules_.find(key);
-        if (iter == uint32_rules_.end()) {
-            last_error_msg = "No rule exists for '" + key + "'";
-            return false;
-        }
-
-        if (value < iter->second.min || value > iter->second.max) {
-            last_error_msg = "Invalid value for '" + key + "', should be between " + std::to_string(iter->second.min) +
-                             " and " + std::to_string(iter->second.max);
-            return false;
-        }
-
-        return true;
-    } else if constexpr (std::is_same_v<T, int32_t>) {
-        auto iter = int32_rules_.find(key);
-        if (iter == int32_rules_.end()) {
-            last_error_msg = "No rule exists for '" + key + "'";
-            return false;
-        }
-
-        if (value < iter->second.min || value > iter->second.max) {
-            last_error_msg = "Invalid value for '" + key + "', should be between " + std::to_string(iter->second.min) +
-                             " and " + std::to_string(iter->second.max);
-            return false;
-        }
-
-        return true;
-    } else if constexpr (std::is_same_v<T, uint64_t>) {
-        auto iter = uint64_rules_.find(key);
-        if (iter == uint64_rules_.end()) {
-            last_error_msg = "No rule exists for '" + key + "'";
-            return false;
-        }
-
-        if (value < iter->second.min || value > iter->second.max) {
-            last_error_msg = "Invalid value for '" + key + "', should be between " + std::to_string(iter->second.min) +
-                             " and " + std::to_string(iter->second.max);
-            return false;
-        }
-
-        return true;
-    } else if constexpr (std::is_same_v<T, uint64_t>) {
-        auto iter = int64_rules_.find(key);
-        if (iter == int64_rules_.end()) {
-            last_error_msg = "No rule exists for '" + key + "'";
-            return false;
-        }
-
-        if (value < iter->second.min || value > iter->second.max) {
-            last_error_msg = "Invalid value for '" + key + "', should be between " + std::to_string(iter->second.min) +
-                             " and " + std::to_string(iter->second.max);
-            return false;
-        }
-
-        return true;
+    auto iter = int64_rules_.find(key);
+    if (iter == int64_rules_.end()) {
+        last_error_msg_ = "No rule exists for '" + key + "'";
+        return false;
     }
 
-    return false;
+    auto &tmpKey = key4log.empty() ? key : key4log;
+    if (value < iter->second.min || value > iter->second.max) {
+        last_error_msg_ = "Invalid value for '" + tmpKey + "', should be between " + std::to_string(iter->second.min) +
+                          " and " + std::to_string(iter->second.max);
+        return false;
+    }
+
+    return true;
+}
+
+ALWAYS_INLINE bool Validator::Validate(const std::string &key, float value, const std::string &key4log) noexcept
+{
+    auto iter = float_rules_.find(key);
+    if (iter == float_rules_.end()) {
+        last_error_msg_ = "No rule exists for '" + key + "'";
+        return false;
+    }
+
+    auto &tmpKey = key4log.empty() ? key : key4log;
+    if (Func::FloatLessThan(value, iter->second.min) || Func::FloatLargerThan(value, iter->second.max)) {
+        last_error_msg_ = "Invalid value for '" + tmpKey + "', should be between " + std::to_string(iter->second.min) +
+                          " and " + std::to_string(iter->second.max);
+        return false;
+    }
+
+    return true;
 }
 
 ALWAYS_INLINE const std::string &Validator::LastErrMsg() const noexcept
 {
-    return last_error_msg;
+    return last_error_msg_;
 }
 
-template <typename DType>
-ALWAYS_INLINE void Validator::AddNumRule(const std::string &key, const NumRule<DType> &rule) noexcept
+ALWAYS_INLINE void Validator::AddNumRule(const Int64Rule &rule) noexcept
 {
+    const std::string &key = rule.key;
     if (rule.required) {
-        required_set.emplace(key);
+        required_set_.emplace(key);
     }
 
-    if constexpr (std::is_same_v<T, uint32_t>) {
-        uint32_rules_.emplace(key, rule);
-    } else if constexpr (std::is_same_v<T, int32_t>) {
-        int32_rules_.emplace(key, rule);
-    } else if constexpr (std::is_same_v<T, uint64_t>) {
-        uint64_rules_.emplace(key, rule);
-    } else if constexpr (std::is_same_v<T, uint64_t>) {
-        int64_rules_.emplace(key, rule);
+    int64_rules_.emplace(key, rule);
+}
+
+ALWAYS_INLINE void Validator::AddFloatRule(const FloatRule &rule) noexcept
+{
+    const std::string &key = rule.key;
+    if (rule.required) {
+        required_set_.emplace(key);
     }
+
+    float_rules_.emplace(key, rule);
 }
 
 } // namespace ubs

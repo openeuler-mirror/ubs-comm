@@ -9,31 +9,88 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_global_setting.h"
+#include "ubsocket_logger.h"
+#include "ubsocket_setting_validator.h"
 
 namespace ock {
 namespace ubs {
 std::mutex GlobalSetting::MUTEX;
-uint32_t GlobalSetting::UBS_ALLOWED_PROTOCOL = 0;
-bool GlobalSetting::UBS_TRACE_ENABLED = false;
-bool GlobalSetting::UBS_INITED = false;
-bool GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED = false;
-bool GlobalSetting::UBS_CONNECTOR_ASYNC_ENABLED = false;
-bool GlobalSetting::UBS_EPOLL_ASYNC_ENABLED = false;
-u_external_lock_ops_t *GlobalSetting::lock_ops = nullptr;
-u_external_rw_lock_ops_t *GlobalSetting::rw_lock_ops = nullptr;
-u_external_semaphore_ops_t *GlobalSetting::sem_ops = nullptr;
+uint32_t GlobalSetting::UBS_ALLOWED_PROTOCOL = 0;            /* no protocol by default */
+bool GlobalSetting::UBS_NATIVE_TCP_MODE = false;             /* use ubsocket by default */
+bool GlobalSetting::UBS_TRACE_ENABLED = false;               /* disabled by default */
+bool GlobalSetting::UBS_INITED = false;                      /* not inited by default */
+int16_t GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;  /* disabled by default */
+int16_t GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = 0; /* disabled by default */
+int16_t GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = 1;     /* enabled by default */
 
-/* envs */
+/* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
 #define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPTOR_THREAD_COUNT"
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
 
-void GlobalSetting::AddRules() noexcept {}
+/* int64 rule: name, required, min, max */
+Int64Rule RULES_INT64[] = {{ENV_TRACE_ENABLED, false, 0, 1L},
+                           {ENV_ASYNC_ACCEPTOR, false, 0, 8L},
+                           {ENV_ASYNC_CONNECTOR, false, 0, 8L},
+                           {ENV_ASYNC_EPOLL, false, 1, 1L}};
+
+void GlobalSetting::AddRules() noexcept
+{
+    for (auto &item : RULES_INT64) {
+        Validator::Instance().AddNumRule(item);
+    }
+}
+
+Result GlobalSetting::VerifySetting() noexcept
+{
+    /* set native tcp mode */
+    if (UBS_ALLOWED_PROTOCOL == UBS_PROTOCOL_TCP) {
+        UBS_NATIVE_TCP_MODE = true;
+    }
+
+    auto &validator = Validator::Instance();
+    if (validator.Validate(ENV_ASYNC_ACCEPTOR, (int64_t)UBS_ACCEPTOR_ASYNC_THREAD_COUNT,
+                           "async_acceptor_thread_count")) {
+        UBS_VLOG_ERR("%s", validator.LastErrMsg().c_str());
+        return UBS_INVALID_PARAM;
+    }
+
+    if (validator.Validate(ENV_ASYNC_CONNECTOR, (int64_t)UBS_CONNECTOR_ASYNC_THREAD_COUNT,
+                           "async_connector_thread_count")) {
+        UBS_VLOG_ERR("%s", validator.LastErrMsg().c_str());
+        return UBS_INVALID_PARAM;
+    }
+
+    if (validator.Validate(ENV_ASYNC_EPOLL, (int64_t)UBS_EPOLL_ASYNC_THREAD_COUNT, "async_epoll_thread_count")) {
+        UBS_VLOG_ERR("%s", validator.LastErrMsg().c_str());
+        return UBS_INVALID_PARAM;
+    }
+
+    return UBS_OK;
+}
 
 Result GlobalSetting::LoadEnv() noexcept
 {
+    auto &validator = Validator::Instance();
     /* load from env */
+    int64_t envValue = 0;
+    if (GetEnv(ENV_TRACE_ENABLED, envValue) && validator.Validate(ENV_TRACE_ENABLED, envValue)) {
+        UBS_TRACE_ENABLED = (envValue == 1);
+    }
+
+    if (GetEnv(ENV_ASYNC_ACCEPTOR, envValue) && validator.Validate(ENV_ASYNC_ACCEPTOR, envValue)) {
+        UBS_ACCEPTOR_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
+    }
+
+    if (GetEnv(ENV_ASYNC_CONNECTOR, envValue) && validator.Validate(ENV_ASYNC_CONNECTOR, envValue)) {
+        UBS_CONNECTOR_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
+    }
+
+    if (GetEnv(ENV_ASYNC_EPOLL, envValue) && validator.Validate(ENV_ASYNC_EPOLL, envValue)) {
+        UBS_EPOLL_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
+    }
+
     return UBS_OK;
 }
 
