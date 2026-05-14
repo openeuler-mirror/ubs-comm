@@ -75,7 +75,7 @@ ssize_t DataTx::WriteV(const SocketInfo &sock, const struct iovec *iov, int iovc
 
     // 发送数据
     uint32_t tx_total_len = 0;
-    int64_t ret = tx_ops_->PostSend(txBuf, batch);
+    int64_t ret = tx_ops_->PostSend(txBuf, batch, iov_converter);
     if (ret < 0) {
         return ret;
     }

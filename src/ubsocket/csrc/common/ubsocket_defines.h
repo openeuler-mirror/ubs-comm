@@ -75,6 +75,9 @@ constexpr uint16_t TX_REPORT_THRESHOLD = 1;
 constexpr uint16_t TX_REFILL_THRESHOLD = 32;
 constexpr uint32_t TX_POST_BATCH_MAX = 64;
 constexpr uint32_t TX_SGE_MAX = 1;
+/* unsolicited bytes use the same setting as brpc
+ * accumulated bytes exceed UNSOLICITED_BYTES_MAX will generate a solicited interrupt event at remote */
+constexpr uint32_t  TX_UNSOLICITED_BYTES_MAX = 1048576;
 
 constexpr uint64_t SIZE_8K = 8192;
 constexpr uint64_t SIZE_16K = 16384;
@@ -90,6 +93,12 @@ constexpr uint32_t GET_PER_ACK = 32;
 constexpr uint32_t POLL_BATCH_MAX = 32;
 
 constexpr const uint32_t NET_STR_ERROR_BUF_SIZE = 128;
+
+constexpr uint32_t BLOCK_TYPE_STR_LEN_MAX = 64;
+constexpr const char* DEFAULT_QBUF_BLOCK_TYPE  = "default"; // 8k
+constexpr const char* SMALL_QBUF_BLOCK_TYPE   = "small" ; // 16k
+constexpr const char* MEDIUM_QBUF_BLOCK_TYPE  = "medium"; // 32k
+constexpr const char* LARGE_QBUF_BLOCK_TYPE   = "large" ; // 64k
 
 class NetCommon {
 public:

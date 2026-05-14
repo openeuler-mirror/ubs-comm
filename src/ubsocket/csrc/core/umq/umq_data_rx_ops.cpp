@@ -15,8 +15,7 @@ namespace ock {
 namespace ubs {
 int UmqDataRxOps::PollRx(bool flow_control_failed)
 {
-    bool enable_share_jfr = GlobalSetting::EnableShareJfr();
-    if (!enable_share_jfr && get_and_ack_event_) {
+    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
         if (GetAndAckEvent(UMQ_IO_RX) < 0) {
             errno = EIO;
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
@@ -91,5 +90,10 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
     }
     return 0;
 }
-} // namespace ubs
-} // namespace ock
+
+ALWAYS_INLINE void * UmqDataRxOps::PtrFloorToBoundary(void *ptr)
+{
+    return (void *)((uint64_t)ptr & ~UmqSetting::FloorMask());
+}
+}
+}

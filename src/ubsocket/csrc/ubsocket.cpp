@@ -15,6 +15,7 @@
 #include "ubsocket_common_includes.h"
 #include "ubsocket_global_setting.h"
 #include "ubsocket_version.h"
+#include "core/umq/umq_setting.h"
 
 using namespace ock::ubs;
 
@@ -99,6 +100,9 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     /* set initialized */
     GlobalSetting::UBS_INITED = true;
+
+    /* umq setting init */
+    UmqSetting::Init();
 
     return UBS_OK;
 }
