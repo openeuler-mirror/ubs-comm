@@ -8,23 +8,20 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-
 #include "ubsocket_data_tx.h"
 #include "ubsocket_socket.h"
 
 namespace ock {
 namespace ubs {
-DataTx::DataTx(const SocketInfo &info, DataTxOpsPtr ops)
-    : fd_(info.raw_socket_),
-      event_fd_(info.event_fd_),
-      tx_ops_(std::move(ops))
+DataTx::DataTx(const SocketPtr &sock, DataTxOps *ops) : fd_(sock->raw_socket_), event_fd_(sock->event_fd_), tx_ops_(ops)
 {
+    /* caller must make sure ops is not null */
 }
 
-ssize_t DataTx::WriteV(const SocketInfo &sock, const struct iovec *iov, int iovcnt)
+ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     int retCode = -1;
-    if (sock.State() == SOCK_STAT_RAW_ESTABLISHED) {
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::writev(fd_, iov, iovcnt);
         retCode = size < 0 ? -1 : 0;
         return size;
@@ -37,7 +34,7 @@ ssize_t DataTx::WriteV(const SocketInfo &sock, const struct iovec *iov, int iovc
         return UBS_ERROR;
     }
 
-    if (sock.State() == SOCK_STAT_CLOSE) {
+    if (sock->State() == SOCK_STAT_CLOSE) {
         errno = EPIPE;
         UBS_VLOG_ERR("WriteV socket is closed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                      Func::Error2Str(errno));

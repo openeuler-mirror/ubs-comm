@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  * http://license.coscl.org.cn/MulanPSL2
@@ -41,9 +41,9 @@ enum SocketCreateType : uint8_t {
     SOCK_CREATE_TYPE_COUNT
 };
 
-class SocketInfo {
+class Socket {
 public:
-    virtual ~SocketInfo() = default;
+    virtual ~Socket() = default;
 
     SocketState State() const noexcept
     {
@@ -65,7 +65,28 @@ public:
     SocketType type_ = SOCK_TYPE_TCP;                         /* type of ubsocket */
     SocketCreateType create_type_ = SOCK_CREATE_TYPE_UNKNOWN; /* created because of what */
 };
-using SocketInfoPtr = Ref<SocketInfo>;
+using SocketPtr = Ref<Socket>;
+
+struct ConnInfo {
+    std::string peer_ip; // 对端IP地址
+    int peer_fd = -1;    // 对端socket fd
+    int type_fd = 0;     // 0 server; 1 client
+    std::chrono::system_clock::time_point create_time;
+};
+
+struct RawConnInfoV4 {
+    // TODO: 考虑内存分配, 优化变量类型
+    int32_t peer_ip;  // 对端IP地址
+    int peer_fd = -1; // 对端socket fd
+    int type_fd = 0;  // 0 server; 1 client
+    std::chrono::system_clock::time_point create_time;
+};
+
+struct AsyncAcceptInfo {
+    std::queue<std::tuple<int, struct sockaddr, socklen_t>> ready_queue;
+    std::atomic<int32_t> asyncTaskNum{0U};
+    u_mutex_t *lock = nullptr;
+};
 
 const std::string &SocketStateToStr(SocketState value);
 const std::string &SocketTypeToStr(SocketType value);

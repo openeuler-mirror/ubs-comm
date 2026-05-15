@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *      http://license.coscl.org.cn/MulanPSL2
@@ -15,12 +15,14 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-Result UmqSocketAcceptorOps::Negotiate(int new_fd, Socket *socket_fd_obj) {
+Result UmqAcceptorOps::Negotiate(int new_fd, const SocketPtr &sock)
+{
     return UBS_OK;
 };
 
-Result UmqSocketAcceptorOps::CreateSocketResources(int new_fd, Socket *socket_fd_obj) 
+Result UmqAcceptorOps::CreateSocketResources(int new_fd, const SocketPtr &sock)
 {
+#ifdef ENABLED
     // 1. 用户直接指定普通设备建链，失败不重试、可降级
     // 2. 用户指定 bonding 设备建链，但如果是节点内回环场景，失败不重试、可降级
     // 3. 用户指定 bonding 设备建链，跨节点场景返回 retryable 错误
@@ -28,13 +30,10 @@ Result UmqSocketAcceptorOps::CreateSocketResources(int new_fd, Socket *socket_fd
     //   - 如果无法重试，则尝试降级
     //   - 如果无法降级，则返回失败
     Result ackRet = UBS_OK;
-    UmqSocket* umq_socket_fd_obj = static_cast<UmqSocket*>(socket_fd_obj);
+    UmqSocket *umq_socket_fd_obj = static_cast<UmqSocket *>(socket_fd_obj);
     auto connEid = umq_socket_fd_obj->umq_acceptor_ops_->UMQConnInfo.conn_eid;
     UBHandshakeState state = UBHandshakeState::kSTART;
-    umq_used_ports_t mUsedPorts = {
-        .port = nullptr,
-        .num = 0
-    };
+    umq_used_ports_t mUsedPorts = {.port = nullptr, .num = 0};
     while (!ok) {
         switch (state) {
             case UBHandshakeState::kOK:
@@ -59,13 +58,15 @@ Result UmqSocketAcceptorOps::CreateSocketResources(int new_fd, Socket *socket_fd
                 return UBS_UB_ACCEPT;
         }
     }
+#endif
     return UBS_OK;
 };
 
 // TODO: mUsedPorts 和 connEid 待收编到成员变量
-Result UmqSocketAcceptorOps::DoUbAccept(int new_fd, umq_eid_t &connEid, UmqSocket *umq_socket_fd_obj,
-    umq_used_ports_t &mUsedPorts)
+Result UmqAcceptorOps::DoUbAccept(int new_fd, umq_eid_t &connEid, const SocketPtr &sock,
+                                        umq_used_ports_t &mUsedPorts)
 {
+#ifdef ENALBED
     Result ret = UBS_OK;
     umq_topo_type_t acceptTopoType = umq_socket_fd_obj->GetTopoType();
     CpMsg local_cp_msg;
@@ -83,10 +84,19 @@ Result UmqSocketAcceptorOps::DoUbAccept(int new_fd, umq_eid_t &connEid, UmqSocke
     if (PrefillRx() != 0) {
         return UBS_PREFILL_RX;
     }
-
+#endif
     return UBS_OK;
 }
 
+void UmqAcceptorOps::DestroySocketResources() {}
+
+void UmqAcceptorOps::SetConnInfo(std::string peer_ip, int peer_fd, int type_fd) {}
+
+int UmqAcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation,
+                                           ssize_t &protocol_negotiation_recv_size)
+{
+    return 0;
+}
 } // namespace umq
 } // namespace ubs
 } // namespace ock

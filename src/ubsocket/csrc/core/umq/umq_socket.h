@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  * http://license.coscl.org.cn/MulanPSL2
@@ -11,41 +11,66 @@
 #ifndef UBS_COMM_UMQ_SOCKET_H
 #define UBS_COMM_UMQ_SOCKET_H
 
+#include "ubsocket_common_includes.h"
 #include "ubsocket_socket.h"
+#include "umq_setting.h"
 #include "umq_socket_acceptor.h"
 #include "umq_socket_connector.h"
-#include "../../../hcom/umq/include/umq/umq_types.h"
 
 namespace ock {
 namespace ubs {
-class UmqSocket : public Socket {
+namespace umq {
+class UmqSocket : public SocketBase {
 public:
     UmqSocket() = default;
     ~UmqSocket() override = default;
 
-    Result Initialize() noexcept;
-    void UnInitialize() noexcept;
+    Result Initialize() noexcept override;
+    void UnInitialize() noexcept override;
 
     uint64_t UmqHandle() const noexcept;
-    void SetLocalUmqHandle(uint64_t handle) { umq_handle_ = handle; }
-    // 绑定状态
-    bool IsBindRemote() const { return umq_is_bind_remote_; }
-    void SetBindRemote(bool bound) { umq_is_bind_remote_ = bound; }
-    bool IsBindRemote() const { return is_bonding_; }
-    void SetBindRemote(bool isBonding) { is_bonding_ = isBonding; }
-    // 传输模式
-    ub_trans_mode GetTransMode() const { return trans_mode_; }
-    void SetTransMode(ub_trans_mode mode) { trans_mode_ = mode; }
-    // 拓扑类型
-    umq_topo_type_t GetTopoType() const { return topo_type_; }
-    void SetTopoType(umq_topo_type_t type) { topo_type_ = type; }
+
+    void SetLocalUmqHandle(uint64_t handle)
+    {
+        umq_handle_ = handle;
+    }
+
+    bool IsBindRemote() const
+    {
+        return umq_is_bind_remote_;
+    }
+
+    void SetBindRemote(bool bound)
+    {
+        umq_is_bind_remote_ = bound;
+    }
+
+    ub_trans_mode GetTransMode() const
+    {
+        return trans_mode_;
+    }
+
+    void SetTransMode(ub_trans_mode mode)
+    {
+        trans_mode_ = mode;
+    }
+
+    umq_topo_type_t GetTopoType() const
+    {
+        return topo_type_;
+    }
+
+    void SetTopoType(umq_topo_type_t type)
+    {
+        topo_type_ = type;
+    }
 
     // 封装 umq 相关操作: umq_create, umq_bind
     Result CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts);
     int PrefillRx();
 
-    Ref<UmqSocketAcceptorOps> umq_acceptor_ops_ = nullptr;
-    Ref<UmqSocketConnectorOps> umq_connector_ops_ = nullptr;
+    UmqAcceptorOpsPtr umq_acceptor_ops_ = nullptr;
+    UmqConnectorOpsPtr umq_connector_ops_ = nullptr;
 
 private:
     // 链接类型相关
@@ -64,6 +89,17 @@ ALWAYS_INLINE uint64_t UmqSocket::UmqHandle() const noexcept
     return umq_handle_;
 }
 
+Result UmqSocket::CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts)
+{
+    return UBS_OK;
+}
+
+int UmqSocket::PrefillRx()
+{
+    return 0;
+}
+
+#ifdef ENALBED
 // UmqAcceptor 和 UmqConnector 共用结构体
 struct CpMsg {
     uint64_t protocol_negotiation = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
@@ -83,6 +119,7 @@ struct NegotiateReq {
     uint32_t socket_id_count = 0;
     uint32_t socket_ids[NEGOTIATE_SOCKET_ID_MAX_NUM] = {0};
 };
+#endif
 
 struct NegotiateRsp {
     int32_t ret_code = 0;
@@ -90,7 +127,7 @@ struct NegotiateRsp {
     uint8_t reserved[3] = {0};
     umq_eid_t local_eid = {};
 };
-
+} // namespace umq
 } // namespace ubs
 } // namespace ock
 

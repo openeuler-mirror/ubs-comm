@@ -8,16 +8,15 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef UBS_COMM_UMQ_SOCKET_ACCEPTOR
-#define UBS_COMM_UMQ_SOCKET_ACCEPTOR
+#ifndef UBS_COMM_UMQ_API_H
+#define UBS_COMM_UMQ_API_H
 
-#include "umq_socket_connector.h"
+#include "umq/include/umq/umq_api.h"
+#include "umq/include/umq/umq_dfx_api.h"
+#include "umq/include/umq/umq_dfx_types.h"
+#include "umq/include/umq/umq_errno.h"
+#include "umq/include/umq/umq_pro_api.h"
+#include "umq/include/umq/umq_types.h"
+#include "umq/src/qbuf/qbuf_list.h"
 
-namespace ock {
-namespace ubs {
-namespace umq {
-
-} // namespace umq
-} // namespace ubs
-} // namespace ock
-#endif
+#endif // UBS_COMM_UMQ_API_H

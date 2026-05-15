@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *      http://license.coscl.org.cn/MulanPSL2
@@ -11,7 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_EPOLL_FD_H
 #define UBS_COMM_UBSOCKET_EPOLL_FD_H
 
-#include "ubsocket_socket.h"
+#include "ubsocket_core_types.h"
 
 namespace ock {
 namespace ubs {
@@ -26,17 +26,21 @@ enum EpollEventType : uint64_t {
 // 对应之前的EpollEventData
 struct EpollEvent {
     EpollEventType event_type;
-    int socket_fd;
-    struct epoll_event event;
-    EpollEvent *next{ nullptr };
+    int socket_fd = -1;
+    struct epoll_event event{};
+    EpollEvent *next{nullptr};
     EpollEvent(EpollEventType type, int socket, const struct epoll_event &evt) noexcept
-        : event_type{ type }, socket_fd{ socket }, event{ evt } {}
+        : event_type{type},
+          socket_fd{socket},
+          event{evt}
+    {
+    }
 };
 
 /*
  * EpollRunner注册的event中的data，总64位，高4位是类型，低60位是数值，可以是对象指针
  */
-union RunnerEventData : uint64_t {
+union RunnerEventData {
     struct EventData {
         uint64_t type : 4;
         uint64_t data : 60;
@@ -52,31 +56,30 @@ enum RunnerEventType : uint64_t {
     RUNNER_EVENT_TYPE_BUTT
 };
 
-
 class EpollMapper {
 public:
     explicit EpollMapper(int fd) : fd_(fd)
     {
-        mutex_ = g_external_lock_ops.create(LT_EXCLUSIVE);
+        mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
     }
 
     ~EpollMapper() {}
 
     void Add(int epoll_fd)
     {
-        ScopedUbExclusiveLocker sLock(mutex_);
+        Locker sLock(mutex_);
         epoll_set_.insert(epoll_fd);
     }
 
     void Del(int epoll_fd)
     {
-        ScopedUbExclusiveLocker sLock(mutex_);
+        Locker sLock(mutex_);
         epoll_set_.erase(epoll_fd);
     }
 
     int QueryFirst()
     {
-        ScopedUbExclusiveLocker sLock(mutex_);
+        Locker sLock(mutex_);
         if (epoll_set_.empty()) {
             return -1;
         } else {
@@ -84,22 +87,27 @@ public:
         }
     }
 
-    void Clear();
+    void Clear() {}
+
 private:
     int fd_;
-    u_external_mutex_t* mutex_ = nullptr;
+    u_mutex_t *mutex_ = nullptr;
     std::unordered_set<int> epoll_set_;
 };
 
 class EventPollOps {
 public:
     virtual ~EventPollOps() = 0;
-    virtual void AddTxEvent(const Socket * const socket, int epoll_fd) = 0;
+    virtual int AddTxEvent(const SocketPtr &socket, int epoll_fd) = 0;
+
+    DEFINE_REF_OPERATION_FUNC
+protected:
+    DECLARE_REF_COUNT_VARIABLE;
 };
+using EventPollOpsPtr = Ref<EventPollOps>;
 
 class EpollRunner {
 public:
-    static EpollRunner &GetInstance();
     ~EpollRunner()
     {
         Stop();
@@ -108,14 +116,14 @@ public:
 public:
     EpollRunner(const EpollRunner &) = delete;
     EpollRunner(EpollRunner &&) = delete;
-    EpollRunner &operator = (const EpollRunner &) = delete;
-    EpollRunner &operator = (EpollRunner &&) = delete;
+    EpollRunner &operator=(const EpollRunner &) = delete;
+    EpollRunner &operator=(EpollRunner &&) = delete;
 
     /**
      * @brief initialize resource and start a thread to epoll_wait
      */
     int Start();
-    
+
     /**
      * @brief uninitialize resource and stop the thread
      */
@@ -127,33 +135,35 @@ public:
      * @param event event of socket fd
      * @return int -1: failed; 0: success
      */
-    virtual int AddEpollEvent(const Socket * const socket, struct epoll_event *event) = 0;    // TODO：这里删了些参数，处理方式见file_descriptor_async.cpp:171行注释
+    virtual int AddEpollEvent(
+        const Socket *const socket,
+        struct epoll_event *event) = 0; // TODO：这里删了些参数，处理方式见file_descriptor_async.cpp:171行注释
 
     /**
      * @brief delete epoll_event from EpollRunner
      * @param socket_fd socket fd removed
      * @return int -1: failed; 0: success
      */
-    virtual int RemoveEpollEvent(const Socket * const socket) = 0;
+    virtual int RemoveEpollEvent(const Socket *const socket) = 0;
 
     /**
      * @brief process epoll_wait event
      * @param event event to process
      */
-    void ProcessOneEvent(const struct epoll_event &event) = 0;
+    virtual void ProcessOneEvent(const struct epoll_event &event) = 0;
 
 private:
     /**
      * @brief start thread to epoll_wait
      */
-    void RunnerThreadRun();
+    void RunInThread() noexcept;
 
 private:
-    int epoll_fd_;  /* used by thread */
-    int exit_efd_;  /* used to notify thread exit */
-    uint32_t event_ack_batch = 0;   /* do ack_interrupt when epoll num reaches event_ack_batch */
-    u_external_mutex_t *mutex_;
-    std::shared_ptr<EpollOps> epoll_ops_ = nullptr; /* epoll ops implemented by different prorocol */
+    int epoll_fd_;                        /* used by thread */
+    int exit_efd_;                        /* used to notify thread exit */
+    uint32_t event_ack_batch = 0;         /* do ack_interrupt when epoll num reaches event_ack_batch */
+    u_mutex_t *mutex_;                    /* mutex */
+    EventPollOpsPtr epoll_ops_ = nullptr; /* epoll ops implemented by different prorocol */
     std::thread wait_thread_;
 };
 
@@ -167,7 +177,7 @@ public:
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    virtual int EpollCtl(int op, const Socket * const socket, struct epoll_event *event) = 0;
+    virtual int EpollCtl(int op, const Socket *const socket, struct epoll_event *event) = 0;
 
     /**
      * @brief corresponds to native epoll_wait interface
@@ -177,7 +187,7 @@ public:
      * @param timeout timeout of epoll_wait
      * @return 0: success; -1: failed
      */
-    virtual int EpollWait(const Socket * const socket, struct epoll_event *events, int maxevents, int timeout) = 0;
+    virtual int EpollWait(const Socket *const socket, struct epoll_event *events, int maxevents, int timeout) = 0;
 
 private:
     int epoll_fd_;
@@ -188,13 +198,16 @@ public:
     /*
      * SPSCRingQueue需要使用cache line对齐的申请，标准的new无法进行对齐，需要重载new和delete
      */
-    static void *operator new(std::size_t size)
+    static void *operator new(std::size_t size) noexcept
     {
+#ifdef ENALBED
         if (UNLIKELY(InitSocketReadableFd() < 0)) {
             return nullptr;
         }
-        ctl_mutex_ = g_external_lock_ops.create(LT_EXCLUSIVE);
+        ctl_mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
         return ::aligned_alloc(alignof(EpollFdAsync), size);
+#endif
+        return nullptr;
     }
 
     static void operator delete(void *ptr)
@@ -209,7 +222,7 @@ public:
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtl(int op, const Socket * const socket, struct epoll_event *event);
+    int EpollCtl(int op, const Socket *const socket, struct epoll_event *event);
 
     /**
      * @brief corresponds to native epoll_wait interface
@@ -219,7 +232,7 @@ public:
      * @param timeout timeout of epoll_wait
      * @return 0: success; -1: failed
      */
-    int EpollWait(const Socket * const socket, struct epoll_event *events, int maxevents, int timeout);
+    int EpollWait(const Socket *const socket, struct epoll_event *events, int maxevents, int timeout);
 
 private:
     /**
@@ -233,42 +246,41 @@ private:
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtlAdd(const Socket * const socket, struct epoll_event *event);
+    int EpollCtlAdd(const Socket *const socket, struct epoll_event *event);
     /**
      * @brief handle epoll_ctl with EPOLL_CTL_MOD operation
      * @param fd socket fd added to epoll_fd
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtlMod(const Socket * const socket, struct epoll_event *event);
+    int EpollCtlMod(const Socket *const socket, struct epoll_event *event);
     /**
      * @brief handle epoll_ctl with EPOLL_CTL_DEL operation
      * @param fd socket fd added to epoll_fd
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtlDel(const Socket * const socket, struct epoll_event *event);
+    int EpollCtlDel(const Socket *const socket, struct epoll_event *event);
 
     /**
      * @brief add pure socket_fd and event to epoll_fd
-     */ 
-    int AddRawSocketEvent(const Socket * const socket, struct epoll_event *event);
+     */
+    int AddRawSocketEvent(const Socket *const socket, struct epoll_event *event);
 
     /**
      * @brief delete pure socket_fd and event to epoll_fd
-     */ 
-    int DelRawSocketEvent(const Socket * const socket);
+     */
+    int DelRawSocketEvent(const Socket *const socket);
 
 private:
     // u_external_mutex_t* mutex_;
-    u_external_mutex_t* ctl_mutex_;
-}
+    u_mutex_t *ctl_mutex_;
+};
 
-}   // namespace ubs
-}   // namespace ock
+} // namespace ubs
+} // namespace ock
 
 #endif // UBS_COMM_UBSOCKET_EPOLL_FD_H
-
 
 /**
  * TODO：问题记录

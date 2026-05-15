@@ -14,6 +14,8 @@
 #include <sys/uio.h>
 #include <cstdint>
 
+namespace ock {
+namespace {
 class IovConverter {
 public:
     // The caller is responsible for ensuring the validity of the input parameters; no validation is performed here.
@@ -33,7 +35,7 @@ public:
                 moved_len = iov_[iov_idx_].iov_len - iov_offset_;
                 iov_offset_ = 0;
                 /* Avoid core dump caused by brpc passing in memory with a length of 0,
-                 * directly skip IOVs with a length of 0. */
+                     * directly skip IOVs with a length of 0. */
                 do {
                     iov_idx_++;
                 } while (iov_idx_ < iovcnt_ && iov_[iov_idx_].iov_len == 0);
@@ -58,5 +60,7 @@ public:
     uint32_t iov_offset_ = 0;
     int iov_idx_ = 0;
 };
+} // namespace
+} // namespace ock
 
 #endif

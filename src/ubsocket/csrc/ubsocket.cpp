@@ -101,7 +101,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
 
     /* step3: umq setting init */
-    UmqSetting::Init();
+    umq::UmqSetting::Init();
 
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
@@ -125,11 +125,11 @@ UBS_API const char *ubsocket_version()
 UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *filename, int line))
 {
     Logger::Instance().SetExternalLogFunction(func);
-    return 0;
+    return UBS_OK;
 }
 
 UBS_API int ubsocket_set_log_level(int level)
 {
     Logger::Instance().SetLogLevel(level);
-    return 0;
+    return UBS_OK;
 }

@@ -19,12 +19,12 @@
 #include <cstring>
 #include <memory>
 
+#include "ubsocket_buf_util.h"
 #include "ubsocket_core_types.h"
-#include "../iobuf/ubsocket_iobuf.h"
-#include "../iobuf/ubsocket_buf_util.h"
-#include "../common/ubsocket_defines.h"
-#include "../common/ubsocket_global_setting.h"
-#include "../common/ubsocket_logger.h"
+#include "ubsocket_defines.h"
+#include "ubsocket_global_setting.h"
+#include "ubsocket_iobuf.h"
+#include "ubsocket_logger.h"
 
 namespace ock {
 namespace ubs {
@@ -70,15 +70,9 @@ protected:
 class DataTx {
 public:
     DataTx() = default;
+    DataTx(const SocketPtr &sock, DataTxOps *ops);
 
-    /**
-     * @brief 构造函数
-     *
-     * @param ops 具体的协议实现 (UMQ 或 RDMA)
-     */
-    DataTx(const SocketInfo &info, DataTxOps* ops);
-
-    ALWAYS_INLINE ssize_t WriteV(const SocketInfo &sock, const struct iovec *iov, int iovcnt);
+    ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
 private:
     int fd_ = -1;

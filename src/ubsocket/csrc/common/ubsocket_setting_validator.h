@@ -23,8 +23,8 @@ namespace ubs {
 struct Int64Rule {
     std::string key;
     bool required = false;
-    int64_t min;
-    int64_t max;
+    int64_t min = 0;
+    int64_t max = 0;
 
     Int64Rule() = default;
 
@@ -40,8 +40,8 @@ struct Int64Rule {
 struct FloatRule {
     std::string key;
     bool required = false;
-    float min;
-    float max;
+    float min = 0.0;
+    float max = 0.0;
 
     FloatRule() = default;
 
@@ -53,6 +53,68 @@ struct FloatRule {
     {
     }
 };
+
+struct StrEnumRule {
+    std::string key;
+    bool required = false;
+    std::string allEnum;
+
+    StrEnumRule() = default;
+    StrEnumRule(const std::string &pKey, bool pRequired, const std::string &pAllEnum)
+        : key(pKey),
+          required(pRequired),
+          allEnum(pAllEnum)
+    {
+        /*
+         * str enum rule: true|false
+         * we added '|' at the start place and end place
+         * when doing validate:
+         * case1: single value, we do string::find with '|xx|'
+         * case2: multiple values, we do split firstly, then do string::find firstly
+         */
+        MakeSortedAllEnum();
+    }
+
+    bool Validate(const std::string &value) noexcept;
+
+    void MakeSortedAllEnum() noexcept;
+};
+
+ALWAYS_INLINE bool StrEnumRule::Validate(const std::string &value) noexcept
+{
+    /* split */
+    auto ordered = Func::StrSplit(value, "|");
+
+    /* match one by one in lower case */
+    for (auto &item : ordered) {
+        auto tmp = "|" + Func::StrTrim(item) + "|";
+        Func::StrLowerCaseDirect(tmp);
+        if (allEnum.find(tmp) == std::string::npos) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+ALWAYS_INLINE void StrEnumRule::MakeSortedAllEnum() noexcept
+{
+    /* change to lower case and split */
+    Func::StrLowerCaseDirect(allEnum);
+    auto ordered = Func::StrSplit(allEnum, "|");
+
+    /* loop and compose, skip empty string */
+    std::string result = "|";
+    for (auto &item : ordered) {
+        auto trimItem = Func::StrTrim(item);
+        if (!trimItem.empty()) {
+            result += trimItem + "|";
+        }
+    }
+
+    /* here we already have sorted enum string, for example |aa|ab|cd|dd| */
+    allEnum = result;
+}
 
 class Validator {
 public:
@@ -80,6 +142,7 @@ public:
      */
     bool Validate(const std::string &key, int64_t value, const std::string &key4log = "") noexcept;
     bool Validate(const std::string &key, float value, const std::string &key4log = "") noexcept;
+    bool ValidateStrEnum(const std::string &key, const std::string &value, const std::string &key4log = "") noexcept;
 
     /**
      * @brief Get last error message
@@ -94,10 +157,12 @@ public:
      */
     void AddNumRule(const Int64Rule &rule) noexcept;
     void AddFloatRule(const FloatRule &rule) noexcept;
+    void AddStrEnumRule(const StrEnumRule &rule) noexcept;
 
 private:
     std::map<std::string, Int64Rule> int64_rules_;
     std::map<std::string, FloatRule> float_rules_;
+    std::map<std::string, StrEnumRule> str_enum_rules_;
 
     std::set<std::string> required_set_;
 
@@ -116,13 +181,14 @@ ALWAYS_INLINE bool Validator::Required(const std::string &key) const noexcept
 
 ALWAYS_INLINE bool Validator::Validate(const std::string &key, int64_t value, const std::string &key4log) noexcept
 {
+    auto &tmpKey = key4log.empty() ? key : key4log;
+
     auto iter = int64_rules_.find(key);
     if (iter == int64_rules_.end()) {
-        last_error_msg_ = "No rule exists for '" + key + "'";
+        last_error_msg_ = "No rule exists for '" + tmpKey + "'";
         return false;
     }
 
-    auto &tmpKey = key4log.empty() ? key : key4log;
     if (value < iter->second.min || value > iter->second.max) {
         last_error_msg_ = "Invalid value for '" + tmpKey + "', should be between " + std::to_string(iter->second.min) +
                           " and " + std::to_string(iter->second.max);
@@ -134,16 +200,36 @@ ALWAYS_INLINE bool Validator::Validate(const std::string &key, int64_t value, co
 
 ALWAYS_INLINE bool Validator::Validate(const std::string &key, float value, const std::string &key4log) noexcept
 {
+    auto &tmpKey = key4log.empty() ? key : key4log;
+
     auto iter = float_rules_.find(key);
     if (iter == float_rules_.end()) {
-        last_error_msg_ = "No rule exists for '" + key + "'";
+        last_error_msg_ = "No rule exists for '" + tmpKey + "'";
         return false;
     }
 
-    auto &tmpKey = key4log.empty() ? key : key4log;
     if (Func::FloatLessThan(value, iter->second.min) || Func::FloatLargerThan(value, iter->second.max)) {
         last_error_msg_ = "Invalid value for '" + tmpKey + "', should be between " + std::to_string(iter->second.min) +
                           " and " + std::to_string(iter->second.max);
+        return false;
+    }
+
+    return true;
+}
+
+ALWAYS_INLINE bool Validator::ValidateStrEnum(const std::string &key, const std::string &value,
+                                              const std::string &key4log) noexcept
+{
+    auto &tmpKey = key4log.empty() ? key : key4log;
+
+    auto iter = str_enum_rules_.find(key);
+    if (iter == str_enum_rules_.end()) {
+        last_error_msg_ = "No rule exists for '" + tmpKey + "'";
+        return false;
+    }
+
+    if (!(iter->second.Validate(value))) {
+        last_error_msg_ = "Invalid value for '" + tmpKey + "', should be one of '" + iter->second.allEnum + "'";
         return false;
     }
 
@@ -173,6 +259,16 @@ ALWAYS_INLINE void Validator::AddFloatRule(const FloatRule &rule) noexcept
     }
 
     float_rules_.emplace(key, rule);
+}
+
+ALWAYS_INLINE void Validator::AddStrEnumRule(const StrEnumRule &rule) noexcept
+{
+    const std::string &key = rule.key;
+    if (rule.required) {
+        required_set_.emplace(key);
+    }
+
+    str_enum_rules_.emplace(key, rule);
 }
 
 } // namespace ubs

@@ -12,6 +12,7 @@
 #define UBS_COMM_UBSOCKET_FUNCTIONS_H
 
 #include "ubsocket_defines.h"
+
 namespace ock {
 namespace ubs {
 
@@ -32,6 +33,35 @@ public:
      * @return string
      */
     static char *Error2Str(int errNum);
+
+    /**
+     * @brief trim a string
+     *
+     * @param src          [in] the string to be trimmed
+     * @return string after trim
+     */
+    static std::string StrTrim(const std::string &src) noexcept;
+
+    /**
+     * @brief Split a string to string set by seperator
+     *
+     * @param src          [in] source string
+     * @param seperator    [in] seperator
+     * @return split set
+     */
+    static std::set<std::string> StrSplit(const std::string &src, const std::string &seperator) noexcept;
+
+    /*
+     * @brief lower case of string
+     */
+    static std::string StrLowerCase(const std::string &src) noexcept;
+    static void StrLowerCaseDirect(std::string &src) noexcept;
+
+    /**
+     * @brief if src is 'true' in lower case, return true, other return false,
+     * in it, we do lower case and trim, then compare with string 'true'
+     */
+    static bool BoolFromStr(const std::string &src) noexcept;
 };
 
 ALWAYS_INLINE bool Func::FloatLargerThan(float a, float b) noexcept
@@ -59,6 +89,71 @@ ALWAYS_INLINE char *Func::Error2Str(int errNum)
 #else
     return strerror_r(errNum, buf, sizeof(buf) - 1);
 #endif
+}
+
+ALWAYS_INLINE std::string Func::StrTrim(const std::string &src) noexcept
+{
+    /* empty if not consider \t\n\r\f\v */
+    size_t start = src.find_first_not_of(" \t\n\r\f\v");
+    if (start == std::string::npos) {
+        return "";
+    }
+
+    /* trim end */
+    size_t end = src.find_last_not_of(" \t\n\r\f\v");
+
+    return src.substr(start, end - start + 1);
+}
+
+ALWAYS_INLINE std::set<std::string> Func::StrSplit(const std::string &src, const std::string &seperator) noexcept
+{
+    std::set<std::string> result;
+
+    /* no split */
+    if (seperator.empty() || src.empty()) {
+        result.insert(src);
+        return result;
+    }
+
+    std::string::size_type pos = 0;
+    std::string::size_type pre = 0;
+
+    while ((pos = src.find(seperator, pre)) != std::string::npos) {
+        std::string sub = src.substr(pre, pos - pre);
+        if (!sub.empty()) {
+            result.insert(sub);
+        }
+        pre = pos + seperator.length();
+    }
+
+    /* last part */
+    std::string last = src.substr(pre);
+    if (!last.empty()) {
+        result.insert(last);
+    }
+
+    return result;
+}
+
+ALWAYS_INLINE std::string Func::StrLowerCase(const std::string &src) noexcept
+{
+    std::string res = src;
+    for (char &ch : res) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return res;
+}
+
+ALWAYS_INLINE void Func::StrLowerCaseDirect(std::string &src) noexcept
+{
+    for (char &ch : src) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+}
+
+ALWAYS_INLINE bool Func::BoolFromStr(const std::string &src) noexcept
+{
+    return StrLowerCase(StrTrim(src)) == "true";
 }
 } // namespace ubs
 } // namespace ock

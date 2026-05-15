@@ -11,17 +11,17 @@
 #ifndef UBS_COMM_ZCOPY_ADAPTER_H
 #define UBS_COMM_ZCOPY_ADAPTER_H
 
-#include <cstdint>
+#include "ubsocket_common_includes.h"
 
 namespace ock {
 namespace ubs {
 class UbsZcopyAdapter {
-    typedef void* (*blockmem_allocate_t)(size_t);
+    typedef void *(*blockmem_allocate_t)(size_t);
     typedef void (*blockmem_deallocate_t)(void *);
 
-    void* blockmem_allocate_zero_copy(size_t);
-    void  blockmem_deallocate_zero_copy(void*);
+    void *blockmem_allocate_zero_copy(size_t);
+    void blockmem_deallocate_zero_copy(void *);
 };
-}
-}
+} // namespace ubs
+} // namespace ock
 #endif

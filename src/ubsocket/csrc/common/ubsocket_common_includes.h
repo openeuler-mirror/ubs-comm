@@ -11,12 +11,18 @@
 #ifndef UBS_COMM_UBSOCKET_INCLUDES_H
 #define UBS_COMM_UBSOCKET_INCLUDES_H
 
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
+#include <unistd.h>
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <queue>
 #include <string>
+#include <thread>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "ubsocket_defines.h"
 #include "ubsocket_errno.h"
@@ -25,8 +31,5 @@
 #include "ubsocket_lock.h"
 #include "ubsocket_logger.h"
 #include "ubsocket_ref.h"
-
-#include "../../hcom/umq/include/umq/umq_errno.h"
-#include "../../hcom/umq/include/umq/umq_types.h"
 
 #endif // UBS_COMM_UBSOCKET_INCLUDES_H

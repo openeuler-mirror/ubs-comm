@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  * http://license.coscl.org.cn/MulanPSL2
@@ -13,15 +13,15 @@
 
 namespace ock {
 namespace ubs {
-int UmqDataRxOps::PollRx(bool flow_control_failed)
+namespace umq {
+
+int UmqRxOps::PollRx(bool flow_control_failed)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
         if (GetAndAckEvent(UMQ_IO_RX) < 0) {
             errno = EIO;
-            char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API,
-                              "ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
-                              NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+            UBS_VLOG_ERR("ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                         Func::Error2Str(errno));
             return -1;
         }
         get_and_ack_event_ = false;
@@ -33,9 +33,8 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
         poll_num = GetQbuf(buf, POLL_BATCH_MAX);
         if (poll_num < 0) {
             errno = EIO;
-            char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n",
-                              fd_, -1, errno, NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+            UBS_VLOG_ERR("ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                         Func::Error2Str(errno));
             return -1;
         } else if (poll_num == 0) {
             /* might be useful for qps performance by
@@ -50,9 +49,9 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf[i]->qbuf_ext);
         if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == 1) {
             // 处理探测包
-            Statistics::ProbeManager::GetInstance().HandleReceivedPacket(fd_, buf[i]);
+            //   Statistics::ProbeManager::GetInstance().HandleReceivedPacket(fd_, buf[i]);
             if (QBUF_LIST_NEXT(buf[i]) != nullptr) {
-                RPC_ADPT_VLOG_WARN("probe buf next not null\n");
+                UBS_VLOG_WARN("probe buf next not null\n");
             }
             umq_buf_free(buf[i]);
             continue;
@@ -69,12 +68,9 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
                 // try to wake up tx if necessary
                 bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
                 if (need_fc_awake && NotifyReadable() == -1) {
-                    char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                    RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                                      "eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
-                                      ", peer ip: %s, errno: %d, errmsg: %s\n",
-                                      event_fd_, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno,
-                                      NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                    UBS_VLOG_ERR("eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
+                                 ", peer ip: %s, errno: %d, errmsg: %s\n",
+                                 event_fd_, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno, Func::Error2Str(errno));
                 }
             }
 
@@ -83,7 +79,7 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
             continue;
         }
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            UpdateTraceStats(StatsMgr::RX_PACKET_COUNT, 1);
+            //   UpdateTraceStats(StatsMgr::RX_PACKET_COUNT, 1);
         }
         block_cache_.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
         polled_size += buf[i]->data_size;
@@ -91,9 +87,10 @@ int UmqDataRxOps::PollRx(bool flow_control_failed)
     return 0;
 }
 
-ALWAYS_INLINE void * UmqDataRxOps::PtrFloorToBoundary(void *ptr)
+ALWAYS_INLINE void *UmqRxOps::PtrFloorToBoundary(void *ptr)
 {
     return (void *)((uint64_t)ptr & ~UmqSetting::FloorMask());
 }
-}
-}
+} // namespace umq
+} // namespace ubs
+} // namespace ock

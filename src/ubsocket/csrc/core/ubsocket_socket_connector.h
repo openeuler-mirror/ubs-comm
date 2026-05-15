@@ -12,6 +12,7 @@
 #define UBS_COMM_UBSOCKET_SOCKET_CONNECTOR_H
 
 #include "ubsocket_common_includes.h"
+#include "ubsocket_core_types.h"
 
 namespace ock {
 namespace ubs {
@@ -23,21 +24,15 @@ public:
 
     // ======================== 主流程方法 ========================
     // 阶段1：协商信息
-    virtual Result Negotiate(int new_fd, Socket *socket_fd_obj) = 0;
+    virtual Result Negotiate(int new_fd, const SocketPtr &sock) = 0;
     // 阶段2：创建资源（例如：umq create + bind + prefill rx）
-    virtual Result CreateSocketResources(int new_fd, Socket *socket_fd_obj) = 0;
+    virtual Result CreateSocketResources(int new_fd, SocketPtr &sock) = 0;
     // 阶段3：销毁资源（握手失败/重试时清理已创建的资源）
     virtual void DestroySocketResources() = 0;
 
-    // ======================== 仅 connect ===========================
-
-    // ======================== 成员变量 ===========================
-    struct ConnInfo {
-        std::string peer_ip; // 对端IP地址
-        int peer_fd = -1;    // 对端socket fd
-        int type_fd = 0;     // 0 server; 1 client
-        std::chrono::system_clock::time_point create_time;
-    } conn_info_;
+    DEFINE_REF_OPERATION_FUNC
+protected:
+    DECLARE_REF_COUNT_VARIABLE;
 };
 
 // connector 建链通用实现层：TCP 建链，协商，建链
@@ -47,7 +42,7 @@ public:
     ~Connector();
 
     // ======================== 基础方法 ========================
-    ALWAYS_INLINE int Connect(const SocketInfo &sock, const struct sockaddr *address, socklen_t address_len) {};
+    int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t *address_len);
 
     // ======================== 成员变量 ========================
     std::shared_ptr<ConnectorOps> connector_ops_ = nullptr;
