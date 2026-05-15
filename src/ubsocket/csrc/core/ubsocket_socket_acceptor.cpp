@@ -10,18 +10,19 @@
  */
 
 #include "ubsocket_socket_acceptor.h"
+#include "ubsocket_socket_set.h"
 
 namespace ock {
 namespace ubs {
 // ======================== 基础方法 ========================
-ALWAYS_INLINE int Acceptor::Accept(const Socket& sock, struct sockaddr *address, socklen_t *address_len)
+ALWAYS_INLINE int Acceptor::Accept(const SocketInfo &sock, struct sockaddr *address, socklen_t *address_len)
 {
     int fd = -1;
-    raw_fd_ = sock.GetRawSocket();
+    auto sock_obj = reinterpret_cast<Socket *>(sock_obj);
+    raw_fd_ = sock_obj->raw_socket_;
 
     // 1. 异步accept模式下，从ready_queue中取fd
-    if (GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED && TryPopAsyncReadyFd(fd, address, address_len))
-    {
+    if (GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED && TryPopAsyncReadyFd(fd, address, address_len)) {
         return fd;
     }
 
@@ -47,15 +48,14 @@ ALWAYS_INLINE int Acceptor::Accept(const Socket& sock, struct sockaddr *address,
         // 使用提取的接口获取IP地址
         peerIp = SocketConnHelper::ExtractIpFromSockAddr(address);
 
-        Socket* sock_obj = SocketSet::GetInstance().GetSocket(fd);
+        Socket *sock_obj = SocketSet::GetInstance().GetSocket(fd);
         if (sock_obj) {
             sock_obj->GetAcceptor()->RawConnInfoV4.peer_ip = peerIp;
             sock_obj->GetAcceptor()->RawConnInfoV4.peer_fd = fd;
             sock_obj->GetAcceptor()->RawConnInfoV4.create_time = std::chrono::system_clock::now();
         }
     }
-    if (sock.GetSocketState() == SOCK_STAT_RAW_ESTABLISHED)
-    {
+    if (sock_obj.GetSocketState() == SOCK_STAT_RAW_ESTABLISHED) {
         return fd;
     }
 
@@ -68,7 +68,7 @@ ALWAYS_INLINE int Acceptor::Accept(const Socket& sock, struct sockaddr *address,
         * a. fd为非阻塞，则返回-1，errno为EAGAIN/EWOULDBLOCK，保持原错误码直接返回上层
         * b. fd为阻塞，则等待直到有连接完成或者触发异常，比如被信号中断，返回-1，errno为EINTR，保持原错误码直接返回上层
         */
-        if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) {  // nonblocking
+        if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) { // nonblocking
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             // Log
             return fd;
@@ -110,7 +110,7 @@ ALWAYS_INLINE bool Acceptor::TryPopAsyncReadyFd(int &fd, struct sockaddr *addres
     }
 }
 
-ALWAYS_INLINE void Acceptor::ProcessUBConnection(int fd, const std::string& peerIp)
+ALWAYS_INLINE void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
 {
     bool is_blocking = SocketConnHelper::IsBlocking(fd);
     if (is_blocking) {
@@ -121,7 +121,7 @@ ALWAYS_INLINE void Acceptor::ProcessUBConnection(int fd, const std::string& peer
     uint64_t protocol_negotiation = 0;
     ssize_t protocol_negotiation_recv_size = 0;
     int ret = acceptor_ops_->ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
-    
+
     if (ret > 0 && !GlobalSetting::UBS_AUTO_FALLBACK_TCP) {
         // RPC_ADPT_VLOG_ERR
         LibcApi::close(fd);
@@ -150,7 +150,7 @@ ALWAYS_INLINE void Acceptor::ProcessUBConnection(int fd, const std::string& peer
     }
 }
 
-Result Acceptor::DoAccept(int new_fd, const std::string& peerIp)
+Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 {
     Result ret = UBS_OK;
     // TODO: event_fd 应该放在哪里
@@ -170,19 +170,19 @@ Result Acceptor::DoAccept(int new_fd, const std::string& peerIp)
     }
 
     auto acceptor_ops = std::make_shared<umq::UmqSocketAcceptorOps>();
-    Acceptor* acceptor = new Acceptor();
+    Acceptor *acceptor = new Acceptor();
     try {
         new_socket_obj->umq_acceptor_ops_ = acceptor_ops;
         acceptor->SetAcceptorOps(acceptor_ops);
         new_socket_obj->SetAcceptor(acceptor);
         acceptor_ops->SetConnInfo(peerIp, new_fd, 0);
-    } catch (std::exception& e) {
+    } catch (std::exception &e) {
         LibcApi::close(event_fd);
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "%s\n", e.what());
         return Error::kUBSOCKET_NEW_SOCKET_FD;
     }
     auto sockCleaner = ubsocket::MakeScopeExit([new_socket_obj]() { delete new_socket_obj; });
-    
+
     ret = acceptor_ops->Negotiate(new_fd, new_socket_obj);
     if (ret != UBS_OK) {
         return ret;
@@ -200,7 +200,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string& peerIp)
     // TODO: 待 PoollingEpoll 重构后修改这部分
 
     socket_fd_obj->umq_acceptor_ops_->RawConnInfoV4.create_time = std::chrono::system_clock::now();
-    // RPC_ADPT_VLOG_INFO  "UB connection has been successfully established new fd: 
+    // RPC_ADPT_VLOG_INFO  "UB connection has been successfully established new fd:
     RawConnInfoV4.type_fd = 0;
 
     return UBS_OK;

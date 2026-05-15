@@ -10,12 +10,15 @@
  */
 
 #include "ubsocket_socket_connector.h"
+#include "ubsocket_socket_set.h"
 
 namespace ock {
 namespace ubs {
 // ======================== 基础方法 ========================
-ALWAYS_INLINE int Connector::Connect(const struct sockaddr *address, socklen_t address_len)
+ALWAYS_INLINE int Connector::Connect(const SocketInfo &sock, const struct sockaddr *address, socklen_t address_len)
 {
+    auto sock_obj = reinterpret_cast<Socket *>(sock);
+    raw_fd_ = sock_obj->raw_socket_;
     // BuildNegotiateReq + sendto(req)
     // IsBlocking
     // IsTfoConnection

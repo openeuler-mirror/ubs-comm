@@ -33,9 +33,9 @@ public:
 
     // ======================== 成员变量 ===========================
     struct ConnInfo {
-        std::string peer_ip;     // 对端IP地址
-        int peer_fd = -1;        // 对端socket fd
-        int type_fd = 0;         // 0 server; 1 client
+        std::string peer_ip; // 对端IP地址
+        int peer_fd = -1;    // 对端socket fd
+        int type_fd = 0;     // 0 server; 1 client
         std::chrono::system_clock::time_point create_time;
     } conn_info_;
 };
@@ -47,7 +47,7 @@ public:
     ~Connector();
 
     // ======================== 基础方法 ========================
-    ALWAYS_INLINE int Connect(const struct sockaddr *address, socklen_t address_len);
+    ALWAYS_INLINE int Connect(const SocketInfo &sock, const struct sockaddr *address, socklen_t address_len) {};
 
     // ======================== 成员变量 ========================
     std::shared_ptr<ConnectorOps> connector_ops_ = nullptr;
@@ -55,6 +55,5 @@ public:
 
 } // namespace ubs
 } // namespace ock
-
 
 #endif // UBS_COMM_UBSOCKET_SOCKET_CONNECTOR_H
