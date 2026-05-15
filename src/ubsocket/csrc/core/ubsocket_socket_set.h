@@ -13,7 +13,6 @@
 
 #include "ubsocket_common_includes.h"
 #include "ubsocket_socket.h"
-#include "../../backup/ub_lock_ops.h"
 
 namespace ock {
 namespace ubs {
@@ -28,7 +27,7 @@ public:
 
     int Init()
     {
-        rwlock_ = g_rw_lock_ops.create();
+        rwlock_ = LockRegistry::RW_LOCK_OPS.create();
         if (rwlock_ != nullptr) {
             // 初始化数组为 nullptr
             for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
@@ -41,7 +40,7 @@ public:
 
     ALWAYS_INLINE Socket *GetSocket(int fd)
     {
-        if(fd<0 || fd>=RPC_ADPT_FD_MAX){
+        if (fd < 0 || fd >= RPC_ADPT_FD_MAX) {
             return nullptr;
         }
         return socket_obj_[fd];
@@ -49,7 +48,7 @@ public:
 
     Socket *GetSocketLocked(int fd)
     {
-        ScopedUbReadLocker lock(rwlock_);
+        ReadLocker lock(rwlock_);
         return GetSocket(fd);
     }
 
@@ -64,7 +63,7 @@ public:
 
         Socket *old_socket = nullptr;
         {
-            ScopedUbWriteLocker lock(rwlock_);
+            WriteLocker lock(rwlock_);
             old_socket = socket_obj_[fd];
             socket_obj_[fd] = new_socket;
         }
@@ -82,7 +81,7 @@ public:
         }
         Socket *socket = nullptr;
         {
-            ScopedUbWriteLocker lock(rwlock_);
+            WriteLocker lock(rwlock_);
             socket = socket_obj_[fd];
             socket_obj_[fd] = nullptr;
         }
@@ -91,7 +90,7 @@ public:
 
     void ReleaseAll()
     {
-        ScopedUbWriteLocker lock(rwlock_);
+        WriteLocker lock(rwlock_);
         for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
             if (socket_obj_[i] != nullptr) {
                 socket_obj_[i]->DecreaseRef();
@@ -102,7 +101,7 @@ public:
 
     void ForEach(const std::function<void(int fd, Socket *)> &callback)
     {
-        ScopedUbReadLocker lock(rwlock_);
+        ReadLocker lock(rwlock_);
         for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
             if (socket_obj_[i] != nullptr) {
                 callback(i, socket_obj_[i]);
@@ -112,7 +111,7 @@ public:
 
     size_t Size()
     {
-        ScopedUbReadLocker lock(rwlock_);
+        ReadLocker lock(rwlock_);
         size_t count = 0;
         for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
             if (socket_obj_[i] != nullptr) {
@@ -134,7 +133,7 @@ private:
     {
         ReleaseAll();
         if (rwlock_ != nullptr) {
-            g_rw_lock_ops.destroy(rwlock_);
+            LockRegistry::RW_LOCK_OPS.destroy(rwlock_);
             rwlock_ = nullptr;
         }
     }
@@ -150,4 +149,3 @@ private:
 } // namespace ock
 
 #endif // UBS_COMM_UBSOCKET_SOCKET_SET_H
-

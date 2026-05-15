@@ -13,10 +13,11 @@
 
 #include "ubsocket_common_includes.h"
 
-namespace ock{
-namespace ubs{
+namespace ock {
+namespace ubs {
 class SocketConnHelper {
     SocketConnHelper() = delete;
+
 public:
     static bool IsBlocking(int fd);
     static int SetNonBlocking(int fd);
@@ -27,7 +28,7 @@ public:
     static bool IsTfoConnection(const int &fd);
     static int SetTcpNoDelay(int fd);
     static std::string ExtractIpFromSockAddr(const struct sockaddr *address);
-}
-}
-}
+};
+} // namespace ubs
+} // namespace ock
 #endif // UBS_COMM_UBSOCKET_SOCKET_HELPER_H

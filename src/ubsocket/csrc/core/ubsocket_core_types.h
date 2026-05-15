@@ -32,6 +32,15 @@ enum SocketType : uint8_t {
     SOCK_TYPE_COUNT
 };
 
+enum SocketCreateType : uint8_t {
+    SOCK_CREATE_TYPE_UNKNOWN = 0, /* unknown */
+    SOCK_CREATE_TYPE_LISTEN,      /* created because of listen */
+    SOCK_CREATE_TYPE_CONNECT,     /* created because of connect */
+    SOCK_CREATE_TYPE_ACCEPT,      /* created because of accept */
+                                  /* add here */
+    SOCK_CREATE_TYPE_COUNT
+};
+
 class SocketInfo {
 public:
     virtual ~SocketInfo() = default;
@@ -49,18 +58,21 @@ public:
     DEFINE_REF_OPERATION_FUNC
 
 public:
-    int raw_socket_ = -1;                /* fd of raw socket */
-    int event_fd_ = -1;                  /* event fd */
-    SocketState state_ = SOCK_STAT_INIT; /* state of ubsocket */
-    SocketType type_ = SOCK_TYPE_TCP;    /* type of ubsocket */
-
-    DECLARE_REF_COUNT_VARIABLE /* int16_t */
+    DECLARE_REF_COUNT_VARIABLE;                               /* ref count int16_t */
+    int raw_socket_ = -1;                                     /* fd of raw socket */
+    int event_fd_ = -1;                                       /* event fd */
+    SocketState state_ = SOCK_STAT_INIT;                      /* state of ubsocket */
+    SocketType type_ = SOCK_TYPE_TCP;                         /* type of ubsocket */
+    SocketCreateType create_type_ = SOCK_CREATE_TYPE_UNKNOWN; /* created because of what */
 };
+using SocketInfoPtr = Ref<SocketInfo>;
 
 const std::string &SocketStateToStr(SocketState value);
 const std::string &SocketTypeToStr(SocketType value);
+const std::string &SocketCreateTypeToStr(SocketCreateType value);
 bool SocketStateValid(SocketState value);
 bool SocketTypeValid(SocketType value);
+bool SocketCreateTypeValid(SocketCreateType value);
 } // namespace ubs
 } // namespace ock
 

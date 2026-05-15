@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *      http://license.coscl.org.cn/MulanPSL2
@@ -34,7 +34,7 @@ using Result = int32_t;
 
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
-#define RPC_ADPT_FD_MAX      (8192)
+#define RPC_ADPT_FD_MAX (8192)
 
 enum dev_schedule_policy {
     ROUND_ROBIN = 1,
@@ -77,7 +77,7 @@ constexpr uint32_t TX_POST_BATCH_MAX = 64;
 constexpr uint32_t TX_SGE_MAX = 1;
 /* unsolicited bytes use the same setting as brpc
  * accumulated bytes exceed UNSOLICITED_BYTES_MAX will generate a solicited interrupt event at remote */
-constexpr uint32_t  TX_UNSOLICITED_BYTES_MAX = 1048576;
+constexpr uint32_t TX_UNSOLICITED_BYTES_MAX = 1048576;
 
 constexpr uint64_t SIZE_8K = 8192;
 constexpr uint64_t SIZE_16K = 16384;
@@ -95,10 +95,10 @@ constexpr uint32_t POLL_BATCH_MAX = 32;
 constexpr const uint32_t NET_STR_ERROR_BUF_SIZE = 128;
 
 constexpr uint32_t BLOCK_TYPE_STR_LEN_MAX = 64;
-constexpr const char* DEFAULT_QBUF_BLOCK_TYPE  = "default"; // 8k
-constexpr const char* SMALL_QBUF_BLOCK_TYPE   = "small" ; // 16k
-constexpr const char* MEDIUM_QBUF_BLOCK_TYPE  = "medium"; // 32k
-constexpr const char* LARGE_QBUF_BLOCK_TYPE   = "large" ; // 64k
+constexpr const char *DEFAULT_QBUF_BLOCK_TYPE = "default"; // 8k
+constexpr const char *SMALL_QBUF_BLOCK_TYPE = "small";     // 16k
+constexpr const char *MEDIUM_QBUF_BLOCK_TYPE = "medium";   // 32k
+constexpr const char *LARGE_QBUF_BLOCK_TYPE = "large";     // 64k
 
 class NetCommon {
 public:

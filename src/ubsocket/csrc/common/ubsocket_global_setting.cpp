@@ -30,7 +30,6 @@ bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
 bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
-bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
 bool GlobalSetting::UBS_USE_UB_FORCE = false;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
@@ -41,19 +40,6 @@ uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
 #define ENV_VAR_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
-
-
-/* int64 rule: name, required, min, max */
-Int64Rule RULES_INT64[] = {{ENV_TRACE_ENABLED, false, 0, 1L},
-                           {ENV_ASYNC_ACCEPTOR, false, 0, 8L},
-                           {ENV_ASYNC_CONNECTOR, false, 0, 8L},
-                           {ENV_ASYNC_EPOLL, false, 1, 1L}};
-
-#define ENV_READV_UNLIMITED "UBSOCKET_READV_UNLIMITED");
-#define ENV_ENABLE_SHARE_JFR "UBSOCKET_ENABLE_SHARE_JFR");
-#define ENV_SHARE_JFR_RX_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH");
-#define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP");
-#define ENV_USE_UB_FORCE "UBSOCKET_USE_UB_FORCE");
 
 /* int64 rule: name, required, min, max */
 Int64Rule RULES_INT64[] = {{ENV_TRACE_ENABLED, false, 0, 1L},

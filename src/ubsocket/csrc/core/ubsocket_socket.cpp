@@ -14,6 +14,8 @@
 #include "umq_data_rx_ops.h"
 #include "umq_data_tx_ops.h"
 #include "umq_socket.h"
+#include "umq_socket_acceptor.h"
+#include "umq_socket_connector.h"
 
 namespace ock {
 namespace ubs {
@@ -35,16 +37,17 @@ Result Socket::Create(ock::ubs::SocketType t, SocketPtr &sock)
         auto baseSock = RefConvert<UmqSocket, Socket>(umqSock);
 
         /* step3: create tx ops */
-        DataTxOpsPtr txOps;
+        DataTxOps *txOps = nullptr;
         result = CreateTxOps(t, baseSock, txOps);
         if (result != UBS_OK) {
             return result;
         }
 
         /* step4: create rx ops */
-        DataRxOpsPtr rxOps;
+        DataRxOps *rxOps = nullptr;
         result = CreateRxOps(t, baseSock, rxOps);
         if (result != UBS_OK) {
+            delete txOps;
             return result;
         }
 
@@ -62,7 +65,7 @@ Result Socket::Create(ock::ubs::SocketType t, SocketPtr &sock)
     }
 } // namespace ubs
 
-Result Socket::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOpsPtr &ops)
+Result Socket::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops)
 {
     if (sock == nullptr) {
         return UBS_INVALID_PARAM;
@@ -73,13 +76,13 @@ Result Socket::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOpsPtr
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
 
         /* create umq ops */
-        auto umqOps = MakeRef<UmqDataTxOps>(umqSock->UmqHandle());
+        auto umqOps = new (std::nothrow) UmqDataTxOps(umqSock->UmqHandle());
         if (umqOps == nullptr) {
             return UBS_MALLOC_FAILED;
         }
 
         /* set out ops */
-        ops = umqOps.Get();
+        ops = umqOps;
         return UBS_OK;
     } else {
         /* invalid type */
@@ -87,7 +90,7 @@ Result Socket::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOpsPtr
     }
 }
 
-Result Socket::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOpsPtr &ops)
+Result Socket::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops)
 {
     if (sock == nullptr) {
         return UBS_INVALID_PARAM;
@@ -98,13 +101,54 @@ Result Socket::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOpsPtr
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
 
         /* create umq ops */
-        auto umqOps = MakeRef<UmqDataRxOps>(umqSock->UmqHandle());
+        auto umqOps = new (std::nothrow) UmqDataRxOps(umqSock->UmqHandle());
         if (umqOps == nullptr) {
             return UBS_MALLOC_FAILED;
         }
 
         /* set out ops */
-        ops = umqOps.Get();
+        ops = umqOps;
+        return UBS_OK;
+    } else {
+        /* invalid type */
+        return UBS_INVALID_PARAM;
+    }
+}
+Result Socket::CreateAcceptor(SocketType value, const SocketPtr &sock, Acceptor *&acceptor)
+{
+    if (sock == nullptr) {
+        return UBS_INVALID_PARAM;
+    }
+
+    if (value == SOCK_TYPE_UMQ) {
+        /* convert to umq socket */
+        UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
+
+        /* create umq acceptor */
+
+        /* set out */
+
+        return UBS_OK;
+    } else {
+        /* invalid type */
+        return UBS_INVALID_PARAM;
+    }
+}
+
+Result Socket::CreateConnector(SocketType value, const SocketPtr &sock, Connector *&connector)
+{
+    if (sock == nullptr) {
+        return UBS_INVALID_PARAM;
+    }
+
+    if (value == SOCK_TYPE_UMQ) {
+        /* convert to umq socket */
+        UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
+
+        /* create umq acceptor */
+
+        /* set out */
+
         return UBS_OK;
     } else {
         /* invalid type */

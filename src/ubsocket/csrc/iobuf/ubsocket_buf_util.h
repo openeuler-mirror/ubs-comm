@@ -1,17 +1,18 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Description: Provide the utility for buffer, iov, etc
- * Author:
- * Create: 2025-08-12
- * Note:
- * History: 2025-08-12
-*/
-
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * ubs-comm is licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ * http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
 #ifndef UBS_COMM_IOV_CONVERTER_H
 #define UBS_COMM_IOV_CONVERTER_H
 
-#include <cstdint>
 #include <sys/uio.h>
+#include <cstdint>
 
 class IovConverter {
 public:
