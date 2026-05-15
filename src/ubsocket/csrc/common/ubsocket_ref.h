@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *      http://license.coscl.org.cn/MulanPSL2
@@ -43,7 +43,7 @@ protected:
     std::atomic<int16_t> ref_count_{0};
 };
 
-#define DECLARE_REF_COUNT_VARIABLE std::atomic<int16_t> ref_count_{0};
+#define DECLARE_REF_COUNT_VARIABLE std::atomic<int16_t> ref_count_{0}
 
 #define DEFINE_REF_OPERATION_FUNC                                      \
     ALWAYS_INLINE void IncreaseRef()                                   \

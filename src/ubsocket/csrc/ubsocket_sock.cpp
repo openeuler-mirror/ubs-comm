@@ -8,10 +8,13 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "dl_libc_api.h"
 #include "ubsocket.h"
 #include "ubsocket_common_includes.h"
 #include "ubsocket_data_tx.h"
 #include "ubsocket_socket.h"
+
+using namespace ock::ubs;
 
 UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
 {
@@ -30,10 +33,11 @@ UBS_API int UB_API_WRAP(close)(int fd)
 
 UBS_API int UB_API_WRAP(accept)(int socket, struct sockaddr *address, socklen_t *address_len)
 {
-    if (!ock::ubs::GlobalSetting::UBS_NATIVE_TCP_MODE) {
+    if (!GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::accept(socket, address, address_len);
     }
-    ock::ubs::Socket *sock = ock::ubs::SocketSet::GetInstance().GetSocket(socket);
+
+    Socket *sock = SocketSet::GetInstance().GetSocket(socket);
     if (sock == nullptr) {
         return LibcApi::accept(socket, address, address_len);
     }
@@ -52,10 +56,11 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
 
 UBS_API int UB_API_WRAP(connect)(int socket, const struct sockaddr *address, socklen_t address_len)
 {
-    if (!ock::ubs::GlobalSetting::UBS_NATIVE_TCP_MODE) {
+    if (!GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::connect(socket, address, address_len);
     }
-    ock::ubs::Socket *sock = ock::ubs::SocketSet::GetInstance().GetSocket(socket);
+
+    Socket *sock = SocketSet::GetInstance().GetSocket(socket);
     if (sock == nullptr) {
         return LibcApi::connect(socket, address, address_len);
     }

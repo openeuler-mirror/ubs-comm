@@ -32,6 +32,16 @@ const std::string &SocketTypeToStr(SocketType value)
     return strings[value];
 }
 
+const std::string &SocketCreateTypeToStr(SocketCreateType value)
+{
+    static std::string strings[SOCK_CREATE_TYPE_COUNT + 1L] = {"unknown", "listen", "client", "accept", "unknown"};
+    if (SocketCreateTypeValid(value)) {
+        return strings[value];
+    }
+
+    return strings[value];
+}
+
 bool SocketStateValid(SocketState value)
 {
     return (value < SOCK_STATE_COUNT);
@@ -40,6 +50,11 @@ bool SocketStateValid(SocketState value)
 bool SocketTypeValid(SocketType value)
 {
     return (value < SOCK_TYPE_COUNT);
+}
+
+bool SocketCreateTypeValid(SocketCreateType value)
+{
+    return (value < SOCK_CREATE_TYPE_COUNT);
 }
 } // namespace ubs
 } // namespace ock

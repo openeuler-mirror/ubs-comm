@@ -70,17 +70,17 @@ public:
     static int16_t UBS_ACCEPTOR_ASYNC_THREAD_COUNT;  /* if enable async acceptor, from API override by env */
     static int16_t UBS_CONNECTOR_ASYNC_THREAD_COUNT; /* if enable async connector, from API override by env */
     static int16_t UBS_EPOLL_ASYNC_THREAD_COUNT;     /* if enable async epoll_wait, from API override by env */
-    static bool UBS_ACCEPTOR_ASYNC_ENABLED;       /* if enable async acceptor, from API override by env */
-    static bool UBS_CONNECTOR_ASYNC_ENABLED;      /* if enable async connector, from API override by env */
-    static bool UBS_EPOLL_ASYNC_ENABLED;          /* if enable async epoll_wait, from API override by env */
-    static bool UBS_AUTO_FALLBACK_TCP;            /* if auto fallback to tcp, from API override by from env */
-    static bool UBS_READV_UNLIMITED;              /* if enable readv limit report, from env */
-    static bool UBS_ENABLE_SHARE_JFR;             /* if enable share jfr, from env */
-    static uint32_t UBS_SHARE_JFR_RX_QUEUE_DEPTH;     /* share jfr queue depth, from env */
-    static bool UBS_USE_UB_FORCE;                 /* if enable async acceptor, from API override by env */
-    static uint32_t UBS_TX_DEPTH;                 /* tx queue depth, from env */
-    static uint32_t UBS_RX_DEPTH;                 /* rx queue depth, from env */
-    static char UBS_BLOCK_TYPE_STR[BLOCK_TYPE_STR_LEN_MAX];    /* block type, default small medium large  */
+    static bool UBS_ACCEPTOR_ASYNC_ENABLED;          /* if enable async acceptor, from API override by env */
+    static bool UBS_CONNECTOR_ASYNC_ENABLED;         /* if enable async connector, from API override by env */
+    static bool UBS_EPOLL_ASYNC_ENABLED;             /* if enable async epoll_wait, from API override by env */
+    static bool UBS_AUTO_FALLBACK_TCP;               /* if auto fallback to tcp, from API override by from env */
+    static bool UBS_READV_UNLIMITED;                 /* if enable readv limit report, from env */
+    static bool UBS_ENABLE_SHARE_JFR;                /* if enable share jfr, from env */
+    static uint32_t UBS_SHARE_JFR_RX_QUEUE_DEPTH;    /* share jfr queue depth, from env */
+    static bool UBS_USE_UB_FORCE;                    /* if enable async acceptor, from API override by env */
+    static uint32_t UBS_TX_DEPTH;                    /* tx queue depth, from env */
+    static uint32_t UBS_RX_DEPTH;                    /* rx queue depth, from env */
+    static char UBS_BLOCK_TYPE_STR[BLOCK_TYPE_STR_LEN_MAX]; /* block type, default small medium large  */
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept
@@ -123,6 +123,7 @@ ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, std::string &o
     }
 
     out = envValue;
+    return true;
 }
 
 ALWAYS_INLINE bool GlobalSetting::NativeTcpMode() noexcept

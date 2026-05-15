@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  * http://license.coscl.org.cn/MulanPSL2
@@ -14,8 +14,9 @@
 
 #include <atomic>
 #include <new>
+
+#include "ubsocket_defines.h"
 #include "ubsocket_zcopy_adapter.h"
-#include "../common/ubsocket_defines.h"
 
 namespace ock {
 namespace ubs {
@@ -32,14 +33,21 @@ struct Block {
     char *data;
 
     Block(char *data_in, uint32_t data_size, int init_nshared = 1)
-        : nshared(init_nshared), flags(0), abi_check(0), size(0),
-    cap(data_size), u({nullptr}), data(data_in) {}
+        : nshared(init_nshared),
+          flags(0),
+          abi_check(0),
+          size(0),
+          cap(data_size),
+          u({nullptr}),
+          data(data_in)
+    {
+    }
 
     void IncRef()
     {
         nshared.fetch_add(1, std::memory_order_relaxed);
-    } 
-    
+    }
+
     void DecRef()
     {
         if (nshared.fetch_sub(1, std::memory_order_release) == 1) {
@@ -49,8 +57,14 @@ struct Block {
         }
     }
 
-    bool Full() const { return size >= cap; }
-    size_t LeftSpace() const { return cap - size; }
+    bool Full() const
+    {
+        return size >= cap;
+    }
+    size_t LeftSpace() const
+    {
+        return cap - size;
+    }
 
     ALWAYS_INLINE Block *SetNext(Block *next)
     {
@@ -67,7 +81,7 @@ struct Block {
 struct BlockRef {
     uint32_t offset = 0;
     uint32_t length = 0;
-    Block* block = nullptr;
+    Block *block = nullptr;
 
     void Reset()
     {
@@ -83,9 +97,9 @@ public:
     {
         Block *new_block = nullptr;
         try {
-            new_block = new (data_in - sizeof(Block)) Block(data_in,data_size);
-        } catch (const std::exception& e) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Alloc new block failed: %s.\n", e.what());
+            new_block = new (data_in - sizeof(Block)) Block(data_in, data_size);
+        } catch (const std::exception &e) {
+            UBS_VLOG_ERR("Alloc new block failed: %s.\n", e.what());
             return;
         }
         if (head_block_ == nullptr) {
@@ -96,7 +110,7 @@ public:
         }
         cache_len_ += data_size;
     }
-    
+
     ssize_t CutAndInsertAfter(uint32_t cut_size, Block *block)
     {
         if (cache_len_ == 0) {
@@ -210,13 +224,13 @@ private:
 
         return total_cut_size;
     }
-    
+
     BlockRef partial_block_;
     Block *head_block_ = nullptr;
     Block *tail_block_ = nullptr;
     uint64_t cache_len_ = 0;
 };
-}
-}
+} // namespace ubs
+} // namespace ock
 
 #endif
