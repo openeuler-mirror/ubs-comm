@@ -16,6 +16,8 @@
 namespace ock {
 namespace hcom {
 
+// User control opcodes
+static const uint32_t BONDP_USER_CTL_ENABLE_SEG_CACHE = 5;
 
 uint32_t UBDeviceHelper::G_InitRef = 0;
 std::unordered_map<urma_speed_t, uint8_t> UBDeviceHelper::G_UBDevBWTable;
@@ -141,6 +143,18 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&c
     eid.urmaEid = eidInfoList[0].eid;
     eid.bandWidth = bw;
     ctx = tmpCtx;
+
+    urma_user_ctl_in_t in;
+    urma_user_ctl_out_t out;
+    in.addr = 0;
+    in.len = 0;
+    in.opcode = BONDP_USER_CTL_ENABLE_SEG_CACHE;
+    ret = HcomUrma::UserCtl(ctx, &in, &out);
+    if (ret != 0) {
+        NN_LOG_ERROR("Failed to enable segment cache for bonding device, ret " << ret);
+        return UB_DEVICE_OPEN_FAILED;
+    }
+
     return UB_OK;
 }
 
