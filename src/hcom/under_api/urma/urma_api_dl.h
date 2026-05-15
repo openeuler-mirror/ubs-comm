@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 #include "urma_types.h"
+#include "urma_ubagg.h"
 
 #define URMA_SO_PATH "liburma.so.0"
 
