@@ -15,7 +15,7 @@
 #include <atomic>
 #include <new>
 
-#include "ubsocket_defines.h"
+#include "ubsocket_common_includes.h"
 #include "ubsocket_zcopy_adapter.h"
 
 namespace ock {
@@ -50,11 +50,13 @@ struct Block {
 
     void DecRef()
     {
+#ifdef ENALBED
         if (nshared.fetch_sub(1, std::memory_order_release) == 1) {
             std::atomic_thread_fence(std::memory_order_acquire);
             this->~Block();
             blockmem_deallocate_zero_copy(this);
         }
+#endif
     }
 
     bool Full() const

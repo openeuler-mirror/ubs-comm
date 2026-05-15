@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *      http://license.coscl.org.cn/MulanPSL2
@@ -14,9 +14,10 @@
 
 namespace ock {
 namespace ubs {
-
-int UmqEpollRunner::AddEpollEvent(const Socket * const socket, struct epoll_event *event)
+namespace umq {
+int UmqEpollRunner::AddEpollEvent(const Socket *const socket, struct epoll_event *event)
 {
+#ifdef ENABLED
     auto skt_event_fd = socekt->GetEventFd();
     if (UNLIKELY(skt_event_fd < 0)) {
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll eventfd() failed : %d : %s\n", errno, strerror(errno));
@@ -32,7 +33,7 @@ int UmqEpollRunner::AddEpollEvent(const Socket * const socket, struct epoll_even
     event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
     event_data.event_data.data = connect_info.share_jfr_fd;
 
-    struct epoll_event shared_jfr_event {};
+    struct epoll_event shared_jfr_event{};
     shared_jfr_event.events = EPOLLIN | EPOLLET;
     shared_jfr_event.data.u64 = event_data.u64;
 
@@ -41,22 +42,20 @@ int UmqEpollRunner::AddEpollEvent(const Socket * const socket, struct epoll_even
     if (UNLIKELY(jfr_main_umq_.count(connect_info.share_jfr_fd) == 0)) {
         if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, connect_info.share_jfr_fd, &shared_jfr_event) < 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll epoll_ctl(ADD) jfr event failed: %d : %s\n", errno,
-                strerror(errno));
+                              strerror(errno));
             return -1;
         }
         jfr_main_umq_.emplace(connect_info.share_jfr_fd, connect_info.main_umq);
     }
     sLock.Unlock();
 
-    struct epoll_event rx_event {
-        .events = EPOLLIN | EPOLLET
-    };
+    struct epoll_event rx_event{.events = EPOLLIN | EPOLLET};
     event_data.event_data.type = DAEMON_EVENT_TYPE_SUB_UMQ_RX;
     event_data.event_data.data = (ptrdiff_t)(void *)connect_info.socket_fd_object;
     rx_event.data.u64 = event_data.u64;
     if (UNLIKELY(epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, connect_info.rx_interrupt_fd, &rx_event) < 0)) {
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "async_epoll epoll_ctl(ADD) rx event failed: %d : %s\n", errno,
-            strerror(errno));
+                          strerror(errno));
         return -1;
     }
     auto socket_obj = ((Brpc::SocketFd *)connect_info.socket_fd_object);
@@ -72,18 +71,16 @@ int UmqEpollRunner::AddEpollEvent(const Socket * const socket, struct epoll_even
     }
 
     return skt_event_fd;
+#endif
+    return 0;
 }
 
-int UmqEpollRunner::RemoveEpollEvent(const Socket * const socket)
+int UmqEpollRunner::RemoveEpollEvent(const Socket *const socket)
 {
     return 0;
 }
 
-void UmqEpollRunner::ProcessOneEvent(const struct epoll_event &event)
-{
-
-}
-
-
-}
-}
+void UmqEpollRunner::ProcessOneEvent(const struct epoll_event &event) {}
+} // namespace umq
+} // namespace ubs
+} // namespace ock

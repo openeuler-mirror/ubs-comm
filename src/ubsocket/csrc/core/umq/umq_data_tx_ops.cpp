@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  * http://license.coscl.org.cn/MulanPSL2
@@ -9,22 +9,25 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "umq_data_tx_ops.h"
-#include "../ubsocket_iobuf_adapter.h"
+#include "ubsocket_iobuf_adapter.h"
 
 namespace ock {
 namespace ubs {
-uintptr_t UmqDataTxOps::AllocTxBuf(uint32_t count)
+namespace umq {
+
+uintptr_t UmqTxOps::AllocTxBuf(uint32_t count)
 {
     umq_buf_t *tx_buf_list = umq_buf_alloc(0, count, UMQ_INVALID_HANDLE, nullptr);
     if (tx_buf_list == nullptr) {
-        RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "umq_buf_alloc() failed for TX, local umq: %llu, ret: %p\n",
-            static_cast<unsigned long long>(local_umqh_), tx_buf_list);
+        UBS_VLOG_ERR("umq_buf_alloc() failed for TX, local umq: %llu, ret: %p\n",
+                     static_cast<unsigned long long>(local_umqh_), tx_buf_list);
         return DpRearmTxInterrupt();
     }
+
     return reinterpret_cast<uintptr_t>(tx_buf_list);
 }
 
-int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch, IovConverter cvt)
+int UmqTxOps::PostSend(uintptr_t buf, uint32_t batch, IovConverter cvt)
 {
     umq_buf_t *tx_buf_list = reinterpret_cast<umq_buf_t *>(buf);
     int flagEIO = -1;
@@ -99,7 +102,7 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch, IovConverter cvt)
     if (ret == UMQ_SUCCESS) {
         tx_queue_avail_num_ -= batch;
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            UpdateTraceStats(StatsMgr::TX_PACKET_COUNT, 1);
+            //    UpdateTraceStats(StatsMgr::TX_PACKET_COUNT, 1);
         }
     } else if (bad_qbuf != nullptr) {
         // Handle partial failure
@@ -111,12 +114,12 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch, IovConverter cvt)
             errno = EIO;
             return -1;
         } else {
-            RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "umq_post() failed for TX, local umq: %llu, ret: %d\n",
-                static_cast<unsigned long long>(local_umqh_), ret);
+            UBS_VLOG_ERR("umq_post() failed for TX, local umq: %llu, ret: %d\n",
+                         static_cast<unsigned long long>(local_umqh_), ret);
             errno = EIO;
             flagEIO = 1;
         }
-        umq_buf_list_t head = { bad_qbuf };
+        umq_buf_list_t head = {bad_qbuf};
         umq_buf_t *cur = nullptr;
         QBUF_LIST_FOR_EACH(cur, &head)
         {
@@ -136,15 +139,15 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch, IovConverter cvt)
             tx_total_len = 0;
         } else {
             tx_total_len = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf, _unsolicited_wr_num, _unsolicited_bytes,
-                _unsignaled_wr_num);
+                                         _unsignaled_wr_num);
         }
         if (flagEIO == 1) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "write failed, destroy UB\n");
+            UBS_VLOG_ERR("write failed, destroy UB\n");
             return -1;
         }
     } else {
-        RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "umq_post() failed for TX without bad_qbuf, local umq: %llu, ret: %d\n",
-            static_cast<unsigned long long>(local_umqh_), ret);
+        UBS_VLOG_ERR("umq_post() failed for TX without bad_qbuf, local umq: %llu, ret: %d\n",
+                     static_cast<unsigned long long>(local_umqh_), ret);
     }
 
     // After posting and before polling, the time for updating the count cna be concealed within the waiting period
@@ -155,24 +158,23 @@ int UmqDataTxOps::PostSend(uintptr_t buf, uint32_t batch, IovConverter cvt)
     return tx_total_len;
 }
 
-int UmqDataTxOps::PollTx()
+int UmqTxOps::PollTx()
 {
     if (get_and_ack_event_) {
         // handle tx epollin epoll event
         do {
             if (GetAndAckEvent(UMQ_IO_TX) < 0) {
                 errno = EIO;
-                char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                RPC_ADPT_VLOG_ERR(UMQ_API, "WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n",
-                    fd_, -1, errno, NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                UBS_VLOG_ERR("WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                             Func::Error2Str(errno));
                 return -1;
             }
             // set poll_to_empty, means poll at least m_tx.m_retrieve_threshold TX CQE
             PollUmqTx(true);
             /* m_tx.epoll_event_num_ not equals to m_tx.m_expect_epoll_event_num means
              * another epoll event is reportedduring readv processing procedure */
-        } while (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0,
-            std::memory_order_release, std::memory_order_acquire));
+        } while (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0, std::memory_order_release,
+                                                           std::memory_order_acquire));
 
         get_and_ack_event_ = false;
     } else if (tx_queue_avail_num_ == 0) {
@@ -185,7 +187,7 @@ int UmqDataTxOps::PollTx()
     return 0;
 }
 
-bool UmqDataTxOps::CutLast(IovConverter cvt, uint32_t len, umq_buf_t *buf)
+bool UmqTxOps::CutLast(IovConverter cvt, uint32_t len, umq_buf_t *buf)
 {
     uint32_t moved_len = 0;
     if (cvt.iov_idx_ < cvt.iovcnt_) {
@@ -217,5 +219,6 @@ bool UmqDataTxOps::CutLast(IovConverter cvt, uint32_t len, umq_buf_t *buf)
 
     return cvt.iov_idx_ < cvt.iovcnt_ ? false : true;
 }
-}
-}
+} // namespace umq
+} // namespace ubs
+} // namespace ock

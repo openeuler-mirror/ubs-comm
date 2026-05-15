@@ -50,6 +50,7 @@ add_library(ubsocket_shared SHARED
 )
 target_link_directories(ubsocket_shared PUBLIC)
 set_target_properties(ubsocket_shared PROPERTIES OUTPUT_NAME "ubsocket")
+target_link_libraries(ubsocket_shared PUBLIC pthread)
 
 ###########################################################################
 ## installation

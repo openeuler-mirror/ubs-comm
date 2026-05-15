@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *      http://license.coscl.org.cn/MulanPSL2
@@ -12,17 +12,19 @@
 #define UBS_COMM_UMQ_SOCKET_CONNECTOR_H
 
 #include "ubsocket_socket_connector.h"
+#include "umq_setting.h"
 
 namespace ock {
 namespace ubs {
 namespace umq {
 
 // 基于 umq 的 connector 实现层
-class UmqSocketConnectorOps : public ConnectorOps {
+class UmqConnectorOps : public ConnectorOps {
 public:
-    UmqSocketConnectorOps() = default;
-    ~UmqSocketConnectorOps() = default;
+    UmqConnectorOps() = default;
+    ~UmqConnectorOps() = default;
 };
+using UmqConnectorOpsPtr = Ref<UmqConnectorOps>;
 
 } // namespace umq
 } // namespace ubs

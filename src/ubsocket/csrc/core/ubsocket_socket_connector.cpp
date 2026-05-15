@@ -15,14 +15,19 @@
 namespace ock {
 namespace ubs {
 // ======================== 基础方法 ========================
-ALWAYS_INLINE int Connector::Connect(const SocketInfo &sock, const struct sockaddr *address, socklen_t address_len)
+int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t *address_len)
 {
+#ifdef ENABLED
     auto sock_obj = reinterpret_cast<Socket *>(sock);
     raw_fd_ = sock_obj->raw_socket_;
     // BuildNegotiateReq + sendto(req)
     // IsBlocking
     // IsTfoConnection
-};
+#endif
+    return 0;
+}
 
+Connector::Connector() {}
+Connector::~Connector() {}
 } // namespace ubs
 } // namespace ock

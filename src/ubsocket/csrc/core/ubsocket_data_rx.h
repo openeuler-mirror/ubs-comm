@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  * http://license.coscl.org.cn/MulanPSL2
@@ -17,9 +17,9 @@
 #include <memory>
 
 #include "ubsocket_core_types.h"
-#include "../iobuf/ubsocket_iobuf.h"
-#include "../common/ubsocket_defines.h"
-#include "../common/ubsocket_global_setting.h"
+#include "ubsocket_defines.h"
+#include "ubsocket_global_setting.h"
+#include "ubsocket_iobuf.h"
 
 namespace ock {
 namespace ubs {
@@ -58,16 +58,15 @@ protected:
 class DataRx {
 public:
     DataRx() = default;
-    DataRx(const SocketInfo &info, DataRxOps *ops);
+    DataRx(const SocketPtr &sock, DataRxOps *ops);
 
-    ALWAYS_INLINE ssize_t ReadV(const SocketInfo &sock, const struct iovec *iov, int iovcnt);
+    ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
 private:
-    ALWAYS_INLINE ssize_t OutputErrorMagicNumber(const struct iovec *iov, int iovcnt);
+    ssize_t OutputErrorMagicNumber(const struct iovec *iov, int iovcnt);
 
 private:
     bool flow_control_failed_ = false;
-
     int fd_ = -1;
     int event_fd_ = -1;
 

@@ -15,8 +15,9 @@
 namespace ock {
 namespace ubs {
 // ======================== 基础方法 ========================
-ALWAYS_INLINE int Acceptor::Accept(const SocketInfo &sock, struct sockaddr *address, socklen_t *address_len)
+int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len)
 {
+#ifdef ENABLED
     int fd = -1;
     auto sock_obj = reinterpret_cast<Socket *>(sock_obj);
     raw_fd_ = sock_obj->raw_socket_;
@@ -86,17 +87,20 @@ ALWAYS_INLINE int Acceptor::Accept(const SocketInfo &sock, struct sockaddr *addr
         ProcessUBConnection(fd, peerIp);
         return fd;
     }
+#endif
+    return 0;
 }
 
-void Acceptor::SetAcceptorOps(std::shared_ptr<AcceptorOps> acceptor_ops)
+void Acceptor::SetAcceptorOps(const AcceptorOpsPtr &acceptor_ops)
 {
-    acceptor_ops_ = std::move(acceptor_ops);
+    acceptor_ops_ = acceptor_ops;
 }
 
 // ======================== Accept 主流程辅助函数 ========================
-ALWAYS_INLINE bool Acceptor::TryPopAsyncReadyFd(int &fd, struct sockaddr *address, socklen_t *address_len)
+bool Acceptor::TryPopAsyncReadyFd(int &fd, struct sockaddr *address, socklen_t *address_len)
 {
-    ScopedUbExclusiveLocker sLock(AsyncAcceptInfo.lock);
+#ifdef ENABLED
+    Locker sLock(AsyncAcceptInfo.lock);
     if (!AsyncAcceptInfo.ready_queue.empty()) {
         auto tmp = AsyncAcceptInfo.ready_queue.front();
         AsyncAcceptInfo.ready_queue.pop();
@@ -105,13 +109,16 @@ ALWAYS_INLINE bool Acceptor::TryPopAsyncReadyFd(int &fd, struct sockaddr *addres
             *address = std::get<1>(tmp);
             *address_len = std::get<2>(tmp);
         }
-        RPC_ADPT_VLOG_DEBUG("found ready fd, return directly, fd %d\n", fd);
+        UBS_VLOG_DEBUG("found ready fd, return directly, fd %d\n", fd);
         return fd;
     }
+#endif
+    return true;
 }
 
-ALWAYS_INLINE void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
+void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
 {
+#ifdef ENABLED
     bool is_blocking = SocketConnHelper::IsBlocking(fd);
     if (is_blocking) {
         // set non_blocking to apply timeout by chrono(send/recv can be returned immediately)
@@ -148,10 +155,12 @@ ALWAYS_INLINE void Acceptor::ProcessUBConnection(int fd, const std::string &peer
         // reset
         SocketConnHelper::SetBlocking(fd);
     }
+#endif
 }
 
 Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 {
+#ifdef ENABLED
     Result ret = UBS_OK;
     // TODO: event_fd 应该放在哪里
     int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -201,9 +210,18 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 
     socket_fd_obj->umq_acceptor_ops_->RawConnInfoV4.create_time = std::chrono::system_clock::now();
     // RPC_ADPT_VLOG_INFO  "UB connection has been successfully established new fd:
-    RawConnInfoV4.type_fd = 0;
-
+    // RawConnInfoV4.type_fd = 0;
+#endif
     return UBS_OK;
 }
+
+int Acceptor::Listen(int backlog)
+{
+    return 0;
+}
+
+Acceptor::Acceptor() {}
+
+Acceptor::~Acceptor() {}
 } // namespace ubs
 } // namespace ock

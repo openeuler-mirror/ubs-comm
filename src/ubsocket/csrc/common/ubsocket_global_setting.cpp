@@ -22,15 +22,10 @@ bool GlobalSetting::UBS_INITED = false;                      /* not inited by de
 int16_t GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;  /* disabled by default */
 int16_t GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = 0; /* disabled by default */
 int16_t GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = 1;     /* enabled by default */
-bool GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED = false;
-bool GlobalSetting::UBS_CONNECTOR_ASYNC_ENABLED = false;
-bool GlobalSetting::UBS_EPOLL_ASYNC_ENABLED = false;
 bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
-
 bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
-bool GlobalSetting::UBS_USE_UB_FORCE = false;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
 
@@ -39,18 +34,26 @@ uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
 #define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPTOR_THREAD_COUNT"
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
-#define ENV_VAR_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
+#define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
+#define ENV_SHARE_JFR_RX_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH"
 
 /* int64 rule: name, required, min, max */
-Int64Rule RULES_INT64[] = {{ENV_TRACE_ENABLED, false, 0, 1L},
-                           {ENV_ASYNC_ACCEPTOR, false, 0, 8L},
+Int64Rule RULES_INT64[] = {{ENV_ASYNC_ACCEPTOR, false, 0, 8L},
                            {ENV_ASYNC_CONNECTOR, false, 0, 8L},
-                           {ENV_ASYNC_EPOLL, false, 1, 1L}};
+                           {ENV_ASYNC_EPOLL, false, 1, 1L},
+                           {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240}};
+
+StrEnumRule RULES_STR_ENUM[] = {{ENV_TRACE_ENABLED, false, "true|false"},
+                                {ENV_AUTO_FALLBACK_TCP, false, "true|false"}};
 
 void GlobalSetting::AddRules() noexcept
 {
     for (auto &item : RULES_INT64) {
         Validator::Instance().AddNumRule(item);
+    }
+
+    for (auto &item : RULES_STR_ENUM) {
+        Validator::Instance().AddStrEnumRule(item);
     }
 }
 
@@ -84,23 +87,33 @@ Result GlobalSetting::VerifySetting() noexcept
 
 Result GlobalSetting::LoadEnv() noexcept
 {
-    auto &validator = Validator::Instance();
-    /* load from env */
+    /* shared value from env */
     int64_t envValue = 0;
-    if (GetEnv(ENV_TRACE_ENABLED, envValue) && validator.Validate(ENV_TRACE_ENABLED, envValue)) {
+    std::string strEnvValue;
+
+    /* load from env */
+    if (GetEnvAndValidate(ENV_TRACE_ENABLED, envValue)) {
         UBS_TRACE_ENABLED = (envValue == 1);
     }
 
-    if (GetEnv(ENV_ASYNC_ACCEPTOR, envValue) && validator.Validate(ENV_ASYNC_ACCEPTOR, envValue)) {
+    if (GetEnvAndValidate(ENV_ASYNC_ACCEPTOR, envValue)) {
         UBS_ACCEPTOR_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
     }
 
-    if (GetEnv(ENV_ASYNC_CONNECTOR, envValue) && validator.Validate(ENV_ASYNC_CONNECTOR, envValue)) {
+    if (GetEnvAndValidate(ENV_ASYNC_CONNECTOR, envValue)) {
         UBS_CONNECTOR_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
     }
 
-    if (GetEnv(ENV_ASYNC_EPOLL, envValue) && validator.Validate(ENV_ASYNC_EPOLL, envValue)) {
+    if (GetEnvAndValidate(ENV_ASYNC_EPOLL, envValue)) {
         UBS_EPOLL_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_AUTO_FALLBACK_TCP, strEnvValue)) {
+        UBS_AUTO_FALLBACK_TCP = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GetEnvAndValidate(ENV_SHARE_JFR_RX_QUEUE_DEPTH, envValue)) {
+        UBS_SHARE_JFR_RX_QUEUE_DEPTH = static_cast<uint32_t>(envValue);
     }
 
     return UBS_OK;

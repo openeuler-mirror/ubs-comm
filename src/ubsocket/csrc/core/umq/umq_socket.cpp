@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  * http://license.coscl.org.cn/MulanPSL2
@@ -12,11 +12,13 @@
 
 namespace ock {
 namespace ubs {
+namespace umq {
 Result UmqSocket::Initialize() noexcept
 {
     return UBS_OK;
 }
 
 void UmqSocket::UnInitialize() noexcept {}
+} // namespace umq
 } // namespace ubs
 } // namespace ock

@@ -24,10 +24,10 @@
 
 namespace ock {
 namespace ubs {
-class Socket;
-using SocketPtr = Ref<Socket>;
+class SocketBase;
+using SocketBasePtr = Ref<SocketBase>;
 
-class Socket : public SocketInfo {
+class SocketBase : public Socket {
 public:
     static Result Create(SocketType t, SocketPtr &sock);
     static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);
@@ -36,14 +36,14 @@ public:
     static Result CreateConnector(SocketType value, const SocketPtr &sock, Connector *&connector);
 
 public:
-    Socket() = default;
-    ~Socket() override = default;
+    SocketBase() = default;
+    ~SocketBase() override = default;
 
     virtual Result Initialize() noexcept = 0;
     virtual void UnInitialize() noexcept = 0;
 
-    int Accept(const SocketInfo &sock, struct sockaddr *address, socklen_t *address_len);
-    int Connect(const SocketInfo &sock, struct sockaddr *address, socklen_t *address_len);
+    int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
+    int Connect(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
 
 protected:
     DataTx tx_;                      /* take charge of send */
@@ -57,7 +57,7 @@ protected:
     friend class Connector;
 };
 
-ALWAYS_INLINE int Socket::Accept(const SocketInfo &sock, struct sockaddr *address, socklen_t *address_len)
+ALWAYS_INLINE int SocketBase::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len)
 {
     if (acceptor_ == nullptr) {
         errno = EINVAL;
@@ -67,7 +67,7 @@ ALWAYS_INLINE int Socket::Accept(const SocketInfo &sock, struct sockaddr *addres
     return acceptor_->Accept(sock, address, address_len);
 }
 
-ALWAYS_INLINE int Socket::Connect(const SocketInfo &sock, struct sockaddr *address, socklen_t *address_len)
+ALWAYS_INLINE int SocketBase::Connect(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len)
 {
     if (connector_ == nullptr) {
         errno = EINVAL;

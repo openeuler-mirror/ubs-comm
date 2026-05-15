@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *      http://license.coscl.org.cn/MulanPSL2
@@ -12,19 +12,19 @@
 #define UBS_COMM_UMQ_EPOLL_OPS_H
 
 #include "ubsocket_event_epoll.h"
+#include "umq_setting.h"
 
 namespace ock {
 namespace ubs {
-
-class UmqEpollOps : public EpollOps {
+namespace umq {
+class UmqEventPollOps : public EventPollOps {
 public:
-    ~UmqEpollOps() override = default;
+    ~UmqEventPollOps() override = default;
 
-    int AddTxEvent(const Socket * const socket, int epoll_fd) override;
-}
-
-
-}   // namespace ubs
-}   // namespace ock
+    int AddTxEvent(const SocketPtr &socket, int epoll_fd) override;
+};
+} // namespace umq
+} // namespace ubs
+} // namespace ock
 
 #endif // UBS_COMM_UMQ_EPOLL_OPS_H

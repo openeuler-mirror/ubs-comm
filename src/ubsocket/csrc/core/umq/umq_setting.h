@@ -1,6 +1,6 @@
 /*
 * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-hcom is licensed under the Mulan PSL v2.
+ * ubs-comm is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  * http://license.coscl.org.cn/MulanPSL2
@@ -12,12 +12,14 @@
 #define UBS_COMM_UMQ_SETTING_H
 
 #include <string>
+
 #include "ubsocket_def.h"
-#include "../../../../hcom/umq/include/umq/umq_types.h"
+#include "ubsocket_global_setting.h"
+#include "umq_api.h"
 
 namespace ock {
 namespace ubs {
-
+namespace umq {
 class UmqSetting {
 public:
     /* 禁止实例化 */
@@ -46,14 +48,15 @@ public:
     /**
      * @brief 将字符串环境变量转换为 UMQ 枚举
      */
-    static umq_buf_block_size_t ParseBlockType(const std::string& typeStr) noexcept;
+    static umq_buf_block_size_t ParseBlockType(const std::string &typeStr) noexcept;
 
     /**
      * @brief 将字符串环境变量转换为 UMQ 枚举
      */
-    static umq_trans_mode_t ParseTransMode(const std::string& typeStr) noexcept;
+    static umq_trans_mode_t ParseTransMode(const std::string &typeStr) noexcept;
 };
-}
-}
+} // namespace umq
+} // namespace ubs
+} // namespace ock
 
 #endif // UBS_COMM_UMQ_SETTING_H
