@@ -1288,9 +1288,11 @@ void UBSHcomService::RegisterOneSideHandler(const UBSHcomServiceOneSideDoneHandl
 
 ![](media/image9.png)
 
-- 若使用拆包和rndv的功能，需要通过UBSHcomChannel::SetUBSHcomTwoSideThreshold设置拆包和rndv的阈值。
+- 若使用拆包和rndv的功能，需要通过UBSHcomChannel::SetUBSHcomTwoSideThreshold设置拆包和rndv的阈值。rndv阈值还可以通过环境变量HCOM_RNDV_THRESHOLD设置。
 
 - 使用rndv，则需要创建service后将UBSHcomService::SetEnableMrCache设置为true（UBSHcomService::RegisterMemoryRegion函数调用前）。
+
+- 在UBC协议下，Send接口发送数据大小有限制（低时延模式下为64k，高带宽模式下为4k）。
 
   1.  函数定义
 
@@ -1324,9 +1326,11 @@ void UBSHcomService::RegisterOneSideHandler(const UBSHcomServiceOneSideDoneHandl
 
 - 若address==NULL，则UBS Comm会通过malloc申请内存，但用户需要自行维护该内存的生命周期，在使用完后通过free释放。
 
-- 若使用拆包和rndv的功能，需要通过UBSHcomChannel::SetUBSHcomTwoSideThreshold设置拆包和rndv的阈值。
+- 若使用拆包和rndv的功能，需要通过UBSHcomChannel::SetUBSHcomTwoSideThreshold设置拆包和rndv的阈值。rndv阈值还可以通过环境变量HCOM_RNDV_THRESHOLD设置。
 
 - 使用rndv，则需要创建service后将UBSHcomService::SetEnableMrCache设置为true（UBSHcomService::RegisterMemoryRegion函数调用前）。
+
+- 在UBC协议下，Call接口发送数据大小有限制（低时延模式下为64k，高带宽模式下为4k）。
 
   1.  函数定义
 
