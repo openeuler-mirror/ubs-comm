@@ -154,7 +154,6 @@ void UBJetty::FillJfsCfg(urma_jfs_cfg_t *jfs_cfg)
     jfs_cfg->rnr_retry = NN_NO7;
     // HighBandwidth RM mode, LowLatency RC mode
     jfs_cfg->trans_mode = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) ? URMA_TM_RM : URMA_TM_RC;
-    jfs_cfg->flag.bs.multi_path = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) ? 1 : 0;
     jfs_cfg->priority = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth)
                         ? mUBContext->mCtpPri : mUBContext->mRtpPri;
 }
