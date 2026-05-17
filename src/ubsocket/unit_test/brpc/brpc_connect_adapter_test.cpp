@@ -51,7 +51,7 @@ TEST_F(BrpcConnectAdapterTest, TestConnectFailed)
     MOCKER_CPP(&OsAPiMgr::sendto)
              .stubs()
              .will(returnValue(ssize_t(-1)));
-    MOCKER_CPP(&Brpc::SocketFd::IsTfoConnection)
+    MOCKER_CPP(&Brpc::SocketFd::IsUBConnection)
             .stubs()
             .will(returnValue(true));
 
@@ -96,7 +96,7 @@ TEST_F(BrpcConnectAdapterTest, TestConnectSucceed)
             .stubs()
             .will(returnValue(ssize_t(0)))
             .then(returnValue(ssize_t(-1)));
-    MOCKER_CPP(&Brpc::SocketFd::IsTfoConnection)
+    MOCKER_CPP(&Brpc::SocketFd::IsUBConnection)
            .stubs()
            .will(returnValue(bool(true)));
     MOCKER_CPP(&SocketFd::IsBlocking)

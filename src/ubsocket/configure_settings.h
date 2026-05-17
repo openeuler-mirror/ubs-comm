@@ -32,6 +32,7 @@
 #define DEV_SCHEDULE_POLICY_LEN_MAX (64)
 #define BOOL_STR_LEN_MAX          (8)
 #define UB_TRANS_MODE_STR_LEN_MAX    (8)
+#define UB_HANDSHAKE_MODE_STR_LEN_MAX (16)
 #define DEFAULT_EID_IDX           (0)
 #define MIN_TX_DEPTH              (64)
 #define MIN_RX_DEPTH              (64)
@@ -86,6 +87,11 @@
 #define ENV_PROBE_TIME_MS         "UBSOCKET_PROBE_TIME_MS"
 #define ENV_PROBE_BATCH           "UBSOCKET_PROBE_BATCH"
 #define ENV_UB_EPOLL_ENABLE       "UBSOCKET_UB_EPOLL_ENABLE"
+#define ENV_UB_HANDSHAKE_MODE     "UBSOCKET_UB_HANDSHAKE_MODE"
+
+#ifndef TCP_UB_SOCKET_HANDSHAKE
+#define TCP_UB_SOCKET_HANDSHAKE 144
+#endif
 
 enum dev_schedule_policy {
     ROUND_ROBIN = 1,
@@ -117,6 +123,11 @@ inline const char *Stringify(ub_trans_mode m)
     }
     return "UNKNOWN-UB-TRANS-MODE";
 }
+
+enum class UBHandshakeMode : uint32_t {
+    TFO,
+    UB_SOCK_OPT
+};
 
 template <typename T>
 class EnvStrConverter {
@@ -323,6 +334,11 @@ public:
     bool IsUbEpollEnable()
     {
         return m_ub_epoll_enable;
+    }
+
+    UBHandshakeMode GetUbHandshakeMode()
+    {
+        return m_ub_handshake_mode;
     }
 
 protected:
@@ -581,6 +597,7 @@ protected:
         }
 
         SetUbTransMode();
+        SetEnvUbHandshakeMode();
     }
 
     void SetUbTransMode()
@@ -601,6 +618,20 @@ protected:
                 m_ub_trans_mode = ub_trans_mode::RC_TP;
             }
             RPC_ADPT_VLOG_INFO("urma transport mode: %s\n", Stringify(m_ub_trans_mode));
+        }
+    }
+
+    void SetEnvUbHandshakeMode()
+    {
+        char* env_ptr = std::getenv(ENV_UB_HANDSHAKE_MODE);
+        if (env_ptr != nullptr) {
+            ReadEnvVar(env_ptr, m_ub_handshake_mode_str, sizeof(m_ub_handshake_mode_str));
+            if (memcmp(m_ub_handshake_mode_str, "ub_sock_opt", strlen(m_ub_handshake_mode_str)) == 0) {
+                m_ub_handshake_mode = UBHandshakeMode::UB_SOCK_OPT;
+            } else {
+                (void)strcpy_s(m_ub_handshake_mode_str, sizeof(m_ub_handshake_mode_str), "tfo");
+                m_ub_handshake_mode = UBHandshakeMode::TFO;
+            }
         }
     }
 
@@ -632,6 +663,7 @@ protected:
     uint64_t m_ubsocket_trace_time = UBSOCKET_TRACE_TIME_DEFAULT;
     uint64_t m_ubsocket_trace_file_size = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
     char m_ub_trans_mode_str[UB_TRANS_MODE_STR_LEN_MAX] = "";
+    char m_ub_handshake_mode_str[UB_HANDSHAKE_MODE_STR_LEN_MAX] = "";
     umq_eid_t m_src_eid;
     uint32_t m_tx_depth = DEFAULT_TX_DEPTH;
     uint32_t m_rx_depth = DEFAULT_RX_DEPTH;
@@ -656,6 +688,7 @@ protected:
     bool m_ub_epoll_enable = false;
     dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
     ub_trans_mode m_ub_trans_mode = ub_trans_mode::RM_TP;
+    UBHandshakeMode m_ub_handshake_mode = UBHandshakeMode::TFO;
 };
 
 #endif
