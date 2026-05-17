@@ -366,10 +366,15 @@ public:
             SetNonBlocking(fd);
         }
 
-        uint64_t protocol_negotiation = 0;
-        ssize_t protocol_negotiation_recv_size = 0;
-        int ret = ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
         Context *context = Context::GetContext();
+        // 非TFO场景，由IsUBConnection进行拦截和校验
+        int ret = 0;
+        if (context->GetUbHandshakeMode() == UBHandshakeMode::TFO) {
+            uint64_t protocol_negotiation = 0;
+            ssize_t protocol_negotiation_recv_size = 0;
+            ret = ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
+        }
+
         if (ret > 0 && !context->AutoFallbackTCP()) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                 "Failed to accept as protocol dismatch,Peer IP:%s\n",
@@ -400,18 +405,33 @@ public:
         }
     }
 
-    static bool IsTfoConnection(const int &fd)
+    static bool IsUBConnection(const int &fd)
     {
-        tcp_info info{};
-        socklen_t len = sizeof(info);
-        bool is_tfo_connection = false;
-        if (OsAPiMgr::GetOriginApi()->getsockopt_ptr(fd, SOL_TCP, TCP_INFO, &info, &len) == 0) {
-            // check TCPI_OPT_SYN_DATA
-            is_tfo_connection = (info.tcpi_options & TCPI_OPT_SYN_DATA) != 0;
+        UBHandshakeMode handshake_mode = Context::GetContext()->GetUbHandshakeMode();
+        if (handshake_mode == UBHandshakeMode::TFO) {
+            tcp_info info{};
+            socklen_t len = sizeof(info);
+            bool is_tfo_connection = false;
+            if (OsAPiMgr::GetOriginApi()->getsockopt_ptr(fd, SOL_TCP, TCP_INFO, &info, &len) == 0) {
+                // check TCPI_OPT_SYN_DATA
+                is_tfo_connection = (info.tcpi_options & TCPI_OPT_SYN_DATA) != 0;
+            }
+            RPC_ADPT_VLOG_INFO("Current tcpi_options: 0x%x, tfo connection: %s \n", info.tcpi_options,
+                is_tfo_connection ? "true" : "false");
+            return is_tfo_connection;
         }
-        RPC_ADPT_VLOG_INFO("Current tcpi_options: 0x%x, tfo connection: %s \n", info.tcpi_options,
-            is_tfo_connection ? "true" : "false");
-        return is_tfo_connection;
+        if (handshake_mode == UBHandshakeMode::UB_SOCK_OPT) {
+            uint64_t opt = -1;
+            socklen_t len = sizeof(opt);
+            if (OsAPiMgr::GetOriginApi()->getsockopt_ptr(fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, &len) == 0) {
+                RPC_ADPT_VLOG_INFO("Current handshake opt: %llx, tfo connection: %s \n", opt,
+                    opt == CONTROL_PLANE_PROTOCOL_NEGOTIATION ? "true" : "false");
+                return opt == CONTROL_PLANE_PROTOCOL_NEGOTIATION;
+            }
+            return false;
+        }
+        RPC_ADPT_VLOG_WARN("Unsupported handshake mode: 0x%x\n", static_cast<unsigned int>(handshake_mode));
+        return false;
     }
 
     ALWAYS_INLINE int Accept(struct sockaddr *address, socklen_t *address_len)
@@ -439,8 +459,8 @@ public:
         socklen_t len_tmp;
         fd = OsAPiMgr::GetOriginApi()->accept(m_fd, &addr_tmp, &len_tmp);
         if (fd >= 0) {
-            // 前置判断，如果不是TFO连接，作为普通TCP连接处理
-            if (!IsTfoConnection(fd)) {
+            // 前置判断：1、基于TFO握手模式：非TFO连接，作为普通TCP处理；2、基于ub_sock_opt握手模式：协议选项判断，不通过则作为普通TCP处理
+            if (!IsUBConnection(fd)) {
                 return fd;
             }
             int tcpNoDelayRet = SetTcpNoDelay(fd);
@@ -999,10 +1019,12 @@ public:
 
     ALWAYS_INLINE int Listen(int backlog)
     {
-        RPC_ADPT_VLOG_INFO("Enable Server TFO, with QLen %d\n", backlog);
-        // enable tfo
-        if (SetSockOpt(m_fd, SOL_TCP, TCP_FASTOPEN, &backlog, sizeof(backlog)) < 0) {
-            RPC_ADPT_VLOG_WARN("Unable to enable server TFO");
+        if (Context::GetContext()->GetUbHandshakeMode() == UBHandshakeMode::TFO) {
+            RPC_ADPT_VLOG_INFO("Enable Server TFO, with QLen %d\n", backlog);
+            // enable tfo
+            if (SetSockOpt(m_fd, SOL_TCP, TCP_FASTOPEN, &backlog, sizeof(backlog)) < 0) {
+                RPC_ADPT_VLOG_WARN("Unable to enable server TFO");
+            }
         }
         return OsAPiMgr::GetOriginApi()->listen(m_fd, backlog);
     }
@@ -1012,61 +1034,21 @@ public:
         SetFdType(FdType::SOCKET_FD);
         int ret = 0;
         TRACE_DELAY_AUTO(BRPC_CONNECT_CALL, ret);
-        // 判断TCPI_OPT_SYN_DATA，如果已置位则复用
-        NegotiateReq req {};
-        if (BuildNegotiateReq(&req) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                "Failed to send negotiate request caused by building req failure\n");
-            return -1;
-        }
+
         bool is_blocking = IsBlocking(m_fd);
-        if (!is_blocking) {
-            SetBlocking(m_fd);
-        }
-
-        constexpr int fast_open = 1;
-        OsAPiMgr::GetOriginApi()->setsockopt(m_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
-        ssize_t sendto_ret = OsAPiMgr::GetOriginApi()->sendto(
-            m_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
-        ret = sendto_ret < 0 ? -1 : 0;
-        if (ret < 0 && errno != 0) {
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
-                "TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s, fd %d\n",
-                sendto_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), m_fd);
-        }
-        if (!IsTfoConnection(m_fd)) {
-            // 首次获取cookie，第二次发送
-            RPC_ADPT_VLOG_INFO("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
-            // 创建临时socket发送
-            const int tmp_fd = OsAPiMgr::GetOriginApi()->socket(AF_INET, SOCK_STREAM, 0);
-            OsAPiMgr::GetOriginApi()->setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
-            sendto_ret = OsAPiMgr::GetOriginApi()->sendto(
-                tmp_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
-            ret = sendto_ret < 0 ? -1 : 0;
-            if (ret < 0 && errno != 0) {
-                char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
-                    "TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s, fd %d\n",
-                    sendto_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd);
+        UBHandshakeMode handshake_mode = Context::GetContext()->GetUbHandshakeMode();
+        if (handshake_mode == UBHandshakeMode::UB_SOCK_OPT) {
+            ret = ConnectViaUmsDriver(address, address_len);
+        } else if (handshake_mode == UBHandshakeMode::TFO) {
+            if (!is_blocking) {
+                SetBlocking(m_fd);
             }
-
-            int dup3_ret = dup3(tmp_fd, m_fd, O_CLOEXEC);
-            OsAPiMgr::GetOriginApi()->close(tmp_fd);
-            if (dup3_ret < 0) {
-                char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
-                    "dup3 failed, ret: %d, errno %d, err msg: %s, tmp_fd %d, m_fd %d\n",
-                    dup3_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd, m_fd);
-                return -1;
+            ret = ConnectViaTfo(address, address_len);
+            if (!is_blocking) {
+                SetNonBlocking(m_fd);
             }
         } else {
-            // 已经是tfo连接，继续处理
-            RPC_ADPT_VLOG_INFO("TFO Cookie exists, continue...\n");
-        }
-
-        if (!is_blocking) {
-            SetNonBlocking(m_fd);
+            return OsAPiMgr::GetOriginApi()->connect(m_fd, address, address_len);
         }
 
         if (address != nullptr) {
@@ -1078,7 +1060,7 @@ public:
             m_conn_info.create_time = std::chrono::system_clock::now();
         }
 
-        if (m_tx_use_tcp || m_rx_use_tcp || !IsTfoConnection(m_fd)) {
+        if (m_tx_use_tcp || m_rx_use_tcp || !IsUBConnection(m_fd)) {
             return ret;
         }
 
@@ -3312,6 +3294,73 @@ private:
             return -1;
         }
         return 0;
+    }
+
+    int ConnectViaUmsDriver(const struct sockaddr *address, socklen_t address_len)
+    {
+        uint64_t magicNum = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
+        OsAPiMgr::GetOriginApi()->setsockopt(m_fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &magicNum, sizeof(magicNum));
+        const int ret = OsAPiMgr::GetOriginApi()->connect(m_fd, address, address_len);
+        uint64_t opt = -1;
+        socklen_t len = sizeof(opt);
+        if (OsAPiMgr::GetOriginApi()->getsockopt_ptr(m_fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, &len) == 0) {
+            RPC_ADPT_VLOG_INFO("Current handshake opt: %llx, tfo connection: %s \n", opt,
+                opt == CONTROL_PLANE_PROTOCOL_NEGOTIATION ? "true" : "false");
+        }
+        return ret;
+    }
+
+    int ConnectViaTfo(const struct sockaddr *address, socklen_t address_len)
+    {
+        // 判断TCPI_OPT_SYN_DATA，如果已置位则复用
+        NegotiateReq req {};
+        if (BuildNegotiateReq(&req) != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                "Failed to send negotiate request caused by building req failure\n");
+            return -1;
+        }
+
+        constexpr int fast_open = 1;
+        OsAPiMgr::GetOriginApi()->setsockopt(m_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
+        ssize_t sendto_ret = OsAPiMgr::GetOriginApi()->sendto(
+            m_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
+        int ret = sendto_ret < 0 ? -1 : 0;
+        if (ret < 0 && errno != 0) {
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
+                "TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s, fd %d\n",
+                sendto_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), m_fd);
+        }
+        if (!IsUBConnection(m_fd)) {
+            // 首次获取cookie，第二次发送
+            RPC_ADPT_VLOG_INFO("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
+            // 创建临时socket发送
+            const int tmp_fd = OsAPiMgr::GetOriginApi()->socket(AF_INET, SOCK_STREAM, 0);
+            OsAPiMgr::GetOriginApi()->setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
+            sendto_ret = OsAPiMgr::GetOriginApi()->sendto(
+                tmp_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
+            ret = sendto_ret < 0 ? -1 : 0;
+            if (ret < 0 && errno != 0) {
+                char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+                RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
+                    "TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s, fd %d\n",
+                    sendto_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd);
+            }
+
+            int dup3_ret = dup3(tmp_fd, m_fd, O_CLOEXEC);
+            OsAPiMgr::GetOriginApi()->close(tmp_fd);
+            if (dup3_ret < 0) {
+                char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+                RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
+                    "dup3 failed, ret: %d, errno %d, err msg: %s, tmp_fd %d, m_fd %d\n",
+                    dup3_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd, m_fd);
+                return -1;
+            }
+        } else {
+            // 已经是tfo连接，继续处理
+            RPC_ADPT_VLOG_INFO("TFO Cookie exists, continue...\n");
+        }
+        return ret;
     }
 
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
