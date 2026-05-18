@@ -141,8 +141,8 @@ private:
     SocketSet(const SocketSet &) = delete;
     SocketSet &operator=(const SocketSet &) = delete;
 
-    static u_rw_lock_t *rwlock_;
-    static Socket *socket_obj_[RPC_ADPT_FD_MAX];
+    u_rw_lock_t *rwlock_ = nullptr;
+    Socket *socket_obj_[RPC_ADPT_FD_MAX];
 };
 
 } // namespace ubs
