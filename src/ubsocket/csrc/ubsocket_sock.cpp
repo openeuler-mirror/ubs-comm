@@ -15,7 +15,6 @@
 #include "ubsocket_socket.h"
 
 using namespace ock::ubs;
-
 UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
 {
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
@@ -56,6 +55,15 @@ UBS_API int UB_API_WRAP(accept4)(int fd, struct sockaddr *address, socklen_t *ad
 {
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::accept4(fd, address, address_len, flags);
+    }
+
+    return 0;
+}
+
+UBS_API int UB_API_WRAP(bind)(int fd, const struct sockaddr *addr, socklen_t addrlen)
+{
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+        return LibcApi::bind(fd, addr, addrlen);
     }
 
     return 0;

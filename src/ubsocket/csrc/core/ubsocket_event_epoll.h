@@ -106,9 +106,29 @@ protected:
 };
 using EventPollOpsPtr = Ref<EventPollOps>;
 
+/*
+ *    (a)           (b)                                  (d)              (e)
+ *  socket_fd     tx_fd                     ┌──────── share_jfr_fd       rx_fd
+ *      │            │                      │              │               │
+ *      │            │                      │              │               │
+ *      │            │                      │              │               │
+ *      │            │                      │              │               │
+ *      │            │                      │              │               │
+ *      │            │                      │              │               │
+ * ┌────┼────────────┼─────┐                │           ┌──┼───────────────┼──┐
+ * │    AsyncEventPoll     │                │           │     EpollRunner     │
+ * └───────┬───────────────┘                │           └──────┬──────────────┘
+ *         │                                │                  │
+ *         │                                │                  │
+ *         │                                │                  │
+ *         │                    (g)         │                  │
+ *    readable_event_fd  <──────────────────┘              exit_event_fd
+ *        (c)                                                 (f)
+ *
+ */
 class EpollRunner {
 public:
-    ~EpollRunner()
+    virtual ~EpollRunner()
     {
         Stop();
     }
@@ -123,7 +143,6 @@ public:
      * @brief initialize resource and start a thread to epoll_wait
      */
     int Start();
-
     /**
      * @brief uninitialize resource and stop the thread
      */
@@ -167,9 +186,12 @@ private:
     std::thread wait_thread_;
 };
 
-// 合并class Fd和class EpollFd，只保留EpollFd
 class EventPoll {
 public:
+    EventPoll(int epoll_fd) : epoll_fd_(epoll_fd) {}
+
+    virtual ~EventPoll() = default;
+
     /**
      * @brief corresponds to native epoll_ctl interface
      * @param op EPOLL_CTL_ADD / EPOLL_CTL_MOD / EPOLL_CTL_DEL
@@ -188,10 +210,16 @@ public:
      * @return 0: success; -1: failed
      */
     virtual int EpollWait(const Socket *const socket, struct epoll_event *events, int maxevents, int timeout) = 0;
+    
+    DEFINE_REF_OPERATION_FUNC;
+    
+public:
+    DECLARE_REF_COUNT_VARIABLE;
 
 private:
     int epoll_fd_;
 };
+using EventPollPtr = Ref<EventPoll>;
 
 class AsyncEventPoll : public EventPoll {
 public:
@@ -214,6 +242,8 @@ public:
     {
         free(ptr);
     }
+
+    explicit AsyncEventPoll(int epoll_fd) noexcept : EventPoll { epoll_fd } {}
 
     /**
      * @brief corresponds to native epoll_ctl interface
@@ -276,6 +306,8 @@ private:
     // u_external_mutex_t* mutex_;
     u_mutex_t *ctl_mutex_;
 };
+using AsyncEventPollPtr = Ref<AsyncEventPoll>;
+
 
 } // namespace ubs
 } // namespace ock
