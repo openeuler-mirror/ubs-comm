@@ -17,6 +17,5 @@
 #include "umq/include/umq/umq_errno.h"
 #include "umq/include/umq/umq_pro_api.h"
 #include "umq/include/umq/umq_types.h"
-#include "umq/src/qbuf/qbuf_list.h"
 
 #endif // UBS_COMM_UMQ_API_H

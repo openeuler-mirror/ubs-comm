@@ -15,6 +15,7 @@
 
 #include "ubsocket_def.h"
 #include "ubsocket_global_setting.h"
+#include "umq_qbuf_list.h"
 #include "umq_api.h"
 #include "../iobuf/ubsocket_zcopy_adapter.h"
 
