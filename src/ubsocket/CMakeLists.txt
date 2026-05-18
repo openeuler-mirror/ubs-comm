@@ -56,3 +56,4 @@ include_directories(
 )
 
 add_subdirectory(csrc)
+add_subdirectory(tools/golden)
