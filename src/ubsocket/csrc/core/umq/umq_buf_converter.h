@@ -1,11 +1,15 @@
-//
-// Created by l30030098 on 2026/5/15.
-//
-
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * ubs-comm is licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ * http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
 #ifndef HCOM_UMQ_BUF_CONVERTER_H
 #define HCOM_UMQ_BUF_CONVERTER_H
-
-#include <securec.h>
 
 namespace ock {
 namespace ubs {
@@ -56,11 +60,11 @@ public:
         if (m_offset + len >= m_size) {
             buf_len = m_size - m_offset;
         }
-        memcpy_s(umq_buf->buf_data, buf_len, m_buf + m_offset, buf_len);
+        (void)memcpy(umq_buf->buf_data, m_buf + m_offset, buf_len);
         m_offset += buf_len;
         return m_offset >= m_size;
     }
 };
-}
-}
-#endif //HCOM_UMQ_BUF_CONVERTER_H
+} // namespace ubs
+} // namespace ock
+#endif // HCOM_UMQ_BUF_CONVERTER_H

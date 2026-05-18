@@ -28,7 +28,10 @@ public:
     Result Initialize() noexcept override;
     void UnInitialize() noexcept override;
 
-    uint64_t UmqHandle() const noexcept;
+    uint64_t UmqHandle() const noexcept
+    {
+        return umq_handle_;
+    }
 
     void SetLocalUmqHandle(uint64_t handle)
     {

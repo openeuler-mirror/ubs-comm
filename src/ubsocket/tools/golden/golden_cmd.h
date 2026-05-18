@@ -13,6 +13,7 @@
 
 #include "golden_cmd_parser.h"
 #include "golden_common.h"
+#include "golden_func.h"
 
 namespace golden {
 /******************************/
@@ -50,12 +51,15 @@ protected:
 
 inline int SubCommand::Execute() noexcept
 {
+    /* step1: setup parameter rules */
     SetRules();
 
+    /* if is -h */
     if (params_.find(SUB_CMD_MINUS_H) != params_.end()) {
         return DoPrintHelp();
     }
 
+    /* step2: convert and verify param by rules */
     auto verified = DoParamByRule();
     if (verified != 0) {
         std::cout << std::endl;
@@ -63,17 +67,20 @@ inline int SubCommand::Execute() noexcept
         return verified;
     }
 
+    /* step3: do initialization */
     auto inited = DoInitialize();
     if (inited != 0) {
         std::cout << "Initialize sub command '" << name_ << "' failed" << std::endl;
         return inited;
     }
 
+    /* step4: execute command */
     return DoExecute();
 }
 
 inline int SubCommand::DoPrintHelp() noexcept
 {
+    /* print sub command */
     std::cout << "Params for sub command '" + name_ + "':" << std::endl;
     for (auto &rule : param_rules_) {
         std::cout << "  --" << std::left << std::setw(10) << rule.first << "    " << rule.second.HelpString()
@@ -81,6 +88,7 @@ inline int SubCommand::DoPrintHelp() noexcept
     }
     std::cout << std::endl;
 
+    /* print examples */
     std::cout << "Example:" << std::endl;
     for (auto &item : example_) {
         std::cout << "  " << item << std::endl;

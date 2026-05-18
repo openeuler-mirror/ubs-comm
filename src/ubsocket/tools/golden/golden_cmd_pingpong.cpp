@@ -39,6 +39,23 @@ int SubCommandPingpong::DoInitialize() noexcept
 
 int SubCommandPingpong::DoExecute() noexcept
 {
+    /* initialize ubsocket */
+    u_init_options_t options;
+    if (ubsocket_init_options(&options) != 0) {
+        std::cout << "Inner error: set ubsocket options failed" << std::endl;
+        return -1;
+    }
+
+    /* set options */
+    options.allowed_protocol = Func::ProtocolFromString(protocol_);
+
+    /* init ubsocket */
+    if (ubsocket_init(&options) != 0) {
+        std::cout << "Inner error: initialize ubsocket options failed" << std::endl;
+        return -1;
+    }
+
+    /* run client and server */
     if (role_ == "client") {
         PPClient client(*this);
         return client.Run();

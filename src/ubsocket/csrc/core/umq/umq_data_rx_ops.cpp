@@ -87,9 +87,31 @@ int UmqRxOps::PollRx(bool flow_control_failed)
     return 0;
 }
 
-ALWAYS_INLINE void *UmqRxOps::PtrFloorToBoundary(void *ptr)
+void *UmqRxOps::PtrFloorToBoundary(void *ptr)
 {
     return (void *)((uint64_t)ptr & ~UmqSetting::FloorMask());
+}
+
+int UmqRxOps::GetQbuf(umq_buf_t **buf, int max_num)
+{
+    // TODO
+    return 0;
+}
+
+int UmqRxOps::GetAndAckEvent(umq_io_direction_t io_dir)
+{
+    // TODO
+    return 0;
+}
+int UmqRxOps::NotifyReadable()
+{
+    // TODO
+    return 0;
+}
+
+void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
+{
+    // TODO
 }
 } // namespace umq
 } // namespace ubs

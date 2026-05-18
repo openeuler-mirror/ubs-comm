@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "golden_cmd.h"
+#include "ubsocket.h"
 
 int main(int argc, char *argv[])
 {
@@ -26,6 +27,12 @@ int main(int argc, char *argv[])
     if (func == nullptr) {
         std::cout << "Invalid sub command\n" << std::endl;
         func = SubCommandRegistry::Instance().GetCommandCreateFunc(SUB_CMD_MINUS_H);
+    }
+
+    /* set ubsocket logger level */
+    auto debug_log = getenv("GOLDEN_LOG_LEVEL");
+    if (debug_log != nullptr && std::string(debug_log) == "0") {
+        ubsocket_set_log_level(atoi(debug_log));
     }
 
     /* create sub command */
