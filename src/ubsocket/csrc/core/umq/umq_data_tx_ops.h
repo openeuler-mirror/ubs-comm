@@ -12,7 +12,6 @@
 #define UBS_COMM_UMQ_DATA_TX_H
 
 #include <cstdint>
-#include <cstdlib>
 
 #include "ubsocket_data_tx.h"
 #include "umq_setting.h"

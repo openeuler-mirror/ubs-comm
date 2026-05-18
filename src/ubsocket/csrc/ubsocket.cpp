@@ -40,6 +40,28 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
     return UBS_OK;
 }
 
+void ZeroCopyPrepare()
+{
+    // new real zcopy allocator
+    uint32_t type = GlobalSetting::UBS_ALLOWED_PROTOCOL;
+    if (type == UBS_PROTOCOL_UB_RM_RTP || type == UBS_PROTOCOL_UB_RC_RTP) {
+        // delete at ubsocket_uninit
+        g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
+    } else {
+        UBS_VLOG_WARN("unknown zcopy allocator type.\n");
+        return;
+    }
+
+    // load brpc symbol for zcopy
+    UbsZcopyAdapter adapter;
+    if (!adapter.Intercept(GlobalSetting::UBS_BRPC_ALLOC_SYM_STR, GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR)) {
+        // intercept failed，fallback to TCP
+        UBS_VLOG_WARN("Failed to hook brpc allocator, fallback to TCP mode");
+        GlobalSetting::UBS_NATIVE_TCP_MODE = true;
+    }
+    UBS_VLOG_INFO("Successfully hooked brpc zero-copy allocator");
+}
+
 UBS_API int ubsocket_init(u_init_options_t *options)
 {
     if (options == nullptr) {
@@ -109,6 +131,10 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
 
+    /* load brpc symbol for zcopy */
+    if (GlobalSetting::USE_BRPC_ZCOPY) {
+        ZeroCopyPrepare();
+    }
     return UBS_OK;
 }
 

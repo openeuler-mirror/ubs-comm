@@ -20,7 +20,6 @@
 #include <memory>
 
 #include "ubsocket_core_types.h"
-#include "ubsocket_defines.h"
 #include "ubsocket_global_setting.h"
 #include "ubsocket_iobuf.h"
 #include "ubsocket_logger.h"

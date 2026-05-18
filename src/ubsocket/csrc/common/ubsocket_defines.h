@@ -110,6 +110,9 @@ constexpr const char *SMALL_QBUF_BLOCK_TYPE = "small";     // 16k
 constexpr const char *MEDIUM_QBUF_BLOCK_TYPE = "medium";   // 32k
 constexpr const char *LARGE_QBUF_BLOCK_TYPE = "large";     // 64k
 
+constexpr uint32_t BRPC_SYM_STR_LEN_MAX = 128;
+constexpr uint32_t BRPC_ALLOC_DEFAULT_BUF_NUM = 1;
+
 static const std::string EMPTY_STR;
 } // namespace ubs
 } // namespace ock

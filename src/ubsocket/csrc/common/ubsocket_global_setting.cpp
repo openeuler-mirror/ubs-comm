@@ -29,6 +29,9 @@ uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
 char GlobalSetting::UBS_BLOCK_TYPE_STR[BLOCK_TYPE_STR_LEN_MAX];
+bool GlobalSetting::USE_BRPC_ZCOPY = true;
+char GlobalSetting::UBS_BRPC_ALLOC_SYM_STR[BRPC_SYM_STR_LEN_MAX];
+char GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR[BRPC_SYM_STR_LEN_MAX];
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
