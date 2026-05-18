@@ -440,8 +440,16 @@ void HcomServiceImp::ForceStop()
         driver->Stop();
     }
 
-    for (const auto& pair : mChannelMap) {
-        UBSHcomChannelPtr channel = pair.second;
+    std::vector<UBSHcomChannelPtr> channels;
+    {
+        std::lock_guard<std::mutex> lockerChannel(mChannelMutex);
+        channels.reserve(mChannelMap.size());
+        for (const auto& pair : mChannelMap) {
+            channels.push_back(pair.second);
+        }
+        mChannelMap.clear();
+    }
+    for (auto& channel : channels) {
         Disconnect(channel);
     }
 
