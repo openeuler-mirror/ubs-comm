@@ -367,14 +367,9 @@ public:
         }
 
         Context *context = Context::GetContext();
-        // 非TFO场景，由IsUBConnection进行拦截和校验
-        int ret = 0;
-        if (context->GetUbHandshakeMode() == UBHandshakeMode::TFO) {
-            uint64_t protocol_negotiation = 0;
-            ssize_t protocol_negotiation_recv_size = 0;
-            ret = ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
-        }
-
+        uint64_t protocol_negotiation = 0;
+        ssize_t protocol_negotiation_recv_size = 0;
+        int ret = ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
         if (ret > 0 && !context->AutoFallbackTCP()) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
                 "Failed to accept as protocol dismatch,Peer IP:%s\n",
@@ -421,12 +416,11 @@ public:
             return is_tfo_connection;
         }
         if (handshake_mode == UBHandshakeMode::UB_SOCK_OPT) {
-            uint64_t opt = -1;
+            int opt = -1;
             socklen_t len = sizeof(opt);
             if (OsAPiMgr::GetOriginApi()->getsockopt_ptr(fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, &len) == 0) {
-                RPC_ADPT_VLOG_INFO("Current handshake opt: %llx, tfo connection: %s \n", opt,
-                    opt == CONTROL_PLANE_PROTOCOL_NEGOTIATION ? "true" : "false");
-                return opt == CONTROL_PLANE_PROTOCOL_NEGOTIATION;
+                RPC_ADPT_VLOG_INFO("UB handshake socket option is %s. \n", opt == 1 ? "enabled" : "disabled");
+                return opt == 1;
             }
             return false;
         }
@@ -566,6 +560,18 @@ public:
     int ConnectNegotiate(umq_eid_t *connEid, umq_route_t &connRoute, umq_eid_t &remoteEid, umq_route_t &backRoute)
     {
         Context *context = Context::GetContext();
+        if (context != nullptr && context->GetUbHandshakeMode() == UBHandshakeMode::UB_SOCK_OPT) {
+            // 基于内核选项的建链，需要单独发送协商请求；TFO建链随sendto发送协商请求
+            NegotiateReq req {};
+            if (BuildNegotiateReq(&req) != 0) {
+                return -1;
+            }
+            if (SendSocketData(m_fd, &req, sizeof(req), CONTROL_PLANE_TIMEOUT_MS) != static_cast<int>(sizeof(req))) {
+                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to send negotiate request, Peer IP:%s, fd: %d\n",
+                                  GetPeerIp().c_str(), m_fd);
+                return -1;
+            }
+        }
         umq_eid_t localEid = context->GetDevSrcEid();
         dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
         NegotiateRsp rsp {};
@@ -1019,11 +1025,25 @@ public:
 
     ALWAYS_INLINE int Listen(int backlog)
     {
-        if (Context::GetContext()->GetUbHandshakeMode() == UBHandshakeMode::TFO) {
-            RPC_ADPT_VLOG_INFO("Enable Server TFO, with QLen %d\n", backlog);
+        Context *context = Context::GetContext();
+        UBHandshakeMode ubHandshakeMode = context == nullptr ? UBHandshakeMode::TFO : context->GetUbHandshakeMode();
+        if (ubHandshakeMode == UBHandshakeMode::UB_SOCK_OPT) {
+            RPC_ADPT_VLOG_INFO("Enable ub handshake option\n");
+            int opt = 1;
+            if (SetSockOpt(m_fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, sizeof(opt)) == 0) {
+                return OsAPiMgr::GetOriginApi()->listen(m_fd, backlog);
+            }
+            RPC_ADPT_VLOG_WARN("Unable to enable ub handshake option. Handshake mode fallback to TFO.\n");
+            if (context != nullptr) {
+                context->SetUbHandshakeMode(UBHandshakeMode::TFO);
+            }
+            ubHandshakeMode = UBHandshakeMode::TFO;
+        }
+        if (ubHandshakeMode == UBHandshakeMode::TFO) {
+            RPC_ADPT_VLOG_INFO("Enable Server TFO, with QLen %d.\n", backlog);
             // enable tfo
             if (SetSockOpt(m_fd, SOL_TCP, TCP_FASTOPEN, &backlog, sizeof(backlog)) < 0) {
-                RPC_ADPT_VLOG_WARN("Unable to enable server TFO");
+                RPC_ADPT_VLOG_WARN("Unable to enable server TFO.\n");
             }
         }
         return OsAPiMgr::GetOriginApi()->listen(m_fd, backlog);
@@ -1035,18 +1055,11 @@ public:
         int ret = 0;
         TRACE_DELAY_AUTO(BRPC_CONNECT_CALL, ret);
 
-        bool is_blocking = IsBlocking(m_fd);
         UBHandshakeMode handshake_mode = Context::GetContext()->GetUbHandshakeMode();
         if (handshake_mode == UBHandshakeMode::UB_SOCK_OPT) {
-            ret = ConnectViaUmsDriver(address, address_len);
+            ret = ConnectViaHandshakeOpt(address, address_len);
         } else if (handshake_mode == UBHandshakeMode::TFO) {
-            if (!is_blocking) {
-                SetBlocking(m_fd);
-            }
             ret = ConnectViaTfo(address, address_len);
-            if (!is_blocking) {
-                SetNonBlocking(m_fd);
-            }
         } else {
             return OsAPiMgr::GetOriginApi()->connect(m_fd, address, address_len);
         }
@@ -1093,6 +1106,7 @@ public:
         if (tcpNoDelayRet != 0) {
             RPC_ADPT_VLOG_WARN("Set TCP_NODELAY failed, fd %d, ret %d, errno %d\n", m_fd, tcpNoDelayRet, errno);
         }
+        bool is_blocking = IsBlocking(m_fd);
         if (is_blocking) {
             // set non_blocking to apply timeout by chrono(send/recv can be returned immediately)
             SetNonBlocking(m_fd);
@@ -3278,6 +3292,9 @@ private:
     int BuildNegotiateReq(NegotiateReq* req)
     {
         Context *context = Context::GetContext();
+        if (context == nullptr) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to build negotiate request caused by empty context.\n");
+        }
         umq_eid_t localEid = context->GetDevSrcEid();
         dev_schedule_policy schedulePolicy = context->GetDevSchedulePolicy();
         req->magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
@@ -3291,76 +3308,83 @@ private:
         req->local_eid = localEid;
         if (req->is_bonding != 0 && (req->has_socket_id == 1) &&
             FillLocalSocketIdsForNegotiate(context, req->socket_ids, req->socket_id_count) != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
+                              "Failed to build negotiate request caused by filling local socket ids failed.\n");
             return -1;
         }
         return 0;
     }
 
-    int ConnectViaUmsDriver(const struct sockaddr *address, socklen_t address_len)
+    int ConnectViaHandshakeOpt(const struct sockaddr *address, socklen_t address_len)
     {
-        uint64_t magicNum = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
-        OsAPiMgr::GetOriginApi()->setsockopt(m_fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &magicNum, sizeof(magicNum));
-        const int ret = OsAPiMgr::GetOriginApi()->connect(m_fd, address, address_len);
-        uint64_t opt = -1;
-        socklen_t len = sizeof(opt);
-        if (OsAPiMgr::GetOriginApi()->getsockopt_ptr(m_fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, &len) == 0) {
-            RPC_ADPT_VLOG_INFO("Current handshake opt: %llx, tfo connection: %s \n", opt,
-                opt == CONTROL_PLANE_PROTOCOL_NEGOTIATION ? "true" : "false");
+        int opt = 1;
+        int ret = OsAPiMgr::GetOriginApi()->setsockopt(m_fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, sizeof(opt));
+        if (ret < 0 && (errno == ENOPROTOOPT || errno == EOPNOTSUPP)) {
+            RPC_ADPT_VLOG_WARN("UB handshake socket option not supported. Handshake mode fallback to TFO.\n");
+            Context *context = Context::GetContext();
+            if (context != nullptr) {
+                context->SetUbHandshakeMode(UBHandshakeMode::TFO);
+            }
+            ret = ConnectViaTfo(address, address_len);
+        } else {
+            RPC_ADPT_VLOG_INFO("Connect with UB handshake socket option.\n");
         }
+        ret = OsAPiMgr::GetOriginApi()->connect(m_fd, address, address_len);
         return ret;
     }
 
     int ConnectViaTfo(const struct sockaddr *address, socklen_t address_len)
     {
-        // 判断TCPI_OPT_SYN_DATA，如果已置位则复用
         NegotiateReq req {};
         if (BuildNegotiateReq(&req) != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket,
-                "Failed to send negotiate request caused by building req failure\n");
             return -1;
         }
+
+        bool is_blocking = IsBlocking(m_fd);
+        if (!is_blocking) {
+            SetBlocking(m_fd);
+        }
+        int reset_fd = m_fd;
+        auto blocking_reset = ubsocket::MakeScopeExit([is_blocking, reset_fd]() {
+            if (!is_blocking) {
+                SetNonBlocking(reset_fd);
+            }
+        });
 
         constexpr int fast_open = 1;
         OsAPiMgr::GetOriginApi()->setsockopt(m_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
         ssize_t sendto_ret = OsAPiMgr::GetOriginApi()->sendto(
             m_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
-        int ret = sendto_ret < 0 ? -1 : 0;
-        if (ret < 0 && errno != 0) {
+        if (sendto_ret < 0 && errno != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
-                "TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s, fd %d\n",
-                sendto_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), m_fd);
+            RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s\n",
+                              sendto_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
         if (!IsUBConnection(m_fd)) {
-            // 首次获取cookie，第二次发送
+            // 首次获取cookie，创建临时socket二次发送
             RPC_ADPT_VLOG_INFO("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
-            // 创建临时socket发送
             const int tmp_fd = OsAPiMgr::GetOriginApi()->socket(AF_INET, SOCK_STREAM, 0);
             OsAPiMgr::GetOriginApi()->setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
             sendto_ret = OsAPiMgr::GetOriginApi()->sendto(
                 tmp_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
-            ret = sendto_ret < 0 ? -1 : 0;
-            if (ret < 0 && errno != 0) {
+            if (sendto_ret < 0 && errno != 0) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
-                    "TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s, fd %d\n",
-                    sendto_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd);
+                RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s\n",
+                    sendto_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             }
 
             int dup3_ret = dup3(tmp_fd, m_fd, O_CLOEXEC);
             OsAPiMgr::GetOriginApi()->close(tmp_fd);
             if (dup3_ret < 0) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET,
-                    "dup3 failed, ret: %d, errno %d, err msg: %s, tmp_fd %d, m_fd %d\n",
-                    dup3_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd, m_fd);
+                RPC_ADPT_VLOG_ERR(ubsocket::NATIVE_SOCKET, "dup3 failed, ret: %d, errno %d, err msg: %s\n",
+                    dup3_ret, errno, NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                 return -1;
             }
         } else {
-            // 已经是tfo连接，继续处理
             RPC_ADPT_VLOG_INFO("TFO Cookie exists, continue...\n");
         }
-        return ret;
+        return sendto_ret < 0 ? -1 : 0;
     }
 
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
@@ -5535,7 +5559,7 @@ public:
         if (input_event->events & EPOLLOUT) {
             if (socket_fd_obj != nullptr && !socket_fd_obj->UseTcp()) {
                 if (!socket_fd_obj->GetBindRemote() && socket_fd_obj->DoConnect() != 0) {
-                    RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP", m_fd);
+                    RPC_ADPT_VLOG_WARN("Fatal error occurred, fd: %d fallback to TCP/IP\n", m_fd);
                     Fd<::SocketFd>::OverrideFdObj(m_fd, nullptr);
                     /* Clear messages that already exist on the TCP link to prevent
                      * dirty messages from affecting user data transmission. */

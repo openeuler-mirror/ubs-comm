@@ -341,6 +341,11 @@ public:
         return m_ub_handshake_mode;
     }
 
+    void SetUbHandshakeMode(UBHandshakeMode ub_handshake_mode)
+    {
+        m_ub_handshake_mode = ub_handshake_mode;
+    }
+
 protected:
     static void ReadEnvVar(char *env_ptr, char *output_str, uint32_t output_str_len)
     {
