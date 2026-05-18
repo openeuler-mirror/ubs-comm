@@ -28,6 +28,7 @@ bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
+char GlobalSetting::UBS_BLOCK_TYPE_STR[BLOCK_TYPE_STR_LEN_MAX];
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
@@ -43,8 +44,7 @@ Int64Rule RULES_INT64[] = {{ENV_ASYNC_ACCEPTOR, false, 0, 8L},
                            {ENV_ASYNC_EPOLL, false, 1, 1L},
                            {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240}};
 
-StrEnumRule RULES_STR_ENUM[] = {{ENV_TRACE_ENABLED, false, "true|false"},
-                                {ENV_AUTO_FALLBACK_TCP, false, "true|false"}};
+StrEnumRule RULES_STR_ENUM[] = {{ENV_TRACE_ENABLED, false, "true|false"}, {ENV_AUTO_FALLBACK_TCP, false, "true|false"}};
 
 void GlobalSetting::AddRules() noexcept
 {

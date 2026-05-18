@@ -62,8 +62,8 @@ typedef struct {
  * structures for ubsocket
  */
 #define UBS_PROTOCOL_TCP 1 << 0L
-#define UBS_PROTOCOL_UB_RM_TP 1 << 1L
-#define UBS_PROTOCOL_UB_RC_TP 1 << 2L
+#define UBS_PROTOCOL_UB_RM_RTP 1 << 1L
+#define UBS_PROTOCOL_UB_RC_RTP 1 << 2L
 
 typedef struct {
     uint32_t allowed_protocol;             /* allowed underlay protocol */

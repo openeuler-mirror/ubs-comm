@@ -97,7 +97,7 @@ private:
 
 class EventPollOps {
 public:
-    virtual ~EventPollOps() = 0;
+    virtual ~EventPollOps() = default;
     virtual int AddTxEvent(const SocketPtr &socket, int epoll_fd) = 0;
 
     DEFINE_REF_OPERATION_FUNC

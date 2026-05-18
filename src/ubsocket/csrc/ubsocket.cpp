@@ -15,6 +15,7 @@
 #include "ubsocket_common_includes.h"
 #include "ubsocket_global_setting.h"
 #include "ubsocket_socket_set.h"
+#include "ubsocket_struct_helper.h"
 #include "ubsocket_version.h"
 #include "umq_setting.h"
 
@@ -26,6 +27,8 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
         errno = EINVAL;
         return UBS_ERROR;
     }
+
+    UBS_SLOG_DEBUG(*options);
 
     options->allowed_protocol = UBS_PROTOCOL_TCP; /* use raw tcp by default */
     options->async_acceptor_thread_count = 0;     /* tune off by default */
