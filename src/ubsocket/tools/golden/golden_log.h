@@ -32,10 +32,10 @@ static void log(const std::string &level, const std::string &msg)
     time_t timeStamp = tv.tv_sec;
     struct tm localTime{};
     struct tm *resultTime = localtime_r(&timeStamp, &localTime);
-    if ((resultTime != nullptr) && (strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S.", resultTime) != 0)) {
-        std::cout << strTime << tv.tv_usec << " " << level << " " << msg << '\n';
+    if ((resultTime != nullptr) && (strftime(strTime, sizeof strTime, "%Y%m%d %H:%M:%S.", resultTime) != 0)) {
+        std::cout << level << strTime << tv.tv_usec << " " << msg << '\n';
     } else {
-        std::cout << "Invalid time trace " << tv.tv_usec << " " << level << " " << msg << '\n';
+        std::cout << "failed to get date\n";
     }
 }
 
@@ -47,16 +47,16 @@ static void log(const std::string &level, const std::string &msg)
 #define GOLDEN_LOG_FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #endif
 
-#define LOG(LEVEL, ARGS)                                                                \
-    do {                                                                                \
-        std::ostringstream oss;                                                         \
-        oss << "[GOLDEN " << GOLDEN_LOG_FILENAME << ":" << GOLDEN_LINE << "] " << ARGS; \
-        log(#LEVEL, oss.str());                                                         \
+#define LOG(LEVEL, ARGS)                                                                                  \
+    do {                                                                                                  \
+        std::ostringstream oss;                                                                           \
+        oss << GOLDEN_LOG_FILENAME << ":" << GOLDEN_LINE << "] [GOLDEN " << __FUNCTION__ << "] " << ARGS; \
+        log(#LEVEL, oss.str());                                                                           \
     } while (0)
 
-#define LOG_INFO(ARGS) LOG(info, ARGS)
-#define LOG_DEBUG(ARGS) LOG(debug, ARGS)
-#define LOG_ERROR(ARGS) LOG(error, ARGS)
+#define LOG_INFO(ARGS) LOG(I, ARGS)
+#define LOG_DEBUG(ARGS) LOG(D, ARGS)
+#define LOG_ERROR(ARGS) LOG(E, ARGS)
 } // namespace golden
 
 #endif // UBS_COMM_GOLDEN_LOG_H

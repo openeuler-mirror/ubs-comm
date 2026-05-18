@@ -67,17 +67,23 @@ bool LibcApi::LOADED = false;
 
 Result LibcApi::Load() noexcept
 {
+    UBS_VLOG_DEBUG("enter");
+
     std::lock_guard<std::mutex> guard(LOAD_MUTEX);
     if (LOADED) {
         return UBS_OK;
     }
 
+    UBS_VLOG_DEBUG("start to load symbal");
+
+    /* step1: open library file */
     void *handle = dlopen("libc.so.6", RTLD_NOW);
     if (handle == nullptr) {
-        // TODO log error
+        UBS_VLOG_ERR("Open libc.so.6 failed, error: %s\n", Func::Error2Str(errno));
         return UBS_DL_OPEN_LIB_FAILED;
     }
 
+    /* step2: load functions */
     DL_API_LOAD(creat);
     DL_API_LOAD(open);
     DL_API_LOAD(dup);
@@ -128,9 +134,13 @@ Result LibcApi::Load() noexcept
     DL_API_LOAD(sigaction);
     DL_API_LOAD(signal);
 
+    /* step3: close handle */
     dlclose(handle);
 
+    /* step4: set loaded */
     LOADED = true;
+
+    UBS_VLOG_DEBUG("load symbal loaded");
     return UBS_OK;
 }
 
@@ -147,6 +157,7 @@ void LibcApi::UnLoad() noexcept
 
 void LibcApi::UnLoadInner() noexcept
 {
+    UBS_VLOG_DEBUG("unload symbal");
     DL_API_SET_NULL(creat)
     DL_API_SET_NULL(open)
     DL_API_SET_NULL(dup)
@@ -196,6 +207,8 @@ void LibcApi::UnLoadInner() noexcept
     DL_API_SET_NULL(daemon)
     DL_API_SET_NULL(sigaction)
     DL_API_SET_NULL(signal)
+
+    UBS_VLOG_DEBUG("unload symbal finished");
 }
 } // namespace ubs
 } // namespace ock

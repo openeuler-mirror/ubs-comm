@@ -21,6 +21,13 @@ namespace ubs {
 class LockRegistry {
 public:
     /**
+     * Register default ops
+     *
+     * @return
+     */
+    static Result RegisterDefaultOps();
+
+    /**
      * @brief Register external lock ops, if ops is invalid, register to default ops
      *
      * @param ops          [in] ops to be registered

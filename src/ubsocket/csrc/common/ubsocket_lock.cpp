@@ -207,15 +207,7 @@ u_external_semaphore_ops_t LockRegistry::SEM_OPS;
 
 Result LockRegistry::RegisterLockOps(u_external_lock_ops_t *ops)
 {
-    using namespace default_locks;
-    u_external_lock_ops_t default_ops = {.create = default_lock_create,
-                                         .destroy = default_lock_destroy,
-                                         .lock = default_lock_lock,
-                                         .unlock = default_lock_unlock,
-                                         .try_lock = default_lock_try_lock};
-
     if (!ops || !ops->create || !ops->destroy || !ops->lock || !ops->unlock || !ops->try_lock) {
-        LOCK_OPS = default_ops;
         return UBS_INVALID_PARAM;
     }
 
@@ -227,18 +219,8 @@ Result LockRegistry::RegisterLockOps(u_external_lock_ops_t *ops)
 
 Result LockRegistry::RegisterRwLockOps(u_external_rw_lock_ops_t *ops)
 {
-    using namespace default_locks;
-    u_external_rw_lock_ops_t default_ops = {.create = default_rw_lock_create,
-                                            .destroy = default_rw_lock_destroy,
-                                            .lock_read = default_rw_lock_lock_read,
-                                            .lock_write = default_rw_lock_lock_write,
-                                            .unlock_rw = default_rw_lock_unlock_rw,
-                                            .try_lock_read = default_rw_lock_try_lock_read,
-                                            .try_lock_write = default_rw_lock_try_lock_write};
-
     if (!ops || !ops->create || !ops->destroy || !ops->lock_read || !ops->lock_write || !ops->unlock_rw ||
         !ops->try_lock_read || !ops->try_lock_write) {
-        RW_LOCK_OPS = default_ops;
         return UBS_INVALID_PARAM;
     }
 
@@ -250,18 +232,41 @@ Result LockRegistry::RegisterRwLockOps(u_external_rw_lock_ops_t *ops)
 
 Result LockRegistry::RegisterSemOps(u_external_semaphore_ops_t *ops)
 {
-    using namespace default_locks;
-    u_external_semaphore_ops_t default_ops = {.create = default_semaphore_create,
-                                              .destroy = default_semaphore_destroy,
-                                              .init = default_semaphore_init,
-                                              .wait = default_semaphore_wait,
-                                              .post = default_semaphore_post};
     if (!ops || !ops->create || !ops->destroy || !ops->init || !ops->wait || !ops->post) {
-        SEM_OPS = default_ops;
         return UBS_INVALID_PARAM;
     }
+
     SEM_OPS = *ops;
     return 0;
+}
+
+Result LockRegistry::RegisterDefaultOps()
+{
+    using namespace default_locks;
+    u_external_lock_ops_t default_lock_ops = {.create = default_lock_create,
+                                              .destroy = default_lock_destroy,
+                                              .lock = default_lock_lock,
+                                              .unlock = default_lock_unlock,
+                                              .try_lock = default_lock_try_lock};
+    LOCK_OPS = default_lock_ops;
+
+    u_external_rw_lock_ops_t default_rw_lock_ops = {.create = default_rw_lock_create,
+                                                    .destroy = default_rw_lock_destroy,
+                                                    .lock_read = default_rw_lock_lock_read,
+                                                    .lock_write = default_rw_lock_lock_write,
+                                                    .unlock_rw = default_rw_lock_unlock_rw,
+                                                    .try_lock_read = default_rw_lock_try_lock_read,
+                                                    .try_lock_write = default_rw_lock_try_lock_write};
+    RW_LOCK_OPS = default_rw_lock_ops;
+
+    u_external_semaphore_ops_t default_sem_ops = {.create = default_semaphore_create,
+                                                  .destroy = default_semaphore_destroy,
+                                                  .init = default_semaphore_init,
+                                                  .wait = default_semaphore_wait,
+                                                  .post = default_semaphore_post};
+    SEM_OPS = default_sem_ops;
+
+    return UBS_OK;
 }
 
 } // namespace ubs

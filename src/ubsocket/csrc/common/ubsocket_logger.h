@@ -65,7 +65,7 @@ public:
     Logger &operator=(Logger &&) = delete;
 
 private:
-    void LogDefault(int level, const std::string &msg) const;
+    void LogDefault(int level, const std::string &msg, const char *filename, int line) const;
 
 private:
     LogLevel logLevel = LEVEL_INFO;
@@ -100,11 +100,9 @@ ALWAYS_INLINE void Logger::SetExternalLogFunction(ExternalLog func)
     mLogFunc = func;
 }
 
-ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg) const
+ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const char *filename, int line) const
 {
-    static const char *levelStr[] = {
-        "EMERG", "ALERT", "CRIT", "ERROR", "WARN", "NOTICE", "INFO", "DEBUG",
-    };
+    static const char *levelStr[] = {"D", "I", "N", "W", "E"};
 
     struct timeval tv{};
     char strTime[24L];
@@ -117,10 +115,10 @@ ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg) const
     time_t timeStamp = tv.tv_sec;
     struct tm localTime{};
     struct tm *resultTime = localtime_r(&timeStamp, &localTime);
-    if ((resultTime != nullptr) && (strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S.", resultTime) != 0)) {
-        std::cout << strTime << tv.tv_usec << " " << levelStr[level] << " " << msg << '\n';
+    if ((resultTime != nullptr) && (strftime(strTime, sizeof strTime, "%Y%m%d %H:%M:%S.", resultTime) != 0)) {
+        std::cout << levelStr[level] << strTime << tv.tv_usec << " " << filename << ":" << line << "] " << msg << '\n';
     } else {
-        std::cout << "Invalid time trace " << tv.tv_usec << " " << levelStr[level] << " " << msg << '\n';
+        std::cout << "get time failed\n";
     }
 }
 
@@ -129,7 +127,7 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
     if (mLogFunc != nullptr) {
         mLogFunc(level, oss.str().c_str(), filename, line);
     } else {
-        LogDefault(level, oss.str());
+        LogDefault(level, oss.str(), filename, line);
     }
 }
 
@@ -138,20 +136,20 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
 
 #define UBS_LOG(level, __format, ...)                                                     \
     do {                                                                                  \
-        if ((level) <= (ock::ubs::Logger::Instance().GetLogLevel())) {                    \
+        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                    \
             std::ostringstream oss;                                                       \
             char buffer[1024L];                                                           \
             std::snprintf(buffer, sizeof(buffer), __format, ##__VA_ARGS__);               \
-            oss << " [UBSOCKET " << buffer;                                               \
+            oss << "[UBSOCKET " << __FUNCTION__ << "] " << buffer;                        \
             ock::ubs::Logger::Instance().Log(level, oss, UBS_LOG_FILENAME, UBS_LOG_LINE); \
         }                                                                                 \
     } while (0)
 
 #define UBS_LOG_STREAM(level, ARGS)                                                       \
     do {                                                                                  \
-        if ((level) <= (ock::ubs::Logger::Instance().GetLogLevel())) {                    \
+        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                    \
             std::ostringstream oss;                                                       \
-            oss << " [UBSOCKET " << ARGS;                                                 \
+            oss << "[UBSOCKET " << __FUNCTION__ << "] " << ARGS;                          \
             ock::ubs::Logger::Instance().Log(level, oss, UBS_LOG_FILENAME, UBS_LOG_LINE); \
         }                                                                                 \
     } while (0)

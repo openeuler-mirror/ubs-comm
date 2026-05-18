@@ -58,33 +58,37 @@ void GlobalSetting::AddRules() noexcept
     for (auto &item : RULES_STR_ENUM) {
         Validator::Instance().AddStrEnumRule(item);
     }
+
+    UBS_SLOG_DEBUG(Validator::Instance().DumpString());
 }
 
 Result GlobalSetting::VerifySetting() noexcept
 {
+    UBS_VLOG_DEBUG("start");
     /* set native tcp mode */
     if (UBS_ALLOWED_PROTOCOL == UBS_PROTOCOL_TCP) {
         UBS_NATIVE_TCP_MODE = true;
     }
 
     auto &validator = Validator::Instance();
-    if (validator.Validate(ENV_ASYNC_ACCEPTOR, (int64_t)UBS_ACCEPTOR_ASYNC_THREAD_COUNT,
+    if (!validator.Validate(ENV_ASYNC_ACCEPTOR, (int64_t)UBS_ACCEPTOR_ASYNC_THREAD_COUNT,
                            "async_acceptor_thread_count")) {
-        UBS_VLOG_ERR("%s", validator.LastErrMsg().c_str());
+        UBS_SLOG_ERR(validator.LastErrMsg());
         return UBS_INVALID_PARAM;
     }
 
-    if (validator.Validate(ENV_ASYNC_CONNECTOR, (int64_t)UBS_CONNECTOR_ASYNC_THREAD_COUNT,
+    if (!validator.Validate(ENV_ASYNC_CONNECTOR, (int64_t)UBS_CONNECTOR_ASYNC_THREAD_COUNT,
                            "async_connector_thread_count")) {
-        UBS_VLOG_ERR("%s", validator.LastErrMsg().c_str());
+        UBS_SLOG_ERR(validator.LastErrMsg());
         return UBS_INVALID_PARAM;
     }
 
-    if (validator.Validate(ENV_ASYNC_EPOLL, (int64_t)UBS_EPOLL_ASYNC_THREAD_COUNT, "async_epoll_thread_count")) {
-        UBS_VLOG_ERR("%s", validator.LastErrMsg().c_str());
+    if (!validator.Validate(ENV_ASYNC_EPOLL, (int64_t)UBS_EPOLL_ASYNC_THREAD_COUNT, "async_epoll_thread_count")) {
+        UBS_SLOG_ERR(validator.LastErrMsg());
         return UBS_INVALID_PARAM;
     }
 
+    UBS_VLOG_DEBUG("end");
     return UBS_OK;
 }
 

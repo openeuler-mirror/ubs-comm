@@ -17,7 +17,7 @@ namespace umq {
 
 uintptr_t UmqTxOps::AllocTxBuf(uint32_t size, uint32_t count)
 {
-    umq_buf_t *tx_buf_list = umq_buf_alloc(size, count, UMQ_INVALID_HANDLE, nullptr);
+    umq_buf_t *tx_buf_list = UmqApi::umq_buf_alloc(size, count, UMQ_INVALID_HANDLE, nullptr);
     if (tx_buf_list == nullptr) {
         UBS_VLOG_ERR("umq_buf_alloc() failed for TX, local umq: %llu, ret: %p\n",
                      static_cast<unsigned long long>(local_umqh_), tx_buf_list);
@@ -98,7 +98,7 @@ int UmqTxOps::PostSend(uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
     QBUF_LIST_FIRST(&tail_buf_) = cur_buf;
 
     umq_buf_t *bad_qbuf = nullptr;
-    int ret = umq_post(local_umqh_, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
+    int ret = UmqApi::umq_post(local_umqh_, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
     if (ret == UMQ_SUCCESS) {
         tx_queue_avail_num_ -= batch;
         if (GlobalSetting::UBS_TRACE_ENABLED) {
@@ -136,7 +136,7 @@ int UmqTxOps::PostSend(uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
             unsignaled_wr_num_ = _unsignaled_wr_num;
             QBUF_LIST_FIRST(&head_buf_) = head_qbuf;
             QBUF_LIST_FIRST(&tail_buf_) = tail_qbuf;
-            umq_buf_free(bad_qbuf);
+            UmqApi::umq_buf_free(bad_qbuf);
             tx_total_len = 0;
         } else {
             tx_total_len = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf, _unsolicited_wr_num, _unsolicited_bytes,
@@ -203,7 +203,7 @@ ConverterPtr UmqTxOps::BuildBufferConverter(const void *buf, size_t size)
 int UmqTxOps::GetAndAckEvent()
 {
     umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX};
-    int events = umq_get_cq_event(local_umqh_, &option);
+    int events = UmqApi::umq_get_cq_event(local_umqh_, &option);
     if (events == 0) {
         return 0;
     } else if (events < 0) {
@@ -212,7 +212,7 @@ int UmqTxOps::GetAndAckEvent()
         return -1;
     }
     if ((event_num += events) >= GET_PER_ACK) {
-        umq_ack_interrupt(local_umqh_, event_num, &option);
+        UmqApi::umq_ack_interrupt(local_umqh_, event_num, &option);
         event_num = 0;
     }
     return 0;
@@ -221,7 +221,7 @@ int UmqTxOps::GetAndAckEvent()
 int UmqTxOps::PollUmqTx(bool poll_to_empty)
 {
     uint32_t poll_total_cnt = 0;
-    int poll_cnt  = 0;
+    int poll_cnt = 0;
     uint32_t poll_zero_cnt = 0;
     ops_error_code err_code = ops_error_code::OK;
     do {
@@ -243,7 +243,7 @@ int UmqTxOps::PollUmqTx(bool poll_to_empty)
 int UmqTxOps::DoUmqTxPoll(ops_error_code &err_code)
 {
     umq_buf_t *buf[POLL_BATCH_MAX];
-    int poll_num = umq_poll(local_umqh_, UMQ_IO_TX, buf, POLL_BATCH_MAX);
+    int poll_num = UmqApi::umq_poll(local_umqh_, UMQ_IO_TX, buf, POLL_BATCH_MAX);
     if (poll_num <= 0) {
         if (poll_num < 0) {
             UBS_VLOG_ERR("umq_poll() failed for TX, local umq: %llu, ret: %d\n",
@@ -258,7 +258,6 @@ int UmqTxOps::DoUmqTxPoll(ops_error_code &err_code)
     for (int i = 0; i < poll_num; ++i) {
         if (buf[i] == nullptr || buf[i]->status != 0 ||
             (first_qbuf = (umq_buf_t *)((umq_buf_pro_t *)(buf[i]->qbuf_ext))->user_ctx) == nullptr) {
-
             // set err_code to true to force a quick exit from current function.
             err_code = ops_error_code::NORMAL_ERROR;
 
@@ -319,7 +318,7 @@ bool UmqTxOps::HandleProbePacket(umq_buf_t *qbuf)
 {
     umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(qbuf->qbuf_ext);
     if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == 1) {
-        umq_buf_free(qbuf);
+        UmqApi::umq_buf_free(qbuf);
         return true; // 已处理
     }
     return false; // 不是探测包
@@ -423,7 +422,7 @@ void UmqTxOps::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
     if (last_qbuf != nullptr) {
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
-    umq_buf_free(first_qbuf);
+    UmqApi::umq_buf_free(first_qbuf);
 }
 
 int UmqTxOps::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf)
@@ -456,15 +455,15 @@ int UmqTxOps::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf)
     if (last_qbuf != nullptr) {
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
-    umq_buf_free(start_qbuf);
+    UmqApi::umq_buf_free(start_qbuf);
 
     return wr_cnt;
 }
 
 int UmqTxOps::DpRearmTxInterrupt()
 {
-    umq_interrupt_option_t tx_option = { UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX };
-    int ret = umq_rearm_interrupt(local_umqh_, false, &tx_option);
+    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX};
+    int ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &tx_option);
     if (ret == 0) {
         errno = EAGAIN;
         return -1;
@@ -489,7 +488,7 @@ inline uint32_t UmqTxOps::IOBufSize()
 }
 
 uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
-                                     uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num)
+                                 uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num)
 {
     umq_buf_t *cur_qbuf = head_qbuf;
     umq_buf_t *last_qbuf = nullptr;
@@ -549,7 +548,7 @@ uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
 
-    umq_buf_free(bad_qbuf);
+    UmqApi::umq_buf_free(bad_qbuf);
     return total_size;
 }
 } // namespace umq

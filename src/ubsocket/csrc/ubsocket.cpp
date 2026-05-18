@@ -10,7 +10,7 @@
  */
 #include <iostream>
 
-#include "dl_libc_api.h"
+#include "dl_api.h"
 #include "ubsocket.h"
 #include "ubsocket_common_includes.h"
 #include "ubsocket_global_setting.h"
@@ -77,6 +77,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     /* do initialization */
     /* step1: global setting */
+    UBS_VLOG_DEBUG("init global setting");
     GlobalSetting::AddRules();
 
     GlobalSetting::UBS_ALLOWED_PROTOCOL = options->allowed_protocol;
@@ -91,16 +92,18 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         return UBS_ERROR;
     }
 
-    SocketSet::GetInstance().Init();
-
     /* step2: load under api */
-    result = LibcApi::Load();
+    UBS_VLOG_DEBUG("load under api");
+    result = DlApi::Load(LOAD_LIBC);
     if (result != UBS_OK) {
         errno = EBADF;
         return UBS_ERROR;
     }
 
     /* step3: register lock */
+    UBS_VLOG_DEBUG("register mutex and sem ops");
+    (void)LockRegistry::RegisterDefaultOps();
+
     if (options->lock_ops != nullptr) {
         result = LockRegistry::RegisterLockOps(options->lock_ops);
         if (result != UBS_OK) {
@@ -125,16 +128,20 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         }
     }
 
+    /* step3: socket related initialization */
+    SocketSet::Instance().Init();
+
     /* step3: umq setting init */
     umq::UmqSetting::Init();
+
+    /* step4: load brpc symbol for zcopy */
+    if (GlobalSetting::USE_BRPC_ZCOPY) {
+        ZeroCopyPrepare();
+    }
 
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
 
-    /* load brpc symbol for zcopy */
-    if (GlobalSetting::USE_BRPC_ZCOPY) {
-        ZeroCopyPrepare();
-    }
     return UBS_OK;
 }
 

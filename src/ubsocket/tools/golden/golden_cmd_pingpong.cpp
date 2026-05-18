@@ -28,29 +28,21 @@ void SubCommandPingpong::SetRules() noexcept
                        "=tcp --" + PARAM_IP + "=127.0.0.1 --" + PARAM_PORT + "=10001");
 }
 
-int SubCommandPingpong::DoParamByRule() noexcept
-{
-    auto result = SubCommand::DoParamByRule();
-    if (result != 0) {
-        return result;
-    }
-
-    struct sockaddr_in addr;
-
-    if (inet_pton(AF_INET, ip_.c_str(), &addr.sin_addr) <= 0) {
-        std::cout << "Invalid ip '" << ip_ << "'" << std::endl;
-        return -1;
-    }
-
-    return 0;
-}
-
 int SubCommandPingpong::DoInitialize() noexcept
 {
     role_ = param_rules_[PARAM_ROLE].strRule.value;
     protocol_ = param_rules_[PARAM_PROTOCOL].strRule.value;
     ip_ = param_rules_[PARAM_IP].strRule.value;
     port_ = param_rules_[PARAM_PORT].int64Rule.value;
+
+    LOG_DEBUG(*this);
+
+    struct sockaddr_in addr;
+    if (inet_pton(AF_INET, ip_.c_str(), &addr.sin_addr) <= 0) {
+        std::cout << "Invalid ip '" << ip_ << "'" << std::endl;
+        return -1;
+    }
+
     return 0;
 }
 

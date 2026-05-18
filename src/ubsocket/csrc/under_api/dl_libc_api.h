@@ -16,7 +16,7 @@
 #include <sys/socket.h>
 #include <csignal>
 
-#include "dl_api_common.h"
+#include "dl_api.h"
 
 using creat_api = int (*)(const char *pathname, mode_t mode);
 using open_api = int (*)(const char *file, int oflag, ...);
@@ -75,7 +75,6 @@ using signal_api = sighandler_t (*)(int signum, sighandler_t handler);
 namespace ock {
 namespace ubs {
 class LibcApi {
-public:
 public:
     static Result Load() noexcept;
     static void UnLoad() noexcept;
@@ -251,9 +250,6 @@ public:
     }
 
 private:
-    static void UnLoadInner() noexcept;
-
-private:
     DL_API_DECLARE(creat);
     DL_API_DECLARE(open);
     DL_API_DECLARE(dup);
@@ -304,6 +300,8 @@ private:
     DL_API_DECLARE(sigaction);
     DL_API_DECLARE(signal);
 
+private:
+    static void UnLoadInner() noexcept;
     static std::mutex LOAD_MUTEX;
     static bool LOADED;
 };

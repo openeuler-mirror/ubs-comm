@@ -16,6 +16,7 @@
 #include <cstring>
 #include <mutex>
 #include <set>
+#include <sstream>
 #include <string>
 
 namespace ock {
