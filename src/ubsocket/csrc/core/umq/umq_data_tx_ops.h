@@ -37,42 +37,43 @@ public:
 
     ~UmqTxOps() override = default;
 
+    ConverterPtr BuildIovConverter(const struct iovec *iov, int iovcnt) override;
+
+    ConverterPtr BuildBufferConverter(const void *buf, size_t size) override;
+
     // 分配发送缓冲区
-    uintptr_t AllocTxBuf(uint32_t count) override;
+    uintptr_t AllocTxBuf(uint32_t size, uint32_t count) override;
 
     // 发送请求
-    int PostSend(uintptr_t buf, uint32_t batch, IovConverter cvt) override;
+    int PostSend(uintptr_t buf, uint32_t batch, const ConverterPtr &cvt) override;
 
     int PollTx() override;
 
-    int GetAndAckEvent() override
-    {
-        return 0;
-    }
-
-    uint32_t IOBufSize() override
-    {
-        return 0;
-    }
+    uint32_t IOBufSize() override;
 
 private:
-    // --- 私有辅助函数 ---
     // 处理 umq_post 失败时的坏 buffer
-    uint32_t HandleBadQBuf(umq_buf_t *tx_buf_list, umq_buf_t *bad_qbuf, umq_buf_t *head_qbuf,
-                           uint16_t _unsolicited_wr_num, uint32_t _unsolicited_bytes, uint16_t _unsignaled_wr_num);
-    // 辅助函数
-    void *PtrFloorToBoundary(void *ptr);        // 假设的指针对齐函数
-    void UpdateTraceStats(int type, int value); // 假设的统计更新函数
-    int PollUmqTx(bool);
-    int GetAndAckEvent(umq_io_direction_t io_dir);
+    uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
+                           uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num);
+    void *PtrFloorToBoundary(void *ptr);
+    void UpdateTraceStats(int type, int value);
+    int PollUmqTx(bool poll_to_empty);
+    int DoUmqTxPoll(ops_error_code &err_code);
+    void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt);
+    bool HandleProbePacket(umq_buf_t *qbuf);
+    // 发端异常 CQE 错误处理.
+    void HandleErrorTxCqe(umq_buf_t *buf);
+    void ProcessErrorTxCqe(umq_buf_t *first_qbuf);
+    int ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf);
+    int GetAndAckEvent();
     int DpRearmTxInterrupt();
-
-    bool CutLast(IovConverter cvt, uint32_t len, umq_buf_t *buf);
-
 private:
     // --- 私有成员变量 ---
     // umq 相关的句柄
     uint64_t local_umqh_ = UMQ_INVALID_HANDLE;
+    uint16_t event_num = 0;
+    uint16_t window_size = 0; // current window size for TX
+    uint16_t retrieve_threshold = 1;
 
     bool get_and_ack_event_ = false;
 

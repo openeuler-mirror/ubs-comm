@@ -66,6 +66,12 @@ enum class UBHandshakeState : uint32_t {
     kFAILED = 6,
 };
 
+enum ops_error_code {
+    OK,
+    NORMAL_ERROR,
+    FATAL_ERROR
+};
+
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
 constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 512;
@@ -93,6 +99,8 @@ constexpr int RETRY_NEEDED = 1;
 constexpr uint32_t GET_PER_ACK = 32;
 // currently, poll batch use 32 is for the balance of performance and efficiency
 constexpr uint32_t POLL_BATCH_MAX = 32;
+
+constexpr uint32_t POLL_TX_RETRY_MAX_CNT = 50;
 
 constexpr const uint32_t NET_STR_ERROR_BUF_SIZE = 128;
 
