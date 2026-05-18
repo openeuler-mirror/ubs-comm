@@ -19,6 +19,21 @@ Result UmqSocket::Initialize() noexcept
 }
 
 void UmqSocket::UnInitialize() noexcept {}
+
+ALWAYS_INLINE uint64_t UmqSocket::UmqHandle() const noexcept
+{
+    return umq_handle_;
+}
+
+Result UmqSocket::CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts)
+{
+    return UBS_OK;
+}
+
+int UmqSocket::PrefillRx()
+{
+    return 0;
+}
 } // namespace umq
 } // namespace ubs
 } // namespace ock

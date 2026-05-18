@@ -20,10 +20,8 @@ DataTx::DataTx(const SocketPtr &sock, DataTxOps *ops) : fd_(sock->raw_socket_), 
 
 ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
-    int retCode = -1;
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::writev(fd_, iov, iovcnt);
-        retCode = size < 0 ? -1 : 0;
         return size;
     }
 
@@ -45,7 +43,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         return UBS_ERROR;
     }
 
-    IovConverter iov_converter(iov, iovcnt);
+    ConverterPtr converterPtr = tx_ops_->BuildIovConverter(iov, iovcnt);
     uint32_t input_total_len = 0;
     uint32_t batch = 0;
     uint32_t post_batch_max = tx_ops_->tx_queue_avail_num_ > TX_POST_BATCH_MAX ? TX_POST_BATCH_MAX :
@@ -59,7 +57,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         uint32_t wr_left_len = tx_ops_->IOBufSize();
         uint32_t sge_idx = 0;
         while (sge_idx++ < TX_SGE_MAX && cut_total_len < tx_ops_->IOBufSize() &&
-               ((cut_len = iov_converter.Cut(wr_left_len)) != 0)) {
+               ((cut_len = converterPtr->IndexMove(wr_left_len)) != 0)) {
             ++buf_cnt;
             wr_left_len -= cut_len;
             cut_total_len += cut_len;
@@ -67,12 +65,12 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         input_total_len += cut_total_len;
     } while (cut_total_len != 0 && ++batch < post_batch_max);
 
-    // 分配txBuf
-    uintptr_t txBuf = tx_ops_->AllocTxBuf(buf_cnt);
+    // 分配txBuf  //传0是umq特定属性？
+    uintptr_t txBuf = tx_ops_->AllocTxBuf(0, buf_cnt);
 
     // 发送数据
-    uint32_t tx_total_len = 0;
-    int64_t ret = tx_ops_->PostSend(txBuf, batch, iov_converter);
+    uint32_t tx_total_len;
+    int64_t ret = tx_ops_->PostSend(txBuf, batch, converterPtr);
     if (ret < 0) {
         return ret;
     }
@@ -82,7 +80,6 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         // UpdateTraceStats(StatsMgr::TX_BYTE_COUNT, tx_total_len);
     }
 
-    retCode = 0;
     return tx_total_len;
 }
 } // namespace ubs

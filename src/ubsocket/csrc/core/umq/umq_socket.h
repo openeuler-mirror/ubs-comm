@@ -84,21 +84,6 @@ private:
 };
 using UmqSocketPtr = Ref<UmqSocket>;
 
-ALWAYS_INLINE uint64_t UmqSocket::UmqHandle() const noexcept
-{
-    return umq_handle_;
-}
-
-Result UmqSocket::CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts)
-{
-    return UBS_OK;
-}
-
-int UmqSocket::PrefillRx()
-{
-    return 0;
-}
-
 #ifdef ENALBED
 // UmqAcceptor 和 UmqConnector 共用结构体
 struct CpMsg {

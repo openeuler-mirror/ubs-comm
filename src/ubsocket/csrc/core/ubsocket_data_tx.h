@@ -19,12 +19,12 @@
 #include <cstring>
 #include <memory>
 
-#include "ubsocket_buf_util.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_defines.h"
 #include "ubsocket_global_setting.h"
 #include "ubsocket_iobuf.h"
 #include "ubsocket_logger.h"
+#include "ubsocket_buf_converter.h"
 
 namespace ock {
 namespace ubs {
@@ -38,15 +38,17 @@ public:
 
     virtual ~DataTxOps() = default;
 
+    virtual ConverterPtr BuildIovConverter(const struct iovec *iov, int iovcnt) = 0;
+
+    virtual ConverterPtr BuildBufferConverter(const void *buf, size_t size) = 0;
+
     // 分配发送缓冲区
-    virtual uintptr_t AllocTxBuf(uint32_t count) = 0;
+    virtual uintptr_t AllocTxBuf(uint32_t size, uint32_t count) = 0;
 
     // 投递发送请求
-    virtual int PostSend(uintptr_t buf_list, uint32_t batch, IovConverter cvt) = 0;
+    virtual int PostSend(uintptr_t buf_list, uint32_t batch, const ConverterPtr &cvt) = 0;
 
     virtual int PollTx() = 0;
-
-    virtual int GetAndAckEvent() = 0;
 
     virtual uint32_t IOBufSize() = 0;
 

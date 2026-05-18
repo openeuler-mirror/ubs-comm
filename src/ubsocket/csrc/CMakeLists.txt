@@ -21,7 +21,7 @@ add_library(entry_objects OBJECT ${ENTRY_SRCS})
 target_compile_options(entry_objects PRIVATE -fPIC)
 
 # core objects
-file(GLOB CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/*.cpp)
+file(GLOB CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/*.cpp ${UBSOCKET_CSRC_DIR}/core/umq/*.cpp)
 add_library(core_objects OBJECT ${CORE_SRCS})
 target_compile_options(core_objects PRIVATE -fPIC)
 

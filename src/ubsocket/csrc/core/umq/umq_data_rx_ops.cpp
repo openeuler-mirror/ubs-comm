@@ -68,9 +68,9 @@ int UmqRxOps::PollRx(bool flow_control_failed)
                 // try to wake up tx if necessary
                 bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
                 if (need_fc_awake && NotifyReadable() == -1) {
-                    UBS_VLOG_ERR("eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
+                    /**UBS_VLOG_ERR("eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
                                  ", peer ip: %s, errno: %d, errmsg: %s\n",
-                                 event_fd_, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno, Func::Error2Str(errno));
+                                 event_fd_, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno, Func::Error2Str(errno));**/
                 }
             }
 

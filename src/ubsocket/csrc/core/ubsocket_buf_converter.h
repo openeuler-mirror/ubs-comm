@@ -15,13 +15,32 @@
 #include <cstdint>
 
 namespace ock {
-namespace {
-class IovConverter {
+namespace ubs {
+class UbSocketBufConverter;
+using ConverterPtr = Ref<UbSocketBufConverter>;
+
+class UbSocketBufConverter {
+public:
+    virtual ~UbSocketBufConverter() = default;
+
+    virtual uint32_t IndexMove(uint32_t len) = 0;
+
+    virtual bool MemCopy(uint32_t len, uintptr_t buf) = 0;
+
+    virtual void Reset() = 0;
+
+    DEFINE_REF_OPERATION_FUNC;
+
+public:
+    DECLARE_REF_COUNT_VARIABLE;
+};
+
+class IovConverter : public UbSocketBufConverter {
 public:
     // The caller is responsible for ensuring the validity of the input parameters; no validation is performed here.
     IovConverter(const struct iovec *iov, int iovcnt) : iov_(iov), iovcnt_(iovcnt) {}
 
-    uint32_t Cut(uint32_t len)
+    uint32_t IndexMove(uint32_t len) override
     {
         uint32_t moved_len = 0;
         if (iov_idx_ < iovcnt_) {
@@ -48,19 +67,43 @@ public:
         return moved_len;
     }
 
-    void Reset()
+    void Reset() override
     {
         iov_offset_ = 0;
         iov_idx_ = 0;
     }
 
-public:
+protected:
     const struct iovec *iov_ = nullptr;
     int iovcnt_ = 0;
     uint32_t iov_offset_ = 0;
     int iov_idx_ = 0;
 };
-} // namespace
-} // namespace ock
 
+class BufferConverter : public UbSocketBufConverter {
+public:
+    BufferConverter(const void *buf, size_t size) : m_buf(static_cast<const char *>(buf)), m_size(size) {}
+
+    uint32_t IndexMove(uint32_t len) override
+    {
+        if (m_offset + len >= m_size) {
+            m_offset = m_size;
+            return m_size - m_offset;
+        }
+        m_offset += len;
+        return len;
+    }
+
+    void Reset() override
+    {
+        m_offset = 0;
+    }
+
+protected:
+    const char *m_buf;
+    size_t m_size;
+    uint32_t m_offset = 0;
+};
+} // namespace ubs
+} // namespace ock
 #endif
