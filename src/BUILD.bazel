@@ -98,6 +98,27 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+cc_library(
+    name = "ubsocket_io",
+    srcs = [
+        "ubsocket/ubsocket_io.cpp",
+    ],
+    hdrs = [
+        "ubsocket/ubsocket_io.h",
+    ],
+    copts = [
+        "-D_GNU_SOURCE",
+        "-std=c++14",
+        "-fPIC",
+    ],
+    includes = [".", "ubsocket"],
+    deps = [
+        ":boundscheck_lib",
+        ":ubsocket",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 cc_binary(
     name = "ubstat",
     srcs = glob([
