@@ -19,7 +19,7 @@ namespace ubs {
 
 class SocketSet {
 public:
-    static SocketSet &GetInstance()
+    static SocketSet &Instance()
     {
         static SocketSet instance;
         return instance;

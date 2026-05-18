@@ -24,11 +24,15 @@ public:
 protected:
     void SetRules() noexcept override;
 
-    int DoParamByRule() noexcept override;
-
     int DoInitialize() noexcept override;
 
     int DoExecute() noexcept override;
+
+    friend std::ostream &operator<<(std::ostream &os, const SubCommandPingpong &o)
+    {
+        os << "role: " << o.role_ << ", protocol: " << o.protocol_ << ", ip: " << o.ip_ << ", port: " << o.port_;
+        return os;
+    }
 
 private:
     std::string role_;

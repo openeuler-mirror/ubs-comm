@@ -53,7 +53,7 @@ int UmqRxOps::PollRx(bool flow_control_failed)
             if (QBUF_LIST_NEXT(buf[i]) != nullptr) {
                 UBS_VLOG_WARN("probe buf next not null\n");
             }
-            umq_buf_free(buf[i]);
+            UmqApi::umq_buf_free(buf[i]);
             continue;
         }
         // currently, umq over IB return IB cr status directly, successful = 0
@@ -75,7 +75,7 @@ int UmqRxOps::PollRx(bool flow_control_failed)
             }
 
             QBUF_LIST_NEXT(buf[i]) = nullptr;
-            umq_buf_free(buf[i]);
+            UmqApi::umq_buf_free(buf[i]);
             continue;
         }
         if (GlobalSetting::UBS_TRACE_ENABLED) {

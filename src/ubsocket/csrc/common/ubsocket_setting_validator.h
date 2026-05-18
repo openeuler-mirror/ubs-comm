@@ -35,6 +35,12 @@ struct Int64Rule {
           max(pMax)
     {
     }
+
+    friend std::ostream &operator<<(std::ostream &os, const Int64Rule &o)
+    {
+        os << "key: " << o.key << ", required: " << o.required << ", min: " << o.min << ", max: " << o.max;
+        return os;
+    }
 };
 
 struct FloatRule {
@@ -51,6 +57,12 @@ struct FloatRule {
           min(pMin),
           max(pMax)
     {
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const FloatRule &o)
+    {
+        os << "key: " << o.key << ", required: " << o.required << ", min: " << o.min << ", max: " << o.max;
+        return os;
     }
 };
 
@@ -78,6 +90,12 @@ struct StrEnumRule {
     bool Validate(const std::string &value) noexcept;
 
     void MakeSortedAllEnum() noexcept;
+
+    friend std::ostream &operator<<(std::ostream &os, const StrEnumRule &o)
+    {
+        os << "key: " << o.key << ", required: " << o.required << ", allEum: " << o.allEnum;
+        return os;
+    }
 };
 
 ALWAYS_INLINE bool StrEnumRule::Validate(const std::string &value) noexcept
@@ -158,6 +176,8 @@ public:
     void AddNumRule(const Int64Rule &rule) noexcept;
     void AddFloatRule(const FloatRule &rule) noexcept;
     void AddStrEnumRule(const StrEnumRule &rule) noexcept;
+
+    std::string DumpString() noexcept;
 
 private:
     std::map<std::string, Int64Rule> int64_rules_;
@@ -269,6 +289,27 @@ ALWAYS_INLINE void Validator::AddStrEnumRule(const StrEnumRule &rule) noexcept
     }
 
     str_enum_rules_.emplace(key, rule);
+}
+
+ALWAYS_INLINE std::string Validator::DumpString() noexcept
+{
+    std::ostringstream oss;
+    oss << "\n  int rules:";
+    for (auto &item : int64_rules_) {
+        oss << std::endl << "    " << item.second;
+    }
+
+    oss << "\n float rules:";
+    for (auto &item : float_rules_) {
+        oss << std::endl << "    " << item.second;
+    }
+
+    oss << "\n str enum rules:";
+    for (auto &item : str_enum_rules_) {
+        oss << std::endl << "    " << item.second;
+    }
+
+    return oss.str();
 }
 
 } // namespace ubs

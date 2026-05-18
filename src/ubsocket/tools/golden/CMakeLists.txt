@@ -13,5 +13,5 @@ file(GLOB GOLDEN_SRCS ${UBSOCKET_BASE_DIR}/tools/golden/*.cpp)
 message(STATUS "ubsocket: golden = ${GOLDEN_SRCS}")
 
 add_executable(golden ${GOLDEN_SRCS})
-target_compile_options(golden PUBLIC -O2)
+target_compile_options(golden PUBLIC -g -O0)
 target_link_libraries(golden PUBLIC ubsocket_shared)
