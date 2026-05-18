@@ -28,6 +28,23 @@ void SubCommandPingpong::SetRules() noexcept
                        "=tcp --" + PARAM_IP + "=127.0.0.1 --" + PARAM_PORT + "=10001");
 }
 
+int SubCommandPingpong::DoParamByRule() noexcept
+{
+    auto result = SubCommand::DoParamByRule();
+    if (result != 0) {
+        return result;
+    }
+
+    struct sockaddr_in addr;
+
+    if (inet_pton(AF_INET, ip_.c_str(), &addr.sin_addr) <= 0) {
+        std::cout << "Invalid ip '" << ip_ << "'" << std::endl;
+        return -1;
+    }
+
+    return 0;
+}
+
 int SubCommandPingpong::DoInitialize() noexcept
 {
     role_ = param_rules_[PARAM_ROLE].strRule.value;
@@ -69,16 +86,156 @@ int SubCommandPingpong::DoExecute() noexcept
 }
 
 /* pp client */
+PPClient::~PPClient()
+{
+    {
+        if (fd_ != -1) {
+            close(fd_);
+            fd_ = -1;
+        }
+    }
+}
+
 int PPClient::Run()
 {
-    std::cout << "client run" << std::endl;
+    LOG_DEBUG("start to run");
+
+    /* step1: create socket */
+    int fd = ubsocket_socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        LOG_ERROR("Create socket failed");
+        return -errno;
+    }
+    LOG_DEBUG("created a socket");
+
+    fd_ = fd;
+
+    /* step2: connect */
+    struct sockaddr_in serv_addr;
+    serv_addr.sin_port = htons(cmd_.port_);
+    serv_addr.sin_family = AF_INET;
+    inet_pton(AF_INET, cmd_.ip_.c_str(), &serv_addr.sin_addr);
+    auto result = ubsocket_connect(fd, (struct sockaddr *)&serv_addr, sizeof(struct sockaddr_in));
+    if (result != 0) {
+        std::cout << "Connect to '" << cmd_.ip_ << ":" << std::to_string(cmd_.port_) << "' failed\n";
+        return result;
+    }
+
+    /* step3: send ping and recv pong */
+    char ping[] = "ping";
+    char pong[10]{};
+
+    struct iovec send_data[1];
+    send_data[0].iov_base = ping;
+    send_data[0].iov_len = strlen(ping);
+
+    struct iovec recv_data[1];
+    recv_data[0].iov_base = pong;
+    recv_data[0].iov_len = 10;
+
+    int i = 0;
+    while (i++ < 10) {
+        result = ubsocket_writev(fd, send_data, sizeof(send_data));
+        if (result != sizeof(ping)) {
+            std::cout << "Write 'ping' to server failed, errno " << errno << std::endl;
+            return -errno;
+        }
+        LOG_DEBUG("write ping successfully");
+
+        result = ubsocket_readv(fd, recv_data, sizeof(recv_data));
+        if (result < 0) {
+            std::cout << "Read 'pong' to server failed, errno " << errno << std::endl;
+            return -errno;
+        }
+        LOG_DEBUG("read pong successfully");
+    }
+
+    LOG_DEBUG("run finished");
+
     return 0;
 }
 
 /* pp server */
+PPServer::~PPServer()
+{
+    if (fd_ != -1) {
+        close(fd_);
+        fd_ = -1;
+    }
+
+    if (client_fd_ != -1) {
+        close(client_fd_);
+        client_fd_ = -1;
+    }
+}
+
 int PPServer::Run()
 {
-    std::cout << "server run" << std::endl;
+    LOG_DEBUG("start to run");
+
+    /* step1: create socket */
+    int fd = ubsocket_socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        LOG_ERROR("Create socket failed");
+        return -errno;
+    }
+    LOG_DEBUG("created a socket");
+
+    fd_ = fd;
+
+    int opt = 1;
+    struct sockaddr_in address{};
+    ubsocket_setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
+
+    address.sin_family = AF_INET;
+    address.sin_port = htons(cmd_.port_);
+    inet_pton(AF_INET, cmd_.ip_.c_str(), &address.sin_addr);
+
+    /* step2: bind and listen */
+    bind(fd_, (struct sockaddr *)&address, sizeof(address));
+    auto result = ubsocket_listen(fd_, 3);
+    if (result < 0) {
+        std::cout << "Listen at '" << cmd_.ip_ << ":" << cmd_.port_ << "' failed, errnor " << errno;
+        return -errno;
+    }
+
+    LOG_DEBUG("listen at '" << cmd_.ip_ << ":" << cmd_.port_ << "'");
+
+    /* step3: accept one client */
+    struct sockaddr_in client_address{};
+    socklen_t addr_len = sizeof(address);
+    client_fd_ = ubsocket_accept(fd_, (struct sockaddr *)&client_address, &addr_len);
+    LOG_DEBUG("accepted one");
+
+    /* step4: recv and send back */
+    char ping[10] = "ping";
+    char pong[] = "pong";
+
+    struct iovec recv_data[1];
+    recv_data[0].iov_base = ping;
+    recv_data[0].iov_len = 10;
+
+    struct iovec send_data[1];
+    send_data[0].iov_base = pong;
+    send_data[0].iov_len = strlen(pong);
+
+    int i = 0;
+    while (i++ < 10) {
+        result = ubsocket_readv(fd, recv_data, sizeof(recv_data));
+        if (result < 0) {
+            std::cout << "Read 'ping' from client failed, errno " << errno << std::endl;
+            return -errno;
+        }
+        LOG_DEBUG("read ping successfully");
+
+        result = ubsocket_writev(fd, send_data, sizeof(send_data));
+        if (result != sizeof(pong)) {
+            std::cout << "Write 'pong' to client failed, errno " << errno << std::endl;
+            return -errno;
+        }
+        LOG_DEBUG("write pong successfully");
+    }
+
     return 0;
 }
 } // namespace golden
