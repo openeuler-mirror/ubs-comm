@@ -24,6 +24,8 @@ public:
 protected:
     void SetRules() noexcept override;
 
+    int DoParamByRule() noexcept override;
+
     int DoInitialize() noexcept override;
 
     int DoExecute() noexcept override;
@@ -33,25 +35,34 @@ private:
     std::string protocol_;
     std::string ip_;
     int32_t port_;
+
+    friend class PPClient;
+    friend class PPServer;
 };
 
 class PPClient {
 public:
     explicit PPClient(const SubCommandPingpong &cmd) : cmd_(cmd) {}
+    ~PPClient();
 
     int Run();
 
 private:
     const SubCommandPingpong &cmd_;
+    int fd_ = -1;
 };
 
 class PPServer {
 public:
     explicit PPServer(const SubCommandPingpong &cmd) : cmd_(cmd) {}
+    ~PPServer();
+
     int Run();
 
 private:
     const SubCommandPingpong &cmd_;
+    int fd_ = -1;
+    int client_fd_ = -1;
 };
 
 static SubCommand *CreatePingpong(const ParamMap &params)

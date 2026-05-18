@@ -11,6 +11,9 @@
 #ifndef UBS_COMM_GOLDEN_COMMON_H
 #define UBS_COMM_GOLDEN_COMMON_H
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <unistd.h>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>

@@ -27,6 +27,8 @@ public:
     static std::string StrLowerCase(const std::string &src) noexcept;
     static void StrLowerCaseDirect(std::string &src) noexcept;
     static bool BoolFromStr(const std::string &src) noexcept;
+
+    static uint64_t TimeUs() noexcept;
 };
 
 inline int Func::ProtocolFromString(const std::string &src) noexcept
@@ -106,6 +108,13 @@ inline void Func::StrLowerCaseDirect(std::string &src) noexcept
 inline bool Func::BoolFromStr(const std::string &src) noexcept
 {
     return StrLowerCase(StrTrim(src)) == "true";
+}
+
+inline uint64_t Func::TimeUs() noexcept
+{
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    return tv.tv_sec * 1000000 + tv.tv_usec;
 }
 } // namespace golden
 

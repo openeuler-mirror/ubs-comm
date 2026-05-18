@@ -51,10 +51,12 @@ static void log(const std::string &level, const std::string &msg)
     do {                                                                                \
         std::ostringstream oss;                                                         \
         oss << "[GOLDEN " << GOLDEN_LOG_FILENAME << ":" << GOLDEN_LINE << "] " << ARGS; \
-        log("info", oss.str());                                                         \
+        log(#LEVEL, oss.str());                                                         \
     } while (0)
 
-#define LOG_INFO(ARGS) LOG(INFO, ARGS)
+#define LOG_INFO(ARGS) LOG(info, ARGS)
+#define LOG_DEBUG(ARGS) LOG(debug, ARGS)
+#define LOG_ERROR(ARGS) LOG(error, ARGS)
 } // namespace golden
 
 #endif // UBS_COMM_GOLDEN_LOG_H
