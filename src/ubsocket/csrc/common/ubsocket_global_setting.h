@@ -88,6 +88,9 @@ public:
     static uint32_t UBS_TX_DEPTH;                    /* tx queue depth, from env */
     static uint32_t UBS_RX_DEPTH;                    /* rx queue depth, from env */
     static char UBS_BLOCK_TYPE_STR[BLOCK_TYPE_STR_LEN_MAX]; /* block type, default small medium large  */
+    static bool USE_BRPC_ZCOPY;
+    static char UBS_BRPC_ALLOC_SYM_STR[BRPC_SYM_STR_LEN_MAX];
+    static char UBS_BRPC_DEALLOC_SYM_STR[BRPC_SYM_STR_LEN_MAX];
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept

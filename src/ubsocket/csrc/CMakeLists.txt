@@ -35,6 +35,11 @@ file(GLOB UNDER_API_SRCS ${UBSOCKET_CSRC_DIR}/under_api/*.cpp)
 add_library(under_api_objects OBJECT ${UNDER_API_SRCS})
 target_compile_options(under_api_objects PRIVATE -fPIC)
 
+# iobuf objects
+file(GLOB IOBUF_SRCS ${UBSOCKET_CSRC_DIR}/iobuf/*.cpp)
+add_library(iobuf_objects OBJECT ${IOBUF_SRCS})
+target_compile_options(iobuf_objects PRIVATE -fPIC)
+
 ###########################################################################
 ## libraries
 # static library
@@ -43,6 +48,7 @@ add_library(ubsocket_static STATIC
         $<TARGET_OBJECTS:entry_objects>
         $<TARGET_OBJECTS:core_objects>
         $<TARGET_OBJECTS:under_api_objects>
+        $<TARGET_OBJECTS:iobuf_objects>
 )
 set_target_properties(ubsocket_static PROPERTIES OUTPUT_NAME "ubsocket")
 
@@ -52,6 +58,7 @@ add_library(ubsocket_shared SHARED
         $<TARGET_OBJECTS:entry_objects>
         $<TARGET_OBJECTS:core_objects>
         $<TARGET_OBJECTS:under_api_objects>
+        $<TARGET_OBJECTS:iobuf_objects>
 )
 target_link_directories(ubsocket_shared PUBLIC)
 set_target_properties(ubsocket_shared PROPERTIES OUTPUT_NAME "ubsocket")

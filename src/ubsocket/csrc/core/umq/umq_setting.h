@@ -16,6 +16,7 @@
 #include "ubsocket_def.h"
 #include "ubsocket_global_setting.h"
 #include "umq_api.h"
+#include "../iobuf/ubsocket_zcopy_adapter.h"
 
 namespace ock {
 namespace ubs {
@@ -54,6 +55,32 @@ public:
      * @brief 将字符串环境变量转换为 UMQ 枚举
      */
     static umq_trans_mode_t ParseTransMode(const std::string &typeStr) noexcept;
+};
+
+
+class UmqZeroCopyAllocator : public UbsZeroCopyAllocator {
+public:
+    void* allocate(size_t size) override
+    {
+        umq_buf_t *buf = umq_buf_alloc(size, BRPC_ALLOC_DEFAULT_BUF_NUM, UMQ_INVALID_HANDLE, nullptr);
+        if (buf == nullptr) {
+            return nullptr;
+        }
+        return (void *)(buf->buf_data);
+    }
+
+    void deallocate(void* ptr) override
+    {
+        if (ptr == nullptr) return;
+
+        umq_buf_t *buf = umq_data_to_head(ptr);
+        if (buf == nullptr) {
+            return;
+        }
+
+        QBUF_LIST_NEXT(buf) = nullptr;
+        umq_buf_free(buf);
+    }
 };
 } // namespace umq
 } // namespace ubs

@@ -67,7 +67,7 @@ public:
         return moved_len;
     }
 
-    void Reset() override
+    void Reset()
     {
         iov_offset_ = 0;
         iov_idx_ = 0;
