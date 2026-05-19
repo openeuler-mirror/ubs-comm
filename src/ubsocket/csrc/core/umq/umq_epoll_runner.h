@@ -11,8 +11,8 @@
 #ifndef UBS_COMM_UMQ_EPOLL_RUNNER_H
 #define UBS_COMM_UMQ_EPOLL_RUNNER_H
 
-#include "ubsocket_event_epoll.h"
-#include "ubsocket_socket.h"
+#include "core/ubsocket_event_epoll.h"
+#include "core/ubsocket_socket.h"
 #include "umq_setting.h"
 
 namespace ock {

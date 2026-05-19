@@ -16,10 +16,9 @@
 #include <cstdlib>
 #include <memory>
 
+#include "common/ubsocket_common_includes.h"
+#include "iobuf/ubsocket_iobuf.h"
 #include "ubsocket_core_types.h"
-#include "ubsocket_defines.h"
-#include "ubsocket_global_setting.h"
-#include "ubsocket_iobuf.h"
 
 namespace ock {
 namespace ubs {

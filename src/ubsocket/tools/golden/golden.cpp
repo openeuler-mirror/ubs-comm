@@ -9,7 +9,6 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "golden_cmd.h"
-#include "ubsocket.h"
 
 int main(int argc, char *argv[])
 {

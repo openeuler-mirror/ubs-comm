@@ -10,8 +10,6 @@
  */
 #include "golden_cmd_pingpong.h"
 
-#include "ubsocket.h"
-
 namespace golden {
 /***************************/
 /* function of sub command pingpong */

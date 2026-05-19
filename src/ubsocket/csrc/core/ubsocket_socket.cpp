@@ -11,11 +11,11 @@
 #include "ubsocket_socket.h"
 #include "ubsocket_data_rx.h"
 #include "ubsocket_data_tx.h"
-#include "umq_data_rx_ops.h"
-#include "umq_data_tx_ops.h"
-#include "umq_socket.h"
-#include "umq_socket_acceptor.h"
-#include "umq_socket_connector.h"
+#include "umq/umq_data_rx_ops.h"
+#include "umq/umq_data_tx_ops.h"
+#include "umq/umq_socket.h"
+#include "umq/umq_socket_acceptor.h"
+#include "umq/umq_socket_connector.h"
 
 namespace ock {
 namespace ubs {

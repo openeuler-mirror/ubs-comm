@@ -8,8 +8,10 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef HCOM_UMQ_BUF_CONVERTER_H
-#define HCOM_UMQ_BUF_CONVERTER_H
+#ifndef UBS_COMM_UMQ_BUF_CONVERTER_H
+#define UBS_COMM_UMQ_BUF_CONVERTER_H
+
+#include "core/ubsocket_buf_converter.h"
 
 namespace ock {
 namespace ubs {
@@ -67,4 +69,4 @@ public:
 };
 } // namespace ubs
 } // namespace ock
-#endif // HCOM_UMQ_BUF_CONVERTER_H
+#endif // UBS_COMM_UMQ_BUF_CONVERTER_H

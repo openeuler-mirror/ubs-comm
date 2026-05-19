@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "golden_log.h"
+#include "include/ubsocket.h"
 
 namespace golden {
 

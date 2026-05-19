@@ -12,7 +12,7 @@
 #define UBS_COMM_GOLDEN_FUNC_H
 
 #include "golden_common.h"
-#include "ubsocket.h"
+#include "include/ubsocket.h"
 
 namespace golden {
 class Func {
