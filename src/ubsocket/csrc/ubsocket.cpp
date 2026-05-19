@@ -14,7 +14,7 @@
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_version.h"
 #include "core/ubsocket_socket_set.h"
-#include "core/umq/umq_setting.h"
+#include "core/umq/umq_backend.h"
 #include "include/ubsocket.h"
 #include "ubsocket_struct_helper.h"
 #include "under_api/dl_api.h"
@@ -54,7 +54,8 @@ void ZeroCopyPrepare()
 
     // load brpc symbol for zcopy
     UbsZcopyAdapter adapter;
-    if (!adapter.Intercept(GlobalSetting::UBS_BRPC_ALLOC_SYM_STR, GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR)) {
+    if (!adapter.Intercept(GlobalSetting::UBS_BRPC_ALLOC_SYM_STR.c_str(),
+                           GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR.c_str())) {
         // intercept failed，fallback to TCP
         UBS_VLOG_WARN("Failed to hook brpc allocator, fallback to TCP mode");
         GlobalSetting::UBS_NATIVE_TCP_MODE = true;
@@ -131,8 +132,8 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* step3: socket related initialization */
     SocketSet::Instance().Init();
 
-    /* step4: umq setting init */
-    umq::UmqSetting::Init();
+    /* step4: umq backend init */
+    umq::UmqBackend::Init();
 
     /* step5: load brpc symbol for zcopy */
     if (GlobalSetting::USE_BRPC_ZCOPY) {

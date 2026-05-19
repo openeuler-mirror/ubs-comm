@@ -66,6 +66,7 @@ public:
     static bool GetEnvAndValidate(const std::string &name, int64_t &out) noexcept;
     static bool GetEnvAndValidate(const std::string &name, float &out) noexcept;
     static bool GetEnvAndValidate(const std::string &name, std::string &out) noexcept;
+    static bool GetEnvAndValidateNotEmpty(const std::string &name, std::string &out) noexcept;
 
     /**
      * @brief Add setting verify rules
@@ -88,10 +89,11 @@ public:
     static uint32_t UBS_SHARE_JFR_RX_QUEUE_DEPTH;    /* share jfr queue depth, from env */
     static uint32_t UBS_TX_DEPTH;                    /* tx queue depth, from env */
     static uint32_t UBS_RX_DEPTH;                    /* rx queue depth, from env */
-    static char UBS_BLOCK_TYPE_STR[BLOCK_TYPE_STR_LEN_MAX]; /* block type, default small medium large  */
+
+    /* brpc malloc related */
     static bool USE_BRPC_ZCOPY;
-    static char UBS_BRPC_ALLOC_SYM_STR[BRPC_SYM_STR_LEN_MAX];
-    static char UBS_BRPC_DEALLOC_SYM_STR[BRPC_SYM_STR_LEN_MAX];
+    static std::string UBS_BRPC_ALLOC_SYM_STR;
+    static std::string UBS_BRPC_DEALLOC_SYM_STR;
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept
@@ -150,6 +152,11 @@ ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidate(const std::string &name, flo
 ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidate(const std::string &name, std::string &out) noexcept
 {
     return (GetEnv(name, out) && Validator::Instance().ValidateStrEnum(name, out));
+}
+
+ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidateNotEmpty(const std::string &name, std::string &out) noexcept
+{
+    return false;
 }
 
 ALWAYS_INLINE bool GlobalSetting::AsyncAcceptorEnabled() noexcept

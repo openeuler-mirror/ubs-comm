@@ -11,17 +11,85 @@
 #include "umq_setting.h"
 #include <cstdlib>
 #include <string>
-#include "../../common/ubsocket_global_setting.h"
+#include "common/ubsocket_global_setting.h"
 
 namespace ock {
 namespace ubs {
 namespace umq {
+#define ENV_UMQ_MIN_RESERVED_CREDIT "UBSOCKET_UMQ_MIN_RESERVED_CREDIT"
+#define ENV_UMQ_BLOCK_TYPE "UBSOCKET_UMQ_BLOCK_TYPE"
+#define ENV_UMQ_MEM_POOL_INIT_SIZE "UBSOCKET_UMQ_POOL_INITIAL_SIZE"
+#define ENV_UMQ_MEM_POOL_MAX_SIZE "UBSOCKET_UMQ_POOL_MAX_SIZE"
+#define ENV_UMQ_UBF_POOL_DEPTH "UBSOCKET_UMQ_BUF_POOL_DEPTH"
+
 umq_trans_mode_t m_trans_mode = UMQ_TRANS_MODE_UB;
 umq_buf_block_size_t UmqSetting::IO_BLOCK_TYPE = BLOCK_SIZE_8K;
+uint16_t UmqSetting::UMQ_FC_DEFAULT_CREDIT = 1024L;
+uint16_t UmqSetting::UMQ_FC_MAX_CREDIT = 1024L;
+uint16_t UmqSetting::UMQ_FC_MIN_CREDIT = 100L;
+uint16_t UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB = 200;
+uint16_t UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB = 2048;
+uint64_t UmqSetting::UMQ_BUF_POOL_DEPTH = 12000;
+
+void UmqSetting::AddRules() noexcept
+{
+    /* int64 rule: name, required, min, max */
+    Int64Rule RULES_INT64[] = {{ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
+                               {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, 1024},
+                               {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 8192}};
+
+    /* str enum rules: name, required, enum */
+    StrEnumRule RULES_STR_ENUM[] = {{ENV_UMQ_BLOCK_TYPE, false, "default|small|medium|large"}};
+
+    /* str not empty rules: name, required */
+    StrNotEmptyRule RULES_STR_NOT_EMPTY[] = {};
+
+    for (auto &item : RULES_INT64) {
+        Validator::Instance().AddNumRule(item);
+    }
+
+    for (auto &item : RULES_STR_ENUM) {
+        Validator::Instance().AddStrEnumRule(item);
+    }
+
+    for (auto &item : RULES_STR_NOT_EMPTY) {
+        Validator::Instance().AddStrNotEmtpyRule(item);
+    }
+
+    UBS_SLOG_DEBUG(Validator::Instance().DumpString());
+}
+
+Result UmqSetting::LoadEnv() noexcept
+{
+    /* shared value from env */
+    int64_t int64EnvValue = 0;
+    std::string strEnvValue;
+    using GS = GlobalSetting;
+
+    /* load from env */
+    if (GS::GetEnvAndValidate(ENV_UMQ_MIN_RESERVED_CREDIT, int64EnvValue)) {
+        UMQ_FC_MIN_CREDIT = static_cast<uint16_t>(int64EnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_BLOCK_TYPE, strEnvValue)) {
+        IO_BLOCK_TYPE = BlockTypeFromStr(strEnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_MEM_POOL_INIT_SIZE, int64EnvValue)) {
+        UMQ_MEM_POOL_INIT_SIZE_MB = static_cast<uint16_t>(int64EnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_MEM_POOL_MAX_SIZE, int64EnvValue)) {
+        UMQ_MEM_POOL_MAX_SIZE_MB = static_cast<uint16_t>(int64EnvValue);
+    }
+
+    return UBS_OK;
+}
 
 void UmqSetting::Init() noexcept
 {
-    IO_BLOCK_TYPE = ParseBlockType(GlobalSetting::UBS_BLOCK_TYPE_STR);
+    AddRules();
+    LoadEnv();
 }
 
 uint32_t UmqSetting::GetIOBufSize() noexcept
@@ -56,7 +124,7 @@ uint64_t UmqSetting::FloorMask() noexcept
     }
 }
 
-umq_buf_block_size_t UmqSetting::ParseBlockType(const std::string &typeStr) noexcept
+umq_buf_block_size_t UmqSetting::BlockTypeFromStr(const std::string &typeStr) noexcept
 {
     if (typeStr == DEFAULT_QBUF_BLOCK_TYPE) {
         return BLOCK_SIZE_8K;
@@ -70,8 +138,7 @@ umq_buf_block_size_t UmqSetting::ParseBlockType(const std::string &typeStr) noex
     // 如果字符串不匹配，返回默认值
     return BLOCK_SIZE_8K;
 }
-
-umq_trans_mode_t UmqSetting::ParseTransMode(const std::string &typeStr) noexcept
+umq_trans_mode_t UmqSetting::TransModeFromStr(const std::string &typeStr) noexcept
 {
     return UMQ_TRANS_MODE_IB_PLUS;
 }

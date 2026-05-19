@@ -14,6 +14,7 @@
 #include <cstdint>
 
 #include "core/ubsocket_data_tx.h"
+#include "umq_backend.h"
 #include "umq_setting.h"
 
 namespace ock {

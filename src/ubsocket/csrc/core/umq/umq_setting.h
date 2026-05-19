@@ -14,9 +14,7 @@
 #include <string>
 
 #include "common/ubsocket_global_setting.h"
-#include "iobuf/ubsocket_zcopy_adapter.h"
 #include "include/ubsocket_def.h"
-#include "umq_qbuf_list.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -24,13 +22,7 @@ namespace ubs {
 namespace umq {
 class UmqSetting {
 public:
-    /* 禁止实例化 */
     UmqSetting() = delete;
-
-    /**
-     * @brief 初始化 UMQ 设置，在 ubsocket_init 中调用
-     */
-    static void Init() noexcept;
 
     /**
      * @brief 获取适配 brpc IOBuf 的实际数据缓冲区大小
@@ -41,48 +33,27 @@ public:
     static uint64_t FloorMask() noexcept;
 
 public:
-    static std::mutex MUTEX;
-    static bool UBS_INITED;
-    /* 存储解析后的枚举值 */
+    static uint16_t UMQ_FC_DEFAULT_CREDIT;
+    static uint16_t UMQ_FC_MAX_CREDIT;
+    static uint16_t UMQ_FC_MIN_CREDIT;
+    static uint16_t UMQ_MEM_POOL_INIT_SIZE_MB;
+    static uint16_t UMQ_MEM_POOL_MAX_SIZE_MB;
+    static uint64_t UMQ_BUF_POOL_DEPTH;
     static umq_buf_block_size_t IO_BLOCK_TYPE;
     static umq_trans_mode_t IO_TRANS_MODE;
 
-    /**
-     * @brief 将字符串环境变量转换为 UMQ 枚举
-     */
-    static umq_buf_block_size_t ParseBlockType(const std::string &typeStr) noexcept;
+private:
+    static void Init() noexcept;
 
-    /**
-     * @brief 将字符串环境变量转换为 UMQ 枚举
-     */
-    static umq_trans_mode_t ParseTransMode(const std::string &typeStr) noexcept;
+    static void AddRules() noexcept;
+    static Result LoadEnv() noexcept;
+
+    static umq_buf_block_size_t BlockTypeFromStr(const std::string &typeStr) noexcept;
+    static umq_trans_mode_t TransModeFromStr(const std::string &typeStr) noexcept;
+
+    friend class UmqBackend;
 };
 
-class UmqZeroCopyAllocator : public UbsZeroCopyAllocator {
-public:
-    void *allocate(size_t size) override
-    {
-        umq_buf_t *buf = UmqApi::umq_buf_alloc(size, BRPC_ALLOC_DEFAULT_BUF_NUM, UMQ_INVALID_HANDLE, nullptr);
-        if (buf == nullptr) {
-            return nullptr;
-        }
-        return (void *)(buf->buf_data);
-    }
-
-    void deallocate(void *ptr) override
-    {
-        if (ptr == nullptr)
-            return;
-
-        umq_buf_t *buf = UmqApi::umq_data_to_head(ptr);
-        if (buf == nullptr) {
-            return;
-        }
-
-        QBUF_LIST_NEXT(buf) = nullptr;
-        UmqApi::umq_buf_free(buf);
-    }
-};
 } // namespace umq
 } // namespace ubs
 } // namespace ock
