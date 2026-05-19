@@ -30,9 +30,10 @@ int main(int argc, char *argv[])
     }
 
     /* set ubsocket logger level */
-    auto debug_log = getenv("GOLDEN_LOG_LEVEL");
-    if (debug_log != nullptr && std::string(debug_log) == "0") {
-        ubsocket_set_log_level(atoi(debug_log));
+    auto log_level = getenv("GOLDEN_LOG_LEVEL");
+    if (log_level != nullptr) {
+        ubsocket_set_log_level(atoi(log_level));
+        Log::Instance().set_log_level(atoi(log_level));
     }
 
     /* create sub command */

@@ -38,9 +38,9 @@ public:
         return -1;
     }
 
-    ALWAYS_INLINE T* GetItem(int idx)
+    ALWAYS_INLINE T *GetItem(int idx)
     {
-        if(idx < 0 || idx >= RPC_ADPT_FD_MAX){
+        if (idx < 0 || idx >= RPC_ADPT_FD_MAX) {
             return nullptr;
         }
         return set_obj_[idx];
@@ -141,12 +141,11 @@ private:
     ArraySet(const ArraySet &) = delete;
     ArraySet &operator=(const ArraySet &) = delete;
 
-    static u_rw_lock_t *rwlock_;
-    static T *set_obj_[RPC_ADPT_FD_MAX];
+    u_rw_lock_t *rwlock_ = nullptr;
+    T *set_obj_[RPC_ADPT_FD_MAX];
 };
 
 } // namespace ubs
 } // namespace ock
 
 #endif // UBS_COMM_UBSOCKET_SET_H
-
