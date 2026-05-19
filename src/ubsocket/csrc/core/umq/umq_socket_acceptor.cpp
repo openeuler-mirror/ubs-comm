@@ -15,12 +15,18 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
+int UmqAcceptorOps::PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
+                                   const SocketPtr &sock)
+{
+    return 0;
+}
+
 Result UmqAcceptorOps::Negotiate(int new_fd, const SocketPtr &sock)
 {
     return UBS_OK;
 };
 
-Result UmqAcceptorOps::CreateSocketResources(int new_fd, const SocketPtr &sock)
+Result UmqAcceptorOps::CreateSocketResources(int new_fd, SocketPtr &sock)
 {
 #ifdef ENABLED
     // 1. 用户直接指定普通设备建链，失败不重试、可降级
@@ -63,8 +69,7 @@ Result UmqAcceptorOps::CreateSocketResources(int new_fd, const SocketPtr &sock)
 };
 
 // TODO: mUsedPorts 和 connEid 待收编到成员变量
-Result UmqAcceptorOps::DoUbAccept(int new_fd, umq_eid_t &connEid, const SocketPtr &sock,
-                                        umq_used_ports_t &mUsedPorts)
+Result UmqAcceptorOps::DoUbAccept(int new_fd, umq_eid_t &connEid, const SocketPtr &sock, umq_used_ports_t &mUsedPorts)
 {
 #ifdef ENALBED
     Result ret = UBS_OK;
@@ -92,8 +97,7 @@ void UmqAcceptorOps::DestroySocketResources() {}
 
 void UmqAcceptorOps::SetConnInfo(std::string peer_ip, int peer_fd, int type_fd) {}
 
-int UmqAcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation,
-                                           ssize_t &protocol_negotiation_recv_size)
+int UmqAcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size)
 {
     return 0;
 }

@@ -10,20 +10,49 @@
  */
 #include "ubsocket_socket_connector.h"
 #include "ubsocket_socket_set.h"
+#include "umq/umq_socket_connector.h"
 
 namespace ock {
 namespace ubs {
 // ======================== 基础方法 ========================
-int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t *address_len)
+int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
 {
-#ifdef ENABLED
-    auto sock_obj = reinterpret_cast<Socket *>(sock);
-    raw_fd_ = sock_obj->raw_socket_;
-    // BuildNegotiateReq + sendto(req)
-    // IsBlocking
-    // IsTfoConnection
-#endif
-    return 0;
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    raw_fd_ = sockBase->raw_socket_;
+    event_fd_ = sockBase->event_fd_;
+
+    Result ret = 0;
+    if (connector_ops_ != nullptr) {
+        ret = connector_ops_->PrepareConnect(raw_fd_, address, address_len, sock);
+        if (ret != 0) {
+            return ret;
+        }
+
+        ret = connector_ops_->Negotiate(raw_fd_, sock);
+        if (ret != UBS_OK) {
+            return -1;
+        }
+
+        ret = connector_ops_->CreateSocketResources(raw_fd_, sock);
+        if (ret != UBS_OK) {
+            return -1;
+        }
+    }
+    if (ret != 0) {
+        // Log
+        SocketSet::Instance().RemoveSocket(raw_fd_);
+        /* Clear messages that already exist on the TCP link to prevent 
+                 * dirty messages from affecting user data transmission*/
+        SocketConnHelper::FlushSocketMsg(raw_fd_);
+    }
+
+    bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
+    if (is_blocking) {
+        SocketConnHelper::SetBlocking(raw_fd_);
+    }
+    // m_peer_info.type_fd = 1;
+
+    return ret;
 }
 
 Connector::Connector() {}

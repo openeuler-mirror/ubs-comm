@@ -12,6 +12,7 @@
 #define UBS_COMM_UBSOCKET_SOCKET_SET_H
 
 #include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_core_types.h"
 #include "core/ubsocket_socket.h"
 
 namespace ock {
@@ -38,30 +39,29 @@ public:
         return -1;
     }
 
-    ALWAYS_INLINE Socket *GetSocket(int fd)
+    ALWAYS_INLINE SocketPtr GetSocket(int fd)
     {
         if (fd < 0 || fd >= RPC_ADPT_FD_MAX) {
             return nullptr;
         }
-        return socket_obj_[fd];
+        return socket_obj_[fd].Get();
     }
 
-    Socket *GetSocketLocked(int fd)
+    SocketPtr GetSocketLocked(int fd)
     {
         ReadLocker lock(rwlock_);
         return GetSocket(fd);
     }
 
-    Socket *OverrideSocket(int fd, Socket *new_socket)
+    SocketPtr OverrideSocket(int fd, const SocketPtr &new_socket)
     {
         if (fd < 0 || fd >= RPC_ADPT_FD_MAX) {
-            return nullptr;
+            return SocketPtr();
         }
         if (new_socket != nullptr) {
             new_socket->IncreaseRef();
         }
-
-        Socket *old_socket = nullptr;
+        SocketPtr old_socket;
         {
             WriteLocker lock(rwlock_);
             old_socket = socket_obj_[fd];
@@ -74,16 +74,16 @@ public:
         return old_socket;
     }
 
-    Socket *RemoveSocket(int fd)
+    SocketPtr RemoveSocket(int fd)
     {
         if (fd < 0 || fd >= RPC_ADPT_FD_MAX) {
-            return nullptr;
+            return SocketPtr();
         }
-        Socket *socket = nullptr;
+        SocketPtr socket = nullptr;
         {
             WriteLocker lock(rwlock_);
             socket = socket_obj_[fd];
-            socket_obj_[fd] = nullptr;
+            socket_obj_[fd] = SocketPtr();
         }
         return socket;
     }
@@ -92,9 +92,9 @@ public:
     {
         WriteLocker lock(rwlock_);
         for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
-            if (socket_obj_[i] != nullptr) {
+            if (socket_obj_[i].Get() != nullptr) {
                 socket_obj_[i]->DecreaseRef();
-                socket_obj_[i] = nullptr;
+                socket_obj_[i] = SocketPtr();
             }
         }
     }
@@ -103,8 +103,8 @@ public:
     {
         ReadLocker lock(rwlock_);
         for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
-            if (socket_obj_[i] != nullptr) {
-                callback(i, socket_obj_[i]);
+            if (socket_obj_[i].Get() != nullptr) {
+                callback(i, socket_obj_[i].Get());
             }
         }
     }
@@ -114,7 +114,7 @@ public:
         ReadLocker lock(rwlock_);
         size_t count = 0;
         for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
-            if (socket_obj_[i] != nullptr) {
+            if (socket_obj_[i].Get() != nullptr) {
                 count++;
             }
         }
@@ -142,7 +142,7 @@ private:
     SocketSet &operator=(const SocketSet &) = delete;
 
     u_rw_lock_t *rwlock_ = nullptr;
-    Socket *socket_obj_[RPC_ADPT_FD_MAX];
+    SocketPtr socket_obj_[RPC_ADPT_FD_MAX];
 };
 
 } // namespace ubs

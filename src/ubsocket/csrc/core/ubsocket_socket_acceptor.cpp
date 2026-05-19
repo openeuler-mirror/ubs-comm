@@ -17,6 +17,8 @@ namespace ubs {
 // ======================== 基础方法 ========================
 int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len)
 {
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+
 #ifdef ENABLED
     int fd = -1;
     auto sock_obj = reinterpret_cast<Socket *>(sock_obj);
@@ -49,7 +51,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         // 使用提取的接口获取IP地址
         peerIp = SocketConnHelper::ExtractIpFromSockAddr(address);
 
-        Socket *sock_obj = SocketSet::GetInstance().GetSocket(fd);
+        Socket *sock_obj = SocketSet::Instance().GetSocket(fd);
         if (sock_obj) {
             sock_obj->GetAcceptor()->RawConnInfoV4.peer_ip = peerIp;
             sock_obj->GetAcceptor()->RawConnInfoV4.peer_fd = fd;
@@ -204,7 +206,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     // Delete existing objects and record new objects in the list.
     sockCleaner.Deactivate();
 
-    Socket *sock_new = SocketSet::GetInstance().OverrideSocket(new_fd, new_socket_obj);
+    Socket *sock_new = SocketSet::Instance().OverrideSocket(new_fd, new_socket_obj);
 
     // TODO: 待 PoollingEpoll 重构后修改这部分
 
