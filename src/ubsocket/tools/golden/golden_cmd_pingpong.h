@@ -40,6 +40,8 @@ private:
     std::string ip_;
     int32_t port_;
 
+    int loop_times = 10;
+
     friend class PPClient;
     friend class PPServer;
 };

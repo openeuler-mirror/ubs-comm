@@ -11,7 +11,9 @@
 #ifndef UBS_COMM_UBSOCKET_LOGGER_H
 #define UBS_COMM_UBSOCKET_LOGGER_H
 
+#include <sys/syscall.h>
 #include <sys/time.h>
+#include <unistd.h>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -80,6 +82,8 @@ private:
 #define UBS_LOG_FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #endif
 
+#define PID_TID " " << getpid() << ":" << syscall(SYS_gettid)
+
 ALWAYS_INLINE int Logger::GetLogLevel() const
 {
     return logLevel;
@@ -116,7 +120,8 @@ ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const c
     struct tm localTime{};
     struct tm *resultTime = localtime_r(&timeStamp, &localTime);
     if ((resultTime != nullptr) && (strftime(strTime, sizeof strTime, "%Y%m%d %H:%M:%S.", resultTime) != 0)) {
-        std::cout << levelStr[level] << strTime << tv.tv_usec << " " << filename << ":" << line << "] " << msg << '\n';
+        std::cout << levelStr[level] << strTime << tv.tv_usec << PID_TID << " " << filename << ":" << line << "] "
+                  << msg << '\n';
     } else {
         std::cout << "get time failed\n";
     }

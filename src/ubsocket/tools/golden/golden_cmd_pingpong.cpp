@@ -120,29 +120,36 @@ int PPClient::Run()
     struct iovec send_data[1];
     send_data[0].iov_base = ping;
     send_data[0].iov_len = strlen(ping);
+    ssize_t expect_send_len = strlen(ping);
 
     struct iovec recv_data[1];
     recv_data[0].iov_base = pong;
     recv_data[0].iov_len = 10;
 
     int i = 0;
-    while (i++ < 10) {
-        result = ubsocket_writev(fd, send_data, sizeof(send_data));
-        if (result != sizeof(ping)) {
-            std::cout << "Write 'ping' to server failed, errno " << errno << std::endl;
+    auto time_start = Func::TimeUs();
+    while (i++ < cmd_.loop_times) {
+        result = ubsocket_writev(fd, send_data, 1);
+        LOG_DEBUG("send data " << ping << ", " << send_data[0].iov_len << ", result " << result);
+        if (result != expect_send_len) {
+            std::cout << "Write 'ping' to server failed, result " << result << " errno " << errno << std::endl;
             return -errno;
         }
         LOG_DEBUG("write ping successfully");
 
-        result = ubsocket_readv(fd, recv_data, sizeof(recv_data));
+        result = ubsocket_readv(fd, recv_data, 1);
         if (result < 0) {
-            std::cout << "Read 'pong' to server failed, errno " << errno << std::endl;
+            std::cout << "Read 'pong' to server failed, result " << result << " errno " << errno << std::endl;
             return -errno;
         }
         LOG_DEBUG("read pong successfully");
     }
 
-    LOG_DEBUG("run finished");
+    auto time_end = Func::TimeUs();
+
+    std::cout << "Pingpong client finished successfully after " << cmd_.loop_times << " times pingpong" << std::endl;
+    std::cout << "- loop times:\t" << cmd_.loop_times << std::endl;
+    std::cout << "- cost time:\t" << (time_end - time_start) << "us" << std::endl;
 
     return 0;
 }
@@ -200,7 +207,7 @@ int PPServer::Run()
     LOG_DEBUG("accepted one");
 
     /* step4: recv and send back */
-    char ping[10] = "ping";
+    char ping[10];
     char pong[] = "pong";
 
     struct iovec recv_data[1];
@@ -210,24 +217,27 @@ int PPServer::Run()
     struct iovec send_data[1];
     send_data[0].iov_base = pong;
     send_data[0].iov_len = strlen(pong);
+    ssize_t expect_send_len = strlen(pong);
 
     int i = 0;
-    while (i++ < 10) {
-        result = ubsocket_readv(fd, recv_data, sizeof(recv_data));
+    while (i++ < cmd_.loop_times) {
+        result = ubsocket_readv(client_fd_, recv_data, 1);
         if (result < 0) {
-            std::cout << "Read 'ping' from client failed, errno " << errno << std::endl;
+            std::cout << "Read 'ping' from client failed, result " << result << " errno " << errno << std::endl;
             return -errno;
         }
         LOG_DEBUG("read ping successfully");
 
-        result = ubsocket_writev(fd, send_data, sizeof(send_data));
-        if (result != sizeof(pong)) {
-            std::cout << "Write 'pong' to client failed, errno " << errno << std::endl;
+        result = ubsocket_writev(client_fd_, send_data, 1);
+        if (result != expect_send_len) {
+            std::cout << "Write 'pong' to client failed, result " << result << " errno " << errno << std::endl;
             return -errno;
         }
         LOG_DEBUG("write pong successfully");
     }
 
+    std::cout << "Pingpong server finished after times pingpong" << std::endl;
+    std::cout << "- loop times:\t" << cmd_.loop_times << std::endl;
     return 0;
 }
 } // namespace golden

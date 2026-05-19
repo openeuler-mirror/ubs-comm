@@ -19,25 +19,51 @@
 
 namespace golden {
 
-static void log(const std::string &level, const std::string &msg)
-{
-    struct timeval tv{};
-    char strTime[24L];
-
-    int ret = gettimeofday(&tv, nullptr);
-    if (ret != 0) {
-        std::cout << "Fail to get the current system time, " << ret << std::endl;
+class Log {
+public:
+    static Log &Instance()
+    {
+        static Log log;
+        return log;
     }
 
-    time_t timeStamp = tv.tv_sec;
-    struct tm localTime{};
-    struct tm *resultTime = localtime_r(&timeStamp, &localTime);
-    if ((resultTime != nullptr) && (strftime(strTime, sizeof strTime, "%Y%m%d %H:%M:%S.", resultTime) != 0)) {
-        std::cout << level << strTime << tv.tv_usec << " " << msg << '\n';
-    } else {
-        std::cout << "failed to get date\n";
+    int get_log_level()
+    {
+        return log_level_;
     }
-}
+
+    void set_log_level(int level)
+    {
+        if (level >= 0 && level <= 4) {
+            log_level_ = level;
+        }
+    }
+
+    void log(int level, const std::string &msg)
+    {
+        static std::string LOG_LEVEL_STR[5] = {"D", "I", "N", "W", "E"};
+
+        struct timeval tv{};
+        char strTime[24L];
+
+        int ret = gettimeofday(&tv, nullptr);
+        if (ret != 0) {
+            std::cout << "Fail to get the current system time, " << ret << std::endl;
+        }
+
+        time_t timeStamp = tv.tv_sec;
+        struct tm localTime{};
+        struct tm *resultTime = localtime_r(&timeStamp, &localTime);
+        if ((resultTime != nullptr) && (strftime(strTime, sizeof strTime, "%Y%m%d %H:%M:%S.", resultTime) != 0)) {
+            std::cout << LOG_LEVEL_STR[level] << strTime << tv.tv_usec << " " << msg << '\n';
+        } else {
+            std::cout << "failed to get date\n";
+        }
+    }
+
+private:
+    int log_level_ = 3;
+};
 
 #ifndef GOLDEN_LINE
 #define GOLDEN_LINE __LINE__
@@ -47,16 +73,18 @@ static void log(const std::string &level, const std::string &msg)
 #define GOLDEN_LOG_FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #endif
 
-#define LOG(LEVEL, ARGS)                                                                                  \
-    do {                                                                                                  \
-        std::ostringstream oss;                                                                           \
-        oss << GOLDEN_LOG_FILENAME << ":" << GOLDEN_LINE << "] [GOLDEN " << __FUNCTION__ << "] " << ARGS; \
-        log(#LEVEL, oss.str());                                                                           \
+#define LOG(LEVEL, ARGS)                                                                                      \
+    do {                                                                                                      \
+        if (LEVEL >= Log::Instance().get_log_level()) {                                                       \
+            std::ostringstream oss;                                                                           \
+            oss << GOLDEN_LOG_FILENAME << ":" << GOLDEN_LINE << "] [GOLDEN " << __FUNCTION__ << "] " << ARGS; \
+            Log::Instance().log(LEVEL, oss.str());                                                            \
+        }                                                                                                     \
     } while (0)
 
-#define LOG_INFO(ARGS) LOG(I, ARGS)
-#define LOG_DEBUG(ARGS) LOG(D, ARGS)
-#define LOG_ERROR(ARGS) LOG(E, ARGS)
+#define LOG_DEBUG(ARGS) LOG(0, ARGS)
+#define LOG_INFO(ARGS) LOG(1, ARGS)
+#define LOG_ERROR(ARGS) LOG(4, ARGS)
 } // namespace golden
 
 #endif // UBS_COMM_GOLDEN_LOG_H

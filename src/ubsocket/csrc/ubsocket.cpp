@@ -48,7 +48,7 @@ void ZeroCopyPrepare()
         // delete at ubsocket_uninit
         g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
     } else {
-        UBS_VLOG_WARN("unknown zcopy allocator type.\n");
+        UBS_VLOG_WARN("unknown zcopy allocator type");
         return;
     }
 
@@ -131,10 +131,10 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* step3: socket related initialization */
     SocketSet::Instance().Init();
 
-    /* step3: umq setting init */
+    /* step4: umq setting init */
     umq::UmqSetting::Init();
 
-    /* step4: load brpc symbol for zcopy */
+    /* step5: load brpc symbol for zcopy */
     if (GlobalSetting::USE_BRPC_ZCOPY) {
         ZeroCopyPrepare();
     }
