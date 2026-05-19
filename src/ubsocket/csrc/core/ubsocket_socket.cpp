@@ -78,7 +78,7 @@ Result SocketBase::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOp
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
 
         /* create umq ops */
-        auto umqOps = new (std::nothrow) UmqTxOps(umqSock->UmqHandle());
+        auto umqOps = new (std::nothrow) UmqTxOps(umqSock->raw_socket_, umqSock->UmqHandle());
         if (umqOps == nullptr) {
             return UBS_MALLOC_FAILED;
         }
@@ -104,7 +104,7 @@ Result SocketBase::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOp
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
 
         /* create umq ops */
-        auto umqOps = new (std::nothrow) UmqRxOps(umqSock->UmqHandle());
+        auto umqOps = new (std::nothrow) UmqRxOps(umqSock->raw_socket_, umqSock->UmqHandle());
         if (umqOps == nullptr) {
             return UBS_MALLOC_FAILED;
         }

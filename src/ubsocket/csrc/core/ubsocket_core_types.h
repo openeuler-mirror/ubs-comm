@@ -50,6 +50,11 @@ public:
         return state_;
     }
 
+    void State(SocketState state)
+    {
+        state_ = state;
+    }
+
     SocketType Type() const noexcept
     {
         return type_;

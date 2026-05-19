@@ -28,7 +28,12 @@ public:
     DataRxOps() = default;
     virtual ~DataRxOps() = default;
 
-    virtual int PollRx(bool flow_control_failed) = 0;
+    /**
+     * poll rx and put data into block_cache_
+     * @return
+     */
+    virtual int PollRx() = 0;
+    ssize_t RxDataSet(void *buf, uint32_t size);
     virtual int RearmRxInterrupt() = 0;
 
 protected:
@@ -40,15 +45,15 @@ protected:
     uint8_t epoll_in_msg_ = 0;
     uint8_t epoll_in_msg_recv_size_ = 0;
     uint16_t rx_queue_avail_num_ = 0; // current window size for RX
-    uint16_t event_num_ = 0;
+    uint16_t ack_event_num_ = 0;
     std::atomic<int> epoll_event_num_{0};
     int expect_epoll_event_num_ = 0;
     bool get_and_ack_event_ = false;
     bool poll_ = false;
     BlockCache block_cache_;
     std::atomic<bool> need_fc_awake_{false};
-
     size_t remaining_size_ = 0;
+    bool flow_control_failed_ = false;
 
     friend class DataRx;
 };
@@ -62,12 +67,15 @@ public:
     ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
 private:
-    ssize_t OutputErrorMagicNumber(const struct iovec *iov, int iovcnt);
+    ssize_t OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
 private:
-    bool flow_control_failed_ = false;
     int fd_ = -1;
     int event_fd_ = -1;
+    // TODO 初始化赋值
+    uint64_t protocol_negotiation_ = 0;
+    uint32_t protocol_negotiation_recv_size_ = 0;
+    uint32_t protocol_negotiation_offset_ = 0;
 
     DataRxOps *rx_ops_ = nullptr;
 };

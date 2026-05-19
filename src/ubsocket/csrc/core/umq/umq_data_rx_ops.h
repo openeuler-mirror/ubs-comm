@@ -24,29 +24,30 @@ namespace umq {
 
 class UmqRxOps : public DataRxOps {
 public:
-    explicit UmqRxOps(uint64_t umq_handle = UMQ_INVALID_HANDLE) : m_local_umqh(umq_handle) {}
+    explicit UmqRxOps(int fd, uint64_t umq_handle = UMQ_INVALID_HANDLE) : local_umqh_(umq_handle)
+    {
+        fd_ = fd;
+    }
 
     ~UmqRxOps() override = default;
 
-    int PollRx(bool flow_control_failed) override;
+    int PollRx() override;
 
-    int RearmRxInterrupt() override
-    {
-        return 0;
-    }
+    int RearmRxInterrupt() override;
 
 private:
-    // --- 私有成员函数 ---
     int GetQbuf(umq_buf_t **buf, int max_num);
+    int UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size);
+    uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf);
+    int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
     void HandleErrorRxCqe(umq_buf_t *buf);
     int NotifyReadable();
-    int GetAndAckEvent(umq_io_direction_t io_dir);
+    int GetAndAckEvent();
     void *PtrFloorToBoundary(void *ptr) override;
 
 private:
-    // --- 私有成员变量 ---
     // umq 相关的句柄
-    uint64_t m_local_umqh = UMQ_INVALID_HANDLE;
+    uint64_t local_umqh_ = UMQ_INVALID_HANDLE;
 };
 } // namespace umq
 } // namespace ubs
