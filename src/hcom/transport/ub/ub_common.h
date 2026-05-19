@@ -102,6 +102,8 @@ constexpr uint32_t JETTY_RETRY_COUNT = NN_NO7;
 constexpr uint32_t JETTY_RNR_RETRY = NN_NO7;
 constexpr uint32_t JFC_COUNT = NN_NO1024;
 
+constexpr uint32_t JETTY_MAX_CTP_SEND_BUFF_SIZE = 4096;
+
 /*
  * class forward declaration
  */

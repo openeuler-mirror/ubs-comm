@@ -186,6 +186,12 @@ public:
             << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_URMA));
         }
 
+        if (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth && bufSize > JETTY_MAX_CTP_SEND_BUFF_SIZE) {
+            NN_LOG_ERROR("In HighBandwidth mode, bufSize = " << bufSize <<
+                " is prohibited from being greater than max ctp send buff size = " << JETTY_MAX_CTP_SEND_BUFF_SIZE);
+            return UB_PARAM_INVALID;
+        }
+
         urma_jfs_wr_t *bad_wr;
         urma_sge_t local_sge{};
         local_sge.addr = bufAddr;
