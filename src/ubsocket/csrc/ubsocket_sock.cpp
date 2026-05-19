@@ -11,6 +11,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_data_tx.h"
 #include "core/ubsocket_socket.h"
+#include "core/ubsocket_socket_set.h"
 #include "include/ubsocket.h"
 #include "under_api/dl_libc_api.h"
 
@@ -48,7 +49,13 @@ UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *add
         return LibcApi::accept(fd, address, address_len);
     }
 
-    return 0;
+    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (sockBase == nullptr) {
+        return LibcApi::accept(fd, address, address_len);
+    }
+
+    return sockBase->Accept(sock, address, address_len);
 }
 
 UBS_API int UB_API_WRAP(accept4)(int fd, struct sockaddr *address, socklen_t *address_len, int flags)
@@ -78,11 +85,19 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
     return 0;
 }
 
-UBS_API int UB_API_WRAP(connect)(int socket, const struct sockaddr *address, socklen_t address_len)
+UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen_t address_len)
 {
-    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::connect(socket, address, address_len);
+    if (!GlobalSetting::UBS_NATIVE_TCP_MODE) {
+        return LibcApi::connect(fd, address, address_len);
     }
+
+    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (sockBase == nullptr) {
+        return LibcApi::connect(fd, address, address_len);
+    }
+
+    return sockBase->Connect(sock, address, address_len);
 
     return 0;
 }

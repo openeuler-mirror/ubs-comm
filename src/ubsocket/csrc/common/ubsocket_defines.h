@@ -75,6 +75,8 @@ enum ops_error_code {
 
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
+constexpr uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445054;
+constexpr uint32_t NEGOTIATE_SOCKET_ID_MAX_NUM = 256;
 constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 512;
 constexpr uint32_t DIVIDED_NUMBER = 2;
 constexpr uint32_t CACHE_LINE_ALIGNMENT = 64;

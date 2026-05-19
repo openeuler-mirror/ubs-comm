@@ -24,7 +24,7 @@ enum InnerCode : int32_t {
     UBS_MALLOC_FAILED = -103,
 
     // ubsocket 相关错误
-    UBS_SET_DEV_INFO = 4097,
+    UBS_SET_DEV_INFO = -4097,
     UBS_PREFILL_RX,
     UBS_INIT_SHARED_JFR_RX_QUEUE,
     UBS_NEW_SOCKET_FD,
@@ -33,6 +33,21 @@ enum InnerCode : int32_t {
     UBS_NO_MAIN_UMQ,
     UBS_MAX,
 };
+
+class NetCommon {
+public:
+    static char *NN_GetStrError(int errNum, char *buf, size_t bufSize)
+    {
+#if defined(_XOPEN_SOURCE) && defined(_POSIX_C_SOURCE) && defined(_GNU_SOURCE) && \
+    (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && !_GNU_SOURCE
+        strerror_r(errNum, buf, bufSize - 1);
+        return buf;
+#else
+        return strerror_r(errNum, buf, bufSize - 1);
+#endif
+    }
+};
+
 } // namespace ubs
 } // namespace ock
 

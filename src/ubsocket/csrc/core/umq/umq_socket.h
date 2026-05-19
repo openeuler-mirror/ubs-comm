@@ -14,8 +14,6 @@
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_socket.h"
 #include "umq_setting.h"
-#include "umq_socket_acceptor.h"
-#include "umq_socket_connector.h"
 
 namespace ock {
 namespace ubs {
@@ -72,9 +70,6 @@ public:
     Result CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts);
     int PrefillRx();
 
-    UmqAcceptorOpsPtr umq_acceptor_ops_ = nullptr;
-    UmqConnectorOpsPtr umq_connector_ops_ = nullptr;
-
 private:
     // 链接类型相关
     bool is_bonding_ = true;
@@ -87,7 +82,6 @@ private:
 };
 using UmqSocketPtr = Ref<UmqSocket>;
 
-#ifdef ENALBED
 // UmqAcceptor 和 UmqConnector 共用结构体
 struct CpMsg {
     uint64_t protocol_negotiation = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
@@ -107,7 +101,6 @@ struct NegotiateReq {
     uint32_t socket_id_count = 0;
     uint32_t socket_ids[NEGOTIATE_SOCKET_ID_MAX_NUM] = {0};
 };
-#endif
 
 struct NegotiateRsp {
     int32_t ret_code = 0;

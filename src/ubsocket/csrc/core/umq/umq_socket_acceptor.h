@@ -13,6 +13,7 @@
 
 #include "core/ubsocket_socket_acceptor.h"
 #include "umq_setting.h"
+#include "umq_socket.h"
 
 namespace ock {
 namespace ubs {
@@ -24,9 +25,12 @@ public:
     UmqAcceptorOps() = default;
     ~UmqAcceptorOps() = default;
 
+    Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
+                          const SocketPtr &sock) override;
+
     Result Negotiate(int new_fd, const SocketPtr &sock) override;
 
-    Result CreateSocketResources(int new_fd, const SocketPtr &sock) override;
+    Result CreateSocketResources(int new_fd, SocketPtr &sock) override;
 
     void DestroySocketResources() override;
 

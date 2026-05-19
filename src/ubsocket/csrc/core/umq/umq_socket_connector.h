@@ -13,6 +13,7 @@
 
 #include "core/ubsocket_socket_connector.h"
 #include "umq_setting.h"
+#include "umq_socket.h"
 
 namespace ock {
 namespace ubs {
@@ -23,6 +24,21 @@ class UmqConnectorOps : public ConnectorOps {
 public:
     UmqConnectorOps() = default;
     ~UmqConnectorOps() = default;
+
+    Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
+                          const SocketPtr &sock) override;
+    Result Negotiate(int new_fd, const SocketPtr &sock) override;
+    Result CreateSocketResources(int new_fd, const SocketPtr &sock) override;
+    void DestroySocketResources() override;
+
+    // ======================== 建链辅助方法 ========================
+    int BuildNegotiateReq(NegotiateReq *req);
+
+    // ======================== 成员变量 ===========================
+    struct UmqConnInfo : public ConnInfo {
+        umq_eid_t peer_eid{}; // 对端EID
+    };
+    UmqConnInfo umq_conn_info_;
 };
 using UmqConnectorOpsPtr = Ref<UmqConnectorOps>;
 
