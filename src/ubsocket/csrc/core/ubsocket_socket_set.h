@@ -11,8 +11,8 @@
 #ifndef UBS_COMM_UBSOCKET_SOCKET_SET_H
 #define UBS_COMM_UBSOCKET_SOCKET_SET_H
 
-#include "ubsocket_common_includes.h"
-#include "ubsocket_socket.h"
+#include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_socket.h"
 
 namespace ock {
 namespace ubs {

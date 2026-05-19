@@ -11,7 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_CORE_TYPES_H
 #define UBS_COMM_UBSOCKET_CORE_TYPES_H
 
-#include "ubsocket_common_includes.h"
+#include "common/ubsocket_common_includes.h"
 
 namespace ock {
 namespace ubs {

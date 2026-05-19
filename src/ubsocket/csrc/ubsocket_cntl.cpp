@@ -8,5 +8,5 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "dl_libc_api.h"
-#include "ubsocket_ctnl.h"
+#include "include/ubsocket_ctnl.h"
+#include "under_api/dl_libc_api.h"

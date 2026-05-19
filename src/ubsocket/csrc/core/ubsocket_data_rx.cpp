@@ -10,8 +10,8 @@
  */
 
 #include "ubsocket_data_rx.h"
-#include "../under_api/dl_libc_api.h"
-#include "umq_data_rx_ops.h"
+#include "umq/umq_data_rx_ops.h"
+#include "under_api/dl_libc_api.h"
 
 namespace ock {
 namespace ubs {

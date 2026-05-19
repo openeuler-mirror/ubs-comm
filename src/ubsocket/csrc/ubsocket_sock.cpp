@@ -8,11 +8,11 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "dl_libc_api.h"
-#include "ubsocket.h"
-#include "ubsocket_common_includes.h"
-#include "ubsocket_data_tx.h"
-#include "ubsocket_socket.h"
+#include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_data_tx.h"
+#include "core/ubsocket_socket.h"
+#include "include/ubsocket.h"
+#include "under_api/dl_libc_api.h"
 
 using namespace ock::ubs;
 UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)

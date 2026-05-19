@@ -11,7 +11,7 @@
 #ifndef UBS_COMM_UMQ_SOCKET_ACCEPTOR
 #define UBS_COMM_UMQ_SOCKET_ACCEPTOR
 
-#include "ubsocket_socket_acceptor.h"
+#include "core/ubsocket_socket_acceptor.h"
 #include "umq_setting.h"
 
 namespace ock {

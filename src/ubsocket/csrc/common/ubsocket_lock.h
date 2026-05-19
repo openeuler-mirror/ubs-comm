@@ -11,7 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_LOCK_H
 #define UBS_COMM_UBSOCKET_LOCK_H
 
-#include "ubsocket_def.h"
+#include "include/ubsocket_def.h"
 #include "ubsocket_defines.h"
 #include "ubsocket_errno.h"
 

@@ -11,7 +11,7 @@
 #ifndef UBS_COMM_UMQ_SOCKET_CONNECTOR_H
 #define UBS_COMM_UMQ_SOCKET_CONNECTOR_H
 
-#include "ubsocket_socket_connector.h"
+#include "core/ubsocket_socket_connector.h"
 #include "umq_setting.h"
 
 namespace ock {

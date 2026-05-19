@@ -15,16 +15,17 @@
 #include <elf.h>
 #include <fcntl.h>
 #include <link.h>
-#include <cstdio>
-#include <cstring>
 #include <sys/mman.h>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <regex>
-#include "ubsocket_common_includes.h"
-#include "dl_libc_api.h"
+
+#include "common/ubsocket_common_includes.h"
+#include "under_api/dl_libc_api.h"
 
 constexpr uint32_t LINK_STR_MAX = 256;
 constexpr uint32_t EXE_STR_MAX = 1024;
@@ -37,9 +38,9 @@ namespace ock {
 namespace ubs {
 class UbsZeroCopyAllocator {
 public:
-  virtual ~UbsZeroCopyAllocator() = default;
-  virtual void *allocate(size_t size) = 0;
-  virtual void deallocate(void *ptr) = 0;
+    virtual ~UbsZeroCopyAllocator() = default;
+    virtual void *allocate(size_t size) = 0;
+    virtual void deallocate(void *ptr) = 0;
 };
 
 extern UbsZeroCopyAllocator *g_zcopy_allocator;
@@ -50,8 +51,8 @@ typedef void (*blockmem_deallocate_t)(void *);
 void *blockmem_allocate_zero_copy(size_t size);
 void blockmem_deallocate_zero_copy(void *addr);
 
-
-template <typename ApiType> void RecordApi(void *handle, const char *symbol_name, ApiType &symbol)
+template <typename ApiType>
+void RecordApi(void *handle, const char *symbol_name, ApiType &symbol)
 {
     (void)dlerror();
     symbol = reinterpret_cast<ApiType>(dlsym(handle, symbol_name));
@@ -67,6 +68,7 @@ public:
     bool ParseBrpcAllocator();
     blockmem_allocate_t *GetBrpcAllocSymAddr();
     blockmem_deallocate_t *GetBrpcDeallocSymAddr();
+
 protected:
     // Looking for the base address for current executable program
     void *GetBaseAddress();

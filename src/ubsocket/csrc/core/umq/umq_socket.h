@@ -11,8 +11,8 @@
 #ifndef UBS_COMM_UMQ_SOCKET_H
 #define UBS_COMM_UMQ_SOCKET_H
 
-#include "ubsocket_common_includes.h"
-#include "ubsocket_socket.h"
+#include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_socket.h"
 #include "umq_setting.h"
 #include "umq_socket_acceptor.h"
 #include "umq_socket_connector.h"

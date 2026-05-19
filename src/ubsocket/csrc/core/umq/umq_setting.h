@@ -13,11 +13,11 @@
 
 #include <string>
 
-#include "../iobuf/ubsocket_zcopy_adapter.h"
-#include "dl_umq_api.h"
-#include "ubsocket_def.h"
-#include "ubsocket_global_setting.h"
+#include "common/ubsocket_global_setting.h"
+#include "iobuf/ubsocket_zcopy_adapter.h"
+#include "include/ubsocket_def.h"
 #include "umq_qbuf_list.h"
+#include "under_api/dl_umq_api.h"
 
 namespace ock {
 namespace ubs {

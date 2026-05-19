@@ -33,7 +33,4 @@
 #include "ubsocket_ref.h"
 #include "ubsocket_set.h"
 
-#include "../../hcom/umq/include/umq/umq_types.h"
-#include "../../hcom/umq/include/umq/umq_errno.h"
-
 #endif // UBS_COMM_UBSOCKET_INCLUDES_H
