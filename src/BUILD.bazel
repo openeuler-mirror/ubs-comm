@@ -72,6 +72,7 @@ cc_library(
     name = "ubsocket",
     srcs = glob([
         # 内部私有的.cpp文件
+        "ubsocket/csrc/*.cpp",
         "ubsocket/csrc/common/*.cpp",
         "ubsocket/csrc/core/*.cpp",
         "ubsocket/csrc/core/umq/*.cpp",
@@ -80,6 +81,7 @@ cc_library(
         "ubsocket/csrc/under_api/*.cpp",
     ]) + glob([
         # 内部私有的.h文件
+        "ubsocket/csrc/*.h",
         "ubsocket/csrc/common/*.h",
         "ubsocket/csrc/core/*.h",
         "ubsocket/csrc/core/umq/*.h",
@@ -110,6 +112,28 @@ cc_library(
     deps = [
         ":boundscheck_lib",
         "//src/hcom/umq:umq",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "golden",
+    srcs = glob([
+        "ubsocket/tools/golden/*.cpp",
+        "ubsocket/tools/golden/*.h"
+    ]),
+    includes = [
+        "ubsocket/include",
+        "ubsocket/tools/golden"
+    ],
+    copts = [
+        "-D_GNU_SOURCE",
+        "-std=c++14",
+        "-fPIC",
+        "-Wno-unused-function"
+    ],
+    deps = [
+        "//src:ubsocket"
     ],
     visibility = ["//visibility:public"],
 )
