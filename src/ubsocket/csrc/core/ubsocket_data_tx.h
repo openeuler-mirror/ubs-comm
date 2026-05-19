@@ -56,12 +56,7 @@ protected:
     uint16_t ack_event_num_ = 0;
     std::atomic<int> epoll_event_num_{0};
     int expect_epoll_event_num_ = 0;
-
     std::atomic<bool> need_fc_awake_{false};
-
-    uint64_t protocol_negotiation_ = 0;
-    uint32_t protocol_negotiation_recv_size_ = 0;
-    uint32_t protocol_negotiation_offset_ = 0;
 
     friend class DataTx;
 };

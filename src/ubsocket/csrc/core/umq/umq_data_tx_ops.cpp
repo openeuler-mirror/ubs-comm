@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "umq_data_tx_ops.h"
+#include "core/ubsocket_socket_set.h"
 #include "umq_buf_converter.h"
 
 namespace ock {
@@ -102,7 +103,6 @@ int UmqTxOps::PostSend(uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
     if (ret == UMQ_SUCCESS) {
         tx_queue_avail_num_ -= batch;
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            // TODO UpdateTraceStats
             //UpdateTraceStats(StatsMgr::TX_PACKET_COUNT, 1);
         }
     } else if (bad_qbuf != nullptr) {
@@ -202,7 +202,7 @@ ConverterPtr UmqTxOps::BuildBufferConverter(const void *buf, size_t size)
 
 int UmqTxOps::GetAndAckEvent()
 {
-    umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX};
+    umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     int events = UmqApi::umq_get_cq_event(local_umqh_, &option);
     if (events == 0) {
         return 0;
@@ -211,9 +211,9 @@ int UmqTxOps::GetAndAckEvent()
                      static_cast<unsigned long long>(local_umqh_), events);
         return -1;
     }
-    if ((event_num += events) >= GET_PER_ACK) {
-        UmqApi::umq_ack_interrupt(local_umqh_, event_num, &option);
-        event_num = 0;
+    if ((ack_event_num_ += events) >= GET_PER_ACK) {
+        UmqApi::umq_ack_interrupt(local_umqh_, ack_event_num_, &option);
+        ack_event_num_ = 0;
     }
     return 0;
 }
@@ -235,9 +235,10 @@ int UmqTxOps::PollUmqTx(bool poll_to_empty)
             poll_zero_cnt = 0;
         }
         poll_total_cnt += (uint32_t)poll_cnt;
-    } while ((poll_total_cnt < retrieve_threshold || (poll_to_empty && poll_cnt > 0)) &&
+    } while ((poll_total_cnt < TX_RETRIEVE_THRESHOLD  || (poll_to_empty && poll_cnt > 0)) &&
              poll_zero_cnt < POLL_TX_RETRY_MAX_CNT && err_code == ops_error_code::OK);
-    window_size += poll_total_cnt;
+    tx_queue_avail_num_ += poll_total_cnt;
+    return 0;
 }
 
 int UmqTxOps::DoUmqTxPoll(ops_error_code &err_code)
@@ -400,8 +401,8 @@ void UmqTxOps::HandleErrorTxCqe(umq_buf_t *buf)
             break;
     }
 
-    //TODO socket状态置为close 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
-    //Close();
+    // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
+    SocketSet::Instance().GetSocket(fd_)->State(SOCK_STAT_CLOSE);
 }
 
 void UmqTxOps::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
@@ -462,7 +463,7 @@ int UmqTxOps::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf)
 
 int UmqTxOps::DpRearmTxInterrupt()
 {
-    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX};
+    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     int ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &tx_option);
     if (ret == 0) {
         errno = EAGAIN;
@@ -538,7 +539,7 @@ uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_
     unsolicited_wr_num_ = _unsolicited_wr_num;
     unsolicited_bytes_ = _unsolicited_bytes;
     unsignaled_wr_num_ = _unsignaled_wr_num;
-    window_size -= wr_cnt;
+    tx_queue_avail_num_ -= wr_cnt;
 
     QBUF_LIST_FIRST(&head_buf_) = head_qbuf_;
     if (last_qbuf != nullptr) {

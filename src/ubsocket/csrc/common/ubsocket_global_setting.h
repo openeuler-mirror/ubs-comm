@@ -84,6 +84,7 @@ public:
     static bool UBS_AUTO_FALLBACK_TCP;               /* if auto fallback to tcp, from API override by from env */
     static bool UBS_READV_UNLIMITED;                 /* if enable readv limit report, from env */
     static bool UBS_ENABLE_SHARE_JFR;                /* if enable share jfr, from env */
+    static bool UBS_ENABLE_USE_POLLING;              /* if enable use polling, from env */
     static uint32_t UBS_SHARE_JFR_RX_QUEUE_DEPTH;    /* share jfr queue depth, from env */
     static uint32_t UBS_TX_DEPTH;                    /* tx queue depth, from env */
     static uint32_t UBS_RX_DEPTH;                    /* rx queue depth, from env */

@@ -10,15 +10,15 @@
  */
 
 #include "umq_data_rx_ops.h"
+#include "core/ubsocket_socket_set.h"
 
 namespace ock {
 namespace ubs {
 namespace umq {
-
-int UmqRxOps::PollRx(bool flow_control_failed)
+int UmqRxOps::PollRx()
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
-        if (GetAndAckEvent(UMQ_IO_RX) < 0) {
+        if (GetAndAckEvent() < 0) {
             errno = EIO;
             UBS_VLOG_ERR("ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
@@ -60,7 +60,7 @@ int UmqRxOps::PollRx(bool flow_control_failed)
         if (buf[i]->status != 0) {
             if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                 if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
-                    flow_control_failed = true;
+                    flow_control_failed_ = true;
                 }
                 HandleErrorRxCqe(buf[i]);
             } else {
@@ -68,9 +68,8 @@ int UmqRxOps::PollRx(bool flow_control_failed)
                 // try to wake up tx if necessary
                 bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
                 if (need_fc_awake && NotifyReadable() == -1) {
-                    /**UBS_VLOG_ERR("eventfd_write() failed, event fd: %d, peer eid:" EID_FMT
-                                 ", peer ip: %s, errno: %d, errmsg: %s\n",
-                                 event_fd_, EID_ARGS(GetPeerEid()), GetPeerIp().c_str(), errno, Func::Error2Str(errno));**/
+                    UBS_VLOG_ERR("eventfd_write() failed, errno: %d, errmsg: %s\n",
+                                 errno, Func::Error2Str(errno));
                 }
             }
 
@@ -94,24 +93,222 @@ void *UmqRxOps::PtrFloorToBoundary(void *ptr)
 
 int UmqRxOps::GetQbuf(umq_buf_t **buf, int max_num)
 {
-    // TODO
+    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
+        return UmqPollAndRefillRx(buf, max_num);
+    }
+    int poll_num = GetAndPopQbuf(buf, max_num);
+    if (poll_num < 0) {
+        UBS_VLOG_ERR("GetQbuf failed, fd: %d, ret: %d\n", fd_, poll_num);
+        return -1;
+    }
+    return poll_num;
+}
+
+int UmqRxOps::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
+{
+    // TODO jfr process needed
+    /*if (rxQueue == nullptr) {
+        UBS_VLOG_ERR("GetAndPopQbuf failed, rx queue is null, fd: %d, ret: %d\n",
+                     fd_, -1);
+        return -1;
+    }
+    uint32_t i = 0;
+    while (!rxQueue->IsEmpty() && i < max_buf_size) {
+        if (rxQueue->Dequeue(&buf[i]) != 0) {
+            return i + 1;
+        }
+        i++;
+    }
+    return i;*/
     return 0;
 }
 
-int UmqRxOps::GetAndAckEvent(umq_io_direction_t io_dir)
+int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
 {
-    // TODO
+    // TODO PollingEpoll is requested
+    // int poll_num = GlobalSetting::UBS_ENABLE_USE_POLLING ? PollingEpoll::GetInstance().GetAndPopQbuf(local_umqh_, buf) :
+    //                             umq_poll(local_umqh_, UMQ_IO_RX, buf, max_buf_size);
+    int poll_num = UmqApi::umq_poll(local_umqh_, UMQ_IO_RX, buf, max_buf_size);
+    if (poll_num < 0 || (poll_num == 0 && rx_queue_avail_num_ == 0)) {
+        if (!GlobalSetting::UBS_ENABLE_USE_POLLING && poll_num < 0) {
+            UBS_VLOG_ERR("umq_poll() failed, local umq: %llu, ret: %d\n",
+                         static_cast<unsigned long long>(local_umqh_), poll_num);
+        }
+        return -1;
+    }
+    rx_queue_avail_num_ -= static_cast<uint16_t>(poll_num);
+    if (static_cast<uint16_t>(GlobalSetting::UBS_RX_DEPTH - rx_queue_avail_num_) > TX_REFILL_THRESHOLD) {
+        umq_alloc_option_t option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(Block)};
+        umq_buf_t *rx_buf_list = UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), TX_REFILL_THRESHOLD, UMQ_INVALID_HANDLE,
+                                               &option);
+        /* do nothing when failure occurs during refilling RX,
+             * try to switch to tcp/ip until poll_num & m_rx.m_window_size both equal to zero */
+        if (rx_buf_list != nullptr) {
+            umq_buf_t *bad_qbuf = nullptr;
+            int umq_ret = UmqApi::umq_post(local_umqh_, rx_buf_list, UMQ_IO_RX, &bad_qbuf);
+            if (umq_ret == UMQ_SUCCESS) {
+                rx_queue_avail_num_ += TX_REFILL_THRESHOLD;
+            } else if ((rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf)) == 0) {
+                UBS_VLOG_ERR("umq_post() failed in refill, ret: %d\n", umq_ret);
+                return -1;
+            }
+        }
+    }
+    return poll_num;
+}
+
+uint32_t UmqRxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf)
+{
+    umq_buf_t *cur_qbuf = head_qbuf;
+    umq_buf_t *last_qbuf = nullptr;
+    uint32_t wr_cnt = 0;
+    while (cur_qbuf != bad_qbuf) {
+        int64_t rest_size = cur_qbuf->total_data_size;
+        /* WriteV ensure total_data_size equals to the sum of all data_size, thus, do not consider
+             * the situation that rest_size would not reduced to zero */
+        while (cur_qbuf && rest_size > 0) {
+            rest_size -= (int64_t)cur_qbuf->data_size;
+            last_qbuf = cur_qbuf;
+            cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
+        }
+        wr_cnt++;
+    }
+    if (last_qbuf != nullptr) {
+        QBUF_LIST_NEXT(last_qbuf) = nullptr;
+    }
+    UmqApi::umq_buf_free(bad_qbuf);
+    return wr_cnt;
+}
+
+int UmqRxOps::GetAndAckEvent()
+{
+    umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    int events = UmqApi::umq_get_cq_event(local_umqh_, &option);
+    if (events == 0) {
+        return 0;
+    } else if (events < 0) {
+        UBS_VLOG_ERR("umq_get_cq_event() failed, local umq: %llu, ret: %d\n",
+                     static_cast<unsigned long long>(local_umqh_), events);
+        return -1;
+    }
+    if ((ack_event_num_ += events) >= GET_PER_ACK) {
+        UmqApi::umq_ack_interrupt(local_umqh_, ack_event_num_, &option);
+        ack_event_num_ = 0;
+    }
     return 0;
 }
+
 int UmqRxOps::NotifyReadable()
 {
-    // TODO
+    // TODO async epoll process is needed
+    /*if (m_added_epoll_fd == nullptr) {
+        return eventfd_write(m_event_fd, 1);
+    }
+    if (((async::EpollFdAsync *)m_added_epoll_fd)->AddSocketReadableEvent(m_fd, m_added_epoll_data) != 0) {
+        return -1;
+    }
+    return ((async::EpollFdAsync *)m_added_epoll_fd)->SetSocketsReadable();*/
     return 0;
 }
 
 void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
 {
-    // TODO
+    switch (buf->status) {
+        case UMQ_BUF_SUCCESS:
+            return;
+            
+        case UMQ_FAKE_BUF_FC_ERR:
+            UBS_VLOG_ERR("cqe error: flow control failed\n");
+            break;
+
+        case UMQ_BUF_UNSUPPORTED_OPCODE_ERR:
+            UBS_VLOG_ERR("cqe error: unsupported opcode\n");
+            break;
+
+        case UMQ_BUF_LOC_LEN_ERR:
+            UBS_VLOG_ERR("cqe error: local length too long\n");
+            break;
+
+        case UMQ_BUF_LOC_OPERATION_ERR:
+            UBS_VLOG_ERR("cqe error: local op err\n");
+            break;
+
+        case UMQ_BUF_LOC_ACCESS_ERR:
+            UBS_VLOG_ERR("cqe error: access to local memory error\n");
+            break;
+
+        case UMQ_BUF_REM_RESP_LEN_ERR:
+            UBS_VLOG_ERR("cqe error: remote rx buffer length error\n");
+            break;
+
+        case UMQ_BUF_REM_UNSUPPORTED_REQ_ERR:
+            UBS_VLOG_ERR("cqe error: remote does not support req\n");
+            break;
+
+        case UMQ_BUF_REM_OPERATION_ERR:
+            UBS_VLOG_ERR("cqe error: remote jetty can not complete op\n");
+            break;
+
+        case UMQ_BUF_REM_ACCESS_ABORT_ERR:
+            UBS_VLOG_ERR("cqe error: remote jetty access memory error\n");
+            break;
+
+        case UMQ_BUF_ACK_TIMEOUT_ERR:
+            UBS_VLOG_ERR("cqe error: remote jetty does not send ack\n");
+            break;
+
+        case UMQ_BUF_RNR_RETRY_CNT_EXC_ERR:
+            UBS_VLOG_ERR("cqe error: remote jetty has no enough RQE\n");
+            break;
+
+        case UMQ_BUF_WR_FLUSH_ERR:
+            break;
+
+        case UMQ_BUF_WR_SUSPEND_DONE:
+            UBS_VLOG_ERR("cqe error: suspend done\n");
+            break;
+
+        case UMQ_BUF_WR_FLUSH_ERR_DONE:
+            UBS_VLOG_ERR("cqe error: flush err done\n");
+            break;
+
+        case UMQ_BUF_WR_UNHANDLED:
+            // See umq_ub_flush_seq
+            UBS_VLOG_ERR("It wont be here.\n");
+            break;
+
+        case UMQ_BUF_LOC_DATA_POISON:
+        case UMQ_BUF_REM_DATA_POISON:
+            UBS_VLOG_ERR("cqe error: not supported yet\n");
+            break;
+
+        case UMQ_FAKE_BUF_FC_UPDATE:
+            UBS_VLOG_ERR("You should handle flow control message manually\n");
+            break;
+
+        case UMQ_MEMPOOL_UPDATE_SUCCESS:
+        case UMQ_MEMPOOL_UPDATE_FAILED:
+            UBS_VLOG_ERR("Something went wrong. brpc-adaptor ONLY uses UB send/recv\n");
+            break;
+
+        default:
+            UBS_VLOG_ERR("unreachable! status=%d\n", buf->status);
+            break;
+    }
+
+    // 异步关闭. 当前处于 readv 中，等到下次 EPOLLIN 事件到来时会触发关闭
+    SocketSet::Instance().GetSocket(fd_)->State(SOCK_STAT_CLOSE);
+}
+
+int UmqRxOps::RearmRxInterrupt()
+{
+    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    int ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &rx_option);
+    if (ret < 0) {
+        UBS_VLOG_ERR("umq_rearm_interrupt() failed for RX, local umq: %llu, ret: %d\n",
+                     static_cast<unsigned long long>(local_umqh_), ret);
+    }
+    return ret;
 }
 } // namespace umq
 } // namespace ubs

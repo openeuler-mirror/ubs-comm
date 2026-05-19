@@ -11,7 +11,7 @@
 
 #include "ubsocket_data_rx.h"
 #include "umq/umq_data_rx_ops.h"
-#include "under_api/dl_libc_api.h"
+#include "ubsocket_socket_set.h"
 
 namespace ock {
 namespace ubs {
@@ -22,11 +22,8 @@ DataRx::DataRx(const SocketPtr &sock, DataRxOps *ops) : fd_(sock->raw_socket_), 
 
 ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
-#ifdef ENABLED
-    int retCode = -1;
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::readv(fd_, iov, iovcnt);
-        retCode = size < 0 ? -1 : 0;
         return size;
     }
 
@@ -40,13 +37,12 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *i
     /* if socket failed to pass protocol negotiation validation, then
      * (1) pass the received protocol negotiation as message to caller;
      * (2) when all the received message passed to caller, fallback to tcp/ip */
-    ssize_t rx_total_len = OutputErrorMagicNumber(iov, iovcnt);
+    ssize_t rx_total_len = OutputErrorMagicNumber(sock, iov, iovcnt);
     if (rx_total_len > 0) {
-        retCode = 0;
         return rx_total_len;
     }
 
-    int ret = rx_ops_->PollRx(flow_control_failed_);
+    int ret = rx_ops_->PollRx();
     if (ret < 0) {
         return ret;
     }
@@ -61,27 +57,62 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *i
         }
     }
 
+    ret = rx_ops_->RxDataSet(iov[0].iov_base, max_buf_size);
+    if (ret < 0) {
+        return ret;
+    }
+    rx_total_len = ret;
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        // UpdateTraceStats(StatsMgr::RX_BYTE_COUNT, rx_total_len);
+    }
+    return rx_total_len;
+}
+
+ssize_t DataRx::OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+{
+    if (protocol_negotiation_recv_size_ == 0) {
+        return 0;
+    }
+
+    ssize_t rx_total_len = 0;
+    int iov_idx = 0;
+    do {
+        size_t copy_size = iov[iov_idx].iov_len < protocol_negotiation_recv_size_ ?
+                               iov[iov_idx].iov_len : protocol_negotiation_recv_size_;
+        (void)memcpy(iov[iov_idx++].iov_base,
+                     (char *)&protocol_negotiation_ + protocol_negotiation_offset_, copy_size);
+        protocol_negotiation_recv_size_ -= copy_size;
+        protocol_negotiation_offset_ += copy_size;
+        rx_total_len += copy_size;
+    } while (protocol_negotiation_recv_size_ > 0 && iov_idx < iovcnt);
+
+    if (protocol_negotiation_recv_size_ == 0) {
+        sock->State(SOCK_STAT_RAW_ESTABLISHED);
+    }
+    return rx_total_len;
+}
+
+ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
+{
     /*
      * rpc adapter has replace brpc butil::iobuf::blockmem_allocate() & butil::iof::blockmem_deallocate()
      * and ensures that the starting address of the Block is aligned to an 8k boundary.
      */
-    Block *out_first_block = (Block *)this->PtrFloorToBoundary(iov[0].iov_base);
-    rx_total_len = rx_ops_->block_cache_.CutAndInsertAfter(max_buf_size, out_first_block);
+    Block *out_first_block = (Block *)PtrFloorToBoundary(buf);
+    ssize_t rx_total_len = block_cache_.CutAndInsertAfter(size, out_first_block);
     if (rx_total_len == 0) {
         /*
          * m_rx.epoll_event_num_ not equals to m_rx.m_expect_epoll_event_num means another epoll event is reported
          * during readv processing procedure, set m_rx.m_poll to enable poll RX operation and set errno to EINTR
          * to let brpc retry and call readv()
          */
-        if (!rx_ops_->epoll_event_num_.compare_exchange_strong(rx_ops_->expect_epoll_event_num_, 0,
-                                                               std::memory_order_release, std::memory_order_acquire)) {
-            rx_ops_->poll_ = true;
+        if (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0,
+                                                      std::memory_order_release, std::memory_order_acquire)) {
+            poll_ = true;
             errno = EINTR;
             return UBS_ERROR;
         }
-
-        if (sock->State() == SOCK_STAT_CLOSE) {
-            retCode = 0;
+        if (SocketSet::Instance().GetSocket(fd_)->State() == SOCK_STAT_CLOSE) {
             return 0;
         }
 
@@ -92,9 +123,8 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *i
             return UBS_ERROR;
         }
 
-        if (rx_ops_->RearmRxInterrupt() < 0) {
+        if (RearmRxInterrupt() < 0) {
             errno = EIO;
-            char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("ReadV RearmRxInterrupt() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
             return UBS_ERROR;
@@ -108,19 +138,7 @@ ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *i
     /* Set the first block as used to prevent brpc from utilizing this block,
      * and only use it as the head of the block linked list. */
     out_first_block->size = out_first_block->cap;
-
-    if (GlobalSetting::UBS_TRACE_ENABLED) {
-        // UpdateTraceStats(StatsMgr::RX_BYTE_COUNT, rx_total_len);
-    }
-    retCode = 0;
     return rx_total_len;
-#endif
-    return 0;
-}
-
-ssize_t DataRx::OutputErrorMagicNumber(const struct iovec *iov, int iovcnt)
-{
-    return 0;
 }
 } // namespace ubs
 } // namespace ock

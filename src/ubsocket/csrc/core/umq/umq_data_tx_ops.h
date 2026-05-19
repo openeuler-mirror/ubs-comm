@@ -22,8 +22,9 @@ namespace umq {
 
 class UmqTxOps : public DataTxOps {
 public:
-    explicit UmqTxOps(uint64_t umq_handle = UMQ_INVALID_HANDLE) : local_umqh_(umq_handle)
+    explicit UmqTxOps(int fd, uint64_t umq_handle = UMQ_INVALID_HANDLE) : local_umqh_(umq_handle)
     {
+        fd_ = fd;
         // 初始化链表头尾为空
         QBUF_LIST_INIT(&head_buf_);
         QBUF_LIST_INIT(&tail_buf_);
@@ -55,7 +56,6 @@ private:
     uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
                            uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num);
     void *PtrFloorToBoundary(void *ptr);
-    void UpdateTraceStats(int type, int value);
     int PollUmqTx(bool poll_to_empty);
     int DoUmqTxPoll(ops_error_code &err_code);
     void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt);
@@ -71,10 +71,6 @@ private:
     // --- 私有成员变量 ---
     // umq 相关的句柄
     uint64_t local_umqh_ = UMQ_INVALID_HANDLE;
-    uint16_t event_num = 0;
-    uint16_t window_size = 0; // current window size for TX
-    uint16_t retrieve_threshold = 1;
-
     bool get_and_ack_event_ = false;
 
     /* m_tx.m_head_buf -> |umq_buf 0| -> |umq_buf 1| -> ... -> |umq_buf n| <- m_tx.m_tailbuf */
