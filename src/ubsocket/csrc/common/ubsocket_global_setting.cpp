@@ -29,10 +29,9 @@ bool GlobalSetting::UBS_ENABLE_USE_POLLING = false;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
-char GlobalSetting::UBS_BLOCK_TYPE_STR[BLOCK_TYPE_STR_LEN_MAX];
 bool GlobalSetting::USE_BRPC_ZCOPY = true;
-char GlobalSetting::UBS_BRPC_ALLOC_SYM_STR[BRPC_SYM_STR_LEN_MAX];
-char GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR[BRPC_SYM_STR_LEN_MAX];
+std::string GlobalSetting::UBS_BRPC_ALLOC_SYM_STR;
+std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
@@ -42,22 +41,31 @@ char GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR[BRPC_SYM_STR_LEN_MAX];
 #define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
 #define ENV_SHARE_JFR_RX_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH"
 
-/* int64 rule: name, required, min, max */
-Int64Rule RULES_INT64[] = {{ENV_ASYNC_ACCEPTOR, false, 0, 8L},
-                           {ENV_ASYNC_CONNECTOR, false, 0, 8L},
-                           {ENV_ASYNC_EPOLL, false, 1, 1L},
-                           {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240}};
-
-StrEnumRule RULES_STR_ENUM[] = {{ENV_TRACE_ENABLED, false, "true|false"}, {ENV_AUTO_FALLBACK_TCP, false, "true|false"}};
-
 void GlobalSetting::AddRules() noexcept
 {
+    /* int64 rule: name, required, min, max */
+    Int64Rule RULES_INT64[] = {{ENV_ASYNC_ACCEPTOR, false, 0, 8L},
+                               {ENV_ASYNC_CONNECTOR, false, 0, 8L},
+                               {ENV_ASYNC_EPOLL, false, 1, 1L},
+                               {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240}};
+
+    /* str enum rules: name, required, enum */
+    StrEnumRule RULES_STR_ENUM[] = {{ENV_TRACE_ENABLED, false, "true|false"},
+                                    {ENV_AUTO_FALLBACK_TCP, false, "true|false"}};
+
+    /* str not empty rules: name, required */
+    StrNotEmptyRule RULES_STR_NOT_EMPTY[] = {};
+
     for (auto &item : RULES_INT64) {
         Validator::Instance().AddNumRule(item);
     }
 
     for (auto &item : RULES_STR_ENUM) {
         Validator::Instance().AddStrEnumRule(item);
+    }
+
+    for (auto &item : RULES_STR_NOT_EMPTY) {
+        Validator::Instance().AddStrNotEmtpyRule(item);
     }
 
     UBS_SLOG_DEBUG(Validator::Instance().DumpString());
@@ -73,13 +81,13 @@ Result GlobalSetting::VerifySetting() noexcept
 
     auto &validator = Validator::Instance();
     if (!validator.Validate(ENV_ASYNC_ACCEPTOR, (int64_t)UBS_ACCEPTOR_ASYNC_THREAD_COUNT,
-                           "async_acceptor_thread_count")) {
+                            "async_acceptor_thread_count")) {
         UBS_SLOG_ERR(validator.LastErrMsg());
         return UBS_INVALID_PARAM;
     }
 
     if (!validator.Validate(ENV_ASYNC_CONNECTOR, (int64_t)UBS_CONNECTOR_ASYNC_THREAD_COUNT,
-                           "async_connector_thread_count")) {
+                            "async_connector_thread_count")) {
         UBS_SLOG_ERR(validator.LastErrMsg());
         return UBS_INVALID_PARAM;
     }

@@ -8,6 +8,11 @@
 # IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 #
+option(BUILD_UMQ_BACKEND "build umq backend" ON)
+option(BUILD_URMA_BACKEND "build urma backend" OFF)
+
+message(STATUS "ubsocket: BUILD_UMQ_BACKEND = ${BUILD_UMQ_BACKEND}")
+message(STATUS "ubsocket: BUILD_URMA_BACKEND = ${BUILD_URMA_BACKEND}")
 
 set(UBSOCKET_BASE_DIR ${PROJECT_SOURCE_DIR}/ubsocket)
 set(UBSOCKET_CSRC_DIR ${PROJECT_SOURCE_DIR}/ubsocket/csrc)
@@ -42,6 +47,10 @@ else ()
 endif ()
 
 message(STATUS "ubsocket: CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
+
+if (BUILD_URMA_BACKEND)
+    add_definitions(-DURMA_BACKEND_ENABLED)
+endif ()
 
 include_directories(
         ${UBSOCKET_BASE_DIR}/

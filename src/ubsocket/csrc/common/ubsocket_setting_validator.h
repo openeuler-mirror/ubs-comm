@@ -98,6 +98,20 @@ struct StrEnumRule {
     }
 };
 
+struct StrNotEmptyRule {
+    std::string key;
+    bool required = false;
+
+    StrNotEmptyRule() = default;
+    StrNotEmptyRule(const std::string &pKey, bool pRequired) : key(pKey), required(pRequired) {}
+
+    friend std::ostream &operator<<(std::ostream &os, const StrNotEmptyRule &o)
+    {
+        os << "key: " << o.key << ", required: " << o.required;
+        return os;
+    }
+};
+
 ALWAYS_INLINE bool StrEnumRule::Validate(const std::string &value) noexcept
 {
     /* split */
@@ -161,6 +175,7 @@ public:
     bool Validate(const std::string &key, int64_t value, const std::string &key4log = "") noexcept;
     bool Validate(const std::string &key, float value, const std::string &key4log = "") noexcept;
     bool ValidateStrEnum(const std::string &key, const std::string &value, const std::string &key4log = "") noexcept;
+    bool ValidateStrEmpty(const std::string &key, const std::string &value, const std::string &key4log = "") noexcept;
 
     /**
      * @brief Get last error message
@@ -176,6 +191,7 @@ public:
     void AddNumRule(const Int64Rule &rule) noexcept;
     void AddFloatRule(const FloatRule &rule) noexcept;
     void AddStrEnumRule(const StrEnumRule &rule) noexcept;
+    void AddStrNotEmtpyRule(const StrNotEmptyRule &rule) noexcept;
 
     std::string DumpString() noexcept;
 
@@ -183,6 +199,7 @@ private:
     std::map<std::string, Int64Rule> int64_rules_;
     std::map<std::string, FloatRule> float_rules_;
     std::map<std::string, StrEnumRule> str_enum_rules_;
+    std::map<std::string, StrNotEmptyRule> str_not_empty_rules_;
 
     std::set<std::string> required_set_;
 
@@ -256,6 +273,25 @@ ALWAYS_INLINE bool Validator::ValidateStrEnum(const std::string &key, const std:
     return true;
 }
 
+ALWAYS_INLINE bool Validator::ValidateStrEmpty(const std::string &key, const std::string &value,
+                                               const std::string &key4log) noexcept
+{
+    auto &tmpKey = key4log.empty() ? key : key4log;
+
+    auto iter = str_not_empty_rules_.find(key);
+    if (iter == str_not_empty_rules_.end()) {
+        last_error_msg_ = "No rule exists for '" + tmpKey + "'";
+        return false;
+    }
+
+    if (value.empty()) {
+        last_error_msg_ = "Invalid value for '" + tmpKey + "', which should be not emtpy";
+        return false;
+    }
+
+    return true;
+}
+
 ALWAYS_INLINE const std::string &Validator::LastErrMsg() const noexcept
 {
     return last_error_msg_;
@@ -291,6 +327,16 @@ ALWAYS_INLINE void Validator::AddStrEnumRule(const StrEnumRule &rule) noexcept
     str_enum_rules_.emplace(key, rule);
 }
 
+ALWAYS_INLINE void Validator::AddStrNotEmtpyRule(const ock::ubs::StrNotEmptyRule &rule) noexcept
+{
+    const std::string &key = rule.key;
+    if (rule.required) {
+        required_set_.emplace(key);
+    }
+
+    str_not_empty_rules_.emplace(key, rule);
+}
+
 ALWAYS_INLINE std::string Validator::DumpString() noexcept
 {
     std::ostringstream oss;
@@ -309,9 +355,13 @@ ALWAYS_INLINE std::string Validator::DumpString() noexcept
         oss << std::endl << "    " << item.second;
     }
 
+    oss << "\n str not empty rules:";
+    for (auto &item : str_not_empty_rules_) {
+        oss << std::endl << "    " << item.second;
+    }
+
     return oss.str();
 }
-
 } // namespace ubs
 } // namespace ock
 
