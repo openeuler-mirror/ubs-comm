@@ -3,8 +3,6 @@ load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_import", "cc_library")
 
 cc_library(
     name = "boundscheck_lib",
-
-   
     deps = ["@libboundscheck//:boundscheck",],
 #    linkstatic = True,  # 关键参数：指示生成静态库
 #    alwayslink = 1,     # 关键参数：强制包含所有符号
@@ -20,14 +18,12 @@ cc_binary(
 
 cc_import(
   name = "libboundscheck",
-#  hdrs = ["mylib.h"],
   shared_library = ":libboundscheck.so",
   visibility = ["//visibility:public"],
 )
 
 cc_import(
   name = "libumq",
-#  hdrs = ["mylib.h"],
   shared_library = ":libumq.so",
 )
 
@@ -75,24 +71,44 @@ cc_binary(
 cc_library(
     name = "ubsocket",
     srcs = glob([
-        "ubsocket/*.cpp",
-        "ubsocket/*.c",
-        "ubsocket/brpc/*.cpp",
-        "ubsocket/trace/*.cpp",
-    ]) + glob([  # 头文件现在也放在 srcs 里
-        "ubsocket/*.h",
-        "ubsocket/brpc/*.h",
-        "ubsocket/brpc/**/*.h",
-        "ubsocket/trace/*.h",
+        # 内部私有的.cpp文件
+        "ubsocket/csrc/common/*.cpp",
+        "ubsocket/csrc/core/*.cpp",
+        "ubsocket/csrc/core/umq/*.cpp",
+        "ubsocket/csrc/iobuf/*.cpp",
+        "ubsocket/csrc/profiling/*.cpp",
+        "ubsocket/csrc/under_api/*.cpp",
+    ]) + glob([
+        # 内部私有的.h文件
+        "ubsocket/csrc/common/*.h",
+        "ubsocket/csrc/core/*.h",
+        "ubsocket/csrc/core/umq/*.h",
+        "ubsocket/csrc/iobuf/*.h",
+        "ubsocket/csrc/profiling/*.h",
+        "ubsocket/csrc/under_api/*.h",
     ]),
+
+    # 对外公开的.h文件
+    hdrs = glob(["ubsocket/include/*.h"]),
     copts = [
         "-D_GNU_SOURCE",
         "-std=c++14",
         "-fPIC",
     ],
-    includes = [".", "ubsocket", "ubsocket/brpc", "ubsocket/trace"],
+    includes = [
+        "ubsocket/include",
+        "ubsocket/csrc/common",
+        "ubsocket/csrc/core",
+        "ubsocket/csrc/core/umq",
+        "ubsocket/csrc/iobuf",
+        "ubsocket/csrc/profiling",
+        "ubsocket/csrc/under_api",
+
+        # 需要使用hcom中的umq头文件
+        "hcom/"
+    ],
     deps = [
-        ":boundscheck_lib",  # 依赖 boundscheck 库
+        ":boundscheck_lib",
         "//src/hcom/umq:umq",
     ],
     visibility = ["//visibility:public"],
@@ -182,16 +198,11 @@ cc_library(
     linkstatic = True,
 )
 
-
-
-
-
 # 4. 聚合目标保持不变
 filegroup(
     name = "release_package",
     srcs = [
         ":libubsocket.so",
-        #":libboundscheck.so",
         ":libboundscheck",
         "//src/hcom/umq/src:umq",
         "//src/hcom/umq/src/qbuf:umq_buf",
