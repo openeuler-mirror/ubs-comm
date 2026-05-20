@@ -38,9 +38,11 @@ struct SubCmd {
 
 #define SUB_CMD_MINUS_H "-h"
 #define SUB_CMD_PINGPONG "pp"
+#define SUB_CMD_PINGPONG_EPOLL "pp-epoll"
 #define SUB_CMD_DATA "data"
 
 static SubCmd cmds[] = {{SUB_CMD_PINGPONG, "pingpong test to check if network is ok"},
+                        {SUB_CMD_PINGPONG_EPOLL, "pingpong test using epoll to check if network is ok"},
                         {SUB_CMD_DATA, "pingpong test to check if data transfer is correct"}};
 
 #define PARAM_ROLE "role"           /* server or client */

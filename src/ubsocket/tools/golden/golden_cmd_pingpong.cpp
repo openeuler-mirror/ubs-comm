@@ -182,7 +182,8 @@ int PPServer::Run()
 
     int opt = 1;
     struct sockaddr_in address{};
-    ubsocket_setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
+    ubsocket_setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    ubsocket_setsockopt(fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
     address.sin_family = AF_INET;
     address.sin_port = htons(cmd_.port_);
