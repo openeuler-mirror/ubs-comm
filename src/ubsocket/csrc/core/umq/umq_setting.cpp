@@ -34,25 +34,25 @@ uint64_t UmqSetting::UMQ_BUF_POOL_DEPTH = 12000;
 void UmqSetting::AddRules() noexcept
 {
     /* int64 rule: name, required, min, max */
-    Int64Rule RULES_INT64[] = {{ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
+    Int64Rule rules_int64[] = {{ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
                                {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, 1024},
                                {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 8192}};
 
     /* str enum rules: name, required, enum */
-    StrEnumRule RULES_STR_ENUM[] = {{ENV_UMQ_BLOCK_TYPE, false, "default|small|medium|large"}};
+    StrEnumRule rules_str_enum[] = {{ENV_UMQ_BLOCK_TYPE, false, "default|small|medium|large"}};
 
     /* str not empty rules: name, required */
-    StrNotEmptyRule RULES_STR_NOT_EMPTY[] = {};
+    StrNotEmptyRule rules_str_not_empty[] = {};
 
-    for (auto &item : RULES_INT64) {
+    for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
     }
 
-    for (auto &item : RULES_STR_ENUM) {
+    for (auto &item : rules_str_enum) {
         Validator::Instance().AddStrEnumRule(item);
     }
 
-    for (auto &item : RULES_STR_NOT_EMPTY) {
+    for (auto &item : rules_str_not_empty) {
         Validator::Instance().AddStrNotEmtpyRule(item);
     }
 
