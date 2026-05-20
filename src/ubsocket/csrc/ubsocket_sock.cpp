@@ -8,12 +8,12 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include <netinet/tcp.h>
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_data_tx.h"
 #include "core/ubsocket_socket.h"
 #include "core/ubsocket_socket_set.h"
 #include "include/ubsocket.h"
-#include "under_api/dl_libc_api.h"
 
 using namespace ock::ubs;
 UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
@@ -21,7 +21,30 @@ UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::socket(domain, type, protocol);
     }
-
+    int fd;
+    if (domain == AF_SMC) {
+        fd = LibcApi::socket(AF_INET, type, protocol);
+    } else {
+        fd = LibcApi::socket(domain, type, protocol);
+    }
+    int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (event_fd < 0) {
+        UBS_VLOG_ERR("eventfd() failed, ret: %d, errno: %d, errmsg: %s\n",
+                     event_fd, errno, Func::Error2Str(errno));
+        LibcApi::close(fd);
+        return -1;
+    }
+    SocketPtr socketPtr;
+    Result ret = SocketBase::Create(fd, SocketType::SOCK_TYPE_UMQ, socketPtr);
+    if (ret != UBS_OK) {
+        UBS_VLOG_ERR("CreateSocketFd() failed, fd: %d, event fd: %d, ret: %d\n",
+                     fd, event_fd, ret);
+        LibcApi::close(fd);
+        LibcApi::close(event_fd);
+        return -1;
+    }
+    socketPtr->event_fd_ = event_fd;
+    SocketSet::Instance().OverrideSocket(fd, socketPtr);
     return 0;
 }
 
@@ -73,7 +96,7 @@ UBS_API int UB_API_WRAP(bind)(int fd, const struct sockaddr *addr, socklen_t add
         return LibcApi::bind(fd, addr, addrlen);
     }
 
-    return 0;
+    return LibcApi::bind(fd, addr, addrlen);
 }
 
 UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
@@ -82,7 +105,19 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
         return LibcApi::listen(fd, backlog);
     }
 
-    return 0;
+    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    if (sock == nullptr) {
+        return LibcApi::listen(fd, backlog);
+    }
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::TFO) {
+        UBS_VLOG_INFO("Enable Server TFO, with QLen %d\n", backlog);
+        // enable tfo
+        if (LibcApi::setsockopt(fd, SOL_TCP, TCP_FASTOPEN, &backlog, sizeof(backlog)) < 0) {
+            UBS_VLOG_WARN("Unable to enable server TFO");
+        }
+    }
+    return LibcApi::listen(fd, backlog);
 }
 
 UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen_t address_len)
@@ -90,16 +125,12 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
     if (!GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::connect(fd, address, address_len);
     }
-
     SocketPtr sock = SocketSet::Instance().GetSocket(fd);
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
-    if (sockBase == nullptr) {
+    if (sock == nullptr) {
         return LibcApi::connect(fd, address, address_len);
     }
-
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
     return sockBase->Connect(sock, address, address_len);
-
-    return 0;
 }
 
 UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
