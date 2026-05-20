@@ -95,7 +95,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     /* step2: load under api */
     UBS_VLOG_DEBUG("load under api");
-    result = DlApi::Load(LOAD_LIBC);
+    result = DlApi::Load(LOAD_LIBC | LOAD_UMQ);
     if (result != UBS_OK) {
         errno = EBADF;
         return UBS_ERROR;

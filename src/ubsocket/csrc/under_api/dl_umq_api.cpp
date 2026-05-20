@@ -68,7 +68,7 @@ Result UmqApi::Load() noexcept
     /* step1: open library file */
     void *handle = dlopen("libumq.so", RTLD_NOW);
     if (handle == nullptr) {
-        UBS_VLOG_ERR("Open libumq failed, error: %s\n", Func::Error2Str(errno));
+        UBS_VLOG_ERR("Open libumq failed, error: %s\n", dlerror());
         return UBS_DL_OPEN_LIB_FAILED;
     }
 
