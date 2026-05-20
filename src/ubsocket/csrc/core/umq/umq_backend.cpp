@@ -44,7 +44,7 @@ Result UmqBackend::Init() noexcept
     umq_config.flow_control.min_reserved_credit = UmqSetting::UMQ_FC_MIN_CREDIT;
     umq_config.block_cfg.small_block_size = UmqSetting::IO_BLOCK_TYPE;
     umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DUMMY;
-    umq_config.trans_info[0].mem_cfg.total_size = static_cast<uint64_t>(UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB) * IO_SIZE_MB;
+    umq_config.trans_info[0].mem_cfg.total_size = UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB * IO_SIZE_MB;
     umq_config.trans_info[0].trans_mode = UMQ_TRANS_MODE_UB;
     umq_config.buf_pool_cfg.umq_buf_pool_max_size = UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB * IO_SIZE_MB;
     umq_config.buf_pool_cfg.tls_qbuf_pool_depth = UmqSetting::UMQ_BUF_POOL_DEPTH;
