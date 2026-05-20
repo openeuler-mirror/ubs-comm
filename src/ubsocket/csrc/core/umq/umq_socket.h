@@ -13,6 +13,7 @@
 
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_socket.h"
+#include "iobuf/ubsocket_iobuf.h"
 #include "umq_setting.h"
 
 namespace ock {
@@ -25,6 +26,15 @@ public:
 
     Result Initialize() noexcept override;
     void UnInitialize() noexcept override;
+
+    bool IsBonding() const noexcept
+    {
+        return is_bonding_;
+    }
+    void SetBonding(bool bonding)
+    {
+        is_bonding_ = bonding;
+    }
 
     uint64_t UmqHandle() const noexcept
     {
@@ -66,7 +76,7 @@ public:
         trans_mode_ = mode;
     }
 
-    umq_topo_type_t GetTopoType() const
+    umq_topo_type_t GetTopoType()
     {
         return topo_type_;
     }
@@ -78,9 +88,12 @@ public:
 
     // 封装 umq 相关操作: umq_create, umq_bind
     Result CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts);
-    int PrefillRx();
+    Result PrefillRx();
+    uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
 
 private:
+    uint32_t getLeftPostRxNum(uint64_t umq_handle);
+
     // 链接类型相关
     bool is_bonding_ = true;
     ub_trans_mode trans_mode_ = RC_TP;
@@ -89,6 +102,7 @@ private:
     bool umq_is_bind_remote_ = false;
     // UMQ 句柄
     uint64_t umq_handle_ = UMQ_INVALID_HANDLE;
+    uint64_t local_umq_handle_ = UMQ_INVALID_HANDLE;
 };
 using UmqSocketPtr = Ref<UmqSocket>;
 
@@ -118,6 +132,21 @@ struct NegotiateRsp {
     uint8_t reserved[3] = {0};
     umq_eid_t local_eid = {};
 };
+
+#ifndef EID_FMT
+#define EID_FMT "%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x"
+#endif
+
+#ifndef EID_RAW_ARGS
+#define EID_RAW_ARGS(eid)                                                                                      \
+    eid[0], eid[1], eid[2], eid[3], eid[4], eid[5], eid[6], eid[7], eid[8], eid[9], eid[10], eid[11], eid[12], \
+        eid[13], eid[14], eid[15]
+#endif
+
+#ifndef EID_ARGS
+#define EID_ARGS(eid) EID_RAW_ARGS((eid).raw)
+#endif
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock

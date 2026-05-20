@@ -31,14 +31,28 @@ public:
     Result CreateSocketResources(int new_fd, const SocketPtr &sock) override;
     void DestroySocketResources() override;
 
+private:
     // ======================== 建链辅助方法 ========================
     int BuildNegotiateReq(NegotiateReq *req);
+    Result ConnectNegotiate(const UmqSocketPtr &umq_socket);
+    Result ConnectExchangeSocketIDs(void);
+    Result DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid, umq_route_t *conn_route, bool use_round_robin,
+                   umq_route_t *back_route);
+    Result DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_ports_t &used_ports);
 
     // ======================== 成员变量 ===========================
     struct UmqConnInfo : public ConnInfo {
         umq_eid_t peer_eid{}; // 对端EID
+        umq_eid_t conn_eid{}; // 本端EID
     };
     UmqConnInfo umq_conn_info_;
+    bool use_round_robin_ = true;
+    int server_socket_id_for_affinity_ = -1;
+    std::vector<uint32_t> peer_all_socket_ids_;
+    umq_eid_t route_backup_src_eid_; // 备
+    umq_route_t conn_route_;
+    umq_route_t back_route_;
+    umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
 };
 using UmqConnectorOpsPtr = Ref<UmqConnectorOps>;
 

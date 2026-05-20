@@ -87,14 +87,14 @@ enum class UBHandshakeMode : uint32_t {
 #endif
 
 #ifndef EID_RAW_ARGS
-#define EID_RAW_ARGS(eid) eid[0], eid[1], eid[2], eid[3], eid[4], eid[5], eid[6], eid[7], eid[8], eid[9], \
-        eid[10], eid[11], eid[12], eid[13], eid[14], eid[15]
+#define EID_RAW_ARGS(eid)                                                                                      \
+    eid[0], eid[1], eid[2], eid[3], eid[4], eid[5], eid[6], eid[7], eid[8], eid[9], eid[10], eid[11], eid[12], \
+        eid[13], eid[14], eid[15]
 #endif
 
 #ifndef EID_ARGS
 #define EID_ARGS(eid) EID_RAW_ARGS((eid).raw)
 #endif
-
 
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 

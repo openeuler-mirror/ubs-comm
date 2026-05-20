@@ -33,6 +33,7 @@ uint64_t UmqSetting::UMQ_BUF_POOL_DEPTH = 12000;
 umq_eid_t UmqSetting::UMQ_LOCAL_EID = {};
 int UmqSetting::UMQ_PROCESS_SOCKET_ID = -1;
 std::vector<uint32_t> UmqSetting::UMQ_ALL_SOCKET_IDS = {};
+uint32_t UmqSetting::UMQ_POST_BATCH_MAX = 64UL;
 
 void UmqSetting::AddRules() noexcept
 {
