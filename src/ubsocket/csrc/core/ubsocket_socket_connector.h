@@ -38,6 +38,7 @@ public:
 
     DEFINE_REF_OPERATION_FUNC
 protected:
+    int raw_fd_; // 传入 sock 的原生 socket fd
     DECLARE_REF_COUNT_VARIABLE;
 };
 

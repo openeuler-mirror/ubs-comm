@@ -46,7 +46,7 @@ bool SocketConnHelper::IsTfoConnection(const int &fd)
 int SetSockOpt(int fd, int level, int optname, const void *optval, socklen_t optlen)
 {
     UBS_VLOG_INFO("SetSockOpt set fd %d, level %d, optname %d\n", fd, level, optname);
-    return  LibcApi::setsockopt(fd, level, optname, optval, optlen);
+    return LibcApi::setsockopt(fd, level, optname, optval, optlen);
 }
 
 int SocketConnHelper::SetTcpNoDelay(int fd)
@@ -61,12 +61,12 @@ std::string SocketConnHelper::ExtractIpFromSockAddr(const struct sockaddr *addre
         return "";
     }
     char ip_str[INET6_ADDRSTRLEN] = {0};
-    const char* result = nullptr;
+    const char *result = nullptr;
     if (address->sa_family == AF_INET) {
-        const sockaddr_in* addr_in = reinterpret_cast<const sockaddr_in*>(address);
+        const sockaddr_in *addr_in = reinterpret_cast<const sockaddr_in *>(address);
         result = inet_ntop(AF_INET, &addr_in->sin_addr, ip_str, INET_ADDRSTRLEN);
     } else if (address->sa_family == AF_INET6) {
-        const sockaddr_in6* addr_in6 = reinterpret_cast<const sockaddr_in6*>(address);
+        const sockaddr_in6 *addr_in6 = reinterpret_cast<const sockaddr_in6 *>(address);
         result = inet_ntop(AF_INET6, &addr_in6->sin6_addr, ip_str, INET6_ADDRSTRLEN);
     }
     return (result != nullptr) ? std::string(ip_str) : "";
@@ -113,12 +113,11 @@ ssize_t SocketConnHelper::SendSocketData(int fd, const void *buf, size_t size, u
             continue;
         }
         if (sent <= 0 || errno != 0) {
-            UBS_VLOG_ERR("send() failed, ret: %zd, errno: %d, errmsg: %s, sent: %zd\n",
-                         sent, errno, Func::Error2Str(errno), sent);
+            UBS_VLOG_ERR("send() failed, ret: %zd, errno: %d, errmsg: %s, sent: %zd\n", sent, errno,
+                         Func::Error2Str(errno), sent);
             return sent;
         } else {
-            UBS_VLOG_DEBUG("Send socket message successful, fd: %d, sent = %zd, total: %zu\n",
-                           fd, sent, size);
+            UBS_VLOG_DEBUG("Send socket message successful, fd: %d, sent = %zd, total: %zu\n", fd, sent, size);
         }
         total -= sent;
         cur += sent;
@@ -154,13 +153,12 @@ ssize_t SocketConnHelper::RecvSocketData(int fd, const void *buf, size_t size, u
             UBS_VLOG_INFO("The connection has been closed by peer.\n");
             return 0;
         } else if (received < 0) {
-            UBS_VLOG_ERR("recv() failed, ret: %zd, errno: %d, errmsg: %s, received: %zd, fd: %d\n",
-                         received, errno, Func::Error2Str(errno), received, fd);
+            UBS_VLOG_ERR("recv() failed, ret: %zd, errno: %d, errmsg: %s, received: %zd, fd: %d\n", received, errno,
+                         Func::Error2Str(errno), received, fd);
             return received;
         } else {
-            UBS_VLOG_DEBUG(
-                "Receive socket message successful, fd: %d, received: %zd, total: %zu\n",
-                fd, received, size);
+            UBS_VLOG_DEBUG("Receive socket message successful, fd: %d, received: %zd, total: %zu\n", fd, received,
+                           size);
         }
         total -= received;
         cur += received;
