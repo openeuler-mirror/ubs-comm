@@ -19,12 +19,12 @@
 
 namespace ock {
 namespace ubs {
-Result SocketBase::Create(ock::ubs::SocketType t, SocketPtr &outSocket)
+Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
 {
     if (t == SOCK_TYPE_UMQ) {
         /* step1: create umq socket */
         using namespace umq;
-        auto umqSock = MakeRef<UmqSocket>();
+        auto umqSock = MakeRef<UmqSocket>(fd);
         if (umqSock == nullptr) {
             return UBS_MALLOC_FAILED;
         }
@@ -53,9 +53,25 @@ Result SocketBase::Create(ock::ubs::SocketType t, SocketPtr &outSocket)
             return result;
         }
 
+        AcceptorOps *acceptorOps = nullptr;
+        result = CreateAcceptorOps(t, sock, acceptorOps);
+        if (result != UBS_OK) {
+            delete acceptorOps;
+            return result;
+        }
+
+        ConnectorOps *connectorOps = nullptr;
+        result = CreateConnectorOps(t, sock, connectorOps);
+        if (result != UBS_OK) {
+            delete acceptorOps;
+            return result;
+        }
+
         /* step5: assign tx and rx */
         sockBase->tx_ = DataTx(sock, txOps);
         sockBase->rx_ = DataRx(sock, rxOps);
+        sockBase->acceptor_ = new Acceptor(sock, acceptorOps);
+        sockBase->connector_ = new Connector(sock, connectorOps);
 
         /* assign out */
         outSocket = sock;
@@ -117,7 +133,7 @@ Result SocketBase::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOp
         return UBS_INVALID_PARAM;
     }
 }
-Result SocketBase::CreateAcceptor(SocketType value, const SocketPtr &sock, Acceptor *&acceptor)
+Result SocketBase::CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptorOps)
 {
     if (sock == nullptr) {
         return UBS_INVALID_PARAM;
@@ -139,7 +155,7 @@ Result SocketBase::CreateAcceptor(SocketType value, const SocketPtr &sock, Accep
     }
 }
 
-Result SocketBase::CreateConnector(SocketType value, const SocketPtr &sock, Connector *&connector)
+Result SocketBase::CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&connectorOps)
 {
     if (sock == nullptr) {
         return UBS_INVALID_PARAM;

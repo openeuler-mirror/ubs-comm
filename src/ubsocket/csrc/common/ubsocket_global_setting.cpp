@@ -22,6 +22,7 @@ bool GlobalSetting::UBS_INITED = false;                      /* not inited by de
 int16_t GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;  /* disabled by default */
 int16_t GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = 0; /* disabled by default */
 int16_t GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = 1;     /* enabled by default */
+bool GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED = false;
 bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
 bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
@@ -31,6 +32,7 @@ uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
 bool GlobalSetting::USE_BRPC_ZCOPY = true;
 std::string GlobalSetting::UBS_BRPC_ALLOC_SYM_STR;
 std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
+UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"

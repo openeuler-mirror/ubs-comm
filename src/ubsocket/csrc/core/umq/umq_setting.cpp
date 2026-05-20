@@ -30,6 +30,9 @@ uint16_t UmqSetting::UMQ_FC_MIN_CREDIT = 100L;
 uint16_t UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB = 200;
 uint16_t UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB = 2048;
 uint64_t UmqSetting::UMQ_BUF_POOL_DEPTH = 12000;
+umq_eid_t UmqSetting::UMQ_LOCAL_EID = {};
+int UmqSetting::UMQ_PROCESS_SOCKET_ID = -1;
+std::vector<uint32_t> UmqSetting::UMQ_ALL_SOCKET_IDS = {};
 
 void UmqSetting::AddRules() noexcept
 {

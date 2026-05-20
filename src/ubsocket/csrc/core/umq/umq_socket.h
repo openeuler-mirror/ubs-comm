@@ -20,7 +20,7 @@ namespace ubs {
 namespace umq {
 class UmqSocket : public SocketBase {
 public:
-    UmqSocket() = default;
+    UmqSocket(int fd) : SocketBase(fd) {}
     ~UmqSocket() override = default;
 
     Result Initialize() noexcept override;
@@ -44,6 +44,16 @@ public:
     void SetBindRemote(bool bound)
     {
         umq_is_bind_remote_ = bound;
+    }
+
+    bool IsBindind() const
+    {
+        return is_bonding_;
+    }
+
+    void SetIsBind(bool bound)
+    {
+        is_bonding_ = bound;
     }
 
     ub_trans_mode GetTransMode() const

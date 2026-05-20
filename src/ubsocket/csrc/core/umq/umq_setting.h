@@ -41,6 +41,9 @@ public:
     static uint64_t UMQ_BUF_POOL_DEPTH;
     static umq_buf_block_size_t IO_BLOCK_TYPE;
     static umq_trans_mode_t IO_TRANS_MODE;
+    static umq_eid_t UMQ_LOCAL_EID;
+    static int UMQ_PROCESS_SOCKET_ID;
+    static std::vector<uint32_t> UMQ_ALL_SOCKET_IDS;
 
 private:
     static void Init() noexcept;
