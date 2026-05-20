@@ -23,7 +23,6 @@ enum EpollEventType : uint64_t {
     EPOLL_EVENT_BUTT
 };
 
-// 对应之前的EpollEventData
 struct EpollEvent {
     EpollEventType event_type;
     int socket_fd = -1;
@@ -95,16 +94,33 @@ private:
     std::unordered_set<int> epoll_set_;
 };
 
-class EventPollOps {
+class EpollRunnerOps {
 public:
-    virtual ~EventPollOps() = default;
-    virtual int AddTxEvent(const SocketPtr &socket, int epoll_fd) = 0;
+    EpollRunnerOps() = default;
+    virtual ~EpollRunnerOps() = default;
+    
+    /**
+     * @brief add epoll_event to EpollRunner
+     * @param sock socket fd added
+     * @param epoll_fd epoll fd
+     * @param event event of socket fd
+     * @return int -1: failed; 0: success
+     */
+    virtual int AddEpollEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
 
+    /**
+     * @brief delete epoll_event from EpollRunner
+     * @param sock socket fd removed
+     * @param epoll_fd epoll fd
+     * @return int -1: failed; 0: success
+     */
+    virtual int RemoveEpollEvent(const SocketPtr &sock, int epoll_fd) = 0;
+   
     DEFINE_REF_OPERATION_FUNC
 protected:
     DECLARE_REF_COUNT_VARIABLE;
 };
-using EventPollOpsPtr = Ref<EventPollOps>;
+using EpollRunnerOpsPtr = Ref<EpollRunnerOps>;
 
 /*
  *    (a)           (b)                                  (d)              (e)
@@ -126,9 +142,23 @@ using EventPollOpsPtr = Ref<EventPollOps>;
  *        (c)                                                 (f)
  *
  */
-class EpollRunner {
+
+class EpollRunnerBase {
 public:
-    virtual ~EpollRunner()
+    virtual ~EpollRunnerBase() = default;
+    virtual int Start() = 0;
+    virtual void Stop() = 0;
+    virtual int AddEpollEvent(const SocketPtr &sock, struct epoll_event *event) = 0;
+    virtual int DelEpollEvent(const SocketPtr &sock) = 0;
+    virtual int ProcessOneEvent(const struct epoll_event &event) = 0;
+};
+
+template<SocketType T>
+class EpollRunner : public EpollRunnerBase {
+public:
+    static EpollRunner &GetInstance();
+
+    ~EpollRunner()
     {
         Stop();
     }
@@ -142,11 +172,11 @@ public:
     /**
      * @brief initialize resource and start a thread to epoll_wait
      */
-    int Start();
+    int Start() override;
     /**
      * @brief uninitialize resource and stop the thread
      */
-    void Stop();
+    void Stop() override;
 
     /**
      * @brief add epoll_event to EpollRunner
@@ -154,24 +184,23 @@ public:
      * @param event event of socket fd
      * @return int -1: failed; 0: success
      */
-    virtual int AddEpollEvent(
-        const Socket *const socket,
-        struct epoll_event *event) = 0; // TODO：这里删了些参数，处理方式见file_descriptor_async.cpp:171行注释
+    int AddEpollEvent(const SocketPtr &sock, struct epoll_event *event) override;
 
     /**
      * @brief delete epoll_event from EpollRunner
      * @param socket_fd socket fd removed
      * @return int -1: failed; 0: success
      */
-    virtual int RemoveEpollEvent(const Socket *const socket) = 0;
+    int DelEpollEvent(const SocketPtr &sock) override;
 
     /**
      * @brief process epoll_wait event
      * @param event event to process
      */
-    virtual void ProcessOneEvent(const struct epoll_event &event) = 0;
+    int ProcessOneEvent(const struct epoll_event &event) override;
 
 private:
+    EpollRunner() = default;
     /**
      * @brief start thread to epoll_wait
      */
@@ -182,13 +211,30 @@ private:
     int exit_efd_;                        /* used to notify thread exit */
     uint32_t event_ack_batch = 0;         /* do ack_interrupt when epoll num reaches event_ack_batch */
     u_mutex_t *mutex_;                    /* mutex */
-    EventPollOpsPtr epoll_ops_ = nullptr; /* epoll ops implemented by different prorocol */
+    std::once_flag flag_;
     std::thread wait_thread_;
+};
+
+class EpollRunnerFactory {
+public:
+    static EpollRunnerBase& GetInstance(SocketType type)
+    {
+        switch (type) {
+            case SocketType::SOCK_TYPE_UMQ:
+                return EpollRunner<SocketType::SOCK_TYPE_UMQ>::GetInstance();
+            default:
+                throw std::runtime_error("Not support type for epoll runner base");
+        }
+        throw std::runtime_error("Not support type for epoll runner base");
+    }
 };
 
 class EventPoll {
 public:
-    EventPoll(int epoll_fd) : epoll_fd_(epoll_fd) {}
+    EventPoll(int epoll_fd) : epoll_fd_(epoll_fd) {
+        mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
+        ctl_mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
+    }
 
     virtual ~EventPoll() = default;
 
@@ -199,7 +245,7 @@ public:
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    virtual int EpollCtl(int op, const Socket *const socket, struct epoll_event *event) = 0;
+    virtual int EpollCtl(int op, const SocketPtr &sock, struct epoll_event *event) = 0;
 
     /**
      * @brief corresponds to native epoll_wait interface
@@ -209,15 +255,17 @@ public:
      * @param timeout timeout of epoll_wait
      * @return 0: success; -1: failed
      */
-    virtual int EpollWait(const Socket *const socket, struct epoll_event *events, int maxevents, int timeout) = 0;
+    virtual int EpollWait(const SocketPtr &sock, struct epoll_event *events, int maxevents, int timeout) = 0;
     
     DEFINE_REF_OPERATION_FUNC;
     
 public:
     DECLARE_REF_COUNT_VARIABLE;
 
-private:
+protected:
     int epoll_fd_;
+    u_mutex_t *ctl_mutex_;
+    u_mutex_t *mutex_;
 };
 using EventPollPtr = Ref<EventPoll>;
 
@@ -228,14 +276,7 @@ public:
      */
     static void *operator new(std::size_t size) noexcept
     {
-#ifdef ENALBED
-        if (UNLIKELY(InitSocketReadableFd() < 0)) {
-            return nullptr;
-        }
-        ctl_mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
-        return ::aligned_alloc(alignof(EpollFdAsync), size);
-#endif
-        return nullptr;
+        return ::aligned_alloc(alignof(AsyncEventPoll), size);
     }
 
     static void operator delete(void *ptr)
@@ -252,7 +293,7 @@ public:
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtl(int op, const Socket *const socket, struct epoll_event *event);
+    int EpollCtl(int op, const SocketPtr &sock, struct epoll_event *event);
 
     /**
      * @brief corresponds to native epoll_wait interface
@@ -262,49 +303,97 @@ public:
      * @param timeout timeout of epoll_wait
      * @return 0: success; -1: failed
      */
-    int EpollWait(const Socket *const socket, struct epoll_event *events, int maxevents, int timeout);
+    int EpollWait(const SocketPtr &sock, struct epoll_event *events, int maxevents, int timeout);
 
 private:
-    /**
-     * @brief socket readable fd init 
-     */
-    int InitSocketReadableFd();
-
     /**
      * @brief handle epoll_ctl with EPOLL_CTL_ADD operation
      * @param fd socket fd added to epoll_fd
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtlAdd(const Socket *const socket, struct epoll_event *event);
+    int EpollCtlAdd(const SocketPtr &sock, struct epoll_event *event);
     /**
      * @brief handle epoll_ctl with EPOLL_CTL_MOD operation
      * @param fd socket fd added to epoll_fd
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtlMod(const Socket *const socket, struct epoll_event *event);
+    int EpollCtlMod(const SocketPtr &sock, struct epoll_event *event);
     /**
      * @brief handle epoll_ctl with EPOLL_CTL_DEL operation
      * @param fd socket fd added to epoll_fd
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtlDel(const Socket *const socket, struct epoll_event *event);
+    int EpollCtlDel(const SocketPtr &sock, struct epoll_event *event);
 
     /**
-     * @brief add pure socket_fd and event to epoll_fd
+     * @brief add raw socket_fd and event to epoll_fd
      */
-    int AddRawSocketEvent(const Socket *const socket, struct epoll_event *event);
+    int AddRawSocketEvent(const SocketPtr &sock, struct epoll_event *event);
 
     /**
-     * @brief delete pure socket_fd and event to epoll_fd
+     * @brief delete raw socket_fd and event to epoll_fd
      */
-    int DelRawSocketEvent(const Socket *const socket);
+    int DelRawSocketEvent(const SocketPtr &sock);
+
+    /**
+     * @brief add socket_readable_fd to epoll_fd
+     */
+    int AddSockReadableEvent();
+
+    /**
+     * @brief add proto tx fd to epoll_fd
+     */
+    int AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *event);
+
+    /**
+     * @brief del proto tx fd from epoll_fd
+     */
+    int DelProtoTxEvent(const SocketPtr &sock);
+
+    /**
+     * @brief check if socket event data exist
+     */
+    ALWAYS_INLINE bool IsSocketEventDataExist(int fd) noexcept
+    {
+        Locker sLock(mutex_);
+        return socket_data_.find(fd) != socket_data_.end();
+    }
+
+    ALWAYS_INLINE bool InsertSocketEventData(int fd, EpollEvent *data) noexcept
+    {
+        Locker sLock(mutex_);
+        auto pos = socket_data_.find(fd);
+        if (UNLIKELY(pos != socket_data_.end())) {
+            return false;
+        }
+        socket_data_.emplace(fd, data);
+        return true;
+    }
+
+    ALWAYS_INLINE bool RemoveSocketEventData(int fd) noexcept
+    {
+        Locker sLock(mutex_);
+        auto pos = socket_data_.find(fd);
+        if (UNLIKELY(pos == socket_data_.end())) {
+            return false;
+        }
+        auto removed = pos->second;
+        socket_data_.erase(pos);
+        if (removed != nullptr) {
+            removed->next = removed_head_;
+            removed_head_ = removed;
+        }
+        return true;
+    }
 
 private:
-    // u_external_mutex_t* mutex_;
-    u_mutex_t *ctl_mutex_;
+    int sock_readable_fd_ = -1;
+    EpollEvent sock_readable_event_ = { EPOLL_EVENT_UB_SOCKET_IN, -1, epoll_event{} };
+    std::unordered_map<int, EpollEvent *> socket_data_;
+    EpollEvent *removed_head_ = nullptr; // 待删除的event data列表，用wait唤醒时统一释放
 };
 using AsyncEventPollPtr = Ref<AsyncEventPoll>;
 

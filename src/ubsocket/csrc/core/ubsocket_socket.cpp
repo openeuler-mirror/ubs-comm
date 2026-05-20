@@ -21,7 +21,7 @@ namespace ock {
 namespace ubs {
 Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
 {
-    if (t == SOCK_TYPE_UMQ) {
+    if (t == SocketType::SOCK_TYPE_UMQ) {
         /* step1: create umq socket */
         using namespace umq;
         auto umqSock = MakeRef<UmqSocket>(fd);
@@ -73,6 +73,15 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
         sockBase->acceptor_ = new Acceptor(sock, acceptorOps);
         sockBase->connector_ = new Connector(sock, connectorOps);
 
+        /* step6: start epoll runner */
+        result = EpollRunnerFactory::GetInstance(SocketType::SOCK_TYPE_UMQ).Start();
+        if (result != UBS_OK) {
+            delete txOps;
+            delete rxOps;
+            return result;
+        }
+        // TODO：资源回收时进行销毁
+
         /* assign out */
         outSocket = sock;
 
@@ -88,7 +97,7 @@ Result SocketBase::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOp
         return UBS_INVALID_PARAM;
     }
 
-    if (value == SOCK_TYPE_UMQ) {
+    if (value == SocketType::SOCK_TYPE_UMQ) {
         using namespace umq;
         /* convert to umq socket */
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
@@ -114,7 +123,7 @@ Result SocketBase::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOp
         return UBS_INVALID_PARAM;
     }
 
-    if (value == SOCK_TYPE_UMQ) {
+    if (value == SocketType::SOCK_TYPE_UMQ) {
         using namespace umq;
         /* convert to umq socket */
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
@@ -139,7 +148,7 @@ Result SocketBase::CreateAcceptorOps(SocketType value, const SocketPtr &sock, Ac
         return UBS_INVALID_PARAM;
     }
 
-    if (value == SOCK_TYPE_UMQ) {
+    if (value == SocketType::SOCK_TYPE_UMQ) {
         using namespace umq;
         /* convert to umq socket */
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
@@ -161,7 +170,7 @@ Result SocketBase::CreateConnectorOps(SocketType value, const SocketPtr &sock, C
         return UBS_INVALID_PARAM;
     }
 
-    if (value == SOCK_TYPE_UMQ) {
+    if (value == SocketType::SOCK_TYPE_UMQ) {
         using namespace umq;
         /* convert to umq socket */
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
@@ -176,5 +185,6 @@ Result SocketBase::CreateConnectorOps(SocketType value, const SocketPtr &sock, C
         return UBS_INVALID_PARAM;
     }
 }
+
 } // namespace ubs
 } // namespace ock
