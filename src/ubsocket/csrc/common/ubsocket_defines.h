@@ -98,6 +98,8 @@ enum class UBHandshakeMode : uint32_t {
 
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
+#define IO_SIZE_MB (1024ULL * 1024ULL)
+
 constexpr uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445054;
 constexpr uint32_t NEGOTIATE_SOCKET_ID_MAX_NUM = 256;
 constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 512;
