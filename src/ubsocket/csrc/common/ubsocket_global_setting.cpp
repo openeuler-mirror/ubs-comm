@@ -44,27 +44,27 @@ std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
 void GlobalSetting::AddRules() noexcept
 {
     /* int64 rule: name, required, min, max */
-    Int64Rule RULES_INT64[] = {{ENV_ASYNC_ACCEPTOR, false, 0, 8L},
+    Int64Rule rules_int64[] = {{ENV_ASYNC_ACCEPTOR, false, 0, 8L},
                                {ENV_ASYNC_CONNECTOR, false, 0, 8L},
                                {ENV_ASYNC_EPOLL, false, 1, 1L},
                                {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240}};
 
     /* str enum rules: name, required, enum */
-    StrEnumRule RULES_STR_ENUM[] = {{ENV_TRACE_ENABLED, false, "true|false"},
+    StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, false, "true|false"},
                                     {ENV_AUTO_FALLBACK_TCP, false, "true|false"}};
 
     /* str not empty rules: name, required */
-    StrNotEmptyRule RULES_STR_NOT_EMPTY[] = {};
+    StrNotEmptyRule rules_str_not_empty[] = {};
 
-    for (auto &item : RULES_INT64) {
+    for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
     }
 
-    for (auto &item : RULES_STR_ENUM) {
+    for (auto &item : rules_str_enum) {
         Validator::Instance().AddStrEnumRule(item);
     }
 
-    for (auto &item : RULES_STR_NOT_EMPTY) {
+    for (auto &item : rules_str_not_empty) {
         Validator::Instance().AddStrNotEmtpyRule(item);
     }
 

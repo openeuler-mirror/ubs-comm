@@ -14,7 +14,7 @@ namespace ock {
 namespace ubs {
 bool SocketConnHelper::IsBlocking(int fd)
 {
-    return 0;
+    return false;
 }
 
 int SocketConnHelper::SetNonBlocking(int fd)
@@ -37,10 +37,7 @@ ssize_t SocketConnHelper::RecvSocketData(int fd, const void *buf, size_t size, u
     return 0;
 }
 
-void SocketConnHelper::FlushSocketMsg(int fd)
-{
-    return 0;
-}
+void SocketConnHelper::FlushSocketMsg(int fd) {}
 
 bool SocketConnHelper::IsTfoConnection(const int &fd)
 {
@@ -54,7 +51,7 @@ int SocketConnHelper::SetTcpNoDelay(int fd)
 
 std::string SocketConnHelper::ExtractIpFromSockAddr(const struct sockaddr *address)
 {
-    return 0;
+    return "";
 }
 } // namespace ubs
 } // namespace ock

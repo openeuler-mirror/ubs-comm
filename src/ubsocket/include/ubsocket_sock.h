@@ -25,6 +25,7 @@ int UB_API_WRAP(shutdown)(int fd, int how);
 int UB_API_WRAP(close)(int fd);
 int UB_API_WRAP(accept)(int socket, struct sockaddr *address, socklen_t *address_len);
 int UB_API_WRAP(accept4)(int socket, struct sockaddr *address, socklen_t *address_len, int flag);
+int UB_API_WRAP(bind)(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int UB_API_WRAP(listen)(int fd, int backlog);
 int UB_API_WRAP(connect)(int socket, const struct sockaddr *address, socklen_t address_len);
 ssize_t UB_API_WRAP(readv)(int fildes, const struct iovec *iov, int iovcnt);

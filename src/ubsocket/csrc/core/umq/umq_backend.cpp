@@ -20,11 +20,11 @@ bool UmqBackend::UMQ_INITED = false;
 
 Result UmqBackend::Init() noexcept
 {
-    UBS_VLOG_DEBUG("enter");
+    //UBS_VLOG_DEBUG("enter");
 
     std::lock_guard<std::mutex> guard(UMQ_MUTEX);
     if (UMQ_INITED) {
-        UBS_VLOG_DEBUG("umq already initialized");
+        //UBS_VLOG_DEBUG("umq already initialized");
         return UBS_OK;
     }
 
@@ -61,7 +61,7 @@ Result UmqBackend::Init() noexcept
 
     UMQ_INITED = true;
 
-    UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
+    //UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
     return UBS_OK;
 }
 

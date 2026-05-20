@@ -189,7 +189,7 @@ int PPServer::Run()
     inet_pton(AF_INET, cmd_.ip_.c_str(), &address.sin_addr);
 
     /* step2: bind and listen */
-    bind(fd_, (struct sockaddr *)&address, sizeof(address));
+    ubsocket_bind(fd_, (struct sockaddr *)&address, sizeof(address));
     auto result = ubsocket_listen(fd_, 3);
     if (result < 0) {
         std::cout << "Listen at '" << cmd_.ip_ << ":" << cmd_.port_ << "' failed, errnor " << errno;

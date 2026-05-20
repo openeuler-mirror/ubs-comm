@@ -34,7 +34,6 @@ if (${CMAKE_BUILD_TYPE} MATCHES "RELEASE")
     add_compile_options(-Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now -fPIE -fPIC -ftrapv -s)
     add_compile_options(-D_FORTIFY_SOURCE=2 -O2)
     add_link_options(-Wl,-z,noexecstack,-z,relro,-z,now)
-    add_link_options(-s)
     set(CMAKE_SKIP_BUILD_RPATH ON)
     message(STATUS "ubsocket: added compile options for RELEASE")
 elseif (${CMAKE_BUILD_TYPE} MATCHES "ASAN")
@@ -50,6 +49,10 @@ message(STATUS "ubsocket: CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
 
 if (BUILD_URMA_BACKEND)
     add_definitions(-DURMA_BACKEND_ENABLED)
+endif ()
+
+if (BUILD_UMQ_BACKEND)
+    add_definitions(-DUMQ_BACKEND_ENABLED)
 endif ()
 
 include_directories(
