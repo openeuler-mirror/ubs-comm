@@ -44,6 +44,8 @@ public:
 
     int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
     int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
+    int WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    int ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
 protected:
     DataTx tx_;                      /* take charge of send */
@@ -76,6 +78,18 @@ ALWAYS_INLINE int SocketBase::Connect(const SocketPtr &sock, const struct sockad
 
     return connector_->Connect(sock, address, address_len);
 }
+
+ALWAYS_INLINE int SocketBase::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+{
+    return tx_.WriteV(sock, iov, iovcnt);
+}
+
+ALWAYS_INLINE int SocketBase::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+{
+    return rx_.ReadV(sock, iov, iovcnt);
+}
+
+
 } // namespace ubs
 } // namespace ock
 

@@ -106,31 +106,26 @@ int UmqRxOps::GetQbuf(umq_buf_t **buf, int max_num)
 
 int UmqRxOps::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
 {
-    // TODO jfr process needed
-    /*if (rxQueue == nullptr) {
+    if (rxQueue_ == nullptr) {
         UBS_VLOG_ERR("GetAndPopQbuf failed, rx queue is null, fd: %d, ret: %d\n",
                      fd_, -1);
         return -1;
     }
     uint32_t i = 0;
-    while (!rxQueue->IsEmpty() && i < max_buf_size) {
-        if (rxQueue->Dequeue(&buf[i]) != 0) {
+    while (!rxQueue_->IsEmpty() && i < max_buf_size) {
+        if (rxQueue_->Dequeue(&buf[i]) != 0) {
             return i + 1;
         }
         i++;
     }
-    return i;*/
-    return 0;
+    return i;
 }
 
 int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
 {
-    // TODO PollingEpoll is requested
-    // int poll_num = GlobalSetting::UBS_ENABLE_USE_POLLING ? PollingEpoll::GetInstance().GetAndPopQbuf(local_umqh_, buf) :
-    //                             umq_poll(local_umqh_, UMQ_IO_RX, buf, max_buf_size);
     int poll_num = UmqApi::umq_poll(local_umqh_, UMQ_IO_RX, buf, max_buf_size);
     if (poll_num < 0 || (poll_num == 0 && rx_queue_avail_num_ == 0)) {
-        if (!GlobalSetting::UBS_ENABLE_USE_POLLING && poll_num < 0) {
+        if (poll_num < 0) {
             UBS_VLOG_ERR("umq_poll() failed, local umq: %llu, ret: %d\n",
                          static_cast<unsigned long long>(local_umqh_), poll_num);
         }

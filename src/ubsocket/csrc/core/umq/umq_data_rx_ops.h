@@ -16,6 +16,7 @@
 #include <cstdlib>
 
 #include "core/ubsocket_data_rx.h"
+#include "core/ubsocket_qbuf_queue.h"
 #include "umq_backend.h"
 #include "umq_setting.h"
 
@@ -49,6 +50,7 @@ private:
 private:
     // umq 相关的句柄
     uint64_t local_umqh_ = UMQ_INVALID_HANDLE;
+    QbufQueue<umq_buf_t*> *rxQueue_ = nullptr;
 };
 } // namespace umq
 } // namespace ubs
