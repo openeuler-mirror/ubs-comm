@@ -18,6 +18,7 @@
 #include "ubsocket_core_types.h"
 #include "ubsocket_data_rx.h"
 #include "ubsocket_data_tx.h"
+#include "ubsocket_event_epoll.h"
 #include "ubsocket_socket_acceptor.h"
 #include "ubsocket_socket_connector.h"
 #include "under_api/dl_libc_api.h"

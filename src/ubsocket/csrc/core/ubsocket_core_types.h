@@ -25,7 +25,7 @@ enum SocketState : uint8_t {
     SOCK_STATE_COUNT
 };
 
-enum SocketType : uint8_t {
+enum class SocketType : uint8_t {
     SOCK_TYPE_TCP = 0, /* only contains raw socket */
     SOCK_TYPE_UMQ,     /* an ubsocket based on umq */
                        /* add type before COUNT */
@@ -41,12 +41,15 @@ enum SocketCreateType : uint8_t {
     SOCK_CREATE_TYPE_COUNT
 };
 
+class Socket;
+using SocketPtr = Ref<Socket>;
+
 class Socket {
 public:
     Socket(int fd) : raw_socket_(fd) {}
     virtual ~Socket() = default;
 
-    SocketState State() const noexcept
+    ALWAYS_INLINE SocketState State() const noexcept
     {
         return state_;
     }
@@ -61,6 +64,14 @@ public:
         return type_;
     }
 
+public:
+    virtual int GetTxFd() = 0;
+    virtual bool IsBindRemote() = 0;
+    virtual Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
+    virtual Result DelTxEvent(const SocketPtr &sock, int epoll_fd) = 0;
+    virtual Result AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
+    virtual Result DelRxEventToRunner(const SocketPtr &sock, int epoll_fd) = 0;
+
     DEFINE_REF_OPERATION_FUNC
 
 public:
@@ -68,10 +79,9 @@ public:
     int raw_socket_ = -1;                                     /* fd of raw socket */
     int event_fd_ = -1;                                       /* event fd */
     SocketState state_ = SOCK_STAT_INIT;                      /* state of ubsocket */
-    SocketType type_ = SOCK_TYPE_TCP;                         /* type of ubsocket */
+    SocketType type_ = SocketType::SOCK_TYPE_TCP;                         /* type of ubsocket */
     SocketCreateType create_type_ = SOCK_CREATE_TYPE_UNKNOWN; /* created because of what */
 };
-using SocketPtr = Ref<Socket>;
 
 struct ConnInfo {
     std::string peer_ip; // 对端IP地址

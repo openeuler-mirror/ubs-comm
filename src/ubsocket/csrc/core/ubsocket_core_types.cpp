@@ -24,12 +24,12 @@ const std::string &SocketStateToStr(SocketState value)
 }
 const std::string &SocketTypeToStr(SocketType value)
 {
-    static std::string strings[SOCK_TYPE_COUNT + 1L] = {"TCP", "UMQ", "unknown"};
+    static std::string strings[static_cast<uint8_t>(SocketType::SOCK_TYPE_COUNT) + 1L] = {"TCP", "UMQ", "unknown"};
     if (SocketTypeValid(value)) {
-        return strings[value];
+        return strings[static_cast<uint8_t>(value)];
     }
 
-    return strings[value];
+    return strings[static_cast<uint8_t>(value)];
 }
 
 const std::string &SocketCreateTypeToStr(SocketCreateType value)
@@ -49,7 +49,7 @@ bool SocketStateValid(SocketState value)
 
 bool SocketTypeValid(SocketType value)
 {
-    return (value < SOCK_TYPE_COUNT);
+    return (value < SocketType::SOCK_TYPE_COUNT);
 }
 
 bool SocketCreateTypeValid(SocketCreateType value)
