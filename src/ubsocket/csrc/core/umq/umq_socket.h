@@ -21,7 +21,11 @@ namespace ubs {
 namespace umq {
 class UmqSocket : public SocketBase {
 public:
-    UmqSocket(int fd) : SocketBase(fd) {}
+    UmqSocket(int fd) : SocketBase(fd)
+    {
+        type_ = SocketType::SOCK_TYPE_UMQ;
+    }
+
     ~UmqSocket() override = default;
 
     Result Initialize() noexcept override;
