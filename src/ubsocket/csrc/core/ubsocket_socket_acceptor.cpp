@@ -10,6 +10,7 @@
  */
 
 #include "ubsocket_socket_acceptor.h"
+#include "ubsocket_core_types.h"
 #include "ubsocket_socket_set.h"
 
 namespace ock {
@@ -69,12 +70,11 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         * b. fd为阻塞，则等待直到有连接完成或者触发异常，比如被信号中断，返回-1，errno为EINTR，保持原错误码直接返回上层
         */
         if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) { // nonblocking
-            UBS_VLOG_ERR("accept() failed, Peer IP:%s, fd: %d, ret: %d, errno: %d, errmsg: %s\n",
-                         GetPeerIp().c_str(), sock->raw_socket_, fd, errno, Func::Error2Str(errno));
+            UBS_VLOG_ERR("accept() failed, Peer IP:%s, fd: %d, ret: %d, errno: %d, errmsg: %s\n", GetPeerIp().c_str(),
+                         sock->raw_socket_, fd, errno, Func::Error2Str(errno));
             return fd;
         }
-        UBS_VLOG_DEBUG("tcp accept need try again, fd: %d, %d, %s\n",
-                       sock->raw_socket_, errno, Func::Error2Str(errno));
+        UBS_VLOG_DEBUG("tcp accept need try again, fd: %d, %d, %s\n", sock->raw_socket_, errno, Func::Error2Str(errno));
         return fd;
     }
 
@@ -125,8 +125,7 @@ void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
     ssize_t protocol_negotiation_recv_size = 0;
     int ret = acceptor_ops_->ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
     if (ret > 0 && !GlobalSetting::UBS_AUTO_FALLBACK_TCP) {
-        UBS_VLOG_ERR("Failed to accept as protocol dismatch,Peer IP:%s\n",
-                     GetPeerIp().c_str());
+        UBS_VLOG_ERR("Failed to accept as protocol dismatch,Peer IP:%s\n", GetPeerIp().c_str());
         LibcApi::close(fd);
         return;
     }
@@ -139,8 +138,7 @@ void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
             if (err) {
                 // 降级至 TCP，客户端可正确工作，不应清理数据.
             } else {
-                UBS_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP\n",
-                              peerIp.data(), fd);
+                UBS_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP\n", peerIp.data(), fd);
                 // Clear messages that already exist on the TCP link to prevent
                 // dirty messages from affecting user data transmission
                 SocketConnHelper::FlushSocketMsg(fd);
@@ -159,14 +157,13 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     Result ret = UBS_OK;
     int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (event_fd < 0) {
-        UBS_VLOG_ERR("eventfd() failed, ret: %d, errno: %d, errmsg: %s\n",
-                     event_fd, errno, Func::Error2Str(errno));
+        UBS_VLOG_ERR("eventfd() failed, ret: %d, errno: %d, errmsg: %s\n", event_fd, errno, Func::Error2Str(errno));
         return UBS_NEW_SOCKET_FD;
     }
 
     // TODO；使用 Socket 工厂方法统一创建, create 增加三种create fd透传
     SocketPtr new_socket_obj;
-    ret = SocketBase::Create(new_fd, SOCK_TYPE_UMQ, new_socket_obj);
+    ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_UMQ, new_socket_obj);
     if (ret != UBS_OK) {
         return ret;
     }
@@ -197,7 +194,7 @@ int Acceptor::Listen(int backlog)
     return 0;
 }
 
-Acceptor::Acceptor(const SocketPtr &sock, AcceptorOps * acceptorOps) {}
+Acceptor::Acceptor(const SocketPtr &sock, AcceptorOps *acceptorOps) {}
 
 Acceptor::~Acceptor() {}
 } // namespace ubs

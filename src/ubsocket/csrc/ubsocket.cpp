@@ -13,13 +13,12 @@
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_version.h"
+#include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_backend.h"
+#include "core/umq/umq_setting.h"
 #include "include/ubsocket.h"
 #include "ubsocket_struct_helper.h"
-#include "ubsocket_version.h"
-#include "umq_setting.h"
-#include "ubsocket_event_epoll.h"
 #include "under_api/dl_api.h"
 
 using namespace ock::ubs;
