@@ -20,7 +20,7 @@ DataRx::DataRx(const SocketPtr &sock, DataRxOps *ops) : fd_(sock->raw_socket_), 
     /* caller must make sure ops is not null */
 }
 
-ALWAYS_INLINE ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::readv(fd_, iov, iovcnt);

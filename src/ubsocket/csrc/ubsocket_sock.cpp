@@ -107,8 +107,13 @@ UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::readv(fd, iov, iovcnt);
     }
+    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (sockBase == nullptr) {
+        return LibcApi::readv(fd, iov, iovcnt);
+    }
 
-    return 0;
+    return sockBase->ReadV(sock, iov, iovcnt);
 }
 
 UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
@@ -116,8 +121,13 @@ UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::writev(fd, iov, iovcnt);
     }
+    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (sockBase == nullptr) {
+        return LibcApi::writev(fd, iov, iovcnt);
+    }
 
-    return 0;
+    return sockBase->WriteV(sock, iov, iovcnt);
 }
 
 UBS_API ssize_t UB_API_WRAP(send)(int fd, const void *buf, size_t len, int flags)

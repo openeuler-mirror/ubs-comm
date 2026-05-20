@@ -25,7 +25,6 @@ int16_t GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = 1;     /* enabled by defau
 bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
 bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
-bool GlobalSetting::UBS_ENABLE_USE_POLLING = false;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;

@@ -56,7 +56,7 @@ int UmqTxOps::PostSend(uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
         for (cur_buf = cur_wr_first; cur_buf && (next_buf = cur_buf->qbuf_next, 1); cur_buf = next_buf) {
             last = cvt->MemCopy(wr_left_len, reinterpret_cast<uintptr_t>(cur_buf));
             cur_buf->io_direction = UMQ_IO_TX;
-            /* rpc adapter has replace brpc butil::iobuf::blockmem_allocate() & butil::iof::blockmem_deallocate()
+            /* rpc adapter has replace brpc iobuf::blockmem_allocate() & iobuf::blockmem_deallocate()
              * and ensures that the starting address of the Block is aligned to an 8k boundary. */
             ((Block *)PtrFloorToBoundary(cur_buf->buf_data))->IncRef();
             wr_left_len -= cur_buf->data_size;
