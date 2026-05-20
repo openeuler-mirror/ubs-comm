@@ -73,6 +73,29 @@ enum ops_error_code {
     FATAL_ERROR
 };
 
+enum class UBHandshakeMode : uint32_t {
+    TFO,
+    UB_SOCK_OPT
+};
+
+#ifndef TCP_UB_SOCKET_HANDSHAKE
+#define TCP_UB_SOCKET_HANDSHAKE 144
+#endif
+
+#ifndef EID_FMT
+#define EID_FMT "%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x"
+#endif
+
+#ifndef EID_RAW_ARGS
+#define EID_RAW_ARGS(eid) eid[0], eid[1], eid[2], eid[3], eid[4], eid[5], eid[6], eid[7], eid[8], eid[9], \
+        eid[10], eid[11], eid[12], eid[13], eid[14], eid[15]
+#endif
+
+#ifndef EID_ARGS
+#define EID_ARGS(eid) EID_RAW_ARGS((eid).raw)
+#endif
+
+
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
 constexpr uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445054;
@@ -89,6 +112,9 @@ constexpr uint32_t TX_SGE_MAX = 1;
 /* unsolicited bytes use the same setting as brpc
  * accumulated bytes exceed UNSOLICITED_BYTES_MAX will generate a solicited interrupt event at remote */
 constexpr uint32_t TX_UNSOLICITED_BYTES_MAX = 1048576;
+constexpr uint32_t NEGOTIATE_TIMEOUT_MS = 10;
+constexpr uint32_t FLUSH_SOCKET_MSG_BUFFER_LEN = 1024;
+constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 20000;
 
 constexpr uint64_t SIZE_8K = 8192;
 constexpr uint64_t SIZE_16K = 16384;

@@ -28,14 +28,13 @@ public:
     Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
                           const SocketPtr &sock) override;
 
-    Result Negotiate(int new_fd, const SocketPtr &sock) override;
+    Result Negotiate(SocketPtr socketPtr) override;
 
-    Result CreateSocketResources(int new_fd, SocketPtr &sock) override;
+    Result CreateSocketResources(SocketPtr socketPtr) override;
 
     void DestroySocketResources() override;
 
     // ======================== 建链辅助方法 ========================
-    void SetConnInfo(std::string peer_ip, int peer_fd, int type_fd) override;
     int ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size) override;
 
     // ======================== 成员变量 ===========================
@@ -56,7 +55,20 @@ public:
     umq_route_t umq_back_route; // 备路由
 
 private:
-    Result DoUbAccept(int new_fd, umq_eid_t &connEid, const SocketPtr &sock, umq_used_ports_t &mUsedPorts);
+    Result AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, umq_eid_t &dstEid,
+                           dev_schedule_policy &peerSchedulePolicy);
+
+    Result DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &mUsedPorts);
+
+    int AcceptExchangeSocketIDs(int fd);
+
+    int CheckDevAdd(const umq_eid_t &connEid);
+private:
+    umq_topo_type_t topo_type;
+    umq_eid_t conn_eid;
+    umq_eid_t peer_eid;
+    umq_route_t conn_route;
+    umq_route_t back_route;
 };
 using UmqAcceptorOpsPtr = Ref<UmqAcceptorOps>;
 } // namespace umq

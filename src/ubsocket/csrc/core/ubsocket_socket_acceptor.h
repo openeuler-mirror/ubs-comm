@@ -30,12 +30,11 @@ public:
                                   const SocketPtr &sock) = 0;
 
     // 阶段1：协商信息
-    virtual Result Negotiate(int new_fd, const SocketPtr &sock) = 0;
+    virtual Result Negotiate(SocketPtr socketPtr) = 0;
     // 阶段2：创建资源（例如：umq create + bind + prefill rx）
-    virtual Result CreateSocketResources(int new_fd, SocketPtr &sock) = 0;
+    virtual Result CreateSocketResources(SocketPtr socketPtr) = 0;
     // 阶段3：销毁资源（握手失败/重试时清理已创建的资源）
     virtual void DestroySocketResources() = 0;
-    virtual void SetConnInfo(std::string peer_ip, int peer_fd, int type_fd) = 0;
 
     // ======================== 仅 accept ===========================
     virtual int ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size) = 0;
@@ -44,13 +43,20 @@ public:
 
 protected:
     DECLARE_REF_COUNT_VARIABLE;
+
+protected:
+    RawConnInfoV4 conn_info;
+    int fd;
+    int event_fd;
+
+    friend class Acceptor;
 };
 using AcceptorOpsPtr = Ref<AcceptorOps>;
 
 // accept 建链通用实现层：TCP 建链，协商，建链
 class Acceptor {
 public:
-    Acceptor();
+    Acceptor(const SocketPtr &sock, AcceptorOps *acceptorOps);
     ~Acceptor();
 
     int Listen(int backlog);
@@ -88,14 +94,8 @@ private:
         return true;
     }
 
-    ALWAYS_INLINE int GetEventFd(void)
-    {
-        return event_fd_;
-    }
-
     // ======================== 成员变量 ========================
     int raw_fd_;   // 传入 sock 的原生 socket fd
-    int event_fd_; // eventfd（通知上层可读）
     Ref<AcceptorOps> acceptor_ops_ = nullptr;
 };
 

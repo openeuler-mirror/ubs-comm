@@ -29,14 +29,14 @@ using SocketBasePtr = Ref<SocketBase>;
 
 class SocketBase : public Socket {
 public:
-    static Result Create(SocketType t, SocketPtr &sock);
+    static Result Create(int fd, SocketType t, SocketPtr &sock);
     static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);
     static Result CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops);
-    static Result CreateAcceptor(SocketType value, const SocketPtr &sock, Acceptor *&acceptor);
-    static Result CreateConnector(SocketType value, const SocketPtr &sock, Connector *&connector);
+    static Result CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptor);
+    static Result CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&connector);
 
 public:
-    SocketBase() = default;
+    SocketBase(int fd) : Socket(fd) {}
     ~SocketBase() override = default;
 
     virtual Result Initialize() noexcept = 0;

@@ -28,6 +28,13 @@ public:
     static bool IsTfoConnection(const int &fd);
     static int SetTcpNoDelay(int fd);
     static std::string ExtractIpFromSockAddr(const struct sockaddr *address);
+    template <typename TimePoint>
+    static ALWAYS_INLINE bool IsTimeout(TimePoint &start, uint32_t timeout_ms)
+    {
+        TimePoint end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+        return duration.count() > timeout_ms;
+    }
 };
 } // namespace ubs
 } // namespace ock

@@ -43,6 +43,7 @@ enum SocketCreateType : uint8_t {
 
 class Socket {
 public:
+    Socket(int fd) : raw_socket_(fd) {}
     virtual ~Socket() = default;
 
     SocketState State() const noexcept
@@ -81,7 +82,7 @@ struct ConnInfo {
 
 struct RawConnInfoV4 {
     // TODO: 考虑内存分配, 优化变量类型
-    int32_t peer_ip;  // 对端IP地址
+    std::string peer_ip;  // 对端IP地址
     int peer_fd = -1; // 对端socket fd
     int type_fd = 0;  // 0 server; 1 client
     std::chrono::system_clock::time_point create_time;
