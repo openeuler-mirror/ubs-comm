@@ -159,16 +159,16 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
         }                                                                                 \
     } while (0)
 
-#define UBS_VLOG_ERR(__format, ...) UBS_LOG(LEVEL_ERR, __format, ##__VA_ARGS__)
-#define UBS_VLOG_WARN(__format, ...) UBS_LOG(LEVEL_WARN, __format, ##__VA_ARGS__)
-#define UBS_VLOG_NOTICE(__format, ...) UBS_LOG(c, __format, ##__VA_ARGS__)
-#define UBS_VLOG_INFO(__format, ...) UBS_LOG(LEVEL_INFO, __format, ##__VA_ARGS__)
-#define UBS_VLOG_DEBUG(__format, ...) UBS_LOG(LEVEL_DEBUG, __format, ##__VA_ARGS__)
+#define UBS_VLOG_ERR(__format, ...) UBS_LOG(ock::ubs::LEVEL_ERR, __format, ##__VA_ARGS__)
+#define UBS_VLOG_WARN(__format, ...) UBS_LOG(ock::ubs::LEVEL_WARN, __format, ##__VA_ARGS__)
+#define UBS_VLOG_NOTICE(__format, ...) UBS_LOG(ock::ubs::LEVEL_NOTICE, __format, ##__VA_ARGS__)
+#define UBS_VLOG_INFO(__format, ...) UBS_LOG(ock::ubs::LEVEL_INFO, __format, ##__VA_ARGS__)
+#define UBS_VLOG_DEBUG(__format, ...) UBS_LOG(ock::ubs::LEVEL_DEBUG, __format, ##__VA_ARGS__)
 
-#define UBS_SLOG_ERR(ARGS) UBS_LOG_STREAM(LEVEL_ERR, ARGS)
-#define UBS_SLOG_WARN(ARGS) UBS_LOG_STREAM(LEVEL_WARN, ARGS)
-#define UBS_SLOG_NOTICE(ARGS) UBS_LOG_STREAM(LEVEL_INFO, ARGS)
-#define UBS_SLOG_INFO(ARGS) UBS_LOG_STREAM(LEVEL_INFO, ARGS)
-#define UBS_SLOG_DEBUG(ARGS) UBS_LOG_STREAM(LEVEL_DEBUG, ARGS)
+#define UBS_SLOG_ERR(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_ERR, ARGS)
+#define UBS_SLOG_WARN(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_WARN, ARGS)
+#define UBS_SLOG_NOTICE(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_NOTICE, ARGS)
+#define UBS_SLOG_INFO(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_INFO, ARGS)
+#define UBS_SLOG_DEBUG(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_DEBUG, ARGS)
 
 #endif // UBS_COMM_UBSOCKET_LOGGER_H
