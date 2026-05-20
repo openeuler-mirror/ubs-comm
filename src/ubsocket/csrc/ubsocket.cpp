@@ -17,6 +17,9 @@
 #include "core/umq/umq_backend.h"
 #include "include/ubsocket.h"
 #include "ubsocket_struct_helper.h"
+#include "ubsocket_version.h"
+#include "umq_setting.h"
+#include "ubsocket_event_epoll.h"
 #include "under_api/dl_api.h"
 
 using namespace ock::ubs;

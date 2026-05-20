@@ -21,7 +21,9 @@ namespace ubs {
 namespace umq {
 class UmqSocket : public SocketBase {
 public:
-    UmqSocket(int fd) : SocketBase(fd) {}
+    UmqSocket(int fd) : SocketBase(fd) {
+        mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
+    }
     ~UmqSocket() override = default;
 
     Result Initialize() noexcept override;
@@ -46,7 +48,7 @@ public:
         umq_handle_ = handle;
     }
 
-    bool IsBindRemote() const
+    bool IsBindRemote() override
     {
         return umq_is_bind_remote_;
     }
@@ -88,6 +90,16 @@ public:
 
     // 封装 umq 相关操作: umq_create, umq_bind
     Result CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts);
+    
+    Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) override;
+    Result DelTxEvent(const SocketPtr &sock, int epoll_fd) override;
+    Result AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) override;
+    Result DelRxEventToRunner(const SocketPtr &sock, int epoll_fd) override;
+
+    int GetTxFd() override;
+
+    UmqAcceptorOpsPtr umq_acceptor_ops_ = nullptr;
+    UmqConnectorOpsPtr umq_connector_ops_ = nullptr;
     Result PrefillRx();
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
 
@@ -102,6 +114,9 @@ private:
     bool umq_is_bind_remote_ = false;
     // UMQ 句柄
     uint64_t umq_handle_ = UMQ_INVALID_HANDLE;
+
+    u_mutex_t *mutex_;
+    std::unordered_map<int, uint64_t> jfr_main_umq_;
     uint64_t local_umq_handle_ = UMQ_INVALID_HANDLE;
 };
 using UmqSocketPtr = Ref<UmqSocket>;
