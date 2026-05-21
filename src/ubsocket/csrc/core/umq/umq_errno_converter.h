@@ -130,15 +130,20 @@ private:
     }};
 
     // Writev/Readv共用错误码映射表
-    static constexpr inline std::array<UmqErrnoMapping, 8> kCommonIoErrnoMappings{{
+    static constexpr inline std::array<UmqErrnoMapping, 13> kCommonIoErrnoMappings{{
         {UMQ_SUCCESS, 0, "Success"},
         // 因为UMQ_FAIL和UMQ_ERR_EPERM的值相同，均为-1，所以这里只映射UMQ_ERR_EPERM
         {UMQ_ERR_EPERM, EIO, "Unrecoverable error: device unavailable, invalid parameter, driver/hardware error"},
         {UMQ_ERR_EAGAIN, EAGAIN, "Resource temporarily unavailable"},
         {UMQ_ERR_ENOMEM, ENOMEM, "Out of memory"},
         {UMQ_ERR_EBUSY, EBUSY, "Device or resource busy"},
+        {UMQ_ERR_EEXIST, EEXIST, "File exists"},
         {UMQ_ERR_EINVAL, EINVAL, "Invalid argument"},
+        {UMQ_ERR_ENODEV, ENODEV, "No such device"},
         {UMQ_ERR_ENOSR, ENOSR, "Out of streams resources"},
+        {UMQ_ERR_ETIMEOUT, ETIMEDOUT, "Connection timed out"},
+        {UMQ_ERR_EINPROGRESS, EINPROGRESS, "Operation now in progress"},
+        {UMQ_ERR_ETSEG_NON_IMPORTED, EIO, "Cannot assign requested address"},
         {UMQ_ERR_EFLOWCTL, EIO, "Flow control error"},
     }};
 
