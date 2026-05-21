@@ -174,3 +174,25 @@ UBS_API int ubsocket_set_log_level(int level)
     Logger::Instance().SetLogLevel(level);
     return UBS_OK;
 }
+
+UBS_API void *ubsocket_iobuf_allocate(size_t size)
+{
+    // new real zcopy allocator
+    uint32_t type = GlobalSetting::UBS_ALLOWED_PROTOCOL;
+    if (type == UBS_PROTOCOL_UB_RM_RTP || type == UBS_PROTOCOL_UB_RC_RTP) {
+        // delete at ubsocket_uninit
+        if (g_zcopy_allocator == nullptr) {
+            g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
+        }
+    } else {
+        UBS_VLOG_WARN("unknown zcopy allocator type");
+        return nullptr;
+    }
+
+    return blockmem_allocate_zero_copy(size);
+}
+
+UBS_API void ubsocket_iobuf_deallocate(void *addr)
+{
+    blockmem_deallocate_zero_copy(addr);
+}

@@ -15,7 +15,7 @@
 namespace ock {
 namespace ubs {
 namespace umq {
-int UmqRxOps::PollRx()
+int UmqRxOps::PollRx(const SocketPtr &sock)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
         if (GetAndAckEvent() < 0) {
@@ -63,6 +63,9 @@ int UmqRxOps::PollRx()
                     flow_control_failed_ = true;
                 }
                 HandleErrorRxCqe(buf[i]);
+
+                // 异步关闭. 当前处于 readv 中，等到下次 EPOLLIN 事件到来时会触发关闭
+                sock->State(SOCK_STAT_CLOSE);
             } else {
                 rx_queue_avail_num_ += 1;
                 // try to wake up tx if necessary
@@ -196,13 +199,14 @@ int UmqRxOps::GetAndAckEvent()
 int UmqRxOps::NotifyReadable()
 {
     // TODO async epoll process is needed
-    /*if (m_added_epoll_fd == nullptr) {
-        return eventfd_write(m_event_fd, 1);
+    /*if (sock.added_async_epoll_ == nullptr) {
+        return eventfd_write(event_fd_, 1);
     }
-    if (((async::EpollFdAsync *)m_added_epoll_fd)->AddSocketReadableEvent(m_fd, m_added_epoll_data) != 0) {
+    if (sock.added_async_epoll_->AddSockReadableEvent(fd_, sock.added_async_epoll_data_) != 0) {
         return -1;
     }
-    return ((async::EpollFdAsync *)m_added_epoll_fd)->SetSocketsReadable();*/
+    return sock.added_async_epoll_->SetSocketsReadable();
+*/
     return 0;
 }
 
@@ -290,9 +294,6 @@ void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
             UBS_VLOG_ERR("unreachable! status=%d\n", buf->status);
             break;
     }
-
-    // 异步关闭. 当前处于 readv 中，等到下次 EPOLLIN 事件到来时会触发关闭
-    SocketSet::Instance().GetSocket(fd_)->State(SOCK_STAT_CLOSE);
 }
 
 int UmqRxOps::RearmRxInterrupt()

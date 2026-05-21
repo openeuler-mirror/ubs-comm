@@ -33,7 +33,7 @@ public:
 
     ~UmqRxOps() override = default;
 
-    int PollRx() override;
+    int PollRx(const SocketPtr &sock) override;
 
     int RearmRxInterrupt() override;
 
