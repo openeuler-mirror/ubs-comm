@@ -158,8 +158,7 @@ Result UmqConnectorOps::CreateSocketResources(int new_fd, const SocketPtr &sock)
         UBS_VLOG_ERR("Failed to finish ub bind in connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), new_fd);
     }
-
-    if (SocketConnHelper::RecvSocketData(new_fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) !=
+    if (SocketConnHelper::SendSocketData(new_fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) !=
         sizeof(ack_ret)) {
         UBS_VLOG_ERR("Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), new_fd);
