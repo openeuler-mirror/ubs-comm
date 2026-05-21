@@ -46,7 +46,7 @@ using SocketPtr = Ref<Socket>;
 
 class Socket {
 public:
-    Socket(int fd) : raw_socket_(fd) {}
+    Socket(int fd, SocketType type) : raw_socket_(fd), type_(type) {}
     virtual ~Socket() = default;
 
     ALWAYS_INLINE SocketState State() const noexcept
@@ -79,7 +79,7 @@ public:
     int raw_socket_ = -1;                                     /* fd of raw socket */
     int event_fd_ = -1;                                       /* event fd */
     SocketState state_ = SOCK_STAT_INIT;                      /* state of ubsocket */
-    SocketType type_ = SocketType::SOCK_TYPE_TCP;                         /* type of ubsocket */
+    SocketType type_ = SocketType::SOCK_TYPE_TCP;             /* type of ubsocket */
     SocketCreateType create_type_ = SOCK_CREATE_TYPE_UNKNOWN; /* created because of what */
 };
 

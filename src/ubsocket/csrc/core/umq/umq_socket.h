@@ -21,9 +21,8 @@ namespace ubs {
 namespace umq {
 class UmqSocket : public SocketBase {
 public:
-    explicit UmqSocket(int fd) : SocketBase(fd)
+    explicit UmqSocket(int fd) : SocketBase(fd, SocketType::SOCK_TYPE_UMQ)
     {
-        type_ = SocketType::SOCK_TYPE_UMQ;
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
     }
     ~UmqSocket() override = default;
