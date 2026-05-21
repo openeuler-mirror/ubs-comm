@@ -133,7 +133,7 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
 
 UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen_t address_len)
 {
-    if (!GlobalSetting::UBS_NATIVE_TCP_MODE) {
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::connect(fd, address, address_len);
     }
     SocketPtr sock = SocketSet::Instance().GetSocket(fd);
