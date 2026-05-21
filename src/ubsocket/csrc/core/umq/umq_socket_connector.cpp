@@ -158,8 +158,7 @@ Result UmqConnectorOps::CreateSocketResources(int new_fd, const SocketPtr &sock)
         UBS_VLOG_ERR("Failed to finish ub bind in connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), new_fd);
     }
-
-    if (SocketConnHelper::RecvSocketData(new_fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) !=
+    if (SocketConnHelper::SendSocketData(new_fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) !=
         sizeof(ack_ret)) {
         UBS_VLOG_ERR("Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), new_fd);
@@ -227,7 +226,7 @@ Result UmqConnectorOps::FillLocalSocketIdsForNegotiate(const UmqSocketPtr &umq_s
 Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
 {
     // TODO: 待增加从环境变量中获取 和 亲和策略
-    umq_eid_t local_eid{};
+    umq_eid_t local_eid = UmqSetting::UMQ_LOCAL_EID;
     dev_schedule_policy schedule_policy = dev_schedule_policy::ROUND_ROBIN;
     NegotiateRsp rsp{};
     if (SocketConnHelper::RecvSocketData(raw_fd_, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) !=
@@ -293,6 +292,9 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
         } else {
             umq_conn_info_.conn_eid = local_eid;
         }
+    } else {
+        // TODO check conn_eid set
+        umq_conn_info_.conn_eid = local_eid;
     }
 
     return UBS_OK;

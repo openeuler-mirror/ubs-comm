@@ -36,12 +36,14 @@ public:
     static uint16_t UMQ_FC_DEFAULT_CREDIT;
     static uint16_t UMQ_FC_MAX_CREDIT;
     static uint16_t UMQ_FC_MIN_CREDIT;
-    static uint16_t UMQ_MEM_POOL_INIT_SIZE_MB;
-    static uint16_t UMQ_MEM_POOL_MAX_SIZE_MB;
+    static uint64_t UMQ_MEM_POOL_INIT_SIZE_MB;
+    static uint64_t UMQ_MEM_POOL_MAX_SIZE_MB;
     static uint64_t UMQ_BUF_POOL_DEPTH;
     static uint32_t UMQ_POST_BATCH_MAX;
     static umq_buf_block_size_t IO_BLOCK_TYPE;
     static umq_trans_mode_t IO_TRANS_MODE;
+    static std::string UMQ_DEV_NAME;
+    static uint32_t UMQ_EID_INDEX;
     static umq_eid_t UMQ_LOCAL_EID;
     static int UMQ_PROCESS_SOCKET_ID;
     static std::vector<uint32_t> UMQ_ALL_SOCKET_IDS;

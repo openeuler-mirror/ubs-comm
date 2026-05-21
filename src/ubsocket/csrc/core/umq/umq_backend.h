@@ -23,7 +23,8 @@ class UmqBackend {
 public:
     static Result Init() noexcept;
     static void UnInit() noexcept;
-
+private:
+    static int AddUbDev(umq_trans_info_t &trans_info);
 private:
     static std::mutex UMQ_MUTEX;
     static bool UMQ_INITED;

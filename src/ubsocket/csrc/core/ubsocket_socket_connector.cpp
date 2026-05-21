@@ -18,9 +18,6 @@ namespace ubs {
 int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
 {
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
-    raw_fd_ = sockBase->raw_socket_;
-    event_fd_ = sockBase->event_fd_;
-
     Result ret = 0;
     if (connector_ops_ != nullptr) {
         ret = connector_ops_->PrepareConnect(raw_fd_, address, address_len, sock);
@@ -55,7 +52,6 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     return ret;
 }
 
-Connector::Connector(const SocketPtr &sock, ConnectorOps *connectorOps) {}
 Connector::~Connector() {}
 } // namespace ubs
 } // namespace ock

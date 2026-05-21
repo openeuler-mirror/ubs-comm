@@ -56,7 +56,8 @@ using AcceptorOpsPtr = Ref<AcceptorOps>;
 // accept 建链通用实现层：TCP 建链，协商，建链
 class Acceptor {
 public:
-    Acceptor(const SocketPtr &sock, AcceptorOps *acceptorOps);
+    Acceptor(const SocketPtr &sock, AcceptorOps *acceptorOps) : raw_fd_(sock->raw_socket_),
+          acceptor_ops_(acceptorOps) {}
     ~Acceptor();
 
     int Listen(int backlog);

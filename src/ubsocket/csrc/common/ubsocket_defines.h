@@ -98,6 +98,8 @@ enum class UBHandshakeMode : uint32_t {
 
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
+#define IO_SIZE_MB (1024ULL * 1024ULL)
+
 constexpr uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445054;
 constexpr uint32_t NEGOTIATE_SOCKET_ID_MAX_NUM = 256;
 constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 512;
@@ -141,6 +143,7 @@ constexpr const char *LARGE_QBUF_BLOCK_TYPE = "large";     // 64k
 
 constexpr uint32_t BRPC_SYM_STR_LEN_MAX = 128;
 constexpr uint32_t BRPC_ALLOC_DEFAULT_BUF_NUM = 1;
+constexpr uint32_t DEV_NAME_STR_LEN_MAX = 64;
 
 constexpr char CPU_LIST_PREFIX_PATH[] = "/sys/devices/system/node/";
 constexpr char CPU_LIST_SUFFIX_PATH[] = "/cpulist";

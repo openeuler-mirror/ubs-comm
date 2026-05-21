@@ -33,9 +33,6 @@ public:
     // 阶段3：销毁资源（握手失败/重试时清理已创建的资源）
     virtual void DestroySocketResources() = 0;
 
-    // ========================= 建链辅助方法 ======================
-    virtual int BuildNegotiateReq() = 0;
-
     DEFINE_REF_OPERATION_FUNC
 protected:
     int raw_fd_; // 传入 sock 的原生 socket fd
@@ -45,7 +42,8 @@ protected:
 // connector 建链通用实现层：TCP 建链，协商，建链
 class Connector {
 public:
-    Connector(const SocketPtr &sock, ConnectorOps* connectorOps);
+    Connector(const SocketPtr &sock, ConnectorOps* connectorOps) : raw_fd_(sock->raw_socket_),
+          connector_ops_(connectorOps) {}
     ~Connector();
 
     int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);

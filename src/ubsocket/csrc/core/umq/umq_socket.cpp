@@ -43,7 +43,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     queue_cfg.mode = UMQ_MODE_INTERRUPT;
     // 共享 JFR、AE 事件依赖 umq_ctx.
     queue_cfg.umq_ctx = raw_socket_;
-    if (IsBonding() == 1) {
+    if (IsBonding()) {
         queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         queue_cfg.used_ports = used_ports;
     }
@@ -110,10 +110,12 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     }
 #endif
 
-    if (strcpy(queue_cfg.dev_info.dev.dev_name, "bonding_dev_0") != 0) {
-        UBS_VLOG_ERR("Failed to strcpy device name\n");
+    if (strcpy(queue_cfg.dev_info.dev.dev_name, "bonding_dev_0") == nullptr) {
+        UBS_VLOG_ERR("Failed to strcpy device name, errno: %d\n", errno);
         return UBS_SET_DEV_INFO;
     }
+    queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+    queue_cfg.dev_info.eid.eid = *conn_eid;
 
     static const char *trans_mode_str[RC_CTP + 1] = {"RC_TP", "RM_TP", "RM_CTP", "RC_CTP"};
     UBS_VLOG_INFO("trans_mode result is: %s\n", trans_mode_str[trans_mode_]);
@@ -188,9 +190,10 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 
 Result UmqSocket::PrefillRx()
 {
+    // TODO jfr check
     // bool enable_share_jfr = context == nullptr ? true : context->EnableShareJfr();
-    bool enable_share_jfr = false;
-    uint64_t umq_handle = enable_share_jfr ? umq_handle_ : local_umq_handle_;
+    // uint64_t umq_handle = enable_share_jfr ? umq_handle_ : local_umq_handle_;
+    uint64_t umq_handle = umq_handle_;
     uint32_t left_post_rx_num = getLeftPostRxNum(umq_handle);
     if (left_post_rx_num == 0) {
         UBS_VLOG_ERR("Failed to set rx window capacity\n");

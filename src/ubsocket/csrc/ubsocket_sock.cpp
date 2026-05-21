@@ -8,6 +8,7 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_data_tx.h"
@@ -45,7 +46,7 @@ UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
     }
     socketPtr->event_fd_ = event_fd;
     SocketSet::Instance().OverrideSocket(fd, socketPtr);
-    return 0;
+    return fd;
 }
 
 UBS_API int UB_API_WRAP(shutdown)(int fd, int how)
@@ -109,8 +110,18 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
     if (sock == nullptr) {
         return LibcApi::listen(fd, backlog);
     }
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
-    if (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::TFO) {
+    UBHandshakeMode ubHandshakeMode = GlobalSetting::UBS_HAND_SHAKE_MODE;
+    if (ubHandshakeMode == UBHandshakeMode::UB_SOCK_OPT) {
+        UBS_VLOG_INFO("Enable ub handshake option\n");
+        int opt = 1;
+        if (LibcApi::setsockopt(fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, sizeof(opt)) == 0) {
+            return LibcApi::listen(fd, backlog);
+        }
+        UBS_VLOG_WARN("Unable to enable ub handshake option. Handshake mode fallback to TFO.\n");
+        GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
+        ubHandshakeMode = UBHandshakeMode::TFO;
+    }
+    if (ubHandshakeMode == UBHandshakeMode::TFO) {
         UBS_VLOG_INFO("Enable Server TFO, with QLen %d\n", backlog);
         // enable tfo
         if (LibcApi::setsockopt(fd, SOL_TCP, TCP_FASTOPEN, &backlog, sizeof(backlog)) < 0) {
@@ -122,7 +133,7 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
 
 UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen_t address_len)
 {
-    if (!GlobalSetting::UBS_NATIVE_TCP_MODE) {
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::connect(fd, address, address_len);
     }
     SocketPtr sock = SocketSet::Instance().GetSocket(fd);

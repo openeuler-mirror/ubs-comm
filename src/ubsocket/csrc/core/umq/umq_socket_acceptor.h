@@ -22,7 +22,10 @@ namespace umq {
 // 基于 umq 的 accept 实现层
 class UmqAcceptorOps : public AcceptorOps {
 public:
-    UmqAcceptorOps() = default;
+    UmqAcceptorOps(int fd_)
+    {
+        fd = fd_;
+    }
     ~UmqAcceptorOps() = default;
 
     Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,

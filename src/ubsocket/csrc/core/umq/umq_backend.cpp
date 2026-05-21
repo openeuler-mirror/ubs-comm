@@ -44,9 +44,9 @@ Result UmqBackend::Init() noexcept
     umq_config.flow_control.min_reserved_credit = UmqSetting::UMQ_FC_MIN_CREDIT;
     umq_config.block_cfg.small_block_size = UmqSetting::IO_BLOCK_TYPE;
     umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DUMMY;
-    umq_config.trans_info[0].mem_cfg.total_size = static_cast<uint64_t>(UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB);
+    umq_config.trans_info[0].mem_cfg.total_size = UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB * IO_SIZE_MB;
     umq_config.trans_info[0].trans_mode = UMQ_TRANS_MODE_UB;
-    umq_config.buf_pool_cfg.umq_buf_pool_max_size = UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB;
+    umq_config.buf_pool_cfg.umq_buf_pool_max_size = UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB * IO_SIZE_MB;
     umq_config.buf_pool_cfg.tls_qbuf_pool_depth = UmqSetting::UMQ_BUF_POOL_DEPTH;
     umq_config.io_lock_free = false;
 
@@ -54,6 +54,28 @@ Result UmqBackend::Init() noexcept
     auto ret = UmqApi::umq_init(&umq_config);
     if (ret != 0) {
         UBS_VLOG_ERR("umq_init() failed, ret: %d\n", ret);
+        // ResetBrpcAllocator();
+        // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+        return UBS_ERROR;
+    }
+
+    // TODO Get from env
+    umq_trans_mode_t transMode = UMQ_TRANS_MODE_UB;
+    switch (transMode) {
+        // case UMQ_TRANS_MODE_IB:
+        //    ret = AddIbDev(umq_config.trans_info[0]);
+        //    break;
+        case UMQ_TRANS_MODE_UB:
+            ret = AddUbDev(umq_config.trans_info[0]);
+            break;
+        default:
+            UBS_VLOG_ERR("Un-supported protocol.\n");
+            // ResetBrpcAllocator();
+            // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+            return UBS_ERROR;
+    }
+    if (ret != 0) {
+        UBS_VLOG_ERR("AddIbDev()/AddUbDev() failed, ret: %d\n", ret);
         // ResetBrpcAllocator();
         // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
         return UBS_ERROR;
@@ -79,6 +101,42 @@ void UmqBackend::UnInit() noexcept
     UMQ_INITED = false;
 
     UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
+}
+
+int UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
+{
+    const char *dev_info = !UmqSetting::UMQ_DEV_NAME.empty() ? UmqSetting::UMQ_DEV_NAME.data() : nullptr;
+    /*if (dev_info == nullptr) {
+        if (FindDevName() != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to find bonding dev, need active input.\n");
+            return -1;
+        }
+    }
+    dev_info = GetDevNameStr();*/
+    int ret = sprintf(trans_info.dev_info.dev.dev_name, "%s", dev_info);
+    if (ret < 0 || ret >= UMQ_DEV_NAME_SIZE) {
+        UBS_VLOG_ERR("Failed to sprintf_s device name\n");
+        return UBS_ERROR;
+    }
+
+    if (strstr(trans_info.dev_info.dev.dev_name, "bonding_dev") == nullptr) {
+        trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
+        trans_info.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
+    } else {
+        trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+        trans_info.dev_info.eid.eid = UmqSetting::UMQ_LOCAL_EID;
+        // isBonding = true;
+    }
+
+    ret = UmqApi::umq_dev_add(&trans_info);
+    if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
+        UBS_VLOG_ERR("umq_dev_add() failed, ret: %d\n", ret);
+        return -1;
+    }
+
+    // TODO RegisterAsyncEvent
+    // return RegisterAsyncEvent(trans_info);
+    return UBS_OK;
 }
 } // namespace umq
 } // namespace ubs

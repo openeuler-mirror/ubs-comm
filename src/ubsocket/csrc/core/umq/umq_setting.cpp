@@ -31,13 +31,15 @@ umq_buf_block_size_t UmqSetting::IO_BLOCK_TYPE = BLOCK_SIZE_8K;
 uint16_t UmqSetting::UMQ_FC_DEFAULT_CREDIT = 1024L;
 uint16_t UmqSetting::UMQ_FC_MAX_CREDIT = 1024L;
 uint16_t UmqSetting::UMQ_FC_MIN_CREDIT = 100L;
-uint16_t UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB = 200;
-uint16_t UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB = 2048;
+uint64_t UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB = 200;
+uint64_t UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB = 2048;
 uint64_t UmqSetting::UMQ_BUF_POOL_DEPTH = 12000;
 umq_eid_t UmqSetting::UMQ_LOCAL_EID = {};
 int UmqSetting::UMQ_PROCESS_SOCKET_ID = -1;
 std::vector<uint32_t> UmqSetting::UMQ_ALL_SOCKET_IDS = {};
 uint32_t UmqSetting::UMQ_POST_BATCH_MAX = 64UL;
+uint32_t UmqSetting::UMQ_EID_INDEX = 0;
+std::string UmqSetting::UMQ_DEV_NAME = "bonding_dev_0";
 
 void UmqSetting::AddRules() noexcept
 {
@@ -91,10 +93,10 @@ Result UmqSetting::LoadEnv() noexcept
         UMQ_MEM_POOL_MAX_SIZE_MB = static_cast<uint16_t>(int64EnvValue);
     }
 
-    if (inet_pton(AF_INET6, "4245:4944:0000:0000:0000:0000:2d00:0000", &(UMQ_LOCAL_EID)) == 1) {
-        UBS_SLOG_INFO("4245:4944:0000:0000:0000:0000:2d00:0000 (eid)\n");
+    if (inet_pton(AF_INET6, "0000:0000:0000:0040:0010:0000:dfdf:0b04", &(UMQ_LOCAL_EID)) == 1) {
+        UBS_SLOG_INFO("0000:0000:0000:0040:0010:0000:dfdf:0b04 (eid)\n");
     } else {
-        UBS_SLOG_ERR("Eid is invalid. Please double check your input(4245:4944:0000:0000:0000:0000:2d00:0000)\n");
+        UBS_SLOG_ERR("Eid is invalid. Please double check your input(0000:0000:0000:0040:0010:0000:dfdf:0b04)\n");
         return UBS_ERROR;
     }
 
