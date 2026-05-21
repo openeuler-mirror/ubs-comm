@@ -24,7 +24,10 @@ uint64_t urpc_get_cpu_hz(void)
             return 0; // 打开失败
         }
         uint64_t freq_khz = 0;
-        fscanf(file, "%lu", &freq_khz);
+        if (fscanf(file, "%lu", &freq_khz) != 1) {
+            fclose(file);
+            return 0;
+        }
         fclose(file);
         g_urpc_cpu_hz = freq_khz * 1000;
     }
