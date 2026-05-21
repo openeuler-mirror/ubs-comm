@@ -42,7 +42,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         return rx_total_len;
     }
 
-    int ret = rx_ops_->PollRx();
+    int ret = rx_ops_->PollRx(sock);
     if (ret < 0) {
         return ret;
     }

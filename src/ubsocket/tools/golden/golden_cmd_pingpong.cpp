@@ -116,7 +116,7 @@ int PPClient::Run()
     char pong[10]{};
 
     struct iovec send_data[1];
-    send_data[0].iov_base = ping;
+    send_data[0].iov_base = ubsocket_iobuf_allocate(strlen(ping));
     send_data[0].iov_len = strlen(ping);
     ssize_t expect_send_len = strlen(ping);
 
@@ -214,7 +214,7 @@ int PPServer::Run()
     recv_data[0].iov_len = 10;
 
     struct iovec send_data[1];
-    send_data[0].iov_base = pong;
+    send_data[0].iov_base = ubsocket_iobuf_allocate(strlen(pong));
     send_data[0].iov_len = strlen(pong);
     ssize_t expect_send_len = strlen(pong);
 

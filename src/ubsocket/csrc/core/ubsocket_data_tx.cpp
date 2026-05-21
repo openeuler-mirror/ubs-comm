@@ -39,7 +39,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         return UBS_ERROR;
     }
 
-    if (tx_ops_->PollTx() < 0) {
+    if (tx_ops_->PollTx(sock) < 0) {
         return UBS_ERROR;
     }
 
@@ -70,7 +70,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
 
     // 发送数据
     uint32_t tx_total_len;
-    int64_t ret = tx_ops_->PostSend(txBuf, batch, converterPtr);
+    int64_t ret = tx_ops_->PostSend(sock, txBuf, batch, converterPtr);
     if (ret < 0) {
         return ret;
     }

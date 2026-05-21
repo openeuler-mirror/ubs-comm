@@ -44,9 +44,9 @@ public:
     virtual uintptr_t AllocTxBuf(uint32_t size, uint32_t count) = 0;
 
     // 投递发送请求
-    virtual int PostSend(uintptr_t buf_list, uint32_t batch, const ConverterPtr &cvt) = 0;
+    virtual int PostSend(const SocketPtr &sock, uintptr_t buf_list, uint32_t batch, const ConverterPtr &cvt) = 0;
 
-    virtual int PollTx() = 0;
+    virtual int PollTx(const SocketPtr &sock) = 0;
 
     virtual uint32_t IOBufSize() = 0;
 

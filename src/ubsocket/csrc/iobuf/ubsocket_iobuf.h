@@ -50,13 +50,11 @@ struct Block {
 
     void DecRef()
     {
-#ifdef ENALBED
         if (nshared.fetch_sub(1, std::memory_order_release) == 1) {
             std::atomic_thread_fence(std::memory_order_acquire);
             this->~Block();
             blockmem_deallocate_zero_copy(this);
         }
-#endif
     }
 
     bool Full() const
