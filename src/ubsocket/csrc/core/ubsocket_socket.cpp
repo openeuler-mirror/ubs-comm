@@ -154,7 +154,7 @@ Result SocketBase::CreateAcceptorOps(SocketType value, const SocketPtr &sock, Ac
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
 
         /* create umq acceptor */
-        auto umqOps = new (std::nothrow) UmqAcceptorOps();
+        auto umqOps = new (std::nothrow) UmqAcceptorOps(sock->raw_socket_);
         if (umqOps == nullptr) {
             return UBS_MALLOC_FAILED;
         }
