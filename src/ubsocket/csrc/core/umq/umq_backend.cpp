@@ -59,6 +59,28 @@ Result UmqBackend::Init() noexcept
         return UBS_ERROR;
     }
 
+    // TODO Get from env
+    umq_trans_mode_t transMode = UMQ_TRANS_MODE_UB;
+    switch (transMode) {
+        // case UMQ_TRANS_MODE_IB:
+        //    ret = AddIbDev(umq_config.trans_info[0]);
+        //    break;
+        case UMQ_TRANS_MODE_UB:
+            ret = AddUbDev(umq_config.trans_info[0]);
+            break;
+        default:
+            UBS_VLOG_ERR("Un-supported protocol.\n");
+            // ResetBrpcAllocator();
+            // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+            return UBS_ERROR;
+    }
+    if (ret != 0) {
+        UBS_VLOG_ERR("AddIbDev()/AddUbDev() failed, ret: %d\n", ret);
+        // ResetBrpcAllocator();
+        // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+        return UBS_ERROR;
+    }
+
     UMQ_INITED = true;
 
     //UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
@@ -79,6 +101,42 @@ void UmqBackend::UnInit() noexcept
     UMQ_INITED = false;
 
     UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
+}
+
+int UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
+{
+    const char *dev_info = !UmqSetting::UMQ_DEV_NAME.empty() ? UmqSetting::UMQ_DEV_NAME.data() : nullptr;
+    /*if (dev_info == nullptr) {
+        if (FindDevName() != 0) {
+            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to find bonding dev, need active input.\n");
+            return -1;
+        }
+    }
+    dev_info = GetDevNameStr();*/
+    int ret = sprintf(trans_info.dev_info.dev.dev_name, "%s", dev_info);
+    if (ret < 0 || ret >= UMQ_DEV_NAME_SIZE) {
+        UBS_VLOG_ERR("Failed to sprintf_s device name\n");
+        return UBS_ERROR;
+    }
+
+    if (strstr(trans_info.dev_info.dev.dev_name, "bonding_dev") == nullptr) {
+        trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
+        trans_info.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
+    } else {
+        trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+        trans_info.dev_info.eid.eid = UmqSetting::UMQ_LOCAL_EID;
+        // isBonding = true;
+    }
+
+    ret = UmqApi::umq_dev_add(&trans_info);
+    if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
+        UBS_VLOG_ERR("umq_dev_add() failed, ret: %d\n", ret);
+        return -1;
+    }
+
+    // TODO RegisterAsyncEvent
+    // return RegisterAsyncEvent(trans_info);
+    return UBS_OK;
 }
 } // namespace umq
 } // namespace ubs
