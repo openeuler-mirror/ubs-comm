@@ -190,9 +190,10 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 
 Result UmqSocket::PrefillRx()
 {
+    // TODO jfr check
     // bool enable_share_jfr = context == nullptr ? true : context->EnableShareJfr();
-    bool enable_share_jfr = false;
-    uint64_t umq_handle = enable_share_jfr ? umq_handle_ : local_umq_handle_;
+    // uint64_t umq_handle = enable_share_jfr ? umq_handle_ : local_umq_handle_;
+    uint64_t umq_handle = umq_handle_;
     uint32_t left_post_rx_num = getLeftPostRxNum(umq_handle);
     if (left_post_rx_num == 0) {
         UBS_VLOG_ERR("Failed to set rx window capacity\n");
