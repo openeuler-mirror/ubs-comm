@@ -401,7 +401,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     local_cp_msg.queue_bind_info_size =
         UmqApi::umq_bind_info_get(umq_socket->UmqHandle(), local_cp_msg.queue_bind_info, UMQ_BIND_INFO_SIZE_MAX);
     if (local_cp_msg.queue_bind_info_size == 0) {
-        UBS_VLOG_ERR("umq_bind_info_get() failed, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, ret: %u\n",
+        UBS_VLOG_ERR("umq_bind_info_get() failed, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, ret: %ld",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_,
                      local_cp_msg.queue_bind_info_size);
         return UBS_ERROR;
@@ -410,20 +410,20 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     uint32_t len = sizeof(local_cp_msg) - sizeof(uint64_t);
     if (SocketConnHelper::SendSocketData(raw_fd_, &local_cp_msg.queue_bind_info_size, len, CONTROL_PLANE_TIMEOUT_MS) !=
         len) {
-        UBS_VLOG_ERR("Failed to send local control message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+        UBS_VLOG_ERR("Failed to send local control message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_ERROR;
     }
-    UBS_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %d, bind info len: %d\n", raw_fd_,
+    UBS_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %ld, bind info len: %ld", raw_fd_,
                    sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
 
     if (SocketConnHelper::RecvSocketData(raw_fd_, &remote_cp_msg, sizeof(remote_cp_msg), CONTROL_PLANE_TIMEOUT_MS) !=
         sizeof(remote_cp_msg)) {
-        UBS_VLOG_ERR("Failed to receive remote control message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+        UBS_VLOG_ERR("Failed to receive remote control message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_ERROR;
     }
-    UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %d, bind info len: %d\n", raw_fd_,
+    UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %ld, bind info len: %ld", raw_fd_,
                    sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
 
     struct timeval start_tv;
