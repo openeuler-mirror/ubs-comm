@@ -33,9 +33,6 @@ public:
     // 阶段3：销毁资源（握手失败/重试时清理已创建的资源）
     virtual void DestroySocketResources() = 0;
 
-    // ========================= 建链辅助方法 ======================
-    virtual int BuildNegotiateReq() = 0;
-
     DEFINE_REF_OPERATION_FUNC
 protected:
     int raw_fd_; // 传入 sock 的原生 socket fd

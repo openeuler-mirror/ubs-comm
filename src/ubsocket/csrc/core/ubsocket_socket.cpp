@@ -154,9 +154,13 @@ Result SocketBase::CreateAcceptorOps(SocketType value, const SocketPtr &sock, Ac
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
 
         /* create umq acceptor */
+        auto umqOps = new (std::nothrow) UmqAcceptorOps();
+        if (umqOps == nullptr) {
+            return UBS_MALLOC_FAILED;
+        }
 
-        /* set out */
-
+        /* set out ops */
+        acceptorOps = umqOps;
         return UBS_OK;
     } else {
         /* invalid type */
@@ -176,8 +180,13 @@ Result SocketBase::CreateConnectorOps(SocketType value, const SocketPtr &sock, C
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
 
         /* create umq acceptor */
+        auto umqOps = new (std::nothrow) UmqConnectorOps();
+        if (umqOps == nullptr) {
+            return UBS_MALLOC_FAILED;
+        }
 
-        /* set out */
+        /* set out ops */
+        connectorOps = umqOps;
 
         return UBS_OK;
     } else {
