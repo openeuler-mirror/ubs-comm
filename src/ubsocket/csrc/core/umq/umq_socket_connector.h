@@ -33,7 +33,9 @@ public:
 
 private:
     // ======================== 建链辅助方法 ========================
-    int BuildNegotiateReq(NegotiateReq *req);
+    Result BuildNegotiateReq(NegotiateReq *req, const UmqSocketPtr &umq_socket);
+    Result FillLocalSocketIdsForNegotiate(const UmqSocketPtr &umq_socket, uint32_t *socket_ids,
+                                          uint32_t &socket_id_count);
     Result ConnectNegotiate(const UmqSocketPtr &umq_socket);
     Result ConnectExchangeSocketIDs(void);
     Result DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid, umq_route_t *conn_route, bool use_round_robin,

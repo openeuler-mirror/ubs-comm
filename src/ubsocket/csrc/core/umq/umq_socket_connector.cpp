@@ -20,9 +20,10 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
                                        const SocketPtr &sock)
 {
     Result ret = UBS_OK;
+    auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
     // 判断TCPI_OPT_SYN_DATA，如果已置位则复用
     NegotiateReq req{};
-    if (BuildNegotiateReq(&req) != 0) {
+    if (BuildNegotiateReq(&req, umq_socket) != 0) {
         UBS_VLOG_ERR("Failed to send negotiate request caused by building req failure\n");
         return UBS_ERROR;
     }
@@ -172,17 +173,6 @@ Result UmqConnectorOps::CreateSocketResources(int new_fd, const SocketPtr &sock)
         return UBS_ERROR;
     }
 
-    // if (context && context->GetUsePolling()) {
-    //     Socket *sock = NULL;
-    //     if (PollingEpoll::GetInstance().SocketCreate(&sock, new_fd, SocketType::SOCKET_TYPE_TCP_CLIENT, m_local_umqh) !=
-    //         0) {
-    //         UBS_VLOG_ERR(ubsocket::UBSocket, "SocketCreate failed,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-    //                      EID_ARGS(umq_conn_info_.peer_eid), mq_socket->peer_ip.c_str(), new_fd);
-    //     } else {
-    //         PollingEpoll::GetInstance().AddSocket(new_fd, sock);
-    //     }
-    // }
-
     umq_conn_info_.create_time = std::chrono::system_clock::now();
     UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
 
@@ -196,9 +186,42 @@ void UmqConnectorOps::DestroySocketResources()
 }
 
 // ======================== 建链辅助方法 ========================
-int UmqConnectorOps::BuildNegotiateReq(NegotiateReq *req)
+Result UmqConnectorOps::BuildNegotiateReq(NegotiateReq *req, const UmqSocketPtr &umq_socket)
 {
-    return 0;
+    umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
+    dev_schedule_policy schedulePolicy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
+    req->magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
+    req->trans_mode = umq_socket->GetTransMode();
+    req->is_bonding = umq_socket->IsBonding() ? 1 : 0;
+    req->enable_share_jfr = 0;
+    req->schedule_policy = static_cast<uint8_t>(schedulePolicy);
+    req->has_socket_id = ((schedulePolicy == dev_schedule_policy::CPU_AFFINITY) ||
+                          (schedulePolicy == dev_schedule_policy::CPU_AFFINITY_PRIORITY)) ?
+                             1 :
+                             0;
+    req->process_socket_id = UmqSetting::UMQ_PROCESS_SOCKET_ID;
+    req->local_eid = localEid;
+    if (req->is_bonding != 0 && (req->has_socket_id == 1) &&
+        FillLocalSocketIdsForNegotiate(umq_socket, req->socket_ids, req->socket_id_count) != UBS_OK) {
+        return UBS_ERROR;
+    }
+    return UBS_OK;
+}
+
+Result UmqConnectorOps::FillLocalSocketIdsForNegotiate(const UmqSocketPtr &umq_socket, uint32_t *socket_ids,
+                                                       uint32_t &socket_id_count)
+{
+    std::vector<uint32_t> ids = UmqSetting::UMQ_ALL_SOCKET_IDS;
+    if (ids.empty() || ids.size() > NEGOTIATE_SOCKET_ID_MAX_NUM) {
+        UBS_VLOG_ERR("Invalid local socket ids, size %zu, Peer IP:%s, fd: %d\n", ids.size(),
+                     umq_conn_info_.peer_ip.c_str(), umq_socket->raw_socket_);
+        return UBS_ERROR;
+    }
+    socket_id_count = static_cast<uint32_t>(ids.size());
+    for (uint32_t i = 0; i < socket_id_count; ++i) {
+        socket_ids[i] = ids[i];
+    }
+    return UBS_OK;
 }
 
 Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
