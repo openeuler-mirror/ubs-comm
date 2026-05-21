@@ -194,8 +194,6 @@ int Acceptor::Listen(int backlog)
     return 0;
 }
 
-Acceptor::Acceptor(const SocketPtr &sock, AcceptorOps *acceptorOps) {}
-
 Acceptor::~Acceptor() {}
 } // namespace ubs
 } // namespace ock
