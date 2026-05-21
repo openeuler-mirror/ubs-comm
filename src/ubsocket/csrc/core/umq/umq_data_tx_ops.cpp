@@ -28,7 +28,7 @@ uintptr_t UmqTxOps::AllocTxBuf(uint32_t size, uint32_t count)
     return reinterpret_cast<uintptr_t>(tx_buf_list);
 }
 
-int UmqTxOps::PostSend(uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
+int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
 {
     umq_buf_t *tx_buf_list = reinterpret_cast<umq_buf_t *>(buf);
     int flagEIO = -1;
@@ -154,12 +154,12 @@ int UmqTxOps::PostSend(uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
     // After posting and before polling, the time for updating the count cna be concealed within the waiting period
     // for polling.
     if ((GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_) >= TX_HANDLE_THRESHOLD) {
-        PollUmqTx(false);
+        PollUmqTx(sock, false);
     }
     return tx_total_len;
 }
 
-int UmqTxOps::PollTx()
+int UmqTxOps::PollTx(const SocketPtr &sock)
 {
     if (get_and_ack_event_) {
         // handle tx epollin epoll event
@@ -171,7 +171,7 @@ int UmqTxOps::PollTx()
                 return -1;
             }
             // set poll_to_empty, means poll at least m_tx.m_retrieve_threshold TX CQE
-            PollUmqTx(true);
+            PollUmqTx(sock, true);
             /* m_tx.epoll_event_num_ not equals to m_tx.m_expect_epoll_event_num means
              * another epoll event is reportedduring readv processing procedure */
         } while (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0, std::memory_order_release,
@@ -179,7 +179,7 @@ int UmqTxOps::PollTx()
 
         get_and_ack_event_ = false;
     } else if (tx_queue_avail_num_ == 0) {
-        PollUmqTx(false);
+        PollUmqTx(sock, false);
         if (tx_queue_avail_num_ == 0) {
             return DpRearmTxInterrupt();
         }
@@ -218,14 +218,14 @@ int UmqTxOps::GetAndAckEvent()
     return 0;
 }
 
-int UmqTxOps::PollUmqTx(bool poll_to_empty)
+int UmqTxOps::PollUmqTx(const SocketPtr &sock, bool poll_to_empty)
 {
     uint32_t poll_total_cnt = 0;
     int poll_cnt = 0;
     uint32_t poll_zero_cnt = 0;
     ops_error_code err_code = ops_error_code::OK;
     do {
-        poll_cnt = DoUmqTxPoll(err_code);
+        poll_cnt = DoUmqTxPoll(sock, err_code);
         if (poll_cnt < 0) {
             break;
         } else if (poll_cnt == 0) {
@@ -241,7 +241,7 @@ int UmqTxOps::PollUmqTx(bool poll_to_empty)
     return 0;
 }
 
-int UmqTxOps::DoUmqTxPoll(ops_error_code &err_code)
+int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
 {
     umq_buf_t *buf[POLL_BATCH_MAX];
     int poll_num = UmqApi::umq_poll(local_umqh_, UMQ_IO_TX, buf, POLL_BATCH_MAX);
@@ -269,6 +269,8 @@ int UmqTxOps::DoUmqTxPoll(ops_error_code &err_code)
 
             if (buf[i]->status != 0) {
                 HandleTxCqeError(buf[i], wr_cnt);
+                // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
+                sock->State(SOCK_STAT_CLOSE);
                 continue;
             }
 
@@ -401,8 +403,6 @@ void UmqTxOps::HandleErrorTxCqe(umq_buf_t *buf)
             break;
     }
 
-    // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
-    SocketSet::Instance().GetSocket(fd_)->State(SOCK_STAT_CLOSE);
 }
 
 void UmqTxOps::ProcessErrorTxCqe(umq_buf_t *first_qbuf)

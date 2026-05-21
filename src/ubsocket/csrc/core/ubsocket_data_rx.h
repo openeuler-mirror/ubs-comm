@@ -32,7 +32,7 @@ public:
      * poll rx and put data into block_cache_
      * @return
      */
-    virtual int PollRx() = 0;
+    virtual int PollRx(const SocketPtr &sock) = 0;
     ssize_t RxDataSet(void *buf, uint32_t size);
     virtual int RearmRxInterrupt() = 0;
 

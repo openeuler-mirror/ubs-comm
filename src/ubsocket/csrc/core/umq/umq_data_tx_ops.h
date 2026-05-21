@@ -46,9 +46,9 @@ public:
     uintptr_t AllocTxBuf(uint32_t size, uint32_t count) override;
 
     // 发送请求
-    int PostSend(uintptr_t buf, uint32_t batch, const ConverterPtr &cvt) override;
+    int PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt) override;
 
-    int PollTx() override;
+    int PollTx(const SocketPtr &sock) override;
 
     uint32_t IOBufSize() override;
 
@@ -57,8 +57,8 @@ private:
     uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
                            uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num);
     void *PtrFloorToBoundary(void *ptr);
-    int PollUmqTx(bool poll_to_empty);
-    int DoUmqTxPoll(ops_error_code &err_code);
+    int PollUmqTx(const SocketPtr &sock, bool poll_to_empty);
+    int DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code);
     void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt);
     bool HandleProbePacket(umq_buf_t *qbuf);
     // 发端异常 CQE 错误处理.

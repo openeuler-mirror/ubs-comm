@@ -64,6 +64,10 @@ int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *fil
  */
 int ubsocket_set_log_level(int level);
 
+void *ubsocket_iobuf_allocate(size_t size);
+
+void ubsocket_iobuf_deallocate(void *addr);
+
 #ifdef __cplusplus
 }
 #endif
