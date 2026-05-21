@@ -1673,12 +1673,32 @@ NResult NetDriverUBWithOob::NewRequestOnEncryption(UBOpContextInfo *ctx, UBSHcom
         ubWorker->RePostReceive(ctx);
         return NN_INVALID_PARAM;
     }
-    size_t decryptRawLen = asyncEp->mAes.GetRawLen(tmpHeader->dataLength);
-    messageReady = msg.AllocateIfNeed(decryptRawLen);
+
+    uint32_t extHeaderSize = 0;
+    // 分片包含额外的extHeader，extHeader没有加密
+    if (tmpHeader->extHeaderType == UBSHcomExtHeaderType::FRAGMENT) {
+        extHeaderSize = sizeof(UBSHcomFragmentHeader);
+    }
+
+    uint32_t cipherLen = tmpHeader->dataLength - extHeaderSize; // 消息体密文长度
+    size_t decryptRawLen = asyncEp->mAes.GetRawLen(cipherLen); // 预期解密后消息体明文长度
+    size_t totalBufSize = decryptRawLen + extHeaderSize;
+
+    messageReady = msg.AllocateIfNeed(totalBufSize);
     if (NN_LIKELY(messageReady)) {
+        // 分片包需要额外拷贝extHeader
+        if (extHeaderSize > 0) {
+            if (memcpy_s(msg.mBuf, totalBufSize, reinterpret_cast<void *>(ctx->mrMemAddr +
+                sizeof(UBSHcomNetTransHeader)), extHeaderSize) != NN_OK) {
+                NN_LOG_ERROR("Failed to memcpy extHeader");
+                ubWorker->RePostReceive(ctx);
+                return NN_ERROR;
+            }
+        }
         uint32_t decryptLen = 0;
         if (!asyncEp->mAes.Decrypt(asyncEp->mSecrets, reinterpret_cast<void *>(ctx->mrMemAddr +
-            sizeof(UBSHcomNetTransHeader)), tmpHeader->dataLength, msg.mBuf, decryptLen)) {
+            sizeof(UBSHcomNetTransHeader) + extHeaderSize), cipherLen,
+            reinterpret_cast<void *>(msg.mBuf + extHeaderSize), decryptLen)) {
             NN_LOG_ERROR("Failed to decrypt data");
             (void)ubWorker->RePostReceive(ctx);
             return NN_DECRYPT_FAILED;
@@ -1689,7 +1709,7 @@ NResult NetDriverUBWithOob::NewRequestOnEncryption(UBOpContextInfo *ctx, UBSHcom
             ubWorker->RePostReceive(ctx);
             return NN_ERROR;
         }
-        msg.mDataLen = decryptRawLen;
+        msg.mDataLen = decryptLen + extHeaderSize;
     }
     return NN_OK;
 }
