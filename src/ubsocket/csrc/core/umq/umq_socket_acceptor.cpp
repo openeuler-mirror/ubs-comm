@@ -183,7 +183,7 @@ int UmqAcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation,
                                      ssize_t &protocol_negotiation_recv_size)
 {
     protocol_negotiation_recv_size =
-        SocketConnHelper::SendSocketData(fd, &protocol_negotiation, sizeof(protocol_negotiation), NEGOTIATE_TIMEOUT_MS);
+        SocketConnHelper::RecvSocketData(fd, &protocol_negotiation, sizeof(protocol_negotiation), NEGOTIATE_TIMEOUT_MS);
     if (protocol_negotiation_recv_size <= 0) {
         UBS_VLOG_ERR("Validate protocol failed, fd: %d, ret: %zd\n",
                      fd, protocol_negotiation_recv_size);
