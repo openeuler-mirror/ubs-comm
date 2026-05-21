@@ -75,7 +75,6 @@
 #define ENV_VAR_POOL_MAX_SIZE     "UBSOCKET_POOL_MAX_SIZE"      // MB
 #define ENV_VAR_BUF_POOL_DEPTH    "UBSOCKET_BUF_POOL_DEPTH"
 #define ENV_VAR_USE_ZCOPY         "UBSOCKET_USE_BRPC_ZCOPY"
-#define ENV_LOG_USE_PRINTF        "UBSOCKET_LOG_USE_PRINTF" // default 0, 0 false; 1 true
 #define ENV_SCHEDULE_POLICY       "UBSOCKET_SCHEDULE_POLICY" // affinity_priority， affinity, rr
 #define ENV_TRACE_ENABLE          "UBSOCKET_TRACE_ENABLE"
 #define ENV_TRACE_TIME            "UBSOCKET_TRACE_TIME"
@@ -267,11 +266,6 @@ public:
         return m_src_eid;
     }
 
-    bool GetLogUse()
-    {
-        return m_log_use_printf;
-    }
-
     dev_schedule_policy GetDevSchedulePolicy()
     {
         return m_dev_schedule_policy;
@@ -336,13 +330,6 @@ protected:
     virtual void LoadEnvVars()
     {
         char *env_ptr;
-        if ((env_ptr = getenv(ENV_LOG_USE_PRINTF)) != NULL) {
-            if (strcmp(env_ptr, "true") != 0 && strcmp(env_ptr, "false") != 0) {
-                printf(
-                    "WARNING: Flag 'ubsocket_log_use_printf' has wrong input type. Using default value : false.\n");
-            }
-            ReadEnvVar(env_ptr, m_log_use_printf_str, sizeof(m_stats_str));
-        }
 
         if ((env_ptr = getenv(ENV_VAR_USE_ZCOPY)) != nullptr) {
             ReadEnvVar(env_ptr, m_use_brpc_zcopy_str, sizeof(m_use_brpc_zcopy_str));
@@ -589,7 +576,6 @@ protected:
     char m_trans_mode_str[TRANS_MODE_STR_LEN_MAX] = "";
     char m_dev_ip_str[IP_ADDR_STR_LEN_MAX] = "";
     char m_dev_name_str[DEV_NAME_STR_LEN_MAX] = "";
-    char m_log_use_printf_str[BOOL_STR_LEN_MAX] = "";
     char m_stats_str[BOOL_STR_LEN_MAX] = "";
     char m_use_brpc_zcopy_str[BOOL_STR_LEN_MAX] = "";
     char m_block_type_str[BLOCK_TYPE_STR_LEN_MAX] = "";
@@ -619,7 +605,6 @@ protected:
     bool m_stats_enable = false;
     bool m_trace_enable = true;
     bool m_probe_enable = false;
-    bool m_log_use_printf = true;
     bool m_use_brpc_zcopy = true;
     bool m_ub_epoll_enable = false;
     dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;

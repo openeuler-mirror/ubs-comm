@@ -348,13 +348,6 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_GetDevNameStr)
     EXPECT_EQ(nameStr, nullptr);  // Default is empty
 }
 
-TEST_F(ConfigureSettingsTest, ConfigSettings_GetLogUse)
-{
-    ConfigSettings config;
-    bool logUse = config.GetLogUse();
-    EXPECT_TRUE(logUse);  // Default is true
-}
-
 // ============= ConfigSettings Init Tests =============
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_Init_Basic)
@@ -448,17 +441,6 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_Init_StatsEnable)
     unsetenv("UBSOCKET_STATS_CLI");
 }
 
-TEST_F(ConfigureSettingsTest, ConfigSettings_Init_LogUsePrintf)
-{
-    setenv("UBSOCKET_LOG_USE_PRINTF", "true", SETENV_OVERWRITE);
-
-    ConfigSettings config;
-    int ret = config.Init();
-    EXPECT_EQ(ret, 0);
-
-    unsetenv("UBSOCKET_LOG_USE_PRINTF");
-}
-
 TEST_F(ConfigureSettingsTest, ConfigSettings_Init_TxDepthBelowMin)
 {
     setenv("UBSOCKET_TX_DEPTH", "1", SETENV_OVERWRITE);  // Below MIN_TX_DEPTH
@@ -521,31 +503,6 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_GetUbsocketTraceFileSize)
 }
 
 // ============= Additional Init Tests for Coverage =============
-
-TEST_F(ConfigureSettingsTest, ConfigSettings_Init_LogUsePrintfTrue)
-{
-    setenv("UBSOCKET_LOG_USE_PRINTF", "true", SETENV_OVERWRITE);
-    setenv("UBSOCKET_LOG_LEVEL", "DEBUG", SETENV_OVERWRITE);
-
-    ConfigSettings config;
-    int ret = config.Init();
-    EXPECT_EQ(ret, 0);
-    EXPECT_TRUE(config.GetLogUse());
-
-    unsetenv("UBSOCKET_LOG_USE_PRINTF");
-    unsetenv("UBSOCKET_LOG_LEVEL");
-}
-
-TEST_F(ConfigureSettingsTest, ConfigSettings_Init_LogUsePrintfFalse)
-{
-    setenv("UBSOCKET_LOG_USE_PRINTF", "false", SETENV_OVERWRITE);
-
-    ConfigSettings config;
-    int ret = config.Init();
-    EXPECT_EQ(ret, 0);
-
-    unsetenv("UBSOCKET_LOG_USE_PRINTF");
-}
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_Init_TransModeIB)
 {
@@ -758,13 +715,6 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_IsDevIpv6_Default)
     EXPECT_FALSE(isIpv6);
 }
 
-TEST_F(ConfigureSettingsTest, ConfigSettings_GetLogUse_Default)
-{
-    ConfigSettings config;
-    bool logUse = config.GetLogUse();
-    EXPECT_TRUE(logUse);
-}
-
 TEST_F(ConfigureSettingsTest, ConfigSettings_GetUbTransMode_Default)
 {
     ConfigSettings config;
@@ -901,7 +851,6 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_Init_BooleanCombinations)
     // All true
     setenv("UBSOCKET_STATS_CLI", "true", SETENV_OVERWRITE);
     setenv("UBSOCKET_USE_BRPC_ZCOPY", "true", SETENV_OVERWRITE);
-    setenv("UBSOCKET_LOG_USE_PRINTF", "true", SETENV_OVERWRITE);
 
     ConfigSettings config;
     EXPECT_EQ(config.Init(), 0);
@@ -909,12 +858,10 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_Init_BooleanCombinations)
 
     unsetenv("UBSOCKET_STATS_CLI");
     unsetenv("UBSOCKET_USE_BRPC_ZCOPY");
-    unsetenv("UBSOCKET_LOG_USE_PRINTF");
 
     // All false
     setenv("UBSOCKET_STATS_CLI", "false", SETENV_OVERWRITE);
     setenv("UBSOCKET_USE_BRPC_ZCOPY", "false", SETENV_OVERWRITE);
-    setenv("UBSOCKET_LOG_USE_PRINTF", "false", SETENV_OVERWRITE);
 
     ConfigSettings config2;
     EXPECT_EQ(config2.Init(), 0);
@@ -922,7 +869,6 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_Init_BooleanCombinations)
 
     unsetenv("UBSOCKET_STATS_CLI");
     unsetenv("UBSOCKET_USE_BRPC_ZCOPY");
-    unsetenv("UBSOCKET_LOG_USE_PRINTF");
 }
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_Init_IPv6FullAddress)
@@ -1548,28 +1494,24 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_Init_AllBooleanTrue)
 {
     setenv("UBSOCKET_STATS_CLI", "true", SETENV_OVERWRITE);
     setenv("UBSOCKET_USE_BRPC_ZCOPY", "true", SETENV_OVERWRITE);
-    setenv("UBSOCKET_LOG_USE_PRINTF", "true", SETENV_OVERWRITE);
 
     ConfigSettings config;
     EXPECT_EQ(config.Init(), 0);
 
     unsetenv("UBSOCKET_STATS_CLI");
     unsetenv("UBSOCKET_USE_BRPC_ZCOPY");
-    unsetenv("UBSOCKET_LOG_USE_PRINTF");
 }
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_Init_AllBooleanFalse)
 {
     setenv("UBSOCKET_STATS_CLI", "false", SETENV_OVERWRITE);
     setenv("UBSOCKET_USE_BRPC_ZCOPY", "false", SETENV_OVERWRITE);
-    setenv("UBSOCKET_LOG_USE_PRINTF", "false", SETENV_OVERWRITE);
 
     ConfigSettings config;
     EXPECT_EQ(config.Init(), 0);
 
     unsetenv("UBSOCKET_STATS_CLI");
     unsetenv("UBSOCKET_USE_BRPC_ZCOPY");
-    unsetenv("UBSOCKET_LOG_USE_PRINTF");
 }
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_Init_ZeroEidIdx)
@@ -1695,18 +1637,6 @@ TEST_F(ConfigureSettingsTest, ConfigSettings_Init_TransModeAllTypes)
         EXPECT_EQ(config.Init(), 0);
         unsetenv("UBSOCKET_TRANS_MODE");
     }
-}
-
-TEST_F(ConfigureSettingsTest, ConfigSettings_Init_LogUsePrintfTrueAdditional)
-{
-    setenv("UBSOCKET_LOG_USE_PRINTF", "true", SETENV_OVERWRITE);
-    setenv("UBSOCKET_LOG_LEVEL", "INFO", SETENV_OVERWRITE);
-
-    ConfigSettings config;
-    EXPECT_EQ(config.Init(), 0);
-
-    unsetenv("UBSOCKET_LOG_USE_PRINTF");
-    unsetenv("UBSOCKET_LOG_LEVEL");
 }
 
 TEST_F(ConfigureSettingsTest, ConfigSettings_Init_StatsEnabledAdditional)

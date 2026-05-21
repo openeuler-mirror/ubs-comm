@@ -71,7 +71,6 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_EID_IDX                  | 使用普通设备的eid编号                             | ub协议下，通过`urma_admin show`命令查询获得                  | 0                 | `RPC_ADPT_DEV_NAME`为普通设备时必填 |
 | UBSOCKET_SRC_EID                  | 使用bonding设备的eid                              | ub协议下，通过`urma_admin show`命令查询获得                  | bonding设备eid    | 否                                  |
 | UBSOCKET_LOG_LEVEL                | 日志级别（仅输出大于等于该级别的日志）            | error：错误型<br>warn：警告型<br>notice：提示型<br>info：信息型<br>debug：调试型 | info              | 否                                  |
-| UBSOCKET_LOG_USE_PRINTF           | 是否将日志打印到前台                              | true：日志在前台打印<br>false：日志不在前台打印              | true             | 否                                  |
 | UBSOCKET_TX_DEPTH                 | 发送队列深度                                      | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfs_depth`两者的最小值） | 1024              | 否                                  |
 | UBSOCKET_RX_DEPTH                 | 接受队列深度                                      | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfr_depth`两者的最小值） | 1024              | 否                                  |
 | UBSOCKET_READV_UNLIMITED          | 是否打开readv上报限制                             | false，true                                                  | true              | 否                                  |
@@ -249,7 +248,6 @@ make -j32
 
 ```shell
 $ export LD_PRELOAD=librpc_adapter_brpc.so
-$ export UBSOCKET_LOG_USE_PRINTF=true
 $ export UBSOCKET_UB_FORCE=true
 $ ./echo_c++_srever  # 或者./echo_c++_client
 ```
@@ -264,22 +262,33 @@ $ ./echo_c++_srever  # 或者./echo_c++_client
 
 ### 5.1 日志目录
 
-UBSocket提供了两种日志输出方式，如通过环境变量UBSOCKET\_LOG\_USE\_PRINTF进行配置。
+UBSocket提供了两种日志输出方式。
 
--   如果UBSOCKET\_LOG\_PRINTF=true，则UBSocket日志直接打屏显示，业务可以讲日志信息重定向到指定文件中
--   如果UBSOCKET\_LOG\_PRINTF=false，则UBSocket日志打印在/var/log/messages中
+-   如果使用brpc编译，则会装载brpc的LOG_AT或LOG_AT1打印函数，函数会影响格式头部的实现效果。
+-   如果不使用brpc编译，则会使用一个默认的打印函数，输出格式为参考brpc的所实现。
 
 ### 5.2 日志格式
 
--   UBSocket日志格式如下：
+-   UBSocket日志格式，装载brpc的LOG_AT时，如下：
 
 ```
-时间戳 [线程ID] | 日志等级 | UBSOCKET | 错误类型 | 函数名[代码行号] | 日志信息
+日志等级 时间戳 线程ID 文件名:代码行号] [UBSOCKET 函数名] 日志信息
+```
+-   UBSocket日志格式，装载brpc的LOG_AT1时，如下：
+
+```
+日志等级 时间戳 进程ID 线程ID 文件名:代码行号] [UBSOCKET 函数名] 日志信息
+```
+-   UBSocket日志格式，不进行brpc编译或brpc侧未使用ubsocket_set_logger钩子时，如下：
+
+```
+日志等级 时间戳 进程ID:线程ID 文件名:代码行号] [UBSOCKET 函数名] 日志信息
 ```
 
 >说明： 
->-   日志等级：包括ERROR, WARNING, NOTICE, INFO, DEBUG
->-   错误类型：包括UMQ_AE, UMQ_API, UMQ_CQE, UBSocket，其中非ERROR级别固定为UBSocket
+>-   glog日志等级参数对应brpc侧参数【minloglevel】，取值为数字：0=INFO 1=WARNING 2=ERROR。输入>=3时认为大于所有等级，会进行日志关闭。输入<0视为异常。
+>-   blog日志等级参数对应brpc侧参数【minloglevel】，取值为数字：0=INFO 1=NOTICE 2=WARNING 3=ERROR。输入>=4时认为大于所有等级，会进行日志关闭。输入<0视为异常。
+>-   不用brpc，日志等级参数默认取INFO。如果使用brpc编译，可通过【ubsocket_set_log_level】钩子在brpc侧定义等级。传参可取值为数字：0=DEBUG 1=INFO 2=NOTICE 3=WARNING 4=ERROR。输入>=5时认为大于所有等级，会进行日志关闭。输入<0用回默认1=INFO等级。
 >-   函数名：上报该日志的函数名
 >-   代码行号：上报该日志的代码行号
 >-   日志信息：该行记录对应的日志信息，包括异常信息说明等
