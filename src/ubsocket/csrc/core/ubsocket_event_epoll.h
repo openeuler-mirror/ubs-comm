@@ -12,9 +12,13 @@
 #define UBS_COMM_UBSOCKET_EPOLL_FD_H
 
 #include "ubsocket_core_types.h"
+#include "ubsocket_spsc_ring_queue.h"
 
 namespace ock {
 namespace ubs {
+
+constexpr auto MAX_READABLE_FD_COUNT = 0x10000U;
+constexpr int MAX_EPOLL_WAIT_COUNT = 1024;
 
 enum EpollEventType : uint64_t {
     EPOLL_EVENT_RAW_SOCKET = 0,
@@ -199,20 +203,20 @@ public:
      */
     int ProcessOneEvent(const struct epoll_event &event) override;
 
-private:
-    EpollRunner() = default;
-    /**
-     * @brief start thread to epoll_wait
-     */
-    void RunInThread() noexcept;
-
-private:
+protected:
     int epoll_fd_;                        /* used by thread */
     int exit_efd_;                        /* used to notify thread exit */
     uint32_t event_ack_batch = 0;         /* do ack_interrupt when epoll num reaches event_ack_batch */
     u_mutex_t *mutex_;                    /* mutex */
     std::once_flag flag_;
     std::thread wait_thread_;
+
+private:
+    EpollRunner() = default;
+    /**
+     * @brief start thread to epoll_wait
+     */
+    void RunInThread() noexcept;
 };
 
 class EpollRunnerFactory {
@@ -256,7 +260,9 @@ public:
      * @return 0: success; -1: failed
      */
     virtual int EpollWait(const SocketPtr &sock, struct epoll_event *events, int maxevents, int timeout) = 0;
-    
+
+    virtual void WakeUpEpollFd() = 0;
+
     DEFINE_REF_OPERATION_FUNC;
     
 public:
@@ -304,6 +310,17 @@ public:
      * @return 0: success; -1: failed
      */
     int EpollWait(const SocketPtr &sock, struct epoll_event *events, int maxevents, int timeout);
+
+    /**
+     * @brief add event_data to readable socket event queue
+     * @param data event_data added to event queue
+     * @return 0: success; -1: failed
+     */
+    int AddReadableEvent(epoll_data_t data);
+
+    int SetReadableEventFd();
+
+    void WakeUpEpollFd() override;
 
 private:
     /**
@@ -389,14 +406,24 @@ private:
         return true;
     }
 
+    /**
+     * @brief deal with events in the readable socket event queue
+     */
+    int ArrangeWakeUpEvents(struct epoll_event *events, int input_count, int max_events);
+
+    /**
+     * @brief remove all stashed EpollEvent at epoll_wait
+     */
+    void ReleaseRemovedEventsData();
+
 private:
     int sock_readable_fd_ = -1;
     EpollEvent sock_readable_event_ = { EPOLL_EVENT_UB_SOCKET_IN, -1, epoll_event{} };
     std::unordered_map<int, EpollEvent *> socket_data_;
     EpollEvent *removed_head_ = nullptr; // 待删除的event data列表，用wait唤醒时统一释放
+    SPSCRingQueue<struct epoll_event> readable_sockets_event_queue_{ MAX_READABLE_FD_COUNT };
 };
 using AsyncEventPollPtr = Ref<AsyncEventPoll>;
-
 
 } // namespace ubs
 } // namespace ock

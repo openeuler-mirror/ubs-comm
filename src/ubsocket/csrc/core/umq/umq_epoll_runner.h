@@ -18,7 +18,8 @@
 namespace ock {
 namespace ubs {
 namespace umq {
-class UmqEpollRunner : public EpollRunner {
+
+class UmqEpollRunner : public EpollRunner<SocketType::SOCK_TYPE_UMQ> {
 public:
     /**
      * @brief add epoll_event to EpollRunner
@@ -26,23 +27,29 @@ public:
      * @param event event of socket fd
      * @return int -1: failed; 0: success
      */
-    int AddEpollEvent(const Socket *const socket, struct epoll_event *event) override;
+    // int AddEpollEvent(const SocketPtr &sock, struct epoll_event *event) override;
 
     /**
      * @brief delete epoll_event from EpollRunner
      * @param socket_fd socket fd removed
      * @return int -1: failed; 0: success
      */
-    int RemoveEpollEvent(const Socket *const socket) override;
+    // int RemoveEpollEvent(const Socket *const socket) override;
 
     /**
      * @brief process epoll_wait event
      * @param event event to process
      */
-    void ProcessOneEvent(const struct epoll_event &event) override;
+    int ProcessOneEvent(const struct epoll_event &event) override;
+
+    int ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq);
+
+    int ProcessMainUmqRearm(uint64_t main_umq);
+
+    static std::unordered_set<UmqRxOps *> SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count);
 
 private:
-    std::unordered_map<int, uint64_t> jfr_main_umq_;
+    uint32_t event_num_{ 0 };
 };
 } // namespace umq
 } // namespace ubs
