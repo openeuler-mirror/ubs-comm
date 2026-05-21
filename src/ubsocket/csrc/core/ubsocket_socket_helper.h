@@ -28,13 +28,26 @@ public:
     static bool IsTfoConnection(const int &fd);
     static int SetTcpNoDelay(int fd);
     static std::string ExtractIpFromSockAddr(const struct sockaddr *address);
+    static int GetCurrentProcessSocketId();
+    // 获取所有 Socket ID
+    static std::vector<uint32_t> GetSocketIdsViaNumaSysfs();
     template <typename TimePoint>
     static ALWAYS_INLINE bool IsTimeout(TimePoint &start, uint32_t timeout_ms)
     {
         TimePoint end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
         return duration.count() > timeout_ms;
     }
+
+private:
+    // 从 CPU ID 获取其 Socket ID（physical_package_id）
+    static int GetSocketIdOfCpu(int cpu);
+    // 通过 NUMA 节点获取所有 Socket ID
+    static std::vector<uint32_t> GetSocketIdsViaNuma();
+    // CPU 扫描方式获取 Socket IDs
+    static std::vector<uint32_t> GetSocketIdsViaCpuScan();
+    // 解析cpulist字符串
+    static int GetFirstCpuFromCpulist(const std::string &cpuListStr);
 };
 } // namespace ubs
 } // namespace ock

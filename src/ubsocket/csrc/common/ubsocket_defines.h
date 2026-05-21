@@ -142,6 +142,13 @@ constexpr const char *LARGE_QBUF_BLOCK_TYPE = "large";     // 64k
 constexpr uint32_t BRPC_SYM_STR_LEN_MAX = 128;
 constexpr uint32_t BRPC_ALLOC_DEFAULT_BUF_NUM = 1;
 
+constexpr char CPU_LIST_PREFIX_PATH[] = "/sys/devices/system/node/";
+constexpr char CPU_LIST_SUFFIX_PATH[] = "/cpulist";
+constexpr char SOCKET_ID_PERFIX_PATH[] = "/sys/devices/system/cpu/";
+constexpr char SOCKET_ID_SUFFIX_PATH[] = "/topology/physical_package_id";
+constexpr uint16_t CPU_STR_SIZE = 3;
+constexpr uint16_t NODE_STR_SIZE = 4;
+
 static const std::string EMPTY_STR;
 } // namespace ubs
 } // namespace ock
