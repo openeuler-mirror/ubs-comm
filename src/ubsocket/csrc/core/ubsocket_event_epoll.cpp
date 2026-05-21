@@ -18,7 +18,6 @@ namespace ubs {
 
 std::unordered_map<int, EpollMapper *> g_socket_epoll_mappers{};
 u_rw_lock_t *g_socket_epoll_lock = nullptr;
-constexpr int MAX_EPOLL_WAIT_COUNT = 1024;
 
 EpollMapper *GetSocketEpollMapper(int socket_fd)
 {
@@ -281,7 +280,114 @@ int AsyncEventPoll::EpollCtl(int op, const SocketPtr &sock, struct epoll_event *
 
 int AsyncEventPoll::EpollWait(const SocketPtr &sock, struct epoll_event *events, int maxevents, int timeout)
 {
+    if (UNLIKELY(events == nullptr)) {
+        UBS_VLOG_ERR("async_epoll EpollWait events is null.\n");
+        errno = EFAULT;
+        return -1;
+    }
+
+    if (UNLIKELY(maxevents < 0)) {
+        UBS_VLOG_ERR("async_epoll EpollWait maxevents(%d) invalid.\n", maxevents);
+        errno = EINVAL;
+        return -1;
+    }
+
+    auto exist_count = readable_sockets_event_queue_.Size();
+    if (UNLIKELY(exist_count > 0)) {
+        auto count = readable_sockets_event_queue_.MultiPop(events, maxevents);
+        if (count > 0) {
+            return (int)count;
+        }
+    }
+
+    int ret = 0;
+    if (UNLIKELY(maxevents == 0 || (ret = epoll_wait(epoll_fd_, events, maxevents, timeout)) <= 0)) {
+        return ret;
+    }
+
+    auto real_count = ArrangeWakeUpEvents(events, ret, maxevents);
+    ReleaseRemovedEventsData();
+    return real_count;
+}
+
+int AsyncEventPoll::AddReadableEvent(epoll_data_t data)
+{
+    if (!readable_sockets_event_queue_.Push(epoll_event{
+        .events = EPOLLIN,
+        .data = data })) {
+            return -1;
+        }
     return 0;
+}
+
+int AsyncEventPoll::SetReadableEventFd()
+{
+    return eventfd_write(sock_readable_fd_, 1);
+}
+
+void AsyncEventPoll::WakeUpEpollFd()
+{
+    uint64_t notification = 1;
+    if (eventfd_write(sock_readable_fd_, notification) < 0) {
+        UBS_VLOG_ERR("Wakeup EventPoll fd: %d failed.\n", epoll_fd_);
+    }
+}
+
+int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_count, int max_events)
+{
+    bool socket_readable = false;
+    int real_count = 0;
+    for (auto i = 0; i < input_count; ++i) {
+        auto event_data = (EpollEvent *)events[i].data.ptr;
+        if (UNLIKELY(event_data == nullptr)) {
+            // invalid event
+            UBS_VLOG_WARN("async_epoll(%d) wait get invalid event\n", epoll_fd_);
+            continue;
+        }
+
+        if (event_data->event_type == EPOLL_EVENT_RAW_SOCKET) {
+            // pure socket
+            if (i != real_count) {
+                events[real_count].events = events[i].events;
+            }
+            events[real_count].data = event_data->event.data;
+            real_count++;
+            continue;
+        }
+
+        if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_OUT) {
+            events[real_count].events = EPOLLOUT;
+            events[real_count].data = event_data->event.data;
+            real_count++;
+            continue;
+        }
+
+        if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_IN) {
+            socket_readable = true;
+        }
+    }
+
+    if (LIKELY(socket_readable)) {
+        auto space_size = max_events - real_count;
+        if (space_size > 0) {
+            real_count += (int)readable_sockets_event_queue_.MultiPop(events + real_count, space_size);
+        }
+    }
+
+    return real_count;
+}
+
+void AsyncEventPoll::ReleaseRemovedEventsData()
+{
+    Locker sLock(ctl_mutex_);
+    auto removed_head = removed_head_;
+    removed_head_ = nullptr;
+
+    while (removed_head != nullptr) {
+        auto next = removed_head->next;
+        delete removed_head;
+        removed_head = next;
+    }
 }
 
 int AsyncEventPoll::EpollCtlAdd(const SocketPtr &sock, struct epoll_event *event)
