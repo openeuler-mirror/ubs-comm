@@ -31,13 +31,10 @@ using SocketBasePtr = Ref<SocketBase>;
 class SocketBase : public Socket {
 public:
     static Result Create(int fd, SocketType t, SocketPtr &sock);
-    static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);
-    static Result CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops);
-    static Result CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptor);
-    static Result CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&connector);
 
+    static Result GenerateSocketCommOps(const SocketPtr &sock);
 public:
-    SocketBase(int fd) : Socket(fd) {}
+    SocketBase(int fd, SocketType type) : Socket(fd, type) {}
     ~SocketBase() override = default;
 
     virtual Result Initialize() noexcept = 0;
@@ -47,6 +44,12 @@ public:
     int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     int WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     int ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+
+protected:
+    static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);
+    static Result CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops);
+    static Result CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptor);
+    static Result CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&connector);
 
 protected:
     DataTx tx_;                      /* take charge of send */

@@ -38,25 +38,9 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
         auto sock = RefConvert<UmqSocket, Socket>(umqSock);
         auto sockBase = RefConvert<UmqSocket, SocketBase>(umqSock);
 
-        /* step3: create tx ops */
-        DataTxOps *txOps = nullptr;
-        result = CreateTxOps(t, sock, txOps);
-        if (result != UBS_OK) {
-            return result;
-        }
-
-        /* step4: create rx ops */
-        DataRxOps *rxOps = nullptr;
-        result = CreateRxOps(t, sock, rxOps);
-        if (result != UBS_OK) {
-            delete txOps;
-            return result;
-        }
-
         AcceptorOps *acceptorOps = nullptr;
         result = CreateAcceptorOps(t, sock, acceptorOps);
         if (result != UBS_OK) {
-            delete acceptorOps;
             return result;
         }
 
@@ -67,17 +51,12 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
             return result;
         }
 
-        /* step5: assign tx and rx */
-        sockBase->tx_ = DataTx(sock, txOps);
-        sockBase->rx_ = DataRx(sock, rxOps);
         sockBase->acceptor_ = new Acceptor(sock, acceptorOps);
         sockBase->connector_ = new Connector(sock, connectorOps);
 
         /* step6: start epoll runner */
         result = EpollRunnerFactory::GetInstance(SocketType::SOCK_TYPE_UMQ).Start();
         if (result != UBS_OK) {
-            delete txOps;
-            delete rxOps;
             return result;
         }
         // TODO：资源回收时进行销毁
@@ -90,6 +69,27 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
         return UBS_INVALID_PARAM;
     }
 } // namespace ubs
+
+Result SocketBase::GenerateSocketCommOps(const SocketPtr &sock)
+{
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    DataTxOps *txOps = nullptr;
+    Result result = CreateTxOps(sock->type_, sock, txOps);
+    if (result != UBS_OK) {
+        return result;
+    }
+
+    DataRxOps *rxOps = nullptr;
+    result = CreateRxOps(sock->type_, sock, rxOps);
+    if (result != UBS_OK) {
+        delete txOps;
+        return result;
+    }
+
+    sockBase->tx_ = DataTx(sock, txOps);
+    sockBase->rx_ = DataRx(sock, rxOps);
+    return UBS_OK;
+}
 
 Result SocketBase::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops)
 {

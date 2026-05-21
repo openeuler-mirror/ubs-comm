@@ -116,7 +116,7 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &mUsedPo
     auto umqSocket = RefConvert<Socket, UmqSocket>(socketPtr);
     ret = umqSocket->CreateLocalUmq(&conn_eid, mUsedPorts);
     // 校验 bind 是否成功
-    if (ret != UBS_OK) {
+    if (ret != UBS_OK || SocketBase::GenerateSocketCommOps(socketPtr) != UBS_OK) {
         UBS_VLOG_ERR("Failed to create umq\n");
         return ret;
     }

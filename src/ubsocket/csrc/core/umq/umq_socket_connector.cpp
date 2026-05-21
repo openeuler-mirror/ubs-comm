@@ -383,7 +383,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     CpMsg local_cp_msg;
     CpMsg remote_cp_msg;
     Result ret;
-
+    auto socket = RefConvert<UmqSocket, Socket>(umq_socket);
     // CreateLocalUmq
     if (umq_socket->GetTopoType() == UMQ_TOPO_TYPE_FULLMESH_1D) {
         ret = umq_socket->CreateLocalUmq(&umq_conn_info_.conn_eid, used_ports);
@@ -392,7 +392,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
         // umq_eid_t localEid = umq_socket->GetDevSrcEid();
         ret = umq_socket->CreateLocalUmq(&umq_conn_info_.conn_eid, used_ports);
     }
-    if (ret != UBS_OK) {
+    if (ret != UBS_OK || SocketBase::GenerateSocketCommOps(socket) != UBS_OK) {
         UBS_VLOG_ERR("Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return ret;
