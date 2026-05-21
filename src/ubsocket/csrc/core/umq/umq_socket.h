@@ -104,7 +104,7 @@ private:
     uint32_t getLeftPostRxNum(uint64_t umq_handle);
 
     // 链接类型相关
-    bool is_bonding_ = true;
+    bool is_bonding_ = false;
     ub_trans_mode trans_mode_ = RC_TP;
     umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
     // UMQ bind

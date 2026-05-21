@@ -110,9 +110,13 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     }
 #endif
 
-    if (strcpy(queue_cfg.dev_info.dev.dev_name, "bonding_dev_0") != 0) {
-        UBS_VLOG_ERR("Failed to strcpy device name\n");
+    if (strcpy(queue_cfg.dev_info.dev.dev_name, "bonding_dev_0") == nullptr) {
+        UBS_VLOG_ERR("Failed to strcpy device name, errno: %d\n", errno);
         return UBS_SET_DEV_INFO;
+    }
+    if (IsBindind()) {
+        queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+        queue_cfg.dev_info.eid.eid = *conn_eid;
     }
 
     static const char *trans_mode_str[RC_CTP + 1] = {"RC_TP", "RM_TP", "RM_CTP", "RC_CTP"};
