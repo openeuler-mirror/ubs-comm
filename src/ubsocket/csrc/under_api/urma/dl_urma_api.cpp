@@ -162,7 +162,7 @@ Result UrmaApi::Load() noexcept
     /* step1: open library file */
     void *handle = dlopen("libumq.so", RTLD_NOW | RTLD_NODELETE | RTLD_GLOBAL);
     if (handle == nullptr) {
-        UBS_VLOG_ERR("Open libumq failed, error: %s\n", dlerror());
+        UBS_VLOG_ERR("Open libumq failed, error: %s", dlerror());
         return UBS_DL_OPEN_LIB_FAILED;
     }
 
