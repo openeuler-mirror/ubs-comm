@@ -378,7 +378,7 @@ int UmqSocket::GetTxFd()
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
-        UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, umq handle: %d\n", umq_handle_);
+        UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, umq handle: %ld", umq_handle_);
         return -1;
     }
     return tx_interrupt_fd;
