@@ -89,7 +89,23 @@ Result UmqAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
                 return UBS_UB_ACCEPT;
         }
     }*/
-    return DoUbAccept(socketPtr, mUsedPorts);
+    Result ret = DoUbAccept(socketPtr, mUsedPorts);
+    if (ret != UBS_OK) {
+        return ret;
+    }
+    if (SocketConnHelper::SendSocketData(fd, &ret, sizeof(ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ret)) {
+        UBS_VLOG_ERR("Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                     EID_ARGS(peer_eid), conn_info.peer_ip.c_str(), fd);
+        return UBS_ERROR;
+    }
+
+    if (SocketConnHelper::RecvSocketData(fd, &ret, sizeof(ret), CONTROL_PLANE_TIMEOUT_MS) !=
+        sizeof(ret)) {
+        UBS_VLOG_ERR("Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                     EID_ARGS(peer_eid), conn_info.peer_ip.c_str(), fd);
+        return UBS_ERROR;
+    }
+    return UBS_OK;
 }
 
 Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &mUsedPorts)
