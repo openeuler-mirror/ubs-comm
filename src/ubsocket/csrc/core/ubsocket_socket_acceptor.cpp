@@ -19,8 +19,6 @@ namespace ubs {
 int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len)
 {
     int fd = -1;
-    raw_fd_ = sock->raw_socket_;
-
     // 1. 异步accept模式下，从ready_queue中取fd
     if (GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED && TryPopAsyncReadyFd(fd, address, address_len)) {
         return fd;

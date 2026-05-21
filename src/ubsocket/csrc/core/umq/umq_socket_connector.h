@@ -22,7 +22,10 @@ namespace umq {
 // 基于 umq 的 connector 实现层
 class UmqConnectorOps : public ConnectorOps {
 public:
-    UmqConnectorOps() = default;
+    UmqConnectorOps(int fd)
+    {
+        raw_fd_ = fd;
+    }
     ~UmqConnectorOps() = default;
 
     Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
