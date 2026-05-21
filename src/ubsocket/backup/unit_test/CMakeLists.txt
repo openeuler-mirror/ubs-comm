@@ -45,6 +45,7 @@ target_sources(ubsocket_test
         utracer_info_test.cpp
         utracer_test.cpp
         probe_manager_test.cpp
+        umq_errno_converter_test.cpp
 )
 
 add_subdirectory(brpc)

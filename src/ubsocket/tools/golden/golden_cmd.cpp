@@ -12,12 +12,14 @@
 #include "golden_cmd_data.h"
 #include "golden_cmd_help.h"
 #include "golden_cmd_pingpong.h"
+#include "golden_cmd_pingpong_epoll.h"
 
 namespace golden {
 void SubCommandRegistry::RegisterAll() noexcept
 {
     (void)RegisterSubCommand(SUB_CMD_MINUS_H, CreateHelp);
     (void)RegisterSubCommand(SUB_CMD_PINGPONG, CreatePingpong);
+    (void)RegisterSubCommand(SUB_CMD_PINGPONG_EPOLL, CreatePingpongEpoll);
     (void)RegisterSubCommand(SUB_CMD_DATA, CreateData);
 }
 } // namespace golden

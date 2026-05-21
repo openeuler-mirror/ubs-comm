@@ -55,7 +55,7 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     return ret;
 }
 
-Connector::Connector(const SocketPtr &sock, ConnectorOps* connectorOps) {}
+Connector::Connector(const SocketPtr &sock, ConnectorOps *connectorOps) {}
 Connector::~Connector() {}
 } // namespace ubs
 } // namespace ock

@@ -8,10 +8,14 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+
 #include "umq_setting.h"
+#include <arpa/inet.h>  // 包含 inet_pton、inet_ntop 函数
+#include <sys/socket.h> // 包含 AF_INET、AF_INET6 等地址族常量
 #include <cstdlib>
 #include <string>
 #include "common/ubsocket_global_setting.h"
+#include "core/ubsocket_socket_helper.h"
 
 namespace ock {
 namespace ubs {
@@ -85,6 +89,22 @@ Result UmqSetting::LoadEnv() noexcept
 
     if (GS::GetEnvAndValidate(ENV_UMQ_MEM_POOL_MAX_SIZE, int64EnvValue)) {
         UMQ_MEM_POOL_MAX_SIZE_MB = static_cast<uint16_t>(int64EnvValue);
+    }
+
+    if (inet_pton(AF_INET6, "4245:4944:0000:0000:0000:0000:2d00:0000", &(UMQ_LOCAL_EID)) == 1) {
+        UBS_SLOG_INFO("4245:4944:0000:0000:0000:0000:2d00:0000 (eid)\n");
+    } else {
+        UBS_SLOG_ERR("Eid is invalid. Please double check your input(4245:4944:0000:0000:0000:0000:2d00:0000)\n");
+        return UBS_ERROR;
+    }
+
+    UMQ_PROCESS_SOCKET_ID = SocketConnHelper::GetCurrentProcessSocketId();
+    UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
+    if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
+        UBS_SLOG_ERR("Failed get socket id in cpu affinity policy.\n");
+        // ResetBrpcAllocator();
+        // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+        return UBS_ERROR;
     }
 
     return UBS_OK;
