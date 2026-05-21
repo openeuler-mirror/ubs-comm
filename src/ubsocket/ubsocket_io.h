@@ -29,7 +29,6 @@ struct UbsocketIovec {
 
 struct UbsocketMsgHeader {
     uint64_t    msgId;
-    uint32_t    senderId;
     uint32_t    payloadLen;
     uint32_t    checksum;
     uint8_t     msgType;
@@ -38,10 +37,10 @@ struct UbsocketMsgHeader {
 uint32_t CalculateIovecChecksum(const struct UbsocketIovec *iov, int iovcnt);
 
 ssize_t UbsocketWritev(int fd, const struct UbsocketIovec *iov, int iovcnt,
-                       uint64_t msgId, uint32_t senderId, uint8_t msgType);
+                       uint64_t msgId, uint8_t msgType);
 
 ssize_t UbsocketReadv(int fd, struct UbsocketIovec *iov, int iovcnt,
-                      uint64_t *msgId, uint32_t *senderId, uint8_t *msgType);
+                      uint64_t *msgId, uint8_t *msgType);
 
 #ifdef __cplusplus
 }

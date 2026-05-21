@@ -28,16 +28,13 @@ static uint64_t GetCurrentTimeNs()
     return static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + static_cast<uint64_t>(ts.tv_nsec);
 }
 
-int SenderInit(struct SenderContext *ctx, uint32_t senderId, uint32_t queueDepth, uint32_t expectedQps)
+int SenderInit(struct SenderContext *ctx, uint32_t expectedQps)
 {
     if (ctx == nullptr) {
         return -1;
     }
     
     memset(ctx, 0, sizeof(struct SenderContext));
-    
-    ctx->senderId = senderId;
-    ctx->queueDepth = queueDepth > 0 ? queueDepth : DEFAULT_QUEUE_DEPTH;
     ctx->expectedQps = expectedQps;
     
     if (expectedQps > 0) {
@@ -46,9 +43,6 @@ int SenderInit(struct SenderContext *ctx, uint32_t senderId, uint32_t queueDepth
         ctx->sendIntervalNs = 0;
     }
     
-    pthread_mutex_init(&ctx->mutex, nullptr);
-    pthread_cond_init(&ctx->cond, nullptr);
-    
     memset(&ctx->stats, 0, sizeof(struct LatencyStats));
     ctx->stats.minLatencyNs = UINT64_MAX;
     ctx->stats.startTimeNs = GetCurrentTimeNs();
@@ -56,8 +50,6 @@ int SenderInit(struct SenderContext *ctx, uint32_t senderId, uint32_t queueDepth
     ctx->stats.records = static_cast<struct RequestRecord *>(
         malloc(MAX_LATENCY_SAMPLES * sizeof(struct RequestRecord)));
     if (ctx->stats.records == nullptr) {
-        pthread_mutex_destroy(&ctx->mutex);
-        pthread_cond_destroy(&ctx->cond);
         return -1;
     }
     ctx->recordCount = 0;
@@ -75,9 +67,6 @@ void SenderDestroy(struct SenderContext *ctx)
         free(ctx->stats.records);
         ctx->stats.records = nullptr;
     }
-    
-    pthread_mutex_destroy(&ctx->mutex);
-    pthread_cond_destroy(&ctx->cond);
 }
 
 void SenderRateLimit(struct SenderContext *ctx)
@@ -100,28 +89,6 @@ void SenderRateLimit(struct SenderContext *ctx)
     ctx->lastSendTimeNs = GetCurrentTimeNs();
 }
 
-static void MarkSendFailure(struct SenderContext *ctx, bool decrementPending)
-{
-    pthread_mutex_lock(&ctx->mutex);
-    if (decrementPending) {
-        ctx->pendingReplies--;
-    }
-    ctx->stats.totalFailure++;
-    ctx->stats.endTimeNs = GetCurrentTimeNs();
-    pthread_cond_signal(&ctx->cond);
-    pthread_mutex_unlock(&ctx->mutex);
-}
-
-static void MarkSendSuccess(struct SenderContext *ctx, uint64_t recvTime)
-{
-    pthread_mutex_lock(&ctx->mutex);
-    ctx->pendingReplies--;
-    ctx->stats.totalSuccess++;
-    ctx->stats.endTimeNs = recvTime;
-    pthread_cond_signal(&ctx->cond);
-    pthread_mutex_unlock(&ctx->mutex);
-}
-
 int SenderSend(struct SenderContext *ctx, const struct UbsocketIovec *iov, int iovcnt)
 {
     if (ctx == nullptr || iov == nullptr || iovcnt <= 0) {
@@ -130,39 +97,30 @@ int SenderSend(struct SenderContext *ctx, const struct UbsocketIovec *iov, int i
     
     SenderRateLimit(ctx);
     
-    pthread_mutex_lock(&ctx->mutex);
-    while (ctx->pendingReplies >= ctx->queueDepth) {
-        pthread_cond_wait(&ctx->cond, &ctx->mutex);
-    }
-    pthread_mutex_unlock(&ctx->mutex);
-    
     uint64_t sendTime = GetCurrentTimeNs();
     uint64_t msgId = ctx->msgCounter++;
     
-    ssize_t sent = UbsocketWritev(ctx->socketFd, iov, iovcnt, msgId, ctx->senderId, UBSOCKET_MSG_TYPE_REQUEST);
+    ssize_t sent = UbsocketWritev(ctx->socketFd, iov, iovcnt, msgId, UBSOCKET_MSG_TYPE_REQUEST);
     if (sent < 0) {
         ctx->stats.totalFailure++;
         ctx->stats.endTimeNs = GetCurrentTimeNs();
         return -1;
     }
     
-    pthread_mutex_lock(&ctx->mutex);
-    ctx->pendingReplies++;
-    pthread_mutex_unlock(&ctx->mutex);
-    
     uint64_t recvMsgId;
-    uint32_t recvSenderId;
     uint8_t recvMsgType;
-    ssize_t received = UbsocketReadv(ctx->socketFd, nullptr, 0, &recvMsgId, &recvSenderId, &recvMsgType);
+    ssize_t received = UbsocketReadv(ctx->socketFd, nullptr, 0, &recvMsgId, &recvMsgType);
     if (received < 0) {
-        MarkSendFailure(ctx, true);
+        ctx->stats.totalFailure++;
+        ctx->stats.endTimeNs = GetCurrentTimeNs();
         return -1;
     }
     
     if (recvMsgType != UBSOCKET_MSG_TYPE_RESPONSE) {
         printf("Invalid response message type: expected=%u, received=%u\n",
                UBSOCKET_MSG_TYPE_RESPONSE, recvMsgType);
-        MarkSendFailure(ctx, true);
+        ctx->stats.totalFailure++;
+        ctx->stats.endTimeNs = GetCurrentTimeNs();
         return -1;
     }
     
@@ -170,7 +128,8 @@ int SenderSend(struct SenderContext *ctx, const struct UbsocketIovec *iov, int i
     uint64_t latencyNs = recvTime - sendTime;
     
     UpdateLatencyStats(&ctx->stats, latencyNs);
-    MarkSendSuccess(ctx, recvTime);
+    ctx->stats.totalSuccess++;
+    ctx->stats.endTimeNs = recvTime;
     
     return 0;
 }
@@ -257,7 +216,7 @@ void PrintLatencyStats(const struct LatencyStats *stats)
     printf("==================================================\n");
 }
 
-int ReceiverInit(struct ReceiverContext *ctx, uint16_t port)
+int ReceiverInit(struct ReceiverContext *ctx, uint16_t port, uint32_t maxClients)
 {
     if (ctx == nullptr) {
         return -1;
@@ -289,6 +248,11 @@ int ReceiverInit(struct ReceiverContext *ctx, uint16_t port)
         return -1;
     }
     
+    ctx->maxClients = maxClients > 0 ? maxClients : DEFAULT_MAX_CLIENTS;
+    if (ctx->maxClients > MAX_CLIENTS) {
+        ctx->maxClients = MAX_CLIENTS;
+    }
+    
     return 0;
 }
 
@@ -314,8 +278,6 @@ void ReceiverRun(struct ReceiverContext *ctx)
     if (ctx == nullptr) {
         return;
     }
-    
-    printf("Receiver listening on port, waiting for connections...\n");
     
     fd_set readFds;
     struct timeval tv;
@@ -356,8 +318,10 @@ void ReceiverRun(struct ReceiverContext *ctx)
             if (clientFd < 0) {
                 continue;
             }
-            if (ctx->clientCount >= MAX_CLIENTS) {
-                printf("Max clients reached, rejecting connection\n");
+            if (ctx->clientCount >= ctx->maxClients) {
+                printf("Max clients reached (%u), rejecting connection from %s:%d\n",
+                       ctx->maxClients, inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
+                fflush(stdout);
                 close(clientFd);
                 continue;
             }
@@ -368,7 +332,9 @@ void ReceiverRun(struct ReceiverContext *ctx)
             setsockopt(clientFd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
             
             ctx->clientFds[ctx->clientCount++] = clientFd;
-            printf("Client connected: %s:%d\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
+            printf("Client connected: %s:%d, total clients: %u\n",
+                   inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port), ctx->clientCount);
+            fflush(stdout);
         }
         
         uint32_t i = 0;
@@ -377,13 +343,11 @@ void ReceiverRun(struct ReceiverContext *ctx)
                 struct UbsocketMsgHeader reqHeader;
                 ssize_t n = recv(ctx->clientFds[i], &reqHeader, sizeof(reqHeader), 0);
                 if (n <= 0) {
-                    printf("Client disconnected or timeout: fd=%d\n", ctx->clientFds[i]);
+                    printf("Client disconnected or timeout: fd=%d, total clients: %u\n",
+                           ctx->clientFds[i], ctx->clientCount - 1);
+                    fflush(stdout);
                     close(ctx->clientFds[i]);
-                    // 将后面的fd向前移动
-                    for (uint32_t j = i; j < ctx->clientCount - 1; j++) {
-                        ctx->clientFds[j] = ctx->clientFds[j + 1];
-                    }
-                    ctx->clientCount--;
+                    ctx->clientFds[i] = ctx->clientFds[--ctx->clientCount];
                     continue;
                 }
                 
@@ -394,12 +358,9 @@ void ReceiverRun(struct ReceiverContext *ctx)
                              sizeof(reqHeader) - headerReceived, 0);
                     if (n <= 0) {
                         printf("Client disconnected during header read: fd=%d\n", ctx->clientFds[i]);
+                        fflush(stdout);
                         close(ctx->clientFds[i]);
-                        // 将后面的fd向前移动
-                        for (uint32_t j = i; j < ctx->clientCount - 1; j++) {
-                            ctx->clientFds[j] = ctx->clientFds[j + 1];
-                        }
-                        ctx->clientCount--;
+                        ctx->clientFds[i] = ctx->clientFds[--ctx->clientCount];
                         clientDisconnected = true;
                         break;
                     }
@@ -415,12 +376,9 @@ void ReceiverRun(struct ReceiverContext *ctx)
                     ssize_t payloadN = recv(ctx->clientFds[i], &payload[0], reqHeader.payloadLen, 0);
                     if (payloadN <= 0) {
                         printf("Client disconnected during payload read: fd=%d\n", ctx->clientFds[i]);
+                        fflush(stdout);
                         close(ctx->clientFds[i]);
-                        // 将后面的fd向前移动
-                        for (uint32_t j = i; j < ctx->clientCount - 1; j++) {
-                            ctx->clientFds[j] = ctx->clientFds[j + 1];
-                        }
-                        ctx->clientCount--;
+                        ctx->clientFds[i] = ctx->clientFds[--ctx->clientCount];
                         continue;
                     }
                     
@@ -431,12 +389,9 @@ void ReceiverRun(struct ReceiverContext *ctx)
                                         reqHeader.payloadLen - payloadReceived, 0);
                         if (payloadN <= 0) {
                             printf("Client disconnected during payload read: fd=%d\n", ctx->clientFds[i]);
+                            fflush(stdout);
                             close(ctx->clientFds[i]);
-                            // 将后面的fd向前移动
-                            for (uint32_t j = i; j < ctx->clientCount - 1; j++) {
-                                ctx->clientFds[j] = ctx->clientFds[j + 1];
-                            }
-                            ctx->clientCount--;
+                            ctx->clientFds[i] = ctx->clientFds[--ctx->clientCount];
                             clientDisconnected = true;
                             break;
                         }
@@ -459,7 +414,6 @@ void ReceiverRun(struct ReceiverContext *ctx)
                 
                 struct UbsocketMsgHeader respHeader;
                 respHeader.msgId = reqHeader.msgId;
-                respHeader.senderId = reqHeader.senderId;
                 respHeader.payloadLen = 0;
                 respHeader.checksum = 0;
                 respHeader.msgType = UBSOCKET_MSG_TYPE_RESPONSE;
@@ -470,6 +424,7 @@ void ReceiverRun(struct ReceiverContext *ctx)
                 
                 if (ctx->totalReceived % STATS_REPORT_INTERVAL == 0) {
                     printf("Received: %lu, Replied: %lu\n", ctx->totalReceived, ctx->totalReplied);
+                    fflush(stdout);
                 }
             }
             i++;
