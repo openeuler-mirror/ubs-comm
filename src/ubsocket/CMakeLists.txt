@@ -14,9 +14,9 @@ option(BUILD_URMA_BACKEND "build urma backend" OFF)
 message(STATUS "ubsocket: BUILD_UMQ_BACKEND = ${BUILD_UMQ_BACKEND}")
 message(STATUS "ubsocket: BUILD_URMA_BACKEND = ${BUILD_URMA_BACKEND}")
 
-set(UBSOCKET_BASE_DIR ${PROJECT_SOURCE_DIR}/ubsocket)
-set(UBSOCKET_CSRC_DIR ${PROJECT_SOURCE_DIR}/ubsocket/csrc)
-set(UBSOCKET_INSTALL_DIR ${PROJECT_SOURCE_DIR}/output/ubsocket)
+set(UBSOCKET_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(UBSOCKET_CSRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/csrc)
+set(UBSOCKET_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/output/ubsocket)
 
 message(STATUS "ubsocket: CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
 message(STATUS "ubsocket: UBSOCKET_BASE_DIR = ${UBSOCKET_BASE_DIR}")
@@ -64,3 +64,11 @@ include_directories(
 
 add_subdirectory(csrc)
 add_subdirectory(tools/golden)
+
+option(UBSOCKET_BUILD_TESTS "Build tests" OFF)
+if(UBSOCKET_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(3rdparty/gtest)
+    add_subdirectory(3rdparty/mockcpp)
+    add_subdirectory(unit_test)
+endif()
