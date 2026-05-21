@@ -48,7 +48,7 @@ uint32_t CalculateIovecChecksum(const struct UbsocketIovec *iov, int iovcnt)
 }
 
 ssize_t UbsocketWritev(int fd, const struct UbsocketIovec *iov, int iovcnt,
-                       uint64_t msgId, uint32_t senderId, uint8_t msgType)
+                       uint64_t msgId, uint8_t msgType)
 {
     if (fd < 0 || iov == nullptr || iovcnt <= 0) {
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid parameters: fd=%d, iov=%p, iovcnt=%d", fd, iov, iovcnt);
@@ -57,7 +57,6 @@ ssize_t UbsocketWritev(int fd, const struct UbsocketIovec *iov, int iovcnt,
     
     struct UbsocketMsgHeader header;
     header.msgId = msgId;
-    header.senderId = senderId;
     header.payloadLen = 0;
     header.checksum = 0;
     header.msgType = msgType;
@@ -131,7 +130,7 @@ static ssize_t ReadvAll(int fd, struct iovec *iov, int iovcnt)
 }
 
 ssize_t UbsocketReadv(int fd, struct UbsocketIovec *iov, int iovcnt,
-                      uint64_t *msgId, uint32_t *senderId, uint8_t *msgType)
+                      uint64_t *msgId, uint8_t *msgType)
 {
     if (fd < 0 || (iov == nullptr && iovcnt != 0)) {
         RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Invalid parameters: fd=%d, iov=%p, iovcnt=%d", fd, iov, iovcnt);
@@ -153,10 +152,6 @@ ssize_t UbsocketReadv(int fd, struct UbsocketIovec *iov, int iovcnt,
     
     if (msgId != nullptr) {
         *msgId = header.msgId;
-    }
-    
-    if (senderId != nullptr) {
-        *senderId = header.senderId;
     }
     
     if (msgType != nullptr) {

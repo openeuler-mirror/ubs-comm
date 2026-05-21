@@ -33,11 +33,9 @@ static void PrintUsage(const char *progName)
     printf("  --mode <mode>           Running mode: sender or receiver\n");
     printf("  --port <port>           Port number (default: 8080)\n");
     printf("\nSender Options:\n");
-    printf("  --sender-id <id>        Sender unique ID (required for sender)\n");
     printf("  --server-addr <addr>    Receiver address (default: 127.0.0.1)\n");
     printf("  --msg-count <count>     Number of messages to send (default: 1000)\n");
     printf("  --msg-size <size>       Message size in bytes (default: 1024)\n");
-    printf("  --queue-depth <depth>   Queue depth (default: 8)\n");
     printf("  --qps <qps>             Expected QPS (0 = unlimited, default: 0)\n");
     printf("\nReceiver Options:\n");
     printf("  --max-clients <count>   Maximum number of clients (default: 10)\n");
@@ -46,23 +44,15 @@ static void PrintUsage(const char *progName)
     printf("  %s --mode receiver --port 8080\n", progName);
     printf("\n");
     printf("  # Start sender\n");
-    printf("  %s --mode sender --sender-id 1 --server-addr 127.0.0.1 --port 8080 \\\n", progName);
-    printf("       --msg-count 10000 --msg-size 1024 --queue-depth 32 --qps 1000\n");
+    printf("  %s --mode sender --server-addr 127.0.0.1 --port 8080 \\\n", progName);
+    printf("       --msg-count 10000 --msg-size 1024 --qps 1000\n");
 }
 
-static int RunSender(uint32_t senderId, const char *serverAddrStr, uint16_t port,
-                     uint32_t msgCount, uint32_t msgSize, uint32_t queueDepth, uint32_t expectedQps)
+static int CreateAndConnectSocket(const char *serverAddrStr, uint16_t port)
 {
-    struct SenderContext ctx;
-    if (SenderInit(&ctx, senderId, queueDepth, expectedQps) != 0) {
-        fprintf(stderr, "Failed to initialize sender context\n");
-        return -1;
-    }
-    
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
         fprintf(stderr, "Failed to create socket\n");
-        SenderDestroy(&ctx);
         return -1;
     }
     
@@ -74,14 +64,12 @@ static int RunSender(uint32_t senderId, const char *serverAddrStr, uint16_t port
     if (inet_pton(AF_INET, serverAddrStr, &serverAddr.sin_addr) <= 0) {
         fprintf(stderr, "Invalid server address: %s\n", serverAddrStr);
         close(sockfd);
-        SenderDestroy(&ctx);
         return -1;
     }
     
     if (connect(sockfd, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr)) < 0) {
         fprintf(stderr, "Failed to connect to server\n");
         close(sockfd);
-        SenderDestroy(&ctx);
         return -1;
     }
     
@@ -92,6 +80,60 @@ static int RunSender(uint32_t senderId, const char *serverAddrStr, uint16_t port
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
         fprintf(stderr, "Failed to set socket receive timeout\n");
         close(sockfd);
+        return -1;
+    }
+    
+    return sockfd;
+}
+
+static bool SetupSignalHandlers()
+{
+    if (signal(SIGINT, SignalHandler) == SIG_ERR) {
+        fprintf(stderr, "Failed to set SIGINT handler\n");
+        return false;
+    }
+    if (signal(SIGTERM, SignalHandler) == SIG_ERR) {
+        fprintf(stderr, "Failed to set SIGTERM handler\n");
+        return false;
+    }
+    return true;
+}
+
+static void SendMessages(struct SenderContext *ctx, const std::string &msgBuffer,
+                         uint32_t msgCount, uint32_t msgSize)
+{
+    uint32_t successCount = 0;
+    uint32_t failureCount = 0;
+    
+    for (uint32_t i = 0; i < msgCount && g_running; i++) {
+        struct UbsocketIovec iov;
+        iov.iovBase = const_cast<char*>(msgBuffer.c_str());
+        iov.iovLen = msgSize;
+        
+        if (SenderSend(ctx, &iov, 1) == 0) {
+            successCount++;
+        } else {
+            failureCount++;
+        }
+        
+        const uint32_t progressReportInterval = 1000;
+        if ((i + 1) % progressReportInterval == 0) {
+            printf("Progress: %u/%u messages sent\n", i + 1, msgCount);
+        }
+    }
+}
+
+static int RunSender(const char *serverAddrStr, uint16_t port,
+                     uint32_t msgCount, uint32_t msgSize, uint32_t expectedQps)
+{
+    struct SenderContext ctx;
+    if (SenderInit(&ctx, expectedQps) != 0) {
+        fprintf(stderr, "Failed to initialize sender context\n");
+        return -1;
+    }
+    
+    int sockfd = CreateAndConnectSocket(serverAddrStr, port);
+    if (sockfd < 0) {
         SenderDestroy(&ctx);
         return -1;
     }
@@ -106,50 +148,24 @@ static int RunSender(uint32_t senderId, const char *serverAddrStr, uint16_t port
         return -1;
     }
     
-    const uint32_t charOffset = 26;
-    std::string msgBuffer(msgSize, 'A' + (senderId % charOffset));
+    std::string msgBuffer(msgSize, 'A');
     
-    printf("Sender %u started, sending %u messages of %u bytes to %s:%u\n",
-           senderId, msgCount, msgSize, serverAddrStr, port);
-    printf("Queue depth: %u, QPS: %u\n", queueDepth, expectedQps);
+    printf("Sender started, sending %u messages of %u bytes to %s:%u\n",
+           msgCount, msgSize, serverAddrStr, port);
+    printf("QPS: %u\n", expectedQps);
     
-    if (signal(SIGINT, SignalHandler) == SIG_ERR) {
-        fprintf(stderr, "Failed to set SIGINT handler\n");
-        close(sockfd);
-        SenderDestroy(&ctx);
-        return -1;
-    }
-    if (signal(SIGTERM, SignalHandler) == SIG_ERR) {
-        fprintf(stderr, "Failed to set SIGTERM handler\n");
+    if (!SetupSignalHandlers()) {
         close(sockfd);
         SenderDestroy(&ctx);
         return -1;
     }
     
-    uint32_t successCount = 0;
-    uint32_t failureCount = 0;
-    
-    for (uint32_t i = 0; i < msgCount && g_running; i++) {
-        struct UbsocketIovec iov;
-        iov.iovBase = const_cast<char*>(msgBuffer.c_str());
-        iov.iovLen = msgSize;
-        
-        if (SenderSend(&ctx, &iov, 1) == 0) {
-            successCount++;
-        } else {
-            failureCount++;
-        }
-        
-        const uint32_t progressReportInterval = 1000;
-        if ((i + 1) % progressReportInterval == 0) {
-            printf("Progress: %u/%u messages sent\n", i + 1, msgCount);
-        }
-    }
+    SendMessages(&ctx, msgBuffer, msgCount, msgSize);
     
     ctx.stats.avgLatencyNs = ctx.stats.totalLatencyNs / ctx.stats.sampleCount;
     
     printf("\n");
-    printf("Sender %u finished:\n", senderId);
+    printf("Sender finished:\n");
     PrintLatencyStats(&ctx.stats);
     
     close(sockfd);
@@ -161,7 +177,7 @@ static int RunSender(uint32_t senderId, const char *serverAddrStr, uint16_t port
 static int RunReceiver(uint16_t port, uint32_t maxClients)
 {
     struct ReceiverContext ctx;
-    if (ReceiverInit(&ctx, port) != 0) {
+    if (ReceiverInit(&ctx, port, maxClients) != 0) {
         fprintf(stderr, "Failed to initialize receiver context\n");
         return -1;
     }
@@ -197,22 +213,18 @@ int main(int argc, char *argv[])
     
     char mode[32] = {0};
     uint16_t port = 8080;
-    uint32_t senderId = 0;
     char serverAddr[64] = "127.0.0.1";
     uint32_t msgCount = 1000;
     uint32_t msgSize = 1024;
-    uint32_t queueDepth = DEFAULT_QUEUE_DEPTH;
     uint32_t expectedQps = DEFAULT_QPS;
-    uint32_t maxClients = 10;
+    uint32_t maxClients = DEFAULT_MAX_CLIENTS;
     
     static struct option longOptions[] = {
         {"mode",        required_argument, 0, 'm'},
         {"port",        required_argument, 0, 'p'},
-        {"sender-id",   required_argument, 0, 'i'},
         {"server-addr", required_argument, 0, 'a'},
         {"msg-count",   required_argument, 0, 'c'},
         {"msg-size",    required_argument, 0, 's'},
-        {"queue-depth", required_argument, 0, 'd'},
         {"qps",         required_argument, 0, 'q'},
         {"max-clients", required_argument, 0, 'n'},
         {"help",        no_argument,       0, 'h'},
@@ -222,16 +234,13 @@ int main(int argc, char *argv[])
     int opt;
     int optionIndex = 0;
     
-    while ((opt = getopt_long(argc, argv, "m:p:i:a:c:s:d:q:n:h", longOptions, &optionIndex)) != -1) {
+    while ((opt = getopt_long(argc, argv, "m:p:a:c:s:q:n:h", longOptions, &optionIndex)) != -1) {
         switch (opt) {
             case 'm':
                 snprintf(mode, sizeof(mode), "%s", optarg);
                 break;
             case 'p':
                 port = static_cast<uint16_t>(atoi(optarg));
-                break;
-            case 'i':
-                senderId = static_cast<uint32_t>(atoi(optarg));
                 break;
             case 'a':
                 snprintf(serverAddr, sizeof(serverAddr), "%s", optarg);
@@ -241,9 +250,6 @@ int main(int argc, char *argv[])
                 break;
             case 's':
                 msgSize = static_cast<uint32_t>(atoi(optarg));
-                break;
-            case 'd':
-                queueDepth = static_cast<uint32_t>(atoi(optarg));
                 break;
             case 'q':
                 expectedQps = static_cast<uint32_t>(atoi(optarg));
@@ -261,12 +267,7 @@ int main(int argc, char *argv[])
     }
     
     if (strcmp(mode, "sender") == 0) {
-        if (senderId == 0) {
-            fprintf(stderr, "Error: --sender-id is required for sender mode\n");
-            PrintUsage(argv[0]);
-            return 1;
-        }
-        return RunSender(senderId, serverAddr, port, msgCount, msgSize, queueDepth, expectedQps);
+        return RunSender(serverAddr, port, msgCount, msgSize, expectedQps);
     } else if (strcmp(mode, "receiver") == 0) {
         return RunReceiver(port, maxClients);
     } else {
