@@ -8,33 +8,21 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef UBS_COMM_UMQ_EPOLL_RUNNER_H
-#define UBS_COMM_UMQ_EPOLL_RUNNER_H
+#ifndef UBS_COMM_UMQ_EPOLL_RUNNER_OPS_H
+#define UBS_COMM_UMQ_EPOLL_RUNNER_OPS_H
 
 #include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_socket.h"
-#include "umq_setting.h"
+#include "umq_types.h"
 
 namespace ock {
 namespace ubs {
 namespace umq {
 
-class UmqEpollRunner : public EpollRunner<SocketType::SOCK_TYPE_UMQ> {
+class UmqEpollRunnerOps : public EpollRunnerOps {
 public:
-    /**
-     * @brief add epoll_event to EpollRunner
-     * @param socket_fd socket fd added
-     * @param event event of socket fd
-     * @return int -1: failed; 0: success
-     */
-    // int AddEpollEvent(const SocketPtr &sock, struct epoll_event *event) override;
-
-    /**
-     * @brief delete epoll_event from EpollRunner
-     * @param socket_fd socket fd removed
-     * @return int -1: failed; 0: success
-     */
-    // int RemoveEpollEvent(const Socket *const socket) override;
+    UmqEpollRunnerOps() = default;
+    virtual ~UmqEpollRunnerOps() = default;
 
     /**
      * @brief process epoll_wait event
@@ -46,7 +34,7 @@ public:
 
     int ProcessMainUmqRearm(uint64_t main_umq);
 
-    static std::unordered_set<UmqRxOps *> SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count);
+    std::unordered_set<Socket *> SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count);
 
 private:
     uint32_t event_num_{ 0 };

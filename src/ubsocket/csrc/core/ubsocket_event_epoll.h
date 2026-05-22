@@ -13,9 +13,6 @@
 
 #include "ubsocket_core_types.h"
 #include "ubsocket_spsc_ring_queue.h"
-#include "umq_errno.h"
-#include "umq_pro_types.h"
-#include "umq_types.h"
 
 namespace ock {
 namespace ubs {
@@ -101,27 +98,17 @@ private:
 };
 extern u_rw_lock_t *g_socket_epoll_lock;
 EpollMapper *GetSocketEpollMapper(int socket_fd);
+
 class EpollRunnerOps {
 public:
     EpollRunnerOps() = default;
     virtual ~EpollRunnerOps() = default;
 
-    /**
-     * @brief add epoll_event to EpollRunner
-     * @param sock socket fd added
-     * @param epoll_fd epoll fd
-     * @param event event of socket fd
-     * @return int -1: failed; 0: success
-     */
-    virtual int AddEpollEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
-
-    /**
-     * @brief delete epoll_event from EpollRunner
-     * @param sock socket fd removed
-     * @param epoll_fd epoll fd
-     * @return int -1: failed; 0: success
-     */
-    virtual int RemoveEpollEvent(const SocketPtr &sock, int epoll_fd) = 0;
+    virtual int ProcessOneEvent(const struct epoll_event &event)
+    {
+        UBS_VLOG_ERR("EpollRunner SocketType Not Specified.\n");
+        return -1;
+    }
 
     DEFINE_REF_OPERATION_FUNC
 protected:
@@ -211,12 +198,6 @@ public:
      */
     int ProcessOneEvent(const struct epoll_event &event) override;
 
-    int ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq);
-
-    int ProcessMainUmqRearm(uint64_t main_umq);
-
-    std::unordered_set<Socket *> SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count);
-
 protected:
     int epoll_fd_;                /* used by thread */
     int exit_efd_;                /* used to notify thread exit */
@@ -224,6 +205,7 @@ protected:
     u_mutex_t *mutex_;            /* mutex */
     std::once_flag flag_;
     std::thread wait_thread_;
+    EpollRunnerOps *ops_ = nullptr;
 
 private:
     EpollRunner() = default;
