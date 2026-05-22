@@ -78,6 +78,7 @@ cc_library(
         "ubsocket/csrc/core/umq/*.cpp",
         "ubsocket/csrc/iobuf/*.cpp",
         "ubsocket/csrc/profiling/*.cpp",
+        "ubsocket/csrc/profiling/impl/*.cpp",
         "ubsocket/csrc/under_api/*.cpp",
     ]) + glob([
         # 内部私有的.h文件
@@ -87,6 +88,7 @@ cc_library(
         "ubsocket/csrc/core/umq/*.h",
         "ubsocket/csrc/iobuf/*.h",
         "ubsocket/csrc/profiling/*.h",
+        "ubsocket/csrc/profiling/impl/*.h",
         "ubsocket/csrc/under_api/*.h",
     ]),
 
@@ -99,6 +101,8 @@ cc_library(
     ],
     includes = [
         "ubsocket/include",
+        "ubsocket",
+        "ubsocket/csrc",
         "ubsocket/csrc/common",
         "ubsocket/csrc/core",
         "ubsocket/csrc/core/umq",
