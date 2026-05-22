@@ -13,6 +13,9 @@
 
 #include "ubsocket_core_types.h"
 #include "ubsocket_spsc_ring_queue.h"
+#include "umq_types.h"
+#include "umq_pro_types.h"
+#include "umq_errno.h"
 
 namespace ock {
 namespace ubs {
@@ -202,6 +205,12 @@ public:
      */
     int ProcessOneEvent(const struct epoll_event &event) override;
 
+    int ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq);
+
+    int ProcessMainUmqRearm(uint64_t main_umq);
+
+    std::unordered_set<Socket *> SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count);
+
 protected:
     int epoll_fd_;                        /* used by thread */
     int exit_efd_;                        /* used to notify thread exit */
@@ -216,6 +225,8 @@ private:
      * @brief start thread to epoll_wait
      */
     void RunInThread() noexcept;
+
+    uint32_t event_num_{ 0 };
 };
 
 class EpollRunnerFactory {

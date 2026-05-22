@@ -50,10 +50,11 @@ public:
 
     virtual uint32_t IOBufSize() = 0;
 
-protected:
+public:
     int fd_ = -1;
     uint16_t tx_queue_avail_num_ = 0; // current window size for TX
     uint16_t ack_event_num_ = 0;
+    bool get_and_ack_event_ = false;
     std::atomic<int> epoll_event_num_{0};
     int expect_epoll_event_num_ = 0;
     std::atomic<bool> need_fc_awake_{false};
@@ -68,6 +69,8 @@ public:
     DataTx(const SocketPtr &sock, DataTxOps *ops);
 
     ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+
+    DataTxOps *GetTxOps() {return tx_ops_;}
 
 private:
     int fd_ = -1;

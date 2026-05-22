@@ -36,10 +36,7 @@ public:
     ssize_t RxDataSet(void *buf, uint32_t size);
     virtual int RearmRxInterrupt() = 0;
 
-protected:
-    virtual void *PtrFloorToBoundary(void *ptr) = 0;
-
-protected:
+public:
     int fd_ = -1;
     // RX fields
     uint8_t epoll_in_msg_ = 0;
@@ -55,6 +52,9 @@ protected:
     size_t remaining_size_ = 0;
     bool flow_control_failed_ = false;
 
+protected:
+    virtual void *PtrFloorToBoundary(void *ptr) = 0;
+
     friend class DataRx;
 };
 
@@ -65,6 +65,8 @@ public:
     DataRx(const SocketPtr &sock, DataRxOps *ops);
 
     ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+
+    DataRxOps *GetRxOps() {return rx_ops_;}
 
 private:
     ssize_t OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec *iov, int iovcnt);

@@ -36,13 +36,14 @@ public:
     int PollRx(const SocketPtr &sock) override;
 
     int RearmRxInterrupt() override;
+    
+    void HandleErrorRxCqe(umq_buf_t *buf);
 
 private:
     int GetQbuf(umq_buf_t **buf, int max_num);
     int UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size);
     uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf);
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
-    void HandleErrorRxCqe(umq_buf_t *buf);
     int NotifyReadable();
     int GetAndAckEvent();
     void *PtrFloorToBoundary(void *ptr) override;
