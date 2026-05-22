@@ -257,7 +257,7 @@ Result UmqSocket::PrefillRx()
 Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event)
 {
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
-    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &tx_option);
+    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
         UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
         return -1;
@@ -269,10 +269,10 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
         return -1;
     }
 
-    ret = ock::ubs::UmqApi::umq_rearm_interrupt(local_umq_handle_, true, &tx_option);
+    ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, true, &tx_option);
     if (ret < 0) {
         UBS_VLOG_ERR("umq_rearm_interrupt() failed for TX, local umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(local_umq_handle_), ret);
+                     static_cast<unsigned long long>(umq_handle_), ret);
         return -1;
     }
     return 0;
@@ -281,7 +281,7 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
 Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
 {
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
-    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &tx_option);
+    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
         UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
         return -1;
@@ -331,7 +331,7 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
 
     //2. add sub umq rx fd
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &rx_option);
+    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
     if (UNLIKELY(rx_interrupt_fd < 0)) {
         UBS_VLOG_ERR("async_epoll Failed to get RX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
         return -1;
@@ -356,10 +356,10 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
                      static_cast<unsigned long long>(main_umq), ret);
         return -1;
     }
-    ret = ock::ubs::UmqApi::umq_rearm_interrupt(local_umq_handle_, false, &rx_option);
+    ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, false, &rx_option);
     if (ret < 0) {
         UBS_VLOG_ERR("umq_rearm_interrupt() failed for sub umq RX, main umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(local_umq_handle_), ret);
+                     static_cast<unsigned long long>(umq_handle_), ret);
         return -1;
     }
 
@@ -369,7 +369,7 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
 Result UmqSocket::DelRxEventToRunner(const SocketPtr &sock, int epoll_fd)
 {
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &rx_option);
+    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
     if (UNLIKELY(rx_interrupt_fd < 0)) {
         UBS_VLOG_ERR("async_epoll Failed to get RX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
         return -1;
@@ -383,9 +383,9 @@ Result UmqSocket::DelRxEventToRunner(const SocketPtr &sock, int epoll_fd)
 int UmqSocket::GetTxFd()
 {
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
-    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &tx_option);
+    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
-        UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, umq handle: %d\n", local_umq_handle_);
+        UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, umq handle: %d\n", umq_handle_);
         return -1;
     }
     return tx_interrupt_fd;
