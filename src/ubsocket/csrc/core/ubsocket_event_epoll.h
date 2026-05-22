@@ -99,6 +99,7 @@ private:
     u_mutex_t *mutex_ = nullptr;
     std::unordered_set<int> epoll_set_;
 };
+extern u_rw_lock_t *g_socket_epoll_lock;
 EpollMapper* GetSocketEpollMapper(int socket_fd);
 class EpollRunnerOps {
 public:

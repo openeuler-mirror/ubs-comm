@@ -8,6 +8,7 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "core/ubsocket_socket_set.h"
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_event_epoll.h"
 #include "include/ubsocket.h"
@@ -49,7 +50,11 @@ UBS_API int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epoll_event 
         return -1;
     }
     // TODO：取socket，待ubsocket_sock.cpp中的实现完成后参考
-    return eventPoll->EpollCtl(op, nullptr, event);
+    SocketPtr socketPtr = SocketSet::Instance().GetSocket(fd);
+    if (socketPtr == nullptr) {
+        return LibcApi::epoll_ctl(epfd, op, fd, event);
+    }
+    return eventPoll->EpollCtl(op, socketPtr, event);
 }
 
 UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int maxevents, int timeout)

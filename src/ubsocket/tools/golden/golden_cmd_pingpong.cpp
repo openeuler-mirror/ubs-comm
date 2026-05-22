@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "golden_cmd_pingpong.h"
+#include <sys/epoll.h>
 
 namespace golden {
 /***************************/
@@ -111,6 +112,21 @@ int PPClient::Run()
         return result;
     }
 
+    int epollFd = ubsocket_epoll_create(1024 * 1024);
+    if (epollFd < 0) {
+        LOG_ERROR("create epollFd error, ret: '" << epollFd << ", errno: " << errno);
+        return -errno;
+    }
+    LOG_INFO("create epollFd success, fd: '" << epollFd );
+    epoll_event evt;
+    evt.data.u64 = -1;
+    evt.events = EPOLLOUT | EPOLLET;
+    int ret = ubsocket_epoll_ctl(epollFd, EPOLL_CTL_ADD, fd, &evt);
+    if (ret < 0) {
+        LOG_ERROR("ubsocket_epoll_ctl error, ret: '" << ret << ", errno: " << errno);
+        return -errno;
+    }
+
     /* step3: send ping and recv pong */
     char ping[] = "ping";
     char pong[10]{};
@@ -204,6 +220,21 @@ int PPServer::Run()
     socklen_t addr_len = sizeof(address);
     client_fd_ = ubsocket_accept(fd_, (struct sockaddr *)&client_address, &addr_len);
     LOG_DEBUG("accepted one");
+
+    int epollFd = ubsocket_epoll_create(1024 * 1024);
+    if (epollFd < 0) {
+        LOG_ERROR("create epollFd error, ret: '" << epollFd << ", errno: " << errno);
+        return -errno;
+    }
+    LOG_INFO("create epollFd success, fd: '" << epollFd );
+    epoll_event evt;
+    evt.data.u64 = -1;
+    evt.events = EPOLLOUT | EPOLLET;
+    int ret = ubsocket_epoll_ctl(epollFd, EPOLL_CTL_ADD, client_fd_, &evt);
+    if (ret < 0) {
+        LOG_ERROR("ubsocket_epoll_ctl error, ret: '" << ret << ", errno: " << errno);
+        return -errno;
+    }
 
     /* step4: recv and send back */
     char ping[10];
