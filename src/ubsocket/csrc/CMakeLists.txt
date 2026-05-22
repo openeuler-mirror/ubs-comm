@@ -27,9 +27,11 @@ file(GLOB CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/*.cpp)
 file(GLOB UMQ_CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/umq/*.cpp)
 list(APPEND CORE_SRCS ${UMQ_CORE_SRCS})
 
-### urma source
-#file(GLOB URMA_CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/urma/*.cpp)
-#list(APPEND CORE_SRCS ${URMA_CORE_SRCS})
+if (BUILD_URMA_BACKEND)
+    ### urma source
+    file(GLOB URMA_CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/urma/*.cpp)
+    list(APPEND CORE_SRCS ${URMA_CORE_SRCS})
+endif ()
 
 add_library(core_objects OBJECT ${CORE_SRCS})
 target_compile_options(core_objects PRIVATE -fPIC)

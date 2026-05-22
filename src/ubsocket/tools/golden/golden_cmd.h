@@ -52,6 +52,7 @@ protected:
 inline int SubCommand::Execute() noexcept
 {
     /* step1: setup parameter rules */
+    LOG_DEBUG("cmd set rules");
     SetRules();
 
     /* if is -h */
