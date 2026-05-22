@@ -148,13 +148,14 @@ using EpollRunnerOpsPtr = Ref<EpollRunnerOps>;
  *        (c)                                                 (f)
  *
  */
+class EventPoll;
 
 class EpollRunnerBase {
 public:
     virtual ~EpollRunnerBase() = default;
     virtual int Start() = 0;
     virtual void Stop() = 0;
-    virtual int AddEpollEvent(const SocketPtr &sock, struct epoll_event *event) = 0;
+    virtual int AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event) = 0;
     virtual int DelEpollEvent(const SocketPtr &sock) = 0;
     virtual int ProcessOneEvent(const struct epoll_event &event) = 0;
 };
@@ -194,7 +195,7 @@ public:
      * @param event event of socket fd
      * @return int -1: failed; 0: success
      */
-    int AddEpollEvent(const SocketPtr &sock, struct epoll_event *event) override;
+    int AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event) override;
 
     /**
      * @brief delete epoll_event from EpollRunner

@@ -69,7 +69,7 @@ public:
     virtual bool IsBindRemote() = 0;
     virtual Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
     virtual Result DelTxEvent(const SocketPtr &sock, int epoll_fd) = 0;
-    virtual Result AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
+    virtual Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
     virtual Result DelRxEventToRunner(const SocketPtr &sock, int epoll_fd) = 0;
 
     DEFINE_REF_OPERATION_FUNC
