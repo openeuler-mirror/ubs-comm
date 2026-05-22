@@ -21,6 +21,8 @@ Result UmqSocket::Initialize() noexcept
 
 void UmqSocket::UnInitialize() noexcept {}
 
+std::unordered_map<int, uint64_t> UmqSocket::jfr_main_umq_ = {};
+
 Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports)
 {
     if (umq_handle_ != UMQ_INVALID_HANDLE) {
@@ -140,6 +142,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     }
 
     // TODO: 增加环境变量和共享jfr
+    // TODO: rxQueue实例化
     // uint64_t share_jfr_rx_queue_depth = 1024ULL;
     // uint64_t share_jfr_rx_queue_depth = context == nullptr ? DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH :
     //                                                          context->GetShareJfrRxQueueDepth();
@@ -382,6 +385,51 @@ int UmqSocket::GetTxFd()
         return -1;
     }
     return tx_interrupt_fd;
+}
+int UmqSocket::AddQbuf(umq_buf_t *qbuf)
+{
+    int enqueue_ret = 0;
+    if (rxQueue == nullptr || (enqueue_ret = rxQueue->Enqueue(qbuf)) != 0) {
+        UBS_VLOG_ERR("AddQbuf failed, fd: %d, ret: %d\n",
+            raw_socket_, rxQueue == nullptr ? -1 : enqueue_ret);
+        return -1;
+    }
+
+    return 0;
+}
+int UmqSocket::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
+{
+    if (rxQueue == nullptr) {
+        UBS_VLOG_ERR("GetAndPopQbuf failed, rx queue is null, fd: %d, ret: %d\n",
+            raw_socket_, -1);
+        return -1;
+    }
+
+    uint32_t i = 0;
+    while (!rxQueue->IsEmpty() && i < max_buf_size) {
+        if (rxQueue->Dequeue(&buf[i]) != 0) {
+            return i + 1;
+        }
+        i++;
+    }
+
+    return i;
+}
+int UmqSocket::FlushRxQueue()
+{
+    if (rxQueue == nullptr) {
+        return -1;
+    }
+
+    while (!rxQueue->IsEmpty()) {
+        umq_buf_t *buf[1];
+        if (rxQueue->Dequeue(buf) != 0) {
+            return -1;
+        }
+        UmqApi::umq_buf_free(buf[0]);
+    }
+
+    return 0;
 }
 uint32_t UmqSocket::getLeftPostRxNum(uint64_t umq_handle)
 {

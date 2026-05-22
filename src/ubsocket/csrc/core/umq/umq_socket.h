@@ -15,6 +15,7 @@
 #include "core/ubsocket_socket.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "umq_setting.h"
+#include "core/ubsocket_qbuf_queue.h"
 
 namespace ock {
 namespace ubs {
@@ -42,6 +43,11 @@ public:
     uint64_t UmqHandle() const noexcept
     {
         return umq_handle_;
+    }
+
+    uint64_t LocalUmqHandle() const noexcept
+    {
+        return local_umq_handle_;
     }
 
     void SetLocalUmqHandle(uint64_t handle)
@@ -89,6 +95,25 @@ public:
         topo_type_ = type;
     }
 
+    ALWAYS_INLINE void NewRxEpollIn()
+    {
+        DataRxOps *ops = rx_.GetRxOps();
+        if (ops->epoll_event_num_.fetch_add(1, std::memory_order_acq_rel) == 0) {
+            ops->get_and_ack_event_ = true;
+            ops->poll_ = true;
+            ops->expect_epoll_event_num_ = 1;
+        }
+    }
+
+    ALWAYS_INLINE void NewTxEpollIn()
+    {
+        DataTxOps *ops = tx_.GetTxOps();
+        if (ops->epoll_event_num_.fetch_add(1, std::memory_order_acq_rel) == 0) {
+            ops->get_and_ack_event_ = true;
+            ops->expect_epoll_event_num_ = 1;
+        }
+    }
+
     // 封装 umq 相关操作: umq_create, umq_bind
     Result CreateLocalUmq(umq_eid_t *connEid, umq_used_ports_t &mUsedPorts);
     Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) override;
@@ -98,6 +123,12 @@ public:
     int GetTxFd() override;
     Result PrefillRx();
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
+    int AddQbuf(umq_buf_t *qbuf);
+    int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
+    int FlushRxQueue();
+
+    // TODO 优化到下层runner
+    static std::unordered_map<int, uint64_t> jfr_main_umq_;
 
 private:
     uint32_t getLeftPostRxNum(uint64_t umq_handle);
@@ -112,8 +143,9 @@ private:
     uint64_t umq_handle_ = UMQ_INVALID_HANDLE;
 
     u_mutex_t *mutex_;
-    std::unordered_map<int, uint64_t> jfr_main_umq_;
     uint64_t local_umq_handle_ = UMQ_INVALID_HANDLE;
+
+    QbufQueue<umq_buf_t *> *rxQueue = nullptr;
 };
 using UmqSocketPtr = Ref<UmqSocket>;
 

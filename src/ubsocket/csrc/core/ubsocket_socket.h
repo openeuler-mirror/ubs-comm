@@ -45,6 +45,13 @@ public:
     int WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     int ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
+    EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
+    void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data);
+    int NotifyReadable();
+
+    DataRx *GetRx() {return &rx_;}
+    DataTx *GetTx() {return &tx_;}
+
 protected:
     static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);
     static Result CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops);
@@ -56,6 +63,8 @@ protected:
     DataRx rx_;                      /* take charge of receive */
     Acceptor *acceptor_ = nullptr;   /* acceptor of ubsocket */
     Connector *connector_ = nullptr; /* connector of ubsocket */
+    EventPoll *added_epoll_fd_ = nullptr;
+    epoll_data_t added_epoll_data_ = {};
 
     friend class DataTx;
     friend class DataRx;
@@ -93,6 +102,30 @@ ALWAYS_INLINE int SocketBase::ReadV(const SocketPtr &sock, const struct iovec *i
     return rx_.ReadV(sock, iov, iovcnt);
 }
 
+ALWAYS_INLINE EventPoll *SocketBase::GetAddedEpollFd(epoll_data_t &data) const
+{
+    data = added_epoll_data_;
+    return added_epoll_fd_;
+}
+
+ALWAYS_INLINE void SocketBase::SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data)
+{
+    added_epoll_fd_ = fd;
+    added_epoll_data_ = data;
+}
+
+ALWAYS_INLINE int SocketBase::NotifyReadable()
+{
+    if (added_epoll_fd_ == nullptr) {
+        return eventfd_write(event_fd_, 1);
+    }
+
+    if (((AsyncEventPoll *)added_epoll_fd_)->AddReadableEvent(added_epoll_data_) != 0) {
+        return -1;
+    }
+
+    return ((AsyncEventPoll *)added_epoll_fd_)->SetReadableEventFd();
+}
 
 } // namespace ubs
 } // namespace ock
