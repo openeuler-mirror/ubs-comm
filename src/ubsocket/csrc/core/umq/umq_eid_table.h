@@ -23,7 +23,8 @@ struct UmqEidHash {
     }
 };
 struct UmqEidEqual {
-    bool operator()(const umq_eid_t& a, const umq_eid_t& b) const {
+    bool operator()(const umq_eid_t& a, const umq_eid_t& b) const
+    {
         return memcmp(a.raw, b.raw, sizeof(a.raw)) == 0;
     }
 };
@@ -198,4 +199,4 @@ private:
 }
 }
 }
-#endif //HCOM_UMQ_EID_TABLE_H
+#endif // HCOM_UMQ_EID_TABLE_H

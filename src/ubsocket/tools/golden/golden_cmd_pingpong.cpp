@@ -117,7 +117,7 @@ int PPClient::Run()
         LOG_ERROR("create epollFd error, ret: '" << epollFd << ", errno: " << errno);
         return -errno;
     }
-    LOG_INFO("create epollFd success, fd: '" << epollFd );
+    LOG_INFO("create epollFd success, fd: '" << epollFd);
     epoll_event evt;
     evt.data.u64 = -1;
     evt.events = EPOLLOUT | EPOLLET;
@@ -226,7 +226,7 @@ int PPServer::Run()
         LOG_ERROR("create epollFd error, ret: '" << epollFd << ", errno: " << errno);
         return -errno;
     }
-    LOG_INFO("create epollFd success, fd: '" << epollFd );
+    LOG_INFO("create epollFd success, fd: '" << epollFd);
     epoll_event evt;
     evt.data.u64 = -1;
     evt.events = EPOLLOUT | EPOLLET;

@@ -243,8 +243,7 @@ Result UmqSocket::PrefillRx()
         usleep(WAIT_READY_TIMEOUT_US);
     } while (poll_cnt++ < WAIT_READY_ROUND);
 
-    int local_umq_state;
-    local_umq_state = UmqApi::umq_state_get(umq_handle_);
+    int local_umq_state = UmqApi::umq_state_get(umq_handle_);
     if (local_umq_state != QUEUE_STATE_READY) {
         UBS_VLOG_ERR("umq_state_get() failed to reach ready, ret: %d\n", local_umq_state);
         return -1;
