@@ -8,9 +8,10 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-
 #include "ubsocket_socket_acceptor.h"
+#include "common/ubsocket_thread_pool.h"
 #include "ubsocket_core_types.h"
+#include "ubsocket_event_epoll.h"
 #include "ubsocket_socket_set.h"
 
 namespace ock {
@@ -79,8 +80,34 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     // 异步/同步
     // TODO: 异步和同步的分两个函数
     if (GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED) {
-        // 待补充异步实现，待完善线程池函数
-        return fd;
+        auto exec_ret = ExecutorService::GetExecutorService()->Execute([this, fd, addr_tmp, len_tmp]() {
+            UBS_VLOG_DEBUG("async accept start. fd:%d\n", fd);
+            std::string ip = SocketConnHelper::ExtractIpFromSockAddr(&addr_tmp);
+            ProcessUBConnection(fd, ip);
+            {
+                Locker sLock(ubSocket_async_accept_info.lock);
+                ubSocket_async_accept_info.ready_queue.push(std::make_tuple(fd, addr_tmp, len_tmp));
+            }
+
+            EpollMapper *mapper = GetSocketEpollMapper(fd);
+            int epoll_fd = mapper->QueryFirst();
+            if (epoll_fd >= 0) {
+                EventPoll *obj = ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
+                // 唤醒待补充
+            }
+            ubSocket_async_accept_info.asyncTaskNum.fetch_sub(1U);
+            UBS_VLOG_DEBUG("async accept success. fd:%d\n", fd);
+        });
+        if (exec_ret == true) {
+            ubSocket_async_accept_info.asyncTaskNum.fetch_add(1U);
+        } else {
+            UBS_VLOG_DEBUG("submit async accept task failed, use sync accept. fd:%d\n", fd);
+            ProcessUBConnection(fd, peerIp);
+            return fd;
+        }
+
+        errno = EAGAIN;
+        return -1;
     } else {
         ProcessUBConnection(fd, peerIp);
         return fd;

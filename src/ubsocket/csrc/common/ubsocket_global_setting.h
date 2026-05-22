@@ -95,6 +95,7 @@ public:
     static std::string UBS_BRPC_ALLOC_SYM_STR;
     static std::string UBS_BRPC_DEALLOC_SYM_STR;
     static UBHandshakeMode UBS_HAND_SHAKE_MODE;
+    static uint32_t UBS_THREAD_POOL_SIZE;
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept
