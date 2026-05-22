@@ -151,6 +151,8 @@ constexpr char SOCKET_ID_PERFIX_PATH[] = "/sys/devices/system/cpu/";
 constexpr char SOCKET_ID_SUFFIX_PATH[] = "/topology/physical_package_id";
 constexpr uint16_t CPU_STR_SIZE = 3;
 constexpr uint16_t NODE_STR_SIZE = 4;
+constexpr uint32_t WAIT_READY_TIMEOUT_US = 100;
+constexpr uint32_t WAIT_READY_ROUND = 10000;
 
 static const std::string EMPTY_STR;
 } // namespace ubs

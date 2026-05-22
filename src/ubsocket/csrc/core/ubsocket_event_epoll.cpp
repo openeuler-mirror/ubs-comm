@@ -243,7 +243,7 @@ ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &even
 
     umq_buf_t *buf[POLL_BATCH_MAX];
     int poll_num = UmqApi::umq_poll(
-        dynamic_cast<umq::UmqSocket *>(socket_object)->LocalUmqHandle(), UMQ_IO_RX, buf, POLL_BATCH_MAX);
+        dynamic_cast<umq::UmqSocket *>(socket_object)->UmqHandle(), UMQ_IO_RX, buf, POLL_BATCH_MAX);
     if (UNLIKELY(poll_num <= 0)) {
         if (dynamic_cast<umq::UmqSocket *>(socket_object)->GetRx()->GetRxOps()->RearmRxInterrupt() < 0) {
             UBS_VLOG_ERR("Rearm sub umq failed, socket fd:%d, ret: %d\n",

@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "umq_socket.h"
+#include "umq_eid_table.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -63,7 +64,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     }
 
     // TODO: 待补充指定 ip 和 bonging name 的情况
-    umq_eid_t local_eid;
+    umq_eid_t local_eid = *conn_eid;
 #ifdef ENABLED
     if (context->GetDevIpStr() != nullptr) {
         if (context->IsDevIpv6()) {
@@ -141,33 +142,21 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
         return UBS_ERROR;
     }
 
-    // TODO: 增加环境变量和共享jfr
-    // TODO: rxQueue实例化
-    // uint64_t share_jfr_rx_queue_depth = 1024ULL;
-    // uint64_t share_jfr_rx_queue_depth = context == nullptr ? DEFAULT_SHARE_JFR_RX_QUEUE_DEPTH :
-    //                                                          context->GetShareJfrRxQueueDepth();
-    // rxQueue = new (std::nothrow) QbufQueue<umq_buf_t *>(share_jfr_rx_queue_depth);
-    // if (rxQueue == nullptr) {
-    //     UBS_VLOG_ERR("Failed to init share jfr rx queue for fd: %d \n", raw_socket_);
-    //     return UBS_INIT_SHARED_JFR_RX_QUEUE;
-    // }
-
-    // Context::FetchAdd();
+    uint64_t share_jfr_rx_queue_depth = UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH;
+    rxQueue = new (std::nothrow) QbufQueue<umq_buf_t *>(share_jfr_rx_queue_depth);
+    if (rxQueue == nullptr) {
+        UBS_VLOG_ERR("Failed to init share jfr rx queue for fd: %d \n", raw_socket_);
+        return UBS_INIT_SHARED_JFR_RX_QUEUE;
+    }
     return UBS_OK;
 }
 
 uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 {
-    //TODO: 待增加环境变量
-    bool enable_share_jfr = false;
-    if (!enable_share_jfr) {
+    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
         return UmqApi::umq_create(cfg);
     }
-    return UmqApi::umq_create(cfg);
-
-    // TODO: 待增加共享jfr
-#ifdef ENABLED
-    ScopedUbExclusiveLocker sLock(EidUmqTable::GetMainMutex());
+    Locker sLock(UmqEidTable::Instance().GetMainMutex());
     uint64_t main_umq = GetOrCreateMainUmq(cfg, local_eid);
     if (main_umq == UMQ_INVALID_HANDLE) {
         UBS_VLOG_ERR("GetOrCreateMainUmq() failed, ret: %llu\n", static_cast<unsigned long long>(main_umq));
@@ -176,27 +165,43 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 
     cfg->create_flag |= UMQ_CREATE_FLAG_SHARE_RQ | UMQ_CREATE_FLAG_UMQ_CTX | UMQ_CREATE_FLAG_SUB_UMQ;
     cfg->share_rq_umqh = main_umq;
-    cfg->umq_ctx = (uint64_t)m_fd;
-    uint64_t sub_umq = umq_create(cfg);
+    cfg->umq_ctx = (uint64_t)raw_socket_;
+    uint64_t sub_umq = UmqApi::umq_create(cfg);
     if (sub_umq == UMQ_INVALID_HANDLE) {
         UBS_VLOG_ERR("umq_create() failed for sub umq, ret: %llu\n", static_cast<unsigned long long>(sub_umq));
         return UMQ_INVALID_HANDLE;
     }
 
-    EidUmqTable::Add(*local_eid, main_umq);
-    MainSubUmqTable::Add(main_umq, sub_umq);
+    UmqEidTable::Instance().Add(*local_eid, GetTransMode(), main_umq);
 
-    m_main_umqh = main_umq;
+    share_umq_handle_ = main_umq;
     return sub_umq;
-#endif
+}
+
+uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
+{
+    std::vector<std::shared_ptr<MainUmqState>> main_umqs;
+    if (!UmqEidTable::Instance().Get(*localEid, GetTransMode(), main_umqs)) {
+        umq_create_option_t cfg_main;
+        memcpy(&cfg_main, cfg, sizeof(*cfg));
+        cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
+
+        return UmqApi::umq_create(&cfg_main);
+    }
+
+    if (main_umqs.empty()) {
+        UBS_VLOG_ERR("Main umq list is empty, local eid:" EID_FMT ", ret: %llu\n",
+                     EID_ARGS(*localEid), static_cast<unsigned long long>(UMQ_INVALID_HANDLE));
+        return UMQ_INVALID_HANDLE;
+    }
+
+    // eid 对应多个不同 UB 传输模式的主 umq. 当前实现保证此时 main_umqs 长度为 1
+    return main_umqs.front()->GetUmqHandle();
 }
 
 Result UmqSocket::PrefillRx()
 {
-    // TODO jfr check
-    // bool enable_share_jfr = context == nullptr ? true : context->EnableShareJfr();
-    // uint64_t umq_handle = enable_share_jfr ? umq_handle_ : local_umq_handle_;
-    uint64_t umq_handle = umq_handle_;
+    uint64_t umq_handle = GlobalSetting::UBS_ENABLE_SHARE_JFR ? share_umq_handle_ : umq_handle_;
     uint32_t left_post_rx_num = getLeftPostRxNum(umq_handle);
     if (left_post_rx_num == 0) {
         UBS_VLOG_ERR("Failed to set rx window capacity\n");
@@ -221,32 +226,31 @@ Result UmqSocket::PrefillRx()
             int rx_window_capacity = 0;
             UBS_VLOG_ERR("umq_post() failed, RX depth: %u, ret: %d\n", rx_window_capacity, umq_ret);
             // TODO：处理bad_qbuf
-            // m_rx.m_window_size += HandleBadQBuf(rx_buf_list, bad_qbuf);
+            // rx_.GetRxOps()->rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf);
             return UBS_ERROR;
         }
-        // TODO: 待增加rx window size
-        // m_rx.m_window_size += cur_post_rx_num;
+        rx_.GetRxOps()->rx_queue_avail_num_ += cur_post_rx_num;
         UBS_VLOG_DEBUG("Post RX depth: %u\n", cur_post_rx_num);
     } while ((left_post_rx_num -= cur_post_rx_num) > 0);
 
-    // TODO：待确认如何调用 PollTx
-    // uint32_t poll_cnt = 0;
-    // do {
-    //     PollTx(m_tx.m_retrieve_threshold);
-    //     if (umq_state_get(m_local_umqh) != QUEUE_STATE_IDLE) {
-    //         break;
-    //     }
-    //     usleep(WAIT_UMQ_READY_TIMEOUT_US);
-    // } while (poll_cnt++ < WAIT_UMQ_READY_ROUND);
+    uint32_t poll_cnt = 0;
+    do {
+        // PollTx(m_tx.m_retrieve_threshold);
+        tx_.GetTxOps()->PollTx(this);
+        if (UmqApi::umq_state_get(umq_handle_) != QUEUE_STATE_IDLE) {
+            break;
+        }
+        usleep(WAIT_READY_TIMEOUT_US);
+    } while (poll_cnt++ < WAIT_READY_ROUND);
 
-    // int local_umq_state = QUEUE_STATE_IDLE;
-    // local_umq_state = umq_state_get(m_local_umqh);
-    // if (local_umq_state != QUEUE_STATE_READY) {
-    //     UBS_VLOG_ERR("umq_state_get() failed to reach ready, ret: %d\n", local_umq_state);
-    //     return -1;
-    // }
+    int local_umq_state;
+    local_umq_state = UmqApi::umq_state_get(umq_handle_);
+    if (local_umq_state != QUEUE_STATE_READY) {
+        UBS_VLOG_ERR("umq_state_get() failed to reach ready, ret: %d\n", local_umq_state);
+        return -1;
+    }
 
-    // m_rx.m_window_size = context->GetRxDepth();
+    rx_.GetRxOps()->rx_queue_avail_num_ = GlobalSetting::UBS_RX_DEPTH;
     return 0;
 }
 
@@ -294,8 +298,7 @@ Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
 Result UmqSocket::AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct epoll_event *event)
 {
     // 1. add share jfr main umq fd
-    // TODO：socket代码还没提交，main_umq从socket中获取
-    int main_umq = -1;
+    int main_umq = share_umq_handle_;
     umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto share_jfr_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(main_umq, &main_option);
     if (UNLIKELY(share_jfr_fd < 0)) {
