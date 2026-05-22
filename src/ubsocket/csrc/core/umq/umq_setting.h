@@ -46,6 +46,7 @@ public:
     static uint32_t UMQ_EID_INDEX;
     static umq_eid_t UMQ_LOCAL_EID;
     static int UMQ_PROCESS_SOCKET_ID;
+    static uint32_t UMQ_SHARE_JFR_RX_QUEUE_DEPTH;
     static std::vector<uint32_t> UMQ_ALL_SOCKET_IDS;
 
 private:

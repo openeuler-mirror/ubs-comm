@@ -133,6 +133,8 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     /* step3: socket related initialization */
     SocketSet::Instance().Init();
+    g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
+    ArraySet<EventPoll>::GetInstance().Init();
 
     /* step4: umq backend init */
 #ifdef UMQ_BACKEND_ENABLED

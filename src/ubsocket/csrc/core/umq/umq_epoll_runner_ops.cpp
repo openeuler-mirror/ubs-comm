@@ -50,7 +50,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
     }
 
     umq_buf_t *buf[POLL_BATCH_MAX];
-    int poll_num = UmqApi::umq_poll(dynamic_cast<UmqSocket *>(socket_object)->LocalUmqHandle(), UMQ_IO_RX, buf,
+    int poll_num = UmqApi::umq_poll(dynamic_cast<UmqSocket *>(socket_object)->UmqHandle(), UMQ_IO_RX, buf,
                                     POLL_BATCH_MAX);
     if (UNLIKELY(poll_num <= 0)) {
         if (dynamic_cast<UmqSocket *>(socket_object)->GetRx()->GetRxOps()->RearmRxInterrupt() < 0) {

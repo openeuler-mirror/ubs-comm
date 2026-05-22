@@ -192,6 +192,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     if (ret != UBS_OK) {
         return ret;
     }
+    new_socket_obj->event_fd_ = event_fd;
     auto newSocket = RefConvert<Socket, SocketBase>(new_socket_obj);
     newSocket->acceptor_->acceptor_ops_->event_fd = event_fd;
     newSocket->acceptor_->acceptor_ops_->conn_info.peer_ip = peerIp;
