@@ -286,7 +286,7 @@ int AsyncEventPoll::EpollCtl(int op, const SocketPtr &sock, struct epoll_event *
             if (ret == 0 && mapper != nullptr) {
                 mapper->Del(epoll_fd_);
             }
-            break; 
+            break;
         default:
             UBS_VLOG_ERR("Invalid op code(%d), epfd: %d, fd: %d\n", op, epoll_fd_, sock->raw_socket_);
             errno = EINVAL;

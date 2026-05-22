@@ -11,6 +11,7 @@
 
 #include "umq_socket_acceptor.h"
 #include "core/ubsocket_socket_helper.h"
+#include "umq_eid_table.h"
 
 namespace ock {
 namespace ubs {
@@ -168,21 +169,20 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &mUsedPo
 
     if (GlobalSetting::UBS_ENABLE_SHARE_JFR) {
         // 强依赖当前实现，一个 eid 对应多 UB 传输模式不同的 umq. 如果后续逻辑有变更，需同步修改。
-        // TODO JFR is needed
-        /*auto main_umq = EidUmqTable::GetFirst(socket_fd_obj->m_conn_info.conn_eid, socket_fd_obj->GetUbTransMode());
+        auto main_umq = UmqEidTable::Instance().GetFirst(conn_eid, umqSocket->GetTransMode());
         if (main_umq == nullptr) {
             UBS_VLOG_ERR("The main umq state is removed by other thread.\n");
             // return ubsocket::Error::kUBSOCKET_NO_MAIN_UMQ;
             return UBS_ERROR;
         }
 
-        return main_umq->EnsurePrefilled([socket_fd_obj, new_fd]() {
-            if (socket_fd_obj->PrefillRx() != 0) {
-                RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to fill rx buffer to main umq, fd: %d\n", new_fd);
-                return ubsocket::Error::kUBSOCKET_PREFILL_RX;
+        return main_umq->EnsurePrefilled([umqSocket]() {
+            if (umqSocket->PrefillRx() != 0) {
+                UBS_VLOG_ERR("Failed to fill rx buffer to main umq, fd: %d\n", umqSocket->raw_socket_);
+                return UBS_ERROR;
             }
-            return ubsocket::Error::kOK;
-        });*/
+            return UBS_OK;
+        });
     }
 
     // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()

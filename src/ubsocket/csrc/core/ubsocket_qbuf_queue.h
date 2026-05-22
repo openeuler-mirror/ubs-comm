@@ -205,7 +205,7 @@ private:
         }
 
         isMalloc_ = true;
-        memset_s(queue_, sizeof(struct QbufQueueT<T>), 0, sizeof(struct QbufQueueT<T>));
+        memset(queue_, 0, sizeof(struct QbufQueueT<T>));
         queue_->itemNb = itemNb + 1;
         return 0;
     }

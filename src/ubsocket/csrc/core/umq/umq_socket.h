@@ -45,14 +45,9 @@ public:
         return umq_handle_;
     }
 
-    uint64_t LocalUmqHandle() const noexcept
+    uint64_t ShareUmqHandle() const noexcept
     {
-        return local_umq_handle_;
-    }
-
-    void SetLocalUmqHandle(uint64_t handle)
-    {
-        umq_handle_ = handle;
+        return share_umq_handle_;
     }
 
     bool IsBindRemote() override
@@ -131,6 +126,7 @@ public:
 
 private:
     uint32_t getLeftPostRxNum(uint64_t umq_handle);
+    uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid);
 
     // 链接类型相关
     bool is_bonding_ = false;
@@ -142,7 +138,7 @@ private:
     uint64_t umq_handle_ = UMQ_INVALID_HANDLE;
 
     u_mutex_t *mutex_;
-    uint64_t local_umq_handle_ = UMQ_INVALID_HANDLE;
+    uint64_t share_umq_handle_ = UMQ_INVALID_HANDLE;
 
     QbufQueue<umq_buf_t *> *rxQueue = nullptr;
 };

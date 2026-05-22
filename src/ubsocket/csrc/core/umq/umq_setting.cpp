@@ -39,6 +39,7 @@ int UmqSetting::UMQ_PROCESS_SOCKET_ID = -1;
 std::vector<uint32_t> UmqSetting::UMQ_ALL_SOCKET_IDS = {};
 uint32_t UmqSetting::UMQ_POST_BATCH_MAX = 64UL;
 uint32_t UmqSetting::UMQ_EID_INDEX = 0;
+uint32_t UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
 std::string UmqSetting::UMQ_DEV_NAME = "bonding_dev_0";
 
 void UmqSetting::AddRules() noexcept
