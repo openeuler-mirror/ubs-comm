@@ -92,7 +92,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
             EpollMapper *mapper = GetSocketEpollMapper(fd);
             int epoll_fd = mapper->QueryFirst();
             if (epoll_fd >= 0) {
-                EventPoll *obj = ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
+                // EventPoll *obj = ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
                 // 唤醒待补充
             }
             ubSocket_async_accept_info.asyncTaskNum.fetch_sub(1U);

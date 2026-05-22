@@ -13,9 +13,9 @@
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
 #include "ubsocket_socket_set.h"
-#include "umq/umq_socket.h"
-#include "umq/umq_data_rx_ops.h"
 #include "umq/umq_backend.h"
+#include "umq/umq_data_rx_ops.h"
+#include "umq/umq_socket.h"
 
 namespace ock {
 namespace ubs {
@@ -66,14 +66,7 @@ void CleanSocketEpollMapper(int socket_fd)
     mapper = nullptr;
 }
 
-template<SocketType T>
-EpollRunner<T> &EpollRunner<T>::GetInstance()
-{
-    static EpollRunner<T> instance;
-    return instance;
-}
-
-template<SocketType T>
+template <SocketType T>
 int EpollRunner<T>::Start()
 {
     std::call_once(flag_, [this]() {
@@ -124,7 +117,7 @@ int EpollRunner<T>::Start()
     return 0;
 }
 
-template<SocketType T>
+template <SocketType T>
 void EpollRunner<T>::Stop()
 {
     if (exit_efd_ < 0) {
@@ -152,7 +145,7 @@ void EpollRunner<T>::Stop()
     mutex_ = nullptr;
 }
 
-template<SocketType T>
+template <SocketType T>
 void EpollRunner<T>::RunInThread() noexcept
 {
     UBS_VLOG_INFO("async_epoll epoll_wait_async_daemon thread started.\n");
@@ -187,22 +180,28 @@ void EpollRunner<T>::RunInThread() noexcept
 }
 
 template<SocketType T>
-ALWAYS_INLINE int EpollRunner<T>::AddEpollEvent(const SocketPtr &sock, struct epoll_event *event)
+ALWAYS_INLINE int EpollRunner<T>::AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event)
 {
     if (UNLIKELY(sock == nullptr)) {
-        UBS_VLOG_ERR("async_epoll AddEvent invalid args efd:%d\n", epoll_fd_);
+        UBS_VLOG_ERR("add epoll event to runner invalid args, sock is nullptr\n");
         return -1;
     }
 
     if (UNLIKELY(sock->event_fd_ < 0)) {
-        UBS_VLOG_ERR("invalid event_fd_ of sock : %d\n", sock->event_fd_);
+        UBS_VLOG_ERR("invalid event_fd_ of sock, event fd: %d\n", sock->event_fd_);
         return -1;
     }
 
-    return sock->AddRxEventToRunner(sock, epoll_fd_, event);
+    auto sock_base = RefConvert<Socket, SocketBase>(sock);
+    int ret = sock_base->AddRxEventToRunner(reinterpret_cast<uintptr_t>(&event_poll), sock, epoll_fd_, event);
+    if (UNLIKELY(ret != 0)) {
+        UBS_VLOG_ERR("add rx event to runner failed, sock:%d, ret:%d\n", sock->raw_socket_, ret);
+        return -1;
+    }
+    return sock->event_fd_;
 }
 
-template<SocketType T>
+template <SocketType T>
 ALWAYS_INLINE int EpollRunner<T>::DelEpollEvent(const SocketPtr &sock)
 {
     if (UNLIKELY(sock == nullptr)) {
@@ -212,7 +211,7 @@ ALWAYS_INLINE int EpollRunner<T>::DelEpollEvent(const SocketPtr &sock)
     return sock->DelRxEventToRunner(sock, epoll_fd_);
 }
 
-template<SocketType T>
+template <SocketType T>
 ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &event)
 {
     uint64_t main_umq = 0;
@@ -230,7 +229,7 @@ ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &even
         socket_object = (Socket *)(ptrdiff_t)event_data.event_data.data;
     } else {
         UBS_VLOG_ERR("async_epoll unknown event:(events:%x, data.type:%lu)\n", event.events,
-            event_data.event_data.type);
+                     event_data.event_data.type);
     }
 
     if (main_umq != 0) {
@@ -242,12 +241,11 @@ ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &even
     }
 
     umq_buf_t *buf[POLL_BATCH_MAX];
-    int poll_num = UmqApi::umq_poll(
-        dynamic_cast<umq::UmqSocket *>(socket_object)->UmqHandle(), UMQ_IO_RX, buf, POLL_BATCH_MAX);
+    int poll_num = UmqApi::umq_poll(dynamic_cast<umq::UmqSocket *>(socket_object)->UmqHandle(), UMQ_IO_RX, buf,
+                                    POLL_BATCH_MAX);
     if (UNLIKELY(poll_num <= 0)) {
         if (dynamic_cast<umq::UmqSocket *>(socket_object)->GetRx()->GetRxOps()->RearmRxInterrupt() < 0) {
-            UBS_VLOG_ERR("Rearm sub umq failed, socket fd:%d, ret: %d\n",
-                socket_object->raw_socket_, poll_num);
+            UBS_VLOG_ERR("Rearm sub umq failed, socket fd:%d, ret: %d\n", socket_object->raw_socket_, poll_num);
         }
         return -1;
     }
@@ -263,7 +261,7 @@ ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &even
     return 0;
 }
 
-template<SocketType T>
+template <SocketType T>
 ALWAYS_INLINE int EpollRunner<T>::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq)
 {
     if (UNLIKELY(ProcessMainUmqRearm(main_umq)) < 0) {
@@ -280,9 +278,9 @@ ALWAYS_INLINE int EpollRunner<T>::ProcessShareJfrEvent(const struct epoll_event 
         return -1;
     }
 
-    umq_alloc_option_t alloc_option = { UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block) };
-    umq_buf_t *rx_buf_list = UmqApi::umq_buf_alloc(
-        umq::UmqSetting::GetIOBufSize(), poll_num, UMQ_INVALID_HANDLE, &alloc_option);
+    umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
+    umq_buf_t *rx_buf_list =
+        UmqApi::umq_buf_alloc(umq::UmqSetting::GetIOBufSize(), poll_num, UMQ_INVALID_HANDLE, &alloc_option);
     if (UNLIKELY(rx_buf_list != nullptr)) {
         umq_buf_t *bad_qbuf = nullptr;
         if (UmqApi::umq_post(main_umq, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
@@ -310,9 +308,8 @@ ALWAYS_INLINE int EpollRunner<T>::ProcessShareJfrEvent(const struct epoll_event 
     return 0;
 }
 
-template<SocketType T>
-ALWAYS_INLINE std::unordered_set<Socket *>
-EpollRunner<T>::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count)
+template <SocketType T>
+ALWAYS_INLINE std::unordered_set<Socket *> EpollRunner<T>::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count)
 {
     std::unordered_set<Socket *> event_reach_sockets;
     for (int i = 0; i < count; ++i) {
@@ -332,20 +329,19 @@ EpollRunner<T>::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count)
             UBS_VLOG_ERR("async_epoll add qbuf for socket fd: %d failed.\n", socket_fd);
             continue;
         }
-        
+
         event_reach_sockets.emplace(socket_ptr);
     }
     return event_reach_sockets;
 }
 
-template<SocketType T>
+template <SocketType T>
 ALWAYS_INLINE int EpollRunner<T>::ProcessMainUmqRearm(uint64_t main_umq)
 {
-    umq_interrupt_option_t option = { UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_EVENT };
+    umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_EVENT};
     auto events_cnt = UmqApi::umq_get_cq_event(main_umq, &option);
     if (UNLIKELY(events_cnt < 0)) {
-        UBS_VLOG_ERR("async_epoll umq_get_cq_event(main_umq=%lu) failed: %d\n", main_umq,
-            events_cnt);
+        UBS_VLOG_ERR("async_epoll umq_get_cq_event(main_umq=%lu) failed: %d\n", main_umq, events_cnt);
         return events_cnt;
     }
 
@@ -402,8 +398,7 @@ int AsyncEventPoll::EpollCtl(int op, const SocketPtr &sock, struct epoll_event *
     if (op == EPOLL_CTL_ADD) {
         mapper_create = CreateSocketEpollMapper(sock->raw_socket_, mapper);
     } else {
-        // TODO：补充其他实现
-        // mapper = GetSocketEpollMapper(fd);
+        mapper = GetSocketEpollMapper(sock->raw_socket_);
     }
     switch (op) {
         case EPOLL_CTL_ADD:
@@ -417,7 +412,15 @@ int AsyncEventPoll::EpollCtl(int op, const SocketPtr &sock, struct epoll_event *
                 mapper = nullptr;
             }
             break;
-        // TODO：补充其他实现
+        case EPOLL_CTL_MOD:
+            ret = EpollCtlMod(sock, event);
+            break;
+        case EPOLL_CTL_DEL:
+            ret = EpollCtlDel(sock, event);
+            if (ret == 0 && mapper != nullptr) {
+                mapper->Del(epoll_fd_);
+            }
+            break;
         default:
             UBS_VLOG_ERR("Invalid op code(%d), epfd: %d, fd: %d\n", op, epoll_fd_, sock->raw_socket_);
             errno = EINVAL;
@@ -459,11 +462,9 @@ int AsyncEventPoll::EpollWait(const SocketPtr &sock, struct epoll_event *events,
 
 int AsyncEventPoll::AddReadableEvent(epoll_data_t data)
 {
-    if (!readable_sockets_event_queue_.Push(epoll_event{
-        .events = EPOLLIN,
-        .data = data })) {
-            return -1;
-        }
+    if (!readable_sockets_event_queue_.Push(epoll_event{.events = EPOLLIN, .data = data})) {
+        return -1;
+    }
     return 0;
 }
 
@@ -575,11 +576,12 @@ int AsyncEventPoll::EpollCtlAdd(const SocketPtr &sock, struct epoll_event *event
     }
 
     if (UNLIKELY(!sock->IsBindRemote())) {  /* listen fd */
+        UBS_VLOG_INFO("socket is not bind remote, socket: %d\n", sock->raw_socket_);
         return 0;
     }
 
     // 3. add epoll runner epoll fd
-    if (UNLIKELY(EpollRunnerFactory::GetInstance(sock->Type()).AddEpollEvent(sock, event) != 0)) {
+    if (UNLIKELY(EpollRunnerFactory::GetInstance(sock->Type()).AddEpollEvent(*this, sock, event) != 0)) {
         UBS_VLOG_ERR("epoll runner add epoll event failed, socket fd: %d\n", sock->raw_socket_);
         return -1;
     }
@@ -589,8 +591,8 @@ int AsyncEventPoll::EpollCtlAdd(const SocketPtr &sock, struct epoll_event *event
         int ret = AddProtoTxEvent(sock, event);
         if (ret < 0) {
             DelRawSocketEvent(sock);
-            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD:%d) failed(ret:%d): %d : %s\n",
-                    ret, sock->raw_socket_, errno, strerror(errno));
+            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD:%d) failed(ret:%d): %d : %s\n", ret, sock->raw_socket_, errno,
+                         strerror(errno));
             return -1;
         }
     }
@@ -617,8 +619,7 @@ int AsyncEventPoll::AddRawSocketEvent(const SocketPtr &sock, struct epoll_event 
     }
 
     if (UNLIKELY(!InsertSocketEventData(sock->raw_socket_, event_data))) {
-        UBS_VLOG_ERR("async_epoll add pure event for socket fd: %d insert event data failed\n",
-                    sock->raw_socket_);
+        UBS_VLOG_ERR("async_epoll add pure event for socket fd: %d insert event data failed\n", sock->raw_socket_);
         epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, sock->raw_socket_, nullptr);
         delete event_data;
         return -1;
@@ -630,11 +631,10 @@ int AsyncEventPoll::AddRawSocketEvent(const SocketPtr &sock, struct epoll_event 
 int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *event)
 {
     struct epoll_event add_event {};
-    auto *event_data = new (std::nothrow) EpollEvent(
+    auto event_data = new (std::nothrow) EpollEvent(
             EPOLL_EVENT_UB_SOCKET_OUT, sock->raw_socket_, *event);
     if (UNLIKELY(event_data == nullptr)) {
-        UBS_VLOG_ERR("async_epoll add out event for socket fd: %d alloc failed.\n",
-                    sock->raw_socket_);
+        UBS_VLOG_ERR("async_epoll add out event for socket fd: %d alloc failed.\n", sock->raw_socket_);
         return -1;
     };
 
@@ -643,15 +643,14 @@ int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *e
     int ret = sock->AddTxEvent(sock, epoll_fd_, &add_event);
     if (ret < 0) {
         delete event_data;
-        UBS_VLOG_ERR("add proto tx event(ADD:%d) failed(ret:%d): %d : %s\n",
-                    ret, sock->raw_socket_, errno, strerror(errno));
+        UBS_VLOG_ERR("add proto tx event(ADD:%d) failed(ret:%d): %d : %s\n", ret, sock->raw_socket_, errno,
+                     strerror(errno));
         return -1;
     }
-    
+
     if (UNLIKELY(!InsertSocketEventData(sock->GetTxFd(), event_data))) {
         delete event_data;
-        UBS_VLOG_ERR("async_epoll add proto tx event for socket fd: %d insert event data failed\n",
-            sock->raw_socket_);
+        UBS_VLOG_ERR("async_epoll add proto tx event for socket fd: %d insert event data failed\n", sock->raw_socket_);
         return -1;
     }
     return 0;
@@ -661,8 +660,7 @@ int AsyncEventPoll::DelProtoTxEvent(const SocketPtr &sock)
 {
     int ret = sock->DelTxEvent(sock, epoll_fd_);
     if (UNLIKELY(ret < 0)) {
-        UBS_VLOG_ERR("del tx event for socket fd: %d failed\n",
-            sock->raw_socket_);
+        UBS_VLOG_ERR("del tx event for socket fd: %d failed\n", sock->raw_socket_);
         return -1;
     }
     RemoveSocketEventData(sock->GetTxFd());
@@ -674,7 +672,7 @@ int AsyncEventPoll::DelRawSocketEvent(const SocketPtr &sock)
     auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, sock->raw_socket_, nullptr);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", sock->raw_socket_, errno,
-                    strerror(errno));
+                     strerror(errno));
         return -1;
     }
 
@@ -715,7 +713,6 @@ int AsyncEventPoll::EpollCtlMod(const SocketPtr &sock, struct epoll_event *event
     return ret;
 }
 
-// TODO：Del时去掉了之前的RemoveSocketEventData逻辑，不再用map记录event data，验证正确性
 int AsyncEventPoll::EpollCtlDel(const SocketPtr &sock, struct epoll_event *event)
 {
     if (UNLIKELY(sock->raw_socket_ < 0)) {

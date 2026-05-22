@@ -13,9 +13,9 @@
 
 #include "ubsocket_core_types.h"
 #include "ubsocket_spsc_ring_queue.h"
-#include "umq_types.h"
-#include "umq_pro_types.h"
 #include "umq_errno.h"
+#include "umq_pro_types.h"
+#include "umq_types.h"
 
 namespace ock {
 namespace ubs {
@@ -95,17 +95,17 @@ public:
     void Clear() {}
 
 private:
-    int fd_;
+    const int fd_;
     u_mutex_t *mutex_ = nullptr;
     std::unordered_set<int> epoll_set_;
 };
 extern u_rw_lock_t *g_socket_epoll_lock;
-EpollMapper* GetSocketEpollMapper(int socket_fd);
+EpollMapper *GetSocketEpollMapper(int socket_fd);
 class EpollRunnerOps {
 public:
     EpollRunnerOps() = default;
     virtual ~EpollRunnerOps() = default;
-    
+
     /**
      * @brief add epoll_event to EpollRunner
      * @param sock socket fd added
@@ -122,7 +122,7 @@ public:
      * @return int -1: failed; 0: success
      */
     virtual int RemoveEpollEvent(const SocketPtr &sock, int epoll_fd) = 0;
-   
+
     DEFINE_REF_OPERATION_FUNC
 protected:
     DECLARE_REF_COUNT_VARIABLE;
@@ -149,23 +149,28 @@ using EpollRunnerOpsPtr = Ref<EpollRunnerOps>;
  *        (c)                                                 (f)
  *
  */
+class EventPoll;
 
 class EpollRunnerBase {
 public:
     virtual ~EpollRunnerBase() = default;
     virtual int Start() = 0;
     virtual void Stop() = 0;
-    virtual int AddEpollEvent(const SocketPtr &sock, struct epoll_event *event) = 0;
+    virtual int AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event) = 0;
     virtual int DelEpollEvent(const SocketPtr &sock) = 0;
     virtual int ProcessOneEvent(const struct epoll_event &event) = 0;
 };
 
-template<SocketType T>
+template <SocketType T>
 class EpollRunner : public EpollRunnerBase {
 public:
-    static EpollRunner &GetInstance();
+    static EpollRunner &GetInstance()
+    {
+        static EpollRunner<T> instance;
+        return instance;
+    }
 
-    ~EpollRunner()
+    ~EpollRunner() override
     {
         Stop();
     }
@@ -191,7 +196,7 @@ public:
      * @param event event of socket fd
      * @return int -1: failed; 0: success
      */
-    int AddEpollEvent(const SocketPtr &sock, struct epoll_event *event) override;
+    int AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event) override;
 
     /**
      * @brief delete epoll_event from EpollRunner
@@ -213,10 +218,10 @@ public:
     std::unordered_set<Socket *> SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count);
 
 protected:
-    int epoll_fd_;                        /* used by thread */
-    int exit_efd_;                        /* used to notify thread exit */
-    uint32_t event_ack_batch = 0;         /* do ack_interrupt when epoll num reaches event_ack_batch */
-    u_mutex_t *mutex_;                    /* mutex */
+    int epoll_fd_;                /* used by thread */
+    int exit_efd_;                /* used to notify thread exit */
+    uint32_t event_ack_batch = 0; /* do ack_interrupt when epoll num reaches event_ack_batch */
+    u_mutex_t *mutex_;            /* mutex */
     std::once_flag flag_;
     std::thread wait_thread_;
 
@@ -227,12 +232,12 @@ private:
      */
     void RunInThread() noexcept;
 
-    uint32_t event_num_{ 0 };
+    uint32_t event_num_{0};
 };
 
 class EpollRunnerFactory {
 public:
-    static EpollRunnerBase& GetInstance(SocketType type)
+    static EpollRunnerBase &GetInstance(SocketType type)
     {
         switch (type) {
             case SocketType::SOCK_TYPE_UMQ:
@@ -246,7 +251,8 @@ public:
 
 class EventPoll {
 public:
-    EventPoll(int epoll_fd) : epoll_fd_(epoll_fd) {
+    explicit EventPoll(int epoll_fd) : epoll_fd_(epoll_fd)
+    {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
         ctl_mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
     }
@@ -275,11 +281,10 @@ public:
     virtual void WakeUpEpollFd() = 0;
 
     DEFINE_REF_OPERATION_FUNC;
-    
-public:
-    DECLARE_REF_COUNT_VARIABLE;
 
 protected:
+    DECLARE_REF_COUNT_VARIABLE;
+
     int epoll_fd_;
     u_mutex_t *ctl_mutex_;
     u_mutex_t *mutex_;
@@ -301,7 +306,7 @@ public:
         free(ptr);
     }
 
-    explicit AsyncEventPoll(int epoll_fd) noexcept : EventPoll { epoll_fd } {}
+    explicit AsyncEventPoll(int epoll_fd) noexcept : EventPoll{epoll_fd} {}
 
     /**
      * @brief corresponds to native epoll_ctl interface
@@ -429,10 +434,10 @@ private:
 
 private:
     int sock_readable_fd_ = -1;
-    EpollEvent sock_readable_event_ = { EPOLL_EVENT_UB_SOCKET_IN, -1, epoll_event{} };
+    EpollEvent sock_readable_event_ = {EPOLL_EVENT_UB_SOCKET_IN, -1, epoll_event{}};
     std::unordered_map<int, EpollEvent *> socket_data_;
     EpollEvent *removed_head_ = nullptr; // 待删除的event data列表，用wait唤醒时统一释放
-    SPSCRingQueue<struct epoll_event> readable_sockets_event_queue_{ MAX_READABLE_FD_COUNT };
+    SPSCRingQueue<struct epoll_event> readable_sockets_event_queue_{MAX_READABLE_FD_COUNT};
 };
 using AsyncEventPollPtr = Ref<AsyncEventPoll>;
 

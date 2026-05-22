@@ -46,7 +46,7 @@ public:
     int ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
     EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
-    void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data);
+    void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data = {});
     int NotifyReadable();
 
     DataRx *GetRx() {return &rx_;}
