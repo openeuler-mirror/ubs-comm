@@ -235,7 +235,7 @@ Result UmqSocket::PrefillRx()
 
     uint32_t poll_cnt = 0;
     do {
-        // PollTx(m_tx.m_retrieve_threshold);
+        // TODO tx_.GetTxOps()->PollUmqTx()
         tx_.GetTxOps()->PollTx(this);
         if (UmqApi::umq_state_get(umq_handle_) != QUEUE_STATE_IDLE) {
             break;
