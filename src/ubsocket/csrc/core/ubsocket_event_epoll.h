@@ -249,7 +249,7 @@ public:
 
 class EventPoll {
 public:
-    EventPoll(int epoll_fd) : epoll_fd_(epoll_fd)
+    explicit EventPoll(int epoll_fd) : epoll_fd_(epoll_fd)
     {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
         ctl_mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
