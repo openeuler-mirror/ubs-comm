@@ -332,7 +332,7 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
     if (UNLIKELY(rx_interrupt_fd < 0)) {
-        UBS_VLOG_ERR("async_epoll Failed to get RX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
+        UBS_VLOG_ERR("async_epoll Failed to get RX interrupt fd for umq, socket fd: %d, ret = %d\n", sock->raw_socket_, rx_interrupt_fd);
         return -1;
     }
     struct epoll_event rx_event{};
