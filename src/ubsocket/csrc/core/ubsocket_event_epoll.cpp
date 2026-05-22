@@ -179,20 +179,26 @@ void EpollRunner<T>::RunInThread() noexcept
     UBS_VLOG_INFO("async_epoll epoll_wait_async_daemon thread exit.\n");
 }
 
-template <SocketType T>
-ALWAYS_INLINE int EpollRunner<T>::AddEpollEvent(const SocketPtr &sock, struct epoll_event *event)
+template<SocketType T>
+ALWAYS_INLINE int EpollRunner<T>::AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event)
 {
     if (UNLIKELY(sock == nullptr)) {
-        UBS_VLOG_ERR("async_epoll AddEvent invalid args efd:%d\n", epoll_fd_);
+        UBS_VLOG_ERR("add epoll event to runner invalid args, sock is nullptr\n");
         return -1;
     }
 
     if (UNLIKELY(sock->event_fd_ < 0)) {
-        UBS_VLOG_ERR("invalid event_fd_ of sock : %d\n", sock->event_fd_);
+        UBS_VLOG_ERR("invalid event_fd_ of sock, event fd: %d\n", sock->event_fd_);
         return -1;
     }
 
-    return sock->AddRxEventToRunner(sock, epoll_fd_, event);
+    auto sock_base = RefConvert<Socket, SocketBase>(sock);
+    int ret = sock_base->AddRxEventToRunner(reinterpret_cast<uintptr_t>(&event_poll), sock, epoll_fd_, event);
+    if (UNLIKELY(ret != 0)) {
+        UBS_VLOG_ERR("add rx event to runner failed, sock:%d, ret:%d\n", sock->raw_socket_, ret);
+        return -1;
+    }
+    return sock->event_fd_;
 }
 
 template <SocketType T>
@@ -392,8 +398,7 @@ int AsyncEventPoll::EpollCtl(int op, const SocketPtr &sock, struct epoll_event *
     if (op == EPOLL_CTL_ADD) {
         mapper_create = CreateSocketEpollMapper(sock->raw_socket_, mapper);
     } else {
-        // TODO：补充其他实现
-        // mapper = GetSocketEpollMapper(fd);
+        mapper = GetSocketEpollMapper(sock->raw_socket_);
     }
     switch (op) {
         case EPOLL_CTL_ADD:
@@ -407,7 +412,15 @@ int AsyncEventPoll::EpollCtl(int op, const SocketPtr &sock, struct epoll_event *
                 mapper = nullptr;
             }
             break;
-        // TODO：补充其他实现
+        case EPOLL_CTL_MOD:
+            ret = EpollCtlMod(sock, event);
+            break;
+        case EPOLL_CTL_DEL:
+            ret = EpollCtlDel(sock, event);
+            if (ret == 0 && mapper != nullptr) {
+                mapper->Del(epoll_fd_);
+            }
+            break; 
         default:
             UBS_VLOG_ERR("Invalid op code(%d), epfd: %d, fd: %d\n", op, epoll_fd_, sock->raw_socket_);
             errno = EINVAL;
@@ -562,12 +575,13 @@ int AsyncEventPoll::EpollCtlAdd(const SocketPtr &sock, struct epoll_event *event
         return -1;
     }
 
-    if (UNLIKELY(!sock->IsBindRemote())) { /* listen fd */
+    if (UNLIKELY(!sock->IsBindRemote())) {  /* listen fd */
+        UBS_VLOG_INFO("socket is not bind remote, socket: %d\n", sock->raw_socket_);
         return 0;
     }
 
     // 3. add epoll runner epoll fd
-    if (UNLIKELY(EpollRunnerFactory::GetInstance(sock->Type()).AddEpollEvent(sock, event) != 0)) {
+    if (UNLIKELY(EpollRunnerFactory::GetInstance(sock->Type()).AddEpollEvent(*this, sock, event) != 0)) {
         UBS_VLOG_ERR("epoll runner add epoll event failed, socket fd: %d\n", sock->raw_socket_);
         return -1;
     }
@@ -616,8 +630,9 @@ int AsyncEventPoll::AddRawSocketEvent(const SocketPtr &sock, struct epoll_event 
 
 int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *event)
 {
-    struct epoll_event add_event{};
-    auto *event_data = new (std::nothrow) EpollEvent(EPOLL_EVENT_UB_SOCKET_OUT, sock->raw_socket_, *event);
+    struct epoll_event add_event {};
+    auto event_data = new (std::nothrow) EpollEvent(
+            EPOLL_EVENT_UB_SOCKET_OUT, sock->raw_socket_, *event);
     if (UNLIKELY(event_data == nullptr)) {
         UBS_VLOG_ERR("async_epoll add out event for socket fd: %d alloc failed.\n", sock->raw_socket_);
         return -1;
@@ -698,7 +713,6 @@ int AsyncEventPoll::EpollCtlMod(const SocketPtr &sock, struct epoll_event *event
     return ret;
 }
 
-// TODO：Del时去掉了之前的RemoveSocketEventData逻辑，不再用map记录event data，验证正确性
 int AsyncEventPoll::EpollCtlDel(const SocketPtr &sock, struct epoll_event *event)
 {
     if (UNLIKELY(sock->raw_socket_ < 0)) {

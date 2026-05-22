@@ -253,7 +253,7 @@ Result UmqSocket::PrefillRx()
 Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event)
 {
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
-    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
+    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
         UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
         return -1;
@@ -265,10 +265,10 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
         return -1;
     }
 
-    ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, true, &tx_option);
+    ret = ock::ubs::UmqApi::umq_rearm_interrupt(local_umq_handle_, true, &tx_option);
     if (ret < 0) {
         UBS_VLOG_ERR("umq_rearm_interrupt() failed for TX, local umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(umq_handle_), ret);
+                     static_cast<unsigned long long>(local_umq_handle_), ret);
         return -1;
     }
     return 0;
@@ -277,7 +277,7 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
 Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
 {
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
-    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
+    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
         UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
         return -1;
@@ -291,11 +291,14 @@ Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
     return 0;
 }
 
-Result UmqSocket::AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct epoll_event *event)
+Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock,
+                                    int epoll_fd, struct epoll_event *event)
 {
+    if (UNLIKELY(epoll_fd < 0 || umq_handle_ <= 0)) {
+        UBS_VLOG_ERR("epoll_fd or umq_handle invalid, epoll_fd: %d, umq_handle: %d\n", epoll_fd, umq_handle_);
+    }
     // 1. add share jfr main umq fd
-    // TODO：socket代码还没提交，main_umq从socket中获取
-    int main_umq = -1;
+    int main_umq = umq_handle_;
     umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto share_jfr_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(main_umq, &main_option);
     if (UNLIKELY(share_jfr_fd < 0)) {
@@ -315,7 +318,7 @@ Result UmqSocket::AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct
     Locker sLock(mutex_);
     if (UNLIKELY(jfr_main_umq_.count(share_jfr_fd) == 0)) {
         if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, share_jfr_fd, &shared_jfr_event) < 0) {
-            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) jfr event failed: %d : %s\n", errno, strerror(errno));
+            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
             return -1;
         }
         jfr_main_umq_.emplace(share_jfr_fd, main_umq);
@@ -324,7 +327,7 @@ Result UmqSocket::AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct
 
     //2. add sub umq rx fd
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
+    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &rx_option);
     if (UNLIKELY(rx_interrupt_fd < 0)) {
         UBS_VLOG_ERR("async_epoll Failed to get RX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
         return -1;
@@ -340,9 +343,7 @@ Result UmqSocket::AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct
     }
 
     // 3. add to socket
-    // TODO：待socket实现，调用SetAdded Epoll Fd接口
-    // auto socket_obj = ((Brpc::SocketFd *)connect_info.socket_fd_object);
-    // socket_obj->SetAddedEpollFd(&epoll_fd, event.data);
+    SetAddedEpollFd((EventPoll *)event_poll, event->data);
 
     // 4. do rearm
     int ret = ock::ubs::UmqApi::umq_rearm_interrupt(main_umq, false, &rx_option);
@@ -351,10 +352,10 @@ Result UmqSocket::AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct
                      static_cast<unsigned long long>(main_umq), ret);
         return -1;
     }
-    ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, false, &rx_option);
+    ret = ock::ubs::UmqApi::umq_rearm_interrupt(local_umq_handle_, false, &rx_option);
     if (ret < 0) {
         UBS_VLOG_ERR("umq_rearm_interrupt() failed for sub umq RX, main umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(umq_handle_), ret);
+                     static_cast<unsigned long long>(local_umq_handle_), ret);
         return -1;
     }
 
@@ -364,24 +365,23 @@ Result UmqSocket::AddRxEventToRunner(const SocketPtr &sock, int epoll_fd, struct
 Result UmqSocket::DelRxEventToRunner(const SocketPtr &sock, int epoll_fd)
 {
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
+    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &rx_option);
     if (UNLIKELY(rx_interrupt_fd < 0)) {
         UBS_VLOG_ERR("async_epoll Failed to get RX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
         return -1;
     }
 
     auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, rx_interrupt_fd, nullptr);
-    // TODO：待socket实现，调用SetAdded Epoll Fd接口
-    // ((Brpc::SocketFd *)connect_info.socket_fd_object)->SetAddedEpollFd(nullptr);
+    SetAddedEpollFd(nullptr);
     return ret;
 }
 
 int UmqSocket::GetTxFd()
 {
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
-    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
+    int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(local_umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
-        UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, umq handle: %ld", umq_handle_);
+        UBS_VLOG_ERR("async_epoll Failed to get TX interrupt fd for umq, umq handle: %d\n", local_umq_handle_);
         return -1;
     }
     return tx_interrupt_fd;
