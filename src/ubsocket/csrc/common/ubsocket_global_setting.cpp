@@ -33,6 +33,7 @@ bool GlobalSetting::USE_BRPC_ZCOPY = false;
 std::string GlobalSetting::UBS_BRPC_ALLOC_SYM_STR;
 std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
+uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"

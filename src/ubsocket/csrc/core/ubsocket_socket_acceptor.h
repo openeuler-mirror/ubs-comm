@@ -98,6 +98,12 @@ private:
     // ======================== 成员变量 ========================
     int raw_fd_;   // 传入 sock 的原生 socket fd
     Ref<AcceptorOps> acceptor_ops_ = nullptr;
+    struct AsyncAcceptInfo {
+        std::queue<std::tuple<int, struct sockaddr, socklen_t>> ready_queue;
+        std::atomic<int32_t> asyncTaskNum{0U};
+        u_mutex_t *lock = nullptr;
+    } ubSocket_async_accept_info;
+
 };
 
 } // namespace ubs

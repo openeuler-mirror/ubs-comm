@@ -50,7 +50,6 @@ union RunnerEventData {
     } event_data;
     uint64_t u64;
 };
-
 enum RunnerEventType : uint64_t {
     RUNNER_EVENT_TYPE_INVALID = 0,
     RUNNER_EVENT_TYPE_SHARE_JFR,
@@ -97,7 +96,7 @@ private:
     u_mutex_t *mutex_ = nullptr;
     std::unordered_set<int> epoll_set_;
 };
-
+EpollMapper* GetSocketEpollMapper(int socket_fd);
 class EpollRunnerOps {
 public:
     EpollRunnerOps() = default;
