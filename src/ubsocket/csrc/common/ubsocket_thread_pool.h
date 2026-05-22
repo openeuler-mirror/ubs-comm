@@ -77,7 +77,7 @@ private:
     void ClearExistWorkerThread();
 
 private:
-    uint32_t threadNum_;
+    uint32_t threadNum_ = 0;
     std::atomic<bool> started_;
     std::atomic<bool> stopped_;
     std::atomic<uint32_t> startedThreadNum_;

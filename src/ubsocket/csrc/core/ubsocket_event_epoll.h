@@ -95,7 +95,7 @@ public:
     void Clear() {}
 
 private:
-    int fd_;
+    const int fd_;
     u_mutex_t *mutex_ = nullptr;
     std::unordered_set<int> epoll_set_;
 };
@@ -280,10 +280,9 @@ public:
 
     DEFINE_REF_OPERATION_FUNC;
 
-public:
+protected:
     DECLARE_REF_COUNT_VARIABLE;
 
-protected:
     int epoll_fd_;
     u_mutex_t *ctl_mutex_;
     u_mutex_t *mutex_;
