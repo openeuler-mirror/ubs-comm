@@ -3,7 +3,9 @@
  */
 #ifndef HCOM_PERF_TEST_SERVICE_READ_LAT_H
 #define HCOM_PERF_TEST_SERVICE_READ_LAT_H
+#include <functional>
 #include <semaphore.h>
+#include <vector>
 #include "hcom/hcom.h"
 #include "test_case/perf_test_base.h"
 #include "test_case/service_v2/service_helper.h"
@@ -22,30 +24,51 @@ private:
 
     inline int DoPostRead()
     {
-        rcnt.store(0);
-        while (mCtx->cnt < mCtx->mIterations) {
-            ock::hcom::Callback *newCallback = ock::hcom::UBSHcomNewCallback(
-                [this](ock::hcom::UBSHcomServiceContext &context) {
-                    PerfTestContext *testCtx = this->GetPerfTestContext();
-                    this->rcnt.fetch_add(1);
-                    if (static_cast<uint64_t>(this->rcnt.load()) == testCtx->mIterations) {
-                        testCtx->tposted[testCtx->mIterations] = ock::hcom::MONOTONIC_TIME_NS();
-                        sem_post(&this->mSem);
-                    }
+        if (mCtx == nullptr) {
+            LOG_ERROR("mCtx is nullptr");
+            sem_post(&mSem);
+            return -1;
+        }
+        if (mCh == nullptr) {
+            LOG_ERROR("mCh is nullptr");
+            sem_post(&mSem);
+            return -1;
+        }
+
+        const uint64_t iters = mCtx->mIterations;
+
+        mCallbacks.clear();
+        mCallbacks.reserve(iters);
+        for (uint64_t i = 0; i < iters; i++) {
+            auto closure = std::bind(
+                [](ServiceReadLatTest *self, ock::hcom::UBSHcomServiceContext &context) {
+                    self->rcnt.fetch_add(1);
                 },
-                std::placeholders::_1);
-            if (newCallback == nullptr) {
-                LOG_ERROR("Create callback failed");
+                this, std::placeholders::_1);
+            auto cb = new (std::nothrow) ock::hcom::InnerClosureCallback<decltype(closure)>(std::move(closure), false);
+            if (cb == nullptr) {
+                LOG_ERROR("Pre-allocate callback[" << i << "] failed");
+                for (auto &ptr : mCallbacks) {
+                    delete ptr;
+                }
+                mCallbacks.clear();
                 sem_post(&mSem);
                 return -1;
             }
+            mCallbacks.push_back(cb);
+        }
+
+        rcnt.store(0);
+        mCtx->cnt = 0;
+        while (mCtx->cnt < iters) {
             mCtx->tposted[mCtx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
-            int res = mCh->Get(mReq, newCallback);
+            int res = mCh->Get(mReq, mCallbacks[mCtx->cnt]);
             if (res != 0) {
-                if (newCallback != nullptr) {
-                    delete newCallback;
+                LOG_ERROR("Get failed at iteration " << mCtx->cnt);
+                for (auto &ptr : mCallbacks) {
+                    delete ptr;
                 }
-                LOG_ERROR("failed to send to server");
+                mCallbacks.clear();
                 sem_post(&mSem);
                 return -1;
             }
@@ -83,10 +106,11 @@ private:
 private:
     ock::hcom::UBSHcomChannelPtr mCh = nullptr;
     ock::hcom::UBSHcomOneSideRequest mReq;
-    volatile std::atomic<int> rcnt{ 0 };
+    std::atomic<uint64_t> rcnt{ 0 };
     ServiceHelper mHelper;
     RegMrInfo mPostMrInfo;
     RegMrInfo mPeerMrInfo;
+    std::vector<ock::hcom::Callback *> mCallbacks;
     sem_t mSem;
 };
 }

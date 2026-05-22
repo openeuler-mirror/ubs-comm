@@ -2008,9 +2008,9 @@ int32_t HcomChannelImp::Put(const UBSHcomOneSideRequest &req, const Callback *do
             return ret;
         }
 
-        NetTrace::TraceBegin(CHANNEL_WRITE);
+        TRACE_DELAY_BEGIN(CHANNEL_WRITE);
         ret = OneSideInner(req, done, true);
-        NetTrace::TraceEnd(CHANNEL_WRITE, ret);
+        TRACE_DELAY_END(CHANNEL_WRITE, ret);
         if (NN_LIKELY(ret == SER_OK)) {
             return SER_OK;
         } else if (ret == SER_NEW_OBJECT_FAILED) { // do later::add retry result code
@@ -2038,9 +2038,9 @@ int32_t HcomChannelImp::Get(const UBSHcomOneSideRequest &req, const Callback *do
             return ret;
         }
 
-        NetTrace::TraceBegin(CHANNEL_READ);
+        TRACE_DELAY_BEGIN(CHANNEL_READ);
         ret = OneSideInner(req, done, false);
-        NetTrace::TraceEnd(CHANNEL_READ, ret);
+        TRACE_DELAY_END(CHANNEL_READ, ret);
         if (NN_LIKELY(ret == SER_OK)) {
             return SER_OK;
         } else if (ret == SER_NEW_OBJECT_FAILED) { // do later::add retry result code
