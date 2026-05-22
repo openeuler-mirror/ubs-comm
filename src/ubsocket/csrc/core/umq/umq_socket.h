@@ -127,7 +127,6 @@ public:
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
     int FlushRxQueue();
 
-    // TODO 优化到下层runner
     static std::unordered_map<int, uint64_t> jfr_main_umq_;
 
 private:
