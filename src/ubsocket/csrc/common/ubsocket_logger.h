@@ -14,6 +14,7 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -60,6 +61,24 @@ public:
     void SetExternalLogFunction(ExternalLog func);
 
     void Log(int level, const std::ostringstream &oss, const char *filename, int line) const;
+    void Logv(int level, const char *filename, int line, const char *format, ...) const
+    {
+        std::ostringstream oss;
+        char buffer[1024L];
+
+        va_list va;
+        va_start(va, format);
+        const int len = std::vsnprintf(buffer, sizeof(buffer), format, va);
+        va_end(va);
+
+        if (UNLIKELY(len < 0)) {
+            oss << "Invalid log format.";
+        } else {
+            oss << buffer;
+        }
+
+        Log(level, oss, filename, line);
+    }
 
     Logger(const Logger &) = delete;
     Logger &operator=(const Logger &) = delete;
@@ -139,15 +158,11 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
 } // namespace ubs
 } // namespace ock
 
-#define UBS_LOG(level, __format, ...)                                                     \
-    do {                                                                                  \
-        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                    \
-            std::ostringstream oss;                                                       \
-            char buffer[1024L];                                                           \
-            std::snprintf(buffer, sizeof(buffer), __format, ##__VA_ARGS__);               \
-            oss << "[UBSOCKET " << __FUNCTION__ << "] " << buffer;                        \
-            ock::ubs::Logger::Instance().Log(level, oss, UBS_LOG_FILENAME, UBS_LOG_LINE); \
-        }                                                                                 \
+#define UBS_LOG(level, __format, ...)                                                                \
+    do {                                                                                             \
+        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                               \
+            ock::ubs::Logger::Instance().Logv(level, UBS_LOG_FILENAME, UBS_LOG_LINE, __format, ##__VA_ARGS__); \
+        }                                                                                            \
     } while (0)
 
 #define UBS_LOG_STREAM(level, ARGS)                                                       \

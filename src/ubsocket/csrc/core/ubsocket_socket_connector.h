@@ -16,8 +16,9 @@
 
 namespace ock {
 namespace ubs {
-
-// accept 操作抽象层
+/**
+ * Connector ops for extension, umq/urma/posix_shm etc
+ */
 class ConnectorOps {
 public:
     virtual ~ConnectorOps() = default;
@@ -35,7 +36,7 @@ public:
 
     DEFINE_REF_OPERATION_FUNC
 protected:
-    int raw_fd_; // 传入 sock 的原生 socket fd
+    int raw_fd_ = -1; // 传入 sock 的原生 socket fd
     DECLARE_REF_COUNT_VARIABLE;
 };
 
@@ -49,11 +50,9 @@ public:
     int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
 
 private:
-    Result DoConnect(void);
-
     // ======================== 成员变量 ========================
-    int raw_fd_;   // 传入 sock 的原生 socket fd
-    int event_fd_; // eventfd（通知上层可读）
+    int raw_fd_ = -1;   // 传入 sock 的原生 socket fd
+    int event_fd_ = -1; // eventfd（通知上层可读）
     Ref<ConnectorOps> connector_ops_ = nullptr;
 };
 

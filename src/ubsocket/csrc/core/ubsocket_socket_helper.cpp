@@ -8,13 +8,6 @@
 * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 * See the Mulan PSL v2 for more details.
 */
-
-#include <dirent.h>
-#include <fstream>
-
-#include <arpa/inet.h>
-#include <netinet/tcp.h>
-#include <under_api/dl_libc_api.h>
 #include "ubsocket_socket_helper.h"
 
 namespace ock {
@@ -46,18 +39,6 @@ bool SocketConnHelper::IsTfoConnection(const int &fd)
     return false;
 }
 
-int SetSockOpt(int fd, int level, int optname, const void *optval, socklen_t optlen)
-{
-    UBS_VLOG_INFO("SetSockOpt set fd %d, level %d, optname %d\n", fd, level, optname);
-    return LibcApi::setsockopt(fd, level, optname, optval, optlen);
-}
-
-int SocketConnHelper::SetTcpNoDelay(int fd)
-{
-    int on = 1;
-    return SetSockOpt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-}
-
 std::string SocketConnHelper::ExtractIpFromSockAddr(const struct sockaddr *address)
 {
     if (address == nullptr) {
@@ -73,24 +54,6 @@ std::string SocketConnHelper::ExtractIpFromSockAddr(const struct sockaddr *addre
         result = inet_ntop(AF_INET6, &addr_in6->sin6_addr, ip_str, INET6_ADDRSTRLEN);
     }
     return (result != nullptr) ? std::string(ip_str) : "";
-}
-
-bool SocketConnHelper::IsBlocking(int fd)
-{
-    const int flags = LibcApi::fcntl(fd, F_GETFL, 0);
-    return flags >= 0 && !(flags & O_NONBLOCK);
-}
-
-int SocketConnHelper::SetNonBlocking(int fd)
-{
-    const int flags = LibcApi::fcntl(fd, F_GETFL, 0);
-    if (flags < 0) {
-        return flags;
-    }
-    if (flags & O_NONBLOCK) {
-        return 0;
-    }
-    return LibcApi::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
 ssize_t SocketConnHelper::SendSocketData(int fd, const void *buf, size_t size, uint32_t timeout_ms)
@@ -187,20 +150,6 @@ void SocketConnHelper::FlushSocketMsg(int fd)
             return;
         }
     } while (received > 0);
-}
-
-int SocketConnHelper::SetBlocking(int fd)
-{
-    const int flags = LibcApi::fcntl(fd, F_GETFL, 0);
-    if (flags < 0) {
-        return flags;
-    }
-
-    if (flags & O_NONBLOCK) {
-        return LibcApi::fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
-    }
-
-    return 0;
 }
 
 int SocketConnHelper::GetCurrentProcessSocketId()
