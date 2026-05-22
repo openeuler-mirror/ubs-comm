@@ -11,6 +11,7 @@
 
 #include "umq_data_rx_ops.h"
 #include "core/ubsocket_socket_set.h"
+#include "umq_socket.h"
 
 namespace ock {
 namespace ubs {
@@ -26,11 +27,11 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
         }
         get_and_ack_event_ = false;
     }
-
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
     umq_buf_t *buf[POLL_BATCH_MAX];
     int poll_num = 0;
     if (poll_) {
-        poll_num = GetQbuf(buf, POLL_BATCH_MAX);
+        poll_num = GetQbuf(sock, buf, POLL_BATCH_MAX);
         if (poll_num < 0) {
             errno = EIO;
             UBS_VLOG_ERR("ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
@@ -70,7 +71,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
                 rx_queue_avail_num_ += 1;
                 // try to wake up tx if necessary
                 bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
-                if (need_fc_awake && NotifyReadable() == -1) {
+                if (need_fc_awake && sockBase->NotifyReadable() == -1) {
                     UBS_VLOG_ERR("eventfd_write() failed, errno: %d, errmsg: %s\n",
                                  errno, Func::Error2Str(errno));
                 }
@@ -94,34 +95,18 @@ void *UmqRxOps::PtrFloorToBoundary(void *ptr)
     return (void *)((uint64_t)ptr & ~UmqSetting::FloorMask());
 }
 
-int UmqRxOps::GetQbuf(umq_buf_t **buf, int max_num)
+int UmqRxOps::GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
         return UmqPollAndRefillRx(buf, max_num);
     }
-    int poll_num = GetAndPopQbuf(buf, max_num);
+    auto umqSock = dynamic_cast<UmqSocket*>(sock.Get());
+    int poll_num = umqSock->GetAndPopQbuf(buf, max_num);
     if (poll_num < 0) {
         UBS_VLOG_ERR("GetQbuf failed, fd: %d, ret: %d\n", fd_, poll_num);
         return -1;
     }
     return poll_num;
-}
-
-int UmqRxOps::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
-{
-    if (rxQueue_ == nullptr) {
-        UBS_VLOG_ERR("GetAndPopQbuf failed, rx queue is null, fd: %d, ret: %d\n",
-                     fd_, -1);
-        return -1;
-    }
-    uint32_t i = 0;
-    while (!rxQueue_->IsEmpty() && i < max_buf_size) {
-        if (rxQueue_->Dequeue(&buf[i]) != 0) {
-            return i + 1;
-        }
-        i++;
-    }
-    return i;
 }
 
 int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
@@ -193,20 +178,6 @@ int UmqRxOps::GetAndAckEvent()
         UmqApi::umq_ack_interrupt(local_umqh_, ack_event_num_, &option);
         ack_event_num_ = 0;
     }
-    return 0;
-}
-
-int UmqRxOps::NotifyReadable()
-{
-    // TODO async epoll process is needed
-    /*if (sock.added_async_epoll_ == nullptr) {
-        return eventfd_write(event_fd_, 1);
-    }
-    if (sock.added_async_epoll_->AddSockReadableEvent(fd_, sock.added_async_epoll_data_) != 0) {
-        return -1;
-    }
-    return sock.added_async_epoll_->SetSocketsReadable();
-*/
     return 0;
 }
 

@@ -40,18 +40,16 @@ public:
     void HandleErrorRxCqe(umq_buf_t *buf);
 
 private:
-    int GetQbuf(umq_buf_t **buf, int max_num);
+    int GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num);
     int UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size);
     uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf);
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
-    int NotifyReadable();
     int GetAndAckEvent();
     void *PtrFloorToBoundary(void *ptr) override;
 
 private:
     // umq 相关的句柄
     uint64_t local_umqh_ = UMQ_INVALID_HANDLE;
-    QbufQueue<umq_buf_t*> *rxQueue_ = nullptr;
 };
 } // namespace umq
 } // namespace ubs
