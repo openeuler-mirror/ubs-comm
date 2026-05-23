@@ -62,7 +62,13 @@ UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int ma
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
     }
-    return -1;
+
+    EventPoll *eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
+    if (UNLIKELY(eventPoll == nullptr)) {
+        UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
+        return -1;
+    }
+    return eventPoll->EpollWait(events, maxevents, timeout);
 }
 
 UBS_API int UB_API_WRAP(epoll_create1)(int flags)

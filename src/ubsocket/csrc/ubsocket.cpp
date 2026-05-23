@@ -137,9 +137,9 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     ArraySet<EventPoll>::GetInstance().Init();
 
     /* step4: umq backend init */
-#ifdef UMQ_BACKEND_ENABLED
+//#ifdef UMQ_BACKEND_ENABLED
     umq::UmqBackend::Init();
-#endif
+//#endif
 
     /* step5: load brpc symbol for zcopy */
     if (GlobalSetting::USE_BRPC_ZCOPY) {

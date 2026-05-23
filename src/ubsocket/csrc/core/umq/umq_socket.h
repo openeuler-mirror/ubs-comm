@@ -130,7 +130,7 @@ private:
 
     // 链接类型相关
     bool is_bonding_ = false;
-    ub_trans_mode trans_mode_ = RC_TP;
+    ub_trans_mode trans_mode_ = RM_TP;
     umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
     // UMQ bind
     bool umq_is_bind_remote_ = false;
@@ -153,7 +153,7 @@ struct CpMsg {
 
 struct NegotiateReq {
     uint64_t magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
-    ub_trans_mode trans_mode = RC_TP;
+    ub_trans_mode trans_mode = RM_TP;
     uint8_t is_bonding = 0;
     uint8_t enable_share_jfr = 0;
     uint8_t schedule_policy = static_cast<uint8_t>(dev_schedule_policy::ROUND_ROBIN);
@@ -166,7 +166,7 @@ struct NegotiateReq {
 
 struct NegotiateRsp {
     int32_t ret_code = 0;
-    ub_trans_mode peer_trans_mode = RC_TP;
+    ub_trans_mode peer_trans_mode = RM_TP;
     uint8_t reserved[3] = {0};
     umq_eid_t local_eid = {};
 };

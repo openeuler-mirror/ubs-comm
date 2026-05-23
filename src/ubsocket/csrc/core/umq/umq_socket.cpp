@@ -181,11 +181,12 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
 {
     std::vector<std::shared_ptr<MainUmqState>> main_umqs;
+    UBS_VLOG_ERR("mytest---------11111111111111");
     if (!UmqEidTable::Instance().Get(*localEid, GetTransMode(), main_umqs)) {
         umq_create_option_t cfg_main;
         memcpy(&cfg_main, cfg, sizeof(*cfg));
         cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
-
+        UBS_VLOG_ERR("mytest---------2222222222222222");
         return UmqApi::umq_create(&cfg_main);
     }
 
@@ -194,7 +195,7 @@ uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *loca
                      EID_ARGS(*localEid), static_cast<unsigned long long>(UMQ_INVALID_HANDLE));
         return UMQ_INVALID_HANDLE;
     }
-
+    UBS_VLOG_ERR("mytest---------3333333333333333");
     // eid 对应多个不同 UB 传输模式的主 umq. 当前实现保证此时 main_umqs 长度为 1
     return main_umqs.front()->GetUmqHandle();
 }
@@ -301,7 +302,7 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
         UBS_VLOG_ERR("epoll_fd or umq_handle invalid, epoll_fd: %d, umq_handle: %d\n", epoll_fd, umq_handle_);
     }
     // 1. add share jfr main umq fd
-    int main_umq = share_umq_handle_;
+    uint64_t main_umq = share_umq_handle_;
     umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto share_jfr_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(main_umq, &main_option);
     if (UNLIKELY(share_jfr_fd < 0)) {
