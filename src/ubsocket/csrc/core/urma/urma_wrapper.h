@@ -128,14 +128,8 @@ ALWAYS_INLINE const std::map<std::string, UrmaDevicePtr> &UrmaDevice::AllDevices
 class UrmaContext : public Referable {
 public:
 private:
-    urma_context_t *context_ = nullptr;
-    urma_device_attr_t *dev_attr_ = nullptr;
-    uint32_t max_jfs_ = 0;
-    uint32_t max_jfr = 0;
-    int cpt_priority_ = 0;
-    int rtp_priority_ = 0;
-    int max_sge_ = 16;
-    uint8_t port_count_ = 1;
+    urma_context_t *context_{nullptr};
+    UrmaDevicePtr device_{nullptr};
     UBEId ub_eid_{};
 };
 

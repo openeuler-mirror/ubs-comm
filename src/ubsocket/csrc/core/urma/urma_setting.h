@@ -25,6 +25,7 @@ public:
 
 public:
     static std::string UB_DEV_NAME;
+    static std::string UB_DEV_EID;
 
 private:
     static void AddRules();

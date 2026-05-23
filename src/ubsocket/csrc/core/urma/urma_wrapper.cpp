@@ -87,6 +87,9 @@ void UrmaDevice::Init() noexcept
         }
     }
 
+    /* free device list */
+    UrmaApi::urma_free_device_list(device_list);
+
     LOADED = true;
 }
 
