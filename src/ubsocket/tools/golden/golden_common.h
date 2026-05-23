@@ -58,6 +58,7 @@ static SubCmd cmds[] = {{SUB_CMD_PINGPONG, "pingpong test to check if network is
 /* for device show */
 #define PARAM_DEVICE_TYPE "device-type"
 #define PARAM_DEVICE_NAME "device-name"
+#define PARAM_DEVICE_DETAIL "device-detail"
 
 enum ParamDataType : int8_t {
     PDT_NONE = 0,
@@ -77,7 +78,7 @@ struct Param {
         int64_t defaultValue = 0;
         int64_t min = 0;
         int64_t max = 0;
-        int64_t value;
+        int64_t value = 0;
     } int64Rule;
 
     struct {
@@ -210,18 +211,18 @@ struct Param {
 
     std::string HelpString() noexcept
     {
-        std::string required = this->required ? "required, " : "optional, ";
+        std::string requiredStr = this->required ? "required, " : "optional, ";
         switch (dataType) {
             case PDT_INT64:
-                return required + "type: number, range: [" + std::to_string(int64Rule.min) + "-" +
+                return requiredStr + "type: number, range: [" + std::to_string(int64Rule.min) + "-" +
                        std::to_string(int64Rule.max) + "], " + help;
             case PDT_FLOAT:
-                return required + "type: number, range: [" + std::to_string(floatRule.min) + "-" +
+                return requiredStr + "type: number, range: [" + std::to_string(floatRule.min) + "-" +
                        std::to_string(floatRule.max) + "], " + help;
             case PDT_STR:
-                return required + "type: str, which should not be empty, " + help;
+                return requiredStr + "type: str, which should not be empty, " + help;
             case PDT_STR_ENUM: {
-                return required + "type: str, which should be one of '" + strRule.allEnum + "', " + help;
+                return requiredStr + "type: str, which should be one of '" + strRule.allEnum + "', " + help;
             }
             default:
                 return "";

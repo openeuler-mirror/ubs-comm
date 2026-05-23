@@ -27,13 +27,15 @@ protected:
 
     friend std::ostream &operator<<(std::ostream &os, const SubCommandShow &o)
     {
-        os << "device type: " << o.device_type_;
+        os << "device type: " << o.device_type_ << ", device name filter: " << o.device_name_
+           << ", show details: " << o.device_details_;
         return os;
     }
 
 private:
-    std::string device_type_; /* type of device, e.g. ub | roce etc*/
-    std::string device_name_; /* sub part of device name */
+    std::string device_type_;    /* type of device, e.g. ub | roce etc*/
+    std::string device_name_;    /* sub part of device name */
+    std::string device_details_; /* how many details to show */
 };
 
 static SubCommand *CreateShow(const ParamMap &params)

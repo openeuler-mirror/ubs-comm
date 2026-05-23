@@ -20,9 +20,11 @@ namespace ock {
 namespace ubs {
 Result DlApi::Load(int libraries) noexcept
 {
+    UBS_VLOG_DEBUG("enter, libraries: %d", libraries);
     Result result = UBS_OK;
     /* load libc api */
     if ((libraries & LOAD_LIBC) == LOAD_LIBC) {
+        UBS_VLOG_DEBUG("load libc api");
         result = LibcApi::Load();
         UBS_VLOG_DEBUG("finished libc api loading, result: %d", result);
         if (result != UBS_OK) {
@@ -31,6 +33,7 @@ Result DlApi::Load(int libraries) noexcept
     }
 
     if ((libraries & LOAD_UMQ) == LOAD_UMQ) {
+        UBS_VLOG_DEBUG("load umq api");
         result = UmqApi::Load();
         UBS_VLOG_DEBUG("finished umq api loading, result: %d", result);
         if (result != UBS_OK) {
@@ -40,7 +43,8 @@ Result DlApi::Load(int libraries) noexcept
 
 #ifdef URMA_BACKEND_ENABLED
     if ((libraries & LOAD_URMA) == LOAD_URMA) {
-        result = UmqApi::Load();
+        UBS_VLOG_DEBUG("load urma api");
+        result = UrmaApi::Load();
         UBS_VLOG_DEBUG("finished urma api loading, result: %d", result);
         if (result != UBS_OK) {
             goto ERROR;

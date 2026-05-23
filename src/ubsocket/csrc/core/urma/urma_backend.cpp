@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "urma_backend.h"
+#include "under_api/dl_api.h"
 
 namespace ock {
 namespace ubs {
@@ -26,12 +27,18 @@ Result Urma::Init() noexcept
         return UBS_OK;
     }
 
+    auto result = DlApi::Load(LOAD_URMA);
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("Load urma api failed, result: %d", result);
+        return result;
+    }
+
     /* init setting, includes env loading etc */
     UrmaSetting::Init();
 
     /* init urma */
     urma_init_attr_t init_attr{};
-    auto result = UrmaApi::urma_init(&init_attr);
+    result = UrmaApi::urma_init(&init_attr);
     if (result != 0) {
         UBS_VLOG_ERR("Init urma failed, result: %d", result);
         return result;

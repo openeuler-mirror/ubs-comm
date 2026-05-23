@@ -61,6 +61,7 @@ inline int SubCommand::Execute() noexcept
     }
 
     /* step2: convert and verify param by rules */
+    LOG_DEBUG("verify param by rules");
     auto verified = DoParamByRule();
     if (verified != 0) {
         std::cout << std::endl;
@@ -69,6 +70,7 @@ inline int SubCommand::Execute() noexcept
     }
 
     /* step3: do initialization */
+    LOG_DEBUG("initialize cmd");
     auto inited = DoInitialize();
     if (inited != 0) {
         std::cout << "Initialize sub command '" << name_ << "' failed" << std::endl;
@@ -76,6 +78,7 @@ inline int SubCommand::Execute() noexcept
     }
 
     /* step4: execute command */
+    LOG_DEBUG("execute");
     return DoExecute();
 }
 
@@ -84,7 +87,7 @@ inline int SubCommand::DoPrintHelp() noexcept
     /* print sub command */
     std::cout << "Params for sub command '" + name_ + "':" << std::endl;
     for (auto &rule : param_rules_) {
-        std::cout << "  --" << std::left << std::setw(10) << rule.first << "    " << rule.second.HelpString()
+        std::cout << "  --" << std::left << std::setw(16) << rule.first << "    " << rule.second.HelpString()
                   << std::endl;
     }
     std::cout << std::endl;
@@ -103,10 +106,18 @@ inline int SubCommand::DoParamByRule() noexcept
     for (auto &rule : param_rules_) {
         auto paramIter = params_.find(rule.first);
 
-        /* if required param is not set, return -1 */
-        if (paramIter == params_.end() && rule.second.required) {
-            std::cout << "Execute sub command '" + name_ + "' failed, as " << rule.second.RequiredError() << std::endl;
-            return -1;
+        /* if not found
+         * case1: is required, return and report error
+         * case2: not required, skip
+         * */
+        if (paramIter == params_.end()) {
+            if (rule.second.required) {
+                std::cout << "Execute sub command '" + name_ + "' failed, as " << rule.second.RequiredError()
+                          << std::endl;
+                return -1;
+            }
+
+            continue;
         }
 
         /* if set, but failed to convert */
