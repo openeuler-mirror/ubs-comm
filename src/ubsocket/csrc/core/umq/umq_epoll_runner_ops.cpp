@@ -99,7 +99,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
     std::set<AsyncEventPoll *> readable_epoll_fds;
     epoll_data_t event_data{};
     auto event_reach_sockets = SiftSocketEventsWithUmqBuffers(buf, poll_num);
-    for (auto obj : SiftSocketEventsWithUmqBuffers(buf, poll_num)) {
+    for (auto obj : event_reach_sockets) {
         auto socket_obj = (Socket *)obj;
         ((UmqSocket *)socket_obj)->NewRxEpollIn();
         auto epoll_fd_obj = (AsyncEventPoll *)(((SocketBase *)socket_obj)->GetAddedEpollFd(event_data));
