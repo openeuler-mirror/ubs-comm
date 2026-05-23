@@ -10,6 +10,7 @@
  */
 #include "umq_socket.h"
 #include "umq_eid_table.h"
+#include "umq_epoll_runner_ops.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -21,8 +22,6 @@ Result UmqSocket::Initialize() noexcept
 }
 
 void UmqSocket::UnInitialize() noexcept {}
-
-std::unordered_map<int, uint64_t> UmqSocket::jfr_main_umq_ = {};
 
 Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports)
 {
@@ -301,7 +300,7 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
         UBS_VLOG_ERR("epoll_fd or umq_handle invalid, epoll_fd: %d, umq_handle: %d\n", epoll_fd, umq_handle_);
     }
     // 1. add share jfr main umq fd
-    int main_umq = share_umq_handle_;
+    uint64_t main_umq = share_umq_handle_;
     umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto share_jfr_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(main_umq, &main_option);
     if (UNLIKELY(share_jfr_fd < 0)) {
@@ -318,15 +317,12 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     shared_jfr_event.events = EPOLLIN | EPOLLET;
     shared_jfr_event.data.u64 = event_data.u64;
 
-    Locker sLock(mutex_);
-    if (UNLIKELY(jfr_main_umq_.count(share_jfr_fd) == 0)) {
-        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, share_jfr_fd, &shared_jfr_event) < 0) {
-            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
-            return -1;
-        }
-        jfr_main_umq_.emplace(share_jfr_fd, main_umq);
+    UmqEpollRunnerOps *ops = (UmqEpollRunnerOps *)EpollRunnerFactory::GetInstance(this->Type()).GetOps();
+    if (UNLIKELY(ops == nullptr || ops->InsertJfrMainUmq(
+        share_jfr_fd, main_umq, epoll_fd, &shared_jfr_event) < 0)) {
+        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
+        return -1;
     }
-    sLock.Unlock();
 
     //2. add sub umq rx fd
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
