@@ -11,8 +11,8 @@
 
 #include <netinet/tcp.h>
 
-#include "umq_eid_table.h"
 #include "umq_socket_connector.h"
+#include "umq_eid_table.h"
 
 namespace ock {
 namespace ubs {
