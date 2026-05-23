@@ -16,9 +16,69 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <string>
+#include <exception>
 #include "multi_sender_test.h"
 
 volatile int g_running = 1;
+
+// 辅助函数：安全解析无符号整数，无效时返回默认值并输出警告
+template<typename T>
+static T ParseUnsignedWithDefault(const char *paramName,
+                                  const char *str,
+                                  T defaultValue,
+                                  T minValue = 0,
+                                  T maxValue = static_cast<T>(-1))
+{
+    if (str == nullptr || str[0] == '\0') {
+        fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n",
+                str ? str : "null", paramName, static_cast<unsigned int>(defaultValue));
+        return defaultValue;
+    }
+    
+    // 检查是否全是数字（允许前导空格）
+    const char *p = str;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    
+    // 空字符串或负号
+    if (*p == '\0' || *p == '-') {
+        fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n",
+                str, paramName, static_cast<unsigned int>(defaultValue));
+        return defaultValue;
+    }
+    
+    // 检查是否全是数字
+    const char *start = p;
+    while (*p != '\0') {
+        if (*p < '0' || *p > '9') {
+            fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n",
+                    str, paramName, static_cast<unsigned int>(defaultValue));
+            return defaultValue;
+        }
+        p++;
+    }
+    
+    // 使用 stoul 避免溢出
+    unsigned long value = 0;
+    try {
+        value = std::stoul(start);
+    } catch (const std::exception &) {
+        (void)fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n",
+                      str, paramName, static_cast<unsigned int>(defaultValue));
+        return defaultValue;
+    }
+    
+    // 范围检查
+    if (value < static_cast<unsigned long>(minValue) || value > static_cast<unsigned long>(maxValue)) {
+        fprintf(stderr, "Warning: Value '%s' for --%s out of range (%u-%u), using default value: %u\n",
+                str, paramName, static_cast<unsigned int>(minValue), static_cast<unsigned int>(maxValue),
+                static_cast<unsigned int>(defaultValue));
+        return defaultValue;
+    }
+    
+    return static_cast<T>(value);
+}
 
 static void SignalHandler(int sig)
 {
@@ -140,14 +200,6 @@ static int RunSender(const char *serverAddrStr, uint16_t port,
     
     ctx.socketFd = sockfd;
     
-    const uint32_t maxMsgSize = 1048576;
-    if (msgSize == 0 || msgSize > maxMsgSize) {
-        fprintf(stderr, "Invalid message size: %u (must be between 1 and %u)\n", msgSize, maxMsgSize);
-        close(sockfd);
-        SenderDestroy(&ctx);
-        return -1;
-    }
-    
     std::string msgBuffer(msgSize, 'A');
     
     printf("Sender started, sending %u messages of %u bytes to %s:%u\n",
@@ -240,22 +292,28 @@ int main(int argc, char *argv[])
                 snprintf(mode, sizeof(mode), "%s", optarg);
                 break;
             case 'p':
-                port = static_cast<uint16_t>(atoi(optarg));
+                // 端口范围 1-65535，默认 8080
+                port = ParseUnsignedWithDefault<uint16_t>("port", optarg, 8080, 1, 65535);
                 break;
             case 'a':
                 snprintf(serverAddr, sizeof(serverAddr), "%s", optarg);
                 break;
             case 'c':
-                msgCount = static_cast<uint32_t>(atoi(optarg));
+                // 消息数量必须 > 0，默认 1000
+                msgCount = ParseUnsignedWithDefault<uint32_t>("msg-count", optarg, 1000, 1);
                 break;
             case 's':
-                msgSize = static_cast<uint32_t>(atoi(optarg));
+                // 消息大小范围 1-1048576，默认 1024
+                msgSize = ParseUnsignedWithDefault<uint32_t>("msg-size", optarg, 1024, 1, 1048576);
                 break;
             case 'q':
-                expectedQps = static_cast<uint32_t>(atoi(optarg));
+                // QPS 无上限，默认 0（不限速）
+                expectedQps = ParseUnsignedWithDefault<uint32_t>("qps", optarg, DEFAULT_QPS, 0);
                 break;
             case 'n':
-                maxClients = static_cast<uint32_t>(atoi(optarg));
+                // 最大客户端数范围 1-MAX_CLIENTS，默认 10
+                maxClients = ParseUnsignedWithDefault<uint32_t>(
+                    "max-clients", optarg, DEFAULT_MAX_CLIENTS, 1, MAX_CLIENTS);
                 break;
             case 'h':
                 PrintUsage(argv[0]);

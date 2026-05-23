@@ -248,9 +248,11 @@ int ReceiverInit(struct ReceiverContext *ctx, uint16_t port, uint32_t maxClients
         return -1;
     }
     
-    ctx->maxClients = maxClients > 0 ? maxClients : DEFAULT_MAX_CLIENTS;
-    if (ctx->maxClients > MAX_CLIENTS) {
-        ctx->maxClients = MAX_CLIENTS;
+    // 超出范围时使用默认值，与 main.cpp 的 ParseUnsignedWithDefault 逻辑保持一致
+    if (maxClients < 1 || maxClients > MAX_CLIENTS) {
+        ctx->maxClients = DEFAULT_MAX_CLIENTS;
+    } else {
+        ctx->maxClients = maxClients;
     }
     
     return 0;
