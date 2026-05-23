@@ -86,6 +86,8 @@ PPClient::~PPClient()
         }
     }
 }
+constexpr uint32_t GOLDEN_WAIT_READY_TIMEOUT_US = 1000;
+constexpr uint32_t GOLDEN_WAIT_READY_TIMEOUT_S = 1;
 
 int PPClient::Run()
 {
@@ -143,15 +145,29 @@ int PPClient::Run()
     int i = 0;
     auto time_start = Func::TimeUs();
     while (i++ < cmd_.loop_times) {
+        errno = 0;
         result = ubsocket_writev(fd, send_data, 1);
         LOG_DEBUG("send data " << ping << ", " << send_data[0].iov_len << ", result " << result);
         if (result != expect_send_len) {
+            if (errno == EAGAIN) {
+                usleep(GOLDEN_WAIT_READY_TIMEOUT_US);
+                continue;
+            }
             std::cout << "Write 'ping' to server failed, result " << result << " errno " << errno << std::endl;
             return -errno;
         }
         LOG_DEBUG("write ping successfully");
-
+        errno = 0;
         result = ubsocket_readv(fd, recv_data, 1);
+        while (errno == EAGAIN || errno == EINTR) {
+            errno = 0;
+            std::cout << "Read 'pong' to server failed, result " << result << " errno " << errno << std::endl;
+            sleep(GOLDEN_WAIT_READY_TIMEOUT_S);
+            result = ubsocket_readv(fd, recv_data, 1);
+            if (result > 0) {
+                break;
+            }
+        }
         if (result < 0) {
             std::cout << "Read 'pong' to server failed, result " << result << " errno " << errno << std::endl;
             return -errno;
@@ -251,14 +267,27 @@ int PPServer::Run()
 
     int i = 0;
     while (i++ < cmd_.loop_times) {
+        errno = 0;
         result = ubsocket_readv(client_fd_, recv_data, 1);
         if (result < 0) {
+            if (errno == EAGAIN || errno == EINTR) {
+                usleep(GOLDEN_WAIT_READY_TIMEOUT_US);
+                continue;
+            }
             std::cout << "Read 'ping' from client failed, result " << result << " errno " << errno << std::endl;
             return -errno;
         }
         LOG_DEBUG("read ping successfully");
-
+        errno = 0;
         result = ubsocket_writev(client_fd_, send_data, 1);
+        while (errno == EAGAIN || errno == EINTR) {
+            errno = 0;
+            sleep(GOLDEN_WAIT_READY_TIMEOUT_S);
+            result = ubsocket_writev(client_fd_, send_data, 1);
+            if (result > 0) {
+                break;
+            }
+        }
         if (result != expect_send_len) {
             std::cout << "Write 'pong' to client failed, result " << result << " errno " << errno << std::endl;
             return -errno;
