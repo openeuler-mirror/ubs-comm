@@ -59,6 +59,7 @@ private:
     std::string device_name_;
     std::string device_sys_path_;
     urma_device_attr_t attributes_{};
+    std::vector<urma_eid_info_t> eid_list_;
 
 private:
     static std::vector<UrmaDevicePtr> ALL_DEVICES;

@@ -43,8 +43,10 @@ void UrmaDevice::Init() noexcept
             continue;
         }
 
+        /* get device attributes and get eid list */
         auto result = UrmaApi::urma_query_device(dev, &tmp_attr);
         if (LIKELY(result == URMA_SUCCESS)) {
+            /* create new device and add into all devices */
             auto new_dev = MakeRef<UrmaDevice>(dev->name, dev->path, tmp_attr);
             if (new_dev == nullptr) {
                 UBS_VLOG_ERR("New object failed, probably out of memory");
@@ -53,6 +55,19 @@ void UrmaDevice::Init() noexcept
             }
 
             ALL_DEVICES.emplace_back(new_dev);
+
+            /* get eids */
+            uint32_t eid_count = 0;
+            auto eid_list = UrmaApi::urma_get_eid_list(dev, &eid_count);
+            if (UNLIKELY(eid_list == nullptr)) {
+                UBS_VLOG_DEBUG("Get eid list failed");
+                continue;
+            }
+
+            for (uint32_t j = 0; j < eid_count; j++) {
+                auto eid = eid_list[j];
+                new_dev->eid_list_.push_back(eid);
+            }
         }
     }
 
@@ -86,6 +101,11 @@ std::string UrmaDevice::ToString(const std::string &prefix, const std::string &s
     oss << prefix << std::setw(width) << "max jfr depth: " << attributes_.dev_cap.max_jfr_depth << seperator;
     oss << prefix << std::setw(width) << "max jfc: " << attributes_.dev_cap.max_jfc << seperator;
     oss << prefix << std::setw(width) << "max jfc depth: " << attributes_.dev_cap.max_jfc_depth << seperator;
+
+    uint32_t eid_index = 0;
+    for (auto &eid : eid_list_) {
+        oss << prefix << std::setw(width) << "eid  " << eid_index++ << ": "<< eid.eid.raw << seperator;
+    }
 
     return oss.str();
 }
