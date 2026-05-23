@@ -145,7 +145,7 @@ UmqEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count)
 
 ALWAYS_INLINE int UmqEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
 {
-    umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_EVENT};
+    umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto events_cnt = UmqApi::umq_get_cq_event(main_umq, &option);
     if (UNLIKELY(events_cnt < 0)) {
         UBS_VLOG_ERR("async_epoll umq_get_cq_event(main_umq=%lu) failed: %d\n", main_umq, events_cnt);
