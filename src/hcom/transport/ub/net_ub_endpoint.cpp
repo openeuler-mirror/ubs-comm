@@ -450,10 +450,6 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
     header->dataLength = request.size + extHeaderSize;
     header->extHeaderType = extHeaderType;
 
-    if (mIsNeedEncrypt) {
-        NN_LOG_WARN("postsent encrypt is not supported now!");
-    }
-
     // 拷贝上层指定的 header，此时将要发送的结构为
     //     | UBSHcomNetTransHeader | extHeader | request body |
     if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
@@ -464,13 +460,26 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         return NN_INVALID_PARAM;
     }
 
-    // 拷贝消息主体
-    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
-                             mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader) - extHeaderSize,
-                             reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
-        mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
-        NN_LOG_ERROR("Failed to copy request to mrBufAddress in async ep");
-        return NN_INVALID_PARAM;
+    // 拷贝消息主体，开启TLS时，仅加密消息主体
+    if (mIsNeedEncrypt) {
+        uint32_t cipherLen = 0;
+        if (!mAes.Encrypt(mSecrets,
+            (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress +
+            sizeof(UBSHcomNetTransHeader) + extHeaderSize), cipherLen)) {
+            NN_LOG_ERROR("Failed to async post send with splitsend as encryption failure");
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            return NN_ENCRYPT_FAILED;
+        }
+        header->dataLength = cipherLen + extHeaderSize;
+    } else {
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
+            mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader) - extHeaderSize,
+            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            NN_LOG_ERROR("Failed to copy request to mrBufAddress in async ep");
+            return NN_INVALID_PARAM;
+        }
+        header->dataLength = request.size + extHeaderSize;
     }
 
     // 头部全部写入完毕后才生成 crc32
@@ -1024,9 +1033,6 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
     header->dataLength = request.size + extHeaderSize;
 
     mLastSendSeqNo = header->seqNo;
-    if (mIsNeedEncrypt) {
-        NN_LOG_WARN("postsent encrypt is not supported now.");
-    }
 
     // 拷贝上层指定的 header，此时将要发送的结构为
     //     | UBSHcomNetTransHeader | extHeader | request body |
@@ -1038,13 +1044,26 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
         return NN_INVALID_PARAM;
     }
 
-    // 拷贝消息主体
-    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
-                             mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader) - extHeaderSize,
-                             reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
-        mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
-        NN_LOG_ERROR("Failed to copy request to mrBufAddress");
-        return NN_INVALID_PARAM;
+    // 拷贝消息主体，开启TLS时，仅加密消息主体
+    if (mIsNeedEncrypt) {
+        uint32_t cipherLen = 0;
+        if (!mAes.Encrypt(mSecrets,
+            (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress +
+            sizeof(UBSHcomNetTransHeader) + extHeaderSize), cipherLen)) {
+            NN_LOG_ERROR("Failed to async post send with splitsend as encryption failure");
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            return NN_ENCRYPT_FAILED;
+        }
+        header->dataLength = cipherLen + extHeaderSize;
+    } else {
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
+            mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader) - extHeaderSize,
+            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            NN_LOG_ERROR("Failed to copy request to mrBufAddress in async ep");
+            return NN_INVALID_PARAM;
+        }
+        header->dataLength = request.size + extHeaderSize;
     }
 
     // 头部全部写入完毕后才生成 crc32
