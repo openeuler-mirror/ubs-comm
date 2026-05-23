@@ -167,7 +167,6 @@ UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     if (sockBase == nullptr) {
         return LibcApi::writev(fd, iov, iovcnt);
     }
-    print_iov_basic(true, iov, iovcnt);
     return sockBase->WriteV(sock, iov, iovcnt);
 }
 
