@@ -17,7 +17,6 @@ UbsZeroCopyAllocator *g_zcopy_allocator = nullptr;
 
 void *blockmem_allocate_zero_copy(size_t size)
 {
-    UBS_VLOG_ERR("mytest-----blockmem_allocate_zero_copy----size: %d", size);
     if (g_zcopy_allocator) {
         return g_zcopy_allocator->allocate(size);
     }
@@ -29,7 +28,6 @@ void blockmem_deallocate_zero_copy(void *addr)
     if (addr != nullptr) {
         return;
     }
-    UBS_VLOG_ERR("mytest-----blockmem_deallocate_zero_copy----addr: %d", addr);
     if (g_zcopy_allocator) {
         return g_zcopy_allocator->deallocate(addr);
     }
@@ -368,7 +366,6 @@ bool UbsZcopyAdapter::Intercept(const char *alloc_sym_str, const char *dealloc_s
     if (is_intercepted_) {
         return true;
     }
-    UBS_VLOG_ERR("mytest-------Intercept---------aaaaaaaaaaaaaaa");
     const char *alloc_sym = GetBrpcAllocSymStr(alloc_sym_str);
     const char *dealloc_sym = GetBrpcDeallocSymStr(dealloc_sym_str);
 
@@ -387,15 +384,12 @@ bool UbsZcopyAdapter::Intercept(const char *alloc_sym_str, const char *dealloc_s
         alloc_addr_ = scanner.GetBrpcAllocSymAddr();
         dealloc_addr_ = scanner.GetBrpcDeallocSymAddr();
     }
-    UBS_VLOG_ERR("mytest-------Intercept---------111111111111");
     // 3. 执行替换（Hook）并记录原始地址
     if (alloc_addr_ && dealloc_addr_) {
-        UBS_VLOG_ERR("mytest-------Intercept---------22222222222");
         RecordAndSetBrpcAllocator();
         is_intercepted_ = true;
         return true;
     }
-    UBS_VLOG_ERR("mytest-------Intercept---------33333333333");
     return false;
 }
 
@@ -427,10 +421,8 @@ void UbsZcopyAdapter::RecordAndSetBrpcAllocator()
 {
     alloc_addr_origin_ = *alloc_addr_;
     dealloc_addr_origin_ = *dealloc_addr_;
-    UBS_VLOG_ERR("mytest-----RecordAndSetBrpcAllocator-----alloc_addr_origin_--%p", *alloc_addr_);
     *alloc_addr_ = blockmem_allocate_zero_copy;
     *dealloc_addr_ = blockmem_deallocate_zero_copy;
-    UBS_VLOG_ERR("mytest-----RecordAndSetBrpcAllocator-----alloc_addr_--%p", *alloc_addr_);
 }
 } // namespace ubs
 } // namespace ock

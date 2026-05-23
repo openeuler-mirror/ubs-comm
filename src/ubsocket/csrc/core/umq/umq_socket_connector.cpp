@@ -11,6 +11,7 @@
 
 #include <netinet/tcp.h>
 
+#include "umq_eid_table.h"
 #include "umq_socket_connector.h"
 
 namespace ock {
@@ -443,7 +444,23 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umq_socket->SetBindRemote(true);
 
-    // TODO: EnableShareJfr
+    if (GlobalSetting::UBS_ENABLE_SHARE_JFR) {
+        // 强依赖当前实现，一个 eid 对应多个 UB 传输模式不同的 umq. 如果后续逻辑有变更，需同步修改。
+        auto main_umq = UmqEidTable::Instance().GetFirst(umq_conn_info_.conn_eid, umq_socket->GetTransMode());
+        if (main_umq == nullptr) {
+            UBS_VLOG_ERR("The main umq is removed by other thread.\n");
+            return UBS_ERROR;
+        }
+
+        return main_umq->EnsurePrefilled([umq_socket, this]() {
+            if (umq_socket->PrefillRx() != 0) {
+                UBS_VLOG_ERR("Failed to fill rx buffer to main umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                             EID_ARGS(this->umq_conn_info_.peer_eid), this->umq_conn_info_.peer_ip.c_str(), umq_socket->raw_socket_);
+                return UBS_ERROR;
+            }
+            return UBS_OK;
+        });
+    }
 
     // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
     if (umq_socket->PrefillRx() != UBS_OK) {
