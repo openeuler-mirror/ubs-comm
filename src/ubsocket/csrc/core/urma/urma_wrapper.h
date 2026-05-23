@@ -120,6 +120,11 @@ ALWAYS_INLINE std::string UrmaDevice::DeviceMTU2Str(urma_mtu_t s)
     return "unknown";
 }
 
+ALWAYS_INLINE const std::map<std::string, UrmaDevicePtr> &UrmaDevice::AllDevices() noexcept
+{
+    return ALL_DEVICES;
+}
+
 class UrmaContext : public Referable {
 public:
 private:

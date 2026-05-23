@@ -90,11 +90,6 @@ void UrmaDevice::Init() noexcept
     LOADED = true;
 }
 
-const std::map<std::string, UrmaDevicePtr> &UrmaDevice::AllDevices() noexcept
-{
-    return ALL_DEVICES;
-}
-
 UrmaDevice::UrmaDevice(const std::string &name, const std::string &sys_path, const urma_device_attr_t &attr)
     : device_name_(name),
       device_sys_path_(sys_path),
