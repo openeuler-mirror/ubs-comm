@@ -1,0 +1,80 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * ubs-comm is licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *      http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+#include "golden_cmd_show.h"
+#include "core/urma/urma_wrapper.h"
+#include "under_api/urma/dl_urma_api.h"
+
+namespace golden {
+
+void SubCommandShow::SetRules() noexcept
+{
+    param_rules_[PARAM_DEVICE_TYPE] = {PARAM_DEVICE_TYPE, PDT_STR_ENUM, true, "", "ub", ""};
+    param_rules_[PARAM_DEVICE_NAME] = {PARAM_DEVICE_NAME, PDT_STR, false, "", "", ""};
+
+    example_.push_back("UB device: " + program + " " + name_ + " --" + PARAM_DEVICE_TYPE + "=ub --" +
+                       PARAM_DEVICE_NAME + "=dev");
+}
+
+int SubCommandShow::DoInitialize() noexcept
+{
+    device_type_ = param_rules_[PARAM_ROLE].strRule.value;
+    device_name_ = param_rules_[PARAM_DEVICE_NAME].strRule.value;
+
+    LOG_DEBUG(*this);
+
+    return 0;
+}
+
+int SubCommandShow::DoExecute() noexcept
+{
+    LOG_DEBUG("enter");
+
+    if (device_type_ == "ub") {
+#ifdef URMA_BACKEND_ENABLED
+        using namespace ock::ubs;
+        using namespace ock::ubs::urma;
+        auto result = UrmaApi::Load();
+        if (result != 0) {
+            std::cout << "Load urma api failed" << std::endl;
+            return -1;
+        }
+
+        UrmaDevice::Init();
+        auto devices = UrmaDevice::AllDevices();
+        std::cout << std::setw(10) << "Total device count: " << std::endl;
+        if (!device_name_.empty()) {
+            std::cout << std::setw(10) << "Devices whose name contains '" << device_name_ << "':" << std::endl;
+        }
+
+        for (auto &device : devices) {
+            if (device.Get() == nullptr) {
+                continue;
+            }
+
+            if (device->DeviceName().find(device_name_) == std::string::npos) {
+                continue;
+            }
+
+            std::cout << device->ToString("  ", "\n");
+        }
+#else
+        std::cout << "urma backend is not enabled" << std::endl;
+#endif
+
+        LOG_DEBUG("leave with ub type");
+        return 0;
+    }
+
+    std::cout << "Un-reachable path" << std::endl;
+    return -1;
+}
+
+} // namespace golden
