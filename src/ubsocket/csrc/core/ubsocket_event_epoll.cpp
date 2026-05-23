@@ -447,7 +447,7 @@ int AsyncEventPoll::EpollCtlAdd(const SocketPtr &sock, struct epoll_event *event
     }
 
     // 3. add epoll runner epoll fd
-    if (UNLIKELY(EpollRunnerFactory::GetInstance(sock->Type()).AddEpollEvent(*this, sock, event) != 0)) {
+    if (UNLIKELY(EpollRunnerFactory::GetInstance(sock->Type()).AddEpollEvent(*this, sock, event) < 0)) {
         UBS_VLOG_ERR("epoll runner add epoll event failed, socket fd: %d\n", sock->raw_socket_);
         return -1;
     }

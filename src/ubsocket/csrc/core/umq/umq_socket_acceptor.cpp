@@ -27,7 +27,6 @@ Result UmqAcceptorOps::Negotiate(SocketPtr socketPtr)
 {
     umq_eid_t connEid;
     umq_eid_t dstEid;
-    // TODO get local eid
     umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
     dev_schedule_policy peerSchedulePolicy = dev_schedule_policy::ROUND_ROBIN;
     topo_type = UMQ_TOPO_TYPE_FULLMESH_1D;
@@ -251,7 +250,6 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid,
     }
     if (req.is_bonding == 1) {
         // 把服务器的套接字值给客户端，在客户端做遍历
-        // TODO set UMQ_PROCESS_SOCKET_ID
         int sendServerSocketId = UmqSetting::UMQ_PROCESS_SOCKET_ID;
         if (SocketConnHelper::SendSocketData(fd, &sendServerSocketId, sizeof(sendServerSocketId),
                                              CONTROL_PLANE_TIMEOUT_MS) != sizeof(sendServerSocketId)) {
@@ -296,7 +294,6 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid,
 int UmqAcceptorOps::AcceptExchangeSocketIDs(int fd)
 {
     // 发送本端的all socket ids
-    // TODO set UMQ_ALL_SOCKET_IDS
     std::vector<uint32_t> sendAllSocketIds = UmqSetting::UMQ_ALL_SOCKET_IDS;
 
     // 发送本端的all socket ids
