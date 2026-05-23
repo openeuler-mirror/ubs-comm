@@ -144,29 +144,17 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
     return sockBase->Connect(sock, address, address_len);
 }
 
-void print_iov_basic(bool isWrite, const struct iovec* iov, int iovcnt) {
-    std::string ops = isWrite ? "weite" : "read";
-    for (int i = 0; i < iovcnt; i++) {
-        UBS_VLOG_ERR("%s: iov[%d]: base=%s, len=%zu\n", ops.data(), i, iov[i].iov_base, iov[i].iov_len);
-    }
-}
-
 UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
 {
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        UBS_VLOG_ERR("mytest----readv---return---1111111111111");
         return LibcApi::readv(fd, iov, iovcnt);
     }
     SocketPtr sock = SocketSet::Instance().GetSocket(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
-        UBS_VLOG_ERR("mytest----readv---return---2222222222222");
         return LibcApi::readv(fd, iov, iovcnt);
     }
-    int ret = sockBase->ReadV(sock, iov, iovcnt);
-    print_iov_basic(false, iov, iovcnt);
-    UBS_VLOG_ERR("mytest----readv---return---33333-----ret: %d, errno: %d, iovcnt: %d", ret, errno, iovcnt);
-    return ret;
+    return sockBase->ReadV(sock, iov, iovcnt);
 }
 
 UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
