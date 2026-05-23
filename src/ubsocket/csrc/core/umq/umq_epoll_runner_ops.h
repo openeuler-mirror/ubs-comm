@@ -21,8 +21,14 @@ namespace umq {
 
 class UmqEpollRunnerOps : public EpollRunnerOps {
 public:
-    UmqEpollRunnerOps() = default;
-    virtual ~UmqEpollRunnerOps() = default;
+    UmqEpollRunnerOps()
+    {
+        mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
+    }
+    ~UmqEpollRunnerOps()
+    {
+        LockRegistry::LOCK_OPS.destroy(mutex_);
+    }
 
     /**
      * @brief process epoll_wait event
@@ -36,8 +42,23 @@ public:
 
     std::unordered_set<Socket *> SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count);
 
+    int InsertJfrMainUmq(int share_jfr_fd, uint64_t main_umq, int epoll_fd, struct epoll_event *shared_jfr_event)
+    {
+        Locker sLock(mutex_);
+        if (UNLIKELY(jfr_main_umq_.count(share_jfr_fd) == 0)) {
+            if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, share_jfr_fd, shared_jfr_event) < 0) {
+                return -1;
+            }
+            jfr_main_umq_.emplace(share_jfr_fd, main_umq);
+        }
+
+        return 0;
+    }
+
 private:
     uint32_t event_num_{ 0 };
+    std::unordered_map<int, uint64_t> jfr_main_umq_{ };
+    u_mutex_t *mutex_{nullptr};
 };
 } // namespace umq
 } // namespace ubs

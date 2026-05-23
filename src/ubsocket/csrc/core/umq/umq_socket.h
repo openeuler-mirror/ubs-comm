@@ -13,9 +13,9 @@
 
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_socket.h"
+#include "core/ubsocket_qbuf_queue.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "umq_setting.h"
-#include "core/ubsocket_qbuf_queue.h"
 
 namespace ock {
 namespace ubs {
@@ -121,8 +121,6 @@ public:
     int AddQbuf(umq_buf_t *qbuf);
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
     int FlushRxQueue();
-
-    static std::unordered_map<int, uint64_t> jfr_main_umq_;
 
 private:
     uint32_t getLeftPostRxNum(uint64_t umq_handle);

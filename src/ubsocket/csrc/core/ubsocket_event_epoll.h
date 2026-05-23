@@ -146,6 +146,7 @@ public:
     virtual int AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event) = 0;
     virtual int DelEpollEvent(const SocketPtr &sock) = 0;
     virtual int ProcessOneEvent(const struct epoll_event &event) = 0;
+    virtual EpollRunnerOps *GetOps() = 0;
 };
 
 template <SocketType T>
@@ -197,6 +198,8 @@ public:
      * @param event event to process
      */
     int ProcessOneEvent(const struct epoll_event &event) override;
+
+    EpollRunnerOps *GetOps() override {return ops_;}
 
 protected:
     int epoll_fd_;                /* used by thread */
