@@ -158,11 +158,11 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
 } // namespace ubs
 } // namespace ock
 
-#define UBS_LOG(level, __format, ...)                                                                \
-    do {                                                                                             \
-        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                               \
+#define UBS_LOG(level, __format, ...)                                                                          \
+    do {                                                                                                       \
+        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                                         \
             ock::ubs::Logger::Instance().Logv(level, UBS_LOG_FILENAME, UBS_LOG_LINE, __format, ##__VA_ARGS__); \
-        }                                                                                            \
+        }                                                                                                      \
     } while (0)
 
 #define UBS_LOG_STREAM(level, ARGS)                                                       \
