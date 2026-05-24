@@ -49,7 +49,6 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
 
     uint32_t max_buf_size;
     if (GlobalSetting::UBS_READV_UNLIMITED) {
-        // TODO 导致卡死
         max_buf_size = UINT32_MAX;
     } else {
         max_buf_size = 0;

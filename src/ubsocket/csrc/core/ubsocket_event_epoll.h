@@ -310,7 +310,7 @@ public:
      * @param timeout timeout of epoll_wait
      * @return 0: success; -1: failed
      */
-    int EpollWait(struct epoll_event *events, int maxevents, int timeout);
+    int EpollWait(struct epoll_event *events, int maxevents, int timeout) override;
 
     /**
      * @brief add event_data to readable socket event queue
