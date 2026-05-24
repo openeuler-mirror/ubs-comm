@@ -53,6 +53,33 @@ endif ()
 
 if (BUILD_UMQ_BACKEND)
     add_definitions(-DUMQ_BACKEND_ENABLED)
+
+    set(UMQ_BUILD_DIR "${UBSOCKET_BASE_DIR}/../hcom/umq/build")
+    set(UMQ_LIB_DIR "${UMQ_BUILD_DIR}/src")
+    set(UMQ_QBUF_LIB_DIR "${UMQ_LIB_DIR}/qbuf")
+    set(UMQ_IPC_LIB_DIR "${UMQ_LIB_DIR}/umq_ipc")
+
+    if(NOT EXISTS "${UMQ_LIB_DIR}/libumq.so")
+        message(STATUS "ubsocket: libumq.so not found, building umq automatically...")
+        file(MAKE_DIRECTORY "${UMQ_BUILD_DIR}")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -DUSE_URMA_STUB=ON -S "${UBSOCKET_BASE_DIR}/../hcom/umq" -B "${UMQ_BUILD_DIR}"
+            RESULT_VARIABLE UMQ_CMAKE_RESULT
+        )
+        if(NOT UMQ_CMAKE_RESULT EQUAL 0)
+            message(FATAL_ERROR "ubsocket: umq cmake failed: ${UMQ_CMAKE_RESULT}")
+        endif()
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} --build "${UMQ_BUILD_DIR}" -j ${CMAKE_BUILD_PARALLEL_LEVEL}
+            RESULT_VARIABLE UMQ_BUILD_RESULT
+        )
+        if(NOT UMQ_BUILD_RESULT EQUAL 0)
+            message(FATAL_ERROR "ubsocket: umq build failed: ${UMQ_BUILD_RESULT}")
+        endif()
+        message(STATUS "ubsocket: umq built successfully")
+    else()
+        message(STATUS "ubsocket: libumq.so found at ${UMQ_LIB_DIR}")
+    endif()
 endif ()
 
 include_directories(
