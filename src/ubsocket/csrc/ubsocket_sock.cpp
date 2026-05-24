@@ -26,7 +26,7 @@ UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
     if (domain == AF_SMC) {
         fd = LibcApi::socket(AF_INET, type, protocol);
     } else {
-        fd = LibcApi::socket(domain, type, protocol);
+        return LibcApi::socket(domain, type, protocol);
     }
     int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (event_fd < 0) {
