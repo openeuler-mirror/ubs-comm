@@ -136,11 +136,6 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
     ArraySet<EventPoll>::GetInstance().Init();
 
-    /* step4: umq backend init */
-//#ifdef UMQ_BACKEND_ENABLED
-    umq::UmqBackend::Init();
-//#endif
-
     /* step5: load brpc symbol for zcopy */
     /* step4: load brpc symbol for zcopy */
     // TODO: UbsZcopyAdapter 中成员变量原在 context 中, 重构后需要在一个地方保存
@@ -149,7 +144,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
 
     /* step5: umq backend init */
-#ifdef UMQ_BACKEND_ENABLED
+//#ifdef UMQ_BACKEND_ENABLED
     result = umq::UmqBackend::Init();
     if (result != UBS_OK) {
         // ResetBrpcAllocator();
@@ -157,7 +152,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         UBS_VLOG_ERR("umq backend init failed, ret: %d\n", result);
         return UBS_ERROR;
     }
-#endif
+//#endif
 
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
