@@ -25,15 +25,6 @@ std::map<urma_speed_t, UrmaDeviceBandWidth> UrmaDevice::URMA_BANDWIDTHS = {
     {URMA_SP_50G, {"50Gb", 50}},    {URMA_SP_100G, {"100Gb", 100}}, {URMA_SP_200G, {"200Gb", 200}},
     {URMA_SP_400G, {"400Gb", 255}}, {URMA_SP_800G, {"800Gb", 255}}};
 
-typedef enum urma_port_state {
-    URMA_PORT_NOP = 0,
-    URMA_PORT_DOWN,
-    URMA_PORT_INIT,
-    URMA_PORT_ARMED,
-    URMA_PORT_ACTIVE,
-    URMA_PORT_ACTIVE_DEFER,
-} urma_port_state_t;
-
 void UrmaDevice::Init() noexcept
 {
     std::lock_guard<std::mutex> lock(MUTEX);
