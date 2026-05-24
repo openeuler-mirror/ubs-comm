@@ -1,7 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
  * Description: Wake up ready event fd utility (adapted for ubs-comm_new)
- * Note: Extracted from ubs-comm_0327/file_descriptor.h EpollFd::WakeUpReadyEventFd
  */
 
 #ifndef UBSOCKET_WAKEUP_EVENT_H
