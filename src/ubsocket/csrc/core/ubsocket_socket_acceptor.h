@@ -14,6 +14,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_socket_helper.h"
+#include "ubsocket_wakeup_event.h"
 
 namespace ock {
 namespace ubs {
@@ -58,6 +59,7 @@ class Acceptor {
 public:
     Acceptor(const SocketPtr &sock, AcceptorOps *acceptorOps) : raw_fd_(sock->raw_socket_), acceptor_ops_(acceptorOps)
     {
+        ubSocket_async_accept_info.lock = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
     }
     ~Acceptor();
 
@@ -104,7 +106,7 @@ private:
         std::atomic<int32_t> asyncTaskNum{0U};
         u_mutex_t *lock = nullptr;
     } ubSocket_async_accept_info;
-
+    UbsocketWakeupEvent wakeup_event_;
 };
 
 } // namespace ubs
