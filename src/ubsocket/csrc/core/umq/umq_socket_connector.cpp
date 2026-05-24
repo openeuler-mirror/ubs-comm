@@ -41,9 +41,8 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
     ssize_t sendto_ret = LibcApi::sendto(new_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
     ret = sendto_ret < 0 ? UBS_ERROR : UBS_OK;
     if (ret < 0 && errno != 0) {
-        char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         UBS_VLOG_ERR("TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s, fd %d\n", sendto_ret, errno,
-                     NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), new_fd);
+                     Func::Error2Str(errno), new_fd);
     }
 
     if (!SocketConnHelper::IsTfoConnection(new_fd)) {
@@ -55,17 +54,15 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
         sendto_ret = LibcApi::sendto(tmp_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
         ret = sendto_ret < 0 ? UBS_ERROR : UBS_OK;
         if (ret < 0 && errno != 0) {
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s, fd %d\n", sendto_ret, errno,
-                         NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd);
+                         Func::Error2Str(errno), tmp_fd);
         }
 
         int dup3_ret = dup3(tmp_fd, new_fd, O_CLOEXEC);
         LibcApi::close(tmp_fd);
         if (dup3_ret < 0) {
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("dup3 failed, ret: %d, errno %d, err msg: %s, tmp_fd %d, new_fd %d\n", dup3_ret, errno,
-                         NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), tmp_fd, new_fd);
+                         Func::Error2Str(errno), tmp_fd, new_fd);
             return UBS_ERROR;
         }
     } else {
@@ -104,13 +101,10 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
             * 若errno是EINTR/EADDRNOTAVAIL/EHOSTUNREACH等错误码，tcp连接失败，则不执行DoConnect，保持原错误码直接返回上层，由上层应用决定后续动作
             */
         if (errno == EINPROGRESS || errno == EALREADY) {
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            UBS_VLOG_DEBUG("tcp connect inprogress:%s, fd %d\n",
-                           NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), new_fd);
+            UBS_VLOG_DEBUG("tcp connect inprogress:%s, fd %d\n", Func::Error2Str(errno), new_fd);
         } else if (errno != EISCONN) {
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("connect() failed, ret: %d, errno: %d, errmsg: %s, fd: %d\n", ret, errno,
-                         NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE), new_fd);
+                         Func::Error2Str(errno), new_fd);
             return ret;
         }
     }

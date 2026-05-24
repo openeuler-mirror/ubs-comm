@@ -13,8 +13,6 @@
 #include <arpa/inet.h>  // 包含 inet_pton、inet_ntop 函数
 #include <sys/socket.h> // 包含 AF_INET、AF_INET6 等地址族常量
 #include <cstdlib>
-#include <string>
-#include "common/ubsocket_global_setting.h"
 #include "core/ubsocket_socket_helper.h"
 
 namespace ock {

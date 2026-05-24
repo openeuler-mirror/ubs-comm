@@ -14,7 +14,6 @@
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_qbuf_queue.h"
 #include "core/ubsocket_socket.h"
-#include "core/ubsocket_qbuf_queue.h"
 #include "core/umq/umq_setting.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "under_api/dl_umq_api.h"
@@ -112,21 +111,23 @@ public:
         }
     }
 
-    // 封装 umq 相关操作: umq_create, umq_bind
-    Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used);
     Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) override;
     Result DelTxEvent(const SocketPtr &sock, int epoll_fd) override;
     Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
                               struct epoll_event *event) override;
     Result DelRxEventToRunner(const SocketPtr &sock, int epoll_fd) override;
     int GetTxFd() override;
+
+    Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used);
     Result PrefillRx();
-    uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
+    void UnbindAndFlushRemoteUmq(const SocketPtr &sock);
+    void DestroyLocalUmq();
     int AddQbuf(umq_buf_t *qbuf);
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
-    int FlushRxQueue();
+    void FlushRxQueue();
 
 private:
+    uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
     uint32_t getLeftPostRxNum(uint64_t umq_handle);
     uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid);
     Result GetDevEid(char *dev_name, uint32_t eid_idx, umq_eid_t *eid);
