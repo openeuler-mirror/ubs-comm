@@ -215,14 +215,15 @@ struct Param {
         switch (dataType) {
             case PDT_INT64:
                 return requiredStr + "type: number, range: [" + std::to_string(int64Rule.min) + "-" +
-                       std::to_string(int64Rule.max) + "], " + help;
+                       std::to_string(int64Rule.max) + "]" + (help.empty() ? "" : (", " + help));
             case PDT_FLOAT:
                 return requiredStr + "type: number, range: [" + std::to_string(floatRule.min) + "-" +
-                       std::to_string(floatRule.max) + "], " + help;
+                       std::to_string(floatRule.max) + "]" + (help.empty() ? "" : (", " + help));
             case PDT_STR:
-                return requiredStr + "type: str, which should not be empty, " + help;
+                return requiredStr + "type: str, which should not be empty" + (help.empty() ? "" : (", " + help));
             case PDT_STR_ENUM: {
-                return requiredStr + "type: str, which should be one of '" + strRule.allEnum + "', " + help;
+                return requiredStr + "type: str, which should be one of '" + strRule.allEnum + "'" +
+                       (help.empty() ? "" : (", " + help));
             }
             default:
                 return "";
