@@ -12,7 +12,7 @@
 #include "dl_libc_api.h"
 #include "dl_umq_api.h"
 
-#ifdef URMA_BACKEND_ENABLED
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
 #include "urma/dl_urma_api.h"
 #endif
 
@@ -41,7 +41,7 @@ Result DlApi::Load(int libraries) noexcept
         }
     }
 
-#ifdef URMA_BACKEND_ENABLED
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
     if ((libraries & LOAD_URMA) == LOAD_URMA) {
         UBS_VLOG_DEBUG("load urma api");
         result = UrmaApi::Load();
@@ -58,7 +58,7 @@ ERROR:
     LibcApi::UnLoad();
     UmqApi::UnLoad();
 
-#ifdef URMA_BACKEND_ENABLED
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
     UrmaApi::UnLoad();
 #endif
 
@@ -71,7 +71,7 @@ void DlApi::UnLoad(int libraries) noexcept
     LibcApi::UnLoad();
     UmqApi::UnLoad();
 
-#ifdef URMA_BACKEND_ENABLED
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
     UrmaApi::UnLoad();
 #endif
 }

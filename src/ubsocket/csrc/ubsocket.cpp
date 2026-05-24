@@ -144,7 +144,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
 
     /* step5: umq backend init */
-//#ifdef UMQ_BACKEND_ENABLED
+//#ifdef UMQ_ADAPTER_BACKEND_ENABLED
     result = umq::UmqBackend::Init();
     if (result != UBS_OK) {
         // ResetBrpcAllocator();
