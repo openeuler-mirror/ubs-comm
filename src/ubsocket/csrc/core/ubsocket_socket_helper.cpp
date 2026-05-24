@@ -265,7 +265,7 @@ int SocketConnHelper::GetFirstCpuFromCpulist(const std::string &cpuListStr)
 {
     if (cpuListStr.empty()) {
         // 表示无效输入
-        UBS_VLOG_WARN("GetFirstCpuFromCpulist failed, empty cpulist string\n");
+        UBS_VLOG_WARN("GetFirstCpuFromCpulist empty, empty cpulist string\n");
         return -1;
     }
 

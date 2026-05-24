@@ -176,7 +176,7 @@ void EpollRunner<T>::RunInThread() noexcept
             auto event_data = (RunnerEventData *)&events[i].data;
             if (UNLIKELY(event_data->event_data.type == RUNNER_EVENT_TYPE_STOP)) {
                 stopped = true;
-                UBS_VLOG_ERR("async_epoll notify exit fd received, exit now\n");
+                UBS_VLOG_INFO("async_epoll notify exit fd received, exit now\n");
                 break;
             }
 
@@ -445,7 +445,7 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     auto sock = SocketSet::Instance().GetSocket(fd);
     if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {  /* listen fd */
         UBS_VLOG_INFO("sock is nullptr or socket is not bind remote, socket: %d\n", 
-            sock->raw_socket_);
+            fd);
         return 0;
     }
 
@@ -624,21 +624,21 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
         return -1;
     }
 
+    if (UNLIKELY(!IsSocketEventDataExist(fd))) {
+        UBS_VLOG_ERR("async_epoll EpollCtlDel(socket:%d) failed, not added\n", fd);
+        errno = ENOENT;
+        return -1;
+    }
+
     DelRawSocketEvent(fd);
     auto sock = SocketSet::Instance().GetSocket(fd);
     if (UNLIKELY(sock == nullptr)) {
         UBS_VLOG_INFO("sock is nullptr for origin sock, socket: %d\n", fd);
         return 0;
     }
-    
+
     if (UNLIKELY(EpollRunnerFactory::GetInstance(sock->Type()).DelEpollEvent(sock) != 0)) {
         UBS_VLOG_ERR("epoll runner add epoll event failed, socket fd: %d\n", sock->raw_socket_);
-        return -1;
-    }
-
-    if (UNLIKELY(!IsSocketEventDataExist(sock->raw_socket_))) {
-        UBS_VLOG_ERR("async_epoll EpollCtlDel(socket:%d) failed, not added\n", sock->raw_socket_);
-        errno = ENOENT;
         return -1;
     }
 
