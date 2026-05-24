@@ -294,7 +294,7 @@ int AsyncEventPoll::EpollCtl(int op, const SocketPtr &sock, struct epoll_event *
     return ret;
 }
 
-int AsyncEventPoll::EpollWait(const SocketPtr &sock, struct epoll_event *events, int maxevents, int timeout)
+int AsyncEventPoll::EpollWait(struct epoll_event *events, int maxevents, int timeout)
 {
     if (UNLIKELY(events == nullptr)) {
         UBS_VLOG_ERR("async_epoll EpollWait events is null.\n");

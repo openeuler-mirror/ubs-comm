@@ -365,7 +365,6 @@ bool UbsZcopyAdapter::Intercept(const char *alloc_sym_str, const char *dealloc_s
     if (is_intercepted_) {
         return true;
     }
-
     const char *alloc_sym = GetBrpcAllocSymStr(alloc_sym_str);
     const char *dealloc_sym = GetBrpcDeallocSymStr(dealloc_sym_str);
 
@@ -384,7 +383,6 @@ bool UbsZcopyAdapter::Intercept(const char *alloc_sym_str, const char *dealloc_s
         alloc_addr_ = scanner.GetBrpcAllocSymAddr();
         dealloc_addr_ = scanner.GetBrpcDeallocSymAddr();
     }
-
     // 3. 执行替换（Hook）并记录原始地址
     if (alloc_addr_ && dealloc_addr_) {
         RecordAndSetBrpcAllocator();

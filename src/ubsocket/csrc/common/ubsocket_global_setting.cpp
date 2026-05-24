@@ -30,7 +30,7 @@ bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
-bool GlobalSetting::USE_BRPC_ZCOPY = false;
+bool GlobalSetting::USE_BRPC_ZCOPY = true;
 std::string GlobalSetting::UBS_BRPC_ALLOC_SYM_STR;
 std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;

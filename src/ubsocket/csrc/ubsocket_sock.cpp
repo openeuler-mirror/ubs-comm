@@ -55,7 +55,7 @@ UBS_API int UB_API_WRAP(shutdown)(int fd, int how)
         return LibcApi::shutdown(fd, how);
     }
 
-    return 0;
+    return LibcApi::shutdown(fd, how);
 }
 
 UBS_API int UB_API_WRAP(close)(int fd)
@@ -64,7 +64,7 @@ UBS_API int UB_API_WRAP(close)(int fd)
         return LibcApi::close(fd);
     }
 
-    return 0;
+    return LibcApi::close(fd);
 }
 
 UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *address_len)
@@ -154,7 +154,6 @@ UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
     if (sockBase == nullptr) {
         return LibcApi::readv(fd, iov, iovcnt);
     }
-
     return sockBase->ReadV(sock, iov, iovcnt);
 }
 
@@ -168,7 +167,6 @@ UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     if (sockBase == nullptr) {
         return LibcApi::writev(fd, iov, iovcnt);
     }
-
     return sockBase->WriteV(sock, iov, iovcnt);
 }
 
@@ -280,5 +278,5 @@ UBS_API int UB_API_WRAP(setsockopt)(int fd, int level, int optname, const void *
         return LibcApi::setsockopt(fd, level, optname, optval, optlen);
     }
 
-    return 0;
+    return LibcApi::setsockopt(fd, level, optname, optval, optlen);
 }

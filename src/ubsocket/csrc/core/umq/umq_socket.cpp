@@ -183,7 +183,6 @@ uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *loca
         umq_create_option_t cfg_main;
         memcpy(&cfg_main, cfg, sizeof(*cfg));
         cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
-
         return UmqApi::umq_create(&cfg_main);
     }
 
@@ -192,7 +191,6 @@ uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *loca
                      static_cast<unsigned long long>(UMQ_INVALID_HANDLE));
         return UMQ_INVALID_HANDLE;
     }
-
     // eid 对应多个不同 UB 传输模式的主 umq. 当前实现保证此时 main_umqs 长度为 1
     return main_umqs.front()->GetUmqHandle();
 }
