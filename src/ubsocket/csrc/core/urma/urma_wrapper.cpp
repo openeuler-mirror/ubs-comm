@@ -15,9 +15,15 @@
 namespace ock {
 namespace ubs {
 namespace urma {
-std::vector<UrmaDevicePtr> UrmaDevice::ALL_DEVICES;
+std::map<std::string, UrmaDevicePtr> UrmaDevice::ALL_DEVICES;
 bool UrmaDevice::LOADED = false;
 std::mutex UrmaDevice::MUTEX;
+std::map<urma_speed_t, UrmaDeviceBandWidth> UrmaDevice::URMA_BANDWIDTHS = {
+    {URMA_SP_10M, {"10Mb", 1}},     {URMA_SP_100M, {"100Mb", 1}},   {URMA_SP_1G, {"1Gb", 1}},
+    {URMA_SP_2_5G, {"2.5Gb", 5}},   {URMA_SP_5G, {"5Gb", 5}},       {URMA_SP_10G, {"10Gb", 10}},
+    {URMA_SP_14G, {"14Gb", 14}},    {URMA_SP_25G, {"15Gb", 25}},    {URMA_SP_40G, {"40Gb", 40}},
+    {URMA_SP_50G, {"50Gb", 50}},    {URMA_SP_100G, {"100Gb", 100}}, {URMA_SP_200G, {"200Gb", 200}},
+    {URMA_SP_400G, {"400Gb", 255}}, {URMA_SP_800G, {"800Gb", 255}}};
 
 void UrmaDevice::Init() noexcept
 {
@@ -54,8 +60,8 @@ void UrmaDevice::Init() noexcept
                 return;
             }
 
-            ALL_DEVICES.emplace_back(new_dev);
-
+            ALL_DEVICES.emplace(dev->name, new_dev);
+#ifdef ENABLED
             /* get eids */
             uint32_t eid_count = 0;
             auto eid_list = UrmaApi::urma_get_eid_list(dev, &eid_count);
@@ -68,15 +74,14 @@ void UrmaDevice::Init() noexcept
                 auto eid = eid_list[j];
                 new_dev->eid_list_.push_back(eid);
             }
+#endif
         }
     }
 
-    LOADED = true;
-}
+    /* free device list */
+    UrmaApi::urma_free_device_list(device_list);
 
-const std::vector<UrmaDevicePtr> &UrmaDevice::AllDevices() noexcept
-{
-    return ALL_DEVICES;
+    LOADED = true;
 }
 
 UrmaDevice::UrmaDevice(const std::string &name, const std::string &sys_path, const urma_device_attr_t &attr)
@@ -86,25 +91,55 @@ UrmaDevice::UrmaDevice(const std::string &name, const std::string &sys_path, con
 {
 }
 
-std::string UrmaDevice::ToString(const std::string &prefix, const std::string &seperator) const noexcept
+std::string UrmaDevice::ToString(bool whole, const std::string &prefix, const std::string &seperator) const noexcept
 {
-    constexpr int width = 10;
+    constexpr int width = 20;
     std::ostringstream oss;
-    oss << prefix << std::setw(width) << "device name: " << device_name_ << seperator;
-    oss << prefix << std::setw(width) << "sys path: " << device_sys_path_ << seperator;
-    oss << prefix << std::setw(width) << "guid: " << attributes_.guid.raw << seperator;
-    oss << prefix << std::setw(width) << "port count: " << attributes_.port_cnt << seperator;
-    oss << prefix << std::setw(width) << "max jetty: " << attributes_.dev_cap.max_jetty << seperator;
-    oss << prefix << std::setw(width) << "max jfs: " << attributes_.dev_cap.max_jfs << seperator;
-    oss << prefix << std::setw(width) << "max jfs depth: " << attributes_.dev_cap.max_jfs_depth << seperator;
-    oss << prefix << std::setw(width) << "max jfr: " << attributes_.dev_cap.max_jfr << seperator;
-    oss << prefix << std::setw(width) << "max jfr depth: " << attributes_.dev_cap.max_jfr_depth << seperator;
-    oss << prefix << std::setw(width) << "max jfc: " << attributes_.dev_cap.max_jfc << seperator;
-    oss << prefix << std::setw(width) << "max jfc depth: " << attributes_.dev_cap.max_jfc_depth << seperator;
+    oss << prefix << std::left << std::setw(width) << "device name: " << device_name_ << seperator;
+    oss << prefix << std::left << std::setw(width) << "sys path: " << device_sys_path_ << seperator;
+    oss << prefix << std::left << std::setw(width) << "port count: " << (uint32_t)attributes_.port_cnt << seperator;
 
-    uint32_t eid_index = 0;
-    for (auto &eid : eid_list_) {
-        oss << prefix << std::setw(width) << "eid  " << eid_index++ << ": "<< eid.eid.raw << seperator;
+    if (attributes_.port_cnt > 0) {
+        /* bandwidth */
+        auto speed = attributes_.port_attr[0].active_speed;
+        auto iter = URMA_BANDWIDTHS.find(speed);
+        if (iter == URMA_BANDWIDTHS.end()) {
+            oss << prefix << std::left << std::setw(width) << "bandwidth: invalid" << seperator;
+        } else {
+            oss << prefix << std::left << std::setw(width) << "bandwidth: " << iter->second.str << seperator;
+        }
+
+        /* state */
+        oss << prefix << std::left << std::setw(width) << "state: " << DeviceState2Str(attributes_.port_attr[0].state)
+            << seperator;
+
+        /* mtu */
+        oss << prefix << std::left << std::setw(width)
+            << "active mtu: " << DeviceMTU2Str(attributes_.port_attr[0].active_mtu) << seperator;
+    }
+
+    if (whole) {
+        oss << prefix << std::left << std::setw(width) << "max jetty: " << attributes_.dev_cap.max_jetty << seperator;
+        oss << prefix << std::left << std::setw(width) << "max jfs: " << attributes_.dev_cap.max_jfs << seperator;
+        oss << prefix << std::left << std::setw(width) << "max jfs depth: " << attributes_.dev_cap.max_jfs_depth
+            << seperator;
+        oss << prefix << std::left << std::setw(width) << "max jfr: " << attributes_.dev_cap.max_jfr << seperator;
+        oss << prefix << std::left << std::setw(width) << "max jfr depth: " << attributes_.dev_cap.max_jfr_depth
+            << seperator;
+        oss << prefix << std::left << std::setw(width) << "max jfc: " << attributes_.dev_cap.max_jfc << seperator;
+        oss << prefix << std::left << std::setw(width) << "max jfc depth: " << attributes_.dev_cap.max_jfc_depth
+            << seperator;
+        oss << prefix << std::left << std::setw(width) << "max sge: " << attributes_.dev_cap.max_jfr_sge << seperator;
+        oss << prefix << std::left << std::setw(width) << "max msg size: " << attributes_.dev_cap.max_msg_size
+            << seperator;
+        oss << prefix << std::left << std::setw(width) << "max inline size: " << attributes_.dev_cap.max_jfs_inline_len
+            << seperator;
+
+        uint32_t eid_index = 0;
+        for (auto &eid : eid_list_) {
+            oss << prefix << std::left << std::setw(width) << "eid  " << eid_index++ << ": " << eid.eid.raw
+                << seperator;
+        }
     }
 
     return oss.str();

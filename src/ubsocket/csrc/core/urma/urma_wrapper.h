@@ -41,11 +41,21 @@ using UrmaJfrPtr = Ref<UrmaJfr>;
 using UrmaJfcPtr = Ref<UrmaJfc>;
 using UrmaSegmentPtr = Ref<UrmaSegment>;
 
+struct UrmaDeviceBandWidth {
+    std::string str;
+    uint16_t intValue;
+
+    UrmaDeviceBandWidth(const std::string &s, uint16_t v) : str(s), intValue(v) {}
+};
+
 class UrmaDevice : public Referable {
 public:
     static void Init() noexcept;
 
-    static const std::vector<UrmaDevicePtr> &AllDevices() noexcept;
+    static const std::map<std::string, UrmaDevicePtr> &AllDevices() noexcept;
+
+    static std::string DeviceState2Str(urma_port_state_t s);
+    static std::string DeviceMTU2Str(urma_mtu_t s);
 
 public:
     UrmaDevice(const std::string &name, const std::string &sys_path, const urma_device_attr_t &attr);
@@ -53,7 +63,8 @@ public:
 
     const std::string &DeviceName() const noexcept;
 
-    std::string ToString(const std::string &prefix = "", const std::string &seperator = "") const noexcept;
+    std::string ToString(bool whole = false, const std::string &prefix = "",
+                         const std::string &seperator = "") const noexcept;
 
 private:
     std::string device_name_;
@@ -62,9 +73,10 @@ private:
     std::vector<urma_eid_info_t> eid_list_;
 
 private:
-    static std::vector<UrmaDevicePtr> ALL_DEVICES;
+    static std::map<std::string, UrmaDevicePtr> ALL_DEVICES;
     static bool LOADED;
     static std::mutex MUTEX;
+    static std::map<urma_speed_t, UrmaDeviceBandWidth> URMA_BANDWIDTHS;
 };
 
 ALWAYS_INLINE const std::string &UrmaDevice::DeviceName() const noexcept
@@ -72,17 +84,52 @@ ALWAYS_INLINE const std::string &UrmaDevice::DeviceName() const noexcept
     return device_name_;
 }
 
+ALWAYS_INLINE std::string UrmaDevice::DeviceState2Str(urma_port_state_t s)
+{
+    switch (s) {
+        case URMA_PORT_DOWN:
+            return "down";
+        case URMA_PORT_ACTIVE:
+            return "active";
+        case URMA_PORT_NOP:
+        case URMA_PORT_INIT:
+        case URMA_PORT_ARMED:
+        case URMA_PORT_ACTIVE_DEFER:
+            break;
+    }
+    return "unknown";
+}
+
+ALWAYS_INLINE std::string UrmaDevice::DeviceMTU2Str(urma_mtu_t s)
+{
+    switch (s) {
+        case URMA_MTU_256:
+            return "256bytes";
+        case URMA_MTU_512:
+            return "512bytes";
+        case URMA_MTU_1024:
+            return "1024bytes";
+        case URMA_MTU_2048:
+            return "2048bytes";
+        case URMA_MTU_4096:
+            return "4096bytes";
+        case URMA_MTU_8192:
+            return "8192bytes";
+    }
+
+    return "unknown";
+}
+
+ALWAYS_INLINE const std::map<std::string, UrmaDevicePtr> &UrmaDevice::AllDevices() noexcept
+{
+    return ALL_DEVICES;
+}
+
 class UrmaContext : public Referable {
 public:
 private:
-    urma_context_t *context_ = nullptr;
-    urma_device_attr_t *dev_attr_ = nullptr;
-    uint32_t max_jfs_ = 0;
-    uint32_t max_jfr = 0;
-    int cpt_priority_ = 0;
-    int rtp_priority_ = 0;
-    int max_sge_ = 16;
-    uint8_t port_count_ = 1;
+    urma_context_t *context_{nullptr};
+    UrmaDevicePtr device_{nullptr};
     UBEId ub_eid_{};
 };
 

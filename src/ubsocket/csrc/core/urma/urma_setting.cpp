@@ -16,6 +16,7 @@ namespace urma {
 #define ENV_URMA_DEV_NAME "UBSOCKET_UB_DEV"
 
 std::string UrmaSetting::UB_DEV_NAME;
+std::string UrmaSetting::UB_DEV_EID;
 
 void UrmaSetting::Init() noexcept {}
 
