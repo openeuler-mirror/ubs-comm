@@ -43,8 +43,11 @@ protected:
 // connector 建链通用实现层：TCP 建链，协商，建链
 class Connector {
 public:
-    Connector(const SocketPtr &sock, ConnectorOps* connectorOps) : raw_fd_(sock->raw_socket_),
-          connector_ops_(connectorOps) {}
+    Connector(const SocketPtr &sock, ConnectorOps *connectorOps)
+        : raw_fd_(sock->raw_socket_),
+          connector_ops_(connectorOps)
+    {
+    }
     ~Connector();
 
     int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);

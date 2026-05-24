@@ -12,8 +12,7 @@
 #define UBS_COMM_UMQ_SOCKET_CONNECTOR_H
 
 #include "core/ubsocket_socket_connector.h"
-#include "umq_setting.h"
-#include "umq_socket.h"
+#include "core/umq/umq_socket.h"
 
 namespace ock {
 namespace ubs {
@@ -41,9 +40,19 @@ private:
                                           uint32_t &socket_id_count);
     Result ConnectNegotiate(const UmqSocketPtr &umq_socket);
     Result ConnectExchangeSocketIDs(void);
-    Result DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid, umq_route_t *conn_route, bool use_round_robin,
-                   umq_route_t *back_route);
+    Result GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_t *dst_eid, umq_route_list_t &filtered_list);
+    Result DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid);
     Result DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_ports_t &used_ports);
+
+    Result GetRoundRobinConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid);
+    void GetBondingEidMapIndex(const umq_eid_t &dst_eid, uint32_t &index);
+    uint32_t GetTargetChipId(const std::vector<uint32_t> &socket_ids, const std::vector<uint32_t> &chip_id_list,
+                             int process_socket_id);
+    Result GetConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid);
+    void RRChooseMainRoute(std::vector<umq_route_t> &main_routes, const umq_eid_t *dst_eid,
+                           umq_route_t &conn_main_route, umq_route_t &conn_back_route);
+    Result GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std::vector<umq_route_t> &main_routes,
+                                  std::vector<umq_route_t> &back_routes);
 
     // ======================== 成员变量 ===========================
     struct UmqConnInfo : public ConnInfo {
@@ -52,11 +61,14 @@ private:
     };
     UmqConnInfo umq_conn_info_;
     bool use_round_robin_ = true;
-    int server_socket_id_for_affinity_ = -1;
-    std::vector<uint32_t> peer_all_socket_ids_;
-    umq_eid_t route_backup_src_eid_; // 备
+    int peer_socket_id_ = -1;                   // 对端socket id
+    std::vector<uint32_t> peer_all_socket_ids_; // 对端所有socket id
+    umq_eid_t route_backup_src_eid_;            // 备
+    umq_eid_t route_backup_dst_eid_;            // 备
     umq_route_t conn_route_;
     umq_route_t back_route_;
+    // TODO: 主备切换逻辑待优化
+    std::vector<umq_route_t> back_route_list_;
     umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
 };
 using UmqConnectorOpsPtr = Ref<UmqConnectorOps>;

@@ -40,11 +40,11 @@ bool DynSymScanner::ParseBrpcAllocator()
     RecordApi(RTLD_DEFAULT, BRPC_DEALLOC_SYMBOL_DEFAULT, dealloc_addr_);
     if (alloc_addr_ != nullptr && dealloc_addr_ != nullptr) {
         UBS_VLOG_INFO("Dynamic Symbol Scanner Found: %s(default), "
-            "(iobuf::blockmem_allocate)\n",
-            BRPC_ALLOC_SYMBOL_DEFAULT);
+                      "(iobuf::blockmem_allocate)\n",
+                      BRPC_ALLOC_SYMBOL_DEFAULT);
         UBS_VLOG_INFO("Dynamic Symbol Scanner Found: %s(default), "
-            "(iobuf::blockmem_deallocate)\n",
-            BRPC_DEALLOC_SYMBOL_DEFAULT);
+                      "(iobuf::blockmem_deallocate)\n",
+                      BRPC_DEALLOC_SYMBOL_DEFAULT);
         return true;
     }
 
@@ -62,14 +62,13 @@ bool DynSymScanner::ParseBrpcAllocator()
 
         const char *name = strtab_data_ + symbols_[i].st_name;
         if (ParseBrpcBlockMemAllocate(name)) {
-            alloc_addr_ =
-                (blockmem_allocate_t *)(ehdr_.e_type == ET_EXEC ? (char *)symbols_[i].st_value :
-                                                                   (char *)base_addr_ + symbols_[i].st_value);
+            alloc_addr_ = (blockmem_allocate_t *)(ehdr_.e_type == ET_EXEC ? (char *)symbols_[i].st_value :
+                                                                            (char *)base_addr_ + symbols_[i].st_value);
             UBS_VLOG_INFO("Dynamic Symbol Scanner Found: %s, (iobuf::blockmem_allocate)\n", name);
         } else if (ParseBrpcBlockMemDeallocate(name)) {
-            dealloc_addr_ =
-                (blockmem_deallocate_t *)(ehdr_.e_type == ET_EXEC ? (char *)symbols_[i].st_value :
-                                                                     (char *)base_addr_ + symbols_[i].st_value);
+            dealloc_addr_ = (blockmem_deallocate_t *)(ehdr_.e_type == ET_EXEC ?
+                                                          (char *)symbols_[i].st_value :
+                                                          (char *)base_addr_ + symbols_[i].st_value);
             UBS_VLOG_INFO("Dynamic Symbol Scanner Found: %s, (iobuf::blockmem_deallocate)\n", name);
         }
     }
@@ -173,7 +172,7 @@ bool DynSymScanner::ParseBrpcBlockMemAllocate(const char *name)
         return false;
     }
 
-    const char* keywords[] = {"butil", "iobuf", "blockmem_allocate"};
+    const char *keywords[] = {"butil", "iobuf", "blockmem_allocate"};
     constexpr int numKeywords = 3;
 
     for (int i = 0; i < numKeywords; ++i) {
@@ -196,7 +195,7 @@ bool DynSymScanner::ParseBrpcBlockMemDeallocate(const char *name)
         return false;
     }
 
-    const char* keywords[] = {"butil", "iobuf", "blockmem_deallocate"};
+    const char *keywords[] = {"butil", "iobuf", "blockmem_deallocate"};
     constexpr int numKeywords = 3;
 
     for (int i = 0; i < numKeywords; ++i) {
@@ -347,14 +346,14 @@ FREE_SHDRS:
     return false;
 }
 
-
 UbsZcopyAdapter::UbsZcopyAdapter()
     : alloc_addr_(nullptr),
       dealloc_addr_(nullptr),
       alloc_addr_origin_(nullptr),
       dealloc_addr_origin_(nullptr),
       is_intercepted_(false)
-{}
+{
+}
 
 UbsZcopyAdapter::~UbsZcopyAdapter()
 {
@@ -426,5 +425,16 @@ void UbsZcopyAdapter::RecordAndSetBrpcAllocator()
     *alloc_addr_ = blockmem_allocate_zero_copy;
     *dealloc_addr_ = blockmem_deallocate_zero_copy;
 }
+
+void UbsZcopyAdapter::ResetBrpcAllocator()
+{
+    if (alloc_addr_ != nullptr) {
+        *alloc_addr_ = alloc_addr_origin_;
+    }
+    if (dealloc_addr_ != nullptr) {
+        *dealloc_addr_ = dealloc_addr_origin_;
+    }
+}
+
 } // namespace ubs
 } // namespace ock

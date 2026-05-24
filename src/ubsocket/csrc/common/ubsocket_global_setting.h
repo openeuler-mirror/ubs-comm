@@ -79,6 +79,7 @@ public:
     static bool UBS_NATIVE_TCP_MODE;                 /* native tcp mode, pass all logic of this library, from API */
     static bool UBS_TRACE_ENABLED;                   /* if enable tracing, from env */
     static bool UBS_INITED;                          /* if ubsocket initialized, from API */
+    static std::string UBS_TRANS_MODE;               /* transport mode, from env */
     static int16_t UBS_ACCEPTOR_ASYNC_THREAD_COUNT;  /* if enable async acceptor, from API override by env */
     static int16_t UBS_CONNECTOR_ASYNC_THREAD_COUNT; /* if enable async connector, from API override by env */
     static int16_t UBS_EPOLL_ASYNC_THREAD_COUNT;     /* if enable async epoll_wait, from API override by env */

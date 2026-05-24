@@ -107,10 +107,12 @@ public:
 
     void Restore();
 
+    void RecordAndSetBrpcAllocator();
+    void ResetBrpcAllocator();
+
 private:
     const char *GetBrpcAllocSymStr(const char *str);
     const char *GetBrpcDeallocSymStr(const char *str);
-    void RecordAndSetBrpcAllocator();
 
     blockmem_allocate_t *alloc_addr_ = nullptr;
     blockmem_deallocate_t *dealloc_addr_ = nullptr;

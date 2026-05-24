@@ -11,6 +11,11 @@
 #ifndef HCOM_UMQ_EID_TABLE_H
 #define HCOM_UMQ_EID_TABLE_H
 
+#include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_leaky_singleton.h"
+#include "common/ubsocket_lock.h"
+#include "under_api/umq_api.h"
+
 namespace ock {
 namespace ubs {
 namespace umq {
@@ -23,7 +28,7 @@ struct UmqEidHash {
     }
 };
 struct UmqEidEqual {
-    bool operator()(const umq_eid_t& a, const umq_eid_t& b) const
+    bool operator()(const umq_eid_t &a, const umq_eid_t &b) const
     {
         return memcmp(a.raw, b.raw, sizeof(a.raw)) == 0;
     }
@@ -37,7 +42,7 @@ public:
           m_mutex(LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE))
     {
     }
-    
+
     MainUmqState(const MainUmqState &rhs) = default;
     MainUmqState &operator=(const MainUmqState &rhs) = default;
 
@@ -87,7 +92,7 @@ public:
         static UmqEidTable instance;
         return instance;
     }
-    
+
     void Add(const umq_eid_t &eid, ub_trans_mode mode, uint64_t main_umq)
     {
         Locker sLock(mutex);
@@ -196,7 +201,126 @@ private:
     u_mutex_t *mutex;
     u_mutex_t *main_mutex;
 };
-}
-}
-}
+
+class EidRegistry : public LeakySingleton<EidRegistry> {
+    friend LeakySingleton<EidRegistry>;
+
+public:
+    bool RegisterEid(const umq_eid_t &eid)
+    {
+        Locker sLock(mutex_);
+        return registered_eids_.insert(eid).second;
+    }
+
+    bool IsRegisteredEid(const umq_eid_t &eid)
+    {
+        Locker sLock(mutex_);
+        return registered_eids_.count(eid) > 0;
+    }
+
+    bool UnregisterEid(const umq_eid_t &eid)
+    {
+        Locker sLock(mutex_);
+        return registered_eids_.erase(eid) > 0;
+    }
+
+    // 控制建链轮询
+    // 注册或者替换index值
+    void RegisterOrReplaceEidIndex(const umq_eid_t &eid, uint32_t index)
+    {
+        Locker sLock(mutex_);
+        eid_index_map_[eid] = index;
+    }
+
+    // 仅检查eid是否存在（不获取值）
+    bool IsRegisteredEidIndex(const umq_eid_t &eid) const
+    {
+        Locker sLock(mutex_);
+        return eid_index_map_.find(eid) != eid_index_map_.end();
+    }
+
+    // 获得index值
+    bool GetEidIndex(const umq_eid_t &eid, uint32_t &index) const
+    {
+        Locker sLock(mutex_);
+        auto it = eid_index_map_.find(eid);
+        if (it != eid_index_map_.end()) {
+            index = it->second;
+            return true;
+        }
+        return false;
+    }
+
+    //删除 eid 及其值
+    bool UnregisterEidIndex(const umq_eid_t &eid)
+    {
+        Locker sLock(mutex_);
+        return eid_index_map_.erase(eid) > 0;
+    }
+
+private:
+    EidRegistry()
+    {
+        mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
+    }
+    ~EidRegistry()
+    {
+        LockRegistry::LOCK_OPS.destroy(mutex_);
+    }
+    u_mutex_t *mutex_;
+    std::unordered_set<umq_eid_t, UmqEidHash, UmqEidEqual> registered_eids_;         // umq_dev_add eid
+    std::unordered_map<umq_eid_t, uint32_t, UmqEidHash, UmqEidEqual> eid_index_map_; // bonding eidroute_list index
+};
+
+class RouteListRegistry : public LeakySingleton<RouteListRegistry> {
+    friend LeakySingleton<RouteListRegistry>;
+
+public:
+    // 注册或者替换routeList值
+    void RegisterOrReplaceRouteList(const umq_eid_t &eid, const umq_route_list_t &routeList)
+    {
+        Locker sLock(mutex_);
+        route_list_map_[eid] = routeList;
+    }
+
+    // 仅检查eid对应的routeList是否存在（不获取值）
+    bool IsRegisteredRouteList(const umq_eid_t &eid) const
+    {
+        Locker sLock(mutex_);
+        return route_list_map_.find(eid) != route_list_map_.end();
+    }
+
+    bool GetRouteList(const umq_eid_t &eid, umq_route_list_t &routeList) const
+    {
+        Locker sLock(mutex_);
+        auto it = route_list_map_.find(eid);
+        if (it != route_list_map_.end()) {
+            routeList = it->second;
+            return true;
+        }
+        return false;
+    }
+
+    //  RouteList
+    bool UnregisterRouteList(const umq_eid_t &eid)
+    {
+        Locker sLock(mutex_);
+        return route_list_map_.erase(eid) > 0;
+    }
+
+private:
+    RouteListRegistry()
+    {
+        mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
+    }
+    ~RouteListRegistry()
+    {
+        LockRegistry::LOCK_OPS.destroy(mutex_);
+    }
+    u_mutex_t *mutex_;
+    std::unordered_map<umq_eid_t, umq_route_list_t, UmqEidHash, UmqEidEqual> route_list_map_; // route_list
+};
+} // namespace umq
+} // namespace ubs
+} // namespace ock
 #endif // HCOM_UMQ_EID_TABLE_H
