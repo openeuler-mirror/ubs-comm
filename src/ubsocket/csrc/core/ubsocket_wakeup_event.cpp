@@ -14,7 +14,7 @@ namespace ock {
 namespace ubs {
 
 UbsocketWakeupEvent::UbsocketWakeupEvent()
-    : epoll_fd_(-1),
+    : epollFd_(-1),
       ready_event_fd_(-1),
       ready_event_mutex_(nullptr)
 {
@@ -30,9 +30,9 @@ UbsocketWakeupEvent::~UbsocketWakeupEvent()
     }
 }
 
-int UbsocketWakeupEvent::Initialize(int epoll_fd)
+int UbsocketWakeupEvent::Initialize(int epollFd)
 {
-    epoll_fd_ = epoll_fd;
+    epollFd_ = epollFd;
 
     if (LIKELY(ready_event_fd_ >= 0)) {
         return 0;
@@ -40,18 +40,16 @@ int UbsocketWakeupEvent::Initialize(int epoll_fd)
 
     int fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (UNLIKELY(fd < 0)) {
-        UBS_VLOG_ERR("UbsocketWakeupEvent: create ready event fd failed: %d : %s\n",
-                      errno, strerror(errno));
+        UBS_VLOG_ERR("UbsocketWakeupEvent: create ready event fd failed: %d : %s\n",errno, strerror(errno));
         return -1;
     }
 
     struct epoll_event event{};
     event.events = EPOLLIN | EPOLLET;
     event.data.ptr = &ready_event_;
-    int ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event);
+    int ret = epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &event);
     if (UNLIKELY(ret < 0)) {
-        UBS_VLOG_ERR("UbsocketWakeupEvent: epoll_ctl add ready event fd failed: %d : %s\n",
-                      errno, strerror(errno));
+        UBS_VLOG_ERR("UbsocketWakeupEvent: epoll_ctl add ready event fd failed: %d : %s\n",errno, strerror(errno));
         close(fd);
         return -1;
     }
@@ -64,8 +62,8 @@ int UbsocketWakeupEvent::Initialize(int epoll_fd)
 void UbsocketWakeupEvent::CleanUp()
 {
     if (ready_event_fd_ >= 0) {
-        if (epoll_fd_ >= 0) {
-            epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, ready_event_fd_, nullptr);
+        if (epollFd_ >= 0) {
+            epoll_ctl(epollFd_, EPOLL_CTL_DEL, ready_event_fd_, nullptr);
         }
         close(ready_event_fd_);
         ready_event_fd_ = -1;
@@ -97,8 +95,7 @@ void UbsocketWakeupEvent::WakeUpReadyEventFd(int fd)
     }
 }
 
-int UbsocketWakeupEvent::ProcessReadyEvents(struct epoll_event *events, int maxevents,
-                                               std::unordered_map<int, EpollEvent *> &socket_data)
+int UbsocketWakeupEvent::ProcessReadyEvents(struct epoll_event *events, int maxevents,std::unordered_map<int, EpollEvent *> &socket_data)
 {
     int num = 0;
     Locker sLock(ready_event_mutex_);

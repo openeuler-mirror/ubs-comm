@@ -25,10 +25,10 @@ public:
 
     /**
      * @brief Initialize ready event fd and add to epoll
-     * @param epoll_fd The epoll fd to add the ready event fd to
+     * @param epollFd The epoll fd to add the ready event fd to
      * @return 0: success; -1: failed
      */
-    int Initialize(int epoll_fd);
+    int Initialize(int epollFd);
 
     /**
      * @brief Clean up ready event fd
@@ -58,7 +58,7 @@ public:
     EpollEvent *GetReadyEvent() { return &ready_event_; }
 
 private:
-    int epoll_fd_ = -1;
+    int epollFd_ = -1;
     int ready_event_fd_ = -1;
     std::queue<int> ready_event_queue_;
     u_mutex_t *ready_event_mutex_ = nullptr;
