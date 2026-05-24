@@ -55,6 +55,7 @@
 #define DEFAULT_PROBE_BATCH          (10)
 #define UBSOCKET_PROBE_BATCH_MIN     (1)
 #define UBSOCKET_PROBE_BATCH_MAX     (500)
+#define TINY_QBUF_BLOCK_TYPE      "tiny"    // 4k
 #define DEFAULT_QBUF_BLOCK_TYPE   "default" // 8k
 #define SMALL_QBUF_BLOCK_TYPE     "small"   // 16k
 #define MEDIUM_QBUF_BLOCK_TYPE    "medium"  // 32k
@@ -71,7 +72,7 @@
 #define ENV_VAR_DEV_SRC_EID       "UBSOCKET_SRC_EID"
 #define ENV_VAR_RX_DEPTH          "UBSOCKET_RX_DEPTH"
 #define ENV_VAR_STATS             "UBSOCKET_STATS_CLI"
-#define ENV_VAR_BLOCK_TYPE        "UBSOCKET_BLOCK_TYPE"         // default, small, medium, large
+#define ENV_VAR_BLOCK_TYPE        "UBSOCKET_BLOCK_TYPE"         // tiny, default, small, medium, large
 #define ENV_VAR_POOL_INITIAL_SIZE "UBSOCKET_POOL_INITIAL_SIZE"  // MB
 #define ENV_VAR_POOL_MAX_SIZE     "UBSOCKET_POOL_MAX_SIZE"      // MB
 #define ENV_VAR_BUF_POOL_DEPTH    "UBSOCKET_BUF_POOL_DEPTH"
@@ -88,6 +89,7 @@
 #define ENV_PROBE_BATCH           "UBSOCKET_PROBE_BATCH"
 #define ENV_UB_EPOLL_ENABLE       "UBSOCKET_UB_EPOLL_ENABLE"
 #define ENV_UB_HANDSHAKE_MODE     "UBSOCKET_UB_HANDSHAKE_MODE"
+#define ENV_FLOW_CONTROL_ENABLE   "UBSOCKET_FLOW_CONTROL_ENABLE"
 
 #ifndef TCP_UB_SOCKET_HANDSHAKE
 #define TCP_UB_SOCKET_HANDSHAKE 144
@@ -468,7 +470,9 @@ protected:
 
         if ((env_ptr = getenv(ENV_VAR_BLOCK_TYPE)) != NULL) {
             ReadEnvVar(env_ptr, m_block_type_str, sizeof(m_block_type_str));
-            if (memcmp(m_block_type_str, DEFAULT_QBUF_BLOCK_TYPE, strlen(m_block_type_str)) == 0) {
+            if (memcmp(m_block_type_str, TINY_QBUF_BLOCK_TYPE, strlen(m_block_type_str)) == 0) {
+                m_block_type = BLOCK_SIZE_4K;
+            } else if (memcmp(m_block_type_str, DEFAULT_QBUF_BLOCK_TYPE, strlen(m_block_type_str)) == 0) {
                 m_block_type = BLOCK_SIZE_8K;
             } else if (memcmp(m_block_type_str, SMALL_QBUF_BLOCK_TYPE, strlen(m_block_type_str)) == 0) {
                 m_block_type = BLOCK_SIZE_16K;
@@ -601,8 +605,17 @@ protected:
             m_ub_epoll_enable = BoolVal::BoolConverter(env_ptr);
         }
 
+        if ((env_ptr = getenv(ENV_FLOW_CONTROL_ENABLE)) != nullptr) {
+            m_flow_control_enable = BoolVal::BoolConverter(env_ptr);
+        }
+
         SetUbTransMode();
         SetEnvUbHandshakeMode();
+    }
+
+    bool IsFlowControlEnable()
+    {
+        return m_flow_control_enable;
     }
 
     void SetUbTransMode()
@@ -691,6 +704,7 @@ protected:
     bool m_log_use_printf = true;
     bool m_use_brpc_zcopy = true;
     bool m_ub_epoll_enable = false;
+    bool m_flow_control_enable = true;
     dev_schedule_policy m_dev_schedule_policy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
     ub_trans_mode m_ub_trans_mode = ub_trans_mode::RM_TP;
     UBHandshakeMode m_ub_handshake_mode = UBHandshakeMode::TFO;

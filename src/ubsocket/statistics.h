@@ -819,10 +819,12 @@ class Listener {
 
     void ProcessTopoRequest(int fd, CLIControlHeader &header)
     {
+        // 当前无法支持以下场景，在 #65 追踪
+        // 1. 服务端为 RM_TP, 客户端为 RC_TP 场景
         umq_route_key_t route{};
         route.src_bonding_eid = header.srcEid;
         route.dst_bonding_eid = header.dstEid;
-        route.tp_type = UMQ_TP_TYPE_RTP;
+        route.tp_type = UMQ_TP_TYPE_CTP;
 
         umq_route_list_t route_list;
         int ret = umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
