@@ -87,7 +87,7 @@ inline int SubCommand::DoPrintHelp() noexcept
     /* print sub command */
     std::cout << "Params for sub command '" + name_ + "':" << std::endl;
     for (auto &rule : param_rules_) {
-        std::cout << "  --" << std::left << std::setw(16) << rule.first << "    " << rule.second.HelpString()
+        std::cout << "  --" << std::left << std::setw(16) << rule.first << "  " << rule.second.HelpString()
                   << std::endl;
     }
     std::cout << std::endl;
