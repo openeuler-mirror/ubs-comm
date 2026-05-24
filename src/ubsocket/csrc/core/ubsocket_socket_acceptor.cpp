@@ -13,6 +13,7 @@
 #include "ubsocket_core_types.h"
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket_set.h"
+#include "ubsocket_wakeup_event.h"
 
 namespace ock {
 namespace ubs {
@@ -92,8 +93,8 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
             EpollMapper *mapper = GetSocketEpollMapper(fd);
             int epoll_fd = mapper->QueryFirst();
             if (epoll_fd >= 0) {
-                // EventPoll *obj = ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
-                // 唤醒待补充
+                wakeup_event_.Initialize(epoll_fd);
+                wakeup_event_.WakeUpReadyEventFd(fd);
             }
             ubSocket_async_accept_info.asyncTaskNum.fetch_sub(1U);
             UBS_VLOG_DEBUG("async accept success. fd:%d\n", fd);
