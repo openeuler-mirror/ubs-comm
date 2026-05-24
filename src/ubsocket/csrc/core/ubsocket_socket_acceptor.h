@@ -14,6 +14,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_socket_helper.h"
+#include "ubsocket_wakeup_event.h"
 
 namespace ock {
 namespace ubs {
