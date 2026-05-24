@@ -30,8 +30,9 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
 
     event_data.u64 = event.data.u64;
     if (event_data.event_data.type == RUNNER_EVENT_TYPE_SHARE_JFR) {
-        auto pos = UmqSocket::jfr_main_umq_.find((int)event_data.event_data.data);
-        if (pos != UmqSocket::jfr_main_umq_.end()) {
+        Locker slock(mutex_);
+        auto pos = jfr_main_umq_.find((int)event_data.event_data.data);
+        if (pos != jfr_main_umq_.end()) {
             main_umq = pos->second;
         }
     } else if (event_data.event_data.type == RUNNER_EVENT_TYPE_SUB_UMQ_RX) {

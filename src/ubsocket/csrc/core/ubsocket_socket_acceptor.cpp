@@ -211,6 +211,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     SocketSet::Instance().OverrideSocket(new_fd, new_socket_obj);
 
     newSocket->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
+    //TODO: 优化建链成功的打印日志
     UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
     return UBS_OK;
 }

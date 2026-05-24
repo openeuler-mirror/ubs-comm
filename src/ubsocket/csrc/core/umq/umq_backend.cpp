@@ -21,7 +21,7 @@ bool UmqBackend::UMQ_INITED = false;
 Result UmqBackend::Init() noexcept
 {
     //UBS_VLOG_DEBUG("enter");
-
+    Result ret = UBS_OK;
     std::lock_guard<std::mutex> guard(UMQ_MUTEX);
     if (UMQ_INITED) {
         //UBS_VLOG_DEBUG("umq already initialized");
@@ -29,7 +29,11 @@ Result UmqBackend::Init() noexcept
     }
 
     /* initialize umq settting */
-    UmqSetting::Init();
+    ret = UmqSetting::Init();
+    if (ret != UBS_OK) {
+        UBS_VLOG_ERR("UmqSetting::Init() failed, ret: %d\n", ret);
+        return ret;
+    }
 
     /* init umq init config */
     umq_init_cfg_t umq_config;
@@ -45,40 +49,43 @@ Result UmqBackend::Init() noexcept
     umq_config.block_cfg.small_block_size = UmqSetting::IO_BLOCK_TYPE;
     umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DUMMY;
     umq_config.trans_info[0].mem_cfg.total_size = UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB * IO_SIZE_MB;
-    umq_config.trans_info[0].trans_mode = UMQ_TRANS_MODE_UB;
+    umq_config.trans_info[0].trans_mode = UmqSetting::UMQ_TRANS_MODE;
     umq_config.buf_pool_cfg.umq_buf_pool_max_size = UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB * IO_SIZE_MB;
     umq_config.buf_pool_cfg.tls_qbuf_pool_depth = UmqSetting::UMQ_BUF_POOL_DEPTH;
     umq_config.io_lock_free = false;
 
     /* init umq */
-    auto ret = UmqApi::umq_init(&umq_config);
+    ret = UmqApi::umq_init(&umq_config);
     if (ret != 0) {
         UBS_VLOG_ERR("umq_init() failed, ret: %d\n", ret);
-        // ResetBrpcAllocator();
-        // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
         return UBS_ERROR;
     }
 
-    // TODO Get from env
-    umq_trans_mode_t transMode = UMQ_TRANS_MODE_UB;
-    switch (transMode) {
-        // case UMQ_TRANS_MODE_IB:
-        //    ret = AddIbDev(umq_config.trans_info[0]);
-        //    break;
+    switch (UmqSetting::UMQ_TRANS_MODE) {
+        case UMQ_TRANS_MODE_IB:
+            // ret = AddIbDev(umq_config.trans_info[0]);
+            UBS_VLOG_ERR("Un-supported IB protocol.\n");
+            break;
         case UMQ_TRANS_MODE_UB:
             ret = AddUbDev(umq_config.trans_info[0]);
             break;
         default:
             UBS_VLOG_ERR("Un-supported protocol.\n");
-            // ResetBrpcAllocator();
-            // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
             return UBS_ERROR;
     }
     if (ret != 0) {
         UBS_VLOG_ERR("AddIbDev()/AddUbDev() failed, ret: %d\n", ret);
-        // ResetBrpcAllocator();
-        // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
         return UBS_ERROR;
+    }
+
+    if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY ||
+        UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
+        UmqSetting::UMQ_PROCESS_SOCKET_ID = SocketConnHelper::GetCurrentProcessSocketId();
+        UmqSetting::UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
+        if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
+            UBS_VLOG_ERR("Failed get socket id in cpu affinity policy.\n");
+            return UBS_ERROR;
+        }
     }
 
     UMQ_INITED = true;
@@ -103,16 +110,25 @@ void UmqBackend::UnInit() noexcept
     UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
 }
 
-int UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
+Result UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
 {
-    const char *dev_info = !UmqSetting::UMQ_DEV_NAME.empty() ? UmqSetting::UMQ_DEV_NAME.data() : nullptr;
-    /*if (dev_info == nullptr) {
-        if (FindDevName() != 0) {
-            RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to find bonding dev, need active input.\n");
-            return -1;
+    if (UmqSetting::UMQ_DEV_NAME.empty()) {
+        if (FindDevName() != UBS_OK) {
+            UBS_VLOG_ERR("Failed to find bonding dev, need active input.\n");
+            return UBS_ERROR;
         }
     }
-    dev_info = GetDevNameStr();*/
+    if (UmqSetting::UMQ_DEV_NAME.length() >= DEV_NAME_STR_LEN_MAX) {
+        UBS_VLOG_ERR("Device name too long.\n");
+        return UBS_ERROR;
+    }
+
+    char dev_info[DEV_NAME_STR_LEN_MAX];
+    strncpy(dev_info, UmqSetting::UMQ_DEV_NAME.c_str(), DEV_NAME_STR_LEN_MAX - 1);
+    dev_info[DEV_NAME_STR_LEN_MAX - 1] = '\0';
+
+    trans_info.mem_cfg.total_size = UmqSetting::UMQ_IO_TOTAL_SIZE_MB * IO_SIZE_MB;
+    trans_info.trans_mode = UMQ_TRANS_MODE_UB;
     int ret = sprintf(trans_info.dev_info.dev.dev_name, "%s", dev_info);
     if (ret < 0 || ret >= UMQ_DEV_NAME_SIZE) {
         UBS_VLOG_ERR("Failed to sprintf_s device name\n");
@@ -125,7 +141,7 @@ int UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
     } else {
         trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
         trans_info.dev_info.eid.eid = UmqSetting::UMQ_LOCAL_EID;
-        // isBonding = true;
+        UmqSetting::UMQ_IS_BONDING = true;
     }
 
     ret = UmqApi::umq_dev_add(&trans_info);
@@ -134,8 +150,46 @@ int UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
         return -1;
     }
 
-    // TODO RegisterAsyncEvent
+    // TODO RegisterAsyncEvent AE事件上报
     // return RegisterAsyncEvent(trans_info);
+    return UBS_OK;
+}
+
+Result UmqBackend::FindDevName()
+{
+    umq_trans_mode_t transMode = UMQ_TRANS_MODE_UB;
+    int devCount = 0;
+    umq_dev_info_t *umqDevInfo = UmqApi::umq_dev_info_list_get(transMode, &devCount);
+    if (umqDevInfo == nullptr || devCount <= 0) {
+        UBS_VLOG_ERR("umq_dev_info_list_get() failed, ret: %p, dev count: %d\n", umqDevInfo, devCount);
+        return UBS_ERROR;
+    }
+
+    int index = 0;
+    int bondingIndex = -1;
+    for (; index < devCount; ++index) {
+        const char *name = umqDevInfo[index].dev_name;
+        if (strcmp(name, "bonding_dev_0") == 0) {
+            bondingIndex = index;
+            break;
+        }
+        if ((bondingIndex == -1) && (strstr(name, "bonding_dev_") != nullptr)) {
+            bondingIndex = index;
+        }
+    }
+    if ((bondingIndex == -1) || (bondingIndex > devCount) || (umqDevInfo[bondingIndex].ub.eid_cnt == 0)) {
+        UBS_VLOG_ERR("Failed to find bonding dev in the environment.\n");
+        return UBS_ERROR;
+    }
+
+    UmqSetting::UMQ_DEV_NAME = umqDevInfo[bondingIndex].dev_name;
+    if (UmqSetting::UMQ_DEV_NAME.size() >= UMQ_DEV_NAME_SIZE) {
+        UBS_VLOG_ERR("Failed to set device name, name size: %d\n", UmqSetting::UMQ_DEV_NAME.size());
+        return UBS_ERROR;
+    }
+
+    UmqSetting::UMQ_LOCAL_EID = umqDevInfo[bondingIndex].ub.eid_list[0].eid;
+    UmqApi::umq_dev_info_list_free(transMode, umqDevInfo);
     return UBS_OK;
 }
 } // namespace umq

@@ -142,9 +142,22 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 //#endif
 
     /* step5: load brpc symbol for zcopy */
+    /* step4: load brpc symbol for zcopy */
+    // TODO: UbsZcopyAdapter 中成员变量原在 context 中, 重构后需要在一个地方保存
     if (GlobalSetting::USE_BRPC_ZCOPY) {
         ZeroCopyPrepare();
     }
+
+    /* step5: umq backend init */
+#ifdef UMQ_BACKEND_ENABLED
+    result = umq::UmqBackend::Init();
+    if (result != UBS_OK) {
+        // ResetBrpcAllocator();
+        // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
+        UBS_VLOG_ERR("umq backend init failed, ret: %d\n", result);
+        return UBS_ERROR;
+    }
+#endif
 
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;

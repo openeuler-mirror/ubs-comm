@@ -10,6 +10,7 @@
  */
 #include "umq_socket.h"
 #include "umq_eid_table.h"
+#include "umq_epoll_runner_ops.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -22,9 +23,7 @@ Result UmqSocket::Initialize() noexcept
 
 void UmqSocket::UnInitialize() noexcept {}
 
-std::unordered_map<int, uint64_t> UmqSocket::jfr_main_umq_ = {};
-
-Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports)
+Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used)
 {
     if (umq_handle_ != UMQ_INVALID_HANDLE) {
         UBS_VLOG_ERR("Create umq on a created umq.\n");
@@ -33,8 +32,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
 
     umq_create_option_t queue_cfg;
     memset(&queue_cfg, 0, sizeof(queue_cfg));
-    // TODO：增加环境变量
-    queue_cfg.trans_mode = UMQ_TRANS_MODE_UB;
+    queue_cfg.trans_mode = UmqSetting::UMQ_TRANS_MODE;
     queue_cfg.create_flag = UMQ_CREATE_FLAG_TX_DEPTH | UMQ_CREATE_FLAG_RX_DEPTH | UMQ_CREATE_FLAG_RX_BUF_SIZE |
                             UMQ_CREATE_FLAG_TX_BUF_SIZE | UMQ_CREATE_FLAG_QUEUE_MODE | UMQ_CREATE_FLAG_TP_MODE |
                             UMQ_CREATE_FLAG_TP_TYPE | UMQ_CREATE_FLAG_UMQ_CTX;
@@ -46,7 +44,8 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     queue_cfg.mode = UMQ_MODE_INTERRUPT;
     // 共享 JFR、AE 事件依赖 umq_ctx.
     queue_cfg.umq_ctx = raw_socket_;
-    if (IsBonding()) {
+    // TODO: is_bonding 待确认如何设置到 socketbase
+    if (UmqSetting::UMQ_IS_BONDING) {
         queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         queue_cfg.used_ports = used_ports;
     }
@@ -64,9 +63,11 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     }
 
     // TODO: 待补充指定 ip 和 bonging name 的情况
-    umq_eid_t local_eid = *conn_eid;
+    umq_eid_t local_eid;
+    if (!UmqSetting::UMQ_DEV_IP.empty()) {
+        // TODO: 待补充指定 ip 情况
+        UBS_VLOG_ERR("Unsupported to set umq ip address\n");
 #ifdef ENABLED
-    if (context->GetDevIpStr() != nullptr) {
         if (context->IsDevIpv6()) {
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_IPV6;
             if (strcpy_s(queue_cfg.dev_info.ipv6.ip_addr, UMQ_IPV6_SIZE, context->GetDevIpStr()) != EOK) {
@@ -80,20 +81,21 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
                 return ubsocket::Error::kUBSOCKET_SET_DEV_INFO;
             }
         }
-    } else if (context->GetDevNameStr() != nullptr) {
-        if (strcpy_s(queue_cfg.dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, context->GetDevNameStr()) != EOK) {
-            UBS_VLOG_ERR("Failed to strcpy_s device name\n");
-            return ubsocket::Error::kUBSOCKET_SET_DEV_INFO;
+#endif
+    } else if (!UmqSetting::UMQ_DEV_NAME.empty()) {
+        if (strcpy(queue_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_DEV_NAME.c_str()) == nullptr) {
+            UBS_VLOG_ERR("Failed to strcpy device name\n");
+            return UBS_NEW_SOCKET_FD;
         }
-        if (!context->IsBonding()) {
+        if (UmqSetting::UMQ_IS_BONDING) {
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
-            queue_cfg.dev_info.dev.eid_idx = context->GetEidIdx();
+            queue_cfg.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
 
-            if (GetDevEid(queue_cfg.dev_info.dev.dev_name, context->GetEidIdx(), &local_eid) != 0) {
-                UBS_VLOG_ERR("Failed to get eid by dev name:%s and eid index:%d \n", context->GetDevNameStr(),
-                             context->GetEidIdx());
+            if (GetDevEid(queue_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_EID_INDEX, &local_eid) != 0) {
+                UBS_VLOG_ERR("Failed to get eid by dev name:%s and eid index:%d \n", UmqSetting::UMQ_DEV_NAME,
+                             UmqSetting::UMQ_EID_INDEX);
             }
-            m_conn_info.conn_eid = local_eid;
+            *conn_eid_used = local_eid;
         } else {
             // init use bonding dev
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
@@ -101,25 +103,17 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
             local_eid = *conn_eid;
         }
     } else {
-        if (strcpy(queue_cfg.dev_info.dev.dev_name, UMQ_DEV_NAME_SIZE, "bonding_dev_0") != EOK) {
-            UBS_VLOG_ERR("Failed to strcpy device name\n");
+        if (strcpy(queue_cfg.dev_info.dev.dev_name, "bonding_dev_0") == nullptr) {
+            UBS_VLOG_ERR("Failed to strcpy device name, errno: %d\n", errno);
             return UBS_SET_DEV_INFO;
         }
-        IsBonding if (context->IsBonding())
-        {
+        if (UmqSetting::UMQ_IS_BONDING) {
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
             queue_cfg.dev_info.eid.eid = *conn_eid;
         }
     }
-#endif
 
-    if (strcpy(queue_cfg.dev_info.dev.dev_name, "bonding_dev_0") == nullptr) {
-        UBS_VLOG_ERR("Failed to strcpy device name, errno: %d\n", errno);
-        return UBS_SET_DEV_INFO;
-    }
-    queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
-    queue_cfg.dev_info.eid.eid = *conn_eid;
-
+    // trans_mode_ 默认为 RC_TP 待补充环境变量
     static const char *trans_mode_str[RC_CTP + 1] = {"RC_TP", "RM_TP", "RM_CTP", "RC_CTP"};
     UBS_VLOG_INFO("trans_mode result is: %s\n", trans_mode_str[trans_mode_]);
     if (trans_mode_ == RC_TP) {
@@ -148,6 +142,9 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
         UBS_VLOG_ERR("Failed to init share jfr rx queue for fd: %d \n", raw_socket_);
         return UBS_INIT_SHARED_JFR_RX_QUEUE;
     }
+
+    // TODO: Context::FetchAdd();
+
     return UBS_OK;
 }
 
@@ -156,6 +153,7 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
         return UmqApi::umq_create(cfg);
     }
+    UBS_VLOG_INFO("UBS_ENABLE_SHARE_JFR = true \n");
     Locker sLock(UmqEidTable::Instance().GetMainMutex());
     uint64_t main_umq = GetOrCreateMainUmq(cfg, local_eid);
     if (main_umq == UMQ_INVALID_HANDLE) {
@@ -189,8 +187,8 @@ uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *loca
     }
 
     if (main_umqs.empty()) {
-        UBS_VLOG_ERR("Main umq list is empty, local eid:" EID_FMT ", ret: %llu\n",
-                     EID_ARGS(*localEid), static_cast<unsigned long long>(UMQ_INVALID_HANDLE));
+        UBS_VLOG_ERR("Main umq list is empty, local eid:" EID_FMT ", ret: %llu\n", EID_ARGS(*localEid),
+                     static_cast<unsigned long long>(UMQ_INVALID_HANDLE));
         return UMQ_INVALID_HANDLE;
     }
     // eid 对应多个不同 UB 传输模式的主 umq. 当前实现保证此时 main_umqs 长度为 1
@@ -292,8 +290,8 @@ Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
     return 0;
 }
 
-Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock,
-                                    int epoll_fd, struct epoll_event *event)
+Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
+                                     struct epoll_event *event)
 {
     if (UNLIKELY(epoll_fd < 0 || umq_handle_ <= 0)) {
         UBS_VLOG_ERR("epoll_fd or umq_handle invalid, epoll_fd: %d, umq_handle: %d\n", epoll_fd, umq_handle_);
@@ -316,15 +314,12 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     shared_jfr_event.events = EPOLLIN | EPOLLET;
     shared_jfr_event.data.u64 = event_data.u64;
 
-    Locker sLock(mutex_);
-    if (UNLIKELY(jfr_main_umq_.count(share_jfr_fd) == 0)) {
-        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, share_jfr_fd, &shared_jfr_event) < 0) {
-            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
-            return -1;
-        }
-        jfr_main_umq_.emplace(share_jfr_fd, main_umq);
+    UmqEpollRunnerOps *ops = (UmqEpollRunnerOps *)EpollRunnerFactory::GetInstance(this->Type()).GetOps();
+    if (UNLIKELY(ops == nullptr || ops->InsertJfrMainUmq(
+        share_jfr_fd, main_umq, epoll_fd, &shared_jfr_event) < 0)) {
+        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
+        return -1;
     }
-    sLock.Unlock();
 
     //2. add sub umq rx fd
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
@@ -392,8 +387,7 @@ int UmqSocket::AddQbuf(umq_buf_t *qbuf)
 {
     int enqueue_ret = 0;
     if (rxQueue == nullptr || (enqueue_ret = rxQueue->Enqueue(qbuf)) != 0) {
-        UBS_VLOG_ERR("AddQbuf failed, fd: %d, ret: %d\n",
-            raw_socket_, rxQueue == nullptr ? -1 : enqueue_ret);
+        UBS_VLOG_ERR("AddQbuf failed, fd: %d, ret: %d\n", raw_socket_, rxQueue == nullptr ? -1 : enqueue_ret);
         return -1;
     }
 
@@ -402,8 +396,7 @@ int UmqSocket::AddQbuf(umq_buf_t *qbuf)
 int UmqSocket::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
 {
     if (rxQueue == nullptr) {
-        UBS_VLOG_ERR("GetAndPopQbuf failed, rx queue is null, fd: %d, ret: %d\n",
-            raw_socket_, -1);
+        UBS_VLOG_ERR("GetAndPopQbuf failed, rx queue is null, fd: %d, ret: %d\n", raw_socket_, -1);
         return -1;
     }
 
@@ -447,6 +440,26 @@ uint32_t UmqSocket::getLeftPostRxNum(uint64_t umq_handle)
         UBS_VLOG_INFO("Successfully get umq cfg, left_post_rx_num = %u\n", left_post_rx_num);
     }
     return left_post_rx_num;
+}
+
+Result UmqSocket::GetDevEid(char *dev_name, uint32_t eid_idx, umq_eid_t *eid)
+{
+    umq_dev_info_t umq_dev_info = {};
+    int ret = UmqApi::umq_dev_info_get(dev_name, UMQ_TRANS_MODE_UB, &umq_dev_info);
+    if (ret != 0) {
+        UBS_VLOG_ERR("umq_dev_info_get() failed, ret: %d\n", ret);
+        return ret;
+    }
+
+    for (uint32_t i = 0; i < umq_dev_info.ub.eid_cnt; ++i) {
+        if (umq_dev_info.ub.eid_list[i].eid_index == eid_idx) {
+            *eid = umq_dev_info.ub.eid_list[i].eid;
+            return UBS_OK;
+        }
+    }
+
+    UBS_VLOG_ERR("Failed to find eid index in device info, eid_idx: %u, ret: %d\n", eid_idx, -1);
+    return UBS_INVALID_PARAM;
 }
 
 } // namespace umq

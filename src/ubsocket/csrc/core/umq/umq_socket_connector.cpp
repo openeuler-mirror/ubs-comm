@@ -11,8 +11,8 @@
 
 #include <netinet/tcp.h>
 
-#include "umq_socket_connector.h"
-#include "umq_eid_table.h"
+#include "core/umq/umq_eid_table.h"
+#include "core/umq/umq_socket_connector.h"
 
 namespace ock {
 namespace ubs {
@@ -133,8 +133,8 @@ Result UmqConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
         UBS_VLOG_ERR("Failed to negotiate in connect,Peer IP:%s, fd: %d\n", umq_conn_info_.peer_ip.c_str(), new_fd);
         return UBS_ERROR;
     }
-    umq_topo_type_t topo_type = umq_socket->GetTopoType();
-    if (SocketConnHelper::SendSocketData(new_fd, &topo_type, sizeof(umq_topo_type_t), CONTROL_PLANE_TIMEOUT_MS) !=
+
+    if (SocketConnHelper::SendSocketData(new_fd, &topo_type_, sizeof(umq_topo_type_t), CONTROL_PLANE_TIMEOUT_MS) !=
         sizeof(umq_topo_type_t)) {
         UBS_VLOG_ERR("send umq topo type failed\n");
         return UBS_ERROR;
@@ -191,9 +191,9 @@ Result UmqConnectorOps::BuildNegotiateReq(NegotiateReq *req, const UmqSocketPtr 
     umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
     dev_schedule_policy schedulePolicy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
     req->magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
-    req->trans_mode = umq_socket->GetTransMode();
-    req->is_bonding = umq_socket->IsBonding() ? 1 : 0;
-    req->enable_share_jfr = 0;
+    req->trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
+    req->is_bonding = UmqSetting::UMQ_IS_BONDING ? 1 : 0;
+    req->enable_share_jfr = GlobalSetting::UBS_ENABLE_SHARE_JFR ? 1 : 0;
     req->schedule_policy = static_cast<uint8_t>(schedulePolicy);
     req->has_socket_id = ((schedulePolicy == dev_schedule_policy::CPU_AFFINITY) ||
                           (schedulePolicy == dev_schedule_policy::CPU_AFFINITY_PRIORITY)) ?
@@ -226,9 +226,9 @@ Result UmqConnectorOps::FillLocalSocketIdsForNegotiate(const UmqSocketPtr &umq_s
 
 Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
 {
-    // TODO: 待增加从环境变量中获取 和 亲和策略
     umq_eid_t local_eid = UmqSetting::UMQ_LOCAL_EID;
-    dev_schedule_policy schedule_policy = dev_schedule_policy::ROUND_ROBIN;
+    dev_schedule_policy schedule_policy = UmqSetting::UMQ_DEV_SCHEDULE_POLICY;
+    umq_conn_info_.conn_eid = local_eid;
     NegotiateRsp rsp{};
     if (SocketConnHelper::RecvSocketData(raw_fd_, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) !=
         static_cast<int>(sizeof(rsp))) {
@@ -241,12 +241,10 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
                      umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_ERROR;
     }
-    // TODO: 待增加从环境变量中获取 trans mode
-    ub_trans_mode local_trans_mode = umq_socket->GetTransMode();
+    ub_trans_mode local_trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
     if (rsp.peer_trans_mode != local_trans_mode) {
         umq_socket->SetTransMode(rsp.peer_trans_mode < local_trans_mode ? rsp.peer_trans_mode : local_trans_mode);
     }
-    use_round_robin_ = true;
     if (schedule_policy == dev_schedule_policy::CPU_AFFINITY ||
         schedule_policy == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
         UBS_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY: %d in connect, fd: %d\n",
@@ -254,7 +252,7 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
         use_round_robin_ = false;
     }
 
-    if (umq_socket->IsBonding()) {
+    if (UmqSetting::UMQ_IS_BONDING) {
         // 接收服务器的id
         int receive_server_socket_id = 0;
         if (SocketConnHelper::RecvSocketData(raw_fd_, &receive_server_socket_id, sizeof(receive_server_socket_id),
@@ -262,14 +260,14 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
             UBS_VLOG_ERR("Failed to get server socket ids in connect");
             return UBS_ERROR;
         }
-        server_socket_id_for_affinity_ = receive_server_socket_id;
+        peer_socket_id_ = receive_server_socket_id;
 
         if (ConnectExchangeSocketIDs() != 0) {
             UBS_VLOG_ERR("Failed to send all socket ids in DoConnect");
         }
         umq_conn_info_.peer_eid = rsp.local_eid;
 
-        if (DoRoute(&local_eid, &umq_conn_info_.peer_eid, &conn_route_, use_round_robin_, &back_route_) != 0) {
+        if (DoRoute(&local_eid, &umq_conn_info_.peer_eid) != 0) {
             UBS_VLOG_ERR("Failed to get route list in connect, fd: %d\n", raw_fd_);
             return UBS_ERROR;
         }
@@ -288,7 +286,7 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
 
         umq_conn_info_.peer_eid = conn_route_.dst_eid;
 
-        if (umq_socket->GetTopoType() == UMQ_TOPO_TYPE_FULLMESH_1D) {
+        if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
             umq_conn_info_.conn_eid = conn_route_.src_eid;
         } else {
             umq_conn_info_.conn_eid = local_eid;
@@ -336,46 +334,42 @@ Result UmqConnectorOps::ConnectExchangeSocketIDs(void)
     return 0;
 }
 
-Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid, umq_route_t *conn_route_,
-                                bool use_round_robin, umq_route_t *back_route_)
+Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid)
 {
-#ifdef ENABLED
-    umq_route_list_t filteredList = {};
-    if (GetDevRouteList(srcEid, dstEid, filteredList) != 0) {
-        UBS_VLOG_ERR(ubsocket::UBSocket, "Failed to get dev route list\n");
-        return -1;
+    umq_route_list_t filtered_list = {};
+    if (GetDevRouteList(src_eid, dst_eid, filtered_list) != 0) {
+        UBS_VLOG_ERR("Failed to get dev route list\n");
+        return UBS_ERROR;
     }
-    mTopoType = filteredList.topo_type;
-    UBS_VLOG_INFO("Topo type's value is: %d\n", mTopoType);
-    if (mTopoType == UMQ_TOPO_TYPE_FULLMESH_1D) {
-        if (GetConnEid(filteredList, dstEid, conn_route_, useRoundRobin) != 0) {
-            UBS_VLOG_ERR(ubsocket::UBSocket, "Failed to get connect eid\n");
-            return -1;
+    topo_type_ = filtered_list.topo_type;
+    UBS_VLOG_INFO("Topo type's value is: %d\n", topo_type_);
+    if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
+        if (GetConnEid(filtered_list, dst_eid) != 0) {
+            UBS_VLOG_ERR("Failed to get connect eid\n");
+            return UBS_ERROR;
         }
-        // 清空back
-        *back_route_ = umq_route_t{};
+        back_route_ = umq_route_t{};
     } else {
-        std::vector<umq_route_t> mainRoutes;
-        std::vector<umq_route_t> backRoutes;
-        umq_route_t connMainRoute;
-        umq_route_t connBackRoute;
-        int getAffinityRes = GetCpuAffinityUmqRoute(filteredList, mainRoutes, backRoutes);
-        if (getAffinityRes != 0) {
-            UBS_VLOG_ERR(ubsocket::UBSocket, "Failed to get cpu affinity umq route\n");
-            // 报错时清空
-            *conn_route_ = umq_route_t{};
-            *back_route_ = umq_route_t{};
-            return -1;
+        std::vector<umq_route_t> main_routes;
+        std::vector<umq_route_t> back_routes;
+        umq_route_t conn_main_route;
+        umq_route_t conn_back_route;
+        int get_affinity_res = GetCpuAffinityUmqRoute(filtered_list, main_routes, back_routes);
+        if (get_affinity_res != 0) {
+            UBS_VLOG_ERR("Failed to get cpu affinity umq route\n");
+            conn_route_ = umq_route_t{};
+            back_route_ = umq_route_t{};
+            return UBS_ERROR;
         }
         // 在客户端侧把不亲数组存起来
-        mBackRoutes = backRoutes;
+        back_route_list_ = back_routes;
         // 优先在mainRoutes里轮询
-        RRChooseMainRoute(mainRoutes, dstEid, connMainRoute, connBackRoute);
-        *conn_route_ = connMainRoute;
-        *back_route_ = connBackRoute;
-        m_route_backup_src_eid = connBackRoute.src_eid;
+        RRChooseMainRoute(main_routes, dst_eid, conn_main_route, conn_back_route);
+        conn_route_ = conn_main_route;
+        back_route_ = conn_back_route;
+        route_backup_src_eid_ = conn_back_route.src_eid;
+        route_backup_dst_eid_ = conn_back_route.dst_eid;
     }
-#endif
     return UBS_OK;
 }
 
@@ -386,12 +380,11 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     Result ret;
     auto socket = RefConvert<UmqSocket, Socket>(umq_socket);
     // CreateLocalUmq
-    if (umq_socket->GetTopoType() == UMQ_TOPO_TYPE_FULLMESH_1D) {
-        ret = umq_socket->CreateLocalUmq(&umq_conn_info_.conn_eid, used_ports);
+    if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
+        ret = umq_socket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid));
     } else {
-        // 获取 dev src eid
-        // umq_eid_t localEid = umq_socket->GetDevSrcEid();
-        ret = umq_socket->CreateLocalUmq(&umq_conn_info_.conn_eid, used_ports);
+        umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
+        ret = umq_socket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid));
     }
     if (ret != UBS_OK || SocketBase::GenerateSocketCommOps(socket) != UBS_OK) {
         UBS_VLOG_ERR("Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
@@ -445,7 +438,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     umq_socket->SetBindRemote(true);
 
     if (GlobalSetting::UBS_ENABLE_SHARE_JFR) {
-        // 强依赖当前实现，一个 eid 对应多个 UB 传输模式不同的 umq. 如果后续逻辑有变更，需同步修改。
+        // 强依赖当前实现，一个 eid 只对应一个主 umq. 如果后续逻辑有变更，需同步修改。
         auto main_umq = UmqEidTable::Instance().GetFirst(umq_conn_info_.conn_eid, umq_socket->GetTransMode());
         if (main_umq == nullptr) {
             UBS_VLOG_ERR("The main umq is removed by other thread.\n");
@@ -453,9 +446,9 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
         }
 
         return main_umq->EnsurePrefilled([umq_socket, this]() {
-            if (umq_socket->PrefillRx() != 0) {
+            if (umq_socket->PrefillRx() != UBS_OK) {
                 UBS_VLOG_ERR("Failed to fill rx buffer to main umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                             EID_ARGS(this->umq_conn_info_.peer_eid), this->umq_conn_info_.peer_ip.c_str(), umq_socket->raw_socket_);
+                             EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
                 return UBS_ERROR;
             }
             return UBS_OK;
@@ -472,6 +465,214 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     return UBS_OK;
 }
 
+/**
+ * @brief Get device route list via umq_get_route_list with cache support
+ */
+Result UmqConnectorOps::GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_t *dst_eid,
+                                        umq_route_list_t &filtered_list)
+{
+    if (RouteListRegistry::Instance().GetRouteList(*dst_eid, filtered_list)) {
+        if (filtered_list.route_num > 0) {
+            return UBS_OK;
+        }
+    }
+
+    // TODO: UmqSetting 增加 umq_trans_mode_t
+    ub_trans_mode trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
+    umq_tp_type_t tp_type;
+    if (trans_mode == RC_TP) {
+        tp_type = UMQ_TP_TYPE_RTP;
+    } else if (trans_mode == RM_TP) {
+        tp_type = UMQ_TP_TYPE_RTP;
+    } else if (trans_mode == RM_CTP) {
+        tp_type = UMQ_TP_TYPE_CTP;
+    } else if (trans_mode == RC_CTP) {
+        tp_type = UMQ_TP_TYPE_CTP;
+    } else {
+        tp_type = UMQ_TP_TYPE_RTP;
+    }
+
+    umq_route_key_t route;
+    (void)memcpy(&route.src_bonding_eid, src_eid, sizeof(umq_eid_t));
+    (void)memcpy(&route.dst_bonding_eid, dst_eid, sizeof(umq_eid_t));
+    route.tp_type = tp_type;
+
+    umq_route_list_t route_list;
+    int ret = UmqApi::umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
+    if (ret != 0) {
+        UBS_VLOG_ERR("umq_get_route_list() failed, ret: %d\n", ret);
+        return -1;
+    }
+
+    filtered_list = route_list;
+    if (filtered_list.route_num == 0) {
+        UBS_VLOG_ERR("Failed to get urma topo is zero\n");
+        return -1;
+    }
+
+    RouteListRegistry::Instance().RegisterOrReplaceRouteList(*dst_eid, filtered_list);
+    return 0;
+}
+
+Result UmqConnectorOps::GetConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid)
+{
+    if (!use_round_robin_) {
+        UBS_VLOG_DEBUG("use_round_robin is false\n");
+        std::set<uint32_t> unique_chip_ids;
+        for (uint32_t i = 0; i < route_list.route_num; ++i) {
+            unique_chip_ids.insert(route_list.routes[i].src_port.bs.chip_id);
+        }
+        std::vector<uint32_t> chipId_list(unique_chip_ids.begin(), unique_chip_ids.end());
+        uint32_t target_chip_id =
+            GetTargetChipId(UmqSetting::UMQ_ALL_SOCKET_IDS, chipId_list, UmqSetting::UMQ_PROCESS_SOCKET_ID);
+        if (target_chip_id == UINT32_MAX) {
+            return GetRoundRobinConnEid(route_list, dst_eid);
+        }
+        // 查找匹配的eid对
+        for (uint32_t i = 0; i < route_list.route_num; ++i) {
+            if (target_chip_id == route_list.routes[i].src_port.bs.chip_id) {
+                conn_route_ = route_list.routes[i];
+                return UBS_OK;
+            }
+        }
+        UBS_VLOG_ERR("Failed to find umq dev\n");
+        return UBS_ERROR;
+    } else {
+        return GetRoundRobinConnEid(route_list, dst_eid);
+    }
+    return UBS_OK;
+}
+
+uint32_t UmqConnectorOps::GetTargetChipId(const std::vector<uint32_t> &socket_ids,
+                                          const std::vector<uint32_t> &chip_id_list, int process_socket_id)
+{
+    auto it = std::find(socket_ids.begin(), socket_ids.end(), process_socket_id);
+    if (it == socket_ids.end()) {
+        return UINT32_MAX; // 错误标识
+    }
+
+    size_t index = std::distance(socket_ids.begin(), it);
+    if (index >= chip_id_list.size()) {
+        return UINT32_MAX; // 索引越界
+    }
+
+    return chip_id_list[index];
+}
+
+// Round_Robin
+Result UmqConnectorOps::GetRoundRobinConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid)
+{
+    // 获取起始索引
+    uint32_t start_index = 0;
+    GetBondingEidMapIndex(*dst_eid, start_index);
+
+    // 确保索引在有效范围内
+    start_index = start_index % route_list.route_num;
+
+    // 从起始索引开始轮询查找
+    bool found = false;
+    for (uint32_t offset = 0; offset < route_list.route_num; ++offset) {
+        uint32_t current_index = (start_index + offset) % route_list.route_num;
+        conn_route_ = route_list.routes[current_index];
+        found = true;
+        start_index = (current_index + 1) % route_list.route_num; // 更新下次起始位置
+        break;
+    }
+
+    // 更新下一个轮询位置
+    EidRegistry::Instance().RegisterOrReplaceEidIndex(*dst_eid, start_index);
+
+    if (!found) {
+        UBS_VLOG_ERR("Failed to find umq dev\n");
+        return UBS_ERROR;
+    }
+
+    return UBS_OK;
+}
+
+void UmqConnectorOps::GetBondingEidMapIndex(const umq_eid_t &dst_eid, uint32_t &index)
+{
+    if (!EidRegistry::Instance().IsRegisteredEidIndex(dst_eid)) {
+        EidRegistry::Instance().RegisterOrReplaceEidIndex(dst_eid, 0);
+    }
+
+    EidRegistry::Instance().GetEidIndex(dst_eid, index);
+}
+
+// CLOS组网 通过亲和性选择 Client端调用
+Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std::vector<umq_route_t> &main_routes,
+                                               std::vector<umq_route_t> &back_routes)
+{
+    main_routes.clear();
+    back_routes.clear();
+    uint32_t process_chip_Id = 0;
+    uint32_t peer_chip_id = 0;
+
+    // 本端
+    std::set<uint32_t> process_chip_ids;
+    for (uint32_t i = 0; i < route_list.route_num; ++i) {
+        process_chip_ids.insert(route_list.routes[i].src_port.bs.chip_id);
+    }
+    std::vector<uint32_t> process_chip_id_list(process_chip_ids.begin(), process_chip_ids.end());
+    process_chip_Id =
+        GetTargetChipId(UmqSetting::UMQ_ALL_SOCKET_IDS, process_chip_id_list, UmqSetting::UMQ_PROCESS_SOCKET_ID);
+    UBS_VLOG_INFO("process_chip_Id: %u\n", process_chip_Id);
+
+    // 对端
+    std::set<uint32_t> peer_chip_ids;
+    for (uint32_t i = 0; i < route_list.route_num; ++i) {
+        peer_chip_ids.insert(route_list.routes[i].dst_port.bs.chip_id);
+    }
+    std::vector<uint32_t> peer_chip_id_list(peer_chip_ids.begin(), peer_chip_ids.end());
+    peer_chip_id = GetTargetChipId(peer_all_socket_ids_, peer_chip_id_list, peer_socket_id_);
+    UBS_VLOG_INFO("peer_chip_id: %u\n", peer_chip_id);
+
+    for (uint32_t i = 0; i < route_list.route_num; ++i) {
+        if (route_list.routes[i].src_port.bs.chip_id == process_chip_Id &&
+            route_list.routes[i].dst_port.bs.chip_id == peer_chip_id) {
+            main_routes.push_back(route_list.routes[i]);
+        }
+    }
+
+    for (uint32_t i = 0; i < route_list.route_num; ++i) {
+        if (route_list.routes[i].src_port.bs.chip_id != process_chip_Id &&
+            route_list.routes[i].dst_port.bs.chip_id != peer_chip_id) {
+            back_routes.push_back(route_list.routes[i]);
+        }
+    }
+
+    if (!main_routes.empty() && !back_routes.empty()) {
+        UBS_VLOG_INFO("Find umq route successfully\n");
+        return UBS_OK;
+    }
+
+    UBS_VLOG_ERR("Failed to find umq route\n");
+    return UBS_ERROR;
+}
+
+void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &main_routes, const umq_eid_t *dst_eid,
+                                        umq_route_t &conn_main_route, umq_route_t &conn_back_route)
+{
+    // 获取起始索引
+    uint32_t start_index = 0;
+    GetBondingEidMapIndex(*dst_eid, start_index);
+
+    // 确保索引在有效范围内
+    start_index = start_index % main_routes.size();
+
+    // 从起始索引开始轮询查找
+    conn_main_route = main_routes[start_index];
+    start_index = (start_index + 1) % main_routes.size(); // 更新下次起始位置
+    conn_back_route = main_routes[start_index];
+
+    // 更新下一个轮询位置
+    EidRegistry::Instance().RegisterOrReplaceEidIndex(*dst_eid, start_index);
+
+    UBS_VLOG_INFO("main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", conn_main_route.src_port.bs.chip_id,
+                  conn_main_route.src_port.bs.die_id, conn_main_route.src_port.bs.port_idx);
+    UBS_VLOG_INFO("back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", conn_back_route.src_port.bs.chip_id,
+                  conn_back_route.src_port.bs.die_id, conn_back_route.src_port.bs.port_idx);
+}
 } // namespace umq
 } // namespace ubs
 } // namespace ock
