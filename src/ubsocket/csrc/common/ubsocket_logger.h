@@ -61,9 +61,10 @@ public:
     void SetExternalLogFunction(ExternalLog func);
 
     void Log(int level, const std::ostringstream &oss, const char *filename, int line) const;
-    void Logv(int level, const char *filename, int line, const char *format, ...) const
+    void Logv(int level, const char *filename, int line, const char *func, const char *format, ...) const
     {
         std::ostringstream oss;
+        oss << "[UBSOCKET " << func << "] ";
         char buffer[1024L];
 
         va_list va;
@@ -158,11 +159,12 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
 } // namespace ubs
 } // namespace ock
 
-#define UBS_LOG(level, __format, ...)                                                                          \
-    do {                                                                                                       \
-        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                                         \
-            ock::ubs::Logger::Instance().Logv(level, UBS_LOG_FILENAME, UBS_LOG_LINE, __format, ##__VA_ARGS__); \
-        }                                                                                                      \
+#define UBS_LOG(level, __format, ...)                                                                        \
+    do {                                                                                                     \
+        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                                       \
+            ock::ubs::Logger::Instance().Logv(level, UBS_LOG_FILENAME, UBS_LOG_LINE, __FUNCTION__, __format, \
+                                              ##__VA_ARGS__);                                                \
+        }                                                                                                    \
     } while (0)
 
 #define UBS_LOG_STREAM(level, ARGS)                                                       \
@@ -185,5 +187,20 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
 #define UBS_SLOG_NOTICE(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_NOTICE, ARGS)
 #define UBS_SLOG_INFO(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_INFO, ARGS)
 #define UBS_SLOG_DEBUG(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_DEBUG, ARGS)
+
+#define UBS_ASSERT(CONDITION)                      \
+    do {                                           \
+        if (UNLIKELY(!(CONDITION))) {              \
+            UBS_SLOG_ERR("Assert " << #CONDITION); \
+        }                                          \
+    } while (0)
+
+#define UBS_ASSERT_RETURN(CONDITION, RETURN_VALUE) \
+    do {                                           \
+        if (UNLIKELY(!(CONDITION))) {              \
+            UBS_SLOG_ERR("Assert " << #CONDITION); \
+            return RETURN_VALUE;                   \
+        }                                          \
+    } while (0)
 
 #endif // UBS_COMM_UBSOCKET_LOGGER_H
