@@ -255,7 +255,7 @@ public:
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    virtual int EpollCtl(int op, const SocketPtr &sock, struct epoll_event *event) = 0;
+    virtual int EpollCtl(int op, int fd, struct epoll_event *event) = 0;
 
     /**
      * @brief corresponds to native epoll_wait interface
@@ -306,7 +306,7 @@ public:
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtl(int op, const SocketPtr &sock, struct epoll_event *event);
+    int EpollCtl(int op, int fd, struct epoll_event *event);
 
     /**
      * @brief corresponds to native epoll_wait interface
@@ -336,36 +336,36 @@ private:
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtlAdd(const SocketPtr &sock, struct epoll_event *event);
+    int EpollCtlAdd(int fd, struct epoll_event *event);
     /**
      * @brief handle epoll_ctl with EPOLL_CTL_MOD operation
      * @param fd socket fd added to epoll_fd
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtlMod(const SocketPtr &sock, struct epoll_event *event);
+    int EpollCtlMod(int fd, struct epoll_event *event);
     /**
      * @brief handle epoll_ctl with EPOLL_CTL_DEL operation
      * @param fd socket fd added to epoll_fd
      * @param event epoll event
      * @return 0: success; -1: failed
      */
-    int EpollCtlDel(const SocketPtr &sock, struct epoll_event *event);
+    int EpollCtlDel(int fd, struct epoll_event *event);
 
     /**
      * @brief add raw socket_fd and event to epoll_fd
      */
-    int AddRawSocketEvent(const SocketPtr &sock, struct epoll_event *event);
+    int AddRawSocketEvent(int fd, struct epoll_event *event);
 
     /**
      * @brief delete raw socket_fd and event to epoll_fd
      */
-    int DelRawSocketEvent(const SocketPtr &sock);
+    int DelRawSocketEvent(int fd);
 
     /**
      * @brief mod raw socket_fd and event to epoll_fd
      */
-    int ModRawSocketEvent(const SocketPtr &sock, struct epoll_event *event);
+    int ModRawSocketEvent(int fd, struct epoll_event *event);
 
     /**
      * @brief add socket_readable_fd to epoll_fd

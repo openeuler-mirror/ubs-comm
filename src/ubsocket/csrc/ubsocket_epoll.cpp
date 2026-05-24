@@ -43,11 +43,6 @@ UBS_API int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epoll_event 
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::epoll_ctl(epfd, op, fd, event);
     }
-
-    SocketPtr socketPtr = SocketSet::Instance().GetSocket(fd);
-    if (socketPtr == nullptr) {
-        return LibcApi::epoll_ctl(epfd, op, fd, event);
-    }
     
     EventPoll *eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
@@ -55,7 +50,7 @@ UBS_API int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epoll_event 
         return -1;
     }
 
-    return eventPoll->EpollCtl(op, socketPtr, event);
+    return eventPoll->EpollCtl(op, fd, event);
 }
 
 UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int maxevents, int timeout)
