@@ -29,6 +29,7 @@ extern "C" {
 #define UMQ_EMPTY_HEADER_COEFFICIENT    16      // if block count is n, there will be n*16 count of empty qbuf header
 #define UMQ_QBUF_DEFAULT_MEMPOOL_ID     (0)
 #define UMQ_HEADROOM_SIZE_LIMIT         (512)
+#define UMQ_QBUF_SIZE_POW_4K            (12)
 #define UMQ_QBUF_SIZE_POW_8K            (13)
 #define UMQ_QBUF_SIZE_POW_16K           (14)
 #define UMQ_QBUF_SIZE_POW_32K           (15)

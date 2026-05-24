@@ -220,7 +220,7 @@ private:
 
         umq_init_cfg_t umq_config;
         memset_s(&umq_config, sizeof(umq_config), 0, sizeof(umq_config));
-        umq_config.feature = UMQ_FEATURE_API_PRO | UMQ_FEATURE_ENABLE_FLOW_CONTROL;
+        umq_config.feature = UMQ_FEATURE_API_PRO | (IsFlowControlEnable() ? UMQ_FEATURE_ENABLE_FLOW_CONTROL : 0);
         umq_config.buf_mode = UMQ_BUF_SPLIT;
         umq_config.io_lock_free = true;
         umq_config.trans_info_num = 1;

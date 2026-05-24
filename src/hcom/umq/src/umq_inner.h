@@ -23,7 +23,7 @@
 extern "C" {
 #endif
 
-#define UMQ_POST_POLL_BATCH             64
+#define UMQ_POST_POLL_BATCH             256
 #define UMQ_EID_MAP_PREFIX              (0x0000ffff)
 #define UMQ_DEFAULT_BUF_SIZE            4096
 #define UMQ_DEFAULT_DEPTH               1024

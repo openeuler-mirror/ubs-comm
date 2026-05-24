@@ -1285,10 +1285,6 @@ int check_and_set_param(umq_ub_ctx_t *dev_ctx, umq_create_option_t *option, ub_q
     }
 
     if (option->create_flag & UMQ_CREATE_FLAG_TP_TYPE) {
-        if (option->tp_type != UMQ_TP_TYPE_RTP) {
-            UMQ_VLOG_ERR(VLOG_UMQ, "tp_type[%d] is invalid\n", option->tp_type);
-            return -UMQ_ERR_EINVAL;
-        }
         queue->tp_type = umq_tp_type_convert_to_urma(option->tp_type);
     } else {
         queue->tp_type = umq_tp_type_convert_to_urma(UMQ_TP_TYPE_RTP);

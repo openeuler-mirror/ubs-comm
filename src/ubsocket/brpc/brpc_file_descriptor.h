@@ -49,7 +49,7 @@
 #define DIVIDED_NUMBER          (2)
 #define CACHE_LINE_ALIGNMENT    (64)
 #define HANDLE_THRESHOLD        (2)
-#define RETRIEVE_THRESHOLD      (1)
+#define RETRIEVE_THRESHOLD      (32) // See #66
 #define REPORT_THRESHOLD        (1)
 
 #ifndef EID_FMT
@@ -65,6 +65,7 @@ eid[10], eid[11], eid[12], eid[13], eid[14], eid[15]
 #define EID_ARGS(eid) EID_RAW_ARGS((eid).raw)
 #endif
 
+constexpr uint64_t SIZE_4K = 4096;
 constexpr uint64_t SIZE_8K  = 8192;
 constexpr uint64_t SIZE_16K = 16384;
 constexpr uint64_t SIZE_32K = 32768;
@@ -75,8 +76,10 @@ constexpr uint16_t REFILL_THRESHOLD = 32;
 constexpr int RETRY_NEEDED = 1;
 // to improve the efficiency, do one ack event operation per GET_PER_ACK times get event operation(same as brpc)
 constexpr uint32_t GET_PER_ACK = 32;
-// currently, poll batch use 32 is for the balance of performance and efficiency
-constexpr uint32_t POLL_BATCH_MAX = 32;
+// currently, poll batch use 32 is for the balance of performance and efficiency.
+// 256 is better on RM_CTP.
+// see #66
+constexpr uint32_t POLL_BATCH_MAX = 256;
 
 namespace Brpc {
 using namespace Statistics;
@@ -85,6 +88,7 @@ inline uint32_t BrpcIOBufSize()
 {
     umq_buf_block_size_t blockType = Context::GetContext()->GetIOBlockType();
     switch (blockType) {
+        case BLOCK_SIZE_4K: return SIZE_4K - IOBUF_DIFF;
         case BLOCK_SIZE_8K:  return SIZE_8K - IOBUF_DIFF;
         case BLOCK_SIZE_16K: return SIZE_16K - IOBUF_DIFF;
         case BLOCK_SIZE_32K: return SIZE_32K - IOBUF_DIFF;
@@ -1253,6 +1257,7 @@ public:
     {
         umq_buf_block_size_t blockType = Context::GetContext()->GetIOBlockType();
         switch (blockType) {
+            case BLOCK_SIZE_4K: return SIZE_4K - MASK_DIFF;
             case BLOCK_SIZE_8K:  return SIZE_8K - MASK_DIFF;
             case BLOCK_SIZE_16K: return SIZE_16K - MASK_DIFF;
             case BLOCK_SIZE_32K: return SIZE_32K - MASK_DIFF;
@@ -1263,8 +1268,8 @@ public:
     }
 
     static const uint32_t SGE_MAX = 1;
-    // currently, the upper limit of post batch for umq is 64
-    static const uint32_t POST_BATCH_MAX = 64;
+    // currently, the upper limit of post batch for umq is 256.
+    static const uint32_t POST_BATCH_MAX = 256;
     /* unsolicited bytes use the same setting as brpc
      * accumulated bytes exceed UNSOLICITED_BYTES_MAX will generate a solicited interrupt event at remote */
     static const uint32_t UNSOLICITED_BYTES_MAX = 1048576;
@@ -1716,6 +1721,7 @@ public:
         // for polling.
 
         if ((m_tx_window_capacity - m_tx.m_window_size) >= m_tx.m_handle_threshold) {
+            // See #66
             PollTx(m_tx.m_retrieve_threshold);
         }
 
@@ -4881,16 +4887,15 @@ private:
             }
         }
 
-        Context *context = Context::GetContext();
-        ub_trans_mode trans_mode = context->GetUbTransMode();
+        const ub_trans_mode ub_trans_mode = GetUbTransMode();
         umq_tp_type_t tp_type;
-        if (trans_mode == RC_TP) {
+        if (ub_trans_mode == RC_TP) {
             tp_type = UMQ_TP_TYPE_RTP;
-        } else if (trans_mode == RM_TP) {
+        } else if (ub_trans_mode == RM_TP) {
             tp_type = UMQ_TP_TYPE_RTP;
-        } else if (trans_mode == RM_CTP) {
+        } else if (ub_trans_mode == RM_CTP) {
             tp_type = UMQ_TP_TYPE_CTP;
-        } else if (trans_mode == RC_CTP) {
+        } else if (ub_trans_mode == RC_CTP) {
             tp_type = UMQ_TP_TYPE_CTP;
         } else {
             tp_type = UMQ_TP_TYPE_RTP;
@@ -4903,9 +4908,15 @@ private:
 
         umq_route_list_t route_list;
         int ret = umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
-        if (ret!=0) {
+        if (ret != 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UMQ_API, "umq_get_route_list() failed, ret: %d\n", ret);
             return -1;
+        }
+
+        // 当前 CTP 下使用 bonding 设备性能严重下降，跨节点下走 bonding 设备
+        // 100k 请求+回复 p99 会比裸设备差 30us.
+        if (ub_trans_mode == RM_CTP || ub_trans_mode == RC_CTP) {
+            route_list.topo_type = UMQ_TOPO_TYPE_FULLMESH_1D;
         }
 
         filteredList = route_list;
