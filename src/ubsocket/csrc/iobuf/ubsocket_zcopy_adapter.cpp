@@ -25,7 +25,7 @@ void *blockmem_allocate_zero_copy(size_t size)
 
 void blockmem_deallocate_zero_copy(void *addr)
 {
-    if (addr != nullptr) {
+    if (addr == nullptr) {
         return;
     }
     if (g_zcopy_allocator) {
