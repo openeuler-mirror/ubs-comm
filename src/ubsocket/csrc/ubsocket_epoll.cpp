@@ -43,17 +43,18 @@ UBS_API int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epoll_event 
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::epoll_ctl(epfd, op, fd, event);
     }
+
+    SocketPtr socketPtr = SocketSet::Instance().GetSocket(fd);
+    if (socketPtr == nullptr) {
+        return LibcApi::epoll_ctl(epfd, op, fd, event);
+    }
     
     EventPoll *eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
         return -1;
     }
-    // TODO：取socket，待ubsocket_sock.cpp中的实现完成后参考
-    SocketPtr socketPtr = SocketSet::Instance().GetSocket(fd);
-    if (socketPtr == nullptr) {
-        return LibcApi::epoll_ctl(epfd, op, fd, event);
-    }
+
     return eventPoll->EpollCtl(op, socketPtr, event);
 }
 

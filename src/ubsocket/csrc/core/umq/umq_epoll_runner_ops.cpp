@@ -64,6 +64,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
             if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                 ((UmqRxOps *)((UmqSocket *)socket_object)->GetRx()->GetRxOps())->HandleErrorRxCqe(buf[i]);
             }
+            QBUF_LIST_NEXT(buf[i]) = nullptr;
             UmqApi::umq_buf_free(buf[i]);
         }
     }
@@ -90,7 +91,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
     umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
     umq_buf_t *rx_buf_list =
         UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), poll_num, UMQ_INVALID_HANDLE, &alloc_option);
-    if (UNLIKELY(rx_buf_list != nullptr)) {
+    if (LIKELY(rx_buf_list != nullptr)) {
         umq_buf_t *bad_qbuf = nullptr;
         if (UmqApi::umq_post(main_umq, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
             UmqApi::umq_buf_free(bad_qbuf);
