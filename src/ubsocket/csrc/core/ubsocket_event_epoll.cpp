@@ -223,6 +223,18 @@ ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &even
     return ops_->ProcessOneEvent(event);
 }
 
+AsyncEventPoll::~AsyncEventPoll() noexcept
+{
+    UBS_VLOG_ERR("async_epoll destructure invoked for fd: %d\n", epoll_fd_);
+    if (epoll_fd_ < 0 || sock_readable_fd_ < 0) {
+        return;
+    }
+
+    epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, sock_readable_fd_, nullptr);
+    close(sock_readable_fd_);
+    sock_readable_fd_ = -1;
+}
+
 int AsyncEventPoll::AddSockReadableEvent()
 {
     /* double check sock_readable_fd to avoid invalid lock */
@@ -535,6 +547,10 @@ int AsyncEventPoll::DelProtoTxEvent(const SocketPtr &sock)
 
 int AsyncEventPoll::DelRawSocketEvent(const SocketPtr &sock)
 {
+    if (!RemoveSocketEventData(sock->raw_socket_)) {
+        UBS_VLOG_WARN("async_epoll del pure event for socket: %d failed, RemoveSocketEventData failed\n", sock->raw_socket_);
+        return 0;
+    }
     auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, sock->raw_socket_, nullptr);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", sock->raw_socket_, errno,
@@ -542,7 +558,6 @@ int AsyncEventPoll::DelRawSocketEvent(const SocketPtr &sock)
         return -1;
     }
 
-    RemoveSocketEventData(sock->raw_socket_);
     return 0;
 }
 
@@ -560,7 +575,7 @@ int AsyncEventPoll::EpollCtlMod(const SocketPtr &sock, struct epoll_event *event
         return -1;
     }
 
-    if (UNLIKELY(!IsSocketEventDataExist(sock->raw_socket_))) {
+    if (UNLIKELY(!ModRawSocketEvent(sock, event))) {
         UBS_VLOG_ERR("async_epoll EpollCtlMod(socket:%d) failed, not added\n", sock->raw_socket_);
         errno = ENOENT;
         return -1;
@@ -577,6 +592,26 @@ int AsyncEventPoll::EpollCtlMod(const SocketPtr &sock, struct epoll_event *event
         }
     }
     return ret;
+}
+
+int AsyncEventPoll::ModRawSocketEvent(const SocketPtr &sock, struct epoll_event *event)
+{
+    auto event_data = GetSocketEventData(sock->raw_socket_);
+    if (UNLIKELY(event_data == nullptr)) {
+        UBS_VLOG_ERR("async_epoll EpollCtlMod(socket:%d) failed, event_data null\n", sock->raw_socket_);
+        errno = EINVAL;
+        return -1;
+    }
+
+    struct epoll_event raw_event {};
+    raw_event.events = event->events;
+    raw_event.data.ptr = event_data;
+    auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, sock->raw_socket_, &raw_event);
+    if (UNLIKELY(ret < 0)) {
+        UBS_VLOG_ERR("async_epoll EpollCtlMod(socket:%d) failed: %d : %s\n", sock->raw_socket_, errno, strerror(errno));
+        return -1;
+    }
+    return 0;
 }
 
 int AsyncEventPoll::EpollCtlDel(const SocketPtr &sock, struct epoll_event *event)

@@ -242,7 +242,11 @@ public:
         ctl_mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
     }
 
-    virtual ~EventPoll() = default;
+    virtual ~EventPoll()
+    {
+        LockRegistry::LOCK_OPS.destroy(mutex_);
+        LockRegistry::LOCK_OPS.destroy(ctl_mutex_);
+    }
 
     /**
      * @brief corresponds to native epoll_ctl interface
@@ -292,6 +296,8 @@ public:
     }
 
     explicit AsyncEventPoll(int epoll_fd) noexcept : EventPoll{epoll_fd} {}
+
+    ~AsyncEventPoll() override;
 
     /**
      * @brief corresponds to native epoll_ctl interface
@@ -357,6 +363,11 @@ private:
     int DelRawSocketEvent(const SocketPtr &sock);
 
     /**
+     * @brief mod raw socket_fd and event to epoll_fd
+     */
+    int ModRawSocketEvent(const SocketPtr &sock, struct epoll_event *event);
+
+    /**
      * @brief add socket_readable_fd to epoll_fd
      */
     int AddSockReadableEvent();
@@ -405,6 +416,18 @@ private:
             removed_head_ = removed;
         }
         return true;
+    }
+
+    ALWAYS_INLINE EpollEvent *GetSocketEventData(int fd) noexcept
+    {
+        Locker slock(mutex_);
+        auto pos = socket_data_.find(fd);
+        if (UNLIKELY(pos == socket_data_.end())) {
+            return nullptr;
+        }
+        auto res = pos->second;
+        slock.Unlock();
+        return res;
     }
 
     /**
