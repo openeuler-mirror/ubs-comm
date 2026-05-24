@@ -12,6 +12,7 @@
 #define UBS_COMM_UMQ_INIT_H
 
 #include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_socket_helper.h"
 #include "iobuf/ubsocket_zcopy_adapter.h"
 #include "umq_qbuf_list.h"
 #include "under_api/dl_umq_api.h"
@@ -23,8 +24,11 @@ class UmqBackend {
 public:
     static Result Init() noexcept;
     static void UnInit() noexcept;
+
 private:
-    static int AddUbDev(umq_trans_info_t &trans_info);
+    static Result AddUbDev(umq_trans_info_t &trans_info);
+    static Result FindDevName();
+
 private:
     static std::mutex UMQ_MUTEX;
     static bool UMQ_INITED;

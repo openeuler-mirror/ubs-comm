@@ -19,6 +19,7 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
 {
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     Result ret = 0;
+    bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
     if (connector_ops_ != nullptr) {
         ret = connector_ops_->PrepareConnect(raw_fd_, address, address_len, sock);
         if (ret != 0) {
@@ -43,7 +44,6 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
         SocketConnHelper::FlushSocketMsg(raw_fd_);
     }
 
-    bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
     if (is_blocking) {
         SocketConnHelper::SetBlocking(raw_fd_);
     }

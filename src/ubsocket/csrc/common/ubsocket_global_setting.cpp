@@ -19,6 +19,7 @@ uint32_t GlobalSetting::UBS_ALLOWED_PROTOCOL = 0;            /* no protocol by d
 bool GlobalSetting::UBS_NATIVE_TCP_MODE = false;             /* use ubsocket by default */
 bool GlobalSetting::UBS_TRACE_ENABLED = false;               /* disabled by default */
 bool GlobalSetting::UBS_INITED = false;                      /* not inited by default */
+std::string GlobalSetting::UBS_TRANS_MODE = "ub";            /* transport mode, from env */
 int16_t GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;  /* disabled by default */
 int16_t GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = 0; /* disabled by default */
 int16_t GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = 1;     /* enabled by default */
@@ -42,6 +43,7 @@ uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
 #define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
 #define ENV_SHARE_JFR_RX_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH"
+#define ENV_TRANS_MODE "UBSOCKET_TRANS_MODE"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -53,7 +55,8 @@ void GlobalSetting::AddRules() noexcept
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, false, "true|false"},
-                                    {ENV_AUTO_FALLBACK_TCP, false, "true|false"}};
+                                    {ENV_AUTO_FALLBACK_TCP, false, "true|false"},
+                                    {ENV_TRANS_MODE, false, "ub|ib"}};
 
     /* str not empty rules: name, required */
     StrNotEmptyRule rules_str_not_empty[] = {};
@@ -132,6 +135,10 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidate(ENV_SHARE_JFR_RX_QUEUE_DEPTH, envValue)) {
         UBS_SHARE_JFR_RX_QUEUE_DEPTH = static_cast<uint32_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_TRANS_MODE, strEnvValue)) {
+        UBS_TRANS_MODE = strEnvValue;
     }
 
     return UBS_OK;

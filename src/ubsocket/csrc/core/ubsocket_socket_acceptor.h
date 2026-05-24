@@ -56,8 +56,9 @@ using AcceptorOpsPtr = Ref<AcceptorOps>;
 // accept 建链通用实现层：TCP 建链，协商，建链
 class Acceptor {
 public:
-    Acceptor(const SocketPtr &sock, AcceptorOps *acceptorOps) : raw_fd_(sock->raw_socket_),
-          acceptor_ops_(acceptorOps) {}
+    Acceptor(const SocketPtr &sock, AcceptorOps *acceptorOps) : raw_fd_(sock->raw_socket_), acceptor_ops_(acceptorOps)
+    {
+    }
     ~Acceptor();
 
     int Listen(int backlog);
@@ -96,7 +97,7 @@ private:
     }
 
     // ======================== 成员变量 ========================
-    int raw_fd_;   // 传入 sock 的原生 socket fd
+    int raw_fd_; // 传入 sock 的原生 socket fd
     Ref<AcceptorOps> acceptor_ops_ = nullptr;
     struct AsyncAcceptInfo {
         std::queue<std::tuple<int, struct sockaddr, socklen_t>> ready_queue;

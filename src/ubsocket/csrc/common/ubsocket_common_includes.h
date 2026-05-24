@@ -14,6 +14,7 @@
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <unistd.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <functional>
