@@ -42,8 +42,12 @@ uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
 #define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
+#define ENV_ENABLE_SHARE_JFR "UBSOCKET_ENABLE_SHARE_JFR"
 #define ENV_SHARE_JFR_RX_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH"
 #define ENV_TRANS_MODE "UBSOCKET_TRANS_MODE"
+#define ENV_UBS_RX_DEPTH "UBSOCKET_RX_DEPTH"
+#define ENV_UBS_TX_DEPTH "UBSOCKET_TX_DEPTH"
+#define ENV_USE_BRPC_ZCOPY "UBSOCKET_USE_BRPC_ZCOPY"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -51,11 +55,16 @@ void GlobalSetting::AddRules() noexcept
     Int64Rule rules_int64[] = {{ENV_ASYNC_ACCEPTOR, false, 0, 8L},
                                {ENV_ASYNC_CONNECTOR, false, 0, 8L},
                                {ENV_ASYNC_EPOLL, false, 1, 1L},
-                               {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240}};
+                               {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240},
+                               {ENV_UBS_RX_DEPTH, false, 2, UINT32_MAX},
+                               {ENV_UBS_TX_DEPTH, false, 2, UINT32_MAX}
+    };
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, false, "true|false"},
                                     {ENV_AUTO_FALLBACK_TCP, false, "true|false"},
+                                    {ENV_ENABLE_SHARE_JFR, false, "true|false"},
+                                    {ENV_USE_BRPC_ZCOPY, false, "true|false"},
                                     {ENV_TRANS_MODE, false, "ub|ib"}};
 
     /* str not empty rules: name, required */
@@ -133,6 +142,10 @@ Result GlobalSetting::LoadEnv() noexcept
         UBS_AUTO_FALLBACK_TCP = Func::BoolFromStr(strEnvValue);
     }
 
+    if (GetEnvAndValidate(ENV_ENABLE_SHARE_JFR, strEnvValue)) {
+        UBS_ENABLE_SHARE_JFR = Func::BoolFromStr(strEnvValue);
+    }
+
     if (GetEnvAndValidate(ENV_SHARE_JFR_RX_QUEUE_DEPTH, envValue)) {
         UBS_SHARE_JFR_RX_QUEUE_DEPTH = static_cast<uint32_t>(envValue);
     }
@@ -141,6 +154,17 @@ Result GlobalSetting::LoadEnv() noexcept
         UBS_TRANS_MODE = strEnvValue;
     }
 
+    if (GetEnvAndValidate(ENV_USE_BRPC_ZCOPY, strEnvValue)) {
+        USE_BRPC_ZCOPY = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GetEnvAndValidate(ENV_UBS_TX_DEPTH, envValue)) {
+        UBS_TX_DEPTH = static_cast<uint32_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_UBS_RX_DEPTH, envValue)) {
+        UBS_RX_DEPTH = static_cast<uint32_t>(envValue);
+    }
     return UBS_OK;
 }
 

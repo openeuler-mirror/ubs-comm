@@ -82,6 +82,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* step1: global setting */
     UBS_VLOG_DEBUG("init global setting");
     GlobalSetting::AddRules();
+    GlobalSetting::LoadEnv();
 
     GlobalSetting::UBS_ALLOWED_PROTOCOL = options->allowed_protocol;
     GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = options->async_acceptor_thread_count;
@@ -137,7 +138,6 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     ArraySet<EventPoll>::GetInstance().Init();
 
     /* step5: load brpc symbol for zcopy */
-    /* step4: load brpc symbol for zcopy */
     // TODO: UbsZcopyAdapter 中成员变量原在 context 中, 重构后需要在一个地方保存
     if (GlobalSetting::USE_BRPC_ZCOPY) {
         ZeroCopyPrepare();
