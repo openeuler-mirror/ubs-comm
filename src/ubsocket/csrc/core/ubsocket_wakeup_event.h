@@ -49,17 +49,20 @@ public:
      * @return Number of events processed
      */
     int ProcessReadyEvents(struct epoll_event *events, int maxevents,
-                          std::unordered_map<int, EpollEvent *> &socket_data);
+                           std::unordered_map<int, EpollEvent *> &socket_data);
 
     /**
      * @brief Get pointer to ready_event_ (for identifying ready event in epoll_wait)
      * @return Pointer to ready_event_
      */
-    EpollEvent *GetReadyEvent() { return &ready_event_; }
+    EpollEvent *GetReadyEvent()
+    {
+        return &ready_event_;
+    }
 
 private:
     int epollFd_ = -1;
-    int ready_event_fd_ = -1;
+    int readyEventFd_ = -1;
     std::queue<int> ready_event_queue_;
     u_mutex_t *ready_event_mutex_ = nullptr;
     EpollEvent ready_event_ = {EPOLL_EVENT_UB_SOCKET_IN, -1, epoll_event{}};

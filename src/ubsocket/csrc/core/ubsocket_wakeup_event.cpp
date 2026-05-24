@@ -13,10 +13,7 @@
 namespace ock {
 namespace ubs {
 
-UbsocketWakeupEvent::UbsocketWakeupEvent()
-    : epollFd_(-1),
-      ready_event_fd_(-1),
-      ready_event_mutex_(nullptr)
+UbsocketWakeupEvent::UbsocketWakeupEvent() : epollFd_(-1), readyEventFd_(-1), ready_event_mutex_(nullptr)
 {
     ready_event_mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
 }
@@ -34,13 +31,13 @@ int UbsocketWakeupEvent::Initialize(int epollFd)
 {
     epollFd_ = epollFd;
 
-    if (LIKELY(ready_event_fd_ >= 0)) {
+    if (LIKELY(readyEventFd_ >= 0)) {
         return 0;
     }
 
     int fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (UNLIKELY(fd < 0)) {
-        UBS_VLOG_ERR("UbsocketWakeupEvent: create ready event fd failed: %d : %s\n",errno, strerror(errno));
+        UBS_VLOG_ERR("UbsocketWakeupEvent: create ready event fd failed: %d : %s\n", errno, strerror(errno));
         return -1;
     }
 
@@ -49,24 +46,24 @@ int UbsocketWakeupEvent::Initialize(int epollFd)
     event.data.ptr = &ready_event_;
     int ret = epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &event);
     if (UNLIKELY(ret < 0)) {
-        UBS_VLOG_ERR("UbsocketWakeupEvent: epoll_ctl add ready event fd failed: %d : %s\n",errno, strerror(errno));
+        UBS_VLOG_ERR("UbsocketWakeupEvent: epoll_ctl add ready event fd failed: %d : %s\n", errno, strerror(errno));
         close(fd);
         return -1;
     }
 
-    ready_event_fd_ = fd;
-    UBS_VLOG_INFO("UbsocketWakeupEvent: ready event fd %d initialized\n", ready_event_fd_);
+    readyEventFd_ = fd;
+    UBS_VLOG_INFO("UbsocketWakeupEvent: ready event fd %d initialized\n", readyEventFd_);
     return 0;
 }
 
 void UbsocketWakeupEvent::CleanUp()
 {
-    if (ready_event_fd_ >= 0) {
+    if (readyEventFd_ >= 0) {
         if (epollFd_ >= 0) {
-            epoll_ctl(epollFd_, EPOLL_CTL_DEL, ready_event_fd_, nullptr);
+            epoll_ctl(epollFd_, EPOLL_CTL_DEL, readyEventFd_, nullptr);
         }
-        close(ready_event_fd_);
-        ready_event_fd_ = -1;
+        close(readyEventFd_);
+        readyEventFd_ = -1;
     }
 
     if (ready_event_mutex_ != nullptr) {
@@ -79,7 +76,7 @@ void UbsocketWakeupEvent::CleanUp()
 
 void UbsocketWakeupEvent::WakeUpReadyEventFd(int fd)
 {
-    if (UNLIKELY(ready_event_fd_ < 0)) {
+    if (UNLIKELY(readyEventFd_ < 0)) {
         UBS_VLOG_WARN("UbsocketWakeupEvent: WakeUpReadyEventFd failed, not initialized.\n");
         return;
     }
@@ -90,12 +87,13 @@ void UbsocketWakeupEvent::WakeUpReadyEventFd(int fd)
     }
 
     uint64_t notification = 1;
-    if (eventfd_write(ready_event_fd_, notification) < 0) {
+    if (eventfd_write(readyEventFd_, notification) < 0) {
         UBS_VLOG_ERR("UbsocketWakeupEvent: WakeUpReadyEventFd eventfd_write failed.\n");
     }
 }
 
-int UbsocketWakeupEvent::ProcessReadyEvents(struct epoll_event *events, int maxevents,std::unordered_map<int, EpollEvent *> &socket_data)
+int UbsocketWakeupEvent::ProcessReadyEvents(struct epoll_event *events, int maxevents,
+                                            std::unordered_map<int, EpollEvent *> &socket_data)
 {
     int num = 0;
     Locker sLock(ready_event_mutex_);
