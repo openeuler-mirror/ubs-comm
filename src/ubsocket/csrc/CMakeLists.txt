@@ -27,7 +27,7 @@ file(GLOB CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/*.cpp)
 file(GLOB UMQ_CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/umq/*.cpp)
 list(APPEND CORE_SRCS ${UMQ_CORE_SRCS})
 
-if (BUILD_URMA_BACKEND)
+if (BUILD_URMA_DLOPEN_BACKEND)
     ### urma source
     file(GLOB URMA_CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/urma/*.cpp)
     list(APPEND CORE_SRCS ${URMA_CORE_SRCS})
@@ -62,7 +62,7 @@ add_library(ubsocket_static STATIC
         $<TARGET_OBJECTS:profiling_objects>
 )
 set_target_properties(ubsocket_static PROPERTIES OUTPUT_NAME "ubsocket")
-if(BUILD_UMQ_BACKEND)
+if(BUILD_UMQ_ADAPTER_BACKEND)
     target_link_directories(ubsocket_static PUBLIC ${UMQ_LIB_DIR} ${UMQ_QBUF_LIB_DIR} ${UMQ_IPC_LIB_DIR})
     target_link_libraries(ubsocket_static PUBLIC umq umq_buf umq_ipc)
 endif()
@@ -78,7 +78,7 @@ add_library(ubsocket_shared SHARED
 )
 set_target_properties(ubsocket_shared PROPERTIES OUTPUT_NAME "ubsocket")
 target_link_libraries(ubsocket_shared PUBLIC pthread)
-if(BUILD_UMQ_BACKEND)
+if(BUILD_UMQ_ADAPTER_BACKEND)
     target_link_directories(ubsocket_shared PUBLIC ${UMQ_LIB_DIR} ${UMQ_QBUF_LIB_DIR} ${UMQ_IPC_LIB_DIR})
     target_link_libraries(ubsocket_shared PUBLIC umq umq_buf umq_ipc)
 endif()

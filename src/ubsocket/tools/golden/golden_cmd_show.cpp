@@ -42,7 +42,7 @@ int SubCommandShow::DoExecute() noexcept
     bool show_whole_info = (device_details_ == "whole");
 
     if (device_type_ == "ub") {
-#ifdef URMA_BACKEND_ENABLED
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
         using namespace ock::ubs;
         using namespace ock::ubs::urma;
         auto result = Urma::Init();

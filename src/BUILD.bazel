@@ -96,6 +96,8 @@ cc_library(
     hdrs = glob(["ubsocket/include/*.h"]),
     copts = [
         "-D_GNU_SOURCE",
+        # 指定和umq一起编译
+        "-DUMQ_ADAPTER_BACKEND_ENABLED",
         "-std=c++14",
         "-fPIC",
     ],
