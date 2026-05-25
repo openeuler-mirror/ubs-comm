@@ -11,8 +11,9 @@
 
 #include "umq_data_rx_ops.h"
 #include "core/ubsocket_socket_set.h"
-#include "umq_socket.h"
 #include "umq_errno_converter.h"
+#include "umq_socket.h"
+
 
 namespace ock {
 namespace ubs {
@@ -71,8 +72,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
                 // try to wake up tx if necessary
                 bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
                 if (need_fc_awake && sockBase->NotifyReadable() == -1) {
-                    UBS_VLOG_ERR("eventfd_write() failed, errno: %d, errmsg: %s\n",
-                                 errno, Func::Error2Str(errno));
+                    UBS_VLOG_ERR("eventfd_write() failed, errno: %d, errmsg: %s\n", errno, Func::Error2Str(errno));
                 }
             }
 
@@ -99,7 +99,7 @@ int UmqRxOps::GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num)
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
         return UmqPollAndRefillRx(buf, max_num);
     }
-    auto umqSock = dynamic_cast<UmqSocket*>(sock.Get());
+    auto umqSock = dynamic_cast<UmqSocket *>(sock.Get());
     int poll_num = umqSock->GetAndPopQbuf(buf, max_num);
     if (poll_num < 0) {
         UBS_VLOG_ERR("[UMQ_API] GetQbuf failed, fd: %d, ret: %d\n", fd_, poll_num);
@@ -124,8 +124,8 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
     rx_queue_avail_num_ -= static_cast<uint16_t>(poll_num);
     if (static_cast<uint16_t>(GlobalSetting::UBS_RX_DEPTH - rx_queue_avail_num_) > TX_REFILL_THRESHOLD) {
         umq_alloc_option_t option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(Block)};
-        umq_buf_t *rx_buf_list = UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), TX_REFILL_THRESHOLD, UMQ_INVALID_HANDLE,
-                                               &option);
+        umq_buf_t *rx_buf_list =
+            UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), TX_REFILL_THRESHOLD, UMQ_INVALID_HANDLE, &option);
         /* do nothing when failure occurs during refilling RX,
              * try to switch to tcp/ip until poll_num & m_rx.m_window_size both equal to zero */
         if (rx_buf_list != nullptr) {
@@ -136,9 +136,9 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
             } else if ((rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf)) == 0) {
                 int savedErrno = errno;
                 errno = UmqErrnoConverter::Convert(UmqOperation::READV, umq_ret, savedErrno);
-                UBS_VLOG_ERR("[UMQ_API] umq_post() failed in refill, ret: %d, mapped errno: %d(%s),
-                             original errno: %d\n", umq_ret, errno,
-                             UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, umq_ret), savedErrno);
+                UBS_VLOG_ERR("[UMQ_API] umq_post() failed in refill, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                             umq_ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, umq_ret),
+                             savedErrno);
                 return -1;
             }
         }
@@ -195,13 +195,12 @@ void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
     auto bufStatus = static_cast<umq_buf_status_t>(buf->status);
     int mappedErrno = UmqErrnoConverter::ConvertBufStatus(UmqOperation::READV, bufStatus, errno);
     const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::READV, bufStatus);
-    UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n",
-        buf->status, mappedErrno, desc);
+    UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n", buf->status, mappedErrno, desc);
 
     switch (buf->status) {
         case UMQ_BUF_SUCCESS:
             return;
-            
+
         case UMQ_FAKE_BUF_FC_ERR:
             UBS_VLOG_ERR("[UMQ_CQE] cqe error: flow control failed\n");
             break;
@@ -290,13 +289,55 @@ int UmqRxOps::RearmRxInterrupt()
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for RX, local umq: %llu, "
-            "ret: %d, mapped errno: %d(%s), original errno: %d\n",
-            static_cast<unsigned long long>(local_umqh_), ret, errno,
-            UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret),
-            savedErrno);
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(local_umqh_), ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret), savedErrno);
     }
     return ret;
 }
+
+void UmqRxOps::FlushRx(const SocketPtr &sock, uint32_t timeout_ms)
+{
+    block_cache_.Flush();
+    if (rx_queue_avail_num_ <= 0) {
+        return;
+    }
+    auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
+    umq_buf_t *buf[POLL_BATCH_MAX];
+    uint32_t poll_total_cnt = 0;
+    int poll_cnt = 0;
+    auto start = std::chrono::high_resolution_clock::now();
+    do {
+        if (SocketConnHelper::IsTimeout(start, timeout_ms)) {
+            UBS_VLOG_DEBUG("Flush RX operation exceeded timeout period(%u ms)\n", timeout_ms);
+            break;
+        }
+
+        poll_cnt = UmqApi::umq_poll(local_umqh_, UMQ_IO_RX, buf, POLL_BATCH_MAX);
+        if (poll_cnt < 0) {
+            UBS_VLOG_ERR("umq_poll() failed for RX flush, local umq: %llu, ret: %d\n",
+                         static_cast<unsigned long long>(local_umqh_), poll_cnt);
+            break;
+        }
+
+        for (int i = 0; i < poll_cnt; i++) {
+            if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
+                if (umq_socket->NotifyReadable() == -1) {
+                    UBS_VLOG_ERR("eventfd_write() failed, event fd: %d, errno: %d, errmsg: %s\n", umq_socket->event_fd_,
+                                 errno, Func::Error2Str(errno));
+                }
+            }
+            UmqApi::umq_buf_free(buf[i]);
+        }
+
+        poll_total_cnt += static_cast<uint32_t>(poll_cnt);
+    } while (sock->Type() != SocketType::SOCK_TYPE_COUNT && poll_total_cnt < rx_queue_avail_num_);
+
+    if ((rx_queue_avail_num_ -= poll_total_cnt) > 0) {
+        UBS_VLOG_DEBUG("Failed to flush umq(RX), leak %u piece(s) of buffer\n", rx_queue_avail_num_);
+    }
+}
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock

@@ -239,10 +239,20 @@ int UmqTxOps::PollUmqTx(const SocketPtr &sock, bool poll_to_empty)
             poll_zero_cnt = 0;
         }
         poll_total_cnt += (uint32_t)poll_cnt;
-    } while ((poll_total_cnt < TX_RETRIEVE_THRESHOLD  || (poll_to_empty && poll_cnt > 0)) &&
+    } while ((poll_total_cnt < TX_RETRIEVE_THRESHOLD || (poll_to_empty && poll_cnt > 0)) &&
              poll_zero_cnt < POLL_TX_RETRY_MAX_CNT && err_code == ops_error_code::OK);
     tx_queue_avail_num_ += poll_total_cnt;
     return 0;
+}
+
+void UmqTxOps::WakeUpTx(Socket* sock)
+{
+    bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (need_fc_awake && eventfd_write(sockBase->event_fd_, 1) == -1) {
+        UBS_VLOG_INFO("eventfd_write() failed, event fd: %d, raw sock fd %d: errno: %d, errmsg: %s\n",
+            sockBase->event_fd_, sockBase->raw_socket_, errno, Func::Error2Str(errno));
+    }
 }
 
 int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
@@ -418,7 +428,6 @@ void UmqTxOps::HandleErrorTxCqe(umq_buf_t *buf)
             UBS_VLOG_ERR("[UMQ_CQE] unreachable! status=%d\n", buf->status);
             break;
     }
-
 }
 
 void UmqTxOps::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
@@ -569,6 +578,81 @@ uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_
     UmqApi::umq_buf_free(bad_qbuf);
     return total_size;
 }
+
+void UmqTxOps::FlushTx(const SocketPtr &sock, uint32_t timeout_ms)
+{
+    uint16_t threshold = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_;
+    if (threshold <= 0) {
+        return;
+    }
+
+    uint32_t poll_total_cnt = 0;
+    int poll_cnt = 0;
+    ops_error_code err_code = ops_error_code::OK;
+    auto start = std::chrono::high_resolution_clock::now();
+    do {
+        if (SocketConnHelper::IsTimeout(start, timeout_ms)) {
+            /* If a timeout is triggered here, it would indicate a memory leak.
+                 * In this case, processing of unsignaled wr should not continue. */
+            UBS_VLOG_DEBUG("Flush TX operation exceeded timeout period(%u ms)\n", timeout_ms);
+            break;
+        }
+
+        poll_cnt = DoUmqTxPoll(sock, err_code);
+        if (poll_cnt < 0) {
+            break;
+        }
+
+        poll_total_cnt += static_cast<uint32_t>(poll_cnt);
+    } while (sock->Type() != SocketType::SOCK_TYPE_COUNT && poll_total_cnt < threshold &&
+             err_code != ops_error_code::FATAL_ERROR);
+    tx_queue_avail_num_ += poll_total_cnt;
+
+    if (err_code != ops_error_code::FATAL_ERROR && tx_queue_avail_num_ < GlobalSetting::UBS_TX_DEPTH &&
+        unsignaled_wr_num_ > 0) {
+        uint32_t left_wr_num = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_;
+        umq_buf_t *cur_qbuf = QBUF_LIST_FIRST(&head_buf_);
+        umq_buf_t *last_qbuf = nullptr;
+        uint32_t cached_wr_cnt = 0;
+        while (cached_wr_cnt < left_wr_num && cur_qbuf != nullptr) {
+            /* unsignaled wr list:
+                 * +--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+                 * |  0  |  1  |  2  |  3  |  4  |  5  |  6  | wr idx
+                 * +--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+                 * |  S  |  S  |  S  |  F  |  F  |  F  |  F  | wr status: (1) S:successful; (2) F:Failed
+                 * +--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+                 * Since the successful wr(0~2) did not set the signaled flag, it will not generate a cqe
+                 * Therefore, it is necessary to perform a release operation through the cache list.
+                 * The unsuccessful(3 ~ 6) wrs have already been released and retried via(by tcp) an
+                 * exceptional cqe within the DoUmqTxPoll() operation, so there is no need to handle these wrs
+                 * again here. Consequently, only 0 ~ 2 wrs need to be processed. */
+            int64_t rest_size = cur_qbuf->total_data_size;
+            /* WriteV ensure total_data_size equals to the sum of all data_size, thus, do not consider
+                * the situation that rest_size would not reduced to zero */
+            while (cur_qbuf && rest_size > 0) {
+                rest_size -= (int64_t)cur_qbuf->data_size;
+                last_qbuf = cur_qbuf;
+                ((Block *)PtrFloorToBoundary(cur_qbuf->buf_data))->DecRef();
+                cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
+            }
+
+            cached_wr_cnt++;
+        }
+
+        if (last_qbuf != nullptr) {
+            QBUF_LIST_NEXT(last_qbuf) = nullptr;
+        }
+
+        UmqApi::umq_buf_free(QBUF_LIST_FIRST(&head_buf_));
+        tx_queue_avail_num_ += cached_wr_cnt;
+    }
+
+    if (tx_queue_avail_num_ < GlobalSetting::UBS_TX_DEPTH) {
+        UBS_VLOG_DEBUG("Failed to flush umq(TX), leak %u wr(s) of buffer\n",
+                       GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_);
+    }
+}
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock

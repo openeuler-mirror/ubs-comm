@@ -11,10 +11,8 @@
 #ifndef UBS_COMM_UMQ_SETTING_H
 #define UBS_COMM_UMQ_SETTING_H
 
-#include <string>
-
+#include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
-#include "core/umq/umq_socket.h"
 #include "include/ubsocket_def.h"
 #include "under_api/dl_umq_api.h"
 

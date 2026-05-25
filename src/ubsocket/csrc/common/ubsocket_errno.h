@@ -34,21 +34,6 @@ enum InnerCode : int32_t {
     UBS_MAX,
     UBS_UB_DEV_ERROR,
 };
-
-class NetCommon {
-public:
-    static char *NN_GetStrError(int errNum, char *buf, size_t bufSize)
-    {
-#if defined(_XOPEN_SOURCE) && defined(_POSIX_C_SOURCE) && defined(_GNU_SOURCE) && \
-    (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && !_GNU_SOURCE
-        strerror_r(errNum, buf, bufSize - 1);
-        return buf;
-#else
-        return strerror_r(errNum, buf, bufSize - 1);
-#endif
-    }
-};
-
 } // namespace ubs
 } // namespace ock
 

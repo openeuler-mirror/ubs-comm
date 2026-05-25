@@ -242,18 +242,8 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, 
     }
 
     // socket_id_count
-    bool has_socket_id = ((UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY) ||
-                          (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY_PRIORITY)) ?
-                             1 :
-                             0;
     rsp.ret_code = (UmqSetting::UMQ_IS_BONDING == (req.is_bonding != 0)) ? 0 : -1;
     rsp.local_eid = connEid;
-    if (rsp.ret_code == 0 && req.is_bonding != 0 && has_socket_id == 1 && req.has_socket_id == 1) {
-        if (req.socket_id_count == 0 || req.socket_id_count > NEGOTIATE_SOCKET_ID_MAX_NUM) {
-            UBS_VLOG_ERR("Invalid peer socket count %u in accept, fd: %d\n", req.socket_id_count, fd);
-            rsp.ret_code = -1;
-        }
-    }
 
     // Schedule Policy
     if (rsp.ret_code == 0 && req.is_bonding != 0) {

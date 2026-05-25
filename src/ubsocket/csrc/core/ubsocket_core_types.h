@@ -28,8 +28,8 @@ enum SocketState : uint8_t {
 enum class SocketType : uint8_t {
     SOCK_TYPE_TCP = 0, /* only contains raw socket */
     SOCK_TYPE_UMQ,     /* an ubsocket based on umq */
-                       /* add type before COUNT */
-    SOCK_TYPE_COUNT
+    SOCK_TYPE_SHM,     /* an ubsocket based on shm */
+    SOCK_TYPE_COUNT    /* add type before COUNT */
 };
 
 enum SocketCreateType : uint8_t {
@@ -69,7 +69,8 @@ public:
     virtual bool IsBindRemote() = 0;
     virtual Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
     virtual Result DelTxEvent(const SocketPtr &sock, int epoll_fd) = 0;
-    virtual Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
+    virtual Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
+                                      struct epoll_event *event) = 0;
     virtual Result DelRxEventToRunner(const SocketPtr &sock, int epoll_fd) = 0;
 
     DEFINE_REF_OPERATION_FUNC
@@ -92,9 +93,9 @@ struct ConnInfo {
 
 struct RawConnInfoV4 {
     // TODO: 考虑内存分配, 优化变量类型
-    std::string peer_ip;  // 对端IP地址
-    int peer_fd = -1; // 对端socket fd
-    int type_fd = 0;  // 0 server; 1 client
+    std::string peer_ip; // 对端IP地址
+    int peer_fd = -1;    // 对端socket fd
+    int type_fd = 0;     // 0 server; 1 client
     std::chrono::system_clock::time_point create_time;
 };
 
