@@ -8,8 +8,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef HCOM_UBSOCKET_VERSION_H
-#define HCOM_UBSOCKET_VERSION_H
+#ifndef UBS_COMM_UBSOCKET_VERSION_H
+#define UBS_COMM_UBSOCKET_VERSION_H
 
 namespace ock {
 namespace ubs {
@@ -43,4 +43,4 @@ namespace ubs {
 } // namespace ubs
 } // namespace ock
 
-#endif // HCOM_UBSOCKET_VERSION_H
+#endif // UBS_COMM_UBSOCKET_VERSION_H

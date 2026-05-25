@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_DEFINES_H
 #define UBS_COMM_UBSOCKET_DEFINES_H
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
