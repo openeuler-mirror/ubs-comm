@@ -136,7 +136,7 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
             } else if ((rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf)) == 0) {
                 int savedErrno = errno;
                 errno = UmqErrnoConverter::Convert(UmqOperation::READV, umq_ret, savedErrno);
-                UBS_VLOG_ERR("[UMQ_API] umq_post() failed in refill, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                UBS_VLOG_ERR("[UMQ_API] umq_post() prefill failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
                              umq_ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, umq_ret),
                              savedErrno);
                 return -1;
