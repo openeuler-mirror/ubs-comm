@@ -229,8 +229,8 @@ Result UmqSocket::PrefillRx()
             int rx_window_capacity = 0;
             // TODO：处理bad_qbuf
             // rx_.GetRxOps()->rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf);
-            UBS_VLOG_ERR("[UMQ_API] umq_post() failed, RX depth: %u, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                         rx_window_capacity, umq_ret, errno,
+            UBS_VLOG_ERR("[UMQ_API] umq_post() failed, RX depth: %u, ret: %d, mapped errno: %d(%s),
+                         original errno: %d\n", rx_window_capacity, umq_ret, errno,
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, umq_ret), savedErrno);
             return UBS_ERROR;
         }
@@ -485,8 +485,8 @@ uint32_t UmqSocket::getLeftPostRxNum(uint64_t umq_handle)
     memset(&cfg, 0, sizeof(umq_cfg_get_t));
     int res = UmqApi::umq_cfg_get(umq_handle, &cfg);
     if (res != 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_cfg_get() failed, umq handle: %llu, ret: %d\n", static_cast<unsigned long long>(umq_handle),
-                     res);
+        UBS_VLOG_ERR("[UMQ_API] umq_cfg_get() failed, umq handle: %llu, ret: %d\n",
+                     static_cast<unsigned long long>(umq_handle), res);
     } else {
         left_post_rx_num = cfg.rqe_post_factor * cfg.rx_depth;
         UBS_VLOG_INFO("Successfully get umq cfg, left_post_rx_num = %u\n", left_post_rx_num);
