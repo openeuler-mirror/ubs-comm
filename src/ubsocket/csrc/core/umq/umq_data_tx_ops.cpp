@@ -20,7 +20,7 @@ uintptr_t UmqTxOps::AllocTxBuf(uint32_t size, uint32_t count)
 {
     umq_buf_t *tx_buf_list = UmqApi::umq_buf_alloc(size, count, UMQ_INVALID_HANDLE, nullptr);
     if (tx_buf_list == nullptr) {
-        UBS_VLOG_ERR("umq_buf_alloc() failed for TX, local umq: %llu, ret: %p\n",
+        UBS_VLOG_ERR("[UMQ_API] umq_buf_alloc() failed for TX, local umq: %llu, ret: %p\n",
                      static_cast<unsigned long long>(local_umqh_), tx_buf_list);
         return DpRearmTxInterrupt();
     }
@@ -115,7 +115,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             errno = EIO;
             return -1;
         } else {
-            UBS_VLOG_ERR("umq_post() failed for TX, local umq: %llu, ret: %d\n",
+            UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX, local umq: %llu, ret: %d\n",
                          static_cast<unsigned long long>(local_umqh_), ret);
             errno = EIO;
             flagEIO = 1;
@@ -147,7 +147,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             return -1;
         }
     } else {
-        UBS_VLOG_ERR("umq_post() failed for TX without bad_qbuf, local umq: %llu, ret: %d\n",
+        UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX without bad_qbuf, local umq: %llu, ret: %d\n",
                      static_cast<unsigned long long>(local_umqh_), ret);
     }
 
@@ -166,7 +166,7 @@ int UmqTxOps::PollTx(const SocketPtr &sock)
         do {
             if (GetAndAckEvent() < 0) {
                 errno = EIO;
-                UBS_VLOG_ERR("WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                UBS_VLOG_ERR("[UMQ_API] WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                              Func::Error2Str(errno));
                 return -1;
             }
@@ -207,7 +207,7 @@ int UmqTxOps::GetAndAckEvent()
     if (events == 0) {
         return 0;
     } else if (events < 0) {
-        UBS_VLOG_ERR("umq_get_cq_event() failed, local umq: %llu, ret: %d\n",
+        UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed, local umq: %llu, ret: %d\n",
                      static_cast<unsigned long long>(local_umqh_), events);
         return -1;
     }
@@ -247,7 +247,7 @@ int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
     int poll_num = UmqApi::umq_poll(local_umqh_, UMQ_IO_TX, buf, POLL_BATCH_MAX);
     if (poll_num <= 0) {
         if (poll_num < 0) {
-            UBS_VLOG_ERR("umq_poll() failed for TX, local umq: %llu, ret: %d\n",
+            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for TX, local umq: %llu, ret: %d\n",
                          static_cast<unsigned long long>(local_umqh_), poll_num);
         }
         return poll_num;
@@ -334,72 +334,72 @@ void UmqTxOps::HandleErrorTxCqe(umq_buf_t *buf)
             return;
 
         case UMQ_FAKE_BUF_FC_ERR:
-            UBS_VLOG_ERR("cqe error: flow control failed\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: flow control failed\n");
             break;
 
         case UMQ_BUF_UNSUPPORTED_OPCODE_ERR:
-            UBS_VLOG_ERR("cqe error: unsupported opcode\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: unsupported opcode\n");
             break;
 
         case UMQ_BUF_LOC_LEN_ERR:
-            UBS_VLOG_ERR("cqe error: local length too long\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: local length too long\n");
             break;
 
         case UMQ_BUF_LOC_OPERATION_ERR:
-            UBS_VLOG_ERR("cqe error: local op err\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: local op err\n");
             break;
 
         case UMQ_BUF_LOC_ACCESS_ERR:
-            UBS_VLOG_ERR("cqe error: access to local memory error\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: access to local memory error\n");
             break;
 
         case UMQ_BUF_REM_RESP_LEN_ERR:
-            UBS_VLOG_ERR("cqe error: remote rx buffer length error\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote rx buffer length error\n");
             break;
 
         case UMQ_BUF_REM_UNSUPPORTED_REQ_ERR:
-            UBS_VLOG_ERR("cqe error: remote does not support req\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote does not support req\n");
             break;
 
         case UMQ_BUF_REM_OPERATION_ERR:
-            UBS_VLOG_ERR("cqe error: remote jetty can not complete op\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty can not complete op\n");
             break;
 
         case UMQ_BUF_REM_ACCESS_ABORT_ERR:
-            UBS_VLOG_ERR("cqe error: remote jetty access memory error\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty access memory error\n");
             break;
 
         case UMQ_BUF_ACK_TIMEOUT_ERR:
-            UBS_VLOG_ERR("cqe error: remote jetty does not send ack\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty does not send ack\n");
             break;
 
         case UMQ_BUF_RNR_RETRY_CNT_EXC_ERR:
-            UBS_VLOG_ERR("cqe error: remote jetty has no enough RQE\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty has no enough RQE\n");
             break;
 
         case UMQ_BUF_WR_FLUSH_ERR:
             break;
 
         case UMQ_BUF_WR_SUSPEND_DONE:
-            UBS_VLOG_ERR("cqe error: suspend done\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: suspend done\n");
             break;
 
         case UMQ_BUF_WR_FLUSH_ERR_DONE:
-            UBS_VLOG_ERR("cqe error: flush err done\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: flush err done\n");
             break;
 
         case UMQ_BUF_WR_UNHANDLED:
             // See umq_ub_flush_seq
-            UBS_VLOG_ERR("It wont be here.\n");
+            UBS_VLOG_ERR("[UMQ_CQE] It wont be here.\n");
             break;
 
         case UMQ_BUF_LOC_DATA_POISON:
         case UMQ_BUF_REM_DATA_POISON:
-            UBS_VLOG_ERR("cqe error: not supported yet\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: not supported yet\n");
             break;
 
         default:
-            UBS_VLOG_ERR("unreachable! status=%d\n", buf->status);
+            UBS_VLOG_ERR("[UMQ_CQE] unreachable! status=%d\n", buf->status);
             break;
     }
 

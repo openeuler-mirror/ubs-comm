@@ -395,7 +395,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     local_cp_msg.queue_bind_info_size =
         UmqApi::umq_bind_info_get(umq_socket->UmqHandle(), local_cp_msg.queue_bind_info, UMQ_BIND_INFO_SIZE_MAX);
     if (local_cp_msg.queue_bind_info_size == 0) {
-        UBS_VLOG_ERR("umq_bind_info_get() failed, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, ret: %ld",
+        UBS_VLOG_ERR("[UMQ_API] umq_bind_info_get() failed, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, ret: %ld",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_,
                      local_cp_msg.queue_bind_info_size);
         return UBS_ERROR;
@@ -429,7 +429,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     long long costms = (end_tv.tv_sec - start_tv.tv_sec) * 1000LL + (end_tv.tv_usec - start_tv.tv_usec) / 1000LL;
 
     if (umq_ret != 0) {
-        UBS_VLOG_ERR("umq_bind() failed, Peer eid:" EID_FMT
+        UBS_VLOG_ERR("[UMQ_API] umq_bind() failed, Peer eid:" EID_FMT
                      ",Peer IP:%s, fd: %d, ret: %d, operation duration: %lld ms.\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, umq_ret, costms);
         return UBS_ERROR;
@@ -500,7 +500,7 @@ Result UmqConnectorOps::GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_
     umq_route_list_t route_list;
     int ret = UmqApi::umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
     if (ret != 0) {
-        UBS_VLOG_ERR("umq_get_route_list() failed, ret: %d\n", ret);
+        UBS_VLOG_ERR("[UMQ_API] umq_get_route_list() failed, ret: %d\n", ret);
         return -1;
     }
 

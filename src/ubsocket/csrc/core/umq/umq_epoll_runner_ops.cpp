@@ -55,7 +55,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
                                     POLL_BATCH_MAX);
     if (UNLIKELY(poll_num <= 0)) {
         if (dynamic_cast<UmqSocket *>(socket_object)->GetRx()->GetRxOps()->RearmRxInterrupt() < 0) {
-            UBS_VLOG_ERR("Rearm sub umq failed, socket fd:%d, ret: %d\n", socket_object->raw_socket_, poll_num);
+            UBS_VLOG_ERR("[UMQ_API] Rearm sub umq failed, socket fd:%d, ret: %d\n", socket_object->raw_socket_, poll_num);
         }
         return -1;
     }
@@ -150,7 +150,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
     umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto events_cnt = UmqApi::umq_get_cq_event(main_umq, &option);
     if (UNLIKELY(events_cnt < 0)) {
-        UBS_VLOG_ERR("async_epoll umq_get_cq_event(main_umq=%lu) failed: %d\n", main_umq, events_cnt);
+        UBS_VLOG_ERR("[UMQ_API] async_epoll umq_get_cq_event(main_umq=%lu) failed: %d\n", main_umq, events_cnt);
         return events_cnt;
     }
 

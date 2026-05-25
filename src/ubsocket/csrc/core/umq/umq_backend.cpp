@@ -31,7 +31,7 @@ Result UmqBackend::Init() noexcept
     /* initialize umq settting */
     ret = UmqSetting::Init();
     if (ret != UBS_OK) {
-        UBS_VLOG_ERR("UmqSetting::Init() failed, ret: %d\n", ret);
+        UBS_VLOG_ERR("[UMQ_API] UmqSetting::Init() failed, ret: %d\n", ret);
         return ret;
     }
 
@@ -57,7 +57,7 @@ Result UmqBackend::Init() noexcept
     /* init umq */
     ret = UmqApi::umq_init(&umq_config);
     if (ret != 0) {
-        UBS_VLOG_ERR("umq_init() failed, ret: %d\n", ret);
+        UBS_VLOG_ERR("[UMQ_API] umq_init() failed, ret: %d\n", ret);
         return UBS_ERROR;
     }
 
@@ -74,7 +74,7 @@ Result UmqBackend::Init() noexcept
             return UBS_ERROR;
     }
     if (ret != 0) {
-        UBS_VLOG_ERR("AddIbDev()/AddUbDev() failed, ret: %d\n", ret);
+        UBS_VLOG_ERR("[UMQ_API] AddIbDev()/AddUbDev() failed, ret: %d\n", ret);
         return UBS_ERROR;
     }
 
@@ -114,7 +114,7 @@ Result UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
 {
     if (UmqSetting::UMQ_DEV_NAME.empty()) {
         if (FindDevName() != UBS_OK) {
-            UBS_VLOG_ERR("Failed to find bonding dev, need active input.\n");
+            UBS_VLOG_ERR("[UMQ_API] Failed to find bonding dev, need active input.\n");
             return UBS_ERROR;
         }
     }
@@ -146,7 +146,7 @@ Result UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
 
     ret = UmqApi::umq_dev_add(&trans_info);
     if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
-        UBS_VLOG_ERR("umq_dev_add() failed, ret: %d\n", ret);
+        UBS_VLOG_ERR("[UMQ_API] umq_dev_add() failed, ret: %d\n", ret);
         return -1;
     }
 
@@ -161,7 +161,7 @@ Result UmqBackend::FindDevName()
     int devCount = 0;
     umq_dev_info_t *umqDevInfo = UmqApi::umq_dev_info_list_get(transMode, &devCount);
     if (umqDevInfo == nullptr || devCount <= 0) {
-        UBS_VLOG_ERR("umq_dev_info_list_get() failed, ret: %p, dev count: %d\n", umqDevInfo, devCount);
+        UBS_VLOG_ERR("[UMQ_API] umq_dev_info_list_get() failed, ret: %p, dev count: %d\n", umqDevInfo, devCount);
         return UBS_ERROR;
     }
 

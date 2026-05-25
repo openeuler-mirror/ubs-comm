@@ -129,7 +129,7 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
     local_cp_msg.queue_bind_info_size = UmqApi::umq_bind_info_get(umqSocket->UmqHandle(), local_cp_msg.queue_bind_info,
                                                                   sizeof(local_cp_msg.queue_bind_info));
     if (local_cp_msg.queue_bind_info_size == 0) {
-        UBS_VLOG_ERR("umq_bind_info_get() failed, ret: %lu\n", local_cp_msg.queue_bind_info_size);
+        UBS_VLOG_ERR("[UMQ_API] umq_bind_info_get() failed, ret: %lu\n", local_cp_msg.queue_bind_info_size);
         // return ubsocket::Error::kUMQ_BIND_INFO_GET | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
         return UBS_ERROR;
     }
@@ -161,7 +161,7 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
     gettimeofday(&end_tv, NULL);
     long long costms = (end_tv.tv_sec - start_tv.tv_sec) * 1000LL + (end_tv.tv_usec - start_tv.tv_usec) / 1000LL;
     if (umq_ret != UMQ_SUCCESS) {
-        UBS_VLOG_ERR("umq_bind() failed, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
+        UBS_VLOG_ERR("[UMQ_API] umq_bind() failed, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
         // return ubsocket::Error::kUMQ_BIND | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
         return UBS_ERROR;
     }
@@ -349,7 +349,7 @@ Result UmqAcceptorOps::CheckDevAdd(const umq_eid_t &connEid)
     trans_info.dev_info.eid.eid = connEid;
     int ret = UmqApi::umq_dev_add(&trans_info);
     if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
-        UBS_VLOG_ERR("umq_dev_add() failed, ret: %d\n", ret);
+        UBS_VLOG_ERR("[UMQ_API] umq_dev_add() failed, ret: %d\n", ret);
         return UBS_ERROR;
     }
 
