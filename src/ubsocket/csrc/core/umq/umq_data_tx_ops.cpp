@@ -245,6 +245,16 @@ int UmqTxOps::PollUmqTx(const SocketPtr &sock, bool poll_to_empty)
     return 0;
 }
 
+void UmqTxOps::WakeUpTx(Socket* sock)
+{
+    bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (need_fc_awake && eventfd_write(sockBase->event_fd_, 1) == -1) {
+        UBS_VLOG_INFO("eventfd_write() failed, event fd: %d, raw sock fd %d: errno: %d, errmsg: %s\n",
+            sockBase->event_fd_, sockBase->raw_socket_, errno, Func::Error2Str(errno));
+    }
+}
+
 int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
 {
     umq_buf_t *buf[POLL_BATCH_MAX];

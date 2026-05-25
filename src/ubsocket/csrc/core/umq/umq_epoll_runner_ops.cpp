@@ -17,6 +17,7 @@
 #include "umq_setting.h"
 #include "umq_errno.h"
 #include "umq_pro_types.h"
+#include "umq_data_tx_ops.h"
 #include "umq_epoll_runner_ops.h"
 
 namespace ock {
@@ -83,6 +84,9 @@ void UmqEpollRunnerOps::HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t 
             if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
                 auto rxOps = dynamic_cast<UmqRxOps *>(umqSock->GetRx()->GetRxOps());
                 rxOps->HandleErrorRxCqe(buf[i]);
+            } else {
+                auto txOps = dynamic_cast<UmqTxOps *>(umqSock->GetTx()->GetTxOps());
+                txOps->WakeUpTx(socketObject);
             }
             QBUF_LIST_NEXT(buf[i]) = nullptr;
             UmqApi::umq_buf_free(buf[i]);
