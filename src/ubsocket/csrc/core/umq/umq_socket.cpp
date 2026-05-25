@@ -229,8 +229,8 @@ Result UmqSocket::PrefillRx()
             int rx_window_capacity = 0;
             // TODO：处理bad_qbuf
             // rx_.GetRxOps()->rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf);
-            UBS_VLOG_ERR("[UMQ_API] umq_post() failed, RX depth: %u, ret: %d, mapped errno: %d(%s),
-                         original errno: %d\n", rx_window_capacity, umq_ret, errno,
+            UBS_VLOG_ERR("[UMQ_API] umq_post() failed, RX depth: %u, ret: %d, mapped: %d(%s), original: %d\n",
+                         rx_window_capacity, umq_ret, errno,
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, umq_ret), savedErrno);
             return UBS_ERROR;
         }

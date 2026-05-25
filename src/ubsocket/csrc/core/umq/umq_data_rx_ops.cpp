@@ -22,8 +22,8 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
         if (GetAndAckEvent() < 0) {
-            UBS_VLOG_ERR("[UMQ_API] ReadV GetAndAckEvent() failed, fd: %d, ret: %d,
-                         errno: %d, errmsg: %s\n", fd_, -1, errno, Func::Error2Str(errno));
+            UBS_VLOG_ERR("[UMQ_API] ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_,
+                         -1, errno, Func::Error2Str(errno));
             return -1;
         }
         get_and_ack_event_ = false;
@@ -115,8 +115,8 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
         if (poll_num < 0) {
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::READV, poll_num, savedErrno);
-            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed, local umq: %llu, ret: %d, mapped errno: %d(%s),
-                         original errno: %d\n", static_cast<unsigned long long>(local_umqh_), poll_num, errno,
+            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed, local umq: %llu, ret: %d, mapped: %d(%s), original: %d\n",
+                         static_cast<unsigned long long>(local_umqh_), poll_num, errno,
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, poll_num), savedErrno);
         }
         return -1;
@@ -178,8 +178,8 @@ int UmqRxOps::GetAndAckEvent()
     } else if (events < 0) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, events, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed, local umq: %llu, ret: %d, mapped errno: %d(%s),
-                     original errno: %d\n", static_cast<unsigned long long>(local_umqh_), events, errno,
+        UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed, local umq: %llu, ret: %d, mapped: %d(%s), original: %d\n",
+                     static_cast<unsigned long long>(local_umqh_), events, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, events), savedErrno);
         return -1;
     }
