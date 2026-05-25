@@ -452,7 +452,7 @@ int32_t umq_ipc_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_in
         .tx_max_buf_size = sizeof(uint64_t) + sizeof(uint32_t),
         .tx_depth = ctx->remote_ring.tx_depth,
         .rx_max_buf_size = sizeof(uint64_t) + sizeof(uint32_t),
-        .rx_depth = ctx->remote_ring.tx_depth,
+        .rx_depth = ctx->remote_ring.rx_depth,
         .addr = ctx->remote_ring.addr,
     };
 
@@ -543,8 +543,8 @@ static ALWAYS_INLINE bool is_remote_addr(umq_ipc_info_t *tp, umq_buf_t *qbuf)
 static ALWAYS_INLINE int enqueue_data(uint64_t umqh_tp, uint64_t *offset, uint32_t num)
 {
     umq_ipc_info_t *tp = (umq_ipc_info_t *)(uintptr_t)umqh_tp;
-    if (num > UMQ_POST_POLL_BATCH) {
-        UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "enqueue data num %u exceeds max_post_size %d\n", num, UMQ_POST_POLL_BATCH);
+    if (num > UMQ_BATCH_SIZE) {
+        UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "enqueue data num %u exceeds max_post_size %d\n", num, UMQ_BATCH_SIZE);
         return -UMQ_ERR_EINVAL;
     }
 
