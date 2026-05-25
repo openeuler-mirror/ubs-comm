@@ -572,7 +572,7 @@ int AsyncEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
         return -1;
     }
 
-    if (UNLIKELY(!ModRawSocketEvent(fd, event))) {
+    if (UNLIKELY(ModRawSocketEvent(fd, event) != 0)) {
         UBS_VLOG_ERR("async_epoll EpollCtlMod(socket:%d) failed, not added\n", fd);
         errno = ENOENT;
         return -1;
@@ -580,7 +580,6 @@ int AsyncEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
 
     auto sock = SocketSet::Instance().GetSocket(fd);
     if (UNLIKELY(sock == nullptr)) {
-        UBS_VLOG_INFO("sock is nullptr for origin sock, socket: %d\n", fd);
         return 0;
     }
     int ret = 0;
