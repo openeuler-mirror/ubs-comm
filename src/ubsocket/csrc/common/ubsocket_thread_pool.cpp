@@ -24,7 +24,7 @@ bool ExecutorService::Start(uint32_t queueCapacity)
 
     uint32_t threadNum = GlobalSetting::UBS_THREAD_POOL_SIZE;
     if (threadNum == 0) {
-        UBS_VLOG_INFO("set thread pool size is zero\n");
+        UBS_VLOG_INFO("set thread pool size is zero");
         return false;
     }
     threadNum_ = threadNum;
@@ -33,7 +33,7 @@ bool ExecutorService::Start(uint32_t queueCapacity)
     for (auto i = 0U; i < threadNum_; i++) {
         auto thr = new (std::nothrow) std::thread(&ExecutorService::RunInThread, this);
         if (thr == nullptr) {
-            UBS_VLOG_ERR("Failed to create executor thread %u\n", i);
+            UBS_VLOG_ERR("Failed to create executor thread %u", i);
             ClearExistWorkerThread();
             return false;
         }
@@ -84,9 +84,9 @@ void ExecutorService::DoRunnable(const Runnable &runnable, bool &flag)
             runnable.Run();
         }
     } catch (std::runtime_error &ex) {
-        UBS_VLOG_ERR("Caught error when execute a task, continue\n");
+        UBS_VLOG_ERR("Caught error when execute a task, continue");
     } catch (...) {
-        UBS_VLOG_ERR("Caught unknown error when execute a task, continue\n");
+        UBS_VLOG_ERR("Caught unknown error when execute a task, continue");
     }
 }
 
@@ -120,7 +120,7 @@ void ExecutorService::RunInThread()
     auto threadName = name_.empty() ? "executor" : name_;
     threadName += std::to_string(index);
     pthread_setname_np(pthread_self(), threadName.c_str());
-    UBS_VLOG_INFO("thread %s started.\n", threadName.c_str());
+    UBS_VLOG_INFO("thread %s started.", threadName.c_str());
     while (runFlag) {
         Runnable task;
         while (!tasks_.PopFront(task)) {
@@ -128,7 +128,7 @@ void ExecutorService::RunInThread()
         }
         DoRunnable(task, runFlag);
     }
-    UBS_VLOG_INFO("thread %s finished.\n", threadName.c_str());
+    UBS_VLOG_INFO("thread %s finished.", threadName.c_str());
 }
 } // namespace ubs
 } // namespace ock

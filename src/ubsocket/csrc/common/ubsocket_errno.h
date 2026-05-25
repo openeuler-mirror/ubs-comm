@@ -32,6 +32,7 @@ enum InnerCode : int32_t {
     UBS_UB_ACCEPT,
     UBS_NO_MAIN_UMQ,
     UBS_MAX,
+    UBS_UB_DEV_ERROR,
 };
 
 class NetCommon {
