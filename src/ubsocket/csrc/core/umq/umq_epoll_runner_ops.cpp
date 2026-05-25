@@ -12,6 +12,7 @@
 #include "core/ubsocket_socket_set.h"
 #include "umq_backend.h"
 #include "umq_data_rx_ops.h"
+#include "umq_errno_converter.h"
 #include "umq_socket.h"
 #include "umq_setting.h"
 #include "umq_errno.h"
@@ -31,12 +32,12 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
     event_data.u64 = event.data.u64;
     if (event_data.event_data.type == RUNNER_EVENT_TYPE_SHARE_JFR) {
         Locker slock(mutex_);
-        auto pos = jfr_main_umq_.find((int)event_data.event_data.data);
+        auto pos = jfr_main_umq_.find(static_cast<int>(event_data.event_data.data));
         if (pos != jfr_main_umq_.end()) {
             main_umq = pos->second;
         }
     } else if (event_data.event_data.type == RUNNER_EVENT_TYPE_SUB_UMQ_RX) {
-        socket_object = (Socket *)(ptrdiff_t)event_data.event_data.data;
+        socket_object = reinterpret_cast<Socket *>(static_cast<ptrdiff_t>(event_data.event_data.data));
     } else {
         UBS_VLOG_ERR("async_epoll unknown event:(events:%x, data.type:%lu)\n", event.events,
                      event_data.event_data.type);
@@ -51,25 +52,42 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
     }
 
     umq_buf_t *buf[POLL_BATCH_MAX];
-    int poll_num = UmqApi::umq_poll(dynamic_cast<UmqSocket *>(socket_object)->UmqHandle(), UMQ_IO_RX, buf,
-                                    POLL_BATCH_MAX);
-    if (UNLIKELY(poll_num <= 0)) {
-        if (dynamic_cast<UmqSocket *>(socket_object)->GetRx()->GetRxOps()->RearmRxInterrupt() < 0) {
-            UBS_VLOG_ERR("Rearm sub umq failed, socket fd:%d, ret: %d\n", socket_object->raw_socket_, poll_num);
+    auto umqSock = dynamic_cast<UmqSocket *>(socket_object);
+    int pollNum = UmqApi::umq_poll(umqSock->UmqHandle(), UMQ_IO_RX, buf, POLL_BATCH_MAX);
+    if (UNLIKELY(pollNum <= 0)) {
+        if (UNLIKELY(pollNum < 0)) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::READV, pollNum, savedErrno);
+            UBS_VLOG_ERR("umq_poll() failed for sub umq RX, local umq: %llu, "
+                         "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(umqSock->UmqHandle()),
+                         pollNum, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum),
+                         savedErrno);
+        }
+        if (umqSock->GetRx()->GetRxOps()->RearmRxInterrupt() < 0) {
+            UBS_VLOG_ERR("Rearm sub umq failed, socket fd:%d\n", socket_object->raw_socket_);
         }
         return -1;
     }
-    for (int i = 0; i < poll_num; ++i) {
+    HandleSubUmqPollBuffers(socket_object, buf, pollNum);
+
+    return 0;
+}
+
+void UmqEpollRunnerOps::HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t **buf, int pollNum)
+{
+    auto umqSock = dynamic_cast<UmqSocket *>(socketObject);
+    for (int i = 0; i < pollNum; ++i) {
         if (buf[i]->status != 0) {
             if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
-                ((UmqRxOps *)((UmqSocket *)socket_object)->GetRx()->GetRxOps())->HandleErrorRxCqe(buf[i]);
+                auto rxOps = dynamic_cast<UmqRxOps *>(umqSock->GetRx()->GetRxOps());
+                rxOps->HandleErrorRxCqe(buf[i]);
             }
             QBUF_LIST_NEXT(buf[i]) = nullptr;
             UmqApi::umq_buf_free(buf[i]);
         }
     }
-
-    return 0;
 }
 
 ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq)
@@ -79,28 +97,39 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
     }
 
     umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
-    auto poll_num = UmqApi::umq_poll(main_umq, UMQ_IO_RX, buf, MAX_EPOLL_WAIT_COUNT);
-    if (UNLIKELY(poll_num < 0)) {
-        UBS_VLOG_ERR("async_epoll umq_poll(main_umq=%lu) failed: %d\n", main_umq, poll_num);
+    auto pollNum = UmqApi::umq_poll(main_umq, UMQ_IO_RX, buf, MAX_EPOLL_WAIT_COUNT);
+    if (UNLIKELY(pollNum < 0)) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::READV, pollNum, savedErrno);
+        UBS_VLOG_ERR("umq_poll() failed for share jfr RX, main umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(main_umq), pollNum, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum), savedErrno);
         return -1;
     }
-    if (UNLIKELY(poll_num == 0)) {
+    if (UNLIKELY(pollNum == 0)) {
         return -1;
     }
 
     umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
     umq_buf_t *rx_buf_list =
-        UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), poll_num, UMQ_INVALID_HANDLE, &alloc_option);
+        UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), pollNum, UMQ_INVALID_HANDLE, &alloc_option);
     if (LIKELY(rx_buf_list != nullptr)) {
         umq_buf_t *bad_qbuf = nullptr;
         if (UmqApi::umq_post(main_umq, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
+            UBS_VLOG_ERR("umq_post() failed for share jfr RX refill, main umq: %llu, "
+                         "mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(main_umq), errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, UMQ_FAIL), savedErrno);
             UmqApi::umq_buf_free(bad_qbuf);
         }
     }
 
     std::set<AsyncEventPoll *> readable_epoll_fds;
     epoll_data_t event_data{};
-    auto event_reach_sockets = SiftSocketEventsWithUmqBuffers(buf, poll_num);
+    auto event_reach_sockets = SiftSocketEventsWithUmqBuffers(buf, pollNum);
     for (auto obj : event_reach_sockets) {
         auto socket_obj = (Socket *)obj;
         ((UmqSocket *)socket_obj)->NewRxEpollIn();
@@ -150,12 +179,25 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
     umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto events_cnt = UmqApi::umq_get_cq_event(main_umq, &option);
     if (UNLIKELY(events_cnt < 0)) {
-        UBS_VLOG_ERR("async_epoll umq_get_cq_event(main_umq=%lu) failed: %d\n", main_umq, events_cnt);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::READV, events_cnt, savedErrno);
+        UBS_VLOG_ERR("umq_get_cq_event() failed for share jfr RX, main umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(main_umq), events_cnt, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, events_cnt), savedErrno);
         return events_cnt;
     }
 
     if (LIKELY(events_cnt > 0)) {
-        UmqApi::umq_rearm_interrupt(main_umq, false, &option);
+        int rearmRet = UmqApi::umq_rearm_interrupt(main_umq, false, &option);
+        if (rearmRet < 0) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::READV, rearmRet, savedErrno);
+            UBS_VLOG_ERR("umq_rearm_interrupt() failed for share jfr RX rearm, "
+                         "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(main_umq), rearmRet, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, rearmRet), savedErrno);
+        }
         event_num_ += events_cnt;
         if (event_num_ >= GET_PER_ACK) {
             UmqApi::umq_ack_interrupt(main_umq, event_num_, &option);
