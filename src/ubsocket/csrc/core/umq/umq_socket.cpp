@@ -24,12 +24,14 @@ Result UmqSocket::Initialize() noexcept
 
 void UmqSocket::UnInitialize() noexcept {}
 
-Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used)
+Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports,
+    umq_eid_t *conn_eid_used, umq_topo_type_t &topo_type)
 {
     if (umq_handle_ != UMQ_INVALID_HANDLE) {
         UBS_VLOG_ERR("Create umq on a created umq.\n");
         return UBS_ERROR;
     }
+    topo_type_ = topo_type;
 
     umq_create_option_t queue_cfg;
     memset(&queue_cfg, 0, sizeof(queue_cfg));
@@ -46,7 +48,8 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     // 共享 JFR、AE 事件依赖 umq_ctx.
     queue_cfg.umq_ctx = raw_socket_;
     // TODO: is_bonding 待确认如何设置到 socketbase
-    if (UmqSetting::UMQ_IS_BONDING) {
+    UBS_VLOG_INFO("UmqSetting::UMQ_IS_BONDING %b topo_type_ %d", UmqSetting::UMQ_IS_BONDING, topo_type_);
+    if (UmqSetting::UMQ_IS_BONDING  && topo_type_ == UMQ_TOPO_TYPE_CLOS) {
         queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         queue_cfg.used_ports = used_ports;
     }

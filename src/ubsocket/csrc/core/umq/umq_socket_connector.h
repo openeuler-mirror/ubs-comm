@@ -53,6 +53,8 @@ private:
                            umq_route_t &conn_main_route, umq_route_t &conn_back_route);
     Result GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std::vector<umq_route_t> &main_routes,
                                   std::vector<umq_route_t> &back_routes);
+    Result ConnectViaHandshakeOpt(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
+    Result ConnectViaTfo(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
 
     // ======================== 成员变量 ===========================
     struct UmqConnInfo : public ConnInfo {

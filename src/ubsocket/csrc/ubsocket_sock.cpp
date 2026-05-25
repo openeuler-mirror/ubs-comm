@@ -124,7 +124,7 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
         UBS_VLOG_INFO("Enable Server TFO, with QLen %d\n", backlog);
         // enable tfo
         if (LibcApi::setsockopt(fd, SOL_TCP, TCP_FASTOPEN, &backlog, sizeof(backlog)) < 0) {
-            UBS_VLOG_WARN("Unable to enable server TFO");
+            UBS_VLOG_WARN("Unable to enable server TFO.\n");
         }
     }
     return LibcApi::listen(fd, backlog);

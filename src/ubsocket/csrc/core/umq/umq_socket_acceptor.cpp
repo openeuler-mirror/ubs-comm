@@ -116,10 +116,10 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
     auto umqSocket = RefConvert<Socket, UmqSocket>(socketPtr);
 
     if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
-        ret = umqSocket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid));
+        ret = umqSocket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid), topo_type_);
     } else {
         umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
-        ret = umqSocket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid));
+        ret = umqSocket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid), topo_type_);
     }
 
     // 校验 bind 是否成功
