@@ -100,13 +100,13 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&c
     }
     auto guard = MakeScopeExit([&devList]() { HcomUrma::FreeDeviceList(devList); });
     char name[] = "bonding_dev_0";
-    char nameBonding[] = "bonding";
-    int devIdx = CompareName(name, sizeof(name), devList, devCount);
+    char nameBonding[] = "bonding_dev_";
+    int devIdx = CompareName(name, strlen(name), devList, devCount);
     if (devIdx == -1) {
-        devIdx = CompareName(nameBonding, sizeof(nameBonding), devList, devCount);
+        devIdx = CompareName(nameBonding, strlen(nameBonding), devList, devCount);
     }
     if (devIdx == -1) {
-        NN_LOG_ERROR("Failed to get proper gid by name " << name << ", or name " << nameBonding);
+        NN_LOG_ERROR("Failed to get proper gid by name " << name << ", or name start with " << nameBonding);
         return UB_DEVICE_FAILED_OPEN;
     }
     
