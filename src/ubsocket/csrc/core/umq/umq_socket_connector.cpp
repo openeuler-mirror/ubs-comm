@@ -9,10 +9,12 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "umq_socket_connector.h"
+
 #include <netinet/tcp.h>
 
 #include "core/umq/umq_eid_table.h"
-#include "core/umq/umq_socket_connector.h"
+#include "umq_errno_converter.h"
 
 namespace ock {
 namespace ubs {
@@ -354,8 +356,8 @@ Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_e
         std::vector<umq_route_t> back_routes;
         umq_route_t conn_main_route;
         umq_route_t conn_back_route;
-        int get_affinity_res = GetCpuAffinityUmqRoute(filtered_list, main_routes, back_routes);
-        if (get_affinity_res != 0) {
+        int getAffinityRes = GetCpuAffinityUmqRoute(filtered_list, main_routes, back_routes);
+        if (getAffinityRes != 0) {
             UBS_VLOG_ERR("Failed to get cpu affinity umq route\n");
             conn_route_ = umq_route_t{};
             back_route_ = umq_route_t{};
@@ -395,9 +397,14 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     local_cp_msg.queue_bind_info_size =
         UmqApi::umq_bind_info_get(umq_socket->UmqHandle(), local_cp_msg.queue_bind_info, UMQ_BIND_INFO_SIZE_MAX);
     if (local_cp_msg.queue_bind_info_size == 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_bind_info_get() failed, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, ret: %ld",
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_bind_info_get() failed, Peer eid:" EID_FMT ",Peer IP:%s, "
+                     "fd: %d, ret: %ld, mapped errno: %d(%s), original errno: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_,
-                     local_cp_msg.queue_bind_info_size);
+                     local_cp_msg.queue_bind_info_size, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL),
+                     savedErrno);
         return UBS_ERROR;
     }
 
@@ -429,9 +436,13 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     long long costms = (end_tv.tv_sec - start_tv.tv_sec) * 1000LL + (end_tv.tv_usec - start_tv.tv_usec) / 1000LL;
 
     if (umq_ret != 0) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, umq_ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_bind() failed, Peer eid:" EID_FMT
-                     ",Peer IP:%s, fd: %d, ret: %d, operation duration: %lld ms.\n",
-                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, umq_ret, costms);
+                     ",Peer IP:%s, fd: %d, ret: %d, mapped errno: %d(%s), "
+                     "original errno: %d, operation duration: %lld ms.\n",
+                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, umq_ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, umq_ret), savedErrno, costms);
         return UBS_ERROR;
     }
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
@@ -500,7 +511,10 @@ Result UmqConnectorOps::GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_
     umq_route_list_t route_list;
     int ret = UmqApi::umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
     if (ret != 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_get_route_list() failed, ret: %d\n", ret);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_get_route_list() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
         return -1;
     }
 
@@ -523,14 +537,14 @@ Result UmqConnectorOps::GetConnEid(umq_route_list_t &route_list, const umq_eid_t
             unique_chip_ids.insert(route_list.routes[i].src_port.bs.chip_id);
         }
         std::vector<uint32_t> chipId_list(unique_chip_ids.begin(), unique_chip_ids.end());
-        uint32_t target_chip_id =
+        uint32_t targetChipId =
             GetTargetChipId(UmqSetting::UMQ_ALL_SOCKET_IDS, chipId_list, UmqSetting::UMQ_PROCESS_SOCKET_ID);
-        if (target_chip_id == UINT32_MAX) {
+        if (targetChipId == UINT32_MAX) {
             return GetRoundRobinConnEid(route_list, dst_eid);
         }
         // 查找匹配的eid对
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
-            if (target_chip_id == route_list.routes[i].src_port.bs.chip_id) {
+            if (targetChipId == route_list.routes[i].src_port.bs.chip_id) {
                 conn_route_ = route_list.routes[i];
                 return UBS_OK;
             }
@@ -544,9 +558,9 @@ Result UmqConnectorOps::GetConnEid(umq_route_list_t &route_list, const umq_eid_t
 }
 
 uint32_t UmqConnectorOps::GetTargetChipId(const std::vector<uint32_t> &socket_ids,
-                                          const std::vector<uint32_t> &chip_id_list, int process_socket_id)
+                                          const std::vector<uint32_t> &chip_id_list, int processSocketId)
 {
-    auto it = std::find(socket_ids.begin(), socket_ids.end(), process_socket_id);
+    auto it = std::find(socket_ids.begin(), socket_ids.end(), processSocketId);
     if (it == socket_ids.end()) {
         return UINT32_MAX; // 错误标识
     }
@@ -563,24 +577,24 @@ uint32_t UmqConnectorOps::GetTargetChipId(const std::vector<uint32_t> &socket_id
 Result UmqConnectorOps::GetRoundRobinConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid)
 {
     // 获取起始索引
-    uint32_t start_index = 0;
-    GetBondingEidMapIndex(*dst_eid, start_index);
+    uint32_t startIndex = 0;
+    GetBondingEidMapIndex(*dst_eid, startIndex);
 
     // 确保索引在有效范围内
-    start_index = start_index % route_list.route_num;
+    startIndex = startIndex % route_list.route_num;
 
     // 从起始索引开始轮询查找
     bool found = false;
     for (uint32_t offset = 0; offset < route_list.route_num; ++offset) {
-        uint32_t current_index = (start_index + offset) % route_list.route_num;
+        uint32_t current_index = (startIndex + offset) % route_list.route_num;
         conn_route_ = route_list.routes[current_index];
         found = true;
-        start_index = (current_index + 1) % route_list.route_num; // 更新下次起始位置
+        startIndex = (current_index + 1) % route_list.route_num; // 更新下次起始位置
         break;
     }
 
     // 更新下一个轮询位置
-    EidRegistry::Instance().RegisterOrReplaceEidIndex(*dst_eid, start_index);
+    EidRegistry::Instance().RegisterOrReplaceEidIndex(*dst_eid, startIndex);
 
     if (!found) {
         UBS_VLOG_ERR("Failed to find umq dev\n");
@@ -654,19 +668,19 @@ void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &main_routes, c
                                         umq_route_t &conn_main_route, umq_route_t &conn_back_route)
 {
     // 获取起始索引
-    uint32_t start_index = 0;
-    GetBondingEidMapIndex(*dst_eid, start_index);
+    uint32_t startIndex = 0;
+    GetBondingEidMapIndex(*dst_eid, startIndex);
 
     // 确保索引在有效范围内
-    start_index = start_index % main_routes.size();
+    startIndex = startIndex % main_routes.size();
 
     // 从起始索引开始轮询查找
-    conn_main_route = main_routes[start_index];
-    start_index = (start_index + 1) % main_routes.size(); // 更新下次起始位置
-    conn_back_route = main_routes[start_index];
+    conn_main_route = main_routes[startIndex];
+    startIndex = (startIndex + 1) % main_routes.size(); // 更新下次起始位置
+    conn_back_route = main_routes[startIndex];
 
     // 更新下一个轮询位置
-    EidRegistry::Instance().RegisterOrReplaceEidIndex(*dst_eid, start_index);
+    EidRegistry::Instance().RegisterOrReplaceEidIndex(*dst_eid, startIndex);
 
     UBS_VLOG_INFO("main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", conn_main_route.src_port.bs.chip_id,
                   conn_main_route.src_port.bs.die_id, conn_main_route.src_port.bs.port_idx);

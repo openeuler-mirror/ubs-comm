@@ -11,6 +11,7 @@
 #include "umq_data_tx_ops.h"
 #include "core/ubsocket_socket_set.h"
 #include "umq_buf_converter.h"
+#include "umq_errno_converter.h"
 
 namespace ock {
 namespace ubs {
@@ -106,18 +107,15 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             //UpdateTraceStats(StatsMgr::TX_PACKET_COUNT, 1);
         }
     } else if (bad_qbuf != nullptr) {
-        // Handle partial failure
-        if (ret == -UMQ_ERR_EAGAIN) {
-            // Operation would block, UMQ queue might be temporarily full despite window check
-            errno = EAGAIN;
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
+        if (errno == EAGAIN) {
             need_fc_awake_.store(true, std::memory_order_relaxed);
-        } else if (ret == -UMQ_ERR_EFLOWCTL) {
-            errno = EIO;
-            return -1;
         } else {
-            UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX, local umq: %llu, ret: %d\n",
-                         static_cast<unsigned long long>(local_umqh_), ret);
-            errno = EIO;
+            UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX, local umq: %llu, ret: %d, "
+                         "mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(local_umqh_), ret, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
             flagEIO = 1;
         }
         umq_buf_list_t head = {bad_qbuf};
@@ -147,8 +145,12 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             return -1;
         }
     } else {
-        UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX without bad_qbuf, local umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(local_umqh_), ret);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX without bad_qbuf, "
+                     "local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(local_umqh_), ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
     }
 
     // After posting and before polling, the time for updating the count cna be concealed within the waiting period
@@ -165,7 +167,6 @@ int UmqTxOps::PollTx(const SocketPtr &sock)
         // handle tx epollin epoll event
         do {
             if (GetAndAckEvent() < 0) {
-                errno = EIO;
                 UBS_VLOG_ERR("[UMQ_API] WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                              Func::Error2Str(errno));
                 return -1;
@@ -207,8 +208,11 @@ int UmqTxOps::GetAndAckEvent()
     if (events == 0) {
         return 0;
     } else if (events < 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed, local umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(local_umqh_), events);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, events, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed, local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(local_umqh_), events, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, events), savedErrno);
         return -1;
     }
     if ((ack_event_num_ += events) >= GET_PER_ACK) {
@@ -247,8 +251,12 @@ int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
     int poll_num = UmqApi::umq_poll(local_umqh_, UMQ_IO_TX, buf, POLL_BATCH_MAX);
     if (poll_num <= 0) {
         if (poll_num < 0) {
-            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for TX, local umq: %llu, ret: %d\n",
-                         static_cast<unsigned long long>(local_umqh_), poll_num);
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, poll_num, savedErrno);
+            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for TX, local umq: %llu, ret: %d, "
+                         "mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(local_umqh_), poll_num, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, poll_num), savedErrno);
         }
         return poll_num;
     }
@@ -329,6 +337,14 @@ bool UmqTxOps::HandleProbePacket(umq_buf_t *qbuf)
 
 void UmqTxOps::HandleErrorTxCqe(umq_buf_t *buf)
 {
+    auto bufStatus = static_cast<umq_buf_status_t>(buf->status);
+    int mappedErrno = UmqErrnoConverter::ConvertBufStatus(UmqOperation::WRITEV,
+        bufStatus, errno);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::WRITEV,
+        bufStatus);
+    UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n",
+        buf->status, mappedErrno, desc);
+
     switch (buf->status) {
         case UMQ_BUF_SUCCESS:
             return;
@@ -470,11 +486,12 @@ int UmqTxOps::DpRearmTxInterrupt()
         return -1;
     }
 
-    // 1. try to switch to tcp/ip
-    // 2. use EIO for now
-    UBS_VLOG_ERR("umq_rearm_interrupt() failed for TX, local umq: %llu, ret: %d\n",
-                 static_cast<unsigned long long>(local_umqh_), ret);
-    errno = EIO;
+    int savedErrno = errno;
+    errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
+    UBS_VLOG_ERR("umq_rearm_interrupt() failed for TX, local umq: %llu, "
+                 "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                 static_cast<unsigned long long>(local_umqh_), ret, errno,
+                 UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
     return -1;
 }
 

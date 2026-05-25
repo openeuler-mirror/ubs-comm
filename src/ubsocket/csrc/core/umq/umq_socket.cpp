@@ -11,6 +11,7 @@
 #include "umq_socket.h"
 #include "umq_eid_table.h"
 #include "umq_epoll_runner_ops.h"
+#include "umq_errno_converter.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -132,7 +133,11 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
 
     umq_handle_ = CreateSubUmq(&queue_cfg, &local_eid);
     if (umq_handle_ == UMQ_INVALID_HANDLE) {
-        UBS_VLOG_ERR("CreateSubUmq() failed, ret: %llu\n", static_cast<unsigned long long>(umq_handle_));
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::CREATE, savedErrno);
+        UBS_VLOG_ERR("CreateSubUmq() failed, ret: %llu, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(umq_handle_), errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, UMQ_FAIL), savedErrno);
         return UBS_ERROR;
     }
 
@@ -219,10 +224,14 @@ Result UmqSocket::PrefillRx()
         umq_buf_t *bad_qbuf = nullptr;
         int umq_ret = UmqApi::umq_post(umq_handle, rx_buf_list, UMQ_IO_RX, &bad_qbuf);
         if (umq_ret != UMQ_SUCCESS) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::READV, umq_ret, savedErrno);
             int rx_window_capacity = 0;
-            UBS_VLOG_ERR("[UMQ_API] umq_post() failed, RX depth: %u, ret: %d\n", rx_window_capacity, umq_ret);
             // TODO：处理bad_qbuf
             // rx_.GetRxOps()->rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf);
+            UBS_VLOG_ERR("[UMQ_API] umq_post() failed, RX depth: %u, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         rx_window_capacity, umq_ret, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, umq_ret), savedErrno);
             return UBS_ERROR;
         }
         rx_.GetRxOps()->rx_queue_avail_num_ += cur_post_rx_num;
@@ -254,7 +263,12 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
-        UBS_VLOG_ERR("[UMQ_API] umq_interrupt_fd_get() Failed to get TX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, tx_interrupt_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(umq_handle_), tx_interrupt_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, tx_interrupt_fd), savedErrno);
         return -1;
     }
     auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, tx_interrupt_fd, event);
@@ -266,8 +280,13 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
 
     ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, true, &tx_option);
     if (ret < 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for TX, local umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(umq_handle_), ret);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for TX, local umq: %llu, "
+            "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+            static_cast<unsigned long long>(umq_handle_), ret, errno,
+            UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret),
+            savedErrno);
         return -1;
     }
     return 0;
@@ -278,7 +297,12 @@ Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
-        UBS_VLOG_ERR("[UMQ_API] umq_interrupt_fd_get() Failed to get TX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, tx_interrupt_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd for DelTxEvent, local umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(umq_handle_), tx_interrupt_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, tx_interrupt_fd), savedErrno);
         return -1;
     }
     auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, tx_interrupt_fd, nullptr);
@@ -301,8 +325,12 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto share_jfr_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(main_umq, &main_option);
     if (UNLIKELY(share_jfr_fd < 0)) {
-        UBS_VLOG_ERR("[UMQ_API] async_epoll umq_interrupt_fd_get() failed, socket fd: %d, ret: %d\n", sock->raw_socket_,
-                     share_jfr_fd);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::READV, share_jfr_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get share jfr RX interrupt fd, main umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(main_umq), share_jfr_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, share_jfr_fd), savedErrno);
         return -1;
     }
 
@@ -325,8 +353,12 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
     if (UNLIKELY(rx_interrupt_fd < 0)) {
-        UBS_VLOG_ERR("[UMQ_API] umq_interrupt_fd_get() failed to get RX interrupt fd for umq, socket fd: %d, ret = %d\n",
-                     sock->raw_socket_, rx_interrupt_fd);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::READV, rx_interrupt_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get RX interrupt fd, local umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(umq_handle_), rx_interrupt_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, rx_interrupt_fd), savedErrno);
         return -1;
     }
     struct epoll_event rx_event{};
@@ -345,14 +377,24 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     // 4. do rearm
     int ret = ock::ubs::UmqApi::umq_rearm_interrupt(main_umq, false, &rx_option);
     if (ret < 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for share jfr RX, main umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(main_umq), ret);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::READV, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for share jfr RX, "
+            "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+            static_cast<unsigned long long>(main_umq), ret, errno,
+            UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret),
+            savedErrno);
         return -1;
     }
     ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, false, &rx_option);
     if (ret < 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for sub umq RX, main umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(umq_handle_), ret);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::READV, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for sub umq RX, "
+            "local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+            static_cast<unsigned long long>(umq_handle_), ret, errno,
+            UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret),
+            savedErrno);
         return -1;
     }
 
@@ -364,7 +406,12 @@ Result UmqSocket::DelRxEventToRunner(const SocketPtr &sock, int epoll_fd)
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
     if (UNLIKELY(rx_interrupt_fd < 0)) {
-        UBS_VLOG_ERR("[UMQ_API] umq_interrupt_fd_get() Failed to get RX interrupt fd for umq, socket fd: %d\n", sock->raw_socket_);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::READV, rx_interrupt_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get RX interrupt fd for DelRxEvent, local umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(umq_handle_), rx_interrupt_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, rx_interrupt_fd), savedErrno);
         return -1;
     }
 
@@ -378,7 +425,12 @@ int UmqSocket::GetTxFd()
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
-        UBS_VLOG_ERR("[UMQ_API] umq_interrupt_fd_get() async_epoll Failed to get TX interrupt fd for umq, umq handle: %d\n", umq_handle_);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, tx_interrupt_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd for GetTxFd, local umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(umq_handle_), tx_interrupt_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, tx_interrupt_fd), savedErrno);
         return -1;
     }
     return tx_interrupt_fd;

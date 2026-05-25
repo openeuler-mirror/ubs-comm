@@ -12,6 +12,7 @@
 #include "umq_socket_acceptor.h"
 #include "core/ubsocket_socket_helper.h"
 #include "umq_eid_table.h"
+#include "umq_errno_converter.h"
 
 namespace ock {
 namespace ubs {
@@ -129,8 +130,11 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
     local_cp_msg.queue_bind_info_size = UmqApi::umq_bind_info_get(umqSocket->UmqHandle(), local_cp_msg.queue_bind_info,
                                                                   sizeof(local_cp_msg.queue_bind_info));
     if (local_cp_msg.queue_bind_info_size == 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_bind_info_get() failed, ret: %lu\n", local_cp_msg.queue_bind_info_size);
-        // return ubsocket::Error::kUMQ_BIND_INFO_GET | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_bind_info_get() failed, ret: %lu, mapped errno: %d(%s), original errno: %d\n",
+                     local_cp_msg.queue_bind_info_size, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL), savedErrno);
         return UBS_ERROR;
     }
 
@@ -161,8 +165,13 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
     gettimeofday(&end_tv, NULL);
     long long costms = (end_tv.tv_sec - start_tv.tv_sec) * 1000LL + (end_tv.tv_usec - start_tv.tv_usec) / 1000LL;
     if (umq_ret != UMQ_SUCCESS) {
-        UBS_VLOG_ERR("[UMQ_API] umq_bind() failed, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
-        // return ubsocket::Error::kUMQ_BIND | ubsocket::Error::kRETRYABLE | ubsocket::Error::kDEGRADABLE;
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::ACCEPT, umq_ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_bind() failed, ret: %d, mapped errno: %d(%s), "
+                     "original errno: %d, operation duration: %lld ms.\n",
+                     umq_ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::ACCEPT, umq_ret),
+                     savedErrno, costms);
         return UBS_ERROR;
     }
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
@@ -349,7 +358,10 @@ Result UmqAcceptorOps::CheckDevAdd(const umq_eid_t &connEid)
     trans_info.dev_info.eid.eid = connEid;
     int ret = UmqApi::umq_dev_add(&trans_info);
     if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
-        UBS_VLOG_ERR("[UMQ_API] umq_dev_add() failed, ret: %d\n", ret);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::ACCEPT, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_dev_add() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::ACCEPT, ret), savedErrno);
         return UBS_ERROR;
     }
 

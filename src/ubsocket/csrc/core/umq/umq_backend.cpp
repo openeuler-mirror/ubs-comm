@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "umq_backend.h"
+#include "umq_errno_converter.h"
 #include "umq_setting.h"
 #include "under_api/dl_umq_api.h"
 
@@ -57,7 +58,10 @@ Result UmqBackend::Init() noexcept
     /* init umq */
     ret = UmqApi::umq_init(&umq_config);
     if (ret != 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_init() failed, ret: %d\n", ret);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CREATE, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_init() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, ret), savedErrno);
         return UBS_ERROR;
     }
 
@@ -146,7 +150,10 @@ Result UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
 
     ret = UmqApi::umq_dev_add(&trans_info);
     if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
-        UBS_VLOG_ERR("[UMQ_API] umq_dev_add() failed, ret: %d\n", ret);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CREATE, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_dev_add() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, ret), savedErrno);
         return -1;
     }
 
@@ -161,7 +168,12 @@ Result UmqBackend::FindDevName()
     int devCount = 0;
     umq_dev_info_t *umqDevInfo = UmqApi::umq_dev_info_list_get(transMode, &devCount);
     if (umqDevInfo == nullptr || devCount <= 0) {
-        UBS_VLOG_ERR("[UMQ_API] umq_dev_info_list_get() failed, ret: %p, dev count: %d\n", umqDevInfo, devCount);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_dev_info_list_get() failed, ret: %p, dev count: %d, "
+                     "mapped errno: %d(%s), original errno: %d\n",
+                     umqDevInfo, devCount, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL), savedErrno);
         return UBS_ERROR;
     }
 
