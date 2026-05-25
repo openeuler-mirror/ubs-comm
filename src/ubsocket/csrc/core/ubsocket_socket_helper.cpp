@@ -157,9 +157,7 @@ int SocketConnHelper::GetCurrentProcessSocketId()
     // 获取当前进程主线程所在的 CPU
     int cpu = sched_getcpu();
     if (cpu < 0) {
-        char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        UBS_VLOG_ERR("sched_getcpu() failed, ret: %d, errno: %d, errmsg: %s\n", cpu, errno,
-                     NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+        UBS_VLOG_ERR("sched_getcpu() failed, ret: %d, errno: %d, errmsg: %s\n", cpu, errno, Func::Error2Str(errno));
         return -1;
     }
     return SocketConnHelper::GetSocketIdOfCpu(cpu);

@@ -258,6 +258,36 @@ Result UmqSocket::PrefillRx()
     return 0;
 }
 
+void UmqSocket::UnbindAndFlushRemoteUmq(const SocketPtr &sock)
+{
+    if (!umq_is_bind_remote_) {
+        return;
+    }
+
+    if (tx_.GetTxOps()->ack_event_num_ > 0) {
+        umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
+        UmqApi::umq_ack_interrupt(umq_handle_, tx_.GetTxOps()->ack_event_num_, &option);
+        tx_.GetTxOps()->ack_event_num_ = 0;
+    }
+
+    if (rx_.GetRxOps()->ack_event_num_ > 0) {
+        umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+        UmqApi::umq_ack_interrupt(umq_handle_, rx_.GetRxOps()->ack_event_num_, &option);
+        rx_.GetRxOps()->ack_event_num_ = 0;
+    }
+
+    int ret = UmqApi::umq_unbind(umq_handle_);
+    if (ret != UMQ_SUCCESS) {
+        UBS_VLOG_ERR("umq_unbind() failed, local umq: %llu, ret: %d\n", static_cast<unsigned long long>(umq_handle_),
+                     ret);
+    }
+    tx_.GetTxOps()->FlushTx(sock);
+
+    GlobalSetting::UBS_ENABLE_SHARE_JFR ? FlushRxQueue() : rx_.GetRxOps()->FlushRx(sock);
+}
+
+void UmqSocket::DestroyLocalUmq() {}
+
 Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event)
 {
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
@@ -283,10 +313,9 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
         UBS_VLOG_ERR("umq_rearm_interrupt() failed for TX, local umq: %llu, "
-            "ret: %d, mapped errno: %d(%s), original errno: %d\n",
-            static_cast<unsigned long long>(umq_handle_), ret, errno,
-            UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret),
-            savedErrno);
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(umq_handle_), ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
         return -1;
     }
     return 0;
@@ -343,8 +372,7 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     shared_jfr_event.data.u64 = event_data.u64;
 
     UmqEpollRunnerOps *ops = (UmqEpollRunnerOps *)EpollRunnerFactory::GetInstance(this->Type()).GetOps();
-    if (UNLIKELY(ops == nullptr || ops->InsertJfrMainUmq(
-        share_jfr_fd, main_umq, epoll_fd, &shared_jfr_event) < 0)) {
+    if (UNLIKELY(ops == nullptr || ops->InsertJfrMainUmq(share_jfr_fd, main_umq, epoll_fd, &shared_jfr_event) < 0)) {
         UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
         return -1;
     }
@@ -380,10 +408,9 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, ret, savedErrno);
         UBS_VLOG_ERR("umq_rearm_interrupt() failed for share jfr RX, "
-            "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-            static_cast<unsigned long long>(main_umq), ret, errno,
-            UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret),
-            savedErrno);
+                     "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(main_umq), ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret), savedErrno);
         return -1;
     }
     ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, false, &rx_option);
@@ -391,10 +418,9 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, ret, savedErrno);
         UBS_VLOG_ERR("umq_rearm_interrupt() failed for sub umq RX, "
-            "local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-            static_cast<unsigned long long>(umq_handle_), ret, errno,
-            UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret),
-            savedErrno);
+                     "local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(umq_handle_), ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret), savedErrno);
         return -1;
     }
 
@@ -462,21 +488,21 @@ int UmqSocket::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
 
     return i;
 }
-int UmqSocket::FlushRxQueue()
+void UmqSocket::FlushRxQueue()
 {
     if (rxQueue == nullptr) {
-        return -1;
+        return;
     }
 
     while (!rxQueue->IsEmpty()) {
         umq_buf_t *buf[1];
         if (rxQueue->Dequeue(buf) != 0) {
-            return -1;
+            return;
         }
         UmqApi::umq_buf_free(buf[0]);
     }
 
-    return 0;
+    return;
 }
 uint32_t UmqSocket::getLeftPostRxNum(uint64_t umq_handle)
 {

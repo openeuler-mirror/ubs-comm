@@ -35,6 +35,7 @@ public:
     virtual int PollRx(const SocketPtr &sock) = 0;
     ssize_t RxDataSet(void *buf, uint32_t size);
     virtual int RearmRxInterrupt() = 0;
+    virtual void FlushRx(const SocketPtr &sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) = 0;
 
 public:
     int fd_ = -1;
@@ -66,7 +67,10 @@ public:
 
     ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
-    DataRxOps *GetRxOps() {return rx_ops_;}
+    DataRxOps *GetRxOps()
+    {
+        return rx_ops_;
+    }
 
 private:
     ssize_t OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec *iov, int iovcnt);

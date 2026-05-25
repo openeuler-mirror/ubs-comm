@@ -81,7 +81,7 @@ ALWAYS_INLINE bool Func::FloatEqual(float a, float b) noexcept
 
 ALWAYS_INLINE char *Func::Error2Str(int errNum)
 {
-    char buf[128L] = {0};
+    char buf[NET_STR_ERROR_BUF_SIZE] = {0};
 #if defined(_XOPEN_SOURCE) && defined(_POSIX_C_SOURCE) && defined(_GNU_SOURCE) && \
     (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && !_GNU_SOURCE
     strerror_r(errNum, buf, sizeof(buf) - 1);
