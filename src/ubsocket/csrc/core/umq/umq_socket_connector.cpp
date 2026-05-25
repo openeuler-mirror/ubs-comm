@@ -393,7 +393,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     if (local_cp_msg.queue_bind_info_size == 0) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, savedErrno);
-        UBS_VLOG_ERR("umq_bind_info_get() failed, Peer eid:" EID_FMT ",Peer IP:%s, "
+        UBS_VLOG_ERR("[UMQ_API] umq_bind_info_get() failed, Peer eid:" EID_FMT ",Peer IP:%s, "
                      "fd: %d, ret: %ld, mapped errno: %d(%s), original errno: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_,
                      local_cp_msg.queue_bind_info_size, errno,
@@ -432,7 +432,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     if (umq_ret != 0) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, umq_ret, savedErrno);
-        UBS_VLOG_ERR("umq_bind() failed, Peer eid:" EID_FMT
+        UBS_VLOG_ERR("[UMQ_API] umq_bind() failed, Peer eid:" EID_FMT
                      ",Peer IP:%s, fd: %d, ret: %d, mapped errno: %d(%s), "
                      "original errno: %d, operation duration: %lld ms.\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, umq_ret, errno,
@@ -507,7 +507,7 @@ Result UmqConnectorOps::GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_
     if (ret != 0) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
-        UBS_VLOG_ERR("umq_get_route_list() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+        UBS_VLOG_ERR("[UMQ_API] umq_get_route_list() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
                      ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
         return -1;
     }

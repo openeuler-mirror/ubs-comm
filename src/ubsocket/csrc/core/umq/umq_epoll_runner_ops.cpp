@@ -59,7 +59,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
         if (UNLIKELY(pollNum < 0)) {
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::READV, pollNum, savedErrno);
-            UBS_VLOG_ERR("umq_poll() failed for sub umq RX, local umq: %llu, "
+            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for sub umq RX, local umq: %llu, "
                          "ret: %d, mapped errno: %d(%s), original errno: %d\n",
                          static_cast<unsigned long long>(umqSock->UmqHandle()),
                          pollNum, errno,
@@ -185,7 +185,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
     if (UNLIKELY(events_cnt < 0)) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, events_cnt, savedErrno);
-        UBS_VLOG_ERR("umq_get_cq_event() failed for share jfr RX, main umq: %llu, "
+        UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed for share jfr RX, main umq: %llu, "
                      "ret: %d, mapped errno: %d(%s), original errno: %d\n",
                      static_cast<unsigned long long>(main_umq), events_cnt, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, events_cnt), savedErrno);

@@ -22,8 +22,8 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
         if (GetAndAckEvent() < 0) {
-            UBS_VLOG_ERR("ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
-                         Func::Error2Str(errno));
+            UBS_VLOG_ERR("[UMQ_API] ReadV GetAndAckEvent() failed, fd: %d, ret: %d,
+                         errno: %d, errmsg: %s\n", fd_, -1, errno, Func::Error2Str(errno));
             return -1;
         }
         get_and_ack_event_ = false;
@@ -34,7 +34,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
     if (poll_) {
         poll_num = GetQbuf(sock, buf, POLL_BATCH_MAX);
         if (poll_num < 0) {
-            UBS_VLOG_ERR("ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+            UBS_VLOG_ERR("[UMQ_API] ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
             return -1;
         } else if (poll_num == 0) {
@@ -102,7 +102,7 @@ int UmqRxOps::GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num)
     auto umqSock = dynamic_cast<UmqSocket *>(sock.Get());
     int poll_num = umqSock->GetAndPopQbuf(buf, max_num);
     if (poll_num < 0) {
-        UBS_VLOG_ERR("GetQbuf failed, fd: %d, ret: %d\n", fd_, poll_num);
+        UBS_VLOG_ERR("[UMQ_API] GetQbuf failed, fd: %d, ret: %d\n", fd_, poll_num);
         return -1;
     }
     return poll_num;
@@ -115,8 +115,8 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
         if (poll_num < 0) {
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::READV, poll_num, savedErrno);
-            UBS_VLOG_ERR("umq_poll() failed, local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                         static_cast<unsigned long long>(local_umqh_), poll_num, errno,
+            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed, local umq: %llu, ret: %d, mapped errno: %d(%s),
+                         original errno: %d\n", static_cast<unsigned long long>(local_umqh_), poll_num, errno,
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, poll_num), savedErrno);
         }
         return -1;
@@ -136,7 +136,7 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
             } else if ((rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf)) == 0) {
                 int savedErrno = errno;
                 errno = UmqErrnoConverter::Convert(UmqOperation::READV, umq_ret, savedErrno);
-                UBS_VLOG_ERR("umq_post() failed in refill, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                UBS_VLOG_ERR("[UMQ_API] umq_post() prefill failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
                              umq_ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, umq_ret),
                              savedErrno);
                 return -1;
@@ -178,8 +178,8 @@ int UmqRxOps::GetAndAckEvent()
     } else if (events < 0) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, events, savedErrno);
-        UBS_VLOG_ERR("umq_get_cq_event() failed, local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(local_umqh_), events, errno,
+        UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed, local umq: %llu, ret: %d, mapped errno: %d(%s),
+                     original errno: %d\n", static_cast<unsigned long long>(local_umqh_), events, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, events), savedErrno);
         return -1;
     }
@@ -202,81 +202,81 @@ void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
             return;
 
         case UMQ_FAKE_BUF_FC_ERR:
-            UBS_VLOG_ERR("cqe error: flow control failed\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: flow control failed\n");
             break;
 
         case UMQ_BUF_UNSUPPORTED_OPCODE_ERR:
-            UBS_VLOG_ERR("cqe error: unsupported opcode\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: unsupported opcode\n");
             break;
 
         case UMQ_BUF_LOC_LEN_ERR:
-            UBS_VLOG_ERR("cqe error: local length too long\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: local length too long\n");
             break;
 
         case UMQ_BUF_LOC_OPERATION_ERR:
-            UBS_VLOG_ERR("cqe error: local op err\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: local op err\n");
             break;
 
         case UMQ_BUF_LOC_ACCESS_ERR:
-            UBS_VLOG_ERR("cqe error: access to local memory error\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: access to local memory error\n");
             break;
 
         case UMQ_BUF_REM_RESP_LEN_ERR:
-            UBS_VLOG_ERR("cqe error: remote rx buffer length error\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote rx buffer length error\n");
             break;
 
         case UMQ_BUF_REM_UNSUPPORTED_REQ_ERR:
-            UBS_VLOG_ERR("cqe error: remote does not support req\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote does not support req\n");
             break;
 
         case UMQ_BUF_REM_OPERATION_ERR:
-            UBS_VLOG_ERR("cqe error: remote jetty can not complete op\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty can not complete op\n");
             break;
 
         case UMQ_BUF_REM_ACCESS_ABORT_ERR:
-            UBS_VLOG_ERR("cqe error: remote jetty access memory error\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty access memory error\n");
             break;
 
         case UMQ_BUF_ACK_TIMEOUT_ERR:
-            UBS_VLOG_ERR("cqe error: remote jetty does not send ack\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty does not send ack\n");
             break;
 
         case UMQ_BUF_RNR_RETRY_CNT_EXC_ERR:
-            UBS_VLOG_ERR("cqe error: remote jetty has no enough RQE\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty has no enough RQE\n");
             break;
 
         case UMQ_BUF_WR_FLUSH_ERR:
             break;
 
         case UMQ_BUF_WR_SUSPEND_DONE:
-            UBS_VLOG_ERR("cqe error: suspend done\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: suspend done\n");
             break;
 
         case UMQ_BUF_WR_FLUSH_ERR_DONE:
-            UBS_VLOG_ERR("cqe error: flush err done\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: flush err done\n");
             break;
 
         case UMQ_BUF_WR_UNHANDLED:
             // See umq_ub_flush_seq
-            UBS_VLOG_ERR("It wont be here.\n");
+            UBS_VLOG_ERR("[UMQ_CQE] It wont be here.\n");
             break;
 
         case UMQ_BUF_LOC_DATA_POISON:
         case UMQ_BUF_REM_DATA_POISON:
-            UBS_VLOG_ERR("cqe error: not supported yet\n");
+            UBS_VLOG_ERR("[UMQ_CQE] cqe error: not supported yet\n");
             break;
 
         case UMQ_FAKE_BUF_FC_UPDATE:
-            UBS_VLOG_ERR("You should handle flow control message manually\n");
+            UBS_VLOG_ERR("[UMQ_CQE] You should handle flow control message manually\n");
             break;
 
         case UMQ_MEMPOOL_UPDATE_SUCCESS:
         case UMQ_MEMPOOL_UPDATE_FAILED:
-            UBS_VLOG_ERR("Something went wrong. brpc-adaptor ONLY uses UB send/recv\n");
+            UBS_VLOG_ERR("[UMQ_CQE] Something went wrong. brpc-adaptor ONLY uses UB send/recv\n");
             break;
 
         default:
-            UBS_VLOG_ERR("unreachable! status=%d\n", buf->status);
+            UBS_VLOG_ERR("[UMQ_CQE] unreachable! status=%d\n", buf->status);
             break;
     }
 }
@@ -288,7 +288,7 @@ int UmqRxOps::RearmRxInterrupt()
     if (ret < 0) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, ret, savedErrno);
-        UBS_VLOG_ERR("umq_rearm_interrupt() failed for RX, local umq: %llu, "
+        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for RX, local umq: %llu, "
                      "ret: %d, mapped errno: %d(%s), original errno: %d\n",
                      static_cast<unsigned long long>(local_umqh_), ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret), savedErrno);

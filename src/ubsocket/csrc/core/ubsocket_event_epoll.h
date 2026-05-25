@@ -453,15 +453,3 @@ using AsyncEventPollPtr = Ref<AsyncEventPoll>;
 } // namespace ock
 
 #endif // UBS_COMM_UBSOCKET_EPOLL_FD_H
-
-/**
- * TODO：问题记录
- * 1. 当前async的方式不开共享JFR跑不起来，后续是否还需要适配
- * 2. AddSocketReadableEvent：socket_fd无用入参
- * 3. EnsureReadableEventFdReady：m_socket_readable_event_fd重复判断，无用锁
- * 4. bug：ProcessShareJfrEvent中SiftSocketEventsWithUmqBuffers重复2次
- * 5. bug：EpollCtlAdd中ret = AddSocketOutEvent(socket_fd, connect_info.tx_interrupt_fd, event);为tx的
- * 6. bug：ProcessOneEvent中流控处理时候没有wait就直接poll了
- * 7. 性能：ProcessUmqRxEvent中umq_get_cq_event如果为0的话，不需要umq_poll了
- * 8. AddPureSocketEvent中以前有添加重复的socket_fd到epoll_fd中会报错的逻辑，当前依赖原生epoll_ctl报错，需确认是否可以
- */
