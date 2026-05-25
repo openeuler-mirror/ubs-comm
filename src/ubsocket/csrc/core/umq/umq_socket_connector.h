@@ -47,7 +47,7 @@ private:
     Result GetRoundRobinConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid);
     void GetBondingEidMapIndex(const umq_eid_t &dst_eid, uint32_t &index);
     uint32_t GetTargetChipId(const std::vector<uint32_t> &socket_ids, const std::vector<uint32_t> &chip_id_list,
-                             int process_socket_id);
+                             int processSocketId);
     Result GetConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid);
     void RRChooseMainRoute(std::vector<umq_route_t> &main_routes, const umq_eid_t *dst_eid,
                            umq_route_t &conn_main_route, umq_route_t &conn_back_route);

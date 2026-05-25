@@ -12,6 +12,7 @@
 #include "umq_data_rx_ops.h"
 #include "core/ubsocket_socket_set.h"
 #include "umq_socket.h"
+#include "umq_errno_converter.h"
 
 namespace ock {
 namespace ubs {
@@ -20,7 +21,6 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
         if (GetAndAckEvent() < 0) {
-            errno = EIO;
             UBS_VLOG_ERR("ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
             return -1;
@@ -33,7 +33,6 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
     if (poll_) {
         poll_num = GetQbuf(sock, buf, POLL_BATCH_MAX);
         if (poll_num < 0) {
-            errno = EIO;
             UBS_VLOG_ERR("ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
             return -1;
@@ -114,8 +113,11 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
     int poll_num = UmqApi::umq_poll(local_umqh_, UMQ_IO_RX, buf, max_buf_size);
     if (poll_num < 0 || (poll_num == 0 && rx_queue_avail_num_ == 0)) {
         if (poll_num < 0) {
-            UBS_VLOG_ERR("umq_poll() failed, local umq: %llu, ret: %d\n",
-                         static_cast<unsigned long long>(local_umqh_), poll_num);
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::READV, poll_num, savedErrno);
+            UBS_VLOG_ERR("umq_poll() failed, local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(local_umqh_), poll_num, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, poll_num), savedErrno);
         }
         return -1;
     }
@@ -132,7 +134,11 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
             if (umq_ret == UMQ_SUCCESS) {
                 rx_queue_avail_num_ += TX_REFILL_THRESHOLD;
             } else if ((rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf)) == 0) {
-                UBS_VLOG_ERR("umq_post() failed in refill, ret: %d\n", umq_ret);
+                int savedErrno = errno;
+                errno = UmqErrnoConverter::Convert(UmqOperation::READV, umq_ret, savedErrno);
+                UBS_VLOG_ERR("umq_post() failed in refill, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                             umq_ret, errno,
+                             UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, umq_ret), savedErrno);
                 return -1;
             }
         }
@@ -170,8 +176,11 @@ int UmqRxOps::GetAndAckEvent()
     if (events == 0) {
         return 0;
     } else if (events < 0) {
-        UBS_VLOG_ERR("umq_get_cq_event() failed, local umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(local_umqh_), events);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::READV, events, savedErrno);
+        UBS_VLOG_ERR("umq_get_cq_event() failed, local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(local_umqh_), events, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, events), savedErrno);
         return -1;
     }
     if ((ack_event_num_ += events) >= GET_PER_ACK) {
@@ -183,6 +192,12 @@ int UmqRxOps::GetAndAckEvent()
 
 void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
 {
+    auto bufStatus = static_cast<umq_buf_status_t>(buf->status);
+    int mappedErrno = UmqErrnoConverter::ConvertBufStatus(UmqOperation::READV, bufStatus, errno);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::READV, bufStatus);
+    UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n",
+        buf->status, mappedErrno, desc);
+
     switch (buf->status) {
         case UMQ_BUF_SUCCESS:
             return;
@@ -272,8 +287,13 @@ int UmqRxOps::RearmRxInterrupt()
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     int ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &rx_option);
     if (ret < 0) {
-        UBS_VLOG_ERR("umq_rearm_interrupt() failed for RX, local umq: %llu, ret: %d\n",
-                     static_cast<unsigned long long>(local_umqh_), ret);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::READV, ret, savedErrno);
+        UBS_VLOG_ERR("umq_rearm_interrupt() failed for RX, local umq: %llu, "
+            "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+            static_cast<unsigned long long>(local_umqh_), ret, errno,
+            UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret),
+            savedErrno);
     }
     return ret;
 }
