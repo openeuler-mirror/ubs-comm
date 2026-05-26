@@ -227,7 +227,15 @@ static ALWAYS_INLINE int fill_ring_info(umq_create_option_t *option, umq_ipc_rin
 
     ring->tx_buf_size = (option->create_flag & UMQ_CREATE_FLAG_TX_BUF_SIZE) ?
         option->tx_buf_size : UMQ_DEFAULT_BUF_SIZE;
-    ring->tx_depth = (option->create_flag & UMQ_CREATE_FLAG_TX_DEPTH) ? option->tx_depth : UMQ_DEFAULT_DEPTH;
+    if (option->create_flag & UMQ_CREATE_FLAG_TX_DEPTH) {
+        if (option->tx_depth == 0) {
+            UMQ_VLOG_ERR(VLOG_UMQ, "tx_depth must be greater than 0\n");
+            return -UMQ_ERR_EINVAL;
+        }
+        ring->tx_depth = option->tx_depth;
+    } else {
+        ring->tx_depth = UMQ_DEFAULT_DEPTH;
+    }
     ring->rx_depth = ring->tx_depth;
 
     uint64_t data_zone_size =
@@ -391,23 +399,27 @@ uint32_t umq_ipc_bind_info_get_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32
     tmp_info->shm_qbuf_pool_headroom_size = global_pool_cfg.headroom_size;
     tmp_info->shm_qbuf_pool_mode = global_pool_cfg.mode;
 
-    strcpy(tmp_info->ipc_name, tp->local_ring.ipc_name);
+    int ret = snprintf(tmp_info->ipc_name, MAX_MSG_RING_NAME + 1, "%s", tp->local_ring.ipc_name);
+    if (ret < 0 || ret >= MAX_MSG_RING_NAME + 1) {
+        errno = UMQ_ERR_EINVAL;
+        UMQ_VLOG_ERR(VLOG_UMQ, "snprintf failed, ret: %d\n", ret);
+        return 0;
+    }
 
     return sizeof(umq_ipc_bind_info_t);
 }
 
 int32_t umq_ipc_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_info_size)
 {
+    if (bind_info_size < sizeof(umq_ipc_bind_info_t)) {
+        UMQ_VLOG_ERR(VLOG_UMQ, "bind_info_size: %u is invalid\n", bind_info_size);
+        return -UMQ_ERR_EINVAL;
+    }
     umq_ipc_info_t *tp = (umq_ipc_info_t *)(uintptr_t)umqh_tp;
     umq_ipc_bind_info_t *tmp_info = (umq_ipc_bind_info_t *)bind_info;
     if (tp->bind_ctx != NULL || tmp_info->is_binded != 0) {
         UMQ_VLOG_ERR(VLOG_UMQ, "umq has already been binded\n");
         return -UMQ_ERR_EEXIST;
-    }
-
-    if (bind_info_size < sizeof(umq_ipc_bind_info_t)) {
-        UMQ_VLOG_ERR(VLOG_UMQ, "bind_info_size is invalid\n");
-        return -UMQ_ERR_EINVAL;
     }
 
     if (tmp_info->trans_mode != UMQ_TRANS_MODE_IPC) {
@@ -440,7 +452,7 @@ int32_t umq_ipc_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_in
         .tx_max_buf_size = sizeof(uint64_t) + sizeof(uint32_t),
         .tx_depth = ctx->remote_ring.tx_depth,
         .rx_max_buf_size = sizeof(uint64_t) + sizeof(uint32_t),
-        .rx_depth = ctx->remote_ring.tx_depth,
+        .rx_depth = ctx->remote_ring.rx_depth,
         .addr = ctx->remote_ring.addr,
     };
 
@@ -531,8 +543,8 @@ static ALWAYS_INLINE bool is_remote_addr(umq_ipc_info_t *tp, umq_buf_t *qbuf)
 static ALWAYS_INLINE int enqueue_data(uint64_t umqh_tp, uint64_t *offset, uint32_t num)
 {
     umq_ipc_info_t *tp = (umq_ipc_info_t *)(uintptr_t)umqh_tp;
-    if (num > UMQ_POST_POLL_BATCH) {
-        UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "enqueue data num %u exceeds max_post_size %d\n", num, UMQ_POST_POLL_BATCH);
+    if (num > UMQ_BATCH_SIZE) {
+        UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "enqueue data num %u exceeds max_post_size %d\n", num, UMQ_BATCH_SIZE);
         return -UMQ_ERR_EINVAL;
     }
 

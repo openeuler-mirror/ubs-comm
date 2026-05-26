@@ -14,26 +14,19 @@
 #define URPC_RANDOM_SEED_SIZE 48
 
 #if defined(__x86_64__)
+#include "ub_get_clock.h"
 
 static uint64_t g_urpc_cpu_hz;
+
 uint64_t urpc_get_cpu_hz(void)
 {
+    // ub get_cpu_mhz will cost 200+ms
     if (URPC_UNLIKELY(g_urpc_cpu_hz == 0)) {
-        FILE *file = fopen("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", "r");
-        if (file == NULL) {
-            return 0; // 打开失败
-        }
-        uint64_t freq_khz = 0;
-        if (fscanf(file, "%lu", &freq_khz) != 1) {
-            fclose(file);
-            return 0;
-        }
-        fclose(file);
-        g_urpc_cpu_hz = freq_khz * 1000;
+        g_urpc_cpu_hz = (uint64_t)(get_cpu_mhz(false) * US_PER_SEC);
     }
+
     return g_urpc_cpu_hz;
 }
-
 #elif defined(__aarch64__)
 uint64_t urpc_get_cpu_hz(void)
 {

@@ -215,7 +215,7 @@ ALWAYS_INLINE int EpollRunner<T>::DelEpollEvent(const SocketPtr &sock)
         UBS_VLOG_ERR("async_epoll AddEvent invalid args efd:%d\n", epoll_fd_);
         return -1;
     }
-    return sock->DelRxEventToRunner(sock, epoll_fd_);
+    return 0;
 }
 
 template <SocketType T>

@@ -56,6 +56,7 @@ public:
     static dev_schedule_policy UMQ_DEV_SCHEDULE_POLICY;
     static ub_trans_mode UMQ_UB_TRANS_MODE;
     static bool UMQ_IS_BONDING;
+    static bool UMQ_FLOW_CONTROL_ENABLE;
 
 private:
     static Result Init() noexcept;

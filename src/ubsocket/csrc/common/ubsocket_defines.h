@@ -107,7 +107,7 @@ constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 512;
 constexpr uint32_t DIVIDED_NUMBER = 2;
 constexpr uint32_t CACHE_LINE_ALIGNMENT = 64;
 constexpr uint16_t TX_HANDLE_THRESHOLD = 2;
-constexpr uint16_t TX_RETRIEVE_THRESHOLD = 1;
+constexpr uint16_t TX_RETRIEVE_THRESHOLD = 32;
 constexpr uint16_t TX_REPORT_THRESHOLD = 1;
 constexpr uint16_t TX_REFILL_THRESHOLD = 32;
 constexpr uint32_t TX_POST_BATCH_MAX = 64;
@@ -120,6 +120,7 @@ constexpr uint32_t FLUSH_SOCKET_MSG_BUFFER_LEN = 1024;
 constexpr uint32_t FLUSH_TIMEOUT_MS = 200;
 constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 20000;
 
+constexpr uint64_t SIZE_4K = 4096;
 constexpr uint64_t SIZE_8K = 8192;
 constexpr uint64_t SIZE_16K = 16384;
 constexpr uint64_t SIZE_32K = 32768;
@@ -131,13 +132,16 @@ constexpr int RETRY_NEEDED = 1;
 // to improve the efficiency, do one ack event operation per GET_PER_ACK times get event operation(same as brpc)
 constexpr uint32_t GET_PER_ACK = 32;
 // currently, poll batch use 32 is for the balance of performance and efficiency
-constexpr uint32_t POLL_BATCH_MAX = 32;
+// 256 is better on RM_CTP.
+// see #66
+constexpr uint32_t POLL_BATCH_MAX = 256;
 
 constexpr uint32_t POLL_TX_RETRY_MAX_CNT = 50;
 
 constexpr const uint32_t NET_STR_ERROR_BUF_SIZE = 128;
 
 constexpr uint32_t BLOCK_TYPE_STR_LEN_MAX = 64;
+constexpr const char *TINY_QBUF_BLOCK_TYPE = "tiny";    // 4k
 constexpr const char *DEFAULT_QBUF_BLOCK_TYPE = "default"; // 8k
 constexpr const char *SMALL_QBUF_BLOCK_TYPE = "small";     // 16k
 constexpr const char *MEDIUM_QBUF_BLOCK_TYPE = "medium";   // 32k

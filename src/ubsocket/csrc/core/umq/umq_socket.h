@@ -115,7 +115,6 @@ public:
     Result DelTxEvent(const SocketPtr &sock, int epoll_fd) override;
     Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
                               struct epoll_event *event) override;
-    Result DelRxEventToRunner(const SocketPtr &sock, int epoll_fd) override;
     int GetTxFd() override;
 
     Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, 

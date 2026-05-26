@@ -114,20 +114,30 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
     if (UNLIKELY(pollNum == 0)) {
         return -1;
     }
+    // 计算时，排除流控的buffer
+    int fcBufCnt = 0;
+    for (int i = 0; i < pollNum; ++i) {
+        if (buf[i]->status >= UMQ_FAKE_BUF_FC_UPDATE) {
+            ++fcBufCnt;
+        }
+    }
 
-    umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
-    umq_buf_t *rx_buf_list =
-        UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), pollNum, UMQ_INVALID_HANDLE, &alloc_option);
-    if (LIKELY(rx_buf_list != nullptr)) {
-        umq_buf_t *bad_qbuf = nullptr;
-        if (UmqApi::umq_post(main_umq, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
-            int savedErrno = errno;
-            errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
-            UBS_VLOG_ERR("umq_post() failed for share jfr RX refill, main umq: %llu, "
-                         "mapped errno: %d(%s), original errno: %d\n",
-                         static_cast<unsigned long long>(main_umq), errno,
-                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, UMQ_FAIL), savedErrno);
-            UmqApi::umq_buf_free(bad_qbuf);
+    int ioPollNum = pollNum - fcBufCnt;
+    if (ioPollNum != 0) {
+        umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
+        umq_buf_t *rx_buf_list =
+            UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), ioPollNum, UMQ_INVALID_HANDLE, &alloc_option);
+        if (LIKELY(rx_buf_list != nullptr)) {
+            umq_buf_t *bad_qbuf = nullptr;
+            if (UmqApi::umq_post(main_umq, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
+                int savedErrno = errno;
+                errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
+                UBS_VLOG_ERR("umq_post() failed for share jfr RX refill, main umq: %llu, "
+                             "mapped errno: %d(%s), original errno: %d\n",
+                             static_cast<unsigned long long>(main_umq), errno,
+                             UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, UMQ_FAIL), savedErrno);
+                UmqApi::umq_buf_free(bad_qbuf);
+            }
         }
     }
 
