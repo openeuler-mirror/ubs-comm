@@ -162,18 +162,27 @@ struct NegotiateReq {
     uint8_t is_bonding = 0;
     uint8_t enable_share_jfr = 0;
     uint8_t schedule_policy = static_cast<uint8_t>(dev_schedule_policy::ROUND_ROBIN);
-    uint8_t has_socket_id = 0;
-    int32_t process_socket_id = -1;
     umq_eid_t local_eid = {};
-    uint32_t socket_id_count = 0;
-    uint32_t socket_ids[NEGOTIATE_SOCKET_ID_MAX_NUM] = {0};
 };
 
 struct NegotiateRsp {
     int32_t ret_code = 0;
+    int32_t aff_sock_id = 0;
     ub_trans_mode peer_trans_mode = RM_TP;
-    uint8_t reserved[3] = {0};
+    uint8_t is_bonding = 0;
+    uint8_t reserved[2] = {0};
+    uint32_t socket_id_count = 0;
+    uint32_t socket_ids[NEGOTIATE_SOCKET_ID_MAX_NUM] = {0};
     umq_eid_t local_eid = {};
+};
+
+struct NegotiateRoute {
+    umq_topo_type_t topo_type;
+    umq_route master_route;
+    umq_route back_route;
+    NegotiateRoute() = default;
+    NegotiateRoute(umq_topo_type_t t_type, const umq_route &m_route, const umq_route &b_route)
+        : topo_type(t_type), master_route(m_route), back_route(b_route) {}
 };
 
 #ifndef EID_FMT
