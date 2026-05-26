@@ -8,23 +8,41 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include  <string>
+#include "ubsocket_prof.h"
+#include <string>
 #include "common/ubsocket_common_includes.h"
 #include "profiling/impl/ubsocket_prof_tracer.h"
-#include "ubsocket_prof.h"
 
 using namespace ock::ubs::profiling;
 
 int ubsocket_prof_enabled = 0;
 
-int ubsocket_prof_init(uint32_t tracepoint_count, const char* dumpPath, uint16_t dumpIntervalMin)
+int ubsocket_prof_init(ubsocket_prof_option_t *option)
 {
+    if (option == nullptr) {
+        UBS_VLOG_ERR("Profiling init failed, as param 'option' is null");
+        return -1;
+    }
+
+    if (option->tracepoint_count == 0) {
+        UBS_VLOG_ERR("Profiling init failed, as param 'option.tracepoint_count' is 0");
+        return -1;
+    }
+
+    if (option->enable_dump != 0) {
+        if (option->dump_file_path == nullptr) {
+            UBS_VLOG_ERR("Profiling init failed, as param 'option.dump_file_path' is null");
+            return -1;
+        }
+    }
+
     TracerOptions options{};
-    options.tracepoint_count = tracepoint_count;
-    options.dumpPath = std::string(dumpPath);
-    options.dumpIntervalMin = dumpIntervalMin;
-    int res = Tracer::Instance().Init(options);
-    if (!res) {
+    options.tracepoint_count = option->tracepoint_count;
+    options.enable_dump = (option->enable_dump != 0);
+    options.dumpPath = option->dump_file_path != nullptr ? std::string(option->dump_file_path) : "";
+    options.dumpIntervalMin = option->dump_interval_min;
+    auto res = Tracer::Instance().Init(options);
+    if (res == 0) {
         ubsocket_prof_enabled = 1;
     }
     return res;
@@ -37,8 +55,7 @@ int ubsocket_prof_uninit()
     return 0;
 }
 
-int ubsocket_prof_record(uint32_t tracepoint_id, const char* tracepoint_name, uint64_t timestamp, bool good)
+int ubsocket_prof_record(uint32_t tracepoint_id, const char *tracepoint_name, uint64_t timestamp, bool good)
 {
-    std::string localTracepointName = std::string(tracepoint_name);
-    return Tracer::Instance().Record(tracepoint_id, localTracepointName, timestamp, good);
+    return Tracer::Instance().Record(tracepoint_id, tracepoint_name, timestamp, good);
 }

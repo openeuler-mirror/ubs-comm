@@ -11,47 +11,45 @@
 #ifndef UBS_COMM_UBSOCKET_PROF_TRACEPOINT_DUMPTHREAD_H
 #define UBS_COMM_UBSOCKET_PROF_TRACEPOINT_DUMPTHREAD_H
 
-#include <ctime>
-#include <iostream>
-#include <iomanip>
-#include <fstream>
-#include <string>
-#include <sstream>
-#include <unistd.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+#include "common/ubsocket_common_includes.h"
 
 namespace ock {
 namespace ubs {
 namespace profiling {
 
-constexpr const char* DEFAULT_DUMP_PATH = "/tmp/ubsocket/profiling";
-constexpr const char* DUMP_FILE_PREFIX = "/ubsocket_profiling_";
-constexpr const char* DUMP_FILE_SUFFIX = ".log";
+constexpr const char *DEFAULT_DUMP_PATH = "/tmp/ubsocket/profiling";
+constexpr const char *DUMP_FILE_PREFIX = "/ubsocket_profiling_";
+constexpr const char *DUMP_FILE_SUFFIX = ".log";
 constexpr uint16_t INTERVAL_DEFAULT_MIN = 1;
 constexpr uint16_t INTERVAL_MIN_MIN = 1;
 constexpr uint16_t INTERVAL_MAX_MIN = 5;
 constexpr int COL_WIDTH_MIN = 20;
 constexpr int COL_WIDTH_MAX = 30;
 
-class Tracer;
-
-class DumpThread {
+class DumpThread : public Referable {
 public:
-    DumpThread()
-        : interval_min_(INTERVAL_DEFAULT_MIN),
-          running_(false) {}
+    DumpThread() : interval_min_(INTERVAL_DEFAULT_MIN), running_(false) {}
 
     ~DumpThread()
     {
         DumpStop();
     }
 
-    DumpThread(const DumpThread&) = delete;
-    DumpThread& operator=(const DumpThread&) = delete;
+    DumpThread(const DumpThread &) = delete;
+    DumpThread &operator=(const DumpThread &) = delete;
 
     // start dump thread
-    void DumpStart(const std::string& filePath, int intervalMin)
+    void DumpStart(const std::string &filePath, int intervalMin)
     {
         std::lock_guard<std::mutex> lock(start_mutex_);
         if (running_) {
@@ -90,11 +88,12 @@ public:
         }
     }
 
-    DEFINE_REF_OPERATION_FUNC
 private:
     // thread scheduled to execute of dump data periodically
     void DumpLoop()
     {
+        pthread_setname_np(pthread_self(), "ubs_prof");
+
         while (running_) {
             // interval time
             std::this_thread::sleep_for(std::chrono::minutes(interval_min_));
@@ -104,14 +103,7 @@ private:
     }
 
     // Truly dump the data
-    void DumpData()
-    {
-        std::ostringstream oss;
-        WriteDumpTitle(oss);
-        Tracer::Instance().CombinerTraceGroups(oss);
-        WriteDumpData(oss);
-        UBS_VLOG_INFO("Dump thread success combiner and dump data. \n");
-    }
+    void DumpData() noexcept;
 
     void WriteDumpTitle(std::ostringstream &oss)
     {
@@ -126,18 +118,14 @@ private:
             UBS_VLOG_WARN("Failed to create timeStamp.\n");
         }
         oss << "timeStamp: " << timeBuf << "\n";
-        oss << std::left
-            << std::setw(COL_WIDTH_MAX) << "[TRACE_NAME]"
-            << std::setw(COL_WIDTH_MIN) << "SUCCESS"
-            << std::setw(COL_WIDTH_MIN) << "FAILURE"
-            << std::setw(COL_WIDTH_MIN) << "TOTAL(ns)"
-            << std::setw(COL_WIDTH_MIN) << "AVG(ns)"
-            << std::setw(COL_WIDTH_MIN) << "MAX(ns)"
+        oss << std::left << std::setw(COL_WIDTH_MAX) << "[TRACE_NAME]" << std::setw(COL_WIDTH_MIN) << "SUCCESS"
+            << std::setw(COL_WIDTH_MIN) << "FAILURE" << std::setw(COL_WIDTH_MIN) << "TOTAL(ns)"
+            << std::setw(COL_WIDTH_MIN) << "AVG(ns)" << std::setw(COL_WIDTH_MIN) << "MAX(ns)"
             << std::setw(COL_WIDTH_MIN) << "MIN(ns)"
             << "\n";
     }
 
-    void CreateDirectory(std::string& path)
+    void CreateDirectory(std::string &path)
     {
         if (path.empty()) {
             path = DEFAULT_DUMP_PATH;
@@ -181,12 +169,11 @@ private:
     std::atomic<bool> running_{false};
     std::thread dump_thread_;
     std::mutex start_mutex_;
-
-    DECLARE_REF_COUNT_VARIABLE;
 };
+using DumpThreadPtr = Ref<DumpThread>;
 
-}
-}
-}
+} // namespace profiling
+} // namespace ubs
+} // namespace ock
 
 #endif // UBS_COMM_UBSOCKET_PROF_TRACEPOINT_DUMPTHREAD_H

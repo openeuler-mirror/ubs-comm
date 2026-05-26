@@ -28,9 +28,14 @@ enum ProfilingTPId : uint32_t {
 
 class Profiling {
 public:
-    static int Init(uint32_t tracepoint_count, const char* dumpPath, uint16_t dumpIntervaMin)
+    static int Init(uint32_t tracepoint_count, const char *dumpPath, uint16_t dumpIntervaMin)
     {
-        return ubsocket_prof_init(tracepoint_count, dumpPath, dumpIntervaMin);
+        ubsocket_prof_option_t option{};
+        option.tracepoint_count = tracepoint_count;
+        option.enable_dump = 1;
+        option.dump_file_path = dumpPath;
+        option.dump_interval_min = dumpIntervaMin;
+        return ubsocket_prof_init(&option);
     }
 
     static int Uninit()

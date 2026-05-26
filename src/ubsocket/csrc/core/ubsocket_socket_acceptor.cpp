@@ -180,7 +180,7 @@ void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
 
 Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 {
-    PROF_START(CORE_ACCEPT)
+    PROF_START(CORE_ACCEPT);
     Result ret = UBS_OK;
     int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (event_fd < 0) {
@@ -215,7 +215,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     newSocket->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
     //TODO: 优化建链成功的打印日志
     UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
-    PROF_END(CORE_ACCEPT, true)
+    PROF_END(CORE_ACCEPT, true);
     return UBS_OK;
 }
 
