@@ -14,6 +14,7 @@
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_signal_handler.h"
 #include "common/ubsocket_version.h"
+#include "common/ubsocket_print_stats_mgr.h"
 #include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_backend.h"
@@ -168,6 +169,11 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
 
+    /* do trace log initial */
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        ubsocket_trace_statistic_init();
+    }
+
     return UBS_OK;
 }
 
@@ -176,6 +182,12 @@ UBS_API void ubsocket_uninit(int flags)
     if (GlobalSetting::UBS_PROF_ENABLE) {
         Profiling::Uninit();
     }
+
+    /* do trace log destroy */
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        ubsocket_trace_statistic_destroy();
+    }
+
     return;
 }
 
@@ -219,4 +231,25 @@ UBS_API void *ubsocket_iobuf_allocate(size_t size)
 UBS_API void ubsocket_iobuf_deallocate(void *addr)
 {
     blockmem_deallocate_zero_copy(addr);
+}
+
+UBS_API void ubsocket_trace_statistic_init(void)
+{
+    if (!GlobalSetting::UBS_TRACE_ENABLED) {
+        return;
+    }
+
+    Statistics::PrintStatsMgr::StartStatsCollection(
+        GlobalSetting::UBS_TRACE_TIME,
+        GlobalSetting::UBS_TRACE_FILE_PATH,
+        GlobalSetting::UBS_TRACE_FILE_SIZE);
+}
+
+UBS_API void ubsocket_trace_statistic_destroy(void)
+{
+    if (!GlobalSetting::UBS_TRACE_ENABLED) {
+        return;
+    }
+
+    Statistics::PrintStatsMgr::StopStatsCollection();
 }

@@ -100,6 +100,11 @@ public:
     static std::string UBS_BRPC_DEALLOC_SYM_STR;
     static UBHandshakeMode UBS_HAND_SHAKE_MODE;
     static uint32_t UBS_THREAD_POOL_SIZE;
+
+    /* trace statistic related */
+    static uint64_t UBS_TRACE_TIME;
+    static uint64_t UBS_TRACE_FILE_SIZE;
+    static char UBS_TRACE_FILE_PATH[UBSOCKET_TRACE_FILE_PATH_LEN_MAX];
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept

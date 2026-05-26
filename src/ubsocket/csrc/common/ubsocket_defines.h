@@ -161,6 +161,18 @@ constexpr uint32_t WAIT_READY_TIMEOUT_US = 100;
 constexpr uint32_t WAIT_READY_ROUND = 10000;
 
 static const std::string EMPTY_STR;
+
+constexpr uint32_t UBSOCKET_TRACE_TIME_DEFAULT = 10;
+constexpr uint32_t UBSOCKET_TRACE_TIME_MIN = 1;
+constexpr uint32_t UBSOCKET_TRACE_TIME_MAX = 300;
+
+constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_DEFAULT = 10;
+constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_MIN = 1;
+constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_MAX = 300;
+
+constexpr uint32_t UBSOCKET_TRACE_FILE_PATH_LEN_MIN = 1;
+constexpr uint32_t UBSOCKET_TRACE_FILE_PATH_LEN_MAX = 512;
+
 } // namespace ubs
 } // namespace ock
 
