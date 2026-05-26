@@ -20,6 +20,27 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
+/**
+ * UMQ操作类型，决定映射路径和映射表。
+ *
+ * 映射路径分四类：
+ * 1. Convert(统一表映射+override): CONNECT/ACCEPT/WRITEV/READV — 统一查kCommonErrnoMappings，
+ *    ShouldOverrideWithSavedErrno生效时返回savedErrno覆盖表结果；表未命中回退savedErrno(>0时)，再回退EIO。
+ *    op对errno映射无区分作用，仅影响BufStatus路径的映射表选择。
+ *
+ * 2. ConvertBufStatus(方向区分表映射): op决定BufStatus映射表选择——
+ *    - CONNECT/ACCEPT: 查kCommonConnectAcceptBufStatusMappings
+ *    - WRITEV: 查kWritevBufStatusMappings
+ *    - READV: 查kReadvBufStatusMappings
+ *
+ * 3. Convert(GET_STATE): umq_state_get — 返回值是umq_state_t枚举(0-3)，不是UMQ_ERR_*负值，
+ *    不查映射表，不走ShouldOverride，QUEUE_STATE_ERR和QUEUE_STATE_MAX返回EIO，其余返回0。
+ *
+ * 4. ConvertHandleResult(有限透传): API失败时返回0/nullptr，无法从返回值推导UMQ错误码，
+ *    不查映射表，仅依赖savedErrno做有限透传：
+ *    - CREATE(umq_create): 仅透传EINVAL/EPERM，其余EIO
+ *    - BIND_INFO_GET(umq_bind_info_get/umq_dev_info_list_get): 仅透传ENOMEM/EINVAL，其余EIO
+ */
 enum class UmqOperation {
     CONNECT,
     ACCEPT,
@@ -27,6 +48,7 @@ enum class UmqOperation {
     READV,
     CREATE,
     BIND_INFO_GET,
+    GET_STATE,
 };
 
 struct UmqErrnoMapping {
@@ -45,15 +67,16 @@ class UmqErrnoConverter {
 public:
     UmqErrnoConverter() = delete;
 
-    /**
+/**
      * @brief 将UMQ API返回的错误码转换为Linux errno（正值）
      * 适用于返回int类型的UMQ API（如umq_connect/umq_accept/umq_post/umq_recv等）
-     * @param op 操作类型（CONNECT/ACCEPT/WRITEV/READV）
+     * @param op 操作类型。对errno映射路径无区分作用——CONNECT/ACCEPT/WRITEV/READV统一查kCommonErrnoMappings；
+     *   仅GET_STATE有特殊处理（不查表，非成功一律返回EIO）。op仍影响BufStatus路径的映射表选择。
      * @param umqRet UMQ API返回值，负数表示错误
      * @param savedErrno 调用UMQ API后立即保存的errno值，用于特定场景覆盖映射结果
-     *   - UMQ_FAIL(=-1)且savedErrno为EINVAL/ENODEV/ENOMEM/ENOEXEC/EIO时，优先返回savedErrno
-     *   - UMQ_ERR_ENODEV且savedErrno为EINVAL/EIO时，优先返回savedErrno
-     *   - 其他场景按映射表转换，映射表未命中时回退到savedErrno或EIO
+     *   - ShouldOverrideWithSavedErrno生效时用savedErrno覆盖表结果；表未命中回退savedErrno(>0时)，再回退EIO
+     *   - UMQ_FAIL(=-1)且savedErrno∈{EINVAL,ENODEV,ENOMEM,ENOEXEC,EIO}时，优先返回savedErrno
+     *   - UMQ_ERR_ENODEV且savedErrno∈{EINVAL,EIO}时，优先返回savedErrno
      * @code
      * int ret = umq_connect(...);
      * if (ret != UMQ_SUCCESS) {
@@ -82,11 +105,15 @@ public:
 
     /**
      * @brief 将返回句柄/大小的UMQ API错误转换为Linux errno（正值）
-     * 适用于返回句柄(uint64_t)或大小(uint32_t)的UMQ API，失败时返回0
-     * @param op 操作类型（CREATE/BIND_INFO_GET）
+     * 适用于返回句柄(uint64_t)或指针(umq_dev_info_t*)的UMQ API，失败时返回0或nullptr。
+     * 与Convert不同：这些API失败时无法从返回值推导UMQ错误码（返回的是0/nullptr而非UMQ_ERR_*负值），
+     * 因此不查映射表，仅依赖savedErrno做有限透传。
+     * @param op 操作类型
+     *   - CREATE: 用于umq_create — 返回0(UMQ_INVALID_HANDLE)表示失败；
+     *     savedErrno为EINVAL/EPERM时直接返回，否则返回EIO
+     *   - BIND_INFO_GET: 用于umq_bind_info_get/umq_dev_info_list_get — 返回nullptr表示失败；
+     *     savedErrno为ENOMEM/EINVAL时直接返回，否则返回EIO
      * @param savedErrno 调用UMQ API后立即保存的errno值
-     *   - CREATE: savedErrno为EINVAL/EPERM时直接返回，否则返回EIO
-     *   - BIND_INFO_GET: savedErrno为ENOMEM/EINVAL时直接返回，否则返回EIO
      * @code
      * uint64_t handle = umq_create(&option);
      * if (handle == UMQ_INVALID_HANDLE) {
@@ -98,12 +125,20 @@ public:
     static int ConvertHandleResult(UmqOperation op, int savedErrno);
 
     /**
-     * @brief 获取错误码的描述信息，用于日志记录
+     * @brief 获取errno映射的描述信息，用于日志记录
+     * @param op 操作类型。对errno描述无区分作用——统一查kCommonErrnoMappings；
+     *   仅GET_STATE有特殊描述路径。op不影响描述结果。
+     * @param umqRet UMQ API返回值或umq_state_t枚举值
      */
     static const char* GetErrorDescription(UmqOperation op, int umqRet);
 
     /**
-     * @brief 获取缓冲区状态的描述信息，用于日志记录
+     * @brief 获取BufStatus映射的描述信息，用于日志记录
+     * @param op 操作类型，决定BufStatus描述表选择——
+     *   CONNECT/ACCEPT查kCommonConnectAcceptBufStatusMappings，WRITEV查kWritevBufStatusMappings，
+     *   READV查kReadvBufStatusMappings。不同方向的描述语义不同（如WRITEV说"Broken pipe"，
+     *   READV说"Connection reset by peer"）。
+     * @param bufStatus CQE中的缓冲区完成状态
      */
     static const char* GetBufStatusDescription(UmqOperation op, umq_buf_status_t bufStatus);
 
@@ -111,28 +146,9 @@ private:
     static constexpr std::size_t maxErrnoMappings = 16;
     static constexpr std::size_t maxBufStatusMappings = 24;
 
-    // CONNECT/ACCEPT共用错误码映射表
-    static constexpr inline std::array<UmqErrnoMapping, 13> kCommonConnectAcceptErrnoMappings{{
+    // 统一errno映射表（原Connect/Accept与Writev/Readv映射表完全一致，合并为单表）
+    static constexpr inline std::array<UmqErrnoMapping, 13> kCommonErrnoMappings{{
         {UMQ_SUCCESS, 0, "Success"},
-        // 因为UMQ_FAIL和UMQ_ERR_EPERM的值相同，均为-1，所以这里只映射UMQ_ERR_EPERM
-        {UMQ_ERR_EPERM, EIO, "Unrecoverable error: device unavailable, invalid parameter, driver/hardware error"},
-        {UMQ_ERR_EAGAIN, EAGAIN, "Resource temporarily unavailable"},
-        {UMQ_ERR_ENOMEM, ENOMEM, "Out of memory"},
-        {UMQ_ERR_EBUSY, EBUSY, "Device or resource busy"},
-        {UMQ_ERR_EEXIST, EEXIST, "File exists"},
-        {UMQ_ERR_EINVAL, EINVAL, "Invalid argument"},
-        {UMQ_ERR_ENODEV, ENODEV, "No such device"},
-        {UMQ_ERR_ENOSR, ENOSR, "Out of streams resources"},
-        {UMQ_ERR_ETIMEOUT, ETIMEDOUT, "Connection timed out"},
-        {UMQ_ERR_EINPROGRESS, EINPROGRESS, "Operation now in progress"},
-        {UMQ_ERR_ETSEG_NON_IMPORTED, EIO, "Cannot assign requested address"},
-        {UMQ_ERR_EFLOWCTL, EIO, "Flow control error"},
-    }};
-
-    // Writev/Readv共用错误码映射表
-    static constexpr inline std::array<UmqErrnoMapping, 13> kCommonIoErrnoMappings{{
-        {UMQ_SUCCESS, 0, "Success"},
-        // 因为UMQ_FAIL和UMQ_ERR_EPERM的值相同，均为-1，所以这里只映射UMQ_ERR_EPERM
         {UMQ_ERR_EPERM, EIO, "Unrecoverable error: device unavailable, invalid parameter, driver/hardware error"},
         {UMQ_ERR_EAGAIN, EAGAIN, "Resource temporarily unavailable"},
         {UMQ_ERR_ENOMEM, ENOMEM, "Out of memory"},
@@ -275,8 +291,6 @@ private:
         }
         return "Unknown buffer status";
     }
-
-    static const char* GetErrnoMappingTableName(UmqOperation op);
 
     /**
      * @brief 判断是否应该用savedErrno覆盖映射结果

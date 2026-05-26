@@ -105,7 +105,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
     if (UNLIKELY(pollNum < 0)) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, pollNum, savedErrno);
-        UBS_VLOG_ERR("umq_poll() failed for share jfr RX, main umq: %llu, "
+        UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for share jfr RX, main umq: %llu, "
                      "ret: %d, mapped errno: %d(%s), original errno: %d\n",
                      static_cast<unsigned long long>(main_umq), pollNum, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum), savedErrno);
@@ -132,7 +132,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
             if (UmqApi::umq_post(main_umq, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
                 int savedErrno = errno;
                 errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
-                UBS_VLOG_ERR("umq_post() failed for share jfr RX refill, main umq: %llu, "
+                UBS_VLOG_ERR("[UMQ_API] umq_post() failed for share jfr RX refill, main umq: %llu, "
                              "mapped errno: %d(%s), original errno: %d\n",
                              static_cast<unsigned long long>(main_umq), errno,
                              UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, UMQ_FAIL), savedErrno);
@@ -207,10 +207,10 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
         if (rearmRet < 0) {
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::READV, rearmRet, savedErrno);
-            UBS_VLOG_ERR("umq_rearm_interrupt() failed for share jfr RX rearm, "
-                         "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                         static_cast<unsigned long long>(main_umq), rearmRet, errno,
-                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, rearmRet), savedErrno);
+            UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for share jfr RX rearm, "
+                "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                static_cast<unsigned long long>(main_umq), rearmRet, errno,
+                UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, rearmRet), savedErrno);
         }
         event_num_ += events_cnt;
         if (event_num_ >= GET_PER_ACK) {

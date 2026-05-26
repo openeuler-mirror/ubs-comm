@@ -338,7 +338,7 @@ void UmqRxOps::FlushRx(const SocketPtr &sock, uint32_t timeout_ms)
 
         poll_cnt = UmqApi::umq_poll(local_umqh_, UMQ_IO_RX, buf, POLL_BATCH_MAX);
         if (poll_cnt < 0) {
-            UBS_VLOG_ERR("umq_poll() failed for RX flush, local umq: %llu, ret: %d\n",
+            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for RX flush, local umq: %llu, ret: %d\n",
                          static_cast<unsigned long long>(local_umqh_), poll_cnt);
             break;
         }

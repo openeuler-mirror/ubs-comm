@@ -497,7 +497,7 @@ int UmqTxOps::DpRearmTxInterrupt()
 
     int savedErrno = errno;
     errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
-    UBS_VLOG_ERR("umq_rearm_interrupt() failed for TX, local umq: %llu, "
+    UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for TX, local umq: %llu, "
                  "ret: %d, mapped errno: %d(%s), original errno: %d\n",
                  static_cast<unsigned long long>(local_umqh_), ret, errno,
                  UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
