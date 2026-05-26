@@ -99,10 +99,6 @@ if (ENABLE_OBJECT_COUNTING)
     add_definitions(-DOBJ_COUNTING_ENABLED)
 endif ()
 
-if (ENABLE_OBJECT_COUNTING)
-    add_definitions(-DOBJ_COUNTING_ENABLED)
-endif ()
-
 include_directories(
         ${UBSOCKET_BASE_DIR}/
         ${UBSOCKET_BASE_DIR}/csrc
