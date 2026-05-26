@@ -12,17 +12,17 @@
 #define UBS_COMM_UBSOCKET_PROF_TYPES_H
 
 #include "common/ubsocket_common_includes.h"
-#include "ubsocket_prof_tracepoint_group.h"
 #include "ubsocket_prof_tracepoint_combiner.h"
+#include "ubsocket_prof_tracepoint_dumper.h"
+#include "ubsocket_prof_tracepoint_group.h"
 
 namespace ock {
 namespace ubs {
 namespace profiling {
-class DumpThread;
-
 struct TracerOptions {
-    uint16_t dumpIntervalMin = 1;
     uint32_t tracepoint_count = 0;
+    bool enable_dump = false;
+    uint16_t dumpIntervalMin = 1;
     std::string dumpPath;
 };
 
@@ -39,9 +39,11 @@ public:
 
     void UnInit() noexcept;
 
-    int Record(uint32_t tp_id, std::string &tp_name, uint64_t timestamp, bool good) noexcept;
+    int Record(uint32_t tp_id, const char *tp_name, uint64_t timestamp, bool good) noexcept;
 
-    int CombinerTraceGroups(std::ostringstream &oss) noexcept;
+    int Combine(TraceGroupPtr &out) noexcept;
+
+    int Combine(std::ostringstream &oss) noexcept;
 
 private:
     Result CreateTraceGroup() noexcept;
@@ -52,11 +54,11 @@ private:
     bool inited_ = false;                      /* inited or not */
     TracerOptions options_;                    /* options */
     std::vector<TraceGroupPtr> trace_groups_;  /* all trace groups for all thread */
-    TraceCombinerPtr trace_combiner_; /* combiner all trace groups data for all thread*/
-    DumpThread *dump_thread_; /* dump tracepoint data thread*/
+    TraceCombinerPtr trace_combiner_;          /* combiner all trace groups data for all thread*/
+    DumpThreadPtr dump_thread_;                /* dump tracepoint data thread*/
 };
 
-ALWAYS_INLINE int Tracer::Record(uint32_t tp_id, std::string &tp_name, uint64_t timestamp, bool good) noexcept
+ALWAYS_INLINE int Tracer::Record(uint32_t tp_id, const char *tp_name, uint64_t timestamp, bool good) noexcept
 {
     if (UNLIKELY(tls_group == nullptr)) {
         auto result = CreateTraceGroup();

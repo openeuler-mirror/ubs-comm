@@ -18,42 +18,59 @@ namespace ubs {
 namespace profiling {
 class TraceGroup {
 public:
-    int Init(uint32_t tp_count) noexcept;
+    explicit TraceGroup(uint16_t tpCount) : max_tp_count_(tpCount) {}
+    ~TraceGroup() = default;
 
-    int Record(uint32_t tp_id, std::string &tp_name, uint64_t timestamp, bool good) noexcept;
+    int Init() noexcept;
+
+    int Record(uint32_t tp_id, const char *tp_name, uint64_t timestamp, bool good) noexcept;
+
+    Tracepoint Get(uint32_t index) noexcept;
 
     DEFINE_REF_OPERATION_FUNC
 
-    friend class Tracer;
 private:
-    uint32_t max_tp_count_;
-    std::vector<Tracepoint> points_;
     DECLARE_REF_COUNT_VARIABLE;
+    const uint32_t max_tp_count_;
+    std::vector<Tracepoint> points_;
+
+    friend class Tracer;
 };
 using TraceGroupPtr = Ref<TraceGroup>;
 
-inline int TraceGroup::Init(uint32_t tp_count) noexcept
+inline int TraceGroup::Init() noexcept
 {
-    points_.resize(tp_count);
-    for (uint32_t i = 0; i < tp_count; i++) {
+    points_.resize(max_tp_count_);
+    for (uint32_t i = 0; i < max_tp_count_; i++) {
         points_[i].id = i;
     }
-    max_tp_count_ = tp_count;
     return UBS_OK;
 }
 
-inline int TraceGroup::Record(uint32_t tp_id, std::string &tp_name, uint64_t timestamp, bool good) noexcept
+inline int TraceGroup::Record(uint32_t tp_id, const char *tp_name, uint64_t timestamp, bool good) noexcept
 {
     if (UNLIKELY(tp_id >= max_tp_count_)) {
-        UBS_VLOG_ERR("Tracer point not exist. \n");
+        UBS_VLOG_ERR("Tracer point not exist");
         return UBS_ERROR;
     }
-    if (points_[tp_id].pointName.empty()) {
-        points_[tp_id].pointName = tp_name;
+
+    if (UNLIKELY(points_[tp_id].pointName.empty())) {
+        points_[tp_id].pointName = (tp_name == nullptr ? "NULL" : std::string(tp_name));
     }
+
     points_[tp_id].Record(timestamp, good);
     return UBS_OK;
 }
+
+inline Tracepoint TraceGroup::Get(uint32_t index) noexcept
+{
+    if (UNLIKELY(index >= max_tp_count_)) {
+        return Tracepoint();
+    }
+
+    return points_[index];
+}
+
 } // namespace profiling
 } // namespace ubs
 } // namespace ock

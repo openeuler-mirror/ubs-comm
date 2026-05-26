@@ -20,7 +20,7 @@ DataTx::DataTx(const SocketPtr &sock, DataTxOps *ops) : fd_(sock->raw_socket_), 
 
 ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
-    PROF_START(CORE_WRITE)
+    PROF_START(CORE_WRITE);
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::writev(fd_, iov, iovcnt);
         return size;
@@ -80,7 +80,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         // UpdateTraceStats(StatsMgr::TX_BYTE_COUNT, tx_total_len);
     }
-    PROF_END(CORE_WRITE, true)
+    PROF_END(CORE_WRITE, true);
     return tx_total_len;
 }
 } // namespace ubs
