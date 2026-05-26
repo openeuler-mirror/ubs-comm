@@ -4913,12 +4913,6 @@ private:
             return -1;
         }
 
-        // 当前 CTP 下使用 bonding 设备性能严重下降，跨节点下走 bonding 设备
-        // 100k 请求+回复 p99 会比裸设备差 30us.
-        if (ub_trans_mode == RM_CTP || ub_trans_mode == RC_CTP) {
-            route_list.topo_type = UMQ_TOPO_TYPE_FULLMESH_1D;
-        }
-
         filteredList = route_list;
         if (filteredList.route_num == 0) {
             RPC_ADPT_VLOG_ERR(ubsocket::UBSocket, "Failed to get urma topo is zero\n");
