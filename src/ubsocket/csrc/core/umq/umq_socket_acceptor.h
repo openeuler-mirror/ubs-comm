@@ -64,12 +64,15 @@ private:
     Result DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &mUsedPorts);
     Result AcceptExchangeSocketIDs(int fd);
     Result CheckDevAdd(const umq_eid_t &connEid);
+    Result FillLocalSocketIdsForNegotiate(uint32_t *socket_ids,
+                                          uint32_t &socket_id_count);
+    void BuildNegotiateRsp(NegotiateRsp &rsp);
 
     umq_topo_type_t topo_type_;
-    umq_eid_t conn_eid;
-    umq_eid_t peer_eid;
-    umq_route_t conn_route;
-    umq_route_t back_route;
+    umq_eid_t conn_eid_;
+    umq_eid_t peer_eid_;
+    umq_route_t conn_route_;
+    umq_route_t back_route_;
 };
 using UmqAcceptorOpsPtr = Ref<UmqAcceptorOps>;
 } // namespace umq

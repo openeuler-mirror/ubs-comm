@@ -155,12 +155,6 @@ Result UmqConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
         UBS_VLOG_ERR("Failed to negotiate in connect,Peer IP:%s, fd: %d\n", umq_conn_info_.peer_ip.c_str(), new_fd);
         return UBS_ERROR;
     }
-
-    if (SocketConnHelper::SendSocketData(new_fd, &topo_type_, sizeof(umq_topo_type_t), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(umq_topo_type_t)) {
-        UBS_VLOG_ERR("send umq topo type failed\n");
-        return UBS_ERROR;
-    }
     return UBS_OK;
 };
 
@@ -217,33 +211,21 @@ Result UmqConnectorOps::BuildNegotiateReq(NegotiateReq *req, const UmqSocketPtr 
     req->is_bonding = UmqSetting::UMQ_IS_BONDING ? 1 : 0;
     req->enable_share_jfr = GlobalSetting::UBS_ENABLE_SHARE_JFR ? 1 : 0;
     req->schedule_policy = static_cast<uint8_t>(schedulePolicy);
-    req->has_socket_id = ((schedulePolicy == dev_schedule_policy::CPU_AFFINITY) ||
-                          (schedulePolicy == dev_schedule_policy::CPU_AFFINITY_PRIORITY)) ?
-                             1 :
-                             0;
-    req->process_socket_id = UmqSetting::UMQ_PROCESS_SOCKET_ID;
     req->local_eid = localEid;
-    if (req->is_bonding != 0 && (req->has_socket_id == 1) &&
-        FillLocalSocketIdsForNegotiate(umq_socket, req->socket_ids, req->socket_id_count) != UBS_OK) {
-        return UBS_ERROR;
-    }
     return UBS_OK;
 }
 
-Result UmqConnectorOps::FillLocalSocketIdsForNegotiate(const UmqSocketPtr &umq_socket, uint32_t *socket_ids,
-                                                       uint32_t &socket_id_count)
+void UmqConnectorOps::PrintSocketsInfo()
 {
-    std::vector<uint32_t> ids = UmqSetting::UMQ_ALL_SOCKET_IDS;
-    if (ids.empty() || ids.size() > NEGOTIATE_SOCKET_ID_MAX_NUM) {
-        UBS_VLOG_ERR("Invalid local socket ids, size %zu, Peer IP:%s, fd: %d\n", ids.size(),
-                     umq_conn_info_.peer_ip.c_str(), umq_socket->raw_socket_);
-        return UBS_ERROR;
+    std::ostringstream oss;
+    oss << "receive remote all socket ids in connect: ";
+    for (size_t i = 0; i < peer_all_socket_ids_.size(); ++i) {
+        if (i > 0) {
+            oss << ", ";
+        }
+        oss << peer_all_socket_ids_[i];
     }
-    socket_id_count = static_cast<uint32_t>(ids.size());
-    for (uint32_t i = 0; i < socket_id_count; ++i) {
-        socket_ids[i] = ids[i];
-    }
-    return UBS_OK;
+    UBS_VLOG_INFO("%s\n", oss.str().c_str());
 }
 
 Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
@@ -287,86 +269,44 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
         use_round_robin_ = false;
     }
 
-    if (UmqSetting::UMQ_IS_BONDING) {
-        // 接收服务器的id
-        int receive_server_socket_id = 0;
-        if (SocketConnHelper::RecvSocketData(raw_fd_, &receive_server_socket_id, sizeof(receive_server_socket_id),
-                                             CONTROL_PLANE_TIMEOUT_MS) != sizeof(receive_server_socket_id)) {
-            UBS_VLOG_ERR("Failed to get server socket ids in connect");
-            return UBS_ERROR;
-        }
-        peer_socket_id_ = receive_server_socket_id;
+    if (UNLIKELY(!UmqSetting::UMQ_IS_BONDING)) {
+        umq_conn_info_.conn_eid = local_eid;
+        return UBS_OK;
+    }
 
-        if (ConnectExchangeSocketIDs() != 0) {
-            UBS_VLOG_ERR("Failed to send all socket ids in DoConnect");
-        }
-        umq_conn_info_.peer_eid = rsp.local_eid;
+    peer_socket_id_ = rsp.aff_sock_id;
+    if (UNLIKELY(rsp.socket_id_count == 0)) {
+        UBS_VLOG_ERR("Invalid peer socket count, fd: %d\n", raw_fd_);
+        return UBS_ERROR;
+    }
+    peer_all_socket_ids_.reserve(rsp.socket_id_count);
+    for (size_t i = 0; i < rsp.socket_id_count; i++) {
+        peer_all_socket_ids_.push_back(rsp.socket_ids[i]);
+    }
+    PrintSocketsInfo();
+    umq_conn_info_.peer_eid = rsp.local_eid;
 
-        if (DoRoute(&local_eid, &umq_conn_info_.peer_eid) != 0) {
-            UBS_VLOG_ERR("Failed to get route list in connect, fd: %d\n", raw_fd_);
-            return UBS_ERROR;
-        }
+    // choose route and send to server
+    if (DoRoute(&local_eid, &umq_conn_info_.peer_eid) != 0) {
+        UBS_VLOG_ERR("Failed to get route list in connect, fd: %d\n", raw_fd_);
+        return UBS_ERROR;
+    }
 
-        if (SocketConnHelper::SendSocketData(raw_fd_, &conn_route_, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) !=
-            sizeof(umq_route_t)) {
-            UBS_VLOG_ERR("Failed to send connect eid message in connect, fd: %d\n", raw_fd_);
-            return UBS_ERROR;
-        }
+    NegotiateRoute negoRoute(topo_type_, conn_route_, back_route_);
+    if (SocketConnHelper::SendSocketData(raw_fd_, &negoRoute, sizeof(NegotiateRoute), CONTROL_PLANE_TIMEOUT_MS) !=
+        sizeof(NegotiateRoute)) {
+        UBS_VLOG_ERR("Failed to send negotiate route info in connect, fd: %d\n", raw_fd_);
+        return UBS_ERROR;
+    }
+    umq_conn_info_.peer_eid = conn_route_.dst_eid;
 
-        if (SocketConnHelper::SendSocketData(raw_fd_, &back_route_, sizeof(umq_route_t), CONTROL_PLANE_TIMEOUT_MS) !=
-            sizeof(umq_route_t)) {
-            UBS_VLOG_ERR("Failed to send back connect eid message in connect, fd: %d\n", raw_fd_);
-            return UBS_ERROR;
-        }
-
-        umq_conn_info_.peer_eid = conn_route_.dst_eid;
-
-        if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
-            umq_conn_info_.conn_eid = conn_route_.src_eid;
-        } else {
-            umq_conn_info_.conn_eid = local_eid;
-        }
+    if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
+        umq_conn_info_.conn_eid = conn_route_.src_eid;
     } else {
-        // TODO check conn_eid set
         umq_conn_info_.conn_eid = local_eid;
     }
 
     return UBS_OK;
-}
-
-Result UmqConnectorOps::ConnectExchangeSocketIDs(void)
-{
-    // 接收对端的all socket ids
-    uint32_t count = 0;
-    if (SocketConnHelper::RecvSocketData(raw_fd_, &count, sizeof(count), CONTROL_PLANE_TIMEOUT_MS) != sizeof(count)) {
-        UBS_VLOG_ERR("Failed to receive remote all socket ids in connect, fd: %d\n", raw_fd_);
-        return UBS_ERROR;
-    }
-
-    if (count == 0) {
-        UBS_VLOG_ERR("Invalid peer socket count, fd: %d\n", raw_fd_);
-        return UBS_ERROR;
-    }
-    // 接收对端的all socket ids
-    peer_all_socket_ids_.resize(count);
-    size_t peer_data_size = count * sizeof(uint32_t);
-    ssize_t all_socket_ret = SocketConnHelper::RecvSocketData(raw_fd_, peer_all_socket_ids_.data(), peer_data_size,
-                                                              CONTROL_PLANE_TIMEOUT_MS);
-    if (all_socket_ret < 0 || static_cast<size_t>(all_socket_ret) != peer_data_size) {
-        UBS_VLOG_ERR("Failed to receive remote all socket ids in connect, fd: %d\n", raw_fd_);
-        return UBS_ERROR;
-    }
-    // 打印
-    std::ostringstream oss;
-    oss << "receive remote all socket ids in connect: ";
-    for (size_t i = 0; i < peer_all_socket_ids_.size(); ++i) {
-        if (i > 0) {
-            oss << ", ";
-        }
-        oss << peer_all_socket_ids_[i];
-    }
-    UBS_VLOG_INFO("%s\n", oss.str().c_str());
-    return 0;
 }
 
 Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid)
