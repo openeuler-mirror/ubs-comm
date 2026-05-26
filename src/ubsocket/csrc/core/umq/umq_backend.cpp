@@ -60,9 +60,9 @@ Result UmqBackend::Init() noexcept
     ret = UmqApi::umq_init(&umq_config);
     if (ret != 0) {
         int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::CREATE, ret, savedErrno);
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_init() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, ret), savedErrno);
+                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
         return UBS_ERROR;
     }
 
@@ -152,9 +152,9 @@ Result UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
     ret = UmqApi::umq_dev_add(&trans_info);
     if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
         int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::CREATE, ret, savedErrno);
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_dev_add() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, ret), savedErrno);
+                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
         return -1;
     }
 
@@ -197,7 +197,7 @@ Result UmqBackend::FindDevName()
 
     UmqSetting::UMQ_DEV_NAME = umqDevInfo[bondingIndex].dev_name;
     if (UmqSetting::UMQ_DEV_NAME.size() >= UMQ_DEV_NAME_SIZE) {
-        UBS_VLOG_ERR("Failed to set device name, name size: %d\n", UmqSetting::UMQ_DEV_NAME.size());
+        UBS_VLOG_ERR("Failed to set device name, name size: %zu\n", UmqSetting::UMQ_DEV_NAME.size());
         return UBS_ERROR;
     }
 

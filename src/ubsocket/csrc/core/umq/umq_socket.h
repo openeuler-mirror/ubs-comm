@@ -131,6 +131,7 @@ private:
     uint32_t getLeftPostRxNum(uint64_t umq_handle);
     uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid);
     Result GetDevEid(char *dev_name, uint32_t eid_idx, umq_eid_t *eid);
+    Result WaitUntilReady(uint64_t umq_handle);
 
     // 链接类型相关
     bool is_bonding_ = false;

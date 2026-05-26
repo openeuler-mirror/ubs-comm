@@ -124,7 +124,7 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
 
     // 校验 bind 是否成功
     if (ret != UBS_OK || SocketBase::GenerateSocketCommOps(socketPtr) != UBS_OK) {
-        UBS_VLOG_ERR("Failed to create umq\n");
+        UBS_VLOG_ERR("[UMQ_API] Failed to create umq\n");
         return ret;
     }
     local_cp_msg.queue_bind_info_size = UmqApi::umq_bind_info_get(umqSocket->UmqHandle(), local_cp_msg.queue_bind_info,

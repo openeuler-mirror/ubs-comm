@@ -424,7 +424,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
             &(umq_conn_info_.conn_eid), topo_type_);
     }
     if (ret != UBS_OK || SocketBase::GenerateSocketCommOps(socket) != UBS_OK) {
-        UBS_VLOG_ERR("Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+        UBS_VLOG_ERR("[UMQ_API] Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return ret;
     }

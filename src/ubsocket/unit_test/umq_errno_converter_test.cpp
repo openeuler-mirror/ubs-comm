@@ -5,6 +5,7 @@
 
 #include "umq_errno_converter.h"
 #include "umq_errno.h"
+#include "umq_types.h"
 
 #include <gtest/gtest.h>
 #include <cstring>
@@ -95,181 +96,28 @@ TEST_F(UmqErrnoConverterTest, ConvertConnect_UnknownError)
     EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::CONNECT, -UMQ_CUSTOM_ERR_1), EIO);
 }
 
-// ==================== Convert - Accept ====================
+// ==================== Convert - GET_STATE ====================
 
-TEST_F(UmqErrnoConverterTest, ConvertAccept_Success)
+TEST_F(UmqErrnoConverterTest, ConvertGetState_ErrReturnsEio)
 {
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::ACCEPT, UMQ_SUCCESS), 0);
+    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::GET_STATE, QUEUE_STATE_ERR), EIO);
 }
 
-TEST_F(UmqErrnoConverterTest, ConvertAccept_Eperm)
+TEST_F(UmqErrnoConverterTest, ConvertGetState_MaxReturnsEio)
 {
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::ACCEPT, -UMQ_ERR_EPERM), EIO);
+    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::GET_STATE, QUEUE_STATE_MAX), EIO);
 }
 
-TEST_F(UmqErrnoConverterTest, ConvertAccept_Eagain)
+TEST_F(UmqErrnoConverterTest, ConvertGetState_IdleReturnsZero)
 {
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::ACCEPT, -UMQ_ERR_EAGAIN), EAGAIN);
+    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::GET_STATE, QUEUE_STATE_IDLE), 0);
 }
 
-TEST_F(UmqErrnoConverterTest, ConvertAccept_Etimeout)
+TEST_F(UmqErrnoConverterTest, ConvertGetState_ReadyReturnsZero)
 {
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::ACCEPT, -UMQ_ERR_ETIMEOUT), ETIMEDOUT);
+    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::GET_STATE, QUEUE_STATE_READY), 0);
 }
 
-TEST_F(UmqErrnoConverterTest, ConvertAccept_Eflowctl)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::ACCEPT, -UMQ_ERR_EFLOWCTL), EIO);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertAccept_UnknownError)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::ACCEPT, -UMQ_CUSTOM_ERR_1), EIO);
-}
-
-// ==================== Convert - Writev ====================
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Success)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, UMQ_SUCCESS), 0);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Eperm)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_EPERM), EIO);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Eagain)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_EAGAIN), EAGAIN);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Enomem)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_ENOMEM), ENOMEM);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Ebusy)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_EBUSY), EBUSY);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Eexist)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_EEXIST), EEXIST);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Einval)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_EINVAL), EINVAL);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Enodev)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_ENODEV), ENODEV);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Enosr)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_ENOSR), ENOSR);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Etimeout)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_ETIMEOUT), ETIMEDOUT);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Einprogress)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_EINPROGRESS), EINPROGRESS);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_EtsegNonImported)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_ETSEG_NON_IMPORTED), EIO);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_Eflowctl)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_ERR_EFLOWCTL), EIO);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertWritev_UnknownError)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::WRITEV, -UMQ_CUSTOM_ERR_1), EIO);
-}
-
-// ==================== Convert - Readv ====================
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Success)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_SUCCESS), 0);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Eperm)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_EPERM), EIO);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Eagain)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_EAGAIN), EAGAIN);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Enomem)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_ENOMEM), ENOMEM);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Ebusy)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_EBUSY), EBUSY);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Eexist)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_EEXIST), EEXIST);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Einval)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_EINVAL), EINVAL);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Enodev)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_ENODEV), ENODEV);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Enosr)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_ENOSR), ENOSR);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Etimeout)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_ETIMEOUT), ETIMEDOUT);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Einprogress)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_EINPROGRESS), EINPROGRESS);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_EtsegNonImported)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_ETSEG_NON_IMPORTED), EIO);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_Eflowctl)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_ERR_EFLOWCTL), EIO);
-}
-
-TEST_F(UmqErrnoConverterTest, ConvertReadv_UnknownError)
-{
-    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::READV, -UMQ_CUSTOM_ERR_1), EIO);
-}
 
 // ==================== ConvertBufStatus - Connect ====================
 

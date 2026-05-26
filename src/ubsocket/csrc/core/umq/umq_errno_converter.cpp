@@ -20,25 +20,20 @@ int UmqErrnoConverter::Convert(UmqOperation op, int umqRet, int savedErrno)
         return 0;
     }
 
+    if (op == UmqOperation::GET_STATE) {
+        if (umqRet == QUEUE_STATE_ERR || umqRet == QUEUE_STATE_MAX) {
+            return EIO;
+        }
+        return 0;
+    }
+
     int absUmqRet = umqRet < 0 ? -umqRet : umqRet;
 
     if (savedErrno > 0 && ShouldOverrideWithSavedErrno(absUmqRet, savedErrno)) {
         return savedErrno;
     }
 
-    switch (op) {
-        case UmqOperation::CONNECT:
-        case UmqOperation::ACCEPT:
-            return FindErrno(kCommonConnectAcceptErrnoMappings, absUmqRet, savedErrno);
-        case UmqOperation::WRITEV:
-        case UmqOperation::READV:
-            return FindErrno(kCommonIoErrnoMappings, absUmqRet, savedErrno);
-        default:
-            if (savedErrno > 0) {
-                return savedErrno;
-            }
-            return EIO;
-    }
+    return FindErrno(kCommonErrnoMappings, absUmqRet, savedErrno);
 }
 
 int UmqErrnoConverter::ConvertBufStatus(UmqOperation op, umq_buf_status_t bufStatus, int savedErrno)
@@ -74,18 +69,17 @@ const char* UmqErrnoConverter::GetErrorDescription(UmqOperation op, int umqRet)
         return "Success";
     }
 
+    if (op == UmqOperation::GET_STATE) {
+        switch (umqRet) {
+            case QUEUE_STATE_ERR: return "Queue error state";
+            case QUEUE_STATE_MAX: return "Invalid queue handle or state";
+            default: return "Unexpected queue state";
+        }
+    }
+
     int absUmqRet = umqRet < 0 ? -umqRet : umqRet;
 
-    switch (op) {
-        case UmqOperation::CONNECT:
-        case UmqOperation::ACCEPT:
-            return FindDescription(kCommonConnectAcceptErrnoMappings, absUmqRet);
-        case UmqOperation::WRITEV:
-        case UmqOperation::READV:
-            return FindDescription(kCommonIoErrnoMappings, absUmqRet);
-        default:
-            return "Unknown operation";
-    }
+    return FindDescription(kCommonErrnoMappings, absUmqRet);
 }
 
 const char* UmqErrnoConverter::GetBufStatusDescription(UmqOperation op, umq_buf_status_t bufStatus)
