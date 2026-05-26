@@ -48,6 +48,7 @@ private:
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
     int GetAndAckEvent();
     void *PtrFloorToBoundary(void *ptr) override;
+    bool PollSubUmqRx(umq_buf_t *buf[], int i) const;
 
 private:
     // umq 相关的句柄

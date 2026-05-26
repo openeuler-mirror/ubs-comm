@@ -553,6 +553,12 @@ Result UmqConnectorOps::GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_
         return -1;
     }
 
+    // 当前 CTP 下使用 bonding 设备性能严重下降，跨节点下走 bonding 设备
+    // 100k 请求+回复 p99 会比裸设备差 30us.
+    if (trans_mode == RM_CTP || trans_mode == RC_CTP) {
+        route_list.topo_type = UMQ_TOPO_TYPE_FULLMESH_1D;
+    }
+
     filtered_list = route_list;
     if (filtered_list.route_num == 0) {
         UBS_VLOG_ERR("Failed to get urma topo is zero\n");

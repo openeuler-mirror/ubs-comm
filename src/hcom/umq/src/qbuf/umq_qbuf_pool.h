@@ -29,6 +29,7 @@ extern "C" {
 #define UMQ_EMPTY_HEADER_COEFFICIENT    16      // if block count is n, there will be n*16 count of empty qbuf header
 #define UMQ_QBUF_DEFAULT_MEMPOOL_ID     (0)
 #define UMQ_HEADROOM_SIZE_LIMIT         (512)
+#define UMQ_QBUF_SIZE_POW_4K            (12)
 #define UMQ_QBUF_SIZE_POW_8K            (13)
 #define UMQ_QBUF_SIZE_POW_16K           (14)
 #define UMQ_QBUF_SIZE_POW_32K           (15)
@@ -78,7 +79,7 @@ int umq_buf_size_pow_small_set(umq_buf_block_size_t block_size);
 
 uint8_t umq_buf_size_pow_small(void);
 
-// small qbuf block size: 8K, or 64K size
+// small qbuf block size: 4K, 8K... 64K size
 static inline uint32_t umq_buf_size_small(void)
 {
     return (1 << umq_buf_size_pow_small());
@@ -252,7 +253,7 @@ static ALWAYS_INLINE int32_t fetch_from_global(
     umq_buf_t *local_head_before;
     uint64_t local_cnt_before;
 
-   (void)pthread_spin_lock(&global_pool->global_mutex);
+    (void)pthread_spin_lock(&global_pool->global_mutex);
     if (with_data) {
         global_buf_cnt = &global_pool->buf_cnt_with_data;
         global_head = &global_pool->head_with_data;
@@ -312,7 +313,7 @@ ROLLBACK:
         QBUF_LIST_FIRST(local_head) = local_head_before;
         uint64_t alloc_cnt = ((*local_buf_cnt) - local_cnt_before);
         umq_buf_t *tail = head;
-        for(uint64_t i = 0; i < alloc_cnt - 1; i++) {
+        for (uint64_t i = 0; i < alloc_cnt - 1; i++) {
             tail = QBUF_LIST_NEXT(tail);
         }
         tail->qbuf_next = NULL;
@@ -656,8 +657,8 @@ static ALWAYS_INLINE void umq_qbuf_block_pool_uninit(global_block_pool_t *block_
 uint32_t umq_qbuf_headroom_get(void);
 umq_buf_mode_t umq_qbuf_mode_get(void);
 
-int umq_qbuf_register_seg(uint8_t *ctx, mempool_segment_ops_t *sps);
-void umq_qbuf_unregister_seg(uint8_t *ctx, mempool_segment_ops_t *sps);
+int umq_qbuf_register_seg(uint8_t *ctx, mempool_segment_ops_t *ops);
+void umq_qbuf_unregister_seg(uint8_t *ctx, mempool_segment_ops_t *ops);
 
 #ifdef __cplusplus
 }

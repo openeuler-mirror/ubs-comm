@@ -380,32 +380,11 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
         return -1;
     }
 
-    //2. add sub umq rx fd
-    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
-    if (UNLIKELY(rx_interrupt_fd < 0)) {
-        int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::READV, rx_interrupt_fd, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] Failed to get RX interrupt fd, local umq: %llu, "
-                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(umq_handle_), rx_interrupt_fd, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, rx_interrupt_fd), savedErrno);
-        return -1;
-    }
-    struct epoll_event rx_event{};
-    rx_event.events = EPOLLIN | EPOLLET;
-    event_data.event_data.type = RUNNER_EVENT_TYPE_SUB_UMQ_RX;
-    event_data.event_data.data = (ptrdiff_t)(void *)(sock.Get());
-    rx_event.data.u64 = event_data.u64;
-    if (UNLIKELY(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, rx_interrupt_fd, &rx_event) < 0)) {
-        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) rx event failed: %d : %s\n", errno, strerror(errno));
-        return -1;
-    }
-
     // 3. add to socket
     SetAddedEpollFd((EventPoll *)event_poll, event->data);
 
     // 4. do rearm
+    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     int ret = ock::ubs::UmqApi::umq_rearm_interrupt(main_umq, false, &rx_option);
     if (ret < 0) {
         int savedErrno = errno;
@@ -428,25 +407,6 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     }
 
     return 0;
-}
-
-Result UmqSocket::DelRxEventToRunner(const SocketPtr &sock, int epoll_fd)
-{
-    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-    int rx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
-    if (UNLIKELY(rx_interrupt_fd < 0)) {
-        int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::READV, rx_interrupt_fd, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] Failed to get RX interrupt fd for DelRxEvent, local umq: %llu, "
-                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(umq_handle_), rx_interrupt_fd, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, rx_interrupt_fd), savedErrno);
-        return -1;
-    }
-
-    auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, rx_interrupt_fd, nullptr);
-    SetAddedEpollFd(nullptr);
-    return ret;
 }
 
 int UmqSocket::GetTxFd()

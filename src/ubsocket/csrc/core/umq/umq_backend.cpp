@@ -39,7 +39,8 @@ Result UmqBackend::Init() noexcept
     /* init umq init config */
     umq_init_cfg_t umq_config;
     bzero(&umq_config, sizeof(umq_config));
-    umq_config.feature = UMQ_FEATURE_API_PRO | UMQ_FEATURE_ENABLE_FLOW_CONTROL;
+    umq_config.feature = UMQ_FEATURE_API_PRO |
+        (UmqSetting::UMQ_FLOW_CONTROL_ENABLE ? UMQ_FEATURE_ENABLE_FLOW_CONTROL : 0);
     umq_config.buf_mode = UMQ_BUF_SPLIT;
     umq_config.io_lock_free = true;
     umq_config.trans_info_num = 1;

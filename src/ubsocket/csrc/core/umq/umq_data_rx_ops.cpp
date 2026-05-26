@@ -59,7 +59,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
         }
         // currently, umq over IB return IB cr status directly, successful = 0
         if (buf[i]->status != 0) {
-            if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE) {
+            if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE && buf[i]->status != UMQ_FAKE_BUF_FC_MSG) {
                 if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
                     flow_control_failed_ = true;
                 }
@@ -67,6 +67,18 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
 
                 // 异步关闭. 当前处于 readv 中，等到下次 EPOLLIN 事件到来时会触发关闭
                 sock->State(SOCK_STAT_CLOSE);
+            } else if (buf[i]->status == UMQ_FAKE_BUF_FC_MSG) {
+                UmqApi::umq_buf_free(buf[i]);
+                if (!PollSubUmqRx(buf, i)) {
+                    continue;
+                }
+
+                if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+                    flow_control_failed_ = true;
+                    HandleErrorRxCqe(buf[i]);
+                    UmqApi::umq_buf_free(buf[i]);
+                    continue;
+                }
             } else {
                 rx_queue_avail_num_ += 1;
                 // try to wake up tx if necessary
@@ -294,6 +306,17 @@ int UmqRxOps::RearmRxInterrupt()
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret), savedErrno);
     }
     return ret;
+}
+
+bool UmqRxOps::PollSubUmqRx(umq_buf_t *buf[], int i) const
+{
+    int ret = umq_poll(local_umqh_, UMQ_IO_RX, &buf[i], 1);
+    bool pollRxSuccess = ret > 0;
+    if (ret < 0) {
+        UBS_VLOG_ERR("Failed to poll fc rx, local umq: %llu, ret: %d\n",
+            static_cast<unsigned long long>(local_umqh_), ret);
+    }
+    return pollRxSuccess;
 }
 
 void UmqRxOps::FlushRx(const SocketPtr &sock, uint32_t timeout_ms)
