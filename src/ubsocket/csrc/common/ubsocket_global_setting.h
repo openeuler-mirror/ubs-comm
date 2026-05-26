@@ -90,6 +90,9 @@ public:
     static uint32_t UBS_SHARE_JFR_RX_QUEUE_DEPTH;    /* share jfr queue depth, from env */
     static uint32_t UBS_TX_DEPTH;                    /* tx queue depth, from env */
     static uint32_t UBS_RX_DEPTH;                    /* rx queue depth, from env */
+    static bool UBS_PROF_ENABLE;
+    static uint16_t UBS_PROF_DUMP_INTERVAL_MIN;
+    static std::string UBS_PROF_DUMP_PATH;
 
     /* brpc malloc related */
     static bool USE_BRPC_ZCOPY;
@@ -159,7 +162,7 @@ ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidate(const std::string &name, std
 
 ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidateNotEmpty(const std::string &name, std::string &out) noexcept
 {
-    return false;
+    return (GetEnv(name, out) && Validator::Instance().ValidateStrEmpty(name, out));
 }
 
 ALWAYS_INLINE bool GlobalSetting::AsyncAcceptorEnabled() noexcept

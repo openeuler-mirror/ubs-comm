@@ -101,9 +101,16 @@ struct StrEnumRule {
 struct StrNotEmptyRule {
     std::string key;
     bool required = false;
+    uint32_t maxLen = UINT32_MAX;
 
     StrNotEmptyRule() = default;
     StrNotEmptyRule(const std::string &pKey, bool pRequired) : key(pKey), required(pRequired) {}
+    StrNotEmptyRule(const std::string &pKey, bool pRequired, uint32_t pMaxLen)
+        : key(pKey),
+          required(pRequired),
+          maxLen(pMaxLen) {}
+
+    bool Validate(const std::string &value) noexcept;
 
     friend std::ostream &operator<<(std::ostream &os, const StrNotEmptyRule &o)
     {
@@ -127,6 +134,12 @@ ALWAYS_INLINE bool StrEnumRule::Validate(const std::string &value) noexcept
     }
 
     return true;
+}
+
+ALWAYS_INLINE bool StrNotEmptyRule::Validate(const std::string &value) noexcept
+{
+    /* split */
+    return value.size() <= maxLen;
 }
 
 ALWAYS_INLINE void StrEnumRule::MakeSortedAllEnum() noexcept
@@ -286,6 +299,12 @@ ALWAYS_INLINE bool Validator::ValidateStrEmpty(const std::string &key, const std
 
     if (value.empty()) {
         last_error_msg_ = "Invalid value for '" + tmpKey + "', which should be not emtpy";
+        return false;
+    }
+
+    if (!(iter->second.Validate(value))) {
+        last_error_msg_ = "Invalid value for '" + tmpKey + "', should be max length " +
+            std::to_string(iter->second.maxLen);
         return false;
     }
 

@@ -157,6 +157,14 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* step6: register signal handler */
     std::signal(SIGUSR2, ubsocket_handle_signal);
 
+    if (GlobalSetting::UBS_PROF_ENABLE) {
+        result = Profiling::Init(ProfilingTPId::UBSOCKET_PROF_COUNT, GlobalSetting::UBS_PROF_DUMP_PATH.c_str(),
+            GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN);
+        if (result != UBS_OK) {
+            UBS_VLOG_WARN("Profiling is not initialize \n");
+        }
+    }
+    
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
 
@@ -165,6 +173,9 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
 UBS_API void ubsocket_uninit(int flags)
 {
+    if (GlobalSetting::UBS_PROF_ENABLE) {
+        Profiling::Uninit();
+    }
     return;
 }
 

@@ -20,10 +20,13 @@ class TraceGroup {
 public:
     int Init(uint32_t tp_count) noexcept;
 
-    int Record(uint32_t tp_id, uint64_t timestamp, bool good) noexcept;
+    int Record(uint32_t tp_id, std::string &tp_name, uint64_t timestamp, bool good) noexcept;
 
     DEFINE_REF_OPERATION_FUNC
+
+    friend class Tracer;
 private:
+    uint32_t max_tp_count_;
     std::vector<Tracepoint> points_;
     DECLARE_REF_COUNT_VARIABLE;
 };
@@ -31,17 +34,23 @@ using TraceGroupPtr = Ref<TraceGroup>;
 
 inline int TraceGroup::Init(uint32_t tp_count) noexcept
 {
-    points_.reserve(tp_count);
+    points_.resize(tp_count);
+    for (uint32_t i = 0; i < tp_count; i++) {
+        points_[i].id = i;
+    }
+    max_tp_count_ = tp_count;
     return UBS_OK;
 }
 
-inline int TraceGroup::Record(uint32_t tp_id, uint64_t timestamp, bool good) noexcept
+inline int TraceGroup::Record(uint32_t tp_id, std::string &tp_name, uint64_t timestamp, bool good) noexcept
 {
-    if (UNLIKELY(tp_id >= points_.size())) {
-        // TODO log out of boundary
+    if (UNLIKELY(tp_id >= max_tp_count_)) {
+        UBS_VLOG_ERR("Tracer point not exist. \n");
         return UBS_ERROR;
     }
-
+    if (points_[tp_id].pointName.empty()) {
+        points_[tp_id].pointName = tp_name;
+    }
     points_[tp_id].Record(timestamp, good);
     return UBS_OK;
 }

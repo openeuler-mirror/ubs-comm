@@ -1,0 +1,192 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * ubs-comm is licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *      http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+#ifndef UBS_COMM_UBSOCKET_PROF_TRACEPOINT_DUMPTHREAD_H
+#define UBS_COMM_UBSOCKET_PROF_TRACEPOINT_DUMPTHREAD_H
+
+#include <ctime>
+#include <iostream>
+#include <iomanip>
+#include <fstream>
+#include <string>
+#include <sstream>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+namespace ock {
+namespace ubs {
+namespace profiling {
+
+constexpr const char* DEFAULT_DUMP_PATH = "/tmp/ubsocket/profiling";
+constexpr const char* DUMP_FILE_PREFIX = "/ubsocket_profiling_";
+constexpr const char* DUMP_FILE_SUFFIX = ".log";
+constexpr uint16_t INTERVAL_DEFAULT_MIN = 1;
+constexpr uint16_t INTERVAL_MIN_MIN = 1;
+constexpr uint16_t INTERVAL_MAX_MIN = 5;
+constexpr int COL_WIDTH_MIN = 20;
+constexpr int COL_WIDTH_MAX = 30;
+
+class Tracer;
+
+class DumpThread {
+public:
+    DumpThread()
+        : interval_min_(INTERVAL_DEFAULT_MIN),
+          running_(false) {}
+
+    ~DumpThread()
+    {
+        DumpStop();
+    }
+
+    DumpThread(const DumpThread&) = delete;
+    DumpThread& operator=(const DumpThread&) = delete;
+
+    // start dump thread
+    void DumpStart(const std::string& filePath, int intervalMin)
+    {
+        std::lock_guard<std::mutex> lock(start_mutex_);
+        if (running_) {
+            return;
+        }
+
+        interval_min_ = intervalMin;
+        if (interval_min_ < INTERVAL_MIN_MIN || interval_min_ > INTERVAL_MAX_MIN) {
+            interval_min_ = INTERVAL_DEFAULT_MIN;
+        }
+        file_path_ = filePath;
+        if (file_path_.empty()) {
+            file_path_ = DEFAULT_DUMP_PATH;
+        }
+
+        running_ = true;
+        CreateDirectory(file_path_);
+        dump_thread_ = std::thread(&DumpThread::DumpLoop, this);
+    }
+
+    // stop dump thread
+    void DumpStop()
+    {
+        std::lock_guard<std::mutex> lock(start_mutex_);
+        if (!running_) {
+            return;
+        }
+
+        running_ = false;
+        if (dump_thread_.joinable()) {
+            dump_thread_.join();
+        }
+
+        if (dump_file_.is_open()) {
+            dump_file_.close();
+        }
+    }
+
+    DEFINE_REF_OPERATION_FUNC
+private:
+    // thread scheduled to execute of dump data periodically
+    void DumpLoop()
+    {
+        while (running_) {
+            // interval time
+            std::this_thread::sleep_for(std::chrono::minutes(interval_min_));
+            // execute dump
+            DumpData();
+        }
+    }
+
+    // Truly dump the data
+    void DumpData()
+    {
+        std::ostringstream oss;
+        WriteDumpTitle(oss);
+        Tracer::Instance().CombinerTraceGroups(oss);
+        WriteDumpData(oss);
+        UBS_VLOG_INFO("Dump thread success combiner and dump data. \n");
+    }
+
+    void WriteDumpTitle(std::ostringstream &oss)
+    {
+        constexpr int timeBufSize = 32;
+        time_t now = time(nullptr);
+        char timeBuf[timeBufSize];
+        struct tm timeInfo;
+        if (localtime_r(&now, &timeInfo) != nullptr) {
+            std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &timeInfo);
+        } else {
+            timeBuf[0] = '\0';
+            UBS_VLOG_WARN("Failed to create timeStamp.\n");
+        }
+        oss << "timeStamp: " << timeBuf << "\n";
+        oss << std::left
+            << std::setw(COL_WIDTH_MAX) << "[TRACE_NAME]"
+            << std::setw(COL_WIDTH_MIN) << "SUCCESS"
+            << std::setw(COL_WIDTH_MIN) << "FAILURE"
+            << std::setw(COL_WIDTH_MIN) << "TOTAL(ns)"
+            << std::setw(COL_WIDTH_MIN) << "AVG(ns)"
+            << std::setw(COL_WIDTH_MIN) << "MAX(ns)"
+            << std::setw(COL_WIDTH_MIN) << "MIN(ns)"
+            << "\n";
+    }
+
+    void CreateDirectory(std::string& path)
+    {
+        if (path.empty()) {
+            path = DEFAULT_DUMP_PATH;
+        }
+
+        constexpr mode_t DEFAULT_DIR_PERMISSION = 0750;
+        std::string tmp_str = path;
+
+        for (size_t i = 1; i < tmp_str.size(); ++i) {
+            if (tmp_str[i] == '/') {
+                tmp_str[i] = '\0';
+                mkdir(tmp_str.c_str(), DEFAULT_DIR_PERMISSION);
+                tmp_str[i] = '/';
+            }
+        }
+
+        mkdir(tmp_str.c_str(), DEFAULT_DIR_PERMISSION);
+    }
+
+    void WriteDumpData(std::ostringstream &oss)
+    {
+        if (file_name_.empty()) {
+            std::ostringstream ossFileName;
+            ossFileName << file_path_ << DUMP_FILE_PREFIX << getpid() << DUMP_FILE_SUFFIX;
+            file_name_ = ossFileName.str();
+
+            dump_file_.open(file_name_, std::ios::out | std::ios::app);
+        }
+
+        if (dump_file_.is_open()) {
+            dump_file_ << oss.str() << std::endl;
+            dump_file_.flush();
+        }
+    }
+
+private:
+    std::string file_path_;
+    std::string file_name_;
+    std::ofstream dump_file_;
+    uint16_t interval_min_ = INTERVAL_DEFAULT_MIN;
+    std::atomic<bool> running_{false};
+    std::thread dump_thread_;
+    std::mutex start_mutex_;
+
+    DECLARE_REF_COUNT_VARIABLE;
+};
+
+}
+}
+}
+
+#endif // UBS_COMM_UBSOCKET_PROF_TRACEPOINT_DUMPTHREAD_H

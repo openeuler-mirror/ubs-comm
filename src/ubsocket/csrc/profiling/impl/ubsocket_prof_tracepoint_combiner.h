@@ -11,4 +11,32 @@
 #ifndef UBS_COMM_UBSOCKET_PROF_TRACEPOINT_COMBINER_H
 #define UBS_COMM_UBSOCKET_PROF_TRACEPOINT_COMBINER_H
 
+#include <algorithm>
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <ctime>
+
+#include "ubsocket_prof_tracepoint.h"
+
+namespace ock {
+namespace ubs {
+namespace profiling {
+class TraceCombiner {
+public:
+    int CombinerTracePoint(Tracepoint& outTracePoint, const Tracepoint& pointB);
+
+    void OutputTracePointStats(std::ostringstream &oss, const Tracepoint &totalTracePoint);
+
+    DEFINE_REF_OPERATION_FUNC
+private:
+    std::mutex mutex_;                         /* mutex for compute tracePoint data */  
+    DECLARE_REF_COUNT_VARIABLE;
+};
+using TraceCombinerPtr = Ref<TraceCombiner>;
+}
+}
+}
+
 #endif // UBS_COMM_UBSOCKET_PROF_TRACEPOINT_COMBINER_H

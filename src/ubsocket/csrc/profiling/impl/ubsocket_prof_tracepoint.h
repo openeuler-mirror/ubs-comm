@@ -23,11 +23,12 @@ struct Tracepoint {
         uint64_t success_count = 0;
         uint64_t failure_count = 0;
         uint64_t total_time = 0;
-        uint64_t min_time = 0;
-        uint64_t max_time = UINT64_MAX;
+        uint64_t min_time = UINT64_MAX;
+        uint64_t max_time = 0;
         uint64_t pp90_time = 0;
         uint64_t pp99_time = 0;
     } data;
+    std::string pointName;
 
     void Record(uint64_t timestamp, bool good);
 };
