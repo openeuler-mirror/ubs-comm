@@ -118,7 +118,8 @@ public:
     Result DelRxEventToRunner(const SocketPtr &sock, int epoll_fd) override;
     int GetTxFd() override;
 
-    Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used);
+    Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, 
+    umq_eid_t *conn_eid_used, umq_topo_type_t &topo_type);
     Result PrefillRx();
     void UnbindAndFlushRemoteUmq(const SocketPtr &sock);
     void DestroyLocalUmq();

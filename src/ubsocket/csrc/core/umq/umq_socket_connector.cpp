@@ -15,63 +15,88 @@
 
 #include "core/umq/umq_eid_table.h"
 #include "umq_errno_converter.h"
+#include "common/ubsocket_scope_exit.h"
 
 namespace ock {
 namespace ubs {
 namespace umq {
+Result UmqConnectorOps::ConnectViaHandshakeOpt(const SocketPtr &sock,
+    const struct sockaddr *address, socklen_t address_len)
+{
+    int opt = 1;
+    int ret = LibcApi::setsockopt(raw_fd_, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, sizeof(opt));
+    if (ret < 0 && (errno == ENOPROTOOPT || errno == EOPNOTSUPP)) {
+        UBS_VLOG_WARN("UB handshake socket option not supported. Handshake mode fallback to TFO.\n");
+        GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
+        ret = ConnectViaTfo(sock, address, address_len);
+    } else {
+        UBS_VLOG_INFO("Connect with UB handshake socket option.\n");
+    }
+    ret = LibcApi::connect(raw_fd_, address, address_len);
+    return ret;
+}
+
+Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
+{
+    auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
+    NegotiateReq req {};
+    if (BuildNegotiateReq(&req, umq_socket) != 0) {
+        return -1;
+    }
+
+    bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
+    if (!is_blocking) {
+        SocketConnHelper::SetBlocking(raw_fd_);
+    }
+    int reset_fd = raw_fd_;
+    auto blocking_reset = MakeScopeExit([is_blocking, reset_fd]() {
+        if (!is_blocking) {
+            SocketConnHelper::SetNonBlocking(reset_fd);
+        }
+    });
+
+    constexpr int fast_open = 1;
+    LibcApi::setsockopt(raw_fd_, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
+    ssize_t sendto_ret = LibcApi::sendto(raw_fd_, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
+    if (sendto_ret < 0 && errno != 0) {
+        UBS_VLOG_ERR("TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s\n",
+                          sendto_ret, errno, Func::Error2Str(errno));
+    }
+    if (!SocketConnHelper::IsTfoConnection(raw_fd_)) {
+        // 首次获取cookie，创建临时socket二次发送
+        UBS_VLOG_INFO("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
+        const int tmp_fd = LibcApi::socket(AF_INET, SOCK_STREAM, 0);
+        LibcApi::setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
+        sendto_ret = LibcApi::sendto(tmp_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
+        if (sendto_ret < 0 && errno != 0) {
+            UBS_VLOG_ERR("TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s\n",
+                sendto_ret, errno, Func::Error2Str(errno));
+        }
+
+        int dup3_ret = dup3(tmp_fd, raw_fd_, O_CLOEXEC);
+        LibcApi::close(tmp_fd);
+        if (dup3_ret < 0) {
+            UBS_VLOG_ERR("dup3 failed, ret: %d, errno %d, err msg: %s\n",
+                dup3_ret, errno, Func::Error2Str(errno));
+            return -1;
+        }
+    } else {
+        UBS_VLOG_INFO("TFO Cookie exists, continue...\n");
+    }
+    return sendto_ret < 0 ? -1 : 0;
+}
+
 Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
                                        const SocketPtr &sock)
 {
     Result ret = UBS_OK;
-    auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
-    // 判断TCPI_OPT_SYN_DATA，如果已置位则复用
-    NegotiateReq req{};
-    if (BuildNegotiateReq(&req, umq_socket) != 0) {
-        UBS_VLOG_ERR("Failed to send negotiate request caused by building req failure\n");
-        return UBS_ERROR;
-    }
-
-    bool is_blocking = SocketConnHelper::IsBlocking(new_fd);
-    if (!is_blocking) {
-        SocketConnHelper::SetBlocking(new_fd);
-    }
-
-    constexpr int fast_open = 1;
-    LibcApi::setsockopt(new_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
-    ssize_t sendto_ret = LibcApi::sendto(new_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
-    ret = sendto_ret < 0 ? UBS_ERROR : UBS_OK;
-    if (ret < 0 && errno != 0) {
-        UBS_VLOG_ERR("TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s, fd %d\n", sendto_ret, errno,
-                     Func::Error2Str(errno), new_fd);
-    }
-
-    if (!SocketConnHelper::IsTfoConnection(new_fd)) {
-        // 首次获取cookie，第二次发送
-        UBS_VLOG_INFO("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
-        // 创建临时socket发送
-        const int tmp_fd = LibcApi::socket(AF_INET, SOCK_STREAM, 0);
-        LibcApi::setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
-        sendto_ret = LibcApi::sendto(tmp_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
-        ret = sendto_ret < 0 ? UBS_ERROR : UBS_OK;
-        if (ret < 0 && errno != 0) {
-            UBS_VLOG_ERR("TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s, fd %d\n", sendto_ret, errno,
-                         Func::Error2Str(errno), tmp_fd);
-        }
-
-        int dup3_ret = dup3(tmp_fd, new_fd, O_CLOEXEC);
-        LibcApi::close(tmp_fd);
-        if (dup3_ret < 0) {
-            UBS_VLOG_ERR("dup3 failed, ret: %d, errno %d, err msg: %s, tmp_fd %d, new_fd %d\n", dup3_ret, errno,
-                         Func::Error2Str(errno), tmp_fd, new_fd);
-            return UBS_ERROR;
-        }
+    UBHandshakeMode handshake_mode = GlobalSetting::UBS_HAND_SHAKE_MODE;
+    if (handshake_mode == UBHandshakeMode::UB_SOCK_OPT) {
+        ret = ConnectViaHandshakeOpt(sock, address, address_len);
+    } else if (handshake_mode == UBHandshakeMode::TFO) {
+        ret = ConnectViaTfo(sock, address, address_len);
     } else {
-        // 已经是tfo连接，继续处理
-        UBS_VLOG_INFO("TFO Cookie exists, continue...\n");
-    }
-
-    if (!is_blocking) {
-        SocketConnHelper::SetNonBlocking(new_fd);
+        return LibcApi::connect(raw_fd_, address, address_len);
     }
 
     if (address != nullptr) {
@@ -113,6 +138,7 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
     if (tcpNoDelayRet != 0) {
         UBS_VLOG_WARN("Set TCP_NODELAY failed, fd %d, ret %d, errno %d\n", new_fd, tcpNoDelayRet, errno);
     }
+    bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
     if (!is_blocking) {
         // set non_blocking to apply timeout by chrono(send/recv can be returned immediately)
         SocketConnHelper::SetNonBlocking(new_fd);
@@ -222,6 +248,19 @@ Result UmqConnectorOps::FillLocalSocketIdsForNegotiate(const UmqSocketPtr &umq_s
 
 Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
 {
+    if (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::UB_SOCK_OPT) {
+        // 基于内核选项的建链，需要单独发送协商请求；TFO建链随sendto发送协商请求
+        NegotiateReq req {};
+        if (BuildNegotiateReq(&req, umq_socket) != 0) {
+            return -1;
+        }
+        if (SocketConnHelper::SendSocketData(raw_fd_, &req, sizeof(req), CONTROL_PLANE_TIMEOUT_MS) !=
+            static_cast<int>(sizeof(req))) {
+            UBS_VLOG_ERR("Failed to send negotiate request, Peer IP:%s, fd: %d\n",
+                umq_conn_info_.peer_ip.c_str(), raw_fd_);
+            return -1;
+        }
+    }
     umq_eid_t local_eid = UmqSetting::UMQ_LOCAL_EID;
     dev_schedule_policy schedule_policy = UmqSetting::UMQ_DEV_SCHEDULE_POLICY;
     umq_conn_info_.conn_eid = local_eid;
@@ -377,10 +416,12 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     auto socket = RefConvert<UmqSocket, Socket>(umq_socket);
     // CreateLocalUmq
     if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
-        ret = umq_socket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid));
+        ret = umq_socket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports,
+            &(umq_conn_info_.conn_eid), topo_type_);
     } else {
         umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
-        ret = umq_socket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid));
+        ret = umq_socket->CreateLocalUmq(&localEid, used_ports,
+            &(umq_conn_info_.conn_eid), topo_type_);
     }
     if (ret != UBS_OK || SocketBase::GenerateSocketCommOps(socket) != UBS_OK) {
         UBS_VLOG_ERR("Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",

@@ -48,6 +48,7 @@ uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 #define ENV_UBS_RX_DEPTH "UBSOCKET_RX_DEPTH"
 #define ENV_UBS_TX_DEPTH "UBSOCKET_TX_DEPTH"
 #define ENV_USE_BRPC_ZCOPY "UBSOCKET_USE_BRPC_ZCOPY"
+#define ENV_UBS_HAND_SHAKE_MODE "UBSOCKET_UB_HANDSHAKE_MODE"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -65,7 +66,8 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_AUTO_FALLBACK_TCP, false, "true|false"},
                                     {ENV_ENABLE_SHARE_JFR, false, "true|false"},
                                     {ENV_USE_BRPC_ZCOPY, false, "true|false"},
-                                    {ENV_TRANS_MODE, false, "ub|ib"}};
+                                    {ENV_TRANS_MODE, false, "ub|ib"},
+                                    {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"}};
 
     /* str not empty rules: name, required */
     StrNotEmptyRule rules_str_not_empty[] = {};
@@ -113,6 +115,17 @@ Result GlobalSetting::VerifySetting() noexcept
 
     UBS_VLOG_DEBUG("end");
     return UBS_OK;
+}
+
+UBHandshakeMode HandShakeFromStr(const std::string &typeStr) noexcept
+{
+    if (typeStr == "tfo") {
+        return UBHandshakeMode::TFO;
+    } else if (typeStr == "ub_sock_opt") {
+        return UBHandshakeMode::UB_SOCK_OPT;
+    }
+    // 如果字符串不匹配，返回默认值
+    return UBHandshakeMode::TFO;
 }
 
 Result GlobalSetting::LoadEnv() noexcept
@@ -165,8 +178,11 @@ Result GlobalSetting::LoadEnv() noexcept
     if (GetEnvAndValidate(ENV_UBS_RX_DEPTH, envValue)) {
         UBS_RX_DEPTH = static_cast<uint32_t>(envValue);
     }
+
+    if (GetEnvAndValidate(ENV_UBS_HAND_SHAKE_MODE, strEnvValue)) {
+        UBS_HAND_SHAKE_MODE = HandShakeFromStr(strEnvValue);
+    }
     return UBS_OK;
 }
-
 } // namespace ubs
 } // namespace ock
