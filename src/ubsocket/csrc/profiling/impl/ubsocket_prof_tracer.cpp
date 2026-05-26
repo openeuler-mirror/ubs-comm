@@ -66,7 +66,6 @@ void Tracer::UnInit() noexcept
 
     if (dump_thread_ != nullptr) {
         dump_thread_->DumpStop();
-        dump_thread_->DecreaseRef();
         dump_thread_ = nullptr;
     }
 
