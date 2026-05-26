@@ -62,6 +62,8 @@ public:
 
     const std::string &DeviceName() const noexcept;
 
+    const urma_device_attr_t &DeviceAttributes() const noexcept;
+
     std::string ToString(bool whole = false, const std::string &prefix = "",
                          const std::string &seperator = "") const noexcept;
 
@@ -124,38 +126,70 @@ ALWAYS_INLINE const std::map<std::string, UrmaDevicePtr> &UrmaDevice::AllDevices
     return ALL_DEVICES;
 }
 
+ALWAYS_INLINE const urma_device_attr_t &UrmaDevice::DeviceAttributes() const noexcept
+{
+    return attributes_;
+}
+
 enum UrmaJfcPollingType {
     BUSY_POLLING = 0,
     EVENT_POLLING
 };
 
+constexpr uint8_t URMA_TOKEN_POLICY_PLAIN_TEXT = URMA_TOKEN_PLAIN_TEXT;
+constexpr uint8_t URMA_JFR_RNR_TIMER_DEFAULT = 19; /* RNR single retransmission time: 2us*2^19 = 1.049s */
+constexpr uint8_t URMA_JFS_RNR_RETRY_DEFAULT = 6;
+constexpr uint8_t URMA_JFS_ERROR_TIMEOUT = 2;
+
 class UrmaContext : public Referable {
 public:
-    static Result CreateContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &context);
+    static Result CreateContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out);
     static uint32_t NewJettyId() noexcept;
 
 public:
-    UrmaContext(urma_context_t *urmaContext, const UrmaDevicePtr &dev) : context_(urmaContext), device_(dev)
+    UrmaContext(urma_context_t *urmaContext, const UrmaDevicePtr &dev, const urma_eid_info_t &eidInfo)
+        : raw_context_(urmaContext),
+          device_(dev),
+          eid_info_(eidInfo)
     {
-        OBJ_INC_COUNT(URMA_CONTEXT);
+        UBS_ASSERT(dev != nullptr);
+        OBJ_INC_COUNT(UBS_URMA_CONTEXT);
     }
 
     ~UrmaContext() override;
 
+    urma_jfc_cfg_t CreateJfcCfg(uint32_t queueDepth, uint64_t userCtx = 0);
+    urma_jfs_cfg_t CreateJfsCfg(uint32_t queueDepth, urma_transport_mode_t transMode, uint64_t userCtx = 0,
+                                uint8_t priority = UINT8_MAX);
+    urma_jfr_cfg_t CreateJfrCfg(uint32_t queueDepth, urma_transport_mode_t transMode, uint32_t tokenValue = 0,
+                                uint64_t userCtx = 0);
+    urma_jetty_cfg_t CreateJettyCfg(uint64_t userCtx = 0);
+
     Result CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingType, UrmaJfcPtr &out);
     Result CreateJfs(urma_jfs_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJfsPtr &out);
     Result CreateJfr(urma_jfr_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJfrPtr &out);
-    Result CreateJetty(urma_jetty_cfg_t &cfg, const UrmaJfsPtr &jfs, const UrmaJfrPtr &jfr, UrmaJettyPtr &out);
+    Result CreateJetty(urma_jetty_cfg_t &cfg, urma_tp_type_t rtp_ctp_utp, const UrmaJfsPtr &jfs, const UrmaJfrPtr &jfr,
+                       UrmaJettyPtr &out);
+
+    const urma_eid_info_t &EidInfo() const noexcept;
 
 private:
-    urma_context_t *context_{nullptr};
+    urma_context_t *raw_context_{nullptr};
     UrmaDevicePtr device_{nullptr};
+    urma_eid_info_t eid_info_{};
 
 private:
     static std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> ALL_CONTEXTS;
     static std::mutex ALL_CONTEXTS_MUTEX;
     static std::atomic<uint32_t> AUTO_INCREASE_JETTY_ID;
+
+    friend class UrmaJetty;
 };
+
+ALWAYS_INLINE const urma_eid_info_t &UrmaContext::EidInfo() const noexcept
+{
+    return eid_info_;
+}
 
 class UrmaJfc : public Referable {
 public:
@@ -168,7 +202,7 @@ public:
         UBS_ASSERT(jfc != nullptr);
         UBS_ASSERT(pollingType == EVENT_POLLING && jfce != nullptr);
         UBS_ASSERT(ctx != nullptr);
-        OBJ_INC_COUNT(URMA_JFC);
+        OBJ_INC_COUNT(UBS_URMA_JFC);
     }
 
     ~UrmaJfc() override;
@@ -189,7 +223,7 @@ public:
     UrmaJfs(urma_jfs_t *jfs, const UrmaContextPtr &ctx, const UrmaJfcPtr &jfc) : raw_jfs_(jfs), context_(ctx), jfc_(jfc)
     {
         UBS_ASSERT(jfs != nullptr);
-        OBJ_INC_COUNT(URMA_JFS);
+        OBJ_INC_COUNT(UBS_URMA_JFS);
     }
 
     ~UrmaJfs() override;
@@ -206,10 +240,14 @@ private:
 
 class UrmaJfr : public Referable {
 public:
-    UrmaJfr(urma_jfr_t *jfr, const UrmaContextPtr &ctx, const UrmaJfcPtr &jfc) : raw_jfr_(jfr), context_(ctx), jfc_(jfc)
+    UrmaJfr(urma_jfr_t *jfr, uint32_t token, const UrmaContextPtr &ctx, const UrmaJfcPtr &jfc)
+        : raw_jfr_(jfr),
+          context_(ctx),
+          jfc_(jfc),
+          token_(token)
     {
         UBS_ASSERT(jfr != nullptr);
-        OBJ_INC_COUNT(URMA_JFR);
+        OBJ_INC_COUNT(UBS_URMA_JFR);
     }
 
     ~UrmaJfr() override;
@@ -220,34 +258,107 @@ private:
     urma_jfr_t *raw_jfr_ = nullptr; /* raw jfr */
     const UrmaContextPtr context_;  /* hold the reference */
     const UrmaJfcPtr jfc_;          /* hold the reference */
+    const uint32_t token_;          /* token */
 
     friend class UrmaContext;
 };
 
 class UrmaJetty : public Referable {
 public:
-    UrmaJetty(urma_jetty_t *jetty, const UrmaContextPtr &ctx, const UrmaJfsPtr &jfs, const UrmaJfrPtr &jfr)
+    UrmaJetty(urma_tp_type_t rtp_ctp_utp, uint32_t jettyId, urma_jetty_t *jetty, const UrmaContextPtr &ctx,
+              const UrmaJfsPtr &jfs, const UrmaJfrPtr &jfr)
         : raw_jetty_(jetty),
           context_(ctx),
           jfs_(jfs),
-          jfr_(jfr)
+          jfr_(jfr),
+          jetty_id_(jettyId),
+          rtp_ctp_utp_(rtp_ctp_utp)
     {
         UBS_ASSERT(jetty != nullptr);
-        OBJ_INC_COUNT(URMA_JETTY);
+
+        OBJ_INC_COUNT(UBS_URMA_JETTY);
+
+        UBS_SLOG_DEBUG(*this);
     }
 
     ~UrmaJetty() override;
 
+    /**
+     * @brief Get int jetty id
+     */
+    uint32_t JettyId() const noexcept;
+
+    /**
+     * @brief Get raw jetty id struct
+     */
+    urma_jetty_id_t RawJettyId() const noexcept;
+
+    /**
+     * @brief Get token of jetty from jfr
+     */
+    uint32_t Token() const noexcept;
+
+    /**
+     * @brief Destroy inner raw jetty
+     */
     void Destroy() noexcept;
 
-    Result ImportRemoteJetty(urma_rjetty_t &remote, urma_token_t &token) noexcept;
+    /**
+     * @brief Import peer jetty
+     *
+     * @param jettyId      [in] jetty struct of peer
+     * @param token        [in] token value of peer
+     * @return 0 if sucessful
+     */
+    Result ImportRemoteJetty(urma_jetty_id_t &jettyId, uint32_t &token) noexcept;
+
+    friend std::ostream &operator<<(std::ostream &os, const UrmaJetty &o);
 
 private:
-    urma_jetty_t *raw_jetty_ = nullptr; /* raw jetty */
-    const UrmaContextPtr context_;      /* hold the reference */
-    const UrmaJfsPtr jfs_;              /* hold the reference */
-    const UrmaJfrPtr jfr_;              /* hold the reference */
+    urma_jetty_t *raw_jetty_ = nullptr;               /* raw jetty */
+    urma_target_jetty_t *raw_target_jetty_ = nullptr; /* imported jetty */
+    const UrmaContextPtr context_;                    /* hold the reference */
+    const UrmaJfsPtr jfs_;                            /* hold the reference */
+    const UrmaJfrPtr jfr_;                            /* hold the reference */
+    const uint32_t jetty_id_;                         /* generated jetty id */
+    const urma_tp_type_t rtp_ctp_utp_;                /* tp type */
+
+    friend class UrmaContext;
 };
+
+ALWAYS_INLINE uint32_t UrmaJetty::JettyId() const noexcept
+{
+    return jetty_id_;
+}
+
+ALWAYS_INLINE urma_jetty_id_t UrmaJetty::RawJettyId() const noexcept
+{
+    urma_jetty_id_t tmp{};
+
+    if (LIKELY(raw_jetty_ != nullptr)) {
+        tmp = raw_jetty_->jetty_id;
+    }
+
+    return tmp;
+}
+
+ALWAYS_INLINE uint32_t UrmaJetty::Token() const noexcept
+{
+    uint32_t tmp = 0;
+    if (LIKELY(raw_jetty_ != nullptr)) {
+        tmp = raw_jetty_->jetty_cfg.jfr_cfg->token_value.token;
+    }
+
+    return tmp;
+}
+
+std::ostream &operator<<(std::ostream &os, const urma_eid_t &o);
+std::ostream &operator<<(std::ostream &os, const urma_jetty_id_t &o);
+std::ostream &operator<<(std::ostream &os, const urma_jfc_cfg_t &o);
+std::ostream &operator<<(std::ostream &os, const urma_jfr_cfg_t &o);
+std::ostream &operator<<(std::ostream &os, const urma_jfs_cfg_t &o);
+std::ostream &operator<<(std::ostream &os, const urma_jetty_cfg_t &o);
+std::ostream &operator<<(std::ostream &os, const urma_jetty_t &o);
 
 class UrmaSegment : public Referable {};
 } // namespace urma

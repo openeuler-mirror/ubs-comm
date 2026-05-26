@@ -18,17 +18,17 @@ namespace ubs {
 
 enum ObjectEnum {
     /* ubsocket related */
-    SOCKET = 0,
+    UBS_SOCKET = 0,
 
     /* urma related */
-    URMA_CONTEXT,
-    URMA_JETTY,
-    URMA_JFS,
-    URMA_JFR,
-    URMA_JFC,
+    UBS_URMA_CONTEXT,
+    UBS_URMA_JETTY,
+    UBS_URMA_JFS,
+    UBS_URMA_JFR,
+    UBS_URMA_JFC,
 
     /* umq related */
-    UMQ_SOCKET,
+    UBS_UMQ_SOCKET,
 
     /* add before count */
     OBJECT_COUNT

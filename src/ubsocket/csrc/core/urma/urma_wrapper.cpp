@@ -133,10 +133,19 @@ std::string UrmaDevice::ToString(bool whole, const std::string &prefix, const st
         oss << prefix << std::left << std::setw(width) << "max jfc: " << attributes_.dev_cap.max_jfc << seperator;
         oss << prefix << std::left << std::setw(width) << "max jfc depth: " << attributes_.dev_cap.max_jfc_depth
             << seperator;
-        oss << prefix << std::left << std::setw(width) << "max sge: " << attributes_.dev_cap.max_jfr_sge << seperator;
+        oss << prefix << std::left << std::setw(width) << "max jfr sge: " << attributes_.dev_cap.max_jfr_sge
+            << seperator;
+        oss << prefix << std::left << std::setw(width) << "max jfs sge: " << attributes_.dev_cap.max_jfs_sge
+            << seperator;
+        oss << prefix << std::left << std::setw(width) << "max jfs rsge: " << attributes_.dev_cap.max_jfs_rsge
+            << seperator;
         oss << prefix << std::left << std::setw(width) << "max msg size: " << attributes_.dev_cap.max_msg_size
             << seperator;
         oss << prefix << std::left << std::setw(width) << "max inline size: " << attributes_.dev_cap.max_jfs_inline_len
+            << seperator;
+        oss << prefix << std::left << std::setw(width) << "max read: " << attributes_.dev_cap.max_read_size
+            << seperator;
+        oss << prefix << std::left << std::setw(width) << "max write: " << attributes_.dev_cap.max_write_size
             << seperator;
 
         uint32_t eid_index = 0;
@@ -156,7 +165,7 @@ std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> UrmaContext::ALL_CONT
 std::mutex UrmaContext::ALL_CONTEXTS_MUTEX;
 std::atomic<uint32_t> UrmaContext::AUTO_INCREASE_JETTY_ID(0);
 
-Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &context)
+Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out)
 {
     UBS_VLOG_DEBUG("enter dev=%s eid index=%d", devName.c_str(), eidIndex);
     if (devName.empty()) {
@@ -194,7 +203,7 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
     std::lock_guard<std::mutex> guard(ALL_CONTEXTS_MUTEX);
     auto context_iter = ALL_CONTEXTS.find(tmp_key);
     if (context_iter != ALL_CONTEXTS.end()) {
-        context = context_iter->second;
+        out = context_iter->second;
         return UBS_OK;
     }
 
@@ -213,8 +222,20 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
         return UBS_UB_DEV_ERROR;
     }
 
+    uint32_t eid_count = 0;
+    auto eid_list = UrmaApi::urma_get_eid_list(raw_dev, &eid_count);
+    if (eidIndex >= eid_count) {
+        UrmaApi::urma_delete_context(raw_context);
+        UBS_VLOG_ERR("Eid index %d is out of range, eid count is %d", eidIndex, eid_count);
+        return UBS_UB_DEV_ERROR;
+    }
+
+    auto eid_info = eid_list[eidIndex];
+
     /* step6: create our context */
-    auto tmp_context = MakeRef<UrmaContext>(raw_context, target_dev);
+    auto tmp_context = MakeRef<UrmaContext>(raw_context, target_dev, eid_info);
+    UrmaApi::urma_free_eid_list(eid_list);
+
     if (tmp_context == nullptr) {
         UrmaApi::urma_delete_context(raw_context);
         UBS_VLOG_ERR("Create UrmaContext object failed, probaly out of memory");
@@ -223,6 +244,9 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
 
     /* step7: insert into all context */
     ALL_CONTEXTS.emplace(tmp_key, tmp_context);
+
+    /* step8: assign to out */
+    out = tmp_context;
 
     UBS_VLOG_DEBUG("created");
     return UBS_OK;
@@ -236,34 +260,36 @@ uint32_t UrmaContext::NewJettyId() noexcept
 
 UrmaContext::~UrmaContext()
 {
-    if (context_ != nullptr) {
-        UrmaApi::urma_delete_context(context_);
-        context_ = nullptr;
+    if (raw_context_ != nullptr) {
+        UrmaApi::urma_delete_context(raw_context_);
+        raw_context_ = nullptr;
     }
 
-    OBJ_DEC_COUNT(URMA_CONTEXT);
+    OBJ_DEC_COUNT(UBS_URMA_CONTEXT);
 }
 
 Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingType, UrmaJfcPtr &out)
 {
     UBS_VLOG_DEBUG("enter");
-    if (UNLIKELY(context_ == nullptr)) {
+    if (UNLIKELY(raw_context_ == nullptr)) {
         UBS_VLOG_ERR("Create jfc failed, as context is null");
         return UBS_ERROR;
     }
 
     if (pollingType == EVENT_POLLING) {
-        auto raw_jfce = UrmaApi::urma_create_jfce(this->context_);
+        auto raw_jfce = UrmaApi::urma_create_jfce(this->raw_context_);
         if (raw_jfce == nullptr) {
             UBS_VLOG_ERR("[URMA_API] Create jfce failed, errno %d", errno);
             return UBS_ERROR;
         }
 
         cfg.jfce = raw_jfce;
-        auto raw_jfc = UrmaApi::urma_create_jfc(this->context_, &cfg);
+        UBS_SLOG_DEBUG(cfg);
+
+        auto raw_jfc = UrmaApi::urma_create_jfc(this->raw_context_, &cfg);
         if (raw_jfc == nullptr) {
             UrmaApi::urma_delete_jfce(raw_jfce);
-            UBS_VLOG_ERR("[URMA_API] Create jfc failed, errno %d", errno);
+            UBS_SLOG_ERR("[URMA_API] Create jfc failed, errno " << errno << ", " << cfg);
             return UBS_ERROR;
         }
 
@@ -293,9 +319,11 @@ Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingTyp
         out = jfc;
     } else {
         cfg.jfce = nullptr;
-        auto raw_jfc = UrmaApi::urma_create_jfc(this->context_, &cfg);
+        UBS_SLOG_DEBUG(cfg);
+
+        auto raw_jfc = UrmaApi::urma_create_jfc(this->raw_context_, &cfg);
         if (raw_jfc == nullptr) {
-            UBS_VLOG_ERR("[URMA_API] Create jfc failed, errno %d", errno);
+            UBS_SLOG_ERR("[URMA_API] Create jfc failed, errno " << errno << ", " << cfg);
             return UBS_ERROR;
         }
 
@@ -314,7 +342,7 @@ Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingTyp
 Result UrmaContext::CreateJfs(urma_jfs_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJfsPtr &out)
 {
     UBS_VLOG_DEBUG("enter");
-    if (UNLIKELY(context_ == nullptr)) {
+    if (UNLIKELY(raw_context_ == nullptr)) {
         UBS_VLOG_ERR("Create jfs failed, as context is null");
         return UBS_ERROR;
     }
@@ -325,9 +353,11 @@ Result UrmaContext::CreateJfs(urma_jfs_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJf
     }
 
     cfg.jfc = jfc->raw_jfc_;
-    auto raw_jfs = UrmaApi::urma_create_jfs(this->context_, &cfg);
+    UBS_SLOG_DEBUG(cfg);
+
+    auto raw_jfs = UrmaApi::urma_create_jfs(this->raw_context_, &cfg);
     if (raw_jfs == nullptr) {
-        UBS_VLOG_ERR("[URMA_API] Create jfs failed, errno %d", errno);
+        UBS_SLOG_ERR("[URMA_API] Create jfs failed, errno " << errno << ", " << cfg);
         return UBS_ERROR;
     }
 
@@ -347,7 +377,7 @@ Result UrmaContext::CreateJfs(urma_jfs_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJf
 Result UrmaContext::CreateJfr(urma_jfr_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJfrPtr &out)
 {
     UBS_VLOG_DEBUG("enter");
-    if (UNLIKELY(context_ == nullptr)) {
+    if (UNLIKELY(raw_context_ == nullptr)) {
         UBS_VLOG_ERR("Create jfr failed, as context is null");
         return UBS_ERROR;
     }
@@ -358,13 +388,15 @@ Result UrmaContext::CreateJfr(urma_jfr_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJf
     }
 
     cfg.jfc = jfc->raw_jfc_;
-    auto raw_jfr = UrmaApi::urma_create_jfr(this->context_, &cfg);
+    UBS_SLOG_DEBUG(cfg);
+
+    auto raw_jfr = UrmaApi::urma_create_jfr(this->raw_context_, &cfg);
     if (raw_jfr == nullptr) {
-        UBS_VLOG_ERR("[URMA_API] Create jfr failed, errno %d", errno);
+        UBS_SLOG_ERR("[URMA_API] Create jfr failed, errno: " << errno << ", " << cfg);
         return UBS_ERROR;
     }
 
-    auto jfr = MakeRef<UrmaJfr>(raw_jfr, this, jfc);
+    auto jfr = MakeRef<UrmaJfr>(raw_jfr, cfg.token_value.token, this, jfc);
     if (jfr == nullptr) {
         UrmaApi::urma_delete_jfr(raw_jfr);
         UBS_VLOG_ERR("Create UrmaJfr object failed, probably out of memory");
@@ -377,10 +409,11 @@ Result UrmaContext::CreateJfr(urma_jfr_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJf
     return UBS_OK;
 }
 
-Result UrmaContext::CreateJetty(urma_jetty_cfg_t &cfg, const UrmaJfsPtr &jfs, const UrmaJfrPtr &jfr, UrmaJettyPtr &out)
+Result UrmaContext::CreateJetty(urma_jetty_cfg_t &cfg, urma_tp_type_t rtp_ctp_utp, const UrmaJfsPtr &jfs,
+                                const UrmaJfrPtr &jfr, UrmaJettyPtr &out)
 {
     UBS_VLOG_DEBUG("enter");
-    if (UNLIKELY(context_ == nullptr)) {
+    if (UNLIKELY(raw_context_ == nullptr)) {
         UBS_VLOG_ERR("Create jetty failed, as context is null");
         return UBS_ERROR;
     }
@@ -400,13 +433,17 @@ Result UrmaContext::CreateJetty(urma_jetty_cfg_t &cfg, const UrmaJfsPtr &jfs, co
     cfg.jfs_cfg = jfs->raw_jfs_->jfs_cfg;
     cfg.shared.jfr = jfr->raw_jfr_;
     cfg.shared.jfc = jfr->jfc_->raw_jfc_;
-    auto raw_jetty = UrmaApi::urma_create_jetty(this->context_, &cfg);
+
+    UBS_SLOG_DEBUG(cfg);
+    UBS_SLOG_DEBUG(jfr->raw_jfr_->jfr_cfg);
+
+    auto raw_jetty = UrmaApi::urma_create_jetty(this->raw_context_, &cfg);
     if (raw_jetty == nullptr) {
-        UBS_VLOG_ERR("[URMA_API] Create jetty failed, errno %d", errno);
+        UBS_SLOG_ERR("[URMA_API] Create jetty failed, errno " << errno << ", " << cfg);
         return UBS_ERROR;
     }
 
-    auto jetty = MakeRef<UrmaJetty>(raw_jetty, this, jfs, jfr);
+    auto jetty = MakeRef<UrmaJetty>(rtp_ctp_utp, raw_jetty->jetty_id.id, raw_jetty, this, jfs, jfr);
     if (jetty == nullptr) {
         UrmaApi::urma_delete_jetty(raw_jetty);
         UBS_VLOG_ERR("Create UrmaJetty object failed, probably out of memory");
@@ -419,12 +456,86 @@ Result UrmaContext::CreateJetty(urma_jetty_cfg_t &cfg, const UrmaJfsPtr &jfs, co
     return UBS_OK;
 }
 
+urma_jfc_cfg_t UrmaContext::CreateJfcCfg(uint32_t queueDepth, uint64_t userCtx)
+{
+    urma_jfc_cfg_t cfg{};
+    bzero(&cfg, sizeof(urma_jfc_cfg_t));
+
+    cfg.depth = queueDepth;
+    cfg.user_ctx = userCtx;
+
+    return cfg;
+}
+
+urma_jfs_cfg_t UrmaContext::CreateJfsCfg(uint32_t queueDepth, urma_transport_mode_t transMode, uint64_t userCtx,
+                                         uint8_t priority)
+{
+    urma_jfs_cfg_t cfg{};
+    bzero(&cfg, sizeof(urma_jfs_cfg_t));
+
+    if (UNLIKELY(raw_context_ == nullptr || device_ == nullptr)) {
+        UBS_VLOG_ERR("Create jfs cfg failed as raw context or device is nullptr");
+        return cfg;
+    }
+
+    cfg.flag.bs.order_type = URMA_DEF_ORDER;
+    cfg.trans_mode = transMode;
+    cfg.depth = queueDepth;
+    cfg.max_sge = device_->DeviceAttributes().dev_cap.max_jfs_sge;
+    cfg.max_rsge = device_->DeviceAttributes().dev_cap.max_jfs_rsge;
+    cfg.max_inline_data = device_->DeviceAttributes().dev_cap.max_jfs_inline_len;
+    cfg.rnr_retry = URMA_JFS_RNR_RETRY_DEFAULT;
+    cfg.err_timeout = URMA_JFS_ERROR_TIMEOUT;
+    cfg.user_ctx = userCtx;
+    if (priority != UINT8_MAX) {
+        cfg.priority = priority;
+    }
+
+    return cfg;
+}
+
+urma_jfr_cfg_t UrmaContext::CreateJfrCfg(uint32_t queueDepth, urma_transport_mode_t transMode, uint32_t tokenValue,
+                                         uint64_t userCtx)
+{
+    urma_jfr_cfg_t cfg{};
+    bzero(&cfg, sizeof(urma_jfr_cfg_t));
+
+    if (UNLIKELY(raw_context_ == nullptr || device_ == nullptr)) {
+        UBS_VLOG_ERR("Create jfr cfg failed as raw context or device is nullptr");
+        return cfg;
+    }
+
+    cfg.depth = queueDepth;
+    cfg.trans_mode = transMode;
+    cfg.max_sge = device_->DeviceAttributes().dev_cap.max_jfr_sge;
+    cfg.min_rnr_timer = URMA_JFR_RNR_TIMER_DEFAULT;
+    cfg.user_ctx = userCtx;
+    cfg.flag.bs.token_policy = URMA_TOKEN_NONE;
+    if (tokenValue != 0) {
+        cfg.flag.bs.token_policy = URMA_TOKEN_POLICY_PLAIN_TEXT;
+        cfg.token_value.token = tokenValue;
+    }
+
+    return cfg;
+}
+
+urma_jetty_cfg_t UrmaContext::CreateJettyCfg(uint64_t userCtx)
+{
+    urma_jetty_cfg_t cfg{};
+    bzero(&cfg, sizeof(urma_jetty_cfg_t));
+
+    cfg.flag.bs.share_jfr = 1;
+    cfg.user_ctx = userCtx;
+
+    return cfg;
+}
+
 /* urma jfc related function */
 UrmaJfc::~UrmaJfc()
 {
     Destroy();
 
-    OBJ_DEC_COUNT(URMA_JFC);
+    OBJ_DEC_COUNT(UBS_URMA_JFC);
 }
 
 void UrmaJfc::Destroy() noexcept
@@ -451,7 +562,7 @@ UrmaJfs::~UrmaJfs()
 {
     Destroy();
 
-    OBJ_DEC_COUNT(URMA_JFS);
+    OBJ_DEC_COUNT(UBS_URMA_JFS);
 }
 void UrmaJfs::Destroy() noexcept
 {
@@ -469,7 +580,7 @@ UrmaJfr::~UrmaJfr()
 {
     Destroy();
 
-    OBJ_DEC_COUNT(URMA_JFR);
+    OBJ_DEC_COUNT(UBS_URMA_JFR);
 }
 
 void UrmaJfr::Destroy() noexcept
@@ -488,12 +599,7 @@ UrmaJetty::~UrmaJetty()
 {
     Destroy();
 
-    OBJ_DEC_COUNT(URMA_CONTEXT);
-}
-
-Result UrmaJetty::ImportRemoteJetty(urma_rjetty_t &remote, urma_token_t &token) noexcept
-{
-    return UBS_OK;
+    OBJ_DEC_COUNT(UBS_URMA_CONTEXT);
 }
 
 void UrmaJetty::Destroy() noexcept
@@ -506,6 +612,162 @@ void UrmaJetty::Destroy() noexcept
         raw_jetty_ = nullptr;
     }
 }
+
+Result UrmaJetty::ImportRemoteJetty(urma_jetty_id_t &jettyId, uint32_t &token) noexcept
+{
+    UBS_VLOG_DEBUG("enter");
+
+    UBS_ASSERT_RETURN(context_ != nullptr && context_->raw_context_ != nullptr, UBS_ERROR);
+    UBS_ASSERT_RETURN(raw_jetty_ != nullptr, UBS_ERROR);
+
+    UBS_SLOG_DEBUG(*raw_jetty_);
+
+    urma_rjetty_t remote_jetty{};
+    remote_jetty.type = URMA_JETTY;
+    remote_jetty.trans_mode = raw_jetty_->jetty_cfg.jfs_cfg.trans_mode;
+    remote_jetty.jetty_id = jettyId;
+    remote_jetty.trans_mode = raw_jetty_->jetty_cfg.jfs_cfg.trans_mode;
+    urma_token_t raw_token{token};
+    if (token != 0) {
+        remote_jetty.flag.bs.token_policy = URMA_TOKEN_POLICY_PLAIN_TEXT;
+    }
+    remote_jetty.tp_type = rtp_ctp_utp_;
+
+    auto target_jetty = UrmaApi::urma_import_jetty(context_->raw_context_, &remote_jetty, &raw_token);
+    if (target_jetty == nullptr) {
+        UBS_SLOG_ERR("Import remote jetty failed, errno " << errno << ", remote " << jettyId);
+        return UBS_ERROR;
+    }
+
+    if (raw_jetty_->jetty_cfg.jfs_cfg.trans_mode != URMA_TM_RC) {
+        raw_target_jetty_ = target_jetty;
+        UBS_VLOG_DEBUG("imported");
+        return UBS_OK;
+    }
+
+    auto result = UrmaApi::urma_bind_jetty(raw_jetty_, target_jetty);
+    if (result != URMA_SUCCESS) {
+        UrmaApi::urma_unimport_jetty(target_jetty);
+        UBS_SLOG_ERR("Bind local jetty and remote jetty failed, errno " << errno << ", remote " << jettyId);
+        return UBS_ERROR;
+    }
+
+    raw_target_jetty_ = target_jetty;
+    UBS_VLOG_DEBUG("imported and bound");
+    return UBS_OK;
+}
+
+/* ostream functions */
+std::ostream &operator<<(std::ostream &os, const urma_eid_t &o)
+{
+    char buf[64l]{};
+    snprintf(buf, sizeof(buf),
+             "%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x", o.raw[0],
+             o.raw[1], o.raw[2], o.raw[3], o.raw[4], o.raw[5], o.raw[6], o.raw[7], o.raw[8], o.raw[9], o.raw[10],
+             o.raw[11], o.raw[12], o.raw[13], o.raw[14], o.raw[15]);
+    os << "eid: " << buf;
+    return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const urma_jetty_id_t &o)
+{
+    os << "jetty_id [id: " << o.id << ", uasid: " << o.uasid << ", " << o.eid << "]";
+    return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const urma_jfc_cfg_t &o)
+{
+    /* level 0 members */
+    os << "jfc cfg [depth: " << o.depth << ", ceqn: " << o.ceqn << ", user ctx: " << o.user_ctx;
+
+    /* urma_jfc_flag_t flag */
+    os << ", flag [lock free:" << o.flag.bs.lock_free << ", inline: " << o.flag.bs.jfc_inline
+       << ", non-blocking: " << o.flag.bs.non_blocking << "]";
+
+    /* jfce */
+    os << ", jfce: " << std::hex << o.jfce << std::dec;
+    if (o.jfce != nullptr) {
+        os << ", jfce-fd: " << o.jfce->fd;
+    }
+
+    /* end */
+    os << "]";
+    return os;
+}
+std::ostream &operator<<(std::ostream &os, const urma_jfr_cfg_t &o)
+{
+    /* level 0 members */
+    os << "jfr cfg [id: " << o.id << ", depth: " << o.depth << ", trans mode: " << o.trans_mode
+       << ", max sge: " << (uint32_t)o.max_sge << ", min rnr timer: " << (uint32_t)o.min_rnr_timer
+       << ", token: " << o.token_value.token << ", user ctx: " << o.user_ctx << std::hex << ", jfc: " << o.jfc
+       << std::dec;
+
+    /* urma_jfr_flag_t flag */
+    os << ", flag [token policy: " << o.flag.bs.token_policy << ", tag matching: " << o.flag.bs.tag_matching
+       << ", lock free: " << o.flag.bs.lock_free << ", order type: " << o.flag.bs.order_type
+       << ", non blocking: " << o.flag.bs.non_blocking << ", ext: " << o.flag.bs.has_drv_ext << "]";
+
+    /* end */
+    os << "]";
+    return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const urma_jfs_cfg_t &o)
+{
+    /* level 0 members */
+    os << "jfs cfg [depth: " << o.depth << ", trans mode: " << o.trans_mode << ", priority: " << (uint32_t)o.priority
+       << ", max sge: " << (uint32_t)o.max_sge << ", max rsge: " << (uint32_t)o.max_rsge
+       << ", max inline data: " << o.max_inline_data << ", rnr retry: " << (uint32_t)o.rnr_retry
+       << ", err timeout: " << (uint32_t)o.err_timeout << ", user ctx: " << o.user_ctx << std::hex << ", jfc: " << o.jfc
+       << std::dec;
+
+    /* urma_jfs_flag_t flag */
+    os << ", flag [lock free: " << o.flag.bs.lock_free << ", error suspend: " << o.flag.bs.error_suspend
+       << ", outorder completion: " << o.flag.bs.outorder_comp << ", order type: " << o.flag.bs.order_type
+       << ", multi path: " << o.flag.bs.multi_path << ", ctp rc multi mode: " << o.flag.bs.ctp_rc_mul_path_mode
+       << ", non blocking: " << o.flag.bs.non_blocking << ", ext: " << o.flag.bs.has_drv_ext << "]";
+
+    /* end */
+    os << "]";
+    return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const urma_jetty_cfg_t &o)
+{
+    /* level 0 member */
+    os << "jetty cfg [id: " << o.id << std::hex << ", jfc: " << o.shared.jfc << ", jfr: " << o.shared.jfr
+       << ", jetty group: " << o.jetty_grp << ", user ctx: " << o.user_ctx << std::dec;
+
+    /* urma_jetty_flag_t flag */
+    os << ", flag [shared jfr:" << o.flag.bs.share_jfr << ", non-blocking: " << o.flag.bs.non_blocking
+       << ", ext: " << o.flag.bs.has_drv_ext << "]";
+
+    /* jfs cfg and end */
+    os << ", " << o.jfs_cfg << "]";
+    return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const urma_jetty_t &o)
+{
+    os << "jetty [" << o.jetty_id << ", " << o.jetty_cfg << ", handle: " << o.handle << ", urma ctx: " << std::hex
+       << o.urma_ctx << std::dec << "]";
+    return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const UrmaJetty &o)
+{
+    os << "jetty id: " << o.jetty_id_ << std::hex << " raw_jetty: " << o.raw_jetty_ << ", context: " << o.context_.Get()
+       << ", jfs: " << o.jfs_.Get() << ", jfr: " << o.jfr_.Get() << std::dec;
+
+    if (o.raw_jetty_ != nullptr) {
+        os << ", " << *(o.raw_jetty_);
+    }
+
+    os << "]";
+
+    return os;
+}
+
 } // namespace urma
 } // namespace ubs
 } // namespace ock
