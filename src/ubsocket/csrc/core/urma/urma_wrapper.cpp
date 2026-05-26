@@ -604,6 +604,25 @@ UrmaJetty::~UrmaJetty()
 
 void UrmaJetty::Destroy() noexcept
 {
+    /* unbind if trans mode is rc */
+    if (raw_jetty_ != nullptr && raw_jetty_->jetty_cfg.jfs_cfg.trans_mode == URMA_TM_RC &&
+        raw_target_jetty_ != nullptr) {
+        auto result = UrmaApi::urma_unbind_jetty(raw_jetty_);
+        if (result != URMA_SUCCESS) {
+            UBS_VLOG_INFO("[URMA_API] Un-import failed, errno: %d", errno);
+        }
+    }
+
+    /* un-import target jetty if imported */
+    if (raw_target_jetty_ != nullptr) {
+        auto result = UrmaApi::urma_unimport_jetty(raw_target_jetty_);
+        if (result != URMA_SUCCESS) {
+            UBS_VLOG_INFO("[URMA_API] Un-import failed, errno: %d", errno);
+        }
+        raw_target_jetty_ = nullptr;
+    }
+
+    /* delete raw jetty */
     if (raw_jetty_ != nullptr) {
         auto result = UrmaApi::urma_delete_jetty(raw_jetty_);
         if (result != URMA_SUCCESS) {
@@ -617,11 +636,13 @@ Result UrmaJetty::ImportRemoteJetty(urma_jetty_id_t &jettyId, uint32_t &token) n
 {
     UBS_VLOG_DEBUG("enter");
 
+    /* step1: verify */
     UBS_ASSERT_RETURN(context_ != nullptr && context_->raw_context_ != nullptr, UBS_ERROR);
     UBS_ASSERT_RETURN(raw_jetty_ != nullptr, UBS_ERROR);
 
     UBS_SLOG_DEBUG(*raw_jetty_);
 
+    /* step2: create remote jetty and set related property */
     urma_rjetty_t remote_jetty{};
     remote_jetty.type = URMA_JETTY;
     remote_jetty.trans_mode = raw_jetty_->jetty_cfg.jfs_cfg.trans_mode;
@@ -633,18 +654,21 @@ Result UrmaJetty::ImportRemoteJetty(urma_jetty_id_t &jettyId, uint32_t &token) n
     }
     remote_jetty.tp_type = rtp_ctp_utp_;
 
+    /* step3: import jetty and get target jetty */
     auto target_jetty = UrmaApi::urma_import_jetty(context_->raw_context_, &remote_jetty, &raw_token);
     if (target_jetty == nullptr) {
         UBS_SLOG_ERR("Import remote jetty failed, errno " << errno << ", remote " << jettyId);
         return UBS_ERROR;
     }
 
+    /* step4: skip bind if not rc mocde */
     if (raw_jetty_->jetty_cfg.jfs_cfg.trans_mode != URMA_TM_RC) {
         raw_target_jetty_ = target_jetty;
         UBS_VLOG_DEBUG("imported");
         return UBS_OK;
     }
 
+    /* step5: bind jetty if rc */
     auto result = UrmaApi::urma_bind_jetty(raw_jetty_, target_jetty);
     if (result != URMA_SUCCESS) {
         UrmaApi::urma_unimport_jetty(target_jetty);
@@ -652,6 +676,7 @@ Result UrmaJetty::ImportRemoteJetty(urma_jetty_id_t &jettyId, uint32_t &token) n
         return UBS_ERROR;
     }
 
+    /* step6: set raw target jetty */
     raw_target_jetty_ = target_jetty;
     UBS_VLOG_DEBUG("imported and bound");
     return UBS_OK;
