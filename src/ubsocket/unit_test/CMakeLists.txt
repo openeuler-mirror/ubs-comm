@@ -78,3 +78,5 @@ target_sources(umq_ops_errno_test
   PRIVATE
         umq_ops_errno_test.cpp
 )
+add_subdirectory(profiling)
+

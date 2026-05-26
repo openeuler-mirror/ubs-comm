@@ -22,6 +22,7 @@ DataRx::DataRx(const SocketPtr &sock, DataRxOps *ops) : fd_(sock->raw_socket_), 
 
 ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
+    PROF_START(CORE_READ)
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::readv(fd_, iov, iovcnt);
         return size;
@@ -65,6 +66,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         // UpdateTraceStats(StatsMgr::RX_BYTE_COUNT, rx_total_len);
     }
+    PROF_END(CORE_READ, true)
     return rx_total_len;
 }
 

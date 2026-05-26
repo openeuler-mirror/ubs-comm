@@ -13,12 +13,17 @@
 
 #include "common/ubsocket_common_includes.h"
 #include "ubsocket_prof_tracepoint_group.h"
+#include "ubsocket_prof_tracepoint_combiner.h"
 
 namespace ock {
 namespace ubs {
 namespace profiling {
+class DumpThread;
+
 struct TracerOptions {
+    uint16_t dumpIntervalMin = 1;
     uint32_t tracepoint_count = 0;
+    std::string dumpPath;
 };
 
 class Tracer {
@@ -34,7 +39,9 @@ public:
 
     void UnInit() noexcept;
 
-    int Record(uint32_t tp_id, uint64_t timestamp, bool good) noexcept;
+    int Record(uint32_t tp_id, std::string &tp_name, uint64_t timestamp, bool good) noexcept;
+
+    int CombinerTraceGroups(std::ostringstream &oss) noexcept;
 
 private:
     Result CreateTraceGroup() noexcept;
@@ -42,12 +49,14 @@ private:
 private:
     static thread_local TraceGroup *tls_group; /* thread local trace group ptr to fast record */
     std::mutex mutex_;                         /* mutex for init and trace group creation */
-    bool inited_;                              /* inited or not */
+    bool inited_ = false;                      /* inited or not */
     TracerOptions options_;                    /* options */
     std::vector<TraceGroupPtr> trace_groups_;  /* all trace groups for all thread */
+    TraceCombinerPtr trace_combiner_; /* combiner all trace groups data for all thread*/
+    DumpThread *dump_thread_; /* dump tracepoint data thread*/
 };
 
-ALWAYS_INLINE int Tracer::Record(uint32_t tp_id, uint64_t timestamp, bool good) noexcept
+ALWAYS_INLINE int Tracer::Record(uint32_t tp_id, std::string &tp_name, uint64_t timestamp, bool good) noexcept
 {
     if (UNLIKELY(tls_group == nullptr)) {
         auto result = CreateTraceGroup();
@@ -56,7 +65,7 @@ ALWAYS_INLINE int Tracer::Record(uint32_t tp_id, uint64_t timestamp, bool good) 
         }
     }
 
-    return tls_group->Record(tp_id, timestamp, good);
+    return tls_group->Record(tp_id, tp_name, timestamp, good);
 }
 } // namespace profiling
 } // namespace ubs

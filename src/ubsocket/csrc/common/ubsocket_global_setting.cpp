@@ -35,6 +35,9 @@ std::string GlobalSetting::UBS_BRPC_ALLOC_SYM_STR;
 std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
 uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+bool GlobalSetting::GlobalSetting::UBS_PROF_ENABLE = false;
+uint16_t GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN = 1;
+std::string GlobalSetting::UBS_PROF_DUMP_PATH = "/tmp/ubsocket/profiling";
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
@@ -49,6 +52,9 @@ uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 #define ENV_UBS_TX_DEPTH "UBSOCKET_TX_DEPTH"
 #define ENV_USE_BRPC_ZCOPY "UBSOCKET_USE_BRPC_ZCOPY"
 #define ENV_UBS_HAND_SHAKE_MODE "UBSOCKET_UB_HANDSHAKE_MODE"
+#define ENV_PROF_ENABLE "UBSOCKET_PROF_ENABLE"
+#define ENV_PROF_DUMP_INTERVAL_MIN "UBSOCKET_PROF_DUMP_INTERVAL_MIN"
+#define ENV_PROF_DUMP_PATH "UBSOCKET_PROF_DUMP_PATH"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -58,8 +64,8 @@ void GlobalSetting::AddRules() noexcept
                                {ENV_ASYNC_EPOLL, false, 1, 1L},
                                {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240},
                                {ENV_UBS_RX_DEPTH, false, 2, UINT32_MAX},
-                               {ENV_UBS_TX_DEPTH, false, 2, UINT32_MAX}
-    };
+                               {ENV_UBS_TX_DEPTH, false, 2, UINT32_MAX},
+                               {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, false, "true|false"},
@@ -67,10 +73,11 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_ENABLE_SHARE_JFR, false, "true|false"},
                                     {ENV_USE_BRPC_ZCOPY, false, "true|false"},
                                     {ENV_TRANS_MODE, false, "ub|ib"},
-                                    {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"}};
+                                    {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"},
+                                    {ENV_PROF_ENABLE, false, "true|false"}};
 
-    /* str not empty rules: name, required */
-    StrNotEmptyRule rules_str_not_empty[] = {};
+    /* str not empty rules: name, required, maxLen */
+    StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, 512}};
 
     for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
@@ -182,6 +189,18 @@ Result GlobalSetting::LoadEnv() noexcept
     if (GetEnvAndValidate(ENV_UBS_HAND_SHAKE_MODE, strEnvValue)) {
         UBS_HAND_SHAKE_MODE = HandShakeFromStr(strEnvValue);
     }
+    if (GetEnvAndValidate(ENV_PROF_ENABLE, strEnvValue)) {
+        UBS_PROF_ENABLE = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GetEnvAndValidate(ENV_PROF_DUMP_INTERVAL_MIN, envValue)) {
+        UBS_PROF_DUMP_INTERVAL_MIN = static_cast<uint16_t>(envValue);
+    }
+
+    if (GetEnvAndValidateNotEmpty(ENV_PROF_DUMP_PATH, strEnvValue)) {
+        UBS_PROF_DUMP_PATH = strEnvValue;
+    }
+
     return UBS_OK;
 }
 } // namespace ubs

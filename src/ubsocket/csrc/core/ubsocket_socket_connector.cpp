@@ -17,6 +17,7 @@ namespace ubs {
 // ======================== 基础方法 ========================
 int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
 {
+    PROF_START(CORE_CONNECT)
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     Result ret = 0;
     bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
@@ -48,7 +49,7 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
         SocketConnHelper::SetBlocking(raw_fd_);
     }
     // m_peer_info.type_fd = 1;
-
+    PROF_END(CORE_CONNECT, true)
     return ret;
 }
 
