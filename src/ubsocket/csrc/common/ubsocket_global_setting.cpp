@@ -38,6 +38,9 @@ uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 bool GlobalSetting::GlobalSetting::UBS_PROF_ENABLE = false;
 uint16_t GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN = 1;
 std::string GlobalSetting::UBS_PROF_DUMP_PATH = "/tmp/ubsocket/profiling";
+uint64_t GlobalSetting::UBS_TRACE_TIME = UBSOCKET_TRACE_TIME_DEFAULT;
+uint64_t GlobalSetting::UBS_TRACE_FILE_SIZE = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
+char GlobalSetting::UBS_TRACE_FILE_PATH[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = "";
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
@@ -55,6 +58,9 @@ std::string GlobalSetting::UBS_PROF_DUMP_PATH = "/tmp/ubsocket/profiling";
 #define ENV_PROF_ENABLE "UBSOCKET_PROF_ENABLE"
 #define ENV_PROF_DUMP_INTERVAL_MIN "UBSOCKET_PROF_DUMP_INTERVAL_MIN"
 #define ENV_PROF_DUMP_PATH "UBSOCKET_PROF_DUMP_PATH"
+#define ENV_TRACE_TIME "UBSOCKET_TRACE_TIME"
+#define ENV_TRACE_FILE_SIZE "UBSOCKET_TRACE_FILE_SIZE"
+#define ENV_TRACE_FILE_PATH "UBSOCKET_TRACE_FILE_PATH"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -65,7 +71,11 @@ void GlobalSetting::AddRules() noexcept
                                {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240},
                                {ENV_UBS_RX_DEPTH, false, 2, UINT32_MAX},
                                {ENV_UBS_TX_DEPTH, false, 2, UINT32_MAX},
-                               {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5}};
+                               {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5},
+                               {ENV_TRACE_TIME, false, UBSOCKET_TRACE_TIME_MIN, UBSOCKET_TRACE_TIME_MAX},
+                               {ENV_TRACE_FILE_SIZE, false, UBSOCKET_TRACE_FILE_SIZE_MIN, UBSOCKET_TRACE_FILE_SIZE_MAX},
+                               {ENV_TRACE_FILE_PATH, false,
+                                UBSOCKET_TRACE_FILE_PATH_LEN_MIN, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, false, "true|false"},
@@ -199,6 +209,19 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidateNotEmpty(ENV_PROF_DUMP_PATH, strEnvValue)) {
         UBS_PROF_DUMP_PATH = strEnvValue;
+    }
+
+    if (GetEnvAndValidate(ENV_TRACE_TIME, envValue)) {
+        UBS_TRACE_TIME = static_cast<uint32_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_TRACE_FILE_SIZE, envValue)) {
+        UBS_TRACE_FILE_SIZE = static_cast<uint32_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_TRACE_FILE_PATH, strEnvValue)) {
+        (void)snprintf(UBS_TRACE_FILE_PATH, sizeof(UBS_TRACE_FILE_PATH),
+            "%s", strEnvValue);
     }
 
     return UBS_OK;
