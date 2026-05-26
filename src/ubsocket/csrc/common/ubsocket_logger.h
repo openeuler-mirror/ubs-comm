@@ -55,13 +55,13 @@ public:
         mLogFunc = nullptr;
     }
 
-    void SetLogLevel(int level);
-    int GetLogLevel() const;
+    void SetLogLevel(int level) noexcept;
+    int GetLogLevel() const noexcept;
 
     void SetExternalLogFunction(ExternalLog func);
 
-    void Log(int level, const std::ostringstream &oss, const char *filename, int line) const;
-    void Logv(int level, const char *filename, int line, const char *func, const char *format, ...) const
+    void Log(int level, const std::ostringstream &oss, const char *filename, int line) const noexcept;
+    void Logv(int level, const char *filename, int line, const char *func, const char *format, ...) const noexcept
     {
         std::ostringstream oss;
         oss << "[UBSOCKET " << func << "] ";
@@ -87,7 +87,7 @@ public:
     Logger &operator=(Logger &&) = delete;
 
 private:
-    void LogDefault(int level, const std::string &msg, const char *filename, int line) const;
+    void LogDefault(int level, const std::string &msg, const char *filename, int line) const noexcept;
 
 private:
     LogLevel logLevel = LEVEL_INFO;
@@ -104,12 +104,12 @@ private:
 
 #define PID_TID " " << getpid() << ":" << syscall(SYS_gettid)
 
-ALWAYS_INLINE int Logger::GetLogLevel() const
+ALWAYS_INLINE int Logger::GetLogLevel() const noexcept
 {
     return logLevel;
 }
 
-ALWAYS_INLINE void Logger::SetLogLevel(int level)
+ALWAYS_INLINE void Logger::SetLogLevel(int level) noexcept
 {
     if (level >= LEVEL_COUNT || level < LEVEL_DEBUG) {
         std::cout << "Invalid setting level." << std::endl;
@@ -124,7 +124,7 @@ ALWAYS_INLINE void Logger::SetExternalLogFunction(ExternalLog func)
     mLogFunc = func;
 }
 
-ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const char *filename, int line) const
+ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const char *filename, int line) const noexcept
 {
     static const char *levelStr[] = {"D", "I", "N", "W", "E"};
 
@@ -147,7 +147,7 @@ ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const c
     }
 }
 
-ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const char *filename, int line) const
+ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const char *filename, int line) const noexcept
 {
     if (mLogFunc != nullptr) {
         mLogFunc(level, oss.str().c_str(), filename, line);
@@ -172,6 +172,15 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
         if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                    \
             std::ostringstream oss;                                                       \
             oss << "[UBSOCKET " << __FUNCTION__ << "] " << ARGS;                          \
+            ock::ubs::Logger::Instance().Log(level, oss, UBS_LOG_FILENAME, UBS_LOG_LINE); \
+        }                                                                                 \
+    } while (0)
+
+#define UBS_LOG_STREAM_RAW(level, ARGS)                                                   \
+    do {                                                                                  \
+        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) {                    \
+            std::ostringstream oss;                                                       \
+            oss << ARGS;                                                                  \
             ock::ubs::Logger::Instance().Log(level, oss, UBS_LOG_FILENAME, UBS_LOG_LINE); \
         }                                                                                 \
     } while (0)

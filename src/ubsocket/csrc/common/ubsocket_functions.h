@@ -11,6 +11,8 @@
 #ifndef UBS_COMM_UBSOCKET_FUNCTIONS_H
 #define UBS_COMM_UBSOCKET_FUNCTIONS_H
 
+#include <fstream>
+
 #include "ubsocket_defines.h"
 
 namespace ock {
@@ -62,6 +64,13 @@ public:
      * in it, we do lower case and trim, then compare with string 'true'
      */
     static bool BoolFromStr(const std::string &src) noexcept;
+
+    /**
+     * @brief Generate random uint32
+     *
+     * @return a random uint32 if successful, 0 if failed
+     */
+    uint32_t SecureRandUInt32() noexcept;
 };
 
 ALWAYS_INLINE bool Func::FloatLargerThan(float a, float b) noexcept
@@ -154,6 +163,24 @@ ALWAYS_INLINE void Func::StrLowerCaseDirect(std::string &src) noexcept
 ALWAYS_INLINE bool Func::BoolFromStr(const std::string &src) noexcept
 {
     return StrLowerCase(StrTrim(src)) == "true";
+}
+
+ALWAYS_INLINE uint32_t Func::SecureRandUInt32() noexcept
+{
+    uint32_t rand = 0;
+    std::ifstream urandom("/dev/urandom", std::ios::in | std::ios::binary);
+    if (!urandom.is_open()) {
+        return 0;
+    }
+
+    urandom.read(reinterpret_cast<char *>(&rand), sizeof(uint32_t));
+    if (!urandom) {
+        urandom.close();
+        return 0;
+    }
+
+    urandom.close();
+    return rand;
 }
 } // namespace ubs
 } // namespace ock
