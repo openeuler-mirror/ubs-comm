@@ -209,13 +209,7 @@ Result UmqSocket::WaitUntilReady(uint64_t umq_handle)
     uint32_t poll_cnt = 0;
     do {
         tx_.GetTxOps()->PollTx(this);
-        int umq_state = UmqApi::umq_state_get(umq_handle);
-        if (umq_state != QUEUE_STATE_IDLE) {
-            int savedErrno = errno;
-            errno = UmqErrnoConverter::Convert(UmqOperation::GET_STATE, umq_state, savedErrno);
-            UBS_VLOG_ERR("[UMQ_API] umq_state_get() failed, state: %d, mapped errno: %d(%s), original errno: %d\n",
-                         umq_state, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::GET_STATE, umq_state),
-                         savedErrno);
+        if (UmqApi::umq_state_get(umq_handle) != QUEUE_STATE_IDLE) {
             break;
         }
         usleep(WAIT_READY_TIMEOUT_US);
