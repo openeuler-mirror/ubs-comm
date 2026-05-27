@@ -41,11 +41,13 @@ struct SubCmd {
 #define SUB_CMD_PINGPONG_EPOLL "pp-epoll"
 #define SUB_CMD_DATA "data"
 #define SUB_CMD_SHOW "show"
+#define SUB_CMD_CONN "conn"
 
 static SubCmd cmds[] = {{SUB_CMD_PINGPONG, "pingpong test to check if network is ok"},
                         {SUB_CMD_PINGPONG_EPOLL, "pingpong test using epoll to check if network is ok"},
                         {SUB_CMD_DATA, "pingpong test to check if data transfer is correct"},
-                        {SUB_CMD_SHOW, "show device info e.g. UB and RoCE"}};
+                        {SUB_CMD_SHOW, "show device info e.g. UB and RoCE"},
+                        {SUB_CMD_CONN, "concurrent connecting performance test for UB and RoCE"}};
 
 /* for communication */
 #define PARAM_ROLE "role"           /* server or client */
@@ -59,6 +61,11 @@ static SubCmd cmds[] = {{SUB_CMD_PINGPONG, "pingpong test to check if network is
 #define PARAM_DEVICE_TYPE "device-type"
 #define PARAM_DEVICE_NAME "device-name"
 #define PARAM_DEVICE_DETAIL "device-detail"
+
+/* for connecting perf */
+#define PARAM_CONN_DEV_NAME "device-name"
+#define PARAM_CONN_DEV_EID "device-eid-index"
+#define PARAM_CONN_THREAD "thread-count"
 
 enum ParamDataType : int8_t {
     PDT_NONE = 0,

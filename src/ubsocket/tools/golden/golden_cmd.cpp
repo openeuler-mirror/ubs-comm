@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "golden_cmd.h"
+#include "golden_cmd_connecting.h"
 #include "golden_cmd_data.h"
 #include "golden_cmd_help.h"
 #include "golden_cmd_pingpong.h"
@@ -23,5 +24,6 @@ void SubCommandRegistry::RegisterAll() noexcept
     (void)RegisterSubCommand(SUB_CMD_PINGPONG_EPOLL, CreatePingpongEpoll);
     (void)RegisterSubCommand(SUB_CMD_DATA, CreateData);
     (void)RegisterSubCommand(SUB_CMD_SHOW, CreateShow);
+    (void)RegisterSubCommand(SUB_CMD_CONN, CreateConn);
 }
 } // namespace golden

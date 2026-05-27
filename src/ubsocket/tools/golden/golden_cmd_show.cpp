@@ -81,7 +81,7 @@ int SubCommandShow::DoExecute() noexcept
         std::cout << "urma backend is not enabled" << std::endl;
 #endif
 
-        LOG_DEBUG("leave with ub type");
+        LOG_DEBUG("leave with ub type, show whole: " << show_whole_info);
         return 0;
     }
 
