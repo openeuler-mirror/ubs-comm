@@ -83,14 +83,11 @@ Result UmqBackend::Init() noexcept
         return UBS_ERROR;
     }
 
-    if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY ||
-        UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
-        UmqSetting::UMQ_PROCESS_SOCKET_ID = SocketConnHelper::GetCurrentProcessSocketId();
-        UmqSetting::UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
-        if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
-            UBS_VLOG_ERR("Failed get socket id in cpu affinity policy.\n");
-            return UBS_ERROR;
-        }
+    UmqSetting::UMQ_PROCESS_SOCKET_ID = SocketConnHelper::GetCurrentProcessSocketId();
+    UmqSetting::UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
+    if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
+        UBS_VLOG_ERR("Failed get socket id in cpu affinity policy.\n");
+        return UBS_ERROR;
     }
 
     UMQ_INITED = true;

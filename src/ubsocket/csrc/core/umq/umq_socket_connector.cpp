@@ -204,7 +204,7 @@ void UmqConnectorOps::DestroySocketResources()
 Result UmqConnectorOps::BuildNegotiateReq(NegotiateReq *req, const UmqSocketPtr &umq_socket)
 {
     umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
-    dev_schedule_policy schedulePolicy = dev_schedule_policy::CPU_AFFINITY_PRIORITY;
+    dev_schedule_policy schedulePolicy = UmqSetting::UMQ_DEV_SCHEDULE_POLICY;
     req->magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
     req->trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
     req->is_bonding = UmqSetting::UMQ_IS_BONDING ? 1 : 0;
