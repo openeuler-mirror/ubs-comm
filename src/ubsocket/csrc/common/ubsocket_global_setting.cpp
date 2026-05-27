@@ -27,6 +27,7 @@ bool GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED = false;
 bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
 bool GlobalSetting::UBS_READV_UNLIMITED = false;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
+bool GlobalSetting::UBS_ENABLE_DEGRADE = true;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
@@ -61,6 +62,7 @@ char GlobalSetting::UBS_TRACE_FILE_PATH[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = "";
 #define ENV_TRACE_TIME "UBSOCKET_TRACE_TIME"
 #define ENV_TRACE_FILE_SIZE "UBSOCKET_TRACE_FILE_SIZE"
 #define ENV_TRACE_FILE_PATH "UBSOCKET_TRACE_FILE_PATH"
+#define ENV_VAR_DEGRADE "UBSOCKET_DEGRADE"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -85,7 +87,8 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_TRANS_MODE, false, "ub|ib"},
                                     {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"},
                                     {ENV_PROF_ENABLE, false, "true|false"},
-                                    {ENV_ASYNC_ACCEPTOR, false, "true|false"}};
+                                    {ENV_ASYNC_ACCEPTOR, false, "true|false"},
+                                    {ENV_VAR_DEGRADE, false, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, 512}};
@@ -230,7 +233,12 @@ Result GlobalSetting::LoadEnv() noexcept
     }
 
     if (GetEnvAndValidate(ENV_TRACE_FILE_PATH, strEnvValue)) {
-        (void)snprintf(UBS_TRACE_FILE_PATH, sizeof(UBS_TRACE_FILE_PATH), "%s", strEnvValue.c_str());
+        (void)snprintf(UBS_TRACE_FILE_PATH, sizeof(UBS_TRACE_FILE_PATH),
+            "%s", strEnvValue.c_str());
+    }
+
+    if (GetEnvAndValidate(ENV_VAR_DEGRADE, strEnvValue)) {
+        UBS_ENABLE_DEGRADE = Func::BoolFromStr(strEnvValue);
     }
 
     return UBS_OK;

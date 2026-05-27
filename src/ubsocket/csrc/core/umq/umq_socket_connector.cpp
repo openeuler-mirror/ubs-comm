@@ -14,6 +14,7 @@
 #include <netinet/tcp.h>
 
 #include "common/ubsocket_scope_exit.h"
+#include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_eid_table.h"
 #include "umq_errno_converter.h"
 
@@ -149,7 +150,6 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
 Result UmqConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
 {
     auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
-    route_backup_src_eid_ = {};
     if (ConnectNegotiate(umq_socket) != UBS_OK) {
         UBS_VLOG_ERR("Failed to negotiate in connect,Peer IP:%s, fd: %d\n", umq_conn_info_.peer_ip.c_str(), new_fd);
         return UBS_ERROR;
@@ -157,41 +157,124 @@ Result UmqConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     return UBS_OK;
 };
 
-Result UmqConnectorOps::CreateSocketResources(int new_fd, const SocketPtr &sock)
+Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
 {
+    /**
+     * 1. 用户直接指定普通设备建链，不重试、可降级
+     * 2. 用户指定 bonding 设备建链，但如果是节点内回环场景，不重试、可降级
+     * 3. 用户指定 bonding 设备建链，跨节点场景返回 retryable 错误，优先重试，如果重试仍旧失败则降级
+     */
+    bool ok = false;
     Result ack_ret = UBS_OK;
     Result peer_ret = UBS_OK;
-    auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
-    // TODO: 待补充建链时重试逻辑
-    std::vector<umq_port_id_t> used_port_vector;
-    used_port_vector = {conn_route_.src_port, back_route_.src_port};
-    umq_used_ports_t used_ports = {.port = used_port_vector.data(),
-                                   .num = static_cast<uint8_t>(used_port_vector.size())};
-    if (ack_ret == UBS_OK) {
-        ack_ret = DoUbConnect(umq_socket, used_ports);
-    }
-    if (ack_ret != UBS_OK) {
-        UBS_VLOG_ERR("Failed to finish ub bind in connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
-                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), new_fd);
-    }
-    if (SocketConnHelper::SendSocketData(new_fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(ack_ret)) {
-        UBS_VLOG_ERR("Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), new_fd);
-        return UBS_ERROR;
-    }
+    // status reset
+    degradable_ = false;
+    retry_state_ = UBHandshakeState::kSTART;
+    other_route_message_ = {};
+    other_conn_route = {};
+    other_back_conn_route = {};
 
-    if (SocketConnHelper::RecvSocketData(new_fd, &peer_ret, sizeof(peer_ret), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(peer_ret)) {
-        UBS_VLOG_ERR("Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), new_fd);
-        return UBS_ERROR;
+    auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
+    while (!ok) {
+        switch (retry_state_) {
+            case UBHandshakeState::kOK: {
+                ok = true;
+                break;
+            }
+            case UBHandshakeState::kSTART: {
+                // 作为客户端，它的 Degradable 属性对于是否降级不生效. Degradable 仅当角色为服务端时生效
+                if (UmqSetting::UMQ_IS_BONDING) {
+                    ack_ret = CheckRouteDevAddForConnect(umq_conn_info_.conn_eid, umq_socket);
+                }
+                std::vector<umq_port_id_t> used_port_vector;
+                used_port_vector = {conn_route_.src_port, back_route_.src_port};
+                umq_used_ports_t used_ports = {.port = used_port_vector.data(),
+                                               .num = static_cast<uint8_t>(used_port_vector.size())};
+                if (ack_ret == UBS_OK) {
+                    ack_ret = DoUbConnect(umq_socket, umq_conn_info_.conn_eid, used_ports);
+                }
+                if (ack_ret != UBS_OK) {
+                    UBS_VLOG_ERR("Failed to finish ub bind in connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                                 EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+                }
+                if (SocketConnHelper::SendSocketData(raw_fd_, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) !=
+                    sizeof(ack_ret)) {
+                    UBS_VLOG_ERR("Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                 EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+                    return UBS_TCP_EXCHANGE;
+                }
+
+                if (SocketConnHelper::RecvSocketData(raw_fd_, &peer_ret, sizeof(peer_ret), CONTROL_PLANE_TIMEOUT_MS) !=
+                    sizeof(peer_ret)) {
+                    UBS_VLOG_ERR("Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                 EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+                    return UBS_TCP_EXCHANGE;
+                }
+
+                // 如果服务端支持降级则客户端需要配合
+                degradable_ = IsDegradable(peer_ret);
+                if (IsOk(ack_ret) && IsOk(peer_ret)) {
+                    retry_state_ = UBHandshakeState::kOK;
+                } else if (UmqSetting::UMQ_IS_BONDING && (IsRetryable(ack_ret) || IsRetryable(peer_ret)) &&
+                           ((umq_conn_info_.conn_eid != UmqSetting::UMQ_LOCAL_EID &&
+                             topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) ||
+                            topo_type_ == UMQ_TOPO_TYPE_CLOS)) {
+                    retry_state_ = UBHandshakeState::kRETRY;
+                } else if (degradable_) {
+                    retry_state_ = UBHandshakeState::kDEGRADE;
+                } else {
+                    retry_state_ = UBHandshakeState::kFAILED;
+                }
+                break;
+            }
+            case UBHandshakeState::kRETRY: {
+                auto ret = DoUbConnectRetry(sock, ack_ret, peer_ret);
+                if (ret == UBS_OK) {
+                    UBS_VLOG_DEBUG("Success to retry connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                                   EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+                    break;
+                } else {
+                    UBS_VLOG_ERR("Failed to retry connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d, err:%d\n",
+                                 EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, ret);
+                    return ret;
+                }
+            }
+            case UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE: {
+                // 客户端在 kRETRY 错误时会进入 kRETRY_FAILED_CHECK_OTHER_ROUTE，但是服务端仍处于 kRETRY 阶段，
+                // 需要发送信令通知服务端，此种情况下 other_route 字段不可用
+                other_route_message_.ub_handshake_state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
+                if (SocketConnHelper::SendSocketData(raw_fd_, &other_route_message_, sizeof(other_route_message_),
+                                                     CONTROL_PLANE_TIMEOUT_MS) != sizeof(other_route_message_)) {
+                    UBS_VLOG_ERR("Failed to send connect eid message in retry connect,Peer eid:" EID_FMT
+                                 ",Peer IP:%s, fd: %d\n",
+                                 EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+                }
+
+                if (degradable_) {
+                    retry_state_ = UBHandshakeState::kDEGRADE;
+                } else {
+                    retry_state_ = UBHandshakeState::kFAILED;
+                }
+                break;
+            }
+
+            case UBHandshakeState::kDEGRADE: {
+                SocketSet::Instance().OverrideSocket(raw_fd_, nullptr);
+                UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
+                return UBS_OK;
+            }
+
+            case UBHandshakeState::kFAILED: {
+                UBS_VLOG_ERR("Failed to get new connect in connect, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                             EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+                return UBS_CONN_RETRY_FAILED;
+            }
+        }
     }
 
     umq_conn_info_.create_time = std::chrono::system_clock::now();
-    UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
+    UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", raw_fd_);
 
-    // PrintQbufPoolInfo();
     return UBS_OK;
 };
 
@@ -341,13 +424,11 @@ Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_e
         RRChooseMainRoute(main_routes, dst_eid, conn_main_route, conn_back_route);
         conn_route_ = conn_main_route;
         back_route_ = conn_back_route;
-        route_backup_src_eid_ = conn_back_route.src_eid;
-        route_backup_dst_eid_ = conn_back_route.dst_eid;
     }
     return UBS_OK;
 }
 
-Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_ports_t &used_ports)
+Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &conn_eid, umq_used_ports_t &used_ports)
 {
     CpMsg local_cp_msg;
     CpMsg remote_cp_msg;
@@ -376,8 +457,9 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
                      "fd: %d, ret: %ld, mapped errno: %d(%s), original errno: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_,
                      local_cp_msg.queue_bind_info_size, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL), savedErrno);
-        return UBS_ERROR;
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL),
+                     savedErrno);
+        return UBS_UMQ_BIND_INFO_GET | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
 
     uint32_t len = sizeof(local_cp_msg) - sizeof(uint64_t);
@@ -402,7 +484,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     struct timeval start_tv;
     gettimeofday(&start_tv, NULL);
     int umq_ret =
-        UmqApi::umq_bind(umq_socket->UmqHandle(), remote_cp_msg.queue_bind_info, remote_cp_msg.queue_bind_info_size);
+            UmqApi::umq_bind(umq_socket->UmqHandle(), remote_cp_msg.queue_bind_info, remote_cp_msg.queue_bind_info_size);
     struct timeval end_tv;
     gettimeofday(&end_tv, NULL);
     long long costms = (end_tv.tv_sec - start_tv.tv_sec) * 1000LL + (end_tv.tv_usec - start_tv.tv_usec) / 1000LL;
@@ -415,7 +497,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
                      "original errno: %d, operation duration: %lld ms.\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, umq_ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, umq_ret), savedErrno, costms);
-        return UBS_ERROR;
+        return UBS_UMQ_BIND | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umq_socket->SetBindRemote(true);
@@ -445,6 +527,81 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
         return UBS_PREFILL_RX;
     }
 
+    return UBS_OK;
+}
+
+Result UmqConnectorOps::DoUbConnectRetry(SocketPtr socket_ptr, Result &ack_ret, Result &peer_ret)
+{
+    auto umq_socket = RefConvert<Socket, UmqSocket>(socket_ptr);
+    if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY) {
+        UBS_VLOG_ERR("CPU_AFFINITY:%d failed, connect no need to retry,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                     static_cast<int>(UmqSetting::UMQ_DEV_SCHEDULE_POLICY), EID_ARGS(umq_conn_info_.peer_eid),
+                     umq_conn_info_.peer_ip.c_str(), raw_fd_);
+
+        if (degradable_) {
+            retry_state_ = UBHandshakeState::kDEGRADE;
+        } else {
+            retry_state_ = UBHandshakeState::kFAILED;
+        }
+        return UBS_OK;
+    }
+    umq_socket->UnbindAndFlushRemoteUmq(socket_ptr);
+    umq_socket->DestroyLocalUmq();
+
+    if ((CheckOtherRoute(umq_socket) != 0 && topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) ||
+        (CheckOtherRouteForClos(umq_socket) != 0 && topo_type_ == UMQ_TOPO_TYPE_CLOS)) {
+        UBS_VLOG_ERR("Failed to get other route in retry,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+        retry_state_ = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
+        return UBS_OK;
+    }
+
+    other_route_message_.ub_handshake_state = UBHandshakeState::kRETRY;
+    other_route_message_.other_route = other_conn_route;
+    other_route_message_.other_back_route = other_back_conn_route;
+    if (SocketConnHelper::SendSocketData(raw_fd_, &other_route_message_, sizeof(other_route_message_),
+                                         CONTROL_PLANE_TIMEOUT_MS) != sizeof(other_route_message_)) {
+        return UBS_TCP_EXCHANGE;
+    }
+
+    std::vector<umq_port_id_t> used_port_vector = {other_conn_route.src_port, other_back_conn_route.src_port};
+    umq_used_ports_t used_ports = {.port = used_port_vector.data(),
+                                   .num = static_cast<uint8_t>(used_port_vector.size())};
+    UBS_VLOG_INFO("DoConnect down to back, main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                  other_conn_route.src_port.bs.chip_id, other_conn_route.src_port.bs.die_id,
+                  other_conn_route.src_port.bs.port_idx);
+    UBS_VLOG_INFO("DoConnect down to back, back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                  other_back_conn_route.src_port.bs.chip_id, other_back_conn_route.src_port.bs.die_id,
+                  other_back_conn_route.src_port.bs.port_idx);
+    ack_ret = DoUbConnect(umq_socket, other_conn_route.src_eid, used_ports);
+    if (!IsOk(ack_ret)) {
+        UBS_VLOG_ERR("Failed to finish ub bind in retry connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+    }
+
+    // 通过返回错误码, 在函数调用处打印错误码
+    if (SocketConnHelper::SendSocketData(raw_fd_, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) !=
+        sizeof(ack_ret)) {
+        UBS_VLOG_ERR("Failed to send ack ret message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, ack_ret: %d",
+                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, ack_ret);
+        return UBS_TCP_EXCHANGE;
+    }
+
+    if (SocketConnHelper::RecvSocketData(raw_fd_, &peer_ret, sizeof(peer_ret), CONTROL_PLANE_TIMEOUT_MS) !=
+        sizeof(peer_ret)) {
+        UBS_VLOG_ERR("Failed to recv peer ret message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, peer_ret: %d",
+                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, peer_ret);
+        return UBS_TCP_EXCHANGE;
+    }
+
+    degradable_ = IsDegradable(peer_ret);
+    if (IsOk(ack_ret) && IsOk(peer_ret)) {
+        retry_state_ = UBHandshakeState::kOK;
+    } else if (degradable_) {
+        retry_state_ = UBHandshakeState::kDEGRADE;
+    } else {
+        retry_state_ = UBHandshakeState::kFAILED;
+    }
     return UBS_OK;
 }
 
@@ -659,6 +816,104 @@ void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &main_routes, c
     UBS_VLOG_INFO("back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", conn_back_route.src_port.bs.chip_id,
                   conn_back_route.src_port.bs.die_id, conn_back_route.src_port.bs.port_idx);
 }
+
+Result UmqConnectorOps::CheckRouteDevAddForConnect(const umq_eid_t &conn_eid, const UmqSocketPtr &umq_socket)
+{
+    if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {
+        return UBS_OK;
+    }
+
+    if (umq_socket->CheckDevAdd(conn_eid) != 0) {
+        UBS_VLOG_ERR("Failed to check main dev add in connect, target eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                     EID_ARGS(conn_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+        return UBS_UMQ_ERROR;
+    }
+
+    if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
+        return UBS_OK;
+    }
+
+    if (umq_socket->CheckDevAdd(back_route_.src_eid) != 0) {
+        UBS_VLOG_ERR("Failed to check backup dev add in connect, target eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                     EID_ARGS(back_route_.src_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+        return UBS_UMQ_ERROR;
+    }
+
+    return UBS_OK;
+}
+
+Result UmqConnectorOps::CheckOtherRoute(const UmqSocketPtr &umq_socket)
+{
+    if (!RouteListRegistry::Instance().IsRegisteredRouteList(umq_conn_info_.peer_eid)) {
+        UBS_VLOG_ERR("Failed to check other route to connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+        return UBS_CONN_ROUTE;
+    }
+
+    umq_route_list_t route_list = {};
+    if (!RouteListRegistry::Instance().GetRouteList(umq_conn_info_.peer_eid, route_list)) {
+        UBS_VLOG_ERR("Failed to get route list in map, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+        return UBS_CONN_ROUTE;
+    }
+
+    umq_route_list_t filtered_list = {};
+    uint32_t filter_mum = 0;
+    bool found = false;
+    for (uint32_t i = 0; i < route_list.route_num; ++i) {
+        if (route_list.routes[i].src_port.bs.chip_id != conn_route_.src_port.bs.chip_id) {
+            if (filter_mum == 0) {
+                other_conn_route = route_list.routes[i];
+                found = true;
+            }
+            filtered_list.routes[filter_mum++] = route_list.routes[i];
+        }
+    }
+
+    if (!found) {
+        UBS_VLOG_DEBUG("Failed to find other route in map\n");
+        return UBS_CONN_ROUTE;
+    }
+
+    filtered_list.route_num = filter_mum;
+    RouteListRegistry::Instance().RegisterOrReplaceRouteList(umq_conn_info_.peer_eid, filtered_list);
+
+    if (umq_socket->CheckDevAdd(other_conn_route.src_eid) != 0) {
+        UBS_VLOG_ERR("CheckDevAdd() failed in CheckOtherRoute, src eid:" EID_FMT ", ret: %d\n",
+                     EID_ARGS(other_conn_route.src_eid), UBS_CONN_ROUTE);
+        return UBS_CONN_ROUTE;
+    }
+
+    return UBS_OK;
+}
+
+Result UmqConnectorOps::CheckOtherRouteForClos(const UmqSocketPtr &umq_socket)
+{
+    umq_route_t conn_main_route;
+    umq_route_t conn_back_route;
+    RRChooseMainRoute(back_route_list_, &umq_conn_info_.peer_eid, conn_main_route, conn_back_route);
+    other_conn_route = conn_main_route;
+    other_back_conn_route = conn_back_route;
+
+    UBS_VLOG_INFO("other main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                  other_conn_route.src_port.bs.chip_id, other_conn_route.src_port.bs.die_id,
+                  other_conn_route.src_port.bs.port_idx);
+
+    UBS_VLOG_INFO("other back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                  other_back_conn_route.src_port.bs.chip_id, other_back_conn_route.src_port.bs.die_id,
+                  other_back_conn_route.src_port.bs.port_idx);
+
+    if (umq_socket->CheckDevAdd(other_conn_route.src_eid) != 0) {
+        return UBS_UB_DEV_ERROR;
+    }
+
+    if (umq_socket->CheckDevAdd(other_back_conn_route.src_eid) != 0) {
+        return UBS_UB_DEV_ERROR;
+    }
+
+    return UBS_OK;
+}
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock

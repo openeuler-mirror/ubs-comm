@@ -141,7 +141,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
         UBS_VLOG_ERR("[UMQ_API] CreateSubUmq() failed, ret: %llu, mapped errno: %d(%s), original errno: %d\n",
                      static_cast<unsigned long long>(umq_handle_), errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, UMQ_FAIL), savedErrno);
-        return UBS_ERROR;
+        return UBS_UMQ_CREATE | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
 
     uint64_t share_jfr_rx_queue_depth = UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH;
@@ -150,8 +150,6 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
         UBS_VLOG_ERR("Failed to init share jfr rx queue for fd: %d \n", raw_socket_);
         return UBS_INIT_SHARED_JFR_RX_QUEUE;
     }
-
-    // TODO: Context::FetchAdd();
 
     return UBS_OK;
 }
@@ -283,7 +281,24 @@ void UmqSocket::UnbindAndFlushRemoteUmq(const SocketPtr &sock)
     GlobalSetting::UBS_ENABLE_SHARE_JFR ? FlushRxQueue() : rx_.GetRxOps()->FlushRx(sock);
 }
 
-void UmqSocket::DestroyLocalUmq() {}
+void UmqSocket::DestroyLocalUmq()
+{
+    if (umq_handle_ != UMQ_INVALID_HANDLE) {
+        // need to flush
+        int ret = UmqApi::umq_destroy(umq_handle_);
+        if (ret != UMQ_SUCCESS) {
+            UBS_VLOG_ERR("umq_destroy() failed, local umq: %llu, ret: %d\n",
+                         static_cast<unsigned long long>(umq_handle_), ret);
+        }
+        /**
+         * (1) 暂时无需 DeleteSubUmq(): umq_handle_ 会在此处释放, share_umq_handle_ 无需在此处删除, 
+         *     在 share_umq_handle_ 做为 umq_handle_ 时会被删除
+         * (2) 暂时无需 MainSubUmqTable: 记录了 share_umq_handle_ 和 umq_handle_ 和映射, 仅在 DeleteSubUmq 中使用
+         * DeleteSubUmq();
+         */
+        umq_handle_ = UMQ_INVALID_HANDLE;
+    }
+}
 
 Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event)
 {
@@ -500,6 +515,38 @@ Result UmqSocket::GetDevEid(char *dev_name, uint32_t eid_idx, umq_eid_t *eid)
 
     UBS_VLOG_ERR("Failed to find eid index in device info, eid_idx: %u, ret: %d\n", eid_idx, -1);
     return UBS_INVALID_PARAM;
+}
+
+Result UmqSocket::CheckDevAdd(const umq_eid_t &conn_eid)
+{
+    if (EidRegistry::Instance().IsRegisteredEid(conn_eid)) {
+        return UBS_OK;
+    }
+
+    umq_trans_info_t trans_info;
+    trans_info.trans_mode = UMQ_TRANS_MODE_UB;
+    trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+    trans_info.dev_info.eid.eid = conn_eid;
+    int ret = UmqApi::umq_dev_add(&trans_info);
+    if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::ACCEPT, ret, savedErrno);
+        UBS_VLOG_ERR("umq_dev_add() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n", ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::ACCEPT, ret), savedErrno);
+        return UBS_UMQ_ERROR;
+    }
+
+    // TODO: AE 事件处理
+#ifdef ENABLE
+    ret = Context::GetContext()->RegisterAsyncEvent(trans_info);
+    if (ret < 0) {
+        UBS_VLOG_ERR("RegisterAsyncEvent() failed, conn eid:" EID_FMT ", ret: %d\n", EID_ARGS(conn_eid), ret);
+        return ret;
+    }
+#endif
+
+    EidRegistry::Instance().RegisterEid(conn_eid);
+    return UBS_OK;
 }
 
 } // namespace umq

@@ -30,7 +30,7 @@ public:
     // 阶段1：协商信息
     virtual Result Negotiate(int new_fd, const SocketPtr &sock) = 0;
     // 阶段2：创建资源（例如：umq create + bind + prefill rx）
-    virtual Result CreateSocketResources(int new_fd, const SocketPtr &sock) = 0;
+    virtual Result CreateSocketResources(const SocketPtr &sock) = 0;
     // 阶段3：销毁资源（握手失败/重试时清理已创建的资源）
     virtual void DestroySocketResources() = 0;
 

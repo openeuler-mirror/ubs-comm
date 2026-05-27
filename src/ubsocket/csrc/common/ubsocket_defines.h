@@ -118,7 +118,7 @@ constexpr uint32_t TX_UNSOLICITED_BYTES_MAX = 1048576;
 constexpr uint32_t NEGOTIATE_TIMEOUT_MS = 10;
 constexpr uint32_t FLUSH_SOCKET_MSG_BUFFER_LEN = 1024;
 constexpr uint32_t FLUSH_TIMEOUT_MS = 200;
-constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 20000;
+constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 100000;
 
 constexpr uint64_t SIZE_4K = 4096;
 constexpr uint64_t SIZE_8K = 8192;
