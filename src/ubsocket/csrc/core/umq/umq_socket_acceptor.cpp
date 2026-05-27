@@ -35,12 +35,7 @@ Result UmqAcceptorOps::Negotiate(SocketPtr socketPtr)
                      conn_info.peer_ip.data(), fd);
         return UBS_ERROR;
     }
-    // 服务端收到当前topo类型
-    if (SocketConnHelper::RecvSocketData(fd, &topo_type_, sizeof(umq_topo_type_t), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(umq_topo_type_t)) {
-        UBS_VLOG_ERR("receive umq topo type failed\n");
-    }
-    UBS_VLOG_INFO("receive umq topo type successfully: %d\n", topo_type_);
+    UBS_VLOG_INFO("negotiate umq topo type successfully: %d\n", topo_type_);
     peer_eid_ = dstEid;
     if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
         conn_eid_ = connEid;
