@@ -117,6 +117,7 @@ public:
                               struct epoll_event *event) override;
     int GetTxFd() override;
 
+
     Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used,
                           umq_topo_type_t &topo_type);
     Result PrefillRx();
@@ -125,6 +126,7 @@ public:
     int AddQbuf(umq_buf_t *qbuf);
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
     void FlushRxQueue();
+    Result CheckDevAdd(const umq_eid_t &conn_eid);
 
 private:
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
@@ -187,6 +189,13 @@ struct NegotiateRoute {
     {
     }
 };
+
+struct OtherRouteMessage {
+    UBHandshakeState ub_handshake_state;
+    umq_route_t other_route;
+    umq_route_t other_back_route;
+};
+
 
 #ifndef EID_FMT
 #define EID_FMT "%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x"

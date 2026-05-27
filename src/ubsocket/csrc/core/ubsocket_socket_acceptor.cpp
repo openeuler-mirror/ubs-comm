@@ -150,10 +150,11 @@ void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
         LibcApi::close(fd);
     } else if (ret == 0) {
         auto err = DoAccept(fd, peerIp);
-        if (err != UBS_OK) {
+        if (!IsOk(err)) {
             // kRETRYABLE 等错误码需要特殊处理：Degradable(err)
-            if (err) {
+            if (IsDegradable(err)) {
                 // 降级至 TCP，客户端可正确工作，不应清理数据.
+                UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
             } else {
                 UBS_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP\n", peerIp.data(), fd);
                 // Clear messages that already exist on the TCP link to prevent

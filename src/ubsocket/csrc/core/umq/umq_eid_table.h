@@ -19,6 +19,16 @@
 namespace ock {
 namespace ubs {
 namespace umq {
+inline bool operator==(const umq_eid_t &a, const umq_eid_t &b)
+{
+    return ::memcmp(a.raw, b.raw, sizeof(a.raw)) == 0;
+}
+
+inline bool operator!=(const umq_eid_t &a, const umq_eid_t &b)
+{
+    return !(a == b);
+}
+
 struct UmqEidHash {
     std::size_t operator()(const umq_eid_t &eid) const noexcept
     {

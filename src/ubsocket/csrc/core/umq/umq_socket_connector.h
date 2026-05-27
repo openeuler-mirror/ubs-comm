@@ -30,7 +30,7 @@ public:
     Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
                           const SocketPtr &sock) override;
     Result Negotiate(int new_fd, const SocketPtr &sock) override;
-    Result CreateSocketResources(int new_fd, const SocketPtr &sock) override;
+    Result CreateSocketResources(const SocketPtr &sock) override;
     void DestroySocketResources() override;
 
 private:
@@ -40,7 +40,11 @@ private:
     Result ConnectExchangeSocketIDs(void);
     Result GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_t *dst_eid, umq_route_list_t &filtered_list);
     Result DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid);
-    Result DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_ports_t &used_ports);
+    Result DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &conn_eid, umq_used_ports_t &used_ports);
+    Result DoUbConnectRetry(SocketPtr socketPtr, Result &ack_ret, Result &peer_ret);
+    Result CheckOtherRoute(const UmqSocketPtr &umq_socket);
+    Result CheckOtherRouteForClos(const UmqSocketPtr &umq_socket);
+    Result CheckRouteDevAddForConnect(const umq_eid_t &conn_eid, const UmqSocketPtr &umq_socket);
 
     Result GetRoundRobinConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid);
     void GetBondingEidMapIndex(const umq_eid_t &dst_eid, uint32_t &index);
@@ -64,13 +68,17 @@ private:
     bool use_round_robin_ = true;
     int peer_socket_id_ = -1;                   // 对端socket id
     std::vector<uint32_t> peer_all_socket_ids_; // 对端所有socket id
-    umq_eid_t route_backup_src_eid_;            // 备
-    umq_eid_t route_backup_dst_eid_;            // 备
     umq_route_t conn_route_;
     umq_route_t back_route_;
     // TODO: 主备切换逻辑待优化
     std::vector<umq_route_t> back_route_list_;
     umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
+    // retry & degrade
+    bool degradable_ = false;
+    OtherRouteMessage other_route_message_;
+    umq_route_t other_conn_route;
+    umq_route_t other_back_conn_route;
+    UBHandshakeState retry_state_ = UBHandshakeState::kSTART;
 };
 using UmqConnectorOpsPtr = Ref<UmqConnectorOps>;
 

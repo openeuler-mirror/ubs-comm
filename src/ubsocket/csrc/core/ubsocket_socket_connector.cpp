@@ -28,18 +28,14 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
         }
 
         ret = connector_ops_->Negotiate(raw_fd_, sock);
-        if (ret != UBS_OK) {
-            return -1;
-        }
 
-        ret = connector_ops_->CreateSocketResources(raw_fd_, sock);
-        if (ret != UBS_OK) {
-            return -1;
+        if (ret == UBS_OK) {
+            ret = connector_ops_->CreateSocketResources(sock);
         }
     }
-    if (ret != 0) {
-        // Log
-        SocketSet::Instance().RemoveSocket(raw_fd_);
+    if (ret != UBS_OK) {
+        UBS_VLOG_ERR("Failed to establish UB connection, fd: %d", raw_fd_);
+        SocketSet::Instance().OverrideSocket(raw_fd_, nullptr);
         /* Clear messages that already exist on the TCP link to prevent 
                  * dirty messages from affecting user data transmission*/
         SocketConnHelper::FlushSocketMsg(raw_fd_);
