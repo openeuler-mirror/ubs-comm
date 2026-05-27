@@ -172,7 +172,7 @@ ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidateNotEmpty(const std::string &n
 
 ALWAYS_INLINE bool GlobalSetting::AsyncAcceptorEnabled() noexcept
 {
-    return UBS_ACCEPTOR_ASYNC_THREAD_COUNT > 0;
+    return UBS_ACCEPTOR_ASYNC_THREAD_COUNT > 0 || UBS_ACCEPTOR_ASYNC_ENABLED;
 }
 
 ALWAYS_INLINE bool GlobalSetting::AsyncConnectorEnabled() noexcept

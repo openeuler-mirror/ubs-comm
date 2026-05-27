@@ -14,6 +14,7 @@
 #include "ubsocket_core_types.h"
 #include "ubsocket_spsc_ring_queue.h"
 
+
 namespace ock {
 namespace ubs {
 
@@ -332,6 +333,18 @@ public:
 
     void WakeUpEpollFd() override;
 
+    /**
+     * @brief Set wakeup callback for async accept
+     * @param ready_event Pointer to the ready_event EpollEvent (from UbsocketWakeupEvent)
+     * @param cb Callback function to process ready events
+     */
+    void SetWakeupCallback(EpollEvent *ready_event,
+                           std::function<int(struct epoll_event *, int, std::unordered_map<int, EpollEvent *> &)> cb)
+    {
+        ready_event_ = ready_event;
+        wakeup_callback_ = cb;
+    }
+
 private:
     /**
      * @brief handle epoll_ctl with EPOLL_CTL_ADD operation
@@ -449,6 +462,10 @@ private:
     std::unordered_map<int, EpollEvent *> socket_data_;
     EpollEvent *removed_head_ = nullptr; // 待删除的event data列表，用wait唤醒时统一释放
     SPSCRingQueue<struct epoll_event> readable_sockets_event_queue_{MAX_READABLE_FD_COUNT};
+
+    // For async accept wakeup
+    EpollEvent *ready_event_ = nullptr;
+    std::function<int(struct epoll_event *, int, std::unordered_map<int, EpollEvent *> &)> wakeup_callback_;
 };
 using AsyncEventPollPtr = Ref<AsyncEventPoll>;
 

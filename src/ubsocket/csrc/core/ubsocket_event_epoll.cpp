@@ -372,6 +372,19 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
             continue;
         }
 
+        // Check if this is the wakeup event for async accept
+        if (ready_event_ == nullptr || event_data != ready_event_) {
+            continue;
+        }
+        if (!wakeup_callback_) {
+            continue;
+        }
+        int processed = wakeup_callback_(events + real_count, max_events - real_count, socket_data_);
+        if (processed > 0) {
+            UBS_VLOG_INFO("async_epoll(%d) ArrangeWakeUpEvents: processed %d ready events\n", epoll_fd_, processed);
+            real_count += processed;
+        }
+
         if (event_data->event_type == EPOLL_EVENT_RAW_SOCKET) {
             // pure socket
             if (i != real_count) {

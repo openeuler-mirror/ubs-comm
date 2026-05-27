@@ -44,7 +44,7 @@ char GlobalSetting::UBS_TRACE_FILE_PATH[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = "";
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
-#define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPTOR_THREAD_COUNT"
+#define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPT"  /* match brpc_test FLAGS_ubsocket_async_accept */
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
 #define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
@@ -84,7 +84,8 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_USE_BRPC_ZCOPY, false, "true|false"},
                                     {ENV_TRANS_MODE, false, "ub|ib"},
                                     {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"},
-                                    {ENV_PROF_ENABLE, false, "true|false"}};
+                                    {ENV_PROF_ENABLE, false, "true|false"},
+                                    {ENV_ASYNC_ACCEPTOR, false, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, 512}};
@@ -112,13 +113,17 @@ Result GlobalSetting::VerifySetting() noexcept
         UBS_NATIVE_TCP_MODE = true;
     }
 
-    auto &validator = Validator::Instance();
-    if (!validator.Validate(ENV_ASYNC_ACCEPTOR, (int64_t)UBS_ACCEPTOR_ASYNC_THREAD_COUNT,
-                            "async_acceptor_thread_count")) {
-        UBS_SLOG_ERR(validator.LastErrMsg());
-        return UBS_INVALID_PARAM;
+    // 手动验证 ENV_ASYNC_ACCEPTOR (字符串类型)
+    std::string strAsyncAccept;
+    if (GetEnv(ENV_ASYNC_ACCEPTOR, strAsyncAccept)) {
+        if (strAsyncAccept != "true" && strAsyncAccept != "false") {
+            UBS_VLOG_ERR("Invalid value for %s: %s, expected 'true' or 'false'\n",
+                         ENV_ASYNC_ACCEPTOR, strAsyncAccept.c_str());
+            return UBS_INVALID_PARAM;
+        }
     }
 
+    auto &validator = Validator::Instance();
     if (!validator.Validate(ENV_ASYNC_CONNECTOR, (int64_t)UBS_CONNECTOR_ASYNC_THREAD_COUNT,
                             "async_connector_thread_count")) {
         UBS_SLOG_ERR(validator.LastErrMsg());
@@ -155,9 +160,14 @@ Result GlobalSetting::LoadEnv() noexcept
     if (GetEnvAndValidate(ENV_TRACE_ENABLED, envValue)) {
         UBS_TRACE_ENABLED = (envValue == 1);
     }
-
-    if (GetEnvAndValidate(ENV_ASYNC_ACCEPTOR, envValue)) {
-        UBS_ACCEPTOR_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
+    // 正确处理 ENV_ASYNC_ACCEPTOR (字符串类型 "true"|"false")
+    std::string strAsyncAccept;
+    if (GetEnvAndValidate(ENV_ASYNC_ACCEPTOR, strAsyncAccept)) {
+        if (Func::BoolFromStr(strAsyncAccept)) {
+            UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 1;  // 默认线程数
+        } else {
+            UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;
+        }
     }
 
     if (GetEnvAndValidate(ENV_ASYNC_CONNECTOR, envValue)) {
