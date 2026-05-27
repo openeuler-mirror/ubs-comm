@@ -21,10 +21,16 @@ enum ProfilingTPId : uint32_t {
 
 constexpr const char *DEFAULT_DUMP_PATH = "/tmp/ubsocket/unitest/profiling";
 constexpr uint16_t INTERVAL_DEFAULT_MIN = 1;
+constexpr uint32_t TP_MAX = 5;
 
 void UProfilingTest::SetUp()
 {
-    ubsocket_prof_init(5, DEFAULT_DUMP_PATH, INTERVAL_DEFAULT_MIN);
+    ubsocket_prof_option_t option;
+    option.tracepoint_count = TP_MAX;
+    option.enable_dump = 1;
+    option.dump_file_path = DEFAULT_DUMP_PATH;
+    option.dump_interval_min = INTERVAL_DEFAULT_MIN;
+    ubsocket_prof_init(&option);
 }
 
 void UProfilingTest::TearDown()
@@ -37,7 +43,7 @@ void test_thread()
 {
     // 所有线程都操作同一个全局 recorder
     PROF_START(TP0);
-    PROF_END(TP0, true)
+    PROF_END(TP0, true);
 }
 
 TEST_F(UProfilingTest, InitAddSum)
@@ -50,6 +56,4 @@ TEST_F(UProfilingTest, InitAddSum)
     for (auto &t : threads) {
         t.join();
     }
-
-    std::this_thread::sleep_for(std::chrono::minutes(6));
 }
