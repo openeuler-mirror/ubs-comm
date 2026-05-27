@@ -8,6 +8,7 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "common/ubsocket_version.h"
 #include "golden_cmd.h"
 
 int main(int argc, char *argv[])
@@ -22,6 +23,13 @@ int main(int argc, char *argv[])
 
     /* get create func for sub command */
     auto sub_cmd_name = parser.SumCommand();
+    if (sub_cmd_name == "-v") {
+        std::string version = ock::ubs::UBS_LIB_VERSION_FULL;
+        version.replace(0, strlen("library "), "");
+        std::cout << version << std::endl;
+        return 0;
+    }
+
     auto func = SubCommandRegistry::Instance().GetCommandCreateFunc(sub_cmd_name);
     if (func == nullptr) {
         std::cout << "Invalid sub command\n" << std::endl;
@@ -33,6 +41,9 @@ int main(int argc, char *argv[])
     if (log_level != nullptr) {
         ubsocket_set_log_level(atoi(log_level));
         Log::Instance().set_log_level(atoi(log_level));
+    } else {
+        ubsocket_set_log_level(3);
+        Log::Instance().set_log_level(3);
     }
 
     /* create sub command */
