@@ -11,9 +11,9 @@
 #include "golden_cmd_pingpong_epoll.h"
 
 #include <fcntl.h>
-#include <string>
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <string>
 
 namespace golden {
 
@@ -208,7 +208,8 @@ int EpollClient::Run()
                     recv_len += n;
                     if (recv_len == MSG_LEN) {
                         if (memcmp(pong_buf, PONG_MSG, MSG_LEN) != 0) {
-                            std::cout << "recv error: expected '" << PONG_MSG << "', got '" << std::string(pong_buf, MSG_LEN) << "'" << std::endl;
+                            std::cout << "recv error: expected '" << PONG_MSG << "', got '"
+                                      << std::string(pong_buf, MSG_LEN) << "'" << std::endl;
                             return -1;
                         }
                         round++;
@@ -356,7 +357,8 @@ int EpollServer::Run()
                         recv_len += n;
                         if (recv_len == MSG_LEN) {
                             if (memcmp(ping_buf, PING_MSG, MSG_LEN) != 0) {
-                                std::cout << "recv error: expected '" << PING_MSG << "', got '" << std::string(ping_buf, MSG_LEN) << "'" << std::endl;
+                                std::cout << "recv error: expected '" << PING_MSG << "', got '"
+                                          << std::string(ping_buf, MSG_LEN) << "'" << std::endl;
                                 return -1;
                             }
                             round++;

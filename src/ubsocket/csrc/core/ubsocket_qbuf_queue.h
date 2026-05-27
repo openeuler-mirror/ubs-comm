@@ -15,8 +15,8 @@
 #include <malloc.h>
 #include <cstdint>
 #include "../../include/ubsocket_def.h"
-#include "../common/ubsocket_logger.h"
 #include "../common/ubsocket_lock.h"
+#include "../common/ubsocket_logger.h"
 
 namespace ock {
 namespace ubs {
@@ -118,7 +118,8 @@ public:
             uint32_t new_cap = (old_cap * 2 > MAX_CAPACITY) ? MAX_CAPACITY : old_cap * 2;
             if (Resize(new_cap) != 0) {
                 UBS_VLOG_ERR("Enqueue qbuf queue failed, reason: queue is full and resize failed, head: %u, tail: "
-                             "%u, itemNb: %u\n", queue_->head, queue_->tail, queue_->itemNb);
+                             "%u, itemNb: %u\n",
+                             queue_->head, queue_->tail, queue_->itemNb);
                 return -1;
             }
         }
@@ -151,9 +152,8 @@ public:
         }
 
         if (IsEmpty()) {
-            UBS_VLOG_WARN(
-                "Dequeue qbuf queue failed, reason: queue is empty, head: %u, tail: %u, itemNb: %u\n",
-                queue_->head, queue_->tail, queue_->itemNb);
+            UBS_VLOG_WARN("Dequeue qbuf queue failed, reason: queue is empty, head: %u, tail: %u, itemNb: %u\n",
+                          queue_->head, queue_->tail, queue_->itemNb);
             return -1;
         }
 
@@ -199,8 +199,8 @@ private:
         headLen = RoundUp(headLen, pageSize);
         queue_ = reinterpret_cast<struct QbufQueueT<T> *>(memalign(pageSize, headLen));
         if (queue_ == nullptr) {
-            UBS_VLOG_ERR("Init qbuf queue memalign failed, pageSize: %zu, headLen: %zu, errno: %d\n",
-                pageSize, headLen, errno);
+            UBS_VLOG_ERR("Init qbuf queue memalign failed, pageSize: %zu, headLen: %zu, errno: %d\n", pageSize, headLen,
+                         errno);
             return -1;
         }
 
@@ -215,8 +215,7 @@ private:
         uint32_t old_itemNb = queue_->itemNb;
         uint32_t new_itemNb = new_cap + 1;
         if (new_itemNb == old_itemNb) {
-            UBS_VLOG_ERR("Resize qbuf queue failed, new capacity equals old capacity: %d\n",
-                         new_cap);
+            UBS_VLOG_ERR("Resize qbuf queue failed, new capacity equals old capacity: %d\n", new_cap);
             return -1;
         }
 
@@ -225,8 +224,8 @@ private:
         newHeadLen = RoundUp(newHeadLen, pageSize);
         struct QbufQueueT<T> *new_q = reinterpret_cast<struct QbufQueueT<T> *>(aligned_alloc(pageSize, newHeadLen));
         if (new_q == nullptr) {
-            UBS_VLOG_ERR("Resize qbuf queue aligned_alloc failed, pageSize: %zu, headLen: %zu, errno: %d\n",
-                         pageSize, newHeadLen, errno);
+            UBS_VLOG_ERR("Resize qbuf queue aligned_alloc failed, pageSize: %zu, headLen: %zu, errno: %d\n", pageSize,
+                         newHeadLen, errno);
             return -1;
         }
 
@@ -239,18 +238,17 @@ private:
         new_q->tail = count;
         new_q->itemNb = new_itemNb;
 
-        struct QbufQueueT<T>* old_q = queue_;
+        struct QbufQueueT<T> *old_q = queue_;
         queue_ = new_q;
         if (isMalloc_) {
             free(old_q);
         }
 
-        UBS_VLOG_DEBUG("Resize qbuf queue success, old capacity: %d, new capacity: %d \n", old_itemNb - 1,
-                       new_cap);
+        UBS_VLOG_DEBUG("Resize qbuf queue success, old capacity: %d, new capacity: %d \n", old_itemNb - 1, new_cap);
         return 0;
     }
 };
-}
-}
+} // namespace ubs
+} // namespace ock
 
 #endif

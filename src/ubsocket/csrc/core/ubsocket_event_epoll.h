@@ -199,7 +199,10 @@ public:
      */
     int ProcessOneEvent(const struct epoll_event &event) override;
 
-    EpollRunnerOps *GetOps() override {return ops_;}
+    EpollRunnerOps *GetOps() override
+    {
+        return ops_;
+    }
 
 protected:
     int epoll_fd_;                /* used by thread */

@@ -55,7 +55,8 @@ public:
     // Flush
     void FlushTx(const SocketPtr &sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) override;
 
-    void WakeUpTx(Socket* sock);
+    void WakeUpTx(Socket *sock);
+
 private:
     // 处理 umq_post 失败时的坏 buffer
     uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,

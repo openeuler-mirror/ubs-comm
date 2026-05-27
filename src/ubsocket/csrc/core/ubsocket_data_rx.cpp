@@ -79,10 +79,9 @@ ssize_t DataRx::OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec
     ssize_t rx_total_len = 0;
     int iov_idx = 0;
     do {
-        size_t copy_size = iov[iov_idx].iov_len < protocol_negotiation_recv_size_ ?
-                               iov[iov_idx].iov_len : protocol_negotiation_recv_size_;
-        (void)memcpy(iov[iov_idx++].iov_base,
-                     (char *)&protocol_negotiation_ + protocol_negotiation_offset_, copy_size);
+        size_t copy_size = iov[iov_idx].iov_len < protocol_negotiation_recv_size_ ? iov[iov_idx].iov_len :
+                                                                                    protocol_negotiation_recv_size_;
+        (void)memcpy(iov[iov_idx++].iov_base, (char *)&protocol_negotiation_ + protocol_negotiation_offset_, copy_size);
         protocol_negotiation_recv_size_ -= copy_size;
         protocol_negotiation_offset_ += copy_size;
         rx_total_len += copy_size;
@@ -108,8 +107,8 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
          * during readv processing procedure, set m_rx.m_poll to enable poll RX operation and set errno to EINTR
          * to let brpc retry and call readv()
          */
-        if (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0,
-                                                      std::memory_order_release, std::memory_order_acquire)) {
+        if (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0, std::memory_order_release,
+                                                      std::memory_order_acquire)) {
             poll_ = true;
             errno = EINTR;
             return UBS_ERROR;

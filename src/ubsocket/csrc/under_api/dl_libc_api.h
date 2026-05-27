@@ -249,7 +249,7 @@ public:
         return epoll_pwait_ptr(epfd, events, maxevents, timeout, sigmask);
     }
 
-    static int getsockopt (int fd, int level, int optname, void * optval, socklen_t * optlen)
+    static int getsockopt(int fd, int level, int optname, void *optval, socklen_t *optlen)
     {
         return getsockopt_ptr(fd, level, optname, optval, optlen);
     }

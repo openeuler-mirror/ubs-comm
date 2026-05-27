@@ -14,23 +14,23 @@
 #ifndef UBSOCKET_PRINT_STATS_MGR_H
 #define UBSOCKET_PRINT_STATS_MGR_H
 
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/stat.h>
 #include <sys/eventfd.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
-#include <ctime>
+#include <sys/un.h>
 #include <cmath>
-#include <thread>
-#include <limits>
-#include <sstream>
-#include <iostream>
-#include <mutex>
-#include <string>
+#include <ctime>
 #include <iomanip>
+#include <iostream>
+#include <limits>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <thread>
 
-#include "ubsocket_statistics.h"
 #include "ubsocket_global_setting.h"
+#include "ubsocket_statistics.h"
 
 namespace Statistics {
 
@@ -45,14 +45,14 @@ public:
     void ProcessStats()
     {
         std::ostringstream oss;
-        PrintStatsMgr* mgr = GetPrintStatsMgr();
+        PrintStatsMgr *mgr = GetPrintStatsMgr();
         StatsMgr::OutputAllStats(oss, mgr->pidVal);
         mgr->OutputJSON(oss);
     }
 
     static void PrintStatsMgrEventLoop()
     {
-        PrintStatsMgr* mgr = GetPrintStatsMgr();
+        PrintStatsMgr *mgr = GetPrintStatsMgr();
         while (mgr->m_running) {
             mgr->ProcessStats();
             sleep(mgr->ubsocketTraceTime);
@@ -61,17 +61,15 @@ public:
 
     static void StartStatsCollection(uint64_t traceTime, const char *tracePath, uint64_t traceFileSize)
     {
-        PrintStatsMgr* mgr = GetPrintStatsMgr();
+        PrintStatsMgr *mgr = GetPrintStatsMgr();
         mgr->ubsocketTraceTime = traceTime;
         mgr->ubsocketTraceFileSize = traceFileSize;
         mgr->pidVal = static_cast<uint32_t>(getpid());
 
         if (tracePath) {
-            (void)snprintf(mgr->ubsocketTraceFilePath, sizeof(mgr->ubsocketTraceFilePath),
-                "%s", tracePath);
+            (void)snprintf(mgr->ubsocketTraceFilePath, sizeof(mgr->ubsocketTraceFilePath), "%s", tracePath);
         } else {
-            (void)snprintf(mgr->ubsocketTraceFilePath, sizeof(mgr->ubsocketTraceFilePath),
-                "%s", "/tmp/ubsocket/log");
+            (void)snprintf(mgr->ubsocketTraceFilePath, sizeof(mgr->ubsocketTraceFilePath), "%s", "/tmp/ubsocket/log");
         }
 
         mgr->CreateDirectory(mgr->ubsocketTraceFilePath);
@@ -83,7 +81,7 @@ public:
 
     static void StopStatsCollection()
     {
-        PrintStatsMgr* mgr = GetPrintStatsMgr();
+        PrintStatsMgr *mgr = GetPrintStatsMgr();
         if (mgr->m_running) {
             sleep(mgr->ubsocketTraceTime);
             mgr->Stop();
@@ -91,12 +89,14 @@ public:
     }
 
 private:
-    PrintStatsMgr() : ubsocketTraceTime(ock::ubs::UBSOCKET_TRACE_TIME_DEFAULT),
-        ubsocketTraceFileSize(ock::ubs::UBSOCKET_TRACE_FILE_SIZE_DEFAULT),
-        m_running(false), m_event_loop(nullptr), pidVal(0)
+    PrintStatsMgr()
+        : ubsocketTraceTime(ock::ubs::UBSOCKET_TRACE_TIME_DEFAULT),
+          ubsocketTraceFileSize(ock::ubs::UBSOCKET_TRACE_FILE_SIZE_DEFAULT),
+          m_running(false),
+          m_event_loop(nullptr),
+          pidVal(0)
     {
-        (void)snprintf(ubsocketTraceFilePath, sizeof(ubsocketTraceFilePath),
-            "%s", "/tmp/ubsocket/log");
+        (void)snprintf(ubsocketTraceFilePath, sizeof(ubsocketTraceFilePath), "%s", "/tmp/ubsocket/log");
     }
 
     ~PrintStatsMgr()
@@ -104,7 +104,7 @@ private:
         Stop();
     }
 
-    void CreateDirectory(const char* path)
+    void CreateDirectory(const char *path)
     {
         if (path == nullptr || path[0] == '\0') {
             return;
@@ -123,7 +123,7 @@ private:
         mkdir(tmp_str.c_str(), DEFAULT_DIR_PERMISSION);
     }
 
-    void ArchiveJSON(const std::string& cleanPath, const uint32_t pid, const char* filename)
+    void ArchiveJSON(const std::string &cleanPath, const uint32_t pid, const char *filename)
     {
         struct stat st;
         if (stat(filename, &st) == 0) {
@@ -146,8 +146,8 @@ private:
 
                 char archiveFilename[ock::ubs::UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = {0};
 
-                int ret = snprintf(archiveFilename, sizeof(archiveFilename),
-                    "%s/ubsocket_kpi_%s.json", cleanPath.c_str(), timeBuf);
+                int ret = snprintf(archiveFilename, sizeof(archiveFilename), "%s/ubsocket_kpi_%s.json",
+                                   cleanPath.c_str(), timeBuf);
                 if (ret < 0) {
                     UBS_VLOG_ERR("Failed to create archive filename for kpi json\n");
                     return;
@@ -163,9 +163,8 @@ private:
                     return;
                 }
 
-                UBS_VLOG_INFO(
-                    "Successfully archive ubsocket kpi json: %s -> %s (size: %ld bytes)\n",
-                    filename, archiveFilename, st.st_size);
+                UBS_VLOG_INFO("Successfully archive ubsocket kpi json: %s -> %s (size: %ld bytes)\n", filename,
+                              archiveFilename, st.st_size);
             }
         }
     }
@@ -177,14 +176,13 @@ private:
         char filename[ock::ubs::UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = {0};
         std::string cleanPath(ubsocketTraceFilePath);
 
-        int ret = snprintf(filename, sizeof(filename),
-            "%s/ubsocket_kpi.json", cleanPath.c_str());
+        int ret = snprintf(filename, sizeof(filename), "%s/ubsocket_kpi.json", cleanPath.c_str());
         if (ret < 0) {
             UBS_VLOG_ERR("Failed to create ubsocket kpi json.\n");
             return;
         }
 
-        FILE* fp = fopen(filename, "a");
+        FILE *fp = fopen(filename, "a");
         if (fp) {
             fprintf(fp, "%s\n", oss.str().c_str());
             fclose(fp);
@@ -224,6 +222,6 @@ private:
     char ubsocketTraceFilePath[ock::ubs::UBSOCKET_TRACE_FILE_PATH_LEN_MAX];
 };
 
-};
+}; // namespace Statistics
 
 #endif

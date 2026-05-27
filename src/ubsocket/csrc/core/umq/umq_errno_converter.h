@@ -11,8 +11,8 @@
 #ifndef UBS_COMM_UMQ_ERRNO_CONVERTER_H
 #define UBS_COMM_UMQ_ERRNO_CONVERTER_H
 
-#include <cerrno>
 #include <array>
+#include <cerrno>
 #include <cstddef>
 #include "umq_api.h"
 
@@ -54,20 +54,20 @@ enum class UmqOperation {
 struct UmqErrnoMapping {
     int umqErrCode;
     int linuxErrno;
-    const char* description;
+    const char *description;
 };
 
 struct UmqBufStatusMapping {
     umq_buf_status_t bufStatus;
     int linuxErrno;
-    const char* description;
+    const char *description;
 };
 
 class UmqErrnoConverter {
 public:
     UmqErrnoConverter() = delete;
 
-/**
+    /**
      * @brief 将UMQ API返回的错误码转换为Linux errno（正值）
      * 适用于返回int类型的UMQ API（如umq_connect/umq_accept/umq_post/umq_recv等）
      * @param op 操作类型。对errno映射路径无区分作用——CONNECT/ACCEPT/WRITEV/READV统一查kCommonErrnoMappings；
@@ -130,7 +130,7 @@ public:
      *   仅GET_STATE有特殊描述路径。op不影响描述结果。
      * @param umqRet UMQ API返回值或umq_state_t枚举值
      */
-    static const char* GetErrorDescription(UmqOperation op, int umqRet);
+    static const char *GetErrorDescription(UmqOperation op, int umqRet);
 
     /**
      * @brief 获取BufStatus映射的描述信息，用于日志记录
@@ -140,7 +140,7 @@ public:
      *   READV说"Connection reset by peer"）。
      * @param bufStatus CQE中的缓冲区完成状态
      */
-    static const char* GetBufStatusDescription(UmqOperation op, umq_buf_status_t bufStatus);
+    static const char *GetBufStatusDescription(UmqOperation op, umq_buf_status_t bufStatus);
 
 private:
     static constexpr std::size_t maxErrnoMappings = 16;
@@ -241,9 +241,9 @@ private:
     }};
 
     template <typename Mapping, std::size_t N>
-    static int FindErrno(const std::array<Mapping, N>& mappings, int umqErrCode, int savedErrno = 0)
+    static int FindErrno(const std::array<Mapping, N> &mappings, int umqErrCode, int savedErrno = 0)
     {
-        for (const auto& mapping : mappings) {
+        for (const auto &mapping : mappings) {
             if (mapping.umqErrCode == umqErrCode) {
                 return mapping.linuxErrno;
             }
@@ -255,9 +255,9 @@ private:
     }
 
     template <typename Mapping, std::size_t N>
-    static const char* FindDescription(const std::array<Mapping, N>& mappings, int umqErrCode)
+    static const char *FindDescription(const std::array<Mapping, N> &mappings, int umqErrCode)
     {
-        for (const auto& mapping : mappings) {
+        for (const auto &mapping : mappings) {
             if (mapping.umqErrCode == umqErrCode) {
                 return mapping.description;
             }
@@ -266,10 +266,10 @@ private:
     }
 
     template <std::size_t N>
-    static int FindBufStatusErrno(const std::array<UmqBufStatusMapping, N>& mappings,
-                                   umq_buf_status_t bufStatus, int savedErrno = 0)
+    static int FindBufStatusErrno(const std::array<UmqBufStatusMapping, N> &mappings, umq_buf_status_t bufStatus,
+                                  int savedErrno = 0)
     {
-        for (const auto& mapping : mappings) {
+        for (const auto &mapping : mappings) {
             if (mapping.bufStatus == bufStatus) {
                 return mapping.linuxErrno;
             }
@@ -281,10 +281,10 @@ private:
     }
 
     template <std::size_t N>
-    static const char* FindBufStatusDescription(const std::array<UmqBufStatusMapping, N>& mappings,
+    static const char *FindBufStatusDescription(const std::array<UmqBufStatusMapping, N> &mappings,
                                                 umq_buf_status_t bufStatus)
     {
-        for (const auto& mapping : mappings) {
+        for (const auto &mapping : mappings) {
             if (mapping.bufStatus == bufStatus) {
                 return mapping.description;
             }

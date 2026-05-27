@@ -6,11 +6,11 @@ namespace profiling {
 constexpr int COL_WIDTH_MIN = 20;
 constexpr int COL_WIDTH_MAX = 30;
 
-int TraceCombiner::CombinerTracePoint(Tracepoint& outTracePoint, const Tracepoint& pointB)
+int TraceCombiner::CombinerTracePoint(Tracepoint &outTracePoint, const Tracepoint &pointB)
 {
     if (outTracePoint.id != pointB.id) {
-        UBS_VLOG_ERR("Error to combiner Tracepoint, Tracepoint id %d and %d is different.\n",
-            outTracePoint.id, pointB.id);
+        UBS_VLOG_ERR("Error to combiner Tracepoint, Tracepoint id %d and %d is different.\n", outTracePoint.id,
+                     pointB.id);
         return UBS_ERROR;
     }
     outTracePoint.data.success_count = outTracePoint.data.success_count + pointB.data.success_count;
@@ -23,18 +23,16 @@ int TraceCombiner::CombinerTracePoint(Tracepoint& outTracePoint, const Tracepoin
 
 void TraceCombiner::OutputTracePointStats(std::ostringstream &oss, const Tracepoint &totalTracePoint)
 {
-    oss << std::left
-        << std::setw(COL_WIDTH_MAX) <<
-            ("[" + (totalTracePoint.pointName.empty() ? std::string("--") : totalTracePoint.pointName) + "]")
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.success_count
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.failure_count
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.total_time
-        << std::setw(COL_WIDTH_MIN) <<
-            (totalTracePoint.data.success_count ? totalTracePoint.data.total_time / totalTracePoint.data.success_count : 0)
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.max_time
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.min_time
-        << "\n";
+    oss << std::left << std::setw(COL_WIDTH_MAX)
+        << ("[" + (totalTracePoint.pointName.empty() ? std::string("--") : totalTracePoint.pointName) + "]")
+        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.success_count << std::setw(COL_WIDTH_MIN)
+        << totalTracePoint.data.failure_count << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.total_time
+        << std::setw(COL_WIDTH_MIN)
+        << (totalTracePoint.data.success_count ? totalTracePoint.data.total_time / totalTracePoint.data.success_count :
+                                                 0)
+        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.max_time << std::setw(COL_WIDTH_MIN)
+        << totalTracePoint.data.min_time << "\n";
 }
-}
-}
-}
+} // namespace profiling
+} // namespace ubs
+} // namespace ock

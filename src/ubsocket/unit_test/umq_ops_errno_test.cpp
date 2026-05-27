@@ -3,28 +3,28 @@
  * ubs-comm is licensed under the Mulan PSL v2.
  */
 
+#include "common/ubsocket_defines.h"
+#include "common/ubsocket_errno.h"
+#include "common/ubsocket_global_setting.h"
+#include "common/ubsocket_lock.h"
+#include "core/ubsocket_core_types.h"
+#include "core/ubsocket_socket_set.h"
+#include "umq_backend.h"
 #include "umq_data_rx_ops.h"
 #include "umq_data_tx_ops.h"
-#include "umq_backend.h"
+#include "umq_eid_table.h"
+#include "umq_errno_converter.h"
 #include "umq_setting.h"
 #include "umq_socket.h"
 #include "umq_socket_acceptor.h"
-#include "umq_errno_converter.h"
-#include "umq_eid_table.h"
 #include "under_api/dl_umq_api.h"
-#include "core/ubsocket_socket_set.h"
-#include "core/ubsocket_core_types.h"
-#include "common/ubsocket_global_setting.h"
-#include "common/ubsocket_errno.h"
-#include "common/ubsocket_defines.h"
-#include "common/ubsocket_lock.h"
 
-#include <mockcpp/mockcpp.hpp>
 #include <gtest/gtest.h>
-#include <cerrno>
 #include <securec.h>
-#include <cstring>
 #include <atomic>
+#include <cerrno>
+#include <cstring>
+#include <mockcpp/mockcpp.hpp>
 
 using namespace ock::ubs;
 using namespace ock::ubs::umq;
@@ -52,7 +52,7 @@ umq_buf_t *AllocMockBuf(uint32_t size, umq_buf_status_t status = UMQ_BUF_SUCCESS
     bufPro.opcode = UMQ_OPC_SEND;
 
     memset_s(&mockBuf, sizeof(umq_buf_t), 0, sizeof(umq_buf_t));
-    mockBuf.buf_data = reinterpret_cast<char *>(bufData);  // NOLINT(G.STD.02)
+    mockBuf.buf_data = reinterpret_cast<char *>(bufData); // NOLINT(G.STD.02)
     mockBuf.data_size = size;
     mockBuf.total_data_size = size;
     mockBuf.status = status;
@@ -69,7 +69,7 @@ umq_eid_t MakeTestEid(uint8_t val)
     memset_s(eid.raw, sizeof(eid.raw), val, sizeof(eid.raw));
     return eid;
 }
-}
+} // namespace
 
 class UmqOpsErrnoTest : public ::testing::Test {
 protected:
@@ -141,9 +141,7 @@ protected:
 TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEpermSavedEinval_MapsEinval)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = EINVAL;
     int ret = rxOps.RearmRxInterrupt();
     EXPECT_EQ(ret, -UMQ_ERR_EPERM);
@@ -154,9 +152,7 @@ TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEpermSavedEinval_MapsEinval)
 TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEagain_MapsEagain)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EAGAIN));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EAGAIN));
     errno = 0;
     int ret = rxOps.RearmRxInterrupt();
     EXPECT_EQ(ret, -UMQ_ERR_EAGAIN);
@@ -167,9 +163,7 @@ TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEagain_MapsEagain)
 TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEpermSavedZero_MapsEio)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = 0;
     int ret = rxOps.RearmRxInterrupt();
     EXPECT_EQ(ret, -UMQ_ERR_EPERM);
@@ -180,9 +174,7 @@ TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEpermSavedZero_MapsEio)
 TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEnodevSavedEio_Override)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_ENODEV));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_ENODEV));
     errno = EIO;
     int ret = rxOps.RearmRxInterrupt();
     EXPECT_EQ(errno, EIO);
@@ -192,9 +184,7 @@ TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEnodevSavedEio_Override)
 TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEnodevNoOverride_MapsEnodev)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_ENODEV));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_ENODEV));
     errno = ENOMEM;
     int ret = rxOps.RearmRxInterrupt();
     EXPECT_EQ(errno, ENODEV);
@@ -206,9 +196,7 @@ TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEnodevNoOverride_MapsEnodev)
 TEST_F(UmqOpsErrnoTest, RxGetAndAckEvent_FailEpermSavedEinval_MapsEinval)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_get_cq_event)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_get_cq_event).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = EINVAL;
     int ret = rxOps.GetAndAckEvent();
     EXPECT_EQ(ret, -1);
@@ -219,9 +207,7 @@ TEST_F(UmqOpsErrnoTest, RxGetAndAckEvent_FailEpermSavedEinval_MapsEinval)
 TEST_F(UmqOpsErrnoTest, RxGetAndAckEvent_FailEagain_MapsEagain)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_get_cq_event)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EAGAIN));
+    MOCKER_CPP(::umq_get_cq_event).stubs().will(returnValue(-UMQ_ERR_EAGAIN));
     errno = 0;
     int ret = rxOps.GetAndAckEvent();
     EXPECT_EQ(ret, -1);
@@ -232,9 +218,7 @@ TEST_F(UmqOpsErrnoTest, RxGetAndAckEvent_FailEagain_MapsEagain)
 TEST_F(UmqOpsErrnoTest, RxGetAndAckEvent_FailEinval_MapsEinval)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_get_cq_event)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EINVAL));
+    MOCKER_CPP(::umq_get_cq_event).stubs().will(returnValue(-UMQ_ERR_EINVAL));
     errno = 0;
     int ret = rxOps.GetAndAckEvent();
     EXPECT_EQ(ret, -1);
@@ -245,9 +229,7 @@ TEST_F(UmqOpsErrnoTest, RxGetAndAckEvent_FailEinval_MapsEinval)
 TEST_F(UmqOpsErrnoTest, RxGetAndAckEvent_FailEpermSavedEagain_NoOverrideMapsEio)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_get_cq_event)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_get_cq_event).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = EAGAIN;
     int ret = rxOps.GetAndAckEvent();
     EXPECT_EQ(errno, EIO);
@@ -259,9 +241,7 @@ TEST_F(UmqOpsErrnoTest, RxGetAndAckEvent_FailEpermSavedEagain_NoOverrideMapsEio)
 TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_SuccessSetsEagain)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(0));
     errno = 0;
     int ret = txOps.DpRearmTxInterrupt();
     EXPECT_EQ(ret, -1);
@@ -272,9 +252,7 @@ TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_SuccessSetsEagain)
 TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEpermSavedEinval_MapsEinval)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = EINVAL;
     int ret = txOps.DpRearmTxInterrupt();
     EXPECT_EQ(ret, -1);
@@ -285,9 +263,7 @@ TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEpermSavedEinval_MapsEinval)
 TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEagain_MapsEagain)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EAGAIN));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EAGAIN));
     errno = 0;
     int ret = txOps.DpRearmTxInterrupt();
     EXPECT_EQ(ret, -1);
@@ -298,9 +274,7 @@ TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEagain_MapsEagain)
 TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEpermSavedZero_MapsEio)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = 0;
     int ret = txOps.DpRearmTxInterrupt();
     EXPECT_EQ(ret, -1);
@@ -311,9 +285,7 @@ TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEpermSavedZero_MapsEio)
 TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEnodevSavedEio_Override)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_ENODEV));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_ENODEV));
     errno = EIO;
     int ret = txOps.DpRearmTxInterrupt();
     EXPECT_EQ(errno, EIO);
@@ -325,9 +297,7 @@ TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEnodevSavedEio_Override)
 TEST_F(UmqOpsErrnoTest, TxGetAndAckEvent_FailEpermSavedEinval_MapsEinval)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_get_cq_event)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_get_cq_event).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = EINVAL;
     int ret = txOps.GetAndAckEvent();
     EXPECT_EQ(ret, -1);
@@ -338,9 +308,7 @@ TEST_F(UmqOpsErrnoTest, TxGetAndAckEvent_FailEpermSavedEinval_MapsEinval)
 TEST_F(UmqOpsErrnoTest, TxGetAndAckEvent_FailEagain_MapsEagain)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_get_cq_event)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EAGAIN));
+    MOCKER_CPP(::umq_get_cq_event).stubs().will(returnValue(-UMQ_ERR_EAGAIN));
     errno = 0;
     int ret = txOps.GetAndAckEvent();
     EXPECT_EQ(ret, -1);
@@ -351,9 +319,7 @@ TEST_F(UmqOpsErrnoTest, TxGetAndAckEvent_FailEagain_MapsEagain)
 TEST_F(UmqOpsErrnoTest, TxGetAndAckEvent_FailEinval_MapsEinval)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_get_cq_event)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EINVAL));
+    MOCKER_CPP(::umq_get_cq_event).stubs().will(returnValue(-UMQ_ERR_EINVAL));
     errno = 0;
     int ret = txOps.GetAndAckEvent();
     EXPECT_EQ(ret, -1);
@@ -364,9 +330,7 @@ TEST_F(UmqOpsErrnoTest, TxGetAndAckEvent_FailEinval_MapsEinval)
 TEST_F(UmqOpsErrnoTest, TxGetAndAckEvent_FailEpermSavedEagain_NoOverrideMapsEio)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_get_cq_event)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_get_cq_event).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = EAGAIN;
     int ret = txOps.GetAndAckEvent();
     EXPECT_EQ(errno, EIO);
@@ -378,9 +342,7 @@ TEST_F(UmqOpsErrnoTest, TxGetAndAckEvent_FailEpermSavedEagain_NoOverrideMapsEio)
 TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEexist_MapsEexist)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EEXIST));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EEXIST));
     errno = 0;
     int ret = txOps.DpRearmTxInterrupt();
     EXPECT_EQ(ret, -1);
@@ -391,9 +353,7 @@ TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEexist_MapsEexist)
 TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEinprogress_MapsEinprogress)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EINPROGRESS));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EINPROGRESS));
     errno = 0;
     int ret = txOps.DpRearmTxInterrupt();
     EXPECT_EQ(ret, -1);
@@ -404,9 +364,7 @@ TEST_F(UmqOpsErrnoTest, DpRearmTxInterrupt_FailEinprogress_MapsEinprogress)
 TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEexist_MapsEexist)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EEXIST));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EEXIST));
     errno = 0;
     int ret = rxOps.RearmRxInterrupt();
     EXPECT_EQ(ret, -UMQ_ERR_EEXIST);
@@ -417,9 +375,7 @@ TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEexist_MapsEexist)
 TEST_F(UmqOpsErrnoTest, RearmRxInterrupt_FailEinprogress_MapsEinprogress)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
-    MOCKER_CPP(::umq_rearm_interrupt)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EINPROGRESS));
+    MOCKER_CPP(::umq_rearm_interrupt).stubs().will(returnValue(-UMQ_ERR_EINPROGRESS));
     errno = 0;
     int ret = rxOps.RearmRxInterrupt();
     EXPECT_EQ(ret, -UMQ_ERR_EINPROGRESS);
@@ -433,9 +389,7 @@ TEST_F(UmqOpsErrnoTest, PollRxFail_EpermSavedEinval_MapsEinval)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf[POLL_BATCH_MAX] = {};
-    MOCKER_CPP(::umq_poll)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_poll).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = EINVAL;
     int ret = rxOps.UmqPollAndRefillRx(buf, POLL_BATCH_MAX);
     EXPECT_EQ(ret, -1);
@@ -447,9 +401,7 @@ TEST_F(UmqOpsErrnoTest, PollRxFail_Eagain_MapsEagain)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf[POLL_BATCH_MAX] = {};
-    MOCKER_CPP(::umq_poll)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EAGAIN));
+    MOCKER_CPP(::umq_poll).stubs().will(returnValue(-UMQ_ERR_EAGAIN));
     errno = 0;
     int ret = rxOps.UmqPollAndRefillRx(buf, POLL_BATCH_MAX);
     EXPECT_EQ(ret, -1);
@@ -461,9 +413,7 @@ TEST_F(UmqOpsErrnoTest, PollRxFail_EpermSavedZero_MapsEio)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf[POLL_BATCH_MAX] = {};
-    MOCKER_CPP(::umq_poll)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_poll).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = 0;
     int ret = rxOps.UmqPollAndRefillRx(buf, POLL_BATCH_MAX);
     EXPECT_EQ(ret, -1);
@@ -475,9 +425,7 @@ TEST_F(UmqOpsErrnoTest, PollRxFail_EnodevSavedEio_Override)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf[POLL_BATCH_MAX] = {};
-    MOCKER_CPP(::umq_poll)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_ENODEV));
+    MOCKER_CPP(::umq_poll).stubs().will(returnValue(-UMQ_ERR_ENODEV));
     errno = EIO;
     int ret = rxOps.UmqPollAndRefillRx(buf, POLL_BATCH_MAX);
     EXPECT_EQ(ret, -1);
@@ -490,9 +438,7 @@ TEST_F(UmqOpsErrnoTest, PollRxZeroRxQueueEmpty_NoConvert)
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
     rxOps.rx_queue_avail_num_ = 0;
     umq_buf_t *buf[POLL_BATCH_MAX] = {};
-    MOCKER_CPP(::umq_poll)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(::umq_poll).stubs().will(returnValue(0));
     errno = TEST_PRESERVED_ERRNO;
     int ret = rxOps.UmqPollAndRefillRx(buf, POLL_BATCH_MAX);
     EXPECT_EQ(ret, -1);
@@ -563,9 +509,7 @@ TEST_F(UmqOpsErrnoTest, HandleErrorTxCqe_FakeBufFcErr_NoErrnoChange)
 TEST_F(UmqBackendErrnoTest, AddUbDev_SuccessReturnsOk)
 {
     umq_trans_info_t trans_info = {};
-    MOCKER_CPP(::umq_dev_add)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(0));
     errno = 0;
     ock::ubs::Result ret = UmqBackend::AddUbDev(trans_info);
     EXPECT_EQ(ret, UBS_OK);
@@ -576,9 +520,7 @@ TEST_F(UmqBackendErrnoTest, AddUbDev_SuccessReturnsOk)
 TEST_F(UmqBackendErrnoTest, AddUbDev_EexistSkippedReturnsOk)
 {
     umq_trans_info_t trans_info = {};
-    MOCKER_CPP(::umq_dev_add)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EEXIST));
+    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-UMQ_ERR_EEXIST));
     errno = 0;
     ock::ubs::Result ret = UmqBackend::AddUbDev(trans_info);
     EXPECT_EQ(ret, UBS_OK);
@@ -589,9 +531,7 @@ TEST_F(UmqBackendErrnoTest, AddUbDev_EexistSkippedReturnsOk)
 TEST_F(UmqBackendErrnoTest, AddUbDev_FailSavedZero_MapsEio)
 {
     umq_trans_info_t trans_info = {};
-    MOCKER_CPP(::umq_dev_add)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = 0;
     ock::ubs::Result ret = UmqBackend::AddUbDev(trans_info);
     EXPECT_EQ(ret, -1);
@@ -602,9 +542,7 @@ TEST_F(UmqBackendErrnoTest, AddUbDev_FailSavedZero_MapsEio)
 TEST_F(UmqBackendErrnoTest, AddUbDev_FailSavedEinval_MapsEinval)
 {
     umq_trans_info_t trans_info = {};
-    MOCKER_CPP(::umq_dev_add)
-        .stubs()
-        .will(returnValue(-1));
+    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-1));
     errno = EINVAL;
     ock::ubs::Result ret = UmqBackend::AddUbDev(trans_info);
     EXPECT_EQ(ret, -1);
@@ -615,9 +553,7 @@ TEST_F(UmqBackendErrnoTest, AddUbDev_FailSavedEinval_MapsEinval)
 TEST_F(UmqBackendErrnoTest, AddUbDev_EnodevSavedEio_Override)
 {
     umq_trans_info_t trans_info = {};
-    MOCKER_CPP(::umq_dev_add)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_ENODEV));
+    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-UMQ_ERR_ENODEV));
     errno = EIO;
     ock::ubs::Result ret = UmqBackend::AddUbDev(trans_info);
     EXPECT_EQ(ret, -1);
@@ -630,9 +566,7 @@ TEST_F(UmqBackendErrnoTest, AddUbDev_EnodevSavedEio_Override)
 TEST_F(UmqBackendErrnoTest, FindDevName_Nullptr_MapsEio)
 {
     UmqSetting::UMQ_DEV_NAME = "";
-    MOCKER_CPP(::umq_dev_info_list_get)
-        .stubs()
-        .will(returnValue(static_cast<umq_dev_info_t *>(nullptr)));
+    MOCKER_CPP(::umq_dev_info_list_get).stubs().will(returnValue(static_cast<umq_dev_info_t *>(nullptr)));
     errno = 0;
     ock::ubs::Result ret = UmqBackend::FindDevName();
     EXPECT_EQ(ret, UBS_ERROR);
@@ -643,9 +577,7 @@ TEST_F(UmqBackendErrnoTest, FindDevName_Nullptr_MapsEio)
 TEST_F(UmqBackendErrnoTest, FindDevName_NullptrSavedEinval_MapsEinval)
 {
     UmqSetting::UMQ_DEV_NAME = "";
-    MOCKER_CPP(::umq_dev_info_list_get)
-        .stubs()
-        .will(returnValue(static_cast<umq_dev_info_t *>(nullptr)));
+    MOCKER_CPP(::umq_dev_info_list_get).stubs().will(returnValue(static_cast<umq_dev_info_t *>(nullptr)));
     errno = EINVAL;
     ock::ubs::Result ret = UmqBackend::FindDevName();
     EXPECT_EQ(ret, UBS_ERROR);
@@ -659,9 +591,7 @@ TEST_F(UmqSocketErrnoTest, GetTxFd_FailSavedZero_MapsEio)
 {
     UmqSocket sock(TEST_FD);
     sock.umq_handle_ = TEST_UMQ_HANDLE;
-    MOCKER_CPP(::umq_interrupt_fd_get)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_interrupt_fd_get).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = 0;
     int ret = sock.GetTxFd();
     EXPECT_EQ(ret, -1);
@@ -673,9 +603,7 @@ TEST_F(UmqSocketErrnoTest, GetTxFd_FailSavedEinval_MapsEinval)
 {
     UmqSocket sock(TEST_FD);
     sock.umq_handle_ = TEST_UMQ_HANDLE;
-    MOCKER_CPP(::umq_interrupt_fd_get)
-        .stubs()
-        .will(returnValue(-1));
+    MOCKER_CPP(::umq_interrupt_fd_get).stubs().will(returnValue(-1));
     errno = EINVAL;
     int ret = sock.GetTxFd();
     EXPECT_EQ(ret, -1);
@@ -687,9 +615,7 @@ TEST_F(UmqSocketErrnoTest, GetTxFd_EnodevSavedEio_Override)
 {
     UmqSocket sock(TEST_FD);
     sock.umq_handle_ = TEST_UMQ_HANDLE;
-    MOCKER_CPP(::umq_interrupt_fd_get)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_ENODEV));
+    MOCKER_CPP(::umq_interrupt_fd_get).stubs().will(returnValue(-UMQ_ERR_ENODEV));
     errno = EIO;
     int ret = sock.GetTxFd();
     EXPECT_EQ(ret, -1);
@@ -705,9 +631,7 @@ TEST_F(UmqSocketErrnoTest, GetDevEid_FailSavedZero_MapsEio)
     sock.umq_handle_ = TEST_UMQ_HANDLE;
     char dev_name[32] = "test_dev";
     umq_eid_t eid = {};
-    MOCKER_CPP(::umq_dev_info_get)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_dev_info_get).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = 0;
     ock::ubs::Result ret = sock.GetDevEid(dev_name, 0, &eid);
     EXPECT_EQ(ret, UBS_ERROR);
@@ -721,9 +645,7 @@ TEST_F(UmqSocketErrnoTest, GetDevEid_FailSavedEinval_MapsEinval)
     sock.umq_handle_ = TEST_UMQ_HANDLE;
     char dev_name[32] = "test_dev";
     umq_eid_t eid = {};
-    MOCKER_CPP(::umq_dev_info_get)
-        .stubs()
-        .will(returnValue(-1));
+    MOCKER_CPP(::umq_dev_info_get).stubs().will(returnValue(-1));
     errno = EINVAL;
     ock::ubs::Result ret = sock.GetDevEid(dev_name, 0, &eid);
     EXPECT_EQ(ret, UBS_ERROR);
@@ -737,9 +659,7 @@ TEST_F(UmqSocketErrnoTest, GetDevEid_EnodevSavedEio_Override)
     sock.umq_handle_ = TEST_UMQ_HANDLE;
     char dev_name[32] = "test_dev";
     umq_eid_t eid = {};
-    MOCKER_CPP(::umq_dev_info_get)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_ENODEV));
+    MOCKER_CPP(::umq_dev_info_get).stubs().will(returnValue(-UMQ_ERR_ENODEV));
     errno = EIO;
     ock::ubs::Result ret = sock.GetDevEid(dev_name, 0, &eid);
     EXPECT_EQ(ret, UBS_ERROR);
@@ -765,9 +685,7 @@ TEST_F(UmqSocketErrnoTest, CheckDevAdd_SuccessReturnsOk)
 {
     UmqAcceptorOps acceptor(TEST_FD);
     umq_eid_t testEid = MakeTestEid(0xBB);
-    MOCKER_CPP(::umq_dev_add)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(0));
     errno = 0;
     ock::ubs::Result ret = acceptor.CheckDevAdd(testEid);
     EXPECT_EQ(ret, UBS_OK);
@@ -780,9 +698,7 @@ TEST_F(UmqSocketErrnoTest, CheckDevAdd_EexistSkippedReturnsOk)
 {
     UmqAcceptorOps acceptor(TEST_FD);
     umq_eid_t testEid = MakeTestEid(0xCC);
-    MOCKER_CPP(::umq_dev_add)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EEXIST));
+    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-UMQ_ERR_EEXIST));
     errno = 0;
     ock::ubs::Result ret = acceptor.CheckDevAdd(testEid);
     EXPECT_EQ(ret, UBS_OK);
@@ -795,9 +711,7 @@ TEST_F(UmqSocketErrnoTest, CheckDevAdd_FailSavedZero_MapsEio)
 {
     UmqAcceptorOps acceptor(TEST_FD);
     umq_eid_t testEid = MakeTestEid(0xDD);
-    MOCKER_CPP(::umq_dev_add)
-        .stubs()
-        .will(returnValue(-UMQ_ERR_EPERM));
+    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-UMQ_ERR_EPERM));
     errno = 0;
     ock::ubs::Result ret = acceptor.CheckDevAdd(testEid);
     EXPECT_EQ(ret, UBS_ERROR);
@@ -809,9 +723,7 @@ TEST_F(UmqSocketErrnoTest, CheckDevAdd_FailSavedEinval_MapsEinval)
 {
     UmqAcceptorOps acceptor(TEST_FD);
     umq_eid_t testEid = MakeTestEid(0xEE);
-    MOCKER_CPP(::umq_dev_add)
-        .stubs()
-        .will(returnValue(-1));
+    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-1));
     errno = EINVAL;
     ock::ubs::Result ret = acceptor.CheckDevAdd(testEid);
     EXPECT_EQ(ret, UBS_ERROR);

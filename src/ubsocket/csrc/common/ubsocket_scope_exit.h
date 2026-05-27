@@ -16,11 +16,10 @@
 namespace ock {
 namespace ubs {
 /// ScopeExit 主要功能为作用域退出时执行一些动作, 常用于清理
-template<typename F> class ScopeExit final {
+template <typename F>
+class ScopeExit final {
 public:
-    ScopeExit(F f, bool active) : m_holder(std::move(f), active)
-    {
-    }
+    ScopeExit(F f, bool active) : m_holder(std::move(f), active) {}
 
     ScopeExit(ScopeExit &&) noexcept = default;
     ScopeExit &operator=(ScopeExit &&) noexcept = delete;
@@ -44,9 +43,7 @@ public:
 
 private:
     struct FuncHolder : F {
-        FuncHolder(F f, bool active) : F(std::move(f)), m_active(active)
-        {
-        }
+        FuncHolder(F f, bool active) : F(std::move(f)), m_active(active) {}
 
         FuncHolder(FuncHolder &&rhs) noexcept : F(std::move(rhs)), m_active(rhs.m_active)
         {
@@ -61,11 +58,12 @@ private:
     FuncHolder m_holder;
 };
 
-template<typename F> auto MakeScopeExit(F f, bool active = true) -> ScopeExit<F>
+template <typename F>
+auto MakeScopeExit(F f, bool active = true) -> ScopeExit<F>
 {
     return ScopeExit<F>(std::move(f), active);
 }
 
-}  // namespace ubs
-}  // namespace ock
-#endif  // UBS_COMM_UBSOCKET_SCOPE_EXIT_H
+} // namespace ubs
+} // namespace ock
+#endif // UBS_COMM_UBSOCKET_SCOPE_EXIT_H

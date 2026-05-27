@@ -30,16 +30,14 @@ UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
     }
     int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (event_fd < 0) {
-        UBS_VLOG_ERR("eventfd() failed, ret: %d, errno: %d, errmsg: %s\n",
-                     event_fd, errno, Func::Error2Str(errno));
+        UBS_VLOG_ERR("eventfd() failed, ret: %d, errno: %d, errmsg: %s\n", event_fd, errno, Func::Error2Str(errno));
         LibcApi::close(fd);
         return -1;
     }
     SocketPtr socketPtr;
     Result ret = SocketBase::Create(fd, SocketType::SOCK_TYPE_UMQ, socketPtr);
     if (ret != UBS_OK) {
-        UBS_VLOG_ERR("CreateSocketFd() failed, fd: %d, event fd: %d, ret: %d\n",
-                     fd, event_fd, ret);
+        UBS_VLOG_ERR("CreateSocketFd() failed, fd: %d, event fd: %d, ret: %d\n", fd, event_fd, ret);
         LibcApi::close(fd);
         LibcApi::close(event_fd);
         return -1;

@@ -14,7 +14,6 @@
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
 
-
 namespace ock {
 namespace ubs {
 namespace umq {
@@ -22,8 +21,8 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
         if (GetAndAckEvent() < 0) {
-            UBS_VLOG_ERR("[UMQ_API] ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_,
-                         -1, errno, Func::Error2Str(errno));
+            UBS_VLOG_ERR("[UMQ_API] ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1,
+                         errno, Func::Error2Str(errno));
             return -1;
         }
         get_and_ack_event_ = false;
@@ -313,8 +312,8 @@ bool UmqRxOps::PollSubUmqRx(umq_buf_t *buf[], int i) const
     int ret = umq_poll(local_umqh_, UMQ_IO_RX, &buf[i], 1);
     bool pollRxSuccess = ret > 0;
     if (ret < 0) {
-        UBS_VLOG_ERR("Failed to poll fc rx, local umq: %llu, ret: %d\n",
-            static_cast<unsigned long long>(local_umqh_), ret);
+        UBS_VLOG_ERR("Failed to poll fc rx, local umq: %llu, ret: %d\n", static_cast<unsigned long long>(local_umqh_),
+                     ret);
     }
     return pollRxSuccess;
 }

@@ -20,17 +20,17 @@ using urma_init_api = urma_status_t (*)(urma_init_attr_t *conf);
 using urma_uninit_api = urma_status_t (*)(void);
 using urma_get_device_list_api = urma_device_t **(*)(int *num_devices);
 using urma_free_device_list_api = void (*)(urma_device_t **device_list);
-using urma_get_eid_list_api = urma_eid_info_t *(*)(urma_device_t *dev, uint32_t *cnt);
+using urma_get_eid_list_api = urma_eid_info_t *(*)(urma_device_t * dev, uint32_t *cnt);
 using urma_free_eid_list_api = void (*)(urma_eid_info_t *eid_list);
 using urma_get_device_by_name_api = urma_device_t *(*)(char *dev_name);
 using urma_get_device_by_eid_api = urma_device_t *(*)(urma_eid_t eid, urma_transport_type_t type);
 using urma_query_device_api = urma_status_t (*)(urma_device_t *dev, urma_device_attr_t *dev_attr);
-using urma_create_context_api = urma_context_t *(*)(urma_device_t *dev, uint32_t eid_index);
+using urma_create_context_api = urma_context_t *(*)(urma_device_t * dev, uint32_t eid_index);
 using urma_delete_context_api = urma_status_t (*)(urma_context_t *ctx);
 using urma_set_context_opt_api = urma_status_t (*)(urma_context_t *ctx, urma_opt_name_t opt_name, const void *opt_value,
                                                    size_t opt_len);
 
-using urma_create_jfc_api = urma_jfc_t *(*)(urma_context_t *ctx, urma_jfc_cfg_t *jfc_cfg);
+using urma_create_jfc_api = urma_jfc_t *(*)(urma_context_t * ctx, urma_jfc_cfg_t *jfc_cfg);
 using urma_modify_jfc_api = urma_status_t (*)(urma_jfc_t *jfc, urma_jfc_attr_t *attr);
 using urma_delete_jfc_api = urma_status_t (*)(urma_jfc_t *jfc);
 using urma_alloc_jfc_api = urma_status_t (*)(urma_context_t *urma_ctx, urma_jfc_cfg_t *cfg, urma_jfc_t **jfc);
@@ -41,7 +41,7 @@ using urma_deactive_jfc_api = urma_status_t (*)(urma_jfc_t *jfc);
 using urma_free_jfc_api = urma_status_t (*)(urma_jfc_t *jfc);
 using urma_delete_jfc_batch_api = urma_status_t (*)(urma_jfc_t **jfc_arr, int jfc_num, urma_jfc_t **bad_jfc);
 
-using urma_create_jfs_api = urma_jfs_t *(*)(urma_context_t *ctx, urma_jfs_cfg_t *jfs_cfg);
+using urma_create_jfs_api = urma_jfs_t *(*)(urma_context_t * ctx, urma_jfs_cfg_t *jfs_cfg);
 using urma_modify_jfs_api = urma_status_t (*)(urma_jfs_t *jfs, urma_jfs_attr_t *attr);
 using urma_query_jfs_api = urma_status_t (*)(urma_jfs_t *jfs, urma_jfs_cfg_t *cfg, urma_jfs_attr_t *attr);
 using urma_delete_jfs_api = urma_status_t (*)(urma_jfs_t *jfs);
@@ -54,13 +54,14 @@ using urma_get_jfs_opt_api = urma_status_t (*)(urma_jfs_t *jfs, uint64_t opt, vo
 using urma_deactive_jfs_api = urma_status_t (*)(urma_jfs_t *jfs);
 using urma_free_jfs_api = urma_status_t (*)(urma_jfs_t *jfs);
 
-using urma_create_jfr_api = urma_jfr_t *(*)(urma_context_t *ctx, urma_jfr_cfg_t *jfr_cfg);
+using urma_create_jfr_api = urma_jfr_t *(*)(urma_context_t * ctx, urma_jfr_cfg_t *jfr_cfg);
 using urma_modify_jfr_api = urma_status_t (*)(urma_jfr_t *jfr, urma_jfr_attr_t *attr);
 using urma_query_jfr_api = urma_status_t (*)(urma_jfr_t *jfr, urma_jfr_cfg_t *cfg, urma_jfr_attr_t *attr);
 using urma_delete_jfr_api = urma_status_t (*)(urma_jfr_t *jfr);
 using urma_delete_jfr_batch_api = urma_status_t (*)(urma_jfr_t **jfr_arr, int jfr_num, urma_jfr_t **bad_jfr);
-using urma_import_jfr_api = urma_target_jetty_t *(*)(urma_context_t *ctx, urma_rjfr_t *rjfr, urma_token_t *token_value);
-using urma_import_jfr_ex_api = urma_target_jetty_t *(*)(urma_context_t *ctx, urma_rjfr_t *rjfr,
+using urma_import_jfr_api = urma_target_jetty_t *(*)(urma_context_t * ctx, urma_rjfr_t *rjfr,
+                                                     urma_token_t *token_value);
+using urma_import_jfr_ex_api = urma_target_jetty_t *(*)(urma_context_t * ctx, urma_rjfr_t *rjfr,
                                                         urma_token_t *token_value, urma_import_jfr_ex_cfg_t *cfg);
 using urma_unimport_jfr_api = urma_status_t (*)(urma_target_jetty_t *target_jfr);
 using urma_advise_jfr_api = urma_status_t (*)(urma_jfs_t *jfs, urma_target_jetty_t *tjfr);
@@ -74,15 +75,15 @@ using urma_get_jfr_opt_api = urma_status_t (*)(urma_jfr_t *jfr, uint64_t opt, vo
 using urma_deactive_jfr_api = urma_status_t (*)(urma_jfr_t *jfr);
 using urma_free_jfr_api = urma_status_t (*)(urma_jfr_t *jfr);
 
-using urma_create_jetty_api = urma_jetty_t *(*)(urma_context_t *ctx, urma_jetty_cfg_t *jetty_cfg);
+using urma_create_jetty_api = urma_jetty_t *(*)(urma_context_t * ctx, urma_jetty_cfg_t *jetty_cfg);
 using urma_modify_jetty_api = urma_status_t (*)(urma_jetty_t *jetty, urma_jetty_attr_t *attr);
 using urma_query_jetty_api = urma_status_t (*)(urma_jetty_t *jetty, urma_jetty_cfg_t *cfg, urma_jetty_attr_t *attr);
 using urma_delete_jetty_api = urma_status_t (*)(urma_jetty_t *jetty);
 using urma_delete_jetty_batch_api = urma_status_t (*)(urma_jetty_t **jetty_arr, int jetty_num,
                                                       urma_jetty_t **bad_jetty);
-using urma_import_jetty_api = urma_target_jetty_t *(*)(urma_context_t *ctx, urma_rjetty_t *rjetty,
+using urma_import_jetty_api = urma_target_jetty_t *(*)(urma_context_t * ctx, urma_rjetty_t *rjetty,
                                                        urma_token_t *token_value);
-using urma_import_jetty_ex_api = urma_target_jetty_t *(*)(urma_context_t *ctx, urma_rjetty_t *rjetty,
+using urma_import_jetty_ex_api = urma_target_jetty_t *(*)(urma_context_t * ctx, urma_rjetty_t *rjetty,
                                                           urma_token_t *token_value, urma_import_jetty_ex_cfg_t *cfg);
 using urma_unimport_jetty_api = urma_status_t (*)(urma_target_jetty_t *tjetty);
 using urma_advise_jetty_api = urma_status_t (*)(urma_jetty_t *jetty, urma_target_jetty_t *tjetty);
@@ -92,14 +93,14 @@ using urma_bind_jetty_ex_api = urma_status_t (*)(urma_jetty_t *jetty, urma_targe
                                                  urma_bind_jetty_ex_cfg_t *cfg);
 using urma_unbind_jetty_api = urma_status_t (*)(urma_jetty_t *jetty);
 using urma_flush_jetty_api = int (*)(urma_jetty_t *jetty, int cr_cnt, urma_cr_t *cr);
-using urma_import_jetty_async_api = urma_target_jetty_t *(*)(urma_notifier_t *notifier, const urma_rjetty_t *rjetty,
+using urma_import_jetty_async_api = urma_target_jetty_t *(*)(urma_notifier_t * notifier, const urma_rjetty_t *rjetty,
                                                              const urma_token_t *token_value, uint64_t user_ctx,
                                                              int timeout);
 using urma_unimport_jetty_async_api = urma_status_t (*)(urma_target_jetty_t *tjetty);
 using urma_bind_jetty_async_api = urma_status_t (*)(urma_notifier_t *notifier, urma_jetty_t *jetty,
                                                     urma_target_jetty_t *tjetty, uint64_t user_ctx, int timeout);
 using urma_unbind_jetty_async_api = urma_status_t (*)(urma_jetty_t *jetty);
-using urma_create_notifier_api = urma_notifier_t *(*)(urma_context_t *ctx);
+using urma_create_notifier_api = urma_notifier_t *(*)(urma_context_t * ctx);
 using urma_delete_notifier_api = urma_status_t (*)(urma_notifier_t *notifier);
 using urma_alloc_jetty_api = urma_status_t (*)(urma_context_t *urma_ctx, urma_jetty_cfg_t *cfg, urma_jetty_t **jetty);
 using urma_set_jetty_opt_api = urma_status_t (*)(urma_jetty_t *jetty, uint64_t opt, void *buf, uint32_t len);
@@ -110,20 +111,20 @@ using urma_free_jetty_api = urma_status_t (*)(urma_jetty_t *jetty);
 using urma_wait_notify_api = int (*)(urma_notifier_t *notifier, uint32_t cnt, urma_notify_t *notify, int timeout);
 using urma_ack_notify_api = urma_status_t (*)(urma_context_t *ctx, uint32_t cnt, urma_notify_t *notify);
 
-using urma_create_jetty_grp_api = urma_jetty_grp_t *(*)(urma_context_t *ctx, urma_jetty_grp_cfg_t *cfg);
+using urma_create_jetty_grp_api = urma_jetty_grp_t *(*)(urma_context_t * ctx, urma_jetty_grp_cfg_t *cfg);
 using urma_delete_jetty_grp_api = urma_status_t (*)(urma_jetty_grp_t *jetty_grp);
 
-using urma_create_jfce_api = urma_jfce_t *(*)(urma_context_t *ctx);
+using urma_create_jfce_api = urma_jfce_t *(*)(urma_context_t * ctx);
 using urma_delete_jfce_api = urma_status_t (*)(urma_jfce_t *jfce);
 using urma_get_async_event_api = urma_status_t (*)(urma_context_t *ctx, urma_async_event_t *event);
 using urma_ack_async_event_api = void (*)(urma_async_event_t *event);
-using urma_alloc_token_id_api = urma_token_id_t *(*)(urma_context_t *ctx);
-using urma_alloc_token_id_ex_api = urma_token_id_t *(*)(urma_context_t *ctx, urma_token_id_flag_t flag);
+using urma_alloc_token_id_api = urma_token_id_t *(*)(urma_context_t * ctx);
+using urma_alloc_token_id_ex_api = urma_token_id_t *(*)(urma_context_t * ctx, urma_token_id_flag_t flag);
 using urma_free_token_id_api = urma_status_t (*)(urma_token_id_t *token_id);
 
-using urma_register_seg_api = urma_target_seg_t *(*)(urma_context_t *ctx, urma_seg_cfg_t *seg_cfg);
+using urma_register_seg_api = urma_target_seg_t *(*)(urma_context_t * ctx, urma_seg_cfg_t *seg_cfg);
 using urma_unregister_seg_api = urma_status_t (*)(urma_target_seg_t *target_seg);
-using urma_import_seg_api = urma_target_seg_t *(*)(urma_context_t *ctx, urma_seg_t *seg, urma_token_t *token_value,
+using urma_import_seg_api = urma_target_seg_t *(*)(urma_context_t * ctx, urma_seg_t *seg, urma_token_t *token_value,
                                                    uint64_t addr);
 using urma_unimport_seg_api = urma_status_t (*)(urma_target_seg_t *tseg);
 
@@ -159,7 +160,7 @@ using urma_log_get_thread_tag_api = const char *(*)(void);
 using urma_log_set_thread_tag_api = void (*)(const char *tag);
 
 using urma_get_tpn_api = int (*)(urma_jetty_t *jetty);
-using urma_get_net_addr_list_api = urma_net_addr_info_t *(*)(urma_context_t *ctx, uint32_t *cnt);
+using urma_get_net_addr_list_api = urma_net_addr_info_t *(*)(urma_context_t * ctx, uint32_t *cnt);
 using urma_free_net_addr_list_api = void (*)(urma_net_addr_info_t *net_addr_list);
 using urma_modify_tp_api = int (*)(urma_context_t *ctx, uint32_t tpn, urma_tp_cfg_t *cfg, urma_tp_attr_t *attr,
                                    urma_tp_attr_mask_t mask);
@@ -956,7 +957,6 @@ private:
     DL_API_DECLARE(urma_get_dmac);
 
 private:
-
     static void UnLoadInner() noexcept;
     static std::mutex LOAD_MUTEX;
     static bool LOADED;

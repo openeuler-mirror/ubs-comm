@@ -12,9 +12,9 @@
 
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
+#include "common/ubsocket_print_stats_mgr.h"
 #include "common/ubsocket_signal_handler.h"
 #include "common/ubsocket_version.h"
-#include "common/ubsocket_print_stats_mgr.h"
 #include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_backend.h"
@@ -145,7 +145,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
 
     /* step5: umq backend init */
-//#ifdef UMQ_ADAPTER_BACKEND_ENABLED
+    //#ifdef UMQ_ADAPTER_BACKEND_ENABLED
     result = umq::UmqBackend::Init();
     if (result != UBS_OK) {
         // ResetBrpcAllocator();
@@ -153,19 +153,19 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         UBS_VLOG_ERR("umq backend init failed, ret: %d\n", result);
         return UBS_ERROR;
     }
-//#endif
+    //#endif
 
     /* step6: register signal handler */
     std::signal(SIGUSR2, ubsocket_handle_signal);
 
     if (GlobalSetting::UBS_PROF_ENABLE) {
         result = Profiling::Init(ProfilingTPId::UBSOCKET_PROF_COUNT, GlobalSetting::UBS_PROF_DUMP_PATH.c_str(),
-            GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN);
+                                 GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN);
         if (result != UBS_OK) {
             UBS_VLOG_WARN("Profiling is not initialize \n");
         }
     }
-    
+
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
 
@@ -239,10 +239,8 @@ UBS_API void ubsocket_trace_statistic_init(void)
         return;
     }
 
-    Statistics::PrintStatsMgr::StartStatsCollection(
-        GlobalSetting::UBS_TRACE_TIME,
-        GlobalSetting::UBS_TRACE_FILE_PATH,
-        GlobalSetting::UBS_TRACE_FILE_SIZE);
+    Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_TRACE_TIME, GlobalSetting::UBS_TRACE_FILE_PATH,
+                                                    GlobalSetting::UBS_TRACE_FILE_SIZE);
 }
 
 UBS_API void ubsocket_trace_statistic_destroy(void)

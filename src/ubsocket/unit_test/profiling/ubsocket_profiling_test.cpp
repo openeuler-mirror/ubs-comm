@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
+#include <chrono>
 #include <mockcpp/mockcpp.hpp>
 #include <thread>
 #include <vector>
-#include <chrono>
 #include "ubsocket_prof.h"
 
 class UProfilingTest : public testing::Test {
@@ -19,7 +19,7 @@ enum ProfilingTPId : uint32_t {
     TP4,
 };
 
-constexpr const char* DEFAULT_DUMP_PATH = "/tmp/ubsocket/unitest/profiling";
+constexpr const char *DEFAULT_DUMP_PATH = "/tmp/ubsocket/unitest/profiling";
 constexpr uint16_t INTERVAL_DEFAULT_MIN = 1;
 
 void UProfilingTest::SetUp()
@@ -47,9 +47,9 @@ TEST_F(UProfilingTest, InitAddSum)
         threads.emplace_back(test_thread);
     }
 
-    for (auto& t : threads) {
+    for (auto &t : threads) {
         t.join();
     }
 
-    std::this_thread::sleep_for(std::chrono::minutes(6));     
+    std::this_thread::sleep_for(std::chrono::minutes(6));
 }
