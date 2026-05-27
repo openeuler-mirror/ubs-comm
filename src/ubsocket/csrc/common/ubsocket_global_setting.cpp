@@ -35,7 +35,7 @@ std::string GlobalSetting::UBS_BRPC_ALLOC_SYM_STR;
 std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
 uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
-bool GlobalSetting::GlobalSetting::UBS_PROF_ENABLE = false;
+bool GlobalSetting::UBS_PROF_ENABLE = false;
 uint16_t GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN = 1;
 std::string GlobalSetting::UBS_PROF_DUMP_PATH = "/tmp/ubsocket/profiling";
 uint64_t GlobalSetting::UBS_TRACE_TIME = UBSOCKET_TRACE_TIME_DEFAULT;

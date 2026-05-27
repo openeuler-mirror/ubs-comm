@@ -40,13 +40,12 @@ Result Tracer::Init(const TracerOptions &options) noexcept
     }
 
     /* create dump thread if enabled */
-    if (options_.enable_dump) {
+    if (options.enable_dump) {
         dump_thread_ = MakeRef<DumpThread>();
         if (dump_thread_ == nullptr) {
             UBS_VLOG_ERR("Create trace dump thread failed, probably out of memory");
             return UBS_ERROR;
         }
-
         dump_thread_->DumpStart(options.dumpPath, options.dumpIntervalMin);
     }
 
