@@ -204,33 +204,6 @@ uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *loca
     return main_umqs.front()->GetUmqHandle();
 }
 
-Result UmqSocket::WaitUntilReady(uint64_t umq_handle)
-{
-    uint32_t poll_cnt = 0;
-    do {
-        tx_.GetTxOps()->PollTx(this);
-        if (UmqApi::umq_state_get(umq_handle) != QUEUE_STATE_IDLE) {
-            break;
-        }
-        usleep(WAIT_READY_TIMEOUT_US);
-    } while (poll_cnt++ < WAIT_READY_ROUND);
-
-    int local_umq_state = UmqApi::umq_state_get(umq_handle);
-    if (local_umq_state != QUEUE_STATE_READY) {
-        int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::GET_STATE, local_umq_state, savedErrno);
-        if (errno == 0) {
-            errno = ETIMEDOUT;
-        }
-        UBS_VLOG_ERR("[UMQ_API] umq_state_get() failed to reach ready, "
-                     "state: %d, mapped errno: %d(%s), original errno: %d\n",
-                     local_umq_state, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::GET_STATE, local_umq_state), savedErrno);
-        return UBS_ERROR;
-    }
-    return UBS_OK;
-}
-
 Result UmqSocket::PrefillRx()
 {
     uint64_t umq_handle = GlobalSetting::UBS_ENABLE_SHARE_JFR ? share_umq_handle_ : umq_handle_;
@@ -267,8 +240,14 @@ Result UmqSocket::PrefillRx()
         UBS_VLOG_DEBUG("Post RX depth: %u\n", cur_post_rx_num);
     } while ((left_post_rx_num -= cur_post_rx_num) > 0);
 
-    Result waitRet = WaitUntilReady(umq_handle_);
-    if (waitRet != UBS_OK) {
+    int local_umq_state = UmqApi::umq_state_get(umq_handle_);
+    if (local_umq_state != QUEUE_STATE_READY) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::GET_STATE, local_umq_state, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_state_get() failed to reach ready, "
+                     "state: %d, mapped errno: %d(%s), original errno: %d\n",
+                     local_umq_state, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::GET_STATE, local_umq_state), savedErrno);
         return UBS_ERROR;
     }
 
