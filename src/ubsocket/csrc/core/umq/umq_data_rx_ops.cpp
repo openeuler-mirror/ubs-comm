@@ -309,7 +309,7 @@ int UmqRxOps::RearmRxInterrupt()
 
 bool UmqRxOps::PollSubUmqRx(umq_buf_t *buf[], int i) const
 {
-    int ret = umq_poll(local_umqh_, UMQ_IO_RX, &buf[i], 1);
+    int ret = UmqApi::umq_poll(local_umqh_, UMQ_IO_RX, &buf[i], 1);
     bool pollRxSuccess = ret > 0;
     if (ret < 0) {
         UBS_VLOG_ERR("Failed to poll fc rx, local umq: %llu, ret: %d\n", static_cast<unsigned long long>(local_umqh_),

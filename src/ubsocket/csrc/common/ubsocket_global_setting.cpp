@@ -230,7 +230,7 @@ Result GlobalSetting::LoadEnv() noexcept
     }
 
     if (GetEnvAndValidate(ENV_TRACE_FILE_PATH, strEnvValue)) {
-        (void)snprintf(UBS_TRACE_FILE_PATH, sizeof(UBS_TRACE_FILE_PATH), "%s", strEnvValue);
+        (void)snprintf(UBS_TRACE_FILE_PATH, sizeof(UBS_TRACE_FILE_PATH), "%s", strEnvValue.c_str());
     }
 
     return UBS_OK;
