@@ -13,15 +13,15 @@
 
 #include <netinet/tcp.h>
 
+#include "common/ubsocket_scope_exit.h"
 #include "core/umq/umq_eid_table.h"
 #include "umq_errno_converter.h"
-#include "common/ubsocket_scope_exit.h"
 
 namespace ock {
 namespace ubs {
 namespace umq {
-Result UmqConnectorOps::ConnectViaHandshakeOpt(const SocketPtr &sock,
-    const struct sockaddr *address, socklen_t address_len)
+Result UmqConnectorOps::ConnectViaHandshakeOpt(const SocketPtr &sock, const struct sockaddr *address,
+                                               socklen_t address_len)
 {
     int opt = 1;
     int ret = LibcApi::setsockopt(raw_fd_, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, sizeof(opt));
@@ -39,7 +39,7 @@ Result UmqConnectorOps::ConnectViaHandshakeOpt(const SocketPtr &sock,
 Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
 {
     auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
-    NegotiateReq req {};
+    NegotiateReq req{};
     if (BuildNegotiateReq(&req, umq_socket) != 0) {
         return -1;
     }
@@ -59,8 +59,8 @@ Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockad
     LibcApi::setsockopt(raw_fd_, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
     ssize_t sendto_ret = LibcApi::sendto(raw_fd_, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
     if (sendto_ret < 0 && errno != 0) {
-        UBS_VLOG_ERR("TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s\n",
-                          sendto_ret, errno, Func::Error2Str(errno));
+        UBS_VLOG_ERR("TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s\n", sendto_ret, errno,
+                     Func::Error2Str(errno));
     }
     if (!SocketConnHelper::IsTfoConnection(raw_fd_)) {
         // 首次获取cookie，创建临时socket二次发送
@@ -69,15 +69,14 @@ Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockad
         LibcApi::setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
         sendto_ret = LibcApi::sendto(tmp_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
         if (sendto_ret < 0 && errno != 0) {
-            UBS_VLOG_ERR("TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s\n",
-                sendto_ret, errno, Func::Error2Str(errno));
+            UBS_VLOG_ERR("TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s\n", sendto_ret, errno,
+                         Func::Error2Str(errno));
         }
 
         int dup3_ret = dup3(tmp_fd, raw_fd_, O_CLOEXEC);
         LibcApi::close(tmp_fd);
         if (dup3_ret < 0) {
-            UBS_VLOG_ERR("dup3 failed, ret: %d, errno %d, err msg: %s\n",
-                dup3_ret, errno, Func::Error2Str(errno));
+            UBS_VLOG_ERR("dup3 failed, ret: %d, errno %d, err msg: %s\n", dup3_ret, errno, Func::Error2Str(errno));
             return -1;
         }
     } else {
@@ -232,14 +231,14 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
 {
     if (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::UB_SOCK_OPT) {
         // 基于内核选项的建链，需要单独发送协商请求；TFO建链随sendto发送协商请求
-        NegotiateReq req {};
+        NegotiateReq req{};
         if (BuildNegotiateReq(&req, umq_socket) != 0) {
             return -1;
         }
         if (SocketConnHelper::SendSocketData(raw_fd_, &req, sizeof(req), CONTROL_PLANE_TIMEOUT_MS) !=
             static_cast<int>(sizeof(req))) {
-            UBS_VLOG_ERR("Failed to send negotiate request, Peer IP:%s, fd: %d\n",
-                umq_conn_info_.peer_ip.c_str(), raw_fd_);
+            UBS_VLOG_ERR("Failed to send negotiate request, Peer IP:%s, fd: %d\n", umq_conn_info_.peer_ip.c_str(),
+                         raw_fd_);
             return -1;
         }
     }
@@ -356,12 +355,11 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     auto socket = RefConvert<UmqSocket, Socket>(umq_socket);
     // CreateLocalUmq
     if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
-        ret = umq_socket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports,
-            &(umq_conn_info_.conn_eid), topo_type_);
+        ret =
+            umq_socket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid), topo_type_);
     } else {
         umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
-        ret = umq_socket->CreateLocalUmq(&localEid, used_ports,
-            &(umq_conn_info_.conn_eid), topo_type_);
+        ret = umq_socket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid), topo_type_);
     }
     if (ret != UBS_OK || SocketBase::GenerateSocketCommOps(socket) != UBS_OK) {
         UBS_VLOG_ERR("[UMQ_API] Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
@@ -378,8 +376,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
                      "fd: %d, ret: %ld, mapped errno: %d(%s), original errno: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_,
                      local_cp_msg.queue_bind_info_size, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL),
-                     savedErrno);
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL), savedErrno);
         return UBS_ERROR;
     }
 
@@ -488,8 +485,8 @@ Result UmqConnectorOps::GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_
     if (ret != 0) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] umq_get_route_list() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_get_route_list() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n", ret,
+                     errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
         return -1;
     }
 

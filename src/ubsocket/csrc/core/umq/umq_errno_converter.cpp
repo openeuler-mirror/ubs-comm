@@ -63,7 +63,7 @@ int UmqErrnoConverter::ConvertBufStatus(UmqOperation op, umq_buf_status_t bufSta
     }
 }
 
-const char* UmqErrnoConverter::GetErrorDescription(UmqOperation op, int umqRet)
+const char *UmqErrnoConverter::GetErrorDescription(UmqOperation op, int umqRet)
 {
     if (umqRet == UMQ_SUCCESS) {
         return "Success";
@@ -71,9 +71,12 @@ const char* UmqErrnoConverter::GetErrorDescription(UmqOperation op, int umqRet)
 
     if (op == UmqOperation::GET_STATE) {
         switch (umqRet) {
-            case QUEUE_STATE_ERR: return "Queue error state";
-            case QUEUE_STATE_MAX: return "Invalid queue handle or state";
-            default: return "Unexpected queue state";
+            case QUEUE_STATE_ERR:
+                return "Queue error state";
+            case QUEUE_STATE_MAX:
+                return "Invalid queue handle or state";
+            default:
+                return "Unexpected queue state";
         }
     }
 
@@ -82,7 +85,7 @@ const char* UmqErrnoConverter::GetErrorDescription(UmqOperation op, int umqRet)
     return FindDescription(kCommonErrnoMappings, absUmqRet);
 }
 
-const char* UmqErrnoConverter::GetBufStatusDescription(UmqOperation op, umq_buf_status_t bufStatus)
+const char *UmqErrnoConverter::GetBufStatusDescription(UmqOperation op, umq_buf_status_t bufStatus)
 {
     if (bufStatus == UMQ_BUF_SUCCESS) {
         return "Buffer operation success";
@@ -104,8 +107,8 @@ const char* UmqErrnoConverter::GetBufStatusDescription(UmqOperation op, umq_buf_
 bool UmqErrnoConverter::ShouldOverrideWithSavedErrno(int absUmqRet, int savedErrno)
 {
     if (absUmqRet == UMQ_ERR_EPERM) {
-        return savedErrno == EINVAL || savedErrno == ENODEV ||
-               savedErrno == ENOMEM || savedErrno == ENOEXEC || savedErrno == EIO;
+        return savedErrno == EINVAL || savedErrno == ENODEV || savedErrno == ENOMEM || savedErrno == ENOEXEC ||
+               savedErrno == EIO;
     }
     if (absUmqRet == UMQ_ERR_ENODEV) {
         return savedErrno == EINVAL || savedErrno == EIO;

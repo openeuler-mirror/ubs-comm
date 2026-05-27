@@ -13,8 +13,8 @@
 
 #include <arpa/inet.h>
 #include <pthread.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <sys/socket.h>
 
 #ifndef __cplusplus
@@ -29,58 +29,58 @@
 extern "C" {
 #endif
 
-#define URMA_GET_VERSION(a, b)      (((a) << 16) + ((b) > 65535 ? 65535 : (b)))
-#define URMA_API_VERSION            ((0 << 16) + 9) // Current Version: 0.9
-#define MAX_PORT_CNT                8
+#define URMA_GET_VERSION(a, b) (((a) << 16) + ((b) > 65535 ? 65535 : (b)))
+#define URMA_API_VERSION ((0 << 16) + 9) // Current Version: 0.9
+#define MAX_PORT_CNT 8
 #define URMA_MAX_JETTY_IN_JETTY_GRP 32U
-#define URMA_MAX_NAME               64
-#define URMA_MAX_PATH               4096
-#define URMA_EID_SIZE               (16)
-#define URMA_MAX_PRIORITY_CNT       16
-#define URMA_IPV4_MAP_IPV6_PREFIX   (0x0000ffff)
-#define URMA_MAX_EID_CNT            1024 /* refer to UBCORE_MAX_SIP */
-#define URMA_CC_IDX_TABLE_SIZE      81   /* support 9 priorities and 9 algorithms */
-                                         /* same as UBCORE_CC_IDX_TABLE_SIZE */
+#define URMA_MAX_NAME 64
+#define URMA_MAX_PATH 4096
+#define URMA_EID_SIZE (16)
+#define URMA_MAX_PRIORITY_CNT 16
+#define URMA_IPV4_MAP_IPV6_PREFIX (0x0000ffff)
+#define URMA_MAX_EID_CNT 1024     /* refer to UBCORE_MAX_SIP */
+#define URMA_CC_IDX_TABLE_SIZE 81 /* support 9 priorities and 9 algorithms */
+                                  /* same as UBCORE_CC_IDX_TABLE_SIZE */
 #define URMA_OPT_REVERSED_NUM 4
 
 #define URMA_EID_STR_LEN (39)
-#define EID_FMT          "%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x"
-#define EID_RAW_ARGS(eid)                                                                                              \
-    eid[0], eid[1], eid[2], eid[3], eid[4], eid[5], eid[6], eid[7], eid[8], eid[9], eid[10], eid[11], eid[12],         \
+#define EID_FMT "%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x"
+#define EID_RAW_ARGS(eid)                                                                                      \
+    eid[0], eid[1], eid[2], eid[3], eid[4], eid[5], eid[6], eid[7], eid[8], eid[9], eid[10], eid[11], eid[12], \
         eid[13], eid[14], eid[15]
-#define EID_ARGS(eid)             EID_RAW_ARGS((eid).raw)
+#define EID_ARGS(eid) EID_RAW_ARGS((eid).raw)
 #define URMA_SEG_TOKEN_ID_INVALID 0xffffffff
 
 /* refer to UBCORE_MAX_DEV_NAME */
 #define URMA_MAX_DEV_NAME 64
-#define URMA_GUID_SIZE    (16)
+#define URMA_GUID_SIZE (16)
 
 #define URMA_IP_ADDR_BYTES 16 /* refer to UBCORE_IP_ADDR_BYTES */
-#define URMA_MAC_BYTES     6  /* refer to UBCORE_MAC_BYTES */
+#define URMA_MAC_BYTES 6      /* refer to UBCORE_MAC_BYTES */
 
-#define URMA_JFS_SQE_BASE_ADDR_MASK       (1ULL << 0)
-#define URMA_JFS_ID_MASK                  (1ULL << 1)
-#define URMA_JFS_DB_ADDR_MASK             (1ULL << 2)
-#define URMA_JFS_DB_STATUS_MASK           (1ULL << 3)
-#define URMA_JFS_PI_MASK                  (1ULL << 4)
-#define URMA_JFS_PI_TYPE_MASK             (1ULL << 5)
-#define URMA_JFS_CI_MASK                  (1ULL << 6)
+#define URMA_JFS_SQE_BASE_ADDR_MASK (1ULL << 0)
+#define URMA_JFS_ID_MASK (1ULL << 1)
+#define URMA_JFS_DB_ADDR_MASK (1ULL << 2)
+#define URMA_JFS_DB_STATUS_MASK (1ULL << 3)
+#define URMA_JFS_PI_MASK (1ULL << 4)
+#define URMA_JFS_PI_TYPE_MASK (1ULL << 5)
+#define URMA_JFS_CI_MASK (1ULL << 6)
 
-#define URMA_JFR_RQE_BASE_ADDR_MASK       (1ULL << 0)
-#define URMA_JFR_ID_MASK                  (1ULL << 1)
-#define URMA_JFR_DB_ADDR_MASK             (1ULL << 2)
-#define URMA_JFR_DB_STATUS_MASK           (1ULL << 3)
-#define URMA_JFR_PI_MASK                  (1ULL << 4)
-#define URMA_JFR_PI_TYPE_MASK             (1ULL << 5)
-#define URMA_JFR_CI_MASK                  (1ULL << 6)
+#define URMA_JFR_RQE_BASE_ADDR_MASK (1ULL << 0)
+#define URMA_JFR_ID_MASK (1ULL << 1)
+#define URMA_JFR_DB_ADDR_MASK (1ULL << 2)
+#define URMA_JFR_DB_STATUS_MASK (1ULL << 3)
+#define URMA_JFR_PI_MASK (1ULL << 4)
+#define URMA_JFR_PI_TYPE_MASK (1ULL << 5)
+#define URMA_JFR_CI_MASK (1ULL << 6)
 
-#define URMA_JFC_CQE_BASE_ADDR_MASK       (1ULL << 0)
-#define URMA_JFC_ID_MASK                  (1ULL << 1)
-#define URMA_JFC_DB_ADDR_MASK             (1ULL << 2)
-#define URMA_JFC_DB_STATUS_MASK           (1ULL << 3)
-#define URMA_JFC_PI_MASK                  (1ULL << 4)
-#define URMA_JFC_PI_TYPE_MASK             (1ULL << 5)
-#define URMA_JFC_CI_MASK                  (1ULL << 6)
+#define URMA_JFC_CQE_BASE_ADDR_MASK (1ULL << 0)
+#define URMA_JFC_ID_MASK (1ULL << 1)
+#define URMA_JFC_DB_ADDR_MASK (1ULL << 2)
+#define URMA_JFC_DB_STATUS_MASK (1ULL << 3)
+#define URMA_JFC_PI_MASK (1ULL << 4)
+#define URMA_JFC_PI_TYPE_MASK (1ULL << 5)
+#define URMA_JFC_CI_MASK (1ULL << 6)
 
 typedef struct urma_init_attr {
     uint64_t token; /* [Optional] security token */
@@ -182,51 +182,51 @@ struct urma_sl_info {
 
 typedef union urma_device_feature {
     struct {
-        uint32_t oor                   : 1; /* [Public] URMA_OUT_OF_ORDER_RECEIVING. */
-        uint32_t jfc_per_wr            : 1; /* [Public] URMA_JFC_PER_WR. */
-        uint32_t stride_op             : 1; /* [Public] URMA_STRIDE_OP. */
-        uint32_t load_store_op         : 1; /* [Public] URMA_LOAD_STORE_OP. */
-        uint32_t non_pin               : 1; /* [Public] URMA_NON_PIN. */
-        uint32_t pmem                  : 1; /* [Public] URMA_PERSISTENCE_MEM. */
-        uint32_t jfc_inline            : 1; /* [Public] URMA_JFC_INLINE. */
-        uint32_t spray_en              : 1; /* [Public] URMA_SPRAY_ENABLE for UDP port. */
-        uint32_t selective_retrans     : 1; /* [Public] URMA_SELECTIVE_RETRANS. */
-        uint32_t live_migrate          : 1; /* [Public] support live migration. */
-        uint32_t dca                   : 1; /* [Public] for user tp */
-        uint32_t jetty_grp             : 1; /* [Public] support jetty group. */
-        uint32_t error_suspend         : 1; /* [Public] support suspend jetty or jfs on error. */
-        uint32_t outorder_comp         : 1; /* [Public] support out-of-order completion. */
-        uint32_t mn                    : 1; /* [Public] for user tp */
-        uint32_t clan                  : 1; /* [Public] for user tp */
+        uint32_t oor : 1;               /* [Public] URMA_OUT_OF_ORDER_RECEIVING. */
+        uint32_t jfc_per_wr : 1;        /* [Public] URMA_JFC_PER_WR. */
+        uint32_t stride_op : 1;         /* [Public] URMA_STRIDE_OP. */
+        uint32_t load_store_op : 1;     /* [Public] URMA_LOAD_STORE_OP. */
+        uint32_t non_pin : 1;           /* [Public] URMA_NON_PIN. */
+        uint32_t pmem : 1;              /* [Public] URMA_PERSISTENCE_MEM. */
+        uint32_t jfc_inline : 1;        /* [Public] URMA_JFC_INLINE. */
+        uint32_t spray_en : 1;          /* [Public] URMA_SPRAY_ENABLE for UDP port. */
+        uint32_t selective_retrans : 1; /* [Public] URMA_SELECTIVE_RETRANS. */
+        uint32_t live_migrate : 1;      /* [Public] support live migration. */
+        uint32_t dca : 1;               /* [Public] for user tp */
+        uint32_t jetty_grp : 1;         /* [Public] support jetty group. */
+        uint32_t error_suspend : 1;     /* [Public] support suspend jetty or jfs on error. */
+        uint32_t outorder_comp : 1;     /* [Public] support out-of-order completion. */
+        uint32_t mn : 1;                /* [Public] for user tp */
+        uint32_t clan : 1;              /* [Public] for user tp */
         uint32_t muti_seg_per_token_id : 1;
-        uint32_t ipourma_en            : 1;
-        uint32_t ctp_en                : 1;
-        uint32_t uboe                  : 1;
-        uint32_t reserved              : 12;
+        uint32_t ipourma_en : 1;
+        uint32_t ctp_en : 1;
+        uint32_t uboe : 1;
+        uint32_t reserved : 12;
     } bs;
     uint32_t value;
 } urma_device_feature_t;
 
 typedef union urma_atomic_feature {
     struct {
-        uint32_t cas           : 1;
-        uint32_t swap          : 1;
+        uint32_t cas : 1;
+        uint32_t swap : 1;
         uint32_t fetch_and_add : 1;
         uint32_t fetch_and_sub : 1;
         uint32_t fetch_and_and : 1;
-        uint32_t fetch_and_or  : 1;
+        uint32_t fetch_and_or : 1;
         uint32_t fetch_and_xor : 1;
-        uint32_t reserved      : 25;
+        uint32_t reserved : 25;
     } bs;
     uint32_t value;
 } urma_atomic_feature_t;
 
 typedef union urma_order_type_cap {
     struct {
-        uint32_t ot       : 1;
-        uint32_t oi       : 1;
-        uint32_t ol       : 1;
-        uint32_t no       : 1;
+        uint32_t ot : 1;
+        uint32_t oi : 1;
+        uint32_t ol : 1;
+        uint32_t no : 1;
         uint32_t reserved : 28;
     } bs;
     uint32_t value;
@@ -234,9 +234,9 @@ typedef union urma_order_type_cap {
 
 typedef union urma_tp_type_cap {
     struct {
-        uint32_t rtp      : 1;
-        uint32_t ctp      : 1;
-        uint32_t utp      : 1;
+        uint32_t rtp : 1;
+        uint32_t ctp : 1;
+        uint32_t utp : 1;
         uint32_t reserved : 29;
     } bs;
     uint32_t value;
@@ -246,7 +246,7 @@ typedef union urma_tp_feature {
     struct {
         uint32_t rm_multi_path : 1;
         uint32_t rc_multi_path : 1;
-        uint32_t reserved      : 30;
+        uint32_t reserved : 30;
     } bs;
     uint32_t value;
 } urma_tp_feature_t;
@@ -411,10 +411,10 @@ typedef struct urma_jfce {
 
 typedef union urma_jfc_flag {
     struct {
-        uint32_t lock_free  : 1;
+        uint32_t lock_free : 1;
         uint32_t jfc_inline : 1;
         uint32_t non_blocking : 1;
-        uint32_t reserved   : 29;
+        uint32_t reserved : 29;
     } bs;
     uint32_t value;
 } urma_jfc_flag_t;
@@ -468,12 +468,12 @@ typedef struct urma_jfc_opt {
                                             bit5:ci, bit6:db_status */
     bool is_actived;
     uint64_t urma_jfc_cqe_base_addr; /* [Optional] CQ Queue Address (VA) */
-    uint32_t urma_jfc_id;      /* [Optional] the id of jfc */
-    uint64_t urma_jfc_db_addr; /* [Optional] CQ Queue Doorbell Address (VA) */
-    uint8_t urma_jfc_db_status; /* [Optional] JFC Doorbell status, used for live migration (0 invalid, 1 valid) */
-    uint16_t urma_jfc_pi;     /* [Optional] PI value of the JFC */
-    uint16_t urma_jfc_pi_type; /* [Optional] PI type, 0: absolute value, 1: cumulative value */
-    uint16_t urma_jfc_ci;     /* [Optional] CI value of the JFC */
+    uint32_t urma_jfc_id;            /* [Optional] the id of jfc */
+    uint64_t urma_jfc_db_addr;       /* [Optional] CQ Queue Doorbell Address (VA) */
+    uint8_t urma_jfc_db_status;      /* [Optional] JFC Doorbell status, used for live migration (0 invalid, 1 valid) */
+    uint16_t urma_jfc_pi;            /* [Optional] PI value of the JFC */
+    uint16_t urma_jfc_pi_type;       /* [Optional] PI type, 0: absolute value, 1: cumulative value */
+    uint16_t urma_jfc_ci;            /* [Optional] CI value of the JFC */
     uint64_t reserved[URMA_OPT_REVERSED_NUM];
 } urma_jfc_opt_t;
 
@@ -499,19 +499,19 @@ typedef enum urma_order_type {
 
 typedef union urma_jfs_flag {
     struct {
-        uint32_t lock_free            : 1; /* default as 0, lock protected */
-        uint32_t error_suspend        : 1; /* 0: error continue; 1: error suspend */
-        uint32_t outorder_comp        : 1; /* 0: not support; 1: support out-of-order completion */
-        uint32_t order_type           : 8; /* (0x0): default, auto config by driver */
+        uint32_t lock_free : 1;            /* default as 0, lock protected */
+        uint32_t error_suspend : 1;        /* 0: error continue; 1: error suspend */
+        uint32_t outorder_comp : 1;        /* 0: not support; 1: support out-of-order completion */
+        uint32_t order_type : 8;           /* (0x0): default, auto config by driver */
                                            /* (0x1): OT, target ordering */
                                            /* (0x2): OI, initiator ordering */
                                            /* (0x3): OL, low layer ordering */
                                            /* (0x4): UNO, unreliable non ordering */
-        uint32_t multi_path           : 1; /* 1: multi-path, 0: single path, for ubagg only. */
+        uint32_t multi_path : 1;           /* 1: multi-path, 0: single path, for ubagg only. */
         uint32_t ctp_rc_mul_path_mode : 1; /* 1: ctp rc mode multi-path */
-        uint32_t non_blocking         : 1;
-        uint32_t has_drv_ext       :    1;
-        uint32_t reserved             : 17;
+        uint32_t non_blocking : 1;
+        uint32_t has_drv_ext : 1;
+        uint32_t reserved : 17;
     } bs;
     uint32_t value;
 } urma_jfs_flag_t;
@@ -535,12 +535,12 @@ typedef struct urma_jfs_opt {
                                             bit5:ci, bit6:db_status */
     bool is_actived;
     uint64_t urma_jfs_sqe_base_addr; /* [Optional] SQ Queue Address (VA) */
-    uint32_t urma_jfs_id;     /* [Optional] the id of jfs */
-    uint64_t urma_jfs_db_addr; /* [Optional] SQ Queue Doorbell Address (VA) */
-    uint8_t urma_jfs_db_status; /* [Optional] JFS Doorbell status, used for live migration (0 invalid, 1 valid) */
-    uint16_t urma_jfs_pi;     /* [Optional] PI value of the JFS */
-    uint16_t urma_jfs_pi_type; /* [Optional] PI type, 0: absolute value, 1: cumulative value */
-    uint16_t urma_jfs_ci;     /* [Optional] CI value of the JFS */
+    uint32_t urma_jfs_id;            /* [Optional] the id of jfs */
+    uint64_t urma_jfs_db_addr;       /* [Optional] SQ Queue Doorbell Address (VA) */
+    uint8_t urma_jfs_db_status;      /* [Optional] JFS Doorbell status, used for live migration (0 invalid, 1 valid) */
+    uint16_t urma_jfs_pi;            /* [Optional] PI value of the JFS */
+    uint16_t urma_jfs_pi_type;       /* [Optional] PI type, 0: absolute value, 1: cumulative value */
+    uint16_t urma_jfs_ci;            /* [Optional] CI value of the JFS */
     uint64_t reserved[URMA_OPT_REVERSED_NUM];
 } urma_jfs_opt_t;
 
@@ -595,15 +595,15 @@ typedef union urma_jfr_flag {
                                       4: URMA_TOKEN_RESERVED */
         uint32_t tag_matching : 1; /* 0: URMA_NO_TAG_MATCHING.
                                       1: URMA_WITH_TAG_MATCHING. */
-        uint32_t lock_free    : 1;
-        uint32_t order_type   : 8; /* (0x0): default, auto config by driver */
-                                   /* (0x1): OT, target ordering */
-                                   /* (0x2): OI, initiator ordering */
-                                   /* (0x3): OL, low layer ordering */
-                                   /* (0x4): UNO, unreliable non ordering */
+        uint32_t lock_free : 1;
+        uint32_t order_type : 8; /* (0x0): default, auto config by driver */
+                                 /* (0x1): OT, target ordering */
+                                 /* (0x2): OI, initiator ordering */
+                                 /* (0x3): OL, low layer ordering */
+                                 /* (0x4): UNO, unreliable non ordering */
         uint32_t non_blocking : 1;
-        uint32_t has_drv_ext  : 1;
-        uint32_t reserved     : 17;
+        uint32_t has_drv_ext : 1;
+        uint32_t reserved : 17;
     } bs;
     uint32_t value;
 } urma_jfr_flag_t;
@@ -627,12 +627,12 @@ typedef struct urma_jfr_opt {
                                         bit5:ci, bit6:db_status */
     bool is_actived;
     uint64_t urma_jfr_rqe_base_addr; /* [Optional] RQ Queue Address (VA) */
-    uint32_t urma_jfr_id;     /* [Optional] the id of jfr */
-    uint64_t urma_jfr_db_addr; /* [Optional] RQ Queue Doorbell Address (VA) */
-    uint8_t urma_jfr_db_status; /* [Optional] JFR Doorbell status, used for live migration (0 invalid, 1 valid) */
-    uint16_t urma_jfr_pi;     /* [Optional] PI value of the JFR */
-    uint16_t urma_jfr_pi_type; /* [Optional] PI type, 0: absolute value, 1: cumulative value */
-    uint16_t urma_jfr_ci;     /* [Optional] CI value of the JFR */
+    uint32_t urma_jfr_id;            /* [Optional] the id of jfr */
+    uint64_t urma_jfr_db_addr;       /* [Optional] RQ Queue Doorbell Address (VA) */
+    uint8_t urma_jfr_db_status;      /* [Optional] JFR Doorbell status, used for live migration (0 invalid, 1 valid) */
+    uint16_t urma_jfr_pi;            /* [Optional] PI value of the JFR */
+    uint16_t urma_jfr_pi_type;       /* [Optional] PI type, 0: absolute value, 1: cumulative value */
+    uint16_t urma_jfr_ci;            /* [Optional] CI value of the JFR */
     uint64_t reserved[URMA_OPT_REVERSED_NUM];
 } urma_jfr_opt_t;
 
@@ -675,15 +675,15 @@ typedef struct urma_jfr {
 typedef union urma_import_jetty_flag {
     struct {
         uint32_t token_policy : 3;
-        uint32_t order_type   : 8; /* (0x0): default, auto config by driver */
-                                   /* (0x1): OT, target ordering */
-                                   /* (0x2): OI, initiator ordering */
-                                   /* (0x3): OL, low layer ordering */
-                                   /* (0x4): UNO, unreliable non ordering */
-        uint32_t share_tp     : 1; /* 1: shared tp; 0: non-shared tp. When rc mode is not ta dst ordering,
+        uint32_t order_type : 8; /* (0x0): default, auto config by driver */
+                                 /* (0x1): OT, target ordering */
+                                 /* (0x2): OI, initiator ordering */
+                                 /* (0x3): OL, low layer ordering */
+                                 /* (0x4): UNO, unreliable non ordering */
+        uint32_t share_tp : 1;   /* 1: shared tp; 0: non-shared tp. When rc mode is not ta dst ordering,
                                          this flag can only be set to 0. */
-        uint32_t has_drv_ext  : 1;
-        uint32_t reserved     : 19;
+        uint32_t has_drv_ext : 1;
+        uint32_t reserved : 19;
     } bs;
     uint32_t value;
     struct {
@@ -712,11 +712,11 @@ typedef struct urma_tp {
 
 typedef union urma_jetty_flag {
     struct {
-        uint32_t share_jfr    : 1; /* 0: URMA_NO_SHARE_JFR.
+        uint32_t share_jfr : 1; /* 0: URMA_NO_SHARE_JFR.
                                       1: URMA_SHARE_JFR. */
         uint32_t non_blocking : 1;
-        uint32_t has_drv_ext  : 1;
-        uint32_t reserved     : 29;
+        uint32_t has_drv_ext : 1;
+        uint32_t reserved : 29;
     } bs;
     uint32_t value;
 } urma_jetty_flag_t;
@@ -832,7 +832,7 @@ typedef union urma_jetty_grp_flag {
                                       2: URMA_TOKEN_SIGNED
                                       3: URMA_TOKEN_ALL_ENCRYPTED
                                       4: URMA_TOKEN_RESERVED */
-        uint32_t reserved     : 29;
+        uint32_t reserved : 29;
     } bs;
     uint32_t value;
 } urma_jetty_grp_flag_t;
@@ -867,54 +867,53 @@ typedef struct urma_ubva {
     uint64_t va;
 } __attribute__((packed)) urma_ubva_t;
 
-
 /* segment definition */
 typedef union urma_reg_seg_flag {
     struct {
-        uint32_t token_policy   : 3; /* 0: URMA_TOKEN_NONE.
+        uint32_t token_policy : 3; /* 0: URMA_TOKEN_NONE.
                                         1: URMA_TOKEN_PLAIN_TEXT.
                                         2: URMA_TOKEN_SIGNED.
                                         3: URMA_TOKEN_ALL_ENCRYPTED.
                                         4: URMA_TOKEN_RESERVED. */
-        uint32_t cacheable      : 1; /* 0: URMA_NON_CACHEABLE.
+        uint32_t cacheable : 1;    /* 0: URMA_NON_CACHEABLE.
                                         1: URMA_CACHEABLE. */
-        uint32_t dsva           : 1;
-        uint32_t access         : 6; /* (0x1): URMA_ACCESS_LOCAL_ONLY.
+        uint32_t dsva : 1;
+        uint32_t access : 6;         /* (0x1): URMA_ACCESS_LOCAL_ONLY.
                                         (0x1 << 1): URMA_ACCESS_READ.
                                         (0x1 << 2): URMA_ACCESS_WRITE.
                                         (0x1 << 3): URMA_ACCESS_ATOMIC. */
-        uint32_t non_pin        : 1; /* 0: segment pages pinned.
+        uint32_t non_pin : 1;        /* 0: segment pages pinned.
                                         1: segment pages non-pinned. */
-        uint32_t user_iova      : 1; /* 0: segment without user iova addr.
+        uint32_t user_iova : 1;      /* 0: segment without user iova addr.
                                         1: segment with user iova addr. */
         uint32_t token_id_valid : 1; /* 0: token id in cfg is invalid.
                                         1: token id in cfg is valid. */
-        uint32_t reserved       : 18;
+        uint32_t reserved : 18;
     } bs;
     uint32_t value;
 } urma_reg_seg_flag_t;
 
 typedef union urma_seg_attr {
     struct {
-        uint32_t token_policy  : 3; /* 0: URMA_TOKEN_NONE.
+        uint32_t token_policy : 3; /* 0: URMA_TOKEN_NONE.
                                        1: URMA_TOKEN_PLAIN_TEXT.
                                        2: URMA_TOKEN_SIGNED.
                                        3: URMA_TOKEN_ALL_ENCRYPTED.
                                        4: URMA_TOKEN_RESERVED. */
-        uint32_t cacheable     : 1; /* 0: URMA_NON_CACHEABLE.
+        uint32_t cacheable : 1;    /* 0: URMA_NON_CACHEABLE.
                                        1: URMA_CACHEABLE. */
-        uint32_t dsva          : 1;
-        uint32_t access        : 6; /* (0x1): URMA_ACCESS_LOCAL_ONLY.
+        uint32_t dsva : 1;
+        uint32_t access : 6;        /* (0x1): URMA_ACCESS_LOCAL_ONLY.
                                        (0x1 << 1): URMA_ACCESS_READ.
                                        (0x1 << 2): URMA_ACCESS_WRITE.
                                        (0x1 << 3): URMA_ACCESS_ATOMIC. */
-        uint32_t non_pin       : 1; /* 0: segment pages pinned.
+        uint32_t non_pin : 1;       /* 0: segment pages pinned.
                                        1: segment pages non-pinned. */
-        uint32_t user_iova     : 1; /* 0: segment without user iova addr.
+        uint32_t user_iova : 1;     /* 0: segment without user iova addr.
                                        1: segment with user iova addr. */
         uint32_t user_token_id : 1; /* 0: token_id is allocated and should be freed by urma.
                                        1: token_id is allocated by user in urma_seg_cfg. */
-        uint32_t reserved      : 18;
+        uint32_t reserved : 18;
     } bs;
     uint32_t value;
 } urma_seg_attr_t;
@@ -923,14 +922,14 @@ typedef union urma_import_seg_flag {
     struct {
         uint32_t cacheable : 1; /* 0: URMA_NON_CACHEABLE.
                                    1: URMA_CACHEABLE. */
-        uint32_t access    : 6; /*  (0x1): URMA_ACCESS_LOCAL_ONLY.
+        uint32_t access : 6;    /*  (0x1): URMA_ACCESS_LOCAL_ONLY.
                                     (0x1 << 1): URMA_ACCESS_READ.
                                     (0x1 << 2): URMA_ACCESS_WRITE.
                                     (0x1 << 3): URMA_ACCESS_ATOMIC.
                                 */
-        uint32_t mapping   : 1; /* 0: URMA_SEG_NOMAP/
+        uint32_t mapping : 1;   /* 0: URMA_SEG_NOMAP/
                                    1: URMA_SEG_MAPPED. */
-        uint32_t reserved  : 24;
+        uint32_t reserved : 24;
     } bs;
     uint32_t value;
 } urma_import_seg_flag_t;
@@ -938,7 +937,7 @@ typedef union urma_import_seg_flag {
 typedef union urma_token_id_flag {
     struct {
         uint32_t multi_seg : 1;
-        uint32_t reserved  : 31;
+        uint32_t reserved : 31;
     } bs;
     uint32_t value;
 } urma_token_id_flag_t;
@@ -1023,20 +1022,20 @@ typedef union urma_jfs_wr_flag {
                                           1: relax order
                                           2: strong order
                                           3: reserve */ /* see urma_place_order_t */
-        uint32_t comp_order       : 1; /* 0: There is no completion order with othwe WR.
+        uint32_t comp_order : 1;       /* 0: There is no completion order with othwe WR.
                                           1: Completion order with previous WR. */
-        uint32_t fence            : 1; /* 0: There is not fence.
+        uint32_t fence : 1;            /* 0: There is not fence.
                                           1: Fence with previous read and atomic WR */
         uint32_t solicited_enable : 1; /* 0: There is not solicited.
                                           1: solicited. It will trigger an event on remote side */
-        uint32_t complete_enable  : 1; /* 0: Do not notify local process after the task is complete.
+        uint32_t complete_enable : 1;  /* 0: Do not notify local process after the task is complete.
                                           1: Notify local process after the task is completed. */
-        uint32_t inline_flag      : 1; /* 0: not inline.
+        uint32_t inline_flag : 1;      /* 0: not inline.
                                           1: inline data. */
 
-        uint32_t db_bypass        : 1;
-        uint32_t has_drv_ext      : 1;
-        uint32_t reserved         : 23;
+        uint32_t db_bypass : 1;
+        uint32_t has_drv_ext : 1;
+        uint32_t reserved : 23;
     } bs;
     uint32_t value;
 } urma_jfs_wr_flag_t;
@@ -1045,7 +1044,7 @@ typedef union urma_jfr_wr_flag {
     struct {
         uint32_t complete_type : 1; /* 0: Write completion record to jfc.
                                        1: Write completion record to complete flag (CF) address */
-        uint32_t reserved      : 31;
+        uint32_t reserved : 31;
     } bs;
     uint32_t value;
 } urma_jfr_wr_flag_t;
@@ -1110,11 +1109,11 @@ typedef struct urma_jfr_wr {
 
 typedef union urma_cr_flag {
     struct {
-        uint8_t s_r            : 1; // Indicate CR stands for sending or receiving, 0: send, 1: recv.
-        uint8_t jetty          : 1; // Indicate CR stands for jetty or jfs/jfr, 0: jfs/jfr, 1: jetty.
-        uint8_t suspend_done   : 1; // Real CR associated with the WR, user_ctx is valid
+        uint8_t s_r : 1;            // Indicate CR stands for sending or receiving, 0: send, 1: recv.
+        uint8_t jetty : 1;          // Indicate CR stands for jetty or jfs/jfr, 0: jfs/jfr, 1: jetty.
+        uint8_t suspend_done : 1;   // Real CR associated with the WR, user_ctx is valid
         uint8_t flush_err_done : 1; // Real CR associated with the WR, user_ctx is valid
-        uint8_t reserved       : 4;
+        uint8_t reserved : 4;
     } bs;
     uint8_t value;
 } urma_cr_flag_t;
@@ -1168,7 +1167,7 @@ typedef union urma_ur_attr {
 
 typedef union urma_import_ur_flag {
     struct {
-        uint32_t mapping  : 2; /* 0: URMA_SEG_NOMAP
+        uint32_t mapping : 2; /* 0: URMA_SEG_NOMAP
                                   1: URMA_SEG_MAPPED_MVA
                                   2: URMA_SEG_MAPPED_DSVA */
         uint32_t reserved : 30;
@@ -1176,8 +1175,8 @@ typedef union urma_import_ur_flag {
     uint32_t value;
 } urma_import_ur_flag_t;
 
-#define UR_NAME_MAX_LEN          256
-#define JFR_NAME_MAX_LEN         256
+#define UR_NAME_MAX_LEN 256
+#define JFR_NAME_MAX_LEN 256
 #define URMA_MAX_SEGS_PER_UR_OPT 64 // Max number of SEGS per attach/detach ur
 
 // In parametre for create UR
@@ -1221,16 +1220,16 @@ typedef struct urma_jfr_info {
 
 typedef union urma_tp_cfg_flag {
     struct {
-        uint32_t target     : 1; /* 0: initiator, 1: target */
-        uint32_t loopback   : 1;
+        uint32_t target : 1; /* 0: initiator, 1: target */
+        uint32_t loopback : 1;
         uint32_t dca_enable : 1;
         /* for the bonding case, the hardware selects the port
          * ignoring the port of the tp context and
          * selects the port based on the hash value
          * along with the information in the bonding group table.
          */
-        uint32_t bonding    : 1;
-        uint32_t reserved   : 28;
+        uint32_t bonding : 1;
+        uint32_t reserved : 28;
     } bs;
     uint32_t value;
 } urma_tp_cfg_flag_t;
@@ -1248,37 +1247,37 @@ typedef struct urma_tp_cfg {
 
 typedef union urma_tp_attr_mask {
     struct {
-        uint32_t flag               : 1;
-        uint32_t peer_tpn           : 1;
-        uint32_t state              : 1;
-        uint32_t tx_psn             : 1;
-        uint32_t rx_psn             : 1; /* modify both rx psn and tx psn when restore tp */
-        uint32_t mtu                : 1;
-        uint32_t cc_pattern_idx     : 1;
-        uint32_t oos_cnt            : 1;
+        uint32_t flag : 1;
+        uint32_t peer_tpn : 1;
+        uint32_t state : 1;
+        uint32_t tx_psn : 1;
+        uint32_t rx_psn : 1; /* modify both rx psn and tx psn when restore tp */
+        uint32_t mtu : 1;
+        uint32_t cc_pattern_idx : 1;
+        uint32_t oos_cnt : 1;
         uint32_t local_net_addr_idx : 1;
-        uint32_t peer_net_addr      : 1;
-        uint32_t data_udp_start     : 1;
-        uint32_t ack_udp_start      : 1;
-        uint32_t udp_range          : 1;
-        uint32_t hop_limit          : 1;
-        uint32_t flow_label         : 1;
-        uint32_t port_id            : 1;
-        uint32_t mn                 : 1;
-        uint32_t peer_trans_type    : 1;
-        uint32_t reserved           : 14;
+        uint32_t peer_net_addr : 1;
+        uint32_t data_udp_start : 1;
+        uint32_t ack_udp_start : 1;
+        uint32_t udp_range : 1;
+        uint32_t hop_limit : 1;
+        uint32_t flow_label : 1;
+        uint32_t port_id : 1;
+        uint32_t mn : 1;
+        uint32_t peer_trans_type : 1;
+        uint32_t reserved : 14;
     } bs;
     uint32_t value;
 } urma_tp_attr_mask_t;
 
 typedef union urma_tp_mod_flag {
     struct {
-        uint32_t oor_en   : 1; /* out of order receive, 0: disable 1: enable */
-        uint32_t sr_en    : 1; /* selective retransmission, 0: disable 1: enable */
-        uint32_t cc_en    : 1; /* congestion control algorithm, 0: disable 1: enable */
-        uint32_t cc_alg   : 4; /* The value is ubcore_tp_cc_alg_t */
+        uint32_t oor_en : 1;   /* out of order receive, 0: disable 1: enable */
+        uint32_t sr_en : 1;    /* selective retransmission, 0: disable 1: enable */
+        uint32_t cc_en : 1;    /* congestion control algorithm, 0: disable 1: enable */
+        uint32_t cc_alg : 4;   /* The value is ubcore_tp_cc_alg_t */
         uint32_t spray_en : 1; /* spray with src udp port, 0: disable 1: enable */
-        uint32_t clan     : 1; /* clan domain, 0: disable 1: enable */
+        uint32_t clan : 1;     /* clan domain, 0: disable 1: enable */
         uint32_t reserved : 23;
     } bs;
     uint32_t value;
@@ -1331,13 +1330,13 @@ typedef struct urma_tp_attr {
 
 typedef union urma_get_tp_cfg_flag {
     struct {
-        uint32_t ctp             : 1;
-        uint32_t rtp             : 1;
-        uint32_t utp             : 1;
-        uint32_t uboe            : 1;
-        uint32_t pre_defined     : 1;
+        uint32_t ctp : 1;
+        uint32_t rtp : 1;
+        uint32_t utp : 1;
+        uint32_t uboe : 1;
+        uint32_t pre_defined : 1;
         uint32_t dynamic_defined : 1;
-        uint32_t reserved        : 26;
+        uint32_t reserved : 26;
     } bs;
     uint32_t value;
 } urma_get_tp_cfg_flag_t;
@@ -1373,16 +1372,16 @@ typedef struct urma_active_tp_cfg urma_bind_jetty_ex_cfg_t;
 #pragma pack(1)
 typedef struct urma_tp_attr_value {
     uint8_t retry_times_init : 3;
-    uint8_t at               : 5;
+    uint8_t at : 5;
     uint8_t sip[URMA_IP_ADDR_BYTES];
     uint8_t dip[URMA_IP_ADDR_BYTES];
     uint8_t sma[URMA_MAC_BYTES];
     uint8_t dma[URMA_MAC_BYTES];
     uint16_t vlan_id : 12;
-    uint8_t vlan_en  : 1;
-    uint8_t dscp     : 6;
+    uint8_t vlan_en : 1;
+    uint8_t dscp : 6;
     uint8_t at_times : 5;
-    uint8_t sl       : 4;
+    uint8_t sl : 4;
     uint8_t ttl;
     uint16_t ack_udp_srcport;
     uint16_t data_udp_srcport;

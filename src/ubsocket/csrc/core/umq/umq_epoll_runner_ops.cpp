@@ -9,16 +9,16 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "umq_epoll_runner_ops.h"
 #include "core/ubsocket_socket_set.h"
 #include "umq_backend.h"
 #include "umq_data_rx_ops.h"
-#include "umq_errno_converter.h"
-#include "umq_socket.h"
-#include "umq_setting.h"
-#include "umq_errno.h"
-#include "umq_pro_types.h"
 #include "umq_data_tx_ops.h"
-#include "umq_epoll_runner_ops.h"
+#include "umq_errno.h"
+#include "umq_errno_converter.h"
+#include "umq_pro_types.h"
+#include "umq_setting.h"
+#include "umq_socket.h"
 
 namespace ock {
 namespace ubs {
@@ -61,10 +61,8 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
             errno = UmqErrnoConverter::Convert(UmqOperation::READV, pollNum, savedErrno);
             UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for sub umq RX, local umq: %llu, "
                          "ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                         static_cast<unsigned long long>(umqSock->UmqHandle()),
-                         pollNum, errno,
-                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum),
-                         savedErrno);
+                         static_cast<unsigned long long>(umqSock->UmqHandle()), pollNum, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum), savedErrno);
         }
         if (umqSock->GetRx()->GetRxOps()->RearmRxInterrupt() < 0) {
             UBS_VLOG_ERR("Rearm sub umq failed, socket fd:%d\n", socket_object->raw_socket_);
@@ -161,8 +159,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
     return 0;
 }
 
-ALWAYS_INLINE std::unordered_set<Socket *>
-UmqEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count)
+ALWAYS_INLINE std::unordered_set<Socket *> UmqEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count)
 {
     std::unordered_set<Socket *> event_reach_sockets;
     for (int i = 0; i < count; ++i) {
@@ -208,9 +205,9 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::READV, rearmRet, savedErrno);
             UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for share jfr RX rearm, "
-                "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                static_cast<unsigned long long>(main_umq), rearmRet, errno,
-                UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, rearmRet), savedErrno);
+                         "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(main_umq), rearmRet, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, rearmRet), savedErrno);
         }
         event_num_ += events_cnt;
         if (event_num_ >= GET_PER_ACK) {

@@ -57,8 +57,8 @@ public:
 
 private:
     void HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t **buf, int pollNum);
-    uint32_t event_num_{ 0 };
-    std::unordered_map<int, uint64_t> jfr_main_umq_{ };
+    uint32_t event_num_{0};
+    std::unordered_map<int, uint64_t> jfr_main_umq_{};
     u_mutex_t *mutex_{nullptr};
 };
 } // namespace umq

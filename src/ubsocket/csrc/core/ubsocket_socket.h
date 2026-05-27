@@ -33,6 +33,7 @@ public:
     static Result Create(int fd, SocketType t, SocketPtr &sock);
 
     static Result GenerateSocketCommOps(const SocketPtr &sock);
+
 public:
     SocketBase(int fd, SocketType type) : Socket(fd, type) {}
     ~SocketBase() override = default;
@@ -49,8 +50,14 @@ public:
     void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data = {});
     int NotifyReadable();
 
-    DataRx *GetRx() {return &rx_;}
-    DataTx *GetTx() {return &tx_;}
+    DataRx *GetRx()
+    {
+        return &rx_;
+    }
+    DataTx *GetTx()
+    {
+        return &tx_;
+    }
 
 protected:
     static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);

@@ -32,8 +32,8 @@
 #include "ubsocket_lock.h"
 #include "ubsocket_logger.h"
 #include "ubsocket_obj_statistics.h"
+#include "ubsocket_profiling.h"
 #include "ubsocket_ref.h"
 #include "ubsocket_set.h"
-#include "ubsocket_profiling.h"
 
 #endif // UBS_COMM_UBSOCKET_INCLUDES_H

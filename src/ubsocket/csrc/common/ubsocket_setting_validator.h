@@ -108,7 +108,9 @@ struct StrNotEmptyRule {
     StrNotEmptyRule(const std::string &pKey, bool pRequired, uint32_t pMaxLen)
         : key(pKey),
           required(pRequired),
-          maxLen(pMaxLen) {}
+          maxLen(pMaxLen)
+    {
+    }
 
     bool Validate(const std::string &value) noexcept;
 
@@ -303,8 +305,8 @@ ALWAYS_INLINE bool Validator::ValidateStrEmpty(const std::string &key, const std
     }
 
     if (!(iter->second.Validate(value))) {
-        last_error_msg_ = "Invalid value for '" + tmpKey + "', should be max length " +
-            std::to_string(iter->second.maxLen);
+        last_error_msg_ =
+            "Invalid value for '" + tmpKey + "', should be max length " + std::to_string(iter->second.maxLen);
         return false;
     }
 

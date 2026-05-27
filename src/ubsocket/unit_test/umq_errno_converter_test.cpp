@@ -16,7 +16,7 @@ namespace {
 static const int UMQ_CUSTOM_ERR_1 = 0xFFFF;
 static const umq_buf_status_t UMQ_BUF_CUSTOM_ERR = static_cast<umq_buf_status_t>(257);
 static const int UMQ_INVALID_OPERATION = 999;
-}
+} // namespace
 
 class UmqErrnoConverterTest : public ::testing::Test {
 protected:
@@ -117,7 +117,6 @@ TEST_F(UmqErrnoConverterTest, ConvertGetState_ReadyReturnsZero)
 {
     EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::GET_STATE, QUEUE_STATE_READY), 0);
 }
-
 
 // ==================== ConvertBufStatus - Connect ====================
 
@@ -306,72 +305,72 @@ TEST_F(UmqErrnoConverterTest, Convert_InvalidOperation)
 
 TEST_F(UmqErrnoConverterTest, ConvertBufStatus_InvalidOperation)
 {
-    EXPECT_EQ(UmqErrnoConverter::ConvertBufStatus(static_cast<UmqOperation>(UMQ_INVALID_OPERATION),
-        UMQ_BUF_SUCCESS), EIO);
+    EXPECT_EQ(UmqErrnoConverter::ConvertBufStatus(static_cast<UmqOperation>(UMQ_INVALID_OPERATION), UMQ_BUF_SUCCESS),
+              EIO);
 }
 
 // ==================== GetErrorDescription ====================
 
 TEST_F(UmqErrnoConverterTest, GetErrorDescription_Success)
 {
-    const char* desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, UMQ_SUCCESS);
+    const char *desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, UMQ_SUCCESS);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Success");
 }
 
 TEST_F(UmqErrnoConverterTest, GetErrorDescription_ConnectEperm)
 {
-    const char* desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_EPERM);
+    const char *desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_EPERM);
     ASSERT_NE(desc, nullptr);
     EXPECT_STRNE(desc, "Unknown error");
 }
 
 TEST_F(UmqErrnoConverterTest, GetErrorDescription_ConnectEagain)
 {
-    const char* desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_EAGAIN);
+    const char *desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_EAGAIN);
     ASSERT_NE(desc, nullptr);
     EXPECT_STRNE(desc, "Unknown error");
 }
 
 TEST_F(UmqErrnoConverterTest, GetErrorDescription_ConnectEnomem)
 {
-    const char* desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_ENOMEM);
+    const char *desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_ENOMEM);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Out of memory");
 }
 
 TEST_F(UmqErrnoConverterTest, GetErrorDescription_ConnectEtimeout)
 {
-    const char* desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_ETIMEOUT);
+    const char *desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_ETIMEOUT);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Connection timed out");
 }
 
 TEST_F(UmqErrnoConverterTest, GetErrorDescription_ConnectEinprogress)
 {
-    const char* desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_EINPROGRESS);
+    const char *desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_EINPROGRESS);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Operation now in progress");
 }
 
 TEST_F(UmqErrnoConverterTest, GetErrorDescription_ConnectEtsegNonImported)
 {
-    const char* desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_ETSEG_NON_IMPORTED);
+    const char *desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_ERR_ETSEG_NON_IMPORTED);
     ASSERT_NE(desc, nullptr);
     EXPECT_STRNE(desc, "Unknown error");
 }
 
 TEST_F(UmqErrnoConverterTest, GetErrorDescription_UnknownError)
 {
-    const char* desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_CUSTOM_ERR_1);
+    const char *desc = UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, -UMQ_CUSTOM_ERR_1);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Unknown error");
 }
 
 TEST_F(UmqErrnoConverterTest, GetErrorDescription_InvalidOperation)
 {
-    const char* desc = UmqErrnoConverter::GetErrorDescription(static_cast<UmqOperation>(UMQ_INVALID_OPERATION),
-        UMQ_SUCCESS);
+    const char *desc =
+        UmqErrnoConverter::GetErrorDescription(static_cast<UmqOperation>(UMQ_INVALID_OPERATION), UMQ_SUCCESS);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Success");
 }
@@ -380,79 +379,71 @@ TEST_F(UmqErrnoConverterTest, GetErrorDescription_InvalidOperation)
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_ConnectSuccess)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::CONNECT, UMQ_BUF_SUCCESS);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::CONNECT, UMQ_BUF_SUCCESS);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Buffer operation success");
 }
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_ConnectUnsupportedOpcode)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(
-        UmqOperation::CONNECT, UMQ_BUF_UNSUPPORTED_OPCODE_ERR);
+    const char *desc =
+        UmqErrnoConverter::GetBufStatusDescription(UmqOperation::CONNECT, UMQ_BUF_UNSUPPORTED_OPCODE_ERR);
     ASSERT_NE(desc, nullptr);
     EXPECT_STRNE(desc, "Unknown buffer status");
 }
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_ConnectLocLenErr)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(
-        UmqOperation::CONNECT, UMQ_BUF_LOC_LEN_ERR);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::CONNECT, UMQ_BUF_LOC_LEN_ERR);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Message too long");
 }
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_ConnectRemAccessAbortErr)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(
-        UmqOperation::CONNECT, UMQ_BUF_REM_ACCESS_ABORT_ERR);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::CONNECT, UMQ_BUF_REM_ACCESS_ABORT_ERR);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Connection reset by peer");
 }
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_ConnectAckTimeoutErr)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(
-        UmqOperation::CONNECT, UMQ_BUF_ACK_TIMEOUT_ERR);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::CONNECT, UMQ_BUF_ACK_TIMEOUT_ERR);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Acknowledgement timeout");
 }
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_WritevRemOperationErr)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(
-        UmqOperation::WRITEV, UMQ_BUF_REM_OPERATION_ERR);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::WRITEV, UMQ_BUF_REM_OPERATION_ERR);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Broken pipe");
 }
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_WritevWrFlushErr)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(
-        UmqOperation::WRITEV, UMQ_BUF_WR_FLUSH_ERR);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::WRITEV, UMQ_BUF_WR_FLUSH_ERR);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Write flush error");
 }
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_ReadvRemOperationErr)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(
-        UmqOperation::READV, UMQ_BUF_REM_OPERATION_ERR);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::READV, UMQ_BUF_REM_OPERATION_ERR);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Connection reset by peer");
 }
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_ReadvWrFlushErr)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(
-        UmqOperation::READV, UMQ_BUF_WR_FLUSH_ERR);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::READV, UMQ_BUF_WR_FLUSH_ERR);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Connection reset by peer, write flush error");
 }
 
 TEST_F(UmqErrnoConverterTest, GetBufStatusDescription_UnknownBufStatus)
 {
-    const char* desc = UmqErrnoConverter::GetBufStatusDescription(
-        UmqOperation::CONNECT, UMQ_BUF_CUSTOM_ERR);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::CONNECT, UMQ_BUF_CUSTOM_ERR);
     ASSERT_NE(desc, nullptr);
     EXPECT_STREQ(desc, "Unknown buffer status");
 }
@@ -498,20 +489,17 @@ TEST_F(UmqErrnoConverterTest, ConvertConnect_FailWithSavedErrnoZero_NoOverride)
 
 TEST_F(UmqErrnoConverterTest, ConvertConnect_EnodevWithSavedErrnoEinval)
 {
-    EXPECT_EQ(UmqErrnoConverter::Convert(
-        UmqOperation::CONNECT, -UMQ_ERR_ENODEV, EINVAL), EINVAL);
+    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::CONNECT, -UMQ_ERR_ENODEV, EINVAL), EINVAL);
 }
 
 TEST_F(UmqErrnoConverterTest, ConvertConnect_EnodevWithSavedErrnoEio)
 {
-    EXPECT_EQ(UmqErrnoConverter::Convert(
-        UmqOperation::CONNECT, -UMQ_ERR_ENODEV, EIO), EIO);
+    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::CONNECT, -UMQ_ERR_ENODEV, EIO), EIO);
 }
 
 TEST_F(UmqErrnoConverterTest, ConvertConnect_EnodevWithSavedErrnoEnomem_NoOverride)
 {
-    EXPECT_EQ(UmqErrnoConverter::Convert(
-        UmqOperation::CONNECT, -UMQ_ERR_ENODEV, ENOMEM), ENODEV);
+    EXPECT_EQ(UmqErrnoConverter::Convert(UmqOperation::CONNECT, -UMQ_ERR_ENODEV, ENOMEM), ENODEV);
 }
 
 // ==================== ConvertHandleResult - CREATE ====================
@@ -540,20 +528,17 @@ TEST_F(UmqErrnoConverterTest, ConvertHandleResultCreate_ErrnoZero)
 
 TEST_F(UmqErrnoConverterTest, ConvertHandleResultBindInfoGet_ErrnoEinval)
 {
-    EXPECT_EQ(UmqErrnoConverter::ConvertHandleResult(
-        UmqOperation::BIND_INFO_GET, EINVAL), EINVAL);
+    EXPECT_EQ(UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, EINVAL), EINVAL);
 }
 
 TEST_F(UmqErrnoConverterTest, ConvertHandleResultBindInfoGet_ErrnoEnomem)
 {
-    EXPECT_EQ(UmqErrnoConverter::ConvertHandleResult(
-        UmqOperation::BIND_INFO_GET, ENOMEM), ENOMEM);
+    EXPECT_EQ(UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, ENOMEM), ENOMEM);
 }
 
 TEST_F(UmqErrnoConverterTest, ConvertHandleResultBindInfoGet_ErrnoEbusy)
 {
-    EXPECT_EQ(UmqErrnoConverter::ConvertHandleResult(
-        UmqOperation::BIND_INFO_GET, EBUSY), EIO);
+    EXPECT_EQ(UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, EBUSY), EIO);
 }
 
 TEST_F(UmqErrnoConverterTest, ConvertHandleResultBindInfoGet_ErrnoZero)

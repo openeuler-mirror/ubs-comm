@@ -11,14 +11,15 @@
 #ifndef UBS_COMM_UBSOCKET_SPSC_RING_QUEUE_H
 #define UBS_COMM_UBSOCKET_SPSC_RING_QUEUE_H
 
-#include <cstdint>
 #include <atomic>
-#include <vector>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace ock {
 namespace ubs {
-template <class T> class SPSCRingQueue {
+template <class T>
+class SPSCRingQueue {
 public:
     explicit SPSCRingQueue(uint64_t capacity) : buffer_(capacity), capacity_(capacity), mask_(capacity - 1UL)
     {
@@ -40,7 +41,8 @@ public:
         return true;
     }
 
-    template <typename InputIt> uint64_t MultiPush(InputIt begin, InputIt end) noexcept
+    template <typename InputIt>
+    uint64_t MultiPush(InputIt begin, InputIt end) noexcept
     {
         auto count = std::distance(begin, end);
         if (count == 0) {
@@ -76,7 +78,8 @@ public:
         return true;
     }
 
-    template <typename OutputIt> uint64_t MultiPop(OutputIt output, uint64_t max_count) noexcept
+    template <typename OutputIt>
+    uint64_t MultiPop(OutputIt output, uint64_t max_count) noexcept
     {
         auto wr = commit_write_.load(std::memory_order_acquire);
         auto available = wr - read_index_;
@@ -108,10 +111,10 @@ public:
 
 private:
     std::vector<T> buffer_;
-    alignas(64) uint64_t write_index_{ 0 };
-    alignas(64) uint64_t read_index_{ 0 };
-    std::atomic<uint64_t> commit_write_{ 0 };
-    std::atomic<uint64_t> commit_read_{ 0 };
+    alignas(64) uint64_t write_index_{0};
+    alignas(64) uint64_t read_index_{0};
+    std::atomic<uint64_t> commit_write_{0};
+    std::atomic<uint64_t> commit_read_{0};
     const uint64_t capacity_;
     const uint64_t mask_;
 };

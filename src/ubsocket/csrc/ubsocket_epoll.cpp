@@ -8,9 +8,9 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "core/ubsocket_socket_set.h"
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_event_epoll.h"
+#include "core/ubsocket_socket_set.h"
 #include "include/ubsocket.h"
 #include "under_api/dl_libc_api.h"
 
@@ -43,7 +43,7 @@ UBS_API int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epoll_event 
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::epoll_ctl(epfd, op, fd, event);
     }
-    
+
     EventPoll *eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);

@@ -162,9 +162,8 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
         errno = UmqErrnoConverter::Convert(UmqOperation::ACCEPT, umq_ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_bind() failed, ret: %d, mapped errno: %d(%s), "
                      "original errno: %d, operation duration: %lld ms.\n",
-                     umq_ret, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::ACCEPT, umq_ret),
-                     savedErrno, costms);
+                     umq_ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::ACCEPT, umq_ret), savedErrno,
+                     costms);
         return UBS_ERROR;
     }
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
@@ -218,8 +217,7 @@ Result UmqAcceptorOps::FillLocalSocketIdsForNegotiate(uint32_t *socket_ids, uint
 {
     std::vector<uint32_t> ids = UmqSetting::UMQ_ALL_SOCKET_IDS;
     if (ids.empty() || ids.size() > NEGOTIATE_SOCKET_ID_MAX_NUM) {
-        UBS_VLOG_ERR("Invalid local socket ids, size %zu, Peer IP:%s\n", ids.size(),
-                     umq_conn_info_.peer_ip.c_str());
+        UBS_VLOG_ERR("Invalid local socket ids, size %zu, Peer IP:%s\n", ids.size(), umq_conn_info_.peer_ip.c_str());
         return UBS_ERROR;
     }
     socket_id_count = static_cast<uint32_t>(ids.size());
@@ -269,8 +267,8 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, 
     rsp.ret_code = (UmqSetting::UMQ_IS_BONDING == (req.is_bonding != 0)) ? 0 : -1;
     rsp.local_eid = connEid;
     if (UNLIKELY(rsp.ret_code != 0)) {
-        UBS_VLOG_ERR("client bonding mode is not equal to server bonding mode, client:%d, server:%d\n",
-                     req.is_bonding, UmqSetting::UMQ_IS_BONDING);
+        UBS_VLOG_ERR("client bonding mode is not equal to server bonding mode, client:%d, server:%d\n", req.is_bonding,
+                     UmqSetting::UMQ_IS_BONDING);
     }
     if (UNLIKELY(rsp.ret_code != 0 || req.is_bonding == 0)) {
         if (SocketConnHelper::SendSocketData(fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) !=
@@ -291,7 +289,7 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, 
     if (SocketConnHelper::RecvSocketData(fd, &negoRoute, sizeof(NegotiateRoute), CONTROL_PLANE_TIMEOUT_MS) !=
         sizeof(NegotiateRoute)) {
         UBS_VLOG_ERR("Failed to receive remote negoritate route in accept, Peer IP:%s, fd: %d\n",
-                        conn_info.peer_ip.c_str(), fd);
+                     conn_info.peer_ip.c_str(), fd);
         return UBS_ERROR;
     }
     conn_route_ = negoRoute.master_route;
@@ -301,7 +299,7 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, 
     int checkResult = CheckDevAdd(conn_route_.dst_eid);
     if (checkResult != 0) {
         UBS_VLOG_ERR("CheckDevAdd() failed in accept, Peer IP:%s, fd: %d, ret: %d\n", conn_info.peer_ip.c_str(), fd,
-                        checkResult);
+                     checkResult);
         return UBS_ERROR;
     }
 
@@ -357,8 +355,8 @@ Result UmqAcceptorOps::CheckDevAdd(const umq_eid_t &connEid)
     if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::ACCEPT, ret, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] umq_dev_add() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::ACCEPT, ret), savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_dev_add() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n", ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::ACCEPT, ret), savedErrno);
         return UBS_ERROR;
     }
 

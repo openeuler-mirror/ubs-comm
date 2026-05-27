@@ -53,7 +53,8 @@ public:
     // Flush
     virtual void FlushTx(const SocketPtr &sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) = 0;
 
-    virtual void WakeUpTx(Socket* sock) = 0;
+    virtual void WakeUpTx(Socket *sock) = 0;
+
 public:
     int fd_ = -1;
     uint16_t tx_queue_avail_num_ = 0; // current window size for TX

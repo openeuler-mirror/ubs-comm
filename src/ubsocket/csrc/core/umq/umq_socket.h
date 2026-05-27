@@ -117,8 +117,8 @@ public:
                               struct epoll_event *event) override;
     int GetTxFd() override;
 
-    Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, 
-    umq_eid_t *conn_eid_used, umq_topo_type_t &topo_type);
+    Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used,
+                          umq_topo_type_t &topo_type);
     Result PrefillRx();
     void UnbindAndFlushRemoteUmq(const SocketPtr &sock);
     void DestroyLocalUmq();
@@ -182,7 +182,11 @@ struct NegotiateRoute {
     umq_route back_route;
     NegotiateRoute() = default;
     NegotiateRoute(umq_topo_type_t t_type, const umq_route &m_route, const umq_route &b_route)
-        : topo_type(t_type), master_route(m_route), back_route(b_route) {}
+        : topo_type(t_type),
+          master_route(m_route),
+          back_route(b_route)
+    {
+    }
 };
 
 #ifndef EID_FMT

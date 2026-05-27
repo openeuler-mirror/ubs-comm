@@ -31,7 +31,7 @@ using umq_state_get_api = umq_state_t (*)(uint64_t umqh);
 using umq_buf_alloc_api = umq_buf_t *(*)(uint32_t request_size, uint32_t request_qbuf_num, uint64_t umqh,
                                          umq_alloc_option_t *option);
 using umq_buf_free_api = void (*)(umq_buf_t *qbuf);
-using umq_buf_break_and_free_api = umq_buf_t *(*)(umq_buf_t *qbuf);
+using umq_buf_break_and_free_api = umq_buf_t *(*)(umq_buf_t * qbuf);
 using umq_buf_headroom_reset_api = int (*)(umq_buf_t *qbuf, uint16_t headroom_size);
 using umq_buf_reset_api = int (*)(umq_buf_t *qbuf);
 using umq_data_to_head_api = umq_buf_t *(*)(void *data);
@@ -49,7 +49,7 @@ using umq_log_config_set_api = int (*)(umq_log_config_t *config);
 using umq_log_config_get_api = int (*)(umq_log_config_t *config);
 using umq_dev_add_api = int (*)(umq_trans_info_t *trans_info);
 using umq_get_route_list_api = int (*)(const umq_route_key_t *route_key, umq_trans_mode_t umq_trans_mode,
-                                        umq_route_list_t *route_list);
+                                       umq_route_list_t *route_list);
 using umq_user_ctl_api = int (*)(uint64_t umqh, umq_user_ctl_in_t *in, umq_user_ctl_out_t *out);
 using umq_mempool_state_get_api = int (*)(uint64_t umqh, uint32_t mempool_id, umq_mempool_state_t *mempool_state);
 using umq_mempool_state_refresh_api = int (*)(uint64_t umqh, uint32_t mempool_id);

@@ -167,8 +167,8 @@ int UmqTxOps::PollTx(const SocketPtr &sock)
         // handle tx epollin epoll event
         do {
             if (GetAndAckEvent() < 0) {
-                UBS_VLOG_ERR("[UMQ_API] WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n",
-                             fd_, -1, errno, Func::Error2Str(errno));
+                UBS_VLOG_ERR("[UMQ_API] WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_,
+                             -1, errno, Func::Error2Str(errno));
                 return -1;
             }
             // set poll_to_empty, means poll at least m_tx.m_retrieve_threshold TX CQE
@@ -245,13 +245,13 @@ int UmqTxOps::PollUmqTx(const SocketPtr &sock, bool poll_to_empty)
     return 0;
 }
 
-void UmqTxOps::WakeUpTx(Socket* sock)
+void UmqTxOps::WakeUpTx(Socket *sock)
 {
     bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (need_fc_awake && eventfd_write(sockBase->event_fd_, 1) == -1) {
         UBS_VLOG_INFO("eventfd_write() failed, event fd: %d, raw sock fd %d: errno: %d, errmsg: %s\n",
-            sockBase->event_fd_, sockBase->raw_socket_, errno, Func::Error2Str(errno));
+                      sockBase->event_fd_, sockBase->raw_socket_, errno, Func::Error2Str(errno));
     }
 }
 
@@ -348,12 +348,9 @@ bool UmqTxOps::HandleProbePacket(umq_buf_t *qbuf)
 void UmqTxOps::HandleErrorTxCqe(umq_buf_t *buf)
 {
     auto bufStatus = static_cast<umq_buf_status_t>(buf->status);
-    int mappedErrno = UmqErrnoConverter::ConvertBufStatus(UmqOperation::WRITEV,
-        bufStatus, errno);
-    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::WRITEV,
-        bufStatus);
-    UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n",
-        buf->status, mappedErrno, desc);
+    int mappedErrno = UmqErrnoConverter::ConvertBufStatus(UmqOperation::WRITEV, bufStatus, errno);
+    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::WRITEV, bufStatus);
+    UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n", buf->status, mappedErrno, desc);
 
     switch (buf->status) {
         case UMQ_BUF_SUCCESS:

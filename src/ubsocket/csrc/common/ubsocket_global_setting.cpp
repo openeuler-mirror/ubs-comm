@@ -65,17 +65,17 @@ char GlobalSetting::UBS_TRACE_FILE_PATH[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = "";
 void GlobalSetting::AddRules() noexcept
 {
     /* int64 rule: name, required, min, max */
-    Int64Rule rules_int64[] = {{ENV_ASYNC_ACCEPTOR, false, 0, 8L},
-                               {ENV_ASYNC_CONNECTOR, false, 0, 8L},
-                               {ENV_ASYNC_EPOLL, false, 1, 1L},
-                               {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240},
-                               {ENV_UBS_RX_DEPTH, false, 2, UINT32_MAX},
-                               {ENV_UBS_TX_DEPTH, false, 2, UINT32_MAX},
-                               {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5},
-                               {ENV_TRACE_TIME, false, UBSOCKET_TRACE_TIME_MIN, UBSOCKET_TRACE_TIME_MAX},
-                               {ENV_TRACE_FILE_SIZE, false, UBSOCKET_TRACE_FILE_SIZE_MIN, UBSOCKET_TRACE_FILE_SIZE_MAX},
-                               {ENV_TRACE_FILE_PATH, false,
-                                UBSOCKET_TRACE_FILE_PATH_LEN_MIN, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
+    Int64Rule rules_int64[] = {
+        {ENV_ASYNC_ACCEPTOR, false, 0, 8L},
+        {ENV_ASYNC_CONNECTOR, false, 0, 8L},
+        {ENV_ASYNC_EPOLL, false, 1, 1L},
+        {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240},
+        {ENV_UBS_RX_DEPTH, false, 2, UINT32_MAX},
+        {ENV_UBS_TX_DEPTH, false, 2, UINT32_MAX},
+        {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5},
+        {ENV_TRACE_TIME, false, UBSOCKET_TRACE_TIME_MIN, UBSOCKET_TRACE_TIME_MAX},
+        {ENV_TRACE_FILE_SIZE, false, UBSOCKET_TRACE_FILE_SIZE_MIN, UBSOCKET_TRACE_FILE_SIZE_MAX},
+        {ENV_TRACE_FILE_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MIN, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, false, "true|false"},
@@ -220,8 +220,7 @@ Result GlobalSetting::LoadEnv() noexcept
     }
 
     if (GetEnvAndValidate(ENV_TRACE_FILE_PATH, strEnvValue)) {
-        (void)snprintf(UBS_TRACE_FILE_PATH, sizeof(UBS_TRACE_FILE_PATH),
-            "%s", strEnvValue);
+        (void)snprintf(UBS_TRACE_FILE_PATH, sizeof(UBS_TRACE_FILE_PATH), "%s", strEnvValue);
     }
 
     return UBS_OK;

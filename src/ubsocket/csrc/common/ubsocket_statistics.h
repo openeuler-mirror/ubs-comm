@@ -30,7 +30,7 @@ public:
         TX_BYTE_COUNT,
         TX_ERROR_PACKET_COUNT,
         TX_LOST_PACKET_COUNT,
-        
+
         TRACE_STATE_TYPE_MAX
     };
 
@@ -66,7 +66,8 @@ public:
         return mReTxCount.load(std::memory_order_relaxed);
     }
 
-    static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss, uint32_t pid) {
+    static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss, uint32_t pid)
+    {
         constexpr int timeBufSize = 32;
         time_t now = time(nullptr);
         char timeBuf[timeBufSize];
@@ -155,19 +156,13 @@ protected:
     const char *GetStatsStr(enum trace_stats_type type)
     {
         const static char *state_type_str[TRACE_STATE_TYPE_MAX] = {
-            "totalConnections",
-            "activeConnections",
-            "sendPackets",
-            "receivePackets",
-            "sendBytes",
-            "receiveBytes",
-            "errorPackets",
-            "lostPackets",
+            "totalConnections", "activeConnections", "sendPackets",  "receivePackets",
+            "sendBytes",        "receiveBytes",      "errorPackets", "lostPackets",
         };
 
         return state_type_str[type];
     }
-    
+
     void OutputStats(std::ostringstream &oss)
     {
         if (!m_stats_enable) {
@@ -179,6 +174,6 @@ protected:
     bool m_stats_enable = false;
 };
 
-};
+}; // namespace Statistics
 
 #endif
