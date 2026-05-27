@@ -1132,24 +1132,16 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
         const uintptr_t segAddr = reinterpret_cast<uintptr_t>(req.address) + segOffset;
         extHeader.offset = segOffset;
 
-        // Callback *newCallback = std::shared_ptr<Callback>(UBSHcomNewCallback(SyncCallCbForWorkerPoll, std::placeholders::_1, &rsp, &syncParam));
-        // if (NN_UNLIKELY(newCallback == nullptr)) {
-        //     NN_LOG_ERROR("Sync call split malloc callback failed");
-        //     return SER_NEW_OBJECT_FAILED;
-        // }
-
         Callback *cb = UBSHcomNewCallback(
             [segIndex, fragmentNum, &rsp, &syncParam](UBSHcomServiceContext &context) {
                 NN_LOG_DEBUG("Run CB [" << (segIndex + 1) << "/" << fragmentNum << "], result " << context.Result());
                 if (segIndex == fragmentNum - 1) {
-                    // const_cast<Callback *>(newCallback)->Run(context);
                     SyncCallCbForWorkerPoll(context, &rsp, &syncParam);
                 }
             },
                 std::placeholders::_1);
         if (!cb) {
             NN_LOG_ERROR("Sync call split malloc callback failed");
-            // delete newCallback;
             return SER_NEW_OBJECT_FAILED;
         }
 
@@ -1158,7 +1150,6 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
         if (result != SER_OK) {
             NN_LOG_ERROR("Prepare timer context failed when sending [" << (segIndex + 1) << "/" << fragmentNum << "]");
             delete cb;
-            // delete newCallback;
             return result;
         }
 
@@ -1178,7 +1169,6 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
             NN_LOG_ERROR("SyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
                          "] failed");
             DestroyTimerContext(context);
-            // delete newCallback;
             return result;
         }
         NN_LOG_DEBUG("SyncCallSplitWithWorkerPoll fragment [" << (segIndex + 1) << "/" << fragmentNum << "] end");
