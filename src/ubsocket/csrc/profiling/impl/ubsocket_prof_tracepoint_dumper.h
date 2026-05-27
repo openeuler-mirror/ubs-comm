@@ -95,9 +95,11 @@ private:
         pthread_setname_np(pthread_self(), "ubs_prof");
 
         while (running_) {
-            // interval time
+#ifdef UBSOCKET_UNIT_TEST
+            std::this_thread::sleep_for(std::chrono::seconds(interval_min_));
+#else
             std::this_thread::sleep_for(std::chrono::minutes(interval_min_));
-            // execute dump
+#endif
             DumpData();
         }
     }
