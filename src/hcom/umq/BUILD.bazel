@@ -38,7 +38,7 @@ cc_library(
     copts = UMQ_DEFAULT_STATIC_COPTS + [
         "-DUMQ_STATIC_LIB",
     ],
-    linkopts = ["-lpthread", "-lurma", "-ltpsa"],
+    linkopts = ["-lpthread"],
     deps = [
         "//src/hcom/umq/include:framework_headers",
         "//src/hcom/umq/include:umq_headers",
