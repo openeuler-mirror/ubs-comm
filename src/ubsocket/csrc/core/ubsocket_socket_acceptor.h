@@ -15,7 +15,6 @@
 #include "ubsocket_core_types.h"
 #include "ubsocket_socket_helper.h"
 #include "ubsocket_wakeup_event.h"
-
 namespace ock {
 namespace ubs {
 
@@ -73,10 +72,12 @@ public:
     static constexpr int kNegotiateTimeoutMs = 10000;
 
 private:
-    // ======================== Accept 主流程辅助函数 ========================
     bool TryPopAsyncReadyFd(int &fd, struct sockaddr *address, socklen_t *address_len);
     void ProcessUBConnection(int fd, const std::string &peerIp);
     Result DoAccept(int new_fd, const std::string &peerIp);
+
+    // 懒初始化：启动 ExecutorService + 初始化 wakeup_event_
+    void InitWakeupEvent();
 
     // ======================== Accept 其他辅助函数 ========================
     // TODO: 将 connect 和 accept 完全共用但是与 accept 和 connect 无关的函数提取出来
@@ -106,6 +107,7 @@ private:
         std::atomic<int32_t> asyncTaskNum{0U};
         u_mutex_t *lock = nullptr;
     } ubSocket_async_accept_info;
+    // 唤醒机制：异步Accept任务完成后，通过 WakeUpReadyEventFd() 写 eventfd 唤醒 epoll_wait
     UbsocketWakeupEvent wakeup_event_;
 };
 

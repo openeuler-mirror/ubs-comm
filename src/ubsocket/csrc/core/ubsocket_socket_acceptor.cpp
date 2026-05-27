@@ -22,13 +22,12 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
 {
     int fd = -1;
     // 1. 异步accept模式下，从ready_queue中取fd
-    if (GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED && TryPopAsyncReadyFd(fd, address, address_len)) {
+    if (GlobalSetting::AsyncAcceptorEnabled() && TryPopAsyncReadyFd(fd, address, address_len)) {
         return fd;
     }
-
     // 2. 同步accept模式下，TCP 建链，返回fd
     struct sockaddr addr_tmp;
-    socklen_t len_tmp;
+    socklen_t len_tmp = sizeof(addr_tmp); // 初始化 addrlen
     fd = LibcApi::accept(raw_fd_, &addr_tmp, &len_tmp);
     if (fd >= 0) {
         // 前置判断，如果不是TFO连接，作为普通TCP连接处理
@@ -40,14 +39,12 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
             UBS_VLOG_WARN("Set TCP_NODELAY failed, fd %d, ret %d, errno %d\n", fd, tcpNoDelayRet, errno);
         }
     }
-
     std::string peerIp;
     if (fd >= 0 && address != nullptr) {
         *address = addr_tmp;
         *address_len = len_tmp;
         // 使用提取的接口获取IP地址
         peerIp = SocketConnHelper::ExtractIpFromSockAddr(address);
-
         SocketPtr sock_obj = SocketSet::Instance().GetSocket(fd);
         if (sock_obj != nullptr) {
             auto sockBase = RefConvert<Socket, SocketBase>(sock_obj);
@@ -59,16 +56,15 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         return fd;
     }
-
     if (fd < 0) {
         /*
-        * 1. 若全连接队列不为空：
-        * a. 正常情况下，返回非负整数的fd，tcp连接已完成，则执行DoAccept，且需要等待ub连接完成再返回，
-        * b. 异常情况下，比如内存不足、文件描述符达到系统上限、客户端异常中止连接等，保持原错误码直接返回上层，由上层应用决定后续动作
-        * 2. 若全连接队列为空：
-        * a. fd为非阻塞，则返回-1，errno为EAGAIN/EWOULDBLOCK，保持原错误码直接返回上层
-        * b. fd为阻塞，则等待直到有连接完成或者触发异常，比如被信号中断，返回-1，errno为EINTR，保持原错误码直接返回上层
-        */
+         * 1. 若全连接队列不为空：
+         * a. 正常情况下，返回非负整数的fd，tcp连接已完成，则执行DoAccept，且需要等待ub连接完成再返回，
+         * b. 异常情况下，比如内存不足、文件描述符达到系统上限、客户端异常中止连接等，保持原错误码直接返回上层，由上层应用决定后续动作
+         * 2. 若全连接队列为空：
+         * a. fd为非阻塞，则返回-1，errno为EAGAIN/EWOULDBLOCK，保持原错误码直接返回上层
+         * b. fd为阻塞，则等待直到有连接完成或者触发异常，比如被信号中断，返回-1，errno为EINTR，保持原错误码直接返回上层
+         */
         if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) { // nonblocking
             UBS_VLOG_ERR("accept() failed, Peer IP:%s, fd: %d, ret: %d, errno: %d, errmsg: %s\n", GetPeerIp().c_str(),
                          sock->raw_socket_, fd, errno, Func::Error2Str(errno));
@@ -77,28 +73,25 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         UBS_VLOG_DEBUG("tcp accept need try again, fd: %d, %d, %s\n", sock->raw_socket_, errno, Func::Error2Str(errno));
         return fd;
     }
-
     // 异步/同步
-    // TODO: 异步和同步的分两个函数
-    if (GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED) {
+    if (GlobalSetting::AsyncAcceptorEnabled()) {
+        // 懒初始化：启动 ExecutorService + 初始化 wakeup_event_
+        InitWakeupEvent();
+        UBS_VLOG_INFO("async accept execute. fd:%d", fd);
         auto exec_ret = ExecutorService::GetExecutorService()->Execute([this, fd, addr_tmp, len_tmp]() {
-            UBS_VLOG_DEBUG("async accept start. fd:%d\n", fd);
+            UBS_VLOG_INFO("async accept start. fd:%d\n", fd);
             std::string ip = SocketConnHelper::ExtractIpFromSockAddr(&addr_tmp);
             ProcessUBConnection(fd, ip);
             {
                 Locker sLock(ubSocket_async_accept_info.lock);
                 ubSocket_async_accept_info.ready_queue.push(std::make_tuple(fd, addr_tmp, len_tmp));
             }
-
-            EpollMapper *mapper = GetSocketEpollMapper(fd);
-            int epoll_fd = mapper->QueryFirst();
-            if (epoll_fd >= 0) {
-                wakeup_event_.Initialize(epoll_fd);
-                wakeup_event_.WakeUpReadyEventFd(fd);
-            }
+            // 直接调用 WakeUpReadyEventFd() 写 eventfd，触发 epoll_wait 返回
+            wakeup_event_.WakeUpReadyEventFd(raw_fd_);
             ubSocket_async_accept_info.asyncTaskNum.fetch_sub(1U);
-            UBS_VLOG_DEBUG("async accept success. fd:%d\n", fd);
+            UBS_VLOG_INFO("async accept success. fd:%d\n", fd);
         });
+        UBS_VLOG_INFO("Execute end. exec_ret:%d\n", exec_ret);
         if (exec_ret == true) {
             ubSocket_async_accept_info.asyncTaskNum.fetch_add(1U);
         } else {
@@ -123,21 +116,19 @@ void Acceptor::SetAcceptorOps(const AcceptorOpsPtr &acceptor_ops)
 // ======================== Accept 主流程辅助函数 ========================
 bool Acceptor::TryPopAsyncReadyFd(int &fd, struct sockaddr *address, socklen_t *address_len)
 {
-#ifdef ENABLED
-    Locker sLock(AsyncAcceptInfo.lock);
-    if (!AsyncAcceptInfo.ready_queue.empty()) {
-        auto tmp = AsyncAcceptInfo.ready_queue.front();
-        AsyncAcceptInfo.ready_queue.pop();
+    Locker sLock(ubSocket_async_accept_info.lock);
+    if (!ubSocket_async_accept_info.ready_queue.empty()) {
+        auto tmp = ubSocket_async_accept_info.ready_queue.front();
+        ubSocket_async_accept_info.ready_queue.pop();
         fd = std::get<0>(tmp);
         if (address != nullptr) {
             *address = std::get<1>(tmp);
             *address_len = std::get<2>(tmp);
         }
         UBS_VLOG_DEBUG("found ready fd, return directly, fd %d\n", fd);
-        return fd;
+        return true;
     }
-#endif
-    return true;
+    return false;
 }
 
 void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
@@ -217,6 +208,46 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
     PROF_END(CORE_ACCEPT, true);
     return UBS_OK;
+}
+
+// ======================== 异步 Accept 唤醒初始化 ========================
+void Acceptor::InitWakeupEvent()
+{
+    static std::once_flag initFlag;
+    std::call_once(initFlag, [this]() {
+        // 1. 启动 ExecutorService 线程池
+        auto exec_service = ExecutorService::GetExecutorService();
+        if (!exec_service->Start()) {
+            UBS_VLOG_ERR("Failed to start ExecutorService for async accept");
+        }
+
+        // 2. 初始化 wakeup_event_：获取 epoll_fd，注册 eventfd 进 epoll
+        EpollMapper *mapper = GetSocketEpollMapper(raw_fd_);
+        if (mapper == nullptr) {
+            UBS_VLOG_ERR("async accept: mapper==nullptr, fd=%d\n", raw_fd_);
+            return;
+        }
+        int epoll_fd = mapper->QueryFirst();
+        if (epoll_fd < 0) {
+            UBS_VLOG_ERR("async accept: epoll_fd<0, fd=%d\n", raw_fd_);
+            return;
+        }
+
+        wakeup_event_.Initialize(epoll_fd);
+        wakeup_event_.SetListenFd(raw_fd_);
+        UBS_VLOG_INFO("async accept: wakeup_event_ init, epoll_fd=%d, listen_fd=%d\n", epoll_fd, raw_fd_);
+
+        auto *aep = (AsyncEventPoll *)ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
+        if (aep != nullptr) {
+            aep->SetWakeupCallback(wakeup_event_.GetReadyEvent(),
+                                   [this](struct epoll_event *ev, int me, std::unordered_map<int, EpollEvent *> &sd) {
+                                       return wakeup_event_.ProcessReadyEvents(ev, me, sd);
+                                   });
+            UBS_VLOG_INFO("async accept: SetWakeupCallback() called for epoll_fd: %d\n", epoll_fd);
+        } else {
+            UBS_VLOG_ERR("async accept: failed to get AsyncEventPoll for epoll_fd: %d\n", epoll_fd);
+        }
+    });
 }
 
 int Acceptor::Listen(int backlog)

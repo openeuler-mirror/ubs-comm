@@ -42,7 +42,7 @@ int UbsocketWakeupEvent::Initialize(int epollFd)
     }
 
     struct epoll_event event{};
-    event.events = EPOLLIN | EPOLLET;
+    event.events = EPOLLIN;
     event.data.ptr = &ready_event_;
     int ret = epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &event);
     if (UNLIKELY(ret < 0)) {
@@ -81,11 +81,6 @@ void UbsocketWakeupEvent::WakeUpReadyEventFd(int fd)
         return;
     }
 
-    {
-        Locker sLock(ready_event_mutex_);
-        ready_event_queue_.push(fd);
-    }
-
     uint64_t notification = 1;
     if (eventfd_write(readyEventFd_, notification) < 0) {
         UBS_VLOG_ERR("UbsocketWakeupEvent: WakeUpReadyEventFd eventfd_write failed.\n");
@@ -95,21 +90,24 @@ void UbsocketWakeupEvent::WakeUpReadyEventFd(int fd)
 int UbsocketWakeupEvent::ProcessReadyEvents(struct epoll_event *events, int maxevents,
                                             std::unordered_map<int, EpollEvent *> &socket_data)
 {
-    int num = 0;
-    Locker sLock(ready_event_mutex_);
-
-    while (!ready_event_queue_.empty() && num < maxevents) {
-        int fd = ready_event_queue_.front();
-        ready_event_queue_.pop();
-
-        auto it = socket_data.find(fd);
-        if (it != socket_data.end()) {
-            events[num].events = EPOLLIN;
-            events[num].data.ptr = it->second;
-            num++;
-        }
+    // Step 1: consume the eventfd counter (wakeup notification)
+    uint64_t u;
+    ssize_t s = read(readyEventFd_, &u, sizeof(uint64_t));
+    if (s != sizeof(uint64_t)) {
+        UBS_VLOG_ERR("UbsocketWakeupEvent: ProcessReadyEvents read failed\n");
     }
-    return num;
+    // Step2: 通过 listen_fd_ 从 socket_data 取出对应的 EpollEvent*
+    //         填到 events[0].data.ptr，使 ArrangeWakeUpEvents 能索引到原始 socketid
+    auto it = socket_data.find(listen_fd_);
+    if (UNLIKELY(it == socket_data.end())) {
+        UBS_VLOG_ERR("UbsocketWakeupEvent: listen_fd_=%d not found in socket_data\n", listen_fd_);
+        return 0;
+    }
+    events[0] = it->second->event;
+
+    UBS_VLOG_INFO("UbsocketWakeupEvent: ProcessReadyEvents done, pending:%llu, listen_fd:%d, epollEvent:%p\n",
+                  (unsigned long long)u, listen_fd_, it->second);
+    return 1;
 }
 
 } // namespace ubs

@@ -86,9 +86,17 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     GlobalSetting::LoadEnv();
 
     GlobalSetting::UBS_ALLOWED_PROTOCOL = options->allowed_protocol;
-    GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = options->async_acceptor_thread_count;
-    GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = options->async_connector_thread_count;
-    GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = options->async_epoll_thread_count;
+    // 只有当命令行参数非默认值时，才覆盖环境变量的值
+    // 0 是默认值，表示用户没有显式设置
+    if (options->async_acceptor_thread_count > 0) {
+        GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = options->async_acceptor_thread_count;
+    }
+    if (options->async_connector_thread_count > 0) {
+        GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = options->async_connector_thread_count;
+    }
+    if (options->async_epoll_thread_count > 0) {
+        GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = options->async_epoll_thread_count;
+    }
 
     auto result = GlobalSetting::VerifySetting();
     if (result != UBS_OK) {
