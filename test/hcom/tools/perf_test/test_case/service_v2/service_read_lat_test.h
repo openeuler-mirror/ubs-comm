@@ -22,59 +22,50 @@ private:
 
     inline int DoPostRead()
     {
-        volatile uint64_t *pollData = reinterpret_cast<uint64_t *>(mPollMrInfo.lAddress);
-        volatile uint64_t *postData = reinterpret_cast<uint64_t *>(mPostMrInfo.lAddress);
-        uint64_t num = 0;
-        *pollData = num;
-        *postData = num;
-        PerfTestContext *ctx = GetPerfTestContext();
-        ctx->cnt = 0;
-        rcnt = 0;
-        ccnt.store(0);
-        while (ctx->cnt < ctx->mIterations || rcnt < ctx->mIterations ||
-            static_cast<uint64_t>(ccnt.load()) < ctx->mIterations) {
-            if (rcnt < ctx->mIterations && !(ctx->cnt < 1 && !mCfg.GetIsServer())) {
-                rcnt++;
-                while ((*pollData != rcnt) && ctx->cnt < ctx->mIterations)
-                    ;
-            }
-            if (ctx->cnt < ctx->mIterations) {
-                ++ctx->cnt;
-                ock::hcom::Callback *newCallback = ock::hcom::UBSHcomNewCallback(
-                    [this](ock::hcom::UBSHcomServiceContext &context) { this->ccnt.fetch_add(1); },
-                    std::placeholders::_1);
-                if (newCallback == nullptr) {
-                    LOG_ERROR("Create callback failed");
-                    sem_post(&mSem);
-                    return -1;
-                }
-                *postData = ctx->cnt;
-                ctx->tposted[mCtx->cnt - 1] = ock::hcom::MONOTONIC_TIME_NS();
-                int res = mCh->Get(mReq, newCallback);
-                if (res != 0) {
-                    if (newCallback != nullptr) {
-                        delete newCallback;
-                    }
-                    LOG_ERROR("failed to read from server");
-                    sem_post(&mSem);
-                    return res;
-                }
-            }
+        if (mCtx == nullptr) {
+            LOG_ERROR("mCtx is nullptr");
+            sem_post(&mSem);
+            return -1;
+        }
+        if (mCh == nullptr) {
+            LOG_ERROR("mCh is nullptr");
+            sem_post(&mSem);
+            return -1;
+        }
 
-            while (ctx->cnt != static_cast<uint64_t>(ccnt.load()))
+        const uint64_t iters = mCtx->mIterations;
+        rcnt.store(0);
+        mCtx->cnt = 0;
+        while (mCtx->cnt < iters) {
+            mCtx->tposted[mCtx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
+            ock::hcom::Callback *newCallback = ock::hcom::UBSHcomNewCallback(
+                [this](ock::hcom::UBSHcomServiceContext &context) {
+                    this->rcnt.fetch_add(1);
+                },
+                std::placeholders::_1);
+            if (newCallback == nullptr) {
+                LOG_ERROR("Create callback failed");
+                sem_post(&mSem);
+                return -1;
+            }
+            int res = mCh->Get(mReq, newCallback);
+            if (res != 0) {
+                LOG_ERROR("Get failed at iteration " << mCtx->cnt);
+                sem_post(&mSem);
+                return -1;
+            }
+            ++mCtx->cnt;
+            while (mCtx->cnt != static_cast<uint64_t>(rcnt.load()))
                 ;
         }
-        if (ctx->cnt == ctx->mIterations) {
-            ctx->tposted[ctx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
-            LOG_DEBUG("One Iteration Done!");
-            sem_post(&mSem);
-        }
+        mCtx->tposted[mCtx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
+        LOG_DEBUG("One Iteration Done!");
+        sem_post(&mSem);
         return 0;
     }
 
     int NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch, const std::string &payload);
     int RequestReceived(const ock::hcom::UBSHcomServiceContext &ctx);
-    void ChannelBroken(const ock::hcom::UBSHcomChannelPtr &ch);
     bool RegMemory();
     bool ExchangeAddress();
 
@@ -97,13 +88,10 @@ private:
 private:
     ock::hcom::UBSHcomChannelPtr mCh = nullptr;
     ock::hcom::UBSHcomOneSideRequest mReq;
+    std::atomic<uint64_t> rcnt{ 0 };
     ServiceHelper mHelper;
     RegMrInfo mPostMrInfo;
-    RegMrInfo mPollMrInfo;
     RegMrInfo mPeerMrInfo;
-    uint64_t rcnt = 0;
-    std::atomic<int> ccnt{ 0 };
-    std::atomic<bool> isConnect{ false };
     sem_t mSem;
 };
 }

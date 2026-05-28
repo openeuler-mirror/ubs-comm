@@ -1,7 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
-#include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
 #include "test_case/service_v2/service_send_bw_test.h"
@@ -14,9 +13,23 @@ constexpr uint16_t OP_CODE_SEND_BW = 201;
 int ServiceSendBwTest::DoPostSend()
 {
     PerfTestContext *ctx = GetPerfTestContext();
+    if (ctx == nullptr) {
+        LOG_ERROR("mCtx is nullptr");
+        sem_post(&mSem);
+        return -1;
+    }
+    if (mCh == nullptr) {
+        LOG_ERROR("mCh is nullptr");
+        sem_post(&mSem);
+        return -1;
+    }
+
+    const uint64_t iters = ctx->mIterations;
     UBSHcomRequest req(mDataAddr, ctx->mSize, OP_CODE_SEND_BW);
+    ctx->totrcnt = 0;
     ctx->tposted[0] = MONOTONIC_TIME_NS();
-    for (uint64_t i = 0; i < ctx->mIterations; ++i) {
+
+    for (uint64_t i = 0; i < iters; ++i) {
         Callback *newCallback = UBSHcomNewCallback(
             [this](UBSHcomServiceContext &context) {
                 PerfTestContext *testCtx = this->GetPerfTestContext();
@@ -29,15 +42,14 @@ int ServiceSendBwTest::DoPostSend()
             std::placeholders::_1);
         if (newCallback == nullptr) {
             LOG_ERROR("Create callback failed");
+            sem_post(&mSem);
             return -1;
         }
         int res = mCh->Send(req, newCallback);
         if (res != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
-            LOG_ERROR("failed to send to server");
-            return res;
+            LOG_ERROR("Send failed at iteration " << i);
+            sem_post(&mSem);
+            return -1;
         }
     }
     return 0;
@@ -139,12 +151,14 @@ bool ServiceSendBwTest::Connect()
 
 bool ServiceSendBwTest::RunTest(PerfTestContext *ctx)
 {
-    // ctx会记录测试中每个Iteration耗时，故每次使用不同的ctx
-    SetPerfTestContext(ctx);
+    if (!SetPerfTestContext(ctx)) {
+        LOG_ERROR("SetPerfTestContext failed");
+        return false;
+    }
+
     if (!mCfg.GetIsServer()) {
         DoPostSend();
     }
-    // 等待测试结束
     sem_wait(&mSem);
     return true;
 }

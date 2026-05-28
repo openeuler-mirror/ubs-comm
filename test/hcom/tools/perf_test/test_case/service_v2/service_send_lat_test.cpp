@@ -22,14 +22,14 @@ int ServiceSendLatTest::DoPostSend()
         Callback *newCallback = UBSHcomNewCallback([](UBSHcomServiceContext &context) {}, std::placeholders::_1);
         if (newCallback == nullptr) {
             LOG_ERROR("Create callback failed");
+            sem_post(&mSem);
             return -1;
         }
         res = mCh->Send(req, newCallback);
         if (res != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("Failed to send to server");
+            sem_post(&mSem);
+            return -1;
         }
         ++ctx->cnt;
         return 0;
@@ -64,9 +64,6 @@ int ServiceSendLatTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &
         }
         res = mCh->Send(req, newCallback);
         if (res != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("UBSHcomResponse meaasge error");
             return -1;
         }
