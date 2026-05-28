@@ -58,7 +58,6 @@ void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode
     int ret = umq_stats_tp_perf_start(umq_trans_mode);
     int umqTransModeInt = umq_trans_mode;
     if (ret < 0) {
-        UBS_VLOG_ERR("Failed to start tp perf: umq_trans_mode=%d\n", umqTransModeInt);
         return;
     }
 
