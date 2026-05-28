@@ -41,6 +41,8 @@ Result UmqAcceptorOps::Negotiate(SocketPtr socketPtr)
     } else {
         conn_eid_ = localEid;
     }
+    umq_conn_info_.peer_eid = peer_eid_;
+    umq_conn_info_.conn_eid = conn_eid_;
     return UBS_OK;
 }
 

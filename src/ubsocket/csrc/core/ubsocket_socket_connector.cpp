@@ -11,6 +11,8 @@
 #include "ubsocket_socket_connector.h"
 #include "ubsocket_socket_set.h"
 #include "umq/umq_socket_connector.h"
+#include "umq/umq_socket.h"
+#include "cli/statistics_statsmgr.h"
 
 namespace ock {
 namespace ubs {
@@ -46,10 +48,14 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
         SocketConnHelper::SetBlocking(raw_fd_);
     }
     // m_peer_info.type_fd = 1;
+    PROF_END(CORE_CONNECT, true);
+    connector_ops_->conn_info.type_fd = 1;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
-        Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::ACTIVE_OPEN_COUNT, 1);
+        umq::UmqSocketPtr sockptr =
+            RefConvert<Socket, umq::UmqSocket>(SocketSet::Instance().GetSocket(raw_fd_));
+        sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
+        sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::ACTIVE_OPEN_COUNT, 1);
     }
 
     PROF_END(CORE_CONNECT, !ret);

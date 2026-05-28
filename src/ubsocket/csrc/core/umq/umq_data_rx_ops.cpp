@@ -12,6 +12,7 @@
 #include "umq_data_rx_ops.h"
 #include "core/ubsocket_socket_set.h"
 #include "umq_errno_converter.h"
+#include "cli/probe_manager.h"
 #include "umq_socket.h"
 
 namespace ock {
@@ -49,7 +50,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf[i]->qbuf_ext);
         if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == 1) {
             // 处理探测包
-            //   Statistics::ProbeManager::GetInstance().HandleReceivedPacket(fd_, buf[i]);
+            Statistics::ProbeManager::GetInstance().HandleReceivedPacket(fd_, buf[i]);
             if (QBUF_LIST_NEXT(buf[i]) != nullptr) {
                 UBS_VLOG_WARN("probe buf next not null\n");
             }
@@ -92,7 +93,9 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
             continue;
         }
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::RX_PACKET_COUNT, 1);
+            UmqSocketPtr sockptr =
+                RefConvert<Socket, UmqSocket>(SocketSet::Instance().GetSocket(fd_));
+            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::RX_PACKET_COUNT, 1);
         }
         block_cache_.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
         polled_size += buf[i]->data_size;

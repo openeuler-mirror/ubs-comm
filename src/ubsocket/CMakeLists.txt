@@ -13,6 +13,7 @@ option(BUILD_UMQ_DLOPEN_BACKEND "build umq dlopen backend" OFF)
 option(BUILD_URMA_DLOPEN_BACKEND "build urma dlopen backend" OFF)
 option(ENABLE_OBJECT_COUNTING "enable object couting to detect memory leak" OFF)
 option(UBSOCKET_ENABLE_COVERAGE "Enable coverage reporting for ubsocket UT" OFF)
+option(UBSOCKET_BUILD_CLI "Enable CLI component build" OFF)
 
 if (BUILD_UMQ_ADAPTER_BACKEND AND BUILD_UMQ_DLOPEN_BACKEND)
     message(FATAL_ERROR "BUILD_UMQ_ADAPTER_BACKEND and BUILD_UMQ_DLOPEN_BACKEND cannot both be ON")
@@ -22,6 +23,7 @@ message(STATUS "ubsocket: BUILD_UMQ_ADAPTER_BACKEND = ${BUILD_UMQ_ADAPTER_BACKEN
 message(STATUS "ubsocket: BUILD_UMQ_DLOPEN_BACKEND = ${BUILD_UMQ_DLOPEN_BACKEND}")
 message(STATUS "ubsocket: BUILD_URMA_DLOPEN_BACKEND = ${BUILD_URMA_DLOPEN_BACKEND}")
 message(STATUS "ubsocket: ENABLE_OBJECT_COUNTING = ${ENABLE_OBJECT_COUNTING}")
+message(STATUS "ubsocket: UBSOCKET_BUILD_CLI = ${UBSOCKET_BUILD_CLI}")
 
 set(UBSOCKET_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(UBSOCKET_CSRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/csrc)
@@ -113,6 +115,7 @@ include_directories(
         ${UBSOCKET_BASE_DIR}/../hcom/umq/include/umq
 )
 
+add_subdirectory(3rdparty/boundscheck)
 add_subdirectory(csrc)
 add_subdirectory(tools/golden)
 

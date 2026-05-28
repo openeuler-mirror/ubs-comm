@@ -18,10 +18,13 @@
 #include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_backend.h"
+#include "core/umq/umq_setting.h"
 #include "include/ubsocket.h"
 #include "ubsocket_struct_helper.h"
 #include "under_api/dl_api.h"
 #include "core/umq/umq_setting.h"
+#include "cli/statistics.h"
+#include "cli/probe_manager.h"
 
 using namespace ock::ubs;
 
@@ -173,6 +176,14 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         if (result != UBS_OK) {
             UBS_VLOG_WARN("Profiling is not initialize \n");
         }
+    }
+
+    if (GlobalSetting::UBS_CLI_ENABLED) {
+        (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr(umq::UmqSetting::UMQ_TRANS_MODE);
+    }
+
+    if (GlobalSetting::UBS_PROBE_ENABLED) {
+        (void)Statistics::ProbeManager::GetInstance().Start(GlobalSetting::UBS_PROBE_MS, GlobalSetting::UBS_PROBE_BATCH, -1);
     }
 
     /* last step: set initialized */

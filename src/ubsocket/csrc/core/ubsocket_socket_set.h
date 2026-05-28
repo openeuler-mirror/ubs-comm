@@ -126,6 +126,11 @@ public:
         return rwlock_;
     }
 
+    SocketPtr *GetSocketObj()
+    {
+        return socket_obj_;
+    }
+
 private:
     SocketSet() = default;
 

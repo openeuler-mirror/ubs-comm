@@ -8,11 +8,18 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include <chrono>
+#include <iostream>
+
+#include "umq_dfx_api.h"
 #include "umq_socket.h"
 #include "umq_eid_table.h"
 #include "umq_epoll_runner_ops.h"
 #include "umq_errno_converter.h"
+#include "umq_socket_acceptor.h"
+#include "umq_socket_connector.h"
 #include "under_api/dl_umq_api.h"
+#include "cli/statistics.h"
 
 namespace ock {
 namespace ubs {
@@ -547,6 +554,117 @@ Result UmqSocket::CheckDevAdd(const umq_eid_t &conn_eid)
 
     EidRegistry::Instance().RegisterEid(conn_eid);
     return UBS_OK;
+}
+
+void UmqSocket::OutputStats(std::ostringstream &oss)
+{
+    stats_mgr_.OutputStats(raw_socket_, oss);
+}
+
+void UmqSocket::GetSocketFlowControlData(Statistics::CLIFlowControlData *data)
+{
+    UmqAcceptorOps *ops = (UmqAcceptorOps *)(acceptor_->GetAcceptorOps().Get());
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+        ops->conn_info.create_time.time_since_epoch());
+    data->createTime = static_cast<uint64_t>(duration.count());
+
+    if (umq_stats_flow_control_get(
+        umq_handle_, &(data->umqFlowControlStat)) != 0) {
+        UBS_VLOG_WARN("Failed to get umq flow control info\n");
+    }
+}
+
+void UmqSocket::GetSocketQbufPoolData(Statistics::CLIQbufPoolData *data)
+{
+    UmqAcceptorOps *ops = (UmqAcceptorOps *)(acceptor_->GetAcceptorOps().Get());
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+        ops->conn_info.create_time.time_since_epoch());
+    data->createTime = static_cast<uint64_t>(duration.count());
+
+    if (umq_stats_qbuf_pool_get(
+        umq_handle_, &(data->umqQbufPoolStat)) != 0) {
+        UBS_VLOG_WARN("Failed to get umq qbuf pool info\n");
+    }
+}
+
+void UmqSocket::GetSocketUmqInfoData(Statistics::CLIUmqInfoData *data)
+{
+    UmqAcceptorOps *ops = (UmqAcceptorOps *)(acceptor_->GetAcceptorOps().Get());
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+        ops->conn_info.create_time.time_since_epoch());
+    data->createTime = static_cast<uint64_t>(duration.count());
+
+    if (umq_info_get(
+        umq_handle_, &(data->umqInfo)) != 0) {
+        UBS_VLOG_WARN("Failed to get umq info\n");
+    }
+}
+
+void UmqSocket::GetSocketIoPacketData(Statistics::CLIIoPacketData *data)
+{
+    UmqAcceptorOps *ops = (UmqAcceptorOps *)(acceptor_->GetAcceptorOps().Get());
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+        ops->conn_info.create_time.time_since_epoch());
+    data->createTime = static_cast<uint64_t>(duration.count());
+
+    if (umq_stats_io_get(
+        umq_handle_, &(data->umqPacketStat)) != 0) {
+        UBS_VLOG_WARN("Failed to get umq io packet stats\n");
+    }
+}
+
+void UmqSocket::GetSocketUmqPerfData(Statistics::CLIUmqPerfData *data)
+{
+    UmqAcceptorOps *ops = (UmqAcceptorOps *)(acceptor_->GetAcceptorOps().Get());
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+        ops->conn_info.create_time.time_since_epoch());
+    data->createTime = static_cast<uint64_t>(duration.count());
+
+    if (umq_stats_perf_get(&(data->umqPerfStat)) != 0) {
+        UBS_VLOG_WARN("Failed to get umq perf stats\n");
+    }
+}
+
+void UmqSocket::GetSocketCLIData(Statistics::CLISocketData *data)
+{
+    stats_mgr_.GetSocketCLIData(data);
+
+    if (IsClient()) {
+        UmqConnectorOps *ops = (UmqConnectorOps *)(connector_->GetConnectorOps().Get());
+        auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+            ops->umq_conn_info_.create_time.time_since_epoch());
+        data->createTime = static_cast<uint64_t>(duration.count());
+
+        if (strcpy_s(data->remoteIp, sizeof(data->remoteIp), ops->umq_conn_info_.peer_ip.c_str()) != 0) {
+            UBS_VLOG_WARN("Failed to strcpy remote ip\n");
+        }
+
+        if (memcpy_s(data->localEid, sizeof(data->localEid), ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE) != 0) {
+            UBS_VLOG_WARN("Failed to memcpy local eid\n");
+        }
+
+        if (memcpy_s(data->remoteEid, sizeof(data->remoteEid), ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE) != 0) {
+            UBS_VLOG_WARN("Failed to memcpy remote eid\n");
+        }
+    } else {
+        UmqAcceptorOps *ops = (UmqAcceptorOps *)(acceptor_->GetAcceptorOps().Get());
+        auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+            ops->conn_info.create_time.time_since_epoch());
+        data->createTime = static_cast<uint64_t>(duration.count());
+
+        if (strcpy_s(data->remoteIp, sizeof(data->remoteIp), ops->conn_info.peer_ip.c_str()) != 0) {
+            UBS_VLOG_WARN("Failed to strcpy remote ip\n");
+        }
+
+        if (memcpy_s(data->localEid, sizeof(data->localEid), ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE) != 0) {
+            UBS_VLOG_WARN("Failed to memcpy local eid\n");
+        }
+
+        if (memcpy_s(data->remoteEid, sizeof(data->remoteEid), ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE) != 0) {
+            UBS_VLOG_WARN("Failed to memcpy remote eid\n");
+        }
+    }
+    
 }
 
 } // namespace umq

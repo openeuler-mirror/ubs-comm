@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "umq_data_tx_ops.h"
+#include "umq_socket.h"
 #include "core/ubsocket_socket_set.h"
 #include "umq_buf_converter.h"
 #include "umq_errno_converter.h"
@@ -104,7 +105,9 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     if (ret == UMQ_SUCCESS) {
         tx_queue_avail_num_ -= batch;
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, 1);
+            UmqSocketPtr sockptr =
+                RefConvert<Socket, UmqSocket>(SocketSet::Instance().GetSocket(fd_));
+            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, 1);
         }
     } else if (bad_qbuf != nullptr) {
         int savedErrno = errno;
@@ -327,10 +330,12 @@ void UmqTxOps::HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt)
     wr_cnt++;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
+        UmqSocketPtr sockptr =
+            RefConvert<Socket, UmqSocket>(SocketSet::Instance().GetSocket(fd_));
         if (qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
-            Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::TX_LOST_PACKET_COUNT, 1);
+            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::TX_LOST_PACKET_COUNT, 1);
         } else {
-            Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::TX_ERROR_PACKET_COUNT, 1);
+            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::TX_ERROR_PACKET_COUNT, 1);
         }
     }
 }

@@ -14,9 +14,12 @@
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_qbuf_queue.h"
 #include "core/ubsocket_socket.h"
+#include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_setting.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "under_api/dl_umq_api.h"
+#include "cli/cli_message.h"
+#include "cli/statistics_statsmgr.h"
 
 namespace ock {
 namespace ubs {
@@ -27,8 +30,17 @@ public:
     explicit UmqSocket(int fd) : SocketBase(fd, SocketType::SOCK_TYPE_UMQ)
     {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
+        stats_mgr_.InitStatsMgr();
     }
-    ~UmqSocket() override = default;
+    ~UmqSocket() override
+    {
+        if (GlobalSetting::UBS_TRACE_ENABLED) {
+            Statistics::StatsMgr::SubMConnCount();
+            if (IsClient()) {
+                Statistics::StatsMgr::SubMActiveConnCount();
+            }
+        }
+    }
 
     Result Initialize() noexcept override;
     void UnInitialize() noexcept override;
@@ -92,6 +104,10 @@ public:
         topo_type_ = type;
     }
 
+    bool IsClient() { 
+        return connector_->IsClient();
+    }
+
     ALWAYS_INLINE void NewRxEpollIn()
     {
         DataRxOps *ops = rx_.GetRxOps();
@@ -127,6 +143,17 @@ public:
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
     void FlushRxQueue();
     Result CheckDevAdd(const umq_eid_t &conn_eid);
+
+    /* GetData Func Set For CLI*/
+    virtual void OutputStats(std::ostringstream &oss);
+    virtual void GetSocketCLIData(Statistics::CLISocketData *data);
+    virtual void GetSocketFlowControlData(Statistics::CLIFlowControlData *data);
+    virtual void GetSocketQbufPoolData(Statistics::CLIQbufPoolData *data);
+    virtual void GetSocketUmqInfoData(Statistics::CLIUmqInfoData *data);
+    virtual void GetSocketIoPacketData(Statistics::CLIIoPacketData *data);
+    virtual void GetSocketUmqPerfData(Statistics::CLIUmqPerfData *data);
+
+    Statistics::StatsMgr stats_mgr_ = {};
 
 private:
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);

@@ -33,6 +33,12 @@ public:
     Result CreateSocketResources(const SocketPtr &sock) override;
     void DestroySocketResources() override;
 
+    struct UmqConnInfo : public ConnInfo {
+        umq_eid_t peer_eid{}; // 对端EID
+        umq_eid_t conn_eid{}; // 本端EID
+    };
+    UmqConnInfo umq_conn_info_;
+
 private:
     // ======================== 建链辅助方法 ========================
     Result BuildNegotiateReq(NegotiateReq *req, const UmqSocketPtr &umq_socket);
@@ -60,11 +66,6 @@ private:
     void PrintSocketsInfo();
 
     // ======================== 成员变量 ===========================
-    struct UmqConnInfo : public ConnInfo {
-        umq_eid_t peer_eid{}; // 对端EID
-        umq_eid_t conn_eid{}; // 本端EID
-    };
-    UmqConnInfo umq_conn_info_;
     bool use_round_robin_ = true;
     int peer_socket_id_ = -1;                   // 对端socket id
     std::vector<uint32_t> peer_all_socket_ids_; // 对端所有socket id

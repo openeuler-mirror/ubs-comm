@@ -14,6 +14,8 @@
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket_set.h"
 #include "ubsocket_wakeup_event.h"
+#include "umq/umq_socket.h"
+#include "cli/statistics_statsmgr.h"
 
 namespace ock {
 namespace ubs {
@@ -103,6 +105,9 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         errno = EAGAIN;
         return -1;
     } else {
+        if (peerIp.length() == 0) {
+            peerIp = SocketConnHelper::ExtractIpFromSockAddr(&addr_tmp);
+        }
         ProcessUBConnection(fd, peerIp);
         return fd;
     }
@@ -209,13 +214,14 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     SocketSet::Instance().OverrideSocket(new_fd, new_socket_obj);
 
     newSocket->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
+
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        umq::UmqSocketPtr sockptr = RefConvert<SocketBase, umq::UmqSocket>(newSocket);
+        sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
+    }
     //TODO: 优化建链成功的打印日志
     UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
     PROF_END(CORE_ACCEPT, true);
-
-    if (GlobalSetting::UBS_TRACE_ENABLED) {
-        Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
-    }
 
     return UBS_OK;
 }
