@@ -105,7 +105,7 @@ public:
     /* trace statistic related */
     static uint64_t UBS_TRACE_TIME;
     static uint64_t UBS_TRACE_FILE_SIZE;
-    static char UBS_TRACE_FILE_PATH[UBSOCKET_TRACE_FILE_PATH_LEN_MAX];
+    static std::string UBS_TRACE_FILE_PATH;
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept

@@ -59,17 +59,17 @@ public:
         }
     }
 
-    static void StartStatsCollection(uint64_t traceTime, const char *tracePath, uint64_t traceFileSize)
+    static void StartStatsCollection(uint64_t traceTime, const std::string& tracePath, uint64_t traceFileSize)
     {
         PrintStatsMgr *mgr = GetPrintStatsMgr();
         mgr->ubsocketTraceTime = traceTime;
         mgr->ubsocketTraceFileSize = traceFileSize;
         mgr->pidVal = static_cast<uint32_t>(getpid());
 
-        if (tracePath) {
-            (void)snprintf(mgr->ubsocketTraceFilePath, sizeof(mgr->ubsocketTraceFilePath), "%s", tracePath);
+        if (!tracePath.empty()) {
+            mgr->ubsocketTraceFilePath = tracePath;
         } else {
-            (void)snprintf(mgr->ubsocketTraceFilePath, sizeof(mgr->ubsocketTraceFilePath), "%s", "/tmp/ubsocket/log");
+            mgr->ubsocketTraceFilePath = "/tmp/ubsocket/log";
         }
 
         mgr->CreateDirectory(mgr->ubsocketTraceFilePath);
@@ -96,7 +96,7 @@ private:
           m_event_loop(nullptr),
           pidVal(0)
     {
-        (void)snprintf(ubsocketTraceFilePath, sizeof(ubsocketTraceFilePath), "%s", "/tmp/ubsocket/log");
+        ubsocketTraceFilePath = "/tmp/ubsocket/log";
     }
 
     ~PrintStatsMgr()
@@ -104,23 +104,23 @@ private:
         Stop();
     }
 
-    void CreateDirectory(const char *path)
+    void CreateDirectory(const std::string& path)
     {
-        if (path == nullptr || path[0] == '\0') {
+        if (path.empty()) {
             return;
         }
 
         constexpr mode_t DEFAULT_DIR_PERMISSION = 0750;
-        std::string tmp_str(path);
+        std::string tmpStr = path;
 
-        for (size_t i = 1; i < tmp_str.size(); ++i) {
-            if (tmp_str[i] == '/') {
-                tmp_str[i] = '\0';
-                mkdir(tmp_str.c_str(), DEFAULT_DIR_PERMISSION);
-                tmp_str[i] = '/';
+        for (size_t i = 1; i < tmpStr.size(); ++i) {
+            if (tmpStr[i] == '/') {
+                tmpStr[i] = '\0';
+                mkdir(tmpStr.c_str(), DEFAULT_DIR_PERMISSION);
+                tmpStr[i] = '/';
             }
         }
-        mkdir(tmp_str.c_str(), DEFAULT_DIR_PERMISSION);
+        mkdir(tmpStr.c_str(), DEFAULT_DIR_PERMISSION);
     }
 
     void ArchiveJSON(const std::string &cleanPath, const uint32_t pid, const char *filename)
@@ -219,7 +219,7 @@ private:
     volatile bool m_running;
     std::thread *m_event_loop;
     uint32_t pidVal;
-    char ubsocketTraceFilePath[ock::ubs::UBSOCKET_TRACE_FILE_PATH_LEN_MAX];
+    std::string ubsocketTraceFilePath;
 };
 
 }; // namespace Statistics

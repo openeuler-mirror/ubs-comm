@@ -64,7 +64,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     }
     rx_total_len = ret;
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        // UpdateTraceStats(StatsMgr::RX_BYTE_COUNT, rx_total_len);
+        Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
     }
     PROF_END(CORE_READ, true);
     return rx_total_len;

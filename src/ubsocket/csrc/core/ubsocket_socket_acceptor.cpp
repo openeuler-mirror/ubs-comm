@@ -208,6 +208,11 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     //TODO: 优化建链成功的打印日志
     UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
     PROF_END(CORE_ACCEPT, true);
+
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
+    }
+
     return UBS_OK;
 }
 
@@ -256,6 +261,11 @@ int Acceptor::Listen(int backlog)
     return 0;
 }
 
-Acceptor::~Acceptor() {}
+Acceptor::~Acceptor()
+{
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        Statistics::StatsMgr::SubMConnCount();
+    }
+}
 } // namespace ubs
 } // namespace ock
