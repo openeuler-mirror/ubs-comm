@@ -104,7 +104,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     if (ret == UMQ_SUCCESS) {
         tx_queue_avail_num_ -= batch;
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            //UpdateTraceStats(StatsMgr::TX_PACKET_COUNT, 1);
+            Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, 1);
         }
     } else if (bad_qbuf != nullptr) {
         int savedErrno = errno;
@@ -328,9 +328,9 @@ void UmqTxOps::HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt)
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         if (qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
-            //UpdateTraceStats(StatsMgr::TX_LOST_PACKET_COUNT, 1);
+            Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::TX_LOST_PACKET_COUNT, 1);
         } else {
-            //UpdateTraceStats(StatsMgr::TX_ERROR_PACKET_COUNT, 1);
+            Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::TX_ERROR_PACKET_COUNT, 1);
         }
     }
 }

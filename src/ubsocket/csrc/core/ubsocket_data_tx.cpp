@@ -78,7 +78,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     tx_total_len = ret;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        // UpdateTraceStats(StatsMgr::TX_BYTE_COUNT, tx_total_len);
+        Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::TX_BYTE_COUNT, tx_total_len);
     }
     PROF_END(CORE_WRITE, true);
     return tx_total_len;

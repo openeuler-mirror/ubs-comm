@@ -35,5 +35,6 @@
 #include "ubsocket_profiling.h"
 #include "ubsocket_ref.h"
 #include "ubsocket_set.h"
+#include "ubsocket_print_stats_mgr.h"
 
 #endif // UBS_COMM_UBSOCKET_INCLUDES_H

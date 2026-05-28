@@ -41,7 +41,7 @@ uint16_t GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN = 1;
 std::string GlobalSetting::UBS_PROF_DUMP_PATH = "/tmp/ubsocket/profiling";
 uint64_t GlobalSetting::UBS_TRACE_TIME = UBSOCKET_TRACE_TIME_DEFAULT;
 uint64_t GlobalSetting::UBS_TRACE_FILE_SIZE = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
-char GlobalSetting::UBS_TRACE_FILE_PATH[UBSOCKET_TRACE_FILE_PATH_LEN_MAX] = "";
+std::string GlobalSetting::UBS_TRACE_FILE_PATH = "/tmp/ubsocket/log";
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
@@ -77,7 +77,7 @@ void GlobalSetting::AddRules() noexcept
         {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5},
         {ENV_TRACE_TIME, false, UBSOCKET_TRACE_TIME_MIN, UBSOCKET_TRACE_TIME_MAX},
         {ENV_TRACE_FILE_SIZE, false, UBSOCKET_TRACE_FILE_SIZE_MIN, UBSOCKET_TRACE_FILE_SIZE_MAX},
-        {ENV_TRACE_FILE_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MIN, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
+    };
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, false, "true|false"},
@@ -91,7 +91,8 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_VAR_DEGRADE, false, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
-    StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, 512}};
+    StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, 512},
+        {ENV_TRACE_FILE_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
 
     for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
@@ -160,8 +161,8 @@ Result GlobalSetting::LoadEnv() noexcept
     std::string strEnvValue;
 
     /* load from env */
-    if (GetEnvAndValidate(ENV_TRACE_ENABLED, envValue)) {
-        UBS_TRACE_ENABLED = (envValue == 1);
+    if (GetEnvAndValidate(ENV_TRACE_ENABLED, strEnvValue)) {
+        UBS_TRACE_ENABLED = Func::BoolFromStr(strEnvValue);
     }
     // 正确处理 ENV_ASYNC_ACCEPTOR (字符串类型 "true"|"false")
     std::string strAsyncAccept;
@@ -232,9 +233,8 @@ Result GlobalSetting::LoadEnv() noexcept
         UBS_TRACE_FILE_SIZE = static_cast<uint32_t>(envValue);
     }
 
-    if (GetEnvAndValidate(ENV_TRACE_FILE_PATH, strEnvValue)) {
-        (void)snprintf(UBS_TRACE_FILE_PATH, sizeof(UBS_TRACE_FILE_PATH),
-            "%s", strEnvValue.c_str());
+    if (GetEnvAndValidateNotEmpty(ENV_TRACE_FILE_PATH, strEnvValue)) {
+        UBS_TRACE_FILE_PATH = strEnvValue;
     }
 
     if (GetEnvAndValidate(ENV_VAR_DEGRADE, strEnvValue)) {

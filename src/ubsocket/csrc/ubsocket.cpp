@@ -243,19 +243,11 @@ UBS_API void ubsocket_iobuf_deallocate(void *addr)
 
 UBS_API void ubsocket_trace_statistic_init(void)
 {
-    if (!GlobalSetting::UBS_TRACE_ENABLED) {
-        return;
-    }
-
     Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_TRACE_TIME, GlobalSetting::UBS_TRACE_FILE_PATH,
                                                     GlobalSetting::UBS_TRACE_FILE_SIZE);
 }
 
 UBS_API void ubsocket_trace_statistic_destroy(void)
 {
-    if (!GlobalSetting::UBS_TRACE_ENABLED) {
-        return;
-    }
-
     Statistics::PrintStatsMgr::StopStatsCollection();
 }

@@ -46,9 +46,21 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     }
     // m_peer_info.type_fd = 1;
     PROF_END(CORE_CONNECT, true);
+
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
+        Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::ACTIVE_OPEN_COUNT, 1);
+    }
+
     return ret;
 }
 
-Connector::~Connector() {}
+Connector::~Connector()
+{
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        Statistics::StatsMgr::SubMConnCount();
+        Statistics::StatsMgr::SubMActiveConnCount();
+    }
+}
 } // namespace ubs
 } // namespace ock
