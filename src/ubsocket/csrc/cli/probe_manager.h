@@ -294,7 +294,6 @@ public:
         UpdateBuffer(probeInfo, MASK_CLIENT_SEND);
         int ret = umq_post(umqh, buf, UMQ_IO_TX, &bad_qbuf);
         if (ret != 0) {
-            UBS_VLOG_ERR("Failed to Send Probe Packet\n");
             umq_buf_free(buf);
             return -1;
         }
