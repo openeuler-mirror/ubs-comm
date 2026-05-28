@@ -439,12 +439,6 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         return -1;
     }
 
-    if (UNLIKELY((event->events & EPOLLET) == 0)) {
-        UBS_VLOG_ERR("async_epoll AddEvent must be edge-triggered notification.\n");
-        errno = EINVAL;
-        return -1;
-    }
-
     // 1. add original socket fd to epoll fd
     if (UNLIKELY(IsSocketEventDataExist(fd))) {
         UBS_VLOG_ERR("async_epoll EpollCtlAdd(socket=%d) already added.", fd);
