@@ -40,7 +40,7 @@ int ubsocket_init(u_init_options_t *options);
  *
  * @param flags
  */
-void ubsocket_uninit(int flags);
+void ubsocket_uninit();
 
 /**
  * @brief Get version of ubsocet library

@@ -197,17 +197,16 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     return UBS_OK;
 }
 
-UBS_API void ubsocket_uninit(int flags)
+void ubsocket_uninit()
 {
     if (GlobalSetting::UBS_PROF_ENABLE) {
         Profiling::Uninit();
     }
-
     /* do trace log destroy */
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         ubsocket_trace_statistic_destroy();
     }
-
+    umq::UmqBackend::UnInit();
     return;
 }
 
@@ -219,10 +218,26 @@ UBS_API const char *ubsocket_version()
     return UBS_LIB_VERSION;
 }
 
+void UmqLogger(int level, char *log_msg)
+{
+    auto new_level = umq_log_level::UMQ_LOG_LEVEL_DEBUG - level;
+    if (new_level <= LogLevel::LEVEL_ERR) {
+        UBS_LOG_STREAM_RAW(new_level, log_msg);
+    } else {
+        static const char *OTHER_LEVEL[] = {"EMERG", "ALERT", "CRIT"};
+        UBS_LOG_STREAM_RAW(LogLevel::LEVEL_ERR, OTHER_LEVEL[level % (sizeof(OTHER_LEVEL))] << ", " << log_msg);
+    }
+}
+
 UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *filename, int line))
 {
     Logger::Instance().SetExternalLogFunction(func);
-    return UBS_OK;
+    umq_log_config_t log_cfg = {
+        .log_flag = UMQ_LOG_FLAG_FUNC | UMQ_LOG_FLAG_LEVEL,
+        .func = UmqLogger,
+        .level = static_cast<umq_log_level_t>(umq_log_level::UMQ_LOG_LEVEL_DEBUG - Logger::Instance().GetLogLevel())
+    };
+    return umq_log_config_set(&log_cfg);
 }
 
 UBS_API int ubsocket_set_log_level(int level)
