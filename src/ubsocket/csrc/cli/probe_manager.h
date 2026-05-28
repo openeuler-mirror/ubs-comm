@@ -10,19 +10,19 @@
 #ifndef PROBE_MANAGER_H
 #define PROBE_MANAGER_H
 
-#include <cstdint>
-#include <atomic>
-#include <thread>
-#include <vector>
-#include <mutex>
-#include <unordered_map>
-#include <sstream>
-#include <chrono>
 #include <pthread.h>
 #include <sched.h>
-#include <cstring>
-#include <semaphore.h>
 #include <securec.h>
+#include <semaphore.h>
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <mutex>
+#include <sstream>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_socket_set.h"
@@ -35,11 +35,11 @@
 #include "umq_pro_types.h"
 #include "umq_types.h"
 
-using ock::ubs::SocketSet;
-using ock::ubs::SocketPtr;
 using ock::ubs::ReadLocker;
-using ock::ubs::umq::UmqSocket;
+using ock::ubs::SocketPtr;
+using ock::ubs::SocketSet;
 using ock::ubs::umq::UmqSetting;
+using ock::ubs::umq::UmqSocket;
 
 namespace Statistics {
 // --- 配置常量 ---
@@ -50,21 +50,21 @@ static constexpr uint64_t PROBE_SEM_S_TO_NS = 1000000000ULL;
 
 // --- 探测类型枚举 ---
 enum ProbeType {
-    PROBE_TYPE_REQUEST  = 1, // 请求包
-    PROBE_TYPE_RESPONSE = 2  // 响应包
+    PROBE_TYPE_REQUEST = 1, // 请求包
+    PROBE_TYPE_RESPONSE = 2 // 响应包
 };
 
 // --- 更新掩码定义 ---
 enum ProbeUpdateMask {
-    MASK_NONE            = 0x00,
-    MASK_CLIENT_SEND     = 0x01,
-    MASK_CLIENT_RSP      = 0x02,
-    MASK_SERVER_RECV     = 0x04,
-    MASK_SERVER_RSP      = 0x08,
+    MASK_NONE = 0x00,
+    MASK_CLIENT_SEND = 0x01,
+    MASK_CLIENT_RSP = 0x02,
+    MASK_SERVER_RECV = 0x04,
+    MASK_SERVER_RSP = 0x08,
     MASK_UMQ_CLIENT_POST = 0x10,
     MASK_UMQ_CLIENT_RECV = 0x20,
     MASK_UMQ_SERVER_RECV = 0x40,
-    MASK_UMQ_SERVER_RSP  = 0x80
+    MASK_UMQ_SERVER_RSP = 0x80
 };
 
 /**
@@ -114,7 +114,7 @@ public:
     }
 
     ProbeManager(const ProbeManager &) = delete;
-    ProbeManager &operator = (const ProbeManager &) = delete;
+    ProbeManager &operator=(const ProbeManager &) = delete;
 
     /**
      * @brief 启动探测服务
@@ -127,7 +127,7 @@ public:
         mIntervalMs = intervalMs;
         sem_init(&mSem, 0, 0);
 
-        mProbeBatch = batch; // 初始化批次
+        mProbeBatch = batch;     // 初始化批次
         mCurrentCursor.store(0); // 初始化游标
         mQueueSt = mQueueEd = 0;
 
@@ -190,20 +190,28 @@ public:
      */
     static void UpdateBuffer(ProbeTimeInfo *info, uint32_t mask)
     {
-        if (!info) return;
+        if (!info)
+            return;
         auto now_clock = std::chrono::system_clock::now();
-        uint64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            now_clock.time_since_epoch()).count();
+        uint64_t now = std::chrono::duration_cast<std::chrono::nanoseconds>(now_clock.time_since_epoch()).count();
 
-        if (mask & MASK_CLIENT_SEND)     info->client_send_time_ns = now;
-        if (mask & MASK_CLIENT_RSP)      info->client_recv_rsp_time_ns = now;
-        if (mask & MASK_SERVER_RECV)     info->server_recv_time_ns = now;
-        if (mask & MASK_SERVER_RSP)      info->server_rsp_time_ns = now;
+        if (mask & MASK_CLIENT_SEND)
+            info->client_send_time_ns = now;
+        if (mask & MASK_CLIENT_RSP)
+            info->client_recv_rsp_time_ns = now;
+        if (mask & MASK_SERVER_RECV)
+            info->server_recv_time_ns = now;
+        if (mask & MASK_SERVER_RSP)
+            info->server_rsp_time_ns = now;
 
-        if (mask & MASK_UMQ_CLIENT_POST) info->umq_client_post_time_ns = now;
-        if (mask & MASK_UMQ_CLIENT_RECV) info->umq_client_recv_time_ns = now;
-        if (mask & MASK_UMQ_SERVER_RECV) info->umq_server_recv_time_ns = now;
-        if (mask & MASK_UMQ_SERVER_RSP)  info->umq_server_rsp_time_ns = now;
+        if (mask & MASK_UMQ_CLIENT_POST)
+            info->umq_client_post_time_ns = now;
+        if (mask & MASK_UMQ_CLIENT_RECV)
+            info->umq_client_recv_time_ns = now;
+        if (mask & MASK_UMQ_SERVER_RECV)
+            info->umq_server_recv_time_ns = now;
+        if (mask & MASK_UMQ_SERVER_RSP)
+            info->umq_server_rsp_time_ns = now;
     }
 
     /**
@@ -212,7 +220,8 @@ public:
      */
     static void UmqPerfCallback(umq_perf_record_type_t record_type, umq_buf_t *qbuf)
     {
-        if (!qbuf || !qbuf->buf_data) return;
+        if (!qbuf || !qbuf->buf_data)
+            return;
 
         // --- 解析 umq_buf_pro_t ---
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(qbuf->qbuf_ext);
@@ -312,7 +321,8 @@ public:
         }
 
         umq_buf_t *buf = umq_buf_alloc(payloadSize, 1, UMQ_INVALID_HANDLE, nullptr);
-        if (buf == nullptr) return -1;
+        if (buf == nullptr)
+            return -1;
 
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf->qbuf_ext);
         ProbeTimeInfo *rspProbeInfo = reinterpret_cast<ProbeTimeInfo *>(buf->buf_data);
@@ -325,7 +335,7 @@ public:
         buf_pro->imm.user_data = PROBE_USER_DATA_ID; // 标记为探针包
 
         // --- 初始化 ProbeTimeInfo ---
-        *rspProbeInfo = *reqProbeInfo; // 拷贝 Client 数据
+        *rspProbeInfo = *reqProbeInfo;            // 拷贝 Client 数据
         rspProbeInfo->type = PROBE_TYPE_RESPONSE; // 改为响应包
 
         // 记录 Server 回复时间 (应用层 + UMQ层)
@@ -345,7 +355,8 @@ public:
      */
     void HandleReceivedPacket(uint32_t fd, umq_buf_t *buf)
     {
-        if (!buf || !buf->buf_data) return;
+        if (!buf || !buf->buf_data)
+            return;
 
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf->qbuf_ext);
 
@@ -395,7 +406,7 @@ public:
         }
     }
 
-    void GetCLIProbeData(std::vector<CLIProbeData>& outDataVec)
+    void GetCLIProbeData(std::vector<CLIProbeData> &outDataVec)
     {
         // 1. 加锁保护
         std::lock_guard<std::mutex> lock(mMutex);
@@ -405,16 +416,16 @@ public:
         outDataVec.reserve(mRecords.size());
 
         // 3. 遍历并填充
-        for (const auto& pair : mRecords) {
-            const uint32_t& fd = pair.first;
-            const ProbeRecord& record = pair.second;
+        for (const auto &pair : mRecords) {
+            const uint32_t &fd = pair.first;
+            const ProbeRecord &record = pair.second;
 
             CLIProbeData item;
             item.fd = static_cast<int32_t>(fd);
             item.rtt = record.mLastRttNs;
 
             // 拷贝时间戳信息
-            const ProbeTimeInfo& info = record.mProbeInfo;
+            const ProbeTimeInfo &info = record.mProbeInfo;
             item.client_send_time_ns = info.client_send_time_ns;
             item.client_recv_rsp_time_ns = info.client_recv_rsp_time_ns;
             item.umq_client_post_time_ns = info.umq_client_post_time_ns;
@@ -443,13 +454,15 @@ private:
         CPU_ZERO(&cpuset);
         CPU_SET(coreId, &cpuset);
         int rc = pthread_setaffinity_np(th.native_handle(), sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) UBS_VLOG_ERR("Bind core failed: %d \n", rc);
+        if (rc != 0)
+            UBS_VLOG_ERR("Bind core failed: %d \n", rc);
     }
 
     // 处理 Server 回包逻辑
     void ProcessServerQueue(uint32_t &sentCount)
     {
-        if (SocketSet::Instance().Size() == 0) return;
+        if (SocketSet::Instance().Size() == 0)
+            return;
 
         while (sentCount < mProbeBatch) {
             ProbeTimeInfo info;
@@ -467,7 +480,8 @@ private:
                 // 获取有效数据
                 if (sockObj) {
                     info = mRecvQueue[mQueueSt].mProbeInfo;
-                    if (++mQueueSt == RPC_ADPT_FD_MAX) mQueueSt = 0U;
+                    if (++mQueueSt == RPC_ADPT_FD_MAX)
+                        mQueueSt = 0U;
                 }
             }
 
@@ -483,11 +497,13 @@ private:
     // 处理 Client 主动探测逻辑
     void ProcessClientProbing(uint32_t &sentCount)
     {
-        if (sentCount >= mProbeBatch) return;
+        if (sentCount >= mProbeBatch)
+            return;
 
         ReadLocker lock(SocketSet::Instance().GetRWLock());
         SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
-        if (socketMap == nullptr) return;
+        if (socketMap == nullptr)
+            return;
 
         uint32_t currentPos = mCurrentCursor.load();
         uint32_t scans = 0;
@@ -495,7 +511,8 @@ private:
         uint32_t maxScan = RPC_ADPT_FD_MAX;
 
         while (sentCount < mProbeBatch && scans < maxScan) {
-            if (currentPos >= RPC_ADPT_FD_MAX) currentPos = 0;
+            if (currentPos >= RPC_ADPT_FD_MAX)
+                currentPos = 0;
 
             UmqSocket *sockObj = (UmqSocket *)socketMap[currentPos].Get();
             if (sockObj && sockObj->IsClient()) {
@@ -526,7 +543,8 @@ private:
         while (mRunning) {
             // --- 等待信号或超时 ---
             int ret = sem_timedwait(&mSem, &exceptTime);
-            if (!mRunning) break; // 退出检查   
+            if (!mRunning)
+                break; // 退出检查
 
             uint32_t sentCount = 0;
 
@@ -560,5 +578,5 @@ private:
     uint32_t mQueueSt;
     uint32_t mQueueEd;
 };
-};
+}; // namespace Statistics
 #endif // PROBE_MANAGER_H

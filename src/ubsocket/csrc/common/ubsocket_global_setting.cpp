@@ -15,8 +15,8 @@
 namespace ock {
 namespace ubs {
 std::mutex GlobalSetting::MUTEX;
-uint32_t GlobalSetting::UBS_ALLOWED_PROTOCOL = 0;            /* no protocol by default */
-bool GlobalSetting::UBS_NATIVE_TCP_MODE = false;             /* use ubsocket by default */
+uint32_t GlobalSetting::UBS_ALLOWED_PROTOCOL = 0; /* no protocol by default */
+bool GlobalSetting::UBS_NATIVE_TCP_MODE = false;  /* use ubsocket by default */
 bool GlobalSetting::UBS_TRACE_ENABLED = true;
 bool GlobalSetting::UBS_CLI_ENABLED = false;
 bool GlobalSetting::UBS_PROBE_ENABLED = false;
@@ -49,7 +49,7 @@ uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
-#define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPT"  /* match brpc_test FLAGS_ubsocket_async_accept */
+#define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPT" /* match brpc_test FLAGS_ubsocket_async_accept */
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
 #define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
@@ -104,7 +104,7 @@ void GlobalSetting::AddRules() noexcept
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, 512},
-        {ENV_TRACE_FILE_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
+                                             {ENV_TRACE_FILE_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
 
     for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
@@ -133,8 +133,8 @@ Result GlobalSetting::VerifySetting() noexcept
     std::string strAsyncAccept;
     if (GetEnv(ENV_ASYNC_ACCEPTOR, strAsyncAccept)) {
         if (strAsyncAccept != "true" && strAsyncAccept != "false") {
-            UBS_VLOG_ERR("Invalid value for %s: %s, expected 'true' or 'false'\n",
-                         ENV_ASYNC_ACCEPTOR, strAsyncAccept.c_str());
+            UBS_VLOG_ERR("Invalid value for %s: %s, expected 'true' or 'false'\n", ENV_ASYNC_ACCEPTOR,
+                         strAsyncAccept.c_str());
             return UBS_INVALID_PARAM;
         }
     }
@@ -180,7 +180,7 @@ Result GlobalSetting::LoadEnv() noexcept
     std::string strAsyncAccept;
     if (GetEnvAndValidate(ENV_ASYNC_ACCEPTOR, strAsyncAccept)) {
         if (Func::BoolFromStr(strAsyncAccept)) {
-            UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 1;  // 默认线程数
+            UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 1; // 默认线程数
         } else {
             UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;
         }

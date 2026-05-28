@@ -11,15 +11,15 @@
  */
 #include "golden_cmd_data.h"
 
-#include <cstring>
 #include <fcntl.h>
-#include <random>
-#include <csignal>
-#include <string>
 #include <sys/epoll.h>
-#include <ctime>
 #include <unistd.h>
 #include <zlib.h>
+#include <csignal>
+#include <cstring>
+#include <ctime>
+#include <random>
+#include <string>
 
 namespace golden {
 
@@ -27,9 +27,9 @@ constexpr int MAX_EVENTS = 16;
 constexpr size_t HEADER_SIZE = sizeof(uint32_t) * 3;
 constexpr int64_t DEFAULT_MSG_COUNT = 100;
 constexpr int64_t DEFAULT_MSG_SIZE = 1024;
-constexpr size_t MAX_MSG_SIZE = 1 * 1024 * 1024;  // 1 MB
-constexpr int64_t MICROSECONDS_PER_SECOND = 1000000LL;  // 每秒微秒数
-constexpr int MSG_IOVEC_COUNT = 4;  // 消息头(seq, crc, msgSize) + 消息体
+constexpr size_t MAX_MSG_SIZE = 1 * 1024 * 1024;       // 1 MB
+constexpr int64_t MICROSECONDS_PER_SECOND = 1000000LL; // 每秒微秒数
+constexpr int MSG_IOVEC_COUNT = 4;                     // 消息头(seq, crc, msgSize) + 消息体
 constexpr int MIN_PORT = 10000;
 constexpr int MAX_PORT = 65535;
 constexpr int64_t MAX_MSG_COUNT = 100000;
@@ -69,43 +69,23 @@ static bool IsValidIPv4(const std::string &ip)
 
 void SubCommandData::SetRules() noexcept
 {
-    param_rules_[PARAM_ROLE] = {PARAM_ROLE, PDT_STR_ENUM, true,
-            "", "client|server", ""};
-    param_rules_[PARAM_PROTOCOL] = {
-            PARAM_PROTOCOL, PDT_STR_ENUM, true, "tcp", "tcp|ub_rm_rtp|ub_rc_rtp", ""};
+    param_rules_[PARAM_ROLE] = {PARAM_ROLE, PDT_STR_ENUM, true, "", "client|server", ""};
+    param_rules_[PARAM_PROTOCOL] = {PARAM_PROTOCOL, PDT_STR_ENUM, true, "tcp", "tcp|ub_rm_rtp|ub_rc_rtp", ""};
     param_rules_[PARAM_IP] = {PARAM_IP, PDT_STR, true, "", "", ""};
-    param_rules_[PARAM_PORT] = {PARAM_PORT, PDT_INT64, true, 10001L,
-            10000, 65535, ""};
+    param_rules_[PARAM_PORT] = {PARAM_PORT, PDT_INT64, true, 10001L, 10000, 65535, ""};
 
-    param_rules_["msg-count"] = {"msg-count",
-            PDT_INT64,
-            false,
-            DEFAULT_MSG_COUNT,
-            1,
-            MAX_MSG_COUNT,
-            "number of messages to send (client only)"};
-    param_rules_["msg-size"] = {"msg-size",
-            PDT_INT64,
-            false,
-            DEFAULT_MSG_SIZE,
-            1,
-            MAX_MSG_SIZE,
-            "size of each message in bytes (client only)"};
-    param_rules_["qps"] = {"qps",
-            PDT_INT64,
-            false,
-            0,
-            0,
-            MAX_QPS,
-            "QPS limit for sending messages (0=unlimited, client only)"};
+    param_rules_["msg-count"] = {
+        "msg-count", PDT_INT64, false, DEFAULT_MSG_COUNT, 1, MAX_MSG_COUNT, "number of messages to send (client only)"};
+    param_rules_["msg-size"] = {
+        "msg-size", PDT_INT64, false, DEFAULT_MSG_SIZE, 1, MAX_MSG_SIZE, "size of each message in bytes (client only)"};
+    param_rules_["qps"] = {
+        "qps", PDT_INT64, false, 0, 0, MAX_QPS, "QPS limit for sending messages (0=unlimited, client only)"};
 
-    example_.push_back("server: " + program + " " + name_ + " --" + PARAM_ROLE +
-            "=server --" + PARAM_PROTOCOL + "=tcp --" + PARAM_IP +
-            "=127.0.0.1 --" + PARAM_PORT + "=10001");
-    example_.push_back("client: " + program + " " + name_ + " --" + PARAM_ROLE +
-            "=client --" + PARAM_PROTOCOL + "=tcp --" + PARAM_IP +
-            "=127.0.0.1 --" + PARAM_PORT + "=10001" +
-            " --msg-count=100 --msg-size=1024 --qps=1000");
+    example_.push_back("server: " + program + " " + name_ + " --" + PARAM_ROLE + "=server --" + PARAM_PROTOCOL +
+                       "=tcp --" + PARAM_IP + "=127.0.0.1 --" + PARAM_PORT + "=10001");
+    example_.push_back("client: " + program + " " + name_ + " --" + PARAM_ROLE + "=client --" + PARAM_PROTOCOL +
+                       "=tcp --" + PARAM_IP + "=127.0.0.1 --" + PARAM_PORT + "=10001" +
+                       " --msg-count=100 --msg-size=1024 --qps=1000");
 }
 
 int SubCommandData::DoInitialize() noexcept
@@ -119,15 +99,13 @@ int SubCommandData::DoInitialize() noexcept
     qps_ = param_rules_["qps"].int64Rule.value;
 
     if (role_ != "client" && role_ != "server") {
-        std::cout << "Error: Invalid role '"
-                  << role_ << "', must be 'client' or 'server'" << std::endl;
+        std::cout << "Error: Invalid role '" << role_ << "', must be 'client' or 'server'" << std::endl;
         return -1;
     }
 
-    if (protocol_ != "tcp" && protocol_ != "ub_rm_rtp" &&
-        protocol_ != "ub_rc_rtp") {
-        std::cout << "Error: Invalid protocol '"
-                  << protocol_ << "', must be 'tcp', 'ub_rm_rtp' or 'ub_rc_rtp'" << std::endl;
+    if (protocol_ != "tcp" && protocol_ != "ub_rm_rtp" && protocol_ != "ub_rc_rtp") {
+        std::cout << "Error: Invalid protocol '" << protocol_ << "', must be 'tcp', 'ub_rm_rtp' or 'ub_rc_rtp'"
+                  << std::endl;
         return -1;
     }
 
@@ -137,20 +115,19 @@ int SubCommandData::DoInitialize() noexcept
     }
 
     if (port_ < MIN_PORT || port_ > MAX_PORT) {
-        std::cout << "Error: Invalid port " << port_ << ", must be between "
-                  << MIN_PORT << " and " << MAX_PORT << std::endl;
+        std::cout << "Error: Invalid port " << port_ << ", must be between " << MIN_PORT << " and " << MAX_PORT
+                  << std::endl;
         return -1;
     }
 
     if (role_ == "client") {
         if (msgCount_ < 1 || msgCount_ > MAX_MSG_COUNT) {
-            std::cout << "Error: msg-count must be between 1 and " << MAX_MSG_COUNT
-                      << ", got " << msgCount_ << std::endl;
+            std::cout << "Error: msg-count must be between 1 and " << MAX_MSG_COUNT << ", got " << msgCount_
+                      << std::endl;
             return -1;
         }
         if (msgSize_ < 1 || msgSize_ > static_cast<int64_t>(MAX_MSG_SIZE)) {
-            std::cout << "Error: msg-size must be between 1 and " << MAX_MSG_SIZE
-                      << ", got " << msgSize_ << std::endl;
+            std::cout << "Error: msg-size must be between 1 and " << MAX_MSG_SIZE << ", got " << msgSize_ << std::endl;
             return -1;
         }
         if (qps_ < 0 || qps_ > MAX_QPS) {
@@ -226,9 +203,9 @@ private:
         return ts.tv_sec * MICROSECONDS_PER_SECOND + ts.tv_nsec / 1000;
     }
 
-    int64_t rate_;           // 每秒生成的令牌数（QPS）
-    double tokens_;          // 当前令牌数
-    int64_t lastUpdate_;     // 上次更新时间（微秒）
+    int64_t rate_;       // 每秒生成的令牌数（QPS）
+    double tokens_;      // 当前令牌数
+    int64_t lastUpdate_; // 上次更新时间（微秒）
 };
 
 // 消息头结构
@@ -239,8 +216,7 @@ struct MessageHeader {
 };
 
 // 发送单个消息
-ssize_t SendMessage(int fd, uint32_t seq, uint32_t crc, uint32_t msgSize,
-                    const uint8_t *msgData)
+ssize_t SendMessage(int fd, uint32_t seq, uint32_t crc, uint32_t msgSize, const uint8_t *msgData)
 {
     struct iovec iov[MSG_IOVEC_COUNT];
     iov[0].iov_base = &seq;
@@ -256,8 +232,7 @@ ssize_t SendMessage(int fd, uint32_t seq, uint32_t crc, uint32_t msgSize,
 }
 
 // 接收消息并解析
-bool ReceiveMessage(int fd, uint8_t *recvBuf, ssize_t &recvOffset,
-                    size_t maxBufSize, MessageHeader &header)
+bool ReceiveMessage(int fd, uint8_t *recvBuf, ssize_t &recvOffset, size_t maxBufSize, MessageHeader &header)
 {
     while (recvOffset < static_cast<ssize_t>(HEADER_SIZE)) {
         struct iovec iov[1];
@@ -337,7 +312,10 @@ private:
     int ReceiveResponses(uint64_t &totalBytesRecv);
 };
 
-SubCommandData::DataClient::~DataClient() { Cleanup(); }
+SubCommandData::DataClient::~DataClient()
+{
+    Cleanup();
+}
 
 void SubCommandData::DataClient::Cleanup()
 {
@@ -382,8 +360,7 @@ int SubCommandData::DataClient::Run()
     }
 
     if (SetNonBlocking(fd_) < 0) {
-        std::cout << "Error: set non-blocking failed, errno: " << errno
-                  << std::endl;
+        std::cout << "Error: set non-blocking failed, errno: " << errno << std::endl;
         return -errno;
     }
 
@@ -392,8 +369,7 @@ int SubCommandData::DataClient::Run()
     addr.sin_port = htons(cmd_.port_);
     inet_pton(AF_INET, cmd_.ip_.c_str(), &addr.sin_addr);
 
-    int ret = ubsocket_connect(fd_, reinterpret_cast<struct sockaddr *>(&addr),
-                               sizeof(addr));
+    int ret = ubsocket_connect(fd_, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr));
     if (ret < 0 && errno != EINPROGRESS) {
         std::cout << "Error: connect failed, errno: " << errno << std::endl;
         return -errno;
@@ -406,7 +382,7 @@ int SubCommandData::DataClient::Run()
     }
 
     struct epoll_event ev;
-    ev.events = EPOLLIN | EPOLLOUT | EPOLLET;  // 使用边缘触发
+    ev.events = EPOLLIN | EPOLLOUT | EPOLLET; // 使用边缘触发
     ev.data.fd = fd_;
     if (ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd_, &ev) < 0) {
         std::cout << "Error: epoll_ctl add failed, errno: " << errno << std::endl;
@@ -456,18 +432,16 @@ int SubCommandData::DataClient::Run()
                         int error = 0;
                         socklen_t len = sizeof(error);
                         if (getsockopt(fd_, SOL_SOCKET, SO_ERROR, &error, &len) < 0) {
-                            std::cout << "Error: getsockopt failed, errno: " << errno
-                                      << std::endl;
+                            std::cout << "Error: getsockopt failed, errno: " << errno << std::endl;
                             return -errno;
                         }
                         if (error != 0) {
-                            std::cout << "Error: connect failed, error: " << error
-                                      << std::endl;
+                            std::cout << "Error: connect failed, error: " << error << std::endl;
                             return -error;
                         }
                         connected_ = true;
                     }
-                    
+
                     // 继续发送消息（异步模式，不等待响应）
                     int sendRet2 = SendMessages(tokenBucket, totalBytesSent);
                     if (sendRet2 < 0) {
@@ -493,8 +467,7 @@ int SubCommandData::DataClient::Run()
 
     auto timeEnd = Func::TimeUs();
     double durationMs = (timeEnd - timeStart) / 1000.0;
-    double throughputMbps =
-            (totalBytesSent * 8.0) / (1024 * 1024 * durationMs / 1000);
+    double throughputMbps = (totalBytesSent * 8.0) / (1024 * 1024 * durationMs / 1000);
 
     std::cout << "\n=== Data Client Report ===" << std::endl;
     std::cout << "Messages sent: " << msgSent_ << std::endl;
@@ -530,11 +503,13 @@ private:
     void Cleanup();
 };
 
-SubCommandData::DataServer::~DataServer() { Cleanup(); }
+SubCommandData::DataServer::~DataServer()
+{
+    Cleanup();
+}
 
 // DataClient::SendMessages - 发送消息（带 QPS 控制）
-int SubCommandData::DataClient::SendMessages(TokenBucket &tokenBucket,
-                                             uint64_t &totalBytesSent)
+int SubCommandData::DataClient::SendMessages(TokenBucket &tokenBucket, uint64_t &totalBytesSent)
 {
     const int defaultEpollTimeoutMs = 1000;
 
@@ -597,38 +572,31 @@ int SubCommandData::DataClient::ReceiveResponses(uint64_t &totalBytesRecv)
 
         // 解析完整的消息
         while (recvOffset_ >= static_cast<ssize_t>(HEADER_SIZE)) {
-            uint32_t recvMsgSize = *reinterpret_cast<uint32_t *>(
-                    recvBuf_ + sizeof(uint32_t) * 2);
+            uint32_t recvMsgSize = *reinterpret_cast<uint32_t *>(recvBuf_ + sizeof(uint32_t) * 2);
 
             if (recvMsgSize > MAX_MSG_SIZE) {
-                std::cout << "Error: invalid message size " << recvMsgSize
-                          << " from server" << std::endl;
+                std::cout << "Error: invalid message size " << recvMsgSize << " from server" << std::endl;
                 return -1;
             }
 
             if (recvOffset_ < static_cast<ssize_t>(HEADER_SIZE + recvMsgSize)) {
-                break;  // 数据不完整，等待更多数据
+                break; // 数据不完整，等待更多数据
             }
 
             // CRC32 校验
-            uint32_t recvCrc =
-                    *reinterpret_cast<uint32_t *>(recvBuf_ + sizeof(uint32_t));
-            uint32_t calcCrc =
-                    CalculateCRC32(recvBuf_ + HEADER_SIZE, recvMsgSize);
+            uint32_t recvCrc = *reinterpret_cast<uint32_t *>(recvBuf_ + sizeof(uint32_t));
+            uint32_t calcCrc = CalculateCRC32(recvBuf_ + HEADER_SIZE, recvMsgSize);
             if (recvCrc != calcCrc) {
                 errorCount_++;
-                std::cout << "[CLIENT] Warning: CRC mismatch at message "
-                          << msgRecv_
-                          << ", direction: Server->Client, expected: "
-                          << calcCrc << ", got: " << recvCrc << std::endl;
+                std::cout << "[CLIENT] Warning: CRC mismatch at message " << msgRecv_
+                          << ", direction: Server->Client, expected: " << calcCrc << ", got: " << recvCrc << std::endl;
             }
             msgRecv_++;
 
             // 移动剩余数据到缓冲区开头
             size_t moveSize = recvOffset_ - (HEADER_SIZE + recvMsgSize);
             if (moveSize > 0) {
-                memmove(recvBuf_, recvBuf_ + HEADER_SIZE + recvMsgSize,
-                        moveSize);
+                memmove(recvBuf_, recvBuf_ + HEADER_SIZE + recvMsgSize, moveSize);
             }
             recvOffset_ -= (HEADER_SIZE + recvMsgSize);
         }
@@ -663,8 +631,7 @@ void SubCommandData::DataServer::Cleanup()
 int SubCommandData::DataServer::Run()
 {
     sendBuf_ = reinterpret_cast<uint8_t *>(malloc(MAX_MSG_SIZE + HEADER_SIZE));
-    recvBuf_ =
-            reinterpret_cast<uint8_t *>(malloc(MAX_MSG_SIZE + HEADER_SIZE));
+    recvBuf_ = reinterpret_cast<uint8_t *>(malloc(MAX_MSG_SIZE + HEADER_SIZE));
     if (!sendBuf_ || !recvBuf_) {
         std::cout << "Error: malloc failed" << std::endl;
         return -1;
@@ -672,14 +639,12 @@ int SubCommandData::DataServer::Run()
 
     listenFd_ = ubsocket_socket(AF_INET, SOCK_STREAM, 0);
     if (listenFd_ < 0) {
-        std::cout << "Error: create socket failed, errno: " << errno
-                  << std::endl;
+        std::cout << "Error: create socket failed, errno: " << errno << std::endl;
         return -errno;
     }
 
     int opt = 1;
-    if (setsockopt(listenFd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) <
-        0) {
+    if (setsockopt(listenFd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
         std::cout << "Error: setsockopt failed, errno: " << errno << std::endl;
         return -errno;
     }
@@ -689,8 +654,7 @@ int SubCommandData::DataServer::Run()
     addr.sin_port = htons(cmd_.port_);
     inet_pton(AF_INET, cmd_.ip_.c_str(), &addr.sin_addr);
 
-    if (ubsocket_bind(listenFd_, reinterpret_cast<struct sockaddr *>(&addr),
-                      sizeof(addr)) < 0) {
+    if (ubsocket_bind(listenFd_, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0) {
         std::cout << "Error: bind failed, errno: " << errno << std::endl;
         return -errno;
     }
@@ -702,8 +666,7 @@ int SubCommandData::DataServer::Run()
 
     epollFd_ = ubsocket_epoll_create1(0);
     if (epollFd_ < 0) {
-        std::cout << "Error: create epoll failed, errno: " << errno
-                  << std::endl;
+        std::cout << "Error: create epoll failed, errno: " << errno << std::endl;
         return -errno;
     }
 
@@ -711,13 +674,11 @@ int SubCommandData::DataServer::Run()
     ev.events = EPOLLIN;
     ev.data.fd = listenFd_;
     if (ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, listenFd_, &ev) < 0) {
-        std::cout << "Error: epoll_ctl add listen failed, errno: " << errno
-                  << std::endl;
+        std::cout << "Error: epoll_ctl add listen failed, errno: " << errno << std::endl;
         return -errno;
     }
 
-    std::cout << "Data server listening on " << cmd_.ip_ << ":" << cmd_.port_
-              << std::endl;
+    std::cout << "Data server listening on " << cmd_.ip_ << ":" << cmd_.port_ << std::endl;
 
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -739,8 +700,7 @@ int SubCommandData::DataServer::Run()
             if (errno == EINTR) {
                 continue;
             }
-            std::cout << "Error: epoll_wait failed, errno: " << errno
-                      << std::endl;
+            std::cout << "Error: epoll_wait failed, errno: " << errno << std::endl;
             return -errno;
         }
 
@@ -749,15 +709,12 @@ int SubCommandData::DataServer::Run()
                 while (true) {
                     struct sockaddr_in clientAddr;
                     socklen_t len = sizeof(clientAddr);
-                    int fd = ubsocket_accept(
-                        listenFd_, reinterpret_cast<struct sockaddr *>(&clientAddr),
-                        &len);
+                    int fd = ubsocket_accept(listenFd_, reinterpret_cast<struct sockaddr *>(&clientAddr), &len);
                     if (fd < 0) {
                         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                            break;  // 立即退出 accept 循环，不要继续调用 accept
+                            break; // 立即退出 accept 循环，不要继续调用 accept
                         }
-                        std::cout << "Error: accept failed, errno: " << errno
-                                  << std::endl;
+                        std::cout << "Error: accept failed, errno: " << errno << std::endl;
                         return -errno;
                     }
 
@@ -770,25 +727,22 @@ int SubCommandData::DataServer::Run()
                     timeStart = Func::TimeUs();
 
                     if (SetNonBlocking(clientFd_) < 0) {
-                        std::cout << "Error: set non-blocking failed, errno: " << errno
-                                  << std::endl;
+                        std::cout << "Error: set non-blocking failed, errno: " << errno << std::endl;
                         return -errno;
                     }
 
-                    ev.events = EPOLLIN | EPOLLOUT | EPOLLET;  // 使用边缘触发
+                    ev.events = EPOLLIN | EPOLLOUT | EPOLLET; // 使用边缘触发
                     ev.data.fd = clientFd_;
                     int epollRet = ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, clientFd_, &ev);
                     if (epollRet < 0) {
-                        std::cout << "Error: epoll_ctl add client failed, errno: "
-                                  << errno << std::endl;
+                        std::cout << "Error: epoll_ctl add client failed, errno: " << errno << std::endl;
                         return -errno;
                     }
 
                     char ipStr[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &clientAddr.sin_addr, ipStr, sizeof(ipStr));
-                    std::cout << "Client connected: " << ipStr << ":"
-                              << ntohs(clientAddr.sin_port) << std::endl;
-                    break;  // 退出 accept 循环，等待客户端事件
+                    std::cout << "Client connected: " << ipStr << ":" << ntohs(clientAddr.sin_port) << std::endl;
+                    break; // 退出 accept 循环，等待客户端事件
                 }
             }
             if (events[i].data.fd == clientFd_) {
@@ -802,10 +756,9 @@ int SubCommandData::DataServer::Run()
                         ssize_t sent = ubsocket_writev(clientFd_, sendIov, 1);
                         if (sent < 0) {
                             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                                break;  // 缓冲区满了，等待下一次 EPOLLOUT 事件
+                                break; // 缓冲区满了，等待下一次 EPOLLOUT 事件
                             }
-                            std::cout << "Error: writev failed, errno: " << errno
-                                      << std::endl;
+                            std::cout << "Error: writev failed, errno: " << errno << std::endl;
                             return -errno;
                         } else {
                             totalBytesSent += sent;
@@ -818,8 +771,8 @@ int SubCommandData::DataServer::Run()
                 if (events[i].events & EPOLLIN) {
                     while (true) {
                         if (recvOffset_ >= static_cast<ssize_t>(MAX_MSG_SIZE + HEADER_SIZE)) {
-                            std::cout << "Error: recvOffset_ " << recvOffset_
-                                      << " exceeds buffer size " << (MAX_MSG_SIZE + HEADER_SIZE) << std::endl;
+                            std::cout << "Error: recvOffset_ " << recvOffset_ << " exceeds buffer size "
+                                      << (MAX_MSG_SIZE + HEADER_SIZE) << std::endl;
                             return -1;
                         }
 
@@ -832,8 +785,7 @@ int SubCommandData::DataServer::Run()
                             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                                 break;
                             }
-                            std::cout << "Error: readv failed, errno: " << errno
-                                      << std::endl;
+                            std::cout << "Error: readv failed, errno: " << errno << std::endl;
                             return -errno;
                         }
                         if (recvd == 0) {
@@ -845,10 +797,8 @@ int SubCommandData::DataServer::Run()
                             std::cout << "Messages received: " << msgRecv_ << std::endl;
                             std::cout << "Messages sent: " << msgSent_ << std::endl;
                             std::cout << "CRC errors: " << errorCount_ << std::endl;
-                            std::cout << "Total bytes received: " << totalBytesRecv
-                                      << std::endl;
-                            std::cout << "Total bytes sent: " << totalBytesSent
-                                      << std::endl;
+                            std::cout << "Total bytes received: " << totalBytesRecv << std::endl;
+                            std::cout << "Total bytes sent: " << totalBytesSent << std::endl;
                             std::cout << "Duration: " << durationMs << " ms" << std::endl;
 
                             msgRecv_ = 0;
@@ -858,8 +808,7 @@ int SubCommandData::DataServer::Run()
                             totalBytesSent = 0;
                             timeStart = Func::TimeUs();
 
-                            ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_DEL, clientFd_,
-                                               nullptr);
+                            ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_DEL, clientFd_, nullptr);
                             close(clientFd_);
                             clientFd_ = -1;
                             recvOffset_ = 0;
@@ -870,11 +819,9 @@ int SubCommandData::DataServer::Run()
                         totalBytesRecv += recvd;
 
                         while (recvOffset_ >= static_cast<ssize_t>(HEADER_SIZE)) {
-                            uint32_t msgSize = *reinterpret_cast<uint32_t *>(
-                                    recvBuf_ + sizeof(uint32_t) * 2);
+                            uint32_t msgSize = *reinterpret_cast<uint32_t *>(recvBuf_ + sizeof(uint32_t) * 2);
                             if (msgSize > MAX_MSG_SIZE) {
-                                std::cout << "Error: message size " << msgSize
-                                          << " exceeds maximum" << std::endl;
+                                std::cout << "Error: message size " << msgSize << " exceeds maximum" << std::endl;
                                 return -1;
                             }
 
@@ -882,16 +829,13 @@ int SubCommandData::DataServer::Run()
                                 break;
                             }
 
-                            uint32_t recvCrc = *reinterpret_cast<uint32_t *>(
-                                    recvBuf_ + sizeof(uint32_t));
-                            uint32_t calcCrc =
-                                    CalculateCRC32(recvBuf_ + HEADER_SIZE, msgSize);
+                            uint32_t recvCrc = *reinterpret_cast<uint32_t *>(recvBuf_ + sizeof(uint32_t));
+                            uint32_t calcCrc = CalculateCRC32(recvBuf_ + HEADER_SIZE, msgSize);
                             if (recvCrc != calcCrc) {
                                 errorCount_++;
-                                std::cout << "[SERVER] Warning: CRC mismatch at message "
-                                          << msgRecv_
-                                          << ", direction: Client->Server, expected: "
-                                          << calcCrc << ", got: " << recvCrc << std::endl;
+                                std::cout << "[SERVER] Warning: CRC mismatch at message " << msgRecv_
+                                          << ", direction: Client->Server, expected: " << calcCrc
+                                          << ", got: " << recvCrc << std::endl;
                             }
 
                             size_t copySize = HEADER_SIZE + msgSize;
@@ -912,8 +856,7 @@ int SubCommandData::DataServer::Run()
                                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
                                         break;
                                     }
-                                    std::cout << "Error: writev failed, errno: " << errno
-                                              << std::endl;
+                                    std::cout << "Error: writev failed, errno: " << errno << std::endl;
                                     return -errno;
                                 } else {
                                     totalBytesSent += sent;
@@ -931,8 +874,7 @@ int SubCommandData::DataServer::Run()
 
                             size_t moveSize = recvOffset_ - (HEADER_SIZE + msgSize);
                             if (moveSize > 0) {
-                                memmove(recvBuf_, recvBuf_ + HEADER_SIZE + msgSize,
-                                        moveSize);
+                                memmove(recvBuf_, recvBuf_ + HEADER_SIZE + msgSize, moveSize);
                             }
                             recvOffset_ -= (HEADER_SIZE + msgSize);
                         }
@@ -947,10 +889,8 @@ int SubCommandData::DataServer::Run()
                         std::cout << "Messages received: " << msgRecv_ << std::endl;
                         std::cout << "Messages sent: " << msgSent_ << std::endl;
                         std::cout << "CRC errors: " << errorCount_ << std::endl;
-                        std::cout << "Total bytes received: " << totalBytesRecv
-                                  << std::endl;
-                        std::cout << "Total bytes sent: " << totalBytesSent
-                                  << std::endl;
+                        std::cout << "Total bytes received: " << totalBytesRecv << std::endl;
+                        std::cout << "Total bytes sent: " << totalBytesSent << std::endl;
                         std::cout << "Duration: " << durationMs << " ms" << std::endl;
 
                         msgRecv_ = 0;

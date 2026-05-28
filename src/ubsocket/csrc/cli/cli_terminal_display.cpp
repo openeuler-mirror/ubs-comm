@@ -11,7 +11,6 @@
 #include "umq_dfx_types.h"
 #include "umq_types.h"
 
-
 namespace Statistics {
 
 static constexpr int IPV6_HEXTET_COUNT = 8;
@@ -20,7 +19,7 @@ static constexpr int IPV6_HEXTET_BYTE_COUNT = 2;
 static constexpr int BYTE_BIT_WIDTH = 8;
 static constexpr int MAX_FLOW_CONTROL_STR = 4096;
 
-char* In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufSize)
+char *In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufSize)
 {
     if (in6Addr == nullptr || dstBuf == nullptr || bufSize < INET6_ADDRSTRLEN) {
         return nullptr;
@@ -32,7 +31,7 @@ char* In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufS
     char *pos = dstBuf;
     for (int i = 0; i < IPV6_HEXTET_COUNT; i++) {
         uint16_t segment = (uint16_t)(in6Addr->s6_addr[IPV6_HEXTET_BYTE_COUNT * i] << BYTE_BIT_WIDTH) |
-            in6Addr->s6_addr[IPV6_HEXTET_BYTE_COUNT * i + 1];
+                           in6Addr->s6_addr[IPV6_HEXTET_BYTE_COUNT * i + 1];
         int written = snprintf_s(pos, bufSize - (pos - dstBuf), bufSize - (pos - dstBuf), "%04x", segment);
         if (written <= 0 || written >= (int)(bufSize - (pos - dstBuf))) {
             return nullptr;
@@ -103,7 +102,7 @@ void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
     Refresh();
     PrintHeader(header);
     PrintSubTitle();
-    CLISocketData* sockData = reinterpret_cast<CLISocketData *>(data + headerSize);
+    CLISocketData *sockData = reinterpret_cast<CLISocketData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
         PrintData(sockData);
         sockData += 1;
@@ -135,12 +134,11 @@ void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataL
     PrintHeader(header);
 
     char fcStatStr[MAX_FLOW_CONTROL_STR] = {};
-    CLIFlowControlData* sockData = reinterpret_cast<CLIFlowControlData *>(data + headerSize);
+    CLIFlowControlData *sockData = reinterpret_cast<CLIFlowControlData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
-        if (umq_flow_control_stats_to_str(&(sockData->umqFlowControlStat),
-            fcStatStr, MAX_FLOW_CONTROL_STR) < 0) {
-                CLI_LOG("Failed to generate flow control info string\n");
-            }
+        if (umq_flow_control_stats_to_str(&(sockData->umqFlowControlStat), fcStatStr, MAX_FLOW_CONTROL_STR) < 0) {
+            CLI_LOG("Failed to generate flow control info string\n");
+        }
         printf("Socket %d:\n", i);
         printf("%s", fcStatStr);
         sockData += 1;
@@ -153,56 +151,50 @@ void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataL
 void PrintProbeHeader()
 {
     printf("\n");
-    printf("%-8s | %-10s | %-10s | %-10s | %-12s | %-12s | %-12s\n",
-            "FD", "UBS RTT(ns)", "CliΔ(ns)", "SrvΔ(ns)",
-            "UMQ RTT(ns)", "UMQ CliΔ(ns)", "UMQ SrvΔ(ns)");
+    printf("%-8s | %-10s | %-10s | %-10s | %-12s | %-12s | %-12s\n", "FD", "UBS RTT(ns)", "CliΔ(ns)", "SrvΔ(ns)",
+           "UMQ RTT(ns)", "UMQ CliΔ(ns)", "UMQ SrvΔ(ns)");
     printf("---------------------------------------------------------------------------------------------------"
            "-------------------------------\n");
 }
 
 // --- 辅助函数：打印单行概览数据 ---
-void PrintProbeRow(const CLIProbeData* probeData)
+void PrintProbeRow(const CLIProbeData *probeData)
 {
     // 1. 基础转换
-    double clientDelta = (double)(probeData->client_recv_rsp_time_ns -
-                                    probeData->client_send_time_ns);
-    double serverDelta = (double)(probeData->server_rsp_time_ns -
-                                    probeData->server_recv_time_ns);
+    double clientDelta = (double)(probeData->client_recv_rsp_time_ns - probeData->client_send_time_ns);
+    double serverDelta = (double)(probeData->server_rsp_time_ns - probeData->server_recv_time_ns);
     double ubsRtt = clientDelta - serverDelta;
 
     // 2. UMQ 差值计算
-    double umqClientDelta = (double)(probeData->umq_client_recv_time_ns -
-                                            probeData->umq_client_post_time_ns);
-    double umqServerDelta = (double)(probeData->umq_server_rsp_time_ns -
-                                            probeData->umq_server_recv_time_ns);
+    double umqClientDelta = (double)(probeData->umq_client_recv_time_ns - probeData->umq_client_post_time_ns);
+    double umqServerDelta = (double)(probeData->umq_server_rsp_time_ns - probeData->umq_server_recv_time_ns);
 
     // 3. UMQ RTT 计算 (Client Δ - Server Δ)
     double umqRtt = umqClientDelta - umqServerDelta;
 
     // 4. 打印
-    printf("%-8d | %-10.3f | %-10.3f | %-10.3f | %-12.3f | %-12.3f | %-12.3f\n",
-            probeData->fd, ubsRtt, clientDelta, serverDelta,
-            umqRtt, umqClientDelta, umqServerDelta);
+    printf("%-8d | %-10.3f | %-10.3f | %-10.3f | %-12.3f | %-12.3f | %-12.3f\n", probeData->fd, ubsRtt, clientDelta,
+           serverDelta, umqRtt, umqClientDelta, umqServerDelta);
 }
 
 // --- 辅助函数：打印详细打点信息 ---
-void PrintProbeDetails(const CLIProbeData* probeData)
+void PrintProbeDetails(const CLIProbeData *probeData)
 {
     // Client 端
     printf("  +-- [Client] ubsocket_client_send(ns): %-10lu | ubsocket_client_recv(ns): %-10lu\n",
            probeData->client_send_time_ns, probeData->client_recv_rsp_time_ns);
 
     // UMQ Client
-    printf("  |            umq_post(ns): %-10lu | umq_recv(ns): %-10lu\n",
-           probeData->umq_client_post_time_ns, probeData->umq_client_recv_time_ns);
+    printf("  |            umq_post(ns): %-10lu | umq_recv(ns): %-10lu\n", probeData->umq_client_post_time_ns,
+           probeData->umq_client_recv_time_ns);
 
     // Server 端
     printf("  +-- [Server] ubsocket_server_recv(ns): %-10lu | ubsocket_server_rsp(ns): %-10lu\n",
            probeData->server_recv_time_ns, probeData->server_rsp_time_ns);
 
     // UMQ Server
-    printf("  |            umq_recv(ns): %-10lu | umq_rsp(ns): %-10lu\n",
-           probeData->umq_server_recv_time_ns, probeData->umq_server_rsp_time_ns);
+    printf("  |            umq_recv(ns): %-10lu | umq_rsp(ns): %-10lu\n", probeData->umq_server_recv_time_ns,
+           probeData->umq_server_rsp_time_ns);
 
     printf("\n"); // 分隔空行
 }
@@ -241,15 +233,14 @@ void TerminalDisplay::DisplayProbeInfo(uint8_t *data, const uint32_t dataLen)
     PrintProbeHeader();
 
     // 5. 将原始指针数据封装进 vector，统一后续处理逻辑
-    std::vector<CLIProbeData> probeDataList(
-        reinterpret_cast<CLIProbeData*>(data + headerSize), // 起始位置
-        reinterpret_cast<CLIProbeData*>(data + dataLen)     // 结束位置
+    std::vector<CLIProbeData> probeDataList(reinterpret_cast<CLIProbeData *>(data + headerSize), // 起始位置
+                                            reinterpret_cast<CLIProbeData *>(data + dataLen)     // 结束位置
     );
 
     // 6. 循环处理数据 (使用 range-based for 循环)
-    for (const auto& probeData : probeDataList) {
-        PrintProbeRow(&probeData);      // 打印概览行
-        PrintProbeDetails(&probeData);  // 打印详情
+    for (const auto &probeData : probeDataList) {
+        PrintProbeRow(&probeData);     // 打印概览行
+        PrintProbeDetails(&probeData); // 打印详情
     }
 
     // 7. 结束提示
@@ -346,7 +337,7 @@ void TerminalDisplay::PrintData(CLISocketData *sockData)
     NewLine();
 }
 
-void TerminalDisplay::PrintDataItem(std::string name, std::string data, const char* color, bool useGrey)
+void TerminalDisplay::PrintDataItem(std::string name, std::string data, const char *color, bool useGrey)
 {
     if (useGrey) {
         color = colorGrey;
@@ -367,7 +358,7 @@ void TerminalDisplay::Refresh()
 
 std::string TerminalDisplay::BytesToHumanReadable(uint64_t bytes)
 {
-    const char* units[] = {"B", "K", "M", "G", "T"};
+    const char *units[] = {"B", "K", "M", "G", "T"};
     const uint64_t base = 1024;
     uint32_t index = 0;
     double value = static_cast<double>(bytes);
@@ -390,11 +381,11 @@ std::string TerminalDisplay::ConvertTimeToString(uint64_t timestamp)
     return std::string(buffer);
 }
 
-std::string TerminalDisplay::ConvertEidToString(const uint8_t* eidArray, size_t length)
+std::string TerminalDisplay::ConvertEidToString(const uint8_t *eidArray, size_t length)
 {
     std::stringstream ss;
     for (size_t i = 0; i < length; i += 2) {
-        uint16_t val = (eidArray[i] << 8) | eidArray[i+1];
+        uint16_t val = (eidArray[i] << 8) | eidArray[i + 1];
         ss << std::setw(4) << std::setfill('0') << std::hex << static_cast<int>(val);
         if (i != length - 2) {
             ss << ":";
@@ -426,12 +417,11 @@ void TerminalDisplay::DisplayQbufPoolInfo(uint8_t *data, uint32_t dataLen)
     PrintHeader(header);
 
     char qbufPoolStatStr[8192] = {}; // 8KB buffer for qbuf pool stats
-    CLIQbufPoolData* sockData = reinterpret_cast<CLIQbufPoolData *>(data + headerSize);
+    CLIQbufPoolData *sockData = reinterpret_cast<CLIQbufPoolData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
-        if (umq_qbuf_pool_stats_to_str(&(sockData->umqQbufPoolStat),
-            qbufPoolStatStr, sizeof(qbufPoolStatStr)) < 0) {
-                CLI_LOG("Failed to generate qbuf pool info string\n");
-            }
+        if (umq_qbuf_pool_stats_to_str(&(sockData->umqQbufPoolStat), qbufPoolStatStr, sizeof(qbufPoolStatStr)) < 0) {
+            CLI_LOG("Failed to generate qbuf pool info string\n");
+        }
         printf("Socket %d:\n", i);
         printf("%s", qbufPoolStatStr);
         sockData += 1;
@@ -463,12 +453,11 @@ void TerminalDisplay::DisplayUmqInfo(uint8_t *data, uint32_t dataLen)
     PrintHeader(header);
 
     char umqInfoStr[8192] = {}; // 8KB buffer for umq info
-    CLIUmqInfoData* sockData = reinterpret_cast<CLIUmqInfoData *>(data + headerSize);
+    CLIUmqInfoData *sockData = reinterpret_cast<CLIUmqInfoData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
-        if (umq_info_to_str(&(sockData->umqInfo),
-            umqInfoStr, sizeof(umqInfoStr)) < 0) {
-                CLI_LOG("Failed to generate umq info string\n");
-            }
+        if (umq_info_to_str(&(sockData->umqInfo), umqInfoStr, sizeof(umqInfoStr)) < 0) {
+            CLI_LOG("Failed to generate umq info string\n");
+        }
         printf("Socket %d:\n", i);
         printf("%s", umqInfoStr);
         sockData += 1;
@@ -500,12 +489,11 @@ void TerminalDisplay::DisplayIoPacketInfo(uint8_t *data, uint32_t dataLen)
     PrintHeader(header);
 
     char ioPacketStatStr[8192] = {}; // 8KB buffer for io packet stats
-    CLIIoPacketData* sockData = reinterpret_cast<CLIIoPacketData *>(data + headerSize);
+    CLIIoPacketData *sockData = reinterpret_cast<CLIIoPacketData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
-        if (umq_io_stats_to_str(&(sockData->umqPacketStat),
-            ioPacketStatStr, sizeof(ioPacketStatStr)) < 0) {
-                CLI_LOG("Failed to generate io packet stats string\n");
-            }
+        if (umq_io_stats_to_str(&(sockData->umqPacketStat), ioPacketStatStr, sizeof(ioPacketStatStr)) < 0) {
+            CLI_LOG("Failed to generate io packet stats string\n");
+        }
         printf("Socket %d:\n", i);
         printf("%s", ioPacketStatStr);
         sockData += 1;
@@ -537,12 +525,11 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
     PrintHeader(header);
 
     char umqPerfStatStr[8192] = {}; // 8KB buffer for umq perf stats
-    CLIUmqPerfData* sockData = reinterpret_cast<CLIUmqPerfData *>(data + headerSize);
+    CLIUmqPerfData *sockData = reinterpret_cast<CLIUmqPerfData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
-        if (umq_stats_perf_to_str(&(sockData->umqPerfStat),
-            umqPerfStatStr, sizeof(umqPerfStatStr)) < 0) {
-                CLI_LOG("Failed to generate umq perf stats string\n");
-            }
+        if (umq_stats_perf_to_str(&(sockData->umqPerfStat), umqPerfStatStr, sizeof(umqPerfStatStr)) < 0) {
+            CLI_LOG("Failed to generate umq perf stats string\n");
+        }
         printf("Socket %d:\n", i);
         printf("%s", umqPerfStatStr);
         sockData += 1;
@@ -550,4 +537,4 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
     NewLine();
     printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
 }
-}
+} // namespace Statistics

@@ -7,7 +7,6 @@
  * History: 2026-02-09
 */
 
-
 #include "cli_args_parser.h"
 #include "cli_client.h"
 #include "cli_terminal_display.h"
@@ -83,7 +82,7 @@ int main(int argc, char *argv[])
             client.Query(args, response);
             player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
-    }  else {
+    } else {
         CLI_LOG("Invalid command\n");
     }
     ock::ubs::LibcApi::UnLoad();

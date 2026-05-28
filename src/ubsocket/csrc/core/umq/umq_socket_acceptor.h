@@ -64,8 +64,7 @@ private:
     Result DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &mUsedPorts);
     Result DoUbAcceptRetry(SocketPtr socketPtr, Result &ackRet, Result &peerRet);
     Result AcceptExchangeSocketIDs(int fd);
-    Result FillLocalSocketIdsForNegotiate(uint32_t *socket_ids,
-                                          uint32_t &socket_id_count);
+    Result FillLocalSocketIdsForNegotiate(uint32_t *socket_ids, uint32_t &socket_id_count);
     void BuildNegotiateRsp(NegotiateRsp &rsp);
 
     umq_topo_type_t topo_type_;

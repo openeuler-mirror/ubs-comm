@@ -10,8 +10,8 @@
 #ifndef CLI_CLIENT
 #define CLI_CLIENT
 
-#include "cli_message.h"
 #include "cli_args_parser.h"
+#include "cli_message.h"
 
 namespace Statistics {
 class CLIClient {
@@ -47,8 +47,9 @@ public:
     int ProcessUmq(int sockfd, CLIMessage &response);
 
     int ProcessProbeQuery(int sockfd, CLIMessage &response);
+
 private:
     std::string mServerPath;
 };
-}
+} // namespace Statistics
 #endif

@@ -11,9 +11,9 @@
 #define CLI_ARGS_PARSER
 
 #include <arpa/inet.h>
-#include <algorithm>
 #include <getopt.h>
 #include <securec.h>
+#include <algorithm>
 
 #include "cli_message.h"
 
@@ -33,11 +33,11 @@ public:
     };
 
     static bool Parse(int argc, char *argv[], ParsedArgs &args);
-    static void PrintUsage(const char* name);
+    static void PrintUsage(const char *name);
     static bool IsCommandValid(std::string &cmd);
     static CLICommand GetCmd(std::string &cmd);
 
     static const struct option options[];
 };
-}
+} // namespace Statistics
 #endif

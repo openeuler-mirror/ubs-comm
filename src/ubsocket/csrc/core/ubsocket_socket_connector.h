@@ -55,7 +55,10 @@ public:
 
     int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
 
-    ConnectorOpsPtr GetConnectorOps() {return connector_ops_;}
+    ConnectorOpsPtr GetConnectorOps()
+    {
+        return connector_ops_;
+    }
 
     ALWAYS_INLINE bool IsClient(void)
     {

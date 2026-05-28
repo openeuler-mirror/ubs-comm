@@ -23,10 +23,10 @@
 #include <vector>
 #include "umq_dfx_types.h"
 
-#define CLI_LOG(fmt, ...) \
-do { \
-    printf("[%s:%d %s] " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
-} while (0)
+#define CLI_LOG(fmt, ...)                                                           \
+    do {                                                                            \
+        printf("[%s:%d %s] " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+    } while (0)
 
 namespace Statistics {
 enum class CLICommand : uint8_t {
@@ -160,7 +160,7 @@ struct __attribute__((packed)) CLIProbeHeader {
 };
 
 struct __attribute__((packed)) CLIProbeData {
-    int32_t  fd;
+    int32_t fd;
 
     // --- Client Side Timestamps (纳秒) ---
     uint64_t client_send_time_ns;
@@ -263,5 +263,5 @@ private:
     uint32_t mDataLen = 0;
     void *mBuf = nullptr;
 };
-}
+} // namespace Statistics
 #endif

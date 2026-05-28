@@ -67,7 +67,10 @@ public:
     int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
 
     void SetAcceptorOps(const AcceptorOpsPtr &acceptor_ops);
-    AcceptorOpsPtr GetAcceptorOps() {return acceptor_ops_;}
+    AcceptorOpsPtr GetAcceptorOps()
+    {
+        return acceptor_ops_;
+    }
 
     ALWAYS_INLINE bool IsClient(void)
     {

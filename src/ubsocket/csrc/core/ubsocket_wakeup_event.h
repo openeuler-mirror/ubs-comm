@@ -55,7 +55,10 @@ public:
      * @brief Set the listen fd for injecting EPOLLIN event after wakeup
      * @param fd The listen socket file descriptor
      */
-    void SetListenFd(int fd) { listen_fd_ = fd; }
+    void SetListenFd(int fd)
+    {
+        listen_fd_ = fd;
+    }
 
     /**
      * @brief Get pointer to ready_event_ (for identifying ready event in epoll_wait)
@@ -70,13 +73,19 @@ public:
      * @brief Set accept callback for async accept wakeup
      * @param cb Callback function to trigger Accept() again
      */
-    void SetAcceptCallback(std::function<void()> cb) { accept_callback_ = cb; }
+    void SetAcceptCallback(std::function<void()> cb)
+    {
+        accept_callback_ = cb;
+    }
 
     /**
      * @brief Get accept callback (for calling Accept() from ProcessReadyEvents)
      * @return accept_callback_
      */
-    std::function<void()> GetAcceptCallback() { return accept_callback_; }
+    std::function<void()> GetAcceptCallback()
+    {
+        return accept_callback_;
+    }
 
 private:
     int epollFd_ = -1;
@@ -84,8 +93,8 @@ private:
     std::queue<int> ready_event_queue_;
     u_mutex_t *ready_event_mutex_ = nullptr;
     EpollEvent ready_event_ = {EPOLL_EVENT_UB_SOCKET_IN, -1, {}};
-    int listen_fd_ = -1;  // listen fd for injecting EPOLLIN after wakeup
-    std::function<void()> accept_callback_{};  // callback to trigger Accept() again
+    int listen_fd_ = -1;                      // listen fd for injecting EPOLLIN after wakeup
+    std::function<void()> accept_callback_{}; // callback to trigger Accept() again
 };
 
 } // namespace ubs

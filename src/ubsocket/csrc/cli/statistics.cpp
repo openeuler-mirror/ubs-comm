@@ -13,45 +13,45 @@ uint32_t Statistics::Recorder::m_title_len = 0;
 volatile bool Statistics::GlobalStatsMgr::m_running = true;
 
 namespace {
-    constexpr const char* PREFIX = "retry_count: ";
+constexpr const char *PREFIX = "retry_count: ";
 
-    constexpr int MAX_DIGIT_LENGTH = 20;
+constexpr int MAX_DIGIT_LENGTH = 20;
 
-    bool TryGetRetryCount(const char* perfBuf, size_t bufLen, uint64_t& retryCount)
-    {
-        if (bufLen == 0) {
-            return false;
-        }
-        const char* ptr = static_cast<const char*>(memmem(perfBuf, bufLen, PREFIX, strlen(PREFIX)));
-        if (ptr == nullptr) {
-            return false;
-        }
-        ptr += strlen(PREFIX);
-        const size_t remaining = bufLen - (ptr - perfBuf);
-        const void* found = memchr(ptr, '\n', remaining);
-        if (found == nullptr) {
-            UBS_VLOG_ERR("Failed to parse retry_count caused by no data to process\n");
-            return false;
-        }
-        const char* newlinePtr = static_cast<const char*>(found);
-        size_t digitLen = static_cast<size_t>(newlinePtr - ptr);
-        if (digitLen == 0 || digitLen > MAX_DIGIT_LENGTH) {
-            return false;
-        }
-        const std::string numStr(ptr, digitLen);
-        try {
-            size_t processedCharCount = 0;
-            retryCount = std::stoull(numStr, &processedCharCount);
+bool TryGetRetryCount(const char *perfBuf, size_t bufLen, uint64_t &retryCount)
+{
+    if (bufLen == 0) {
+        return false;
+    }
+    const char *ptr = static_cast<const char *>(memmem(perfBuf, bufLen, PREFIX, strlen(PREFIX)));
+    if (ptr == nullptr) {
+        return false;
+    }
+    ptr += strlen(PREFIX);
+    const size_t remaining = bufLen - (ptr - perfBuf);
+    const void *found = memchr(ptr, '\n', remaining);
+    if (found == nullptr) {
+        UBS_VLOG_ERR("Failed to parse retry_count caused by no data to process\n");
+        return false;
+    }
+    const char *newlinePtr = static_cast<const char *>(found);
+    size_t digitLen = static_cast<size_t>(newlinePtr - ptr);
+    if (digitLen == 0 || digitLen > MAX_DIGIT_LENGTH) {
+        return false;
+    }
+    const std::string numStr(ptr, digitLen);
+    try {
+        size_t processedCharCount = 0;
+        retryCount = std::stoull(numStr, &processedCharCount);
 
-            // 检查是否转换了所有字符
-            return processedCharCount > 0;
-        } catch (const std::exception& e) {
-            // 处理转换失败（如：非数字字符、数值溢出等）
-            UBS_VLOG_ERR("Failed to parse retry_count: %s\n", e.what());
-            return false;
-        }
+        // 检查是否转换了所有字符
+        return processedCharCount > 0;
+    } catch (const std::exception &e) {
+        // 处理转换失败（如：非数字字符、数值溢出等）
+        UBS_VLOG_ERR("Failed to parse retry_count: %s\n", e.what());
+        return false;
     }
 }
+} // namespace
 
 void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode)
 {

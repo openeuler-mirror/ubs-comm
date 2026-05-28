@@ -10,9 +10,9 @@
  */
 
 #include "umq_data_rx_ops.h"
+#include "cli/probe_manager.h"
 #include "core/ubsocket_socket_set.h"
 #include "umq_errno_converter.h"
-#include "cli/probe_manager.h"
 #include "umq_socket.h"
 
 namespace ock {
@@ -93,8 +93,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
             continue;
         }
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            UmqSocketPtr sockptr =
-                RefConvert<Socket, UmqSocket>(SocketSet::Instance().GetSocket(fd_));
+            UmqSocketPtr sockptr = RefConvert<Socket, UmqSocket>(SocketSet::Instance().GetSocket(fd_));
             sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::RX_PACKET_COUNT, 1);
         }
         block_cache_.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);

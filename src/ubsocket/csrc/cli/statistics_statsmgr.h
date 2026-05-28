@@ -11,13 +11,13 @@
 #ifndef STATISTICS_STATSMGR_H
 #define STATISTICS_STATSMGR_H
 
-#include <cmath>
-#include <limits>
-#include <iomanip>
 #include <atomic>
-#include <vector>
-#include <string>
+#include <cmath>
+#include <iomanip>
 #include <iostream>
+#include <limits>
+#include <string>
+#include <vector>
 
 #include "cli_message.h"
 #include "under_api/umq_api.h"
@@ -26,7 +26,7 @@
 
 namespace Statistics {
 class Recorder {
-    public:
+public:
     const static uint32_t NAME_WIDTH_MAX = 30;
     const static uint32_t FIELD_WIDTH_MAX = 21;
     const static uint32_t FD_WIDTH_MAX = 10;
@@ -35,14 +35,14 @@ class Recorder {
 
     Recorder(const char *name)
     {
-        if(name == nullptr){
+        if (name == nullptr) {
             throw std::runtime_error("Input invalid name");
         }
 
         m_name = name;
-        if(m_name.length() > NAME_WIDTH_MAX){
-            throw std::runtime_error("Input name length(" + std::to_string(m_name.length()) +
-                ") exceeds upper limit(" + std::to_string(NAME_WIDTH_MAX) + ")");
+        if (m_name.length() > NAME_WIDTH_MAX) {
+            throw std::runtime_error("Input name length(" + std::to_string(m_name.length()) + ") exceeds upper limit(" +
+                                     std::to_string(NAME_WIDTH_MAX) + ")");
         }
     }
 
@@ -72,7 +72,7 @@ class Recorder {
 
     double GetVar()
     {
-        return (m_cnt < RPC_VAR) ? 0 : m_m2 / (m_cnt -1);
+        return (m_cnt < RPC_VAR) ? 0 : m_m2 / (m_cnt - 1);
     }
 
     double GetStd()
@@ -87,7 +87,7 @@ class Recorder {
          * CV > 1: Indicates it has relatively high dispersion. The volatility is above the average level.
          * CV >1.5 or higher: Typically suggests it has very high volatility, possibly containing extreme
          * values or multipe distinct groups. */
-         return (m_cnt == 0 || IsZero(m_mean)) ? 0 : GetStd() / m_mean;
+        return (m_cnt == 0 || IsZero(m_mean)) ? 0 : GetStd() / m_mean;
     }
 
     void Reset()
@@ -101,34 +101,28 @@ class Recorder {
 
     void GetInfo(int fd, std::ostringstream &oss)
     {
-        if(m_min == UINT32_MAX && m_max == 0){
+        if (m_min == UINT32_MAX && m_max == 0) {
             /* When both the maximum and minimum values remain unchanged, it is considered that no statistical
              * information for this variable has been recorded, and a '-' is directly output. */
-            oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd)
-                << std::setw(NAME_WIDTH_MAX) << m_name
-                << std::setw(FIELD_WIDTH_MAX) << "-"
-                << std::endl;
-            return;    
+            oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd) << std::setw(NAME_WIDTH_MAX) << m_name
+                << std::setw(FIELD_WIDTH_MAX) << "-" << std::endl;
+            return;
         }
 
-        oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd)
-            << std::setw(NAME_WIDTH_MAX) << m_name
-            << std::setw(FIELD_WIDTH_MAX) << m_cnt
-            << std::endl;
+        oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd) << std::setw(NAME_WIDTH_MAX) << m_name
+            << std::setw(FIELD_WIDTH_MAX) << m_cnt << std::endl;
     }
 
     static void GetTitle(std::ostringstream &oss)
     {
-        oss << std::left << std::setw(FD_WIDTH_MAX) << "fd"
-            << std::setw(NAME_WIDTH_MAX) << "type"
-            << std::setw(FIELD_WIDTH_MAX) << "total"
-            << std::endl;
+        oss << std::left << std::setw(FD_WIDTH_MAX) << "fd" << std::setw(NAME_WIDTH_MAX) << "type"
+            << std::setw(FIELD_WIDTH_MAX) << "total" << std::endl;
     }
 
     static void FillEmptyForm(std::ostringstream &oss)
     {
         static std::once_flag once_flag;
-        std::call_once(once_flag, [](){
+        std::call_once(once_flag, []() {
             std::ostringstream title_oss;
             GetTitle(title_oss);
             m_title_len = title_oss.str().length();
@@ -136,21 +130,16 @@ class Recorder {
 
         /* Here, the use if length rather than content comparison is to enhance the efficiency of the comparsion,
          * with the caller ensuring that the content does not deviate from expectations. */
-        if (oss.str().length() != m_title_len){
+        if (oss.str().length() != m_title_len) {
             return;
         }
-        
-        oss << std::left << std::setw(FD_WIDTH_MAX) << "-"
-            << std::setw(NAME_WIDTH_MAX) << "-"
-            << std::setw(FIELD_WIDTH_MAX) << "-"
-            << std::setw(FIELD_WIDTH_MAX) << "-"
-            << std::setw(FIELD_WIDTH_MAX) << "-"
-            << std::setw(FIELD_WIDTH_MAX) << "-"
-            << std::setw(FIELD_WIDTH_MAX) << "-"
-            << std::endl;
+
+        oss << std::left << std::setw(FD_WIDTH_MAX) << "-" << std::setw(NAME_WIDTH_MAX) << "-"
+            << std::setw(FIELD_WIDTH_MAX) << "-" << std::setw(FIELD_WIDTH_MAX) << "-" << std::setw(FIELD_WIDTH_MAX)
+            << "-" << std::setw(FIELD_WIDTH_MAX) << "-" << std::setw(FIELD_WIDTH_MAX) << "-" << std::endl;
     }
 
-    private:
+private:
     bool IsZero(double a)
     {
         return std::fabs(a) < std::numeric_limits<double>::epsilon();
@@ -175,11 +164,12 @@ public:
         TX_BYTE_COUNT,
         TX_ERROR_PACKET_COUNT,
         TX_LOST_PACKET_COUNT,
-        
+
         TRACE_STATE_TYPE_MAX
     };
 
-    StatsMgr() {
+    StatsMgr()
+    {
         InitStatsMgr();
     }
     ~StatsMgr() = default;
@@ -189,7 +179,7 @@ public:
         for (int i = 0; i < TRACE_STATE_TYPE_MAX; ++i) {
             try {
                 m_recorder_vec.emplace_back(GetStatsStr((enum trace_stats_type)i));
-            } catch (std::exception& e) {
+            } catch (std::exception &e) {
                 UBS_VLOG_ERR("Failed to construct statistics manager, %s\n", e.what());
                 return false;
             }
@@ -225,7 +215,8 @@ public:
         return mReTxCount.load(std::memory_order_relaxed);
     }
 
-    static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss, uint32_t pid) {
+    static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss, uint32_t pid)
+    {
         constexpr int timeBufSize = 32;
         time_t now = time(nullptr);
         char timeBuf[timeBufSize];
@@ -336,14 +327,8 @@ public:
     const char *GetStatsStr(enum trace_stats_type type)
     {
         const static char *state_type_str[TRACE_STATE_TYPE_MAX] = {
-            "totalConnections",
-            "activeConnections",
-            "sendPackets",
-            "receivePackets",
-            "sendBytes",
-            "receiveBytes",
-            "errorPackets",
-            "lostPackets",
+            "totalConnections", "activeConnections", "sendPackets",  "receivePackets",
+            "sendBytes",        "receiveBytes",      "errorPackets", "lostPackets",
         };
 
         return state_type_str[type];
@@ -363,10 +348,9 @@ public:
     }
 
 protected:
-
     std::vector<Statistics::Recorder> m_recorder_vec;
     bool m_stats_enable = false;
 };
-}
+} // namespace Statistics
 
 #endif

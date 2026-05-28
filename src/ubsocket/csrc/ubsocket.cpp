@@ -10,6 +10,8 @@
  */
 #include <iostream>
 
+#include "cli/probe_manager.h"
+#include "cli/statistics.h"
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_print_stats_mgr.h"
@@ -22,9 +24,6 @@
 #include "include/ubsocket.h"
 #include "ubsocket_struct_helper.h"
 #include "under_api/dl_api.h"
-#include "core/umq/umq_setting.h"
-#include "cli/statistics.h"
-#include "cli/probe_manager.h"
 
 using namespace ock::ubs;
 
@@ -183,7 +182,8 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
 
     if (GlobalSetting::UBS_PROBE_ENABLED) {
-        (void)Statistics::ProbeManager::GetInstance().Start(GlobalSetting::UBS_PROBE_MS, GlobalSetting::UBS_PROBE_BATCH, -1);
+        (void)Statistics::ProbeManager::GetInstance().Start(GlobalSetting::UBS_PROBE_MS, GlobalSetting::UBS_PROBE_BATCH,
+                                                            -1);
     }
 
     /* last step: set initialized */
@@ -235,8 +235,7 @@ UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg, const c
     umq_log_config_t log_cfg = {
         .log_flag = UMQ_LOG_FLAG_FUNC | UMQ_LOG_FLAG_LEVEL,
         .func = UmqLogger,
-        .level = static_cast<umq_log_level_t>(umq_log_level::UMQ_LOG_LEVEL_DEBUG - Logger::Instance().GetLogLevel())
-    };
+        .level = static_cast<umq_log_level_t>(umq_log_level::UMQ_LOG_LEVEL_DEBUG - Logger::Instance().GetLogLevel())};
     return umq_log_config_set(&log_cfg);
 }
 
@@ -271,9 +270,8 @@ UBS_API void ubsocket_iobuf_deallocate(void *addr)
 UBS_API void ubsocket_trace_statistic_init(void)
 {
     umq_trans_mode_t transMode = umq::UmqSetting::UMQ_TRANS_MODE;
-    Statistics::PrintStatsMgr::StartStatsCollection(
-        GlobalSetting::UBS_TRACE_TIME, GlobalSetting::UBS_TRACE_FILE_PATH,
-        GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
+    Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_TRACE_TIME, GlobalSetting::UBS_TRACE_FILE_PATH,
+                                                    GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
 }
 
 UBS_API void ubsocket_trace_statistic_destroy(void)

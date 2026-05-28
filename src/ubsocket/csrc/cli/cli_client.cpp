@@ -9,18 +9,18 @@
 
 #include "cli_client.h"
 
-#include "net_common.h"
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_socket_helper.h"
+#include "net_common.h"
 #include "under_api/dl_libc_api.h"
 
 #include "cli_args_parser.h"
 #include "cli_terminal_display.h"
-#include "scope_exit.h"
 #include "net_common.h"
+#include "scope_exit.h"
 
-using ock::ubs::SocketConnHelper;
 using ock::ubs::LibcApi;
+using ock::ubs::SocketConnHelper;
 
 namespace Statistics {
 
@@ -310,10 +310,10 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
         return -1;
     }
     addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-    if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+    if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         CLI_LOG("Failed to connect server errno=%d, error=%s\n", errno,
-            NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return -1;
     }
 
@@ -332,34 +332,34 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
         ret = ProcessTopo(sockfd, response, args);
         return ret;
     }
-    
+
     if (args.command == CLICommand::FLOW_CONTROL) {
         ret = ProcessFlowControl(sockfd, response);
         return ret;
     }
-    
+
     if (args.command == CLICommand::QBUF_POOL) {
         ret = ProcessQbufPool(sockfd, response);
         return ret;
     }
-    
+
     if (args.command == CLICommand::UMQ_INFO) {
         ret = ProcessUmqInfo(sockfd, response);
         return ret;
     }
-    
+
     if (args.command == CLICommand::IO) {
         ret = ProcessIo(sockfd, response);
         return ret;
     }
-    
+
     if (args.command == CLICommand::UMQ) {
         ret = ProcessUmq(sockfd, response);
         return ret;
     }
 
     if (args.command == CLICommand::PROBE) {
-        ret =  ProcessProbeQuery(sockfd, response);
+        ret = ProcessProbeQuery(sockfd, response);
         return ret;
     }
     return 0;
@@ -388,4 +388,4 @@ int CLIClient::SetSocketTimeout(int sockFd) const
 
     return 0;
 }
-}
+} // namespace Statistics

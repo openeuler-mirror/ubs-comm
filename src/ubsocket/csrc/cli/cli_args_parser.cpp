@@ -23,7 +23,7 @@ const struct option CLIArgsParser::options[] = {
     {nullptr, 0, nullptr, 0},
 };
 
-static bool ParseIpv6Eid(char* eidBuf, size_t bufSize, const char* arg)
+static bool ParseIpv6Eid(char *eidBuf, size_t bufSize, const char *arg)
 {
     if (arg == nullptr) {
         CLI_LOG("Invalid eid: argument is null\n");
@@ -106,7 +106,7 @@ bool CLIArgsParser::Parse(int argc, char *argv[], ParsedArgs &args)
     return true;
 }
 
-void CLIArgsParser::PrintUsage(const char* progName)
+void CLIArgsParser::PrintUsage(const char *progName)
 {
     printf("=============================================\n");
     printf("Usage: %s <command> [options]\n", progName);
@@ -148,7 +148,8 @@ void CLIArgsParser::PrintUsage(const char* progName)
     printf("    -w, --watch          Optional, enable real-time monitoring (refresh io packet info every second)\n");
     printf("\n");
     printf("  [umq command only]:\n");
-    printf("    -w, --watch          Optional, enable real-time monitoring (refresh umq performance info every second)\n");
+    printf(
+        "    -w, --watch          Optional, enable real-time monitoring (refresh umq performance info every second)\n");
     printf("\n");
     printf("  [probe command only]:\n");
     printf("    -w, --watch          Optional, enable real-time monitoring (refresh probe info every second)\n");
@@ -219,4 +220,4 @@ CLICommand CLIArgsParser::GetCmd(std::string &cmd)
     }
     return CLICommand::INVALID;
 }
-}
+} // namespace Statistics
