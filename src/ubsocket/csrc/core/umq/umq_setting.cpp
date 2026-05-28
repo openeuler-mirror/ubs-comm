@@ -65,8 +65,8 @@ void UmqSetting::AddRules() noexcept
 {
     /* int64 rule: name, required, min, max */
     Int64Rule rules_int64[] = {{ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
-                               {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, 1024},
-                               {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 8192}};
+                               {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, std::numeric_limits<int64_t>::max()},
+                               {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 6144}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_UMQ_BLOCK_TYPE, false, "tiny|default|small|medium|large"},
@@ -109,11 +109,11 @@ Result UmqSetting::LoadEnv() noexcept
     }
 
     if (GS::GetEnvAndValidate(ENV_UMQ_MEM_POOL_INIT_SIZE, int64EnvValue)) {
-        UMQ_MEM_POOL_INIT_SIZE_MB = static_cast<uint16_t>(int64EnvValue);
+        UMQ_MEM_POOL_INIT_SIZE_MB = static_cast<uint64_t>(int64EnvValue);
     }
 
-    if (GS::GetEnvAndValidate(ENV_UMQ_MEM_POOL_MAX_SIZE, int64EnvValue)) {
-        UMQ_MEM_POOL_MAX_SIZE_MB = static_cast<uint16_t>(int64EnvValue);
+    if (GS::GetEnv(ENV_UMQ_MEM_POOL_MAX_SIZE, int64EnvValue)) {
+        UMQ_MEM_POOL_MAX_SIZE_MB = static_cast<uint64_t>(int64EnvValue);
     }
 
     if (GS::GetEnvAndValidate(ENV_UMQ_DEV_IP, strEnvValue)) {
@@ -144,7 +144,7 @@ Result UmqSetting::LoadEnv() noexcept
 
     if (UMQ_DEV_IP.size() > 0) {
         UBS_VLOG_ERR("IP address is invalid. Please double check your input(%s)\n", UMQ_DEV_IP.c_str());
-        return UBS_ERROR;
+        return UBS_INVALID_PARAM;
     } else if (UMQ_DEV_NAME.size() > 0) {
         UBS_VLOG_INFO("%s: %s\n", ENV_UMQ_DEV_NAME, UMQ_DEV_NAME.c_str());
         if (UMQ_DEV_SRC_EID_STR.size() > 0) {
@@ -152,7 +152,7 @@ Result UmqSetting::LoadEnv() noexcept
                 UBS_VLOG_INFO("%s: %s (eid)\n", ENV_UMQ_DEV_SRC_EID, UMQ_DEV_SRC_EID_STR.c_str());
             } else {
                 UBS_VLOG_ERR("Eid is invalid. Please double check your input(%s)\n", UMQ_DEV_SRC_EID_STR.c_str());
-                return UBS_ERROR;
+                return UBS_INVALID_PARAM;
             }
         }
     }
@@ -176,10 +176,42 @@ Result UmqSetting::LoadEnv() noexcept
     return UBS_OK;
 }
 
+Result UmqSetting::VerifySetting() noexcept
+{
+    auto &validator = Validator::Instance();
+
+    // UMQ_MEM_POOL_MAX_SIZE_MB MAX
+    if (!validator.Validate(ENV_UMQ_MEM_POOL_MAX_SIZE, (int64_t)UMQ_MEM_POOL_MAX_SIZE_MB, "ubsocket_pool_max_size")) {
+        UBS_SLOG_ERR(validator.LastErrMsg());
+        return UBS_INVALID_PARAM;
+    }
+    // UMQ_MEM_POOL_MAX_SIZE_MB MIN
+    if (UMQ_MEM_POOL_MAX_SIZE_MB < UMQ_MEM_POOL_INIT_SIZE_MB + UMQ_MEM_MIN_EXPAND_SIZE_MB) {
+        UBS_VLOG_ERR("UBSOCKET_POOL_MAX_SIZE(%ld) is smaller than UBSOCKET_POOL_INITIAL_SIZE(%ld) + 64M.\n",
+                     UMQ_MEM_POOL_MAX_SIZE_MB, UMQ_MEM_POOL_INIT_SIZE_MB);
+        return UBS_INVALID_PARAM;
+    }
+
+    return UBS_OK;
+}
+
 Result UmqSetting::Init() noexcept
 {
     AddRules();
-    return LoadEnv();
+    auto result = LoadEnv();
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("initialize failed as options are invalid");
+        return result;
+    }
+
+    result = VerifySetting();
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("initialize failed as options are invalid");
+        errno = EINVAL;
+        return result;
+    }
+
+    return result;
 }
 
 uint32_t UmqSetting::GetIOBufSize() noexcept

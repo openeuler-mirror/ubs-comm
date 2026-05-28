@@ -63,6 +63,7 @@ private:
 
     static void AddRules() noexcept;
     static Result LoadEnv() noexcept;
+    static Result VerifySetting() noexcept;
 
     static umq_buf_block_size_t BlockTypeFromStr(const std::string &typeStr) noexcept;
     static umq_trans_mode_t TransModeFromStr(const std::string &typeStr) noexcept;
