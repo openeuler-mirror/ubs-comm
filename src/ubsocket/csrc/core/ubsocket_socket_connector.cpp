@@ -54,8 +54,12 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         umq::UmqSocketPtr sockptr =
             RefConvert<Socket, umq::UmqSocket>(SocketSet::Instance().GetSocket(raw_fd_));
-        sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
-        sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::ACTIVE_OPEN_COUNT, 1);
+        if (sockptr != nullptr) {
+            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
+            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::ACTIVE_OPEN_COUNT, 1);
+        } else {
+            UBS_VLOG_DEBUG("socket is Null, no UpdateTraceStats!");
+        }
     }
 
     PROF_END(CORE_CONNECT, !ret);
