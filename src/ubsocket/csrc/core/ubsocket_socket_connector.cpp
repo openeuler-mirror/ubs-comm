@@ -24,6 +24,7 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     if (connector_ops_ != nullptr) {
         ret = connector_ops_->PrepareConnect(raw_fd_, address, address_len, sock);
         if (ret != 0) {
+            PROF_END(CORE_CONNECT, false);
             return ret;
         }
 
@@ -45,13 +46,13 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
         SocketConnHelper::SetBlocking(raw_fd_);
     }
     // m_peer_info.type_fd = 1;
-    PROF_END(CORE_CONNECT, true);
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
         Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::ACTIVE_OPEN_COUNT, 1);
     }
 
+    PROF_END(CORE_CONNECT, !ret);
     return ret;
 }
 

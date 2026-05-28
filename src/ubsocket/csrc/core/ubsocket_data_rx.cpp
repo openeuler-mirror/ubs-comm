@@ -32,6 +32,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         errno = EINVAL;
         UBS_VLOG_WARN("ReadV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                       Func::Error2Str(errno));
+        PROF_END(CORE_READ, false);
         return UBS_ERROR;
     }
 
@@ -40,11 +41,13 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
      * (2) when all the received message passed to caller, fallback to tcp/ip */
     ssize_t rx_total_len = OutputErrorMagicNumber(sock, iov, iovcnt);
     if (rx_total_len > 0) {
+        PROF_END(CORE_READ, false);
         return rx_total_len;
     }
 
     int ret = rx_ops_->PollRx(sock);
     if (ret < 0) {
+        PROF_END(CORE_READ, false);
         return ret;
     }
 
@@ -60,6 +63,9 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
 
     ret = rx_ops_->RxDataSet(iov[0].iov_base, max_buf_size);
     if (ret < 0) {
+        if (!((errno == EINTR) || (errno == EAGAIN))) {
+            PROF_END(CORE_READ, false);
+        }
         return ret;
     }
     rx_total_len = ret;
