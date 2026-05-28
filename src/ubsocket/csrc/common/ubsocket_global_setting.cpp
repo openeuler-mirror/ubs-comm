@@ -18,8 +18,8 @@ std::mutex GlobalSetting::MUTEX;
 uint32_t GlobalSetting::UBS_ALLOWED_PROTOCOL = 0;            /* no protocol by default */
 bool GlobalSetting::UBS_NATIVE_TCP_MODE = false;             /* use ubsocket by default */
 bool GlobalSetting::UBS_TRACE_ENABLED = true;
-bool GlobalSetting::UBS_CLI_ENABLED = true;
-bool GlobalSetting::UBS_PROBE_ENABLED = true;
+bool GlobalSetting::UBS_CLI_ENABLED = false;
+bool GlobalSetting::UBS_PROBE_ENABLED = false;
 bool GlobalSetting::UBS_INITED = false;                      /* not inited by default */
 std::string GlobalSetting::UBS_TRANS_MODE = "ub";            /* transport mode, from env */
 int16_t GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;  /* disabled by default */
@@ -67,6 +67,10 @@ uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 #define ENV_TRACE_FILE_SIZE "UBSOCKET_TRACE_FILE_SIZE"
 #define ENV_TRACE_FILE_PATH "UBSOCKET_TRACE_FILE_PATH"
 #define ENV_VAR_DEGRADE "UBSOCKET_DEGRADE"
+#define ENV_VAR_CLI "UBSOCKET_STATS_CLI"
+#define ENV_VAR_PROBE "UBSOCKET_PROBE_ENABLE"
+#define ENV_VAR_PROBE_TIME "UBSOCKET_PROBE_TIME_MS"
+#define ENV_VAR_PROBE_BATCH "UBSOCKET_PROBE_BATCH"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -81,10 +85,12 @@ void GlobalSetting::AddRules() noexcept
         {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5},
         {ENV_TRACE_TIME, false, UBSOCKET_TRACE_TIME_MIN, UBSOCKET_TRACE_TIME_MAX},
         {ENV_TRACE_FILE_SIZE, false, UBSOCKET_TRACE_FILE_SIZE_MIN, UBSOCKET_TRACE_FILE_SIZE_MAX},
+        {ENV_VAR_PROBE_TIME, false, UBSOCKET_PROBE_TIME_MS_MIN, UBSOCKET_PROBE_TIME_MS_MAX},
+        {ENV_VAR_PROBE_BATCH, false, UBSOCKET_PROBE_BATCH_MIN, UBSOCKET_PROBE_BATCH_MAX},
     };
 
     /* str enum rules: name, required, enum */
-    StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, false, "true|false"},
+    StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, true, "true|false"},
                                     {ENV_AUTO_FALLBACK_TCP, false, "true|false"},
                                     {ENV_ENABLE_SHARE_JFR, false, "true|false"},
                                     {ENV_USE_BRPC_ZCOPY, false, "true|false"},
@@ -92,7 +98,9 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"},
                                     {ENV_PROF_ENABLE, false, "true|false"},
                                     {ENV_ASYNC_ACCEPTOR, false, "true|false"},
-                                    {ENV_VAR_DEGRADE, false, "true|false"}};
+                                    {ENV_VAR_DEGRADE, false, "true|false"},
+                                    {ENV_VAR_CLI, false, "true|false"},
+                                    {ENV_VAR_PROBE, false, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, 512},
@@ -243,6 +251,22 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidate(ENV_VAR_DEGRADE, strEnvValue)) {
         UBS_ENABLE_DEGRADE = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GetEnvAndValidate(ENV_VAR_CLI, strEnvValue)) {
+        UBS_CLI_ENABLED = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GetEnvAndValidate(ENV_VAR_PROBE, strEnvValue)) {
+        UBS_PROBE_ENABLED = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GetEnvAndValidate(ENV_VAR_PROBE_TIME, envValue)) {
+        UBS_PROBE_MS = static_cast<uint32_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_VAR_PROBE_BATCH, envValue)) {
+        UBS_PROBE_BATCH = static_cast<uint32_t>(envValue);
     }
 
     return UBS_OK;
