@@ -78,6 +78,8 @@ public:
     static uint32_t UBS_ALLOWED_PROTOCOL;            /* allowed protocol, from API */
     static bool UBS_NATIVE_TCP_MODE;                 /* native tcp mode, pass all logic of this library, from API */
     static bool UBS_TRACE_ENABLED;                   /* if enable tracing, from env */
+    static bool UBS_CLI_ENABLED;
+    static bool UBS_PROBE_ENABLED;
     static bool UBS_INITED;                          /* if ubsocket initialized, from API */
     static std::string UBS_TRANS_MODE;               /* transport mode, from env */
     static int16_t UBS_ACCEPTOR_ASYNC_THREAD_COUNT;  /* if enable async acceptor, from API override by env */
@@ -94,6 +96,8 @@ public:
     static bool UBS_PROF_ENABLE;
     static uint16_t UBS_PROF_DUMP_INTERVAL_MIN;
     static std::string UBS_PROF_DUMP_PATH;
+    static uint32_t UBS_PROBE_MS;
+    static uint32_t UBS_PROBE_BATCH;
 
     /* brpc malloc related */
     static bool USE_BRPC_ZCOPY;

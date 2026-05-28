@@ -12,6 +12,8 @@
 #include "ubsocket_data_rx.h"
 #include "ubsocket_socket_set.h"
 #include "umq/umq_data_rx_ops.h"
+#include "umq/umq_socket.h"
+#include "ubsocket_socket_set.h"
 
 namespace ock {
 namespace ubs {
@@ -70,7 +72,9 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     }
     rx_total_len = ret;
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        Statistics::StatsMgr::UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
+        umq::UmqSocketPtr sockptr =
+            RefConvert<Socket, umq::UmqSocket>(SocketSet::Instance().GetSocket(fd_));
+        sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
     }
     PROF_END(CORE_READ, true);
     return rx_total_len;

@@ -30,7 +30,7 @@
 #include <thread>
 
 #include "ubsocket_global_setting.h"
-#include "ubsocket_statistics.h"
+#include "cli/statistics_statsmgr.h"
 
 namespace Statistics {
 

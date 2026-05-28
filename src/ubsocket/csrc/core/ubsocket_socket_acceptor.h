@@ -24,6 +24,8 @@ class AcceptorOps {
 public:
     virtual ~AcceptorOps() = default;
 
+    RawConnInfoV4 conn_info;
+
     // ======================== 主流程方法 ========================
     // 阶段0：准备连接( TCP 辅助建链, 包括 TFO 发送 等 DoConnect 和 DoAccept 的前置操作)
     virtual Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
@@ -45,7 +47,6 @@ protected:
     DECLARE_REF_COUNT_VARIABLE;
 
 protected:
-    RawConnInfoV4 conn_info;
     int fd;
     int event_fd;
 
@@ -66,10 +67,12 @@ public:
     int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
 
     void SetAcceptorOps(const AcceptorOpsPtr &acceptor_ops);
+    AcceptorOpsPtr GetAcceptorOps() {return acceptor_ops_;}
 
-    // connection status
-    static constexpr int kControlPlaneTimeoutMs = 5000;
-    static constexpr int kNegotiateTimeoutMs = 10000;
+    ALWAYS_INLINE bool IsClient(void)
+    {
+        return acceptor_ops_->conn_info.type_fd == 1 ? true : false;
+    }
 
 private:
     bool TryPopAsyncReadyFd(int &fd, struct sockaddr *address, socklen_t *address_len);
@@ -93,11 +96,9 @@ private:
         return 0;
     }
 
-    ALWAYS_INLINE bool IsClient(void)
-    {
-        // return RawConnInfoV4.type_fd == 1 ? true : false;
-        return true;
-    }
+    // connection status
+    static constexpr int kControlPlaneTimeoutMs = 5000;
+    static constexpr int kNegotiateTimeoutMs = 10000;
 
     // ======================== 成员变量 ========================
     int raw_fd_; // 传入 sock 的原生 socket fd

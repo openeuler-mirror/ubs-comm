@@ -1,17 +1,16 @@
 /*
- * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
- * ubs-comm is licensed under the Mulan PSL v2.
- * You can use this software according to the terms and conditions of the Mulan PSL v2.
- * You may obtain a copy of Mulan PSL v2 at:
- *      http://license.coscl.org.cn/MulanPSL2
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PSL v2 for more details.
- * Description: Provide statistic class
- * Create: 2026
- */
+ *Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+ *Description: Provide the utility for umq buffer, iov, etc
+ *Author:
+ *Create: 2025-07-16
+ *Note:
+ *History: 2025-07-16
+*/
+#include "statistics.h"
+#include "umq_dfx_api.h"
 
-#include "ubsocket_statistics.h"
+uint32_t Statistics::Recorder::m_title_len = 0;
+volatile bool Statistics::GlobalStatsMgr::m_running = true;
 
 namespace {
     constexpr const char* PREFIX = "retry_count: ";

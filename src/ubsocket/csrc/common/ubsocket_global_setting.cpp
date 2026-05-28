@@ -17,7 +17,9 @@ namespace ubs {
 std::mutex GlobalSetting::MUTEX;
 uint32_t GlobalSetting::UBS_ALLOWED_PROTOCOL = 0;            /* no protocol by default */
 bool GlobalSetting::UBS_NATIVE_TCP_MODE = false;             /* use ubsocket by default */
-bool GlobalSetting::UBS_TRACE_ENABLED = false;               /* disabled by default */
+bool GlobalSetting::UBS_TRACE_ENABLED = true;
+bool GlobalSetting::UBS_CLI_ENABLED = true;
+bool GlobalSetting::UBS_PROBE_ENABLED = true;
 bool GlobalSetting::UBS_INITED = false;                      /* not inited by default */
 std::string GlobalSetting::UBS_TRANS_MODE = "ub";            /* transport mode, from env */
 int16_t GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;  /* disabled by default */
@@ -42,6 +44,8 @@ std::string GlobalSetting::UBS_PROF_DUMP_PATH = "/tmp/ubsocket/profiling";
 uint64_t GlobalSetting::UBS_TRACE_TIME = UBSOCKET_TRACE_TIME_DEFAULT;
 uint64_t GlobalSetting::UBS_TRACE_FILE_SIZE = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
 std::string GlobalSetting::UBS_TRACE_FILE_PATH = "/tmp/ubsocket/log";
+uint32_t GlobalSetting::UBS_PROBE_MS = 1000;
+uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"

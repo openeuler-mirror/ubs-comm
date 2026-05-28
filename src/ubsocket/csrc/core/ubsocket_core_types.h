@@ -64,6 +64,11 @@ public:
         return type_;
     }
 
+    int Fd() const noexcept
+    {
+        return raw_socket_;
+    }
+
 public:
     virtual int GetTxFd() = 0;
     virtual bool IsBindRemote() = 0;

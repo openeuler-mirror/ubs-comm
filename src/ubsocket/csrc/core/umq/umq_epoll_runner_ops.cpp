@@ -94,7 +94,7 @@ void UmqEpollRunnerOps::HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t 
 
 ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq)
 {
-    if (UNLIKELY(ProcessMainUmqRearm(main_umq)) < 0) {
+    if (UNLIKELY(ProcessMainUmqRearm(main_umq) < 0)) {
         return -1;
     }
 

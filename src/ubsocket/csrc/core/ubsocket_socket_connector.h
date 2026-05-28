@@ -23,6 +23,8 @@ class ConnectorOps {
 public:
     virtual ~ConnectorOps() = default;
 
+    RawConnInfoV4 conn_info;
+
     // ======================== 主流程方法 ========================
     // 阶段0：准备连接( TCP 辅助建链, 包括 TFO 发送 等 DoConnect 和 DoAccept 的前置操作)
     virtual Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
@@ -39,6 +41,7 @@ protected:
     int raw_fd_ = -1; // 传入 sock 的原生 socket fd
     DECLARE_REF_COUNT_VARIABLE;
 };
+using ConnectorOpsPtr = Ref<ConnectorOps>;
 
 // connector 建链通用实现层：TCP 建链，协商，建链
 class Connector {
@@ -51,6 +54,13 @@ public:
     ~Connector();
 
     int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
+
+    ConnectorOpsPtr GetConnectorOps() {return connector_ops_;}
+
+    ALWAYS_INLINE bool IsClient(void)
+    {
+        return connector_ops_->conn_info.type_fd == 1 ? true : false;
+    }
 
 private:
     // ======================== 成员变量 ========================
