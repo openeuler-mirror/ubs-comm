@@ -12,23 +12,24 @@
 
 #include <securec.h>
 
-#include "umq_dfx_api.h"
 #include "cli_message.h"
+#include "umq_dfx_api.h"
 
 namespace Statistics {
 class TerminalDisplay {
-    static constexpr const char* cursorHome = "\033[H";
-    static constexpr const char* clearScreen = "\033[2J";
-    static constexpr const char* colorRed = "\033[31m";
-    static constexpr const char* colorGreen = "\033[32m";
-    static constexpr const char* colorYellow = "\033[33m";
-    static constexpr const char* colorBlue = "\033[34m";
-    static constexpr const char* colorGrey = "\033[30m";
-    static constexpr const char* colorBold = "\033[1m";
-    static constexpr const char* colorReset = "\033[0m";
-    static constexpr const char* underline = "\033[4m";
+    static constexpr const char *cursorHome = "\033[H";
+    static constexpr const char *clearScreen = "\033[2J";
+    static constexpr const char *colorRed = "\033[31m";
+    static constexpr const char *colorGreen = "\033[32m";
+    static constexpr const char *colorYellow = "\033[33m";
+    static constexpr const char *colorBlue = "\033[34m";
+    static constexpr const char *colorGrey = "\033[30m";
+    static constexpr const char *colorBold = "\033[1m";
+    static constexpr const char *colorReset = "\033[0m";
+    static constexpr const char *underline = "\033[4m";
 
     static constexpr uint8_t byteDataPrecision = 2;
+
 public:
     TerminalDisplay()
     {
@@ -53,12 +54,12 @@ public:
     void PrintSubTitleItem(std::string name);
     void PrintDelimiter();
     void PrintData(CLISocketData *sockData);
-    void PrintDataItem(std::string name, std::string data, const char* color, bool useGrey);
+    void PrintDataItem(std::string name, std::string data, const char *color, bool useGrey);
     void NewLine();
     void Refresh();
     std::string BytesToHumanReadable(uint64_t bytes);
     std::string ConvertTimeToString(uint64_t timestamp);
-    std::string ConvertEidToString(const uint8_t* eidArray, size_t length);
+    std::string ConvertEidToString(const uint8_t *eidArray, size_t length);
     // flow control display
     void DisplayFlowControlInfo(uint8_t *data, uint32_t dataLen);
     // qbuf pool display
@@ -78,5 +79,5 @@ private:
     bool mIstty = false;
     int mTerminalWidth = 120;
 };
-}
+} // namespace Statistics
 #endif

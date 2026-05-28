@@ -9,10 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_socket_connector.h"
-#include "ubsocket_socket_set.h"
-#include "umq/umq_socket_connector.h"
-#include "umq/umq_socket.h"
 #include "cli/statistics_statsmgr.h"
+#include "ubsocket_socket_set.h"
+#include "umq/umq_socket.h"
+#include "umq/umq_socket_connector.h"
 
 namespace ock {
 namespace ubs {
@@ -52,8 +52,7 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     connector_ops_->conn_info.type_fd = 1;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        umq::UmqSocketPtr sockptr =
-            RefConvert<Socket, umq::UmqSocket>(SocketSet::Instance().GetSocket(raw_fd_));
+        umq::UmqSocketPtr sockptr = RefConvert<Socket, umq::UmqSocket>(SocketSet::Instance().GetSocket(raw_fd_));
         if (sockptr != nullptr) {
             sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
             sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::ACTIVE_OPEN_COUNT, 1);

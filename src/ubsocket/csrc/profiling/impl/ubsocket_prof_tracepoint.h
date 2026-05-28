@@ -11,8 +11,8 @@
 #ifndef UBS_COMM_UBSOCKET_PROF_TRACE_POINT_H
 #define UBS_COMM_UBSOCKET_PROF_TRACE_POINT_H
 
-#include "securec.h"
 #include "common/ubsocket_common_includes.h"
+#include "securec.h"
 
 namespace ock {
 namespace ubs {
@@ -29,11 +29,11 @@ struct Tracepoint {
         uint64_t max_time = 0;
         uint64_t pp90_time = 0;
     } data;
-    char* name = nullptr;
+    char *name = nullptr;
 
     void Record(uint64_t timestamp, bool good);
 
-    void SetName(const char* newName)
+    void SetName(const char *newName)
     {
         if (name != nullptr) {
             free(name);
@@ -45,13 +45,13 @@ struct Tracepoint {
         }
 
         size_t len = strlen(newName);
-        name = (char*)malloc(len + 1);
+        name = (char *)malloc(len + 1);
         if (name != nullptr) {
             (void)strcpy_s(name, (len + 1), newName);
         }
     }
 
-    const char* GetName() const
+    const char *GetName() const
     {
         return name;
     }
@@ -72,7 +72,7 @@ struct Tracepoint {
     }
 
     // copy constructor
-    Tracepoint(const Tracepoint& other)
+    Tracepoint(const Tracepoint &other)
     {
         id = other.id;
         has_name = other.has_name;
@@ -81,7 +81,7 @@ struct Tracepoint {
 
         if (other.name != nullptr) {
             size_t len = strlen(other.name);
-            name = (char*)malloc(len + 1);
+            name = (char *)malloc(len + 1);
             if (name != nullptr) {
                 (void)strcpy_s(name, (len + 1), other.name);
             }
@@ -89,7 +89,7 @@ struct Tracepoint {
     }
 
     // copy operator=
-    Tracepoint& operator=(const Tracepoint& other)
+    Tracepoint &operator=(const Tracepoint &other)
     {
         if (this == &other) {
             return *this;
@@ -106,7 +106,7 @@ struct Tracepoint {
         name = nullptr;
         if (other.name != nullptr) {
             size_t len = strlen(other.name);
-            name = (char*)malloc(len + 1);
+            name = (char *)malloc(len + 1);
             if (name != nullptr) {
                 (void)strcpy_s(name, (len + 1), other.name);
             }
@@ -115,8 +115,8 @@ struct Tracepoint {
         return *this;
     }
 
-    // move constructor 
-    Tracepoint(Tracepoint&& other) noexcept
+    // move constructor
+    Tracepoint(Tracepoint &&other) noexcept
     {
         id = other.id;
         has_name = other.has_name;
@@ -126,7 +126,7 @@ struct Tracepoint {
     }
 
     // move operator=
-    Tracepoint& operator=(Tracepoint&& other) noexcept
+    Tracepoint &operator=(Tracepoint &&other) noexcept
     {
         if (this == &other) {
             return *this;

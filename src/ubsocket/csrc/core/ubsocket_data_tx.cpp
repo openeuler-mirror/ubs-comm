@@ -9,8 +9,8 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_data_tx.h"
-#include "umq/umq_socket.h"
 #include "ubsocket_socket.h"
+#include "umq/umq_socket.h"
 
 namespace ock {
 namespace ubs {
@@ -83,8 +83,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     tx_total_len = ret;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        umq::UmqSocketPtr sockptr =
-            RefConvert<Socket, umq::UmqSocket>(SocketSet::Instance().GetSocket(fd_));
+        umq::UmqSocketPtr sockptr = RefConvert<Socket, umq::UmqSocket>(SocketSet::Instance().GetSocket(fd_));
         sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::TX_BYTE_COUNT, tx_total_len);
     }
     PROF_END(CORE_WRITE, true);

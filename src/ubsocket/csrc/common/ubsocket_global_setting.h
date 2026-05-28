@@ -75,9 +75,9 @@ public:
 
 public:
     static std::mutex MUTEX;
-    static uint32_t UBS_ALLOWED_PROTOCOL;            /* allowed protocol, from API */
-    static bool UBS_NATIVE_TCP_MODE;                 /* native tcp mode, pass all logic of this library, from API */
-    static bool UBS_TRACE_ENABLED;                   /* if enable tracing, from env */
+    static uint32_t UBS_ALLOWED_PROTOCOL; /* allowed protocol, from API */
+    static bool UBS_NATIVE_TCP_MODE;      /* native tcp mode, pass all logic of this library, from API */
+    static bool UBS_TRACE_ENABLED;        /* if enable tracing, from env */
     static bool UBS_CLI_ENABLED;
     static bool UBS_PROBE_ENABLED;
     static bool UBS_INITED;                          /* if ubsocket initialized, from API */

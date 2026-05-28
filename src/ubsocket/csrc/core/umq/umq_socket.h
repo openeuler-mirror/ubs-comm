@@ -11,6 +11,8 @@
 #ifndef UBS_COMM_UMQ_SOCKET_H
 #define UBS_COMM_UMQ_SOCKET_H
 
+#include "cli/cli_message.h"
+#include "cli/statistics_statsmgr.h"
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_qbuf_queue.h"
 #include "core/ubsocket_socket.h"
@@ -18,8 +20,6 @@
 #include "core/umq/umq_setting.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "under_api/dl_umq_api.h"
-#include "cli/cli_message.h"
-#include "cli/statistics_statsmgr.h"
 
 namespace ock {
 namespace ubs {
@@ -104,7 +104,8 @@ public:
         topo_type_ = type;
     }
 
-    bool IsClient() { 
+    bool IsClient()
+    {
         return connector_->IsClient();
     }
 
@@ -132,7 +133,6 @@ public:
     Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
                               struct epoll_event *event) override;
     int GetTxFd() override;
-
 
     Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used,
                           umq_topo_type_t &topo_type);
@@ -222,7 +222,6 @@ struct OtherRouteMessage {
     umq_route_t other_route;
     umq_route_t other_back_route;
 };
-
 
 #ifndef EID_FMT
 #define EID_FMT "%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x"

@@ -29,8 +29,8 @@
 #include <string>
 #include <thread>
 
-#include "ubsocket_global_setting.h"
 #include "cli/statistics_statsmgr.h"
+#include "ubsocket_global_setting.h"
 
 namespace Statistics {
 
@@ -60,8 +60,8 @@ public:
         }
     }
 
-    static void StartStatsCollection(uint64_t traceTime, const std::string& tracePath, uint64_t traceFileSize,
-        const umq_trans_mode_t trans_mode = UMQ_TRANS_MODE_UB)
+    static void StartStatsCollection(uint64_t traceTime, const std::string &tracePath, uint64_t traceFileSize,
+                                     const umq_trans_mode_t trans_mode = UMQ_TRANS_MODE_UB)
     {
         PrintStatsMgr *mgr = GetPrintStatsMgr();
         mgr->ubsocketTraceTime = traceTime;
@@ -107,7 +107,7 @@ private:
         Stop();
     }
 
-    void CreateDirectory(const std::string& path)
+    void CreateDirectory(const std::string &path)
     {
         if (path.empty()) {
             return;

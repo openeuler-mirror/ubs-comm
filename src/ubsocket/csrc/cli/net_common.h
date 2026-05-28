@@ -12,25 +12,24 @@
 #ifndef NET_COMMON_H
 #define NET_COMMON_H
 
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <strings.h>
+#include <unistd.h>
 #include <atomic>
 #include <cstddef>
 #include <cstring>
 #include <ctime>
-#include <ifaddrs.h>
 #include <iostream>
-#include <netinet/in.h>
+#include <regex>
 #include <sstream>
-#include <strings.h>
 #include <thread>
 #include <unordered_map>
-#include <unistd.h>
-#include <regex>
-#include <arpa/inet.h>
 
 constexpr const uint32_t NET_STR_ERROR_BUF_SIZE = 128;
 
-namespace Statistics
-{
+namespace Statistics {
 class NetCommon {
 public:
     static char *NN_GetStrError(int errNum, char *buf, size_t bufSize)
@@ -45,7 +44,5 @@ public:
     }
 };
 } // namespace Statistics
-
-
 
 #endif

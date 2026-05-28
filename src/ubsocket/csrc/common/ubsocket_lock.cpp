@@ -216,12 +216,11 @@ Result LockRegistry::RegisterLockOps(u_external_lock_ops_t *ops)
     LOCK_OPS = *ops;
 
     umq_external_mutex_lock_ops_t umq_mutex_ops = {
-        .create = (umq_external_mutex_t *(*)(umq_external_mutex_attr_t))ops->create,
+        .create = (umq_external_mutex_t * (*)(umq_external_mutex_attr_t)) ops->create,
         .destroy = (int (*)(umq_external_mutex_t *))ops->destroy,
         .lock = (int (*)(umq_external_mutex_t *))ops->lock,
         .unlock = (int (*)(umq_external_mutex_t *))ops->unlock,
-        .trylock = (int (*)(umq_external_mutex_t *))ops->try_lock
-    };
+        .trylock = (int (*)(umq_external_mutex_t *))ops->try_lock};
     return umq_external_mutex_lock_ops_register(&umq_mutex_ops);
 }
 
@@ -234,15 +233,13 @@ Result LockRegistry::RegisterRwLockOps(u_external_rw_lock_ops_t *ops)
 
     RW_LOCK_OPS = *ops;
 
-    umq_external_rw_lock_ops umq_rwlock_ops = {
-        .create = (umq_external_rwlock_t *(*)(void))ops->create,
-        .destroy = (int (*)(umq_external_rwlock_t *))ops->destroy,
-        .read_lock = (int (*)(umq_external_rwlock_t *))ops->lock_read,
-        .write_lock = (int (*)(umq_external_rwlock_t *))ops->lock_write,
-        .unlock = (int (*)(umq_external_rwlock_t *))ops->unlock_rw,
-        .try_read_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_read,
-        .try_write_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_write
-    };
+    umq_external_rw_lock_ops umq_rwlock_ops = {.create = (umq_external_rwlock_t * (*)(void)) ops->create,
+                                               .destroy = (int (*)(umq_external_rwlock_t *))ops->destroy,
+                                               .read_lock = (int (*)(umq_external_rwlock_t *))ops->lock_read,
+                                               .write_lock = (int (*)(umq_external_rwlock_t *))ops->lock_write,
+                                               .unlock = (int (*)(umq_external_rwlock_t *))ops->unlock_rw,
+                                               .try_read_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_read,
+                                               .try_write_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_write};
     return umq_external_rwlock_ops_register(&umq_rwlock_ops);
 }
 

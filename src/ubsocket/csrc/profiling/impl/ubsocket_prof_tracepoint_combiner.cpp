@@ -17,7 +17,7 @@ int TraceCombiner::CombinerTracePoint(Tracepoint &outTracePoint, const Tracepoin
         outTracePoint.has_name = pointB.has_name;
         outTracePoint.SetName(pointB.name);
     }
-    
+
     outTracePoint.data.success_count = outTracePoint.data.success_count + pointB.data.success_count;
     outTracePoint.data.failure_count = outTracePoint.data.failure_count + pointB.data.failure_count;
     outTracePoint.data.total_time = outTracePoint.data.total_time + pointB.data.total_time;
@@ -28,17 +28,15 @@ int TraceCombiner::CombinerTracePoint(Tracepoint &outTracePoint, const Tracepoin
 
 void TraceCombiner::OutputTracePointStats(std::ostringstream &oss, const Tracepoint &totalTracePoint)
 {
-    oss << std::left
-        << std::setw(COL_WIDTH_MAX) <<
-            ("[" + (totalTracePoint.has_name ? totalTracePoint.GetName() : std::string("--")) + "]")
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.success_count
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.failure_count
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.total_time
-        << std::setw(COL_WIDTH_MIN) <<
-            (totalTracePoint.data.success_count ? totalTracePoint.data.total_time / totalTracePoint.data.success_count : 0)
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.max_time
-        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.min_time
-        << "\n";
+    oss << std::left << std::setw(COL_WIDTH_MAX)
+        << ("[" + (totalTracePoint.has_name ? totalTracePoint.GetName() : std::string("--")) + "]")
+        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.success_count << std::setw(COL_WIDTH_MIN)
+        << totalTracePoint.data.failure_count << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.total_time
+        << std::setw(COL_WIDTH_MIN)
+        << (totalTracePoint.data.success_count ? totalTracePoint.data.total_time / totalTracePoint.data.success_count :
+                                                 0)
+        << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.max_time << std::setw(COL_WIDTH_MIN)
+        << totalTracePoint.data.min_time << "\n";
 }
 } // namespace profiling
 } // namespace ubs

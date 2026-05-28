@@ -20,8 +20,7 @@ SubCommand *CreateData(const ParamMap &params);
 
 class SubCommandData : public SubCommand {
 public:
-    SubCommandData(const std::string &name, const ParamMap &params)
-        : SubCommand(name, params) {}
+    SubCommandData(const std::string &name, const ParamMap &params) : SubCommand(name, params) {}
 
 protected:
     void SetRules() noexcept override;

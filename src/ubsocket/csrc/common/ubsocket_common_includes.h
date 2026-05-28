@@ -18,11 +18,11 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <queue>
 #include <string>
 #include <thread>
-#include <limits>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -33,9 +33,9 @@
 #include "ubsocket_lock.h"
 #include "ubsocket_logger.h"
 #include "ubsocket_obj_statistics.h"
+#include "ubsocket_print_stats_mgr.h"
 #include "ubsocket_profiling.h"
 #include "ubsocket_ref.h"
 #include "ubsocket_set.h"
-#include "ubsocket_print_stats_mgr.h"
 
 #endif // UBS_COMM_UBSOCKET_INCLUDES_H

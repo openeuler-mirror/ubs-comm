@@ -24,31 +24,31 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include "cli_message.h"
+#include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_socket_helper.h"
+#include "core/umq/umq_socket.h"
+#include "net_common.h"
+#include "probe_manager.h"
+#include "statistics_statsmgr.h"
 #include "umq_dfx_api.h"
 #include "umq_dfx_types.h"
 #include "umq_errno.h"
-#include "common/ubsocket_common_includes.h"
-#include "core/ubsocket_socket_helper.h"
 #include "under_api/dl_libc_api.h"
 #include "under_api/dl_umq_api.h"
-#include "core/umq/umq_socket.h"
-#include "statistics_statsmgr.h"
-#include "cli_message.h"
-#include "probe_manager.h"
-#include "net_common.h"
 
 using ock::ubs::LibcApi;
-using ock::ubs::UmqApi;
+using ock::ubs::ReadLocker;
+using ock::ubs::SocketConnHelper;
 using ock::ubs::SocketSet;
 using ock::ubs::SocketType;
-using ock::ubs::SocketConnHelper;
-using ock::ubs::ReadLocker;
+using ock::ubs::UmqApi;
 using ock::ubs::umq::UmqSocket;
 
 namespace Statistics {
 
 class Listener {
-    public:
+public:
     struct __attribute__((packed)) CtrlHead {
         uint16_t m_module_id;
         uint16_t m_cmd_id;
@@ -61,7 +61,7 @@ class Listener {
         UBS_CMD_MAX
     };
 
-    #ifdef UBSOCKET_UNIT_TEST
+#ifdef UBSOCKET_UNIT_TEST
     const static uint32_t LISTENER_SEND_RECV_TIMEOUT_MS = 100;
 #else
     const static uint32_t LISTENER_SEND_RECV_TIMEOUT_MS = 8000;
@@ -89,8 +89,9 @@ class Listener {
             }
         }
 
-        fd_guard(const fd_guard&) = delete;
-        void operator=(const fd_guard&) = delete;
+        fd_guard(const fd_guard &) = delete;
+        void operator=(const fd_guard &) = delete;
+
     private:
         int mfd;
     };
@@ -102,9 +103,9 @@ class Listener {
         // Create an abstract namespace socket name, which is also convenient to calculate string length
         char name[UDS_SUN_PATH_NAME_MAX] = {0};
         int ret = snprintf_s(name, sizeof(name), sizeof(name) - 1, "ubscli-%u", (uint32_t)getpid());
-        if(ret<0 || ret >=(int)sizeof(name)){
-            throw std::runtime_error(
-                std::string("Failed to copy unix domain socket name, error ") + std::to_string(ret));
+        if (ret < 0 || ret >= (int)sizeof(name)) {
+            throw std::runtime_error(std::string("Failed to copy unix domain socket name, error ") +
+                                     std::to_string(ret));
         }
 
         //Set the first character to an empty character.
@@ -112,45 +113,45 @@ class Listener {
         // Copy the name to the ramaining part
         ret = strncpy_s(addr.sun_path + 1, sizeof(addr.sun_path) - 1, name, UDS_SUN_PATH_NAME_MAX);
         if (ret != EOK) {
-            throw std::runtime_error(
-                std::string("Failed to construct unix domain socket name, error ") + std::to_string(ret));
+            throw std::runtime_error(std::string("Failed to construct unix domain socket name, error ") +
+                                     std::to_string(ret));
         }
 
         m_uds_fd = LibcApi::socket(AF_UNIX, SOCK_STREAM, 0);
-        if(m_uds_fd < 0){
+        if (m_uds_fd < 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             throw std::runtime_error(std::string("Failed to create unix domain socket, ") +
-                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                     NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
 
         if (LibcApi::bind(m_uds_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
             (void)LibcApi::close(m_uds_fd);
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             throw std::runtime_error(std::string("Failed to bind unix domain socket, ") +
-                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                     NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
 
         if (LibcApi::listen(m_uds_fd, 1) < 0) {
             (void)LibcApi::close(m_uds_fd);
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             throw std::runtime_error(std::string("Failed to listen unix domain socket, ") +
-                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                     NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
     }
 
     virtual ~Listener()
     {
-        if (m_internal_epoll_enable){
-            if (m_wakeup_fd >= 0){
+        if (m_internal_epoll_enable) {
+            if (m_wakeup_fd >= 0) {
                 (void)LibcApi::close(m_wakeup_fd);
             }
 
-            if (m_epoll_fd >= 0){
+            if (m_epoll_fd >= 0) {
                 (void)LibcApi::close(m_epoll_fd);
             }
         }
 
-        if (m_uds_fd >= 0){
+        if (m_uds_fd >= 0) {
             (void)LibcApi::close(m_uds_fd);
         }
     }
@@ -158,13 +159,13 @@ class Listener {
     int InternalEpollEnable()
     {
         m_epoll_fd = LibcApi::epoll_create(MAX_EPOLL_FD_NUM);
-        if(m_epoll_fd < 0){
+        if (m_epoll_fd < 0) {
             UBS_VLOG_ERR("Failed to create epoll file descriptor\n");
             return -1;
         }
 
         m_wakeup_fd = eventfd(0, EFD_NONBLOCK);
-        if(m_wakeup_fd == -1){
+        if (m_wakeup_fd == -1) {
             UBS_VLOG_ERR("Failed to create wakeup event file descriptor\n");
             goto CLEAN_EPOLL;
         }
@@ -172,7 +173,7 @@ class Listener {
         struct epoll_event ev;
         ev.events = EPOLLIN;
         ev.data.fd = m_wakeup_fd;
-        if(LibcApi::epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_wakeup_fd, &ev) == -1){
+        if (LibcApi::epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_wakeup_fd, &ev) == -1) {
             UBS_VLOG_ERR("Failed to add epoll event for wakeup event file descriptor\n");
             goto CLEAN_ALL_RESOURCE;
         }
@@ -181,7 +182,7 @@ class Listener {
         if (LibcApi::epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_uds_fd, &ev) != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("Failed to add epoll control event, %s\n",
-                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                         NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             goto CLEAN_ALL_RESOURCE;
         }
 
@@ -195,8 +196,8 @@ class Listener {
 
     CLEAN_EPOLL:
         LibcApi::close(m_epoll_fd);
-        m_epoll_fd = -1; 
-        
+        m_epoll_fd = -1;
+
         return -1;
     }
 
@@ -230,7 +231,7 @@ class Listener {
         }
     }
 
-    void GetAllProbeData(std::vector<CLIProbeData>& outDataVec)
+    void GetAllProbeData(std::vector<CLIProbeData> &outDataVec)
     {
         Statistics::ProbeManager::GetInstance().GetCLIProbeData(outDataVec);
     }
@@ -320,12 +321,12 @@ class Listener {
         struct epoll_event events[MAX_EPOLL_EVENT_NUM];
         // Do not set a timeout to reduce the core usage of the listening thread.
         int ev_num = LibcApi::epoll_wait(m_epoll_fd, events, MAX_EPOLL_EVENT_NUM, -1);
-        if (ev_num == -1){
+        if (ev_num == -1) {
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("epoll_wait() failed in statistics poll, epfd: %d, maxevents: %d, timeout: %d, "
-                "errmsg: %s\n",
-                m_epoll_fd, MAX_EPOLL_EVENT_NUM, -1, errno,
-                NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                         "errmsg: %s\n",
+                         m_epoll_fd, MAX_EPOLL_EVENT_NUM, -1, errno,
+                         NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
             return;
         }
 
@@ -496,7 +497,7 @@ class Listener {
         }
         umq_route_list_t filteredList{};
         uint32_t filterNum = 0;
-        for (uint32_t i = 0;i< route_list.route_num; ++i) {
+        for (uint32_t i = 0; i < route_list.route_num; ++i) {
             filteredList.routes[filterNum++] = route_list.routes[i];
         }
 
@@ -506,8 +507,8 @@ class Listener {
             return;
         }
 
-        if (SocketConnHelper::SendSocketData(fd, &filteredList, sizeof(umq_route_list_t), LISTENER_SEND_RECV_TIMEOUT_MS) !=
-            sizeof(umq_route_list_t)) {
+        if (SocketConnHelper::SendSocketData(fd, &filteredList, sizeof(umq_route_list_t),
+                                             LISTENER_SEND_RECV_TIMEOUT_MS) != sizeof(umq_route_list_t)) {
             UBS_VLOG_ERR("Failed to send umq route list\n");
         }
 
@@ -701,7 +702,7 @@ class Listener {
         if (fd < 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("Failed to accept connection, %s\n",
-                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                         NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return;
         }
         fd_guard tmpFd(fd);
@@ -769,19 +770,19 @@ class Listener {
         return m_uds_fd;
     }
 
-    protected:
+protected:
     int RecvCmd(int fd, CtrlHead &ipc_ctl)
     {
-        if (SocketConnHelper::RecvSocketData(
-            fd, &ipc_ctl, sizeof(CtrlHead), LISTENER_SEND_RECV_TIMEOUT_MS) != sizeof(CtrlHead)) {
+        if (SocketConnHelper::RecvSocketData(fd, &ipc_ctl, sizeof(CtrlHead), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CtrlHead)) {
             UBS_VLOG_ERR("Failed to recv CLIControlHeader\n");
             return -1;
         }
 
         if (ipc_ctl.m_data_size > CACHE_BUFFER_LEN) {
             // Currently, using 8KB of memory is more than sufficient.
-            UBS_VLOG_ERR("Received data size %u exceeds cache buffer length %u\n",
-                ipc_ctl.m_data_size, CACHE_BUFFER_LEN);
+            UBS_VLOG_ERR("Received data size %u exceeds cache buffer length %u\n", ipc_ctl.m_data_size,
+                         CACHE_BUFFER_LEN);
             return -1;
         }
 
@@ -789,8 +790,8 @@ class Listener {
             return 0;
         }
 
-        if (SocketConnHelper::RecvSocketData(
-            fd, m_cache_buffer, ipc_ctl.m_data_size, LISTENER_SEND_RECV_TIMEOUT_MS) != ipc_ctl.m_data_size) {
+        if (SocketConnHelper::RecvSocketData(fd, m_cache_buffer, ipc_ctl.m_data_size, LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            ipc_ctl.m_data_size) {
             UBS_VLOG_ERR("Failed to recv cache data\n");
             return -1;
         }
@@ -800,8 +801,8 @@ class Listener {
 
     int SendCmd(int fd, CtrlHead &ipc_ctl, const char *in_data)
     {
-        if (SocketConnHelper::SendSocketData(
-            fd, &ipc_ctl, sizeof(CtrlHead), LISTENER_SEND_RECV_TIMEOUT_MS) != sizeof(CtrlHead)) {
+        if (SocketConnHelper::SendSocketData(fd, &ipc_ctl, sizeof(CtrlHead), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CtrlHead)) {
             UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
             return -1;
         }
@@ -810,8 +811,8 @@ class Listener {
             return 0;
         }
 
-        if (SocketConnHelper::SendSocketData(
-            fd, in_data, ipc_ctl.m_data_size, LISTENER_SEND_RECV_TIMEOUT_MS) != ipc_ctl.m_data_size) {
+        if (SocketConnHelper::SendSocketData(fd, in_data, ipc_ctl.m_data_size, LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            ipc_ctl.m_data_size) {
             UBS_VLOG_ERR("Failed to send cache data\n");
             return -1;
         }
@@ -825,13 +826,13 @@ class Listener {
         {
             ReadLocker lock(SocketSet::Instance().GetRWLock());
             SocketPtr *socket_fd_obj_map = SocketSet::Instance().GetSocketObj();
-            for (uint32_t i = 0; i < RPC_ADPT_FD_MAX; ++i){
+            for (uint32_t i = 0; i < RPC_ADPT_FD_MAX; ++i) {
                 UmqSocket *sock = (UmqSocket *)socket_fd_obj_map[i].Get();
-                if(sock == nullptr){
+                if (sock == nullptr) {
                     continue;
                 }
                 sock->OutputStats(m_oss);
-            } 
+            }
         }
         Statistics::Recorder::FillEmptyForm(m_oss);
     }
@@ -846,8 +847,8 @@ class Listener {
 
 /* The reason for using a singleton implementation independently rather than inheriting it from the context is to 
  * avoid creating and occupying unnecessary memory when the statistic-related functionality is not enabled. */
- class GlobalStatsMgr final : public Listener {
-    public:
+class GlobalStatsMgr final : public Listener {
+public:
     static ALWAYS_INLINE GlobalStatsMgr *GetGlobalStatsMgr(const umq_trans_mode_t trans_mode)
     {
         static GlobalStatsMgr mgr(trans_mode);
@@ -857,7 +858,7 @@ class Listener {
     static void GlobalStatsMgrEventLoop(const umq_trans_mode_t trans_mode)
     {
         GlobalStatsMgr *mgr = GetGlobalStatsMgr(trans_mode);
-        while(m_running){
+        while (m_running) {
             mgr->Poll();
         }
     }
@@ -869,7 +870,7 @@ class Listener {
         Listener::ProcessEpollEvents(events, evNum);
     }
 
-    private:
+private:
     explicit GlobalStatsMgr(umq_trans_mode_t trans_mode)
     {
         m_trans_mode = trans_mode;
@@ -879,7 +880,7 @@ class Listener {
 
         try {
             m_event_loop = new std::thread(GlobalStatsMgrEventLoop, trans_mode);
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             UBS_VLOG_ERR("%s\n", e.what());
             throw std::runtime_error("Failed to launch internal thread for statistics");
         }
@@ -888,7 +889,7 @@ class Listener {
     ~GlobalStatsMgr()
     {
         m_running = false;
-        if(m_event_loop != nullptr) {
+        if (m_event_loop != nullptr) {
             WakeupEpoll();
             m_event_loop->join();
             delete m_event_loop;
@@ -898,9 +899,8 @@ class Listener {
     std::thread *m_event_loop = nullptr;
     static volatile bool m_running;
     umq_trans_mode_t m_trans_mode;
- };
-
 };
 
-#endif
+}; // namespace Statistics
 
+#endif

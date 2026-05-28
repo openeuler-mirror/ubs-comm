@@ -14,7 +14,6 @@
 #include "ubsocket_core_types.h"
 #include "ubsocket_spsc_ring_queue.h"
 
-
 namespace ock {
 namespace ubs {
 
