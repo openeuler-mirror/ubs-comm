@@ -27,14 +27,13 @@ int ServiceWriteBwTest::DoPostWrite()
             std::placeholders::_1);
         if (newCallback == nullptr) {
             LOG_ERROR("Create callback failed");
+            sem_post(&mSem);
             return -1;
         }
         int res = mCh->Put(mReq, newCallback);
         if (res != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("failed to send to server");
+            sem_post(&mSem);
             return res;
         }
     }
@@ -65,9 +64,6 @@ int ServiceWriteBwTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &
         UBSHcomReplyContext replyCtx;
         replyCtx.rspCtx = ctx.RspCtx();
         if ((ctx.Channel()->Reply(replyCtx, req, newCallback)) != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("Failed to post message to data to server");
             return -1;
         }

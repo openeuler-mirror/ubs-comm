@@ -34,9 +34,6 @@ int ServiceReadLatTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &
         UBSHcomReplyContext replyCtx;
         replyCtx.rspCtx = ctx.RspCtx();
         if ((ctx.Channel()->Reply(replyCtx, req, newCallback)) != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("Failed to post message to data to server");
             return -1;
         }
@@ -126,6 +123,7 @@ void ServiceReadLatTest::UnInitialize()
     }
 
     mHelper.DestroyService();
+
     sem_destroy(&mSem);
 }
 
@@ -147,8 +145,10 @@ bool ServiceReadLatTest::Connect()
 
 bool ServiceReadLatTest::RunTest(PerfTestContext *ctx)
 {
-    // ctx会记录测试中每个Iteration耗时，故每次使用不同的ctx
-    SetPerfTestContext(ctx);
+    if (!SetPerfTestContext(ctx)) {
+        LOG_ERROR("SetPerfTestContext failed");
+        return false;
+    }
 
     if (!mCfg.GetIsServer()) {
         mReq.lAddress = mPostMrInfo.lAddress;
@@ -159,7 +159,6 @@ bool ServiceReadLatTest::RunTest(PerfTestContext *ctx)
 
         DoPostRead();
     }
-    // 等待测试结束
     sem_wait(&mSem);
     return true;
 }

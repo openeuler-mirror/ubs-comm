@@ -29,6 +29,7 @@ int ServiceWriteLatTest::RequestReceived(const ock::hcom::UBSHcomServiceContext 
         // server
         if (memcpy_s(&mPeerMrInfo, sizeof(mPeerMrInfo), ctx.MessageData(), ctx.MessageDataLen()) != 0) {
             LOG_ERROR("memcpy_s failed");
+            sem_post(&mSem);
             return -1;
         }
         UBSHcomRequest req(&mPollMrInfo, sizeof(mPollMrInfo), OP_SERVICE_WRITE_LAT);
@@ -43,9 +44,6 @@ int ServiceWriteLatTest::RequestReceived(const ock::hcom::UBSHcomServiceContext 
         UBSHcomReplyContext replyCtx;
         replyCtx.rspCtx = ctx.RspCtx();
         if ((ctx.Channel()->Reply(replyCtx, req, newCallback)) != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("Failed to post message to data to server");
             result = -1;
         }
