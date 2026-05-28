@@ -52,9 +52,6 @@ private:
                 ctx->tposted[mCtx->cnt - 1] = ock::hcom::MONOTONIC_TIME_NS();
                 int res = mCh->Put(mReq, newCallback);
                 if (res != 0) {
-                    if (newCallback != nullptr) {
-                        delete newCallback;
-                    }
                     LOG_ERROR("failed to write to server");
                     sem_post(&mSem);
                     return res;

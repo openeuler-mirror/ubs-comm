@@ -3,9 +3,7 @@
  */
 #ifndef HCOM_PERF_TEST_SERVICE_READ_LAT_H
 #define HCOM_PERF_TEST_SERVICE_READ_LAT_H
-#include <functional>
 #include <semaphore.h>
-#include <vector>
 #include "hcom/hcom.h"
 #include "test_case/perf_test_base.h"
 #include "test_case/service_v2/service_helper.h"
@@ -36,39 +34,23 @@ private:
         }
 
         const uint64_t iters = mCtx->mIterations;
-
-        mCallbacks.clear();
-        mCallbacks.reserve(iters);
-        for (uint64_t i = 0; i < iters; i++) {
-            auto closure = std::bind(
-                [](ServiceReadLatTest *self, ock::hcom::UBSHcomServiceContext &context) {
-                    self->rcnt.fetch_add(1);
-                },
-                this, std::placeholders::_1);
-            auto cb = new (std::nothrow) ock::hcom::InnerClosureCallback<decltype(closure)>(std::move(closure), false);
-            if (cb == nullptr) {
-                LOG_ERROR("Pre-allocate callback[" << i << "] failed");
-                for (auto &ptr : mCallbacks) {
-                    delete ptr;
-                }
-                mCallbacks.clear();
-                sem_post(&mSem);
-                return -1;
-            }
-            mCallbacks.push_back(cb);
-        }
-
         rcnt.store(0);
         mCtx->cnt = 0;
         while (mCtx->cnt < iters) {
             mCtx->tposted[mCtx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
-            int res = mCh->Get(mReq, mCallbacks[mCtx->cnt]);
+            ock::hcom::Callback *newCallback = ock::hcom::UBSHcomNewCallback(
+                [this](ock::hcom::UBSHcomServiceContext &context) {
+                    this->rcnt.fetch_add(1);
+                },
+                std::placeholders::_1);
+            if (newCallback == nullptr) {
+                LOG_ERROR("Create callback failed");
+                sem_post(&mSem);
+                return -1;
+            }
+            int res = mCh->Get(mReq, newCallback);
             if (res != 0) {
                 LOG_ERROR("Get failed at iteration " << mCtx->cnt);
-                for (auto &ptr : mCallbacks) {
-                    delete ptr;
-                }
-                mCallbacks.clear();
                 sem_post(&mSem);
                 return -1;
             }
@@ -110,7 +92,6 @@ private:
     ServiceHelper mHelper;
     RegMrInfo mPostMrInfo;
     RegMrInfo mPeerMrInfo;
-    std::vector<ock::hcom::Callback *> mCallbacks;
     sem_t mSem;
 };
 }

@@ -34,9 +34,6 @@ int ServiceReadLatTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &
         UBSHcomReplyContext replyCtx;
         replyCtx.rspCtx = ctx.RspCtx();
         if ((ctx.Channel()->Reply(replyCtx, req, newCallback)) != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("Failed to post message to data to server");
             return -1;
         }
@@ -126,11 +123,6 @@ void ServiceReadLatTest::UnInitialize()
     }
 
     mHelper.DestroyService();
-
-    for (auto &ptr : mCallbacks) {
-        delete ptr;
-    }
-    mCallbacks.clear();
 
     sem_destroy(&mSem);
 }
