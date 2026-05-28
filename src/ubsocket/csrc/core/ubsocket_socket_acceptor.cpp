@@ -177,6 +177,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (event_fd < 0) {
         UBS_VLOG_ERR("eventfd() failed, ret: %d, errno: %d, errmsg: %s\n", event_fd, errno, Func::Error2Str(errno));
+        PROF_END(CORE_ACCEPT, false);
         return UBS_NEW_SOCKET_FD;
     }
 
@@ -184,6 +185,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     SocketPtr new_socket_obj;
     ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_UMQ, new_socket_obj);
     if (ret != UBS_OK) {
+        PROF_END(CORE_ACCEPT, false);
         return ret;
     }
     new_socket_obj->event_fd_ = event_fd;
@@ -195,10 +197,12 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 
     ret = newSocket->acceptor_->acceptor_ops_->Negotiate(new_socket_obj);
     if (ret != UBS_OK) {
+        PROF_END(CORE_ACCEPT, false);
         return ret;
     }
     ret = newSocket->acceptor_->acceptor_ops_->CreateSocketResources(new_socket_obj);
     if (ret != UBS_OK) {
+        PROF_END(CORE_ACCEPT, false);
         return ret;
     }
 

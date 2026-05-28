@@ -54,8 +54,14 @@ inline int TraceGroup::Record(uint32_t tp_id, const char *tp_name, uint64_t time
         return UBS_ERROR;
     }
 
-    if (UNLIKELY(points_[tp_id].pointName.empty())) {
-        points_[tp_id].pointName = (tp_name == nullptr ? "NULL" : std::string(tp_name));
+    if (UNLIKELY(tp_name == nullptr)) {
+        UBS_VLOG_ERR("Tracer point name is null.");
+        return UBS_ERROR;
+    }
+
+    if (UNLIKELY(points_[tp_id].has_name == 0)) {
+        points_[tp_id].SetName(tp_name);
+        points_[tp_id].has_name = 1;
     }
 
     points_[tp_id].Record(timestamp, good);

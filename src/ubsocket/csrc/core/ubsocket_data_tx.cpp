@@ -30,6 +30,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         errno = EINVAL;
         UBS_VLOG_ERR("WriteV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                      Func::Error2Str(errno));
+        PROF_END(CORE_WRITE, false);
         return UBS_ERROR;
     }
 
@@ -37,10 +38,12 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         errno = EPIPE;
         UBS_VLOG_ERR("WriteV socket is closed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                      Func::Error2Str(errno));
+        PROF_END(CORE_WRITE, false);
         return UBS_ERROR;
     }
 
     if (tx_ops_->PollTx(sock) < 0) {
+        PROF_END(CORE_WRITE, false);
         return UBS_ERROR;
     }
 
@@ -73,6 +76,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     uint32_t tx_total_len;
     int64_t ret = tx_ops_->PostSend(sock, txBuf, batch, converterPtr);
     if (ret < 0) {
+        PROF_END(CORE_WRITE, false);
         return ret;
     }
     tx_total_len = ret;
