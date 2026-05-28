@@ -16,6 +16,7 @@
 #include <thread>
 
 #include "ubsocket_logger.h"
+#include "under_api/umq_api.h"
 
 namespace Statistics {
 
@@ -88,7 +89,7 @@ public:
         oss << "\"" << "activeConnections" << "\":" << mActiveConnCount.load() << ",";
         oss << "\"" << "reTxCount" << "\":" << mReTxCount.load() << ",";
         oss << "\"" << "sendPackets" << "\":" << mTxPacketCount.load() << ",";
-        oss << "\"" << "receivePackets" << "\":" << mRxPacketCount.load() << ",";
+        oss << "\"" << "receivePackets" << "\":" << (mRxPacketCount.load() / 2) << ",";
         oss << "\"" << "sendBytes" << "\":" << mTxByteCount.load() << ",";
         oss << "\"" << "receiveBytes" << "\":" << mRxByteCount.load() << ",";
         oss << "\"" << "errorPackets" << "\":" << mTxErrorPacketCount.load() << ",";
@@ -96,6 +97,8 @@ public:
 
         oss << "}" << "}";
     }
+
+    static void UpdateReTxCount(umq_trans_mode_t umq_trans_mode);
 
     // data plane interface, caller ensure input validation
     static ALWAYS_INLINE void UpdateTraceStats(enum trace_stats_type type, uint32_t value)

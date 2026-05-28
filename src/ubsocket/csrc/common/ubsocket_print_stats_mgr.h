@@ -46,6 +46,7 @@ public:
     {
         std::ostringstream oss;
         PrintStatsMgr *mgr = GetPrintStatsMgr();
+        StatsMgr::UpdateReTxCount(mgr->m_trans_mode);
         StatsMgr::OutputAllStats(oss, mgr->pidVal);
         mgr->OutputJSON(oss);
     }
@@ -59,12 +60,14 @@ public:
         }
     }
 
-    static void StartStatsCollection(uint64_t traceTime, const std::string& tracePath, uint64_t traceFileSize)
+    static void StartStatsCollection(uint64_t traceTime, const std::string& tracePath, uint64_t traceFileSize,
+        const umq_trans_mode_t trans_mode = UMQ_TRANS_MODE_UB)
     {
         PrintStatsMgr *mgr = GetPrintStatsMgr();
         mgr->ubsocketTraceTime = traceTime;
         mgr->ubsocketTraceFileSize = traceFileSize;
         mgr->pidVal = static_cast<uint32_t>(getpid());
+        mgr->m_trans_mode = trans_mode;
 
         if (!tracePath.empty()) {
             mgr->ubsocketTraceFilePath = tracePath;
@@ -220,6 +223,7 @@ private:
     std::thread *m_event_loop;
     uint32_t pidVal;
     std::string ubsocketTraceFilePath;
+    umq_trans_mode_t m_trans_mode;
 };
 
 }; // namespace Statistics

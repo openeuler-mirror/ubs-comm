@@ -21,6 +21,7 @@
 #include "include/ubsocket.h"
 #include "ubsocket_struct_helper.h"
 #include "under_api/dl_api.h"
+#include "core/umq/umq_setting.h"
 
 using namespace ock::ubs;
 
@@ -243,8 +244,10 @@ UBS_API void ubsocket_iobuf_deallocate(void *addr)
 
 UBS_API void ubsocket_trace_statistic_init(void)
 {
-    Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_TRACE_TIME, GlobalSetting::UBS_TRACE_FILE_PATH,
-                                                    GlobalSetting::UBS_TRACE_FILE_SIZE);
+    umq_trans_mode_t transMode = umq::UmqSetting::UMQ_TRANS_MODE;
+    Statistics::PrintStatsMgr::StartStatsCollection(
+        GlobalSetting::UBS_TRACE_TIME, GlobalSetting::UBS_TRACE_FILE_PATH,
+        GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
 }
 
 UBS_API void ubsocket_trace_statistic_destroy(void)
