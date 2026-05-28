@@ -172,6 +172,12 @@ constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_MAX = 300;
 constexpr uint32_t UBSOCKET_TRACE_FILE_PATH_LEN_MIN = 1;
 constexpr uint32_t UBSOCKET_TRACE_FILE_PATH_LEN_MAX = 512;
 
+constexpr uint32_t UBSOCKET_PROBE_TIME_MS_MIN = 1;
+constexpr uint32_t UBSOCKET_PROBE_TIME_MS_MAX = 360000;
+
+constexpr uint32_t UBSOCKET_PROBE_BATCH_MIN = 1;
+constexpr uint32_t UBSOCKET_PROBE_BATCH_MAX = 500;
+
 } // namespace ubs
 } // namespace ock
 
