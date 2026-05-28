@@ -1,18 +1,19 @@
 ## 🔄Latest News
 
-* UB TP Support May 30, 2026
+* UB Support May 30, 2026
 
 ## 🎉Introduction
 
 UBSocket is an easy and high performance communication library on top of Unified Bus from Huawei. Key concepts:
-* socket api compatible
-* in use space
-* massive scale
-* well integrated with bRPC and so on
+* <b>easy to use</b>: socket api compatible
+* <b>high performance</b>: bypass kernel, zero copy, fast connection
+* <b>large scale</b>: support massive connection 
+* <b>well integrated</b>: well integrated with bRPC and so on
 
+## Architecture overview
 ![architecture](../../doc/ubsocket/figures/ubsocket_architecture.png)
 
-## 🧩Core Features
+UBSocket is designed highly extendable to support different hardware, for example: Unified Bus, and RoCE/Posix SHM in the future.
 
 ## 🔥Performance
 
@@ -28,15 +29,12 @@ UBSocket is an easy and high performance communication library on top of Unified
 ## 📦Pre-request hardware and software
 
 - Hardware
-    - Device:
-    - Host: aarch64/x86
+    - Host: Kunpeng 950
 
 - Software:
-    - OS
-    - URMA
+    - OS:
+    - URMA:
 
 ## 📝 Other information
 
-- [Security Note]()
-
-- [License]()
+- [License](./../../LICENSE)
