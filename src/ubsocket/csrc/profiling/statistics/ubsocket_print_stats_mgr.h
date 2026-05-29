@@ -29,8 +29,8 @@
 #include <string>
 #include <thread>
 
-#include "cli/statistics_statsmgr.h"
-#include "ubsocket_global_setting.h"
+#include "statistics_statsmgr.h"
+#include "common/ubsocket_global_setting.h"
 
 namespace Statistics {
 

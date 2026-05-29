@@ -24,7 +24,7 @@ char *In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufS
     if (in6Addr == nullptr || dstBuf == nullptr || bufSize < INET6_ADDRSTRLEN) {
         return nullptr;
     }
-    if (memset_s(dstBuf, bufSize, 0, bufSize) != 0) {
+    if (memset(dstBuf, 0, bufSize) != 0) {
         CLI_LOG("Failed to memset buf\n");
         return nullptr;
     }
@@ -32,7 +32,7 @@ char *In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufS
     for (int i = 0; i < IPV6_HEXTET_COUNT; i++) {
         uint16_t segment = (uint16_t)(in6Addr->s6_addr[IPV6_HEXTET_BYTE_COUNT * i] << BYTE_BIT_WIDTH) |
                            in6Addr->s6_addr[IPV6_HEXTET_BYTE_COUNT * i + 1];
-        int written = snprintf_s(pos, bufSize - (pos - dstBuf), bufSize - (pos - dstBuf), "%04x", segment);
+        int written = snprintf(pos, bufSize - (pos - dstBuf), "%04x", segment);
         if (written <= 0 || written >= (int)(bufSize - (pos - dstBuf))) {
             return nullptr;
         }
@@ -88,7 +88,7 @@ void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy_s(&header, sizeof(CLIDataHeader), data, headerSize) != 0) {
+    if (memcpy(&header, data, headerSize) != 0) {
         CLI_LOG("Failed to memcpy CLIDataHeader\n");
         return;
     }
@@ -119,7 +119,7 @@ void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataL
         return;
     }
     CLIDataHeader header{};
-    if (memcpy_s(&header, sizeof(CLIDataHeader), data, headerSize) != 0) {
+    if (memcpy(&header, data, headerSize) != 0) {
         CLI_LOG("Failed to memcpy CLIDataHeader\n");
         return;
     }
@@ -211,7 +211,7 @@ void TerminalDisplay::DisplayProbeInfo(uint8_t *data, const uint32_t dataLen)
 
     // 2. 拷贝头部
     CLIProbeHeader header{};
-    if (memcpy_s(&header, sizeof(CLIProbeHeader), data, headerSize) != 0) {
+    if (memcpy(&header, data, headerSize) != 0) {
         CLI_LOG("Failed to memcpy CLIProbeHeader\n");
         return;
     }
@@ -402,7 +402,7 @@ void TerminalDisplay::DisplayQbufPoolInfo(uint8_t *data, uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy_s(&header, sizeof(CLIDataHeader), data, headerSize) != 0) {
+    if (memcpy(&header, data, headerSize) != 0) {
         CLI_LOG("Failed to memcpy CLIDataHeader\n");
         return;
     }
@@ -438,7 +438,7 @@ void TerminalDisplay::DisplayUmqInfo(uint8_t *data, uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy_s(&header, sizeof(CLIDataHeader), data, headerSize) != 0) {
+    if (memcpy(&header, data, headerSize) != 0) {
         CLI_LOG("Failed to memcpy CLIDataHeader\n");
         return;
     }
@@ -474,7 +474,7 @@ void TerminalDisplay::DisplayIoPacketInfo(uint8_t *data, uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy_s(&header, sizeof(CLIDataHeader), data, headerSize) != 0) {
+    if (memcpy(&header, data, headerSize) != 0) {
         CLI_LOG("Failed to memcpy CLIDataHeader\n");
         return;
     }
@@ -510,7 +510,7 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy_s(&header, sizeof(CLIDataHeader), data, headerSize) != 0) {
+    if (memcpy(&header, data, headerSize) != 0) {
         CLI_LOG("Failed to memcpy CLIDataHeader\n");
         return;
     }

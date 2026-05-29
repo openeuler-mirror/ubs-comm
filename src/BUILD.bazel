@@ -79,8 +79,9 @@ cc_library(
         "ubsocket/csrc/iobuf/*.cpp",
         "ubsocket/csrc/profiling/*.cpp",
         "ubsocket/csrc/profiling/impl/*.cpp",
-        "ubsocket/csrc/under_api/*.cpp",
-        "ubsocket/csrc/cli/statistics.cpp"
+        "ubsocket/csrc/profiling/probe/*.cpp",
+        "ubsocket/csrc/profiling/statistics/*.cpp",
+        "ubsocket/csrc/under_api/*.cpp"
     ]) + glob([
         # 内部私有的.h文件
         "ubsocket/csrc/*.h",
@@ -90,8 +91,9 @@ cc_library(
         "ubsocket/csrc/iobuf/*.h",
         "ubsocket/csrc/profiling/*.h",
         "ubsocket/csrc/profiling/impl/*.h",
-        "ubsocket/csrc/under_api/*.h",
-        "ubsocket/csrc/cli/*.h"
+        "ubsocket/csrc/profiling/probe/*.h",
+        "ubsocket/csrc/profiling/statistics/*.h",
+        "ubsocket/csrc/under_api/*.h"
     ]),
 
     # 对外公开的.h文件
