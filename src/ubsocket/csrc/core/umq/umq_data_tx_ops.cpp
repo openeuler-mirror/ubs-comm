@@ -428,6 +428,16 @@ void UmqTxOps::HandleErrorTxCqe(umq_buf_t *buf)
             UBS_VLOG_ERR("[UMQ_CQE] unreachable! status=%d\n", buf->status);
             break;
     }
+    
+    // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
+    
+    // TODO: 快速退出, 如果 brpc-adapter 正好在 readv/writev 中可以不经过一次 epoll_wait.
+    // m_closed.store(true, std::memory_order_relaxed);
+
+    // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
+    // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
+    LibcApi::shutdown(fd_, SHUT_RD);
+    UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", fd_);
 }
 
 void UmqTxOps::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
