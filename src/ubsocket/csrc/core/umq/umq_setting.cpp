@@ -191,6 +191,7 @@ Result UmqSetting::VerifySetting() noexcept
                      UMQ_MEM_POOL_MAX_SIZE_MB, UMQ_MEM_POOL_INIT_SIZE_MB);
         return UBS_INVALID_PARAM;
     }
+    UBS_VLOG_INFO("UBSOCKET_POOL_MAX_SIZE is to set: %ld MB", UMQ_MEM_POOL_MAX_SIZE_MB);
 
     return UBS_OK;
 }
