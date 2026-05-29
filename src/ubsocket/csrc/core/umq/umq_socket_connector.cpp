@@ -63,7 +63,7 @@ Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockad
         UBS_VLOG_ERR("TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s\n", sendto_ret, errno,
                      Func::Error2Str(errno));
     }
-    if (!SocketConnHelper::IsTfoConnection(raw_fd_)) {
+    if (!SocketConnHelper::IsUbsConnection(raw_fd_)) {
         // 首次获取cookie，创建临时socket二次发送
         UBS_VLOG_INFO("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
         const int tmp_fd = LibcApi::socket(AF_INET, SOCK_STREAM, 0);
@@ -109,7 +109,7 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
     }
 
     // TODO: m_tx_use_tcp || m_rx_use_tcp 如何处理
-    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED || !SocketConnHelper::IsTfoConnection(new_fd)) {
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED || !SocketConnHelper::IsUbsConnection(new_fd)) {
         return ret;
     }
 
@@ -127,6 +127,8 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
             */
         if (errno == EINPROGRESS || errno == EALREADY) {
             UBS_VLOG_DEBUG("tcp connect inprogress:%s, fd %d\n", Func::Error2Str(errno), new_fd);
+            // 内核选项建链场景：fd是非阻塞套接字，调用connect返回-1，errno为EINPROGRESS，网络正在建连，需修正ret，确保后续正常协商
+            ret = UBS_OK;
         } else if (errno != EISCONN) {
             UBS_VLOG_ERR("connect() failed, ret: %d, errno: %d, errmsg: %s, fd: %d\n", ret, errno,
                          Func::Error2Str(errno), new_fd);

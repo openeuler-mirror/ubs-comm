@@ -40,7 +40,7 @@ public:
     static ssize_t RecvSocketData(int fd, const void *buf, size_t size, uint32_t timeout_ms);
     static void FlushSocketMsg(int fd);
 
-    static bool IsTfoConnection(const int &fd);
+    static bool IsUbsConnection(const int &fd);
 
     static int SetTcpNoDelay(int fd);
     static std::string ExtractIpFromSockAddr(const struct sockaddr *address);

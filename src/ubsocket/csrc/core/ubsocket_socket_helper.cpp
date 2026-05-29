@@ -12,7 +12,7 @@
 
 namespace ock {
 namespace ubs {
-bool SocketConnHelper::IsTfoConnection(const int &fd)
+bool SocketConnHelper::IsUbsConnection(const int &fd)
 {
     if (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::TFO) {
         tcp_info info{};
