@@ -29,6 +29,11 @@ description: Module-specific skill for writing UT for files under src/ubsocket/c
 - `ubsocket_common_includes.h` — 公共include聚合器
 - `ubsocket_profiling.h` — 性能宏(链接到profiling模块)
 
+## UT约束
+
+- **stub默认不启用**: 新增UT时优先使用mockcpp(`MOCKER_CPP`/`MOCKER`)mock C API和系统调用，**默认不使用stub方式**(fake_epoll_static/AllocMockBufWithBlock/SocketTestHelper等)。只有用户明确指定需要stub实现时才启用。
+- **单用例执行≤1s**: 每个`TEST_F`用例的执行时间不超过1秒。禁止在测试中使用长时间sleep、阻塞等待、密集计算循环等。如需等待异步事件，使用短超时(≤100ms)+轮询。
+
 ## 单例模式与清理
 
 ### GlobalSetting (Meyers单例)
@@ -203,6 +208,37 @@ EXPECT_EQ(ObjStatistics::GetDestroyCount("TestClass"), 1);
 | `ubsocket_signal_handler.cpp` | ~80 | 中 | P3 — 信号处理 |
 | `ubsocket_scope_exit.h` | ~30 | 低 | P3 — 仅头文件RAII |
 | `ubsocket_obj_statistics.cpp` | ~50 | 低 | P3 — 计数器 |
+
+## 如何使用本Skill
+
+### 触发与加载
+
+触发关键词见本skill YAML frontmatter `description`字段。加载规则见`.opencode/README.md` §全局规则——写common模块UT时需与`ut-gen`(root skill)一起加载。
+
+### 工作流程
+
+1. **认领文件** — 从§优先覆盖的新文件中选择目标文件
+2. **识别单例/全局状态** — 对照§单例模式与清理确定SetUp/TearDown需求
+3. **设计case** — 按本skill各节per-class测试策略设计
+4. **编写测试** — 大多数common类无需mock(纯逻辑/仅头文件)
+5. **构建验证** — 命令见ut-gen §构建与运行
+6. **报告进度** — 更新ut-coverage-coord进度表+覆盖率增量
+
+## 知识回流
+
+按`.opencode/README.md` §如何更新Skill回流。Common模块特定判断:
+
+| 发现类型 | 判断条件 | 回流目标 |
+|----------|---------|----------|
+| Singleton/全局状态清理陷阱 | 涉及单例销毁/LeakySingleton/环境变量时序 | 本skill §单例模式与清理 |
+| pthread/lock mock模式 | 涉及`LockRegistry`或`pthread_rwlock_t` | 本skill §Lock & LockRegistry |
+| ThreadPool测试策略 | 涉及线程创建/sleep_for/任务提交 | 本skill §ThreadPool |
+| 跨模块适用 | 不限于common模块 | `ut-gen` §mockcpp模式/§常见陷阱 |
+
+### 回流更新检查清单
+
+- [ ] 新singleton清理陷阱 → 本skill §单例模式与清理
+- [ ] 新Lock/ThreadPool测试策略 → 本skill对应章节
 
 ## 参考文件
 

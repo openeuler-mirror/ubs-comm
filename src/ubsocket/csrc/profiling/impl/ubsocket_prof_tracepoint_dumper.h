@@ -35,6 +35,8 @@ constexpr uint16_t INTERVAL_MIN_MIN = 1;
 constexpr uint16_t INTERVAL_MAX_MIN = 5;
 constexpr int COL_WIDTH_MIN = 20;
 constexpr int COL_WIDTH_MAX = 30;
+constexpr int SLEEP_CHUNK_MS = 10;
+constexpr int UT_SLEEP_DURATION_MS = 10;
 
 class DumpThread : public Referable {
 public:
@@ -95,13 +97,29 @@ private:
         pthread_setname_np(pthread_self(), "ubs_prof");
 
         while (running_) {
-#ifdef UBSOCKET_UNIT_TEST
-            std::this_thread::sleep_for(std::chrono::seconds(interval_min_));
-#else
-            std::this_thread::sleep_for(std::chrono::minutes(interval_min_));
-#endif
+            auto sleepDuration = GetSleepDuration();
+            auto chunkMs = std::chrono::milliseconds(SLEEP_CHUNK_MS);
+            auto elapsed = std::chrono::milliseconds(0);
+            while (running_ && elapsed < sleepDuration) {
+                auto remaining = sleepDuration - elapsed;
+                auto sleepChunk = (remaining < chunkMs) ? remaining : chunkMs;
+                std::this_thread::sleep_for(sleepChunk);
+                elapsed += sleepChunk;
+            }
+            if (!running_) {
+                break;
+            }
             DumpData();
         }
+    }
+
+    std::chrono::milliseconds GetSleepDuration() const
+    {
+#ifdef UBSOCKET_UNIT_TEST
+        return std::chrono::milliseconds(UT_SLEEP_DURATION_MS);
+#else
+        return std::chrono::minutes(interval_min_);
+#endif
     }
 
     // Truly dump the data

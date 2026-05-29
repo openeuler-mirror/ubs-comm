@@ -1,7 +1,7 @@
 # UBSocket csrc UT 覆盖率基线与提升计划
 
 > 最后更新: 2026-05-27
-> 关联文档: `doc/ubsocket/UBSOCKET-ERRNO-UT-PROGRESS.ch.md`
+> 关联文档: `doc/ubsocket/UBSOCKET-CLAIMING.md`, `doc/ubsocket/UBSOCKET-ARCHITECTURE.ch.md`
 > 关联skill: `.opencode/skills/ut-gen/SKILL.md`, `.opencode/skills/ut-coverage-coord/SKILL.md`
 > 关联子skill: `.opencode/skills/ut-gen-umq/SKILL.md`, `.opencode/skills/ut-gen-core/SKILL.md`, `.opencode/skills/ut-gen-common/SKILL.md`, `.opencode/skills/ut-gen-under-api/SKILL.md`, `.opencode/skills/ut-gen-profiling/SKILL.md`
 > 关联项目上下文: `AGENTS.md` (Coverage Baseline section)
@@ -16,13 +16,13 @@
 UMQ_BUILD=on UBSOCKET_UT=on UBSOCKET_COVERAGE=on bash build/build_umq_and_ubsocket.sh
 ```
 
-### 1.2 总体覆盖率 (2026-05-27 baseline)
+### 1.2 总体覆盖率 (2026-05-27 baseline, iobuf UT后更新)
 
-| 指标 | 基线值 | 目标 | 缺口 |
-|------|--------|------|------|
-| 行覆盖率 | 11.1% (623/5637) | ≥80% | +3886行 |
-| 函数覆盖率 | 19.0% (117/615) | — | +498函数 |
-| 分支覆盖率 | 5.3% (361/6861) | ≥50% | +3068分支 |
+| 指标 | 基线值 | iobuf后 | 目标 | 缺口 |
+|------|--------|---------|------|------|
+| 行覆盖率 | 11.1% (623/5637) | 15.1% (850/5637) | ≥80% | +3650行 |
+| 函数覆盖率 | 19.0% (117/615) | 27.0% (166/615) | — | +449函数 |
+| 分支覆盖率 | 5.3% (361/6861) | 7.0% (479/6861) | ≥50% | +2953分支 |
 
 ### 1.3 模块级覆盖率明细
 
@@ -31,7 +31,7 @@ UMQ_BUILD=on UBSOCKET_UT=on UBSOCKET_COVERAGE=on bash build/build_umq_and_ubsock
 | core/umq | 12.0% | 2148 | 258 | 0.6% | 160 | 0.0% | 2693 | 19 | +1460 |
 | core/socket | 2.4% | 1452 | 35 | 0.6% | 157 | 0.0% | 1768 | 22 | +1126 |
 | common | 20.1% | 642 | 129 | 4.7% | 149 | 0.0% | 1062 | 16 | +384 |
-| iobuf | 0.0% | 343 | 0 | 0.0% | 29 | 0.0% | 328 | 3 | +274 |
+| iobuf | 0.0%→57.3% | 343 | 0→196 | 0%→79% | 29 | 0%→23% | 328 | 3 | +77 |
 | entry | 0.0% | 294 | 0 | 0.0% | 39 | 0.0% | 290 | 4 | +235 |
 | under_api/urma | 0.0% | 267 | 0 | 0.0% | 3 | 0.0% | 258 | 1 | +213 |
 | under_api | 5.2% | 269 | 14 | 0.0% | 57 | 0.0% | 168 | 5 | +201 |
@@ -241,15 +241,17 @@ UMQ_BUILD=on UBSOCKET_UT=on UBSOCKET_COVERAGE=on bash build/build_umq_and_ubsock
 | easy | ubsocket_data_tx.cpp | 0 | 无外部调用 |
 | easy | ubsocket_zcopy_adapter.cpp | 1 | 内部依赖 |
 
-### 5.2 需建立的统一 Mock 桩
+### 5.2 Mock 桩基础设施现状
 
-| 桩文件 | Mock 覆盖的 API | 影响模块 | 优先级 |
-|--------|-----------------|----------|--------|
-| umq_stub.h/.cpp | 全部 umq_* API (~50个函数) | core/umq, iobuf, entry | P0 |
-| epoll_stub.h/.cpp | epoll_create1/ctl/wait/close | core/socket, entry, core/umq | P0 |
-| pthread_stub.h/.cpp | pthread_mutex/cond/thread/create/join | common, core/socket | P1 |
-| socket_stub.h/.cpp | socket/bind/listen/accept/connect/setsockopt | core/socket, core/umq, entry | P1 |
-| dl_stub.h/.cpp | dlopen/dlsym/dlclose/dlerror | under_api, under_api/urma | P2 |
+| 桩 | Mock 覆盖的 API | 影响模块 | 优先级 | 形式 | 状态 |
+|----|-----------------|----------|--------|------|------|
+| umq_api_helper.h | umq_* API测试常量+AllocMockBuf | core/umq | P0 | helper头文件 | done |
+| libc_api_helper.h | LibcApi测试常量+MakeTestSockAddr+MakeTestEpollEvent | core/socket, entry | P0 | helper头文件 | done |
+| dl_helper.h | dlopen测试常量 | under_api | P2 | helper头文件 | done |
+| fake_epoll_static | epoll_create1/ctl/wait/pwait + eventfd/write/read + close(dlsym转发) | core/socket, entry, core/umq | P0 | 静态库 | done |
+| LockRegistry注入 | LOCK_OPS/RW_LOCK_OPS函数指针表 | common, core/socket | P1 | 已有基础设施 | done |
+| pthread不需要mock | `ubsocket_lock.cpp`通过LOCK_OPS函数指针注入 | common | P1 | 无需mock | N/A |
+| socket/bind/listen等 | LibcApi::_ptr函数指针(mockcpp或lambda) | core/socket, core/umq, entry | P1 | mockcpp+helper | done |
 
 ***
 
@@ -271,21 +273,20 @@ UMQ_BUILD=on UBSOCKET_UT=on UBSOCKET_COVERAGE=on bash build/build_umq_and_ubsock
 
 ### 6.2 分发前必须完成的 5 项准备
 
-#### P0: Mock 桩基础设施 (最关键阻塞项)
+#### P0: Mock 桩基础设施 (已完成)
 
-建立共享 stub 目录 `unit_test/stub/`:
-- `umq_stub.h/.cpp` — 统一 mock 全部 umq_* API
-- `epoll_stub.h/.cpp` — mock epoll_create/ctl/wait/close
-- `pthread_stub.h/.cpp` — mock pthread_mutex/cond/thread
-- `socket_stub.h/.cpp` — mock socket/bind/listen/accept/connect
-- `dl_stub.h/.cpp` — mock dlopen/dlsym/dlclose
+`unit_test/stub/` 目录已建立:
+- `umq_api_helper.h` — AllocMockBuf + MakeTest* 工厂函数 + 测试常量
+- `libc_api_helper.h` — MakeTestSockAddr + MakeTestEpollEvent + 测试常量
+- `dl_helper.h` — dlopen测试常量
+- `fake_epoll/fake_epoll.h + fake_epoll.cpp` — 静态库, 链接时替换epoll/eventfd/close, `close()`对非fake fd通过`dlsym(RTLD_NEXT)`转发
+- `LockRegistry::RegisterDefaultOps()` — 函数指针注入, pthread无需mock
 
-**理由**: 16 人独立写 mock 会严重重复且风格不一致，必须先建统一桩。
+#### P1: 新测试二进制 CMake 模板 (已完成)
 
-#### P1: 新测试二进制 CMake 模板
-
-当前只有 3 个测试二进制(umq_errno_converter_test, umq_ops_errno_test, profiling_test)。
-需要为每个新模块添加独立 test binary，建议结构:
+当前5个测试二进制: umq_errno_converter_test(91), umq_ops_errno_test(51), mock_infrastructure_test(32), iobuf_zcopy_adapter_test(45), profiling_test(1)。
+CMake模板在`.opencode/skills/ut-gen/SKILL.md`中已文档化(Converter-only和Ops级两种模式)。
+Ops级测试必须链接`fake_epoll_static`。
 
 ```
 unit_test/
@@ -325,15 +326,14 @@ unit_test/
 - 只跑自己的 test: `ctest --test-dir build -R <test_name>`
 - 覆盖率目标: 行≥80%、分支≥50%
 
-#### P4: 更新 UBSOCKET-UT.md
+#### P4: 已完成 — CLAIMING.md已包含构建/运行/覆盖率命令
 
-现有 `doc/ubsocket/UBSOCKET-UT.md` 内容过时(仍是旧版 backup 的目录结构和 cmake 命令)，
-需要更新为当前 csrc 版的构建/运行/覆盖率命令和目录结构。
+构建/运行/覆盖率命令已纳入 `doc/ubsocket/UBSOCKET-CLAIMING.md` 快速上手章节和关键规则。
 
 ### 6.3 执行顺序
 
 ```
-P0 Mock桩 → P1 CMake模板 → P2 认领表 → P3 工作流文档 → P4 更新UBSOCKET-UT.md → 开始分发任务
+P0 Mock桩 → P1 CMake模板 → P2 认领表 → P3 工作流文档 → P4 已完成 → 开始分发任务
 ```
 
 ***

@@ -38,6 +38,11 @@ description: Module-specific skill for writing UT for files under src/ubsocket/c
 | UmqEpollRunnerOps | 依赖epoll基础设施 | OsAPiMgr::epoll_create, epoll_ctl, epoll_wait |
 | UmqErrnoConverter | 静态类(无ctor) | 无 — 纯逻辑，无需mock |
 
+## UT约束
+
+- **stub默认不启用**: 新增UT时优先使用mockcpp(`MOCKER_CPP`/`MOCKER`)mock C API和系统调用，**默认不使用stub方式**(fake_epoll_static/AllocMockBufWithBlock/SocketTestHelper等)。只有用户明确指定需要stub实现时才启用。
+- **单用例执行≤1s**: 每个`TEST_F`用例的执行时间不超过1秒。禁止在测试中使用长时间sleep、阻塞等待、密集计算循环等。如需等待异步事件，使用短超时(≤100ms)+轮询。
+
 ## UMQ API Mock模式
 
 ### Adapter后端(默认, UMQ_ADAPTER_BACKEND_ENABLED)
@@ -172,6 +177,41 @@ target_sources(<test_name> PRIVATE <test_name>.cpp)
 | `umq_epoll_runner_ops.cpp` | ~200 | 中 | Epoll wait/ctl错误路径 | P3 |
 | `umq_buf_converter.cpp` | ~80 | 低 | buffer转换逻辑 | P3 |
 
+## 如何使用本Skill
+
+### 触发与加载
+
+触发关键词见本skill YAML frontmatter `description`字段。加载规则见`.opencode/README.md` §全局规则——写UMQ模块UT时需与`ut-gen`(root skill)一起加载。
+
+### 工作流程
+
+1. **认领文件** — 从§优先覆盖的新文件中选择目标文件
+2. **读源码** — 对照§各调用点的errno映射表识别Convert API和UmqOperation
+3. **读已有测试** — 参考§已有测试覆盖的fixture模式
+4. **设计case** — 按ut-gen §Errno映射测试覆盖矩阵+本skill §Share-JFR双Handle陷阱设计
+5. **编写测试** — 使用§UMQ API Mock模式(`MOCKER_CPP(::umq_xxx)`)
+6. **构建验证** — 命令见ut-gen §构建与运行
+7. **报告进度** — 更新ut-coverage-coord进度表+覆盖率增量
+
+## 知识回流
+
+按`.opencode/README.md` §如何更新Skill回流。UMQ模块特定判断:
+
+| 发现类型 | 判断条件 | 回流目标 |
+|----------|---------|----------|
+| UMQ API mock模式 | 适配`::umq_*`函数 | 本skill §UMQ API Mock模式 |
+| Share-JFR/双handle相关 | 涉及handle变量语义或主/子UMQ切换 | 本skill §Share-JFR双Handle陷阱 |
+| 其他UMQ errno路径陷阱 | 不涉及Share-JFR | 本skill新增§常见陷阱条目(格式参考ut-gen §常见陷阱#12) |
+| 新errno映射调用点 | 新增调用点未被§各调用点的errno映射表覆盖 | 本skill §各调用点的errno映射表 |
+| 跨模块适用 | 不限于umq模块 | `ut-gen` §mockcpp模式/§常见陷阱 |
+
+### 回流更新检查清单
+
+- [ ] 新UMQ API mock模式 → 本skill §UMQ API Mock模式
+- [ ] Share-JFR/双handle陷阱 → 本skill §Share-JFR双Handle陷阱
+- [ ] 其他UMQ errno路径陷阱 → 本skill新增§常见陷阱条目
+- [ ] 新errno映射调用点 → 本skill §各调用点的errno映射表
+
 ## 参考文件
 
 | 文件 | 用途 |
@@ -183,4 +223,4 @@ target_sources(<test_name> PRIVATE <test_name>.cpp)
 | `src/ubsocket/csrc/core/umq/umq_data_tx_ops.h/.cpp` | TX ops源码 |
 | `src/ubsocket/csrc/core/umq/umq_backend.h/.cpp` | Backend源码 |
 | `src/ubsocket/csrc/core/umq/umq_socket.h/.cpp` | Socket源码 |
-| `doc/ubsocket/UBSOCKET-ERRNO-UT-PROGRESS.ch.md` | errno映射进度跟踪 |
+| `doc/ubsocket/UBSOCKET-CLAIMING.md` | Sprint唯一入口 — 认领表+规则+mock基础设施 |

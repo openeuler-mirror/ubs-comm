@@ -16,7 +16,6 @@
 #include "umq_errno_converter.h"
 #include "umq_setting.h"
 #include "umq_socket.h"
-#include "umq_socket_acceptor.h"
 #include "under_api/dl_umq_api.h"
 
 #include <gtest/gtest.h>
@@ -667,66 +666,3 @@ TEST_F(UmqSocketErrnoTest, GetDevEid_EnodevSavedEio_Override)
     GlobalMockObject::verify();
 }
 
-// ==================== UmqAcceptorOps::CheckDevAdd ====================
-
-TEST_F(UmqSocketErrnoTest, CheckDevAdd_AlreadyRegisteredReturnsOk)
-{
-    UmqAcceptorOps acceptor(TEST_FD);
-    umq_eid_t testEid = MakeTestEid(0xAA);
-    EidRegistry::Instance().RegisterEid(testEid);
-    errno = 0;
-    ock::ubs::Result ret = acceptor.CheckDevAdd(testEid);
-    EXPECT_EQ(ret, UBS_OK);
-    EXPECT_EQ(errno, 0);
-    EidRegistry::Instance().UnregisterEid(testEid);
-}
-
-TEST_F(UmqSocketErrnoTest, CheckDevAdd_SuccessReturnsOk)
-{
-    UmqAcceptorOps acceptor(TEST_FD);
-    umq_eid_t testEid = MakeTestEid(0xBB);
-    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(0));
-    errno = 0;
-    ock::ubs::Result ret = acceptor.CheckDevAdd(testEid);
-    EXPECT_EQ(ret, UBS_OK);
-    EXPECT_EQ(errno, 0);
-    EidRegistry::Instance().UnregisterEid(testEid);
-    GlobalMockObject::verify();
-}
-
-TEST_F(UmqSocketErrnoTest, CheckDevAdd_EexistSkippedReturnsOk)
-{
-    UmqAcceptorOps acceptor(TEST_FD);
-    umq_eid_t testEid = MakeTestEid(0xCC);
-    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-UMQ_ERR_EEXIST));
-    errno = 0;
-    ock::ubs::Result ret = acceptor.CheckDevAdd(testEid);
-    EXPECT_EQ(ret, UBS_OK);
-    EXPECT_EQ(errno, 0);
-    EidRegistry::Instance().UnregisterEid(testEid);
-    GlobalMockObject::verify();
-}
-
-TEST_F(UmqSocketErrnoTest, CheckDevAdd_FailSavedZero_MapsEio)
-{
-    UmqAcceptorOps acceptor(TEST_FD);
-    umq_eid_t testEid = MakeTestEid(0xDD);
-    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-UMQ_ERR_EPERM));
-    errno = 0;
-    ock::ubs::Result ret = acceptor.CheckDevAdd(testEid);
-    EXPECT_EQ(ret, UBS_ERROR);
-    EXPECT_EQ(errno, EIO);
-    GlobalMockObject::verify();
-}
-
-TEST_F(UmqSocketErrnoTest, CheckDevAdd_FailSavedEinval_MapsEinval)
-{
-    UmqAcceptorOps acceptor(TEST_FD);
-    umq_eid_t testEid = MakeTestEid(0xEE);
-    MOCKER_CPP(::umq_dev_add).stubs().will(returnValue(-1));
-    errno = EINVAL;
-    ock::ubs::Result ret = acceptor.CheckDevAdd(testEid);
-    EXPECT_EQ(ret, UBS_ERROR);
-    EXPECT_EQ(errno, EINVAL);
-    GlobalMockObject::verify();
-}

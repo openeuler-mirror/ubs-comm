@@ -66,7 +66,7 @@ cd src/ubsocket/build
 - **No C-style casts** — use `static_cast` etc. (enforced, severity: critical)
 - **No `reinterpret_cast`** in clang-tidy whitelist (but used in some legacy code)
 - **camelBack** for parameters and local variables; **CamelCase** for classes/methods; **UPPER_CASE** for macros/enum constants; **g_** prefix for global variables
-- **Comments**: do not add any unless explicitly requested
+- **Comments**: follow the style of existing code in the same file/module
 - **License header**: every source file must have the Mulan PSL v2 header (see existing files for exact format, includes blank line after Copyright line)
 - **Include ordering**: corresponding header first, then standard library, then project headers, then 3rdparty. `IncludeBlocks: Preserve` in clang-format — do NOT rely on auto-sort; manual ordering must respect dependency chains
 - **Build flags**: release mode adds `-fvisibility=hidden -Werror -fstack-protector-strong`; debug/test adds `-rdynamic -fPIC`; test adds `-fno-access-control -fno-inline --coverage -DMOCK_VERBS`
@@ -79,7 +79,28 @@ cd src/ubsocket/build
 - `-DMOCK_VERBS` enables fake ibverbs stub
 - Test fixture pattern: `class Test<Module> : public testing::Test`, `TEST_F(Test<Module>, <Scenario>)`
 - HCOM test binaries: `hcom_ut` (UT), `hcom_test` (LLT)
-- UBSocket test binaries: `umq_errno_converter_test`, `umq_ops_errno_test`, etc.
+- UBSocket test binaries: `umq_errno_converter_test`, `umq_ops_errno_test`, `mock_infrastructure_test`, `profiling_test`
+
+### UT约束
+
+- **stub默认不启用**: 新增UT时优先使用mockcpp(`MOCKER_CPP`/`MOCKER`)mock C API和系统调用，**默认不使用stub方式**(fake_epoll_static/AllocMockBufWithBlock/SocketTestHelper等)。只有用户明确指定需要stub实现时才启用。现有stub基础设施和mock_infrastructure_test保留不动(验证stub自身正确性)，但新增业务UT不应依赖stub。
+- **单用例执行≤1s**: 每个`TEST_F`用例的执行时间不超过1秒。禁止在测试中使用长时间sleep、阻塞等待、密集计算循环等。如需等待异步事件，使用短超时(≤100ms)+轮询。
+
+### Skill系统
+
+opencode skill系统位于`.opencode/skills/`，指导AI生成符合项目约定的UT代码。详见`.opencode/README.md`。
+
+| Skill | 触发关键词 | 覆盖模块 |
+|-------|-----------|---------|
+| `ut-gen` | UT, 单元测试, mockcpp, gtest | 通用UT模式(root skill) |
+| `ut-gen-umq` | UMQ, umq, Share-JFR | `csrc/core/umq/` |
+| `ut-gen-core` | epoll, SocketConnector, SocketAcceptor | `csrc/core/`(不含umq/) |
+| `ut-gen-common` | GlobalSetting, LeakySingleton, ThreadPool | `csrc/common/` |
+| `ut-gen-under-api` | DlApi, dlopen, dlsym | `csrc/under_api/` |
+| `ut-gen-profiling` | ProfTracer, profiling | `csrc/profiling/` |
+| `ut-coverage-coord` | coverage, 进度, 认领 | 协调层 |
+
+写模块UT时需同时加载`ut-gen`+对应子skill。发现新模式/陷阱时按skill"知识回流"规则更新。
 
 ## Architecture & Package Boundaries
 
@@ -100,28 +121,59 @@ cd src/ubsocket/build
 
 ## Errno Mapping 工作进度 (ubsocket)
 
-> **详细成果固化**: `doc/ubsocket/UBSOCKET-ERRNO-UT-PROGRESS.ch.md`
+> **详细成果固化**: AGENTS.md §Errno Mapping工作进度 + `doc/ubsocket/UBSOCKET-CLAIMING.md`
 
 ### 代码修复
 - `umq_errno_converter.cpp:24` — Convert(GET_STATE): ERR||MAX→EIO, else→0
 - `umq_backend.cpp:199` — printf `%d→%zu`; `umq_socket.cpp:220` — `%u→%d`; `umq_socket.cpp:331` — `%d→%llu+cast`
 
-### UT覆盖率 (142 total, 2 binaries)
+### UT覆盖率 (220 total, 5 binaries)
 | Binary | Count | Type |
 |--------|-------|------|
 | `umq_errno_converter_test` | 91 | converter级 (全部映射逻辑+override+BufStatus+HandleResult+GET_STATE) |
 | `umq_ops_errno_test` | 51 | ops级 (RX/TX poll+rearm+cqe+handleError+AddUbDev+FindDevName+GetTxFd+GetDevEid+CheckDevAdd) |
+| `mock_infrastructure_test` | 32 | mock基础设施验证 (Helper方式2 + Static方式19 + Block方式5 + Socket方式6) |
+| `iobuf_zcopy_adapter_test` | 45 | iobuf模块全覆盖 (BlockMem 6 + ZcopyAdapter 15 + DynSymScanner 24) |
+| `profiling_test` | 1 | profiling (DumpLoop无sleep) |
 
 - 13/36 调用点已覆盖ops级; 所有7个UmqOperation枚举值均有ops级覆盖
 - 23个未覆盖调用点因SocketPtr/epoll/connector/acceptor复杂依赖暂不测试
+
+### fake_epoll_static (链接时系统调用替换)
+
+- **位置**: `src/ubsocket/unit_test/stub/fake_epoll/` — `fake_epoll.h` + `fake_epoll.cpp`
+- **原理**: 提供与libc同名C全局函数(`epoll_create1`, `epoll_create`, `epoll_ctl`, `epoll_wait`, `epoll_pwait`, `eventfd`, `eventfd_write`, `eventfd_read`, `close`)，链接器优先解析fake符号；`close()`对非fake fd通过`dlsym(RTLD_NEXT)`转发到真实libc
+- **测试控制API** (`ock::ubs::test::FakeEpollCtl`): `Reset()`, `SetNextEpollCreateReturn(fd)`, `SetNextEpollWaitEvents(events)`, `SetNextEpollWaitReturn(ret)`, `SetNextEventfdReturn(fd)`, `IsFakeFd(fd)`, `AllocFakeFd()`, `ReleaseFakeFd(fd)`, `GetFdCount()`
+- **fd分配**: 从`100`开始递增(`FAKE_FD_BASE`)，避免与真实fd冲突
+- **内部状态**: `FakeEpollState`维护epoll_fds/event_fds/all_fake_fds集合 + registered_events映射(epfd→fd→epoll_event)
+- **使用方式**: Ops级测试链接`fake_epoll_static`后，生产代码中直接调用的`epoll_create1()/epoll_ctl()/eventfd()/close()`自动被拦截；通过`FakeEpollCtl` API注入特定返回值
+
+### AllocMockBufWithBlock (Block级8K对齐mock) — 快捷方式，非唯一入口
+
+- **位置**: `src/ubsocket/unit_test/stub/umq_api_helper.h` — `AllocMockBufWithBlock()` + `GetBlockFromMockBuf()` + `ResetMockBufWithBlockIndex()`
+- **原理**: 分配8K对齐内存(`alignas(8192)`)，在8K边界放置`Block`结构体(placement new)，`buf_data`指向Block之后的区域，`PtrFloorToBoundary(buf_data)`正确回溯到Block地址
+- **Block初始nshared=1**: 与生产代码一致; IncRef→2, DecRef→1(存活); DecRef→0时调用`blockmem_deallocate_zero_copy`但g_zcopy_allocator为nullptr所以安全
+- **缓冲池**: 8个静态`MockBufWithBlock`数组(每个16384字节)，循环使用；`ResetMockBufWithBlockIndex()`在SetUp中调用重置索引
+- **灵活绕过**: 需自定义opcode/nshared/data_size等字段时，直接在test case中手写umq_buf_t构造+8K对齐placement new Block
+- **使用方式**: `umq_buf_t *buf = AllocMockBufWithBlock(size); Block *block = GetBlockFromMockBuf(buf); block->IncRef(); ...`
+
+### SocketTestHelper (UmqSocket对象构造) — 快捷方式，非唯一入口
+
+- **位置**: `src/ubsocket/unit_test/stub/socket_test_helper.h` — `MakeTestUmqSocket()` + `DestroyTestSocketOps()`
+- **原理**: 使用`MakeRef<UmqSocket>(fd)`创建UmqSocketPtr(绕过SocketBase::Create工厂链)，通过`-fno-access-control`设置`umq_handle_/event_fd_/state_`，创建`UmqTxOps/UmqRxOps`并赋给`tx_.tx_ops_/rx_.rx_ops_`，`RefConvert`转为SocketPtr
+- **参数**: `MakeTestUmqSocket(fd, umqHandle, state=ESTABLISHED, shareUmqHandle=INVALID_HANDLE)` — state支持INIT/RAW_ESTABLISHED/ESTABLISHED/SHUTDOWN；shareUmqHandle模拟JFR场景
+- **Ref管理**: MakeRef创建ref_count=1，RefConvert临时增到2，函数返回后SocketPtr持有ref_count=1，析构时ref_count→0→delete
+- **灵活绕过**: 复杂场景(自定义ops/跳过ops创建/多handle配置)可在test case中手写MakeRef→设private字段→自定义构造
+- **cleanup**: `DestroyTestSocketOps(sock)` 删除tx/rx ops + 释放fake event_fd，在SocketPtr析构前调用
+- **使用方式**: `SocketPtr sock = MakeTestUmqSocket(TEST_FD, TEST_UMQ_HANDLE); ...; DestroyTestSocketOps(sock);`
 
 ### Coverage Baseline (csrc UT)
 > **详细分析**: `doc/ubsocket/UBSOCKET-COVERAGE-ANALYSIS.ch.md`
 
 | 指标 | 基线 | 目标 | 缺口 |
 |------|------|------|------|
-| 行覆盖率 | 11.1% (623/5637) | ≥80% | +3886行 |
-| 分支覆盖率 | 5.3% (361/6861) | ≥50% | +3068分支 |
+| 行覆盖率 | 15.1% (850/5637) | ≥80% | +3650行 |
+| 分支覆盖率 | 7.0% (479/6861) | ≥50% | +2953分支 |
 
 - 构建: `UMQ_BUILD=on UBSOCKET_UT=on UBSOCKET_COVERAGE=on bash build/build_umq_and_ubsocket.sh`
 - 报告: `src/ubsocket/build/coverage_report/`, `coverage_summary.txt`, `coverage_detailed.txt`
@@ -137,6 +189,12 @@ cd src/ubsocket/build
 - lcov 1.16: 只用 `--ignore-errors gcov` (不支持 `unused,range`，那是旧版lcov的)
 - coverage filter: `'*/_deps/*' '/usr/include/*' '*/3rdparty/*' '*/unit_test/*' '*/tools/*'`
 - lcov必须加 `--initial --capture` 步骤才能纳入零覆盖率文件
+- **`extern "C"` + namespace scope**: `extern "C"`块内无法直接使用C++命名空间中的变量(如`g_state`、`next_fd_`)，必须用显式限定(`ock::ubs::test::FakeEpollCtl::next_fd_++`)或提供全局访问器函数(`GetFakeEpollState()`)
+- **`dlsym(RTLD_NEXT)` 转发**: `fake_epoll_static`的`close()`对非fake fd必须通过`dlsym(RTLD_NEXT, "close")`转发到真实libc，否则测试代码本身的close调用和LibcApi路径都会返回-1+EBADF
+- **helper头文件自包含**: `libc_api_helper.h`使用`sockaddr_in`/`htons`/`INADDR_LOOPBACK`时需包含`<netinet/in.h>`+`<arpa/inet.h>`，否则独立编译报"incomplete type"
+- **`LibcApi::open` 是variadic**: mockcpp无法mock variadic函数，改用`LibcApi::open_ptr`函数指针直接替换(`-fno-access-control`)
+- **mockcpp `.stubs()` 默认返回Void**: 非void返回函数必须加`.will(returnValue(...))`
+- **`LibcApi::_ptr` 初始为nullptr**: 未调用`LibcApi::Load()`时通过nullptr函数指针调用→segfault，SetUp中必须设置`_ptr`或调用`Load()`
 
 ## Known Gotchas
 

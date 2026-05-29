@@ -9,11 +9,11 @@ description: Coordination skill for managing the 16-person team sprint to raise 
 
 ## Sprint目标
 
-| 指标 | 基线 (2026-05-27) | 目标 | 缺口 |
-|--------|----------------------|--------|-----|
-| 行覆盖率 | 11.1% (623/5637) | ≥ 80% | +3886行 |
-| 分支覆盖率 | 5.3% (361/6861) | ≥ 50% | +3068分支 |
-| 函数覆盖率 | 19.0% (117/615) | — | +498函数 |
+| 指标 | 基线 (2026-05-27) | iobuf后 | 目标 | 缺口 |
+|--------|----------------------|---------|--------|-----|
+| 行覆盖率 | 11.1% (623/5637) | 15.1% (850/5637) | ≥ 80% | +3650行 |
+| 分支覆盖率 | 5.3% (361/6861) | 7.0% (479/6861) | ≥ 50% | +2953分支 |
+| 函数覆盖率 | 19.0% (117/615) | 27.0% (166/615) | — | +449函数 |
 
 ## 模块优先级 (来自覆盖率分析文档)
 
@@ -22,7 +22,7 @@ description: Coordination skill for managing the 16-person team sprint to raise 
 | core/umq | +1460 | hard | 5-6 | UMQ API + epoll + socket ops |
 | core/socket | +1126 | hard | 4-5 | epoll + socket + pthread |
 | common | +384 | medium | 2 | pthread |
-| iobuf | +274 | easy | 1 | UMQ buf |
+| iobuf | +274→+77 | easy→done | 1→0 | UMQ buf (已完成57%, 45 cases) |
 | entry | +235 | hard | 1(延后) | 依赖core模块 |
 | under_api + urma | +414 | easy | 1 | dlopen |
 | profiling | 0(84.2%已达标) | done | 0 | — |
@@ -31,11 +31,16 @@ description: Coordination skill for managing the 16-person team sprint to raise 
 
 分发任务前，按顺序完成:
 
-1. **P0: Mock桩** — 建立 `unit_test/stub/` 含umq/epoll/pthread/socket/dl桩
+1. **P0: Mock基础设施** — `unit_test/stub/` 已建立(含fake_epoll/AllocMockBuf/SocketTestHelper等stub)，但**新增UT默认不使用stub**，优先用mockcpp
 2. **P1: CMake模板** — 每模块test binary结构
 3. **P2: 文件认领表** — 本skill下方进度表
 4. **P3: 工作流标准化** — 构建/覆盖率/验证命令文档
-5. **P4: 更新UBSOCKET-UT.md** — 反映当前csrc版构建/覆盖率命令
+5. **P4: 更新CLAIMING.md** — 构建/覆盖率命令已纳入CLAIMING.md快速上手章节
+
+## UT约束
+
+- **stub默认不启用**: 新增UT时优先使用mockcpp(`MOCKER_CPP`/`MOCKER`)mock C API和系统调用，**默认不使用stub方式**(fake_epoll_static/AllocMockBufWithBlock/SocketTestHelper等)。只有用户明确指定需要stub实现时才启用。
+- **单用例执行≤1s**: 每个`TEST_F`用例的执行时间不超过1秒。禁止在测试中使用长时间sleep、阻塞等待、密集计算循环等。如需等待异步事件，使用短超时(≤100ms)+轮询。
 
 ## 小步快跑工作流 (按文件)
 
@@ -84,7 +89,7 @@ description: Coordination skill for managing the 16-person team sprint to raise 
 | 1 | core/umq | umq_socket_connector.cpp | 410 | 21 | hard | | unclaimed | | 0% |
 | 2 | core/socket | ubsocket_event_epoll.cpp | 404 | 29 | hard | | unclaimed | | 0% |
 | 3 | under_api/urma | dl_urma_api.cpp | 267 | 3 | easy | | unclaimed | | 0% |
-| 4 | iobuf | ubsocket_zcopy_adapter.cpp | 242 | 19 | easy | | unclaimed | | 0% |
+| 4 | iobuf | ubsocket_zcopy_adapter.cpp | 242 | 19 | easy | AI | done | iobuf_zcopy_adapter_test | 52.5% |
 | 5 | core/socket | ubsocket_socket_helper.cpp | 181 | 11 | medium | | unclaimed | | 0% |
 | 6 | entry | ubsocket_sock.cpp | 143 | 24 | hard | | unclaimed | | 0% |
 | 7 | under_api | dl_libc_api.cpp | 124 | 3 | medium | | unclaimed | | 0% |
@@ -120,6 +125,7 @@ description: Coordination skill for managing the 16-person team sprint to raise 
 | 里程碑 | 目标 | 达成日期 | 实际值 |
 |-----------|--------|--------------|--------|
 | 基线测量 | Phase 0 | 2026-05-27 | 11.1% 行 / 5.3% 分支 |
+| iobuf UT完成 | Phase 1 | 2026-05-27 | 15.1% 行 / 7.0% 分支 |
 | 30% 行覆盖率 | Phase 1中期 | _待定_ | _待定_ |
 | 50% 行 / 25% 分支 | Phase 2中期 | _待定_ | _待定_ |
 | 80% 行 / 50% 分支 | Sprint结束 | _待定_ | _待定_ |
@@ -192,8 +198,7 @@ genhtml --branch-coverage --output-directory src/ubsocket/build/coverage_report 
 | 资源 | 用途 |
 |----------|---------|
 | `doc/ubsocket/UBSOCKET-COVERAGE-ANALYSIS.ch.md` | **权威数据源** — 覆盖率基线、文件完备性、模块明细、mock分析、陷阱 |
-| `doc/ubsocket/UBSOCKET-ERRNO-UT-PROGRESS.ch.md` | Errno映射UT进度 |
-| `doc/ubsocket/UBSOCKET-UT.md` | UT目录结构说明(需更新) |
+| `doc/ubsocket/UBSOCKET-CLAIMING.md` | Sprint唯一入口 — 认领表+快速上手+mock基础设施 |
 | `AGENTS.md` | 项目级上下文(构建命令、gotchas、覆盖率基线) |
 | `.opencode/skills/ut-gen/SKILL.md` | 主 UT 生成 skill |
 | `.opencode/skills/ut-gen-umq/SKILL.md` | UMQ 模块子 skill |
@@ -201,7 +206,7 @@ genhtml --branch-coverage --output-directory src/ubsocket/build/coverage_report 
 | `.opencode/skills/ut-gen-common/SKILL.md` | Common 模块子 skill |
 | `.opencode/skills/ut-gen-under-api/SKILL.md` | Under-API 模块子 skill |
 | `.opencode/skills/ut-gen-profiling/SKILL.md` | Profiling 模块子 skill |
-| `src/ubsocket/unit_test/CMakeLists.txt` | 当前test targets(3) |
+| `src/ubsocket/unit_test/CMakeLists.txt` | 当前test targets(5) |
 | `src/ubsocket/CMakeLists.txt` | Coverage target定义(lines 126-183) |
 
 ## 如何使用本Skill
