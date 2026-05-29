@@ -106,7 +106,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         tx_queue_avail_num_ -= batch;
         if (GlobalSetting::UBS_TRACE_ENABLED) {
             UmqSocketPtr sockptr = RefConvert<Socket, UmqSocket>(SocketSet::Instance().GetSocket(fd_));
-            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, 1);
+            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, batch);
         }
     } else if (bad_qbuf != nullptr) {
         int savedErrno = errno;

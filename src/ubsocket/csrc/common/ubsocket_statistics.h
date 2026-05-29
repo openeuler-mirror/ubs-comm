@@ -89,7 +89,7 @@ public:
         oss << "\"" << "activeConnections" << "\":" << mActiveConnCount.load() << ",";
         oss << "\"" << "reTxCount" << "\":" << mReTxCount.load() << ",";
         oss << "\"" << "sendPackets" << "\":" << mTxPacketCount.load() << ",";
-        oss << "\"" << "receivePackets" << "\":" << (mRxPacketCount.load() / 2) << ",";
+        oss << "\"" << "receivePackets" << "\":" << mRxPacketCount.load() << ",";
         oss << "\"" << "sendBytes" << "\":" << mTxByteCount.load() << ",";
         oss << "\"" << "receiveBytes" << "\":" << mRxByteCount.load() << ",";
         oss << "\"" << "errorPackets" << "\":" << mTxErrorPacketCount.load() << ",";
