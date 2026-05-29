@@ -12,10 +12,10 @@
 
 #include <arpa/inet.h>
 #include <getopt.h>
-#include <securec.h>
+#include <cstring>
 #include <algorithm>
 
-#include "cli_message.h"
+#include "profiling/statistics/cli_message.h"
 
 namespace Statistics {
 

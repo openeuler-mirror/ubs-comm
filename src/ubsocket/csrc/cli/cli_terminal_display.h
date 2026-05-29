@@ -10,9 +10,9 @@
 #ifndef CLI_TERMINAL_DISPLAY
 #define CLI_TERMINAL_DISPLAY
 
-#include <securec.h>
+#include <cstring>
 
-#include "cli_message.h"
+#include "profiling/statistics/cli_message.h"
 #include "umq_dfx_api.h"
 
 namespace Statistics {

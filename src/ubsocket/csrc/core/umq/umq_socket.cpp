@@ -11,7 +11,7 @@
 #include <chrono>
 #include <iostream>
 
-#include "cli/statistics.h"
+#include "profiling/statistics/statistics.h"
 #include "umq_dfx_api.h"
 #include "umq_eid_table.h"
 #include "umq_epoll_runner_ops.h"

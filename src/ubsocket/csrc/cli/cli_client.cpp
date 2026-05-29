@@ -7,17 +7,16 @@
  *History: 2026-02-09
 */
 
+#include <cstring>
 #include "cli_client.h"
 
 #include "common/ubsocket_common_includes.h"
+#include "commom/ubsocket_scope_exit.h"
 #include "core/ubsocket_socket_helper.h"
-#include "net_common.h"
 #include "under_api/dl_libc_api.h"
 
 #include "cli_args_parser.h"
 #include "cli_terminal_display.h"
-#include "net_common.h"
-#include "scope_exit.h"
 
 using ock::ubs::LibcApi;
 using ock::ubs::SocketConnHelper;
@@ -305,15 +304,15 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
     struct sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     addr.sun_path[0] = '\0';
-    if (strncpy_s(addr.sun_path + 1, sizeof(addr.sun_path) - 1, mServerPath.c_str(), sizeof(addr.sun_path) - 1) != 0) {
+    if (strncpy(addr.sun_path + 1, mServerPath.c_str(), sizeof(addr.sun_path) - 1) != 0) {
         CLI_LOG("Failed to copy server path\n");
         return -1;
     }
+
     addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
     if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         CLI_LOG("Failed to connect server errno=%d, error=%s\n", errno,
-                NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                ock::ubs::Func::Error2Str(errno);
         return -1;
     }
 

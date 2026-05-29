@@ -16,7 +16,7 @@
 #include <cstdlib>
 
 #include "core/ubsocket_data_rx.h"
-#include "core/ubsocket_qbuf_queue.h"
+#include "common/ubsocket_qbuf_queue.h"
 #include "umq_backend.h"
 #include "umq_setting.h"
 

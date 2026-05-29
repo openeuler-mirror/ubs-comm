@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_socket_connector.h"
-#include "cli/statistics_statsmgr.h"
+#include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_socket_set.h"
 #include "umq/umq_socket.h"
 #include "umq/umq_socket_connector.h"
