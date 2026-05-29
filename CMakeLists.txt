@@ -8,7 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE release)
 endif()
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
-
+add_compile_options(-D_GLIBCXX_USE_CXX11_ABI=0)
 # Reset the prefix path if user doesn't provide one.
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set_property(CACHE CMAKE_INSTALL_PREFIX PROPERTY VALUE ${PROJECT_BINARY_DIR})
