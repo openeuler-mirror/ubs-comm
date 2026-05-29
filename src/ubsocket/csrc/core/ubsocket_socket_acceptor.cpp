@@ -33,7 +33,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     fd = LibcApi::accept(raw_fd_, &addr_tmp, &len_tmp);
     if (fd >= 0) {
         // 前置判断，如果不是TFO连接，作为普通TCP连接处理
-        if (!SocketConnHelper::IsTfoConnection(fd)) {
+        if (!SocketConnHelper::IsUbsConnection(fd)) {
             return fd;
         }
         int tcpNoDelayRet = SocketConnHelper::SetTcpNoDelay(fd);
