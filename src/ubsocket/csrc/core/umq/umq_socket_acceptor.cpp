@@ -394,9 +394,7 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, 
     // UB 传输模式优先级协商，值越小优先级越高。例如当服务端为 RM_TP 而客户端是 RC_TP 会协商至 RC_TP.
     auto umqSocket = RefConvert<Socket, UmqSocket>(socketPtr);
     auto local_trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
-    if (req.trans_mode != local_trans_mode) {
-        umqSocket->SetTransMode(std::min(req.trans_mode, local_trans_mode));
-    }
+    umqSocket->SetTransMode(std::min(req.trans_mode, local_trans_mode));
 
     // src bonding mode is different from dst bonding mode
     rsp.ret_code = (UmqSetting::UMQ_IS_BONDING == (req.is_bonding != 0)) ? 0 : -1;
