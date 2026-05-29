@@ -117,7 +117,10 @@ include_directories(
 
 add_subdirectory(3rdparty/boundscheck)
 add_subdirectory(csrc)
-add_subdirectory(tools/golden)
+find_package(ZLIB)
+if (ZLIB_FOUND)
+    add_subdirectory(tools/golden)
+endif()
 
 option(UBSOCKET_BUILD_TESTS "Build tests" OFF)
 if (UBSOCKET_BUILD_TESTS)

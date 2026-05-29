@@ -105,6 +105,33 @@ void SetUp() override
 - 线程安全验证
 - 禁用路径(trace_enabled = false)覆盖率
 
+## 如何使用本Skill
+
+### 触发与加载
+
+触发关键词见本skill YAML frontmatter `description`字段。加载规则见`.opencode/README.md` §全局规则——写profiling模块UT时需与`ut-gen`(root skill)一起加载。
+
+### 工作流程
+
+1. **确认必要性** — Profiling模块84.2%已达标，仅补充缺失路径时使用
+2. **读源码** — 识别getter/setter/环形buffer/线程安全逻辑
+3. **设计case** — 按本skill §测试模式(纯逻辑，无需mock)
+4. **编写测试** — 直接构造对象，验证状态
+5. **构建验证** — 命令见ut-gen §构建与运行
+
+## 知识回流
+
+按`.opencode/README.md` §如何更新Skill回流。Profiling模块特定判断:
+
+| 发现类型 | 判断条件 | 回流目标 |
+|----------|---------|----------|
+| 环形buffer/线程安全测试策略 | 涉及环形buffer溢出或并发trace | 本skill §测试模式 |
+| 跨模块适用 | 不限于profiling模块 | `ut-gen` §mockcpp模式/§常见陷阱 |
+
+### 回流更新检查清单
+
+- [ ] 新环形buffer测试策略 → 本skill §测试模式
+
 ## 参考文件
 
 | 文件 | 用途 |

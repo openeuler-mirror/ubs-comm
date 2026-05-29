@@ -16,6 +16,11 @@ description: Module-specific skill for writing UT for files under src/ubsocket/c
 - `dl_libc_api.h/.cpp` — DlLibcApi (通过dlopen加载libc函数)
 - `umq_api.h/.cpp` — UmqApi (静态包装器: adapter后端 vs dlopen后端)
 
+## UT约束
+
+- **stub默认不启用**: 新增UT时优先使用mockcpp(`MOCKER_CPP`/`MOCKER`)mock C API和系统调用，**默认不使用stub方式**(fake_epoll_static/AllocMockBufWithBlock/SocketTestHelper等)。只有用户明确指定需要stub实现时才启用。
+- **单用例执行≤1s**: 每个`TEST_F`用例的执行时间不超过1秒。禁止在测试中使用长时间sleep、阻塞等待、密集计算循环等。如需等待异步事件，使用短超时(≤100ms)+轮询。
+
 ## 两种后端模式
 
 ### Adapter后端(UMQ_ADAPTER_BACKEND_ENABLED, 默认ON)
@@ -140,6 +145,36 @@ EXPECT_EQ(ret, expected_value);
 | `dl_umq_api.cpp` | ~100 | 中 | P2 — 符号加载 |
 | `dl_libc_api.cpp` | ~60 | 低 | P3 — libc符号加载 |
 | `umq_api.cpp` | ~40 | 低 | P3 — 薄静态包装器 |
+
+## 如何使用本Skill
+
+### 触发与加载
+
+触发关键词见本skill YAML frontmatter `description`字段。加载规则见`.opencode/README.md` §全局规则——写under-api模块UT时需与`ut-gen`(root skill)一起加载。
+
+### 工作流程
+
+1. **认领文件** — 从§优先覆盖的新文件中选择目标文件
+2. **确定后端模式** — 默认测试adapter后端(§Adapter后端); 仅显式需要时测试dlopen后端(§Dlopen后端)
+3. **设计case** — adapter路径用`MOCKER_CPP(::umq_xxx)`; dlopen路径用§MockDlsym的invoke+static函数
+4. **编写测试** — dlsym mock必须参数依赖(invoke+static函数，非lambda)
+5. **构建验证** — 命令见ut-gen §构建与运行
+6. **报告进度** — 更新ut-coverage-coord进度表+覆盖率增量
+
+## 知识回流
+
+按`.opencode/README.md` §如何更新Skill回流。Under-api模块特定判断:
+
+| 发现类型 | 判断条件 | 回流目标 |
+|----------|---------|----------|
+| dlopen/dlsym mock模式 | 涉及`dlopen`/`dlsym`/`dlclose`调用 | 本skill §DlApi或§MockDlsym |
+| 两后端切换陷阱 | 涉及adapter/dlopen路径选择或`_ptr`混用 | 本skill §常见陷阱 |
+| 跨模块适用 | 不限于under-api模块 | `ut-gen` §mockcpp模式/§常见陷阱 |
+
+### 回流更新检查清单
+
+- [ ] 新dlsym invoke模式 → 本skill §MockDlsym
+- [ ] 新adapter/dlopen切换陷阱 → 本skill §常见陷阱
 
 ## 参考文件
 

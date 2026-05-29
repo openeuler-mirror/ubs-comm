@@ -336,10 +336,20 @@ target_include_directories(<test_name>
 # 7. 链接库
 # Converter-only测试(无mockcpp, 无ubsocket_static):
 target_link_libraries(<test_name> PRIVATE GTest::gtest_main)
-# Ops级测试(需要mockcpp + ubsocket_static):
+# Ops级测试(默认方式 — mockcpp，不含fake_epoll_static):
 target_link_libraries(<test_name>
     PRIVATE
         ubsocket_static
+        boundscheck
+        mockcpp
+        GTest::gtest_main
+        pthread
+)
+# Ops级测试(用户明确指定使用stub方式时 — 加fake_epoll_static):
+target_link_libraries(<test_name>
+    PRIVATE
+        ubsocket_static
+        fake_epoll_static
         boundscheck
         mockcpp
         GTest::gtest_main
@@ -456,6 +466,11 @@ UBS_VLOG_ERR("umq_rearm_interrupt() failed for RX, local umq: %llu, "
 | 非白名单errno | `errno=EBUSY` | EIO |
 | errno=0(无信息) | `errno=0` | EIO |
 
+## UT约束
+
+- **stub默认不启用**: 新增UT时优先使用mockcpp(`MOCKER_CPP`/`MOCKER`)mock C API和系统调用，**默认不使用stub方式**(fake_epoll_static/AllocMockBufWithBlock/SocketTestHelper等)。只有用户明确指定需要stub实现时才启用。现有stub基础设施和mock_infrastructure_test保留不动(验证stub自身正确性)，但新增业务UT不应依赖stub。
+- **单用例执行≤1s**: 每个`TEST_F`用例的执行时间不超过1秒。禁止在测试中使用长时间sleep、阻塞等待、密集计算循环等。如需等待异步事件，使用短超时(≤100ms)+轮询。
+
 ## 常见陷阱
 
 1. **永远不要使用 `_ptr` 赋值** — adapter后端没有 `_ptr` 成员。只用 `MOCKER_CPP(::umq_xxx)`。
@@ -471,6 +486,15 @@ UBS_VLOG_ERR("umq_rearm_interrupt() failed for RX, local umq: %llu, "
 11. **`umq_handle_` 是 `uint64_t`** — 在 `UBS_VLOG_ERR` 中打印时用 `%llu` + `static_cast<unsigned long long>(umq_handle_)`，非 `%d`。
 12. **Share-JFR handle变量语义** — `PrefillRx` 中本地变量 `umq_handle` 在 `UBS_ENABLE_SHARE_JFR=true` 时解析为 `share_umq_handle_`(主UMQ)，`false` 时为 `umq_handle_`(子UMQ)。等ready逻辑必须检查 `umq_handle_`(子UMQ)——子UMQ是新创建的、需IDLE→READY转换；主UMQ早已ready。提取子函数(如 `WaitUntilReady`)时传 `umq_handle_`(成员变量)而非本地 `umq_handle`——传本地变量会导致share-JFR模式检查错误的handle。此陷阱适用于任何涉及主/子UMQ双handle的重构。
 13. **`UBS_ENABLE_SHARE_JFR` 默认 `true`** — 测试环境若不显式设为 `false` 则走share路径。重构必须在 `true` 和 `false` 两种模式下都验证。
+14. **`extern "C"` + namespace scope** — `extern "C"`块内无法直接使用C++命名空间中的变量(如`g_state`、`next_fd_`)，必须用显式限定(`ock::ubs::test::FakeEpollCtl::next_fd_++`)或提供全局访问器函数(`GetFakeEpollState()`)。fake_epoll.cpp中所有`extern "C"`函数通过`S()`访问器获取`g_state`。
+15. **`dlsym(RTLD_NEXT)` 转发** — `fake_epoll_static`的`close()`对非fake fd必须通过`dlsym(RTLD_NEXT, "close")`转发到真实libc，否则测试代码本身的close调用和LibcApi路径都返回-1+EBADF。
+16. **helper头文件自包含** — `libc_api_helper.h`使用`sockaddr_in`/`htons`/`INADDR_LOOPBACK`时需包含`<netinet/in.h>`+`<arpa/inet.h>`，否则独立编译报"incomplete type"。
+17. **fake_epoll_static与LibcApi互补** — 链接时fake拦截直接调用的epoll/eventfd/close，但`LibcApi::Load()`通过dlopen+dlsym加载真实指针(dlsym查dynamic linker不查static link table)。因此需**两种机制并用**: fake拦截直接调用 + `_ptr` override拦截LibcApi路径。
+18. **`LibcApi::open` 是variadic** — 签名`int open(const char*, int, ...)`，mockcpp无法mock variadic函数(编译报"no matching function for call to `mockAPI::get`")。替代方案: 通过`-fno-access-control`直接设置`LibcApi::open_ptr`为自定义mock函数(`static int MockOpenFail(const char*, int, ...)`)，测试结束后恢复为`nullptr`。同理适用于所有`DL_API_DECLARE`生成的`_ptr`成员。
+19. **mockcpp `.stubs()` 默认返回Void** — 对非void返回类型函数(如`fgets`返回`char*`)，单独`.stubs()`会抛异常"Returned type does NOT match the method declaration"。必须加`.will(returnValue(...))`，如`MOCKER(::fgets).stubs().will(returnValue(static_cast<char*>(nullptr)))`。
+20. **mockcpp `invoke()` 签名必须完全匹配** — 包括参数顺序和类型。`fgets`真实签名`char* fgets(char*, int, FILE*)`，mock函数参数顺序必须相同。mockcpp严格类型检查: `FILE*` vs `_IO_FILE*`在glibc上类型不匹配会报错。对glibc内部类型冲突的函数(如`fgets`)，避免`invoke()`，改用`.will(returnValue(...))`。
+21. **`RecordAndSetBrpcAllocator` 修改指针指向的值** — `*alloc_addr_ = blockmem_allocate_zero_copy` 修改了变量`mockAllocFunc`的值，`alloc_addr_origin_`保存的是旧值。断言应保存旧值(`originalAllocValue`)再比较，而非直接比较已被修改的`mockAllocFunc`。
+22. **`LibcApi::_ptr` 初始为nullptr** — `DL_API_DEFINE(LibcApi, open)`展开为`open_api LibcApi::open_ptr = nullptr;`。若未调用`LibcApi::Load()`，所有`_ptr`为nullptr。通过nullptr函数指针调用→segfault。测试中若需调用任何`LibcApi::xxx()`路径，**必须在SetUp中设置`_ptr`为mock函数或调用`LibcApi::Load()`**。
 
 ## 测试工作流
 
@@ -480,33 +504,33 @@ UBS_VLOG_ERR("umq_rearm_interrupt() failed for RX, local umq: %llu, "
 - 识别每个调用对应的 `UmqOperation` 枚举
 - 识别使用哪个 `UmqErrnoConverter` API(`Convert`, `ConvertBufStatus`, `ConvertHandleResult`)
 - 检查errno是否在转换前保存(应该如此: `int savedErrno = errno;`)
+- 详见§深度分析方法(4步)
 
 ### 步骤2: 设计测试用例
-- 对每个错误路径，按上述矩阵创建2-5个测试用例
+- 对每个错误路径，按§Errno映射测试覆盖矩阵创建2-5个测试用例
 - 命名: `<Method>_<Scenario>_<ExpectedResult>`
 - 确定是否需要 `LockRegistry::RegisterDefaultOps()` 和 `SocketSet::Instance().Init()`
 
 ### 步骤3: 编写测试文件
-- 使用本skill的文件结构和fixture模式
+- 使用§Test Fixture模式
 - 需buffer测试时添加 `AllocMockBuf` 辅助函数
-- 使用 `MOCKER_CPP(::umq_xxx)` mock
+- 使用§mockcpp模式(`MOCKER_CPP(::umq_xxx)`)
 - 使用 `securec` 函数(`memset_s`, `memcpy_s`)
-- 遵守所有代码风格(120字符、4空格缩进、camelBack等)
+- 遵守§代码风格要求
 
 ### 步骤4: 更新CMakeLists.txt
-- 按本skill模式添加新test target
+- 按§CMakeLists.txt注册模板添加新test target
 - 确定链接类型: converter-only = 仅 `GTest::gtest_main`; ops级 = `ubsocket_static + mockcpp + boundscheck + pthread`
 
 ### 步骤5: 构建并运行
-```bash
-UMQ_BUILD=on UBSOCKET_UT=on bash build/build_umq_and_ubsocket.sh
-cd src/ubsocket/build && ./<test_binary_name>
-```
+- 命令见§构建与运行
 
 ### 步骤6: 验证
 - 所有测试通过(无segfault、无意外失败)
-- 无cmake错误
 - 完整ctest: `ctest --test-dir src/ubsocket/build --output-on-failure`
+
+### 步骤7: 报告进度
+- 通知协调者(ut-coverage-coord)状态+覆盖率增量
 
 ## 高级模式 (经验积累)
 
@@ -535,6 +559,39 @@ cd src/ubsocket/build && ./<test_binary_name>
 | UMQ C函数(adapter后端) | `MOCKER_CPP(::func_name)` | `MOCKER_CPP(::umq_poll)` |
 
 **注意:** `MOCKER_CPP(::func_name)` 对UMQ C函数有效，因为mockcpp将它们解析为全局符号。纯C libc函数如 `eventfd` 使用 `MOCKER(eventfd)`。
+
+### LibcApi _ptr 函数指针替换 — variadic函数mock方案
+
+`LibcApi` 所有static方法通过`_ptr`函数指针调用(`DL_API_DECLARE`宏生成)。mockcpp无法mock variadic函数(如`LibcApi::open`)，但可通过`-fno-access-control`直接设置`_ptr`:
+
+```cpp
+static int g_mockOpenCallCount = 0;
+static int MockOpenFail(const char *file, int oflag, ...)
+{
+    g_mockOpenCallCount++;
+    return -1;
+}
+
+TEST_F(MyTest, MyScenario)
+{
+    LibcApi::open_ptr = MockOpenFail;
+    LibcApi::close_ptr = MockCloseSuccess;
+
+    // ... 测试代码 ...
+
+    LibcApi::open_ptr = nullptr;
+    LibcApi::close_ptr = nullptr;
+}
+```
+
+**适用场景**: `LibcApi::open`(variadic)、`LibcApi::close`、`LibcApi::read`等——当mockcpp无法mock(variadic)或需要更简单控制时。
+
+**与fake_epoll_static互补**: fake拦截直接`::close()`调用, `_ptr`拦截`LibcApi::close()`路径, 两种都需覆盖。
+
+**注意事项**:
+- `_ptr`初始为`nullptr`(`DL_API_DEFINE`展开), 未设置时调用→segfault
+- SetUp/TearDown中必须恢复为`nullptr`避免影响其他测试
+- 非variadic函数仍可用`MOCKER_CPP(&LibcApi::close)`mockcpp方式
 
 ### OsAPiMgr mock — 时序关键
 
@@ -654,21 +711,72 @@ static int g_setsockoptCallCount = 0;
 - [ ] mock函数用CamelCase
 - [ ] `memcpy_s` / `memset_s` 替代 `memcpy` / `memset`
 
+## 如何使用本Skill
+
+### 触发与加载
+
+触发关键词见本skill YAML frontmatter `description`字段。全局加载规则见`.opencode/README.md` §全局规则。
+
+写特定模块测试时，需**同时加载对应子skill**(各子skill关键词见其YAML frontmatter):
+
+| 目标模块 | 加载的子skill |
+|----------|-------------|
+| `csrc/core/umq/` | `ut-gen-umq` |
+| `csrc/core/`(不含umq/) | `ut-gen-core` |
+| `csrc/common/` | `ut-gen-common` |
+| `csrc/under_api/` | `ut-gen-under-api` |
+| `csrc/profiling/` | `ut-gen-profiling` |
+| 规划/跟踪/协调 | `ut-coverage-coord` |
+
+### 工作流程 (摘要版，详见§测试工作流)
+
+1. **分析源文件** — 读取目标`.cpp`，识别UMQ API调用、UmqOperation枚举、Converter API(详见§深度分析方法4步)
+2. **设计测试用例** — 按§Errno映射测试覆盖矩阵创建2-5个case
+3. **编写测试文件** — 使用§Test Fixture模式+§mockcpp模式
+4. **更新CMakeLists.txt** — 按§CMakeLists.txt注册模板添加新test target
+5. **构建并运行** — 命令见§构建与运行
+6. **验证** — 全部通过，无crash
+7. **报告进度** — 通知协调者(ut-coverage-coord)状态+覆盖率增量
+
+## 知识回流
+
+发现新模式或陷阱时，按`.opencode/README.md` §如何更新Skill回流。判断条件:
+
+| 发现类型 | 判断条件 | 回流目标 |
+|----------|---------|----------|
+| mockcpp/fixture/CMake通用模式 | 跨模块适用 | 本skill §mockcpp模式/§Test Fixture模式/§CMakeLists.txt注册 |
+| UMQ errno映射陷阱 | 仅umq模块 | `ut-gen-umq` §常见陷阱 |
+| epoll/socket/Connector/Acceptor陷阱 | 仅core模块 | `ut-gen-core` §常见陷阱 |
+| singleton/lock/ThreadPool陷阱 | 仅common模块 | `ut-gen-common` §常见陷阱 |
+| dlopen/dlsym/两后端陷阱 | 仅under-api模块 | `ut-gen-under-api` §常见陷阱 |
+| 构建/架构/gotchas | 与构建系统有关 | `AGENTS.md` §已知陷阱 |
+
+### 回流更新检查清单
+
+- [ ] 新mockcpp API用法 → 本skill §mockcpp模式或§高级模式(格式参考§常见陷阱#12: 粗体标题+解释+代码)
+- [ ] 新fixture模式 → 本skill §Test Fixture模式
+- [ ] 新CMake链接模式 → 本skill §CMakeLists.txt注册
+- [ ] 模块特定陷阱 → 对应`ut-gen-<module>` §常见陷阱
+- [ ] 构建系统问题 → `AGENTS.md` §已知陷阱
+
 ## 参考文件
 
 | 文件 | 用途 |
 |------|------|
 | `src/ubsocket/unit_test/umq_errno_converter_test.cpp` | 纯converter逻辑测试(91 cases) |
 | `src/ubsocket/unit_test/umq_ops_errno_test.cpp` | Ops级errno映射测试含mockcpp(51 cases, 3 fixture类) |
-| `src/ubsocket/unit_test/CMakeLists.txt` | 测试构建配置(2 targets) |
+| `src/ubsocket/unit_test/mock_infrastructure_test.cpp` | mock基础设施验证(32 cases, Helper+Static+Block+Socket) |
+| `src/ubsocket/unit_test/iobuf_zcopy_adapter_test.cpp` | iobuf模块全覆盖(45 cases, BlockMem+ZcopyAdapter+DynSymScanner) |
+| `src/ubsocket/unit_test/CMakeLists.txt` | 测试构建配置(5 targets) |
+| `src/ubsocket/unit_test/stub/fake_epoll/fake_epoll.h` | FakeEpollCtl API定义 |
+| `src/ubsocket/unit_test/stub/fake_epoll/fake_epoll.cpp` | fake epoll实现(extern "C"链接时替换) |
 | `src/ubsocket/csrc/core/umq/umq_errno_converter.h` | 冻结 — converter API, 映射表, 枚举 |
 | `src/ubsocket/csrc/core/umq/umq_errno_converter.cpp` | converter实现 |
+| `src/ubsocket/csrc/under_api/dl_libc_api.h` | LibcApi类 — static函数指针wrapper |
 | `src/ubsocket/csrc/under_api/dl_umq_api.h` | UmqApi类 — adapter vs dlopen后端 |
 | `src/ubsocket/csrc/core/umq/umq_data_rx_ops.h/.cpp` | RX ops 含errno映射 |
 | `src/ubsocket/csrc/core/umq/umq_data_tx_ops.h/.cpp` | TX ops 含errno映射 |
 | `src/ubsocket/csrc/core/umq/umq_backend.h/.cpp` | Backend init 含errno映射 |
 | `src/ubsocket/csrc/core/umq/umq_socket.h/.cpp` | Socket 含interrupt_fd_get errno映射 |
 | `src/ubsocket/csrc/core/umq/umq_epoll_runner_ops.h/.cpp` | Epoll runner 含errno映射 |
-| `src/ubsocket/csrc/core/umq/umq_socket_connector.h/.cpp` | Connector 含errno映射 |
-| `src/ubsocket/csrc/core/umq/umq_socket_acceptor.h/.cpp` | Acceptor 含errno映射 |
 | `doc/ubsocket/UBSOCKET-BRPC-ERRNO-MAPPING.ch.md` | errno映射设计文档 |
