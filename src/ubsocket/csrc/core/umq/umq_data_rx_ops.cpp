@@ -10,7 +10,7 @@
  */
 
 #include "umq_data_rx_ops.h"
-#include "cli/probe_manager.h"
+#include "profiling/probe/probe_manager.h"
 #include "core/ubsocket_socket_set.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"

@@ -11,7 +11,6 @@
 #define CLI_MESSAGE_H
 
 #include <arpa/inet.h>
-#include <securec.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -231,7 +230,7 @@ public:
         if (mBuf == nullptr || mBufLen == 0) {
             return;
         }
-        memset_s(mBuf, mBufLen, 0, mBufLen);
+        memset(mBuf, 0, mBufLen);
     }
 
     bool AllocateIfNeed(uint32_t newSize)

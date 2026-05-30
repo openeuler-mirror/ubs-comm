@@ -11,7 +11,7 @@
 #define CLI_CLIENT
 
 #include "cli_args_parser.h"
-#include "cli_message.h"
+#include "profiling/statistics/cli_message.h"
 
 namespace Statistics {
 class CLIClient {

@@ -28,8 +28,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_socket_helper.h"
 #include "core/umq/umq_socket.h"
-#include "net_common.h"
-#include "probe_manager.h"
+#include "profiling/probe/probe_manager.h"
 #include "statistics_statsmgr.h"
 #include "umq_dfx_api.h"
 #include "umq_dfx_types.h"
@@ -120,23 +119,18 @@ public:
 
         m_uds_fd = LibcApi::socket(AF_UNIX, SOCK_STREAM, 0);
         if (m_uds_fd < 0) {
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             throw std::runtime_error(std::string("Failed to create unix domain socket, ") +
-                                     NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                     ock::ubs::Func::Error2Str(errno));
         }
 
         if (LibcApi::bind(m_uds_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
             (void)LibcApi::close(m_uds_fd);
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            throw std::runtime_error(std::string("Failed to bind unix domain socket, ") +
-                                     NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            throw std::runtime_error(std::string("Failed to bind unix domain socket, ") + ock::ubs::Func::Error2Str(errno));
         }
 
         if (LibcApi::listen(m_uds_fd, 1) < 0) {
             (void)LibcApi::close(m_uds_fd);
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            throw std::runtime_error(std::string("Failed to listen unix domain socket, ") +
-                                     NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            throw std::runtime_error(std::string("Failed to listen unix domain socket, ") + ock::ubs::Func::Error2Str(errno));
         }
     }
 
@@ -181,9 +175,7 @@ public:
 
         ev.data.fd = m_uds_fd;
         if (LibcApi::epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_uds_fd, &ev) != 0) {
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            UBS_VLOG_ERR("Failed to add epoll control event, %s\n",
-                         NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            UBS_VLOG_ERR("Failed to add epoll control event, %s\n", ock::ubs::Func::Error2Str(errno));
             goto CLEAN_ALL_RESOURCE;
         }
 
@@ -323,11 +315,10 @@ public:
         // Do not set a timeout to reduce the core usage of the listening thread.
         int ev_num = LibcApi::epoll_wait(m_epoll_fd, events, MAX_EPOLL_EVENT_NUM, -1);
         if (ev_num == -1) {
-            char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("epoll_wait() failed in statistics poll, epfd: %d, maxevents: %d, timeout: %d, "
                          "errmsg: %s\n",
                          m_epoll_fd, MAX_EPOLL_EVENT_NUM, -1, errno,
-                         NetCommon::NN_GetStrError(errno, errno_buf, NET_STR_ERROR_BUF_SIZE));
+                         ock::ubs::Func::Error2Str(errno));
             return;
         }
 
@@ -701,9 +692,7 @@ public:
 
         int fd = LibcApi::accept(m_uds_fd, NULL, NULL);
         if (fd < 0) {
-            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            UBS_VLOG_ERR("Failed to accept connection, %s\n",
-                         NetCommon::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            UBS_VLOG_ERR("Failed to accept connection, %s\n", ock::ubs::Func::Error2Str(errno));
             return;
         }
         fd_guard tmpFd(fd);

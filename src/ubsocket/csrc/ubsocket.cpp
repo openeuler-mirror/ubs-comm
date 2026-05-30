@@ -10,11 +10,11 @@
  */
 #include <iostream>
 
-#include "cli/probe_manager.h"
-#include "cli/statistics.h"
+#include "profiling/probe/probe_manager.h"
+#include "profiling/statistics/statistics.h"
+#include "profiling/statistics/ubsocket_print_stats_mgr.h"
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
-#include "common/ubsocket_print_stats_mgr.h"
 #include "common/ubsocket_signal_handler.h"
 #include "common/ubsocket_version.h"
 #include "core/ubsocket_event_epoll.h"
