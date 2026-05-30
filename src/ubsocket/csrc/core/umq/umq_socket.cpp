@@ -81,13 +81,13 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
 #ifdef ENABLED
         if (context->IsDevIpv6()) {
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_IPV6;
-            if (strcpy_s(queue_cfg.dev_info.ipv6.ip_addr, UMQ_IPV6_SIZE, context->GetDevIpStr()) != EOK) {
+            if (strcpy(queue_cfg.dev_info.ipv6.ip_addr, context->GetDevIpStr()) != EOK) {
                 UBS_VLOG_ERR("Failed to strcpy_s device ipv6 address\n");
                 return ubsocket::Error::kUBSOCKET_SET_DEV_INFO;
             }
         } else {
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_IPV4;
-            if (strcpy_s(queue_cfg.dev_info.ipv4.ip_addr, UMQ_IPV4_SIZE, context->GetDevIpStr()) != EOK) {
+            if (strcpy(queue_cfg.dev_info.ipv4.ip_addr, context->GetDevIpStr()) != EOK) {
                 UBS_VLOG_ERR("Failed to strcpy_s device ipv4 address\n");
                 return ubsocket::Error::kUBSOCKET_SET_DEV_INFO;
             }
@@ -627,15 +627,15 @@ void UmqSocket::GetSocketCLIData(Statistics::CLISocketData *data)
             std::chrono::duration_cast<std::chrono::seconds>(ops->umq_conn_info_.create_time.time_since_epoch());
         data->createTime = static_cast<uint64_t>(duration.count());
 
-        if (strcpy_s(data->remoteIp, sizeof(data->remoteIp), ops->umq_conn_info_.peer_ip.c_str()) != 0) {
+        if (strcpy(data->remoteIp, ops->umq_conn_info_.peer_ip.c_str()) != 0) {
             UBS_VLOG_WARN("Failed to strcpy remote ip\n");
         }
 
-        if (memcpy_s(data->localEid, sizeof(data->localEid), ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE) != 0) {
+        if (memcpy(data->localEid, ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE) != 0) {
             UBS_VLOG_WARN("Failed to memcpy local eid\n");
         }
 
-        if (memcpy_s(data->remoteEid, sizeof(data->remoteEid), ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE) != 0) {
+        if (memcpy(data->remoteEid, ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE) != 0) {
             UBS_VLOG_WARN("Failed to memcpy remote eid\n");
         }
     } else {
@@ -643,15 +643,15 @@ void UmqSocket::GetSocketCLIData(Statistics::CLISocketData *data)
         auto duration = std::chrono::duration_cast<std::chrono::seconds>(ops->conn_info.create_time.time_since_epoch());
         data->createTime = static_cast<uint64_t>(duration.count());
 
-        if (strcpy_s(data->remoteIp, sizeof(data->remoteIp), ops->conn_info.peer_ip.c_str()) != 0) {
+        if (strcpy(data->remoteIp, ops->conn_info.peer_ip.c_str()) != 0) {
             UBS_VLOG_WARN("Failed to strcpy remote ip\n");
         }
 
-        if (memcpy_s(data->localEid, sizeof(data->localEid), ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE) != 0) {
+        if (memcpy(data->localEid, ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE) != 0) {
             UBS_VLOG_WARN("Failed to memcpy local eid\n");
         }
 
-        if (memcpy_s(data->remoteEid, sizeof(data->remoteEid), ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE) != 0) {
+        if (memcpy(data->remoteEid, ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE) != 0) {
             UBS_VLOG_WARN("Failed to memcpy remote eid\n");
         }
     }

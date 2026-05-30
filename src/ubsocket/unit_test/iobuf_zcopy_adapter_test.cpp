@@ -101,9 +101,7 @@ static ssize_t MockReadlinkSuccess(const char *path, char *buf, size_t bufsiz)
     g_readlinkCallCount++;
     const char *exe = "/tmp/test_exe";
     size_t len = strlen(exe);
-    if (memcpy_s(buf, bufsiz, exe, len + 1) != 0) {
-        return -1;
-    }
+    memcpy(buf, exe, len + 1);
     return static_cast<ssize_t>(len);
 }
 
@@ -126,9 +124,7 @@ static char *MockFgetsMatch(char *buf, int n, FILE *fp)
     if (lineLen >= static_cast<size_t>(n)) {
         return nullptr;
     }
-    if (memcpy_s(buf, static_cast<size_t>(n), line, lineLen + 1) != 0) {
-        return nullptr;
-    }
+    memcpy(buf, line, lineLen + 1);
     return buf;
 }
 
@@ -144,9 +140,7 @@ static char *MockFgetsPartialMatch(char *buf, int n, FILE *fp)
     if (lineLen >= static_cast<size_t>(n)) {
         return nullptr;
     }
-    if (memcpy_s(buf, static_cast<size_t>(n), line, lineLen + 1) != 0) {
-        return nullptr;
-    }
+    memcpy(buf, line, lineLen + 1);
     return buf;
 }
 
@@ -171,9 +165,7 @@ static char *MockFgetsPartialMatch(FILE *fp, char *buf, int n)
     if (lineLen >= static_cast<size_t>(n)) {
         return nullptr;
     }
-    if (memcpy_s(buf, static_cast<size_t>(n), line, lineLen + 1) != 0) {
-        return nullptr;
-    }
+    memcpy(buf, static_cast<size_t>(n), line, lineLen + 1);
     return buf;
 }
 } // namespace

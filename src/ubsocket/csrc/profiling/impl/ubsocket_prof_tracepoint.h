@@ -47,7 +47,7 @@ struct Tracepoint {
         size_t len = strlen(newName);
         name = (char *)malloc(len + 1);
         if (name != nullptr) {
-            (void)strcpy_s(name, (len + 1), newName);
+            (void)strcpy(name, newName);
         }
     }
 
@@ -83,7 +83,7 @@ struct Tracepoint {
             size_t len = strlen(other.name);
             name = (char *)malloc(len + 1);
             if (name != nullptr) {
-                (void)strcpy_s(name, (len + 1), other.name);
+                (void)strcpy(name, other.name);
             }
         }
     }
@@ -108,7 +108,7 @@ struct Tracepoint {
             size_t len = strlen(other.name);
             name = (char *)malloc(len + 1);
             if (name != nullptr) {
-                (void)strcpy_s(name, (len + 1), other.name);
+                (void)strcpy(name, other.name);
             }
         }
 

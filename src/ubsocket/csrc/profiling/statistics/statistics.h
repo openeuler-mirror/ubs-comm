@@ -102,7 +102,7 @@ public:
         addr.sun_family = AF_UNIX;
         // Create an abstract namespace socket name, which is also convenient to calculate string length
         char name[UDS_SUN_PATH_NAME_MAX] = {0};
-        int ret = snprintf_s(name, sizeof(name), sizeof(name) - 1, "ubscli-%u", (uint32_t)getpid());
+        int ret = snprintf(name, sizeof(name), "ubscli-%u", (uint32_t)getpid());
         if (ret < 0 || ret >= (int)sizeof(name)) {
             throw std::runtime_error(std::string("Failed to copy unix domain socket name, error ") +
                                      std::to_string(ret));
@@ -111,11 +111,7 @@ public:
         //Set the first character to an empty character.
         addr.sun_path[0] = '\0';
         // Copy the name to the ramaining part
-        ret = strncpy_s(addr.sun_path + 1, sizeof(addr.sun_path) - 1, name, UDS_SUN_PATH_NAME_MAX);
-        if (ret != EOK) {
-            throw std::runtime_error(std::string("Failed to construct unix domain socket name, error ") +
-                                     std::to_string(ret));
-        }
+        strncpy(addr.sun_path + 1, name, UDS_SUN_PATH_NAME_MAX);
 
         m_uds_fd = LibcApi::socket(AF_UNIX, SOCK_STREAM, 0);
         if (m_uds_fd < 0) {
@@ -359,7 +355,7 @@ public:
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         CLIheader.reTxCount = StatsMgr::GetReTxCount();
         // collect data
-        if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
+        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
             UBS_VLOG_ERR("Failed to memcpy cli header\n");
             return;
         }
@@ -398,7 +394,7 @@ public:
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         CLIheader.reTxCount = StatsMgr::GetReTxCount();
         // collect data
-        if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
+        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
             UBS_VLOG_ERR("Failed to memcpy cli header\n");
             return;
         }
@@ -442,7 +438,7 @@ public:
         cliHeader.socketNum = sockNum;
 
         // 拷贝 Header
-        if (memcpy_s(msg.Data(), msg.GetBufLen(), &cliHeader, headerSize) != 0) {
+        if (memcpy(msg.Data(), &cliHeader, headerSize) != 0) {
             UBS_VLOG_ERR("Failed to memcpy cli header\n");
             return;
         }
@@ -452,7 +448,7 @@ public:
 
         if (sockNum > 0) {
             // 一次性把整个数组拷贝过去，效率最高
-            if (memcpy_s(dataPtr, sockDataSize, probeDataList.data(), sockDataSize) != 0) {
+            if (memcpy(dataPtr, probeDataList.data(), sockDataSize) != 0) {
                 UBS_VLOG_ERR("Failed to memcpy probe data\n");
                 return;
             }
@@ -525,7 +521,7 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         // collect data
-        if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
+        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
             UBS_VLOG_ERR("Failed to memcpy cli header\n");
             return;
         }
@@ -563,7 +559,7 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         // collect data
-        if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
+        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
             UBS_VLOG_ERR("Failed to memcpy cli header\n");
             return;
         }
@@ -601,7 +597,7 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         // collect data
-        if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
+        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
             UBS_VLOG_ERR("Failed to memcpy cli header\n");
             return;
         }
@@ -639,7 +635,7 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         // collect data
-        if (memcpy_s(msg.Data(), msg.GetBufLen(), &CLIheader, headerSize) != 0) {
+        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
             UBS_VLOG_ERR("Failed to memcpy cli header\n");
             return;
         }

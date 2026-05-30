@@ -47,15 +47,15 @@ umq_buf_t *AllocMockBuf(uint32_t size, umq_buf_status_t status = UMQ_BUF_SUCCESS
     static umq_buf_pro_t bufPro;
     static umq_buf_t mockBuf;
 
-    memset_s(&bufPro, sizeof(umq_buf_pro_t), 0, sizeof(umq_buf_pro_t));
+    memset(&bufPro, 0, sizeof(umq_buf_pro_t));
     bufPro.opcode = UMQ_OPC_SEND;
 
-    memset_s(&mockBuf, sizeof(umq_buf_t), 0, sizeof(umq_buf_t));
+    memset(&mockBuf, 0, sizeof(umq_buf_t));
     mockBuf.buf_data = reinterpret_cast<char *>(bufData); // NOLINT(G.STD.02)
     mockBuf.data_size = size;
     mockBuf.total_data_size = size;
     mockBuf.status = status;
-    memcpy_s(mockBuf.qbuf_ext, sizeof(mockBuf.qbuf_ext), &bufPro, sizeof(umq_buf_pro_t));
+    memcpy(mockBuf.qbuf_ext, &bufPro, sizeof(umq_buf_pro_t));
     mockBuf.qbuf_next = nullptr;
     mockBuf.io_direction = UMQ_IO_RX;
 
@@ -65,7 +65,7 @@ umq_buf_t *AllocMockBuf(uint32_t size, umq_buf_status_t status = UMQ_BUF_SUCCESS
 umq_eid_t MakeTestEid(uint8_t val)
 {
     umq_eid_t eid = {};
-    memset_s(eid.raw, sizeof(eid.raw), val, sizeof(eid.raw));
+    memset(eid.raw, val, sizeof(eid.raw));
     return eid;
 }
 } // namespace
