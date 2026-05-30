@@ -21,6 +21,7 @@ int TransportSendBwTest::DoPostSend()
         int res = mEp->PostSend(OP_CODE_SEND_BW, req);
         if (res != 0) {
             LOG_ERROR("failed to send to server");
+            return res;
         }
     }
     return 0;
@@ -121,7 +122,11 @@ bool TransportSendBwTest::RunTest(PerfTestContext *ctx)
     // ctx会记录测试中每个Iteration耗时，故每次使用不同的ctx
     SetPerfTestContext(ctx);
     if (!mCfg.GetIsServer()) {
-        DoPostSend();
+        int res = DoPostSend();
+        if (res != 0) {
+            sem_post(&mSem);
+            return false;
+        }
     }
     // 等待测试结束
     sem_wait(&mSem);
