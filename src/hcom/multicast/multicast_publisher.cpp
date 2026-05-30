@@ -82,7 +82,7 @@ HcomServiceCtxStore *CreateAndInitCtxStore(uint32_t capacity, uintptr_t memPoolR
 }
 
 SerResult Publisher::Initialize(uintptr_t memPool, uintptr_t pubMemPool, uintptr_t periodicMgr,
-    uint32_t ctxStoreCapacity, UBSHcomNetDriverProtocol protocol)
+                                uint32_t ctxStoreCapacity, UBSHcomNetDriverProtocol protocol)
 {
     std::lock_guard<std::mutex> locker(mMgrMutex);
     mState.Set(PublisherState::PUB_NEW);
@@ -265,7 +265,7 @@ SerResult Publisher::Call(const UBSHcomNetTransOpInfo &opInfo, const MultiReques
         return SER_INVALID_PARAM;
     }
 
-    MultiCastTimerContext context {};
+    MultiCastTimerContext context{};
     MultiCastCallback *cb = NewMultiCastCallback(
         [this, done](PublisherContext &context) { const_cast<MultiCastCallback *>(done)->Run(context); },
         std::placeholders::_1);
@@ -285,7 +285,7 @@ SerResult Publisher::Call(const UBSHcomNetTransOpInfo &opInfo, const MultiReques
         return SER_NEW_OBJECT_FAILED;
     }
 
-    auto ctx = new (pubCtxPtr)PublisherContext(mMaxSubscriberNum);
+    auto ctx = new (pubCtxPtr) PublisherContext(mMaxSubscriberNum);
     result = ctx->InitSubscribers(mSubscriptionMap);
     if (NN_UNLIKELY(result != SER_OK)) {
         DestroyTimerContext(context);
@@ -301,7 +301,7 @@ SerResult Publisher::Call(const UBSHcomNetTransOpInfo &opInfo, const MultiReques
     }
 
     UBSHcomNetTransRequest netReq(reinterpret_cast<uintptr_t>(req.data), 0, req.lkey, 0, req.size,
-        sizeof(SerTransContext));
+                                  sizeof(SerTransContext));
     SetServiceTransCtx(netReq.upCtxData, context.seqNo);
     result = PostSendAll(context, netReq, ctx, result);
     if (NN_UNLIKELY(result == SER_MULTICAST_SEND_ALL_FAILED)) {
@@ -316,7 +316,7 @@ SerResult Publisher::Call(const UBSHcomNetTransOpInfo &opInfo, const MultiReques
 }
 
 SerResult Publisher::PostSendAll(const MultiCastTimerContext &context, const UBSHcomNetTransRequest &netReq,
-    PublisherContext *ctx, SerResult &result)
+                                 PublisherContext *ctx, SerResult &result)
 {
     uint32_t failedCount = 0;
     uint32_t toSendCount = 0;
@@ -349,8 +349,8 @@ SerResult Publisher::PostSendAll(const MultiCastTimerContext &context, const UBS
                 continue;
             }
             ctx->SetResponseStatus(sub, nullptr, SubscriberRspStatus::SEND_ERROR);
-            NN_LOG_ERROR("Failed to send to ep " << ep->Id() << ", error: " << result << " set sub info " <<
-                sub->mName << " to SEND_ERROR");
+            NN_LOG_ERROR("Failed to send to ep " << ep->Id() << ", error: " << result << " set sub info " << sub->mName
+                                                 << " to SEND_ERROR");
             failedCount++;
         }
     }
@@ -422,5 +422,5 @@ Publisher::Publisher(const std::string &name)
 {
     mName = name;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -43,7 +43,7 @@ public:
 
 public:
     UBSHcomNetEndpointPtr mEp = nullptr; /* manager ep time out */
-    uint64_t mTimeout = 0;        /* absolute timeout compare to current system time */
+    uint64_t mTimeout = 0;               /* absolute timeout compare to current system time */
 };
 
 /*
@@ -52,7 +52,8 @@ public:
 class NetDelayReleaseTimer {
 public:
     NetDelayReleaseTimer(const std::string &name, uint16_t driverIndex)
-        : mDriverIndex(driverIndex), mName(name + std::to_string(driverIndex)) {};
+        : mDriverIndex(driverIndex),
+          mName(name + std::to_string(driverIndex)){};
 
     ~NetDelayReleaseTimer() = default;
 
@@ -78,10 +79,10 @@ private:
     std::mutex mMutex;
     bool mStarted = false;
     std::thread mThread;
-    std::atomic_bool mThreadStarted { false };
+    std::atomic_bool mThreadStarted{false};
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_NET_DELAY_RELEASE_TIMER_H

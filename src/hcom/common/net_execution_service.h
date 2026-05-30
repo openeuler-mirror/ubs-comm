@@ -58,7 +58,6 @@ constexpr uint32_t ES_MAX_THR_NUM = 256;
 class NetExecutorService;
 using NetExecutorServicePtr = NetRef<NetExecutorService>;
 
-
 /*
  * @brief Execution service is fixed thread pool to task execution
  */
@@ -155,7 +154,8 @@ private:
           mStarted(false),
           mStopped(false),
           mStartedThreadNum(0)
-    {}
+    {
+    }
 
     void RunInThread(int16_t cpuId);
     void DoRunnable(bool &flag);
@@ -175,7 +175,7 @@ private:
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HCOM_NET_EXECUTION_SERVICE_H

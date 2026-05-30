@@ -13,8 +13,8 @@
 
 #include "hcom_def.h"
 #include "net_obj_pool.h"
-#include "ut_helper.h"
 #include "test_blocking_queue.h"
+#include "ut_helper.h"
 
 using namespace ock::hcom;
 TestCaseBlockingQueue::TestCaseBlockingQueue() {}

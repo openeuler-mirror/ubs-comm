@@ -13,9 +13,9 @@
 #define HCOM_SERVICE_V2_SERVICE_CALLBACK_H_
 
 #include "api/hcom_service_channel.h"
-#include "service_ctx_store.h"
-#include "service_common.h"
 #include "net_monotonic.h"
+#include "service_common.h"
+#include "service_ctx_store.h"
 
 namespace ock {
 namespace hcom {
@@ -34,13 +34,14 @@ enum class HcomAsyncCBType : uint8_t {
 
 class HcomServiceTimer {
 public:
-    UBSHcomChannel *mChannel = nullptr;          /* used for build UBSHcomServiceContext */
-    HcomServiceCtxStore *mCtxStore = nullptr; /* manager memory and seqNo */
-    uint64_t mTimeout = 0;                   /* absolute timeout compare to current system time */
-    uintptr_t mCallback = 0;                 /* callback obj address */
-    uint32_t mSeqNo = 0;                     /* seq no for find query map */
-    HcomAsyncCBType mType = HcomAsyncCBType::CBS_IO;      /* callback type */
-    HcomAsyncCBState mState = HcomAsyncCBState::CBS_INIT; /* atomic status to handle the trace condition between timeout
+    UBSHcomChannel *mChannel = nullptr;              /* used for build UBSHcomServiceContext */
+    HcomServiceCtxStore *mCtxStore = nullptr;        /* manager memory and seqNo */
+    uint64_t mTimeout = 0;                           /* absolute timeout compare to current system time */
+    uintptr_t mCallback = 0;                         /* callback obj address */
+    uint32_t mSeqNo = 0;                             /* seq no for find query map */
+    HcomAsyncCBType mType = HcomAsyncCBType::CBS_IO; /* callback type */
+    HcomAsyncCBState mState =
+        HcomAsyncCBState::CBS_INIT; /* atomic status to handle the trace condition between timeout
                                               * handle thread and polling thread */
 public:
     inline uint32_t SeqNo() const
@@ -173,7 +174,10 @@ public:
     }
 
     HcomServiceTimer(UBSHcomChannel *ch, HcomServiceCtxStore *ctxStore, int32_t t, uintptr_t cb, HcomAsyncCBType type)
-        : mChannel(ch), mCtxStore(ctxStore), mCallback(cb), mType(type)
+        : mChannel(ch),
+          mCtxStore(ctxStore),
+          mCallback(cb),
+          mType(type)
     {
         // if t < 0, it means never timeout, so leave mTimeout as 0
         if (t >= 0) {
@@ -323,14 +327,14 @@ public:
     }
 
 public:
-    HcomServiceTimer mTimerCtx {};
+    HcomServiceTimer mTimerCtx{};
     NetSpinLock mLock;
     uint32_t mCtxCount = 0;
 };
 
 class HcomServiceTimerCompare {
 public:
-    bool operator () (HcomServiceTimer *&a, HcomServiceTimer *&b) const
+    bool operator()(HcomServiceTimer *&a, HcomServiceTimer *&b) const
     {
         if (a->Timeout() > b->Timeout()) {
             return true;
@@ -342,6 +346,6 @@ public:
     }
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_SERVICE_V2_SERVICE_CALLBACK_H_

@@ -27,8 +27,11 @@ struct NetWorkerGroupLbInfo {
 class NetWorkerLB {
 public:
     NetWorkerLB(const std::string &name, UBSHcomNetDriverLBPolicy policy, uint16_t wrkLimitedCnt)
-        : mName(name), mPolicy(policy), mWorkerLimitedCnt(wrkLimitedCnt)
-    {}
+        : mName(name),
+          mPolicy(policy),
+          mWorkerLimitedCnt(wrkLimitedCnt)
+    {
+    }
 
     ~NetWorkerLB() = default;
 
@@ -83,7 +86,7 @@ public:
             flatWrkIdx = mWrkGroups[grpIdx].wrkOffsetInAll + innerIdx;
             return true;
         } else if (mPolicy == NET_HASH_IP_PORT) {
-            auto innerIdx = std::hash<std::string> {}(peerIpPort) % mWrkGroups[grpIdx].wrkCntInGrp;
+            auto innerIdx = std::hash<std::string>{}(peerIpPort) % mWrkGroups[grpIdx].wrkCntInGrp;
             flatWrkIdx = mWrkGroups[grpIdx].wrkOffsetInAll + innerIdx;
             return true;
         }
@@ -95,9 +98,9 @@ public:
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "name: " << mName << ", policy: " << UBSHcomNetDriverLBPolicyToString(mPolicy) <<
-            ", choose-able-count: " << (mWorkerLimitedCnt == UINT16_MAX ? "all" : std::to_string(mWorkerLimitedCnt)) <<
-            ", worker-groups: " << mWrkGroups.size();
+        oss << "name: " << mName << ", policy: " << UBSHcomNetDriverLBPolicyToString(mPolicy)
+            << ", choose-able-count: " << (mWorkerLimitedCnt == UINT16_MAX ? "all" : std::to_string(mWorkerLimitedCnt))
+            << ", worker-groups: " << mWrkGroups.size();
         return oss.str();
     }
 
@@ -117,7 +120,7 @@ private:
             flatWrkIdx = mWrkGroups[grpIdx].wrkOffsetInAll + mWrkGroups[grpIdx].wrkLimited[innerIdx];
             return true;
         } else if (mPolicy == NET_HASH_IP_PORT) {
-            auto innerIdx = std::hash<std::string> {}(peerIpPort) % mWrkGroups[grpIdx].wrkCntLimited;
+            auto innerIdx = std::hash<std::string>{}(peerIpPort) % mWrkGroups[grpIdx].wrkCntLimited;
             flatWrkIdx = mWrkGroups[grpIdx].wrkOffsetInAll + mWrkGroups[grpIdx].wrkLimited[innerIdx];
             return true;
         }
@@ -134,7 +137,7 @@ private:
      */
     inline void AddWorkerGroup(uint16_t offsetWorker, uint16_t wrkCntInGrp)
     {
-        NetWorkerGroupLbInfo info {};
+        NetWorkerGroupLbInfo info{};
         info.wrkCntInGrp = wrkCntInGrp;
         info.wrkOffsetInAll = offsetWorker;
         info.grpRRIdx = 0;
@@ -158,15 +161,15 @@ private:
 
 private:
     std::string mName;
-    UBSHcomNetDriverLBPolicy mPolicy = NET_ROUND_ROBIN;  /* policy */
-    uint16_t mWorkerLimitedCnt = 0;               /* means this can be  less than total workers in one group */
-    std::vector<NetWorkerGroupLbInfo> mWrkGroups; /* worker group info */
-    std::vector<uint16_t> mEpCntPerWorkers;       /* for even distributed policy */
+    UBSHcomNetDriverLBPolicy mPolicy = NET_ROUND_ROBIN; /* policy */
+    uint16_t mWorkerLimitedCnt = 0;                     /* means this can be  less than total workers in one group */
+    std::vector<NetWorkerGroupLbInfo> mWrkGroups;       /* worker group info */
+    std::vector<uint16_t> mEpCntPerWorkers;             /* for even distributed policy */
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
 using NetWorkerLBPtr = NetRef<NetWorkerLB>;
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_LOAD_BALANCE_H

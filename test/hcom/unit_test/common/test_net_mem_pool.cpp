@@ -13,8 +13,8 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
-#include "net_util.h"
 #include "net_mem_pool_fixed.h"
+#include "net_util.h"
 
 namespace ock {
 namespace hcom {
@@ -24,7 +24,7 @@ public:
     virtual void SetUp(void);
     virtual void TearDown(void);
 
-    NetMemPoolFixedOptions options {};
+    NetMemPoolFixedOptions options{};
     NetMemPoolFixedPtr globalPool = nullptr;
 };
 
@@ -61,8 +61,8 @@ TEST_F(TestNetMemPool, KeyedThreadLocalCache)
 {
     NetMemPoolFixedOptions options{};
     options.superBlkSizeMB = NN_NO1;
-    options.tcExpandBlkCnt = NN_NO8;  // 每个扩容时小块个数
-    options.minBlkSize = NN_NO64;     // 每个小块大小
+    options.tcExpandBlkCnt = NN_NO8; // 每个扩容时小块个数
+    options.minBlkSize = NN_NO64;    // 每个小块大小
 
     NetLocalAutoDecreasePtr<NetMemPoolFixed> mempool(new (std::nothrow) NetMemPoolFixed("keyed", options));
     mempool.Get()->Initialize();
@@ -103,5 +103,5 @@ TEST_F(TestNetMemPool, KeyedThreadLocalCache)
     EXPECT_EQ(cache.mTCacheFixeds[0]->mCurrentFree, 8);
 }
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

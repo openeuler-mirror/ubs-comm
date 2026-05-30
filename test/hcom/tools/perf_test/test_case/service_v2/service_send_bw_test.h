@@ -45,7 +45,7 @@ private:
     char *mDataAddr = nullptr;
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

@@ -12,8 +12,8 @@
 #ifdef RDMA_BUILD_ENABLED
 #include <malloc.h>
 
-#include "verbs_api_wrapper.h"
 #include "rdma_mr_pool.h"
+#include "verbs_api_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -38,7 +38,7 @@ RResult RDMAMemoryRegion::Create(const std::string &name, RDMAContext *ctx, uint
 }
 
 RResult RDMAMemoryRegion::Create(const std::string &name, RDMAContext *ctx, uintptr_t address, uint64_t size,
-    RDMAMemoryRegion *&buf)
+                                 RDMAMemoryRegion *&buf)
 {
     if (NN_UNLIKELY(ctx == nullptr)) {
         NN_LOG_ERROR("Create rdma mr param invalid");
@@ -73,10 +73,11 @@ RResult RDMAMemoryRegion::Initialize()
         // register mr directly
         auto tmpBuf = reinterpret_cast<void *>(mBuf);
         tmpMR = HcomIbv::RegMr(mRDMAContext->mProtectDomain, tmpBuf, mSize,
-            IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
+                               IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
         if (tmpMR == nullptr) {
-            NN_LOG_ERROR("Failed to register external memory for RDMAMemoryRegion " << mName << ", error " <<
-                NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) << ", buffer " << tmpBuf);
+            NN_LOG_ERROR("Failed to register external memory for RDMAMemoryRegion "
+                         << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)
+                         << ", buffer " << tmpBuf);
             return RR_MR_REG_FAILED;
         }
     } else {
@@ -93,12 +94,12 @@ RResult RDMAMemoryRegion::Initialize()
 
         // register memory region to card
         tmpMR = HcomIbv::RegMr(mRDMAContext->mProtectDomain, tmpBuf, mSize,
-            IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
+                               IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
         if (tmpMR == nullptr) {
             free(tmpBuf);
             tmpBuf = nullptr;
-            NN_LOG_ERROR("Failed to register memory for RDMAMemoryRegion " << mName << ", error "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to register memory for RDMAMemoryRegion "
+                         << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return RR_MR_REG_FAILED;
         }
 
@@ -130,6 +131,6 @@ void RDMAMemoryRegion::UnInitialize()
     mRDMAContext = nullptr;
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

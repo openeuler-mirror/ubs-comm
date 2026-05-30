@@ -13,12 +13,12 @@
 #define OCK_RDMA_WORKER_1234341456433_H
 #ifdef RDMA_BUILD_ENABLED
 
+#include <pthread.h>
+#include <sys/resource.h>
 #include <atomic>
 #include <mutex>
-#include <sys/resource.h>
 #include <thread>
 #include <utility>
-#include <pthread.h>
 
 #include "hcom.h"
 #include "net_ctx_info_pool.h"
@@ -71,16 +71,16 @@ using RDMAWorkerOptions = struct RDMAWorkerOptionsStruct {
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "options type: " << WorkerTypeToString(workerType) << ", mode: " << PollingModeToString(workerMode) <<
-            ", cq size: " << completionQueueDepth << ", max post send: " << maxPostSendCountPerQP <<
-            ", pre-post receive size: " << prePostReceiveSizePerQP << ", poll batch size " << pollingBatchSize <<
-            ", cpu id: " << cpuId << ", qp send queue: " << qpSendQueueSize << ", qp receive queue: " <<
-            qpReceiveQueueSize << ", qp batch repost size: " << qpBatchRePostSize <<
-            ", dontStartWorkers: " << dontStartWorkers;
+        oss << "options type: " << WorkerTypeToString(workerType) << ", mode: " << PollingModeToString(workerMode)
+            << ", cq size: " << completionQueueDepth << ", max post send: " << maxPostSendCountPerQP
+            << ", pre-post receive size: " << prePostReceiveSizePerQP << ", poll batch size " << pollingBatchSize
+            << ", cpu id: " << cpuId << ", qp send queue: " << qpSendQueueSize
+            << ", qp receive queue: " << qpReceiveQueueSize << ", qp batch repost size: " << qpBatchRePostSize
+            << ", dontStartWorkers: " << dontStartWorkers;
         return oss.str();
     }
 
-    void SetValue(const UBSHcomNetDriverOptions& opt)
+    void SetValue(const UBSHcomNetDriverOptions &opt)
     {
         workerType = RDMAWorkerType::SENDER_RECEIVER;
         completionQueueDepth = opt.completionQueueDepth;
@@ -106,7 +106,7 @@ using RDMAWorkerOptions = struct RDMAWorkerOptionsStruct {
 class RDMAWorker {
 public:
     RDMAWorker(const std::string &name, RDMAContext *ctx, const RDMAWorkerOptions &options,
-        const NetMemPoolFixedPtr &memPool, const NetMemPoolFixedPtr &sglMemPool);
+               const NetMemPoolFixedPtr &memPool, const NetMemPoolFixedPtr &sglMemPool);
 
     virtual ~RDMAWorker()
     {
@@ -149,17 +149,17 @@ public:
 
     RResult PostReceive(RDMAQp *qp, uintptr_t bufAddress, uint32_t bufSize, uint32_t localKey);
     RResult PostSend(RDMAQp *qp, const RDMASendReadWriteRequest &req, uint32_t immData = 0);
-    RResult PostSendSglInline(
-        RDMAQp *qp, const RDMASendSglInlineHeader &header, const RDMASendReadWriteRequest &req, uint32_t immData = 0);
+    RResult PostSendSglInline(RDMAQp *qp, const RDMASendSglInlineHeader &header, const RDMASendReadWriteRequest &req,
+                              uint32_t immData = 0);
 
     RResult PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, const RDMASendReadWriteRequest &tlsReq,
-        uint32_t immData = 0, bool isEncrypted = false);
+                        uint32_t immData = 0, bool isEncrypted = false);
     RResult PostRead(RDMAQp *qp, const RDMASendReadWriteRequest &req);
     RResult PostOneSideSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, bool isRead = true);
     RResult PostWrite(RDMAQp *qp, const RDMASendReadWriteRequest &req,
-        RDMAOpContextInfo::OpType type = RDMAOpContextInfo::WRITE);
+                      RDMAOpContextInfo::OpType type = RDMAOpContextInfo::WRITE);
     RResult CreateOneSideCtx(RDMASgeCtxInfo &sgeInfo, UBSHcomNetTransSgeIov *iov, uint32_t iovCount,
-        uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead);
+                             uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead);
     RResult RePostReceive(RDMAOpContextInfo *ctx);
     RResult BatchRePostReceive(RDMAOpContextInfo *ctx);
     RResult PostSendRawNoCpy(RDMAQp *qp, const RDMASendReadWriteRequest &req, uint32_t immData);
@@ -228,7 +228,7 @@ public:
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 public:
     static RResult Create(const std::string &name, RDMAContext *ctx, const RDMAWorkerOptions &options,
-        NetMemPoolFixedPtr memPool, NetMemPoolFixedPtr sglMemPool, RDMAWorker *&outWorker);
+                          NetMemPoolFixedPtr memPool, NetMemPoolFixedPtr sglMemPool, RDMAWorker *&outWorker);
 
 protected:
     void RunInThread();
@@ -237,14 +237,14 @@ protected:
 
 protected:
     std::string mName;
-    UBSHcomNetWorkerIndex mIndex {};
+    UBSHcomNetWorkerIndex mIndex{};
     RDMAContext *mRDMAContext = nullptr;
     RDMACq *mRDMACq = nullptr;
     NetMemPoolFixedPtr mOpCtxMemPool = nullptr;
     NetMemPoolFixedPtr mSglCtxMemPool = nullptr;
     bool mInited = false;
 
-    RDMAWorkerOptions mOptions {};
+    RDMAWorkerOptions mOptions{};
 
     // variable for thread
     std::thread mProgressThread;
@@ -274,7 +274,7 @@ protected:
 
     friend class RDMAQp;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // OCK_RDMA_WORKER_1234341456433_H

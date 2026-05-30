@@ -29,11 +29,11 @@
 #endif
 
 #define MEM_ALLOCATOR_ROUND_UP_TO(x, align) \
-    (((x) + (align)-1) / ((align)) * ((align))) /* round x to align, etc round(3,4) = 4 */
+    (((x) + (align) - 1) / ((align)) * ((align))) /* round x to align, etc round(3,4) = 4 */
 
 #define MA_LEN_LEN (NN_NO4)
 #define MA_CANARY_LEN (NN_NO4)
-#define MA_META_DATA_RESERVE_LEN                                                    \
+#define MA_META_DATA_RESERVE_LEN \
     (NN_NO16) /* total reserve length, for memcpy's performance, 16 bytes alignment \
             is best */
 
@@ -88,7 +88,7 @@ class MemoryRegion {
 public:
     NetRbTree<MemoryArea> mRoot;
     NetLinkedList<NetRbNode<MemoryArea>> freeHead[FREE_LIST_NUM];
-    int64_t freeCnt[FREE_LIST_NUM] {};
+    int64_t freeCnt[FREE_LIST_NUM]{};
     uint64_t totalSize = 0;
     uint64_t freeSize = 0;
 
@@ -222,8 +222,7 @@ public:
 
         mrAddress = static_cast<uintptr_t>(address);
 
-        NN_LOG_TRACE_INFO("Mem allocate success, addr size " << size << " alignSize " <<
-            alignedSize);
+        NN_LOG_TRACE_INFO("Mem allocate success, addr size " << size << " alignSize " << alignedSize);
         return NN_OK;
     }
 
@@ -336,8 +335,8 @@ private:
             auto cur = &i.head;
             do {
                 if (cur->data.data.magic != MA_MAGIC) {
-                    NN_LOG_ERROR("free memory node " << (uint64_t)cur <<
-                        " was corrupted, usually caused by use after free.");
+                    NN_LOG_ERROR("free memory node " << (uint64_t)cur
+                                                     << " was corrupted, usually caused by use after free.");
                     return false;
                 }
                 cur = cur->next;

@@ -11,9 +11,9 @@
  */
 #include "hcom_def.h"
 #ifdef RDMA_BUILD_ENABLED
+#include "net_rdma_async_endpoint.h"
 #include "net_rdma_driver.h"
 #include "net_rdma_sync_endpoint.h"
-#include "net_rdma_async_endpoint.h"
 #include "openssl_api_wrapper.h"
 #include "rdma_common.h"
 #include "rdma_mr_dm_buf.h"
@@ -104,44 +104,46 @@ NResult NetDriverRDMA::ValidateOptions()
 {
     /* validate param related to device IpMask for RDMA and Sock */
     if (NN_UNLIKELY(!ValidateArrayOptions(mOptions.netDeviceIpMask, NN_NO256))) {
-        NN_LOG_ERROR("Option 'netDeviceIpMask' is invalid, " << mOptions.netDeviceIpMask <<
-            " is set in driver,the Array max length is 256.");
+        NN_LOG_ERROR("Option 'netDeviceIpMask' is invalid, " << mOptions.netDeviceIpMask
+                                                             << " is set in driver,the Array max length is 256.");
         return NN_INVALID_PARAM;
     }
 
     if (mOptions.prePostReceiveSizePerQP == 0) {
-        NN_LOG_ERROR("Invalid option prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP <<
-            ", should not be zero");
+        NN_LOG_ERROR("Invalid option prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP
+                                                               << ", should not be zero");
         return NN_INVALID_PARAM;
     }
 
     if (mOptions.prePostReceiveSizePerQP > NN_NO2048) {
-        NN_LOG_WARN("Invalid option prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP <<
-            ", should be <= " << NN_NO2048 << ", set to " << NN_NO2048);
+        NN_LOG_WARN("Invalid option prePostReceiveSizePerQP "
+                    << mOptions.prePostReceiveSizePerQP << ", should be <= " << NN_NO2048 << ", set to " << NN_NO2048);
         mOptions.prePostReceiveSizePerQP = NN_NO2048;
     }
 
     if (mOptions.maxPostSendCountPerQP == 0) {
-        NN_LOG_ERROR("Invalid option maxPostSendCountPerQP " << mOptions.maxPostSendCountPerQP <<
-            ", should not be zero");
+        NN_LOG_ERROR("Invalid option maxPostSendCountPerQP " << mOptions.maxPostSendCountPerQP
+                                                             << ", should not be zero");
         return NN_INVALID_PARAM;
     }
 
     if (mOptions.maxPostSendCountPerQP > NN_NO1024) {
-        NN_LOG_WARN("Invalid option maxPostSendCountPerQP " << mOptions.maxPostSendCountPerQP << ", should be <= " <<
-            NN_NO1024 << ", set to " << NN_NO1024);
+        NN_LOG_WARN("Invalid option maxPostSendCountPerQP "
+                    << mOptions.maxPostSendCountPerQP << ", should be <= " << NN_NO1024 << ", set to " << NN_NO1024);
         mOptions.maxPostSendCountPerQP = NN_NO1024;
     }
 
     if (mOptions.maxPostSendCountPerQP > mOptions.prePostReceiveSizePerQP) {
-        NN_LOG_WARN("Invalid option maxPostSendCountPerQP " << mOptions.maxPostSendCountPerQP <<
-            ", more than prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP << " , change to equal");
+        NN_LOG_WARN("Invalid option maxPostSendCountPerQP "
+                    << mOptions.maxPostSendCountPerQP << ", more than prePostReceiveSizePerQP "
+                    << mOptions.prePostReceiveSizePerQP << " , change to equal");
         mOptions.maxPostSendCountPerQP = mOptions.prePostReceiveSizePerQP;
     }
 
     if (mOptions.qpBatchRePostSize == 0 || mOptions.qpBatchRePostSize > QP_MAX_BATCH_RETURN_WR_SIZE) {
         NN_LOG_ERROR("Invalid option qpBatchRePostSize " << mOptions.qpBatchRePostSize
-        << ", should not be zero or more than " << QP_MAX_BATCH_RETURN_WR_SIZE);
+                                                         << ", should not be zero or more than "
+                                                         << QP_MAX_BATCH_RETURN_WR_SIZE);
         return NN_INVALID_PARAM;
     }
 
@@ -166,7 +168,7 @@ NResult NetDriverRDMA::CreateContext()
         uint16_t enableCount = 0;
         std::vector<std::string> enableIps;
         result = RDMADeviceHelper::GetEnableDeviceCount(mOptions.NetDeviceIpMask(), enableCount, enableIps,
-            mOptions.NetDeviceIpGroup());
+                                                        mOptions.NetDeviceIpGroup());
         if (result != NN_OK) {
             return result;
         }
@@ -188,15 +190,15 @@ NResult NetDriverRDMA::CreateContext()
         // choose the first matched ip
         mMatchIp = matchIps[0];
     }
-    RDMAGId tmpGid {};
+    RDMAGId tmpGid{};
     if ((result = RDMADeviceHelper::GetDeviceByIp(mMatchIp, tmpGid)) != 0) {
         RDMADeviceHelper::UnInitialize();
         NN_LOG_ERROR("Failed to get device by ip");
         return result;
     }
 
-    NN_LOG_DEBUG("gid found devIndex " << tmpGid.devIndex << ", gidIndex " << tmpGid.gid << ", RoCEVersion " <<
-        RDMADeviceHelper::RoCEVersionToStr(tmpGid.RoCEVersion));
+    NN_LOG_DEBUG("gid found devIndex " << tmpGid.devIndex << ", gidIndex " << tmpGid.gid << ", RoCEVersion "
+                                       << RDMADeviceHelper::RoCEVersionToStr(tmpGid.RoCEVersion));
     mBandWidth = tmpGid.bandWidth;
     // create context
     if ((result = RDMAContext::Create(mName, false, tmpGid, mContext)) != 0) {
@@ -236,7 +238,7 @@ NResult NetDriverRDMA::CreateSendMr()
     int result = 0;
     // create mr pool for send/receive and initialize
     if ((result = RDMAMemoryRegionFixedBuffer::Create(mName, mContext, mOptions.mrSendReceiveSegSize,
-        mOptions.mrSendReceiveSegCount, mDriverSendMR)) != 0) {
+                                                      mOptions.mrSendReceiveSegCount, mDriverSendMR)) != 0) {
         NN_LOG_ERROR("Failed to create mr for send/receive in NetDriverRDMA " << mName << ", result " << result);
         return result;
     }
@@ -264,8 +266,8 @@ NResult NetDriverRDMA::CreateOpCtxMemPool()
     auto result = mOpCtxMemPool->Initialize();
     if (result != NN_OK) {
         mOpCtxMemPool.Set(nullptr);
-        NN_LOG_ERROR("Failed to initialize memory pool for rdma op context pool " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to initialize memory pool for rdma op context pool " << mName
+                                                                                  << ", probably out of memory");
         return result;
     }
 
@@ -280,16 +282,16 @@ NResult NetDriverRDMA::CreateSglCtxMemPool()
     options.tcExpandBlkCnt = NN_NO64;
     mSglCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mSglCtxMemPool.Get() == nullptr) {
-        NN_LOG_ERROR("Failed to create memory pool for rdma sgl op context in driver " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to create memory pool for rdma sgl op context in driver " << mName
+                                                                                       << ", probably out of memory");
         return NN_INVALID_PARAM;
     }
 
     auto result = mSglCtxMemPool->Initialize();
     if (result != NN_OK) {
         mSglCtxMemPool.Set(nullptr);
-        NN_LOG_ERROR("Failed to initialize memory pool for rdma sgl op context in driver " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to initialize memory pool for rdma sgl op context in driver "
+                     << mName << ", probably out of memory");
         return result;
     }
 
@@ -361,9 +363,9 @@ NResult NetDriverRDMA::CreateWorkers()
     if (!(NetFunc::NN_ParseWorkersGroups(mOptions.WorkGroups(), workerGroups)) ||
         !(NetFunc::NN_ParseWorkerGroupsCpus(mOptions.WorkerGroupCpus(), workerGroupCpus)) ||
         !(NetFunc::NN_FinalizeWorkerGroupCpus(workerGroups, workerGroupCpus, mOptions.mode != NET_BUSY_POLLING,
-        flatWorkerCpus)) ||
+                                              flatWorkerCpus)) ||
         !(NetFunc::NN_ParseWorkersGroupsThreadPriority(mOptions.WorkerGroupThreadPriority(), workerThreadPriority,
-        workerGroups.size()))) {
+                                                       workerGroups.size()))) {
         NN_LOG_ERROR("Failed to parse worker or cpu groups");
         return NN_INVALID_PARAM;
     }
@@ -372,7 +374,7 @@ NResult NetDriverRDMA::CreateWorkers()
     options.SetValue(mOptions);
     if ((mOptions.workerThreadPriority != 0) && (!workerThreadPriority.empty())) {
         NN_LOG_WARN("Driver options 'workerThreadPriority' and 'workerGroupsThreadPriority' set all, preferential use "
-            "'workerGroupsThreadPriority'.");
+                    "'workerGroupsThreadPriority'.");
     }
 
     /* create workers */
@@ -390,8 +392,8 @@ NResult NetDriverRDMA::CreateWorkers()
                 options.threadPriority = workerThreadPriority[groupIndex];
             }
             RDMAWorker *worker = nullptr;
-            if (NN_UNLIKELY(
-                (result = RDMAWorker::Create(mName, mContext, options, mOpCtxMemPool, mSglCtxMemPool, worker)) != 0)) {
+            if (NN_UNLIKELY((result = RDMAWorker::Create(mName, mContext, options, mOpCtxMemPool, mSglCtxMemPool,
+                                                         worker)) != 0)) {
                 return result;
             }
 
@@ -569,8 +571,8 @@ NResult NetDriverRDMA::CreateMemoryRegion(uintptr_t address, uint64_t size, UBSH
     RDMAMemoryRegion *tmp = nullptr;
     auto result = RDMAMemoryRegion::Create(mName, mContext, address, size, tmp);
     if (NN_UNLIKELY(result != RR_OK)) {
-        NN_LOG_ERROR("Failed to create Memory region with ptr in NetDriverRDMA " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to create Memory region with ptr in NetDriverRDMA " << mName
+                                                                                 << ", probably out of memory");
         return result;
     }
 
@@ -580,8 +582,8 @@ NResult NetDriverRDMA::CreateMemoryRegion(uintptr_t address, uint64_t size, UBSH
     }
 
     if ((result = mMrChecker.Register(tmp->GetLKey(), tmp->GetAddress(), size)) != NN_OK) {
-        NN_LOG_ERROR("Failed to add memory region with ptr to range checker in driver" << mName <<
-            " for duplicate keys");
+        NN_LOG_ERROR("Failed to add memory region with ptr to range checker in driver" << mName
+                                                                                       << " for duplicate keys");
         delete tmp;
         return result;
     }
@@ -611,5 +613,5 @@ void NetDriverRDMA::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
     mr->UnInitialize();
 }
 } // namespace hcom
-}
+} // namespace ock
 #endif

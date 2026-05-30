@@ -40,7 +40,7 @@ using IBV_CREATE_QP = struct ibv_qp *(*)(struct ibv_pd *pd, struct ibv_qp_init_a
 using IBV_CLOSE_DEVICE = int (*)(struct ibv_context *context);
 using IBV_DEALLOC_PD = int (*)(struct ibv_pd *pd);
 using IBV_CREATE_CQ = struct ibv_cq *(*)(struct ibv_context *context, int cqe, void *cq_context,
-    struct ibv_comp_channel *channel, int comp_vector);
+                                         struct ibv_comp_channel *channel, int comp_vector);
 using IBV_DESTROY_COMP_CHANNEL = int (*)(struct ibv_comp_channel *channel);
 using IBV_DESTROY_CQ = int (*)(struct ibv_cq *cq);
 using IBV_ACK_CQ_EVENTS = void (*)(struct ibv_cq *cq, unsigned int nevents);
@@ -50,7 +50,7 @@ using IBV_DEREG_MR = int (*)(struct ibv_mr *mr);
 using IBV_QUERY_GID = int (*)(struct ibv_context *context, uint8_t port_num, int index, union ibv_gid *gid);
 using IBV_QUERY_DEVICE = int (*)(struct ibv_context *context, struct ibv_device_attr *device_attr);
 using IBV_REG_MR_IOVA2 = struct ibv_mr *(*)(struct ibv_pd *pd, void *addr, size_t length, uint64_t iova,
-    unsigned int access);
+                                            unsigned int access);
 using IBV_PORT_STATE_STR = const char *(*)(enum ibv_port_state port_state);
 
 class VerbsAPI {
@@ -99,7 +99,7 @@ private:
     ({                                                                                                \
         struct ibv_mr *ret;                                                                           \
         auto noIova2 = VerbsAPI::hcomInnerRegMrIOVA2 == nullptr;                                      \
-        if (((is_access_const) && ((access)&IBV_ACCESS_OPTIONAL_RANGE) == 0) || noIova2) {            \
+        if (((is_access_const) && ((access) & IBV_ACCESS_OPTIONAL_RANGE) == 0) || noIova2) {          \
             ret = VerbsAPI::hcomInnerRegMr((pd), (addr), (length), (access));                         \
         } else {                                                                                      \
             ret = VerbsAPI::hcomInnerRegMrIOVA2((pd), (addr), (length), (uintptr_t)(addr), (access)); \
@@ -108,30 +108,30 @@ private:
     })
 
 #define HCOM_IBV_INNER_REG_MR(pd, addr, length, access) \
-    HCOM_IBV_REG_MR(pd, addr, length, access, __builtin_constant_p(((access)&IBV_ACCESS_OPTIONAL_RANGE) == 0))
+    HCOM_IBV_REG_MR(pd, addr, length, access, __builtin_constant_p(((access) & IBV_ACCESS_OPTIONAL_RANGE) == 0))
 
 #ifndef verbs_get_ctx_op
-#define HCOM_IBV_INNER_QUERY_PORT(context, port_num, port_attr)           \
-    ({                                                                    \
-        int rc;                                                           \
-        bzero((port_attr), sizeof(*(port_attr)));                         \
-        rc = VerbsAPI::hcomInnerIbvQueryPort(context, port_num,           \
-            reinterpret_cast<struct _compat_ibv_port_attr *>(port_attr)); \
-        rc;                                                               \
+#define HCOM_IBV_INNER_QUERY_PORT(context, port_num, port_attr)                                            \
+    ({                                                                                                     \
+        int rc;                                                                                            \
+        bzero((port_attr), sizeof(*(port_attr)));                                                          \
+        rc = VerbsAPI::hcomInnerIbvQueryPort(context, port_num,                                            \
+                                             reinterpret_cast<struct _compat_ibv_port_attr *>(port_attr)); \
+        rc;                                                                                                \
     })
 #else
-#define HCOM_IBV_INNER_QUERY_PORT(context, port_num, port_attr)                        \
-    ({                                                                                 \
-        struct verbs_context *vctx = verbs_get_ctx_op(context, query_port);            \
-        int rc;                                                                        \
-        if (!vctx) {                                                                   \
-            bzero((port_attr), sizeof(*(port_attr)));                                  \
-            rc = VerbsAPI::hcomInnerIbvQueryPort(context, port_num,                    \
-                reinterpret_cast<struct _compat_ibv_port_attr *>(port_attr));          \
-        } else {                                                                       \
-            rc = vctx->query_port(context, port_num, port_attr, sizeof(*(port_attr))); \
-        }                                                                              \
-        rc;                                                                            \
+#define HCOM_IBV_INNER_QUERY_PORT(context, port_num, port_attr)                                                \
+    ({                                                                                                         \
+        struct verbs_context *vctx = verbs_get_ctx_op(context, query_port);                                    \
+        int rc;                                                                                                \
+        if (!vctx) {                                                                                           \
+            bzero((port_attr), sizeof(*(port_attr)));                                                          \
+            rc = VerbsAPI::hcomInnerIbvQueryPort(context, port_num,                                            \
+                                                 reinterpret_cast<struct _compat_ibv_port_attr *>(port_attr)); \
+        } else {                                                                                               \
+            rc = vctx->query_port(context, port_num, port_attr, sizeof(*(port_attr)));                         \
+        }                                                                                                      \
+        rc;                                                                                                    \
     })
 #endif
 #endif

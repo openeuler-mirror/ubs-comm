@@ -97,8 +97,8 @@ private:
     NetMemPoolFixedPtr mOpCtxMemPool = nullptr;
     NetMemPoolFixedPtr mSglCtxMemPool = nullptr;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // _OCK_NET_DRIVER_RDMA_123423434341233_H

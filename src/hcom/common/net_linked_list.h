@@ -14,7 +14,8 @@
 
 namespace ock {
 namespace hcom {
-template <typename T> struct NetLinkedListNode {
+template <typename T>
+struct NetLinkedListNode {
     T data;
     NetLinkedListNode *prev;
     NetLinkedListNode *next;
@@ -60,7 +61,8 @@ template <typename T> struct NetLinkedListNode {
     }
 };
 
-template <typename T> struct NetLinkedList {
+template <typename T>
+struct NetLinkedList {
     NetLinkedListNode<T> head;
 
     NetLinkedList() = default;
@@ -82,6 +84,6 @@ template <typename T> struct NetLinkedList {
         return head.next == &head;
     }
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_LINKEDLIST_H

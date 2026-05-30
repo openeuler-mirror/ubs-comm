@@ -10,20 +10,20 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <cassert>
-#include <unistd.h>
-#include <cstdlib>
-#include <cstdio>
-#include <cmath>
-#include <mpi.h>
-#include <cstring>
-#include <cstdint>
 #include <getopt.h>
+#include <mpi.h>
 #include <pthread.h>
-#include <cinttypes>
 #include <sys/time.h>
-#include <climits>
 #include <sys/types.h>
+#include <unistd.h>
+#include <cassert>
+#include <cinttypes>
+#include <climits>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include "hcom_service.h"
 namespace ock {
 namespace hcom {
@@ -48,25 +48,25 @@ uint64_t g_startTimeServer = 0;
 uint64_t g_endTimeServer = 0;
 int g_numprocs = 0;
 int g_rank;
-#define MPI_CHECK(stmt)                                                                           \
-    do {                                                                                          \
-        int mpiErrno = (stmt);                                                                    \
-        if (MPI_SUCCESS != mpiErrno) {                                                            \
-            fprintf(stderr, "[%s:%d] MPI call failed with %d \n", __FILE__, __LINE__, mpiErrno);  \
-            exit(EXIT_FAILURE);                                                                   \
-        }                                                                                         \
-        assert(MPI_SUCCESS == mpiErrno);                                                          \
+#define MPI_CHECK(stmt)                                                                          \
+    do {                                                                                         \
+        int mpiErrno = (stmt);                                                                   \
+        if (MPI_SUCCESS != mpiErrno) {                                                           \
+            fprintf(stderr, "[%s:%d] MPI call failed with %d \n", __FILE__, __LINE__, mpiErrno); \
+            exit(EXIT_FAILURE);                                                                  \
+        }                                                                                        \
+        assert(MPI_SUCCESS == mpiErrno);                                                         \
     } while (0)
 
 int ValidateArguments(int argc, char *argv[])
 {
     const char *usage = "usage\n"
-        "        -d, --driver,                 driver type, 0 means rdma, 1 means tcp\n"
-        "        -i, --ip,                     server ip mask, e.g. 10.175.118.1\n"
-        "        -p, --port,                   server port, by default 9981\n"
-        "        -s, --io size ,               max data size\n"
-        "        -w, --worker num ,            worker num\n"
-        "        -c, --cpuId,                  async worker\n";
+                        "        -d, --driver,                 driver type, 0 means rdma, 1 means tcp\n"
+                        "        -i, --ip,                     server ip mask, e.g. 10.175.118.1\n"
+                        "        -p, --port,                   server port, by default 9981\n"
+                        "        -s, --io size ,               max data size\n"
+                        "        -w, --worker num ,            worker num\n"
+                        "        -c, --cpuId,                  async worker\n";
 
     if (argc != NN_NO13) {
         printf("invalid param, %s, for example %s -d 0 -i rdma_nic_ip -p 9981 -s 1024 -w 1 -c 5\n", usage, argv[0]);
@@ -139,8 +139,8 @@ int NewChannel(const std::string &ipPort, const NetChannelPtr &ch, const std::st
     if (g_count == g_numprocs - 1) {
         g_endTimeServer = MONOTONIC_TIME_NS();
         double s = static_cast<double>(g_endTimeServer - g_startTimeServer) / 1000000000;
-        std::cout << "all connect success: " << s << " s, count " << g_count <<
-        ", numprocs " << g_numprocs << std::endl;
+        std::cout << "all connect success: " << s << " s, count " << g_count << ", numprocs " << g_numprocs
+                  << std::endl;
     }
     NN_LOG_INFO("new channel " << ch->Id() << " call from " << ipPort << " payload: " << payload);
     return 0;
@@ -359,5 +359,5 @@ int main(int argc, char *argv[])
 
     return EXIT_SUCCESS;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

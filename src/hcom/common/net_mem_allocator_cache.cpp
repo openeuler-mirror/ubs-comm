@@ -9,8 +9,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "net_common.h"
 #include "net_mem_allocator_cache.h"
+#include "net_common.h"
 
 namespace ock {
 namespace hcom {
@@ -38,15 +38,16 @@ NResult NetAllocatorCache::Initialize(const UBSHcomNetMemoryAllocatorOptions &op
 
     /* validate cache tier count */
     if (options.cacheTierCount == NN_NO0 || options.cacheTierCount > NN_NO8192) {
-        NN_LOG_ERROR("Invalid cacheTierCount " << options.cacheTierCount << " for allocator cache, which should <= " <<
-            NN_NO8192 << " and != " << NN_NO0);
+        NN_LOG_ERROR("Invalid cacheTierCount " << options.cacheTierCount << " for allocator cache, which should <= "
+                                               << NN_NO8192 << " and != " << NN_NO0);
         return NN_INVALID_PARAM;
     }
 
     /* validate cache block count in each tier and assign */
     if (options.cacheBlockCountPerTier < NN_NO4 || options.cacheBlockCountPerTier > NN_NO8192) {
-        NN_LOG_ERROR("Invalid cacheBlockCountPerTier " << options.cacheBlockCountPerTier <<
-            " for allocate cache, which should between " << NN_NO4 << "~" << NN_NO8192);
+        NN_LOG_ERROR("Invalid cacheBlockCountPerTier " << options.cacheBlockCountPerTier
+                                                       << " for allocate cache, which should between " << NN_NO4 << "~"
+                                                       << NN_NO8192);
         return NN_INVALID_PARAM;
     }
     mBlockCacheCountPerTier = options.cacheBlockCountPerTier;
@@ -66,9 +67,10 @@ NResult NetAllocatorCache::Initialize(const UBSHcomNetMemoryAllocatorOptions &op
         mMaxCacheBlockSize = mBaseBlockSize * mBlockTierCount;
     } else if (options.cacheTierPolicy == TIER_POWER) {
         if (mBlockTierCount > NN_NO31) {
-            NN_LOG_ERROR("Invalid cacheTierCount " << options.cacheTierCount <<
-                " for allocator cache, since the cacheTierPolicy is TIER_POWER, then it should <= " << NN_NO31 <<
-                " and != " << NN_NO0);
+            NN_LOG_ERROR("Invalid cacheTierCount "
+                         << options.cacheTierCount
+                         << " for allocator cache, since the cacheTierPolicy is TIER_POWER, then it should <= "
+                         << NN_NO31 << " and != " << NN_NO0);
             return NN_INVALID_PARAM;
         }
         mTierChooseFunc = &NetCacheTierFuncPower;
@@ -111,10 +113,10 @@ NResult NetAllocatorCache::Initialize(const UBSHcomNetMemoryAllocatorOptions &op
         }
     }
 
-    NN_LOG_INFO("Initialized allocator cache, aligned " << mAligned << ", tierCount " << mBlockTierCount <<
-        ", blockCountPerTier " << mBlockCacheCountPerTier << ", minBlockSize " << mBaseBlockSize <<
-        ", maxCacheBlockSize " << mMaxCacheBlockSize << ", tier bucket heads occupied memory " <<
-        (sizeof(NetMemAllocCacheLinkNode) * mBlockTierCount));
+    NN_LOG_INFO("Initialized allocator cache, aligned "
+                << mAligned << ", tierCount " << mBlockTierCount << ", blockCountPerTier " << mBlockCacheCountPerTier
+                << ", minBlockSize " << mBaseBlockSize << ", maxCacheBlockSize " << mMaxCacheBlockSize
+                << ", tier bucket heads occupied memory " << (sizeof(NetMemAllocCacheLinkNode) * mBlockTierCount));
 
     return NN_OK;
 }
@@ -136,5 +138,5 @@ void NetAllocatorCache::UnInitialize()
         mTieredBlockHead = nullptr;
     }
 }
-}
-}
+} // namespace hcom
+} // namespace ock

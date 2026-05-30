@@ -12,17 +12,17 @@
 #ifndef HCOM_TRACE_H
 #define HCOM_TRACE_H
 
-#include <mutex>
-#include <iomanip>
-#include <sstream>
 #include <functional>
+#include <iomanip>
+#include <mutex>
+#include <sstream>
 #include "hcom_def.h"
 #include "hcom_utils.h"
 #include "trace/htracer.h"
 
 namespace ock {
 namespace hcom {
-#define GENERATE_TRACE_ID(level, innerId) ((level) << NN_NO24 | ((innerId)&0xFFFFFF))
+#define GENERATE_TRACE_ID(level, innerId) ((level) << NN_NO24 | ((innerId) & 0xFFFFFF))
 
 enum NetTraceLevel : uint8_t {
     LEVEL0 = 0, // disable
@@ -526,7 +526,7 @@ public:
 
     // Disable copy and assignment
     TraceDefer(const TraceDefer &) = delete;
-    TraceDefer &operator = (const TraceDefer &) = delete;
+    TraceDefer &operator=(const TraceDefer &) = delete;
 
 private:
     std::function<void()> mBeginFunc;
@@ -538,7 +538,7 @@ private:
     NetTracePointIdWithLevel level = tracePoint;                                                           \
     std::string name = #tracePoint;                                                                        \
     TraceDefer defer([level, name, &tpBegin]() { TRACE_DELAY_DEFER_BEGIN(level, name.c_str(), tpBegin); }, \
-        [level, &result, &tpBegin]() { TRACE_DELAY_DEFER_END(level, (result), tpBegin); })
-}
-}
+                     [level, &result, &tpBegin]() { TRACE_DELAY_DEFER_END(level, (result), tpBegin); })
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_TRACE_H

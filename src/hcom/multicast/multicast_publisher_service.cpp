@@ -2,12 +2,12 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
-#include "multicast_publisher_service_imp.h"
+#include "include/multicast_publisher_service.h"
 #include "multicast_periodic_manager.h"
+#include "multicast_publisher_service_imp.h"
 #include "net_common.h"
 #include "net_oob.h"
 #include "utils/multicast_utils.h"
-#include "include/multicast_publisher_service.h"
 
 namespace ock {
 namespace hcom {
@@ -84,9 +84,8 @@ int32_t PublisherService::Destroy(const std::string &name)
     return SER_OK;
 }
 
-
 static int DefaultNewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                              const std::string &payload)
 {
     NN_LOG_INFO("new ep request!");
     return 0;
@@ -115,5 +114,5 @@ static int DefaultOneSideDone(const ock::hcom::UBSHcomNetRequestContext &ctx)
     NN_LOG_INFO("request oneside done!");
     return 0;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

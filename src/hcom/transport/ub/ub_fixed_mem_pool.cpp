@@ -27,8 +27,8 @@ UResult UBFixedMemPool::Initialize()
         UnInitialize();
         return UB_ERROR;
     }
-    NN_LOG_INFO("UB mempool initialized total size = " << mTotalSize << " blk size = " << mBlkSize << " blk cnt = "
-        << mBlkCnt);
+    NN_LOG_INFO("UB mempool initialized total size = " << mTotalSize << " blk size = " << mBlkSize
+                                                       << " blk cnt = " << mBlkCnt);
     return UB_OK;
 }
 
@@ -75,6 +75,6 @@ bool UBFixedMemPool::ReturnBuffer(uintptr_t buf)
     mHead.next = tmp;
     return true;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

@@ -10,11 +10,11 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "test_net_sock_endpoint.h"
 #include "gtest/gtest.h"
 #include "hcom.h"
 #include "hcom_def.h"
 #include "net_sock_common.h"
-#include "test_net_sock_endpoint.h"
 
 using namespace ock::hcom;
 TestNetSockEndpoint::TestNetSockEndpoint() {}
@@ -89,8 +89,8 @@ static int RequestReceivedSglServer(const UBSHcomNetRequestContext &ctx)
 
     NN_LOG_INFO("request rsp Mr info");
     for (uint16_t i = 0; i < NN_NO4; i++) {
-        NN_LOG_INFO("idx:" << i << " key:" << localMrInfo[i].lKey << " address:" << localMrInfo[i].lAddress <<
-            " size: " << localMrInfo[i].size);
+        NN_LOG_INFO("idx:" << i << " key:" << localMrInfo[i].lKey << " address:" << localMrInfo[i].lAddress
+                           << " size: " << localMrInfo[i].size);
     }
     return 0;
 }
@@ -102,8 +102,8 @@ static int RequestReceivedSglClient(const UBSHcomNetRequestContext &ctx)
     memcpy(remoteMrInfo, ctx.Message()->Data(), ctx.Message()->DataLen());
     NN_LOG_INFO("get remote Mr info");
     for (uint16_t i = 0; i < NN_NO4; i++) {
-        NN_LOG_INFO("idx:" << i << " key:" << remoteMrInfo[i].lKey << " address:" << remoteMrInfo[i].lAddress <<
-            " size" << remoteMrInfo[i].size);
+        NN_LOG_INFO("idx:" << i << " key:" << remoteMrInfo[i].lKey << " address:" << remoteMrInfo[i].lAddress << " size"
+                           << remoteMrInfo[i].size);
     }
 
     sem_post(&sem);
@@ -164,7 +164,7 @@ static bool CertCallback(const std::string &name, std::string &value)
 }
 
 static bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                               UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -176,7 +176,7 @@ static bool PrivateKeyCallback(const std::string &name, std::string &value, void
 }
 
 static bool CACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                       UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = certPath1 + "/CA/cacert.pem";
     cb = std::bind(&Verify, std::placeholders::_1, std::placeholders::_2);
@@ -184,7 +184,8 @@ static bool CACallback(const std::string &name, std::string &caPath, std::string
 }
 
 static bool CreateServerDriver(UBSHcomNetDriver *&driver, uint16_t port,
-    int (*reqHandler)(const UBSHcomNetRequestContext &), bool enableTls, uint32_t segSize = 1024, uint16_t buffSize = 0)
+                               int (*reqHandler)(const UBSHcomNetRequestContext &), bool enableTls,
+                               uint32_t segSize = 1024, uint16_t buffSize = 0)
 {
     auto name = "server-" + std::to_string(port);
 
@@ -194,7 +195,7 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, uint16_t port,
         return false;
     }
 
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.SetNetDeviceIpMask(IP_SEG);
     options.enableTls = enableTls;
@@ -215,9 +216,10 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, uint16_t port,
         driver->RegisterTLSCertificationCallback(
             std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
         driver->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
-            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
         driver->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1,
-            std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                        std::placeholders::_2, std::placeholders::_3,
+                                                        std::placeholders::_4, std::placeholders::_5));
     }
 
     driver->OobIpAndPort(BASE_IP, port);
@@ -238,7 +240,7 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, uint16_t port,
 }
 
 static bool CreateClientDriver(UBSHcomNetDriver *&driver, uint16_t port,
-    int (*reqHandler)(const UBSHcomNetRequestContext &), bool enableTls)
+                               int (*reqHandler)(const UBSHcomNetRequestContext &), bool enableTls)
 {
     auto name = "client-" + std::to_string(port);
 
@@ -248,7 +250,7 @@ static bool CreateClientDriver(UBSHcomNetDriver *&driver, uint16_t port,
         return false;
     }
 
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.SetNetDeviceIpMask(IP_SEG);
     options.enableTls = enableTls;
@@ -263,9 +265,10 @@ static bool CreateClientDriver(UBSHcomNetDriver *&driver, uint16_t port,
         driver->RegisterTLSCertificationCallback(
             std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
         driver->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
-            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
         driver->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1,
-            std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                        std::placeholders::_2, std::placeholders::_3,
+                                                        std::placeholders::_4, std::placeholders::_5));
     }
 
     driver->OobIpAndPort(BASE_IP, port);
@@ -286,7 +289,7 @@ static bool CreateClientDriver(UBSHcomNetDriver *&driver, uint16_t port,
 }
 
 static bool CreateClientDriverSync(UBSHcomNetDriver *&driver, uint16_t port, uint32_t segSize = 1024,
-    uint16_t buffSize = 0)
+                                   uint16_t buffSize = 0)
 {
     auto name = "client-" + std::to_string(port);
 
@@ -295,7 +298,7 @@ static bool CreateClientDriverSync(UBSHcomNetDriver *&driver, uint16_t port, uin
         NN_LOG_ERROR("failed to create clientDriver already created");
         return false;
     }
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.mrSendReceiveSegCount = NN_NO10;
     options.mrSendReceiveSegSize = segSize;
@@ -379,7 +382,7 @@ TEST_F(TestNetSockEndpoint, PostSendRetry)
     result = ep->WaitCompletion();
     EXPECT_EQ(NN_INVALID_OPERATION, result);
 
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     result = ep->Receive(NN_NO2, respCtx);
     EXPECT_EQ(NN_INVALID_OPERATION, result);
 
@@ -496,10 +499,10 @@ TEST_F(TestNetSockEndpoint, PostReadWriteRetry)
     req.rKey = localMrInfo[0].lKey;
     req.size = localMrInfo[0].size;
 
-    NN_LOG_INFO("++++++++++++rAddress = " << req.rAddress << ", value = " <<
-        *(reinterpret_cast<uint64_t *>((void *)req.rAddress)));
-    NN_LOG_INFO("++++++++++++lAddress = " << req.lAddress << ", value = " <<
-        *(reinterpret_cast<uint64_t *>((void *)req.lAddress)));
+    NN_LOG_INFO("++++++++++++rAddress = " << req.rAddress
+                                          << ", value = " << *(reinterpret_cast<uint64_t *>((void *)req.rAddress)));
+    NN_LOG_INFO("++++++++++++lAddress = " << req.lAddress
+                                          << ", value = " << *(reinterpret_cast<uint64_t *>((void *)req.lAddress)));
     result = ep->PostRead(req);
     sem_wait(&sem);
 
@@ -512,15 +515,14 @@ TEST_F(TestNetSockEndpoint, PostReadWriteRetry)
     result = ep->PostWrite(req);
     sem_wait(&sem);
 
-    MOCKER_CPP(&SockWorker::PostRead, SResult(SockWorker::*)(Sock *, SockTransHeader &,
-        const UBSHcomNetTransRequest &))
+    MOCKER_CPP(&SockWorker::PostRead, SResult(SockWorker::*)(Sock *, SockTransHeader &, const UBSHcomNetTransRequest &))
         .defaults()
         .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostRead(req);
     EXPECT_EQ(SS_ERROR, result);
 
-    MOCKER_CPP(&SockWorker::PostWrite, SResult(SockWorker::*)(Sock *, SockTransHeader &,
-        const UBSHcomNetTransRequest &))
+    MOCKER_CPP(&SockWorker::PostWrite,
+               SResult(SockWorker::*)(Sock *, SockTransHeader &, const UBSHcomNetTransRequest &))
         .defaults()
         .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostWrite(req);
@@ -584,15 +586,15 @@ TEST_F(TestNetSockEndpoint, PostReadWriteSglRetry)
     result = ep->PostWrite(reqWrite);
     sem_wait(&sem);
 
-    MOCKER_CPP(&SockWorker::PostRead, SResult(SockWorker::*)(Sock *, SockTransHeader &,
-        const UBSHcomNetTransSglRequest &))
+    MOCKER_CPP(&SockWorker::PostRead,
+               SResult(SockWorker::*)(Sock *, SockTransHeader &, const UBSHcomNetTransSglRequest &))
         .defaults()
         .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostRead(reqRead);
     EXPECT_EQ(SS_ERROR, result);
 
-    MOCKER_CPP(&SockWorker::PostWrite, SResult(SockWorker::*)(Sock *, SockTransHeader &,
-        const UBSHcomNetTransSglRequest &))
+    MOCKER_CPP(&SockWorker::PostWrite,
+               SResult(SockWorker::*)(Sock *, SockTransHeader &, const UBSHcomNetTransSglRequest &))
         .defaults()
         .will(returnObjectList(static_cast<int>(SS_TCP_RETRY), static_cast<int>(SS_ERROR)));
     result = ep->PostWrite(reqRead);
@@ -628,11 +630,11 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRetry)
     result = ep->PostSend(1, req);
     EXPECT_EQ(SS_OK, result);
 
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     result = ep->Receive(NN_NO2, respCtx);
     std::string resp((char *)respCtx.Message()->Data(), respCtx.Header().dataLength);
-    NN_LOG_INFO("server response received - " << respCtx.Header().opCode << ", dataLen " <<
-        respCtx.Header().dataLength);
+    NN_LOG_INFO("server response received - " << respCtx.Header().opCode << ", dataLen "
+                                              << respCtx.Header().dataLength);
     EXPECT_EQ(SS_OK, result);
 
     UBSHcomNetTransOpInfo innerOpInfo(0, 0, 0, NTH_TWO_SIDE);
@@ -669,11 +671,9 @@ TEST_F(TestNetSockEndpoint, SyncReceiveRetry)
 
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
 
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
 
-    MOCKER_CPP(&Sock::PostReceiveHeader)
-        .defaults()
-        .will(returnObjectList(static_cast<int>(SS_ERROR), 0, 0));
+    MOCKER_CPP(&Sock::PostReceiveHeader).defaults().will(returnObjectList(static_cast<int>(SS_ERROR), 0, 0));
     result = ep->Receive(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -708,11 +708,11 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRawRetry)
     result = ep->PostSendRaw(req, 1);
     EXPECT_EQ(SS_OK, result);
 
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     result = ep->ReceiveRaw(-1, respCtx);
     std::string resp((char *)respCtx.Message()->Data(), respCtx.Header().dataLength);
-    NN_LOG_INFO("server response received - " << respCtx.Header().opCode << ", dataLen " <<
-        respCtx.Header().dataLength);
+    NN_LOG_INFO("server response received - " << respCtx.Header().opCode << ", dataLen "
+                                              << respCtx.Header().dataLength);
     EXPECT_EQ(SS_OK, result);
 
     MOCKER_CPP(&Sock::PostSend, SResult(Sock::*)(SockTransHeader &, const UBSHcomNetTransRequest &))
@@ -740,11 +740,9 @@ TEST_F(TestNetSockEndpoint, SyncReceiveRawRetry)
     clientDriver->Connect("hello server", ep, NET_EP_SELF_POLLING);
 
     std::string msg = "Hello server, this is a message";
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
 
-    MOCKER_CPP(&Sock::PostReceiveHeader)
-        .defaults()
-        .will(returnObjectList(static_cast<int>(SS_ERROR), 0, 0));
+    MOCKER_CPP(&Sock::PostReceiveHeader).defaults().will(returnObjectList(static_cast<int>(SS_ERROR), 0, 0));
     result = ep->ReceiveRaw(NN_NO4, respCtx);
     EXPECT_EQ(SS_ERROR, result);
 
@@ -789,7 +787,7 @@ TEST_F(TestNetSockEndpoint, SyncPostSendRawSglRetry)
     }
 
     UBSHcomNetTransSglRequest req(iov, NN_NO4, 0);
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
 
     result = ep->PostSendRawSgl(req, 0);
     EXPECT_EQ(SS_OK, result);
@@ -835,7 +833,7 @@ TEST_F(TestNetSockEndpoint, SyncPostReadWriteRetry)
     result = ep->PostSend(1, rsp);
     EXPECT_EQ(SS_OK, result);
 
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     result = ep->Receive(respCtx);
     EXPECT_EQ(SS_OK, result);
 
@@ -907,7 +905,7 @@ TEST_F(TestNetSockEndpoint, SyncPostReadWriteSglRetry)
     result = ep->PostSend(1, rsp);
     EXPECT_EQ(SS_OK, result);
 
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     result = ep->Receive(respCtx);
     EXPECT_EQ(SS_OK, result);
 
@@ -920,8 +918,8 @@ TEST_F(TestNetSockEndpoint, SyncPostReadWriteSglRetry)
         iov[i].lKey = clientMrInfo[i].lKey;
         iov[i].rKey = localMrInfo[i].lKey;
         iov[i].size = localMrInfo[i].size;
-        NN_LOG_INFO("idx:" << i << " lKey:" << iov[i].lKey << " lAddress:" << iov[i].lAddress << " rKey:" <<
-            iov[i].rKey << " rAddress:" << iov[i].rAddress << " size:" << iov[i].size);
+        NN_LOG_INFO("idx:" << i << " lKey:" << iov[i].lKey << " lAddress:" << iov[i].lAddress << " rKey:" << iov[i].rKey
+                           << " rAddress:" << iov[i].rAddress << " size:" << iov[i].size);
     }
     UBSHcomNetTransSglRequest reqRead(iov, NN_NO4, 0);
     result = ep->PostRead(reqRead);

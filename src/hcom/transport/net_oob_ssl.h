@@ -48,7 +48,7 @@ public:
     NResult SSLClientRecvHandler(int fd);
 
     void SetTLSCallback(const UBSHcomTLSCertificationCallback &certCB, const UBSHcomTLSPrivateKeyCallback &keyCB,
-        const UBSHcomTLSCaCallback &caCB)
+                        const UBSHcomTLSCaCallback &caCB)
     {
         mCertCallback = certCB;
         mKeyCallback = keyCB;
@@ -104,17 +104,24 @@ protected:
 class OOBSSLServer : public OOBTCPServer {
 public:
     OOBSSLServer(NetDriverOobType t, const std::string &ipOrName, uint16_t portOrPerm,
-        UBSHcomTLSPrivateKeyCallback &keyCB, UBSHcomTLSCertificationCallback &certCB, UBSHcomTLSCaCallback &caCB)
-        : OOBTCPServer(t, ipOrName, portOrPerm), mTlsPrivateKeyCb(keyCB), mTlsCertCb(certCB), mTlsCaCallback(caCB)
-    {}
+                 UBSHcomTLSPrivateKeyCallback &keyCB, UBSHcomTLSCertificationCallback &certCB,
+                 UBSHcomTLSCaCallback &caCB)
+        : OOBTCPServer(t, ipOrName, portOrPerm),
+          mTlsPrivateKeyCb(keyCB),
+          mTlsCertCb(certCB),
+          mTlsCaCallback(caCB)
+    {
+    }
 
     OOBSSLServer(NetDriverOobType t, const std::string &ipOrName, uint16_t portOrPerm, bool isCheck,
-        UBSHcomTLSPrivateKeyCallback &keyCB, UBSHcomTLSCertificationCallback &certCB, UBSHcomTLSCaCallback &caCB)
+                 UBSHcomTLSPrivateKeyCallback &keyCB, UBSHcomTLSCertificationCallback &certCB,
+                 UBSHcomTLSCaCallback &caCB)
         : OOBTCPServer(t, ipOrName, portOrPerm, isCheck),
           mTlsPrivateKeyCb(keyCB),
           mTlsCertCb(certCB),
           mTlsCaCallback(caCB)
-    {}
+    {
+    }
 
     ~OOBSSLServer() override = default;
 
@@ -134,7 +141,7 @@ public:
     }
 
     inline void SetPSKCallback(const UBSHcomPskFindSessionCb &pskFindSessionCb,
-        const UBSHcomPskUseSessionCb &pskUseSessionCb)
+                               const UBSHcomPskUseSessionCb &pskUseSessionCb)
     {
         mPskFindSessionCb = pskFindSessionCb;
         mPskUseSessionCb = pskUseSessionCb;
@@ -159,9 +166,14 @@ private:
 class OOBSSLClient : public OOBTCPClient {
 public:
     OOBSSLClient(NetDriverOobType t, std::string serverIpOrName, uint16_t serverPort,
-        UBSHcomTLSPrivateKeyCallback &keyCB, UBSHcomTLSCertificationCallback &certCB, UBSHcomTLSCaCallback &caCB)
-        : OOBTCPClient(t, serverIpOrName, serverPort), mTlsCaCallback(caCB), mTlsCertCb(certCB), mTlsPrivateKeyCb(keyCB)
-    {}
+                 UBSHcomTLSPrivateKeyCallback &keyCB, UBSHcomTLSCertificationCallback &certCB,
+                 UBSHcomTLSCaCallback &caCB)
+        : OOBTCPClient(t, serverIpOrName, serverPort),
+          mTlsCaCallback(caCB),
+          mTlsCertCb(certCB),
+          mTlsPrivateKeyCb(keyCB)
+    {
+    }
 
     ~OOBSSLClient() override = default;
 
@@ -188,7 +200,7 @@ public:
     }
 
     inline void SetPSKCallback(const UBSHcomPskFindSessionCb &pskFindSessionCb,
-        const UBSHcomPskUseSessionCb &pskUseSessionCb)
+                               const UBSHcomPskUseSessionCb &pskUseSessionCb)
     {
         mPskFindSessionCb = pskFindSessionCb;
         mPskUseSessionCb = pskUseSessionCb;
@@ -203,7 +215,7 @@ private:
 
     UBSHcomPskFindSessionCb mPskFindSessionCb = nullptr;
     UBSHcomPskUseSessionCb mPskUseSessionCb = nullptr;
-    OOBSSLConnection *mOobConn {};
+    OOBSSLConnection *mOobConn{};
 };
 
 class TlsConnectCbTask : public ConnectCbTask {
@@ -218,7 +230,7 @@ public:
     }
 
     void SetTlsCb(UBSHcomTLSCertificationCallback certCb, UBSHcomTLSPrivateKeyCallback privateKeyCb,
-        UBSHcomTLSCaCallback caCb)
+                  UBSHcomTLSCaCallback caCb)
     {
         mTlsCertCb = certCb;
         mTlsPrivateKeyCb = privateKeyCb;
@@ -249,7 +261,7 @@ private:
     UBSHcomPskFindSessionCb mPskFindSessionCb = nullptr;
     UBSHcomPskUseSessionCb mPskUseSessionCb = nullptr;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_OOB_SSL_12334324233_H

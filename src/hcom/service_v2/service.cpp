@@ -11,18 +11,18 @@
  */
 #include "hcom_service.h"
 
+#include <linux/limits.h>
 #include <cstddef>
 #include <mutex>
 #include <new>
-#include <linux/limits.h>
 
 #include "hcom.h"
-#include "hcom_log.h"
 #include "hcom_def.h"
 #include "hcom_err.h"
+#include "hcom_log.h"
 #include "hcom_service_def.h"
-#include "service_imp.h"
 #include "net_param_validator.h"
+#include "service_imp.h"
 
 namespace ock {
 namespace hcom {
@@ -38,8 +38,7 @@ static inline bool HcomServiceCreateCheck(const UBSHcomServiceOptions &opt)
         NN_LOG_ERROR("Invalid maxSendDataSize: " << opt.maxSendRecvDataSize);
         return false;
     }
-    if (NN_UNLIKELY(opt.workerGroupMode != NET_BUSY_POLLING
-            && opt.workerGroupMode != NET_EVENT_POLLING)) {
+    if (NN_UNLIKELY(opt.workerGroupMode != NET_BUSY_POLLING && opt.workerGroupMode != NET_EVENT_POLLING)) {
         NN_LOG_ERROR("Invalid workerGroupMode: " << static_cast<uint32_t>(opt.workerGroupMode));
         return false;
     }
@@ -51,7 +50,7 @@ static inline bool HcomServiceCreateCheck(const UBSHcomServiceOptions &opt)
 }
 
 UBSHcomService *UBSHcomService::Create(UBSHcomServiceProtocol t, const std::string &name,
-    const UBSHcomServiceOptions &opt)
+                                       const UBSHcomServiceOptions &opt)
 {
     if (NN_UNLIKELY(!HcomServiceCreateCheck(opt))) {
         NN_LOG_ERROR("invalid options for service create");
@@ -112,5 +111,5 @@ int32_t UBSHcomService::Destroy(const std::string &name)
     return SER_OK;
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

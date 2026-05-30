@@ -11,20 +11,20 @@
  */
 
 #ifdef RDMA_BUILD_ENABLED
+#include "test_rdma.h"
 #include <gtest/gtest.h>
-#include "mockcpp/mockcpp.hpp"
-#include "cstring"
-#include "hcom.h"
 #include "common/net_util.h"
-#include "transport/rdma/verbs/net_rdma_sync_endpoint.h"
-#include "transport/rdma/verbs/net_rdma_async_endpoint.h"
+#include "cstring"
+#include "fake_ibv.h"
+#include "hcom.h"
+#include "mockcpp/mockcpp.hpp"
 #include "transport/rdma/rdma_mr_dm_buf.h"
 #include "transport/rdma/rdma_mr_fixed_buf.h"
-#include "transport/rdma/verbs/rdma_worker.h"
-#include "fake_ibv.h"
+#include "transport/rdma/verbs/net_rdma_async_endpoint.h"
 #include "transport/rdma/verbs/net_rdma_driver.h"
+#include "transport/rdma/verbs/net_rdma_sync_endpoint.h"
+#include "transport/rdma/verbs/rdma_worker.h"
 #include "ut_helper.h"
-#include "test_rdma.h"
 
 TestCaseRdma::TestCaseRdma() {}
 
@@ -111,8 +111,8 @@ int ServerRequestReceived(const UBSHcomNetRequestContext &ctx)
 
             NN_LOG_INFO("request rsp Mr info");
             for (uint16_t i = 0; i < NN_NO4; i++) {
-                NN_LOG_TRACE_INFO("idx:" << i << " key:" << serverLocalMrInfo[i].lKey << " address:" <<
-                    serverLocalMrInfo[i].lAddress << " size" << serverLocalMrInfo[i].size);
+                NN_LOG_TRACE_INFO("idx:" << i << " key:" << serverLocalMrInfo[i].lKey << " address:"
+                                         << serverLocalMrInfo[i].lAddress << " size" << serverLocalMrInfo[i].size);
             }
         } else if (ctx.Header().opCode == CHECK_SYNC_RESPONSE) {
             uint64_t *readValue = reinterpret_cast<uint64_t *>((void *)(ctx.Message()->Data()));
@@ -162,7 +162,6 @@ int ServerOneSideDone(const UBSHcomNetRequestContext &ctx)
     return 0;
 }
 
-
 bool ServerCreateDriver()
 {
     if (serverDriver != nullptr) {
@@ -176,7 +175,7 @@ bool ServerCreateDriver()
         return false;
     }
 
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING; // 只支持EVENT模式
     options.mrSendReceiveSegSize = NN_NO1024;
     options.mrSendReceiveSegCount = NN_NO1024;
@@ -256,8 +255,8 @@ int ClientRequestReceived(const UBSHcomNetRequestContext &ctx)
             memcpy(remoteMrInfo, ctx.Message()->Data(), ctx.Message()->DataLen());
             NN_LOG_INFO("get remote Mr info");
             for (uint16_t i = 0; i < NN_NO4; i++) {
-                NN_LOG_TRACE_INFO("idx:" << i << " key:" << remoteMrInfo[i].lKey << " address:" <<
-                    remoteMrInfo[i].lAddress << " size" << remoteMrInfo[i].size);
+                NN_LOG_TRACE_INFO("idx:" << i << " key:" << remoteMrInfo[i].lKey
+                                         << " address:" << remoteMrInfo[i].lAddress << " size" << remoteMrInfo[i].size);
             }
             sem_post(&sem);
         } else if (ctx.Header().opCode == CHECK_SYNC_RESPONSE) {
@@ -297,7 +296,7 @@ bool ClientCreateDriver()
         return false;
     }
 
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING; // 只支持EVENT模式
     options.mrSendReceiveSegSize = NN_NO1024;
     options.mrSendReceiveSegCount = NN_NO1024;
@@ -648,7 +647,7 @@ void SyncRequestsSuccess()
 {
     // get one mr seg from pool
     uint64_t data = 0;
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
 
     int result = 0;
     data = SYNC_SEND_VALUE;
@@ -675,7 +674,7 @@ void SyncRequestsSuccess()
     }
 
     UBSHcomNetTransRequest buffReq(localMrInfo[0].lAddress, remoteMrInfo[0].lAddress, localMrInfo[0].lKey,
-        remoteMrInfo[0].lKey, localMrInfo[0].size, 0);
+                                   remoteMrInfo[0].lKey, localMrInfo[0].size, 0);
     result = clientSyncEp->PostRead(buffReq);
     EXPECT_EQ(result, 0);
     if (result != 0) {
@@ -778,7 +777,7 @@ void SendSyncOneSideRequest(UBSHcomNetTransSgeIov *iov, uint64_t index)
 void SyncSetRemoteMrZero()
 {
     uint64_t data = 0;
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
 
     int result = 0;
     data = SYNC_SEND_VALUE;

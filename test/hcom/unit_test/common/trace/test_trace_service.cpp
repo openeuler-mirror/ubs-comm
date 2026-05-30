@@ -10,15 +10,13 @@
  * See the Mulan PSL v2 for more details.
  */
 
-
 #include "test_trace_service.h"
-#include <atomic>
-#include <vector>
-#include <cstdlib>
-#include <cstdio>
 #include <unistd.h>
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
+#include <vector>
 #include "htracer.h"
-
 
 namespace ock {
 namespace hcom {
@@ -101,8 +99,8 @@ TEST_F(TestService, test_get_traceinfo_give_morethan_MAX_SERVICE_NUM_return_empt
     TRACE_DELAY_END(TRACE_ID_0, 0);
     TRACE_DELAY_BEGIN(TRACE_ID_2);
     TRACE_DELAY_END(TRACE_ID_2, 0);
-    auto tTranceInfos = TracerServiceHelper::GetTraceInfos(MAX_SERVICE_NUM + 1,
-        0, TraceManager::IsLatencyQuantileEnable());
+    auto tTranceInfos =
+        TracerServiceHelper::GetTraceInfos(MAX_SERVICE_NUM + 1, 0, TraceManager::IsLatencyQuantileEnable());
 
     EXPECT_EQ(tTranceInfos.size(), 0);
 
@@ -117,8 +115,8 @@ TEST_F(TestService, test_get_traceinfo_give_invalid_value_return_all_records)
     TRACE_DELAY_END(TRACE_ID_0, 0);
     TRACE_DELAY_BEGIN(TRACE_ID_2);
     TRACE_DELAY_END(TRACE_ID_2, 0);
-    auto tTranceInfos = TracerServiceHelper::GetTraceInfos(INVALID_SERVICE_ID,
-        0, TraceManager::IsLatencyQuantileEnable());
+    auto tTranceInfos =
+        TracerServiceHelper::GetTraceInfos(INVALID_SERVICE_ID, 0, TraceManager::IsLatencyQuantileEnable());
 
     EXPECT_EQ(tTranceInfos.size(), NN_NO2);
     for (int i = 0; i < NN_NO2; i++) {
@@ -139,7 +137,6 @@ TEST_F(TestService, test_sent_response_return_ok)
     delete g_traceService;
     g_traceService = nullptr;
 }
-
 
 TEST_F(TestService, test_sent_request_nullptr_return_false)
 {
@@ -173,8 +170,7 @@ TEST_F(TestService, test_sent_request_opcode_TRACE_OP_MODIFY_return_true)
     EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_op_modify")), NN_OK);
     Message response(nullptr, 0);
 
-    QueryTraceInfoRequest *queryRequest =
-        static_cast<QueryTraceInfoRequest *>(malloc(sizeof(QueryTraceInfoRequest)));
+    QueryTraceInfoRequest *queryRequest = static_cast<QueryTraceInfoRequest *>(malloc(sizeof(QueryTraceInfoRequest)));
     queryRequest->serviceId = 1;
     queryRequest->opcode = INVALID_OPCODE;
     Message request(queryRequest, sizeof(QueryTraceInfoRequest));
@@ -189,8 +185,7 @@ TEST_F(TestService, test_sent_request_opcode_TRACE_OP_QUERY_return_true)
     EXPECT_EQ(g_traceService->StartUp(GenTraceServerName("trace_op_query")), NN_OK);
     Message response(nullptr, 0);
 
-    QueryTraceInfoRequest *queryRequest =
-        static_cast<QueryTraceInfoRequest *>(malloc(sizeof(QueryTraceInfoRequest)));
+    QueryTraceInfoRequest *queryRequest = static_cast<QueryTraceInfoRequest *>(malloc(sizeof(QueryTraceInfoRequest)));
     queryRequest->serviceId = 1;
 
     Message request(queryRequest, sizeof(queryRequest));
@@ -206,13 +201,13 @@ TEST_F(TestService, TestTraceManagerBegin)
 
 TEST_F(TestService, TestBuildMessage)
 {
-    Message msg {};
+    Message msg{};
     ResetTraceInfoResponse::BuildMessage(msg);
 }
 
 TEST_F(TestService, TestCentroidList)
 {
-    CentroidList lst {2};
+    CentroidList lst{2};
     EXPECT_EQ(lst.Insert(1, NN_NO2), InsertResultCode::NO_NEED_COMPERSS);
     EXPECT_EQ(lst.Insert(1, NN_NO2), InsertResultCode::NEED_COMPERSS);
     EXPECT_EQ(lst.Insert(-1, NN_NO2), InsertResultCode::NO_NEED_COMPERSS);
@@ -249,5 +244,5 @@ TEST_F(TestService, TestTdigest)
     double p90 = tdigest.Quantile(90);
     tdigest.Reset();
 }
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

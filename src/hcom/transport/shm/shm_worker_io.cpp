@@ -9,13 +9,12 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "shm_worker.h"
 #include "shm_handle.h"
 #include "shm_queue.h"
+#include "shm_worker.h"
 
 namespace ock {
 namespace hcom {
-
 
 HResult ShmWorker::FillSglCtx(ShmSglOpContextInfo *sglCtx, const UBSHcomNetTransSglRequest &sglReq)
 {
@@ -25,8 +24,8 @@ HResult ShmWorker::FillSglCtx(ShmSglOpContextInfo *sglCtx, const UBSHcomNetTrans
     }
 
     sglCtx->result = SH_OK;
-    if (NN_UNLIKELY(memcpy_s(sglCtx->iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV,
-        sglReq.iov, sizeof(UBSHcomNetTransSgeIov) * sglReq.iovCount) != SH_OK)) {
+    if (NN_UNLIKELY(memcpy_s(sglCtx->iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglReq.iov,
+                             sizeof(UBSHcomNetTransSgeIov) * sglReq.iovCount) != SH_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         return SH_PARAM_INVALID;
     }
@@ -77,12 +76,13 @@ HResult ShmWorker::SendLocalEvent(uintptr_t ctx, ShmChannel *ch, ShmOpContextInf
 }
 
 HResult ShmWorker::PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransRequest &req,
-    const UBSHcomNetTransSglRequest &sglReq, uint64_t offset, uint32_t immData, int32_t defaultTimeout = -1)
+                                  const UBSHcomNetTransSglRequest &sglReq, uint64_t offset, uint32_t immData,
+                                  int32_t defaultTimeout = -1)
 {
     /* upper caller need to make sure ch is not null */
     if (NN_UNLIKELY(sglReq.upCtxSize > sizeof(ShmOpContextInfo::upCtx))) {
-        NN_LOG_ERROR("Shm Failed to PostSend with ShmWorker " << mName << " as upCtxSize > " <<
-            sizeof(ShmOpContextInfo::upCtx));
+        NN_LOG_ERROR("Shm Failed to PostSend with ShmWorker " << mName << " as upCtxSize > "
+                                                              << sizeof(ShmOpContextInfo::upCtx));
         return SH_PARAM_INVALID;
     }
 
@@ -94,7 +94,7 @@ HResult ShmWorker::PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransRequest &
     mDefaultTimeout = defaultTimeout;
 
     ShmEvent event(immData, req.size, offset, ch->Id(), ch->PeerChannelId(), ch->PeerChannelAddress(),
-        ShmOpContextInfo::ShmOpType::SH_RECEIVE);
+                   ShmOpContextInfo::ShmOpType::SH_RECEIVE);
     auto result = ch->EQEventEnqueue(event);
     if (NN_UNLIKELY(result != SH_OK)) {
         if (result == ShmEventQueue::SHM_QUEUE_FULL) {
@@ -148,7 +148,7 @@ HResult ShmWorker::PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransRequest &
 }
 
 static inline HResult ReadWriteProcess(UBSHcomNetTransSgeIov iov, ShmMRHandleMap &mrHandleMap, ShmChannel *ch,
-    ShmOpContextInfo::ShmOpType type)
+                                       ShmOpContextInfo::ShmOpType type)
 {
     auto localMemHandle = mrHandleMap.GetFromLocalMap(static_cast<uint32_t>(iov.lKey));
     if (NN_UNLIKELY(localMemHandle == nullptr)) {
@@ -168,13 +168,13 @@ static inline HResult ReadWriteProcess(UBSHcomNetTransSgeIov iov, ShmMRHandleMap
     /* address has mmap already, copy directly */
     if (type == ShmOpContextInfo::ShmOpType::SH_READ || type == ShmOpContextInfo::ShmOpType::SH_SGL_READ) {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(localMemHandle->ShmAddress()), localMemHandle->DataSize(),
-            reinterpret_cast<void *>(remoteMemHandle->ShmAddress()), iov.size) != SH_OK)) {
+                                 reinterpret_cast<void *>(remoteMemHandle->ShmAddress()), iov.size) != SH_OK)) {
             NN_LOG_ERROR("Failed to copy remoteMemHandle to localMemHandle");
             return SH_PARAM_INVALID;
         }
     } else if (type == ShmOpContextInfo::ShmOpType::SH_WRITE || type == ShmOpContextInfo::ShmOpType::SH_SGL_WRITE) {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(remoteMemHandle->ShmAddress()), remoteMemHandle->DataSize(),
-            reinterpret_cast<void *>(localMemHandle->ShmAddress()), iov.size) != SH_OK)) {
+                                 reinterpret_cast<void *>(localMemHandle->ShmAddress()), iov.size) != SH_OK)) {
             NN_LOG_ERROR("Failed to copy localMemHandle to remoteMemHandle");
             return SH_PARAM_INVALID;
         }
@@ -187,12 +187,12 @@ static inline HResult ReadWriteProcess(UBSHcomNetTransSgeIov iov, ShmMRHandleMap
 }
 
 HResult ShmWorker::PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap,
-    ShmOpContextInfo::ShmOpType type)
+                                 ShmOpContextInfo::ShmOpType type)
 {
     /* upper caller need to make sure ch is not null */
     if (NN_UNLIKELY(req.upCtxSize > sizeof(ShmOpContextInfo::upCtx))) {
-        NN_LOG_ERROR("Failed to PostReadWrite type:" << type << " with ShmWorker " << mName << " as upCtxSize > " <<
-            sizeof(ShmOpContextInfo::upCtx));
+        NN_LOG_ERROR("Failed to PostReadWrite type:" << type << " with ShmWorker " << mName << " as upCtxSize > "
+                                                     << sizeof(ShmOpContextInfo::upCtx));
         return SH_PARAM_INVALID;
     }
 
@@ -201,7 +201,7 @@ HResult ShmWorker::PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequest &r
         return SH_CH_BROKEN;
     }
 
-    UBSHcomNetTransSgeIov iov {};
+    UBSHcomNetTransSgeIov iov{};
     iov.lKey = req.lKey;
     iov.rKey = req.rKey;
     iov.size = req.size;
@@ -249,12 +249,13 @@ HResult ShmWorker::PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequest &r
     return result;
 }
 
-
 static inline void FillReadWriteSglCtx(ShmChannel *ch, const UBSHcomNetTransSglRequest &req,
-    ShmOpContextInfo::ShmOpType type, ShmOpContextInfo *ctx, ShmSglOpContextInfo *sglCtx)
+                                       ShmOpContextInfo::ShmOpType type, ShmOpContextInfo *ctx,
+                                       ShmSglOpContextInfo *sglCtx)
 {
     if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(sglCtx->iov), sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV,
-        reinterpret_cast<void *>(req.iov), sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != SH_OK)) {
+                             reinterpret_cast<void *>(req.iov),
+                             sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != SH_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         return;
     }
@@ -279,12 +280,12 @@ static inline void FillReadWriteSglCtx(ShmChannel *ch, const UBSHcomNetTransSglR
 }
 
 HResult ShmWorker::PostReadWriteSgl(ShmChannel *ch, const UBSHcomNetTransSglRequest &req, ShmMRHandleMap &mrHandleMap,
-    ShmOpContextInfo::ShmOpType type)
+                                    ShmOpContextInfo::ShmOpType type)
 {
     /* upper caller need to make sure ch is not null */
     if (NN_UNLIKELY(req.upCtxSize > sizeof(ShmOpContextInfo::upCtx))) {
-        NN_LOG_ERROR("Failed to PostReadWriteSgl type:" << type << " with ShmWorker " << mName << " as upCtxSize > " <<
-            sizeof(ShmOpContextInfo::upCtx));
+        NN_LOG_ERROR("Failed to PostReadWriteSgl type:" << type << " with ShmWorker " << mName << " as upCtxSize > "
+                                                        << sizeof(ShmOpContextInfo::upCtx));
         return SH_PARAM_INVALID;
     }
 
@@ -340,5 +341,5 @@ HResult ShmWorker::PostReadWriteSgl(ShmChannel *ch, const UBSHcomNetTransSglRequ
 
     return result;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

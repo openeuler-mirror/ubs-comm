@@ -66,5 +66,5 @@ NResult NetEndpointImpl::Decrypt(const void *cipher, uint64_t cipherLen, void *r
     return NN_OK;
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

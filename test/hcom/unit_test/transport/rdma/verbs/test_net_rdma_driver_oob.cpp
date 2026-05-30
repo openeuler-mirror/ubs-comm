@@ -9,19 +9,19 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <fcntl.h>
+#include <gtest/gtest.h>
 #include <sys/poll.h>
+#include <mockcpp/mockcpp.hpp>
 
 #include "net_monotonic.h"
+#include "net_oob_secure.h"
 #include "net_oob_ssl.h"
-#include "net_rdma_sync_endpoint.h"
 #include "net_rdma_async_endpoint.h"
+#include "net_rdma_driver_oob.h"
+#include "net_rdma_sync_endpoint.h"
 #include "rdma_mr_dm_buf.h"
 #include "rdma_mr_fixed_buf.h"
-#include "net_rdma_driver_oob.h"
-#include "net_oob_secure.h"
 
 namespace ock {
 namespace hcom {
@@ -65,7 +65,7 @@ NResult MockConnect(const std::string &ip, uint32_t port, OOBTCPConnection *&con
 
 NResult MockReceiveTest(void *&buf, uint32_t size)
 {
-    ConnectHeader *bufHeader = reinterpret_cast<ConnectHeader*>(buf);
+    ConnectHeader *bufHeader = reinterpret_cast<ConnectHeader *>(buf);
     bufHeader->devIndex = NN_NO4;
     return NN_OK;
 }
@@ -100,7 +100,7 @@ TEST_F(TestNetRdmaDriverOob, TestConnectMultiRailFail)
 
 TEST_F(TestNetRdmaDriverOob, DestroyEpByPortNum)
 {
-    UBSHcomNetWorkerIndex index {};
+    UBSHcomNetWorkerIndex index{};
     RDMAAsyncEndPoint *ep1 = (RDMAAsyncEndPoint *)malloc(sizeof(RDMAAsyncEndPoint));
     RDMAQp *qp1 = (RDMAQp *)malloc(sizeof(RDMAQp));
     RDMAContext *context1 = (RDMAContext *)malloc(sizeof(RDMAContext));
@@ -222,9 +222,7 @@ TEST_F(TestNetRdmaDriverOob, HandleCqEvent)
 
     MOCKER_CPP(&RDMAWorker::Stop).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverRDMAWithOob::DestroyEpInWorker).stubs().will(ignoreReturnValue());
-    MOCKER_CPP(&RDMAWorker::ReInitializeCQ).stubs()
-            .will(returnValue(1))
-            .then(returnValue(0));
+    MOCKER_CPP(&RDMAWorker::ReInitializeCQ).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&RDMAWorker::Start).stubs().will(returnValue(1));
     EXPECT_NO_FATAL_FAILURE(testDriver->HandleCqEvent(&event));
     EXPECT_NO_FATAL_FAILURE(testDriver->HandleCqEvent(&event));
@@ -236,7 +234,7 @@ TEST_F(TestNetRdmaDriverOob, HandleAsyncEvent)
 {
     RDMAContext *ctx = nullptr;
     RDMACq *cq = nullptr;
-    ibv_async_event event {};
+    ibv_async_event event{};
     ibv_qp *qp = (ibv_qp *)malloc(sizeof(ibv_qp));
     RDMAQp *rdmaQp = new RDMAQp("rdma qp", 0, ctx, cq);
     qp->qp_context = (void *)rdmaQp;
@@ -290,7 +288,7 @@ TEST_F(TestNetRdmaDriverOob, HandleAsyncEvent)
     event.event_type = IBV_EVENT_DEVICE_FATAL;
     EXPECT_NO_FATAL_FAILURE(testDriver->HandleAsyncEvent(&event));
 
-    delete(rdmaQp);
+    delete (rdmaQp);
     free(qp);
 }
 
@@ -301,15 +299,15 @@ int MockRequestPostedHandler(const UBSHcomNetRequestContext &)
 
 TEST_F(TestNetRdmaDriverOob, SendFinishedCB)
 {
-    RDMAOpContextInfo ctx {};
+    RDMAOpContextInfo ctx{};
     ctx.opType = RDMAOpContextInfo::SEND_RAW_SGL;
     ctx.upCtxSize = 1;
     RDMAQp *qp = (RDMAQp *)malloc(sizeof(RDMAQp));
     ctx.qp = qp;
     UBSHcomNetEndpoint *ep = (UBSHcomNetEndpoint *)malloc((sizeof(UBSHcomNetEndpoint)));
     ctx.qp->mUpContext = (uintptr_t)ep;
-    RDMASgeCtxInfo sgeCtx {};
-    RDMASglContextInfo sglCtx {};
+    RDMASgeCtxInfo sgeCtx{};
+    RDMASglContextInfo sglCtx{};
     sgeCtx.ctx = &sglCtx;
     memcpy_s(ctx.upCtx, sizeof(RDMASgeCtxInfo), &sgeCtx, sizeof(RDMASgeCtxInfo));
     ctx.upCtxSize = sizeof(RDMASgeCtxInfo);
@@ -330,7 +328,7 @@ TEST_F(TestNetRdmaDriverOob, SendFinishedCB)
 
 TEST_F(TestNetRdmaDriverOob, SendSglInlineFinishedCB)
 {
-    RDMAOpContextInfo ctx {};
+    RDMAOpContextInfo ctx{};
     ctx.opType = RDMAOpContextInfo::SEND_RAW_SGL;
     ctx.upCtxSize = 1;
     UBSHcomNetRequestContext netCtx{};
@@ -349,7 +347,7 @@ TEST_F(TestNetRdmaDriverOob, SendSglInlineFinishedCB)
 
 TEST_F(TestNetRdmaDriverOob, ProcessErrorSendFinished)
 {
-    RDMAOpContextInfo ctx {};
+    RDMAOpContextInfo ctx{};
     EXPECT_NO_FATAL_FAILURE(testDriver->ProcessErrorSendFinished(&ctx));
 
     RDMAQp *qp = (RDMAQp *)malloc(sizeof(RDMAQp));
@@ -367,10 +365,10 @@ TEST_F(TestNetRdmaDriverOob, TestRDMAMemoryRegionCreate)
     uint64_t size = NN_NO64;
     RDMAMemoryRegion *buf = nullptr;
     uintptr_t address = 0;
- 
+
     ret = RDMAMemoryRegion::Create(name, ctx, size, buf);
     EXPECT_EQ(ret, RR_PARAM_INVALID);
- 
+
     ret = RDMAMemoryRegion::Create(name, ctx, address, size, buf);
     EXPECT_EQ(ret, RR_PARAM_INVALID);
 }
@@ -381,7 +379,7 @@ TEST_F(TestNetRdmaDriverOob, TestRDMAFixBufferCreate)
     std::string name = "mr";
     RDMAContext *ctx = nullptr;
     RDMAMemoryRegionFixedBuffer *mr = nullptr;
- 
+
     mr = new RDMAMemoryRegionFixedBuffer(name, ctx, 0, 0);
     EXPECT_NE(mr->Initialize(), RR_OK);
 }
@@ -390,19 +388,19 @@ TEST_F(TestNetRdmaDriverOob, TestDriverInitializeFail)
 {
     int ret;
     UBSHcomNetDriverOptions option{};
- 
+
     testDriver->mInited = false;
     option.enableTls = false;
- 
+
     MOCKER_CPP(&NetDriverRDMA::CreateContext).stubs().will(returnValue(0));
     MOCKER_CPP(&RDMAContext::Initialize).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverRDMA::ValidateOptions).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverRDMA::CreateWorkerResource).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&NetDriverRDMA::CreateWorkers).stubs().will(returnValue(1));
- 
+
     ret = testDriver->Initialize(option);
     EXPECT_NE(ret, 0);
- 
+
     ret = testDriver->Initialize(option);
     EXPECT_NE(ret, 0);
 }
@@ -411,10 +409,10 @@ TEST_F(TestNetRdmaDriverOob, TestDriverInitializeFail2)
 {
     int ret;
     UBSHcomNetDriverOptions option{};
- 
+
     testDriver->mInited = false;
     option.enableTls = false;
- 
+
     MOCKER_CPP(&NetDriverRDMA::CreateContext).stubs().will(returnValue(0));
     MOCKER_CPP(&RDMAContext::Initialize).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverRDMA::ValidateOptions).stubs().will(returnValue(0));
@@ -422,10 +420,10 @@ TEST_F(TestNetRdmaDriverOob, TestDriverInitializeFail2)
     MOCKER_CPP(&NetDriverRDMA::CreateWorkers).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverRDMA::CreateClientLB).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&NetDriverRDMA::CreateListeners).stubs().will(returnValue(1));
- 
+
     ret = testDriver->Initialize(option);
     EXPECT_NE(ret, 0);
- 
+
     ret = testDriver->Initialize(option);
     EXPECT_NE(ret, 0);
 }
@@ -433,13 +431,13 @@ TEST_F(TestNetRdmaDriverOob, TestDriverInitializeFail2)
 TEST_F(TestNetRdmaDriverOob, CreateWorkerResourceFail)
 {
     int ret;
- 
+
     MOCKER_CPP(&NetDriverRDMA::CreateSendMr).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&NetDriverRDMA::CreateOpCtxMemPool).stubs().will(returnValue(1));
- 
+
     ret = testDriver->CreateWorkerResource();
     EXPECT_NE(ret, 0);
- 
+
     ret = testDriver->CreateWorkerResource();
     EXPECT_NE(ret, 0);
 }
@@ -447,11 +445,11 @@ TEST_F(TestNetRdmaDriverOob, CreateWorkerResourceFail)
 TEST_F(TestNetRdmaDriverOob, CreateWorkerResourceFail2)
 {
     int ret;
- 
+
     MOCKER_CPP(&NetDriverRDMA::CreateSendMr).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverRDMA::CreateOpCtxMemPool).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverRDMA::CreateSglCtxMemPool).stubs().will(returnValue(1));
- 
+
     ret = testDriver->CreateWorkerResource();
     EXPECT_NE(ret, 0);
 }
@@ -466,8 +464,10 @@ TEST_F(TestNetRdmaDriverOob, Connect)
     std::string payload{};
     UBSHcomNetEndpointPtr outEp;
     MOCKER_CPP(&NetDriverRDMAWithOob::Connect,
-        NResult(NetDriverRDMAWithOob::*)(const OOBTCPClientPtr &, const std::string &, UBSHcomNetEndpointPtr &, uint8_t,
-        uint8_t, uint64_t)).stubs().will(returnValue(1));
+               NResult(NetDriverRDMAWithOob::*)(const OOBTCPClientPtr &, const std::string &, UBSHcomNetEndpointPtr &,
+                                                uint8_t, uint8_t, uint64_t))
+        .stubs()
+        .will(returnValue(1));
     MOCKER_CPP(&NetDriverRDMAWithOob::ConnectSyncEp).stubs().will(returnValue(0));
     ret = testDriver->Connect(badUrl, payload, outEp, 0, 0, 0, 0);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
@@ -544,7 +544,8 @@ TEST_F(TestNetRdmaDriverOob, Connect3)
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, int &)).stubs().will(returnValue(0));
     MOCKER(::recv).stubs().will(invoke(MockRecv));
     MOCKER(::send).stubs().will(invoke(MockSend));
-    MOCKER(RDMASyncEndpoint::Create).stubs()
+    MOCKER(RDMASyncEndpoint::Create)
+        .stubs()
         .with(any(), any(), any(), any(), any(), outBound(rep))
         .will(returnValue(0));
     EXPECT_EQ(testDriver->ConnectSyncEp(client, payload, outEp, 0, 0, 0), RR_EP_NOT_INITIALIZED);
@@ -565,7 +566,8 @@ TEST_F(TestNetRdmaDriverOob, Connect4)
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, int &)).stubs().will(returnValue(0));
     MOCKER(::recv).stubs().will(invoke(MockRecv));
     MOCKER(::send).stubs().will(invoke(MockSend));
-    MOCKER(RDMASyncEndpoint::Create).stubs()
+    MOCKER(RDMASyncEndpoint::Create)
+        .stubs()
         .with(any(), any(), any(), any(), any(), outBound(rep))
         .will(returnValue(0));
     MOCKER_CPP_VIRTUAL(*rep, &RDMASyncEndpoint::Initialize).stubs().will(returnValue(0));
@@ -588,5 +590,5 @@ TEST_F(TestNetRdmaDriverOob, Connect4)
     EXPECT_EQ(testDriver->ConnectSyncEp(client, payload, outEp, 0, 0, 0), NN_CONNECT_REFUSED);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

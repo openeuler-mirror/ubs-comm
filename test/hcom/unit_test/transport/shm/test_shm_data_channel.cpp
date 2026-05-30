@@ -23,11 +23,9 @@ public:
     virtual void TearDown(void);
 };
 
-TestShmDataChannel::TestShmDataChannel()
-{}
+TestShmDataChannel::TestShmDataChannel() {}
 
-void TestShmDataChannel::SetUp()
-{}
+void TestShmDataChannel::SetUp() {}
 
 void TestShmDataChannel::TearDown()
 {
@@ -112,7 +110,7 @@ TEST_F(TestShmDataChannel, Initialize)
 
     ret = dc->Initialize();
     EXPECT_EQ(ret, SH_OK);
-    ret = dc->Initialize();  // Initialize again
+    ret = dc->Initialize(); // Initialize again
     EXPECT_EQ(ret, SH_OK);
 
     if (dc != nullptr) {
@@ -151,5 +149,5 @@ TEST_F(TestShmDataChannel, MarkFree)
         dc = nullptr;
     }
 }
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

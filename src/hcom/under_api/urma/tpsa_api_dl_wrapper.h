@@ -34,8 +34,8 @@ public:
         return TpsaAPI::LoadTpsaAPI();
     }
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // HCOM_TPSA_API_WRAPPER_H

@@ -9,8 +9,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <unistd.h>
 #include <sys/epoll.h>
+#include <unistd.h>
 
 #include "hcom_service_context.h"
 #include "net_trace.h"
@@ -92,8 +92,9 @@ void HcomPeriodicManager::ProcessCleanUp(uint16_t tId)
         auto currentQueue = &(mQueue[tId].queue[i]);
         std::lock_guard<std::mutex> guard(mQueue[tId].lock[i]);
         while (!currentQueue->empty()) {
-            NN_LOG_TRACE_INFO("Process clean up seq no " << currentQueue->top()->SeqNo() << " timeout " <<
-                currentQueue->top()->mTimeout << ", current time " << NetMonotonic::TimeSec());
+            NN_LOG_TRACE_INFO("Process clean up seq no " << currentQueue->top()->SeqNo() << " timeout "
+                                                         << currentQueue->top()->mTimeout << ", current time "
+                                                         << NetMonotonic::TimeSec());
             if (currentQueue->top()->EraseSeqNoWithRet()) {
                 currentQueue->top()->TimeoutDump();
                 currentQueue->top()->MarkTimeout();
@@ -121,8 +122,9 @@ void HcomPeriodicManager::ProcessTimeOut(uint16_t tId)
         auto currentQueue = &(mQueue[tId].queue[i]);
         std::lock_guard<std::mutex> guard(mQueue[tId].lock[i]);
         while (!currentQueue->empty()) {
-            NN_LOG_TRACE_INFO("Process time out seq no " << currentQueue->top()->SeqNo() << " timeout " <<
-                currentQueue->top()->mTimeout << ", current time " << NetMonotonic::TimeSec());
+            NN_LOG_TRACE_INFO("Process time out seq no " << currentQueue->top()->SeqNo() << " timeout "
+                                                         << currentQueue->top()->mTimeout << ", current time "
+                                                         << NetMonotonic::TimeSec());
             if (currentQueue->top()->IsFinished() || currentQueue->top()->IsTimeOut()) {
                 mHandleQueue[tId].emplace_back(currentQueue->top());
                 currentQueue->pop();
@@ -164,7 +166,7 @@ void HcomPeriodicManager::RunInThread(int16_t tId)
     if (eFd < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("HcomPeriodic manager failed to create epoll by "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return;
     }
 
@@ -188,5 +190,5 @@ void HcomPeriodicManager::RunInThread(int16_t tId)
     NetFunc::NN_SafeCloseFd(eFd);
     NN_LOG_INFO("PeriodicManager for timeout [name: " << mName << ", index: " << tId << "] working thread exit");
 }
-}
-}
+} // namespace hcom
+} // namespace ock

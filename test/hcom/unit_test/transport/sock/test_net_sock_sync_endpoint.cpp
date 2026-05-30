@@ -14,10 +14,10 @@
 #include <mockcpp/mockcpp.hpp>
 #include "hcom.h"
 #include "net_common.h"
-#include "net_sock_driver_oob.h"
 #include "net_security_rand.h"
-#include "sock_validation.h"
+#include "net_sock_driver_oob.h"
 #include "net_sock_sync_endpoint.h"
+#include "sock_validation.h"
 
 namespace ock {
 namespace hcom {
@@ -389,7 +389,7 @@ TEST_F(TestNetSockSyncEndpoint, SyncReceiveFailWithErrorDataLen)
 {
     // param init
     int32_t timeout = 0;
-    UBSHcomNetResponseContext ctx {};
+    UBSHcomNetResponseContext ctx{};
     mockHeader.dataLength = 0;
     ep->mRespCtx.mHeader = mockHeader;
     MOCKER_CPP(setsockopt).stubs().will(returnValue(0));
@@ -404,7 +404,7 @@ TEST_F(TestNetSockSyncEndpoint, SyncReceiveFailWithOverDataLen)
 {
     // param init
     int32_t timeout = 0;
-    UBSHcomNetResponseContext ctx {};
+    UBSHcomNetResponseContext ctx{};
     mockHeader.dataLength = NET_SGE_MAX_SIZE + 1;
     ep->mRespCtx.mHeader = mockHeader;
     MOCKER_CPP(setsockopt).stubs().will(returnValue(0));
@@ -419,7 +419,7 @@ TEST_F(TestNetSockSyncEndpoint, SyncReceiveFailWithInvalidCRC)
 {
     // param init
     int32_t timeout = 0;
-    UBSHcomNetResponseContext ctx {};
+    UBSHcomNetResponseContext ctx{};
     mockHeader.dataLength = NN_NO1024;
     ep->mRespCtx.mHeader = mockHeader;
     MOCKER_CPP(setsockopt).stubs().will(returnValue(0));
@@ -434,7 +434,7 @@ TEST_F(TestNetSockSyncEndpoint, SyncReceiveFailWithInvalidSeqNo)
 {
     // param init
     int32_t timeout = 0;
-    UBSHcomNetResponseContext ctx {};
+    UBSHcomNetResponseContext ctx{};
     mockHeader.dataLength = NN_NO1024;
     mockHeader.seqNo = 1;
     mockHeader.headerCrc = NetFunc::CalcHeaderCrc32(mockHeader);
@@ -534,7 +534,7 @@ TEST_F(TestNetSockSyncEndpoint, GetRemoteUdsIdInfoFail2)
 {
     int ret;
     UBSHcomNetUdsIdInfo sockIdInfo{};
- 
+
     ep->mState.Set(NEP_ESTABLISHED);
     mDriver->mStartOobSvr = true;
     mDriver->mOptions.oobType = NET_OOB_TCP;
@@ -554,8 +554,10 @@ TEST_F(TestNetSockSyncEndpoint, Connect)
     mDriver->mWorkerGroups.emplace_back(std::make_pair(1, 1));
 
     MOCKER_CPP(&NetDriverSockWithOOB::Connect,
-        NResult(NetDriverSockWithOOB::*)(const OOBTCPClientPtr &, const std::string &, UBSHcomNetEndpointPtr &, uint8_t,
-        uint8_t, uint64_t)).stubs().will(returnValue(1));
+               NResult(NetDriverSockWithOOB::*)(const OOBTCPClientPtr &, const std::string &, UBSHcomNetEndpointPtr &,
+                                                uint8_t, uint8_t, uint64_t))
+        .stubs()
+        .will(returnValue(1));
     MOCKER_CPP(&NetDriverSockWithOOB::ConnectSyncEp).stubs().will(returnValue(0));
     ret = mDriver->Connect(badUrl, payload, ep, 0, 0, 0, 0);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
@@ -568,5 +570,5 @@ TEST_F(TestNetSockSyncEndpoint, Connect)
     ret = mDriver->Connect(serverUrl, payload, ep, NET_EP_SELF_POLLING, 0, 0, 0);
     EXPECT_EQ(ret, 0);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

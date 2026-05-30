@@ -20,7 +20,7 @@ namespace hcom {
 class RWLockGuard {
 public:
     RWLockGuard(RWLockGuard &) = delete;
-    RWLockGuard &operator = (RWLockGuard &) = delete;
+    RWLockGuard &operator=(RWLockGuard &) = delete;
 
     explicit RWLockGuard(NetReadWriteLock &lock) : mRwLock(lock) {}
 
@@ -42,6 +42,6 @@ public:
 private:
     NetReadWriteLock &mRwLock;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

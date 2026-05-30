@@ -26,13 +26,13 @@
 namespace ock {
 namespace hcom {
 
-#define VALIDATE_PARAM_RET(funcName, ...)                       \
-    do {                                                        \
-        if (NN_UNLIKELY(!funcName##Check(__VA_ARGS__))) {       \
-            NN_LOG_ERROR("Invalid parameter!");                 \
-            return SER_INVALID_PARAM;                           \
-        }                                                       \
-    } while (0)                                                 \
+#define VALIDATE_PARAM_RET(funcName, ...)                 \
+    do {                                                  \
+        if (NN_UNLIKELY(!funcName##Check(__VA_ARGS__))) { \
+            NN_LOG_ERROR("Invalid parameter!");           \
+            return SER_INVALID_PARAM;                     \
+        }                                                 \
+    } while (0)
 
 #define VALIDATE_PARAM(funcName, ...) (funcName##Check(__VA_ARGS__))
 
@@ -76,20 +76,19 @@ inline bool TlsOptionsCheck(const UBSHcomTlsOptions &opt)
 inline bool SerConnInfoCheck(const SerConnInfo &connInfo)
 {
     if (NN_UNLIKELY(connInfo.totalLinkCount == NN_NO0 || connInfo.totalLinkCount > NN_NO64)) {
-        NN_LOG_ERROR("Invalid total link count " << static_cast<int32_t>(connInfo.totalLinkCount) <<
-            " for connect, make sure range in [1, 64]");
+        NN_LOG_ERROR("Invalid total link count " << static_cast<int32_t>(connInfo.totalLinkCount)
+                                                 << " for connect, make sure range in [1, 64]");
         return false;
     }
 
     if (NN_UNLIKELY(connInfo.options.linkCount == NN_NO0 || connInfo.options.linkCount > NN_NO16)) {
-        NN_LOG_ERROR("Invalid link count " << connInfo.options.linkCount <<
-            " for connect, make sure range in [1, 16]");
+        NN_LOG_ERROR("Invalid link count " << connInfo.options.linkCount << " for connect, make sure range in [1, 16]");
         return false;
     }
 
     if (NN_UNLIKELY(connInfo.index >= connInfo.totalLinkCount)) {
-        NN_LOG_ERROR("Invalid conn index " << connInfo.index << ", total ep size " << connInfo.totalLinkCount <<
-            " for connecting");
+        NN_LOG_ERROR("Invalid conn index " << connInfo.index << ", total ep size " << connInfo.totalLinkCount
+                                           << " for connecting");
         return false;
     }
 
@@ -99,8 +98,8 @@ inline bool SerConnInfoCheck(const SerConnInfo &connInfo)
 inline bool ConnectOptionsCheck(const UBSHcomConnectOptions &opt)
 {
     if (NN_UNLIKELY(opt.linkCount == NN_NO0 || opt.linkCount > NN_NO16)) {
-        NN_LOG_ERROR("Invalid link count " << static_cast<int32_t>(opt.linkCount) <<
-            " for connect, make sure range in [1, 16]");
+        NN_LOG_ERROR("Invalid link count " << static_cast<int32_t>(opt.linkCount)
+                                           << " for connect, make sure range in [1, 16]");
         return false;
     }
     if (NN_UNLIKELY(opt.mode != UBSHcomClientPollingMode::WORKER_POLL &&
@@ -144,7 +143,7 @@ inline bool OneSideSglRequestCheck(const UBSHcomOneSideSglRequest &req)
         NN_LOG_ERROR("NetServiceRequest.iov or iovCount " << req.iovCount << " is invalid");
         return false;
     }
-    
+
     for (uint32_t i = 0; i < req.iovCount; i++) {
         if (!OneSideRequestCheck(req.iov[i])) {
             return false;
@@ -174,6 +173,6 @@ inline bool ReplyCheck(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req
     }
     return true;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_PARAM_VAL_H

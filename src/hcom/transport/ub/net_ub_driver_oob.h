@@ -16,10 +16,10 @@
 
 #include <unordered_map>
 
+#include "net_heartbeat.h"
 #include "net_oob.h"
 #include "net_ub_driver.h"
 #include "net_util.h"
-#include "net_heartbeat.h"
 #include "ub_common.h"
 #include "ub_mr_fixed_buf.h"
 #include "ub_urma_wrapper_public_jetty.h"
@@ -46,12 +46,12 @@ public:
     }
 
     NResult Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo = 0,
-        uint8_t clientGrpNo = 0) override;
+                    uint8_t clientGrpNo = 0) override;
     NResult Connect(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-        UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0,
-        uint64_t ctx = 0) override;
+                    UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0,
+                    uint64_t ctx = 0) override;
     NResult Connect(const std::string &serverUrl, const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags,
-        uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0, uint64_t ctx = 0) override;
+                    uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0, uint64_t ctx = 0) override;
     NResult MultiRailNewConnection(OOBTCPConnection &mConn);
     uint16_t GetHbIdleTime()
     {
@@ -66,7 +66,7 @@ protected:
     int NewConnectionCB(OOBTCPConnection &mConn);
     int NewRequest(UBOpContextInfo *ctx);
     NResult NewRequestOnEncryption(UBOpContextInfo *ctx, UBSHcomNetMessage &msg, bool &messageReady,
-        UBSHcomNetRequestContext &netCtx);
+                                   UBSHcomNetRequestContext &netCtx);
     int SendFinished(UBOpContextInfo *ctx);
     int OneSideDone(UBOpContextInfo *ctx);
 
@@ -92,49 +92,50 @@ protected:
     void ProcessTwoSideHeartbeat(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx);
 
     NResult ConnectSyncEp(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-        UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint64_t ctx);
+                          UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint64_t ctx);
 
     NResult CreatePublicJetty(UBPublicJetty *&publicJetty, uint32_t id, bool isServer = false);
     NResult CreateUrmaListeners(UBPublicJetty *&publicJetty);
     NResult PublicJettyNewConnectionCB(UBOpContextInfo *ctx);
     NResult ConnectByPublicJetty(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-        UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0,
-        uint64_t ctx = 0);
+                                 UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0,
+                                 uint8_t clientGrpNo = 0, uint64_t ctx = 0);
     NResult ConnectSyncEpByPublicJetty(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-        UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0,
-        uint64_t ctx = 0);
+                                       UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0,
+                                       uint8_t clientGrpNo = 0, uint64_t ctx = 0);
     NResult ConnectASyncEpByPublicJetty(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-        UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0,
-        uint64_t ctx = 0);
+                                        UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0,
+                                        uint8_t clientGrpNo = 0, uint64_t ctx = 0);
     NResult CheckServerACK(JettyConnResp &exchangeMsg);
     NResult PrePostReceiveOnConnection(UBJetty *qp, UBWorker *worker);
-    NResult FillExchMsg(JettyConnHeader *exchangeInfo, UBJetty *qp, const std::string &payload,
-        uint8_t serverGrpNo, UBPublicJetty *clientPublicJetty);
+    NResult FillExchMsg(JettyConnHeader *exchangeInfo, UBJetty *qp, const std::string &payload, uint8_t serverGrpNo,
+                        UBPublicJetty *clientPublicJetty);
     NResult ServerCreateEp(UBJettyExchangeInfo &info, UBJetty *qp, UBWorker *worker, JettyConnHeader *exchangeInfo,
-        UBPublicJetty *serverControlJetty);
+                           UBPublicJetty *serverControlJetty);
     NResult ServerReplyMsg(UBJetty *qp, JettyConnResp &exchangeMsg, UBPublicJetty *serverControlJetty,
-        uint32_t token = 0);
+                           uint32_t token = 0);
     NResult ServerCreateJetty(UBJetty *&qp, UBWorker *worker, JettyConnResp &exchangeMsg, JettyConnHeader *exchangeInfo,
-        UBPublicJetty *serverControlJetty, uint32_t token = 0);
+                              UBPublicJetty *serverControlJetty, uint32_t token = 0);
     NResult ServerSelectWorker(UBWorker *&worker, JettyConnResp &exchangeMsg, uint8_t groupIndex,
-        UBPublicJetty *serverControlJetty);
+                               UBPublicJetty *serverControlJetty);
     NResult CheckMagicAndProtocol(JettyConnResp &exchangeMsg, JettyConnHeader *exchangeInfo,
-        UBPublicJetty *serverControlJetty);
+                                  UBPublicJetty *serverControlJetty);
     NResult ClientCheckState(const std::string &payload);
     NResult PublicJettyConnect(const std::string &oobIp, uint16_t oobPort, UBPublicJetty *&clientPublicJetty);
     NResult ClientSelectWorker(UBWorker *&worker, uint8_t clientGrpNo, uint64_t id);
     NResult ClientCreateJetty(UBJetty *&qp, UBWorker *worker, uint32_t token = 0);
     NResult ClientSendConnReq(const std::string payload, uint64_t id, uint8_t serverGrpNo,
-        UBPublicJetty *clientPublicJetty, UBJetty *qp, UBPublicJetty *clientControlJetty, uint32_t token = 0);
+                              UBPublicJetty *clientPublicJetty, UBJetty *qp, UBPublicJetty *clientControlJetty,
+                              uint32_t token = 0);
     NResult ClientEstablishConnOnReply(UBPublicJetty *clientControlJetty, UBJetty *qp, UBJettyExchangeInfo &info);
     NResult ClientCreateEp(UBSHcomNetEndpointPtr &outEp, uint64_t id, UBJetty *qp, UBWorker *worker,
-        UBJettyExchangeInfo &info, UBPublicJetty *clientControlJetty);
+                           UBJettyExchangeInfo &info, UBPublicJetty *clientControlJetty);
     NResult ClientSyncEpCreateJetty(UBJetty *&qp, UBJfc *&cq, UBPollingMode pollMode, uint32_t token = 0);
     NResult PrePostReceiveOnSyncEp(UBSHcomNetEndpointPtr ep, uint16_t prePostCount, UBJetty *qp);
     void ClientSyncEpSetInfo(UBSHcomNetEndpointPtr ep, UBJetty *qp, UBSHcomNetEndpointPtr &outEp);
     NResult ServerEstablishCtrlConn(JettyConnHeader *exchangeInfo, UBPublicJetty *serverControlJetty);
     NResult CreateSyncEp(UBJetty *qp, UBJfc *cq, uint64_t id, UBSHcomNetEndpointPtr &outEp,
-        UBPublicJetty *clientControlJetty);
+                         UBPublicJetty *clientControlJetty);
 
 private:
     friend class NetUBAsyncEndpoint;
@@ -142,13 +143,14 @@ private:
     friend class UBJetty;
 
     NResult NewReceivedRequest(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, UBSHcomNetMessage &msg,
-        UBWorker *worker) const;
+                               UBWorker *worker) const;
 
     NResult NewReceivedRawRequest(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, UBSHcomNetMessage &msg,
-        UBWorker *worker, uint32_t immData) const;
-    
+                                  UBWorker *worker, uint32_t immData) const;
+
     NResult NewReceivedRequestWithoutCopy(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-        UBSHcomNetMessage &msg, UBWorker *worker, void *dataAddress, UBSHcomNetTransHeader *header) const;
+                                          UBSHcomNetMessage &msg, UBWorker *worker, void *dataAddress,
+                                          UBSHcomNetTransHeader *header) const;
 
     void DestroyEpInWorker(UBWorker *worker);
     void DestroyEpByPortNum(int portNum);
@@ -161,7 +163,7 @@ private:
     inline bool ValidateRequestContext(UBOpContextInfo *ctx)
     {
         if (NN_UNLIKELY(ctx == nullptr || ctx->ubJetty == nullptr || ctx->ubJetty->GetUpContext() == 0 ||
-            ctx->ubJetty->GetUpContext1() == 0)) {
+                        ctx->ubJetty->GetUpContext1() == 0)) {
             NN_LOG_ERROR("Ctx or QP or Worker or ep is null of RequestReceived in Driver " << mName << "");
             return false;
         }
@@ -169,14 +171,14 @@ private:
     }
     bool mNeedStopEvent = false;
     std::thread mUBEventThread;
-    std::atomic<bool> mEventStarted{ false };
+    std::atomic<bool> mEventStarted{false};
     NetHeartbeat *mHeartBeat = nullptr;
     UBPublicJetty *mPublicJetty = nullptr;
     friend class NetHeartbeat;
     friend class UBWorker;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // HCOM_NET_UB_DRIVER_OOB_H

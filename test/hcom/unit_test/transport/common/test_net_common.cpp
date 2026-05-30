@@ -12,8 +12,8 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
-#include "net_common.h"
 #include "hcom.h"
+#include "net_common.h"
 
 namespace ock {
 namespace hcom {
@@ -24,9 +24,7 @@ public:
     virtual void TearDown(void);
 };
 
-void TestNetCommon::SetUp()
-{
-}
+void TestNetCommon::SetUp() {}
 
 void TestNetCommon::TearDown()
 {
@@ -166,5 +164,5 @@ TEST_F(TestNetCommon, TestValidateUrl)
     EXPECT_EQ(NetFunc::NN_ValidateUrl(""), static_cast<uint32_t>(NN_INVALID_PARAM));
     EXPECT_EQ(NetFunc::NN_ValidateUrl("tcp://127.0.0.1:8888"), static_cast<uint32_t>(NN_OK));
 }
-}
-}
+} // namespace hcom
+} // namespace ock

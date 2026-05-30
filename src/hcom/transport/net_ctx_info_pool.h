@@ -17,7 +17,8 @@
 
 namespace ock {
 namespace hcom {
-template <typename T> class OpContextInfoPool {
+template <typename T>
+class OpContextInfoPool {
 public:
     inline NResult Initialize(const NetMemPoolFixedPtr &opCtxMemPool)
     {
@@ -74,7 +75,7 @@ private:
     NetMemPoolFixedPtr mOpCtxMemPool;
     UBSHcomNetDriverProtocol mProtocol;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // COMMUNICATION_NET_CTX_INFO_POOL_H

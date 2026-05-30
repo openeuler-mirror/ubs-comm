@@ -13,8 +13,8 @@
 
 #include <cstdint>
 
-#include "hcom_log.h"
 #include "hcom_err.h"
+#include "hcom_log.h"
 #include "hcom_num_def.h"
 #include "hcom_service_channel.h"
 #include "net_param_validator.h"
@@ -25,9 +25,8 @@ namespace hcom {
 constexpr uint16_t RECON_DELAY_ERASE_TIME = 60;
 constexpr uint16_t DEFAULT_DELAY_ERASE_TIME = 1;
 
-
 SerResult HcomChannelImp::Initialize(std::vector<UBSHcomNetEndpointPtr> &ep, uintptr_t ctxMemPool,
-    uintptr_t periodicMgr, uintptr_t pgTable, uint32_t ctxStoreCapacity)
+                                     uintptr_t periodicMgr, uintptr_t pgTable, uint32_t ctxStoreCapacity)
 {
     std::lock_guard<std::mutex> locker(mMgrMutex);
     if (!mChState.Compare(UBSHcomChannelState::CH_NEW)) {
@@ -109,13 +108,13 @@ void HcomChannelImp::CheckAndUpdateThreshold()
     const long enabled = NetFunc::NN_GetLongEnv("HCOM_ENABLE_SPLIT_SEND", 0, 1, 0);
     if (!enabled) {
         if (!mEnableMrCache) {
-            NN_LOG_WARN("Unable to set rndv threshold because mEnableMrCache is false, SplitSend threshold " <<
-                mUserSplitSendThreshold << ", Rndv Threshold is: " << mRndvThreshold);
+            NN_LOG_WARN("Unable to set rndv threshold because mEnableMrCache is false, SplitSend threshold "
+                        << mUserSplitSendThreshold << ", Rndv Threshold is: " << mRndvThreshold);
             return;
         }
         mRndvThreshold = rndvThreshold;
         NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << UINT32_MAX
-                                                                        << ", Rndv Threshold is: " << mRndvThreshold);
+                                                                   << ", Rndv Threshold is: " << mRndvThreshold);
         return;
     }
 
@@ -131,8 +130,8 @@ void HcomChannelImp::CheckAndUpdateThreshold()
     } else {
         mRndvThreshold = rndvThreshold;
     }
-    NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << NN_NO65536 << ", Rndv Threshold is: " <<
-        mRndvThreshold);
+    NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << NN_NO65536
+                                                               << ", Rndv Threshold is: " << mRndvThreshold);
 }
 
 SerResult HcomChannelImp::InitializeEp(std::vector<UBSHcomNetEndpointPtr> &ep)
@@ -291,7 +290,7 @@ inline void MarkOpCodeBySeqNo(uint32_t &seqNo, uintptr_t rspCtx, bool originalSe
 }
 
 inline SerResult HcomChannelImp::AcquireSelfPollEp(UBSHcomNetEndpoint *&ep, uint32_t &index, int16_t timeout,
-    uint16_t dvrIdx)
+                                                   uint16_t dvrIdx)
 {
     if (NN_UNLIKELY(!mChState.Compare(UBSHcomChannelState::CH_ESTABLISHED))) {
         NN_LOG_ERROR("Channel state is not established " << static_cast<int>(mChState.Get()));
@@ -307,19 +306,20 @@ inline SerResult HcomChannelImp::AcquireSelfPollEp(UBSHcomNetEndpoint *&ep, uint
     }
 
     index = __sync_fetch_and_add(&mEpChoosingIdx[dvrIdx], 1) % (mEpInfo->epSize / mDriverNum) +
-        dvrIdx * (mEpInfo->epSize / mDriverNum);
+            dvrIdx * (mEpInfo->epSize / mDriverNum);
     uint32_t count = 0;
     while (!mEpInfo->epState[index].CAS(SER_EP_ESTABLISHED_UNOCCUPIED, SER_EP_ESTABLISHED_OCCUPIED)) {
         index = __sync_fetch_and_add(&mEpChoosingIdx[dvrIdx], 1) % (mEpInfo->epSize / mDriverNum) +
-            dvrIdx * (mEpInfo->epSize / mDriverNum);
+                dvrIdx * (mEpInfo->epSize / mDriverNum);
         if ((++count % (mEpInfo->epSize / mDriverNum)) == 0) {
             if (NN_UNLIKELY(!mChState.Compare(UBSHcomChannelState::CH_ESTABLISHED))) {
                 NN_LOG_ERROR("Channel is not established " << static_cast<int>(mChState.Get()));
                 return SER_NOT_ESTABLISHED;
             }
             if (NetMonotonic::TimeSec() > endTimeSecond) {
-                NN_LOG_ERROR("Acquire self poll ep timeout for " << endTimeSecond - startTimeSecond <<
-                    " seconds, maybe all endpoints broken / users too much / remote side not response");
+                NN_LOG_ERROR("Acquire self poll ep timeout for "
+                             << endTimeSecond - startTimeSecond
+                             << " seconds, maybe all endpoints broken / users too much / remote side not response");
                 return SER_TIMEOUT;
             }
         }
@@ -336,15 +336,12 @@ inline SerResult HcomChannelImp::AcquireSelfPollEp(UBSHcomNetEndpoint *&ep, uint
 inline void HcomChannelImp::ReleaseSelfPollEp(uint32_t index)
 {
     if (NN_UNLIKELY(index >= mEpInfo->epSize)) {
-        NN_LOG_ERROR("Invalid index to release self poll ep in channel "
-                     << mOptions.id);
+        NN_LOG_ERROR("Invalid index to release self poll ep in channel " << mOptions.id);
         return;
     }
 
-    if (!mEpInfo->epState[index].CAS(SER_EP_ESTABLISHED_OCCUPIED,
-                                     SER_EP_ESTABLISHED_UNOCCUPIED)) {
-        NN_LOG_ERROR("Channel id " << mOptions.id
-                                   << " failed to release self poll ep, state "
+    if (!mEpInfo->epState[index].CAS(SER_EP_ESTABLISHED_OCCUPIED, SER_EP_ESTABLISHED_UNOCCUPIED)) {
+        NN_LOG_ERROR("Channel id " << mOptions.id << " failed to release self poll ep, state "
                                    << mEpInfo->epState[index].Get());
     }
 }
@@ -357,11 +354,10 @@ inline SerResult HcomChannelImp::NextWorkerPollEp(UBSHcomNetEndpoint *&ep, uint1
     }
 
     uint16_t tmpIndex = __sync_fetch_and_add(&mEpChoosingIdx[dvrIdx], 1) % (mEpInfo->epSize / mDriverNum) +
-            dvrIdx * (mEpInfo->epSize / mDriverNum);
+                        dvrIdx * (mEpInfo->epSize / mDriverNum);
     uint16_t count = 0;
 
-    while (mEpInfo->epState[tmpIndex].Compare(SER_EP_BROKEN) &&
-           count < (mEpInfo->epSize / mDriverNum)) {
+    while (mEpInfo->epState[tmpIndex].Compare(SER_EP_BROKEN) && count < (mEpInfo->epSize / mDriverNum)) {
         tmpIndex = (tmpIndex + 1) % (mEpInfo->epSize / mDriverNum) + dvrIdx * (mEpInfo->epSize / mDriverNum);
         count++;
     }
@@ -393,8 +389,7 @@ inline SerResult HcomChannelImp::ResponseWorkerPollEp(uintptr_t rspCtx, UBSHcomN
     }
 
     if (NN_UNLIKELY(mEpInfo->epState[epIndex].Compare(SER_EP_BROKEN))) {
-        NN_LOG_ERROR("Ep broken of channel id "
-                     << mOptions.id << " , select response ep fail");
+        NN_LOG_ERROR("Ep broken of channel id " << mOptions.id << " , select response ep fail");
         return SER_NOT_ESTABLISHED;
     }
 
@@ -414,8 +409,8 @@ SerResult HcomChannelImp::PrepareTimerContext(const Callback *cb, int16_t timeou
         return SER_NEW_OBJECT_FAILED;
     }
 
-    context.timer = new (timerPtr)HcomServiceTimer(this, mCtxStore,
-        timeout, reinterpret_cast<uintptr_t>(cb), HcomAsyncCBType::CBS_IO);
+    context.timer = new (timerPtr)
+        HcomServiceTimer(this, mCtxStore, timeout, reinterpret_cast<uintptr_t>(cb), HcomAsyncCBType::CBS_IO);
     NResult ret = mCtxStore->PutAndGetSeqNo(context.timer, context.seqNo);
     if (NN_UNLIKELY(ret != SER_OK)) {
         NN_LOG_ERROR("Failed to generate seqNo by context store pool.");
@@ -456,8 +451,9 @@ void HcomChannelImp::DestroyTimerContext(TimerCtx &context)
 
 int32_t HcomChannelImp::Send(const UBSHcomRequest &req, const Callback *done)
 {
-    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Send" << ", channel id = " << mOptions.id <<
-                 ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
+    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Send"
+                 << ", channel id = " << mOptions.id
+                 << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
     VALIDATE_PARAM_RET(Request, req);
     SerResult result = SER_OK;
     uint64_t timestamp = mOptions.twoSideTimeout < 0 ? UINT64_MAX : mOptions.twoSideTimeout + NetMonotonic::TimeSec();
@@ -522,14 +518,14 @@ SerResult HcomChannelImp::SyncSendInner(const UBSHcomRequest &req)
         return SyncSendSplitWithWorkerPoll(ep, req, fragmentNum);
     }
 
-    HcomServiceSelfSyncParam syncParam {};
+    HcomServiceSelfSyncParam syncParam{};
     Callback *callback = UBSHcomNewCallback(SyncSendCbForWorkerPoll, std::placeholders::_1, &syncParam);
     if (NN_UNLIKELY(callback == nullptr)) {
         NN_LOG_ERROR("Sync send callback is nullptr");
         return SER_NEW_OBJECT_FAILED;
     }
 
-    TimerCtx timerContext {};
+    TimerCtx timerContext{};
     result = PrepareTimerContext(callback, mOptions.twoSideTimeout, timerContext);
     if (result != SER_OK) {
         delete callback;
@@ -544,8 +540,9 @@ SerResult HcomChannelImp::SyncSendInner(const UBSHcomRequest &req)
     if (NN_LIKELY(transReq.size >= mRndvThreshold)) {
         result = RndvInner(ep, req, transOp, false);
     } else {
-        NN_LOG_DEBUG("[Request Send] ------ channel id=" << mOptions.id << ", ep id=" << ep->Id() << ", seqNo=" <<
-                     transOp.seqNo << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
+        NN_LOG_DEBUG("[Request Send] ------ channel id="
+                     << mOptions.id << ", ep id=" << ep->Id() << ", seqNo=" << transOp.seqNo
+                     << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
         result = ep->PostSend(req.opcode, transReq, transOp);
     }
     if (NN_UNLIKELY(result != SER_OK)) {
@@ -559,7 +556,7 @@ SerResult HcomChannelImp::SyncSendInner(const UBSHcomRequest &req)
 }
 
 SerResult HcomChannelImp::SyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, const UBSHcomRequest &req,
-    uint32_t fragmentNum)
+                                                      uint32_t fragmentNum)
 {
     UBSHcomFragmentHeader extHeader;
     extHeader.msgId = {ep->Id(), ep->NextSeq()};
@@ -606,12 +603,11 @@ SerResult HcomChannelImp::SyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
         MarkOpCodeBySeqNo(userSeqNo, NN_NO0, mRespOriginalSeqNo);
         UBSHcomNetTransOpInfo transOp(userSeqNo, mOptions.twoSideTimeout);
         NN_LOG_DEBUG("SyncSendSplitWithWorkerPoll fragment ["
-                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id()
-                     << ", seqNo=" << transOp.seqNo << ", status="
-                     << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM)
+                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id() << ", seqNo="
+                     << transOp.seqNo << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM)
                      << " req.opcode: " << req.opcode);
-        result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
-            sizeof(extHeader));
+        result =
+            ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader, sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
             NN_LOG_ERROR("Channel sync send failed " << result << " ep id " << ep->Id());
             DestroyTimerContext(timerContext);
@@ -625,8 +621,8 @@ SerResult HcomChannelImp::SyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
     return syncParam.Result();
 }
 
-auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
-            -> std::tuple<SpliceMessageResultType, SerResult, std::string>
+auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx,
+                                   bool isResp) -> std::tuple<SpliceMessageResultType, SerResult, std::string>
 {
     const uintptr_t msgAddr = reinterpret_cast<uintptr_t>(ctx.Message()->Data());
     const uint32_t msgSize = ctx.Message()->DataLen();
@@ -645,8 +641,8 @@ auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isR
     const uint32_t totalLength = serviceHeader->totalLength;
     const uint32_t offset = serviceHeader->offset;
 
-    NN_LOG_DEBUG("SpliceMessage: msgId " << msgId << ", totalLength " << totalLength
-                                             << ", offset " << offset << ", size " << payloadLen);
+    NN_LOG_DEBUG("SpliceMessage: msgId " << msgId << ", totalLength " << totalLength << ", offset " << offset
+                                         << ", size " << payloadLen);
 
     // 避免因数据在网络中被篡改而造成高内存占用
     if (totalLength >= SERVICE_MAX_TOTAL_LENGTH) {
@@ -664,8 +660,8 @@ auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isR
         bool isInserted = false;
         {
             std::lock_guard<std::mutex> lock(mMsgReceivedMutex);
-            std::tie(iter, isInserted) = mMsgReceived.emplace(msgId,
-                std::make_shared<std::pair<uint32_t, std::string>>());
+            std::tie(iter, isInserted) =
+                mMsgReceived.emplace(msgId, std::make_shared<std::pair<uint32_t, std::string>>());
             if (NN_LIKELY(isInserted)) {
                 incompleteMsg = iter->second;
             } else {
@@ -751,7 +747,7 @@ auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isR
         // 由 std::shared_ptr 保证，pmsg 一定有效
         std::string msg = std::move(*pmsg);
 
-        HcomServiceTimer* timer = nullptr;
+        HcomServiceTimer *timer = nullptr;
         if (NN_UNLIKELY(mCtxStore->GetSeqNoAndRemove(incompleteMsg->first, timer) == SER_OK)) {
             timer->MarkFinished();
             timer->DeleteCallBack();
@@ -767,7 +763,7 @@ auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isR
 }
 
 SerResult HcomChannelImp::AsyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, const UBSHcomRequest &req,
-    uint32_t fragmentNum, const Callback *done)
+                                                       uint32_t fragmentNum, const Callback *done)
 {
     UBSHcomFragmentHeader extHeader;
     extHeader.msgId = {ep->Id(), ep->NextSeq()};
@@ -814,14 +810,13 @@ SerResult HcomChannelImp::AsyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
 
         UBSHcomNetTransOpInfo transOp(newSeqNo, mOptions.twoSideTimeout);
         NN_LOG_DEBUG("AsyncSendSplitWithWorkerPoll fragment ["
-                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id()
-                     << ", seqNo=" << transOp.seqNo << ", status="
-                     << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
-        result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
-            sizeof(extHeader));
+                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id() << ", seqNo="
+                     << transOp.seqNo << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
+        result =
+            ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader, sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("AsyncSendSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
-                         "] failed");
+            NN_LOG_ERROR("AsyncSendSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum
+                                                                        << "] failed");
 
             DestroyTimerContext(context);
             delete done;
@@ -855,7 +850,7 @@ SerResult HcomChannelImp::AsyncSendInner(const UBSHcomRequest &req, const Callba
 
     UBSHcomNetTransRequest transReq(req.address, req.size, sizeof(SerTransContext));
     uint32_t newSeqNo = 0;
-    TimerCtx context {};
+    TimerCtx context{};
     result = PrepareTimerContext(const_cast<Callback *>(done), mOptions.twoSideTimeout, context);
     if (result != SER_OK) {
         delete done;
@@ -870,8 +865,9 @@ SerResult HcomChannelImp::AsyncSendInner(const UBSHcomRequest &req, const Callba
     if (NN_LIKELY(transReq.size >= mRndvThreshold)) {
         result = RndvInner(ep, req, transOp, false);
     } else {
-        NN_LOG_DEBUG("[Request Send] ------ channel id=" << mOptions.id << ", ep id=" << ep->Id() << ", seqNo=" <<
-                     transOp.seqNo << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
+        NN_LOG_DEBUG("[Request Send] ------ channel id="
+                     << mOptions.id << ", ep id=" << ep->Id() << ", seqNo=" << transOp.seqNo
+                     << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
         result = ep->PostSend(req.opcode, transReq, transOp);
     }
     if (NN_UNLIKELY(result != SER_OK)) {
@@ -883,7 +879,7 @@ SerResult HcomChannelImp::AsyncSendInner(const UBSHcomRequest &req, const Callba
 }
 
 SerResult HcomChannelImp::SyncSendSplitWithSelfPoll(UBSHcomNetEndpoint *&ep, const UBSHcomRequest &req,
-    uint32_t fragmentNum, uint32_t index)
+                                                    uint32_t fragmentNum, uint32_t index)
 {
     UBSHcomFragmentHeader extHeader;
     extHeader.msgId = {ep->Id(), ep->NextSeq()};
@@ -899,11 +895,10 @@ SerResult HcomChannelImp::SyncSendSplitWithSelfPoll(UBSHcomNetEndpoint *&ep, con
         UBSHcomNetTransRequest transReq(reinterpret_cast<void *>(segAddr), segSize, 0);
         UBSHcomNetTransOpInfo transOp(SelfPollNextSeqNo(), mOptions.twoSideTimeout);
         NN_LOG_DEBUG("SyncSendSplitWithSelfPoll fragment ["
-                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id()
-                     << ", seqNo=" << transOp.seqNo << ", status="
-                     << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
-        auto result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
-                                   sizeof(extHeader));
+                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id() << ", seqNo="
+                     << transOp.seqNo << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
+        auto result =
+            ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader, sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
             NN_LOG_ERROR("Channel SyncSendSplitWithSelfPoll failed " << result << " ep id " << ep->Id() << ", ["
                                                                      << (segIndex + 1) << "/" << fragmentNum << "]");
@@ -944,8 +939,9 @@ SerResult HcomChannelImp::SyncSendWithSelfPoll(const UBSHcomRequest &req)
 
     UBSHcomNetTransRequest transReq(req.address, req.size, 0);
     UBSHcomNetTransOpInfo transOp(SelfPollNextSeqNo(), mOptions.twoSideTimeout);
-    NN_LOG_DEBUG("[Request Send] ------ channel id=" << mOptions.id << ", ep id=" << ep->Id() << ", seqNo=" <<
-                 transOp.seqNo << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
+    NN_LOG_DEBUG("[Request Send] ------ channel id=" << mOptions.id << ", ep id=" << ep->Id()
+                                                     << ", seqNo=" << transOp.seqNo << ", status="
+                                                     << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
     result = ep->PostSend(req.opcode, transReq, transOp);
     if (NN_UNLIKELY(result != SER_OK)) {
         NN_LOG_ERROR("Channel sync send failed " << result << " ep id " << ep->Id());
@@ -967,8 +963,9 @@ SerResult HcomChannelImp::SyncSendWithSelfPoll(const UBSHcomRequest &req)
 
 int32_t HcomChannelImp::Call(const UBSHcomRequest &req, UBSHcomResponse &rsp, const Callback *done)
 {
-    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Call" << ", channel id = " << mOptions.id <<
-                 ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
+    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Call"
+                 << ", channel id = " << mOptions.id
+                 << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
     VALIDATE_PARAM(Request, req);
     SerResult result = SER_OK;
     uint64_t timestamp = mOptions.twoSideTimeout < 0 ? UINT64_MAX : mOptions.twoSideTimeout + NetMonotonic::TimeSec();
@@ -1015,7 +1012,7 @@ NResult HcomChannelImp::ReceiveFds(int fds[], uint32_t len, int32_t timeoutSec)
 }
 
 static void SyncCallCbForWorkerPoll(UBSHcomServiceContext &context, UBSHcomResponse *rsp,
-    HcomServiceSelfSyncParam *syncParam)
+                                    HcomServiceSelfSyncParam *syncParam)
 {
     if (NN_UNLIKELY(rsp == nullptr || syncParam == nullptr)) {
         NN_LOG_ERROR("Failed to call SyncCallback as rspOpInfo, rsp or syncParam is null");
@@ -1034,8 +1031,8 @@ static void SyncCallCbForWorkerPoll(UBSHcomServiceContext &context, UBSHcomRespo
 
         if (rsp->address != nullptr) {
             if (NN_UNLIKELY(message.size > rsp->size)) {
-                NN_LOG_ERROR("Sync call check user prepare size " << rsp->size << " less than receive size " <<
-                    message.size);
+                NN_LOG_ERROR("Sync call check user prepare size " << rsp->size << " less than receive size "
+                                                                  << message.size);
                 syncParam->Result(SER_RSP_SIZE_TOO_SMALL);
                 break;
             }
@@ -1083,14 +1080,14 @@ SerResult HcomChannelImp::SyncCallInner(const UBSHcomRequest &req, UBSHcomRespon
     }
 
     /* worker poll mode */
-    HcomServiceSelfSyncParam syncParam {};
+    HcomServiceSelfSyncParam syncParam{};
     Callback *newCallback = UBSHcomNewCallback(SyncCallCbForWorkerPoll, std::placeholders::_1, &rsp, &syncParam);
     if (NN_UNLIKELY(newCallback == nullptr)) {
         NN_LOG_ERROR("Sync call malloc callback failed");
         return SER_NEW_OBJECT_FAILED;
     }
 
-    TimerCtx context {};
+    TimerCtx context{};
     result = PrepareTimerContext(newCallback, timeOut == 0 ? mOptions.twoSideTimeout : timeOut, context);
     if (result != SER_OK) {
         delete newCallback;
@@ -1118,7 +1115,7 @@ SerResult HcomChannelImp::SyncCallInner(const UBSHcomRequest &req, UBSHcomRespon
 }
 
 SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, const UBSHcomRequest &req,
-    uint32_t fragmentNum, UBSHcomResponse &rsp)
+                                                      uint32_t fragmentNum, UBSHcomResponse &rsp)
 {
     UBSHcomFragmentHeader extHeader;
     extHeader.msgId = {ep->Id(), ep->NextSeq()};
@@ -1145,7 +1142,7 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
                     const_cast<Callback *>(newCallback)->Run(context);
                 }
             },
-                std::placeholders::_1);
+            std::placeholders::_1);
         if (!cb) {
             NN_LOG_ERROR("Sync call split malloc callback failed");
             delete newCallback;
@@ -1171,11 +1168,11 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
                      << (segIndex + 1) << "/" << fragmentNum << "] begin;ep id=" << ep->Id()
                      << ", seqNo=" << transOp.seqNo << " ,opCode = " << req.opcode
                      << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
-        result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
-            sizeof(extHeader));
+        result =
+            ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader, sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("SyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
-                         "] failed");
+            NN_LOG_ERROR("SyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum
+                                                                       << "] failed");
             DestroyTimerContext(context);
             delete newCallback;
             return result;
@@ -1187,8 +1184,8 @@ SerResult HcomChannelImp::SyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
     return syncParam.Result();
 }
 
-SerResult HcomChannelImp::RndvInner(UBSHcomNetEndpoint *ep, const UBSHcomRequest &req,
-    UBSHcomNetTransOpInfo &transOp, bool isCall)
+SerResult HcomChannelImp::RndvInner(UBSHcomNetEndpoint *ep, const UBSHcomRequest &req, UBSHcomNetTransOpInfo &transOp,
+                                    bool isCall)
 {
     SerResult result = SER_OK;
     PgTable *pgTable = reinterpret_cast<PgTable *>(mPgtable);
@@ -1212,7 +1209,7 @@ SerResult HcomChannelImp::RndvInner(UBSHcomNetEndpoint *ep, const UBSHcomRequest
 
         HcomServiceRndvMessage rndvMessage(mConnectTimestamp.GetRemoteTimestamp(mOptions.twoSideTimeout), newReq);
         UBSHcomNetTransRequest transReq(const_cast<void *>(reinterpret_cast<const void *>(&rndvMessage)),
-            sizeof(HcomServiceRndvMessage), sizeof(SerTransContext));
+                                        sizeof(HcomServiceRndvMessage), sizeof(SerTransContext));
         // RNDV请求 对端必须reply 不区分send和Call
         SetServiceTransCtx(transReq.upCtxData, transOp.seqNo, false);
         result = ep->PostSend(ServiceV2PrivateOpcode::RNDV_CALL_OP_V2, transReq, transOp);
@@ -1238,8 +1235,8 @@ static SerResult SyncCallCbForSelfPoll(UBSHcomNetResponseContext &ctx, UBSHcomRe
                 return SER_INVALID_PARAM;
             }
         } else {
-            NN_LOG_ERROR("Sync call self poll check user prepare size " << rsp.size << " less than receive size " <<
-                dataLength);
+            NN_LOG_ERROR("Sync call self poll check user prepare size " << rsp.size << " less than receive size "
+                                                                        << dataLength);
             return SER_RSP_SIZE_TOO_SMALL;
         }
     } else {
@@ -1312,7 +1309,7 @@ SerResult HcomChannelImp::SyncCallWithSelfPoll(const UBSHcomRequest &req, UBSHco
 }
 
 static SerResult SyncCallbackWithSelfPoll(void *data, uint32_t dataLen, const UBSHcomNetTransHeader &header,
-    UBSHcomResponse &rsp)
+                                          UBSHcomResponse &rsp)
 {
     rsp.errorCode = header.errorCode;
     if (rsp.address != nullptr) {
@@ -1322,8 +1319,8 @@ static SerResult SyncCallbackWithSelfPoll(void *data, uint32_t dataLen, const UB
                 return SER_INVALID_PARAM;
             }
         } else {
-            NN_LOG_ERROR("Sync call self poll check user prepare size " << rsp.size << " less than receive size " <<
-                dataLen);
+            NN_LOG_ERROR("Sync call self poll check user prepare size " << rsp.size << " less than receive size "
+                                                                        << dataLen);
             return SER_RSP_SIZE_TOO_SMALL;
         }
     } else {
@@ -1344,7 +1341,7 @@ static SerResult SyncCallbackWithSelfPoll(void *data, uint32_t dataLen, const UB
 }
 
 SerResult HcomChannelImp::SyncCallSplitWithSelfPoll(UBSHcomNetEndpoint *&ep, const UBSHcomRequest &req,
-    uint32_t fragmentNum, uint32_t index, UBSHcomResponse &rsp)
+                                                    uint32_t fragmentNum, uint32_t index, UBSHcomResponse &rsp)
 {
     UBSHcomFragmentHeader extHeader;
     extHeader.msgId = {ep->Id(), ep->NextSeq()};
@@ -1364,8 +1361,8 @@ SerResult HcomChannelImp::SyncCallSplitWithSelfPoll(UBSHcomNetEndpoint *&ep, con
                      << (segIndex + 1) << "/" << fragmentNum << "] begin;ep id=" << ep->Id()
                      << ", seqNo=" << transOp.seqNo << ", opCode = " << req.opcode
                      << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
-        auto result = ep->PostSend(req.opcode, msg, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
-            sizeof(extHeader));
+        auto result =
+            ep->PostSend(req.opcode, msg, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader, sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
             NN_LOG_ERROR("Channel SyncCallSplitWithSelfPoll failed " << result << " ep id " << ep->Id() << ", ["
                                                                      << (segIndex + 1) << "/" << fragmentNum << "]");
@@ -1419,7 +1416,7 @@ SerResult HcomChannelImp::AsyncCallInner(const UBSHcomRequest &req, const Callba
         return AsyncCallSplitWithWorkerPoll(ep, req, fragmentNum, done);
     }
 
-    TimerCtx context {};
+    TimerCtx context{};
     result = PrepareTimerContext(const_cast<Callback *>(done), mOptions.twoSideTimeout, context);
     if (result != SER_OK) {
         delete done;
@@ -1446,7 +1443,7 @@ SerResult HcomChannelImp::AsyncCallInner(const UBSHcomRequest &req, const Callba
 }
 
 SerResult HcomChannelImp::AsyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, const UBSHcomRequest &req,
-    uint32_t fragmentNum, const Callback *done)
+                                                       uint32_t fragmentNum, const Callback *done)
 {
     UBSHcomFragmentHeader extHeader;
     extHeader.msgId = {ep->Id(), ep->NextSeq()};
@@ -1461,8 +1458,7 @@ SerResult HcomChannelImp::AsyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
 
         Callback *cb = UBSHcomNewCallback(
             [segIndex, fragmentNum, done](UBSHcomServiceContext &context) {
-                NN_LOG_DEBUG("Run CB [" << (segIndex + 1) << "/" << fragmentNum << "], result "
-                                        << context.Result());
+                NN_LOG_DEBUG("Run CB [" << (segIndex + 1) << "/" << fragmentNum << "], result " << context.Result());
                 if (segIndex == fragmentNum - 1) {
                     const_cast<Callback *>(done)->Run(context);
                 }
@@ -1493,11 +1489,11 @@ SerResult HcomChannelImp::AsyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
                      << (segIndex + 1) << "/" << fragmentNum << "] begin;ep id=" << ep->Id()
                      << ", seqNo=" << transOp.seqNo << " ,opCode = " << req.opcode
                      << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
-        result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
-            sizeof(extHeader));
+        result =
+            ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader, sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("AsyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
-                         "] failed");
+            NN_LOG_ERROR("AsyncCallSplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum
+                                                                        << "] failed");
             DestroyTimerContext(context);
             delete done;
             return result;
@@ -1510,8 +1506,9 @@ SerResult HcomChannelImp::AsyncCallSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, 
 
 int32_t HcomChannelImp::Reply(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback *done)
 {
-    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Reply" << ", channel id = " << mOptions.id <<
-                 ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
+    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Reply"
+                 << ", channel id = " << mOptions.id
+                 << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
     VALIDATE_PARAM(Reply, ctx, req, mOptions.selfPoll);
     SerResult ret = SER_OK;
     uint64_t timestamp = mOptions.twoSideTimeout < 0 ? UINT64_MAX : mOptions.twoSideTimeout + NetMonotonic::TimeSec();
@@ -1557,7 +1554,7 @@ SerResult HcomChannelImp::SyncReplyInner(const UBSHcomReplyContext &ctx, const U
         return SyncReplySplitWithWorkerPoll(ctx, ep, req, fragmentNum);
     }
 
-    HcomServiceSelfSyncParam syncParam {};
+    HcomServiceSelfSyncParam syncParam{};
     Callback *newCallback = UBSHcomNewCallback(
         [&syncParam](UBSHcomServiceContext &context) {
             if (NN_UNLIKELY(context.Result() != SER_OK)) {
@@ -1572,7 +1569,7 @@ SerResult HcomChannelImp::SyncReplyInner(const UBSHcomReplyContext &ctx, const U
         return SER_NEW_OBJECT_FAILED;
     }
 
-    TimerCtx context {};
+    TimerCtx context{};
     auto result = PrepareTimerContext(newCallback, mOptions.twoSideTimeout, context);
     if (result != SER_OK) {
         delete newCallback;
@@ -1597,7 +1594,7 @@ SerResult HcomChannelImp::SyncReplyInner(const UBSHcomReplyContext &ctx, const U
 }
 
 SerResult HcomChannelImp::SyncReplySplitWithWorkerPoll(const UBSHcomReplyContext &ctx, UBSHcomNetEndpoint *&ep,
-    const UBSHcomRequest &req, uint32_t fragmentNum)
+                                                       const UBSHcomRequest &req, uint32_t fragmentNum)
 {
     UBSHcomFragmentHeader extHeader;
     extHeader.msgId = {ep->Id(), ep->NextSeq()};
@@ -1644,12 +1641,11 @@ SerResult HcomChannelImp::SyncReplySplitWithWorkerPoll(const UBSHcomReplyContext
         MarkOpCodeBySeqNo(userSeqNo, ctx.rspCtx, mRespOriginalSeqNo);
         UBSHcomNetTransOpInfo transOp(userSeqNo, mOptions.twoSideTimeout, ctx.errorCode, 0);
         NN_LOG_DEBUG("SyncReplySplitWithWorkerPoll fragment ["
-                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id()
-                     << ", seqNo=" << transOp.seqNo << ", status="
-                     << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM)
+                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id() << ", seqNo="
+                     << transOp.seqNo << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM)
                      << " req.opcode: " << req.opcode);
-        result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
-            sizeof(extHeader));
+        result =
+            ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader, sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
             NN_LOG_ERROR("Channel sync reply failed " << result << " ep id " << ep->Id());
             DestroyTimerContext(context);
@@ -1664,7 +1660,7 @@ SerResult HcomChannelImp::SyncReplySplitWithWorkerPoll(const UBSHcomReplyContext
 }
 
 SerResult HcomChannelImp::AsyncReplyInner(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req,
-    const Callback *done)
+                                          const Callback *done)
 {
     SerResult res = SER_OK;
     UBSHcomNetEndpoint *ep = nullptr;
@@ -1689,7 +1685,8 @@ SerResult HcomChannelImp::AsyncReplyInner(const UBSHcomReplyContext &ctx, const 
 }
 
 SerResult HcomChannelImp::AsyncReplySplitWithWorkerPoll(const UBSHcomReplyContext &ctx, UBSHcomNetEndpoint *&ep,
-    const UBSHcomRequest &req, uint32_t fragmentNum, const Callback *done)
+                                                        const UBSHcomRequest &req, uint32_t fragmentNum,
+                                                        const Callback *done)
 {
     UBSHcomFragmentHeader extHeader;
     extHeader.msgId = {ep->Id(), ep->NextSeq()};
@@ -1731,14 +1728,13 @@ SerResult HcomChannelImp::AsyncReplySplitWithWorkerPoll(const UBSHcomReplyContex
         MarkOpCodeBySeqNo(newSeqNo, ctx.rspCtx, mRespOriginalSeqNo);
         UBSHcomNetTransOpInfo transOp(newSeqNo, mOptions.twoSideTimeout, ctx.errorCode, 0);
         NN_LOG_DEBUG("AsyncReplySplitWithWorkerPoll fragment ["
-                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id()
-                     << ", seqNo=" << transOp.seqNo << ", status="
-                     << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
-        result = ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader,
-            sizeof(extHeader));
+                     << (segIndex + 1) << "/" << fragmentNum << "] begin; ep id=" << ep->Id() << ", seqNo="
+                     << transOp.seqNo << ", status=" << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_HCOM));
+        result =
+            ep->PostSend(req.opcode, transReq, transOp, UBSHcomExtHeaderType::FRAGMENT, &extHeader, sizeof(extHeader));
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("AsyncReplySplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum <<
-                         "] failed");
+            NN_LOG_ERROR("AsyncReplySplitWithWorkerPoll Send fragment [" << (segIndex + 1) << "/" << fragmentNum
+                                                                         << "] failed");
 
             DestroyTimerContext(context);
             delete done;
@@ -1765,14 +1761,15 @@ SerResult HcomChannelImp::OneSideSyncWithSelfPoll(const UBSHcomOneSideRequest &r
         uint32_t index = 0;
         result = AcquireSelfPollEp(ep, index, mOptions.oneSideTimeout, i);
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("Channel sync read acquire ep failed " << result << " channel id " << mOptions.id <<
-                " in rail " << i);
+            NN_LOG_ERROR("Channel sync read acquire ep failed " << result << " channel id " << mOptions.id
+                                                                << " in rail " << i);
             return result;
         }
 
         CalculateOffsetAndSize(request, ep, remain, offset, size);
         UBSHcomNetTransRequest req(request.lAddress + offset, request.rAddress + offset,
-            request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size, 0);
+                                   request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size,
+                                   0);
         req.srcSeg = reinterpret_cast<void *>(request.lKey.tokens[ep->GetDevIndex()]);
         req.dstSeg = reinterpret_cast<void *>(request.rKey.tokens[ep->GetDevIndex()]);
         if (isWrite) {
@@ -1797,9 +1794,10 @@ SerResult HcomChannelImp::OneSideSyncWithSelfPoll(const UBSHcomOneSideRequest &r
     return SER_OK;
 }
 
-SerResult HcomChannelImp::PrepareCallback(HcomServiceSelfSyncParam& syncParam, TimerCtx &syncContext)
+SerResult HcomChannelImp::PrepareCallback(HcomServiceSelfSyncParam &syncParam, TimerCtx &syncContext)
 {
-    Callback *newCallback = UBSHcomNewCallback([&syncParam](UBSHcomServiceContext &context) {
+    Callback *newCallback = UBSHcomNewCallback(
+        [&syncParam](UBSHcomServiceContext &context) {
             if (NN_UNLIKELY(context.Result() != SER_OK)) {
                 NN_LOG_ERROR("Prepare callback failed " << context.Result());
             }
@@ -1820,7 +1818,6 @@ SerResult HcomChannelImp::PrepareCallback(HcomServiceSelfSyncParam& syncParam, T
     return SER_OK;
 }
 
-
 SerResult HcomChannelImp::OneSideSyncWithWorkerPoll(const UBSHcomOneSideRequest &request, bool isWrite)
 {
     SerResult ret = SER_OK;
@@ -1835,11 +1832,11 @@ SerResult HcomChannelImp::OneSideSyncWithWorkerPoll(const UBSHcomOneSideRequest 
         UBSHcomNetEndpoint *ep = nullptr;
         auto result = NextWorkerPollEp(ep, idx);
         if (NN_UNLIKELY(result != SER_OK)) {
-            NN_LOG_ERROR("NextWorkerPollEp failed, result:" << result <<", idx: "<< idx);
+            NN_LOG_ERROR("NextWorkerPollEp failed, result:" << result << ", idx: " << idx);
             ret = result;
             break;
         }
-        TimerCtx syncContext {};
+        TimerCtx syncContext{};
         result = PrepareCallback(paramVec[idx], syncContext);
         if (NN_UNLIKELY(result != SER_OK)) {
             NN_LOG_ERROR("PrepareCallback failed, result:" << result << ", idx:" << idx);
@@ -1849,8 +1846,8 @@ SerResult HcomChannelImp::OneSideSyncWithWorkerPoll(const UBSHcomOneSideRequest 
 
         CalculateOffsetAndSize(request, ep, remain, offset, size);
         UBSHcomNetTransRequest req(request.lAddress + offset, request.rAddress + offset,
-            request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size,
-            sizeof(SerTransContext));
+                                   request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size,
+                                   sizeof(SerTransContext));
         req.srcSeg = reinterpret_cast<void *>(request.lKey.tokens[ep->GetDevIndex()]);
         req.dstSeg = reinterpret_cast<void *>(request.rKey.tokens[ep->GetDevIndex()]);
         SetServiceTransCtx(req.upCtxData, syncContext.seqNo);
@@ -1923,7 +1920,7 @@ void HcomChannelImp::ProcessRemainCallback(Callback *cb, uint32_t remainNums)
 }
 
 SerResult HcomChannelImp::OneSideAsyncWithWorkerPoll(const UBSHcomOneSideRequest &request, const Callback *done,
-    bool isWrite)
+                                                     bool isWrite)
 {
     uint32_t size = request.size;
     uint32_t offset = 0;
@@ -1946,7 +1943,7 @@ SerResult HcomChannelImp::OneSideAsyncWithWorkerPoll(const UBSHcomOneSideRequest
             return result;
         }
 
-        TimerCtx readContext {};
+        TimerCtx readContext{};
         result = PrepareTimerContext(cb, mOptions.oneSideTimeout, readContext);
         if (result != SER_OK) {
             NN_LOG_ERROR("PrepareTimerContext failed " << result << " in rail " << i);
@@ -1956,8 +1953,8 @@ SerResult HcomChannelImp::OneSideAsyncWithWorkerPoll(const UBSHcomOneSideRequest
 
         CalculateOffsetAndSize(request, ep, remain, offset, size);
         UBSHcomNetTransRequest req(request.lAddress + offset, request.rAddress + offset,
-            request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size,
-            sizeof(SerTransContext));
+                                   request.lKey.keys[ep->GetDevIndex()], request.rKey.keys[ep->GetPeerDevIndex()], size,
+                                   sizeof(SerTransContext));
         req.srcSeg = reinterpret_cast<void *>(request.lKey.tokens[ep->GetDevIndex()]);
         req.dstSeg = reinterpret_cast<void *>(request.rKey.tokens[ep->GetDevIndex()]);
         SetServiceTransCtx(req.upCtxData, readContext.seqNo);
@@ -1997,8 +1994,9 @@ SerResult HcomChannelImp::OneSideInner(const UBSHcomOneSideRequest &request, con
 
 int32_t HcomChannelImp::Put(const UBSHcomOneSideRequest &req, const Callback *done)
 {
-    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Put" << ", channel id = " << mOptions.id <<
-                 ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
+    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Put"
+                 << ", channel id = " << mOptions.id
+                 << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
     VALIDATE_PARAM(OneSideRequest, req);
     SerResult ret = SER_OK;
     uint64_t timestamp = mOptions.oneSideTimeout < 0 ? UINT64_MAX : mOptions.oneSideTimeout + NetMonotonic::TimeSec();
@@ -2027,8 +2025,9 @@ int32_t HcomChannelImp::Put(const UBSHcomOneSideRequest &req, const Callback *do
 
 int32_t HcomChannelImp::Get(const UBSHcomOneSideRequest &req, const Callback *done)
 {
-    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Get" << ", channel id = " << mOptions.id <<
-                 ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
+    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::Get"
+                 << ", channel id = " << mOptions.id
+                 << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
     VALIDATE_PARAM(OneSideRequest, req);
     SerResult ret = SER_OK;
     uint64_t timestamp = mOptions.oneSideTimeout < 0 ? UINT64_MAX : mOptions.oneSideTimeout + NetMonotonic::TimeSec();
@@ -2063,12 +2062,13 @@ inline void DestroyCallback(const Callback *cb)
 }
 
 int32_t HcomChannelImp::Recv(const UBSHcomServiceContext &context, uintptr_t address, uint32_t size,
-    const Callback *done)
+                             const Callback *done)
 {
     HcomServiceRndvMessage *rndvMessage = static_cast<HcomServiceRndvMessage *>(context.mData);
     if (rndvMessage == nullptr || rndvMessage->request.size != size) {
-        NN_LOG_ERROR(" Fail to get Request data or Request size " << size << " and processing size " <<
-            (rndvMessage == nullptr ? 0 : rndvMessage->request.size) << " mismatch");
+        NN_LOG_ERROR(" Fail to get Request data or Request size "
+                     << size << " and processing size " << (rndvMessage == nullptr ? 0 : rndvMessage->request.size)
+                     << " mismatch");
         DestroyCallback(done);
         return SER_ERROR;
     }
@@ -2117,7 +2117,8 @@ SerResult HcomChannelImp::OneSideSglSyncWithSelfPoll(const UBSHcomOneSideSglRequ
     UBSHcomNetTransSgeIov iovArray[NET_SGE_MAX_IOV];
     for (uint32_t i = 0; i < request.iovCount; i++) {
         iovArray[i] = UBSHcomNetTransSgeIov(request.iov[i].lAddress, request.iov[i].rAddress,
-            request.iov[i].lKey.keys[0], request.iov[i].rKey.keys[0], request.iov[i].size);
+                                            request.iov[i].lKey.keys[0], request.iov[i].rKey.keys[0],
+                                            request.iov[i].size);
         iovArray[i].srcSeg = reinterpret_cast<void *>(request.iov[i].lKey.tokens[0]);
         iovArray[i].dstSeg = reinterpret_cast<void *>(request.iov[i].rKey.tokens[0]);
     }
@@ -2152,9 +2153,10 @@ SerResult HcomChannelImp::OneSideSglSyncWithWorkerPoll(const UBSHcomOneSideSglRe
         NN_LOG_ERROR("Get Ep failed " << result);
         return result;
     }
-    
-    HcomServiceSelfSyncParam syncParam {};
-    Callback *newCallback = UBSHcomNewCallback([&syncParam](UBSHcomServiceContext &context) {
+
+    HcomServiceSelfSyncParam syncParam{};
+    Callback *newCallback = UBSHcomNewCallback(
+        [&syncParam](UBSHcomServiceContext &context) {
             if (NN_UNLIKELY(context.Result() != SER_OK)) {
                 NN_LOG_ERROR("Prepare callback failed " << context.Result());
             }
@@ -2167,7 +2169,7 @@ SerResult HcomChannelImp::OneSideSglSyncWithWorkerPoll(const UBSHcomOneSideSglRe
         return SER_NEW_OBJECT_FAILED;
     }
 
-    TimerCtx readContext {};
+    TimerCtx readContext{};
     result = PrepareTimerContext(newCallback, mOptions.oneSideTimeout, readContext);
     if (result != SER_OK) {
         NN_LOG_ERROR("PrepareTimerContext failed " << result);
@@ -2178,7 +2180,8 @@ SerResult HcomChannelImp::OneSideSglSyncWithWorkerPoll(const UBSHcomOneSideSglRe
     UBSHcomNetTransSgeIov iovArray[NET_SGE_MAX_IOV];
     for (uint32_t i = 0; i < request.iovCount; i++) {
         iovArray[i] = UBSHcomNetTransSgeIov(request.iov[i].lAddress, request.iov[i].rAddress,
-            request.iov[i].lKey.keys[0], request.iov[i].rKey.keys[0], request.iov[i].size);
+                                            request.iov[i].lKey.keys[0], request.iov[i].rKey.keys[0],
+                                            request.iov[i].size);
         iovArray[i].srcSeg = reinterpret_cast<void *>(request.iov[i].lKey.tokens[0]);
         iovArray[i].dstSeg = reinterpret_cast<void *>(request.iov[i].rKey.tokens[0]);
     }
@@ -2195,13 +2198,13 @@ SerResult HcomChannelImp::OneSideSglSyncWithWorkerPoll(const UBSHcomOneSideSglRe
         DestroyTimerContext(readContext);
         return result;
     }
-    
+
     syncParam.Wait();
     return syncParam.Result();
 }
 
 SerResult HcomChannelImp::OneSideSglAsyncWithWorkerPoll(const UBSHcomOneSideSglRequest &request, const Callback *done,
-    bool isWrite)
+                                                        bool isWrite)
 {
     UBSHcomNetEndpoint *ep = nullptr;
     auto result = NextWorkerPollEp(ep, 0);
@@ -2210,7 +2213,7 @@ SerResult HcomChannelImp::OneSideSglAsyncWithWorkerPoll(const UBSHcomOneSideSglR
         return result;
     }
 
-    TimerCtx readContext {};
+    TimerCtx readContext{};
     result = PrepareTimerContext(done, mOptions.oneSideTimeout, readContext);
     if (result != SER_OK) {
         NN_LOG_ERROR("PrepareTimerContext failed " << result);
@@ -2221,7 +2224,8 @@ SerResult HcomChannelImp::OneSideSglAsyncWithWorkerPoll(const UBSHcomOneSideSglR
     UBSHcomNetTransSgeIov iovArray[NET_SGE_MAX_IOV];
     for (uint32_t i = 0; i < request.iovCount; i++) {
         iovArray[i] = UBSHcomNetTransSgeIov(request.iov[i].lAddress, request.iov[i].rAddress,
-            request.iov[i].lKey.keys[0], request.iov[i].rKey.keys[0], request.iov[i].size);
+                                            request.iov[i].lKey.keys[0], request.iov[i].rKey.keys[0],
+                                            request.iov[i].size);
         iovArray[i].srcSeg = reinterpret_cast<void *>(request.iov[i].lKey.tokens[0]);
         iovArray[i].dstSeg = reinterpret_cast<void *>(request.iov[i].rKey.tokens[0]);
     }
@@ -2237,7 +2241,7 @@ SerResult HcomChannelImp::OneSideSglAsyncWithWorkerPoll(const UBSHcomOneSideSglR
         DestroyTimerContext(readContext);
         return result;
     }
-    
+
     return SER_OK;
 }
 
@@ -2266,8 +2270,9 @@ SerResult HcomChannelImp::OneSideSglInner(const UBSHcomOneSideSglRequest &reques
 
 int32_t HcomChannelImp::PutV(const UBSHcomOneSideSglRequest &req, const Callback *done)
 {
-    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::PutV" << ", channel id = " << mOptions.id <<
-                 ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
+    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::PutV"
+                 << ", channel id = " << mOptions.id
+                 << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
     VALIDATE_PARAM(OneSideSglRequest, req);
     SerResult ret = SER_OK;
     uint64_t timestamp = mOptions.oneSideTimeout < 0 ? UINT64_MAX : mOptions.oneSideTimeout + NetMonotonic::TimeSec();
@@ -2295,8 +2300,9 @@ int32_t HcomChannelImp::PutV(const UBSHcomOneSideSglRequest &req, const Callback
 }
 int32_t HcomChannelImp::GetV(const UBSHcomOneSideSglRequest &req, const Callback *done)
 {
-    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::GetV" << ", channel id = " << mOptions.id <<
-                 ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
+    NN_LOG_DEBUG("[Request Send] ------ API = HcomChannelImp::GetV"
+                 << ", channel id = " << mOptions.id
+                 << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::CALLED));
     VALIDATE_PARAM(OneSideSglRequest, req);
     SerResult ret = SER_OK;
     uint64_t timestamp = mOptions.oneSideTimeout < 0 ? UINT64_MAX : mOptions.oneSideTimeout + NetMonotonic::TimeSec();
@@ -2342,8 +2348,8 @@ SerResult HcomChannelImp::FlowControl(uint64_t size, int16_t timeout, uint64_t t
         }
 
         if (NN_UNLIKELY(rateLimiter->InvalidateSize(size))) {
-            NN_LOG_ERROR("Failed to flow control by user size " << size << " over configure thresholdByte " <<
-                rateLimiter->thresholdByte);
+            NN_LOG_ERROR("Failed to flow control by user size " << size << " over configure thresholdByte "
+                                                                << rateLimiter->thresholdByte);
             return SER_INVALID_PARAM;
         }
 
@@ -2421,8 +2427,7 @@ void HcomChannelImp::UnSetEpUpCtx()
 bool HcomChannelImp::AllEpEstablished()
 {
     for (uint16_t i = 0; i < mEpInfo->epSize; i++) {
-        if (mEpInfo->epState[i].Compare(SER_EP_BROKEN) ||
-            mEpInfo->epArr[i]->State().Compare(NEP_BROKEN)) {
+        if (mEpInfo->epState[i].Compare(SER_EP_BROKEN) || mEpInfo->epArr[i]->State().Compare(NEP_BROKEN)) {
             return false;
         }
     }
@@ -2560,20 +2565,20 @@ int32_t HcomChannelImp::SetTwoSideThreshold(const UBSHcomTwoSideThreshold &thres
             return SER_INVALID_PARAM;
         }
         mRndvThreshold = threshold.rndvThreshold;
-        NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << mUserSplitSendThreshold <<
-                    ", Rndv Threshold is: " << mRndvThreshold);
+        NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << mUserSplitSendThreshold
+                                                                   << ", Rndv Threshold is: " << mRndvThreshold);
         return SER_OK;
     }
 
     if (threshold.splitThreshold < NN_NO128) {
-        NN_LOG_ERROR("The split threshold (" << threshold.splitThreshold <<
-            ") is less than 128, SplitSend may not work properly");
+        NN_LOG_ERROR("The split threshold (" << threshold.splitThreshold
+                                             << ") is less than 128, SplitSend may not work properly");
         return SER_INVALID_PARAM;
     }
 
     if (threshold.splitThreshold > mMaxSendRecvDataSize) {
-        NN_LOG_ERROR("The split threshold (" << threshold.splitThreshold << ") is larger than SegSize (" <<
-            mMaxSendRecvDataSize << "), SplitSend will fail to post request");
+        NN_LOG_ERROR("The split threshold (" << threshold.splitThreshold << ") is larger than SegSize ("
+                                             << mMaxSendRecvDataSize << "), SplitSend will fail to post request");
         return SER_INVALID_PARAM;
     }
 
@@ -2592,13 +2597,13 @@ int32_t HcomChannelImp::SetTwoSideThreshold(const UBSHcomTwoSideThreshold &thres
     // 拆包阈值只有在小于rndv阈值时才有效
     if (threshold.splitThreshold < threshold.rndvThreshold) {
         mUserSplitSendThreshold =
-        threshold.splitThreshold - sizeof(UBSHcomNetTransHeader) - sizeof(UBSHcomFragmentHeader);
+            threshold.splitThreshold - sizeof(UBSHcomNetTransHeader) - sizeof(UBSHcomFragmentHeader);
     }
 
     mRndvThreshold = threshold.rndvThreshold;
 
-    NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << threshold.splitThreshold <<
-        ", Rndv Threshold is: " << mRndvThreshold);
+    NN_LOG_INFO("SplitSend (UBC only) enabled with threshold " << threshold.splitThreshold
+                                                               << ", Rndv Threshold is: " << mRndvThreshold);
     return SER_OK;
 }
 
@@ -2611,5 +2616,5 @@ uint64_t HcomChannelImp::GetUpCtx()
 {
     return mUpCtx;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

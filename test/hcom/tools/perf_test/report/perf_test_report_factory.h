@@ -12,7 +12,7 @@
 namespace hcom {
 namespace perftest {
 
-using ReportCreateFunc = PerfTestReportBase* (*)(const PerfTestConfig& cfg);
+using ReportCreateFunc = PerfTestReportBase *(*)(const PerfTestConfig &cfg);
 
 class PerfTestReportFactory {
 public:
@@ -23,7 +23,7 @@ public:
         return instance;
     }
 
-    PerfTestReportBase* CreatePerfTestReport(const PerfTestConfig& cfg);
+    PerfTestReportBase *CreatePerfTestReport(const PerfTestConfig &cfg);
 
     void RegistCreateFunc(PERF_TEST_REPORT_TYPE type, ReportCreateFunc func)
     {
@@ -36,7 +36,6 @@ private:
     std::map<uint32_t, ReportCreateFunc> m_createFuncs;
 };
 
-
 class PerfTestReportRegister {
 public:
     PerfTestReportRegister(PERF_TEST_REPORT_TYPE type, ReportCreateFunc func)
@@ -45,13 +44,13 @@ public:
     }
 };
 
-#define REGIST_PERF_TEST_REPORT_CREATOR(ReportType, ReportClass)                             \
-    static PerfTestReportBase* Create##ReportClass(const PerfTestConfig& cfg)                \
-    {                                                                                        \
-        return new (std::nothrow) ReportClass(cfg);                                          \
-    }                                                                                        \
+#define REGIST_PERF_TEST_REPORT_CREATOR(ReportType, ReportClass)              \
+    static PerfTestReportBase *Create##ReportClass(const PerfTestConfig &cfg) \
+    {                                                                         \
+        return new (std::nothrow) ReportClass(cfg);                           \
+    }                                                                         \
     static PerfTestReportRegister g_register_##ReportClass(ReportType, Create##ReportClass)
 
-}
-}
+} // namespace perftest
+} // namespace hcom
 #endif

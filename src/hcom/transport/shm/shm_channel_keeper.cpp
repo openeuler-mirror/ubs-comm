@@ -14,8 +14,8 @@
 #include <unistd.h>
 
 #include "shm_channel.h"
-#include "shm_handle_fds.h"
 #include "shm_channel_keeper.h"
+#include "shm_handle_fds.h"
 
 namespace ock {
 namespace hcom {
@@ -38,8 +38,8 @@ HResult ShmChannelKeeper::Start()
     mEpollHandle = epoll_create(MAX_EPOLL_SIZE);
     if (mEpollHandle < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create epoll in ShmChannelKeeper " << mName << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create epoll in ShmChannelKeeper "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return SH_CREATE_KEEPER_EPOLL_FAILURE;
     }
 
@@ -92,8 +92,8 @@ HResult ShmChannelKeeper::AddShmChannel(const ShmChannelPtr &ch)
     std::lock_guard<std::mutex> guard(mChMapMutex);
     auto iter = mShmChannels.find(ch->Id());
     if (iter != mShmChannels.end()) {
-        NN_LOG_ERROR("Failed to add channel " << ch->Id() << " into ShmChannelKeeper " << mName <<
-            " as already existed, remove it firstly.");
+        NN_LOG_ERROR("Failed to add channel " << ch->Id() << " into ShmChannelKeeper " << mName
+                                              << " as already existed, remove it firstly.");
         return SH_DUP_CH_IN_KEEPER;
     }
 
@@ -102,9 +102,9 @@ HResult ShmChannelKeeper::AddShmChannel(const ShmChannelPtr &ch)
     ev.data.ptr = ch.Get();
     if (epoll_ctl(mEpollHandle, EPOLL_CTL_ADD, ch->UdsFD(), &ev) != 0) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to add channel " << ch->Id() << " into ShmChannelKeeper " << mName <<
-            " as epoll add failed, errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to add channel "
+                     << ch->Id() << " into ShmChannelKeeper " << mName << " as epoll add failed, errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         return SH_CH_ADD_FAILURE_IN_KEEPER;
     }
 
@@ -128,8 +128,9 @@ HResult ShmChannelKeeper::RemoveShmChannel(uint64_t id)
 
     if (epoll_ctl(mEpollHandle, EPOLL_CTL_DEL, iter->second->UdsFD(), nullptr) != 0) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to delete from epoll handle for channel " << id << " in ShmChannelKeeper " << mName <<
-            ", errno:" << errno << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to delete from epoll handle for channel "
+                     << id << " in ShmChannelKeeper " << mName << ", errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         return SH_CH_REMOVE_FAILURE_IN_KEEPER;
     }
 
@@ -162,13 +163,13 @@ void ShmChannelKeeper::RunInThread()
             } else {
                 /* error happens */
                 char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("Failed to do epoll_wait in channelKeeper " << mName << ", errno:" << errno << " error:" <<
-                    NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+                NN_LOG_ERROR("Failed to do epoll_wait in channelKeeper "
+                             << mName << ", errno:" << errno
+                             << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
                 continue;
             }
         } catch (std::runtime_error &ex) {
-            NN_LOG_WARN("Got runtime fail in ShmChannelKeeper::RunInThread '" << ex.what() <<
-                "', ignore and continue");
+            NN_LOG_WARN("Got runtime fail in ShmChannelKeeper::RunInThread '" << ex.what() << "', ignore and continue");
         } catch (...) {
             NN_LOG_WARN("Got unknown fail in ShmChannelKeeper::RunInThread, ignore and continue");
         }
@@ -190,8 +191,9 @@ HResult ShmChannelKeeper::ExchangeFdProcess(ShmChKeeperMsgHeader &header, const 
 
         result = ch->AddMrFd(fds[NN_NO0]);
         if (NN_UNLIKELY(result != SH_OK)) {
-            NN_LOG_ERROR("Successfully received mr to peer fd:" << fds[NN_NO0] << ", but the channel " << ch->Id() <<
-                " cannot add peer fd to the fd queue, result is " << result);
+            NN_LOG_ERROR("Successfully received mr to peer fd:" << fds[NN_NO0] << ", but the channel " << ch->Id()
+                                                                << " cannot add peer fd to the fd queue, result is "
+                                                                << result);
             return result;
         }
     } else if (header.msgType == EXCHANGE_USER_FD) {
@@ -222,7 +224,7 @@ void ShmChannelKeeper::HandleEpollEvent(uint32_t eventCount, struct epoll_event 
         return;
     }
 
-    ShmChKeeperMsgHeader header {};
+    ShmChKeeperMsgHeader header{};
     ShmChannelPtr ch;
 
     for (uint32_t i = 0; i < eventCount; ++i) {
@@ -268,5 +270,5 @@ void ShmChannelKeeper::HandleEpollEvent(uint32_t eventCount, struct epoll_event 
         }
     }
 }
-}
-}
+} // namespace hcom
+} // namespace ock

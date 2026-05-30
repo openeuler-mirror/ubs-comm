@@ -19,17 +19,17 @@
 #include <algorithm>
 #include "urma_ubagg.h"
 
-#include "hcom_utils.h"
-#include "net_util.h"
-#include "net_oob.h"
-#include "ub_common.h"
-#include "net_load_balance.h"
-#include "net_ctx_info_pool.h"
-#include "net_mem_pool_fixed.h"
 #include "hcom_obj_statistics.h"
-#include "under_api/urma/urma_api_wrapper.h"
+#include "hcom_utils.h"
+#include "net_ctx_info_pool.h"
+#include "net_load_balance.h"
+#include "net_mem_pool_fixed.h"
+#include "net_oob.h"
+#include "net_util.h"
+#include "ub_common.h"
 #include "ub_mr_fixed_buf.h"
 #include "ub_urma_wrapper_jfc.h"
+#include "under_api/urma/urma_api_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -49,15 +49,20 @@ struct UBJettyExchangeInfo {
 } __attribute__((packed));
 
 enum class UBJettyState : uint8_t {
-    RESET,  ///< 初始状态
-    READY,  ///< 可收发数据
-    ERROR,  ///< 调用 modify jetty error之后
+    RESET, ///< 初始状态
+    READY, ///< 可收发数据
+    ERROR, ///< 调用 modify jetty error之后
 };
 
 class UBJetty {
 public:
     UBJetty(const std::string &name, uint32_t id, UBContext *ctx, UBJfc *jfc, JettyOptions jettyOptions = {})
-        : mName(name), mId(id), mUBContext(ctx), mSendJfc(jfc), mRecvJfc(jfc), mJettyOptions(jettyOptions)
+        : mName(name),
+          mId(id),
+          mUBContext(ctx),
+          mSendJfc(jfc),
+          mRecvJfc(jfc),
+          mJettyOptions(jettyOptions)
     {
         if (mUBContext != nullptr) {
             mUBContext->IncreaseRef();
@@ -149,8 +154,8 @@ public:
         wr.src.num_sge = 1;
         wr.next = nullptr;
 
-        NN_LOG_DEBUG("[Post Buffer] ------ urma_post_jetty_recv_wr1, jetty id: " << mUrmaJetty->jetty_id.id
-        << ", jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id);
+        NN_LOG_DEBUG("[Post Buffer] ------ urma_post_jetty_recv_wr1, jetty id: "
+                     << mUrmaJetty->jetty_id.id << ", jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id);
         auto ret = HcomUrma::PostJettyRecvWr(mUrmaJetty, &wr, &bad_wr);
         if (NN_UNLIKELY(ret != 0)) {
             NN_LOG_ERROR("Failed to post receive request to jetty " << mName << ", result " << ret);
@@ -161,7 +166,7 @@ public:
     }
 
     inline UResult PostSend(uintptr_t bufAddr, uint32_t bufSize, urma_target_seg_t *localSeg, UBOpContextInfo *context,
-        uint32_t immData = 0)
+                            uint32_t immData = 0)
     {
         if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY)) {
             return UB_QP_NOT_INITIALIZED;
@@ -175,20 +180,23 @@ public:
         // 如果是普通send，存在header，header中的seqNo是序号
         // 如果是send_raw，不存在header，immData是序号
         if (context->opType == UBOpContextInfo::SEND) {
-            NN_LOG_DEBUG("[Request Send] ------ ep id = " << epId << ", headerCrc = "
-            << header->headerCrc << ", opCode = " << header->opCode << ", flags = " << header->flags << ", seqNo = "
-            << header->seqNo << ",timeout = " << header->timeout << ", errCode = " << header->errorCode
-            << ", dataLength = " << header->dataLength << ", status = " <<
-            UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_URMA));
+            NN_LOG_DEBUG("[Request Send] ------ ep id = "
+                         << epId << ", headerCrc = " << header->headerCrc << ", opCode = " << header->opCode
+                         << ", flags = " << header->flags << ", seqNo = " << header->seqNo
+                         << ",timeout = " << header->timeout << ", errCode = " << header->errorCode
+                         << ", dataLength = " << header->dataLength
+                         << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_URMA));
         } else {
-            NN_LOG_DEBUG("[Request Send] ------ ep id = " << epId << ", seqNo = " << immData
-            << ", bufSize = " << bufSize << ", bufhead = " << *(reinterpret_cast<uint32_t*>(bufAddr))
-            << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_URMA));
+            NN_LOG_DEBUG("[Request Send] ------ ep id = "
+                         << epId << ", seqNo = " << immData << ", bufSize = " << bufSize
+                         << ", bufhead = " << *(reinterpret_cast<uint32_t *>(bufAddr))
+                         << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_URMA));
         }
 
         if (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth && bufSize > JETTY_MAX_CTP_SEND_BUFF_SIZE) {
-            NN_LOG_ERROR("In HighBandwidth mode, bufSize = " << bufSize <<
-                " is prohibited from being greater than max ctp send buff size = " << JETTY_MAX_CTP_SEND_BUFF_SIZE);
+            NN_LOG_ERROR("In HighBandwidth mode, bufSize = "
+                         << bufSize << " is prohibited from being greater than max ctp send buff size = "
+                         << JETTY_MAX_CTP_SEND_BUFF_SIZE);
             return UB_PARAM_INVALID;
         }
 
@@ -218,7 +226,7 @@ public:
     }
 
     inline UResult PostSendSglInline(UBSHcomNetTransDataIov *iov, uint32_t iovCount, uint64_t context,
-        uint32_t immData = 0)
+                                     uint32_t immData = 0)
     {
         if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY)) {
             return UB_QP_NOT_INITIALIZED;
@@ -232,7 +240,7 @@ public:
             list[i].len = iov[i].size;
         }
 
-        urma_jfs_wr_t wr {};
+        urma_jfs_wr_t wr{};
         wr.user_ctx = reinterpret_cast<uint64_t>(context);
         wr.send.src.sge = list;
         wr.send.src.num_sge = iovCount;
@@ -253,7 +261,7 @@ public:
     }
 
     inline UResult PostSendSglInlineUbc(UBSHcomNetTransDataIov *iov, uint32_t iovCount, uint64_t context,
-        urma_target_seg_t **tseg, uint32_t immData = 0)
+                                        urma_target_seg_t **tseg, uint32_t immData = 0)
     {
         if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY)) {
             return UB_QP_NOT_INITIALIZED;
@@ -267,7 +275,7 @@ public:
             list[i].tseg = tseg[i];
         }
 
-        urma_jfs_wr_t wr {};
+        urma_jfs_wr_t wr{};
         wr.user_ctx = reinterpret_cast<uint64_t>(context);
         wr.send.src.sge = list;
         wr.send.src.num_sge = iovCount;
@@ -326,7 +334,7 @@ public:
     }
 
     inline UResult PostRead(uintptr_t bufAddr, urma_target_seg_t *srcSeg, uintptr_t dstBufAddr,
-        urma_target_seg_t *dstSeg, uint32_t bufSize, uint64_t context)
+                            urma_target_seg_t *dstSeg, uint32_t bufSize, uint64_t context)
     {
         if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY)) {
             return UB_QP_NOT_INITIALIZED;
@@ -381,7 +389,7 @@ public:
     /// @param bufSize     [in] 读取大小
     /// @param context     [in] `UBOpContextInfo`, 事件完成时通过此 context 找回对应 Jetty 以及上层 Service 层的上下文
     UResult PostRead(uintptr_t bufAddr, urma_target_seg_t *ltseg, uintptr_t dstBufAddr, uint64_t dstSeg,
-        uint32_t bufSize, uint64_t context)
+                     uint32_t bufSize, uint64_t context)
     {
         if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY || dstSeg == 0)) {
             NN_LOG_ERROR("Failed to post read as not init or dstSeg is null");
@@ -420,9 +428,10 @@ public:
         wr.flag.bs.complete_enable = 1;
         wr.tjetty = mTargetJetty;
 
-        NN_LOG_DEBUG("[Request Read] ------ , bufAddr = " << bufAddr << ", ltseg = " << ltseg << ", dstBufAddr = " <<
-            dstBufAddr << ", dstSeg = " << dstSeg  << ", bufSize = " << bufSize  << ", context = " << context <<
-            UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_URMA));
+        NN_LOG_DEBUG("[Request Read] ------ , bufAddr = "
+                     << bufAddr << ", ltseg = " << ltseg << ", dstBufAddr = " << dstBufAddr << ", dstSeg = " << dstSeg
+                     << ", bufSize = " << bufSize << ", context = " << context
+                     << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::IN_URMA));
         auto ret = HcomUrma::PostJettySendWr(mUrmaJetty, &wr, &bad_wr);
         if (mJettyOptions.ubcMode == UBSHcomUbcMode::LowLatency) {
             ret = HcomUrma::UnimportSeg(realDstSeg);
@@ -438,7 +447,7 @@ public:
     }
 
     inline UResult PostWrite(uintptr_t bufAddr, urma_target_seg_t *srcSeg, uintptr_t dstBufAddr,
-        urma_target_seg_t *dstSeg, uint32_t bufSize, uint64_t context)
+                             urma_target_seg_t *dstSeg, uint32_t bufSize, uint64_t context)
     {
         if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY)) {
             return UB_QP_NOT_INITIALIZED;
@@ -485,7 +494,7 @@ public:
     /// @param bufSize     [in] 写入大小
     /// @param context     [in] `UBOpContextInfo`, 事件完成时通过此 context 找回对应 Jetty 以及上层 Service 层的上下文
     UResult PostWrite(uintptr_t bufAddr, urma_target_seg_t *ltseg, uintptr_t dstBufAddr, uint64_t rtoken,
-        uint32_t bufSize, uint64_t context)
+                      uint32_t bufSize, uint64_t context)
     {
         if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY)) {
             return UB_QP_NOT_INITIALIZED;
@@ -541,8 +550,8 @@ public:
     /// @param context   [in] Service 层上下文
     /// @param isRead    [in] 是否选择发送 read 请求，当为 false 时发送 write 请求。
     /// @param ctxLen    [in] context 数组长度
-    UResult PostOneSideSgl(UBSHcomNetTransSgeIov *iov, uint32_t iovCount, uint64_t *context,
-        bool isRead, uint8_t ctxLen)
+    UResult PostOneSideSgl(UBSHcomNetTransSgeIov *iov, uint32_t iovCount, uint64_t *context, bool isRead,
+                           uint8_t ctxLen)
     {
         if (NN_UNLIKELY(mUrmaJetty == nullptr || mState != UBJettyState::READY)) {
             return UB_QP_NOT_INITIALIZED;
@@ -855,7 +864,7 @@ public:
 
 private:
     void FillJettyCfg(urma_jetty_cfg_t &jetty_cfg, uintptr_t seg_pa, uintptr_t seg_va, uint32_t seg_len,
-        uint32_t seg_count);
+                      uint32_t seg_count);
     void FillJfsCfg(urma_jfs_cfg_t *jfs_cfg);
     void FillJfrCfg(urma_jfr_cfg_t *jfr_cfg, uint32_t token = 0);
     UResult ChangeToInit(urma_jetty_attr_t &attr);
@@ -884,7 +893,7 @@ private:
     uintptr_t mUpContext1 = 0;
     NetSpinLock mLock;
     UBOpContextInfo mCtxPosted{};
-    uint32_t mCtxPostedCount{ 0 };
+    uint32_t mCtxPostedCount{0};
     UBMemoryRegionFixedBuffer *mJettyMr = nullptr;
 
     int32_t mOneSideMaxWr = JETTY_MAX_SEND_WR - NN_NO64;

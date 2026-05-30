@@ -1,10 +1,10 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
+#include "test_case/service_v2/service_send_lat_test.h"
 #include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "test_case/service_v2/service_send_lat_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -44,7 +44,7 @@ int ServiceSendLatTest::DoPostSend()
 }
 
 int ServiceSendLatTest::NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch,
-    const std::string &payload)
+                                   const std::string &payload)
 {
     mCh = ch;
     LOG_DEBUG("New connection from " << ipPort << " !");
@@ -80,7 +80,7 @@ bool ServiceSendLatTest::Initialize()
     // create NetService
     std::function<int(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch, const std::string &payload)>
         funcNewChannel = bind(&ServiceSendLatTest::NewChannel, this, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3);
+                              std::placeholders::_3);
     std::function<int(const ock::hcom::UBSHcomServiceContext &ctx)> funcReqReceived =
         bind(&ServiceSendLatTest::RequestReceived, this, std::placeholders::_1);
     mHelper.RegisterNewChHandler(funcNewChannel);
@@ -161,5 +161,5 @@ bool ServiceSendLatTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::SERVICE_SEND_LAT, ServiceSendLatTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

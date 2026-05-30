@@ -11,9 +11,9 @@ namespace perftest {
 
 class PerfTestUtils {
 public:
-    static bool IsStringCaseInsensitiveEqual(const std::string& left, const std::string& right);
+    static bool IsStringCaseInsensitiveEqual(const std::string &left, const std::string &right);
 };
 
-}
-}
+} // namespace perftest
+} // namespace hcom
 #endif

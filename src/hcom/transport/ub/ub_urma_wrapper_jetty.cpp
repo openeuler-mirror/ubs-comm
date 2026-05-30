@@ -11,8 +11,8 @@
  */
 #ifdef UB_BUILD_ENABLED
 
-#include "hcom_env.h"
 #include "ub_urma_wrapper_jetty.h"
+#include "hcom_env.h"
 #include "ub_worker.h"
 
 namespace ock {
@@ -35,10 +35,10 @@ UResult UBJetty::CreateUrmaJetty(uintptr_t seg_pa, uint32_t seg_len, uint32_t se
     mCtxPosted.next = nullptr;
     mCtxPosted.prev = nullptr;
 
-    mJettyOptions.maxSendWr =
-        (mJettyOptions.maxSendWr < JETTY_MAX_SEND_WR) ? JETTY_MAX_SEND_WR : mJettyOptions.maxSendWr;
-    mJettyOptions.maxReceiveWr =
-        (mJettyOptions.maxReceiveWr < JETTY_MAX_RECV_WR) ? JETTY_MAX_RECV_WR : mJettyOptions.maxReceiveWr;
+    mJettyOptions.maxSendWr = (mJettyOptions.maxSendWr < JETTY_MAX_SEND_WR) ? JETTY_MAX_SEND_WR :
+                                                                              mJettyOptions.maxSendWr;
+    mJettyOptions.maxReceiveWr = (mJettyOptions.maxReceiveWr < JETTY_MAX_RECV_WR) ? JETTY_MAX_RECV_WR :
+                                                                                    mJettyOptions.maxReceiveWr;
 
     urma_jfs_cfg_t jfs_cfg{};
     FillJfsCfg(&jfs_cfg);
@@ -66,8 +66,8 @@ UResult UBJetty::CreateUrmaJetty(uintptr_t seg_pa, uint32_t seg_len, uint32_t se
     tmpJetty = HcomUrma::CreateJetty(mUBContext->mUrmaContext, &jetty_cfg);
     if (tmpJetty == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create urma jetty for UBJetty " << mName << ", errno " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create urma jetty for UBJetty "
+                     << mName << ", errno " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         if (mJfr != nullptr) {
             HcomUrma::DeleteJfr(mJfr);
             mJfr = nullptr;
@@ -77,9 +77,9 @@ UResult UBJetty::CreateUrmaJetty(uintptr_t seg_pa, uint32_t seg_len, uint32_t se
     mUrmaJetty = tmpJetty;
     mUrmaJettyId = mUrmaJetty->jetty_id.id;
 
-    NN_LOG_INFO("Create jetty success, jetty id: " << mUrmaJettyId << ", jfr id: " << (mJfr ? mJfr->jfr_id.id : -1) <<
-        ", jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id << ", priority: " <<
-        static_cast<int>(jetty_cfg.jfs_cfg.priority));
+    NN_LOG_INFO("Create jetty success, jetty id: " << mUrmaJettyId << ", jfr id: " << (mJfr ? mJfr->jfr_id.id : -1)
+                                                   << ", jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id
+                                                   << ", priority: " << static_cast<int>(jetty_cfg.jfs_cfg.priority));
     return UB_OK;
 }
 
@@ -154,8 +154,8 @@ void UBJetty::FillJfsCfg(urma_jfs_cfg_t *jfs_cfg)
     jfs_cfg->rnr_retry = NN_NO7;
     // HighBandwidth RM mode, LowLatency RC mode
     jfs_cfg->trans_mode = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) ? URMA_TM_RM : URMA_TM_RC;
-    jfs_cfg->priority = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth)
-                        ? mUBContext->mCtpPri : mUBContext->mRtpPri;
+    jfs_cfg->priority = (mJettyOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) ? mUBContext->mCtpPri :
+                                                                                   mUBContext->mRtpPri;
 }
 
 void UBJetty::FillJfrCfg(urma_jfr_cfg_t *jfr_cfg, uint32_t token)
@@ -178,7 +178,7 @@ UResult UBJetty::CreateJettyMr()
     NResult result = NN_OK;
     // create mr pool for send/receive and initialize
     if ((result = UBMemoryRegionFixedBuffer::Create(mName, mUBContext, mJettyOptions.mrSegSize,
-        mJettyOptions.mrSegCount, mJettyOptions.slave, mJettyMr)) != 0) {
+                                                    mJettyOptions.mrSegCount, mJettyOptions.slave, mJettyMr)) != 0) {
         NN_LOG_ERROR("Failed to create mr for send/receive in jetty " << mName << ", result " << result);
         return result;
     }
@@ -248,8 +248,8 @@ UResult UBJetty::UnInitialize()
         }
         if ((result = HcomUrma::DeleteJetty(mUrmaJetty)) != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to delete jetty id " << mUrmaJettyId << ", result " << result << ", as " <<
-                 NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_WARN("Unable to delete jetty id " << mUrmaJettyId << ", result " << result << ", as "
+                                                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         } else {
             NN_LOG_INFO("Delete jetty success, jetty id: " << mUrmaJettyId);
         }
@@ -259,8 +259,8 @@ UResult UBJetty::UnInitialize()
     if (mJfr != nullptr) {
         if ((result = HcomUrma::DeleteJfr(mJfr)) != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to delete jfr " << result << ", as " <<
-                NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_WARN("Unable to delete jfr " << result << ", as "
+                                                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
         mJfr = nullptr;
     }
@@ -381,8 +381,8 @@ UResult UBJetty::ChangeToReady(ock::hcom::UBJettyExchangeInfo &exInfo)
         return ret;
     }
 
-    NN_LOG_INFO("UB jetty " << mId << " attr send queue size " << mJettyOptions.maxSendWr << ", receive queue size " <<
-        mJettyOptions.maxReceiveWr << ", eid-n-n " << (exInfo.eid.in6.interface_id != 0));
+    NN_LOG_INFO("UB jetty " << mId << " attr send queue size " << mJettyOptions.maxSendWr << ", receive queue size "
+                            << mJettyOptions.maxReceiveWr << ", eid-n-n " << (exInfo.eid.in6.interface_id != 0));
 
     mState = UBJettyState::READY;
     return UB_OK;
@@ -390,12 +390,12 @@ UResult UBJetty::ChangeToReady(ock::hcom::UBJettyExchangeInfo &exInfo)
 
 UResult UBJetty::SetMaxSendWrConfig(UBJettyExchangeInfo &exInfo)
 {
-    NN_LOG_TRACE_INFO("Remote qpId " << mId << " info: send wr " << exInfo.maxSendWr << ", receive wr " <<
-        exInfo.maxReceiveWr << ", receive seg size " << exInfo.receiveSegSize << ", receive seg count " <<
-        exInfo.receiveSegCount);
-    NN_LOG_TRACE_INFO("Local qpId " << mId << " info: send wr " << mJettyOptions.maxSendWr << ", receive wr " <<
-        mJettyOptions.maxReceiveWr << ", receive seg size " << mJettyOptions.mrSegSize << ", receive seg count " <<
-        mJettyOptions.mrSegCount);
+    NN_LOG_TRACE_INFO("Remote qpId " << mId << " info: send wr " << exInfo.maxSendWr << ", receive wr "
+                                     << exInfo.maxReceiveWr << ", receive seg size " << exInfo.receiveSegSize
+                                     << ", receive seg count " << exInfo.receiveSegCount);
+    NN_LOG_TRACE_INFO("Local qpId " << mId << " info: send wr " << mJettyOptions.maxSendWr << ", receive wr "
+                                    << mJettyOptions.maxReceiveWr << ", receive seg size " << mJettyOptions.mrSegSize
+                                    << ", receive seg count " << mJettyOptions.mrSegCount);
 
     int32_t maxWr = std::min(mJettyOptions.maxSendWr, exInfo.maxReceiveWr);
     int32_t maxPostSendWr = std::min(mJettyOptions.maxSendWr, exInfo.receiveSegCount);
@@ -409,8 +409,8 @@ UResult UBJetty::SetMaxSendWrConfig(UBJettyExchangeInfo &exInfo)
     mPostSendMaxWr = maxPostSendWr;
     mPostSendRef = mPostSendMaxWr;
     mPostSendMaxSize = exInfo.receiveSegSize;
-    NN_LOG_TRACE_INFO("Qp id " << mId << " one side max wr " << mOneSideMaxWr << ", post send max wr " <<
-        mPostSendMaxWr << ", post send max size " << mPostSendMaxSize);
+    NN_LOG_TRACE_INFO("Qp id " << mId << " one side max wr " << mOneSideMaxWr << ", post send max wr " << mPostSendMaxWr
+                               << ", post send max size " << mPostSendMaxSize);
     return UB_OK;
 }
 

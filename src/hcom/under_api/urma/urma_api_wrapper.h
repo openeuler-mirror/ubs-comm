@@ -175,7 +175,7 @@ public:
     }
 
     static inline urma_target_jetty_t *ImportJetty(urma_context_t *ctx, urma_rjetty_t *rjetty,
-        urma_token_t *token_value)
+                                                   urma_token_t *token_value)
     {
         return UrmaAPI::hcomInnerUrmaImportJetty(ctx, rjetty, token_value);
     }
@@ -261,7 +261,7 @@ public:
     }
 
     static inline urma_target_seg_t *ImportSeg(urma_context_t *ctx, urma_seg_t *seg, urma_token_t *token_value,
-        uint64_t addr, urma_import_seg_flag_t flag)
+                                               uint64_t addr, urma_import_seg_flag_t flag)
     {
         return UrmaAPI::hcomInnerUrmaImportSeg(ctx, seg, token_value, addr, flag);
     }
@@ -286,8 +286,8 @@ public:
         return UrmaAPI::hcomInnerUrmaPostJettySendWr(jetty, wr, bad_wr);
     }
 
-    static inline urma_status_t PostJettySendWr(
-        urma_jetty_t *jetty, urma_jfs_wr_t *wr, uint32_t wrCnt, urma_jfs_wr_t **bad_wr)
+    static inline urma_status_t PostJettySendWr(urma_jetty_t *jetty, urma_jfs_wr_t *wr, uint32_t wrCnt,
+                                                urma_jfs_wr_t **bad_wr)
     {
         return UrmaAPI::hcomInnerUrmaPostJettySendWr(jetty, wr, bad_wr);
     }
@@ -298,27 +298,27 @@ public:
     }
 
     static inline urma_status_t Write(urma_jfs_t *jfs, urma_target_jetty_t *target_jfr, urma_target_seg_t *dst_tseg,
-        urma_target_seg_t *src_tseg, uint64_t dst, uint64_t src, uint32_t len, urma_jfs_wr_flag_t flag,
-        uint64_t user_ctx)
+                                      urma_target_seg_t *src_tseg, uint64_t dst, uint64_t src, uint32_t len,
+                                      urma_jfs_wr_flag_t flag, uint64_t user_ctx)
     {
         return UrmaAPI::hcomInnerUrmaWrite(jfs, target_jfr, dst_tseg, src_tseg, dst, src, len, flag, user_ctx);
     }
 
     static inline urma_status_t Read(urma_jfs_t *jfs, urma_target_jetty_t *target_jfr, urma_target_seg_t *dst_tseg,
-        urma_target_seg_t *src_tseg, uint64_t dst, uint64_t src, uint32_t len, urma_jfs_wr_flag_t flag,
-        uint64_t user_ctx)
+                                     urma_target_seg_t *src_tseg, uint64_t dst, uint64_t src, uint32_t len,
+                                     urma_jfs_wr_flag_t flag, uint64_t user_ctx)
     {
         return UrmaAPI::hcomInnerUrmaRead(jfs, target_jfr, dst_tseg, src_tseg, dst, src, len, flag, user_ctx);
     }
 
     static inline urma_status_t Send(urma_jfs_t *jfs, urma_target_jetty_t *target_jfr, urma_target_seg_t *src_tseg,
-        uint64_t src, uint32_t len, urma_jfs_wr_flag_t flag, uint64_t user_ctx)
+                                     uint64_t src, uint32_t len, urma_jfs_wr_flag_t flag, uint64_t user_ctx)
     {
         return UrmaAPI::hcomInnerUrmaSend(jfs, target_jfr, src_tseg, src, len, flag, user_ctx);
     }
 
     static inline urma_status_t Recv(urma_jfr_t *jfr, urma_target_seg_t *recv_tseg, uint64_t buf, uint32_t len,
-        uint64_t user_ctx)
+                                     uint64_t user_ctx)
     {
         return UrmaAPI::hcomInnerUrmaRecv(jfr, recv_tseg, buf, len, user_ctx);
     }
@@ -392,8 +392,8 @@ public:
 #endif
     }
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // HCOM_URMA_API_WRAPPER_H

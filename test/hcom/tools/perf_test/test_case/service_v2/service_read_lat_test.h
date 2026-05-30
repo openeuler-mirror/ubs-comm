@@ -39,10 +39,7 @@ private:
         while (mCtx->cnt < iters) {
             mCtx->tposted[mCtx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
             ock::hcom::Callback *newCallback = ock::hcom::UBSHcomNewCallback(
-                [this](ock::hcom::UBSHcomServiceContext &context) {
-                    this->rcnt.fetch_add(1);
-                },
-                std::placeholders::_1);
+                [this](ock::hcom::UBSHcomServiceContext &context) { this->rcnt.fetch_add(1); }, std::placeholders::_1);
             if (newCallback == nullptr) {
                 LOG_ERROR("Create callback failed");
                 sem_post(&mSem);
@@ -88,13 +85,13 @@ private:
 private:
     ock::hcom::UBSHcomChannelPtr mCh = nullptr;
     ock::hcom::UBSHcomOneSideRequest mReq;
-    std::atomic<uint64_t> rcnt{ 0 };
+    std::atomic<uint64_t> rcnt{0};
     ServiceHelper mHelper;
     RegMrInfo mPostMrInfo;
     RegMrInfo mPeerMrInfo;
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

@@ -10,7 +10,6 @@
 #include "test_case/perf_test_base.h"
 #include "test_case/transport/transport_helper.h"
 
-
 namespace hcom {
 namespace perftest {
 class TransportSendLatTest : public PerfTestBase {
@@ -50,7 +49,7 @@ private:
     char *mDataAddr = nullptr;
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

@@ -2,11 +2,11 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
 #include <algorithm>
-#include <sstream>
 #include <iomanip>
+#include <sstream>
 
-#include "report/perf_test_report_factory.h"
 #include "common/perf_test_logger.h"
+#include "report/perf_test_report_factory.h"
 #include "report/perf_test_report_lat.h"
 
 namespace hcom {
@@ -31,7 +31,7 @@ constexpr uint32_t OUTPUT_PRECISION = 2;
 // 与ib_send_lat打印保持一致
 #define RESULT_LAT_HEADER                                                                                \
     " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]    t_avg[usec]    t_stdev[usec]" \
-        "   99\% percentile[usec]   99.9\% percentile[usec]"
+    "   99\% percentile[usec]   99.9\% percentile[usec]"
 
 static inline double GetMedian(uint64_t num, double *deltaArr)
 {
@@ -138,5 +138,5 @@ void PerfTestReportLat::PrintReportHead()
 }
 
 REGIST_PERF_TEST_REPORT_CREATOR(PERF_TEST_REPORT_TYPE::LATENCY, PerfTestReportLat);
-}
-}
+} // namespace perftest
+} // namespace hcom

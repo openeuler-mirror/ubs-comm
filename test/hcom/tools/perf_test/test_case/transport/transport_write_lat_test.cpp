@@ -13,7 +13,7 @@ namespace perftest {
 using namespace ock::hcom;
 constexpr uint16_t OP_CODE_WRITE_LAT = 3;
 int TransportWriteLatTest::NewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                                       const std::string &payload)
 {
     mEp = ep;
     isConnect.store(true);
@@ -61,7 +61,7 @@ bool TransportWriteLatTest::Initialize()
 
     // create UBSHcomNetDriver
     NewEpHandler funcNewEndpoint = bind(&TransportWriteLatTest::NewEndPoint, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+                                        std::placeholders::_2, std::placeholders::_3);
     ReqRecvHandler funcReqReceived = bind(&TransportWriteLatTest::RequestReceived, this, std::placeholders::_1);
     OneSideDoneHandler funcOneSide = bind(&TransportWriteLatTest::OneSideDone, this, std::placeholders::_1);
     EpBrokenHandler funcBrokenEp = bind(&TransportWriteLatTest::EpBroken, this, std::placeholders::_1);
@@ -175,5 +175,5 @@ bool TransportWriteLatTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::TRANSPORT_WRITE_LAT, TransportWriteLatTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

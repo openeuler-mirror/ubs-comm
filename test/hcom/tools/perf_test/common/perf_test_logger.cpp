@@ -81,5 +81,5 @@ void PerfTestLogger::Log(int level, const std::ostringstream &oss) const
     }
 }
 
-}
-}
+} // namespace perftest
+} // namespace hcom

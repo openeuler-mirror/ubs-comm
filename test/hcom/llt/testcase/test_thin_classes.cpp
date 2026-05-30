@@ -13,8 +13,8 @@
 #include <unordered_set>
 
 #include "net_obj_pool.h"
-#include "ut_helper.h"
 #include "test_thin_classes.h"
+#include "ut_helper.h"
 
 using namespace ock::hcom;
 TestCaseThinClasses::TestCaseThinClasses() {}

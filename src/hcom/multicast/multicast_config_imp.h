@@ -4,8 +4,8 @@
 #ifndef HCOM_MULTICAST_CONFIG_IMP_H
 #define HCOM_MULTICAST_CONFIG_IMP_H
 
-#include "include/multicast_def.h"
 #include "include/multicast_config.h"
+#include "include/multicast_def.h"
 
 namespace ock {
 namespace hcom {
@@ -90,6 +90,7 @@ public:
     void AddWorkerGroup(UBSHcomWorkerGroupInfo &groupInfo);
 
     UBSHcomNetDriverProtocol GetProtocol() const override;
+
 public:
     /*****************************************************************
      * 仅在内部类中使用，不对外暴露
@@ -113,7 +114,7 @@ public:
 private:
     MulticastServiceOptionsInner mOptions;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

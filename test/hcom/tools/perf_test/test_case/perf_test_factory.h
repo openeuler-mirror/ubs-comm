@@ -12,7 +12,7 @@
 namespace hcom {
 namespace perftest {
 
-using CreateFunc = PerfTestBase* (*)(const PerfTestConfig& cfg);
+using CreateFunc = PerfTestBase *(*)(const PerfTestConfig &cfg);
 
 class PerfTestFactory {
 public:
@@ -23,7 +23,7 @@ public:
         return instance;
     }
 
-    PerfTestBase* CreatePerfTest(PERF_TEST_TYPE type, const PerfTestConfig& cfg)
+    PerfTestBase *CreatePerfTest(PERF_TEST_TYPE type, const PerfTestConfig &cfg)
     {
         for (auto it : m_createFuncs) {
             if (it.first == static_cast<uint32_t>(type)) {
@@ -45,7 +45,6 @@ private:
     std::map<uint32_t, CreateFunc> m_createFuncs;
 };
 
-
 class PerfTestRegister {
 public:
     PerfTestRegister(PERF_TEST_TYPE type, CreateFunc func)
@@ -54,13 +53,13 @@ public:
     }
 };
 
-#define REGIST_PERF_TEST_CREATOR(TestType, TestClass)                             \
-    static PerfTestBase *Create##TestClass(const PerfTestConfig& cfg)             \
-    {                                                                             \
-        return new (std::nothrow) TestClass(cfg);                                 \
-    }                                                                             \
+#define REGIST_PERF_TEST_CREATOR(TestType, TestClass)                 \
+    static PerfTestBase *Create##TestClass(const PerfTestConfig &cfg) \
+    {                                                                 \
+        return new (std::nothrow) TestClass(cfg);                     \
+    }                                                                 \
     static PerfTestRegister g_register_##TestClass(TestType, Create##TestClass)
 
-}
-}
+} // namespace perftest
+} // namespace hcom
 #endif

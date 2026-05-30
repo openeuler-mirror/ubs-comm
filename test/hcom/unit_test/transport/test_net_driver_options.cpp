@@ -10,13 +10,9 @@ namespace hcom {
 
 class TestNetDriverOptions : public testing::Test {
 public:
-    void SetUp() override
-    {
-    }
+    void SetUp() override {}
 
-    void TearDown() override
-    {
-    }
+    void TearDown() override {}
 };
 
 TEST_F(TestNetDriverOptions, SetNetDeviceEidFailed)
@@ -40,5 +36,5 @@ TEST_F(TestNetDriverOptions, SetNetDeviceEidOk)
     EXPECT_EQ(opts.netDeviceEid[15], 0x04);
 }
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

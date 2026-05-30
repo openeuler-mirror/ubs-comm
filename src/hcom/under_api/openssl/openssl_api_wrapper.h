@@ -250,13 +250,13 @@ public:
     }
 
     static inline int EvpEncryptInitEx(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, ENGINE *impl,
-        const unsigned char *key, const unsigned char *iv)
+                                       const unsigned char *key, const unsigned char *iv)
     {
         return SSLAPI::evpEncryptInitEx(ctx, cipher, impl, key, iv);
     }
 
     static inline int EvpEncryptUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl, const unsigned char *in,
-        int inl)
+                                       int inl)
     {
         return SSLAPI::evpEncryptUpdate(ctx, out, outl, in, inl);
     }
@@ -267,13 +267,13 @@ public:
     }
 
     static inline int EvpDecryptInitEx(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher, ENGINE *impl,
-        const unsigned char *key, const unsigned char *iv)
+                                       const unsigned char *key, const unsigned char *iv)
     {
         return SSLAPI::evpDecryptInitEx(ctx, cipher, impl, key, iv);
     }
 
     static inline int EvpDecryptUpdate(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl, const unsigned char *in,
-        int inl)
+                                       int inl)
     {
         return SSLAPI::evpDecryptUpdate(ctx, out, outl, in, inl);
     }
@@ -362,6 +362,6 @@ public:
 
     static inline void UnLoad() {}
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_OPENSSL_API_WRAPPER_H
