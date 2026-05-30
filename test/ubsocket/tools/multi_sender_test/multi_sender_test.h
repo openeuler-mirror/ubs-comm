@@ -10,8 +10,8 @@
 #ifndef MULTI_SENDER_TEST_H
 #define MULTI_SENDER_TEST_H
 
-#include <cstdint>
 #include <pthread.h>
+#include <cstdint>
 #include <ctime>
 #include "ubsocket_io.h"
 

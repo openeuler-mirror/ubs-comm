@@ -1,7 +1,16 @@
 cmake_minimum_required(VERSION 3.14)
-option(BUILD_HCOM "Build hcom" ON)
+project(ubs_comm CXX C)
 
-if(BUILD_HCOM)
+option(BUILD_HCOM "Build hcom" ON)
+option(BUILD_UBSOCKET "Build ubsocket" OFF)
+
+message(STATUS "BUILD_HCOM = ${BUILD_HCOM}")
+message(STATUS "BUILD_UBSOCKET = ${BUILD_UBSOCKET}")
+
+if (BUILD_HCOM)
     add_subdirectory(hcom)
-endif()
-message(STATUS "BUILD_HCOM: ${BUILD_HCOM}")
+endif ()
+
+if (BUILD_UBSOCKET)
+    add_subdirectory(ubsocket)
+endif ()
