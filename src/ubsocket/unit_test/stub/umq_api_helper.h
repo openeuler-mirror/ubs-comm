@@ -37,7 +37,7 @@
  *   buf.buf_data = ...;
  *   buf.data_size = ...;
  *   buf.status = ...;
- *   memcpy_s(buf.qbuf_ext, sizeof(buf.qbuf_ext), &bufPro, sizeof(umq_buf_pro_t));
+ *   memcpy(buf.qbuf_ext, &bufPro, sizeof(umq_buf_pro_t));
  *   Block *block = GetBlockFromMockBuf(&buf);  // 如需Block则手写8K对齐分配+placement new
  */
 
@@ -79,15 +79,15 @@ inline umq_buf_t *AllocMockBufWithBlock(uint32_t size, umq_buf_status_t status =
 
     new (b.blockMem) Block(dataPtr, MOCK_BLOCK_MEM_SIZE - sizeof(Block));
 
-    memset_s(&b.bufPro, sizeof(umq_buf_pro_t), 0, sizeof(umq_buf_pro_t));
+    memset(&b.bufPro, 0, sizeof(umq_buf_pro_t));
     b.bufPro.opcode = UMQ_OPC_SEND;
 
-    memset_s(&b.buf, sizeof(umq_buf_t), 0, sizeof(umq_buf_t));
+    memset(&b.buf, 0, sizeof(umq_buf_t));
     b.buf.buf_data = dataPtr;
     b.buf.data_size = size;
     b.buf.total_data_size = size;
     b.buf.status = status;
-    memcpy_s(b.buf.qbuf_ext, sizeof(b.buf.qbuf_ext), &b.bufPro, sizeof(umq_buf_pro_t));
+    memcpy(b.buf.qbuf_ext, &b.bufPro, sizeof(umq_buf_pro_t));
     b.buf.qbuf_next = nullptr;
     b.buf.io_direction = UMQ_IO_RX;
 
@@ -110,15 +110,15 @@ inline umq_buf_t *AllocMockBuf(uint32_t size, umq_buf_status_t status = UMQ_BUF_
     static umq_buf_pro_t bufPro;
     static umq_buf_t mockBuf;
 
-    memset_s(&bufPro, sizeof(umq_buf_pro_t), 0, sizeof(umq_buf_pro_t));
+    memset(&bufPro, 0, sizeof(umq_buf_pro_t));
     bufPro.opcode = UMQ_OPC_SEND;
 
-    memset_s(&mockBuf, sizeof(umq_buf_t), 0, sizeof(umq_buf_t));
+    memset(&mockBuf, 0, sizeof(umq_buf_t));
     mockBuf.buf_data = reinterpret_cast<char *>(bufData);
     mockBuf.data_size = size;
     mockBuf.total_data_size = size;
     mockBuf.status = status;
-    memcpy_s(mockBuf.qbuf_ext, sizeof(mockBuf.qbuf_ext), &bufPro, sizeof(umq_buf_pro_t));
+    memcpy(mockBuf.qbuf_ext, &bufPro, sizeof(umq_buf_pro_t));
     mockBuf.qbuf_next = nullptr;
     mockBuf.io_direction = UMQ_IO_RX;
 
@@ -128,7 +128,7 @@ inline umq_buf_t *AllocMockBuf(uint32_t size, umq_buf_status_t status = UMQ_BUF_
 inline umq_eid_t MakeTestEid(uint8_t val)
 {
     umq_eid_t eid = {};
-    memset_s(eid.raw, sizeof(eid.raw), val, sizeof(eid.raw));
+    memset(eid.raw, sizeof(eid.raw), val, sizeof(eid.raw));
     return eid;
 }
 

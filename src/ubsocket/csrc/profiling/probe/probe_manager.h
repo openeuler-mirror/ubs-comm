@@ -100,7 +100,7 @@ struct ProbeRecord {
 
     ProbeRecord() : mSockFd(0), mLastRttNs(0), mIsCompleted(false)
     {
-        memset_s(&mProbeInfo, sizeof(ProbeTimeInfo), 0, sizeof(ProbeTimeInfo));
+        memset(&mProbeInfo, 0, sizeof(ProbeTimeInfo));
     }
 };
 
