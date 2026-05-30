@@ -10,8 +10,8 @@
  */
 
 #include "umq_data_rx_ops.h"
-#include "profiling/probe/probe_manager.h"
 #include "core/ubsocket_socket_set.h"
+#include "profiling/probe/probe_manager.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
 
@@ -293,7 +293,6 @@ void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
             break;
     }
     // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
-
     // TODO: 快速退出, 如果 brpc-adapter 正好在 readv/writev 中可以不经过一次 epoll_wait.
     // m_closed.store(true, std::memory_order_relaxed);
 
