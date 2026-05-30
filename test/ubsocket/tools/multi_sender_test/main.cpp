@@ -7,76 +7,73 @@
  * History: 2026-05-09
  */
 
+#include <arpa/inet.h>
+#include <getopt.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <unistd.h>
-#include <getopt.h>
-#include <csignal>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <string>
 #include <exception>
+#include <string>
 #include "multi_sender_test.h"
 
 volatile int g_running = 1;
 
 // 辅助函数：安全解析无符号整数，无效时返回默认值并输出警告
-template<typename T>
-static T ParseUnsignedWithDefault(const char *paramName,
-                                  const char *str,
-                                  T defaultValue,
-                                  T minValue = 0,
+template <typename T>
+static T ParseUnsignedWithDefault(const char *paramName, const char *str, T defaultValue, T minValue = 0,
                                   T maxValue = static_cast<T>(-1))
 {
     if (str == nullptr || str[0] == '\0') {
-        fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n",
-                str ? str : "null", paramName, static_cast<unsigned int>(defaultValue));
+        fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n", str ? str : "null",
+                paramName, static_cast<unsigned int>(defaultValue));
         return defaultValue;
     }
-    
+
     // 检查是否全是数字（允许前导空格）
     const char *p = str;
     while (*p == ' ' || *p == '\t') {
         p++;
     }
-    
+
     // 空字符串或负号
     if (*p == '\0' || *p == '-') {
-        fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n",
-                str, paramName, static_cast<unsigned int>(defaultValue));
+        fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n", str, paramName,
+                static_cast<unsigned int>(defaultValue));
         return defaultValue;
     }
-    
+
     // 检查是否全是数字
     const char *start = p;
     while (*p != '\0') {
         if (*p < '0' || *p > '9') {
-            fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n",
-                    str, paramName, static_cast<unsigned int>(defaultValue));
+            fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n", str, paramName,
+                    static_cast<unsigned int>(defaultValue));
             return defaultValue;
         }
         p++;
     }
-    
+
     // 使用 stoul 避免溢出
     unsigned long value = 0;
     try {
         value = std::stoul(start);
     } catch (const std::exception &) {
-        (void)fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n",
-                      str, paramName, static_cast<unsigned int>(defaultValue));
+        (void)fprintf(stderr, "Warning: Invalid value '%s' for --%s, using default value: %u\n", str, paramName,
+                      static_cast<unsigned int>(defaultValue));
         return defaultValue;
     }
-    
+
     // 范围检查
     if (value < static_cast<unsigned long>(minValue) || value > static_cast<unsigned long>(maxValue)) {
-        fprintf(stderr, "Warning: Value '%s' for --%s out of range (%u-%u), using default value: %u\n",
-                str, paramName, static_cast<unsigned int>(minValue), static_cast<unsigned int>(maxValue),
+        fprintf(stderr, "Warning: Value '%s' for --%s out of range (%u-%u), using default value: %u\n", str, paramName,
+                static_cast<unsigned int>(minValue), static_cast<unsigned int>(maxValue),
                 static_cast<unsigned int>(defaultValue));
         return defaultValue;
     }
-    
+
     return static_cast<T>(value);
 }
 
@@ -115,24 +112,24 @@ static int CreateAndConnectSocket(const char *serverAddrStr, uint16_t port)
         fprintf(stderr, "Failed to create socket\n");
         return -1;
     }
-    
+
     struct sockaddr_in serverAddr;
     memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
-    
+
     if (inet_pton(AF_INET, serverAddrStr, &serverAddr.sin_addr) <= 0) {
         fprintf(stderr, "Invalid server address: %s\n", serverAddrStr);
         close(sockfd);
         return -1;
     }
-    
+
     if (connect(sockfd, reinterpret_cast<struct sockaddr *>(&serverAddr), sizeof(serverAddr)) < 0) {
         fprintf(stderr, "Failed to connect to server\n");
         close(sockfd);
         return -1;
     }
-    
+
     const int socketTimeoutSec = 5;
     struct timeval timeout;
     timeout.tv_sec = socketTimeoutSec;
@@ -142,7 +139,7 @@ static int CreateAndConnectSocket(const char *serverAddrStr, uint16_t port)
         close(sockfd);
         return -1;
     }
-    
+
     return sockfd;
 }
 
@@ -159,23 +156,22 @@ static bool SetupSignalHandlers()
     return true;
 }
 
-static void SendMessages(struct SenderContext *ctx, const std::string &msgBuffer,
-                         uint32_t msgCount, uint32_t msgSize)
+static void SendMessages(struct SenderContext *ctx, const std::string &msgBuffer, uint32_t msgCount, uint32_t msgSize)
 {
     uint32_t successCount = 0;
     uint32_t failureCount = 0;
-    
+
     for (uint32_t i = 0; i < msgCount && g_running; i++) {
         struct UbsocketIovec iov;
-        iov.iovBase = const_cast<char*>(msgBuffer.c_str());
+        iov.iovBase = const_cast<char *>(msgBuffer.c_str());
         iov.iovLen = msgSize;
-        
+
         if (SenderSend(ctx, &iov, 1) == 0) {
             successCount++;
         } else {
             failureCount++;
         }
-        
+
         const uint32_t progressReportInterval = 1000;
         if ((i + 1) % progressReportInterval == 0) {
             printf("Progress: %u/%u messages sent\n", i + 1, msgCount);
@@ -183,46 +179,45 @@ static void SendMessages(struct SenderContext *ctx, const std::string &msgBuffer
     }
 }
 
-static int RunSender(const char *serverAddrStr, uint16_t port,
-                     uint32_t msgCount, uint32_t msgSize, uint32_t expectedQps)
+static int RunSender(const char *serverAddrStr, uint16_t port, uint32_t msgCount, uint32_t msgSize,
+                     uint32_t expectedQps)
 {
     struct SenderContext ctx;
     if (SenderInit(&ctx, expectedQps) != 0) {
         fprintf(stderr, "Failed to initialize sender context\n");
         return -1;
     }
-    
+
     int sockfd = CreateAndConnectSocket(serverAddrStr, port);
     if (sockfd < 0) {
         SenderDestroy(&ctx);
         return -1;
     }
-    
+
     ctx.socketFd = sockfd;
-    
+
     std::string msgBuffer(msgSize, 'A');
-    
-    printf("Sender started, sending %u messages of %u bytes to %s:%u\n",
-           msgCount, msgSize, serverAddrStr, port);
+
+    printf("Sender started, sending %u messages of %u bytes to %s:%u\n", msgCount, msgSize, serverAddrStr, port);
     printf("QPS: %u\n", expectedQps);
-    
+
     if (!SetupSignalHandlers()) {
         close(sockfd);
         SenderDestroy(&ctx);
         return -1;
     }
-    
+
     SendMessages(&ctx, msgBuffer, msgCount, msgSize);
-    
+
     ctx.stats.avgLatencyNs = ctx.stats.totalLatencyNs / ctx.stats.sampleCount;
-    
+
     printf("\n");
     printf("Sender finished:\n");
     PrintLatencyStats(&ctx.stats);
-    
+
     close(sockfd);
     SenderDestroy(&ctx);
-    
+
     return 0;
 }
 
@@ -233,9 +228,9 @@ static int RunReceiver(uint16_t port, uint32_t maxClients)
         fprintf(stderr, "Failed to initialize receiver context\n");
         return -1;
     }
-    
+
     printf("Receiver started on port %u, max clients: %u\n", port, maxClients);
-    
+
     if (signal(SIGINT, SignalHandler) == SIG_ERR) {
         fprintf(stderr, "Failed to set SIGINT handler\n");
         ReceiverDestroy(&ctx);
@@ -246,11 +241,11 @@ static int RunReceiver(uint16_t port, uint32_t maxClients)
         ReceiverDestroy(&ctx);
         return -1;
     }
-    
+
     ReceiverRun(&ctx);
-    
+
     ReceiverDestroy(&ctx);
-    
+
     return 0;
 }
 
@@ -262,7 +257,7 @@ int main(int argc, char *argv[])
         PrintUsage(argv[0]);
         return 1;
     }
-    
+
     char mode[32] = {0};
     uint16_t port = 8080;
     char serverAddr[64] = "127.0.0.1";
@@ -270,22 +265,20 @@ int main(int argc, char *argv[])
     uint32_t msgSize = 1024;
     uint32_t expectedQps = DEFAULT_QPS;
     uint32_t maxClients = DEFAULT_MAX_CLIENTS;
-    
-    static struct option longOptions[] = {
-        {"mode",        required_argument, 0, 'm'},
-        {"port",        required_argument, 0, 'p'},
-        {"server-addr", required_argument, 0, 'a'},
-        {"msg-count",   required_argument, 0, 'c'},
-        {"msg-size",    required_argument, 0, 's'},
-        {"qps",         required_argument, 0, 'q'},
-        {"max-clients", required_argument, 0, 'n'},
-        {"help",        no_argument,       0, 'h'},
-        {nullptr,       0,                 0, 0}
-    };
-    
+
+    static struct option longOptions[] = {{"mode", required_argument, 0, 'm'},
+                                          {"port", required_argument, 0, 'p'},
+                                          {"server-addr", required_argument, 0, 'a'},
+                                          {"msg-count", required_argument, 0, 'c'},
+                                          {"msg-size", required_argument, 0, 's'},
+                                          {"qps", required_argument, 0, 'q'},
+                                          {"max-clients", required_argument, 0, 'n'},
+                                          {"help", no_argument, 0, 'h'},
+                                          {nullptr, 0, 0, 0}};
+
     int opt;
     int optionIndex = 0;
-    
+
     while ((opt = getopt_long(argc, argv, "m:p:a:c:s:q:n:h", longOptions, &optionIndex)) != -1) {
         switch (opt) {
             case 'm':
@@ -312,8 +305,8 @@ int main(int argc, char *argv[])
                 break;
             case 'n':
                 // 最大客户端数范围 1-MAX_CLIENTS，默认 10
-                maxClients = ParseUnsignedWithDefault<uint32_t>(
-                    "max-clients", optarg, DEFAULT_MAX_CLIENTS, 1, MAX_CLIENTS);
+                maxClients =
+                    ParseUnsignedWithDefault<uint32_t>("max-clients", optarg, DEFAULT_MAX_CLIENTS, 1, MAX_CLIENTS);
                 break;
             case 'h':
                 PrintUsage(argv[0]);
@@ -323,7 +316,7 @@ int main(int argc, char *argv[])
                 return 1;
         }
     }
-    
+
     if (strcmp(mode, "sender") == 0) {
         return RunSender(serverAddr, port, msgCount, msgSize, expectedQps);
     } else if (strcmp(mode, "receiver") == 0) {
@@ -333,6 +326,6 @@ int main(int argc, char *argv[])
         PrintUsage(argv[0]);
         return 1;
     }
-    
+
     return 0;
 }

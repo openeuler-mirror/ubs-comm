@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14.1)
-project(hcom CXX C)
+project(UBS_COMM CXX C)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_SKIP_BUILD_RPATH ON)
