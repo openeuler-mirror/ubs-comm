@@ -98,15 +98,15 @@ bool UrmaAPI::IsLoaded()
 }
 
 #if !defined(TEST_LLT) || !defined(MOCK_URMA)
-#define DLSYM(type, ptr, sym)                                                                 \
-    do {                                                                                      \
-        auto ptr1 = dlsym(handle, sym);                                                       \
-        if (ptr1 == nullptr) {                                                                \
+#define DLSYM(type, ptr, sym)                                                           \
+    do {                                                                                \
+        auto ptr1 = dlsym(handle, sym);                                                 \
+        if (ptr1 == nullptr) {                                                          \
             NN_LOG_ERROR("Failed to load function " << sym << ", error " << dlerror()); \
-            dlclose(handle);                                                                  \
-            return -1;                                                                        \
-        }                                                                                     \
-        ptr = (type)ptr1;                                                                     \
+            dlclose(handle);                                                            \
+            return -1;                                                                  \
+        }                                                                               \
+        ptr = (type)ptr1;                                                               \
     } while (0)
 
 int UrmaAPI::LoadUrmaAPI()

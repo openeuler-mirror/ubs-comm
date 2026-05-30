@@ -13,7 +13,7 @@
 namespace ock {
 namespace hcom {
 HResult ShmSyncEndpoint::Create(const std::string &name, uint16_t eventQueueLength, ShmPollingMode mode,
-    ShmSyncEndpointPtr &ep)
+                                ShmSyncEndpointPtr &ep)
 {
     ShmSyncEndpointPtr tmpEp = new (std::nothrow) ShmSyncEndpoint(name, eventQueueLength, mode);
     if (NN_UNLIKELY(tmpEp.Get() == nullptr)) {
@@ -65,17 +65,17 @@ HResult ShmSyncEndpoint::CreateEventQueue()
 }
 
 HResult ShmSyncEndpoint::PostSend(ShmChannel *ch, const UBSHcomNetTransRequest &req, uint64_t offset, uint32_t immData,
-    int32_t defaultTimeout)
+                                  int32_t defaultTimeout)
 {
     if (NN_UNLIKELY(req.upCtxSize > sizeof(ShmOpContextInfo::upCtx))) {
-        NN_LOG_ERROR("Failed to PostSend with ShmWorker " << mName << " as upCtxSize > " <<
-            sizeof(ShmOpContextInfo::upCtx));
+        NN_LOG_ERROR("Failed to PostSend with ShmWorker " << mName << " as upCtxSize > "
+                                                          << sizeof(ShmOpContextInfo::upCtx));
         return SH_PARAM_INVALID;
     }
     mDefaultTimeout = defaultTimeout;
 
     /* get op completion ctx */
-    static thread_local ShmOpCompInfo ctx {};
+    static thread_local ShmOpCompInfo ctx{};
     if (immData == 0) {
         ctx.header = *(reinterpret_cast<UBSHcomNetTransHeader *>(req.lAddress));
     }
@@ -86,7 +86,7 @@ HResult ShmSyncEndpoint::PostSend(ShmChannel *ch, const UBSHcomNetTransRequest &
     ch->IncreaseRef();
 
     ShmEvent event(immData, req.size, offset, ch->Id(), ch->PeerChannelId(), ch->PeerChannelAddress(),
-        ShmOpContextInfo::ShmOpType::SH_RECEIVE);
+                   ShmOpContextInfo::ShmOpType::SH_RECEIVE);
     auto result = ch->EQEventEnqueue(event);
     if (NN_UNLIKELY(result != SH_OK)) {
         if (result == ShmEventQueue::SHM_QUEUE_FULL) {
@@ -129,7 +129,7 @@ HResult ShmSyncEndpoint::FillSglCtx(ShmSglOpContextInfo *sglCtx, const UBSHcomNe
 
     sglCtx->result = SH_OK;
     if (NN_UNLIKELY(memcpy_s(sglCtx->iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglReq.iov,
-        sizeof(UBSHcomNetTransSgeIov) * sglReq.iovCount) != SH_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * sglReq.iovCount) != SH_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         return SH_PARAM_INVALID;
     }
@@ -146,23 +146,24 @@ HResult ShmSyncEndpoint::FillSglCtx(ShmSglOpContextInfo *sglCtx, const UBSHcomNe
 }
 
 HResult ShmSyncEndpoint::PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransRequest &req,
-    const UBSHcomNetTransSglRequest &sglReq, uint64_t offset, uint32_t immData, int32_t defaultTimeout)
+                                        const UBSHcomNetTransSglRequest &sglReq, uint64_t offset, uint32_t immData,
+                                        int32_t defaultTimeout)
 {
     if (NN_UNLIKELY(sglReq.upCtxSize > sizeof(ShmOpContextInfo::upCtx))) {
-        NN_LOG_ERROR("Failed to PostSend with sync endpoint " << mName << " as upCtxSize > " <<
-            sizeof(ShmOpContextInfo::upCtx));
+        NN_LOG_ERROR("Failed to PostSend with sync endpoint " << mName << " as upCtxSize > "
+                                                              << sizeof(ShmOpContextInfo::upCtx));
         return SH_PARAM_INVALID;
     }
     mDefaultTimeout = defaultTimeout;
 
-    thread_local ShmSglOpContextInfo sglCtx {};
+    thread_local ShmSglOpContextInfo sglCtx{};
     auto result = FillSglCtx(&sglCtx, sglReq);
     if (NN_UNLIKELY(result != SH_OK)) {
         return result;
     }
 
     /* get op completion ctx */
-    thread_local ShmOpCompInfo ctx {};
+    thread_local ShmOpCompInfo ctx{};
     if (immData == 0) {
         ctx.header = *(reinterpret_cast<UBSHcomNetTransHeader *>(req.lAddress));
     }
@@ -176,7 +177,7 @@ HResult ShmSyncEndpoint::PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransReq
     ch->IncreaseRef();
 
     ShmEvent event(immData, req.size, offset, ch->Id(), ch->PeerChannelId(), ch->PeerChannelAddress(),
-        ShmOpContextInfo::ShmOpType::SH_RECEIVE);
+                   ShmOpContextInfo::ShmOpType::SH_RECEIVE);
     result = ch->EQEventEnqueue(event);
     if (NN_UNLIKELY(result != SH_OK)) {
         if (result == ShmEventQueue::SHM_QUEUE_FULL) {
@@ -212,7 +213,7 @@ HResult ShmSyncEndpoint::PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransReq
 
 /* Single-side transport process */
 static inline HResult SyncReadWriteProcess(UBSHcomNetTransSgeIov &iov, ShmMRHandleMap &mrHandleMap, ShmChannel *ch,
-    ShmOpContextInfo::ShmOpType type)
+                                           ShmOpContextInfo::ShmOpType type)
 {
     auto localMrHandle = mrHandleMap.GetFromLocalMap(static_cast<uint32_t>(iov.lKey));
     if (NN_UNLIKELY(localMrHandle == nullptr)) {
@@ -233,13 +234,13 @@ static inline HResult SyncReadWriteProcess(UBSHcomNetTransSgeIov &iov, ShmMRHand
     /* address has mmap already, copy directly */
     if (type == ShmOpContextInfo::ShmOpType::SH_READ || type == ShmOpContextInfo::ShmOpType::SH_SGL_READ) {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(localMrHandle->ShmAddress()), localMrHandle->DataSize(),
-            reinterpret_cast<void *>(remoteMrHandle->ShmAddress()), iov.size) != SH_OK)) {
+                                 reinterpret_cast<void *>(remoteMrHandle->ShmAddress()), iov.size) != SH_OK)) {
             NN_LOG_ERROR("Failed to copy remoteMrHandle to localMrHandle");
             return SH_PARAM_INVALID;
         }
     } else if (type == ShmOpContextInfo::ShmOpType::SH_WRITE || type == ShmOpContextInfo::ShmOpType::SH_SGL_WRITE) {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(remoteMrHandle->ShmAddress()), remoteMrHandle->DataSize(),
-            reinterpret_cast<void *>(localMrHandle->ShmAddress()), iov.size) != SH_OK)) {
+                                 reinterpret_cast<void *>(localMrHandle->ShmAddress()), iov.size) != SH_OK)) {
             NN_LOG_ERROR("Failed to copy localMrHandle to remoteMrHandle");
             return SH_PARAM_INVALID;
         }
@@ -280,24 +281,24 @@ HResult ShmSyncEndpoint::SendLocalEventForOneSideDone(ShmOpContextInfo *ctx, Shm
 }
 
 HResult ShmSyncEndpoint::PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap,
-    ShmOpContextInfo::ShmOpType type)
+                                       ShmOpContextInfo::ShmOpType type)
 {
     /* upper caller need to make sure ch is not null */
     if (NN_UNLIKELY(req.upCtxSize > sizeof(ShmOpContextInfo::upCtx))) {
-        NN_LOG_ERROR("Failed to PostSend with ShmWorker " << mName << " as upCtxSize > " <<
-            sizeof(ShmOpContextInfo::upCtx));
+        NN_LOG_ERROR("Failed to PostSend with ShmWorker " << mName << " as upCtxSize > "
+                                                          << sizeof(ShmOpContextInfo::upCtx));
         return SH_PARAM_INVALID;
     }
 
-    UBSHcomNetTransSgeIov iov {};
+    UBSHcomNetTransSgeIov iov{};
     iov.lKey = req.lKey;
     iov.rKey = req.rKey;
     iov.size = req.size;
 
     // Prevent integer truncation, safely converts uint64_t to uint32_t
     if (NN_UNLIKELY(iov.lKey > UINT32_MAX || iov.rKey > UINT32_MAX)) {
-        NN_LOG_ERROR("Shm failed to PostReadWrite with RDMAWorker as Key is larger than uint32max, lkey" <<
-            iov.lKey << " rKey " << iov.rKey);
+        NN_LOG_ERROR("Shm failed to PostReadWrite with RDMAWorker as Key is larger than uint32max, lkey"
+                     << iov.lKey << " rKey " << iov.rKey);
         return SH_PARAM_INVALID;
     }
 
@@ -308,7 +309,7 @@ HResult ShmSyncEndpoint::PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequ
     }
 
     /* get op ctx */
-    thread_local ShmOpContextInfo ctx {};
+    thread_local ShmOpContextInfo ctx{};
     ctx.channel = ch;
     ctx.mrMemAddr = req.lAddress;
     ctx.lKey = static_cast<uint32_t>(req.lKey);
@@ -333,12 +334,12 @@ HResult ShmSyncEndpoint::PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequ
 }
 
 HResult ShmSyncEndpoint::PostReadWriteSgl(ShmChannel *ch, const UBSHcomNetTransSglRequest &req,
-    ShmMRHandleMap &mrHandleMap, ShmOpContextInfo::ShmOpType type)
+                                          ShmMRHandleMap &mrHandleMap, ShmOpContextInfo::ShmOpType type)
 {
     /* upper caller need to make sure ch is not null */
     if (NN_UNLIKELY(req.upCtxSize > sizeof(ShmOpContextInfo::upCtx))) {
-        NN_LOG_ERROR("Failed to PostReadWriteSgl type:" << type << " with ShmWorker " << mName << " as upCtxSize > " <<
-            sizeof(ShmOpContextInfo::upCtx));
+        NN_LOG_ERROR("Failed to PostReadWriteSgl type:" << type << " with ShmWorker " << mName << " as upCtxSize > "
+                                                        << sizeof(ShmOpContextInfo::upCtx));
         return SH_PARAM_INVALID;
     }
 
@@ -351,8 +352,8 @@ HResult ShmSyncEndpoint::PostReadWriteSgl(ShmChannel *ch, const UBSHcomNetTransS
     }
 
     /* get op ctx */
-    thread_local ShmOpContextInfo ctx {};
-    thread_local ShmSglOpContextInfo sglCtx {};
+    thread_local ShmOpContextInfo ctx{};
+    thread_local ShmSglOpContextInfo sglCtx{};
     result = FillSglCtx(&sglCtx, req);
     if (NN_UNLIKELY(result != SH_OK)) {
         return result;
@@ -380,7 +381,7 @@ HResult ShmSyncEndpoint::PostReadWriteSgl(ShmChannel *ch, const UBSHcomNetTransS
 HResult ShmSyncEndpoint::Receive(int32_t timeout, ShmOpContextInfo &opCtx, uint32_t &immData)
 {
     HResult result = SH_OK;
-    ShmEvent event {};
+    ShmEvent event{};
     if (NN_UNLIKELY((result = DequeueEvent(timeout, event)) != SH_OK)) {
         NN_LOG_ERROR("Failed to dequeue event");
         return result;
@@ -399,7 +400,7 @@ HResult ShmSyncEndpoint::Receive(int32_t timeout, ShmOpContextInfo &opCtx, uint3
     }
 
     ShmOpContextInfo ctx(ch, address, event.dataSize, static_cast<ShmOpContextInfo::ShmOpType>(event.opType),
-        ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);
+                         ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);
     opCtx = ctx;
     immData = event.immData;
 
@@ -410,7 +411,7 @@ HResult ShmSyncEndpoint::DequeueEvent(int32_t timeout, ShmEvent &opEvent)
 {
     int32_t timeoutInMs = TimeSecToMs(timeout);
     HResult result = SH_OK;
-    ShmEvent event {};
+    ShmEvent event{};
 
     if (mShmMode == SHM_BUSY_POLLING) {
         auto start = NetMonotonic::TimeMs();
@@ -434,5 +435,5 @@ HResult ShmSyncEndpoint::DequeueEvent(int32_t timeout, ShmEvent &opEvent)
     opEvent = event;
     return result;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -23,7 +23,10 @@ namespace hcom {
 class UBJfc {
 public:
     UBJfc(const std::string &name, UBContext *ctx, bool createCompletionChannel = false, uintptr_t work = 0)
-        : mName(name), mCreateCompletionChannel(createCompletionChannel), mWork(work), mUBContext(ctx)
+        : mName(name),
+          mCreateCompletionChannel(createCompletionChannel),
+          mWork(work),
+          mUBContext(ctx)
     {
         if (mUBContext != nullptr) {
             mUBContext->IncreaseRef();
@@ -72,7 +75,7 @@ private:
     friend class UBJetty;
     friend class UBPublicJetty;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_URMA_WRAPPER_JFC_H

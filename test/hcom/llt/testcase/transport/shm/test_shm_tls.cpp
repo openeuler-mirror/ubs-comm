@@ -10,13 +10,13 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "test_shm_tls.h"
 #include "hcom.h"
-#include "net_shm_sync_endpoint.h"
-#include "net_shm_async_endpoint.h"
 #include "net_security_alg.h"
+#include "net_shm_async_endpoint.h"
+#include "net_shm_sync_endpoint.h"
 #include "shm_worker.h"
 #include "test_shm_common.h"
-#include "test_shm_tls.h"
 
 using namespace ock::hcom;
 TestShmTls::TestShmTls() {}
@@ -26,7 +26,7 @@ UBSHcomNetEndpointPtr tlsShmClientEp = nullptr;
 static TestRegMrInfo tlsClientMrInfo;
 static TestRegMrInfo tlsServerMrInfo;
 static UBSHcomNetTransSgeIov tlsShmClientMrInfo[NN_NO4];
-UBSHcomNetDriverOptions tlsShmOptions {};
+UBSHcomNetDriverOptions tlsShmOptions{};
 
 UBSHcomNetDriver *tlsShmCDriver = nullptr;
 UBSHcomNetDriver *tlsShmSDriver = nullptr;
@@ -85,7 +85,7 @@ static int ServerNewEndPoint(const std::string &ipPort, const UBSHcomNetEndpoint
 }
 
 static int ServerNewEndPointSend(const std::string &ipPort, const UBSHcomNetEndpointPtr &newEP,
-    const std::string &payload)
+                                 const std::string &payload)
 {
     NN_LOG_INFO("new endpoint from " << ipPort << " payload " << payload);
     tlsShmServerEp = newEP;
@@ -146,7 +146,7 @@ static bool CertCallback(const std::string &name, std::string &value)
 }
 
 static bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                               UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -158,7 +158,7 @@ static bool PrivateKeyCallback(const std::string &name, std::string &value, void
 }
 
 static bool CACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                       UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = shmCertPath + "/CA/cacert.pem";
     cb = std::bind(&Verify, std::placeholders::_1, std::placeholders::_2);
@@ -166,7 +166,7 @@ static bool CACallback(const std::string &name, std::string &caPath, std::string
 }
 
 static bool RegSglMem(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov mrInfo[],
-    std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
+                      std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
 {
     for (int i = 0; i < 4; ++i) {
         UBSHcomNetMemoryRegionPtr mr;
@@ -193,7 +193,7 @@ static void DestoryTlsMem(UBSHcomNetDriver *driver, std::vector<UBSHcomNetMemory
 }
 
 static bool RegReadWriteMem(UBSHcomNetDriver *driver, TestRegMrInfo mrInfo[],
-    std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
+                            std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
 {
     UBSHcomNetMemoryRegionPtr mr;
     auto result = driver->CreateMemoryRegion(NN_NO1024, mr);
@@ -211,7 +211,7 @@ static bool RegReadWriteMem(UBSHcomNetDriver *driver, TestRegMrInfo mrInfo[],
 }
 
 static bool CreateServerDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(const UBSHcomNetRequestContext &),
-    UBSHcomNetDriverOptions &tlsShmOptions)
+                               UBSHcomNetDriverOptions &tlsShmOptions)
 {
     auto name = "server_tls_" + std::to_string(g_nameSeed++);
 
@@ -237,9 +237,10 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(cons
 
     driver->RegisterTLSCertificationCallback(std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
     driver->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
     driver->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                    std::placeholders::_3, std::placeholders::_4,
+                                                    std::placeholders::_5));
 
     int result = 0;
     if ((result = driver->Initialize(tlsShmOptions)) != 0) {
@@ -257,7 +258,7 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(cons
 }
 
 static bool CreateServerDriverSend(UBSHcomNetDriver *&driver, int (*reqHandler)(const UBSHcomNetRequestContext &),
-    UBSHcomNetDriverOptions &tlsShmOptions)
+                                   UBSHcomNetDriverOptions &tlsShmOptions)
 {
     auto name = "server_tls_" + std::to_string(g_nameSeed++);
 
@@ -283,9 +284,10 @@ static bool CreateServerDriverSend(UBSHcomNetDriver *&driver, int (*reqHandler)(
 
     driver->RegisterTLSCertificationCallback(std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
     driver->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
     driver->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                    std::placeholders::_3, std::placeholders::_4,
+                                                    std::placeholders::_5));
 
     int result = 0;
     if ((result = driver->Initialize(tlsShmOptions)) != 0) {
@@ -303,7 +305,7 @@ static bool CreateServerDriverSend(UBSHcomNetDriver *&driver, int (*reqHandler)(
 }
 
 static bool CreateClientDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(const UBSHcomNetRequestContext &),
-    UBSHcomNetDriverOptions &tlsShmOptions)
+                               UBSHcomNetDriverOptions &tlsShmOptions)
 {
     auto name = "client_tls_" + std::to_string(g_nameSeed++);
 
@@ -322,9 +324,10 @@ static bool CreateClientDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(cons
 
     driver->RegisterTLSCertificationCallback(std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
     driver->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
     driver->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                    std::placeholders::_3, std::placeholders::_4,
+                                                    std::placeholders::_5));
 
     int result = 0;
     if ((result = driver->Initialize(tlsShmOptions)) != 0) {
@@ -357,9 +360,10 @@ static bool CreateSyncClientDriver(UBSHcomNetDriver *&driver, UBSHcomNetDriverOp
 
     driver->RegisterTLSCertificationCallback(std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
     driver->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
     driver->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                    std::placeholders::_3, std::placeholders::_4,
+                                                    std::placeholders::_5));
 
     int result = 0;
     if ((result = driver->Initialize(options)) != 0) {
@@ -431,8 +435,8 @@ TEST_F(TestShmTls, PostSendTls)
     result = tlsShmClientEp->PostSend(1, req);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
-        const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                       const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -460,8 +464,8 @@ TEST_F(TestShmTls, PostSendTlsCipherSuite256)
     result = tlsShmClientEp->PostSend(1, req);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
-        const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                       const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -499,8 +503,8 @@ TEST_F(TestShmTls, PostSendOpInfoTls)
     result = tlsShmClientEp->PostSend(1, req, innerOpInfo);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
-        const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                       const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -526,8 +530,8 @@ TEST_F(TestShmTls, PostSendRawTls)
     result = tlsShmClientEp->PostSendRaw(req, 1);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
-        const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                       const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -554,8 +558,8 @@ TEST_F(TestShmTls, PostSendRawSglTls)
     result = tlsShmClientEp->PostSendRawSgl(reqSgl, 1);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
-        const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                       const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -662,8 +666,8 @@ TEST_F(TestShmTls, PostTlsEncryptFail)
     void *cipher = malloc(encryptLen);
 
     /* Set Client Encrypt Value ,AesGcm128::Encrypt is fail */
-    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
-        const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                       const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
     result = tlsShmClientEp->Encrypt(value.c_str(), value.length(), cipher, encryptLen);
@@ -752,7 +756,7 @@ TEST_F(TestShmTls, PostTlsDecryptFail)
 
     /* Set Decrypt ,AesGcm128::Decrypt is fail */
     MOCKER_CPP(&AesGcm128::Decrypt,
-        bool (AesGcm128::*)(const unsigned char *, const unsigned char *, size_t, unsigned char *, size_t &))
+               bool(AesGcm128::*)(const unsigned char *, const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
     result = tlsShmClientEp->Decrypt(readValue, req.size, rawValue, rawLen);
@@ -805,7 +809,7 @@ TEST_F(TestShmTls, PostTlsDecryptFail1)
 TEST_F(TestShmTls, SyncPostTlsReadWrite)
 {
     NResult result;
-    UBSHcomNetDriverOptions tlsSyncShmOptions {};
+    UBSHcomNetDriverOptions tlsSyncShmOptions{};
     tlsSyncShmOptions.enableTls = true;
     CreateServerDriver(tlsShmSDriver, RequestReceivedServer, tlsSyncShmOptions);
     CreateSyncClientDriver(tlsShmCDriver, tlsSyncShmOptions);
@@ -827,7 +831,7 @@ TEST_F(TestShmTls, SyncPostTlsReadWrite)
     EXPECT_EQ(SH_OK, result);
     result = tlsShmClientEp->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     result = tlsShmClientEp->Receive(NN_NO2, respCtx);
     EXPECT_EQ(SH_OK, result);
     memcpy(&getRemoteMrInfo, respCtx.Message()->Data(), respCtx.Message()->DataLen());
@@ -871,7 +875,7 @@ TEST_F(TestShmTls, SyncPostTlsReadWrite)
 TEST_F(TestShmTls, SyncPostTlsEncryptFail)
 {
     NResult result;
-    UBSHcomNetDriverOptions tlsSyncShmOptions {};
+    UBSHcomNetDriverOptions tlsSyncShmOptions{};
     tlsSyncShmOptions.enableTls = true;
     CreateServerDriver(tlsShmSDriver, RequestReceivedServer, tlsSyncShmOptions);
     CreateSyncClientDriver(tlsShmCDriver, tlsSyncShmOptions);
@@ -895,8 +899,8 @@ TEST_F(TestShmTls, SyncPostTlsEncryptFail)
     value = "value from client";
     encryptLen = tlsShmClientEp->EstimatedEncryptLen(value.length());
     void *cipher = malloc(encryptLen);
-    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
-        const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                       const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
     result = tlsShmClientEp->Encrypt(value.c_str(), value.length(), cipher, encryptLen);
@@ -911,7 +915,7 @@ TEST_F(TestShmTls, SyncPostTlsEncryptFail)
 TEST_F(TestShmTls, SyncPostTlsEncryptFail1)
 {
     NResult result;
-    UBSHcomNetDriverOptions tlsSyncShmOptions {};
+    UBSHcomNetDriverOptions tlsSyncShmOptions{};
     tlsSyncShmOptions.enableTls = false;
     CreateServerDriver(tlsShmSDriver, RequestReceivedServer, tlsSyncShmOptions);
     CreateSyncClientDriver(tlsShmCDriver, tlsSyncShmOptions);
@@ -942,7 +946,7 @@ TEST_F(TestShmTls, SyncPostTlsEncryptFail1)
 TEST_F(TestShmTls, SyncPostTlsDecryptFail)
 {
     NResult result;
-    UBSHcomNetDriverOptions tlsSyncShmOptions {};
+    UBSHcomNetDriverOptions tlsSyncShmOptions{};
     tlsSyncShmOptions.enableTls = true;
     CreateServerDriver(tlsShmSDriver, RequestReceivedServer, tlsSyncShmOptions);
     CreateSyncClientDriver(tlsShmCDriver, tlsSyncShmOptions);
@@ -963,7 +967,7 @@ TEST_F(TestShmTls, SyncPostTlsDecryptFail)
     EXPECT_EQ(SH_OK, result);
     result = tlsShmClientEp->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     result = tlsShmClientEp->Receive(NN_NO2, respCtx);
     EXPECT_EQ(SH_OK, result);
     memcpy(&getRemoteMrInfo, respCtx.Message()->Data(), respCtx.Message()->DataLen());
@@ -985,7 +989,7 @@ TEST_F(TestShmTls, SyncPostTlsDecryptFail)
 
     /* Set Decrypt ,AesGcm128::Decrypt is fail */
     MOCKER_CPP(&AesGcm128::Decrypt,
-        bool (AesGcm128::*)(const unsigned char *, const unsigned char *, size_t, unsigned char *, size_t &))
+               bool(AesGcm128::*)(const unsigned char *, const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
     result = tlsShmClientEp->Decrypt(readValue, req.size, rawValue, rawLen);
@@ -1000,7 +1004,7 @@ TEST_F(TestShmTls, SyncPostTlsDecryptFail)
 TEST_F(TestShmTls, SyncPostTlsDecryptFail1)
 {
     NResult result;
-    UBSHcomNetDriverOptions tlsSyncShmOptions {};
+    UBSHcomNetDriverOptions tlsSyncShmOptions{};
     tlsSyncShmOptions.enableTls = false;
     CreateServerDriver(tlsShmSDriver, RequestReceivedServer, tlsSyncShmOptions);
     CreateSyncClientDriver(tlsShmCDriver, tlsSyncShmOptions);

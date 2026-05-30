@@ -30,7 +30,7 @@ void TestMemoryAllocator::SetUp() {}
 void TestMemoryAllocator::TearDown() {}
 
 static void ConcurrentRoutine(UBSHcomNetMemoryAllocatorPtr ptr, const int count, bool random,
-    std::atomic_uint64_t &allocCost, std::atomic_uint64_t &freeCost)
+                              std::atomic_uint64_t &allocCost, std::atomic_uint64_t &freeCost)
 {
     uint64_t allocTotalTime = 0;
 
@@ -170,8 +170,8 @@ TEST_F(TestMemoryAllocator, SimpleConcurrent)
 
 TEST_F(TestMemoryAllocator, Concurrent)
 {
-    std::atomic_uint64_t allocCost { 0 };
-    std::atomic_uint64_t freeCost { 0 };
+    std::atomic_uint64_t allocCost{0};
+    std::atomic_uint64_t freeCost{0};
 
     for (int k = 0; k < NN_NO4; ++k) {
         const auto threadCount = 10;
@@ -265,16 +265,15 @@ TEST_F(TestMemoryAllocator, CompareToNudeMalloc)
         cost[NN_NO3] += nuFreeCost;
     }
 
-    NN_LOG_INFO("ma alloc cost:" << cost[NN_NO0] / loopCount << "ns, " <<
-                "ma free cost:" << cost[NN_NO1] / loopCount << "ns, " <<
-                "na free cost:" << cost[NN_NO2] / loopCount << "ns, " <<
-                "na free cost:" << cost[NN_NO3] / loopCount << "ns");
+    NN_LOG_INFO("ma alloc cost:" << cost[NN_NO0] / loopCount << "ns, " << "ma free cost:" << cost[NN_NO1] / loopCount
+                                 << "ns, " << "na free cost:" << cost[NN_NO2] / loopCount << "ns, "
+                                 << "na free cost:" << cost[NN_NO3] / loopCount << "ns");
 }
 
 TEST_F(TestMemoryAllocator, PerfConcurrentWithRandomSize)
 {
-    std::atomic_uint64_t allocCost { 0 };
-    std::atomic_uint64_t freeCost { 0 };
+    std::atomic_uint64_t allocCost{0};
+    std::atomic_uint64_t freeCost{0};
     const auto threadCount = 10;
     const auto blockCount = 20;
 
@@ -300,8 +299,8 @@ TEST_F(TestMemoryAllocator, PerfConcurrentWithRandomSize)
         threads[i].join();
     }
 
-    NN_LOG_INFO("alloc avg cost " << allocCost / threadCount / blockCount << "ns"
-                                  << " free avg cost " << freeCost / threadCount / blockCount << "ns");
+    NN_LOG_INFO("alloc avg cost " << allocCost / threadCount / blockCount << "ns" << " free avg cost "
+                                  << freeCost / threadCount / blockCount << "ns");
     ptr->Destroy();
     free(address);
 }

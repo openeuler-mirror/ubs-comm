@@ -12,20 +12,24 @@
 #ifndef HCOM_CAPI_V2_HCOM_DEF_INNER_C_H_
 #define HCOM_CAPI_V2_HCOM_DEF_INNER_C_H_
 
-#include <unordered_set>
 #include <memory>
+#include <unordered_set>
 
 #include "hcom_c.h"
-#include "service_v2/api/hcom_service.h"
 #include "hcom_service_c.h"
 #include "securec.h"
+#include "service_v2/api/hcom_service.h"
 
 namespace ock {
 namespace hcom {
 class EpHdlAdp {
 public:
-    EpHdlAdp(ubs_hcom_ep_handler_type t, ubs_hcom_ep_handler h, uint64_t usrCtx) : mHandlerType(t),
-        mHandler(h), mUsrCtx(usrCtx) {}
+    EpHdlAdp(ubs_hcom_ep_handler_type t, ubs_hcom_ep_handler h, uint64_t usrCtx)
+        : mHandlerType(t),
+          mHandler(h),
+          mUsrCtx(usrCtx)
+    {
+    }
     ~EpHdlAdp()
     {
         mHandler = nullptr;
@@ -86,7 +90,7 @@ public:
             return NN_INVALID_PARAM;
         }
 
-        static thread_local ubs_hcom_request_context localCtx {};
+        static thread_local ubs_hcom_request_context localCtx{};
         bzero(&localCtx, sizeof(ubs_hcom_request_context));
         BuildRequestCommonFiled(ctx, localCtx);
 
@@ -96,12 +100,13 @@ public:
             localCtx.originalSend.size = ctx.OriginalRequest().size;
             localCtx.originalSend.upCtxSize = ctx.OriginalRequest().upCtxSize;
             if (NN_UNLIKELY(memcpy_s(localCtx.originalSend.upCtxData, sizeof(localCtx.originalSend.upCtxData),
-                ctx.OriginalRequest().upCtxData, sizeof(ctx.OriginalRequest().upCtxData)) != NN_OK)) {
+                                     ctx.OriginalRequest().upCtxData,
+                                     sizeof(ctx.OriginalRequest().upCtxData)) != NN_OK)) {
                 NN_LOG_ERROR("Failed to copy up ctx data");
                 return NN_INVALID_PARAM;
             }
         } else if (ctx.OpType() == UBSHcomNetRequestContext::NN_WRITTEN ||
-            ctx.OpType() == UBSHcomNetRequestContext::NN_READ) {
+                   ctx.OpType() == UBSHcomNetRequestContext::NN_READ) {
             localCtx.originalReq.lMRA = ctx.OriginalRequest().lAddress;
             localCtx.originalReq.rMRA = ctx.OriginalRequest().rAddress;
             localCtx.originalReq.lKey = ctx.OriginalRequest().lKey;
@@ -109,18 +114,20 @@ public:
             localCtx.originalReq.size = ctx.OriginalRequest().size;
             localCtx.originalReq.upCtxSize = ctx.OriginalRequest().upCtxSize;
             if (NN_UNLIKELY(memcpy_s(localCtx.originalReq.upCtxData, sizeof(localCtx.originalReq.upCtxData),
-                ctx.OriginalRequest().upCtxData, sizeof(ctx.OriginalRequest().upCtxData)) != NN_OK)) {
+                                     ctx.OriginalRequest().upCtxData,
+                                     sizeof(ctx.OriginalRequest().upCtxData)) != NN_OK)) {
                 NN_LOG_ERROR("Failed to copy up ctx data");
                 return NN_INVALID_PARAM;
             }
         } else if (ctx.OpType() == UBSHcomNetRequestContext::NN_SGL_WRITTEN ||
-            ctx.OpType() == UBSHcomNetRequestContext::NN_SGL_READ ||
-            ctx.OpType() == UBSHcomNetRequestContext::NN_SENT_RAW_SGL) {
+                   ctx.OpType() == UBSHcomNetRequestContext::NN_SGL_READ ||
+                   ctx.OpType() == UBSHcomNetRequestContext::NN_SENT_RAW_SGL) {
             localCtx.originalSglReq.iov = reinterpret_cast<ubs_hcom_readwrite_sge *>(ctx.OriginalSgeRequest().iov);
             localCtx.originalSglReq.iovCount = ctx.OriginalSgeRequest().iovCount;
             localCtx.originalSglReq.upCtxSize = ctx.OriginalSgeRequest().upCtxSize;
             if (NN_UNLIKELY(memcpy_s(localCtx.originalSglReq.upCtxData, sizeof(localCtx.originalSglReq.upCtxData),
-                ctx.OriginalSgeRequest().upCtxData, sizeof(ctx.OriginalSgeRequest().upCtxData)) != NN_OK)) {
+                                     ctx.OriginalSgeRequest().upCtxData,
+                                     sizeof(ctx.OriginalSgeRequest().upCtxData)) != NN_OK)) {
                 NN_LOG_ERROR("Failed to copy up ctx data");
                 return NN_INVALID_PARAM;
             }
@@ -143,7 +150,7 @@ public:
         mProvider = nullptr;
     }
     int CreateSecInfo(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen,
-        bool &needAutoFree)
+                      bool &needAutoFree)
     {
         if (NN_UNLIKELY(mProvider == nullptr)) {
             return -1;
@@ -241,7 +248,7 @@ public:
     }
 
     bool UBSHcomTLSPrivateKeyCallback(const std::string &name, std::string &path, void *&keyPass, int len,
-        ::ock::hcom::UBSHcomTLSEraseKeypass &callback)
+                                      ::ock::hcom::UBSHcomTLSEraseKeypass &callback)
     {
         if (NN_UNLIKELY(mGetPriKey == nullptr)) {
             return false;
@@ -290,7 +297,8 @@ public:
     }
 
     bool UBSHcomTLSCaCallback(const std::string &name, std::string &caPath, std::string &crlPath,
-        UBSHcomPeerCertVerifyType &peerCertVerifyType, ::ock::hcom::UBSHcomTLSCertVerifyCallback &callback)
+                              UBSHcomPeerCertVerifyType &peerCertVerifyType,
+                              ::ock::hcom::UBSHcomTLSCertVerifyCallback &callback)
     {
         if (NN_UNLIKELY(mGetCA == nullptr)) {
             return false;
@@ -345,7 +353,8 @@ public:
         mHdlAdpSet.insert(adp);
     }
 
-    template <typename C> void RemoveHdlAdp(uintptr_t adp)
+    template <typename C>
+    void RemoveHdlAdp(uintptr_t adp)
     {
         uintptr_t hdlAddr = 0;
         {
@@ -376,10 +385,18 @@ private:
 class ServiceHdlAdp {
 public:
     ServiceHdlAdp(ubs_hcom_service_channel_handler_type t, ubs_hcom_service_channel_policy p,
-        ubs_hcom_service_channel_handler h, uint64_t usrCtx)
-        : mHandlerType(t), mHandler(h), mUsrCtx(usrCtx) {}
+                  ubs_hcom_service_channel_handler h, uint64_t usrCtx)
+        : mHandlerType(t),
+          mHandler(h),
+          mUsrCtx(usrCtx)
+    {
+    }
     ServiceHdlAdp(ubs_hcom_service_channel_handler_type t, ubs_hcom_service_channel_handler h, uint64_t usrCtx)
-        : mHandlerType(t), mHandler(h), mUsrCtx(usrCtx) {}
+        : mHandlerType(t),
+          mHandler(h),
+          mUsrCtx(usrCtx)
+    {
+    }
 
     ~ServiceHdlAdp()
     {
@@ -416,7 +433,10 @@ private:
 class ServiceIdleHdlAdp {
 public:
     explicit ServiceIdleHdlAdp(ubs_hcom_idle_handler handler, uint64_t usrCtx)
-        : mServiceHandler(handler), mUsrCtx(usrCtx) {}
+        : mServiceHandler(handler),
+          mUsrCtx(usrCtx)
+    {
+    }
     ~ServiceIdleHdlAdp()
     {
         mServiceHandler = nullptr;
@@ -437,7 +457,10 @@ private:
 class ChannelOpHdlAdp {
 public:
     explicit ChannelOpHdlAdp(ubs_hcom_service_request_handler handler, uint64_t usrCtx)
-        : mHandler(handler), mUsrCtx(usrCtx) {}
+        : mHandler(handler),
+          mUsrCtx(usrCtx)
+    {
+    }
 
     ~ChannelOpHdlAdp()
     {
@@ -466,9 +489,9 @@ public:
         std::lock_guard<std::mutex> guard(mMutex);
 
         // 自动为不存在的Service创建条目
-        auto& adpSet = mHdlAdpMap[service];
+        auto &adpSet = mHdlAdpMap[service];
         if (adpSet.find(adp) != adpSet.end()) {
-            return;  // 已存在则不重复添加
+            return; // 已存在则不重复添加
         }
         adpSet.insert(adp);
     }
@@ -477,22 +500,22 @@ public:
     {
         std::unordered_set<uintptr_t> adpToDelete;
 
-        {   // 临界区开始
+        { // 临界区开始
             std::lock_guard<std::mutex> guard(mMutex);
             auto svcIter = mHdlAdpMap.find(svc);
             if (svcIter == mHdlAdpMap.end()) {
-                return;  // Service不存在
+                return; // Service不存在
             }
 
             // 转移所有权到临时集合
             adpToDelete = std::move(svcIter->second);
-            mHdlAdpMap.erase(svcIter);  // 立即移除Service条目
-        }   // 临界区结束
+            mHdlAdpMap.erase(svcIter); // 立即移除Service条目
+        } // 临界区结束
 
         // 在锁外执行资源释放
-        for (auto& adp : adpToDelete) {
-            if (adp != 0) {  // 防御性检查
-                delete reinterpret_cast<C*>(adp);
+        for (auto &adp : adpToDelete) {
+            if (adp != 0) { // 防御性检查
+                delete reinterpret_cast<C *>(adp);
             }
         }
     }
@@ -501,6 +524,6 @@ private:
     std::mutex mMutex;
     std::unordered_map<uintptr_t, std::unordered_set<uintptr_t>> mHdlAdpMap;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_CAPI_V2_HCOM_DEF_INNER_C_H_

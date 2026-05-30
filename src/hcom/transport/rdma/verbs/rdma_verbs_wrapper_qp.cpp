@@ -10,12 +10,12 @@
  * See the Mulan PSL v2 for more details.
  */
 #ifdef RDMA_BUILD_ENABLED
-#include <algorithm>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <sys/poll.h>
+#include <algorithm>
 
 #include "rdma_verbs_wrapper_qp.h"
 
@@ -55,7 +55,7 @@ RResult RDMAQp::CreateIbvQp()
     if (tmpQP == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to create ibv qp RDMAQp " << mName << ", errno "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                                       << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_QP_CREATE_FAILED;
     }
 
@@ -69,7 +69,7 @@ RResult RDMAQp::CreateQpMr()
     NResult result = NN_OK;
     // create mr pool for send/receive and initialize
     if ((result = RDMAMemoryRegionFixedBuffer::Create(mName, mRDMAContext, mQpOptions.mrSegSize, mQpOptions.mrSegCount,
-        mQpMr)) != 0) {
+                                                      mQpMr)) != 0) {
         NN_LOG_ERROR("Failed to create mr for send/receive in qp " << mName << ", result " << result);
         return result;
     }
@@ -157,13 +157,13 @@ RResult RDMAQp::ChangeToInit(struct ibv_qp_attr &attr)
     attr.qp_state = IBV_QPS_INIT;
     attr.pkey_index = 0;
     attr.port_num = mRDMAContext->mPortNumber;
-    attr.qp_access_flags =
-        IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_ATOMIC | IBV_ACCESS_REMOTE_WRITE;
+    attr.qp_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_ATOMIC |
+                           IBV_ACCESS_REMOTE_WRITE;
 
     if (HcomIbv::ModifyQp(mQP, &attr, IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS) != 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to change qp " << mName << " state to INIT modify failed, errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to change qp " << mName << " state to INIT modify failed, errno:" << errno << " error:"
+                                            << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_QP_CHANGE_STATE_FAILED;
     }
 
@@ -197,11 +197,12 @@ RResult RDMAQp::ChangeToReceive(RDMAQpExchangeInfo &exInfo, struct ibv_qp_attr &
     }
 
     if ((ret = HcomIbv::ModifyQp(mQP, &attr,
-        IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN | IBV_QP_MAX_DEST_RD_ATOMIC |
-        IBV_QP_MIN_RNR_TIMER)) != 0) {
+                                 IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN |
+                                     IBV_QP_MAX_DEST_RD_ATOMIC | IBV_QP_MIN_RNR_TIMER)) != 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to change qp " << mName << " state to READY-TO-RECEIVE modify failed result " << ret <<
-            ", errno:" << errno << " error:" << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to change qp "
+                     << mName << " state to READY-TO-RECEIVE modify failed result " << ret << ", errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_QP_CHANGE_STATE_FAILED;
     }
 
@@ -219,8 +220,8 @@ RResult RDMAQp::ChangeToSend(struct ibv_qp_attr &attr)
     attr.max_rd_atomic = rdAtomic;
 
     if (HcomIbv::ModifyQp(mQP, &attr,
-        IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN |
-        IBV_QP_MAX_QP_RD_ATOMIC) != 0) {
+                          IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN |
+                              IBV_QP_MAX_QP_RD_ATOMIC) != 0) {
         NN_LOG_ERROR("Failed to change qp " << mName << " state to READY-TO-SEND modify failed, errno " << errno);
         return RR_QP_CHANGE_STATE_FAILED;
     }
@@ -230,12 +231,12 @@ RResult RDMAQp::ChangeToSend(struct ibv_qp_attr &attr)
 
 RResult RDMAQp::SetMaxSendWrConfig(RDMAQpExchangeInfo &exInfo)
 {
-    NN_LOG_TRACE_INFO("Remote qpId " << mId << " info: send wr " << exInfo.maxSendWr << ", receive wr " <<
-        exInfo.maxReceiveWr << ", receive seg size " << exInfo.receiveSegSize << ", receive seg count " <<
-        exInfo.receiveSegCount);
-    NN_LOG_TRACE_INFO("Local qpId " << mId << " info: send wr " << mQpOptions.maxSendWr << ", receive wr " <<
-        mQpOptions.maxReceiveWr << ", receive seg size " << mQpOptions.mrSegSize << ", receive seg count " <<
-        mQpOptions.mrSegCount);
+    NN_LOG_TRACE_INFO("Remote qpId " << mId << " info: send wr " << exInfo.maxSendWr << ", receive wr "
+                                     << exInfo.maxReceiveWr << ", receive seg size " << exInfo.receiveSegSize
+                                     << ", receive seg count " << exInfo.receiveSegCount);
+    NN_LOG_TRACE_INFO("Local qpId " << mId << " info: send wr " << mQpOptions.maxSendWr << ", receive wr "
+                                    << mQpOptions.maxReceiveWr << ", receive seg size " << mQpOptions.mrSegSize
+                                    << ", receive seg count " << mQpOptions.mrSegCount);
 
     int32_t maxWr = std::min(mQpOptions.maxSendWr, exInfo.maxReceiveWr);
     int32_t maxPostSendWr = std::min(mQpOptions.maxSendWr, exInfo.receiveSegCount);
@@ -249,8 +250,8 @@ RResult RDMAQp::SetMaxSendWrConfig(RDMAQpExchangeInfo &exInfo)
     mPostSendMaxWr = maxPostSendWr;
     mPostSendRef = mPostSendMaxWr;
     mPostSendMaxSize = exInfo.receiveSegSize;
-    NN_LOG_TRACE_INFO("Qp id " << mId << " one side max wr " << mOneSideMaxWr << ", post send max wr " <<
-        mPostSendMaxWr << ", post send max size " << mPostSendMaxSize);
+    NN_LOG_TRACE_INFO("Qp id " << mId << " one side max wr " << mOneSideMaxWr << ", post send max wr " << mPostSendMaxWr
+                               << ", post send max size " << mPostSendMaxSize);
     return RR_OK;
 }
 
@@ -283,9 +284,9 @@ RResult RDMAQp::ChangeToReady(RDMAQpExchangeInfo &exInfo)
         return ret;
     }
 
-    NN_LOG_INFO("RDMA qp " << mId << " attr send queue size " << mQpOptions.maxSendWr << ", receive queue size " <<
-        mQpOptions.maxReceiveWr << ", tc " << std::to_string(attr.ah_attr.grh.traffic_class) << ", gid-n-n " <<
-        (exInfo.gid.global.interface_id != 0));
+    NN_LOG_INFO("RDMA qp " << mId << " attr send queue size " << mQpOptions.maxSendWr << ", receive queue size "
+                           << mQpOptions.maxReceiveWr << ", tc " << std::to_string(attr.ah_attr.grh.traffic_class)
+                           << ", gid-n-n " << (exInfo.gid.global.interface_id != 0));
 
     isStarted = true;
     return RR_OK;
@@ -302,6 +303,6 @@ RResult RDMAQp::GetExchangeInfo(RDMAQpExchangeInfo &exInfo)
     exInfo.gid = mRDMAContext->mBestGid.ibvGid;
     return RR_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

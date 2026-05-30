@@ -13,20 +13,20 @@
 #define OCK_RDMA_COMMON_1234234341233_H
 #ifdef RDMA_BUILD_ENABLED
 
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <strings.h>
+#include <unistd.h>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <ctime>
-#include <fcntl.h>
 #include <functional>
 #include <iostream>
 #include <mutex>
-#include <netinet/in.h>
 #include <sstream>
-#include <strings.h>
 #include <thread>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
@@ -169,9 +169,9 @@ struct RDMAOpContextInfo {
         MR = 2
     };
 
-    RDMAQp      *qp = nullptr;                         /* pointer to qp */
-    struct RDMAOpContextInfo *prev = nullptr;          /* link to prev context */
-    struct RDMAOpContextInfo *next = nullptr;          /* link to next context */
+    RDMAQp *qp = nullptr;                     /* pointer to qp */
+    struct RDMAOpContextInfo *prev = nullptr; /* link to prev context */
+    struct RDMAOpContextInfo *next = nullptr; /* link to next context */
 
     union {
         uintptr_t whole = 0;
@@ -260,12 +260,16 @@ struct QpOptions {
     QpOptions() = default;
 
     QpOptions(uint32_t maxSendWrNum, uint32_t maxReceiveWrNum, uint32_t segSize, uint32_t segCount)
-        : maxSendWr(maxSendWrNum), maxReceiveWr(maxReceiveWrNum), mrSegSize(segSize), mrSegCount(segCount)
-    {}
+        : maxSendWr(maxSendWrNum),
+          maxReceiveWr(maxReceiveWrNum),
+          mrSegSize(segSize),
+          mrSegCount(segCount)
+    {
+    }
 } __attribute__((packed));
 
 inline RResult ReadRoCEVersionFromFile(const std::string &deviceName, uint32_t portNumber, uint32_t gid,
-    std::string &version)
+                                       std::string &version)
 {
     std::ostringstream oSStream;
     char filePath[PATH_MAX] = {0};
@@ -280,7 +284,7 @@ inline RResult ReadRoCEVersionFromFile(const std::string &deviceName, uint32_t p
     if (fd < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to open file " << oSStream.str() << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                            << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_OPEN_FILE_FAILED;
     }
 
@@ -289,7 +293,7 @@ inline RResult ReadRoCEVersionFromFile(const std::string &deviceName, uint32_t p
         close(fd);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to read content file " << oSStream.str() << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_READ_FILE_FAILED;
     }
 
@@ -302,7 +306,7 @@ inline RResult ReadRoCEVersionFromFile(const std::string &deviceName, uint32_t p
     close(fd);
     return RR_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // OCK_RDMA_COMMON_1234234341233_H

@@ -10,9 +10,9 @@
  * See the Mulan PSL v2 for more details.
  */
 #ifdef UB_BUILD_ENABLED
+#include <dlfcn.h>
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
-#include <dlfcn.h>
 
 #if defined(TEST_LLT) && defined(MOCK_URMA)
 #include "fake_urma.h"
@@ -70,6 +70,6 @@ TEST_F(TestUrmaApiDl, TestLoadUrmaApiDlSuccess)
     free(ptr1);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

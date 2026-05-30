@@ -10,20 +10,20 @@
  * See the Mulan PSL v2 for more details.
  */
 #ifdef UB_BUILD_ENABLED
-#include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <fcntl.h>
+#include <gtest/gtest.h>
 #include <sys/poll.h>
+#include <mockcpp/mockcpp.hpp>
 
-#include "securec.h"
 #include "net_monotonic.h"
-#include "net_oob_ssl.h"
-#include "net_ub_endpoint.h"
-#include "ub_mr_fixed_buf.h"
-#include "ub_worker.h"
-#include "net_ub_driver_oob.h"
 #include "net_oob_secure.h"
+#include "net_oob_ssl.h"
+#include "net_ub_driver_oob.h"
+#include "net_ub_endpoint.h"
+#include "securec.h"
+#include "ub_mr_fixed_buf.h"
 #include "ub_urma_wrapper_public_jetty.h"
+#include "ub_worker.h"
 
 namespace ock {
 namespace hcom {
@@ -168,9 +168,7 @@ TEST_F(TestNetDriverUBPublicJetty, PublicJettyConnect1)
     std::string oobIp("1.2.3.4");
     UBPublicJetty *clientPublicJetty = nullptr;
 
-    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty).stubs().will(returnValue(1));
 
     EXPECT_EQ(driver->PublicJettyConnect(oobIp, 1, clientPublicJetty), NN_ERROR);
 }
@@ -179,12 +177,9 @@ TEST_F(TestNetDriverUBPublicJetty, PublicJettyConnect2)
 {
     std::string oobIp("1.2.3.4");
     UBPublicJetty *clientPublicJetty = nullptr;
-    
-    UBPublicJetty* tmp = new (std::nothrow) UBPublicJetty(name, 0, nullptr, nullptr);
-    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty)
-        .stubs()
-        .with(outBound(tmp), any())
-        .will(returnValue(0));
+
+    UBPublicJetty *tmp = new (std::nothrow) UBPublicJetty(name, 0, nullptr, nullptr);
+    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty).stubs().with(outBound(tmp), any()).will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::StartPublicJetty).stubs().will(returnValue(1));
 
     EXPECT_EQ(driver->PublicJettyConnect(oobIp, 1, clientPublicJetty), NN_ERROR);
@@ -195,11 +190,8 @@ TEST_F(TestNetDriverUBPublicJetty, PublicJettyConnect3)
     std::string oobIp("1.2.3.4");
     UBPublicJetty *clientPublicJetty = nullptr;
 
-    UBPublicJetty* tmp = new (std::nothrow) UBPublicJetty(name, 0, nullptr, nullptr);
-    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty)
-        .stubs()
-        .with(outBound(tmp), any())
-        .will(returnValue(0));
+    UBPublicJetty *tmp = new (std::nothrow) UBPublicJetty(name, 0, nullptr, nullptr);
+    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty).stubs().with(outBound(tmp), any()).will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::StartPublicJetty).stubs().will(returnValue(0));
     MOCKER_CPP(HcomUrma::StrToEid).stubs().will(returnValue(1));
 
@@ -211,11 +203,8 @@ TEST_F(TestNetDriverUBPublicJetty, PublicJettyConnect4)
     std::string oobIp("1.2.3.4");
     UBPublicJetty *clientPublicJetty = nullptr;
 
-    UBPublicJetty* tmp = new (std::nothrow) UBPublicJetty(name, 0, nullptr, nullptr);
-    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty)
-        .stubs()
-        .with(outBound(tmp), any())
-        .will(returnValue(0));
+    UBPublicJetty *tmp = new (std::nothrow) UBPublicJetty(name, 0, nullptr, nullptr);
+    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty).stubs().with(outBound(tmp), any()).will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::StartPublicJetty).stubs().will(returnValue(0));
     MOCKER_CPP(HcomUrma::StrToEid).stubs().will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::ImportPublicJetty).stubs().will(returnValue(1));
@@ -228,11 +217,8 @@ TEST_F(TestNetDriverUBPublicJetty, PublicJettyConnect5)
     std::string oobIp("1.2.3.4");
     UBPublicJetty *clientPublicJetty = nullptr;
 
-    UBPublicJetty* tmp = new (std::nothrow) UBPublicJetty(name, 0, nullptr, nullptr);
-    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty)
-        .stubs()
-        .with(outBound(tmp), any())
-        .will(returnValue(0));
+    UBPublicJetty *tmp = new (std::nothrow) UBPublicJetty(name, 0, nullptr, nullptr);
+    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty).stubs().with(outBound(tmp), any()).will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::StartPublicJetty).stubs().will(returnValue(0));
     MOCKER_CPP(HcomUrma::StrToEid).stubs().will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::ImportPublicJetty).stubs().will(returnValue(0));
@@ -320,7 +306,7 @@ TEST_F(TestNetDriverUBPublicJetty, ClientEstablishConnOnReply)
     EXPECT_EQ(driver->ClientEstablishConnOnReply(jetty, qp, info), NN_ERROR);
     EXPECT_EQ(driver->ClientEstablishConnOnReply(jetty, qp, info), NN_OK);
 
-    MOCKER_CPP(&operator new, void *(*) (size_t, const std::nothrow_t &))
+    MOCKER_CPP(&operator new, void *(*)(size_t, const std::nothrow_t &))
         .stubs()
         .will(returnValue(static_cast<void *>(nullptr)));
     EXPECT_EQ(driver->ClientEstablishConnOnReply(jetty, qp, info), NN_MALLOC_FAILED);
@@ -361,7 +347,7 @@ TEST_F(TestNetDriverUBPublicJetty, ClientCreateJetty3)
     NetMemPoolFixed *sglMemPool = nullptr;
     UBWorkerOptions workerOptions{};
     UBWorker *worker = new UBWorker(name, 0, workerOptions, memPool, sglMemPool);
-    UBJetty* tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
+    UBJetty *tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
 
     MOCKER_CPP(&UBWorker::CreateQP).stubs().with(outBound(tmp)).will(returnValue(0));
     MOCKER_CPP(&UBJetty::Initialize).stubs().will(returnValue(1));
@@ -381,7 +367,7 @@ TEST_F(TestNetDriverUBPublicJetty, ClientCreateJetty4)
     NetMemPoolFixed *sglMemPool = nullptr;
     UBWorkerOptions workerOptions{};
     UBWorker *worker = new UBWorker(name, 0, workerOptions, memPool, sglMemPool);
-    UBJetty* tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
+    UBJetty *tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
 
     MOCKER_CPP(&UBWorker::CreateQP).stubs().with(outBound(tmp)).will(returnValue(0));
     MOCKER_CPP(&UBJetty::Initialize).stubs().will(returnValue(0));
@@ -564,7 +550,7 @@ TEST_F(TestNetDriverUBPublicJetty, ServerCreateJetty2)
     JettyConnResp exchangeMsg{};
     JettyConnHeader info{};
 
-    UBJetty* tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
+    UBJetty *tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
     MOCKER_CPP(&UBWorker::CreateQP).stubs().with(outBound(tmp)).will(returnValue(0));
     MOCKER_CPP(&UBJetty::Initialize).stubs().will(returnValue(1));
     MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(0));
@@ -586,7 +572,7 @@ TEST_F(TestNetDriverUBPublicJetty, ServerCreateJetty3)
     JettyConnResp exchangeMsg{};
     JettyConnHeader info{};
 
-    UBJetty* tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
+    UBJetty *tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
     MOCKER_CPP(&UBWorker::CreateQP).stubs().with(outBound(tmp)).will(returnValue(0));
     MOCKER_CPP(&UBJetty::Initialize).stubs().will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(0));
@@ -609,12 +595,12 @@ TEST_F(TestNetDriverUBPublicJetty, ServerCreateJetty4)
     JettyConnResp exchangeMsg{};
     JettyConnHeader info{};
 
-    UBJetty* tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
+    UBJetty *tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
     MOCKER_CPP(&UBWorker::CreateQP).stubs().with(outBound(tmp)).will(returnValue(0));
     MOCKER_CPP(&UBJetty::Initialize).stubs().will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(0));
 
-    MOCKER_CPP(&operator new, void *(*) (size_t, const std::nothrow_t &))
+    MOCKER_CPP(&operator new, void *(*)(size_t, const std::nothrow_t &))
         .stubs()
         .will(returnValue(static_cast<void *>(nullptr)));
     EXPECT_EQ(driver->ServerCreateJetty(outQp, worker, exchangeMsg, &info, jetty), NN_MALLOC_FAILED);
@@ -635,7 +621,7 @@ TEST_F(TestNetDriverUBPublicJetty, ServerCreateJetty5)
     JettyConnResp exchangeMsg{};
     JettyConnHeader info{};
 
-    UBJetty* tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
+    UBJetty *tmp = new (std::nothrow) UBJetty(name, 0, nullptr, nullptr);
     MOCKER_CPP(&UBWorker::CreateQP).stubs().with(outBound(tmp)).will(returnValue(0));
     MOCKER_CPP(&UBJetty::Initialize).stubs().will(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::SendByPublicJetty).stubs().will(returnValue(0));
@@ -952,7 +938,8 @@ int MockNewEndPoint(const std::string &ipPort, const UBSHcomNetEndpointPtr &newE
     return 0;
 }
 
-template<int8_t value> UResult MockReceive(void *buf, uint32_t size)
+template <int8_t value>
+UResult MockReceive(void *buf, uint32_t size)
 {
     int8_t *data = reinterpret_cast<int8_t *>(buf);
     *data = value;
@@ -1083,7 +1070,8 @@ TEST_F(TestNetDriverUBPublicJetty, ServerEstablishCtrlConn)
     EXPECT_EQ(driver->ServerEstablishCtrlConn(&exchangeInfo, jetty), NN_OK);
 }
 
-template<typename T> void *NewExceptFor(size_t sz, const std::nothrow_t &)
+template <typename T>
+void *NewExceptFor(size_t sz, const std::nothrow_t &)
 {
     if (sz == sizeof(T)) {
         return nullptr;
@@ -1100,8 +1088,8 @@ TEST_F(TestNetDriverUBPublicJetty, CreateSyncEpMallocFail)
     tmpJetty->IncreaseRef();
 
     MOCKER_CPP(&operator new, void *(*)(size_t, const std::nothrow_t &))
-            .stubs()
-            .will(invoke(NewExceptFor<NetUBSyncEndpoint>));
+        .stubs()
+        .will(invoke(NewExceptFor<NetUBSyncEndpoint>));
 
     EXPECT_EQ(driver->CreateSyncEp(tmpJetty, nullptr, 0, outEp, nullptr), NN_NEW_OBJECT_FAILED);
     if (tmpJetty != nullptr) {
@@ -1121,18 +1109,19 @@ TEST_F(TestNetDriverUBPublicJetty, CreateSyncEpFail)
     pubJetty->IncreaseRef();
 
     MOCKER_CPP(&NetDriverUBWithOob::PrePostReceiveOnSyncEp)
-            .stubs()
-            .will(returnValue(static_cast<NResult>(NN_ERROR)))
-            .then(returnValue(static_cast<NResult>(NN_OK)));
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_ERROR)))
+        .then(returnValue(static_cast<NResult>(NN_OK)));
     MOCKER_CPP(&UBPublicJetty::SendByPublicJetty)
-            .stubs()
-            .will(returnValue(static_cast<NResult>(UB_PARAM_INVALID)))
-            .then(returnValue(static_cast<NResult>(NN_OK)));
+        .stubs()
+        .will(returnValue(static_cast<NResult>(UB_PARAM_INVALID)))
+        .then(returnValue(static_cast<NResult>(NN_OK)));
     MOCKER_CPP(&UBPublicJetty::PollingCompletion)
-            .stubs()
-            .will(returnValue(static_cast<NResult>(UB_CQ_EVENT_GET_TIMOUT)))
-            .then(returnValue(static_cast<NResult>(NN_OK)));
-    MOCKER_CPP(&UBPublicJetty::Receive).stubs()
+        .stubs()
+        .will(returnValue(static_cast<NResult>(UB_CQ_EVENT_GET_TIMOUT)))
+        .then(returnValue(static_cast<NResult>(NN_OK)));
+    MOCKER_CPP(&UBPublicJetty::Receive)
+        .stubs()
         .will(returnValue(static_cast<NResult>(NN_ERROR)))
         .then(returnValue(static_cast<NResult>(NN_OK)));
 
@@ -1190,8 +1179,11 @@ TEST_F(TestNetDriverUBPublicJetty, ConnectASyncEpByPublicJetty)
     std::string payload("hello");
     UBSHcomNetEndpointPtr outEp = nullptr;
     MOCKER_CPP(&NetDriverUBWithOob::PublicJettyConnect).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty).stubs().with(outBound(jetty), any(), any())
-        .will(returnValue(1)).then(returnValue(0));
+    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty)
+        .stubs()
+        .with(outBound(jetty), any(), any())
+        .will(returnValue(1))
+        .then(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::StartPublicJetty).stubs().then(returnValue(1));
 
     EXPECT_EQ(driver->ConnectASyncEpByPublicJetty(oobIp, 1, payload, outEp, 0, 0, 0), NN_ERROR);
@@ -1229,13 +1221,16 @@ TEST_F(TestNetDriverUBPublicJetty, ConnectSyncEpByPublicJettyFail)
 
     MOCKER_CPP(&NetDriverUBWithOob::PublicJettyConnect).stubs().will(returnValue(1)).then(returnValue(0));
 
-    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty).stubs().with(outBound(jetty), any(), any())
-        .will(returnValue(1)).then(returnValue(0));
+    MOCKER_CPP(&NetDriverUBWithOob::CreatePublicJetty)
+        .stubs()
+        .with(outBound(jetty), any(), any())
+        .will(returnValue(1))
+        .then(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::StartPublicJetty).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&NetDriverUBWithOob::ClientEstablishConnOnReply)
-            .stubs()
-            .will(returnValue(NN_ERROR))
-            .then(returnValue(NN_OK));
+        .stubs()
+        .will(returnValue(NN_ERROR))
+        .then(returnValue(NN_OK));
     MOCKER_CPP(&NetDriverUBWithOob::CreateSyncEp).stubs().will(returnValue(NN_ERROR)).then(returnValue(NN_OK));
 
     jetty->IncreaseRef();
@@ -1254,6 +1249,6 @@ TEST_F(TestNetDriverUBPublicJetty, ConnectSyncEpByPublicJettyFail)
     EXPECT_EQ(driver->ConnectSyncEpByPublicJetty(oobIp, 1, payload, outEp, 0, 0, 0), NN_ERROR);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

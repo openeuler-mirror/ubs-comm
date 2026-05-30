@@ -27,8 +27,7 @@ struct NetMemAllocCacheLinkNode {
      */
     void Lock()
     {
-        while (!__sync_bool_compare_and_swap(&lock, 0, NN_NO1)) {
-        }
+        while (!__sync_bool_compare_and_swap(&lock, 0, NN_NO1)) {}
     }
 
     /*
@@ -254,7 +253,7 @@ private:
     uint16_t mBlockTierCount = 0;                         /* timer count */
     bool mAligned = true;                                 /* address is aligned or not */
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HCOM_NET_MEM_ALLOCATOR_CACHE_H

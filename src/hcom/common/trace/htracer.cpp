@@ -89,5 +89,5 @@ void EnableHtrace(bool enableTrace)
     TraceManager::SetEnable(enableTrace);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

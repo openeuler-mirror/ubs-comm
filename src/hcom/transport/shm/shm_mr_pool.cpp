@@ -119,11 +119,11 @@ inline uint32_t ShmMemoryRegion::GenerateKey()
     std::hash<uint32_t> hashCount;
 
     // 混合PID、索引和时间哈希
-    uint32_t mix =
-        hashCount(pid) ^ hashCount(shmLocalKeyIndex.fetch_add(1)) ^ (static_cast<uint32_t>(time(nullptr)) & 0xFFFF);
+    uint32_t mix = hashCount(pid) ^ hashCount(shmLocalKeyIndex.fetch_add(1)) ^
+                   (static_cast<uint32_t>(time(nullptr)) & 0xFFFF);
 
     // 二次混合确保均匀分布
     return (mix ^ (mix >> NN_NO16)) * 0x45d9f3b;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

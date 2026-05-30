@@ -32,7 +32,7 @@ private:
         rcnt = 0;
         ccnt.store(0);
         while (ctx->cnt < ctx->mIterations || rcnt < ctx->mIterations ||
-            static_cast<uint64_t>(ccnt.load()) < ctx->mIterations) {
+               static_cast<uint64_t>(ccnt.load()) < ctx->mIterations) {
             if (rcnt < ctx->mIterations && !(ctx->cnt < 1 && !mCfg.GetIsServer())) {
                 rcnt++;
                 while ((*pollData != rcnt) && ctx->cnt < ctx->mIterations)
@@ -99,11 +99,11 @@ private:
     RegMrInfo mPollMrInfo;
     RegMrInfo mPeerMrInfo;
     uint64_t rcnt = 0;
-    std::atomic<int> ccnt{ 0 };
-    std::atomic<bool> isConnect{ false };
+    std::atomic<int> ccnt{0};
+    std::atomic<bool> isConnect{false};
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

@@ -56,7 +56,7 @@ using URMA_MODIFY_JETTY = urma_status_t (*)(urma_jetty_t *jetty, urma_jetty_attr
 using URMA_QUERY_JETTY = urma_status_t (*)(urma_jetty_t *jetty, urma_jetty_cfg_t *cfg, urma_jetty_attr_t *attr);
 using URMA_DELETE_JETTY = urma_status_t (*)(urma_jetty_t *jetty);
 using URMA_IMPORT_JETTY = urma_target_jetty_t *(*)(urma_context_t *ctx, urma_rjetty_t *rjetty,
-    urma_token_t *token_value);
+                                                   urma_token_t *token_value);
 using URMA_UNIMPORT_JETTY = urma_status_t (*)(urma_target_jetty_t *tjetty);
 using URMA_ADVISE_JETTY = urma_status_t (*)(urma_jetty_t *jetty, urma_target_jetty_t *tjetty);
 using URMA_UNADVISE_JETTY = urma_status_t (*)(urma_jetty_t *jetty, urma_target_jetty_t *tjetty);
@@ -74,20 +74,22 @@ using URMA_FREE_TOKEN_ID = urma_status_t (*)(urma_token_id_t *token_id);
 using URMA_REGISTER_SEG = urma_target_seg_t *(*)(urma_context_t *ctx, urma_seg_cfg_t *seg_cfg);
 using URMA_UNREGISTER_SEG = urma_status_t (*)(urma_target_seg_t *target_seg);
 using URMA_IMPORT_SEG = urma_target_seg_t *(*)(urma_context_t *ctx, urma_seg_t *seg, urma_token_t *token_value,
-    uint64_t addr, urma_import_seg_flag_t flag);
+                                               uint64_t addr, urma_import_seg_flag_t flag);
 using URMA_UNIMPORT_SEG = urma_status_t (*)(urma_target_seg_t *tseg);
 using URMA_POST_JFS_WR = urma_status_t (*)(urma_jfs_t *jfs, urma_jfs_wr_t *wr, urma_jfs_wr_t **bad_wr);
 using URMA_POST_JFR_WR = urma_status_t (*)(urma_jfr_t *jfr, urma_jfr_wr_t *wr, urma_jfr_wr_t **bad_wr);
 using URMA_POST_JETTY_SEND_WR = urma_status_t (*)(urma_jetty_t *jetty, urma_jfs_wr_t *wr, urma_jfs_wr_t **bad_wr);
 using URMA_POST_JETTY_RECV_WR = urma_status_t (*)(urma_jetty_t *jetty, urma_jfr_wr_t *wr, urma_jfr_wr_t **bad_wr);
 using URMA_WRITE = urma_status_t (*)(urma_jfs_t *jfs, urma_target_jetty_t *target_jfr, urma_target_seg_t *dst_tseg,
-    urma_target_seg_t *src_tseg, uint64_t dst, uint64_t src, uint32_t len, urma_jfs_wr_flag_t flag, uint64_t user_ctx);
+                                     urma_target_seg_t *src_tseg, uint64_t dst, uint64_t src, uint32_t len,
+                                     urma_jfs_wr_flag_t flag, uint64_t user_ctx);
 using URMA_READ = urma_status_t (*)(urma_jfs_t *jfs, urma_target_jetty_t *target_jfr, urma_target_seg_t *dst_tseg,
-    urma_target_seg_t *src_tseg, uint64_t dst, uint64_t src, uint32_t len, urma_jfs_wr_flag_t flag, uint64_t user_ctx);
+                                    urma_target_seg_t *src_tseg, uint64_t dst, uint64_t src, uint32_t len,
+                                    urma_jfs_wr_flag_t flag, uint64_t user_ctx);
 using URMA_SEND = urma_status_t (*)(urma_jfs_t *jfs, urma_target_jetty_t *target_jfr, urma_target_seg_t *src_tseg,
-    uint64_t src, uint32_t len, urma_jfs_wr_flag_t flag, uint64_t user_ctx);
+                                    uint64_t src, uint32_t len, urma_jfs_wr_flag_t flag, uint64_t user_ctx);
 using URMA_RECV = urma_status_t (*)(urma_jfr_t *jfr, urma_target_seg_t *recv_tseg, uint64_t buf, uint32_t len,
-    uint64_t user_ctx);
+                                    uint64_t user_ctx);
 using URMA_POLL_JFC = int (*)(urma_jfc_t *jfc, int cr_cnt, urma_cr_t *cr);
 using URMA_REARM_JFC = urma_status_t (*)(urma_jfc_t *jfc, bool solicited_only);
 using URMA_WAIT_JFC = int (*)(urma_jfce_t *jfce, uint32_t jfc_cnt, int time_out, urma_jfc_t *jfc[]);

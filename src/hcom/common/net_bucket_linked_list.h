@@ -28,7 +28,7 @@ struct NetLLNode {
  */
 struct NetBucketLinkedListMeta {
     NetLLNode *next = nullptr; /* point to the real memory segment */
-    NetSpinLock lock {};       /* spin lock for insertion & deletion of memory */
+    NetSpinLock lock{};        /* spin lock for insertion & deletion of memory */
     uint32_t count = 0;        /* the count of current linked list */
 };
 
@@ -110,16 +110,16 @@ public:
 
     NetBucketLinkedList(const NetBucketLinkedList &) = delete;
     NetBucketLinkedList(NetBucketLinkedList &&) = delete;
-    NetBucketLinkedList &operator = (const NetBucketLinkedList &) = delete;
-    NetBucketLinkedList &operator = (NetBucketLinkedList &&) = delete;
+    NetBucketLinkedList &operator=(const NetBucketLinkedList &) = delete;
+    NetBucketLinkedList &operator=(NetBucketLinkedList &&) = delete;
 
 private:
     /* NOTE: to make sure the size of this class is same with one cache line of CPU */
-    uint32_t mPopRRIdx = 0;                            /* round-robin index for pop */
-    uint32_t mPushRRIdx = 0;                           /* round-robin index for push */
-    NetBucketLinkedListMeta mBuckets[BUCKET_COUNT] {}; /* buckets linked list */
+    uint32_t mPopRRIdx = 0;                           /* round-robin index for pop */
+    uint32_t mPushRRIdx = 0;                          /* round-robin index for push */
+    NetBucketLinkedListMeta mBuckets[BUCKET_COUNT]{}; /* buckets linked list */
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_LINKED_LIST_H

@@ -10,11 +10,11 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <sys/epoll.h>
+#include <mockcpp/mockcpp.hpp>
 #include "shm_channel.h"
-#include "shm_handle_fds.h"
 #include "shm_channel_keeper.h"
+#include "shm_handle_fds.h"
 
 namespace ock {
 namespace hcom {
@@ -28,8 +28,7 @@ public:
     ShmChannelKeeper *keeper = nullptr;
 };
 
-TestShmChannelKeeper::TestShmChannelKeeper()
-{}
+TestShmChannelKeeper::TestShmChannelKeeper() {}
 
 void TestShmChannelKeeper::SetUp()
 {
@@ -111,5 +110,5 @@ TEST_F(TestShmChannelKeeper, ExchangeFdProcess)
     EXPECT_EQ(ret, SH_OK);
 }
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

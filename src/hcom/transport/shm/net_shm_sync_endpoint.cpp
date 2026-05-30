@@ -9,15 +9,20 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "shm_validation.h"
-#include "hcom_log.h"
 #include "net_shm_sync_endpoint.h"
+#include "hcom_log.h"
+#include "shm_validation.h"
 
 namespace ock {
 namespace hcom {
 NetSyncEndpointShm::NetSyncEndpointShm(uint64_t id, ShmChannel *ch, NetDriverShmWithOOB *driver,
-    const UBSHcomNetWorkerIndex &workerIndex, ShmSyncEndpoint *shmEp, ShmMRHandleMap &handleMap)
-    : NetEndpointImpl(id, workerIndex), mShmCh(ch), mDriver(driver), mShmEp(shmEp), mrHandleMap(handleMap)
+                                       const UBSHcomNetWorkerIndex &workerIndex, ShmSyncEndpoint *shmEp,
+                                       ShmMRHandleMap &handleMap)
+    : NetEndpointImpl(id, workerIndex),
+      mShmCh(ch),
+      mDriver(driver),
+      mShmEp(shmEp),
+      mrHandleMap(handleMap)
 {
     if (mShmCh != nullptr) {
         mShmCh->IncreaseRef();
@@ -61,7 +66,7 @@ NResult NetSyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         NN_LOG_ERROR("Shm failed to sync post send as validate fail");
         return result;
     }
- 
+
     if (NN_UNLIKELY((result = PostSendValidationMaxSize(request, mAllowedSize, mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to sync post send as validate size fail");
         return result;
@@ -89,7 +94,7 @@ NResult NetSyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransReque
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+                          reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("Shm Failed to post send message as encryption failed");
             mShmCh->DCMarkBuckFree(address);
             return NN_ENCRYPT_FAILED;
@@ -98,8 +103,8 @@ NResult NetSyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransReque
     } else {
         header->dataLength = request.size;
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)),
-            mShmCh->GetSendDCBuckSize() - sizeof(UBSHcomNetTransHeader),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 mShmCh->GetSendDCBuckSize() - sizeof(UBSHcomNetTransHeader),
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mShmCh->DCMarkBuckFree(address);
             NN_LOG_ERROR("Failed to copy request to address");
             return NN_INVALID_PARAM;
@@ -135,14 +140,14 @@ NResult NetSyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransReque
 }
 
 NResult NetSyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo)
+                                     const UBSHcomNetTransOpInfo &opInfo)
 {
     NResult result = NN_OK;
     if (NN_UNLIKELY((result = PostSendValidation(mState, mId, opCode, request)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to sync post send as validation fail");
         return result;
     }
- 
+
     if (NN_UNLIKELY((result = PostSendValidationMaxSize(request, mAllowedSize, mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to sync post send as validate size failed");
         return result;
@@ -171,7 +176,7 @@ NResult NetSyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransReque
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+                          reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("Failed to post send message as encryption failure");
             mShmCh->DCMarkBuckFree(address);
             return NN_ENCRYPT_FAILED;
@@ -180,8 +185,8 @@ NResult NetSyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransReque
     } else {
         header->dataLength = request.size;
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)),
-            mShmCh->GetSendDCBuckSize() - sizeof(UBSHcomNetTransHeader),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 mShmCh->GetSendDCBuckSize() - sizeof(UBSHcomNetTransHeader),
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mShmCh->DCMarkBuckFree(address);
             NN_LOG_ERROR("Failed to copy request to address");
             return NN_INVALID_PARAM;
@@ -223,7 +228,7 @@ NResult NetSyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, u
         NN_LOG_ERROR("Shm failed to sync post send raw as validate fail");
         return result;
     }
- 
+
     if (NN_UNLIKELY((result = PostSendValidationMaxSize(request, mSegSize, mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to sync post send raw as validate size fail");
         return result;
@@ -246,7 +251,7 @@ NResult NetSyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, u
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(address), cipherLen)) {
+                          reinterpret_cast<void *>(address), cipherLen)) {
             NN_LOG_ERROR("Failed to post send message as encryption failure");
             mShmCh->DCMarkBuckFree(address);
             return NN_ENCRYPT_FAILED;
@@ -254,7 +259,7 @@ NResult NetSyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, u
         innerReq.size = cipherLen;
     } else {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(address), mShmCh->GetSendDCBuckSize(),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy request to address");
             mShmCh->DCMarkBuckFree(address);
             return NN_INVALID_PARAM;
@@ -287,8 +292,8 @@ NResult NetSyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, u
 NResult NetSyncEndpointShm::PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo)
 {
     NResult result = NN_OK;
-    if (NN_UNLIKELY((result = PostSendSglValidation(mState, mId, mDriver, seqNo, request, mSegSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((result = PostSendSglValidation(mState, mId, mDriver, seqNo, request, mSegSize, mIsNeedEncrypt,
+                                                    mAes)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to sync post send raw sgl as validate fail");
         return result;
     }
@@ -315,7 +320,7 @@ NResult NetSyncEndpointShm::PostSendRawSgl(const UBSHcomNetTransSglRequest &requ
             dataLen += request.iov[i].size;
         }
 
-        UBSHcomNetMessage tmpMsg {};
+        UBSHcomNetMessage tmpMsg{};
         bool messageReady = tmpMsg.AllocateIfNeed(dataLen);
         if (NN_UNLIKELY(!messageReady)) {
             NN_LOG_ERROR("Failed to allocate net msg buffer failed");
@@ -324,8 +329,8 @@ NResult NetSyncEndpointShm::PostSendRawSgl(const UBSHcomNetTransSglRequest &requ
         }
         for (uint16_t i = 0; i < request.iovCount; i++) {
             if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(tmpMsg.mBuf) + iovOffset),
-                request.iov[i].size, reinterpret_cast<const void *>(request.iov[i].lAddress),
-                request.iov[i].size) != NN_OK)) {
+                                     request.iov[i].size, reinterpret_cast<const void *>(request.iov[i].lAddress),
+                                     request.iov[i].size) != NN_OK)) {
                 mShmCh->DCMarkBuckFree(address);
                 NN_LOG_WARN("Invalid operation to memcpy_s in shm encrypt PostSendRawSgl");
                 return NN_ERROR;
@@ -344,7 +349,8 @@ NResult NetSyncEndpointShm::PostSendRawSgl(const UBSHcomNetTransSglRequest &requ
     } else {
         for (uint16_t i = 0; i < request.iovCount; i++) {
             if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(address + iovOffset), request.iov[i].size,
-                reinterpret_cast<const void *>(request.iov[i].lAddress), request.iov[i].size) != NN_OK)) {
+                                     reinterpret_cast<const void *>(request.iov[i].lAddress),
+                                     request.iov[i].size) != NN_OK)) {
                 mShmCh->DCMarkBuckFree(address);
                 NN_LOG_WARN("Invalid operation to memcpy_s in shm PostSendRawSgl");
                 return NN_ERROR;
@@ -486,7 +492,7 @@ NResult NetSyncEndpointShm::PostWrite(const UBSHcomNetTransSglRequest &request)
 
 NResult NetSyncEndpointShm::Receive(int32_t timeout, UBSHcomNetResponseContext &ctx)
 {
-    ShmOpContextInfo opCtx {};
+    ShmOpContextInfo opCtx{};
     NResult result = NN_OK;
     mDemandPollingOpType = ShmOpContextInfo::SH_RECEIVE;
     uint32_t immData = 0;
@@ -502,14 +508,14 @@ NResult NetSyncEndpointShm::Receive(int32_t timeout, UBSHcomNetResponseContext &
 
         uintptr_t address = 0;
         if (NN_UNLIKELY((result = ch->GetPeerDataAddressByOffset(mDelayHandleReceiveEvent.dataOffset, address)) !=
-            SH_OK)) {
+                        SH_OK)) {
             NN_LOG_ERROR("Shm Got invalid event " << mShmEp->GetName() << " as get data address failed, dropped it");
             return result;
         }
 
         opCtx = ShmOpContextInfo(ch, address, mDelayHandleReceiveEvent.dataSize,
-            static_cast<ShmOpContextInfo::ShmOpType>(mDelayHandleReceiveEvent.opType),
-            ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);
+                                 static_cast<ShmOpContextInfo::ShmOpType>(mDelayHandleReceiveEvent.opType),
+                                 ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);
     } else if (NN_UNLIKELY((result = mShmEp->Receive(timeout, opCtx, immData)) != NN_OK)) {
         NN_LOG_ERROR("Shm Failed to receive response from peer, result " << result);
         return result;
@@ -536,8 +542,8 @@ NResult NetSyncEndpointShm::Receive(int32_t timeout, UBSHcomNetResponseContext &
         uint32_t decryptLen = 0;
         bool msgReady = mRespMessage.AllocateIfNeed(realDataSize);
         if (NN_UNLIKELY(!msgReady)) {
-            NN_LOG_ERROR("Shm Failed to allocate memory for response size " << opCtx.dataSize <<
-                ", probably out of memory");
+            NN_LOG_ERROR("Shm Failed to allocate memory for response size " << opCtx.dataSize
+                                                                            << ", probably out of memory");
             opCtx.channel->DCMarkPeerBuckFree(opCtx.dataAddress);
             return NN_MALLOC_FAILED;
         }
@@ -564,7 +570,7 @@ NResult NetSyncEndpointShm::Receive(int32_t timeout, UBSHcomNetResponseContext &
     }
 
     if (NN_UNLIKELY(memcpy_s(&(mRespCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
-        sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
+                             sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
         opCtx.channel->DCMarkPeerBuckFree(opCtx.dataAddress);
         NN_LOG_ERROR("Failed to copy tmpHeader to mRespCtx");
         return NN_INVALID_PARAM;
@@ -581,7 +587,7 @@ NResult NetSyncEndpointShm::Receive(int32_t timeout, UBSHcomNetResponseContext &
 
 NResult NetSyncEndpointShm::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContext &ctx)
 {
-    ShmOpContextInfo opCtx {};
+    ShmOpContextInfo opCtx{};
     NResult result = NN_OK;
     mDemandPollingOpType = ShmOpContextInfo::SH_RECEIVE;
     uint32_t immData = 0;
@@ -595,13 +601,13 @@ NResult NetSyncEndpointShm::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContex
         }
         uintptr_t address = 0;
         if (NN_UNLIKELY((result = ch->GetPeerDataAddressByOffset(mDelayHandleReceiveEvent.dataOffset, address)) !=
-            SH_OK)) {
+                        SH_OK)) {
             NN_LOG_ERROR("Got invalid event " << mShmEp->GetName() << " as get data address failed, dropped it");
             return result;
         }
         opCtx = ShmOpContextInfo(ch, address, mDelayHandleReceiveEvent.dataSize,
-            static_cast<ShmOpContextInfo::ShmOpType>(mDelayHandleReceiveEvent.opType),
-            ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);
+                                 static_cast<ShmOpContextInfo::ShmOpType>(mDelayHandleReceiveEvent.opType),
+                                 ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);
         immData = mDelayHandleReceiveEvent.immData;
     } else if (NN_UNLIKELY((result = mShmEp->Receive(timeout, opCtx, immData)) != NN_OK)) {
         NN_LOG_ERROR("Failed to get operation,time out");
@@ -626,8 +632,8 @@ NResult NetSyncEndpointShm::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContex
         uint32_t decryptLen = 0;
         bool msgReady = mRespMessage.AllocateIfNeed(realDataSize);
         if (NN_UNLIKELY(!msgReady)) {
-            NN_LOG_ERROR("Failed to allocate memory for response size " << opCtx.dataSize <<
-                ", probably out of memory");
+            NN_LOG_ERROR("Failed to allocate memory for response size " << opCtx.dataSize
+                                                                        << ", probably out of memory");
             opCtx.channel->DCMarkPeerBuckFree(opCtx.dataAddress);
             return NN_MALLOC_FAILED;
         }
@@ -668,7 +674,7 @@ NResult NetSyncEndpointShm::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContex
 
 NResult NetSyncEndpointShm::WaitCompletion(int32_t timeout)
 {
-    ShmEvent event {};
+    ShmEvent event{};
     NResult result = NN_OK;
 
 POLL_EVENT:
@@ -708,5 +714,5 @@ POLL_EVENT:
     NN_LOG_ERROR("Got un-demand operation type " << event.opType << ", ignored");
     return SH_ERROR;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

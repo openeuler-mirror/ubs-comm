@@ -54,7 +54,8 @@ using NewKeeperMsgHandler = std::function<void(const ShmChKeeperMsgHeader &, con
 class ShmChannelKeeper {
 public:
     ShmChannelKeeper(const std::string &name, uint16_t driverIndex)
-        : mDriverIndex(driverIndex), mName(name + std::to_string(driverIndex))
+        : mDriverIndex(driverIndex),
+          mName(name + std::to_string(driverIndex))
     {
         OBJ_GC_INCREASE(ShmChannelKeeper);
     }
@@ -93,12 +94,12 @@ private:
     bool mNeedStop = false;
     uint16_t mDriverIndex = 0;
     std::thread mEPollThread;
-    std::atomic_bool mThreadStarted { false };
+    std::atomic_bool mThreadStarted{false};
     std::string mName;
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HCOM_SHM_CHANNEL_KEEPER_H

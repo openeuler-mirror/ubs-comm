@@ -29,5 +29,5 @@ void Subscriber::Close()
         mEp->Close();
     }
 }
-}
-}
+} // namespace hcom
+} // namespace ock

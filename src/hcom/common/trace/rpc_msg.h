@@ -76,8 +76,7 @@ public:
         }
 
         MessageHeader *header = reinterpret_cast<MessageHeader *>(messageData);
-        if (header->version != VERSION ||
-            header->magicCode != MAGIC_CODE ||
+        if (header->version != VERSION || header->magicCode != MAGIC_CODE ||
             header->bodySize + sizeof(MessageHeader) > messageSize) {
             return false;
         }
@@ -85,7 +84,7 @@ public:
     }
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // RPC_MSG_H

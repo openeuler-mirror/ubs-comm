@@ -10,11 +10,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
-
 #include "test_trace_rpc.h"
 #include "htracer_service_helper.h"
-#include "rpc_server.h"
 #include "rpc_msg.h"
+#include "rpc_server.h"
 
 using namespace std;
 using namespace ock::hcom;

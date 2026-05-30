@@ -38,7 +38,7 @@ RResult RDMAAsyncEndPoint::Create(const std::string &name, RDMAWorker *worker, R
 }
 
 RResult RDMASyncEndpoint::Create(const std::string &name, RDMAContext *ctx, RDMAPollingMode pollMode,
-    uint32_t rdmaOpCtxPoolSize, const QpOptions &options, RDMASyncEndpoint *&ep)
+                                 uint32_t rdmaOpCtxPoolSize, const QpOptions &options, RDMASyncEndpoint *&ep)
 {
     if (ctx == nullptr || name.empty()) {
         return RR_PARAM_INVALID;
@@ -68,6 +68,6 @@ RResult RDMASyncEndpoint::Create(const std::string &name, RDMAContext *ctx, RDMA
     ep = tmpEP;
     return RR_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

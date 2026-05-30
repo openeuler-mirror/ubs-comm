@@ -19,8 +19,8 @@
 
 #include "hcom.h"
 #include "net_common.h"
-#include "ub_device_helper.h"
 #include "net_mem_pool_fixed.h"
+#include "ub_device_helper.h"
 
 namespace ock {
 namespace hcom {
@@ -49,7 +49,7 @@ public:
     NResult CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr, unsigned long memid) override;
     void DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr) override;
     NResult ImportUrmaSeg(uintptr_t address, uint64_t size, uint64_t key, void **tSeg, uint8_t *eid,
-        uint32_t eidLen) override;
+                          uint32_t eidLen) override;
 
     inline NResult ValidateMemoryRegion(uint64_t lKey, uintptr_t address, uint64_t size)
     {
@@ -101,6 +101,7 @@ protected:
     MemoryRegionChecker mMrChecker;
     uint32_t mHeartBeatIdleTime = NN_NO8;
     uint32_t mHeartBeatProbeInterval = NN_NO1;
+
 private:
     NResult CreateSendMr(uint8_t slave);
     NResult ImportRemotePA(unsigned long memid);
@@ -112,8 +113,8 @@ private:
     std::map<uint64_t, urma_target_seg_t *> mMapTseg;
     std::mutex mLockTseg;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // HCOM_NET_UB_DRIVER_H

@@ -18,6 +18,7 @@ repos:
         entry: clang-format
         language: system
         files: \.(h|c|cpp)$
+        exclude: ^(src/hcom/umq|src/ubsocket)
         args: [-style=file, -i]
       - id: clang-tidy
         name: Run clang-tidy check

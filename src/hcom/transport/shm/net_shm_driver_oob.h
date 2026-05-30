@@ -52,13 +52,13 @@ public:
     void DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr) override;
 
     NResult Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo,
-        uint8_t clientGrpNo) override;
+                    uint8_t clientGrpNo) override;
 
     NResult Connect(const std::string &oobIp, uint16_t oobPort, const std::string &payload, UBSHcomNetEndpointPtr &ep,
-        uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx) override;
+                    uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx) override;
 
     NResult Connect(const std::string &serverUrl, const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags,
-        uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0, uint64_t ctx = 0) override;
+                    uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0, uint64_t ctx = 0) override;
 
     NResult MultiRailNewConnection(OOBTCPConnection &conn);
 
@@ -95,7 +95,7 @@ protected:
     void ProcessEpError(const ShmChannelPtr &channelPtr);
 
     NResult ConnectSyncEp(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-        UBSHcomNetEndpointPtr &outEp, uint8_t serverGrpNo, uint64_t ctx);
+                          UBSHcomNetEndpointPtr &outEp, uint8_t serverGrpNo, uint64_t ctx);
 
     inline void AddEp(const UBSHcomNetEndpointPtr &newEp)
     {
@@ -135,13 +135,13 @@ protected:
     DelayReleaseTimerPtr mDelayReleaseTimer = nullptr;
     MemoryRegionChecker mMrChecker;
     std::thread mClearThread;
-    std::atomic_bool mClearThreadStarted { false };
+    std::atomic_bool mClearThreadStarted{false};
 
 private:
     friend class NetAsyncEndpointShm;
     friend class NetSyncEndpointShm;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_SHM_DRIVER_OOB_H

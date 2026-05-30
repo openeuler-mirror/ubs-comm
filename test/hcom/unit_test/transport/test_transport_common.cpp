@@ -10,24 +10,24 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
-#include <unistd.h>
 #include <sys/epoll.h>
+#include <unistd.h>
+#include <mockcpp/mockcpp.hpp>
 #include <utility>
 
 #include "hcom_utils.h"
 #include "net_common.h"
+#include "net_sock_driver_oob.h"
 #include "rdma_worker.h"
 #include "transport/net_delay_release_timer.h"
 #include "transport/net_heartbeat.h"
 #include "transport/net_load_balance.h"
 #include "transport/rdma/rdma_common.h"
 #include "transport/rdma/verbs/net_rdma_async_endpoint.h"
+#include "transport/ub/net_ub_driver_oob.h"
+#include "transport/ub/net_ub_endpoint.h"
 #include "transport/ub/ub_urma_wrapper_jetty.h"
 #include "transport/ub/ub_worker.h"
-#include "transport/ub/net_ub_endpoint.h"
-#include "transport/ub/net_ub_driver_oob.h"
-#include "net_sock_driver_oob.h"
 
 namespace ock {
 namespace hcom {
@@ -38,9 +38,7 @@ public:
     virtual void TearDown(void);
 };
 
-void TestTransportCommon::SetUp()
-{
-}
+void TestTransportCommon::SetUp() {}
 
 void TestTransportCommon::TearDown()
 {
@@ -107,8 +105,8 @@ TEST_F(TestTransportCommon, NetHeartbeatStart)
     heartbeat->mHbThread = std::move(tmpThread);
     EXPECT_NO_FATAL_FAILURE(heartbeat->Stop());
 
-    NetDriverRDMAWithOob *driver = new (std::nothrow) NetDriverRDMAWithOob("name", false,
-        UBSHcomNetDriverProtocol::UBC);
+    NetDriverRDMAWithOob *driver = new (std::nothrow)
+        NetDriverRDMAWithOob("name", false, UBSHcomNetDriverProtocol::UBC);
     heartbeat->mDriver = driver;
     EXPECT_NO_FATAL_FAILURE(heartbeat->DetectHbState());
 
@@ -116,7 +114,8 @@ TEST_F(TestTransportCommon, NetHeartbeatStart)
     NetAsyncEndpoint *ep = new (std::nothrow) NetAsyncEndpoint(0, nullptr, nullptr, workerIndex);
 
     MOCKER_CPP_VIRTUAL(*ep, &NetAsyncEndpoint::PostSend,
-        NResult(NetAsyncEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, uint32_t)).stubs()
+                       NResult(NetAsyncEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, uint32_t))
+        .stubs()
         .will(returnValue(static_cast<int>(NN_OK)))
         .then(returnValue(static_cast<int>(NN_INVALID_PARAM)));
     EXPECT_EQ(heartbeat->SendTwoSideHeartBeat(ep), static_cast<int>(NN_OK));
@@ -138,13 +137,13 @@ TEST_F(TestTransportCommon, NetHeartbeatStart)
 TEST_F(TestTransportCommon, NetHeartbeatDetectSingleEpHbState)
 {
     NetHeartbeat *heartbeat = new (std::nothrow) NetHeartbeat(nullptr, 0, 0);
-    UBSHcomNetTransRequest req {};
+    UBSHcomNetTransRequest req{};
     EXPECT_NO_FATAL_FAILURE(heartbeat->DetectSingleEpHbState(req, nullptr));
 
     UBSHcomNetWorkerIndex workerIndex{};
     UBSHcomNetEndpointPtr ep = new (std::nothrow) NetAsyncEndpoint(0, nullptr, nullptr, workerIndex);
-    NetDriverSockWithOOB *driver =
-        new (std::nothrow) NetDriverSockWithOOB("name", false, UBSHcomNetDriverProtocol::TCP, SOCK_TCP);
+    NetDriverSockWithOOB *driver = new (std::nothrow)
+        NetDriverSockWithOOB("name", false, UBSHcomNetDriverProtocol::TCP, SOCK_TCP);
     heartbeat->mDriver = driver;
     EXPECT_NO_FATAL_FAILURE(heartbeat->DetectSingleEpHbState(req, nullptr));
     if (heartbeat != nullptr) {
@@ -162,7 +161,7 @@ TEST_F(TestTransportCommon, NetWorkerLBFunction)
 
     uint16_t wkrIdx = 0;
     EXPECT_EQ(lb->ChooseWorker(2, "127.0.0.1", wkrIdx), false);
-    NetWorkerGroupLbInfo info {};
+    NetWorkerGroupLbInfo info{};
     info.wrkCntLimited = 1;
     info.wrkCntInGrp = 0;
     lb->mWrkGroups.push_back(info);
@@ -183,7 +182,7 @@ TEST_F(TestTransportCommon, NetWorkerLBChooseWorkerLimited)
     uint16_t wkrIdx = 0;
     EXPECT_EQ(lb->ChooseWorkerLimited(2, "127.0.0.1", wkrIdx), false);
 
-    NetWorkerGroupLbInfo info {};
+    NetWorkerGroupLbInfo info{};
     info.wrkCntLimited = 1;
     info.wrkCntInGrp = 0;
     lb->mWrkGroups.push_back(info);
@@ -220,8 +219,7 @@ TEST_F(TestTransportCommon, NormalMemoryRegionFixedBufferInit)
 {
     NormalMemoryRegionFixedBuffer *buffer = new (std::nothrow) NormalMemoryRegionFixedBuffer("name", 0, 0);
     EXPECT_EQ(buffer->Initialize(), static_cast<int>(NN_INVALID_PARAM));
-    MOCKER_CPP(NetRingBuffer<uintptr_t>::Initialize).stubs()
-        .will(returnValue(static_cast<int>(NN_INVALID_PARAM)));
+    MOCKER_CPP(NetRingBuffer<uintptr_t>::Initialize).stubs().will(returnValue(static_cast<int>(NN_INVALID_PARAM)));
     EXPECT_EQ(buffer->Initialize(), static_cast<int>(NN_INVALID_PARAM));
 
     if (buffer != nullptr) {
@@ -246,6 +244,6 @@ TEST_F(TestTransportCommon, NormalMemoryRegionFixedBufferGetFreeBufferN)
     NormalMemoryRegionFixedBuffer buffer("name", 0, 0);
     EXPECT_EQ(buffer.GetFreeBufferN(nullptr, 0), false);
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 //#endif

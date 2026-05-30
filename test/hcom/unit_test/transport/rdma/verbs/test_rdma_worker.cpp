@@ -11,8 +11,8 @@
  */
 //#ifdef RDMA_BUILD_ENABLED
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <unistd.h>
+#include <mockcpp/mockcpp.hpp>
 #include <utility>
 #include "hcom_utils.h"
 #include "net_common.h"
@@ -87,6 +87,6 @@ TEST_F(TestRdmaWorker, RdmaReadRoCEVersionFromFile)
     EXPECT_EQ(ReadRoCEVersionFromFile(deviceName, 0, 0, version), static_cast<int>(RR_PARAM_INVALID));
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 //#endif

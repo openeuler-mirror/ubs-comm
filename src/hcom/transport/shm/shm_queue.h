@@ -27,21 +27,22 @@ struct ShmQueueMeta {
     uint32_t capacity = 0; /* capacity of the queue */
     uint32_t mask = 0;     /* mask of queue */
 
-    ShmQueueHeadTail prod {}; /* producer info */
-    ShmQueueHeadTail cons {}; /* consumer info */
+    ShmQueueHeadTail prod{}; /* producer info */
+    ShmQueueHeadTail cons{}; /* consumer info */
 
-    sem_t sem {}; /* sem info */
+    sem_t sem{}; /* sem info */
 
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "capacity " << capacity << ", mask " << mask << ", prod: " << prod.head << "-" << prod.tail <<
-            ", cons: " << cons.head << "-" << cons.tail;
+        oss << "capacity " << capacity << ", mask " << mask << ", prod: " << prod.head << "-" << prod.tail
+            << ", cons: " << cons.head << "-" << cons.tail;
         return oss.str();
     }
 };
 
-template <typename T> class ShmQueue {
+template <typename T>
+class ShmQueue {
 public:
     static const HResult SHM_QUEUE_FULL = -1;
     static const HResult SHM_QUEUE_EMPTY = -2;
@@ -49,7 +50,9 @@ public:
 
 public:
     ShmQueue(const std::string &name, uint32_t capacity, const ShmHandlePtr &shmHandle)
-        : mShmHandle(shmHandle.Get()), mName(name), mCapacity(capacity)
+        : mShmHandle(shmHandle.Get()),
+          mName(name),
+          mCapacity(capacity)
     {
         OBJ_GC_INCREASE(ShmQueue);
     }
@@ -90,8 +93,8 @@ public:
         }
 
         if (mShmHandle->DataSize() != MemSize(mCapacity)) {
-            NN_LOG_ERROR("Failed to initialize shm queue " << mName << " as size not matched, " <<
-                mShmHandle->DataSize() << "!=" << MemSize(mCapacity));
+            NN_LOG_ERROR("Failed to initialize shm queue " << mName << " as size not matched, "
+                                                           << mShmHandle->DataSize() << "!=" << MemSize(mCapacity));
             return SH_PARAM_INVALID;
         }
 
@@ -103,8 +106,8 @@ public:
 
         mQueueMeta = reinterpret_cast<ShmQueueMeta *>(mShmHandle->ShmAddress());
 
-        NN_LOG_TRACE_INFO("shm mem base info, sizeof(ShmQueueMeta) " << sizeof(ShmQueueMeta) << ", meta " <<
-            mQueueMeta->ToString());
+        NN_LOG_TRACE_INFO("shm mem base info, sizeof(ShmQueueMeta) " << sizeof(ShmQueueMeta) << ", meta "
+                                                                     << mQueueMeta->ToString());
 
         if (mShmHandle->IsOwner()) {
             /* set meta */
@@ -119,8 +122,8 @@ public:
             auto result = sem_init(&mQueueMeta->sem, 1, 0);
             if (result != 0) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("Failed initialize shm sem for queue " << mName << ", error "
-                        << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                NN_LOG_ERROR("Failed initialize shm sem for queue "
+                             << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                 return result;
             }
         } else {
@@ -130,10 +133,10 @@ public:
         }
 
         mQueueData = reinterpret_cast<T *>(mShmHandle->ShmAddress() + sizeof(ShmQueueMeta));
-        mMaxFailedTime = static_cast<uint32_t>(NetFunc::NN_GetLongEnv("HCOM_SHM_MAX_ENQUEUE_STUCK_TIME",
-            NN_NO1, NN_NO7200, NN_NO10));
-        mMaxEnqueueTimeout = static_cast<uint32_t>(NetFunc::NN_GetLongEnv("HCOM_SHM_ENQUEUE_TIMEOUT",
-            NN_NO1, NN_NO7200, NN_NO20));
+        mMaxFailedTime = static_cast<uint32_t>(
+            NetFunc::NN_GetLongEnv("HCOM_SHM_MAX_ENQUEUE_STUCK_TIME", NN_NO1, NN_NO7200, NN_NO10));
+        mMaxEnqueueTimeout =
+            static_cast<uint32_t>(NetFunc::NN_GetLongEnv("HCOM_SHM_ENQUEUE_TIMEOUT", NN_NO1, NN_NO7200, NN_NO20));
         NN_LOG_DEBUG("SHM: mMaxFailedTime " << mMaxFailedTime << ", mMaxEnqueueTimeout " << mMaxEnqueueTimeout);
         mInited = true;
         return SH_OK;
@@ -460,7 +463,7 @@ private:
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_SHM_WRAPPER_H

@@ -10,7 +10,6 @@
  * See the Mulan PSL v2 for more details.
  */
 
-
 #ifdef RDMA_BUILD_ENABLED
 
 #include "rdma_device_helper.h"
@@ -18,7 +17,7 @@
 namespace ock {
 namespace hcom {
 
-static const char* RDMARoCEVersionStrTable[] = {
+static const char *RDMARoCEVersionStrTable[] = {
     "Unknown",
     "IB/RoCE v1",
     "RoCE v1.5",
@@ -92,7 +91,7 @@ RResult RDMADeviceHelper::DoUpdate()
         RDMADeviceSimpleInfo info;
         info.devIndex = i;
         if (NN_UNLIKELY(strcpy_s(info.devName, IBV_SYSFS_NAME_MAX, reinterpret_cast<const char *>(devList[i]->name)) !=
-            RR_OK)) {
+                        RR_OK)) {
             NN_LOG_ERROR("Failed to copy devName in initializing device");
             return RR_PARAM_INVALID;
         }
@@ -127,15 +126,16 @@ RResult RDMADeviceHelper::Update()
 }
 
 void RDMADeviceHelper::GetGidVec(ibv_context *context, const std::string &devName, uint16_t devIndex, uint8_t bandWidth,
-    uint32_t gidTableLen, std::vector<RDMAGId> &outGidVec)
+                                 uint32_t gidTableLen, std::vector<RDMAGId> &outGidVec)
 {
     if (context == nullptr) {
         return;
     }
 
-    union ibv_gid tmpIbvGid {};
+    union ibv_gid tmpIbvGid {
+    };
     std::string RoCEVersion;
-    RDMAGId gid {};
+    RDMAGId gid{};
     for (uint32_t i = 0; i < gidTableLen; i++) {
         if (HcomIbv::QueryGid(context, PORT_NUMBER, i, &tmpIbvGid) != 0) {
             continue;
@@ -179,7 +179,7 @@ RResult RDMADeviceHelper::GetDeviceCount(uint16_t &deviceCount, std::vector<RDMA
 }
 
 RResult RDMADeviceHelper::GetEnableDeviceCount(std::string ipMask, uint16_t &enableDevCount,
-    std::vector<std::string> &enableIps, std::string ipGroup)
+                                               std::vector<std::string> &enableIps, std::string ipGroup)
 {
     /* ipMask and ipGroup may be null */
     if (ipMask.size() > NN_NO256 || ipGroup.size() > NN_NO1024) {
@@ -227,8 +227,8 @@ RResult RDMADeviceHelper::GetEnableDeviceCount(std::string ipMask, uint16_t &ena
             enableCount++;
             findIps.emplace_back(matchIps[i]);
         }
-        NN_LOG_DEBUG("gid found devIndex " << tmpGid.devIndex << ", gidIndex " << tmpGid.gid << ", RoCEVersion " <<
-            RoCEVersionToStr(tmpGid.RoCEVersion));
+        NN_LOG_DEBUG("gid found devIndex " << tmpGid.devIndex << ", gidIndex " << tmpGid.gid << ", RoCEVersion "
+                                           << RoCEVersionToStr(tmpGid.RoCEVersion));
     }
     enableDevCount = enableCount;
     enableIps = findIps;
@@ -261,7 +261,7 @@ RResult RDMADeviceHelper::GetIfAddressByIp(const std::string &ip, struct sockadd
     while (iter != nullptr) {
         if (iter->ifa_addr != nullptr && iter->ifa_addr->sa_family == AF_INET) {
             inet_ntop(AF_INET, &((reinterpret_cast<struct sockaddr_in *>(iter->ifa_addr))->sin_addr), ipStr,
-                INET_ADDRSTRLEN);
+                      INET_ADDRSTRLEN);
             if (ip == std::string(ipStr)) {
                 address = *(reinterpret_cast<struct sockaddr_in *>(iter->ifa_addr));
                 found = true;
@@ -280,7 +280,6 @@ RResult RDMADeviceHelper::GetIfAddressByIp(const std::string &ip, struct sockadd
     return RR_OK;
 }
 
-
 RResult RDMADeviceHelper::GetDeviceByAddress(const std::string &ip, struct sockaddr_in &address, RDMAGId &gid)
 {
     RResult result = RR_OK;
@@ -288,7 +287,7 @@ RResult RDMADeviceHelper::GetDeviceByAddress(const std::string &ip, struct socka
         return result;
     }
 
-    RDMAGId tmpGid {};
+    RDMAGId tmpGid{};
     bool found = false;
 
     std::lock_guard<std::mutex> lock(G_Mutex);
@@ -298,9 +297,10 @@ RResult RDMADeviceHelper::GetDeviceByAddress(const std::string &ip, struct socka
             auto targetAddress = address.sin_addr.s_addr;
 
             auto judge1 = ((devI6Address->s6_addr32[NN_NO0] | devI6Address->s6_addr32[NN_NO1]) |
-                (devI6Address->s6_addr32[NN_NO2] ^ htonl(0x0000ffff))) == 0UL;
+                           (devI6Address->s6_addr32[NN_NO2] ^ htonl(0x0000ffff))) == 0UL;
             /* IPv4 encoded multicast addresses */
-            auto judge2 = devI6Address->s6_addr32[NN_NO0] == htonl(0xff0e0000) &&
+            auto judge2 =
+                devI6Address->s6_addr32[NN_NO0] == htonl(0xff0e0000) &&
                 ((devI6Address->s6_addr32[NN_NO1] | (devI6Address->s6_addr32[NN_NO2] ^ htonl(0x0000ffff))) == 0UL);
             if (!((judge1 || judge2) && devI6Address->s6_addr32[NN_NO3] == targetAddress)) {
                 // doesn't match
@@ -374,6 +374,6 @@ std::string RDMADeviceHelper::DeviceInfo()
 
     return oss.str();
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

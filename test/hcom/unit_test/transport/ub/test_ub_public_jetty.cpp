@@ -10,14 +10,14 @@
  * See the Mulan PSL v2 for more details.
  */
 #ifdef UB_BUILD_ENABLED
-#include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
-#include <sys/poll.h>
 #include <fcntl.h>
+#include <gtest/gtest.h>
+#include <sys/poll.h>
+#include <mockcpp/mockcpp.hpp>
 
-#include "ub_urma_wrapper_public_jetty.h"
-#include "ub_mr_fixed_buf.h"
 #include "ub_fixed_mem_pool.h"
+#include "ub_mr_fixed_buf.h"
+#include "ub_urma_wrapper_public_jetty.h"
 namespace ock {
 namespace hcom {
 
@@ -223,7 +223,9 @@ TEST_F(TestUBPublicJetty, SendByPublicJetty)
     MOCKER_CPP(&UBPublicJetty::CreateUrmaPublicJetty).stubs().will(returnValue(0));
     MOCKER(HcomUrma::UnimportJetty).stubs().will(returnValue(0));
     MOCKER_CPP(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1)).then(returnValue(0));
+        .stubs()
+        .will(returnValue(1))
+        .then(returnValue(0));
     jetty->mUrmaJetty = &tmpJetty;
     jetty->InitializePublicJetty(0);
 
@@ -282,8 +284,7 @@ TEST_F(TestUBPublicJetty, PollingCompletion)
     urma_jetty_t mUrmaJetty{};
     uint32_t pollCount = 0;
 
-    MOCKER_CPP(&UBJfc::ProgressV).stubs().with(any(), outBound(pollCount))
-        .will(returnValue(1));
+    MOCKER_CPP(&UBJfc::ProgressV).stubs().with(any(), outBound(pollCount)).will(returnValue(1));
     MOCKER_CPP(&UBPublicJetty::ReturnBuffer).stubs().will(returnValue(false));
     MOCKER_CPP(&UBFixedMemPool::ReturnBuffer).stubs().will(returnValue(true));
     EXPECT_EQ(jetty->PollingCompletion(), UB_EP_NOT_INITIALIZED);
@@ -301,8 +302,7 @@ TEST_F(TestUBPublicJetty, ReceiveFail)
     urma_jfc_t mUrmaJfc{};
     urma_jetty_t mUrmaJetty{};
     uint32_t pollCount = 0;
-    MOCKER_CPP(&UBJfc::ProgressV).stubs().with(any(), outBound(pollCount))
-        .will(returnValue(1));
+    MOCKER_CPP(&UBJfc::ProgressV).stubs().with(any(), outBound(pollCount)).will(returnValue(1));
 
     jetty->mUrmaJetty = &mUrmaJetty;
     jfc->mUrmaJfc = &mUrmaJfc;
@@ -443,7 +443,7 @@ TEST_F(TestUBPublicJetty, UBThreadPool)
 
     threadPool->Stop();
     threadPool->Initialize();
-    threadPool->Submit([]() {NN_LOG_INFO("Run a test task");});
+    threadPool->Submit([]() { NN_LOG_INFO("Run a test task"); });
     threadPool->Submit([]() {
         NN_LOG_INFO("Run a std error task");
         throw std::runtime_error("Run a std error task");
@@ -459,6 +459,6 @@ TEST_F(TestUBPublicJetty, UBThreadPool)
         threadPool = nullptr;
     }
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

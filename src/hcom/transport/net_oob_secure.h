@@ -23,34 +23,37 @@ public:
      * There are 32 cases for sec info process, please refer readme of this project
      */
     static NResult SecProcessInOOBClient(const UBSHcomNetDriverEndpointSecInfoProvider &secInfoProvider,
-        const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator, OOBTCPConnection *conn,
-        const std::string &driverName, uint64_t ctx, UBSHcomNetDriverSecType secType);
+                                         const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator,
+                                         OOBTCPConnection *conn, const std::string &driverName, uint64_t ctx,
+                                         UBSHcomNetDriverSecType secType);
 
     static NResult SecProcessInOOBServer(const UBSHcomNetDriverEndpointSecInfoProvider &secInfoProvider,
-        const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator, OOBTCPConnection &conn,
-        const std::string &driverName, UBSHcomNetDriverSecType sType);
+                                         const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator,
+                                         OOBTCPConnection &conn, const std::string &driverName,
+                                         UBSHcomNetDriverSecType sType);
 
     static NResult SecProcessCompareEpNum(uint32_t localIpAddr, uint32_t listenPort, const std::string &mIpAndPort,
-        const std::vector<NetOOBServer *> &oobServers);
+                                          const std::vector<NetOOBServer *> &oobServers);
 
     static void SecProcessAddEpNum(uint32_t localIpAddr, uint32_t listenPort, const std::string &mIpAndPort,
-        const std::vector<NetOOBServer *> &oobServers);
+                                   const std::vector<NetOOBServer *> &oobServers);
 
     static void SecProcessDelEpNum(uint32_t localIpAddr, uint32_t listenPort, const std::string &mIpAndPort,
-        const std::vector<NetOOBServer *> &oobServers);
+                                   const std::vector<NetOOBServer *> &oobServers);
 
     static NResult SecProcessCompareEpNum(const std::string &localUdsName, const std::string &mIpAndPort,
-        const std::vector<NetOOBServer *> &oobServers);
+                                          const std::vector<NetOOBServer *> &oobServers);
 
     static void SecProcessAddEpNum(const std::string &localUdsName, const std::string &mIpAndPort,
-        const std::vector<NetOOBServer *> &oobServers);
+                                   const std::vector<NetOOBServer *> &oobServers);
 
     static void SecProcessDelEpNum(const std::string &localUdsName, const std::string &mIpAndPort,
-        const std::vector<NetOOBServer *> &oobServers);
+                                   const std::vector<NetOOBServer *> &oobServers);
 
     static NResult SecCheckConnectionHeader(const ConnectHeader &header, const UBSHcomNetDriverOptions &option,
-        const bool &enableTls, const UBSHcomNetDriverProtocol &protocol, const uint32_t &majorVersion,
-        const uint32_t &minorVersion, ConnRespWithUId &respWithUId);
+                                            const bool &enableTls, const UBSHcomNetDriverProtocol &protocol,
+                                            const uint32_t &majorVersion, const uint32_t &minorVersion,
+                                            ConnRespWithUId &respWithUId);
 
 private:
     /*
@@ -63,8 +66,8 @@ private:
      * In 2 ways authentications case: both oob client and oob sever calls this
      */
     static NResult SendSecInfo(const UBSHcomNetDriverEndpointSecInfoProvider &secInfoProvider,
-        const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator, OOBTCPConnection *conn,
-        const std::string &driverName, UBSHcomNetDriverSecType &secType, uint64_t ctx);
+                               const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator, OOBTCPConnection *conn,
+                               const std::string &driverName, UBSHcomNetDriverSecType &secType, uint64_t ctx);
 
     /*
      * Validate sec info from peer via oob connection
@@ -76,11 +79,11 @@ private:
      * In 2 ways authentications case: both oob server and oob client calls this
      */
     static NResult ValidateSecInfo(const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator,
-        OOBTCPConnection &conn, const std::string &driverName, UBSHcomNetDriverSecType &secType,
-        uint64_t &ctx, UBSHcomNetDriverSecType sType);
+                                   OOBTCPConnection &conn, const std::string &driverName,
+                                   UBSHcomNetDriverSecType &secType, uint64_t &ctx, UBSHcomNetDriverSecType sType);
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

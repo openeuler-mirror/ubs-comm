@@ -107,7 +107,7 @@ constexpr uint32_t NN_NO1000000000 = 1000000000;
 constexpr uint64_t NN_NO107374182400 = 107374182400;
 constexpr uint64_t NN_NO1099511627776 = 1099511627776; // 1TB
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_CPP_NUM_DEF_H

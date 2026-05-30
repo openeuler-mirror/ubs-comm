@@ -9,14 +9,14 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include <mockcpp/mockcpp.hpp>
+#include <gtest/gtest.h>
 #include <cstdlib>
+#include <mockcpp/mockcpp.hpp>
 #include <vector>
 
-#include "securec.h"
 #include "net_pgtable.h"
+#include "securec.h"
 
 constexpr size_t AlignDown(size_t n, size_t alignment)
 {
@@ -36,12 +36,11 @@ public:
 
 protected:
     using SearchResult = std::vector<PgtRegion *>;
-    PgTable mPgTable { pgdAlloc, pgdFree };
+    PgTable mPgTable{pgdAlloc, pgdFree};
 
     SearchResult Search(PgtAddress from, PgtAddress to)
     {
-        NN_LOG_INFO("Begin to search from "
-            << "[0x" << std::hex << from << ".. 0x" << std::hex << to << "]");
+        NN_LOG_INFO("Begin to search from " << "[0x" << std::hex << from << ".. 0x" << std::hex << to << "]");
         SearchResult result;
         mPgTable.SearchRange(from, to, pgdSearchCb, reinterpret_cast<void *>(&result));
         return result;
@@ -49,14 +48,14 @@ protected:
 
     static PgtRegion *MakeRegion(PgtAddress start, PgtAddress end)
     {
-        PgtRegion r = { start, end };
+        PgtRegion r = {start, end};
         return new PgtRegion(r);
     }
 
     static bool IsOverlap(const PgtRegion *region, PgtAddress from, PgtAddress to)
     {
-        NN_LOG_DEBUG("regions" << region << " in the range 0x" << std::hex << region->start << "..0x" << region->end <<
-            " from 0x" << from << " to: 0x" << to);
+        NN_LOG_DEBUG("regions" << region << " in the range 0x" << std::hex << region->start << "..0x" << region->end
+                               << " from 0x" << from << " to: 0x" << to);
         return std::max(from, region->start) <= std::min(to, region->end);
     }
 
@@ -106,8 +105,8 @@ private:
 
     static void pgdSearchCb(const PgTable &pgtable, PgtRegion &region, void *arg)
     {
-        NN_LOG_INFO("find the region push to result " << &region << "[0x" << std::hex << region.start << ".. 0x" <<
-            std::hex << region.end << "]");
+        NN_LOG_INFO("find the region push to result " << &region << "[0x" << std::hex << region.start << ".. 0x"
+                                                      << std::hex << region.end << "]");
         SearchResult *result = reinterpret_cast<SearchResult *>(arg);
         result->push_back(&region);
     }
@@ -149,14 +148,14 @@ TEST_F(TestPgTable, InsertPgdAllocFailed)
     region.start = 0x600800;
     region.end = 0x603400;
 
-    PgTable pgTable { pgdAllocFailed, pgdFree };
+    PgTable pgTable{pgdAllocFailed, pgdFree};
     NResult status = pgTable.Insert(region);
     EXPECT_EQ(status, NN_ERROR);
 }
 
 TEST_F(TestPgTable, PgtExpandFailed)
 {
-    PgTable pgTable { pgdAlloc, pgdFree };
+    PgTable pgTable{pgdAlloc, pgdFree};
     pgTable.mIndexShift = NN_NO64;
     bool ret = pgTable.PgtExpand();
     EXPECT_EQ(ret, false);
@@ -165,8 +164,8 @@ TEST_F(TestPgTable, PgtExpandFailed)
 TEST_F(TestPgTable, InsertAndLookupAdjSuccess)
 {
     // [0xc600000, 0xc600400) [0xc600400, 0xc600800)
-    PgtRegion region1 = { 0xc600000, 0xc600400 };
-    PgtRegion region2 = { 0xc600400, 0xc600800 };
+    PgtRegion region1 = {0xc600000, 0xc600400};
+    PgtRegion region2 = {0xc600400, 0xc600800};
     NResult status = mPgTable.Insert(region1);
     EXPECT_EQ(status, NN_OK);
 
@@ -186,15 +185,15 @@ TEST_F(TestPgTable, InsertAndLookupAdjSuccess)
 
 TEST_F(TestPgTable, InsertAlreadyExistFailed)
 {
-    PgtRegion region1 = { 0x4000, 0x6000 };
+    PgtRegion region1 = {0x4000, 0x6000};
     NResult ret = mPgTable.Insert(region1);
     EXPECT_EQ(ret, NN_OK);
 
-    PgtRegion region2 = { 0x5000, 0x7000 };
+    PgtRegion region2 = {0x5000, 0x7000};
     ret = mPgTable.Insert(region2);
     EXPECT_EQ(ret, NN_ERROR);
 
-    PgtRegion region3 = { 0x3000, 0x5000 };
+    PgtRegion region3 = {0x3000, 0x5000};
     ret = mPgTable.Insert(region3);
     EXPECT_EQ(ret, NN_ERROR);
 
@@ -204,11 +203,11 @@ TEST_F(TestPgTable, InsertAlreadyExistFailed)
 
 TEST_F(TestPgTable, RemoveNonExistFailed)
 {
-    PgtRegion region1 = { 0x5000, 0x7000 };
+    PgtRegion region1 = {0x5000, 0x7000};
     auto ret = mPgTable.Remove(region1);
     EXPECT_EQ(ret, NN_ERROR);
 
-    PgtRegion region2 = { 0x6000, 0x8000 };
+    PgtRegion region2 = {0x6000, 0x8000};
     ret = mPgTable.Insert(region2);
     EXPECT_EQ(ret, NN_OK);
 
@@ -230,7 +229,7 @@ TEST_F(TestPgTable, RemoveNonExistFailed)
 
 TEST_F(TestPgTable, SearchLargeRegionSuccess)
 {
-    PgtRegion region = { 0x3c03cb00, 0x3c03f600 };
+    PgtRegion region = {0x3c03cb00, 0x3c03f600};
     NResult ret = mPgTable.Insert(region);
     EXPECT_EQ(ret, NN_OK);
 
@@ -265,21 +264,21 @@ TEST_F(TestPgTable, SearchNonContigRegionsSuccess)
     // insert [0x7f6ef0000000 .. 0x7f6f00000000]
     auto start = 0x7f6ef0000000;
     auto end = start + regionSize;
-    PgtRegion region1 = { start, end };
+    PgtRegion region1 = {start, end};
     NResult ret = mPgTable.Insert(region1);
     EXPECT_EQ(ret, NN_OK);
 
     // insert [0x7f6f2c021000 .. 0x7f6f3c021000]
     start = 0x7f6f2c021000;
     end = start + regionSize;
-    PgtRegion region2 = { start, end };
+    PgtRegion region2 = {start, end};
     ret = mPgTable.Insert(region2);
     EXPECT_EQ(ret, NN_OK);
 
     // insert [0x7f6f42000000 .. 0x7f6f52000000]
     start = 0x7f6f42000000;
     end = start + regionSize;
-    PgtRegion region3 = { start, end };
+    PgtRegion region3 = {start, end};
     ret = mPgTable.Insert(region3);
     EXPECT_EQ(ret, NN_OK);
 
@@ -310,21 +309,21 @@ TEST_F(TestPgTable, SearchAdjRegionsSuccess)
     // insert [0x7f6ef0000000 .. 0x7f6f00000000]
     auto start = 0x7f6ef0000000;
     auto end = start + regionSize;
-    PgtRegion region1 = { start, end };
+    PgtRegion region1 = {start, end};
     NResult ret = mPgTable.Insert(region1);
     EXPECT_EQ(ret, NN_OK);
 
     // insert [0x7f6f00000000 .. 0x7f6f10000000]
     start = end;
     end = start + regionSize;
-    PgtRegion region2 = { region1.end, 0x7f6f40000000 };
+    PgtRegion region2 = {region1.end, 0x7f6f40000000};
     ret = mPgTable.Insert(region2);
     EXPECT_EQ(ret, NN_OK);
 
     // insert [0x7f6f10000000 .. 0x7f6f20000000]
     start = end;
     end = start + regionSize;
-    PgtRegion region3 = { region2.end, 0x7f6f48000000 };
+    PgtRegion region3 = {region2.end, 0x7f6f48000000};
     ret = mPgTable.Insert(region3);
     EXPECT_EQ(ret, NN_OK);
 
@@ -400,9 +399,9 @@ TEST_F(TestPgTable, MultiSearchSuccess)
             max = std::max(start, max);
             auto region = MakeRegion(start, end);
 
-            NN_LOG_INFO("begin to check insert count:" << count << " region index:" << i <<
-                " regions in the range 0x" << std::hex << region->start << "..0x" << region->end << std::dec <<
-                " total num:" << regionCount);
+            NN_LOG_INFO("begin to check insert count:" << count << " region index:" << i << " regions in the range 0x"
+                                                       << std::hex << region->start << "..0x" << region->end << std::dec
+                                                       << " total num:" << regionCount);
 
             if (CountOverlap(regions, region->start, region->end) != 0) {
                 /* Make sure regions do not overlap */
@@ -424,17 +423,17 @@ TEST_F(TestPgTable, MultiSearchSuccess)
         uint32_t numInRange = CountOverlap(regions, from, to);
 
         SearchResult result = Search(from, to);
-        NN_LOG_INFO("total region num " << regionCount << " found " << result.size() << "/" << numInRange <<
-            " regions in the range 0x" << std::hex << from << "..0x" << to << std::dec);
+        NN_LOG_INFO("total region num " << regionCount << " found " << result.size() << "/" << numInRange
+                                        << " regions in the range 0x" << std::hex << from << "..0x" << to << std::dec);
         EXPECT_EQ(numInRange, result.size());
     }
 }
 
 TEST_F(TestPgTable, CleanUpSuccess)
 {
-    PgtRegion region1 = { 0xc600000, 0xc600400 };
-    PgtRegion region2 = { 0xc600400, 0xc600800 };
-    PgtRegion region3 = { 0xc600800, 0xc600b00 };
+    PgtRegion region1 = {0xc600000, 0xc600400};
+    PgtRegion region2 = {0xc600400, 0xc600800};
+    PgtRegion region3 = {0xc600800, 0xc600b00};
     EXPECT_EQ(mPgTable.Insert(region1), NN_OK);
     EXPECT_EQ(mPgTable.Insert(region2), NN_OK);
     EXPECT_EQ(mPgTable.Insert(region3), NN_OK);
@@ -474,7 +473,7 @@ void pgdFreeFailed2(const PgTable &pgtable, PgtDir *pgdir)
 
 TEST_F(TestPgTable, TestPgtDirAllocFail)
 {
-    PgTable pgTable { pgdAlloc, pgdFree };
+    PgTable pgTable{pgdAlloc, pgdFree};
     const uint32_t order = 5;
     MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(true));
     MOCKER_CPP(&PgtEntry::SetDir).stubs().will(returnValue(false));
@@ -483,7 +482,7 @@ TEST_F(TestPgTable, TestPgtDirAllocFail)
     MOCKER_CPP(&memset_s).stubs().will(returnValue(-1));
     EXPECT_EQ(pgTable.PgtDirAlloc(), nullptr);
 
-    PgTable pgTable2 { pgdAllocFailed2, pgdFreeFailed2 };
+    PgTable pgTable2{pgdAllocFailed2, pgdFreeFailed2};
     EXPECT_EQ(pgTable2.PgtDirAlloc(), nullptr);
 
     MOCKER_CPP(&NetPgTable::PgtExpand).stubs().will(returnValue(false));
@@ -504,7 +503,7 @@ PgtDir *GetDirStub()
 
 TEST_F(TestPgTable, TestPgtShrinkFail)
 {
-    PgTable pgTable { pgdAlloc, pgdFree };
+    PgTable pgTable{pgdAlloc, pgdFree};
     MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(true));
     MOCKER_CPP(&PgtEntry::HasFlag).stubs().will(returnValue(true));
     MOCKER_CPP(&PgtEntry::GetDir).stubs().will(invoke(GetDirStub));
@@ -514,7 +513,7 @@ TEST_F(TestPgTable, TestPgtShrinkFail)
 
 TEST_F(TestPgTable, TestInsertPageFail)
 {
-    PgTable pgTable { pgdAlloc, pgdFree };
+    PgTable pgTable{pgdAlloc, pgdFree};
     PgtAddress address = 0x000001;
     PgtRegion region{};
     NResult ret = pgTable.InsertPage(address, 1, region);
@@ -550,7 +549,7 @@ bool HasFlagStub(EntryFlags flag)
 
 TEST_F(TestPgTable, TestRemovePageFail)
 {
-    PgTable pgTable { pgdAlloc, pgdFree };
+    PgTable pgTable{pgdAlloc, pgdFree};
     PgtAddress address = 0x000001;
     PgtRegion region{};
     NResult ret = pgTable.RemovePage(address, 1, region);
@@ -568,7 +567,7 @@ TEST_F(TestPgTable, TestRemovePageFail)
 
 TEST_F(TestPgTable, TestInsertFail)
 {
-    PgTable pgTable { pgdAlloc, pgdFree };
+    PgTable pgTable{pgdAlloc, pgdFree};
     PgtRegion region{};
     region.start = 0x000002;
     region.end = 0x000001;
@@ -603,7 +602,7 @@ PgtRegion *GetRegionStub()
 
 TEST_F(TestPgTable, TestLookupFail)
 {
-    PgTable pgTable { pgdAlloc, pgdFree };
+    PgTable pgTable{pgdAlloc, pgdFree};
     PgtAddress address = 0x000001;
     MOCKER_CPP(&PgtEntry::IsPresent).stubs().will(returnValue(true));
     PgtRegion *reg = nullptr;

@@ -9,11 +9,11 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "test_openssl.h"
 #include <dlfcn.h>
 #include <unistd.h>
 #include "hcom.h"
 #include "openssl_api_wrapper.h"
-#include "test_openssl.h"
 
 using namespace ock::hcom;
 TestOpenSsl::TestOpenSsl() {}

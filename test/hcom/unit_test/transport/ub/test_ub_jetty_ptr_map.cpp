@@ -87,6 +87,6 @@ TEST_F(TestUbJettyPtrMap, JetyyPtrMapModify)
     EXPECT_EQ(result, UB_OK);
     EXPECT_EQ(jetty, (UBJetty *)0x1122);
 }
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock
 #endif

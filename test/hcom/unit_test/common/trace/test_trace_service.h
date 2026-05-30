@@ -10,7 +10,6 @@
  * See the Mulan PSL v2 for more details.
  */
 
-
 #ifndef DFS_TRACER_TEST_TRACE_SERVICE_H
 #define DFS_TRACER_TEST_TRACE_SERVICE_H
 
@@ -37,7 +36,7 @@ public:
 
     ock::hcom::HTracerService *g_traceService = nullptr;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // DFS_TRACER_TEST_TRACE_SERVICE_H

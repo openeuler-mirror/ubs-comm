@@ -11,11 +11,11 @@
  */
 
 #ifdef RDMA_BUILD_ENABLED
+#include "test_net_rdma_driver.h"
+#include "common/net_util.h"
+#include "transport/rdma/verbs/net_rdma_async_endpoint.h"
 #include "transport/rdma/verbs/net_rdma_driver.h"
 #include "transport/rdma/verbs/net_rdma_driver_oob.h"
-#include "transport/rdma/verbs/net_rdma_async_endpoint.h"
-#include "common/net_util.h"
-#include "test_net_rdma_driver.h"
 #include "ut_helper.h"
 
 using namespace ock::hcom;
@@ -233,7 +233,6 @@ TEST_F(TestNetDriverRDMA, StartWithoutOneSideHdFailed)
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
 }
 
-
 TEST_F(TestNetDriverRDMA, DriverOobConnectWithoutClientCbFailed)
 {
     driver->Initialize(options);
@@ -279,20 +278,20 @@ TEST_F(TestNetDriverRDMA, DriverOobConnectSuccess)
 }
 
 int CreateAuthInfo(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen,
-    bool &needAutoFree)
+                   bool &needAutoFree)
 {
     const char *kToken = "token";
     flag = 1;
     output = const_cast<char *>(kToken);
     outLen = strlen(kToken);
     type = NET_SEC_VALID_TWO_WAY;
-    NN_LOG_INFO("auth info " << output << " len:" << outLen << " flag:" << flag << " sec type:" <<
-        UBSHcomNetDriverSecTypeToString(type));
+    NN_LOG_INFO("auth info " << output << " len:" << outLen << " flag:" << flag
+                             << " sec type:" << UBSHcomNetDriverSecTypeToString(type));
     return 0;
 }
 
 int CreateAuthInfoFailed(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen,
-    bool &needAutoFree)
+                         bool &needAutoFree)
 {
     return -1;
 }
@@ -323,9 +322,10 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecSuccess)
 {
     auto sDriver = CreateDriver("twoWaySecServer", true);
     sDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     sDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
 
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
@@ -333,9 +333,10 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecSuccess)
 
     auto cDriver = CreateDriver("twoWaySecClient", false);
     cDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     cDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
 
     cDriver->Initialize(options);
     result = cDriver->Start();
@@ -355,19 +356,20 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithClientSendError)
 {
     auto sDriver = CreateDriver("twoWaySecServer1", true, NET_SEC_VALID_TWO_WAY);
     sDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     sDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
     EXPECT_EQ(NNCode::NN_OK, result);
 
     auto cDriver = CreateDriver("CreateAuthInfoFailedCli", false, NET_SEC_VALID_TWO_WAY);
-    cDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfoFailed, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5,
-        std::placeholders::_6));
+    cDriver->RegisterEndpointSecInfoProvider(
+        std::bind(&CreateAuthInfoFailed, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
+                  std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
     cDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
 
     cDriver->Initialize(options);
     result = cDriver->Start();
@@ -389,18 +391,21 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithServerValidError)
 {
     auto sDriver = CreateDriver("AuthValidateFailedServer", true, NET_SEC_VALID_TWO_WAY);
     sDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     sDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidateFailed, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_2, std::placeholders::_3,
+                                                        std::placeholders::_4));
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
     EXPECT_EQ(NNCode::NN_OK, result);
 
     auto cDriver = CreateDriver("twoWaySecClient1", false, NET_SEC_VALID_TWO_WAY);
     cDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     cDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
 
     cDriver->Initialize(options);
     result = cDriver->Start();
@@ -421,20 +426,21 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithServerValidError)
 TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithServerSendError)
 {
     auto sDriver = CreateDriver("CreateAuthInfoFailedSrv", true, NET_SEC_VALID_TWO_WAY);
-    sDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfoFailed, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5,
-        std::placeholders::_6));
+    sDriver->RegisterEndpointSecInfoProvider(
+        std::bind(&CreateAuthInfoFailed, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
+                  std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
     sDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
     EXPECT_EQ(NNCode::NN_OK, result);
 
     auto cDriver = CreateDriver("twoWaySecClient2", false, NET_SEC_VALID_TWO_WAY);
     cDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     cDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
 
     cDriver->Initialize(options);
     result = cDriver->Start();
@@ -456,18 +462,21 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithClientValidError)
 {
     auto sDriver = CreateDriver("twoWaySecServer", true, NET_SEC_VALID_TWO_WAY);
     sDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     sDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
     EXPECT_EQ(NNCode::NN_OK, result);
 
     auto cDriver = CreateDriver("AuthValidateFailedClient", false, NET_SEC_VALID_TWO_WAY);
     cDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     cDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidateFailed, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_2, std::placeholders::_3,
+                                                        std::placeholders::_4));
 
     cDriver->Initialize(options);
     result = cDriver->Start();
@@ -489,16 +498,17 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithClientNotSetProvider)
 {
     auto sDriver = CreateDriver("twoWaySecServer3", true, NET_SEC_VALID_TWO_WAY);
     sDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     sDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
     EXPECT_EQ(NNCode::NN_OK, result);
 
     auto cDriver = CreateDriver("NotSetProviderClient", false, NET_SEC_VALID_TWO_WAY);
     cDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
 
     cDriver->Initialize(options);
     result = cDriver->Start();
@@ -520,16 +530,18 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithClientNotSetValidator)
 {
     auto sDriver = CreateDriver("twoWaySecServer4", true, NET_SEC_VALID_TWO_WAY);
     sDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     sDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
     EXPECT_EQ(NNCode::NN_OK, result);
 
     auto cDriver = CreateDriver("NotSetValidatorClient", false, NET_SEC_VALID_TWO_WAY);
     cDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
 
     cDriver->Initialize(options);
     result = cDriver->Start();
@@ -551,7 +563,8 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithServerNotSetValidator)
 {
     auto sDriver = CreateDriver("NotSetValidatorServer", true, NET_SEC_VALID_TWO_WAY);
     sDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
 
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
@@ -559,9 +572,10 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithServerNotSetValidator)
 
     auto cDriver = CreateDriver("twoWaySecClient3", false, NET_SEC_VALID_TWO_WAY);
     cDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     cDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
 
     cDriver->Initialize(options);
     result = cDriver->Start();
@@ -583,16 +597,18 @@ TEST_F(TestNetDriverRDMA, DriverOobSecTwoWaySecFailedWithServerNotSetProvider)
 {
     auto sDriver = CreateDriver("NotSetProviderServer", true, NET_SEC_VALID_TWO_WAY);
     sDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     sDriver->Initialize(options);
     NResult result = sDriver->Start();
     EXPECT_EQ(NNCode::NN_OK, result);
 
     auto cDriver = CreateDriver("twoWaySecClient4", false, NET_SEC_VALID_TWO_WAY);
     cDriver->RegisterEndpointSecInfoProvider(std::bind(&CreateAuthInfo, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                       std::placeholders::_3, std::placeholders::_4,
+                                                       std::placeholders::_5, std::placeholders::_6));
     cDriver->RegisterEndpointSecInfoValidator(std::bind(&AuthValidate, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                                                        std::placeholders::_3, std::placeholders::_4));
 
     cDriver->Initialize(options);
     result = cDriver->Start();

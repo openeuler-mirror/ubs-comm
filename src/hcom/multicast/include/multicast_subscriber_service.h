@@ -88,7 +88,7 @@ public:
     virtual void RegisterTLSCertificationCallback(const UBSHcomTLSCertificationCallback &cb) = 0;
     virtual void RegisterTLSPrivateKeyCallback(const UBSHcomTLSPrivateKeyCallback &cb) = 0;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

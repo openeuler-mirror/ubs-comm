@@ -12,18 +12,18 @@
 #ifndef OCK_HCOM_NET_UTIL_H_54434
 #define OCK_HCOM_NET_UTIL_H_54434
 
+#include <linux/limits.h>
+#include <malloc.h>
+#include <semaphore.h>
+#include <sys/time.h>
 #include <atomic>
 #include <chrono>
 #include <cstring>
 #include <ctime>
 #include <random>
-#include <malloc.h>
-#include <semaphore.h>
-#include <sys/time.h>
-#include <linux/limits.h>
 
-#include "hcom_err.h"
 #include "hcom_def.h"
+#include "hcom_err.h"
 
 namespace ock {
 namespace hcom {
@@ -38,20 +38,17 @@ inline timespec MONOTONIC_TIME()
 
 inline uint64_t MONOTONIC_TIME_INTERVAL_NS(const timespec &start, const timespec &end)
 {
-    return (end.tv_sec - start.tv_sec) * NN_NO1000000000 +
-           (end.tv_nsec - start.tv_nsec);
+    return (end.tv_sec - start.tv_sec) * NN_NO1000000000 + (end.tv_nsec - start.tv_nsec);
 }
 
 inline uint64_t MONOTONIC_TIME_INTERVAL_US(const timespec &start, const timespec &end)
 {
-    return (end.tv_sec - start.tv_sec) * NN_NO1000000 +
-           (end.tv_nsec - start.tv_nsec) / NN_NO1000;
+    return (end.tv_sec - start.tv_sec) * NN_NO1000000 + (end.tv_nsec - start.tv_nsec) / NN_NO1000;
 }
 
 inline uint64_t MONOTONIC_TIME_INTERVAL_SEC(const timespec &start, const timespec &end)
 {
-    return (end.tv_sec - start.tv_sec) +
-           (end.tv_nsec - start.tv_nsec) / NN_NO1000000000;
+    return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / NN_NO1000000000;
 }
 
 inline uint64_t MONOTONIC_TIME_NS()
@@ -153,8 +150,7 @@ public:
 
     inline void Lock()
     {
-        while (mFlag.test_and_set(std::memory_order_acquire)) {
-        }
+        while (mFlag.test_and_set(std::memory_order_acquire)) {}
     }
 
     inline void Unlock()
@@ -168,11 +164,10 @@ private:
 
 /* ****************************************************************************************** */
 
-template<typename T> class NetRingBuffer {
+template <typename T>
+class NetRingBuffer {
 public:
-    explicit NetRingBuffer(uint32_t capacity) : mCapacity(capacity)
-    {
-    }
+    explicit NetRingBuffer(uint32_t capacity) : mCapacity(capacity) {}
 
     ~NetRingBuffer()
     {
@@ -378,11 +373,10 @@ private:
     bool mInterrupt = false;
 };
 
-template<typename T> class NetBlockingQueue {
+template <typename T>
+class NetBlockingQueue {
 public:
-    explicit NetBlockingQueue(uint32_t capacity) : mRingBuffer(capacity)
-    {
-    }
+    explicit NetBlockingQueue(uint32_t capacity) : mRingBuffer(capacity) {}
     ~NetBlockingQueue()
     {
         UnInitialize();
@@ -499,7 +493,8 @@ public:
         return (timestamp << NN_NO32) | seqNo;
     }
 
-    static uint64_t GenerateUuid(const std::string& ip);
+    static uint64_t GenerateUuid(const std::string &ip);
+
 private:
     static uint32_t gSeqNo;
     static NetSpinLock gLock;
@@ -515,9 +510,7 @@ constexpr uint32_t PAGE_ALIGN_H = NN_NO4096;
 #define H_LIKELY(e) (__builtin_expect(!!(e), 1) != 0)
 #define H_UNLIKELY(e) (__builtin_expect(!!(e), 0) != 0)
 
-#define H_CAS(ptr, o, n)                                           \
-    __atomic_compare_exchange_n(ptr, &(o), n, 0, __ATOMIC_RELEASE, \
-                                __ATOMIC_RELAXED)
+#define H_CAS(ptr, o, n) __atomic_compare_exchange_n(ptr, &(o), n, 0, __ATOMIC_RELEASE, __ATOMIC_RELAXED)
 #define H_WMB() __atomic_thread_fence(__ATOMIC_RELEASE)
 #define H_RMB() __atomic_thread_fence(__ATOMIC_ACQUIRE)
 #define H_MB() __atomic_thread_fence(__ATOMIC_SEQ_CST)
@@ -543,7 +536,7 @@ inline uint32_t NN_NextPower2(uint32_t value)
     return 1UL << (NN_NO32 - __builtin_clz(value - 1));
 }
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock
 
-#endif  // OCK_HCOM_NET_UTIL_H_54434
+#endif // OCK_HCOM_NET_UTIL_H_54434

@@ -11,10 +11,10 @@ namespace hcom {
 
 class MulticastUtils {
 public:
-    static std::string GetFilteredDeviceIP(const std::string& ipMask);
+    static std::string GetFilteredDeviceIP(const std::string &ipMask);
     static bool ParseUrl(const std::string &url, std::string &ip, uint16_t &port);
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

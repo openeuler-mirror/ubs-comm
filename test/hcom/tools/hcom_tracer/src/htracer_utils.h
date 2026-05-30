@@ -13,17 +13,17 @@
 #ifndef HTRACE_UTILS_H
 #define HTRACE_UTILS_H
 
-#include <vector>
-#include <cstring>
-#include <memory>
-#include <algorithm>
-#include <iomanip>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sstream>
 #include <linux/limits.h>
-#include "securec.h"
+#include <sys/stat.h>
+#include <unistd.h>
+#include <algorithm>
+#include <cstring>
+#include <iomanip>
+#include <memory>
+#include <sstream>
+#include <vector>
 #include "hcom/hcom_num_def.h"
+#include "securec.h"
 
 namespace ock {
 namespace hcom {
@@ -75,15 +75,15 @@ public:
         time(&rawTime);
         auto tmInfo = localtime(&rawTime);
         std::stringstream ss;
-        ss << std::setfill('0') << std::setw(NN_NO4) << std::right << (NN_NO1900 + tmInfo->tm_year) << "-" <<
-            std::setfill('0') << std::setw(NN_NO2) << std::right << (NN_NO1 + tmInfo->tm_mon) << "-" <<
-            std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_mday << " " << std::setfill('0') <<
-            std::setw(NN_NO2) << std::right << tmInfo->tm_hour << ":" << std::setfill('0') << std::setw(NN_NO2) <<
-            std::right << tmInfo->tm_min << ":" << std::setfill('0') << std::setw(NN_NO2) << std::right <<
-            tmInfo->tm_sec;
+        ss << std::setfill('0') << std::setw(NN_NO4) << std::right << (NN_NO1900 + tmInfo->tm_year) << "-"
+           << std::setfill('0') << std::setw(NN_NO2) << std::right << (NN_NO1 + tmInfo->tm_mon) << "-"
+           << std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_mday << " " << std::setfill('0')
+           << std::setw(NN_NO2) << std::right << tmInfo->tm_hour << ":" << std::setfill('0') << std::setw(NN_NO2)
+           << std::right << tmInfo->tm_min << ":" << std::setfill('0') << std::setw(NN_NO2) << std::right
+           << tmInfo->tm_sec;
         return ss.str();
     }
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HTRACE_UTILS_H

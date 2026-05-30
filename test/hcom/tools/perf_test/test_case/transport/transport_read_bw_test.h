@@ -55,7 +55,7 @@ private:
     sem_t mSem;
     void *mTseg = nullptr;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif // HCOM_TRANSPORT_READ_BW_TEST_H

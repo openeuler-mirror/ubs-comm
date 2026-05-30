@@ -15,10 +15,10 @@
 #include "hcom.h"
 #include "net_common.h"
 #include "net_rdma_driver_oob.h"
-#include "net_security_rand.h"
-#include "rdma_validation.h"
-#include "rdma_composed_endpoint.h"
 #include "net_rdma_sync_endpoint.h"
+#include "net_security_rand.h"
+#include "rdma_composed_endpoint.h"
+#include "rdma_validation.h"
 
 namespace ock {
 namespace hcom {
@@ -161,8 +161,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendSeq)
         .then(returnValue(0))
         .then(returnValue(static_cast<int>(RR_QP_POST_SEND_FAILED)));
 
-    MOCKER_CPP(&AesGcm128::Encrypt,
-               bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -216,8 +215,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfo)
         .then(returnValue(0))
         .then(returnValue(static_cast<int>(RR_QP_POST_SEND_FAILED)));
 
-    MOCKER_CPP(&AesGcm128::Encrypt,
-               bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -484,8 +482,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaEstimatedEncryptLenTwo)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaEncrypt)
 {
     uint64_t cipherLen = 0;
-    MOCKER_CPP(&AesGcm128::Encrypt,
-               bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     int ret = NEP->Encrypt(reinterpret_cast<void *>(0), 0, reinterpret_cast<void *>(0), cipherLen);
@@ -499,8 +496,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaEncrypt)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaEncryptTwo)
 {
     uint64_t cipherLen = 0;
-    MOCKER_CPP(&AesGcm128::Encrypt,
-               bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(true));
 
@@ -620,9 +616,7 @@ TEST_F(TestNetRdmaSyncEndpoint, SyncReceiveFailWithErrorOpType)
     opCtx.opType = RDMAOpContextInfo::SEND;
     NEP->mDelayHandleReceiveCtx = &opCtx;
 
-    MOCKER_CPP(&RDMASyncEndpoint::RePostReceive)
-    .stubs()
-    .will(returnValue(0));
+    MOCKER_CPP(&RDMASyncEndpoint::RePostReceive).stubs().will(returnValue(0));
 
     NResult ret = NEP->Receive(timeout, ctx);
     EXPECT_EQ(ret, NN_ERROR);
@@ -641,9 +635,7 @@ TEST_F(TestNetRdmaSyncEndpoint, SyncReceiveFailWithOverDataSize)
     opCtx.mrMemAddr = reinterpret_cast<uintptr_t>(&header);
     NEP->mDelayHandleReceiveCtx = &opCtx;
 
-    MOCKER_CPP(&RDMASyncEndpoint::RePostReceive)
-    .stubs()
-    .will(returnValue(0));
+    MOCKER_CPP(&RDMASyncEndpoint::RePostReceive).stubs().will(returnValue(0));
 
     NResult ret = NEP->Receive(timeout, ctx);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
@@ -663,9 +655,7 @@ TEST_F(TestNetRdmaSyncEndpoint, SyncReceiveFailWithErrDataLen)
     opCtx.mrMemAddr = reinterpret_cast<uintptr_t>(&header);
     NEP->mDelayHandleReceiveCtx = &opCtx;
 
-    MOCKER_CPP(&RDMASyncEndpoint::RePostReceive)
-    .stubs()
-    .will(returnValue(0));
+    MOCKER_CPP(&RDMASyncEndpoint::RePostReceive).stubs().will(returnValue(0));
 
     NResult ret = NEP->Receive(timeout, ctx);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
@@ -685,9 +675,7 @@ TEST_F(TestNetRdmaSyncEndpoint, SyncReceiveFailWithInvalidHeader)
     opCtx.mrMemAddr = reinterpret_cast<uintptr_t>(&header);
     NEP->mDelayHandleReceiveCtx = &opCtx;
 
-    MOCKER_CPP(&RDMASyncEndpoint::RePostReceive)
-    .stubs()
-    .will(returnValue(0));
+    MOCKER_CPP(&RDMASyncEndpoint::RePostReceive).stubs().will(returnValue(0));
 
     NResult ret = NEP->Receive(timeout, ctx);
     EXPECT_EQ(ret, NN_VALIDATE_HEADER_CRC_INVALID);
@@ -695,17 +683,19 @@ TEST_F(TestNetRdmaSyncEndpoint, SyncReceiveFailWithInvalidHeader)
 
 TEST_F(TestNetRdmaSyncEndpoint, TestRDMASyncEndpointFunction)
 {
-    RDMASyncEndpoint syncEp {"name", nullptr, EVENT_POLLING, nullptr, nullptr, 0};
+    RDMASyncEndpoint syncEp{"name", nullptr, EVENT_POLLING, nullptr, nullptr, 0};
     EXPECT_EQ(syncEp.Initialize(), static_cast<int>(RR_EP_NOT_INITIALIZED));
     syncEp.mQP = qp;
     EXPECT_EQ(syncEp.Initialize(), static_cast<int>(RR_EP_NOT_INITIALIZED));
     syncEp.mCq = cq;
 
-    MOCKER_CPP(RDMACq::Initialize).stubs()
+    MOCKER_CPP(RDMACq::Initialize)
+        .stubs()
         .will(returnValue(static_cast<int>(RR_PARAM_INVALID)))
         .then(returnValue(static_cast<int>(RR_OK)));
     EXPECT_EQ(syncEp.Initialize(), static_cast<int>(RR_PARAM_INVALID));
-    MOCKER_CPP(RDMAQp::Initialize).stubs()
+    MOCKER_CPP(RDMAQp::Initialize)
+        .stubs()
         .will(returnValue(static_cast<int>(RR_PARAM_INVALID)))
         .then(returnValue(static_cast<int>(RR_OK)));
     EXPECT_EQ(syncEp.Initialize(), static_cast<int>(RR_PARAM_INVALID));
@@ -716,10 +706,10 @@ TEST_F(TestNetRdmaSyncEndpoint, TestRDMASyncEndpointFunction)
 
 TEST_F(TestNetRdmaSyncEndpoint, PostReceiveFail)
 {
-    RDMASyncEndpoint syncEp {"name", nullptr, EVENT_POLLING, nullptr, nullptr, 0};
+    RDMASyncEndpoint syncEp{"name", nullptr, EVENT_POLLING, nullptr, nullptr, 0};
     EXPECT_EQ(syncEp.PostReceive(0, 0, 0), static_cast<int>(RR_PARAM_INVALID));
     EXPECT_EQ(syncEp.RePostReceive(nullptr), static_cast<int>(RR_PARAM_INVALID));
-    RDMASendReadWriteRequest rwReq {};
+    RDMASendReadWriteRequest rwReq{};
     EXPECT_EQ(syncEp.PostSend(rwReq), static_cast<int>(RR_PARAM_INVALID));
     EXPECT_EQ(syncEp.PostRead(rwReq), static_cast<int>(RR_PARAM_INVALID));
     EXPECT_EQ(syncEp.PostWrite(rwReq), static_cast<int>(RR_PARAM_INVALID));
@@ -727,11 +717,11 @@ TEST_F(TestNetRdmaSyncEndpoint, PostReceiveFail)
 
 TEST_F(TestNetRdmaSyncEndpoint, PostOneSideSglFail)
 {
-    RDMASyncEndpoint syncEp {"name", nullptr, EVENT_POLLING, nullptr, nullptr, 0};
-    RDMASendSglRWRequest sglRwReq {};
+    RDMASyncEndpoint syncEp{"name", nullptr, EVENT_POLLING, nullptr, nullptr, 0};
+    RDMASendSglRWRequest sglRwReq{};
     EXPECT_EQ(syncEp.PostOneSideSgl(sglRwReq), static_cast<int>(RR_PARAM_INVALID));
 
-    RDMASgeCtxInfo sge {};
+    RDMASgeCtxInfo sge{};
     uint64_t ctxArr[NET_SGE_MAX_IOV];
     EXPECT_EQ(syncEp.CreateOneSideCtx(sge, nullptr, 0, ctxArr, false), static_cast<int>(RR_PARAM_INVALID));
 
@@ -748,6 +738,6 @@ TEST_F(TestNetRdmaSyncEndpoint, SyncPollingCompletionContextInfoNull)
     RResult ret = ep->PollingCompletion(opCtx, 0, immData);
     EXPECT_EQ(ret, RR_CQ_WC_WRONG);
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 //#endif

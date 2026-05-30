@@ -11,7 +11,6 @@
 #include "test_case/perf_test_base.h"
 #include "test_case/transport/transport_helper.h"
 
-
 namespace hcom {
 namespace perftest {
 class TransportReadLatTest : public PerfTestBase {
@@ -73,7 +72,7 @@ private:
     sem_t mSem;
     void *mTseg = nullptr;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif // HCOM_TRANSPORT_READ_LAT_TEST_H

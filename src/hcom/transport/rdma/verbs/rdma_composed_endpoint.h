@@ -193,9 +193,9 @@ public:
 
     RDMAAsyncEndPoint() = delete;
     RDMAAsyncEndPoint(const RDMAAsyncEndPoint &) = delete;
-    RDMAAsyncEndPoint &operator = (const RDMAAsyncEndPoint &) = delete;
+    RDMAAsyncEndPoint &operator=(const RDMAAsyncEndPoint &) = delete;
     RDMAAsyncEndPoint(RDMAAsyncEndPoint &&) = delete;
-    RDMAAsyncEndPoint &operator = (RDMAAsyncEndPoint &&) = delete;
+    RDMAAsyncEndPoint &operator=(RDMAAsyncEndPoint &&) = delete;
 
 private:
     RDMAWorker *mWorker = nullptr;
@@ -210,12 +210,16 @@ private:
 class RDMASyncEndpoint : public RDMAEndpoint {
 public:
     static RResult Create(const std::string &name, RDMAContext *ctx, RDMAPollingMode pollMode,
-        uint32_t rdmaOpCtxPoolSize, const QpOptions &options, RDMASyncEndpoint *&ep);
+                          uint32_t rdmaOpCtxPoolSize, const QpOptions &options, RDMASyncEndpoint *&ep);
 
 public:
     RDMASyncEndpoint(const std::string &name, RDMAContext *ctx, RDMAPollingMode pollMode, RDMACq *cq, RDMAQp *qp,
-        uint32_t rdmaOpCtxPoolSize)
-        : RDMAEndpoint(name, qp), mContext(ctx), mPollingMode(pollMode), mCq(cq), mCtxPool(name, rdmaOpCtxPoolSize)
+                     uint32_t rdmaOpCtxPoolSize)
+        : RDMAEndpoint(name, qp),
+          mContext(ctx),
+          mPollingMode(pollMode),
+          mCq(cq),
+          mCtxPool(name, rdmaOpCtxPoolSize)
     {
         if (mContext != nullptr) {
             mContext->IncreaseRef();
@@ -346,7 +350,7 @@ public:
             return RR_PARAM_INVALID;
         }
 
-        static thread_local RDMAOpContextInfo ctx {};
+        static thread_local RDMAOpContextInfo ctx{};
         ctx.qp = mQP;
         ctx.mrMemAddr = req.lAddress;
         ctx.dataSize = req.size;
@@ -369,7 +373,7 @@ public:
         mQP->IncreaseRef();
 
         auto result = mQP->PostSend(req.lAddress, req.size, static_cast<uint32_t>(req.lKey),
-            reinterpret_cast<uint64_t>(&ctx), immData);
+                                    reinterpret_cast<uint64_t>(&ctx), immData);
         if (NN_UNLIKELY(result != RR_OK)) {
             // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
             mQP->DecreaseRef();
@@ -380,7 +384,7 @@ public:
     }
 
     RResult PostSendSgl(const RDMASendSglRWRequest &req, const RDMASendReadWriteRequest &tlsReq, uint32_t immData,
-        bool isEncrypted = false)
+                        bool isEncrypted = false)
     {
         if (NN_UNLIKELY(mQP == nullptr)) {
             NN_LOG_ERROR("Failed to PostSendSgl with RDMAWorker " << mName << " as qp is null");
@@ -391,7 +395,7 @@ public:
         sglCtx.qp = mQP;
         sglCtx.result = RR_OK;
         if (NN_UNLIKELY(memcpy_s(sglCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, req.iov,
-            sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != RR_OK)) {
+                                 sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != RR_OK)) {
             NN_LOG_ERROR("Failed to copy request to sglCtx");
             return RR_PARAM_INVALID;
         }
@@ -426,9 +430,8 @@ public:
 
         RResult result = RR_OK;
         if (isEncrypted) {
-            result =
-                mQP->PostSend(tlsReq.lAddress, tlsReq.size, static_cast<uint32_t>(tlsReq.lKey),
-                    reinterpret_cast<uint64_t>(&ctx), immData);
+            result = mQP->PostSend(tlsReq.lAddress, tlsReq.size, static_cast<uint32_t>(tlsReq.lKey),
+                                   reinterpret_cast<uint64_t>(&ctx), immData);
         } else {
             result = mQP->PostSendSgl(req.iov, req.iovCount, reinterpret_cast<uint64_t>(&ctx), immData);
         }
@@ -448,7 +451,7 @@ public:
             return RR_PARAM_INVALID;
         }
 
-        static thread_local RDMAOpContextInfo ctx {};
+        static thread_local RDMAOpContextInfo ctx{};
         ctx.qp = mQP;
         ctx.mrMemAddr = req.lAddress;
         ctx.dataSize = req.size;
@@ -483,7 +486,7 @@ public:
             return RR_PARAM_INVALID;
         }
 
-        static thread_local RDMAOpContextInfo ctx {};
+        static thread_local RDMAOpContextInfo ctx{};
         ctx.qp = mQP;
         ctx.mrMemAddr = req.lAddress;
         ctx.dataSize = req.size;
@@ -522,7 +525,7 @@ public:
         sglCtx.result = RR_OK;
         sglCtx.qp = mQP;
         if (NN_UNLIKELY(memcpy_s(sglCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, req.iov,
-            sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != RR_OK)) {
+                                 sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != RR_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
             return RR_PARAM_INVALID;
         }
@@ -554,7 +557,7 @@ public:
     }
 
     RResult CreateOneSideCtx(RDMASgeCtxInfo &sgeInfo, UBSHcomNetTransSgeIov *iov, uint32_t iovCount,
-        uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead)
+                             uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead)
     {
         if (iov == nullptr || iovCount == NN_NO0 || iovCount > NN_NO4 || ctxArr == nullptr) {
             NN_LOG_ERROR("Failed to create oneSide operation ctx because param invalid");
@@ -588,7 +591,7 @@ public:
         }
 
         int32_t timeoutInMs = TimeSecToMs(timeout);
-        ibv_wc wc {};
+        ibv_wc wc{};
         int pollCount = 1;
         RResult result = RR_OK;
         if (mPollingMode == BUSY_POLLING) {
@@ -620,8 +623,8 @@ public:
         contextInfo->opResultType = RDMAOpContextInfo::OpResult(wc);
         ctx = contextInfo;
         if (NN_UNLIKELY(wc.status != IBV_WC_SUCCESS)) {
-            NN_LOG_ERROR("Poll cq failed in RDMASyncEndpoint " << mName << ", wcStatus " << wc.status << ", opType " <<
-                contextInfo->opType);
+            NN_LOG_ERROR("Poll cq failed in RDMASyncEndpoint " << mName << ", wcStatus " << wc.status << ", opType "
+                                                               << contextInfo->opType);
             return RR_CQ_WC_WRONG;
         }
         immData = wc.imm_data;
@@ -635,8 +638,8 @@ private:
     RDMACq *mCq = nullptr;
     NetObjPool<RDMAOpContextInfo> mCtxPool;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // OCK_RDMA_COMPOSED_ENDPOINT_12342437333_H

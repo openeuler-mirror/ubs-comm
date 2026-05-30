@@ -12,12 +12,12 @@
 #ifdef RDMA_BUILD_ENABLED
 #include <unistd.h>
 
-#include "hcom.h"
-#include "hcom_utils.h"
 #include "common/net_util.h"
 #include "cstring"
-#include "ut_helper.h"
+#include "hcom.h"
+#include "hcom_utils.h"
 #include "test_rdma_tls.h"
+#include "ut_helper.h"
 
 using namespace ock::hcom;
 
@@ -33,7 +33,7 @@ UBSHcomNetDriver *abnormalCertChainDriver = nullptr;
 UBSHcomNetDriver *normalCertChainDriver = nullptr;
 UBSHcomNetDriver *customVerifyTlsDriver = nullptr;
 
-static UBSHcomNetDriverOptions options {};
+static UBSHcomNetDriverOptions options{};
 
 UBSHcomNetEndpointPtr tlsServerEp = nullptr;
 std::string tlsIpSeg = IP_SEG;
@@ -59,7 +59,6 @@ using TestOpCode = enum {
     RECEIVE_RAW,
 };
 
-
 using TestRegMrInfo = struct _reg_sgl_info_test_ {
     uintptr_t lAddress = 0;
     uint32_t lKey = 0;
@@ -84,7 +83,6 @@ bool driverInitAndStart(UBSHcomNetDriver *driver)
     return true;
 }
 
-
 int TlsServerNewEndPoint(const std::string &ipPort, const UBSHcomNetEndpointPtr &newEP, const std::string &payload)
 {
     NN_LOG_INFO("new endpoint from " << ipPort << " payload " << payload);
@@ -108,8 +106,8 @@ int TlsServerRequestReceived(const UBSHcomNetRequestContext &ctx)
             EXPECT_EQ(syncSendValue.length(), req.length());
             EXPECT_EQ(0, memcmp(syncSendValue.c_str(), req.c_str(), syncSendValue.size()));
 
-            UBSHcomNetTransRequest rsp((void *)(const_cast<char *>(syncReplyValue.c_str())),
-                syncReplyValue.length(), 0);
+            UBSHcomNetTransRequest rsp((void *)(const_cast<char *>(syncReplyValue.c_str())), syncReplyValue.length(),
+                                       0);
 
             if ((result = ctx.EndPoint()->PostSend(ctx.Header().opCode, rsp)) != 0) {
                 NN_LOG_ERROR("failed to post message to data to server, result " << result);
@@ -124,8 +122,8 @@ int TlsServerRequestReceived(const UBSHcomNetRequestContext &ctx)
             EXPECT_EQ(syncSendRawValue.length(), req.length());
             EXPECT_EQ(0, memcmp(syncSendRawValue.c_str(), req.c_str(), syncSendRawValue.size()));
 
-            UBSHcomNetTransRequest rsp((void *)(const_cast<char *>(syncReplyValue.c_str())),
-                syncReplyValue.length(), 0);
+            UBSHcomNetTransRequest rsp((void *)(const_cast<char *>(syncReplyValue.c_str())), syncReplyValue.length(),
+                                       0);
 
             if ((result = ctx.EndPoint()->PostSendRaw(rsp, ctx.Header().opCode)) != 0) {
                 NN_LOG_ERROR("failed to post message to data to server, result " << result);
@@ -166,7 +164,7 @@ static bool CertCallback(const std::string &name, std::string &value)
 }
 
 static bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                               UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -178,7 +176,7 @@ static bool PrivateKeyCallback(const std::string &name, std::string &value, void
 }
 
 static bool CACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                       UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = certPath + "/CA/cacert.pem";
     cb = nullptr;
@@ -224,7 +222,7 @@ int ValidateTlsCert()
 }
 
 void setServerDriverCallback(UBSHcomNetDriver *driver, UBSHcomTLSCertificationCallback CertCallback,
-    UBSHcomTLSCaCallback CACallback, UBSHcomTLSPrivateKeyCallback PrivateKeyCallback)
+                             UBSHcomTLSCaCallback CACallback, UBSHcomTLSPrivateKeyCallback PrivateKeyCallback)
 {
     driver->RegisterNewEPHandler(
         std::bind(&TlsServerNewEndPoint, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -235,9 +233,10 @@ void setServerDriverCallback(UBSHcomNetDriver *driver, UBSHcomTLSCertificationCa
 
     driver->RegisterTLSCertificationCallback(std::bind(CertCallback, std::placeholders::_1, std::placeholders::_2));
     driver->RegisterTLSCaCallback(std::bind(CACallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
     driver->RegisterTLSPrivateKeyCallback(std::bind(PrivateKeyCallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                    std::placeholders::_3, std::placeholders::_4,
+                                                    std::placeholders::_5));
 }
 
 // server with invalid cert path
@@ -248,7 +247,7 @@ static bool InvalidCertCallback(const std::string &name, std::string &value)
 }
 
 static bool InvalidPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                      UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -260,7 +259,7 @@ static bool InvalidPrivateKeyCallback(const std::string &name, std::string &valu
 }
 
 static bool InvalidCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                              UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = certPath + "/CA/key.pem";
     return true;
@@ -288,7 +287,6 @@ bool ServerCreateDriverWithInvalidTls()
     return driverInitAndStart(invalidTlsDriver);
 }
 
-
 // server with not same Ca cert
 static bool VerifyFailedCertCallback(const std::string &name, std::string &value)
 {
@@ -297,7 +295,7 @@ static bool VerifyFailedCertCallback(const std::string &name, std::string &value
 }
 
 static bool VerifyFailedPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                           UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -309,7 +307,7 @@ static bool VerifyFailedPrivateKeyCallback(const std::string &name, std::string 
 }
 
 static bool VerifyFailedCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                   UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = otherCertPath + "/CA/cacert.pem";
     return true;
@@ -331,7 +329,7 @@ bool ServerCreateDriverTlsNotSameCACert()
     NN_LOG_INFO("set ip mask " << options.netDeviceIpMask);
 
     setServerDriverCallback(notSameCaTlsDriver, VerifyFailedCertCallback, VerifyFailedCACallback,
-        VerifyFailedPrivateKeyCallback);
+                            VerifyFailedPrivateKeyCallback);
 
     notSameCaTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -346,7 +344,7 @@ static bool ExpiredCertCertCallback(const std::string &name, std::string &value)
 }
 
 static bool ExpiredCertPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                          UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -358,7 +356,7 @@ static bool ExpiredCertPrivateKeyCallback(const std::string &name, std::string &
 }
 
 static bool ExpiredCertCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                  UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = expiredCertPath + "/CA/cacert.pem";
     return true;
@@ -379,7 +377,7 @@ bool ServerCreateDriverTlsWithExpiredCert()
     NN_LOG_INFO("set ip mask " << options.netDeviceIpMask);
 
     setServerDriverCallback(certExpiredTlsDriver, ExpiredCertCertCallback, ExpiredCertCACallback,
-        ExpiredCertPrivateKeyCallback);
+                            ExpiredCertPrivateKeyCallback);
 
     certExpiredTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -394,7 +392,7 @@ static bool RevokedCertCertCallback(const std::string &name, std::string &value)
 }
 
 static bool RevokedCertPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                          UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -406,7 +404,7 @@ static bool RevokedCertPrivateKeyCallback(const std::string &name, std::string &
 }
 
 static bool RevokedCertCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                  UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     crlPath = revokedCertPath + "/CA/ca.crl";
     caPath = revokedCertPath + "/CA/cacert.pem";
@@ -429,7 +427,7 @@ bool ServerCreateDriverTlsWithRevokedCert()
     NN_LOG_INFO("set ip mask " << options.netDeviceIpMask);
 
     setServerDriverCallback(certRevokedTlsDriver, RevokedCertCertCallback, RevokedCertCACallback,
-        RevokedCertPrivateKeyCallback);
+                            RevokedCertPrivateKeyCallback);
 
     certRevokedTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -444,7 +442,7 @@ static bool CliVerifyByNoneCertCallback(const std::string &name, std::string &va
 }
 
 static bool CliVerifyByNonePrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                              UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -456,7 +454,7 @@ static bool CliVerifyByNonePrivateKeyCallback(const std::string &name, std::stri
 }
 
 static bool CliVerifyByNoneACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                     UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = cliVerifyByNoneCertPath + "/CA/cacert.pem";
     return true;
@@ -478,7 +476,7 @@ bool ServerCreateDriverTlsWithCVerifyByNone()
     NN_LOG_INFO("set ip mask " << options.netDeviceIpMask);
 
     setServerDriverCallback(cVerifyByNoneTlsDriver, CliVerifyByNoneCertCallback, CliVerifyByNoneACallback,
-        CliVerifyByNonePrivateKeyCallback);
+                            CliVerifyByNonePrivateKeyCallback);
 
     cVerifyByNoneTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -493,7 +491,7 @@ static bool MultiLevelCertCallback(const std::string &name, std::string &value)
 }
 
 static bool MultiLevelPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                         UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -505,7 +503,7 @@ static bool MultiLevelPrivateKeyCallback(const std::string &name, std::string &v
 }
 
 static bool MultiLevelCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                 UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     std::string rootCa = multiCertPath + "/CA/rootca.crt";
     std::string secondCa = multiCertPath + "/CA/secondca.crt";
@@ -529,7 +527,7 @@ bool ServerCreateDriverTlsWithMultiLevelCert()
     NN_LOG_INFO("set ip mask " << options.netDeviceIpMask);
 
     setServerDriverCallback(multiLevelCertTlsDriver, MultiLevelCertCallback, MultiLevelCACallback,
-        MultiLevelPrivateKeyCallback);
+                            MultiLevelPrivateKeyCallback);
 
     multiLevelCertTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -544,7 +542,7 @@ static bool AbnormalCertChainCertCallback(const std::string &name, std::string &
 }
 
 static bool AbnormalCertChainPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                                UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -555,7 +553,7 @@ static bool AbnormalCertChainPrivateKeyCallback(const std::string &name, std::st
 }
 
 static bool AbnormalCertChainCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                        UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     std::string rootCa = abnormalCertChainPath + "/CA/cacert.pem";
     std::string secondCa = abnormalCertChainPath + "/CA/secondca.crt";
@@ -569,8 +567,8 @@ bool ServerCreateDriverTlsWithAbnormalCertChain()
         NN_LOG_ERROR("multiLevelCertTlsDriver already created");
     }
 
-    abnormalCertChainDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA,
-        "AbnormalCertChainServer", true);
+    abnormalCertChainDriver =
+        UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA, "AbnormalCertChainServer", true);
     if (abnormalCertChainDriver == nullptr) {
         NN_LOG_ERROR("failed to create multiLevelCertTlsDriver already created");
         return false;
@@ -580,7 +578,7 @@ bool ServerCreateDriverTlsWithAbnormalCertChain()
     NN_LOG_INFO("set ip mask " << options.netDeviceIpMask);
 
     setServerDriverCallback(abnormalCertChainDriver, AbnormalCertChainCertCallback, AbnormalCertChainCACallback,
-        AbnormalCertChainPrivateKeyCallback);
+                            AbnormalCertChainPrivateKeyCallback);
 
     abnormalCertChainDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -595,7 +593,7 @@ static bool NormalCertChainCertCallback(const std::string &name, std::string &va
 }
 
 static bool NormalCertChainPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                              UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -606,7 +604,7 @@ static bool NormalCertChainPrivateKeyCallback(const std::string &name, std::stri
 }
 
 static bool NormalCertChainCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                      UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     std::string rootCa = normalCertChainPath + "/CA/cacert.pem";
     caPath = rootCa;
@@ -629,7 +627,7 @@ bool ServerCreateDriverTlsWithNormalCertChain()
     NN_LOG_INFO("set ip mask " << options.netDeviceIpMask);
 
     setServerDriverCallback(normalCertChainDriver, NormalCertChainCertCallback, NormalCertChainCACallback,
-        NormalCertChainPrivateKeyCallback);
+                            NormalCertChainPrivateKeyCallback);
 
     normalCertChainDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -638,7 +636,7 @@ bool ServerCreateDriverTlsWithNormalCertChain()
 
 // server with custom verify func
 static bool CustomVerifyCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                   UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = certPath + "/CA/cacert.pem";
     cb = std::bind(&Verify, std::placeholders::_1, std::placeholders::_2);
@@ -744,7 +742,7 @@ int TlsClientOneSideDone(const UBSHcomNetRequestContext &ctx)
 }
 
 void setClientDriverCallback(UBSHcomNetDriver *driver, UBSHcomTLSCertificationCallback CertCallback,
-    UBSHcomTLSCaCallback CACallback, UBSHcomTLSPrivateKeyCallback PrivateKeyCallback)
+                             UBSHcomTLSCaCallback CACallback, UBSHcomTLSPrivateKeyCallback PrivateKeyCallback)
 {
     driver->RegisterEPBrokenHandler(std::bind(&TlsClientEndPointBroken, std::placeholders::_1));
     driver->RegisterNewReqHandler(std::bind(&TlsClientRequestReceived, std::placeholders::_1));
@@ -753,9 +751,10 @@ void setClientDriverCallback(UBSHcomNetDriver *driver, UBSHcomTLSCertificationCa
 
     driver->RegisterTLSCertificationCallback(std::bind(CertCallback, std::placeholders::_1, std::placeholders::_2));
     driver->RegisterTLSCaCallback(std::bind(CACallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
     driver->RegisterTLSPrivateKeyCallback(std::bind(PrivateKeyCallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                    std::placeholders::_3, std::placeholders::_4,
+                                                    std::placeholders::_5));
 }
 
 // client in normal case
@@ -766,7 +765,7 @@ static bool ClientCertCallback(const std::string &name, std::string &value)
 }
 
 static bool ClientPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                     UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -778,12 +777,11 @@ static bool ClientPrivateKeyCallback(const std::string &name, std::string &value
 }
 
 static bool ClientCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                             UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = certPath + "/CA/cacert.pem";
     return true;
 }
-
 
 bool ClientCreateDriverWithTls()
 {
@@ -878,7 +876,6 @@ void TlsAsyncSendRawRequest()
     EXPECT_EQ(result, NN_OK);
 }
 
-
 void TlsSyncRequests()
 {
     int result;
@@ -894,7 +891,7 @@ void TlsSyncRequests()
         return;
     }
 
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     if ((result = tlsClientSyncEp->Receive(respCtx)) != 0) {
         NN_LOG_INFO("failed to get response, result " << result);
         return;
@@ -920,7 +917,7 @@ void TlsSyncSendRawRequests()
         return;
     }
 
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     if ((result = tlsClientSyncEp->ReceiveRaw(respCtx)) != 0) {
         NN_LOG_INFO("failed to get response, result " << result);
         return;
@@ -939,7 +936,7 @@ static bool CertExpiredClientCertCallback(const std::string &name, std::string &
 }
 
 static bool CertExpiredClientPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                                UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -951,7 +948,7 @@ static bool CertExpiredClientPrivateKeyCallback(const std::string &name, std::st
 }
 
 static bool CertExpiredClientCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                        UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = expiredCertPath + "/CA/cacert.pem";
     return true;
@@ -969,7 +966,7 @@ bool ClientCreateDriverWithTlsExpiredCert()
         return false;
     }
     setClientDriverCallback(tlsClientCertExpiredDriver, &CertExpiredClientCertCallback, &CertExpiredClientCACallback,
-        &CertExpiredClientPrivateKeyCallback);
+                            &CertExpiredClientPrivateKeyCallback);
 
     tlsClientCertExpiredDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -1000,7 +997,7 @@ static bool CertRevokedClientCertCallback(const std::string &name, std::string &
 }
 
 static bool CertRevokedClientPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                                UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -1012,7 +1009,7 @@ static bool CertRevokedClientPrivateKeyCallback(const std::string &name, std::st
 }
 
 static bool CertRevokedClientCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                        UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     crlPath = revokedCertPath + "/CA/ca.crl";
     caPath = revokedCertPath + "/CA/cacert.pem";
@@ -1032,13 +1029,12 @@ bool ClientCreateDriverWithTlsRevokedCert()
     }
 
     setClientDriverCallback(tlsClientCertRevokedDriver, &CertRevokedClientCertCallback, &CertRevokedClientCACallback,
-        &CertRevokedClientPrivateKeyCallback);
+                            &CertRevokedClientPrivateKeyCallback);
 
     tlsClientCertRevokedDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientCertRevokedDriver);
 }
-
 
 bool SyncClientConnectWithTlsCertRevoked()
 {
@@ -1064,7 +1060,7 @@ static bool VerifyByNoneClientCertCallback(const std::string &name, std::string 
 }
 
 static bool VerifyByNoneClientPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                                 UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -1075,7 +1071,8 @@ static bool VerifyByNoneClientPrivateKeyCallback(const std::string &name, std::s
 }
 
 static bool VerifyByNoneClientCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                         UBSHcomPeerCertVerifyType &peerCertVerifyType,
+                                         UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = cliVerifyByNoneCertPath + "/CA/cacert.pem";
     peerCertVerifyType = ock::hcom::VERIFY_BY_NONE;
@@ -1095,13 +1092,12 @@ bool ClientCreateDriverWithTlsVerifyByNone()
         return false;
     }
     setClientDriverCallback(tlsClientVerifyByNoneDriver, &VerifyByNoneClientCertCallback, &VerifyByNoneClientCACallback,
-        &VerifyByNoneClientPrivateKeyCallback);
+                            &VerifyByNoneClientPrivateKeyCallback);
 
     tlsClientVerifyByNoneDriver->OobIpAndPort(BASE_IP, testPort);
 
     return driverInitAndStart(tlsClientVerifyByNoneDriver);
 }
-
 
 bool SyncClientConnectWithTlsVerifyByNone()
 {
@@ -1127,7 +1123,7 @@ static bool MultiLevelClientCertCallback(const std::string &name, std::string &v
 }
 
 static bool MultiLevelClientPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                                               UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -1138,7 +1134,7 @@ static bool MultiLevelClientPrivateKeyCallback(const std::string &name, std::str
 }
 
 static bool MultiLevelClientCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                       UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     std::string rootCa = multiCertPath + "/CA/rootca.crt";
     std::string secondCa = multiCertPath + "/CA/secondca.crt";
@@ -1161,7 +1157,7 @@ bool ClientCreateDriverWithTlsMultiLevelCert()
     }
 
     setClientDriverCallback(tlsClientMultiLevelCertDriver, &MultiLevelClientCertCallback, &MultiLevelClientCACallback,
-        &MultiLevelClientPrivateKeyCallback);
+                            &MultiLevelClientPrivateKeyCallback);
 
     tlsClientMultiLevelCertDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -1192,7 +1188,7 @@ static bool AbnormalClientCertChainCallback(const std::string &name, std::string
 }
 
 static bool AbnormalClientCertChainPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass,
-    int &len, UBSHcomTLSEraseKeypass &erase)
+                                                      int &len, UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -1203,7 +1199,8 @@ static bool AbnormalClientCertChainPrivateKeyCallback(const std::string &name, s
 }
 
 static bool AbnormalClientCertChainCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                              UBSHcomPeerCertVerifyType &peerCertVerifyType,
+                                              UBSHcomTLSCertVerifyCallback &cb)
 {
     std::string rootCa = abnormalCertChainPath + "/CA/cacert.pem";
     caPath = rootCa;
@@ -1225,7 +1222,7 @@ bool ClientCreateDriverWithTlsAbnormalCertChain()
     }
 
     setClientDriverCallback(tlsClientAbnormalCertChainDriver, &AbnormalClientCertChainCallback,
-        &AbnormalClientCertChainCACallback, &AbnormalClientCertChainPrivateKeyCallback);
+                            &AbnormalClientCertChainCACallback, &AbnormalClientCertChainPrivateKeyCallback);
 
     tlsClientAbnormalCertChainDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -1257,7 +1254,7 @@ static bool NormalClientCertChainCallback(const std::string &name, std::string &
 }
 
 static bool NormalClientCertChainPrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass,
-    int &len, UBSHcomTLSEraseKeypass &erase)
+                                                    int &len, UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -1268,7 +1265,8 @@ static bool NormalClientCertChainPrivateKeyCallback(const std::string &name, std
 }
 
 static bool NormalClientCertChainCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                            UBSHcomPeerCertVerifyType &peerCertVerifyType,
+                                            UBSHcomTLSCertVerifyCallback &cb)
 {
     std::string rootCa = normalCertChainPath + "/CA/cacert.pem";
     caPath = rootCa;
@@ -1290,7 +1288,7 @@ bool ClientCreateDriverWithTlsNormalCertChain()
     }
 
     setClientDriverCallback(tlsClientNormalCertChainDriver, &NormalClientCertChainCallback,
-        &NormalClientCertChainCACallback, &NormalClientCertChainPrivateKeyCallback);
+                            &NormalClientCertChainCACallback, &NormalClientCertChainPrivateKeyCallback);
 
     tlsClientNormalCertChainDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -1315,7 +1313,8 @@ bool SyncClientConnectWithNormalCertChain()
 
 // client with custom verify func
 static bool CustomVerifyClientCACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                                         UBSHcomPeerCertVerifyType &peerCertVerifyType,
+                                         UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = certPath + "/CA/cacert.pem";
     cb = std::bind(&Verify, std::placeholders::_1, std::placeholders::_2);
@@ -1338,7 +1337,7 @@ bool ClientCreateDriverWithTlsCustomVerify()
     }
 
     setClientDriverCallback(tlsClientCustomVerifyTlsDriver, &ClientCertCallback, &CustomVerifyClientCACallback,
-        &ClientPrivateKeyCallback);
+                            &ClientPrivateKeyCallback);
 
     tlsClientCustomVerifyTlsDriver->OobIpAndPort(BASE_IP, testPort);
 
@@ -1381,7 +1380,6 @@ void TestCaseRdmaTLS::TearDown()
 {
     GlobalMockObject::verify();
 }
-
 
 TEST_F(TestCaseRdmaTLS, RDMATLSSuccess)
 {

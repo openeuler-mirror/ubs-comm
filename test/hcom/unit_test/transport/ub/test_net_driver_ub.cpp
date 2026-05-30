@@ -15,14 +15,14 @@
 #include <mockcpp/mockcpp.hpp>
 
 #include "hcom_def.h"
+#include "net_oob_secure.h"
 #include "net_ub_driver.h"
 #include "net_ub_endpoint.h"
 #include "openssl_api_wrapper.h"
-#include "under_api/urma/urma_api_wrapper.h"
 #include "ub_common.h"
 #include "ub_mr_fixed_buf.h"
 #include "ub_worker.h"
-#include "net_oob_secure.h"
+#include "under_api/urma/urma_api_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -103,10 +103,7 @@ TEST_F(TestNetDriverUB, InitializeParamErr)
     EXPECT_EQ(driver->Initialize(option), NN_OK);
 
     driver->mInited = false;
-    MOCKER(UBSHcomNetOutLogger::Instance)
-        .stubs()
-        .will(returnValue(logger))
-        .then(returnValue(trueLogger));
+    MOCKER(UBSHcomNetOutLogger::Instance).stubs().will(returnValue(logger)).then(returnValue(trueLogger));
     EXPECT_EQ(driver->Initialize(option), NN_NOT_INITIALIZED);
 }
 
@@ -219,8 +216,7 @@ TEST_F(TestNetDriverUB, InitializeDoInitializeErr)
     MOCKER_CPP(&NetDriverUB::CreateWorkerResource).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverUB::CreateWorkers).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverUB::CreateClientLB).stubs().will(returnValue(0));
-    MOCKER_CPP_VIRTUAL(*driver, &NetDriverUBWithOob::DoInitialize).stubs()
-        .will(returnValue(1)).then(returnValue(0));
+    MOCKER_CPP_VIRTUAL(*driver, &NetDriverUBWithOob::DoInitialize).stubs().will(returnValue(1)).then(returnValue(0));
 
     driver->mProtocol = UBSHcomNetDriverProtocol::UBC;
     option.mrSendReceiveSegSize = OBMM_SIZE;
@@ -492,9 +488,9 @@ TEST_F(TestNetDriverUB, CreateWorkersErr)
 
 TEST_F(TestNetDriverUB, CreateWorkers)
 {
-    std::vector<uint16_t> workerGroups{ 1 };
-    std::vector<int16_t> workerThreadPriority{ 1 };
-    std::vector<int16_t> flatWorkerCpus{ 1 };
+    std::vector<uint16_t> workerGroups{1};
+    std::vector<int16_t> workerThreadPriority{1};
+    std::vector<int16_t> flatWorkerCpus{1};
     MOCKER(NetFunc::NN_ParseWorkersGroups).stubs().with(any(), outBound(workerGroups)).will(returnValue(true));
     MOCKER(NetFunc::NN_ParseWorkerGroupsCpus).stubs().will(returnValue(true));
     MOCKER(NetFunc::NN_FinalizeWorkerGroupCpus)
@@ -717,6 +713,6 @@ TEST_F(TestNetDriverUB, GetTseg)
     urma_target_seg_t *tseg = nullptr;
     EXPECT_EQ(driver->GetTseg(0, tseg), static_cast<uint32_t>(UB_PARAM_INVALID));
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

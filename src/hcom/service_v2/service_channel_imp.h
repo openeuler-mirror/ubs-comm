@@ -12,17 +12,17 @@
 #ifndef HCOM_SERVICE_V2_HCOM_CHANNEL_IMP_H_
 #define HCOM_SERVICE_V2_HCOM_CHANNEL_IMP_H_
 
+#include <pthread.h>
 #include <cstdint>
 #include <mutex>
-#include <pthread.h>
 #include "hcom_def.h"
-#include "hcom_service_def.h"
-#include "hcom_service_channel.h"
-#include "hcom_obj_statistics.h"
-#include "service_imp.h"
-#include "service_common.h"
-#include "service_callback.h"
 #include "hcom_env.h"
+#include "hcom_obj_statistics.h"
+#include "hcom_service_channel.h"
+#include "hcom_service_def.h"
+#include "service_callback.h"
+#include "service_common.h"
+#include "service_imp.h"
 
 namespace ock {
 namespace hcom {
@@ -49,14 +49,14 @@ enum ServiceEpState : uint16_t {
 
 struct EpInfo {
     UBSHcomNetAtomicState<ServiceEpState> epState[CHANNEL_EP_MAX_NUM]{}; /* state of eps */
-    UBSHcomNetEndpoint *epArr[CHANNEL_EP_MAX_NUM]{}; /* endpoints for data transfer */
+    UBSHcomNetEndpoint *epArr[CHANNEL_EP_MAX_NUM]{};                     /* endpoints for data transfer */
     uint16_t epSize = 0;
     EpInfo() = default;
 };
 
 #define PROCESS_IO(remainCtx)                               \
     do {                                                    \
-        UBSHcomServiceContext brokenCtx{};                     \
+        UBSHcomServiceContext brokenCtx{};                  \
         HcomServiceGlobalObject::BuildBrokenCtx(brokenCtx); \
         for (auto ctx : (remainCtx)) {                      \
             if (ctx->EraseSeqNoWithRet()) {                 \
@@ -92,7 +92,7 @@ public:
     int32_t SendFds(int fds[], uint32_t len) override;
     int32_t ReceiveFds(int fds[], uint32_t len, int32_t timeoutSec) override;
     int32_t Recv(const UBSHcomServiceContext &context, uintptr_t address, uint32_t size,
-        const Callback *done = nullptr) override;
+                 const Callback *done = nullptr) override;
 
     int32_t SetFlowControlConfig(const UBSHcomFlowCtrlOptions &opt) override;
     void SetChannelTimeOut(int16_t oneSideTimeout, int16_t twoSideTimeout) override;
@@ -113,8 +113,8 @@ protected:
     /// 定为 SER_OK，同时 std::string 为拼完后的完整消息；当返回
     /// SpliceMessageResultType::INDETERMINATE 时，同时返回的 SerResult 必定为 SER_OK，
     /// std::string 无效。
-    auto SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
-            -> std::tuple<SpliceMessageResultType, SerResult, std::string> override;
+    auto SpliceMessage(const UBSHcomNetRequestContext &ctx,
+                       bool isResp) -> std::tuple<SpliceMessageResultType, SerResult, std::string> override;
 
     std::mutex mMsgReceivedMutex;
     std::map<UBSHcomFragmentMessageId, std::shared_ptr<std::pair<uint32_t, std::string>>> mMsgReceived;
@@ -123,7 +123,8 @@ private:
     HcomChannelImp(uint64_t id, bool selfPoll, InnerConnectOptions &opt,
                    UBSHcomServiceProtocol protocol = UBSHcomServiceProtocol::UNKNOWN,
                    uint32_t maxSendRecvDataSize = 1024)
-        : mProtocol(protocol), mMaxSendRecvDataSize(maxSendRecvDataSize)
+        : mProtocol(protocol),
+          mMaxSendRecvDataSize(maxSendRecvDataSize)
     {
         mOptions.id = id;
         mOptions.selfPoll = selfPoll;
@@ -143,7 +144,7 @@ private:
     }
 
     SerResult Initialize(std::vector<UBSHcomNetEndpointPtr> &ep, uintptr_t ctxMemPool, uintptr_t periodicMgr,
-        uintptr_t pgTable, uint32_t ctxStoreCapacity = NN_NO2097152) override;
+                         uintptr_t pgTable, uint32_t ctxStoreCapacity = NN_NO2097152) override;
     void UnInitialize() override;
     void ForceUnInitialize();
     std::string ToString() override;
@@ -238,9 +239,9 @@ private:
     SerResult OneSideSglSyncWithSelfPoll(const UBSHcomOneSideSglRequest &request, bool isWrite);
     SerResult OneSideSglSyncWithWorkerPoll(const UBSHcomOneSideSglRequest &request, bool isWrite);
     SerResult OneSideSglAsyncWithWorkerPoll(const UBSHcomOneSideSglRequest &req, const Callback *done, bool isWrite);
-    SerResult PrepareCallback(HcomServiceSelfSyncParam& syncParam, TimerCtx &syncContext);
-    inline void CalculateOffsetAndSize(const UBSHcomOneSideRequest &request, UBSHcomNetEndpoint *ep,
-        uint32_t &remain, uint32_t &offset, uint32_t &size)
+    SerResult PrepareCallback(HcomServiceSelfSyncParam &syncParam, TimerCtx &syncContext);
+    inline void CalculateOffsetAndSize(const UBSHcomOneSideRequest &request, UBSHcomNetEndpoint *ep, uint32_t &remain,
+                                       uint32_t &offset, uint32_t &size)
     {
         if (mOptions.enableMultiRail && mDriverNum > 1 && request.size > mOptions.multiRailThresh) {
             offset = request.size - remain;
@@ -284,8 +285,8 @@ private:
         }
 
         return (mProtocol != UBSHcomServiceProtocol::UBC && mProtocol != UBSHcomServiceProtocol::TCP) ?
-                       1 :
-                       (static_cast<uint64_t>(size) + mUserSplitSendThreshold - 1) / mUserSplitSendThreshold;
+                   1 :
+                   (static_cast<uint64_t>(size) + mUserSplitSendThreshold - 1) / mUserSplitSendThreshold;
     }
 
     void CheckAndUpdateThreshold();
@@ -298,28 +299,28 @@ private:
     uintptr_t mPeriodicMgr = 0; /* timeout periodic manager */
     uintptr_t mPgtable = 0;
     uint32_t mRndvThreshold = UINT32_MAX;
-    uint32_t mSelfPollSeqNo = 1;    /* for self polling simplified usage */
+    uint32_t mSelfPollSeqNo = 1; /* for self polling simplified usage */
     bool mRespOriginalSeqNo = false;
 
     uintptr_t mTimerList = 0;
     uint32_t mLocalIp = 0;
     uint16_t mDriverNum = 1;
     uint32_t mTotalBandWidth = 0;
-    uint16_t mEpChoosingIdx[4] = {0};   /* index for choosing to which ep to transfer */
+    uint16_t mEpChoosingIdx[4] = {0}; /* index for choosing to which ep to transfer */
     std::string mUuid;
     std::atomic_bool mBrokenProcessed{false};
     std::mutex mMgrMutex;
-    UBSHcomNetAtomicState<UBSHcomChannelState> mChState;       // channel state
+    UBSHcomNetAtomicState<UBSHcomChannelState> mChState; // channel state
     std::string mPayload;
-    HcomConnectTimestamp mConnectTimestamp {};
+    HcomConnectTimestamp mConnectTimestamp{};
 
     UBSHcomServiceProtocol mProtocol = UBSHcomServiceProtocol::UNKNOWN;
     uint32_t mMaxSendRecvDataSize = 1024;
-    bool mEnableMrCache = false;        //  mr into pgTable for management
-    uint64_t mUpCtx; // store user ctx
+    bool mEnableMrCache = false; //  mr into pgTable for management
+    uint64_t mUpCtx;             // store user ctx
     friend class HcomServiceImp;
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_SERVICE_V2_HCOM_CHANNEL_IMP_H_

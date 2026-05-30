@@ -8,10 +8,10 @@
 #include <string>
 #include <vector>
 #include "hcom.h"
-#include "hcom_service_channel.h"
-#include "hcom_obj_statistics.h"
 #include "hcom_def.h"
+#include "hcom_obj_statistics.h"
 #include "hcom_ref.h"
+#include "hcom_service_channel.h"
 
 namespace ock {
 namespace hcom {
@@ -38,8 +38,8 @@ public:
      * @param opt service创建需要的配置项
      * @return UBSHcomService* 返回创建好的service
      */
-    static UBSHcomService* Create(UBSHcomServiceProtocol t, const std::string &name,
-        const UBSHcomServiceOptions &opt = {});
+    static UBSHcomService *Create(UBSHcomServiceProtocol t, const std::string &name,
+                                  const UBSHcomServiceOptions &opt = {});
 
     /**
      * @brief 销毁service
@@ -78,7 +78,7 @@ public:
      * @return int32_t 成功：0；失败：错误码
      */
     virtual int32_t Connect(const std::string &serverUrl, UBSHcomChannelPtr &ch,
-        const UBSHcomConnectOptions &opt = {}) = 0;
+                            const UBSHcomConnectOptions &opt = {}) = 0;
 
     /**
      * @brief 断开链接
@@ -171,7 +171,8 @@ public:
      * @param multirailIdx 该workerGroup绑定的rail
      */
     virtual void AddWorkerGroup(uint16_t workerGroupId, uint32_t threadCount,
-        const std::pair<uint32_t, uint32_t> &cpuIdsRange, int8_t priority = 0, uint16_t multirailIdx = 0) = 0;
+                                const std::pair<uint32_t, uint32_t> &cpuIdsRange, int8_t priority = 0,
+                                uint16_t multirailIdx = 0) = 0;
 
     /**
      * @brief 增加监听器，支持监听多个url
@@ -179,7 +180,7 @@ public:
      * @param url 监听url，tcp协议：tcp://127.0.0.1:9981；uds协议：uds://file(文件名/抽象命名空间)
      * @param workerCount 该listener监听到链接请求后，会从对应的workerGroup中选择workerCount个线程按照lbPolicy的策略去选择线程绑定到asyncEp上
      */
-    virtual void AddListener(const std::string &url,  uint16_t workerCount = UINT16_MAX) = 0;
+    virtual void AddListener(const std::string &url, uint16_t workerCount = UINT16_MAX) = 0;
 
     /**
      * @brief 设置建链负载均衡策略，主动/被动建链时需要选择一个worker线程去完成，lbPolicy则代表选择worker线程的策略
@@ -334,6 +335,6 @@ private:
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_SERVICE_H

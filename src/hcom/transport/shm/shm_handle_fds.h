@@ -27,10 +27,7 @@ public:
         }
 
         // create iov for msg_iov param
-        struct iovec iov = {
-            .iov_base = &len,
-            .iov_len = sizeof(uint32_t)
-        };
+        struct iovec iov = {.iov_base = &len, .iov_len = sizeof(uint32_t)};
 
         uint32_t fdsSize = sizeof(int) * NN_NO4;
         char buf[CMSG_SPACE(fdsSize)];
@@ -59,8 +56,9 @@ public:
         auto result = ::sendmsg(udsFd, &msg, 0);
         if (NN_UNLIKELY(result <= 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to send fds msg to peer result:" << result << ", as errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to send fds msg to peer result:"
+                         << result << ", as errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
             return SH_ERROR;
         }
 
@@ -76,10 +74,7 @@ public:
 
         // create iov for msg_iov param
         uint32_t recvLen = 0;
-        struct iovec iov = {
-            .iov_base = &recvLen,
-            .iov_len = sizeof(uint32_t)
-        };
+        struct iovec iov = {.iov_base = &recvLen, .iov_len = sizeof(uint32_t)};
 
         uint32_t fdsSize = sizeof(int) * NN_NO4;
 
@@ -100,8 +95,8 @@ public:
 
         if (NN_UNLIKELY(result <= 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to receive fds msg from peer, as errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to receive fds msg from peer, as errno:"
+                         << errno << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
             return SH_ERROR;
         }
 
@@ -123,6 +118,6 @@ public:
         return SH_OK;
     }
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

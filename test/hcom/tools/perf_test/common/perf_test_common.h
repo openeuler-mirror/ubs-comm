@@ -28,7 +28,7 @@ public:
     uint8_t eid[16] = {0};
 };
 
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

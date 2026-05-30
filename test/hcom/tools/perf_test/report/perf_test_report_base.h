@@ -6,9 +6,8 @@
 
 #include <cstdint>
 
-#include "common/perf_test_config.h"
 #include "common/perf_test_common.h"
-
+#include "common/perf_test_config.h"
 
 namespace hcom {
 namespace perftest {
@@ -22,7 +21,7 @@ enum class PERF_TEST_REPORT_TYPE {
 
 class PerfTestReportBase {
 public:
-    explicit PerfTestReportBase(const PerfTestConfig& cfg) : mCfg(cfg) {};
+    explicit PerfTestReportBase(const PerfTestConfig &cfg) : mCfg(cfg){};
     // 打印结果的头部
     virtual void PrintReportHead() = 0;
     // 打印单条结果项，每个包尺寸调用该接口打印一条
@@ -34,7 +33,7 @@ protected:
     PerfTestConfig mCfg;
 };
 
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

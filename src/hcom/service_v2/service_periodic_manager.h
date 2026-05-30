@@ -11,13 +11,13 @@
  */
 #ifndef HCOM_SERVICE_V2_SERVICE_PERIODIC_MANAGER_H_
 #define HCOM_SERVICE_V2_SERVICE_PERIODIC_MANAGER_H_
+#include <queue>
 #include <thread>
 #include <vector>
-#include <queue>
 
-#include "service_common.h"
 #include "hcom_utils.h"
 #include "service_callback.h"
+#include "service_common.h"
 
 namespace ock {
 namespace hcom {
@@ -129,7 +129,7 @@ private:
     std::vector<HcomServiceTimer *> mHandleQueue[M_MAX_THREAD_NUM];
 
     std::thread mWorkingThreads[M_MAX_THREAD_NUM];
-    std::atomic<int16_t> mStartedWorkingThreads = { 0 };
+    std::atomic<int16_t> mStartedWorkingThreads = {0};
     uint16_t mThreadCount = 1;
 
     std::mutex mMutex;
@@ -140,6 +140,6 @@ private:
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_SERVICE_V2_SERVICE_PERIODIC_MANAGER_H_

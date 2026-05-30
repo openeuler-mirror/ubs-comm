@@ -12,12 +12,12 @@
 #ifndef OCK_COMM_LOG_12456845341233_H
 #define OCK_COMM_LOG_12456845341233_H
 
-#include <ctime>
-#include <mutex>
-#include <iostream>
-#include <sstream>
 #include <sys/time.h>
 #include <cstring>
+#include <ctime>
+#include <iostream>
+#include <mutex>
+#include <sstream>
 #include "hcom_def.h"
 
 namespace ock {
@@ -87,7 +87,7 @@ public:
         // See NN_LOG_DEBUG, NN_LOG_INFO, NN_LOG_WARN and NN_LOG_ERROR
         const char *levelStr[] = {"DEBUG", "INFO", "WARN", "ERROR"};
 
-        struct timeval tv{};
+        struct timeval tv {};
         char strTime[24];
 
         int ret = gettimeofday(&tv, nullptr);
@@ -95,7 +95,7 @@ public:
             std::cout << "Fail to get the current system time, " << ret << ".\n";
         }
         time_t timeStamp = tv.tv_sec;
-        struct tm localTime{};
+        struct tm localTime {};
         struct tm *resultTime = localtime_r(&timeStamp, &localTime);
         if ((resultTime != nullptr) &&
             (strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S.", resultTime) != NN_NO0)) {
@@ -115,9 +115,9 @@ public:
     }
 
     UBSHcomNetOutLogger(const UBSHcomNetOutLogger &) = delete;
-    UBSHcomNetOutLogger &operator = (const UBSHcomNetOutLogger &) = delete;
+    UBSHcomNetOutLogger &operator=(const UBSHcomNetOutLogger &) = delete;
     UBSHcomNetOutLogger(UBSHcomNetOutLogger &&) = delete;
-    UBSHcomNetOutLogger &operator = (UBSHcomNetOutLogger &&) = delete;
+    UBSHcomNetOutLogger &operator=(UBSHcomNetOutLogger &&) = delete;
 
     ~UBSHcomNetOutLogger()
     {
@@ -147,19 +147,19 @@ private:
 
 #define NN_LOG(level, args)                                                        \
     do {                                                                           \
-        if ((level) >= (UBSHcomNetOutLogger::Instance()->GetLogLevel())) {                \
+        if ((level) >= (UBSHcomNetOutLogger::Instance()->GetLogLevel())) {         \
             std::ostringstream oss;                                                \
             oss << "[HCOM " << NN_LOG_FILENAME << ":" << __LINE__ << "] " << args; \
-            UBSHcomNetOutLogger::Instance()->Log(level, oss);                             \
+            UBSHcomNetOutLogger::Instance()->Log(level, oss);                      \
         }                                                                          \
     } while (0)
 
-#define NN_LOG_PRINT(level, args)                                                  \
+#define NN_LOG_PRINT(level, args)                                                    \
     do {                                                                             \
-        if ((level) >= (UBSHcomNetOutLogger::Instance()->GetLogLevel())) {                  \
+        if ((level) >= (UBSHcomNetOutLogger::Instance()->GetLogLevel())) {           \
             std::ostringstream oss;                                                  \
             oss << "[HCOM " << NN_LOG_FILENAME << ":" << __LINE__ << "] " << (args); \
-            UBSHcomNetOutLogger::Instance()->Print(level, oss.str().c_str());               \
+            UBSHcomNetOutLogger::Instance()->Print(level, oss.str().c_str());        \
         }                                                                            \
     } while (0)
 
@@ -185,7 +185,7 @@ private:
 #else
 #define NN_LOG_TRACE_INFO(x)
 #endif
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_COMM_LOG_12456845341233_H

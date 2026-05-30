@@ -14,13 +14,13 @@
 #include <sys/poll.h>
 
 #include "net_monotonic.h"
+#include "net_oob_secure.h"
 #include "net_oob_ssl.h"
-#include "net_rdma_sync_endpoint.h"
 #include "net_rdma_async_endpoint.h"
+#include "net_rdma_driver_oob.h"
+#include "net_rdma_sync_endpoint.h"
 #include "rdma_mr_dm_buf.h"
 #include "rdma_mr_fixed_buf.h"
-#include "net_rdma_driver_oob.h"
-#include "net_oob_secure.h"
 
 namespace ock {
 namespace hcom {
@@ -203,8 +203,8 @@ void NetDriverRDMAWithOob::DestroyEpInWorker(RDMAWorker *worker)
         ProcessEpError(reinterpret_cast<uintptr_t>(endPoint.Get()));
     }
 
-    NN_LOG_INFO("Destroyed all endpoints count " << endPointsCopy.size() << " in RDMA worker " <<
-        worker->DetailName() << " of driver " << mName);
+    NN_LOG_INFO("Destroyed all endpoints count " << endPointsCopy.size() << " in RDMA worker " << worker->DetailName()
+                                                 << " of driver " << mName);
     endPointsCopy.clear();
 }
 
@@ -215,23 +215,23 @@ void NetDriverRDMAWithOob::HandleCqEvent(struct ibv_async_event *event)
         NN_LOG_ERROR("CQ error for CQ of driver " << mName);
     } else {
         auto worker = reinterpret_cast<RDMAWorker *>(event->element.cq->cq_context);
-        NN_LOG_ERROR("CQ error for CQ with handle " << event->element.cq << " in RDMA worker " <<
-            worker->DetailName() << " of driver " << mName);
+        NN_LOG_ERROR("CQ error for CQ with handle " << event->element.cq << " in RDMA worker " << worker->DetailName()
+                                                    << " of driver " << mName);
         if (worker->Stop() != NN_OK) {
-            NN_LOG_ERROR("Handle Cq event stop error in RDMA worker " << worker->DetailName() << " of driver " <<
-                mName);
+            NN_LOG_ERROR("Handle Cq event stop error in RDMA worker " << worker->DetailName() << " of driver "
+                                                                      << mName);
             return;
         }
 
         DestroyEpInWorker(worker);
         if (worker->ReInitializeCQ() != NN_OK) {
-            NN_LOG_ERROR("Handle Cq event ReInitializeCQ error in RDMA worker " << worker->DetailName() <<
-                " of driver " << mName);
+            NN_LOG_ERROR("Handle Cq event ReInitializeCQ error in RDMA worker " << worker->DetailName() << " of driver "
+                                                                                << mName);
             return;
         }
         if (worker->Start() != NN_OK) {
-            NN_LOG_ERROR("Handle Cq event start error in RDMA worker " << worker->DetailName() << " of driver " <<
-                mName);
+            NN_LOG_ERROR("Handle Cq event start error in RDMA worker " << worker->DetailName() << " of driver "
+                                                                       << mName);
             return;
         }
     }
@@ -250,36 +250,36 @@ void NetDriverRDMAWithOob::HandleAsyncEvent(struct ibv_async_event *event)
     switch (event->event_type) {
         /* QP events */
         case IBV_EVENT_QP_FATAL:
-            NN_LOG_ERROR("QP fatal event for " << QpDetailInfo(event->element.qp->qp_context) << " of driver " <<
-                mName);
+            NN_LOG_ERROR("QP fatal event for " << QpDetailInfo(event->element.qp->qp_context) << " of driver "
+                                               << mName);
             break;
         case IBV_EVENT_QP_REQ_ERR:
-            NN_LOG_ERROR("QP Requester error for " << QpDetailInfo(event->element.qp->qp_context) << " of driver " <<
-                mName);
+            NN_LOG_ERROR("QP Requester error for " << QpDetailInfo(event->element.qp->qp_context) << " of driver "
+                                                   << mName);
             break;
         case IBV_EVENT_QP_ACCESS_ERR:
-            NN_LOG_ERROR("QP access error event for " << QpDetailInfo(event->element.qp->qp_context) << " of driver " <<
-                mName);
+            NN_LOG_ERROR("QP access error event for " << QpDetailInfo(event->element.qp->qp_context) << " of driver "
+                                                      << mName);
             break;
         case IBV_EVENT_COMM_EST:
-            NN_LOG_ERROR("QP communication established event for " << QpDetailInfo(event->element.qp->qp_context) <<
-                " of driver " << mName);
+            NN_LOG_ERROR("QP communication established event for " << QpDetailInfo(event->element.qp->qp_context)
+                                                                   << " of driver " << mName);
             break;
         case IBV_EVENT_SQ_DRAINED:
-            NN_LOG_ERROR("QP Send Queue drained event for " << QpDetailInfo(event->element.qp->qp_context) <<
-                " of driver " << mName);
+            NN_LOG_ERROR("QP Send Queue drained event for " << QpDetailInfo(event->element.qp->qp_context)
+                                                            << " of driver " << mName);
             break;
         case IBV_EVENT_PATH_MIG:
-            NN_LOG_ERROR("QP Path migration loaded event for " << QpDetailInfo(event->element.qp->qp_context) <<
-                " of driver " << mName);
+            NN_LOG_ERROR("QP Path migration loaded event for " << QpDetailInfo(event->element.qp->qp_context)
+                                                               << " of driver " << mName);
             break;
         case IBV_EVENT_PATH_MIG_ERR:
-            NN_LOG_ERROR("QP Path migration error event for " << QpDetailInfo(event->element.qp->qp_context) <<
-                " of driver " << mName);
+            NN_LOG_ERROR("QP Path migration error event for " << QpDetailInfo(event->element.qp->qp_context)
+                                                              << " of driver " << mName);
             break;
         case IBV_EVENT_QP_LAST_WQE_REACHED:
-            NN_LOG_ERROR("QP last WQE reached event for " << QpDetailInfo(event->element.qp->qp_context) <<
-                " of driver " << mName);
+            NN_LOG_ERROR("QP last WQE reached event for " << QpDetailInfo(event->element.qp->qp_context)
+                                                          << " of driver " << mName);
             break;
 
         /* CQ events */
@@ -312,20 +312,20 @@ void NetDriverRDMAWithOob::HandleAsyncEvent(struct ibv_async_event *event)
             NN_LOG_ERROR("LID change event for port number " << event->element.port_num << " of driver " << mName);
             break;
         case IBV_EVENT_PKEY_CHANGE:
-            NN_LOG_ERROR("P_Key table change event for port number " << event->element.port_num << " of driver " <<
-                mName);
+            NN_LOG_ERROR("P_Key table change event for port number " << event->element.port_num << " of driver "
+                                                                     << mName);
             break;
         case IBV_EVENT_GID_CHANGE:
-            NN_LOG_ERROR("GID table change event for port number " << event->element.port_num << " of driver " <<
-                mName);
+            NN_LOG_ERROR("GID table change event for port number " << event->element.port_num << " of driver "
+                                                                   << mName);
             mContext->UpdateGid(mMatchIp);
             break;
         case IBV_EVENT_SM_CHANGE:
             NN_LOG_ERROR("SM change event for port number " << event->element.port_num << " of driver " << mName);
             break;
         case IBV_EVENT_CLIENT_REREGISTER:
-            NN_LOG_ERROR("Client reregister event for port number " << event->element.port_num << " of driver " <<
-                mName);
+            NN_LOG_ERROR("Client reregister event for port number " << event->element.port_num << " of driver "
+                                                                    << mName);
             break;
 
         /* RDMA device events */
@@ -351,8 +351,8 @@ void NetDriverRDMAWithOob::RunInRdmaEventThread()
     int ret = fcntl(mContext->Context()->async_fd, F_SETFL, (static_cast<uint32_t>(flags)) | O_NONBLOCK);
     if (ret < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to change event fd of RDMA context for driver " << mName << ", error " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to change event fd of RDMA context for driver "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return;
     }
 
@@ -369,8 +369,8 @@ void NetDriverRDMAWithOob::RunInRdmaEventThread()
                 break;
             } else if (ret < 0 && errno != EINTR) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("Failed to poll event fd of RDMA context for driver " << mName << ", error " <<
-                    NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                NN_LOG_ERROR("Failed to poll event fd of RDMA context for driver "
+                             << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                 break;
             }
             // rc == 0
@@ -401,13 +401,13 @@ NResult NetDriverRDMAWithOob::MultiRailNewConnection(OOBTCPConnection &conn)
 int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
 {
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBServer(mSecInfoProvider, mSecInfoValidator, conn, mName,
-        mOptions.secType)) != NN_OK) {
+                                                            mOptions.secType)) != NN_OK) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
     uint32_t ip = NetFunc::GetIpByFd(conn.GetFd());
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessCompareEpNum(ip, conn.ListenPort(), conn.GetIpAndPort(),
-        mOobServers)) != NN_OK) {
+                                                             mOobServers)) != NN_OK) {
         NN_LOG_ERROR("Rdma connection num exceeds maximum");
         return NN_OOB_SEC_PROCESS_ERROR;
     }
@@ -416,16 +416,16 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
 
     // receive server worker grpno
     auto startRecvWG = NetMonotonic::TimeUs();
-    ConnectHeader header {};
+    ConnectHeader header{};
     void *grpnobuf = &header;
     if ((result = conn.Receive(grpnobuf, sizeof(ConnectHeader))) != 0) {
         NN_LOG_ERROR("Failed to receive specified server worker grpno from client " << mName << ", result " << result);
         return NN_ERROR;
     }
 
-    ConnRespWithUId respWithUId{ OK, 0 };
+    ConnRespWithUId respWithUId{OK, 0};
     result = OOBSecureProcess::SecCheckConnectionHeader(header, mOptions, mEnableTls, Protocol(), mMajorVersion,
-        mMinorVersion, respWithUId);
+                                                        mMinorVersion, respWithUId);
     if (result != NN_OK) {
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
@@ -449,9 +449,9 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
     uint16_t workerIndex = 0;
     if (NN_UNLIKELY(!lb->ChooseWorker(header.groupIndex, conn.GetIpAndPort(), workerIndex)) ||
         workerIndex >= mWorkers.size()) {
-        NN_LOG_ERROR("Failed to find worker fit grpno " << header.groupIndex << " in " << mName << " , result " <<
-            result);
-        ConnRespWithUId respWithUId { WORKER_GRPNO_MISMATCH, 0 };
+        NN_LOG_ERROR("Failed to find worker fit grpno " << header.groupIndex << " in " << mName << " , result "
+                                                        << result);
+        ConnRespWithUId respWithUId{WORKER_GRPNO_MISMATCH, 0};
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
     }
@@ -462,7 +462,7 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
 
     if (!worker->IsWorkStarted()) {
         NN_LOG_ERROR("Failed to connect worker group no " << header.groupIndex << " in " << mName);
-        ConnRespWithUId respWithUId { WORKER_NOT_STARTED, 0 };
+        ConnRespWithUId respWithUId{WORKER_NOT_STARTED, 0};
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
     }
@@ -474,14 +474,14 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
 
     if ((result = RDMAAsyncEndPoint::Create(mName, worker, rep)) != 0) {
         NN_LOG_ERROR("Failed to create ep for new connection in Driver " << mName << " , result " << result);
-        ConnRespWithUId respWithUId { SERVER_INTERNAL_ERROR, 0 };
+        ConnRespWithUId respWithUId{SERVER_INTERNAL_ERROR, 0};
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
     }
     NetLocalAutoDecreasePtr<RDMAAsyncEndPoint> repAutoDecPtr(rep);
     if ((result = rep->Initialize()) != 0) {
         NN_LOG_ERROR("Failed to initialize ep for new connection in Driver " << mName << " , result " << result);
-        ConnRespWithUId respWithUId { SERVER_INTERNAL_ERROR, 0 };
+        ConnRespWithUId respWithUId{SERVER_INTERNAL_ERROR, 0};
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
     }
@@ -502,7 +502,7 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
     NN_LOG_TRACE_INFO("get and send exchange info of ep");
     auto startExchInfo = NetMonotonic::TimeUs();
     auto prePostCount = mOptions.prePostReceiveSizePerQP;
-    RDMAQpExchangeInfo info {};
+    RDMAQpExchangeInfo info{};
     if (mHeartBeat != nullptr) {
         mHeartBeat->GetRemoteHbInfo(info);
     }
@@ -519,8 +519,8 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
         return NN_ERROR;
     }
     NN_LOG_TRACE_INFO("Send exchange info success in Server " << mName);
-    NN_LOG_TRACE_INFO("local ep ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface " <<
-        info.gid.global.interface_id);
+    NN_LOG_TRACE_INFO("local ep ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface "
+                                              << info.gid.global.interface_id);
     void *tmp = static_cast<void *>(&info);
     if ((result = conn.Receive(tmp, sizeof(RDMAQpExchangeInfo))) != 0) {
         NN_LOG_ERROR("Failed to receive ep exchange info in Driver " << mName << ", result " << result);
@@ -561,8 +561,9 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
         payload = std::string(payChars, payloadLen);
     }
 
-    NN_LOG_TRACE_INFO("remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface " <<
-        info.gid.global.interface_id << ", pre-post-receive-count " << info.receiveSegCount);
+    NN_LOG_TRACE_INFO("remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface "
+                                               << info.gid.global.interface_id << ", pre-post-receive-count "
+                                               << info.receiveSegCount);
     if ((result = rep->ChangeToReady(info)) != 0) {
         NN_LOG_ERROR("Failed to change ep to ready in Driver " << mName << ", result " << result);
         return result;
@@ -613,8 +614,9 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
         socklen_t len = sizeof(struct ucred);
         if (NN_UNLIKELY(getsockopt(conn.GetFd(), SOL_SOCKET, SO_PEERCRED, &remoteIds, &len) != 0)) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to get uds ids in driver " << mName << " errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to get uds ids in driver "
+                         << mName << " errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return NN_GET_UDS_ID_INFO_FAILED;
         }
         ep->RemoteUdsIdInfo(remoteIds.pid, remoteIds.uid, remoteIds.gid);
@@ -673,13 +675,13 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
 
     OOBSecureProcess::SecProcessAddEpNum(ip, conn.ListenPort(), conn.GetIpAndPort(), mOobServers);
 
-    NN_LOG_INFO("New connection from " << conn.GetIpAndPort() << " established, async ep id " << ep->Id() <<
-        " worker info " << worker->DetailName());
+    NN_LOG_INFO("New connection from " << conn.GetIpAndPort() << " established, async ep id " << ep->Id()
+                                       << " worker info " << worker->DetailName());
     return NN_OK;
 }
 
 NResult NetDriverRDMAWithOob::Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags,
-    uint8_t serverGrpNo, uint8_t clientGrpNo)
+                                      uint8_t serverGrpNo, uint8_t clientGrpNo)
 {
     if (mOptions.oobType == NET_OOB_TCP) {
         return Connect(mOobIp, mOobPort, payload, ep, flags, serverGrpNo, clientGrpNo);
@@ -690,7 +692,8 @@ NResult NetDriverRDMAWithOob::Connect(const std::string &payload, UBSHcomNetEndp
 }
 
 NResult NetDriverRDMAWithOob::Connect(const std::string &serverUrl, const std::string &payload,
-    UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
+                                      UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo,
+                                      uint8_t clientGrpNo, uint64_t ctx)
 {
     if (NN_UNLIKELY(!mInited.load())) {
         NN_LOG_ERROR("Verbs Driver " << mName << " is not initialized");
@@ -741,7 +744,8 @@ NResult NetDriverRDMAWithOob::Connect(const std::string &serverUrl, const std::s
 }
 
 NResult NetDriverRDMAWithOob::Connect(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-    UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
+                                      UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo,
+                                      uint8_t clientGrpNo, uint64_t ctx)
 {
     if (NN_UNLIKELY(!mInited.load())) {
         NN_LOG_ERROR("Verbs Driver " << mName << " is not initialized");
@@ -780,7 +784,8 @@ NResult NetDriverRDMAWithOob::Connect(const std::string &oobIp, uint16_t oobPort
 }
 
 NResult NetDriverRDMAWithOob::ConnectSyncEp(const OOBTCPClientPtr &client, const std::string &payload,
-    UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint64_t ctx)
+                                            UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo,
+                                            uint64_t ctx)
 {
     /* try to connect to oob server */
     OOBTCPConnection *conn = nullptr;
@@ -821,7 +826,7 @@ NResult NetDriverRDMAWithOob::ConnectSyncEp(const OOBTCPClientPtr &client, const
     }
 
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBClient(mSecInfoProvider, mSecInfoValidator, conn, mName, ctx,
-        mOptions.secType))) {
+                                                            mOptions.secType))) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
@@ -832,9 +837,9 @@ NResult NetDriverRDMAWithOob::ConnectSyncEp(const OOBTCPClientPtr &client, const
     // create
     RDMASyncEndpoint *rep = nullptr;
     QpOptions qpOptions(mOptions.qpSendQueueSize, mOptions.qpReceiveQueueSize, mOptions.mrSendReceiveSegSize,
-        mOptions.prePostReceiveSizePerQP);
-    if (NN_UNLIKELY((result =
-            RDMASyncEndpoint::Create(mName, mContext, pollMode, prePostCount + NN_NO4, qpOptions, rep)) != 0)) {
+                        mOptions.prePostReceiveSizePerQP);
+    if (NN_UNLIKELY((result = RDMASyncEndpoint::Create(mName, mContext, pollMode, prePostCount + NN_NO4, qpOptions,
+                                                       rep)) != 0)) {
         NN_LOG_ERROR("Failed to create sync ep for new connection in Driver " << mName << " , result " << result);
         return result;
     }
@@ -847,8 +852,8 @@ NResult NetDriverRDMAWithOob::ConnectSyncEp(const OOBTCPClientPtr &client, const
 
     /* send connection header */
     ConnectHeader header;
-    SetConnHeader(header, mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion,
-                  mMinorVersion, mOptions.tlsVersion);
+    SetConnHeader(header, mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion, mMinorVersion,
+                  mOptions.tlsVersion);
 
     if (NN_UNLIKELY((result = conn->Send(&header, sizeof(ConnectHeader))) != 0)) {
         NN_LOG_ERROR("Failed to send server worker grpno in Driver " << mName << ", result " << result);
@@ -856,7 +861,7 @@ NResult NetDriverRDMAWithOob::ConnectSyncEp(const OOBTCPClientPtr &client, const
     }
 
     /* receive connect response and peer ep id */
-    ConnRespWithUId respWithUId {};
+    ConnRespWithUId respWithUId{};
     void *ackBuf = static_cast<void *>(&respWithUId);
     if (NN_UNLIKELY((result = conn->Receive(ackBuf, sizeof(ConnRespWithUId))) != 0)) {
         NN_LOG_ERROR("Failed receive ServerAck in Driver " << mName << ", result " << result);
@@ -898,7 +903,7 @@ NResult NetDriverRDMAWithOob::ConnectSyncEp(const OOBTCPClientPtr &client, const
 
     // exchange info
     NN_LOG_TRACE_INFO("get and send exchange info of ep");
-    RDMAQpExchangeInfo info {};
+    RDMAQpExchangeInfo info{};
     if (mHeartBeat != nullptr) {
         mHeartBeat->GetRemoteHbInfo(info);
     }
@@ -937,8 +942,9 @@ NResult NetDriverRDMAWithOob::ConnectSyncEp(const OOBTCPClientPtr &client, const
         return result;
     }
 
-    NN_LOG_TRACE_INFO("remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface " <<
-        info.gid.global.interface_id << ", pre-post-receive-count " << info.receiveSegCount);
+    NN_LOG_TRACE_INFO("remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface "
+                                               << info.gid.global.interface_id << ", pre-post-receive-count "
+                                               << info.receiveSegCount);
     if (NN_UNLIKELY((result = rep->ChangeToReady(info)) != 0)) {
         NN_LOG_ERROR("Failed to change ep to ready in Driver " << mName << ", result " << result);
         return result;
@@ -1010,8 +1016,8 @@ NResult NetDriverRDMAWithOob::ConnectSyncEp(const OOBTCPClientPtr &client, const
 
     ep->State().Set(NEP_ESTABLISHED);
 
-    NN_LOG_INFO("New connect to tcp:" << client->GetServerIp() << ":" << client->GetServerPort() <<" or uds: " <<
-        client->GetServerUdsName() << " established, sync ep id " << ep->Id());
+    NN_LOG_INFO("New connect to tcp:" << client->GetServerIp() << ":" << client->GetServerPort() << " or uds: "
+                                      << client->GetServerUdsName() << " established, sync ep id " << ep->Id());
 
     ep->mDevIndex = mDevIndex;
     ep->mPeerDevIndex = mPeerDevIndex;
@@ -1022,7 +1028,8 @@ NResult NetDriverRDMAWithOob::ConnectSyncEp(const OOBTCPClientPtr &client, const
 }
 
 NResult NetDriverRDMAWithOob::Connect(const OOBTCPClientPtr &client, const std::string &payload,
-    UBSHcomNetEndpointPtr &outEp, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
+                                      UBSHcomNetEndpointPtr &outEp, uint8_t serverGrpNo, uint8_t clientGrpNo,
+                                      uint64_t ctx)
 {
     /* try to connect to oob server */
     OOBTCPConnection *conn = nullptr;
@@ -1063,22 +1070,22 @@ NResult NetDriverRDMAWithOob::Connect(const OOBTCPClientPtr &client, const std::
     }
 
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBClient(mSecInfoProvider, mSecInfoValidator, conn, mName, ctx,
-        mOptions.secType))) {
+                                                            mOptions.secType))) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
     /* send connection header & grpNo */
     auto startSendGrpNo = NetMonotonic::TimeUs();
     ConnectHeader header;
-    SetConnHeader(header, mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion,
-                  mMinorVersion, mOptions.tlsVersion);
+    SetConnHeader(header, mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion, mMinorVersion,
+                  mOptions.tlsVersion);
     if ((result = conn->Send(&header, sizeof(ConnectHeader))) != 0) {
         NN_LOG_ERROR("Verbs Failed to send server worker grpno in Driver " << mName << ", result " << result);
         return result;
     }
 
     /* receive connect response and peer ep id */
-    ConnRespWithUId respWithUId {};
+    ConnRespWithUId respWithUId{};
     void *ackBuf = static_cast<void *>(&respWithUId);
     if ((result = conn->Receive(ackBuf, sizeof(ConnRespWithUId))) != 0) {
         NN_LOG_ERROR("Verbs Failed receive ServerAck in Driver " << mName << ", result " << result);
@@ -1155,7 +1162,7 @@ NResult NetDriverRDMAWithOob::Connect(const OOBTCPClientPtr &client, const std::
     /* fill and send exchange info */
     auto startExchInfo = NetMonotonic::TimeUs();
     NN_LOG_TRACE_INFO("get and send exchange info of ep");
-    RDMAQpExchangeInfo info {};
+    RDMAQpExchangeInfo info{};
     if (mHeartBeat != nullptr) {
         mHeartBeat->GetRemoteHbInfo(info);
     }
@@ -1194,14 +1201,15 @@ NResult NetDriverRDMAWithOob::Connect(const OOBTCPClientPtr &client, const std::
     /* receive exchange info */
     void *tmp = static_cast<void *>(&info);
     if ((result = conn->Receive(tmp, sizeof(RDMAQpExchangeInfo))) != 0) {
-        NN_LOG_ERROR("Failed to receive ep exchange info in Driver " << mName << ", result " << result <<
-            ". check your header");
+        NN_LOG_ERROR("Failed to receive ep exchange info in Driver " << mName << ", result " << result
+                                                                     << ". check your header");
         return result;
     }
 
     /* change to ready */
-    NN_LOG_TRACE_INFO("remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface " <<
-        info.gid.global.interface_id << ", pre-post-receive-count " << info.receiveSegCount);
+    NN_LOG_TRACE_INFO("remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface "
+                                               << info.gid.global.interface_id << ", pre-post-receive-count "
+                                               << info.receiveSegCount);
     if ((result = rep->ChangeToReady(info)) != 0) {
         NN_LOG_ERROR("Verbs Failed to change ep to ready in Driver " << mName << ", result " << result);
         return result;
@@ -1287,9 +1295,9 @@ NResult NetDriverRDMAWithOob::Connect(const OOBTCPClientPtr &client, const std::
         }
     }
 
-    NN_LOG_INFO("New connect to tcp:" << client->GetServerIp() << ":" << client->GetServerPort() <<" or uds: " <<
-        client->GetServerUdsName() << " established, async ep id " << ep->Id() << " worker info " <<
-        worker->DetailName());
+    NN_LOG_INFO("New connect to tcp:" << client->GetServerIp() << ":" << client->GetServerPort()
+                                      << " or uds: " << client->GetServerUdsName() << " established, async ep id "
+                                      << ep->Id() << " worker info " << worker->DetailName());
     ep->mDevIndex = mDevIndex;
     ep->mPeerDevIndex = mPeerDevIndex;
     ep->mBandWidth = mBandWidth;
@@ -1321,12 +1329,13 @@ void NetDriverRDMAWithOob::ProcessErrorNewRequest(RDMAOpContextInfo *ctx)
 }
 
 NResult NetDriverRDMAWithOob::SendRequestFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-    RDMAWorker *worker)
+                                                    RDMAWorker *worker)
 {
     NResult result = 0;
     if (ctx->opType == RDMAOpContextInfo::SEND) {
         if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader),
-            reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr), sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
+                                 reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr),
+                                 sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
             result = NN_INVALID_PARAM;
         }
@@ -1337,7 +1346,7 @@ NResult NetDriverRDMAWithOob::SendRequestFinishedCB(RDMAOpContextInfo *ctx, UBSH
     netCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->qp->UpContext()));
     netCtx.mMessage = nullptr;
     netCtx.mOpType = ctx->opType == RDMAOpContextInfo::SEND ? UBSHcomNetRequestContext::NN_SENT :
-        UBSHcomNetRequestContext::NN_SENT_RAW;
+                                                              UBSHcomNetRequestContext::NN_SENT_RAW;
     netCtx.mOriginalReq = {};
     // if PostSend implement with one side memory, the lAddress should be valued with ctx->mrMemAddr.
     netCtx.mOriginalReq.lAddress = 0;
@@ -1363,16 +1372,16 @@ NResult NetDriverRDMAWithOob::SendRequestFinishedCB(RDMAOpContextInfo *ctx, UBSH
     worker->ReturnOpContextInfo(ctx);
     // call to callback
     if (result == NN_OK && NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName <<
-            " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-            netCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Call requestPostedHandler in Driver "
+                     << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                     << ", dataSize " << netCtx.mHeader.dataLength << "]");
     }
     netCtx.mEp.Set(nullptr);
     return result;
 }
 
 NResult NetDriverRDMAWithOob::SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-    RDMAWorker *worker)
+                                                   RDMAWorker *worker)
 {
     NResult result = 0;
     auto sgeCtx = reinterpret_cast<RDMASgeCtxInfo *>(ctx->upCtx);
@@ -1385,7 +1394,7 @@ NResult NetDriverRDMAWithOob::SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHc
     netCtx.mHeader.Invalid();
     netCtx.mMessage = nullptr;
     if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglCtx->iov,
-        sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
         NN_LOG_ERROR("Failed to copy request to sglCtx");
         result = NN_INVALID_PARAM;
     }
@@ -1395,7 +1404,7 @@ NResult NetDriverRDMAWithOob::SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHc
     if (netCtx.mOriginalSglReq.upCtxSize > 0 &&
         netCtx.mOriginalSglReq.upCtxSize <= sizeof(UBSHcomNetTransSglRequest::upCtxData)) {
         if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalSglReq.upCtxData, NN_NO16, sglCtx->upCtx, sglCtx->upCtxSize) !=
-            NN_OK)) {
+                        NN_OK)) {
             NN_LOG_ERROR("Failed to copy request to sglCtx");
             result = NN_INVALID_PARAM;
         }
@@ -1403,8 +1412,8 @@ NResult NetDriverRDMAWithOob::SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHc
     worker->ReturnSglContextInfo(sglCtx);
     // called to callback
     if (result == NN_OK && NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName << " return non-zero for sgl type " <<
-            ctx->opType << " done");
+        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName << " return non-zero for sgl type " << ctx->opType
+                                                            << " done");
     }
     netCtx.mEp.Set(nullptr);
 
@@ -1418,7 +1427,7 @@ NResult NetDriverRDMAWithOob::SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHc
 }
 
 NResult NetDriverRDMAWithOob::SendSglInlineFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-    RDMAWorker *worker)
+                                                      RDMAWorker *worker)
 {
     NResult result = 0;
 
@@ -1443,9 +1452,9 @@ NResult NetDriverRDMAWithOob::SendSglInlineFinishedCB(RDMAOpContextInfo *ctx, UB
     worker->ReturnOpContextInfo(ctx);
     // call to callback
     if (result == NN_OK && NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName <<
-            " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-            netCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Call requestPostedHandler in Driver "
+                     << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                     << ", dataSize " << netCtx.mHeader.dataLength << "]");
     }
     netCtx.mEp.Set(nullptr);
     return result;
@@ -1453,7 +1462,7 @@ NResult NetDriverRDMAWithOob::SendSglInlineFinishedCB(RDMAOpContextInfo *ctx, UB
 
 int NetDriverRDMAWithOob::SendFinishedCB(RDMAOpContextInfo *ctx)
 {
-    static thread_local UBSHcomNetRequestContext netCtx {};
+    static thread_local UBSHcomNetRequestContext netCtx{};
     ctx->qp->ReturnPostSendWr();
     auto worker = reinterpret_cast<RDMAWorker *>(ctx->qp->UpContext1());
 
@@ -1487,9 +1496,8 @@ int NetDriverRDMAWithOob::RWOneSideDoneCB(RDMAOpContextInfo *ctx, UBSHcomNetRequ
     // set context
     netCtx.mResult = RDMAOpContextInfo::GetNResult(ctx->opResultType);
     netCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->qp->UpContext()));
-    netCtx.mOpType =
-        ctx->opType == RDMAOpContextInfo::WRITE ? UBSHcomNetRequestContext::NN_WRITTEN :
-        UBSHcomNetRequestContext::NN_READ;
+    netCtx.mOpType = ctx->opType == RDMAOpContextInfo::WRITE ? UBSHcomNetRequestContext::NN_WRITTEN :
+                                                               UBSHcomNetRequestContext::NN_READ;
     netCtx.mHeader.Invalid();
     netCtx.mMessage = nullptr;
     netCtx.mOriginalReq.lAddress = ctx->mrMemAddr;
@@ -1519,7 +1527,7 @@ int NetDriverRDMAWithOob::RWOneSideDoneCB(RDMAOpContextInfo *ctx, UBSHcomNetRequ
 int NetDriverRDMAWithOob::OneSideDoneCB(RDMAOpContextInfo *ctx)
 {
     int result = 0;
-    static thread_local UBSHcomNetRequestContext netCtx {};
+    static thread_local UBSHcomNetRequestContext netCtx{};
     auto worker = reinterpret_cast<RDMAWorker *>(ctx->qp->UpContext1());
     ctx->qp->ReturnOneSideWr();
     if (ctx->opType == RDMAOpContextInfo::WRITE || ctx->opType == RDMAOpContextInfo::READ) {
@@ -1542,7 +1550,7 @@ int NetDriverRDMAWithOob::OneSideDoneCB(RDMAOpContextInfo *ctx)
         netCtx.mHeader.Invalid();
         netCtx.mMessage = nullptr;
         if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglCtx->iov,
-            sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
+                                 sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
             result = NN_INVALID_PARAM;
         }
@@ -1552,7 +1560,7 @@ int NetDriverRDMAWithOob::OneSideDoneCB(RDMAOpContextInfo *ctx)
         if (netCtx.mOriginalSglReq.upCtxSize > 0 &&
             netCtx.mOriginalSglReq.upCtxSize <= sizeof(UBSHcomNetTransSglRequest::upCtxData)) {
             if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalSglReq.upCtxData, NN_NO16, sglCtx->upCtx, sglCtx->upCtxSize) !=
-                NN_OK)) {
+                            NN_OK)) {
                 NN_LOG_ERROR("Failed to copy req to sglCtx");
                 result = NN_INVALID_PARAM;
             }
@@ -1560,8 +1568,8 @@ int NetDriverRDMAWithOob::OneSideDoneCB(RDMAOpContextInfo *ctx)
         worker->ReturnSglContextInfo(sglCtx);
         // called to callback
         if (result == NN_OK && NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
-            NN_LOG_ERROR("Call oneSideDoneHandler in Driver " << mName << " return non-zero for sgl type " <<
-                ctx->opType << " done");
+            NN_LOG_ERROR("Call oneSideDoneHandler in Driver " << mName << " return non-zero for sgl type "
+                                                              << ctx->opType << " done");
         }
         netCtx.mEp.Set(nullptr);
         worker->ReturnOpContextInfo(ctx);
@@ -1622,11 +1630,10 @@ void NetDriverRDMAWithOob::ProcessEpError(uintptr_t ep)
         }
     }
 
-    NN_LOG_WARN("Handle Ep state " << UBSHcomNEPStateToString(epPtr->State().Get()) << ", Ep id " << epPtr->Id() <<
-        " , try call Ep broken handle");
+    NN_LOG_WARN("Handle Ep state " << UBSHcomNEPStateToString(epPtr->State().Get()) << ", Ep id " << epPtr->Id()
+                                   << " , try call Ep broken handle");
     UBSHcomNetEndpointPtr netEp = reinterpret_cast<UBSHcomNetEndpoint *>(epPtr);
-    OOBSecureProcess::SecProcessDelEpNum(epPtr->LocalIp(), epPtr->ListenPort(), epPtr->PeerIpAndPort(),
-        mOobServers);
+    OOBSecureProcess::SecProcessDelEpNum(epPtr->LocalIp(), epPtr->ListenPort(), epPtr->PeerIpAndPort(), mOobServers);
     mEndPointBrokenHandler(netEp);
     DestroyEndpoint(netEp);
 }
@@ -1653,7 +1660,7 @@ int NetDriverRDMAWithOob::NewRequest(RDMAOpContextInfo *ctx)
         return NN_OK;
     }
 
-    static thread_local UBSHcomNetRequestContext netCtx {};
+    static thread_local UBSHcomNetRequestContext netCtx{};
     static thread_local UBSHcomNetMessage msg;
     auto worker = reinterpret_cast<RDMAWorker *>(ctx->qp->UpContext1());
     uint32_t immData = *reinterpret_cast<uint32_t *>(ctx->upCtx);
@@ -1670,7 +1677,7 @@ int NetDriverRDMAWithOob::NewRequest(RDMAOpContextInfo *ctx)
 }
 
 NResult NetDriverRDMAWithOob::NewReceivedRawRequest(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-    UBSHcomNetMessage &msg, RDMAWorker *worker, uint32_t immData) const
+                                                    UBSHcomNetMessage &msg, RDMAWorker *worker, uint32_t immData) const
 { /* for raw message */
     bool messageReady = true;
 
@@ -1703,9 +1710,9 @@ NResult NetDriverRDMAWithOob::NewReceivedRawRequest(RDMAOpContextInfo *ctx, UBSH
     int result = 0;
 
     if (NN_UNLIKELY(!messageReady)) {
-        NN_LOG_ERROR("Failed to build UBSHcomNetRequestContext or message in Driver " << mName <<
-            ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " << msg.mDataLen <<
-            "] will be dropped");
+        NN_LOG_ERROR("Failed to build UBSHcomNetRequestContext or message in Driver "
+                     << mName << ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " << msg.mDataLen
+                     << "] will be dropped");
         return NN_OK;
     }
 
@@ -1719,9 +1726,9 @@ NResult NetDriverRDMAWithOob::NewReceivedRawRequest(RDMAOpContextInfo *ctx, UBSH
 
     // call to callback
     if (NN_UNLIKELY((result = mReceivedRequestHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Call receivedRequestHandler in Driver " << mName <<
-            " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-            netCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Call receivedRequestHandler in Driver "
+                     << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                     << ", dataSize " << netCtx.mHeader.dataLength << "]");
     }
 
     // after repost the ctx cannot be used anymore
@@ -1737,7 +1744,7 @@ NResult NetDriverRDMAWithOob::NewReceivedRawRequest(RDMAOpContextInfo *ctx, UBSH
 }
 
 NResult NetDriverRDMAWithOob::NewReceivedRequest(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-    UBSHcomNetMessage &msg, RDMAWorker *worker) const
+                                                 UBSHcomNetMessage &msg, RDMAWorker *worker) const
 {
     bool messageReady = true;
     auto *tmpHeader = reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr);
@@ -1766,14 +1773,13 @@ NResult NetDriverRDMAWithOob::NewReceivedRequest(RDMAOpContextInfo *ctx, UBSHcom
     messageReady = msg.AllocateIfNeed(decryptRawLen);
     if (NN_LIKELY(messageReady)) {
         uint32_t decryptLen = 0;
-        if (!asyncEp->mAes.Decrypt(asyncEp->mSecrets, tmpDataAddress, tmpHeader->dataLength, msg.mBuf,
-            decryptLen)) {
+        if (!asyncEp->mAes.Decrypt(asyncEp->mSecrets, tmpDataAddress, tmpHeader->dataLength, msg.mBuf, decryptLen)) {
             NN_LOG_ERROR("Verbs Failed to decrypt data");
             (void)worker->RePostReceive(ctx);
             return NN_DECRYPT_FAILED;
         }
         if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
-            sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
+                                 sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
             return NN_INVALID_PARAM;
         }
@@ -1786,9 +1792,9 @@ NResult NetDriverRDMAWithOob::NewReceivedRequest(RDMAOpContextInfo *ctx, UBSHcom
     }
 
     if (NN_UNLIKELY(!messageReady)) {
-        NN_LOG_ERROR("Verbs Failed to build UBSHcomNetRequestContext or message in Driver " << mName <<
-            ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " << msg.mDataLen <<
-            "] will be dropped");
+        NN_LOG_ERROR("Verbs Failed to build UBSHcomNetRequestContext or message in Driver "
+                     << mName << ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " << msg.mDataLen
+                     << "] will be dropped");
         return NN_OK;
     }
 
@@ -1797,13 +1803,13 @@ NResult NetDriverRDMAWithOob::NewReceivedRequest(RDMAOpContextInfo *ctx, UBSHcom
     netCtx.mMessage = &msg;
     netCtx.mOriginalReq = {};
     netCtx.mHeader.dataLength = msg.mDataLen;
-    netCtx.extHeaderType = tmpHeader->extHeaderType;  // 指导服务层处理
+    netCtx.extHeaderType = tmpHeader->extHeaderType; // 指导服务层处理
 
     // call to callback
     if (NN_UNLIKELY((result = mReceivedRequestHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Verbs Call receivedRequestHandler in Driver " << mName <<
-            " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-            netCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Verbs Call receivedRequestHandler in Driver "
+                     << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                     << ", dataSize " << netCtx.mHeader.dataLength << "]");
     }
 
     netCtx.mEp.Set(nullptr);
@@ -1811,7 +1817,8 @@ NResult NetDriverRDMAWithOob::NewReceivedRequest(RDMAOpContextInfo *ctx, UBSHcom
 }
 
 NResult NetDriverRDMAWithOob::NewReceivedRequestWithoutCopy(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-    UBSHcomNetMessage &msg, RDMAWorker *worker, void *dataAddress, UBSHcomNetTransHeader *header) const
+                                                            UBSHcomNetMessage &msg, RDMAWorker *worker,
+                                                            void *dataAddress, UBSHcomNetTransHeader *header) const
 {
     msg.SetBuf(dataAddress, header->dataLength);
     msg.mDataLen = header->dataLength;
@@ -1827,13 +1834,13 @@ NResult NetDriverRDMAWithOob::NewReceivedRequestWithoutCopy(RDMAOpContextInfo *c
     netCtx.mHeader.flags = header->flags;
     netCtx.mHeader.headerCrc = header->headerCrc;
     netCtx.mHeader.errorCode = header->errorCode;
-    netCtx.extHeaderType = header->extHeaderType;  // 指导服务层处理
+    netCtx.extHeaderType = header->extHeaderType; // 指导服务层处理
     int result = 0;
     // call to callback
     if (NN_UNLIKELY((result = mReceivedRequestHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Verbs Call receivedRequestHandler in Driver " << mName <<
-            " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-            netCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Verbs Call receivedRequestHandler in Driver "
+                     << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                     << ", dataSize " << netCtx.mHeader.dataLength << "]");
     }
     msg.SetBuf(nullptr, 0);
     netCtx.mMessage = nullptr;
@@ -1873,6 +1880,6 @@ int NetDriverRDMAWithOob::OneSideDone(RDMAOpContextInfo *ctx)
 
     return OneSideDoneCB(ctx);
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

@@ -13,18 +13,18 @@
 #ifndef HTRACE_MSG_H
 #define HTRACE_MSG_H
 
+#include <unistd.h>
 #include <cstring>
+#include <iomanip>
 #include <ios>
 #include <ostream>
-#include <string>
-#include <unistd.h>
-#include <vector>
 #include <sstream>
-#include <iomanip>
-#include "rpc_msg.h"
-#include "htracer_log.h"
-#include "hcom/hcom_num_def.h"
+#include <string>
+#include <vector>
 #include "hcom/hcom_err.h"
+#include "hcom/hcom_num_def.h"
+#include "htracer_log.h"
+#include "rpc_msg.h"
 #include "securec.h"
 
 #define TRACE_INFO_MAX_LEN 63
@@ -47,7 +47,9 @@ struct HandlerConfPara {
     char reserved[1];
     char logPath[LOG_PATH_LENGTH];
     HandlerConfPara(bool enable1, bool enable2, bool enable3, const std::string &path)
-        : enable(enable1), enableTp(enable2), enableLog(enable3)
+        : enable(enable1),
+          enableTp(enable2),
+          enableLog(enable3)
     {
         if (path.size() < sizeof(logPath) && (strcpy_s(logPath, path.length() + 1, path.c_str()) != 0)) {
             LOG_ERR("Failed to strcpy logPath");
@@ -74,7 +76,7 @@ struct TTraceInfo {
         }
     }
 
-    void operator += (const TTraceInfo &other)
+    void operator+=(const TTraceInfo &other)
     {
         begin += other.begin;
         goodEnd += other.goodEnd;
@@ -98,50 +100,34 @@ struct TTraceInfo {
 
     std::string ToString(TracePointTimeUnit unit = MICRO_SECOND) const
     {
-        static uint64_t timeUnitStep[TP_TIME_UNIT] = {
-            1,
-            NN_NO1000,
-            NN_NO1000000,
-            NN_NO1000000000
-        };
+        static uint64_t timeUnitStep[TP_TIME_UNIT] = {1, NN_NO1000, NN_NO1000000, NN_NO1000000000};
 
-        static std::string timeUnitName[TP_TIME_UNIT] = {
-            "ns",
-            "us",
-            "ms",
-            "s"
-        };
+        static std::string timeUnitName[TP_TIME_UNIT] = {"ns", "us", "ms", "s"};
         std::string str;
         std::ostringstream os(str);
         os.flags(std::ios::fixed);
         os.precision(NN_NO3);
         auto unitStep = timeUnitStep[unit];
         auto unitName = timeUnitName[unit];
-        os << "[" << std::left << std::setw(NN_NO50) << name << "]"
-           << "\t" << std::left << std::setw(NN_NO15) << begin << "\t" << std::left << std::setw(NN_NO15) << goodEnd <<
-            "\t" << std::left << std::setw(NN_NO15) << badEnd << "\t" << std::left << std::setw(NN_NO15) <<
-            ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0) << "\t" << std::left << std::setw(NN_NO15) <<
-            (min == UINT64_MAX ? 0 : ((double)min / unitStep)) << "\t" << std::left << std::setw(NN_NO15) <<
-            (double)max / unitStep << "\t" << std::left << std::setw(NN_NO15) <<
-            (goodEnd == 0 ? 0 : (double)total / goodEnd / unitStep) << "\t" << std::left << std::setw(NN_NO15) <<
-            (double)total / unitStep << "\t" << std::left << std::setw(NN_NO15) <<
-            (latencyQuentile > 0 ? std::to_string(latencyQuentile) : "OFF");
+        os << "[" << std::left << std::setw(NN_NO50) << name << "]" << "\t" << std::left << std::setw(NN_NO15) << begin
+           << "\t" << std::left << std::setw(NN_NO15) << goodEnd << "\t" << std::left << std::setw(NN_NO15) << badEnd
+           << "\t" << std::left << std::setw(NN_NO15) << ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0)
+           << "\t" << std::left << std::setw(NN_NO15) << (min == UINT64_MAX ? 0 : ((double)min / unitStep)) << "\t"
+           << std::left << std::setw(NN_NO15) << (double)max / unitStep << "\t" << std::left << std::setw(NN_NO15)
+           << (goodEnd == 0 ? 0 : (double)total / goodEnd / unitStep) << "\t" << std::left << std::setw(NN_NO15)
+           << (double)total / unitStep << "\t" << std::left << std::setw(NN_NO15)
+           << (latencyQuentile > 0 ? std::to_string(latencyQuentile) : "OFF");
         return os.str();
     }
 
     static std::string HeaderString()
     {
         std::stringstream ss;
-        ss << "\t[" << std::left << std::setw(NN_NO50) << "TP_NAME"
-           << "]"
-           << "\t" << std::left << std::setw(NN_NO15) << "TOTAL"
-           << "\t" << std::left << std::setw(NN_NO15) << "SUCCESS"
-           << "\t" << std::left << std::setw(NN_NO15) << "FAILURE"
-           << "\t" << std::left << std::setw(NN_NO15) << "UNFINISHED"
-           << "\t" << std::left << std::setw(NN_NO15) << "MIN(us)"
-           << "\t" << std::left << std::setw(NN_NO15) << "MAX(us)"
-           << "\t" << std::left << std::setw(NN_NO15) << "AVG(us)"
-           << "\t" << std::left << std::setw(NN_NO15) << "TOTAL(us)"
+        ss << "\t[" << std::left << std::setw(NN_NO50) << "TP_NAME" << "]" << "\t" << std::left << std::setw(NN_NO15)
+           << "TOTAL" << "\t" << std::left << std::setw(NN_NO15) << "SUCCESS" << "\t" << std::left << std::setw(NN_NO15)
+           << "FAILURE" << "\t" << std::left << std::setw(NN_NO15) << "UNFINISHED" << "\t" << std::left
+           << std::setw(NN_NO15) << "MIN(us)" << "\t" << std::left << std::setw(NN_NO15) << "MAX(us)" << "\t"
+           << std::left << std::setw(NN_NO15) << "AVG(us)" << "\t" << std::left << std::setw(NN_NO15) << "TOTAL(us)"
            << "\t" << std::left << std::setw(NN_NO15) << "TPX(us)";
         return ss.str();
     }

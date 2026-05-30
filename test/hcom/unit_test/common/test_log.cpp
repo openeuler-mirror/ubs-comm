@@ -1,8 +1,8 @@
 // Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 // Author: zhiwei
 
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
 #include "hcom_log.h"
@@ -13,9 +13,7 @@ namespace ock {
 namespace hcom {
 class TestLog : public testing::Test {
 public:
-    void SetUp() override
-    {
-    }
+    void SetUp() override {}
 
     void TearDown() override
     {
@@ -43,5 +41,5 @@ TEST_F(TestLog, localtime_r)
     EXPECT_THAT(out, StartsWith("Invalid time trace"));
 }
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

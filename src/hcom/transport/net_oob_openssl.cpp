@@ -9,18 +9,18 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <cstdlib>
 #include <dlfcn.h>
+#include <linux/limits.h>
 #include <netinet/tcp.h>
 #include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <linux/limits.h>
+#include <cstdlib>
 
-#include "openssl_api_wrapper.h"
-#include "net_oob_ssl.h"
 #include "net_oob_openssl.h"
+#include "net_oob_ssl.h"
+#include "openssl_api_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -80,8 +80,8 @@ NResult OOBOpenSSLConnection::Send(void *buf, uint32_t size) const
         int ret = HcomSsl::SslWrite(mSsl, reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(buf) + size - len), len);
         if (ret <= 0) {
             int sslErrCode = HcomSsl::SslGetError(mSsl, ret);
-            NN_LOG_ERROR("Failed to write data to TLS channel, ret: " << ret << ", errno: " << sslErrCode <<
-                " write Len: " << size);
+            NN_LOG_ERROR("Failed to write data to TLS channel, ret: " << ret << ", errno: " << sslErrCode
+                                                                      << " write Len: " << size);
             return NN_OOB_SSL_WRITE_ERROR;
         }
         len -= ret;
@@ -102,8 +102,8 @@ NResult OOBOpenSSLConnection::Receive(void *buf, uint32_t size) const
         int ret = HcomSsl::SslRead(mSsl, reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(buf) + size - len), len);
         if (ret <= 0) {
             int sslErrCode = HcomSsl::SslGetError(mSsl, ret);
-            NN_LOG_ERROR("Failed to read data from TLS channel, ret: " << ret << ", errno: " << sslErrCode <<
-                ", read Len: " << len);
+            NN_LOG_ERROR("Failed to read data from TLS channel, ret: " << ret << ", errno: " << sslErrCode
+                                                                       << ", read Len: " << len);
             return NN_OOB_SSL_READ_ERROR;
         }
         len -= ret;
@@ -137,7 +137,7 @@ int OOBOpenSSLConnection::DefaultSslCertVerify(X509_STORE_CTX *x509ctx, const ch
     auto verifyResult = HcomSsl::X509VerifyCert(x509ctx);
     if (verifyResult != NN_NO1) {
         NN_LOG_ERROR("Verify failed in callback"
-            << " error: " << HcomSsl::X509VerifyCertErrorString(HcomSsl::X509StoreCtxGetError(x509ctx)));
+                     << " error: " << HcomSsl::X509VerifyCertErrorString(HcomSsl::X509StoreCtxGetError(x509ctx)));
         return checkFailed;
     }
     return checkSuccess;
@@ -170,13 +170,13 @@ int OOBOpenSSLConnection::CaCallbackWrapper(X509_STORE_CTX *x509ctx, void *arg)
 }
 
 int OOBOpenSSLConnection::PskFindCallbackWrapper(SSL *ssl, const unsigned char *identity, size_t identityLen,
-    SSL_SESSION **sess)
+                                                 SSL_SESSION **sess)
 {
     return mOpenSslPskFindSessionCb(ssl, identity, identityLen, reinterpret_cast<void **>(sess));
 }
 
 int OOBOpenSSLConnection::PskUseCallbackWrapper(SSL *ssl, const EVP_MD *md, const unsigned char **id, size_t *idlen,
-    SSL_SESSION **sess)
+                                                SSL_SESSION **sess)
 {
     return mOpenSslPskUseSessionCb(ssl, md, id, idlen, reinterpret_cast<void **>(sess));
 }
@@ -209,16 +209,16 @@ NResult OOBOpenSSLConnection::InitSSL(bool isServer)
 
     /* SSL_load_error_strings() */
     ret = HcomSsl::OpensslInitSsl(HcomSsl::OPENSSL_INIT_LOAD_SSL_STRINGS | HcomSsl::OPENSSL_INIT_LOAD_CRYPTO_STRINGS,
-        nullptr);
+                                  nullptr);
     OOB_SSL_LAYER_CHECK_RET((ret <= 0), "Failed to initialize openssl library");
 
     if (isServer) {
         OOB_SSL_LAYER_CHECK_RET((mCertCallback == nullptr || mKeyCallback == nullptr) && mPskFindSessionCb == nullptr,
-            "Both callback for cert and callback for find psk is not set at server");
+                                "Both callback for cert and callback for find psk is not set at server");
         mSslCtx = HcomSsl::SslCtxNew(HcomSsl::TlsServerMethod());
     } else {
         OOB_SSL_LAYER_CHECK_RET(mCaCallback == nullptr && mPskUseSessionCb == nullptr,
-            "Both callback for cert and callback for find psk is not set at client");
+                                "Both callback for cert and callback for find psk is not set at client");
         mSslCtx = HcomSsl::SslCtxNew(HcomSsl::TlsClientMethod());
     }
     OOB_SSL_LAYER_CHECK_RET(mSslCtx == nullptr, "SslCtxNew() failed");
@@ -334,7 +334,7 @@ NResult OOBOpenSSLConnection::CommLoad(bool isServer)
     ret = isServer ? HcomSsl::SslAccept(mSsl) : HcomSsl::SslConnect(mSsl);
     if (isServer) {
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0,
-            "TLS Failed to accept new TLS connection, result " << ret << " failed");
+                                          "TLS Failed to accept new TLS connection, result " << ret << " failed");
     } else {
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0, "TLS Failed to connect to TLS server, result " << ret << " failed");
     }
@@ -362,7 +362,7 @@ X509_CRL *OOBOpenSSLConnection::LoadCertRevokeListFile(const char *crlFile)
     }
 
     int result = HcomSsl::BioCtrl(in, HcomSsl::BIO_C_SET_FILENAME, HcomSsl::BIO_CLOSE | HcomSsl::BIO_FP_READ,
-        const_cast<char *>(realCrlPath));
+                                  const_cast<char *>(realCrlPath));
     if (result <= 0) {
         (void)HcomSsl::BioFree(in);
         free(realCrlPath);
@@ -383,5 +383,5 @@ X509_CRL *OOBOpenSSLConnection::LoadCertRevokeListFile(const char *crlFile)
     realCrlPath = nullptr;
     return crl;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

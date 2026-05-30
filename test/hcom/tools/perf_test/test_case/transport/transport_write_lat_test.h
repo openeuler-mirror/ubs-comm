@@ -11,7 +11,6 @@
 #include "test_case/perf_test_base.h"
 #include "test_case/transport/transport_helper.h"
 
-
 namespace hcom {
 namespace perftest {
 class TransportWriteLatTest : public PerfTestBase {
@@ -38,8 +37,7 @@ private:
         while (ctx->cnt < ctx->mIterations || rcnt < ctx->mIterations || ccnt.load() < ctx->mIterations) {
             if (rcnt < ctx->mIterations && !(ctx->cnt < 1 && !mCfg.GetIsServer())) {
                 rcnt++;
-                while ((*pollData != rcnt % UINT8_MAX) && ctx->cnt < ctx->mIterations) {
-                }
+                while ((*pollData != rcnt % UINT8_MAX) && ctx->cnt < ctx->mIterations) {}
             }
             if (ctx->cnt < ctx->mIterations) {
                 ++ctx->cnt;
@@ -52,8 +50,7 @@ private:
                     return -1;
                 }
             }
-            while (ccnt.load() != ctx->cnt) {
-            }
+            while (ccnt.load() != ctx->cnt) {}
         }
         if (ctx->cnt == ctx->mIterations) {
             ctx->tposted[ctx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
@@ -94,11 +91,11 @@ private:
     MrInfo mPollMrInfo;
     MrInfo mPeerMrInfo;
     uint64_t rcnt = 0;
-    std::atomic<uint64_t> ccnt{ 0 };
-    std::atomic<bool> isConnect{ false };
+    std::atomic<uint64_t> ccnt{0};
+    std::atomic<bool> isConnect{false};
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif // HCOM_TRANSPORT_READ_LAT_TEST_H

@@ -43,8 +43,8 @@ public:
     UResult Initialize()
     {
         const size_t jettyIdMax = NN_NO65536;
-        void *id2Jetty = mmap(nullptr, jettyIdMax * sizeof(UBJetty *), PROT_READ | PROT_WRITE,
-                              MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+        void *id2Jetty =
+            mmap(nullptr, jettyIdMax * sizeof(UBJetty *), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
         if (id2Jetty == MAP_FAILED) {
             NN_LOG_ERROR("Unable to mmap with size: " << (jettyIdMax * sizeof(UBJetty *)));
             return UB_MEMORY_ALLOCATE_FAILED;
@@ -96,12 +96,12 @@ public:
     }
 
 private:
-    UBJetty **mId2Jetty = nullptr;  ///< UBJetty::mUrmaJettyId -> UBJetty* 映射表
-    uint32_t mId2JettySize = 0;     ///< mId2Jetty 映射表大小
+    UBJetty **mId2Jetty = nullptr; ///< UBJetty::mUrmaJettyId -> UBJetty* 映射表
+    uint32_t mId2JettySize = 0;    ///< mId2Jetty 映射表大小
 };
 
 } // namespace hcom
 } // namespace ock
 
-#endif  // HCOM_UB_JETTY_PTR_MAP_H
+#endif // HCOM_UB_JETTY_PTR_MAP_H
 #endif

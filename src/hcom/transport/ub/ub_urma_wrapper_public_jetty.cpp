@@ -24,7 +24,6 @@ std::string EidToStr(urma_eid_t urmaEid)
     return str;
 }
 
-
 uint32_t UBPublicJetty::G_INDEX = 1;
 
 // public jetty import remote jetty
@@ -39,19 +38,22 @@ UResult UBPublicJetty::ImportPublicJetty(const urma_eid_t &remoteEid, uint32_t j
     remoteJetty.tp_type = URMA_CTP;
     urma_token_t token{0};
 
-    NN_LOG_INFO("Local public jetty id: " << mUrmaJetty->jetty_id.id << ", local eid: " <<
-        EidToStr(mUrmaJetty->jetty_id.eid) << "; Remote public jetty id: " << remoteJetty.jetty_id.id <<
-        ", remote eid: " << EidToStr(remoteJetty.jetty_id.eid));
+    NN_LOG_INFO("Local public jetty id: " << mUrmaJetty->jetty_id.id
+                                          << ", local eid: " << EidToStr(mUrmaJetty->jetty_id.eid)
+                                          << "; Remote public jetty id: " << remoteJetty.jetty_id.id
+                                          << ", remote eid: " << EidToStr(remoteJetty.jetty_id.eid));
     mTargetJetty = HcomUrma::ImportJetty(mUBContext->mUrmaContext, &remoteJetty, &token);
     if (mTargetJetty == nullptr) {
-        NN_LOG_WARN("Failed to import public jetty id: " << mUrmaJetty->jetty_id.id << ", local eid: " <<
-            EidToStr(mUrmaJetty->jetty_id.eid) << "; Remote public jetty id: " << remoteJetty.jetty_id.id <<
-            ", remote eid: " << EidToStr(remoteJetty.jetty_id.eid));
+        NN_LOG_WARN("Failed to import public jetty id: " << mUrmaJetty->jetty_id.id
+                                                         << ", local eid: " << EidToStr(mUrmaJetty->jetty_id.eid)
+                                                         << "; Remote public jetty id: " << remoteJetty.jetty_id.id
+                                                         << ", remote eid: " << EidToStr(remoteJetty.jetty_id.eid));
         return UB_QP_IMPORT_FAILED;
     }
-    NN_LOG_INFO("Local public jetty id: " << mUrmaJetty->jetty_id.id << ", local eid: " <<
-        EidToStr(mUrmaJetty->jetty_id.eid) << "; Remote public jetty id: " << mTargetJetty->id.id << ", remote eid: " <<
-        EidToStr(mTargetJetty->id.eid));
+    NN_LOG_INFO("Local public jetty id: " << mUrmaJetty->jetty_id.id
+                                          << ", local eid: " << EidToStr(mUrmaJetty->jetty_id.eid)
+                                          << "; Remote public jetty id: " << mTargetJetty->id.id
+                                          << ", remote eid: " << EidToStr(mTargetJetty->id.eid));
 
     return UB_OK;
 }
@@ -116,18 +118,19 @@ UResult UBPublicJetty::CreateUrmaPublicJetty(uint32_t id)
     tmpJetty = HcomUrma::CreateJetty(mUBContext->mUrmaContext, &jetty_cfg);
     if (tmpJetty == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create urma jetty for UBJetty " << mName << ", errno " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create urma jetty for UBJetty "
+                     << mName << ", errno " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         HcomUrma::DeleteJfr(mJfr);
         mJfr = nullptr;
         return UB_QP_CREATE_FAILED;
     }
     mUrmaJetty = tmpJetty;
     mUrmaJettyId = mUrmaJetty->jetty_id.id;
-    NN_LOG_INFO("Create public jetty success, jetty id: " << mUrmaJettyId << ", local eid: " <<
-        EidToStr(mUrmaJetty->jetty_id.eid) << ", jfr id: " << mJfr->jfr_id.id << ", recv jfc id: " <<
-        mRecvJfc->mUrmaJfc->jfc_id.id << ", send jfc id: " << mSendJfc->mUrmaJfc->jfc_id.id << ", multi_path: " <<
-        mUrmaJetty->jetty_cfg.jfs_cfg.flag.bs.multi_path);
+    NN_LOG_INFO("Create public jetty success, jetty id: "
+                << mUrmaJettyId << ", local eid: " << EidToStr(mUrmaJetty->jetty_id.eid)
+                << ", jfr id: " << mJfr->jfr_id.id << ", recv jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id
+                << ", send jfc id: " << mSendJfc->mUrmaJfc->jfc_id.id
+                << ", multi_path: " << mUrmaJetty->jetty_cfg.jfs_cfg.flag.bs.multi_path);
     return UB_OK;
 }
 
@@ -137,8 +140,8 @@ UResult UBPublicJetty::CreateJettyMr()
     NResult result = NN_OK;
     uint32_t segCount = isServer ? NN_NO32 : NN_NO8;
     // create mr pool for send/receive and initialize
-    if ((result = UBMemoryRegionFixedBuffer::Create(mName, mUBContext, PUBLIC_JETTY_SEG_SIZE, segCount, 0, mJettyMr))
-        != 0) {
+    if ((result = UBMemoryRegionFixedBuffer::Create(mName, mUBContext, PUBLIC_JETTY_SEG_SIZE, segCount, 0, mJettyMr)) !=
+        0) {
         NN_LOG_ERROR("Failed to create mr for send/receive in public jetty " << mName << ", result " << result);
         return result;
     }
@@ -321,16 +324,14 @@ void UBPublicJetty::ProcessPollingResult(urma_cr_t &wc)
         return;
     }
     // optimize to thread poll in next version
-    mThreadPool->Submit([this, ctx]() {
-        this->ProcessWorkerCompletion(ctx);
-    });
+    mThreadPool->Submit([this, ctx]() { this->ProcessWorkerCompletion(ctx); });
 }
 
 // public jetty polling thread
 void UBPublicJetty::RunInThread()
 {
-    NN_LOG_INFO("OOB server public jetty accept thread started success, load balancer " <<
-        (mWorkerLb == nullptr ? "null" : mWorkerLb->ToString()));
+    NN_LOG_INFO("OOB server public jetty accept thread started success, load balancer "
+                << (mWorkerLb == nullptr ? "null" : mWorkerLb->ToString()));
     urma_cr_t wc{};
     uint32_t pollCount = 0;
     while (!mNeedStop) {
@@ -343,8 +344,8 @@ void UBPublicJetty::RunInThread()
             }
             usleep(NN_NO100000); // 100ms
         } catch (std::runtime_error &ex) {
-            NN_LOG_WARN("Got runtime incorrect signal in UBWorker::RunInThread '" << ex.what() <<
-                "', ignore and continue");
+            NN_LOG_WARN("Got runtime incorrect signal in UBWorker::RunInThread '" << ex.what()
+                                                                                  << "', ignore and continue");
         } catch (...) {
             NN_LOG_WARN("Got unknown signal in UBWorker::RunInThread, ignore and continue");
         }
@@ -439,8 +440,8 @@ UResult UBPublicJetty::PostReceive(uintptr_t bufAddr, uint32_t bufSize, urma_tar
     wr.next = nullptr;
     wr.user_ctx = context;
 
-    NN_LOG_DEBUG("[Post Buffer] ------ urma_post_jetty_recv_wr2, jetty id: " << mUrmaJetty->jetty_id.id <<
-        ", jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id);
+    NN_LOG_DEBUG("[Post Buffer] ------ urma_post_jetty_recv_wr2, jetty id: " << mUrmaJetty->jetty_id.id << ", jfc id: "
+                                                                             << mRecvJfc->mUrmaJfc->jfc_id.id);
     auto ret = HcomUrma::PostJettyRecvWr(mUrmaJetty, &wr, &bad_wr);
     if (NN_UNLIKELY(ret != 0)) {
         NN_LOG_ERROR("Failed to post receive request to jetty " << mName << ", result " << ret);
@@ -451,19 +452,20 @@ UResult UBPublicJetty::PostReceive(uintptr_t bufAddr, uint32_t bufSize, urma_tar
 }
 
 UResult UBPublicJetty::CheckRecvResult(urma_cr_t wc, uint32_t size, UResult result, uint32_t pollCount,
-    int32_t timeoutInMs)
+                                       int32_t timeoutInMs)
 {
     // 若pollCount == 0，大概率是超时还未收到事件，返回失败
     if (pollCount == 0) {
-        NN_LOG_ERROR("polled 0 cqe, jetty id: " << mUrmaJetty->jetty_id.id << ", jfc id: " <<
-            mRecvJfc->mUrmaJfc->jfc_id.id << "timeout: " << timeoutInMs << " ms");
+        NN_LOG_ERROR("polled 0 cqe, jetty id: " << mUrmaJetty->jetty_id.id
+                                                << ", jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id
+                                                << "timeout: " << timeoutInMs << " ms");
         return UB_CQ_POLLING_FAILED;
     }
 
     // 若pollCount非0，判断result
     if (NN_UNLIKELY(result != UB_OK)) {
-        NN_LOG_ERROR("Failed to event polling in public jetty Receive res = " << result << ", polling timeout " <<
-            timeoutInMs << " ms");
+        NN_LOG_ERROR("Failed to event polling in public jetty Receive res = " << result << ", polling timeout "
+                                                                              << timeoutInMs << " ms");
         return result;
     }
 
@@ -473,8 +475,8 @@ UResult UBPublicJetty::CheckRecvResult(urma_cr_t wc, uint32_t size, UResult resu
     }
 
     if (NN_UNLIKELY(wc.completion_len != size)) {
-        NN_LOG_ERROR("Failed to Receive in public jetty Receive as expect size:" << size << " actual size: " <<
-            wc.completion_len);
+        NN_LOG_ERROR("Failed to Receive in public jetty Receive as expect size:" << size << " actual size: "
+                                                                                 << wc.completion_len);
         return UB_CQ_WC_WRONG;
     }
     return UB_OK;
@@ -558,8 +560,9 @@ UResult UBPublicJetty::PollingCompletion()
     } while (result == UB_OK && pollCount == 0);
     // 若pollCount == 0，大概率是超时还未收到事件，返回失败
     if (pollCount == 0) {
-        NN_LOG_ERROR("polled 0 cqe, jetty id: " << mUrmaJetty->jetty_id.id << ", jfc id: " <<
-            mRecvJfc->mUrmaJfc->jfc_id.id << "timeout: " << timeoutInMs << " ms");
+        NN_LOG_ERROR("polled 0 cqe, jetty id: " << mUrmaJetty->jetty_id.id
+                                                << ", jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id
+                                                << "timeout: " << timeoutInMs << " ms");
         return UB_CQ_POLLING_FAILED;
     }
 

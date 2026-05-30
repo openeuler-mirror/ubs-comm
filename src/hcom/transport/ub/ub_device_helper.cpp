@@ -52,10 +52,10 @@ void UBDeviceHelper::UnInitialize()
 UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid)
 {
     // 后续HCOM重构时重新定义此处数值换算，目前为了不修改头文件中uint8_t bandWidth(范围0~2555)的定义,只做大致比例换算。
-    G_UBDevBWTable = { { URMA_SP_10M, 1 },    { URMA_SP_100M, 1 },  { URMA_SP_1G, 1 },     { URMA_SP_2_5G, 3 },
-        { URMA_SP_5G, 5 },     { URMA_SP_10G, 10 },  { URMA_SP_14G, 14 },   { URMA_SP_25G, 25 },
-        { URMA_SP_40G, 40 },   { URMA_SP_50G, 50 },  { URMA_SP_100G, 100 }, { URMA_SP_200G, 200 },
-        { URMA_SP_400G, 255 }, { URMA_SP_800G, 255 } };
+    G_UBDevBWTable = {{URMA_SP_10M, 1},    {URMA_SP_100M, 1},  {URMA_SP_1G, 1},     {URMA_SP_2_5G, 3},
+                      {URMA_SP_5G, 5},     {URMA_SP_10G, 10},  {URMA_SP_14G, 14},   {URMA_SP_25G, 25},
+                      {URMA_SP_40G, 40},   {URMA_SP_50G, 50},  {URMA_SP_100G, 100}, {URMA_SP_200G, 200},
+                      {URMA_SP_400G, 255}, {URMA_SP_800G, 255}};
     auto ret = DoUpdate(devAttr, ctx, eid);
     if (NN_UNLIKELY(ret != UB_OK)) {
         G_UBDevBWTable.clear();
@@ -109,7 +109,7 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&c
         NN_LOG_ERROR("Failed to get proper gid by name " << name << ", or name start with " << nameBonding);
         return UB_DEVICE_FAILED_OPEN;
     }
-    
+
     NN_LOG_INFO("Choosing UB Device " << devIdx << " name " << devList[devIdx]->name);
     uint32_t eidCnt = 0;
     urma_eid_info_t *eidInfoList = HcomUrma::GetEidList(devList[devIdx], &eidCnt);
@@ -162,6 +162,6 @@ uint32_t UBDeviceHelper::GetPortNumber()
 {
     return PORT_NUMBER;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

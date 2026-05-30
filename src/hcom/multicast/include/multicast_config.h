@@ -58,7 +58,7 @@ public:
 
     virtual UBSHcomNetDriverProtocol GetProtocol() const = 0;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
