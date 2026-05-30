@@ -342,10 +342,10 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
                      umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_ERROR;
     }
+
     ub_trans_mode local_trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
-    if (rsp.peer_trans_mode != local_trans_mode) {
-        umq_socket->SetTransMode(rsp.peer_trans_mode < local_trans_mode ? rsp.peer_trans_mode : local_trans_mode);
-    }
+    umq_socket->SetTransMode(std::min(rsp.peer_trans_mode, local_trans_mode));
+
     if (schedule_policy == dev_schedule_policy::CPU_AFFINITY ||
         schedule_policy == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
         UBS_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY: %d in connect, fd: %d\n",
