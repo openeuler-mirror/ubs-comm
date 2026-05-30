@@ -13,7 +13,7 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "core/ubsocket_ring_buffer.h"
+#include "common/ubsocket_ring_buffer.h"
 
 namespace ock {
 namespace ubs {

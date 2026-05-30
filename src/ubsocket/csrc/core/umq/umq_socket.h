@@ -11,10 +11,10 @@
 #ifndef UBS_COMM_UMQ_SOCKET_H
 #define UBS_COMM_UMQ_SOCKET_H
 
-#include "cli/cli_message.h"
-#include "cli/statistics_statsmgr.h"
+#include "profiling/statistics/cli_message.h"
+#include "profiling/statistics/statistics_statsmgr.h"
 #include "common/ubsocket_common_includes.h"
-#include "core/ubsocket_qbuf_queue.h"
+#include "common/ubsocket_qbuf_queue.h"
 #include "core/ubsocket_socket.h"
 #include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_setting.h"

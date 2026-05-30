@@ -115,7 +115,6 @@ include_directories(
         ${UBSOCKET_BASE_DIR}/../hcom/umq/include/umq
 )
 
-add_subdirectory(3rdparty/boundscheck)
 add_subdirectory(csrc)
 find_package(ZLIB)
 if (ZLIB_FOUND)

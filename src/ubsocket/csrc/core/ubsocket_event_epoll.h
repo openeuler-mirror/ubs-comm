@@ -12,7 +12,7 @@
 #define UBS_COMM_UBSOCKET_EPOLL_FD_H
 
 #include "ubsocket_core_types.h"
-#include "ubsocket_spsc_ring_queue.h"
+#include "common/ubsocket_spsc_ring_queue.h"
 
 namespace ock {
 namespace ubs {
