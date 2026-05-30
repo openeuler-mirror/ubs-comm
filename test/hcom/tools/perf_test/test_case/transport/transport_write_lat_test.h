@@ -48,6 +48,7 @@ private:
                 int res = mEp->PostWrite(mReq);
                 if (res != 0) {
                     LOG_ERROR("failed to send to server");
+                    sem_post(&mSem);
                     return -1;
                 }
             }
