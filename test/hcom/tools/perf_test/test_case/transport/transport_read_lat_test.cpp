@@ -27,6 +27,7 @@ int TransportReadLatTest::RequestReceived(const ock::hcom::UBSHcomNetRequestCont
         // client
         if (memcpy_s(&serverMrInfo, sizeof(serverMrInfo), ctx.Message()->Data(), ctx.Message()->DataLen()) != 0) {
             LOG_ERROR("memcpy_s failed");
+            sem_post(&mSem);
             return -1;
         }
         if (mCfg.GetUbcMode() == ock::hcom::UBSHcomUbcMode::HighBandwidth &&

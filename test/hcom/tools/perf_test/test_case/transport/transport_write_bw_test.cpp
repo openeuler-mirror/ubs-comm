@@ -48,6 +48,7 @@ int TransportWriteBwTest::RequestReceived(const ock::hcom::UBSHcomNetRequestCont
         // client
         if (memcpy_s(&mPeerMrInfo, sizeof(mPeerMrInfo), ctx.Message()->Data(), ctx.Message()->DataLen()) != 0) {
             LOG_ERROR("memcpy_s failed");
+            sem_post(&mSem);
             return -1;
         }
         sem_post(&mSem);
