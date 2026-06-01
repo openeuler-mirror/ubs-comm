@@ -39,8 +39,8 @@ SResult SockWorker::Initialize()
     /* create epoll */
     if (NN_UNLIKELY((mEpollHandle = epoll_create(MAX_EPOLL_SIZE)) < 0)) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create epoll in sock worker " << mName << ", error " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create epoll in sock worker "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return SS_WORKER_EPOLL_FAILED;
     }
 
@@ -120,9 +120,10 @@ SResult SockWorker::HandleReceiveCtx(SockOpContextInfo &opCtx)
     switch ((opCtx.header->flags & 0xff)) {
         case NTH_TWO_SIDE:
         case NTH_TWO_SIDE_SGL:
-            NN_LOG_TRACE_INFO("Receive new request " << opCtx.sock->Id() << " head imm data " <<
-                opCtx.header->immData << ", flags " << opCtx.header->flags << ", seqNo " << opCtx.header->seqNo <<
-                ", data len " << opCtx.header->dataLength);
+            NN_LOG_TRACE_INFO("Receive new request " << opCtx.sock->Id() << " head imm data " << opCtx.header->immData
+                                                     << ", flags " << opCtx.header->flags << ", seqNo "
+                                                     << opCtx.header->seqNo << ", data len "
+                                                     << opCtx.header->dataLength);
             return mNewRequestHandler(opCtx);
         case NTH_READ:
             return PostReadAck(opCtx);
@@ -154,7 +155,7 @@ SResult SockWorker::HandleReceiveCtx(SockOpContextInfo &opCtx)
         continue;                                                                                            \
     }                                                                                                        \
                                                                                                              \
-    static thread_local SockOpContextInfo opCtx {};                                                          \
+    static thread_local SockOpContextInfo opCtx{};                                                           \
     if (oneEv.events & EPOLLIN) {                                                                            \
         if (NN_LIKELY(((sockOpResult) = sock->HandleIn((doUpperCall)))) == SockOpContextInfo::SS_NO_ERROR) { \
             /* if fully receive a request */                                                                 \
@@ -177,8 +178,8 @@ SResult SockWorker::HandleReceiveCtx(SockOpContextInfo &opCtx)
             /* not fully received, continue to process next event */                                         \
             continue;                                                                                        \
         }                                                                                                    \
-        NN_LOG_TRACE_INFO("Got error " << (sockOpResult) << " on sock " << sock->Id() << " with peer " <<    \
-            sock->PeerIpPort() << " in sock worker " << mName);                                              \
+        NN_LOG_TRACE_INFO("Got error " << (sockOpResult) << " on sock " << sock->Id() << " with peer "       \
+                                       << sock->PeerIpPort() << " in sock worker " << mName);                \
                                                                                                              \
         /* do sock conn broken process */                                                                    \
         bzero(&opCtx, sizeof(SockOpContextInfo));                                                            \
@@ -196,7 +197,6 @@ SResult SockWorker::HandleReceiveCtx(SockOpContextInfo &opCtx)
     /* continue to process next event */                                                                     \
     continue
 
-
 // use epoll ET mode
 #define HANDLE_SOCK_EVENT(sockOpResult, doUpperCall)                                                         \
     Sock *sock = static_cast<Sock *>(oneEv.data.ptr);                                                        \
@@ -209,7 +209,7 @@ SResult SockWorker::HandleReceiveCtx(SockOpContextInfo &opCtx)
         continue;                                                                                            \
     }                                                                                                        \
                                                                                                              \
-    static thread_local SockOpContextInfo opCtx {};                                                          \
+    static thread_local SockOpContextInfo opCtx{};                                                           \
     if (oneEv.events & EPOLLIN) {                                                                            \
         if (NN_LIKELY(((sockOpResult) = sock->HandleIn((doUpperCall)))) == SockOpContextInfo::SS_NO_ERROR) { \
             /* if fully receive a request */                                                                 \
@@ -235,8 +235,8 @@ SResult SockWorker::HandleReceiveCtx(SockOpContextInfo &opCtx)
             /* not fully received, continue to process next event */                                         \
             continue;                                                                                        \
         }                                                                                                    \
-        NN_LOG_TRACE_INFO("Got error " << (sockOpResult) << " on sock " << sock->Id() << " with peer " <<    \
-            sock->PeerIpPort() << " in sock worker " << mName);                                              \
+        NN_LOG_TRACE_INFO("Got error " << (sockOpResult) << " on sock " << sock->Id() << " with peer "       \
+                                       << sock->PeerIpPort() << " in sock worker " << mName);                \
                                                                                                              \
         /* do sock conn broken process */                                                                    \
         bzero(&opCtx, sizeof(SockOpContextInfo));                                                            \
@@ -270,7 +270,6 @@ SResult SockWorker::HandleReceiveCtx(SockOpContextInfo &opCtx)
     /* continue to process next event */                                                                     \
     continue
 
-
 #define HANDLE_EVENTS(count, sockOpResult, doUpperCall, ev)       \
     for (uint16_t i = 0; i < static_cast<uint16_t>(count); ++i) { \
         struct epoll_event &oneEv = (ev)[i];                      \
@@ -288,8 +287,8 @@ void SockWorker::RunInThread(int16_t cpuId)
     if (mOptions.threadPriority != 0) {
         if (NN_UNLIKELY(setpriority(PRIO_PROCESS, 0, mOptions.threadPriority) != 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to set worker thread priority in sock worker " << mName <<
-                ", as " << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_WARN("Unable to set worker thread priority in sock worker "
+                        << mName << ", as " << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         }
     }
 
@@ -326,8 +325,9 @@ void SockWorker::RunInThread(int16_t cpuId)
         } else {
             /* error happens */
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to do epoll_wait in sock worker " << mName << ", errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to do epoll_wait in sock worker "
+                         << mName << ", errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
             break;
         }
     }
@@ -459,8 +459,8 @@ SResult SockWorker::PostReadAckHandle(SockOpContextInfo &opCtx)
     NN_ASSERT_LOG_RETURN(opCtx.sock->UpContext() != 0, SS_ERROR)
     auto originalCtx = opCtx.sock->RemoveOpCtx(opCtx.header->seqNo);
     if (originalCtx == nullptr) {
-        NN_LOG_ERROR("Failed to PostReadAckHandle with sock worker " << DetailName() << " as invalid seqNo " <<
-            opCtx.header->seqNo);
+        NN_LOG_ERROR("Failed to PostReadAckHandle with sock worker " << DetailName() << " as invalid seqNo "
+                                                                     << opCtx.header->seqNo);
         return SS_PARAM_INVALID;
     }
     if (originalCtx->sock != opCtx.sock) {
@@ -473,19 +473,19 @@ SResult SockWorker::PostReadAckHandle(SockOpContextInfo &opCtx)
         return SS_PARAM_INVALID;
     }
     if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(originalCtx->sendCtx->iov[0].lAddress),
-        originalCtx->sendCtx->iov[0].size, reinterpret_cast<void *>(opCtx.dataAddress),
-        originalCtx->sendCtx->iov[0].size) != SS_OK)) {
+                             originalCtx->sendCtx->iov[0].size, reinterpret_cast<void *>(opCtx.dataAddress),
+                             originalCtx->sendCtx->iov[0].size) != SS_OK)) {
         NN_LOG_ERROR("Failed to copy opCtx to iov");
         return SS_PARAM_INVALID;
     }
-    NN_LOG_TRACE_INFO("PostReadAckHandle " << opCtx.sock->Id() << " head imm data " << opCtx.header->immData <<
-        ", flags " << opCtx.header->flags << ", seqNo " << opCtx.header->seqNo << ", data len " <<
-        opCtx.header->dataLength);
+    NN_LOG_TRACE_INFO("PostReadAckHandle " << opCtx.sock->Id() << " head imm data " << opCtx.header->immData
+                                           << ", flags " << opCtx.header->flags << ", seqNo " << opCtx.header->seqNo
+                                           << ", data len " << opCtx.header->dataLength);
     return mOneSideDoneHandler(originalCtx);
 }
 
 SResult SockWorker::GenerateReadSglAckOpCtxInfo(SockOpContextInfo *&opCtxInfo, SockOpContextInfo &opCtx,
-    UBSHcomNetTransSgeIov *&rawIov, uint16_t iovCount, uint32_t dataSize)
+                                                UBSHcomNetTransSgeIov *&rawIov, uint16_t iovCount, uint32_t dataSize)
 {
     opCtxInfo->errType = SockOpContextInfo::SockErrorType::SS_NO_ERROR;
     auto sglCtx = mSglCtxInfoPool.Get();
@@ -522,8 +522,8 @@ inline SResult SockWorker::CheckIovLen(SockOpContextInfo &opCtx, uint16_t &iovCo
         NN_LOG_ERROR("Failed to check sock with sock worker " << mName << " as iov count is illegal.");
         return false;
     }
-    if (NN_UNLIKELY(opCtx.dataSize < (sizeof(UBSHcomNetTransSglRequest::iovCount) +
-        sizeof(UBSHcomNetTransSgeIov) * (*count)))) {
+    if (NN_UNLIKELY(opCtx.dataSize <
+                    (sizeof(UBSHcomNetTransSglRequest::iovCount) + sizeof(UBSHcomNetTransSgeIov) * (*count)))) {
         NN_LOG_ERROR("Failed to PostReadAck as data size " << opCtx.dataSize << " is less than iov size");
         return false;
     }
@@ -542,12 +542,12 @@ SResult SockWorker::PostReadSglAck(SockOpContextInfo &opCtx)
         opCtx.sock->ReturnQueueSpace(NN_NO1);
         return SS_PARAM_INVALID;
     }
-    auto rawIov = reinterpret_cast<UBSHcomNetTransSgeIov *>(opCtx.dataAddress +
-        sizeof(UBSHcomNetTransSglRequest::iovCount));
+    auto rawIov =
+        reinterpret_cast<UBSHcomNetTransSgeIov *>(opCtx.dataAddress + sizeof(UBSHcomNetTransSglRequest::iovCount));
     uint32_t dataSize = 0;
     for (uint16_t i = 0; i < iovCount; i++) {
         if (NN_UNLIKELY(NN_OK !=
-            opCtx.sock->mMrChecker->Validate(rawIov[i].rKey, rawIov[i].rAddress, rawIov[i].size))) {
+                        opCtx.sock->mMrChecker->Validate(rawIov[i].rKey, rawIov[i].rAddress, rawIov[i].size))) {
             NN_LOG_ERROR("Invalid memory region or local key");
             opCtx.sock->ReturnQueueSpace(NN_NO1);
             return NN_INVALID_LKEY;
@@ -605,15 +605,15 @@ SResult SockWorker::PostReadSglAckHandle(SockOpContextInfo &opCtx)
         NN_LOG_ERROR("Failed to check sock with sock worker " << mName << " as iov count is illegal.");
         return SS_PARAM_INVALID;
     }
-    if (NN_UNLIKELY(opCtx.dataSize < (sizeof(UBSHcomNetTransSglRequest::iovCount) +
-        sizeof(UBSHcomNetTransSgeIov) * (*iovCount)))) {
+    if (NN_UNLIKELY(opCtx.dataSize <
+                    (sizeof(UBSHcomNetTransSglRequest::iovCount) + sizeof(UBSHcomNetTransSgeIov) * (*iovCount)))) {
         NN_LOG_ERROR("Failed to PostReadAck as data size " << opCtx.dataSize << " is less than iov size");
         return SS_PARAM_INVALID;
     }
-    auto sgeIov = reinterpret_cast<UBSHcomNetTransSgeIov *>(opCtx.dataAddress +
-        sizeof(UBSHcomNetTransSglRequest::iovCount));
+    auto sgeIov =
+        reinterpret_cast<UBSHcomNetTransSgeIov *>(opCtx.dataAddress + sizeof(UBSHcomNetTransSglRequest::iovCount));
     auto data = reinterpret_cast<char *>(opCtx.dataAddress + sizeof(UBSHcomNetTransSglRequest::iovCount) +
-        sizeof(UBSHcomNetTransSgeIov) * (*iovCount));
+                                         sizeof(UBSHcomNetTransSgeIov) * (*iovCount));
 
     uint32_t dataSize = 0;
     for (uint16_t i = 0; i < *iovCount; i++) {
@@ -629,16 +629,16 @@ SResult SockWorker::PostReadSglAckHandle(SockOpContextInfo &opCtx)
     for (uint16_t i = 0; i < *iovCount; i++) {
         UBSHcomNetTransSgeIov iov = originalCtx->sendCtx->iov[i];
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(iov.lAddress), iov.size, data + copyOffset, iov.size) !=
-            NN_OK)) {
+                        NN_OK)) {
             NN_LOG_ERROR("Failed to copy data to iov");
             return NN_INVALID_PARAM;
         }
         copyOffset += iov.size;
     }
 
-    NN_LOG_TRACE_INFO("PostReadSglAckHandle " << opCtx.sock->Id() << " head imm data " << opCtx.header->immData <<
-        ", flags " << opCtx.header->flags << ", seqNo " << opCtx.header->seqNo << ", data len " <<
-        opCtx.header->dataLength);
+    NN_LOG_TRACE_INFO("PostReadSglAckHandle " << opCtx.sock->Id() << " head imm data " << opCtx.header->immData
+                                              << ", flags " << opCtx.header->flags << ", seqNo " << opCtx.header->seqNo
+                                              << ", data len " << opCtx.header->dataLength);
     return mOneSideDoneHandler(originalCtx);
 }
 
@@ -685,7 +685,8 @@ SResult SockWorker::PostWriteAck(SockOpContextInfo &opCtx)
     }
     /* write data */
     if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(rawIov->rAddress), rawIov->size,
-        reinterpret_cast<void *>(opCtx.dataAddress + sizeof(UBSHcomNetTransSgeIov)), rawIov->size) != NN_OK)) {
+                             reinterpret_cast<void *>(opCtx.dataAddress + sizeof(UBSHcomNetTransSgeIov)),
+                             rawIov->size) != NN_OK)) {
         opCtx.sock->ReturnQueueSpace(NN_NO1);
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         return SS_PARAM_INVALID;
@@ -730,9 +731,9 @@ SResult SockWorker::PostWriteAckHandle(SockOpContextInfo &opCtx)
         return SS_PARAM_INVALID;
     }
 
-    NN_LOG_TRACE_INFO("PostWriteAckHandle " << opCtx.sock->Id() << " head imm data " << opCtx.header->immData <<
-        ", flags " << opCtx.header->flags << ", seqNo " << opCtx.header->seqNo << ", data len " <<
-        opCtx.header->dataLength);
+    NN_LOG_TRACE_INFO("PostWriteAckHandle " << opCtx.sock->Id() << " head imm data " << opCtx.header->immData
+                                            << ", flags " << opCtx.header->flags << ", seqNo " << opCtx.header->seqNo
+                                            << ", data len " << opCtx.header->dataLength);
     return mOneSideDoneHandler(originalCtx);
 }
 
@@ -772,21 +773,21 @@ SResult SockWorker::PostWriteSglAck(SockOpContextInfo &opCtx)
         opCtx.sock->ReturnQueueSpace(NN_NO1);
         return SS_PARAM_INVALID;
     }
-    auto iov = reinterpret_cast<UBSHcomNetTransSgeIov *>(opCtx.dataAddress +
-        sizeof(UBSHcomNetTransSglRequest::iovCount));
+    auto iov =
+        reinterpret_cast<UBSHcomNetTransSgeIov *>(opCtx.dataAddress + sizeof(UBSHcomNetTransSglRequest::iovCount));
     uint32_t dataSize = 0;
     for (uint16_t i = 0; i < iovCount; i++) {
         dataSize += iov[i].size;
     }
-    if (NN_UNLIKELY(opCtx.dataSize <
-        (sizeof(UBSHcomNetTransSglRequest::iovCount) + sizeof(UBSHcomNetTransSgeIov) * iovCount + dataSize))) {
+    if (NN_UNLIKELY(opCtx.dataSize < (sizeof(UBSHcomNetTransSglRequest::iovCount) +
+                                      sizeof(UBSHcomNetTransSgeIov) * iovCount + dataSize))) {
         NN_LOG_ERROR("Failed to PostReadAck as data size " << opCtx.dataSize << " is less than iov data size");
         opCtx.sock->ReturnQueueSpace(NN_NO1);
         return SS_PARAM_INVALID;
     }
 
     auto data = reinterpret_cast<char *>(opCtx.dataAddress + sizeof(UBSHcomNetTransSglRequest::iovCount) +
-        sizeof(UBSHcomNetTransSgeIov) * iovCount);
+                                         sizeof(UBSHcomNetTransSgeIov) * iovCount);
 
     uint32_t copyOffset = 0;
     for (uint16_t i = 0; i < iovCount; i++) {
@@ -796,7 +797,7 @@ SResult SockWorker::PostWriteSglAck(SockOpContextInfo &opCtx)
             return NN_INVALID_LKEY;
         }
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(iov[i].rAddress), iov[i].size, data + copyOffset,
-            iov[i].size) != NN_OK)) {
+                                 iov[i].size) != NN_OK)) {
             opCtx.sock->ReturnQueueSpace(NN_NO1);
             NN_LOG_ERROR("Failed to copy data to iov");
             return NN_INVALID_PARAM;
@@ -848,9 +849,9 @@ SResult SockWorker::PostWriteSglAckHandle(SockOpContextInfo &opCtx)
         return SS_PARAM_INVALID;
     }
 
-    NN_LOG_TRACE_INFO("PostWriteSglAckHandle " << opCtx.sock->Id() << " head imm data " << opCtx.header->immData <<
-        ", flags " << opCtx.header->flags << ", seqNo " << opCtx.header->seqNo << ", data len " <<
-        opCtx.header->dataLength);
+    NN_LOG_TRACE_INFO("PostWriteSglAckHandle " << opCtx.sock->Id() << " head imm data " << opCtx.header->immData
+                                               << ", flags " << opCtx.header->flags << ", seqNo " << opCtx.header->seqNo
+                                               << ", data len " << opCtx.header->dataLength);
     return mOneSideDoneHandler(originalCtx);
 }
 
@@ -874,5 +875,5 @@ void SockWorker::EpCloseByUser(Sock *sock)
     }
     mEpCloseHandler(sock);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

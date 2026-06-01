@@ -16,8 +16,10 @@
 namespace ock {
 namespace hcom {
 NetSyncEndpointSock::NetSyncEndpointSock(uint64_t id, Sock *sock, NetDriverSockWithOOB *driver,
-    const UBSHcomNetWorkerIndex &workerIndex)
-    : NetEndpointImpl(id, workerIndex), mSock(sock), mDriver(driver)
+                                         const UBSHcomNetWorkerIndex &workerIndex)
+    : NetEndpointImpl(id, workerIndex),
+      mSock(sock),
+      mDriver(driver)
 {
     if (mSock != nullptr) {
         mSock->IncreaseRef();
@@ -87,7 +89,7 @@ NResult NetSyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
     REQ_SIZE_VALIDATION();
     OPCODE_VALIDATION();
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.dataLength = request.size;
     header.seqNo = seqNo == 0 ? NextSeq() : seqNo;
     header.flags = NTH_TWO_SIDE;
@@ -122,7 +124,7 @@ NResult NetSyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
 }
 
 NResult NetSyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo)
+                                      const UBSHcomNetTransOpInfo &opInfo)
 {
     NResult result = NN_OK;
     if (NN_UNLIKELY((result = StateValidation(mState, mId, mDriver, mSock)) != NN_OK)) {
@@ -137,7 +139,7 @@ NResult NetSyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
     REQ_SIZE_VALIDATION();
     OPCODE_VALIDATION();
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.opCode = opCode;
     header.seqNo = opInfo.seqNo == 0 ? NextSeq() : opInfo.seqNo;
     header.flags = ((uint16_t)opInfo.flags << NN_NO8) | ((uint16_t)NTH_TWO_SIDE);
@@ -186,7 +188,7 @@ NResult NetSyncEndpointSock::PostSendRaw(const UBSHcomNetTransRequest &request, 
     }
     REQ_SIZE_VALIDATION();
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = seqNo == 0 ? NextSeq() : seqNo;
     header.immData = 1;
     header.flags = NTH_TWO_SIDE;
@@ -233,7 +235,7 @@ NResult NetSyncEndpointSock::PostSendRawSgl(const UBSHcomNetTransSglRequest &req
         return result;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.flags = NTH_TWO_SIDE_SGL;
     header.immData = 1;
     header.dataLength = totalSize;
@@ -305,7 +307,7 @@ NResult NetSyncEndpointSock::PostRead(const UBSHcomNetTransRequest &request)
         return SS_CTX_FULL;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = mSock->OneSideNextSeq();
     header.flags = NTH_READ;
     header.dataLength = sizeof(UBSHcomNetTransSgeIov);
@@ -378,7 +380,7 @@ NResult NetSyncEndpointSock::PostRead(const UBSHcomNetTransSglRequest &request)
         return SS_CTX_FULL;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = mSock->OneSideNextSeq();
     header.flags = NTH_READ_SGL;
     header.dataLength = sizeof(request.iovCount) + sizeof(UBSHcomNetTransSgeIov) * request.iovCount;
@@ -455,7 +457,7 @@ NResult NetSyncEndpointSock::PostWrite(const UBSHcomNetTransRequest &request)
         return SS_CTX_FULL;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = mSock->OneSideNextSeq();
     header.flags = NTH_WRITE;
     header.dataLength = sizeof(UBSHcomNetTransSgeIov) + request.size;
@@ -529,7 +531,7 @@ NResult NetSyncEndpointSock::PostWrite(const UBSHcomNetTransSglRequest &request)
         return SS_PARAM_INVALID;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = mSock->OneSideNextSeq();
     header.flags = NTH_WRITE_SGL;
     header.dataLength = sizeof(request.iovCount) + sizeof(UBSHcomNetTransSgeIov) * request.iovCount + totalSize;
@@ -584,15 +586,14 @@ static inline NResult WriteData(Sock *sock, SockTransHeader &header, SockOpConte
         }
 
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(originalCtx->sendCtx->iov[0].lAddress),
-            originalCtx->sendCtx->iov[0].size, buf, originalCtx->sendCtx->iov[0].size) != NN_OK)) {
+                                 originalCtx->sendCtx->iov[0].size, buf, originalCtx->sendCtx->iov[0].size) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy buf to sendCtx");
             return NN_INVALID_PARAM;
         }
     } else if (header.flags == NTH_READ_SGL_ACK) {
         /* write data */
-        if (header.dataLength <
-            (sizeof(UBSHcomNetTransSglRequest::iovCount) + sizeof(UBSHcomNetTransSgeIov) *
-            originalCtx->sendCtx->iovCount)) {
+        if (header.dataLength < (sizeof(UBSHcomNetTransSglRequest::iovCount) +
+                                 sizeof(UBSHcomNetTransSgeIov) * originalCtx->sendCtx->iovCount)) {
             NN_LOG_ERROR("Failed to ReadSglAck as data size " << header.dataLength << " is less than iov size");
             return SS_PARAM_INVALID;
         }
@@ -601,11 +602,11 @@ static inline NResult WriteData(Sock *sock, SockTransHeader &header, SockOpConte
             NN_LOG_ERROR("Failed to check sock with sock " << sock->Name() << " as iov count is illegal.");
             return SS_PARAM_INVALID;
         }
-        auto sgeIov =
-            reinterpret_cast<UBSHcomNetTransSgeIov *>(reinterpret_cast<uintptr_t>(buf) +
-            sizeof(UBSHcomNetTransSglRequest::iovCount));
-        auto data = reinterpret_cast<char *>(reinterpret_cast<uintptr_t>(buf) +
-            sizeof(UBSHcomNetTransSglRequest::iovCount) + sizeof(UBSHcomNetTransSgeIov) * (*iovCount));
+        auto sgeIov = reinterpret_cast<UBSHcomNetTransSgeIov *>(reinterpret_cast<uintptr_t>(buf) +
+                                                                sizeof(UBSHcomNetTransSglRequest::iovCount));
+        auto data =
+            reinterpret_cast<char *>(reinterpret_cast<uintptr_t>(buf) + sizeof(UBSHcomNetTransSglRequest::iovCount) +
+                                     sizeof(UBSHcomNetTransSgeIov) * (*iovCount));
 
         uint32_t dataSize = 0;
         for (uint16_t i = 0; i < *iovCount; i++) {
@@ -620,8 +621,8 @@ static inline NResult WriteData(Sock *sock, SockTransHeader &header, SockOpConte
         uint32_t copyOffset = 0;
         for (uint16_t i = 0; i < *iovCount; i++) {
             UBSHcomNetTransSgeIov iov = originalCtx->sendCtx->iov[i];
-            if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(iov.lAddress), iov.size, data + copyOffset,
-                iov.size) != NN_OK)) {
+            if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(iov.lAddress), iov.size, data + copyOffset, iov.size) !=
+                            NN_OK)) {
                 NN_LOG_ERROR("Failed to copy data to iov");
                 return NN_INVALID_PARAM;
             }
@@ -648,8 +649,8 @@ NResult NetSyncEndpointSock::WaitCompletion(int32_t timeout)
     if (mRespCtx.mHeader.flags == NTH_READ_ACK || mRespCtx.mHeader.flags == NTH_READ_SGL_ACK) {
         auto msgReady = mRespMessage.AllocateIfNeed(mRespCtx.mHeader.dataLength);
         if (NN_UNLIKELY(!msgReady)) {
-            NN_LOG_ERROR("Failed to allocate memory for response size " << mRespCtx.mHeader.dataLength <<
-                ", probably out of memory");
+            NN_LOG_ERROR("Failed to allocate memory for response size " << mRespCtx.mHeader.dataLength
+                                                                        << ", probably out of memory");
             return NN_MALLOC_FAILED;
         }
         result = mSock->PostReceiveBody(mRespMessage.mBuf, mRespCtx.mHeader.dataLength, true);
@@ -657,14 +658,15 @@ NResult NetSyncEndpointSock::WaitCompletion(int32_t timeout)
             NN_LOG_ERROR("Failed to receive body, result " << result << ", seqNo " << mRespCtx.mHeader.seqNo);
             return result;
         }
-        NN_LOG_TRACE_INFO("Receive body successfully: sock " << mSock->Id() << ", head imm data " <<
-            mRespCtx.mHeader.immData << ", flags " << mRespCtx.mHeader.flags << ", seqNo " << mRespCtx.mHeader.seqNo <<
-            ", data len " << mRespCtx.mHeader.dataLength);
+        NN_LOG_TRACE_INFO("Receive body successfully: sock "
+                          << mSock->Id() << ", head imm data " << mRespCtx.mHeader.immData << ", flags "
+                          << mRespCtx.mHeader.flags << ", seqNo " << mRespCtx.mHeader.seqNo << ", data len "
+                          << mRespCtx.mHeader.dataLength);
 
         auto originalReadCtx = mSock->RemoveOpCtx(mRespCtx.mHeader.seqNo);
         if (originalReadCtx == nullptr) {
-            NN_LOG_ERROR("Failed to handle ack with sock " << mSock->Name() << " as invalid seqNo " <<
-                mRespCtx.mHeader.seqNo);
+            NN_LOG_ERROR("Failed to handle ack with sock " << mSock->Name() << " as invalid seqNo "
+                                                           << mRespCtx.mHeader.seqNo);
             return SS_PARAM_INVALID;
         }
         if (originalReadCtx->sock != mSock) {
@@ -674,13 +676,14 @@ NResult NetSyncEndpointSock::WaitCompletion(int32_t timeout)
 
         return WriteData(mSock, mRespCtx.mHeader, originalReadCtx, mRespMessage.mBuf);
     } else if (mRespCtx.mHeader.flags == NTH_WRITE_ACK || mRespCtx.mHeader.flags == NTH_WRITE_SGL_ACK) {
-        NN_LOG_TRACE_INFO("Post receive header successfully: sock " << mSock->Id() << ", head imm data " <<
-            mRespCtx.mHeader.immData << ", flags " << mRespCtx.mHeader.flags << ", seqNo " << mRespCtx.mHeader.seqNo);
+        NN_LOG_TRACE_INFO("Post receive header successfully: sock "
+                          << mSock->Id() << ", head imm data " << mRespCtx.mHeader.immData << ", flags "
+                          << mRespCtx.mHeader.flags << ", seqNo " << mRespCtx.mHeader.seqNo);
 
         auto originalWriteCtx = mSock->RemoveOpCtx(mRespCtx.mHeader.seqNo);
         if (originalWriteCtx == nullptr) {
-            NN_LOG_ERROR("Failed to handle ack with sock " << mSock->Name() << " as invalid seqNo " <<
-                mRespCtx.mHeader.seqNo);
+            NN_LOG_ERROR("Failed to handle ack with sock " << mSock->Name() << " as invalid seqNo "
+                                                           << mRespCtx.mHeader.seqNo);
             return SS_PARAM_INVALID;
         }
         if (originalWriteCtx->sock != mSock) {
@@ -706,8 +709,9 @@ NResult NetSyncEndpointSock::Receive(int32_t timeout, UBSHcomNetResponseContext 
         NN_LOG_ERROR("Failed to post receive header, result " << result);
         return result;
     }
-    NN_LOG_TRACE_INFO("Post receive header successfully: sock " << mSock->Id() << ", head imm data " <<
-        mRespCtx.mHeader.immData << ", flags " << mRespCtx.mHeader.flags << ", seqNo " << mRespCtx.mHeader.seqNo);
+    NN_LOG_TRACE_INFO("Post receive header successfully: sock "
+                      << mSock->Id() << ", head imm data " << mRespCtx.mHeader.immData << ", flags "
+                      << mRespCtx.mHeader.flags << ", seqNo " << mRespCtx.mHeader.seqNo);
 
     if (NN_UNLIKELY(mRespCtx.mHeader.seqNo != mLastSendSeqNo)) {
         NN_LOG_ERROR("Received un-matched seq no " << mRespCtx.mHeader.seqNo << ", demand seq no " << mLastSendSeqNo);
@@ -716,8 +720,8 @@ NResult NetSyncEndpointSock::Receive(int32_t timeout, UBSHcomNetResponseContext 
 
     auto msgReady = mRespMessage.AllocateIfNeed(mRespCtx.mHeader.dataLength);
     if (NN_UNLIKELY(!msgReady)) {
-        NN_LOG_ERROR("Failed to allocate memory for response size " << mRespCtx.mHeader.dataLength <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to allocate memory for response size " << mRespCtx.mHeader.dataLength
+                                                                    << ", probably out of memory");
         return NN_MALLOC_FAILED;
     }
 
@@ -729,9 +733,10 @@ NResult NetSyncEndpointSock::Receive(int32_t timeout, UBSHcomNetResponseContext 
         NN_LOG_ERROR("Failed to receive body, result " << result << ", seqNo " << mRespCtx.mHeader.seqNo);
         return result;
     }
-    NN_LOG_TRACE_INFO("Post receive body successfully: sock " << mSock->Id() << ", head imm data " <<
-        mRespCtx.mHeader.immData << ", flags " << mRespCtx.mHeader.flags << ", seqNo " << mRespCtx.mHeader.seqNo <<
-        ", data len " << mRespCtx.mHeader.dataLength);
+    NN_LOG_TRACE_INFO("Post receive body successfully: sock "
+                      << mSock->Id() << ", head imm data " << mRespCtx.mHeader.immData << ", flags "
+                      << mRespCtx.mHeader.flags << ", seqNo " << mRespCtx.mHeader.seqNo << ", data len "
+                      << mRespCtx.mHeader.dataLength);
 
     mRespMessage.mDataLen = mRespCtx.mHeader.dataLength;
     mRespCtx.mMessage = &mRespMessage;
@@ -744,5 +749,5 @@ NResult NetSyncEndpointSock::ReceiveRaw(int32_t timeout, UBSHcomNetResponseConte
 {
     return Receive(timeout, ctx);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

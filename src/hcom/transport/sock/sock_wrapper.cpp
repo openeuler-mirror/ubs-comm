@@ -99,8 +99,9 @@ SResult Sock::SetSockOption(const SockWorkerOptions &workerOptions)
         auto value = workerOptions.sockReceiveBufKB * NN_NO1024;
         if (NN_UNLIKELY(setsockopt(mFd, SOL_SOCKET, SO_RCVBUF, &value, sizeof(value)) < 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to set receive buffer for sock " << mId << ", errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to set receive buffer for sock "
+                         << mId << ", errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
             return SS_TCP_SET_OPTION_FAILED;
         }
     }
@@ -111,8 +112,9 @@ SResult Sock::SetSockOption(const SockWorkerOptions &workerOptions)
         auto value = workerOptions.sockSendBufKB * NN_NO1024;
         if (NN_UNLIKELY(setsockopt(mFd, SOL_SOCKET, SO_SNDBUF, &value, sizeof(value)) < 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to set send buffer for sock " << mId << ", errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to set send buffer for sock "
+                         << mId << ", errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
             return SS_TCP_SET_OPTION_FAILED;
         }
     } else {
@@ -120,8 +122,9 @@ SResult Sock::SetSockOption(const SockWorkerOptions &workerOptions)
         socklen_t buffTypeSize = sizeof(sendBufSize);
         if (NN_UNLIKELY(getsockopt(mFd, SOL_SOCKET, SO_SNDBUF, &sendBufSize, &buffTypeSize) < 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to get send buffer for sock " << mId << ", errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to get send buffer for sock "
+                         << mId << ", errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
             return SS_TCP_GET_OPTION_FAILED;
         }
         if (NN_UNLIKELY(sendBufSize <= 0)) {
@@ -141,12 +144,13 @@ SResult Sock::SetSockOption(const SockWorkerOptions &workerOptions)
     int value = 1;
     auto optSize = sizeof(workerOptions.keepaliveIdleTime);
     if (NN_UNLIKELY(setsockopt(mFd, SOL_SOCKET, SO_KEEPALIVE, &value, sizeof(value)) < 0 ||
-        setsockopt(mFd, IPPROTO_TCP, TCP_KEEPIDLE, &workerOptions.keepaliveIdleTime, optSize) < 0 ||
-        setsockopt(mFd, IPPROTO_TCP, TCP_KEEPINTVL, &workerOptions.keepaliveProbeInterval, optSize) < 0 ||
-        setsockopt(mFd, IPPROTO_TCP, TCP_KEEPCNT, &workerOptions.keepaliveProbeTimes, optSize) < 0)) {
+                    setsockopt(mFd, IPPROTO_TCP, TCP_KEEPIDLE, &workerOptions.keepaliveIdleTime, optSize) < 0 ||
+                    setsockopt(mFd, IPPROTO_TCP, TCP_KEEPINTVL, &workerOptions.keepaliveProbeInterval, optSize) < 0 ||
+                    setsockopt(mFd, IPPROTO_TCP, TCP_KEEPCNT, &workerOptions.keepaliveProbeTimes, optSize) < 0)) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to set keepalive options for sock " << mId << ", errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to set keepalive options for sock "
+                     << mId << ", errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         return SS_TCP_SET_OPTION_FAILED;
     }
 
@@ -154,8 +158,9 @@ SResult Sock::SetSockOption(const SockWorkerOptions &workerOptions)
     if (workerOptions.tcpEnableNoDelay &&
         NN_UNLIKELY(setsockopt(mFd, SOL_TCP, TCP_NODELAY, reinterpret_cast<void *>(&value), sizeof(value)) != 0)) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to set no-delay for sock " << mId << ", errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to set no-delay for sock "
+                     << mId << ", errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         return SS_TCP_SET_OPTION_FAILED;
     }
 
@@ -170,8 +175,9 @@ SResult Sock::SetSockOption(const SockWorkerOptions &workerOptions)
         auto timeout = workerOptions.tcpUserTimeout * NN_NO1000;
         if (NN_UNLIKELY(setsockopt(mFd, SOL_TCP, TCP_USER_TIMEOUT, &timeout, sizeof(timeout)) != 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to set timeout for sock " << mId << ", errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to set timeout for sock "
+                         << mId << ", errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
             return SS_TCP_SET_OPTION_FAILED;
         }
     }
@@ -193,8 +199,9 @@ SResult Sock::SetBlockingSendTimeout(int32_t sendTimeout)
     };
     if (NN_UNLIKELY(setsockopt(mFd, SOL_SOCKET, SO_SNDTIMEO, &timeval, sizeof(timeval)) < 0)) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to set send timeout for sock " << mId << ", errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to set send timeout for sock "
+                     << mId << ", errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         return SS_TCP_SET_OPTION_FAILED;
     }
 
@@ -207,15 +214,17 @@ SResult Sock::SetBlockingIo()
     /* set blocking, fcntl result is 0 or -1 */
     if (NN_UNLIKELY((value = fcntl(mFd, F_GETFL, 0)) == -1)) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to get control value for sock " << mId << ", errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to get control value for sock "
+                     << mId << ", errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         return SS_TCP_SET_OPTION_FAILED;
     }
 
     if (NN_UNLIKELY((value = fcntl(mFd, F_SETFL, static_cast<uint32_t>(value) & ~O_NONBLOCK)) == -1)) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to set control value for sock " << mId << ", errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to set control value for sock "
+                     << mId << ", errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         return SS_TCP_SET_OPTION_FAILED;
     }
     mTcpBlockingMode = true;
@@ -229,15 +238,17 @@ SResult Sock::SetNonBlockingIo()
     /* set no-blocking */
     if (NN_UNLIKELY((value = fcntl(mFd, F_GETFL, 0)) == -1)) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to get control value for sock " << mId << ", errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to get control value for sock "
+                     << mId << ", errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         return SS_TCP_SET_OPTION_FAILED;
     }
 
     if (NN_UNLIKELY((value = fcntl(mFd, F_SETFL, static_cast<uint32_t>(value) | O_NONBLOCK)) == -1)) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to set control value for sock " << mId << ", errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to set control value for sock "
+                     << mId << ", errno:" << errno
+                     << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         return SS_TCP_SET_OPTION_FAILED;
     }
 
@@ -262,5 +273,5 @@ uint32_t Sock::GetSendQueueCount()
 {
     return mSendQueue.Size();
 }
-}
-}
+} // namespace hcom
+} // namespace ock

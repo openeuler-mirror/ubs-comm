@@ -13,21 +13,21 @@
 #define OCK_HCOM_SOCK_COMMON_H_2344
 
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/tcp.h>
+#include <sys/epoll.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/un.h>
+#include <unistd.h>
 #include <atomic>
 #include <cstdint>
 #include <functional>
-#include <fcntl.h>
 #include <mutex>
-#include <netinet/tcp.h>
 #include <string>
-#include <sys/epoll.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/uio.h>
 #include <thread>
 #include <unordered_map>
-#include <unistd.h>
 #include "hcom.h"
 #include "hcom_def.h"
 #include "hcom_log.h"
@@ -81,15 +81,16 @@ struct SockWorkerOptions {
     int tcpUserTimeout = -1;
     bool tcpEnableNoDelay = true;
     bool tcpSendZCopy = false;
-    bool tcpEpollLT = false;  /* epoll default is ET, set true enable to LT (multicast for hlc will use this option) */
+    bool tcpEpollLT = false; /* epoll default is ET, set true enable to LT (multicast for hlc will use this option) */
 
     inline std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "options polling-timeout-us: " << pollingTimeoutMs << "us, polling-batch-size: " << pollingBatchSize <<
-            ", is-server: " << isServer << ", recv-buf-size: " << sockReceiveBufKB << "KB, send-buf-size: " <<
-            sockSendBufKB << "KB, keepalive-idle-time: " << keepaliveIdleTime << "s, keepalive-probe-times: " <<
-            keepaliveProbeTimes << ", keepalive-probe-interval: " << keepaliveProbeInterval << "s";
+        oss << "options polling-timeout-us: " << pollingTimeoutMs << "us, polling-batch-size: " << pollingBatchSize
+            << ", is-server: " << isServer << ", recv-buf-size: " << sockReceiveBufKB
+            << "KB, send-buf-size: " << sockSendBufKB << "KB, keepalive-idle-time: " << keepaliveIdleTime
+            << "s, keepalive-probe-times: " << keepaliveProbeTimes
+            << ", keepalive-probe-interval: " << keepaliveProbeInterval << "s";
         return oss.str();
     }
 
@@ -100,7 +101,7 @@ struct SockWorkerOptions {
         return oss.str();
     }
 
-    void SetValue(const UBSHcomNetDriverOptions& opt, bool isStartOobServer)
+    void SetValue(const UBSHcomNetDriverOptions &opt, bool isStartOobServer)
     {
         pollingTimeoutMs = opt.eventPollingTimeout;
         pollingBatchSize = opt.pollingBatchSize;
@@ -120,8 +121,8 @@ struct SockWorkerOptions {
 };
 
 struct SockSglContextInfo {
-    SockTransHeader sendHeader {}; // record header for raw/raw sgl/read/write/
-    uint16_t iovCount = 0;         // max count:NET_SGE_MAX_IOV
+    SockTransHeader sendHeader{}; // record header for raw/raw sgl/read/write/
+    uint16_t iovCount = 0;        // max count:NET_SGE_MAX_IOV
     UBSHcomNetTransSgeIov iov[NET_SGE_MAX_IOV] = {};
 
     inline void Clone(SockTransHeader newHeader, UBSHcomNetTransSgeIov *newIov, uint16_t newIovCnt)
@@ -225,7 +226,7 @@ enum SCode {
 };
 
 constexpr uint32_t SOCK_CTX_MAP_RESERVATION = 8192;
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_SOCK_COMMON_H_2344

@@ -31,7 +31,7 @@ enum SockExchangeOp : int16_t {
     REAL_CONNECT = -1,
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_SOCK_COMMON_H_234234

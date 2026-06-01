@@ -16,8 +16,10 @@
 namespace ock {
 namespace hcom {
 NetAsyncEndpointSock::NetAsyncEndpointSock(uint64_t id, Sock *sock, NetDriverSockWithOOB *driver,
-    const UBSHcomNetWorkerIndex &workerIndex)
-    : NetEndpointImpl(id, workerIndex), mSock(sock), mDriver(driver)
+                                           const UBSHcomNetWorkerIndex &workerIndex)
+    : NetEndpointImpl(id, workerIndex),
+      mSock(sock),
+      mDriver(driver)
 {
     if (mSock != nullptr) {
         mSock->IncreaseRef();
@@ -87,7 +89,7 @@ uint32_t NetAsyncEndpointSock::GetSendQueueCount()
 }
 
 NResult NetAsyncEndpointSock::PostSendZCopy(int16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo)
+                                            const UBSHcomNetTransOpInfo &opInfo)
 {
     REQ_SIZE_VALIDATION_ZERO_COPY();
 
@@ -113,8 +115,8 @@ NResult NetAsyncEndpointSock::PostSendZCopy(int16_t opCode, const UBSHcomNetTran
     do {
         result = worker->PostSend(mSock, header, request);
         if (result == SS_OK) {
-            NN_LOG_TRACE_INFO("Sock Post send ep id " << mId << ", flag " << header.flags << ", seqNo " <<
-                header.seqNo << ", size " << request.size);
+            NN_LOG_TRACE_INFO("Sock Post send ep id " << mId << ", flag " << header.flags << ", seqNo " << header.seqNo
+                                                      << ", size " << request.size);
             TRACE_DELAY_END(SOCK_EP_ASYNC_POST_SEND, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTimeSend) {
@@ -162,8 +164,9 @@ NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransReq
     header->flags = NTH_TWO_SIDE;
     header->dataLength = request.size;
     auto dataAddress = mrBufAddress + sizeof(SockTransHeader); // req data start address
-    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(dataAddress), mDriver->mSockDriverSendMR->GetSingleSegSize() -
-        sizeof(SockTransHeader), reinterpret_cast<void *>(request.lAddress), request.size) != NN_OK)) {
+    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(dataAddress),
+                             mDriver->mSockDriverSendMR->GetSingleSegSize() - sizeof(SockTransHeader),
+                             reinterpret_cast<void *>(request.lAddress), request.size) != NN_OK)) {
         mDriver->mSockDriverSendMR->ReturnBuffer(mrBufAddress);
         NN_LOG_ERROR("Failed to copy request to dataAddress");
         return NN_INVALID_PARAM;
@@ -178,8 +181,8 @@ NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransReq
     do {
         result = worker->PostSend(mSock, *header, request);
         if (result == SS_OK) {
-            NN_LOG_TRACE_INFO("Post send ep id " << mId << ", flag " << header->flags << ", seqNo " << header->seqNo <<
-                ", size " << request.size);
+            NN_LOG_TRACE_INFO("Post send ep id " << mId << ", flag " << header->flags << ", seqNo " << header->seqNo
+                                                 << ", size " << request.size);
             TRACE_DELAY_END(SOCK_EP_ASYNC_POST_SEND, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTimeSend) {
@@ -282,7 +285,7 @@ NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransReq
 }
 
 NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo)
+                                       const UBSHcomNetTransOpInfo &opInfo)
 {
     NResult result = NN_OK;
     if (NN_UNLIKELY((result = StateValidation(mState, mId, mDriver, mSock)) != NN_OK)) {
@@ -315,8 +318,9 @@ NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransReq
     sockHeader->errorCode = opInfo.errorCode;
     sockHeader->dataLength = request.size;
     auto dataAddress = mrBufAddress + sizeof(SockTransHeader); // req data start address
-    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(dataAddress), mDriver->mSockDriverSendMR->GetSingleSegSize() -
-        sizeof(SockTransHeader), reinterpret_cast<void *>(request.lAddress), request.size) != NN_OK)) {
+    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(dataAddress),
+                             mDriver->mSockDriverSendMR->GetSingleSegSize() - sizeof(SockTransHeader),
+                             reinterpret_cast<void *>(request.lAddress), request.size) != NN_OK)) {
         mDriver->mSockDriverSendMR->ReturnBuffer(mrBufAddress);
         NN_LOG_ERROR("Failed to copy request to dataAddress");
         return NN_INVALID_PARAM;
@@ -368,8 +372,8 @@ NResult NetAsyncEndpointSock::PostSendRawNoCpy(const UBSHcomNetTransRequest &req
     TRACE_DELAY_BEGIN(SOCK_EP_ASYNC_POST_SEND);
     result = worker->PostSendNoCpy(mSock, header, request);
     if (result == SS_OK) {
-        NN_LOG_TRACE_INFO("Sock Post send ep id " << mId << ", flag " << header.flags << ", seqNo " <<
-            header.seqNo << ", size " << request.size);
+        NN_LOG_TRACE_INFO("Sock Post send ep id " << mId << ", flag " << header.flags << ", seqNo " << header.seqNo
+                                                  << ", size " << request.size);
         TRACE_DELAY_END(SOCK_EP_ASYNC_POST_SEND, result);
         return NN_OK;
     }
@@ -411,7 +415,7 @@ NResult NetAsyncEndpointSock::PostSendRaw(const UBSHcomNetTransRequest &request,
     header->dataLength = request.size;
     auto dataAddress = mrBufAddress + sizeof(SockTransHeader); // req data start address
     if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(dataAddress), mDriver->mSockDriverSendMR->GetSingleSegSize(),
-        reinterpret_cast<void *>(request.lAddress), request.size) != NN_OK)) {
+                             reinterpret_cast<void *>(request.lAddress), request.size) != NN_OK)) {
         mDriver->mSockDriverSendMR->ReturnBuffer(mrBufAddress);
         NN_LOG_ERROR("Failed to copy request to dataAddress");
         return NN_INVALID_PARAM;
@@ -456,7 +460,7 @@ NResult NetAsyncEndpointSock::PostSendRawSgl(const UBSHcomNetTransSglRequest &re
         return result;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = seqNo == 0 ? NextSeq() : seqNo;
     header.immData = 1;
     header.flags = NTH_TWO_SIDE_SGL;
@@ -504,7 +508,7 @@ NResult NetAsyncEndpointSock::PostRead(const UBSHcomNetTransRequest &request)
         return result;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = mSock->OneSideNextSeq(); // do later change to NextReq()
     header.flags = NTH_READ;
     header.dataLength = sizeof(UBSHcomNetTransSgeIov);
@@ -518,8 +522,8 @@ NResult NetAsyncEndpointSock::PostRead(const UBSHcomNetTransRequest &request)
     do {
         result = worker->PostRead(mSock, header, request);
         if (result == SS_OK) {
-            NN_LOG_TRACE_INFO("Post read ep id " << mId << ", flag " << header.flags << ", seqNo " << header.seqNo <<
-                ", size " << request.size);
+            NN_LOG_TRACE_INFO("Post read ep id " << mId << ", flag " << header.flags << ", seqNo " << header.seqNo
+                                                 << ", size " << request.size);
             TRACE_DELAY_END(SOCK_EP_ASYNC_POST_READ, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
@@ -549,7 +553,7 @@ NResult NetAsyncEndpointSock::PostRead(const UBSHcomNetTransSglRequest &request)
         return NN_INVALID_PARAM;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = mSock->OneSideNextSeq();
     header.flags = NTH_READ_SGL;
     header.dataLength = sizeof(request.iovCount) + sizeof(UBSHcomNetTransSgeIov) * request.iovCount;
@@ -596,7 +600,7 @@ NResult NetAsyncEndpointSock::PostWrite(const UBSHcomNetTransRequest &request)
         return NN_INVALID_PARAM;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = mSock->OneSideNextSeq();
     header.flags = NTH_WRITE;
     header.dataLength = sizeof(UBSHcomNetTransSgeIov) + request.size;
@@ -610,8 +614,8 @@ NResult NetAsyncEndpointSock::PostWrite(const UBSHcomNetTransRequest &request)
     do {
         result = worker->PostWrite(mSock, header, request);
         if (result == SS_OK) {
-            NN_LOG_TRACE_INFO("Post write ep id " << mId << ", flag " << header.flags << ", seqNo " << header.seqNo <<
-                ", size " << request.size);
+            NN_LOG_TRACE_INFO("Post write ep id " << mId << ", flag " << header.flags << ", seqNo " << header.seqNo
+                                                  << ", size " << request.size);
             TRACE_DELAY_END(SOCK_EP_ASYNC_POST_WRITE, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
@@ -641,7 +645,7 @@ NResult NetAsyncEndpointSock::PostWrite(const UBSHcomNetTransSglRequest &request
         return NN_INVALID_PARAM;
     }
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.seqNo = mSock->OneSideNextSeq();
     header.flags = NTH_WRITE_SGL;
     header.dataLength = sizeof(request.iovCount) + sizeof(UBSHcomNetTransSgeIov) * request.iovCount + totalSize;
@@ -669,5 +673,5 @@ NResult NetAsyncEndpointSock::PostWrite(const UBSHcomNetTransSglRequest &request
     TRACE_DELAY_END(SOCK_EP_ASYNC_POST_WRITE_SGL, result);
     return result;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
