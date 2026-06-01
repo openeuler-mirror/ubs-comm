@@ -169,8 +169,8 @@ int UmqTxOps::PollTx(const SocketPtr &sock)
         // handle tx epollin epoll event
         do {
             if (GetAndAckEvent() < 0) {
-                UBS_VLOG_ERR("[UMQ_API] WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_,
-                             -1, errno, Func::Error2Str(errno));
+                UBS_VLOG_ERR("WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                             Func::Error2Str(errno));
                 return -1;
             }
             // set poll_to_empty, means poll at least m_tx.m_retrieve_threshold TX CQE

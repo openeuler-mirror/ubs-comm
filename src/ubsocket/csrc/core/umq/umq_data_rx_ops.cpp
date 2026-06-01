@@ -22,8 +22,8 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
         if (GetAndAckEvent() < 0) {
-            UBS_VLOG_ERR("[UMQ_API] ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1,
-                         errno, Func::Error2Str(errno));
+            UBS_VLOG_ERR("ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                         Func::Error2Str(errno));
             return -1;
         }
         get_and_ack_event_ = false;
@@ -34,7 +34,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
     if (poll_) {
         poll_num = GetQbuf(sock, buf, POLL_BATCH_MAX);
         if (poll_num < 0) {
-            UBS_VLOG_ERR("[UMQ_API] ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+            UBS_VLOG_ERR("ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
             return -1;
         } else if (poll_num == 0) {
@@ -115,7 +115,7 @@ int UmqRxOps::GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num)
     auto umqSock = dynamic_cast<UmqSocket *>(sock.Get());
     int poll_num = umqSock->GetAndPopQbuf(buf, max_num);
     if (poll_num < 0) {
-        UBS_VLOG_ERR("[UMQ_API] GetQbuf failed, fd: %d, ret: %d\n", fd_, poll_num);
+        UBS_VLOG_ERR("GetQbuf failed, fd: %d, ret: %d\n", fd_, poll_num);
         return -1;
     }
     return poll_num;

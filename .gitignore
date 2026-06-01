@@ -1,6 +1,9 @@
 .vscode/
 .DS_Store
-*/build/
+**/build/
+dist/
+tmp_build_dir/
+compile_commands.json
 bazel-bin
 bazel-out
 bazel-testlogs

@@ -32,7 +32,7 @@ Result UmqBackend::Init() noexcept
     /* initialize umq settting */
     ret = UmqSetting::Init();
     if (ret != UBS_OK) {
-        UBS_VLOG_ERR("[UMQ_API] UmqSetting::Init() failed, ret: %d\n", ret);
+        UBS_VLOG_ERR("UmqSetting::Init() failed, ret: %d\n", ret);
         return ret;
     }
 
@@ -79,7 +79,7 @@ Result UmqBackend::Init() noexcept
             return UBS_ERROR;
     }
     if (ret != 0) {
-        UBS_VLOG_ERR("[UMQ_API] AddIbDev()/AddUbDev() failed, ret: %d\n", ret);
+        UBS_VLOG_ERR("AddIbDev()/AddUbDev() failed, ret: %d\n", ret);
         return UBS_ERROR;
     }
 
@@ -116,7 +116,7 @@ Result UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
 {
     if (UmqSetting::UMQ_DEV_NAME.empty()) {
         if (FindDevName() != UBS_OK) {
-            UBS_VLOG_ERR("[UMQ_API] Failed to find bonding dev, need active input.\n");
+            UBS_VLOG_ERR("Failed to find bonding dev, need active input.\n");
             return UBS_ERROR;
         }
     }
