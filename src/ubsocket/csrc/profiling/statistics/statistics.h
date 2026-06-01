@@ -313,7 +313,7 @@ public:
         // Do not set a timeout to reduce the core usage of the listening thread.
         int ev_num = LibcApi::epoll_wait(m_epoll_fd, events, MAX_EPOLL_EVENT_NUM, -1);
         if (ev_num == -1) {
-            UBS_VLOG_ERR("epoll_wait() failed in statistics poll, epfd: %d, maxevents: %d, timeout: %d, "
+            UBS_VLOG_ERR("epoll_wait() failed in statistics poll, epfd: %d, maxevents: %d, timeout: %d, error: %d, "
                          "errmsg: %s\n",
                          m_epoll_fd, MAX_EPOLL_EVENT_NUM, -1, errno, ock::ubs::Func::Error2Str(errno));
             return;
