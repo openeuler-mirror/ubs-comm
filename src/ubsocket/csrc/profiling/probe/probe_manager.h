@@ -12,7 +12,6 @@
 
 #include <pthread.h>
 #include <sched.h>
-#include <securec.h>
 #include <semaphore.h>
 #include <atomic>
 #include <chrono>

@@ -12,7 +12,6 @@
 #define UBS_COMM_UBSOCKET_PROF_TRACE_POINT_H
 
 #include "common/ubsocket_common_includes.h"
-#include "securec.h"
 
 namespace ock {
 namespace ubs {
