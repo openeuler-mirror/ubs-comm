@@ -114,12 +114,12 @@ void CLIArgsParser::PrintUsage(const char *progName)
     printf("Commands:\n");
     printf("  stat      Query detailed information of each socket in the specified process\n");
     printf("  topo      Query the network topology relationship of a pair of EIDs in the specified process\n");
+    printf("  delay     Show or operate trace point delay in the specified process\n");
     printf("  fc        Query Flow Control statistics in the specified process\n");
     printf("  qbuf      Query Qbuf Pool statistics in the specified process\n");
     printf("  umqinfo   Query UMQ configuration information in the specified process\n");
     printf("  io        Query IO packet statistics in the specified process\n");
     printf("  umq       Query UMQ performance statistics in the specified process\n");
-    printf("  probe     Query probe info in the specified process\n");
     printf("\n");
     printf("Global Options (applicable to all commands):\n");
     printf("  -p, --pid <pid>        Required, specify the process ID to query (Range: 0~%d)\n", INT32_MAX);
@@ -134,6 +134,12 @@ void CLIArgsParser::PrintUsage(const char *progName)
     printf("    -s, --srceid <eid>   Required, specify the source EID (must be a valid IPv6 address)\n");
     printf("    -d, --dsteid <eid>   Required, specify the destination EID (must be a valid IPv6 address)\n");
     printf("    Note: The topo command does NOT support the -w parameter\n");
+    printf("\n");
+    printf("  [delay command only]:\n");
+    printf("    -t, --type <op_type>   Required, specify operation you want (must in query, enable, reset)\n");
+    printf("    -v, --value <quantile>   Optional, when type is 'query' could be used\n");
+    printf("    -e, --enable <enable_switches>   Required when type is 'enable', specify trace switches you want"
+           " (could be a combination of (trace,quantile,log), which not use will be closed)\n");
     printf("\n");
     printf("  [fc command only]:\n");
     printf("    -w, --watch          Optional, enable real-time monitoring (refresh flow control info every second)\n");
@@ -151,9 +157,6 @@ void CLIArgsParser::PrintUsage(const char *progName)
     printf(
         "    -w, --watch          Optional, enable real-time monitoring (refresh umq performance info every second)\n");
     printf("\n");
-    printf("  [probe command only]:\n");
-    printf("    -w, --watch          Optional, enable real-time monitoring (refresh probe info every second)\n");
-    printf("\n");
     printf("Examples:\n");
     printf("  1. Query socket info of process 1234:\n");
     printf("     %s stat -p 1234\n", progName);
@@ -161,39 +164,40 @@ void CLIArgsParser::PrintUsage(const char *progName)
     printf("     %s stat -p 1234 -w\n", progName);
     printf("  3. Query topology relationship of EID pair in process 1234:\n");
     printf("     %s topo -p 1234 -s 2001:db8::1 -d 2001:db8::2\n", progName);
-    printf("  4. Query Flow Control statistics of process 1234:\n");
+    printf("  4. Show the delay time of trace point delay in the specified process:\n");
+    printf("     %s delay -p 1234 -t query\n", progName);
+    printf("  5. Change the switch status of trace:\n");
+    printf("     %s delay -p 1234 -t enable\n", progName);
+    printf("  6. Query Flow Control statistics of process 1234:\n");
     printf("     %s fc -p 1234\n", progName);
-    printf("  5. Real-time monitor Flow Control statistics of process 1234:\n");
+    printf("  7. Real-time monitor Flow Control statistics of process 1234:\n");
     printf("     %s fc -p 1234 -w\n", progName);
-    printf("  6. Query Qbuf Pool statistics of process 1234:\n");
+    printf("  8. Query Qbuf Pool statistics of process 1234:\n");
     printf("     %s qbuf -p 1234\n", progName);
-    printf("  7. Real-time monitor Qbuf Pool statistics of process 1234:\n");
+    printf("  9. Real-time monitor Qbuf Pool statistics of process 1234:\n");
     printf("     %s qbuf -p 1234 -w\n", progName);
-    printf("  8. Query UMQ configuration information of process 1234:\n");
+    printf(" 10. Query UMQ configuration information of process 1234:\n");
     printf("     %s umqinfo -p 1234\n", progName);
-    printf("  9. Real-time monitor UMQ configuration information of process 1234:\n");
+    printf(" 11. Real-time monitor UMQ configuration information of process 1234:\n");
     printf("     %s umqinfo -p 1234 -w\n", progName);
-    printf(" 10. Query IO packet statistics of process 1234:\n");
+    printf(" 12. Query IO packet statistics of process 1234:\n");
     printf("     %s io -p 1234\n", progName);
-    printf(" 11. Real-time monitor IO packet statistics of process 1234:\n");
+    printf(" 13. Real-time monitor IO packet statistics of process 1234:\n");
     printf("     %s io -p 1234 -w\n", progName);
-    printf(" 12. Query UMQ performance statistics of process 1234:\n");
+    printf(" 14. Query UMQ performance statistics of process 1234:\n");
     printf("     %s umq -p 1234\n", progName);
-    printf(" 13. Real-time monitor UMQ performance statistics of process 1234:\n");
+    printf(" 15. Real-time monitor UMQ performance statistics of process 1234:\n");
     printf("     %s umq -p 1234 -w\n", progName);
-    printf(" 16. Query probe time info of process 1234:\n");
-    printf("     %s probe -p 1234\n", progName);
-    printf(" 17. Real-time monitor probe time info of process 1234:\n");
-    printf("     %s probe -p 1234 -w\n", progName);
     printf("=============================================\n");
 }
 
 bool CLIArgsParser::IsCommandValid(std::string &cmd)
 {
-    static const std::vector<std::string> cmdSet = {"stat", "topo", "fc", "qbuf", "umqinfo", "io", "umq", "probe"};
+    static const std::vector<std::string> cmdSet = {"stat",    "topo", "delay", "fc",   "qbuf",
+                                                    "umqinfo", "io",   "umq",   "probe"};
     auto it = std::find(cmdSet.begin(), cmdSet.end(), cmd);
     if (it == cmdSet.end()) {
-        CLI_LOG("Invalid command (e.g., 'stat', 'topo', 'fc', 'qbuf', 'umqinfo', 'io', 'umq', 'probe')\n");
+        CLI_LOG("Invalid command (e.g., 'stat', 'topo', 'delay', 'fc', 'qbuf', 'umqinfo', 'io', 'umq', 'probe')\n");
         return false;
     }
     return true;
@@ -205,6 +209,8 @@ CLICommand CLIArgsParser::GetCmd(std::string &cmd)
         return CLICommand::STAT;
     } else if (cmd == "topo") {
         return CLICommand::TOPO;
+    } else if (cmd == "delay") {
+        return CLICommand::DELAY;
     } else if (cmd == "fc") {
         return CLICommand::FLOW_CONTROL;
     } else if (cmd == "qbuf") {

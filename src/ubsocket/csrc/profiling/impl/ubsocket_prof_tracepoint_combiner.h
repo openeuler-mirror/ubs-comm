@@ -19,6 +19,7 @@
 #include <string>
 
 #include "ubsocket_prof_tracepoint.h"
+#include "ubsocket_prof_tracepoint_group.h"
 
 namespace ock {
 namespace ubs {
@@ -27,9 +28,17 @@ class TraceCombiner {
 public:
     int CombinerTracePoint(Tracepoint &outTracePoint, const Tracepoint &pointB);
 
-    void OutputTracePointStats(std::ostringstream &oss, const Tracepoint &totalTracePoint);
+    void OutputTraceGroup(std::ostringstream &oss, const TraceGroupPtr &allTraceGroup);
+
+    int OutputTraceGroupCli(char **out_buf, const TraceGroupPtr &allTraceGroup);
 
     DEFINE_REF_OPERATION_FUNC
+
+private:
+    void OutputTracePointStats(std::ostringstream &oss, const Tracepoint &totalTracePoint);
+
+    void OutputTracePointCli(std::ostringstream &oss, const Tracepoint &totalTracePoint);
+
 private:
     std::mutex mutex_; /* mutex for compute tracePoint data */
     DECLARE_REF_COUNT_VARIABLE;

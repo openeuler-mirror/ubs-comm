@@ -59,3 +59,13 @@ int ubsocket_prof_record(uint32_t tracepoint_id, const char *tracepoint_name, ui
 {
     return Tracer::Instance().Record(tracepoint_id, tracepoint_name, timestamp, good);
 }
+
+int ubsocket_prof_combind(char **out_buf)
+{
+    return Tracer::Instance().Combine(out_buf);
+}
+
+void ubsocket_prof_reset()
+{
+    Tracer::Instance().Reset();
+}

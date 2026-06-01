@@ -143,6 +143,8 @@ struct Tracepoint {
 
         return *this;
     }
+
+    void Reset();
 };
 
 inline void Tracepoint::Record(uint64_t timestamp, bool good)
@@ -155,6 +157,16 @@ inline void Tracepoint::Record(uint64_t timestamp, bool good)
         data.min_time = std::min(data.min_time, timestamp);
         /* TODO pp90 pp99 */
     }
+}
+
+inline void Tracepoint::Reset()
+{
+    data.success_count = 0;
+    data.failure_count = 0;
+    data.total_time = 0;
+    data.min_time = UINT64_MAX;
+    data.max_time = 0;
+    data.pp90_time = 0;
 }
 } // namespace profiling
 } // namespace ubs

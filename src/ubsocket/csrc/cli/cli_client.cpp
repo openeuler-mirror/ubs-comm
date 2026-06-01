@@ -7,17 +7,17 @@
  *History: 2026-02-09
 */
 
-#include <cstring>
 #include "cli_client.h"
+#include <cstring>
 
 #include "common/ubsocket_common_includes.h"
-#include "commom/ubsocket_scope_exit.h"
 #include "core/ubsocket_socket_helper.h"
 #include "under_api/dl_libc_api.h"
 
 #include "cli_args_parser.h"
 #include "cli_terminal_display.h"
 
+using namespace ock::ubs;
 using ock::ubs::LibcApi;
 using ock::ubs::SocketConnHelper;
 
@@ -286,6 +286,63 @@ int CLIClient::ProcessUmq(int sockfd, CLIMessage &response)
     return 0;
 }
 
+static std::unordered_map<std::string, CLITypeParam> delayTypeNameToType = {
+    {"query", CLITypeParam::TRACE_OP_QUERY},
+    {"enable", CLITypeParam::TRACE_OP_ENABLE_TRACE},
+    {"reset", CLITypeParam::TRACE_OP_RESET},
+};
+
+CLITypeParam tranCliTypeParam(const std::string &name, CLITypeParam *type,
+                              const std::unordered_map<std::string, CLITypeParam> &nameToType)
+{
+    auto it = nameToType.find(name);
+    if (it != nameToType.end()) {
+        *type = it->second;
+        return it->second;
+    }
+    return CLITypeParam::INVALID;
+}
+
+int CLIClient::ProcessDelayQuery(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args)
+{
+    CLIControlHeader header{};
+    header.Reset();
+    header.mCmdId = CLICommand::DELAY;
+    header.mValue = args.value;
+    if (tranCliTypeParam(args.type, &header.mType, delayTypeNameToType) == CLITypeParam::INVALID) {
+        CLI_LOG("Invalid type param for delay\n");
+        return -1;
+    }
+
+    if (SocketConnHelper::SendSocketData(sockfd, &header, sizeof(CLIControlHeader), cliclientIoTimeoutMs) !=
+        sizeof(CLIControlHeader)) {
+        CLI_LOG("Failed to send CLIControlHeader\n");
+        return -1;
+    }
+    if (SocketConnHelper::RecvSocketData(sockfd, &header, sizeof(CLIControlHeader), cliclientIoTimeoutMs) !=
+        sizeof(CLIControlHeader)) {
+        CLI_LOG("Failed to recv CLIControlHeader\n");
+        return -1;
+    }
+    uint32_t payloadLen = header.mDataSize;
+    if (payloadLen == 0 || payloadLen > maxResponseSize) {
+        CLI_LOG("Invalid paylaod size: %d\n", payloadLen);
+        return -1;
+    }
+
+    if (!response.AllocateIfNeed(payloadLen)) {
+        CLI_LOG("Failed to alloc reponsese memory\n");
+        return -1;
+    }
+
+    if (SocketConnHelper::RecvSocketData(sockfd, response.Data(), payloadLen, cliclientIoTimeoutMs) != payloadLen) {
+        CLI_LOG("Failed to recv server msg\n");
+        return -1;
+    }
+    response.SetDataLen(payloadLen);
+    return 0;
+}
+
 int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
 {
     if (!IsServerAvailable()) {
@@ -301,19 +358,14 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
 
     auto guard = MakeScopeExit([sockfd]() { ::close(sockfd); });
 
-    struct sockaddr_un addr {
-    };
+    struct sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     addr.sun_path[0] = '\0';
-    if (strncpy(addr.sun_path + 1, mServerPath.c_str(), sizeof(addr.sun_path) - 1) != 0) {
-        CLI_LOG("Failed to copy server path\n");
-        return -1;
-    }
+    strncpy(addr.sun_path + 1, mServerPath.c_str(), sizeof(addr.sun_path) - 1);
 
     addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
     if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        CLI_LOG("Failed to connect server errno=%d, error=%s\n", errno,
-                ock::ubs::Func::Error2Str(errno);
+        CLI_LOG("Failed to connect server errno=%d, error=%s\n", errno, ock::ubs::Func::Error2Str(errno));
         return -1;
     }
 
@@ -330,6 +382,11 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
 
     if (args.command == CLICommand::TOPO) {
         ret = ProcessTopo(sockfd, response, args);
+        return ret;
+    }
+
+    if (args.command == CLICommand::DELAY) {
+        ret = ProcessDelayQuery(sockfd, response, args);
         return ret;
     }
 

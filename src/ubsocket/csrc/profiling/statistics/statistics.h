@@ -36,6 +36,7 @@
 #include "under_api/dl_libc_api.h"
 #include "under_api/dl_umq_api.h"
 
+using namespace ock::ubs;
 using ock::ubs::LibcApi;
 using ock::ubs::ReadLocker;
 using ock::ubs::SocketConnHelper;
@@ -55,8 +56,7 @@ public:
         uint32_t m_data_size;
     };
 
-    enum RpcAdptCmdType
-    {
+    enum RpcAdptCmdType {
         UBS_CMD_STATS,
         UBS_CMD_MAX
     };
@@ -121,12 +121,14 @@ public:
 
         if (LibcApi::bind(m_uds_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
             (void)LibcApi::close(m_uds_fd);
-            throw std::runtime_error(std::string("Failed to bind unix domain socket, ") + ock::ubs::Func::Error2Str(errno));
+            throw std::runtime_error(std::string("Failed to bind unix domain socket, ") +
+                                     ock::ubs::Func::Error2Str(errno));
         }
 
         if (LibcApi::listen(m_uds_fd, 1) < 0) {
             (void)LibcApi::close(m_uds_fd);
-            throw std::runtime_error(std::string("Failed to listen unix domain socket, ") + ock::ubs::Func::Error2Str(errno));
+            throw std::runtime_error(std::string("Failed to listen unix domain socket, ") +
+                                     ock::ubs::Func::Error2Str(errno));
         }
     }
 
@@ -313,8 +315,7 @@ public:
         if (ev_num == -1) {
             UBS_VLOG_ERR("epoll_wait() failed in statistics poll, epfd: %d, maxevents: %d, timeout: %d, "
                          "errmsg: %s\n",
-                         m_epoll_fd, MAX_EPOLL_EVENT_NUM, -1, errno,
-                         ock::ubs::Func::Error2Str(errno));
+                         m_epoll_fd, MAX_EPOLL_EVENT_NUM, -1, errno, ock::ubs::Func::Error2Str(errno));
             return;
         }
 
@@ -333,6 +334,71 @@ public:
             if (events[i].data.fd == m_uds_fd) {
                 Process(events[i].events);
             }
+        }
+    }
+
+    void DealDelayOperation(CLIDelayHeader &delayHeader, std::string &outTracePointStr, CLIControlHeader header)
+    {
+        int ret = UBS_OK;
+        switch (header.mType) {
+            case CLITypeParam::TRACE_OP_QUERY:
+                ret = Profiling::Combine(outTracePointStr);
+                delayHeader.tracePointDataSize = outTracePointStr.size();
+                if (ret != UBS_OK) {
+                    UBS_VLOG_WARN("Cli request profiling combine is not completed.");
+                }
+                break;
+            case CLITypeParam::TRACE_OP_RESET:
+                Profiling::Reset();
+                break;
+            case CLITypeParam::TRACE_OP_ENABLE_TRACE:
+                ret = Profiling::Init(ProfilingTPId::UBSOCKET_PROF_COUNT, GlobalSetting::UBS_PROF_DUMP_PATH.c_str(),
+                                      GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN);
+                if (ret != UBS_OK) {
+                    UBS_VLOG_WARN("Profiling is not initialize.");
+                }
+                GlobalSetting::UBS_PROF_ENABLE = true;
+                break;
+            case CLITypeParam::INVALID:
+            default:
+                delayHeader.retCode = -1;
+                UBS_VLOG_WARN("OpType error for trace operation.");
+                break;
+        }
+    }
+
+    void ProcessDelayRequest(int fd, CLIMessage &msg, CLIControlHeader header)
+    {
+        CLIDelayHeader delayHeader{};
+        std::string outTracePointStr;
+        DealDelayOperation(delayHeader, outTracePointStr, header);
+        uint32_t headerSize = sizeof(CLIDelayHeader);
+        uint32_t traceDataSize = outTracePointStr.size();
+        uint32_t totalSize = headerSize + traceDataSize;
+        // malloc mem base on socket cnt
+        if (!msg.AllocateIfNeed(totalSize)) {
+            UBS_VLOG_ERR("Failed to alloc reponsese memory.");
+            return;
+        }
+        msg.ResetBuf();
+        // collect data
+        memcpy(msg.Data(), &delayHeader, headerSize);
+
+        if (delayHeader.tracePointDataSize > 0) {
+            uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDelayHeader);
+            memcpy(data, outTracePointStr.c_str(), traceDataSize);
+        }
+        header.Reset();
+        header.mDataSize = totalSize;
+        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CLIControlHeader)) {
+            UBS_VLOG_ERR("Failed to send CLIControlHeader.");
+            return;
+        }
+
+        if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
+            UBS_VLOG_ERR("Failed to send CLISocketData.");
+            return;
         }
     }
 
@@ -717,6 +783,8 @@ public:
             ProcessStatRequest(fd, msg, header);
         } else if (header.mCmdId == CLICommand::TOPO) {
             ProcessTopoRequest(fd, header);
+        } else if (header.mCmdId == CLICommand::DELAY) {
+            ProcessDelayRequest(fd, msg, header);
         } else if (header.mCmdId == CLICommand::FLOW_CONTROL) {
             ProcessFlowControlRequest(fd, msg, header);
         } else if (header.mCmdId == CLICommand::QBUF_POOL) {

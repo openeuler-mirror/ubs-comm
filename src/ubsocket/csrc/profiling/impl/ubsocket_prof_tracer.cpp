@@ -145,31 +145,36 @@ int Tracer::Combine(TraceGroupPtr &out) noexcept
  */
 int Tracer::Combine(std::ostringstream &oss) noexcept
 {
-    std::vector<TraceGroupPtr> localTraceGroup;
-    {
-        std::lock_guard<std::mutex> guard(mutex_);
-        if (!inited_) {
-            UBS_VLOG_ERR("Tracer has not been initialize");
-            return UBS_ERROR;
-        }
-        localTraceGroup = trace_groups_;
+    TraceGroupPtr out;
+    int ret = Combine(out);
+    if (ret == UBS_OK) {
+        trace_combiner_->OutputTraceGroup(oss, out);
     }
 
-    for (uint32_t i = 0; i < options_.tracepoint_count; i++) {
-        Tracepoint combined_tp;
-        for (uint32_t j = 0; j < localTraceGroup.size(); j++) {
-            if (j == 0) {
-                combined_tp = localTraceGroup[j].Get()->points_[i];
-                continue;
-            }
-            if (trace_combiner_->CombinerTracePoint(combined_tp, localTraceGroup[j].Get()->points_[i]) != UBS_OK) {
-                UBS_VLOG_ERR("Error to trace combiner data");
-                return UBS_ERROR;
-            }
-        }
-        trace_combiner_->OutputTracePointStats(oss, combined_tp);
+    return ret;
+}
+
+/*
+ * combine data and output char *
+ * reurn out_buf len
+ */
+int Tracer::Combine(char **out_buf) noexcept
+{
+    TraceGroupPtr out;
+    int ret = Combine(out);
+    if (ret == UBS_OK) {
+        ret = trace_combiner_->OutputTraceGroupCli(out_buf, out);
     }
-    return UBS_OK;
+
+    return ret;
+}
+
+void Tracer::Reset() noexcept
+{
+    std::lock_guard<std::mutex> guard(mutex_);
+    for (auto &thread : trace_groups_) {
+        thread->Reset();
+    }
 }
 
 } // namespace profiling

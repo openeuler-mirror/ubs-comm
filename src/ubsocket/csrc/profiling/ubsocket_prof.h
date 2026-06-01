@@ -34,6 +34,10 @@ int ubsocket_prof_uninit();
 
 int ubsocket_prof_record(uint32_t tracepoint_id, const char *tracepoint_name, uint64_t timestamp, bool good);
 
+int ubsocket_prof_combind(char **out_buf);
+
+void ubsocket_prof_reset();
+
 static __always_inline uint64_t ubsocket_get_timeNs()
 {
     struct timespec tpDelay = {0, 0};
