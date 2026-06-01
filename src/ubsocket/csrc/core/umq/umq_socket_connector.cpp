@@ -790,6 +790,32 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
         return UBS_OK;
     }
 
+    UBS_VLOG_WARN("Default Route policy Not Applied, Finding Route Based on Process End Chip Id.\n");
+
+    // 主或备为空 回退到client端同chip_id
+    if (main_routes.empty()) {
+        for (uint32_t i = 0; i < route_list.route_num; ++i) {
+            if (route_list.routes[i].src_port.bs.chip_id == process_chip_Id &&
+                route_list.routes[i].dst_port.bs.chip_id == process_chip_Id) {
+                main_routes.push_back(route_list.routes[i]);
+            }
+        }
+    }
+
+    if (back_routes.empty()) {
+        for (uint32_t i = 0; i < route_list.route_num; ++i) {
+            if (route_list.routes[i].src_port.bs.chip_id != process_chip_Id &&
+                route_list.routes[i].dst_port.bs.chip_id != process_chip_Id) {
+                back_routes.push_back(route_list.routes[i]);
+            }
+        }
+    }
+
+    if (!main_routes.empty() && !back_routes.empty()) {
+        UBS_VLOG_INFO("Find umq route successfully\n");
+        return UBS_OK;
+    }
+
     UBS_VLOG_ERR("Failed to find umq route\n");
     return UBS_ERROR;
 }
