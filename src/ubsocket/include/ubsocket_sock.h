@@ -8,8 +8,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef UBS_COMM_REFACTOR_BAO_UBSOCKET_SOCK_H
-#define UBS_COMM_REFACTOR_BAO_UBSOCKET_SOCK_H
+#ifndef UBS_COMM_UBSOCKET_SOCK_H
+#define UBS_COMM_UBSOCKET_SOCK_H
 
 #include "ubsocket_def.h"
 
@@ -48,4 +48,4 @@ int UB_API_WRAP(setsockopt)(int fd, int level, int optname, const void *optval, 
 }
 #endif
 
-#endif // UBS_COMM_REFACTOR_BAO_UBSOCKET_SOCK_H
+#endif // UBS_COMM_UBSOCKET_SOCK_H
