@@ -66,9 +66,9 @@ RResult RDMAContext::Initialize()
     }
 
     mMaxSge = attr.max_sge < mMaxSge ? attr.max_sge : mMaxSge;
-    NN_LOG_INFO("Device info: fw_ver " << attr.fw_ver << " ,max_qp " << attr.max_qp << " ,max_qp_wr " <<
-        attr.max_qp_wr << " ,max_sge " << attr.max_sge << " ,adapter max_cqe " << mMaxSge << " ,max_cq " <<
-        attr.max_cq << " ,max_cqe " << attr.max_cqe);
+    NN_LOG_INFO("Device info: fw_ver " << attr.fw_ver << " ,max_qp " << attr.max_qp << " ,max_qp_wr " << attr.max_qp_wr
+                                       << " ,max_sge " << attr.max_sge << " ,adapter max_cqe " << mMaxSge << " ,max_cq "
+                                       << attr.max_cq << " ,max_cqe " << attr.max_cqe);
 
     ibv_pd *tmpPD = nullptr;
     if ((tmpPD = HcomIbv::AllocPd(tmpCtx)) == nullptr) {
@@ -79,8 +79,8 @@ RResult RDMAContext::Initialize()
     }
 
     if (HcomIbv::QueryPort(tmpCtx, mPortNumber, &mPortAttr) != 0 || mPortAttr.state != IBV_PORT_ACTIVE) {
-        NN_LOG_ERROR("Failed to query port for RDMAContext " << mName << ", errno " << errno <<
-            " or port state invalid " << mPortAttr.state);
+        NN_LOG_ERROR("Failed to query port for RDMAContext " << mName << ", errno " << errno
+                                                             << " or port state invalid " << mPortAttr.state);
         HcomIbv::CloseDev(tmpCtx);
         HcomIbv::FreeDevList(devList);
         HcomIbv::DeallocPd(tmpPD);
@@ -101,14 +101,14 @@ void RDMAContext::UpdateGid(const std::string &matchIp)
         return;
     }
 
-    RDMAGId tmpGid {};
+    RDMAGId tmpGid{};
     if ((RDMADeviceHelper::GetDeviceByIp(matchIp, tmpGid)) != 0) {
         NN_LOG_ERROR("Failed to get device by ip " << matchIp);
         return;
     }
 
-    NN_LOG_INFO("gid found devIndex " << tmpGid.devIndex << ", gidIndex " << tmpGid.gid << ", RoCEVersion " <<
-        RDMADeviceHelper::RoCEVersionToStr(tmpGid.RoCEVersion));
+    NN_LOG_INFO("gid found devIndex " << tmpGid.devIndex << ", gidIndex " << tmpGid.gid << ", RoCEVersion "
+                                      << RDMADeviceHelper::RoCEVersionToStr(tmpGid.RoCEVersion));
     mBestGid = tmpGid;
 }
 
@@ -125,6 +125,6 @@ RResult RDMAContext::UnInitialize()
 
     return RR_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

@@ -90,7 +90,7 @@ void UBSHcomNetEndpoint::DefaultTimeout(int32_t timeout)
 }
 
 void UBSHcomNetEndpoint::StoreConnInfo(uint32_t localIp, uint16_t listenPort, uint8_t version,
-    const std::string &payload)
+                                       const std::string &payload)
 {
     mLocalIp = localIp;
     mListenPort = listenPort;
@@ -109,20 +109,21 @@ void UBSHcomNetEndpoint::RemoteUdsIdInfo(uint32_t pid, uint32_t uid, uint32_t gi
 }
 
 NResult UBSHcomNetMemoryAllocator::Create(UBSHcomNetMemoryAllocatorType t,
-    const UBSHcomNetMemoryAllocatorOptions &options, UBSHcomNetMemoryAllocatorPtr &out)
+                                          const UBSHcomNetMemoryAllocatorOptions &options,
+                                          UBSHcomNetMemoryAllocatorPtr &out)
 {
     if (t == DYNAMIC_SIZE) {
         NetLocalAutoDecreasePtr<NetMemAllocator> alloc(new (std::nothrow) NetMemAllocator());
         if (alloc.Get() == nullptr) {
-            NN_LOG_ERROR("Failed to new memory allocator obj with type '" <<
-                UBSHcomNetMemoryAllocatorTypeToString(t) << "'");
+            NN_LOG_ERROR("Failed to new memory allocator obj with type '" << UBSHcomNetMemoryAllocatorTypeToString(t)
+                                                                          << "'");
             return NN_NEW_OBJECT_FAILED;
         }
 
         auto ret = alloc.Get()->Initialize(options.address, options.size, options.minBlockSize, options.alignedAddress);
         if (ret != NN_OK) {
-            NN_LOG_ERROR("Failed to initialize allocator obj with type '" <<
-                UBSHcomNetMemoryAllocatorTypeToString(t) << "'");
+            NN_LOG_ERROR("Failed to initialize allocator obj with type '" << UBSHcomNetMemoryAllocatorTypeToString(t)
+                                                                          << "'");
             return NN_ERROR;
         }
 
@@ -132,30 +133,29 @@ NResult UBSHcomNetMemoryAllocator::Create(UBSHcomNetMemoryAllocatorType t,
     } else if (t == DYNAMIC_SIZE_WITH_CACHE) {
         NetLocalAutoDecreasePtr<NetMemAllocator> alloc(new (std::nothrow) NetMemAllocator());
         if (alloc.Get() == nullptr) {
-            NN_LOG_ERROR("Failed to new memory allocator with type '" <<
-                UBSHcomNetMemoryAllocatorTypeToString(t) << "'");
+            NN_LOG_ERROR("Failed to new memory allocator with type '" << UBSHcomNetMemoryAllocatorTypeToString(t)
+                                                                      << "'");
             return NN_NEW_OBJECT_FAILED;
         }
 
         auto ret = alloc.Get()->Initialize(options.address, options.size, options.minBlockSize, options.alignedAddress);
         if (ret != NN_OK) {
-            NN_LOG_ERROR("Failed to initialize allocator with type '" <<
-                UBSHcomNetMemoryAllocatorTypeToString(t) << "'");
+            NN_LOG_ERROR("Failed to initialize allocator with type '" << UBSHcomNetMemoryAllocatorTypeToString(t)
+                                                                      << "'");
             return NN_ERROR;
         }
 
         NetLocalAutoDecreasePtr<NetAllocatorCache> cache(new (std::nothrow) NetAllocatorCache(alloc.Get()));
         if (cache.Get() == nullptr) {
-            NN_LOG_ERROR("Failed to new memory allocator cache with type '" <<
-                UBSHcomNetMemoryAllocatorTypeToString(t) << "'");
+            NN_LOG_ERROR("Failed to new memory allocator cache with type '" << UBSHcomNetMemoryAllocatorTypeToString(t)
+                                                                            << "'");
             return NN_NEW_OBJECT_FAILED;
         }
 
         ret = cache.Get()->Initialize(options);
         if (ret != NN_OK) {
-            NN_LOG_ERROR("Failed to initialize allocator cache with type '" <<
-                UBSHcomNetMemoryAllocatorTypeToString(t) <<
-                "'");
+            NN_LOG_ERROR("Failed to initialize allocator cache with type '" << UBSHcomNetMemoryAllocatorTypeToString(t)
+                                                                            << "'");
             return NN_ERROR;
         }
 
@@ -355,8 +355,8 @@ UBSHcomNetDriver *UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol t, const s
             return nullptr;
 #endif
         default:
-            NN_LOG_ERROR("Failed to new driver " << name << " for " << UBSHcomNetDriverProtocolToString(t) <<
-                ", not implemented yet");
+            NN_LOG_ERROR("Failed to new driver " << name << " for " << UBSHcomNetDriverProtocolToString(t)
+                                                 << ", not implemented yet");
             break;
     }
 
@@ -365,8 +365,8 @@ UBSHcomNetDriver *UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol t, const s
         driver->mIndex = gDriverIndex++;
         std::tie(iter, std::ignore) = gDriverMap.emplace(name, driver);
     } else {
-        NN_LOG_ERROR("Failed to new driver " << name << " for " << UBSHcomNetDriverProtocolToString(t) <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to new driver " << name << " for " << UBSHcomNetDriverProtocolToString(t)
+                                             << ", probably out of memory");
         return nullptr;
     }
 
@@ -401,8 +401,8 @@ UBSHcomNetDriver *UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol t, const s
     gOSMaxFdCount = static_cast<int32_t>(sysconf(_SC_OPEN_MAX));
     if (NN_UNLIKELY(gOSMaxFdCount == -1)) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_WARN("Unable to get limit of open files, errno: " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_WARN("Unable to get limit of open files, errno: " << NetFunc::NN_GetStrError(errno, buf,
+                                                                                            NET_STR_ERROR_BUF_SIZE));
     } else {
         NN_LOG_INFO("Limit of open files is " << gOSMaxFdCount << ", please check if it is big enough");
     }
@@ -426,8 +426,8 @@ NResult UBSHcomNetDriver::DestroyInstance(const std::string &name)
 
         driver = iter->second;
         if (NN_UNLIKELY(driver->IsInited() || driver->IsStarted())) {
-            NN_LOG_ERROR("Please stop or unInitialize the driver " << name <<
-                " first, the current driver status cannot be destroyed");
+            NN_LOG_ERROR("Please stop or unInitialize the driver "
+                         << name << " first, the current driver status cannot be destroyed");
             return NN_ERROR;
         }
         gDriverMap.erase(iter);
@@ -439,7 +439,7 @@ NResult UBSHcomNetDriver::DestroyInstance(const std::string &name)
 
 bool UBSHcomNetDriver::LocalSupport(UBSHcomNetDriverProtocol t, UBSHcomNetDriverDeviceInfo &deviceInfo)
 {
-    UBSHcomNetDriverDeviceInfo tmpInfo {};
+    UBSHcomNetDriverDeviceInfo tmpInfo{};
 #ifdef RDMA_BUILD_ENABLED
     std::vector<RDMADeviceSimpleInfo> enabledDevice;
     uint16_t devCount = 0;
@@ -483,7 +483,7 @@ bool UBSHcomNetDriver::LocalSupport(UBSHcomNetDriverProtocol t, UBSHcomNetDriver
 }
 
 bool UBSHcomNetDriver::MultiRailGetDevCount(UBSHcomNetDriverProtocol t, std::string ipMask, uint16_t &enableDevCount,
-    std::string ipGroup)
+                                            std::string ipGroup)
 {
 #if defined(RDMA_BUILD_ENABLED)
     uint16_t devCount = 0;
@@ -541,8 +541,8 @@ NResult UBSHcomNetDriver::CreateListeners(bool enableMultiRail)
     }
 
     if (mOobListenOptions.empty()) {
-        NN_LOG_ERROR("No listen info is set for oob type " << UBSHcomNetDriverOobTypeToString(mOptions.oobType) <<
-            " in driver " << mName);
+        NN_LOG_ERROR("No listen info is set for oob type " << UBSHcomNetDriverOobTypeToString(mOptions.oobType)
+                                                           << " in driver " << mName);
         return NN_INVALID_PARAM;
     }
 
@@ -551,8 +551,8 @@ NResult UBSHcomNetDriver::CreateListeners(bool enableMultiRail)
         NetOOBServerPtr oobServer = nullptr;
         /* create oob server */
         if (mEnableTls) {
-            auto oobSSLServer = new (std::nothrow) OOBSSLServer(mOptions.oobType, lOpt.Ip(), lOpt.port,
-                mTlsPrivateKeyCB, mTlsCertCB, mTlsCaCallback);
+            auto oobSSLServer = new (std::nothrow)
+                OOBSSLServer(mOptions.oobType, lOpt.Ip(), lOpt.port, mTlsPrivateKeyCB, mTlsCertCB, mTlsCaCallback);
             NN_ASSERT_LOG_RETURN(oobSSLServer != nullptr, NN_NEW_OBJECT_FAILED)
             oobSSLServer->SetTlsOptions(mOptions.cipherSuite, mOptions.tlsVersion);
             oobSSLServer->SetPSKCallback(mPskFindSessionCb, mPskUseSessionCb);
@@ -574,7 +574,7 @@ NResult UBSHcomNetDriver::CreateListeners(bool enableMultiRail)
 
         NN_LOG_TRACE_INFO(lOpt.second.Ip());
 
-        oobServer->Index({ mIndex, oobIndex++ });
+        oobServer->Index({mIndex, oobIndex++});
         oobServer->SetMaxConntionNum(mOptions.maxConnectionNum);
 
         /* create load balancer for each oob server */
@@ -599,8 +599,8 @@ NResult UBSHcomNetDriver::CreateListeners(bool enableMultiRail)
     }
 
     if (mOobListenOptions.size() != mOobServers.size()) {
-        NN_LOG_ERROR("Created oob server count " << mOobServers.size() << " is not equal to listener options size " <<
-            mOobListenOptions.size() << " in driver " << mName);
+        NN_LOG_ERROR("Created oob server count " << mOobServers.size() << " is not equal to listener options size "
+                                                 << mOobListenOptions.size() << " in driver " << mName);
         return NN_ERROR;
     }
 
@@ -619,8 +619,9 @@ NResult UBSHcomNetDriver::CreateUdsListeners()
         NetOOBServerPtr oobServer = nullptr;
         /* create oob server */
         if (mEnableTls) {
-            auto oobSSLServer = new (std::nothrow) OOBSSLServer(mOptions.oobType, lOpt.second.Name(), lOpt.second.perm,
-                lOpt.second.isCheck, mTlsPrivateKeyCB, mTlsCertCB, mTlsCaCallback);
+            auto oobSSLServer = new (std::nothrow)
+                OOBSSLServer(mOptions.oobType, lOpt.second.Name(), lOpt.second.perm, lOpt.second.isCheck,
+                             mTlsPrivateKeyCB, mTlsCertCB, mTlsCaCallback);
             NN_ASSERT_LOG_RETURN(oobSSLServer != nullptr, NN_NEW_OBJECT_FAILED)
             oobSSLServer->SetTlsOptions(mOptions.cipherSuite, mOptions.tlsVersion);
             oobSSLServer->SetPSKCallback(mPskFindSessionCb, mPskUseSessionCb);
@@ -633,7 +634,7 @@ NResult UBSHcomNetDriver::CreateUdsListeners()
 
         NN_LOG_TRACE_INFO(lOpt.second.Name());
 
-        oobServer->Index({ mIndex, oobIndex++ });
+        oobServer->Index({mIndex, oobIndex++});
         oobServer->SetMaxConntionNum(mOptions.maxConnectionNum);
 
         /* create load balancer ptr for each oob server */
@@ -658,8 +659,8 @@ NResult UBSHcomNetDriver::CreateUdsListeners()
     }
 
     if (mOobUdsListenOptions.size() != mOobServers.size()) {
-        NN_LOG_ERROR("Created oob server count " << mOobServers.size() << " is not equal to listener options size " <<
-            mOobUdsListenOptions.size() << " in uds driver " << mName);
+        NN_LOG_ERROR("Created oob server count " << mOobServers.size() << " is not equal to listener options size "
+                                                 << mOobUdsListenOptions.size() << " in uds driver " << mName);
         return NN_ERROR;
     }
 
@@ -711,8 +712,8 @@ NResult UBSHcomNetDriver::StartListeners()
             if (mOobServers[i]->GetListenPort(port) == NN_OK) {
                 mOobListenOptions[i].port = port;
             } else {
-                NN_LOG_WARN("Invalid to get real listen port for " << mOobListenOptions[i].Ip() << ":" <<
-                    mOobListenOptions[i].port);
+                NN_LOG_WARN("Invalid to get real listen port for " << mOobListenOptions[i].Ip() << ":"
+                                                                   << mOobListenOptions[i].port);
             }
         }
     }
@@ -828,13 +829,13 @@ bool UBSHcomNetDriver::GetOobIpAndPort(std::vector<std::pair<std::string, uint16
     }
 
     result.clear();
-    for (const auto& item : mOobListenOptions) {
+    for (const auto &item : mOobListenOptions) {
         result.emplace_back(item.Ip(), item.port);
     }
     return true;
 }
 
-NResult UBSHcomNetDriver::ValidateAndParseOobPortRange(const char* oobPortRange)
+NResult UBSHcomNetDriver::ValidateAndParseOobPortRange(const char *oobPortRange)
 {
     if (oobPortRange == nullptr || oobPortRange[0] == '\0') {
         return NN_OK;
@@ -885,7 +886,8 @@ NResult UBSHcomNetDriver::ParseUrl(const std::string &url, NetDriverOobType &typ
     NetProtocol protocal;
     std::string urlSuffix;
     if (NN_UNLIKELY(!NetFunc::NN_SplitProtoUrl(url, protocal, urlSuffix))) {
-        NN_LOG_ERROR("Invalid url: "<< url <<" should be like tcp://127.0.0.1:9981 or uds://name or ubc://eid:jettyId");
+        NN_LOG_ERROR("Invalid url: " << url
+                                     << " should be like tcp://127.0.0.1:9981 or uds://name or ubc://eid:jettyId");
         return NN_PARAM_INVALID;
     }
 
@@ -907,7 +909,7 @@ NResult UBSHcomNetDriver::ParseUrl(const std::string &url, NetDriverOobType &typ
 
     type = NetDriverOobType::NET_OOB_TCP;
     if (NN_UNLIKELY(!NetFunc::NN_ConvertIpAndPort(urlSuffix, ip, port))) {
-        NN_LOG_ERROR("Invalid url: " << url <<" should be like 127.0.0.1:9981");
+        NN_LOG_ERROR("Invalid url: " << url << " should be like 127.0.0.1:9981");
         return NN_PARAM_INVALID;
     }
 
@@ -925,10 +927,10 @@ void UBSHcomNetDriver::AddOobOptions(const UBSHcomNetOobListenerOptions &option)
 
         // The same port number cannot be used for two identical IP addresses
         // The same port number can be used for two different IP addresses
-        for (const auto& opt : mOobListenOptions) {
+        for (const auto &opt : mOobListenOptions) {
             if (opt.Ip() == option.Ip() && opt.port == option.port && opt.port != 0) {
-                NN_LOG_WARN("Duplicated listen '" << option.Ip() << ":" << option.port << "' adding to driver " <<
-                    mName << ", ignored");
+                NN_LOG_WARN("Duplicated listen '" << option.Ip() << ":" << option.port << "' adding to driver " << mName
+                                                  << ", ignored");
                 return;
             }
         }
@@ -1185,9 +1187,8 @@ std::string &UBSHcomNetMemoryAllocatorTypeToString(UBSHcomNetMemoryAllocatorType
 std::string UBSHcomNetMemoryAllocatorOptions::ToString() const
 {
     std::ostringstream oss;
-    oss << ", size " << size << ", minBlockSize " << minBlockSize <<
-        ", cacheTierCount " << cacheTierCount << ", cacheBlockCountPerTier " <<
-        cacheBlockCountPerTier << ", cacheTierPolicy " << cacheTierPolicy;
+    oss << ", size " << size << ", minBlockSize " << minBlockSize << ", cacheTierCount " << cacheTierCount
+        << ", cacheBlockCountPerTier " << cacheBlockCountPerTier << ", cacheTierPolicy " << cacheTierPolicy;
     return oss.str();
 }
 
@@ -1203,7 +1204,11 @@ std::string &UBSHcomNetDriverOobTypeToString(NetDriverOobType v)
 
 std::string &UBSHcomNetDriverSecTypeToString(UBSHcomNetDriverSecType v)
 {
-    static std::string secType[NN_NO3] = {"SecNoValid", "SecValidOneWay", "SecValidTwoWay", };
+    static std::string secType[NN_NO3] = {
+        "SecNoValid",
+        "SecValidOneWay",
+        "SecValidTwoWay",
+    };
     static std::string unknown = "UNKNOWN SEC TYPE";
     if (v != NET_SEC_VALID_ONE_WAY && v != NET_SEC_VALID_TWO_WAY) {
         return unknown;
@@ -1213,7 +1218,10 @@ std::string &UBSHcomNetDriverSecTypeToString(UBSHcomNetDriverSecType v)
 
 std::string &UBSHcomNetDriverLBPolicyToString(UBSHcomNetDriverLBPolicy v)
 {
-    static std::string driverLB[NN_NO2] = {"RR", "Hash", };
+    static std::string driverLB[NN_NO2] = {
+        "RR",
+        "Hash",
+    };
     static std::string unknown = "UNKNOWN POLICY";
     if (v != NET_ROUND_ROBIN && v != NET_HASH_IP_PORT) {
         return unknown;
@@ -1223,8 +1231,8 @@ std::string &UBSHcomNetDriverLBPolicyToString(UBSHcomNetDriverLBPolicy v)
 
 std::string &UBSHcomNetDriverProtocolToString(UBSHcomNetDriverProtocol v)
 {
-    static std::string driverProtocol[NN_NO8] = {"RDMA", "TCP", "UDS", "SHM", "UNKNOWN PROTOCOL", "UNKNOWN PROTOCOL",
-        "UNKNOWN PROTOCOL", "UBC"};
+    static std::string driverProtocol[NN_NO8] = {
+        "RDMA", "TCP", "UDS", "SHM", "UNKNOWN PROTOCOL", "UNKNOWN PROTOCOL", "UNKNOWN PROTOCOL", "UBC"};
     static std::string unknown = "UNKNOWN PROTOCOL";
     if (v >= NN_NO8) {
         return unknown;
@@ -1248,12 +1256,12 @@ bool UBSHcomNetCloneStringToArray(char *dest, size_t destMax, const std::string 
 }
 
 NResult ValidateWorkerOptions(UBSHcomNetDriverWorkingMode mode, char *workerGroups, char *workerGroupsCpuSet,
-    UBSHcomNetDriverLBPolicy lbPolicy, int workerThreadPriority)
+                              UBSHcomNetDriverLBPolicy lbPolicy, int workerThreadPriority)
 {
     /* validate param related to poll mode for RDMA, Sock and SHM */
     if (NN_UNLIKELY(mode != NET_BUSY_POLLING && mode != NET_EVENT_POLLING)) {
-        NN_LOG_ERROR("Option 'mode' is invalid, " << mode <<
-            " is set in driver, valid value is NET_BUSY_POLLING(0) or NET_EVENT_POLLING(1)");
+        NN_LOG_ERROR("Option 'mode' is invalid, "
+                     << mode << " is set in driver, valid value is NET_BUSY_POLLING(0) or NET_EVENT_POLLING(1)");
         return NN_INVALID_PARAM;
     }
 
@@ -1270,15 +1278,15 @@ NResult ValidateWorkerOptions(UBSHcomNetDriverWorkingMode mode, char *workerGrou
 
     /* validate param related to load balance policy for RDMA, Sock and SHM */
     if (NN_UNLIKELY(lbPolicy != NET_ROUND_ROBIN && lbPolicy != NET_HASH_IP_PORT)) {
-        NN_LOG_ERROR("Option 'oobType' is invalid, " << lbPolicy <<
-            " is set in driver, valid value is NET_ROUND_ROBIN(0) or NET_HASH_IP_PORT(1)");
+        NN_LOG_ERROR("Option 'oobType' is invalid, "
+                     << lbPolicy << " is set in driver, valid value is NET_ROUND_ROBIN(0) or NET_HASH_IP_PORT(1)");
         return NN_INVALID_PARAM;
     }
 
     if (NN_UNLIKELY(workerThreadPriority > static_cast<int>(NN_NO20) ||
-        workerThreadPriority < -static_cast<int>(NN_NO20))) {
+                    workerThreadPriority < -static_cast<int>(NN_NO20))) {
         NN_LOG_ERROR("Option 'workerThreadPriority' is invalid, it should be set from -20 to 20 closed, 0 means do not "
-            "set priority");
+                     "set priority");
         return NN_INVALID_PARAM;
     }
 
@@ -1289,31 +1297,32 @@ NResult ValidateOobOptions(NetDriverOobType oobType)
 {
     /* validate param related to net driver oobType for RDMA, Sock and SHM */
     if (NN_UNLIKELY(oobType > NET_OOB_UB)) {
-        NN_LOG_ERROR("Option 'oobType' is invalid, " << oobType <<
-            " is set in driver, valid value is NET_OOB_TCP(0) or NET_OOB_UDS(1) or NET_OOB_UB(2)");
+        NN_LOG_ERROR("Option 'oobType' is invalid, "
+                     << oobType
+                     << " is set in driver, valid value is NET_OOB_TCP(0) or NET_OOB_UDS(1) or NET_OOB_UB(2)");
         return NN_INVALID_PARAM;
     }
     return NN_OK;
 }
 
 NResult ValidateHeartbeatOptions(uint16_t heartBeatIdleTime, uint16_t heartBeatProbeTimes,
-    uint16_t heartBeatProbeInterval)
+                                 uint16_t heartBeatProbeInterval)
 {
     if (NN_UNLIKELY(heartBeatIdleTime == 0 || heartBeatIdleTime > NN_NO10000)) {
-        NN_LOG_ERROR("Option 'heartBeatIdleTime' is invalid, " << heartBeatIdleTime <<
-            " is set in driver, the valid value range is 1s ~ 10000s");
+        NN_LOG_ERROR("Option 'heartBeatIdleTime' is invalid, "
+                     << heartBeatIdleTime << " is set in driver, the valid value range is 1s ~ 10000s");
         return NN_INVALID_PARAM;
     }
 
     if (NN_UNLIKELY(heartBeatProbeTimes == 0 || heartBeatProbeTimes > NN_NO1024)) {
-        NN_LOG_ERROR("Option 'heartBeatProbeTime' is invalid, " << heartBeatProbeTimes <<
-            " is set in driver, the valid value range is 1s ~ 1024s");
+        NN_LOG_ERROR("Option 'heartBeatProbeTime' is invalid, "
+                     << heartBeatProbeTimes << " is set in driver, the valid value range is 1s ~ 1024s");
         return NN_INVALID_PARAM;
     }
 
     if (NN_UNLIKELY(heartBeatProbeInterval > NN_NO1024)) {
-        NN_LOG_ERROR("Option 'heartBeatProbeInterval' is invalid, " << heartBeatProbeInterval <<
-            " is set in driver, the valid value range is 1s ~ 1024s");
+        NN_LOG_ERROR("Option 'heartBeatProbeInterval' is invalid, "
+                     << heartBeatProbeInterval << " is set in driver, the valid value range is 1s ~ 1024s");
         return NN_INVALID_PARAM;
     }
     return NN_OK;
@@ -1323,20 +1332,20 @@ NResult ValidateQueueOptions(uint32_t qpSendQueueSize, uint32_t qpReceiveQueueSi
 {
     /* validate params related to send queue and receive queue size for RDMA and Sock */
     if (NN_UNLIKELY(qpSendQueueSize < NN_NO16 || qpSendQueueSize > NN_NO65535)) {
-        NN_LOG_ERROR("Option 'qpSendQueueSize' is invalid, " << qpSendQueueSize <<
-            " is set in driver, the valid value range is 16 ~ 65535");
+        NN_LOG_ERROR("Option 'qpSendQueueSize' is invalid, "
+                     << qpSendQueueSize << " is set in driver, the valid value range is 16 ~ 65535");
         return NN_INVALID_PARAM;
     }
 
     if (NN_UNLIKELY(qpReceiveQueueSize < NN_NO16 || qpReceiveQueueSize > NN_NO65535)) {
-        NN_LOG_ERROR("Option 'qpReceiveQueueSize' is invalid " << qpReceiveQueueSize <<
-            " is set in driver, the valid value range is 16 ~ 65535");
+        NN_LOG_ERROR("Option 'qpReceiveQueueSize' is invalid "
+                     << qpReceiveQueueSize << " is set in driver, the valid value range is 16 ~ 65535");
         return NN_INVALID_PARAM;
     }
 
     if (NN_UNLIKELY(completionQueueDepth == NN_NO0 || completionQueueDepth > NN_NO65535)) {
-        NN_LOG_ERROR("Option 'completionQueueDepth' is invalid " << completionQueueDepth <<
-            " is set in driver, the valid value range is 1 ~ 65535");
+        NN_LOG_ERROR("Option 'completionQueueDepth' is invalid "
+                     << completionQueueDepth << " is set in driver, the valid value range is 1 ~ 65535");
         return NN_INVALID_PARAM;
     }
     return NN_OK;
@@ -1346,14 +1355,14 @@ NResult ValidatePollingOptions(uint16_t pollingBatchSize, uint32_t eventPollingT
 {
     /* validate params related to poll for RDMA, Sock and SHM */
     if (NN_UNLIKELY(pollingBatchSize == 0 || pollingBatchSize > NN_NO1024)) {
-        NN_LOG_ERROR("Option 'pollingBatchSize' is invalid, " << pollingBatchSize <<
-            " is set in driver, the valid value range is 1 ~ 1024");
+        NN_LOG_ERROR("Option 'pollingBatchSize' is invalid, "
+                     << pollingBatchSize << " is set in driver, the valid value range is 1 ~ 1024");
         return NN_INVALID_PARAM;
     }
 
     if (NN_UNLIKELY(eventPollingTimeout == 0 || eventPollingTimeout > NN_NO2000000)) {
-        NN_LOG_ERROR("Option 'eventPollingTimeout' is invalid, " << eventPollingTimeout <<
-            " is set in driver, the valid value range is 1ms ~ 2000000ms");
+        NN_LOG_ERROR("Option 'eventPollingTimeout' is invalid, "
+                     << eventPollingTimeout << " is set in driver, the valid value range is 1ms ~ 2000000ms");
         return NN_INVALID_PARAM;
     }
     return NN_OK;
@@ -1362,14 +1371,14 @@ NResult ValidatePollingOptions(uint16_t pollingBatchSize, uint32_t eventPollingT
 NResult ValidateSegOptions(uint32_t mrSendReceiveSegSize, uint32_t mrSendReceiveSegCount)
 {
     if (mrSendReceiveSegSize < NN_NO1 || mrSendReceiveSegSize > NET_SGE_MAX_SIZE) {
-        NN_LOG_ERROR("Option 'mrSendReceiveSegSize' is invalid, " << mrSendReceiveSegSize <<
-            " is set in driver, the valid value range is 1 byte ~ 524288000 byte");
+        NN_LOG_ERROR("Option 'mrSendReceiveSegSize' is invalid, "
+                     << mrSendReceiveSegSize << " is set in driver, the valid value range is 1 byte ~ 524288000 byte");
         return NN_INVALID_PARAM;
     }
 
     if (mrSendReceiveSegCount < NN_NO1 || mrSendReceiveSegCount > NN_NO65535) {
-        NN_LOG_ERROR("Option 'mrSendReceiveSegCount' is invalid, " << mrSendReceiveSegCount <<
-            " is set in driver, the valid value range is 1 ~ 65535");
+        NN_LOG_ERROR("Option 'mrSendReceiveSegCount' is invalid, "
+                     << mrSendReceiveSegCount << " is set in driver, the valid value range is 1 ~ 65535");
         return NN_INVALID_PARAM;
     }
     return NN_OK;
@@ -1382,9 +1391,9 @@ NResult ValidateCipherOptions(bool enableTls, UBSHcomTlsVersion tlsVersion, UBSH
     }
 
     if ((cipherSuite < AES_GCM_128) || (cipherSuite > CHACHA20_POLY1305)) {
-        NN_LOG_ERROR("Option 'cipherSuite' is invalid, " << cipherSuite <<
-            " is set in driver, the valid value range is AES_GCM_128:" << AES_GCM_128 << " and CHACHA20_POLY1305:" <<
-            CHACHA20_POLY1305);
+        NN_LOG_ERROR("Option 'cipherSuite' is invalid, "
+                     << cipherSuite << " is set in driver, the valid value range is AES_GCM_128:" << AES_GCM_128
+                     << " and CHACHA20_POLY1305:" << CHACHA20_POLY1305);
         return NN_INVALID_PARAM;
     }
 
@@ -1399,8 +1408,8 @@ NResult ValidateCipherOptions(bool enableTls, UBSHcomTlsVersion tlsVersion, UBSH
 NResult ValidateMaxConnectionOptions(uint32_t maxConnectionNum)
 {
     if (maxConnectionNum == NN_NO0) {
-        NN_LOG_ERROR("Option 'maxConnectionNum' is invalid, " << maxConnectionNum <<
-            " is set in driver, the valid value range is > 0");
+        NN_LOG_ERROR("Option 'maxConnectionNum' is invalid, " << maxConnectionNum
+                                                              << " is set in driver, the valid value range is > 0");
         return NN_INVALID_PARAM;
     }
     return NN_OK;
@@ -1410,7 +1419,7 @@ NResult UBSHcomNetDriverOptions::ValidateCommonOptions()
 {
     /* validate params related to heart beat for RDMA, Sock and SHM */
     if (NN_UNLIKELY(ValidateWorkerOptions(mode, workerGroups, workerGroupsCpuSet, lbPolicy, workerThreadPriority) !=
-        NN_OK)) {
+                    NN_OK)) {
         return NN_INVALID_PARAM;
     }
 
@@ -1423,7 +1432,7 @@ NResult UBSHcomNetDriverOptions::ValidateCommonOptions()
     }
 
     if (NN_UNLIKELY(ValidateHeartbeatOptions(heartBeatIdleTime, heartBeatProbeTimes, heartBeatProbeInterval) !=
-        NN_OK)) {
+                    NN_OK)) {
         return NN_INVALID_PARAM;
     }
 
@@ -1541,31 +1550,36 @@ bool UBSHcomNetDriverOptions::SetWorkerGroupThreadPriority(const std::string &va
 std::string UBSHcomNetDriverOptions::ToString() const
 {
     std::ostringstream oss;
-    oss << "UBSHcomNetDriverOptions mode: " << static_cast<int>(mode) << ", send/receive-mr-seg-count: " <<
-        mrSendReceiveSegCount << ", send/receive-mr-seg-size: " << mrSendReceiveSegSize << ", device-mask: " <<
-        NetDeviceIpMask() << ", cq-size " << completionQueueDepth << ", max-post-send: " << maxPostSendCountPerQP <<
-        ", pre-post-receive-count: " << prePostReceiveSizePerQP << ", polling-batch-size: " << pollingBatchSize <<
-        ", qp-send-queue-size: " << qpSendQueueSize << ", qp-receive-queue-size: " << qpReceiveQueueSize <<
-        ", worker-groups: " << WorkGroups() << ", worker-groups-cpu-set: " << WorkerGroupCpus() <<
-        ", start-workers: " << dontStartWorkers << ", tls-enabled: " << enableTls << ", oob-type: " <<
-        UBSHcomNetDriverOobTypeToString(oobType) << ", lb-policy: " << UBSHcomNetDriverLBPolicyToString(lbPolicy);
+    oss << "UBSHcomNetDriverOptions mode: " << static_cast<int>(mode)
+        << ", send/receive-mr-seg-count: " << mrSendReceiveSegCount
+        << ", send/receive-mr-seg-size: " << mrSendReceiveSegSize << ", device-mask: " << NetDeviceIpMask()
+        << ", cq-size " << completionQueueDepth << ", max-post-send: " << maxPostSendCountPerQP
+        << ", pre-post-receive-count: " << prePostReceiveSizePerQP << ", polling-batch-size: " << pollingBatchSize
+        << ", qp-send-queue-size: " << qpSendQueueSize << ", qp-receive-queue-size: " << qpReceiveQueueSize
+        << ", worker-groups: " << WorkGroups() << ", worker-groups-cpu-set: " << WorkerGroupCpus()
+        << ", start-workers: " << dontStartWorkers << ", tls-enabled: " << enableTls
+        << ", oob-type: " << UBSHcomNetDriverOobTypeToString(oobType)
+        << ", lb-policy: " << UBSHcomNetDriverLBPolicyToString(lbPolicy);
     return oss.str();
 }
 
 std::string UBSHcomNetDriverOptions::ToStringForSock() const
 {
     std::ostringstream oss;
-    oss << "UBSHcomNetDriverOptions mode: " << static_cast<int>(mode) << ", send/receive-mr-seg-count: " <<
-        mrSendReceiveSegCount << ", send/receive-mr-seg-size: " << mrSendReceiveSegSize << ", device-mask: " <<
-        NetDeviceIpMask() << ", cq-size " << completionQueueDepth << ", max-post-send: " << maxPostSendCountPerQP <<
-        ", pre-post-receive-count: " << prePostReceiveSizePerQP << ", polling-batch-size: " << pollingBatchSize <<
-        ", qp-send-queue-size: " << qpSendQueueSize << ", qp-receive-queue-size: " << qpReceiveQueueSize <<
-        ", worker-groups: " << WorkGroups() << ", worker-groups-cpu-set: " << WorkerGroupCpus() <<
-        ", start-workers: " << dontStartWorkers << ", tls-enabled: " << enableTls << ", oob-type: " <<
-        UBSHcomNetDriverOobTypeToString(oobType) << ", lb-policy: " << UBSHcomNetDriverLBPolicyToString(lbPolicy) <<
-        ", tcp-keepalive-idle-time: " << heartBeatIdleTime << " seconds, tcp-keepalive-probe-times: " <<
-        heartBeatProbeTimes << ", tcp-keepalive-probe-interval: " << heartBeatProbeInterval <<
-        " seconds, tcp-send-buffer-size: " << tcpSendBufSize << ", tcp-receive-buffer-size: " << tcpReceiveBufSize;
+    oss << "UBSHcomNetDriverOptions mode: " << static_cast<int>(mode)
+        << ", send/receive-mr-seg-count: " << mrSendReceiveSegCount
+        << ", send/receive-mr-seg-size: " << mrSendReceiveSegSize << ", device-mask: " << NetDeviceIpMask()
+        << ", cq-size " << completionQueueDepth << ", max-post-send: " << maxPostSendCountPerQP
+        << ", pre-post-receive-count: " << prePostReceiveSizePerQP << ", polling-batch-size: " << pollingBatchSize
+        << ", qp-send-queue-size: " << qpSendQueueSize << ", qp-receive-queue-size: " << qpReceiveQueueSize
+        << ", worker-groups: " << WorkGroups() << ", worker-groups-cpu-set: " << WorkerGroupCpus()
+        << ", start-workers: " << dontStartWorkers << ", tls-enabled: " << enableTls
+        << ", oob-type: " << UBSHcomNetDriverOobTypeToString(oobType)
+        << ", lb-policy: " << UBSHcomNetDriverLBPolicyToString(lbPolicy)
+        << ", tcp-keepalive-idle-time: " << heartBeatIdleTime
+        << " seconds, tcp-keepalive-probe-times: " << heartBeatProbeTimes
+        << ", tcp-keepalive-probe-interval: " << heartBeatProbeInterval
+        << " seconds, tcp-send-buffer-size: " << tcpSendBufSize << ", tcp-receive-buffer-size: " << tcpReceiveBufSize;
     return oss.str();
 }
 
@@ -1587,8 +1601,7 @@ void UnParseWorkerGroupsCpus(const std::vector<UBSHcomWorkerGroupInfo> &workerGr
     for (const auto &workerGroup : workerGroups) {
         std::string item = "na";
         if (NN_UNLIKELY(workerGroup.cpuIdsRange.first != UINT32_MAX)) {
-            item = std::to_string(workerGroup.cpuIdsRange.first) + "-"
-                + std::to_string(workerGroup.cpuIdsRange.second);
+            item = std::to_string(workerGroup.cpuIdsRange.first) + "-" + std::to_string(workerGroup.cpuIdsRange.second);
         }
         if (NN_UNLIKELY(strRes.empty())) {
             strRes += item;
@@ -1614,5 +1627,5 @@ bool UBSHcomNetDriverOptions::SetWorkerGroupsInfo(const std::vector<UBSHcomWorke
     return true;
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

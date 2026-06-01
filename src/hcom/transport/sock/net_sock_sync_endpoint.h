@@ -25,7 +25,7 @@ using SockSglContextInfoPool = OpContextInfoPool<SockSglContextInfo>;
 class NetSyncEndpointSock : public NetEndpointImpl {
 public:
     NetSyncEndpointSock(uint64_t id, Sock *sock, NetDriverSockWithOOB *driver,
-        const UBSHcomNetWorkerIndex &workerIndex);
+                        const UBSHcomNetWorkerIndex &workerIndex);
     ~NetSyncEndpointSock() override;
 
     NResult SetEpOption(UBSHcomEpOptions &epOptions) override;
@@ -54,7 +54,7 @@ public:
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
 
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo) override;
+                     const UBSHcomNetTransOpInfo &opInfo) override;
 
     NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
 
@@ -78,8 +78,8 @@ public:
     {
         // 用户可能在建链回调中使用该函数，此时ep状态并未设置成NEP_ESTABLISHED
         if (!mState.Compare(NEP_ESTABLISHED)) {
-            NN_LOG_WARN("[Sock SyncEp] EP status is " << mState.Get() <<
-                " now, use ep after the connection established.");
+            NN_LOG_WARN("[Sock SyncEp] EP status is " << mState.Get()
+                                                      << " now, use ep after the connection established.");
         }
 
         if (!mDriver->mStartOobSvr) {
@@ -169,7 +169,8 @@ private:
     }
 
     __always_inline NResult FillReadWriteCtx(SockOpContextInfo *ctx, SockSglContextInfo *sglCtx,
-        const UBSHcomNetTransRequest &request, SockOpContextInfo::SockOpType opType, UBSHcomNetTransHeader header)
+                                             const UBSHcomNetTransRequest &request,
+                                             SockOpContextInfo::SockOpType opType, UBSHcomNetTransHeader header)
     {
         ctx->sock = mSock;
         ctx->opType = opType;
@@ -189,7 +190,8 @@ private:
     }
 
     __always_inline NResult FillReadWriteSglCtx(SockOpContextInfo *ctx, SockSglContextInfo *sglCtx,
-        const UBSHcomNetTransSglRequest &request, SockOpContextInfo::SockOpType opType, UBSHcomNetTransHeader header)
+                                                const UBSHcomNetTransSglRequest &request,
+                                                SockOpContextInfo::SockOpType opType, UBSHcomNetTransHeader header)
     {
         ctx->sock = mSock;
         ctx->opType = opType;
@@ -219,7 +221,7 @@ private:
 
     friend class NetDriverSockWithOOB;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_SOCK_SYNC_ENDPOINT_H

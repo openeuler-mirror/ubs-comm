@@ -9,11 +9,11 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "test_net_rbtree.h"
 #include <thread>
 #include "hcom_def.h"
 #include "common/net_rb_tree.h"
 #include "hcom_utils.h"
-#include "test_net_rbtree.h"
 
 using namespace ock::hcom;
 
@@ -63,11 +63,10 @@ static void CppErase(NetRbTree<int> *tree, int val)
     tree->Erase(target);
 }
 
-
 static void LevelOrderTraverseDump(NetRbTree<int> *tree)
 {
     std::cout << "===========================dump rbtree===========================" << std::endl;
-    std::vector<NetRbNode<int> *> seq { tree->ref };
+    std::vector<NetRbNode<int> *> seq{tree->ref};
     std::vector<int> ret;
     while (!seq.empty()) {
         std::vector<NetRbNode<int> *> newSeq;
@@ -113,25 +112,25 @@ static bool IsEveryRedNodeHasTwoBlackChildren(NetRbNode<int> *node)
 static std::pair<int, bool> ChildrenHasSameBlackHeight(NetRbNode<int> *node)
 {
     if (!node) {
-        return { 0, true };
+        return {0, true};
     }
     int leftBH = node->IsBlack() ? 1 : 0;
     int rightBH = node->IsBlack() ? 1 : 0;
     if (node->left) {
         auto ret = ChildrenHasSameBlackHeight(node->left);
         if (!ret.second) {
-            return { 0, false };
+            return {0, false};
         }
         leftBH += ret.first;
     }
     if (node->right) {
         auto ret = ChildrenHasSameBlackHeight(node->left);
         if (!ret.second) {
-            return { 0, false };
+            return {0, false};
         }
         rightBH += ret.first;
     }
-    return { leftBH, leftBH == rightBH };
+    return {leftBH, leftBH == rightBH};
 }
 
 static bool IsInorderAscend(NetRbNode<int> *node)
