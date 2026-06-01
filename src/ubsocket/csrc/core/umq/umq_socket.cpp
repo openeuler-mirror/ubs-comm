@@ -145,7 +145,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     if (umq_handle_ == UMQ_INVALID_HANDLE) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::CREATE, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] CreateSubUmq() failed, ret: %llu, mapped errno: %d(%s), original errno: %d\n",
+        UBS_VLOG_ERR("CreateSubUmq() failed, ret: %llu, mapped errno: %d(%s), original errno: %d\n",
                      static_cast<unsigned long long>(umq_handle_), errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, UMQ_FAIL), savedErrno);
         return UBS_UMQ_CREATE | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
@@ -170,7 +170,7 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
     Locker sLock(UmqEidTable::Instance().GetMainMutex());
     uint64_t main_umq = GetOrCreateMainUmq(cfg, local_eid);
     if (main_umq == UMQ_INVALID_HANDLE) {
-        UBS_VLOG_ERR("[UMQ_API] GetOrCreateMainUmq() failed, ret: %llu\n", static_cast<unsigned long long>(main_umq));
+        UBS_VLOG_ERR("GetOrCreateMainUmq() failed, ret: %llu\n", static_cast<unsigned long long>(main_umq));
         return UMQ_INVALID_HANDLE;
     }
 
@@ -387,8 +387,7 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
     event_data.event_data.data = share_jfr_fd;
 
-    struct epoll_event shared_jfr_event {
-    };
+    struct epoll_event shared_jfr_event {};
     shared_jfr_event.events = EPOLLIN | EPOLLET;
     shared_jfr_event.data.u64 = event_data.u64;
 

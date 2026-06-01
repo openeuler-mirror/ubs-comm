@@ -78,7 +78,7 @@ void UrmaDevice::Init() noexcept
             }
 #endif
         } else {
-            UBS_VLOG_ERR("[URMA_API] Open device failed, errno %d", errno);
+            UBS_VLOG_ERR("[URMA_API] urma_query_device() failed, errno %d", errno);
         }
     }
 
@@ -210,7 +210,7 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
     /* step4: no previously created context, create one and put into all contexts */
     auto raw_dev = UrmaApi::urma_get_device_by_name(const_cast<char *>(target_dev_name.c_str()));
     if (raw_dev == nullptr) {
-        UBS_VLOG_ERR("[URMA_API] Open urma device '%s' failed, errno: %d", target_dev_name.c_str(), errno);
+        UBS_VLOG_ERR("[URMA_API] urma_get_device_by_name() failed for '%s', errno: %d", target_dev_name.c_str(), errno);
         return UBS_UB_DEV_ERROR;
     }
 
@@ -304,7 +304,7 @@ Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingTyp
         if (fcntl(raw_jfce->fd, F_SETFL, static_cast<uint32_t>(tmp_ctl) | O_NONBLOCK) < 0) {
             UrmaApi::urma_delete_jfce(raw_jfce);
             UrmaApi::urma_delete_jfc(raw_jfc);
-            UBS_VLOG_ERR("[URMA_API] create jfc failed as set jfc fd to non-blocking failed, errno %d", errno);
+            UBS_VLOG_ERR("fcntl() set jfc fd to non-blocking failed, errno %d", errno);
             return UBS_ERROR;
         }
 
@@ -609,7 +609,7 @@ void UrmaJetty::Destroy() noexcept
         raw_target_jetty_ != nullptr) {
         auto result = UrmaApi::urma_unbind_jetty(raw_jetty_);
         if (result != URMA_SUCCESS) {
-            UBS_VLOG_INFO("[URMA_API] Un-import failed, errno: %d", errno);
+            UBS_VLOG_INFO("[URMA_API] urma_unbind_jetty() failed, errno: %d", errno);
         }
     }
 
@@ -617,7 +617,7 @@ void UrmaJetty::Destroy() noexcept
     if (raw_target_jetty_ != nullptr) {
         auto result = UrmaApi::urma_unimport_jetty(raw_target_jetty_);
         if (result != URMA_SUCCESS) {
-            UBS_VLOG_INFO("[URMA_API] Un-import failed, errno: %d", errno);
+            UBS_VLOG_INFO("[URMA_API] urma_unimport_jetty() failed, errno: %d", errno);
         }
         raw_target_jetty_ = nullptr;
     }
