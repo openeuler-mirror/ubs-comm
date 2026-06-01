@@ -27,6 +27,8 @@ public:
 
     Tracepoint Get(uint32_t index) noexcept;
 
+    void Reset() noexcept;
+
     DEFINE_REF_OPERATION_FUNC
 
 private:
@@ -35,6 +37,7 @@ private:
     std::vector<Tracepoint> points_;
 
     friend class Tracer;
+    friend class TraceCombiner;
 };
 using TraceGroupPtr = Ref<TraceGroup>;
 
@@ -75,6 +78,13 @@ inline Tracepoint TraceGroup::Get(uint32_t index) noexcept
     }
 
     return points_[index];
+}
+
+inline void TraceGroup::Reset() noexcept
+{
+    for (uint32_t i = 0; i < max_tp_count_; i++) {
+        points_[i].Reset();
+    }
 }
 
 } // namespace profiling

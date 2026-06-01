@@ -16,12 +16,12 @@
 
 namespace ock {
 namespace ubs {
-enum ProfilingTPId : uint32_t
-{
+enum ProfilingTPId : uint32_t {
     CORE_CONNECT = 0,
     CORE_ACCEPT,
     CORE_WRITE,
     CORE_READ,
+    BRPC_WRITE,
 
     // count the number of ProfilingTPId
     UBSOCKET_PROF_COUNT,
@@ -42,6 +42,23 @@ public:
     static int Uninit()
     {
         return ubsocket_prof_uninit();
+    }
+
+    static int Combine(std::string &out_str)
+    {
+        char *out_buf = nullptr;
+        int len = ubsocket_prof_combind(&out_buf);
+        if (len < 0 || out_buf == nullptr) {
+            return UBS_ERROR;
+        }
+        out_str = std::string(out_buf, len);
+        free(out_buf);
+        return UBS_OK;
+    }
+
+    static void Reset()
+    {
+        ubsocket_prof_reset();
     }
 
 public:

@@ -26,6 +26,42 @@ int TraceCombiner::CombinerTracePoint(Tracepoint &outTracePoint, const Tracepoin
     return UBS_OK;
 }
 
+void TraceCombiner::OutputTraceGroup(std::ostringstream &oss, const TraceGroupPtr &allTraceGroup)
+{
+    for (size_t i = 0; i < allTraceGroup->points_.size(); i++) {
+        OutputTracePointStats(oss, allTraceGroup->points_[i]);
+    }
+}
+
+int TraceCombiner::OutputTraceGroupCli(char **out_buf, const TraceGroupPtr &allTraceGroup)
+{
+    std::ostringstream oss;
+    for (size_t i = 0; i < allTraceGroup->points_.size(); i++) {
+        OutputTracePointCli(oss, allTraceGroup->points_[i]);
+    }
+    std::string out_str = oss.str();
+    size_t data_len = out_str.size();
+    char *buf = (char *)malloc(data_len);
+    if (!buf) {
+        return -1;
+    }
+    memcpy(buf, out_str.c_str(), data_len);
+    *out_buf = buf;
+    return data_len;
+}
+
+void TraceCombiner::OutputTracePointCli(std::ostringstream &oss, const Tracepoint &totalTracePoint)
+{
+    oss << ("[" + (totalTracePoint.has_name ? totalTracePoint.GetName() : std::string("--")) + "]") << ","
+        << totalTracePoint.data.success_count << "," << totalTracePoint.data.failure_count << ","
+        << totalTracePoint.data.total_time << ","
+        << (totalTracePoint.data.success_count ? totalTracePoint.data.total_time / totalTracePoint.data.success_count :
+                                                 0)
+        << "," << std::setw(COL_WIDTH_MIN) << totalTracePoint.data.max_time << "," << std::setw(COL_WIDTH_MIN)
+        << totalTracePoint.data.min_time << ","
+        << ";";
+}
+
 void TraceCombiner::OutputTracePointStats(std::ostringstream &oss, const Tracepoint &totalTracePoint)
 {
     oss << std::left << std::setw(COL_WIDTH_MAX)

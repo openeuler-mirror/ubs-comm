@@ -46,6 +46,8 @@ public:
 
     int ProcessUmq(int sockfd, CLIMessage &response);
 
+    int ProcessDelayQuery(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
+
     int ProcessProbeQuery(int sockfd, CLIMessage &response);
 
 private:

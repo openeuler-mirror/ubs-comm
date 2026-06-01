@@ -6,6 +6,8 @@
  *Note:
  *History: 2026-02-09
 */
+#include <iomanip>
+#include <sstream>
 
 #include "cli_terminal_display.h"
 #include "umq_dfx_types.h"
@@ -18,6 +20,9 @@ static constexpr int IPV6_MAX_COLONS = 7;
 static constexpr int IPV6_HEXTET_BYTE_COUNT = 2;
 static constexpr int BYTE_BIT_WIDTH = 8;
 static constexpr int MAX_FLOW_CONTROL_STR = 4096;
+constexpr int COL_WIDTH_MIN = 20;
+constexpr int COL_WIDTH_MAX = 30;
+constexpr int PROF_VALUE_SUM = 7;
 
 char *In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufSize)
 {
@@ -536,5 +541,89 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
     }
     NewLine();
     printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
+}
+
+void TerminalDisplay::DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen)
+{
+    uint32_t headerSize = sizeof(CLIDelayHeader);
+    if (dataLen < headerSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    CLIDelayHeader header{};
+    memcpy(&header, data, headerSize);
+
+    if (header.retCode != 0) {
+        printf("Error occur while deal delay operation\n");
+        return;
+    }
+    uint32_t expectedSize = headerSize + header.tracePointDataSize;
+    if (dataLen != expectedSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+
+    if (dataLen == headerSize) {
+        PrintProfValue();
+        return;
+    }
+
+    std::string recvDataStr(reinterpret_cast<char *>(data + headerSize), header.tracePointDataSize);
+    PrintProfData(recvDataStr);
+}
+
+void TerminalDisplay::PrintProfTitle(std::ostringstream &oss)
+{
+    constexpr int timeBufSize = 32;
+    time_t now = time(nullptr);
+    char timeBuf[timeBufSize];
+    struct tm timeInfo;
+    if (localtime_r(&now, &timeInfo) != nullptr) {
+        std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &timeInfo);
+    } else {
+        timeBuf[0] = '\0';
+        CLI_LOG("Failed to create timeStamp.\n");
+    }
+    oss << "timeStamp: " << timeBuf << "\n";
+    oss << std::left << std::setw(COL_WIDTH_MAX) << "[TRACE_NAME]" << std::setw(COL_WIDTH_MIN) << "SUCCESS"
+        << std::setw(COL_WIDTH_MIN) << "FAILURE" << std::setw(COL_WIDTH_MIN) << "TOTAL(ns)" << std::setw(COL_WIDTH_MIN)
+        << "AVG(ns)" << std::setw(COL_WIDTH_MIN) << "MAX(ns)" << std::setw(COL_WIDTH_MIN) << "MIN(ns)"
+        << "\n";
+}
+
+void TerminalDisplay::PrintProfData(std::string &outPutData)
+{
+    std::ostringstream oss;
+    PrintProfTitle(oss);
+
+    auto tp_items = Split(outPutData, ';');
+    for (const auto &item : tp_items) {
+        if (item.empty()) {
+            continue;
+        }
+        auto fields = Split(item, ',');
+        if (fields.size() != PROF_VALUE_SUM) {
+            continue;
+        }
+        oss << std::left;
+        for (auto i = 0; i < fields.size(); ++i) {
+            if (!i) {
+                oss << std::setw(COL_WIDTH_MAX);
+            } else {
+                oss << std::setw(COL_WIDTH_MIN);
+            }
+            oss << fields[i];
+        }
+        oss << "\n";
+    }
+    oss << "Success to deal delay operation. \n";
+    printf("%s", oss.str().c_str());
+}
+
+void TerminalDisplay::PrintProfValue()
+{
+    std::ostringstream oss;
+    oss << "Success to deal delay operation. \n";
+    printf("%s", oss.str().c_str());
 }
 } // namespace Statistics

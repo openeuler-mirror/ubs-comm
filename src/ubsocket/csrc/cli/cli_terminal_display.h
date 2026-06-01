@@ -10,7 +10,9 @@
 #ifndef CLI_TERMINAL_DISPLAY
 #define CLI_TERMINAL_DISPLAY
 
+#include <securec.h>
 #include <cstring>
+#include <vector>
 
 #include "profiling/statistics/cli_message.h"
 #include "umq_dfx_api.h"
@@ -71,7 +73,13 @@ public:
     // umq perf display
     void DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen);
 
+    void DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen);
+
 private:
+    void PrintProfTitle(std::ostringstream &oss);
+    void PrintProfData(std::string &outPutData);
+    void PrintProfValue();
+
     void DetectTerminal()
     {
         mIstty = (isatty(STDOUT_FILENO) == 1);

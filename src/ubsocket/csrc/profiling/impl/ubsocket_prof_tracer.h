@@ -45,6 +45,10 @@ public:
 
     int Combine(std::ostringstream &oss) noexcept;
 
+    int Combine(char **out_buf) noexcept;
+
+    void Reset() noexcept;
+
 private:
     Result CreateTraceGroup() noexcept;
 

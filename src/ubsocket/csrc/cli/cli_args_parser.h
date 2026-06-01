@@ -12,8 +12,8 @@
 
 #include <arpa/inet.h>
 #include <getopt.h>
-#include <cstring>
 #include <algorithm>
+#include <cstring>
 
 #include "profiling/statistics/cli_message.h"
 

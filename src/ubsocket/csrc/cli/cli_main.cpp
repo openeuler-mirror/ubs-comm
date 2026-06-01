@@ -42,6 +42,11 @@ int main(int argc, char *argv[])
             client.Query(args, response);
             player.DisplayFlowControlInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
+    } else if (args.command == Statistics::CLICommand::DELAY) {
+        if (client.Query(args, response) != 0) {
+            return 0;
+        }
+        player.DisplayDelayTraceInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
     } else if (args.command == Statistics::CLICommand::QBUF_POOL) {
         client.Query(args, response);
         player.DisplayQbufPoolInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
