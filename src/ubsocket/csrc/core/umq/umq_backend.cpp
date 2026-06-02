@@ -29,14 +29,14 @@ Result UmqBackend::Init() noexcept
         return UBS_OK;
     }
 
-    /* initialize umq settting */
+    /* step1: initialize umq settting */
     ret = UmqSetting::Init();
     if (ret != UBS_OK) {
         UBS_VLOG_ERR("UmqSetting::Init() failed, ret: %d\n", ret);
         return ret;
     }
 
-    /* init umq init config */
+    /* step2: init umq init config */
     umq_init_cfg_t umq_config;
     bzero(&umq_config, sizeof(umq_config));
     umq_config.feature = UMQ_FEATURE_API_PRO |
@@ -56,7 +56,7 @@ Result UmqBackend::Init() noexcept
     umq_config.buf_pool_cfg.tls_qbuf_pool_depth = UmqSetting::UMQ_BUF_POOL_DEPTH;
     umq_config.io_lock_free = false;
 
-    /* init umq */
+    /* step3: init umq */
     ret = UmqApi::umq_init(&umq_config);
     if (ret != 0) {
         int savedErrno = errno;
@@ -90,6 +90,29 @@ Result UmqBackend::Init() noexcept
         return UBS_ERROR;
     }
 
+    /* step4: umq perf start */
+    if (GlobalSetting::UBS_PROF_ENABLE) {
+        ret = UmqApi::umq_stats_perf_start();
+        if (ret != UBS_OK) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+            UBS_VLOG_ERR("[UMQ_API] umq_stats_perf_start() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+            return UBS_UMQ_CREATE;
+        }
+
+        // TODO: add UMQ_PERF_QUANTILE_MAX_NUM, 控制统计的精度
+        umq_perf_stats_cfg_t perf_stats_cfg;
+        ret = UmqApi::umq_stats_perf_reset(&perf_stats_cfg);
+        if (ret != UBS_OK) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+            UBS_VLOG_ERR("[UMQ_API] umq_stats_perf_reset() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+            return UBS_UMQ_CREATE;
+        }
+    }
+
     UMQ_INITED = true;
 
     //UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
@@ -108,6 +131,10 @@ void UmqBackend::UnInit() noexcept
 
     UmqApi::umq_uninit();
     UMQ_INITED = false;
+
+    if (GlobalSetting::UBS_PROF_ENABLE) {
+        UmqApi::umq_stats_perf_stop();
+    }
 
     UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
 }
