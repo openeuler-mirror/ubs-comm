@@ -139,9 +139,8 @@ TEST_F(TestNegativeTcpDriver, DiscontinuousState)
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
     UBSHcomNetDriver *driver;
-    result =
-        UTHelper::GetDriverStateMask(driver, DRIVER_STATE_INIT | DRIVER_STATE_START, false,
-        UBSHcomNetDriverProtocol::TCP);
+    result = UTHelper::GetDriverStateMask(driver, DRIVER_STATE_INIT | DRIVER_STATE_START, false,
+                                          UBSHcomNetDriverProtocol::TCP);
     UT_CHECK_RESULT_OK(result)
     UT_CHECK_RESULT_TRUE(driver->IsStarted())
     UT_CHECK_RESULT_TRUE(driver->IsInited())

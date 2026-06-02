@@ -14,25 +14,25 @@
 #define HCOM_UB_COMMON_H
 #ifdef UB_BUILD_ENABLED
 
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <strings.h>
+#include <unistd.h>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <ctime>
-#include <fcntl.h>
 #include <functional>
 #include <mutex>
-#include <netinet/in.h>
 #include <sstream>
-#include <strings.h>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
 #include "hcom.h"
 #include "hcom_def.h"
-#include "hcom_num_def.h"
 #include "hcom_log.h"
+#include "hcom_num_def.h"
 #include "net_common.h"
 #include "net_obj_pool.h"
 #include "under_api/urma/urma_api_wrapper.h"
@@ -101,6 +101,8 @@ constexpr uint32_t JETTY_TIMEOUT = NN_NO14;
 constexpr uint32_t JETTY_RETRY_COUNT = NN_NO7;
 constexpr uint32_t JETTY_RNR_RETRY = NN_NO7;
 constexpr uint32_t JFC_COUNT = NN_NO1024;
+
+constexpr uint32_t JETTY_MAX_CTP_SEND_BUFF_SIZE = 4096;
 
 /*
  * class forward declaration
@@ -301,7 +303,7 @@ struct UBVaSge {
     urma_target_seg_t *targetSeg = nullptr;
     urma_target_seg_t *dstSeg = nullptr;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_COMMON_H

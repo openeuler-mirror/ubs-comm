@@ -1,10 +1,10 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
+#include "test_case/service_v2/service_read_bw_test.h"
 #include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "test_case/service_v2/service_read_bw_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -28,14 +28,13 @@ int ServiceReadBwTest::DoPostRead()
             std::placeholders::_1);
         if (newCallback == nullptr) {
             LOG_ERROR("Create callback failed");
+            sem_post(&mSem);
             return -1;
         }
         res = mCh->Get(mReq, newCallback);
         if (res != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("failed to send to server");
+            sem_post(&mSem);
             return res;
         }
     }
@@ -43,7 +42,7 @@ int ServiceReadBwTest::DoPostRead()
 }
 
 int ServiceReadBwTest::NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch,
-    const std::string &payload)
+                                  const std::string &payload)
 {
     mCh = ch;
     LOG_DEBUG("New connection from " << ipPort << " !");
@@ -65,9 +64,6 @@ int ServiceReadBwTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &c
         UBSHcomReplyContext replyCtx;
         replyCtx.rspCtx = ctx.RspCtx();
         if ((ctx.Channel()->Reply(replyCtx, req, newCallback)) != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("Failed to post message to data to server");
             return -1;
         }
@@ -194,5 +190,5 @@ bool ServiceReadBwTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::SERVICE_READ_BW, ServiceReadBwTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

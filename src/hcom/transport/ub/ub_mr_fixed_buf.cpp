@@ -17,7 +17,7 @@ namespace ock {
 namespace hcom {
 
 UResult UBMemoryRegionFixedBuffer::Create(const std::string &name, UBContext *ctx, uint32_t singleSegSize,
-    uint32_t segCount, unsigned long memid, UBMemoryRegionFixedBuffer *&buf)
+                                          uint32_t segCount, unsigned long memid, UBMemoryRegionFixedBuffer *&buf)
 {
     auto tmp = new (std::nothrow) UBMemoryRegionFixedBuffer(name, ctx, memid, singleSegSize, segCount);
     if (tmp == nullptr) {
@@ -48,6 +48,6 @@ void UBMemoryRegionFixedBuffer::UnInitialize()
 {
     UBMemoryRegion::UnInitialize();
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

@@ -25,7 +25,8 @@ namespace hcom {
 struct RDMAQpExchangeInfo {
     uint32_t lid = 0;
     uint32_t qpn = 0;
-    union ibv_gid gid {};
+    union ibv_gid gid {
+    };
     uintptr_t hbAddress = 0;
     uint32_t hbKey = 0;
     uint64_t hbMrSize = 0;
@@ -38,7 +39,12 @@ struct RDMAQpExchangeInfo {
 class RDMAQp {
 public:
     RDMAQp(const std::string &name, uint32_t id, RDMAContext *ctx, RDMACq *cq, QpOptions qpOptions = {})
-        : mName(name), mId(id), mRDMAContext(ctx), mSendCQ(cq), mRecvCQ(cq), mQpOptions(qpOptions)
+        : mName(name),
+          mId(id),
+          mRDMAContext(ctx),
+          mSendCQ(cq),
+          mRecvCQ(cq),
+          mQpOptions(qpOptions)
     {
         if (mRDMAContext != nullptr) {
             mRDMAContext->IncreaseRef();
@@ -51,7 +57,11 @@ public:
     }
 
     RDMAQp(uint32_t id, RDMAContext *ctx, RDMACq *sendCq, RDMACq *receiveCq, QpOptions qpOptions)
-        : mId(id), mRDMAContext(ctx), mSendCQ(sendCq), mRecvCQ(receiveCq), mQpOptions(qpOptions)
+        : mId(id),
+          mRDMAContext(ctx),
+          mSendCQ(sendCq),
+          mRecvCQ(receiveCq),
+          mQpOptions(qpOptions)
     {
         if (mRDMAContext != nullptr) {
             mRDMAContext->IncreaseRef();
@@ -142,18 +152,18 @@ public:
         struct ibv_recv_wr *bad_wr;
         int result = ibv_post_recv(mQP, &wrs[0], &bad_wr);
         if (NN_UNLIKELY(result != 0)) {
-            NN_LOG_ERROR("BatchPostReceive failed on qp " << mName << ", result=" << result << " (errno: " <<
-                strerror(result) << ")");
+            NN_LOG_ERROR("BatchPostReceive failed on qp " << mName << ", result=" << result
+                                                          << " (errno: " << strerror(result) << ")");
             return RR_QP_POST_RECEIVE_FAILED;
         }
         return RR_OK;
     }
 
     inline RResult PostSend(uintptr_t bufAddr, uint32_t bufSize, uint32_t localKey, uint64_t context,
-        uint32_t immData = 0)
+                            uint32_t immData = 0)
     {
-        NN_LOG_TRACE_INFO("Post send addr " << bufAddr << ", size " << bufSize << ", lkey " << localKey <<
-            ", context " << context);
+        NN_LOG_TRACE_INFO("Post send addr " << bufAddr << ", size " << bufSize << ", lkey " << localKey << ", context "
+                                            << context);
         if (NN_UNLIKELY(mQP == nullptr)) {
             return RR_QP_NOT_INITIALIZED;
         }
@@ -186,7 +196,7 @@ public:
     }
 
     inline RResult PostSendSglInline(UBSHcomNetTransDataIov *iov, uint32_t iovCount, uint64_t context,
-        uint32_t immData = 0)
+                                     uint32_t immData = 0)
     {
         if (NN_UNLIKELY(mQP == nullptr)) {
             return RR_QP_NOT_INITIALIZED;
@@ -258,8 +268,8 @@ public:
         return RR_OK;
     }
 
-    inline RResult PostOneSideSgl(UBSHcomNetTransSgeIov *iov, uint32_t iovCount,
-        uint64_t (&context)[NET_SGE_MAX_IOV], bool isRead)
+    inline RResult PostOneSideSgl(UBSHcomNetTransSgeIov *iov, uint32_t iovCount, uint64_t (&context)[NET_SGE_MAX_IOV],
+                                  bool isRead)
     {
         if (NN_UNLIKELY(mQP == nullptr)) {
             return RR_QP_NOT_INITIALIZED;
@@ -295,7 +305,7 @@ public:
     }
 
     inline RResult PostRead(uintptr_t bufAddr, uint32_t localKey, uintptr_t remoteBufAddr, uint32_t remoteKey,
-        uint32_t bufSize, uint64_t context)
+                            uint32_t bufSize, uint64_t context)
     {
         if (NN_UNLIKELY(mQP == nullptr)) {
             return RR_QP_NOT_INITIALIZED;
@@ -326,7 +336,7 @@ public:
     }
 
     inline RResult PostWrite(uintptr_t bufAddr, uint32_t localKey, uintptr_t remoteBufAddr, uint32_t remoteKey,
-        uint32_t bufSize, uint64_t context)
+                             uint32_t bufSize, uint64_t context)
     {
         if (NN_UNLIKELY(mQP == nullptr)) {
             return RR_QP_NOT_INITIALIZED;
@@ -573,8 +583,8 @@ public:
         auto result = HcomIbv::ModifyQp(mQP, &attr, IBV_QP_STATE);
         if (result != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to modify QP state to ERR " << result << ", as " <<
-                NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to modify QP state to ERR "
+                         << result << ", as " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return RR_QP_CHANGE_ERR;
         }
 
@@ -597,13 +607,13 @@ private:
     RDMAContext *mRDMAContext = nullptr;
     RDMACq *mSendCQ = nullptr;
     RDMACq *mRecvCQ = nullptr;
-    QpOptions mQpOptions {};
+    QpOptions mQpOptions{};
     ibv_qp *mQP = nullptr;
     uintptr_t mUpContext = 0;
     uintptr_t mUpContext1 = 0;
     NetSpinLock mLock;
-    RDMAOpContextInfo mCtxPosted {};
-    uint32_t mCtxPostedCount { 0 };
+    RDMAOpContextInfo mCtxPosted{};
+    uint32_t mCtxPostedCount{0};
     RDMAMemoryRegionFixedBuffer *mQpMr = nullptr;
 
     int32_t mOneSideMaxWr = QP_MAX_SEND_WR - NN_NO64;
@@ -612,7 +622,7 @@ private:
     uint32_t mPostSendMaxSize = NN_NO1024;
     int32_t mPostSendRef = NN_NO64;
     // delay batch return wr
-    std::atomic<uint16_t> mDelayNum { 0 };
+    std::atomic<uint16_t> mDelayNum{0};
     struct RDMAOpContextInfo *mDelayList[QP_MAX_BATCH_RETURN_WR_SIZE];
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 
@@ -620,7 +630,7 @@ private:
 
     friend class RDMAWorker;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_RDMA_VERBS_WRAPPER_QP_H

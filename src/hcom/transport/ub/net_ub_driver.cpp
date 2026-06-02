@@ -11,14 +11,14 @@
  */
 #ifdef UB_BUILD_ENABLED
 
-#include "hcom_def.h"
 #include "net_ub_driver.h"
+#include "hcom_def.h"
+#include "net_common.h"
 #include "net_ub_endpoint.h"
 #include "openssl_api_wrapper.h"
 #include "ub_common.h"
 #include "ub_mr_fixed_buf.h"
 #include "ub_worker.h"
-#include "net_common.h"
 
 namespace ock {
 namespace hcom {
@@ -105,41 +105,42 @@ NResult NetDriverUB::ValidateOptions()
 {
     /* validate param related to device IpMask for UB and Sock */
     if (NN_UNLIKELY(!ValidateArrayOptions(mOptions.netDeviceIpMask, NN_NO256))) {
-        NN_LOG_ERROR("Option 'netDeviceIpMask' is invalid, " << mOptions.netDeviceIpMask <<
-            " is set in driver,the Array max length is 256.");
+        NN_LOG_ERROR("Option 'netDeviceIpMask' is invalid, " << mOptions.netDeviceIpMask
+                                                             << " is set in driver,the Array max length is 256.");
         return NN_INVALID_PARAM;
     }
 
     uint64_t sendRecvMrSize = static_cast<uint64_t>(mOptions.mrSendReceiveSegCount) * mOptions.mrSendReceiveSegSize;
 
     if (mOptions.prePostReceiveSizePerQP == 0) {
-        NN_LOG_ERROR("Invalid option prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP <<
-            ", should not be zero");
+        NN_LOG_ERROR("Invalid option prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP
+                                                               << ", should not be zero");
         return NN_INVALID_PARAM;
     }
 
     // 32K 为硬件 max_jfr_depth 上限
     if (mOptions.prePostReceiveSizePerQP > NN_NO32768) {
-        NN_LOG_WARN("Invalid option prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP <<
-            ", should be <= " << NN_NO32768 << ", set to " << NN_NO32768);
+        NN_LOG_WARN("Invalid option prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP << ", should be <= "
+                                                              << NN_NO32768 << ", set to " << NN_NO32768);
         mOptions.prePostReceiveSizePerQP = NN_NO32768;
     }
 
     if (mOptions.maxPostSendCountPerQP == 0) {
-        NN_LOG_ERROR("Invalid option maxPostSendCountPerQP " << mOptions.maxPostSendCountPerQP <<
-            ", should not be zero");
+        NN_LOG_ERROR("Invalid option maxPostSendCountPerQP " << mOptions.maxPostSendCountPerQP
+                                                             << ", should not be zero");
         return NN_INVALID_PARAM;
     }
 
     if (mOptions.maxPostSendCountPerQP > NN_NO32768) {
-        NN_LOG_WARN("Invalid option maxPostSendCountPerQP " << mOptions.maxPostSendCountPerQP << ", should be <= " <<
-            NN_NO32768 << ", set to " << NN_NO32768);
+        NN_LOG_WARN("Invalid option maxPostSendCountPerQP "
+                    << mOptions.maxPostSendCountPerQP << ", should be <= " << NN_NO32768 << ", set to " << NN_NO32768);
         mOptions.maxPostSendCountPerQP = NN_NO32768;
     }
 
     if (mOptions.maxPostSendCountPerQP > mOptions.prePostReceiveSizePerQP) {
-        NN_LOG_WARN("Invalid option maxPostSendCountPerQP " << mOptions.maxPostSendCountPerQP <<
-            ", over than prePostReceiveSizePerQP " << mOptions.prePostReceiveSizePerQP << " , change to equal");
+        NN_LOG_WARN("Invalid option maxPostSendCountPerQP "
+                    << mOptions.maxPostSendCountPerQP << ", over than prePostReceiveSizePerQP "
+                    << mOptions.prePostReceiveSizePerQP << " , change to equal");
         mOptions.maxPostSendCountPerQP = mOptions.prePostReceiveSizePerQP;
     }
 
@@ -158,7 +159,7 @@ NResult NetDriverUB::ValidaQpQueueSizeOptions()
 {
     if (mContext == nullptr) {
         NN_LOG_WARN("Unable to get system max jfs and max jfr, cannot compare with Option 'qpSendQueueSize' and "
-            "'qpReceiveQueueSize'.");
+                    "'qpReceiveQueueSize'.");
         return NN_OK;
     }
     uint32_t maxJfs = mContext->GetMaxJfs();
@@ -170,13 +171,13 @@ NResult NetDriverUB::ValidaQpQueueSizeOptions()
     uint32_t needJfs = maxJfs - NN_NO8;
     uint32_t needJfr = maxJfr - NN_NO8;
     if (mOptions.qpSendQueueSize > needJfs) {
-        NN_LOG_WARN("Urma max Jfs is " << maxJfs << " , urma option 'qpSendQueueSize' range is 16~" << needJfs <<
-            " ,change 'qpSendQueueSize' to " << needJfs);
+        NN_LOG_WARN("Urma max Jfs is " << maxJfs << " , urma option 'qpSendQueueSize' range is 16~" << needJfs
+                                       << " ,change 'qpSendQueueSize' to " << needJfs);
         mOptions.qpSendQueueSize = needJfs;
     }
     if (mOptions.qpReceiveQueueSize > needJfr) {
-        NN_LOG_WARN("Urma max Jfr is " << maxJfr << " , urma option 'qpReceiveQueueSize' range is 16~" << needJfr <<
-            " ,change 'qpReceiveQueueSize' to " << needJfr);
+        NN_LOG_WARN("Urma max Jfr is " << maxJfr << " , urma option 'qpReceiveQueueSize' range is 16~" << needJfr
+                                       << " ,change 'qpReceiveQueueSize' to " << needJfr);
         mOptions.qpReceiveQueueSize = needJfr;
     }
     return NN_OK;
@@ -223,7 +224,7 @@ NResult NetDriverUB::CreateSendMr(uint8_t slave)
     int result = 0;
     // create mr pool for send/receive and initialize
     if ((result = UBMemoryRegionFixedBuffer::Create(mName, mContext, mOptions.mrSendReceiveSegSize,
-        mOptions.mrSendReceiveSegCount, slave, mDriverSendMR)) != 0) {
+                                                    mOptions.mrSendReceiveSegCount, slave, mDriverSendMR)) != 0) {
         NN_LOG_ERROR("Failed to create mr for send/receive in NetDriverUB " << mName << ", result " << result);
         return result;
     }
@@ -266,16 +267,16 @@ NResult NetDriverUB::CreateSglCtxMemPool()
     options.tcExpandBlkCnt = NN_NO64;
     mSglCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mSglCtxMemPool.Get() == nullptr) {
-        NN_LOG_ERROR("Failed to create memory pool for UB sgl op context in driver " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to create memory pool for UB sgl op context in driver " << mName
+                                                                                     << ", probably out of memory");
         return NN_INVALID_PARAM;
     }
 
     auto result = mSglCtxMemPool->Initialize();
     if (result != NN_OK) {
         mSglCtxMemPool.Set(nullptr);
-        NN_LOG_ERROR("Failed to initialize memory pool for UB sgl op context in driver " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to initialize memory pool for UB sgl op context in driver " << mName
+                                                                                         << ", probably out of memory");
         return result;
     }
 
@@ -346,9 +347,9 @@ NResult NetDriverUB::CreateWorkers()
     if (!(NetFunc::NN_ParseWorkersGroups(mOptions.WorkGroups(), workerGroups)) ||
         !(NetFunc::NN_ParseWorkerGroupsCpus(mOptions.WorkerGroupCpus(), workerGroupCpus)) ||
         !(NetFunc::NN_FinalizeWorkerGroupCpus(workerGroups, workerGroupCpus, mOptions.mode != NET_BUSY_POLLING,
-        flatWorkerCpus)) ||
-        !(NetFunc::NN_ParseWorkersGroupsThreadPriority(mOptions.WorkerGroupThreadPriority(),
-        workerThreadPriority, workerGroups.size()))) {
+                                              flatWorkerCpus)) ||
+        !(NetFunc::NN_ParseWorkersGroupsThreadPriority(mOptions.WorkerGroupThreadPriority(), workerThreadPriority,
+                                                       workerGroups.size()))) {
         NN_LOG_ERROR("Failed to parse worker or cpu groups");
         return NN_INVALID_PARAM;
     }
@@ -357,7 +358,7 @@ NResult NetDriverUB::CreateWorkers()
     options.SetValue(mOptions);
     if ((mOptions.workerThreadPriority != 0) && (!workerThreadPriority.empty())) {
         NN_LOG_WARN("Driver options 'workerThreadPriority' and 'workerGroupsThreadPriority' set all, preferential use "
-            "'workerGroupsThreadPriority'.");
+                    "'workerGroupsThreadPriority'.");
     }
 
     /* create workers */
@@ -375,8 +376,8 @@ NResult NetDriverUB::CreateWorkers()
                 options.threadPriority = workerThreadPriority[groupIndex];
             }
             UBWorker *worker = nullptr;
-            if (NN_UNLIKELY(
-                (result = UBWorker::Create(mName, mContext, options, mOpCtxMemPool, mSglCtxMemPool, worker)) != 0)) {
+            if (NN_UNLIKELY((result = UBWorker::Create(mName, mContext, options, mOpCtxMemPool, mSglCtxMemPool,
+                                                       worker)) != 0)) {
                 return result;
             }
 
@@ -614,17 +615,17 @@ inline urma_target_seg_t *NetDriverUB::ImportSeg(uintptr_t addr, uint32_t bufSiz
     remoteSeg.token_id = tokenId;
     remoteSeg.ubva.eid = eid;
     remoteSeg.attr.bs.token_policy = URMA_TOKEN_PLAIN_TEXT;
- 
+
     urma_import_seg_flag_t flag{};
     flag.bs.cacheable = URMA_NON_CACHEABLE;
     flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE;
     flag.bs.mapping = URMA_SEG_NOMAP;
- 
+
     return HcomUrma::ImportSeg(mContext->mUrmaContext, &remoteSeg, &tokenValue, 0, flag);
 }
- 
+
 NResult NetDriverUB::ImportUrmaSeg(uintptr_t address, uint64_t size, uint64_t key, void **tSeg, uint8_t *eid,
-    uint32_t eidLen)
+                                   uint32_t eidLen)
 {
     NN_LOG_INFO("ImportUrmaSeg, size: " << size << ", key :" << key);
     urma_eid_t urmaEid{};
@@ -646,7 +647,7 @@ NResult NetDriverUB::ImportUrmaSeg(uintptr_t address, uint64_t size, uint64_t ke
     *tSeg = static_cast<void *>(dstSeg);
     return NN_OK;
 }
- 
-}
-}
+
+} // namespace hcom
+} // namespace ock
 #endif

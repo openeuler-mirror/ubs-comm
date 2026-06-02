@@ -1,11 +1,11 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
-#include <functional>
+#include "transport_send_bw_test.h"
 #include <unistd.h>
+#include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "transport_send_bw_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -21,13 +21,14 @@ int TransportSendBwTest::DoPostSend()
         int res = mEp->PostSend(OP_CODE_SEND_BW, req);
         if (res != 0) {
             LOG_ERROR("failed to send to server");
+            return res;
         }
     }
     return 0;
 }
 
 int TransportSendBwTest::NewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                                     const std::string &payload)
 {
     mEp = ep;
     LOG_DEBUG("new connection from " << ipPort << " !");
@@ -50,7 +51,7 @@ bool TransportSendBwTest::Initialize()
     sem_init(&mSem, 0, 0);
     // create UBSHcomNetDriver
     NewEpHandler funcNewEndpoint = bind(&TransportSendBwTest::NewEndPoint, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+                                        std::placeholders::_2, std::placeholders::_3);
     ReqPostedHandler funcReqPosted = bind(&TransportSendBwTest::RequestPosted, this, std::placeholders::_1);
     mHelper.RegisterNewEPHandler(funcNewEndpoint);
     mHelper.RegisterReqPostedHandler(funcReqPosted);
@@ -121,7 +122,11 @@ bool TransportSendBwTest::RunTest(PerfTestContext *ctx)
     // ctx会记录测试中每个Iteration耗时，故每次使用不同的ctx
     SetPerfTestContext(ctx);
     if (!mCfg.GetIsServer()) {
-        DoPostSend();
+        int res = DoPostSend();
+        if (res != 0) {
+            sem_post(&mSem);
+            return false;
+        }
     }
     // 等待测试结束
     sem_wait(&mSem);
@@ -129,5 +134,5 @@ bool TransportSendBwTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::TRANSPORT_SEND_BW, TransportSendBwTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

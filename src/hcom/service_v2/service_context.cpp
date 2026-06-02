@@ -66,7 +66,7 @@ SerResult UBSHcomServiceContext::CopyData(void *data, uint32_t dataLen)
 }
 
 SerResult UBSHcomServiceContext::Clone(UBSHcomServiceContext &newOne, const UBSHcomServiceContext &oldOne,
-    bool copyData)
+                                       bool copyData)
 {
     newOne = oldOne;
 
@@ -80,5 +80,5 @@ SerResult UBSHcomServiceContext::Clone(UBSHcomServiceContext &newOne, const UBSH
     }
     return SER_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

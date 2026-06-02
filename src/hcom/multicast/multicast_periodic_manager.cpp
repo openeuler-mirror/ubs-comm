@@ -1,8 +1,8 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
-#include <unistd.h>
 #include <sys/epoll.h>
+#include <unistd.h>
 
 #include "net_trace.h"
 
@@ -92,14 +92,14 @@ void MultiCastPeriodicManager::ProcessCleanUp(uint16_t tId)
         return;
     }
 
-    PublisherContext timeoutCtx {};
+    PublisherContext timeoutCtx{};
     for (uint32_t i = NN_NO0; i < M_MAX_BATCH_NUM; i++) {
         auto currentQueue = &(mQueue[tId].queue[i]);
         std::lock_guard<std::mutex> guard(mQueue[tId].lock[i]);
         while (!currentQueue->empty()) {
             auto it = currentQueue->begin();
-            NN_LOG_TRACE_INFO("Process clean up seq no " << (*it)->mSeqNo << " time " << (*it)->mTimeout <<
-                ", current time " << NetMonotonic::TimeSec());
+            NN_LOG_TRACE_INFO("Process clean up seq no " << (*it)->mSeqNo << " time " << (*it)->mTimeout
+                                                         << ", current time " << NetMonotonic::TimeSec());
             if ((*it)->EraseSeqNoWithRet()) {
                 (*it)->TimeoutDump();
                 (*it)->MarkTimeout();
@@ -114,7 +114,6 @@ void MultiCastPeriodicManager::ProcessCleanUp(uint16_t tId)
     }
 }
 
-
 void MultiCastPeriodicManager::FillHandleQueue(uint16_t tId)
 {
     mHandleQueue[tId].clear();
@@ -124,8 +123,8 @@ void MultiCastPeriodicManager::FillHandleQueue(uint16_t tId)
         std::lock_guard<std::mutex> guard(mQueue[tId].lock[i]);
         auto it = currentQueue->begin();
         while (it != currentQueue->end()) {
-            NN_LOG_TRACE_INFO("Process clean up seq no is: " << (*it)->SeqNo() << " time is: " << (*it)->mTimeout <<
-                                                             ", current time is :" << NetMonotonic::TimeSec());
+            NN_LOG_TRACE_INFO("Process clean up seq no is: " << (*it)->SeqNo() << " time is: " << (*it)->mTimeout
+                                                             << ", current time is :" << NetMonotonic::TimeSec());
             if ((*it)->IsFinished() || (*it)->IsTimeOut()) {
                 mHandleQueue[tId].emplace_back(*it);
                 it = currentQueue->erase(it);
@@ -212,15 +211,14 @@ SerResult MultiCastPeriodicManager::AddTimerCheck(MultiCastServiceTimer *&timer)
 bool MultiCastPeriodicManager::ValidateTimer(MultiCastServiceTimer *&timer)
 {
     if (NN_UNLIKELY(timer == nullptr || (timer->mType) != MultiCastSyncCBType::IO)) {
-            return false;
-        }
+        return false;
+    }
 
     if (NN_UNLIKELY((timer->mPublisher) == nullptr || (timer->mPublisher->mTimerList) == 0)) {
         return false;
     }
     return true;
 }
-
 
 void MultiCastPeriodicManager::RunInThread(int16_t tId)
 {
@@ -235,8 +233,8 @@ void MultiCastPeriodicManager::RunInThread(int16_t tId)
     int eFd = epoll_create(1);
     if (eFd < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("MultiCastPeriodicManager manager failed to create epoll by " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("MultiCastPeriodicManager manager failed to create epoll by "
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return;
     }
 
@@ -258,5 +256,5 @@ void MultiCastPeriodicManager::RunInThread(int16_t tId)
     NetFunc::NN_SafeCloseFd(eFd);
     NN_LOG_INFO("PeriodicManager for timeout [name: " << mName << ", index: " << tId << "] working thread exit");
 }
-}
-}
+} // namespace hcom
+} // namespace ock

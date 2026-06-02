@@ -10,17 +10,19 @@
  * See the Mulan PSL v2 for more details.
  */
 #ifdef RDMA_BUILD_ENABLED
+#include "net_rdma_async_endpoint.h"
 #include "net_common.h"
 #include "net_rdma_driver_oob.h"
 #include "net_security_rand.h"
 #include "rdma_validation.h"
-#include "net_rdma_async_endpoint.h"
 
 namespace ock {
 namespace hcom {
 NetAsyncEndpoint::NetAsyncEndpoint(uint64_t id, RDMAAsyncEndPoint *ep, NetDriverRDMAWithOob *driver,
-    const UBSHcomNetWorkerIndex &workerIndex)
-    : NetEndpointImpl(id, workerIndex), mEp(ep), mDriver(driver)
+                                   const UBSHcomNetWorkerIndex &workerIndex)
+    : NetEndpointImpl(id, workerIndex),
+      mEp(ep),
+      mDriver(driver)
 {
     if (mDriver != nullptr) {
         mDriver->IncreaseRef();
@@ -32,8 +34,8 @@ NetAsyncEndpoint::NetAsyncEndpoint(uint64_t id, RDMAAsyncEndPoint *ep, NetDriver
 
     if (mEp != nullptr && mDriver != nullptr) {
         mSegSize = mDriver->mOptions.mrSendReceiveSegSize < mEp->Qp()->PostSendMaxSize() ?
-            mDriver->mOptions.mrSendReceiveSegSize :
-            mEp->Qp()->PostSendMaxSize();
+                       mDriver->mOptions.mrSendReceiveSegSize :
+                       mEp->Qp()->PostSendMaxSize();
         mAllowedSize = mSegSize - sizeof(UBSHcomNetTransHeader);
     }
 
@@ -69,8 +71,8 @@ uint32_t NetAsyncEndpoint::GetSendQueueCount()
 NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNO)
 {
     NResult result = NN_OK;
-    if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize, mIsNeedEncrypt,
+                                                 mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to async post send as validate fail");
         return result;
     }
@@ -91,7 +93,7 @@ NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("RDMA Failed to async post send with seq no as encryption failure");
             return NN_ENCRYPT_FAILED;
@@ -100,8 +102,8 @@ NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest
     } else {
         header->dataLength = request.size;
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
-            mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader),
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("RDMA Failed to copy request to mrBufAddress");
             return NN_INVALID_PARAM;
@@ -142,8 +144,8 @@ NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest
 }
 
 NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType, const void *extHeader,
-    uint32_t extHeaderSize)
+                                   const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType,
+                                   const void *extHeader, uint32_t extHeaderSize)
 {
     if (NN_UNLIKELY(extHeaderType == UBSHcomExtHeaderType::RAW)) {
         NN_LOG_ERROR("Shouldn't use RAW type when extHeader is given.");
@@ -158,7 +160,7 @@ NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest
     // 保证 extHeaderSize + request.size <= mAllowedSize.
     NResult result = NN_OK;
     if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize - extHeaderSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+                                                 mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to async post send as validate fail");
         return result;
     }
@@ -222,7 +224,7 @@ NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest
             TRACE_DELAY_END(RDMA_EP_ASYNC_POST_SEND, result);
             return RR_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
-            usleep(100UL);  // LWT situation is not suitable for calling system sleep
+            usleep(100UL); // LWT situation is not suitable for calling system sleep
             continue;
         }
         // no retry result or timeout = 0
@@ -236,11 +238,11 @@ NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest
 }
 
 NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo)
+                                   const UBSHcomNetTransOpInfo &opInfo)
 {
     NResult res = NN_OK;
-    if (NN_UNLIKELY((res = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((res = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize, mIsNeedEncrypt,
+                                              mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to async post send as validate fail");
         return res;
     }
@@ -263,7 +265,7 @@ NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("Mlx5 Failed to async post send with op info as encryption failure");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ENCRYPT_FAILED;
@@ -272,8 +274,8 @@ NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest
     } else {
         header->dataLength = request.size;
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
-            mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader),
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("Failed to copy request to mrBufAddress");
             return NN_INVALID_PARAM;
@@ -311,8 +313,8 @@ NResult NetAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest
     return res;
 }
 
-NResult NetAsyncEndpoint::PostSendSglInline(
-    uint16_t opCode, const UBSHcomNetTransRequest &request, const UBSHcomNetTransOpInfo &opInfo)
+NResult NetAsyncEndpoint::PostSendSglInline(uint16_t opCode, const UBSHcomNetTransRequest &request,
+                                            const UBSHcomNetTransOpInfo &opInfo)
 {
     // 需要加密必定会涉及到内存拷贝，仍然走非inline方式
     if (mIsNeedEncrypt) {
@@ -320,8 +322,8 @@ NResult NetAsyncEndpoint::PostSendSglInline(
     }
 
     NResult result = NN_OK;
-    if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize, mIsNeedEncrypt,
+                                                 mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to async post send as validate fail");
         return result;
     }
@@ -355,8 +357,8 @@ NResult NetAsyncEndpoint::PostSendSglInline(
 NResult NetAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo)
 {
     NResult result = NN_OK;
-    if (NN_UNLIKELY((result = PostSendRawValidation(mState, mId, mDriver, seqNo, request, mSegSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((result = PostSendRawValidation(mState, mId, mDriver, seqNo, request, mSegSize, mIsNeedEncrypt,
+                                                    mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to async post send raw as validate fail");
         return result;
     }
@@ -371,7 +373,7 @@ NResult NetAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uin
     size_t msgSize = 0;
     if (!mIsNeedEncrypt) {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress), mDriver->mDriverSendMR->GetSingleSegSize(),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("Failed to copy request to mrBufAddress");
             return NN_INVALID_PARAM;
@@ -380,7 +382,7 @@ NResult NetAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uin
     } else {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(mrBufAddress), cipherLen)) {
+                          reinterpret_cast<void *>(mrBufAddress), cipherLen)) {
             NN_LOG_ERROR("Failed send message as encryption failure in rdma");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ENCRYPT_FAILED;
@@ -419,8 +421,8 @@ NResult NetAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uin
 NResult NetAsyncEndpoint::PostSendRawNoCpy(const UBSHcomNetTransRequest &request, uint32_t seqNo)
 {
     NResult result = NN_OK;
-    if (NN_UNLIKELY((result = PostSendRawValidation(mState, mId, mDriver, seqNo, request, mSegSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((result = PostSendRawValidation(mState, mId, mDriver, seqNo, request, mSegSize, mIsNeedEncrypt,
+                                                    mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to async post send raw as validate fail");
         return result;
     }
@@ -461,7 +463,7 @@ NResult NetAsyncEndpoint::PostSendRawNoCpyEncrypt(const UBSHcomNetTransRequest &
 
     uint32_t cipherLen = 0;
     if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-        reinterpret_cast<void *>(mrBufAddress), cipherLen)) {
+                      reinterpret_cast<void *>(mrBufAddress), cipherLen)) {
         NN_LOG_ERROR("Failed send message as encryption failure in rdma");
         mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
         return NN_ENCRYPT_FAILED;
@@ -497,12 +499,12 @@ NResult NetAsyncEndpoint::PostSendRawSgl(const UBSHcomNetTransSglRequest &reques
     size_t size = 0;
     NResult result = NN_OK;
     if (NN_UNLIKELY((result = PostSendSglValidation(mState, mId, mDriver, seqNo, request, mSegSize, size,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+                                                    mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to async post send raw sgl as validate fail");
         return result;
     }
 
-    UBSHcomNetTransRequest tlsReq {};
+    UBSHcomNetTransRequest tlsReq{};
     uintptr_t mrBufAddress = 0;
     if (mIsNeedEncrypt) {
         if (NN_UNLIKELY(EncryptRawSgl(tlsReq, mrBufAddress, size, mAes, mDriver, request, mSecrets) != NN_OK)) {
@@ -662,6 +664,6 @@ void NetAsyncEndpoint::UpdateTargetHbTime()
 {
     mTargetHbTime = NetMonotonic::TimeSec() + mHeartBeatIdleTime;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

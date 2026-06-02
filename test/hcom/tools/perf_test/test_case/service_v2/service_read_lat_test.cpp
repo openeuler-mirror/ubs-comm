@@ -1,10 +1,10 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
+#include "test_case/service_v2/service_read_lat_test.h"
 #include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "test_case/service_v2/service_read_lat_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -12,7 +12,7 @@ using namespace ock::hcom;
 constexpr uint16_t OP_SERVICE_READ_LAT = 203;
 
 int ServiceReadLatTest::NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch,
-    const std::string &payload)
+                                   const std::string &payload)
 {
     mCh = ch;
     LOG_DEBUG("New connection from " << ipPort << " !");
@@ -34,9 +34,6 @@ int ServiceReadLatTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &
         UBSHcomReplyContext replyCtx;
         replyCtx.rspCtx = ctx.RspCtx();
         if ((ctx.Channel()->Reply(replyCtx, req, newCallback)) != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("Failed to post message to data to server");
             return -1;
         }
@@ -50,7 +47,7 @@ bool ServiceReadLatTest::Initialize()
 
     // create NetService
     UBSHcomServiceNewChannelHandler funcNewChannel = bind(&ServiceReadLatTest::NewChannel, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+                                                          std::placeholders::_2, std::placeholders::_3);
     UBSHcomServiceRecvHandler funcReqReceived = bind(&ServiceReadLatTest::RequestReceived, this, std::placeholders::_1);
 
     mHelper.RegisterRecvHandler(funcReqReceived);
@@ -126,6 +123,7 @@ void ServiceReadLatTest::UnInitialize()
     }
 
     mHelper.DestroyService();
+
     sem_destroy(&mSem);
 }
 
@@ -147,8 +145,10 @@ bool ServiceReadLatTest::Connect()
 
 bool ServiceReadLatTest::RunTest(PerfTestContext *ctx)
 {
-    // ctx会记录测试中每个Iteration耗时，故每次使用不同的ctx
-    SetPerfTestContext(ctx);
+    if (!SetPerfTestContext(ctx)) {
+        LOG_ERROR("SetPerfTestContext failed");
+        return false;
+    }
 
     if (!mCfg.GetIsServer()) {
         mReq.lAddress = mPostMrInfo.lAddress;
@@ -159,11 +159,10 @@ bool ServiceReadLatTest::RunTest(PerfTestContext *ctx)
 
         DoPostRead();
     }
-    // 等待测试结束
     sem_wait(&mSem);
     return true;
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::SERVICE_READ_LAT, ServiceReadLatTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

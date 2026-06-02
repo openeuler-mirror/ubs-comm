@@ -13,8 +13,8 @@
 #ifndef HTRACER_H
 #define HTRACER_H
 
-#include <ctime>
 #include <cstdint>
+#include <ctime>
 #include <iostream>
 namespace ock {
 namespace hcom {
@@ -53,8 +53,8 @@ extern HTRACE_INTF g_htraceIntf;
         TP_BEGIN_TIME = g_htraceIntf.GetCurrentTimeNs();       \
     }
 
-#define TRACE_DELAY_DEFER_END(TP_ID, RET_CODE, TP_BEGIN_TIME)                                    \
-    if (g_htraceIntf.IsEnable()) {                                                               \
+#define TRACE_DELAY_DEFER_END(TP_ID, RET_CODE, TP_BEGIN_TIME)                                      \
+    if (g_htraceIntf.IsEnable()) {                                                                 \
         g_htraceIntf.DelayEnd(TP_ID, g_htraceIntf.GetCurrentTimeNs() - (TP_BEGIN_TIME), RET_CODE); \
     }
 
@@ -67,7 +67,7 @@ extern HTRACE_INTF g_htraceIntf;
 
 #define GET_TIME_NS()                                                 \
     ({                                                                \
-        struct timespec tpDelay = { 0, 0 };                           \
+        struct timespec tpDelay = {0, 0};                             \
         clock_gettime(CLOCK_MONOTONIC, &tpDelay);                     \
         (uint64_t)(tpDelay.tv_nsec + tpDelay.tv_sec * 1000000000ULL); \
     })
@@ -76,19 +76,19 @@ extern HTRACE_INTF g_htraceIntf;
 #define ASYNC_TRACE_DELAY_BEGIN(TP_ID) g_htraceIntf.AsyncDelayBegin(TP_ID, #TP_ID)
 
 // NOTICE: will be deprecated, use TRACE_V2_DELAY_END
-#define ASYNC_TRACE_DELAY_END(TP_ID, RET_CODE, STARTTIME)                                             \
-    struct timespec tpEnd##TP_ID = { 0, 0 };                                                          \
-    bool traceEnabled##TP_ID = g_htraceIntf.IsEnable();                                               \
-    if (traceEnabled##TP_ID) {                                                                        \
-        clock_gettime(CLOCK_MONOTONIC, &tpEnd##TP_ID);                                                \
-        long tpDiff##TP_ID;                                                                           \
+#define ASYNC_TRACE_DELAY_END(TP_ID, RET_CODE, STARTTIME)                                               \
+    struct timespec tpEnd##TP_ID = {0, 0};                                                              \
+    bool traceEnabled##TP_ID = g_htraceIntf.IsEnable();                                                 \
+    if (traceEnabled##TP_ID) {                                                                          \
+        clock_gettime(CLOCK_MONOTONIC, &tpEnd##TP_ID);                                                  \
+        long tpDiff##TP_ID;                                                                             \
         long tpDiffSec##TP_ID = tpEnd##TP_ID.tv_sec - (STARTTIME).tv_sec;                               \
-        if (tpDiffSec##TP_ID == 0) {                                                                  \
+        if (tpDiffSec##TP_ID == 0) {                                                                    \
             tpDiff##TP_ID = tpEnd##TP_ID.tv_nsec - (STARTTIME).tv_nsec;                                 \
-        } else {                                                                                      \
+        } else {                                                                                        \
             tpDiff##TP_ID = tpDiffSec##TP_ID * 1000000000 + tpEnd##TP_ID.tv_nsec - (STARTTIME).tv_nsec; \
-        }                                                                                             \
-        g_htraceIntf.DelayEnd(TP_ID, tpDiff##TP_ID, RET_CODE);                                        \
+        }                                                                                               \
+        g_htraceIntf.DelayEnd(TP_ID, tpDiff##TP_ID, RET_CODE);                                          \
     }
 
 #define TRACE_V2_DELAY_BEGIN(TP_ID, P_U64_TIME_NS)            \
@@ -115,13 +115,12 @@ extern HTRACE_INTF g_htraceIntf;
         g_htraceIntf.DelayBegin(TP_ID, #TP_ID); \
     }
 
-
-#define TRACE_IOSIZE_END(TP_ID, IOSIZE, RET_CODE)                   \
-    if (g_htraceIntf.IsEnable()) {                                  \
-        g_htraceIntf.DelayEnd(TP_ID, ((IOSIZE)*1000ULL), RET_CODE); \
+#define TRACE_IOSIZE_END(TP_ID, IOSIZE, RET_CODE)                     \
+    if (g_htraceIntf.IsEnable()) {                                    \
+        g_htraceIntf.DelayEnd(TP_ID, ((IOSIZE) * 1000ULL), RET_CODE); \
     }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 
 // HTRACER_H

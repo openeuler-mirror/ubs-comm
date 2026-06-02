@@ -10,21 +10,21 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <fstream>
 #include <sys/epoll.h>
+#include <fstream>
 
 #include "hcom.h"
 #include "mockcpp/mockcpp.hpp"
 #include "sock_common.h"
-#include "ut_helper.h"
 #include "test_net_sock_driver_oob.h"
+#include "ut_helper.h"
 
 using namespace ock::hcom;
 
 TestNetSockDriverOob::TestNetSockDriverOob() {}
 
 UBSHcomNetEndpointPtr ep = nullptr;
-UBSHcomNetDriverOptions sockOptions {};
+UBSHcomNetDriverOptions sockOptions{};
 static int g_nameSeed = 159753;
 static int port = 9031;
 UBSHcomNetDriver *sockServerDriver;
@@ -113,7 +113,7 @@ static bool CertCallback(const std::string &name, std::string &value)
 }
 
 static bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                               UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "huawei";
     keyPass = reinterpret_cast<void *>(content);
@@ -125,7 +125,7 @@ static bool PrivateKeyCallback(const std::string &name, std::string &value, void
 }
 
 static bool CACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                       UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = certificatePath + "/CA/cacert.pem";
     cb = std::bind(&Verify, std::placeholders::_1, std::placeholders::_2);
@@ -143,9 +143,10 @@ void SetCB(UBSHcomNetDriver *driver)
 
     driver->RegisterTLSCertificationCallback(std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
     driver->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
     driver->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                    std::placeholders::_3, std::placeholders::_4,
+                                                    std::placeholders::_5));
 }
 
 bool RegisterMemory(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov iovs[])
@@ -296,8 +297,8 @@ TEST_F(TestNetSockDriverOob, InitFailWithoutSetListeningIpAndPort)
     sockOptions.enableTls = false;
     sockOptions.dontStartWorkers = false;
     sockOptions.magic = NN_NO256;
-    UBSHcomNetDriver *netDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP,
-        std::to_string(g_nameSeed++), true);
+    UBSHcomNetDriver *netDriver =
+        UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, std::to_string(g_nameSeed++), true);
     SetCB(netDriver);
     NResult result = netDriver->Initialize(sockOptions);
     EXPECT_EQ(NNCode::NN_INVALID_PARAM, result);
@@ -417,7 +418,6 @@ TEST_F(TestNetSockDriverOob, ConnectSuccess)
     EXPECT_EQ(NNCode::NN_OK, result);
 }
 
-
 TEST_F(TestNetSockDriverOob, ConnectUdsSuccess)
 {
     const char *testFile = "hcom-server1";
@@ -434,7 +434,7 @@ TEST_F(TestNetSockDriverOob, ConnectUdsSuccess)
     sockOptions.oobType = ock::hcom::NET_OOB_UDS;
     sockServerDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::UDS, std::to_string(g_nameSeed++), true);
     sockClientDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::UDS, std::to_string(g_nameSeed++), false);
-    UBSHcomNetOobUDSListenerOptions opt {};
+    UBSHcomNetOobUDSListenerOptions opt{};
     opt.Name("hcom-server1");
     opt.perm = 0;
     sockServerDriver->AddOobUdsOptions(opt);

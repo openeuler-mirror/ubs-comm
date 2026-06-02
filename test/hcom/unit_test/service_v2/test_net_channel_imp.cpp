@@ -9,14 +9,14 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <cstdint>
-#include <semaphore.h>
 #include <gtest/gtest.h>
+#include <semaphore.h>
+#include <cstdint>
 #include <mockcpp/mockcpp.hpp>
 
 #include "hcom.h"
-#include "service_channel_imp.h"
 #include "net_rdma_async_endpoint.h"
+#include "service_channel_imp.h"
 #include "under_api/urma/urma_api_wrapper.h"
 
 namespace ock {
@@ -114,13 +114,14 @@ TEST_F(TestNetChannelImp, TestSendInner)
     UBSHcomRequest req(data, sizeof(data), 0);
     ASSERT_EQ(channel->SendInner(req, nullptr), SER_NOT_ESTABLISHED);
 
-    Callback *callback = UBSHcomNewCallback([]
-        (UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); }, std::placeholders::_1);
+    Callback *callback = UBSHcomNewCallback([](UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); },
+                                            std::placeholders::_1);
     ASSERT_EQ(channel->SendInner(req, callback), SER_INVALID_PARAM);
 
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     channel->SetChannelState(CH_ESTABLISHED);
     ASSERT_EQ(channel->SendInner(req, nullptr), NN_EP_NOT_ESTABLISHED);
 }
@@ -172,8 +173,9 @@ TEST_F(TestNetChannelImp, TestCallInner)
     ASSERT_EQ(channel->CallInner(req, rsp, callback), SER_INVALID_PARAM);
 
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     channel->SetChannelState(CH_ESTABLISHED);
     ASSERT_EQ(channel->CallInner(req, rsp, nullptr), NN_EP_NOT_ESTABLISHED);
 }
@@ -212,13 +214,14 @@ TEST_F(TestNetChannelImp, TestReplyInner)
     UBSHcomRequest req(data, dataSize, 0);
     ASSERT_EQ(channel->ReplyInner(ctx, req, nullptr), SER_NOT_ESTABLISHED);
 
-    Callback *callback = UBSHcomNewCallback([]
-        (UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); }, std::placeholders::_1);
+    Callback *callback = UBSHcomNewCallback([](UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); },
+                                            std::placeholders::_1);
     ASSERT_EQ(channel->ReplyInner(ctx, req, callback), SER_NOT_ESTABLISHED);
 
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     channel->SetChannelState(CH_ESTABLISHED);
     ASSERT_EQ(channel->ReplyInner(ctx, req, nullptr), SER_NEW_OBJECT_FAILED);
 }
@@ -295,8 +298,9 @@ TEST_F(TestNetChannelImp, TestOneSideInner)
     ASSERT_EQ(channel->OneSideInner(req, nullptr, true), SER_NOT_ESTABLISHED);
 
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     channel->SetChannelState(CH_ESTABLISHED);
     ASSERT_EQ(channel->OneSideInner(req, nullptr, true), NN_EP_NOT_ESTABLISHED);
 }
@@ -304,8 +308,9 @@ TEST_F(TestNetChannelImp, TestOneSideInner)
 TEST_F(TestNetChannelImp, TestInitialize)
 {
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
 
     ASSERT_EQ(channel->ToString(), "Connect channel id " + std::to_string(NN_NO60) + " with 1 eps :[100]");
     ASSERT_EQ(channel->SetFlowControlConfig(ctrlOptions), SER_OK);
@@ -339,8 +344,9 @@ TEST_F(TestNetChannelImp, TestNextWorkerPollEp)
     UBSHcomNetEndpoint *nextEp = nullptr;
     ASSERT_EQ(channel->NextWorkerPollEp(nextEp, 0), SER_NOT_ESTABLISHED);
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     ASSERT_EQ(channel->NextWorkerPollEp(nextEp, 0), SER_OK);
 }
 
@@ -354,7 +360,7 @@ TEST_F(TestNetChannelImp, TestPrepareTimerCtx)
     MOCKER_CPP(&HcomServiceCtxStore::Return<HcomServiceTimer>).stubs();
     MOCKER_CPP(&HcomPeriodicManager::AddTimer).stubs().will(returnValue(static_cast<int>(SER_OK)));
 
-    TimerCtx TimerCtx {};
+    TimerCtx TimerCtx{};
     ASSERT_EQ(channel->PrepareTimerContext(nullptr, 0, TimerCtx), 0);
     delete serviceTimer;
 }
@@ -362,7 +368,7 @@ TEST_F(TestNetChannelImp, TestPrepareTimerCtx)
 TEST_F(TestNetChannelImp, TestDestroyTimerCtx)
 {
     HcomServiceTimer *timer = new HcomServiceTimer();
-    TimerCtx TimerCtx {};
+    TimerCtx TimerCtx{};
     TimerCtx.timer = timer;
     TimerCtx.timer->IncreaseRef();
     MOCKER_CPP(&HcomServiceTimer::EraseSeqNoWithRet).stubs().will(returnValue(false)).then(returnValue(true));
@@ -375,7 +381,7 @@ SerResult MockPrepareTimerCtx(const Callback *cb, int16_t timeout, TimerCtx &con
 {
     if (cb != nullptr) {
         auto *mutableCb = const_cast<Callback *>(cb);
-        UBSHcomServiceContext ctx {};
+        UBSHcomServiceContext ctx{};
         ctx.mResult = SER_OK;
         mutableCb->Run(ctx);
     }
@@ -386,8 +392,9 @@ TEST_F(TestNetChannelImp, TestSyncSendInner)
 {
     channel->mOptions.selfPoll = false;
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
         .stubs()
         .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
@@ -396,7 +403,8 @@ TEST_F(TestNetChannelImp, TestSyncSendInner)
     UBSHcomRequest req(data, sizeof(data), 0);
     ASSERT_EQ(channel->SyncSendInner(req), SER_NEW_OBJECT_FAILED);
 
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
         SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
@@ -411,8 +419,9 @@ TEST_F(TestNetChannelImp, TestAsyncSendInner)
 {
     channel->mOptions.selfPoll = false;
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     MOCKER_CPP(&HcomChannelImp::DestroyTimerContext).stubs();
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
         .stubs()
@@ -420,7 +429,8 @@ TEST_F(TestNetChannelImp, TestAsyncSendInner)
         .then(returnValue(static_cast<int>(SER_OK)));
     UBSHcomRequest req(data, sizeof(data), 0);
     ASSERT_EQ(channel->AsyncSendInner(req, nullptr), SER_NEW_OBJECT_FAILED);
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
         SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
@@ -433,7 +443,8 @@ TEST_F(TestNetChannelImp, TestAsyncSendInner)
 
 TEST_F(TestNetChannelImp, TestSyncSendWithSelfPoll)
 {
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
         SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
@@ -442,14 +453,15 @@ TEST_F(TestNetChannelImp, TestSyncSendWithSelfPoll)
         .will(returnValue(static_cast<int>(SER_OK)));
     channel->mOptions.selfPoll = true;
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     UBSHcomRequest req(data, sizeof(data), 0);
     ASSERT_EQ(channel->SyncSendWithSelfPoll(req), SER_OK);
 }
 
 void MockSyncCallCbForWorkerPoll(UBSHcomServiceContext &context, UBSHcomResponse *rsp,
-    HcomServiceSelfSyncParam *syncParam)
+                                 HcomServiceSelfSyncParam *syncParam)
 {
     syncParam->Result(SER_OK);
     syncParam->Signal();
@@ -460,8 +472,9 @@ TEST_F(TestNetChannelImp, TestSyncCallInner)
     channel->mOptions.selfPoll = false;
     UBSHcomResponse rsp{};
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
         .stubs()
         .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
@@ -470,7 +483,8 @@ TEST_F(TestNetChannelImp, TestSyncCallInner)
     UBSHcomRequest req(data, sizeof(data), 0);
     ASSERT_EQ(channel->SyncCallInner(req, rsp), SER_NEW_OBJECT_FAILED);
 
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
         SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
@@ -486,10 +500,12 @@ TEST_F(TestNetChannelImp, TestSyncCallWithSelfPoll)
     channel->mOptions.selfPoll = true;
     UBSHcomResponse rsp{};
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     UBSHcomRequest req(data, sizeof(data), 0);
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
         SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
@@ -497,7 +513,7 @@ TEST_F(TestNetChannelImp, TestSyncCallWithSelfPoll)
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
     MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
-        SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_INVALID_PARAM)));
     ASSERT_EQ(channel->SyncCallWithSelfPoll(req, rsp), SER_INVALID_PARAM);
@@ -508,8 +524,9 @@ TEST_F(TestNetChannelImp, TestSyncCallWithSelfPollFail)
     channel->mOptions.selfPoll = true;
     UBSHcomResponse rsp{};
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     channel->mUserSplitSendThreshold = NN_NO10;
     channel->mProtocol = UBC;
     UBSHcomRequest req(data, NN_NO20, 0);
@@ -526,8 +543,9 @@ TEST_F(TestNetChannelImp, TestAsyncCallInner)
 {
     channel->mOptions.selfPoll = false;
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
         .stubs()
         .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
@@ -535,7 +553,8 @@ TEST_F(TestNetChannelImp, TestAsyncCallInner)
     MOCKER_CPP(&HcomChannelImp::DestroyTimerContext).stubs();
     UBSHcomRequest req(data, sizeof(data), 0);
     ASSERT_EQ(channel->AsyncCallInner(req, nullptr), SER_NEW_OBJECT_FAILED);
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
         SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
@@ -552,8 +571,8 @@ TEST_F(TestNetChannelImp, TestPrepareCallback)
         .stubs()
         .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
         .then(invoke(MockPrepareTimerCtx));
-    HcomServiceSelfSyncParam syncParam {};
-    TimerCtx syncContext {};
+    HcomServiceSelfSyncParam syncParam{};
+    TimerCtx syncContext{};
     ASSERT_EQ(channel->PrepareCallback(syncParam, syncContext), SER_NEW_OBJECT_FAILED);
     ASSERT_EQ(channel->PrepareCallback(syncParam, syncContext), SER_OK);
 }
@@ -562,18 +581,19 @@ TEST_F(TestNetChannelImp, TestOneSideSyncWithWorkerPoll)
 {
     channel->mOptions.selfPoll = false;
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
-    UBSHcomOneSideRequest request {};
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
+    UBSHcomOneSideRequest request{};
     request.lAddress = reinterpret_cast<uintptr_t>(data);
     request.size = dataSize;
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext).stubs().will(invoke(MockPrepareTimerCtx));
     MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostWrite,
-        SerResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
+                       SerResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
     MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostRead,
-        SerResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
+                       SerResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
     ASSERT_EQ(channel->OneSideSyncWithWorkerPoll(request, true), SER_OK);
@@ -584,25 +604,26 @@ TEST_F(TestNetChannelImp, TestOneSideAsyncWithWorkerPoll)
 {
     channel->mOptions.selfPoll = false;
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
-    UBSHcomOneSideRequest req {};
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
+    UBSHcomOneSideRequest req{};
     req.lAddress = reinterpret_cast<uintptr_t>(data);
     req.size = dataSize;
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext).stubs().will(invoke(MockPrepareTimerCtx));
     MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostWrite,
-        SerResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
+                       SerResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
     MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostRead,
-        SerResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
+                       SerResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
-    Callback *callback = UBSHcomNewCallback([]
-        (UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); }, std::placeholders::_1);
+    Callback *callback = UBSHcomNewCallback([](UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); },
+                                            std::placeholders::_1);
     ASSERT_EQ(channel->OneSideAsyncWithWorkerPoll(req, callback, true), SER_OK);
-    callback = UBSHcomNewCallback([]
-        (UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); }, std::placeholders::_1);
+    callback = UBSHcomNewCallback([](UBSHcomServiceContext &context) { ASSERT_EQ(context.Result(), 0); },
+                                  std::placeholders::_1);
     ASSERT_EQ(channel->OneSideAsyncWithWorkerPoll(req, callback, false), SER_OK);
 
     MOCKER_CPP(&HcomChannelImp::NextWorkerPollEp).stubs().will(returnValue(static_cast<int>(SER_ERROR)));
@@ -612,8 +633,9 @@ TEST_F(TestNetChannelImp, TestOneSideAsyncWithWorkerPoll)
 TEST_F(TestNetChannelImp, TestRecvFail)
 {
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     UBSHcomServiceContext context{};
     UBSHcomRequest req(data, sizeof(data), 0);
     HcomServiceRndvMessage rndvMessage(NN_NO2, req);
@@ -639,7 +661,7 @@ TEST_F(TestNetChannelImp, TestRecvFail)
     ASSERT_EQ(channel->Recv(context, address, size), SER_ERROR);
 
     MOCKER_CPP_VIRTUAL(*channel, &HcomChannelImp::Get,
-        int32_t(HcomChannelImp::*)(const UBSHcomOneSideRequest &, const Callback *))
+                       int32_t(HcomChannelImp::*)(const UBSHcomOneSideRequest &, const Callback *))
         .stubs()
         .will(returnValue(static_cast<int>(SER_ERROR)))
         .then(returnValue(static_cast<int>(SER_OK)));
@@ -654,8 +676,9 @@ TEST_F(TestNetChannelImp, TestRndvInnerFail)
     threshold.rndvThreshold = NN_NO1024;
     channel->SetTwoSideThreshold(threshold);
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     UBSHcomRequest req(data, sizeof(data), 0);
     UBSHcomNetTransOpInfo transOp{};
 
@@ -665,7 +688,8 @@ TEST_F(TestNetChannelImp, TestRndvInnerFail)
     pgtRegion2.end = reinterpret_cast<uintptr_t>(data) + sizeof(data) - NN_NO1;
     MOCKER_CPP(&PgTable::Lookup).stubs().will(returnValue(pgtRegion)).then(returnValue(&pgtRegion2));
 
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
         SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)))
@@ -720,14 +744,15 @@ TEST_F(TestNetChannelImp, TestAcquireQuotaSuccess)
 
 TEST_F(TestNetChannelImp, TestSetFlowControlConfig)
 {
-    UBSHcomFlowCtrlOptions opt {};
+    UBSHcomFlowCtrlOptions opt{};
     ASSERT_EQ(channel->SetFlowControlConfig(opt), SER_NOT_ESTABLISHED);
     RateLimiter *limiter = new (std::nothrow) RateLimiter;
     ASSERT_NE(limiter, nullptr);
     channel->mOptions.rateLimit = reinterpret_cast<uintptr_t>(limiter);
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     ASSERT_EQ(channel->SetFlowControlConfig(opt), SER_OK);
     channel->mOptions.rateLimit = 0;
     delete limiter;
@@ -742,8 +767,9 @@ TEST_F(TestNetChannelImp, TestAllEpBroken)
     channel->mEpInfo = nullptr;
 
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     ASSERT_EQ(channel->AllEpBroken(), false);
 }
 
@@ -768,14 +794,15 @@ TEST_F(TestNetChannelImp, TestInvokeChannelBrokenCb)
 TEST_F(TestNetChannelImp, TestProcessIoInBroken)
 {
     ASSERT_EQ(channel->Initialize(epVector, reinterpret_cast<uintptr_t>(ctxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get())),
-        SER_OK);
+                                  reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                  reinterpret_cast<uintptr_t>(mPgtable.Get())),
+              SER_OK);
     EXPECT_NO_FATAL_FAILURE(channel->ProcessIoInBroken());
 }
 
 TEST_F(TestNetChannelImp, TestCalculateOffsetAndSize)
 {
-    UBSHcomOneSideRequest request {};
+    UBSHcomOneSideRequest request{};
     request.size = NN_NO1024;
     uint32_t remain = 0;
     uint32_t offset = 0;
@@ -787,7 +814,7 @@ TEST_F(TestNetChannelImp, TestCalculateOffsetAndSize)
 
 TEST_F(TestNetChannelImp, TestGetRemoteUdsIdInfo)
 {
-    UBSHcomNetUdsIdInfo info {};
+    UBSHcomNetUdsIdInfo info{};
     EXPECT_EQ(channel->GetRemoteUdsIdInfo(info), static_cast<uint32_t>(SER_ERROR));
 
     EpInfo *epInfo = new (std::nothrow) EpInfo;
@@ -842,21 +869,22 @@ void MockReleaseSelfPollEp(uint32_t index) {}
 TEST_F(TestNetChannelImp, TestSyncSendSplitWithWorkerPoll)
 {
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
-            .then(invoke(MockPrepareTimerCtx));
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
+        .then(invoke(MockPrepareTimerCtx));
     MOCKER_CPP(&HcomChannelImp::DestroyTimerContext).stubs();
 
     UBSHcomRequest req(data, NN_NO65536, 0);
     auto tmpEp = ep.Get();
     ASSERT_EQ(channel->SyncSendSplitWithWorkerPoll(tmpEp, req, 1), SER_NEW_OBJECT_FAILED);
 
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
-            SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
-            const UBSHcomExtHeaderType, const void *, uint32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+        SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
+                                         const UBSHcomExtHeaderType, const void *, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     ASSERT_EQ(channel->SyncSendSplitWithWorkerPoll(tmpEp, req, 1), SER_INVALID_PARAM);
     ASSERT_EQ(channel->SyncSendSplitWithWorkerPoll(tmpEp, req, 1), SER_OK);
 }
@@ -864,20 +892,21 @@ TEST_F(TestNetChannelImp, TestSyncSendSplitWithWorkerPoll)
 TEST_F(TestNetChannelImp, TestSyncSendSplitWithSelfPoll)
 {
     MOCKER_CPP(&HcomChannelImp::ReleaseSelfPollEp).stubs().will(invoke(MockReleaseSelfPollEp));
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
-            SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
-            const UBSHcomExtHeaderType, const void *, uint32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+        SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
+                                         const UBSHcomExtHeaderType, const void *, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     UBSHcomRequest req(data, NN_NO65536, 0);
     auto tmpEp = ep.Get();
     ASSERT_EQ(channel->SyncSendSplitWithSelfPoll(tmpEp, req, 1, 0), SER_INVALID_PARAM);
 
     MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::WaitCompletion, SerResult(UBSHcomNetEndpoint::*)(int32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_OK)))
-            .then(returnValue(static_cast<int>(SER_INVALID_PARAM)));
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_OK)))
+        .then(returnValue(static_cast<int>(SER_INVALID_PARAM)));
 
     ASSERT_EQ(channel->SyncSendSplitWithSelfPoll(tmpEp, req, 1, 0), SER_OK);
     ASSERT_EQ(channel->SyncSendSplitWithSelfPoll(tmpEp, req, 1, 0), SER_INVALID_PARAM);
@@ -887,19 +916,20 @@ TEST_F(TestNetChannelImp, TestAsyncSendSplitWithWorkerPoll)
 {
     MOCKER_CPP(&HcomChannelImp::DestroyTimerContext).stubs();
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     UBSHcomRequest req(data, NN_NO65536, 0);
     auto tmpEp = ep.Get();
     ASSERT_EQ(channel->AsyncSendSplitWithWorkerPoll(tmpEp, req, 1, nullptr), SER_NEW_OBJECT_FAILED);
 
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
-            SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
-            const UBSHcomExtHeaderType, const void *, uint32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+        SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
+                                         const UBSHcomExtHeaderType, const void *, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     ASSERT_EQ(channel->AsyncSendSplitWithWorkerPoll(tmpEp, req, 1, nullptr), SER_INVALID_PARAM);
     ASSERT_EQ(channel->AsyncSendSplitWithWorkerPoll(tmpEp, req, 1, nullptr), SER_OK);
 }
@@ -917,7 +947,7 @@ TEST_F(TestNetChannelImp, TestSyncSpliceMessage)
     ctx.mHeader = mHeader;
 
     MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
-        SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext&))
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_INVALID_PARAM)));
 
@@ -955,8 +985,8 @@ UBSHcomFragmentHeader *GetFragmentHeader(int msgId, int totalLength, int offset)
 }
 
 // Typically the payload pointer refers the GetFragmentHeader::buf.
-template<typename T> void SetNRCPayload(UBSHcomNetRequestContext &ctx, T *payload,
-    uint32_t sz = sizeof(UBSHcomFragmentHeader) + 1)
+template <typename T>
+void SetNRCPayload(UBSHcomNetRequestContext &ctx, T *payload, uint32_t sz = sizeof(UBSHcomFragmentHeader) + 1)
 {
     ctx.mMessage->mBuf = payload;
     ctx.mMessage->mDataLen = sz;
@@ -999,18 +1029,18 @@ TEST_F(TestNetChannelImp, TestSpliceMessageFirstFragmentLost)
 }
 
 namespace internal {
-void DoMockThen(mockcpp::MoreStubBuilder<> *builder)
-{
-}
+void DoMockThen(mockcpp::MoreStubBuilder<> *builder) {}
 
-template<typename... Ts> void DoMockThen(mockcpp::MoreStubBuilder<> *builder, SerResult err, Ts... errs)
+template <typename... Ts>
+void DoMockThen(mockcpp::MoreStubBuilder<> *builder, SerResult err, Ts... errs)
 {
     builder = &builder->then(returnValue(static_cast<SerResult>(err)));
     DoMockThen(builder, errs...);
 }
-}  // namespace internal
+} // namespace internal
 
-template<typename... Ts> void MockPrepareTimerContext(SerResult err, Ts... errs)
+template <typename... Ts>
+void MockPrepareTimerContext(SerResult err, Ts... errs)
 {
     auto builder = MOCKER_CPP(&HcomChannelImp::PrepareTimerContext).stubs();
     auto *b = &builder.will(returnValue(static_cast<SerResult>(err)));
@@ -1058,7 +1088,8 @@ TEST_F(TestNetChannelImp, TestSpliceMessageLargePayload)
     EXPECT_EQ(code, SER_SPLIT_INVALID_MSG);
 }
 
-template<typename... Ts> void MockGetSeqNoAndRemove(SerResult err, Ts... errs)
+template <typename... Ts>
+void MockGetSeqNoAndRemove(SerResult err, Ts... errs)
 {
     auto builder = MOCKER_CPP(&HcomServiceCtxStore::GetSeqNoAndRemove<HcomServiceTimer>).stubs();
     auto *b = &builder.will(returnValue(static_cast<SerResult>(err)));
@@ -1164,20 +1195,21 @@ TEST_F(TestNetChannelImp, TestAsyncReplySplitWithWorkerPoll)
     UBSHcomReplyContext ctx;
 
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     MOCKER_CPP(&HcomChannelImp::DestroyTimerContext).stubs();
     auto tmp = ep.Get();
     UBSHcomRequest req(data, NN_NO65536, 0);
     ASSERT_EQ(channel->AsyncReplySplitWithWorkerPoll(ctx, tmp, req, 1, nullptr), SER_NEW_OBJECT_FAILED);
 
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
-            SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
-            const UBSHcomExtHeaderType, const void *, uint32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+        SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
+                                         const UBSHcomExtHeaderType, const void *, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     ASSERT_EQ(channel->AsyncReplySplitWithWorkerPoll(ctx, tmp, req, 1, nullptr), SER_INVALID_PARAM);
     ASSERT_EQ(channel->AsyncReplySplitWithWorkerPoll(ctx, tmp, req, 1, nullptr), SER_OK);
 }
@@ -1187,20 +1219,21 @@ TEST_F(TestNetChannelImp, TestSyncReplySplitWithWorkerPoll)
     UBSHcomReplyContext ctx;
 
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     MOCKER_CPP(&HcomChannelImp::DestroyTimerContext).stubs();
     auto tmp = ep.Get();
     UBSHcomRequest req(data, NN_NO65536, 0);
 
     ASSERT_EQ(channel->SyncReplySplitWithWorkerPoll(ctx, tmp, req, 1), SER_NEW_OBJECT_FAILED);
 
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
-            SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
-            const UBSHcomExtHeaderType, const void *, uint32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_INVALID_PARAM)));
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+        SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
+                                         const UBSHcomExtHeaderType, const void *, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)));
     ASSERT_EQ(channel->SyncReplySplitWithWorkerPoll(ctx, tmp, req, 1), SER_INVALID_PARAM);
 }
 
@@ -1212,16 +1245,17 @@ TEST_F(TestNetChannelImp, TestSyncCallSplitWithWorkerPoll)
 
     MOCKER_CPP(&HcomChannelImp::DestroyTimerContext).stubs();
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     ASSERT_EQ(channel->SyncCallSplitWithWorkerPoll(tmpEp, req, 1, rsp), SER_NEW_OBJECT_FAILED);
 
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
-            SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
-            const UBSHcomExtHeaderType, const void *, uint32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_INVALID_PARAM)));
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+        SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
+                                         const UBSHcomExtHeaderType, const void *, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)));
 
     ASSERT_EQ(channel->SyncCallSplitWithWorkerPoll(tmpEp, req, 1, rsp), SER_INVALID_PARAM);
 }
@@ -1229,20 +1263,21 @@ TEST_F(TestNetChannelImp, TestSyncCallSplitWithWorkerPoll)
 TEST_F(TestNetChannelImp, TestAsyncCallSplitWithWorkerPoll)
 {
     MOCKER_CPP(&HcomChannelImp::PrepareTimerContext)
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_NEW_OBJECT_FAILED)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     MOCKER_CPP(&HcomChannelImp::DestroyTimerContext).stubs();
     UBSHcomRequest req(data, NN_NO65536, 0);
     auto tmpEp = ep.Get();
 
     ASSERT_EQ(channel->AsyncCallSplitWithWorkerPoll(tmpEp, req, 1, nullptr), SER_NEW_OBJECT_FAILED);
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
-            SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
-            const UBSHcomExtHeaderType, const void *, uint32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+        SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
+                                         const UBSHcomExtHeaderType, const void *, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
+        .then(returnValue(static_cast<int>(SER_OK)));
     ASSERT_EQ(channel->AsyncCallSplitWithWorkerPoll(tmpEp, req, 1, nullptr), SER_INVALID_PARAM);
     ASSERT_EQ(channel->AsyncCallSplitWithWorkerPoll(tmpEp, req, 1, nullptr), SER_OK);
 }
@@ -1253,18 +1288,19 @@ TEST_F(TestNetChannelImp, TestSyncCallSplitWithSelfPoll)
     UBSHcomRequest req(data, NN_NO65536, 0);
     auto tmpEp = ep.Get();
 
-    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::PostSend,
-            SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
-            const UBSHcomExtHeaderType, const void *, uint32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
-            .then(returnValue(static_cast<int>(SER_OK)));
+    MOCKER_CPP_VIRTUAL(
+        *(ep.Get()), &UBSHcomNetEndpoint::PostSend,
+        SerResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &,
+                                         const UBSHcomExtHeaderType, const void *, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
+        .then(returnValue(static_cast<int>(SER_OK)));
 
     ASSERT_EQ(channel->SyncCallSplitWithSelfPoll(tmpEp, req, 1, 0, rsp), SER_INVALID_PARAM);
 
     MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::WaitCompletion, SerResult(UBSHcomNetEndpoint::*)(int32_t))
-            .stubs()
-            .will(returnValue(static_cast<int>(SER_INVALID_PARAM)));
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)));
     ASSERT_EQ(channel->SyncCallSplitWithSelfPoll(tmpEp, req, 1, 0, rsp), SER_INVALID_PARAM);
 }
 
@@ -1295,21 +1331,21 @@ TEST_F(TestNetChannelImp, TestSyncSpliceMessageOne)
     fHeader.offset = NN_NO100;
     fHeader.totalLength = NN_NO200;
     acc.resize(NN_NO300);
-    UBSHcomNetMessage message {};
+    UBSHcomNetMessage message{};
     message.mBuf = &fHeader;
     message.mDataLen = NN_NO200;
     ctx.mMessage = &message;
 
     MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
-        SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext&))
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
         .stubs()
         .will(returnValue(static_cast<int>(SER_OK)));
-    
+
     EXPECT_EQ(SyncSpliceMessage(ctx, tmpEp, 1, acc, data, dataLen), SER_SPLIT_INVALID_MSG);
 
     message.mBuf = nullptr;
     ctx.mMessage = nullptr;
 }
 
-}  // namespace HCOM
-}  // namespace OCK
+} // namespace hcom
+} // namespace ock

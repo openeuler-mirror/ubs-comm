@@ -17,18 +17,18 @@
 
 namespace ock {
 namespace hcom {
-#define STATE_VALIDATION(state, id, driver)                                                                           \
-    do {                                                                                                              \
-        if (NN_UNLIKELY(!(state).Compare(NEP_ESTABLISHED))) {                                                         \
-            NN_LOG_ERROR("Endpoint " << (id) << " is not established, state is " <<                                   \
-            UBSHcomNEPStateToString((state).Get()));                                                                  \
-            return NN_EP_NOT_ESTABLISHED;                                                                             \
-        }                                                                                                             \
-                                                                                                                      \
-        if (NN_UNLIKELY(!(driver)->IsStarted())) {                                                                    \
-            NN_LOG_ERROR("Failed to validate state as driver " << (driver) << " is not started");                     \
-            return NN_ERROR;                                                                                          \
-        }                                                                                                             \
+#define STATE_VALIDATION(state, id, driver)                                                       \
+    do {                                                                                          \
+        if (NN_UNLIKELY(!(state).Compare(NEP_ESTABLISHED))) {                                     \
+            NN_LOG_ERROR("Endpoint " << (id) << " is not established, state is "                  \
+                                     << UBSHcomNEPStateToString((state).Get()));                  \
+            return NN_EP_NOT_ESTABLISHED;                                                         \
+        }                                                                                         \
+                                                                                                  \
+        if (NN_UNLIKELY(!(driver)->IsStarted())) {                                                \
+            NN_LOG_ERROR("Failed to validate state as driver " << (driver) << " is not started"); \
+            return NN_ERROR;                                                                      \
+        }                                                                                         \
     } while (0)
 
 #define LOCAL_REQUEST_VALIDATION(request)                                                              \
@@ -43,30 +43,30 @@ namespace hcom {
         }                                                                                              \
     } while (0)
 
-#define SIZE_VALIDATION(request, allowedSize)                                             \
-    do {                                                                                  \
-        size_t compareSize = (request).size;                                              \
-        if (mIsNeedEncrypt) {                                                             \
-            compareSize = mAes.EstimatedEncryptLen((request).size);                       \
-        }                                                                                 \
-                                                                                          \
-        if (NN_UNLIKELY(compareSize > (allowedSize))) {                                   \
-            NN_LOG_ERROR("Failed to post message as message size " << ((request).size) << \
-                " is too large, use one side post");                                      \
-            return NN_TWO_SIDE_MESSAGE_TOO_LARGE;                                         \
-        }                                                                                 \
+#define SIZE_VALIDATION(request, allowedSize)                                                              \
+    do {                                                                                                   \
+        size_t compareSize = (request).size;                                                               \
+        if (mIsNeedEncrypt) {                                                                              \
+            compareSize = mAes.EstimatedEncryptLen((request).size);                                        \
+        }                                                                                                  \
+                                                                                                           \
+        if (NN_UNLIKELY(compareSize > (allowedSize))) {                                                    \
+            NN_LOG_ERROR("Failed to post message as message size " << ((request).size)                     \
+                                                                   << " is too large, use one side post"); \
+            return NN_TWO_SIDE_MESSAGE_TOO_LARGE;                                                          \
+        }                                                                                                  \
     } while (0)
 
-#define POST_SEND_VALIDATION(state, id, driver, opCode, request, allowedSize)                             \
-    do {                                                                                                  \
-        STATE_VALIDATION(state, id, driver);                                                              \
-        LOCAL_REQUEST_VALIDATION(request);                                                                \
-        SIZE_VALIDATION(request, allowedSize);                                                            \
-        if (NN_UNLIKELY((opCode) >= MAX_OPCODE)) {                                                        \
-            NN_LOG_ERROR("Failed to post message as opcode is invalid, which should with the range 0~" << \
-                (MAX_OPCODE - 1));                                                                        \
-            return NN_INVALID_OPCODE;                                                                     \
-        }                                                                                                 \
+#define POST_SEND_VALIDATION(state, id, driver, opCode, request, allowedSize)                          \
+    do {                                                                                               \
+        STATE_VALIDATION(state, id, driver);                                                           \
+        LOCAL_REQUEST_VALIDATION(request);                                                             \
+        SIZE_VALIDATION(request, allowedSize);                                                         \
+        if (NN_UNLIKELY((opCode) >= MAX_OPCODE)) {                                                     \
+            NN_LOG_ERROR("Failed to post message as opcode is invalid, which should with the range 0~" \
+                         << (MAX_OPCODE - 1));                                                         \
+            return NN_INVALID_OPCODE;                                                                  \
+        }                                                                                              \
     } while (0)
 
 #define POST_SEND_RAW_VALIDATION(state, id, driver, seqNo, request, allowedSize) \
@@ -97,7 +97,7 @@ namespace hcom {
 #define SGL_VALIDATION(request, totalSize)                                                               \
     do {                                                                                                 \
         if (NN_UNLIKELY((request).iov == nullptr || (request).iovCount > NET_SGE_MAX_IOV ||              \
-            (request).iovCount == 0)) {                                                                  \
+                        (request).iovCount == 0)) {                                                      \
             NN_LOG_ERROR("Invalid iov ptr:" << (request).iov << " or iov cnt:" << (request).iovCount);   \
             return UB_PARAM_INVALID;                                                                     \
         }                                                                                                \
@@ -107,7 +107,7 @@ namespace hcom {
         }                                                                                                \
         for (int i = 0; i < (request).iovCount; ++i) {                                                   \
             if (NN_OK != mDriver->ValidateMemoryRegion((request).iov[i].lKey, (request).iov[i].lAddress, \
-                (request).iov[i].size)) {                                                                \
+                                                       (request).iov[i].size)) {                         \
                 NN_LOG_ERROR("Invalid MemoryRegion or lKey in iov in async PostWrite");                  \
                 return NN_INVALID_LKEY;                                                                  \
             }                                                                                            \
@@ -128,70 +128,71 @@ namespace hcom {
         }                                                                                       \
     } while (0)
 
-#define POST_SEND_SGL_VALIDATION(state, id, driver, seqNo, request, allowedSize, totalSize) \
-    do {                                                                                    \
-        STATE_VALIDATION(state, id, driver);                                                \
-        if (NN_UNLIKELY((seqNo) == 0)) {                                                    \
-            NN_LOG_ERROR("Failed to post raw message as seqNo must > 0");                   \
-            return UB_PARAM_INVALID;                                                        \
-        }                                                                                   \
-                                                                                            \
-        SGL_VALIDATION(request, (totalSize));                                               \
-        size_t compareSize = (totalSize);                                                   \
-        if (mIsNeedEncrypt) {                                                               \
-            compareSize = mAes.EstimatedEncryptLen((totalSize));                            \
-        }                                                                                   \
-                                                                                            \
-        if (NN_UNLIKELY(compareSize > (allowedSize))) {                                     \
-            NN_LOG_ERROR("Failed to post send raw sgl as message size " << compareSize <<   \
-                " is too large, use one side post");                                        \
-            return NN_TWO_SIDE_MESSAGE_TOO_LARGE;                                           \
-        }                                                                                   \
+#define POST_SEND_SGL_VALIDATION(state, id, driver, seqNo, request, allowedSize, totalSize)                     \
+    do {                                                                                                        \
+        STATE_VALIDATION(state, id, driver);                                                                    \
+        if (NN_UNLIKELY((seqNo) == 0)) {                                                                        \
+            NN_LOG_ERROR("Failed to post raw message as seqNo must > 0");                                       \
+            return UB_PARAM_INVALID;                                                                            \
+        }                                                                                                       \
+                                                                                                                \
+        SGL_VALIDATION(request, (totalSize));                                                                   \
+        size_t compareSize = (totalSize);                                                                       \
+        if (mIsNeedEncrypt) {                                                                                   \
+            compareSize = mAes.EstimatedEncryptLen((totalSize));                                                \
+        }                                                                                                       \
+                                                                                                                \
+        if (NN_UNLIKELY(compareSize > (allowedSize))) {                                                         \
+            NN_LOG_ERROR("Failed to post send raw sgl as message size " << compareSize                          \
+                                                                        << " is too large, use one side post"); \
+            return NN_TWO_SIDE_MESSAGE_TOO_LARGE;                                                               \
+        }                                                                                                       \
     } while (0)
 
-#define ENCRYPT_RAW_SGL(tlsReq, mrBufAddress, size, mAes, mDriver)                                         \
-    do {                                                                                                   \
-        uintptr_t tmpBuff = 0;                                                                             \
-        if (NN_UNLIKELY(!(mDriver)->mDriverSendMR->GetFreeBuffer(tmpBuff))) {                              \
-            NN_LOG_ERROR("Failed to post message as failed to get tmp mr buffer from pool from driver " << \
-                (mDriver)->Name());                                                                        \
-            return NN_GET_BUFF_FAILED;                                                                     \
-        }                                                                                                  \
-                                                                                                           \
-        uint32_t iovOffset = 0;                                                                            \
-        for (int i = 0; i < request.iovCount; i++) {                                                       \
-            if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(tmpBuff + iovOffset), request.iov[i].size,   \
-                reinterpret_cast<const void *>(request.iov[i].lAddress), request.iov[i].size) != NN_OK)) { \
-                NN_LOG_ERROR("Failed to copy request to buff");                                            \
-                (void)(mDriver)->mDriverSendMR->ReturnBuffer(tmpBuff);                                     \
-                return NN_ERROR;                                                                           \
-            }                                                                                              \
-            iovOffset += request.iov[i].size;                                                              \
-        }                                                                                                  \
-                                                                                                           \
-        if (NN_UNLIKELY(!(mDriver)->mDriverSendMR->GetFreeBuffer(mrBufAddress))) {                         \
-            NN_LOG_ERROR("Failed to post message as failed to get mr buffer from pool from driver " <<     \
-                (mDriver)->Name());                                                                        \
-            (void)(mDriver)->mDriverSendMR->ReturnBuffer(tmpBuff);                                         \
-            return NN_GET_BUFF_FAILED;                                                                     \
-        }                                                                                                  \
-                                                                                                           \
-        uint32_t cipherLen = 0;                                                                            \
-        if (!(mAes).Encrypt(mSecrets, reinterpret_cast<void *>(tmpBuff), size,                             \
-            reinterpret_cast<void *>(mrBufAddress), cipherLen)) {                                          \
-            NN_LOG_ERROR("Failed to post send message as encryption failure");                             \
-            (void)(mDriver)->mDriverSendMR->ReturnBuffer(tmpBuff);                                         \
-            (void)(mDriver)->mDriverSendMR->ReturnBuffer(mrBufAddress);                                    \
-            return NN_ENCRYPT_FAILED;                                                                      \
-        }                                                                                                  \
-                                                                                                           \
-        (tlsReq).lAddress = mrBufAddress;                                                                  \
-        (tlsReq).lKey = (mDriver)->mDriverSendMR->GetLKey();                                               \
-        (tlsReq).srcSeg = (mDriver)->mDriverSendMR->GetMemorySeg();                                        \
-        (tlsReq).size = cipherLen;                                                                         \
-        (size) = cipherLen;                                                                                \
-                                                                                                           \
-        (void)(mDriver)->mDriverSendMR->ReturnBuffer(tmpBuff);                                             \
+#define ENCRYPT_RAW_SGL(tlsReq, mrBufAddress, size, mAes, mDriver)                                                     \
+    do {                                                                                                               \
+        uintptr_t tmpBuff = 0;                                                                                         \
+        if (NN_UNLIKELY(!(mDriver)->mDriverSendMR->GetFreeBuffer(tmpBuff))) {                                          \
+            NN_LOG_ERROR("Failed to post message as failed to get tmp mr buffer from pool from driver "                \
+                         << (mDriver)->Name());                                                                        \
+            return NN_GET_BUFF_FAILED;                                                                                 \
+        }                                                                                                              \
+                                                                                                                       \
+        uint32_t iovOffset = 0;                                                                                        \
+        for (int i = 0; i < request.iovCount; i++) {                                                                   \
+            if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(tmpBuff + iovOffset), request.iov[i].size,               \
+                                     reinterpret_cast<const void *>(request.iov[i].lAddress),                          \
+                                     request.iov[i].size) != NN_OK)) {                                                 \
+                NN_LOG_ERROR("Failed to copy request to buff");                                                        \
+                (void)(mDriver)->mDriverSendMR->ReturnBuffer(tmpBuff);                                                 \
+                return NN_ERROR;                                                                                       \
+            }                                                                                                          \
+            iovOffset += request.iov[i].size;                                                                          \
+        }                                                                                                              \
+                                                                                                                       \
+        if (NN_UNLIKELY(!(mDriver)->mDriverSendMR->GetFreeBuffer(mrBufAddress))) {                                     \
+            NN_LOG_ERROR("Failed to post message as failed to get mr buffer from pool from driver "                    \
+                         << (mDriver)->Name());                                                                        \
+            (void)(mDriver)->mDriverSendMR->ReturnBuffer(tmpBuff);                                                     \
+            return NN_GET_BUFF_FAILED;                                                                                 \
+        }                                                                                                              \
+                                                                                                                       \
+        uint32_t cipherLen = 0;                                                                                        \
+        if (!(mAes).Encrypt(mSecrets, reinterpret_cast<void *>(tmpBuff), size, reinterpret_cast<void *>(mrBufAddress), \
+                            cipherLen)) {                                                                              \
+            NN_LOG_ERROR("Failed to post send message as encryption failure");                                         \
+            (void)(mDriver)->mDriverSendMR->ReturnBuffer(tmpBuff);                                                     \
+            (void)(mDriver)->mDriverSendMR->ReturnBuffer(mrBufAddress);                                                \
+            return NN_ENCRYPT_FAILED;                                                                                  \
+        }                                                                                                              \
+                                                                                                                       \
+        (tlsReq).lAddress = mrBufAddress;                                                                              \
+        (tlsReq).lKey = (mDriver)->mDriverSendMR->GetLKey();                                                           \
+        (tlsReq).srcSeg = (mDriver)->mDriverSendMR->GetMemorySeg();                                                    \
+        (tlsReq).size = cipherLen;                                                                                     \
+        (size) = cipherLen;                                                                                            \
+                                                                                                                       \
+        (void)(mDriver)->mDriverSendMR->ReturnBuffer(tmpBuff);                                                         \
     } while (0)
 
 static inline GetSglTseg(NetDriverUBWithOob *driver, UBSHcomNetTransSglRequest &sglReq)
@@ -209,7 +210,9 @@ static inline GetSglTseg(NetDriverUBWithOob *driver, UBSHcomNetTransSglRequest &
 
 NetUBAsyncEndpoint::NetUBAsyncEndpoint(uint64_t id, UBJetty *qp, NetDriverUBWithOob *driver, UBWorker *worker)
     : NetEndpointImpl(id, worker != nullptr ? worker->Index() : UBSHcomNetWorkerIndex{}),
-      mJetty(qp), mWorker(worker), mDriver(driver)
+      mJetty(qp),
+      mWorker(worker),
+      mDriver(driver)
 {
     if (mDriver != nullptr) {
         mDriver->IncreaseRef();
@@ -226,8 +229,8 @@ NetUBAsyncEndpoint::NetUBAsyncEndpoint(uint64_t id, UBJetty *qp, NetDriverUBWith
 
     if (mJetty != nullptr && mDriver != nullptr) {
         mSegSize = mDriver->mOptions.mrSendReceiveSegSize < mJetty->GetPostSendMaxSize() ?
-            mDriver->mOptions.mrSendReceiveSegSize :
-            mJetty->GetPostSendMaxSize();
+                       mDriver->mOptions.mrSendReceiveSegSize :
+                       mJetty->GetPostSendMaxSize();
         mAllowedSize = mSegSize - sizeof(UBSHcomNetTransHeader);
         mDmSize = mDriver->mOptions.dmSegSize;
         mSendRawAllowedSize = mSegSize < NN_NO65536 ? mSegSize : NN_NO65536;
@@ -290,9 +293,8 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
 
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
-        if (!mAes.Encrypt(mSecrets,
-            (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress +
-            sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+        if (!mAes.Encrypt(mSecrets, (void *)request.lAddress, request.size,
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("Failed to async post send with seq no as encryption failure");
             return NN_ENCRYPT_FAILED;
@@ -300,8 +302,8 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         header->dataLength = cipherLen;
     } else {
         header->dataLength = request.size;
-        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
-            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             NN_LOG_ERROR("Failed to async post send with seq no as memcpy fail");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ERROR;
@@ -325,7 +327,7 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
     TRACE_DELAY_BEGIN(UB_EP_ASYNC_POST_SEND);
     do {
         result = worker->PostSend(mJetty, ubReq,
-            reinterpret_cast<urma_target_seg_t *>(mDriver->mDriverSendMR->GetMemorySeg()));
+                                  reinterpret_cast<urma_target_seg_t *>(mDriver->mDriverSendMR->GetMemorySeg()));
         if (result == UB_OK) {
             TRACE_DELAY_END(UB_EP_ASYNC_POST_SEND, result);
             return NN_OK;
@@ -344,7 +346,7 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
 }
 
 NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo)
+                                     const UBSHcomNetTransOpInfo &opInfo)
 {
     POST_SEND_VALIDATION(mState, mId, mDriver, opCode, request, mAllowedSize);
     // get mr from pool
@@ -365,9 +367,8 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
 
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
-        if (!mAes.Encrypt(mSecrets,
-            (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress +
-            sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+        if (!mAes.Encrypt(mSecrets, (void *)request.lAddress, request.size,
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("Failed to async post send with op info as encryption failure");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ENCRYPT_FAILED;
@@ -375,8 +376,8 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         header->dataLength = cipherLen;
     } else {
         header->dataLength = request.size;
-        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
-            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             NN_LOG_ERROR("Failed to async post send with op info as memcpy fail");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ERROR;
@@ -397,7 +398,7 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
     TRACE_DELAY_BEGIN(UB_EP_ASYNC_POST_SEND);
     do {
         res = worker->PostSend(mJetty, ubReq,
-            reinterpret_cast<urma_target_seg_t *>(mDriver->mDriverSendMR->GetMemorySeg()));
+                               reinterpret_cast<urma_target_seg_t *>(mDriver->mDriverSendMR->GetMemorySeg()));
         if (res == UB_OK) {
             TRACE_DELAY_END(UB_EP_ASYNC_POST_SEND, res);
             return NN_OK;
@@ -416,8 +417,8 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
 }
 
 NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType, const void *extHeader,
-    uint32_t extHeaderSize)
+                                     const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType,
+                                     const void *extHeader, uint32_t extHeaderSize)
 {
     if (NN_UNLIKELY(extHeaderType == UBSHcomExtHeaderType::RAW)) {
         NN_LOG_ERROR("Should not use RAW type when extHeader is given.");
@@ -450,10 +451,6 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
     header->dataLength = request.size + extHeaderSize;
     header->extHeaderType = extHeaderType;
 
-    if (mIsNeedEncrypt) {
-        NN_LOG_WARN("postsent encrypt is not supported now!");
-    }
-
     // 拷贝上层指定的 header，此时将要发送的结构为
     //     | UBSHcomNetTransHeader | extHeader | request body |
     if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
@@ -464,13 +461,27 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         return NN_INVALID_PARAM;
     }
 
-    // 拷贝消息主体
-    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
-                             mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader) - extHeaderSize,
-                             reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
-        mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
-        NN_LOG_ERROR("Failed to copy request to mrBufAddress in async ep");
-        return NN_INVALID_PARAM;
+    // 拷贝消息主体，开启TLS时，仅加密消息主体
+    if (mIsNeedEncrypt) {
+        uint32_t cipherLen = 0;
+        if (!mAes.Encrypt(mSecrets, (void *)request.lAddress, request.size,
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
+                          cipherLen)) {
+            NN_LOG_ERROR("Failed to async post send with splitsend as encryption failure");
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            return NN_ENCRYPT_FAILED;
+        }
+        header->dataLength = cipherLen + extHeaderSize;
+    } else {
+        if (NN_UNLIKELY(
+                memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
+                         mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader) - extHeaderSize,
+                         reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            NN_LOG_ERROR("Failed to copy request to mrBufAddress in async ep");
+            return NN_INVALID_PARAM;
+        }
+        header->dataLength = request.size + extHeaderSize;
     }
 
     // 头部全部写入完毕后才生成 crc32
@@ -493,7 +504,7 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
             TRACE_DELAY_END(UB_EP_ASYNC_POST_SEND, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
-            usleep(100UL);  // LWT situation is not suitable for calling system sleep
+            usleep(100UL); // LWT situation is not suitable for calling system sleep
             continue;
         }
         // no retry result or timeout = 0
@@ -506,8 +517,8 @@ NResult NetUBAsyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReque
     return result;
 }
 
-NResult NetUBAsyncEndpoint::PostSendSglInline(
-    uint16_t opCode, const UBSHcomNetTransRequest &request, const UBSHcomNetTransOpInfo &opInfo)
+NResult NetUBAsyncEndpoint::PostSendSglInline(uint16_t opCode, const UBSHcomNetTransRequest &request,
+                                              const UBSHcomNetTransOpInfo &opInfo)
 {
     // 仅支持UBC，同时需要加密必定会涉及到内存拷贝，仍然走非inline方式
     if (mIsNeedEncrypt || mJetty->GetProtocol() != UBSHcomNetDriverProtocol::UBC) {
@@ -558,7 +569,7 @@ NResult NetUBAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, u
     size_t msgSize = 0;
     if (!mIsNeedEncrypt) {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("Failed to copy request to send mr");
             return UB_PARAM_INVALID;
@@ -566,8 +577,8 @@ NResult NetUBAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, u
         msgSize = request.size;
     } else {
         uint32_t cipherLen = 0;
-        result = mAes.Encrypt(mSecrets,
-            (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress), cipherLen);
+        result = mAes.Encrypt(mSecrets, (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress),
+                              cipherLen);
         if (!result) {
             NN_LOG_ERROR("Failed to send raw message as encryption failure");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
@@ -587,7 +598,7 @@ NResult NetUBAsyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, u
     TRACE_DELAY_BEGIN(UB_EP_ASYNC_POST_SEND_RAW);
     do {
         result = worker->PostSend(mJetty, ubReq,
-            reinterpret_cast<urma_target_seg_t *>(mDriver->mDriverSendMR->GetMemorySeg()), seqNo);
+                                  reinterpret_cast<urma_target_seg_t *>(mDriver->mDriverSendMR->GetMemorySeg()), seqNo);
         if (NN_LIKELY(result == UB_OK)) {
             TRACE_DELAY_END(UB_EP_ASYNC_POST_SEND_RAW, result);
             return NN_OK;
@@ -615,7 +626,7 @@ NResult NetUBAsyncEndpoint::PostSendRawSgl(const UBSHcomNetTransSglRequest &requ
         return UB_PARAM_INVALID;
     }
 
-    UBSHcomNetTransRequest tlsReq {}; // used in encryption, to do...
+    UBSHcomNetTransRequest tlsReq{}; // used in encryption, to do...
     uintptr_t mrBufAddress = 0;
     if (mIsNeedEncrypt) {
         ENCRYPT_RAW_SGL(tlsReq, mrBufAddress, size, mAes, mDriver);
@@ -787,8 +798,12 @@ void NetUBAsyncEndpoint::UpdateTargetHbTime()
 }
 
 NetUBSyncEndpoint::NetUBSyncEndpoint(uint64_t id, UBJetty *qp, UBJfc *cq, uint32_t ubOpCtxPoolSize,
-    NetDriverUBWithOob *driver, const UBSHcomNetWorkerIndex &workerIndex)
-    : NetEndpointImpl(id, workerIndex), mJetty(qp), mJfc(cq), mCtxPool("ctxPool", ubOpCtxPoolSize), mDriver(driver)
+                                     NetDriverUBWithOob *driver, const UBSHcomNetWorkerIndex &workerIndex)
+    : NetEndpointImpl(id, workerIndex),
+      mJetty(qp),
+      mJfc(cq),
+      mCtxPool("ctxPool", ubOpCtxPoolSize),
+      mDriver(driver)
 {
     if (mJetty != nullptr) {
         mJetty->IncreaseRef();
@@ -804,8 +819,8 @@ NetUBSyncEndpoint::NetUBSyncEndpoint(uint64_t id, UBJetty *qp, UBJfc *cq, uint32
 
     if (mJetty != nullptr && mDriver != nullptr) {
         mSegSize = mDriver->mOptions.mrSendReceiveSegSize < mJetty->GetPostSendMaxSize() ?
-            mDriver->mOptions.mrSendReceiveSegSize :
-            mJetty->GetPostSendMaxSize();
+                       mDriver->mOptions.mrSendReceiveSegSize :
+                       mJetty->GetPostSendMaxSize();
         mAllowedSize = mSegSize - sizeof(UBSHcomNetTransHeader);
         mDmSize = mDriver->mOptions.dmSegSize;
         mSendRawAllowedSize = mSegSize < NN_NO65536 ? mSegSize : NN_NO65536;
@@ -856,9 +871,8 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
     mLastSendSeqNo = header->seqNo;
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
-        if (!mAes.Encrypt(mSecrets,
-            (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress +
-            sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+        if (!mAes.Encrypt(mSecrets, (void *)request.lAddress, request.size,
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("Failed to sync post send with seq no as encryption failure");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ENCRYPT_FAILED;
@@ -868,8 +882,8 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
         // copy message
         header->dataLength = request.size;
 
-        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
-            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             NN_LOG_ERROR("Failed to sync post send with seq no as memcpy fail");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ERROR;
@@ -910,7 +924,7 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
 }
 
 NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo)
+                                    const UBSHcomNetTransOpInfo &opInfo)
 {
     POST_SEND_VALIDATION(mState, mId, mDriver, opCode, request, mAllowedSize);
 
@@ -935,9 +949,8 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
     mLastSendSeqNo = header->seqNo;
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
-        if (!mAes.Encrypt(mSecrets,
-            (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress +
-            sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+        if (!mAes.Encrypt(mSecrets, (void *)request.lAddress, request.size,
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("Failed to sync post send with op info as encryption failure");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ENCRYPT_FAILED;
@@ -947,8 +960,8 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
         // copy message
         header->dataLength = request.size;
 
-        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
-            request.size, reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+        if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), request.size,
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             NN_LOG_ERROR("Failed to sync post send with op info as memcpy fail");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ERROR;
@@ -989,8 +1002,8 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
 }
 
 NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType, const void *extHeader,
-    uint32_t extHeaderSize)
+                                    const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType,
+                                    const void *extHeader, uint32_t extHeaderSize)
 {
     if (NN_UNLIKELY(extHeaderType == UBSHcomExtHeaderType::RAW)) {
         NN_LOG_ERROR("RAW type should not be used when extHeader is given.");
@@ -1024,9 +1037,6 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
     header->dataLength = request.size + extHeaderSize;
 
     mLastSendSeqNo = header->seqNo;
-    if (mIsNeedEncrypt) {
-        NN_LOG_WARN("postsent encrypt is not supported now.");
-    }
 
     // 拷贝上层指定的 header，此时将要发送的结构为
     //     | UBSHcomNetTransHeader | extHeader | request body |
@@ -1038,13 +1048,27 @@ NResult NetUBSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransReques
         return NN_INVALID_PARAM;
     }
 
-    // 拷贝消息主体
-    if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
-                             mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader) - extHeaderSize,
-                             reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
-        mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
-        NN_LOG_ERROR("Failed to copy request to mrBufAddress");
-        return NN_INVALID_PARAM;
+    // 拷贝消息主体，开启TLS时，仅加密消息主体
+    if (mIsNeedEncrypt) {
+        uint32_t cipherLen = 0;
+        if (!mAes.Encrypt(mSecrets, (void *)request.lAddress, request.size,
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
+                          cipherLen)) {
+            NN_LOG_ERROR("Failed to async post send with splitsend as encryption failure");
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            return NN_ENCRYPT_FAILED;
+        }
+        header->dataLength = cipherLen + extHeaderSize;
+    } else {
+        if (NN_UNLIKELY(
+                memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader) + extHeaderSize),
+                         mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader) - extHeaderSize,
+                         reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+            mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
+            NN_LOG_ERROR("Failed to copy request to mrBufAddress in async ep");
+            return NN_INVALID_PARAM;
+        }
+        header->dataLength = request.size + extHeaderSize;
     }
 
     // 头部全部写入完毕后才生成 crc32
@@ -1094,7 +1118,7 @@ NResult NetUBSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, ui
 
     if (!mIsNeedEncrypt) {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress), request.size,
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("Failed to copy request to mrBufAddress");
             return UB_PARAM_INVALID;
@@ -1102,8 +1126,8 @@ NResult NetUBSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, ui
         msgSize = request.size;
     } else {
         uint32_t cipherLen = 0;
-        if (!mAes.Encrypt(mSecrets,
-            (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress), cipherLen)) {
+        if (!mAes.Encrypt(mSecrets, (void *)request.lAddress, request.size, reinterpret_cast<void *>(mrBufAddress),
+                          cipherLen)) {
             NN_LOG_ERROR("Failed send message as encryption failure");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ENCRYPT_FAILED;
@@ -1125,8 +1149,8 @@ NResult NetUBSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, ui
     uint64_t finishTime = GetFinishTime();
     TRACE_DELAY_BEGIN(UB_EP_SYNC_POST_SEND_RAW);
     do {
-        result = InnerPostSend(ubReq, reinterpret_cast<urma_target_seg_t *>(mDriver->mDriverSendMR->GetMemorySeg()),
-            seqNo);
+        result =
+            InnerPostSend(ubReq, reinterpret_cast<urma_target_seg_t *>(mDriver->mDriverSendMR->GetMemorySeg()), seqNo);
         if (NN_LIKELY(result == UB_OK)) {
             TRACE_DELAY_END(UB_EP_SYNC_POST_SEND_RAW, result);
             return NN_OK;
@@ -1145,7 +1169,7 @@ NResult NetUBSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, ui
 }
 
 NResult NetUBSyncEndpoint::InnerPostSendSgl(const UBSendSglRWRequest &req, const UBSendReadWriteRequest &tlsReq,
-    uint32_t immData)
+                                            uint32_t immData)
 {
     if (NN_UNLIKELY(mJetty == nullptr)) {
         NN_LOG_ERROR("Failed to InnerPostSendSgl with NetUBSyncEndpoint as jetty is null");
@@ -1155,8 +1179,8 @@ NResult NetUBSyncEndpoint::InnerPostSendSgl(const UBSendSglRWRequest &req, const
     static thread_local UBSglContextInfo sglCtx;
     sglCtx.result = UB_OK;
     sglCtx.qp = mJetty;
-    if (NN_UNLIKELY(memcpy_s(sglCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV,
-        req.iov, sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != UB_OK)) {
+    if (NN_UNLIKELY(memcpy_s(sglCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, req.iov,
+                             sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != UB_OK)) {
         NN_LOG_ERROR("InnerPostSendSgl failed to copy the UBSHcomNetTransSgeIov to sglCtx");
         return UB_PARAM_INVALID;
     }
@@ -1433,14 +1457,13 @@ NResult NetUBSyncEndpoint::Receive(int32_t timeout, UBSHcomNetResponseContext &c
             realDataSize = mAes.GetRawLen(tmpHeader->dataLength);
             auto msgReady = mRespMessage.AllocateIfNeed(realDataSize);
             if (NN_UNLIKELY(!msgReady)) {
-                NN_LOG_ERROR("Failed to allocate memory for response size: " << realDataSize <<
-                    ", probably out of memory");
+                NN_LOG_ERROR("Failed to allocate memory for response size: " << realDataSize
+                                                                             << ", probably out of memory");
                 result = NN_MALLOC_FAILED;
                 break;
             }
 
-            if (!mAes.Decrypt(mSecrets, tmpDataAddress, tmpHeader->dataLength, mRespMessage.mBuf,
-                decryptLen)) {
+            if (!mAes.Decrypt(mSecrets, tmpDataAddress, tmpHeader->dataLength, mRespMessage.mBuf, decryptLen)) {
                 NN_LOG_ERROR("Failed to decrypt message");
                 result = NN_DECRYPT_FAILED;
                 break;
@@ -1450,13 +1473,13 @@ NResult NetUBSyncEndpoint::Receive(int32_t timeout, UBSHcomNetResponseContext &c
             realDataSize = tmpHeader->dataLength;
             auto msgReady = mRespMessage.AllocateIfNeed(realDataSize);
             if (NN_UNLIKELY(!msgReady)) {
-                NN_LOG_ERROR("Failed to allocate memory for response size: " << realDataSize <<
-                    ", probably out of memory");
+                NN_LOG_ERROR("Failed to allocate memory for response size: " << realDataSize
+                                                                             << ", probably out of memory");
                 result = NN_MALLOC_FAILED;
                 break;
             }
-            if (NN_UNLIKELY(memcpy_s(mRespMessage.mBuf,
-                mRespMessage.GetBufLen(), tmpDataAddress, realDataSize) != UB_OK)) {
+            if (NN_UNLIKELY(memcpy_s(mRespMessage.mBuf, mRespMessage.GetBufLen(), tmpDataAddress, realDataSize) !=
+                            UB_OK)) {
                 NN_LOG_ERROR("Failed to copy tmpDataAddress to mRespMessage");
                 result = NN_INVALID_PARAM;
                 break;
@@ -1464,8 +1487,8 @@ NResult NetUBSyncEndpoint::Receive(int32_t timeout, UBSHcomNetResponseContext &c
             mRespMessage.mDataLen = realDataSize;
         }
 
-        if (NN_UNLIKELY(memcpy_s(&(mRespCtx.mHeader),
-            sizeof(UBSHcomNetTransHeader), tmpHeader, sizeof(UBSHcomNetTransHeader)) != UB_OK)) {
+        if (NN_UNLIKELY(memcpy_s(&(mRespCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
+                                 sizeof(UBSHcomNetTransHeader)) != UB_OK)) {
             NN_LOG_ERROR("Failed to copy tmpHeader to mRespCtx");
             result = NN_INVALID_PARAM;
             break;
@@ -1519,8 +1542,7 @@ void NetUBSyncEndpoint::ReceiveRawHandle(UBOpContextInfo *opCtx, uint32_t immDat
     auto dataSize = opCtx->dataSize;
     auto msgReady = mRespMessage.AllocateIfNeed(dataSize);
     if (NN_UNLIKELY(!msgReady)) {
-        NN_LOG_ERROR("Failed to allocate memory for response size " << opCtx->dataSize <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to allocate memory for response size " << opCtx->dataSize << ", probably out of memory");
         result = NN_MALLOC_FAILED;
         return;
     }
@@ -1688,7 +1710,7 @@ NResult NetUBSyncEndpoint::RePostReceive(UBOpContextInfo *ctx)
     }
 
     auto result = ctx->ubJetty->PostReceive(ctx->mrMemAddr, mJetty->PostRegMrSize(), ctx->localSeg,
-        reinterpret_cast<uint64_t>(ctx));
+                                            reinterpret_cast<uint64_t>(ctx));
     if (NN_UNLIKELY(result != UB_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
         ctx->ubJetty->DecreaseRef();
@@ -1701,7 +1723,7 @@ NResult NetUBSyncEndpoint::RePostReceive(UBOpContextInfo *ctx)
 }
 
 NResult NetUBSyncEndpoint::CreateResources(const std::string &name, UBContext *ctx, UBPollingMode pollMode,
-    const JettyOptions &options, UBJetty *&qp, UBJfc *&cq)
+                                           const JettyOptions &options, UBJetty *&qp, UBJfc *&cq)
 {
     if (ctx == nullptr || name.empty()) {
         return UB_PARAM_INVALID;
@@ -1727,7 +1749,7 @@ NResult NetUBSyncEndpoint::CreateResources(const std::string &name, UBContext *c
 }
 
 NResult NetUBSyncEndpoint::InnerPostSend(const UBSendReadWriteRequest &req, urma_target_seg_t *localSeg,
-    uint32_t immData)
+                                         uint32_t immData)
 {
     if (NN_UNLIKELY(mJetty == nullptr)) {
         NN_LOG_ERROR("Failed to PostSend with UBSyncEndpoint as qp is null");
@@ -1791,11 +1813,11 @@ NResult NetUBSyncEndpoint::InnerPostRead(const UBSendReadWriteRequest &req)
     // HighBandWidth scene, local ImportSeg is pre-done, PostRead need token(req.srcSeg); remote ImportSeg is pre-done, PostRead need token(req.dstSeg)
     // LowLatency scene, local ImportSeg is pre-done, PostRead need token(req.srcSeg); remote ImportSeg is inline, PostRead need key(req.rKey)
     if (mDriver->mOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) {
-        result = mJetty->PostRead(req.lAddress, tseg, req.rAddress,
-            reinterpret_cast<uint64_t>(req.dstSeg), req.size, reinterpret_cast<uint64_t>(&ctx));
+        result = mJetty->PostRead(req.lAddress, tseg, req.rAddress, reinterpret_cast<uint64_t>(req.dstSeg), req.size,
+                                  reinterpret_cast<uint64_t>(&ctx));
     } else {
-        result = mJetty->PostRead(req.lAddress, tseg, req.rAddress,
-            req.rKey, req.size, reinterpret_cast<uint64_t>(&ctx));
+        result =
+            mJetty->PostRead(req.lAddress, tseg, req.rAddress, req.rKey, req.size, reinterpret_cast<uint64_t>(&ctx));
     }
     if (NN_UNLIKELY(result != UB_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
@@ -1846,7 +1868,7 @@ NResult NetUBSyncEndpoint::InnerPostWrite(const UBSendReadWriteRequest &req)
 }
 
 UResult NetUBSyncEndpoint::CreateOneSideCtx(const UBSgeCtxInfo &sgeInfo, const UBSHcomNetTransSgeIov *iov,
-    uint32_t iovCount, uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead)
+                                            uint32_t iovCount, uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead)
 {
     if (iov == nullptr || iovCount == NN_NO0 || iovCount > NN_NO4 || ctxArr == nullptr) {
         NN_LOG_ERROR("Urma failed to create oneSide operation ctx because param invalid");
@@ -1883,7 +1905,7 @@ UResult NetUBSyncEndpoint::PostOneSideSgl(const UBSendSglRWRequest &req, bool is
     sglCtx.qp = mJetty;
     sglCtx.result = UB_OK;
     if (NN_UNLIKELY(memcpy_s(sglCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, req.iov,
-        sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != UB_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != UB_OK)) {
         NN_LOG_ERROR("Urma post oneSide failed to copy UBSHcomNetTransSgeIov to sglCtx");
         return UB_PARAM_INVALID;
     }
@@ -1917,6 +1939,6 @@ UResult NetUBSyncEndpoint::PostOneSideSgl(const UBSendSglRWRequest &req, bool is
     }
     return result;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

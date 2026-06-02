@@ -10,10 +10,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include "hcom.h"
+#include "test_net_security_alg.h"
 #include "common/net_security_alg.h"
 #include "common/net_util.h"
-#include "test_net_security_alg.h"
+#include "hcom.h"
 
 using namespace ock::hcom;
 
@@ -39,8 +39,7 @@ TEST_F(TestNetSecurityAlg, EncryptSuccess)
     std::string value = "hello";
 
     uint32_t destLen;
-    bool result =
-        mAes.Encrypt(secrets, value.c_str(), value.length(), dest, destLen);
+    bool result = mAes.Encrypt(secrets, value.c_str(), value.length(), dest, destLen);
 
     EXPECT_EQ(true, result);
     EXPECT_EQ(mAes.EstimatedEncryptLen(value.length()), destLen);
@@ -98,8 +97,7 @@ TEST_F(TestNetSecurityAlg, DecryptSuccess)
     std::string value = "hello";
 
     uint32_t destLen = mAes.EstimatedEncryptLen(value.length());
-    bool result =
-        mAes.Encrypt(secrets, value.c_str(), value.length(), dest, destLen);
+    bool result = mAes.Encrypt(secrets, value.c_str(), value.length(), dest, destLen);
 
     EXPECT_EQ(true, result);
     EXPECT_EQ(mAes.EstimatedEncryptLen(value.length()), destLen);

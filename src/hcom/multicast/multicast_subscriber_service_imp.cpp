@@ -2,16 +2,16 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
+#include "multicast_subscriber_service_imp.h"
 #include "multicast_config_imp.h"
 #include "net_common.h"
 #include "net_oob.h"
 #include "utils/multicast_utils.h"
-#include "multicast_subscriber_service_imp.h"
 
 namespace ock {
 namespace hcom {
 static int DefaultNewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                              const std::string &payload)
 {
     NN_LOG_INFO("new ep request!");
     return 0;
@@ -45,8 +45,7 @@ void SubscriberServiceImp::ServiceEndPointBroken(const UBSHcomNetEndpointPtr &ep
 
 SerResult SubscriberServiceImp::InitDriver()
 {
-    UBSHcomNetDriver *driver = UBSHcomNetDriver::Instance(mCfg.GetProtocol(),
-        mCfg.GetName(), mCfg.GetStartOobServer());
+    UBSHcomNetDriver *driver = UBSHcomNetDriver::Instance(mCfg.GetProtocol(), mCfg.GetName(), mCfg.GetStartOobServer());
     if (driver == nullptr) {
         NN_LOG_ERROR("failed to create driver for service " << mCfg.GetName());
         return SER_ERROR;
@@ -71,7 +70,7 @@ SerResult SubscriberServiceImp::InitDriver()
     mDriverPtr->RegisterNewEPHandler(DefaultNewEndPoint);
     mDriverPtr->RegisterEPBrokenHandler(
         std::bind(&SubscriberServiceImp::ServiceEndPointBroken, this, std::placeholders::_1));
-    
+
     if (driverOpt.enableTls) {
         mDriverPtr->RegisterTLSCaCallback(mSubTLSCaCallback);
         mDriverPtr->RegisterTLSCertificationCallback(mSubTLSCertificationCallback);
@@ -254,5 +253,5 @@ void SubscriberServiceImp::RegisterTLSPrivateKeyCallback(const UBSHcomTLSPrivate
 {
     mSubTLSPrivateKeyCallback = cb;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

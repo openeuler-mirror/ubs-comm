@@ -36,9 +36,9 @@ using EVP_MD = struct evp_md_st;
 using SSL_SESSION = struct ssl_session_st;
 
 using SSL_psk_find_session_cb_func = int (*)(SSL *ssl, const unsigned char *identity, size_t identityLen,
-    SSL_SESSION **sess);
+                                             SSL_SESSION **sess);
 using SSL_psk_use_session_cb_func = int (*)(SSL *ssl, const EVP_MD *md, const unsigned char **id, size_t *idlen,
-    SSL_SESSION **sess);
+                                            SSL_SESSION **sess);
 
 using FuncInit = int (*)(uint64_t, const OPENSSL_INIT_SETTINGS *);
 using FuncOpensslCleanup = void (*)();
@@ -83,7 +83,7 @@ using FuncEvpCipherCtxNew = EVP_CIPHER_CTX *(*)();
 using FuncEvpCipherCtxFree = void (*)(EVP_CIPHER_CTX *);
 using FuncEvpCipherCtxCtrl = int (*)(EVP_CIPHER_CTX *, int, int, void *);
 using FuncEvpEncryptInitEx = int (*)(EVP_CIPHER_CTX *, const EVP_CIPHER *, ENGINE *, const unsigned char *,
-    const unsigned char *);
+                                     const unsigned char *);
 using FuncEvpEncryptUpdate = int (*)(EVP_CIPHER_CTX *, unsigned char *, int *, const unsigned char *, int);
 using FuncEvpEncryptFinalEx = int (*)(EVP_CIPHER_CTX *, unsigned char *, int *);
 using FuncEvpDecryptInitEx = FuncEvpEncryptInitEx;
@@ -198,7 +198,7 @@ private:
     static int LoadSSLSymbols(void *sslHandle);
     static int LoadCryptoSymbols(void *cryptoHandle);
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HCOM_UNDER_API_OPENSSL_API_DL_H_2134

@@ -47,7 +47,7 @@ if(NOT LIBBOUNDCHECK_INCLUDE_DIR OR NOT LIBBOUNDCHECK_SHARED_LIBRARY)
                 # 假设 umdk-urma 仓库包含 urma 的头文件
                 FetchContent_Declare(
                         libboundscheck
-                        GIT_REPOSITORY https://gitee.com/openeuler/libboundscheck.git
+                        GIT_REPOSITORY https://atomgit.com/openeuler/libboundscheck.git
                         GIT_TAG        master
                 )
                 FetchContent_MakeAvailable(libboundscheck)

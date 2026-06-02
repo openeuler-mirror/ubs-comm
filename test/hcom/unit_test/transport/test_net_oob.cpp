@@ -10,20 +10,20 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
-#include <unistd.h>
 #include <sys/epoll.h>
+#include <unistd.h>
+#include <mockcpp/mockcpp.hpp>
 #include <utility>
 
 #include "hcom_utils.h"
 #include "net_common.h"
+#include "net_sock_driver_oob.h"
 #include "rdma_worker.h"
 #include "transport/net_delay_release_timer.h"
 #include "transport/net_heartbeat.h"
 #include "transport/net_load_balance.h"
 #include "transport/rdma/rdma_common.h"
 #include "transport/rdma/verbs/net_rdma_async_endpoint.h"
-#include "net_sock_driver_oob.h"
 
 namespace ock {
 namespace hcom {
@@ -34,9 +34,7 @@ public:
     virtual void TearDown(void);
 };
 
-void TestNetOob::SetUp()
-{
-}
+void TestNetOob::SetUp() {}
 
 void TestNetOob::TearDown()
 {
@@ -142,13 +140,10 @@ TEST_F(TestNetOob, ConnectWithFdRecv)
     uint16_t testPort = 2233;
     MOCKER(::sleep).stubs().will(returnValue(static_cast<int>(0)));
     MOCKER(::connect).stubs().will(returnValue(static_cast<int>(0)));
-    MOCKER(::recv)
-            .stubs()
-            .will(returnValue(static_cast<int>(-1)))
-            .then(returnValue(static_cast<int>(NN_NO4)));
+    MOCKER(::recv).stubs().will(returnValue(static_cast<int>(-1))).then(returnValue(static_cast<int>(NN_NO4)));
 
     err = OOBTCPClient::ConnectWithFd("127.0.0.1", testPort, fd);
     EXPECT_EQ(err, NN_OK);
 }
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

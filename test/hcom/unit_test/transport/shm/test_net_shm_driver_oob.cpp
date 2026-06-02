@@ -9,17 +9,17 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <dirent.h>
+#include <gtest/gtest.h>
 #include <iostream>
-#include "net_shm_sync_endpoint.h"
-#include "net_shm_async_endpoint.h"
-#include "shm_composed_endpoint.h"
+#include <mockcpp/mockcpp.hpp>
 #include "net_oob_secure.h"
 #include "net_oob_ssl.h"
-#include "shm_validation.h"
+#include "net_shm_async_endpoint.h"
 #include "net_shm_driver_oob.h"
+#include "net_shm_sync_endpoint.h"
+#include "shm_composed_endpoint.h"
+#include "shm_validation.h"
 
 namespace ock {
 namespace hcom {
@@ -298,8 +298,8 @@ TEST_F(TestNetShmDriverOob, HandleNewRequestChannelStateFail)
     ch->mState.Set(ShmChannelState::CH_BROKEN);
     ch->UpContext(1);
 
-    ShmOpContextInfo ctx{ ch.Get(), 1, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
-        ShmOpContextInfo::ShmErrorType::SH_NO_ERROR };
+    ShmOpContextInfo ctx{ch.Get(), 1, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
+                         ShmOpContextInfo::ShmErrorType::SH_NO_ERROR};
     ret = driver->HandleNewRequest(ctx, 0);
     EXPECT_EQ(ret, 0);
 }
@@ -317,8 +317,8 @@ TEST_F(TestNetShmDriverOob, HandleNewRequestValidateHeaderWithDataSizeFail)
     ASSERT_NE(ep, nullptr);
     ch->UpContext(reinterpret_cast<uintptr_t>(ep.Get()));
 
-    ShmOpContextInfo ctx{ ch.Get(), 1, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
-        ShmOpContextInfo::ShmErrorType::SH_NO_ERROR };
+    ShmOpContextInfo ctx{ch.Get(), 1, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
+                         ShmOpContextInfo::ShmErrorType::SH_NO_ERROR};
     MOCKER_CPP(NetFunc::ValidateHeaderWithDataSize).stubs().will(returnValue(100));
     MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree).stubs().will(returnValue(0));
     ret = driver->HandleNewRequest(ctx, 0);
@@ -339,8 +339,8 @@ TEST_F(TestNetShmDriverOob, HandleNewRequestEpToChildFail)
     ch->UpContext(reinterpret_cast<uintptr_t>(ep));
 
     char testData[128] = "Hello, this is a test data.";
-    ShmOpContextInfo ctx{ ch.Get(), (uintptr_t)testData, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
-        ShmOpContextInfo::ShmErrorType::SH_NO_ERROR };
+    ShmOpContextInfo ctx{ch.Get(), (uintptr_t)testData, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
+                         ShmOpContextInfo::ShmErrorType::SH_NO_ERROR};
     MOCKER_CPP(NetFunc::ValidateHeaderWithDataSize).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree).stubs().will(returnValue(0));
     ret = driver->HandleNewRequest(ctx, 0);
@@ -365,8 +365,8 @@ TEST_F(TestNetShmDriverOob, HandleNewRequestMallocDecryptFail)
     ch->UpContext(reinterpret_cast<uintptr_t>(ep));
 
     char testData[128] = "Hello, this is a test data.";
-    ShmOpContextInfo ctx{ ch.Get(), (uintptr_t)testData, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
-        ShmOpContextInfo::ShmErrorType::SH_NO_ERROR };
+    ShmOpContextInfo ctx{ch.Get(), (uintptr_t)testData, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
+                         ShmOpContextInfo::ShmErrorType::SH_NO_ERROR};
     MOCKER_CPP(NetFunc::ValidateHeaderWithDataSize).stubs().will(returnValue(0));
     MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed)
         .stubs()
@@ -405,8 +405,8 @@ TEST_F(TestNetShmDriverOob, HandleNewRequestValidateDecryptLengthFail)
     ch->UpContext(reinterpret_cast<uintptr_t>(ep));
 
     char testData[128] = "Hello, this is a test data.";
-    ShmOpContextInfo ctx{ ch.Get(), (uintptr_t)testData, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
-        ShmOpContextInfo::ShmErrorType::SH_NO_ERROR };
+    ShmOpContextInfo ctx{ch.Get(), (uintptr_t)testData, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
+                         ShmOpContextInfo::ShmErrorType::SH_NO_ERROR};
     MOCKER_CPP(NetFunc::ValidateHeaderWithDataSize).stubs().will(returnValue(0));
     MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).stubs().will(returnValue(true));
     MOCKER_CPP(&AesGcm128::Decrypt).stubs().will(returnValue(true));
@@ -430,8 +430,8 @@ TEST_F(TestNetShmDriverOob, HandleNewRequestMallocMemcpyFail)
     ch->UpContext(reinterpret_cast<uintptr_t>(ep));
 
     char testData[128] = "Hello, this is a test data.";
-    ShmOpContextInfo ctx{ ch.Get(), (uintptr_t)testData, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
-        ShmOpContextInfo::ShmErrorType::SH_NO_ERROR };
+    ShmOpContextInfo ctx{ch.Get(), (uintptr_t)testData, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
+                         ShmOpContextInfo::ShmErrorType::SH_NO_ERROR};
     MOCKER_CPP(NetFunc::ValidateHeaderWithDataSize).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree).stubs().will(returnValue(0));
     ret = driver->HandleNewRequest(ctx, 0);
@@ -456,8 +456,8 @@ TEST_F(TestNetShmDriverOob, HandleNewRequest)
     ch->mState.Set(ShmChannelState::CH_NEW);
     ch->UpContext(1);
 
-    ShmOpContextInfo ctx{ ch.Get(), 1, 1, ShmOpContextInfo::ShmOpType::SH_SEND,
-        ShmOpContextInfo::ShmErrorType::SH_NO_ERROR };
+    ShmOpContextInfo ctx{ch.Get(), 1, 1, ShmOpContextInfo::ShmOpType::SH_SEND,
+                         ShmOpContextInfo::ShmErrorType::SH_NO_ERROR};
     ret = driver->HandleNewRequest(ctx, 0);
     EXPECT_EQ(ret, 0);
 }
@@ -480,14 +480,16 @@ TEST_F(TestNetShmDriverOob, HandleReqPostedFail)
     NetMemPoolFixedPtr opMemPool;
     NetMemPoolFixedPtr opCtxMemPool;
     NetMemPoolFixedPtr sglOpMemPool;
-    ShmWorker *worker =
-        new (std::nothrow) ShmWorker("shm", indexWorker, options, opMemPool, opCtxMemPool, sglOpMemPool);
+    ShmWorker *worker = new (std::nothrow)
+        ShmWorker("shm", indexWorker, options, opMemPool, opCtxMemPool, sglOpMemPool);
     ch->UpContext1(reinterpret_cast<uintptr_t>(worker));
 
     ShmOpCompInfo ctx{};
     ctx.channel = ch.Get();
     ctx.opType = ShmOpContextInfo::ShmOpType::SH_RECEIVE;
-    driver->mRequestPostedHandler = [](const UBSHcomNetRequestContext &ctx) -> int { return SER_ERROR; };
+    driver->mRequestPostedHandler = [](const UBSHcomNetRequestContext &ctx) -> int {
+        return SER_ERROR;
+    };
     ret = driver->HandleReqPosted(ctx);
     EXPECT_EQ(ret, SER_ERROR);
 }
@@ -576,8 +578,8 @@ TEST_F(TestNetShmDriverOob, ProcessEpErrorOneSideRemaining)
     ASSERT_NE(ep, nullptr);
     ch->UpContext(reinterpret_cast<uintptr_t>(ep));
 
-    ShmOpContextInfo ctx{ ch.Get(), 1, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
-        ShmOpContextInfo::ShmErrorType::SH_NO_ERROR };
+    ShmOpContextInfo ctx{ch.Get(), 1, 1, ShmOpContextInfo::ShmOpType::SH_RECEIVE,
+                         ShmOpContextInfo::ShmErrorType::SH_NO_ERROR};
     ch.Get()->mCtxPosted.next = &ctx;
 
     EXPECT_NO_FATAL_FAILURE(driver->ProcessEpError(ch));

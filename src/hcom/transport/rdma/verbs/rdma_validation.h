@@ -15,16 +15,16 @@
 
 #include "hcom.h"
 
-#include "rdma_composed_endpoint.h"
+#include "hcom_utils.h"
 #include "net_monotonic.h"
 #include "net_rdma_driver_oob.h"
 #include "net_security_alg.h"
-#include "hcom_utils.h"
+#include "rdma_composed_endpoint.h"
 
 namespace ock {
 namespace hcom {
 static __always_inline NResult StateValidate(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    NetDriverRDMAWithOob *driver)
+                                             NetDriverRDMAWithOob *driver)
 {
     if (NN_UNLIKELY(!state.Compare(NEP_ESTABLISHED))) {
         NN_LOG_ERROR("Endpoint " << id << " is not established, state is " << UBSHcomNEPStateToString(state.Get()));
@@ -52,23 +52,23 @@ static __always_inline NResult LocalRequestValidate(const UBSHcomNetTransRequest
 }
 
 static __always_inline NResult SizeValidate(const UBSHcomNetTransRequest &request, uint32_t allowedSize,
-    bool mIsNeedEncrypt, AesGcm128 mAes)
+                                            bool mIsNeedEncrypt, AesGcm128 mAes)
 {
     size_t compareSize = request.size;
     if (mIsNeedEncrypt) {
         compareSize = mAes.EstimatedEncryptLen(request.size);
     }
     if (NN_UNLIKELY(compareSize > allowedSize)) {
-        NN_LOG_ERROR("Failed to post message as message size " << request.size <<
-            " is too large, use one side post");
+        NN_LOG_ERROR("Failed to post message as message size " << request.size << " is too large, use one side post");
         return NN_TWO_SIDE_MESSAGE_TOO_LARGE;
     }
     return NN_OK;
 }
 
 static __always_inline NResult PostSendValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    NetDriverRDMAWithOob *driver, uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t allowedSize,
-    bool mIsNeedEncrypt, AesGcm128 mAes)
+                                                  NetDriverRDMAWithOob *driver, uint16_t opCode,
+                                                  const UBSHcomNetTransRequest &request, uint32_t allowedSize,
+                                                  bool mIsNeedEncrypt, AesGcm128 mAes)
 {
     NResult result = NN_OK;
     if (NN_UNLIKELY(result = StateValidate(state, id, driver)) != NN_OK) {
@@ -89,8 +89,9 @@ static __always_inline NResult PostSendValidation(UBSHcomNetAtomicState<UBSHcomN
 }
 
 static __always_inline NResult PostSendRawValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    NetDriverRDMAWithOob *driver, uint32_t seqNo, const UBSHcomNetTransRequest &request, uint32_t allowedSize,
-    bool mIsNeedEncrypt, AesGcm128 mAes)
+                                                     NetDriverRDMAWithOob *driver, uint32_t seqNo,
+                                                     const UBSHcomNetTransRequest &request, uint32_t allowedSize,
+                                                     bool mIsNeedEncrypt, AesGcm128 mAes)
 {
     NResult result = NN_OK;
     if (NN_UNLIKELY(result = StateValidate(state, id, driver)) != NN_OK) {
@@ -110,7 +111,7 @@ static __always_inline NResult PostSendRawValidation(UBSHcomNetAtomicState<UBSHc
 }
 
 static __always_inline NResult ReadWriteValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    NetDriverRDMAWithOob *driver, const UBSHcomNetTransRequest &request)
+                                                   NetDriverRDMAWithOob *driver, const UBSHcomNetTransRequest &request)
 {
     NResult result = NN_OK;
     if (NN_UNLIKELY(result = StateValidate(state, id, driver)) != NN_OK) {
@@ -135,7 +136,7 @@ static __always_inline NResult ReadWriteValidation(UBSHcomNetAtomicState<UBSHcom
 }
 
 static __always_inline NResult SglValidation(const UBSHcomNetTransSglRequest &request, size_t &totalSize,
-    NetDriverRDMAWithOob *driver)
+                                             NetDriverRDMAWithOob *driver)
 {
     if (NN_UNLIKELY(request.iov == nullptr || request.iovCount > NET_SGE_MAX_IOV || request.iovCount == 0)) {
         NN_LOG_ERROR("Invalid iov ptr:" << request.iov << " or iov cnt:" << request.iovCount);
@@ -151,8 +152,7 @@ static __always_inline NResult SglValidation(const UBSHcomNetTransSglRequest &re
             return NN_PARAM_INVALID;
         }
 
-        if (NN_OK != driver->ValidateMemoryRegion(request.iov[i].lKey, request.iov[i].lAddress,
-            request.iov[i].size)) {
+        if (NN_OK != driver->ValidateMemoryRegion(request.iov[i].lKey, request.iov[i].lAddress, request.iov[i].size)) {
             NN_LOG_ERROR("Failed to validate as invalid MemoryRegion or lKey in iov");
             return NN_INVALID_LKEY;
         }
@@ -162,7 +162,8 @@ static __always_inline NResult SglValidation(const UBSHcomNetTransSglRequest &re
 }
 
 static __always_inline NResult ReadWriteSglValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state,
-    uint64_t id, NetDriverRDMAWithOob *driver, const UBSHcomNetTransSglRequest &request)
+                                                      uint64_t id, NetDriverRDMAWithOob *driver,
+                                                      const UBSHcomNetTransSglRequest &request)
 {
     NResult result = NN_OK;
     if (NN_UNLIKELY(result = StateValidate(state, id, driver)) != NN_OK) {
@@ -182,8 +183,9 @@ static __always_inline NResult ReadWriteSglValidation(UBSHcomNetAtomicState<UBSH
 }
 
 static __always_inline NResult PostSendSglValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    NetDriverRDMAWithOob *driver, uint32_t seqNo, const UBSHcomNetTransSglRequest &request, uint32_t allowedSize,
-    size_t &totalSize, bool mIsNeedEncrypt, AesGcm128 mAes)
+                                                     NetDriverRDMAWithOob *driver, uint32_t seqNo,
+                                                     const UBSHcomNetTransSglRequest &request, uint32_t allowedSize,
+                                                     size_t &totalSize, bool mIsNeedEncrypt, AesGcm128 mAes)
 {
     NResult ret = NN_OK;
     if (NN_UNLIKELY(ret = StateValidate(state, id, driver)) != NN_OK) {
@@ -201,15 +203,16 @@ static __always_inline NResult PostSendSglValidation(UBSHcomNetAtomicState<UBSHc
         compareSize = mAes.EstimatedEncryptLen(totalSize);
     }
     if (NN_UNLIKELY(compareSize > allowedSize)) {
-        NN_LOG_ERROR("Failed to post send raw sgl as message size " << compareSize <<
-            " is too large, use one side post");
+        NN_LOG_ERROR("Failed to post send raw sgl as message size " << compareSize
+                                                                    << " is too large, use one side post");
         return NN_TWO_SIDE_MESSAGE_TOO_LARGE;
     }
     return NN_OK;
 }
 
 static __always_inline NResult EncryptRawSgl(UBSHcomNetTransRequest &tlsReq, uintptr_t &mrBufAddress, size_t &size,
-    AesGcm128 mAes, NetDriverRDMAWithOob *driver, const UBSHcomNetTransSglRequest &request, NetSecrets &mSecrets)
+                                             AesGcm128 mAes, NetDriverRDMAWithOob *driver,
+                                             const UBSHcomNetTransSglRequest &request, NetSecrets &mSecrets)
 {
     uintptr_t tmpBuffer = 0;
     if (NN_UNLIKELY(!driver->GetDriverSendMr()->GetFreeBuffer(tmpBuffer))) {
@@ -220,8 +223,9 @@ static __always_inline NResult EncryptRawSgl(UBSHcomNetTransRequest &tlsReq, uin
     uint32_t iovOffset = 0;
     for (uint16_t i = 0; i < request.iovCount; i++) {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(tmpBuffer + iovOffset),
-            driver->GetDriverSendMr()->GetSingleSegSize() - iovOffset,
-            reinterpret_cast<const void *>(request.iov[i].lAddress), request.iov[i].size) != NN_OK)) {
+                                 driver->GetDriverSendMr()->GetSingleSegSize() - iovOffset,
+                                 reinterpret_cast<const void *>(request.iov[i].lAddress),
+                                 request.iov[i].size) != NN_OK)) {
             (void)driver->GetDriverSendMr()->ReturnBuffer(tmpBuffer);
             NN_LOG_ERROR("Failed to copy request to mrBufAddress");
             return NN_INVALID_PARAM;
@@ -237,7 +241,7 @@ static __always_inline NResult EncryptRawSgl(UBSHcomNetTransRequest &tlsReq, uin
 
     uint32_t cipherLen = 0;
     if (!(mAes).Encrypt(mSecrets, reinterpret_cast<void *>(tmpBuffer), size, reinterpret_cast<void *>(mrBufAddress),
-        cipherLen)) {
+                        cipherLen)) {
         NN_LOG_ERROR("Failed to post send message as encryption failure");
         (void)driver->GetDriverSendMr()->ReturnBuffer(tmpBuffer);
         (void)driver->GetDriverSendMr()->ReturnBuffer(mrBufAddress);
@@ -252,8 +256,8 @@ static __always_inline NResult EncryptRawSgl(UBSHcomNetTransRequest &tlsReq, uin
     (void)driver->GetDriverSendMr()->ReturnBuffer(tmpBuffer);
     return NN_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // OCK_HCOM_NET_RDMA_VALIDATION_H

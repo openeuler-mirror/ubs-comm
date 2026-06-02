@@ -34,7 +34,7 @@ int TransportWriteBwTest::DoPostWrite()
 }
 
 int TransportWriteBwTest::NewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                                      const std::string &payload)
 {
     mEp = ep;
     LOG_DEBUG("new connection from " << ipPort << " !");
@@ -48,6 +48,7 @@ int TransportWriteBwTest::RequestReceived(const ock::hcom::UBSHcomNetRequestCont
         // client
         if (memcpy_s(&mPeerMrInfo, sizeof(mPeerMrInfo), ctx.Message()->Data(), ctx.Message()->DataLen()) != 0) {
             LOG_ERROR("memcpy_s failed");
+            sem_post(&mSem);
             return -1;
         }
         sem_post(&mSem);
@@ -78,7 +79,7 @@ bool TransportWriteBwTest::Initialize()
 
     // create UBSHcomNetDriver
     NewEpHandler funcNewEndpoint = bind(&TransportWriteBwTest::NewEndPoint, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+                                        std::placeholders::_2, std::placeholders::_3);
     ReqRecvHandler funcReqReceived = bind(&TransportWriteBwTest::RequestReceived, this, std::placeholders::_1);
     OneSideDoneHandler funcOneSide = bind(&TransportWriteBwTest::OneSideDone, this, std::placeholders::_1);
     mHelper.RegisterNewEPHandler(funcNewEndpoint);
@@ -175,5 +176,5 @@ bool TransportWriteBwTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::TRANSPORT_WRITE_BW, TransportWriteBwTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

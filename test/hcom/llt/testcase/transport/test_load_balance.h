@@ -16,10 +16,10 @@
 
 class TestLoadBalance : public testing::Test {
 public:
-  TestLoadBalance();
-  virtual void SetUp(void);
-  virtual void TearDown(void);
-  static uint16_t basePort;
+    TestLoadBalance();
+    virtual void SetUp(void);
+    virtual void TearDown(void);
+    static uint16_t basePort;
 };
 
 #endif // HCOM_TEST_LOAD_BALANCE_H

@@ -20,12 +20,12 @@
 #include <utility>
 #include <vector>
 
-#include "hcom_err.h"
-#include "hcom_ref.h"
 #include "hcom_def.h"
+#include "hcom_err.h"
 #include "hcom_log.h"
-#include "hcom_utils.h"
 #include "hcom_obj_statistics.h"
+#include "hcom_ref.h"
+#include "hcom_utils.h"
 
 namespace ock {
 namespace hcom {
@@ -69,21 +69,19 @@ const char *UBSHcomNetErrStr(int16_t errCode);
 
 bool UBSHcomNetCloneStringToArray(char *dest, size_t destMax, const std::string &src);
 
-#define NN_SET_CHAR_ARRAY_FROM_STRING(CHAR_ARRAY, VALUE)                     \
-    do {                                                                     \
+#define NN_SET_CHAR_ARRAY_FROM_STRING(CHAR_ARRAY, VALUE)                            \
+    do {                                                                            \
         return UBSHcomNetCloneStringToArray(CHAR_ARRAY, sizeof(CHAR_ARRAY), VALUE); \
     } while (0)
 
-#define NN_SET_CHAR_ARRAY_FROM_STRING_VOID(CHAR_ARRAY, VALUE)              \
+#define NN_SET_CHAR_ARRAY_FROM_STRING_VOID(CHAR_ARRAY, VALUE)                \
     do {                                                                     \
-        UBSHcomNetCloneStringToArray(CHAR_ARRAY, sizeof(CHAR_ARRAY), VALUE);        \
+        UBSHcomNetCloneStringToArray(CHAR_ARRAY, sizeof(CHAR_ARRAY), VALUE); \
     } while (0)
 
-#define NN_CHAR_ARRAY_TO_STRING(CHAR_ARRAY)                    \
-    {                                                          \
-        CHAR_ARRAY, strlen(CHAR_ARRAY) <= sizeof(CHAR_ARRAY) ? \
-                            strlen(CHAR_ARRAY) :               \
-                            sizeof(CHAR_ARRAY)                 \
+#define NN_CHAR_ARRAY_TO_STRING(CHAR_ARRAY)                                                            \
+    {                                                                                                  \
+        CHAR_ARRAY, strlen(CHAR_ARRAY) <= sizeof(CHAR_ARRAY) ? strlen(CHAR_ARRAY) : sizeof(CHAR_ARRAY) \
     }
 
 enum class UBSHcomNetRequestStatus {
@@ -108,15 +106,15 @@ void SetTraceIdInner(const std::string &traceId);
 /// 好了。
 /// - 单边 UBC 场景与 RDMA 保持一致。
 struct UBSHcomNetTransRequest {
-    uintptr_t lAddress = 0;        ///< 本地读取地址
-    uintptr_t rAddress = 0;        ///< 远端写入地址
-    uint64_t lKey = 0;             ///< 本地 lkey, 适用于 RDMA/UB/TCP/SHM
-    uint64_t rKey = 0;             ///< 远端 rkey, 适用于 RDMA/UB/TCP/SHM
-    void *srcSeg = nullptr;        ///< 仅适用于 UB
-    void *dstSeg = nullptr;        ///< 仅适用于 UB
-    uint32_t size = 0;             ///< 写入字节数
-    uint16_t upCtxSize = 0;        ///< 上层 ctx 大小。默认为 0 代表 upCtxData 无效
-    char upCtxData[NN_NO64] = {};  ///< 可用于存储上层 ctx
+    uintptr_t lAddress = 0;       ///< 本地读取地址
+    uintptr_t rAddress = 0;       ///< 远端写入地址
+    uint64_t lKey = 0;            ///< 本地 lkey, 适用于 RDMA/UB/TCP/SHM
+    uint64_t rKey = 0;            ///< 远端 rkey, 适用于 RDMA/UB/TCP/SHM
+    void *srcSeg = nullptr;       ///< 仅适用于 UB
+    void *dstSeg = nullptr;       ///< 仅适用于 UB
+    uint32_t size = 0;            ///< 写入字节数
+    uint16_t upCtxSize = 0;       ///< 上层 ctx 大小。默认为 0 代表 upCtxData 无效
+    char upCtxData[NN_NO64] = {}; ///< 可用于存储上层 ctx
 
     UBSHcomNetTransRequest() = default;
 
@@ -127,8 +125,7 @@ struct UBSHcomNetTransRequest {
     {
     }
 
-    UBSHcomNetTransRequest(uintptr_t la, uintptr_t ra, uint64_t lk, uint64_t rk,
-                    uint32_t s, uint16_t upCtxSi)
+    UBSHcomNetTransRequest(uintptr_t la, uintptr_t ra, uint64_t lk, uint64_t rk, uint32_t s, uint16_t upCtxSi)
         : lAddress(la),
           rAddress(ra),
           lKey(lk),
@@ -138,8 +135,8 @@ struct UBSHcomNetTransRequest {
     {
     }
 
-    UBSHcomNetTransRequest(uintptr_t la, uintptr_t ra, uint64_t lk, uint64_t rk,
-                    uint32_t s, uint16_t upCtxSi, void *sSeg, void *dSeg)
+    UBSHcomNetTransRequest(uintptr_t la, uintptr_t ra, uint64_t lk, uint64_t rk, uint32_t s, uint16_t upCtxSi,
+                           void *sSeg, void *dSeg)
         : lAddress(la),
           rAddress(ra),
           lKey(lk),
@@ -154,48 +151,54 @@ struct UBSHcomNetTransRequest {
 } __attribute__((packed));
 
 struct UBSHcomNetTransSglRequest {
-    UBSHcomNetTransSgeIov *iov = nullptr;  // array
-    uint16_t iovCount = 0;          // max count: NET_SGE_MAX_IOV
-    uint16_t upCtxSize = 0;         // upper context size
-    char upCtxData[NN_NO16] = {};   // upper context data
+    UBSHcomNetTransSgeIov *iov = nullptr; // array
+    uint16_t iovCount = 0;                // max count: NET_SGE_MAX_IOV
+    uint16_t upCtxSize = 0;               // upper context size
+    char upCtxData[NN_NO16] = {};         // upper context data
 
     UBSHcomNetTransSglRequest() = default;
 
     UBSHcomNetTransSglRequest(UBSHcomNetTransSgeIov *iovPtr, uint16_t cnt, uint16_t upCtxSi)
-        : iov(iovPtr), iovCount(cnt), upCtxSize(upCtxSi)
-    {}
+        : iov(iovPtr),
+          iovCount(cnt),
+          upCtxSize(upCtxSi)
+    {
+    }
 } __attribute__((packed));
 
 struct UBSHcomNetTransOpInfo {
     uint32_t seqNo = 0;    // seq no
-    int16_t timeout = 0;  // timeout
+    int16_t timeout = 0;   // timeout
     int16_t errorCode = 0; // error code
     uint8_t flags = 0;     // flags in user case
 
     UBSHcomNetTransOpInfo() = default;
 
     UBSHcomNetTransOpInfo(uint32_t seqNo, int16_t timeout, int16_t errorCode, uint8_t flags)
-        : seqNo(seqNo), timeout(timeout), errorCode(errorCode), flags(flags)
-    {}
+        : seqNo(seqNo),
+          timeout(timeout),
+          errorCode(errorCode),
+          flags(flags)
+    {
+    }
     UBSHcomNetTransOpInfo(uint32_t seqNo, int16_t timeout) : seqNo(seqNo), timeout(timeout) {}
 } __attribute__((packed));
 
 struct UBSHcomNetUdsIdInfo {
-    uint32_t pid = 0;  // process id
-    uint32_t uid = 0;  // user id
-    uint32_t gid = 0;  // group id
+    uint32_t pid = 0; // process id
+    uint32_t uid = 0; // user id
+    uint32_t gid = 0; // group id
 
     UBSHcomNetUdsIdInfo() = default;
 
-    UBSHcomNetUdsIdInfo(uint32_t pid, uint32_t uid, uint32_t gid)
-        : pid(pid), uid(uid), gid(gid){};
+    UBSHcomNetUdsIdInfo(uint32_t pid, uint32_t uid, uint32_t gid) : pid(pid), uid(uid), gid(gid){};
 } __attribute__((packed));
 
 union UBSHcomEpOptions {
     struct {
         bool tcpBlockingIo;
         bool cbByWorkerInBlocking;
-        int32_t sendTimeout;  // send timeout in blocking mode in second
+        int32_t sendTimeout; // send timeout in blocking mode in second
     };
 
     void Set(bool tcpBI, bool cb, int32_t st)
@@ -330,8 +333,7 @@ public:
      * @return 0 if successful
      *
      */
-    virtual NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-                             uint32_t seqNo) = 0;
+    virtual NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNo) = 0;
 
     virtual NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
                              const UBSHcomNetTransOpInfo &opInfo) = 0;
@@ -374,8 +376,7 @@ public:
      * @return 0 if successful
      *
      */
-    virtual NResult
-    PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo) = 0;
+    virtual NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo) = 0;
 
     /**
      * @brief Post send a request without opcode and header to peer, peer will be trigger new request callback also
@@ -394,8 +395,7 @@ public:
      * @return 0 if successful
      *
      */
-    virtual NResult
-    PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo) = 0;
+    virtual NResult PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo) = 0;
 
     /**
      * @brief Post a single side read request to peer, no callback at peer will be triggered
@@ -565,8 +565,7 @@ public:
      *
      * @return 0 if success
      */
-    virtual NResult Encrypt(const void *rawData, uint64_t rawLen, void *cipher,
-                            uint64_t &cipherLen)
+    virtual NResult Encrypt(const void *rawData, uint64_t rawLen, void *cipher, uint64_t &cipherLen)
     {
         return 0;
     }
@@ -593,8 +592,7 @@ public:
      *
      * @return 0 if success
      */
-    virtual NResult Decrypt(const void *cipher, uint64_t cipherLen,
-                            void *rawData, uint64_t &rawLen)
+    virtual NResult Decrypt(const void *cipher, uint64_t cipherLen, void *rawData, uint64_t &rawLen)
     {
         return 0;
     }
@@ -664,8 +662,7 @@ public:
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
 protected:
-    explicit UBSHcomNetEndpoint(uint64_t id, const UBSHcomNetWorkerIndex &workerWholeIndex)
-        : mId(id)
+    explicit UBSHcomNetEndpoint(uint64_t id, const UBSHcomNetWorkerIndex &workerWholeIndex) : mId(id)
     {
         OBJ_GC_INCREASE(UBSHcomNetEndpoint);
         mWorkerIndex = workerWholeIndex;
@@ -687,7 +684,7 @@ protected:
     bool IsNeedSendHb() const;
 
     virtual NResult PostSendSglInline(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo)
+                                      const UBSHcomNetTransOpInfo &opInfo)
     {
         return PostSend(opCode, request, opInfo);
     }
@@ -720,8 +717,8 @@ protected:
 
     // 服务层拆包专用，上层用户在调用时应当保证 extHeaderType != RAW
     virtual NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType, const void *extHeader,
-        uint32_t extHeaderSize)
+                             const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType,
+                             const void *extHeader, uint32_t extHeaderSize)
     {
         NN_LOG_WARN("PostSend with header unimplemented yet!!!");
         return NN_ERROR;
@@ -736,8 +733,7 @@ private:
     /**
      * @brief Set the connect info
      */
-    void StoreConnInfo(uint32_t localIp, uint16_t listenPort, uint8_t version,
-                       const std::string &payload);
+    void StoreConnInfo(uint32_t localIp, uint16_t listenPort, uint8_t version, const std::string &payload);
 
     /**
      * @brief Set the payload
@@ -936,8 +932,7 @@ public:
 
     // the passed context cannot be copy directly need to use SafeClone()
     // if needing to transfer to thread to process in async
-    static bool
-    SafeClone(const UBSHcomNetRequestContext &old, const UBSHcomNetRequestContextPtr &newOne)
+    static bool SafeClone(const UBSHcomNetRequestContext &old, const UBSHcomNetRequestContextPtr &newOne)
     {
         if (NN_UNLIKELY(newOne.Get() == nullptr)) {
             return false;
@@ -972,11 +967,10 @@ private:
     UBSHcomNetTransHeader mHeader{};
     NN_OpType mOpType = NN_RECEIVED;
     UBSHcomNetMessage *mMessage = nullptr;
-    UBSHcomNetTransRequest mOriginalReq{};  // copy information, not original address
+    UBSHcomNetTransRequest mOriginalReq{}; // copy information, not original address
 
     UBSHcomNetTransSgeIov iov[NET_SGE_MAX_IOV];
-    UBSHcomNetTransSglRequest
-            mOriginalSglReq{};  // copy information, not original address
+    UBSHcomNetTransSglRequest mOriginalSglReq{}; // copy information, not original address
 
     UBSHcomExtHeaderType extHeaderType = UBSHcomExtHeaderType::RAW;
 
@@ -1142,14 +1136,17 @@ public:
     virtual void GetVa(uint64_t &va, uint64_t &vaLen, uint32_t &tokenId) = 0;
 
     virtual uint8_t *GetEidRaw() = 0;
-    
+
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
 protected:
-    UBSHcomNetMemoryRegion(const std::string &name, bool extMem, uintptr_t buf,
-                    uint64_t size)
-        : mName(name), mExternalMemory(extMem), mSize(size), mBuf(buf)
-    {}
+    UBSHcomNetMemoryRegion(const std::string &name, bool extMem, uintptr_t buf, uint64_t size)
+        : mName(name),
+          mExternalMemory(extMem),
+          mSize(size),
+          mBuf(buf)
+    {
+    }
 
     /**
      * @brief UnInitialize
@@ -1184,10 +1181,8 @@ protected:
  * @brief Type of allocator
  */
 enum UBSHcomNetMemoryAllocatorType {
-    DYNAMIC_SIZE =
-            0, /* allocate dynamic memory size, there is alignment with X KB */
-    DYNAMIC_SIZE_WITH_CACHE =
-            1, /* allocator with dynamic memory size, with pre-allocate cache for performance */
+    DYNAMIC_SIZE = 0,            /* allocate dynamic memory size, there is alignment with X KB */
+    DYNAMIC_SIZE_WITH_CACHE = 1, /* allocator with dynamic memory size, with pre-allocate cache for performance */
 };
 
 /**
@@ -1239,8 +1234,7 @@ public:
      * @param options      [in] options
      * @param allocator    [out] allocator created
      */
-    static NResult Create(UBSHcomNetMemoryAllocatorType t,
-                          const UBSHcomNetMemoryAllocatorOptions &options,
+    static NResult Create(UBSHcomNetMemoryAllocatorType t, const UBSHcomNetMemoryAllocatorOptions &options,
                           UBSHcomNetMemoryAllocatorPtr &out);
 
 public:
@@ -1305,7 +1299,7 @@ public:
      * It's suggested to be called even if you are not using memory protection currently,
      * in case you may miss this once you turn memory protection on in the future.
      */
-    virtual void Destroy(){};
+    virtual void Destroy() {};
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
@@ -1340,12 +1334,11 @@ inline void UBSHcomNetMemoryAllocator::SetTargetSeg(void *targetSeg)
  * @brief Oob listening information for multiple listen port
  */
 struct UBSHcomNetOobListenerOptions {
-    char ip[NN_NO40]{};   /* listening ip */
-    uint16_t port = 9980; /* listening port */
-    uint16_t targetWorkerCount =
-            UINT16_MAX; /* the count of target workers, if >= 1, the
+    char ip[NN_NO40]{};                      /* listening ip */
+    uint16_t port = 9980;                    /* listening port */
+    uint16_t targetWorkerCount = UINT16_MAX; /* the count of target workers, if >= 1, the
                                        accepted socket will be attached to sub set to workers, 0 means all */
-    int cpuId = -1;       /* listening thread bind cpu id, default is -1, means not bind */
+    int cpuId = -1;                          /* listening thread bind cpu id, default is -1, means not bind */
 
     /**
      * @brief Set ip/port/targetWorkerCount
@@ -1410,8 +1403,8 @@ struct UBSHcomNetOobListenerOptions {
  * @brief Oob listening information for multiple listen file
  */
 struct UBSHcomNetOobUDSListenerOptions {
-    char name[NN_NO96] {}; /* UDS name for listen or file path */
-    uint16_t perm = 0600;  /* if 0 means not use file, otherwise use file and this perm as file perm, max is 0600 */
+    char name[NN_NO96]{}; /* UDS name for listen or file path */
+    uint16_t perm = 0600; /* if 0 means not use file, otherwise use file and this perm as file perm, max is 0600 */
     uint16_t targetWorkerCount = UINT16_MAX; /* the count of target workers, if >= 1, the
                                        accepted socket will be attached to sub set to workers, 0 means all */
     bool isCheck = true;                     /* whether to verify the permission on the UDS file */
@@ -1491,7 +1484,7 @@ using UBSHcomTLSCertificationCallback = std::function<bool(const std::string &na
  * passwd is used
  */
 using UBSHcomTLSPrivateKeyCallback = std::function<bool(const std::string &name, std::string &path, void *&password,
-    int &length, UBSHcomTLSEraseKeypass &erase)>;
+                                                        int &length, UBSHcomTLSEraseKeypass &erase)>;
 
 /**
  * @brief Customize callback function of verify cert, which is used in UBSHcomTLSCaCallback
@@ -1508,8 +1501,9 @@ using UBSHcomTLSCertVerifyCallback = std::function<int(void *, const char *)>;
  * to be specified
  * @param cb                   [out] callback function of customized function
  */
-using UBSHcomTLSCaCallback = std::function<bool(const std::string &name, std::string &capath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &verifyPeerCert, UBSHcomTLSCertVerifyCallback &cb)>;
+using UBSHcomTLSCaCallback =
+    std::function<bool(const std::string &name, std::string &capath, std::string &crlPath,
+                       UBSHcomPeerCertVerifyType &verifyPeerCert, UBSHcomTLSCertVerifyCallback &cb)>;
 
 /**
  * @brief UBSHcomNetDriver secure mode
@@ -1532,8 +1526,8 @@ enum UBSHcomNetDriverSecType : uint8_t {
  * @param outLen           [out] secure info length
  * @param needAutoFree     [out] secure info need to auto free in hcom or not
  */
-using UBSHcomNetDriverEndpointSecInfoProvider = std::function<int(uint64_t ctx, int64_t &flag,
-    UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen, bool &needAutoFree)>;
+using UBSHcomNetDriverEndpointSecInfoProvider = std::function<int(
+    uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen, bool &needAutoFree)>;
 
 /**
  * @brief ValidateSecInfo callback function, when oob connect build, this function will be called to validate auth info
@@ -1608,15 +1602,15 @@ std::string &UBSHcomNetDriverLBPolicyToString(UBSHcomNetDriverLBPolicy v);
 /// UB-C 专用: UB-C 具有多路径能力，发送时使用多条路径可以增大带宽，对于带宽要求
 /// 不高、时延敏感型业务又提供单路径直连模式。
 enum class UBSHcomUbcMode : int8_t {
-    LowLatency = 0,     ///< 低时延模式，使用单路径发送
-    HighBandwidth = 1,  ///< 高带宽模式，使用多条路径发送
+    LowLatency = 0,    ///< 低时延模式，使用单路径发送
+    HighBandwidth = 1, ///< 高带宽模式，使用多条路径发送
 };
 
 struct UBSHcomWorkerGroupInfo {
-    int8_t threadPriority = 0;  // [-20, 19], 19 is the lowest, -20 is the highest
-    uint16_t threadCount = 1;   // total number of threads in the worker group
-    uint16_t groupId = 0;   // group id of the worker group
-    std::pair<uint32_t, uint32_t> cpuIdsRange;   // worker groups cpu ids range
+    int8_t threadPriority = 0;                 // [-20, 19], 19 is the lowest, -20 is the highest
+    uint16_t threadCount = 1;                  // total number of threads in the worker group
+    uint16_t groupId = 0;                      // group id of the worker group
+    std::pair<uint32_t, uint32_t> cpuIdsRange; // worker groups cpu ids range
 };
 
 /**
@@ -1624,80 +1618,64 @@ struct UBSHcomWorkerGroupInfo {
  */
 struct UBSHcomNetDriverOptions {
     union {
-        char netDeviceIpMask[NN_NO256]{};  // IP 掩码。非 UBC 多路径场景通过此掩码可查找得到实际设备的 IP
-        uint8_t netDeviceEid[NN_NO16];     // UB EID (128b). 多路径聚合设备为非 IP 设备，需用户显式指定
+        char netDeviceIpMask[NN_NO256]{}; // IP 掩码。非 UBC 多路径场景通过此掩码可查找得到实际设备的 IP
+        uint8_t netDeviceEid[NN_NO16]; // UB EID (128b). 多路径聚合设备为非 IP 设备，需用户显式指定
     } __attribute__((packed));
-    char netDeviceIpGroup[NN_NO1024]{};           // ip group for devices
-    bool enableTls = true;                       // enable ssl
-    UBSHcomNetDriverSecType secType = NET_SEC_DISABLED;  // security type
-    UBSHcomTlsVersion tlsVersion = TLS_1_3;  // tls version, default TLS1.3 (772)
+    char netDeviceIpGroup[NN_NO1024]{};                 // ip group for devices
+    bool enableTls = true;                              // enable ssl
+    UBSHcomNetDriverSecType secType = NET_SEC_DISABLED; // security type
+    UBSHcomTlsVersion tlsVersion = TLS_1_3;             // tls version, default TLS1.3 (772)
     UBSHcomNetCipherSuite cipherSuite =
-            AES_GCM_128;  // if tls enabled can set cipher suite, client and server should same
-                          /* worker setting */
-    bool dontStartWorkers = false;  // start worker or not
-    UBSHcomNetDriverWorkingMode mode =
-            NET_BUSY_POLLING;  // worker polling mode, could busy polling or event polling
-    char workerGroups[NN_NO64]{};  // worker groups, for example 1,3,3
-    char workerGroupsCpuSet
-            [NN_NO128]{};  // worker groups cpu set, for example 1-1,2-5,na
-    char workerGroupsThreadPriority[NN_NO64] {};  // worker groups thread priority, for example -10,na,9
+        AES_GCM_128;               // if tls enabled can set cipher suite, client and server should same
+                                   /* worker setting */
+    bool dontStartWorkers = false; // start worker or not
+    UBSHcomNetDriverWorkingMode mode = NET_BUSY_POLLING; // worker polling mode, could busy polling or event polling
+    char workerGroups[NN_NO64]{};                        // worker groups, for example 1,3,3
+    char workerGroupsCpuSet[NN_NO128]{};                 // worker groups cpu set, for example 1-1,2-5,na
+    char workerGroupsThreadPriority[NN_NO64]{};          // worker groups thread priority, for example -10,na,9
     // worker thread priority [-20,19], 19 is the lowest, -20 is the highest, 0 (default) means do not set priority
     int workerThreadPriority = 0;
     /* connection attribute */
-    NetDriverOobType oobType =
-            NET_OOB_TCP;  // oob type, tcp or UDS, UDS cannot accept remote connection
-    UBSHcomNetDriverLBPolicy lbPolicy =
-            NET_ROUND_ROBIN;  // select worker load balance policy, default round-robin
-    uint16_t magic = NN_NO256;  // magic number for c/s connect validation
-    uint8_t version = 0;        // program version used by connect validation
-                                /* heart beat attribute */
-    uint16_t heartBeatIdleTime = NN_NO60;   // heart beat idle time, in seconds
-    uint16_t heartBeatProbeTimes = NN_NO7;  // heart beat probe times
-    uint16_t heartBeatProbeInterval =
-            NN_NO2;  // heart beat probe interval, in seconds
-                     /* options for only tcp protocol */
+    NetDriverOobType oobType = NET_OOB_TCP;              // oob type, tcp or UDS, UDS cannot accept remote connection
+    UBSHcomNetDriverLBPolicy lbPolicy = NET_ROUND_ROBIN; // select worker load balance policy, default round-robin
+    uint16_t magic = NN_NO256;                           // magic number for c/s connect validation
+    uint8_t version = 0;                                 // program version used by connect validation
+                                                         /* heart beat attribute */
+    uint16_t heartBeatIdleTime = NN_NO60;                // heart beat idle time, in seconds
+    uint16_t heartBeatProbeTimes = NN_NO7;               // heart beat probe times
+    uint16_t heartBeatProbeInterval = NN_NO2;            // heart beat probe interval, in seconds
+                                                         /* options for only tcp protocol */
     // timeout during io (s), it should be [-1, 1024], -1 means do not set, 0 means never timeout during io
     int16_t tcpUserTimeout = -1;
-    bool tcpEnableNoDelay = true;  // tcp TCP_NODELAY option, true in default
-    bool tcpSendZCopy =
-            false;  // tcp whether copy request to inner memory, false in default
-    bool tcpEpollLT = false;  // tcp epoll mode, default is ET
+    bool tcpEnableNoDelay = true; // tcp TCP_NODELAY option, true in default
+    bool tcpSendZCopy = false;    // tcp whether copy request to inner memory, false in default
+    bool tcpEpollLT = false;      // tcp epoll mode, default is ET
     /* The buffer sizes will be adjusted automatically when these two variables are 0, and the performance would be
      * better */
-    uint16_t tcpSendBufSize =
-            0;  // tcp connection send buffer size in kernel, by KB
-    uint16_t tcpReceiveBufSize =
-            0;  // tcp connection send receive buf size in kernel, by KB
-                /* options for rdma protocol only */
-    uint32_t mrSendReceiveSegCount =
-            NN_NO8192;  // memory region segment count for two side operation
-    uint32_t mrSendReceiveSegSize =
-            NN_NO1024;  // data size of memory region segment
+    uint16_t tcpSendBufSize = 0;                // tcp connection send buffer size in kernel, by KB
+    uint16_t tcpReceiveBufSize = 0;             // tcp connection send receive buf size in kernel, by KB
+                                                /* options for rdma protocol only */
+    uint32_t mrSendReceiveSegCount = NN_NO8192; // memory region segment count for two side operation
+    uint32_t mrSendReceiveSegSize = NN_NO1024;  // data size of memory region segment
     /* transmit of 256b data performs better when dmSegSize is 290 */
-    uint32_t dmSegSize = NN_NO290;   // data size of device memory segment
-    uint32_t dmSegCount = NN_NO400;  // segment count of device memory segment
+    uint32_t dmSegSize = NN_NO290;              // data size of device memory segment
+    uint32_t dmSegCount = NN_NO400;             // segment count of device memory segment
     uint16_t completionQueueDepth = NN_NO2048;  // completion queue size of rdma
-    uint16_t maxPostSendCountPerQP = NN_NO64;  // max number request could issue
-    uint16_t prePostReceiveSizePerQP = NN_NO64;  // pre post receive of qp
-    uint16_t pollingBatchSize = NN_NO4;  // polling batch size for worker
-    uint32_t eventPollingTimeout =
-            NN_NO500;  // event polling timeout in ms, max value is 2000000ms
-    uint32_t qpSendQueueSize =
-            NN_NO256;  // max send working request of qp for rdma
-    uint32_t qpReceiveQueueSize =
-            NN_NO256;  // max receive working request of qp for rdma
-    uint32_t qpBatchRePostSize = NN_NO1; // qp batch return wr size
-    uint16_t oobConnHandleThreadCount =
-            NN_NO2;  // server accept connection thread num
-    uint32_t oobConnHandleQueueCap =
-            NN_NO4096;  // server accept connection queue capability
-    uint32_t maxConnectionNum = NN_NO250;  // max connection number
-    bool activateBackup = false;           // enable backup
-    bool enableMultiRail = false;          // enable multi rail
-    uint8_t slave = 1;                     // slave 1 or 2
+    uint16_t maxPostSendCountPerQP = NN_NO64;   // max number request could issue
+    uint16_t prePostReceiveSizePerQP = NN_NO64; // pre post receive of qp
+    uint16_t pollingBatchSize = NN_NO4;         // polling batch size for worker
+    uint32_t eventPollingTimeout = NN_NO500;    // event polling timeout in ms, max value is 2000000ms
+    uint32_t qpSendQueueSize = NN_NO256;        // max send working request of qp for rdma
+    uint32_t qpReceiveQueueSize = NN_NO256;     // max receive working request of qp for rdma
+    uint32_t qpBatchRePostSize = NN_NO1;        // qp batch return wr size
+    uint16_t oobConnHandleThreadCount = NN_NO2; // server accept connection thread num
+    uint32_t oobConnHandleQueueCap = NN_NO4096; // server accept connection queue capability
+    uint32_t maxConnectionNum = NN_NO250;       // max connection number
+    bool enableMultiRail = false;               // enable multi rail
+    uint8_t slave = 1;                          // slave 1 or 2
     uint32_t ubPriority = UINT32_MAX;
 
-    char oobPortRange[NN_NO16]{};  // port range when enable port auto selection
+    char oobPortRange[NN_NO16]{}; // port range when enable port auto selection
 
     UBSHcomUbcMode ubcMode = UBSHcomUbcMode::LowLatency;
 
@@ -1846,7 +1824,7 @@ public:
     static bool LocalSupport(UBSHcomNetDriverProtocol t, UBSHcomNetDriverDeviceInfo &deviceInfo);
 
     static bool MultiRailGetDevCount(UBSHcomNetDriverProtocol t, std::string ipMask, uint16_t &enableDevCount,
-        std::string ipGroup);
+                                     std::string ipGroup);
 
 public:
     virtual ~UBSHcomNetDriver()
@@ -1888,8 +1866,7 @@ public:
      *
      * @return 0 successful
      */
-    virtual NResult
-    CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr) = 0;
+    virtual NResult CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr) = 0;
 
     /**
      * @brief Register a memory region, the memory need to be passed in
@@ -1900,14 +1877,12 @@ public:
      *
      * @return 0 successful
      */
-    virtual NResult CreateMemoryRegion(uintptr_t address, uint64_t size,
-                                       UBSHcomNetMemoryRegionPtr &mr) = 0;
+    virtual NResult CreateMemoryRegion(uintptr_t address, uint64_t size, UBSHcomNetMemoryRegionPtr &mr) = 0;
 
-    virtual NResult CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr,
-                                       unsigned long memid) = 0;
+    virtual NResult CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr, unsigned long memid) = 0;
 
     virtual NResult ImportUrmaSeg(uintptr_t address, uint64_t size, uint64_t key, void **tSeg, uint8_t *eid,
-        uint32_t eidLen)
+                                  uint32_t eidLen)
     {
         NN_LOG_ERROR("ImportUrmaSeg not supported in other protocol, only UBC");
         return NN_ERROR;
@@ -1932,8 +1907,7 @@ public:
      *
      * @return 0 successful
      */
-    virtual NResult Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep,
-                            uint32_t flags, uint8_t serverGrpNo,
+    virtual NResult Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo,
                             uint8_t clientGrpNo) = 0;
 
     /**
@@ -1946,8 +1920,8 @@ public:
      *
      * @return 0 successful
      */
-    virtual NResult Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep,
-                            uint8_t serverGrpNo, uint8_t clientGrpNo)
+    virtual NResult Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint8_t serverGrpNo,
+                            uint8_t clientGrpNo)
     {
         return Connect(payload, ep, 0, serverGrpNo, clientGrpNo);
     }
@@ -1961,8 +1935,7 @@ public:
      *
      * @return 0 successful
      */
-    virtual NResult
-    Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags)
+    virtual NResult Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags)
     {
         return Connect(payload, ep, flags, 0, 0);
     }
@@ -1993,12 +1966,10 @@ public:
      *
      * @return 0 successful
      */
-    NResult Connect(const std::string &oobIpOrName, uint16_t oobPort,
-                    const std::string &payload, UBSHcomNetEndpointPtr &ep,
-                    uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo)
+    NResult Connect(const std::string &oobIpOrName, uint16_t oobPort, const std::string &payload,
+                    UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo)
     {
-        return Connect(oobIpOrName, oobPort, payload, ep, flags, serverGrpNo,
-                       clientGrpNo, 0);
+        return Connect(oobIpOrName, oobPort, payload, ep, flags, serverGrpNo, clientGrpNo, 0);
     };
 
     /**
@@ -2014,8 +1985,8 @@ public:
      *
      * @return 0 successful
      */
-    virtual NResult Connect(const std::string &serverUrl, const std::string &payload,
-        UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx) = 0;
+    virtual NResult Connect(const std::string &serverUrl, const std::string &payload, UBSHcomNetEndpointPtr &ep,
+                            uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx) = 0;
 
     /**
      * @brief Connect to server
@@ -2031,10 +2002,9 @@ public:
      *
      * @return 0 successful
      */
-    virtual NResult Connect(const std::string &oobIpOrName, uint16_t oobPort,
-                            const std::string &payload, UBSHcomNetEndpointPtr &ep,
-                            uint32_t flags, uint8_t serverGrpNo,
-                            uint8_t clientGrpNo, uint64_t ctx) = 0;
+    virtual NResult Connect(const std::string &oobIpOrName, uint16_t oobPort, const std::string &payload,
+                            UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo,
+                            uint64_t ctx) = 0;
 
     /**
      * @brief Connect to server
@@ -2048,12 +2018,10 @@ public:
      *
      * @return 0 successful
      */
-    inline NResult Connect(const std::string &oobIpOrName, uint16_t oobPort,
-                           const std::string &payload, UBSHcomNetEndpointPtr &ep,
-                           uint8_t serverGrpNo, uint8_t clientGrpNo)
+    inline NResult Connect(const std::string &oobIpOrName, uint16_t oobPort, const std::string &payload,
+                           UBSHcomNetEndpointPtr &ep, uint8_t serverGrpNo, uint8_t clientGrpNo)
     {
-        return Connect(oobIpOrName, oobPort, payload, ep, 0, serverGrpNo,
-                       clientGrpNo);
+        return Connect(oobIpOrName, oobPort, payload, ep, 0, serverGrpNo, clientGrpNo);
     }
 
     /**
@@ -2067,9 +2035,8 @@ public:
      *
      * @return 0 successful
      */
-    virtual NResult Connect(const std::string &oobIpOrName, uint16_t oobPort,
-                            const std::string &payload, UBSHcomNetEndpointPtr &ep,
-                            uint32_t flags)
+    virtual NResult Connect(const std::string &oobIpOrName, uint16_t oobPort, const std::string &payload,
+                            UBSHcomNetEndpointPtr &ep, uint32_t flags)
     {
         return Connect(oobIpOrName, oobPort, payload, ep, flags, 0, 0);
     }
@@ -2084,8 +2051,8 @@ public:
      *
      * @return 0 successful
      */
-    virtual NResult Connect(const std::string &oobIpOrName, uint16_t oobPort,
-                            const std::string &payload, UBSHcomNetEndpointPtr &ep)
+    virtual NResult Connect(const std::string &oobIpOrName, uint16_t oobPort, const std::string &payload,
+                            UBSHcomNetEndpointPtr &ep)
     {
         return Connect(oobIpOrName, oobPort, payload, ep, 0, 0, 0);
     }
@@ -2211,16 +2178,14 @@ public:
      *
      * @param provider      [in] provider function
      */
-    void RegisterEndpointSecInfoProvider(
-            const UBSHcomNetDriverEndpointSecInfoProvider &provider);
+    void RegisterEndpointSecInfoProvider(const UBSHcomNetDriverEndpointSecInfoProvider &provider);
 
     /**
      * @brief Register callback for validate secure info from peer
      *
      * @param validator      [in] validator function
      */
-    void RegisterEndpointSecInfoValidator(
-            const UBSHcomNetDriverEndpointSecInfoValidator &validator);
+    void RegisterEndpointSecInfoValidator(const UBSHcomNetDriverEndpointSecInfoValidator &validator);
 
     /**
      * @brief Register psk callback for client
@@ -2279,9 +2244,10 @@ public:
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
 protected:
-    UBSHcomNetDriver(const std::string &name, bool startOobSvr,
-              UBSHcomNetDriverProtocol protocol)
-        : mName(name), mStartOobSvr(startOobSvr), mProtocol(protocol)
+    UBSHcomNetDriver(const std::string &name, bool startOobSvr, UBSHcomNetDriverProtocol protocol)
+        : mName(name),
+          mStartOobSvr(startOobSvr),
+          mProtocol(protocol)
     {
         OBJ_GC_INCREASE(UBSHcomNetDriver);
     }
@@ -2360,8 +2326,7 @@ protected:
     UBSHcomPskUseSessionCb mPskUseSessionCb = nullptr;
 
     std::vector<UBSHcomNetOobListenerOptions> mOobListenOptions;
-    std::unordered_map<std::string, UBSHcomNetOobUDSListenerOptions>
-            mOobUdsListenOptions;
+    std::unordered_map<std::string, UBSHcomNetOobUDSListenerOptions> mOobUdsListenOptions;
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 
@@ -2413,7 +2378,7 @@ inline uint8_t UBSHcomNetDriver::GetBandWidth() const
 {
     return mBandWidth;
 }
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock
 
-#endif  // OCK_HCOM_CPP_H_34562
+#endif // OCK_HCOM_CPP_H_34562

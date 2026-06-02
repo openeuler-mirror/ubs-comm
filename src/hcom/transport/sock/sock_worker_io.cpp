@@ -14,7 +14,6 @@
 namespace ock {
 namespace hcom {
 
-
 /* async endpoint operation */
 SResult SockWorker::PostSend(Sock *sock, SockTransHeader &header, const UBSHcomNetTransRequest &req)
 {
@@ -30,8 +29,8 @@ SResult SockWorker::PostSend(Sock *sock, SockTransHeader &header, const UBSHcomN
     }
     opCtxInfo->errType = SockOpContextInfo::SockErrorType::SS_NO_ERROR;
     opCtxInfo->sock = sock;
-    opCtxInfo->opType =
-        header.immData == 0 ? SockOpContextInfo::SockOpType::SS_SEND : SockOpContextInfo::SockOpType::SS_SEND_RAW;
+    opCtxInfo->opType = header.immData == 0 ? SockOpContextInfo::SockOpType::SS_SEND :
+                                              SockOpContextInfo::SockOpType::SS_SEND_RAW;
     opCtxInfo->upCtxSize = req.upCtxSize;
     if (opCtxInfo->upCtxSize > 0) {
         if (NN_UNLIKELY(memcpy_s(opCtxInfo->upCtx, NN_NO16, req.upCtxData, opCtxInfo->upCtxSize) != NN_OK)) {
@@ -61,8 +60,9 @@ SResult SockWorker::PostSend(Sock *sock, SockTransHeader &header, const UBSHcomN
         sock->ReturnQueueSpace(NN_NO1);
         mSendPostedHandler(opCtxInfo);
         mOpCtxInfoPool.Return(opCtxInfo);
-        NN_LOG_TRACE_INFO("PostSend cb sock " << sock->Id() << " head imm data " << header.immData << ", flags " <<
-            header.flags << ", seqNo " << header.seqNo << ", data len " << header.dataLength);
+        NN_LOG_TRACE_INFO("PostSend cb sock " << sock->Id() << " head imm data " << header.immData << ", flags "
+                                              << header.flags << ", seqNo " << header.seqNo << ", data len "
+                                              << header.dataLength);
         return result;
     } else if (result == SS_SOCK_SEND_EAGAIN) {
         return ModifyInEpoll(sock, EPOLLIN | EPOLLOUT | EPOLLET);
@@ -86,8 +86,9 @@ SResult SockWorker::PostSendNoCpy(Sock *sock, SockTransHeader &header, const UBS
     auto result = sock->PostSend(header, req);
     // blocking post send no cpy not call upper handle
     if (result == SS_OK) {
-        NN_LOG_TRACE_INFO("PostSend cb sock " << sock->Id() << " head imm data " << header.immData << ", flags " <<
-            header.flags << ", seqNo " << header.seqNo << ", data len " << header.dataLength);
+        NN_LOG_TRACE_INFO("PostSend cb sock " << sock->Id() << " head imm data " << header.immData << ", flags "
+                                              << header.flags << ", seqNo " << header.seqNo << ", data len "
+                                              << header.dataLength);
         return result;
     }
 
@@ -136,8 +137,9 @@ SResult SockWorker::PostSendRawSgl(Sock *sock, SockTransHeader &header, const UB
         sock->ReturnQueueSpace(NN_NO1);
         mSendPostedHandler(opCtxInfo);
         mOpCtxInfoPool.Return(opCtxInfo);
-        NN_LOG_TRACE_INFO("PostSendRawSgl cb sock " << sock->Id() << " head imm data " << header.immData <<
-            ", flags " << header.flags << ", seqNo " << header.seqNo << ", data len " << header.dataLength);
+        NN_LOG_TRACE_INFO("PostSendRawSgl cb sock " << sock->Id() << " head imm data " << header.immData << ", flags "
+                                                    << header.flags << ", seqNo " << header.seqNo << ", data len "
+                                                    << header.dataLength);
         return result;
     } else if (result == SS_SOCK_SEND_EAGAIN) {
         return ModifyInEpoll(sock, EPOLLIN | EPOLLOUT | EPOLLET);
@@ -377,5 +379,5 @@ SResult SockWorker::PostWrite(Sock *sock, SockTransHeader &header, const UBSHcom
 
     return result;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -46,9 +46,9 @@ public:
 
     UBContext() = delete;
     UBContext(const UBContext &) = delete;
-    UBContext &operator = (const UBContext &) = delete;
+    UBContext &operator=(const UBContext &) = delete;
     UBContext(UBContext &&) = delete;
-    UBContext &operator = (UBContext &&) = delete;
+    UBContext &operator=(UBContext &&) = delete;
 
     std::string ToString();
 
@@ -115,7 +115,7 @@ private:
     friend NetDriverUB;
     friend class UBPublicJetty;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_URMA_WRAPPER_CTX_H

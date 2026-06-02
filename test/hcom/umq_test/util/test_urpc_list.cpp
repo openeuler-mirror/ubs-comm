@@ -16,7 +16,9 @@ TEST(UrpcUtilTest, TestList)
     urpc_list_init(&channel_list);
 
     struct channel c1, c2, c3;
-    c1.id = 1; c2.id = 2; c3.id = 3;
+    c1.id = 1;
+    c2.id = 2;
+    c3.id = 3;
     urpc_list_push_back(&channel_list, &c1.node);
     urpc_list_push_back(&channel_list, &c2.node);
     urpc_list_push_back(&channel_list, &c3.node);

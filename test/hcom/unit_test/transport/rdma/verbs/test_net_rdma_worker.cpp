@@ -15,10 +15,10 @@
 #include "hcom.h"
 #include "net_common.h"
 #include "net_rdma_driver_oob.h"
-#include "net_security_rand.h"
-#include "rdma_validation.h"
-#include "rdma_composed_endpoint.h"
 #include "net_rdma_sync_endpoint.h"
+#include "net_security_rand.h"
+#include "rdma_composed_endpoint.h"
+#include "rdma_validation.h"
 
 namespace ock {
 namespace hcom {
@@ -390,6 +390,6 @@ TEST_F(TestNetRdmaWorker, RdmaWorkerPostSendSglInlineSeven)
     EXPECT_EQ(ret, 0);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 //#endif

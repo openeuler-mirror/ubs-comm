@@ -77,7 +77,8 @@ TEST_F(TestSockWorker, TestInitializeValidateFail)
 
 TEST_F(TestSockWorker, TestInitializeOpCtxMemPoolFail)
 {
-    MOCKER_CPP(&OpContextInfoPool<SockOpContextInfo>::Initialize,
+    MOCKER_CPP(
+        &OpContextInfoPool<SockOpContextInfo>::Initialize,
         NResult(OpContextInfoPool<SockOpContextInfo>::*)(const NetMemPoolFixedPtr &, const UBSHcomNetDriverProtocol))
         .stubs()
         .will(returnValue(static_cast<SResult>(SS_ERROR)));
@@ -87,7 +88,8 @@ TEST_F(TestSockWorker, TestInitializeOpCtxMemPoolFail)
 
 TEST_F(TestSockWorker, TestInitializeSglCtxMemPoolFail)
 {
-    MOCKER_CPP(&OpContextInfoPool<SockSglContextInfo>::Initialize,
+    MOCKER_CPP(
+        &OpContextInfoPool<SockSglContextInfo>::Initialize,
         NResult(OpContextInfoPool<SockSglContextInfo>::*)(const NetMemPoolFixedPtr &, const UBSHcomNetDriverProtocol))
         .stubs()
         .will(returnValue(static_cast<SResult>(SS_ERROR)));
@@ -98,7 +100,8 @@ TEST_F(TestSockWorker, TestInitializeSglCtxMemPoolFail)
 TEST_F(TestSockWorker, TestInitializeHeaderReqMemPoolFail)
 {
     mSockWorker->mOptions.tcpSendZCopy = true;
-    MOCKER_CPP(&OpContextInfoPool<SockHeaderReqInfo>::Initialize,
+    MOCKER_CPP(
+        &OpContextInfoPool<SockHeaderReqInfo>::Initialize,
         NResult(OpContextInfoPool<SockHeaderReqInfo>::*)(const NetMemPoolFixedPtr &, const UBSHcomNetDriverProtocol))
         .stubs()
         .will(returnValue(static_cast<SResult>(SS_ERROR)));
@@ -285,8 +288,8 @@ TEST_F(TestSockWorker, TestTCPInitializeOpCtxMemPoolFail)
     mSockWorker->mType = SOCK_TCP;
     MOCKER_CPP(&OpContextInfoPool<SockOpContextInfo>::Initialize,
                NResult(OpContextInfoPool<SockOpContextInfo>::*)(const NetMemPoolFixedPtr &))
-            .stubs()
-            .will(returnValue(static_cast<SResult>(SS_ERROR)));
+        .stubs()
+        .will(returnValue(static_cast<SResult>(SS_ERROR)));
     SResult res = mSockWorker->Initialize();
     EXPECT_EQ(res, static_cast<SResult>(SS_ERROR));
 }
@@ -296,8 +299,8 @@ TEST_F(TestSockWorker, TestTCPInitializeSglCtxMemPoolFail)
     mSockWorker->mType = SOCK_TCP;
     MOCKER_CPP(&OpContextInfoPool<SockSglContextInfo>::Initialize,
                NResult(OpContextInfoPool<SockSglContextInfo>::*)(const NetMemPoolFixedPtr &))
-            .stubs()
-            .will(returnValue(static_cast<SResult>(SS_ERROR)));
+        .stubs()
+        .will(returnValue(static_cast<SResult>(SS_ERROR)));
     SResult res = mSockWorker->Initialize();
     EXPECT_EQ(res, static_cast<SResult>(SS_ERROR));
 }
@@ -308,8 +311,8 @@ TEST_F(TestSockWorker, TestTCPInitializeHeaderReqMemPoolFail)
     mSockWorker->mOptions.tcpSendZCopy = true;
     MOCKER_CPP(&OpContextInfoPool<SockHeaderReqInfo>::Initialize,
                NResult(OpContextInfoPool<SockHeaderReqInfo>::*)(const NetMemPoolFixedPtr &))
-            .stubs()
-            .will(returnValue(static_cast<SResult>(SS_ERROR)));
+        .stubs()
+        .will(returnValue(static_cast<SResult>(SS_ERROR)));
     SResult res = mSockWorker->Initialize();
     EXPECT_EQ(res, static_cast<SResult>(SS_ERROR));
 }
@@ -359,5 +362,5 @@ TEST_F(TestSockWorker, PostWriteSglAck)
     MOCKER_CPP(&SockWorker::CheckIovLen).stubs().will(returnValue(1));
     EXPECT_EQ(mSockWorker->PostWriteSglAck(opCtx), SS_PARAM_INVALID);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

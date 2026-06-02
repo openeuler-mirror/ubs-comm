@@ -20,7 +20,8 @@
 
 namespace ock {
 namespace hcom {
-template <typename T> class NetObjPool {
+template <typename T>
+class NetObjPool {
 public:
     explicit NetObjPool(const std::string &name, uint32_t capacity) : mName(name), mObjRB(capacity) {}
     ~NetObjPool()
@@ -99,8 +100,8 @@ public:
     std::string ToString()
     {
         std::ostringstream oss;
-        oss << "obj pool " << mName << ", capacity " << mObjRB.Capacity() << ", size " << mObjRB.Size() <<
-            ", addresses " << mObjs;
+        oss << "obj pool " << mName << ", capacity " << mObjRB.Capacity() << ", size " << mObjRB.Size()
+            << ", addresses " << mObjs;
         return oss.str();
     }
 
@@ -111,7 +112,7 @@ private:
     std::string mName;
     NetRingBuffer<T *> mObjRB;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_COMM_OBJ_POOL_H_23444

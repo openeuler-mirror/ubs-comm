@@ -10,12 +10,12 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "test_hcom.h"
+#include "common/net_util.h"
+#include "net_trace.h"
 #include "transport/rdma/verbs/net_rdma_driver.h"
 #include "transport/rdma/verbs/net_rdma_driver_oob.h"
-#include "common/net_util.h"
 #include "ut_helper.h"
-#include "net_trace.h"
-#include "test_hcom.h"
 
 using namespace ock::hcom;
 
@@ -48,7 +48,7 @@ static int OneSideDone(const UBSHcomNetRequestContext &ctx)
 }
 
 TestHcom::TestHcom() {}
-static UBSHcomNetDriverOptions options {};
+static UBSHcomNetDriverOptions options{};
 void TestHcom::SetUp()
 {
 #ifdef RDMA_BUILD_ENABLED
@@ -77,10 +77,10 @@ static void Log(int level, const char *msg)
     (void)gettimeofday(&tv, nullptr);
     (void)strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S.", localtime(&tv.tv_sec));
 
-    static  std::string levelInfo[4] = {"debug", "info", "warn", "error"};
+    static std::string levelInfo[4] = {"debug", "info", "warn", "error"};
 
-    std::cout << strTime << tv.tv_usec << " " << levelInfo[level & NN_NO3] << " " << msg <<
-        " ExteralLogFunc" << std::endl;
+    std::cout << strTime << tv.tv_usec << " " << levelInfo[level & NN_NO3] << " " << msg << " ExteralLogFunc"
+              << std::endl;
 }
 
 TEST_F(TestHcom, InstanceOfTcpProtocolSuccess)
@@ -100,7 +100,6 @@ TEST_F(TestHcom, InstanceOfTcpProtocolSuccess)
     EXPECT_EQ(NNCode::NN_OK, result);
     tcpDriver->Stop();
 }
-
 
 TEST_F(TestHcom, InstanceOfUdsProtocolSuccess)
 {

@@ -12,20 +12,20 @@
 #ifndef OCK_HCOM_SOCK_WRAPPER_H_234234
 #define OCK_HCOM_SOCK_WRAPPER_H_234234
 
-#include <sys/ioctl.h>
 #include <linux/sockios.h>
+#include <sys/ioctl.h>
 
 #include "net_common.h"
 #include "net_ctx_info_pool.h"
 #include "net_memory_region.h"
 #include "net_oob.h"
+#include "net_oob_openssl.h"
 #include "net_oob_ssl.h"
 #include "net_security_rand.h"
 #include "openssl_api_wrapper.h"
 #include "securec.h"
-#include "sock_common.h"
-#include "net_oob_openssl.h"
 #include "sock_buff.h"
+#include "sock_common.h"
 
 namespace ock {
 namespace hcom {
@@ -65,7 +65,7 @@ struct SockReceiveState {
 
 struct SendingQueueRequest {
     uint64_t remainSize = 0;
-    struct iovec iov[NN_NO7] {};
+    struct iovec iov[NN_NO7]{};
     uint16_t iovCount = 0;
     bool isTwoSideMode = false;
 };
@@ -364,7 +364,7 @@ public:
             (mSendingQueueRequest).iovCount = NN_NO2;                                                                 \
             (mSendingQueueRequest).remainSize = reqSize + sizeof(SockTransHeader);                                    \
         } else if ((reqInQueue)->opType == SockOpContextInfo::SockOpType::SS_SEND_RAW_SGL ||                          \
-            (reqInQueue)->opType == SockOpContextInfo::SockOpType::SS_READ_ACK) {                                     \
+                   (reqInQueue)->opType == SockOpContextInfo::SockOpType::SS_READ_ACK) {                              \
             auto sendCtx = (reqInQueue)->sendCtx;                                                                     \
             (mSendingQueueRequest).iov[NN_NO0].iov_base = reinterpret_cast<void *>(&sendCtx->sendHeader);             \
             (mSendingQueueRequest).iov[NN_NO0].iov_len = sizeof(SockTransHeader);                                     \
@@ -394,7 +394,7 @@ public:
             (mSendingQueueRequest).iovCount = NN_NO2;                                                                 \
             (mSendingQueueRequest).remainSize = sizeof(SockTransHeader) + sizeof(UBSHcomNetTransSgeIov);              \
         } else if ((reqInQueue)->opType == SockOpContextInfo::SockOpType::SS_WRITE_ACK ||                             \
-            (reqInQueue)->opType == SockOpContextInfo::SockOpType::SS_SGL_WRITE_ACK) {                                \
+                   (reqInQueue)->opType == SockOpContextInfo::SockOpType::SS_SGL_WRITE_ACK) {                         \
             (mSendingQueueRequest).iov[NN_NO0].iov_base =                                                             \
                 reinterpret_cast<void *>(&(reqInQueue)->sendCtx->sendHeader);                                         \
             (mSendingQueueRequest).iov[NN_NO0].iov_len = sizeof(SockTransHeader);                                     \
@@ -411,7 +411,7 @@ public:
             (mSendingQueueRequest).iovCount = NN_NO3;                                                                 \
             (mSendingQueueRequest).remainSize = sendCtx->sendHeader.dataLength + sizeof(SockTransHeader);             \
         } else if ((reqInQueue)->opType == SockOpContextInfo::SockOpType::SS_SGL_WRITE ||                             \
-            (reqInQueue)->opType == SockOpContextInfo::SockOpType::SS_SGL_READ_ACK) {                                 \
+                   (reqInQueue)->opType == SockOpContextInfo::SockOpType::SS_SGL_READ_ACK) {                          \
             auto sendCtx = (reqInQueue)->sendCtx;                                                                     \
             (mSendingQueueRequest).iov[NN_NO0].iov_base = reinterpret_cast<void *>(&sendCtx->sendHeader);             \
             (mSendingQueueRequest).iov[NN_NO0].iov_len = sizeof(SockTransHeader);                                     \
@@ -442,81 +442,82 @@ public:
         }                                                                                                             \
     }
 
-#define PROCESS_REQUEST(mSendingQueueRequest, reqInQueue)                                                             \
-    do {                                                                                                              \
-        std::lock_guard<std::mutex> guard(mIoMutex);                                                                  \
-        ssize_t result = 0;                                                                                           \
-        if ((mSendingQueueRequest).isTwoSideMode && mEnableTls) {                                                     \
-            auto iov = (mSendingQueueRequest).iov;                                                                    \
-            for (uint16_t i = 0; i < (mSendingQueueRequest).iovCount; i++) {                                          \
-                if (iov[i].iov_len == 0) {                                                                            \
-                    continue;                                                                                         \
-                }                                                                                                     \
-                int ret = 0;                                                                                          \
-                SResult writeRet = SS_OK;                                                                             \
-                if (i == NN_NO0) {                                                                                    \
-                    ret = writev(mFd, &iov[i], NN_NO1);                                                               \
-                } else {                                                                                              \
-                    writeRet = SSLSend(iov[i].iov_base, iov[i].iov_len, reinterpret_cast<uint32_t &>(ret));           \
-                }                                                                                                     \
-                if (ret <= 0 || writeRet != SS_OK) {                                                                  \
-                    if (errno != ECONNRESET && errno != EAGAIN) {                                                     \
-                        NN_LOG_ERROR("Failed to send msg with tls to peer in sock " << mId << " name " << mName <<    \
-                            " result:" << result << " iov_len:" << iov[i].iov_len);                                   \
-                        return SS_SOCK_SEND_FAILED;                                                                   \
-                    }                                                                                                 \
-                    break;                                                                                            \
-                }                                                                                                     \
-                result += ret;                                                                                        \
-                if (static_cast<size_t>(ret) != iov[i].iov_len) {                                                     \
-                    break;                                                                                            \
-                }                                                                                                     \
-            }                                                                                                         \
-        } else {                                                                                                      \
-            result = writev(mFd, reinterpret_cast<const struct iovec *>(&(mSendingQueueRequest).iov),                 \
-                (mSendingQueueRequest).iovCount);                                                                     \
-        }                                                                                                             \
-        if (result <= 0) {                                                                                            \
-            if (errno == ECONNRESET) {                                                                                \
-                NN_LOG_ERROR("Failed to send msg to peer in sock " << mId << " name " << mName << ", reset by peer, " \
-                                                                   << " result:" << result);                          \
-                return SS_RESET_BY_PEER;                                                                              \
-            }                                                                                                         \
-            if (errno == EAGAIN) {                                                                                    \
-                /* send buff is full not send */                                                                      \
-                return SS_SOCK_SEND_EAGAIN;                                                                           \
-            }                                                                                                         \
-            NN_LOG_ERROR("Failed to send msg to peer in sock " << mId << " name " << mName << ", errno " << errno <<  \
-                " error code:" << errno << " result:" << result);                                                     \
-            return SS_SOCK_SEND_FAILED;                                                                               \
-        }                                                                                                             \
-                                                                                                                      \
-        NN_LOG_TRACE_INFO("Receive sock " << Id() << " event EPOLLOUT,"                                               \
-                                          << "queue size:" << mSendQueue.Size() << " deque and write result: " <<     \
-            result << " req size:" << (mSendingQueueRequest).remainSize << " max send size:" << maxSendSize);         \
-        if (static_cast<uint64_t>(result) < (mSendingQueueRequest).remainSize) {                                      \
-            for (uint32_t i = 0; i < (mSendingQueueRequest).iovCount; i++) {                                          \
-                auto iovLen = static_cast<ssize_t>((mSendingQueueRequest).iov[i].iov_len);                            \
-                if (result < iovLen) {                                                                                \
-                    (mSendingQueueRequest).iov[i].iov_base =                                                          \
-                        reinterpret_cast<char *>((mSendingQueueRequest).iov[i].iov_base) + result;                    \
-                    (mSendingQueueRequest).iov[i].iov_len -= static_cast<size_t>(result);                             \
-                    (mSendingQueueRequest).remainSize -= static_cast<uint64_t>(result);                               \
-                    break;                                                                                            \
-                } else if (result > iovLen) {                                                                         \
-                    result -= iovLen;                                                                                 \
-                    (mSendingQueueRequest).remainSize -= static_cast<uint64_t>(iovLen);                               \
-                    (mSendingQueueRequest).iov[i].iov_len = 0;                                                        \
-                } else {                                                                                              \
-                    (mSendingQueueRequest).remainSize -= static_cast<uint64_t>(iovLen);                               \
-                    (mSendingQueueRequest).iov[i].iov_len = 0;                                                        \
-                    break;                                                                                            \
-                }                                                                                                     \
-            }                                                                                                         \
-            return SS_SOCK_SEND_EAGAIN;                                                                               \
-        } else {                                                                                                      \
-            (mSendingQueueRequest).remainSize = 0;                                                                    \
-        }                                                                                                             \
+#define PROCESS_REQUEST(mSendingQueueRequest, reqInQueue)                                                              \
+    do {                                                                                                               \
+        std::lock_guard<std::mutex> guard(mIoMutex);                                                                   \
+        ssize_t result = 0;                                                                                            \
+        if ((mSendingQueueRequest).isTwoSideMode && mEnableTls) {                                                      \
+            auto iov = (mSendingQueueRequest).iov;                                                                     \
+            for (uint16_t i = 0; i < (mSendingQueueRequest).iovCount; i++) {                                           \
+                if (iov[i].iov_len == 0) {                                                                             \
+                    continue;                                                                                          \
+                }                                                                                                      \
+                int ret = 0;                                                                                           \
+                SResult writeRet = SS_OK;                                                                              \
+                if (i == NN_NO0) {                                                                                     \
+                    ret = writev(mFd, &iov[i], NN_NO1);                                                                \
+                } else {                                                                                               \
+                    writeRet = SSLSend(iov[i].iov_base, iov[i].iov_len, reinterpret_cast<uint32_t &>(ret));            \
+                }                                                                                                      \
+                if (ret <= 0 || writeRet != SS_OK) {                                                                   \
+                    if (errno != ECONNRESET && errno != EAGAIN) {                                                      \
+                        NN_LOG_ERROR("Failed to send msg with tls to peer in sock " << mId << " name " << mName        \
+                                                                                    << " result:" << result            \
+                                                                                    << " iov_len:" << iov[i].iov_len); \
+                        return SS_SOCK_SEND_FAILED;                                                                    \
+                    }                                                                                                  \
+                    break;                                                                                             \
+                }                                                                                                      \
+                result += ret;                                                                                         \
+                if (static_cast<size_t>(ret) != iov[i].iov_len) {                                                      \
+                    break;                                                                                             \
+                }                                                                                                      \
+            }                                                                                                          \
+        } else {                                                                                                       \
+            result = writev(mFd, reinterpret_cast<const struct iovec *>(&(mSendingQueueRequest).iov),                  \
+                            (mSendingQueueRequest).iovCount);                                                          \
+        }                                                                                                              \
+        if (result <= 0) {                                                                                             \
+            if (errno == ECONNRESET) {                                                                                 \
+                NN_LOG_ERROR("Failed to send msg to peer in sock " << mId << " name " << mName << ", reset by peer, "  \
+                                                                   << " result:" << result);                           \
+                return SS_RESET_BY_PEER;                                                                               \
+            }                                                                                                          \
+            if (errno == EAGAIN) {                                                                                     \
+                /* send buff is full not send */                                                                       \
+                return SS_SOCK_SEND_EAGAIN;                                                                            \
+            }                                                                                                          \
+            NN_LOG_ERROR("Failed to send msg to peer in sock " << mId << " name " << mName << ", errno " << errno      \
+                                                               << " error code:" << errno << " result:" << result);    \
+            return SS_SOCK_SEND_FAILED;                                                                                \
+        }                                                                                                              \
+                                                                                                                       \
+        NN_LOG_TRACE_INFO("Receive sock " << Id() << " event EPOLLOUT," << "queue size:" << mSendQueue.Size()          \
+                                          << " deque and write result: " << result << " req size:"                     \
+                                          << (mSendingQueueRequest).remainSize << " max send size:" << maxSendSize);   \
+        if (static_cast<uint64_t>(result) < (mSendingQueueRequest).remainSize) {                                       \
+            for (uint32_t i = 0; i < (mSendingQueueRequest).iovCount; i++) {                                           \
+                auto iovLen = static_cast<ssize_t>((mSendingQueueRequest).iov[i].iov_len);                             \
+                if (result < iovLen) {                                                                                 \
+                    (mSendingQueueRequest).iov[i].iov_base =                                                           \
+                        reinterpret_cast<char *>((mSendingQueueRequest).iov[i].iov_base) + result;                     \
+                    (mSendingQueueRequest).iov[i].iov_len -= static_cast<size_t>(result);                              \
+                    (mSendingQueueRequest).remainSize -= static_cast<uint64_t>(result);                                \
+                    break;                                                                                             \
+                } else if (result > iovLen) {                                                                          \
+                    result -= iovLen;                                                                                  \
+                    (mSendingQueueRequest).remainSize -= static_cast<uint64_t>(iovLen);                                \
+                    (mSendingQueueRequest).iov[i].iov_len = 0;                                                         \
+                } else {                                                                                               \
+                    (mSendingQueueRequest).remainSize -= static_cast<uint64_t>(iovLen);                                \
+                    (mSendingQueueRequest).iov[i].iov_len = 0;                                                         \
+                    break;                                                                                             \
+                }                                                                                                      \
+            }                                                                                                          \
+            return SS_SOCK_SEND_EAGAIN;                                                                                \
+        } else {                                                                                                       \
+            (mSendingQueueRequest).remainSize = 0;                                                                     \
+        }                                                                                                              \
     } while (0)
 
 #define POST_PROCESS(popReq)                                                       \
@@ -589,54 +590,58 @@ public:
         return SS_SOCK_SEND_EAGAIN;
     }
 
-#define POST_SEND(iov, requestSize, seqNo)                                                                         \
-    do {                                                                                                           \
-        ssize_t ret = 0;                                                                                           \
-        if (!mEnableTls) {                                                                                         \
-            if ((ret = writev(mFd, reinterpret_cast<const struct iovec *>(&(iov)), NN_NO2)) <                      \
-                static_cast<ssize_t>((requestSize) + sizeof(SockTransHeader))) {                                   \
-                if (ret == 0) {                                                                                    \
-                    return SS_TCP_RETRY;                                                                           \
-                }                                                                                                  \
-                if (errno == 0) {                                                                                  \
-                    NN_LOG_ERROR("Failed to PostSend to peer in sock " << mId << " name " << mName << " with " <<  \
-                        mSendTimeoutSecond << " second timeout, " << ret << " is sent");                           \
-                    return SS_TIMEOUT;                                                                             \
-                }                                                                                                  \
-                NN_LOG_ERROR("Failed to PostSend to peer in sock " << mId << " name " << mName << ", errno " <<    \
-                    errno << ", seqNo " << (seqNo));                                                               \
-                return SS_SOCK_SEND_FAILED;                                                                        \
-            }                                                                                                      \
-        } else {                                                                                                   \
-            if ((ret = writev(mFd, &(iov)[NN_NO0], NN_NO1)) < static_cast<ssize_t>(sizeof(SockTransHeader))) {     \
-                if (ret == 0) {                                                                                    \
-                    return SS_TCP_RETRY;                                                                           \
-                }                                                                                                  \
-                if (errno == 0) {                                                                                  \
-                    NN_LOG_ERROR("(TLS)Failed to PostSend header to peer in sock " << mId << " name " << mName <<  \
-                        " with " << mSendTimeoutSecond << " second timeout, " << ret << " is sent");               \
-                    return SS_TIMEOUT;                                                                             \
-                }                                                                                                  \
-                char buf[NET_STR_ERROR_BUF_SIZE] = {0};                                                          \
-                NN_LOG_ERROR("(TLS)Failed to PostSend header to peer in sock " << mId << " name " << mName <<      \
-                    ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) << ", seqNo " <<     \
-                    (seqNo));                                                                                      \
-                return SS_SOCK_SEND_FAILED;                                                                        \
-            }                                                                                                      \
-            uint32_t writeLen = 0;                                                                                 \
-            ret = SSLSend((iov)[NN_NO1].iov_base, (iov)[NN_NO1].iov_len, writeLen);                                \
-            if (ret != SS_OK || writeLen != (iov)[NN_NO1].iov_len) {                                               \
-                if (ret == SS_TIMEOUT) {                                                                           \
-                    NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock " << mId << " name " << mName << \
-                        ", error is timeout with " << mSendTimeoutSecond << " second, seqNo " << (seqNo) <<        \
-                        ", the failed iov data len " << (iov)[NN_NO1].iov_len);                                    \
-                    return SS_TIMEOUT;                                                                             \
-                }                                                                                                  \
-                NN_LOG_ERROR("(TLS)Failed to PostSend body to peer in sock " << mId << " name " << mName <<        \
-                    ", seqNo " << (seqNo) << ", the failed iov data len " << (iov)[NN_NO1].iov_len);               \
-                return SS_SOCK_SEND_FAILED;                                                                        \
-            }                                                                                                      \
-        }                                                                                                          \
+#define POST_SEND(iov, requestSize, seqNo)                                                                             \
+    do {                                                                                                               \
+        ssize_t ret = 0;                                                                                               \
+        if (!mEnableTls) {                                                                                             \
+            if ((ret = writev(mFd, reinterpret_cast<const struct iovec *>(&(iov)), NN_NO2)) <                          \
+                static_cast<ssize_t>((requestSize) + sizeof(SockTransHeader))) {                                       \
+                if (ret == 0) {                                                                                        \
+                    return SS_TCP_RETRY;                                                                               \
+                }                                                                                                      \
+                if (errno == 0) {                                                                                      \
+                    NN_LOG_ERROR("Failed to PostSend to peer in sock " << mId << " name " << mName << " with "         \
+                                                                       << mSendTimeoutSecond << " second timeout, "    \
+                                                                       << ret << " is sent");                          \
+                    return SS_TIMEOUT;                                                                                 \
+                }                                                                                                      \
+                NN_LOG_ERROR("Failed to PostSend to peer in sock " << mId << " name " << mName << ", errno " << errno  \
+                                                                   << ", seqNo " << (seqNo));                          \
+                return SS_SOCK_SEND_FAILED;                                                                            \
+            }                                                                                                          \
+        } else {                                                                                                       \
+            if ((ret = writev(mFd, &(iov)[NN_NO0], NN_NO1)) < static_cast<ssize_t>(sizeof(SockTransHeader))) {         \
+                if (ret == 0) {                                                                                        \
+                    return SS_TCP_RETRY;                                                                               \
+                }                                                                                                      \
+                if (errno == 0) {                                                                                      \
+                    NN_LOG_ERROR("(TLS)Failed to PostSend header to peer in sock "                                     \
+                                 << mId << " name " << mName << " with " << mSendTimeoutSecond << " second timeout, "  \
+                                 << ret << " is sent");                                                                \
+                    return SS_TIMEOUT;                                                                                 \
+                }                                                                                                      \
+                char buf[NET_STR_ERROR_BUF_SIZE] = {0};                                                                \
+                NN_LOG_ERROR("(TLS)Failed to PostSend header to peer in sock "                                         \
+                             << mId << " name " << mName << ", error "                                                 \
+                             << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) << ", seqNo " << (seqNo)); \
+                return SS_SOCK_SEND_FAILED;                                                                            \
+            }                                                                                                          \
+            uint32_t writeLen = 0;                                                                                     \
+            ret = SSLSend((iov)[NN_NO1].iov_base, (iov)[NN_NO1].iov_len, writeLen);                                    \
+            if (ret != SS_OK || writeLen != (iov)[NN_NO1].iov_len) {                                                   \
+                if (ret == SS_TIMEOUT) {                                                                               \
+                    NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock "                                    \
+                                 << mId << " name " << mName << ", error is timeout with " << mSendTimeoutSecond       \
+                                 << " second, seqNo " << (seqNo) << ", the failed iov data len "                       \
+                                 << (iov)[NN_NO1].iov_len);                                                            \
+                    return SS_TIMEOUT;                                                                                 \
+                }                                                                                                      \
+                NN_LOG_ERROR("(TLS)Failed to PostSend body to peer in sock "                                           \
+                             << mId << " name " << mName << ", seqNo " << (seqNo) << ", the failed iov data len "      \
+                             << (iov)[NN_NO1].iov_len);                                                                \
+                return SS_SOCK_SEND_FAILED;                                                                            \
+            }                                                                                                          \
+        }                                                                                                              \
     } while (0)
 
     inline SResult PostSend(SockOpContextInfo *ctx)
@@ -670,11 +675,12 @@ public:
                 mSendQueue.PushBack(ctx);
                 return SS_SOCK_SEND_EAGAIN;
             }
-            NN_LOG_TRACE_INFO("Post send request successfully : sock " << mId << ", head imm data " <<
-                reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->immData << ", flags " <<
-                reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->flags << ", seqNo " <<
-                reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->seqNo << ", data len " <<
-                reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->dataLength);
+            NN_LOG_TRACE_INFO("Post send request successfully : sock "
+                              << mId << ", head imm data "
+                              << reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->immData << ", flags "
+                              << reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->flags << ", seqNo "
+                              << reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->seqNo << ", data len "
+                              << reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->dataLength);
             return SS_OK;
         } else {
             mSendQueue.PushBack(ctx);
@@ -693,8 +699,9 @@ public:
         std::lock_guard<std::mutex> guard(mIoMutex);
         POST_SEND(iov, req.size, header.seqNo);
 
-        NN_LOG_TRACE_INFO("PostSend request successfully : sock " << mId << ", head imm data " << header.immData <<
-            ", flags " << header.flags << ", seqNo " << header.seqNo << ", data len " << header.dataLength);
+        NN_LOG_TRACE_INFO("PostSend request successfully : sock "
+                          << mId << ", head imm data " << header.immData << ", flags " << header.flags << ", seqNo "
+                          << header.seqNo << ", data len " << header.dataLength);
         return SS_OK;
     }
 
@@ -707,13 +714,15 @@ public:
                 return SS_TCP_RETRY;
             }
             if (errno == 0) {
-                NN_LOG_ERROR("(TLS)Failed to PostSendSgl header to peer in sock " << mId << " name " << mName <<
-                    " with " << mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                NN_LOG_ERROR("(TLS)Failed to PostSendSgl header to peer in sock "
+                             << mId << " name " << mName << " with " << mSendTimeoutSecond << " second timeout, " << ret
+                             << " is sent");
                 return SS_TIMEOUT;
             }
 
-            NN_LOG_ERROR("(TLS)Failed to PostSendSgl header to peer in sock " << mId << " name " << mName <<
-                ", errno " << errno << ", seqNo " << reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->seqNo);
+            NN_LOG_ERROR("(TLS)Failed to PostSendSgl header to peer in sock "
+                         << mId << " name " << mName << ", errno " << errno << ", seqNo "
+                         << reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->seqNo);
             return SS_SOCK_SEND_FAILED;
         }
 
@@ -721,16 +730,17 @@ public:
             uint32_t writeLen = 0;
             ret = SSLSend(iov[i].iov_base, iov[i].iov_len, writeLen);
             if (ret == SS_TIMEOUT) {
-                NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock " << mId << " name " <<
-                    mName << ", error is timeout with " << mSendTimeoutSecond << " second, seqNo " <<
-                    reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->seqNo <<
-                    ", the failed iov data len " << iov[NN_NO1].iov_len);
+                NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock "
+                             << mId << " name " << mName << ", error is timeout with " << mSendTimeoutSecond
+                             << " second, seqNo " << reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->seqNo
+                             << ", the failed iov data len " << iov[NN_NO1].iov_len);
                 return SS_TIMEOUT;
             }
             if (ret != SS_OK || writeLen != static_cast<uint32_t>(iov[i].iov_len)) {
-                NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock " << mId << " name " << mName <<
-                    ", seqNo " << reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->seqNo <<
-                    ", the failed iov data len " << iov[i].iov_len);
+                NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock "
+                             << mId << " name " << mName << ", seqNo "
+                             << reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->seqNo
+                             << ", the failed iov data len " << iov[i].iov_len);
                 return SS_SOCK_SEND_FAILED;
             }
         }
@@ -749,8 +759,8 @@ public:
             iov[NN_NO0].iov_base = reinterpret_cast<void *>(&sendCtx->sendHeader);
             iov[NN_NO0].iov_len = sizeof(SockTransHeader);
 
-            NN_LOG_TRACE_INFO("PostSendSgl in sock iov count " << sendCtx->iovCount << ", head size " <<
-                iov[NN_NO0].iov_len);
+            NN_LOG_TRACE_INFO("PostSendSgl in sock iov count " << sendCtx->iovCount << ", head size "
+                                                               << iov[NN_NO0].iov_len);
             size_t requestSize = 0;
             for (uint16_t i = 0; i < sendCtx->iovCount; i++) {
                 iov[i + NN_NO1].iov_base = reinterpret_cast<void *>(sendCtx->iov[i].lAddress);
@@ -773,13 +783,15 @@ public:
                         return SS_TCP_RETRY;
                     }
                     if (errno == 0) {
-                        NN_LOG_ERROR("Failed to PostSendSgl to peer in sock: " << mId << " name: " << mName <<
-                            " with " << mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                        NN_LOG_ERROR("Failed to PostSendSgl to peer in sock: "
+                                     << mId << " name: " << mName << " with " << mSendTimeoutSecond
+                                     << " second timeout, " << ret << " is sent");
                         return SS_TIMEOUT;
                     }
                     char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                    NN_LOG_ERROR("Failed to PostSendSgl to peer in sock " << mId << " name " << mName << ", error " <<
-                        NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                    NN_LOG_ERROR("Failed to PostSendSgl to peer in sock "
+                                 << mId << " name " << mName << ", error "
+                                 << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                     return SS_SOCK_SEND_FAILED;
                 }
             }
@@ -789,9 +801,10 @@ public:
                 mSendQueue.PushBack(ctx);
                 return SS_SOCK_SEND_EAGAIN;
             }
-            NN_LOG_TRACE_INFO("Post send request successfully : sock " << mId << ", head imm data " <<
-                sendCtx->sendHeader.immData << ", flags " << sendCtx->sendHeader.flags << ", seqNo " <<
-                sendCtx->sendHeader.seqNo << ", data len " << sendCtx->sendHeader.dataLength);
+            NN_LOG_TRACE_INFO("Post send request successfully : sock "
+                              << mId << ", head imm data " << sendCtx->sendHeader.immData << ", flags "
+                              << sendCtx->sendHeader.flags << ", seqNo " << sendCtx->sendHeader.seqNo << ", data len "
+                              << sendCtx->sendHeader.dataLength);
 
             return SS_OK;
         } else {
@@ -824,13 +837,15 @@ public:
                     return SS_TCP_RETRY;
                 }
                 if (errno == 0) {
-                    NN_LOG_ERROR("Failed to PostSendSgl to peer in sock " << mId << " name " << mName << " with " <<
-                        mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                    NN_LOG_ERROR("Failed to PostSendSgl to peer in sock " << mId << " name " << mName << " with "
+                                                                          << mSendTimeoutSecond << " second timeout, "
+                                                                          << ret << " is sent");
                     return SS_TIMEOUT;
                 }
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("Failed to PostSendSgl to peer in sock " << mId << " name " << mName << ", error " <<
-                    NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                NN_LOG_ERROR("Failed to PostSendSgl to peer in sock "
+                             << mId << " name " << mName << ", error "
+                             << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                 return SS_SOCK_SEND_FAILED;
             }
         } else {
@@ -839,34 +854,39 @@ public:
                     return SS_TCP_RETRY;
                 }
                 if (errno == 0) {
-                    NN_LOG_ERROR("(TLS)Failed to PostSendSgl header to peer in sock " << mId << " name " << mName <<
-                        " with " << mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                    NN_LOG_ERROR("(TLS)Failed to PostSendSgl header to peer in sock "
+                                 << mId << " name " << mName << " with " << mSendTimeoutSecond << " second timeout, "
+                                 << ret << " is sent");
                     return SS_TIMEOUT;
                 }
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("(TLS)Failed to PostSendSgl header to peer in sock " << mId << " name " << mName <<
-                    ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) << ", seqNo " <<
-                    header.seqNo);
+                NN_LOG_ERROR("(TLS)Failed to PostSendSgl header to peer in sock "
+                             << mId << " name " << mName << ", error "
+                             << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) << ", seqNo "
+                             << header.seqNo);
                 return SS_SOCK_SEND_FAILED;
             }
             for (uint16_t i = 1; i < NN_NO1 + req.iovCount; i++) {
                 uint32_t writeLen = 0;
                 ret = SSLSend(iov[i].iov_base, iov[i].iov_len, writeLen);
                 if (ret == SS_TIMEOUT) {
-                    NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock " << mId << " name " << mName <<
-                        ", error is timeout with " << mSendTimeoutSecond << " second, seqNo " << header.seqNo <<
-                        ", the failed iov data len " << iov[i].iov_len);
+                    NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock "
+                                 << mId << " name " << mName << ", error is timeout with " << mSendTimeoutSecond
+                                 << " second, seqNo " << header.seqNo << ", the failed iov data len "
+                                 << iov[i].iov_len);
                     return SS_TIMEOUT;
                 }
                 if (ret != SS_OK || writeLen != iov[i].iov_len) {
-                    NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock " << mId << " name " << mName <<
-                        ", seqNo " << header.seqNo << ", the failed iov data len " << iov[i].iov_len);
+                    NN_LOG_ERROR("(TLS)Failed to PostSendSgl body to peer in sock "
+                                 << mId << " name " << mName << ", seqNo " << header.seqNo
+                                 << ", the failed iov data len " << iov[i].iov_len);
                     return SS_SOCK_SEND_FAILED;
                 }
             }
         }
-        NN_LOG_TRACE_INFO("PostSendSgl request successfully: sock " << mId << ", head imm data " << header.immData <<
-            ", flags " << header.flags << ", seqNo " << header.seqNo << ", data len " << header.dataLength);
+        NN_LOG_TRACE_INFO("PostSendSgl request successfully: sock "
+                          << mId << ", head imm data " << header.immData << ", flags " << header.flags << ", seqNo "
+                          << header.seqNo << ", data len " << header.dataLength);
         return SS_OK;
     }
 
@@ -885,17 +905,18 @@ public:
                     return SS_TCP_RETRY;
                 }
                 if (errno == 0) {
-                    NN_LOG_ERROR("Failed to PostSendHead to peer in sock " << mId << " name " << mName << " with " <<
-                        mSendTimeoutSecond << " second, " << ret << " is sent");
+                    NN_LOG_ERROR("Failed to PostSendHead to peer in sock " << mId << " name " << mName << " with "
+                                                                           << mSendTimeoutSecond << " second, " << ret
+                                                                           << " is sent");
                     return SS_TIMEOUT;
                 }
-                NN_LOG_ERROR("Failed to PostSendHead to peer in sock " << mId << " name " << mName << ", errno " <<
-                    errno);
+                NN_LOG_ERROR("Failed to PostSendHead to peer in sock " << mId << " name " << mName << ", errno "
+                                                                       << errno);
                 return SS_SOCK_SEND_FAILED;
             }
-            NN_LOG_TRACE_INFO("Post send head successfully: sock " << mId << ", head imm data " <<
-                ctx->sendCtx->sendHeader.immData << ", flags " << ctx->sendCtx->sendHeader.flags << ", seqNo " <<
-                ctx->sendCtx->sendHeader.seqNo);
+            NN_LOG_TRACE_INFO("Post send head successfully: sock "
+                              << mId << ", head imm data " << ctx->sendCtx->sendHeader.immData << ", flags "
+                              << ctx->sendCtx->sendHeader.flags << ", seqNo " << ctx->sendCtx->sendHeader.seqNo);
             return SS_OK;
         } else {
             mSendQueue.PushBack(ctx);
@@ -927,18 +948,20 @@ public:
                 }
 
                 if (errno == 0) {
-                    NN_LOG_ERROR("Failed to PostRead to peer in sock " << mId << " name " << mName << " with " <<
-                        mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                    NN_LOG_ERROR("Failed to PostRead to peer in sock " << mId << " name " << mName << " with "
+                                                                       << mSendTimeoutSecond << " second timeout, "
+                                                                       << ret << " is sent");
                     return SS_TIMEOUT;
                 }
 
-                NN_LOG_ERROR("Failed to PostRead to peer in sock " << mId << " name " << mName << ", errno " << errno <<
-                    ", seqNo " << sendCtx->sendHeader.seqNo);
+                NN_LOG_ERROR("Failed to PostRead to peer in sock " << mId << " name " << mName << ", errno " << errno
+                                                                   << ", seqNo " << sendCtx->sendHeader.seqNo);
                 return SS_SOCK_SEND_FAILED;
             }
-            NN_LOG_TRACE_INFO("PostRead successfully: sock " << mId << ", head imm data " <<
-                sendCtx->sendHeader.immData << ", flags " << sendCtx->sendHeader.flags << ", seqNo " <<
-                sendCtx->sendHeader.seqNo << ", data len " << sendCtx->sendHeader.dataLength);
+            NN_LOG_TRACE_INFO("PostRead successfully: sock " << mId << ", head imm data " << sendCtx->sendHeader.immData
+                                                             << ", flags " << sendCtx->sendHeader.flags << ", seqNo "
+                                                             << sendCtx->sendHeader.seqNo << ", data len "
+                                                             << sendCtx->sendHeader.dataLength);
             return SS_OK;
         } else {
             mSendQueue.PushBack(ctx);
@@ -971,18 +994,20 @@ public:
                     return SS_TCP_RETRY;
                 }
                 if (errno == 0) {
-                    NN_LOG_ERROR("Failed to PostSendSgl to peer in sock " << mId << " name " << mName << " with " <<
-                        mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                    NN_LOG_ERROR("Failed to PostSendSgl to peer in sock " << mId << " name " << mName << " with "
+                                                                          << mSendTimeoutSecond << " second timeout, "
+                                                                          << ret << " is sent");
                     return SS_TIMEOUT;
                 }
-                NN_LOG_ERROR("Failed to PostSendSgl to peer in sock " << mId << " name " << mName << ", errno " <<
-                    errno);
+                NN_LOG_ERROR("Failed to PostSendSgl to peer in sock " << mId << " name " << mName << ", errno "
+                                                                      << errno);
                 return SS_SOCK_SEND_FAILED;
             }
 
-            NN_LOG_TRACE_INFO("PostWrite request successfully : sock " << mId << ", head imm data " <<
-                sendCtx->sendHeader.immData << ", flags " << sendCtx->sendHeader.flags << ", seqNo " <<
-                sendCtx->sendHeader.seqNo << ", data len " << sendCtx->sendHeader.dataLength);
+            NN_LOG_TRACE_INFO("PostWrite request successfully : sock "
+                              << mId << ", head imm data " << sendCtx->sendHeader.immData << ", flags "
+                              << sendCtx->sendHeader.flags << ", seqNo " << sendCtx->sendHeader.seqNo << ", data len "
+                              << sendCtx->sendHeader.dataLength);
 
             return SS_OK;
         } else {
@@ -996,9 +1021,9 @@ public:
         if (NN_UNLIKELY(mRevTimeoutSecond != timeoutSecond)) {
             mRevTimeoutSecond = timeoutSecond;
             timeoutSecond = timeoutSecond > 0 ? timeoutSecond : timeoutSecond == 0 ? -1 : 0;
-            struct timeval timeout = { timeoutSecond, 0 };
-            if (NN_UNLIKELY(
-                setsockopt(mFd, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<char *>(&timeout), sizeof(timeval)) < 0)) {
+            struct timeval timeout = {timeoutSecond, 0};
+            if (NN_UNLIKELY(setsockopt(mFd, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<char *>(&timeout),
+                                       sizeof(timeval)) < 0)) {
                 return SS_TCP_SET_OPTION_FAILED;
             }
         }
@@ -1012,15 +1037,18 @@ public:
                 ret = ::recv(mFd, buff, remainingSize, 0);
                 if (errno == EAGAIN) {
                     char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                    NN_LOG_ERROR("Failed to PostReceiveHeader from peer in sock " << mId << " name " << mName <<
-                        ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) <<
-                        " due to timeout with " << mRevTimeoutSecond << " second, " << ret << " is received");
+                    NN_LOG_ERROR("Failed to PostReceiveHeader from peer in sock "
+                                 << mId << " name " << mName << ", error "
+                                 << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)
+                                 << " due to timeout with " << mRevTimeoutSecond << " second, " << ret
+                                 << " is received");
                     return SS_TIMEOUT;
                 }
                 if (ret <= 0) {
                     char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                    NN_LOG_ERROR("Failed to PostReceiveHeader from peer in sock " << mId << " name " << mName <<
-                        ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                    NN_LOG_ERROR("Failed to PostReceiveHeader from peer in sock "
+                                 << mId << " name " << mName << ", error "
+                                 << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                     return SS_SOCK_SEND_FAILED;
                 }
 
@@ -1035,8 +1063,9 @@ public:
             NN_LOG_ERROR("Failed to validate received header, ep " << Id());
             return result;
         }
-        NN_LOG_TRACE_INFO("PostReceiveHeader from peer successfully: sock " << mId << ", head imm data " <<
-            header.immData << ", flags " << header.flags << ", seqNo " << header.seqNo);
+        NN_LOG_TRACE_INFO("PostReceiveHeader from peer successfully: sock "
+                          << mId << ", head imm data " << header.immData << ", flags " << header.flags << ", seqNo "
+                          << header.seqNo);
         return SS_OK;
     }
 
@@ -1055,24 +1084,29 @@ public:
                 ret = ::recv(mFd, buff, remainingSize, 0);
                 if (errno == EAGAIN) {
                     char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                    NN_LOG_ERROR("Failed to PostReceiveBody from peer in sock " << mId << " name " << mName <<
-                        ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) <<
-                        " due to timeout with " << mRevTimeoutSecond << " second, " << ret << " is received");
+                    NN_LOG_ERROR("Failed to PostReceiveBody from peer in sock "
+                                 << mId << " name " << mName << ", error "
+                                 << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)
+                                 << " due to timeout with " << mRevTimeoutSecond << " second, " << ret
+                                 << " is received");
                     return SS_TIMEOUT;
                 }
                 if (ret <= 0) {
                     char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                    NN_LOG_ERROR("Failed to PostReceiveBody from peer in sock " << mId << " name " << mName <<
-                        ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                    NN_LOG_ERROR("Failed to PostReceiveBody from peer in sock "
+                                 << mId << " name " << mName << ", error "
+                                 << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                     return SS_SOCK_SEND_FAILED;
                 }
             } else {
                 auto readResult = SSLRead(buff, remainingSize, reinterpret_cast<uint32_t &>(ret));
                 if (readResult == SS_TIMEOUT) {
                     char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                    NN_LOG_ERROR("(TLS)Failed to PostReceiveBody from peer in sock " << mId << " name " << mName <<
-                        ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) <<
-                        " due to timeout with " << mRevTimeoutSecond << " second, " << ret << " is received");
+                    NN_LOG_ERROR("(TLS)Failed to PostReceiveBody from peer in sock "
+                                 << mId << " name " << mName << ", error "
+                                 << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)
+                                 << " due to timeout with " << mRevTimeoutSecond << " second, " << ret
+                                 << " is received");
                     return SS_TIMEOUT;
                 }
 
@@ -1116,18 +1150,20 @@ public:
                 }
 
                 if (errno == 0) {
-                    NN_LOG_ERROR("Failed to PostReadSgl to peer in sock " << mId << " name " << mName << " with " <<
-                        mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                    NN_LOG_ERROR("Failed to PostReadSgl to peer in sock " << mId << " name " << mName << " with "
+                                                                          << mSendTimeoutSecond << " second timeout, "
+                                                                          << ret << " is sent");
                     return SS_TIMEOUT;
                 }
 
-                NN_LOG_ERROR("Failed to PostReadSgl to peer in sock " << mId << " name " << mName << ", errno " <<
-                    errno << ", seqNo " << sendCtx->sendHeader.seqNo);
+                NN_LOG_ERROR("Failed to PostReadSgl to peer in sock " << mId << " name " << mName << ", errno " << errno
+                                                                      << ", seqNo " << sendCtx->sendHeader.seqNo);
                 return SS_SOCK_SEND_FAILED;
             }
-            NN_LOG_TRACE_INFO("PostReadSgl successfully: sock " << mId << ", head imm data " <<
-                sendCtx->sendHeader.immData << ", flags " << sendCtx->sendHeader.flags << ", seqNo " <<
-                sendCtx->sendHeader.seqNo << ", data len " << sendCtx->sendHeader.dataLength);
+            NN_LOG_TRACE_INFO("PostReadSgl successfully: sock "
+                              << mId << ", head imm data " << sendCtx->sendHeader.immData << ", flags "
+                              << sendCtx->sendHeader.flags << ", seqNo " << sendCtx->sendHeader.seqNo << ", data len "
+                              << sendCtx->sendHeader.dataLength);
             return SS_OK;
         } else {
             mSendQueue.PushBack(ctx);
@@ -1167,19 +1203,22 @@ public:
                 }
 
                 if (errno == 0) {
-                    NN_LOG_ERROR("Failed to PostReadSglAck to peer in sock " << mId << " name " << mName << " with " <<
-                        mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                    NN_LOG_ERROR("Failed to PostReadSglAck to peer in sock "
+                                 << mId << " name " << mName << " with " << mSendTimeoutSecond << " second timeout, "
+                                 << ret << " is sent");
                     return SS_TIMEOUT;
                 }
 
-                NN_LOG_ERROR("Failed to PostReadSglAck to peer in sock " << mId << " name " << mName << ", errno " <<
-                    errno << ", seqNo " << sendCtx->sendHeader.seqNo);
+                NN_LOG_ERROR("Failed to PostReadSglAck to peer in sock " << mId << " name " << mName << ", errno "
+                                                                         << errno << ", seqNo "
+                                                                         << sendCtx->sendHeader.seqNo);
                 return SS_SOCK_SEND_FAILED;
             }
 
-            NN_LOG_TRACE_INFO("PostReadSglAck successfully: sock " << mId << ", head imm data " <<
-                sendCtx->sendHeader.immData << ", flags " << sendCtx->sendHeader.flags << ", seqNo " <<
-                sendCtx->sendHeader.seqNo << ", data len " << sendCtx->sendHeader.dataLength);
+            NN_LOG_TRACE_INFO("PostReadSglAck successfully: sock "
+                              << mId << ", head imm data " << sendCtx->sendHeader.immData << ", flags "
+                              << sendCtx->sendHeader.flags << ", seqNo " << sendCtx->sendHeader.seqNo << ", data len "
+                              << sendCtx->sendHeader.dataLength);
             return SS_OK;
         } else {
             mSendQueue.PushBack(ctx);
@@ -1217,19 +1256,22 @@ public:
                 }
 
                 if (errno == 0) {
-                    NN_LOG_ERROR("Failed to PostWriteSgl to peer in sock " << mId << " name " << mName << " with " <<
-                        mSendTimeoutSecond << " second timeout, " << ret << " is sent");
+                    NN_LOG_ERROR("Failed to PostWriteSgl to peer in sock " << mId << " name " << mName << " with "
+                                                                           << mSendTimeoutSecond << " second timeout, "
+                                                                           << ret << " is sent");
                     return SS_TIMEOUT;
                 }
 
-                NN_LOG_ERROR("Failed to PostWriteSgl to peer in sock " << mId << " name " << mName << ", errno " <<
-                    errno << ", seqNo " << sendCtx->sendHeader.seqNo);
+                NN_LOG_ERROR("Failed to PostWriteSgl to peer in sock " << mId << " name " << mName << ", errno "
+                                                                       << errno << ", seqNo "
+                                                                       << sendCtx->sendHeader.seqNo);
                 return SS_SOCK_SEND_FAILED;
             }
 
-            NN_LOG_TRACE_INFO("PostWriteSgl successfully: sock " << mId << ", head imm data " <<
-                sendCtx->sendHeader.immData << ", flags " << sendCtx->sendHeader.flags << ", seqNo " <<
-                sendCtx->sendHeader.seqNo << ", data len " << sendCtx->sendHeader.dataLength);
+            NN_LOG_TRACE_INFO("PostWriteSgl successfully: sock "
+                              << mId << ", head imm data " << sendCtx->sendHeader.immData << ", flags "
+                              << sendCtx->sendHeader.flags << ", seqNo " << sendCtx->sendHeader.seqNo << ", data len "
+                              << sendCtx->sendHeader.dataLength);
             return SS_OK;
         } else {
             mSendQueue.PushBack(ctx);
@@ -1239,54 +1281,54 @@ public:
 
 #define NO_BODY_FLAG(flag) ((flag) == NTH_WRITE_ACK || (flag) == NTH_WRITE_SGL_ACK)
 
-#define RECEIVE_HEADER(result, fullReceived)                                                                      \
-    do {                                                                                                          \
-        result = ::recv(mFd, reinterpret_cast<void *>(headDataPtr + mReceiveState.ReceivedHeaderLen()),           \
-            mReceiveState.headerToBeReceived, 0);                                                                 \
-        if (NN_LIKELY((result) > 0)) {                                                                            \
-            /* header is full */                                                                                  \
-            if (mReceiveState.HeaderSatisfied(result)) {                                                          \
-                if (NN_UNLIKELY(NetFunc::ValidateHeader(mHeader) != NN_OK)) {                                     \
-                    NN_LOG_ERROR("Failed to validate received header param, sock " << mId);                       \
-                    return SockOpContextInfo::SS_OPERATE_FAILURE;                                                 \
-                }                                                                                                 \
-                /* set body len to be received to the value in header */                                          \
-                mReceiveState.bodyToBeReceived = static_cast<ssize_t>(mHeader.dataLength);                        \
-                /* expand memory size */                                                                          \
-                if (NN_UNLIKELY(!mReceiveBuff.ExpandIfNeed(mHeader.dataLength))) {                                \
-                    NN_LOG_ERROR("Failed to expand receive buffer to " << mHeader.dataLength <<                   \
-                        ", probably out of memory");                                                              \
-                    return SockOpContextInfo::SS_OUT_OF_MEM;                                                      \
-                }                                                                                                 \
-                                                                                                                  \
-                /* set actually body data to 0 */                                                                 \
-                mReceiveBuff.ActualDataSize(0);                                                                   \
-                /* if head only message do upper callback directly */                                             \
-                fullReceived = (mHeader.dataLength == 0);                                                         \
-                NN_LOG_TRACE_INFO("Receive sock " << mId << " head imm data " << mHeader.immData << ", flags " << \
-                    mHeader.flags << ", seqNo " << mHeader.seqNo << ", data len " << mHeader.dataLength);         \
-                if ((fullReceived) == true || NO_BODY_FLAG(mHeader.flags)) {                                      \
-                    mReceiveState.ResetHeader();                                                                  \
-                    fullReceived = true;                                                                          \
-                    return SockOpContextInfo::SS_NO_ERROR;                                                        \
-                }                                                                                                 \
-            } else {                                                                                              \
-                return SockOpContextInfo::SS_NO_ERROR; /* header is not fully received, continue to receive */    \
-            }                                                                                                     \
-        } else {                                                                                                  \
-            /* ECONNRESET is broken during io, SUCCESS is broken during idle time. */                             \
-            if (errno == ECONNRESET || errno == 0) {                                                              \
-                NN_LOG_WARN("Sock " << mId << " does not receive data header, connection "                        \
-                                    << " reset by peer");                                                         \
-                return SockOpContextInfo::SS_RESET_BY_PEER; /* socket is closed by peer, socket is error */       \
-            }                                                                                                     \
-            /* if errno is eagain is normal, need to continue to receive */                                       \
-            /* else meaning failed to read from socket, socket is error */                                        \
-            if (errno != EAGAIN) {                                                                                \
-                NN_LOG_ERROR("sock " << mId << " receive header failed, errno " << errno);                        \
-            }                                                                                                     \
-            return (errno == EAGAIN ? SockOpContextInfo::SS_NO_ERROR : SockOpContextInfo::SS_OPERATE_FAILURE);    \
-        }                                                                                                         \
+#define RECEIVE_HEADER(result, fullReceived)                                                                       \
+    do {                                                                                                           \
+        result = ::recv(mFd, reinterpret_cast<void *>(headDataPtr + mReceiveState.ReceivedHeaderLen()),            \
+                        mReceiveState.headerToBeReceived, 0);                                                      \
+        if (NN_LIKELY((result) > 0)) {                                                                             \
+            /* header is full */                                                                                   \
+            if (mReceiveState.HeaderSatisfied(result)) {                                                           \
+                if (NN_UNLIKELY(NetFunc::ValidateHeader(mHeader) != NN_OK)) {                                      \
+                    NN_LOG_ERROR("Failed to validate received header param, sock " << mId);                        \
+                    return SockOpContextInfo::SS_OPERATE_FAILURE;                                                  \
+                }                                                                                                  \
+                /* set body len to be received to the value in header */                                           \
+                mReceiveState.bodyToBeReceived = static_cast<ssize_t>(mHeader.dataLength);                         \
+                /* expand memory size */                                                                           \
+                if (NN_UNLIKELY(!mReceiveBuff.ExpandIfNeed(mHeader.dataLength))) {                                 \
+                    NN_LOG_ERROR("Failed to expand receive buffer to " << mHeader.dataLength                       \
+                                                                       << ", probably out of memory");             \
+                    return SockOpContextInfo::SS_OUT_OF_MEM;                                                       \
+                }                                                                                                  \
+                                                                                                                   \
+                /* set actually body data to 0 */                                                                  \
+                mReceiveBuff.ActualDataSize(0);                                                                    \
+                /* if head only message do upper callback directly */                                              \
+                fullReceived = (mHeader.dataLength == 0);                                                          \
+                NN_LOG_TRACE_INFO("Receive sock " << mId << " head imm data " << mHeader.immData << ", flags "     \
+                                                  << mHeader.flags << ", seqNo " << mHeader.seqNo << ", data len " \
+                                                  << mHeader.dataLength);                                          \
+                if ((fullReceived) == true || NO_BODY_FLAG(mHeader.flags)) {                                       \
+                    mReceiveState.ResetHeader();                                                                   \
+                    fullReceived = true;                                                                           \
+                    return SockOpContextInfo::SS_NO_ERROR;                                                         \
+                }                                                                                                  \
+            } else {                                                                                               \
+                return SockOpContextInfo::SS_NO_ERROR; /* header is not fully received, continue to receive */     \
+            }                                                                                                      \
+        } else {                                                                                                   \
+            /* ECONNRESET is broken during io, SUCCESS is broken during idle time. */                              \
+            if (errno == ECONNRESET || errno == 0) {                                                               \
+                NN_LOG_WARN("Sock " << mId << " does not receive data header, connection " << " reset by peer");   \
+                return SockOpContextInfo::SS_RESET_BY_PEER; /* socket is closed by peer, socket is error */        \
+            }                                                                                                      \
+            /* if errno is eagain is normal, need to continue to receive */                                        \
+            /* else meaning failed to read from socket, socket is error */                                         \
+            if (errno != EAGAIN) {                                                                                 \
+                NN_LOG_ERROR("sock " << mId << " receive header failed, errno " << errno);                         \
+            }                                                                                                      \
+            return (errno == EAGAIN ? SockOpContextInfo::SS_NO_ERROR : SockOpContextInfo::SS_OPERATE_FAILURE);     \
+        }                                                                                                          \
     } while (0)
 
 #define RECEIVE_BODY(result, fullReceived)                                                                          \
@@ -1296,7 +1338,7 @@ public:
             mReceiveBuff.DataIntPtr() + (mHeader.dataLength - static_cast<size_t>(mReceiveState.bodyToBeReceived)); \
         if (mEnableTls && ((mHeader.flags & 0xff) == NTH_TWO_SIDE || (mHeader.flags & 0xff) == NTH_TWO_SIDE_SGL)) { \
             auto readRet = SSLRead(reinterpret_cast<void *>(dataPtr), mReceiveState.bodyToBeReceived,               \
-                reinterpret_cast<uint32_t &>(result));                                                              \
+                                   reinterpret_cast<uint32_t &>(result));                                           \
             if (readRet != SS_OK) {                                                                                 \
                 result = -1;                                                                                        \
             }                                                                                                       \
@@ -1319,8 +1361,7 @@ public:
         } else {                                                                                                    \
             /* ECONNRESET is broken during io, SUCCESS is broken during idle time. */                               \
             if (errno == ECONNRESET || errno == 0) {                                                                \
-                NN_LOG_WARN("Sock " << mId << " does not receive data body, connection "                            \
-                                    << " reset by peer");                                                           \
+                NN_LOG_WARN("Sock " << mId << " does not receive data body, connection " << " reset by peer");      \
                 return SockOpContextInfo::SS_RESET_BY_PEER; /* socket is closed by peer, socket is error */         \
             }                                                                                                       \
             /* if errno is eagain is normal, need to continue to receive */                                         \
@@ -1418,9 +1459,9 @@ public:
     std::string ToString()
     {
         std::ostringstream oss;
-        oss << "info [type " << SockTypeToString(mType) << ", name " << mName << ", id " << mId << ", peer-ip-port " <<
-            mPeerIpPort << ", up-ctx: " << mUpCtx << ", up-ctx1: " << mUpCtx1 << ", rev-buff-size: " <<
-            mReceiveBuff.Size();
+        oss << "info [type " << SockTypeToString(mType) << ", name " << mName << ", id " << mId << ", peer-ip-port "
+            << mPeerIpPort << ", up-ctx: " << mUpCtx << ", up-ctx1: " << mUpCtx1
+            << ", rev-buff-size: " << mReceiveBuff.Size();
         return oss.str();
     }
 
@@ -1458,8 +1499,8 @@ protected:
             if (sslErrCode == HcomSsl::SSL_ERROR_WANT_WRITE) {
                 return SS_TIMEOUT;
             }
-            NN_LOG_ERROR("Failed to write data to TLS channel, ret: " << ret << ", errno: " << sslErrCode <<
-                " write Len: " << size);
+            NN_LOG_ERROR("Failed to write data to TLS channel, ret: " << ret << ", errno: " << sslErrCode
+                                                                      << " write Len: " << size);
             return SS_OOB_SSL_WRITE_ERROR;
         }
         writeLen = static_cast<uint32_t>(ret);
@@ -1487,7 +1528,7 @@ protected:
     uint64_t mUpCtx1 = 0;               /* up context 1 */
     SockBuff mReceiveBuff;              /* one extendable receive buffer */
     SockTransHeader mHeader;            /* sock command header */
-    SockReceiveState mReceiveState {};  /* receive data status */
+    SockReceiveState mReceiveState{};   /* receive data status */
     bool mCbByWorkerInBlocking = false; /* worker call send post cb for blocking io */
     bool mTcpBlockingMode = true;       /* tcp mode: nonblocking in default */
     int64_t mQueueVacantSize = 0;
@@ -1532,7 +1573,7 @@ private:
     int32_t mSendTimeoutSecond = -1;
     int32_t mRevTimeoutSecond = -1;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_SOCK_WRAPPER_H_234234

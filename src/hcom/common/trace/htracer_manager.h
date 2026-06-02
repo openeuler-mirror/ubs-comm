@@ -13,15 +13,15 @@
 #ifndef HTRACER_MANAGER_H
 #define HTRACER_MANAGER_H
 
-#include <cerrno>
-#include <sys/cdefs.h>
-#include <iostream>
 #include <fcntl.h>
+#include <sys/cdefs.h>
+#include <cerrno>
 #include <fstream>
-#include "trace/htracer.h"
-#include "htracer_info.h"
+#include <iostream>
 #include "hcom_err.h"
 #include "hcom_log.h"
+#include "htracer_info.h"
+#include "trace/htracer.h"
 
 namespace ock {
 namespace hcom {
@@ -120,8 +120,8 @@ private:
         if (instance == nullptr) {
             return nullptr;
         } else {
-            auto ret = memset_s(instance, sizeof(TraceInfo *) * MAX_SERVICE_NUM,
-                                0x0, sizeof(TraceInfo *) * MAX_SERVICE_NUM);
+            auto ret =
+                memset_s(instance, sizeof(TraceInfo *) * MAX_SERVICE_NUM, 0x0, sizeof(TraceInfo *) * MAX_SERVICE_NUM);
             if (ret != 0) {
                 NN_LOG_WARN("[HTRACER] Failed to memset_s to instance.");
                 delete[] instance;
@@ -205,7 +205,7 @@ private:
     static std::string mDumpDir;
     static std::string mDefaultDir;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

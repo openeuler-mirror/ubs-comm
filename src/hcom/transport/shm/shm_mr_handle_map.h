@@ -22,7 +22,7 @@ using ShmHandlePtr = NetRef<ShmHandle>;
 class ShmMRHandleMap {
 public:
     ShmMRHandleMap(const ShmMRHandleMap &) = delete;
-    ShmMRHandleMap &operator = (const ShmMRHandleMap &) = delete;
+    ShmMRHandleMap &operator=(const ShmMRHandleMap &) = delete;
 
     static ShmMRHandleMap &GetInstance()
     {
@@ -94,6 +94,6 @@ private:
     std::map<uint32_t, ShmHandlePtr> mMrLKeyFdMap;
     std::map<uint32_t, ShmHandlePtr> mMrRKeyFdMap;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

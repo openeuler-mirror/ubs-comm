@@ -50,10 +50,14 @@ public:
  *
  * @param ClosureFunction
  */
-template <typename ClosureFunction> class InnerClosureCallback : public Callback {
+template <typename ClosureFunction>
+class InnerClosureCallback : public Callback {
 public:
     explicit InnerClosureCallback(ClosureFunction &&function, bool deleteSelf)
-        : mFunction(std::move(function)), mDeleteSelf(deleteSelf) {}
+        : mFunction(std::move(function)),
+          mDeleteSelf(deleteSelf)
+    {
+    }
 
     ~InnerClosureCallback() override = default;
 
@@ -97,7 +101,8 @@ private:
  * coding, std::bind is used to implement closure. If the cost of std::bind
  * is found to be high, then optimize it.
  */
-template <typename... Args> Callback *UBSHcomNewCallback(Args... args)
+template <typename... Args>
+Callback *UBSHcomNewCallback(Args... args)
 {
     auto closure = std::bind(args...);
     return new (std::nothrow) InnerClosureCallback<decltype(closure)>(std::move(closure), true);
@@ -187,7 +192,7 @@ public:
      * @return int32_t 0：成功；非0：失败错误码
      */
     virtual int32_t Recv(const UBSHcomServiceContext &context, uintptr_t address, uint32_t size,
-        const Callback *done = nullptr) = 0;
+                         const Callback *done = nullptr) = 0;
 
     /**
      * @brief 流控设置
@@ -232,13 +237,13 @@ public:
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
 protected:
-    virtual auto SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
-            -> std::tuple<SpliceMessageResultType, SerResult, std::string> = 0;
+    virtual auto SpliceMessage(const UBSHcomNetRequestContext &ctx,
+                               bool isResp) -> std::tuple<SpliceMessageResultType, SerResult, std::string> = 0;
 
-    uint32_t mUserSplitSendThreshold = UINT32_MAX;  // 用户 payload 拆包阈值，已去除额外头部大小
+    uint32_t mUserSplitSendThreshold = UINT32_MAX; // 用户 payload 拆包阈值，已去除额外头部大小
 private:
     virtual SerResult Initialize(std::vector<UBSHcomEndpointPtr> &ep, uintptr_t ctxMemPool, uintptr_t periodicMgr,
-        uintptr_t pgTable, uint32_t ctxStoreCapacity = NN_NO2097152) = 0;
+                                 uintptr_t pgTable, uint32_t ctxStoreCapacity = NN_NO2097152) = 0;
     virtual void UnInitialize() = 0;
     virtual std::string ToString() = 0;
 
@@ -296,6 +301,6 @@ inline int32_t UBSHcomChannel::Get(const UBSHcomOneSideRequest &req)
 {
     return this->Get(req, nullptr);
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_API_HCOM_CHANNEL_H_

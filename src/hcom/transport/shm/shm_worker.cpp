@@ -18,8 +18,11 @@ namespace hcom {
 std::atomic<uint64_t> ShmWorker::shmWorkerIndex(0);
 
 ShmWorker::ShmWorker(const std::string &name, const UBSHcomNetWorkerIndex &index, const ShmWorkerOptions &options,
-    const NetMemPoolFixedPtr &opMemPool, const NetMemPoolFixedPtr &opCtxMemPool, const NetMemPoolFixedPtr &sglOpMemPool)
-    : mName(name + index.ToString()), mIndex(index), mOptions(options)
+                     const NetMemPoolFixedPtr &opMemPool, const NetMemPoolFixedPtr &opCtxMemPool,
+                     const NetMemPoolFixedPtr &sglOpMemPool)
+    : mName(name + index.ToString()),
+      mIndex(index),
+      mOptions(options)
 {
     if (mOpCompInfoPool.Initialize(opMemPool) != NN_OK) {
         NN_LOG_ERROR("Failed to initialize op complete pool for worker " << mName);
@@ -117,7 +120,7 @@ HResult ShmWorker::CreateEventQueue()
     return SH_OK;
 }
 
-void SetThreadNameAndAffinity(const std::string& name, int16_t cpuId)
+void SetThreadNameAndAffinity(const std::string &name, int16_t cpuId)
 {
     pthread_setname_np(pthread_self(), name.c_str());
 
@@ -138,9 +141,9 @@ void ShmWorker::RunInThread(int16_t cpuId)
     if (mOptions.threadPriority != 0) {
         if (NN_UNLIKELY(setpriority(PRIO_PROCESS, 0, mOptions.threadPriority) != 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to set worker thread priority in shm worker" << mName <<
-                ", reason:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE) <<
-                ", keeping default.");
+            NN_LOG_WARN("Unable to set worker thread priority in shm worker"
+                        << mName << ", reason:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE)
+                        << ", keeping default.");
         }
     }
 
@@ -209,13 +212,13 @@ void ShmWorker::RunInThread(int16_t cpuId)
             }                                                                                                        \
                                                                                                                      \
             ShmOpContextInfo ctx(ch, address, (event).dataSize,                                                      \
-                static_cast<ShmOpContextInfo::ShmOpType>((event).opType),                                            \
-                ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);                                                        \
+                                 static_cast<ShmOpContextInfo::ShmOpType>((event).opType),                           \
+                                 ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);                                       \
             mNewRequestHandler(ctx, (event).immData);                                                                \
         } else if ((event).opType == ShmOpContextInfo::ShmOpType::SH_READ ||                                         \
-            (event).opType == ShmOpContextInfo::ShmOpType::SH_WRITE ||                                               \
-            (event).opType == ShmOpContextInfo::ShmOpType::SH_SGL_READ ||                                            \
-            (event).opType == ShmOpContextInfo::ShmOpType::SH_SGL_WRITE) {                                           \
+                   (event).opType == ShmOpContextInfo::ShmOpType::SH_WRITE ||                                        \
+                   (event).opType == ShmOpContextInfo::ShmOpType::SH_SGL_READ ||                                     \
+                   (event).opType == ShmOpContextInfo::ShmOpType::SH_SGL_WRITE) {                                    \
             if (NN_UNLIKELY((event).shmChannel == nullptr)) {                                                        \
                 NN_LOG_WARN("Got invalid event " << (event).opType << " in worker " << mName << " as ch is null");   \
                 /* if state is broken ch has already decreased\remove\return in keeper thread */                     \
@@ -249,7 +252,7 @@ void ShmWorker::RunInThread(int16_t cpuId)
 
 void ShmWorker::DoEventPolling()
 {
-    ShmEvent event {};
+    ShmEvent event{};
     bool stopping = false;
 
     HResult result;
@@ -277,7 +280,7 @@ void ShmWorker::DoEventPolling()
 
 void ShmWorker::DoBusyPolling()
 {
-    ShmEvent event {};
+    ShmEvent event{};
 
     while (!mNeedToStop) {
         auto result = mEventQueue->Dequeue(event);
@@ -361,5 +364,5 @@ void ShmWorker::Stop()
 
     mStarted = false;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

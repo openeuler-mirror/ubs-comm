@@ -1,10 +1,10 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
+#include "test_case/service_v2/service_send_lat_test.h"
 #include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "test_case/service_v2/service_send_lat_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -22,14 +22,14 @@ int ServiceSendLatTest::DoPostSend()
         Callback *newCallback = UBSHcomNewCallback([](UBSHcomServiceContext &context) {}, std::placeholders::_1);
         if (newCallback == nullptr) {
             LOG_ERROR("Create callback failed");
+            sem_post(&mSem);
             return -1;
         }
         res = mCh->Send(req, newCallback);
         if (res != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("Failed to send to server");
+            sem_post(&mSem);
+            return -1;
         }
         ++ctx->cnt;
         return 0;
@@ -44,7 +44,7 @@ int ServiceSendLatTest::DoPostSend()
 }
 
 int ServiceSendLatTest::NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch,
-    const std::string &payload)
+                                   const std::string &payload)
 {
     mCh = ch;
     LOG_DEBUG("New connection from " << ipPort << " !");
@@ -64,9 +64,6 @@ int ServiceSendLatTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &
         }
         res = mCh->Send(req, newCallback);
         if (res != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("UBSHcomResponse meaasge error");
             return -1;
         }
@@ -83,7 +80,7 @@ bool ServiceSendLatTest::Initialize()
     // create NetService
     std::function<int(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch, const std::string &payload)>
         funcNewChannel = bind(&ServiceSendLatTest::NewChannel, this, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3);
+                              std::placeholders::_3);
     std::function<int(const ock::hcom::UBSHcomServiceContext &ctx)> funcReqReceived =
         bind(&ServiceSendLatTest::RequestReceived, this, std::placeholders::_1);
     mHelper.RegisterNewChHandler(funcNewChannel);
@@ -164,5 +161,5 @@ bool ServiceSendLatTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::SERVICE_SEND_LAT, ServiceSendLatTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

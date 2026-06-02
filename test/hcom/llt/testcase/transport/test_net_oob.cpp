@@ -9,12 +9,12 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <thread>
+#include "test_net_oob.h"
 #include <sys/poll.h>
 #include <unistd.h>
+#include <thread>
 #include "hcom.h"
 #include "transport/rdma/rdma_common.h"
-#include "test_net_oob.h"
 
 namespace ock {
 namespace hcom {
@@ -331,7 +331,8 @@ TEST_F(TestNetOob, StartForUdsFailureWithEmptyFilePath)
 
 TEST_F(TestNetOob, StartForUdsFailureWithLongFileName)
 {
-    ock::hcom::OOBTCPServer oobServer(ock::hcom::NET_OOB_UDS,
+    ock::hcom::OOBTCPServer oobServer(
+        ock::hcom::NET_OOB_UDS,
         "ThisFileNameIs107InLengthThisFileNameIs107InLengthThisFileNameIs107InLengthThisFileNameIs107InLengthXXXXXXX",
         0);
     oobServer.SetNewConnCB(std::bind(&testNewConnectionHandler, std::placeholders::_1));
@@ -484,8 +485,8 @@ TEST_F(TestNetOob, ConnectForUdsSuccessWithAbstractPath)
     NResult ret = oobServer.Start();
     EXPECT_EQ(ret, ock::hcom::NN_OK);
     ock::hcom::OOBTCPConnection *conn = nullptr;
-    ock::hcom::OOBTCPClientPtr client =
-        new (std::nothrow) ock::hcom::OOBTCPClient(ock::hcom::NET_OOB_UDS, "client.socket", 0);
+    ock::hcom::OOBTCPClientPtr client = new (std::nothrow)
+        ock::hcom::OOBTCPClient(ock::hcom::NET_OOB_UDS, "client.socket", 0);
     NResult ret1 = client->Connect("server.socket", conn);
     EXPECT_EQ(ret1, ock::hcom::NN_OK);
 
@@ -508,8 +509,8 @@ TEST_F(TestNetOob, ConnectForUdsFailureWithEmptyPath)
     NResult ret = oobServer.Start();
     ASSERT_EQ(ret, ock::hcom::NN_OK);
     ock::hcom::OOBTCPConnection *conn = nullptr;
-    ock::hcom::OOBTCPClientPtr client =
-        new (std::nothrow) ock::hcom::OOBTCPClient(ock::hcom::NET_OOB_UDS, "client.socket", 0);
+    ock::hcom::OOBTCPClientPtr client = new (std::nothrow)
+        ock::hcom::OOBTCPClient(ock::hcom::NET_OOB_UDS, "client.socket", 0);
     NResult ret1 = client->Connect("", conn);
     EXPECT_EQ(ret1, ock::hcom::NN_OOB_CLIENT_SOCKET_ERROR);
 }
@@ -544,7 +545,7 @@ static bool CreateDriver(UBSHcomNetDriver *&driver, uint16_t port, bool isServer
         driver->OobIpAndPort(BASE_IP, testPort);
     } else {
         driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM,
-            driverName + std::to_string(driverIndex.fetch_add(1)), isServer);
+                                            driverName + std::to_string(driverIndex.fetch_add(1)), isServer);
     }
 
     if (oobType == NET_OOB_UDS && isServer) {
@@ -554,7 +555,7 @@ static bool CreateDriver(UBSHcomNetDriver *&driver, uint16_t port, bool isServer
         driver->AddOobUdsOptions(listenOpt);
     }
 
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.oobType = oobType;
     options.SetNetDeviceIpMask(IP_SEG);
@@ -632,5 +633,5 @@ TEST_F(TestNetOob, TestClientTcpConnect)
     int result = client->Connect(conn);
     EXPECT_EQ(NN_OOB_CLIENT_SOCKET_ERROR, result);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

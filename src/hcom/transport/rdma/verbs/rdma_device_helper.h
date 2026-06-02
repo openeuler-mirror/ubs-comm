@@ -21,7 +21,7 @@ namespace hcom {
 
 struct RDMADeviceSimpleInfo {
     uint16_t devIndex = 0;
-    char devName[IBV_SYSFS_NAME_MAX] {};
+    char devName[IBV_SYSFS_NAME_MAX]{};
     bool active = false;
     UBSHcomNetDriverDeviceInfo deviceInfo;
 };
@@ -36,7 +36,8 @@ enum RDMARoCEVersion {
 struct RDMAGId {
     uint16_t devIndex = 0;
     uint16_t gid = 0;
-    union ibv_gid ibvGid {};
+    union ibv_gid ibvGid {
+    };
     RDMARoCEVersion RoCEVersion = RDMARoCEVersion::RoCE_UNKNOWN;
     uint8_t bandWidth = 0;
 } __attribute__((packed));
@@ -60,13 +61,13 @@ public:
     static std::string DeviceInfo();
 
     static RResult GetEnableDeviceCount(std::string ipMask, uint16_t &enableDevCount,
-        std::vector<std::string> &enableIps, std::string ipGroup);
+                                        std::vector<std::string> &enableIps, std::string ipGroup);
 
 private:
     static RResult DoInitialize();
     static RResult DoUpdate();
     static void GetGidVec(ibv_context *context, const std::string &devName, uint16_t devIndex, uint8_t bandWidth,
-        uint32_t gidTableLen, std::vector<RDMAGId> &outGidVec);
+                          uint32_t gidTableLen, std::vector<RDMAGId> &outGidVec);
 
     static RResult GetIfAddressByIp(const std::string &ip, struct sockaddr_in &address);
     static RResult GetDeviceByAddress(const std::string &ip, struct sockaddr_in &address, RDMAGId &gid);
@@ -79,7 +80,7 @@ private:
 
     static uint32_t PORT_NUMBER;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_RDMA_DEVICE_HELPER_H

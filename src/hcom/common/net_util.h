@@ -5,25 +5,26 @@
 #define OCK_RDMA_UTIL_1233432457233_H
 
 #include <arpa/inet.h>
+#include <semaphore.h>
+#include <sys/time.h>
 #include <climits>
 #include <cmath>
 #include <cstdint>
-#include <type_traits>
 #include <cstring>
 #include <ctime>
-#include <semaphore.h>
-#include <sys/time.h>
+#include <type_traits>
 #include <vector>
 
-#include "hcom_err.h"
-#include "hcom_num_def.h"
 #include "hcom_def.h"
+#include "hcom_err.h"
 #include "hcom_log.h"
+#include "hcom_num_def.h"
 
 namespace ock {
 namespace hcom {
 /* NetLocalAutoDecreasePtr */
-template <typename T> class NetLocalAutoDecreasePtr {
+template <typename T>
+class NetLocalAutoDecreasePtr {
 public:
     explicit NetLocalAutoDecreasePtr(T *obj)
     {
@@ -58,16 +59,17 @@ public:
     NetLocalAutoDecreasePtr(const NetLocalAutoDecreasePtr<T> &) = delete;
     NetLocalAutoDecreasePtr(NetLocalAutoDecreasePtr<T> &&) = delete;
     // operator =
-    NetLocalAutoDecreasePtr<T> &operator = (T *newObj) = delete;
-    NetLocalAutoDecreasePtr<T> &operator = (const NetLocalAutoDecreasePtr<T> &other) = delete;
-    NetLocalAutoDecreasePtr<T> &operator = (NetLocalAutoDecreasePtr<T> &&other) = delete;
+    NetLocalAutoDecreasePtr<T> &operator=(T *newObj) = delete;
+    NetLocalAutoDecreasePtr<T> &operator=(const NetLocalAutoDecreasePtr<T> &other) = delete;
+    NetLocalAutoDecreasePtr<T> &operator=(NetLocalAutoDecreasePtr<T> &&other) = delete;
 
 private:
     T *mObj = nullptr;
 };
 
 /* NetLocalAutoFreePtr */
-template <typename T> class NetLocalAutoFreePtr {
+template <typename T>
+class NetLocalAutoFreePtr {
 public:
     explicit NetLocalAutoFreePtr(T *obj, bool isArray = false) : mObj(obj), mIsArray(isArray) {}
 
@@ -106,9 +108,9 @@ public:
     NetLocalAutoFreePtr(const NetLocalAutoFreePtr<T> &) = delete;
     NetLocalAutoFreePtr(NetLocalAutoFreePtr<T> &&) = delete;
     // operator =
-    NetLocalAutoFreePtr<T> &operator = (T *newObj) = delete;
-    NetLocalAutoFreePtr<T> &operator = (const NetLocalAutoFreePtr<T> &other) = delete;
-    NetLocalAutoFreePtr<T> &operator = (NetLocalAutoFreePtr<T> &&other) = delete;
+    NetLocalAutoFreePtr<T> &operator=(T *newObj) = delete;
+    NetLocalAutoFreePtr<T> &operator=(const NetLocalAutoFreePtr<T> &other) = delete;
+    NetLocalAutoFreePtr<T> &operator=(NetLocalAutoFreePtr<T> &&other) = delete;
 
 private:
     T *mObj = nullptr;
@@ -116,11 +118,10 @@ private:
 };
 
 /// ScopeExit 主要功能为作用域退出时执行一些动作，常用于清理.
-template<typename F> class ScopeExit {
+template <typename F>
+class ScopeExit {
 public:
-    ScopeExit(F f, bool active) : mHolder(std::move(f), active)
-    {
-    }
+    ScopeExit(F f, bool active) : mHolder(std::move(f), active) {}
 
     ScopeExit(ScopeExit &&rhs) noexcept : mHolder(std::move(rhs.mHolder))
     {
@@ -150,16 +151,14 @@ public:
 
 private:
     struct FuncHolder : public F {
-        FuncHolder(F f, bool active) : F(std::move(f)), mActive(active)
-        {
-        }
+        FuncHolder(F f, bool active) : F(std::move(f)), mActive(active) {}
 
         FuncHolder(FuncHolder &&rhs) noexcept : F(static_cast<F>(rhs)), mActive(rhs.mActive)
         {
             rhs.mActive = false;
         }
 
-        FuncHolder& operator=(FuncHolder&&) = delete;
+        FuncHolder &operator=(FuncHolder &&) = delete;
 
         bool mActive;
     };
@@ -167,7 +166,8 @@ private:
     FuncHolder mHolder;
 };
 
-template<typename F> auto MakeScopeExit(F f, bool active = true) -> ScopeExit<F>
+template <typename F>
+auto MakeScopeExit(F f, bool active = true) -> ScopeExit<F>
 {
     return ScopeExit<F>(std::move(f), active);
 }
@@ -175,6 +175,6 @@ template<typename F> auto MakeScopeExit(F f, bool active = true) -> ScopeExit<F>
 bool BuffToHexString(void *buff, uint32_t buffSize, std::string &out);
 bool HexStringToBuff(const std::string &str, uint32_t buffSize, void *buff);
 uint32_t GenerateSecureRandomUint32();
-}  // namespace hcom
-}
+} // namespace hcom
+} // namespace ock
 #endif // OCK_RDMA_UTIL_1233432457233_H

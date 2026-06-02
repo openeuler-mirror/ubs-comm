@@ -4,12 +4,12 @@
 #ifndef HCOM_SERVICE_HELPER_H
 #define HCOM_SERVICE_HELPER_H
 
-#include "hcom/hcom_service.h"
-#include "hcom/hcom_service_context.h"
-#include "hcom/hcom_service_channel.h"
-#include "hcom/hcom.h"
 #include "common/perf_test_common.h"
 #include "common/perf_test_config.h"
+#include "hcom/hcom.h"
+#include "hcom/hcom_service.h"
+#include "hcom/hcom_service_channel.h"
+#include "hcom/hcom_service_context.h"
 
 namespace hcom {
 namespace perftest {
@@ -54,6 +54,6 @@ private:
     UBSHcomServiceSendHandler mSendHandler;
     UBSHcomServiceOneSideDoneHandler mOneSideDoneHandler;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 #endif // HCOM_SERVICE_HELPER_H

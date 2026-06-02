@@ -148,8 +148,8 @@ public:
 
     bool IsPresent() const
     {
-        constexpr PgtAddress PRESENT_MASK =
-            static_cast<PgtAddress>(EntryFlags::REGION) | static_cast<PgtAddress>(EntryFlags::DIR);
+        constexpr PgtAddress PRESENT_MASK = static_cast<PgtAddress>(EntryFlags::REGION) |
+                                            static_cast<PgtAddress>(EntryFlags::DIR);
         return (mValue & PRESENT_MASK) != 0;
     }
 
@@ -237,7 +237,7 @@ public:
      */
     explicit NetPgTable(PgDirAllocCb allocCb, PgDirReleaseCb releaseCb)
         : mRegionCount(0),
-          mRootEntry {},
+          mRootEntry{},
           mVirBaseAddr(0),
           mSpaceMask(0),
           mIndexShift(PAGE_SHIFT_MIN)
@@ -266,7 +266,7 @@ public:
         if (mRootEntry.IsPresent()) {
             try {
                 Cleanup();
-            } catch (const std::exception& ex) {
+            } catch (const std::exception &ex) {
                 NN_LOG_ERROR("NetPgTable DeConstructor caught exception in Cleanup: " << ex.what());
             }
         }
@@ -330,11 +330,11 @@ private:
 
     NResult RemovePage(PgtAddress address, uint32_t order, PgtRegion &region);
     NResult UnlinkRegion(PgtAddress address, uint32_t order, PgtDir &pgd, PgtEntry &pte, uint32_t shift,
-        PgtRegion &region);
+                         PgtRegion &region);
 
     void SearchRange(PgtAddress from, PgtAddress to, PgtSearchCb cb, void *arg);
     void SearchSubtree(PgtAddress address, uint32_t order, const PgtEntry &pte, uint32_t shift, PgtSearchCb cb,
-        void *arg, PgtRegion *&lastRegion);
+                       void *arg, PgtRegion *&lastRegion);
 
     void PgtEnsureCapacity(uint32_t order, PgtAddress address);
     bool PgtExpand();
@@ -347,9 +347,9 @@ private:
     void PgtDirRelease(PgtDir *pgd);
 
     void PgtDumpSubtree(uint32_t indent, const PgtEntry &pte, uint32_t pteIndex, PgtAddress base, PgtAddress mask,
-        uint32_t shift);
+                        uint32_t shift);
 
-    PgtEntry mRootEntry {};
+    PgtEntry mRootEntry{};
     PgtAddress mVirBaseAddr = 0;
     PgtAddress mSpaceMask = 0;
     uint32_t mIndexShift = 0;
@@ -360,7 +360,7 @@ private:
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

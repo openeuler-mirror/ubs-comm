@@ -17,18 +17,18 @@
 #include <mutex>
 #include <string>
 
-#include "hcom_def.h"
-#include "hcom_log.h"
-#include "api/hcom_service_def.h"
 #include "api/hcom_service.h"
 #include "api/hcom_service_channel.h"
+#include "api/hcom_service_def.h"
+#include "hcom_def.h"
+#include "hcom_log.h"
 #include "hcom_obj_statistics.h"
-#include "service_periodic_manager.h"
 #include "net_common.h"
 #include "net_load_balance.h"
 #include "net_oob.h"
 #include "net_oob_ssl.h"
 #include "net_pgtable.h"
+#include "service_periodic_manager.h"
 
 namespace ock {
 namespace hcom {
@@ -98,9 +98,9 @@ public:
             groupInfo.threadCount = opt.workerGroupThreadCount;
             groupInfo.groupId = opt.workerGroupId;
             groupInfo.cpuIdsRange = opt.workerGroupCpuIdsRange;
-            std::vector<UBSHcomWorkerGroupInfo> workerInfoVec {};
+            std::vector<UBSHcomWorkerGroupInfo> workerInfoVec{};
             workerInfoVec.emplace_back(groupInfo);
-            mOptions.workerGroupInfos.emplace_back(workerInfoVec);      // UBSHcomService::Instance lock
+            mOptions.workerGroupInfos.emplace_back(workerInfoVec); // UBSHcomService::Instance lock
         }
         OBJ_GC_INCREASE(HcomServiceImp);
     }
@@ -229,8 +229,8 @@ public:
      * @param priority 同线程nice值，范围[-20,19]，-20优先级最高，19优先级最低
      * @param multirailIdx 该workerGroup绑定的rail
      */
-    void AddWorkerGroup(uint16_t workerGroupId, uint32_t threadCount,
-        const std::pair<uint32_t, uint32_t> &cpuIdsRange, int8_t priority = 0, uint16_t multirailIdx = 0) override;
+    void AddWorkerGroup(uint16_t workerGroupId, uint32_t threadCount, const std::pair<uint32_t, uint32_t> &cpuIdsRange,
+                        int8_t priority = 0, uint16_t multirailIdx = 0) override;
 
     /**
      * @brief 增加监听器，支持监听多个url
@@ -404,15 +404,15 @@ private:
     SerResult CreatePeriodicMgr();
     SerResult CreateCtxMemPool();
     SerResult DoConnect(const std::string &serverUrl, SerConnInfo &opt, const std::string &payLoad,
-        UBSHcomChannelPtr &tmpChannel);
+                        UBSHcomChannelPtr &tmpChannel);
     SerResult DoConnectInner(const std::string &serverUrl, SerConnInfo &opt, const std::string &payLoad,
                              std::vector<UBSHcomNetEndpointPtr> &epVector, uint32_t &totalBandWidth);
     SerResult ChooseDriver(OOBTCPConnection &conn, UBSHcomNetDriver *&driver);
-    void DoChooseDriver(uint8_t devInex, uint8_t bandWidth,
-        int8_t &selectDevIndex, uint8_t &selectBandWidth, UBSHcomNetDriver *&driver);
+    void DoChooseDriver(uint8_t devInex, uint8_t bandWidth, int8_t &selectDevIndex, uint8_t &selectBandWidth,
+                        UBSHcomNetDriver *&driver);
 
     void ConvertHcomSerImpOptsToHcomDriOpts(const HcomServiceImpOptions &serviceOpt,
-        UBSHcomNetDriverOptions &driverOpt);
+                                            UBSHcomNetDriverOptions &driverOpt);
     void RegisterDriverCb();
     bool RunRequestCallback(UBSHcomChannel *channel, const UBSHcomRequestContext &ctx, UBSHcomServiceContext &context);
 
@@ -427,21 +427,21 @@ private:
     SerResult GenerateUuid(const std::string &ipInfo, uint64_t channelId, std::string &uuid);
     SerResult GenerateUuid(uint32_t ip, uint64_t channelId, std::string &uuid);
     int32_t ServiceNewChannel(const std::string &ipPort, SerConnInfo &connInfo, const std::string &userPayLoad,
-        std::vector<UBSHcomNetEndpointPtr> &ep);
+                              std::vector<UBSHcomNetEndpointPtr> &ep);
     int32_t ServiceHandleNewEndPoint(const std::string &ipPort, const UBSHcomNetEndpointPtr &newEp,
-        const std::string &payload);
-    SerResult EmplaceNewEndpoint(const UBSHcomNetEndpointPtr &newEp, ConnectingEpInfoPtr &epInfo,
-        SerConnInfo &connInfo, std::string &uuid);
+                                     const std::string &payload);
+    SerResult EmplaceNewEndpoint(const UBSHcomNetEndpointPtr &newEp, ConnectingEpInfoPtr &epInfo, SerConnInfo &connInfo,
+                                 std::string &uuid);
     void ServiceEndPointBroken(const UBSHcomNetEndpointPtr &netEp);
     int32_t ServiceRequestReceived(const UBSHcomRequestContext &ctx);
     int32_t ServiceRequestPosted(const UBSHcomRequestContext &ctx);
     int32_t ServiceOneSideDone(const UBSHcomRequestContext &ctx);
     int32_t ServiceSecInfoProvider(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output,
-        uint32_t &outLen, bool &needAutoFree);
+                                   uint32_t &outLen, bool &needAutoFree);
     int32_t ServiceSecInfoValidator(uint64_t ctx, int64_t flag, const char *input, uint32_t inputLen);
     SerResult ExchangeTimestamp(UBSHcomChannel *channel);
     int ServiceExchangeTimeStampHandle(UBSHcomServiceContext &ctx);
-    std::string GetFilteredDeviceIP(const std::string& ipMask);
+    std::string GetFilteredDeviceIP(const std::string &ipMask);
     /**
      * @brief MultiRail模式下注册的Connection事件处理函数
      *
@@ -508,18 +508,18 @@ private:
     std::mutex mNewEpMutex;
     std::mutex mChannelMutex;
 
-    std::map<std::string, ConnectingEpInfoPtr> mNewEpMap;   // temporary storage eps until create channel
-    std::map<uint64_t, ConnectingSecInfo> mSecInfoMap;      // temporary storage secInfo
+    std::map<std::string, ConnectingEpInfoPtr> mNewEpMap; // temporary storage eps until create channel
+    std::map<uint64_t, ConnectingSecInfo> mSecInfoMap;    // temporary storage secInfo
     std::map<std::string, UBSHcomChannelPtr> mChannelMap;
-    std::vector<NetOOBServer *> mOobServers;    //  oob server need to be configed when enable multirail
-    std::map<uint8_t, uint8_t> mDriverPair;    /* local driver Index and remote driver Index map have been connected
+    std::vector<NetOOBServer *> mOobServers; //  oob server need to be configed when enable multirail
+    std::map<uint8_t, uint8_t> mDriverPair;  /* local driver Index and remote driver Index map have been connected
                                                     to each other */
-    std::vector<uint8_t> mUseId;               /* local driver Index has been used */
+    std::vector<uint8_t> mUseId;             /* local driver Index has been used */
     uint32_t mDriverIndex = 0;
     netPgTablePtr mPgtable = nullptr;
-    bool mEnableMrCache = false;        //  mr into pgTable for management
+    bool mEnableMrCache = false; //  mr into pgTable for management
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_SERVICE_V2_HCOM_SERVICE_IMP_H_

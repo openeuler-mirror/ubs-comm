@@ -15,12 +15,12 @@
 #include "securec.h"
 
 #include "hcom_service_channel.h"
-#include "hcom_service_def.h"
 #include "hcom_service_context.h"
+#include "hcom_service_def.h"
 #include "net_common.h"
 #include "net_crc32.h"
-#include "net_trace.h"
 #include "net_monotonic.h"
+#include "net_trace.h"
 
 namespace ock {
 namespace hcom {
@@ -85,10 +85,8 @@ inline bool IsNeedInvokeCallback(const UBSHcomRequestContext &ctx)
         return true;
     }
 
-    if (ctx.OpType() == UBSHcomRequestContext::NN_SENT ||
-        ctx.OpType() == UBSHcomRequestContext::NN_SENT_RAW ||
-        ctx.OpType() == UBSHcomRequestContext::NN_WRITTEN ||
-        ctx.OpType() == UBSHcomRequestContext::NN_READ) {
+    if (ctx.OpType() == UBSHcomRequestContext::NN_SENT || ctx.OpType() == UBSHcomRequestContext::NN_SENT_RAW ||
+        ctx.OpType() == UBSHcomRequestContext::NN_WRITTEN || ctx.OpType() == UBSHcomRequestContext::NN_READ) {
         return GetServiceTransNeedPostedCall(const_cast<char *>(ctx.OriginalRequest().upCtxData));
     } else if (ctx.OpType() == UBSHcomRequestContext::NN_SENT_RAW_SGL ||
                ctx.OpType() == UBSHcomRequestContext::NN_SGL_WRITTEN ||
@@ -108,7 +106,8 @@ inline bool IsNeedInvokeCallback(const UBSHcomRequestContext &ctx)
  * @return Callback*
  * @note see @ref NewCallback.
  */
-template <typename... Args> Callback *NewPermanentCallback(Args... args)
+template <typename... Args>
+Callback *NewPermanentCallback(Args... args)
 {
     auto closure = std::bind(args...);
     return new (std::nothrow) InnerClosureCallback<decltype(closure)>(std::move(closure), false);
@@ -116,9 +115,9 @@ template <typename... Args> Callback *NewPermanentCallback(Args... args)
 
 class AsyncClosureCallback : public Callback {
 public:
-    explicit AsyncClosureCallback(Callback *function, uint16_t mFinishCnt)
-        : mFunction(function), mTotalTime(mFinishCnt)
-    {}
+    explicit AsyncClosureCallback(Callback *function, uint16_t mFinishCnt) : mFunction(function), mTotalTime(mFinishCnt)
+    {
+    }
 
     void Run(UBSHcomServiceContext &context) override
     {
@@ -178,7 +177,9 @@ struct SerConnInfo {
 
     SerConnInfo() = default;
     SerConnInfo(uint32_t v, uint64_t id, UBSHcomChannelBrokenPolicy p, const UBSHcomConnectOptions &opt)
-        : version(v), channelId(id), policy(p)
+        : version(v),
+          channelId(id),
+          policy(p)
     {
         options.clientGroupId = opt.clientGroupId;
         options.serverGroupId = opt.serverGroupId;
@@ -188,7 +189,7 @@ struct SerConnInfo {
         options.cbType = opt.cbType;
     }
     SerConnInfo(uint32_t v, uint64_t id, uint16_t driverSize, UBSHcomChannelBrokenPolicy p,
-        const UBSHcomConnectOptions &opt)
+                const UBSHcomConnectOptions &opt)
         : version(v),
           channelId(id),
           driverSize(driverSize),
@@ -253,7 +254,8 @@ class HcomConnectingEpInfo {
 public:
     HcomConnectingEpInfo() = default;
     HcomConnectingEpInfo(std::string &id, const UBSHcomNetEndpointPtr &ep, SerConnInfo &info)
-        : mConnInfo(info), mUuid(id)
+        : mConnInfo(info),
+          mUuid(id)
     {
         std::lock_guard<std::mutex> lockerEp(mLock);
         mEpState[0].Set(NEP_ESTABLISHED);
@@ -280,11 +282,11 @@ public:
     bool Compare(const SerConnInfo &info) const;
 
     std::mutex mLock;
-    SerConnInfo mConnInfo {};
-    UBSHcomNetAtomicState<ConnectingEpState> mConnState {};
-    UBSHcomNetAtomicState<UBSHcomNetEndPointState> mEpState[CHANNEL_EP_MAX_NUM] {};
-    std::string mUuid {};
-    std::vector<UBSHcomNetEndpointPtr> mEpVector {};
+    SerConnInfo mConnInfo{};
+    UBSHcomNetAtomicState<ConnectingEpState> mConnState{};
+    UBSHcomNetAtomicState<UBSHcomNetEndPointState> mEpState[CHANNEL_EP_MAX_NUM]{};
+    std::string mUuid{};
+    std::vector<UBSHcomNetEndpointPtr> mEpVector{};
 
 public:
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
@@ -311,8 +313,8 @@ public:
 union Ep2ChanUpCtx {
     struct {
         uint64_t connected : 1; /* flag for connecting or connected, store different type ptr */
-        uint64_t epIdx : 5; /* endpoint index, range [0, 31] */
-        uint64_t ptr : 58;  /* pointer to connecting mgr or net channel */
+        uint64_t epIdx : 5;     /* endpoint index, range [0, 31] */
+        uint64_t ptr : 58;      /* pointer to connecting mgr or net channel */
     };
     uint64_t wholeUpCtx = 0; /* whole */
 
@@ -348,10 +350,10 @@ union Ep2ChanUpCtx {
 };
 
 struct RateLimiter {
-    bool triggering = false;                      /* trigger next window flag */
+    bool triggering = false;                                            /* trigger next window flag */
     UBSHcomFlowCtrlLevel level = UBSHcomFlowCtrlLevel::LOW_LEVEL_BLOCK; /* wait level */
-    uint16_t intervalTimeMs = 0;                  /* user config interval time ms, range in [1, 1000] */
-    uint64_t thresholdByte = 0;                   /* user config threshold byte */
+    uint16_t intervalTimeMs = 0; /* user config interval time ms, range in [1, 1000] */
+    uint64_t thresholdByte = 0;  /* user config threshold byte */
 
     uint64_t windowEndTimeMs = 0;  /* in interval time window, end time trace */
     uint64_t windowPassedByte = 0; /* in interval time window, passed byte */
@@ -384,8 +386,7 @@ struct RateLimiter {
         }
 
         if (level == UBSHcomFlowCtrlLevel::HIGH_LEVEL_BLOCK) {
-            while (NetMonotonic::TimeMs() < endTime) {
-            }
+            while (NetMonotonic::TimeMs() < endTime) {}
         } else {
             usleep((endTime - currentTime) * NN_NO1000);
         }
@@ -394,9 +395,7 @@ struct RateLimiter {
     inline void BuildNextWindow()
     {
         std::unique_lock<std::mutex> locker(nextWindowMutex);
-        nextWindowCond.wait(locker, [&]() {
-            return !triggering;
-        });
+        nextWindowCond.wait(locker, [&]() { return !triggering; });
 
         if (NetMonotonic::TimeMs() < windowEndTimeMs) {
             return;
@@ -412,7 +411,7 @@ struct RateLimiter {
 };
 
 struct HcomServiceSelfSyncParam {
-    sem_t sem {};
+    sem_t sem{};
     int result = NN_OK;
 
     HcomServiceSelfSyncParam()
@@ -434,7 +433,7 @@ struct HcomServiceSelfSyncParam {
         if (result != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             NN_LOG_ERROR("Sem wait failed with result " << result << ", errno " << errno << ", reason "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                                        << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
     }
 
@@ -481,14 +480,12 @@ union HcomSeqNo {
         uint32_t realSeq : 24; /* real seq no */
         uint32_t version : 6;  /* request version */
         uint32_t fromFlat : 1; /* allocated from flat or hash map */
-        uint32_t isResp : 1; /* request or reply, 0 for request, 1 for reply */
+        uint32_t isResp : 1;   /* request or reply, 0 for request, 1 for reply */
         /* high address */
     };
     uint32_t wholeSeq = 0;
 
-    explicit HcomSeqNo(uint32_t whole) : wholeSeq(whole)
-    {
-    }
+    explicit HcomSeqNo(uint32_t whole) : wholeSeq(whole) {}
 
     inline void SetValue(uint32_t flat, uint32_t ver, uint32_t seq)
     {
@@ -500,9 +497,8 @@ union HcomSeqNo {
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "HcomSeqNo info=[wholeSeq: " << wholeSeq << ", isResp: " << isResp <<
-            ", fromFlat: " << fromFlat << ", version: " << version <<
-            ", realSeq: " << realSeq << "]";
+        oss << "HcomSeqNo info=[wholeSeq: " << wholeSeq << ", isResp: " << isResp << ", fromFlat: " << fromFlat
+            << ", version: " << version << ", realSeq: " << realSeq << "]";
         return oss.str();
     }
 
@@ -532,8 +528,11 @@ struct HcomConnectTimestamp {
 
     HcomConnectTimestamp() = default;
     HcomConnectTimestamp(uint64_t lTime, uint64_t rTime, uint64_t dTime)
-        : localTimeUs(lTime), remoteTimeUs(rTime), deltaTimeUs(dTime)
-    {}
+        : localTimeUs(lTime),
+          remoteTimeUs(rTime),
+          deltaTimeUs(dTime)
+    {
+    }
 
     uint64_t GetRemoteTimestamp(int16_t timeOutSecond) const;
 };
@@ -550,13 +549,11 @@ struct HcomServiceRndvMessage {
     UBSHcomRequest request{};
 
     HcomServiceRndvMessage() = default;
-    HcomServiceRndvMessage(uint64_t ts, const UBSHcomRequest &req)
-        : timestamp(ts), request(req)
-    {}
+    HcomServiceRndvMessage(uint64_t ts, const UBSHcomRequest &req) : timestamp(ts), request(req) {}
 
     bool IsTimeout() const;
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_SERVICE_V2_SERVICE_COMMON_H_

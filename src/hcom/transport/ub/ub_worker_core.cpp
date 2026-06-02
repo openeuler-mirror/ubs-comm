@@ -15,8 +15,8 @@
 
 #include "hcom_utils.h"
 #include "net_common.h"
-#include "ub_worker.h"
 #include "net_ub_endpoint.h"
+#include "ub_worker.h"
 
 namespace ock {
 namespace hcom {
@@ -41,7 +41,7 @@ std::string &PollingModeToString(UBPollingMode m)
 }
 
 UBWorker::UBWorker(const std::string &name, UBContext *ctx, const UBWorkerOptions &options,
-    const NetMemPoolFixedPtr &memPool, const NetMemPoolFixedPtr &sglMemPool)
+                   const NetMemPoolFixedPtr &memPool, const NetMemPoolFixedPtr &sglMemPool)
     : mName(name),
       mUBContext(ctx),
       mOpCtxMemPool(memPool),
@@ -155,8 +155,8 @@ UResult UBWorker::ReInitializeCQ()
     auto tmpCQ = new (std::nothrow)
         UBJfc(DetailName(), mUBContext, mOptions.workerMode == UB_EVENT_POLLING, reinterpret_cast<uintptr_t>(this));
     if (tmpCQ == nullptr) {
-        NN_LOG_ERROR("Failed to new UBJfc in UBWorker " << DetailName() <<
-            " in reinitialization, probably out of memory");
+        NN_LOG_ERROR("Failed to new UBJfc in UBWorker " << DetailName()
+                                                        << " in reinitialization, probably out of memory");
         return UB_NEW_OBJECT_FAILED;
     }
 
@@ -260,8 +260,8 @@ void UBWorker::DoWithBusyPolling()
             ProcessPollingResult(wc, pollCount, lastBrokenQp, lastErrorWcStatus);
             TRACE_DELAY_END(UB_WORKER_BUSY_POLLING, 0);
         } catch (std::runtime_error &ex) {
-            NN_LOG_WARN("Got runtime incorrect signal in UBWorker::RunInThread '" << ex.what() <<
-                "', ignore and continue");
+            NN_LOG_WARN("Got runtime incorrect signal in UBWorker::RunInThread '" << ex.what()
+                                                                                  << "', ignore and continue");
         } catch (...) {
             NN_LOG_WARN("Got unknown signal in UBWorker::RunInThread, ignore and continue");
         }
@@ -311,15 +311,16 @@ void UBWorker::RunInThread()
     if (mOptions.threadPriority != 0) {
         if (NN_UNLIKELY(setpriority(PRIO_PROCESS, 0, mOptions.threadPriority) != 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to set worker thread priority in ub worker " << mName << ", as " <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_WARN("Unable to set worker thread priority in ub worker "
+                        << mName << ", as " << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         }
     }
 
     mProgressThreadStarted.store(true);
-    NN_LOG_INFO("UBWorker " << DetailName() << ", cpuId: " << mProgressCpuId << ", cq count: " <<
-        ((mUBJfc != nullptr) ? mUBJfc->GetCQCount() : 0) << ", polling batch size: " << mProgressBatchSize <<
-        ", more " << mOptions.ToString() << "] working thread started");
+    NN_LOG_INFO("UBWorker " << DetailName() << ", cpuId: " << mProgressCpuId
+                            << ", cq count: " << ((mUBJfc != nullptr) ? mUBJfc->GetCQCount() : 0)
+                            << ", polling batch size: " << mProgressBatchSize << ", more " << mOptions.ToString()
+                            << "] working thread started");
 
     if (mOptions.workerMode == UB_BUSY_POLLING) {
         DoWithBusyPolling();
@@ -333,7 +334,7 @@ void UBWorker::RunInThread()
 }
 
 UResult UBWorker::Create(const std::string &name, UBContext *ctx, const UBWorkerOptions &options,
-    NetMemPoolFixedPtr memPool, NetMemPoolFixedPtr sglMemPool, UBWorker *&outWorker)
+                         NetMemPoolFixedPtr memPool, NetMemPoolFixedPtr sglMemPool, UBWorker *&outWorker)
 {
     if (ctx == nullptr || name.empty()) {
         NN_LOG_ERROR("Failed to create ub worker as ctx is nullptr or name empty");
@@ -358,7 +359,7 @@ UResult UBWorker::CreateQP(UBJetty *&qp)
     }
 
     JettyOptions jettyOptions(mOptions.qpSendQueueSize, mOptions.qpReceiveQueueSize, mOptions.qpMrSegSize,
-        mOptions.qpMrSegCount, mOptions.slave, mOptions.ubcMode);
+                              mOptions.qpMrSegCount, mOptions.slave, mOptions.ubcMode);
     qp = new (std::nothrow) UBJetty(DetailName(), UBJetty::NewId(), mUBContext, mUBJfc, jettyOptions);
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Failed to create qp with UBWorker " << DetailName() << ", probably out of memory");
@@ -368,6 +369,6 @@ UResult UBWorker::CreateQP(UBJetty *&qp)
     qp->SetUpContext1(reinterpret_cast<uintptr_t>(this));
     return UB_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

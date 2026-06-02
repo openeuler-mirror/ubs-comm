@@ -14,12 +14,12 @@
 #define HTRACE_SERVICE_H
 
 #include <stdint.h>
-#include <memory>
-#include <thread>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
-#include "rpc_server.h"
+#include <thread>
 #include "hcom_err.h"
+#include "rpc_server.h"
 
 namespace ock {
 namespace hcom {
@@ -33,10 +33,11 @@ public:
     int32_t StartUp(const std::string &serverName);
 
     void ShutDown();
+
 private:
     SerCode HandleRequest(const Message &request, Message &response);
     void SentResponse(SerCode result, Message &response);
-    
+
 private:
     std::unique_ptr<RpcServer> mRpcServer = nullptr;
     std::condition_variable mDumpCond;
@@ -47,6 +48,6 @@ private:
     static bool mDumpEnable;
 };
 
-}
-}
-#endif  // HTRACE_SERVICE_H
+} // namespace hcom
+} // namespace ock
+#endif // HTRACE_SERVICE_H

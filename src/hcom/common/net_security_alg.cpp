@@ -72,7 +72,7 @@ NResult AesGcm128::SetEncryptInfo(EVP_CIPHER_CTX *ctx, const unsigned char *key,
 }
 
 NResult AesGcm128::EncryptInner(const unsigned char *key, const unsigned char *aad, const unsigned char *rawData,
-    uint32_t rawLen, unsigned char *cipher, uint32_t &cipherLen)
+                                uint32_t rawLen, unsigned char *cipher, uint32_t &cipherLen)
 {
     EVP_CIPHER_CTX *ctx = HcomSsl::EvpCipherCtxNew();
     if (ctx == nullptr) {
@@ -154,7 +154,7 @@ NResult AesGcm128::SetDecryptInfo(EVP_CIPHER_CTX *ctx, const unsigned char *key,
     if (mCipherSuite == AES_CCM_128) {
         /* if CipherSuite is AES_CCM_128, need set tag */
         if (HcomSsl::EvpCipherCtxCtrl(ctx, HcomSsl::EVP_CTRL_AEAD_SET_TAG, mTagLen,
-            const_cast<unsigned char *>(cipher + mTagOffset)) <= 0) {
+                                      const_cast<unsigned char *>(cipher + mTagOffset)) <= 0) {
             NN_LOG_ERROR("Set TAG failed");
             HcomSsl::EvpCipherCtxFree(ctx);
             return NN_ENCRYPT_FAILED;
@@ -170,7 +170,7 @@ NResult AesGcm128::SetDecryptInfo(EVP_CIPHER_CTX *ctx, const unsigned char *key,
 }
 
 NResult AesGcm128::DecryptInner(const unsigned char *key, const unsigned char *cipher, uint32_t cipherLen,
-    unsigned char *rawData, uint32_t &rawLen)
+                                unsigned char *rawData, uint32_t &rawLen)
 {
     EVP_CIPHER_CTX *ctx = HcomSsl::EvpCipherCtxNew();
     if (ctx == nullptr) {
@@ -208,7 +208,7 @@ NResult AesGcm128::DecryptInner(const unsigned char *key, const unsigned char *c
 
     if (mCipherSuite != AES_CCM_128) {
         if (HcomSsl::EvpCipherCtxCtrl(ctx, HcomSsl::EVP_CTRL_AEAD_SET_TAG, mTagLen,
-            const_cast<unsigned char *>(cipher + mTagOffset)) <= 0) {
+                                      const_cast<unsigned char *>(cipher + mTagOffset)) <= 0) {
             NN_LOG_ERROR("Set TAG failed");
             HcomSsl::EvpCipherCtxFree(ctx);
             return NN_DECRYPT_FAILED;
@@ -231,5 +231,5 @@ NResult AesGcm128::DecryptInner(const unsigned char *key, const unsigned char *c
     NN_LOG_TRACE_INFO("Decrypt data rawLen :" << rawLen << " cipherLen: " << cipherLen);
     return NN_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -19,13 +19,13 @@
 
 namespace ock {
 namespace hcom {
-#define OPCODE_VALIDATION()                                                                               \
-    do {                                                                                                  \
-        if (NN_UNLIKELY(opCode >= MAX_OPCODE)) {                                                          \
-            NN_LOG_ERROR("Failed to post message as opcode is invalid, which should with the range 0~" << \
-                (MAX_OPCODE - 1));                                                                        \
-            return NN_INVALID_OPCODE;                                                                     \
-        }                                                                                                 \
+#define OPCODE_VALIDATION()                                                                            \
+    do {                                                                                               \
+        if (NN_UNLIKELY(opCode >= MAX_OPCODE)) {                                                       \
+            NN_LOG_ERROR("Failed to post message as opcode is invalid, which should with the range 0~" \
+                         << (MAX_OPCODE - 1));                                                         \
+            return NN_INVALID_OPCODE;                                                                  \
+        }                                                                                              \
     } while (0)
 
 #define REQ_SIZE_VALIDATION()                                                                           \
@@ -45,7 +45,7 @@ namespace hcom {
     } while (0)
 
 static __always_inline NResult StateValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    NetDriverSockWithOOB *driver, Sock *sock)
+                                               NetDriverSockWithOOB *driver, Sock *sock)
 {
     if (NN_UNLIKELY(!state.Compare(NEP_ESTABLISHED))) {
         NN_LOG_ERROR("Endpoint " << id << " is not established, state is " << UBSHcomNEPStateToString(state.Get()));
@@ -74,7 +74,7 @@ static __always_inline NResult BuffValidation(const UBSHcomNetTransRequest &requ
 }
 
 static __always_inline NResult TwoSideSglValidation(const UBSHcomNetTransSglRequest &request,
-    NetDriverSockWithOOB *driver, uint32_t segSize, size_t &totalSize)
+                                                    NetDriverSockWithOOB *driver, uint32_t segSize, size_t &totalSize)
 {
     if (NN_UNLIKELY(request.upCtxSize > sizeof(SockOpContextInfo::upCtx))) {
         NN_LOG_ERROR("Sock failed to post message as upCtxSize > " << sizeof(SockOpContextInfo::upCtx));
@@ -95,8 +95,8 @@ static __always_inline NResult TwoSideSglValidation(const UBSHcomNetTransSglRequ
     }
 
     if (NN_UNLIKELY(totalSize < NN_NO1 || totalSize > segSize)) {
-        NN_LOG_ERROR("Sock Failed to post raw sgl message as size " << totalSize <<
-            " is too large, use one side instead");
+        NN_LOG_ERROR("Sock Failed to post raw sgl message as size " << totalSize
+                                                                    << " is too large, use one side instead");
         return NN_INVALID_PARAM;
     }
     return NN_OK;
@@ -117,7 +117,7 @@ static __always_inline NResult OneSideValidation(const UBSHcomNetTransRequest &r
 }
 
 static __always_inline NResult OneSideSglValidation(const UBSHcomNetTransSglRequest &request,
-    NetDriverSockWithOOB *driver, size_t &totalSize)
+                                                    NetDriverSockWithOOB *driver, size_t &totalSize)
 {
     if (NN_UNLIKELY(request.upCtxSize > sizeof(SockOpContextInfo::upCtx))) {
         NN_LOG_ERROR("Failed to post message as upCtxSize > " << sizeof(SockOpContextInfo::upCtx));
@@ -131,7 +131,7 @@ static __always_inline NResult OneSideSglValidation(const UBSHcomNetTransSglRequ
 
     for (uint16_t i = 0; i < request.iovCount; i++) {
         if (NN_UNLIKELY(NN_OK != driver->ValidateMemoryRegion(request.iov[i].lKey, request.iov[i].lAddress,
-            request.iov[i].size))) {
+                                                              request.iov[i].size))) {
             NN_LOG_ERROR("Invalid MemoryRegion or lKey in iov of sgl request");
             return NN_INVALID_LKEY;
         }
@@ -139,7 +139,7 @@ static __always_inline NResult OneSideSglValidation(const UBSHcomNetTransSglRequ
     }
     return NN_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // OCK_HCOM_SOCK_VALIDATION_H

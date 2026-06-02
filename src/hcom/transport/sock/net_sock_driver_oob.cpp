@@ -14,11 +14,11 @@
 #include "hcom_err.h"
 #include "hcom_log.h"
 #include "net_oob.h"
+#include "net_oob_secure.h"
 #include "net_oob_ssl.h"
-#include "net_sock_sync_endpoint.h"
 #include "net_sock_async_endpoint.h"
 #include "net_sock_common.h"
-#include "net_oob_secure.h"
+#include "net_sock_sync_endpoint.h"
 
 namespace ock {
 namespace hcom {
@@ -138,21 +138,21 @@ NResult NetDriverSockWithOOB::ValidateOptions()
 {
     /* validate param related to device IpMask for RDMA and Sock */
     if (NN_UNLIKELY(!ValidateArrayOptions(mOptions.netDeviceIpMask, NN_NO256))) {
-        NN_LOG_ERROR("Option 'netDeviceIpMask' is invalid, " << mOptions.netDeviceIpMask <<
-            " is set in driver,the Array max length is 256.");
+        NN_LOG_ERROR("Option 'netDeviceIpMask' is invalid, " << mOptions.netDeviceIpMask
+                                                             << " is set in driver,the Array max length is 256.");
         return NN_INVALID_PARAM;
     }
 
     /* validate params related to tcp connection send and receive buffer size in kernel for Sock */
     if (NN_UNLIKELY(mOptions.tcpSendBufSize > NN_NO4096)) {
-        NN_LOG_ERROR("Option 'tcpSendBufSize is invalid, " << mOptions.tcpSendBufSize <<
-            " is set in driver, the valid value range is 0 ~ 4MB");
+        NN_LOG_ERROR("Option 'tcpSendBufSize is invalid, " << mOptions.tcpSendBufSize
+                                                           << " is set in driver, the valid value range is 0 ~ 4MB");
         return NN_INVALID_PARAM;
     }
 
     if (NN_UNLIKELY(mOptions.tcpReceiveBufSize > NN_NO4096)) {
-        NN_LOG_ERROR("Option 'tcpReceiveBufSize is invalid, " << mOptions.tcpReceiveBufSize <<
-            " is set in driver, the valid value range is 0 ~ 4MB");
+        NN_LOG_ERROR("Option 'tcpReceiveBufSize is invalid, " << mOptions.tcpReceiveBufSize
+                                                              << " is set in driver, the valid value range is 0 ~ 4MB");
         return NN_INVALID_PARAM;
     }
 
@@ -212,9 +212,9 @@ NResult NetDriverSockWithOOB::CreateWorkers()
     if (!(NetFunc::NN_ParseWorkersGroups(mOptions.WorkGroups(), workerGroups)) ||
         !(NetFunc::NN_ParseWorkerGroupsCpus(mOptions.WorkerGroupCpus(), workerGroupCpus)) ||
         !(NetFunc::NN_FinalizeWorkerGroupCpus(workerGroups, workerGroupCpus, true, flatWorkerCpus)) ||
-        !(NetFunc::NN_ParseWorkersGroupsThreadPriority(mOptions.WorkerGroupThreadPriority(),
-        workerThreadPriority, workerGroups.size()))) {
-            NN_LOG_ERROR("[Sock] Failed to parse worker or cpu groups");
+        !(NetFunc::NN_ParseWorkersGroupsThreadPriority(mOptions.WorkerGroupThreadPriority(), workerThreadPriority,
+                                                       workerGroups.size()))) {
+        NN_LOG_ERROR("[Sock] Failed to parse worker or cpu groups");
         return NN_INVALID_PARAM;
     }
 
@@ -222,13 +222,13 @@ NResult NetDriverSockWithOOB::CreateWorkers()
     options.SetValue(mOptions, mStartOobSvr);
     if ((mOptions.workerThreadPriority != 0) && (!workerThreadPriority.empty())) {
         NN_LOG_WARN("Driver options 'workerThreadPriority' and 'workerGroupsThreadPriority' set all, preferential use "
-            "'workerGroupsThreadPriority'");
+                    "'workerGroupsThreadPriority'");
     }
     /* create workers */
     mWorkers.reserve(flatWorkerCpus.size());
     uint32_t groupIndex = 0;
     uint16_t totalWorkerIndex = 0;
-    UBSHcomNetWorkerIndex workerIndex {};
+    UBSHcomNetWorkerIndex workerIndex{};
     for (auto item : workerGroups) {
         /* The left of mWorkerGroups is the index of each group's first worker in the mWorkers */
         mWorkerGroups.emplace_back(totalWorkerIndex, item);
@@ -304,8 +304,8 @@ NResult NetDriverSockWithOOB::CreateOpCtxMemPool()
     auto result = mOpCtxMemPool->Initialize();
     if (result != NN_OK) {
         mOpCtxMemPool.Set(nullptr);
-        NN_LOG_ERROR("Failed to initialize memory pool for sock op context pool " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to initialize memory pool for sock op context pool " << mName
+                                                                                  << ", probably out of memory");
         return result;
     }
 
@@ -320,16 +320,16 @@ NResult NetDriverSockWithOOB::CreateSglCtxMemPool()
     options.tcExpandBlkCnt = NN_NO64;
     mSglCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mSglCtxMemPool.Get() == nullptr) {
-        NN_LOG_ERROR("Failed to create memory pool for sgl op context in driver " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to create memory pool for sgl op context in driver " << mName
+                                                                                  << ", probably out of memory");
         return NN_INVALID_PARAM;
     }
 
     auto result = mSglCtxMemPool->Initialize();
     if (result != NN_OK) {
         mSglCtxMemPool.Set(nullptr);
-        NN_LOG_ERROR("Failed to initialize memory pool for sgl op context in driver " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to initialize memory pool for sgl op context in driver " << mName
+                                                                                      << ", probably out of memory");
         return result;
     }
 
@@ -344,16 +344,16 @@ NResult NetDriverSockWithOOB::CreateHeaderReqMemPool()
     options.tcExpandBlkCnt = NN_NO64;
     mHeaderReqMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mHeaderReqMemPool.Get() == nullptr) {
-        NN_LOG_ERROR("Failed to create memory pool for header request context in driver " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to create memory pool for header request context in driver "
+                     << mName << ", probably out of memory");
         return NN_INVALID_PARAM;
     }
 
     auto result = mHeaderReqMemPool->Initialize();
     if (result != NN_OK) {
         mHeaderReqMemPool.Set(nullptr);
-        NN_LOG_ERROR("Failed to initialize memory pool for header request context in driver " << mName <<
-            ", probably out of memory");
+        NN_LOG_ERROR("Failed to initialize memory pool for header request context in driver "
+                     << mName << ", probably out of memory");
         return result;
     }
 
@@ -364,8 +364,9 @@ NResult NetDriverSockWithOOB::CreateSendMr()
 {
     NResult result = NN_OK;
     // create mr pool for send/receive and initialize
-    if (NN_UNLIKELY((result = NormalMemoryRegionFixedBuffer::Create(mName, mOptions.mrSendReceiveSegSize,
-        mOptions.mrSendReceiveSegCount, mSockDriverSendMR)) != NN_OK)) {
+    if (NN_UNLIKELY((result = NormalMemoryRegionFixedBuffer::Create(
+                         mName, mOptions.mrSendReceiveSegSize, mOptions.mrSendReceiveSegCount, mSockDriverSendMR)) !=
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to create mr for send/receive in NetDriverSock " << mName << ", result " << result);
         return result;
     }
@@ -560,7 +561,7 @@ void NetDriverSockWithOOB::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
     mMrChecker.UnRegister(mr->GetLKey());
 
     auto tmp = mr.ToChild<NormalMemoryRegion>();
-    if (NN_UNLIKELY(tmp == nullptr))  {
+    if (NN_UNLIKELY(tmp == nullptr)) {
         NN_LOG_WARN("Invalid operation to dynamic cast");
         return;
     }
@@ -568,7 +569,7 @@ void NetDriverSockWithOOB::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
 }
 
 NResult NetDriverSockWithOOB::Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags,
-    uint8_t serverGrpNo, uint8_t clientGrpNo)
+                                      uint8_t serverGrpNo, uint8_t clientGrpNo)
 {
     if (mOptions.oobType == NET_OOB_TCP) {
         return Connect(mOobIp, mOobPort, payload, ep, flags, serverGrpNo, clientGrpNo, 0);
@@ -579,7 +580,8 @@ NResult NetDriverSockWithOOB::Connect(const std::string &payload, UBSHcomNetEndp
 }
 
 NResult NetDriverSockWithOOB::Connect(const std::string &serverUrl, const std::string &payload,
-    UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
+                                      UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo,
+                                      uint8_t clientGrpNo, uint64_t ctx)
 {
     if (NN_UNLIKELY(!mInited.load())) {
         NN_LOG_ERROR("[Sock] Driver " << mName << " is not initialized");
@@ -615,8 +617,8 @@ NResult NetDriverSockWithOOB::Connect(const std::string &serverUrl, const std::s
 
     OOBTCPClientPtr clt;
     if (mEnableTls) {
-        auto oobSSLClient = new (std::nothrow) OOBSSLClient(type, ip, port,
-            mTlsPrivateKeyCB, mTlsCertCB, mTlsCaCallback);
+        auto oobSSLClient = new (std::nothrow)
+            OOBSSLClient(type, ip, port, mTlsPrivateKeyCB, mTlsCertCB, mTlsCaCallback);
         NN_ASSERT_LOG_RETURN(oobSSLClient != nullptr, NN_NEW_OBJECT_FAILED)
         oobSSLClient->SetTlsOptions(mOptions);
         oobSSLClient->SetPSKCallback(mPskFindSessionCb, mPskUseSessionCb);
@@ -633,7 +635,8 @@ NResult NetDriverSockWithOOB::Connect(const std::string &serverUrl, const std::s
 }
 
 NResult NetDriverSockWithOOB::Connect(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-    UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
+                                      UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo,
+                                      uint8_t clientGrpNo, uint64_t ctx)
 {
     if (NN_UNLIKELY(!mInited.load())) {
         NN_LOG_ERROR("Sock Driver " << mName << " is not initialized");
@@ -657,8 +660,8 @@ NResult NetDriverSockWithOOB::Connect(const std::string &oobIp, uint16_t oobPort
 
     OOBTCPClientPtr clt;
     if (mEnableTls) {
-        auto oobSSLClient = new (std::nothrow) OOBSSLClient(mOptions.oobType, oobIp, oobPort, mTlsPrivateKeyCB,
-            mTlsCertCB, mTlsCaCallback);
+        auto oobSSLClient = new (std::nothrow)
+            OOBSSLClient(mOptions.oobType, oobIp, oobPort, mTlsPrivateKeyCB, mTlsCertCB, mTlsCaCallback);
         NN_ASSERT_LOG_RETURN(oobSSLClient != nullptr, NN_NEW_OBJECT_FAILED)
         oobSSLClient->SetTlsOptions(mOptions);
         oobSSLClient->SetPSKCallback(mPskFindSessionCb, mPskUseSessionCb);
@@ -675,9 +678,10 @@ NResult NetDriverSockWithOOB::Connect(const std::string &oobIp, uint16_t oobPort
 }
 
 NResult NetDriverSockWithOOB::Connect(const OOBTCPClientPtr &client, const std::string &payload,
-    UBSHcomNetEndpointPtr &outEp, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
+                                      UBSHcomNetEndpointPtr &outEp, uint8_t serverGrpNo, uint8_t clientGrpNo,
+                                      uint64_t ctx)
 {
-     /* try to connect to oob server */
+    /* try to connect to oob server */
     OOBTCPConnection *conn = nullptr;
     NResult result = NN_OK;
     if ((result = client->Connect(conn)) != 0) {
@@ -693,22 +697,22 @@ NResult NetDriverSockWithOOB::Connect(const OOBTCPClientPtr &client, const std::
     }
 
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBClient(mSecInfoProvider, mSecInfoValidator, conn, mName, ctx,
-        mOptions.secType))) {
+                                                            mOptions.secType))) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
     /* send connection header */
-    ConnectHeader header {};
-    SetConnHeader(header, mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion,
-                  mMinorVersion, mOptions.tlsVersion);
+    ConnectHeader header{};
+    SetConnHeader(header, mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion, mMinorVersion,
+                  mOptions.tlsVersion);
     if (NN_UNLIKELY((result = conn->Send(&header, sizeof(ConnectHeader))) != NN_OK)) {
-        NN_LOG_ERROR("Sock Failed to send conn header to oob server " << client->GetServerIp() << ":" <<\
-            client->GetServerPort() << " in driver " << mName);
+        NN_LOG_ERROR("Sock Failed to send conn header to oob server "
+                     << client->GetServerIp() << ":" << client->GetServerPort() << " in driver " << mName);
         return NN_ERROR;
     }
 
     /* receive connect response and peer sock id */
-    ConnRespWithUId respWithUId {};
+    ConnRespWithUId respWithUId{};
     void *tmpBuff = &respWithUId;
     if (NN_UNLIKELY((result = conn->Receive(tmpBuff, sizeof(ConnRespWithUId))) != NN_OK)) {
         return result;
@@ -721,19 +725,19 @@ NResult NetDriverSockWithOOB::Connect(const OOBTCPClientPtr &client, const std::
             NN_LOG_ERROR("Sock Failed to pass server magic validation " << mName << ", result " << NN_CONNECT_REFUSED);
             return NN_CONNECT_REFUSED;
         case PROTOCOL_MISMATCH:
-            NN_LOG_ERROR("Sock Failed to pass server protocol validation " << mName << ", result " <<
-                NN_CONNECT_PROTOCOL_MISMATCH);
+            NN_LOG_ERROR("Sock Failed to pass server protocol validation " << mName << ", result "
+                                                                           << NN_CONNECT_PROTOCOL_MISMATCH);
             return NN_CONNECT_PROTOCOL_MISMATCH;
         case SERVER_INTERNAL_ERROR:
             NN_LOG_ERROR("Sock Server error happened, connection refused " << mName << ", result " << resp);
             return NN_ERROR;
         case VERSION_MISMATCH:
-            NN_LOG_ERROR("Sock Failed to pass server version validation " << mName << ", result " <<
-                NN_CONNECT_REFUSED);
+            NN_LOG_ERROR("Sock Failed to pass server version validation " << mName << ", result "
+                                                                          << NN_CONNECT_REFUSED);
             return NN_CONNECT_REFUSED;
         case TLS_VERSION_MISMATCH:
-            NN_LOG_ERROR("Sock Failed to pass server tls version validation " << mName << ", result " <<
-                NN_CONNECT_REFUSED);
+            NN_LOG_ERROR("Sock Failed to pass server tls version validation " << mName << ", result "
+                                                                              << NN_CONNECT_REFUSED);
             return NN_CONNECT_REFUSED;
         case OK:
         case OK_PROTOCOL_TCP:
@@ -762,7 +766,7 @@ NResult NetDriverSockWithOOB::Connect(const OOBTCPClientPtr &client, const std::
     NN_ASSERT_LOG_RETURN(worker != nullptr, NN_ERROR);
 
     /* create sock and initialize */
-    SockOptions options {};
+    SockOptions options{};
     options.sendQueueSize = mOptions.qpSendQueueSize;
     Sock *sock;
     int fdConn = conn->TransferFd();
@@ -786,23 +790,23 @@ NResult NetDriverSockWithOOB::Connect(const OOBTCPClientPtr &client, const std::
     }
 
     /* send real head and payload */
-    UBSHcomNetTransHeader workerFirstReq {};
+    UBSHcomNetTransHeader workerFirstReq{};
     workerFirstReq.flags = NTH_TWO_SIDE;
     workerFirstReq.opCode = SockExchangeOp::REAL_CONNECT;
     workerFirstReq.dataLength = payload.length();
     workerFirstReq.seqNo = header.wholeHeader[0]; /* use reqNo */
     /* finally fill header crc */
     workerFirstReq.headerCrc = NetFunc::CalcHeaderCrc32(workerFirstReq);
-    if (NN_UNLIKELY((result = sock->SendRealConnHeader(fdConn, &workerFirstReq,
-        sizeof(UBSHcomNetTransHeader))) != NN_OK)) {
+    if (NN_UNLIKELY((result = sock->SendRealConnHeader(fdConn, &workerFirstReq, sizeof(UBSHcomNetTransHeader))) !=
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to send payload header to peer at " << conn->GetIpAndPort() << " in driver " << mName);
         return result;
     }
 
     if (!payload.empty()) {
         if ((result = sock->Send(payload.c_str(), payload.length())) != NN_OK) {
-            NN_LOG_ERROR("Failed to send payload to peer at " << conn->GetIpAndPort() << " in driver " << mName <<
-                ", errno " << result);
+            NN_LOG_ERROR("Failed to send payload to peer at " << conn->GetIpAndPort() << " in driver " << mName
+                                                              << ", errno " << result);
             return result;
         }
     }
@@ -874,13 +878,14 @@ NResult NetDriverSockWithOOB::Connect(const OOBTCPClientPtr &client, const std::
     newEp->State().Set(NEP_ESTABLISHED);
     outEp.Set(newEp.Get());
 
-    NN_LOG_INFO("New connection to " << client->GetServerIp() << ":" << client->GetServerPort() <<
-        " established, async ep id " << outEp->Id() << " worker info " << worker->DetailName());
+    NN_LOG_INFO("New connection to " << client->GetServerIp() << ":" << client->GetServerPort()
+                                     << " established, async ep id " << outEp->Id() << " worker info "
+                                     << worker->DetailName());
     return NN_OK;
 }
 
 NResult NetDriverSockWithOOB::ConnectSyncEp(const OOBTCPClientPtr &client, const std::string &payload,
-    UBSHcomNetEndpointPtr &outEp, uint8_t serverGrpNo, uint64_t ctx)
+                                            UBSHcomNetEndpointPtr &outEp, uint8_t serverGrpNo, uint64_t ctx)
 {
     if (NN_UNLIKELY(!mInited)) {
         NN_LOG_ERROR("Driver " << mName << " is not initialized");
@@ -903,22 +908,22 @@ NResult NetDriverSockWithOOB::ConnectSyncEp(const OOBTCPClientPtr &client, const
     }
 
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBClient(mSecInfoProvider, mSecInfoValidator, conn, mName, ctx,
-        mOptions.secType))) {
+                                                            mOptions.secType))) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
     /* send connection header */
-    ConnectHeader header {};
+    ConnectHeader header{};
 
     SetConnHeader(header, mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion, mMinorVersion,
-        mOptions.tlsVersion);
+                  mOptions.tlsVersion);
     if (NN_UNLIKELY((result = conn->Send(&header, sizeof(ConnectHeader))) != NN_OK)) {
-        NN_LOG_ERROR("Sock Failed to send conn header to oob server " << client->GetServerIp() << ":"
-            << client->GetServerPort() << " in Driver " << mName);
+        NN_LOG_ERROR("Sock Failed to send conn header to oob server "
+                     << client->GetServerIp() << ":" << client->GetServerPort() << " in Driver " << mName);
         return NN_ERROR;
     }
 
     /* receive connect response and peer ep id */
-    ConnRespWithUId respWithUId {};
+    ConnRespWithUId respWithUId{};
     void *tmpBuf = &respWithUId;
     if (NN_UNLIKELY((result = conn->Receive(tmpBuf, sizeof(ConnRespWithUId))) != NN_OK)) {
         return result;
@@ -958,7 +963,7 @@ NResult NetDriverSockWithOOB::ConnectSyncEp(const OOBTCPClientPtr &client, const
     int fdConn = conn->TransferFd();
 
     /* create sock and initialize */
-    SockOptions option {};
+    SockOptions option{};
     option.sendQueueSize = mOptions.qpSendQueueSize;
     Sock *sock;
     if (mEnableTls) {
@@ -983,7 +988,7 @@ NResult NetDriverSockWithOOB::ConnectSyncEp(const OOBTCPClientPtr &client, const
     }
 
     /* send real head and payload */
-    UBSHcomNetTransHeader workerFirstReq {};
+    UBSHcomNetTransHeader workerFirstReq{};
     workerFirstReq.opCode = SockExchangeOp::REAL_CONNECT;
     workerFirstReq.flags = NTH_TWO_SIDE;
     workerFirstReq.dataLength = payload.length();
@@ -992,8 +997,8 @@ NResult NetDriverSockWithOOB::ConnectSyncEp(const OOBTCPClientPtr &client, const
     /* finally fill header crc */
     workerFirstReq.headerCrc = NetFunc::CalcHeaderCrc32(workerFirstReq);
 
-    if (NN_UNLIKELY((result = sock->SendRealConnHeader(fdConn, &workerFirstReq,
-        sizeof(UBSHcomNetTransHeader))) != NN_OK)) {
+    if (NN_UNLIKELY((result = sock->SendRealConnHeader(fdConn, &workerFirstReq, sizeof(UBSHcomNetTransHeader))) !=
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to send payload header to peer at " << conn->GetIpAndPort() << " in driver " << mName);
         NetFunc::NN_SafeCloseFd(fdConn);
         return result;
@@ -1001,15 +1006,15 @@ NResult NetDriverSockWithOOB::ConnectSyncEp(const OOBTCPClientPtr &client, const
 
     if (!payload.empty()) {
         if ((result = sock->Send(payload.c_str(), payload.length())) != NN_OK) {
-            NN_LOG_ERROR("Failed to send payload to peer at " << conn->GetIpAndPort() << " in driver " << mName <<
-                ", errno " << result);
+            NN_LOG_ERROR("Failed to send payload to peer at " << conn->GetIpAndPort() << " in driver " << mName
+                                                              << ", errno " << result);
             NetFunc::NN_SafeCloseFd(fdConn);
             return result;
         }
     }
 
     /* create ep */
-    const UBSHcomNetWorkerIndex netWorkerIndex {};
+    const UBSHcomNetWorkerIndex netWorkerIndex{};
     UBSHcomNetEndpointPtr newEp = new (std::nothrow) NetSyncEndpointSock(sock->Id(), sock, this, netWorkerIndex);
     if (NN_UNLIKELY(newEp.Get() == nullptr)) {
         NN_LOG_ERROR("Failed to new sync sock ep in driver " << mName << ", probably out of memory");
@@ -1047,8 +1052,8 @@ NResult NetDriverSockWithOOB::ConnectSyncEp(const OOBTCPClientPtr &client, const
     newEp->State().Set(NEP_ESTABLISHED);
     outEp.Set(newEp.Get());
 
-    NN_LOG_INFO("New connect to " << client->GetServerIp() << ":" << client->GetServerPort() <<
-        " established, sync ep id " << outEp->Id());
+    NN_LOG_INFO("New connect to " << client->GetServerIp() << ":" << client->GetServerPort()
+                                  << " established, sync ep id " << outEp->Id());
     return NN_OK;
 }
 
@@ -1089,30 +1094,30 @@ void NetDriverSockWithOOB::DestroyEndpointById(uint64_t id)
 NResult NetDriverSockWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
 {
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBServer(mSecInfoProvider, mSecInfoValidator, conn, mName,
-        mOptions.secType)) != NN_OK) {
+                                                            mOptions.secType)) != NN_OK) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
     uint32_t ip = NetFunc::GetIpByFd(conn.GetFd());
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessCompareEpNum(ip, conn.ListenPort(), conn.GetIpAndPort(),
-        mOobServers)) != NN_OK) {
+                                                             mOobServers)) != NN_OK) {
         NN_LOG_ERROR("Sock connection num exceeds maximum");
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
     NResult result = 0;
     /* receive header and verify */
-    ConnectHeader header {};
+    ConnectHeader header{};
     void *headerBuf = &header;
     if (NN_UNLIKELY((result = conn.Receive(headerBuf, sizeof(ConnectHeader))) != 0)) {
-        NN_LOG_ERROR("Failed to read header from " << conn.GetIpAndPort() << " for driver " << mName << ", result " <<
-            result);
+        NN_LOG_ERROR("Failed to read header from " << conn.GetIpAndPort() << " for driver " << mName << ", result "
+                                                   << result);
         return result;
     }
 
-    ConnRespWithUId respWithUId{ OK, 0 };
+    ConnRespWithUId respWithUId{OK, 0};
     result = OOBSecureProcess::SecCheckConnectionHeader(header, mOptions, mEnableTls, Protocol(), mMajorVersion,
-        mMinorVersion, respWithUId);
+                                                        mMinorVersion, respWithUId);
     if (result != NN_OK) {
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
@@ -1133,8 +1138,8 @@ NResult NetDriverSockWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
     {
         std::lock_guard<std::mutex> guard(mEndPointsMutex);
         while (mEndPoints.count(newSockId) != 0) {
-            NN_LOG_WARN("Duplicate generate ep id " << newSockId << " for connection to "
-                << conn.GetIpAndPort() << " for driver " << mName << ", regenereate");
+            NN_LOG_WARN("Duplicate generate ep id " << newSockId << " for connection to " << conn.GetIpAndPort()
+                                                    << " for driver " << mName << ", regenereate");
             newSockId = NetUuid::GenerateUuid();
         }
     }
@@ -1156,7 +1161,7 @@ NResult NetDriverSockWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
         int fdConn = conn.TransferFd();
 
         /* create sock and initialize */
-        SockOptions options {};
+        SockOptions options{};
         Sock *sock;
         if (mEnableTls) {
             sock = new (std::nothrow) Sock(mSockType, mName, newSockId, fdConn, options, &conn);
@@ -1235,8 +1240,7 @@ NResult NetDriverSockWithOOB::HandleSockError(Sock *sock)
     worker->RemoveFromEpoll(sock);
     sock->DealCbWithFailure();
     sock->Close();
-    OOBSecureProcess::SecProcessDelEpNum(sock->mLocalIp, sock->mListenPort, sock->PeerIpPort(),
-        mOobServers);
+    OOBSecureProcess::SecProcessDelEpNum(sock->mLocalIp, sock->mListenPort, sock->PeerIpPort(), mOobServers);
     /* remove ep */
     sock->DecreaseRef();
     NN_ASSERT_LOG_RETURN(brokenEp.Get() != nullptr, NN_ERROR);
@@ -1259,7 +1263,7 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock((ctx).sock);
     NN_ASSERT_LOG_RETURN(ctx.sock->UpContext1() != 0, NN_ERROR)
-    ConnectHeader header {};
+    ConnectHeader header{};
     SockWorker *worker = nullptr;
     UBSHcomNetEndpointPtr ep = nullptr;
     static thread_local std::string payload;
@@ -1269,7 +1273,7 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
     if (NN_UNLIKELY(worker == nullptr)) {
         ctx.sock->Close();
         OOBSecureProcess::SecProcessDelEpNum(ctx.sock->mLocalIp, ctx.sock->mListenPort, ctx.sock->PeerIpPort(),
-            mOobServers);
+                                             mOobServers);
         NN_LOG_ERROR("Invalid worker for driver " << mName);
         return NN_EP_CLOSE;
     }
@@ -1293,8 +1297,9 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
             socklen_t len = static_cast<socklen_t>(sizeof(struct ucred));
             if (NN_UNLIKELY(getsockopt(ctx.sock->FD(), SOL_SOCKET, SO_PEERCRED, &remoteIds, &len) != 0)) {
                 char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("Failed to get uds ids in driver " << mName << ", errno:" << errno <<
-                " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+                NN_LOG_ERROR("Failed to get uds ids in driver "
+                             << mName << ", errno:" << errno
+                             << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
                 break;
             }
             ep->RemoteUdsIdInfo(remoteIds.pid, remoteIds.uid, remoteIds.gid);
@@ -1321,7 +1326,7 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
 
         if (payloadLen > 0) {
             payload.resize(ctx.header->dataLength + NN_NO1);
-            payload = { reinterpret_cast<char *>(ctx.dataAddress), ctx.header->dataLength };
+            payload = {reinterpret_cast<char *>(ctx.dataAddress), ctx.header->dataLength};
             payload[ctx.header->dataLength] = '\0';
         } else {
             payload.clear();
@@ -1331,8 +1336,8 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
         ctx.sock->SetMrChecker(&mMrChecker);
         /* do callback */
         if (NN_UNLIKELY((result = mNewEndPointHandler(ctx.sock->PeerIpPort(), ep, payload)) != NN_OK)) {
-            NN_LOG_ERROR("Got " << result << " from new ep callback, this new connection from " <<
-                ctx.sock->PeerIpPort() << " will be dropped");
+            NN_LOG_ERROR("Got " << result << " from new ep callback, this new connection from "
+                                << ctx.sock->PeerIpPort() << " will be dropped");
             break;
         }
         int8_t ready = 1;
@@ -1357,15 +1362,15 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
         ctx.sock->UpContext(reinterpret_cast<uint64_t>(ep.Get()));
         AddEp(ep);
         result = NN_OK;
-        NN_LOG_INFO("New connection from " << ctx.sock->PeerIpPort() << " established, async ep id " <<
-            ep->Id() << " worker info " << worker->DetailName());
+        NN_LOG_INFO("New connection from " << ctx.sock->PeerIpPort() << " established, async ep id " << ep->Id()
+                                           << " worker info " << worker->DetailName());
     } while (0);
 
     if (result != NN_OK) {
         worker->RemoveFromEpoll(ctx.sock);
         ctx.sock->Close();
         OOBSecureProcess::SecProcessDelEpNum(ctx.sock->mLocalIp, ctx.sock->mListenPort, ctx.sock->PeerIpPort(),
-            mOobServers);
+                                             mOobServers);
         result = NN_EP_CLOSE;
     }
 
@@ -1385,8 +1390,8 @@ NResult NetDriverSockWithOOB::HandleNewRequest(SockOpContextInfo &ctx)
     NN_ASSERT_LOG_RETURN(ctx.header != nullptr, NN_ERROR);
     /* user op code */
     if (NN_LIKELY(ctx.header->opCode >= 0)) {
-        static thread_local UBSHcomNetRequestContext netCtx {};
-        static thread_local UBSHcomNetMessage netMsg {};
+        static thread_local UBSHcomNetRequestContext netCtx{};
+        static thread_local UBSHcomNetMessage netMsg{};
 
         /* set net context */
         NN_ASSERT_LOG_RETURN(ctx.sock->UpContext() != 0, NN_ERROR)
@@ -1426,7 +1431,7 @@ NResult NetDriverSockWithOOB::HandleSendRawSglReqPosted(SockOpContextInfo *ctx, 
     netCtx.mHeader.Invalid();
     netCtx.mMessage = nullptr;
     if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglCtx->iov,
-        sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         result = NN_INVALID_PARAM;
     }
@@ -1444,9 +1449,9 @@ NResult NetDriverSockWithOOB::HandleSendRawSglReqPosted(SockOpContextInfo *ctx, 
 
     // call to callback
     if (result == NN_OK && NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName <<
-            " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-            netCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Call requestPostedHandler in Driver "
+                     << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                     << ", dataSize " << netCtx.mHeader.dataLength << "]");
     }
     netCtx.mEp.Set(nullptr);
     ctx->sock->mSglCtxInfoPool.Return(ctx->sendCtx);
@@ -1462,19 +1467,19 @@ NResult NetDriverSockWithOOB::HandleReqPosted(SockOpContextInfo *ctx)
     NN_ASSERT_LOG_RETURN(ctx->sock->UpContext() != 0, NN_ERROR)
     NResult result = NN_OK;
 
-    static thread_local UBSHcomNetRequestContext netCtx {};
+    static thread_local UBSHcomNetRequestContext netCtx{};
     if (ctx->opType == SockOpContextInfo::SS_SEND || ctx->opType == SockOpContextInfo::SS_SEND_RAW) {
         if (ctx->opType == SockOpContextInfo::SS_SEND) {
             if (mOptions.tcpSendZCopy) {
                 if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader),
-                    &ctx->headerRequest->sendHeader, sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
+                                         &ctx->headerRequest->sendHeader, sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
                     NN_LOG_ERROR("Failed to copy req to sglCtx");
                     result = NN_INVALID_PARAM;
                 }
             } else {
                 if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader),
-                    reinterpret_cast<UBSHcomNetTransHeader *>(ctx->sendBuff),
-                    sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
+                                         reinterpret_cast<UBSHcomNetTransHeader *>(ctx->sendBuff),
+                                         sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
                     NN_LOG_ERROR("Failed to copy req to sglCtx");
                     result = NN_INVALID_PARAM;
                 }
@@ -1486,9 +1491,8 @@ NResult NetDriverSockWithOOB::HandleReqPosted(SockOpContextInfo *ctx)
         netCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->sock->UpContext()));
         netCtx.mResult = SockOpContextInfo::GetNResult(ctx->errType);
         netCtx.mMessage = nullptr;
-        netCtx.mOpType =
-            ctx->opType == SockOpContextInfo::SS_SEND ? UBSHcomNetRequestContext::NN_SENT :
-            UBSHcomNetRequestContext::NN_SENT_RAW;
+        netCtx.mOpType = ctx->opType == SockOpContextInfo::SS_SEND ? UBSHcomNetRequestContext::NN_SENT :
+                                                                     UBSHcomNetRequestContext::NN_SENT_RAW;
 
         netCtx.mOriginalReq = {};
         netCtx.mOriginalReq.upCtxSize = ctx->upCtxSize;
@@ -1503,9 +1507,9 @@ NResult NetDriverSockWithOOB::HandleReqPosted(SockOpContextInfo *ctx)
 
         // call to callback
         if (result == NN_OK && NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != NN_OK)) {
-            NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName <<
-                " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
-                << ", dataSize " << netCtx.mHeader.dataLength << "]");
+            NN_LOG_ERROR("Call requestPostedHandler in Driver "
+                         << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                         << ", dataSize " << netCtx.mHeader.dataLength << "]");
         }
         netCtx.mEp.Set(nullptr);
         if (!mOptions.tcpSendZCopy && ctx->sendBuff != nullptr) {
@@ -1533,14 +1537,13 @@ NResult NetDriverSockWithOOB::OneSideDone(SockOpContextInfo *ctx)
     NResult result = NN_OK;
 
     auto worker = reinterpret_cast<SockWorker *>(ctx->sock->UpContext1());
-    static thread_local UBSHcomNetRequestContext netCtx {};
+    static thread_local UBSHcomNetRequestContext netCtx{};
     if (ctx->opType == SockOpContextInfo::SS_WRITE || ctx->opType == SockOpContextInfo::SS_READ) {
         // set context
         netCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->sock->UpContext()));
         netCtx.mResult = SockOpContextInfo::GetNResult(ctx->errType);
-        netCtx.mOpType =
-            ctx->opType == SockOpContextInfo::SS_WRITE ? UBSHcomNetRequestContext::NN_WRITTEN :
-            UBSHcomNetRequestContext::NN_READ;
+        netCtx.mOpType = ctx->opType == SockOpContextInfo::SS_WRITE ? UBSHcomNetRequestContext::NN_WRITTEN :
+                                                                      UBSHcomNetRequestContext::NN_READ;
         netCtx.mHeader.Invalid();
         netCtx.mMessage = nullptr;
         netCtx.mOriginalReq.lAddress = ctx->sendCtx->iov[0].lAddress;
@@ -1574,8 +1577,8 @@ NResult NetDriverSockWithOOB::OneSideDone(SockOpContextInfo *ctx)
                                                                           UBSHcomNetRequestContext::NN_SGL_READ;
         netCtx.mHeader.Invalid();
         netCtx.mMessage = nullptr;
-        if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV,
-            sglCtx->iov, sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
+        if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglCtx->iov,
+                                 sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
             result = NN_INVALID_PARAM;
         }
@@ -1616,5 +1619,5 @@ NResult NetDriverSockWithOOB::MultiRailNewConnection(OOBTCPConnection &conn)
     NN_LOG_ERROR("Invalid operation, TCP is not supported by MultiRail");
     return NN_ERROR;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -12,8 +12,8 @@
 #ifndef HCOM_TEST_NET_OOB_H
 #define HCOM_TEST_NET_OOB_H
 
-#include <fstream>
 #include <cstdio>
+#include <fstream>
 
 #include "gtest/gtest.h"
 #include "mockcpp/mokc.h"
@@ -21,9 +21,9 @@
 
 class TestNetOob : public testing ::Test {
 public:
-    TestNetOob() {};
+    TestNetOob(){};
 
-    ~TestNetOob() {};
+    ~TestNetOob(){};
 
     void SetUp()
     {

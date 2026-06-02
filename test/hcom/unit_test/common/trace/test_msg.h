@@ -10,14 +10,13 @@
  * See the Mulan PSL v2 for more details.
  */
 
-
 #ifndef DFS_TRACER_TEST_MSG_H
 #define DFS_TRACER_TEST_MSG_H
 #include <thread>
 #include "gtest/gtest.h"
 #include "htracer_msg.h"
-#include "rpc_msg.h"
 #include "htracer_service_helper.h"
+#include "rpc_msg.h"
 
 class TestMsg : public testing::Test {
 public:
@@ -32,6 +31,5 @@ public:
     void SetUp() const;
     void TearDown() const;
 };
-
 
 #endif // DFS_TRACER_TEST_MSG_H

@@ -4,17 +4,17 @@
 #ifndef HCOM_MULTICAST_PERIODIC_MANAGER_H
 #define HCOM_MULTICAST_PERIODIC_MANAGER_H
 
+#include <list>
+#include <queue>
 #include <thread>
 #include <utility>
 #include <vector>
-#include <queue>
-#include <list>
 
-#include "multicast/include/multicast_publisher_service.h"
-#include "service_periodic_manager.h"
 #include "hcom_obj_statistics.h"
 #include "multicast/include/multicast_publisher.h"
+#include "multicast/include/multicast_publisher_service.h"
 #include "multicast/include/multicast_service_callback.h"
+#include "service_periodic_manager.h"
 
 namespace ock {
 namespace hcom {
@@ -24,7 +24,9 @@ using MultiCastPeriodicManagerPtr = NetRef<MultiCastPeriodicManager>;
 class MultiCastPeriodicManager {
 public:
     MultiCastPeriodicManager(uint16_t threadCount, std::string name, int cpuId)
-        : mThreadCount(threadCount), mName(std::move(name)), mCpuId(cpuId)
+        : mThreadCount(threadCount),
+          mName(std::move(name)),
+          mCpuId(cpuId)
     {
         OBJ_GC_INCREASE(MultiCastPeriodicManager);
     }
@@ -103,7 +105,7 @@ private:
     std::vector<MultiCastServiceTimer *> mHandleQueue[M_MAX_THREAD_NUM];
 
     std::thread mWorkingThreads[M_MAX_THREAD_NUM];
-    std::atomic<int16_t> mStartedWorkingThreads = { 0 };
+    std::atomic<int16_t> mStartedWorkingThreads = {0};
 
     std::mutex mMutex;
     bool mStarted = false;
@@ -116,7 +118,7 @@ private:
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HCOM_MULTICAST_PERIODIC_MANAGER_H

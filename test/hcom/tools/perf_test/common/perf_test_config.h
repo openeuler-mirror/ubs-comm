@@ -4,8 +4,8 @@
 #ifndef HCOM_PERF_TEST_CONFIG_H
 #define HCOM_PERF_TEST_CONFIG_H
 
-#include <unistd.h>
 #include <getopt.h>
+#include <unistd.h>
 #include <cstdint>
 
 #include "hcom/hcom.h"
@@ -15,7 +15,7 @@ namespace perftest {
 constexpr uint32_t MAX_MESSAGE_SIZE = 2097152; // 2MB = 2^21B
 // option中的mrSendReceiveSegSize要配置为 MAX_MESSAGE_SIZE + HCOM_HEADER_SIZE
 // sizeof(UBSHcomNetTransHeader) = 32
-constexpr uint32_t HCOM_HEADER_SIZE = 1024;     // 需要内存对齐
+constexpr uint32_t HCOM_HEADER_SIZE = 1024; // 需要内存对齐
 constexpr uint32_t MAX_ITERATIONS = 200000;
 
 enum class PERF_TEST_TYPE {
@@ -141,35 +141,24 @@ public:
         mUbPriority = ubPriority;
     }
 
-    bool GetEnableActiveBackup() const
-    {
-        return mEnableActiveBackup;
-    }
-
-    void SetEnableActiveBackup(bool enableActiveBackup)
-    {
-        mEnableActiveBackup = enableActiveBackup;
-    }
-
 private:
     // 检查参数有效性
     bool SelfCheck();
 
 private:
-    PERF_TEST_TYPE mType;                   // 测试类型
+    PERF_TEST_TYPE mType;                          // 测试类型
     ock::hcom::UBSHcomNetDriverProtocol mProtocol; // 底层通信协议类型
-    bool mIsServer;                         // 是否为server
-    std::string mOobIp;                     // server OOB Ip
-    uint16_t mOobPort;                      // server OOB Port
-    std::string mIpMask;                    // OOB网段，client server相同
-    int16_t mCpuId;                         // 亲和性配置，-1为不绑核
-    uint64_t mIterations;                   // 测试次数
-    uint32_t mSize;                         // 测试的最大包大小
-    bool mIsTestAllSize = false;            // 是否测试所有大小的包
-    ock::hcom::UBSHcomUbcMode mUbcMode;     // 低时延/高带宽模式选择
-    uint32_t mUbPriority;                   // SL优先级
-    bool mEnableActiveBackup = false;       // 是否启用主备
+    bool mIsServer;                                // 是否为server
+    std::string mOobIp;                            // server OOB Ip
+    uint16_t mOobPort;                             // server OOB Port
+    std::string mIpMask;                           // OOB网段，client server相同
+    int16_t mCpuId;                                // 亲和性配置，-1为不绑核
+    uint64_t mIterations;                          // 测试次数
+    uint32_t mSize;                                // 测试的最大包大小
+    bool mIsTestAllSize = false;                   // 是否测试所有大小的包
+    ock::hcom::UBSHcomUbcMode mUbcMode;            // 低时延/高带宽模式选择
+    uint32_t mUbPriority;                          // SL优先级
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 #endif

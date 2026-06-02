@@ -16,8 +16,8 @@
 #include "hcom.h"
 
 #include "net_bucket_linked_list.h"
-#include "rdma_verbs_wrapper_ctx.h"
 #include "net_util.h"
+#include "rdma_verbs_wrapper_ctx.h"
 
 namespace ock {
 namespace hcom {
@@ -25,13 +25,13 @@ class RDMAMemoryRegion : public UBSHcomNetMemoryRegion {
 public:
     static RResult Create(const std::string &name, RDMAContext *ctx, uint64_t size, RDMAMemoryRegion *&buf);
     static RResult Create(const std::string &name, RDMAContext *ctx, uintptr_t address, uint64_t size,
-        RDMAMemoryRegion *&buf);
+                          RDMAMemoryRegion *&buf);
 
     RDMAMemoryRegion() = delete;
     RDMAMemoryRegion(const RDMAMemoryRegion &other) = delete;
     RDMAMemoryRegion(RDMAMemoryRegion &&other) = delete;
-    RDMAMemoryRegion &operator = (const RDMAMemoryRegion &) = delete;
-    RDMAMemoryRegion &operator = (RDMAMemoryRegion &&) = delete;
+    RDMAMemoryRegion &operator=(const RDMAMemoryRegion &) = delete;
+    RDMAMemoryRegion &operator=(RDMAMemoryRegion &&) = delete;
 
     ~RDMAMemoryRegion() override
     {
@@ -60,7 +60,8 @@ public:
 
 protected:
     RDMAMemoryRegion(const std::string &name, RDMAContext *ctx, uint64_t size)
-        : UBSHcomNetMemoryRegion(name, false, 0, size), mRDMAContext(ctx)
+        : UBSHcomNetMemoryRegion(name, false, 0, size),
+          mRDMAContext(ctx)
     {
         // increase the reference count of context
         if (ctx != nullptr) {
@@ -71,7 +72,8 @@ protected:
     }
 
     RDMAMemoryRegion(const std::string &name, RDMAContext *ctx, uintptr_t address, uint64_t size)
-        : UBSHcomNetMemoryRegion(name, true, address, size), mRDMAContext(ctx)
+        : UBSHcomNetMemoryRegion(name, true, address, size),
+          mRDMAContext(ctx)
     {
         // increase the reference count of context
         if (ctx != nullptr) {
@@ -86,7 +88,7 @@ protected:
 
     static uint64_t gPageSize;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // _OCK_RDMA_MR_12342341232433_H

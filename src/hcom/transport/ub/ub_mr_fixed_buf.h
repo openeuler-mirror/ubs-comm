@@ -22,11 +22,11 @@ namespace hcom {
 class UBMemoryRegionFixedBuffer : public UBMemoryRegion {
 public:
     static UResult Create(const std::string &name, UBContext *ctx, uint32_t singleSegSize, uint32_t segCount,
-        unsigned long memid, UBMemoryRegionFixedBuffer *&buf);
+                          unsigned long memid, UBMemoryRegionFixedBuffer *&buf);
 
 public:
     UBMemoryRegionFixedBuffer(const std::string &name, UBContext *ctx, unsigned long memid, uint32_t singleSegSize,
-        uint32_t segCount)
+                              uint32_t segCount)
         : UBMemoryRegion(name, ctx, static_cast<uint64_t>(singleSegSize) * static_cast<uint64_t>(segCount), memid, 0),
           mSingleSegSize(singleSegSize),
           mSegCount(segCount)
@@ -66,8 +66,8 @@ public:
     std::string ToString()
     {
         std::ostringstream oss;
-        oss << "buf-address " << mBuf << ", mSingleSegSize " << mSingleSegSize << ", mSegCount " << mSegCount <<
-            ", total buf size " << mSize;
+        oss << "buf-address " << mBuf << ", mSingleSegSize " << mSingleSegSize << ", mSegCount " << mSegCount
+            << ", total buf size " << mSize;
         return oss.str();
     }
 
@@ -81,7 +81,7 @@ private:
     // uintptr_p store the start address of each mr segment
     NetBucketLinkedList mLinkList;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_MR_FIXED_BUF_H

@@ -12,8 +12,8 @@
 #ifdef RDMA_BUILD_ENABLED
 #include <thread>
 
-#include "test_negative_rdma_endpoint.h"
 #include "mockcpp/mockcpp.hpp"
+#include "test_negative_rdma_endpoint.h"
 #include "ut_helper.h"
 
 #define OVERLOAD_CONNECT 64
@@ -52,7 +52,7 @@ static void InvalidRequestForReadWrite(UBSHcomNetEndpointPtr &ep, UBSHcomNetTran
 }
 
 static void InvalidRequestForSend(UBSHcomNetEndpointPtr &ep, UBSHcomNetTransRequest &req, uint16_t opCode,
-    uint32_t seqNo, UBSHcomNetTransOpInfo &opInfo)
+                                  uint32_t seqNo, UBSHcomNetTransOpInfo &opInfo)
 {
     NResult result = ep->PostSend(opCode, req);
     UT_CHECK_RESULT_NOK(result)
@@ -202,7 +202,7 @@ TEST_F(TestNegativeRdmaEndpoint, SyncEpBadReq)
     result = ep->WaitCompletion(1);
     UT_CHECK_RESULT_OK(result)
 
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     result = ep->Receive(1, respCtx);
     UT_CHECK_RESULT_NOK(result)
 }

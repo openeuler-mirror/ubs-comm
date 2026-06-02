@@ -1,10 +1,10 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
+#include "test_case/service_v2/service_rndv_lat_test.h"
 #include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "test_case/service_v2/service_rndv_lat_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -37,7 +37,7 @@ int ServiceRndvLatTest::DoPostSend()
 }
 
 int ServiceRndvLatTest::NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch,
-    const std::string &payload)
+                                   const std::string &payload)
 {
     mCh = ch;
     LOG_DEBUG("New connection from " << ipPort << " !");
@@ -62,7 +62,7 @@ int ServiceRndvLatTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &
                 replyCtx.errorCode = 0;
                 replyCtx.rspCtx = contextRsp;
                 Callback *cb = UBSHcomNewCallback([](UBSHcomServiceContext &context) {}, std::placeholders::_1);
-                if (cb==nullptr) {
+                if (cb == nullptr) {
                     LOG_ERROR("New callback is nullptr");
                     return;
                 }
@@ -94,7 +94,7 @@ bool ServiceRndvLatTest::Initialize()
     // create NetService
     std::function<int(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch, const std::string &payload)>
         funcNewChannel = bind(&ServiceRndvLatTest::NewChannel, this, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3);
+                              std::placeholders::_3);
     std::function<int(const ock::hcom::UBSHcomServiceContext &ctx)> funcReqReceived =
         bind(&ServiceRndvLatTest::RequestReceived, this, std::placeholders::_1);
     mHelper.RegisterNewChHandler(funcNewChannel);
@@ -170,5 +170,5 @@ bool ServiceRndvLatTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::SERVICE_RNDV_LAT, ServiceRndvLatTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

@@ -12,16 +12,16 @@ namespace perftest {
 
 class PerfTestBase {
 public:
-    explicit PerfTestBase(const PerfTestConfig& cfg) : mCfg(cfg) {};
-    virtual ~PerfTestBase() {};
+    explicit PerfTestBase(const PerfTestConfig &cfg) : mCfg(cfg){};
+    virtual ~PerfTestBase(){};
     virtual bool Initialize() = 0;
-    virtual bool RunTest(PerfTestContext* ctx) = 0;
+    virtual bool RunTest(PerfTestContext *ctx) = 0;
     virtual void UnInitialize() = 0;
 
 protected:
     PerfTestConfig mCfg;
 };
 
-}
-}
+} // namespace perftest
+} // namespace hcom
 #endif

@@ -15,8 +15,8 @@
 
 #include "hcom_utils.h"
 #include "net_common.h"
-#include "rdma_worker.h"
 #include "net_rdma_async_endpoint.h"
+#include "rdma_worker.h"
 
 namespace ock {
 namespace hcom {
@@ -41,7 +41,7 @@ std::string &PollingModeToString(RDMAPollingMode m)
 }
 
 RDMAWorker::RDMAWorker(const std::string &name, RDMAContext *ctx, const RDMAWorkerOptions &options,
-    const NetMemPoolFixedPtr &memPool, const NetMemPoolFixedPtr &sglMemPool)
+                       const NetMemPoolFixedPtr &memPool, const NetMemPoolFixedPtr &sglMemPool)
     : mName(name),
       mRDMAContext(ctx),
       mOpCtxMemPool(memPool),
@@ -266,16 +266,18 @@ RResult RDMAWorker::Stop()
             } else {                                                                                                   \
                 if ((contextInfo)->opType == RDMAOpContextInfo::HB_WRITE) {                                            \
                     (lastBrokenQp) = (contextInfo)->qp;                                                                \
-                    NN_LOG_INFO("HB poll cq receive wcStatus " << wc[i].status << ", maybe remote ep " <<              \
-                        (contextInfo)->qp->UpId() << " closed");                                                       \
+                    NN_LOG_INFO("HB poll cq receive wcStatus " << wc[i].status << ", maybe remote ep "                 \
+                                                               << (contextInfo)->qp->UpId() << " closed");             \
                 } else if (((contextInfo)->qp->isStarted) && ((lastBrokenQp) != (contextInfo)->qp)) {                  \
                     (lastBrokenQp) = (contextInfo)->qp;                                                                \
-                    NN_LOG_ERROR("Poll cq failed in RDMAWorker " << DetailName() << ", wcStatus " << wc[i].status <<   \
-                        ", opType " << (contextInfo)->opType << ", ep id " << (contextInfo)->qp->UpId());              \
+                    NN_LOG_ERROR("Poll cq failed in RDMAWorker " << DetailName() << ", wcStatus " << wc[i].status      \
+                                                                 << ", opType " << (contextInfo)->opType << ", ep id " \
+                                                                 << (contextInfo)->qp->UpId());                        \
                 } else if (((contextInfo)->qp->isStarted) && (lastErrorWcStatus != wc[i].status)) {                    \
                     lastErrorWcStatus = wc[i].status;                                                                  \
-                    NN_LOG_ERROR("Poll cq failed in RDMAWorker " << DetailName() << ", wc Status " << wc[i].status <<  \
-                        ", opType " << (contextInfo)->opType << ", ep id " << (contextInfo)->qp->UpId());              \
+                    NN_LOG_ERROR("Poll cq failed in RDMAWorker " << DetailName() << ", wc Status " << wc[i].status     \
+                                                                 << ", opType " << (contextInfo)->opType << ", ep id " \
+                                                                 << (contextInfo)->qp->UpId());                        \
                 }                                                                                                      \
             }                                                                                                          \
                                                                                                                        \
@@ -313,13 +315,12 @@ RResult RDMAWorker::Stop()
                     break;                                                                                             \
             }                                                                                                          \
         }                                                                                                              \
-                                                                                                                      \
+                                                                                                                       \
         /* if there is no coming request, call up idle function */                                                     \
         if (mIdleHandler != nullptr && (pollCount) == 0) {                                                             \
             mIdleHandler(mIndex);                                                                                      \
         }                                                                                                              \
     } while (0)
-
 
 void RDMAWorker::DoWithBusyPolling()
 {
@@ -344,8 +345,8 @@ void RDMAWorker::DoWithBusyPolling()
             PROCESS_POLLING_RESULT(pollCount, contextInfo, lastBrokenQp);
             TRACE_DELAY_END(RDMA_WORKER_EVENT_POLLING, 0);
         } catch (std::runtime_error &ex) {
-            NN_LOG_WARN("Verbs Got runtime incorrect signal in RDMAWorker::RunInThread '" << ex.what() <<
-                "', ignore and continue");
+            NN_LOG_WARN("Verbs Got runtime incorrect signal in RDMAWorker::RunInThread '" << ex.what()
+                                                                                          << "', ignore and continue");
         } catch (...) {
             NN_LOG_WARN("Verbs Got unknown signal in RDMAWorker::RunInThread, ignore and continue");
         }
@@ -380,8 +381,8 @@ void RDMAWorker::DoWithCQEventPolling()
             PROCESS_POLLING_RESULT(pollCount, contextInfo, lastBrokenQp);
             TRACE_DELAY_END(RDMA_WORKER_EVENT_POLLING, 0);
         } catch (std::runtime_error &ex) {
-            NN_LOG_WARN("Got runtime incorrect signal in RDMAWorker::RunInThread '" << ex.what() <<
-                "', ignore and continue");
+            NN_LOG_WARN("Got runtime incorrect signal in RDMAWorker::RunInThread '" << ex.what()
+                                                                                    << "', ignore and continue");
         } catch (...) {
             NN_LOG_WARN("Got unknown signal in RDMAWorker::RunInThread, ignore and continue");
         }
@@ -396,15 +397,16 @@ void RDMAWorker::RunInThread()
     if (mOptions.threadPriority != 0) {
         if (NN_UNLIKELY(setpriority(PRIO_PROCESS, 0, mOptions.threadPriority) != 0)) {
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to set worker thread priority in rdma worker " << mName << ", errno:" <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_WARN("Unable to set worker thread priority in rdma worker "
+                        << mName << ", errno:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
         }
     }
 
     mProgressThreadStarted.store(true);
-    NN_LOG_INFO("RDMAWorker " << DetailName() << ", cpuId: " << mProgressCpuId << ", cq count: " <<
-        ((mRDMACq != nullptr) ? mRDMACq->GetCQCount() : 0) << ", polling batch size: " << mProgressBatchSize <<
-        ", more " << mOptions.ToString() << "] working thread started");
+    NN_LOG_INFO("RDMAWorker " << DetailName() << ", cpuId: " << mProgressCpuId
+                              << ", cq count: " << ((mRDMACq != nullptr) ? mRDMACq->GetCQCount() : 0)
+                              << ", polling batch size: " << mProgressBatchSize << ", more " << mOptions.ToString()
+                              << "] working thread started");
 
     if (mOptions.workerMode == BUSY_POLLING) {
         DoWithBusyPolling();
@@ -418,7 +420,7 @@ void RDMAWorker::RunInThread()
 }
 
 RResult RDMAWorker::Create(const std::string &name, RDMAContext *ctx, const RDMAWorkerOptions &options,
-    NetMemPoolFixedPtr memPool, NetMemPoolFixedPtr sglMemPool, RDMAWorker *&outWorker)
+                           NetMemPoolFixedPtr memPool, NetMemPoolFixedPtr sglMemPool, RDMAWorker *&outWorker)
 {
     if (ctx == nullptr || name.empty()) {
         NN_LOG_ERROR("Create worker param invalid");
@@ -443,7 +445,7 @@ RResult RDMAWorker::CreateQP(RDMAQp *&qp)
     }
 
     QpOptions qpOptions(mOptions.qpSendQueueSize, mOptions.qpReceiveQueueSize, mOptions.qpMrSegSize,
-        mOptions.qpMrSegCount);
+                        mOptions.qpMrSegCount);
     qp = new (std::nothrow) RDMAQp(DetailName(), RDMAQp::NewId(), mRDMAContext, mRDMACq, qpOptions);
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Failed to create qp with RDMAWorker " << DetailName() << ", probably out of memory");
@@ -453,6 +455,6 @@ RResult RDMAWorker::CreateQP(RDMAQp *&qp)
     qp->UpContext1(reinterpret_cast<uintptr_t>(this));
     return RR_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

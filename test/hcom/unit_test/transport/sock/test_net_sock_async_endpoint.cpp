@@ -198,11 +198,12 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncGetSendQueueCount)
 TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendZCopy)
 {
     UBSHcomNetTransOpInfo OpInfo{};
-    MOCKER_CPP(&SockWorker::PostSend).stubs()
+    MOCKER_CPP(&SockWorker::PostSend)
+        .stubs()
         .will(returnValue(static_cast<int>(SS_TCP_RETRY)))
         .then(returnValue(1))
         .then(returnValue(0));
-    
+
     int ret = ep->PostSendZCopy(0, request, OpInfo);
     EXPECT_EQ(ret, static_cast<int>(NN_NO1));
 
@@ -238,7 +239,8 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendSeqGetBuffErr)
 {
     ep->mSendZCopy = false;
     MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
-        .stubs().will(returnValue(false));
+        .stubs()
+        .will(returnValue(false));
     int ret = ep->PostSend(0, request, 0);
     EXPECT_EQ(ret, static_cast<int>(NN_GET_BUFF_FAILED));
 }
@@ -246,13 +248,15 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendSeqGetBuffErr)
 TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendSeqCopyErr)
 {
     ep->mSendZCopy = false;
-    NormalMemoryRegionFixedBuffer *Mr = mDriver->mSockDriverSendMR
-        = new (std::nothrow)NormalMemoryRegionFixedBuffer(name, 1, 1);
+    NormalMemoryRegionFixedBuffer *Mr = mDriver->mSockDriverSendMR = new (std::nothrow)
+        NormalMemoryRegionFixedBuffer(name, 1, 1);
     MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
-        .stubs().will(invoke(MockGetFreeBuffer));
+        .stubs()
+        .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
     MOCKER_CPP(&NormalMemoryRegionFixedBuffer::ReturnBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t))
-        .stubs().will(returnValue(true));
+        .stubs()
+        .will(returnValue(true));
     int ret = ep->PostSend(0, request, 0);
     EXPECT_EQ(ret, static_cast<int>(NN_INVALID_PARAM));
 
@@ -294,7 +298,8 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendOpInfoGetBuffErr)
     ep->mSendZCopy = false;
     UBSHcomNetTransOpInfo opInfo{};
     MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
-        .stubs().will(returnValue(false));
+        .stubs()
+        .will(returnValue(false));
     int ret = ep->PostSend(0, request, opInfo);
     EXPECT_EQ(ret, static_cast<int>(NN_GET_BUFF_FAILED));
 }
@@ -303,13 +308,15 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendOpInfoCopyErr)
 {
     ep->mSendZCopy = false;
     UBSHcomNetTransOpInfo opInfo{};
-    NormalMemoryRegionFixedBuffer *Mr = mDriver->mSockDriverSendMR
-        = new (std::nothrow)NormalMemoryRegionFixedBuffer(name, 1, 1);
+    NormalMemoryRegionFixedBuffer *Mr = mDriver->mSockDriverSendMR = new (std::nothrow)
+        NormalMemoryRegionFixedBuffer(name, 1, 1);
     MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
-        .stubs().will(invoke(MockGetFreeBuffer));
+        .stubs()
+        .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
     MOCKER_CPP(&NormalMemoryRegionFixedBuffer::ReturnBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t))
-        .stubs().will(returnValue(true));
+        .stubs()
+        .will(returnValue(true));
     int ret = ep->PostSend(0, request, opInfo);
     EXPECT_EQ(ret, static_cast<int>(NN_INVALID_PARAM));
 
@@ -347,7 +354,8 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendRawSeqGetBuffErr)
 {
     ep->mSendZCopy = false;
     MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
-        .stubs().will(returnValue(false));
+        .stubs()
+        .will(returnValue(false));
     int ret = ep->PostSendRaw(request, 0);
     EXPECT_EQ(ret, static_cast<int>(NN_GET_BUFF_FAILED));
 }
@@ -355,13 +363,15 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendRawSeqGetBuffErr)
 TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendRawSeqCopyErr)
 {
     ep->mSendZCopy = false;
-    NormalMemoryRegionFixedBuffer *Mr = mDriver->mSockDriverSendMR
-        = new (std::nothrow)NormalMemoryRegionFixedBuffer(name, 1, 1);
+    NormalMemoryRegionFixedBuffer *Mr = mDriver->mSockDriverSendMR = new (std::nothrow)
+        NormalMemoryRegionFixedBuffer(name, 1, 1);
     MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
-        .stubs().will(invoke(MockGetFreeBuffer));
+        .stubs()
+        .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
     MOCKER_CPP(&NormalMemoryRegionFixedBuffer::ReturnBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t))
-        .stubs().will(returnValue(true));
+        .stubs()
+        .will(returnValue(true));
     int ret = ep->PostSendRaw(request, 0);
     EXPECT_EQ(ret, static_cast<int>(NN_INVALID_PARAM));
 
@@ -520,5 +530,5 @@ TEST_F(TestNetSockAsyncEndpoint, OneSideValidationFail)
     EXPECT_EQ(ret, static_cast<int>(NN_INVALID_PARAM));
     request.upCtxSize = 0;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

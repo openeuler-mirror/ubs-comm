@@ -27,11 +27,11 @@ enum class InsertResultCode {
 class Centroid {
 public:
     Centroid(double newMean, uint32_t newWeight) : mean(newMean), weight(newWeight) {}
-    bool operator < (const Centroid &centroid) const
+    bool operator<(const Centroid &centroid) const
     {
         return this->mean < centroid.mean;
     }
-    bool operator > (const Centroid &centroid) const
+    bool operator>(const Centroid &centroid) const
     {
         return this->mean > centroid.mean;
     }
@@ -70,7 +70,7 @@ public:
         }
         return InsertResultCode::NEED_COMPERSS;
     }
-    
+
     void Reset()
     {
         centroids.clear();
@@ -87,7 +87,7 @@ public:
         return totalWeight;
     }
 
-    std::vector<Centroid>& GetAndSetCentroids()
+    std::vector<Centroid> &GetAndSetCentroids()
     {
         return centroids;
     }
@@ -109,13 +109,13 @@ inline double QuantileToScale(double q, double normalizer)
     const double qMin = 1e-15;
     const double qMax = 1 - qMin;
     const double qMid = 0.5;
-    
+
     if (q < qMin) {
         return (NN_NO2 * QuantileToScale(qMin, normalizer));
     } else if (q > qMax) {
         return (NN_NO2 * QuantileToScale(qMax, normalizer));
     }
-    
+
     if (q <= qMid) {
         return log(NN_NO2 * q) * normalizer;
     } else {
@@ -146,8 +146,7 @@ struct CompressionState {
     const uint32_t newTotalWeight = 0;
     const double normalizer = 0;
 
-    CompressionState(uint32_t totalWeight, double norm)
-        : newTotalWeight(totalWeight), normalizer(norm)
+    CompressionState(uint32_t totalWeight, double norm) : newTotalWeight(totalWeight), normalizer(norm)
     {
         k1 = QuantileToScale(NN_NO0, normalizer);
         nextQLimitWeight = newTotalWeight * ScaleToQuantile(k1 + NN_NO1, normalizer);
@@ -155,8 +154,8 @@ struct CompressionState {
         weightToAdd = 0;
         meanToAdd = 0;
     }
-    
-    void InitializeFirstCentroid(const Centroid& first)
+
+    void InitializeFirstCentroid(const Centroid &first)
     {
         weightToAdd = first.GetWeight();
         meanToAdd = first.GetMean();
@@ -173,9 +172,14 @@ struct CompressionState {
 class Tdigest {
 public:
     explicit Tdigest(size_t size)
-        : one(size), two(size), buffer(NN_NO2 * size), active(&one),
+        : one(size),
+          two(size),
+          buffer(NN_NO2 * size),
+          active(&one),
           minValue(std::numeric_limits<double>::max()),
-          maxValue(std::numeric_limits<double>::lowest()) {}
+          maxValue(std::numeric_limits<double>::lowest())
+    {
+    }
 
     void Insert(double value, uint32_t weight = 1)
     {
@@ -238,13 +242,13 @@ public:
         const auto &first = active->GetAndSetCentroids().front();
         if (first.GetWeight() > NN_NO1 && index < (first.GetWeight() / NN_NO2)) {
             return (Lerp(minValue, first.GetMean(),
-                static_cast<double>(index - NN_NO1) / (first.GetWeight() / NN_NO2 - NN_NO1)));
+                         static_cast<double>(index - NN_NO1) / (first.GetWeight() / NN_NO2 - NN_NO1)));
         }
 
         const auto &last = active->GetAndSetCentroids().back();
         if (last.GetWeight() > NN_NO1 && active->GetTotalWeight() - index <= last.GetWeight() / NN_NO2) {
             return (maxValue - static_cast<double>(active->GetTotalWeight() - index - NN_NO1) /
-                    (last.GetWeight() / NN_NO2 - NN_NO1) * (maxValue - last.GetMean()));
+                                   (last.GetWeight() / NN_NO2 - NN_NO1) * (maxValue - last.GetMean()));
         }
 
         // 在质心对中查找中位数
@@ -256,7 +260,7 @@ public:
             if (currentWeight + segmentWeight > index) {
                 uint32_t lower = index - currentWeight;
                 uint32_t upper = currentWeight + segmentWeight - index;
-                return (left.GetMean() * upper + right.GetMean() *lower) / (lower + upper);
+                return (left.GetMean() * upper + right.GetMean() * lower) / (lower + upper);
             }
             currentWeight += segmentWeight;
         }
@@ -282,26 +286,22 @@ private:
     }
     void UpdateMinMaxForward(const std::vector<Centroid> &input)
     {
-        minValue = std::min(minValue,
-            input.front().GetWeight() == NN_NO1 ? input.front().GetMean() :
-            std::numeric_limits<double>::max());
-        maxValue = std::max(maxValue,
-            input.back().GetWeight() == NN_NO1 ? input.back().GetMean() :
-            std::numeric_limits<double>::min());
+        minValue = std::min(minValue, input.front().GetWeight() == NN_NO1 ? input.front().GetMean() :
+                                                                            std::numeric_limits<double>::max());
+        maxValue = std::max(
+            maxValue, input.back().GetWeight() == NN_NO1 ? input.back().GetMean() : std::numeric_limits<double>::min());
     }
     void UpdateMinMaxBackward(const std::vector<Centroid> &input)
     {
-        minValue = std::min(minValue,
-            input.back().GetWeight() == NN_NO1 ? input.back().GetMean() :
-            std::numeric_limits<double>::max());
-        maxValue = std::max(maxValue,
-            input.front().GetWeight() == NN_NO1 ? input.front().GetMean() :
-            std::numeric_limits<double>::min());
+        minValue = std::min(
+            minValue, input.back().GetWeight() == NN_NO1 ? input.back().GetMean() : std::numeric_limits<double>::max());
+        maxValue = std::max(maxValue, input.front().GetWeight() == NN_NO1 ? input.front().GetMean() :
+                                                                            std::numeric_limits<double>::min());
     }
     void CompressData(const std::vector<Centroid> &input, CentroidList &inactive)
     {
         const uint32_t newTotalWeight = buffer.GetTotalWeight() + active->GetTotalWeight();
-        const double normalizer  = ComputeNormalizer(inactive.GetAndSetCentroids().capacity(), newTotalWeight);
+        const double normalizer = ComputeNormalizer(inactive.GetAndSetCentroids().capacity(), newTotalWeight);
         CompressionState state(newTotalWeight, normalizer);
         // 初始化第一个质心
         state.InitializeFirstCentroid(input.front());
@@ -334,8 +334,8 @@ private:
         if ((state.weightSoFar + state.weightToAdd + current.GetWeight()) <= state.nextQLimitWeight) {
             // 合并到当前质心
             state.weightToAdd += current.GetWeight();
-            state.meanToAdd = state.meanToAdd +
-                (current.GetMean() - state.meanToAdd) * current.GetWeight() / state.weightToAdd;
+            state.meanToAdd =
+                state.meanToAdd + (current.GetMean() - state.meanToAdd) * current.GetWeight() / state.weightToAdd;
         } else {
             // 开始新的质心
             state.weightSoFar += state.weightToAdd;
@@ -359,7 +359,7 @@ private:
     bool forward = true;
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
-#endif  // HTRACER_3RDPARTY_T_DIGEST_H
+#endif // HTRACER_3RDPARTY_T_DIGEST_H

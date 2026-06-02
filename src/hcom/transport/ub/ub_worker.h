@@ -14,18 +14,18 @@
 #define HCOM_UB_WORKER_H
 #ifdef UB_BUILD_ENABLED
 
+#include <pthread.h>
+#include <sys/resource.h>
 #include <atomic>
 #include <mutex>
-#include <sys/resource.h>
-#include <thread>
 #include <set>
+#include <thread>
 #include <utility>
-#include <pthread.h>
 
 #include "net_ctx_info_pool.h"
 #include "net_ub_endpoint.h"
-#include "ub_urma_wrapper_jetty.h"
 #include "ub_jetty_ptr_map.h"
+#include "ub_urma_wrapper_jetty.h"
 
 namespace ock {
 namespace hcom {
@@ -70,11 +70,11 @@ using UBWorkerOptions = struct UBWorkerOptionsStruct {
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "options type: " << WorkerTypeToString(workerType) << ", mode: " << PollingModeToString(workerMode) <<
-            ", jfc size: " << completionQueueDepth << ", max post send: " << maxPostSendCountPerQP <<
-            ", pre-post receive size: " << prePostReceiveSizePerQP << ", poll batch size " << pollingBatchSize <<
-            ", cpu id: " << cpuId << ", jetty send queue: " << qpSendQueueSize << ", jetty receive queue: " <<
-            qpReceiveQueueSize << ", dontStartWorkers: " << dontStartWorkers;
+        oss << "options type: " << WorkerTypeToString(workerType) << ", mode: " << PollingModeToString(workerMode)
+            << ", jfc size: " << completionQueueDepth << ", max post send: " << maxPostSendCountPerQP
+            << ", pre-post receive size: " << prePostReceiveSizePerQP << ", poll batch size " << pollingBatchSize
+            << ", cpu id: " << cpuId << ", jetty send queue: " << qpSendQueueSize
+            << ", jetty receive queue: " << qpReceiveQueueSize << ", dontStartWorkers: " << dontStartWorkers;
         return oss.str();
     }
 
@@ -105,7 +105,7 @@ using UBWorkerOptions = struct UBWorkerOptionsStruct {
 class UBWorker {
 public:
     UBWorker(const std::string &name, UBContext *ctx, const UBWorkerOptions &options, const NetMemPoolFixedPtr &memPool,
-        const NetMemPoolFixedPtr &sglMemPool);
+             const NetMemPoolFixedPtr &sglMemPool);
 
     virtual ~UBWorker()
     {
@@ -149,15 +149,15 @@ public:
     UResult PostReceive(UBJetty *qp, uintptr_t bufAddress, uint32_t bufSize, urma_target_seg_t *localSeg);
     UResult PostSend(UBJetty *qp, const UBSendReadWriteRequest &req, urma_target_seg_t *localSeg, uint32_t immData = 0);
     UResult PostSendSglInline(UBJetty *qp, const UBSendSglInlineHeader &header, const UBSendReadWriteRequest &req,
-        uint32_t immData = 0);
+                              uint32_t immData = 0);
     UResult PostSendSgl(UBJetty *qp, const UBSHcomNetTransSglRequest &req, const UBSHcomNetTransRequest &tlsReq,
-        uint32_t immData, bool isEncrypted);
+                        uint32_t immData, bool isEncrypted);
     UResult PostRead(UBJetty *qp, const UBSendReadWriteRequest &req);
     UResult PostWrite(UBJetty *qp, const UBSendReadWriteRequest &req,
-        UBOpContextInfo::OpType type = UBOpContextInfo::WRITE);
+                      UBOpContextInfo::OpType type = UBOpContextInfo::WRITE);
     UResult RePostReceive(UBOpContextInfo *ctx);
     UResult CreateOneSideCtx(const UBSgeCtxInfo &sgeInfo, const UBSHcomNetTransSgeIov *iov, uint32_t iovCount,
-        uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead);
+                             uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead);
     UResult PostOneSideSgl(UBJetty *qp, const UBSendSglRWRequest &req, bool isRead = true);
 
     inline UBOpContextInfo *GetOpContextInfo()
@@ -224,7 +224,7 @@ public:
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 public:
     static UResult Create(const std::string &name, UBContext *ctx, const UBWorkerOptions &options,
-        NetMemPoolFixedPtr memPool, NetMemPoolFixedPtr sglMemPool, UBWorker *&outWorker);
+                          NetMemPoolFixedPtr memPool, NetMemPoolFixedPtr sglMemPool, UBWorker *&outWorker);
 
 protected:
     void RunInThread();
@@ -264,7 +264,7 @@ protected:
     UBIdleHandler mIdleHandler = nullptr;
 
     uint32_t mProgressBatchSize = NN_NO4;
-    
+
     JettyPtrMap mJettyPtrMap; ///< ID -> UBJetty* 映射表，仅出错后开始记录
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
@@ -292,11 +292,12 @@ private:
     }
 
     inline __attribute__((always_inline)) void ProcessPollingResult(urma_cr_t *wc, uint32_t pollCount,
-        UBJetty *&lastBrokenQp, urma_cr_status_t &lastErrorWcStatus)
+                                                                    UBJetty *&lastBrokenQp,
+                                                                    urma_cr_status_t &lastErrorWcStatus)
     {
         for (uint32_t i = 0; i < pollCount; i++) {
             const uint32_t jettyId = wc[i].local_id;
-            
+
             // SQE 被硬件处理时同时 modify jetty error 了
             if (wc[i].status == URMA_CR_WR_FLUSH_ERR) {
                 NN_LOG_DEBUG("SQE flushed, jetty id: " << wc[i].local_id);
@@ -334,7 +335,7 @@ private:
             switch (contextInfo->ubJetty->State()) {
                 case UBJettyState::READY:
                     break;
-                
+
                 // 已经处于 error 状态，需要等到 FLUSH_ERR_DONE 进行资源回收
                 case UBJettyState::ERROR:
                     continue;
@@ -367,25 +368,28 @@ private:
     }
 
     inline __attribute__((always_inline)) void CheckPollingResult(UBOpContextInfo &contextInfo, urma_cr_t &wc,
-        UBJetty *&lastBrokenQp, urma_cr_status_t &lastErrorWcStatus)
+                                                                  UBJetty *&lastBrokenQp,
+                                                                  urma_cr_status_t &lastErrorWcStatus)
     {
         if (NN_UNLIKELY(wc.status == URMA_CR_SUCCESS)) {
             return;
         }
         if (contextInfo.opType == UBOpContextInfo::HB_WRITE) {
             lastBrokenQp = contextInfo.ubJetty;
-            NN_LOG_INFO("HB poll cq receive wcStatus " << wc.status << ", maybe remote ep " <<
-                contextInfo.ubJetty->GetUpId() << " closed");
+            NN_LOG_INFO("HB poll cq receive wcStatus " << wc.status << ", maybe remote ep "
+                                                       << contextInfo.ubJetty->GetUpId() << " closed");
         } else if (lastBrokenQp != contextInfo.ubJetty) {
             lastBrokenQp = contextInfo.ubJetty;
-            NN_LOG_ERROR("Poll cq failed in UBWorker " << DetailName() << ", wcStatus " << wc.status << ", opType " <<
-                (uint32_t)(contextInfo.opType) << ", ep id = " << contextInfo.ubJetty->GetUpId() << ", context = " <<
-                (uint64_t)(&contextInfo) << ", mrMemAddr = " << contextInfo.mrMemAddr);
+            NN_LOG_ERROR("Poll cq failed in UBWorker "
+                         << DetailName() << ", wcStatus " << wc.status << ", opType " << (uint32_t)(contextInfo.opType)
+                         << ", ep id = " << contextInfo.ubJetty->GetUpId() << ", context = " << (uint64_t)(&contextInfo)
+                         << ", mrMemAddr = " << contextInfo.mrMemAddr);
         } else if (lastErrorWcStatus != wc.status) {
             lastErrorWcStatus = wc.status;
-            NN_LOG_ERROR("Poll cq failed in UBWorker " << DetailName() << ", wc Status " << wc.status << ", opType " <<
-                (uint32_t)contextInfo.opType << ", ep id = " << contextInfo.ubJetty->GetUpId() << ", context = " <<
-                (uint64_t)(&contextInfo) << ", mrMemAddr = " << contextInfo.mrMemAddr);
+            NN_LOG_ERROR("Poll cq failed in UBWorker "
+                         << DetailName() << ", wc Status " << wc.status << ", opType " << (uint32_t)contextInfo.opType
+                         << ", ep id = " << contextInfo.ubJetty->GetUpId() << ", context = " << (uint64_t)(&contextInfo)
+                         << ", mrMemAddr = " << contextInfo.mrMemAddr);
         }
     }
 

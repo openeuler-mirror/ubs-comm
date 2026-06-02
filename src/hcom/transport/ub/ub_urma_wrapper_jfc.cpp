@@ -27,8 +27,8 @@ UResult UBJfc::CreatePollingCq()
     urma_jfc_t *tmpJfc = HcomUrma::CreateJfc(mUBContext->mUrmaContext, &jfc_cfg);
     if (tmpJfc == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create completion queue for UBJfc " << mName << ", error " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create completion queue for UBJfc "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return UB_NEW_OBJECT_FAILED;
     }
 
@@ -42,8 +42,8 @@ UResult UBJfc::CreateEventCq()
     urma_jfce_t *tmpJfce = HcomUrma::CreateJfce(mUBContext->mUrmaContext);
     if (tmpJfce == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create JFCE for UBJfc " << mName << ", error " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create JFCE for UBJfc " << mName << ", error "
+                                                        << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return UB_NEW_OBJECT_FAILED;
     }
 
@@ -57,8 +57,8 @@ UResult UBJfc::CreateEventCq()
     urma_jfc_t *tmpJfc = HcomUrma::CreateJfc(mUBContext->mUrmaContext, &jfc_cfg);
     if (tmpJfc == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create completion queue for UBJfc " << mName << ", error " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create completion queue for UBJfc "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         HcomUrma::DeleteJfce(tmpJfce);
         return UB_NEW_OBJECT_FAILED;
     }
@@ -67,8 +67,8 @@ UResult UBJfc::CreateEventCq()
         HcomUrma::DeleteJfc(tmpJfc);
         HcomUrma::DeleteJfce(tmpJfce);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create completion queue for UBJfc " << mName << ", error " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create completion queue for UBJfc "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return UB_NEW_OBJECT_FAILED;
     }
 
@@ -77,8 +77,8 @@ UResult UBJfc::CreateEventCq()
         HcomUrma::DeleteJfc(tmpJfc);
         HcomUrma::DeleteJfce(tmpJfce);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to set no blocking for UBJfc " << mName << ", error " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to set no blocking for UBJfc "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return UB_NEW_OBJECT_FAILED;
     }
 
@@ -114,9 +114,9 @@ UResult UBJfc::UnInitialize()
     if (mUrmaJfc != nullptr) {
         if ((res = HcomUrma::DeleteJfc(mUrmaJfc)) != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to delete jfc " << res << ", as " <<
-                NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
-                return UB_OK;
+            NN_LOG_WARN("Unable to delete jfc " << res << ", as "
+                                                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            return UB_OK;
         }
         mUrmaJfc = nullptr;
     }
@@ -199,5 +199,5 @@ UResult UBJfc::EventProgressV(urma_cr_t *cr, uint32_t &countInOut, int32_t timeo
     return UB_OK;
 }
 } // namespace hcom
-}
+} // namespace ock
 #endif

@@ -13,7 +13,7 @@ namespace perftest {
 using namespace ock::hcom;
 constexpr uint16_t OP_CODE_READ_LAT = 2;
 int TransportReadLatTest::NewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                                      const std::string &payload)
 {
     mEp = ep;
     LOG_DEBUG("new connection from " << ipPort << " !");
@@ -27,12 +27,13 @@ int TransportReadLatTest::RequestReceived(const ock::hcom::UBSHcomNetRequestCont
         // client
         if (memcpy_s(&serverMrInfo, sizeof(serverMrInfo), ctx.Message()->Data(), ctx.Message()->DataLen()) != 0) {
             LOG_ERROR("memcpy_s failed");
+            sem_post(&mSem);
             return -1;
         }
         if (mCfg.GetUbcMode() == ock::hcom::UBSHcomUbcMode::HighBandwidth &&
             mCfg.GetProtocol() == ock::hcom::UBSHcomNetDriverProtocol::UBC) {
             mHelper.GetNetDriver()->ImportUrmaSeg(serverMrInfo.lAddress, serverMrInfo.size, serverMrInfo.lKey, &mTseg,
-                serverMrInfo.eid, sizeof(serverMrInfo.eid));
+                                                  serverMrInfo.eid, sizeof(serverMrInfo.eid));
         }
         sem_post(&mSem);
         return result;
@@ -56,7 +57,7 @@ bool TransportReadLatTest::Initialize()
 
     // create UBSHcomNetDriver
     NewEpHandler funcNewEndpoint = bind(&TransportReadLatTest::NewEndPoint, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+                                        std::placeholders::_2, std::placeholders::_3);
     ReqRecvHandler funcReqReceived = bind(&TransportReadLatTest::RequestReceived, this, std::placeholders::_1);
     OneSideDoneHandler funcOneSide = bind(&TransportReadLatTest::OneSideDone, this, std::placeholders::_1);
     mHelper.RegisterNewEPHandler(funcNewEndpoint);
@@ -170,5 +171,5 @@ bool TransportReadLatTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::TRANSPORT_READ_LAT, TransportReadLatTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

@@ -12,20 +12,20 @@
 #ifndef OCK_NET_COMMON_123424434341233_H
 #define OCK_NET_COMMON_123424434341233_H
 
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <strings.h>
+#include <unistd.h>
 #include <atomic>
 #include <cstddef>
 #include <cstring>
 #include <ctime>
-#include <ifaddrs.h>
 #include <iostream>
-#include <netinet/in.h>
+#include <regex>
 #include <sstream>
-#include <strings.h>
 #include <thread>
 #include <unordered_map>
-#include <unistd.h>
-#include <regex>
-#include <arpa/inet.h>
 
 #include "net_crc32.h"
 #include "net_trace.h"
@@ -52,7 +52,7 @@ constexpr const char *INVALID_IP_PORT_SPLIT_PLACEHOLDER = "999999";
 /**
  * Get struct pointer from member pointer
  */
-#define GetStructRoot(_memberPtr, _type, _field) ((_type*)((char*)(_memberPtr) - offsetof(_type, _field)))
+#define GetStructRoot(_memberPtr, _type, _field) ((_type *)((char *)(_memberPtr) - offsetof(_type, _field)))
 
 enum class NetProtocol {
     NET_TCP,
@@ -93,8 +93,7 @@ public:
     static inline NResult ValidateSeqNo(UBSHcomNetTransHeader &header, uint32_t lastSendSeqNo)
     {
         if (NN_UNLIKELY(header.seqNo != lastSendSeqNo)) {
-            NN_LOG_ERROR("Received un-matched seq no " << header.seqNo << ", demand seq no "
-                                                       << lastSendSeqNo);
+            NN_LOG_ERROR("Received un-matched seq no " << header.seqNo << ", demand seq no " << lastSendSeqNo);
             return NN_SEQ_NO_NOT_MATCHED;
         }
 
@@ -128,7 +127,7 @@ public:
     }
 
     static inline NResult ValidateHeaderWithSeqNo(UBSHcomNetTransHeader &header, uint32_t dataSize,
-        uint32_t lastSendSeqNo)
+                                                  uint32_t lastSendSeqNo)
     {
         NResult ret = ValidateSeqNo(header, lastSendSeqNo);
         if (ret != NN_OK) {
@@ -308,8 +307,7 @@ public:
             return NN_INVALID_PARAM;
         }
         for (char n : name) {
-            if (NN_UNLIKELY((!std::isalnum(n)) &&
-                            (n != '_' && n != '-' && n != '/' && n != '.' && n != ':'))) {
+            if (NN_UNLIKELY((!std::isalnum(n)) && (n != '_' && n != '-' && n != '/' && n != '.' && n != ':'))) {
                 NN_LOG_WARN("Url cannot contain illegal characters, only could contain alphabet, "
                             "number, -, _, ., :, /");
                 return NN_INVALID_PARAM;
@@ -330,7 +328,7 @@ public:
 #ifdef UB_BUILD_ENABLED
     static NResult NN_EidToStr(uvs_eid_t &eid, std::string &strEid)
     {
-        struct in6_addr eidIn6{};
+        struct in6_addr eidIn6 {};
         uint32_t size = sizeof(uint64_t); // size of uint64_t: 8
         if (NN_UNLIKELY(memcpy_s(&eidIn6.s6_addr[0], size, &eid.in6.subnet_prefix, size) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy subnet_prefix to in6_addr");
@@ -376,7 +374,7 @@ public:
     }
 
     static NResult NN_GetPrimaryEid(const std::string &srcBondingEid, const std::string &dstBondingEid,
-        std::string &srcPrimaryEid, std::string &dstPrimaryEid)
+                                    std::string &srcPrimaryEid, std::string &dstPrimaryEid)
     {
         NN_LOG_DEBUG("srcBondingEid: " << srcBondingEid << ", dstBondingEid: " << dstBondingEid);
         uvs_path_set_t uvsPathSet = {};
@@ -610,9 +608,11 @@ public:
             workerGroups.emplace_back(1);
             return true;
         } else if (extractStrings.size() > NN_NO128) {
-            NN_LOG_ERROR("Invalid worker group setting '" << workerStr <<
-                "', example '1,3,3' meaning that there are 3 groups, 1 worker in group0, 3 workers in group1 and 3 "
-                "workers in group2. group size must be 1-128");
+            NN_LOG_ERROR(
+                "Invalid worker group setting '"
+                << workerStr
+                << "', example '1,3,3' meaning that there are 3 groups, 1 worker in group0, 3 workers in group1 and 3 "
+                   "workers in group2. group size must be 1-128");
             return false;
         }
 
@@ -626,9 +626,11 @@ public:
             }
 
             /* if invalid config group */
-            NN_LOG_ERROR("Invalid worker group setting '" << workerStr <<
-                "', example '1,3,3' meaning that there are 3 groups, 1 worker in group0, 3 workers in group1 and 3 "
-                "workers in group2. worker size in each group must be 1-128");
+            NN_LOG_ERROR(
+                "Invalid worker group setting '"
+                << workerStr
+                << "', example '1,3,3' meaning that there are 3 groups, 1 worker in group0, 3 workers in group1 and 3 "
+                   "workers in group2. worker size in each group must be 1-128");
             return false;
         }
 
@@ -653,7 +655,7 @@ public:
      * 3 each element is workerGroupCpusStr na/NA/digital-range
      */
     static bool NN_ParseWorkerGroupsCpus(const std::string &workerGroupCpusStr,
-        std::vector<std::pair<uint8_t, uint8_t>> &workerGroupCpus)
+                                         std::vector<std::pair<uint8_t, uint8_t>> &workerGroupCpus)
     {
         std::vector<std::string> extractStrings;
         NN_SplitStr(workerGroupCpusStr, ",", extractStrings);
@@ -670,9 +672,11 @@ public:
             workerGroupCpus.clear();
             return true;
         } else if (extractStrings.size() > NN_NO128) {
-            NN_LOG_ERROR("Invalid cpu id setting '" << workerGroupCpusStr <<
-                "' for worker groups, example '10-10,11-13,na' meaning that 10 for group0, 11/12/13 for group1, no "
-                "need to group2, each number must be 0-127, total group must less or equal to 128");
+            NN_LOG_ERROR(
+                "Invalid cpu id setting '"
+                << workerGroupCpusStr
+                << "' for worker groups, example '10-10,11-13,na' meaning that 10 for group0, 11/12/13 for group1, no "
+                   "need to group2, each number must be 0-127, total group must less or equal to 128");
             return false;
         }
 
@@ -696,16 +700,18 @@ public:
                 badConf = true;
             } else if (!NN_Stol(extractedCpuIds[0], tmpCpuIdStart) || !NN_Stol(extractedCpuIds[1], tmpCpuIdEnd)) {
                 badConf = true;
-            } else if (tmpCpuIdStart < 0 || tmpCpuIdStart >= NN_NO612  || tmpCpuIdEnd < 0 || tmpCpuIdEnd >= NN_NO612) {
+            } else if (tmpCpuIdStart < 0 || tmpCpuIdStart >= NN_NO612 || tmpCpuIdEnd < 0 || tmpCpuIdEnd >= NN_NO612) {
                 badConf = true;
             } else if (tmpCpuIdStart > tmpCpuIdEnd) {
                 badConf = true;
             }
 
             if (badConf) {
-                NN_LOG_ERROR("Invalid cpu id setting '" << item << "' in '" << workerGroupCpusStr <<
-                    "' for worker groups, example '10-10,11-13,na' meaning that 10 for group0, 11/12/13 for group1, no "
-                    "need to group2, each number must be 0-127, total group must less or equal to 128");
+                NN_LOG_ERROR("Invalid cpu id setting '"
+                             << item << "' in '" << workerGroupCpusStr
+                             << "' for worker groups, example '10-10,11-13,na' meaning that 10 for group0, 11/12/13 "
+                                "for group1, no "
+                                "need to group2, each number must be 0-127, total group must less or equal to 128");
                 return false;
             }
 
@@ -727,8 +733,8 @@ public:
      * @return true if ok
      */
     static bool NN_FinalizeWorkerGroupCpus(const std::vector<uint16_t> &workerGroups,
-        const std::vector<std::pair<uint8_t, uint8_t>> &workerGroupCpus, bool allowDuplicatedCpuIds,
-        std::vector<int16_t> &flatWorkersCpus)
+                                           const std::vector<std::pair<uint8_t, uint8_t>> &workerGroupCpus,
+                                           bool allowDuplicatedCpuIds, std::vector<int16_t> &flatWorkersCpus)
     {
         if (workerGroups.empty() || workerGroups.size() < workerGroupCpus.size()) {
             NN_LOG_ERROR("Invalid worker groups which is empty or size of worker groups < cpu groups");
@@ -761,9 +767,10 @@ public:
 
             /* invalid size */
             if (cpuPair.second > workersInGroup || (!allowDuplicatedCpuIds && cpuPair.second != workersInGroup)) {
-                NN_LOG_ERROR("Invalid cpus group '" << cpuPair.first << ":" << cpuPair.second << "', the count " <<
-                    cpuPair.second << " is larger than or not equal to workers number " << workersInGroup <<
-                    " of group " << i);
+                NN_LOG_ERROR("Invalid cpus group '"
+                             << cpuPair.first << ":" << cpuPair.second << "', the count " << cpuPair.second
+                             << " is larger than or not equal to workers number " << workersInGroup << " of group "
+                             << i);
                 return false;
             }
 
@@ -797,13 +804,13 @@ public:
      * 4 each element is threadPriorityStr must be -20 to 20
      */
     static bool NN_ParseWorkersGroupsThreadPriority(const std::string &threadPriorityStr,
-        std::vector<int16_t> &threadPriority, int groupNum)
+                                                    std::vector<int16_t> &threadPriority, int groupNum)
     {
         std::vector<std::string> extractStrings;
         NN_SplitStr(threadPriorityStr, ",", extractStrings);
 
-        NN_LOG_TRACE_INFO("Worker group thread priority string '" << threadPriorityStr << "', extract vector size " <<
-            threadPriority.size());
+        NN_LOG_TRACE_INFO("Worker group thread priority string '" << threadPriorityStr << "', extract vector size "
+                                                                  << threadPriority.size());
 #ifdef NN_LOG_TRACE_INFO_ENABLED
         for (auto &item : extractStrings) {
             NN_LOG_TRACE_INFO("extracted item " << item);
@@ -815,8 +822,8 @@ public:
             threadPriority.clear();
             return true;
         } else if (static_cast<int>(extractStrings.size()) != groupNum) {
-            NN_LOG_ERROR("Invalid worker group thread priority setting '" << threadPriorityStr <<
-                "'. group size must be equal worker group number " << groupNum);
+            NN_LOG_ERROR("Invalid worker group thread priority setting '"
+                         << threadPriorityStr << "'. group size must be equal worker group number " << groupNum);
             return false;
         }
 
@@ -834,10 +841,12 @@ public:
             }
 
             /* if invalid config group */
-            NN_LOG_ERROR("Invalid worker group thread priority setting '" << threadPriorityStr <<
-                "', example '1,3,na,10' meaning that there are 4 groups, group0 set thread priority 1 , group1 set "
-                "thread priority 3,group2 not set thread priority and group3 set thread priority 10"
-                ". thread priority in each group must be -20~19");
+            NN_LOG_ERROR(
+                "Invalid worker group thread priority setting '"
+                << threadPriorityStr
+                << "', example '1,3,na,10' meaning that there are 4 groups, group0 set thread priority 1 , group1 set "
+                   "thread priority 3,group2 not set thread priority and group3 set thread priority 10"
+                   ". thread priority in each group must be -20~19");
             return false;
         }
 
@@ -965,7 +974,7 @@ public:
 
 private:
     std::unordered_map<uint64_t, std::pair<uint64_t, uint64_t>> mRangeCache;
-    ::pthread_rwlock_t mRwlock {};
+    ::pthread_rwlock_t mRwlock{};
     bool mLockWhenOperates = false;
 };
 
@@ -974,9 +983,10 @@ inline NResult FilterIp(const std::string &ipMask, std::vector<std::string> &out
     in_addr_t mask = 0;
     in_addr_t inputIpByMask = 0;
     if (!NetFunc::NN_CovertIpMask(ipMask, inputIpByMask, mask)) {
-        NN_LOG_ERROR("Ip mask is invalid " << ipMask <<
-            ", should be something like '192.168.2.1/24', 24 means the left 24 bits will be "
-            "the condition to compare");
+        NN_LOG_ERROR("Ip mask is invalid "
+                     << ipMask
+                     << ", should be something like '192.168.2.1/24', 24 means the left 24 bits will be "
+                        "the condition to compare");
         return NN_ERROR;
     }
 
@@ -988,8 +998,7 @@ inline NResult FilterIp(const std::string &ipMask, std::vector<std::string> &out
 
     struct ifaddrs *iter = addresses;
     while (iter != nullptr) {
-        if (iter->ifa_addr == nullptr ||
-            iter->ifa_addr->sa_family != AF_INET ||
+        if (iter->ifa_addr == nullptr || iter->ifa_addr->sa_family != AF_INET ||
             ((reinterpret_cast<struct sockaddr_in *>(iter->ifa_addr))->sin_addr.s_addr & mask) != inputIpByMask) {
             iter = iter->ifa_next;
             continue;
@@ -997,7 +1006,7 @@ inline NResult FilterIp(const std::string &ipMask, std::vector<std::string> &out
 
         char ipStr[INET_ADDRSTRLEN] = {0};
         inet_ntop(AF_INET, &((reinterpret_cast<struct sockaddr_in *>(iter->ifa_addr))->sin_addr), ipStr,
-            INET_ADDRSTRLEN);
+                  INET_ADDRSTRLEN);
         outIps.emplace_back(ipStr);
 
         iter = iter->ifa_next;
@@ -1019,7 +1028,7 @@ inline bool ValidateArrayOptions(const char *src, uint32_t srcLen)
     NN_LOG_ERROR("The array length is too long, it must less or equal to " << srcLen);
     return false;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

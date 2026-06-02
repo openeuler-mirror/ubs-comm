@@ -1,11 +1,11 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
-#include <sstream>
-#include <iomanip>
-#include "report/perf_test_report_factory.h"
-#include "common/perf_test_logger.h"
 #include "report/perf_test_report_bw.h"
+#include <iomanip>
+#include <sstream>
+#include "common/perf_test_logger.h"
+#include "report/perf_test_report_factory.h"
 
 namespace hcom {
 namespace perftest {
@@ -72,5 +72,5 @@ void PerfTestReportBw::PrintReportHead()
 }
 
 REGIST_PERF_TEST_REPORT_CREATOR(PERF_TEST_REPORT_TYPE::BAND_WIDTH, PerfTestReportBw);
-}
-}
+} // namespace perftest
+} // namespace hcom

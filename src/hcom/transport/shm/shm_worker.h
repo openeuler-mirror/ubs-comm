@@ -15,10 +15,10 @@
 #include <sys/resource.h>
 
 #include "net_monotonic.h"
+#include "shm_channel.h"
 #include "shm_common.h"
 #include "shm_handle.h"
 #include "shm_queue.h"
-#include "shm_channel.h"
 
 namespace ock {
 namespace hcom {
@@ -38,8 +38,8 @@ struct ShmWorkerOptions {
     std::string ToShortString() const
     {
         std::ostringstream oss;
-        oss << "mode: " << ShmPollingModeToStr(mode) << ", poll-timeout: " << pollingTimeoutMs << "us, event-q-cap: " <<
-            eventQueueLength;
+        oss << "mode: " << ShmPollingModeToStr(mode) << ", poll-timeout: " << pollingTimeoutMs
+            << "us, event-q-cap: " << eventQueueLength;
         return oss.str();
     }
 };
@@ -47,8 +47,8 @@ struct ShmWorkerOptions {
 class ShmWorker {
 public:
     ShmWorker(const std::string &name, const UBSHcomNetWorkerIndex &index, const ShmWorkerOptions &options,
-        const NetMemPoolFixedPtr &opMemPool, const NetMemPoolFixedPtr &opCtxMemPool,
-        const NetMemPoolFixedPtr &sglOpMemPool);
+              const NetMemPoolFixedPtr &opMemPool, const NetMemPoolFixedPtr &opCtxMemPool,
+              const NetMemPoolFixedPtr &sglOpMemPool);
 
     ~ShmWorker()
     {
@@ -140,9 +140,9 @@ public:
     }
 
     HResult PostSend(ShmChannel *ch, const UBSHcomNetTransRequest &req, uint64_t offset, uint32_t immData,
-        int32_t defaultTimeout);
+                     int32_t defaultTimeout);
     HResult PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransRequest &req, const UBSHcomNetTransSglRequest &sglReq,
-        uint64_t offset, uint32_t immData, int32_t defaultTimeout);
+                           uint64_t offset, uint32_t immData, int32_t defaultTimeout);
     HResult PostRead(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap);
     HResult PostReadSgl(ShmChannel *ch, const UBSHcomNetTransSglRequest &req, ShmMRHandleMap &mrHandleMap);
     HResult PostWrite(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap);
@@ -159,10 +159,10 @@ private:
     void DoBusyPolling();
 
     HResult PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap,
-        ShmOpContextInfo::ShmOpType type);
+                          ShmOpContextInfo::ShmOpType type);
 
     HResult PostReadWriteSgl(ShmChannel *ch, const UBSHcomNetTransSglRequest &req, ShmMRHandleMap &mrHandleMap,
-        ShmOpContextInfo::ShmOpType type);
+                             ShmOpContextInfo::ShmOpType type);
 
     uint64_t inline GetFinishTime()
     {
@@ -197,17 +197,17 @@ private:
 private:
     std::string mName;
     std::mutex mMutex;
-    UBSHcomNetWorkerIndex mIndex {};
+    UBSHcomNetWorkerIndex mIndex{};
     bool mInited = false;
     int32_t mDefaultTimeout = -1;
 
-    ShmWorkerOptions mOptions {};
+    ShmWorkerOptions mOptions{};
 
     /* variable for thread */
-    std::thread mProgressThr;                       /* thread object of progress */
-    bool mStarted = false;                          /* thread already started or not */
-    std::atomic_bool mProgressThrStarted { false }; /* started flag */
-    volatile bool mNeedToStop = false;              /* flag to be stopped */
+    std::thread mProgressThr;                    /* thread object of progress */
+    bool mStarted = false;                       /* thread already started or not */
+    std::atomic_bool mProgressThrStarted{false}; /* started flag */
+    volatile bool mNeedToStop = false;           /* flag to be stopped */
 
     ShmOpCompInfoPool mOpCompInfoPool;     /* op completion pool */
     ShmOpContextInfoPool mOpCtxInfoPool;   /* op completion pool */
@@ -225,12 +225,12 @@ private:
 };
 
 inline HResult ShmWorker::PostSend(ShmChannel *ch, const UBSHcomNetTransRequest &req, uint64_t offset, uint32_t immData,
-    int32_t defaultTimeout = -1)
+                                   int32_t defaultTimeout = -1)
 {
     /* upper caller need to make sure ch is not null */
     if (NN_UNLIKELY(req.upCtxSize > sizeof(ShmOpContextInfo::upCtx))) {
-        NN_LOG_ERROR("Failed to PostSend with ShmWorker " << mName << " as upCtxSize > " <<
-            sizeof(ShmOpContextInfo::upCtx));
+        NN_LOG_ERROR("Failed to PostSend with ShmWorker " << mName << " as upCtxSize > "
+                                                          << sizeof(ShmOpContextInfo::upCtx));
         return SH_PARAM_INVALID;
     }
 
@@ -242,7 +242,7 @@ inline HResult ShmWorker::PostSend(ShmChannel *ch, const UBSHcomNetTransRequest 
     mDefaultTimeout = defaultTimeout;
 
     ShmEvent event(immData, req.size, offset, ch->Id(), ch->PeerChannelId(), ch->PeerChannelAddress(),
-        ShmOpContextInfo::ShmOpType::SH_RECEIVE);
+                   ShmOpContextInfo::ShmOpType::SH_RECEIVE);
     auto result = ch->EQEventEnqueue(event);
     if (NN_UNLIKELY(result != SH_OK)) {
         if (result == ShmEventQueue::SHM_QUEUE_FULL) {
@@ -290,8 +290,7 @@ inline HResult ShmWorker::PostRead(ShmChannel *ch, const UBSHcomNetTransRequest 
     return PostReadWrite(ch, req, mrHandleMap, ShmOpContextInfo::ShmOpType::SH_READ);
 }
 
-inline HResult ShmWorker::PostReadSgl(ShmChannel *ch, const UBSHcomNetTransSglRequest &req,
-    ShmMRHandleMap &mrHandleMap)
+inline HResult ShmWorker::PostReadSgl(ShmChannel *ch, const UBSHcomNetTransSglRequest &req, ShmMRHandleMap &mrHandleMap)
 {
     return PostReadWriteSgl(ch, req, mrHandleMap, ShmOpContextInfo::ShmOpType::SH_SGL_READ);
 }
@@ -302,11 +301,11 @@ inline HResult ShmWorker::PostWrite(ShmChannel *ch, const UBSHcomNetTransRequest
 }
 
 inline HResult ShmWorker::PostWriteSgl(ShmChannel *ch, const UBSHcomNetTransSglRequest &req,
-    ShmMRHandleMap &mrHandleMap)
+                                       ShmMRHandleMap &mrHandleMap)
 {
     return PostReadWriteSgl(ch, req, mrHandleMap, ShmOpContextInfo::ShmOpType::SH_SGL_WRITE);
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_SHM_WORKER_H

@@ -63,33 +63,33 @@ void ShmChannel::UnInitialize()
 HResult ShmChannel::ValidateExchangeInfo(const ShmConnExchangeInfo &info)
 {
     if (NN_UNLIKELY(info.qCapacity == 0 || info.qCapacity > NN_NO8192 || info.queueFd <= 0)) {
-        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId <<
-            " to ready as invalid queue capacity or fd from peer");
+        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId
+                                                   << " to ready as invalid queue capacity or fd from peer");
         return SH_PARAM_INVALID;
     }
 
     if (NN_UNLIKELY(info.GetQueueName().empty())) {
-        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId <<
-            " to ready as invalid queue name from peer");
+        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId
+                                                   << " to ready as invalid queue name from peer");
         return SH_PARAM_INVALID;
     }
 
     if (NN_UNLIKELY(info.dcBuckCount == 0 || info.dcBuckSize == 0 || info.dcBuckCount > NN_NO65535 ||
-        info.dcBuckSize > NET_SGE_MAX_SIZE)) {
-        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId <<
-            " to ready as invalid buck size or count from peer");
+                    info.dcBuckSize > NET_SGE_MAX_SIZE)) {
+        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId
+                                                   << " to ready as invalid buck size or count from peer");
         return SH_PARAM_INVALID;
     }
 
     if (NN_UNLIKELY(info.GetDCName().empty())) {
-        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId <<
-            " to ready as invalid data channel name from peer");
+        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId
+                                                   << " to ready as invalid data channel name from peer");
         return SH_PARAM_INVALID;
     }
 
     if (NN_UNLIKELY(info.channelId == 0 || info.channelAddress == 0 || info.channelFd <= 0)) {
-        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId <<
-            " to ready as invalid data channel id, address or fd from peer");
+        NN_LOG_ERROR("Failed to change ShmChannel" << mName << ":" << mId
+                                                   << " to ready as invalid data channel id, address or fd from peer");
         return SH_PARAM_INVALID;
     }
 
@@ -160,5 +160,5 @@ HResult ShmChannel::ChangeToReady(const ShmConnExchangeInfo &info)
 
     return SH_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

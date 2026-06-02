@@ -23,7 +23,7 @@ namespace hcom {
 class NetAsyncEndpointSock : public NetEndpointImpl {
 public:
     NetAsyncEndpointSock(uint64_t id, Sock *sock, NetDriverSockWithOOB *driver,
-        const UBSHcomNetWorkerIndex &workerIndex);
+                         const UBSHcomNetWorkerIndex &workerIndex);
     ~NetAsyncEndpointSock() override;
 
     NResult SetEpOption(UBSHcomEpOptions &epOptions) override;
@@ -35,7 +35,7 @@ public:
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
 
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo) override;
+                     const UBSHcomNetTransOpInfo &opInfo) override;
 
     NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
 
@@ -133,8 +133,8 @@ public:
     {
         // 用户可能在建链回调中使用该函数，此时ep状态并未设置成NEP_ESTABLISHED
         if (!mState.Compare(NEP_ESTABLISHED)) {
-            NN_LOG_WARN("[Sock AsyncEp] EP status is " << mState.Get() <<
-                " now, use ep after the connection established.");
+            NN_LOG_WARN("[Sock AsyncEp] EP status is " << mState.Get()
+                                                       << " now, use ep after the connection established.");
         }
 
         if (!mDriver->mStartOobSvr) {
@@ -193,7 +193,7 @@ private:
 
     friend class NetDriverSockWithOOB;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_SOCK_ASYNC_ENDPOINT_H

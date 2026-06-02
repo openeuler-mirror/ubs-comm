@@ -16,22 +16,22 @@
 #include <mutex>
 #include "securec.h"
 
+#include "api/hcom_service.h"
+#include "api/hcom_service_def.h"
 #include "hcom_def.h"
 #include "hcom_err.h"
 #include "hcom_log.h"
 #include "hcom_num_def.h"
-#include "api/hcom_service_def.h"
-#include "api/hcom_service.h"
 
 #include "net_common.h"
 #include "net_load_balance.h"
 #include "net_mem_pool_fixed.h"
 #include "net_param_validator.h"
 
-#include "service_common.h"
 #include "service_callback.h"
-#include "service_periodic_manager.h"
 #include "service_channel_imp.h"
+#include "service_common.h"
+#include "service_periodic_manager.h"
 
 namespace ock {
 namespace hcom {
@@ -95,8 +95,7 @@ SerResult HcomServiceImp::AddTcpOobListener(const std::string &url, uint16_t wor
     }
 
     if (NN_UNLIKELY(mOptions.oobOption.find(url) != mOptions.oobOption.end())) {
-        NN_LOG_WARN("Duplicated listen ip/port adding to driver Manager " <<
-            mOptions.name << ", ignored");
+        NN_LOG_WARN("Duplicated listen ip/port adding to driver Manager " << mOptions.name << ", ignored");
         return SER_INVALID_PARAM;
     }
 
@@ -121,8 +120,7 @@ SerResult HcomServiceImp::AddUdsOobListener(const std::string &url, uint16_t wor
     }
 
     if (NN_UNLIKELY(mOptions.udsOobOption.find(name) != mOptions.udsOobOption.end())) {
-        NN_LOG_WARN("Duplicated listen url adding to driver " << mOptions.name <<
-            ", ignored");
+        NN_LOG_WARN("Duplicated listen url adding to driver " << mOptions.name << ", ignored");
         return SER_INVALID_PARAM;
     }
 
@@ -164,8 +162,8 @@ int32_t HcomServiceImp::Start()
     }
     mPgtable = pgtable;
 
-    if (NN_LIKELY(mOptions.protocol != UBSHcomNetDriverProtocol::SHM
-            && mOptions.protocol != UBSHcomNetDriverProtocol::UDS && !mOptions.ipMasks.empty())) {
+    if (NN_LIKELY(mOptions.protocol != UBSHcomNetDriverProtocol::SHM &&
+                  mOptions.protocol != UBSHcomNetDriverProtocol::UDS && !mOptions.ipMasks.empty())) {
         mOobIp = GetFilteredDeviceIP(mOptions.ipMasks[0]);
     }
 
@@ -189,22 +187,23 @@ SerResult HcomServiceImp::DoInitDriver()
                 ++driverIdx;
             }
         }
-        driver->RegisterNewEPHandler(std::bind(&HcomServiceImp::ServiceHandleNewEndPoint, this,
-            std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+        driver->RegisterNewEPHandler(std::bind(&HcomServiceImp::ServiceHandleNewEndPoint, this, std::placeholders::_1,
+                                               std::placeholders::_2, std::placeholders::_3));
         driver->RegisterEPBrokenHandler(std::bind(&HcomServiceImp::ServiceEndPointBroken, this, std::placeholders::_1));
         driver->RegisterNewReqHandler(std::bind(&HcomServiceImp::ServiceRequestReceived, this, std::placeholders::_1));
         driver->RegisterReqPostedHandler(std::bind(&HcomServiceImp::ServiceRequestPosted, this, std::placeholders::_1));
         driver->RegisterOneSideDoneHandler(std::bind(&HcomServiceImp::ServiceOneSideDone, this, std::placeholders::_1));
 
         if (mOptions.connSecOption.provider != nullptr) {
-            driver->RegisterEndpointSecInfoProvider(std::bind(&HcomServiceImp::ServiceSecInfoProvider, this,
-                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4,
-                std::placeholders::_5, std::placeholders::_6));
+            driver->RegisterEndpointSecInfoProvider(
+                std::bind(&HcomServiceImp::ServiceSecInfoProvider, this, std::placeholders::_1, std::placeholders::_2,
+                          std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
         }
 
         if (mOptions.connSecOption.validator != nullptr) {
             driver->RegisterEndpointSecInfoValidator(std::bind(&HcomServiceImp::ServiceSecInfoValidator, this,
-                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+                                                               std::placeholders::_1, std::placeholders::_2,
+                                                               std::placeholders::_3, std::placeholders::_4));
         }
 
         res = driver->Initialize(driverOpt);
@@ -248,8 +247,9 @@ SerResult HcomServiceImp::CreateOobUdsListeners(const UBSHcomNetDriverOptions &d
         NetOOBServerPtr oobServer = nullptr;
         /* create oob server */
         if (driverOpt.enableTls) { // to check
-            auto oobSSLServer = new (std::nothrow) OOBSSLServer(driverOpt.oobType, lOpt.second.Name(),
-                lOpt.second.perm, mOptions.tlsOption.pkCb, mOptions.tlsOption.cfCb, mOptions.tlsOption.caCb);
+            auto oobSSLServer = new (std::nothrow)
+                OOBSSLServer(driverOpt.oobType, lOpt.second.Name(), lOpt.second.perm, mOptions.tlsOption.pkCb,
+                             mOptions.tlsOption.cfCb, mOptions.tlsOption.caCb);
             NN_ASSERT_LOG_RETURN(oobSSLServer != nullptr, NN_NEW_OBJECT_FAILED)
             oobSSLServer->SetTlsOptions(mOptions.tlsOption.netCipherSuite, mOptions.tlsOption.tlsVersion);
             oobSSLServer->SetPSKCallback(mOptions.tlsOption.pskFindCb, mOptions.tlsOption.pskUseCb);
@@ -259,7 +259,7 @@ SerResult HcomServiceImp::CreateOobUdsListeners(const UBSHcomNetDriverOptions &d
                 OOBTCPServer(driverOpt.oobType, lOpt.second.Name(), lOpt.second.perm, lOpt.second.isCheck);
             NN_ASSERT_LOG_RETURN(oobServer.Get() != nullptr, NN_NEW_OBJECT_FAILED)
         }
-        oobServer->Index({ 0, oobIndex++ });
+        oobServer->Index({0, oobIndex++});
         oobServer->SetMaxConntionNum(driverOpt.maxConnectionNum);
         oobServer->SetMultiRail(driverOpt.enableMultiRail);
         oobServer->IncreaseRef();
@@ -267,8 +267,8 @@ SerResult HcomServiceImp::CreateOobUdsListeners(const UBSHcomNetDriverOptions &d
     }
 
     if (mOptions.udsOobOption.size() != mOobServers.size()) {
-        NN_LOG_ERROR("Created oob server count " << mOobServers.size() << " is not equal to listener options size " <<
-            mOptions.udsOobOption.size() << " in uds driver " << mOptions.name);
+        NN_LOG_ERROR("Created oob server count " << mOobServers.size() << " is not equal to listener options size "
+                                                 << mOptions.udsOobOption.size() << " in uds driver " << mOptions.name);
         return SER_ERROR;
     }
 
@@ -278,16 +278,15 @@ SerResult HcomServiceImp::CreateOobUdsListeners(const UBSHcomNetDriverOptions &d
 SerResult HcomServiceImp::CreateOobListeners(const UBSHcomNetDriverOptions &driverOpt)
 {
     if (driverOpt.oobType != NET_OOB_UDS && driverOpt.oobType != NET_OOB_TCP) {
-        NN_LOG_ERROR("Un-supported oob type " << driverOpt.oobType << " is set in driver Manager " <<
-            mOptions.name);
+        NN_LOG_ERROR("Un-supported oob type " << driverOpt.oobType << " is set in driver Manager " << mOptions.name);
         return SER_INVALID_PARAM;
     } else if (driverOpt.oobType == NET_OOB_UDS) {
         return CreateOobUdsListeners(driverOpt);
     }
 
     if (mOptions.oobOption.empty()) {
-        NN_LOG_ERROR("No listen info is set for oob type " << UBSHcomNetDriverOobTypeToString(driverOpt.oobType) <<
-            " in driver " << mOptions.name);
+        NN_LOG_ERROR("No listen info is set for oob type " << UBSHcomNetDriverOobTypeToString(driverOpt.oobType)
+                                                           << " in driver " << mOptions.name);
         return SER_INVALID_PARAM;
     }
 
@@ -300,8 +299,9 @@ SerResult HcomServiceImp::CreateOobListeners(const UBSHcomNetDriverOptions &driv
     for (auto &lOpt : mOptions.oobOption) {
         NetOOBServerPtr oobServer = nullptr;
         if (driverOpt.enableTls) {
-            auto oobSSLServer = new (std::nothrow) OOBSSLServer(driverOpt.oobType, lOpt.second.Ip(),
-                lOpt.second.port, mOptions.tlsOption.pkCb, mOptions.tlsOption.cfCb, mOptions.tlsOption.caCb);
+            auto oobSSLServer = new (std::nothrow)
+                OOBSSLServer(driverOpt.oobType, lOpt.second.Ip(), lOpt.second.port, mOptions.tlsOption.pkCb,
+                             mOptions.tlsOption.cfCb, mOptions.tlsOption.caCb);
             NN_ASSERT_LOG_RETURN(oobSSLServer != nullptr, NN_NEW_OBJECT_FAILED)
             oobSSLServer->SetTlsOptions(mOptions.tlsOption.netCipherSuite, mOptions.tlsOption.tlsVersion);
             oobSSLServer->SetPSKCallback(mOptions.tlsOption.pskFindCb, mOptions.tlsOption.pskUseCb);
@@ -312,7 +312,7 @@ SerResult HcomServiceImp::CreateOobListeners(const UBSHcomNetDriverOptions &driv
         }
 
         NN_LOG_TRACE_INFO(lOpt.second.Ip());
-        oobServer->Index({ 0, oobIndex++ });
+        oobServer->Index({0, oobIndex++});
         oobServer->SetMaxConntionNum(driverOpt.maxConnectionNum);
         oobServer->SetMultiRail(driverOpt.enableMultiRail);
         oobServer->IncreaseRef();
@@ -320,8 +320,8 @@ SerResult HcomServiceImp::CreateOobListeners(const UBSHcomNetDriverOptions &driv
     }
 
     if (mOptions.oobOption.size() != mOobServers.size()) {
-        NN_LOG_ERROR("Created oob server count " << mOobServers.size() << " is not equal to listener options size " <<
-            mOptions.oobOption.size() << " in driver " << mOptions.name);
+        NN_LOG_ERROR("Created oob server count " << mOobServers.size() << " is not equal to listener options size "
+                                                 << mOptions.oobOption.size() << " in driver " << mOptions.name);
         return SER_ERROR;
     }
 
@@ -360,7 +360,6 @@ SerResult HcomServiceImp::InitDriver()
     return DoInitDriver();
 }
 
-
 SerResult HcomServiceImp::CreateMultiRailDriver()
 {
     uint16_t enableDevCount = 0;
@@ -369,21 +368,21 @@ SerResult HcomServiceImp::CreateMultiRailDriver()
     std::string ipGroupsStr;
     NetFunc::NN_VecStrToStr(mOptions.ipGroups, ";", ipGroupsStr);
 
-    if (NN_UNLIKELY(!UBSHcomNetDriver::MultiRailGetDevCount(mOptions.protocol, ipMasksStr, enableDevCount,
-        ipGroupsStr))) {
+    if (NN_UNLIKELY(
+            !UBSHcomNetDriver::MultiRailGetDevCount(mOptions.protocol, ipMasksStr, enableDevCount, ipGroupsStr))) {
         NN_LOG_ERROR("Failed to new multi rail service, because not get active RDMA devices. ");
         return SER_ERROR;
     }
 
     if (NN_UNLIKELY((enableDevCount == 0) || (enableDevCount > MAX_ENABLE_DEVCOUNT))) {
-        NN_LOG_ERROR("The number of available devices is " << enableDevCount << ", only 1~" << MAX_ENABLE_DEVCOUNT <<
-            " driver is allowed in MultiRail Service.");
+        NN_LOG_ERROR("The number of available devices is " << enableDevCount << ", only 1~" << MAX_ENABLE_DEVCOUNT
+                                                           << " driver is allowed in MultiRail Service.");
         return SER_ERROR;
     }
     mDriverPtrs.reserve(enableDevCount);
     for (uint16_t i = 0; i < enableDevCount; i++) {
-        UBSHcomNetDriver *driver = UBSHcomNetDriver::Instance(mOptions.protocol,
-            mOptions.name + "_" + std::to_string(i), mOptions.startOobSvr);
+        UBSHcomNetDriver *driver = UBSHcomNetDriver::Instance(
+            mOptions.protocol, mOptions.name + "_" + std::to_string(i), mOptions.startOobSvr);
         if (NN_UNLIKELY(driver == nullptr)) {
             NN_LOG_WARN("Failed to new driver in devIndex " << i << "for " << RDMA);
             continue;
@@ -440,8 +439,16 @@ void HcomServiceImp::ForceStop()
         driver->Stop();
     }
 
-    for (const auto& pair : mChannelMap) {
-        UBSHcomChannelPtr channel = pair.second;
+    std::vector<UBSHcomChannelPtr> channels;
+    {
+        std::lock_guard<std::mutex> lockerChannel(mChannelMutex);
+        channels.reserve(mChannelMap.size());
+        for (const auto &pair : mChannelMap) {
+            channels.push_back(pair.second);
+        }
+        mChannelMap.clear();
+    }
+    for (auto &channel : channels) {
         Disconnect(channel);
     }
 
@@ -486,8 +493,8 @@ void HcomServiceImp::RegisterDriverCb()
 
 SerResult HcomServiceImp::ValidateServiceOption()
 {
-    if (NN_UNLIKELY(mOptions.timeOutDetectThreadNum == 0
-        || mOptions.timeOutDetectThreadNum > MAX_TIME_OUT_DETECT_THREAD_NUM)) {
+    if (NN_UNLIKELY(mOptions.timeOutDetectThreadNum == 0 ||
+                    mOptions.timeOutDetectThreadNum > MAX_TIME_OUT_DETECT_THREAD_NUM)) {
         NN_LOG_ERROR("Invalid time out detect thread num " << mOptions.timeOutDetectThreadNum << ", must range [1, 4]");
         return SER_INVALID_PARAM;
     }
@@ -532,8 +539,8 @@ SerResult HcomServiceImp::CreateResource()
 
 SerResult HcomServiceImp::CreatePeriodicMgr()
 {
-    HcomPeriodicManagerPtr periodicMgr
-            = new (std::nothrow) HcomPeriodicManager(mOptions.timeOutDetectThreadNum, mOptions.name);
+    HcomPeriodicManagerPtr periodicMgr = new (std::nothrow)
+        HcomPeriodicManager(mOptions.timeOutDetectThreadNum, mOptions.name);
     if (NN_UNLIKELY(periodicMgr.Get() == nullptr)) {
         NN_LOG_ERROR("Create periodic manager failed");
         return SER_NEW_OBJECT_FAILED;
@@ -555,8 +562,8 @@ SerResult HcomServiceImp::CreateCtxMemPool()
         options.minBlkSize = NN_NO64 * NN_NO4;
     }
     options.tcExpandBlkCnt = NN_NO256;
-    NetMemPoolFixedPtr contextMemPool =
-        new (std::nothrow) NetMemPoolFixed("ServiceContextTimer-" + mOptions.name, options);
+    NetMemPoolFixedPtr contextMemPool = new (std::nothrow)
+        NetMemPoolFixed("ServiceContextTimer-" + mOptions.name, options);
     if (NN_UNLIKELY(contextMemPool.Get() == nullptr)) {
         NN_LOG_ERROR("Create mem pool failed");
         return SER_NEW_OBJECT_FAILED;
@@ -592,8 +599,7 @@ int32_t HcomServiceImp::Connect(const std::string &serverUrl, UBSHcomChannelPtr 
 
     UBSHcomChannelPtr tmpChannel;
     const uint32_t version = 0;
-    SerConnInfo connInfo(version, NetUuid::GenerateUuid(mOobIp), mDriverPtrs.size(),
-         mOptions.chBrokenPolicy, opt);
+    SerConnInfo connInfo(version, NetUuid::GenerateUuid(mOobIp), mDriverPtrs.size(), mOptions.chBrokenPolicy, opt);
 
     res = DoConnect(serverUrl, connInfo, opt.payload, tmpChannel);
     if (NN_UNLIKELY(res != SER_OK)) {
@@ -633,7 +639,7 @@ int32_t HcomServiceImp::Connect(const std::string &serverUrl, UBSHcomChannelPtr 
 }
 
 SerResult HcomServiceImp::DoConnectInner(const std::string &serverUrl, SerConnInfo &opt, const std::string &payLoad,
-    std::vector<UBSHcomNetEndpointPtr> &epVector, uint32_t &totalBandWidth)
+                                         std::vector<UBSHcomNetEndpointPtr> &epVector, uint32_t &totalBandWidth)
 {
     opt.totalLinkCount = opt.options.linkCount * mDriverPtrs.size();
     for (int j = 0; j < static_cast<int>(mDriverPtrs.size()); ++j) {
@@ -649,8 +655,8 @@ SerResult HcomServiceImp::DoConnectInner(const std::string &serverUrl, SerConnIn
 
             UBSHcomNetEndpointPtr ep;
             auto result = mDriverPtrs[j]->Connect(serverUrl, serializeConnInfo, ep,
-                static_cast<uint32_t>(opt.options.mode), opt.options.serverGroupId, opt.options.clientGroupId,
-                opt.channelId);
+                                                  static_cast<uint32_t>(opt.options.mode), opt.options.serverGroupId,
+                                                  opt.options.clientGroupId, opt.channelId);
             if (NN_LIKELY(result == SER_OK)) {
                 epVector.emplace_back(ep);
                 continue;
@@ -671,7 +677,7 @@ SerResult HcomServiceImp::DoConnectInner(const std::string &serverUrl, SerConnIn
 }
 
 SerResult HcomServiceImp::DoConnect(const std::string &serverUrl, SerConnInfo &opt, const std::string &payLoad,
-    UBSHcomChannelPtr &channel)
+                                    UBSHcomChannelPtr &channel)
 {
     SerResult res = SER_OK;
     std::vector<UBSHcomNetEndpointPtr> epVector;
@@ -686,7 +692,7 @@ SerResult HcomServiceImp::DoConnect(const std::string &serverUrl, SerConnInfo &o
                      opt.options.mode == UBSHcomClientPollingMode::SELF_POLL_EVENT);
 
     UBSHcomChannelPtr tmpChannel = new (std::nothrow)
-            HcomChannelImp(opt.channelId, selfPoll, opt.options, Protocol(), mOptions.maxSendRecvDataSize);
+        HcomChannelImp(opt.channelId, selfPoll, opt.options, Protocol(), mOptions.maxSendRecvDataSize);
     if (NN_UNLIKELY(tmpChannel == nullptr)) {
         NN_LOG_ERROR("Failed to new channel obj");
         for (auto &iter : epVector) {
@@ -700,8 +706,8 @@ SerResult HcomServiceImp::DoConnect(const std::string &serverUrl, SerConnInfo &o
     tmpChannel->SetEnableMrCache(mEnableMrCache);
 
     if (NN_UNLIKELY(tmpChannel->Initialize(epVector, reinterpret_cast<uintptr_t>(mContextMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get()),
-        mOptions.ctxStoreCapacity))) {
+                                           reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                           reinterpret_cast<uintptr_t>(mPgtable.Get()), mOptions.ctxStoreCapacity))) {
         for (auto &iter : epVector) {
             if (iter != nullptr) {
                 iter->Close();
@@ -719,8 +725,8 @@ SerResult HcomServiceImp::DoConnect(const std::string &serverUrl, SerConnInfo &o
     return SER_OK;
 }
 
-void HcomServiceImp::DoChooseDriver(uint8_t devInex, uint8_t bandWidth,
-    int8_t &selectDevIndex, uint8_t &selectBandWidth, UBSHcomNetDriver *&driver)
+void HcomServiceImp::DoChooseDriver(uint8_t devInex, uint8_t bandWidth, int8_t &selectDevIndex,
+                                    uint8_t &selectBandWidth, UBSHcomNetDriver *&driver)
 {
     bool isUsed = false;
     for (auto it = mDriverPair.begin(); it != mDriverPair.end(); ++it) {
@@ -900,7 +906,7 @@ int32_t HcomServiceImp::RegisterMemoryRegion(uintptr_t address, uint64_t size, U
 
     return res;
 }
- 
+
 int32_t HcomServiceImp::ImportUrmaSeg(uintptr_t address, uint64_t size, UBSHcomMemoryKey &key)
 {
     if (mDriverPtrs.size() == 0) {
@@ -957,8 +963,8 @@ void HcomServiceImp::DestroyMemoryRegion(UBSHcomRegMemoryRegion &mr)
     }
 
     if (NN_UNLIKELY(netMrs.size() != mDriverPtrs.size())) {
-        NN_LOG_WARN("Size of UBSHcomMemoryRegionPtr is not equal to dirvers, mr size:" << netMrs.size() <<
-            ", driver size:" << mDriverPtrs.size());
+        NN_LOG_WARN("Size of UBSHcomMemoryRegionPtr is not equal to dirvers, mr size:"
+                    << netMrs.size() << ", driver size:" << mDriverPtrs.size());
         return;
     }
 
@@ -992,7 +998,7 @@ void HcomServiceImp::DestroyNetMrs(std::vector<UBSHcomMemoryRegionPtr> &netMrs, 
 }
 
 void HcomServiceImp::RegisterChannelBrokenHandler(const UBSHcomServiceChannelBrokenHandler &handler,
-    const UBSHcomChannelBrokenPolicy policy)
+                                                  const UBSHcomChannelBrokenPolicy policy)
 {
     mOptions.chBrokenHandler = handler;
     mOptions.chBrokenPolicy = policy;
@@ -1019,7 +1025,8 @@ void HcomServiceImp::RegisterOneSideHandler(const UBSHcomServiceOneSideDoneHandl
 }
 
 void HcomServiceImp::AddWorkerGroup(uint16_t workerGroupId, uint32_t threadCount,
-    const std::pair<uint32_t, uint32_t> &cpuIdsRange, int8_t priority, uint16_t multirailIdx)
+                                    const std::pair<uint32_t, uint32_t> &cpuIdsRange, int8_t priority,
+                                    uint16_t multirailIdx)
 {
     if (multirailIdx >= MAX_MULTI_RAIL_NUM) {
         NN_LOG_ERROR("Invalid multirailIdx, should be in range [0, 3]");
@@ -1162,8 +1169,8 @@ void HcomServiceImp::SetCtxStoreCapacity(uint32_t ctxStoreCapacity)
     }
 
     if (ctxStoreCapacity < NN_NO128 || ctxStoreCapacity > NN_NO16777216) {
-        NN_LOG_WARN("CtxStore Capacity " << ctxStoreCapacity <<
-            " is invalid, must be in range [128, 16777216], set to 2097152");
+        NN_LOG_WARN("CtxStore Capacity " << ctxStoreCapacity
+                                         << " is invalid, must be in range [128, 16777216], set to 2097152");
         return;
     }
     mOptions.ctxStoreCapacity = ctxStoreCapacity;
@@ -1176,8 +1183,7 @@ void HcomServiceImp::SetUbPriority(uint32_t ubPriority)
     }
 
     if (ubPriority > NN_NO15) {
-        NN_LOG_WARN("UbPrioity " << ubPriority <<
-            " is invalid, must be in range [0, 15], use default value");
+        NN_LOG_WARN("UbPrioity " << ubPriority << " is invalid, must be in range [0, 15], use default value");
         return;
     }
     mOptions.ubPriority = ubPriority;
@@ -1203,8 +1209,8 @@ SerResult HcomServiceImp::GenerateUuid(const std::string &ipInfo, uint64_t chann
         NN_LOG_ERROR("Failed to generate uuid");
         return SER_ERROR;
     }
-    NN_LOG_TRACE_INFO("###### uuid " << uuid << ", ip port " << ipInfo << ", ip " << ip << ", channel id " <<
-        channelId);
+    NN_LOG_TRACE_INFO("###### uuid " << uuid << ", ip port " << ipInfo << ", ip " << ip << ", channel id "
+                                     << channelId);
     return SER_OK;
 }
 
@@ -1220,7 +1226,7 @@ SerResult HcomServiceImp::GenerateUuid(uint32_t ip, uint64_t channelId, std::str
 }
 
 SerResult HcomServiceImp::EmplaceNewEndpoint(const UBSHcomNetEndpointPtr &newEp, ConnectingEpInfoPtr &epInfo,
-    SerConnInfo &connInfo, std::string &uuid)
+                                             SerConnInfo &connInfo, std::string &uuid)
 {
     std::lock_guard<std::mutex> lockerEp(mNewEpMutex);
     auto iter = mNewEpMap.find(uuid);
@@ -1257,7 +1263,7 @@ SerResult HcomServiceImp::EmplaceNewEndpoint(const UBSHcomNetEndpointPtr &newEp,
 }
 
 int32_t HcomServiceImp::ServiceHandleNewEndPoint(const std::string &ipPort, const UBSHcomNetEndpointPtr &newEp,
-    const std::string &payload)
+                                                 const std::string &payload)
 {
     if (NN_UNLIKELY(newEp == nullptr)) {
         NN_LOG_ERROR("Invalid newEp, newEp is nullptr");
@@ -1304,19 +1310,19 @@ int32_t HcomServiceImp::ServiceHandleNewEndPoint(const std::string &ipPort, cons
 }
 
 int32_t HcomServiceImp::ServiceNewChannel(const std::string &ipPort, SerConnInfo &connInfo,
-    const std::string &userPayLoad, std::vector<UBSHcomNetEndpointPtr> &ep)
+                                          const std::string &userPayLoad, std::vector<UBSHcomNetEndpointPtr> &ep)
 {
     SerResult res = SER_OK;
     UBSHcomChannelPtr channel = new (std::nothrow)
-            HcomChannelImp(connInfo.channelId, false, connInfo.options, Protocol(), mOptions.maxSendRecvDataSize);
+        HcomChannelImp(connInfo.channelId, false, connInfo.options, Protocol(), mOptions.maxSendRecvDataSize);
     if (NN_UNLIKELY(channel == nullptr)) {
         NN_LOG_ERROR("Failed to new channel obj");
         return SER_NEW_OBJECT_FAILED;
     }
     channel->SetEnableMrCache(mEnableMrCache);
     if (NN_UNLIKELY(channel->Initialize(ep, reinterpret_cast<uintptr_t>(mContextMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), reinterpret_cast<uintptr_t>(mPgtable.Get()),
-        mOptions.ctxStoreCapacity))) {
+                                        reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
+                                        reinterpret_cast<uintptr_t>(mPgtable.Get()), mOptions.ctxStoreCapacity))) {
         NN_LOG_ERROR("Failed to initialize channel");
         return SER_NEW_OBJECT_FAILED;
     }
@@ -1377,8 +1383,8 @@ SerResult HcomServiceImp::DelayEraseChannel(UBSHcomChannelPtr &ch, uint16_t dela
         return SER_NEW_OBJECT_FAILED;
     }
 
-    auto timer = new (timerPtr)HcomServiceTimer(ch.Get(), ctxStore, delayTime, reinterpret_cast<uintptr_t>(newCallback),
-        HcomAsyncCBType::CBS_CHANNEL_BROKEN);
+    auto timer = new (timerPtr) HcomServiceTimer(
+        ch.Get(), ctxStore, delayTime, reinterpret_cast<uintptr_t>(newCallback), HcomAsyncCBType::CBS_CHANNEL_BROKEN);
     uint32_t seqNo = 0;
     auto ret = ctxStore->PutAndGetSeqNo(timer, seqNo);
     if (NN_UNLIKELY(ret != SER_OK)) {
@@ -1524,8 +1530,8 @@ int32_t HcomServiceImp::ServiceRequestReceived(const UBSHcomRequestContext &ctx)
         auto ctxStorePtr = ch->GetCtxStore();
         if (NN_UNLIKELY(ctxStorePtr->GetSeqNoAndRemove(ctx.Header().seqNo, tmp) != SER_OK)) {
             HcomSeqNo dumpSeq(ctx.Header().seqNo);
-            NN_LOG_ERROR("UBSHcomService Channel " << ch->GetId() << " fetch " << dumpSeq.ToString() <<
-                " context failed");
+            NN_LOG_ERROR("UBSHcomService Channel " << ch->GetId() << " fetch " << dumpSeq.ToString()
+                                                   << " context failed");
             return SER_ERROR;
         }
 
@@ -1540,8 +1546,8 @@ int32_t HcomServiceImp::ServiceRequestReceived(const UBSHcomRequestContext &ctx)
 int32_t HcomServiceImp::ServicePrivateOpHandle(UBSHcomServiceContext &ctx)
 {
     if (ctx.mDataLen != sizeof(HcomServiceRndvMessage)) {
-        NN_LOG_ERROR(" Received RNDV data size is incorrect, actual size " << ctx.mDataLen << ", expected size " <<
-            sizeof(UBSHcomRequest));
+        NN_LOG_ERROR(" Received RNDV data size is incorrect, actual size " << ctx.mDataLen << ", expected size "
+                                                                           << sizeof(UBSHcomRequest));
         return SER_ERROR;
     }
 
@@ -1559,14 +1565,15 @@ int32_t HcomServiceImp::ServicePrivateOpHandle(UBSHcomServiceContext &ctx)
 }
 
 bool HcomServiceImp::RunRequestCallback(UBSHcomChannel *channel, const UBSHcomRequestContext &ctx,
-    UBSHcomServiceContext &context)
+                                        UBSHcomServiceContext &context)
 {
     char *upCtx = nullptr;
     if (ctx.OpType() == UBSHcomRequestContext::NN_SENT || ctx.OpType() == UBSHcomRequestContext::NN_SENT_RAW ||
-        ctx.OpType() == UBSHcomRequestContext::NN_READ|| ctx.OpType() == UBSHcomRequestContext::NN_WRITTEN) {
+        ctx.OpType() == UBSHcomRequestContext::NN_READ || ctx.OpType() == UBSHcomRequestContext::NN_WRITTEN) {
         upCtx = const_cast<char *>(ctx.OriginalRequest().upCtxData);
     } else if (ctx.OpType() == UBSHcomRequestContext::NN_SENT_RAW_SGL ||
-        ctx.OpType() == UBSHcomRequestContext::NN_SGL_WRITTEN || ctx.OpType() == UBSHcomRequestContext::NN_SGL_READ) {
+               ctx.OpType() == UBSHcomRequestContext::NN_SGL_WRITTEN ||
+               ctx.OpType() == UBSHcomRequestContext::NN_SGL_READ) {
         upCtx = const_cast<char *>(ctx.OriginalSgeRequest().upCtxData);
     } else {
         NN_LOG_ERROR("Invalid op type " << ctx.OpType() << " for request posted");
@@ -1628,8 +1635,8 @@ int32_t HcomServiceImp::ServiceRequestPosted(const UBSHcomRequestContext &ctx)
         }
         return mOptions.sendHandler(context);
     } else {
-        NN_LOG_ERROR("Invalid callback type " << static_cast<int32_t>(ch->GetCallBackType()) <<
-            " for call request posted cb");
+        NN_LOG_ERROR("Invalid callback type " << static_cast<int32_t>(ch->GetCallBackType())
+                                              << " for call request posted cb");
         return SER_ERROR;
     }
 }
@@ -1640,7 +1647,7 @@ int32_t HcomServiceImp::ServiceOneSideDone(const UBSHcomRequestContext &ctx)
     auto ch = epCtx.Channel();
     if (NN_UNLIKELY(ch == nullptr)) {
         NN_LOG_ERROR("Default imp up context invalid, maybe broken then handle, ep Id " << ctx.EndPoint()->Id()
-                                                                            << " result " << ctx.Result());
+                                                                                        << " result " << ctx.Result());
         return SER_ERROR;
     }
 
@@ -1664,17 +1671,17 @@ int32_t HcomServiceImp::ServiceOneSideDone(const UBSHcomRequestContext &ctx)
         }
         return handler(context);
     } else {
-        NN_LOG_ERROR("Default imp invalid callback type " << static_cast<int32_t>(ch->GetCallBackType()) <<
-            " for call one side done cb");
+        NN_LOG_ERROR("Default imp invalid callback type " << static_cast<int32_t>(ch->GetCallBackType())
+                                                          << " for call one side done cb");
         return SER_ERROR;
     }
 }
 
 int32_t HcomServiceImp::ServiceSecInfoProvider(uint64_t chId, int64_t &flag, UBSHcomNetDriverSecType &type,
-    char *&output, uint32_t &outLen, bool &needAutoFree)
+                                               char *&output, uint32_t &outLen, bool &needAutoFree)
 {
     bool infoExist = false;
-    ConnectingSecInfo info {};
+    ConnectingSecInfo info{};
     {
         std::lock_guard<std::mutex> lockerEp(mNewEpMutex);
         auto iter = mSecInfoMap.find(chId);
@@ -1712,7 +1719,7 @@ int32_t HcomServiceImp::ServiceSecInfoProvider(uint64_t chId, int64_t &flag, UBS
 
 int32_t HcomServiceImp::ServiceSecInfoValidator(uint64_t ctx, int64_t flag, const char *input, uint32_t inputLen)
 {
-    ConnectingSecInfo info {};
+    ConnectingSecInfo info{};
     bool infoExist = false;
     {
         std::lock_guard<std::mutex> lockerEp(mNewEpMutex);
@@ -1744,7 +1751,7 @@ int32_t HcomServiceImp::ServiceSecInfoValidator(uint64_t ctx, int64_t flag, cons
     return result;
 }
 
-std::string HcomServiceImp::GetFilteredDeviceIP(const std::string& ipMask)
+std::string HcomServiceImp::GetFilteredDeviceIP(const std::string &ipMask)
 {
     std::string res;
     std::vector<std::string> filterVec;
@@ -1769,7 +1776,7 @@ std::string HcomServiceImp::GetFilteredDeviceIP(const std::string& ipMask)
 }
 
 void HcomServiceImp::ConvertHcomSerImpOptsToHcomDriOpts(const HcomServiceImpOptions &serviceOpt,
-    ock::hcom::UBSHcomNetDriverOptions &driverOpt)
+                                                        ock::hcom::UBSHcomNetDriverOptions &driverOpt)
 {
     driverOpt.SetNetDeviceIpMask(serviceOpt.ipMasks);
     driverOpt.SetNetDeviceIpGroup(serviceOpt.ipGroups);
@@ -1813,9 +1820,9 @@ SerResult HcomServiceImp::ExchangeTimestamp(UBSHcomChannel *channel)
         return SER_ERROR;
     }
 
-    HcomExchangeTimestamp reqTimestamp {};
+    HcomExchangeTimestamp reqTimestamp{};
     UBSHcomRequest req(&reqTimestamp, sizeof(reqTimestamp), EXCHANGE_TIMESTAMP_OP);
-    HcomExchangeTimestamp rspTimestamp {};
+    HcomExchangeTimestamp rspTimestamp{};
     UBSHcomResponse rsp(&rspTimestamp, sizeof(rspTimestamp));
 
     reqTimestamp.deltaTimeStamp = NN_NO100;
@@ -1854,8 +1861,9 @@ SerResult HcomServiceImp::ExchangeTimestamp(UBSHcomChannel *channel)
     ch->mConnectTimestamp.localTimeUs = reqTimestamp.timestamp;
     ch->mConnectTimestamp.remoteTimeUs = rspTimestamp.timestamp;
     ch->mConnectTimestamp.deltaTimeUs = reqTimestamp.deltaTimeStamp;
-    NN_LOG_INFO("Exchange timestamp success, ch id " << ch->GetId() << ", local " << reqTimestamp.timestamp <<
-        "us, remote " << rspTimestamp.timestamp << "us, delta " << reqTimestamp.deltaTimeStamp << "us");
+    NN_LOG_INFO("Exchange timestamp success, ch id " << ch->GetId() << ", local " << reqTimestamp.timestamp
+                                                     << "us, remote " << rspTimestamp.timestamp << "us, delta "
+                                                     << reqTimestamp.deltaTimeStamp << "us");
     return SER_OK;
 }
 
@@ -1892,15 +1900,14 @@ int HcomServiceImp::ServiceExchangeTimeStampHandle(UBSHcomServiceContext &ctx)
     ch->mConnectTimestamp.remoteTimeUs = timestamp->timestamp;
     ch->mConnectTimestamp.deltaTimeUs = timestamp->deltaTimeStamp;
 
-    NN_LOG_INFO("Exchange timestamp success, ch id " << ch->GetId() << ", local " <<
-        ch->mConnectTimestamp.localTimeUs << "us, remote " << ch->mConnectTimestamp.remoteTimeUs << "us, delta " <<
-        ch->mConnectTimestamp.deltaTimeUs << "us");
+    NN_LOG_INFO("Exchange timestamp success, ch id " << ch->GetId() << ", local " << ch->mConnectTimestamp.localTimeUs
+                                                     << "us, remote " << ch->mConnectTimestamp.remoteTimeUs
+                                                     << "us, delta " << ch->mConnectTimestamp.deltaTimeUs << "us");
 
     timestamp->timestamp = ch->mConnectTimestamp.localTimeUs;
     UBSHcomRequest req(timestamp, sizeof(HcomExchangeTimestamp), EXCHANGE_TIMESTAMP_OP);
     UBSHcomReplyContext replyCtx(ctx.RspCtx(), NN_NO0);
     return ctx.Channel()->Reply(replyCtx, req, HcomServiceGlobalObject::gEmptyCallback);
 }
-}
-}
-
+} // namespace hcom
+} // namespace ock

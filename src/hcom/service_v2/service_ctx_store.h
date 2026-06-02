@@ -12,10 +12,10 @@
 #ifndef HCOM_SERVICE_V2_SERVICE_CTX_STORE_H_
 #define HCOM_SERVICE_V2_SERVICE_CTX_STORE_H_
 
+#include "common/net_mem_pool_fixed.h"
 #include "hcom_def.h"
 #include "hcom_ref.h"
 #include "service_common.h"
-#include "common/net_mem_pool_fixed.h"
 
 namespace ock {
 namespace hcom {
@@ -29,7 +29,9 @@ constexpr int32_t BITS_PER_INT = 32;
 class HcomServiceCtxStore {
 public:
     HcomServiceCtxStore(uint32_t flatCapacity, const NetMemPoolFixedPtr &ctxPool, UBSHcomNetDriverProtocol protocol)
-        : mFlatCapacity(flatCapacity), mCtxMemPool(ctxPool), mProtocol(protocol)
+        : mFlatCapacity(flatCapacity),
+          mCtxMemPool(ctxPool),
+          mProtocol(protocol)
     {
         OBJ_GC_INCREASE(HcomServiceCtxStore);
     }
@@ -82,9 +84,9 @@ public:
             i.reserve(HASH_BUCKET_SIZE);
         }
 
-        NN_LOG_INFO("Initialized context store, flatten capacity " <<
-                    mFlatCapacity << ", versionAndSeqMask " << mSeqNoAndVersionMask << ", seqNoMask " <<
-                    mSeqNoMask << ", seqNoAndVersionIndex " << mSeqNoAndVersionIndex);
+        NN_LOG_INFO("Initialized context store, flatten capacity "
+                    << mFlatCapacity << ", versionAndSeqMask " << mSeqNoAndVersionMask << ", seqNoMask " << mSeqNoMask
+                    << ", seqNoAndVersionIndex " << mSeqNoAndVersionIndex);
 
         return SER_OK;
     }
@@ -197,7 +199,8 @@ public:
      *         SER_INVALID_PARAM if ctx is null or seqNo is invalid
      *         SER_STORE_SEQ_DUP if the slot is already occupied (flat) or key exists (hash)
      */
-    template <typename T> NResult PutBySeqNo(T* ctx, uint32_t seqNo)
+    template <typename T>
+    NResult PutBySeqNo(T *ctx, uint32_t seqNo)
     {
         if (NN_UNLIKELY(ctx == nullptr)) {
             return SER_INVALID_PARAM;
@@ -246,7 +249,8 @@ public:
      * SER_STORE_SEQ_NO_FOUND if seq is not existed, probably removed already
      *
      */
-    template <typename T> NResult GetBySeqNo(uint32_t seqNo, T *&out)
+    template <typename T>
+    NResult GetBySeqNo(uint32_t seqNo, T *&out)
     {
         HcomSeqNo no(0);
         no.wholeSeq = seqNo;
@@ -398,9 +402,9 @@ private:
     }
 
 private:
-    static constexpr uint32_t VERSION_MASK = 0x3F;             /* mask to reverse version */
-    static constexpr uint32_t VERSION_BIT_WIDTH = 6;            /* mask to reverse version */
-    static constexpr uint32_t HASH_COUNT = 4;                  /* hash map count */
+    static constexpr uint32_t VERSION_MASK = 0x3F;           /* mask to reverse version */
+    static constexpr uint32_t VERSION_BIT_WIDTH = 6;         /* mask to reverse version */
+    static constexpr uint32_t HASH_COUNT = 4;                /* hash map count */
     static constexpr uint64_t PTR_MASK = 0x03FFFFFFFFFFFFFF; /* ptr mask */
 
 private:
@@ -423,7 +427,7 @@ private:
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock
 
-#endif  // HCOM_SERVICE_V2_SERVICE_CTX_STORE_H_
+#endif // HCOM_SERVICE_V2_SERVICE_CTX_STORE_H_

@@ -16,11 +16,11 @@
 #include <sys/mman.h>
 
 #include "hcom.h"
+#include "net_bucket_linked_list.h"
+#include "net_util.h"
 #include "ub_common.h"
 #include "ub_urma_wrapper_ctx.h"
-#include "net_bucket_linked_list.h"
 #include "under_api/urma/urma_api_wrapper.h"
-#include "net_util.h"
 
 namespace ock {
 namespace hcom {
@@ -28,7 +28,7 @@ class UBMemoryRegion : public UBSHcomNetMemoryRegion {
 public:
     static UResult Create(const std::string &name, UBContext *ctx, uint64_t size, UBMemoryRegion *&buf);
     static UResult Create(const std::string &name, UBContext *ctx, uintptr_t address, uint64_t size,
-        UBMemoryRegion *&buf);
+                          UBMemoryRegion *&buf);
     void *GetMemorySeg() override
     {
         return mMemSeg;
@@ -49,8 +49,8 @@ public:
     UBMemoryRegion() = delete;
     UBMemoryRegion(const UBMemoryRegion &other) = delete;
     UBMemoryRegion(UBMemoryRegion &&other) = delete;
-    UBMemoryRegion &operator = (const UBMemoryRegion &) = delete;
-    UBMemoryRegion &operator = (UBMemoryRegion &&) = delete;
+    UBMemoryRegion &operator=(const UBMemoryRegion &) = delete;
+    UBMemoryRegion &operator=(UBMemoryRegion &&) = delete;
 
     ~UBMemoryRegion() override
     {
@@ -70,7 +70,9 @@ public:
 
 protected:
     UBMemoryRegion(const std::string &name, UBContext *ctx, uint64_t size, unsigned long memid, int flag)
-        : UBSHcomNetMemoryRegion(name, false, 0, size), mUBContext(ctx), mMemid(memid)
+        : UBSHcomNetMemoryRegion(name, false, 0, size),
+          mUBContext(ctx),
+          mMemid(memid)
     {
         // increase the reference count of context
         if (ctx != nullptr) {
@@ -81,7 +83,8 @@ protected:
     }
 
     UBMemoryRegion(const std::string &name, UBContext *ctx, uintptr_t address, uint64_t size)
-        : UBSHcomNetMemoryRegion(name, true, address, size), mUBContext(ctx)
+        : UBSHcomNetMemoryRegion(name, true, address, size),
+          mUBContext(ctx)
     {
         // increase the reference count of context
         if (ctx != nullptr) {
@@ -96,7 +99,7 @@ protected:
     unsigned long mMemid = 0;
     static uint64_t gPageSize;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_MR_POOL_H
