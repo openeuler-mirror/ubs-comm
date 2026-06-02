@@ -622,8 +622,8 @@ SerResult HcomChannelImp::SyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
     return syncParam.Result();
 }
 
-auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx,
-                                   bool isResp) -> std::tuple<SpliceMessageResultType, SerResult, std::string>
+auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
+    -> std::tuple<SpliceMessageResultType, SerResult, std::string>
 {
     const uintptr_t msgAddr = reinterpret_cast<uintptr_t>(ctx.Message()->Data());
     const uint32_t msgSize = ctx.Message()->DataLen();

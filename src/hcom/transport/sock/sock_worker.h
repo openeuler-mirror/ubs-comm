@@ -186,7 +186,8 @@ public:
             return SS_PARAM_INVALID;
         }
 
-        struct epoll_event evNewFd {};
+        struct epoll_event evNewFd {
+        };
         SET_EPOLL_EVENT(sock, events, evNewFd);
         NN_LOG_TRACE_INFO("Adding sock " << sock->Id() << " address " << sock << " fd " << sock->FD()
                                          << " into sock worker " << mName);
@@ -211,7 +212,8 @@ public:
 
         NN_LOG_TRACE_INFO("Modifying sock " << sock->Id() << " fd " << sock->FD() << " in sock worker " << mName);
 
-        struct epoll_event evNewFd {};
+        struct epoll_event evNewFd {
+        };
         SET_EPOLL_EVENT(sock, events, evNewFd);
 
         if (NN_UNLIKELY(epoll_ctl(mEpollHandle, EPOLL_CTL_MOD, sock->FD(), &evNewFd) != 0)) {

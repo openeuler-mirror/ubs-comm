@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
- 
+
  * ubs-hcom is licensed under the Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
@@ -21,28 +21,29 @@ namespace ock {
 namespace hcom {
 class SerTimerListHeader;
 
-enum class HcomAsyncCBState : uint8_t {
+enum class HcomAsyncCBState : uint8_t
+{
     CBS_INIT = 0,
     CBS_FINISHED = 1,
     CBS_TIMEOUT = 2,
 };
 
-enum class HcomAsyncCBType : uint8_t {
+enum class HcomAsyncCBType : uint8_t
+{
     CBS_IO = 0,
     CBS_CHANNEL_BROKEN = 1,
 };
 
 class HcomServiceTimer {
 public:
-    UBSHcomChannel *mChannel = nullptr;              /* used for build UBSHcomServiceContext */
-    HcomServiceCtxStore *mCtxStore = nullptr;        /* manager memory and seqNo */
-    uint64_t mTimeout = 0;                           /* absolute timeout compare to current system time */
-    uintptr_t mCallback = 0;                         /* callback obj address */
-    uint32_t mSeqNo = 0;                             /* seq no for find query map */
-    HcomAsyncCBType mType = HcomAsyncCBType::CBS_IO; /* callback type */
-    HcomAsyncCBState mState =
-        HcomAsyncCBState::CBS_INIT; /* atomic status to handle the trace condition between timeout
-                                              * handle thread and polling thread */
+    UBSHcomChannel *mChannel = nullptr;              // used for build UBSHcomServiceContext
+    HcomServiceCtxStore *mCtxStore = nullptr;        // manager memory and seqNo
+    uint64_t mTimeout = 0;                           // absolute timeout compare to current system time
+    uintptr_t mCallback = 0;                         // callback obj address
+    uint32_t mSeqNo = 0;                             // seq no for find query map
+    HcomAsyncCBType mType = HcomAsyncCBType::CBS_IO; // callback type
+    HcomAsyncCBState mState = HcomAsyncCBState::CBS_INIT;
+
 public:
     inline uint32_t SeqNo() const
     {
@@ -345,7 +346,6 @@ public:
         }
     }
 };
-
 } // namespace hcom
 } // namespace ock
 #endif // HCOM_SERVICE_V2_SERVICE_CALLBACK_H_

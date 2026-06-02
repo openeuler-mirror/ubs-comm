@@ -99,7 +99,7 @@ private:
     ({                                                                                                \
         struct ibv_mr *ret;                                                                           \
         auto noIova2 = VerbsAPI::hcomInnerRegMrIOVA2 == nullptr;                                      \
-        if (((is_access_const) && ((access) & IBV_ACCESS_OPTIONAL_RANGE) == 0) || noIova2) {          \
+        if (((is_access_const) && ((access)&IBV_ACCESS_OPTIONAL_RANGE) == 0) || noIova2) {            \
             ret = VerbsAPI::hcomInnerRegMr((pd), (addr), (length), (access));                         \
         } else {                                                                                      \
             ret = VerbsAPI::hcomInnerRegMrIOVA2((pd), (addr), (length), (uintptr_t)(addr), (access)); \
@@ -108,7 +108,7 @@ private:
     })
 
 #define HCOM_IBV_INNER_REG_MR(pd, addr, length, access) \
-    HCOM_IBV_REG_MR(pd, addr, length, access, __builtin_constant_p(((access) & IBV_ACCESS_OPTIONAL_RANGE) == 0))
+    HCOM_IBV_REG_MR(pd, addr, length, access, __builtin_constant_p(((access)&IBV_ACCESS_OPTIONAL_RANGE) == 0))
 
 #ifndef verbs_get_ctx_op
 #define HCOM_IBV_INNER_QUERY_PORT(context, port_num, port_attr)                                            \

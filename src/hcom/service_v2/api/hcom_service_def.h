@@ -36,30 +36,35 @@ using UBSHcomChTypeIndex = uint16_t;
 using UBSHcomCipherSuite = UBSHcomNetCipherSuite;
 using UBSHcomMemoryRegionPtr = UBSHcomNetMemoryRegionPtr;
 
-enum class UBSHcomChannelBrokenPolicy : uint8_t {
+enum class UBSHcomChannelBrokenPolicy : uint8_t
+{
     BROKEN_ALL, /* when one ep broken, all eps broken */
     RECONNECT,  /* when one ep broken, try re-connect first. If re-connect fail, broken all eps */
     KEEP_ALIVE, /* when one ep broken, keep left eps alive until all eps broken */
 };
 
-enum class UBSHcomClientPollingMode : uint8_t {
+enum class UBSHcomClientPollingMode : uint8_t
+{
     WORKER_POLL = 0,
     SELF_POLL_BUSY = 1,
     SELF_POLL_EVENT = 2,
     UNKNOWN = 255,
 };
 
-enum class UBSHcomChannelCallBackType : uint8_t {
+enum class UBSHcomChannelCallBackType : uint8_t
+{
     CHANNEL_FUNC_CB,
     CHANNEL_GLOBAL_CB,
 };
 
-enum class UBSHcomOobType : uint8_t {
+enum class UBSHcomOobType : uint8_t
+{
     TCP,
     UDS,
 };
 
-enum class UBSHcomSecType : uint8_t {
+enum class UBSHcomSecType : uint8_t
+{
     NET_SEC_DISABLED,
     NET_SEC_VALID_ONE_WAY,
     NET_SEC_VALID_TWO_WAY,
@@ -176,7 +181,8 @@ struct UBSHcomHeartBeatOptions {
     uint16_t heartBeatProbeIntervalSec = 2; // 发送心跳后再次发送时间
 };
 
-enum class UBSHcomFlowCtrlLevel : uint8_t {
+enum class UBSHcomFlowCtrlLevel : uint8_t
+{
     HIGH_LEVEL_BLOCK, /* spin-wait by busy loop */
     LOW_LEVEL_BLOCK,  /* full sleep */
 };

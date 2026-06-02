@@ -56,7 +56,8 @@ public:
         uint32_t m_data_size;
     };
 
-    enum RpcAdptCmdType {
+    enum RpcAdptCmdType
+    {
         UBS_CMD_STATS,
         UBS_CMD_MAX
     };

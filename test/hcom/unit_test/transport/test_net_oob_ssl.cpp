@@ -19,7 +19,6 @@
 #include "net_security_rand.h"
 #include "transport/net_oob_openssl.h"
 #include "transport/net_oob_ssl.h"
-#include "transport/net_oob_openssl.h"
 
 namespace ock {
 namespace hcom {

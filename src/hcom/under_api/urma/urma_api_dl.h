@@ -102,7 +102,6 @@ using URMA_LOG_SET_LEVEL = void (*)(urma_vlog_level_t level);
 using URMA_STR_TO_EID = int (*)(const char *buf, urma_eid_t *eid);
 using URMA_LOG_SET_THREAD_TAG = void (*)(const char *tag);
 
-
 class UrmaAPI {
 public:
     static URMA_INIT hcomInnerUrmaInit;

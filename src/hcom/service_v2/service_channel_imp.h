@@ -41,7 +41,8 @@ struct HcomChannelImpOptions {
     bool selfPoll = false;
 };
 
-enum ServiceEpState : uint16_t {
+enum ServiceEpState : uint16_t
+{
     SER_EP_ESTABLISHED = 0,
     SER_EP_BROKEN = 1,
     SER_EP_ESTABLISHED_OCCUPIED = 2,
@@ -114,8 +115,8 @@ protected:
     /// 定为 SER_OK，同时 std::string 为拼完后的完整消息；当返回
     /// SpliceMessageResultType::INDETERMINATE 时，同时返回的 SerResult 必定为 SER_OK，
     /// std::string 无效。
-    auto SpliceMessage(const UBSHcomNetRequestContext &ctx,
-                       bool isResp) -> std::tuple<SpliceMessageResultType, SerResult, std::string> override;
+    auto SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
+        -> std::tuple<SpliceMessageResultType, SerResult, std::string> override;
 
     std::mutex mMsgReceivedMutex;
     std::map<UBSHcomFragmentMessageId, std::shared_ptr<std::pair<uint32_t, std::string>>> mMsgReceived;

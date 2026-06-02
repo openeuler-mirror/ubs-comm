@@ -52,9 +52,10 @@ constexpr const char *INVALID_IP_PORT_SPLIT_PLACEHOLDER = "999999";
 /**
  * Get struct pointer from member pointer
  */
-#define GetStructRoot(_memberPtr, _type, _field) ((_type *)((char *)(_memberPtr) - offsetof(_type, _field)))
+#define GetStructRoot(_memberPtr, _type, _field) ((_type *)((char *)(_memberPtr)-offsetof(_type, _field)))
 
-enum class NetProtocol {
+enum class NetProtocol
+{
     NET_TCP,
     NET_UDS,
     NET_UBC,
@@ -156,7 +157,8 @@ public:
 
     static inline uint32_t GetIpByFd(int fd)
     {
-        struct sockaddr_in addressIn {};
+        struct sockaddr_in addressIn {
+        };
         addressIn.sin_addr.s_addr = INVALID_IP;
         socklen_t len = sizeof(addressIn);
         getsockname(fd, reinterpret_cast<struct sockaddr *>(&addressIn), &len); // UDS return INVALID_IP
@@ -328,7 +330,8 @@ public:
 #ifdef UB_BUILD_ENABLED
     static NResult NN_EidToStr(uvs_eid_t &eid, std::string &strEid)
     {
-        struct in6_addr eidIn6 {};
+        struct in6_addr eidIn6 {
+        };
         uint32_t size = sizeof(uint64_t); // size of uint64_t: 8
         if (NN_UNLIKELY(memcpy_s(&eidIn6.s6_addr[0], size, &eid.in6.subnet_prefix, size) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy subnet_prefix to in6_addr");
@@ -398,12 +401,12 @@ public:
         uvs_eid_t uSrcPrimaryEid = {0};
         uvs_eid_t uDstPrimaryEid = {0};
         if (NN_UNLIKELY(memcpy_s(&uSrcPrimaryEid, sizeof(uvs_eid_t), &uvsPathSet.paths[0].src_eid, sizeof(uvs_eid_t)) !=
-            NN_OK)) {
+                        NN_OK)) {
             NN_LOG_ERROR("Failed to copy source primary eid from path set");
             return NN_INVALID_PARAM;
         }
         if (NN_UNLIKELY(memcpy_s(&uDstPrimaryEid, sizeof(uvs_eid_t), &uvsPathSet.paths[0].dst_eid, sizeof(uvs_eid_t)) !=
-            NN_OK)) {
+                        NN_OK)) {
             NN_LOG_ERROR("Failed to copy destination primary eid from path set");
             return NN_INVALID_PARAM;
         }

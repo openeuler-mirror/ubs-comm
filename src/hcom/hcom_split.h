@@ -24,7 +24,8 @@ const uint32_t SERVICE_MAX_TOTAL_LENGTH = 2U * 1024 * 1024 * 1024;
 SerResult SyncSpliceMessage(UBSHcomNetResponseContext &ctx, UBSHcomNetEndpoint *ep, int32_t timeout, std::string &acc,
                             void *&data, uint32_t &dataLen);
 
-enum class SpliceMessageResultType {
+enum class SpliceMessageResultType
+{
     OK,
     ERROR,
     INDETERMINATE,

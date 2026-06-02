@@ -96,7 +96,8 @@ void NetDriverSockWithOOB::UnInitialize()
         return;
     }
     if (mStarted) {
-        NN_LOG_WARN("Unable to unInitialize sock driver" << " " << mName << " which is not stopped");
+        NN_LOG_WARN("Unable to unInitialize sock driver"
+                    << " " << mName << " which is not stopped");
         return;
     }
 
@@ -750,7 +751,8 @@ NResult NetDriverSockWithOOB::Connect(const OOBTCPClientPtr &client, const std::
 
     /* peer ep id */
     auto newSockId = respWithUId.epId;
-    NN_LOG_TRACE_INFO("Sock new ep id will be set as" << " " << newSockId << " in driver " << mName);
+    NN_LOG_TRACE_INFO("Sock new ep id will be set as"
+                      << " " << newSockId << " in driver " << mName);
 
     /* choose worker */
     uint16_t workerIndex = 0;
@@ -1293,7 +1295,8 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
         }
 
         if (ctx.sock->mType == SOCK_UDS) {
-            struct ucred remoteIds {};
+            struct ucred remoteIds {
+            };
             socklen_t len = static_cast<socklen_t>(sizeof(struct ucred));
             if (NN_UNLIKELY(getsockopt(ctx.sock->FD(), SOL_SOCKET, SO_PEERCRED, &remoteIds, &len) != 0)) {
                 char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};

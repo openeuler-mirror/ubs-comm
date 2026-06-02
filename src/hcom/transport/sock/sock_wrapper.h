@@ -65,7 +65,8 @@ struct SockReceiveState {
 
 struct SendingQueueRequest {
     uint64_t remainSize = 0;
-    struct iovec iov[NN_NO7]{};
+    struct iovec iov[NN_NO7] {
+    };
     uint16_t iovCount = 0;
     bool isTwoSideMode = false;
 };
@@ -492,9 +493,10 @@ public:
             return SS_SOCK_SEND_FAILED;                                                                                \
         }                                                                                                              \
                                                                                                                        \
-        NN_LOG_TRACE_INFO("Receive sock " << Id() << " event EPOLLOUT," << "queue size:" << mSendQueue.Size()          \
-                                          << " deque and write result: " << result << " req size:"                     \
-                                          << (mSendingQueueRequest).remainSize << " max send size:" << maxSendSize);   \
+        NN_LOG_TRACE_INFO("Receive sock "                                                                              \
+                          << Id() << " event EPOLLOUT,"                                                                \
+                          << "queue size:" << mSendQueue.Size() << " deque and write result: " << result               \
+                          << " req size:" << (mSendingQueueRequest).remainSize << " max send size:" << maxSendSize);   \
         if (static_cast<uint64_t>(result) < (mSendingQueueRequest).remainSize) {                                       \
             for (uint32_t i = 0; i < (mSendingQueueRequest).iovCount; i++) {                                           \
                 auto iovLen = static_cast<ssize_t>((mSendingQueueRequest).iov[i].iov_len);                             \
@@ -1319,7 +1321,8 @@ public:
         } else {                                                                                                   \
             /* ECONNRESET is broken during io, SUCCESS is broken during idle time. */                              \
             if (errno == ECONNRESET || errno == 0) {                                                               \
-                NN_LOG_WARN("Sock " << mId << " does not receive data header, connection " << " reset by peer");   \
+                NN_LOG_WARN("Sock " << mId << " does not receive data header, connection "                         \
+                                    << " reset by peer");                                                          \
                 return SockOpContextInfo::SS_RESET_BY_PEER; /* socket is closed by peer, socket is error */        \
             }                                                                                                      \
             /* if errno is eagain is normal, need to continue to receive */                                        \
@@ -1361,7 +1364,8 @@ public:
         } else {                                                                                                    \
             /* ECONNRESET is broken during io, SUCCESS is broken during idle time. */                               \
             if (errno == ECONNRESET || errno == 0) {                                                                \
-                NN_LOG_WARN("Sock " << mId << " does not receive data body, connection " << " reset by peer");      \
+                NN_LOG_WARN("Sock " << mId << " does not receive data body, connection "                            \
+                                    << " reset by peer");                                                           \
                 return SockOpContextInfo::SS_RESET_BY_PEER; /* socket is closed by peer, socket is error */         \
             }                                                                                                       \
             /* if errno is eagain is normal, need to continue to receive */                                         \

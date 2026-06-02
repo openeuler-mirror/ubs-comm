@@ -14,8 +14,8 @@
 #define HCOM_RDMA_VERBS_WRAPPER_CTX_H
 #ifdef RDMA_BUILD_ENABLED
 
-#include "hcom_utils.h"
 #include "hcom_obj_statistics.h"
+#include "hcom_utils.h"
 #include "rdma_common.h"
 #include "rdma_device_helper.h"
 
@@ -123,7 +123,8 @@ private:
 #ifdef RDMA_CX5_BUILD_ENABLED
     ibv_dm *mDeviceMemory = nullptr;
 #endif
-    struct ibv_port_attr mPortAttr {};
+    struct ibv_port_attr mPortAttr {
+    };
     uint8_t mPortNumber = 1;
     uint16_t mDevIndex = 0;
     int mMaxSge = NN_NO16;

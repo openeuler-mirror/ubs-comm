@@ -28,7 +28,8 @@
     } while (0)
 
 namespace Statistics {
-enum class CLICommand : uint8_t {
+enum class CLICommand : uint8_t
+{
     INVALID = 0,
     TOPO = 1,
     STAT = 2,
@@ -41,21 +42,24 @@ enum class CLICommand : uint8_t {
     PROBE = 9,
 };
 
-enum class CLITypeParam : uint8_t {
+enum class CLITypeParam : uint8_t
+{
     INVALID = 0,
     TRACE_OP_QUERY,
     TRACE_OP_RESET,
     TRACE_OP_ENABLE_TRACE,
 };
 
-enum class CLISwitchPosition : uint8_t {
+enum class CLISwitchPosition : uint8_t
+{
     IS_TRACE_ENABLE = 0,
     IS_LATENCY_QUANTILE_ENABLE,
     IS_TRACE_LOG_ENABLE,
     INVALID = 16
 };
 
-enum class CLIErrorCode : uint8_t {
+enum class CLIErrorCode : uint8_t
+{
     OK = 0,
     INTERNAL_ERROR = 1
 };

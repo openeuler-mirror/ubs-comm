@@ -33,7 +33,8 @@ public:
         char buf[CMSG_SPACE(fdsSize)];
         bzero(buf, fdsSize);
 
-        struct msghdr msg {};
+        struct msghdr msg {
+        };
         msg.msg_iov = &iov;
         msg.msg_control = buf;
         msg.msg_iovlen = 1;
@@ -81,7 +82,8 @@ public:
         char buf[CMSG_SPACE(fdsSize)];
         bzero(buf, fdsSize);
 
-        struct msghdr msg {};
+        struct msghdr msg {
+        };
         msg.msg_iov = &iov;
         msg.msg_iovlen = 1;
         msg.msg_control = buf;

@@ -70,7 +70,7 @@ struct HcomServiceImpOptions {
     bool enableRndv = false;
     bool tcpSendZCopy = false;
     bool startOobSvr = false;
-    bool activateBackup = false; // 主备开关
+    bool activateBackup = false;  // 主备开关
     bool enableMultiRail = false; // 关闭时才会启用主备切换功能
     NetDriverOobType oobType = NET_OOB_TCP;
     UBSHcomServiceLBPolicy lbPolicy = NET_ROUND_ROBIN;

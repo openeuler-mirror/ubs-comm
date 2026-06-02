@@ -63,13 +63,15 @@ struct DummyObj {
     ~DummyObj() {}
 };
 
-using OBJ_LIFE_CYCLE = enum _o_l_c_ {
+using OBJ_LIFE_CYCLE = enum _o_l_c_
+{
     NONE = 0,
     INIT,
     DEINIT
 };
 
-using DRIVER_STATE = enum _d_s_ {
+using DRIVER_STATE = enum _d_s_
+{
     DRIVER_STATE_NONE = 0,
     DRIVER_STATE_INIT = 1 << 0,
     DRIVER_STATE_START = 1 << 1,

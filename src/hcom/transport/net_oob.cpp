@@ -457,7 +457,8 @@ NResult OOBTCPServer::StartForUds()
         return NN_INVALID_PARAM;
     }
 
-    struct sockaddr_un address {};
+    struct sockaddr_un address {
+    };
     socklen_t addressLen = 0;
     NN_ASSERT_LOG_RETURN(sizeof(address.sun_path) - 1 > mUdsName.length(), NN_INVALID_PARAM);
     bzero(&address, sizeof(address));
@@ -939,7 +940,8 @@ NResult OOBTCPClient::ConnectWithFd(const std::string &filename, int &fd)
         return NN_OOB_CLIENT_SOCKET_ERROR;
     }
 
-    struct sockaddr_un address {};
+    struct sockaddr_un address {
+    };
     socklen_t addressLen = 0;
     NN_ASSERT_LOG_RETURN(sizeof(address.sun_path) - 1 > filename.length(), NN_INVALID_PARAM);
 

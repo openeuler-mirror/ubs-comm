@@ -26,7 +26,8 @@ namespace ock {
 namespace hcom {
 constexpr uint32_t CHANNEL_EP_MAX_NUM = 64;
 
-enum ServiceV2PrivateOpcode : uint16_t {
+enum ServiceV2PrivateOpcode : uint16_t
+{
     RNDV_CALL_OP_V2 = 1001,
     EXCHANGE_TIMESTAMP_OP = 1002,
 };
@@ -149,7 +150,8 @@ private:
     uint64_t mStartTime = 0;
 };
 
-enum class ConnectingEpState {
+enum class ConnectingEpState
+{
     NEW_EP,
     NEW_CHANNEL,
     EP_BROKEN,

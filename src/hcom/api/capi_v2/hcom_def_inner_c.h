@@ -510,7 +510,7 @@ public:
             // 转移所有权到临时集合
             adpToDelete = std::move(svcIter->second);
             mHdlAdpMap.erase(svcIter); // 立即移除Service条目
-        } // 临界区结束
+        }                              // 临界区结束
 
         // 在锁外执行资源释放
         for (auto &adp : adpToDelete) {

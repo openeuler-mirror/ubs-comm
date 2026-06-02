@@ -360,7 +360,8 @@ void NetDriverUBWithOob::RunInUbEventThread()
 
     urma_async_event_t event{};
     while (!mNeedStopEvent) {
-        struct pollfd fd {};
+        struct pollfd fd {
+        };
         int timeoutMs = NN_NO100;
         fd.fd = urmaContext->async_fd;
         fd.events = POLLIN;
@@ -401,11 +402,11 @@ void NetDriverUBWithOob::RunInUbEventThread()
 int NetDriverUBWithOob::ChooseRoutes(std::string peerEid, uvs_path_set_t &uvsPathSet)
 {
     uint8_t chipId = 1; // 固定0
-    uint8_t dieId = 1; // 固定0
+    uint8_t dieId = 1;  // 固定0
     std::set<uint8_t> ports;
     for (int pathIdx = 0; pathIdx < uvsPathSet.path_count; ++pathIdx) {
-        if (uvsPathSet.paths[pathIdx].src_port.chip_id == chipId
-            && uvsPathSet.paths[pathIdx].src_port.die_id == dieId) {
+        if (uvsPathSet.paths[pathIdx].src_port.chip_id == chipId &&
+            uvsPathSet.paths[pathIdx].src_port.die_id == dieId) {
             ports.insert(uvsPathSet.paths[pathIdx].src_port.port_idx);
         }
     }
@@ -479,8 +480,8 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
         uvs_path_set_t uvsPathSet;
         ret = NetFunc::GetTopoInfo(localEid, peerEid, uvsPathSet);
         if (ret != NN_OK) {
-            NN_LOG_ERROR("Failed to get topo info in Driver " << mName << ", localEid " << localEid << ", peerEid " <<
-                peerEid << ", ret " << ret);
+            NN_LOG_ERROR("Failed to get topo info in Driver " << mName << ", localEid " << localEid << ", peerEid "
+                                                              << peerEid << ", ret " << ret);
             return ret;
         }
         // CLOS  topo
@@ -708,7 +709,8 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
     }
 
     if (mOptions.oobType == NET_OOB_UDS) {
-        struct ucred remoteIds {};
+        struct ucred remoteIds {
+        };
         socklen_t len = sizeof(struct ucred);
         if (NN_UNLIKELY(getsockopt(conn.GetFd(), SOL_SOCKET, SO_PEERCRED, &remoteIds, &len) != 0)) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
@@ -884,7 +886,7 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
                                                             mOptions.secType))) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
-    
+
     if (!mOptions.enableMultiRail && mOptions.activateBackup) {
         std::string localEid = mEid;
         uint32_t localEidLen = static_cast<uint32_t>(localEid.size());
@@ -924,8 +926,8 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
         uvs_path_set_t uvsPathSet;
         result = NetFunc::GetTopoInfo(localEid, peerEid, uvsPathSet);
         if (result != NN_OK) {
-            NN_LOG_ERROR("Failed to get topo info in Driver " << mName << ", localEid " << localEid << ", peerEid " <<
-                peerEid << ", result " << result);
+            NN_LOG_ERROR("Failed to get topo info in Driver " << mName << ", localEid " << localEid << ", peerEid "
+                                                              << peerEid << ", result " << result);
             return result;
         }
 
@@ -1128,7 +1130,7 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
     if (NN_UNLIKELY(exchInfoTime > MAX_OP_TIME_US)) {
         NN_LOG_WARN("Exchange Info time too long: " << exchInfoTime << " us.");
     }
-         
+
     /* Create endpoint */
     auto startCreateEp = NetMonotonic::TimeUs();
     UBSHcomNetEndpointPtr ep = new (std::nothrow) NetUBAsyncEndpoint(id, jetty, this, worker);
