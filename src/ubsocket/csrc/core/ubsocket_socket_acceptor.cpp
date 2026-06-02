@@ -9,12 +9,12 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_socket_acceptor.h"
+#include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_thread_pool.h"
 #include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
-#include "ubsocket_socket_set.h"
 #include "ubsocket_wakeup_event.h"
 
 namespace ock {
@@ -47,7 +47,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         *address_len = len_tmp;
         // 使用提取的接口获取IP地址
         peerIp = SocketConnHelper::ExtractIpFromSockAddr(address);
-        SocketPtr sock_obj = SocketSet::Instance().GetSocket(fd);
+        SocketPtr sock_obj = ArraySet<Socket>::GetInstance().GetItem(fd);
         if (sock_obj != nullptr) {
             auto sockBase = RefConvert<Socket, SocketBase>(sock_obj);
             sockBase->acceptor_->acceptor_ops_->conn_info.peer_ip = peerIp;
@@ -211,7 +211,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
         return ret;
     }
 
-    SocketSet::Instance().OverrideSocket(new_fd, new_socket_obj);
+    ArraySet<Socket>::GetInstance().OverrideItem(new_fd, new_socket_obj.Get());
 
     newSocket->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
 
@@ -252,7 +252,8 @@ void Acceptor::InitWakeupEvent()
         wakeup_event_.SetListenFd(raw_fd_);
         UBS_VLOG_INFO("async accept: wakeup_event_ init, epoll_fd=%d, listen_fd=%d\n", epoll_fd, raw_fd_);
 
-        auto *aep = (AsyncEventPoll *)ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
+        EventPollPtr aepRef = ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
+        auto *aep = (AsyncEventPoll *)aepRef.Get();
         if (aep != nullptr) {
             aep->SetWakeupCallback(wakeup_event_.GetReadyEvent(),
                                    [this](struct epoll_event *ev, int me, std::unordered_map<int, EpollEvent *> &sd) {

@@ -13,7 +13,6 @@
 
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_socket.h"
-#include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_bounded_seq.h"
 #include "core/umq/umq_buffer_receive_queue.h"
 #include "core/umq/umq_setting.h"

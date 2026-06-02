@@ -3,12 +3,12 @@
  * ubs-comm is licensed under the Mulan PSL v2.
  */
 
+#include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_defines.h"
 #include "common/ubsocket_errno.h"
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_lock.h"
 #include "core/ubsocket_core_types.h"
-#include "core/ubsocket_socket_set.h"
 #include "umq_backend.h"
 #include "umq_data_rx_ops.h"
 #include "umq_data_tx_ops.h"
@@ -76,7 +76,7 @@ protected:
     {
         errno = 0;
         LockRegistry::RegisterDefaultOps();
-        SocketSet::Instance().Init();
+        ArraySet<Socket>::GetInstance().Init();
 
         GlobalSetting::UBS_ENABLE_SHARE_JFR = false;
         GlobalSetting::UBS_RX_DEPTH = TEST_DEPTH;
@@ -88,7 +88,7 @@ protected:
     {
         errno = 0;
         GlobalMockObject::verify();
-        SocketSet::Instance().ReleaseAll();
+        ArraySet<Socket>::GetInstance().ReleaseAll();
     }
 };
 
@@ -119,7 +119,7 @@ protected:
     {
         errno = 0;
         LockRegistry::RegisterDefaultOps();
-        SocketSet::Instance().Init();
+        ArraySet<Socket>::GetInstance().Init();
 
         GlobalSetting::UBS_ENABLE_SHARE_JFR = false;
         GlobalSetting::UBS_RX_DEPTH = TEST_SOCK_DEPTH;
@@ -131,7 +131,7 @@ protected:
     {
         errno = 0;
         GlobalMockObject::verify();
-        SocketSet::Instance().ReleaseAll();
+        ArraySet<Socket>::GetInstance().ReleaseAll();
     }
 };
 

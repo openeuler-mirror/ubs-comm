@@ -10,8 +10,8 @@
  */
 
 #include "ubsocket_data_rx.h"
+#include "common/ubsocket_common_includes.h"
 #include "ubsocket_socket.h"
-#include "ubsocket_socket_set.h"
 
 namespace ock {
 namespace ubs {
@@ -120,7 +120,7 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
             errno = EINTR;
             return UBS_ERROR;
         }
-        if (SocketSet::Instance().GetSocket(fd_)->State() == SOCK_STAT_CLOSE) {
+        if (ArraySet<Socket>::GetInstance().GetItem(fd_)->State() == SOCK_STAT_CLOSE) {
             return 0;
         }
 

@@ -13,8 +13,8 @@
 
 #include <netinet/tcp.h>
 
+#include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_scope_exit.h"
-#include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_eid_table.h"
 #include "umq_errno_converter.h"
 
@@ -261,7 +261,7 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
             }
 
             case UBHandshakeState::kDEGRADE: {
-                SocketSet::Instance().OverrideSocket(raw_fd_, nullptr);
+                ArraySet<Socket>::GetInstance().OverrideItem(raw_fd_, nullptr);
                 UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
                 return UBS_OK;
             }

@@ -15,7 +15,6 @@
 #include "common/ubsocket_signal_handler.h"
 #include "common/ubsocket_version.h"
 #include "core/ubsocket_event_epoll.h"
-#include "core/ubsocket_socket_set.h"
 #include "core/umq/umq_backend.h"
 #include "core/umq/umq_setting.h"
 #include "include/ubsocket.h"
@@ -145,7 +144,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
 
     /* step3: socket related initialization */
-    SocketSet::Instance().Init();
+    ArraySet<Socket>::GetInstance().Init();
     g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
     ArraySet<EventPoll>::GetInstance().Init();
 

@@ -10,7 +10,7 @@
  */
 
 #include "umq_epoll_runner_ops.h"
-#include "core/ubsocket_socket_set.h"
+#include "common/ubsocket_common_includes.h"
 #include "umq_backend.h"
 #include "umq_data_rx_ops.h"
 #include "umq_data_tx_ops.h"
@@ -169,7 +169,7 @@ ALWAYS_INLINE std::unordered_set<Socket *> UmqEpollRunnerOps::SiftSocketEventsWi
         }
 
         auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
-        auto socket_ptr = SocketSet::Instance().GetSocket(socket_fd).Get();
+        auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
         if (UNLIKELY(socket_ptr == nullptr)) {
             UBS_VLOG_WARN("async_epoll Get socket fd:%d object failed. \n", socket_fd);
             continue;

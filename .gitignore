@@ -10,3 +10,5 @@ bazel-testlogs
 bazel-ubs-comm
 bazel-ubs-comm_refactor
 MODULE.bazel.lock
+.clangd
+.cache/

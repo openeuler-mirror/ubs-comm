@@ -29,7 +29,6 @@ public:
     {
         rwlock_ = LockRegistry::RW_LOCK_OPS.create();
         if (rwlock_ != nullptr) {
-            // 初始化数组为 nullptr
             for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
                 set_obj_[i] = nullptr;
             }
@@ -38,24 +37,19 @@ public:
         return -1;
     }
 
-    ALWAYS_INLINE T *GetItem(int idx)
+    ALWAYS_INLINE Ref<T> GetItem(int idx)
     {
         if (idx < 0 || idx >= RPC_ADPT_FD_MAX) {
-            return nullptr;
+            return Ref<T>();
         }
-        return set_obj_[idx];
-    }
-
-    T *GetItemLocked(int idx)
-    {
         ReadLocker lock(rwlock_);
-        return GetItem(idx);
+        return Ref<T>(set_obj_[idx]);
     }
 
-    T *OverrideItem(int idx, T *new_item)
+    Ref<T> OverrideItem(int idx, T *new_item)
     {
         if (idx < 0 || idx >= RPC_ADPT_FD_MAX) {
-            return nullptr;
+            return Ref<T>();
         }
         if (new_item != nullptr) {
             new_item->IncreaseRef();
@@ -71,13 +65,13 @@ public:
         if (old_item != nullptr) {
             old_item->DecreaseRef();
         }
-        return old_item;
+        return Ref<T>(old_item);
     }
 
-    T *RemoveItem(int idx)
+    Ref<T> RemoveItem(int idx)
     {
         if (idx < 0 || idx >= RPC_ADPT_FD_MAX) {
-            return nullptr;
+            return Ref<T>();
         }
         T *item = nullptr;
         {
@@ -85,7 +79,7 @@ public:
             item = set_obj_[idx];
             set_obj_[idx] = nullptr;
         }
-        return item;
+        return Ref<T>(item);
     }
 
     void ReleaseAll()
@@ -119,11 +113,6 @@ public:
             }
         }
         return count;
-    }
-
-    u_rw_lock_t *GetRWLock()
-    {
-        return rwlock_;
     }
 
 private:

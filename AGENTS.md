@@ -111,13 +111,34 @@ opencode skill系统位于`.opencode/skills/`，指导AI生成符合项目约定
 | `src/hcom/umq/` | UMQ messaging queue | Standalone CMake build. Outputs `libumq.so` |
 | `src/ubsocket/` | UBSocket adapter | Depends on UMQ. Outputs `librpc_adapter_brpc.so` |
 | `src/ubsocket/csrc/core/umq/` | UMQ socket adapter ops | `umq_errno_converter.h` (frozen — do NOT modify) |
+| `src/ubsocket/csrc/core/` | 通用抽象层 | `ubsocket_*`文件，不应引用`umq/`头文件 |
 | `test/hcom/` | HCOM tests | `unit_test/`, `llt/`, `stub/`, `opensslcrt/` |
 | `src/ubsocket/unit_test/` | UBSocket tests | gtest+mockcpp, ctest runner |
 | `doc/` | Documentation | Design docs in `doc/ubsocket/` and `doc/hcom/` |
 
+### 依赖方向规则
+
+`core/ubsocket_*`是通用抽象层，当前支持umq通信方式，后续新增通信方式只需在`core/`下新增子目录即可，不需要改动通用层代码：
+
+- **通用层**(`core/ubsocket_*.cpp/.h`)只操作虚接口(`AcceptorOps/ConnectorOps/DataTxOps/DataRxOps`等)，**禁止引用任何具体实现子目录的头文件**（当前为`umq/`，后续新增如`urma/`、`posix_shm/`等同理禁止）
+- **工厂方法**(`ubsocket_socket.cpp`)是唯一允许引用具体实现子目录头文件的通用层代码——它根据`SocketType`创建具体实现对象，新增通信方式时只需在此文件新增`case`分支
+- **具体实现层**(`core/umq/*.cpp/.h`等)可以引用通用层头文件
+
 ## Pre-commit Hooks
 
 `.pre-commit-config.yaml`在每次commit时运行: **全量构建** + clang-format + clang-tidy。非常耗时——这些是本地hooks，不是轻量检查。clang-tidy对源文件使用release构建目录(`-p=cmake-build-release`)，对测试文件使用debug构建目录(`-p=cmake-build-debug`)。
+
+### commit前必做检查
+
+**每次commit之前必须执行** `pre-commit run clang-format --all-files`，确保格式合规后再提交。完整pre-commit hook耗时过长（全量构建+clang-tidy），仅clang-format是轻量且可靠的检查。如clang-format修改了文件，需`git add`后再commit。
+
+```bash
+pre-commit run clang-format --all-files   # commit前必跑
+git add -A                     # 如有格式修改，重新暂存
+git commit --no-verify -m "..." # 跳过完整hook，仅依赖手动clang-format
+```
+
+clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也有预存编译错误，两者均与ubsocket改动无关，commit时可用`--no-verify`跳过。
 
 ## Errno Mapping 工作进度 (ubsocket)
 
