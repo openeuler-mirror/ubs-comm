@@ -54,6 +54,10 @@ public:
 
     ~UBMemoryRegion() override
     {
+        if (mUBContext != nullptr) {
+            mUBContext->DecreaseRef();
+            mUBContext = nullptr;
+        }
         OBJ_GC_DECREASE(UBMemoryRegion);
     }
 
