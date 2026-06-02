@@ -13,9 +13,9 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <mockcpp/mockcpp.hpp>
-#include "net_sock_driver_oob.h"
-#include "net_sock_async_endpoint.h"
 #include "net_oob_secure.h"
+#include "net_sock_async_endpoint.h"
+#include "net_sock_driver_oob.h"
 
 namespace ock {
 namespace hcom {

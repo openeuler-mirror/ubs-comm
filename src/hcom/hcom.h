@@ -55,7 +55,8 @@ using NetOOBServer = OOBTCPServer;
 using NetLogger = UBSHcomNetOutLogger;
 
 /* ****************************************************************************************** */
-enum UBSHcomNetEndPointState {
+enum UBSHcomNetEndPointState
+{
     NEP_NEW = 0,
     NEP_ESTABLISHED = 1,
     NEP_BROKEN = 2,
@@ -84,7 +85,8 @@ bool UBSHcomNetCloneStringToArray(char *dest, size_t destMax, const std::string 
         CHAR_ARRAY, strlen(CHAR_ARRAY) <= sizeof(CHAR_ARRAY) ? strlen(CHAR_ARRAY) : sizeof(CHAR_ARRAY) \
     }
 
-enum class UBSHcomNetRequestStatus {
+enum class UBSHcomNetRequestStatus
+{
     CALLED = 0,
     IN_HCOM,
     IN_URMA,
@@ -219,14 +221,16 @@ union UBSHcomEpOptions {
 /**
  * @brief Cipher suite ids
  */
-enum UBSHcomNetCipherSuite {
+enum UBSHcomNetCipherSuite
+{
     AES_GCM_128 = 0,
     AES_GCM_256 = 1,
     AES_CCM_128 = 2,
     CHACHA20_POLY1305 = 3,
 };
 
-enum UBSHcomTlsVersion : uint32_t {
+enum UBSHcomTlsVersion : uint32_t
+{
     TLS_1_2 = NN_NO771,
     TLS_1_3 = NN_NO772,
 };
@@ -879,7 +883,8 @@ private:
  */
 class UBSHcomNetRequestContext {
 public:
-    enum NN_OpType : uint8_t {
+    enum NN_OpType : uint8_t
+    {
         NN_SENT = 0,
         NN_SENT_RAW = 1,
         NN_SENT_RAW_SGL = 2,
@@ -1180,7 +1185,8 @@ protected:
 /**
  * @brief Type of allocator
  */
-enum UBSHcomNetMemoryAllocatorType {
+enum UBSHcomNetMemoryAllocatorType
+{
     DYNAMIC_SIZE = 0,            /* allocate dynamic memory size, there is alignment with X KB */
     DYNAMIC_SIZE_WITH_CACHE = 1, /* allocator with dynamic memory size, with pre-allocate cache for performance */
 };
@@ -1197,7 +1203,8 @@ std::string &UBSHcomNetMemoryAllocatorTypeToString(UBSHcomNetMemoryAllocatorType
 /**
  * @brief Allocator cache tier policy
  */
-enum UBSHcomNetMemoryAllocatorCacheTierPolicy : int16_t {
+enum UBSHcomNetMemoryAllocatorCacheTierPolicy : int16_t
+{
     TIER_TIMES = 0, /* tier by times of min-block-size */
     TIER_POWER = 1, /* tier by power of min-block-size */
 };
@@ -1299,7 +1306,7 @@ public:
      * It's suggested to be called even if you are not using memory protection currently,
      * in case you may miss this once you turn memory protection on in the future.
      */
-    virtual void Destroy() {};
+    virtual void Destroy(){};
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
@@ -1450,7 +1457,8 @@ using UBSHcomNetDriverIdleHandler = std::function<void(const UBSHcomNetWorkerInd
  * b) verify peer certification by what hcom provided
  * c) verify peer certification using caller's
  */
-enum UBSHcomPeerCertVerifyType : uint8_t {
+enum UBSHcomPeerCertVerifyType : uint8_t
+{
     VERIFY_BY_NONE = 0,        /* don't verify peer certification */
     VERIFY_BY_DEFAULT = 1,     /* verify peer certification by what hcom provided, crl check and cert check */
     VERIFY_BY_CUSTOM_FUNC = 2, /* verify peer certification using caller's */
@@ -1508,7 +1516,8 @@ using UBSHcomTLSCaCallback =
 /**
  * @brief UBSHcomNetDriver secure mode
  */
-enum UBSHcomNetDriverSecType : uint8_t {
+enum UBSHcomNetDriverSecType : uint8_t
+{
     NET_SEC_DISABLED = 0,
     NET_SEC_VALID_ONE_WAY = 1,
     NET_SEC_VALID_TWO_WAY = 2,
@@ -1573,7 +1582,8 @@ std::string &UBSHcomNetDriverSecTypeToString(UBSHcomNetDriverSecType v);
 /**
  * @brief UBSHcomNetDriver working mode
  */
-enum NetDriverOobType : uint8_t {
+enum NetDriverOobType : uint8_t
+{
     NET_OOB_TCP = 0,
     NET_OOB_UDS = 1,
     NET_OOB_UB = 2,
@@ -1584,7 +1594,8 @@ std::string &UBSHcomNetDriverOobTypeToString(NetDriverOobType v);
 /**
  * @brief UBSHcomNetDriver working mode
  */
-enum UBSHcomNetDriverWorkingMode : uint8_t {
+enum UBSHcomNetDriverWorkingMode : uint8_t
+{
     NET_BUSY_POLLING = 0,
     NET_EVENT_POLLING = 1,
 };
@@ -1592,7 +1603,8 @@ enum UBSHcomNetDriverWorkingMode : uint8_t {
 /**
  * @brief UBSHcomNetDriver load balance policy
  */
-enum UBSHcomNetDriverLBPolicy : uint8_t {
+enum UBSHcomNetDriverLBPolicy : uint8_t
+{
     NET_ROUND_ROBIN = 0,
     NET_HASH_IP_PORT = 1,
 };
@@ -1601,7 +1613,8 @@ std::string &UBSHcomNetDriverLBPolicyToString(UBSHcomNetDriverLBPolicy v);
 
 /// UB-C 专用: UB-C 具有多路径能力，发送时使用多条路径可以增大带宽，对于带宽要求
 /// 不高、时延敏感型业务又提供单路径直连模式。
-enum class UBSHcomUbcMode : int8_t {
+enum class UBSHcomUbcMode : int8_t
+{
     LowLatency = 0,    ///< 低时延模式，使用单路径发送
     HighBandwidth = 1, ///< 高带宽模式，使用多条路径发送
 };
@@ -1773,7 +1786,8 @@ struct UBSHcomNetDriverOptions {
 /**
  * @brief The protocol of driver
  */
-enum UBSHcomNetDriverProtocol {
+enum UBSHcomNetDriverProtocol
+{
     RDMA = 0,
     TCP = 1,
     UDS = 2,

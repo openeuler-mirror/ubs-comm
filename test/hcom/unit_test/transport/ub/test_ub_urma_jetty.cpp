@@ -601,7 +601,7 @@ TEST_F(TestUbUrmaJetty, CreateJettyMr)
 TEST_F(TestUbUrmaJetty, GetFreeBuff)
 {
     uintptr_t item = 0;
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     EXPECT_EQ(jetty->GetFreeBuff(item), false);

@@ -63,7 +63,8 @@ bool PerfTestLogger::SetStrStol(const std::string &str, long &value)
 
 void PerfTestLogger::Log(int level, const std::ostringstream &oss) const
 {
-    struct timeval tv {};
+    struct timeval tv {
+    };
     char strTime[24];
 
     int ret = gettimeofday(&tv, nullptr);
@@ -71,7 +72,8 @@ void PerfTestLogger::Log(int level, const std::ostringstream &oss) const
         std::cout << "Fail to get the current system time, " << ret << "." << std::endl;
     }
     time_t timeStamp = tv.tv_sec;
-    struct tm localTime {};
+    struct tm localTime {
+    };
     struct tm *resultTime = localtime_r(&timeStamp, &localTime);
     if ((resultTime != nullptr) &&
         (strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S.", resultTime) != PERF_TEST_NO0)) {

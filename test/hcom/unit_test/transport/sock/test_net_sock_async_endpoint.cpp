@@ -13,9 +13,9 @@
 #include <mockcpp/mockcpp.hpp>
 #include "hcom.h"
 #include "net_common.h"
+#include "net_sock_async_endpoint.h"
 #include "net_sock_driver_oob.h"
 #include "sock_validation.h"
-#include "net_sock_async_endpoint.h"
 
 namespace ock {
 namespace hcom {
@@ -238,7 +238,7 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendSeqValidateBuffFail)
 TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendSeqGetBuffErr)
 {
     ep->mSendZCopy = false;
-    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool (NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     int ret = ep->PostSend(0, request, 0);
@@ -250,11 +250,11 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendSeqCopyErr)
     ep->mSendZCopy = false;
     NormalMemoryRegionFixedBuffer *Mr = mDriver->mSockDriverSendMR = new (std::nothrow)
         NormalMemoryRegionFixedBuffer(name, 1, 1);
-    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool (NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
-    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::ReturnBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t))
+    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::ReturnBuffer, bool (NormalMemoryRegionFixedBuffer::*)(uintptr_t))
         .stubs()
         .will(returnValue(true));
     int ret = ep->PostSend(0, request, 0);
@@ -297,7 +297,7 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendOpInfoGetBuffErr)
 {
     ep->mSendZCopy = false;
     UBSHcomNetTransOpInfo opInfo{};
-    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool (NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     int ret = ep->PostSend(0, request, opInfo);
@@ -310,11 +310,11 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendOpInfoCopyErr)
     UBSHcomNetTransOpInfo opInfo{};
     NormalMemoryRegionFixedBuffer *Mr = mDriver->mSockDriverSendMR = new (std::nothrow)
         NormalMemoryRegionFixedBuffer(name, 1, 1);
-    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool (NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
-    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::ReturnBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t))
+    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::ReturnBuffer, bool (NormalMemoryRegionFixedBuffer::*)(uintptr_t))
         .stubs()
         .will(returnValue(true));
     int ret = ep->PostSend(0, request, opInfo);
@@ -353,7 +353,7 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendRawSeqZCopy)
 TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendRawSeqGetBuffErr)
 {
     ep->mSendZCopy = false;
-    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool (NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     int ret = ep->PostSendRaw(request, 0);
@@ -365,11 +365,11 @@ TEST_F(TestNetSockAsyncEndpoint, AsyncPostSendRawSeqCopyErr)
     ep->mSendZCopy = false;
     NormalMemoryRegionFixedBuffer *Mr = mDriver->mSockDriverSendMR = new (std::nothrow)
         NormalMemoryRegionFixedBuffer(name, 1, 1);
-    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::GetFreeBuffer, bool (NormalMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
-    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::ReturnBuffer, bool(NormalMemoryRegionFixedBuffer::*)(uintptr_t))
+    MOCKER_CPP(&NormalMemoryRegionFixedBuffer::ReturnBuffer, bool (NormalMemoryRegionFixedBuffer::*)(uintptr_t))
         .stubs()
         .will(returnValue(true));
     int ret = ep->PostSendRaw(request, 0);

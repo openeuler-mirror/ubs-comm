@@ -10,9 +10,6 @@
  */
 #include <iostream>
 
-#include "profiling/probe/probe_manager.h"
-#include "profiling/statistics/statistics.h"
-#include "profiling/statistics/ubsocket_print_stats_mgr.h"
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_signal_handler.h"
@@ -22,6 +19,9 @@
 #include "core/umq/umq_backend.h"
 #include "core/umq/umq_setting.h"
 #include "include/ubsocket.h"
+#include "profiling/probe/probe_manager.h"
+#include "profiling/statistics/statistics.h"
+#include "profiling/statistics/ubsocket_print_stats_mgr.h"
 #include "ubsocket_struct_helper.h"
 #include "under_api/dl_api.h"
 

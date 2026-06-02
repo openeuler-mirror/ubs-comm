@@ -23,7 +23,8 @@ namespace hcom {
 /*
  * Keeper message types
  */
-enum ShmChKeeperMsgType : uint16_t {
+enum ShmChKeeperMsgType : uint16_t
+{
     RESET_BY_PEER = 0,
     ACTIVE_CLOSE_CH = 1,
     EXCHANGE_CH_FD = 2,

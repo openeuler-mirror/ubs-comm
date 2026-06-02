@@ -97,7 +97,8 @@ HResult ShmChannelKeeper::AddShmChannel(const ShmChannelPtr &ch)
         return SH_DUP_CH_IN_KEEPER;
     }
 
-    struct epoll_event ev {};
+    struct epoll_event ev {
+    };
     ev.events = EPOLLIN;
     ev.data.ptr = ch.Get();
     if (epoll_ctl(mEpollHandle, EPOLL_CTL_ADD, ch->UdsFD(), &ev) != 0) {

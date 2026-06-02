@@ -141,7 +141,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaGetSendQueueCount)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendSeqFailed)
 {
     name = "NetSyncEndpointRdmaPostSend";
-    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool(RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool (RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     int ret = NEP->PostSend(0, request, 0);
@@ -151,7 +151,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendSeqFailed)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendSeq)
 {
     name = "NetSyncEndpointRdmaPostSend";
-    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool(RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool (RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
 
@@ -161,7 +161,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendSeq)
         .then(returnValue(0))
         .then(returnValue(static_cast<int>(RR_QP_POST_SEND_FAILED)));
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -177,7 +177,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendSeq)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendSeqTwo)
 {
     name = "NetSyncEndpointRdmaPostSend";
-    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool(RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool (RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&RDMASyncEndpoint::PostSend).stubs().will(returnValue(1)).then(returnValue(0));
@@ -194,7 +194,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendSeqTwo)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendInfoFailed)
 {
     name = "NetSyncEndpointRdmaPostSend";
-    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool(RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool (RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     UBSHcomNetTransOpInfo OpInfo{};
@@ -205,7 +205,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendInfoFailed)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfo)
 {
     name = "NetSyncEndpointRdmaPostSend";
-    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool(RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool (RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
 
@@ -215,7 +215,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfo)
         .then(returnValue(0))
         .then(returnValue(static_cast<int>(RR_QP_POST_SEND_FAILED)));
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -232,7 +232,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfo)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfoTwo)
 {
     name = "NetSyncEndpointRdmaPostSend";
-    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool(RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool (RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&RDMASyncEndpoint::PostSend).stubs().will(returnValue(1)).then(returnValue(0));
@@ -300,7 +300,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfoWithHeaderValid
 
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfoWithHeaderBuffer)
 {
-    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool(RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool (RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -318,7 +318,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfoWithHeaderBuffe
 
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfoWithHeaderMemcpy)
 {
-    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool(RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool (RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0)).then(returnValue(1));
@@ -341,7 +341,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfoWithHeaderMemcp
 
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaPostSendOpInfoWithHeaderEpSend)
 {
-    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool(RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&RDMAMemoryRegionFixedBuffer::GetFreeBuffer, bool (RDMAMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&RDMASyncEndpoint::PostSend)
@@ -482,7 +482,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaEstimatedEncryptLenTwo)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaEncrypt)
 {
     uint64_t cipherLen = 0;
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     int ret = NEP->Encrypt(reinterpret_cast<void *>(0), 0, reinterpret_cast<void *>(0), cipherLen);
@@ -496,7 +496,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaEncrypt)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaEncryptTwo)
 {
     uint64_t cipherLen = 0;
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(true));
 
@@ -520,7 +520,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaEstimatedDecryptLen)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaDecrypt)
 {
     uint64_t rawLen = 0;
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     int ret = NEP->Decrypt(reinterpret_cast<void *>(0), 0, reinterpret_cast<void *>(0), rawLen);
@@ -534,7 +534,7 @@ TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaDecrypt)
 TEST_F(TestNetRdmaSyncEndpoint, NetSyncEndpointRdmaDecryptTwo)
 {
     uint64_t rawLen = 0;
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(true));
 

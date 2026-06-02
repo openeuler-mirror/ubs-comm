@@ -11,8 +11,8 @@
 #ifndef UBS_COMM_UBSOCKET_EPOLL_FD_H
 #define UBS_COMM_UBSOCKET_EPOLL_FD_H
 
-#include "ubsocket_core_types.h"
 #include "common/ubsocket_spsc_ring_queue.h"
+#include "ubsocket_core_types.h"
 
 namespace ock {
 namespace ubs {

@@ -112,7 +112,8 @@ public:
             bufAddr, bufSize, localKey
         };
 
-        struct ibv_recv_wr wr {};
+        struct ibv_recv_wr wr {
+        };
         wr.wr_id = context;
         wr.sg_list = &list;
         wr.num_sge = 1;
@@ -173,7 +174,8 @@ public:
             bufAddr, bufSize, localKey
         };
 
-        struct ibv_send_wr wr {};
+        struct ibv_send_wr wr {
+        };
         wr.sg_list = &list;
         wr.wr_id = context;
         wr.num_sge = 1;
@@ -210,7 +212,8 @@ public:
             list[i].lkey = static_cast<uint32_t>(iov[i].key);
         }
 
-        struct ibv_send_wr wr {};
+        struct ibv_send_wr wr {
+        };
         wr.wr_id = context;
         wr.sg_list = list;
         wr.num_sge = static_cast<int>(iovCount);
@@ -246,7 +249,8 @@ public:
             list[i].lkey = static_cast<uint32_t>(iov[i].lKey);
         }
 
-        struct ibv_send_wr wr {};
+        struct ibv_send_wr wr {
+        };
         wr.wr_id = context;
         wr.sg_list = list;
         wr.num_sge = static_cast<int>(iovCount);
@@ -316,7 +320,8 @@ public:
             bufAddr, bufSize, localKey
         };
 
-        struct ibv_send_wr wr {};
+        struct ibv_send_wr wr {
+        };
         wr.sg_list = &list;
         wr.num_sge = 1;
         wr.next = nullptr;
@@ -347,7 +352,8 @@ public:
             bufAddr, bufSize, localKey
         };
 
-        struct ibv_send_wr wr {};
+        struct ibv_send_wr wr {
+        };
         wr.wr_id = context;
         wr.sg_list = &list;
         wr.num_sge = 1;

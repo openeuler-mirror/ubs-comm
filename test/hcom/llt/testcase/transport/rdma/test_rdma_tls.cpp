@@ -52,7 +52,8 @@ std::string asyncSendValue = "async send value";
 std::string asyncSendRawValue = "async send raw value";
 std::string syncSendRawValue = "sync send raw value";
 uint16_t testPort = 9998;
-using TestOpCode = enum {
+using TestOpCode = enum
+{
     CHECK_ASYNC_RESPONSE = 1,
     CHECK_SYNC_RESPONSE,
     SEND_RAW,

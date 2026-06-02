@@ -20,7 +20,7 @@ namespace ock {
 namespace hcom {
 
 #define INVALID_PORT (0xFFFF)
-#define TRACE_ID(SERVICE_ID_, INNER_ID_) ((SERVICE_ID_) << 16 | ((INNER_ID_) & 0xFFFF))
+#define TRACE_ID(SERVICE_ID_, INNER_ID_) ((SERVICE_ID_) << 16 | ((INNER_ID_)&0xFFFF))
 
 using HTRACE_INTF = struct HTRACE_INTF_S {
     bool (*IsEnable)();
@@ -115,9 +115,9 @@ extern HTRACE_INTF g_htraceIntf;
         g_htraceIntf.DelayBegin(TP_ID, #TP_ID); \
     }
 
-#define TRACE_IOSIZE_END(TP_ID, IOSIZE, RET_CODE)                     \
-    if (g_htraceIntf.IsEnable()) {                                    \
-        g_htraceIntf.DelayEnd(TP_ID, ((IOSIZE) * 1000ULL), RET_CODE); \
+#define TRACE_IOSIZE_END(TP_ID, IOSIZE, RET_CODE)                   \
+    if (g_htraceIntf.IsEnable()) {                                  \
+        g_htraceIntf.DelayEnd(TP_ID, ((IOSIZE)*1000ULL), RET_CODE); \
     }
 } // namespace hcom
 } // namespace ock

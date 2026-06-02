@@ -45,7 +45,8 @@ using SockPtr = NetRef<Sock>;
 
 using SockTransHeader = UBSHcomNetTransHeader;
 
-enum SockType : uint8_t {
+enum SockType : uint8_t
+{
     SOCK_UDS = 0,     /* uds as transfer protocol */
     SOCK_TCP = 1,     /* tcp as transfer protocol */
     SOCK_UDS_TCP = 2, /* both tcp and uds, if local host use uds, otherwise use tcp */
@@ -141,7 +142,8 @@ struct SockHeaderReqInfo {
 } __attribute__((packed));
 
 struct SockOpContextInfo {
-    enum SockOpType : uint8_t {
+    enum SockOpType : uint8_t
+    {
         SS_SEND = 0,
         SS_SEND_RAW = 1,
         SS_SEND_RAW_SGL = 2,
@@ -156,7 +158,8 @@ struct SockOpContextInfo {
         SS_SGL_READ_ACK = 11,
     };
 
-    enum SockErrorType : uint8_t {
+    enum SockErrorType : uint8_t
+    {
         SS_NO_ERROR = 0,
         SS_OPERATE_FAILURE = 1,
         SS_RESET_BY_PEER = 2,
@@ -199,7 +202,8 @@ struct SockOpContextInfo {
 
 using SResult = int32_t;
 
-enum SCode {
+enum SCode
+{
     SS_OK = 0,
     SS_ERROR = 400, /* general error */
     SS_PARAM_INVALID = 401,

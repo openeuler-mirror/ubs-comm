@@ -27,7 +27,8 @@ constexpr const uint32_t NET_STR_ERROR_BUF_SIZE = 128;
 constexpr const uint32_t NET_SGE_MAX_IOV = 4;
 
 // enum num should less than 128
-enum NET_FLAGS {
+enum NET_FLAGS
+{
     NTH_TWO_SIDE = 0,
     NTH_TWO_SIDE_SGL = 1,
     NTH_REPLY_REQUIRED = 2,
@@ -42,7 +43,8 @@ enum NET_FLAGS {
 };
 
 /* opcode specifically reserved for some operations */
-enum NetPrivateOpCode {
+enum NetPrivateOpCode
+{
     HB_SEND_OP = 1024,
     HB_RECV_OP = 1025,
     MR_INFO_OP = 1026,
@@ -150,7 +152,8 @@ struct UBSHcomNetTransDataIov {
 
 /// 本类型主要用于描述存在于传输层 payload 中可能存在的额外头部，以指导服务层如
 /// 何处理 payload.
-enum class UBSHcomExtHeaderType : uint32_t {
+enum class UBSHcomExtHeaderType : uint32_t
+{
     RAW = 0,  ///< 裸 payload
     FRAGMENT, ///< SplitSend 专用的分片头，对应下方的 UBSHcomFragmentHeader
 };

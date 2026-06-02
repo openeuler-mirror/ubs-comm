@@ -31,7 +31,7 @@ public:
      * it can be call multi-times, but really do once.
      * @return true for success
      */
-    virtual NResult InitSSL(bool server) {};
+    virtual NResult InitSSL(bool server){};
 
     /*
      * @brief server send the secret.
@@ -84,8 +84,8 @@ public:
 
 protected:
     /* Server and Client build the TLS */
-    virtual NResult CommLoad(bool server) {};
-    virtual NResult VerifyCA(bool server) {};
+    virtual NResult CommLoad(bool server){};
+    virtual NResult VerifyCA(bool server){};
 
     NetSecrets mSecret;
     UBSHcomTLSCertificationCallback mCertCallback = nullptr;

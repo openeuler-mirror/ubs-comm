@@ -55,7 +55,8 @@ namespace hcom {
         memcpy((dest), (src), (lenWithTerm));      \
     } while (0)
 
-typedef enum {
+typedef enum
+{
     SEC_EOK = 0,
     SEC_EINVAL = 22,
     SEC_ERANGE = 34,

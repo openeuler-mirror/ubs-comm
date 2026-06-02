@@ -19,7 +19,8 @@ class SubscriptionInfo;
 using SubscriptionInfoPtr = NetRef<SubscriptionInfo>;
 class SubscriberRspInfo;
 using SubscriberRspInfoPtr = NetRef<SubscriberRspInfo>;
-enum class PublisherState {
+enum class PublisherState
+{
     PUB_NEW = 0,
     PUB_ESTABLISHED = 1,
     PUB_CLOSE = 2,
@@ -177,7 +178,8 @@ private:
     friend class SubscriberRspInfo;
 };
 
-enum class SubscriberRspStatus {
+enum class SubscriberRspStatus
+{
     SUCCESS,       // 已回复（成功）
     INIT,          // 初始还未发送
     SEND_ERROR,    // 发送错误

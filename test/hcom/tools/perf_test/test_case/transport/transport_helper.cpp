@@ -1,7 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
-#include "securec.h"
 #include "common/perf_test_logger.h"
 #include "securec.h"
 

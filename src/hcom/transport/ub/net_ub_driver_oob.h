@@ -35,7 +35,6 @@ inline uint32_t backRouteSrcPortEid; // 备
 inline uint32_t backRouteDstPortEid; // 备
 extern std::map<std::string, uint32_t> g_eid_port_map;
 
-
 class NetDriverUBWithOob : public NetDriverUB {
 public:
     NetDriverUBWithOob(const std::string &name, bool startOobSvr, UBSHcomNetDriverProtocol protocol)

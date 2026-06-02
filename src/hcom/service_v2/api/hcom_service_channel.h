@@ -29,7 +29,8 @@ using UBSHcomEndpointPtr = NetRef<UBSHcomNetEndpoint>;
 using UBSHcomChannelPtr = NetRef<UBSHcomChannel>;
 using UBSHcomServiceChannelBrokenHandler = std::function<void(const UBSHcomChannelPtr &)>;
 
-enum UBSHcomChannelState : uint16_t {
+enum UBSHcomChannelState : uint16_t
+{
     CH_NEW,
     CH_ESTABLISHED,
     CH_CLOSE,
@@ -237,8 +238,8 @@ public:
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
 protected:
-    virtual auto SpliceMessage(const UBSHcomNetRequestContext &ctx,
-                               bool isResp) -> std::tuple<SpliceMessageResultType, SerResult, std::string> = 0;
+    virtual auto SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
+        -> std::tuple<SpliceMessageResultType, SerResult, std::string> = 0;
 
     uint32_t mUserSplitSendThreshold = UINT32_MAX; // 用户 payload 拆包阈值，已去除额外头部大小
 private:

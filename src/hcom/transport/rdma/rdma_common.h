@@ -43,7 +43,8 @@ namespace hcom {
  */
 using RResult = int;
 
-enum RRCode {
+enum RRCode
+{
     RR_OK = 0,
     RR_PARAM_INVALID = 200,
     RR_MEMORY_ALLOCATE_FAILED = 201,
@@ -139,7 +140,8 @@ class OOBTCPClient;
 
 // the size of RDMAOpContextInfo is 64 bytes which fit to single CPU cache line
 struct RDMAOpContextInfo {
-    enum OpType : uint8_t {
+    enum OpType : uint8_t
+    {
         SEND = 0,
         SEND_RAW = 1,
         SEND_RAW_SGL = 2,
@@ -154,7 +156,8 @@ struct RDMAOpContextInfo {
         SEND_RAW_NO_CP = 11,
     };
 
-    enum OpResultType : uint8_t {
+    enum OpResultType : uint8_t
+    {
         SUCCESS = 0,
         ERR_TIMEOUT = 1,
         ERR_CANCELED = 2,
@@ -165,7 +168,8 @@ struct RDMAOpContextInfo {
         INVALID_MAGIC = 0xFF,
     };
 
-    enum MrType : uint8_t {
+    enum MrType : uint8_t
+    {
         MR = 2
     };
 
@@ -246,7 +250,8 @@ struct RDMASgeCtxInfo {
     explicit RDMASgeCtxInfo(RDMASglContextInfo *sglCtx) : ctx(sglCtx) {}
 } __attribute__((packed));
 
-enum RDMAPollingMode : uint8_t {
+enum RDMAPollingMode : uint8_t
+{
     BUSY_POLLING = 0,
     EVENT_POLLING = 1,
 };

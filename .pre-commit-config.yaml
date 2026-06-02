@@ -17,7 +17,7 @@ repos:
         name: Run clang-format check
         entry: clang-format
         language: system
-        files: ^$
+        files: \.(h|c|cpp)$
         exclude: ^src/hcom/umq
         args: [-style=file, -i]
       - id: clang-tidy

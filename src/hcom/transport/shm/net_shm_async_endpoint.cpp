@@ -165,7 +165,8 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
     uintptr_t address = 0;
     result = mShmCh->DCGetFreeBuck(address, offset, NN_NO100, mDefaultTimeout);
     if (NN_UNLIKELY(result != NN_OK)) {
-        NN_LOG_ERROR("Shm Failed to get free buck from shm channel " << mShmCh->Id() << "," << "result " << result);
+        NN_LOG_ERROR("Shm Failed to get free buck from shm channel " << mShmCh->Id() << ","
+                                                                     << "result " << result);
         return result;
     }
 

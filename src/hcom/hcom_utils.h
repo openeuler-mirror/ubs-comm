@@ -505,7 +505,7 @@ private:
 constexpr uint32_t PAGE_ALIGN_H = NN_NO4096;
 
 // defines
-#define POWER_OF_2(x) ((((x) - 1) & (x)) == 0)
+#define POWER_OF_2(x) ((((x)-1) & (x)) == 0)
 
 #define H_LIKELY(e) (__builtin_expect(!!(e), 1) != 0)
 #define H_UNLIKELY(e) (__builtin_expect(!!(e), 0) != 0)

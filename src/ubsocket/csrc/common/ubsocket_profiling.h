@@ -16,7 +16,8 @@
 
 namespace ock {
 namespace ubs {
-enum ProfilingTPId : uint32_t {
+enum ProfilingTPId : uint32_t
+{
     CORE_CONNECT = 0,
     CORE_ACCEPT,
     CORE_WRITE,

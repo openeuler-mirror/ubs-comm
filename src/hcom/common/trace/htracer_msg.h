@@ -35,7 +35,8 @@ namespace hcom {
 
 constexpr uint32_t LOG_PATH_LENGTH = 260;
 
-enum MessageOpcode {
+enum MessageOpcode
+{
     TRACE_OP_PING = 0,
     TRACE_OP_QUERY = 1,
     TRACE_OP_ENABLE_TRACE = 2,
@@ -103,7 +104,8 @@ struct TTraceInfo {
         }
     }
 
-    enum TracePointTimeUnit {
+    enum TracePointTimeUnit
+    {
         NANO_SECOND,
         MICRO_SECOND,
         MILLI_SECOND,
@@ -122,11 +124,12 @@ struct TTraceInfo {
         os.precision(NN_NO3);
         auto unitStep = timeUnitStep[unit];
         auto unitName = timeUnitName[unit];
-        os << "[" << std::left << std::setw(NN_NO50) << name << "]" << "\t" << std::left << std::setw(NN_NO15) << begin
-           << "\t" << std::left << std::setw(NN_NO15) << goodEnd << "\t" << std::left << std::setw(NN_NO15) << badEnd
-           << "\t" << std::left << std::setw(NN_NO15) << ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0)
-           << "\t" << std::left << std::setw(NN_NO15) << (min == UINT64_MAX ? 0 : ((double)min / unitStep)) << "\t"
-           << std::left << std::setw(NN_NO15) << (double)max / unitStep << "\t" << std::left << std::setw(NN_NO15)
+        os << "[" << std::left << std::setw(NN_NO50) << name << "]"
+           << "\t" << std::left << std::setw(NN_NO15) << begin << "\t" << std::left << std::setw(NN_NO15) << goodEnd
+           << "\t" << std::left << std::setw(NN_NO15) << badEnd << "\t" << std::left << std::setw(NN_NO15)
+           << ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0) << "\t" << std::left << std::setw(NN_NO15)
+           << (min == UINT64_MAX ? 0 : ((double)min / unitStep)) << "\t" << std::left << std::setw(NN_NO15)
+           << (double)max / unitStep << "\t" << std::left << std::setw(NN_NO15)
            << (goodEnd == 0 ? 0 : (double)total / goodEnd / unitStep) << "\t" << std::left << std::setw(NN_NO15)
            << (double)total / unitStep << "\t" << std::left << std::setw(NN_NO15)
            << (latencyQuentile > 0 ? std::to_string(latencyQuentile) : "OFF");
@@ -136,11 +139,16 @@ struct TTraceInfo {
     static std::string HeaderString()
     {
         std::stringstream ss;
-        ss << "\t[" << std::left << std::setw(NN_NO50) << "TP_NAME" << "]" << "\t" << std::left << std::setw(NN_NO15)
-           << "TOTAL" << "\t" << std::left << std::setw(NN_NO15) << "SUCCESS" << "\t" << std::left << std::setw(NN_NO15)
-           << "FAILURE" << "\t" << std::left << std::setw(NN_NO15) << "UNFINISHED" << "\t" << std::left
-           << std::setw(NN_NO15) << "MIN(us)" << "\t" << std::left << std::setw(NN_NO15) << "MAX(us)" << "\t"
-           << std::left << std::setw(NN_NO15) << "AVG(us)" << "\t" << std::left << std::setw(NN_NO15) << "TOTAL(us)"
+        ss << "\t[" << std::left << std::setw(NN_NO50) << "TP_NAME"
+           << "]"
+           << "\t" << std::left << std::setw(NN_NO15) << "TOTAL"
+           << "\t" << std::left << std::setw(NN_NO15) << "SUCCESS"
+           << "\t" << std::left << std::setw(NN_NO15) << "FAILURE"
+           << "\t" << std::left << std::setw(NN_NO15) << "UNFINISHED"
+           << "\t" << std::left << std::setw(NN_NO15) << "MIN(us)"
+           << "\t" << std::left << std::setw(NN_NO15) << "MAX(us)"
+           << "\t" << std::left << std::setw(NN_NO15) << "AVG(us)"
+           << "\t" << std::left << std::setw(NN_NO15) << "TOTAL(us)"
            << "\t" << std::left << std::setw(NN_NO15) << "TPX(us)";
         return ss.str();
     }

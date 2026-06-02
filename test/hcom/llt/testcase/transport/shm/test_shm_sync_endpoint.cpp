@@ -1028,7 +1028,7 @@ TEST_F(TestShmSyncEndpoint, SyncReceiveRawRetry4)
     EXPECT_EQ(SH_OK, result);
     result = ep->WaitCompletion(NN_NO2);
     EXPECT_EQ(SH_OK, result);
-    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed, bool(UBSHcomNetMessage::*)(uint32_t))
+    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed, bool (UBSHcomNetMessage::*)(uint32_t))
         .defaults()
         .will(returnValue(false));
     result = ep->Receive(NN_NO2, respCtx);
@@ -1272,8 +1272,9 @@ TEST_F(TestShmSyncEndpoint, PostReadWrite)
     req.rKey = getRemoteMrInfo[0].lKey;
     req.size = getRemoteMrInfo[0].size;
 
-    NN_LOG_INFO("req " << "req.lAddress: " << req.lAddress << " req.rAddress: " << req.rAddress
-                       << " req.lKey: " << req.lKey << " req.rKey: " << req.rKey << " req.size:" << req.size);
+    NN_LOG_INFO("req "
+                << "req.lAddress: " << req.lAddress << " req.rAddress: " << req.rAddress << " req.lKey: " << req.lKey
+                << " req.rKey: " << req.rKey << " req.size:" << req.size);
     result = ep->PostRead(req);
     EXPECT_EQ(SH_OK, result);
 
@@ -1347,8 +1348,9 @@ TEST_F(TestShmSyncEndpoint, PostReadWriteFail)
     req.rKey = getRemoteMrInfo[0].lKey;
     req.size = getRemoteMrInfo[0].size;
     req.upCtxSize = testUpCtxSize;
-    NN_LOG_INFO("req " << "req.lAddress: " << req.lAddress << " req.rAddress: " << req.rAddress
-                       << " req.lKey: " << req.lKey << " req.rKey: " << req.rKey << " req.size:" << req.size);
+    NN_LOG_INFO("req "
+                << "req.lAddress: " << req.lAddress << " req.rAddress: " << req.rAddress << " req.lKey: " << req.lKey
+                << " req.rKey: " << req.rKey << " req.size:" << req.size);
 
     result = ep->PostWrite(req);
     EXPECT_EQ(SH_PARAM_INVALID, result);
@@ -1399,8 +1401,9 @@ TEST_F(TestShmSyncEndpoint, GetRemoteMrFdsFail)
     req.rKey = getRemoteMrInfo[0].lKey;
     req.size = getRemoteMrInfo[0].size;
 
-    NN_LOG_INFO("req " << "req.lAddress: " << req.lAddress << " req.rAddress: " << req.rAddress
-                       << " req.lKey: " << req.lKey << " req.rKey: " << req.rKey << " req.size:" << req.size);
+    NN_LOG_INFO("req "
+                << "req.lAddress: " << req.lAddress << " req.rAddress: " << req.rAddress << " req.lKey: " << req.lKey
+                << " req.rKey: " << req.rKey << " req.size:" << req.size);
 
     MOCKER_CPP(&ShmChannel::GetRemoteMrFds).defaults().will(returnValue(SH_TIME_OUT));
     result = ep->PostWrite(req);

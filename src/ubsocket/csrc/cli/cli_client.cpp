@@ -358,7 +358,8 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
 
     auto guard = MakeScopeExit([sockfd]() { ::close(sockfd); });
 
-    struct sockaddr_un addr{};
+    struct sockaddr_un addr {
+    };
     addr.sun_family = AF_UNIX;
     addr.sun_path[0] = '\0';
     strncpy(addr.sun_path + 1, mServerPath.c_str(), sizeof(addr.sun_path) - 1);

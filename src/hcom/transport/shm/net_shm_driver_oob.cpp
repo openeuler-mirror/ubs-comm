@@ -922,7 +922,8 @@ NResult NetDriverShmWithOOB::ConnectSyncEp(const std::string &oobIp, uint16_t oo
     /* try to connect to oob server */
     OOBTCPConnection *conn = nullptr;
     if ((result = clt->Connect(conn)) != 0) {
-        NN_LOG_ERROR("Shm Failed to connect server via oob, result" << " " << result);
+        NN_LOG_ERROR("Shm Failed to connect server via oob, result"
+                     << " " << result);
         return result;
     }
 
@@ -1146,7 +1147,8 @@ NResult NetDriverShmWithOOB::SendExchangeInfo(OOBTCPConnection &conn, ShmConnExc
     char buf[CMSG_SPACE(sizeof(fds))];
     bzero(buf, sizeof(buf));
 
-    struct msghdr msg {};
+    struct msghdr msg {
+    };
     msg.msg_iov = &iov;
     msg.msg_iovlen = NN_NO1;
     msg.msg_control = buf;
@@ -1181,7 +1183,8 @@ NResult NetDriverShmWithOOB::ReceiveExchangeInfo(OOBTCPConnection &conn, ShmConn
     char buf[CMSG_SPACE(sizeof(fds))];
     bzero(buf, sizeof(buf));
 
-    struct msghdr msg {};
+    struct msghdr msg {
+    };
     msg.msg_iov = &iov;
     msg.msg_iovlen = NN_NO1;
     msg.msg_control = buf;
@@ -1317,7 +1320,8 @@ NResult NetDriverShmWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
         return NN_NEW_OBJECT_FAILED;
     }
 
-    struct ucred remoteIds {};
+    struct ucred remoteIds {
+    };
     socklen_t len = sizeof(struct ucred);
     if (NN_UNLIKELY(getsockopt(conn.GetFd(), SOL_SOCKET, SO_PEERCRED, &remoteIds, &len) != 0)) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};

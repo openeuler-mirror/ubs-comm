@@ -20,7 +20,8 @@ namespace hcom {
 /*
  * @brief buck state
  */
-enum ShmBuckState : uint8_t {
+enum ShmBuckState : uint8_t
+{
     HCOM_SHM_FREE = 0,
     HCOM_SHM_OCCUPIED = 1,
 };

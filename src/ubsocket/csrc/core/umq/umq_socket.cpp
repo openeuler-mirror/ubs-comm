@@ -387,7 +387,8 @@ Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock
     event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
     event_data.event_data.data = share_jfr_fd;
 
-    struct epoll_event shared_jfr_event {};
+    struct epoll_event shared_jfr_event {
+    };
     shared_jfr_event.events = EPOLLIN | EPOLLET;
     shared_jfr_event.data.u64 = event_data.u64;
 

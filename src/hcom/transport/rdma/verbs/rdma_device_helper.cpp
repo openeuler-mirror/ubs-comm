@@ -81,7 +81,8 @@ RResult RDMADeviceHelper::DoUpdate()
     G_RDMADevMap.reserve(devCount);
     G_RDMADevGidTable.reserve(devCount);
 
-    struct ibv_port_attr portAttr {};
+    struct ibv_port_attr portAttr {
+    };
     for (int i = 0; i < devCount; i++) {
         if (devList[i] == nullptr) { // should not happen
             NN_LOG_WARN("RDMA Device " << i << " is null");
@@ -105,7 +106,8 @@ RResult RDMADeviceHelper::DoUpdate()
             GetGidVec(ctx, info.devName, i, portAttr.active_speed, portAttr.gid_tbl_len, gidVec);
         }
 
-        struct ibv_device_attr attr {};
+        struct ibv_device_attr attr {
+        };
         if (info.active && HcomIbv::QueryDevice(ctx, &attr) == 0) {
             info.deviceInfo.maxSge = attr.max_sge;
         }
@@ -238,7 +240,8 @@ RResult RDMADeviceHelper::GetEnableDeviceCount(std::string ipMask, uint16_t &ena
 RResult RDMADeviceHelper::GetDeviceByIp(const std::string &ip, RDMAGId &gid)
 {
     RResult result = RR_OK;
-    struct sockaddr_in address {};
+    struct sockaddr_in address {
+    };
     if ((result = GetIfAddressByIp(ip, address)) != RR_OK) {
         return result;
     }

@@ -265,8 +265,9 @@ TEST_F(TestMemoryAllocator, CompareToNudeMalloc)
         cost[NN_NO3] += nuFreeCost;
     }
 
-    NN_LOG_INFO("ma alloc cost:" << cost[NN_NO0] / loopCount << "ns, " << "ma free cost:" << cost[NN_NO1] / loopCount
-                                 << "ns, " << "na free cost:" << cost[NN_NO2] / loopCount << "ns, "
+    NN_LOG_INFO("ma alloc cost:" << cost[NN_NO0] / loopCount << "ns, "
+                                 << "ma free cost:" << cost[NN_NO1] / loopCount << "ns, "
+                                 << "na free cost:" << cost[NN_NO2] / loopCount << "ns, "
                                  << "na free cost:" << cost[NN_NO3] / loopCount << "ns");
 }
 
@@ -299,8 +300,8 @@ TEST_F(TestMemoryAllocator, PerfConcurrentWithRandomSize)
         threads[i].join();
     }
 
-    NN_LOG_INFO("alloc avg cost " << allocCost / threadCount / blockCount << "ns" << " free avg cost "
-                                  << freeCost / threadCount / blockCount << "ns");
+    NN_LOG_INFO("alloc avg cost " << allocCost / threadCount / blockCount << "ns"
+                                  << " free avg cost " << freeCost / threadCount / blockCount << "ns");
     ptr->Destroy();
     free(address);
 }

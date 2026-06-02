@@ -147,28 +147,33 @@ typedef void (*ubs_hcom_log_handler)(int level, const char *msg);
  * 2 For TCP/UDS
  * only event pooling is supported
  */
-typedef enum {
+typedef enum
+{
     C_SERVICE_BUSY_POLLING = 0,
     C_SERVICE_EVENT_POLLING = 1,
 } ubs_hcom_service_worker_mode;
 
-typedef enum {
+typedef enum
+{
     C_CLIENT_WORKER_POLL = 0,
     C_CLIENT_SELF_POLL_BUSY = 1,
     C_CLIENT_SELF_POLL_EVENT = 2,
 } ubs_hcom_service_polling_mode;
 
-typedef enum {
+typedef enum
+{
     C_CHANNEL_FUNC_CB = 0,   // use channel function param (const NetCallback *cb)
     C_CHANNEL_GLOBAL_CB = 1, // use service RegisterOpHandler
 } ubs_hcom_channel_cb_type;
 
-typedef enum {
+typedef enum
+{
     HIGH_LEVEL_BLOCK, /* spin-wait by busy loop */
     LOW_LEVEL_BLOCK,  /* full sleep */
 } ubs_hcom_channel_flowctl_level;
 
-typedef enum {
+typedef enum
+{
     C_SERVICE_RDMA = 0,
     C_SERVICE_TCP = 1,
     C_SERVICE_UDS = 2,
@@ -176,7 +181,8 @@ typedef enum {
     C_SERVICE_UBC = 6,
 } ubs_hcom_service_type;
 
-typedef enum {
+typedef enum
+{
     C_CHANNEL_BROKEN_ALL = 0, /* when one ep broken, all eps broken */
     C_CHANNEL_RECONNECT = 1,  /* when one ep broken, try re-connect first. If re-connect fail, broken all eps */
     C_CHANNEL_KEEP_ALIVE = 2, /* when one ep broken, keep left eps alive until all eps broken */
@@ -185,35 +191,41 @@ typedef enum {
 /*
  * @brief Enum for callback register [new endpoint connected or endpoint broken]
  */
-typedef enum {
+typedef enum
+{
     C_CHANNEL_NEW = 0,
     C_CHANNEL_BROKEN = 1,
 } ubs_hcom_service_channel_handler_type;
 
-typedef enum {
+typedef enum
+{
     C_SERVICE_REQUEST_RECEIVED = 0,
     C_SERVICE_REQUEST_POSTED = 1,
     C_SERVICE_READWRITE_DONE = 2,
 } ubs_hcom_service_handler_type;
 
-typedef enum {
+typedef enum
+{
     SERVICE_ROUND_ROBIN = 0,
     SERVICE_HASH_IP_PORT = 1,
 } ubs_hcom_service_lb_policy;
 
-typedef enum {
+typedef enum
+{
     C_SERVICE_TLS_1_2 = 771,
     C_SERVICE_TLS_1_3 = 772,
 } ubs_hcom_service_tls_version;
 
-typedef enum {
+typedef enum
+{
     C_SERVICE_AES_GCM_128 = 0,
     C_SERVICE_AES_GCM_256 = 1,
     C_SERVICE_AES_CCM_128 = 2,
     C_SERVICE_CHACHA20_POLY1305 = 3,
 } ubs_hcom_service_cipher_suite;
 
-typedef enum {
+typedef enum
+{
     C_SERVICE_NET_SEC_DISABLED = 0,
     C_SERVICE_NET_SEC_ONE_WAY = 1,
     C_SERVICE_NET_SEC_TWO_WAY = 2,
@@ -222,7 +234,8 @@ typedef enum {
 /*
  * @brief Enum for UBC mode
  */
-typedef enum {
+typedef enum
+{
     C_SERVICE_LOWLATENCY = 0,
     C_SERVICE_HIGHBANDWIDTH = 1,
 } ubs_hcom_service_ubc_mode;
@@ -230,7 +243,8 @@ typedef enum {
 /*
  * @brief Context type, part of ubs_hcom_service_context, sync mode is not aware most of them
  */
-typedef enum {
+typedef enum
+{
     SERVICE_RECEIVED = 0,     /* support invoke all functions */
     SERVICE_RECEIVED_RAW = 1, /* support invoke most functions except Service_GetOpInfo() */
     SERVICE_SENT = 2,         /* support invoke basic functions except

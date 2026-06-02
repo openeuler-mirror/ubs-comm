@@ -18,7 +18,8 @@
 
 namespace ock {
 namespace hcom {
-enum NetRunnableType {
+enum NetRunnableType
+{
     NORMAL = 0,
     STOP = 1,
 };
