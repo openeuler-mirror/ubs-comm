@@ -10,7 +10,6 @@
  */
 #include "ubsocket_data_tx.h"
 #include "ubsocket_socket.h"
-#include "ubsocket_socket_set.h"
 
 namespace ock {
 namespace ubs {

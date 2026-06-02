@@ -9,9 +9,9 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_socket_connector.h"
+#include "common/ubsocket_common_includes.h"
 #include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_socket.h"
-#include "ubsocket_socket_set.h"
 
 namespace ock {
 namespace ubs {
@@ -37,7 +37,7 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     }
     if (ret != UBS_OK) {
         UBS_VLOG_ERR("Failed to establish UB connection, fd: %d", raw_fd_);
-        SocketSet::Instance().OverrideSocket(raw_fd_, nullptr);
+        ArraySet<Socket>::GetInstance().OverrideItem(raw_fd_, nullptr);
         /* Clear messages that already exist on the TCP link to prevent 
                  * dirty messages from affecting user data transmission*/
         SocketConnHelper::FlushSocketMsg(raw_fd_);

@@ -37,10 +37,10 @@
 #include "under_api/dl_umq_api.h"
 
 using namespace ock::ubs;
+using ock::ubs::ArraySet;
 using ock::ubs::LibcApi;
 using ock::ubs::ReadLocker;
 using ock::ubs::SocketConnHelper;
-using ock::ubs::SocketSet;
 using ock::ubs::SocketType;
 using ock::ubs::UmqApi;
 using ock::ubs::umq::UmqSocket;
@@ -196,31 +196,30 @@ public:
     uint32_t GetSockNum()
     {
         uint32_t sockNum = 0;
-        ReadLocker lock(SocketSet::Instance().GetRWLock());
-        SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
-        for (uint32_t i = 0; i < RPC_ADPT_FD_MAX; ++i) {
-            if (socketMap[i].Get() == nullptr || socketMap[i].Get()->Type() == SocketType::SOCK_TYPE_TCP) {
-                continue;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+                return;
             }
             sockNum++;
-        }
+        });
         return sockNum;
     }
 
     void GetAllSocketData(CLISocketData *data, uint32_t sockNum)
     {
-        ReadLocker lock(SocketSet::Instance().GetRWLock());
-        SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
         uint32_t doneNum = 0;
-        for (uint32_t i = 0; i < RPC_ADPT_FD_MAX && doneNum < sockNum; ++i) {
-            if (socketMap[i].Get() == nullptr || socketMap[i].Get()->Type() == SocketType::SOCK_TYPE_TCP) {
-                continue;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (doneNum >= sockNum) {
+                return;
             }
-            data->socketId = i;
-            ((UmqSocket *)socketMap[i].Get())->GetSocketCLIData(data);
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+                return;
+            }
+            data->socketId = fd;
+            ((UmqSocket *)sock)->GetSocketCLIData(data);
             data += 1;
             doneNum += 1;
-        }
+        });
     }
 
     void GetAllProbeData(std::vector<CLIProbeData> &outDataVec)
@@ -230,82 +229,87 @@ public:
 
     void GetAllFlowControlData(CLIFlowControlData *data, uint32_t sockNum)
     {
-        ReadLocker lock(SocketSet::Instance().GetRWLock());
-        SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
         uint32_t doneNum = 0;
-        for (uint32_t i = 0; i < RPC_ADPT_FD_MAX && doneNum < sockNum; ++i) {
-            if (socketMap[i].Get() == nullptr || socketMap[i].Get()->Type() == SocketType::SOCK_TYPE_TCP) {
-                continue;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (doneNum >= sockNum) {
+                return;
             }
-            data->socketId = i;
-            ((UmqSocket *)socketMap[i].Get())->GetSocketFlowControlData(data);
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+                return;
+            }
+            data->socketId = fd;
+            ((UmqSocket *)sock)->GetSocketFlowControlData(data);
             data += 1;
             doneNum += 1;
-        }
+        });
     }
 
     void GetAllQbufPoolData(CLIQbufPoolData *data, uint32_t sockNum)
     {
-        ReadLocker lock(SocketSet::Instance().GetRWLock());
-        SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
         uint32_t doneNum = 0;
-        for (uint32_t i = 0; i < RPC_ADPT_FD_MAX && doneNum < sockNum; ++i) {
-            if (socketMap[i].Get() == nullptr || socketMap[i].Get()->Type() == SocketType::SOCK_TYPE_TCP) {
-                continue;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (doneNum >= sockNum) {
+                return;
             }
-            data->socketId = i;
-            ((UmqSocket *)socketMap[i].Get())->GetSocketQbufPoolData(data);
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+                return;
+            }
+            data->socketId = fd;
+            ((UmqSocket *)sock)->GetSocketQbufPoolData(data);
             data += 1;
             doneNum += 1;
-        }
+        });
     }
 
     void GetAllUmqInfoData(CLIUmqInfoData *data, uint32_t sockNum)
     {
-        ReadLocker lock(SocketSet::Instance().GetRWLock());
-        SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
         uint32_t doneNum = 0;
-        for (uint32_t i = 0; i < RPC_ADPT_FD_MAX && doneNum < sockNum; ++i) {
-            if (socketMap[i].Get() == nullptr || socketMap[i].Get()->Type() == SocketType::SOCK_TYPE_TCP) {
-                continue;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (doneNum >= sockNum) {
+                return;
             }
-            data->socketId = i;
-            ((UmqSocket *)socketMap[i].Get())->GetSocketUmqInfoData(data);
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+                return;
+            }
+            data->socketId = fd;
+            ((UmqSocket *)sock)->GetSocketUmqInfoData(data);
             data += 1;
             doneNum += 1;
-        }
+        });
     }
 
     void GetAllIoPacketData(CLIIoPacketData *data, uint32_t sockNum)
     {
-        ReadLocker lock(SocketSet::Instance().GetRWLock());
-        SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
         uint32_t doneNum = 0;
-        for (uint32_t i = 0; i < RPC_ADPT_FD_MAX && doneNum < sockNum; ++i) {
-            if (socketMap[i].Get() == nullptr || socketMap[i].Get()->Type() == SocketType::SOCK_TYPE_TCP) {
-                continue;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (doneNum >= sockNum) {
+                return;
             }
-            data->socketId = i;
-            ((UmqSocket *)socketMap[i].Get())->GetSocketIoPacketData(data);
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+                return;
+            }
+            data->socketId = fd;
+            ((UmqSocket *)sock)->GetSocketIoPacketData(data);
             data += 1;
             doneNum += 1;
-        }
+        });
     }
 
     void GetAllUmqPerfData(CLIUmqPerfData *data, uint32_t sockNum)
     {
-        ReadLocker lock(SocketSet::Instance().GetRWLock());
-        SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
         uint32_t doneNum = 0;
-        for (uint32_t i = 0; i < RPC_ADPT_FD_MAX && doneNum < sockNum; ++i) {
-            if (socketMap[i].Get() == nullptr || socketMap[i].Get()->Type() == SocketType::SOCK_TYPE_TCP) {
-                continue;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (doneNum >= sockNum) {
+                return;
             }
-            data->socketId = i;
-            ((UmqSocket *)socketMap[i].Get())->GetSocketUmqPerfData(data);
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+                return;
+            }
+            data->socketId = fd;
+            ((UmqSocket *)sock)->GetSocketUmqPerfData(data);
             data += 1;
             doneNum += 1;
-        }
+        });
     }
 
     void Poll(void)
@@ -709,19 +713,21 @@ public:
 
     uint64_t GetFirstUmqHandle()
     {
-        ReadLocker lock(SocketSet::Instance().GetRWLock());
-        SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
-        for (uint32_t i = 0; i < RPC_ADPT_FD_MAX; ++i) {
-            if (socketMap[i].Get() == nullptr || socketMap[i].Get()->Type() == SocketType::SOCK_TYPE_TCP) {
-                continue;
+        uint64_t result = UMQ_INVALID_HANDLE;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (result != UMQ_INVALID_HANDLE) {
+                return;
             }
-            // Get main umq handle (from brpc_file_descriptor)
-            uint64_t umqh = GetMainUmqHandleFromSocket(socketMap[i]);
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+                return;
+            }
+            SocketPtr socketPtr(sock);
+            uint64_t umqh = GetMainUmqHandleFromSocket(socketPtr);
             if (umqh != UMQ_INVALID_HANDLE) {
-                return umqh;
+                result = umqh;
             }
-        }
-        return UMQ_INVALID_HANDLE;
+        });
+        return result;
     }
 
     uint64_t GetMainUmqHandleFromSocket(SocketPtr socket)
@@ -864,15 +870,13 @@ protected:
     {
         Statistics::Recorder::GetTitle(m_oss);
         {
-            ReadLocker lock(SocketSet::Instance().GetRWLock());
-            SocketPtr *socket_fd_obj_map = SocketSet::Instance().GetSocketObj();
-            for (uint32_t i = 0; i < RPC_ADPT_FD_MAX; ++i) {
-                UmqSocket *sock = (UmqSocket *)socket_fd_obj_map[i].Get();
-                if (sock == nullptr) {
-                    continue;
+            ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+                UmqSocket *umqSock = (UmqSocket *)sock;
+                if (umqSock == nullptr) {
+                    return;
                 }
-                sock->OutputStats(m_oss);
-            }
+                umqSock->OutputStats(m_oss);
+            });
         }
         Statistics::Recorder::FillEmptyForm(m_oss);
     }

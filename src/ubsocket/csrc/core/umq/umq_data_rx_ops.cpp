@@ -10,7 +10,7 @@
  */
 
 #include "umq_data_rx_ops.h"
-#include "core/ubsocket_socket_set.h"
+#include "common/ubsocket_common_includes.h"
 #include "profiling/probe/probe_manager.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
@@ -93,8 +93,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
             continue;
         }
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
-            sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_PACKET_COUNT, 1);
+            sockBase->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_PACKET_COUNT, 1);
         }
         block_cache_.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
         polled_size += buf[i]->data_size;

@@ -10,9 +10,9 @@
  */
 #include <cerrno>
 
+#include "common/ubsocket_common_includes.h"
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
-#include "ubsocket_socket_set.h"
 #include "umq/umq_epoll_runner_ops.h"
 
 namespace ock {
@@ -452,7 +452,7 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         return -1;
     }
 
-    auto sock = SocketSet::Instance().GetSocket(fd);
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) { /* listen fd */
         UBS_VLOG_INFO("sock is nullptr or socket is not bind remote, socket: %d\n", fd);
         return 0;
@@ -586,7 +586,7 @@ int AsyncEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
         return -1;
     }
 
-    auto sock = SocketSet::Instance().GetSocket(fd);
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr)) {
         return 0;
     }
@@ -639,7 +639,7 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
     }
 
     DelRawSocketEvent(fd);
-    auto sock = SocketSet::Instance().GetSocket(fd);
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr)) {
         UBS_VLOG_INFO("sock is nullptr for origin sock, socket: %d\n", fd);
         return 0;

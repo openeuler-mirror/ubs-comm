@@ -13,7 +13,6 @@
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_data_tx.h"
 #include "core/ubsocket_socket.h"
-#include "core/ubsocket_socket_set.h"
 #include "include/ubsocket.h"
 
 using namespace ock::ubs;
@@ -43,7 +42,7 @@ UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
         return -1;
     }
     socketPtr->event_fd_ = event_fd;
-    SocketSet::Instance().OverrideSocket(fd, socketPtr);
+    ArraySet<Socket>::GetInstance().OverrideItem(fd, socketPtr.Get());
     return fd;
 }
 
@@ -70,7 +69,7 @@ UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *add
         return LibcApi::accept(fd, address, address_len);
     }
 
-    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
         return LibcApi::accept(fd, address, address_len);
@@ -103,7 +102,7 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
         return LibcApi::listen(fd, backlog);
     }
 
-    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
         return LibcApi::listen(fd, backlog);
     }
@@ -133,7 +132,7 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::connect(fd, address, address_len);
     }
-    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
         return LibcApi::connect(fd, address, address_len);
     }
@@ -146,7 +145,7 @@ UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::readv(fd, iov, iovcnt);
     }
-    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
         return LibcApi::readv(fd, iov, iovcnt);
@@ -159,7 +158,7 @@ UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::writev(fd, iov, iovcnt);
     }
-    SocketPtr sock = SocketSet::Instance().GetSocket(fd);
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
         return LibcApi::writev(fd, iov, iovcnt);

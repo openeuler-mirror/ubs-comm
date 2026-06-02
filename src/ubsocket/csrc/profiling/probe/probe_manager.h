@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "common/ubsocket_common_includes.h"
-#include "core/ubsocket_socket_set.h"
+#include "core/ubsocket_core_types.h"
 #include "core/umq/umq_setting.h"
 #include "core/umq/umq_socket.h"
 
@@ -34,9 +34,10 @@
 #include "umq_pro_types.h"
 #include "umq_types.h"
 
+using ock::ubs::ArraySet;
 using ock::ubs::ReadLocker;
+using ock::ubs::Socket;
 using ock::ubs::SocketPtr;
-using ock::ubs::SocketSet;
 using ock::ubs::umq::UmqSetting;
 using ock::ubs::umq::UmqSocket;
 
@@ -462,8 +463,9 @@ private:
     // 处理 Server 回包逻辑
     void ProcessServerQueue(uint32_t &sentCount)
     {
-        if (SocketSet::Instance().Size() == 0)
+        if (ArraySet<Socket>::GetInstance().Size() == 0) {
             return;
+        }
 
         while (sentCount < mProbeBatch) {
             ProbeTimeInfo info;
@@ -477,7 +479,7 @@ private:
                 }
                 // 获取 fd 和 对象指针
                 int fd = mRecvQueue[mQueueSt].mSockFd;
-                sockObj = ((UmqSocket *)SocketSet::Instance().GetSocket(fd).Get());
+                sockObj = ((UmqSocket *)ArraySet<Socket>::GetInstance().GetItem(fd).Get());
                 // 获取有效数据
                 if (sockObj) {
                     info = mRecvQueue[mQueueSt].mProbeInfo;
@@ -501,29 +503,17 @@ private:
         if (sentCount >= mProbeBatch)
             return;
 
-        ReadLocker lock(SocketSet::Instance().GetRWLock());
-        SocketPtr *socketMap = SocketSet::Instance().GetSocketObj();
-        if (socketMap == nullptr)
-            return;
-
-        uint32_t currentPos = mCurrentCursor.load();
-        uint32_t scans = 0;
-        // 限制扫描范围，防止死循环
-        uint32_t maxScan = RPC_ADPT_FD_MAX;
-
-        while (sentCount < mProbeBatch && scans < maxScan) {
-            if (currentPos >= RPC_ADPT_FD_MAX)
-                currentPos = 0;
-
-            UmqSocket *sockObj = (UmqSocket *)socketMap[currentPos].Get();
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (sentCount >= mProbeBatch) {
+                return;
+            }
+            UmqSocket *sockObj = (UmqSocket *)sock;
             if (sockObj && sockObj->IsClient()) {
                 SendProbePacket(sockObj);
                 sentCount++;
-                mCurrentCursor.store(currentPos + 1);
+                mCurrentCursor.store(fd + 1);
             }
-            currentPos++;
-            scans++;
-        }
+        });
     }
 
     void UpdateTimespec(struct timespec *t, uint64_t ms)

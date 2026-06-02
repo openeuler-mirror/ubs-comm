@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "umq_data_tx_ops.h"
-#include "core/ubsocket_socket_set.h"
+#include "common/ubsocket_common_includes.h"
 #include "umq_buf_converter.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
@@ -340,7 +340,7 @@ void UmqTxOps::HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt)
     wr_cnt++;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(SocketSet::Instance().GetSocket(fd_));
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(ArraySet<Socket>::GetInstance().GetItem(fd_));
         if (qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
             sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_LOST_PACKET_COUNT, 1);
         } else {
