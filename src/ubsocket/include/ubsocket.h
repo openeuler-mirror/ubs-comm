@@ -68,10 +68,6 @@ void *ubsocket_iobuf_allocate(size_t size);
 
 void ubsocket_iobuf_deallocate(void *addr);
 
-void ubsocket_trace_statistic_init(void);
-
-void ubsocket_trace_statistic_destroy(void);
-
 #ifdef __cplusplus
 }
 #endif
