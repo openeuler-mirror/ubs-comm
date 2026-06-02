@@ -191,7 +191,10 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     /* do trace log initial */
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        ubsocket_trace_statistic_init();
+        umq_trans_mode_t transMode = umq::UmqSetting::UMQ_TRANS_MODE;
+        Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_TRACE_TIME,
+                                                        GlobalSetting::UBS_TRACE_FILE_PATH,
+                                                        GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
     }
 
     return UBS_OK;
@@ -204,7 +207,7 @@ void ubsocket_uninit()
     }
     /* do trace log destroy */
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        ubsocket_trace_statistic_destroy();
+        Statistics::PrintStatsMgr::StopStatsCollection();
     }
     umq::UmqBackend::UnInit();
     return;
@@ -265,16 +268,4 @@ UBS_API void *ubsocket_iobuf_allocate(size_t size)
 UBS_API void ubsocket_iobuf_deallocate(void *addr)
 {
     blockmem_deallocate_zero_copy(addr);
-}
-
-UBS_API void ubsocket_trace_statistic_init(void)
-{
-    umq_trans_mode_t transMode = umq::UmqSetting::UMQ_TRANS_MODE;
-    Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_TRACE_TIME, GlobalSetting::UBS_TRACE_FILE_PATH,
-                                                    GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
-}
-
-UBS_API void ubsocket_trace_statistic_destroy(void)
-{
-    Statistics::PrintStatsMgr::StopStatsCollection();
 }
