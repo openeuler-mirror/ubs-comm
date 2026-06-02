@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <stdexcept>
 
 namespace ock {
 namespace ubs {
