@@ -49,6 +49,7 @@ std::vector<uint32_t> UmqSetting::UMQ_ALL_SOCKET_IDS = {};
 uint32_t UmqSetting::UMQ_POST_BATCH_MAX = 256UL;
 uint32_t UmqSetting::UMQ_EID_INDEX = 0;
 uint32_t UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
+uint32_t UmqSetting::UMQ_SHARE_JFR_RX_O3_QUEUE_DEPTH = 256;
 std::string UmqSetting::UMQ_DEV_NAME = "";
 std::string UmqSetting::UMQ_DEV_IP = "";
 std::string UmqSetting::UMQ_DEV_SRC_EID_STR = "";

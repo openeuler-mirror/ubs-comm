@@ -51,6 +51,7 @@ public:
     static umq_trans_mode_t UMQ_TRANS_MODE;
     static int UMQ_PROCESS_SOCKET_ID;
     static uint32_t UMQ_SHARE_JFR_RX_QUEUE_DEPTH;
+    static uint32_t UMQ_SHARE_JFR_RX_O3_QUEUE_DEPTH;
     static std::vector<uint32_t> UMQ_ALL_SOCKET_IDS;
     static std::string UMQ_DEV_SCHEDULE_POLICY_NAME;
     static dev_schedule_policy UMQ_DEV_SCHEDULE_POLICY;
@@ -58,6 +59,9 @@ public:
     static bool UMQ_IS_BONDING;
     static bool UMQ_FLOW_CONTROL_ENABLE;
 
+    static constexpr size_t UMQ_SOCKET_SEQ_NUM_BIT_WIDTH = 24;
+    static constexpr size_t UMQ_SOCKET_SEQ_NUM_MAX = (1ULL << UMQ_SOCKET_SEQ_NUM_BIT_WIDTH) - 2;
+    static constexpr uint32_t UMQ_PROBE_USER_DATA_ID = 0xFFFFFF; // (2^24 - 1) 用于标识探针包的 user_data
 private:
     static Result Init() noexcept;
 

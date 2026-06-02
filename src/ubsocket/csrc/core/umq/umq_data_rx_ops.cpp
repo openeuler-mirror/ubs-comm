@@ -48,7 +48,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
     uint32_t polled_size = 0;
     for (int i = 0; i < poll_num; ++i) {
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf[i]->qbuf_ext);
-        if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == 1) {
+        if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == UmqSetting::UMQ_PROBE_USER_DATA_ID) {
             // 处理探测包
             Statistics::ProbeManager::GetInstance().HandleReceivedPacket(fd_, buf[i]);
             if (QBUF_LIST_NEXT(buf[i]) != nullptr) {
