@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "cli_message.h"
+#include "common/ubsocket_logger.h"
 #include "under_api/umq_api.h"
 
 #define RPC_VAR (2)

@@ -425,10 +425,8 @@ public:
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         CLIheader.reTxCount = StatsMgr::GetReTxCount();
         // collect data
-        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
-            UBS_VLOG_ERR("Failed to memcpy cli header\n");
-            return;
-        }
+        memcpy(msg.Data(), &CLIheader, headerSize);
+
         uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
         GetAllSocketData(reinterpret_cast<CLISocketData *>(data), sockNum);
         header.Reset();
@@ -464,10 +462,8 @@ public:
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         CLIheader.reTxCount = StatsMgr::GetReTxCount();
         // collect data
-        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
-            UBS_VLOG_ERR("Failed to memcpy cli header\n");
-            return;
-        }
+        memcpy(msg.Data(), &CLIheader, headerSize);
+
         uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
         GetAllFlowControlData(reinterpret_cast<CLIFlowControlData *>(data), sockNum);
         header.Reset();
@@ -508,20 +504,14 @@ public:
         cliHeader.socketNum = sockNum;
 
         // 拷贝 Header
-        if (memcpy(msg.Data(), &cliHeader, headerSize) != 0) {
-            UBS_VLOG_ERR("Failed to memcpy cli header\n");
-            return;
-        }
+        memcpy(msg.Data(), &cliHeader, headerSize);
 
         // 4. 填充 Data 利用 vector 的连续内存特性，可以直接内存拷贝
         uint8_t *dataPtr = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIProbeHeader);
 
         if (sockNum > 0) {
             // 一次性把整个数组拷贝过去，效率最高
-            if (memcpy(dataPtr, probeDataList.data(), sockDataSize) != 0) {
-                UBS_VLOG_ERR("Failed to memcpy probe data\n");
-                return;
-            }
+            memcpy(dataPtr, probeDataList.data(), sockDataSize);
         }
 
         // 5. 发送数据
@@ -591,10 +581,8 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         // collect data
-        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
-            UBS_VLOG_ERR("Failed to memcpy cli header\n");
-            return;
-        }
+        memcpy(msg.Data(), &CLIheader, headerSize);
+
         uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
         GetAllQbufPoolData(reinterpret_cast<CLIQbufPoolData *>(data), sockNum);
         header.Reset();
@@ -629,10 +617,8 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         // collect data
-        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
-            UBS_VLOG_ERR("Failed to memcpy cli header\n");
-            return;
-        }
+        memcpy(msg.Data(), &CLIheader, headerSize);
+
         uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
         GetAllUmqInfoData(reinterpret_cast<CLIUmqInfoData *>(data), sockNum);
         header.Reset();
@@ -667,10 +653,8 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         // collect data
-        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
-            UBS_VLOG_ERR("Failed to memcpy cli header\n");
-            return;
-        }
+        memcpy(msg.Data(), &CLIheader, headerSize);
+
         uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
         GetAllIoPacketData(reinterpret_cast<CLIIoPacketData *>(data), sockNum);
         header.Reset();
@@ -705,10 +689,8 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         // collect data
-        if (memcpy(msg.Data(), &CLIheader, headerSize) != 0) {
-            UBS_VLOG_ERR("Failed to memcpy cli header\n");
-            return;
-        }
+        memcpy(msg.Data(), &CLIheader, headerSize);
+
         uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
         GetAllUmqPerfData(reinterpret_cast<CLIUmqPerfData *>(data), sockNum);
         header.Reset();

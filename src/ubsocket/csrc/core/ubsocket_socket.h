@@ -15,6 +15,7 @@
 #include <chrono>
 
 #include "common/ubsocket_common_includes.h"
+#include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_data_rx.h"
 #include "ubsocket_data_tx.h"
@@ -35,8 +36,19 @@ public:
     static Result GenerateSocketCommOps(const SocketPtr &sock);
 
 public:
-    SocketBase(int fd, SocketType type) : Socket(fd, type) {}
-    ~SocketBase() override = default;
+    SocketBase(int fd, SocketType type) : Socket(fd, type)
+    {
+        stats_mgr_.InitStatsMgr();
+    }
+    ~SocketBase() override
+    {
+        if (GlobalSetting::UBS_TRACE_ENABLED) {
+            Statistics::StatsMgr::SubMConnCount();
+            if (IsClient()) {
+                Statistics::StatsMgr::SubMActiveConnCount();
+            }
+        }
+    }
 
     virtual Result Initialize() noexcept = 0;
     virtual void UnInitialize() noexcept = 0;
@@ -58,6 +70,15 @@ public:
     {
         return &tx_;
     }
+    Statistics::StatsMgr *GetStatsMgr()
+    {
+        return &stats_mgr_;
+    }
+
+    bool IsClient()
+    {
+        return connector_->IsClient();
+    }
 
 protected:
     static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);
@@ -72,6 +93,8 @@ protected:
     Connector *connector_ = nullptr; /* connector of ubsocket */
     EventPoll *added_epoll_fd_ = nullptr;
     epoll_data_t added_epoll_data_ = {};
+
+    Statistics::StatsMgr stats_mgr_ = {};
 
     friend class DataTx;
     friend class DataRx;
