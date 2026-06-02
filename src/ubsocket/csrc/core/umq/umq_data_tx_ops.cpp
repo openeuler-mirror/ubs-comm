@@ -105,8 +105,8 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     if (ret == UMQ_SUCCESS) {
         tx_queue_avail_num_ -= batch;
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            UmqSocketPtr sockptr = RefConvert<Socket, UmqSocket>(SocketSet::Instance().GetSocket(fd_));
-            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, batch);
+            SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+            sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, batch);
         }
     } else if (bad_qbuf != nullptr) {
         int savedErrno = errno;
@@ -329,11 +329,11 @@ void UmqTxOps::HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt)
     wr_cnt++;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        UmqSocketPtr sockptr = RefConvert<Socket, UmqSocket>(SocketSet::Instance().GetSocket(fd_));
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(SocketSet::Instance().GetSocket(fd_));
         if (qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
-            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::TX_LOST_PACKET_COUNT, 1);
+            sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_LOST_PACKET_COUNT, 1);
         } else {
-            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::TX_ERROR_PACKET_COUNT, 1);
+            sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_ERROR_PACKET_COUNT, 1);
         }
     }
 }

@@ -29,10 +29,8 @@ char *In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufS
     if (in6Addr == nullptr || dstBuf == nullptr || bufSize < INET6_ADDRSTRLEN) {
         return nullptr;
     }
-    if (memset(dstBuf, 0, bufSize) != 0) {
-        CLI_LOG("Failed to memset buf\n");
-        return nullptr;
-    }
+    memset(dstBuf, 0, bufSize);
+
     char *pos = dstBuf;
     for (int i = 0; i < IPV6_HEXTET_COUNT; i++) {
         uint16_t segment = (uint16_t)(in6Addr->s6_addr[IPV6_HEXTET_BYTE_COUNT * i] << BYTE_BIT_WIDTH) |
@@ -93,10 +91,8 @@ void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy(&header, data, headerSize) != 0) {
-        CLI_LOG("Failed to memcpy CLIDataHeader\n");
-        return;
-    }
+    memcpy(&header, data, headerSize);
+
     uint32_t SocketNum = header.socketNum;
     uint32_t expectedSize = headerSize + SocketNum * sizeof(CLISocketData);
     if (dataLen != expectedSize) {
@@ -124,10 +120,8 @@ void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataL
         return;
     }
     CLIDataHeader header{};
-    if (memcpy(&header, data, headerSize) != 0) {
-        CLI_LOG("Failed to memcpy CLIDataHeader\n");
-        return;
-    }
+    memcpy(&header, data, headerSize);
+
     uint32_t SocketNum = header.socketNum;
     uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIFlowControlData);
     if (dataLen != expectedSize) {
@@ -216,10 +210,7 @@ void TerminalDisplay::DisplayProbeInfo(uint8_t *data, const uint32_t dataLen)
 
     // 2. 拷贝头部
     CLIProbeHeader header{};
-    if (memcpy(&header, data, headerSize) != 0) {
-        CLI_LOG("Failed to memcpy CLIProbeHeader\n");
-        return;
-    }
+    memcpy(&header, data, headerSize);
 
     // 3. 长度一致性校验
     uint32_t sockNum = header.socketNum;
@@ -407,10 +398,8 @@ void TerminalDisplay::DisplayQbufPoolInfo(uint8_t *data, uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy(&header, data, headerSize) != 0) {
-        CLI_LOG("Failed to memcpy CLIDataHeader\n");
-        return;
-    }
+    memcpy(&header, data, headerSize);
+
     uint32_t SocketNum = header.socketNum;
     uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIQbufPoolData);
     if (dataLen != expectedSize) {
@@ -443,10 +432,8 @@ void TerminalDisplay::DisplayUmqInfo(uint8_t *data, uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy(&header, data, headerSize) != 0) {
-        CLI_LOG("Failed to memcpy CLIDataHeader\n");
-        return;
-    }
+    memcpy(&header, data, headerSize);
+
     uint32_t SocketNum = header.socketNum;
     uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIUmqInfoData);
     if (dataLen != expectedSize) {
@@ -479,10 +466,8 @@ void TerminalDisplay::DisplayIoPacketInfo(uint8_t *data, uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy(&header, data, headerSize) != 0) {
-        CLI_LOG("Failed to memcpy CLIDataHeader\n");
-        return;
-    }
+    memcpy(&header, data, headerSize);
+
     uint32_t SocketNum = header.socketNum;
     uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIIoPacketData);
     if (dataLen != expectedSize) {
@@ -515,10 +500,8 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
         return;
     }
     CLIDataHeader header{};
-    if (memcpy(&header, data, headerSize) != 0) {
-        CLI_LOG("Failed to memcpy CLIDataHeader\n");
-        return;
-    }
+    memcpy(&header, data, headerSize);
+
     uint32_t SocketNum = header.socketNum;
     uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIUmqPerfData);
     if (dataLen != expectedSize) {

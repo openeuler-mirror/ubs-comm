@@ -30,10 +30,7 @@ static bool ParseIpv6Eid(char *eidBuf, size_t bufSize, const char *arg)
         return false;
     }
 
-    if (strncpy(eidBuf, arg, bufSize - 1) != 0) {
-        CLI_LOG("Failed to copy eid\n");
-        return false;
-    }
+    strncpy(eidBuf, arg, bufSize - 1);
     eidBuf[bufSize - 1] = '\0';
 
     struct in6_addr in6;

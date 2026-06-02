@@ -13,9 +13,9 @@
 #include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_event_epoll.h"
+#include "ubsocket_socket.h"
 #include "ubsocket_socket_set.h"
 #include "ubsocket_wakeup_event.h"
-#include "umq/umq_socket.h"
 
 namespace ock {
 namespace ubs {
@@ -216,8 +216,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     newSocket->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        umq::UmqSocketPtr sockptr = RefConvert<SocketBase, umq::UmqSocket>(newSocket);
-        sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
+        newSocket->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
     }
     //TODO: 优化建链成功的打印日志
     UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);

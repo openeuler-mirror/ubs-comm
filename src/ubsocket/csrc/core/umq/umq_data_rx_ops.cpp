@@ -93,8 +93,8 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
             continue;
         }
         if (GlobalSetting::UBS_TRACE_ENABLED) {
-            UmqSocketPtr sockptr = RefConvert<Socket, UmqSocket>(SocketSet::Instance().GetSocket(fd_));
-            sockptr->stats_mgr_.UpdateTraceStats(Statistics::StatsMgr::RX_PACKET_COUNT, 1);
+            SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+            sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_PACKET_COUNT, 1);
         }
         block_cache_.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
         polled_size += buf[i]->data_size;

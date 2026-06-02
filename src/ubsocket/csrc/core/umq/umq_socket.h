@@ -30,17 +30,8 @@ public:
     explicit UmqSocket(int fd) : SocketBase(fd, SocketType::SOCK_TYPE_UMQ)
     {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
-        stats_mgr_.InitStatsMgr();
     }
-    ~UmqSocket() override
-    {
-        if (GlobalSetting::UBS_TRACE_ENABLED) {
-            Statistics::StatsMgr::SubMConnCount();
-            if (IsClient()) {
-                Statistics::StatsMgr::SubMActiveConnCount();
-            }
-        }
-    }
+    ~UmqSocket() override = default;
 
     Result Initialize() noexcept override;
     void UnInitialize() noexcept override;
@@ -104,11 +95,6 @@ public:
         topo_type_ = type;
     }
 
-    bool IsClient()
-    {
-        return connector_->IsClient();
-    }
-
     ALWAYS_INLINE void NewRxEpollIn()
     {
         DataRxOps *ops = rx_.GetRxOps();
@@ -152,8 +138,6 @@ public:
     virtual void GetSocketUmqInfoData(Statistics::CLIUmqInfoData *data);
     virtual void GetSocketIoPacketData(Statistics::CLIIoPacketData *data);
     virtual void GetSocketUmqPerfData(Statistics::CLIUmqPerfData *data);
-
-    Statistics::StatsMgr stats_mgr_ = {};
 
 private:
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
