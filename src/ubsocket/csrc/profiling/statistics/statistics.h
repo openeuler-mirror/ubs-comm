@@ -323,19 +323,22 @@ public:
         ProcessEpollEvents(events, ev_num);
     }
 
-    virtual void ProcessEpollEvents(const struct epoll_event *events, const int evNum)
+    // 处理 Epoll 事件。当返回 false 时表示 polling 线程正在退出。通常这意味着
+    // ubsocket_uninit() 已经被调用.
+    virtual bool ProcessEpollEvents(const struct epoll_event *events, const int evNum)
     {
         for (int i = 0; i < evNum; i++) {
             if (events[i].data.fd == m_wakeup_fd) {
                 /* The current epoll event reported from the wakeup fd only indicates that
                  * the program needs to exit as soon as possible, so it directly returns. */
                 AckWakeupEpoll();
-                return;
+                return false;
             }
             if (events[i].data.fd == m_uds_fd) {
                 Process(events[i].events);
             }
         }
+        return true;
     }
 
     void DealDelayOperation(CLIDelayHeader &delayHeader, std::string &outTracePointStr, CLIControlHeader header)
@@ -918,11 +921,10 @@ public:
         }
     }
 
-    void ProcessEpollEvents(const epoll_event *events, const int evNum) override
+    bool ProcessEpollEvents(const epoll_event *events, const int evNum) override
     {
         // get urma perf info and update
-        StatsMgr::UpdateReTxCount(m_trans_mode);
-        Listener::ProcessEpollEvents(events, evNum);
+        return Listener::ProcessEpollEvents(events, evNum) && (StatsMgr::UpdateReTxCount(m_trans_mode), true);
     }
 
 private:
