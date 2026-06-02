@@ -72,6 +72,7 @@ struct HcomServiceImpOptions {
     bool startOobSvr = false;
     bool activateBackup = false;  // 主备开关
     bool enableMultiRail = false; // 关闭时才会启用主备切换功能
+    bool tcpEpollLT = false;
     NetDriverOobType oobType = NET_OOB_TCP;
     UBSHcomServiceLBPolicy lbPolicy = NET_ROUND_ROBIN;
     UBSHcomWorkerMode workerGroupMode = NET_BUSY_POLLING;
@@ -390,6 +391,13 @@ public:
      * @param ubPriority SL优先级, 取值范围[0， 15]
      */
     void SetUbPriority(uint32_t ubPriority) override;
+
+    /**
+     * @brief 设置tcp epoll mode
+     *
+     * @param isTcpEpollLT tcp epoll mode, default is ET
+     */
+    void SetTcpEpollMode(bool isTcpEpollLT) override;
 
 private:
     SerResult ValidateServiceOption();

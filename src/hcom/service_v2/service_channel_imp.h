@@ -95,6 +95,9 @@ public:
     int32_t ReceiveFds(int fds[], uint32_t len, int32_t timeoutSec) override;
     int32_t Recv(const UBSHcomServiceContext &context, uintptr_t address, uint32_t size,
                  const Callback *done = nullptr) override;
+    int32_t CallWithHlc(const UBSHcomRequest &req, UBSHcomResponse &rsp, const Callback *done = nullptr) override;
+    int32_t ReplyWithHlc(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req,
+                         const Callback *done = nullptr) override;
 
     int32_t SetFlowControlConfig(const UBSHcomFlowCtrlOptions &opt) override;
     void SetChannelTimeOut(int16_t oneSideTimeout, int16_t twoSideTimeout) override;
@@ -181,6 +184,12 @@ private:
                                            const Callback *done);
     SerResult SyncCallSplitWithSelfPoll(UBSHcomNetEndpoint *&ep, const UBSHcomRequest &req, uint32_t fragmentNum,
                                         uint32_t index, UBSHcomResponse &rsp);
+    SerResult CallWithHlcInner(const UBSHcomRequest &req, UBSHcomResponse &rsp, const Callback *done);
+    SerResult SyncCallWithHlcInner(const UBSHcomRequest &req, UBSHcomResponse &rsp, uint32_t timeOut = NN_NO0);
+    SerResult AsyncCallWithHlcInner(const UBSHcomRequest &req, const Callback *done);
+    SerResult ReplyWithHlcInner(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback *done);
+    SerResult SyncReplyWithHlcInner(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req);
+    SerResult AsyncReplyWithHlcInner(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback *done);
 
     void SetUuid(const std::string &uuid) override;
     void SetPayload(const std::string &payload) override;

@@ -64,7 +64,11 @@ NetAsyncEndpointSock::~NetAsyncEndpointSock()
 
 NResult NetAsyncEndpointSock::SetEpOption(UBSHcomEpOptions &epOptions)
 {
-    NN_LOG_INFO("SetEpOption tcpBlockingIo " << epOptions.tcpBlockingIo);
+    NN_LOG_DEBUG("SetEpOption tcpBlockingIo " << epOptions.tcpBlockingIo);
+    if (epOptions.tcpBlockingIo == mIsBlocking && epOptions.cbByWorkerInBlocking == mSock->mCbByWorkerInBlocking &&
+        epOptions.sendTimeout == mSock->mSendTimeoutSecond) {
+        return NN_OK;
+    }
     if (!epOptions.tcpBlockingIo) {
         NN_LOG_WARN("Tcp is nonblocking in default, there is no need to set it again");
         return NN_OK;
@@ -347,6 +351,45 @@ NResult NetAsyncEndpointSock::PostSend(uint16_t opCode, const UBSHcomNetTransReq
 
     mDriver->mSockDriverSendMR->ReturnBuffer(mrBufAddress);
     NN_LOG_ERROR("Failed to async post send request with opInfo, result " << result);
+    TRACE_DELAY_END(SOCK_EP_ASYNC_POST_SEND, result);
+    return result;
+}
+
+NResult NetAsyncEndpointSock::PostSendNoCopy(int16_t opCode, const UBSHcomNetTransRequest &request,
+                                             const UBSHcomNetTransOpInfo &opInfo)
+{
+    NResult result = NN_OK;
+    if (NN_UNLIKELY((result = StateValidation(mState, mId, mDriver, mSock)) != NN_OK)) {
+        NN_LOG_ERROR("Sock failed to async post send raw no copy as state validation failed");
+        return result;
+    }
+
+    UBSHcomNetTransHeader header{};
+    if (opCode == -1) {
+        header.immData = 1;
+    } else {
+        header.opCode = opCode;
+    }
+    header.seqNo = opInfo.seqNo == 0 ? NextSeq() : opInfo.seqNo;
+    header.flags = NTH_TWO_SIDE;
+    header.timeout = opInfo.timeout;
+    header.errorCode = opInfo.errorCode;
+    header.dataLength = request.size;
+
+    /* finally fill header crc */
+    header.headerCrc = NetFunc::CalcHeaderCrc32(header);
+    auto worker = reinterpret_cast<SockWorker *>(mSock->UpContext1());
+
+    TRACE_DELAY_BEGIN(SOCK_EP_ASYNC_POST_SEND);
+    result = worker->PostSendNoCpy(mSock, header, request);
+    if (result == SS_OK) {
+        NN_LOG_TRACE_INFO("Sock Post send ep id " << mId << ", flag " << header.flags << ", seqNo " << header.seqNo
+                                                  << ", size " << request.size);
+        TRACE_DELAY_END(SOCK_EP_ASYNC_POST_SEND, result);
+        return NN_OK;
+    }
+
+    NN_LOG_ERROR("Failed to async post send request, result " << result);
     TRACE_DELAY_END(SOCK_EP_ASYNC_POST_SEND, result);
     return result;
 }

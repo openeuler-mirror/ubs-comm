@@ -326,6 +326,13 @@ public:
      */
     virtual void SetUbPriority(uint32_t ubPriority) = 0;
 
+    /**
+     * @brief 设置tcp epoll mode
+     *
+     * @param isTcpEpollLT tcp epoll mode, default is ET, ture means LT
+     */
+    virtual void SetTcpEpollMode(bool isTcpEpollLT = false) = 0;
+
     virtual ~UBSHcomService() {}
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS

@@ -1572,6 +1572,7 @@ protected:
 
     friend class SockWorker;
     friend class NetDriverSockWithOOB;
+    friend class NetAsyncEndpointSock;
 
 private:
     int32_t mSendTimeoutSecond = -1;
