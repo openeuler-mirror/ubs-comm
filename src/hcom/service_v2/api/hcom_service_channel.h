@@ -143,6 +143,28 @@ public:
     int32_t Reply(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req);
 
     /**
+     * @brief 发送双边消息，需要回复，HLC劫持专用；固定为阻塞模式及免拷贝，推荐设置epoll为LT模式
+     *
+     * @param req 发送双边消息请求
+     * @param rsp 出参，发送双边消息请求后对端回复
+     * @param done nullptr：同步发送；非nullptr：异步发送，发送完成后回调函数
+     * @return int32_t 0：成功；非0：失败错误码
+     */
+    virtual int32_t CallWithHlc(const UBSHcomRequest &req, UBSHcomResponse &rsp, const Callback *done) = 0;
+    int32_t CallWithHlc(const UBSHcomRequest &req, UBSHcomResponse &rsp);
+
+    /**
+     * @brief 回复双边消息，接收端配合Call使用，HLC劫持专用；固定为阻塞模式及免拷贝，推荐设置epoll为LT模式
+     *
+     * @param ctx 回复上下文
+     * @param req 回复数据
+     * @param done nullptr：同步发送；非nullptr：异步发送，发送完成后回调函数
+     * @return int32_t 0：成功；非0：失败错误码
+     */
+    virtual int32_t ReplyWithHlc(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback *done) = 0;
+    int32_t ReplyWithHlc(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req);
+
+    /**
      * @brief 发送单边写请求
      *
      * @param req 单边写请求
@@ -290,6 +312,16 @@ inline int32_t UBSHcomChannel::Call(const UBSHcomRequest &req, UBSHcomResponse &
 inline int32_t UBSHcomChannel::Reply(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req)
 {
     return this->Reply(ctx, req, nullptr);
+}
+
+inline int32_t UBSHcomChannel::CallWithHlc(const UBSHcomRequest &req, UBSHcomResponse &rsp)
+{
+    return this->CallWithHlc(req, rsp, nullptr);
+}
+
+inline int32_t UBSHcomChannel::ReplyWithHlc(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req)
+{
+    return this->ReplyWithHlc(ctx, req, nullptr);
 }
 
 inline int32_t UBSHcomChannel::Put(const UBSHcomOneSideRequest &req)
