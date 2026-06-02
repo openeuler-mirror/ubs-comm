@@ -754,6 +754,12 @@ private:
         return NN_OK;
     }
 
+    virtual NResult PostSendNoCopy(int16_t opCode, const UBSHcomNetTransRequest &request,
+                                   const UBSHcomNetTransOpInfo &opInfo)
+    {
+        return NN_OK;
+    }
+
     uint32_t mLocalIp = INVALID_IP;
     uint16_t mListenPort = 0;
     uint8_t mVersion = 0;

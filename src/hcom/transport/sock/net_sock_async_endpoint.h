@@ -37,6 +37,9 @@ public:
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
                      const UBSHcomNetTransOpInfo &opInfo) override;
 
+    NResult PostSendNoCopy(int16_t opCode, const UBSHcomNetTransRequest &request,
+                           const UBSHcomNetTransOpInfo &opInfo) override;
+
     NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
 
     NResult PostSendRawNoCpy(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
