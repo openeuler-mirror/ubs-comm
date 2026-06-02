@@ -13,14 +13,14 @@
 #ifndef HTRACER_INFO_H
 #define HTRACER_INFO_H
 
+#include <sys/cdefs.h>
 #include <atomic>
 #include <cstddef>
-#include <mutex>
 #include <cstring>
-#include <sys/cdefs.h>
 #include <iostream>
-#include "htracer_utils.h"
+#include <mutex>
 #include "htracer_tdigest.h"
+#include "htracer_utils.h"
 
 #define SERVICE_ID(TP_ID_) (((TP_ID_) >> 16) & 0xFFFF)
 #define INNER_ID(TP_ID_) ((TP_ID_) & 0xFFFF)
@@ -69,7 +69,7 @@ public:
         if (lateQuantileEnable) {
             tdigest.Insert(diff);
         }
-        
+
         total += diff;
         goodEnd++;
     }
@@ -196,7 +196,7 @@ private:
     uint64_t periodMax = 0;
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

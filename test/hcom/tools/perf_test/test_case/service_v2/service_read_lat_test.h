@@ -22,30 +22,32 @@ private:
 
     inline int DoPostRead()
     {
+        if (mCtx == nullptr) {
+            LOG_ERROR("mCtx is nullptr");
+            sem_post(&mSem);
+            return -1;
+        }
+        if (mCh == nullptr) {
+            LOG_ERROR("mCh is nullptr");
+            sem_post(&mSem);
+            return -1;
+        }
+
+        const uint64_t iters = mCtx->mIterations;
         rcnt.store(0);
-        while (mCtx->cnt < mCtx->mIterations) {
+        mCtx->cnt = 0;
+        while (mCtx->cnt < iters) {
+            mCtx->tposted[mCtx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
             ock::hcom::Callback *newCallback = ock::hcom::UBSHcomNewCallback(
-                [this](ock::hcom::UBSHcomServiceContext &context) {
-                    PerfTestContext *testCtx = this->GetPerfTestContext();
-                    this->rcnt.fetch_add(1);
-                    if (static_cast<uint64_t>(this->rcnt.load()) == testCtx->mIterations) {
-                        testCtx->tposted[testCtx->mIterations] = ock::hcom::MONOTONIC_TIME_NS();
-                        sem_post(&this->mSem);
-                    }
-                },
-                std::placeholders::_1);
+                [this](ock::hcom::UBSHcomServiceContext &context) { this->rcnt.fetch_add(1); }, std::placeholders::_1);
             if (newCallback == nullptr) {
                 LOG_ERROR("Create callback failed");
                 sem_post(&mSem);
                 return -1;
             }
-            mCtx->tposted[mCtx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
             int res = mCh->Get(mReq, newCallback);
             if (res != 0) {
-                if (newCallback != nullptr) {
-                    delete newCallback;
-                }
-                LOG_ERROR("failed to send to server");
+                LOG_ERROR("Get failed at iteration " << mCtx->cnt);
                 sem_post(&mSem);
                 return -1;
             }
@@ -83,13 +85,13 @@ private:
 private:
     ock::hcom::UBSHcomChannelPtr mCh = nullptr;
     ock::hcom::UBSHcomOneSideRequest mReq;
-    volatile std::atomic<int> rcnt{ 0 };
+    std::atomic<uint64_t> rcnt{0};
     ServiceHelper mHelper;
     RegMrInfo mPostMrInfo;
     RegMrInfo mPeerMrInfo;
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

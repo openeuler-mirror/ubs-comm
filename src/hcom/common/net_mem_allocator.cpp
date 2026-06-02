@@ -9,8 +9,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "net_common.h"
 #include "net_mem_allocator.h"
+#include "net_common.h"
 
 #define MEM_ALLOCATOR_ATOMIC_INC(x) __sync_add_and_fetch((x), 1)
 #define MEM_ALLOCATOR_ATOMIC_DEC(x) __sync_sub_and_fetch((x), 1)
@@ -252,7 +252,7 @@ NResult NetMemAllocator::RegionMalloc(uint64_t &startAddress, uint64_t length, u
             auto metaReqLenAddress = reinterpret_cast<uint64_t *>(metaBaseAddr + MA_CANARY_LEN + MA_LEN_LEN);
 
             if (NN_UNLIKELY(memcpy_s(metaCanaryAddress, MA_CANARY_LEN, needReserve ? "#c_r" : "#c_a", MA_CANARY_LEN) !=
-                NN_OK)) {
+                            NN_OK)) {
                 NN_LOG_WARN("Invalid operation to memcpy_s in RegionMalloc");
                 return NN_ERROR;
             }

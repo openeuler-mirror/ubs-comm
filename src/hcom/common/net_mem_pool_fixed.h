@@ -12,8 +12,8 @@
 #ifndef OCK_HCOM_NET_MEM_POOL_H
 #define OCK_HCOM_NET_MEM_POOL_H
 
-#include <condition_variable>
 #include <array>
+#include <condition_variable>
 #include <memory>
 
 #include "hcom.h"
@@ -58,8 +58,8 @@ struct NetMemPoolFixedOptions {
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "super-blk-size-mb: " << superBlkSizeMB << ", min-blk-size: " << minBlkSize <<
-            ", thread-cache-blk-count: " << tcExpandBlkCnt;
+        oss << "super-blk-size-mb: " << superBlkSizeMB << ", min-blk-size: " << minBlkSize
+            << ", thread-cache-blk-count: " << tcExpandBlkCnt;
         return oss.str();
     }
 } __attribute__((packed));
@@ -139,7 +139,7 @@ private:
      * @brief Make the super block to min block with linked list
      */
     NResult MakeFreeList(const NetMemPoolSuperBlock &superBlk, NetMemPoolMinBlock *&head, NetMemPoolMinBlock *&tail,
-        uint32_t &count) const
+                         uint32_t &count) const
     {
         count = superBlk.size / mOptions.minBlkSize;
         auto address = reinterpret_cast<uintptr_t>(superBlk.buffer);
@@ -195,10 +195,10 @@ private:
 
 private:
     NetSpinLock mTcMutex;
-    NetMemPoolMinBlock mFreeMinBlkList {};
+    NetMemPoolMinBlock mFreeMinBlkList{};
     uint64_t mFreeCount = 0;
 
-    NetMemPoolFixedOptions mOptions {};
+    NetMemPoolFixedOptions mOptions{};
     std::mutex mMutex;
     std::condition_variable mCondForOs;
     bool mAllocatingFromOs = false;
@@ -232,7 +232,8 @@ public:
     /*
      * @brief Allocate one from thread cache, this is not thread safe
      */
-    template <typename T> T *Allocate()
+    template <typename T>
+    T *Allocate()
     {
         if (NN_LIKELY(mHead.next != nullptr)) {
             /* allocate from head */
@@ -264,7 +265,8 @@ public:
     /*
      * @brief Free one to thread cache, this is not thread safe
      */
-    template <typename T> void Free(T *value)
+    template <typename T>
+    void Free(T *value)
     {
         if (NN_LIKELY(value == nullptr)) {
             return;
@@ -341,19 +343,20 @@ private:
         head->count = mCurrentFree;
         mSharedPool->TCFree(head);
 
-        NN_LOG_TRACE_INFO("Thread cache for fixed size memory pool is deconstructing, returned " << mCurrentFree <<
-            " to global pool " << mSharedPool->mName);
+        NN_LOG_TRACE_INFO("Thread cache for fixed size memory pool is deconstructing, returned "
+                          << mCurrentFree << " to global pool " << mSharedPool->mName);
         mCurrentFree = 0;
     }
 
 private:
-    NetMemPoolMinBlock mHead {};
+    NetMemPoolMinBlock mHead{};
     NetMemPoolFixed *mSharedPool = nullptr;
     uint16_t mCurrentFree = 0;
     uint16_t mFreeSteps = 0;
 
     friend class NetMemPoolFixed;
-    template<uint8_t KeyMax> friend class KeyedThreadLocalCache;
+    template <uint8_t KeyMax>
+    friend class KeyedThreadLocalCache;
 };
 
 /// NetTCacheFixed 通常与 thread_local 一起使用，即使上层传递的 mempool 是不同的，thread_local 对象仅会初始化一次。在同
@@ -366,12 +369,14 @@ private:
 ///
 /// \seealso NetServiceCtxStore::GetOrReturn
 /// \seealso HcomServiceCtxStore::GetOrReturn
-template<uint8_t KeyMax> class KeyedThreadLocalCache {
+template <uint8_t KeyMax>
+class KeyedThreadLocalCache {
 public:
     KeyedThreadLocalCache() = default;
     ~KeyedThreadLocalCache() = default;
 
-    template<typename T> T *Allocate(uint8_t key)
+    template <typename T>
+    T *Allocate(uint8_t key)
     {
         if (key > KeyMax) {
             return nullptr;
@@ -380,7 +385,8 @@ public:
         return mTCacheFixeds[key] ? mTCacheFixeds[key]->template Allocate<T>() : nullptr;
     }
 
-    template<typename T> void Free(uint8_t key, T *ctx)
+    template <typename T>
+    void Free(uint8_t key, T *ctx)
     {
         if (key > KeyMax) {
             return;
@@ -405,7 +411,7 @@ public:
 private:
     std::array<std::unique_ptr<NetTCacheFixed>, KeyMax + 1> mTCacheFixeds;
 };
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_MEM_POOL_H

@@ -25,7 +25,7 @@ void UBThreadPool::Initialize()
 
     mIsRunning = true;
     mThreads.reserve(mThreadCount);
-    
+
     for (int i = 0; i < mThreadCount; ++i) {
         mThreads.emplace_back(&UBThreadPool::RunInThread, this);
     }
@@ -40,10 +40,10 @@ void UBThreadPool::Stop()
         NN_LOG_INFO("UB threadpool is not running");
         return;
     }
-    
+
     mIsRunning = false;
     mCondition.notify_all();
-    for (auto& thread : mThreads) {
+    for (auto &thread : mThreads) {
         if (thread.joinable()) {
             thread.join();
         }
@@ -74,9 +74,7 @@ void UBThreadPool::RunInThread()
         std::function<void()> task;
         {
             std::unique_lock<std::mutex> lock(mMutex);
-            mCondition.wait(lock, [this]() {
-                return !mIsRunning || !mTasks.empty();
-            });
+            mCondition.wait(lock, [this]() { return !mIsRunning || !mTasks.empty(); });
             if (!mIsRunning) {
                 return;
             }
@@ -85,13 +83,13 @@ void UBThreadPool::RunInThread()
         }
         try {
             task();
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             NN_LOG_ERROR("Caught error " << e.what() << " when execute a task, continue");
         } catch (...) {
             NN_LOG_ERROR("Caught unknown error when execute a task, continue");
         }
     }
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

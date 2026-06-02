@@ -12,13 +12,13 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
+#include "hcom.h"
 #include "hcom_c.h"
 #include "hcom_service_c.h"
-#include "service_channel_imp.h"
-#include "net_rdma_async_endpoint.h"
-#include "net_param_validator.h"
 #include "net_mem_allocator.h"
-#include "hcom.h"
+#include "net_param_validator.h"
+#include "net_rdma_async_endpoint.h"
+#include "service_channel_imp.h"
 
 namespace ock {
 namespace hcom {
@@ -31,9 +31,7 @@ public:
 
 TestHcomCapi::TestHcomCapi() {}
 
-void TestHcomCapi::SetUp()
-{
-}
+void TestHcomCapi::SetUp() {}
 
 void TestHcomCapi::TearDown()
 {
@@ -42,8 +40,8 @@ void TestHcomCapi::TearDown()
 
 TEST_F(TestHcomCapi, TestCopySglInfo)
 {
-    ubs_hcom_readwrite_request_sgl *src
-        = static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
+    ubs_hcom_readwrite_request_sgl *src =
+        static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
     ASSERT_NE(src, nullptr);
     bzero(src, sizeof(ubs_hcom_readwrite_request_sgl));
     EXPECT_EQ(ubs_hcom_ep_post_send_raw_sgl(1, src, 1), static_cast<uint32_t>(NN_INVALID_PARAM));
@@ -52,8 +50,8 @@ TEST_F(TestHcomCapi, TestCopySglInfo)
 
 TEST_F(TestHcomCapi, TestCopySglInfoFail)
 {
-    ubs_hcom_readwrite_request_sgl *src
-        = static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
+    ubs_hcom_readwrite_request_sgl *src =
+        static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
     ASSERT_NE(src, nullptr);
     bzero(src, sizeof(ubs_hcom_readwrite_request_sgl));
     src->iov = static_cast<ubs_hcom_readwrite_sge *>(malloc(sizeof(ubs_hcom_readwrite_sge)));
@@ -65,8 +63,8 @@ TEST_F(TestHcomCapi, TestCopySglInfoFail)
 
 TEST_F(TestHcomCapi, TestCopySglInfoNormal)
 {
-    ubs_hcom_readwrite_request_sgl *src
-        = static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
+    ubs_hcom_readwrite_request_sgl *src =
+        static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
     ASSERT_NE(src, nullptr);
     bzero(src, sizeof(ubs_hcom_readwrite_request_sgl));
     src->iov = static_cast<ubs_hcom_readwrite_sge *>(malloc(sizeof(ubs_hcom_readwrite_sge)));
@@ -79,8 +77,8 @@ TEST_F(TestHcomCapi, TestCopySglInfoNormal)
 
 TEST_F(TestHcomCapi, TestPostSendRawSgl)
 {
-    ubs_hcom_readwrite_request_sgl *src
-        = static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
+    ubs_hcom_readwrite_request_sgl *src =
+        static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
     ASSERT_NE(src, nullptr);
     bzero(src, sizeof(ubs_hcom_readwrite_request_sgl));
     src->iov = static_cast<ubs_hcom_readwrite_sge *>(malloc(sizeof(ubs_hcom_readwrite_sge)));
@@ -89,7 +87,7 @@ TEST_F(TestHcomCapi, TestPostSendRawSgl)
     UBSHcomNetWorkerIndex workerIndex{};
     UBSHcomNetEndpoint *endpoint = new (std::nothrow) NetAsyncEndpoint(NN_NO100, nullptr, nullptr, workerIndex);
     EXPECT_NE(ubs_hcom_ep_post_send_raw_sgl(reinterpret_cast<ubs_hcom_endpoint>(endpoint), src, 1),
-        static_cast<uint32_t>(NN_OK));
+              static_cast<uint32_t>(NN_OK));
     delete endpoint;
     free(src->iov);
     free(src);
@@ -97,8 +95,8 @@ TEST_F(TestHcomCapi, TestPostSendRawSgl)
 
 TEST_F(TestHcomCapi, TestPostSendRawSglFail)
 {
-    ubs_hcom_readwrite_request_sgl *src
-        = static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
+    ubs_hcom_readwrite_request_sgl *src =
+        static_cast<ubs_hcom_readwrite_request_sgl *>(malloc(sizeof(ubs_hcom_readwrite_request_sgl)));
     ASSERT_NE(src, nullptr);
     bzero(src, sizeof(ubs_hcom_readwrite_request_sgl));
     EXPECT_EQ(ubs_hcom_ep_post_send_raw_sgl(1, src, 0), static_cast<uint32_t>(NN_INVALID_PARAM));
@@ -111,7 +109,7 @@ TEST_F(TestHcomCapi, TestSendRecvFds)
 {
     EXPECT_EQ(ubs_hcom_channel_send_fds(0, nullptr, 0), static_cast<uint32_t>(SER_INVALID_PARAM));
     EXPECT_EQ(ubs_hcom_channel_recv_fds(0, nullptr, 0, 0), static_cast<uint32_t>(SER_INVALID_PARAM));
-    InnerConnectOptions opt {};
+    InnerConnectOptions opt{};
     UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
     EXPECT_NE(ch, nullptr);
     ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
@@ -123,11 +121,11 @@ TEST_F(TestHcomCapi, TestSendRecvFds)
 
 TEST_F(TestHcomCapi, TestConvertServiceConnectOptionsToInnerOptions)
 {
-    ubs_hcom_service_options opt {};
+    ubs_hcom_service_options opt{};
     ubs_hcom_service service = 0;
     int ret = ubs_hcom_service_create(C_SERVICE_RDMA, "service0", opt, &service);
     ASSERT_EQ(ret, 0);
-    ubs_hcom_service_connect_options connectOpt {};
+    ubs_hcom_service_connect_options connectOpt{};
     connectOpt.mode = C_CLIENT_SELF_POLL_BUSY;
     ubs_hcom_channel channel = 0;
     EXPECT_NE(ubs_hcom_service_connect(service, "url", &channel, connectOpt), 0);
@@ -139,10 +137,10 @@ TEST_F(TestHcomCapi, TestConvertServiceConnectOptionsToInnerOptions)
 TEST_F(TestHcomCapi, TestConvertServiceConnectOptionsToInnerOptionsFail)
 {
     ubs_hcom_service service = 0;
-    ubs_hcom_service_connect_options connectOpt {};
+    ubs_hcom_service_connect_options connectOpt{};
     EXPECT_NE(ubs_hcom_service_connect(service, "url", nullptr, connectOpt), 0);
 
-    ubs_hcom_service_options opt {};
+    ubs_hcom_service_options opt{};
     int ret = ubs_hcom_service_create(C_SERVICE_RDMA, "service0", opt, &service);
     ASSERT_EQ(ret, 0);
     EXPECT_NE(ubs_hcom_service_connect(service, nullptr, nullptr, connectOpt), 0);
@@ -151,7 +149,7 @@ TEST_F(TestHcomCapi, TestConvertServiceConnectOptionsToInnerOptionsFail)
 
 TEST_F(TestHcomCapi, TestServiceDoConnectFail)
 {
-    ubs_hcom_service_options opt {};
+    ubs_hcom_service_options opt{};
     ubs_hcom_service service = 0;
     int ret = ubs_hcom_service_create(C_SERVICE_RDMA, "service0", opt, &service);
     ASSERT_EQ(ret, 0);
@@ -161,7 +159,7 @@ TEST_F(TestHcomCapi, TestServiceDoConnectFail)
     MOCKER_CPP(&ConnectOptionsCheck).stubs().will(returnValue(true));
     ret = ubs_hcom_service_start(service);
     ASSERT_EQ(ret, 0);
-    ubs_hcom_service_connect_options connectOpt {};
+    ubs_hcom_service_connect_options connectOpt{};
     connectOpt.mode = C_CLIENT_SELF_POLL_BUSY;
     ubs_hcom_channel channel = 0;
     EXPECT_NE(ubs_hcom_service_connect(service, "url", &channel, connectOpt), 0);
@@ -182,7 +180,7 @@ TEST_F(TestHcomCapi, TestServiceConnectNormal)
     EXPECT_NE(servicet, nullptr);
     ubs_hcom_service service = reinterpret_cast<ubs_hcom_service>(servicet);
     MOCKER_CPP_VIRTUAL(*servicet, &UBSHcomService::Connect).stubs().will(invoke(ConnectStub));
-    ubs_hcom_service_connect_options connectOpt {};
+    ubs_hcom_service_connect_options connectOpt{};
     connectOpt.mode = C_CLIENT_SELF_POLL_BUSY;
     ubs_hcom_channel channel = 0;
     EXPECT_EQ(ubs_hcom_service_connect(service, "url", &channel, connectOpt), 0);
@@ -207,32 +205,32 @@ int CaCb(const char *name, char **caPath, char **crlPath, ubs_hcom_peer_cert_ver
 
 TEST_F(TestHcomCapi, TestSetTlsOptions)
 {
-    ubs_hcom_service_options opt {};
+    ubs_hcom_service_options opt{};
     ubs_hcom_service service = 0;
     int ret = ubs_hcom_service_create(C_SERVICE_RDMA, "service0", opt, &service);
     ASSERT_EQ(ret, 0);
     EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, false, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128,
-        nullptr, nullptr, nullptr));
-    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(0, false, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128,
-        nullptr, nullptr, nullptr));
+                                                         nullptr, nullptr, nullptr));
+    EXPECT_NO_FATAL_FAILURE(
+        ubs_hcom_service_set_tls_opt(0, false, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128, nullptr, nullptr, nullptr));
     EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128,
-        nullptr, nullptr, nullptr));
-    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128,
-        CertCb, PriKeyCb, CaCb));
-    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_3, C_SERVICE_AES_GCM_128,
-        CertCb, PriKeyCb, CaCb));
-    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_256,
-        CertCb, PriKeyCb, CaCb));
-    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_CCM_128,
-        CertCb, PriKeyCb, CaCb));
+                                                         nullptr, nullptr, nullptr));
+    EXPECT_NO_FATAL_FAILURE(
+        ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128, CertCb, PriKeyCb, CaCb));
+    EXPECT_NO_FATAL_FAILURE(
+        ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_3, C_SERVICE_AES_GCM_128, CertCb, PriKeyCb, CaCb));
+    EXPECT_NO_FATAL_FAILURE(
+        ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_256, CertCb, PriKeyCb, CaCb));
+    EXPECT_NO_FATAL_FAILURE(
+        ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_CCM_128, CertCb, PriKeyCb, CaCb));
     EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_CHACHA20_POLY1305,
-        CertCb, PriKeyCb, CaCb));
+                                                         CertCb, PriKeyCb, CaCb));
     ubs_hcom_service_destroy(service, "service0");
 }
 
 TEST_F(TestHcomCapi, TestSetUbcMode)
 {
-    ubs_hcom_service_options opt {};
+    ubs_hcom_service_options opt{};
     ubs_hcom_service service = 0;
     int ret = ubs_hcom_service_create(C_SERVICE_UBC, "service0", opt, &service);
     ASSERT_EQ(ret, 0);
@@ -265,7 +263,7 @@ TEST_F(TestHcomCapi, TestChannelRecv)
 
     uintptr_t address = NN_NO100;
     EXPECT_EQ(ubs_hcom_channel_recv(channel, serviceContext, address, 0, nullptr),
-        static_cast<uint32_t>(SER_INVALID_PARAM));
+              static_cast<uint32_t>(SER_INVALID_PARAM));
 
     MOCKER_CPP_VIRTUAL(*ch, &UBSHcomChannel::Recv).stubs().will(returnValue(static_cast<int>(SER_OK)));
     uint32_t size = NN_NO1024;
@@ -461,8 +459,8 @@ TEST_F(TestHcomCapi, TestDriverGetIpport)
 
 TEST_F(TestHcomCapi, TestDriverInitialize)
 {
-    UBSHcomNetDriver *drivert = new (std::nothrow) NetDriverRDMAWithOob("device0",
-        true, UBSHcomNetDriverProtocol::RDMA);
+    UBSHcomNetDriver *drivert = new (std::nothrow)
+        NetDriverRDMAWithOob("device0", true, UBSHcomNetDriverProtocol::RDMA);
     EXPECT_NE(drivert, nullptr);
     ubs_hcom_driver driver = reinterpret_cast<ubs_hcom_driver>(drivert);
     ubs_hcom_driver_opts options{};
@@ -480,16 +478,20 @@ TEST_F(TestHcomCapi, TestDriverInitialize)
     ret = ubs_hcom_driver_start(driver);
     EXPECT_EQ(ret, NN_OK);
 
-    MOCKER_CPP_VIRTUAL(*drivert, &UBSHcomNetDriver::Connect,
+    MOCKER_CPP_VIRTUAL(
+        *drivert, &UBSHcomNetDriver::Connect,
         NResult(UBSHcomNetDriver::*)(const std::string &, UBSHcomNetEndpointPtr &, uint32_t, uint8_t, uint8_t))
-        .stubs().will(returnValue(static_cast<NResult>(NN_ERROR)));
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_ERROR)));
     ubs_hcom_endpoint ep = NN_NO100;
     ret = ubs_hcom_driver_connect(driver, nullptr, &ep, 0);
     EXPECT_EQ(ret, NN_ERROR);
 
     MOCKER_CPP_VIRTUAL(*drivert, &UBSHcomNetDriver::Connect,
-        NResult(UBSHcomNetDriver::*)(const std::string &, uint16_t, const std::string &, UBSHcomNetEndpointPtr &,
-        uint32_t, uint8_t, uint8_t, uint64_t)).stubs().will(returnValue(static_cast<NResult>(NN_ERROR)));
+                       NResult(UBSHcomNetDriver::*)(const std::string &, uint16_t, const std::string &,
+                                                    UBSHcomNetEndpointPtr &, uint32_t, uint8_t, uint8_t, uint64_t))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_ERROR)));
     ret = ubs_hcom_driver_connect_to_ipport(driver, nullptr, 0, nullptr, &ep, 0);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
 
@@ -518,8 +520,8 @@ int HandleEp(ubs_hcom_endpoint ep, uint64_t usrCtx, const char *payLoad)
 
 TEST_F(TestHcomCapi, TestDriverEpHandle)
 {
-    UBSHcomNetDriver *drivert = new (std::nothrow) NetDriverRDMAWithOob("device0",
-        true, UBSHcomNetDriverProtocol::RDMA);
+    UBSHcomNetDriver *drivert = new (std::nothrow)
+        NetDriverRDMAWithOob("device0", true, UBSHcomNetDriverProtocol::RDMA);
     EXPECT_NE(drivert, nullptr);
     ubs_hcom_driver driver = reinterpret_cast<ubs_hcom_driver>(drivert);
     uintptr_t ret = ubs_hcom_driver_register_ep_handler(0, C_EP_NEW, nullptr, 0);
@@ -549,8 +551,8 @@ int HandleRequest(ubs_hcom_request_context *ctx, uint64_t usrCtx)
 
 TEST_F(TestHcomCapi, TestDriverOpHandle)
 {
-    UBSHcomNetDriver *drivert = new (std::nothrow) NetDriverRDMAWithOob("device0",
-        true, UBSHcomNetDriverProtocol::RDMA);
+    UBSHcomNetDriver *drivert = new (std::nothrow)
+        NetDriverRDMAWithOob("device0", true, UBSHcomNetDriverProtocol::RDMA);
     EXPECT_NE(drivert, nullptr);
     ubs_hcom_driver driver = reinterpret_cast<ubs_hcom_driver>(drivert);
     uintptr_t ret = ubs_hcom_driver_register_op_handler(0, C_OP_REQUEST_RECEIVED, nullptr, 0);
@@ -584,8 +586,8 @@ void HandleIdle(uint8_t wkrGrpIdx, uint16_t idxInGrp, uint64_t usrCtx)
 
 TEST_F(TestHcomCapi, TestDriverIdleHandle)
 {
-    UBSHcomNetDriver *drivert = new (std::nothrow) NetDriverRDMAWithOob("device0",
-        true, UBSHcomNetDriverProtocol::RDMA);
+    UBSHcomNetDriver *drivert = new (std::nothrow)
+        NetDriverRDMAWithOob("device0", true, UBSHcomNetDriverProtocol::RDMA);
     EXPECT_NE(drivert, nullptr);
     ubs_hcom_driver driver = reinterpret_cast<ubs_hcom_driver>(drivert);
     uintptr_t ret = ubs_hcom_driver_register_idle_handler(0, nullptr, 0);
@@ -601,8 +603,8 @@ TEST_F(TestHcomCapi, TestDriverIdleHandle)
     delete drivert;
 }
 
-int HandleProvider(uint64_t ctx, int64_t *flag, ubs_hcom_driver_sec_type *type, char **output,
-    uint32_t *outLen, int *needAutoFree)
+int HandleProvider(uint64_t ctx, int64_t *flag, ubs_hcom_driver_sec_type *type, char **output, uint32_t *outLen,
+                   int *needAutoFree)
 {
     return NN_OK;
 }
@@ -614,8 +616,8 @@ int HandleValidator(uint64_t ctx, int64_t flag, const char *input, uint32_t inpu
 
 TEST_F(TestHcomCapi, TestDriverRegisterProviderValidator)
 {
-    UBSHcomNetDriver *drivert = new (std::nothrow) NetDriverRDMAWithOob("device0",
-        true, UBSHcomNetDriverProtocol::RDMA);
+    UBSHcomNetDriver *drivert = new (std::nothrow)
+        NetDriverRDMAWithOob("device0", true, UBSHcomNetDriverProtocol::RDMA);
     EXPECT_NE(drivert, nullptr);
     ubs_hcom_driver driver = reinterpret_cast<ubs_hcom_driver>(drivert);
 
@@ -647,16 +649,16 @@ int PriKeyCbStub(const char *name, char **priKeyPath, char **keyPass, ubs_hcom_t
     return NN_OK;
 }
 
-int CaCbStub(const char *name, char **caPath, char **crlPath,
-    ubs_hcom_peer_cert_verify_type *verifyType, ubs_hcom_tls_cert_verify *verify)
+int CaCbStub(const char *name, char **caPath, char **crlPath, ubs_hcom_peer_cert_verify_type *verifyType,
+             ubs_hcom_tls_cert_verify *verify)
 {
     return NN_OK;
 }
 
 TEST_F(TestHcomCapi, TestDriverRegisterTls)
 {
-    UBSHcomNetDriver *drivert = new (std::nothrow) NetDriverRDMAWithOob("device0",
-        true, UBSHcomNetDriverProtocol::RDMA);
+    UBSHcomNetDriver *drivert = new (std::nothrow)
+        NetDriverRDMAWithOob("device0", true, UBSHcomNetDriverProtocol::RDMA);
     EXPECT_NE(drivert, nullptr);
     ubs_hcom_driver driver = reinterpret_cast<ubs_hcom_driver>(drivert);
 
@@ -684,8 +686,8 @@ TEST_F(TestHcomCapi, TestDriverRegisterTls)
 
 TEST_F(TestHcomCapi, TestDriverCreateMemoryRegion)
 {
-    UBSHcomNetDriver *drivert = new (std::nothrow) NetDriverRDMAWithOob("device0",
-        true, UBSHcomNetDriverProtocol::RDMA);
+    UBSHcomNetDriver *drivert = new (std::nothrow)
+        NetDriverRDMAWithOob("device0", true, UBSHcomNetDriverProtocol::RDMA);
     EXPECT_NE(drivert, nullptr);
     ubs_hcom_driver driver = reinterpret_cast<ubs_hcom_driver>(drivert);
     ubs_hcom_memory_region mr = NN_NO100;
@@ -695,8 +697,9 @@ TEST_F(TestHcomCapi, TestDriverCreateMemoryRegion)
     ret = ubs_hcom_driver_create_memory_region(driver, 0, 0);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
     MOCKER_CPP_VIRTUAL(*drivert, &UBSHcomNetDriver::CreateMemoryRegion,
-        NResult(UBSHcomNetDriver::*)(uint64_t size, UBSHcomNetMemoryRegionPtr &))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetDriver::*)(uint64_t size, UBSHcomNetMemoryRegionPtr &))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     ret = ubs_hcom_driver_create_memory_region(driver, 1, &mr);
     EXPECT_EQ(ret, NN_OK);
 
@@ -713,8 +716,9 @@ TEST_F(TestHcomCapi, TestDriverCreateMemoryRegion)
     ret = ubs_hcom_driver_create_assign_memory_region(driver, 0, 0, 0);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
     MOCKER_CPP_VIRTUAL(*drivert, &UBSHcomNetDriver::CreateMemoryRegion,
-        NResult(UBSHcomNetDriver::*)(uintptr_t, uint64_t, UBSHcomNetMemoryRegionPtr &))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetDriver::*)(uintptr_t, uint64_t, UBSHcomNetMemoryRegionPtr &))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     ret = ubs_hcom_driver_create_assign_memory_region(driver, NN_NO100, 1, &mr);
     EXPECT_EQ(ret, NN_OK);
 
@@ -765,8 +769,9 @@ TEST_F(TestHcomCapi, TestEpPostSend)
     s.copy(req.upCtxData, s.length());
 
     MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::PostSend,
-        NResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, uint32_t))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     int ret = ubs_hcom_ep_post_send(ep, 0, &req);
     EXPECT_EQ(ret, NN_OK);
 
@@ -793,9 +798,11 @@ TEST_F(TestHcomCapi, TestEpPostSendWithOpinfo)
     int ret = ubs_hcom_ep_post_send_with_opinfo(ep, 0, &req, nullptr);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
 
-    MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::PostSend,
+    MOCKER_CPP_VIRTUAL(
+        *ept, &UBSHcomNetEndpoint::PostSend,
         NResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, const UBSHcomNetTransOpInfo &))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     ret = ubs_hcom_ep_post_send_with_opinfo(ep, 0, &req, &opInfo);
     EXPECT_EQ(ret, NN_OK);
 
@@ -823,8 +830,9 @@ TEST_F(TestHcomCapi, TestEpPostSendRaw)
     EXPECT_EQ(ret, NN_INVALID_PARAM);
 
     MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::PostSendRaw,
-        NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &, uint32_t))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     ret = ubs_hcom_ep_post_send_raw(ep, &req, 1);
     EXPECT_EQ(ret, NN_OK);
 
@@ -855,8 +863,9 @@ TEST_F(TestHcomCapi, TestEpPostSendRawSgl)
     ubs_hcom_readwrite_sge iov = {NN_NO100, NN_NO200, 0, 1, NN_NO100};
     req.iov = &iov;
     MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::PostSendRawSgl,
-        NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransSglRequest &, uint32_t))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransSglRequest &, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     ret = ubs_hcom_ep_post_send_raw_sgl(ep, &req, 1);
     EXPECT_EQ(ret, NN_OK);
 
@@ -884,8 +893,9 @@ TEST_F(TestHcomCapi, TestEpPostSendWithSeqno)
     EXPECT_EQ(ret, NN_INVALID_PARAM);
 
     MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::PostSend,
-        NResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, uint32_t))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetEndpoint::*)(uint16_t, const UBSHcomNetTransRequest &, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     ret = ubs_hcom_ep_post_send_with_seqno(ep, 0, &req, 0);
     EXPECT_EQ(ret, NN_OK);
 
@@ -922,11 +932,13 @@ TEST_F(TestHcomCapi, TestEpPostReadAndWrite)
     EXPECT_EQ(ret, NN_INVALID_PARAM);
 
     MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::PostRead,
-        NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::PostWrite,
-        NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransRequest &))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     ret = ubs_hcom_ep_post_read(ep, &req);
     EXPECT_EQ(ret, NN_OK);
     ret = ubs_hcom_ep_post_write(ep, &req);
@@ -966,11 +978,13 @@ TEST_F(TestHcomCapi, TestEpPostReadAndWriteSgl)
     ubs_hcom_readwrite_sge iov = {NN_NO100, NN_NO200, 0, 1, NN_NO100};
     req.iov = &iov;
     MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::PostRead,
-        NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransSglRequest &))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransSglRequest &))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::PostWrite,
-        NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransSglRequest &))
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+                       NResult(UBSHcomNetEndpoint::*)(const UBSHcomNetTransSglRequest &))
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     ret = ubs_hcom_ep_post_read_sgl(ep, &req);
     EXPECT_EQ(ret, NN_OK);
     ret = ubs_hcom_ep_post_write_sgl(ep, &req);
@@ -1117,11 +1131,12 @@ TEST_F(TestHcomCapi, TestFDS)
     ret = ubs_hcom_get_remote_uds_info(ep, &idInfo);
     EXPECT_EQ(ret, NN_EP_NOT_ESTABLISHED);
     MOCKER_CPP_VIRTUAL(*ept, &UBSHcomNetEndpoint::GetRemoteUdsIdInfo)
-        .stubs().will(returnValue(static_cast<NResult>(NN_OK)));
+        .stubs()
+        .will(returnValue(static_cast<NResult>(NN_OK)));
     ret = ubs_hcom_get_remote_uds_info(ep, &idInfo);
     EXPECT_EQ(ret, NN_OK);
     delete ept;
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

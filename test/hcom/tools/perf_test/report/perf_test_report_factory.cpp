@@ -6,7 +6,7 @@
 namespace hcom {
 namespace perftest {
 
-PerfTestReportBase* PerfTestReportFactory::CreatePerfTestReport(const PerfTestConfig& cfg)
+PerfTestReportBase *PerfTestReportFactory::CreatePerfTestReport(const PerfTestConfig &cfg)
 {
     PERF_TEST_REPORT_TYPE reportType = PERF_TEST_REPORT_TYPE::LATENCY;
     if (static_cast<uint32_t>(cfg.GetType()) % 2 != 0) {
@@ -23,5 +23,5 @@ PerfTestReportBase* PerfTestReportFactory::CreatePerfTestReport(const PerfTestCo
     return nullptr;
 }
 
-}
-}
+} // namespace perftest
+} // namespace hcom

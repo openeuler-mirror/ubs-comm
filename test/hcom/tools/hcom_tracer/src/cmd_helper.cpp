@@ -10,11 +10,11 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "cmd_helper.h"
 #include <mutex>
 #include <set>
-#include "htracer_utils.h"
 #include "htracer_client.h"
-#include "cmd_helper.h"
+#include "htracer_utils.h"
 
 #define INVALID_SERVICE_ID (0xFFFF)
 
@@ -129,13 +129,9 @@ std::string HostInfo::ToString(bool detail)
         }
     } else {
         if (IsActive()) {
-            ss << "  "
-               << "localHost "
-               << "(status: active) ";
+            ss << "  " << "localHost " << "(status: active) ";
         } else {
-            ss << "  "
-               << "localHost "
-               << "(status: inactive) ";
+            ss << "  " << "localHost " << "(status: inactive) ";
         }
     }
     return ss.str();

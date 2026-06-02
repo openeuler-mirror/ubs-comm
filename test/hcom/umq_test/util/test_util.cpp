@@ -12,7 +12,8 @@
 #include "urpc_slab.h"
 #include "urpc_util.h"
 
-TEST(UrpcUtilTest, TestBitmap) {
+TEST(UrpcUtilTest, TestBitmap)
+{
     urpc_bitmap_t bitmap = urpc_bitmap_alloc(1024);
     urpc_bitmap_set(bitmap, 1023, true);
     ASSERT_EQ(urpc_bitmap_is_set(bitmap, 1023), true);
@@ -23,7 +24,8 @@ TEST(UrpcUtilTest, TestBitmap) {
     urpc_bitmap_free(bitmap);
 }
 
-TEST(UrpcUtilTest, TestIdGenerator) {
+TEST(UrpcUtilTest, TestIdGenerator)
+{
     urpc_id_generator_t id_gen;
     urpc_id_generator_init(&id_gen, URPC_ID_GENERATOR_TYPE_BITMAP, 1024);
 
@@ -46,7 +48,8 @@ TEST(UrpcUtilTest, TestIdGenerator) {
     urpc_id_generator_uninit(&id_gen);
 }
 
-TEST(UrpcUtilTest, tokenTest) {
+TEST(UrpcUtilTest, tokenTest)
+{
     uint32_t ret1 = get_timestamp();
     ASSERT_NE(ret1, (uint32_t)0);
     sleep(1);

@@ -13,9 +13,9 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
-#include "net_util.h"
 #include "net_addr_size_map.h"
 #include "net_mem_allocator_cache.h"
+#include "net_util.h"
 
 namespace ock {
 namespace hcom {
@@ -25,7 +25,7 @@ public:
     virtual void SetUp(void);
     virtual void TearDown(void);
 
-    UBSHcomNetMemoryAllocatorOptions mOptions {};
+    UBSHcomNetMemoryAllocatorOptions mOptions{};
     void *mAddress = nullptr;
 };
 
@@ -95,5 +95,5 @@ TEST_F(TestNetMemAllocator, InitializeFail_NEW_OBJECT_FAILED)
     EXPECT_EQ(ret, NN_NEW_OBJECT_FAILED);
 }
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

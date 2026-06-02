@@ -10,12 +10,12 @@
  * See the Mulan PSL v2 for more details.
  */
 #ifdef RDMA_BUILD_ENABLED
-#include <algorithm>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <sys/poll.h>
+#include <algorithm>
 
 #include "net_monotonic.h"
 #include "rdma_verbs_wrapper_cq.h"
@@ -26,11 +26,11 @@ namespace hcom {
 RResult RDMACq::CreatePollingCq()
 {
     auto tmpCQ = HcomIbv::CreateCq(mRDMAContext->mContext, static_cast<int>(mCQCount), reinterpret_cast<void *>(mWork),
-        nullptr, 0);
+                                   nullptr, 0);
     if (tmpCQ == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create completion queue for RDMACq " << mName << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create completion queue for RDMACq "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_NEW_OBJECT_FAILED;
     }
 
@@ -43,18 +43,18 @@ RResult RDMACq::CreateEventCq()
     ibv_comp_channel *tmpCC = HcomIbv::CreateCompChannel(mRDMAContext->mContext);
     if (tmpCC == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create completion channel for RDMACq " << mName << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create completion channel for RDMACq "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_NEW_OBJECT_FAILED;
     }
 
     auto tmpCQ = HcomIbv::CreateCq(mRDMAContext->mContext, static_cast<int>(mCQCount), reinterpret_cast<void *>(mWork),
-        tmpCC, 0);
+                                   tmpCC, 0);
     if (tmpCQ == nullptr) {
         HcomIbv::DestroyCompChannel(tmpCC);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create completion queue for RDMACq " << mName << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create completion queue for RDMACq "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_NEW_OBJECT_FAILED;
     }
 
@@ -62,8 +62,8 @@ RResult RDMACq::CreateEventCq()
         HcomIbv::DestroyCompChannel(tmpCC);
         HcomIbv::DestroyCq(tmpCQ);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create completion queue for RDMACq " << mName << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to create completion queue for RDMACq "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_NEW_OBJECT_FAILED;
     }
 
@@ -72,8 +72,8 @@ RResult RDMACq::CreateEventCq()
         HcomIbv::DestroyCompChannel(tmpCC);
         HcomIbv::DestroyCq(tmpCQ);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to set no blocking for RDMACq " << mName << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to set no blocking for RDMACq "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return RR_NEW_OBJECT_FAILED;
     }
 
@@ -192,8 +192,8 @@ POLL_CQ:
 
         if (rc < 0 && errno != EINTR) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Get poll event failed in RDMA Cq " << mName << ", errno "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Get poll event failed in RDMA Cq "
+                         << mName << ", errno " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return RR_CQ_EVENT_GET_FAILED;
         }
     }
@@ -219,6 +219,6 @@ POLL_CQ:
 
     goto POLL_CQ;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

@@ -87,7 +87,7 @@ bool ServiceHelper::CreateService()
     options.maxSendRecvDataSize = MAX_MESSAGE_SIZE + HCOM_HEADER_SIZE;
     options.workerGroupMode = ock::hcom::NET_BUSY_POLLING;
     if (mCfg.GetCpuId() != -1) {
-        options.workerGroupCpuIdsRange = { mCfg.GetCpuId(), mCfg.GetCpuId() };
+        options.workerGroupCpuIdsRange = {mCfg.GetCpuId(), mCfg.GetCpuId()};
     }
 
     mService = UBSHcomService::Create(mCfg.GetProtocol(), name, options);
@@ -96,8 +96,7 @@ bool ServiceHelper::CreateService()
         return false;
     }
 
-    mService->SetActiveBackup(mCfg.GetEnableActiveBackup());
-    mService->SetDeviceIpMask({ mCfg.GetIpMask() });
+    mService->SetDeviceIpMask({mCfg.GetIpMask()});
     mService->SetUbcMode(mCfg.GetUbcMode());
     mService->SetSendQueueSize(NN_NO4096);
     mService->SetRecvQueueSize(NN_NO4096);
@@ -173,5 +172,5 @@ bool ServiceHelper::CreateMemoryRegion(RegMrInfo &mrInfo)
     mMrVector.emplace_back(mr);
     return true;
 }
-}
-}
+} // namespace perftest
+} // namespace hcom

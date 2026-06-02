@@ -58,7 +58,7 @@ public:
      */
     virtual int32_t CreatePublisher(NetRef<Publisher> &publisher) = 0;
 
-     /**
+    /**
      * @brief 销毁publisher
      * @param publisher 待销毁的publisher
      */
@@ -73,7 +73,7 @@ public:
      * @return int32_t 成功：0；失败：错误码
      */
     virtual int32_t Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler,
-        const int cpuId = -1) = 0;
+                         const int cpuId = -1) = 0;
 
     /**
      * @brief 获取MulticastConfig，用于做高级配置
@@ -102,13 +102,13 @@ public:
     virtual void RegisterTLSPrivateKeyCallback(const UBSHcomTLSPrivateKeyCallback &cb) = 0;
 
     virtual void AddWorkerGroup(uint16_t workerGroupId, uint32_t threadCount,
-        const std::pair<uint32_t, uint32_t> &cpuIdsRange, int8_t priority) = 0;
+                                const std::pair<uint32_t, uint32_t> &cpuIdsRange, int8_t priority) = 0;
 
     virtual SerResult RegisterMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr) = 0;
     virtual SerResult RegisterMemoryRegion(uintptr_t address, uint64_t size, UBSHcomNetMemoryRegionPtr &mr) = 0;
     virtual void DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr) = 0;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

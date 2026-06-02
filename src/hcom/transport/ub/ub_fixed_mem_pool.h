@@ -13,9 +13,9 @@
 #define HCOM_UB_FIXED_MEM_POOL_H
 #ifdef UB_BUILD_ENABLED
 
-#include "ub_common.h"
 #include "net_bucket_linked_list.h"
 #include "net_util.h"
+#include "ub_common.h"
 
 namespace ock {
 namespace hcom {
@@ -23,7 +23,7 @@ namespace hcom {
  * Mini block allocated to end user
  */
 struct UBMemPoolMinBlock {
-    UBMemPoolMinBlock *next = nullptr;  /* link to next min block */
+    UBMemPoolMinBlock *next = nullptr; /* link to next min block */
 };
 
 /*
@@ -32,7 +32,7 @@ struct UBMemPoolMinBlock {
  */
 class UBFixedMemPool {
 public:
-    UBFixedMemPool(uint16_t blkSize, uint16_t blkCnt = NN_NO64): mBlkSize(blkSize), mBlkCnt(blkCnt)
+    UBFixedMemPool(uint16_t blkSize, uint16_t blkCnt = NN_NO64) : mBlkSize(blkSize), mBlkCnt(blkCnt)
     {
         mTotalSize = mBlkSize * mBlkCnt;
     }
@@ -58,12 +58,12 @@ private:
     uint16_t mBlkCnt = NN_NO64;
     uint64_t mTotalSize = NN_NO8192;
     uintptr_t mBuf = 0;
-    UBMemPoolMinBlock mHead {};
+    UBMemPoolMinBlock mHead{};
     std::mutex mMutex;
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_FIXED_MEM_POOL_H

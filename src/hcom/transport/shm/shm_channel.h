@@ -12,9 +12,9 @@
 #ifndef OCK_HCOM_SHM_CHANNEL_H
 #define OCK_HCOM_SHM_CHANNEL_H
 
-#include <queue>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <queue>
 
 #include "net_common.h"
 #include "shm_channel_keeper.h"
@@ -32,7 +32,7 @@ public:
 
 public:
     static HResult CreateAndInit(const std::string &name, uint64_t id, uint32_t dcBuckSize, uint16_t dcBuckCount,
-        ShmChannelPtr &out)
+                                 ShmChannelPtr &out)
     {
         ShmChannelPtr tmp = new (std::nothrow) ShmChannel(name, id, dcBuckSize, dcBuckCount);
         if (NN_UNLIKELY(tmp.Get() == nullptr)) {
@@ -51,7 +51,10 @@ public:
 
 public:
     ShmChannel(const std::string &name, uint64_t id, uint32_t dcBuckSize, uint16_t dcBuckCount)
-        : mId(id), mName(name), mSendDCBuckSize(dcBuckSize), mSendDCBuckCount(dcBuckCount)
+        : mId(id),
+          mName(name),
+          mSendDCBuckSize(dcBuckSize),
+          mSendDCBuckCount(dcBuckCount)
     {
         OBJ_GC_INCREASE(ShmChannel);
     }
@@ -145,7 +148,7 @@ public:
     HResult ChangeToReady(const ShmConnExchangeInfo &info);
 
     inline HResult DCGetFreeBuck(uintptr_t &address, uint64_t &offsetToBase, uint16_t waitPeriodUs = NN_NO100,
-        int32_t timeoutSecond = -1)
+                                 int32_t timeoutSecond = -1)
     {
         NN_ASSERT_LOG_RETURN(mDataChannel != nullptr, SH_NOT_INITIALIZED)
         return mDataChannel->TryOccupyWithWait(address, offsetToBase, waitPeriodUs, timeoutSecond);
@@ -204,8 +207,8 @@ public:
     {
         std::unique_lock<std::mutex> guard(mMrFdQueueMutex);
         if (mMrFdQueue.size() >= gQueueSizeCap) {
-            NN_LOG_ERROR("Failed to add fd in the queue, the queue size is exceeded in channel " << mName << " " <<
-                mId);
+            NN_LOG_ERROR("Failed to add fd in the queue, the queue size is exceeded in channel " << mName << " "
+                                                                                                 << mId);
             return SH_FDS_QUEUE_FULL;
         }
 
@@ -230,8 +233,8 @@ public:
             auto end = NetMonotonic::TimeUs();
             auto pollTime = end - start;
             if (QUEUE_TIMEOUT_US < pollTime) {
-                NN_LOG_ERROR("Within a limited time, failed to get remote mr fds as queue empty in channel " << mName <<
-                    " " << mId);
+                NN_LOG_ERROR("Within a limited time, failed to get remote mr fds as queue empty in channel "
+                             << mName << " " << mId);
                 flag = false;
                 break;
             }
@@ -254,7 +257,7 @@ public:
                 return value;
             }
             NN_LOG_ERROR("Invalid setting 'HCOM_SHM_EXCHANGE_FD_QUEUE_SIZE' which should be 10~256, restored fd "
-                "exchange queue capacity to default value 10");
+                         "exchange queue capacity to default value 10");
         }
 
         return NN_NO10;
@@ -264,8 +267,8 @@ public:
     {
         std::unique_lock<std::mutex> guard(mUserFdQueueMutex);
         if (mUserFdQueue.size() + len > gQueueSizeCap) {
-            NN_LOG_ERROR("Failed to add fd in the queue, the queue size is exceeded in channel " << mName << " " <<
-                mId);
+            NN_LOG_ERROR("Failed to add fd in the queue, the queue size is exceeded in channel " << mName << " "
+                                                                                                 << mId);
             return SH_FDS_QUEUE_FULL;
         }
 
@@ -301,8 +304,8 @@ public:
             auto end = NetMonotonic::TimeUs();
             auto pollTime = end - start;
             if (timeoutUs < pollTime) {
-                NN_LOG_ERROR("Failed to remove user fds in queue of channel " << mName << " " << mId <<
-                    " as timeout " << timeoutUs << " us is exceeded");
+                NN_LOG_ERROR("Failed to remove user fds in queue of channel " << mName << " " << mId << " as timeout "
+                                                                              << timeoutUs << " us is exceeded");
                 flag = false;
                 break;
             }
@@ -340,10 +343,10 @@ private:
     uint64_t mUpCtx1 = 0;                       /* up context 1 */
     bool mPeerEventPooling = true;              /* peer is event pooling or not */
     NetSpinLock mLock;                          /* spin lock of post ctx */
-    ShmOpContextInfo mCtxPosted {};             /* one side done ctx double linked list */
-    ShmOpCompInfo mCompPosted {};               /* two side complete post ctx double linked list */
-    uint32_t mCtxPostedCount { 0 };             /* one side done ctx count */
-    uint32_t mCompPostedCount { 0 };            /* two side complete post ctx count */
+    ShmOpContextInfo mCtxPosted{};              /* one side done ctx double linked list */
+    ShmOpCompInfo mCompPosted{};                /* two side complete post ctx double linked list */
+    uint32_t mCtxPostedCount{0};                /* one side done ctx count */
+    uint32_t mCompPostedCount{0};               /* two side complete post ctx count */
 
     int mFd = -1; /* uds fd to transfer file descriptor of shm files, between client and server */
     std::string mUdsName;
@@ -356,7 +359,7 @@ private:
     std::queue<int> mMrFdQueue;          /* exchange one side mr fd queue */
     std::mutex mUserFdQueueMutex;        /* lock for add/remove in exchange user fd queue */
     std::queue<int> mUserFdQueue;        /* exchange user fd queue */
-    UBSHcomNetAtomicState<ShmChannelState> mState { CH_NEW };
+    UBSHcomNetAtomicState<ShmChannelState> mState{CH_NEW};
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
@@ -489,7 +492,7 @@ inline HResult ShmChannel::EQEventEnqueue(ShmEvent &event)
 
 inline HResult ShmChannel::GetRemoteMrFds(uint32_t remoteKey, int &rfd)
 {
-    ShmChKeeperMsgHeader header {};
+    ShmChKeeperMsgHeader header{};
     header.msgType = ShmChKeeperMsgType::GET_MR_FD;
     header.dataSize = sizeof(remoteKey);
 
@@ -497,14 +500,14 @@ inline HResult ShmChannel::GetRemoteMrFds(uint32_t remoteKey, int &rfd)
     if (NN_UNLIKELY(::send(UdsFD(), &header, sizeof(ShmChKeeperMsgHeader), MSG_NOSIGNAL) <= 0)) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to notify exchange mr fd info, as"
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return SH_ERROR;
     }
 
     if (NN_UNLIKELY(::send(UdsFD(), &remoteKey, sizeof(remoteKey), MSG_NOSIGNAL) <= 0)) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to get remote mr fds for key:" << remoteKey << " as"
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to get remote mr fds for key:"
+                     << remoteKey << " as" << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return SH_ERROR;
     }
 
@@ -524,8 +527,8 @@ inline HResult ShmChannel::GetRemoteMrHandle(uint32_t remoteKey, uint32_t bufSiz
     if (mrHandleMap.GetFromRemoteMap(rfd) == nullptr) {
         auto remoteHandle = new (std::nothrow) ShmHandle(mName, tmpName, rfd, bufSize, rfd, false);
         if (remoteHandle == nullptr) {
-            NN_LOG_ERROR("Failed to new remote shm handle for shm data channel " << mName <<
-                ", probably out of memory");
+            NN_LOG_ERROR("Failed to new remote shm handle for shm data channel " << mName
+                                                                                 << ", probably out of memory");
             return SH_NEW_OBJECT_FAILED;
         }
 
@@ -559,7 +562,7 @@ inline HResult ShmChannel::GetPeerDataAddressByOffset(uint64_t offset, uintptr_t
     NN_ASSERT_LOG_RETURN(mPeerDataChannel != nullptr, SH_NOT_INITIALIZED)
     return mPeerDataChannel->GetAddressByOffset(offset, address);
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_SHM_CHANNEL_H

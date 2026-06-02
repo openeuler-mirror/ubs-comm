@@ -46,7 +46,7 @@ const std::string &MulticastConfigImp::GetName() const
 int32_t MulticastConfigImp::ValidateMulticastServiceOption()
 {
     if (NN_UNLIKELY(mOptions.timeOutDetectThreadNum == 0 ||
-        mOptions.timeOutDetectThreadNum > MAX_TIME_OUT_DETECT_THREAD_NUM)) {
+                    mOptions.timeOutDetectThreadNum > MAX_TIME_OUT_DETECT_THREAD_NUM)) {
         NN_LOG_ERROR("Invalid time out detect thread num " << mOptions.timeOutDetectThreadNum << ", must range [1, 4]");
         return SER_INVALID_PARAM;
     }
@@ -278,5 +278,5 @@ UBSHcomNetDriverProtocol MulticastConfigImp::GetProtocol() const
 {
     return mOptions.protocol;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

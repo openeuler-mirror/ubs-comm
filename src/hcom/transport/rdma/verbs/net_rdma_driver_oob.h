@@ -16,10 +16,10 @@
 
 #include "hcom.h"
 
+#include "net_heartbeat.h"
 #include "net_oob.h"
 #include "net_rdma_driver.h"
 #include "net_util.h"
-#include "net_heartbeat.h"
 #include "rdma_common.h"
 #include "rdma_mr_dm_buf.h"
 #include "rdma_mr_fixed_buf.h"
@@ -41,12 +41,12 @@ public:
     }
 
     NResult Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo = 0,
-        uint8_t clientGrpNo = 0) override;
+                    uint8_t clientGrpNo = 0) override;
     NResult Connect(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-        UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0,
-        uint64_t ctx = 0) override;
+                    UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0,
+                    uint64_t ctx = 0) override;
     NResult Connect(const std::string &serverUrl, const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags,
-        uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0, uint64_t ctx = 0) override;
+                    uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0, uint64_t ctx = 0) override;
 
     NResult MultiRailNewConnection(OOBTCPConnection &conn);
     uint16_t GetHbIdleTime()
@@ -85,21 +85,22 @@ private:
     friend class NetSyncEndpoint;
 
     NResult NewReceivedRequest(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, UBSHcomNetMessage &msg,
-        RDMAWorker *worker) const;
+                               RDMAWorker *worker) const;
 
     NResult NewReceivedRawRequest(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, UBSHcomNetMessage &msg,
-        RDMAWorker *worker, uint32_t immData) const;
-    
+                                  RDMAWorker *worker, uint32_t immData) const;
+
     NResult NewReceivedRequestWithoutCopy(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-        UBSHcomNetMessage &msg, RDMAWorker *worker, void *dataAddress, UBSHcomNetTransHeader *header) const;
+                                          UBSHcomNetMessage &msg, RDMAWorker *worker, void *dataAddress,
+                                          UBSHcomNetTransHeader *header) const;
     NResult SendRequestFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, RDMAWorker *worker);
     NResult SendRawSglFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, RDMAWorker *worker);
     NResult SendSglInlineFinishedCB(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx, RDMAWorker *worker);
 
     NResult Connect(const OOBTCPClientPtr &client, const std::string &payload, UBSHcomNetEndpointPtr &outEp,
-       uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx);
+                    uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx);
     NResult ConnectSyncEp(const OOBTCPClientPtr &client, const std::string &payload, UBSHcomNetEndpointPtr &outEp,
-        uint32_t flags, uint8_t serverGrpNo, uint64_t ctx);
+                          uint32_t flags, uint8_t serverGrpNo, uint64_t ctx);
 
     void DestroyEpInWorker(RDMAWorker *worker);
     void DestroyEpByPortNum(int portNum);
@@ -111,14 +112,14 @@ private:
     inline bool ValidateRequestContext(RDMAOpContextInfo *ctx)
     {
         if (NN_UNLIKELY(ctx == nullptr || ctx->qp == nullptr || ctx->qp->UpContext1() == 0 ||
-            ctx->qp->UpContext() == 0)) {
+                        ctx->qp->UpContext() == 0)) {
             NN_LOG_ERROR("Ctx or QP or Worker is null of RequestReceived in Driver " << mName << "");
             return false;
         }
         return true;
     }
     __always_inline void ProcessErrorContext(RDMAOpContextInfo *&nextOpCtx, RDMAOpContextInfo *&remainingOpCtx,
-        UBSHcomNetEndpoint *epPtr)
+                                             UBSHcomNetEndpoint *epPtr)
     {
         nextOpCtx = remainingOpCtx->next;
         if (remainingOpCtx->opResultType != RDMAOpContextInfo::INVALID_MAGIC) {
@@ -152,11 +153,11 @@ private:
     }
     bool mNeedStopEvent = false;
     std::thread mRdmaEventThread;
-    std::atomic<bool> mEventStarted { false };
+    std::atomic<bool> mEventStarted{false};
     NetHeartbeat *mHeartBeat = nullptr;
     friend class NetHeartbeat;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // _OCK_NET_CLIENT_SERVER_RDMA_1234244441233_H

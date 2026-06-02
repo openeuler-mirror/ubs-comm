@@ -12,10 +12,10 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
-#include "shm_worker.h"
+#include "shm_common.h"
 #include "shm_handle.h"
 #include "shm_queue.h"
-#include "shm_common.h"
+#include "shm_worker.h"
 
 namespace ock {
 namespace hcom {
@@ -25,7 +25,7 @@ public:
     virtual void SetUp(void);
     virtual void TearDown(void);
     std::string name = "TestShmQueue";
-    ShmEvent event {};
+    ShmEvent event{};
     ShmEventQueuePtr queue;
     ShmQueueMeta *queueMeta;
 };
@@ -96,5 +96,5 @@ TEST_F(TestShmQueue, CheckState)
     EXPECT_NO_FATAL_FAILURE(queue->CheckAndMarkProducerState());
     EXPECT_EQ(queue->mQueueMeta->prod.tail, NN_NO1);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

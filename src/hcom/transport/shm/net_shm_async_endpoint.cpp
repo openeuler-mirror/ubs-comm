@@ -9,9 +9,9 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "shm_validation.h"
-#include "hcom_log.h"
 #include "net_shm_async_endpoint.h"
+#include "hcom_log.h"
+#include "shm_validation.h"
 
 namespace ock {
 namespace hcom {
@@ -67,7 +67,7 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
         NN_LOG_ERROR("Shm failed to async post send as validate fail");
         return result;
     }
- 
+
     if (NN_UNLIKELY((result = PostSendValidationMaxSize(request, mAllowedSize, mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to async post send as validate size fail");
         return result;
@@ -93,7 +93,7 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+                          reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("Shm Failed to post send message as encryption failure");
             (void)mShmCh->DCMarkBuckFree(address);
             return NN_ENCRYPT_FAILED;
@@ -102,8 +102,8 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
     } else {
         header->dataLength = request.size;
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)),
-            mShmCh->GetSendDCBuckSize() - sizeof(UBSHcomNetTransHeader),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 mShmCh->GetSendDCBuckSize() - sizeof(UBSHcomNetTransHeader),
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             (void)mShmCh->DCMarkBuckFree(address);
             NN_LOG_ERROR("Failed to copy the request to address");
             return NN_INVALID_PARAM;
@@ -147,14 +147,14 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
 }
 
 NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo)
+                                      const UBSHcomNetTransOpInfo &opInfo)
 {
     NResult result = NN_OK;
     if (NN_UNLIKELY((result = PostSendValidation(mState, mId, opCode, request)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to async post send as validation fail");
         return result;
     }
- 
+
     if (NN_UNLIKELY((result = PostSendValidationMaxSize(request, mAllowedSize, mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to async post send as validate size fail");
         return result;
@@ -182,7 +182,7 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = mAes.EstimatedEncryptLen(request.size);
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+                          reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("Failed to post send message as encryption failure");
             (void)mShmCh->DCMarkBuckFree(address);
             return NN_ENCRYPT_FAILED;
@@ -191,8 +191,8 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
     } else {
         header->dataLength = request.size;
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(address + sizeof(UBSHcomNetTransHeader)),
-            mShmCh->GetSendDCBuckSize() - sizeof(UBSHcomNetTransHeader),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 mShmCh->GetSendDCBuckSize() - sizeof(UBSHcomNetTransHeader),
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             (void)mShmCh->DCMarkBuckFree(address);
             NN_LOG_ERROR("Failed to copy request to address");
             return NN_INVALID_PARAM;
@@ -216,7 +216,7 @@ NResult NetAsyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransRequ
             TRACE_DELAY_END(SHM_EP_ASYNC_POST_SEND, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
-            usleep(100UL);  // LWT situation is not suitable for calling system sleep
+            usleep(100UL); // LWT situation is not suitable for calling system sleep
             continue;
         }
         // no retry result or timeout = 0
@@ -240,7 +240,7 @@ NResult NetAsyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, 
         NN_LOG_ERROR("Shm failed to async post send raw as validate fail");
         return result;
     }
- 
+
     if (NN_UNLIKELY((result = PostSendValidationMaxSize(request, mSegSize, mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to async post send raw as validate size fail");
         return result;
@@ -261,7 +261,7 @@ NResult NetAsyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, 
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(address), cipherLen)) {
+                          reinterpret_cast<void *>(address), cipherLen)) {
             NN_LOG_ERROR("Shm Failed to post send message as encryption failure");
             (void)mShmCh->DCMarkBuckFree(address);
             return NN_ENCRYPT_FAILED;
@@ -269,7 +269,7 @@ NResult NetAsyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, 
         innerReq.size = cipherLen;
     } else {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(address), mShmCh->GetSendDCBuckSize(),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             (void)mShmCh->DCMarkBuckFree(address);
             NN_LOG_ERROR("Shm Failed to copy the request to address");
             return NN_INVALID_PARAM;
@@ -308,8 +308,8 @@ NResult NetAsyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, 
 NResult NetAsyncEndpointShm::PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo)
 {
     NResult result = NN_OK;
-    if (NN_UNLIKELY((result = PostSendSglValidation(mState, mId, mDriver, seqNo, request, mSegSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((result = PostSendSglValidation(mState, mId, mDriver, seqNo, request, mSegSize, mIsNeedEncrypt,
+                                                    mAes)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to async post send raw sgl as validate fail");
         return result;
     }
@@ -334,7 +334,7 @@ NResult NetAsyncEndpointShm::PostSendRawSgl(const UBSHcomNetTransSglRequest &req
             dataLen += request.iov[i].size;
         }
 
-        UBSHcomNetMessage tmpMsg {};
+        UBSHcomNetMessage tmpMsg{};
         bool messageReady = tmpMsg.AllocateIfNeed(dataLen);
         if (NN_UNLIKELY(!messageReady)) {
             NN_LOG_ERROR("Shm Failed to allocate net msg buffer failed");
@@ -343,8 +343,9 @@ NResult NetAsyncEndpointShm::PostSendRawSgl(const UBSHcomNetTransSglRequest &req
         }
         for (uint16_t i = 0; i < request.iovCount; i++) {
             if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(tmpMsg.mBuf) + iovOffset),
-                tmpMsg.GetBufLen() - iovOffset, reinterpret_cast<const void *>(request.iov[i].lAddress),
-                request.iov[i].size) != NN_OK)) {
+                                     tmpMsg.GetBufLen() - iovOffset,
+                                     reinterpret_cast<const void *>(request.iov[i].lAddress),
+                                     request.iov[i].size) != NN_OK)) {
                 NN_LOG_ERROR("Failed to copy request to tmpMsg");
                 mShmCh->DCMarkBuckFree(address);
                 return NN_INVALID_PARAM;
@@ -362,9 +363,9 @@ NResult NetAsyncEndpointShm::PostSendRawSgl(const UBSHcomNetTransSglRequest &req
         innerReq.size = cipherLen;
     } else {
         for (uint16_t i = 0; i < request.iovCount; i++) {
-            if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(address + iovOffset),
-                mShmCh->GetSendDCBuckSize() - iovOffset, reinterpret_cast<const void *>(request.iov[i].lAddress),
-                request.iov[i].size) != NN_OK)) {
+            if (NN_UNLIKELY(
+                    memcpy_s(reinterpret_cast<void *>(address + iovOffset), mShmCh->GetSendDCBuckSize() - iovOffset,
+                             reinterpret_cast<const void *>(request.iov[i].lAddress), request.iov[i].size) != NN_OK)) {
                 (void)mShmCh->DCMarkBuckFree(address);
                 NN_LOG_ERROR("Failed to copy request to address");
                 return NN_INVALID_PARAM;
@@ -516,5 +517,5 @@ NResult NetAsyncEndpointShm::PostWrite(const UBSHcomNetTransSglRequest &request)
     TRACE_DELAY_END(SHM_EP_ASYNC_POST_WRITE_SGL, result);
     return result;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

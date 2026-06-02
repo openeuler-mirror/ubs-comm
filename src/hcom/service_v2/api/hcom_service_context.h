@@ -12,8 +12,8 @@
 #ifndef HCOM_API_HCOM_CONTEXT_H_
 #define HCOM_API_HCOM_CONTEXT_H_
 #include <cstdint>
-#include "hcom_service_def.h"
 #include "hcom_service_channel.h"
+#include "hcom_service_def.h"
 
 namespace ock {
 namespace hcom {
@@ -24,18 +24,18 @@ using UBSHcomRequestContext = UBSHcomNetRequestContext;
 constexpr uint16_t EPIDX_BIT_NUM = 32;
 
 enum class Operation : uint8_t {
-    SER_RECEIVED = 0,     /* support invoke all functions */
-    SER_RECEIVED_RAW = 1, /* support invoke most functions except OpInfo() */
-    SER_SENT = 2,         /* support invoke basic functions except
+    SER_RECEIVED = 0,           /* support invoke all functions */
+    SER_RECEIVED_RAW = 1,       /* support invoke most functions except OpInfo() */
+    SER_SENT = 2,               /* support invoke basic functions except
                                 Message()、MessageData()、MessageDataLen()、RspCtx()、all ReplySend*() */
-    SER_SENT_RAW = 3,     /* support invoke basic functions except
+    SER_SENT_RAW = 3,           /* support invoke basic functions except
                                 Message()、MessageData()、MessageDataLen()、RspCtx()、OpInfo()、all ReplySend*() */
-    SER_ONE_SIDE = 4,     /* support invoke basic functions except
+    SER_ONE_SIDE = 4,           /* support invoke basic functions except
                                 Message()、MessageData()、MessageDataLen()、RspCtx()、OpInfo()、all ReplySend*() */
-    SER_RNDV = 5,         /* support invoke all functions */
-    SER_RNDV_SGL = 6,     /* support invoke all functions */
-    SER_MULTIRAIL_RNDV_RAW = 7,     /* support invoke all functions */
-    SER_INVALID_OP_TYPE = 255,      /* support invoke all functions */
+    SER_RNDV = 5,               /* support invoke all functions */
+    SER_RNDV_SGL = 6,           /* support invoke all functions */
+    SER_MULTIRAIL_RNDV_RAW = 7, /* support invoke all functions */
+    SER_INVALID_OP_TYPE = 255,  /* support invoke all functions */
 };
 
 /* *
@@ -109,9 +109,7 @@ public:
      * @param copyData : true means malloc and copy receive data.
      * @return SER_OK if success, others if failed
      */
-    static SerResult Clone(UBSHcomServiceContext &newOne,
-                           const UBSHcomServiceContext &oldOne,
-                           bool copyData = true);
+    static SerResult Clone(UBSHcomServiceContext &newOne, const UBSHcomServiceContext &oldOne, bool copyData = true);
 
     /**
      * @brief check current context timeout or not
@@ -140,19 +138,18 @@ protected:
 
     SerResult CopyData(void *data, uint32_t dataLen);
 
-    UBSHcomChannelPtr mCh;       /* channel ptr */
+    UBSHcomChannelPtr mCh;        /* channel ptr */
     uint64_t mTimeoutTraceMs = 0; /* record timeout time trace, 0 means never timeout */
-    void *mData = nullptr; /* received/received raw message data address */
-    uint32_t mDataLen = 0; /* received/received raw message data len */
+    void *mData = nullptr;        /* received/received raw message data address */
+    uint32_t mDataLen = 0;        /* received/received raw message data len */
     int32_t mErrorCode;
     int32_t mResult = 0;     /* context result */
     uint32_t mEpIdxInCh = 0; /* for response */
     uint32_t mSeqNo = 0;     /* for response */
     uint32_t mReadCount = 0;
     uint16_t mOpCode;
-    UBSHcomRequestContext::NN_OpType mOpType =
-            UBSHcomRequestContext::NN_INVALID_OP_TYPE; /* operate original type */
-    DataType mDataType = DataType::INVALID_DATA; /* type of mData */
+    UBSHcomRequestContext::NN_OpType mOpType = UBSHcomRequestContext::NN_INVALID_OP_TYPE; /* operate original type */
+    DataType mDataType = DataType::INVALID_DATA;                                          /* type of mData */
     // 64B cache rsv 12 Bytes
 
     uint8_t rsv[12];
@@ -236,6 +233,6 @@ inline void UBSHcomServiceContext::Invalidate()
     mCh.Set(nullptr);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_CONTEXT_H

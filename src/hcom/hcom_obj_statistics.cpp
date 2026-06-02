@@ -158,5 +158,5 @@ void NetObjStatistic::Dump()
 #endif
     NN_LOG_INFO(ossDump.str());
 }
-}
-}
+} // namespace hcom
+} // namespace ock

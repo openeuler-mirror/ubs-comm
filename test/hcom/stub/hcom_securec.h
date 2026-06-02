@@ -23,6 +23,6 @@ int memcpy_s(void *dest, size_t destMax, const void *src, size_t count);
 int strcpy_error(char *strDest, size_t destMax, const char *strSrc);
 int strcpy_s(char *strDest, size_t destMax, const char *strSrc);
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_HCOM_SECUREC_H

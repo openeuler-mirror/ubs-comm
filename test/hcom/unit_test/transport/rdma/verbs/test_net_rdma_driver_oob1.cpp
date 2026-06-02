@@ -9,19 +9,19 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <fcntl.h>
+#include <gtest/gtest.h>
 #include <sys/poll.h>
+#include <mockcpp/mockcpp.hpp>
 
 #include "net_monotonic.h"
+#include "net_oob_secure.h"
 #include "net_oob_ssl.h"
-#include "net_rdma_sync_endpoint.h"
 #include "net_rdma_async_endpoint.h"
+#include "net_rdma_driver_oob.h"
+#include "net_rdma_sync_endpoint.h"
 #include "rdma_mr_dm_buf.h"
 #include "rdma_mr_fixed_buf.h"
-#include "net_rdma_driver_oob.h"
-#include "net_oob_secure.h"
 
 namespace ock {
 namespace hcom {
@@ -64,25 +64,23 @@ TEST_F(TestNetRdmaDriverOob1, TestDoUnInitialize)
 TEST_F(TestNetRdmaDriverOob1, TestNewConnectionCBFailed)
 {
     OOBTCPConnection *conn = new (std::nothrow) OOBTCPConnection(-1);
-    MOCKER_CPP(&OOBSecureProcess::SecProcessInOOBServer).stubs()
-        .will(returnValue(static_cast<int>(NN_OK)));
+    MOCKER_CPP(&OOBSecureProcess::SecProcessInOOBServer).stubs().will(returnValue(static_cast<int>(NN_OK)));
     MOCKER_CPP(&OOBSecureProcess::SecProcessCompareEpNum,
-        NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &)).stubs()
+               NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
+        .stubs()
         .will(returnValue(static_cast<int>(NN_OOB_SEC_PROCESS_ERROR)))
         .then(returnValue(static_cast<int>(NN_OK)));
     EXPECT_EQ(testDriver1->NewConnectionCB(*conn), static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
 
-    MOCKER_CPP_VIRTUAL(*conn, &OOBTCPConnection::Receive)
+    MOCKER_CPP_VIRTUAL(*conn, &OOBTCPConnection::Receive).stubs().will(returnValue(static_cast<int>(NN_OK)));
+    MOCKER_CPP(&OOBSecureProcess::SecCheckConnectionHeader)
         .stubs()
-        .will(returnValue(static_cast<int>(NN_OK)));
-    MOCKER_CPP(&OOBSecureProcess::SecCheckConnectionHeader).stubs()
         .will(returnValue(static_cast<int>(NN_OOB_SEC_PROCESS_ERROR)))
         .then(returnValue(static_cast<int>(NN_OK)));
     EXPECT_EQ(testDriver1->NewConnectionCB(*conn), static_cast<int>(NN_ERROR));
 
     testDriver1->mOptions.enableMultiRail = true;
-    MOCKER_CPP(&NetWorkerLB::ChooseWorker).stubs()
-        .will(returnValue(static_cast<int>(NN_ERROR)));
+    MOCKER_CPP(&NetWorkerLB::ChooseWorker).stubs().will(returnValue(static_cast<int>(NN_ERROR)));
     EXPECT_EQ(testDriver1->NewConnectionCB(*conn), static_cast<int>(NN_ERROR));
 }
 
@@ -104,5 +102,5 @@ TEST_F(TestNetRdmaDriverOob1, TestProcessError)
     EXPECT_NO_FATAL_FAILURE(testDriver1->SendFinished(nullptr));
     EXPECT_NO_FATAL_FAILURE(testDriver1->OneSideDone(nullptr));
 }
-}
-}
+} // namespace hcom
+} // namespace ock

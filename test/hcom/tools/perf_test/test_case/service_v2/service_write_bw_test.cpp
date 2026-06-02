@@ -1,10 +1,10 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
+#include "test_case/service_v2/service_write_bw_test.h"
 #include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "test_case/service_v2/service_write_bw_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -27,14 +27,13 @@ int ServiceWriteBwTest::DoPostWrite()
             std::placeholders::_1);
         if (newCallback == nullptr) {
             LOG_ERROR("Create callback failed");
+            sem_post(&mSem);
             return -1;
         }
         int res = mCh->Put(mReq, newCallback);
         if (res != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("failed to send to server");
+            sem_post(&mSem);
             return res;
         }
     }
@@ -43,7 +42,7 @@ int ServiceWriteBwTest::DoPostWrite()
 }
 
 int ServiceWriteBwTest::NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch,
-    const std::string &payload)
+                                   const std::string &payload)
 {
     mCh = ch;
     LOG_DEBUG("New connection from " << ipPort << " !");
@@ -65,9 +64,6 @@ int ServiceWriteBwTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &
         UBSHcomReplyContext replyCtx;
         replyCtx.rspCtx = ctx.RspCtx();
         if ((ctx.Channel()->Reply(replyCtx, req, newCallback)) != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("Failed to post message to data to server");
             return -1;
         }
@@ -81,7 +77,7 @@ bool ServiceWriteBwTest::Initialize()
 
     // create NetService
     UBSHcomServiceNewChannelHandler funcNewChannel = bind(&ServiceWriteBwTest::NewChannel, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+                                                          std::placeholders::_2, std::placeholders::_3);
     UBSHcomServiceRecvHandler funcReqReceived = bind(&ServiceWriteBwTest::RequestReceived, this, std::placeholders::_1);
 
     mHelper.RegisterRecvHandler(funcReqReceived);
@@ -189,5 +185,5 @@ bool ServiceWriteBwTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::SERVICE_WRITE_BW, ServiceWriteBwTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

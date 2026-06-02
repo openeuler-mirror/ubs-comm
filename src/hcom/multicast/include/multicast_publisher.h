@@ -5,11 +5,11 @@
 #define HCOM_MULTICAST_PUBLISHER_H
 
 #include "hcom.h"
-#include "multicast_message.h"
-#include "multicast_subscriber.h"
 #include "hcom_service.h"
 #include "multicast_config.h"
 #include "multicast_def.h"
+#include "multicast_message.h"
+#include "multicast_subscriber.h"
 
 namespace ock {
 namespace hcom {
@@ -43,11 +43,14 @@ public:
  *
  * @param ClosureFunction
  */
-template <typename ClosureFunction> class MultiCastClosureCallback : public MultiCastCallback {
+template <typename ClosureFunction>
+class MultiCastClosureCallback : public MultiCastCallback {
 public:
     explicit MultiCastClosureCallback(ClosureFunction &&function, bool deleteSelf)
-        : mFunction(function), mDeleteSelf(deleteSelf)
-    {}
+        : mFunction(function),
+          mDeleteSelf(deleteSelf)
+    {
+    }
 
     ~MultiCastClosureCallback() override = default;
 
@@ -105,7 +108,8 @@ inline void DestroyCallback(const MultiCastCallback *cb)
  * coding, std::bind is used to implement closure. If the cost of std::bind
  * is found to be high, then optimize it.
  */
-template <typename... Args> MultiCastCallback *NewMultiCastCallback(Args... args)
+template <typename... Args>
+MultiCastCallback *NewMultiCastCallback(Args... args)
 {
     auto closure = std::bind(args...);
     return new (std::nothrow) MultiCastClosureCallback<decltype(closure)>(std::move(closure), true);
@@ -119,7 +123,8 @@ template <typename... Args> MultiCastCallback *NewMultiCastCallback(Args... args
  * @return MultiCastCallback*
  * @note see @ref NewCallback.
  */
-template <typename... Args> MultiCastCallback *NewPermanentCallback(Args... args)
+template <typename... Args>
+MultiCastCallback *NewPermanentCallback(Args... args)
 {
     auto closure = std::bind(args...);
     return new (std::nothrow) MultiCastClosureCallback<decltype(closure)>(std::move(closure), false);
@@ -129,20 +134,25 @@ class SubscriptionInfo {
 public:
     SubscriptionInfo() = default;
     SubscriptionInfo(uint64_t id, std::string name, std::string &ip, uint16_t port, UBSHcomNetEndpointPtr ep)
-        : mId(id), mName(std::move(name)), mIp(ip), mPort(port), mEp(std::move(ep))
-    {}
+        : mId(id),
+          mName(std::move(name)),
+          mIp(ip),
+          mPort(port),
+          mEp(std::move(ep))
+    {
+    }
 
     inline uint64_t GetId() const
     {
         return mId;
     }
 
-    inline const std::string& GetName() const
+    inline const std::string &GetName() const
     {
         return mName;
     }
 
-    inline const std::string& GetIp() const
+    inline const std::string &GetIp() const
     {
         return mIp;
     }
@@ -190,7 +200,7 @@ public:
         return mStatus;
     }
 
-    inline const MultiResponse& GetMultiResponse() const
+    inline const MultiResponse &GetMultiResponse() const
     {
         return mResponse;
     }
@@ -199,7 +209,7 @@ public:
 private:
     SubscriptionInfoPtr mSubInfo; // 订阅者信息
     SubscriberRspStatus mStatus;  // 响应状态
-    MultiResponse mResponse {};   // 订阅者回复的数据
+    MultiResponse mResponse{};    // 订阅者回复的数据
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 
     friend class PublisherContext;
@@ -219,7 +229,7 @@ public:
         subscriberRspList.clear();
     }
 
-    inline const std::vector<SubscriberRspInfo>& GetSubscriberRspInfo()
+    inline const std::vector<SubscriberRspInfo> &GetSubscriberRspInfo()
     {
         return subscriberRspList;
     }
@@ -331,18 +341,18 @@ public:
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 private:
     int PrepareTimerContext(ock::hcom::MultiCastCallback *cb, int16_t timeout,
-        ock::hcom::MultiCastTimerContext &context);
+                            ock::hcom::MultiCastTimerContext &context);
     void DestroyTimerContext(MultiCastTimerContext &context);
     void DestroyPubContext(PublisherContext &context);
     SerResult PostSendAll(const MultiCastTimerContext &context, const UBSHcomNetTransRequest &netReq,
-        PublisherContext *ctx, SerResult &result);
+                          PublisherContext *ctx, SerResult &result);
     void ForceUnInitialize();
     void ProcessIoInBroken();
     static void ProcessIO(const std::vector<MultiCastServiceTimer *> &remainCtx);
     static void UpdateSubscriberRsp(PublisherContext *pubCtx);
 
     std::string mName;
-    UBSHcomNetAtomicState<PublisherState> mState {};
+    UBSHcomNetAtomicState<PublisherState> mState{};
     uint32_t mSubCount = 0;
     std::unordered_map<uint32_t, UBSHcomNetEndpointPtr> mEpMap;
     std::unordered_map<uint32_t, SubscriptionInfoPtr> mSubscriptionMap;
@@ -352,8 +362,8 @@ private:
     uintptr_t mPubCtxMemPool = NN_NO0;
     HcomServiceCtxStore *mCtxStore = nullptr;    /* store seq no ctx */
     HcomServiceCtxStore *mPubCtxStore = nullptr; /* store seq no pub ctx */
-    uintptr_t mPeriodicMgr = NN_NO0;            /* timeout periodic manager */
-    uintptr_t mTimerList = NN_NO0;              /* record timer ctx by list */
+    uintptr_t mPeriodicMgr = NN_NO0;             /* timeout periodic manager */
+    uintptr_t mTimerList = NN_NO0;               /* record timer ctx by list */
     uint32_t mMaxSubscriberNum = NN_NO7;
     std::mutex mMgrMutex;
 
@@ -364,7 +374,7 @@ private:
 };
 
 using PublisherPtr = NetRef<Publisher>;
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

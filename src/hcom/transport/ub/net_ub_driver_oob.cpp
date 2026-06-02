@@ -14,13 +14,13 @@
 #include <fcntl.h>
 #include <sys/poll.h>
 
-#include "net_monotonic.h"
-#include "net_oob_ssl.h"
-#include "net_ub_endpoint.h"
-#include "net_ub_driver_oob.h"
-#include "net_oob_secure.h"
-#include "ub_worker.h"
 #include "net_common.h"
+#include "net_monotonic.h"
+#include "net_oob_secure.h"
+#include "net_oob_ssl.h"
+#include "net_ub_driver_oob.h"
+#include "net_ub_endpoint.h"
+#include "ub_worker.h"
 
 namespace ock {
 namespace hcom {
@@ -65,7 +65,7 @@ NResult NetDriverUBWithOob::DoInitialize()
                 NN_LOG_DEBUG("Local primary eid: " << localPrimaryEid << ", Remote primary eid: " << remotePrimaryEid);
                 lOpt.Ip(localPrimaryEid);
             }
- 	             
+
             result = CreateListeners(mOptions.enableMultiRail);
         } else {
             result = CreateUrmaListeners(mPublicJetty);
@@ -241,8 +241,8 @@ void NetDriverUBWithOob::DestroyEpInWorker(UBWorker *worker)
         ProcessEpError(reinterpret_cast<uintptr_t>(endPoint.Get()));
     }
 
-    NN_LOG_INFO("Destroyed all endpoints count " << endPointsCopy.size() << " in UB worker " << worker->DetailName() <<
-        " of driver " << mName);
+    NN_LOG_INFO("Destroyed all endpoints count " << endPointsCopy.size() << " in UB worker " << worker->DetailName()
+                                                 << " of driver " << mName);
     endPointsCopy.clear();
 }
 
@@ -263,8 +263,8 @@ void NetDriverUBWithOob::HandleCqEvent(urma_async_event_t *event)
 
     DestroyEpInWorker(worker);
     if (worker->ReInitializeCQ() != UB_OK) {
-        NN_LOG_ERROR("Handle Cq event ReInitializeCQ error in UB worker " << worker->DetailName() << " of driver " <<
-            mName);
+        NN_LOG_ERROR("Handle Cq event ReInitializeCQ error in UB worker " << worker->DetailName() << " of driver "
+                                                                          << mName);
         return;
     }
     if (worker->Start() != UB_OK) {
@@ -343,8 +343,8 @@ void NetDriverUBWithOob::RunInUbEventThread()
     urma_context_t *urmaContext = mContext->GetContext();
     if (urmaContext == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to get urma context for driver " << mName << ", error " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to get urma context for driver "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         mEventStarted.store(false);
         return;
     }
@@ -352,8 +352,8 @@ void NetDriverUBWithOob::RunInUbEventThread()
     int ret = fcntl(urmaContext->async_fd, F_SETFL, (static_cast<uint32_t>(flags)) | O_NONBLOCK);
     if (ret < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to change event fd of ub context for driver " << mName << ", error " <<
-            NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to change event fd of ub context for driver "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         mEventStarted.store(false);
         return;
     }
@@ -371,8 +371,8 @@ void NetDriverUBWithOob::RunInUbEventThread()
                 break;
             } else if (ret < 0 && errno != EINTR) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("Failed to poll event fd of ub context for driver " << mName << ", error " <<
-                    NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                NN_LOG_ERROR("Failed to poll event fd of ub context for driver "
+                             << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                 break;
             }
             // rc == 0
@@ -434,7 +434,7 @@ int NetDriverUBWithOob::ChooseRoutes(std::string peerEid, uvs_path_set_t &uvsPat
 int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
 {
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBServer(mSecInfoProvider, mSecInfoValidator, conn, mName,
-        mOptions.secType)) != NN_OK) {
+                                                            mOptions.secType)) != NN_OK) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
@@ -505,9 +505,9 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
         return NN_ERROR;
     }
 
-    ConnRespWithUId respWithUId{ OK, 0 };
+    ConnRespWithUId respWithUId{OK, 0};
     ret = OOBSecureProcess::SecCheckConnectionHeader(header, mOptions, mEnableTls, Protocol(), mMajorVersion,
-        mMinorVersion, respWithUId);
+                                                     mMinorVersion, respWithUId);
     if (ret != NN_OK) {
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
@@ -528,11 +528,9 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
     }
     NN_ASSERT_LOG_RETURN(lb.Get() != nullptr, NN_ERROR)
     uint16_t wkrIdx = 0;
-    if (NN_UNLIKELY(!lb->ChooseWorker(header.groupIndex, conn.GetIpAndPort(), wkrIdx)) ||
-        wkrIdx >= mWorkers.size()) {
-        NN_LOG_ERROR("Failed to find worker fit grpno " << header.groupIndex << " in " << mName << " , ret " <<
-            ret);
-        ConnRespWithUId respWithUId{ WORKER_GRPNO_MISMATCH, 0 };
+    if (NN_UNLIKELY(!lb->ChooseWorker(header.groupIndex, conn.GetIpAndPort(), wkrIdx)) || wkrIdx >= mWorkers.size()) {
+        NN_LOG_ERROR("Failed to find worker fit grpno " << header.groupIndex << " in " << mName << " , ret " << ret);
+        ConnRespWithUId respWithUId{WORKER_GRPNO_MISMATCH, 0};
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
     }
@@ -543,7 +541,7 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
 
     if (!worker->IsWorkStarted()) {
         NN_LOG_ERROR("Failed to connect worker group no " << header.groupIndex << " in " << mName);
-        ConnRespWithUId respWithUId{ WORKER_NOT_STARTED, 0 };
+        ConnRespWithUId respWithUId{WORKER_NOT_STARTED, 0};
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
     }
@@ -553,7 +551,7 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
     UBJetty *qp = nullptr;
     if ((ret = worker->CreateQP(qp)) != 0) {
         NN_LOG_ERROR("Failed to create qp for new connection in Driver " << mName << " , ret " << ret);
-        ConnRespWithUId respWithUId{ SERVER_INTERNAL_ERROR, 0 };
+        ConnRespWithUId respWithUId{SERVER_INTERNAL_ERROR, 0};
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
     }
@@ -564,7 +562,7 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
     info.token = token;
     if ((ret = qp->Initialize(mOptions.mrSendReceiveSegCount, 0, token)) != 0) {
         NN_LOG_ERROR("Failed to initialize qp for new connection in Driver " << mName << " , ret " << ret);
-        ConnRespWithUId respWithUId{ SERVER_INTERNAL_ERROR, 0 };
+        ConnRespWithUId respWithUId{SERVER_INTERNAL_ERROR, 0};
         conn.Send(&respWithUId, sizeof(ConnRespWithUId));
         return NN_ERROR;
     }
@@ -612,8 +610,8 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
         return NN_ERROR;
     }
     NN_LOG_TRACE_INFO("Send exchange info success in Server " << mName);
-    NN_LOG_TRACE_INFO("local ep ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface " <<
-        info.gid.global.interface_id);
+    NN_LOG_TRACE_INFO("local ep ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface "
+                                              << info.gid.global.interface_id);
 
     std::unique_ptr<UBJettyExchangeInfo> peerExInfo(new (std::nothrow) UBJettyExchangeInfo);
     if (!peerExInfo) {
@@ -661,8 +659,9 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
         payload = std::string(payloadChars, payloadLen);
     }
 
-    NN_LOG_TRACE_INFO("Remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface " <<
-        info.gid.global.interface_id << ", pre-post-receive-count " << info.receiveSegCount);
+    NN_LOG_TRACE_INFO("Remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface "
+                                               << info.gid.global.interface_id << ", pre-post-receive-count "
+                                               << info.receiveSegCount);
     if ((ret = qp->ChangeToReady(qp->GetExchangeInfo())) != 0) {
         NN_LOG_ERROR("Failed to change qp to ready in Driver " << mName << ", ret " << ret);
         return ret;
@@ -684,7 +683,7 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
     uint16_t i = 0;
     for (; i < prePostCount; i++) {
         if ((ret = worker->PostReceive(qp, mrSegs[i], mOptions.mrSendReceiveSegSize,
-            reinterpret_cast<urma_target_seg_t *>(qp->GetMemorySeg()))) != 0) {
+                                       reinterpret_cast<urma_target_seg_t *>(qp->GetMemorySeg()))) != 0) {
             ClearJettyResource(qp);
             return ret;
         }
@@ -713,8 +712,9 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
         socklen_t len = sizeof(struct ucred);
         if (NN_UNLIKELY(getsockopt(conn.GetFd(), SOL_SOCKET, SO_PEERCRED, &remoteIds, &len) != 0)) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to get uds ids in driver " << mName << " errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to get uds ids in driver "
+                         << mName << " errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return NN_GET_UDS_ID_INFO_FAILED;
         }
         ep->RemoteUdsIdInfo(remoteIds.pid, remoteIds.uid, remoteIds.gid);
@@ -722,7 +722,7 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
 
     ep->StoreConnInfo(NetFunc::GetIpByFd(conn.GetFd()), conn.ListenPort(), header.version, payload);
     ep.ToChild<NetUBAsyncEndpoint>()->SetRemoteHbInfo(qp->GetExchangeInfo().hbAddress, qp->GetExchangeInfo().hbKey,
-        qp->GetExchangeInfo().hbMrSize);
+                                                      qp->GetExchangeInfo().hbMrSize);
     if (mEnableTls) {
         auto childEp = ep.ToChild<NetUBAsyncEndpoint>();
         if (NN_UNLIKELY(childEp == nullptr)) {
@@ -780,12 +780,12 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
     }
 
     NN_LOG_INFO("New connection from " << conn.GetIpAndPort() << " established, async ep id " << ep->Id()
-    << ", jetty id: " << qp->QpNum() << ", worker info " << worker->DetailName());
+                                       << ", jetty id: " << qp->QpNum() << ", worker info " << worker->DetailName());
     return NN_OK;
 }
 
 NResult NetDriverUBWithOob::Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags,
-    uint8_t serverGrpNo, uint8_t clientGrpNo)
+                                    uint8_t serverGrpNo, uint8_t clientGrpNo)
 {
     if (mOptions.oobType == NET_OOB_TCP) {
         return Connect(mOobIp, mOobPort, payload, ep, flags, serverGrpNo, clientGrpNo);
@@ -798,7 +798,8 @@ NResult NetDriverUBWithOob::Connect(const std::string &payload, UBSHcomNetEndpoi
 }
 
 NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-    UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
+                                    UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo,
+                                    uint8_t clientGrpNo, uint64_t ctx)
 {
     if (ClientCheckState(payload) != 0) {
         NN_LOG_ERROR("Failed to connect as driver not start or payload oversize");
@@ -832,7 +833,7 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
     if ((flags & NET_EP_SELF_POLLING) || (flags & NET_EP_EVENT_POLLING)) {
         return ConnectSyncEp(oobIpCopy, oobPort, payload, outEp, flags, serverGrpNo, ctx);
     }
-    
+
     OOBTCPClientPtr tcpClient;
     if (mEnableTls) {
         tcpClient = new (std::nothrow)
@@ -880,7 +881,7 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
     }
 
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBClient(mSecInfoProvider, mSecInfoValidator, conn, mName, ctx,
-        mOptions.secType))) {
+                                                            mOptions.secType))) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
     
@@ -942,7 +943,7 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
     auto startSendGrpNo = NetMonotonic::TimeUs();
     ConnectHeader header;
     SetConnHeader(header, mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion, mMinorVersion,
-        mOptions.tlsVersion);
+                  mOptions.tlsVersion);
     header.reserve = ctx;
     if ((result = conn->Send(&header, sizeof(ConnectHeader))) != 0) {
         NN_LOG_ERROR("Failed to send server worker grpno in Driver " << mName << ", result " << result);
@@ -1086,8 +1087,9 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
     jetty->StoreExchangeInfo(peerExInfo.release());
 
     /* change to ready */
-    NN_LOG_TRACE_INFO("remote jetty ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface " <<
-        info.gid.global.interface_id << ", pre-post-receive-count " << info.receiveSegCount);
+    NN_LOG_TRACE_INFO("remote jetty ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface "
+                                                  << info.gid.global.interface_id << ", pre-post-receive-count "
+                                                  << info.receiveSegCount);
     if ((result = jetty->ChangeToReady(jetty->GetExchangeInfo())) != 0) {
         NN_LOG_ERROR("Failed to change jetty to ready in Driver " << mName << ", result " << result);
         return result;
@@ -1111,7 +1113,7 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
     uint16_t i = 0;
     for (; i < prePostCount; i++) {
         if ((result = worker->PostReceive(jetty, mrSegs[i], mOptions.mrSendReceiveSegSize,
-            reinterpret_cast<urma_target_seg_t *>(jetty->GetMemorySeg()))) != 0) {
+                                          reinterpret_cast<urma_target_seg_t *>(jetty->GetMemorySeg()))) != 0) {
             ClearJettyResource(jetty);
             return result;
         }
@@ -1152,8 +1154,8 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
     }
 
     ep->StoreConnInfo(NetFunc::GetIpByFd(conn->GetFd()), conn->ListenPort(), header.version, payload);
-    ep.ToChild<NetUBAsyncEndpoint>()->SetRemoteHbInfo(jetty->GetExchangeInfo().hbAddress,
-        jetty->GetExchangeInfo().hbKey, jetty->GetExchangeInfo().hbMrSize);
+    ep.ToChild<NetUBAsyncEndpoint>()->SetRemoteHbInfo(
+        jetty->GetExchangeInfo().hbAddress, jetty->GetExchangeInfo().hbKey, jetty->GetExchangeInfo().hbMrSize);
 
     // receive server ready signal
     int8_t ready = -1;
@@ -1173,7 +1175,7 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
     }
 
     NN_LOG_INFO("New connect to " << oobIp << ":" << oobPort << " established, async ep id: " << ep->Id()
-    << ", jetty id: " << jetty->QpNum() << ", worker info " << worker->DetailName());
+                                  << ", jetty id: " << jetty->QpNum() << ", worker info " << worker->DetailName());
     outEp = ep;
     reinterpret_cast<NetUBAsyncEndpoint *>(ep.Get())->GetQp()->SetUpId(ep->Id());
     auto endCreateEp = NetMonotonic::TimeUs();
@@ -1185,7 +1187,8 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
 }
 
 NResult NetDriverUBWithOob::ConnectSyncEp(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-    UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint64_t ctx)
+                                          UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo,
+                                          uint64_t ctx)
 {
     OOBTCPClientPtr client;
     if (mEnableTls) {
@@ -1211,7 +1214,7 @@ NResult NetDriverUBWithOob::ConnectSyncEp(const std::string &oobIp, uint16_t oob
     conn->SetIpAndPort(oobIp, oobPort);
 
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessInOOBClient(mSecInfoProvider, mSecInfoValidator, conn, mName, ctx,
-        mOptions.secType))) {
+                                                            mOptions.secType))) {
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
@@ -1223,7 +1226,7 @@ NResult NetDriverUBWithOob::ConnectSyncEp(const std::string &oobIp, uint16_t oob
     UBJetty *qp = nullptr;
     UBJfc *cq = nullptr;
     JettyOptions qpOptions(mOptions.qpSendQueueSize, mOptions.qpReceiveQueueSize, mOptions.mrSendReceiveSegSize,
-        mOptions.prePostReceiveSizePerQP, mOptions.slave, mOptions.ubcMode);
+                           mOptions.prePostReceiveSizePerQP, mOptions.slave, mOptions.ubcMode);
     if ((result = NetUBSyncEndpoint::CreateResources(mName, mContext, pollMode, qpOptions, qp, cq)) != 0) {
         NN_LOG_ERROR("Failed to create qp and cq, result " << result);
         return result;
@@ -1247,7 +1250,7 @@ NResult NetDriverUBWithOob::ConnectSyncEp(const std::string &oobIp, uint16_t oob
     /* send connection header */
     ConnectHeader header;
     SetConnHeader(header, mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion, mMinorVersion,
-        mOptions.tlsVersion);
+                  mOptions.tlsVersion);
 
     if ((result = conn->Send(&header, sizeof(ConnectHeader))) != 0) {
         NN_LOG_ERROR("Failed to send server worker grpno in Driver " << mName << ", result " << result);
@@ -1265,8 +1268,8 @@ NResult NetDriverUBWithOob::ConnectSyncEp(const std::string &oobIp, uint16_t oob
     /* connect response */
     auto serverAck = respWithUId.connResp;
     if (serverAck == MAGIC_MISMATCH) {
-        NN_LOG_ERROR("Failed to pass server magic validation " << mName << ",magic " << header.magic << ", result " <<
-            serverAck);
+        NN_LOG_ERROR("Failed to pass server magic validation " << mName << ",magic " << header.magic << ", result "
+                                                               << serverAck);
         return NN_CONNECT_REFUSED;
     }
 
@@ -1339,8 +1342,9 @@ NResult NetDriverUBWithOob::ConnectSyncEp(const std::string &oobIp, uint16_t oob
     }
     qp->StoreExchangeInfo(peerExInfo.release());
 
-    NN_LOG_TRACE_INFO("remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface " <<
-        info.gid.global.interface_id << ", pre-post-receive-count " << info.receiveSegCount);
+    NN_LOG_TRACE_INFO("remote qp ex info lid " << info.lid << ", qpn " << info.qpn << ", gid interface "
+                                               << info.gid.global.interface_id << ", pre-post-receive-count "
+                                               << info.receiveSegCount);
     if ((result = qp->ChangeToReady(qp->GetExchangeInfo())) != 0) {
         NN_LOG_ERROR("Failed to change ep to ready in Driver " << mName << ", result " << result);
         return result;
@@ -1364,8 +1368,8 @@ NResult NetDriverUBWithOob::ConnectSyncEp(const std::string &oobIp, uint16_t oob
     // create endpoint
     static UBSHcomNetWorkerIndex workerIndex;
     workerIndex.driverIdx = mIndex;
-    UBSHcomNetEndpointPtr ep = new (std::nothrow) NetUBSyncEndpoint(id, qp, cq, prePostCount + NN_NO4, this,
-        workerIndex);
+    UBSHcomNetEndpointPtr ep = new (std::nothrow)
+        NetUBSyncEndpoint(id, qp, cq, prePostCount + NN_NO4, this, workerIndex);
     if (ep.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create UBSHcomNetEndpoint in Driver " << mName << ", probably out of memory");
         // do later: handle pre post-ed mr
@@ -1378,8 +1382,8 @@ NResult NetDriverUBWithOob::ConnectSyncEp(const std::string &oobIp, uint16_t oob
     }
 
     for (int i = 0; i < prePostCount; i++) {
-        result = reinterpret_cast<NetUBSyncEndpoint *>(ep.Get())->PostReceive(mrSegs[i], mOptions.mrSendReceiveSegSize,
-            reinterpret_cast<urma_target_seg_t *>(qp->GetMemorySeg()));
+        result = reinterpret_cast<NetUBSyncEndpoint *>(ep.Get())->PostReceive(
+            mrSegs[i], mOptions.mrSendReceiveSegSize, reinterpret_cast<urma_target_seg_t *>(qp->GetMemorySeg()));
         if (result != 0) {
             // do later if failure, qp should break at this time
             return result;
@@ -1458,7 +1462,7 @@ int NetDriverUBWithOob::SendRawSglFinishedCB(UBOpContextInfo *ctx, UBSHcomNetReq
     netCtx.mHeader.Invalid();
     netCtx.mMessage = nullptr;
     if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglCtx->iov,
-        sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != UB_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * sglCtx->iovCount) != UB_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         return UB_PARAM_INVALID;
     }
@@ -1468,7 +1472,7 @@ int NetDriverUBWithOob::SendRawSglFinishedCB(UBOpContextInfo *ctx, UBSHcomNetReq
     if (netCtx.mOriginalSglReq.upCtxSize > 0 &&
         netCtx.mOriginalSglReq.upCtxSize <= sizeof(UBSHcomNetTransSglRequest::upCtxData)) {
         if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalSglReq.upCtxData, NN_NO16, sglCtx->upCtx, sglCtx->upCtxSize) !=
-            UB_OK)) {
+                        UB_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
             return UB_PARAM_INVALID;
         }
@@ -1476,8 +1480,8 @@ int NetDriverUBWithOob::SendRawSglFinishedCB(UBOpContextInfo *ctx, UBSHcomNetReq
     worker->ReturnSglContextInfo(sglCtx);
     // called to callback
     if (NN_UNLIKELY((result = mRequestPostedHandler(netCtx)) != UB_OK)) {
-        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName << " return non-zero for sgl type " <<
-            ctx->opType << " done");
+        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName << " return non-zero for sgl type " << ctx->opType
+                                                            << " done");
     }
     netCtx.mEp.Set(nullptr);
 
@@ -1496,18 +1500,20 @@ void PrintSendFinishDebug(UBSHcomNetTransHeader &header, UBOpContextInfo *ctx)
     UBSHcomNetEndpointPtr debugEp = reinterpret_cast<UBSHcomNetEndpoint *>(ctx->ubJetty->GetUpContext());
     uint64_t epId = debugEp->Id();
     if (ctx->opType == UBOpContextInfo::SEND) {
-        NN_LOG_DEBUG("[Request Send] ------ ep id = " << epId << ", headerCrc = " << header.headerCrc
-            << ", opCode = " << header.opCode << ", flags = " << header.flags << ", seqNo = " << header.seqNo
-            << ",timeout = " << header.timeout << ", errCode = " << header.errorCode << ", dataLength = "
-            << header.dataLength << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
+        NN_LOG_DEBUG("[Request Send] ------ ep id = "
+                     << epId << ", headerCrc = " << header.headerCrc << ", opCode = " << header.opCode
+                     << ", flags = " << header.flags << ", seqNo = " << header.seqNo << ",timeout = " << header.timeout
+                     << ", errCode = " << header.errorCode << ", dataLength = " << header.dataLength
+                     << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
     } else {
-        NN_LOG_DEBUG("[Request Send] ------ raw request, ep id = " << epId << "dataLength = " << ctx->dataSize <<
-            ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
+        NN_LOG_DEBUG("[Request Send] ------ raw request, ep id = "
+                     << epId << "dataLength = " << ctx->dataSize
+                     << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
     }
 }
 
 int NetDriverUBWithOob::SendSglInlineFinishedCB(UBOpContextInfo *ctx, UBSHcomNetRequestContext &requestCtx,
-    UBWorker *worker)
+                                                UBWorker *worker)
 {
     int result = 0;
     requestCtx.mHeader.Invalid();
@@ -1523,7 +1529,7 @@ int NetDriverUBWithOob::SendSglInlineFinishedCB(UBOpContextInfo *ctx, UBSHcomNet
     if (requestCtx.mOriginalReq.upCtxSize > 0 &&
         requestCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData)) {
         if (NN_UNLIKELY(memcpy_s(requestCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx, ctx->upCtxSize) !=
-            UB_OK)) {
+                        UB_OK)) {
             NN_LOG_ERROR("Failed to copy req to ctx");
             result = UB_PARAM_INVALID;
         }
@@ -1532,21 +1538,23 @@ int NetDriverUBWithOob::SendSglInlineFinishedCB(UBOpContextInfo *ctx, UBSHcomNet
     worker->ReturnOpContextInfo(ctx);
     // call to callback
     if (result == UB_OK && NN_UNLIKELY((result = mRequestPostedHandler(requestCtx)) != UB_OK)) {
-        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName <<
-            " return non-zero for receive message [dataSize " << requestCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Call requestPostedHandler in Driver "
+                     << mName << " return non-zero for receive message [dataSize " << requestCtx.mHeader.dataLength
+                     << "]");
     }
     requestCtx.mEp.Set(nullptr);
     return result;
 }
 
 int NetDriverUBWithOob::SendAndSendRawFinishedCB(UBOpContextInfo *ctx, UBSHcomNetRequestContext &requestCtx,
-    UBWorker *worker)
+                                                 UBWorker *worker)
 {
     using NRC = UBSHcomNetRequestContext;
     int result = 0;
-    if (ctx->opType == UBOpContextInfo::SEND && NN_UNLIKELY(memcpy_s(&(requestCtx.mHeader),
-        sizeof(UBSHcomNetTransHeader), reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr),
-        sizeof(UBSHcomNetTransHeader)) != UB_OK)) {
+    if (ctx->opType == UBOpContextInfo::SEND &&
+        NN_UNLIKELY(memcpy_s(&(requestCtx.mHeader), sizeof(UBSHcomNetTransHeader),
+                             reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr),
+                             sizeof(UBSHcomNetTransHeader)) != UB_OK)) {
         NN_LOG_ERROR("Failed to copy ctx to requestCtx");
         result = UB_ERROR;
     }
@@ -1567,8 +1575,7 @@ int NetDriverUBWithOob::SendAndSendRawFinishedCB(UBOpContextInfo *ctx, UBSHcomNe
 
     if (requestCtx.mOriginalReq.upCtxSize > 0 &&
         requestCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData) &&
-        NN_UNLIKELY(memcpy_s(requestCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx,
-        ctx->upCtxSize) != UB_OK)) {
+        NN_UNLIKELY(memcpy_s(requestCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx, ctx->upCtxSize) != UB_OK)) {
         NN_LOG_ERROR("Failed to copy ctx to requestCtx");
         result = UB_ERROR;
     }
@@ -1584,9 +1591,9 @@ int NetDriverUBWithOob::SendAndSendRawFinishedCB(UBOpContextInfo *ctx, UBSHcomNe
     }
     // call to callback
     if (result == UB_OK && NN_UNLIKELY((result = mRequestPostedHandler(requestCtx)) != UB_OK)) {
-        NN_LOG_ERROR("Call requestPostedHandler in Driver " << mName
-        << " return non-zero for receive message [opCode: " << requestCtx.mHeader.opCode << ", dataSize "
-        << requestCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Call requestPostedHandler in Driver "
+                     << mName << " return non-zero for receive message [opCode: " << requestCtx.mHeader.opCode
+                     << ", dataSize " << requestCtx.mHeader.dataLength << "]");
     }
     requestCtx.mEp.Set(nullptr);
     return result;
@@ -1638,19 +1645,19 @@ int NetDriverUBWithOob::RWSglOneSideDoneCB(UBOpContextInfo *ctx, UBSHcomNetReque
     // set context
     netCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->ubJetty->GetUpContext()));
 
-    NN_LOG_DEBUG("[Request RWSglOneSideDoneCB] ------ ep id = " << netCtx.mEp->Id() << ", opType = " <<
-        static_cast<uint32_t>(ctx->opType) << ", lKey = " << ctx->lKey << ", size = " << ctx->dataSize <<
-        ", header opcode = " << netCtx.mHeader.opCode << ", seqNo = " << netCtx.mHeader.seqNo << ", status = " <<
-        UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
+    NN_LOG_DEBUG("[Request RWSglOneSideDoneCB] ------ ep id = "
+                 << netCtx.mEp->Id() << ", opType = " << static_cast<uint32_t>(ctx->opType) << ", lKey = " << ctx->lKey
+                 << ", size = " << ctx->dataSize << ", header opcode = " << netCtx.mHeader.opCode
+                 << ", seqNo = " << netCtx.mHeader.seqNo
+                 << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
 
     netCtx.mResult = sglContext->result;
-    netCtx.mOpType =
-        ctx->opType == UBOpContextInfo::SGL_WRITE ? UBSHcomNetRequestContext::NN_SGL_WRITTEN :
-        UBSHcomNetRequestContext::NN_SGL_READ;
+    netCtx.mOpType = ctx->opType == UBOpContextInfo::SGL_WRITE ? UBSHcomNetRequestContext::NN_SGL_WRITTEN :
+                                                                 UBSHcomNetRequestContext::NN_SGL_READ;
     netCtx.mHeader.Invalid();
     netCtx.mMessage = nullptr;
     if (NN_UNLIKELY(memcpy_s(netCtx.iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, sglContext->iov,
-        sizeof(UBSHcomNetTransSgeIov) * sglContext->iovCount) != NN_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * sglContext->iovCount) != NN_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         result = NN_INVALID_PARAM;
     }
@@ -1659,8 +1666,8 @@ int NetDriverUBWithOob::RWSglOneSideDoneCB(UBOpContextInfo *ctx, UBSHcomNetReque
     netCtx.mOriginalSglReq.upCtxSize = sglContext->upCtxSize;
     if (netCtx.mOriginalSglReq.upCtxSize > 0 &&
         netCtx.mOriginalSglReq.upCtxSize <= sizeof(UBSHcomNetTransSglRequest::upCtxData)) {
-        if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalSglReq.upCtxData, NN_NO16,
-            sglContext->upCtx, sglContext->upCtxSize) != NN_OK)) {
+        if (NN_UNLIKELY(memcpy_s(netCtx.mOriginalSglReq.upCtxData, NN_NO16, sglContext->upCtx, sglContext->upCtxSize) !=
+                        NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
             result = NN_INVALID_PARAM;
         }
@@ -1668,8 +1675,8 @@ int NetDriverUBWithOob::RWSglOneSideDoneCB(UBOpContextInfo *ctx, UBSHcomNetReque
     worker->ReturnSglContextInfo(sglContext);
     // called to callback
     if (result == NN_OK && NN_UNLIKELY((result = mOneSideDoneHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Call oneSideDoneHandler in Driver " << mName << " return non-zero for sgl type " << ctx->opType <<
-            " done");
+        NN_LOG_ERROR("Call oneSideDoneHandler in Driver " << mName << " return non-zero for sgl type " << ctx->opType
+                                                          << " done");
     }
     netCtx.mEp.Set(nullptr);
     worker->ReturnOpContextInfo(ctx);
@@ -1687,12 +1694,12 @@ int NetDriverUBWithOob::OneSideDoneCB(UBOpContextInfo *ctx)
         // set context
         netCtx.mResult = UBOpContextInfo::GetNResult(ctx->opResultType);
         netCtx.mEp.Set(reinterpret_cast<UBSHcomNetEndpoint *>(ctx->ubJetty->GetUpContext()));
-        NN_LOG_DEBUG("[Request oneSideDown] ------ ep id = " << netCtx.mEp->Id() << ", opType = " <<
-            static_cast<uint32_t>(ctx->opType) << ", lKey = " << ctx->lKey << ", size = " << ctx->dataSize <<
-            ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
-        netCtx.mOpType =
-            ctx->opType == UBOpContextInfo::WRITE ? UBSHcomNetRequestContext::NN_WRITTEN :
-            UBSHcomNetRequestContext::NN_READ;
+        NN_LOG_DEBUG("[Request oneSideDown] ------ ep id = "
+                     << netCtx.mEp->Id() << ", opType = " << static_cast<uint32_t>(ctx->opType)
+                     << ", lKey = " << ctx->lKey << ", size = " << ctx->dataSize
+                     << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
+        netCtx.mOpType = ctx->opType == UBOpContextInfo::WRITE ? UBSHcomNetRequestContext::NN_WRITTEN :
+                                                                 UBSHcomNetRequestContext::NN_READ;
         netCtx.mHeader.Invalid();
         netCtx.mMessage = nullptr;
         netCtx.mOriginalReq.lAddress = ctx->mrMemAddr;
@@ -1702,8 +1709,7 @@ int NetDriverUBWithOob::OneSideDoneCB(UBOpContextInfo *ctx)
 
         if (netCtx.mOriginalReq.upCtxSize > 0 &&
             netCtx.mOriginalReq.upCtxSize <= sizeof(UBSendReadWriteRequest::upCtxData) &&
-            NN_UNLIKELY(memcpy_s(netCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx,
-            ctx->upCtxSize) != NN_OK)) {
+            NN_UNLIKELY(memcpy_s(netCtx.mOriginalReq.upCtxData, ctx->upCtxSize, ctx->upCtx, ctx->upCtxSize) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy ctx to requestCtx");
             result = NN_ERROR;
         }
@@ -1761,8 +1767,8 @@ void NetDriverUBWithOob::ProcessEpError(uintptr_t ep)
     auto qp = endpointPtr->GetQp();
     qp->Stop();
 
-    NN_LOG_WARN("Handle Ep state " << UBSHcomNEPStateToString(endpointPtr->State().Get()) << ", Ep id " <<
-        endpointPtr->Id() << " , try call Ep broken handle");
+    NN_LOG_WARN("Handle Ep state " << UBSHcomNEPStateToString(endpointPtr->State().Get()) << ", Ep id "
+                                   << endpointPtr->Id() << " , try call Ep broken handle");
     mEndPointBrokenHandler(endpointPtr);
 }
 
@@ -1796,10 +1802,10 @@ void NetDriverUBWithOob::ProcessTwoSideHeartbeat(UBOpContextInfo *ctx, UBSHcomNe
 }
 
 NResult NetDriverUBWithOob::NewRequestOnEncryption(UBOpContextInfo *ctx, UBSHcomNetMessage &msg, bool &messageReady,
-    UBSHcomNetRequestContext &netCtx)
+                                                   UBSHcomNetRequestContext &netCtx)
 {
     if (NN_UNLIKELY(ctx == nullptr || ctx->ubJetty == nullptr || ctx->ubJetty->GetUpContext1() == 0 ||
-        ctx->ubJetty->GetUpContext() == 0)) {
+                    ctx->ubJetty->GetUpContext() == 0)) {
         NN_LOG_ERROR("Ctx or QP or Worker or ep is null of RequestReceived in Driver " << mName);
         return NN_INVALID_PARAM;
     }
@@ -1818,23 +1824,45 @@ NResult NetDriverUBWithOob::NewRequestOnEncryption(UBOpContextInfo *ctx, UBSHcom
         ubWorker->RePostReceive(ctx);
         return NN_INVALID_PARAM;
     }
-    size_t decryptRawLen = asyncEp->mAes.GetRawLen(tmpHeader->dataLength);
-    messageReady = msg.AllocateIfNeed(decryptRawLen);
+
+    uint32_t extHeaderSize = 0;
+    // 分片包含额外的extHeader，extHeader没有加密
+    if (tmpHeader->extHeaderType == UBSHcomExtHeaderType::FRAGMENT) {
+        extHeaderSize = sizeof(UBSHcomFragmentHeader);
+    }
+
+    uint32_t cipherLen = tmpHeader->dataLength - extHeaderSize; // 消息体密文长度
+    size_t decryptRawLen = asyncEp->mAes.GetRawLen(cipherLen);  // 预期解密后消息体明文长度
+    size_t totalBufSize = decryptRawLen + extHeaderSize;
+
+    messageReady = msg.AllocateIfNeed(totalBufSize);
     if (NN_LIKELY(messageReady)) {
+        // 分片包需要额外拷贝extHeader
+        if (extHeaderSize > 0) {
+            if (memcpy_s(msg.mBuf, totalBufSize,
+                         reinterpret_cast<void *>(ctx->mrMemAddr + sizeof(UBSHcomNetTransHeader)),
+                         extHeaderSize) != NN_OK) {
+                NN_LOG_ERROR("Failed to memcpy extHeader");
+                ubWorker->RePostReceive(ctx);
+                return NN_ERROR;
+            }
+        }
         uint32_t decryptLen = 0;
-        if (!asyncEp->mAes.Decrypt(asyncEp->mSecrets, reinterpret_cast<void *>(ctx->mrMemAddr +
-            sizeof(UBSHcomNetTransHeader)), tmpHeader->dataLength, msg.mBuf, decryptLen)) {
+        if (!asyncEp->mAes.Decrypt(
+                asyncEp->mSecrets,
+                reinterpret_cast<void *>(ctx->mrMemAddr + sizeof(UBSHcomNetTransHeader) + extHeaderSize), cipherLen,
+                reinterpret_cast<void *>(msg.mBuf + extHeaderSize), decryptLen)) {
             NN_LOG_ERROR("Failed to decrypt data");
             (void)ubWorker->RePostReceive(ctx);
             return NN_DECRYPT_FAILED;
         }
-        if (memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
-            sizeof(UBSHcomNetTransHeader)) != NN_OK) {
+        if (memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader, sizeof(UBSHcomNetTransHeader)) !=
+            NN_OK) {
             NN_LOG_ERROR("Failed to memcpy to netCtx header");
             ubWorker->RePostReceive(ctx);
             return NN_ERROR;
         }
-        msg.mDataLen = decryptRawLen;
+        msg.mDataLen = decryptLen + extHeaderSize;
     }
     return NN_OK;
 }
@@ -1863,11 +1891,12 @@ int NetDriverUBWithOob::NewRequest(UBOpContextInfo *ctx)
         uint64_t epId = debugEp->Id();
         auto tmpAsyncEp = debugEp.ToChild<NetUBAsyncEndpoint>();
         UBSHcomNetTransHeader *header = (UBSHcomNetTransHeader *)tmpHeader;
-        NN_LOG_DEBUG("[Request Recv] ------ common request, ep id = " << epId << ", headerCrc = "
-        << header->headerCrc << ", opCode = " << header->opCode << ", flags=" << header->flags << ", seqNo="
-        << header->seqNo << ",timeout=" << header->timeout << ", errCode=" << header->errorCode << ", dataLength="
-        << header->dataLength << " dataSize = " << ctx->dataSize << ", status = " <<
-        UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
+        NN_LOG_DEBUG("[Request Recv] ------ common request, ep id = "
+                     << epId << ", headerCrc = " << header->headerCrc << ", opCode = " << header->opCode
+                     << ", flags=" << header->flags << ", seqNo=" << header->seqNo << ",timeout=" << header->timeout
+                     << ", errCode=" << header->errorCode << ", dataLength=" << header->dataLength
+                     << " dataSize = " << ctx->dataSize
+                     << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
 
         if (NN_UNLIKELY(NetFunc::ValidateHeaderWithDataSize(*tmpHeader, ctx->dataSize) != NN_OK)) {
             NN_LOG_ERROR("Failed to validate received header " << tmpHeader->headerCrc);
@@ -1876,10 +1905,12 @@ int NetDriverUBWithOob::NewRequest(UBOpContextInfo *ctx)
         }
         if (NN_LIKELY(!mOptions.enableTls)) {
             messageReady = msg.AllocateIfNeed(tmpHeader->dataLength);
-            if (NN_LIKELY(messageReady) && (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader),
-                tmpHeader, sizeof(UBSHcomNetTransHeader)) != NN_OK) || NN_UNLIKELY(memcpy_s(msg.mBuf,
-                tmpHeader->dataLength, reinterpret_cast<void *>(ctx->mrMemAddr + sizeof(UBSHcomNetTransHeader)),
-                tmpHeader->dataLength) != NN_OK))) {
+            if (NN_LIKELY(messageReady) &&
+                (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
+                                      sizeof(UBSHcomNetTransHeader)) != NN_OK) ||
+                 NN_UNLIKELY(memcpy_s(msg.mBuf, tmpHeader->dataLength,
+                                      reinterpret_cast<void *>(ctx->mrMemAddr + sizeof(UBSHcomNetTransHeader)),
+                                      tmpHeader->dataLength) != NN_OK))) {
                 NN_LOG_ERROR("Failed to copy header");
                 worker->RePostReceive(ctx);
                 return NN_ERROR;
@@ -1900,9 +1931,9 @@ int NetDriverUBWithOob::NewRequest(UBOpContextInfo *ctx)
         }
 
         if (NN_UNLIKELY(!messageReady)) {
-            NN_LOG_ERROR("Failed to build UBSHcomNetRequestContext or message in Driver " << mName <<
-                ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " << msg.mDataLen <<
-                "] will be dropped");
+            NN_LOG_ERROR("Failed to build UBSHcomNetRequestContext or message in Driver "
+                         << mName << ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize "
+                         << msg.mDataLen << "] will be dropped");
             return NN_OK;
         }
 
@@ -1915,9 +1946,9 @@ int NetDriverUBWithOob::NewRequest(UBOpContextInfo *ctx)
 
         // call to callback
         if (NN_UNLIKELY((result = mReceivedRequestHandler(netCtx)) != NN_OK)) {
-            NN_LOG_ERROR("Call receivedRequestHandler in Driver " << mName <<
-                " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-                netCtx.mHeader.dataLength << "]");
+            NN_LOG_ERROR("Call receivedRequestHandler in Driver "
+                         << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                         << ", dataSize " << netCtx.mHeader.dataLength << "]");
         }
         netCtx.mEp.Set(nullptr);
     } else if (ctx->opType == UBOpContextInfo::RECEIVE && immData != 0) {
@@ -1926,9 +1957,9 @@ int NetDriverUBWithOob::NewRequest(UBOpContextInfo *ctx)
         UBSHcomNetEndpointPtr debugEp = reinterpret_cast<UBSHcomNetEndpoint *>(qpUpContext);
         uint64_t epId = debugEp->Id();
         auto tmpAsyncEp = debugEp.ToChild<NetUBAsyncEndpoint>();
-        NN_LOG_DEBUG("[Request Recv] ------ raw request, ep id = " << epId << ", seqNo = " << immData
-        << ", dataSize = " << msg.DataLen() << ", status = " <<
-        UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
+        NN_LOG_DEBUG("[Request Recv] ------ raw request, ep id = "
+                     << epId << ", seqNo = " << immData << ", dataSize = " << msg.DataLen()
+                     << ", status = " << UBSHcomRequestStatusToString(UBSHcomNetRequestStatus::POLLED));
 
         return NewReceivedRawRequest(ctx, netCtx, msg, worker, immData);
     } else {
@@ -1939,15 +1970,15 @@ int NetDriverUBWithOob::NewRequest(UBOpContextInfo *ctx)
 }
 
 NResult NetDriverUBWithOob::NewReceivedRawRequest(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-    UBSHcomNetMessage &msg, UBWorker *worker, uint32_t immData) const
+                                                  UBSHcomNetMessage &msg, UBWorker *worker, uint32_t immData) const
 { /* for raw message */
     bool messageReady = true;
     auto qpUpContext = ctx->ubJetty->GetUpContext();
     if (NN_LIKELY(!mOptions.enableTls)) {
         messageReady = msg.AllocateIfNeed(ctx->dataSize);
         if (NN_LIKELY(messageReady)) {
-            if (NN_UNLIKELY(memcpy_s(msg.mBuf, ctx->dataSize,
-                reinterpret_cast<void *>(ctx->mrMemAddr), ctx->dataSize) != NN_OK)) {
+            if (NN_UNLIKELY(memcpy_s(msg.mBuf, ctx->dataSize, reinterpret_cast<void *>(ctx->mrMemAddr),
+                                     ctx->dataSize) != NN_OK)) {
                 NN_LOG_ERROR("Failed to copy ctx to msg");
                 return NN_ERROR;
             }
@@ -1971,7 +2002,7 @@ NResult NetDriverUBWithOob::NewReceivedRawRequest(UBOpContextInfo *ctx, UBSHcomN
         if (NN_LIKELY(messageReady)) {
             uint32_t decryptLen = 0;
             if (!childEp->mAes.Decrypt(childEp->mSecrets, reinterpret_cast<void *>(ctx->mrMemAddr), ctx->dataSize,
-                msg.mBuf, decryptLen)) {
+                                       msg.mBuf, decryptLen)) {
                 NN_LOG_ERROR("Failed to decrypt data");
                 (void)worker->RePostReceive(ctx);
                 return NN_DECRYPT_FAILED;
@@ -1988,9 +2019,9 @@ NResult NetDriverUBWithOob::NewReceivedRawRequest(UBOpContextInfo *ctx, UBSHcomN
     }
 
     if (NN_UNLIKELY(!messageReady)) {
-        NN_LOG_ERROR("Failed to build UBSHcomNetRequestContext or message in Driver " << mName <<
-            ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " << msg.mDataLen <<
-            "] will be dropped");
+        NN_LOG_ERROR("Failed to build UBSHcomNetRequestContext or message in Driver "
+                     << mName << ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " << msg.mDataLen
+                     << "] will be dropped");
         return NN_OK;
     }
 
@@ -2004,9 +2035,9 @@ NResult NetDriverUBWithOob::NewReceivedRawRequest(UBOpContextInfo *ctx, UBSHcomN
 
     // call to callback
     if (NN_UNLIKELY((ret = mReceivedRequestHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Call receivedRequestHandler in Driver " << mName <<
-            " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-            netCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Call receivedRequestHandler in Driver "
+                     << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                     << ", dataSize " << netCtx.mHeader.dataLength << "]");
     }
 
     netCtx.mEp.Set(nullptr);
@@ -2015,7 +2046,7 @@ NResult NetDriverUBWithOob::NewReceivedRawRequest(UBOpContextInfo *ctx, UBSHcomN
 }
 
 NResult NetDriverUBWithOob::NewReceivedRequest(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-    UBSHcomNetMessage &msg, UBWorker *worker) const
+                                               UBSHcomNetMessage &msg, UBWorker *worker) const
 {
     bool messageReady = true;
     auto *tmpHeader = reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr);
@@ -2049,14 +2080,15 @@ NResult NetDriverUBWithOob::NewReceivedRequest(UBOpContextInfo *ctx, UBSHcomNetR
     messageReady = msg.AllocateIfNeed(decryptRawLen);
     if (NN_LIKELY(messageReady)) {
         uint32_t decryptLen = 0;
-        if (!asyncEp->mAes.Decrypt(asyncEp->mSecrets, reinterpret_cast<void *>(ctx->mrMemAddr +
-            sizeof(UBSHcomNetTransHeader)), tmpHeader->dataLength, msg.mBuf, decryptLen)) {
+        if (!asyncEp->mAes.Decrypt(asyncEp->mSecrets,
+                                   reinterpret_cast<void *>(ctx->mrMemAddr + sizeof(UBSHcomNetTransHeader)),
+                                   tmpHeader->dataLength, msg.mBuf, decryptLen)) {
             NN_LOG_ERROR("Failed to decrypt data");
             (void)worker->RePostReceive(ctx);
             return NN_DECRYPT_FAILED;
         }
         if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
-            sizeof(UBSHcomNetTransHeader)) != UB_OK)) {
+                                 sizeof(UBSHcomNetTransHeader)) != UB_OK)) {
             NN_LOG_ERROR("Failed to copy header to netCtx");
             worker->RePostReceive(ctx);
             return NN_INVALID_PARAM;
@@ -2070,9 +2102,9 @@ NResult NetDriverUBWithOob::NewReceivedRequest(UBOpContextInfo *ctx, UBSHcomNetR
     }
 
     if (NN_UNLIKELY(!messageReady)) {
-        NN_LOG_ERROR("Failed to build UBSHcomNetRequestContext or message in Driver " << mName <<
-            ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " << msg.mDataLen <<
-            "] will be dropped");
+        NN_LOG_ERROR("Failed to build UBSHcomNetRequestContext or message in Driver "
+                     << mName << ", receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " << msg.mDataLen
+                     << "] will be dropped");
         return NN_OK;
     }
 
@@ -2084,9 +2116,9 @@ NResult NetDriverUBWithOob::NewReceivedRequest(UBOpContextInfo *ctx, UBSHcomNetR
 
     // call to callback
     if (NN_UNLIKELY((result = mReceivedRequestHandler(netCtx)) != NN_OK)) {
-        NN_LOG_ERROR("Call receivedRequestHandler in Driver " << mName <<
-            " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-            netCtx.mHeader.dataLength << "]");
+        NN_LOG_ERROR("Call receivedRequestHandler in Driver "
+                     << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                     << ", dataSize " << netCtx.mHeader.dataLength << "]");
     }
 
     netCtx.mEp.Set(nullptr);
@@ -2095,10 +2127,11 @@ NResult NetDriverUBWithOob::NewReceivedRequest(UBOpContextInfo *ctx, UBSHcomNetR
 }
 
 NResult NetDriverUBWithOob::NewReceivedRequestWithoutCopy(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
-    UBSHcomNetMessage &msg, UBWorker *worker, void *dataAddress, UBSHcomNetTransHeader *header) const
+                                                          UBSHcomNetMessage &msg, UBWorker *worker, void *dataAddress,
+                                                          UBSHcomNetTransHeader *header) const
 {
-    if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), header,
-        sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
+    if (NN_UNLIKELY(memcpy_s(&(netCtx.mHeader), sizeof(UBSHcomNetTransHeader), header, sizeof(UBSHcomNetTransHeader)) !=
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         return NN_INVALID_PARAM;
     }
@@ -2114,9 +2147,9 @@ NResult NetDriverUBWithOob::NewReceivedRequestWithoutCopy(UBOpContextInfo *ctx, 
     int result = 0;
     // call to callback
     if (NN_UNLIKELY((result = mReceivedRequestHandler(netCtx)) != NN_OK)) {
-        NN_LOG_WARN("Verbs Call receivedRequestHandler in Driver " << mName <<
-            " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode << ", dataSize " <<
-            netCtx.mHeader.dataLength << "]");
+        NN_LOG_WARN("Verbs Call receivedRequestHandler in Driver "
+                    << mName << " return non-zero for receive message [opCode: " << netCtx.mHeader.opCode
+                    << ", dataSize " << netCtx.mHeader.dataLength << "]");
     }
     msg.SetBuf(nullptr, 0);
     netCtx.mMessage = nullptr;
@@ -2158,7 +2191,7 @@ int NetDriverUBWithOob::OneSideDone(UBOpContextInfo *ctx)
 }
 
 NResult NetDriverUBWithOob::Connect(const std::string &serverUrl, const std::string &payload, UBSHcomNetEndpointPtr &ep,
-    uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
+                                    uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
 {
     NetDriverOobType type;
     std::string ip;
@@ -2179,6 +2212,6 @@ NResult NetDriverUBWithOob::Connect(const std::string &serverUrl, const std::str
 
     return Connect(ip, port, payload, ep, flags, serverGrpNo, clientGrpNo, ctx);
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

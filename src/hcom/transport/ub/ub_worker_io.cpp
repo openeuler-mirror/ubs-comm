@@ -85,7 +85,7 @@ UResult UBWorker::RePostReceive(UBOpContextInfo *ctx)
 }
 
 UResult UBWorker::PostSend(UBJetty *qp, const UBSendReadWriteRequest &req, urma_target_seg_t *localSeg,
-    uint32_t immData)
+                           uint32_t immData)
 {
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Failed to PostSend with UBWorker " << DetailName() << " as qp is null");
@@ -111,7 +111,7 @@ UResult UBWorker::PostSend(UBJetty *qp, const UBSendReadWriteRequest &req, urma_
     ctx->opType = immData == 0 ? UBOpContextInfo::SEND : UBOpContextInfo::SEND_RAW;
     ctx->opResultType = UBOpContextInfo::SUCCESS;
     ctx->upCtxSize = req.upCtxSize;
-    if (req.upCtxSize > 0  && NN_UNLIKELY(memcpy_s(ctx->upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != UB_OK)) {
+    if (req.upCtxSize > 0 && NN_UNLIKELY(memcpy_s(ctx->upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != UB_OK)) {
         NN_LOG_ERROR("Failed to copy req to ctx");
         qp->ReturnPostSendWr();
         mOpCtxInfoPool.Return(ctx);
@@ -137,7 +137,7 @@ UResult UBWorker::PostSend(UBJetty *qp, const UBSendReadWriteRequest &req, urma_
 }
 
 UResult UBWorker::PostSendSglInline(UBJetty *qp, const UBSendSglInlineHeader &header, const UBSendReadWriteRequest &req,
-    uint32_t immData)
+                                    uint32_t immData)
 {
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Verbs Failed to PostSend with RDMAWorker " << DetailName() << " as qp is null");
@@ -193,7 +193,7 @@ UResult UBWorker::PostSendSglInline(UBJetty *qp, const UBSendSglInlineHeader &he
 }
 
 UResult UBWorker::PostSendSgl(UBJetty *qp, const UBSHcomNetTransSglRequest &req, const UBSHcomNetTransRequest &tlsReq,
-    uint32_t immData, bool isEncrypted)
+                              uint32_t immData, bool isEncrypted)
 {
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Failed to PostSendSgl with UBWorker " << DetailName() << " as qp is null");
@@ -208,7 +208,7 @@ UResult UBWorker::PostSendSgl(UBJetty *qp, const UBSHcomNetTransSglRequest &req,
     sglCtx->qp = qp;
     sglCtx->result = UB_OK;
     if (NN_UNLIKELY(memcpy_s(sglCtx->iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, req.iov,
-        sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != UB_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != UB_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         mSglCtxInfoPool.Return(sglCtx);
         return UB_PARAM_INVALID;
@@ -254,7 +254,7 @@ UResult UBWorker::PostSendSgl(UBJetty *qp, const UBSHcomNetTransSglRequest &req,
     UResult result = UB_OK;
     if (isEncrypted != 0) {
         result = qp->PostSend(tlsReq.lAddress, tlsReq.size, reinterpret_cast<urma_target_seg_t *>(tlsReq.srcSeg),
-            reinterpret_cast<UBOpContextInfo *>(ctx), immData);
+                              reinterpret_cast<UBOpContextInfo *>(ctx), immData);
     } else {
         result = qp->PostSendSgl(req.iov, req.iovCount, reinterpret_cast<uintptr_t>(ctx), immData);
     }
@@ -311,10 +311,10 @@ UResult UBWorker::PostRead(UBJetty *qp, const UBSendReadWriteRequest &req)
     UResult result = UB_OK;
     if (mOptions.ubcMode == UBSHcomUbcMode::HighBandwidth) {
         result = qp->PostRead(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress,
-            reinterpret_cast<uint64_t>(req.dstSeg), req.size, reinterpret_cast<uint64_t>(ctx));
+                              reinterpret_cast<uint64_t>(req.dstSeg), req.size, reinterpret_cast<uint64_t>(ctx));
     } else {
-        result = qp->PostRead(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress,
-            req.rKey, req.size, reinterpret_cast<uint64_t>(ctx));
+        result = qp->PostRead(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress, req.rKey,
+                              req.size, reinterpret_cast<uint64_t>(ctx));
     }
     if (NN_UNLIKELY(result != UB_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
@@ -329,7 +329,7 @@ UResult UBWorker::PostRead(UBJetty *qp, const UBSendReadWriteRequest &req)
 }
 
 UResult UBWorker::CreateOneSideCtx(const UBSgeCtxInfo &sgeInfo, const UBSHcomNetTransSgeIov *iov, uint32_t iovCount,
-    uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead)
+                                   uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead)
 {
     if (iov == nullptr || iovCount == NN_NO0 || iovCount > NN_NO4 || ctxArr == nullptr) {
         NN_LOG_ERROR("Urma failed to create oneSide operation ctx because param invalid");
@@ -349,8 +349,8 @@ UResult UBWorker::CreateOneSideCtx(const UBSgeCtxInfo &sgeInfo, const UBSHcomNet
         }
 
         if (NN_UNLIKELY(!sgeInfo.ctx->qp->GetOneSideWr())) {
-            NN_LOG_ERROR("Urma failed to oneSide operation with UBWorker " << DetailName() <<
-                " as no one side wr left");
+            NN_LOG_ERROR("Urma failed to oneSide operation with UBWorker " << DetailName()
+                                                                           << " as no one side wr left");
             mOpCtxInfoPool.Return(ctx);
             for (uint32_t j = 0; j < i; ++j) {
                 sgeInfo.ctx->qp->ReturnOneSideWr();
@@ -395,7 +395,7 @@ UResult UBWorker::PostOneSideSgl(UBJetty *qp, const UBSendSglRWRequest &req, boo
     sglCtx->qp = qp;
     sglCtx->result = UB_OK;
     if (NN_UNLIKELY(memcpy_s(sglCtx->iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, req.iov,
-        sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != UB_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != UB_OK)) {
         NN_LOG_ERROR("Urma failed to copy iov to sglCtx");
         mSglCtxInfoPool.Return(sglCtx);
         return UB_PARAM_INVALID;
@@ -470,8 +470,8 @@ UResult UBWorker::PostWrite(UBJetty *qp, const UBSendReadWriteRequest &req, UBOp
     qp->AddOpCtxInfo(ctx);
 
     UResult result = UB_OK;
-    result = qp->PostWrite(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress,
-        req.rKey, req.size, reinterpret_cast<uint64_t>(ctx));
+    result = qp->PostWrite(req.lAddress, reinterpret_cast<urma_target_seg_t *>(req.srcSeg), req.rAddress, req.rKey,
+                           req.size, reinterpret_cast<uint64_t>(ctx));
     if (NN_UNLIKELY(result != UB_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
         qp->ReturnOneSideWr();
@@ -483,6 +483,6 @@ UResult UBWorker::PostWrite(UBJetty *qp, const UBSendReadWriteRequest &req, UBOp
     // ctx could not be used if post successfully
     return result;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

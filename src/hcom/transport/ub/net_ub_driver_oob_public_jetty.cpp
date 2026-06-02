@@ -15,10 +15,10 @@
 #include <sys/poll.h>
 
 #include "net_monotonic.h"
-#include "net_oob_ssl.h"
-#include "net_ub_endpoint.h"
-#include "net_ub_driver_oob.h"
 #include "net_oob_secure.h"
+#include "net_oob_ssl.h"
+#include "net_ub_driver_oob.h"
+#include "net_ub_endpoint.h"
 #include "ub_mr_fixed_buf.h"
 #include "ub_urma_wrapper_public_jetty.h"
 #include "ub_worker.h"
@@ -29,8 +29,8 @@ namespace hcom {
 NResult NetDriverUBWithOob::CreateUrmaListeners(UBPublicJetty *&publicJetty)
 {
     if (mOobListenOptions.empty()) {
-        NN_LOG_ERROR("No listen info is set for oob type " << UBSHcomNetDriverOobTypeToString(mOptions.oobType) <<
-            " in driver " << mName);
+        NN_LOG_ERROR("No listen info is set for oob type " << UBSHcomNetDriverOobTypeToString(mOptions.oobType)
+                                                           << " in driver " << mName);
         return NN_INVALID_PARAM;
     }
     for (auto &lOpt : mOobListenOptions) {
@@ -63,7 +63,8 @@ NResult NetDriverUBWithOob::CreateUrmaListeners(UBPublicJetty *&publicJetty)
 }
 
 NResult NetDriverUBWithOob::ConnectByPublicJetty(const std::string &oobIp, uint16_t oobPort, const std::string &payload,
-    UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
+                                                 UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo,
+                                                 uint8_t clientGrpNo, uint64_t ctx)
 {
     if (ClientCheckState(payload) != 0) {
         NN_LOG_ERROR("Failed to connect as driver not start or payload oversize");
@@ -81,8 +82,9 @@ NResult NetDriverUBWithOob::ConnectByPublicJetty(const std::string &oobIp, uint1
 }
 
 NResult NetDriverUBWithOob::ConnectASyncEpByPublicJetty(const std::string &oobIp, uint16_t oobPort,
-    const std::string &payload, UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo,
-    uint64_t ctx)
+                                                        const std::string &payload, UBSHcomNetEndpointPtr &outEp,
+                                                        uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo,
+                                                        uint64_t ctx)
 {
     UBPublicJetty *clientPublicJetty = nullptr;
     if (PublicJettyConnect(oobIp, oobPort, clientPublicJetty) != 0) {
@@ -161,8 +163,8 @@ NResult NetDriverUBWithOob::ClientCheckState(const std::string &payload)
     }
 
     if (payload.size() >= NN_NO1024) {
-        NN_LOG_ERROR("Failed to connect to server via payload size " << payload.size() <<
-            " over limit size " << NN_NO1024);
+        NN_LOG_ERROR("Failed to connect to server via payload size " << payload.size() << " over limit size "
+                                                                     << NN_NO1024);
         return NN_INVALID_PARAM;
     }
     return NN_OK;
@@ -179,18 +181,18 @@ NResult NetDriverUBWithOob::CreatePublicJetty(UBPublicJetty *&publicJetty, uint3
     result = tmpJfc->Initialize();
     if (result != UB_OK) {
         NN_LOG_ERROR("Jfc initialize failed in create public jetty " << result);
-        delete(tmpJfc);
+        delete (tmpJfc);
         return result;
     }
     publicJetty = new (std::nothrow) UBPublicJetty(mName, id, mContext, tmpJfc, isServer);
     if (publicJetty == nullptr) {
         NN_LOG_ERROR("Failed to create public jetty");
-        delete(tmpJfc);
+        delete (tmpJfc);
         return NN_ERROR;
     }
     if ((publicJetty->InitializePublicJetty(id)) != NN_OK) {
         NN_LOG_ERROR("Failed to initialize public jetty");
-        delete(publicJetty);
+        delete (publicJetty);
         publicJetty = nullptr;
         return NN_ERROR;
     }
@@ -198,7 +200,7 @@ NResult NetDriverUBWithOob::CreatePublicJetty(UBPublicJetty *&publicJetty, uint3
 }
 
 NResult NetDriverUBWithOob::PublicJettyConnect(const std::string &oobIp, uint16_t oobPort,
-    UBPublicJetty *&clientPublicJetty)
+                                               UBPublicJetty *&clientPublicJetty)
 {
     urma_eid_t remoteEid{};
     if (CreatePublicJetty(clientPublicJetty, 0, false) != NN_OK) {
@@ -246,7 +248,8 @@ NResult NetDriverUBWithOob::ClientSelectWorker(UBWorker *&worker, uint8_t client
 }
 
 NResult NetDriverUBWithOob::ClientSendConnReq(const std::string payload, uint64_t id, uint8_t serverGrpNo,
-    UBPublicJetty *clientPublicJetty, UBJetty *qp, UBPublicJetty *clientControlJetty, uint32_t token)
+                                              UBPublicJetty *clientPublicJetty, UBJetty *qp,
+                                              UBPublicJetty *clientControlJetty, uint32_t token)
 {
     if (NN_UNLIKELY(clientPublicJetty == nullptr)) {
         NN_LOG_ERROR("Failed to send connection request as clientPublicJetty is nullptr");
@@ -260,8 +263,8 @@ NResult NetDriverUBWithOob::ClientSendConnReq(const std::string payload, uint64_
         NN_LOG_ERROR("Failed to fill exchange message in client public jetty");
         return NN_ERROR;
     }
-    NN_LOG_INFO("Client send exchangeInfo clientControlJettyId = " << exchangeInfo.controlJettyId << " jettyId = "
-        << exchangeInfo.info.jettyId.id);
+    NN_LOG_INFO("Client send exchangeInfo clientControlJettyId = " << exchangeInfo.controlJettyId
+                                                                   << " jettyId = " << exchangeInfo.info.jettyId.id);
     // send to server
     if (clientPublicJetty->SendByPublicJetty(&exchangeInfo, msgSize) != 0) {
         NN_LOG_ERROR("Failed to send data to server public jetty");
@@ -307,7 +310,7 @@ NResult NetDriverUBWithOob::CheckServerACK(JettyConnResp &exchangeMsg)
 }
 
 NResult NetDriverUBWithOob::ClientEstablishConnOnReply(UBPublicJetty *clientControlJetty, UBJetty *qp,
-    UBJettyExchangeInfo &info)
+                                                       UBJettyExchangeInfo &info)
 {
     if (NN_UNLIKELY(qp == nullptr || clientControlJetty == nullptr)) {
         NN_LOG_ERROR("Failed to establish connection on reply as qp or clientControlJetty is nullptr");
@@ -318,8 +321,8 @@ NResult NetDriverUBWithOob::ClientEstablishConnOnReply(UBPublicJetty *clientCont
         NN_LOG_ERROR("Failed to receive exchange message");
         return NN_ERROR;
     }
-    NN_LOG_INFO("Client recv exchangeMsg serverControlJetty id = " << exchangeMsg.serverCtrlJettyId << " jettyId = "
-        << exchangeMsg.info.jettyId.id);
+    NN_LOG_INFO("Client recv exchangeMsg serverControlJetty id = " << exchangeMsg.serverCtrlJettyId
+                                                                   << " jettyId = " << exchangeMsg.info.jettyId.id);
     if (CheckServerACK(exchangeMsg) != 0) {
         NN_LOG_ERROR("Failed to check server ack in client public jetty");
         return NN_ERROR;
@@ -374,7 +377,7 @@ ERROR_FREE:
 }
 
 NResult NetDriverUBWithOob::ClientCreateEp(UBSHcomNetEndpointPtr &outEp, uint64_t id, UBJetty *qp, UBWorker *worker,
-    UBJettyExchangeInfo &info, UBPublicJetty *clientControlJetty)
+                                           UBJettyExchangeInfo &info, UBPublicJetty *clientControlJetty)
 {
     if (NN_UNLIKELY(qp == nullptr || worker == nullptr)) {
         NN_LOG_ERROR("Failed to create ep in client as qp or worker is nullptr");
@@ -413,13 +416,12 @@ NResult NetDriverUBWithOob::ClientCreateEp(UBSHcomNetEndpointPtr &outEp, uint64_
         std::lock_guard<std::mutex> locker(mEndPointsMutex);
         mEndPoints.emplace(ep->Id(), ep);
     }
-    NN_LOG_INFO("New connection established via public jetty, async ep id " << ep->Id() << ", jetty id: "
-                << qp->QpNum() << ", worker info " << worker->DetailName());
+    NN_LOG_INFO("New connection established via public jetty, async ep id "
+                << ep->Id() << ", jetty id: " << qp->QpNum() << ", worker info " << worker->DetailName());
     outEp = ep;
     reinterpret_cast<NetUBAsyncEndpoint *>(ep.Get())->GetQp()->SetUpId(ep->Id());
     return NN_OK;
 }
-
 
 NResult NetDriverUBWithOob::ServerEstablishCtrlConn(JettyConnHeader *exchangeInfo, UBPublicJetty *serverControlJetty)
 {
@@ -427,8 +429,8 @@ NResult NetDriverUBWithOob::ServerEstablishCtrlConn(JettyConnHeader *exchangeInf
         NN_LOG_ERROR("Failed to establish control connection as exchangeInfo or serverControlJetty is nullptr");
         return NN_PARAM_INVALID;
     }
-    NN_LOG_INFO("Server recv exchangeInfo clientControlJettyId = " << exchangeInfo->controlJettyId << " jettyId = "
-        << exchangeInfo->info.jettyId.id);
+    NN_LOG_INFO("Server recv exchangeInfo clientControlJettyId = " << exchangeInfo->controlJettyId
+                                                                   << " jettyId = " << exchangeInfo->info.jettyId.id);
     urma_eid_t remoteEid = exchangeInfo->info.eid;
     if (serverControlJetty->StartPublicJetty() != NN_OK) {
         NN_LOG_ERROR("Failed to start public jetty in client");
@@ -531,7 +533,7 @@ void NetDriverUBWithOob::ClearJettyResource(UBJetty *qp)
 }
 
 NResult NetDriverUBWithOob::ServerCreateEp(UBJettyExchangeInfo &info, UBJetty *qp, UBWorker *worker,
-    JettyConnHeader *exchangeInfo, UBPublicJetty *serverControlJetty)
+                                           JettyConnHeader *exchangeInfo, UBPublicJetty *serverControlJetty)
 {
     if (NN_UNLIKELY(qp == nullptr || worker == nullptr)) {
         NN_LOG_ERROR("Failed to create ep in server as qp or worker is nullptr");
@@ -559,7 +561,7 @@ NResult NetDriverUBWithOob::ServerCreateEp(UBJettyExchangeInfo &info, UBJetty *q
         exchangeInfo->payload[payloadLen] = '\0';
         payload = std::string(exchangeInfo->payload, payloadLen);
     }
-    struct in_addr ipAddr{};
+    struct in_addr ipAddr {};
     char ipStr[INET_ADDRSTRLEN]{};
     ipAddr.s_addr = exchangeInfo->info.eid.in4.addr;
     if (inet_ntop(AF_INET, &ipAddr, ipStr, INET_ADDRSTRLEN) == NULL) {
@@ -569,7 +571,7 @@ NResult NetDriverUBWithOob::ServerCreateEp(UBJettyExchangeInfo &info, UBJetty *q
     auto listenJettyId = exchangeInfo->controlJettyId;
     std::string eidAndPort = std::string(ipStr) + ":" + std::to_string(listenJettyId);
     ep->StoreConnInfo(exchangeInfo->info.eid.in4.addr, listenJettyId, exchangeInfo->ConnectHeader.version, payload);
-    
+
     // client                         server
     //    -----------client ack---------->
     //                                  NewEndpointHandler()
@@ -607,8 +609,8 @@ NResult NetDriverUBWithOob::ServerCreateEp(UBJettyExchangeInfo &info, UBJetty *q
         return NN_ERROR;
     }
     if (serverControlJetty->PollingCompletion() != 0) {
-        NN_LOG_ERROR("Failed to poll completion in client serverControlJetty jetty id: " <<
-            serverControlJetty->GetJettyId());
+        NN_LOG_ERROR(
+            "Failed to poll completion in client serverControlJetty jetty id: " << serverControlJetty->GetJettyId());
         return NN_ERROR;
     }
     NN_LOG_INFO("serverControlJetty end ServerHandshake jetty id: " << serverControlJetty->GetJettyId());
@@ -620,17 +622,17 @@ NResult NetDriverUBWithOob::ServerCreateEp(UBJettyExchangeInfo &info, UBJetty *q
     }
 
     NN_LOG_INFO("New connection build via public jetty, ep id " << ep->Id() << ", jetty id: " << qp->QpNum()
-                << ", worker info " << worker->DetailName());
+                                                                << ", worker info " << worker->DetailName());
     return NN_OK;
 }
 
 NResult NetDriverUBWithOob::CheckMagicAndProtocol(JettyConnResp &exchangeMsg, JettyConnHeader *exchangeInfo,
-    UBPublicJetty *serverControlJetty)
+                                                  UBPublicJetty *serverControlJetty)
 {
     auto header = exchangeInfo->ConnectHeader;
     if (header.magic != mOptions.magic) {
-        NN_LOG_ERROR("Failed to match magic number from client, connection refused header.magic = " << header.magic <<
-            ", mOptions.magic = " << mOptions.magic);
+        NN_LOG_ERROR("Failed to match magic number from client, connection refused header.magic = "
+                     << header.magic << ", mOptions.magic = " << mOptions.magic);
         exchangeMsg.connResp = MAGIC_MISMATCH;
         serverControlJetty->SendByPublicJetty(&exchangeMsg, sizeof(JettyConnResp));
         return NN_ERROR;
@@ -644,14 +646,14 @@ NResult NetDriverUBWithOob::CheckMagicAndProtocol(JettyConnResp &exchangeMsg, Je
     return NN_OK;
 }
 
-NResult NetDriverUBWithOob::FillExchMsg(JettyConnHeader *exchangeInfo, UBJetty *qp,
-    const std::string &payload, uint8_t serverGrpNo, UBPublicJetty *clientControlJetty)
+NResult NetDriverUBWithOob::FillExchMsg(JettyConnHeader *exchangeInfo, UBJetty *qp, const std::string &payload,
+                                        uint8_t serverGrpNo, UBPublicJetty *clientControlJetty)
 {
     int result = 0;
     exchangeInfo->msgType = CONNECT_REQ;
     exchangeInfo->controlJettyId = clientControlJetty->GetJettyId();
     exchangeInfo->SetConnHeader(mOptions.magic, mOptions.version, serverGrpNo, Protocol(), mMajorVersion, mMinorVersion,
-        mOptions.tlsVersion);
+                                mOptions.tlsVersion);
 
     exchangeInfo->info.maxSendWr = mOptions.qpSendQueueSize;
     exchangeInfo->info.maxReceiveWr = mOptions.qpReceiveQueueSize;
@@ -678,8 +680,7 @@ NResult NetDriverUBWithOob::FillExchMsg(JettyConnHeader *exchangeInfo, UBJetty *
         NN_LOG_ERROR("Failed to copy data as payload is too long " << payload.size());
         return NN_ERROR;
     }
-    if (NN_UNLIKELY(memcpy_s(exchangeInfo->payload, NN_NO1024, payload.c_str(), payload.size())
-        != NN_OK)) {
+    if (NN_UNLIKELY(memcpy_s(exchangeInfo->payload, NN_NO1024, payload.c_str(), payload.size()) != NN_OK)) {
         NN_LOG_ERROR("Failed to copy data");
         return NN_ERROR;
     }
@@ -712,7 +713,7 @@ NResult NetDriverUBWithOob::PrePostReceiveOnConnection(UBJetty *qp, UBWorker *wo
     uint16_t i = 0;
     for (; i < prePostCount; i++) {
         if ((result = worker->PostReceive(qp, mrSegs[i], mOptions.mrSendReceiveSegSize,
-            reinterpret_cast<urma_target_seg_t *>(qp->GetMemorySeg()))) != 0) {
+                                          reinterpret_cast<urma_target_seg_t *>(qp->GetMemorySeg()))) != 0) {
             break;
         }
     }
@@ -724,14 +725,13 @@ NResult NetDriverUBWithOob::PrePostReceiveOnConnection(UBJetty *qp, UBWorker *wo
     return result;
 }
 
-NResult NetDriverUBWithOob::ServerSelectWorker(UBWorker *&worker, JettyConnResp &exchangeMsg,
-    uint8_t groupIndex, UBPublicJetty *serverControlJetty)
+NResult NetDriverUBWithOob::ServerSelectWorker(UBWorker *&worker, JettyConnResp &exchangeMsg, uint8_t groupIndex,
+                                               UBPublicJetty *serverControlJetty)
 {
     uint16_t workerIndex = 0;
     NetWorkerLBPtr lb = mPublicJetty->LoadBalancer();
     NN_ASSERT_LOG_RETURN(lb.Get() != nullptr, NN_ERROR)
-    if (NN_UNLIKELY(!lb->ChooseWorker(groupIndex, mOobIp, workerIndex)) ||
-        workerIndex >= mWorkers.size()) {
+    if (NN_UNLIKELY(!lb->ChooseWorker(groupIndex, mOobIp, workerIndex)) || workerIndex >= mWorkers.size()) {
         exchangeMsg.connResp = WORKER_GRPNO_MISMATCH;
         serverControlJetty->SendByPublicJetty(&exchangeMsg, sizeof(JettyConnResp));
         return NN_ERROR;
@@ -748,7 +748,8 @@ NResult NetDriverUBWithOob::ServerSelectWorker(UBWorker *&worker, JettyConnResp 
 }
 
 NResult NetDriverUBWithOob::ServerCreateJetty(UBJetty *&qp, UBWorker *worker, JettyConnResp &exchangeMsg,
-    JettyConnHeader *exchangeInfo, UBPublicJetty *serverControlJetty, uint32_t token)
+                                              JettyConnHeader *exchangeInfo, UBPublicJetty *serverControlJetty,
+                                              uint32_t token)
 {
     int result = 0;
     uint64_t epId = exchangeInfo->epId;
@@ -789,7 +790,7 @@ NResult NetDriverUBWithOob::ServerCreateJetty(UBJetty *&qp, UBWorker *worker, Je
 }
 
 NResult NetDriverUBWithOob::ServerReplyMsg(UBJetty *qp, JettyConnResp &exchangeMsg, UBPublicJetty *serverControlJetty,
-    uint32_t token)
+                                           uint32_t token)
 {
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("Failed to reply message as qp is nullptr");
@@ -823,8 +824,8 @@ NResult NetDriverUBWithOob::ServerReplyMsg(UBJetty *qp, JettyConnResp &exchangeM
         NN_LOG_ERROR("Failed to get or send ep exchange info in Driver " << mName << ", result " << result);
         return result;
     }
-    NN_LOG_INFO("Server send exchangeMsg serverControlJetty = " << exchangeMsg.serverCtrlJettyId << " jettyId = "
-        << exchangeMsg.info.jettyId.id);
+    NN_LOG_INFO("Server send exchangeMsg serverControlJetty = " << exchangeMsg.serverCtrlJettyId
+                                                                << " jettyId = " << exchangeMsg.info.jettyId.id);
     if (serverControlJetty->SendByPublicJetty(&exchangeMsg, sizeof(JettyConnResp)) != 0) {
         NN_LOG_ERROR("Failed to send data in public server");
         return NN_ERROR;
@@ -842,8 +843,8 @@ NResult NetDriverUBWithOob::CreateSyncEp(UBJetty *qp, UBJfc *cq, uint64_t id, UB
     auto prePostCount = mOptions.prePostReceiveSizePerQP;
     static UBSHcomNetWorkerIndex workerIndex;
     workerIndex.driverIdx = mIndex;
-    UBSHcomNetEndpointPtr ep = new (std::nothrow) NetUBSyncEndpoint(id, qp, cq, prePostCount + NN_NO4, this,
-        workerIndex);
+    UBSHcomNetEndpointPtr ep = new (std::nothrow)
+        NetUBSyncEndpoint(id, qp, cq, prePostCount + NN_NO4, this, workerIndex);
     if (ep.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create UB sync endpoint in Driver " << mName << ", probably out of memory");
         return NN_NEW_OBJECT_FAILED;
@@ -884,8 +885,9 @@ NResult NetDriverUBWithOob::CreateSyncEp(UBJetty *qp, UBJfc *cq, uint64_t id, UB
 }
 
 NResult NetDriverUBWithOob::ConnectSyncEpByPublicJetty(const std::string &oobIp, uint16_t oobPort,
-    const std::string &payload, UBSHcomNetEndpointPtr &outEp, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo,
-    uint64_t ctx)
+                                                       const std::string &payload, UBSHcomNetEndpointPtr &outEp,
+                                                       uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo,
+                                                       uint64_t ctx)
 {
     // create public jetty and connect
     UBPublicJetty *clientPublicJetty = nullptr;
@@ -966,9 +968,10 @@ NResult NetDriverUBWithOob::PrePostReceiveOnSyncEp(UBSHcomNetEndpointPtr ep, uin
     }
     int i = 0;
     for (; i < prePostCount; i++) {
-        if (result = reinterpret_cast<NetUBSyncEndpoint *>(ep.Get())->PostReceive(mrSegs[i],
-            mOptions.mrSendReceiveSegSize, reinterpret_cast<urma_target_seg_t *>(qp->GetMemorySeg())) != 0) {
-                break;
+        if (result = reinterpret_cast<NetUBSyncEndpoint *>(ep.Get())->PostReceive(
+                         mrSegs[i], mOptions.mrSendReceiveSegSize,
+                         reinterpret_cast<urma_target_seg_t *>(qp->GetMemorySeg())) != 0) {
+            break;
         }
     }
     for (; i < prePostCount; i++) {
@@ -981,7 +984,7 @@ NResult NetDriverUBWithOob::ClientSyncEpCreateJetty(UBJetty *&qp, UBJfc *&cq, UB
 {
     int result = 0;
     JettyOptions qpOptions(mOptions.qpSendQueueSize, mOptions.qpReceiveQueueSize, mOptions.mrSendReceiveSegSize,
-        mOptions.prePostReceiveSizePerQP, mOptions.slave, mOptions.ubcMode);
+                           mOptions.prePostReceiveSizePerQP, mOptions.slave, mOptions.ubcMode);
     if ((result = NetUBSyncEndpoint::CreateResources(mName, mContext, pollMode, qpOptions, qp, cq)) != 0) {
         NN_LOG_ERROR("Failed to create qp and cq, result " << result);
         return result;
@@ -1003,6 +1006,6 @@ NResult NetDriverUBWithOob::ClientSyncEpCreateJetty(UBJetty *&qp, UBJfc *&cq, UB
     }
     return NN_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

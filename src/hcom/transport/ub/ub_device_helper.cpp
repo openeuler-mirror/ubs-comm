@@ -16,6 +16,8 @@
 namespace ock {
 namespace hcom {
 
+// User control opcodes
+static const uint32_t BONDP_USER_CTL_ENABLE_SEG_CACHE = 5;
 
 uint32_t UBDeviceHelper::G_InitRef = 0;
 std::unordered_map<urma_speed_t, uint8_t> UBDeviceHelper::G_UBDevBWTable;
@@ -50,10 +52,10 @@ void UBDeviceHelper::UnInitialize()
 UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid)
 {
     // 后续HCOM重构时重新定义此处数值换算，目前为了不修改头文件中uint8_t bandWidth(范围0~2555)的定义,只做大致比例换算。
-    G_UBDevBWTable = { { URMA_SP_10M, 1 },    { URMA_SP_100M, 1 },  { URMA_SP_1G, 1 },     { URMA_SP_2_5G, 3 },
-        { URMA_SP_5G, 5 },     { URMA_SP_10G, 10 },  { URMA_SP_14G, 14 },   { URMA_SP_25G, 25 },
-        { URMA_SP_40G, 40 },   { URMA_SP_50G, 50 },  { URMA_SP_100G, 100 }, { URMA_SP_200G, 200 },
-        { URMA_SP_400G, 255 }, { URMA_SP_800G, 255 } };
+    G_UBDevBWTable = {{URMA_SP_10M, 1},    {URMA_SP_100M, 1},  {URMA_SP_1G, 1},     {URMA_SP_2_5G, 3},
+                      {URMA_SP_5G, 5},     {URMA_SP_10G, 10},  {URMA_SP_14G, 14},   {URMA_SP_25G, 25},
+                      {URMA_SP_40G, 40},   {URMA_SP_50G, 50},  {URMA_SP_100G, 100}, {URMA_SP_200G, 200},
+                      {URMA_SP_400G, 255}, {URMA_SP_800G, 255}};
     auto ret = DoUpdate(devAttr, ctx, eid);
     if (NN_UNLIKELY(ret != UB_OK)) {
         G_UBDevBWTable.clear();
@@ -98,16 +100,16 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&c
     }
     auto guard = MakeScopeExit([&devList]() { HcomUrma::FreeDeviceList(devList); });
     char name[] = "bonding_dev_0";
-    char nameBonding[] = "bonding";
-    int devIdx = CompareName(name, sizeof(name), devList, devCount);
+    char nameBonding[] = "bonding_dev_";
+    int devIdx = CompareName(name, strlen(name), devList, devCount);
     if (devIdx == -1) {
-        devIdx = CompareName(nameBonding, sizeof(nameBonding), devList, devCount);
+        devIdx = CompareName(nameBonding, strlen(nameBonding), devList, devCount);
     }
     if (devIdx == -1) {
-        NN_LOG_ERROR("Failed to get proper gid by name " << name << ", or name " << nameBonding);
+        NN_LOG_ERROR("Failed to get proper gid by name " << name << ", or name start with " << nameBonding);
         return UB_DEVICE_FAILED_OPEN;
     }
-    
+
     NN_LOG_INFO("Choosing UB Device " << devIdx << " name " << devList[devIdx]->name);
     uint32_t eidCnt = 0;
     urma_eid_info_t *eidInfoList = HcomUrma::GetEidList(devList[devIdx], &eidCnt);
@@ -141,6 +143,18 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&c
     eid.urmaEid = eidInfoList[0].eid;
     eid.bandWidth = bw;
     ctx = tmpCtx;
+
+    urma_user_ctl_in_t in;
+    urma_user_ctl_out_t out;
+    in.addr = 0;
+    in.len = 0;
+    in.opcode = BONDP_USER_CTL_ENABLE_SEG_CACHE;
+    ret = HcomUrma::UserCtl(ctx, &in, &out);
+    if (ret != 0) {
+        NN_LOG_ERROR("Failed to enable segment cache for bonding device, ret " << ret);
+        return UB_DEVICE_OPEN_FAILED;
+    }
+
     return UB_OK;
 }
 
@@ -148,6 +162,6 @@ uint32_t UBDeviceHelper::GetPortNumber()
 {
     return PORT_NUMBER;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

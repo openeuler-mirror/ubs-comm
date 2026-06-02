@@ -1,10 +1,10 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
+#include "test_case/service_v2/service_rndv_bw_test.h"
 #include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "test_case/service_v2/service_rndv_bw_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -31,14 +31,13 @@ int ServiceRndvBwTest::DoPostSend()
             std::placeholders::_1);
         if (newCallback == nullptr) {
             LOG_ERROR("Create callback failed");
+            sem_post(&mSem);
             return -1;
         }
         int res = mCh->Call(req, rsp, newCallback);
         if (res != 0) {
-            if (newCallback != nullptr) {
-                delete newCallback;
-            }
             LOG_ERROR("failed to send to server");
+            sem_post(&mSem);
             return res;
         }
     }
@@ -46,7 +45,7 @@ int ServiceRndvBwTest::DoPostSend()
 }
 
 int ServiceRndvBwTest::NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch,
-    const std::string &payload)
+                                  const std::string &payload)
 {
     mCh = ch;
     LOG_DEBUG("New connection from " << ipPort << " !");
@@ -71,7 +70,7 @@ int ServiceRndvBwTest::RequestReceived(const ock::hcom::UBSHcomServiceContext &c
                 replyCtx.errorCode = 0;
                 replyCtx.rspCtx = contextRsp;
                 Callback *cb = UBSHcomNewCallback([](UBSHcomServiceContext &context) {}, std::placeholders::_1);
-                if (cb==nullptr) {
+                if (cb == nullptr) {
                     LOG_ERROR("New callback is nullptr");
                     return;
                 }
@@ -192,5 +191,5 @@ bool ServiceRndvBwTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::SERVICE_RNDV_BW, ServiceRndvBwTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

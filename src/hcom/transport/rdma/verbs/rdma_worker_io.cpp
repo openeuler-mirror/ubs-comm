@@ -15,8 +15,8 @@
 
 #include "hcom_utils.h"
 #include "net_common.h"
-#include "rdma_worker.h"
 #include "net_rdma_async_endpoint.h"
+#include "rdma_worker.h"
 
 namespace ock {
 namespace hcom {
@@ -109,7 +109,7 @@ RResult RDMAWorker::BatchRePostReceive(RDMAOpContextInfo *ctx)
     if (NN_UNLIKELY(result != RR_OK)) {
         // batch free context
         for (int i = 0; i < batchSize; ++i) {
-            auto* delayCtx = ctx->qp->mDelayList[i];
+            auto *delayCtx = ctx->qp->mDelayList[i];
             if (!delayCtx) {
                 continue;
             }
@@ -169,8 +169,8 @@ RResult RDMAWorker::PostSend(RDMAQp *qp, const RDMASendReadWriteRequest &req, ui
     // if posted failed, need to remove
     qp->AddOpCtxInfo(ctx);
 
-    auto result = qp->PostSend(req.lAddress, req.size, static_cast<uint32_t>(req.lKey),
-        reinterpret_cast<uint64_t>(ctx), immData);
+    auto result =
+        qp->PostSend(req.lAddress, req.size, static_cast<uint32_t>(req.lKey), reinterpret_cast<uint64_t>(ctx), immData);
     if (NN_UNLIKELY(result != RR_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
         qp->ReturnPostSendWr();
@@ -221,8 +221,8 @@ RResult RDMAWorker::PostSendRawNoCpy(RDMAQp *qp, const RDMASendReadWriteRequest 
     // if posted failed, need to remove
     qp->AddOpCtxInfo(ctx);
 
-    auto result = qp->PostSend(req.lAddress, req.size, static_cast<uint32_t>(req.lKey),
-                               reinterpret_cast<uint64_t>(ctx), immData);
+    auto result =
+        qp->PostSend(req.lAddress, req.size, static_cast<uint32_t>(req.lKey), reinterpret_cast<uint64_t>(ctx), immData);
     if (NN_UNLIKELY(result != RR_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
         qp->ReturnPostSendWr();
@@ -235,8 +235,8 @@ RResult RDMAWorker::PostSendRawNoCpy(RDMAQp *qp, const RDMASendReadWriteRequest 
     return result;
 }
 
-RResult RDMAWorker::PostSendSglInline(
-    RDMAQp *qp, const RDMASendSglInlineHeader &header, const RDMASendReadWriteRequest &req, uint32_t immData)
+RResult RDMAWorker::PostSendSglInline(RDMAQp *qp, const RDMASendSglInlineHeader &header,
+                                      const RDMASendReadWriteRequest &req, uint32_t immData)
 {
     if (NN_UNLIKELY(qp == nullptr)) {
         NN_LOG_ERROR("RDMA Failed to PostSendSgl with RDMAWorker " << DetailName() << " as qp is null");
@@ -280,8 +280,7 @@ RResult RDMAWorker::PostSendSglInline(
     netTransDataIov[NN_NO1].address = req.lAddress;
     netTransDataIov[NN_NO1].size = req.size;
 
-    auto result = qp->PostSendSglInline(
-        netTransDataIov, NN_NO2, reinterpret_cast<uint64_t>(ctx), immData);
+    auto result = qp->PostSendSglInline(netTransDataIov, NN_NO2, reinterpret_cast<uint64_t>(ctx), immData);
     if (NN_UNLIKELY(result != RR_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
         qp->ReturnPostSendWr();
@@ -295,7 +294,7 @@ RResult RDMAWorker::PostSendSglInline(
 }
 
 RResult RDMAWorker::PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, const RDMASendReadWriteRequest &tlsReq,
-    uint32_t immData, bool isEncrypted)
+                                uint32_t immData, bool isEncrypted)
 {
     // Prevent integer truncation, safely converts uint64_t to uint32_t
     if (NN_UNLIKELY(tlsReq.lKey > UINT32_MAX)) {
@@ -316,7 +315,7 @@ RResult RDMAWorker::PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, con
     sglCtx->qp = qp;
     sglCtx->result = RR_OK;
     if (NN_UNLIKELY(memcpy_s(sglCtx->iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, req.iov,
-        sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != RR_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != RR_OK)) {
         NN_LOG_ERROR("Failed to copy request to sglCtx");
         mSglCtxInfoPool.Return(sglCtx);
         return RR_PARAM_INVALID;
@@ -365,7 +364,7 @@ RResult RDMAWorker::PostSendSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, con
     RResult result = RR_OK;
     if (isEncrypted != 0) {
         result = qp->PostSend(tlsReq.lAddress, tlsReq.size, static_cast<uint32_t>(tlsReq.lKey),
-            reinterpret_cast<uint64_t>(ctx), immData);
+                              reinterpret_cast<uint64_t>(ctx), immData);
     } else {
         result = qp->PostSendSgl(req.iov, req.iovCount, reinterpret_cast<uint64_t>(ctx), immData);
     }
@@ -386,8 +385,8 @@ RResult RDMAWorker::PostRead(RDMAQp *qp, const RDMASendReadWriteRequest &req)
 {
     // Prevent integer truncation, safely converts uint64_t to uint32_t
     if (NN_UNLIKELY(req.lKey > UINT32_MAX || req.rKey > UINT32_MAX)) {
-        NN_LOG_ERROR("Failed to PostRead with RDMAWorker as Key is larger than uint32max, lKey" <<
-            req.lKey << " rKey " << req.rKey);
+        NN_LOG_ERROR("Failed to PostRead with RDMAWorker as Key is larger than uint32max, lKey" << req.lKey << " rKey "
+                                                                                                << req.rKey);
         return RR_PARAM_INVALID;
     }
     if (NN_UNLIKELY(qp == nullptr)) {
@@ -429,7 +428,7 @@ RResult RDMAWorker::PostRead(RDMAQp *qp, const RDMASendReadWriteRequest &req)
     qp->AddOpCtxInfo(ctx);
 
     auto result = qp->PostRead(req.lAddress, static_cast<uint32_t>(req.lKey), req.rAddress,
-        static_cast<uint32_t>(req.rKey), req.size, reinterpret_cast<uint64_t>(ctx));
+                               static_cast<uint32_t>(req.rKey), req.size, reinterpret_cast<uint64_t>(ctx));
     if (NN_UNLIKELY(result != RR_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
         qp->ReturnOneSideWr();
@@ -458,7 +457,7 @@ RResult RDMAWorker::PostOneSideSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, 
     sglCtx->result = RR_OK;
     sglCtx->qp = qp;
     if (NN_UNLIKELY(memcpy_s(sglCtx->iov, sizeof(UBSHcomNetTransSgeIov) * NET_SGE_MAX_IOV, req.iov,
-        sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != RR_OK)) {
+                             sizeof(UBSHcomNetTransSgeIov) * req.iovCount) != RR_OK)) {
         NN_LOG_ERROR("Failed to copy req to sglCtx");
         mSglCtxInfoPool.Return(sglCtx);
         return RR_PARAM_INVALID;
@@ -497,7 +496,7 @@ RResult RDMAWorker::PostOneSideSgl(RDMAQp *qp, const RDMASendSglRWRequest &req, 
 }
 
 RResult RDMAWorker::CreateOneSideCtx(RDMASgeCtxInfo &sgeInfo, UBSHcomNetTransSgeIov *iov, uint32_t iovCount,
-    uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead)
+                                     uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead)
 {
     if (iov == nullptr || iovCount == NN_NO0 || iovCount > NN_NO4 || ctxArr == nullptr) {
         NN_LOG_ERROR("Failed to create oneSide operation ctx because param invalid");
@@ -517,8 +516,8 @@ RResult RDMAWorker::CreateOneSideCtx(RDMASgeCtxInfo &sgeInfo, UBSHcomNetTransSge
         }
 
         if (NN_UNLIKELY(!sgeInfo.ctx->qp->GetOneSideWr())) {
-            NN_LOG_ERROR("Verbs failed to oneSide operation with RDMAWorker " << DetailName() <<
-                " as no one side wr left");
+            NN_LOG_ERROR("Verbs failed to oneSide operation with RDMAWorker " << DetailName()
+                                                                              << " as no one side wr left");
             mOpCtxInfoPool.Return(ctx);
             for (uint32_t j = 0; j < i; ++j) {
                 sgeInfo.ctx->qp->ReturnOneSideWr();
@@ -551,8 +550,8 @@ RResult RDMAWorker::PostWrite(RDMAQp *qp, const RDMASendReadWriteRequest &req, R
 {
     // Prevent integer truncation, safely converts uint64_t to uint32_t
     if (NN_UNLIKELY(req.lKey > UINT32_MAX || req.rKey > UINT32_MAX)) {
-        NN_LOG_ERROR("Failed to PostWrite with RDMAWorker as Key is larger than uint32max, lKey" <<
-            req.lKey << " rKey " << req.rKey);
+        NN_LOG_ERROR("Failed to PostWrite with RDMAWorker as Key is larger than uint32max, lKey" << req.lKey << " rKey "
+                                                                                                 << req.rKey);
         return RR_PARAM_INVALID;
     }
     if (NN_UNLIKELY(qp == nullptr)) {
@@ -593,7 +592,7 @@ RResult RDMAWorker::PostWrite(RDMAQp *qp, const RDMASendReadWriteRequest &req, R
     qp->AddOpCtxInfo(ctx);
 
     auto result = qp->PostWrite(req.lAddress, static_cast<uint32_t>(req.lKey), req.rAddress,
-        static_cast<uint32_t>(req.rKey), req.size, reinterpret_cast<uint64_t>(ctx));
+                                static_cast<uint32_t>(req.rKey), req.size, reinterpret_cast<uint64_t>(ctx));
     if (NN_UNLIKELY(result != RR_OK)) {
         // remove ctx from qp firstly, then return to pool because, ctx maybe deleted
         qp->ReturnOneSideWr();
@@ -605,6 +604,6 @@ RResult RDMAWorker::PostWrite(RDMAQp *qp, const RDMASendReadWriteRequest &req, R
     // ctx could not be used if post successfully
     return result;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

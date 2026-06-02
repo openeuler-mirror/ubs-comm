@@ -13,8 +13,8 @@
 #ifdef UB_BUILD_ENABLED
 
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <sys/poll.h>
+#include <mockcpp/mockcpp.hpp>
 
 #include "net_monotonic.h"
 #include "ub_common.h"
@@ -196,7 +196,9 @@ TEST_F(TestUbUrmaJetty, PostSendSglInlineJettyFail)
     iov[0].key = testKey;
     iov[0].size = NN_NO10;
     MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1)).then(returnValue(0));
+        .stubs()
+        .will(returnValue(1))
+        .then(returnValue(0));
     EXPECT_EQ(jetty->PostSendSglInline(iov, 1, 0), UB_QP_POST_SEND_FAILED);
     EXPECT_EQ(jetty->PostSendSglInline(iov, 1, 0), UB_OK);
 }
@@ -215,7 +217,9 @@ TEST_F(TestUbUrmaJetty, PostSendSgl)
     UBSHcomNetTransSgeIov iov{};
     uint32_t iovCount = 1;
     MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1)).then(returnValue(0));
+        .stubs()
+        .will(returnValue(1))
+        .then(returnValue(0));
     EXPECT_EQ(jetty->PostSendSgl(&iov, iovCount, 0, 0), UB_QP_POST_SEND_FAILED);
     EXPECT_EQ(jetty->PostSendSgl(&iov, iovCount, 0, 0), UB_OK);
 
@@ -232,7 +236,9 @@ TEST_F(TestUbUrmaJetty, PostReadParamErr)
 TEST_F(TestUbUrmaJetty, PostRead)
 {
     MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1)).then(returnValue(0));
+        .stubs()
+        .will(returnValue(1))
+        .then(returnValue(0));
     EXPECT_EQ(jetty->PostRead(0, nullptr, 0, nullptr, 0, 0), UB_QP_POST_WRITE_FAILED);
     EXPECT_EQ(jetty->PostRead(0, nullptr, 0, nullptr, 0, 0), UB_OK);
 }
@@ -244,7 +250,9 @@ TEST_F(TestUbUrmaJetty, UBCPostReadTseg)
     urma_target_seg_t *tmpSeg2 = &seg;
     MOCKER(HcomUrma::UnimportSeg).stubs().will(returnValue(1)).then(returnValue(0)).then(returnValue(0));
     MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1)).then(returnValue(0));
+        .stubs()
+        .will(returnValue(1))
+        .then(returnValue(0));
     MOCKER(HcomUrma::ImportSeg)
         .stubs()
         .will(returnValue(tmpSeg1))
@@ -252,17 +260,21 @@ TEST_F(TestUbUrmaJetty, UBCPostReadTseg)
         .then(returnValue(tmpSeg2));
 
     EXPECT_EQ(jetty->PostRead(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(1), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_POST_READ_FAILED);
+                              static_cast<uint64_t>(1), static_cast<uint32_t>(0), static_cast<uint64_t>(0)),
+              UB_QP_POST_READ_FAILED);
 
     EXPECT_EQ(jetty->PostRead(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(1), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_POST_READ_FAILED);
+                              static_cast<uint64_t>(1), static_cast<uint32_t>(0), static_cast<uint64_t>(0)),
+              UB_QP_POST_READ_FAILED);
 
     EXPECT_EQ(jetty->PostRead(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(1), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_OK);
+                              static_cast<uint64_t>(1), static_cast<uint32_t>(0), static_cast<uint64_t>(0)),
+              UB_OK);
 
     jetty->mUrmaJetty = nullptr;
     EXPECT_EQ(jetty->PostRead(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_NOT_INITIALIZED);
+                              static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)),
+              UB_QP_NOT_INITIALIZED);
 }
 
 TEST_F(TestUbUrmaJetty, PostWriteParamErr)
@@ -274,7 +286,9 @@ TEST_F(TestUbUrmaJetty, PostWriteParamErr)
 TEST_F(TestUbUrmaJetty, PostWrite)
 {
     MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1)).then(returnValue(0));
+        .stubs()
+        .will(returnValue(1))
+        .then(returnValue(0));
     EXPECT_EQ(jetty->PostWrite(0, nullptr, 0, nullptr, 0, 0), UB_QP_POST_WRITE_FAILED);
     EXPECT_EQ(jetty->PostWrite(0, nullptr, 0, nullptr, 0, 0), UB_OK);
 }
@@ -286,21 +300,27 @@ TEST_F(TestUbUrmaJetty, UBCPostWriteTseg)
     urma_target_seg_t *tmpSeg2 = &seg;
     MOCKER(HcomUrma::UnimportSeg).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1)).then(returnValue(0));
+        .stubs()
+        .will(returnValue(1))
+        .then(returnValue(0));
     MOCKER(HcomUrma::ImportSeg).stubs().will(returnValue(tmpSeg1)).then(returnValue(tmpSeg2));
 
     EXPECT_EQ(jetty->PostWrite(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_POST_WRITE_FAILED);
+                               static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)),
+              UB_QP_POST_WRITE_FAILED);
 
     EXPECT_EQ(jetty->PostWrite(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_POST_WRITE_FAILED);
+                               static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)),
+              UB_QP_POST_WRITE_FAILED);
 
     EXPECT_EQ(jetty->PostWrite(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_OK);
+                               static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)),
+              UB_OK);
 
     jetty->mUrmaJetty = nullptr;
     EXPECT_EQ(jetty->PostWrite(0, static_cast<urma_target_seg_t *>(nullptr), static_cast<uintptr_t>(0),
-        static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)), UB_QP_NOT_INITIALIZED);
+                               static_cast<uint64_t>(0), static_cast<uint32_t>(0), static_cast<uint64_t>(0)),
+              UB_QP_NOT_INITIALIZED);
 }
 
 TEST_F(TestUbUrmaJetty, GetId)
@@ -581,7 +601,7 @@ TEST_F(TestUbUrmaJetty, CreateJettyMr)
 TEST_F(TestUbUrmaJetty, GetFreeBuff)
 {
     uintptr_t item = 0;
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     EXPECT_EQ(jetty->GetFreeBuff(item), false);
@@ -609,9 +629,9 @@ TEST_F(TestUbUrmaJetty, PostOneSideSglImportSegFail)
     urma_target_seg_t seg{};
     urma_target_seg_t *tmpSeg = nullptr;
     MOCKER(HcomUrma::ImportSeg).stubs().will(returnValue(tmpSeg));
-    MOCKER(HcomUrma::PostJettySendWr,
-        urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, uint32_t, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1));
+    MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, uint32_t, urma_jfs_wr_t **))
+        .stubs()
+        .will(returnValue(1));
     EXPECT_EQ(jetty->PostOneSideSgl(iov, iovCount, ctx, true, NET_SGE_MAX_IOV), UB_QP_POST_READ_FAILED);
 }
 
@@ -623,9 +643,9 @@ TEST_F(TestUbUrmaJetty, PostOneSideSglFail)
     urma_target_seg_t seg{};
     urma_target_seg_t *tmpSeg = &seg;
     MOCKER(HcomUrma::ImportSeg).stubs().will(returnValue(tmpSeg));
-    MOCKER(HcomUrma::PostJettySendWr,
-        urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, uint32_t, urma_jfs_wr_t **))
-        .stubs().will(returnValue(1));
+    MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, uint32_t, urma_jfs_wr_t **))
+        .stubs()
+        .will(returnValue(1));
     MOCKER_CPP(HcomUrma::UnimportSeg).stubs().will(returnValue(0));
     EXPECT_EQ(jetty->PostOneSideSgl(iov, iovCount, ctx, true, NET_SGE_MAX_IOV), UB_QP_POST_READ_FAILED);
     EXPECT_EQ(jetty->PostOneSideSgl(iov, iovCount, ctx, false, NET_SGE_MAX_IOV), UB_QP_POST_WRITE_FAILED);
@@ -639,9 +659,9 @@ TEST_F(TestUbUrmaJetty, PostOneSideSgl)
     urma_target_seg_t seg{};
     urma_target_seg_t *tmpSeg = &seg;
     MOCKER(HcomUrma::ImportSeg).stubs().will(returnValue(tmpSeg));
-    MOCKER(HcomUrma::PostJettySendWr,
-        urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, uint32_t, urma_jfs_wr_t **))
-        .stubs().will(returnValue(0));
+    MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, uint32_t, urma_jfs_wr_t **))
+        .stubs()
+        .will(returnValue(0));
     MOCKER(HcomUrma::UnimportSeg).stubs().will(returnValue(1));
     EXPECT_EQ(jetty->PostOneSideSgl(iov, iovCount, ctx, false, NET_SGE_MAX_IOV), UB_OK);
 }
@@ -677,7 +697,9 @@ TEST_F(TestUbUrmaJetty, CreateHBMemoryRegion)
     EXPECT_EQ(jetty->CreateHBMemoryRegion(0, mr), NN_INVALID_PARAM);
 
     MOCKER_CPP(UBMemoryRegion::Create, UResult(const std::string &, UBContext *, uint64_t, UBMemoryRegion *&))
-        .stubs().will(returnValue(1)).then(returnValue(0));
+        .stubs()
+        .will(returnValue(1))
+        .then(returnValue(0));
     EXPECT_EQ(jetty->CreateHBMemoryRegion(1, mr), 1);
 
     MOCKER_CPP(&UBMemoryRegion::InitializeForOneSide).stubs().will(returnValue(1)).then(returnValue(0));
@@ -733,6 +755,6 @@ TEST_F(TestUbUrmaJetty, GetRemoteHbInfo)
     jetty->mHBRemoteMr.Set(nullptr);
 }
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock
 #endif

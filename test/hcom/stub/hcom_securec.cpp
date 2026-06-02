@@ -30,19 +30,20 @@ namespace hcom {
 
 #define SECUREC_MEMORY_NO_OVERLAP(dest, src, count)                           \
     (((src) < (dest) && ((const char *)(src) + (count)) <= (char *)(dest)) || \
-        ((dest) < (src) && ((char *)(dest) + (count)) <= (const char *)(src)))
+     ((dest) < (src) && ((char *)(dest) + (count)) <= (const char *)(src)))
 
 #define SECUREC_MEMORY_IS_OVERLAP(dest, src, count)                          \
     (((src) < (dest) && ((const char *)(src) + (count)) > (char *)(dest)) || \
-        ((dest) < (src) && ((char *)(dest) + (count)) > (const char *)(src)))
+     ((dest) < (src) && ((char *)(dest) + (count)) > (const char *)(src)))
 
 #define SECUREC_MEMCPY_PARAM_OK(dest, destMax, src, count)                           \
     (SECUREC_LIKELY((count) <= (destMax) && (dest) != nullptr && (src) != nullptr && \
-        (destMax) <= SECUREC_MEM_MAX_LEN && (count) > 0 && SECUREC_MEMORY_NO_OVERLAP((dest), (src), (count))))
+                    (destMax) <= SECUREC_MEM_MAX_LEN && (count) > 0 &&               \
+                    SECUREC_MEMORY_NO_OVERLAP((dest), (src), (count))))
 
 #define SECUREC_STRCPY_PARAM_OK(strDest, destMax, strSrc)                                                   \
     ((destMax) > 0 && (destMax) <= SECUREC_STRING_MAX_LEN && (strDest) != nullptr && (strSrc) != nullptr && \
-        (strDest) != (strSrc))
+     (strDest) != (strSrc))
 
 #define SECUREC_CALC_STR_LEN(str, maxLen, outLen) \
     do {                                          \
@@ -149,5 +150,5 @@ int strcpy_s(char *strDest, size_t destMax, const char *strSrc)
     }
     return strcpy_error(strDest, destMax, strSrc);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

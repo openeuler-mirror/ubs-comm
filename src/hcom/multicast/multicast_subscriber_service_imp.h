@@ -4,8 +4,8 @@
 #ifndef HCOM_MULTICAST_SUBSCRIBER_SERVICE_IMP_H
 #define HCOM_MULTICAST_SUBSCRIBER_SERVICE_IMP_H
 
-#include "include/multicast_subscriber_service.h"
 #include "include/multicast_subscriber.h"
+#include "include/multicast_subscriber_service.h"
 #include "multicast_config_imp.h"
 
 namespace ock {
@@ -61,7 +61,7 @@ private:
     UBSHcomTLSCertificationCallback mSubTLSCertificationCallback = nullptr;
     UBSHcomTLSPrivateKeyCallback mSubTLSPrivateKeyCallback = nullptr;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

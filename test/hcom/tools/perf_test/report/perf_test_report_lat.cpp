@@ -2,11 +2,11 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
 #include <algorithm>
-#include <sstream>
 #include <iomanip>
+#include <sstream>
 
-#include "report/perf_test_report_factory.h"
 #include "common/perf_test_logger.h"
+#include "report/perf_test_report_factory.h"
 #include "report/perf_test_report_lat.h"
 
 namespace hcom {
@@ -31,7 +31,7 @@ constexpr uint32_t OUTPUT_PRECISION = 2;
 // 与ib_send_lat打印保持一致
 #define RESULT_LAT_HEADER                                                                                \
     " #bytes #iterations    t_min[usec]    t_max[usec]  t_typical[usec]    t_avg[usec]    t_stdev[usec]" \
-        "   99\% percentile[usec]   99.9\% percentile[usec]"
+    "   99\% percentile[usec]   99.9\% percentile[usec]"
 
 static inline double GetMedian(uint64_t num, double *deltaArr)
 {
@@ -65,7 +65,7 @@ void PerfTestReportLat::PrintReportElement(PerfTestContext *ctx)
         return;
     }
 
-    double *delta = new double[iters];
+    double *delta = new (std::nothrow) double[iters];
     if (delta == nullptr) {
         LOG_ERROR("Failed to allocate memory for delta!");
         return;
@@ -99,8 +99,8 @@ void PerfTestReportLat::PrintReportElement(PerfTestContext *ctx)
     }
     double stdev = sqrt(stdev_sum / iters);
 
-    uint64_t iters_99 = static_cast<uint64_t>(ceil(iters * PERF_TEST_ITERS_99));
-    uint64_t iters_99_9 = static_cast<uint64_t>(ceil(iters * PERF_TEST_ITERS_99_9));
+    uint64_t iters_99 = static_cast<uint64_t>(ceil(iters * PERF_TEST_ITERS_99)) - 1;
+    uint64_t iters_99_9 = static_cast<uint64_t>(ceil(iters * PERF_TEST_ITERS_99_9)) - 1;
 
     std::stringstream sstream;
     // 统一设置左对齐，统一设置填充字符（配合位宽使用，通过修改填充字符方便调整打印格式）
@@ -110,7 +110,7 @@ void PerfTestReportLat::PrintReportElement(PerfTestContext *ctx)
     // 固定保留小数点后两位
     sstream << std::fixed << std::setprecision(OUTPUT_PRECISION);
     sstream << " " << std::setw(OUTPUT_WIDTH_14) << delta[0];
-    sstream << " " << std::setw(OUTPUT_WIDTH_12) << delta[iters];
+    sstream << " " << std::setw(OUTPUT_WIDTH_12) << delta[iters - 1];
     sstream << " " << std::setw(OUTPUT_WIDTH_18) << median;
     sstream << " " << std::setw(OUTPUT_WIDTH_14) << average;
     sstream << " " << std::setw(OUTPUT_WIDTH_15) << stdev;
@@ -138,5 +138,5 @@ void PerfTestReportLat::PrintReportHead()
 }
 
 REGIST_PERF_TEST_REPORT_CREATOR(PERF_TEST_REPORT_TYPE::LATENCY, PerfTestReportLat);
-}
-}
+} // namespace perftest
+} // namespace hcom

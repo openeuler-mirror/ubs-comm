@@ -13,20 +13,20 @@
 #ifndef HTRACE_MSG_H
 #define HTRACE_MSG_H
 
+#include <unistd.h>
 #include <cstring>
+#include <iomanip>
 #include <ios>
 #include <ostream>
-#include <string>
-#include <unistd.h>
-#include <vector>
 #include <sstream>
-#include <iomanip>
-#include "rpc_msg.h"
-#include "htracer_info.h"
-#include "securec.h"
-#include "htracer_tdigest.h"
+#include <string>
+#include <vector>
 #include "hcom_err.h"
 #include "hcom_log.h"
+#include "htracer_info.h"
+#include "htracer_tdigest.h"
+#include "rpc_msg.h"
+#include "securec.h"
 
 #define TRACE_INFO_MAX_LEN 63
 
@@ -55,14 +55,14 @@ struct TTraceInfo {
     explicit TTraceInfo(const char *name)
     {
         errno_t ret = strncpy_s(this->name, sizeof(this->name), name,
-            std::min(strlen(name), static_cast<size_t>(TRACE_INFO_MAX_LEN)));
+                                std::min(strlen(name), static_cast<size_t>(TRACE_INFO_MAX_LEN)));
         if (ret != EOK) {
             NN_LOG_ERROR("[HTRACER] Failed to strncpy name, err: " << ret);
             this->name[0] = '\0';
         }
     }
 
-    void operator += (const TTraceInfo &other)
+    void operator+=(const TTraceInfo &other)
     {
         begin += other.begin;
         goodEnd += other.goodEnd;
@@ -79,7 +79,7 @@ struct TTraceInfo {
     TTraceInfo(const TraceInfo &info, double quantile, bool enableTp)
     {
         errno_t ret = strncpy_s(this->name, sizeof(this->name), info.GetName().c_str(),
-            std::min(strlen(info.GetName().c_str()), static_cast<size_t>(TRACE_INFO_MAX_LEN)));
+                                std::min(strlen(info.GetName().c_str()), static_cast<size_t>(TRACE_INFO_MAX_LEN)));
         if (ret != EOK) {
             NN_LOG_ERROR("[HTRACER] Failed to strncpy name, err: " << ret);
             this->name[0] = '\0';
@@ -98,7 +98,7 @@ struct TTraceInfo {
                 Tdigest tdigest = info.GetTdigest();
                 tdigest.Merge();
                 // "/1000" ns -> us
-                latencyQuentile = tdigest.Quantile(quantile)/NN_NO1000;
+                latencyQuentile = tdigest.Quantile(quantile) / NN_NO1000;
             }
         }
     }
@@ -113,37 +113,21 @@ struct TTraceInfo {
 
     std::string ToString(TracePointTimeUnit unit = MICRO_SECOND) const
     {
-        static uint64_t timeUnitStep[TP_TIME_UNIT] = {
-            1,
-            NN_NO1000,
-            NN_NO1000000,
-            NN_NO1000000000
-        };
+        static uint64_t timeUnitStep[TP_TIME_UNIT] = {1, NN_NO1000, NN_NO1000000, NN_NO1000000000};
 
-        static std::string timeUnitName[TP_TIME_UNIT] = {
-            "ns",
-            "us",
-            "ms",
-            "s"
-        };
+        static std::string timeUnitName[TP_TIME_UNIT] = {"ns", "us", "ms", "s"};
         std::string str;
         std::ostringstream os(str);
         os.flags(std::ios::fixed);
         os.precision(NN_NO3);
         auto unitStep = timeUnitStep[unit];
         auto unitName = timeUnitName[unit];
-        os << "[" << std::left << std::setw(NN_NO50) << name << "]"
-           << "\t" << std::left << std::setw(NN_NO15) << begin << "\t"
-           << std::left << std::setw(NN_NO15) << goodEnd << "\t"
-           << std::left << std::setw(NN_NO15) << badEnd << "\t"
-           << std::left << std::setw(NN_NO15)
-           << ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0)
-           << "\t" << std::left << std::setw(NN_NO15)
-           << (min == UINT64_MAX ? 0 : ((double)min / unitStep))
-           << "\t" << std::left << std::setw(NN_NO15)
-           << (double)max / unitStep << "\t" << std::left << std::setw(NN_NO15)
-           << (goodEnd == 0 ? 0 : (double)total / goodEnd / unitStep) << "\t"
-           << std::left << std::setw(NN_NO15)
+        os << "[" << std::left << std::setw(NN_NO50) << name << "]" << "\t" << std::left << std::setw(NN_NO15) << begin
+           << "\t" << std::left << std::setw(NN_NO15) << goodEnd << "\t" << std::left << std::setw(NN_NO15) << badEnd
+           << "\t" << std::left << std::setw(NN_NO15) << ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0)
+           << "\t" << std::left << std::setw(NN_NO15) << (min == UINT64_MAX ? 0 : ((double)min / unitStep)) << "\t"
+           << std::left << std::setw(NN_NO15) << (double)max / unitStep << "\t" << std::left << std::setw(NN_NO15)
+           << (goodEnd == 0 ? 0 : (double)total / goodEnd / unitStep) << "\t" << std::left << std::setw(NN_NO15)
            << (double)total / unitStep << "\t" << std::left << std::setw(NN_NO15)
            << (latencyQuentile > 0 ? std::to_string(latencyQuentile) : "OFF");
         return os.str();
@@ -152,16 +136,11 @@ struct TTraceInfo {
     static std::string HeaderString()
     {
         std::stringstream ss;
-        ss << "\t[" << std::left << std::setw(NN_NO50) << "TP_NAME"
-           << "]"
-           << "\t" << std::left << std::setw(NN_NO15) << "TOTAL"
-           << "\t" << std::left << std::setw(NN_NO15) << "SUCCESS"
-           << "\t" << std::left << std::setw(NN_NO15) << "FAILURE"
-           << "\t" << std::left << std::setw(NN_NO15) << "UNFINISHED"
-           << "\t" << std::left << std::setw(NN_NO15) << "MIN(us)"
-           << "\t" << std::left << std::setw(NN_NO15) << "MAX(us)"
-           << "\t" << std::left << std::setw(NN_NO15) << "AVG(us)"
-           << "\t" << std::left << std::setw(NN_NO15) << "TOTAL(us)"
+        ss << "\t[" << std::left << std::setw(NN_NO50) << "TP_NAME" << "]" << "\t" << std::left << std::setw(NN_NO15)
+           << "TOTAL" << "\t" << std::left << std::setw(NN_NO15) << "SUCCESS" << "\t" << std::left << std::setw(NN_NO15)
+           << "FAILURE" << "\t" << std::left << std::setw(NN_NO15) << "UNFINISHED" << "\t" << std::left
+           << std::setw(NN_NO15) << "MIN(us)" << "\t" << std::left << std::setw(NN_NO15) << "MAX(us)" << "\t"
+           << std::left << std::setw(NN_NO15) << "AVG(us)" << "\t" << std::left << std::setw(NN_NO15) << "TOTAL(us)"
            << "\t" << std::left << std::setw(NN_NO15) << "TPX(us)";
         return ss.str();
     }
@@ -278,7 +257,7 @@ struct QueryTraceInfoResponse : public MessageHeader {
     }
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HTRACE_MSG_H

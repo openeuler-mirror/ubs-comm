@@ -12,10 +12,10 @@
 #include "ut_helper.h"
 
 bool UTHelper::ServerCreateDriver(UBSHcomNetDriver *&serverDriver, Handlers &handlers, UBSHcomNetDriverOptions &options,
-    uint16_t port)
+                                  uint16_t port)
 {
-    serverDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA,
-        "rdmaServer" + std::to_string(port), true);
+    serverDriver =
+        UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA, "rdmaServer" + std::to_string(port), true);
     if (serverDriver == nullptr) {
         NN_LOG_ERROR("failed to create serverDriver already created");
         return false;
@@ -50,7 +50,7 @@ bool UTHelper::ServerCreateDriver(UBSHcomNetDriver *&serverDriver, Handlers &han
 }
 
 bool UTHelper::ClientCreateDriver(UBSHcomNetDriver *&clientDriver, Handlers &handlers, UBSHcomNetDriverOptions &options,
-    uint16_t port)
+                                  uint16_t port)
 {
     auto name = "rdmaClient" + std::to_string(port);
     clientDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA, name, false);
@@ -87,7 +87,7 @@ bool UTHelper::ClientCreateDriver(UBSHcomNetDriver *&clientDriver, Handlers &han
 }
 
 bool UTHelper::ClientConnect(UBSHcomNetDriver *clientDriver, UBSHcomNetEndpointPtr &clientEp, uint16_t grpNo,
-    uint16_t clientNo)
+                             uint16_t clientNo)
 {
     setenv("HCOM_CONNECTION_RETRY_TIMES", "1", 1);
     if (clientDriver == nullptr) {
@@ -123,7 +123,7 @@ static uint16_t basePort = 6900;
 static int nameSeed = 0;
 
 NResult UTHelper::GetDriverStateMask(UBSHcomNetDriver *&driver, uint16_t stateMask, bool isServer,
-    UBSHcomNetDriverProtocol protocol)
+                                     UBSHcomNetDriverProtocol protocol)
 {
     driver = UBSHcomNetDriver::Instance(protocol, std::to_string(nameSeed++), isServer);
     driver->OobIpAndPort(BASE_IP, isServer ? ++basePort : basePort);
@@ -132,7 +132,7 @@ NResult UTHelper::GetDriverStateMask(UBSHcomNetDriver *&driver, uint16_t stateMa
 }
 
 NResult UTHelper::GetDriver(UBSHcomNetDriver *&driver, DRIVER_STATE state, bool isServer,
-    UBSHcomNetDriverProtocol protocol)
+                            UBSHcomNetDriverProtocol protocol)
 {
     driver = UBSHcomNetDriver::Instance(protocol, std::to_string(nameSeed++), isServer);
     driver->OobIpAndPort(BASE_IP, isServer ? ++basePort : basePort);

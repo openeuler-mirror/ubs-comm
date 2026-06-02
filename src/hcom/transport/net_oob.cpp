@@ -106,13 +106,12 @@ NResult OOBTCPServer::GetUdsName(std::string &udsName)
     return NN_OK;
 }
 
-bool BuildSockAddr(const std::string &ip, uint16_t port,
-                   sockaddr_storage &addrStorage, socklen_t &addrLen, int &family)
+bool BuildSockAddr(const std::string &ip, uint16_t port, sockaddr_storage &addrStorage, socklen_t &addrLen, int &family)
 {
     addrStorage = {};
     addrLen = 0;
     family = AF_UNSPEC;
-    sockaddr_in addr4 {};
+    sockaddr_in addr4{};
     if (inet_pton(AF_INET, ip.c_str(), &addr4.sin_addr) == 1) {
         addr4.sin_family = AF_INET;
         addr4.sin_port = htons(port);
@@ -121,7 +120,7 @@ bool BuildSockAddr(const std::string &ip, uint16_t port,
         family = AF_INET;
         return true;
     }
-    sockaddr_in6 addr6 {};
+    sockaddr_in6 addr6{};
     if (inet_pton(AF_INET6, ip.c_str(), &addr6.sin6_addr) == 1) {
         addr6.sin6_family = AF_INET6;
         addr6.sin6_port = htons(port);
@@ -135,7 +134,7 @@ bool BuildSockAddr(const std::string &ip, uint16_t port,
 
 NResult OOBTCPServer::BindAndListenCommon(int socketFD)
 {
-    sockaddr_storage addrStorage {};
+    sockaddr_storage addrStorage{};
     socklen_t addrLen = 0;
     int family = AF_UNSPEC;
     if (!BuildSockAddr(mListenIP, mListenPort, addrStorage, addrLen, family)) {
@@ -148,7 +147,7 @@ NResult OOBTCPServer::BindAndListenCommon(int socketFD)
     if (NN_UNLIKELY(ret < 0)) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to bind on " << mListenIP << ":" << mListenPort << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                          << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         NetFunc::NN_SafeCloseFd(socketFD);
         return NN_OOB_LISTEN_SOCKET_ERROR;
     }
@@ -157,7 +156,7 @@ NResult OOBTCPServer::BindAndListenCommon(int socketFD)
     if (NN_UNLIKELY(::listen(socketFD, OOB_DEFAULT_LISTEN_BACKLOG) < 0)) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to listen on " << mListenIP << ":" << mListenPort << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                            << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         NetFunc::NN_SafeCloseFd(socketFD);
         return NN_OOB_LISTEN_SOCKET_ERROR;
     }
@@ -170,7 +169,7 @@ NResult OOBTCPServer::BindAndListenAuto(int &socketFD)
     // mListenPort is set to mMinListenPort in EnableAutoPortSelection()
     auto tmpPort = mListenPort;
     while (tmpPort <= mMaxListenPort) {
-        sockaddr_storage addrStorage {};
+        sockaddr_storage addrStorage{};
         socklen_t addrLen = 0;
         int family = AF_UNSPEC;
         if (!BuildSockAddr(mListenIP, tmpPort, addrStorage, addrLen, family)) {
@@ -182,7 +181,7 @@ NResult OOBTCPServer::BindAndListenAuto(int &socketFD)
         if (NN_UNLIKELY(ret < 0)) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             NN_LOG_DEBUG("Try to bind on " << mListenIP << ":" << tmpPort << " failed, error "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                           << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             ++tmpPort;
             continue;
         }
@@ -194,7 +193,7 @@ NResult OOBTCPServer::BindAndListenAuto(int &socketFD)
         }
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_DEBUG("Try to listen on " << mListenIP << ":" << tmpPort << " failed, error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                         << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         // bind success but listen failed, reuse socketFD will case invalid argument error(22)
         NetFunc::NN_SafeCloseFd(socketFD);
         ret = CreateAndConfigSocket(socketFD);
@@ -216,7 +215,7 @@ NResult OOBTCPServer::BindAndListenAuto(int &socketFD)
 
 NResult OOBTCPServer::CreateAndConfigSocket(int &socketFD)
 {
-    sockaddr_storage addrStorage {};
+    sockaddr_storage addrStorage{};
     socklen_t addrLen = 0;
     int family = AF_UNSPEC;
     if (!BuildSockAddr(mListenIP, mListenPort, addrStorage, addrLen, family)) {
@@ -229,8 +228,8 @@ NResult OOBTCPServer::CreateAndConfigSocket(int &socketFD)
     if (tmpFD < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to create listen socket, error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) <<
-            ", please check if running of fd limit");
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)
+                     << ", please check if running of fd limit");
         return NN_OOB_LISTEN_SOCKET_ERROR;
     }
     /* set no-blocking */
@@ -238,16 +237,16 @@ NResult OOBTCPServer::CreateAndConfigSocket(int &socketFD)
     if (NN_UNLIKELY((value = fcntl(tmpFD, F_GETFL, 0)) == -1)) {
         NetFunc::NN_SafeCloseFd(tmpFD);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to get control value for sock " << mIndex.oobSvrIdx << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to get control value for sock "
+                     << mIndex.oobSvrIdx << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return NN_OOB_LISTEN_SOCKET_ERROR;
     }
 
     if (NN_UNLIKELY((value = fcntl(tmpFD, F_SETFL, uint32_t(value) | O_NONBLOCK)) == -1)) {
         NetFunc::NN_SafeCloseFd(tmpFD);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to set control value for sock " << mIndex.oobSvrIdx << ", error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to set control value for sock "
+                     << mIndex.oobSvrIdx << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return NN_OOB_LISTEN_SOCKET_ERROR;
     }
 
@@ -257,8 +256,7 @@ NResult OOBTCPServer::CreateAndConfigSocket(int &socketFD)
     if (NN_UNLIKELY(ret < 0)) {
         NetFunc::NN_SafeCloseFd(tmpFD);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to set option, error "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to set option, error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return NN_OOB_LISTEN_SOCKET_ERROR;
     }
     socketFD = tmpFD;
@@ -310,8 +308,8 @@ NResult OOBTCPServer::Start()
     }
 
     if (mOobType != NET_OOB_TCP || mListenIP.empty() || mListenPort < NN_NO1024) {
-        NN_LOG_ERROR("Failed to start oob server as invalid type or listen ip " << mListenIP << " or port " <<
-            mListenPort << ", port range is 1024 ~ 65535)");
+        NN_LOG_ERROR("Failed to start oob server as invalid type or listen ip "
+                     << mListenIP << " or port " << mListenPort << ", port range is 1024 ~ 65535)");
         return NN_INVALID_PARAM;
     }
 
@@ -327,7 +325,7 @@ NResult OOBTCPServer::Start()
         NetFunc::NN_SafeCloseFd(mListenFD);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to create oob connection cb thread in oob server, as "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return NN_ERROR;
     }
     mEs->SetThreadName("OOBTcpConnHdl");
@@ -335,7 +333,7 @@ NResult OOBTCPServer::Start()
         NetFunc::NN_SafeCloseFd(mListenFD);
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to start oob connection cb thread in oob server, as "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return NN_ERROR;
     }
 
@@ -474,8 +472,8 @@ NResult OOBTCPServer::StartForUds()
     if (listenFd < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to create listen socket, error "
-            << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) <<
-            ", please check if fd is out of limit");
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)
+                     << ", please check if fd is out of limit");
         return NN_OOB_LISTEN_SOCKET_ERROR;
     }
 
@@ -539,7 +537,7 @@ void OOBTCPServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr,
     int family = peerAddr.ss_family;
 
     if (family == AF_INET6) {
-        const auto *a6 = reinterpret_cast<const sockaddr_in6*>(&peerAddr);
+        const auto *a6 = reinterpret_cast<const sockaddr_in6 *>(&peerAddr);
         if (inet_ntop(AF_INET6, &(a6->sin6_addr), ipStr, sizeof(ipStr)) == nullptr) {
             NN_LOG_ERROR("Failed to convert ipv6 number to string");
             resp = SERVER_INTERNAL_ERROR;
@@ -547,7 +545,7 @@ void OOBTCPServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr,
             peerPort = ntohs(a6->sin6_port);
         }
     } else {
-        const auto *a4 = reinterpret_cast<const sockaddr_in*>(&peerAddr);
+        const auto *a4 = reinterpret_cast<const sockaddr_in *>(&peerAddr);
         if (inet_ntop(AF_INET, &(a4->sin_addr), ipStr, sizeof(ipStr)) == nullptr) {
             NN_LOG_ERROR("Failed to convert ipv4 number to string");
             resp = SERVER_INTERNAL_ERROR;
@@ -581,9 +579,8 @@ void OOBTCPServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr,
         if (::send(fd, &resp, sizeof(ConnectResp), 0) <= 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             NN_LOG_ERROR("Failed to send connect resp to peer on oob @ "
-                << ipStr << ":" << peerPort
-                << ", errno:" << errno << " error:"
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                         << ipStr << ":" << peerPort << ", errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
     }
 }
@@ -591,11 +588,11 @@ void OOBTCPServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr,
 void OOBTCPServer::RunInThread()
 {
     if (mOobType == NET_OOB_TCP) {
-        NN_LOG_INFO("OOB server accept thread for " << mListenIP << ":" << mListenPort << " started, load balancer " <<
-            (mWorkerLb == nullptr ? "null" : mWorkerLb->ToString()));
+        NN_LOG_INFO("OOB server accept thread for " << mListenIP << ":" << mListenPort << " started, load balancer "
+                                                    << (mWorkerLb == nullptr ? "null" : mWorkerLb->ToString()));
     } else if (mOobType == NET_OOB_UDS) {
-        NN_LOG_TRACE_INFO("OOB server accept thread for " << mUdsName << " started, load balancer " <<
-            (mWorkerLb == nullptr ? "null" : mWorkerLb->ToString()));
+        NN_LOG_TRACE_INFO("OOB server accept thread for " << mUdsName << " started, load balancer "
+                                                          << (mWorkerLb == nullptr ? "null" : mWorkerLb->ToString()));
     } else {
         NN_LOG_ERROR("Un-reachable path");
     }
@@ -625,7 +622,7 @@ void OOBTCPServer::RunInThread()
             if (rc < 0 && errno != EINTR) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
                 NN_LOG_ERROR("Get poll event failed, errno "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                             << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                 break;
             }
 
@@ -633,15 +630,14 @@ void OOBTCPServer::RunInThread()
                 continue;
             }
 
-            sockaddr_storage peerAddr {};
+            sockaddr_storage peerAddr{};
             socklen_t peerLen = sizeof(peerAddr);
 
             int fd = ::accept(mListenFD, reinterpret_cast<sockaddr *>(&peerAddr), &peerLen);
             if (fd < 0) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
                 NN_LOG_WARN("Invalid to accept on new socket with "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)
-                    << ", ignore and continue");
+                            << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) << ", ignore and continue");
                 continue;
             }
 
@@ -650,18 +646,18 @@ void OOBTCPServer::RunInThread()
 
             /* set recv or send timeout */
             if (maxRecvTimeout != NN_NO0) {
-                struct timeval recvTimeout = { maxRecvTimeout, 0 };
+                struct timeval recvTimeout = {maxRecvTimeout, 0};
                 setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &recvTimeout, sizeof(recvTimeout));
             }
             if (maxSendTimeout != NN_NO0) {
-                struct timeval sendTimeout = { maxSendTimeout, 0 };
+                struct timeval sendTimeout = {maxSendTimeout, 0};
                 setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &sendTimeout, sizeof(sendTimeout));
             }
 
             DealConnectInThread(fd, peerAddr, peerLen);
         } catch (std::exception &ex) {
-            NN_LOG_WARN("Got exception in OOBTCPServer::RunInThread, exception "
-                << ex.what() << ", ignore and continue");
+            NN_LOG_WARN("Got exception in OOBTCPServer::RunInThread, exception " << ex.what()
+                                                                                 << ", ignore and continue");
         } catch (...) {
             NN_LOG_WARN("Got unknown exception in OOBTCPServer::RunInThread, ignore and continue");
         }
@@ -692,16 +688,13 @@ NResult OOBTCPConnection::Send(void *buf, uint32_t size) const
             } else {
                 // Since mFD is blocking, EAGAIN/EWOULDBLOCK won't be there.
                 char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR(
-                    "Failed to send data to peer on oob @ "
-                    << mIpAndPort << ", as errno:" << errno << " error:"
-                    << NetFunc::NN_GetStrError(errno, errBuf,
-                                               NET_STR_ERROR_BUF_SIZE));
+                NN_LOG_ERROR("Failed to send data to peer on oob @ "
+                             << mIpAndPort << ", as errno:" << errno
+                             << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
                 return NN_OOB_CONN_SEND_ERROR;
             }
         } else if (result == 0) {
-            NN_LOG_ERROR("Failed to send data to peer on oob @ "
-                         << mIpAndPort << ", reset by peer");
+            NN_LOG_ERROR("Failed to send data to peer on oob @ " << mIpAndPort << ", reset by peer");
             return NN_OOB_CONN_SEND_ERROR;
         }
 
@@ -728,11 +721,9 @@ NResult OOBTCPConnection::Receive(void *buf, uint32_t size) const
             } else {
                 // Since mFD is blocking, EAGAIN/EWOULDBLOCK won't be there.
                 char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR(
-                    "Failed to receive data from peer on oob @ "
-                    << mIpAndPort << ", as errno:" << errno << " error:"
-                    << NetFunc::NN_GetStrError(errno, errBuf,
-                                               NET_STR_ERROR_BUF_SIZE));
+                NN_LOG_ERROR("Failed to receive data from peer on oob @ "
+                             << mIpAndPort << ", as errno:" << errno
+                             << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
                 return NN_OOB_CONN_RECEIVE_ERROR;
             }
         } else if (result == 0) {
@@ -755,17 +746,17 @@ NResult OOBTCPConnection::SendMsg(msghdr msg, uint32_t size) const
     } else if (result <= 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to send msg to peer " << mIpAndPort << " result:" << result << ", as "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                                   << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return NN_ERROR;
     } else {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed send msg to pee, the size is un-matched required size " << sizeof(msg) << ", send size " <<
-            result << ", or connection error, errno " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed send msg to pee, the size is un-matched required size "
+                     << sizeof(msg) << ", send size " << result << ", or connection error, errno "
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return NN_ERROR;
     }
     return NN_OK;
 }
-
 
 NResult OOBTCPConnection::ReceiveMsg(msghdr msg, uint32_t size) const
 {
@@ -774,14 +765,14 @@ NResult OOBTCPConnection::ReceiveMsg(msghdr msg, uint32_t size) const
         return NN_OK;
     } else if (result <= 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to receive msg from peer on oob" << mIpAndPort << ", as "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to receive msg from peer on oob"
+                     << mIpAndPort << ", as " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return NN_ERROR;
     } else {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to receive data from peer, the size is un-matched required size " << sizeof(msg) <<
-            ", recv size " << result << ", or connection error, errno "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        NN_LOG_ERROR("Failed to receive data from peer, the size is un-matched required size "
+                     << sizeof(msg) << ", recv size " << result << ", or connection error, errno "
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return NN_ERROR;
     }
     return NN_OK;
@@ -809,12 +800,12 @@ NResult OOBTCPClient::Connect(const std::string &ip, uint32_t port, OOBTCPConnec
 
 NResult OOBTCPClient::ConnectWithFd(const std::string &ip, uint32_t port, int &fd)
 {
-    sockaddr_storage addrStorage {};
+    sockaddr_storage addrStorage{};
     socklen_t addrLen = 0;
     int family = AF_UNSPEC;
 
     {
-        sockaddr_in addr4 {};
+        sockaddr_in addr4{};
         if (inet_pton(AF_INET, ip.c_str(), &addr4.sin_addr) == 1) {
             addr4.sin_family = AF_INET;
             addr4.sin_port = htons(port);
@@ -825,7 +816,7 @@ NResult OOBTCPClient::ConnectWithFd(const std::string &ip, uint32_t port, int &f
     }
 
     if (family == AF_UNSPEC) {
-        sockaddr_in6 addr6 {};
+        sockaddr_in6 addr6{};
         if (inet_pton(AF_INET6, ip.c_str(), &addr6.sin6_addr) == 1) {
             addr6.sin6_family = AF_INET6;
             addr6.sin6_port = htons(port);
@@ -844,8 +835,8 @@ NResult OOBTCPClient::ConnectWithFd(const std::string &ip, uint32_t port, int &f
     if (tmpFD < 0) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to create socket, errno:" << errno << " error:"
-            << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE)
-            << ", please check if fd is out of limit");
+                                                       << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE)
+                                                       << ", please check if fd is out of limit");
         return NN_OOB_CLIENT_SOCKET_ERROR;
     }
 
@@ -864,9 +855,9 @@ NResult OOBTCPClient::ConnectWithFd(const std::string &ip, uint32_t port, int &f
     ConnectResp connectStatus = ConnectResp::OK;
 
     if (family == AF_INET6) {
-        sockaddr_storage localAddrStorage {};
+        sockaddr_storage localAddrStorage{};
         socklen_t localAddrLen = 0;
-        sockaddr_in6 localAddr6 {};
+        sockaddr_in6 localAddr6{};
 
         inet_pton(AF_INET6, mLocalEid.c_str(), &localAddr6.sin6_addr);
         localAddr6.sin6_family = AF_INET6;
@@ -979,8 +970,9 @@ NResult OOBTCPClient::ConnectWithFd(const std::string &filename, int &fd)
     auto tmpFD = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (tmpFD < 0) {
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Failed to create listen socket, errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE) << ", please check if fd is out of limit");
+        NN_LOG_ERROR("Failed to create listen socket, errno:"
+                     << errno << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE)
+                     << ", please check if fd is out of limit");
         return NN_OOB_CLIENT_SOCKET_ERROR;
     }
     int synCnt = 1; /* Set connect() retry time for quick connect */
@@ -998,9 +990,10 @@ NResult OOBTCPClient::ConnectWithFd(const std::string &filename, int &fd)
             ssize_t result = ::recv(tmpFD, &connectStatus, sizeof(ConnectResp), 0);
             if (result <= 0 || connectStatus != ConnectResp::OK) {
                 char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("Failed to receive connection status from peer on oob, as result:" << result <<
-                    " errno:" << errno << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE) <<
-                    " connTaskStatus:" << connectStatus);
+                NN_LOG_ERROR("Failed to receive connection status from peer on oob, as result:"
+                             << result << " errno:" << errno
+                             << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE)
+                             << " connTaskStatus:" << connectStatus);
             } else {
                 fd = tmpFD;
                 NN_LOG_INFO("Connect to " << filename << " successfully");
@@ -1016,8 +1009,9 @@ NResult OOBTCPClient::ConnectWithFd(const std::string &filename, int &fd)
         timesRetried++;
 
         char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-        NN_LOG_ERROR("Trying to connect to " << filename << " errno:" << errno << " error:" <<
-            NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE) << " retry times:" << timesRetried);
+        NN_LOG_ERROR("Trying to connect to " << filename << " errno:" << errno << " error:"
+                                             << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE)
+                                             << " retry times:" << timesRetried);
     }
 
     NetFunc::NN_SafeCloseFd(tmpFD);
@@ -1032,13 +1026,13 @@ void OOBTCPClient::ConfigureSocketTimeouts(int &tmpFD, long &maxConnRetryTimes, 
     auto maxRecvTimeout = NetFunc::NN_GetLongEnv("HCOM_CONNECTION_RECV_TIMEOUT_SEC", NN_NO1, NN_NO7200, NN_NO0);
     auto maxSendTimeout = NetFunc::NN_GetLongEnv("HCOM_CONNECTION_SEND_TIMEOUT_SEC", NN_NO1, NN_NO7200, NN_NO0);
     if (maxRecvTimeout != NN_NO0) {
-        struct timeval recvTimeout = { maxRecvTimeout, 0 };
+        struct timeval recvTimeout = {maxRecvTimeout, 0};
         setsockopt(tmpFD, SOL_SOCKET, SO_RCVTIMEO, &recvTimeout, sizeof(timeval));
     }
     if (maxSendTimeout != NN_NO0) {
-        struct timeval sendTimeout = { maxSendTimeout, 0 };
+        struct timeval sendTimeout = {maxSendTimeout, 0};
         setsockopt(tmpFD, SOL_SOCKET, SO_SNDTIMEO, &sendTimeout, sizeof(timeval));
     }
 }
-}
-}
+} // namespace hcom
+} // namespace ock

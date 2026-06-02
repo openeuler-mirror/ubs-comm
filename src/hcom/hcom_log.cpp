@@ -16,5 +16,5 @@ namespace hcom {
 UBSHcomNetOutLogger *UBSHcomNetOutLogger::gLogger = nullptr;
 std::mutex UBSHcomNetOutLogger::gMutex;
 int UBSHcomNetOutLogger::logLevel = NN_NO1;
-}
-}
+} // namespace hcom
+} // namespace ock

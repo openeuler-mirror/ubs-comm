@@ -1,14 +1,14 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
-#include <thread>
-#include <unistd.h>
 #include <getopt.h>
+#include <unistd.h>
 #include <cstdio>
+#include <thread>
 #include "securec.h"
 
-#include "multicast/multicast_subscriber_service.h"
 #include "multicast/multicast_subscriber.h"
+#include "multicast/multicast_subscriber_service.h"
 
 using namespace ock::hcom;
 int g_userChar = 0;
@@ -37,7 +37,7 @@ void BrokenSubscriber(const UBSHcomNetEndpointPtr &ep)
 }
 
 static int DefaultNewEp(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                        const std::string &payload)
 {
     return 0;
 }
@@ -77,7 +77,7 @@ bool CertCallback(const std::string &name, std::string &value)
 }
 
 bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                        UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "keypass";
     keyPass = reinterpret_cast<void *>(content);
@@ -89,7 +89,7 @@ bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyP
 }
 
 bool CACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = g_certPath + "/CA/cacert.pem";
     std::string crlFile = g_certPath + "/CA/ca.crl";
@@ -126,17 +126,19 @@ bool CreateSubscriberService()
         return false;
     }
 
-    g_subscriberService->GetConfig().SetDeviceIpMask({ g_ipSeg });
+    g_subscriberService->GetConfig().SetDeviceIpMask({g_ipSeg});
     g_subscriberService->RegisterRecvHandler(ReceivedRequest);
     g_subscriberService->RegisterBrokenHandler(BrokenSubscriber);
 
     if (g_enableTls) {
-        g_subscriberService->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1,
-            std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+        g_subscriberService->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
+                                                             std::placeholders::_3, std::placeholders::_4,
+                                                             std::placeholders::_5));
         g_subscriberService->RegisterTLSCertificationCallback(
             std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
         g_subscriberService->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1,
-            std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                                     std::placeholders::_2, std::placeholders::_3,
+                                                                     std::placeholders::_4, std::placeholders::_5));
     }
     NN_LOG_INFO("SubscriberService Created!");
     return true;
@@ -218,17 +220,14 @@ void Test()
 int main(int argc, char *argv[])
 {
     struct option options[] = {
-        {"ip", required_argument, nullptr, 'i'},
-        {"port", required_argument, nullptr, 'p'},
-        {"driver", required_argument, nullptr, 'd'},
-        {"size", required_argument, nullptr, 's'},
-        {"cpuId", required_argument, nullptr, 'c'},
-        {"TLS enabled", required_argument, nullptr, 'T'},
-        {"cipherSuite", required_argument, nullptr, 'C'},
-        {nullptr, 0, nullptr, 0},
+        {"ip", required_argument, nullptr, 'i'},          {"port", required_argument, nullptr, 'p'},
+        {"driver", required_argument, nullptr, 'd'},      {"size", required_argument, nullptr, 's'},
+        {"cpuId", required_argument, nullptr, 'c'},       {"TLS enabled", required_argument, nullptr, 'T'},
+        {"cipherSuite", required_argument, nullptr, 'C'}, {nullptr, 0, nullptr, 0},
     };
 
-    const char *usage = "usage\n"
+    const char *usage =
+        "usage\n"
         "        -i, --ip,                     coord server ip mask, e.g. 10.175.118.1;\n"
         "        -p, --port,                   coord server port, by default 9981; jetty id for UBC, e.g. 998\n"
         "        -d, --driver,                 multicast driver protocol, 0 means RDMA, 1 means TCP\n"

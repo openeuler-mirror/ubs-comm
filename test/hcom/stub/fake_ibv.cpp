@@ -11,11 +11,11 @@
  */
 
 #include "fake_ibv.h"
-#include <sys/eventfd.h>
-#include <unistd.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
+#include <sys/eventfd.h>
+#include <unistd.h>
 #include <cstdio>
 #include <cstdlib>
 
@@ -42,25 +42,8 @@ extern "C" {
 #endif
 
 struct ibv_device g_ibvdevice[FAKE_IBV_DEVICE_NUM] = {
-    {
-        {NULL, NULL},
-        IBV_NODE_RNIC,
-        IBV_TRANSPORT_IB,
-        "hrn0_0",
-        "uverbs0",
-        "/tmp/hrn0_0",
-        "/tmp/uverbs0"
-    },
-    {
-        {NULL, NULL},
-        IBV_NODE_RNIC,
-        IBV_TRANSPORT_IB,
-        "hrn1_0",
-        "uverbs1",
-        "/tmp/hrn1_0",
-        "/tmp/uverbs1"
-    }
-};
+    {{NULL, NULL}, IBV_NODE_RNIC, IBV_TRANSPORT_IB, "hrn0_0", "uverbs0", "/tmp/hrn0_0", "/tmp/uverbs0"},
+    {{NULL, NULL}, IBV_NODE_RNIC, IBV_TRANSPORT_IB, "hrn1_0", "uverbs1", "/tmp/hrn1_0", "/tmp/uverbs1"}};
 
 static uint64_t readBuff[100];
 fake_lock_list_t g_f_qp_list;
@@ -255,7 +238,7 @@ void fake_send_event_on_cc(struct ibv_comp_channel *cmc)
  功能描述  : 创建一个CQ
 ********************************************************************** */
 struct ibv_cq *ibv_create_cq(struct ibv_context *context, int cqe, void *cq_context, struct ibv_comp_channel *channel,
-    int comp_vector)
+                             int comp_vector)
 {
     fake_cq_t *fcq = (fake_cq_t *)malloc(sizeof(fake_cq_t));
     if (fcq == NULL) {
@@ -404,27 +387,25 @@ int ibv_destroy_qp(struct ibv_qp *qp)
 ********************************************************************** */
 const char *ibv_event_type_str(enum ibv_event_type event)
 {
-    static const char *event_type_str[] = {
-        [IBV_EVENT_CQ_ERR]        = "CQ error",
-        [IBV_EVENT_QP_FATAL]        = "local work queue catastrophic error",
-        [IBV_EVENT_QP_REQ_ERR]        = "invalid request local work queue error",
-        [IBV_EVENT_QP_ACCESS_ERR]    = "local access violation work queue error",
-        [IBV_EVENT_COMM_EST]        = "communication established",
-        [IBV_EVENT_SQ_DRAINED]        = "send queue drained",
-        [IBV_EVENT_PATH_MIG]        = "path migrated",
-        [IBV_EVENT_PATH_MIG_ERR]    = "path migration request error",
-        [IBV_EVENT_DEVICE_FATAL]    = "local catastrophic error",
-        [IBV_EVENT_PORT_ACTIVE]        = "port active",
-        [IBV_EVENT_PORT_ERR]        = "port error",
-        [IBV_EVENT_LID_CHANGE]        = "LID change",
-        [IBV_EVENT_PKEY_CHANGE]        = "P_Key change",
-        [IBV_EVENT_SM_CHANGE]        = "SM change",
-        [IBV_EVENT_SRQ_ERR]        = "SRQ catastrophic error",
-        [IBV_EVENT_SRQ_LIMIT_REACHED]    = "SRQ limit reached",
-        [IBV_EVENT_QP_LAST_WQE_REACHED]    = "last WQE reached",
-        [IBV_EVENT_CLIENT_REREGISTER]    = "client reregistration",
-        [IBV_EVENT_GID_CHANGE]        = "GID table change"
-    };
+    static const char *event_type_str[] = {[IBV_EVENT_CQ_ERR] = "CQ error",
+                                           [IBV_EVENT_QP_FATAL] = "local work queue catastrophic error",
+                                           [IBV_EVENT_QP_REQ_ERR] = "invalid request local work queue error",
+                                           [IBV_EVENT_QP_ACCESS_ERR] = "local access violation work queue error",
+                                           [IBV_EVENT_COMM_EST] = "communication established",
+                                           [IBV_EVENT_SQ_DRAINED] = "send queue drained",
+                                           [IBV_EVENT_PATH_MIG] = "path migrated",
+                                           [IBV_EVENT_PATH_MIG_ERR] = "path migration request error",
+                                           [IBV_EVENT_DEVICE_FATAL] = "local catastrophic error",
+                                           [IBV_EVENT_PORT_ACTIVE] = "port active",
+                                           [IBV_EVENT_PORT_ERR] = "port error",
+                                           [IBV_EVENT_LID_CHANGE] = "LID change",
+                                           [IBV_EVENT_PKEY_CHANGE] = "P_Key change",
+                                           [IBV_EVENT_SM_CHANGE] = "SM change",
+                                           [IBV_EVENT_SRQ_ERR] = "SRQ catastrophic error",
+                                           [IBV_EVENT_SRQ_LIMIT_REACHED] = "SRQ limit reached",
+                                           [IBV_EVENT_QP_LAST_WQE_REACHED] = "last WQE reached",
+                                           [IBV_EVENT_CLIENT_REREGISTER] = "client reregistration",
+                                           [IBV_EVENT_GID_CHANGE] = "GID table change"};
 
     if (event < IBV_EVENT_CQ_ERR || event > IBV_EVENT_GID_CHANGE) {
         return "unknown";
@@ -548,7 +529,7 @@ void fake_flash_all_recv_wr(fake_qp_t *fqp)
     fake_send_event_on_cc(fcq->cq.channel);
 
     FAKE_LOG("Recv_wr_mgr(%p) Qp(%p) cq(%p) flash to wr(%d) to cq(%u-%u).", &fqp->recv_wr_mgr, fqp, fcq, total,
-        fcq->wcq.comsumer, fcq->wcq.producer);
+             fcq->wcq.comsumer, fcq->wcq.producer);
 }
 
 /* *********************************************************************
@@ -613,7 +594,6 @@ int fake_post_srq_recv(struct ibv_srq *srq, struct ibv_recv_wr *recv_wr, struct 
 
     return 0;
 }
-
 
 /* *********************************************************************
  功能描述  : 查找对端的qp
@@ -729,17 +709,14 @@ int fake_ibv_post_send(fake_qp_t *my_qp, struct ibv_send_wr *wr)
     for (int i = 0; i < wr->num_sge; i++) {
         if (item->sg_list[i].length == 0) {
             // 兼容一个wqe接受sgl的场景，直接拷贝在上一个
-            memcpy(reinterpret_cast<void *>(
-                static_cast<uintptr_t>(item->sg_list[i - 1].addr + wr->sg_list[i - 1].length)),
-                reinterpret_cast<void *>(static_cast<uintptr_t>(wr->sg_list[i].addr)),
-                wr->sg_list[i].length);
+            memcpy(
+                reinterpret_cast<void *>(static_cast<uintptr_t>(item->sg_list[i - 1].addr + wr->sg_list[i - 1].length)),
+                reinterpret_cast<void *>(static_cast<uintptr_t>(wr->sg_list[i].addr)), wr->sg_list[i].length);
             size += wr->sg_list[i].length;
             continue;
         }
-        memcpy(reinterpret_cast<void *>(
-            static_cast<uintptr_t>(item->sg_list[i].addr)),
-            reinterpret_cast<void *>(static_cast<uintptr_t>(wr->sg_list[i].addr)),
-            wr->sg_list[i].length);
+        memcpy(reinterpret_cast<void *>(static_cast<uintptr_t>(item->sg_list[i].addr)),
+               reinterpret_cast<void *>(static_cast<uintptr_t>(wr->sg_list[i].addr)), wr->sg_list[i].length);
         size += wr->sg_list[i].length;
     }
 
@@ -1042,7 +1019,6 @@ int ibv_dereg_umm_page_mr(struct ibv_mr *mr)
     free(mr);
     return 0;
 }
-
 
 int ibv_query_gid(struct ibv_context *context, uint8_t port_num, int index, union ibv_gid *gid)
 {

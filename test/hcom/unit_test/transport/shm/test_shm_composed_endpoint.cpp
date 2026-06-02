@@ -12,8 +12,8 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 #include "shm_composed_endpoint.h"
-#include "shm_queue.h"
 #include "shm_mr_pool.h"
+#include "shm_queue.h"
 
 namespace ock {
 namespace hcom {
@@ -26,9 +26,7 @@ public:
 
 TestShmComposedEndpoint::TestShmComposedEndpoint() {}
 
-void TestShmComposedEndpoint::SetUp()
-{
-}
+void TestShmComposedEndpoint::SetUp() {}
 
 void TestShmComposedEndpoint::TearDown()
 {
@@ -44,14 +42,11 @@ TEST_F(TestShmComposedEndpoint, ShmSyncEndpointCreate)
     // ShmSyncEndpoint create
     ShmSyncEndpointPtr shmEp;
 
-    MOCKER_CPP(&ShmSyncEndpoint::CreateEventQueue)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&ShmSyncEndpoint::CreateEventQueue).stubs().will(returnValue(1));
 
     ret = ShmSyncEndpoint::Create("ShmSyncEndpointCreate", NN_NO128, SHM_EVENT_POLLING, shmEp);
     EXPECT_EQ(ret, 1);
 }
-
 
 TEST_F(TestShmComposedEndpoint, ShmSyncEndpointCreateFail)
 {
@@ -59,9 +54,7 @@ TEST_F(TestShmComposedEndpoint, ShmSyncEndpointCreateFail)
     ShmSyncEndpointPtr shmEp;
     ShmSyncEndpoint *nullEp = nullptr;
 
-    MOCKER_CPP(&ShmSyncEndpointPtr::Get)
-        .stubs()
-        .will(returnValue(nullEp));
+    MOCKER_CPP(&ShmSyncEndpointPtr::Get).stubs().will(returnValue(nullEp));
 
     ret = ShmSyncEndpoint::Create("ShmSyncEndpointCreate", NN_NO128, SHM_EVENT_POLLING, shmEp);
     EXPECT_EQ(ret, static_cast<int>(SH_NEW_OBJECT_FAILED));
@@ -77,15 +70,11 @@ TEST_F(TestShmComposedEndpoint, ShmSyncEndpointCreateEventQueueFail)
     ShmHandle *nullShmHandle = nullptr;
     ShmEventQueue *nullEventQueue = nullptr;
 
-    MOCKER_CPP(&ShmEventQueuePtr::Get)
-        .stubs()
-        .will(returnValue(nullEventQueue));
+    MOCKER_CPP(&ShmEventQueuePtr::Get).stubs().will(returnValue(nullEventQueue));
     ret = ep->CreateEventQueue();
     EXPECT_EQ(ret, static_cast<int>(SH_NEW_OBJECT_FAILED));
 
-    MOCKER_CPP(&ShmHandlePtr::Get)
-        .stubs()
-        .will(returnValue(nullShmHandle));
+    MOCKER_CPP(&ShmHandlePtr::Get).stubs().will(returnValue(nullShmHandle));
     ret = ep->CreateEventQueue();
     EXPECT_EQ(ret, static_cast<int>(SH_NEW_OBJECT_FAILED));
 }
@@ -107,10 +96,7 @@ TEST_F(TestShmComposedEndpoint, ShmSyncEndpointPostSend)
     int32_t defaultTimeout = 0;
     UBSHcomNetTransHeader header{};
 
-    MOCKER_CPP(&ShmChannel::EQEventEnqueue)
-        .stubs()
-        .will(returnValue(-1))
-        .then(returnValue(0));
+    MOCKER_CPP(&ShmChannel::EQEventEnqueue).stubs().will(returnValue(-1)).then(returnValue(0));
     MOCKER_CPP(&ShmEventQueue::EnqueueAndNotify)
         .stubs()
         .will(returnValue(0))
@@ -191,10 +177,7 @@ TEST_F(TestShmComposedEndpoint, ShmSyncEndpointPostSendRawSgl)
     request.upCtxSize = 1;
     req.lAddress = reinterpret_cast<uintptr_t>(&header);
 
-    MOCKER_CPP(&ShmChannel::EQEventEnqueue)
-        .stubs()
-        .will(returnValue(-1))
-        .then(returnValue(0));
+    MOCKER_CPP(&ShmChannel::EQEventEnqueue).stubs().will(returnValue(-1)).then(returnValue(0));
     MOCKER_CPP(&ShmEventQueue::EnqueueAndNotify)
         .stubs()
         .will(returnValue(0))
@@ -254,11 +237,7 @@ TEST_F(TestShmComposedEndpoint, ShmSyncEndpointReceive)
     ShmOpContextInfo opCtx{};
     uint32_t immData = 0;
 
-    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent)
-        .stubs()
-        .will(returnValue(1))
-        .then(returnValue(0))
-        .then(returnValue(1));
+    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent).stubs().will(returnValue(1)).then(returnValue(0)).then(returnValue(1));
 
     ret = ep->Receive(0, opCtx, immData);
     EXPECT_EQ(ret, 1);
@@ -277,11 +256,7 @@ TEST_F(TestShmComposedEndpoint, ShmSyncEndpointDequeueEvent)
     // param create
     ShmEvent opEvent{};
 
-    MOCKER_CPP(&ShmEventQueue::DequeueOrWait)
-        .stubs()
-        .will(returnValue(1))
-        .then(returnValue(0))
-        .then(returnValue(1));
+    MOCKER_CPP(&ShmEventQueue::DequeueOrWait).stubs().will(returnValue(1)).then(returnValue(0)).then(returnValue(1));
 
     ret = ep->DequeueEvent(0, opEvent);
     EXPECT_EQ(ret, 1);
@@ -369,9 +344,7 @@ TEST_F(TestShmComposedEndpoint, SyncReadWriteProcess)
     ShmHandlePtr localMrHandle = nullptr;
     UBSHcomNetTransRequest req{};
 
-    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap)
-        .stubs()
-        .will(returnValue(localMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap).stubs().will(returnValue(localMrHandle));
 
     ret = ep->PostReadWrite(ch.Get(), req, mrHandleMap, type);
     EXPECT_EQ(ret, static_cast<int>(SH_ERROR));
@@ -394,15 +367,9 @@ TEST_F(TestShmComposedEndpoint, SyncReadWriteProcessTwo)
     ShmHandlePtr remoteMrHandle;
     UBSHcomNetTransRequest req{};
 
-    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap)
-        .stubs()
-        .will(returnValue(localMrHandle));
-    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap)
-        .stubs()
-        .will(returnValue(remoteMrHandle));
-    MOCKER_CPP(&ShmChannel::GetRemoteMrHandle)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap).stubs().will(returnValue(localMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap).stubs().will(returnValue(remoteMrHandle));
+    MOCKER_CPP(&ShmChannel::GetRemoteMrHandle).stubs().will(returnValue(1));
 
     ret = ep->PostReadWrite(ch.Get(), req, mrHandleMap, type);
     EXPECT_EQ(ret, 1);
@@ -422,7 +389,7 @@ TEST_F(TestShmComposedEndpoint, SyncReadWriteProcessLkeyFail)
     ShmOpContextInfo::ShmOpType type = ShmOpContextInfo::SH_SEND;
     ShmHandlePtr localMrHandle = nullptr;
     UBSHcomNetTransRequest req{};
-    req.lKey  = UINT64_MAX;
+    req.lKey = UINT64_MAX;
     ret = ep->PostReadWrite(ch.Get(), req, mrHandleMap, type);
     EXPECT_EQ(ret, static_cast<int>(SH_PARAM_INVALID));
 }
@@ -440,18 +407,14 @@ TEST_F(TestShmComposedEndpoint, PostReadWriteCopyFail)
     ShmChannel::CreateAndInit("PostReadWriteCopyFail", 0, NN_NO128, NN_NO4, ch);
     ShmOpContextInfo::ShmOpType type = ShmOpContextInfo::ShmOpType::SH_READ;
     UBSHcomNetTransRequest req{};
-    req.upCtxSize  = 1;
+    req.upCtxSize = 1;
     ShmHandlePtr localMrHandle = new (std::nothrow) ShmHandle("localMrHandle", "", 0, 0, false);
     ASSERT_NE(localMrHandle, nullptr);
     ShmHandlePtr remoteMrHandle = new (std::nothrow) ShmHandle("remoteMrHandle", "", 0, 0, false);
     ASSERT_NE(remoteMrHandle, nullptr);
 
-    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap)
-        .stubs()
-        .will(returnValue(localMrHandle));
-    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap)
-        .stubs()
-        .will(returnValue(remoteMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap).stubs().will(returnValue(localMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap).stubs().will(returnValue(remoteMrHandle));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0)).then(returnValue(1));
 
     ret = ep->PostReadWrite(ch.Get(), req, mrHandleMap, type);
@@ -471,18 +434,14 @@ TEST_F(TestShmComposedEndpoint, PostReadWriteSendLocalEventFail)
     ShmChannel::CreateAndInit("PostReadWriteSendLocalEventFail", 0, NN_NO128, NN_NO4, ch);
     ShmOpContextInfo::ShmOpType type = ShmOpContextInfo::ShmOpType::SH_READ;
     UBSHcomNetTransRequest req{};
-    req.upCtxSize  = 0;
+    req.upCtxSize = 0;
     ShmHandlePtr localMrHandle = new (std::nothrow) ShmHandle("localMrHandle", "", 0, 0, false);
     ASSERT_NE(localMrHandle, nullptr);
     ShmHandlePtr remoteMrHandle = new (std::nothrow) ShmHandle("remoteMrHandle", "", 0, 0, false);
     ASSERT_NE(remoteMrHandle, nullptr);
 
-    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap)
-        .stubs()
-        .will(returnValue(localMrHandle));
-    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap)
-        .stubs()
-        .will(returnValue(remoteMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap).stubs().will(returnValue(localMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap).stubs().will(returnValue(remoteMrHandle));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmSyncEndpoint::SendLocalEventForOneSideDone).stubs().will(returnValue(1));
 
@@ -508,15 +467,9 @@ TEST_F(TestShmComposedEndpoint, PostReadWriteSglSyncReadWriteProcessFail)
     ASSERT_NE(localMrHandle, nullptr);
     ShmHandlePtr remoteMrHandle;
 
-    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap)
-        .stubs()
-        .will(returnValue(localMrHandle));
-    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap)
-        .stubs()
-        .will(returnValue(remoteMrHandle));
-    MOCKER_CPP(&ShmChannel::GetRemoteMrHandle)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap).stubs().will(returnValue(localMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap).stubs().will(returnValue(remoteMrHandle));
+    MOCKER_CPP(&ShmChannel::GetRemoteMrHandle).stubs().will(returnValue(1));
 
     ret = ep->PostReadWriteSgl(ch.Get(), sglReq, mrHandleMap, type);
     EXPECT_EQ(ret, 1);
@@ -541,12 +494,8 @@ TEST_F(TestShmComposedEndpoint, PostReadWriteSglFillSglCtxFail)
     ShmHandlePtr remoteMrHandle = new (std::nothrow) ShmHandle("remoteMrHandle", "", 0, 0, false);
     ASSERT_NE(remoteMrHandle, nullptr);
 
-    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap)
-        .stubs()
-        .will(returnValue(localMrHandle));
-    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap)
-        .stubs()
-        .will(returnValue(remoteMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap).stubs().will(returnValue(localMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap).stubs().will(returnValue(remoteMrHandle));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmSyncEndpoint::FillSglCtx).stubs().will(returnValue(1));
     ret = ep->PostReadWriteSgl(ch.Get(), sglReq, mrHandleMap, type);
@@ -572,12 +521,8 @@ TEST_F(TestShmComposedEndpoint, PostReadWriteSglSendLocalEventFail)
     ShmHandlePtr remoteMrHandle = new (std::nothrow) ShmHandle("remoteMrHandle", "", 0, 0, false);
     ASSERT_NE(remoteMrHandle, nullptr);
 
-    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap)
-        .stubs()
-        .will(returnValue(localMrHandle));
-    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap)
-        .stubs()
-        .will(returnValue(remoteMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromLocalMap).stubs().will(returnValue(localMrHandle));
+    MOCKER_CPP(&ShmMRHandleMap::GetFromRemoteMap).stubs().will(returnValue(remoteMrHandle));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmSyncEndpoint::FillSglCtx).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmSyncEndpoint::SendLocalEventForOneSideDone).stubs().will(returnValue(1));
@@ -590,7 +535,7 @@ TEST_F(TestShmComposedEndpoint, CreateEventQueueFail)
     int ret;
     ShmSyncEndpoint *ep = new ShmSyncEndpoint("shm", 0, SHM_EVENT_POLLING);
     EXPECT_NE(ep->CreateEventQueue(), SH_OK);
- 
+
     delete ep;
 }
 
@@ -598,12 +543,12 @@ TEST_F(TestShmComposedEndpoint, ShmMemoryRegionCreateFail)
 {
     int ret;
     ShmMemoryRegion *mr = nullptr;
-    
+
     ret = ShmMemoryRegion::Create("shmMr", 0, mr);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
- 
+
     ret = ShmMemoryRegion::Create("shmMr", 0, 0, mr);
     EXPECT_EQ(ret, NN_INVALID_PARAM);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

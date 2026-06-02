@@ -21,8 +21,8 @@ using SerResult = int;
 /// SplitSend 专用: 2G 为最大可发送包大小
 const uint32_t SERVICE_MAX_TOTAL_LENGTH = 2U * 1024 * 1024 * 1024;
 
-SerResult SyncSpliceMessage(UBSHcomNetResponseContext &ctx, UBSHcomNetEndpoint *ep, int32_t timeout,
-    std::string &acc, void *&data, uint32_t &dataLen);
+SerResult SyncSpliceMessage(UBSHcomNetResponseContext &ctx, UBSHcomNetEndpoint *ep, int32_t timeout, std::string &acc,
+                            void *&data, uint32_t &dataLen);
 
 enum class SpliceMessageResultType {
     OK,
@@ -30,7 +30,7 @@ enum class SpliceMessageResultType {
     INDETERMINATE,
 };
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock
 
-#endif  // OCK_HCOM_CPP_HCOM_SPLIT_H
+#endif // OCK_HCOM_CPP_HCOM_SPLIT_H

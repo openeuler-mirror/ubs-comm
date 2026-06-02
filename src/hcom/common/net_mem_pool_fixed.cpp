@@ -15,7 +15,8 @@
 namespace ock {
 namespace hcom {
 NetMemPoolFixed::NetMemPoolFixed(const std::string &name, const NetMemPoolFixedOptions &options)
-    : mOptions(options), mName(name)
+    : mOptions(options),
+      mName(name)
 {
     OBJ_GC_INCREASE(NetMemPoolFixed);
 }
@@ -62,22 +63,22 @@ NResult NetMemPoolFixed::Validate()
 {
     /* validate super block size, which must between 1 and 256 MB including 256 MB */
     if (mOptions.superBlkSizeMB == 0 || mOptions.superBlkSizeMB > NN_NO256) {
-        NN_LOG_ERROR("Invalid superBlkSizeMB " << mOptions.superBlkSizeMB << " in mem pool " << mName <<
-            ", which be 1~" << NN_NO256 << ", reset to " << NN_NO4);
+        NN_LOG_ERROR("Invalid superBlkSizeMB " << mOptions.superBlkSizeMB << " in mem pool " << mName << ", which be 1~"
+                                               << NN_NO256 << ", reset to " << NN_NO4);
         return NN_INVALID_PARAM;
     }
 
     /* validate thread cache expand and shrink steps, which between 8 and 256 MB */
     if (mOptions.tcExpandBlkCnt < NN_NO8 || mOptions.tcExpandBlkCnt > NN_NO256) {
-        NN_LOG_ERROR("Invalid tcExpandBlkCnt " << mOptions.tcExpandBlkCnt << " in mem pool " << mName <<
-            ", which be " << NN_NO8 << "~" << NN_NO256 << ", reset to " << NN_NO128);
+        NN_LOG_ERROR("Invalid tcExpandBlkCnt " << mOptions.tcExpandBlkCnt << " in mem pool " << mName << ", which be "
+                                               << NN_NO8 << "~" << NN_NO256 << ", reset to " << NN_NO128);
         return NN_INVALID_PARAM;
     }
 
     /* validate size of min block */
     if (mOptions.minBlkSize < sizeof(NetMemPoolMinBlock)) {
-        NN_LOG_ERROR("Invalid minBlkSize " << mOptions.minBlkSize << " in mem pool " << mName <<
-            ", which be larger than " << sizeof(NetMemPoolMinBlock));
+        NN_LOG_ERROR("Invalid minBlkSize " << mOptions.minBlkSize << " in mem pool " << mName
+                                           << ", which be larger than " << sizeof(NetMemPoolMinBlock));
         return NN_INVALID_PARAM;
     }
 
@@ -91,9 +92,9 @@ NResult NetMemPoolFixed::Validate()
 
     uint64_t superBlkSize = mOptions.superBlkSizeMB * NN_NO1024 * NN_NO1024;
     if (superBlkSize % (mOptions.minBlkSize * mOptions.tcExpandBlkCnt)) {
-        NN_LOG_ERROR("Invalid minBlkSize " << mOptions.minBlkSize << " or tcExpandBlkCnt " << mOptions.tcExpandBlkCnt <<
-            " in mem pool " << mName << ", super block size is not times of " <<
-            mOptions.minBlkSize * mOptions.tcExpandBlkCnt);
+        NN_LOG_ERROR("Invalid minBlkSize " << mOptions.minBlkSize << " or tcExpandBlkCnt " << mOptions.tcExpandBlkCnt
+                                           << " in mem pool " << mName << ", super block size is not times of "
+                                           << mOptions.minBlkSize * mOptions.tcExpandBlkCnt);
         return NN_INVALID_PARAM;
     }
 
@@ -104,8 +105,8 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
 {
     uint64_t startTime = NetMonotonic::TimeNs();
     /* allocate memory */
-    auto superBlkSize = (mTotalSuperBlkSize == 0) ?
-        (mOptions.superBlkSizeMB * NN_NO1024 * NN_NO1024) : mTotalSuperBlkSize;
+    auto superBlkSize = (mTotalSuperBlkSize == 0) ? (mOptions.superBlkSizeMB * NN_NO1024 * NN_NO1024) :
+                                                    mTotalSuperBlkSize;
     auto mem = memalign(NN_NO4096, superBlkSize);
     if (mem == nullptr) {
         NN_LOG_ERROR("Failed to malloc memory for supper block in mem pool " << mName);
@@ -147,10 +148,11 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
         mTcMutex.Unlock();
     }
 
-    NN_LOG_INFO("Fixed size memory pool " << mName << " allocated " << mOptions.superBlkSizeMB <<
-        "MB memory from os, total block size " << mTotalSuperBlkSize << " and split to " << count <<
-        " min block with size " << mOptions.minBlkSize << " which took " <<
-        (NetMonotonic::TimeNs() - startTime) / NN_NO1000 << "us, current free min block is " << mFreeCount);
+    NN_LOG_INFO("Fixed size memory pool " << mName << " allocated " << mOptions.superBlkSizeMB
+                                          << "MB memory from os, total block size " << mTotalSuperBlkSize
+                                          << " and split to " << count << " min block with size " << mOptions.minBlkSize
+                                          << " which took " << (NetMonotonic::TimeNs() - startTime) / NN_NO1000
+                                          << "us, current free min block is " << mFreeCount);
 
     return NN_OK;
 }
@@ -200,9 +202,10 @@ NResult NetMemPoolFixed::TCAlloc(NetMemPoolMinBlock &head)
 std::string NetMemPoolFixed::ToString()
 {
     std::ostringstream oss;
-    oss << "fixed-size-memory-pool [name: " << mName << ", options: [" << mOptions.ToString() <<
-        "], super-block-count: " << mSuperBlocks.size() << ", super-block-size: " <<
-        mTotalSuperBlkSize / NN_NO1024 / NN_NO1024 << "MB, free-min-block-count: " << mFreeCount;
+    oss << "fixed-size-memory-pool [name: " << mName << ", options: [" << mOptions.ToString()
+        << "], super-block-count: " << mSuperBlocks.size()
+        << ", super-block-size: " << mTotalSuperBlkSize / NN_NO1024 / NN_NO1024
+        << "MB, free-min-block-count: " << mFreeCount;
 
     uint32_t blkIndex = 0;
     oss << " super-blocks: [";
@@ -253,5 +256,5 @@ std::string NetTCacheFixed::ToString()
     oss << "]]";
     return oss.str();
 }
-}
-}
+} // namespace hcom
+} // namespace ock

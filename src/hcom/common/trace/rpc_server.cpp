@@ -11,18 +11,18 @@
  */
 
 #include "rpc_server.h"
-#include <cerrno>
-#include <cstring>
-#include <string>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/unistd.h>
-#include <netinet/in.h>
-#include <thread>
 #include <unistd.h>
+#include <cerrno>
+#include <cstring>
+#include <string>
+#include <thread>
+#include "hcom_log.h"
 #include "rpc_msg.h"
 #include "securec.h"
-#include "hcom_log.h"
 
 #define MAX_CONNECT_NUM (2)
 
@@ -66,7 +66,7 @@ SerCode RpcServer::Start(const std::string &serverName)
 
     if (listen(mSockFd, MAX_CONNECT_NUM) < 0) {
         NN_LOG_WARN("[HTRACER] listen failed");
-        std::cout<<"failed to listen"<<std::endl;
+        std::cout << "failed to listen" << std::endl;
         close(mSockFd);
         mSockFd = -1;
         return SER_ERROR;
@@ -77,7 +77,7 @@ SerCode RpcServer::Start(const std::string &serverName)
             int32_t connFd = ::accept(mSockFd, nullptr, nullptr);
             if (connFd == -1) {
                 NN_LOG_WARN("[HTRACER] failed to accept connection link");
-                std::cout<<"failed to accept"<<std::endl;
+                std::cout << "failed to accept" << std::endl;
                 return;
             }
 
@@ -150,5 +150,5 @@ void RpcServer::Stop()
     }
     mRunning = false;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

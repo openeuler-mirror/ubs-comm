@@ -10,9 +10,9 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <thread>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <thread>
 
 #include "hcom_utils.h"
 
@@ -21,8 +21,8 @@ namespace hcom {
 
 NetSpinLock NetUuid::gLock;
 uint32_t NetUuid::gSeqNo = 0;
- 
-uint64_t NetUuid::GenerateUuid(const std::string& ip)
+
+uint64_t NetUuid::GenerateUuid(const std::string &ip)
 {
     struct Uuid {
         union {
@@ -60,5 +60,5 @@ uint64_t NetUuid::GenerateUuid(const std::string& ip)
     return res.value;
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

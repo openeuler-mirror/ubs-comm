@@ -4,27 +4,27 @@
 #include <iostream>
 #include <map>
 
+#include "common/perf_test_config.h"
 #include "common/perf_test_logger.h"
 #include "common/perf_test_utils.h"
-#include "common/perf_test_config.h"
 
 namespace hcom {
 namespace perftest {
 static const std::vector<std::pair<std::string, PERF_TEST_TYPE>> gPerfTestType = {
-    { "TRANSPORT_SEND_LAT", PERF_TEST_TYPE::TRANSPORT_SEND_LAT },
-    { "TRANSPORT_SEND_BW", PERF_TEST_TYPE::TRANSPORT_SEND_BW },
-    { "TRANSPORT_READ_LAT", PERF_TEST_TYPE::TRANSPORT_READ_LAT },
-    { "TRANSPORT_READ_BW", PERF_TEST_TYPE::TRANSPORT_READ_BW },
-    { "TRANSPORT_WRITE_LAT", PERF_TEST_TYPE::TRANSPORT_WRITE_LAT },
-    { "TRANSPORT_WRITE_BW", PERF_TEST_TYPE::TRANSPORT_WRITE_BW },
-    { "SERVICE_SEND_LAT", PERF_TEST_TYPE::SERVICE_SEND_LAT },
-    { "SERVICE_SEND_BW", PERF_TEST_TYPE::SERVICE_SEND_BW },
-    { "SERVICE_READ_LAT", PERF_TEST_TYPE::SERVICE_READ_LAT },
-    { "SERVICE_READ_BW", PERF_TEST_TYPE::SERVICE_READ_BW },
-    { "SERVICE_WRITE_LAT", PERF_TEST_TYPE::SERVICE_WRITE_LAT },
-    { "SERVICE_WRITE_BW", PERF_TEST_TYPE::SERVICE_WRITE_BW },
-    { "SERVICE_RNDV_LAT", PERF_TEST_TYPE::SERVICE_RNDV_LAT },
-    { "SERVICE_RNDV_BW", PERF_TEST_TYPE::SERVICE_RNDV_BW },
+    {"TRANSPORT_SEND_LAT", PERF_TEST_TYPE::TRANSPORT_SEND_LAT},
+    {"TRANSPORT_SEND_BW", PERF_TEST_TYPE::TRANSPORT_SEND_BW},
+    {"TRANSPORT_READ_LAT", PERF_TEST_TYPE::TRANSPORT_READ_LAT},
+    {"TRANSPORT_READ_BW", PERF_TEST_TYPE::TRANSPORT_READ_BW},
+    {"TRANSPORT_WRITE_LAT", PERF_TEST_TYPE::TRANSPORT_WRITE_LAT},
+    {"TRANSPORT_WRITE_BW", PERF_TEST_TYPE::TRANSPORT_WRITE_BW},
+    {"SERVICE_SEND_LAT", PERF_TEST_TYPE::SERVICE_SEND_LAT},
+    {"SERVICE_SEND_BW", PERF_TEST_TYPE::SERVICE_SEND_BW},
+    {"SERVICE_READ_LAT", PERF_TEST_TYPE::SERVICE_READ_LAT},
+    {"SERVICE_READ_BW", PERF_TEST_TYPE::SERVICE_READ_BW},
+    {"SERVICE_WRITE_LAT", PERF_TEST_TYPE::SERVICE_WRITE_LAT},
+    {"SERVICE_WRITE_BW", PERF_TEST_TYPE::SERVICE_WRITE_BW},
+    {"SERVICE_RNDV_LAT", PERF_TEST_TYPE::SERVICE_RNDV_LAT},
+    {"SERVICE_RNDV_BW", PERF_TEST_TYPE::SERVICE_RNDV_BW},
 };
 
 bool PerfTestConfig::SetType(const std::string &cmd)
@@ -41,8 +41,10 @@ bool PerfTestConfig::SetType(const std::string &cmd)
 }
 
 static const std::vector<std::pair<std::string, ock::hcom::UBSHcomNetDriverProtocol>> gPerfTestProtocol = {
-    { "RDMA", ock::hcom::UBSHcomNetDriverProtocol::RDMA }, { "TCP", ock::hcom::UBSHcomNetDriverProtocol::TCP },
-    { "SHM", ock::hcom::UBSHcomNetDriverProtocol::SHM },   { "UBC", ock::hcom::UBSHcomNetDriverProtocol::UBC },
+    {"RDMA", ock::hcom::UBSHcomNetDriverProtocol::RDMA},
+    {"TCP", ock::hcom::UBSHcomNetDriverProtocol::TCP},
+    {"SHM", ock::hcom::UBSHcomNetDriverProtocol::SHM},
+    {"UBC", ock::hcom::UBSHcomNetDriverProtocol::UBC},
 };
 
 bool PerfTestConfig::SetProtocol(const std::string &cmd)
@@ -85,7 +87,6 @@ void PerfTestConfig::Print()
     LOG_DEBUG("cpuId = " << mCpuId);
     LOG_DEBUG("ubcMode = " << static_cast<uint32_t>(mUbcMode));
     LOG_DEBUG("ubPriority = " << mUbPriority);
-    LOG_DEBUG("enableActiveBackup = " << mEnableActiveBackup);
 }
 
 PerfTestConfig::PerfTestConfig()
@@ -150,7 +151,6 @@ bool PerfTestConfig::ParseArgs(int argc, char *argv[])
         {"help", no_argument, nullptr, 'h'},
         {"ubcMode", no_argument, nullptr, 'u'},
         {"priority", no_argument, nullptr, 'r'},
-        {"backup", no_argument, nullptr, 'b'},
         {nullptr, 0, nullptr, 0},
     };
 
@@ -205,13 +205,11 @@ bool PerfTestConfig::ParseArgs(int argc, char *argv[])
             case 'r':
                 SetUbPriority(static_cast<uint32_t>(strtoul(optarg, nullptr, 0)));
                 break;
-            case 'b':
-                SetEnableActiveBackup(true);
             default:
                 break;
         }
     }
     return SelfCheck();
 }
-}
-}
+} // namespace perftest
+} // namespace hcom

@@ -11,15 +11,15 @@
  */
 
 #include <dlfcn.h>
-#include <fstream>
 #include <sys/epoll.h>
 #include <sys/mman.h>
+#include <fstream>
 
 #include "hcom.h"
 #include "net_mem_pool_fixed.h"
 #include "openssl_api_wrapper.h"
-#include "shm_common.h"
 #include "shm_channel.h"
+#include "shm_common.h"
 #include "shm_handle.h"
 #include "test_shm_common.h"
 #include "test_shm_send_recv_msg.h"
@@ -29,7 +29,7 @@ TestShmSendRecvMsg::TestShmSendRecvMsg() {}
 
 UBSHcomNetEndpointPtr clientEp = nullptr;
 UBSHcomNetEndpointPtr serverEp = nullptr;
-UBSHcomNetDriverOptions shmMsgOptions {};
+UBSHcomNetDriverOptions shmMsgOptions{};
 static int port = 8091;
 UBSHcomNetDriver *shmMsgServerDriver;
 UBSHcomNetDriver *shmMsgClientDriver;
@@ -37,7 +37,6 @@ UBSHcomNetTransSgeIov iovPtrMsgServer[4];
 UBSHcomNetTransSgeIov iovPtrMsgClient[4];
 static int g_nameSeed = 0;
 uint32_t fdsLen = 3;
-
 
 int ShmMsgNewEndPoint(const std::string &ipPort, const UBSHcomNetEndpointPtr &newEP, const std::string &payload)
 {
@@ -63,13 +62,11 @@ int ShmMsgRequestPosted(const UBSHcomNetRequestContext &ctx)
     return 0;
 }
 
-
 int ShmMsgOneSideDone(const UBSHcomNetRequestContext &ctx)
 {
     NN_LOG_INFO("one side done");
     return 0;
 }
-
 
 void SetShmCallBack(UBSHcomNetDriver *driver)
 {
@@ -82,7 +79,7 @@ void SetShmCallBack(UBSHcomNetDriver *driver)
 }
 
 bool MsgRegisterShmMemory(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov iovs[],
-    std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
+                          std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
 {
     for (int i = 0; i < 4; i++) {
         auto &iov = iovs[i];
@@ -117,7 +114,7 @@ void CreateFds(int shmFds[])
         if (tmpFd < 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             NN_LOG_ERROR("Failed to create shm file error "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)););
+                         << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)););
         }
         shmFds[i] = tmpFd;
     }
@@ -125,16 +122,15 @@ void CreateFds(int shmFds[])
 
 void DestoryFds(int outFds[])
 {
-    NN_LOG_INFO("Destory fds len:" << fdsLen << " fds[0]:" << outFds[0] << " fds[1]:" << outFds[1] << " fds[2]:" <<
-        outFds[2]);
+    NN_LOG_INFO("Destory fds len:" << fdsLen << " fds[0]:" << outFds[0] << " fds[1]:" << outFds[1]
+                                   << " fds[2]:" << outFds[2]);
 
     for (uint32_t i = 0; i < fdsLen; i++) {
         auto mappedAddress = mmap(nullptr, 10, PROT_READ | PROT_WRITE, MAP_SHARED, outFds[i], 0);
         if (mappedAddress == MAP_FAILED) {
             close(outFds[i]);
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to mmap file error "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)););
+            NN_LOG_ERROR("Failed to mmap file error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)););
         }
         NN_LOG_INFO("shm map fds:" << outFds[i]);
 
@@ -154,15 +150,15 @@ void TestShmSendRecvMsg::SetUp()
     shmMsgOptions.oobType = ock::hcom::NET_OOB_UDS;
     shmMsgOptions.enableTls = false;
 
-    shmMsgServerDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM,
-        "shm_msg" + std::to_string(g_nameSeed++), true);
+    shmMsgServerDriver =
+        UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM, "shm_msg" + std::to_string(g_nameSeed++), true);
     UBSHcomNetOobUDSListenerOptions listenOpt;
     listenOpt.Name(UDSNAME);
     listenOpt.perm = 0;
     shmMsgServerDriver->AddOobUdsOptions(listenOpt);
 
-    shmMsgClientDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM,
-        "shm_msg" + std::to_string(g_nameSeed++), false);
+    shmMsgClientDriver =
+        UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM, "shm_msg" + std::to_string(g_nameSeed++), false);
     shmMsgServerDriver->OobIpAndPort(BASE_IP, port);
     shmMsgClientDriver->OobIpAndPort(BASE_IP, port++);
     SetShmCallBack(shmMsgServerDriver);

@@ -97,7 +97,7 @@ enum SerCode {
     SER_SPLIT_INVALID_MSG = 524,
     SER_MULTICAST_SEND_ALL_FAILED = 525,
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_CPP_ERR_H

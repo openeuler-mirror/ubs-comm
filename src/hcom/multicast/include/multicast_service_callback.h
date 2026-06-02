@@ -5,9 +5,9 @@
 #define HCOM_MULTICAST_SERVICE_CALLBACK_H
 
 #include "hcom_service.h"
+#include "multicast_publisher.h"
 #include "net_monotonic.h"
 #include "service_ctx_store.h"
-#include "multicast_publisher.h"
 
 namespace ock {
 namespace hcom {
@@ -168,8 +168,11 @@ public:
     }
 
     MultiCastServiceTimer(Publisher *publisher, HcomServiceCtxStore *ctxStore, int32_t t, uintptr_t cb,
-        MultiCastSyncCBType type)
-        : mPublisher(publisher), mCtxStore(ctxStore), mCallback(cb), mType(type)
+                          MultiCastSyncCBType type)
+        : mPublisher(publisher),
+          mCtxStore(ctxStore),
+          mCallback(cb),
+          mType(type)
     {
         // if t < 0, it means never timeout, so leave mTimeout as 0
         if (t >= 0) {
@@ -318,7 +321,7 @@ public:
     }
 
 private:
-    MultiCastServiceTimer mTimerCtx {};
+    MultiCastServiceTimer mTimerCtx{};
     NetSpinLock mLock;
     uint32_t mCtxCount = NN_NO0;
 };
@@ -332,7 +335,7 @@ struct MultiCastTimerContext {
 
 class MultiCastServiceTimerCompare {
 public:
-    bool operator () (MultiCastServiceTimer *&a, MultiCastServiceTimer *&b) const
+    bool operator()(MultiCastServiceTimer *&a, MultiCastServiceTimer *&b) const
     {
         if (a->Timeout() > b->Timeout()) {
             return true;
@@ -343,7 +346,7 @@ public:
         }
     }
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HCOM_MULTICAST_SERVICE_CALLBACK_H

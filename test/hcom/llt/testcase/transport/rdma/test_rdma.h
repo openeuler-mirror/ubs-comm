@@ -18,6 +18,7 @@ public:
     TestCaseRdma();
     virtual void SetUp(void);
     virtual void TearDown(void);
+
 protected:
 };
 

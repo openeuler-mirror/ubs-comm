@@ -18,13 +18,13 @@
 #include <sys/poll.h>
 
 #include "net_monotonic.h"
+#include "net_oob_secure.h"
 #include "net_oob_ssl.h"
+#include "net_ub_driver_oob.h"
 #include "net_ub_endpoint.h"
 #include "ub_mr_fixed_buf.h"
-#include "ub_worker.h"
-#include "net_ub_driver_oob.h"
-#include "net_oob_secure.h"
 #include "ub_urma_wrapper_jetty.h"
+#include "ub_worker.h"
 
 namespace ock {
 namespace hcom {
@@ -251,7 +251,7 @@ static ssize_t MockRecvUBC(int socket, void *buf, size_t size, int flags)
         default:
             break;
     }
- 
+
     return size;
 }
 
@@ -263,11 +263,8 @@ static ssize_t MockConnSend(int socket, void const *buf, size_t size, int flags)
 TEST_F(TestNetDriverUBWithOob, NewConnectionCBSecErr)
 {
     OOBTCPConnection conn(-1);
-    MOCKER(OOBSecureProcess::SecProcessInOOBServer).stubs()
-        .will(returnValue(1))
-        .then(returnValue(0));
-    MOCKER_CPP_VIRTUAL(conn, &OOBTCPConnection::Receive).stubs()
-        .will(returnValue(1));
+    MOCKER(OOBSecureProcess::SecProcessInOOBServer).stubs().will(returnValue(1)).then(returnValue(0));
+    MOCKER_CPP_VIRTUAL(conn, &OOBTCPConnection::Receive).stubs().will(returnValue(1));
     EXPECT_EQ(driver->NewConnectionCB(conn), NN_OOB_SEC_PROCESS_ERROR);
     EXPECT_EQ(driver->NewConnectionCB(conn), NN_ERROR);
 }
@@ -275,10 +272,8 @@ TEST_F(TestNetDriverUBWithOob, NewConnectionCBSecErr)
 TEST_F(TestNetDriverUBWithOob, NewConnectionCBMagicErr)
 {
     OOBTCPConnection conn(-1);
-    MOCKER(OOBSecureProcess::SecProcessInOOBServer).stubs()
-        .will(returnValue(0));
-    MOCKER_CPP_VIRTUAL(conn, &OOBTCPConnection::Send).stubs()
-        .will(returnValue(0));
+    MOCKER(OOBSecureProcess::SecProcessInOOBServer).stubs().will(returnValue(0));
+    MOCKER_CPP_VIRTUAL(conn, &OOBTCPConnection::Send).stubs().will(returnValue(0));
     MOCKER(::recv).stubs().will(invoke(MockRecv));
     EXPECT_EQ(driver->NewConnectionCB(conn), NN_ERROR);
     driver->mOptions.magic = 1;
@@ -290,13 +285,10 @@ TEST_F(TestNetDriverUBWithOob, NewConnectionLbErr)
 {
     OOBTCPConnection conn(-1);
     conn.mLb = lb;
-    MOCKER(OOBSecureProcess::SecProcessInOOBServer).stubs()
-        .will(returnValue(0));
-    MOCKER_CPP_VIRTUAL(conn, &OOBTCPConnection::Send).stubs()
-        .will(returnValue(0));
+    MOCKER(OOBSecureProcess::SecProcessInOOBServer).stubs().will(returnValue(0));
+    MOCKER_CPP_VIRTUAL(conn, &OOBTCPConnection::Send).stubs().will(returnValue(0));
     MOCKER(::recv).stubs().will(invoke(MockRecv));
-    MOCKER_CPP(&NetWorkerLB::ChooseWorker).stubs()
-        .will(returnValue(false));
+    MOCKER_CPP(&NetWorkerLB::ChooseWorker).stubs().will(returnValue(false));
     driver->mOptions.magic = 1;
     EXPECT_EQ(driver->NewConnectionCB(conn), NN_ERROR);
 }
@@ -431,8 +423,8 @@ TEST_F(TestNetDriverUBWithOob, NewConnectionExchangeErr)
     // 必须放在最后 MOCK，保证之前通过 std::nothrow new 分配的实例已完成。否则会
     // 遇到 NetLogger 的 this 为空.
     MOCKER_CPP(&operator new, void *(*)(size_t, const std::nothrow_t &))
-            .stubs()
-            .will(returnValue(static_cast<void *>(nullptr)));
+        .stubs()
+        .will(returnValue(static_cast<void *>(nullptr)));
     EXPECT_EQ(driver->NewConnectionCB(conn), NN_MALLOC_FAILED);
 
     driver->mWorkers.clear();
@@ -494,7 +486,8 @@ TEST_F(TestNetDriverUBWithOob, NewConnectionGetbufferErr)
     driver->mWorkers.clear();
 }
 
-template<typename T> void *NewExceptFor(size_t sz, const std::nothrow_t &)
+template <typename T>
+void *NewExceptFor(size_t sz, const std::nothrow_t &)
 {
     if (sz == sizeof(T)) {
         return nullptr;
@@ -603,7 +596,7 @@ TEST_F(TestNetDriverUBWithOob, ConnectBranch)
     std::string payload{};
     UBSHcomNetEndpointPtr ep = nullptr;
     driver->mInited = false;
-    
+
     driver->mOptions.oobType = NET_OOB_TCP;
     EXPECT_EQ(driver->Connect(payload, ep, 0, 0, 0), NN_ERROR);
 
@@ -644,7 +637,8 @@ TEST_F(TestNetDriverUBWithOob, AsyncConnectTCPErr)
     uint16_t oobPort = 1;
     UBSHcomNetEndpointPtr outEp = nullptr;
     std::string payload("hello world");
-    MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs()
+    MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &))
+        .stubs()
         .will(returnValue(1))
         .then(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(1));
@@ -872,8 +866,8 @@ TEST_F(TestNetDriverUBWithOob, AsyncConnectExchangeErr)
     // 并且在正常流程中也会遇到 OOBTCPClient, OOBTCPConnection, UBJetty 等通过
     // std::nothrow 版本的 new 来分配内存，这些必须避免。
     MOCKER_CPP(&operator new, void *(*)(size_t, const std::nothrow_t &))
-            .stubs()
-            .will(invoke(NewExceptFor<UBJettyExchangeInfo>));
+        .stubs()
+        .will(invoke(NewExceptFor<UBJettyExchangeInfo>));
     EXPECT_EQ(driver->Connect(oobIp, oobPort, payload, outEp, 0, 0, 0, 0), NN_MALLOC_FAILED);
 
     driver->mWorkers.clear();
@@ -973,7 +967,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncEp)
     UBSHcomNetEndpointPtr outEp = nullptr;
     std::string payload("hello world");
 
-    MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs()
+    MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &))
+        .stubs()
         .will(returnValue(1))
         .then(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(1));
@@ -990,7 +985,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncEpCreateResourcesErr)
 
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs().will(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(0));
-    MOCKER(NetUBSyncEndpoint::CreateResources).stubs()
+    MOCKER(NetUBSyncEndpoint::CreateResources)
+        .stubs()
         .with(any(), any(), any(), any(), outBound(qp), outBound(jfc))
         .will(returnValue(1))
         .then(returnValue(0));
@@ -1009,7 +1005,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncEpQpErr)
 
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs().will(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(0));
-    MOCKER(NetUBSyncEndpoint::CreateResources).stubs()
+    MOCKER(NetUBSyncEndpoint::CreateResources)
+        .stubs()
         .with(any(), any(), any(), any(), outBound(qp), outBound(jfc))
         .will(returnValue(0));
     MOCKER_CPP(&UBJfc::Initialize).stubs().will(returnValue(0));
@@ -1027,7 +1024,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncEpTCPAckErr)
 
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs().will(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(0));
-    MOCKER(NetUBSyncEndpoint::CreateResources).stubs()
+    MOCKER(NetUBSyncEndpoint::CreateResources)
+        .stubs()
         .with(any(), any(), any(), any(), outBound(qp), outBound(jfc))
         .will(returnValue(0));
     MOCKER_CPP(&UBJfc::Initialize).stubs().will(returnValue(0));
@@ -1051,7 +1049,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncEpProtoErr)
 
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs().will(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(0));
-    MOCKER(NetUBSyncEndpoint::CreateResources).stubs()
+    MOCKER(NetUBSyncEndpoint::CreateResources)
+        .stubs()
         .with(any(), any(), any(), any(), outBound(qp), outBound(jfc))
         .will(returnValue(0));
     MOCKER_CPP(&UBJfc::Initialize).stubs().will(returnValue(0));
@@ -1075,7 +1074,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncEpElseErr)
 
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs().will(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(0));
-    MOCKER(NetUBSyncEndpoint::CreateResources).stubs()
+    MOCKER(NetUBSyncEndpoint::CreateResources)
+        .stubs()
         .with(any(), any(), any(), any(), outBound(qp), outBound(jfc))
         .will(returnValue(0));
     MOCKER_CPP(&UBJfc::Initialize).stubs().will(returnValue(0));
@@ -1097,7 +1097,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncExchangeErr)
 
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs().will(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(0));
-    MOCKER(NetUBSyncEndpoint::CreateResources).stubs()
+    MOCKER(NetUBSyncEndpoint::CreateResources)
+        .stubs()
         .with(any(), any(), any(), any(), outBound(qp), outBound(jfc))
         .will(returnValue(0));
     MOCKER_CPP(&UBJfc::Initialize).stubs().will(returnValue(0));
@@ -1116,8 +1117,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncExchangeErr)
     // 并且在正常流程中也会遇到 OOBTCPClient, OOBTCPConnection, UBJetty 等通过
     // std::nothrow 版本的 new 来分配内存，这些必须避免。
     MOCKER_CPP(&operator new, void *(*)(size_t, const std::nothrow_t &))
-            .stubs()
-            .will(invoke(NewExceptFor<UBJettyExchangeInfo>));
+        .stubs()
+        .will(invoke(NewExceptFor<UBJettyExchangeInfo>));
     EXPECT_EQ(driver->ConnectSyncEp(oobIp, oobPort, payload, outEp, 0, 0, 0), NN_MALLOC_FAILED);
 }
 
@@ -1131,7 +1132,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncPostrecvErr)
 
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs().will(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(0));
-    MOCKER(NetUBSyncEndpoint::CreateResources).stubs()
+    MOCKER(NetUBSyncEndpoint::CreateResources)
+        .stubs()
         .with(any(), any(), any(), any(), outBound(qp), outBound(jfc))
         .will(returnValue(0));
     MOCKER_CPP(&UBJfc::Initialize).stubs().will(returnValue(0));
@@ -1158,7 +1160,8 @@ TEST_F(TestNetDriverUBWithOob, ConnectSyncSuccess)
 
     MOCKER(OOBTCPClient::ConnectWithFd, NResult(const std::string &, uint32_t, int &)).stubs().will(returnValue(0));
     MOCKER(OOBSecureProcess::SecProcessInOOBClient).stubs().will(returnValue(0));
-    MOCKER(NetUBSyncEndpoint::CreateResources).stubs()
+    MOCKER(NetUBSyncEndpoint::CreateResources)
+        .stubs()
         .with(any(), any(), any(), any(), outBound(qp), outBound(jfc))
         .will(returnValue(0));
     MOCKER_CPP(&UBJfc::Initialize).stubs().will(returnValue(0));
@@ -1234,7 +1237,7 @@ TEST_F(TestNetDriverUBWithOob, RWSglOneSideDoneCB)
 
     MOCKER_CPP(&UBWorker::ReturnSglContextInfo).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBWorker::ReturnOpContextInfo).stubs().will(ignoreReturnValue());
-    UBSHcomNetDriverOneSideDoneHandler handler = [](const UBSHcomNetRequestContext&) -> int {
+    UBSHcomNetDriverOneSideDoneHandler handler = [](const UBSHcomNetRequestContext &) -> int {
         return 1; // 返回值固定为 1
     };
     driver->RegisterOneSideDoneHandler(handler); // 注册 handler
@@ -1248,7 +1251,7 @@ TEST_F(TestNetDriverUBWithOob, OneSideDoneCB)
 
     MOCKER_CPP(&UBJetty::ReturnOneSideWr).stubs().will(ignoreReturnValue());
     MOCKER_CPP(&UBWorker::ReturnOpContextInfo).stubs().will(ignoreReturnValue());
-    UBSHcomNetDriverOneSideDoneHandler handler = [](const UBSHcomNetRequestContext&) -> int {
+    UBSHcomNetDriverOneSideDoneHandler handler = [](const UBSHcomNetRequestContext &) -> int {
         return 1; // 返回值固定为 1
     };
     EXPECT_EQ(driver->OneSideDoneCB(&ctxInfo), 1);
@@ -1361,9 +1364,11 @@ TEST_F(TestNetDriverUBWithOob, NewRequestGetEpErr)
     ctxInfo.opType = UBOpContextInfo::RECEIVE;
     driver->mOptions.enableTls = true;
 
-    MOCKER_CPP(&UBJetty::GetUpContext1, uintptr_t(UBJetty::*)() const).stubs()
+    MOCKER_CPP(&UBJetty::GetUpContext1, uintptr_t(UBJetty::*)() const)
+        .stubs()
         .will(returnValue(reinterpret_cast<uintptr_t>(fakeWorker)));
-    MOCKER_CPP(&UBJetty::GetUpContext, uintptr_t(UBJetty::*)() const).stubs()
+    MOCKER_CPP(&UBJetty::GetUpContext, uintptr_t(UBJetty::*)() const)
+        .stubs()
         .will(returnValue(static_cast<uintptr_t>(0)));
     MOCKER_CPP(NetFunc::ValidateHeaderWithDataSize).stubs().will(returnValue(0));
     MOCKER_CPP(&UBWorker::RePostReceive).stubs().will(returnValue(0));
@@ -1381,7 +1386,8 @@ TEST_F(TestNetDriverUBWithOob, NewReceivedRawRequestGetEpErr)
     ctxInfo.ubJetty = qp1;
     driver->mOptions.enableTls = true;
 
-    MOCKER_CPP(&UBJetty::GetUpContext, uintptr_t(UBJetty::*)() const).stubs()
+    MOCKER_CPP(&UBJetty::GetUpContext, uintptr_t(UBJetty::*)() const)
+        .stubs()
         .will(returnValue(static_cast<uintptr_t>(0)));
     MOCKER_CPP(&UBWorker::RePostReceive).stubs().will(returnValue(0));
 
@@ -1397,7 +1403,8 @@ TEST_F(TestNetDriverUBWithOob, NewReceivedRequestGetEpErr)
     ctxInfo.ubJetty = qp1;
     driver->mOptions.enableTls = true;
 
-    MOCKER_CPP(&UBJetty::GetUpContext, uintptr_t(UBJetty::*)() const).stubs()
+    MOCKER_CPP(&UBJetty::GetUpContext, uintptr_t(UBJetty::*)() const)
+        .stubs()
         .will(returnValue(static_cast<uintptr_t>(0)));
     MOCKER_CPP(NetFunc::ValidateHeaderWithDataSize).stubs().will(returnValue(0));
     MOCKER_CPP(&UBWorker::RePostReceive).stubs().will(returnValue(0));
@@ -1477,7 +1484,8 @@ TEST_F(TestNetDriverUBWithOob, NewReceivedRequestEnableTlsOff)
     ctxInfo.ubJetty = qp1;
     driver->mOptions.enableTls = false;
 
-    MOCKER_CPP(&UBJetty::GetUpContext, uintptr_t(UBJetty::*)() const).stubs()
+    MOCKER_CPP(&UBJetty::GetUpContext, uintptr_t(UBJetty::*)() const)
+        .stubs()
         .will(returnValue(static_cast<uintptr_t>(0)));
     MOCKER_CPP(NetFunc::ValidateHeaderWithDataSize).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverUBWithOob::NewReceivedRequestWithoutCopy).stubs().will(returnValue(0));
@@ -1569,6 +1577,6 @@ TEST_F(TestNetDriverUBWithOob, connectUrl)
     EXPECT_EQ(ret, NN_ERROR);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

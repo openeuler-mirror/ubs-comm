@@ -51,7 +51,7 @@ private:
     static uint32_t PORT_NUMBER;
     static std::unordered_map<urma_speed_t, uint8_t> G_UBDevBWTable;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_WRAPPER_DEVICE_HELPER_H

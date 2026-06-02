@@ -9,18 +9,17 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <cstdint>
 #include <gtest/gtest.h>
+#include <cstdint>
 #include <mockcpp/mockcpp.hpp>
 
-#include "securec.h"
 #include "hcom_def.h"
 #include "hcom_log.h"
-#include "net_shm_sync_endpoint.h"
 #include "net_shm_async_endpoint.h"
+#include "net_shm_sync_endpoint.h"
+#include "securec.h"
 #include "shm_common.h"
 #include "shm_validation.h"
-
 
 namespace ock {
 namespace hcom {
@@ -35,12 +34,12 @@ public:
     static void SetUpTestSuite() {}
     static void TearDownTestSuite() {}
 
-    NetAsyncEndpointShm* mShmAsyncEp = nullptr;
+    NetAsyncEndpointShm *mShmAsyncEp = nullptr;
     UBSHcomNetTransRequest mReq;
 };
 
-static HResult MockDCGetFreeBuck(uintptr_t &address, uint64_t &offsetToBase,
-    uint16_t waitPeriodUs = NN_NO100, int32_t timeoutSecond = -1)
+static HResult MockDCGetFreeBuck(uintptr_t &address, uint64_t &offsetToBase, uint16_t waitPeriodUs = NN_NO100,
+                                 int32_t timeoutSecond = -1)
 {
     static UBSHcomNetTransHeader mockAsyncBuf{};
     address = reinterpret_cast<uintptr_t>(&mockAsyncBuf);
@@ -108,9 +107,7 @@ TEST_F(TestShmAsyncEndpoint, PostSendFailWhenValidateSizeFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendFailWhenGetFreeBuckFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_NOT_INITIALIZED)));
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck).stubs().will(returnValue(static_cast<HResult>(SH_NOT_INITIALIZED)));
 
     NResult ret = mShmAsyncEp->PostSend(0, mReq, 0);
     EXPECT_EQ(ret, SH_NOT_INITIALIZED);
@@ -118,14 +115,11 @@ TEST_F(TestShmAsyncEndpoint, PostSendFailWhenGetFreeBuckFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendFailWhenMemcpyFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck,
-        HResult (ShmChannel::*)(uintptr_t&, uint64_t&, uint16_t, int32_t))
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck, HResult(ShmChannel::*)(uintptr_t &, uint64_t &, uint16_t, int32_t))
         .stubs()
         .will(invoke(MockDCGetFreeBuck));
 
-    MOCKER_CPP(&ShmChannel::DCMarkBuckFree)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_OK)));
+    MOCKER_CPP(&ShmChannel::DCMarkBuckFree).stubs().will(returnValue(static_cast<HResult>(SH_OK)));
 
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
 
@@ -154,9 +148,7 @@ TEST_F(TestShmAsyncEndpoint, PostSendOpInfoFailWhenValidateSizeFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendOpInfoFailWhenGetFreeBuckFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_NOT_INITIALIZED)));
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck).stubs().will(returnValue(static_cast<HResult>(SH_NOT_INITIALIZED)));
 
     UBSHcomNetTransOpInfo opInfo{};
     NResult ret = mShmAsyncEp->PostSend(0, mReq, opInfo);
@@ -165,21 +157,15 @@ TEST_F(TestShmAsyncEndpoint, PostSendOpInfoFailWhenGetFreeBuckFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendOpInfoFailWhenEncryptFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck,
-        HResult (ShmChannel::*)(uintptr_t&, uint64_t&, uint16_t, int32_t))
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck, HResult(ShmChannel::*)(uintptr_t &, uint64_t &, uint16_t, int32_t))
         .stubs()
         .will(invoke(MockDCGetFreeBuck));
 
-    MOCKER_CPP(&ShmChannel::DCMarkBuckFree)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_OK)));
+    MOCKER_CPP(&ShmChannel::DCMarkBuckFree).stubs().will(returnValue(static_cast<HResult>(SH_OK)));
 
-    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen)
-        .stubs()
-        .will(returnValue(static_cast<size_t>(0)));
+    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen).stubs().will(returnValue(static_cast<size_t>(0)));
 
-    MOCKER_CPP(&AesGcm128::Encrypt,
-        bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -191,14 +177,11 @@ TEST_F(TestShmAsyncEndpoint, PostSendOpInfoFailWhenEncryptFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendOpInfoFailWhenMemcpyFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck,
-        HResult (ShmChannel::*)(uintptr_t&, uint64_t&, uint16_t, int32_t))
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck, HResult(ShmChannel::*)(uintptr_t &, uint64_t &, uint16_t, int32_t))
         .stubs()
         .will(invoke(MockDCGetFreeBuck));
 
-    MOCKER_CPP(&ShmChannel::DCMarkBuckFree)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_OK)));
+    MOCKER_CPP(&ShmChannel::DCMarkBuckFree).stubs().will(returnValue(static_cast<HResult>(SH_OK)));
 
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
 
@@ -210,19 +193,16 @@ TEST_F(TestShmAsyncEndpoint, PostSendOpInfoFailWhenMemcpyFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendOpInfoFailWhenSendFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck,
-        HResult (ShmChannel::*)(uintptr_t&, uint64_t&, uint16_t, int32_t))
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck, HResult(ShmChannel::*)(uintptr_t &, uint64_t &, uint16_t, int32_t))
         .stubs()
         .will(invoke(MockDCGetFreeBuck));
 
-    MOCKER_CPP(&ShmChannel::DCMarkBuckFree)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_OK)));
+    MOCKER_CPP(&ShmChannel::DCMarkBuckFree).stubs().will(returnValue(static_cast<HResult>(SH_OK)));
 
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
 
     MOCKER_CPP(&ShmWorker::PostSend,
-        HResult (ShmWorker::*)(ShmChannel *, const UBSHcomNetTransRequest&, uint64_t, uint32_t, int32_t))
+               HResult(ShmWorker::*)(ShmChannel *, const UBSHcomNetTransRequest &, uint64_t, uint32_t, int32_t))
         .stubs()
         .will(returnValue(static_cast<HResult>(SH_OP_CTX_FULL)))
         .then(returnValue(static_cast<HResult>(SH_SEND_COMPLETION_CALLBACK_FAILURE)))
@@ -255,9 +235,7 @@ TEST_F(TestShmAsyncEndpoint, PostSendRawFailWhenValidateSizeFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendRawFailWhenGetFreeBuckFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_NOT_INITIALIZED)));
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck).stubs().will(returnValue(static_cast<HResult>(SH_NOT_INITIALIZED)));
 
     mShmAsyncEp->mSegSize = ASYNC_EP_SHM_ALLOWD_SIZE;
     NResult ret = mShmAsyncEp->PostSendRaw(mReq, 0);
@@ -266,21 +244,15 @@ TEST_F(TestShmAsyncEndpoint, PostSendRawFailWhenGetFreeBuckFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendRawFailWhenEncryptFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck,
-        HResult (ShmChannel::*)(uintptr_t&, uint64_t&, uint16_t, int32_t))
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck, HResult(ShmChannel::*)(uintptr_t &, uint64_t &, uint16_t, int32_t))
         .stubs()
         .will(invoke(MockDCGetFreeBuck));
 
-    MOCKER_CPP(&ShmChannel::DCMarkBuckFree)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_OK)));
+    MOCKER_CPP(&ShmChannel::DCMarkBuckFree).stubs().will(returnValue(static_cast<HResult>(SH_OK)));
 
-    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen)
-        .stubs()
-        .will(returnValue(static_cast<size_t>(0)));
+    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen).stubs().will(returnValue(static_cast<size_t>(0)));
 
-    MOCKER_CPP(&AesGcm128::Encrypt,
-        bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -292,14 +264,11 @@ TEST_F(TestShmAsyncEndpoint, PostSendRawFailWhenEncryptFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendRawFailWhenMemcpyFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck,
-        HResult (ShmChannel::*)(uintptr_t&, uint64_t&, uint16_t, int32_t))
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck, HResult(ShmChannel::*)(uintptr_t &, uint64_t &, uint16_t, int32_t))
         .stubs()
         .will(invoke(MockDCGetFreeBuck));
 
-    MOCKER_CPP(&ShmChannel::DCMarkBuckFree)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_OK)));
+    MOCKER_CPP(&ShmChannel::DCMarkBuckFree).stubs().will(returnValue(static_cast<HResult>(SH_OK)));
 
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
 
@@ -311,19 +280,16 @@ TEST_F(TestShmAsyncEndpoint, PostSendRawFailWhenMemcpyFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendRawFailWhenSendFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck,
-        HResult (ShmChannel::*)(uintptr_t&, uint64_t&, uint16_t, int32_t))
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck, HResult(ShmChannel::*)(uintptr_t &, uint64_t &, uint16_t, int32_t))
         .stubs()
         .will(invoke(MockDCGetFreeBuck));
 
-    MOCKER_CPP(&ShmChannel::DCMarkBuckFree)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_OK)));
+    MOCKER_CPP(&ShmChannel::DCMarkBuckFree).stubs().will(returnValue(static_cast<HResult>(SH_OK)));
 
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
 
     MOCKER_CPP(&ShmWorker::PostSend,
-        HResult (ShmWorker::*)(ShmChannel *, const UBSHcomNetTransRequest&, uint64_t, uint32_t, int32_t))
+               HResult(ShmWorker::*)(ShmChannel *, const UBSHcomNetTransRequest &, uint64_t, uint32_t, int32_t))
         .stubs()
         .will(returnValue(static_cast<HResult>(SH_OP_CTX_FULL)))
         .then(returnValue(static_cast<HResult>(SH_SEND_COMPLETION_CALLBACK_FAILURE)))
@@ -350,9 +316,7 @@ TEST_F(TestShmAsyncEndpoint, PostSendRawSglFailWhenValidateFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendRawSglFailWhenGetFreeBuckFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_NOT_INITIALIZED)));
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck).stubs().will(returnValue(static_cast<HResult>(SH_NOT_INITIALIZED)));
     MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion).stubs().will(returnValue(0));
 
     UBSHcomNetTransSgeIov iov[NN_NO4];
@@ -363,23 +327,17 @@ TEST_F(TestShmAsyncEndpoint, PostSendRawSglFailWhenGetFreeBuckFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendRawSglFailWhenEncryptFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck,
-        HResult (ShmChannel::*)(uintptr_t&, uint64_t&, uint16_t, int32_t))
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck, HResult(ShmChannel::*)(uintptr_t &, uint64_t &, uint16_t, int32_t))
         .stubs()
         .will(invoke(MockDCGetFreeBuck));
 
-    MOCKER_CPP(&ShmChannel::DCMarkBuckFree)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_OK)));
+    MOCKER_CPP(&ShmChannel::DCMarkBuckFree).stubs().will(returnValue(static_cast<HResult>(SH_OK)));
 
-    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed)
-        .stubs()
-        .will(returnValue(true));
+    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).stubs().will(returnValue(true));
 
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
 
-    MOCKER_CPP(&AesGcm128::Encrypt,
-        bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -394,14 +352,11 @@ TEST_F(TestShmAsyncEndpoint, PostSendRawSglFailWhenEncryptFail)
 
 TEST_F(TestShmAsyncEndpoint, PostSendRawSglFailWhenMemcpyFail)
 {
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck,
-        HResult (ShmChannel::*)(uintptr_t&, uint64_t&, uint16_t, int32_t))
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck, HResult(ShmChannel::*)(uintptr_t &, uint64_t &, uint16_t, int32_t))
         .stubs()
         .will(invoke(MockDCGetFreeBuck));
 
-    MOCKER_CPP(&ShmChannel::DCMarkBuckFree)
-        .stubs()
-        .will(returnValue(static_cast<HResult>(SH_OK)));
+    MOCKER_CPP(&ShmChannel::DCMarkBuckFree).stubs().will(returnValue(static_cast<HResult>(SH_OK)));
 
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
 
@@ -549,5 +504,5 @@ TEST_F(TestShmAsyncEndpoint, PostSendValidationSizeFail)
     req.size = 0;
     EXPECT_EQ(PostSendValidation(state, 0, 0, req), NN_INVALID_PARAM);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -12,10 +12,10 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
-#include "shm_worker.h"
+#include "shm_common.h"
 #include "shm_handle.h"
 #include "shm_queue.h"
-#include "shm_common.h"
+#include "shm_worker.h"
 
 namespace ock {
 namespace hcom {
@@ -193,10 +193,7 @@ TEST_F(TestShmWorker, SendLocalEvent)
     ShmOpContextInfo::ShmOpType type = ShmOpContextInfo::ShmOpType::SH_SEND;
     worker->mOptions.mode = SHM_BUSY_POLLING;
 
-    MOCKER_CPP(&ShmEventQueue::Enqueue)
-        .stubs()
-        .will(returnValue(-1))
-        .then(returnValue(1));
+    MOCKER_CPP(&ShmEventQueue::Enqueue).stubs().will(returnValue(-1)).then(returnValue(1));
 
     HResult res = worker->SendLocalEvent(0, ch, type);
     EXPECT_EQ(res, 1);
@@ -208,9 +205,7 @@ TEST_F(TestShmWorker, SendLocalEventQueueFull)
     ShmOpContextInfo::ShmOpType type = ShmOpContextInfo::ShmOpType::SH_SEND;
     worker->mOptions.mode = SHM_BUSY_POLLING;
 
-    MOCKER_CPP(&ShmEventQueue::Enqueue)
-        .stubs()
-        .will(returnValue(-1));
+    MOCKER_CPP(&ShmEventQueue::Enqueue).stubs().will(returnValue(-1));
 
     worker->mDefaultTimeout = 0;
     HResult res = worker->SendLocalEvent(0, ch, type);
@@ -329,5 +324,5 @@ TEST_F(TestShmWorker, PostSendRetryFull)
     HResult res = worker->PostSend(ch, req, 0, 0, -1);
     EXPECT_EQ(res, SH_RETRY_FULL);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

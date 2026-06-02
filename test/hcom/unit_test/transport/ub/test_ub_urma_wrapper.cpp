@@ -13,8 +13,8 @@
 #ifdef UB_BUILD_ENABLED
 
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <sys/poll.h>
+#include <mockcpp/mockcpp.hpp>
 
 #include "net_monotonic.h"
 #include "ub_common.h"
@@ -78,7 +78,7 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperInitialize)
     mUBDeviceHelper->G_InitRef = 1;
     urma_device_attr_t *devAttr = nullptr;
     urma_context_t *ctx = nullptr;
-    UBEId eid {};
+    UBEId eid{};
     UResult ret = mUBDeviceHelper->Initialize(devAttr, ctx, eid);
     EXPECT_EQ(ret, UB_OK);
 
@@ -97,10 +97,10 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperUnInitialize)
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoInitialize)
 {
     MOCKER_CPP(&UBDeviceHelper::DoUpdate).stubs().will(returnValue(1)).then(returnValue(0));
-    
+
     urma_device_attr_t *devAttr = nullptr;
     urma_context_t *ctx = nullptr;
-    UBEId eid {};
+    UBEId eid{};
     UResult ret = mUBDeviceHelper->DoInitialize(devAttr, ctx, eid);
     EXPECT_EQ(ret, 1);
     ret = mUBDeviceHelper->DoInitialize(devAttr, ctx, eid);
@@ -115,7 +115,7 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoUpdate)
     MOCKER_CPP(HcomUrma::GetDeviceList).stubs().will(returnValue(devList));
     urma_device_attr_t *devAttr = nullptr;
     urma_context_t *ctx = nullptr;
-    UBEId eid {};
+    UBEId eid{};
     UResult ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
     EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
     ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
@@ -137,6 +137,20 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoUpdateErr)
     UBEId eid{};
     UResult ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
     EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
+}
+
+TEST_F(TestUbUrmaWrapper, UBDeviceHelperCompareName)
+{
+    urma_device_t bonding3{};
+    urma_device_t bonding0{};
+    ASSERT_EQ(strcpy_s(bonding3.name, URMA_MAX_NAME, "bonding_dev_3"), EOK);
+    ASSERT_EQ(strcpy_s(bonding0.name, URMA_MAX_NAME, "bonding_dev_0"), EOK);
+    urma_device_t *devList[] = {&bonding3, &bonding0};
+
+    const char bondingDev0[] = "bonding_dev_0";
+    const char bondingPrefix[] = "bonding_dev_";
+    EXPECT_EQ(mUBDeviceHelper->CompareName(bondingDev0, strlen(bondingDev0), devList, NN_NO2), 1);
+    EXPECT_EQ(mUBDeviceHelper->CompareName(bondingPrefix, strlen(bondingPrefix), devList, NN_NO2), 0);
 }
 
 urma_device_t **MockGetDeviceList(int *num_devices)
@@ -503,6 +517,6 @@ TEST_F(TestUbUrmaWrapper, GetNResult)
     EXPECT_EQ(UBOpContextInfo::GetNResult(opResult), NN_URMA_ACK_TIMEOUT);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

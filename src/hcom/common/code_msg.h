@@ -194,6 +194,6 @@ static int32_t RRCodeArrayLength = sizeof(RRCodeArray) / sizeof(RRCodeArray[0]);
 static int32_t ShCodeArrayLength = sizeof(ShCodeArray) / sizeof(ShCodeArray[0]);
 static int32_t SCodeArrayLength = sizeof(SCodeArray) / sizeof(SCodeArray[0]);
 static int32_t SevCodeArrayLength = sizeof(SevCodeArray) / sizeof(SevCodeArray[0]);
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_CODE_MSG_H

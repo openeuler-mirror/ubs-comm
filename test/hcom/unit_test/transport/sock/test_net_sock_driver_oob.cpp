@@ -9,10 +9,10 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <dirent.h>
+#include <gtest/gtest.h>
 #include <iostream>
+#include <mockcpp/mockcpp.hpp>
 #include "net_sock_driver_oob.h"
 #include "net_sock_async_endpoint.h"
 #include "net_oob_secure.h"
@@ -237,9 +237,9 @@ TEST_F(TestNetSockDriverOob, CreateMemoryRegionErr)
 {
     UBSHcomNetMemoryRegionPtr mr = nullptr;
     mDriver->mInited = true;
-    MOCKER_CPP(NormalMemoryRegion::Create,
-        NResult(const std::string &, uint64_t, NormalMemoryRegion *&))
-        .stubs().will(returnValue(1));
+    MOCKER_CPP(NormalMemoryRegion::Create, NResult(const std::string &, uint64_t, NormalMemoryRegion *&))
+        .stubs()
+        .will(returnValue(1));
     EXPECT_EQ(mDriver->CreateMemoryRegion(NN_NO8, mr), 1);
 }
 
@@ -248,7 +248,8 @@ TEST_F(TestNetSockDriverOob, CreateMemoryRegionInitErr)
     UBSHcomNetMemoryRegionPtr mr = nullptr;
     mDriver->mInited = true;
     auto tmpBuf = new (std::nothrow) NormalMemoryRegion(name, false, 0, NN_NO8);
-    MOCKER(NormalMemoryRegion::Create, NResult(const std::string &, uint64_t, NormalMemoryRegion *&)).stubs()
+    MOCKER(NormalMemoryRegion::Create, NResult(const std::string &, uint64_t, NormalMemoryRegion *&))
+        .stubs()
         .with(any(), any(), outBound(tmpBuf))
         .will(returnValue(0));
     MOCKER_CPP_VIRTUAL(*tmpBuf, &NormalMemoryRegion::Initialize).stubs().will(returnValue(1));
@@ -260,7 +261,8 @@ TEST_F(TestNetSockDriverOob, CreateMemoryRegionRegisterErr)
     UBSHcomNetMemoryRegionPtr mr = nullptr;
     mDriver->mInited = true;
     auto tmpBuf = new (std::nothrow) NormalMemoryRegion(name, false, 0, NN_NO8);
-    MOCKER(NormalMemoryRegion::Create, NResult(const std::string &, uint64_t, NormalMemoryRegion *&)).stubs()
+    MOCKER(NormalMemoryRegion::Create, NResult(const std::string &, uint64_t, NormalMemoryRegion *&))
+        .stubs()
         .with(any(), any(), outBound(tmpBuf))
         .will(returnValue(0));
     MOCKER_CPP_VIRTUAL(*tmpBuf, &NormalMemoryRegion::Initialize).stubs().will(returnValue(0));
@@ -273,9 +275,9 @@ TEST_F(TestNetSockDriverOob, CreateMemoryRegionAddressErr)
     UBSHcomNetMemoryRegionPtr mr = nullptr;
     uintptr_t address = 1;
     mDriver->mInited = true;
-    MOCKER_CPP(NormalMemoryRegion::Create,
-        NResult(const std::string &, uintptr_t, uint64_t, NormalMemoryRegion *&))
-        .stubs().will(returnValue(1));
+    MOCKER_CPP(NormalMemoryRegion::Create, NResult(const std::string &, uintptr_t, uint64_t, NormalMemoryRegion *&))
+        .stubs()
+        .will(returnValue(1));
     EXPECT_EQ(mDriver->CreateMemoryRegion(address, NN_NO8, mr), 1);
 }
 
@@ -285,7 +287,8 @@ TEST_F(TestNetSockDriverOob, CreateMemoryRegionAddressInitErr)
     uintptr_t address = 1;
     mDriver->mInited = true;
     auto tmpBuf = new (std::nothrow) NormalMemoryRegion(name, true, address, NN_NO8);
-    MOCKER(NormalMemoryRegion::Create, NResult(const std::string &, uintptr_t, uint64_t, NormalMemoryRegion *&)).stubs()
+    MOCKER(NormalMemoryRegion::Create, NResult(const std::string &, uintptr_t, uint64_t, NormalMemoryRegion *&))
+        .stubs()
         .with(any(), any(), any(), outBound(tmpBuf))
         .will(returnValue(0));
     MOCKER_CPP_VIRTUAL(*tmpBuf, &NormalMemoryRegion::Initialize).stubs().will(returnValue(1));
@@ -298,7 +301,8 @@ TEST_F(TestNetSockDriverOob, CreateMemoryRegionAddressRegisterErr)
     uintptr_t address = 1;
     mDriver->mInited = true;
     auto tmpBuf = new (std::nothrow) NormalMemoryRegion(name, true, address, NN_NO8);
-    MOCKER(NormalMemoryRegion::Create, NResult(const std::string &, uintptr_t, uint64_t, NormalMemoryRegion *&)).stubs()
+    MOCKER(NormalMemoryRegion::Create, NResult(const std::string &, uintptr_t, uint64_t, NormalMemoryRegion *&))
+        .stubs()
         .with(any(), any(), any(), outBound(tmpBuf))
         .will(returnValue(0));
     MOCKER_CPP_VIRTUAL(*tmpBuf, &NormalMemoryRegion::Initialize).stubs().will(returnValue(0));
@@ -321,7 +325,7 @@ TEST_F(TestNetSockDriverOob, MultiRailNewConnectionErr)
 
 TEST_F(TestNetSockDriverOob, HandleSockRealConnectWithDupId)
 {
-    SockOpContextInfo ctx {};
+    SockOpContextInfo ctx{};
     ctx.sock = sock;
     sock->IncreaseRef();
 
@@ -341,10 +345,10 @@ TEST_F(TestNetSockDriverOob, HandleSockRealConnectWithDupId)
 
 TEST_F(TestNetSockDriverOob, HandleSockRealConnectWithOverPayload)
 {
-    SockOpContextInfo ctx {};
+    SockOpContextInfo ctx{};
     ctx.sock = sock;
     sock->IncreaseRef();
-    UBSHcomNetTransHeader mockHeader {};
+    UBSHcomNetTransHeader mockHeader{};
     mockHeader.dataLength = NN_NO2048;
     ctx.header = &mockHeader;
     mDriver->mOptions.magic = 0;
@@ -355,8 +359,8 @@ TEST_F(TestNetSockDriverOob, HandleSockRealConnectWithOverPayload)
     NetMemPoolFixedPtr sglMemPool;
     NetMemPoolFixedPtr headerReqMemPool;
     UBSHcomNetWorkerIndex index;
-    SockWorker *worker =
-        new (std::nothrow) SockWorker(SOCK_TCP, name, index, memPool, sglMemPool, headerReqMemPool, options);
+    SockWorker *worker = new (std::nothrow)
+        SockWorker(SOCK_TCP, name, index, memPool, sglMemPool, headerReqMemPool, options);
     ASSERT_NE(worker, nullptr);
     ctx.sock->UpContext1(reinterpret_cast<uint64_t>(worker));
     worker->IncreaseRef();
@@ -375,8 +379,8 @@ TEST_F(TestNetSockDriverOob, HandleSockErrorWithErrUpCtx)
     NetMemPoolFixedPtr sglMemPool;
     NetMemPoolFixedPtr headerReqMemPool;
     UBSHcomNetWorkerIndex index;
-    SockWorker *worker =
-            new (std::nothrow) SockWorker(SOCK_TCP, name, index, memPool, sglMemPool, headerReqMemPool, options);
+    SockWorker *worker = new (std::nothrow)
+        SockWorker(SOCK_TCP, name, index, memPool, sglMemPool, headerReqMemPool, options);
     ASSERT_NE(worker, nullptr);
     sock->UpContext1(reinterpret_cast<uint64_t>(worker));
     worker->IncreaseRef();
@@ -385,7 +389,6 @@ TEST_F(TestNetSockDriverOob, HandleSockErrorWithErrUpCtx)
     EXPECT_EQ(ret, NN_ERROR);
     worker->DecreaseRef();
 }
-
 
 TEST_F(TestNetSockDriverOob, HandleReqPostedWithNullCtx)
 {
@@ -399,9 +402,12 @@ TEST_F(TestNetSockDriverOob, HandleNewOobConnSecProcessFail)
     conn.SetIpAndPort("127.0.0.1", K_MOCK_OOB_PORT);
     conn.ListenPort(K_MOCK_OOB_PORT);
 
-    MOCKER_CPP(OOBSecureProcess::SecProcessInOOBServer,
+    MOCKER_CPP(
+        OOBSecureProcess::SecProcessInOOBServer,
         NResult(const UBSHcomNetDriverEndpointSecInfoProvider &, const UBSHcomNetDriverEndpointSecInfoValidator &,
-        OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType)).stubs().will(returnValue(1));
+                OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType))
+        .stubs()
+        .will(returnValue(1));
 
     auto ret = mDriver->HandleNewOobConn(conn);
     EXPECT_EQ(ret, NN_OOB_SEC_PROCESS_ERROR);
@@ -413,11 +419,14 @@ TEST_F(TestNetSockDriverOob, HandleNewOobConnCompareEpNumFail)
     conn.SetIpAndPort("127.0.0.1", K_MOCK_OOB_PORT);
     conn.ListenPort(K_MOCK_OOB_PORT);
 
-    MOCKER_CPP(OOBSecureProcess::SecProcessInOOBServer,
+    MOCKER_CPP(
+        OOBSecureProcess::SecProcessInOOBServer,
         NResult(const UBSHcomNetDriverEndpointSecInfoProvider &, const UBSHcomNetDriverEndpointSecInfoValidator &,
-        OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType)).stubs().will(returnValue(0));
+                OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType))
+        .stubs()
+        .will(returnValue(0));
     MOCKER_CPP(OOBSecureProcess::SecProcessCompareEpNum,
-        NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
+               NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
         .stubs()
         .will(returnValue(1));
 
@@ -427,7 +436,7 @@ TEST_F(TestNetSockDriverOob, HandleNewOobConnCompareEpNumFail)
 
 TEST_F(TestNetSockDriverOob, OneSideDoneWithNullUpContext1)
 {
-    SockOpContextInfo ctx {};
+    SockOpContextInfo ctx{};
     ctx.sock = sock;
     sock->UpContext(1);
     sock->UpContext1(0);
@@ -444,16 +453,21 @@ TEST_F(TestNetSockDriverOob, HandleNewOobConnWithNullLb)
 
     OOBTCPConnection *tcpConn = &conn;
     MOCKER_CPP_VIRTUAL(*tcpConn, &OOBTCPConnection::Receive).stubs().will(returnValue(static_cast<int>(NN_OK)));
-    MOCKER_CPP(OOBSecureProcess::SecProcessInOOBServer,
+    MOCKER_CPP(
+        OOBSecureProcess::SecProcessInOOBServer,
         NResult(const UBSHcomNetDriverEndpointSecInfoProvider &, const UBSHcomNetDriverEndpointSecInfoValidator &,
-        OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType)).stubs().will(returnValue(0));
+                OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType))
+        .stubs()
+        .will(returnValue(0));
     MOCKER_CPP(OOBSecureProcess::SecProcessCompareEpNum,
-        NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
+               NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
         .stubs()
         .will(returnValue(0));
     MOCKER_CPP(OOBSecureProcess::SecCheckConnectionHeader,
-        NResult(const ConnectHeader &, const UBSHcomNetDriverOptions &, const bool &, const UBSHcomNetDriverProtocol &,
-        const uint32_t &, const uint32_t &, ConnRespWithUId &)).stubs().will(returnValue(0));
+               NResult(const ConnectHeader &, const UBSHcomNetDriverOptions &, const bool &,
+                       const UBSHcomNetDriverProtocol &, const uint32_t &, const uint32_t &, ConnRespWithUId &))
+        .stubs()
+        .will(returnValue(0));
 
     auto ret = mDriver->HandleNewOobConn(conn);
     EXPECT_EQ(ret, NN_ERROR);
@@ -476,16 +490,21 @@ TEST_F(TestNetSockDriverOob, HandleNewOobConnWithNullWorker)
     OOBTCPConnection *tcpConn = &conn;
     MOCKER_CPP_VIRTUAL(*tcpConn, &OOBTCPConnection::Receive).stubs().will(returnValue(static_cast<int>(NN_OK)));
     MOCKER_CPP_VIRTUAL(*tcpConn, &OOBTCPConnection::Send).stubs().will(returnValue(static_cast<int>(NN_OK)));
-    MOCKER_CPP(OOBSecureProcess::SecProcessInOOBServer,
+    MOCKER_CPP(
+        OOBSecureProcess::SecProcessInOOBServer,
         NResult(const UBSHcomNetDriverEndpointSecInfoProvider &, const UBSHcomNetDriverEndpointSecInfoValidator &,
-        OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType)).stubs().will(returnValue(0));
+                OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType))
+        .stubs()
+        .will(returnValue(0));
     MOCKER_CPP(OOBSecureProcess::SecProcessCompareEpNum,
-        NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
+               NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
         .stubs()
         .will(returnValue(0));
     MOCKER_CPP(OOBSecureProcess::SecCheckConnectionHeader,
-        NResult(const ConnectHeader &, const UBSHcomNetDriverOptions &, const bool &, const UBSHcomNetDriverProtocol &,
-        const uint32_t &, const uint32_t &, ConnRespWithUId &)).stubs().will(returnValue(0));
+               NResult(const ConnectHeader &, const UBSHcomNetDriverOptions &, const bool &,
+                       const UBSHcomNetDriverProtocol &, const uint32_t &, const uint32_t &, ConnRespWithUId &))
+        .stubs()
+        .will(returnValue(0));
 
     auto ret = mDriver->HandleNewOobConn(conn);
     EXPECT_EQ(ret, NN_ERROR);
@@ -493,7 +512,7 @@ TEST_F(TestNetSockDriverOob, HandleNewOobConnWithNullWorker)
 
 TEST_F(TestNetSockDriverOob, HandleReqPostedWithNullUpContext)
 {
-    SockOpContextInfo ctx {};
+    SockOpContextInfo ctx{};
     ctx.sock = sock;
     sock->UpContext(0);
 
@@ -503,7 +522,7 @@ TEST_F(TestNetSockDriverOob, HandleReqPostedWithNullUpContext)
 
 TEST_F(TestNetSockDriverOob, OneSideDoneWithNullUpContext)
 {
-    SockOpContextInfo ctx {};
+    SockOpContextInfo ctx{};
     ctx.sock = sock;
     sock->UpContext(0);
 
@@ -515,5 +534,5 @@ TEST_F(TestNetSockDriverOob, GetConnRespOther)
     SockType t = SOCK_UDS_TCP;
     EXPECT_EQ(mDriver->GetConnResp(t), OK);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

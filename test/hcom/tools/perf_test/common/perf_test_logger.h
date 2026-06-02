@@ -4,12 +4,12 @@
 #ifndef PERF_TEST_LOG_H
 #define PERF_TEST_LOG_H
 
-#include <ctime>
-#include <mutex>
-#include <iostream>
-#include <sstream>
 #include <sys/time.h>
 #include <cstring>
+#include <ctime>
+#include <iostream>
+#include <mutex>
+#include <sstream>
 
 namespace hcom {
 namespace perftest {
@@ -32,9 +32,9 @@ public:
     void Log(int level, const std::ostringstream &oss) const;
 
     PerfTestLogger(const PerfTestLogger &) = delete;
-    PerfTestLogger &operator = (const PerfTestLogger &) = delete;
+    PerfTestLogger &operator=(const PerfTestLogger &) = delete;
     PerfTestLogger(PerfTestLogger &&) = delete;
-    PerfTestLogger &operator = (PerfTestLogger &&) = delete;
+    PerfTestLogger &operator=(PerfTestLogger &&) = delete;
 
     ~PerfTestLogger() {}
 
@@ -71,7 +71,7 @@ private:
 #define LOG_WARN(args) PERTTEST_LOG(2, args)
 #define LOG_ERROR(args) PERTTEST_LOG(3, args)
 
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif
