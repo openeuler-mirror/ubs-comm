@@ -31,6 +31,7 @@ bool GlobalSetting::UBS_READV_UNLIMITED = false;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
 bool GlobalSetting::UBS_ENABLE_DEGRADE = true;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
+uint32_t GlobalSetting::UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH = 256;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
 bool GlobalSetting::USE_BRPC_ZCOPY = true;
@@ -55,6 +56,7 @@ uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 #define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
 #define ENV_ENABLE_SHARE_JFR "UBSOCKET_ENABLE_SHARE_JFR"
 #define ENV_SHARE_JFR_RX_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH"
+#define ENV_SHARE_JFR_RX_O3_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_O3_QUEUE_DEPTH"
 #define ENV_TRANS_MODE "UBSOCKET_TRANS_MODE"
 #define ENV_UBS_RX_DEPTH "UBSOCKET_RX_DEPTH"
 #define ENV_UBS_TX_DEPTH "UBSOCKET_TX_DEPTH"
@@ -204,6 +206,10 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidate(ENV_SHARE_JFR_RX_QUEUE_DEPTH, envValue)) {
         UBS_SHARE_JFR_RX_QUEUE_DEPTH = static_cast<uint32_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_SHARE_JFR_RX_O3_QUEUE_DEPTH, envValue)) {
+        UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH = static_cast<uint32_t>(envValue);
     }
 
     if (GetEnvAndValidate(ENV_TRANS_MODE, strEnvValue)) {

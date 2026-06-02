@@ -151,8 +151,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
         return UBS_UMQ_CREATE | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
 
-    uint64_t share_jfr_rx_queue_depth = UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH;
-    rxQueue = new (std::nothrow) QbufQueue<umq_buf_t *>(share_jfr_rx_queue_depth);
+    rxQueue = new (std::nothrow) UmqBufferReceiveQueue();
     if (rxQueue == nullptr) {
         UBS_VLOG_ERR("Failed to init share jfr rx queue for fd: %d \n", raw_socket_);
         return UBS_INIT_SHARED_JFR_RX_QUEUE;
@@ -444,13 +443,18 @@ int UmqSocket::GetTxFd()
 }
 int UmqSocket::AddQbuf(umq_buf_t *qbuf)
 {
-    int enqueue_ret = 0;
-    if (rxQueue == nullptr || (enqueue_ret = rxQueue->Enqueue(qbuf)) != 0) {
-        UBS_VLOG_ERR("AddQbuf failed, fd: %d, ret: %d\n", raw_socket_, rxQueue == nullptr ? -1 : enqueue_ret);
-        return -1;
+    if (rxQueue == nullptr) {
+        UBS_VLOG_ERR("AddQbuf failed, fd: %d, reason: rxQueue is null\n", raw_socket_);
+        return UBS_ERROR;
     }
 
-    return 0;
+    UmqBufferReceiveQueue::OpResult enqueue_ret = rxQueue->Enqueue(qbuf);
+    if (enqueue_ret != UmqBufferReceiveQueue::OpResult::OK) {
+        UBS_VLOG_ERR("AddQbuf failed, fd: %d, ret: %d\n", raw_socket_, static_cast<int>(enqueue_ret));
+        return UBS_ERROR;
+    }
+
+    return UBS_OK;
 }
 int UmqSocket::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
 {
@@ -460,11 +464,15 @@ int UmqSocket::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
     }
 
     uint32_t i = 0;
-    while (!rxQueue->IsEmpty() && i < max_buf_size) {
-        if (rxQueue->Dequeue(&buf[i]) != 0) {
+    while (i < max_buf_size) {
+        UmqBufferReceiveQueue::OpResult ret = rxQueue->Dequeue(&buf[i]);
+        if (ret == UmqBufferReceiveQueue::OpResult::OK) {
+            i++;
+        } else if (ret == UmqBufferReceiveQueue::OpResult::QUEUE_EMPTY) {
+            break;
+        } else {
             return i + 1;
         }
-        i++;
     }
 
     return i;
@@ -475,14 +483,7 @@ void UmqSocket::FlushRxQueue()
         return;
     }
 
-    while (!rxQueue->IsEmpty()) {
-        umq_buf_t *buf[1];
-        if (rxQueue->Dequeue(buf) != 0) {
-            return;
-        }
-        UmqApi::umq_buf_free(buf[0]);
-    }
-
+    rxQueue->Shutdown();
     return;
 }
 uint32_t UmqSocket::getLeftPostRxNum(uint64_t umq_handle)

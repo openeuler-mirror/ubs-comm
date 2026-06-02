@@ -43,7 +43,7 @@ using ock::ubs::umq::UmqSocket;
 namespace Statistics {
 // --- 配置常量 ---
 static constexpr uint32_t PROBE_INTERVAL_SEC = 1;
-static constexpr uint32_t PROBE_USER_DATA_ID = 1; // 用于标识探针包的 user_data
+static constexpr uint32_t PROBE_USER_DATA_ID = UmqSetting::UMQ_PROBE_USER_DATA_ID;
 static constexpr uint64_t PROBE_SEM_MS_TO_NS = 1000000ULL;
 static constexpr uint64_t PROBE_SEM_S_TO_NS = 1000000000ULL;
 

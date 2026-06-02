@@ -31,22 +31,8 @@ struct QbufQueueT {
 template <typename T>
 class QbufQueue {
 public:
-    explicit QbufQueue(struct QbufQueueT<T> *q) : queue_(q), isMalloc_(false)
-    {
-        mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
-        if (mutex_ == nullptr) {
-            UBS_VLOG_ERR("Create qbuf queue lock failed\n");
-        }
-    }
-
     explicit QbufQueue(uint32_t itemNb) : isMalloc_(false), isExit_(false), init_cap_(itemNb)
     {
-        mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
-        if (mutex_ == nullptr) {
-            UBS_VLOG_ERR("Create qbuf queue lock failed\n");
-            return;
-        }
-
         if (InitQueue(itemNb) != 0) {
             UBS_VLOG_ERR("Init qbuf queue failed. \n");
             isExit_ = true;
@@ -62,9 +48,6 @@ public:
                 free(queue_);
                 queue_ = nullptr;
             }
-        }
-        if (mutex_ != nullptr) {
-            LockRegistry::LOCK_OPS.destroy(mutex_);
         }
     }
 
@@ -100,13 +83,6 @@ public:
             UBS_VLOG_ERR("Enqueue qbuf queue failed, reason: queue is null\n");
             return -1;
         }
-
-        if (mutex_ == nullptr) {
-            UBS_VLOG_ERR("Enqueue qbuf queue failed, reason: lock is null\n");
-            return -1;
-        }
-
-        Locker sLock(mutex_);
         if (IsFull()) {
             if (!isMalloc_) {
                 UBS_VLOG_ERR("Enqueue qbuf queue failed, reason: queue is full, head: %u, tail: %u, itemNb: %u\n",
@@ -146,18 +122,12 @@ public:
             return -1;
         }
 
-        if (mutex_ == nullptr) {
-            UBS_VLOG_ERR("Dequeue qbuf queue failed, reason: lock is null\n");
-            return -1;
-        }
-
         if (IsEmpty()) {
             UBS_VLOG_WARN("Dequeue qbuf queue failed, reason: queue is empty, head: %u, tail: %u, itemNb: %u\n",
                           queue_->head, queue_->tail, queue_->itemNb);
             return -1;
         }
 
-        Locker sLock(mutex_);
         *data = queue_->q[queue_->head];
         queue_->head = (queue_->head == queue_->itemNb - 1) ? 0 : queue_->head + 1;
 
@@ -184,7 +154,6 @@ private:
     bool isMalloc_ = false;
     volatile bool isExit_ = false;
     uint32_t init_cap_;
-    u_mutex_t *mutex_ = nullptr;
     static constexpr uint32_t MAX_CAPACITY = 0x3FFFFFFF;
 
     size_t RoundUp(size_t size, size_t align)

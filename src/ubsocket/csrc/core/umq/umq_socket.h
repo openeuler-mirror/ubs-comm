@@ -12,9 +12,10 @@
 #define UBS_COMM_UMQ_SOCKET_H
 
 #include "common/ubsocket_common_includes.h"
-#include "common/ubsocket_qbuf_queue.h"
 #include "core/ubsocket_socket.h"
 #include "core/ubsocket_socket_set.h"
+#include "core/umq/umq_bounded_seq.h"
+#include "core/umq/umq_buffer_receive_queue.h"
 #include "core/umq/umq_setting.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "profiling/statistics/cli_message.h"
@@ -25,7 +26,12 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-class UmqSocket : public SocketBase {
+using UmqSocketSeq =
+    UmqSocketBoundedSequence<UmqSetting::UMQ_SOCKET_SEQ_NUM_BIT_WIDTH, uint32_t, UmqSetting::UMQ_SOCKET_SEQ_NUM_MAX>;
+
+class UmqSocket
+    : public SocketBase
+    , public UmqSocketSeq {
 public:
     explicit UmqSocket(int fd) : SocketBase(fd, SocketType::SOCK_TYPE_UMQ)
     {
@@ -157,7 +163,7 @@ private:
     u_mutex_t *mutex_;
     uint64_t share_umq_handle_ = UMQ_INVALID_HANDLE;
 
-    QbufQueue<umq_buf_t *> *rxQueue = nullptr;
+    UmqBufferReceiveQueue *rxQueue = nullptr;
 };
 using UmqSocketPtr = Ref<UmqSocket>;
 

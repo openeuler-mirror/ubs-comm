@@ -33,6 +33,7 @@ uintptr_t UmqTxOps::AllocTxBuf(uint32_t size, uint32_t count)
 int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
 {
     umq_buf_t *tx_buf_list = reinterpret_cast<umq_buf_t *>(buf);
+    auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
     int flagEIO = -1;
     umq_buf_t *head_qbuf = QBUF_LIST_FIRST(&head_buf_);
     umq_buf_t *tail_qbuf = QBUF_LIST_FIRST(&tail_buf_);
@@ -48,6 +49,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         QBUF_LIST_NEXT(QBUF_LIST_FIRST(&tail_buf_)) = cur_buf;
     }
     uint32_t tx_total_len = 0;
+    uint32_t sn_allocated = 0;
     cvt->Reset();
     for (uint32_t i = 0; i < batch; ++i) {
         umq_buf_t *cur_wr_first = next_buf;
@@ -63,6 +65,11 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             ((Block *)PtrFloorToBoundary(cur_buf->buf_data))->IncRef();
             wr_left_len -= cur_buf->data_size;
             moved_total_len += cur_buf->data_size;
+
+            umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)cur_buf->qbuf_ext;
+            buf_pro->imm.user_data = umq_socket->FetchAddSeqNum(1);
+            ++sn_allocated;
+
             if (last || ++sge_idx >= TX_SGE_MAX || moved_total_len >= UmqSetting::GetIOBufSize()) {
                 break;
             }
@@ -71,9 +78,10 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         tx_total_len += moved_total_len;
         cur_wr_first->total_data_size = moved_total_len;
         umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)cur_wr_first->qbuf_ext;
-        buf_pro->opcode = UMQ_OPC_SEND;
+        buf_pro->opcode = UMQ_OPC_SEND_IMM;
         buf_pro->flag.value = 0;
         buf_pro->user_ctx = 0;
+
         if (tx_queue_avail_num_ == 1 || i + 1 == batch) {
             buf_pro->flag.bs.solicited_enable = 1;
         } else {
@@ -138,9 +146,12 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             QBUF_LIST_FIRST(&tail_buf_) = tail_qbuf;
             UmqApi::umq_buf_free(bad_qbuf);
             tx_total_len = 0;
+            umq_socket->FetchSubSeqNum(sn_allocated);
         } else {
+            uint32_t tx_avail_before = tx_queue_avail_num_;
             tx_total_len = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf, _unsolicited_wr_num, _unsolicited_bytes,
                                          _unsignaled_wr_num);
+            umq_socket->FetchSubSeqNum(sn_allocated - (tx_avail_before - tx_queue_avail_num_));
         }
         if (flagEIO == 1) {
             UBS_VLOG_ERR("write failed, destroy UB\n");
@@ -341,7 +352,7 @@ void UmqTxOps::HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt)
 bool UmqTxOps::HandleProbePacket(umq_buf_t *qbuf)
 {
     umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(qbuf->qbuf_ext);
-    if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == 1) {
+    if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == UmqSetting::UMQ_PROBE_USER_DATA_ID) {
         UmqApi::umq_buf_free(qbuf);
         return true; // 已处理
     }
