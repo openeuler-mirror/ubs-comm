@@ -81,7 +81,8 @@ struct SockWorkerOptions {
     int tcpUserTimeout = -1;
     bool tcpEnableNoDelay = true;
     bool tcpSendZCopy = false;
-    bool tcpEpollLT = false; /* epoll default is ET, set true enable to LT (multicast for hlc will use this option) */
+    /* epoll default is ET, set true enable to LT (multicast or call for hlc will use this option) */
+    bool tcpEpollLT = false;
 
     inline std::string ToString() const
     {

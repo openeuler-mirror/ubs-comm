@@ -997,6 +997,77 @@ SerResult HcomChannelImp::CallInner(const UBSHcomRequest &req, UBSHcomResponse &
     return AsyncCallInner(req, done);
 }
 
+int32_t HcomChannelImp::CallWithHlc(const UBSHcomRequest &req, UBSHcomResponse &rsp, const Callback *done)
+{
+    VALIDATE_PARAM(Request, req);
+    SerResult result = SER_OK;
+    uint64_t timestamp = mOptions.twoSideTimeout < 0 ? UINT64_MAX : mOptions.twoSideTimeout + NetMonotonic::TimeSec();
+    do {
+        result = CallWithHlcInner(req, rsp, done);
+        if (NN_LIKELY(result == SER_OK)) {
+            return SER_OK;
+        } else if (result == SER_NEW_OBJECT_FAILED) {
+            usleep(100UL);
+            continue;
+        } else {
+            break;
+        }
+    } while (NetMonotonic::TimeSec() < timestamp);
+
+    NN_LOG_ERROR("Failed to call with hlc " << result);
+    return result;
+}
+
+SerResult HcomChannelImp::CallWithHlcInner(const UBSHcomRequest &req, UBSHcomResponse &rsp, const Callback *done)
+{
+    if (done == nullptr) {
+        return SyncCallWithHlcInner(req, rsp);
+    }
+    return AsyncCallWithHlcInner(req, done);
+}
+
+SerResult HcomChannelImp::AsyncCallWithHlcInner(const UBSHcomRequest &req, const Callback *done)
+{
+    if (mOptions.selfPoll) {
+        NN_LOG_ERROR("Failed to invoke async CallWithHlc with self poll, not support");
+        delete done;
+        return SER_INVALID_PARAM;
+    }
+
+    UBSHcomNetEndpoint *ep = nullptr;
+    auto result = NextWorkerPollEp(ep);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        delete done;
+        return result;
+    }
+
+    TimerCtx context{};
+    result = PrepareTimerContext(const_cast<Callback *>(done), mOptions.twoSideTimeout, context);
+    if (result != SER_OK) {
+        delete done;
+        return result;
+    }
+
+    UBSHcomNetTransRequest transReq(req.address, req.size, sizeof(SerTransContext));
+    SetServiceTransCtx(transReq.upCtxData, context.seqNo, false);
+
+    MarkOpCodeBySeqNo(context.seqNo, 0);
+    UBSHcomNetTransOpInfo transOp(context.seqNo, mOptions.twoSideTimeout);
+
+    UBSHcomEpOptions epOptions;
+    epOptions.tcpBlockingIo = true;
+    epOptions.cbByWorkerInBlocking = false;
+    ep->SetEpOption(epOptions);
+
+    result = ep->PostSendNoCopy(req.opcode, transReq, transOp);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Channel async call send failed " << result << " ep id " << ep->Id());
+        DestroyTimerContext(context);
+        return result;
+    }
+    return SER_OK;
+}
+
 NResult HcomChannelImp::SendFds(int fds[], uint32_t len)
 {
     NN_ASSERT_LOG_RETURN(mEpInfo != nullptr, SER_ERROR)
@@ -1104,6 +1175,56 @@ SerResult HcomChannelImp::SyncCallInner(const UBSHcomRequest &req, UBSHcomRespon
     } else {
         result = ep->PostSend(req.opcode, transReq, transOp);
     }
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Channel sync call send failed " << result << " ep id " << ep->Id());
+        DestroyTimerContext(context);
+        return result;
+    }
+
+    syncParam.Wait();
+    return syncParam.Result();
+}
+
+SerResult HcomChannelImp::SyncCallWithHlcInner(const UBSHcomRequest &req, UBSHcomResponse &rsp, uint32_t timeOut)
+{
+    if (mOptions.selfPoll) {
+        NN_LOG_ERROR("Failed to invoke sync CallWithHlc with self poll, not support");
+        return SER_INVALID_PARAM;
+    }
+
+    UBSHcomNetEndpoint *ep = nullptr;
+    auto result = NextWorkerPollEp(ep);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        return result;
+    }
+
+    /* worker poll mode */
+    HcomServiceSelfSyncParam syncParam{};
+    Callback *newCallback = UBSHcomNewCallback(SyncCallCbForWorkerPoll, std::placeholders::_1, &rsp, &syncParam);
+    if (NN_UNLIKELY(newCallback == nullptr)) {
+        NN_LOG_ERROR("Sync call malloc callback failed");
+        return SER_NEW_OBJECT_FAILED;
+    }
+
+    TimerCtx context{};
+    result = PrepareTimerContext(newCallback, timeOut == 0 ? mOptions.twoSideTimeout : timeOut, context);
+    if (result != SER_OK) {
+        delete newCallback;
+        return result;
+    }
+
+    UBSHcomNetTransRequest transReq(req.address, req.size, sizeof(SerTransContext));
+    SetServiceTransCtx(transReq.upCtxData, context.seqNo, false);
+
+    MarkOpCodeBySeqNo(context.seqNo, 0);
+    UBSHcomNetTransOpInfo transOp(context.seqNo, mOptions.twoSideTimeout);
+
+    UBSHcomEpOptions epOptions;
+    epOptions.tcpBlockingIo = true;
+    epOptions.cbByWorkerInBlocking = false;
+    ep->SetEpOption(epOptions);
+
+    result = ep->PostSendNoCopy(req.opcode, transReq, transOp);
     if (NN_UNLIKELY(result != SER_OK)) {
         NN_LOG_ERROR("Channel sync call send failed " << result << " ep id " << ep->Id());
         DestroyTimerContext(context);
@@ -1591,6 +1712,116 @@ SerResult HcomChannelImp::SyncReplyInner(const UBSHcomReplyContext &ctx, const U
 
     syncParam.Wait();
     return syncParam.Result();
+}
+
+int32_t HcomChannelImp::ReplyWithHlc(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback *done)
+{
+    VALIDATE_PARAM(Reply, ctx, req, mOptions.selfPoll);
+    SerResult ret = SER_OK;
+    uint64_t timestamp = mOptions.twoSideTimeout < 0 ? UINT64_MAX : mOptions.twoSideTimeout + NetMonotonic::TimeSec();
+    do {
+        ret = ReplyWithHlcInner(ctx, req, done);
+        if (NN_LIKELY(ret == SER_OK)) {
+            return SER_OK;
+        } else if (ret == SER_NEW_OBJECT_FAILED) {
+            usleep(100UL);
+            continue;
+        } else {
+            break;
+        }
+    } while (NetMonotonic::TimeSec() < timestamp);
+    NN_LOG_WARN("Failed to reply with hlc, ret code: " << ret);
+    return ret;
+}
+
+SerResult HcomChannelImp::ReplyWithHlcInner(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req,
+                                            const Callback *done)
+{
+    if (done == nullptr) {
+        return SyncReplyWithHlcInner(ctx, req);
+    }
+    return AsyncReplyWithHlcInner(ctx, req, done);
+}
+
+SerResult HcomChannelImp::SyncReplyWithHlcInner(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req)
+{
+    SerResult res = SER_OK;
+    UBSHcomNetEndpoint *ep = nullptr;
+    res = ResponseWorkerPollEp(ctx.rspCtx, ep);
+    if (NN_UNLIKELY(res != SER_OK)) {
+        NN_LOG_ERROR("Failed to select ep " << res);
+        return res;
+    }
+
+    HcomServiceSelfSyncParam syncParam{};
+    Callback *newCallback = UBSHcomNewCallback(
+        [&syncParam](UBSHcomServiceContext &context) {
+            if (NN_UNLIKELY(context.Result() != SER_OK)) {
+                NN_LOG_WARN("Channel sync reply inner callback failed " << context.Result());
+            }
+            syncParam.Result(context.Result());
+            syncParam.Signal();
+        },
+        std::placeholders::_1);
+    if (NN_UNLIKELY(newCallback == nullptr)) {
+        NN_LOG_ERROR("Sync send callback is nullptr");
+        return SER_NEW_OBJECT_FAILED;
+    }
+
+    TimerCtx context{};
+    auto result = PrepareTimerContext(newCallback, mOptions.twoSideTimeout, context);
+    if (result != SER_OK) {
+        delete newCallback;
+        return result;
+    }
+
+    UBSHcomNetTransRequest transReq(req.address, req.size, sizeof(SerTransContext));
+    SetServiceTransCtx(transReq.upCtxData, context.seqNo);
+
+    uint32_t userSeqNo = context.seqNo;
+    MarkOpCodeBySeqNo(userSeqNo, ctx.rspCtx, mRespOriginalSeqNo);
+    UBSHcomNetTransOpInfo transOp(userSeqNo, mOptions.twoSideTimeout, ctx.errorCode, 0);
+
+    UBSHcomEpOptions epOptions;
+    epOptions.tcpBlockingIo = true;
+    epOptions.cbByWorkerInBlocking = false;
+    ep->SetEpOption(epOptions);
+
+    result = ep->PostSendNoCopy(req.opcode, transReq, transOp);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        NN_LOG_ERROR("Channel sync send failed " << result << " ep id " << ep->Id());
+        DestroyTimerContext(context);
+        return result;
+    }
+
+    syncParam.Wait();
+    return syncParam.Result();
+}
+
+SerResult HcomChannelImp::AsyncReplyWithHlcInner(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req,
+                                                 const Callback *done)
+{
+    SerResult res = SER_OK;
+    UBSHcomNetEndpoint *ep = nullptr;
+    res = ResponseWorkerPollEp(ctx.rspCtx, ep);
+    if (NN_UNLIKELY(res != SER_OK)) {
+        NN_LOG_ERROR("Failed to select ep " << res);
+        delete done;
+        return res;
+    }
+
+    UBSHcomNetTransRequest transReq(req.address, req.size, sizeof(SerTransContext));
+    uint32_t newSeqNo = 0;
+    SetServiceTransCtx(transReq.upCtxData, const_cast<Callback *>(done));
+    MarkOpCodeBySeqNo(newSeqNo, ctx.rspCtx, mRespOriginalSeqNo);
+    UBSHcomNetTransOpInfo transOp(newSeqNo, mOptions.twoSideTimeout, ctx.errorCode, 0);
+
+    UBSHcomEpOptions epOptions;
+    epOptions.tcpBlockingIo = true;
+    epOptions.cbByWorkerInBlocking = false;
+    ep->SetEpOption(epOptions);
+
+    return ep->PostSendNoCopy(req.opcode, transReq, transOp);
 }
 
 SerResult HcomChannelImp::SyncReplySplitWithWorkerPoll(const UBSHcomReplyContext &ctx, UBSHcomNetEndpoint *&ep,

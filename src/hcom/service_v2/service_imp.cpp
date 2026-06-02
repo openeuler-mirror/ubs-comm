@@ -1153,6 +1153,11 @@ void HcomServiceImp::SetUbcMode(UBSHcomUbcMode ubcMode)
     mOptions.ubcMode = ubcMode;
 }
 
+void HcomServiceImp::SetTcpEpollMode(bool isTcpEpollLT)
+{
+    mOptions.tcpEpollLT = isTcpEpollLT;
+}
+
 void HcomServiceImp::SetCtxStoreCapacity(uint32_t ctxStoreCapacity)
 {
     if (mStarted) {
@@ -1799,6 +1804,7 @@ void HcomServiceImp::ConvertHcomSerImpOptsToHcomDriOpts(const HcomServiceImpOpti
     driverOpt.mrSendReceiveSegCount = serviceOpt.maxSendRecvDataCount;
     driverOpt.ubcMode = serviceOpt.ubcMode;
     driverOpt.ubPriority = serviceOpt.ubPriority;
+    driverOpt.tcpEpollLT = serviceOpt.tcpEpollLT;
 }
 
 SerResult HcomServiceImp::ExchangeTimestamp(UBSHcomChannel *channel)
