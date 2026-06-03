@@ -387,7 +387,11 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
         umq_conn_info_.conn_eid = conn_route_.src_eid;
     } else {
-        umq_conn_info_.conn_eid = local_eid;
+        if (GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+            umq_conn_info_.conn_eid = local_eid;
+        } else {
+            umq_conn_info_.conn_eid = conn_route_.src_eid;
+        }
     }
 
     return UBS_OK;
@@ -441,8 +445,13 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &c
         ret =
             umq_socket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid), topo_type_);
     } else {
-        umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
-        ret = umq_socket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid), topo_type_);
+        if (GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+            umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
+            ret = umq_socket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid), topo_type_);
+        } else {
+            ret = umq_socket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid),
+                                             topo_type_);
+        }
     }
     if (ret != UBS_OK || SocketBase::GenerateSocketCommOps(socket) != UBS_OK) {
         UBS_VLOG_ERR("Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
@@ -534,6 +543,8 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &c
 Result UmqConnectorOps::DoUbConnectRetry(SocketPtr socket_ptr, Result &ack_ret, Result &peer_ret)
 {
     auto umq_socket = RefConvert<Socket, UmqSocket>(socket_ptr);
+    // ub降级后检查other链路时，是否检查成功的ret值
+    int checkOtherRet = 0;
     if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY) {
         UBS_VLOG_ERR("CPU_AFFINITY:%d failed, connect no need to retry,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                      static_cast<int>(UmqSetting::UMQ_DEV_SCHEDULE_POLICY), EID_ARGS(umq_conn_info_.peer_eid),
@@ -549,8 +560,13 @@ Result UmqConnectorOps::DoUbConnectRetry(SocketPtr socket_ptr, Result &ack_ret, 
     umq_socket->UnbindAndFlushRemoteUmq(socket_ptr);
     umq_socket->DestroyLocalUmq();
 
-    if ((CheckOtherRoute(umq_socket) != 0 && topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) ||
-        (CheckOtherRouteForClos(umq_socket) != 0 && topo_type_ == UMQ_TOPO_TYPE_CLOS)) {
+    if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {
+        checkOtherRet = CheckOtherRouteForClos(umq_socket);
+    } else {
+        checkOtherRet = CheckOtherRoute(umq_socket);
+    }
+
+    if (checkOtherRet != 0) {
         UBS_VLOG_ERR("Failed to get other route in retry,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         retry_state_ = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
@@ -846,7 +862,7 @@ void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &main_routes, c
 
 Result UmqConnectorOps::CheckRouteDevAddForConnect(const umq_eid_t &conn_eid, const UmqSocketPtr &umq_socket)
 {
-    if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {
+    if (topo_type_ == UMQ_TOPO_TYPE_CLOS && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
         return UBS_OK;
     }
 

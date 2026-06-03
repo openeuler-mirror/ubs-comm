@@ -57,7 +57,9 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     // TODO: is_bonding 待确认如何设置到 socketbase
     UBS_VLOG_INFO("UmqSetting::UMQ_IS_BONDING %b topo_type_ %d", UmqSetting::UMQ_IS_BONDING, topo_type_);
     if (UmqSetting::UMQ_IS_BONDING && topo_type_ == UMQ_TOPO_TYPE_CLOS) {
-        queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
+        if (GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+            queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
+        }
         queue_cfg.used_ports = used_ports;
     }
 
@@ -98,7 +100,8 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
             UBS_VLOG_ERR("Failed to strcpy device name\n");
             return UBS_NEW_SOCKET_FD;
         }
-        if (UmqSetting::UMQ_IS_BONDING) {
+        if (UmqSetting::UMQ_IS_BONDING &&
+            (topo_type_ != UMQ_TOPO_TYPE_CLOS || GlobalSetting::UBS_BACKUP_LINK_ENABLED)) {
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
             queue_cfg.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
 
@@ -107,11 +110,13 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
                              UmqSetting::UMQ_EID_INDEX);
             }
             *conn_eid_used = local_eid;
+            UBS_VLOG_INFO("Use Bonding: " EID_FMT ".\n", EID_ARGS(*conn_eid_used));
         } else {
             // init use bonding dev
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
             queue_cfg.dev_info.eid.eid = *conn_eid;
             local_eid = *conn_eid;
+            UBS_VLOG_INFO("Use UDMA: " EID_FMT ".\n", EID_ARGS(*conn_eid));
         }
     } else {
         if (strcpy(queue_cfg.dev_info.dev.dev_name, "bonding_dev_0") == nullptr) {

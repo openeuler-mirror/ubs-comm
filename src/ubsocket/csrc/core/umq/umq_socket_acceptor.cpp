@@ -39,7 +39,11 @@ Result UmqAcceptorOps::Negotiate(SocketPtr socketPtr)
     if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
         conn_eid_ = connEid;
     } else {
-        conn_eid_ = localEid;
+        if (GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+            conn_eid_ = localEid;
+        } else {
+            conn_eid_ = connEid;
+        }
     }
     umq_conn_info_.peer_eid = peer_eid_;
     umq_conn_info_.conn_eid = conn_eid_;
@@ -158,8 +162,13 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
     if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
         ret = umqSocket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid), topo_type_);
     } else {
-        umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
-        ret = umqSocket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid), topo_type_);
+        if (GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+            umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
+            ret = umqSocket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid), topo_type_);
+        } else {
+            ret = umqSocket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid),
+                                            topo_type_);
+        }
     }
 
     // 校验 bind 是否成功

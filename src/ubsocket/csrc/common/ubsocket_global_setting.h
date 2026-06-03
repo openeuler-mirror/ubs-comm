@@ -80,6 +80,7 @@ public:
     static bool UBS_TRACE_ENABLED;        /* if enable tracing, from env */
     static bool UBS_CLI_ENABLED;
     static bool UBS_PROBE_ENABLED;
+    static bool UBS_BACKUP_LINK_ENABLED;
     static bool UBS_INITED;                          /* if ubsocket initialized, from API */
     static std::string UBS_TRANS_MODE;               /* transport mode, from env */
     static int16_t UBS_ACCEPTOR_ASYNC_THREAD_COUNT;  /* if enable async acceptor, from API override by env */
