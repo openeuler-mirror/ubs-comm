@@ -512,7 +512,7 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
     Refresh();
     PrintHeader(header);
 
-    char umqPerfStatStr[8192] = {}; // 8KB buffer for umq perf stats
+    char umqPerfStatStr[16384] = {}; // 16KB buffer for umq perf stats
     CLIUmqPerfData *sockData = reinterpret_cast<CLIUmqPerfData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
         if (umq_stats_perf_to_str(&(sockData->umqPerfStat), umqPerfStatStr, sizeof(umqPerfStatStr)) < 0) {
@@ -520,6 +520,14 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
         }
         printf("Socket %d:\n", i);
         printf("%s", umqPerfStatStr);
+        sockData += 1;
+    }
+    NewLine();
+
+    // umq tp perf info
+    sockData = reinterpret_cast<CLIUmqPerfData *>(data + headerSize);
+    for (uint32_t i = 0; i < SocketNum; i++) {
+        printf("%s", sockData->umqTpPerfBuf);
         sockData += 1;
     }
     NewLine();

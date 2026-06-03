@@ -306,6 +306,21 @@ public:
         return umq_stats_perf_get_ptr(umq_perf_stats);
     }
 
+    static int umq_stats_tp_perf_start(umq_trans_mode_t trans_mode)
+    {
+        return umq_stats_tp_perf_start_ptr(trans_mode);
+    }
+
+    static int umq_stats_tp_perf_stop(umq_trans_mode_t trans_mode)
+    {
+        return umq_stats_tp_perf_stop_ptr(trans_mode);
+    }
+
+    static int umq_stats_tp_perf_info_get(umq_trans_mode_t trans_mode, char *perf_buf, uint32_t *length)
+    {
+        return umq_stats_tp_perf_info_get_ptr(trans_mode, perf_buf, length);
+    }
+
 private:
     DL_API_DECLARE(umq_init);
     DL_API_DECLARE(umq_uninit);
@@ -353,6 +368,9 @@ private:
     DL_API_DECLARE(umq_stats_perf_to_str);
     DL_API_DECLARE(umq_stats_perf_reset);
     DL_API_DECLARE(umq_stats_perf_get);
+    DL_API_DECLARE(umq_stats_tp_perf_start);
+    DL_API_DECLARE(umq_stats_tp_perf_stop);
+    DL_API_DECLARE(umq_stats_tp_perf_info_get);
 
 private:
     static void UnLoadInner() noexcept;
@@ -614,6 +632,21 @@ public:
     static int umq_stats_perf_to_str(umq_perf_stats_t *umq_perf_stats, char *buf, int max_buf_len)
     {
         return ::umq_stats_perf_to_str(umq_perf_stats, buf, max_buf_len);
+    }
+
+    static int umq_stats_tp_perf_start(umq_trans_mode_t trans_mode)
+    {
+        return ::umq_stats_tp_perf_start(trans_mode);
+    }
+
+    static int umq_stats_tp_perf_stop(umq_trans_mode_t trans_mode)
+    {
+        return ::umq_stats_tp_perf_stop(trans_mode);
+    }
+
+    static int umq_stats_tp_perf_info_get(umq_trans_mode_t trans_mode, char *perf_buf, uint32_t *length)
+    {
+        return ::umq_stats_tp_perf_info_get(trans_mode, perf_buf, length);
     }
 };
 } // namespace ubs
