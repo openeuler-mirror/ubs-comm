@@ -56,6 +56,11 @@ DL_API_DEFINE(UmqApi, umq_post);
 DL_API_DEFINE(UmqApi, umq_poll);
 DL_API_DEFINE(UmqApi, umq_interrupt_fd_get);
 DL_API_DEFINE(UmqApi, umq_get_cq_event);
+DL_API_DEFINE(UmqApi, umq_stats_perf_start);
+DL_API_DEFINE(UmqApi, umq_stats_perf_stop);
+DL_API_DEFINE(UmqApi, umq_stats_perf_to_str);
+DL_API_DEFINE(UmqApi, umq_stats_perf_reset);
+DL_API_DEFINE(UmqApi, umq_stats_perf_get);
 
 std::mutex UmqApi::LOAD_MUTEX;
 bool UmqApi::LOADED = false;
@@ -117,6 +122,11 @@ Result UmqApi::Load() noexcept
     DL_API_LOAD(umq_poll);
     DL_API_LOAD(umq_interrupt_fd_get);
     DL_API_LOAD(umq_get_cq_event);
+    DL_API_LOAD(umq_stats_perf_start);
+    DL_API_LOAD(umq_stats_perf_stop);
+    DL_API_LOAD(umq_stats_perf_to_str);
+    DL_API_LOAD(umq_stats_perf_reset);
+    DL_API_LOAD(umq_stats_perf_get);
 
     /* step3: close handle */
     dlclose(handle);
@@ -181,6 +191,11 @@ void UmqApi::UnLoadInner() noexcept
     DL_API_SET_NULL(umq_poll);
     DL_API_SET_NULL(umq_interrupt_fd_get);
     DL_API_SET_NULL(umq_get_cq_event);
+    DL_API_SET_NULL(umq_stats_perf_start);
+    DL_API_SET_NULL(umq_stats_perf_stop);
+    DL_API_SET_NULL(umq_stats_perf_to_str);
+    DL_API_SET_NULL(umq_stats_perf_reset);
+    DL_API_SET_NULL(umq_stats_perf_get);
 }
 } // namespace ubs
 } // namespace ock

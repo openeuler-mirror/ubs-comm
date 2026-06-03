@@ -282,6 +282,30 @@ public:
         return umq_get_cq_event_ptr(umqh, option);
     }
 
+    static int umq_stats_perf_start(void)
+    {
+        return umq_stats_perf_start_ptr();
+    }
+
+    static int umq_stats_perf_stop(void)
+    {
+        return umq_stats_perf_stop_ptr();
+    }
+    static int umq_stats_perf_to_str(umq_perf_stats_t *umq_perf_stats, char *buf, int max_buf_len)
+    {
+        return umq_stats_perf_to_str_ptr(umq_perf_stats, buf, max_buf_len);
+    }
+
+    static int umq_stats_perf_reset(umq_perf_stats_cfg_t *perf_stats_cfg)
+    {
+        return umq_stats_perf_reset_ptr(perf_stats_cfg);
+    }
+
+    static int umq_stats_perf_get(umq_perf_stats_t *umq_perf_stats)
+    {
+        return umq_stats_perf_get_ptr(umq_perf_stats);
+    }
+
 private:
     DL_API_DECLARE(umq_init);
     DL_API_DECLARE(umq_uninit);
@@ -324,7 +348,11 @@ private:
     DL_API_DECLARE(umq_post);
     DL_API_DECLARE(umq_poll);
     DL_API_DECLARE(umq_interrupt_fd_get);
-    DL_API_DECLARE(umq_get_cq_event);
+    DL_API_DECLARE(umq_stats_perf_start);
+    DL_API_DECLARE(umq_stats_perf_stop);
+    DL_API_DECLARE(umq_stats_perf_to_str);
+    DL_API_DECLARE(umq_stats_perf_reset);
+    DL_API_DECLARE(umq_stats_perf_get);
 
 private:
     static void UnLoadInner() noexcept;
@@ -561,6 +589,31 @@ public:
     static int umq_get_cq_event(uint64_t umqh, umq_interrupt_option_t *option)
     {
         return ::umq_get_cq_event(umqh, option);
+    }
+
+    static int umq_stats_perf_start(void)
+    {
+        return ::umq_stats_perf_start();
+    }
+
+    static int umq_stats_perf_stop(void)
+    {
+        return ::umq_stats_perf_stop();
+    }
+
+    static int umq_stats_perf_get(umq_perf_stats_t *umq_perf_stats)
+    {
+        return ::umq_stats_perf_get(umq_perf_stats);
+    }
+
+    static int umq_stats_perf_reset(umq_perf_stats_cfg_t *perf_stats_cfg)
+    {
+        return ::umq_stats_perf_reset(perf_stats_cfg);
+    }
+
+    static int umq_stats_perf_to_str(umq_perf_stats_t *umq_perf_stats, char *buf, int max_buf_len)
+    {
+        return ::umq_stats_perf_to_str(umq_perf_stats, buf, max_buf_len);
     }
 };
 } // namespace ubs
