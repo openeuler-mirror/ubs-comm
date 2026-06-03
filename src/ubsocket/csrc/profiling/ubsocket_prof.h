@@ -21,6 +21,25 @@ extern "C" {
 
 extern int ubsocket_prof_enabled;
 
+enum ProfilingTPId : uint32_t
+{
+    CORE_CONNECT = 0,
+    CORE_ACCEPT,
+    CORE_WRITE,
+    CORE_READ,
+    // 当前为了快速分析CTP性能，brpc复用ubsocket打点和cli查询能力, 点位先放一起。后续有需要考虑解耦开
+    BRPC_CLIENT_CALL,
+    BRPC_SERIALIZE,
+    BRPC_WRITEV,
+    BRPC_DESERIALIZE,
+    BRPC_READV,
+    BRPC_SERVER_PROCESS_REQ,
+    BRPC_CLIENT_PROCESS_RSP,
+
+    // count the number of ProfilingTPId
+    UBSOCKET_PROF_COUNT,
+};
+
 typedef struct {
     uint32_t tracepoint_count;  /* how many trace points to be recorded */
     int32_t enable_dump;        /* dump to file or not */

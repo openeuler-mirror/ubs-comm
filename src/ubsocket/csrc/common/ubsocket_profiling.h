@@ -16,18 +16,6 @@
 
 namespace ock {
 namespace ubs {
-enum ProfilingTPId : uint32_t
-{
-    CORE_CONNECT = 0,
-    CORE_ACCEPT,
-    CORE_WRITE,
-    CORE_READ,
-    BRPC_WRITE,
-
-    // count the number of ProfilingTPId
-    UBSOCKET_PROF_COUNT,
-};
-
 class Profiling {
 public:
     static int Init(uint32_t tracepoint_count, const char *dumpPath, uint16_t dumpIntervaMin)
