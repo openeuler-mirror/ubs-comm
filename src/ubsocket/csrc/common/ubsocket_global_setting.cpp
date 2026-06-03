@@ -47,6 +47,7 @@ uint64_t GlobalSetting::UBS_TRACE_FILE_SIZE = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
 std::string GlobalSetting::UBS_TRACE_FILE_PATH = "/tmp/ubsocket/log";
 uint32_t GlobalSetting::UBS_PROBE_MS = 1000;
 uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
+bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = false;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
@@ -73,6 +74,7 @@ uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 #define ENV_VAR_PROBE "UBSOCKET_PROBE_ENABLE"
 #define ENV_VAR_PROBE_TIME "UBSOCKET_PROBE_TIME_MS"
 #define ENV_VAR_PROBE_BATCH "UBSOCKET_PROBE_BATCH"
+#define ENV_BACKUP_LINK_ENABLED "UBSOCKET_BACKUP_LINK_ENABLE"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -102,7 +104,8 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_ASYNC_ACCEPTOR, false, "true|false"},
                                     {ENV_VAR_DEGRADE, false, "true|false"},
                                     {ENV_VAR_CLI, false, "true|false"},
-                                    {ENV_VAR_PROBE, false, "true|false"}};
+                                    {ENV_VAR_PROBE, false, "true|false"},
+                                    {ENV_BACKUP_LINK_ENABLED, false, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, 512},
@@ -273,6 +276,10 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidate(ENV_VAR_PROBE_BATCH, envValue)) {
         UBS_PROBE_BATCH = static_cast<uint32_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_BACKUP_LINK_ENABLED, strEnvValue)) {
+        UBS_BACKUP_LINK_ENABLED = Func::BoolFromStr(strEnvValue);
     }
 
     return UBS_OK;
