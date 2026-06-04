@@ -128,7 +128,7 @@ inline umq_buf_t *AllocMockBuf(uint32_t size, umq_buf_status_t status = UMQ_BUF_
 inline umq_eid_t MakeTestEid(uint8_t val)
 {
     umq_eid_t eid = {};
-    memset(eid.raw, sizeof(eid.raw), val, sizeof(eid.raw));
+    memset(eid.raw, val, sizeof(eid.raw));
     return eid;
 }
 

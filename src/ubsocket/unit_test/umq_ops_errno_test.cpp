@@ -19,11 +19,11 @@
 #include "under_api/dl_umq_api.h"
 
 #include <gtest/gtest.h>
-#include <securec.h>
 #include <atomic>
 #include <cerrno>
 #include <cstring>
 #include <mockcpp/mockcpp.hpp>
+#include "under_api/dl_libc_api.h"
 
 using namespace ock::ubs;
 using namespace ock::ubs::umq;
@@ -451,27 +451,39 @@ TEST_F(UmqOpsErrnoTest, HandleErrorRxCqe_RemOperationErr_NoErrnoChange)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf = AllocMockBuf(TEST_BUF_SIZE, UMQ_BUF_REM_OPERATION_ERR);
+    LibcApi::shutdown_ptr = [](int, int) -> int {
+        return 0;
+    };
     errno = 0;
     rxOps.HandleErrorRxCqe(buf);
     EXPECT_EQ(errno, 0);
+    LibcApi::shutdown_ptr = nullptr;
 }
 
 TEST_F(UmqOpsErrnoTest, HandleErrorRxCqe_RemAccessAbortErr_NoErrnoChange)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf = AllocMockBuf(TEST_BUF_SIZE, UMQ_BUF_REM_ACCESS_ABORT_ERR);
+    LibcApi::shutdown_ptr = [](int, int) -> int {
+        return 0;
+    };
     errno = 0;
     rxOps.HandleErrorRxCqe(buf);
     EXPECT_EQ(errno, 0);
+    LibcApi::shutdown_ptr = nullptr;
 }
 
 TEST_F(UmqOpsErrnoTest, HandleErrorRxCqe_WrFlushErr_NoErrnoChange)
 {
     UmqRxOps rxOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf = AllocMockBuf(TEST_BUF_SIZE, UMQ_BUF_WR_FLUSH_ERR);
+    LibcApi::shutdown_ptr = [](int, int) -> int {
+        return 0;
+    };
     errno = 0;
     rxOps.HandleErrorRxCqe(buf);
     EXPECT_EQ(errno, 0);
+    LibcApi::shutdown_ptr = nullptr;
 }
 
 // ==================== UmqTxOps::HandleErrorTxCqe ====================
@@ -480,27 +492,39 @@ TEST_F(UmqOpsErrnoTest, HandleErrorTxCqe_RemOperationErr_NoErrnoChange)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf = AllocMockBuf(TEST_BUF_SIZE, UMQ_BUF_REM_OPERATION_ERR);
+    LibcApi::shutdown_ptr = [](int, int) -> int {
+        return 0;
+    };
     errno = 0;
     txOps.HandleErrorTxCqe(buf);
     EXPECT_EQ(errno, 0);
+    LibcApi::shutdown_ptr = nullptr;
 }
 
 TEST_F(UmqOpsErrnoTest, HandleErrorTxCqe_RemAccessAbortErr_NoErrnoChange)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf = AllocMockBuf(TEST_BUF_SIZE, UMQ_BUF_REM_ACCESS_ABORT_ERR);
+    LibcApi::shutdown_ptr = [](int, int) -> int {
+        return 0;
+    };
     errno = 0;
     txOps.HandleErrorTxCqe(buf);
     EXPECT_EQ(errno, 0);
+    LibcApi::shutdown_ptr = nullptr;
 }
 
 TEST_F(UmqOpsErrnoTest, HandleErrorTxCqe_FakeBufFcErr_NoErrnoChange)
 {
     UmqTxOps txOps(TEST_FD, TEST_UMQ_HANDLE);
     umq_buf_t *buf = AllocMockBuf(TEST_BUF_SIZE, UMQ_FAKE_BUF_FC_ERR);
+    LibcApi::shutdown_ptr = [](int, int) -> int {
+        return 0;
+    };
     errno = 0;
     txOps.HandleErrorTxCqe(buf);
     EXPECT_EQ(errno, 0);
+    LibcApi::shutdown_ptr = nullptr;
 }
 
 // ==================== UmqBackend::AddUbDev ====================
