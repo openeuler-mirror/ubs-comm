@@ -276,3 +276,22 @@ UBS_API int UB_API_WRAP(setsockopt)(int fd, int level, int optname, const void *
 
     return LibcApi::setsockopt(fd, level, optname, optval, optlen);
 }
+
+UBS_API int UB_API_WRAP(getsockopt)(int fd, int level, int optname, void *optval, socklen_t *optlen)
+{
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+        return LibcApi::getsockopt(fd, level, optname, optval, optlen);
+    }
+
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (sockBase == nullptr) {
+        return LibcApi::getsockopt(fd, level, optname, optval, optlen);
+    }
+
+    if (level < static_cast<int>(UbsocketLevel::SOL_UB)) {
+        return LibcApi::getsockopt(fd, level, optname, optval, optlen);
+    }
+
+    return sockBase->GetSockOpt(fd, level, optname, optval, optlen);
+}
