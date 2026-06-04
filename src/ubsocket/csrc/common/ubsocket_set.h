@@ -38,7 +38,7 @@ public:
             UBS_VLOG_ERR("ArraySet Init getrlimit failed, errno: %d\n", errno);
             return -1;
         }
-        capacity_ = std::min(static_cast<uint32_t>(rl.rlim_cur), FD_CAPACITY_HARD_LIMIT);
+        capacity_ = std::min(static_cast<uint32_t>(rl.rlim_cur), static_cast<uint32_t>(FD_CAPACITY_HARD_LIMIT));
         if (capacity_ == 0) {
             UBS_VLOG_ERR("ArraySet Init invalid capacity: 0 (rlim_cur: %llu)\n",
                          static_cast<unsigned long long>(rl.rlim_cur));
@@ -46,7 +46,7 @@ public:
         }
         set_obj_.reset(new std::atomic<T *>[capacity_]());
         UBS_VLOG_INFO("ArraySet Init capacity: %u (rlim_cur: %llu, hard_limit: %u)\n", capacity_,
-                      static_cast<unsigned long long>(rl.rlim_cur), FD_CAPACITY_HARD_LIMIT);
+                      static_cast<unsigned long long>(rl.rlim_cur), static_cast<uint32_t>(FD_CAPACITY_HARD_LIMIT));
         return 0;
     }
 
