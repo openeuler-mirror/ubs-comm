@@ -165,7 +165,7 @@ static char *MockFgetsPartialMatch(FILE *fp, char *buf, int n)
     if (lineLen >= static_cast<size_t>(n)) {
         return nullptr;
     }
-    memcpy(buf, static_cast<size_t>(n), line, lineLen + 1);
+    memcpy(buf, line, lineLen + 1);
     return buf;
 }
 } // namespace
