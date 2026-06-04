@@ -30,6 +30,7 @@ namespace umq {
 #define ENV_UMQ_EID_IDX "UBSOCKET_EID_IDX"
 #define ENV_UMQ_UB_TRANS_MODE "UBSOCKET_UB_TRANS_MODE"
 #define ENV_UMQ_FLOW_CONTROL_ENABLED "UBSOCKET_FLOW_CONTROL_ENABLE"
+#define ENV_UMQ_LINK_PRIORITY "UBSOCKET_LINK_PRIORITY"
 
 #define DEFAULT_DEV_SCHEDULE_POLICY "affinity_priority"
 #define ROUND_ROBIN_DEV_SCHEDULE_POLICY "rr"
@@ -61,13 +62,15 @@ umq_trans_mode_t UmqSetting::UMQ_TRANS_MODE = UMQ_TRANS_MODE_UB;
 ub_trans_mode UmqSetting::UMQ_UB_TRANS_MODE = RM_TP;
 bool UmqSetting::UMQ_IS_BONDING = false;
 bool UmqSetting::UMQ_FLOW_CONTROL_ENABLE = true;
+int8_t UmqSetting::UMQ_LINK_PRIORITY = UBSOCKET_LINK_PRIORITY_DEFAULT;
 
 void UmqSetting::AddRules() noexcept
 {
     /* int64 rule: name, required, min, max */
     Int64Rule rules_int64[] = {{ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
                                {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, std::numeric_limits<int64_t>::max()},
-                               {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 6144}};
+                               {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 6144},
+                               {ENV_UMQ_LINK_PRIORITY, false, 0, 15}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_UMQ_BLOCK_TYPE, false, "tiny|default|small|medium|large"},
@@ -123,6 +126,10 @@ Result UmqSetting::LoadEnv() noexcept
 
     if (GS::GetEnvAndValidate(ENV_UMQ_DEV_NAME, strEnvValue)) {
         UMQ_DEV_NAME = strEnvValue;
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_LINK_PRIORITY, int64EnvValue)) {
+        UMQ_LINK_PRIORITY = static_cast<int8_t>(int64EnvValue);
     }
 
     if (GS::GetEnvAndValidate(ENV_UMQ_EID_IDX, int64EnvValue)) {

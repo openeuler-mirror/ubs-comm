@@ -58,6 +58,7 @@ public:
     static ub_trans_mode UMQ_UB_TRANS_MODE;
     static bool UMQ_IS_BONDING;
     static bool UMQ_FLOW_CONTROL_ENABLE;
+    static int8_t UMQ_LINK_PRIORITY;
 
     static constexpr size_t UMQ_SOCKET_SEQ_NUM_BIT_WIDTH = 24;
     static constexpr size_t UMQ_SOCKET_SEQ_NUM_MAX = (1ULL << UMQ_SOCKET_SEQ_NUM_BIT_WIDTH) - 2;

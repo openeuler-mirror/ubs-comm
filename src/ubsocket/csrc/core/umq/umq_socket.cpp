@@ -63,11 +63,11 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
         queue_cfg.used_ports = used_ports;
     }
 
-    // TODO: 设置队列优先级
-    // if (context->GetLinkPriority() != DEFAULT_LINK_PRIORITY) {
-    //     queue_cfg.priority = context->GetLinkPriority();
-    //     queue_cfg.create_flag |= UMQ_CREATE_FLAG_PRIORITY;
-    // }
+    UBS_VLOG_INFO("UBSOCKET_LINK_PRIORITY: %d\n", UmqSetting::UMQ_LINK_PRIORITY);
+    if (UmqSetting::UMQ_LINK_PRIORITY != UBSOCKET_LINK_PRIORITY_DEFAULT) {
+        queue_cfg.priority = static_cast<uint8_t>(UmqSetting::UMQ_LINK_PRIORITY);
+        queue_cfg.create_flag |= UMQ_CREATE_FLAG_PRIORITY;
+    }
 
     int n = snprintf(queue_cfg.name, UMQ_NAME_MAX_LEN, "fd: %d", raw_socket_);
     if ((((int)UMQ_NAME_MAX_LEN - 1) < n) || (n < 0)) {
