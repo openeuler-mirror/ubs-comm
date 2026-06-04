@@ -84,6 +84,7 @@ void GlobalSetting::AddRules() noexcept
         {ENV_ASYNC_CONNECTOR, false, 0, 8L},
         {ENV_ASYNC_EPOLL, false, 1, 1L},
         {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240},
+        {ENV_SHARE_JFR_RX_O3_QUEUE_DEPTH, false, 128, 10240},
         {ENV_UBS_RX_DEPTH, false, 2, UINT32_MAX},
         {ENV_UBS_TX_DEPTH, false, 2, UINT32_MAX},
         {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5},

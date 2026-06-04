@@ -11,7 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_FIXED_MIN_HEAP_H
 #define UBS_COMM_UBSOCKET_FIXED_MIN_HEAP_H
 
-#include "csrc/core/ubsocket_core_types.h"
+#include "common/ubsocket_common_includes.h"
 
 namespace ock {
 namespace ubs {
