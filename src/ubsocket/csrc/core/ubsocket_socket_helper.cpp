@@ -204,7 +204,8 @@ std::vector<uint32_t> SocketConnHelper::GetSocketIdsViaNuma()
         std::string name = entry->d_name;
         if (name.substr(0, NODE_STR_SIZE) == "node" && name.size() > NODE_STR_SIZE) {
             char *end;
-            long nodeId = std::strtol(name.substr(NODE_STR_SIZE).c_str(), &end, 10);
+            std::string nodeIdStr = name.substr(NODE_STR_SIZE);
+            long nodeId = std::strtol(nodeIdStr.c_str(), &end, 10);
             if (*end == '\0' && nodeId >= 0) {
                 // 读取该 NUMA 节点的 CPU 列表
                 std::string cpuListPath = std::string(CPU_LIST_PREFIX_PATH) + name + std::string(CPU_LIST_SUFFIX_PATH);
@@ -244,7 +245,8 @@ std::vector<uint32_t> SocketConnHelper::GetSocketIdsViaCpuScan()
         std::string name = entry->d_name;
         if (name.substr(0, CPU_STR_SIZE) == "cpu" && name.size() > CPU_STR_SIZE) {
             char *end;
-            long cpuId = std::strtol(name.substr(CPU_STR_SIZE).c_str(), &end, 10);
+            std::string cpuIdStr = name.substr(CPU_STR_SIZE);
+            long cpuId = std::strtol(cpuIdStr.c_str(), &end, 10);
             if (*end == '\0' && cpuId >= 0) {
                 int socketId = SocketConnHelper::GetSocketIdOfCpu(static_cast<int>(cpuId));
                 if (socketId >= 0) {
