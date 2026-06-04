@@ -325,11 +325,20 @@ private:
 
         /* step 1: get first */
         auto head = mHead.next;
+        if (head == nullptr) {
+            mCurrentFree = 0;
+            return;
+        }
 
         /* step 2: move head forward mFreeSteps and get tail */
         const uint16_t returnCount = mCurrentFree - 1;
+        uint16_t actualCount = 1;
         for (uint16_t i = 0; i < returnCount; ++i) {
+            if (mHead.next->next == nullptr) {
+                break;
+            }
             mHead.next = mHead.next->next;
+            ++actualCount;
         }
         head->nextN = mHead.next;
 
@@ -338,14 +347,14 @@ private:
 
         /* step 4: free */
         head->nextN->next = nullptr;
-        head->count = mCurrentFree;
+        head->count = actualCount;
         mSharedPool->TCFree(head);
 
-        NN_LOG_TRACE_INFO("Thread cache for fixed size memory pool is deconstructing, returned " << mCurrentFree <<
-            " to global pool " << mSharedPool->mName);
+        NN_LOG_TRACE_INFO("Thread cache for fixed size memory pool is deconstructing, returned "
+                          << actualCount << " to global pool " << mSharedPool->mName);
         mCurrentFree = 0;
     }
-
+    
 private:
     NetMemPoolMinBlock mHead {};
     NetMemPoolFixed *mSharedPool = nullptr;
