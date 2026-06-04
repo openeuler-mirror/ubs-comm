@@ -56,10 +56,8 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     queue_cfg.umq_ctx = raw_socket_;
     // TODO: is_bonding 待确认如何设置到 socketbase
     UBS_VLOG_INFO("UmqSetting::UMQ_IS_BONDING %b topo_type_ %d", UmqSetting::UMQ_IS_BONDING, topo_type_);
-    if (UmqSetting::UMQ_IS_BONDING && topo_type_ == UMQ_TOPO_TYPE_CLOS) {
-        if (GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
-            queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
-        }
+    if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+        queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         queue_cfg.used_ports = used_ports;
     }
 
@@ -100,8 +98,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
             UBS_VLOG_ERR("Failed to strcpy device name\n");
             return UBS_NEW_SOCKET_FD;
         }
-        if (UmqSetting::UMQ_IS_BONDING &&
-            (topo_type_ != UMQ_TOPO_TYPE_CLOS || GlobalSetting::UBS_BACKUP_LINK_ENABLED)) {
+        if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
             queue_cfg.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
 
