@@ -25,6 +25,13 @@ namespace hcom {
 constexpr uint16_t RECON_DELAY_ERASE_TIME = 60;
 constexpr uint16_t DEFAULT_DELAY_ERASE_TIME = 1;
 
+inline void DestroyCallback(const Callback *cb)
+{
+    if (cb != nullptr) {
+        delete cb;
+    }
+}
+
 SerResult HcomChannelImp::Initialize(std::vector<UBSHcomNetEndpointPtr> &ep, uintptr_t ctxMemPool,
                                      uintptr_t periodicMgr, uintptr_t pgTable, uint32_t ctxStoreCapacity)
 {

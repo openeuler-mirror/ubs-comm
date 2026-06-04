@@ -9,9 +9,9 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "net_sock_async_endpoint.h"
 #include "net_sock_driver_oob.h"
 #include "sock_validation.h"
+#include "net_sock_async_endpoint.h"
 
 namespace ock {
 namespace hcom {

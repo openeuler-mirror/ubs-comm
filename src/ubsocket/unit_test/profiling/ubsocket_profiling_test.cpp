@@ -11,7 +11,7 @@ public:
     virtual void TearDown();
 };
 
-enum ProfilingTPId : uint32_t
+enum ProfilingTPIdTest : uint32_t
 {
     TP0 = 0,
     TP1,

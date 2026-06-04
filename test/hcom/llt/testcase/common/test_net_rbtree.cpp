@@ -11,8 +11,8 @@
  */
 #include "test_net_rbtree.h"
 #include <thread>
-#include "common/net_rb_tree.h"
 #include "hcom_def.h"
+#include "common/net_rb_tree.h"
 #include "hcom_utils.h"
 
 using namespace ock::hcom;
