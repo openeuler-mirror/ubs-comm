@@ -116,10 +116,7 @@ include_directories(
 )
 
 add_subdirectory(csrc)
-find_package(ZLIB)
-if (ZLIB_FOUND)
-    add_subdirectory(tools/golden)
-endif()
+add_subdirectory(tools/golden)
 
 option(UBSOCKET_BUILD_TESTS "Build tests" OFF)
 if (UBSOCKET_BUILD_TESTS)

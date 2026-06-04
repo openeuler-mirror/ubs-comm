@@ -10,11 +10,11 @@
  * Mulan PSL v2 for more details.
  */
 #include "golden_cmd_data.h"
+#include "golden_crc.h"
 
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <unistd.h>
-#include <zlib.h>
 #include <csignal>
 #include <cstring>
 #include <ctime>
@@ -58,7 +58,7 @@ static int SetNonBlocking(int fd)
 
 static uint32_t CalculateCRC32(const uint8_t *data, size_t len)
 {
-    return crc32(0L, data, len);
+    return CRC::Crc32(data, len);
 }
 
 static bool IsValidIPv4(const std::string &ip)

@@ -16,4 +16,4 @@ add_executable(golden ${GOLDEN_SRCS}
         golden_cmd_show.cpp
         golden_cmd_show.h)
 target_compile_options(golden PUBLIC -g -O0)
-target_link_libraries(golden PUBLIC ubsocket_shared z)
+target_link_libraries(golden PUBLIC ubsocket_shared)
