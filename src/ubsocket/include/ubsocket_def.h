@@ -76,6 +76,17 @@ typedef struct {
     u_external_semaphore_ops_t *sem_ops;   /* external lock operations, for example brpc's sem */
 } u_init_options_t;
 
+enum class UbsocketLevel : int
+{
+    // Does not conflict with the native level of the system
+    SOL_UB = 0x1000,
+};
+
+enum class UbSocketOpt : int
+{
+    UBS_OPT_PROTOCOL = 1,
+};
+
 #define UB_API_WRAP(FUNC) ubsocket_##FUNC
 
 #ifdef __cplusplus

@@ -195,5 +195,30 @@ Result SocketBase::CreateConnectorOps(SocketType value, const SocketPtr &sock, C
     }
 }
 
+int SocketBase::GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen)
+{
+    if (optval == nullptr || optlen == nullptr) {
+        errno = EINVAL;
+        UBS_VLOG_ERR("getsockopt optval or optlen is null\n");
+        return -1;
+    }
+
+    if (level == static_cast<int>(UbsocketLevel::SOL_UB)) {
+        switch (static_cast<UbSocketOpt>(optname)) {
+            case UbSocketOpt::UBS_OPT_PROTOCOL: {
+                int connectType = static_cast<int>(type_);
+                memcpy(optval, &connectType, sizeof(int));
+                *optlen = sizeof(int);
+                return 0;
+            }
+            default: {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+    }
+    errno = EINVAL;
+    return -1;
+}
 } // namespace ubs
 } // namespace ock

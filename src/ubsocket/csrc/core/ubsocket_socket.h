@@ -15,6 +15,7 @@
 #include <chrono>
 
 #include "common/ubsocket_common_includes.h"
+#include "include/ubsocket_def.h"
 #include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_data_rx.h"
@@ -57,6 +58,7 @@ public:
     int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     int WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     int ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen);
 
     EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
     void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data = {});

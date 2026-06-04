@@ -43,6 +43,7 @@ ssize_t UB_API_WRAP(recvmsg)(int sockfd, struct msghdr *msg, int flags);
 ssize_t UB_API_WRAP(sendfile)(int out_fd, int in_fd, off_t *offset, size_t count);
 ssize_t UB_API_WRAP(sendfile64)(int out_fd, int in_fd, off64_t *offset, size_t count);
 int UB_API_WRAP(setsockopt)(int fd, int level, int optname, const void *optval, socklen_t optlen);
+int UB_API_WRAP(getsockopt)(int fd, int level, int optname, void *optval, socklen_t *optlen);
 
 #ifdef __cplusplus
 }
