@@ -30,7 +30,11 @@ UmqBufferReceiveQueue::UmqBufferReceiveQueue()
         uint32_t o3_queue_depth = GlobalSetting::UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH != 0 ?
                                       GlobalSetting::UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH :
                                       UmqSetting::UMQ_SHARE_JFR_RX_O3_QUEUE_DEPTH;
-        uint32_t max_depth = queue_depth > o3_queue_depth ? queue_depth : o3_queue_depth;
+        if (o3_queue_depth > queue_depth) {
+            o3_queue_depth = queue_depth;
+            UBS_VLOG_WARN("O3 queue depth exceeds shared jfr rx queue depth; use share jfr rx depth instead.\n");
+        }
+        uint32_t max_depth = std::max<uint32_t>(o3_queue_depth, queue_depth);
         out_of_order_queue = new (std::nothrow) FastHeap<umq_buf_t *, O3QueueComparator>(o3_queue_depth, max_depth);
         if (out_of_order_queue == nullptr) {
             ClearAllocations();
@@ -47,9 +51,8 @@ UmqBufferReceiveQueue::UmqBufferReceiveQueue()
 
 UmqBufferReceiveQueue::~UmqBufferReceiveQueue()
 {
-    FlushReceiveQueueInternal();
-    if (use_o3_) {
-        FlushOooQueueInternal();
+    {
+        Shutdown();
     }
     ClearAllocations();
 
@@ -181,7 +184,8 @@ UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::EnqueueInOrder(umq_buf_t 
             }
         }
     } else {
-        out_of_order_queue->Push(buffer);
+        int ret = out_of_order_queue->Push(buffer);
+        return ret == UBS_OK ? OpResult::OK : OpResult::ERROR;
     }
     return OpResult::OK;
 }

@@ -30,7 +30,7 @@ public:
     static constexpr IntType MODULUS = MAX_VALID + 1;
 
     // 动态计算当前序列号空间允许的最大前向滑动窗口（总空间的一半），用于判断：旧包 or 超出防环绕范围
-    static constexpr IntType MAX_WINDOW = MODULUS / 2;
+    static constexpr IntType MAX_WINDOW = (MODULUS - 1) / 2;
 
     static inline IntType Mask(IntType key) noexcept
     {
@@ -61,7 +61,7 @@ public:
             diff_forward = Mask(inc - base);
         } else {
             // 显式计算环形正向距离
-            diff_forward = (inc > base) ? (inc - base) : (MODULUS - base + inc);
+            diff_forward = (inc >= base) ? (inc - base) : (MODULUS - base + inc);
         }
 
         if (diff_forward > MAX_WINDOW) {
@@ -72,17 +72,16 @@ public:
 
     static bool CompareLessInCircularOrder(IntType key_a, IntType key_b) noexcept
     {
+        IntType a = Normalize(key_a);
+        IntType b = Normalize(key_b);
+        if (a == b) {
+            return false;
+        }
         if constexpr (MaxVal == 0) {
             static constexpr size_t SHIFT_AMT = sizeof(IntType) * 8 - Bits;
             using SignedT = typename std::make_signed<IntType>::type;
-            return static_cast<SignedT>((Mask(key_a) - Mask(key_b)) << SHIFT_AMT) < 0;
+            return static_cast<SignedT>((a - b) << SHIFT_AMT) < 0;
         } else {
-            IntType a = Normalize(key_a);
-            IntType b = Normalize(key_b);
-            if (a == b) {
-                return false;
-            }
-
             // 计算在环上从 a 到 b 的正向距离，距离过半视为“大于”
             IntType dist = (b >= a) ? (b - a) : (MODULUS - a + b);
             return dist < (MAX_WINDOW + 1);
@@ -103,6 +102,11 @@ public:
             // 普通加法
             return (b + (val % MODULUS)) % MODULUS;
         }
+    }
+
+    static IntType Next(IntType base)
+    {
+        return Add(base, 1);
     }
 };
 
@@ -141,7 +145,7 @@ public:
         return m_seq_num.load(order);
     }
 
-    IntType StoreSeqNum(IntType val, std::memory_order order = std::memory_order_relaxed)
+    void StoreSeqNum(IntType val, std::memory_order order = std::memory_order_relaxed)
     {
         m_seq_num.store(Traits::Normalize(val), order);
     }
