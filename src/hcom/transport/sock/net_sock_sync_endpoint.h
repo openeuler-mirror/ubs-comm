@@ -12,11 +12,11 @@
 #ifndef OCK_HCOM_NET_SOCK_SYNC_ENDPOINT_H
 #define OCK_HCOM_NET_SOCK_SYNC_ENDPOINT_H
 
+#include "transport/net_endpoint_impl.h"
 #include "net_monotonic.h"
 #include "net_security_alg.h"
 #include "net_sock_common.h"
 #include "sock_common.h"
-#include "transport/net_endpoint_impl.h"
 
 namespace ock {
 namespace hcom {

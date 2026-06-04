@@ -14,8 +14,8 @@
 #define HCOM_RDMA_VERBS_WRAPPER_CTX_H
 #ifdef RDMA_BUILD_ENABLED
 
-#include "hcom_obj_statistics.h"
 #include "hcom_utils.h"
+#include "hcom_obj_statistics.h"
 #include "rdma_common.h"
 #include "rdma_device_helper.h"
 

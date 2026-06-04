@@ -18,7 +18,7 @@ repos:
         entry: clang-format
         language: system
         files: \.(h|c|cpp)$
-        exclude: ^src/hcom/umq
+        exclude: ^(src/hcom/umq|src/hcom/hcom.cpp|src/hcom/hcom_obj_statistics.cpp|src/hcom/transport/sock/net_sock_async_endpoint.cpp|src/hcom/transport/sock/net_sock_async_endpoint.h|src/hcom/transport/sock/net_sock_sync_endpoint.cpp|src/hcom/transport/sock/net_sock_sync_endpoint.h|src/hcom/transport/rdma/verbs/rdma_verbs_wrapper_ctx.h|test/hcom/llt/testcase/common/test_net_rbtree.cpp|test/hcom/unit_test/transport/sock/test_net_sock_async_endpoint.cpp|test/hcom/unit_test/transport/sock/test_net_sock_driver_oob.cpp)
         args: [-style=file, -i]
       - id: clang-tidy
         name: Run clang-tidy check

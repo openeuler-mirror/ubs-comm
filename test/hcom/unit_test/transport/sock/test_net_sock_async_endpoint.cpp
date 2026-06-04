@@ -13,9 +13,9 @@
 #include <mockcpp/mockcpp.hpp>
 #include "hcom.h"
 #include "net_common.h"
-#include "net_sock_async_endpoint.h"
 #include "net_sock_driver_oob.h"
 #include "sock_validation.h"
+#include "net_sock_async_endpoint.h"
 
 namespace ock {
 namespace hcom {

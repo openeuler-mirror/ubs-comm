@@ -170,17 +170,33 @@ function run_ubsocket_pass_rate() {
     local ubsocket_build_dir="${ROOT_DIR}/src/ubsocket/build"
     cd "${ubsocket_build_dir}"
 
-    ./ubsocket_test --gtest_output=xml:./ubsocket_test.xml
-    ./brpc_adapter_test --gtest_output=xml:./brpc_adapter_test.xml
+    # Discover all registered ctest tests dynamically
+    local test_names=$(ctest -N 2>/dev/null | grep 'Test #' | awk '{print $NF}')
+    local xml_files=()
 
-    files=("ubsocket_test.xml" "brpc_adapter_test.xml")
+    for test_name in ${test_names}; do
+        echo "Running ${test_name} for pass rate report ..."
+        ./${test_name} --gtest_output=xml:${test_name}.xml || true
+        xml_files+=("${test_name}.xml")
+    done
+
+    if [ ${#xml_files[@]} -eq 0 ]; then
+        echo "[Warning]: No test XML files found, skipping pass rate report."
+        cd "${ROOT_DIR}"
+        return 0
+    fi
+
     tests_val=0
     failures_val=0
     disabled_val=0
     errors_val=0
     time_val=0
 
-    for file in "${files[@]}"; do
+    for file in "${xml_files[@]}"; do
+        if [ ! -f "$file" ]; then
+            echo "[Warning]: ${file} not found, skipping."
+            continue
+        fi
         tests_val=$((tests_val + $(grep "<testsuites " "$file" | awk -F "tests=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')))
         failures_val=$((failures_val + $(grep "<testsuites " "$file" | awk -F "failures=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')))
         disabled_val=$((disabled_val + $(grep "<testsuites " "$file" | awk -F "disabled=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')))
@@ -188,7 +204,7 @@ function run_ubsocket_pass_rate() {
         time_val=$(echo "$time_val + $(grep "<testsuites " "$file" | awk -F "time=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}' | awk '{sum+=$1} END {print sum}')" | bc)
     done
 
-    timestamp_val=$(cat ubsocket_test.xml | grep "<testsuites " | head -n 1 | awk -F "timestamp=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}')
+    timestamp_val=$(cat "${xml_files[0]}" | grep "<testsuites " | head -n 1 | awk -F "timestamp=" '{print $2}' | awk '{print $1}' | awk -F "\"" '{print $2}')
     pass_rate=$(echo "scale=2; ($tests_val - $failures_val - $errors_val) / $tests_val * 100" | bc)
     fail_rate=$(echo "scale=2; ($failures_val + $errors_val) / $tests_val * 100" | bc)
 
