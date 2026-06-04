@@ -229,3 +229,7 @@ clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也
 - **DpRearmTxInterrupt成功路径不走Convert**: `umq_rearm_interrupt` ret==0时直接设errno=EAGAIN返回-1，不调用Convert。仅ret≠0(失败)走Convert路径
 - **Share-JFR handle变量语义陷阱**: `PrefillRx`中本地变量`umq_handle`在`UBS_ENABLE_SHARE_JFR=true`时指向`share_umq_handle_`(主UMQ), `false`时指向`umq_handle_`(子UMQ)。等ready逻辑应查`umq_handle_`(子UMQ)——因为子UMQ是刚创建的、需从IDLE→READY; 主UMQ早已ready。提取`WaitUntilReady`时若错误传入本地`umq_handle`而非`umq_handle_`, share JFR模式下会导致查错handle。此陷阱适用于任何涉及主/子UMQ双handle的函数重构。
 - **`UBS_ENABLE_SHARE_JFR`默认true** — 测试环境若未显式关闭, PrefillRx走主UMQ路径。重构时必须在两种模式下都验证。
+- **冗余GetItem陷阱**: 当函数入参已持有`SocketPtr`/`SocketBasePtr`时，不应再用`ArraySet<Socket>::GetInstance().GetItem(fd_)`重新查找——入参就是同一个对象的引用，额外GetItem多一次atomic load + IncreaseRef且语义冗余。应直接用入参(`sock`)或函数内已计算的局部变量(`sockBase`)。反面: `RefConvert<Socket,SocketBase>(ArraySet<Socket>::GetInstance().GetItem(fd_))`; 正面: `RefConvert<Socket,SocketBase>(sock)` 或复用已有的 `sockBase`。
+- **`RPC_ADPT_FD_MAX`与`ArraySet::Capacity()`语义不同**: `RPC_ADPT_FD_MAX=8192`是`ubsocket_defines.h`中编译时常量，仅用于`ProbeManager`固定大小环形队列(`mRecvQueue[RPC_ADPT_FD_MAX]`)——不可替换为运行时`Capacity()`，因为静态数组大小必须编译时确定。`Capacity()`是运行时动态值(取`min(rlim_cur, 65536)`)，供外部查询fd容量上限使用。
+- **热路径不加日志**: `Init`是一次性初始化可加日志；`GetItem/OverrideItem/RemoveItem/ForEach`是高频热路径，加日志会显著影响性能，尤其`ForEach`遍历+回调场景。
+- **mermaid渲染陷阱**: 方括号`[]`在`participant as`别名中被解析为链接语法(需改为纯文本如`set_obj_idx`)；泛型尖括号`<>`、Unicode圆圈数字①②③④、emoji如❌、特殊数学符号≤×、特殊箭头←→、HTML实体`&lt;&gt;`均可能导致渲染失败。文档中mermaid图应只用纯ASCII英文+中文描述。

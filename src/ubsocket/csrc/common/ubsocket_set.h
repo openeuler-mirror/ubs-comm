@@ -11,6 +11,8 @@
 #ifndef UBS_COMM_UBSOCKET_SET_H
 #define UBS_COMM_UBSOCKET_SET_H
 
+#include <sys/resource.h>
+
 #include "ubsocket_common_includes.h"
 
 namespace ock {
@@ -27,92 +29,95 @@ public:
 
     int Init()
     {
-        rwlock_ = LockRegistry::RW_LOCK_OPS.create();
-        if (rwlock_ != nullptr) {
-            for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
-                set_obj_[i] = nullptr;
-            }
+        if (capacity_ != 0) {
+            UBS_VLOG_INFO("ArraySet already initialized, capacity: %u\n", capacity_);
             return 0;
         }
-        return -1;
+        struct rlimit rl;
+        if (getrlimit(RLIMIT_NOFILE, &rl) != 0) {
+            UBS_VLOG_ERR("ArraySet Init getrlimit failed, errno: %d\n", errno);
+            return -1;
+        }
+        capacity_ = std::min(static_cast<uint32_t>(rl.rlim_cur), FD_CAPACITY_HARD_LIMIT);
+        if (capacity_ == 0) {
+            UBS_VLOG_ERR("ArraySet Init invalid capacity: 0 (rlim_cur: %llu)\n",
+                         static_cast<unsigned long long>(rl.rlim_cur));
+            return -1;
+        }
+        set_obj_.reset(new std::atomic<T *>[capacity_]());
+        UBS_VLOG_INFO("ArraySet Init capacity: %u (rlim_cur: %llu, hard_limit: %u)\n", capacity_,
+                      static_cast<unsigned long long>(rl.rlim_cur), FD_CAPACITY_HARD_LIMIT);
+        return 0;
     }
 
     ALWAYS_INLINE Ref<T> GetItem(int idx)
     {
-        if (idx < 0 || idx >= RPC_ADPT_FD_MAX) {
+        if (idx < 0 || static_cast<uint32_t>(idx) >= capacity_) {
             return Ref<T>();
         }
-        ReadLocker lock(rwlock_);
-        return Ref<T>(set_obj_[idx]);
+        return Ref<T>(set_obj_[idx].load(std::memory_order_acquire));
     }
 
     Ref<T> OverrideItem(int idx, T *new_item)
     {
-        if (idx < 0 || idx >= RPC_ADPT_FD_MAX) {
+        if (idx < 0 || static_cast<uint32_t>(idx) >= capacity_) {
             return Ref<T>();
         }
         if (new_item != nullptr) {
             new_item->IncreaseRef();
         }
-
-        T *old_item = nullptr;
-        {
-            WriteLocker lock(rwlock_);
-            old_item = set_obj_[idx];
-            set_obj_[idx] = new_item;
-        }
-
+        T *old_item = set_obj_[idx].exchange(new_item, std::memory_order_acq_rel);
+        Ref<T> ref(old_item);
         if (old_item != nullptr) {
             old_item->DecreaseRef();
         }
-        return Ref<T>(old_item);
+        return ref;
     }
 
     Ref<T> RemoveItem(int idx)
     {
-        if (idx < 0 || idx >= RPC_ADPT_FD_MAX) {
+        if (idx < 0 || static_cast<uint32_t>(idx) >= capacity_) {
             return Ref<T>();
         }
-        T *item = nullptr;
-        {
-            WriteLocker lock(rwlock_);
-            item = set_obj_[idx];
-            set_obj_[idx] = nullptr;
-        }
+        T *item = set_obj_[idx].exchange(nullptr, std::memory_order_acq_rel);
         return Ref<T>(item);
     }
 
     void ReleaseAll()
     {
-        WriteLocker lock(rwlock_);
-        for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
-            if (set_obj_[i] != nullptr) {
-                set_obj_[i]->DecreaseRef();
-                set_obj_[i] = nullptr;
+        for (uint32_t i = 0; i < capacity_; ++i) {
+            T *old_item = set_obj_[i].exchange(nullptr, std::memory_order_acq_rel);
+            if (old_item != nullptr) {
+                old_item->DecreaseRef();
             }
         }
     }
 
     void ForEach(const std::function<void(int fd, T *)> &callback)
     {
-        ReadLocker lock(rwlock_);
-        for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
-            if (set_obj_[i] != nullptr) {
-                callback(i, set_obj_[i]);
+        for (uint32_t i = 0; i < capacity_; ++i) {
+            Ref<T> ref = GetItem(static_cast<int>(i));
+            T *p = ref.Get();
+            if (p != nullptr) {
+                callback(static_cast<int>(i), p);
             }
         }
     }
 
     size_t Size()
     {
-        ReadLocker lock(rwlock_);
         size_t count = 0;
-        for (int i = 0; i < RPC_ADPT_FD_MAX; i++) {
-            if (set_obj_[i] != nullptr) {
+        for (uint32_t i = 0; i < capacity_; ++i) {
+            if (set_obj_[i].load(std::memory_order_acquire) != nullptr) {
                 count++;
             }
         }
         return count;
+    }
+
+    uint32_t Capacity() const
+    {
+        return capacity_;
     }
 
 private:
@@ -121,17 +126,14 @@ private:
     ~ArraySet()
     {
         ReleaseAll();
-        if (rwlock_ != nullptr) {
-            LockRegistry::RW_LOCK_OPS.destroy(rwlock_);
-            rwlock_ = nullptr;
-        }
     }
 
     ArraySet(const ArraySet &) = delete;
     ArraySet &operator=(const ArraySet &) = delete;
 
-    u_rw_lock_t *rwlock_ = nullptr;
-    T *set_obj_[RPC_ADPT_FD_MAX];
+    static constexpr uint32_t FD_CAPACITY_HARD_LIMIT = 65536;
+    uint32_t capacity_ = 0;
+    std::unique_ptr<std::atomic<T *>[]> set_obj_;
 };
 
 } // namespace ubs
