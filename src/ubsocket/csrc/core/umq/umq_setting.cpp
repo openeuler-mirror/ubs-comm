@@ -18,6 +18,8 @@
 namespace ock {
 namespace ubs {
 namespace umq {
+#define ENV_UMQ_INITIAL_CREDIT "UBSOCKET_INITIAL_CREDIT"
+#define ENV_UMQ_MAX_CREDIT_PER_REQUEST "UBSOCKET_MAX_CREDIT_PER_REQUEST"
 #define ENV_UMQ_MIN_RESERVED_CREDIT "UBSOCKET_MIN_RESERVED_CREDIT"
 #define ENV_UMQ_BLOCK_TYPE "UBSOCKET_BLOCK_TYPE"
 #define ENV_UMQ_MEM_POOL_INIT_SIZE "UBSOCKET_POOL_INITIAL_SIZE"
@@ -67,7 +69,9 @@ int8_t UmqSetting::UMQ_LINK_PRIORITY = UBSOCKET_LINK_PRIORITY_DEFAULT;
 void UmqSetting::AddRules() noexcept
 {
     /* int64 rule: name, required, min, max */
-    Int64Rule rules_int64[] = {{ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
+    Int64Rule rules_int64[] = {{ENV_UMQ_INITIAL_CREDIT, false, 1, 1024}, // See UMQ_UB_FC_MAX_IMM_DATA
+                               {ENV_UMQ_MAX_CREDIT_PER_REQUEST, false, 1, 1024},
+                               {ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
                                {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 6144},
                                {ENV_UMQ_LINK_PRIORITY, false, 0, 15}};
@@ -104,6 +108,14 @@ Result UmqSetting::LoadEnv() noexcept
     using GS = GlobalSetting;
 
     /* load from env */
+    if (GS::GetEnvAndValidate(ENV_UMQ_INITIAL_CREDIT, int64EnvValue)) {
+        UMQ_FC_DEFAULT_CREDIT = static_cast<uint16_t>(int64EnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_MAX_CREDIT_PER_REQUEST, int64EnvValue)) {
+        UMQ_FC_MAX_CREDIT = static_cast<uint16_t>(int64EnvValue);
+    }
+
     if (GS::GetEnvAndValidate(ENV_UMQ_MIN_RESERVED_CREDIT, int64EnvValue)) {
         UMQ_FC_MIN_CREDIT = static_cast<uint16_t>(int64EnvValue);
     }
