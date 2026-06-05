@@ -231,12 +231,25 @@ void UmqLogger(int level, char *log_msg)
     }
 }
 
+void UmqExtLogger(int level, const char *file, const char *function, int line, char *log_msg)
+{
+    auto new_level = umq_log_level::UMQ_LOG_LEVEL_DEBUG - level;
+    if (new_level <= LogLevel::LEVEL_ERR) {
+        UBS_LOG_STREAM_EXT_RAW(new_level, file, function, line, log_msg);
+    } else {
+        static const char *OTHER_LEVEL[] = {"EMERG", "ALERT", "CRIT"};
+        UBS_LOG_STREAM_EXT_RAW(LogLevel::LEVEL_ERR, file, function, line,
+                               OTHER_LEVEL[level % (sizeof(OTHER_LEVEL))] << ", " << log_msg);
+    }
+}
+
 UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *filename, int line))
 {
     Logger::Instance().SetExternalLogFunction(func);
     umq_log_config_t log_cfg = {
-        .log_flag = UMQ_LOG_FLAG_FUNC | UMQ_LOG_FLAG_LEVEL,
-        .func = UmqLogger,
+        .log_flag = UMQ_LOG_FLAG_LEVEL | UMQ_LOG_FLAG_EXT_FUNC,
+        .func = nullptr,
+        .ext_func = UmqExtLogger,
         .level = static_cast<umq_log_level_t>(umq_log_level::UMQ_LOG_LEVEL_DEBUG - Logger::Instance().GetLogLevel())};
     return umq_log_config_set(&log_cfg);
 }
@@ -244,7 +257,11 @@ UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg, const c
 UBS_API int ubsocket_set_log_level(int level)
 {
     Logger::Instance().SetLogLevel(level);
-    return UBS_OK;
+    umq_log_config_t log_cfg = {.log_flag = UMQ_LOG_FLAG_LEVEL,
+                                .func = nullptr,
+                                .ext_func = nullptr,
+                                .level = static_cast<umq_log_level_t>(umq_log_level::UMQ_LOG_LEVEL_DEBUG - level)};
+    return umq_log_config_set(&log_cfg);
 }
 
 UBS_API void *ubsocket_iobuf_allocate(size_t size)
