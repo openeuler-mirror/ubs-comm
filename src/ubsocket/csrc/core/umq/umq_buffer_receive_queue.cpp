@@ -157,6 +157,11 @@ UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::EnqueueInOrder(umq_buf_t 
     }
 
     uint32_t sn = buf_pro->imm.user_data;
+    if (sn == UmqSetting::UMQ_PROBE_USER_DATA_ID) {
+        // 探测包直接入队
+        receive_queue->Enqueue(buffer);
+        return OpResult::OK;
+    }
     if (!UmqSeqTraits::ValidateAhead(m_expect_sn, sn)) {
         UBS_VLOG_WARN("Validate sn ahead failed, expect_sn: %u, sn: %u.\n", m_expect_sn, sn);
         UmqApi::umq_buf_free(buffer);

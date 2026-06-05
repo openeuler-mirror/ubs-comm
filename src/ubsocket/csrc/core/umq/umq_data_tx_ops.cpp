@@ -66,10 +66,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             wr_left_len -= cur_buf->data_size;
             moved_total_len += cur_buf->data_size;
 
-            umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)cur_buf->qbuf_ext;
-            buf_pro->imm.user_data = umq_socket->FetchAddSeqNum(1);
-            ++sn_allocated;
-
             if (last || ++sge_idx >= TX_SGE_MAX || moved_total_len >= UmqSetting::GetIOBufSize()) {
                 break;
             }
@@ -81,6 +77,8 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         buf_pro->opcode = UMQ_OPC_SEND_IMM;
         buf_pro->flag.value = 0;
         buf_pro->user_ctx = 0;
+        buf_pro->imm.user_data = umq_socket->FetchAddSeqNum(1);
+        ++sn_allocated;
 
         if (tx_queue_avail_num_ == 1 || i + 1 == batch) {
             buf_pro->flag.bs.solicited_enable = 1;
