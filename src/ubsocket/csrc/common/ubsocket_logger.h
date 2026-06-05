@@ -188,6 +188,15 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
         }                                                                                 \
     } while (0)
 
+#define UBS_LOG_STREAM_EXT_RAW(level, file, func, ln, ARGS)            \
+    do {                                                               \
+        if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) { \
+            std::ostringstream oss;                                    \
+            oss << "[UMQ " << func << "] " << ARGS;                    \
+            ock::ubs::Logger::Instance().Log(level, oss, file, ln);    \
+        }                                                              \
+    } while (0)
+
 #define UBS_VLOG_ERR(__format, ...) UBS_LOG(ock::ubs::LEVEL_ERR, __format, ##__VA_ARGS__)
 #define UBS_VLOG_WARN(__format, ...) UBS_LOG(ock::ubs::LEVEL_WARN, __format, ##__VA_ARGS__)
 #define UBS_VLOG_NOTICE(__format, ...) UBS_LOG(ock::ubs::LEVEL_NOTICE, __format, ##__VA_ARGS__)
