@@ -20,6 +20,8 @@
 
 namespace ock {
 namespace ubs {
+
+const uint16_t IOBUF_BLOCK_FLAGS_UB = 1 << 2;
 struct Block {
     std::atomic<int> nshared;
     uint16_t flags;
@@ -34,7 +36,7 @@ struct Block {
 
     Block(char *data_in, uint32_t data_size, int init_nshared = 1)
         : nshared(init_nshared),
-          flags(0),
+          flags(IOBUF_BLOCK_FLAGS_UB),
           abi_check(0),
           size(0),
           cap(data_size),
