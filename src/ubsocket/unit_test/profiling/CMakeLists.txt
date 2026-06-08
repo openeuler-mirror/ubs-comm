@@ -31,10 +31,14 @@
  	 )
  	 
  	 target_sources(profiling_test
- 	   PRIVATE
- 	        ubsocket_profiling_test.cpp
-          ${UBSOCKET_BASE_DIR}/csrc/profiling/ubsocket_prof.cpp
- 	        ${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracer.cpp
-${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracepoint_combiner.cpp
-          ${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracepoint_dumper.cpp
-  	 )
+   PRIVATE
+        ubsocket_profiling_test.cpp
+         ${UBSOCKET_BASE_DIR}/csrc/profiling/ubsocket_prof.cpp
+         ${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracer.cpp
+         ${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracepoint_combiner.cpp
+         ${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracepoint_dumper.cpp
+         ${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracer_ext.cpp
+         ${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracepoint_combiner_ext.cpp
+         ${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracepoint_dumper_ext.cpp
+         ${UBSOCKET_BASE_DIR}/csrc/common/ubsocket_global_setting.cpp
+  )

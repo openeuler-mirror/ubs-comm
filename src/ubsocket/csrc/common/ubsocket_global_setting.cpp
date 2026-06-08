@@ -40,6 +40,7 @@ std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
 uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 bool GlobalSetting::UBS_PROF_ENABLE = false;
+std::string GlobalSetting::UBS_PROF_MODE = "fast";
 uint16_t GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN = 1;
 std::string GlobalSetting::UBS_PROF_DUMP_PATH = "/tmp/ubsocket/profiling";
 uint64_t GlobalSetting::UBS_TRACE_TIME = UBSOCKET_TRACE_TIME_DEFAULT;
@@ -64,6 +65,7 @@ bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = false;
 #define ENV_USE_BRPC_ZCOPY "UBSOCKET_USE_BRPC_ZCOPY"
 #define ENV_UBS_HAND_SHAKE_MODE "UBSOCKET_UB_HANDSHAKE_MODE"
 #define ENV_PROF_ENABLE "UBSOCKET_PROF_ENABLE"
+#define ENV_PROF_MODE "UBSOCKET_PROF_MODE"
 #define ENV_PROF_DUMP_INTERVAL_MIN "UBSOCKET_PROF_DUMP_INTERVAL_MIN"
 #define ENV_PROF_DUMP_PATH "UBSOCKET_PROF_DUMP_PATH"
 #define ENV_TRACE_TIME "UBSOCKET_TRACE_TIME"
@@ -102,6 +104,7 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_TRANS_MODE, false, "ub|ib"},
                                     {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"},
                                     {ENV_PROF_ENABLE, false, "true|false"},
+                                    {ENV_PROF_MODE, false, "fast|ext"},
                                     {ENV_ASYNC_ACCEPTOR, false, "true|false"},
                                     {ENV_VAR_DEGRADE, false, "true|false"},
                                     {ENV_VAR_CLI, false, "true|false"},
@@ -237,6 +240,9 @@ Result GlobalSetting::LoadEnv() noexcept
     }
     if (GetEnvAndValidate(ENV_PROF_ENABLE, strEnvValue)) {
         UBS_PROF_ENABLE = Func::BoolFromStr(strEnvValue);
+    }
+    if (GetEnvAndValidate(ENV_PROF_MODE, strEnvValue)) {
+        UBS_PROF_MODE = strEnvValue;
     }
 
     if (GetEnvAndValidate(ENV_PROF_DUMP_INTERVAL_MIN, envValue)) {

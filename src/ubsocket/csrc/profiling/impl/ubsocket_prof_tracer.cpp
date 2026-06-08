@@ -46,7 +46,7 @@ Result Tracer::Init(const TracerOptions &options) noexcept
             UBS_VLOG_ERR("Create trace dump thread failed, probably out of memory");
             return UBS_ERROR;
         }
-        dump_thread_->DumpStart(options.dumpPath, options.dumpIntervalMin);
+        dump_thread_->DumpStart(options.dump_path, options.dump_interval_min);
     }
 
     options_ = options;
