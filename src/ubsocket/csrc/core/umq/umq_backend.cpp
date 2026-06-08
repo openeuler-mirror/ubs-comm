@@ -92,6 +92,7 @@ Result UmqBackend::Init() noexcept
 
     /* step4: umq perf start */
     if (GlobalSetting::UBS_PROF_ENABLE) {
+        // umq perf start
         ret = UmqApi::umq_stats_perf_start();
         if (ret != UBS_OK) {
             int savedErrno = errno;
@@ -109,6 +110,17 @@ Result UmqBackend::Init() noexcept
             errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
             UBS_VLOG_ERR("[UMQ_API] umq_stats_perf_reset() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n",
                          ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+            return UBS_UMQ_CREATE;
+        }
+
+        // umq tp perf start (urma)
+        ret = UmqApi::umq_stats_tp_perf_start(UmqSetting::UMQ_TRANS_MODE);
+        if (ret != UBS_OK) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+            UBS_VLOG_ERR(
+                "[UMQ_API] umq_stats_tp_perf_start() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n", ret,
+                errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
             return UBS_UMQ_CREATE;
         }
     }
@@ -134,6 +146,7 @@ void UmqBackend::UnInit() noexcept
 
     if (GlobalSetting::UBS_PROF_ENABLE) {
         UmqApi::umq_stats_perf_stop();
+        UmqApi::umq_stats_tp_perf_stop(UmqSetting::UMQ_TRANS_MODE);
     }
 
     UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);

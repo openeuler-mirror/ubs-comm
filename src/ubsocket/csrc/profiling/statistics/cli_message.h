@@ -154,6 +154,8 @@ struct CLIUmqPerfData {
     uint64_t socketId;
     uint64_t createTime;
     umq_perf_stats_t umqPerfStat;
+    char umqTpPerfBuf[4096];
+    uint32_t umqTpPerfLen;
 };
 
 struct __attribute__((packed)) CLIProbeHeader {

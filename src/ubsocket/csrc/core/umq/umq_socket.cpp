@@ -615,8 +615,29 @@ void UmqSocket::GetSocketUmqPerfData(Statistics::CLIUmqPerfData *data)
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(ops->conn_info.create_time.time_since_epoch());
     data->createTime = static_cast<uint64_t>(duration.count());
 
-    if (umq_stats_perf_get(&(data->umqPerfStat)) != 0) {
+    if (UmqApi::umq_stats_perf_get(&(data->umqPerfStat)) != 0) {
         UBS_VLOG_WARN("Failed to get umq perf stats\n");
+    }
+
+    // urma 只统计 start 到 stop 之间的数据
+    if (UmqApi::umq_stats_tp_perf_stop(UmqSetting::UMQ_TRANS_MODE) != 0) {
+        UBS_VLOG_WARN("Failed to stop tp perf: umq_trans_mode=%d\n", UmqSetting::UMQ_TRANS_MODE);
+        return;
+    }
+
+    memset(data->umqTpPerfBuf, 0, sizeof(data->umqTpPerfBuf));
+    data->umqTpPerfLen = sizeof(data->umqTpPerfBuf);
+    if (UmqApi::umq_stats_tp_perf_info_get(UmqSetting::UMQ_TRANS_MODE, data->umqTpPerfBuf, &(data->umqTpPerfLen)) !=
+        0) {
+        UBS_VLOG_WARN("Failed to get umq tp perf info\n");
+        data->umqTpPerfLen = 0;
+        data->umqTpPerfBuf[0] = '\0';
+    }
+
+    // 重新恢复 tp 统计
+    if (UmqApi::umq_stats_tp_perf_start(UmqSetting::UMQ_TRANS_MODE) != 0) {
+        UBS_VLOG_WARN("Failed to start tp perf: umq_trans_mode=%d\n", UmqSetting::UMQ_TRANS_MODE);
+        return;
     }
 }
 

@@ -55,18 +55,10 @@ bool TryGetRetryCount(const char *perfBuf, size_t bufLen, uint64_t &retryCount)
 
 void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode)
 {
-    int ret = umq_stats_tp_perf_start(umq_trans_mode);
+    int ret = 0;
     int umqTransModeInt = umq_trans_mode;
-    if (ret < 0) {
-        return;
-    }
 
-    ret = umq_stats_tp_perf_stop(umq_trans_mode);
-    if (ret < 0) {
-        UBS_VLOG_ERR("Failed to stop tp perf: umq_trans_mode=%d\n", umqTransModeInt);
-        return;
-    }
-
+    // umq_stats_tp_perf_info_get 不支持多次 get, 待后续完善
     char perfBuf[4096] = {};
     uint32_t perfLen = sizeof(perfBuf);
     ret = umq_stats_tp_perf_info_get(umq_trans_mode, perfBuf, &perfLen);
