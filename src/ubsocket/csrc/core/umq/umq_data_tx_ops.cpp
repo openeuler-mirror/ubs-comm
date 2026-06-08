@@ -41,6 +41,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     uint32_t _unsolicited_bytes = unsolicited_bytes_;
     uint16_t _unsignaled_wr_num = unsignaled_wr_num_;
 
+    PROF_START(CORE_WRITE_MEM_COPY);
     umq_buf_t *cur_buf = tx_buf_list;
     umq_buf_t *next_buf = cur_buf;
     if (QBUF_LIST_EMPTY(&head_buf_)) {
@@ -105,16 +106,20 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     }
 
     QBUF_LIST_FIRST(&tail_buf_) = cur_buf;
+    PROF_END(CORE_WRITE_MEM_COPY, true);
 
+    PROF_START(CORE_WRITE_UMQ_POST);
     umq_buf_t *bad_qbuf = nullptr;
     int ret = UmqApi::umq_post(local_umqh_, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
     if (ret == UMQ_SUCCESS) {
         tx_queue_avail_num_ -= batch;
+        PROF_END(CORE_WRITE_UMQ_POST, true);
         if (GlobalSetting::UBS_TRACE_ENABLED) {
             SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
             sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, batch);
         }
     } else if (bad_qbuf != nullptr) {
+        PROF_END(CORE_WRITE_UMQ_POST, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
         if (errno == EAGAIN) {
@@ -156,6 +161,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             return -1;
         }
     } else {
+        PROF_END(CORE_WRITE_UMQ_POST, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX without bad_qbuf, "
@@ -167,7 +173,9 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     // After posting and before polling, the time for updating the count cna be concealed within the waiting period
     // for polling.
     if ((GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_) >= TX_HANDLE_THRESHOLD) {
+        PROF_START(CORE_WRITE_POLL_CQE);
         PollUmqTx(sock, false);
+        PROF_END(CORE_WRITE_POLL_CQE, true);
     }
     return tx_total_len;
 }
@@ -177,11 +185,14 @@ int UmqTxOps::PollTx(const SocketPtr &sock)
     if (get_and_ack_event_) {
         // handle tx epollin epoll event
         do {
+            PROF_START(CORE_WRITE_REARM);
             if (GetAndAckEvent() < 0) {
+                PROF_END(CORE_WRITE_REARM, false);
                 UBS_VLOG_ERR("WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                              Func::Error2Str(errno));
                 return -1;
             }
+            PROF_END(CORE_WRITE_REARM, true);
             // set poll_to_empty, means poll at least m_tx.m_retrieve_threshold TX CQE
             PollUmqTx(sock, true);
             /* m_tx.epoll_event_num_ not equals to m_tx.m_expect_epoll_event_num means
@@ -240,7 +251,9 @@ int UmqTxOps::PollUmqTx(const SocketPtr &sock, bool poll_to_empty)
     uint32_t poll_zero_cnt = 0;
     ops_error_code err_code = ops_error_code::OK;
     do {
+        PROF_START(CORE_WRITE_DO_TX_POLL);
         poll_cnt = DoUmqTxPoll(sock, err_code);
+        PROF_END(CORE_WRITE_DO_TX_POLL, poll_cnt >= 0);
         if (poll_cnt < 0) {
             break;
         } else if (poll_cnt == 0) {
@@ -507,9 +520,11 @@ int UmqTxOps::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf)
 
 int UmqTxOps::DpRearmTxInterrupt()
 {
+    PROF_START(CORE_WRITE_REARM);
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     int ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &tx_option);
     if (ret == 0) {
+        PROF_END(CORE_WRITE_REARM, true);
         errno = EAGAIN;
         return -1;
     }
@@ -520,6 +535,7 @@ int UmqTxOps::DpRearmTxInterrupt()
                  "ret: %d, mapped errno: %d(%s), original errno: %d\n",
                  static_cast<unsigned long long>(local_umqh_), ret, errno,
                  UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
+    PROF_END(CORE_WRITE_REARM, false);
     return -1;
 }
 

@@ -21,11 +21,14 @@ namespace umq {
 int UmqRxOps::PollRx(const SocketPtr &sock)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
+        PROF_START(CORE_READ_REARM);
         if (GetAndAckEvent() < 0) {
+            PROF_END(CORE_READ_REARM, false);
             UBS_VLOG_ERR("ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
             return -1;
         }
+        PROF_END(CORE_READ_REARM, true);
         get_and_ack_event_ = false;
     }
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
@@ -45,6 +48,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
         }
     }
 
+    PROF_START(CORE_READ_HANDLE_BUF);
     uint32_t polled_size = 0;
     for (int i = 0; i < poll_num; ++i) {
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf[i]->qbuf_ext);
@@ -98,6 +102,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
         block_cache_.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
         polled_size += buf[i]->data_size;
     }
+    PROF_END(CORE_READ_HANDLE_BUF, true);
     return 0;
 }
 
@@ -303,6 +308,7 @@ void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
 
 int UmqRxOps::RearmRxInterrupt()
 {
+    PROF_START(CORE_READ_REARM);
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     int ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &rx_option);
     if (ret < 0) {
@@ -313,6 +319,7 @@ int UmqRxOps::RearmRxInterrupt()
                      static_cast<unsigned long long>(local_umqh_), ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, ret), savedErrno);
     }
+    PROF_END(CORE_READ_REARM, ret >= 0);
     return ret;
 }
 

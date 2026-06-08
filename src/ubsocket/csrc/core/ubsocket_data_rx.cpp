@@ -11,6 +11,7 @@
 
 #include "ubsocket_data_rx.h"
 #include "common/ubsocket_common_includes.h"
+#include "profiling/ubsocket_prof.h"
 #include "ubsocket_socket.h"
 
 namespace ock {
@@ -23,8 +24,10 @@ DataRx::DataRx(const SocketPtr &sock, DataRxOps *ops) : fd_(sock->raw_socket_), 
 ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     PROF_START(CORE_READ);
+    PROF_START(CORE_READ_EAGAIN);
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::readv(fd_, iov, iovcnt);
+        PROF_END(CORE_READ, size >= 0);
         return size;
     }
 
@@ -45,7 +48,9 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         return rx_total_len;
     }
 
+    PROF_START(CORE_READ_POLL_RX);
     int ret = rx_ops_->PollRx(sock);
+    PROF_END(CORE_READ_POLL_RX, ret >= 0);
     if (ret < 0) {
         PROF_END(CORE_READ, false);
         return ret;
@@ -65,6 +70,8 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     if (ret < 0) {
         if (!((errno == EINTR) || (errno == EAGAIN))) {
             PROF_END(CORE_READ, false);
+        } else {
+            PROF_END(CORE_READ_EAGAIN, true);
         }
         return ret;
     }
