@@ -187,6 +187,15 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
         return UBS_UMQ_BIND_INFO_GET | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
 
+    if (SocketConnHelper::SendSocketData(fd, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) !=
+        sizeof(local_cp_msg)) {
+        UBS_VLOG_ERR("Failed to send local control message, fd: %d\n", fd);
+        // return ubsocket::FromRaw(errno);
+        return UBS_ERROR;
+    }
+    UBS_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %lu, bind info len: %lu\n", fd,
+                   sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
+
     size_t len = sizeof(remote_cp_msg) - sizeof(uint64_t);
     if (SocketConnHelper::RecvSocketData(fd, &remote_cp_msg.queue_bind_info_size, len, CONTROL_PLANE_TIMEOUT_MS) !=
         (ssize_t)len) {
@@ -196,15 +205,6 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
     }
     UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %lu, bind info len: %lu\n", fd,
                    sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
-
-    if (SocketConnHelper::SendSocketData(fd, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(local_cp_msg)) {
-        UBS_VLOG_ERR("Failed to send local control message, fd: %d\n", fd);
-        // return ubsocket::FromRaw(errno);
-        return UBS_ERROR;
-    }
-    UBS_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %lu, bind info len: %lu\n", fd,
-                   sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
 
     struct timeval start_tv;
     gettimeofday(&start_tv, NULL);
