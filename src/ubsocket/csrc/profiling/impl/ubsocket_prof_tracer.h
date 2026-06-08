@@ -22,8 +22,8 @@ namespace profiling {
 struct TracerOptions {
     uint32_t tracepoint_count = 0;
     bool enable_dump = false;
-    uint16_t dumpIntervalMin = 1;
-    std::string dumpPath;
+    uint16_t dump_interval_min = 1;
+    std::string dump_path;
 };
 
 class Tracer {

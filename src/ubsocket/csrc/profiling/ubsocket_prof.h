@@ -51,6 +51,7 @@ int ubsocket_prof_init(ubsocket_prof_option_t *option);
 
 int ubsocket_prof_uninit();
 
+/* 高性能打点接口（默认）- 使用 thread_local，无锁写入 */
 int ubsocket_prof_record(uint32_t tracepoint_id, const char *tracepoint_name, uint64_t timestamp, bool good);
 
 int ubsocket_prof_combind(char **out_buf);
@@ -64,6 +65,7 @@ static __always_inline uint64_t ubsocket_get_timeNs()
     return tpDelay.tv_sec * 1000000000ULL + tpDelay.tv_nsec;
 }
 
+/* 高性能打点宏（默认）*/
 #define PROF_START(TP_ID)                           \
     uint64_t tpBegin##TP_ID = 0;                    \
     do {                                            \

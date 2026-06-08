@@ -96,6 +96,7 @@ public:
     static uint32_t UBS_TX_DEPTH;                    /* tx queue depth, from env */
     static uint32_t UBS_RX_DEPTH;                    /* rx queue depth, from env */
     static bool UBS_PROF_ENABLE;
+    static std::string UBS_PROF_MODE; /* profiling mode: "fast" or "ext" */
     static uint16_t UBS_PROF_DUMP_INTERVAL_MIN;
     static std::string UBS_PROF_DUMP_PATH;
     static uint32_t UBS_PROBE_MS;
