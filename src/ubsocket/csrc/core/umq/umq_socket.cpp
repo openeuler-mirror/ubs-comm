@@ -264,6 +264,7 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
         return -1;
     }
 
+    // solicated : true 中断只返回给 solicited_enable 为 1 的 socket
     ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, true, &tx_option);
     if (ret < 0) {
         int savedErrno = errno;
@@ -297,6 +298,16 @@ Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
         return -1;
     }
     return 0;
+}
+
+Result UmqSocket::ProcessEpollEvent(struct epoll_event &event)
+{
+    auto event_data = (EpollEvent *)event.data.ptr;
+    if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_OUT) {
+        UBS_VLOG_ERR("ProcessEpollEvent ProcessEpollEvent ProcessEpollEvent \n");
+        NewTxEpollIn();
+    }
+    return UBS_OK;
 }
 
 Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,

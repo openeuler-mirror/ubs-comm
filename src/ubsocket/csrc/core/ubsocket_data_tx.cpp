@@ -58,8 +58,9 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     ConverterPtr converterPtr = tx_ops_->BuildIovConverter(iov, iovcnt);
     uint32_t input_total_len = 0;
     uint32_t batch = 0;
-    uint32_t post_batch_max = tx_ops_->tx_queue_avail_num_ > TX_POST_BATCH_MAX ? TX_POST_BATCH_MAX :
-                                                                                 tx_ops_->tx_queue_avail_num_;
+    uint32_t post_batch_max = tx_ops_->tx_queue_avail_num_.load(std::memory_order_acq_rel) > TX_POST_BATCH_MAX ?
+                                  TX_POST_BATCH_MAX :
+                                  tx_ops_->tx_queue_avail_num_.load(std::memory_order_acq_rel);
     uint32_t buf_cnt = 0;
     uint32_t cut_total_len = 0;
 

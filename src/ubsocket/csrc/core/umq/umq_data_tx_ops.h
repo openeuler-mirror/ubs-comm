@@ -77,15 +77,15 @@ private:
     // --- 私有成员变量 ---
     // umq 相关的句柄
     uint64_t local_umqh_ = UMQ_INVALID_HANDLE;
-    bool get_and_ack_event_ = false;
 
     /* m_tx.m_head_buf -> |umq_buf 0| -> |umq_buf 1| -> ... -> |umq_buf n| <- m_tx.m_tailbuf */
     umq_buf_list_t head_buf_ = {0};
     umq_buf_list_t tail_buf_ = {0};
 
-    uint32_t unsolicited_bytes_ = 0;  // length of accumulated work request without setting solicited
-    uint16_t unsolicited_wr_num_ = 0; // number of accumulated work request without setting solicited
-    uint16_t unsignaled_wr_num_ = 0;  // number of accumulated work request without setting signaled
+    uint32_t unsolicited_bytes_ = 0;                 // length of accumulated work request without setting solicited
+    uint16_t unsolicited_wr_num_ = 0;                // number of accumulated work request without setting solicited
+    uint16_t unsignaled_wr_num_ = 0;                 // number of accumulated work request without setting signaled
+    std::atomic<uint16_t> successful_post_count_{0}; // number of successfully posted work request
 };
 } // namespace umq
 } // namespace ubs

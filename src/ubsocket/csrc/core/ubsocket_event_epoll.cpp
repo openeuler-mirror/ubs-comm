@@ -400,7 +400,9 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
             continue;
         }
 
+        auto sock = ArraySet<Socket>::GetInstance().GetItem(event_data->socket_fd);
         if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_OUT) {
+            sock->ProcessEpollEvent(events[i]);
             events[real_count].events = EPOLLOUT;
             events[real_count].data = event_data->event.data;
             real_count++;
@@ -473,15 +475,15 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     // 4. add proto ex exent
-    if ((event->events & EPOLLOUT) == EPOLLOUT) {
-        int ret = AddProtoTxEvent(sock, event);
-        if (ret < 0) {
-            DelRawSocketEvent(fd);
-            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD:%d) failed(ret:%d): %d : %s\n", ret, sock->raw_socket_, errno,
-                         strerror(errno));
-            return -1;
-        }
+    // if ((event->events & EPOLLOUT) == EPOLLOUT) {
+    int ret = AddProtoTxEvent(sock, event);
+    if (ret < 0) {
+        DelRawSocketEvent(fd);
+        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD:%d) failed(ret:%d): %d : %s\n", ret, sock->raw_socket_, errno,
+                     strerror(errno));
+        return -1;
     }
+    // }
     return 0;
 }
 
@@ -516,6 +518,9 @@ int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 
 int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *event)
 {
+    if (UNLIKELY(IsSocketEventDataExist(sock->GetTxFd()))) {
+        return 0;
+    }
     struct epoll_event add_event {
     };
     auto event_data = new (std::nothrow) EpollEvent(EPOLL_EVENT_UB_SOCKET_OUT, sock->raw_socket_, *event);
@@ -524,7 +529,7 @@ int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *e
         return -1;
     };
 
-    add_event.events = EPOLLOUT | EPOLLET;
+    add_event.events = EPOLLIN | EPOLLET;
     add_event.data.ptr = event_data;
     int ret = sock->AddTxEvent(sock, epoll_fd_, &add_event);
     if (ret < 0) {
@@ -587,22 +592,7 @@ int AsyncEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
         errno = ENOENT;
         return -1;
     }
-
-    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (UNLIKELY(sock == nullptr)) {
-        return 0;
-    }
-    int ret = 0;
-    if (IsSocketEventDataExist(sock->GetTxFd())) {
-        if ((event->events & EPOLLOUT) == 0) {
-            ret = DelProtoTxEvent(sock);
-        }
-    } else {
-        if ((event->events & EPOLLOUT) != 0) {
-            ret = AddProtoTxEvent(sock, event);
-        }
-    }
-    return ret;
+    return 0;
 }
 
 int AsyncEventPoll::ModRawSocketEvent(int fd, struct epoll_event *event)

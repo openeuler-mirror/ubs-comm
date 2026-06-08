@@ -37,7 +37,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     int flagEIO = -1;
     umq_buf_t *head_qbuf = QBUF_LIST_FIRST(&head_buf_);
     umq_buf_t *tail_qbuf = QBUF_LIST_FIRST(&tail_buf_);
-    uint16_t _unsolicited_wr_num = unsignaled_wr_num_;
+    uint16_t _unsolicited_wr_num = unsolicited_wr_num_;
     uint32_t _unsolicited_bytes = unsolicited_bytes_;
     uint16_t _unsignaled_wr_num = unsignaled_wr_num_;
 
@@ -81,13 +81,13 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         buf_pro->imm.user_data = umq_socket->FetchAddSeqNum(1);
         ++sn_allocated;
 
-        if (tx_queue_avail_num_ == 1 || i + 1 == batch) {
+        if (tx_queue_avail_num_.load(std::memory_order_acq_rel) == 1 || i + 1 == batch) {
             buf_pro->flag.bs.solicited_enable = 1;
         } else {
-            if (unsignaled_wr_num_ > TX_REPORT_THRESHOLD || unsolicited_bytes_ > TX_UNSOLICITED_BYTES_MAX) {
+            if (unsolicited_wr_num_ > TX_REPORT_THRESHOLD || unsolicited_bytes_ > TX_UNSOLICITED_BYTES_MAX) {
                 buf_pro->flag.bs.solicited_enable = 1;
             } else {
-                ++unsignaled_wr_num_;
+                ++unsolicited_wr_num_;
                 unsolicited_bytes_ += moved_total_len;
             }
         }
@@ -97,6 +97,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             unsolicited_bytes_ = 0;
         }
 
+        // bonding 下, complete_enable 必须置为 1, 原判断和阈值失效
         if (++unsignaled_wr_num_ >= TX_REPORT_THRESHOLD) {
             buf_pro->flag.bs.complete_enable = 1;
             buf_pro->user_ctx = (uint64_t)QBUF_LIST_FIRST(&head_buf_);
@@ -112,7 +113,9 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     umq_buf_t *bad_qbuf = nullptr;
     int ret = UmqApi::umq_post(local_umqh_, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
     if (ret == UMQ_SUCCESS) {
-        tx_queue_avail_num_ -= batch;
+        // 全部 post成功
+        tx_queue_avail_num_.fetch_sub(batch, std::memory_order_acq_rel);
+        successful_post_count_.fetch_add(batch, std::memory_order_acq_rel);
         PROF_END(CORE_WRITE_UMQ_POST, true);
         if (GlobalSetting::UBS_TRACE_ENABLED) {
             SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
@@ -124,6 +127,9 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
         if (errno == EAGAIN) {
             need_fc_awake_.store(true, std::memory_order_relaxed);
+        } else if (ret == -UMQ_ERR_EFLOWCTL) {
+            errno = EIO;
+            return -1;
         } else {
             UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX, local umq: %llu, ret: %d, "
                          "mapped errno: %d(%s), original errno: %d\n",
@@ -142,6 +148,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         }
 
         if (bad_qbuf == tx_buf_list) {
+            // 全部 post 失败, 恢复状态
             unsolicited_wr_num_ = _unsolicited_wr_num;
             unsolicited_bytes_ = _unsolicited_bytes;
             unsignaled_wr_num_ = _unsignaled_wr_num;
@@ -151,10 +158,16 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             tx_total_len = 0;
             umq_socket->FetchSubSeqNum(sn_allocated);
         } else {
-            uint32_t tx_avail_before = tx_queue_avail_num_;
+            // 部分 post 失败, 处理失败缓冲区
+            // tx_avail_before: post 前可用队列数
+            // tx_queue_avail_num_ -= wr_cnt: post 后的可用队列数
+            // wr_cnt : 实际 post 成功队列数
+            // sn_allocated - (tx_avail_before - tx_queue_avail_num_) = sn_allocated - wr_cnt
+            uint32_t tx_avail_before = tx_queue_avail_num_.load(std::memory_order_acq_rel);
             tx_total_len = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf, _unsolicited_wr_num, _unsolicited_bytes,
                                          _unsignaled_wr_num);
-            umq_socket->FetchSubSeqNum(sn_allocated - (tx_avail_before - tx_queue_avail_num_));
+            umq_socket->FetchSubSeqNum(sn_allocated -
+                                       (tx_avail_before - tx_queue_avail_num_.load(std::memory_order_acq_rel)));
         }
         if (flagEIO == 1) {
             UBS_VLOG_ERR("write failed, destroy UB\n");
@@ -168,14 +181,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
                      "local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
                      static_cast<unsigned long long>(local_umqh_), ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
-    }
-
-    // After posting and before polling, the time for updating the count cna be concealed within the waiting period
-    // for polling.
-    if ((GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_) >= TX_HANDLE_THRESHOLD) {
-        PROF_START(CORE_WRITE_POLL_CQE);
-        PollUmqTx(sock, false);
-        PROF_END(CORE_WRITE_POLL_CQE, true);
     }
     return tx_total_len;
 }
@@ -193,19 +198,23 @@ int UmqTxOps::PollTx(const SocketPtr &sock)
                 return -1;
             }
             PROF_END(CORE_WRITE_REARM, true);
+            PROF_START(CORE_WRITE_POLL_TX_FIRST);
             // set poll_to_empty, means poll at least m_tx.m_retrieve_threshold TX CQE
             PollUmqTx(sock, true);
             /* m_tx.epoll_event_num_ not equals to m_tx.m_expect_epoll_event_num means
              * another epoll event is reportedduring readv processing procedure */
+            PROF_END(CORE_WRITE_POLL_TX_FIRST, true);
         } while (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0, std::memory_order_release,
                                                            std::memory_order_acquire));
 
         get_and_ack_event_ = false;
-    } else if (tx_queue_avail_num_ == 0) {
+    } else if (tx_queue_avail_num_.load(std::memory_order_acq_rel) == 0) {
+        PROF_START(CORE_WRITE_POLL_TX_SECOND);
         PollUmqTx(sock, false);
-        if (tx_queue_avail_num_ == 0) {
+        if (tx_queue_avail_num_.load(std::memory_order_acq_rel) == 0) {
             return DpRearmTxInterrupt();
         }
+        PROF_END(CORE_WRITE_POLL_TX_SECOND, true);
     }
 
     return 0;
@@ -225,6 +234,7 @@ ConverterPtr UmqTxOps::BuildBufferConverter(const void *buf, size_t size)
 
 int UmqTxOps::GetAndAckEvent()
 {
+    int ret = 0;
     umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     int events = UmqApi::umq_get_cq_event(local_umqh_, &option);
     if (events == 0) {
@@ -237,9 +247,11 @@ int UmqTxOps::GetAndAckEvent()
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, events), savedErrno);
         return -1;
     }
-    if ((ack_event_num_ += events) >= GET_PER_ACK) {
+    if ((ack_event_num_ += events) >= 1) {
         UmqApi::umq_ack_interrupt(local_umqh_, ack_event_num_, &option);
         ack_event_num_ = 0;
+        // TODO: 返回值判断
+        ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &option);
     }
     return 0;
 }
@@ -265,13 +277,13 @@ int UmqTxOps::PollUmqTx(const SocketPtr &sock, bool poll_to_empty)
         poll_total_cnt += (uint32_t)poll_cnt;
     } while ((poll_total_cnt < TX_RETRIEVE_THRESHOLD || (poll_to_empty && poll_cnt > 0)) &&
              poll_zero_cnt < POLL_TX_RETRY_MAX_CNT && err_code == ops_error_code::OK);
-    tx_queue_avail_num_ += poll_total_cnt;
+    tx_queue_avail_num_.fetch_add(poll_total_cnt, std::memory_order_acq_rel);
     return 0;
 }
 
 void UmqTxOps::WakeUpTx(Socket *sock)
 {
-    bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
+    bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_acq_rel);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (need_fc_awake && eventfd_write(sockBase->event_fd_, 1) == -1) {
         UBS_VLOG_INFO("eventfd_write() failed, event fd: %d, raw sock fd %d: errno: %d, errmsg: %s\n",
@@ -604,7 +616,8 @@ uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_
     unsolicited_wr_num_ = _unsolicited_wr_num;
     unsolicited_bytes_ = _unsolicited_bytes;
     unsignaled_wr_num_ = _unsignaled_wr_num;
-    tx_queue_avail_num_ -= wr_cnt;
+    tx_queue_avail_num_.fetch_sub(wr_cnt, std::memory_order_acq_rel);
+    successful_post_count_.fetch_add(wr_cnt, std::memory_order_acq_rel);
 
     QBUF_LIST_FIRST(&head_buf_) = head_qbuf_;
     if (last_qbuf != nullptr) {
@@ -620,7 +633,7 @@ uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_
 
 void UmqTxOps::FlushTx(const SocketPtr &sock, uint32_t timeout_ms)
 {
-    uint16_t threshold = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_;
+    uint16_t threshold = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel);
     if (threshold <= 0) {
         return;
     }
@@ -645,11 +658,11 @@ void UmqTxOps::FlushTx(const SocketPtr &sock, uint32_t timeout_ms)
         poll_total_cnt += static_cast<uint32_t>(poll_cnt);
     } while (sock->Type() != SocketType::SOCK_TYPE_COUNT && poll_total_cnt < threshold &&
              err_code != ops_error_code::FATAL_ERROR);
-    tx_queue_avail_num_ += poll_total_cnt;
+    tx_queue_avail_num_.fetch_add(poll_total_cnt, std::memory_order_relaxed);
 
-    if (err_code != ops_error_code::FATAL_ERROR && tx_queue_avail_num_ < GlobalSetting::UBS_TX_DEPTH &&
-        unsignaled_wr_num_ > 0) {
-        uint32_t left_wr_num = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_;
+    if (err_code != ops_error_code::FATAL_ERROR &&
+        tx_queue_avail_num_.load(std::memory_order_relaxed) < GlobalSetting::UBS_TX_DEPTH && unsignaled_wr_num_ > 0) {
+        uint32_t left_wr_num = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel);
         umq_buf_t *cur_qbuf = QBUF_LIST_FIRST(&head_buf_);
         umq_buf_t *last_qbuf = nullptr;
         uint32_t cached_wr_cnt = 0;
@@ -683,12 +696,12 @@ void UmqTxOps::FlushTx(const SocketPtr &sock, uint32_t timeout_ms)
         }
 
         UmqApi::umq_buf_free(QBUF_LIST_FIRST(&head_buf_));
-        tx_queue_avail_num_ += cached_wr_cnt;
+        tx_queue_avail_num_.fetch_add(cached_wr_cnt, std::memory_order_acq_rel);
     }
 
-    if (tx_queue_avail_num_ < GlobalSetting::UBS_TX_DEPTH) {
+    if (tx_queue_avail_num_.load(std::memory_order_acq_rel) < GlobalSetting::UBS_TX_DEPTH) {
         UBS_VLOG_DEBUG("Failed to flush umq(TX), leak %u wr(s) of buffer\n",
-                       GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_);
+                       GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel));
     }
 }
 

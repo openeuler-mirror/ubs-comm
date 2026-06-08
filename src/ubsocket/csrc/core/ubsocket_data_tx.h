@@ -29,10 +29,7 @@ namespace ubs {
 // 接口层，实现 Alloc Post Free PollTx等动作
 class DataTxOps {
 public:
-    DataTxOps()
-    {
-        tx_queue_avail_num_ = GlobalSetting::UBS_TX_DEPTH;
-    }
+    DataTxOps() {}
 
     virtual ~DataTxOps() = default;
 
@@ -57,7 +54,7 @@ public:
 
 public:
     int fd_ = -1;
-    uint16_t tx_queue_avail_num_ = 0; // current window size for TX
+    std::atomic<uint16_t> tx_queue_avail_num_{GlobalSetting::UBS_TX_DEPTH}; // current window size for TX
     uint16_t ack_event_num_ = 0;
     bool get_and_ack_event_ = false;
     std::atomic<int> epoll_event_num_{0};
