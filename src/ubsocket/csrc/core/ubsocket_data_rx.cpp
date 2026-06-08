@@ -138,6 +138,15 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
             return UBS_ERROR;
         }
 
+        // UB 链路上无数据，但还是触发了 EPOLLIN 事件，可能是对端 TCP 连接关闭了，此种场景下向 brpc
+        // 返回 0 暗示读到 EOF, brpc 随后会主动关闭连接.
+        char b[1];
+        int n = LibcApi::recv(fd_, b, sizeof(b), MSG_PEEK | MSG_DONTWAIT);
+        if (n == 0) {
+            UBS_VLOG_INFO("The TCP connection has been closed by peer.\n");
+            return 0;
+        }
+
         /* return UBS_ERROR and set errno to EAGAIN to notice user no more data to read */
         errno = EAGAIN;
         return UBS_ERROR;
