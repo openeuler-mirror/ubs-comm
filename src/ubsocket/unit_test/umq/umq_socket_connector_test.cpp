@@ -199,29 +199,29 @@ static int MockGetRouteListFail(uint64_t umqh, uint8_t *bind_info, uint32_t bind
     return 0;
 }
 
-static Result MockCreateLocalUmqSuccess(umq_eid_t *conn_eid, umq_used_ports_t &used_ports,
+static ock::ubs::Result MockCreateLocalUmqSuccess(umq_eid_t *conn_eid, umq_used_ports_t &used_ports,
                                                   umq_eid_t *conn_eid_used, umq_topo_type_t &topo_type)
 {
     return UBS_OK;
 }
 
-static Result MockCreateLocalUmqFail(umq_eid_t *conn_eid, umq_used_ports_t &used_ports,
+static ock::ubs::Result MockCreateLocalUmqFail(umq_eid_t *conn_eid, umq_used_ports_t &used_ports,
                                                umq_eid_t *conn_eid_used, umq_topo_type_t &topo_type)
 {
     return UBS_UMQ_CREATE;
 }
 
-static Result MockGenerateSocketCommOpsSuccess(const SocketPtr &sock)
+static ock::ubs::Result MockGenerateSocketCommOpsSuccess(const SocketPtr &sock)
 {
     return UBS_OK;
 }
 
-static Result MockPrefillRxSuccess()
+static ock::ubs::Result MockPrefillRxSuccess()
 {
     return UBS_OK;
 }
 
-static Result MockPrefillRxFail()
+static ock::ubs::Result MockPrefillRxFail()
 {
     return UBS_PREFILL_RX;
 }
@@ -346,7 +346,7 @@ TEST_F(UmqConnectorOpsTest, BuildNegotiateReq_SetsFieldsCorrectly)
 
     UmqSocketPtr umqSocket = MakeRef<UmqSocket>(TEST_FD);
     NegotiateReq req{};
-    EXPECT_EQ(connector_.BuildNegotiateReq(&req, umqSocket), static_cast<Result>(UBS_OK));
+    EXPECT_EQ(connector_.BuildNegotiateReq(&req, umqSocket), static_cast<ock::ubs::Result>(UBS_OK));
     EXPECT_EQ(req.magic_number, CONTROL_PLANE_PROTOCOL_NEGOTIATION);
     EXPECT_EQ(req.trans_mode, RM_TP);
     EXPECT_EQ(req.is_bonding, 0);
@@ -364,7 +364,7 @@ TEST_F(UmqConnectorOpsTest, BuildNegotiateReq_ShareJfrEnabled_SetsEnableShareJfr
 
     UmqSocketPtr umqSocket = MakeRef<UmqSocket>(TEST_FD);
     NegotiateReq req{};
-    EXPECT_EQ(connector_.BuildNegotiateReq(&req, umqSocket), static_cast<Result>(UBS_OK));
+    EXPECT_EQ(connector_.BuildNegotiateReq(&req, umqSocket), static_cast<ock::ubs::Result>(UBS_OK));
     EXPECT_EQ(req.enable_share_jfr, 1);
     EXPECT_EQ(req.is_bonding, 1);
     EXPECT_EQ(req.schedule_policy, static_cast<uint8_t>(dev_schedule_policy::CPU_AFFINITY));
@@ -394,7 +394,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_HandshakeOpt_SetsockoptSuccess_Connec
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(ret, UBS_OK);
 
@@ -423,7 +423,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_HandshakeOpt_SetsockoptFailEnoprotoop
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(GlobalSetting::UBS_HAND_SHAKE_MODE, UBHandshakeMode::TFO);
 
@@ -452,7 +452,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_HandshakeOpt_SetsockoptFailEopnotsupp
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(GlobalSetting::UBS_HAND_SHAKE_MODE, UBHandshakeMode::TFO);
 
@@ -477,7 +477,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_HandshakeOpt_SetsockoptFailOtherErrno
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(GlobalSetting::UBS_HAND_SHAKE_MODE, UBHandshakeMode::UB_SOCK_OPT);
 
@@ -505,7 +505,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_Einprogress_RetCorrectedToOk)
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(ret, UBS_OK);
     EXPECT_EQ(errno, EINPROGRESS);
@@ -532,7 +532,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_Ealready_RetCorrectedToOk)
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(ret, UBS_OK);
     EXPECT_EQ(errno, EALREADY);
@@ -559,7 +559,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_Eisconn_ContinuesWithOk)
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(ret, -1);
 
@@ -585,7 +585,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_OtherErrno_ReturnsError)
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(ret, -1);
     EXPECT_EQ(errno, ECONNREFUSED);
@@ -612,7 +612,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_RawEstablishedState_ReturnsEarly)
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(ret, -1);
 
@@ -638,7 +638,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_NotUbsConnection_ReturnsEarly)
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(ret, -1);
 
@@ -659,7 +659,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_NullAddress_NoPeerIp)
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
     errno = 0;
-    Result ret = connector_.PrepareConnect(TEST_NEW_FD, nullptr, 0, sock);
+    ock::ubs::Result ret = connector_.PrepareConnect(TEST_NEW_FD, nullptr, 0, sock);
     EXPECT_EQ(ret, UBS_OK);
     EXPECT_EQ(connector_.umq_conn_info_.peer_ip, "");
 
@@ -690,7 +690,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_TfoMode_SendtoSuccessButDup3Fail_Retu
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(ret, -1);
 
@@ -719,7 +719,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_TfoMode_SendtoFail_ReturnsMinus1)
     addr.sin_port = htons(8080);
 
     errno = 0;
-    Result ret =
+    ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
     EXPECT_EQ(ret, -1);
 
@@ -737,7 +737,7 @@ TEST_F(UmqConnectorOpsTest, Negotiate_RecvFail_ReturnsUbsError)
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(returnValue(static_cast<ssize_t>(-1)));
 
     errno = 0;
-    Result ret = connector_.Negotiate(TEST_NEW_FD, sock);
+    ock::ubs::Result ret = connector_.Negotiate(TEST_NEW_FD, sock);
     EXPECT_EQ(ret, UBS_ERROR);
 
     GlobalMockObject::verify();
