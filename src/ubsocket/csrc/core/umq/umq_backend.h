@@ -28,6 +28,8 @@ public:
 private:
     static Result AddUbDev(umq_trans_info_t &trans_info);
     static Result FindDevName();
+    static Result CreateShareMainUmq(umq_eid_t &local_eid);
+    static Result PrefillShareMainUmq(umq_eid_t &local_eid);
 
 private:
     static std::mutex UMQ_MUTEX;
