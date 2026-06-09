@@ -139,6 +139,20 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoUpdateErr)
     EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
 }
 
+TEST_F(TestUbUrmaWrapper, UBDeviceHelperCompareName)
+{
+    urma_device_t bonding3 {};
+    urma_device_t bonding0 {};
+    ASSERT_EQ(strcpy_s(bonding3.name, URMA_MAX_NAME, "bonding_dev_3"), EOK);
+    ASSERT_EQ(strcpy_s(bonding0.name, URMA_MAX_NAME, "bonding_dev_0"), EOK);
+    urma_device_t *devList[] = { &bonding3, &bonding0 };
+
+    const char bondingDev0[] = "bonding_dev_0";
+    const char bondingPrefix[] = "bonding_dev_";
+    EXPECT_EQ(mUBDeviceHelper->CompareName(bondingDev0, strlen(bondingDev0), devList, NN_NO2), 1);
+    EXPECT_EQ(mUBDeviceHelper->CompareName(bondingPrefix, strlen(bondingPrefix), devList, NN_NO2), 0);
+}
+    
 urma_device_t **MockGetDeviceList(int *num_devices)
 {
     *num_devices = NN_NO8;
