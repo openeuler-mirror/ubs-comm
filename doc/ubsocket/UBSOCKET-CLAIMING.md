@@ -108,7 +108,7 @@ ctest --test-dir src/ubsocket/build --output-on-failure
 
 | # | 模块 | 文件 | 行数 | 分支数 | 当前行% | 当前分支% | mock难度 | 认领人 | 状态 | 达成(行/分支) |
 |---|------|------|------|--------|---------|----------|---------|--------|------|--------------|
-| 1 | core/umq | umq_socket_connector.cpp | 410 | 640 | 0% | 0% | hard | | unclaimed | |
+| 1 | core/umq | umq_socket_connector.cpp | 410 | 640 | 23.4% | 29.4% | hard | | unclaimed | |
 | 2 | core/socket | ubsocket_event_epoll.cpp | 404 | 500 | 0% | 0% | hard | | unclaimed | |
 | 3 | under_api/urma | dl_urma_api.cpp | 267 | 258 | 0% | 0% | easy | | unclaimed | |
 | 4 | iobuf | ubsocket_zcopy_adapter.cpp | 242 | 278 | 0% | 0% | easy | | unclaimed | |
@@ -129,7 +129,7 @@ ctest --test-dir src/ubsocket/build --output-on-failure
 | 19 | under_api | dl_api.cpp | 25 | 28 | 0% | 0% | medium | | unclaimed | |
 | 20 | core/socket | ubsocket_socket_connector.cpp | 24 | 32 | 0% | 0% | easy | | unclaimed | |
 | 21 | core/socket | ubsocket_core_types.cpp | 21 | 66 | 0% | 0% | easy | | unclaimed | |
-| 22 | common | ubsocket_signal_handler.cpp | 4 | 16 | 0% | 0% | easy | | unclaimed | |
+| 22 | common | ubsocket_signal_handler.cpp | 4 | 16 | 100% | ~50% | easy | | unclaimed | |
 | 23 | core/umq | umq_data_tx_ops.cpp | 374 | 394 | 9.1% | 6.3% | hard | | unclaimed | |
 | 24 | core/umq | umq_socket.cpp | 293 | 408 | 5.5% | 2.9% | hard | | unclaimed | |
 | 25 | core/umq | umq_socket_acceptor.cpp | 193 | 306 | 7.3% | 4.9% | hard | | unclaimed | |
