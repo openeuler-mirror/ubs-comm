@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_data_tx.h"
+#include "profiling/ubsocket_prof.h"
 #include "ubsocket_socket.h"
 
 namespace ock {
@@ -23,6 +24,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     PROF_START(CORE_WRITE);
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::writev(fd_, iov, iovcnt);
+        PROF_END(CORE_WRITE, size >= 0);
         return size;
     }
 
@@ -42,11 +44,17 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         return UBS_ERROR;
     }
 
+    PROF_START(CORE_WRITE_POLL_TX);
     if (tx_ops_->PollTx(sock) < 0) {
+        PROF_END(CORE_WRITE_POLL_TX, false);
         PROF_END(CORE_WRITE, false);
         return UBS_ERROR;
     }
+    PROF_END(CORE_WRITE_POLL_TX, true);
 
+    PROF_START(CORE_WRITE_POST_SEND);
+
+    PROF_START(CORE_WRITE_BUILD_IOV);
     ConverterPtr converterPtr = tx_ops_->BuildIovConverter(iov, iovcnt);
     uint32_t input_total_len = 0;
     uint32_t batch = 0;
@@ -69,16 +77,17 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         input_total_len += cut_total_len;
     } while (cut_total_len != 0 && ++batch < post_batch_max);
 
-    // 分配txBuf  //传0是umq特定属性？
     uintptr_t txBuf = tx_ops_->AllocTxBuf(0, buf_cnt);
+    PROF_END(CORE_WRITE_BUILD_IOV, true);
 
-    // 发送数据
     uint32_t tx_total_len;
     int64_t ret = tx_ops_->PostSend(sock, txBuf, batch, converterPtr);
     if (ret < 0) {
+        PROF_END(CORE_WRITE_POST_SEND, false);
         PROF_END(CORE_WRITE, false);
         return ret;
     }
+    PROF_END(CORE_WRITE_POST_SEND, true);
     tx_total_len = ret;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {

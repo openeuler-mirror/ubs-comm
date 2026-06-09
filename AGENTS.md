@@ -217,6 +217,12 @@ clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也
 - **mockcpp `.stubs()` 默认返回Void**: 非void返回函数必须加`.will(returnValue(...))`
 - **`LibcApi::_ptr` 初始为nullptr**: 未调用`LibcApi::Load()`时通过nullptr函数指针调用→segfault，SetUp中必须设置`_ptr`或调用`Load()`
 
+## Commit规范
+
+- commit前必须执行 `pre-commit run clang-format --all-files`，确保格式合规后再提交
+- 完整pre-commit hook耗时过长(全量构建+clang-tidy)，commit时用 `--no-verify` 跳过，仅依赖手动clang-format
+- **Co-Authored-By**: 当AI辅助生成代码时，commit消息必须包含 `Co-Authored-By: <模型名> <模型邮箱>`，标注实际使用的驱动模型(如 `Co-Authored-By: GLM-5.1 <noreply@zhipuai.cn>`、`Co-Authored-By: Claude Opus 4 <noreply@anthropic.com>` 等)，根据实际情况填写
+
 ## Known Gotchas
 
 - CMake编译 **C++11** (`-std=c++11`) 但 `.clang-format` 设 `Standard: c++17` — 格式化用c++17规则，但代码必须兼容c++11
