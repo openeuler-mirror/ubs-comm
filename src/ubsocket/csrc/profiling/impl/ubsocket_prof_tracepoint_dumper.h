@@ -86,7 +86,7 @@ public:
 
         if (dump_file_.is_open()) {
             dump_file_.close();
-            dir_created = false;
+            dir_created_ = false;
         }
     }
 
@@ -147,7 +147,7 @@ private:
 
     int CreateDirectory(std::string &path)
     {
-        if (dir_created) {
+        if (dir_created_) {
             return 0;
         }
 
@@ -177,7 +177,7 @@ private:
                           Func::Error2Str(errno));
             return -1;
         }
-        dir_created = true;
+        dir_created_ = true;
         return 0;
     }
 
@@ -213,7 +213,7 @@ private:
 
 private:
     std::string file_path_;
-    bool dir_created = false;
+    bool dir_created_ = false;
     std::string file_name_;
     std::ofstream dump_file_;
     uint16_t interval_min_ = INTERVAL_DEFAULT_MIN;

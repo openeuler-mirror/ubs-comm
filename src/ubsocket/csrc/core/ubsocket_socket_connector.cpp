@@ -26,6 +26,8 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
         ret = connector_ops_->PrepareConnect(raw_fd_, address, address_len, sock);
         if (ret != 0) {
             PROF_END(CORE_CONNECT, false);
+            ArraySet<Socket>::GetInstance().OverrideItem(raw_fd_, nullptr);
+            SocketConnHelper::FlushSocketMsg(raw_fd_);
             return ret;
         }
 
