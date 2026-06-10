@@ -13,7 +13,6 @@
 
 #include <map>
 #include <set>
-
 #include "ubsocket_defines.h"
 #include "ubsocket_functions.h"
 

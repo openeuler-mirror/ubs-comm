@@ -12,13 +12,16 @@
 #define UBS_COMM_UBSOCKET_GLOBAL_SETTING_H
 
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <type_traits>
 
 #include "include/ubsocket_def.h"
 #include "ubsocket_errno.h"
+#include "ubsocket_logger.h"
 #include "ubsocket_setting_validator.h"
 
 namespace ock {
@@ -123,10 +126,17 @@ ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) 
     }
 
     std::string envStr(envValue);
+    // Regex mismatch: not an integer, e.g. "2min" will fail validation.
+    static const std::regex num_regex("^-?[0-9]+$");
+    if (!std::regex_match(envStr, num_regex)) {
+        UBS_VLOG_ERR("Invalid value for %s: %s, should be an integer.\n", name.c_str(), envStr.c_str());
+        return false;
+    }
     try {
         out = static_cast<int64_t>(std::stol(envStr));
         return true;
     } catch (...) {
+        UBS_VLOG_ERR("Invalid value for %s: %s, should be an integer.\n", name.c_str(), envStr.c_str());
         return false;
     }
 }
@@ -139,10 +149,19 @@ ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, float &out) no
     }
 
     std::string envStr(envValue);
+    // Validate number format (supports integers and decimals)
+    // If regex mismatch, it is not a valid number → fail (e.g., "2.31min")
+    static const std::regex float_regex("^-?[0-9]+(\\.[0-9]+)?$");
+    if (!std::regex_match(envStr, float_regex)) {
+        UBS_VLOG_ERR("Invalid value for %s: %s, should be an number.\n", name.c_str(), envStr.c_str());
+        return false;
+    }
+
     try {
         out = static_cast<int64_t>(std::stod(envStr));
         return true;
     } catch (...) {
+        UBS_VLOG_ERR("Invalid value for %s: %s, should be an number.\n", name.c_str(), envStr.c_str());
         return false;
     }
 }
@@ -160,22 +179,58 @@ ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, std::string &o
 
 ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidate(const std::string &name, int64_t &out) noexcept
 {
-    return (GetEnv(name, out) && Validator::Instance().Validate(name, static_cast<int64_t>(out)));
+    if (!GetEnv(name, out)) {
+        return false;
+    }
+
+    if (!Validator::Instance().Validate(name, static_cast<int64_t>(out))) {
+        UBS_SLOG_ERR(Validator::Instance().LastErrMsg());
+        return false;
+    }
+
+    return true;
 }
 
 ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidate(const std::string &name, float &out) noexcept
 {
-    return (GetEnv(name, out) && Validator::Instance().Validate(name, static_cast<float>(out)));
+    if (!GetEnv(name, out)) {
+        return false;
+    }
+
+    if (!Validator::Instance().Validate(name, static_cast<float>(out))) {
+        UBS_SLOG_ERR(Validator::Instance().LastErrMsg());
+        return false;
+    }
+
+    return true;
 }
 
 ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidate(const std::string &name, std::string &out) noexcept
 {
-    return (GetEnv(name, out) && Validator::Instance().ValidateStrEnum(name, out));
+    if (!GetEnv(name, out)) {
+        return false;
+    }
+
+    if (!Validator::Instance().ValidateStrEnum(name, out)) {
+        UBS_SLOG_ERR(Validator::Instance().LastErrMsg());
+        return false;
+    }
+
+    return true;
 }
 
 ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidateNotEmpty(const std::string &name, std::string &out) noexcept
 {
-    return (GetEnv(name, out) && Validator::Instance().ValidateStrEmpty(name, out));
+    if (!GetEnv(name, out)) {
+        return false;
+    }
+
+    if (!Validator::Instance().ValidateStrEmpty(name, out)) {
+        UBS_SLOG_ERR(Validator::Instance().LastErrMsg());
+        return false;
+    }
+
+    return true;
 }
 
 ALWAYS_INLINE bool GlobalSetting::AsyncAcceptorEnabled() noexcept

@@ -19,7 +19,10 @@ void DumpThreadExt::DumpDataExt() noexcept
     std::ostringstream oss;
     WriteDumpTitleExt(oss);
     TracerExt::Instance().CombineExt(oss);
-    WriteDumpDataExt(oss);
+    if (WriteDumpDataExt(oss) != 0) {
+        UBS_VLOG_WARN("Profiling data write skipped, please check path and permissions.\n");
+        return;
+    }
     UBS_VLOG_DEBUG("Dump thread ext success combiner and dump data");
 }
 } // namespace profiling

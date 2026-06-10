@@ -9,7 +9,6 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_global_setting.h"
-#include "ubsocket_logger.h"
 #include "ubsocket_setting_validator.h"
 
 namespace ock {
@@ -112,7 +111,7 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_BACKUP_LINK_ENABLED, false, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
-    StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, 512},
+    StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX},
                                              {ENV_TRACE_FILE_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
 
     for (auto &item : rules_int64) {
