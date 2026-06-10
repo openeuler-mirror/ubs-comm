@@ -94,6 +94,12 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_PROBE_ENABLE                | 是否打开探测功能                                        | false, true                                                                                                                                                             | false             | 否                                  |
 | UBSOCKET_PROBE_TIME_MS               | 每次探测的时间间隔（单位ms）                                 | [1, 360000ULL]                                                                                                                                                          | 1000              | 否                                  |
 | UBSOCKET_PROBE_BATCH                 | 每次探测的连接数量                                       | [1, 500]                                                                                                                                                                | 10                | 否                                  |
+| UBSOCKET_PROF_ENABLE                | 是否打开profiling打点功能                                        | false, true                                                                                                                                                             | false             | 否                                  |
+
+| UBSOCKET_PROF_MODE                | 是否打开profiling百分位统计功能，fast：关闭，ext：打开                   | fast, ext                 | fast             | 否                                  |
+| UBSOCKET_PROF_DUMP_INTERVAL_MIN               | 每次统计profiling打点数据时间间隔（单位s）                                 | [1, 5]                                                                                                                                                          | 1              | 否                                  |
+| UBSOCKET_PROF_DUMP_PATH                 | profiling打点数据输出路径                                       | [1, 512]                                                                                                                                                                | /tmp/ubsocket/profiling      | 否                                  |
+
 
 
 > 说明：

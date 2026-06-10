@@ -19,7 +19,10 @@ void DumpThread::DumpData() noexcept
     std::ostringstream oss;
     WriteDumpTitle(oss);
     Tracer::Instance().Combine(oss);
-    WriteDumpData(oss);
+    if (WriteDumpData(oss) != 0) {
+        UBS_VLOG_WARN("Profiling data write skipped, please check path and permissions.\n");
+        return;
+    }
     UBS_VLOG_DEBUG("Dump thread success combiner and dump data");
 }
 } // namespace profiling

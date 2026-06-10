@@ -68,7 +68,6 @@ public:
         }
 
         running_ = true;
-        CreateDirectory(file_path_);
         dump_thread_ = std::thread(&DumpThread::DumpLoop, this);
     }
 
@@ -87,6 +86,7 @@ public:
 
         if (dump_file_.is_open()) {
             dump_file_.close();
+            dir_created = false;
         }
     }
 
@@ -145,44 +145,75 @@ private:
             << "\n";
     }
 
-    void CreateDirectory(std::string &path)
+    int CreateDirectory(std::string &path)
     {
+        if (dir_created) {
+            return 0;
+        }
+
         if (path.empty()) {
             path = DEFAULT_DUMP_PATH;
         }
 
         constexpr mode_t DEFAULT_DIR_PERMISSION = 0750;
-        std::string tmp_str = path;
+        std::string current_path;
 
-        for (size_t i = 1; i < tmp_str.size(); ++i) {
-            if (tmp_str[i] == '/') {
-                tmp_str[i] = '\0';
-                mkdir(tmp_str.c_str(), DEFAULT_DIR_PERMISSION);
-                tmp_str[i] = '/';
+        for (char c : path) {
+            current_path += c;
+            if (c == '/') {
+                if (mkdir(current_path.c_str(), DEFAULT_DIR_PERMISSION) == -1) {
+                    if (errno == EEXIST) {
+                        continue;
+                    }
+                    UBS_VLOG_WARN("File path %s creation skipped, errno: %d, errmsg: %s.\n", current_path.c_str(),
+                                  errno, Func::Error2Str(errno));
+                    return -1;
+                }
             }
         }
 
-        mkdir(tmp_str.c_str(), DEFAULT_DIR_PERMISSION);
+        if (mkdir(path.c_str(), DEFAULT_DIR_PERMISSION) == -1 && errno != EEXIST) {
+            UBS_VLOG_WARN("File path %s creation skipped, errno: %d, errmsg: %s.\n", path.c_str(), errno,
+                          Func::Error2Str(errno));
+            return -1;
+        }
+        dir_created = true;
+        return 0;
     }
 
-    void WriteDumpData(std::ostringstream &oss)
+    int WriteDumpData(std::ostringstream &oss)
     {
+        if (CreateDirectory(file_path_) != 0) {
+            return -1;
+        }
+
         if (file_name_.empty()) {
             std::ostringstream ossFileName;
             ossFileName << file_path_ << DUMP_FILE_PREFIX << getpid() << DUMP_FILE_SUFFIX;
             file_name_ = ossFileName.str();
+        }
 
+        if (!dump_file_.is_open()) {
             dump_file_.open(file_name_, std::ios::out | std::ios::app);
+            if (!dump_file_.is_open()) {
+                UBS_VLOG_WARN("File %s open skipped, errno: %d, errmsg: %s.\n", file_name_.c_str(), errno,
+                              Func::Error2Str(errno));
+                return -1;
+            } else {
+                UBS_VLOG_DEBUG("File %s open success.\n", file_name_.c_str());
+            }
         }
 
         if (dump_file_.is_open()) {
             dump_file_ << oss.str() << std::endl;
             dump_file_.flush();
         }
+        return 0;
     }
 
 private:
     std::string file_path_;
+    bool dir_created = false;
     std::string file_name_;
     std::ofstream dump_file_;
     uint16_t interval_min_ = INTERVAL_DEFAULT_MIN;
