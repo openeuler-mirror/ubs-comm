@@ -421,11 +421,13 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, 
     back_route_ = negoRoute.back_route;
     topo_type_ = negoRoute.topo_type;
 
-    int checkResult = umqSocket->CheckDevAdd(conn_route_.dst_eid);
-    if (checkResult != 0) {
-        UBS_VLOG_ERR("CheckDevAdd() failed in accept, Peer IP:%s, fd: %d, ret: %d\n", conn_info.peer_ip.c_str(), fd,
-                     checkResult);
-        return UBS_ERROR;
+    if (UmqSetting::UMQ_IS_BONDING && !GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+        int checkResult = umqSocket->CheckDevAdd(conn_route_.dst_eid);
+        if (checkResult != 0) {
+            UBS_VLOG_ERR("CheckDevAdd() failed in accept, Peer IP:%s, fd: %d, ret: %d\n", conn_info.peer_ip.c_str(), fd,
+                         checkResult);
+            return UBS_ERROR;
+        }
     }
 
     // 保存对端EID
