@@ -109,7 +109,7 @@ opencode skill系统位于`.opencode/skills/`，指导AI生成符合项目约定
 | `src/hcom/` | HCOM core library | Main product. `ock::hcom` namespace. Entry: `hcom.h` |
 | `src/hcom/transport/` | Transport implementations | `rdma/`, `sock/`, `shm/`, `ub/` — conditional compilation |
 | `src/hcom/umq/` | UMQ messaging queue | Standalone CMake build. Outputs `libumq.so` |
-| `src/ubsocket/` | UBSocket adapter | Depends on UMQ. Outputs `librpc_adapter_brpc.so` |
+| `src/ubsocket/` | UBSocket adapter | Depends on UMQ. Outputs `libubsocket.so` |
 | `src/ubsocket/csrc/core/umq/` | UMQ socket adapter ops | `umq_errno_converter.h` (frozen — do NOT modify) |
 | `src/ubsocket/csrc/core/` | 通用抽象层 | `ubsocket_*`文件，不应引用`umq/`头文件 |
 | `test/hcom/` | HCOM tests | `unit_test/`, `llt/`, `stub/`, `opensslcrt/` |

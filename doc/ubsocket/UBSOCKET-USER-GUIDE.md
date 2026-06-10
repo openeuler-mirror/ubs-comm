@@ -127,7 +127,7 @@ UBSocket支持两种构建方式：
 
 - 单独通过cmake构建
 
-  编译出librpc_adapter_brpc.so等动态库文件。
+  编译出libubsocket.so等动态库文件。
 
 > 说明：
 >
@@ -242,7 +242,7 @@ cmake ..
 make -j32
 ```
 
-完成`UBSocket`的编译后，可以得到`build/brpc/librpc_adapter_brpc.so`目标编译产物。
+完成`UBSocket`的编译后，可以得到`build/csrc/libubsocket.so`目标编译产物。
 
 > 说明：
 >
@@ -254,7 +254,7 @@ make -j32
 参考4.4节中cmake构建方式，以echo\_c++\_server和echo\_c++\_client为例，通过如下命令启动开启UB加速能力：
 
 ```shell
-$ export LD_PRELOAD=librpc_adapter_brpc.so
+$ export LD_PRELOAD=libubsocket.so
 $ export UBSOCKET_UB_FORCE=true
 $ ./echo_c++_srever  # 或者./echo_c++_client
 ```

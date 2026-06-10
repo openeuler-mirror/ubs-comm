@@ -75,7 +75,7 @@ cmake ..
 make -j32
 ```
 
-After `UBSocket` is compiled, the `build/brpc/librpc_adapter_brpc.so` target compilation product is obtained.
+After `UBSocket` is compiled, the `build/csrc/libubsocket.so` target compilation product is obtained.
 
 > Note:
 >
@@ -86,7 +86,7 @@ After `UBSocket` is compiled, the `build/brpc/librpc_adapter_brpc.so` target com
 `UBSocket` hijacks the `POSIX Socket API` in TCP applications in `LD_PRELOAD` mode and converts it into UB communication. The source code of TCP applications does not need to be modified. Assume that the normal startup command for a TCP application is `./application`. You can run the following command to start the TCP application to use the `UBSocket` communication acceleration capability:
 
 ```shell
-$ env LD_PRELOAD=/path/to/lib/librpc_adapter_brpc.so \
+$ env LD_PRELOAD=/path/src/ubsocket/build/csrc/libubsocket.so \
 UBSOCKET_TRANS_MODE=ub \
 UBSOCKET_DEV_NAME="bonding_dev_0" \
 UBSOCKET_SRC_EID="xxxx:xxxx:0000:0000:0000:0000:0100:0000" \
