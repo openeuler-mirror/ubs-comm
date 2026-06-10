@@ -28,6 +28,10 @@ protected:
     int DoExecute() noexcept override;
 
 private:
+    int ValidateCommonParams() noexcept;
+    int ValidateClientParams() noexcept;
+    int ValidateServerParams() noexcept;
+
     std::string role_;
     std::string protocol_;
     std::string ip_;
