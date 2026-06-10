@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_EPOLL_FD_H
 #define UBS_COMM_UBSOCKET_EPOLL_FD_H
 
+#include "common/ubsocket_leaky_singleton.h"
 #include "common/ubsocket_spsc_ring_queue.h"
 #include "ubsocket_core_types.h"
 
@@ -153,14 +154,12 @@ public:
 };
 
 template <SocketType T>
-class EpollRunner : public EpollRunnerBase {
-public:
-    static EpollRunner &GetInstance()
-    {
-        static EpollRunner<T> instance;
-        return instance;
-    }
+class EpollRunner
+    : public EpollRunnerBase
+    , public LeakySingleton<EpollRunner<T>> {
+    friend LeakySingleton<EpollRunner>;
 
+public:
     ~EpollRunner() override
     {
         Stop();
@@ -232,7 +231,7 @@ public:
     {
         switch (type) {
             case SocketType::SOCK_TYPE_UMQ:
-                return EpollRunner<SocketType::SOCK_TYPE_UMQ>::GetInstance();
+                return EpollRunner<SocketType::SOCK_TYPE_UMQ>::Instance();
             default:
                 throw std::runtime_error("Not support type for epoll runner base");
         }
