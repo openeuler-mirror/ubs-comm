@@ -30,7 +30,7 @@
 %endif
 
 %if %{undefined rpm_release}
-    %define rpm_release 7
+    %define rpm_release 8
 %endif
 
 %if %{undefined rpm_build_date}
@@ -54,7 +54,7 @@ BuildRoot     : %{_buildirootdir}/%{name}_%{version}-build
 buildArch     : aarch64 x86_64
 ExclusiveArch : aarch64
 
-BuildRequires: make gcc cmake libboundscheck rdma-core-devel umdk-urma-devel openssl openssl-devel
+BuildRequires: make gcc cmake libboundscheck rdma-core-devel umdk-urma-devel openssl openssl-devel chrpath
 Requires: libboundscheck
 
 %description
@@ -116,9 +116,15 @@ cp %{_builddir}/%{package_name}/src/hcom/umq/build/src/qbuf/libumq_buf.so.0.0.1 
 ln -s libumq_buf.so.0.0.1 %{buildroot}%{_libdir}/libumq_buf.so.0
 ln -s libumq_buf.so.0     %{buildroot}%{_libdir}/libumq_buf.so
 
-cp %{_builddir}/%{package_name}/src/ubsocket/build/brpc/librpc_adapter_brpc.so.0.0.1  %{buildroot}/usr/lib64/
-ln -s librpc_adapter_brpc.so.0.0.1 %{buildroot}%{_libdir}/librpc_adapter_brpc.so.0
-ln -s librpc_adapter_brpc.so.0     %{buildroot}%{_libdir}/librpc_adapter_brpc.so
+cp %{_builddir}/%{package_name}/src/hcom/umq/build/src/umq_ipc/libumq_ipc.so.0.0.1  %{buildroot}/usr/lib64/
+ln -s libumq_ipc.so.0.0.1 %{buildroot}%{_libdir}/libumq_ipc.so.0
+ln -s libumq_ipc.so.0     %{buildroot}%{_libdir}/libumq_ipc.so
+
+cp %{_builddir}/%{package_name}/src/ubsocket/build/csrc/libubsocket.so  %{buildroot}/usr/lib64/libubsocket.so.0.0.1
+chrpath -d %{buildroot}/usr/lib64/libubsocket.so.0.0.1
+ln -s libubsocket.so.0.0.1 %{buildroot}%{_libdir}/libubsocket.so.0
+ln -s libubsocket.so.0     %{buildroot}%{_libdir}/libubsocket.so
+cp %{_builddir}/%{package_name}/src/ubsocket/build/csrc/libubsocket.a  %{buildroot}/usr/lib64/
 
 %if %{with java_compile}
     cp %{_builddir}/%{package_name}/hcom/jars/*  %{buildroot}/usr/local/jars/hcom/
@@ -158,20 +164,27 @@ ln -s librpc_adapter_brpc.so.0     %{buildroot}%{_libdir}/librpc_adapter_brpc.so
 %{_prefix}/lib64/libumq.so
 %{_prefix}/lib64/libumq_ub.so
 %{_prefix}/lib64/libumq_buf.so
+%{_prefix}/lib64/libumq_ipc.so
 %{_prefix}/lib64/libumq.so.0
 %{_prefix}/lib64/libumq.so.0.0.1
 %{_prefix}/lib64/libumq_ub.so.0
 %{_prefix}/lib64/libumq_ub.so.0.0.1
 %{_prefix}/lib64/libumq_buf.so.0
 %{_prefix}/lib64/libumq_buf.so.0.0.1
+%{_prefix}/lib64/libumq_ipc.so.0
+%{_prefix}/lib64/libumq_ipc.so.0.0.1
 
 %files ubsocket
 %defattr(-,root,root)
-%{_prefix}/lib64/librpc_adapter_brpc.so
-%{_prefix}/lib64/librpc_adapter_brpc.so.0
-%{_prefix}/lib64/librpc_adapter_brpc.so.0.0.1
+%{_prefix}/lib64/libubsocket.so
+%{_prefix}/lib64/libubsocket.a
+%{_prefix}/lib64/libubsocket.so.0
+%{_prefix}/lib64/libubsocket.so.0.0.1
 
 %changelog
+* Wed Jun 10 2026 xxx <xxx@xxx.com> - 1.0.0-8
+- Build libubsocket package, add libumq_ipc to umq package.
+
 * Fri Jan 23 2026 xxx <xxx@xxx.com> - 1.0.0-7
 - fix tar use noncom branch, update log.
 
