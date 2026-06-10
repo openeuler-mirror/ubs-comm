@@ -32,9 +32,9 @@ Result UmqConnectorOps::ConnectViaHandshakeOpt(const SocketPtr &sock, const stru
         GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
         ret = ConnectViaTfo(sock, address, address_len);
     } else {
+        ret = LibcApi::connect(raw_fd_, address, address_len);
         UBS_VLOG_INFO("Connect with UB handshake socket option.\n");
     }
-    ret = LibcApi::connect(raw_fd_, address, address_len);
     return ret;
 }
 
