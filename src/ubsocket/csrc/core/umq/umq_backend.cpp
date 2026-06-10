@@ -264,6 +264,9 @@ Result UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
     memset(&share_main_umq_cfg, 0, sizeof(share_main_umq_cfg));
     UmqConnHelper::NewBaseUmqCreateOptions(share_main_umq_cfg);
 
+    // 声明在分支外，避免悬垂指针导致 umq 创建时，取不到正确的port信息
+    std::vector<umq_port_id_t> used_ports;
+
     if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
         share_main_umq_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         umq_eid_t bonding_eid = UmqSetting::UMQ_LOCAL_EID;
@@ -272,7 +275,11 @@ Result UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
             UBS_VLOG_ERR("Failed to get urma route info.\n");
             return UBS_UMQ_CREATE;
         }
-        share_main_umq_cfg.used_ports = {.port = &(route_list.routes[0].src_port), .num = 1};
+        used_ports.reserve(route_list.route_num);
+        for (uint32_t i = 0; i < route_list.route_num; ++i) {
+            used_ports.push_back(route_list.routes[i].src_port);
+        }
+        share_main_umq_cfg.used_ports = {.port = used_ports.data(), .num = static_cast<uint8_t>(used_ports.size())};
     }
 
     if (strcpy(share_main_umq_cfg.name, "ubsocket_main_umq") == nullptr) {
@@ -280,37 +287,27 @@ Result UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
         return UBS_SET_DEV_INFO;
     }
 
-    if (!UmqSetting::UMQ_DEV_NAME.empty()) {
-        if (strcpy(share_main_umq_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_DEV_NAME.c_str()) == nullptr) {
-            UBS_VLOG_ERR("Failed to set device name\n");
-            return UBS_NEW_SOCKET_FD;
-        }
-        if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
-            share_main_umq_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
-            share_main_umq_cfg.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
+    // init阶段 UMQ_DEV_NAME必定有值（FindDevName)
+    if (strcpy(share_main_umq_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_DEV_NAME.c_str()) == nullptr) {
+        UBS_VLOG_ERR("Failed to set device name\n");
+        return UBS_NEW_SOCKET_FD;
+    }
+    if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+        share_main_umq_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
+        share_main_umq_cfg.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
 
-            if (UmqConnHelper::GetDevEid(share_main_umq_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_EID_INDEX,
-                                         &local_eid) != 0) {
-                UBS_VLOG_ERR("Failed to get eid by dev name:%s and eid index:%d \n", UmqSetting::UMQ_DEV_NAME.c_str(),
-                             UmqSetting::UMQ_EID_INDEX);
-            }
-            UBS_VLOG_INFO("Use Bonding: " EID_FMT ".\n", EID_ARGS(local_eid));
-        } else {
-            // init use bonding dev
-            share_main_umq_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
-            share_main_umq_cfg.dev_info.eid.eid = UmqSetting::UMQ_LOCAL_EID;
-            local_eid = UmqSetting::UMQ_LOCAL_EID;
-            UBS_VLOG_INFO("Use UDMA: " EID_FMT ".\n", EID_ARGS(local_eid));
+        if (UmqConnHelper::GetDevEid(share_main_umq_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_EID_INDEX, &local_eid) !=
+            0) {
+            UBS_VLOG_ERR("Failed to get eid by dev name:%s and eid index:%d \n", UmqSetting::UMQ_DEV_NAME.c_str(),
+                         UmqSetting::UMQ_EID_INDEX);
         }
+        UBS_VLOG_INFO("Use Bonding: " EID_FMT ".\n", EID_ARGS(local_eid));
     } else {
-        if (strcpy(share_main_umq_cfg.dev_info.dev.dev_name, "bonding_dev_0") == nullptr) {
-            UBS_VLOG_ERR("Failed to strcpy device name, errno: %d\n", errno);
-            return UBS_SET_DEV_INFO;
-        }
-        if (UmqSetting::UMQ_IS_BONDING) {
-            share_main_umq_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
-            share_main_umq_cfg.dev_info.eid.eid = UmqSetting::UMQ_LOCAL_EID;
-        }
+        // init use bonding dev
+        share_main_umq_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
+        share_main_umq_cfg.dev_info.eid.eid = UmqSetting::UMQ_LOCAL_EID;
+        local_eid = UmqSetting::UMQ_LOCAL_EID;
+        UBS_VLOG_INFO("Use UDMA: " EID_FMT ".\n", EID_ARGS(local_eid));
     }
 
     Locker sLock(UmqEidTable::Instance().GetMainMutex());
