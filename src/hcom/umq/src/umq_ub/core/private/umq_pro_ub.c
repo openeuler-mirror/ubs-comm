@@ -1010,10 +1010,18 @@ int umq_ub_fill_fc_rx_buf(ub_queue_t *queue)
     return UMQ_SUCCESS;
 }
 
-int umq_ub_fill_fc_rx_buf_batch(ub_queue_t *queue, uint32_t batch)
+int umq_ub_fill_fc_rx_buf_batch(ub_queue_t *queue, uint8_t rqe_post_factor)
 {
+    uint32_t post_num = 0;
+    uint32_t post_left_num = queue->fc_rx_depth;
+    uint32_t batch = queue->fc_rx_depth * rqe_post_factor;
     if (batch == 0) {
         return UMQ_SUCCESS;
+    }
+
+    uint32_t post_round = queue->fc_rx_depth / UMQ_BATCH_SIZE;
+    if (post_round == 0) {
+        post_round = 1;
     }
 
     if (batch > queue->fc_rx_depth * URMA_UBAGG_DEV_MAX_NUM) {
@@ -1036,23 +1044,33 @@ int umq_ub_fill_fc_rx_buf_batch(ub_queue_t *queue, uint32_t batch)
         recv_wr[i - 1].next = &recv_wr[i];
     }
 
+    urma_jfr_wr_t *post_wrs;
     urma_jfr_wr_t *bad_wr = NULL;
     urma_status_t status;
     // bondp with shared_jfr should use urma_post_jfr_wr
     bool post_jfr = ((queue->create_flag & UMQ_CREATE_FLAG_MAIN_UMQ) != 0 && queue->used_port_num > 0);
-    if (post_jfr) {
-        status =
-            umq_symbol_urma()->urma_post_jfr_wr(queue->jfr_ctx[UB_QUEUE_JETTY_FLOW_CONTROL]->jfr, recv_wr, &bad_wr);
-    } else {
-        status =
-            umq_symbol_urma()->urma_post_jetty_recv_wr(queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL], recv_wr, &bad_wr);
-    }
-    if (status != URMA_SUCCESS) {
-        UMQ_LIMIT_VLOG_ERR(VLOG_UMQ_URMA_API, "eid: " EID_FMT ", jetty_id: %u, urma_post_jetty_recv_wr failed, "
-            "status: %d\n", EID_ARGS(queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL]->jetty_id.eid),
-            queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL]->jetty_id.id, (int)status);
-        free(recv_wr);
-        return umq_status_convert(status);
+    for (uint32_t i = 0; i < post_round; i++) {
+        post_num = post_left_num > UMQ_BATCH_SIZE ? UMQ_BATCH_SIZE : post_left_num;
+        post_left_num -= post_num;
+        recv_wr[UMQ_BATCH_SIZE * i + post_num - 1].next = NULL;
+        post_wrs = &recv_wr[UMQ_BATCH_SIZE * i];
+
+        for (uint8_t j = 0; j < rqe_post_factor; j++) {
+            if (post_jfr) {
+                status = umq_symbol_urma()->urma_post_jfr_wr(queue->jfr_ctx[UB_QUEUE_JETTY_FLOW_CONTROL]->jfr,
+                                                             post_wrs, &bad_wr);
+            } else {
+                status = umq_symbol_urma()->urma_post_jetty_recv_wr(queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL],
+                                                                    post_wrs, &bad_wr);
+            }
+            if (status != URMA_SUCCESS) {
+                UMQ_LIMIT_VLOG_ERR(VLOG_UMQ_URMA_API, "eid: " EID_FMT ", jetty_id: %u, urma_post_jetty_recv_wr failed, "
+                                                      "status: %d\n", EID_ARGS(queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL]->jetty_id.eid),
+                                   queue->jetty[UB_QUEUE_JETTY_FLOW_CONTROL]->jetty_id.id, (int)status);
+                free(recv_wr);
+                return umq_status_convert(status);
+            }
+        }
     }
     free(recv_wr);
     return UMQ_SUCCESS;
