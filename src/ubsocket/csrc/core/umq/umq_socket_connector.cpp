@@ -16,7 +16,6 @@
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_scope_exit.h"
 #include "core/umq/umq_eid_table.h"
-#include "umq_conn_helper.h"
 #include "umq_errno_converter.h"
 
 namespace ock {
@@ -513,12 +512,31 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &c
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umq_socket->SetBindRemote(true);
 
-    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && UmqConnHelper::PrefillRx(umq_socket->UmqHandle()) != UBS_OK) {
-        UBS_VLOG_ERR("Failed to fill rx buffer to umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+    if (GlobalSetting::UBS_ENABLE_SHARE_JFR) {
+        // 强依赖当前实现，一个 eid 只对应一个主 umq. 如果后续逻辑有变更，需同步修改。
+        auto main_umq = UmqEidTable::Instance().GetFirst(umq_conn_info_.conn_eid, umq_socket->GetTransMode());
+        if (main_umq == nullptr) {
+            UBS_VLOG_ERR("The main umq is removed by other thread.\n");
+            return UBS_ERROR;
+        }
+
+        return main_umq->EnsurePrefilled([umq_socket, this]() {
+            if (umq_socket->PrefillRx() != UBS_OK) {
+                UBS_VLOG_ERR("Failed to fill rx buffer to main umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                             EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+                return UBS_ERROR;
+            }
+            return UBS_OK;
+        });
+    }
+
+    // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
+    if (umq_socket->PrefillRx() != UBS_OK) {
+        UBS_VLOG_INFO("Failed to fill rx buffer to umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_PREFILL_RX;
     }
-    umq_socket->UpdateRxQueueAvailNum();
+
     return UBS_OK;
 }
 
@@ -615,13 +633,45 @@ Result UmqConnectorOps::GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_
             return UBS_OK;
         }
     }
-    if (UmqConnHelper::GetRouteList(filtered_list, *src_eid, *dst_eid) != UBS_OK) {
-        UBS_VLOG_ERR("Failed to get urma route info.\n");
-        return UBS_ERROR;
+
+    // TODO: UmqSetting 增加 umq_trans_mode_t
+    ub_trans_mode trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
+    umq_tp_type_t tp_type;
+    if (trans_mode == RC_TP) {
+        tp_type = UMQ_TP_TYPE_RTP;
+    } else if (trans_mode == RM_TP) {
+        tp_type = UMQ_TP_TYPE_RTP;
+    } else if (trans_mode == RM_CTP) {
+        tp_type = UMQ_TP_TYPE_CTP;
+    } else if (trans_mode == RC_CTP) {
+        tp_type = UMQ_TP_TYPE_CTP;
+    } else {
+        tp_type = UMQ_TP_TYPE_RTP;
+    }
+
+    umq_route_key_t route;
+    (void)memcpy(&route.src_bonding_eid, src_eid, sizeof(umq_eid_t));
+    (void)memcpy(&route.dst_bonding_eid, dst_eid, sizeof(umq_eid_t));
+    route.tp_type = tp_type;
+
+    umq_route_list_t route_list;
+    int ret = UmqApi::umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
+    if (ret != 0) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_get_route_list() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n", ret,
+                     errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+        return -1;
+    }
+
+    filtered_list = route_list;
+    if (filtered_list.route_num == 0) {
+        UBS_VLOG_ERR("Failed to get urma topo is zero\n");
+        return -1;
     }
 
     RouteListRegistry::Instance().RegisterOrReplaceRouteList(*dst_eid, filtered_list);
-    return UBS_OK;
+    return 0;
 }
 
 Result UmqConnectorOps::GetConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid)

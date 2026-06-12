@@ -12,7 +12,6 @@
 #include <iostream>
 
 #include "profiling/statistics/statistics.h"
-#include "umq_conn_helper.h"
 #include "umq_dfx_api.h"
 #include "umq_eid_table.h"
 #include "umq_epoll_runner_ops.h"
@@ -43,8 +42,16 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
 
     umq_create_option_t queue_cfg;
     memset(&queue_cfg, 0, sizeof(queue_cfg));
-    UmqConnHelper::NewBaseUmqCreateOptions(queue_cfg, trans_mode_);
+    queue_cfg.trans_mode = UmqSetting::UMQ_TRANS_MODE;
+    queue_cfg.create_flag = UMQ_CREATE_FLAG_TX_DEPTH | UMQ_CREATE_FLAG_RX_DEPTH | UMQ_CREATE_FLAG_RX_BUF_SIZE |
+                            UMQ_CREATE_FLAG_TX_BUF_SIZE | UMQ_CREATE_FLAG_QUEUE_MODE | UMQ_CREATE_FLAG_TP_MODE |
+                            UMQ_CREATE_FLAG_TP_TYPE | UMQ_CREATE_FLAG_UMQ_CTX;
 
+    queue_cfg.rx_depth = GlobalSetting::UBS_RX_DEPTH;
+    queue_cfg.tx_depth = GlobalSetting::UBS_TX_DEPTH;
+    queue_cfg.rx_buf_size = UmqSetting::GetIOBufSize();
+    queue_cfg.tx_buf_size = UmqSetting::GetIOBufSize();
+    queue_cfg.mode = UMQ_MODE_INTERRUPT;
     // 共享 JFR、AE 事件依赖 umq_ctx.
     queue_cfg.umq_ctx = raw_socket_;
     // TODO: is_bonding 待确认如何设置到 socketbase
@@ -52,6 +59,12 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
         queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         queue_cfg.used_ports = used_ports;
+    }
+
+    UBS_VLOG_INFO("UBSOCKET_LINK_PRIORITY: %d\n", UmqSetting::UMQ_LINK_PRIORITY);
+    if (UmqSetting::UMQ_LINK_PRIORITY != UBSOCKET_LINK_PRIORITY_DEFAULT) {
+        queue_cfg.priority = static_cast<uint8_t>(UmqSetting::UMQ_LINK_PRIORITY);
+        queue_cfg.create_flag |= UMQ_CREATE_FLAG_PRIORITY;
     }
 
     int n = snprintf(queue_cfg.name, UMQ_NAME_MAX_LEN, "fd: %d", raw_socket_);
@@ -89,7 +102,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
             queue_cfg.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
 
-            if (UmqConnHelper::GetDevEid(queue_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_EID_INDEX, &local_eid) != 0) {
+            if (GetDevEid(queue_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_EID_INDEX, &local_eid) != 0) {
                 UBS_VLOG_ERR("Failed to get eid by dev name:%s and eid index:%d \n", UmqSetting::UMQ_DEV_NAME,
                              UmqSetting::UMQ_EID_INDEX);
             }
@@ -111,6 +124,23 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
             queue_cfg.dev_info.eid.eid = *conn_eid;
         }
+    }
+
+    // trans_mode_ 默认为 RC_TP 待补充环境变量
+    static const char *trans_mode_str[RC_CTP + 1] = {"RC_TP", "RM_TP", "RM_CTP", "RC_CTP"};
+    UBS_VLOG_INFO("trans_mode result is: %s\n", trans_mode_str[trans_mode_]);
+    if (trans_mode_ == RC_TP) {
+        queue_cfg.tp_mode = UMQ_TM_RC;
+        queue_cfg.tp_type = UMQ_TP_TYPE_RTP;
+    } else if (trans_mode_ == RM_TP) {
+        queue_cfg.tp_mode = UMQ_TM_RM;
+        queue_cfg.tp_type = UMQ_TP_TYPE_RTP;
+    } else if (trans_mode_ == RM_CTP) {
+        queue_cfg.tp_mode = UMQ_TM_RM;
+        queue_cfg.tp_type = UMQ_TP_TYPE_CTP;
+    } else if (trans_mode_ == RC_CTP) {
+        queue_cfg.tp_mode = UMQ_TM_RC;
+        queue_cfg.tp_type = UMQ_TP_TYPE_CTP;
     }
 
     umq_handle_ = CreateSubUmq(&queue_cfg, &local_eid);
@@ -180,8 +210,42 @@ uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *loca
     return main_umqs.front()->GetUmqHandle();
 }
 
-Result UmqSocket::UpdateRxQueueAvailNum()
+Result UmqSocket::PrefillRx()
 {
+    uint64_t umq_handle = GlobalSetting::UBS_ENABLE_SHARE_JFR ? share_umq_handle_ : umq_handle_;
+    uint32_t left_post_rx_num = getLeftPostRxNum(umq_handle);
+    if (left_post_rx_num == 0) {
+        UBS_VLOG_ERR("Failed to set rx window capacity\n");
+        return UBS_ERROR;
+    }
+    uint32_t cur_post_rx_num = 0;
+    umq_alloc_option_t option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(Block)};
+    do {
+        cur_post_rx_num = left_post_rx_num > UmqSetting::UMQ_POST_BATCH_MAX ? UmqSetting::UMQ_POST_BATCH_MAX :
+                                                                              left_post_rx_num;
+        umq_buf_t *rx_buf_list =
+            UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), cur_post_rx_num, UMQ_INVALID_HANDLE, &option);
+        if (rx_buf_list == nullptr) {
+            int rx_window_capacity = 0;
+            UBS_VLOG_ERR("[UMQ_API] umq_buf_alloc() failed, RX depth: %d, ret: %p\n", rx_window_capacity, rx_buf_list);
+            return UBS_ERROR;
+        }
+
+        umq_buf_t *bad_qbuf = nullptr;
+        int umq_ret = UmqApi::umq_post(umq_handle, rx_buf_list, UMQ_IO_RX, &bad_qbuf);
+        if (umq_ret != UMQ_SUCCESS) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, umq_ret, savedErrno);
+            int rx_window_capacity = 0;
+            UBS_VLOG_ERR("[UMQ_API] umq_post() failed, RX depth: %u, ret: %d, mapped: %d(%s), original: %d\n",
+                         rx_window_capacity, umq_ret, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, umq_ret), savedErrno);
+            return UBS_ERROR;
+        }
+        rx_.GetRxOps()->rx_queue_avail_num_ += cur_post_rx_num;
+        UBS_VLOG_DEBUG("Post RX depth: %u\n", cur_post_rx_num);
+    } while ((left_post_rx_num -= cur_post_rx_num) > 0);
+
     int local_umq_state = UmqApi::umq_state_get(umq_handle_);
     if (local_umq_state != QUEUE_STATE_READY) {
         int savedErrno = errno;
@@ -434,6 +498,45 @@ void UmqSocket::FlushRxQueue()
 
     rxQueue->Shutdown();
     return;
+}
+uint32_t UmqSocket::getLeftPostRxNum(uint64_t umq_handle)
+{
+    uint32_t left_post_rx_num = 0;
+    umq_cfg_get_t cfg;
+    memset(&cfg, 0, sizeof(umq_cfg_get_t));
+    int res = UmqApi::umq_cfg_get(umq_handle, &cfg);
+    if (res != 0) {
+        UBS_VLOG_ERR("[UMQ_API] umq_cfg_get() failed, umq handle: %llu, ret: %d\n",
+                     static_cast<unsigned long long>(umq_handle), res);
+    } else {
+        left_post_rx_num = cfg.rqe_post_factor * cfg.rx_depth;
+        UBS_VLOG_INFO("Successfully get umq cfg, left_post_rx_num = %u\n", left_post_rx_num);
+    }
+    return left_post_rx_num;
+}
+
+Result UmqSocket::GetDevEid(char *dev_name, uint32_t eid_idx, umq_eid_t *eid)
+{
+    umq_dev_info_t umq_dev_info = {};
+    int ret = UmqApi::umq_dev_info_get(dev_name, UMQ_TRANS_MODE_UB, &umq_dev_info);
+    if (ret != 0) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_dev_info_get() failed, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+        return UBS_ERROR;
+    }
+
+    for (uint32_t i = 0; i < umq_dev_info.ub.eid_cnt; ++i) {
+        if (umq_dev_info.ub.eid_list[i].eid_index == eid_idx) {
+            *eid = umq_dev_info.ub.eid_list[i].eid;
+            return UBS_OK;
+        }
+    }
+
+    UBS_VLOG_ERR("Failed to find eid index in device info, eid_idx: %u, ret: %d\n", eid_idx, -1);
+    return UBS_INVALID_PARAM;
 }
 
 Result UmqSocket::CheckDevAdd(const umq_eid_t &conn_eid)

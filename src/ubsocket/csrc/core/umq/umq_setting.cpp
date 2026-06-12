@@ -83,7 +83,7 @@ void UmqSetting::AddRules() noexcept
                                     {ENV_UMQ_FLOW_CONTROL_ENABLED, false, "true|false"}};
 
     /* str not empty rules: name, required */
-    StrNotEmptyRule rules_str_not_empty[] = {{ENV_UMQ_DEV_NAME, false}, {ENV_UMQ_DEV_SRC_EID, false}};
+    StrNotEmptyRule rules_str_not_empty[] = {};
 
     for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
@@ -136,7 +136,7 @@ Result UmqSetting::LoadEnv() noexcept
         UMQ_DEV_IP = strEnvValue;
     }
 
-    if (GS::GetEnvAndValidateNotEmpty(ENV_UMQ_DEV_NAME, strEnvValue)) {
+    if (GS::GetEnvAndValidate(ENV_UMQ_DEV_NAME, strEnvValue)) {
         UMQ_DEV_NAME = strEnvValue;
     }
 
@@ -148,7 +148,7 @@ Result UmqSetting::LoadEnv() noexcept
         UMQ_EID_INDEX = static_cast<uint32_t>(int64EnvValue);
     }
 
-    if (GS::GetEnvAndValidateNotEmpty(ENV_UMQ_DEV_SRC_EID, strEnvValue)) {
+    if (GS::GetEnvAndValidate(ENV_UMQ_DEV_SRC_EID, strEnvValue)) {
         UMQ_DEV_SRC_EID_STR = strEnvValue;
     }
 

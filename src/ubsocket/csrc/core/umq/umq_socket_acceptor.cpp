@@ -11,7 +11,6 @@
 
 #include "umq_socket_acceptor.h"
 #include "core/umq/umq_eid_table.h"
-#include "umq_conn_helper.h"
 #include "umq_errno_converter.h"
 
 namespace ock {
@@ -226,11 +225,29 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umqSocket->SetBindRemote(true);
 
-    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && UmqConnHelper::PrefillRx(umqSocket->UmqHandle()) != UBS_OK) {
+    if (GlobalSetting::UBS_ENABLE_SHARE_JFR) {
+        // 强依赖当前实现，一个 eid 对应多 UB 传输模式不同的 umq. 如果后续逻辑有变更，需同步修改。
+        auto main_umq = UmqEidTable::Instance().GetFirst(conn_eid_, umqSocket->GetTransMode());
+        if (main_umq == nullptr) {
+            UBS_VLOG_ERR("The main umq state is removed by other thread.\n");
+            // return ubsocket::Error::kUBSOCKET_NO_MAIN_UMQ;
+            return UBS_ERROR;
+        }
+
+        return main_umq->EnsurePrefilled([umqSocket]() {
+            if (umqSocket->PrefillRx() != 0) {
+                UBS_VLOG_ERR("Failed to fill rx buffer to main umq, fd: %d\n", umqSocket->raw_socket_);
+                return UBS_ERROR;
+            }
+            return UBS_OK;
+        });
+    }
+
+    // 1650 RC mode not support post rx right after create jetty, thus, move post rx operation after bind()
+    if (umqSocket->PrefillRx() != 0) {
         UBS_VLOG_ERR("Failed to fill rx buffer to umq, fd: %d\n", fd);
         return UBS_PREFILL_RX;
     }
-    umqSocket->UpdateRxQueueAvailNum();
     return UBS_OK;
 }
 
