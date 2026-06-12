@@ -204,6 +204,12 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
         //return ubsocket::FromRaw(errno);
         return UBS_ERROR;
     }
+
+    if (remote_cp_msg.queue_bind_info_size > UMQ_BIND_INFO_SIZE_MAX) {
+        UBS_VLOG_ERR("Receive remote invalid control message, fd: %d\n", fd);
+        return UBS_ERROR;
+    }
+
     UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %lu, bind info len: %lu\n", fd,
                    sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
 

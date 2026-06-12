@@ -48,6 +48,9 @@ int main(int argc, char *argv[])
 
     /* create sub command */
     auto sub_cmd = func(parser.Params());
+    if (sub_cmd == nullptr) {
+        return 0;
+    }
 
     /* execute sub command */
     return sub_cmd->Execute();

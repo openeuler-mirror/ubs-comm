@@ -332,6 +332,7 @@ int EpollServer::Run()
                 }
                 if (SetNonBlocking(client_fd_) < 0) {
                     close(client_fd_);
+                    client_fd_ = -1;
                     return -errno;
                 }
 

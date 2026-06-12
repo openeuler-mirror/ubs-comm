@@ -49,6 +49,7 @@ public:
     TARGET_FUNC_VAR = (TARGET_FUNC_TYPE)(DlApi::LoadSym(FILE_HANDLE, SYMBOL_NAME)); \
     if (TARGET_FUNC_VAR == nullptr) {                                               \
         UnLoadInner();                                                              \
+        dlclose(FILE_HANDLE);                                                       \
         return UBS_DL_LOAD_SYM_FAILED;                                              \
     }
 

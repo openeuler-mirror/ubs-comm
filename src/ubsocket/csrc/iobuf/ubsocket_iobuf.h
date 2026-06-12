@@ -115,7 +115,7 @@ public:
 
     ssize_t CutAndInsertAfter(uint32_t cut_size, Block *block)
     {
-        if (cache_len_ == 0) {
+        if (cache_len_ == 0 || block == nullptr) {
             return 0;
         }
 

@@ -126,6 +126,7 @@ int PPClient::Run()
     int ret = ubsocket_epoll_ctl(epollFd, EPOLL_CTL_ADD, fd, &evt);
     if (ret < 0) {
         LOG_ERROR("ubsocket_epoll_ctl error, ret: '" << ret << ", errno: " << errno);
+        close(epollFd);
         return -errno;
     }
 
@@ -135,6 +136,11 @@ int PPClient::Run()
 
     struct iovec send_data[1];
     send_data[0].iov_base = ubsocket_iobuf_allocate(strlen(ping));
+    if (send_data[0].iov_base == nullptr) {
+        LOG_ERROR("ubsocket_iobuf_allocate error, errno: " << errno);
+        return -errno;
+    }
+
     send_data[0].iov_len = strlen(ping);
     ssize_t expect_send_len = strlen(ping);
 

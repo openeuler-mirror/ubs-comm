@@ -39,6 +39,16 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         return UBS_ERROR;
     }
 
+    for (int i = 0; i < iovcnt; i++) {
+        if (iov[i].iov_base == nullptr) {
+            errno = EINVAL;
+            UBS_VLOG_WARN("ReadV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                          Func::Error2Str(errno));
+            PROF_END(CORE_READ, false);
+            return UBS_ERROR;
+        }
+    }
+
     /* if socket failed to pass protocol negotiation validation, then
      * (1) pass the received protocol negotiation as message to caller;
      * (2) when all the received message passed to caller, fallback to tcp/ip */

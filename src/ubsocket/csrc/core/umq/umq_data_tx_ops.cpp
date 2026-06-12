@@ -24,7 +24,7 @@ uintptr_t UmqTxOps::AllocTxBuf(uint32_t size, uint32_t count)
     if (tx_buf_list == nullptr) {
         UBS_VLOG_ERR("[UMQ_API] umq_buf_alloc() failed for TX, local umq: %llu, ret: %p\n",
                      static_cast<unsigned long long>(local_umqh_), tx_buf_list);
-        return DpRearmTxInterrupt();
+        DpRearmTxInterrupt();
     }
 
     return reinterpret_cast<uintptr_t>(tx_buf_list);
@@ -299,7 +299,7 @@ int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
     int cur_wr_cnt;
     umq_buf_t *first_qbuf = nullptr;
     for (int i = 0; i < poll_num; ++i) {
-        if (buf[i] == nullptr || buf[i]->status != 0 ||
+        if (buf[i] == nullptr || buf[i]->status != 0 || (((umq_buf_pro_t *)buf[i]->qbuf_ext) == nullptr) ||
             (first_qbuf = (umq_buf_t *)((umq_buf_pro_t *)(buf[i]->qbuf_ext))->user_ctx) == nullptr) {
             // set err_code to true to force a quick exit from current function.
             err_code = ops_error_code::NORMAL_ERROR;
@@ -363,6 +363,10 @@ void UmqTxOps::HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt)
 bool UmqTxOps::HandleProbePacket(umq_buf_t *qbuf)
 {
     umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(qbuf->qbuf_ext);
+    if (buf_pro == nullptr) {
+        return false;
+    }
+
     if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == UmqSetting::UMQ_PROBE_USER_DATA_ID) {
         UmqApi::umq_buf_free(qbuf);
         return true; // 已处理

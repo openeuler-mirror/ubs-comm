@@ -360,7 +360,7 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     }
 
     peer_socket_id_ = rsp.aff_sock_id;
-    if (UNLIKELY(rsp.socket_id_count == 0)) {
+    if (UNLIKELY(rsp.socket_id_count == 0 || (rsp.socket_id_count > NEGOTIATE_SOCKET_ID_MAX_NUM))) {
         UBS_VLOG_ERR("Invalid peer socket count, fd: %d\n", raw_fd_);
         return UBS_ERROR;
     }

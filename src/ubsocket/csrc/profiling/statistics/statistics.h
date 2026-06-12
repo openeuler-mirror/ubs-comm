@@ -207,6 +207,9 @@ public:
 
     void GetAllSocketData(CLISocketData *data, uint32_t sockNum)
     {
+        if (data == nullptr) {
+            return;
+        }
         uint32_t doneNum = 0;
         ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
             if (doneNum >= sockNum) {
@@ -246,6 +249,9 @@ public:
 
     void GetAllQbufPoolData(CLIQbufPoolData *data, uint32_t sockNum)
     {
+        if (data == nullptr) {
+            return;
+        }
         uint32_t doneNum = 0;
         ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
             if (doneNum >= sockNum) {
@@ -263,6 +269,9 @@ public:
 
     void GetAllUmqInfoData(CLIUmqInfoData *data, uint32_t sockNum)
     {
+        if (data == nullptr) {
+            return;
+        }
         uint32_t doneNum = 0;
         ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
             if (doneNum >= sockNum) {
@@ -280,6 +289,9 @@ public:
 
     void GetAllIoPacketData(CLIIoPacketData *data, uint32_t sockNum)
     {
+        if (data == nullptr) {
+            return;
+        }
         uint32_t doneNum = 0;
         ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
             if (doneNum >= sockNum) {
@@ -297,6 +309,10 @@ public:
 
     void GetAllUmqPerfData(CLIUmqPerfData *data, uint32_t sockNum)
     {
+        if (data == nullptr) {
+            return;
+        }
+
         uint32_t doneNum = 0;
         ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
             if (doneNum >= sockNum) {
