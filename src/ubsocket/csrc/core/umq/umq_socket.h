@@ -121,6 +121,7 @@ public:
 
     Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) override;
     Result DelTxEvent(const SocketPtr &sock, int epoll_fd) override;
+    Result ProcessEpollEvent(struct epoll_event &event) override;
     Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
                               struct epoll_event *event) override;
     int GetTxFd() override;
