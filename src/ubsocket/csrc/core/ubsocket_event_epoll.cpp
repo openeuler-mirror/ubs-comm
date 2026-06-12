@@ -60,7 +60,7 @@ void CleanSocketEpollMapper(int socket_fd)
         g_socket_epoll_mappers.erase(socket_fd);
     }
     mapper->Clear();
-    free(mapper);
+    delete mapper;
     mapper = nullptr;
 }
 
@@ -289,8 +289,10 @@ int AsyncEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
             } else if (mapper_create) {
                 WriteLocker s_lock(g_socket_epoll_lock);
                 g_socket_epoll_mappers.erase(fd);
-                free(mapper);
-                mapper = nullptr;
+                if (mapper != nullptr) {
+                    delete mapper;
+                    mapper = nullptr;
+                }
             }
             break;
         case EPOLL_CTL_MOD:

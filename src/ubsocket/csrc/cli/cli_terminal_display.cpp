@@ -85,6 +85,10 @@ void TerminalDisplay::DisplayTopoInfo(umq_route_list_t *routeList, const uint32_
 
 void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
 {
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
     uint32_t headerSize = sizeof(CLIDataHeader);
     if (dataLen < headerSize) {
         CLI_LOG("Invalid data size\n");
@@ -114,6 +118,10 @@ void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
 
 void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataLen)
 {
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
     uint32_t headerSize = sizeof(CLIDataHeader);
     if (dataLen < headerSize) {
         CLI_LOG("Invalid data size\n");
@@ -201,6 +209,10 @@ void PrintProbeDetails(const CLIProbeData *probeData)
 // --- 主函数 ---
 void TerminalDisplay::DisplayProbeInfo(uint8_t *data, const uint32_t dataLen)
 {
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
     // 1. 基础校验
     uint32_t headerSize = sizeof(CLIProbeHeader);
     if (dataLen < headerSize) {
@@ -392,6 +404,10 @@ std::string TerminalDisplay::ConvertEidToString(const uint8_t *eidArray, size_t 
 
 void TerminalDisplay::DisplayQbufPoolInfo(uint8_t *data, uint32_t dataLen)
 {
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
     uint32_t headerSize = sizeof(CLIDataHeader);
     if (dataLen < headerSize) {
         CLI_LOG("Invalid data size\n");
@@ -426,6 +442,10 @@ void TerminalDisplay::DisplayQbufPoolInfo(uint8_t *data, uint32_t dataLen)
 
 void TerminalDisplay::DisplayUmqInfo(uint8_t *data, uint32_t dataLen)
 {
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
     uint32_t headerSize = sizeof(CLIDataHeader);
     if (dataLen < headerSize) {
         CLI_LOG("Invalid data size\n");
@@ -460,6 +480,10 @@ void TerminalDisplay::DisplayUmqInfo(uint8_t *data, uint32_t dataLen)
 
 void TerminalDisplay::DisplayIoPacketInfo(uint8_t *data, uint32_t dataLen)
 {
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
     uint32_t headerSize = sizeof(CLIDataHeader);
     if (dataLen < headerSize) {
         CLI_LOG("Invalid data size\n");
@@ -494,6 +518,10 @@ void TerminalDisplay::DisplayIoPacketInfo(uint8_t *data, uint32_t dataLen)
 
 void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
 {
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
     uint32_t headerSize = sizeof(CLIDataHeader);
     if (dataLen < headerSize) {
         CLI_LOG("Invalid data size\n");
@@ -536,6 +564,10 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
 
 void TerminalDisplay::DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen)
 {
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
     uint32_t headerSize = sizeof(CLIDelayHeader);
     if (dataLen < headerSize) {
         CLI_LOG("Invalid data size\n");

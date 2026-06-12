@@ -198,6 +198,11 @@ private:
         }
 
         T *new_heap = InitHeap(reserve_capacity);
+        if (new_heap == nullptr) {
+            UBS_VLOG_ERR("Failed to init heap.\n");
+            return UBS_ERROR;
+        }
+
         if (m_size > 0) {
             std::move(m_heap, m_heap + m_size, new_heap);
         }

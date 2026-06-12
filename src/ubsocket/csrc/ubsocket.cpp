@@ -32,9 +32,6 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
         errno = EINVAL;
         return UBS_ERROR;
     }
-
-    UBS_SLOG_DEBUG(*options);
-
     options->allowed_protocol = UBS_PROTOCOL_TCP; /* use raw tcp by default */
     options->async_acceptor_thread_count = 0;     /* tune off by default */
     options->async_connector_thread_count = 0;    /* tune off by default */
@@ -42,6 +39,8 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
     options->lock_ops = nullptr;
     options->rw_lock_ops = nullptr;
     options->sem_ops = nullptr;
+
+    UBS_SLOG_DEBUG(*options);
     return UBS_OK;
 }
 
@@ -227,7 +226,8 @@ void UmqLogger(int level, char *log_msg)
         UBS_LOG_STREAM_RAW(new_level, log_msg);
     } else {
         static const char *OTHER_LEVEL[] = {"EMERG", "ALERT", "CRIT"};
-        UBS_LOG_STREAM_RAW(LogLevel::LEVEL_ERR, OTHER_LEVEL[level % (sizeof(OTHER_LEVEL))] << ", " << log_msg);
+        UBS_LOG_STREAM_RAW(LogLevel::LEVEL_ERR,
+                           OTHER_LEVEL[level % (sizeof(OTHER_LEVEL) / sizeof(OTHER_LEVEL[0]))] << ", " << log_msg);
     }
 }
 
@@ -239,7 +239,7 @@ void UmqExtLogger(int level, const char *file, const char *function, int line, c
     } else {
         static const char *OTHER_LEVEL[] = {"EMERG", "ALERT", "CRIT"};
         UBS_LOG_STREAM_EXT_RAW(LogLevel::LEVEL_ERR, file, function, line,
-                               OTHER_LEVEL[level % (sizeof(OTHER_LEVEL))] << ", " << log_msg);
+                               OTHER_LEVEL[level % (sizeof(OTHER_LEVEL) / sizeof(OTHER_LEVEL[0]))] << ", " << log_msg);
     }
 }
 

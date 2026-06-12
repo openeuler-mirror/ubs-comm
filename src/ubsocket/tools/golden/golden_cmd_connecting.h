@@ -64,7 +64,7 @@ struct UrmaExchange {
 
     friend std::ostream &operator<<(std::ostream &os, const UrmaExchange &ex)
     {
-        os << "jetty id: " << ex.raw_jetty_id.id << ", token: " << ex.token;
+        os << "jetty id: " << ex.raw_jetty_id.id;
         return os;
     }
 };

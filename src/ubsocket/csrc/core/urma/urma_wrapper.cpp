@@ -224,7 +224,14 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
 
     uint32_t eid_count = 0;
     auto eid_list = UrmaApi::urma_get_eid_list(raw_dev, &eid_count);
+    if (eid_list == nullptr || eid_count == 0) {
+        UrmaApi::urma_delete_context(raw_context);
+        UBS_VLOG_ERR("Eid list is null or eid count is %d", eid_count);
+        return UBS_UB_DEV_ERROR;
+    }
+
     if (eidIndex >= eid_count) {
+        UrmaApi::urma_free_eid_list(eid_list);
         UrmaApi::urma_delete_context(raw_context);
         UBS_VLOG_ERR("Eid index %d is out of range, eid count is %d", eidIndex, eid_count);
         return UBS_UB_DEV_ERROR;
@@ -724,8 +731,7 @@ std::ostream &operator<<(std::ostream &os, const urma_jfr_cfg_t &o)
     /* level 0 members */
     os << "jfr cfg [id: " << o.id << ", depth: " << o.depth << ", trans mode: " << o.trans_mode
        << ", max sge: " << (uint32_t)o.max_sge << ", min rnr timer: " << (uint32_t)o.min_rnr_timer
-       << ", token: " << o.token_value.token << ", user ctx: " << o.user_ctx << std::hex << ", jfc: " << o.jfc
-       << std::dec;
+       << ", user ctx: " << o.user_ctx << std::hex << ", jfc: " << o.jfc << std::dec;
 
     /* urma_jfr_flag_t flag */
     os << ", flag [token policy: " << o.flag.bs.token_policy << ", tag matching: " << o.flag.bs.tag_matching

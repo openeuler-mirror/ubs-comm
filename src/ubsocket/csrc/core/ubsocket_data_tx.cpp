@@ -78,6 +78,13 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     } while (cut_total_len != 0 && ++batch < post_batch_max);
 
     uintptr_t txBuf = tx_ops_->AllocTxBuf(0, buf_cnt);
+    if (txBuf == 0) {
+        PROF_END(CORE_WRITE_POST_SEND, false);
+        PROF_END(CORE_WRITE, false);
+        PROF_END(CORE_WRITE_BUILD_IOV, false);
+        return -1;
+    }
+
     PROF_END(CORE_WRITE_BUILD_IOV, true);
 
     uint32_t tx_total_len;
