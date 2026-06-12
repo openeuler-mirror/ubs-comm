@@ -373,6 +373,11 @@ bool Publisher::AddSubscription(SubscriptionInfoPtr &info)
     }
     NN_LOG_DEBUG("begin to add subscribe info id :" << info->mId << " name:" << info->mName);
 
+    if (info->mEp == nullptr) {
+        NN_LOG_ERROR("Add subscription failed as mEp is null");
+        return false;
+    }
+
     RWLockGuard(mRwLock).LockWrite();
     info->mEp->UpCtx(reinterpret_cast<uint64_t>(info.Get()));
 

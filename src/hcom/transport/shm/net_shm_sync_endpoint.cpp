@@ -72,6 +72,11 @@ NResult NetSyncEndpointShm::PostSend(uint16_t opCode, const UBSHcomNetTransReque
         return result;
     }
 
+    if (NN_UNLIKELY(mShmCh == nullptr || mShmEp == nullptr)) {
+        NN_LOG_ERROR("Shm invalid endpoint, mShmCh or mShmEp is null");
+        return NN_ERROR;
+    }
+
     /* get free buffer from channel */
     uintptr_t address = 0;
     uint64_t offset = 0;
@@ -232,6 +237,11 @@ NResult NetSyncEndpointShm::PostSendRaw(const UBSHcomNetTransRequest &request, u
     if (NN_UNLIKELY((result = PostSendValidationMaxSize(request, mSegSize, mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("Shm failed to sync post send raw as validate size fail");
         return result;
+    }
+
+    if (NN_UNLIKELY(mShmCh == nullptr || mShmEp == nullptr)) {
+        NN_LOG_ERROR("Shm invalid endpoint, mShmCh or mShmEp is null");
+        return NN_ERROR;
     }
 
     /* get free buffer from channel */

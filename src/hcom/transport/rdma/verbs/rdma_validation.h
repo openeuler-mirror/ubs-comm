@@ -187,6 +187,10 @@ static __always_inline NResult PostSendSglValidation(UBSHcomNetAtomicState<UBSHc
                                                      const UBSHcomNetTransSglRequest &request, uint32_t allowedSize,
                                                      size_t &totalSize, bool mIsNeedEncrypt, AesGcm128 mAes)
 {
+    if (NN_UNLIKELY(driver == nullptr)) {
+        NN_LOG_ERROR("Driver is null in PostSendSglValidation");
+        return NN_ERROR;
+    }
     NResult ret = NN_OK;
     if (NN_UNLIKELY(ret = StateValidate(state, id, driver)) != NN_OK) {
         return ret;
@@ -214,6 +218,10 @@ static __always_inline NResult EncryptRawSgl(UBSHcomNetTransRequest &tlsReq, uin
                                              AesGcm128 mAes, NetDriverRDMAWithOob *driver,
                                              const UBSHcomNetTransSglRequest &request, NetSecrets &mSecrets)
 {
+    if (NN_UNLIKELY(driver == nullptr)) {
+        NN_LOG_ERROR("Driver is null in EncryptRawSgl");
+        return NN_ERROR;
+    }
     uintptr_t tmpBuffer = 0;
     if (NN_UNLIKELY(!driver->GetDriverSendMr()->GetFreeBuffer(tmpBuffer))) {
         NN_LOG_ERROR("Failed to post message as failed to get tmp mr buffer from pool from driver " << driver->Name());

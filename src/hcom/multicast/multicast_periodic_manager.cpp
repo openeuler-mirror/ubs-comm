@@ -98,6 +98,11 @@ void MultiCastPeriodicManager::ProcessCleanUp(uint16_t tId)
         std::lock_guard<std::mutex> guard(mQueue[tId].lock[i]);
         while (!currentQueue->empty()) {
             auto it = currentQueue->begin();
+            if (NN_UNLIKELY(*it == nullptr)) {
+                NN_LOG_ERROR("Process clean up iterator is null");
+                currentQueue->pop_front();
+                continue;
+            }
             NN_LOG_TRACE_INFO("Process clean up seq no " << (*it)->mSeqNo << " time " << (*it)->mTimeout
                                                          << ", current time " << NetMonotonic::TimeSec());
             if ((*it)->EraseSeqNoWithRet()) {
@@ -123,6 +128,11 @@ void MultiCastPeriodicManager::FillHandleQueue(uint16_t tId)
         std::lock_guard<std::mutex> guard(mQueue[tId].lock[i]);
         auto it = currentQueue->begin();
         while (it != currentQueue->end()) {
+            if (NN_UNLIKELY(*it == nullptr)) {
+                NN_LOG_ERROR("Fill handle queue iterator is null");
+                it = currentQueue->erase(it);
+                continue;
+            }
             NN_LOG_TRACE_INFO("Process clean up seq no is: " << (*it)->SeqNo() << " time is: " << (*it)->mTimeout
                                                              << ", current time is :" << NetMonotonic::TimeSec());
             if ((*it)->IsFinished() || (*it)->IsTimeOut()) {

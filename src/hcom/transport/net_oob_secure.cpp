@@ -32,6 +32,9 @@ NResult OOBSecureProcess::SecProcessCompareEpNum(uint32_t localIpAddr, uint32_t 
     uint16_t port;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = static_cast<uint32_t>(oobServer->GetListenIp(ip));
         result |= static_cast<uint32_t>(oobServer->GetListenPort(port));
         if (result != NN_OK) {
@@ -54,6 +57,9 @@ NResult OOBSecureProcess::SecProcessCompareEpNum(const std::string &localUdsName
     int result;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = oobServer->GetUdsName(udsName);
         if (result != NN_OK) {
             continue;
@@ -86,6 +92,9 @@ void OOBSecureProcess::SecProcessAddEpNum(uint32_t localIpAddr, uint32_t listenP
     uint16_t port;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = static_cast<uint32_t>(oobServer->GetListenIp(ip));
         result |= static_cast<uint32_t>(oobServer->GetListenPort(port));
         if (result != NN_OK) {
@@ -107,6 +116,9 @@ void OOBSecureProcess::SecProcessAddEpNum(const std::string &localUdsName, const
     int result;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = oobServer->GetUdsName(udsName);
         if (result != NN_OK) {
             continue;
@@ -138,6 +150,9 @@ void OOBSecureProcess::SecProcessDelEpNum(uint32_t localIpAddr, uint32_t listenP
     uint32_t result;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = static_cast<uint32_t>(oobServer->GetListenIp(ip));
         result |= static_cast<uint32_t>(oobServer->GetListenPort(port));
         if (result != NN_OK) {

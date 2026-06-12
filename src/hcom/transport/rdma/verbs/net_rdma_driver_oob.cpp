@@ -1136,6 +1136,7 @@ NResult NetDriverRDMAWithOob::Connect(const OOBTCPClientPtr &client, const std::
 
     /* create rdma ep */
     RDMAAsyncEndPoint *rep = nullptr;
+    NN_ASSERT_LOG_RETURN(mClientLb != nullptr, NN_ERROR)
     uint16_t workerIndex = 0;
     if (NN_UNLIKELY(!mClientLb->ChooseWorker(clientGrpNo, std::to_string(id), workerIndex)) ||
         workerIndex >= mWorkers.size()) {
@@ -1603,6 +1604,10 @@ void NetDriverRDMAWithOob::ProcessErrorOneSideDone(RDMAOpContextInfo *ctx)
 void NetDriverRDMAWithOob::ProcessEpError(uintptr_t ep)
 {
     auto epPtr = reinterpret_cast<NetAsyncEndpoint *>(ep);
+    if (NN_UNLIKELY(epPtr == nullptr)) {
+        NN_LOG_ERROR("Ep is null or zero in ProcessEpError of Driver " << mName);
+        return;
+    }
 
     bool process = false;
     if (NN_UNLIKELY(!epPtr->EPBrokenProcessed().compare_exchange_strong(process, true))) {
@@ -1621,6 +1626,10 @@ void NetDriverRDMAWithOob::ProcessEpError(uintptr_t ep)
     RDMAOpContextInfo *nextOpCtx = nullptr;
     qp->GetCtxPosted(remainingOpCtx);
     while (remainingOpCtx != nullptr) {
+        if (NN_UNLIKELY(epPtr == nullptr)) {
+            NN_LOG_ERROR("epPtr is nullptr in ProcessErrorContext loop");
+            break;
+        }
         ProcessErrorContext(nextOpCtx, remainingOpCtx, epPtr);
     }
 
@@ -1629,6 +1638,10 @@ void NetDriverRDMAWithOob::ProcessEpError(uintptr_t ep)
         NN_LOG_INFO("Process remain op ctx, qp " << qp->Name());
         qp->GetCtxPosted(remainingOpCtx);
         while (remainingOpCtx != nullptr) {
+            if (NN_UNLIKELY(epPtr == nullptr)) {
+                NN_LOG_ERROR("epPtr is nullptr in ProcessErrorContext loop");
+                break;
+            }
             ProcessErrorContext(nextOpCtx, remainingOpCtx, epPtr);
         }
     }
@@ -1749,6 +1762,11 @@ NResult NetDriverRDMAWithOob::NewReceivedRawRequest(RDMAOpContextInfo *ctx, UBSH
 NResult NetDriverRDMAWithOob::NewReceivedRequest(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
                                                  UBSHcomNetMessage &msg, RDMAWorker *worker) const
 {
+    if (NN_UNLIKELY(ctx->mrMemAddr == nullptr)) {
+        NN_LOG_ERROR("mrMemAddr is null in NewReceivedRequest of Driver " << mName);
+        return NN_ERROR;
+    }
+
     bool messageReady = true;
     auto *tmpHeader = reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr);
     auto qpUpContext = ctx->qp->UpContext();

@@ -477,6 +477,10 @@ NResult MemoryRegion::MemoryAreaRemove(uint64_t *startAddress, uint64_t length, 
  */
 NResult MemoryRegion::MemoryAreaInsert(uint64_t startAddress, uint64_t length)
 {
+    if (NN_UNLIKELY(startAddress == 0)) {
+        NN_LOG_ERROR("startAddress is zero in MemoryAreaInsert");
+        return NN_ERROR;
+    }
     auto root = &mRoot;
     auto newMa = reinterpret_cast<MemoryAreaRawPtr>(startAddress);
     uint32_t index = 0;

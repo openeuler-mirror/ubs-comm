@@ -1788,6 +1788,10 @@ void NetDriverUBWithOob::ProcessQPError(UBOpContextInfo *ctx)
 
 void NetDriverUBWithOob::ProcessTwoSideHeartbeat(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx)
 {
+    if (NN_UNLIKELY(ctx == nullptr || ctx->ubJetty == nullptr || ctx->ubJetty->GetUpContext() == 0)) {
+        NN_LOG_ERROR("Ctx or QP or ep is null in ProcessTwoSideHeartbeat of Driver " << mName);
+        return;
+    }
     auto tmpEp = reinterpret_cast<NetUBAsyncEndpoint *>(ctx->ubJetty->GetUpContext());
     if (netCtx.mHeader.opCode == HB_SEND_OP) {
         char data;
@@ -1871,6 +1875,11 @@ NResult NetDriverUBWithOob::NewRequestOnEncryption(UBOpContextInfo *ctx, UBSHcom
 
 int NetDriverUBWithOob::NewRequest(UBOpContextInfo *ctx)
 {
+    if (NN_UNLIKELY(ctx == nullptr)) {
+        NN_LOG_ERROR("Ctx is null of NewRequest in Driver " << mName);
+        return NN_ERROR;
+    }
+
     if (NN_UNLIKELY(!ValidateRequestContext(ctx))) {
         return NN_ERROR;
     }
@@ -2050,6 +2059,11 @@ NResult NetDriverUBWithOob::NewReceivedRawRequest(UBOpContextInfo *ctx, UBSHcomN
 NResult NetDriverUBWithOob::NewReceivedRequest(UBOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
                                                UBSHcomNetMessage &msg, UBWorker *worker) const
 {
+    if (NN_UNLIKELY(ctx == nullptr)) {
+        NN_LOG_ERROR("Ctx is null of NewReceivedRequest in Driver " << mName);
+        return NN_ERROR;
+    }
+
     bool messageReady = true;
     auto *tmpHeader = reinterpret_cast<UBSHcomNetTransHeader *>(ctx->mrMemAddr);
     auto qpUpContext = ctx->ubJetty->GetUpContext();
