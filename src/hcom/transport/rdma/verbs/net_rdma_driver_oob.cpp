@@ -1762,8 +1762,8 @@ NResult NetDriverRDMAWithOob::NewReceivedRawRequest(RDMAOpContextInfo *ctx, UBSH
 NResult NetDriverRDMAWithOob::NewReceivedRequest(RDMAOpContextInfo *ctx, UBSHcomNetRequestContext &netCtx,
                                                  UBSHcomNetMessage &msg, RDMAWorker *worker) const
 {
-    if (NN_UNLIKELY(ctx->mrMemAddr == nullptr)) {
-        NN_LOG_ERROR("mrMemAddr is null in NewReceivedRequest of Driver " << mName);
+    if (NN_UNLIKELY(ctx->mrMemAddr == 0)) {
+        NN_LOG_ERROR("mrMemAddr is 0 in NewReceivedRequest of Driver " << mName);
         return NN_ERROR;
     }
 
