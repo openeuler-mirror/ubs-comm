@@ -11,6 +11,7 @@
 #include "ubsocket_socket.h"
 #include "ubsocket_data_rx.h"
 #include "ubsocket_data_tx.h"
+#include "ubsocket_tx_cqe_poller.h"
 #include "umq/umq_data_rx_ops.h"
 #include "umq/umq_data_tx_ops.h"
 #include "umq/umq_socket.h"
@@ -56,6 +57,12 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
 
         /* step6: start epoll runner */
         result = EpollRunnerFactory::GetInstance(SocketType::SOCK_TYPE_UMQ).Start();
+        if (result != UBS_OK) {
+            return result;
+        }
+
+        // 启动后台 Tx CQE poller
+        result = TxCqePoller::Instance().Start();
         if (result != UBS_OK) {
             return result;
         }

@@ -212,9 +212,15 @@ int UmqTxOps::PollTx(const SocketPtr &sock)
         PROF_START(CORE_WRITE_POLL_TX_SECOND);
         PollUmqTx(sock, false);
         if (tx_queue_avail_num_.load(std::memory_order_acq_rel) == 0) {
-            return DpRearmTxInterrupt();
+            // 暂时禁用，否则会关闭 solicited mode.
+            // return DpRearmTxInterrupt();
         }
         PROF_END(CORE_WRITE_POLL_TX_SECOND, true);
+    } else {
+        // Tx CQE poller 大概率会在这里运行
+        PROF_START(CORE_WRITE_POLL_TX_THIRD);
+        PollUmqTxOnce(sock);
+        PROF_END(CORE_WRITE_POLL_TX_THIRD, true);
     }
 
     return 0;
@@ -278,6 +284,20 @@ int UmqTxOps::PollUmqTx(const SocketPtr &sock, bool poll_to_empty)
     } while ((poll_total_cnt < TX_RETRIEVE_THRESHOLD || (poll_to_empty && poll_cnt > 0)) &&
              poll_zero_cnt < POLL_TX_RETRY_MAX_CNT && err_code == ops_error_code::OK);
     tx_queue_avail_num_.fetch_add(poll_total_cnt, std::memory_order_acq_rel);
+    return 0;
+}
+
+int UmqTxOps::PollUmqTxOnce(const SocketPtr &sock)
+{
+    PROF_START(CORE_WRITE_DO_TX_POLL);
+    ops_error_code err_code = OK;
+    int poll_cnt = DoUmqTxPoll(sock, err_code);
+    PROF_END(CORE_WRITE_DO_TX_POLL, poll_cnt >= 0);
+
+    if (poll_cnt > 0) {
+        tx_queue_avail_num_.fetch_add(poll_cnt, std::memory_order_acq_rel);
+        successful_post_count_.fetch_sub(poll_cnt, std::memory_order_acq_rel);
+    }
     return 0;
 }
 

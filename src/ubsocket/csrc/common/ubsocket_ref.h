@@ -196,6 +196,18 @@ Ref<Des> inline RefConvert(const Ref<Src> &src)
 {
     return Ref<Des>(dynamic_cast<Des *>(src.Get()));
 }
+
+template <typename To, typename From>
+Ref<To> RefStaticCast(const Ref<From> &from)
+{
+    return Ref<To>(static_cast<To *>(from.Get()));
+}
+
+template <typename To, typename From>
+Ref<To> RefDynamicCast(const Ref<From> &from)
+{
+    return Ref<To>(dynamic_cast<To *>(from.Get()));
+}
 } // namespace ubs
 } // namespace ock
 
