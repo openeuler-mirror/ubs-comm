@@ -63,6 +63,7 @@ private:
                            uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num);
     void *PtrFloorToBoundary(void *ptr);
     int PollUmqTx(const SocketPtr &sock, bool poll_to_empty);
+    int PollUmqTxOnce(const SocketPtr &sock);
     int DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code);
     void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt);
     bool HandleProbePacket(umq_buf_t *qbuf);

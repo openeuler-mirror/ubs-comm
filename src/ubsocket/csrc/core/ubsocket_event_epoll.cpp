@@ -13,6 +13,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
+#include "ubsocket_tx_cqe_poller.h"
 #include "umq/umq_epoll_runner_ops.h"
 
 namespace ock {
@@ -475,7 +476,6 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     // 4. add proto ex exent
-    // if ((event->events & EPOLLOUT) == EPOLLOUT) {
     int ret = AddProtoTxEvent(sock, event);
     if (ret < 0) {
         DelRawSocketEvent(fd);
@@ -483,7 +483,10 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
                      strerror(errno));
         return -1;
     }
-    // }
+
+    // 添加至后台 Tx CQE poller
+    TxCqePoller::Instance().AddSocket(sock);
+
     return 0;
 }
 
@@ -643,6 +646,8 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
     }
 
     DelProtoTxEvent(sock);
+
+    TxCqePoller::Instance().DelSocket(sock);
     return 0;
 }
 
