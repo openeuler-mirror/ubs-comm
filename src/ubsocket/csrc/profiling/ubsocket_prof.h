@@ -42,6 +42,7 @@ enum ProfilingTPId : uint32_t
     CORE_WRITE_REARM,
     CORE_WRITE_POLL_TX_FIRST,
     CORE_WRITE_POLL_TX_SECOND,
+    CORE_WRITE_POLL_TX_THIRD,
     // 当前为了快速分析CTP性能，brpc复用ubsocket打点和cli查询能力, 点位先放一起。后续有需要考虑解耦开
     BRPC_CLIENT_CALL,
     BRPC_SERIALIZE,
