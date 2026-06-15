@@ -179,7 +179,6 @@ NResult AesGcm128::DecryptInner(const unsigned char *key, const unsigned char *c
     }
 
     if (SetDecryptInfo(ctx, key, cipher) != NN_OK) {
-        HcomSsl::EvpCipherCtxFree(ctx);
         return NN_DECRYPT_FAILED;
     }
 

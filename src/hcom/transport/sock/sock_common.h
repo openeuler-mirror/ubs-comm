@@ -129,6 +129,10 @@ struct SockSglContextInfo {
 
     inline void Clone(SockTransHeader newHeader, UBSHcomNetTransSgeIov *newIov, uint16_t newIovCnt)
     {
+        if (newIovCnt > NET_SGE_MAX_IOV) {
+            NN_LOG_ERROR("Failed to clone SockSglContextInfo as new iov count " << newIovCnt);
+            return;
+        }
         sendHeader = newHeader;
         iovCount = newIovCnt;
         for (uint16_t i = 0; i < iovCount; i++) {

@@ -180,7 +180,15 @@ public:
      */
     static inline uint64_t NN_RoundUpTo(uint64_t value, uint64_t align)
     {
-        return ((value + align - 1) / align) * align;
+        if (align == 0) {
+            return value;
+        }
+        uint64_t remainder = value % align;
+        if (remainder == 0) {
+            return value;
+        }
+
+        return value + (align - remainder);
     }
 
     /*
@@ -926,7 +934,7 @@ public:
             if (NN_UNLIKELY(mLockWhenOperates)) {
                 pthread_rwlock_unlock(&mRwlock);
             }
-            if (address >= range.first && address + size <= range.second) {
+            if (address >= range.first && address < range.second && size <= range.second - address) {
                 return NN_OK;
             }
             NN_LOG_ERROR("Address does not match lKey, size:" << size);
@@ -951,6 +959,11 @@ public:
         pthread_rwlock_wrlock(&mRwlock);
         if (NN_UNLIKELY(mRangeCache.count(key) > 0)) {
             pthread_rwlock_unlock(&mRwlock);
+            return NN_ERROR;
+        }
+        if (address + size <= address) {
+            pthread_rwlock_unlock(&mRwlock);
+            NN_LOG_ERROR("Address overflow, address:" << address << ", size:" << size);
             return NN_ERROR;
         }
         mRangeCache[key] = {address, address + size};

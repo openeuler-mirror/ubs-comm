@@ -148,6 +148,7 @@ UResult UBPublicJetty::CreateJettyMr()
     mJettyMr->IncreaseRef();
     if ((result = mJettyMr->Initialize()) != 0) {
         NN_LOG_ERROR("Failed to initialize mr for send/receive in public jetty " << mName << ", result " << result);
+        mJettyMr->DecreaseRef();
         return result;
     }
 
@@ -222,6 +223,8 @@ UResult UBPublicJetty::StartPublicJetty()
         return UB_MEMORY_ALLOCATE_FAILED;
     }
     urma_target_seg_t *localSeg = reinterpret_cast<urma_target_seg_t *>(mJettyMr->GetMemorySeg());
+    std::vector<uintptr_t> ctxBufs;
+    ctxBufs.reserve(prePostCount);
     uint32_t i = 0;
     for (; i < prePostCount; i++) {
         uintptr_t buf = 0;
@@ -230,6 +233,7 @@ UResult UBPublicJetty::StartPublicJetty()
             mJettyMr->ReturnBuffer(mrBufAddress);
             return UB_MEMORY_ALLOCATE_FAILED;
         }
+        ctxBufs.push_back(buf);
         auto *ctx = reinterpret_cast<UBOpContextInfo *>(buf);
         bzero(ctx, sizeof(UBOpContextInfo));
         ctx->mrMemAddr = mrSegs[i];
@@ -242,6 +246,10 @@ UResult UBPublicJetty::StartPublicJetty()
             NN_LOG_ERROR("Failed to postrecv in start public jetty");
             mJettyMr->ReturnBuffer(ctx->mrMemAddr);
             mCtxInfoPool->ReturnBuffer(reinterpret_cast<uintptr_t>(ctx));
+            for (uint32_t j = i; j > 0; j--) {
+                mJettyMr->ReturnBuffer(mrSegs[j - 1]);
+                mCtxInfoPool->ReturnBuffer(ctxBufs[j - 1]);
+            }
             return UB_ERROR;
         }
     }
@@ -380,6 +388,7 @@ UResult UBPublicJetty::SendByPublicJetty(const void *buf, uint32_t size)
     urma_target_seg_t *localSeg = GetMemorySeg();
     if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress), PUBLIC_JETTY_SEG_SIZE, buf, size) != 0)) {
         NN_LOG_ERROR("Failed to copy oob port range");
+        mJettyMr->ReturnBuffer(mrBufAddress);
         return UB_PARAM_INVALID;
     }
 
@@ -392,6 +401,7 @@ UResult UBPublicJetty::SendByPublicJetty(const void *buf, uint32_t size)
     auto *ctx = reinterpret_cast<UBOpContextInfo *>(ctxBuffer);
     if (NN_UNLIKELY(ctx == nullptr)) {
         NN_LOG_ERROR("Failed to get ctx in public jetty");
+        mJettyMr->ReturnBuffer(mrBufAddress);
         return UB_QP_CTX_FULL;
     }
     ctx->mrMemAddr = mrBufAddress;

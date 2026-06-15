@@ -152,6 +152,10 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&c
     ret = HcomUrma::UserCtl(ctx, &in, &out);
     if (ret != 0) {
         NN_LOG_ERROR("Failed to enable segment cache for bonding device, ret " << ret);
+        if (ctx != nullptr) {
+            HcomUrma::DeleteContext(ctx);
+            ctx = nullptr;
+        }
         return UB_DEVICE_OPEN_FAILED;
     }
 

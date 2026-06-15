@@ -281,9 +281,9 @@ public:
 
     HResult RemoveUserFds(int fds[], uint32_t len, int32_t timeoutSec)
     {
-        uint32_t timeoutUs = QUEUE_TIMEOUT_US;
+        uint64_t timeoutUs = QUEUE_TIMEOUT_US;
         if (timeoutSec > 0) {
-            timeoutUs = static_cast<uint32_t>(timeoutSec) * NN_NO1000000;
+            timeoutUs = static_cast<uint64_t>(timeoutSec) * NN_NO1000000;
         }
         bool flag = true;
         uint32_t index = 0;

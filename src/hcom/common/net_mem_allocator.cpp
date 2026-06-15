@@ -105,6 +105,10 @@ void MemoryRegion::MemoryAreaInsertPre(NetRbNode<MemoryArea> *newMa, NetRbNode<M
             CAST_TO_LIST_NODE(neighMa)->RemoveSelf();
             MEM_ALLOCATOR_ATOMIC_DEC(&freeCnt[neighMa->index]);
             index = neighMa->length >> MEM_ALLOCATOR_BASE_SHIFT;
+            if (index == 0) {
+                NN_LOG_ERROR("Memory block length is invalid, length " << neighMa->length);
+                return;
+            }
             index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index - 1);
             neighMa->index = index;
             CAST_TO_LIST(&freeHead[index])->Append(CAST_TO_LIST_NODE(neighMa));
@@ -529,6 +533,10 @@ NResult MemoryRegion::MemoryAreaInsert(uint64_t startAddress, uint64_t length)
      * freeHead, which speed up taking operation
      */
     index = newMa->length >> MEM_ALLOCATOR_BASE_SHIFT;
+    if (index == 0) {
+        NN_LOG_ERROR("Memory block length is invalid, length " << newMa->length);
+        return NN_ERROR;
+    }
     index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index - 1);
     newMa->index = index;
     freeHead[index].Append(CAST_TO_LIST_NODE(newMa));

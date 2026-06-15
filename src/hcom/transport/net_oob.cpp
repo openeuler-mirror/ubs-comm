@@ -518,6 +518,7 @@ NResult OOBTCPServer::StartForUds()
     // start oob connection cb thread
     mEs = NetExecutorService::Create(mNewConnCbThreadNum, mNewConnCbQueueCap);
     if (NN_UNLIKELY(mEs == nullptr)) {
+        NetFunc::NN_SafeCloseFd(mListenFD);
         return NN_ERROR;
     }
     mEs->SetThreadName("OOBUdsConnHdl");
@@ -579,6 +580,7 @@ void OOBTCPServer::DealConnectInThread(int fd, const sockaddr_storage &peerAddr,
         // if accept success but execute task failed, should notify client connect fail and client will retry
         if (::send(fd, &resp, sizeof(ConnectResp), 0) <= 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            NetFunc::NN_SafeCloseFd(fd);
             NN_LOG_ERROR("Failed to send connect resp to peer on oob @ "
                          << ipStr << ":" << peerPort << ", errno:" << errno
                          << " error:" << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));

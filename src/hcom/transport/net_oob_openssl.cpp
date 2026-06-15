@@ -224,6 +224,7 @@ NResult OOBOpenSSLConnection::InitSSL(bool isServer)
     OOB_SSL_LAYER_CHECK_RET(mSslCtx == nullptr, "SslCtxNew() failed");
 
     HcomSsl::SslCtxCtrl(mSslCtx, HcomSsl::SSL_CTRL_SET_MAX_PROTO_VERSION, GetTLSVersion(), nullptr);
+    HcomSsl::SslCtxCtrl(mSslCtx, HcomSsl::SSL_CTRL_SET_MIN_PROTO_VERSION, GetTLSVersion(), nullptr);
     if (GetTLSVersion() == TLS_1_2) {
         ret = HcomSsl::SslCtxSetOption(mSslCtx, HcomSsl::SSL_NO_TLS1_2_RENEGOTIATION);
         OOB_SSL_LAYER_CHECK_RET(ret <= 0, "Failed to set renegotiation");
@@ -329,6 +330,10 @@ NResult OOBOpenSSLConnection::CommLoad(bool isServer)
 
     auto ret = HcomSsl::SslSetFd(mSsl, mFD);
     OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0, "Failed to set fd to TLS, result " << ret);
+    if (ret <= 0 && mSsl != nullptr) {
+        HcomSsl::SslFree(mSsl);
+        mSsl = nullptr;
+    }
 
     /* Server will accept and Client will connect */
     ret = isServer ? HcomSsl::SslAccept(mSsl) : HcomSsl::SslConnect(mSsl);
@@ -337,6 +342,10 @@ NResult OOBOpenSSLConnection::CommLoad(bool isServer)
                                           "TLS Failed to accept new TLS connection, result " << ret << " failed");
     } else {
         OOB_SSL_LAYER_CHECK_RET_ERASE_RET(ret <= 0, "TLS Failed to connect to TLS server, result " << ret << " failed");
+    }
+    if (ret <= 0 && mSsl != nullptr) {
+        HcomSsl::SslFree(mSsl);
+        mSsl = nullptr;
     }
 
     if (erase != nullptr) {
