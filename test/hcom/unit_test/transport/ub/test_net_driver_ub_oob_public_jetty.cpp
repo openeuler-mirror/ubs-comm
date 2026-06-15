@@ -150,7 +150,7 @@ TEST_F(TestNetDriverUBPublicJetty, CreatePublicJetty)
 {
     int err = 1;
     UBPublicJetty *publicJetty = nullptr;
-    MOCKER_CPP(&UBJfc::Initialize).stubs().will(returnValue(err)).then(returnValue(0));
+    MOCKER_CPP(&UBJfc::InitializeForPublicJetty).stubs().will(returnValue(err)).then(returnValue(0));
     MOCKER_CPP(&UBPublicJetty::InitializePublicJetty).stubs().will(returnValue(err)).then(returnValue(0));
 
     EXPECT_EQ(driver->CreatePublicJetty(publicJetty, 0), err);

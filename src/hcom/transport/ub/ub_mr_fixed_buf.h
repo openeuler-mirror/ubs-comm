@@ -41,6 +41,7 @@ public:
     }
 
     UResult Initialize() override;
+    UResult InitializeForPublicJetty();
 
     inline bool GetFreeBuffer(uintptr_t &item)
     {

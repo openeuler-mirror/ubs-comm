@@ -58,6 +58,7 @@ public:
     }
 
     UResult Initialize() override;
+    UResult InitializeForPublicJetty();
     UResult InitializeForOneSide();
     void UnInitialize() override;
     inline UBSHcomNetDriverProtocol GetProtocol()

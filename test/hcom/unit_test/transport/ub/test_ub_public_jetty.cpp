@@ -86,7 +86,7 @@ TEST_F(TestUBPublicJetty, CreateUrmaPublicJetty)
     EXPECT_EQ(jetty->CreateUrmaPublicJetty(0), UB_PARAM_INVALID);
 
     jfc->mUrmaJfc = &mUrmaJfc;
-    ctx->mUrmaContext = &urmaContext;
+    ctx->mPublicUrmaContext = &urmaContext;
     urma_jfr_t *outJfr = nullptr;
     urma_jfr_t outJfr2{};
     MOCKER_CPP(HcomUrma::CreateJfr).stubs().will(returnValue(outJfr)).then(returnValue(&outJfr2));
@@ -100,7 +100,7 @@ TEST_F(TestUBPublicJetty, CreateUrmaPublicJetty)
     EXPECT_EQ(jetty->CreateUrmaPublicJetty(0), UB_OK);
 
     jfc->mUrmaJfc = nullptr;
-    ctx->mUrmaContext = nullptr;
+    ctx->mPublicUrmaContext = nullptr;
     jetty->mUrmaJetty = nullptr;
 }
 

@@ -44,6 +44,23 @@ UResult UBMemoryRegionFixedBuffer::Initialize()
     return UB_OK;
 }
 
+UResult UBMemoryRegionFixedBuffer::InitializeForPublicJetty()
+{
+    UResult result = UB_OK;
+    if ((result = UBMemoryRegion::InitializeForPublicJetty()) != UB_OK) {
+        return result;
+    }
+
+    // init un-allocated
+    uintptr_t address = mBuf;
+    for (uint32_t i = 0; i < mSegCount; i++) {
+        mLinkList.PushFront(address);
+        address += mSingleSegSize;
+    }
+
+    return UB_OK;
+}
+
 void UBMemoryRegionFixedBuffer::UnInitialize()
 {
     UBMemoryRegion::UnInitialize();

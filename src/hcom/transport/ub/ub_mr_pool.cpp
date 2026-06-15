@@ -121,6 +121,70 @@ UResult UBMemoryRegion::Initialize()
     return UB_OK;
 }
 
+UResult UBMemoryRegion::InitializeForPublicJetty()
+{
+    if (mMemSeg != nullptr) {
+        return UB_OK;
+    }
+
+    if (mUBContext == nullptr) {
+        NN_LOG_ERROR("Failed to initialize UBMemoryRegion as ctx is nullptr");
+        return UB_PARAM_INVALID;
+    }
+
+    urma_target_seg_t *tmpMR = nullptr;
+
+    urma_reg_seg_flag_t flag{};
+    flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE;
+
+    urma_seg_cfg_t seg_cfg{};
+    seg_cfg.len = mSize;
+    seg_cfg.flag = flag;
+
+    if (mExternalMemory) {
+        // the memory is allocated externally
+        // register mr directly
+        NN_LOG_WARN("externally allocated memory");
+        auto tmpBuf = reinterpret_cast<uint64_t>(mBuf);
+        seg_cfg.va = tmpBuf;
+        tmpMR = HcomUrma::RegisterSeg(mUBContext->mPublicUrmaContext, &seg_cfg);
+        if (tmpMR == nullptr) {
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            NN_LOG_ERROR("Failed to register ex mem for UBMemoryRegion "
+                         << mName << " error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            return UB_MR_REG_FAILED;
+        }
+    } else {
+        // allocate memory
+        if (gPageSize <= 0) {
+            NN_LOG_ERROR("Failed to get page size from system, page size: " << gPageSize);
+            return UB_PARAM_INVALID;
+        }
+        auto tmpBuf = memalign(gPageSize, mSize);
+        if (tmpBuf == nullptr) {
+            NN_LOG_ERROR("Failed to allocate memory for UBMemoryRegion " << mName << " with size " << mSize);
+            return UB_MEMORY_ALLOCATE_FAILED;
+        }
+
+        seg_cfg.va = reinterpret_cast<uint64_t>(tmpBuf);
+        // register memory region to card
+        tmpMR = HcomUrma::RegisterSeg(mUBContext->mPublicUrmaContext, &seg_cfg);
+        if (tmpMR == nullptr) {
+            free(tmpBuf);
+            tmpBuf = nullptr;
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            NN_LOG_ERROR("Failed to register memory for UBMemoryRegion "
+                         << mName << " error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            return UB_MR_REG_FAILED;
+        }
+        mBuf = reinterpret_cast<uintptr_t>(tmpBuf);
+    }
+
+    mMemSeg = tmpMR;
+
+    return UB_OK;
+}
+
 UResult UBMemoryRegion::InitializeForOneSide()
 {
     if (mMemSeg != nullptr) {

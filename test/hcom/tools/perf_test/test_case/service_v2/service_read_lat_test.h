@@ -23,12 +23,10 @@ private:
     inline int DoPostRead()
     {
         if (mCtx == nullptr) {
-            LOG_ERROR("mCtx is nullptr");
             sem_post(&mSem);
             return -1;
         }
         if (mCh == nullptr) {
-            LOG_ERROR("mCh is nullptr");
             sem_post(&mSem);
             return -1;
         }
@@ -41,13 +39,11 @@ private:
             ock::hcom::Callback *newCallback = ock::hcom::UBSHcomNewCallback(
                 [this](ock::hcom::UBSHcomServiceContext &context) { this->rcnt.fetch_add(1); }, std::placeholders::_1);
             if (newCallback == nullptr) {
-                LOG_ERROR("Create callback failed");
                 sem_post(&mSem);
                 return -1;
             }
             int res = mCh->Get(mReq, newCallback);
             if (res != 0) {
-                LOG_ERROR("Get failed at iteration " << mCtx->cnt);
                 sem_post(&mSem);
                 return -1;
             }
@@ -56,7 +52,6 @@ private:
                 ;
         }
         mCtx->tposted[mCtx->cnt] = ock::hcom::MONOTONIC_TIME_NS();
-        LOG_DEBUG("One Iteration Done!");
         sem_post(&mSem);
         return 0;
     }

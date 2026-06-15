@@ -178,7 +178,7 @@ NResult NetDriverUBWithOob::CreatePublicJetty(UBPublicJetty *&publicJetty, uint3
         NN_LOG_ERROR("Failed to create jfc in public jetty");
         return NN_ERROR;
     }
-    result = tmpJfc->Initialize();
+    result = tmpJfc->InitializeForPublicJetty();
     if (result != UB_OK) {
         NN_LOG_ERROR("Jfc initialize failed in create public jetty " << result);
         delete (tmpJfc);

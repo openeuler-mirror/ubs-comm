@@ -52,6 +52,7 @@ public:
     }
 
     UResult Initialize();
+    UResult InitializeForPublicJetty();
     UResult UnInitialize();
 
     UResult ProgressV(urma_cr_t *cr, uint32_t &countInOut);
@@ -62,6 +63,8 @@ public:
 private:
     UResult CreatePollingCq();
     UResult CreateEventCq();
+    UResult CreatePollingCqForPublicJetty();
+    UResult CreateEventCqForPublicJetty();
     std::string mName;
     uint32_t mJfcCount = JFC_COUNT;
     bool mCreateCompletionChannel = false;

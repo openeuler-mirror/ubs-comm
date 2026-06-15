@@ -1,6 +1,7 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
+#include "test_case/transport/transport_helper.h"
 #include "common/perf_test_logger.h"
 #include "securec.h"
 
