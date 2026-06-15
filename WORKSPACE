@@ -114,11 +114,7 @@ git_repository(
 	branch = "master",  # optional: pin to a specific branch
 	build_file = "//src/ubsocket/3rdparty/boundscheck:BUILD.bazel",
 )
-
-git_repository(
- 	     name = "urma",
- 	     build_file = "//src/hcom/umq/third_party/urma:BUILD.bazel",
- 	     commit = "c42ebe196794d286edad884c7753748c23da2703",
- 	     remote = "https://gitcode.com/openeuler/umdk.git",
- 	     strip_prefix ="src/urma",
+hcom_urma_repository( 
+    name = "urma", 
+    build_file = "//src/hcom/umq/third_party/urma:BUILD.bazel", 
 )
