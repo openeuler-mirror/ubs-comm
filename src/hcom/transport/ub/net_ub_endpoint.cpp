@@ -728,6 +728,10 @@ NResult NetUBAsyncEndpoint::PostRead(const UBSHcomNetTransSglRequest &request)
 NResult NetUBAsyncEndpoint::PostWrite(const UBSHcomNetTransRequest &request)
 {
     READ_WRITE_VALIDATION(mState, mId, mDriver, request);
+    if (NN_UNLIKELY(mJetty == nullptr)) {
+        NN_LOG_ERROR("mJetty is null in PostWrite, ep id " << mId);
+        return NN_ERROR;
+    }
     UBSHcomNetTransRequest reqInner = request;
     urma_target_seg_t *tseg = nullptr;
     if (mDriver->GetTseg(request.lKey, tseg) != NN_OK) {
@@ -1367,6 +1371,10 @@ NResult NetUBSyncEndpoint::PostWrite(const UBSHcomNetTransSglRequest &request)
 
 NResult NetUBSyncEndpoint::WaitCompletion(int32_t timeout)
 {
+    if (NN_UNLIKELY(mDriver == nullptr)) {
+        NN_LOG_ERROR("mDriver is null in WaitCompletion, ep id " << mId);
+        return NN_ERROR;
+    }
     NN_LOG_TRACE_INFO("wait completion mDemandPollingOpType " << mDemandPollingOpType);
     UBOpContextInfo *opCtx = nullptr;
     NResult result = NN_OK;
@@ -1512,7 +1520,9 @@ NResult NetUBSyncEndpoint::Receive(int32_t timeout, UBSHcomNetResponseContext &c
 
     if (NN_UNLIKELY(rePostResult != UB_OK)) {
         NN_LOG_ERROR("Failed to repost receive, result " << rePostResult);
-        mJetty->ReturnBuffer(opCtx->mrMemAddr);
+        if (mJetty != nullptr) {
+            mJetty->ReturnBuffer(opCtx->mrMemAddr);
+        }
         return rePostResult;
     }
 
@@ -1605,7 +1615,9 @@ UResult NetUBSyncEndpoint::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContext
 
     if (NN_UNLIKELY(rePostResult != NN_OK)) {
         NN_LOG_ERROR("NetUBSyncEndpoint Failed to repost receive raw, result " << rePostResult);
-        mJetty->ReturnBuffer(mrMemAddr);
+        if (mJetty != nullptr) {
+            mJetty->ReturnBuffer(mrMemAddr);
+        }
         return rePostResult;
     }
 

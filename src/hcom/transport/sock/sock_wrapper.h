@@ -757,6 +757,10 @@ public:
 
         if (mTcpBlockingMode) {
             auto sendCtx = ctx->sendCtx;
+            if (NN_UNLIKELY(sendCtx == nullptr)) {
+                NN_LOG_ERROR("PostSendSgl sendCtx is null");
+                return SS_PARAM_INVALID;
+            }
             struct iovec iov[NN_NO5];
             iov[NN_NO0].iov_base = reinterpret_cast<void *>(&sendCtx->sendHeader);
             iov[NN_NO0].iov_len = sizeof(SockTransHeader);

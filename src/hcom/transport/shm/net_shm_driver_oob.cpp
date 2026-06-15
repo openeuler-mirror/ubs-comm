@@ -1345,6 +1345,10 @@ NResult NetDriverShmWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
 
     std::string payload = std::string(payChars, peerExInfo.payLoadSize);
     /* call user handler new endpoint handler */
+    if (NN_UNLIKELY(mNewEndPointHandler == nullptr)) {
+        NN_LOG_ERROR("New endpoint handler is null in driver " << mName);
+        return NN_ERROR;
+    }
     if (NN_UNLIKELY((result = mNewEndPointHandler(peerIpPort, newEp, payload)) != NN_OK)) {
         NN_LOG_ERROR("Calling new endpoint handler failed in driver " << mName << ", result " << result);
         return result;

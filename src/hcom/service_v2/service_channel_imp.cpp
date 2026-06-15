@@ -632,6 +632,10 @@ SerResult HcomChannelImp::SyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
 auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
     -> std::tuple<SpliceMessageResultType, SerResult, std::string>
 {
+    if (NN_UNLIKELY(ctx.Message() == nullptr)) {
+        NN_LOG_ERROR("SpliceMessage: ctx.Message() is null");
+        return std::make_tuple(SpliceMessageResultType::ERROR, SER_SPLIT_INVALID_MSG, "");
+    }
     const uintptr_t msgAddr = reinterpret_cast<uintptr_t>(ctx.Message()->Data());
     const uint32_t msgSize = ctx.Message()->DataLen();
     if (msgSize < sizeof(UBSHcomFragmentHeader)) {
@@ -2323,6 +2327,11 @@ int32_t HcomChannelImp::Recv(const UBSHcomServiceContext &context, uintptr_t add
 
     // 在pgTable上查询address 是否被注册
     PgTable *pgTable = reinterpret_cast<PgTable *>(mPgtable);
+    if (NN_UNLIKELY(pgTable == nullptr)) {
+        NN_LOG_ERROR("Recv: mPgtable is null");
+        DestroyCallback(done);
+        return SER_ERROR;
+    }
     uintptr_t endAddr = address + size - NN_NO1;
     PgtRegion *pgtRegion = pgTable->Lookup(address);
     if (pgtRegion == nullptr || !(pgtRegion->start <= address && pgtRegion->end > endAddr)) {
@@ -2731,6 +2740,10 @@ bool HcomChannelImp::NeedProcessBroken()
 
 void HcomChannelImp::ProcessIoInBroken()
 {
+    if (NN_UNLIKELY(mTimerList == 0)) {
+        NN_LOG_ERROR("ProcessIoInBroken: mTimerList is null");
+        return;
+    }
     auto header = reinterpret_cast<SerTimerListHeader *>(mTimerList);
     std::vector<HcomServiceTimer *> remainCtx;
 

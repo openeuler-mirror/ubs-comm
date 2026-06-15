@@ -1610,6 +1610,10 @@ bool HcomServiceImp::RunRequestCallback(UBSHcomChannel *channel, const UBSHcomRe
 
 int32_t HcomServiceImp::ServiceRequestPosted(const UBSHcomRequestContext &ctx)
 {
+    if (NN_UNLIKELY(ctx.EndPoint() == nullptr)) {
+        NN_LOG_ERROR("Service request posted endpoint is null");
+        return SER_ERROR;
+    }
     Ep2ChanUpCtx epCtx(ctx.EndPoint()->UpCtx());
     auto ch = epCtx.Channel();
     if (NN_UNLIKELY(ch == nullptr)) {
@@ -1648,6 +1652,10 @@ int32_t HcomServiceImp::ServiceRequestPosted(const UBSHcomRequestContext &ctx)
 
 int32_t HcomServiceImp::ServiceOneSideDone(const UBSHcomRequestContext &ctx)
 {
+    if (NN_UNLIKELY(ctx.EndPoint() == nullptr)) {
+        NN_LOG_ERROR("Service one side done endpoint is null");
+        return SER_ERROR;
+    }
     Ep2ChanUpCtx epCtx(ctx.EndPoint()->UpCtx());
     auto ch = epCtx.Channel();
     if (NN_UNLIKELY(ch == nullptr)) {

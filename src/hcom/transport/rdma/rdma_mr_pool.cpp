@@ -124,7 +124,9 @@ void RDMAMemoryRegion::UnInitialize()
             free(reinterpret_cast<void *>(mBuf));
         }
     }
-    mRDMAContext->DecreaseRef();
+    if (mRDMAContext != nullptr) {
+        mRDMAContext->DecreaseRef();
+    }
 
     mMemReg = nullptr;
     mBuf = 0;

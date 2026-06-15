@@ -763,6 +763,10 @@ SResult SockWorker::GenerateWriteSglAckOpCtxInfo(SockOpContextInfo *&opCtxInfo, 
 
 SResult SockWorker::PostWriteSglAck(SockOpContextInfo &opCtx)
 {
+    if (NN_UNLIKELY(opCtx.sock == nullptr)) {
+        NN_LOG_ERROR("Failed to PostWriteSglAck with sock worker " << mName << " as sock is null");
+        return SS_PARAM_INVALID;
+    }
     NN_ASSERT_LOG_RETURN(opCtx.sock->UpContext() != 0, SS_ERROR)
     while (NN_UNLIKELY(!opCtx.sock->GetQueueSpace())) {
         (void)opCtx.sock->ProcessQueueReq();
@@ -834,6 +838,10 @@ SResult SockWorker::PostWriteSglAck(SockOpContextInfo &opCtx)
 SResult SockWorker::PostWriteSglAckHandle(SockOpContextInfo &opCtx)
 {
     NN_ASSERT_LOG_RETURN(opCtx.sock->UpContext() != 0, SS_ERROR)
+    if (NN_UNLIKELY(opCtx.header == nullptr)) {
+        NN_LOG_ERROR("Failed to PostWriteSglAckHandle with sock worker " << mName << " as header is null");
+        return SS_PARAM_INVALID;
+    }
 
     auto originalCtx = opCtx.sock->RemoveOpCtx(opCtx.header->seqNo);
     if (originalCtx == nullptr) {
