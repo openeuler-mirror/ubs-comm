@@ -312,6 +312,10 @@ inline SerResult HcomChannelImp::AcquireSelfPollEp(UBSHcomNetEndpoint *&ep, uint
         endTimeSecond = startTimeSecond + NN_NO8;
     }
 
+    if (mDriverNum == 0) {
+        NN_LOG_ERROR("Invalid driver num 0 in channel ");
+        return SER_INVALID_PARAM;
+    }
     index = __sync_fetch_and_add(&mEpChoosingIdx[dvrIdx], 1) % (mEpInfo->epSize / mDriverNum) +
             dvrIdx * (mEpInfo->epSize / mDriverNum);
     uint32_t count = 0;
@@ -2333,6 +2337,11 @@ int32_t HcomChannelImp::Recv(const UBSHcomServiceContext &context, uintptr_t add
         return SER_ERROR;
     }
     uintptr_t endAddr = address + size - NN_NO1;
+    if (endAddr < address) { //溢出判断
+        NN_LOG_ERROR(" Address overflow, address " << std::hex << address << ", size " << size);
+        DestroyCallback(done);
+        return SER_INVALID_PARAM;
+    }
     PgtRegion *pgtRegion = pgTable->Lookup(address);
     if (pgtRegion == nullptr || !(pgtRegion->start <= address && pgtRegion->end > endAddr)) {
         NN_LOG_ERROR(" Fail to lookUp address in pgTable or req address is out of range");

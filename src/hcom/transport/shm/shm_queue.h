@@ -434,10 +434,15 @@ private:
         } else {
             H_RMB();
         }
+        uint64_t endTimeSecond = NetMonotonic::TimeSec() + mMaxEnqueueTimeout;
 
         /* if others is enqueue/dequeue in progress, wait */
         while (H_UNLIKELY(mQueueMeta->cons.tail != oldTail)) {
             H_Pause();
+            if (NetMonotonic::TimeSec() > endTimeSecond) {
+                NN_LOG_ERROR("Update Cons tail failed, timeout.");
+                return;
+            }
         }
 
         mQueueMeta->cons.tail = newTail;

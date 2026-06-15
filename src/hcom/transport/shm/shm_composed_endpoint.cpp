@@ -344,6 +344,10 @@ HResult ShmSyncEndpoint::PostReadWriteSgl(ShmChannel *ch, const UBSHcomNetTransS
     }
 
     HResult result = SH_OK;
+    if (NN_UNLIKELY(req.iovCount > NET_SGE_MAX_IOV)) {
+        NN_LOG_ERROR("Failed to PostReadWriteSgl as iovCount is invalid, iovCount " << req.iovCount);
+        return SH_PARAM_INVALID;
+    }
     for (auto i = 0; i < req.iovCount; i++) {
         if (NN_UNLIKELY((result = SyncReadWriteProcess(req.iov[i], mrHandleMap, ch, type)) != SH_OK)) {
             NN_LOG_ERROR("Failed to read/write sgl data to/from server");

@@ -164,6 +164,10 @@ static bool ConvertCpuIdsRangeStrToPair(const char *cpuIdsStr, std::pair<uint32_
         NN_LOG_ERROR("Invalid begin id " << beginNumStr << " or end id: " << endNumStr);
         return false;
     }
+    if (beginId > UINT32_MAX || endId > UINT32_MAX) {
+        NN_LOG_ERROR("Invalid begin id " << beginId << " or end id: " << endId);
+        return false;
+    }
     cpuIdsPair = {static_cast<uint32_t>(beginId), static_cast<uint32_t>(endId)};
     NN_LOG_DEBUG("Convert Cpu ids pair:" << beginId << "," << endId);
     return true;

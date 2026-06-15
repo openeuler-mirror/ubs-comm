@@ -236,6 +236,9 @@ public:
         urma_jfs_wr_t *badWR;
         urma_sge_t list[NN_NO4] = {};
         urma_target_seg_t srcSeg[NET_SGE_MAX_IOV] = {};
+        if (NN_UNLIKELY(iovCount > NN_NO4)) {
+            return UB_PARAM_INVALID;
+        }
         for (uint32_t i = 0; i < iovCount; i++) {
             list[i].addr = iov[i].address;
             list[i].len = iov[i].size;
@@ -270,6 +273,9 @@ public:
 
         urma_jfs_wr_t *badWR;
         urma_sge_t list[NN_NO4] = {};
+        if (NN_UNLIKELY(iovCount > NN_NO4)) {
+            return UB_PARAM_INVALID;
+        }
         for (uint32_t i = 0; i < iovCount; i++) {
             list[i].addr = iov[i].address;
             list[i].len = iov[i].size;
@@ -309,6 +315,9 @@ public:
         urma_jfs_wr_t *bad_wr;
         urma_sge_t list[NET_SGE_MAX_IOV];
         urma_target_seg_t srcSeg[NET_SGE_MAX_IOV] = {};
+        if (NN_UNLIKELY(iovCount > NET_SGE_MAX_IOV)) {
+            return UB_PARAM_INVALID;
+        }
         for (uint32_t i = 0; i < iovCount; i++) {
             list[i].addr = iov[i].lAddress;
             list[i].len = iov[i].size;
@@ -566,6 +575,9 @@ public:
         urma_sge_t dst_sge[NET_SGE_MAX_IOV] = {};
         UResult ret = UB_OK;
         uint32_t i = 0;
+        if (NN_UNLIKELY(iovCount > NET_SGE_MAX_IOV)) {
+            return UB_PARAM_INVALID;
+        }
         for (; i < iovCount; i++) {
             FillUrmaTargetSeg(srcSeg[i], iov[i].lAddress, iov[i].size, iov[i].lKey);
             src_sge[i].addr = iov[i].lAddress;

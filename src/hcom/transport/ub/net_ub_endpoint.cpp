@@ -197,6 +197,11 @@ namespace hcom {
 
 static inline GetSglTseg(NetDriverUBWithOob *driver, UBSHcomNetTransSglRequest &sglReq)
 {
+    if (sglReq.iovCount > NET_SGE_MAX_IOV) {
+        NN_LOG_ERROR("Failed to post read request");
+        return UB_PARAM_INVALID;
+    }
+
     for (uint16_t i = 0; i < sglReq.iovCount; i++) {
         urma_target_seg_t *tseg = nullptr;
         if (driver->GetTseg(sglReq.iov[i].lKey, tseg) != NN_OK) {

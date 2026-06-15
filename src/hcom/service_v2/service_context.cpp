@@ -49,6 +49,10 @@ UBSHcomServiceContext::UBSHcomServiceContext(const UBSHcomRequestContext &ctx, U
 
 SerResult UBSHcomServiceContext::CopyData(void *data, uint32_t dataLen)
 {
+    if (NN_UNLIKELY(mData != nullptr)) {
+        free(mData);
+        mData = nullptr;
+    }
     mData = malloc(dataLen);
     if (NN_UNLIKELY(mData == nullptr)) {
         NN_LOG_ERROR("Invalid msg size " << dataLen << ", alloc failed");

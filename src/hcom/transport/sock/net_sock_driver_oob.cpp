@@ -96,8 +96,7 @@ void NetDriverSockWithOOB::UnInitialize()
         return;
     }
     if (mStarted) {
-        NN_LOG_WARN("Unable to unInitialize sock driver"
-                    << " " << mName << " which is not stopped");
+        NN_LOG_WARN("Unable to unInitialize sock driver " << mName << " which is not stopped");
         return;
     }
 
@@ -751,8 +750,7 @@ NResult NetDriverSockWithOOB::Connect(const OOBTCPClientPtr &client, const std::
 
     /* peer ep id */
     auto newSockId = respWithUId.epId;
-    NN_LOG_TRACE_INFO("Sock new ep id will be set as"
-                      << " " << newSockId << " in driver " << mName);
+    NN_LOG_TRACE_INFO("Sock new ep id will be set as " << newSockId << " in driver " << mName);
 
     /* choose worker */
     uint16_t workerIndex = 0;

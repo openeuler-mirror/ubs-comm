@@ -107,6 +107,7 @@ HResult ShmWorker::PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransRequest &
     auto sglCtx = mSglCtxInfoPool.Get();
     result = FillSglCtx(sglCtx, sglReq);
     if (NN_UNLIKELY(result != SH_OK)) {
+        mSglCtxInfoPool.Return(sglCtx);
         return result;
     }
 
@@ -114,6 +115,7 @@ HResult ShmWorker::PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransRequest &
     auto ctx = mOpCompInfoPool.Get();
     if (NN_UNLIKELY(ctx == nullptr)) {
         NN_LOG_ERROR("Shm Failed to PostSend with ShmWorker " << mName << " as no opCtx left");
+        mSglCtxInfoPool.Return(sglCtx);
         return SH_OP_CTX_FULL;
     }
 
@@ -228,6 +230,7 @@ HResult ShmWorker::PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequest &r
     if (req.upCtxSize > 0) {
         if (NN_UNLIKELY(memcpy_s(ctx->upCtx, NN_NO16, req.upCtxData, req.upCtxSize) != NN_OK)) {
             NN_LOG_ERROR("Failed to copy req to sglCtx");
+            mOpCtxInfoPool.Return(ctx);
             return NN_INVALID_PARAM;
         }
     }

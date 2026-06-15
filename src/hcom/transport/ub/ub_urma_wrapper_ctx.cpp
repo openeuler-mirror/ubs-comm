@@ -67,6 +67,8 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
     ret = HcomUrma::UserCtl(mUrmaContext, &in, &out);
     if (ret != 0) {
         NN_LOG_ERROR("Failed to set bonding mode for device , ret " << ret);
+        free(mDevAttr);
+        mDevAttr = nullptr;
         return ret;
     }
     NN_LOG_INFO("Set bonding mode for device successfully");
@@ -108,11 +110,15 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
     mCtpPri = GetPriByTpType(tp_type_ctp);
     if (mCtpPri == -1) {
         NN_LOG_ERROR("Failed to get priority by ctp type");
+        free(mDevAttr);
+        mDevAttr = nullptr;
         return UB_ERROR;
     }
     mRtpPri = GetPriByTpType(tp_type_rtp);
     if (mRtpPri == -1) {
         NN_LOG_ERROR("Failed to get priority by rtp type");
+        free(mDevAttr);
+        mDevAttr = nullptr;
         return UB_ERROR;
     }
 
@@ -121,6 +127,8 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
             NN_LOG_ERROR(
                 "UbPriority " << ubPriority
                               << " is invalid, please set priority with ctp type when ubc mode is high bandwidth");
+            free(mDevAttr);
+            mDevAttr = nullptr;
             return UB_ERROR;
         }
         // if user set priority, use user set priority, else use ctp default priority
@@ -133,6 +141,8 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
             NN_LOG_ERROR(
                 "UbPriority " << ubPriority
                               << " is invalid, please set priority with rtp type when ubc mode is low latency");
+            free(mDevAttr);
+            mDevAttr = nullptr;
             return UB_ERROR;
         }
         // if user set priority, use user set priority, else use rtp default priority
