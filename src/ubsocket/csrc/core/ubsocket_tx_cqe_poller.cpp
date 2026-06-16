@@ -199,7 +199,7 @@ void TxCqePoller::RunInThread() noexcept
             std::vector<SocketPtr> activeSockets;
             {
                 Locker sLock(mutex_);
-                activeSockets = std::move(sockets_);
+                activeSockets = sockets_;
             }
 
             for (const auto &sock : activeSockets) {
