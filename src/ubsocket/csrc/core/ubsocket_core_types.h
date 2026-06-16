@@ -79,6 +79,7 @@ public:
     virtual Result DelTxEvent(const SocketPtr &sock, int epoll_fd) = 0;
     virtual Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
                                       struct epoll_event *event) = 0;
+    virtual Result ProcessEpollEvent(struct epoll_event &event) = 0;
     DEFINE_REF_OPERATION_FUNC
 
 public:
