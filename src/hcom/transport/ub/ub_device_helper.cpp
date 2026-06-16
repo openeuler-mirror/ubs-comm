@@ -45,8 +45,8 @@ void UBDeviceHelper::UnInitialize()
         return;
     }
     // HcomUrma::Uninit() 每个进程只能调用一次，防止一个进程多个service多次调用
-    HcomUrma::Uninit();
     G_UBDevBWTable.clear();
+    HcomUrma::Uninit();
 }
 
 UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid)
