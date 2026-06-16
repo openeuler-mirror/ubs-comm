@@ -20,6 +20,7 @@
 #include <sys/time.h>
 #include <sys/un.h>
 #include <cmath>
+#include <condition_variable>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
@@ -56,7 +57,10 @@ public:
         PrintStatsMgr *mgr = GetPrintStatsMgr();
         while (mgr->m_running) {
             mgr->ProcessStats();
-            sleep(mgr->ubsocketTraceTime);
+
+            // for exit quickly
+            std::unique_lock<std::mutex> lock(mgr->m_mutex);
+            mgr->m_cv.wait_for(lock, std::chrono::seconds(mgr->ubsocketTraceTime), [mgr] { return !mgr->m_running; });
         }
     }
 
@@ -86,7 +90,6 @@ public:
     {
         PrintStatsMgr *mgr = GetPrintStatsMgr();
         if (mgr->m_running) {
-            sleep(mgr->ubsocketTraceTime);
             mgr->Stop();
         }
     }
@@ -207,7 +210,11 @@ private:
 
     void Stop()
     {
-        m_running = false;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_running = false;
+        }
+        m_cv.notify_all();
         if (m_event_loop != nullptr) {
             if (m_event_loop->joinable()) {
                 m_event_loop->join();
@@ -224,6 +231,8 @@ private:
     uint32_t pidVal;
     std::string ubsocketTraceFilePath;
     umq_trans_mode_t m_trans_mode;
+    std::mutex m_mutex;
+    std::condition_variable m_cv;
 };
 
 }; // namespace Statistics
