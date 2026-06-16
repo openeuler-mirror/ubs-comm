@@ -401,10 +401,18 @@ void NetDriverUBWithOob::RunInUbEventThread()
 
 int NetDriverUBWithOob::ChooseRoutes(std::string peerEid, uvs_path_set_t &uvsPathSet)
 {
+    NN_LOG_INFO("path set topo type : " << uvsPathSet.topo_type);
     uint8_t chipId = 1; // 固定0
     uint8_t dieId = 1;  // 固定0
+    if (uvsPathSet.topo_type != UVS_TOPO_TYPE_CLOS) {
+        chipId = uvsPathSet.paths[0].src_port.chip_id;
+        dieId = uvsPathSet.paths[0].src_port.die_id;
+    }
     std::set<uint8_t> ports;
     for (int pathIdx = 0; pathIdx < uvsPathSet.path_count; ++pathIdx) {
+        NN_LOG_DEBUG("chip id : " << uvsPathSet.paths[pathIdx].src_port.chip_id
+                                  << ", die id : " << uvsPathSet.paths[pathIdx].src_port.die_id
+                                  << ", port idx : " << uvsPathSet.paths[pathIdx].src_port.port_idx);
         if (uvsPathSet.paths[pathIdx].src_port.chip_id == chipId &&
             uvsPathSet.paths[pathIdx].src_port.die_id == dieId) {
             ports.insert(uvsPathSet.paths[pathIdx].src_port.port_idx);
@@ -484,16 +492,13 @@ int NetDriverUBWithOob::NewConnectionCB(OOBTCPConnection &conn)
                                                               << peerEid << ", ret " << ret);
             return ret;
         }
-        // CLOS  topo
-        NN_LOG_INFO("path set topo type : " << uvsPathSet.topo_type);
-        if (uvsPathSet.topo_type == UVS_TOPO_TYPE_CLOS) {
-            g_is_activate_backup = true;
-            // 开启主备
-            ret = ChooseRoutes(peerEid, uvsPathSet);
-            if (ret != NN_OK) {
-                NN_LOG_ERROR("Failed to choose routes , ret " << ret);
-                return ret;
-            }
+
+        g_is_activate_backup = true;
+        // 开启主备
+        ret = ChooseRoutes(peerEid, uvsPathSet);
+        if (ret != NN_OK) {
+            NN_LOG_ERROR("Failed to choose routes , ret " << ret);
+            return ret;
         }
     }
 
@@ -931,13 +936,10 @@ NResult NetDriverUBWithOob::Connect(const std::string &oobIp, uint16_t oobPort, 
             return result;
         }
 
-        NN_LOG_INFO("path set topo type : " << uvsPathSet.topo_type);
-        if (uvsPathSet.topo_type == UVS_TOPO_TYPE_CLOS) {
-            result = ChooseRoutes(peerEid, uvsPathSet);
-            if (result != NN_OK) {
-                NN_LOG_ERROR("Failed to choose routes , ret " << result);
-                return result;
-            }
+        result = ChooseRoutes(peerEid, uvsPathSet);
+        if (result != NN_OK) {
+            NN_LOG_ERROR("Failed to choose routes , ret " << result);
+            return result;
         }
     }
 
