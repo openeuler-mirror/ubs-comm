@@ -108,6 +108,98 @@ UResult UBJfc::Initialize()
     return UB_OK;
 }
 
+UResult UBJfc::CreatePollingCqForPublicJetty()
+{
+    urma_jfc_cfg_t jfc_cfg{};
+    jfc_cfg.depth = mJfcCount;
+    jfc_cfg.flag.value = 0;
+    jfc_cfg.jfce = nullptr;
+    jfc_cfg.user_ctx = mWork;
+
+    urma_jfc_t *tmpJfc = HcomUrma::CreateJfc(mUBContext->mPublicUrmaContext, &jfc_cfg);
+    if (tmpJfc == nullptr) {
+        char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+        NN_LOG_ERROR("Failed to create completion queue for UBJfc "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        return UB_NEW_OBJECT_FAILED;
+    }
+
+    mUrmaJfc = tmpJfc;
+    return UB_OK;
+}
+
+UResult UBJfc::CreateEventCqForPublicJetty()
+{
+    // create jfce
+    urma_jfce_t *tmpJfce = HcomUrma::CreateJfce(mUBContext->mPublicUrmaContext);
+    if (tmpJfce == nullptr) {
+        char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+        NN_LOG_ERROR("Failed to create JFCE for UBJfc " << mName << ", error "
+                                                        << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        return UB_NEW_OBJECT_FAILED;
+    }
+
+    // create jfc
+    urma_jfc_cfg_t jfc_cfg{};
+    jfc_cfg.depth = mJfcCount;
+    jfc_cfg.flag.value = 0;
+    jfc_cfg.jfce = tmpJfce;
+    jfc_cfg.user_ctx = mWork;
+
+    urma_jfc_t *tmpJfc = HcomUrma::CreateJfc(mUBContext->mPublicUrmaContext, &jfc_cfg);
+    if (tmpJfc == nullptr) {
+        char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+        NN_LOG_ERROR("Failed to create completion queue for UBJfc "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        HcomUrma::DeleteJfce(tmpJfce);
+        return UB_NEW_OBJECT_FAILED;
+    }
+
+    if (HcomUrma::RearmJfc(tmpJfc, 0) != 0) {
+        HcomUrma::DeleteJfc(tmpJfc);
+        HcomUrma::DeleteJfce(tmpJfce);
+        char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+        NN_LOG_ERROR("Failed to create completion queue for UBJfc "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        return UB_NEW_OBJECT_FAILED;
+    }
+
+    int flags = fcntl(tmpJfce->fd, F_GETFL);
+    if (fcntl(tmpJfce->fd, F_SETFL, static_cast<uint32_t>(flags) | O_NONBLOCK) < 0) {
+        HcomUrma::DeleteJfc(tmpJfc);
+        HcomUrma::DeleteJfce(tmpJfce);
+        char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+        NN_LOG_ERROR("Failed to set no blocking for UBJfc "
+                     << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        return UB_NEW_OBJECT_FAILED;
+    }
+
+    mUrmaJfcEvent = tmpJfce;
+    mUrmaJfc = tmpJfc;
+    return UB_OK;
+}
+
+UResult UBJfc::InitializeForPublicJetty()
+{
+    NN_LOG_TRACE_INFO("UBJfc::InitializeForPublicJetty");
+    if (mUrmaJfc != nullptr) {
+        return UB_OK;
+    }
+
+    if (mUBContext == nullptr || mUBContext->mPublicUrmaContext == nullptr) {
+        NN_LOG_ERROR("Failed to initialize UBJfc as ub context is null");
+        return UB_PARAM_INVALID;
+    }
+    if (mCreateCompletionChannel) {
+        return CreateEventCqForPublicJetty();
+    } else {
+        return CreatePollingCqForPublicJetty();
+    }
+
+    NN_LOG_TRACE_INFO("UBJfc::Initialized");
+    return UB_OK;
+}
+
 UResult UBJfc::UnInitialize()
 {
     int res = 0;

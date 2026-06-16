@@ -35,14 +35,17 @@ struct UBEId {
 
 class UBDeviceHelper {
 public:
-    static UResult Initialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid);
+    static UResult Initialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, urma_context_t *&publicCtx,
+                              UBEId &eid);
     static void UnInitialize();
     static uint32_t GetPortNumber();
 
 private:
-    static UResult DoInitialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid);
-    static UResult DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid);
+    static UResult DoInitialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, urma_context_t *&publicCtx,
+                                UBEId &eid);
+    static UResult DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&ctx, urma_context_t *&publicCtx, UBEId &eid);
     static int CompareName(const char name[], size_t nameLen, urma_device_t **devList, int devCount);
+    static UResult CreatePublicJettyUrmaContext(urma_context_t *&publicCtx, urma_device_t *dev, uint32_t eidIndex);
 
 private:
     static std::mutex G_Mutex;

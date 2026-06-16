@@ -22,12 +22,12 @@ private:
 
     inline int DoPostWrite()
     {
-        volatile uint64_t *pollData = reinterpret_cast<uint64_t *>(mPollMrInfo.lAddress);
-        volatile uint64_t *postData = reinterpret_cast<uint64_t *>(mPostMrInfo.lAddress);
+        PerfTestContext *ctx = GetPerfTestContext();
+        volatile uint64_t *pollData = reinterpret_cast<uint64_t *>(mPollMrInfo.lAddress + ctx->mSize - 1);
+        volatile uint64_t *postData = reinterpret_cast<uint64_t *>(mPostMrInfo.lAddress + ctx->mSize - 1);
         uint64_t num = 0;
         *pollData = num;
         *postData = num;
-        PerfTestContext *ctx = GetPerfTestContext();
         ctx->cnt = 0;
         rcnt = 0;
         ccnt.store(0);
@@ -35,7 +35,7 @@ private:
                static_cast<uint64_t>(ccnt.load()) < ctx->mIterations) {
             if (rcnt < ctx->mIterations && !(ctx->cnt < 1 && !mCfg.GetIsServer())) {
                 rcnt++;
-                while ((*pollData != rcnt) && ctx->cnt < ctx->mIterations)
+                while ((*pollData != rcnt % UINT8_MAX) && ctx->cnt < ctx->mIterations)
                     ;
             }
             if (ctx->cnt < ctx->mIterations) {
@@ -48,8 +48,8 @@ private:
                     sem_post(&mSem);
                     return -1;
                 }
-                *postData = ctx->cnt;
-                ctx->tposted[mCtx->cnt - 1] = ock::hcom::MONOTONIC_TIME_NS();
+                *postData = ctx->cnt % UINT8_MAX;
+                ctx->tposted[ctx->cnt - 1] = ock::hcom::MONOTONIC_TIME_NS();
                 int res = mCh->Put(mReq, newCallback);
                 if (res != 0) {
                     LOG_ERROR("failed to write to server");

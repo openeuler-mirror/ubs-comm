@@ -42,7 +42,7 @@ UResult UBPublicJetty::ImportPublicJetty(const urma_eid_t &remoteEid, uint32_t j
                                           << ", local eid: " << EidToStr(mUrmaJetty->jetty_id.eid)
                                           << "; Remote public jetty id: " << remoteJetty.jetty_id.id
                                           << ", remote eid: " << EidToStr(remoteJetty.jetty_id.eid));
-    mTargetJetty = HcomUrma::ImportJetty(mUBContext->mUrmaContext, &remoteJetty, &token);
+    mTargetJetty = HcomUrma::ImportJetty(mUBContext->mPublicUrmaContext, &remoteJetty, &token);
     if (mTargetJetty == nullptr) {
         NN_LOG_WARN("Failed to import public jetty id: " << mUrmaJetty->jetty_id.id
                                                          << ", local eid: " << EidToStr(mUrmaJetty->jetty_id.eid)
@@ -66,7 +66,6 @@ void UBPublicJetty::FillJfsCfg(urma_jfs_cfg_t *jfs_cfg)
     jfs_cfg->depth = JETTY_MAX_SEND_WR;
     jfs_cfg->max_sge = static_cast<uint8_t>(mUBContext->mMaxSge);
     jfs_cfg->flag.value = 0;
-    jfs_cfg->flag.bs.multi_path = 1;
     jfs_cfg->priority = mUBContext->mCtpPri;
 }
 
@@ -84,7 +83,7 @@ void UBPublicJetty::FillJfrCfg(urma_jfr_cfg_t *jfr_cfg)
 // create a public jetty
 UResult UBPublicJetty::CreateUrmaPublicJetty(uint32_t id)
 {
-    if (mUBContext == nullptr || mUBContext->mUrmaContext == nullptr || mSendJfc == nullptr ||
+    if (mUBContext == nullptr || mUBContext->mPublicUrmaContext == nullptr || mSendJfc == nullptr ||
         mSendJfc->mUrmaJfc == nullptr) {
         NN_LOG_ERROR("Invalid parameter for jetty creating");
         return UB_PARAM_INVALID;
@@ -107,7 +106,7 @@ UResult UBPublicJetty::CreateUrmaPublicJetty(uint32_t id)
     jetty_cfg.jfr_cfg = &jfr_cfg;
     // create jetty
     urma_jetty_t *tmpJetty = nullptr;
-    mJfr = HcomUrma::CreateJfr(mUBContext->mUrmaContext, &jfr_cfg);
+    mJfr = HcomUrma::CreateJfr(mUBContext->mPublicUrmaContext, &jfr_cfg);
     if (mJfr == nullptr) {
         NN_LOG_ERROR("urma create jfr failed");
         return UB_PARAM_INVALID;
@@ -115,7 +114,7 @@ UResult UBPublicJetty::CreateUrmaPublicJetty(uint32_t id)
 
     jetty_cfg.shared.jfc = mRecvJfc->mUrmaJfc;
     jetty_cfg.shared.jfr = mJfr;
-    tmpJetty = HcomUrma::CreateJetty(mUBContext->mUrmaContext, &jetty_cfg);
+    tmpJetty = HcomUrma::CreateJetty(mUBContext->mPublicUrmaContext, &jetty_cfg);
     if (tmpJetty == nullptr) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("Failed to create urma jetty for UBJetty "
@@ -130,7 +129,7 @@ UResult UBPublicJetty::CreateUrmaPublicJetty(uint32_t id)
                 << mUrmaJettyId << ", local eid: " << EidToStr(mUrmaJetty->jetty_id.eid)
                 << ", jfr id: " << mJfr->jfr_id.id << ", recv jfc id: " << mRecvJfc->mUrmaJfc->jfc_id.id
                 << ", send jfc id: " << mSendJfc->mUrmaJfc->jfc_id.id
-                << ", multi_path: " << mUrmaJetty->jetty_cfg.jfs_cfg.flag.bs.multi_path);
+                << ", priority: " << static_cast<int>(mUrmaJetty->jetty_cfg.jfs_cfg.priority));
     return UB_OK;
 }
 
@@ -146,7 +145,7 @@ UResult UBPublicJetty::CreateJettyMr()
         return result;
     }
     mJettyMr->IncreaseRef();
-    if ((result = mJettyMr->Initialize()) != 0) {
+    if ((result = mJettyMr->InitializeForPublicJetty()) != 0) {
         NN_LOG_ERROR("Failed to initialize mr for send/receive in public jetty " << mName << ", result " << result);
         mJettyMr->DecreaseRef();
         return result;

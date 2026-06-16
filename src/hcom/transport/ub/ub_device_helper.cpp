@@ -24,7 +24,8 @@ std::unordered_map<urma_speed_t, uint8_t> UBDeviceHelper::G_UBDevBWTable;
 std::mutex UBDeviceHelper::G_Mutex;
 uint32_t UBDeviceHelper::PORT_NUMBER = 1;
 
-UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid)
+UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, urma_context_t *&publicCtx,
+                                   UBEId &eid)
 {
     UResult ret = UB_OK;
     std::lock_guard<std::mutex> guard(G_Mutex);
@@ -33,7 +34,7 @@ UResult UBDeviceHelper::Initialize(urma_device_attr_t *devAttr, urma_context_t *
         // 第二次进来直接加引用计数，防止mUBContext析构的时候调用UnInitialize时把资源直接释放
         return ret;
     }
-    ret = DoInitialize(devAttr, ctx, eid);
+    ret = DoInitialize(devAttr, ctx, publicCtx, eid);
     return ret;
 }
 
@@ -49,14 +50,15 @@ void UBDeviceHelper::UnInitialize()
     HcomUrma::Uninit();
 }
 
-UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid)
+UResult UBDeviceHelper::DoInitialize(urma_device_attr_t *devAttr, urma_context_t *&ctx, urma_context_t *&publicCtx,
+                                     UBEId &eid)
 {
     // 后续HCOM重构时重新定义此处数值换算，目前为了不修改头文件中uint8_t bandWidth(范围0~2555)的定义,只做大致比例换算。
     G_UBDevBWTable = {{URMA_SP_10M, 1},    {URMA_SP_100M, 1},  {URMA_SP_1G, 1},     {URMA_SP_2_5G, 3},
                       {URMA_SP_5G, 5},     {URMA_SP_10G, 10},  {URMA_SP_14G, 14},   {URMA_SP_25G, 25},
                       {URMA_SP_40G, 40},   {URMA_SP_50G, 50},  {URMA_SP_100G, 100}, {URMA_SP_200G, 200},
                       {URMA_SP_400G, 255}, {URMA_SP_800G, 255}};
-    auto ret = DoUpdate(devAttr, ctx, eid);
+    auto ret = DoUpdate(devAttr, ctx, publicCtx, eid);
     if (NN_UNLIKELY(ret != UB_OK)) {
         G_UBDevBWTable.clear();
         return ret;
@@ -79,7 +81,8 @@ int UBDeviceHelper::CompareName(const char name[], size_t nameLen, urma_device_t
     return -1;
 }
 
-UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&ctx, UBEId &eid)
+UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&ctx, urma_context_t *&publicCtx,
+                                 UBEId &eid)
 {
     UResult ret = UB_OK;
     bool isFindDevice = false;
@@ -157,6 +160,37 @@ UResult UBDeviceHelper::DoUpdate(urma_device_attr_t *devAttr, urma_context_t *&c
             ctx = nullptr;
         }
         return UB_DEVICE_OPEN_FAILED;
+    }
+
+    if (ret = UBDeviceHelper::CreatePublicJettyUrmaContext(publicCtx, devList[devIdx], eidIndex) != 0) {
+        NN_LOG_ERROR("Failed to create urma context for public jetty, ret " << ret);
+        return UB_DEVICE_OPEN_FAILED;
+    }
+
+    return UB_OK;
+}
+
+UResult UBDeviceHelper::CreatePublicJettyUrmaContext(urma_context_t *&publicCtx, urma_device_t *dev, uint32_t eidIndex)
+{
+    urma_context_t *tmpCtx = nullptr;
+    if ((tmpCtx = HcomUrma::CreateContext(dev, eidIndex)) == nullptr) {
+        NN_LOG_ERROR("Invalid device index is set for Device " << dev->name << ", errno " << errno);
+        return UB_DEVICE_OPEN_FAILED;
+    }
+    publicCtx = tmpCtx;
+
+    bondp_set_bonding_mode_in_t bondInBackup = {
+        .bonding_mode = BONDP_BONDING_MODE_STANDALONE,
+        .bonding_level = BONDP_BONDING_LEVEL_IODIE,
+    };
+
+    urma_user_ctl_in_t in = {
+        .addr = (uint64_t)&bondInBackup, .len = sizeof(bondInBackup), .opcode = BONDP_USER_CTL_SET_BONDING_MODE};
+    urma_user_ctl_out_t out = {0};
+    UResult ret = HcomUrma::UserCtl(publicCtx, &in, &out);
+    if (ret != 0) {
+        NN_LOG_ERROR("Failed to set bonding mode for public jetty urma ctx , ret " << ret);
+        return ret;
     }
 
     return UB_OK;
