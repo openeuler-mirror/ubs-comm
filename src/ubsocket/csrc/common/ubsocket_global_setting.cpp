@@ -47,7 +47,7 @@ uint64_t GlobalSetting::UBS_TRACE_FILE_SIZE = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
 std::string GlobalSetting::UBS_TRACE_FILE_PATH = "/tmp/ubsocket/log";
 uint32_t GlobalSetting::UBS_PROBE_MS = 1000;
 uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
-bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = false;
+bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = true;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
@@ -108,7 +108,7 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_VAR_DEGRADE, false, "true|false"},
                                     {ENV_VAR_CLI, false, "true|false"},
                                     {ENV_VAR_PROBE, false, "true|false"},
-                                    {ENV_BACKUP_LINK_ENABLED, false, "true|false"}};
+                                    {ENV_BACKUP_LINK_ENABLED, true, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX},
