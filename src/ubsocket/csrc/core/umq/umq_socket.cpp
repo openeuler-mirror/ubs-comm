@@ -11,6 +11,7 @@
 #include <chrono>
 #include <iostream>
 
+#include "core/ubsocket_tx_cqe_poller.h"
 #include "profiling/statistics/statistics.h"
 #include "umq_conn_helper.h"
 #include "umq_dfx_api.h"
@@ -127,6 +128,23 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     if (rxQueue == nullptr) {
         UBS_VLOG_ERR("Failed to init share jfr rx queue for fd: %d \n", raw_socket_);
         return UBS_INIT_SHARED_JFR_RX_QUEUE;
+    }
+
+    // 总是使用使能 TX solicited，这会导致对端 JFR 只有接收到 solicited_enable=true 的包时才会产生中断。而在客
+    // 户端本端，开启此功能后不会在 TX 上产生中断，无法通过 `epoll_wait` 唤醒，必须定期 poll cq
+    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
+    int tx_interrupt_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
+    if (tx_interrupt_fd < 0) {
+        UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
+                     static_cast<unsigned long long>(umq_handle_));
+        return UBS_ERROR;
+    }
+
+    int ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, true, &tx_option);
+    if (ret < 0) {
+        UBS_VLOG_ERR("[UMQ_API] Failed to enable solicited mode for umq: %llu\n",
+                     static_cast<unsigned long long>(umq_handle_));
+        return UBS_ERROR;
     }
 
     return UBS_OK;
