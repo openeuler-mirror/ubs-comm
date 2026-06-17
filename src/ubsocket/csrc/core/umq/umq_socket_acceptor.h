@@ -71,7 +71,7 @@ private:
     umq_eid_t conn_eid_;
     umq_eid_t peer_eid_;
     umq_route_t conn_route_;
-    umq_route_t back_route_;
+    std::vector<umq_route_t> back_routes_; // 一主三备：备路组，最多3条
 
     // degrade & retry
     bool degradable_ = false;

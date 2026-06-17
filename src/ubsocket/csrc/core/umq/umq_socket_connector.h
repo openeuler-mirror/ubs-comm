@@ -57,10 +57,18 @@ private:
     uint32_t GetTargetChipId(const std::vector<uint32_t> &socket_ids, const std::vector<uint32_t> &chip_id_list,
                              int processSocketId);
     Result GetConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid);
-    void RRChooseMainRoute(std::vector<umq_route_t> &main_routes, const umq_eid_t *dst_eid,
-                           umq_route_t &conn_main_route, umq_route_t &conn_back_route);
-    Result GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std::vector<umq_route_t> &main_routes,
-                                  std::vector<umq_route_t> &back_routes);
+    // 从所有路由中RR轮询选取主路由和备路由组（一主三备，不区分亲和/不亲和）
+    // all_routes: 所有可用路由（亲和组 + 不亲和组合并）
+    // dst_eid: 对端EID，用于轮询索引
+    // conn_main_route: 输出参数，选出的主路由
+    // conn_back_routes: 输出参数，选出的备路由组（最多3条）
+    void RRChooseMainRoute(std::vector<umq_route_t> &all_routes, const umq_eid_t *dst_eid, umq_route_t &conn_main_route,
+                           std::vector<umq_route_t> &conn_back_routes);
+    // 获取CPU亲和性路由
+    // affine_routes: 输出参数，亲和组路由（src/dst 均为本端芯片）
+    // non_aff_routes: 输出参数，非亲和组路由（src/dst 为异芯片）
+    Result GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std::vector<umq_route_t> &affine_routes,
+                                  std::vector<umq_route_t> &non_aff_routes);
     Result ConnectViaHandshakeOpt(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     Result ConnectViaTfo(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     void PrintSocketsInfo();
@@ -70,9 +78,9 @@ private:
     int peer_socket_id_ = -1;                   // 对端socket id
     std::vector<uint32_t> peer_all_socket_ids_; // 对端所有socket id
     umq_route_t conn_route_;
-    umq_route_t back_route_;
     // TODO: 主备切换逻辑待优化
-    std::vector<umq_route_t> back_route_list_;
+    std::vector<umq_route_t> back_routes_;        // 备路由组，最多3条（一主三备）
+    std::vector<umq_route_t> non_aff_route_list_; // 非亲和路由列表，用于容灾重试
     umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
     // retry & degrade
     bool degradable_ = false;
