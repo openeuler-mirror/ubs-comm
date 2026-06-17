@@ -44,6 +44,7 @@ public:
 
     static int SetTcpNoDelay(int fd);
     static std::string ExtractIpFromSockAddr(const struct sockaddr *address);
+    static uint16_t ExtractPortFromSockAddr(const struct sockaddr *address);
     static int GetCurrentProcessSocketId();
     // 获取所有 Socket ID
     static std::vector<uint32_t> GetSocketIdsViaNumaSysfs();

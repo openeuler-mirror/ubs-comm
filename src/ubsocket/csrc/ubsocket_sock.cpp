@@ -13,6 +13,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_data_tx.h"
 #include "core/ubsocket_socket.h"
+#include "core/ubsocket_socket_helper.h"
 #include "include/ubsocket.h"
 
 using namespace ock::ubs;
@@ -89,6 +90,8 @@ UBS_API int UB_API_WRAP(accept4)(int fd, struct sockaddr *address, socklen_t *ad
 
 UBS_API int UB_API_WRAP(bind)(int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
+    UBS_VLOG_INFO("Binding to IP: %s, Port: %d\n", SocketConnHelper::ExtractIpFromSockAddr(addr).c_str(),
+                  SocketConnHelper::ExtractPortFromSockAddr(addr));
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::bind(fd, addr, addrlen);
     }

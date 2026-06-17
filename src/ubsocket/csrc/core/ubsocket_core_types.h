@@ -12,6 +12,7 @@
 #define UBS_COMM_UBSOCKET_CORE_TYPES_H
 
 #include "common/ubsocket_common_includes.h"
+#include "profiling/trace/ubsocket_trace.h"
 
 namespace ock {
 namespace ubs {
@@ -49,8 +50,20 @@ using SocketPtr = Ref<Socket>;
 
 class Socket {
 public:
-    Socket(int fd, SocketType type) : raw_socket_(fd), type_(type) {}
-    virtual ~Socket() = default;
+    Socket(int fd, SocketType type) : raw_socket_(fd), type_(type)
+    {
+        if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+            split_trace_ = new SplitTrace();
+        }
+    }
+    virtual ~Socket()
+    {
+        if (split_trace_ != nullptr) {
+            split_trace_->Flush();
+            delete split_trace_;
+            split_trace_ = nullptr;
+        }
+    }
 
     ALWAYS_INLINE SocketState State() const noexcept
     {
@@ -60,6 +73,9 @@ public:
     void State(SocketState state)
     {
         state_ = state;
+        if (state == SOCK_STAT_CLOSE && split_trace_ != nullptr) {
+            split_trace_->Flush();
+        }
     }
 
     SocketType Type() const noexcept
@@ -89,6 +105,7 @@ public:
     SocketState state_ = SOCK_STAT_INIT;                      /* state of ubsocket */
     SocketType type_ = SocketType::SOCK_TYPE_TCP;             /* type of ubsocket */
     SocketCreateType create_type_ = SOCK_CREATE_TYPE_UNKNOWN; /* created because of what */
+    SplitTrace *split_trace_ = nullptr;
 };
 
 struct ConnInfo {

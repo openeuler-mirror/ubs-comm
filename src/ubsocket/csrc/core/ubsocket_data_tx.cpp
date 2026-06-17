@@ -21,10 +21,18 @@ DataTx::DataTx(const SocketPtr &sock, DataTxOps *ops) : fd_(sock->raw_socket_), 
 
 ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
+    auto *trace = sock->split_trace_;
+    if (trace != nullptr) {
+        trace->AddBrpcWriteTrace(BRPC_CLIENT_CALL, fd_);
+        trace->AddWriteTrace(CORE_WRITE, fd_);
+    }
     PROF_START(CORE_WRITE);
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::writev(fd_, iov, iovcnt);
         PROF_END(CORE_WRITE, size >= 0);
+        if (trace != nullptr) {
+            trace->TrySwap();
+        }
         return size;
     }
 
@@ -103,6 +111,9 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_BYTE_COUNT, tx_total_len);
     }
     PROF_END(CORE_WRITE, true);
+    if (trace != nullptr) {
+        trace->TrySwap();
+    }
     return tx_total_len;
 }
 } // namespace ubs

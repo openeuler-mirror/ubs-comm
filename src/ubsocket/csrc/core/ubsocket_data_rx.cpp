@@ -49,19 +49,33 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         }
     }
 
+    auto *trace = sock->split_trace_;
+
     /* if socket failed to pass protocol negotiation validation, then
      * (1) pass the received protocol negotiation as message to caller;
      * (2) when all the received message passed to caller, fallback to tcp/ip */
     ssize_t rx_total_len = OutputErrorMagicNumber(sock, iov, iovcnt);
     if (rx_total_len > 0) {
+        if (trace != nullptr) {
+            trace->AddReadTrace(CORE_READ, fd_, ubsocket_get_timeNs(), 0);
+        }
         PROF_END(CORE_READ, false);
         return rx_total_len;
     }
 
     PROF_START(CORE_READ_POLL_RX);
+    uint64_t start_time = ubsocket_get_timeNs();
     int ret = rx_ops_->PollRx(sock);
+    uint64_t end_time = ubsocket_get_timeNs();
     PROF_END(CORE_READ_POLL_RX, ret >= 0);
+    if (trace != nullptr) {
+        trace->AddReadTrace(CORE_READ_POLL_RX, fd_, start_time, end_time);
+    }
+
     if (ret < 0) {
+        if (trace != nullptr) {
+            trace->AddReadTrace(CORE_READ, fd_, ubsocket_get_timeNs(), 0);
+        }
         PROF_END(CORE_READ, false);
         return ret;
     }
@@ -76,12 +90,24 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         }
     }
 
+    uint64_t data_set_start_time = ubsocket_get_timeNs();
     ret = rx_ops_->RxDataSet(iov[0].iov_base, max_buf_size);
+    uint64_t data_set_end_time = ubsocket_get_timeNs();
+    if (trace != nullptr) {
+        trace->AddReadTrace(CORE_READ_RX_DATA_SET, fd_, data_set_start_time, data_set_end_time);
+    }
+
     if (ret < 0) {
         if (!((errno == EINTR) || (errno == EAGAIN))) {
             PROF_END(CORE_READ, false);
+            if (trace != nullptr) {
+                trace->AddReadTrace(CORE_READ, fd_, ubsocket_get_timeNs(), 0);
+            }
         } else {
             PROF_END(CORE_READ_EAGAIN, true);
+            if (trace != nullptr) {
+                trace->AddReadTrace(CORE_READ_EAGAIN, fd_, ubsocket_get_timeNs(), 0);
+            }
         }
         return ret;
     }
@@ -90,7 +116,13 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
         sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
     }
+    if (trace != nullptr) {
+        trace->AddReadTrace(CORE_READ, fd_, ubsocket_get_timeNs(), 0);
+    }
     PROF_END(CORE_READ, true);
+    if (trace != nullptr) {
+        trace->TrySwap();
+    }
     return rx_total_len;
 }
 
@@ -161,6 +193,10 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
         int n = LibcApi::recv(fd_, b, sizeof(b), MSG_PEEK | MSG_DONTWAIT);
         if (n == 0) {
             UBS_VLOG_INFO("The TCP connection has been closed by peer.\n");
+            auto trace_sock = ArraySet<Socket>::GetInstance().GetItem(fd_);
+            if (trace_sock != nullptr && trace_sock->split_trace_ != nullptr) {
+                trace_sock->split_trace_->Flush();
+            }
             return 0;
         }
 

@@ -81,6 +81,7 @@ cc_library(
         "ubsocket/csrc/profiling/impl/*.cpp",
         "ubsocket/csrc/profiling/probe/*.cpp",
         "ubsocket/csrc/profiling/statistics/*.cpp",
+        "ubsocket/csrc/profiling/trace/*.cpp",
         "ubsocket/csrc/under_api/*.cpp"
     ]) + glob([
         # 内部私有的.h文件
@@ -93,6 +94,7 @@ cc_library(
         "ubsocket/csrc/profiling/impl/*.h",
         "ubsocket/csrc/profiling/probe/*.h",
         "ubsocket/csrc/profiling/statistics/*.h",
+        "ubsocket/csrc/profiling/trace/*.h",
         "ubsocket/csrc/under_api/*.h"
     ]),
 

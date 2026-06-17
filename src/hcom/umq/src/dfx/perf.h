@@ -28,6 +28,9 @@ extern "C" {
 
 uint64_t umq_perf_get_start_timestamp(void);
 void umq_perf_record_write(umq_perf_record_type_t type, uint64_t start);
+void umq_perf_data_write(umq_perf_data_type_t type, umq_data_record_t data);
+void umq_ub_close_perf_log(void);
+void umq_ub_remain_data_print(void *args);
 void umq_perf_record_write_with_direction(umq_perf_record_type_t type, uint64_t start, umq_io_direction_t direction);
 void umq_perf_record_write_interrupt_with_direction(
     umq_perf_record_type_t type, uint64_t start, umq_io_direction_t direction);

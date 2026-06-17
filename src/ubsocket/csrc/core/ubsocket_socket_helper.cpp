@@ -56,6 +56,22 @@ std::string SocketConnHelper::ExtractIpFromSockAddr(const struct sockaddr *addre
     return (result != nullptr) ? std::string(ip_str) : "";
 }
 
+uint16_t SocketConnHelper::ExtractPortFromSockAddr(const struct sockaddr *address)
+{
+    uint16_t port = 0;
+    if (address == nullptr) {
+        return port;
+    }
+    if (address->sa_family == AF_INET) {
+        const sockaddr_in *addr_in = reinterpret_cast<const sockaddr_in *>(address);
+        port = ntohs(addr_in->sin_port);
+    } else if (address->sa_family == AF_INET6) {
+        const sockaddr_in6 *addr_in6 = reinterpret_cast<const sockaddr_in6 *>(address);
+        port = ntohs(addr_in6->sin6_port);
+    }
+    return port;
+}
+
 ssize_t SocketConnHelper::SendSocketData(int fd, const void *buf, size_t size, uint32_t timeout_ms)
 {
     errno = 0;
