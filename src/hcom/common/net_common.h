@@ -395,8 +395,8 @@ public:
         NN_StrToEid(srcBondingEid, uSrcBondingEid);
         NN_StrToEid(dstBondingEid, uDstBondingEid);
 
-        uvs_tp_type tpType = UVS_RTP;
-        int ret = HcomTpsa::UvsGetPathSet(&uSrcBondingEid, &uDstBondingEid, tpType, false, &uvsPathSet);
+        uvs_tp_type tpType = UVS_CTP; // 仅用以获取primaryEid提供给ipourma，实际不参与urma建链
+        int ret = HcomTpsa::UvsGetPathSet(&uSrcBondingEid, &uDstBondingEid, tpType, true, &uvsPathSet);
         if (ret != 0) {
             NN_LOG_ERROR("UvsGetPathSet failed, ret " << ret);
             return NN_INVALID_PARAM;
