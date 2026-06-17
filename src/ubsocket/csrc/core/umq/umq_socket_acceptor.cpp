@@ -77,7 +77,14 @@ Result UmqAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
                 break;
             }
             case UBHandshakeState::kSTART: {
-                std::vector<umq_port_id_t> used_port_vector = {conn_route_.src_port, back_route_.src_port};
+                std::vector<umq_port_id_t> used_port_vector;
+                if (topo_type_ == UMQ_TOPO_TYPE_CLOS && UmqSetting::UMQ_IS_BONDING) {
+                    used_port_vector = {conn_route_.src_port, back_route_.src_port};
+                } else if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D && UmqSetting::UMQ_IS_BONDING) {
+                    used_port_vector = {conn_route_.src_port};
+                } else {
+                    used_port_vector = {};
+                }
                 umq_used_ports_t used_ports = {.port = used_port_vector.data(),
                                                .num = static_cast<uint8_t>(used_port_vector.size())};
                 ackRet = DoUbAccept(socketPtr, used_ports);
@@ -280,8 +287,14 @@ Result UmqAcceptorOps::DoUbAcceptRetry(SocketPtr socketPtr, Result &ack_ret, Res
     }
 
     // 保留在 CheckDevAdd 阶段时的错误
-    std::vector<umq_port_id_t> used_port_vector = {other_route_message_.other_route.src_port,
-                                                   other_route_message_.other_back_route.src_port};
+    std::vector<umq_port_id_t> used_port_vector;
+    if (topo_type_ == UMQ_TOPO_TYPE_CLOS && UmqSetting::UMQ_IS_BONDING) {
+        used_port_vector = {other_route_message_.other_route.src_port, other_route_message_.other_back_route.src_port};
+    } else if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D && UmqSetting::UMQ_IS_BONDING) {
+        used_port_vector = {other_route_message_.other_route.src_port};
+    } else {
+        used_port_vector = {};
+    }
     umq_used_ports_t used_ports = {.port = used_port_vector.data(),
                                    .num = static_cast<uint8_t>(used_port_vector.size())};
     UBS_VLOG_INFO("DoAccept down to back, main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",

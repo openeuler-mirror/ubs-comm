@@ -191,7 +191,13 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
                     ack_ret = CheckRouteDevAddForConnect(umq_conn_info_.conn_eid, umq_socket);
                 }
                 std::vector<umq_port_id_t> used_port_vector;
-                used_port_vector = {conn_route_.src_port, back_route_.src_port};
+                if (topo_type_ == UMQ_TOPO_TYPE_CLOS && UmqSetting::UMQ_IS_BONDING) {
+                    used_port_vector = {conn_route_.src_port, back_route_.src_port};
+                } else if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D && UmqSetting::UMQ_IS_BONDING) {
+                    used_port_vector = {conn_route_.src_port};
+                } else {
+                    used_port_vector = {};
+                }
                 umq_used_ports_t used_ports = {.port = used_port_vector.data(),
                                                .num = static_cast<uint8_t>(used_port_vector.size())};
                 if (ack_ret == UBS_OK) {
@@ -564,7 +570,14 @@ Result UmqConnectorOps::DoUbConnectRetry(SocketPtr socket_ptr, Result &ack_ret, 
         return UBS_TCP_EXCHANGE;
     }
 
-    std::vector<umq_port_id_t> used_port_vector = {other_conn_route.src_port, other_back_conn_route.src_port};
+    std::vector<umq_port_id_t> used_port_vector;
+    if (topo_type_ == UMQ_TOPO_TYPE_CLOS && UmqSetting::UMQ_IS_BONDING) {
+        used_port_vector = {other_conn_route.src_port, other_back_conn_route.src_port};
+    } else if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D && UmqSetting::UMQ_IS_BONDING) {
+        used_port_vector = {other_conn_route.src_port};
+    } else {
+        used_port_vector = {};
+    }
     umq_used_ports_t used_ports = {.port = used_port_vector.data(),
                                    .num = static_cast<uint8_t>(used_port_vector.size())};
     UBS_VLOG_INFO("DoConnect down to back, main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
