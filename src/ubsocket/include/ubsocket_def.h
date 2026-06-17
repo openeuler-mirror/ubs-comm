@@ -59,6 +59,10 @@ typedef struct {
     int (*post)(u_semaphore_t *s);
 } u_external_semaphore_ops_t;
 
+typedef struct {
+    void *(*get_rpc_id)();
+    void *(*get_rpc_call_timestamp)();
+} u_external_rpc_id_ops_t;
 /*
  * structures for ubsocket
  */
@@ -74,6 +78,7 @@ typedef struct {
     u_external_lock_ops_t *lock_ops;       /* external lock operations, for example brpc's butex */
     u_external_rw_lock_ops_t *rw_lock_ops; /* external lock operations, for example brpc's butex */
     u_external_semaphore_ops_t *sem_ops;   /* external lock operations, for example brpc's sem */
+    u_external_rpc_id_ops_t *rpc_id_ops;
 } u_init_options_t;
 
 enum class UbsocketLevel : int

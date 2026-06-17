@@ -313,6 +313,7 @@ Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll del out event for socket event fd: %d failed: %d : %s\n", tx_interrupt_fd, errno,
                      strerror(errno));
+        ock::ubs::UmqApi::umq_uninit();
         return -1;
     }
     return 0;

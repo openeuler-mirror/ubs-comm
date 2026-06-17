@@ -115,7 +115,8 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
     }
 
     if (ret == UBS_OK) {
-        UBS_VLOG_INFO("tcp connect succeed, fd %d\n", new_fd);
+        UBS_VLOG_INFO("tcp connect succeed, ip %s port %d fd %d\n", umq_conn_info_.peer_ip.c_str(),
+                      SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
     } else {
         /* fd是非阻塞套接字
             * 1. 第一次调用connect返回-1，errno为EINPROGRESS，网络正在建连；

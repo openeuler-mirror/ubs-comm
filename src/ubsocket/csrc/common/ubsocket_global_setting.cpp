@@ -17,6 +17,9 @@ std::mutex GlobalSetting::MUTEX;
 uint32_t GlobalSetting::UBS_ALLOWED_PROTOCOL = 0; /* no protocol by default */
 bool GlobalSetting::UBS_NATIVE_TCP_MODE = false;  /* use ubsocket by default */
 bool GlobalSetting::UBS_TRACE_ENABLED = true;
+bool GlobalSetting::UBS_SPLIT_TRACE_ENABLED = false;
+uint32_t GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY = 65535;
+uint32_t GlobalSetting::UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS = 10;
 bool GlobalSetting::UBS_CLI_ENABLED = false;
 bool GlobalSetting::UBS_PROBE_ENABLED = false;
 bool GlobalSetting::UBS_INITED = false;                      /* not inited by default */
@@ -51,6 +54,9 @@ bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = true;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
+#define ENV_SPLIT_TRACE_ENABLED "UBSOCKET_SPLIT_TRACE_ENABLE"
+#define ENV_SPLIT_TRACE_BUF_CAPACITY "UBSOCKET_SPLIT_TRACE_BUF_CAPACITY"
+#define ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS "UBSOCKET_SPLIT_TRACE_DRAIN_INTERVAL_MS"
 #define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPT" /* match brpc_test FLAGS_ubsocket_async_accept */
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
@@ -93,10 +99,13 @@ void GlobalSetting::AddRules() noexcept
         {ENV_TRACE_FILE_SIZE, false, UBSOCKET_TRACE_FILE_SIZE_MIN, UBSOCKET_TRACE_FILE_SIZE_MAX},
         {ENV_VAR_PROBE_TIME, false, UBSOCKET_PROBE_TIME_MS_MIN, UBSOCKET_PROBE_TIME_MS_MAX},
         {ENV_VAR_PROBE_BATCH, false, UBSOCKET_PROBE_BATCH_MIN, UBSOCKET_PROBE_BATCH_MAX},
+        {ENV_SPLIT_TRACE_BUF_CAPACITY, false, 16384, 65536},
+        {ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS, false, 1, 10000},
     };
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, true, "true|false"},
+                                    {ENV_SPLIT_TRACE_ENABLED, false, "true|false"},
                                     {ENV_AUTO_FALLBACK_TCP, false, "true|false"},
                                     {ENV_ENABLE_SHARE_JFR, false, "true|false"},
                                     {ENV_USE_BRPC_ZCOPY, false, "true|false"},
@@ -183,6 +192,15 @@ Result GlobalSetting::LoadEnv() noexcept
     /* load from env */
     if (GetEnvAndValidate(ENV_TRACE_ENABLED, strEnvValue)) {
         UBS_TRACE_ENABLED = Func::BoolFromStr(strEnvValue);
+    }
+    if (GetEnvAndValidate(ENV_SPLIT_TRACE_ENABLED, strEnvValue)) {
+        UBS_SPLIT_TRACE_ENABLED = Func::BoolFromStr(strEnvValue);
+    }
+    if (GetEnvAndValidate(ENV_SPLIT_TRACE_BUF_CAPACITY, envValue)) {
+        UBS_SPLIT_TRACE_BUF_CAPACITY = static_cast<uint32_t>(envValue);
+    }
+    if (GetEnvAndValidate(ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS, envValue)) {
+        UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS = static_cast<uint32_t>(envValue);
     }
     // 正确处理 ENV_ASYNC_ACCEPTOR (字符串类型 "true"|"false")
     std::string strAsyncAccept;

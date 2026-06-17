@@ -20,6 +20,7 @@
 #include "umq_errno.h"
 #include "urpc_util.h"
 #include "util_lock.h"
+#include "umq_dfx_api.h"
 
 #ifdef UMQ_STATIC_LIB
 #include "umq_ub_api.h"
@@ -292,8 +293,9 @@ RESET_LOG:
 int umq_log_config_set(umq_log_config_t *config)
 {
     if (config == NULL) {
-        UMQ_VLOG_ERR(VLOG_UMQ, "invalid configure\n");
-        return -UMQ_ERR_EINVAL;
+        UMQ_VLOG_INFO(VLOG_UMQ, "========not print trace log\n");
+ 	    umq_ub_close_perf_log();
+ 	    return -UMQ_ERR_EINVAL;
     }
 
     if ((config->log_flag & UMQ_LOG_FLAG_LEVEL) &&
@@ -459,6 +461,8 @@ static void umq_thread_uninit(umq_init_cfg_t *cfg)
 
 void umq_uninit(void)
 {
+    void *args = NULL;
+    umq_ub_remain_data_print(args);
     if (!g_umq_inited) {
         UMQ_VLOG_ERR(VLOG_UMQ, "umq has not been inited\n");
         return;
@@ -716,6 +720,7 @@ int umq_init(umq_init_cfg_t *cfg)
     umq_init_cfg_dummy_dev_filter(g_umq_config);
 
     g_umq_inited = true;
+    umq_stats_perf_start();
     return UMQ_SUCCESS;
 
 FW_UNINIT:

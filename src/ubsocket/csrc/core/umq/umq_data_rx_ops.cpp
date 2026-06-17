@@ -50,6 +50,7 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
 
     PROF_START(CORE_READ_HANDLE_BUF);
     uint32_t polled_size = 0;
+    auto *trace = sock->split_trace_;
     for (int i = 0; i < poll_num; ++i) {
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(buf[i]->qbuf_ext);
         if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == UmqSetting::UMQ_PROBE_USER_DATA_ID) {
@@ -101,6 +102,13 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
         }
         block_cache_.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
         polled_size += buf[i]->data_size;
+        // due to the flowcontrl buf, real buf may start with i = 1
+        if (i == 0 || i == 1 || i == poll_num - 2 || i == poll_num - 1) {
+            if (trace != nullptr) {
+                trace->AddReadTrace(CORE_READ_HANDLE_BUF, sock->raw_socket_, buf_pro->imm.user_data, buf[i]->data_size,
+                                    polled_size);
+            }
+        }
     }
     PROF_END(CORE_READ_HANDLE_BUF, true);
     return 0;

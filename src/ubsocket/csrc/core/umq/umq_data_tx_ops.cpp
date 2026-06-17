@@ -34,6 +34,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
 {
     umq_buf_t *tx_buf_list = reinterpret_cast<umq_buf_t *>(buf);
     auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
+    auto *trace = sock->split_trace_;
     int flagEIO = -1;
     umq_buf_t *head_qbuf = QBUF_LIST_FIRST(&head_buf_);
     umq_buf_t *tail_qbuf = QBUF_LIST_FIRST(&tail_buf_);
@@ -52,6 +53,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     uint32_t tx_total_len = 0;
     uint32_t sn_allocated = 0;
     cvt->Reset();
+
     for (uint32_t i = 0; i < batch; ++i) {
         umq_buf_t *cur_wr_first = next_buf;
         uint32_t moved_total_len = 0;
@@ -78,7 +80,16 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         buf_pro->opcode = UMQ_OPC_SEND_IMM;
         buf_pro->flag.value = 0;
         buf_pro->user_ctx = 0;
-        buf_pro->imm.user_data = umq_socket->FetchAddSeqNum(1);
+        auto seq_no = umq_socket->FetchAddSeqNum(1);
+        buf_pro->imm.user_data = seq_no;
+        if (trace != nullptr) {
+            if (i == 0) {
+                // first write record has no seqno
+                trace->UpdateWriteFirstTrace(CORE_WRITE, seq_no, cur_buf->data_size, tx_total_len);
+            } else if (i > batch - 3) {
+                trace->AddWriteTrace(CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size, tx_total_len);
+            }
+        }
         ++sn_allocated;
 
         if (tx_queue_avail_num_.load(std::memory_order_acq_rel) == 1 || i + 1 == batch) {
@@ -109,9 +120,16 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     QBUF_LIST_FIRST(&tail_buf_) = cur_buf;
     PROF_END(CORE_WRITE_MEM_COPY, true);
 
+    // update last seqno type to CORE_WRITE_UMQ_POST, and add the timestamp
     PROF_START(CORE_WRITE_UMQ_POST);
     umq_buf_t *bad_qbuf = nullptr;
+    if (trace != nullptr) {
+        trace->UpdateWriteLastTrace(CORE_WRITE_UMQ_POST, cur_buf->data_size, tx_total_len);
+    }
     int ret = UmqApi::umq_post(local_umqh_, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
+    if (trace != nullptr) {
+        trace->UpdateWriteLastTraceEndTime(CORE_WRITE_UMQ_POST);
+    }
     if (ret == UMQ_SUCCESS) {
         // 全部 post成功
         tx_queue_avail_num_.fetch_sub(batch, std::memory_order_acq_rel);
@@ -146,7 +164,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
              * and ensures that the starting address of the Block is aligned to an 8k boundary. */
             ((Block *)PtrFloorToBoundary(cur->buf_data))->DecRef();
         }
-
         if (bad_qbuf == tx_buf_list) {
             // 全部 post 失败, 恢复状态
             unsolicited_wr_num_ = _unsolicited_wr_num;

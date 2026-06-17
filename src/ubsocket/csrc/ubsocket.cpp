@@ -21,6 +21,7 @@
 #include "profiling/probe/probe_manager.h"
 #include "profiling/statistics/statistics.h"
 #include "profiling/statistics/ubsocket_print_stats_mgr.h"
+#include "profiling/trace/ubsocket_trace.h"
 #include "ubsocket_struct_helper.h"
 #include "under_api/dl_api.h"
 
@@ -32,6 +33,9 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
         errno = EINVAL;
         return UBS_ERROR;
     }
+
+    UBS_SLOG_DEBUG(*options);
+
     options->allowed_protocol = UBS_PROTOCOL_TCP; /* use raw tcp by default */
     options->async_acceptor_thread_count = 0;     /* tune off by default */
     options->async_connector_thread_count = 0;    /* tune off by default */
@@ -39,8 +43,6 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
     options->lock_ops = nullptr;
     options->rw_lock_ops = nullptr;
     options->sem_ops = nullptr;
-
-    UBS_SLOG_DEBUG(*options);
     return UBS_OK;
 }
 
@@ -142,6 +144,14 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         }
     }
 
+    if (options->rpc_id_ops != nullptr) {
+        result = TraceRegistry::RegisterRpcIdOps(options->rpc_id_ops);
+        if (result != UBS_OK) {
+            errno = EBADF;
+            return UBS_ERROR;
+        }
+    }
+
     /* step3: socket related initialization */
     ArraySet<Socket>::GetInstance().Init();
     g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
@@ -163,6 +173,10 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         return UBS_ERROR;
     }
     //#endif
+
+    if (!GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        UmqApi::umq_log_config_set(NULL);
+    }
 
     /* step6: register signal handler */
     std::signal(SIGUSR2, ubsocket_handle_signal);
@@ -194,6 +208,9 @@ UBS_API int ubsocket_init(u_init_options_t *options)
                                                         GlobalSetting::UBS_TRACE_FILE_PATH,
                                                         GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
     }
+    if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        TracePrintThread::Instance().Start();
+    }
 
     return UBS_OK;
 }
@@ -204,6 +221,14 @@ void ubsocket_uninit()
         Profiling::Uninit();
     }
     /* do trace log destroy */
+    if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        TracePrintThread::Instance().Stop();
+        ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) {
+            if (sock->split_trace_ != nullptr) {
+                sock->split_trace_->Flush();
+            }
+        });
+    }
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::PrintStatsMgr::StopStatsCollection();
     }
@@ -226,8 +251,7 @@ void UmqLogger(int level, char *log_msg)
         UBS_LOG_STREAM_RAW(new_level, log_msg);
     } else {
         static const char *OTHER_LEVEL[] = {"EMERG", "ALERT", "CRIT"};
-        UBS_LOG_STREAM_RAW(LogLevel::LEVEL_ERR,
-                           OTHER_LEVEL[level % (sizeof(OTHER_LEVEL) / sizeof(OTHER_LEVEL[0]))] << ", " << log_msg);
+        UBS_LOG_STREAM_RAW(LogLevel::LEVEL_ERR, OTHER_LEVEL[level % (sizeof(OTHER_LEVEL))] << ", " << log_msg);
     }
 }
 
@@ -239,7 +263,7 @@ void UmqExtLogger(int level, const char *file, const char *function, int line, c
     } else {
         static const char *OTHER_LEVEL[] = {"EMERG", "ALERT", "CRIT"};
         UBS_LOG_STREAM_EXT_RAW(LogLevel::LEVEL_ERR, file, function, line,
-                               OTHER_LEVEL[level % (sizeof(OTHER_LEVEL) / sizeof(OTHER_LEVEL[0]))] << ", " << log_msg);
+                               OTHER_LEVEL[level % (sizeof(OTHER_LEVEL))] << ", " << log_msg);
     }
 }
 

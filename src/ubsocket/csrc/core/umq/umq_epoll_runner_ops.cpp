@@ -94,12 +94,16 @@ void UmqEpollRunnerOps::HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t 
 
 ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq)
 {
+    traceTime_.umq_rearm_start_timestamp_ = ubsocket_get_timeNs();
     if (UNLIKELY(ProcessMainUmqRearm(main_umq) < 0)) {
         return -1;
     }
+    traceTime_.umq_rearm_end_timestamp_ = ubsocket_get_timeNs();
 
     umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
+    traceTime_.umq_poll_start_timestamp_ = ubsocket_get_timeNs();
     auto pollNum = UmqApi::umq_poll(main_umq, UMQ_IO_RX, buf, MAX_EPOLL_WAIT_COUNT);
+    traceTime_.umq_poll_end_timestamp_ = ubsocket_get_timeNs();
     if (UNLIKELY(pollNum < 0)) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, pollNum, savedErrno);
@@ -123,10 +127,13 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
     int ioPollNum = pollNum - fcBufCnt;
     if (ioPollNum != 0) {
         umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
+        traceTime_.umq_alloc_start_timestamp_ = ubsocket_get_timeNs();
         umq_buf_t *rx_buf_list =
             UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), ioPollNum, UMQ_INVALID_HANDLE, &alloc_option);
+        traceTime_.umq_alloc_end_timestamp_ = ubsocket_get_timeNs();
         if (LIKELY(rx_buf_list != nullptr)) {
             umq_buf_t *bad_qbuf = nullptr;
+            traceTime_.umq_post_start_timestamp_ = ubsocket_get_timeNs();
             if (UmqApi::umq_post(main_umq, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
                 int savedErrno = errno;
                 errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
@@ -136,6 +143,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
                              UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, UMQ_FAIL), savedErrno);
                 UmqApi::umq_buf_free(bad_qbuf);
             }
+            traceTime_.umq_post_end_timestamp_ = ubsocket_get_timeNs();
         }
     }
 
@@ -155,7 +163,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
     for (auto epoll_fd : readable_epoll_fds) {
         epoll_fd->SetReadableEventFd();
     }
-
+    traceTime_.process_share_jfr_end_timestamp_ = ubsocket_get_timeNs();
     return 0;
 }
 
@@ -173,6 +181,37 @@ ALWAYS_INLINE std::unordered_set<Socket *> UmqEpollRunnerOps::SiftSocketEventsWi
         if (UNLIKELY(socket_ptr == nullptr)) {
             UBS_VLOG_WARN("async_epoll Get socket fd:%d object failed. \n", socket_fd);
             continue;
+        }
+
+        auto *trace = socket_ptr->split_trace_;
+
+        if (i == 0) {
+            uint32_t last_seq = 0;
+            if (buf_pro->imm.user_data > 0) {
+                last_seq = buf_pro->imm.user_data - 1;
+            }
+            if (trace != nullptr) {
+                trace->AddEpollTrace(CORE_PROCESS_JRF_END, socket_ptr->raw_socket_, last_seq, buf[i]->data_size, count,
+                                     traceTime_.process_share_jfr_end_timestamp_, 0);
+                trace->AddEpollTrace(CORE_EPOLL_REARM, socket_ptr->raw_socket_, buf_pro->imm.user_data,
+                                     buf[i]->data_size, count, traceTime_.umq_rearm_start_timestamp_,
+                                     traceTime_.umq_rearm_end_timestamp_);
+                trace->AddEpollTrace(CORE_EPOLL_POLL_RX, socket_ptr->raw_socket_, buf_pro->imm.user_data,
+                                     buf[i]->data_size, count, traceTime_.umq_poll_start_timestamp_,
+                                     traceTime_.umq_poll_end_timestamp_);
+                trace->AddEpollTrace(CORE_EPOLL_ALLOC_BUF, socket_ptr->raw_socket_, buf_pro->imm.user_data,
+                                     buf[i]->data_size, count, traceTime_.umq_alloc_start_timestamp_,
+                                     traceTime_.umq_alloc_end_timestamp_);
+                trace->AddEpollTrace(CORE_EPOLL_POST_RX, socket_ptr->raw_socket_, buf_pro->imm.user_data,
+                                     buf[i]->data_size, count, traceTime_.umq_post_start_timestamp_,
+                                     traceTime_.umq_post_end_timestamp_);
+            }
+        }
+        // due to the flowcontrl buf message, not simple to record first and last
+        if (trace != nullptr) {
+            trace->AddEpollTrace(CORE_EPOLL_ENQUEUE, socket_ptr->raw_socket_, buf_pro->imm.user_data, buf[i]->data_size,
+                                 0);
+            trace->TrySwapEpoll();
         }
 
         if (UNLIKELY((((UmqSocket *)socket_ptr)->AddQbuf(buf[i]) != 0))) {

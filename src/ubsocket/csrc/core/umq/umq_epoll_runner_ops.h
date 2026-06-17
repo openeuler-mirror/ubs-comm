@@ -18,6 +18,17 @@
 namespace ock {
 namespace ubs {
 namespace umq {
+struct UmqPollTraceTime {
+    uint64_t umq_poll_start_timestamp_;
+    uint64_t umq_poll_end_timestamp_;
+    uint64_t umq_rearm_start_timestamp_;
+    uint64_t umq_rearm_end_timestamp_;
+    uint64_t umq_alloc_start_timestamp_;
+    uint64_t umq_alloc_end_timestamp_;
+    uint64_t umq_post_start_timestamp_;
+    uint64_t umq_post_end_timestamp_;
+    uint64_t process_share_jfr_end_timestamp_;
+};
 
 class UmqEpollRunnerOps : public EpollRunnerOps {
 public:
@@ -60,7 +71,9 @@ private:
     uint32_t event_num_{0};
     std::unordered_map<int, uint64_t> jfr_main_umq_{};
     u_mutex_t *mutex_{nullptr};
+    UmqPollTraceTime traceTime_{};
 };
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock
