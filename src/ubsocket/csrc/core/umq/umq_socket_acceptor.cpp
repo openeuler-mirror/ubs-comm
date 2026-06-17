@@ -80,7 +80,13 @@ Result UmqAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
             case UBHandshakeState::kSTART: {
                 std::vector<umq_port_id_t> used_port_vector;
                 if (topo_type_ == UMQ_TOPO_TYPE_CLOS && UmqSetting::UMQ_IS_BONDING) {
-                    used_port_vector = {conn_route_.src_port, back_route_.src_port};
+                    // 构造 used_ports：主路 + 所有备路端口
+                    used_port_vector.push_back(conn_route_.src_port);
+                    for (const auto &br : back_routes_) {
+                        used_port_vector.push_back(br.src_port);
+                    }
+                    UBS_VLOG_INFO("Acceptor CreateSocketResources: used_ports num=%zu (1 main + %zu backup)\n",
+                                  used_port_vector.size(), back_routes_.size());
                 } else if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D && UmqSetting::UMQ_IS_BONDING) {
                     used_port_vector = {conn_route_.src_port};
                 } else {
@@ -462,8 +468,21 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, 
         return UBS_ERROR;
     }
     conn_route_ = negoRoute.master_route;
-    back_route_ = negoRoute.back_route;
+    // 适配一主三备：从 back_routes[] 数组读取所有备路
+    back_routes_.clear();
+    for (uint32_t i = 0; i < negoRoute.back_route_num; ++i) {
+        back_routes_.push_back(negoRoute.back_routes[i]);
+    }
     topo_type_ = negoRoute.topo_type;
+
+    // 日志：打印接收到的 NegotiateRoute 内容，验证一主三备
+    UBS_VLOG_INFO("AcceptNegotiate: received back_route_num=%u\n", negoRoute.back_route_num);
+    UBS_VLOG_INFO("  master_route: src_port(chip=%u,die=%u,port=%u)\n", conn_route_.src_port.bs.chip_id,
+                  conn_route_.src_port.bs.die_id, conn_route_.src_port.bs.port_idx);
+    for (size_t i = 0; i < back_routes_.size(); ++i) {
+        UBS_VLOG_INFO("  back_routes_[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i, back_routes_[i].src_port.bs.chip_id,
+                      back_routes_[i].src_port.bs.die_id, back_routes_[i].src_port.bs.port_idx);
+    }
 
     if (UmqSetting::UMQ_IS_BONDING && !GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
         int checkResult = umqSocket->CheckDevAdd(conn_route_.dst_eid);

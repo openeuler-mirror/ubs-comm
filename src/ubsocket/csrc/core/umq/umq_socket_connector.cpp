@@ -193,7 +193,12 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
                 }
                 std::vector<umq_port_id_t> used_port_vector;
                 if (topo_type_ == UMQ_TOPO_TYPE_CLOS && UmqSetting::UMQ_IS_BONDING) {
-                    used_port_vector = {conn_route_.src_port, back_route_.src_port};
+                    used_port_vector.push_back(conn_route_.src_port);
+                    for (const auto &br : back_routes_) {
+                        used_port_vector.push_back(br.src_port);
+                    }
+                    UBS_VLOG_INFO("CreateSocketResources: used_ports num=%zu (1 main + %zu backup)\n",
+                                  used_port_vector.size(), back_routes_.size());
                 } else if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D && UmqSetting::UMQ_IS_BONDING) {
                     used_port_vector = {conn_route_.src_port};
                 } else {
@@ -385,7 +390,17 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
         return UBS_ERROR;
     }
 
-    NegotiateRoute negoRoute(topo_type_, conn_route_, back_route_);
+    // 日志：打印即将发送的 NegotiateRoute 内容
+    UBS_VLOG_INFO("Send NegotiateRoute: topo_type=%u, back_route_num=%zu\n", topo_type_, back_routes_.size());
+    UBS_VLOG_INFO("  master_route: src_port(chip=%u,die=%u,port=%u) dst_port(chip=%u,die=%u,port=%u)\n",
+                  conn_route_.src_port.bs.chip_id, conn_route_.src_port.bs.die_id, conn_route_.src_port.bs.port_idx,
+                  conn_route_.dst_port.bs.chip_id, conn_route_.dst_port.bs.die_id, conn_route_.dst_port.bs.port_idx);
+    for (size_t i = 0; i < back_routes_.size(); ++i) {
+        UBS_VLOG_INFO("  back_routes[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i, back_routes_[i].src_port.bs.chip_id,
+                      back_routes_[i].src_port.bs.die_id, back_routes_[i].src_port.bs.port_idx);
+    }
+
+    NegotiateRoute negoRoute(topo_type_, conn_route_, back_routes_);
     if (SocketConnHelper::SendSocketData(raw_fd_, &negoRoute, sizeof(NegotiateRoute), CONTROL_PLANE_TIMEOUT_MS) !=
         sizeof(NegotiateRoute)) {
         UBS_VLOG_ERR("Failed to send negotiate route info in connect, fd: %d\n", raw_fd_);
@@ -420,25 +435,39 @@ Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_e
             UBS_VLOG_ERR("Failed to get connect eid\n");
             return UBS_ERROR;
         }
-        back_route_ = umq_route_t{};
-    } else {
-        std::vector<umq_route_t> main_routes;
-        std::vector<umq_route_t> back_routes;
-        umq_route_t conn_main_route;
-        umq_route_t conn_back_route;
+        // 电组网无备路，清空以防 CLOS→FULLMESH 切换时残留
+        back_routes_.clear();
+    } else {                                       //光组网
+        std::vector<umq_route_t> main_routes;      //亲和组
+        std::vector<umq_route_t> back_routes;      //不亲和组
+        umq_route_t conn_main_route;               //主路
+        std::vector<umq_route_t> conn_back_routes; //备路组（最多3条）
+
         int getAffinityRes = GetCpuAffinityUmqRoute(filtered_list, main_routes, back_routes);
         if (getAffinityRes != 0) {
             UBS_VLOG_ERR("Failed to get cpu affinity umq route\n");
             conn_route_ = umq_route_t{};
-            back_route_ = umq_route_t{};
+            back_routes_.clear();
             return UBS_ERROR;
         }
-        // 在客户端侧把不亲数组存起来
-        back_route_list_ = back_routes;
-        // 优先在mainRoutes里轮询
-        RRChooseMainRoute(main_routes, dst_eid, conn_main_route, conn_back_route);
+        // 在客户端侧把不亲数组存起来（用于降级，不消耗）
+        non_aff_route_list_ = back_routes;
+
+        // 一主三备：合并亲和组和不亲和组，统一RR轮询（不区分亲和/不亲和）
+        std::vector<umq_route_t> all_routes = main_routes;
+        all_routes.insert(all_routes.end(), back_routes.begin(), back_routes.end());
+
+        // 日志：打印所有路由大小
+        UBS_VLOG_INFO("DoRoute(CLOS): main_routes.size()=%zu, back_routes.size()=%zu, all_routes.size()=%zu\n",
+                      main_routes.size(), back_routes.size(), all_routes.size());
+        RRChooseMainRoute(all_routes, dst_eid, conn_main_route, conn_back_routes);
         conn_route_ = conn_main_route;
-        back_route_ = conn_back_route;
+
+        // 备路组：直接使用RR选择的备路（已包含亲和+不亲和的统一排序）
+        back_routes_.clear();
+        for (const auto &br : conn_back_routes) {
+            back_routes_.push_back(br);
+        }
     }
     return UBS_OK;
 }
@@ -751,27 +780,29 @@ void UmqConnectorOps::GetBondingEidMapIndex(const umq_eid_t &dst_eid, uint32_t &
 }
 
 // CLOS组网 通过亲和性选择 Client端调用
-Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std::vector<umq_route_t> &main_routes,
-                                               std::vector<umq_route_t> &back_routes)
+// affine_routes: 输出，亲和组路由（本端和对端均为同芯片）
+// non_aff_routes: 输出，非亲和组路由（跨芯片）
+Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std::vector<umq_route_t> &affine_routes,
+                                               std::vector<umq_route_t> &non_aff_routes)
 {
-    main_routes.clear();
-    back_routes.clear();
-    uint32_t process_chip_Id = 0;
-    uint32_t peer_chip_id = 0;
+    affine_routes.clear();
+    non_aff_routes.clear();
+    uint32_t process_chip_Id = 0; //本段芯片id
+    uint32_t peer_chip_id = 0;    //对端芯片id
 
     // 本端
-    std::set<uint32_t> process_chip_ids;
+    std::set<uint32_t> process_chip_ids; //本段芯片数组
     for (uint32_t i = 0; i < route_list.route_num; ++i) {
         process_chip_ids.insert(route_list.routes[i].src_port.bs.chip_id);
     }
     std::vector<uint32_t> process_chip_id_list(process_chip_ids.begin(), process_chip_ids.end());
-    process_chip_Id =
-        GetTargetChipId(UmqSetting::UMQ_ALL_SOCKET_IDS, process_chip_id_list, UmqSetting::UMQ_PROCESS_SOCKET_ID);
+    process_chip_Id = GetTargetChipId(UmqSetting::UMQ_ALL_SOCKET_IDS, process_chip_id_list,
+                                      UmqSetting::UMQ_PROCESS_SOCKET_ID); //得到本端芯片id
     UBS_VLOG_INFO("process_chip_Id: %u\n", process_chip_Id);
 
     // 对端
     std::set<uint32_t> peer_chip_ids;
-    for (uint32_t i = 0; i < route_list.route_num; ++i) {
+    for (uint32_t i = 0; i < route_list.route_num; ++i) { //亲和
         peer_chip_ids.insert(route_list.routes[i].dst_port.bs.chip_id);
     }
     std::vector<uint32_t> peer_chip_id_list(peer_chip_ids.begin(), peer_chip_ids.end());
@@ -781,18 +812,18 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
     for (uint32_t i = 0; i < route_list.route_num; ++i) {
         if (route_list.routes[i].src_port.bs.chip_id == process_chip_Id &&
             route_list.routes[i].dst_port.bs.chip_id == peer_chip_id) {
-            main_routes.push_back(route_list.routes[i]);
+            affine_routes.push_back(route_list.routes[i]);
         }
     }
 
     for (uint32_t i = 0; i < route_list.route_num; ++i) {
         if (route_list.routes[i].src_port.bs.chip_id != process_chip_Id &&
             route_list.routes[i].dst_port.bs.chip_id != peer_chip_id) {
-            back_routes.push_back(route_list.routes[i]);
+            non_aff_routes.push_back(route_list.routes[i]);
         }
     }
 
-    if (!main_routes.empty() && !back_routes.empty()) {
+    if (!affine_routes.empty() && !non_aff_routes.empty()) {
         UBS_VLOG_INFO("Find umq route successfully\n");
         return UBS_OK;
     }
@@ -800,25 +831,25 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
     UBS_VLOG_WARN("Default Route policy Not Applied, Finding Route Based on Process End Chip Id.\n");
 
     // 主或备为空 回退到client端同chip_id
-    if (main_routes.empty()) {
+    if (affine_routes.empty()) {
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
             if (route_list.routes[i].src_port.bs.chip_id == process_chip_Id &&
                 route_list.routes[i].dst_port.bs.chip_id == process_chip_Id) {
-                main_routes.push_back(route_list.routes[i]);
+                affine_routes.push_back(route_list.routes[i]);
             }
         }
     }
 
-    if (back_routes.empty()) {
+    if (non_aff_routes.empty()) {
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
             if (route_list.routes[i].src_port.bs.chip_id != process_chip_Id &&
                 route_list.routes[i].dst_port.bs.chip_id != process_chip_Id) {
-                back_routes.push_back(route_list.routes[i]);
+                non_aff_routes.push_back(route_list.routes[i]);
             }
         }
     }
 
-    if (!main_routes.empty() && !back_routes.empty()) {
+    if (!affine_routes.empty() && !non_aff_routes.empty()) {
         UBS_VLOG_INFO("Find umq route successfully\n");
         return UBS_OK;
     }
@@ -827,28 +858,40 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
     return UBS_ERROR;
 }
 
-void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &main_routes, const umq_eid_t *dst_eid,
-                                        umq_route_t &conn_main_route, umq_route_t &conn_back_route)
+void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &all_routes, const umq_eid_t *dst_eid,
+                                        umq_route_t &conn_main_route, std::vector<umq_route_t> &conn_back_routes)
 {
     // 获取起始索引
     uint32_t startIndex = 0;
     GetBondingEidMapIndex(*dst_eid, startIndex);
 
+    // 一主三备：确认测试环境亲和组大小
+    UBS_VLOG_INFO("RRChooseMainRoute: all_routes.size()=%zu, startIndex=%u\n", all_routes.size(), startIndex);
+
     // 确保索引在有效范围内
-    startIndex = startIndex % main_routes.size();
+    startIndex = startIndex % all_routes.size();
 
     // 从起始索引开始轮询查找
-    conn_main_route = main_routes[startIndex];
-    startIndex = (startIndex + 1) % main_routes.size(); // 更新下次起始位置
-    conn_back_route = main_routes[startIndex];
+    conn_main_route = all_routes[startIndex];
 
-    // 更新下一个轮询位置
-    EidRegistry::Instance().RegisterOrReplaceEidIndex(*dst_eid, startIndex);
+    // 一主三备：从主路下一位开始，取最多3条作为备路（循环取）
+    conn_back_routes.clear();
+    uint32_t size = static_cast<uint32_t>(all_routes.size());
+    for (uint32_t i = 1; i <= NegotiateRoute::BACK_ROUTE_MAX_NUM && i < size; ++i) {
+        conn_back_routes.push_back(all_routes[(startIndex + i) % size]);
+    }
+
+    // 更新下一个轮询位置（存下一个索引，让RR真正前进）
+    uint32_t nextIndex = (startIndex + 1) % static_cast<uint32_t>(all_routes.size());
+    EidRegistry::Instance().RegisterOrReplaceEidIndex(*dst_eid, nextIndex);
 
     UBS_VLOG_INFO("main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", conn_main_route.src_port.bs.chip_id,
                   conn_main_route.src_port.bs.die_id, conn_main_route.src_port.bs.port_idx);
-    UBS_VLOG_INFO("back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", conn_back_route.src_port.bs.chip_id,
-                  conn_back_route.src_port.bs.die_id, conn_back_route.src_port.bs.port_idx);
+    for (size_t i = 0; i < conn_back_routes.size(); ++i) {
+        UBS_VLOG_INFO("back route[%zu]: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", i,
+                      conn_back_routes[i].src_port.bs.chip_id, conn_back_routes[i].src_port.bs.die_id,
+                      conn_back_routes[i].src_port.bs.port_idx);
+    }
 }
 
 Result UmqConnectorOps::CheckRouteDevAddForConnect(const umq_eid_t &conn_eid, const UmqSocketPtr &umq_socket)
@@ -867,10 +910,13 @@ Result UmqConnectorOps::CheckRouteDevAddForConnect(const umq_eid_t &conn_eid, co
         return UBS_OK;
     }
 
-    if (umq_socket->CheckDevAdd(back_route_.src_eid) != 0) {
-        UBS_VLOG_ERR("Failed to check backup dev add in connect, target eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
-                     EID_ARGS(back_route_.src_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
-        return UBS_UMQ_ERROR;
+    // 一主三备：检查所有备路端口（不只第一条）
+    for (size_t i = 0; i < back_routes_.size(); ++i) {
+        if (umq_socket->CheckDevAdd(back_routes_[i].src_eid) != 0) {
+            UBS_VLOG_ERR("Failed to check backup dev add[%zu] in connect, target eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
+                         i, EID_ARGS(back_routes_[i].src_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+            return UBS_UMQ_ERROR;
+        }
     }
 
     return UBS_OK;
@@ -924,10 +970,12 @@ Result UmqConnectorOps::CheckOtherRoute(const UmqSocketPtr &umq_socket)
 Result UmqConnectorOps::CheckOtherRouteForClos(const UmqSocketPtr &umq_socket)
 {
     umq_route_t conn_main_route;
-    umq_route_t conn_back_route;
-    RRChooseMainRoute(back_route_list_, &umq_conn_info_.peer_eid, conn_main_route, conn_back_route);
+    std::vector<umq_route_t> temp_back_routes;
+    // 从容灾备路池选路，适配 RRChooseMainRoute 新签名
+    RRChooseMainRoute(non_aff_route_list_, &umq_conn_info_.peer_eid, conn_main_route, temp_back_routes);
     other_conn_route = conn_main_route;
-    other_back_conn_route = conn_back_route;
+    // 取第一条备路，兼容 OtherRouteMessage 的二字段结构
+    other_back_conn_route = temp_back_routes.empty() ? umq_route_t{} : temp_back_routes[0];
 
     UBS_VLOG_INFO("other main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
                   other_conn_route.src_port.bs.chip_id, other_conn_route.src_port.bs.die_id,

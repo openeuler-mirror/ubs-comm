@@ -54,6 +54,12 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
         queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         queue_cfg.used_ports = used_ports;
+        // 日志：打印 used_ports 内容，验证一主三备是否传入
+        UBS_VLOG_INFO("CreateLocalUmq: used_ports.num=%u (expect 1 main + up to 3 backup)\n", used_ports.num);
+        for (uint32_t i = 0; i < used_ports.num; ++i) {
+            UBS_VLOG_INFO("  used_ports[%u]: src_port(chip=%u,die=%u,port=%u)\n", i, used_ports.port[i].bs.chip_id,
+                          used_ports.port[i].bs.die_id, used_ports.port[i].bs.port_idx);
+        }
     }
 
     int n = snprintf(queue_cfg.name, UMQ_NAME_MAX_LEN, "fd: %d", raw_socket_);

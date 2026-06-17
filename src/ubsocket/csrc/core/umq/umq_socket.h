@@ -193,15 +193,23 @@ struct NegotiateRsp {
 };
 
 struct NegotiateRoute {
+    enum : uint32_t
+    {
+        BACK_ROUTE_MAX_NUM = 3
+    };
     umq_topo_type_t topo_type;
     umq_route master_route;
-    umq_route back_route;
+    umq_route back_routes[BACK_ROUTE_MAX_NUM];
+    uint32_t back_route_num{0};
     NegotiateRoute() = default;
-    NegotiateRoute(umq_topo_type_t t_type, const umq_route &m_route, const umq_route &b_route)
+    NegotiateRoute(umq_topo_type_t t_type, const umq_route &m_route, const std::vector<umq_route_t> &b_routes)
         : topo_type(t_type),
           master_route(m_route),
-          back_route(b_route)
+          back_route_num(std::min(static_cast<uint32_t>(b_routes.size()), static_cast<uint32_t>(BACK_ROUTE_MAX_NUM)))
     {
+        for (uint32_t i = 0; i < back_route_num; ++i) {
+            back_routes[i] = b_routes[i];
+        }
     }
 };
 
