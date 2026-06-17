@@ -14,6 +14,7 @@
 #include <netinet/tcp.h>
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_port_cooldown.h"
 #include "common/ubsocket_scope_exit.h"
 #include "core/umq/umq_eid_table.h"
 #include "umq_conn_helper.h"
@@ -448,6 +449,21 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &c
     CpMsg remote_cp_msg;
     Result ret;
     auto socket = RefConvert<UmqSocket, Socket>(umq_socket);
+
+    // ========== 新增：umq_bind() 前检查冷却（仅 CLOS 组网）==========
+    if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {
+        for (uint8_t i = 0; i < used_ports.num; ++i) {
+            if (PortCooldownManager::IsPortInCooldown(used_ports.port[i])) {
+                UBS_VLOG_ERR("DoUbConnect: port(value=%u) in cooldown, skip umq_bind, Peer eid:" EID_FMT
+                             ", Peer IP:%s, fd: %d\n",
+                             used_ports.port[i].value, EID_ARGS(umq_conn_info_.peer_eid),
+                             umq_conn_info_.peer_ip.c_str(), raw_fd_);
+                return UBS_UMQ_BIND | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
+            }
+        }
+    }
+    // ===============================================================
+
     // CreateLocalUmq
     if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
         ret =
@@ -515,6 +531,17 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &c
                      "original errno: %d, operation duration: %lld ms.\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, umq_ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, umq_ret), savedErrno, costms);
+        // ========== 新增：umq_bind() 失败后标记冷却（仅 CLOS 组网）==========
+        if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {
+            for (uint8_t i = 0; i < used_ports.num; ++i) {
+                PortCooldownManager::MarkPortInCooldown(used_ports.port[i]);
+                UBS_VLOG_ERR("DoUbConnect: umq_bind failed, mark port(value=%u) in cooldown, Peer eid:" EID_FMT
+                             ", Peer IP:%s, fd: %d\n",
+                             used_ports.port[i].value, EID_ARGS(umq_conn_info_.peer_eid),
+                             umq_conn_info_.peer_ip.c_str(), raw_fd_);
+            }
+        }
+        // ================================================================
         return UBS_UMQ_BIND | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
