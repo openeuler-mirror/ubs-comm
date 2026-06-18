@@ -70,6 +70,7 @@ uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 10; /* port cooldown duration in
 #define ENV_UBS_TX_DEPTH "UBSOCKET_TX_DEPTH"
 #define ENV_USE_BRPC_ZCOPY "UBSOCKET_USE_BRPC_ZCOPY"
 #define ENV_UBS_HAND_SHAKE_MODE "UBSOCKET_UB_HANDSHAKE_MODE"
+#define ENV_UBS_THREAD_POOL_SIZE "UBSOCKET_THREAD_POOL_SIZE"
 #define ENV_PROF_ENABLE "UBSOCKET_PROF_ENABLE"
 #define ENV_PROF_MODE "UBSOCKET_PROF_MODE"
 #define ENV_PROF_DUMP_INTERVAL_MIN "UBSOCKET_PROF_DUMP_INTERVAL_MIN"
@@ -104,6 +105,7 @@ void GlobalSetting::AddRules() noexcept
         {ENV_SPLIT_TRACE_BUF_CAPACITY, false, 16384, 65536},
         {ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS, false, 1, 10000},
         {ENV_PORT_COOLDOWN_SEC, false, 1, 300},
+        {ENV_UBS_THREAD_POOL_SIZE, false, 1, UINT32_MAX},
     };
 
     /* str enum rules: name, required, enum */
@@ -258,6 +260,11 @@ Result GlobalSetting::LoadEnv() noexcept
     if (GetEnvAndValidate(ENV_UBS_HAND_SHAKE_MODE, strEnvValue)) {
         UBS_HAND_SHAKE_MODE = HandShakeFromStr(strEnvValue);
     }
+
+    if (GetEnvAndValidate(ENV_UBS_THREAD_POOL_SIZE, envValue)) {
+        UBS_THREAD_POOL_SIZE = static_cast<uint32_t>(envValue);
+    }
+
     if (GetEnvAndValidate(ENV_PROF_ENABLE, strEnvValue)) {
         UBS_PROF_ENABLE = Func::BoolFromStr(strEnvValue);
     }
