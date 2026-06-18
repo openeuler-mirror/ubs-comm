@@ -753,7 +753,6 @@ int umq_init(umq_init_cfg_t *cfg)
     umq_init_cfg_dummy_dev_filter(g_umq_config);
 
     g_umq_inited = true;
-    umq_stats_perf_start();
     return UMQ_SUCCESS;
 
 FW_UNINIT:
