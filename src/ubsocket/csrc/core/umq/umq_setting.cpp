@@ -33,6 +33,8 @@ namespace umq {
 #define ENV_UMQ_UB_TRANS_MODE "UBSOCKET_UB_TRANS_MODE"
 #define ENV_UMQ_FLOW_CONTROL_ENABLED "UBSOCKET_FLOW_CONTROL_ENABLE"
 #define ENV_UMQ_LINK_PRIORITY "UBSOCKET_LINK_PRIORITY"
+#define ENV_UMQ_TP_TYPE "UBSOCKET_TP_TYPE"
+#define ENV_UMQ_TP_POOL_SIZE "UBSOCKET_TP_POOL_SIZE"
 
 #define DEFAULT_DEV_SCHEDULE_POLICY "affinity_priority"
 #define ROUND_ROBIN_DEV_SCHEDULE_POLICY "rr"
@@ -62,9 +64,13 @@ dev_schedule_policy UmqSetting::UMQ_DEV_SCHEDULE_POLICY = CPU_AFFINITY_PRIORITY;
 // TODO: 根据 UBS_TRANS_MODE 来设置 UMQ_TRANS_MODE, 待增加 ENV转换器
 umq_trans_mode_t UmqSetting::UMQ_TRANS_MODE = UMQ_TRANS_MODE_UB;
 ub_trans_mode UmqSetting::UMQ_UB_TRANS_MODE = RM_TP;
+umq_tp_mode_t UmqSetting::UMQ_UB_TP_MODE = UMQ_TM_RM;
+umq_tp_type_t UmqSetting::UMQ_UB_TP_TYPE = UMQ_TP_TYPE_RTP;
 bool UmqSetting::UMQ_IS_BONDING = false;
 bool UmqSetting::UMQ_FLOW_CONTROL_ENABLE = true;
 int8_t UmqSetting::UMQ_LINK_PRIORITY = UBSOCKET_LINK_PRIORITY_DEFAULT;
+pool_type_t UmqSetting::UMQ_TP_TYPE = SINGLE;
+uint32_t UmqSetting::UMQ_TP_POOL_SIZE = 16;
 
 void UmqSetting::AddRules() noexcept
 {
@@ -74,13 +80,15 @@ void UmqSetting::AddRules() noexcept
                                {ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
                                {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 6144},
-                               {ENV_UMQ_LINK_PRIORITY, false, 0, 15}};
+                               {ENV_UMQ_LINK_PRIORITY, false, 0, 15},
+                               {ENV_UMQ_TP_POOL_SIZE, false, 1, 1000}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_UMQ_BLOCK_TYPE, false, "tiny|default|small|medium|large"},
                                     {ENV_UMQ_SCHEDULE_POLICY, false, "rr|affinity|affinity_priority"},
                                     {ENV_UMQ_UB_TRANS_MODE, false, "RC_TP|RM_TP|RM_CTP|RC_CTP"},
-                                    {ENV_UMQ_FLOW_CONTROL_ENABLED, false, "true|false"}};
+                                    {ENV_UMQ_FLOW_CONTROL_ENABLED, false, "true|false"},
+                                    {ENV_UMQ_TP_TYPE, false, "single|pool"}};
 
     /* str not empty rules: name, required */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_UMQ_DEV_NAME, false}, {ENV_UMQ_DEV_SRC_EID, false}};
@@ -132,6 +140,18 @@ Result UmqSetting::LoadEnv() noexcept
         UMQ_MEM_POOL_MAX_SIZE_MB = static_cast<uint64_t>(int64EnvValue);
     }
 
+    if (GS::GetEnvAndValidate(ENV_UMQ_TP_TYPE, strEnvValue)) {
+        if (strEnvValue == "pool") {
+            UMQ_TP_TYPE = POOL;
+        } else {
+            UMQ_TP_TYPE = SINGLE;
+        }
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_TP_POOL_SIZE, int64EnvValue)) {
+        UMQ_TP_POOL_SIZE = static_cast<uint32_t>(int64EnvValue);
+    }
+
     if (GS::GetEnvAndValidate(ENV_UMQ_DEV_IP, strEnvValue)) {
         UMQ_DEV_IP = strEnvValue;
     }
@@ -181,14 +201,24 @@ Result UmqSetting::LoadEnv() noexcept
         std::string ub_trans_mode_str = strEnvValue;
         if (ub_trans_mode_str == "RM_TP") {
             UMQ_UB_TRANS_MODE = ub_trans_mode::RM_TP;
+            UMQ_UB_TP_MODE = UMQ_TM_RM;
+            UMQ_UB_TP_TYPE = UMQ_TP_TYPE_RTP;
         } else if (ub_trans_mode_str == "RM_CTP") {
             UMQ_UB_TRANS_MODE = ub_trans_mode::RM_CTP;
+            UMQ_UB_TP_MODE = UMQ_TM_RM;
+            UMQ_UB_TP_TYPE = UMQ_TP_TYPE_CTP;
         } else if (ub_trans_mode_str == "RC_TP") {
             UMQ_UB_TRANS_MODE = ub_trans_mode::RC_TP;
+            UMQ_UB_TP_MODE = UMQ_TM_RC;
+            UMQ_UB_TP_TYPE = UMQ_TP_TYPE_RTP;
         } else if (ub_trans_mode_str == "RC_CTP") {
             UMQ_UB_TRANS_MODE = ub_trans_mode::RC_CTP;
+            UMQ_UB_TP_MODE = UMQ_TM_RC;
+            UMQ_UB_TP_TYPE = UMQ_TP_TYPE_CTP;
         } else {
             UMQ_UB_TRANS_MODE = ub_trans_mode::RC_TP;
+            UMQ_UB_TP_MODE = UMQ_TM_RC;
+            UMQ_UB_TP_TYPE = UMQ_TP_TYPE_RTP;
         }
         UBS_VLOG_INFO("Current ub trans mode");
     }

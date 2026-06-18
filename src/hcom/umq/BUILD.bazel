@@ -31,6 +31,7 @@ cc_library(
         "src/umq_ub",
         "src/umq_ub/core",
         "src/umq_ub/core/flow_control",
+        "src/umq_ub/core/jetty_pool",
         "src/umq_ub/core/private",
         "src",
         "util",

@@ -15,7 +15,7 @@ description: Module-specific skill for writing UT for files under src/ubsocket/c
 - `umq_data_tx_ops.h/.cpp` — UmqTxOps (TX数据通路)
 - `umq_backend.h/.cpp` — UmqBackend (初始化、dev_add、状态管理)
 - `umq_socket.h/.cpp` — UmqSocket (interrupt_fd_get, rearm, prefill)
-- `umq_epoll_runner_ops.h/.cpp` — UmqEpollRunnerOps (epoll集成)
+- `umq_share_jfr_epoll_runner_ops.h/.cpp` — UmqShareJfrEpollRunnerOps (epoll集成)
 - `umq_socket_connector.h/.cpp` — UmqSocketConnector (连接路径)
 - `umq_socket_acceptor.h/.cpp` — UmqSocketAcceptor (接受路径)
 - `umq_errno_converter.h/.cpp` — UmqErrnoConverter (errno映射, API冻结)
@@ -35,7 +35,7 @@ description: Module-specific skill for writing UT for files under src/ubsocket/c
 | UmqSocket | 从SocketBase的复杂ctor | `::umq_interrupt_fd_get`, `::umq_rearm_interrupt`, LockRegistry, SocketSet |
 | UmqSocketConnector | 继承UmqSocket | `::umq_bind` (CONNECT op), OsAPiMgr系统调用 |
 | UmqSocketAcceptor | 继承UmqSocket | `::umq_dev_add` (ACCEPT op), `::umq_bind` (ACCEPT op) |
-| UmqEpollRunnerOps | 依赖epoll基础设施 | OsAPiMgr::epoll_create, epoll_ctl, epoll_wait |
+| UmqShareJfrEpollRunnerOps | 依赖epoll基础设施 | OsAPiMgr::epoll_create, epoll_ctl, epoll_wait |
 | UmqErrnoConverter | 静态类(无ctor) | 无 — 纯逻辑，无需mock |
 
 ## UT约束

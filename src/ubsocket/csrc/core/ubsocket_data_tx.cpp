@@ -52,6 +52,14 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         return UBS_ERROR;
     }
 
+    if (!tx_ops_->Writable(sock)) {
+        errno = EAGAIN;
+        UBS_VLOG_DEBUG("WriteV socket is not writable, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                       Func::Error2Str(errno));
+        PROF_END(CORE_WRITE, false);
+        return 0;
+    }
+
     PROF_START(CORE_WRITE_POLL_TX);
     if (tx_ops_->PollTx(sock) < 0) {
         PROF_END(CORE_WRITE_POLL_TX, false);

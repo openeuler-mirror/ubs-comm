@@ -303,7 +303,9 @@ public:
         uint64_t umqh = sockObj->UmqHandle();
         // 记录应用层发送时间
         UpdateBuffer(probeInfo, MASK_CLIENT_SEND);
-        int ret = umq_post(umqh, buf, UMQ_IO_TX, &bad_qbuf);
+        umq_io_option_t option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
+                                  UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+        int ret = umq_post(umqh, buf, &option, &bad_qbuf);
         if (ret != 0) {
             umq_buf_free(buf);
             return -1;
@@ -343,7 +345,9 @@ public:
         // 记录 Server 回复时间 (应用层 + UMQ层)
         UpdateBuffer(rspProbeInfo, MASK_SERVER_RSP);
         umq_buf_t *bad_qbuf = nullptr;
-        int ret = umq_post(sockObj->UmqHandle(), buf, UMQ_IO_TX, &bad_qbuf);
+        umq_io_option_t option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
+                                  UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+        int ret = umq_post(sockObj->UmqHandle(), buf, &option, &bad_qbuf);
         if (ret != 0) {
             UBS_VLOG_ERR("Failed to Send Probe Packet\n");
             umq_buf_free(buf);
@@ -569,5 +573,5 @@ private:
     uint32_t mQueueSt;
     uint32_t mQueueEd;
 };
-};     // namespace Statistics
+} // namespace Statistics
 #endif // PROBE_MANAGER_H

@@ -49,7 +49,6 @@ public:
     bool get_and_ack_event_ = false;
     bool poll_ = false;
     BlockCache block_cache_;
-    std::atomic<bool> need_fc_awake_{false};
     size_t remaining_size_ = 0;
     bool flow_control_failed_ = false;
 

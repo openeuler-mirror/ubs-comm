@@ -57,6 +57,8 @@ public:
 
     void WakeUpTx(Socket *sock);
 
+    bool Writable(const SocketPtr &sock) override;
+
 private:
     // 处理 umq_post 失败时的坏 buffer
     uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
@@ -65,12 +67,6 @@ private:
     int PollUmqTx(const SocketPtr &sock, bool poll_to_empty);
     int PollUmqTxOnce(const SocketPtr &sock);
     int DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code);
-    void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt);
-    bool HandleProbePacket(umq_buf_t *qbuf);
-    // 发端异常 CQE 错误处理.
-    void HandleErrorTxCqe(umq_buf_t *buf);
-    void ProcessErrorTxCqe(umq_buf_t *first_qbuf);
-    int ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf);
     int GetAndAckEvent();
     int DpRearmTxInterrupt();
 

@@ -426,6 +426,19 @@ int32_t umq_ipc_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_in
         UMQ_VLOG_ERR(VLOG_UMQ, "trans mode: %d is invalid, bind failed\n", tmp_info->trans_mode);
         return -UMQ_ERR_EINVAL;
     }
+
+    if (tmp_info->tx_depth == 0 || tmp_info->rx_depth == 0) {
+        UMQ_VLOG_ERR(VLOG_UMQ, "tx_depth: %u, rx_depth: %u is invalid, bind failed\n",
+            tmp_info->tx_depth, tmp_info->rx_depth);
+        return -UMQ_ERR_EINVAL;
+    }
+
+    if (tmp_info->transmit_queue_buf_size >= tmp_info->shm_total_size) {
+        UMQ_VLOG_ERR(VLOG_UMQ, "transmit_queue_buf_size: %u, shm_total_size: %u is invalid, bind failed\n",
+            tmp_info->transmit_queue_buf_size, tmp_info->shm_total_size);
+        return -UMQ_ERR_EINVAL;
+    }
+
     ipc_bind_ctx_t *ctx = (ipc_bind_ctx_t *)calloc(1, sizeof(ipc_bind_ctx_t));
     if (ctx == NULL) {
         UMQ_VLOG_ERR(VLOG_UMQ, "bind ctx alloc failed\n");
@@ -517,12 +530,12 @@ int32_t umq_ipc_unbind_impl(uint64_t umqh_tp)
     return UMQ_SUCCESS;
 }
 
-int umq_ipc_post_impl(uint64_t umqh_tp, umq_buf_t *qbuf, umq_io_direction_t io_direction, umq_buf_t **bad_qbuf)
+int umq_ipc_post_impl(uint64_t umqh_tp, umq_buf_t *qbuf, umq_io_option_t *option, umq_buf_t **bad_qbuf)
 {
     return UMQ_FAIL;
 }
 
-int umq_ipc_poll_impl(uint64_t umqh_tp, umq_io_direction_t io_direction, umq_buf_t **buf, uint32_t max_buf_count)
+int umq_ipc_poll_impl(uint64_t umqh_tp, umq_io_option_t *option, umq_buf_t **buf, uint32_t max_buf_count)
 {
     return UMQ_FAIL;
 }

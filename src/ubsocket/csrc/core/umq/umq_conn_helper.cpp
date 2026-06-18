@@ -62,7 +62,9 @@ Result UmqConnHelper::PrefillRx(uint64_t umq_handle)
         }
 
         umq_buf_t *bad_qbuf = nullptr;
-        int umq_ret = UmqApi::umq_post(umq_handle, rx_buf_list, UMQ_IO_RX, &bad_qbuf);
+        umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
+                                        UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+        int umq_ret = UmqApi::umq_post(umq_handle, rx_buf_list, &io_rx_option, &bad_qbuf);
         if (umq_ret != UMQ_SUCCESS) {
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, umq_ret, savedErrno);
@@ -117,6 +119,10 @@ Result UmqConnHelper::NewBaseUmqCreateOptions(umq_create_option_t &umq_create_op
     UBS_VLOG_INFO("trans_mode result is: %s\n", trans_mode_str[trans_mode]);
     if (GetTpInfo(umq_create_option.tp_mode, umq_create_option.tp_type) != UBS_OK) {
         return UBS_ERROR;
+    }
+
+    if (UmqSetting::UMQ_TP_TYPE == POOL) {
+        umq_create_option.create_flag |= UMQ_CREATE_FLAG_SHARE_TRANSPORT;
     }
 
     return UBS_OK;

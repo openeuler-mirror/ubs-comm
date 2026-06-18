@@ -46,8 +46,8 @@ umq_buf_t *umq_ub_plus_buf_alloc_impl(uint32_t request_size, uint32_t request_qb
     umq_alloc_option_t *option);
 void umq_ub_buf_free_impl(umq_buf_t *qbuf, uint64_t umqh_tp);
 void umq_ub_plus_buf_free_impl(umq_buf_t *qbuf, uint64_t umqh_tp);
-int umq_ub_post_impl(uint64_t umqh_tp, umq_buf_t *qbuf, umq_io_direction_t io_direction, umq_buf_t **bad_qbuf);
-int umq_ub_poll_impl(uint64_t umqh_tp, umq_io_direction_t io_direction, umq_buf_t **buf, uint32_t max_buf_count);
+int umq_ub_post_impl(uint64_t umqh_tp, umq_buf_t *qbuf, umq_io_option_t *option, umq_buf_t **bad_qbuf);
+int umq_ub_poll_impl(uint64_t umqh_tp, umq_io_option_t *option, umq_buf_t **buf, uint32_t max_buf_count);
 
 int32_t umq_ub_enqueue_impl(uint64_t umqh_tp, umq_buf_t *qbuf, umq_buf_t **bad_qbuf);
 int32_t umq_ub_enqueue_impl_plus(uint64_t umqh_tp, umq_buf_t *qbuf, umq_buf_t **bad_qbuf);
@@ -62,6 +62,12 @@ int umq_ub_wait_interrupt_impl(uint64_t wait_umqh_tp, int time_out, umq_interrup
 void umq_ub_ack_interrupt_impl(uint64_t umqh_tp, uint32_t nevents, umq_interrupt_option_t *option);
 
 int umq_ub_interrupt_fd_get_impl(uint64_t umqh_tp, umq_interrupt_option_t *option);
+int umq_ub_interrupt_fd_list_get_impl(uint64_t umqh_tp,
+    umq_interrupt_option_t *option, umq_interrupt_fd_list_t *fd_list);
+
+int umq_ub_jetty_pool_eventfd_get_impl(void);
+
+int umq_ub_transport_pool_eventfd_get_impl(void);
 
 int umq_ub_write_imm(uint64_t umqh_tp, uint64_t target_addr, uint32_t len, uint64_t imm_value);
 
@@ -93,6 +99,10 @@ int umq_ub_stats_io_reset_impl(uint64_t umqh_tp);
 int umq_ub_stats_tp_perf_start_impl(void);
 int umq_ub_stats_tp_perf_stop_impl(void);
 int umq_ub_stats_tp_perf_info_get_impl(char *perf_buf, uint32_t *length);
+
+int umq_ub_transport_pool_resource_modify_impl(uint64_t umqh_tp, uint32_t tp_handle_idx);
+uint32_t umq_ub_transport_pool_resource_create_impl(uint64_t umqh_tp);
+int umq_ub_transport_pool_resource_destroy_impl(uint64_t umqh_tp, uint32_t tp_handle_idx);
 
 #ifdef __cplusplus
 }

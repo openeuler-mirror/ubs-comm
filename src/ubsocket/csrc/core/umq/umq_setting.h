@@ -56,13 +56,20 @@ public:
     static std::string UMQ_DEV_SCHEDULE_POLICY_NAME;
     static dev_schedule_policy UMQ_DEV_SCHEDULE_POLICY;
     static ub_trans_mode UMQ_UB_TRANS_MODE;
+    static umq_tp_mode_t UMQ_UB_TP_MODE;
+    static umq_tp_type_t UMQ_UB_TP_TYPE;
     static bool UMQ_IS_BONDING;
     static bool UMQ_FLOW_CONTROL_ENABLE;
     static int8_t UMQ_LINK_PRIORITY;
+    static pool_type_t UMQ_TP_TYPE;
+    static uint32_t UMQ_TP_POOL_SIZE;
 
     static constexpr size_t UMQ_SOCKET_SEQ_NUM_BIT_WIDTH = 24;
     static constexpr size_t UMQ_SOCKET_SEQ_NUM_MAX = (1ULL << UMQ_SOCKET_SEQ_NUM_BIT_WIDTH) - 2;
     static constexpr uint32_t UMQ_PROBE_USER_DATA_ID = 0xFFFFFF; // (2^24 - 1) 用于标识探针包的 user_data
+
+    static constexpr uint32_t UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX = 0;
+
 private:
     static Result Init() noexcept;
 

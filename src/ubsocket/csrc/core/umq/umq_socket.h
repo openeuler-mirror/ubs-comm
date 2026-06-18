@@ -25,6 +25,13 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
+enum class JettyAllocState
+{
+    IDLE,    // 空闲状态，不需要申请Jetty资源
+    WAITING, // 等待Jetty资源分配
+    READY    // Jetty有空闲资源，准备分配
+};
+
 using UmqSocketSeq =
     UmqSocketBoundedSequence<UmqSetting::UMQ_SOCKET_SEQ_NUM_BIT_WIDTH, uint32_t, UmqSetting::UMQ_SOCKET_SEQ_NUM_MAX>;
 
@@ -119,11 +126,20 @@ public:
         }
     }
 
+    ALWAYS_INLINE void SetJettyAllocState(JettyAllocState state)
+    {
+        jetty_alloc_state = state;
+    }
+
+    ALWAYS_INLINE JettyAllocState GetJettyAllocState() const
+    {
+        return jetty_alloc_state;
+    }
+
     Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) override;
     Result DelTxEvent(const SocketPtr &sock, int epoll_fd) override;
+    bool ShouldRegisterTxEvent() override;
     Result ProcessEpollEvent(struct epoll_event &event) override;
-    Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
-                              struct epoll_event *event) override;
     int GetTxFd() override;
 
     Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used,
@@ -162,6 +178,8 @@ private:
     uint64_t share_umq_handle_ = UMQ_INVALID_HANDLE;
 
     UmqBufferReceiveQueue *rxQueue = nullptr;
+
+    JettyAllocState jetty_alloc_state = JettyAllocState::IDLE;
 };
 using UmqSocketPtr = Ref<UmqSocket>;
 

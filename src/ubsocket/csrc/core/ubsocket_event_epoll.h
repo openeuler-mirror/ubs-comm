@@ -14,6 +14,7 @@
 #include "common/ubsocket_leaky_singleton.h"
 #include "common/ubsocket_spsc_ring_queue.h"
 #include "ubsocket_core_types.h"
+#include "umq_errno.h"
 
 namespace ock {
 namespace ubs {
@@ -58,6 +59,8 @@ enum RunnerEventType : uint64_t
     RUNNER_EVENT_TYPE_INVALID = 0,
     RUNNER_EVENT_TYPE_SHARE_JFR,
     RUNNER_EVENT_TYPE_SUB_UMQ_RX,
+    RUNNER_EVENT_TYPE_TP_TX,
+    RUNNER_EVENT_TYPE_TP_EVENT,
     RUNNER_EVENT_TYPE_STOP,
     RUNNER_EVENT_TYPE_BUTT
 };
@@ -105,12 +108,23 @@ EpollMapper *GetSocketEpollMapper(int socket_fd);
 
 class EpollRunnerOps {
 public:
+    struct ExtContext {
+        uint64_t umq_handle = UMQ_INVALID_HANDLE;
+        virtual ~ExtContext() = default;
+    };
+
     EpollRunnerOps() = default;
     virtual ~EpollRunnerOps() = default;
 
     virtual int ProcessOneEvent(const struct epoll_event &event)
     {
-        UBS_VLOG_ERR("EpollRunner SocketType Not Specified.\n");
+        UBS_VLOG_ERR("EpollRunner EpollRunType Not Specified.\n");
+        return -1;
+    }
+
+    virtual int AddEventToRunner(int epoll_fd, int fd, struct epoll_event *event, ExtContext *ctx = nullptr)
+    {
+        UBS_VLOG_ERR("EpollRunner EpollRunType Not Specified.\n");
         return -1;
     }
 
@@ -147,13 +161,13 @@ public:
     virtual ~EpollRunnerBase() = default;
     virtual int Start() = 0;
     virtual void Stop() = 0;
-    virtual int AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event) = 0;
+    virtual int AddEpollEvent(int fd, struct epoll_event *event, EpollRunnerOps::ExtContext *ctx) = 0;
     virtual int DelEpollEvent(const SocketPtr &sock) = 0;
     virtual int ProcessOneEvent(const struct epoll_event &event) = 0;
     virtual EpollRunnerOps *GetOps() = 0;
 };
 
-template <SocketType T>
+template <EpollRunnerType T>
 class EpollRunner
     : public EpollRunnerBase
     , public LeakySingleton<EpollRunner<T>> {
@@ -182,11 +196,11 @@ public:
 
     /**
      * @brief add epoll_event to EpollRunner
-     * @param socket_fd socket fd added
+     * @param fd  fd
      * @param event event of socket fd
      * @return int -1: failed; 0: success
      */
-    int AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event) override;
+    int AddEpollEvent(int fd, struct epoll_event *event, EpollRunnerOps::ExtContext *ctx) override;
 
     /**
      * @brief delete epoll_event from EpollRunner
@@ -227,11 +241,15 @@ private:
 
 class EpollRunnerFactory {
 public:
-    static EpollRunnerBase &GetInstance(SocketType type)
+    static EpollRunnerBase &GetInstance(EpollRunnerType type)
     {
         switch (type) {
-            case SocketType::SOCK_TYPE_UMQ:
-                return EpollRunner<SocketType::SOCK_TYPE_UMQ>::Instance();
+            case EpollRunnerType::SHARE_JFR_RX_RUNNER:
+                return EpollRunner<EpollRunnerType::SHARE_JFR_RX_RUNNER>::Instance();
+            case EpollRunnerType::TRANSPORT_POOL_TX_RUNNER:
+                return EpollRunner<EpollRunnerType::TRANSPORT_POOL_TX_RUNNER>::Instance();
+            case EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER:
+                return EpollRunner<EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER>::Instance();
             default:
                 throw std::runtime_error("Not support type for epoll runner base");
         }

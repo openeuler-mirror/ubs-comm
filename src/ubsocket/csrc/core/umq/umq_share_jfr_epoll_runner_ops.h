@@ -8,8 +8,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#ifndef UBS_COMM_UMQ_EPOLL_RUNNER_OPS_H
-#define UBS_COMM_UMQ_EPOLL_RUNNER_OPS_H
+#ifndef UBS_COMM_UMQ_SHARE_JFR_EPOLL_RUNNER_OPS_H
+#define UBS_COMM_UMQ_SHARE_JFR_EPOLL_RUNNER_OPS_H
 
 #include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_socket.h"
@@ -30,13 +30,13 @@ struct UmqPollTraceTime {
     uint64_t process_share_jfr_end_timestamp_;
 };
 
-class UmqEpollRunnerOps : public EpollRunnerOps {
+class UmqShareJfrEpollRunnerOps : public EpollRunnerOps {
 public:
-    UmqEpollRunnerOps()
+    UmqShareJfrEpollRunnerOps()
     {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
     }
-    ~UmqEpollRunnerOps()
+    ~UmqShareJfrEpollRunnerOps()
     {
         LockRegistry::LOCK_OPS.destroy(mutex_);
     }
@@ -65,6 +65,8 @@ public:
 
         return 0;
     }
+
+    int AddEventToRunner(int epoll_fd, int fd, struct epoll_event *event, ExtContext *ctx) override;
 
 private:
     void HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t **buf, int pollNum);
