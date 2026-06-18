@@ -17,7 +17,6 @@
 
 using namespace ock::hcom;
 
-UVS_GET_ROUTE_LIST TpsaAPI::hcomUvsGetRouteList = nullptr;
 UVS_GET_PATH_SET TpsaAPI::hcomInnerUvsGetPathSet = nullptr;
 
 bool TpsaAPI::gLoaded = false;
@@ -50,7 +49,6 @@ int TpsaAPI::LoadTpsaAPI()
         return -1;
     }
 
-    DLSYM(UVS_GET_ROUTE_LIST, TpsaAPI::hcomUvsGetRouteList, "uvs_get_route_list");
     DLSYM(UVS_GET_PATH_SET, TpsaAPI::hcomInnerUvsGetPathSet, "uvs_get_path_set");
 
     NN_LOG_INFO("Success to load Tpsa api");
