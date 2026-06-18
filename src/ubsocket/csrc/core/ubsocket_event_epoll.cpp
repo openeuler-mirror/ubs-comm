@@ -14,7 +14,9 @@
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
 #include "ubsocket_tx_cqe_poller.h"
-#include "umq/umq_epoll_runner_ops.h"
+#include "umq/umq_share_jfr_epoll_runner_ops.h"
+#include "umq/umq_tp_event_epoll_runner_ops.h"
+#include "umq/umq_tp_tx_epoll_runner_ops.h"
 
 namespace ock {
 namespace ubs {
@@ -65,7 +67,7 @@ void CleanSocketEpollMapper(int socket_fd)
     mapper = nullptr;
 }
 
-template <SocketType T>
+template <EpollRunnerType T>
 int EpollRunner<T>::Start()
 {
     std::call_once(flag_, [this]() {
@@ -112,8 +114,12 @@ int EpollRunner<T>::Start()
             return -1;
         }
 
-        if (T == SocketType::SOCK_TYPE_UMQ) {
-            ops_ = new umq::UmqEpollRunnerOps();
+        if (T == EpollRunnerType::SHARE_JFR_RX_RUNNER) {
+            ops_ = new umq::UmqShareJfrEpollRunnerOps();
+        } else if (T == EpollRunnerType::TRANSPORT_POOL_TX_RUNNER) {
+            ops_ = new umq::UmqTpTxEpollRunnerOps();
+        } else if (T == EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER) {
+            ops_ = new umq::UmqTpEventEpollRunnerOps();
         } else {
             ops_ = new EpollRunnerOps();
         }
@@ -124,7 +130,7 @@ int EpollRunner<T>::Start()
     return 0;
 }
 
-template <SocketType T>
+template <EpollRunnerType T>
 void EpollRunner<T>::Stop()
 {
     if (exit_efd_ < 0) {
@@ -154,7 +160,7 @@ void EpollRunner<T>::Stop()
     mutex_ = nullptr;
 }
 
-template <SocketType T>
+template <EpollRunnerType T>
 void EpollRunner<T>::RunInThread() noexcept
 {
     UBS_VLOG_INFO("async_epoll epoll_wait_async_daemon thread started.\n");
@@ -188,29 +194,18 @@ void EpollRunner<T>::RunInThread() noexcept
     UBS_VLOG_INFO("async_epoll epoll_wait_async_daemon thread exit.\n");
 }
 
-template <SocketType T>
-ALWAYS_INLINE int EpollRunner<T>::AddEpollEvent(EventPoll &event_poll, const SocketPtr &sock, struct epoll_event *event)
+template <EpollRunnerType T>
+ALWAYS_INLINE int EpollRunner<T>::AddEpollEvent(int fd, struct epoll_event *event, EpollRunnerOps::ExtContext *ctx)
 {
-    if (UNLIKELY(sock == nullptr)) {
-        UBS_VLOG_ERR("add epoll event to runner invalid args, sock is nullptr\n");
-        return -1;
-    }
-
-    if (UNLIKELY(sock->event_fd_ < 0)) {
-        UBS_VLOG_ERR("invalid event_fd_ of sock, event fd: %d\n", sock->event_fd_);
-        return -1;
-    }
-
-    auto sock_base = RefConvert<Socket, SocketBase>(sock);
-    int ret = sock_base->AddRxEventToRunner(reinterpret_cast<uintptr_t>(&event_poll), sock, epoll_fd_, event);
+    int ret = ops_->AddEventToRunner(epoll_fd_, fd, event, ctx);
     if (UNLIKELY(ret != 0)) {
-        UBS_VLOG_ERR("add rx event to runner failed, sock:%d, ret:%d\n", sock->raw_socket_, ret);
+        UBS_VLOG_ERR("add rx event to runner failed, ret:%d\n", ret);
         return -1;
     }
-    return sock->event_fd_;
+    return UBS_OK;
 }
 
-template <SocketType T>
+template <EpollRunnerType T>
 ALWAYS_INLINE int EpollRunner<T>::DelEpollEvent(const SocketPtr &sock)
 {
     if (UNLIKELY(sock == nullptr)) {
@@ -220,7 +215,7 @@ ALWAYS_INLINE int EpollRunner<T>::DelEpollEvent(const SocketPtr &sock)
     return 0;
 }
 
-template <SocketType T>
+template <EpollRunnerType T>
 ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &event)
 {
     return ops_->ProcessOneEvent(event);
@@ -469,23 +464,25 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         return -1;
     }
 
-    // 3. add epoll runner epoll fd
-    if (UNLIKELY(EpollRunnerFactory::GetInstance(sock->Type()).AddEpollEvent(*this, sock, event) < 0)) {
-        UBS_VLOG_ERR("epoll runner add epoll event failed, socket fd: %d\n", sock->raw_socket_);
-        return -1;
+    // 3. set added epoll fd
+    if ((event->events & EPOLLIN) == EPOLLIN) {
+        auto sockBase = RefConvert<Socket, SocketBase>(sock);
+        sockBase->SetAddedEpollFd(this, event->data);
     }
 
     // 4. add proto ex exent
-    int ret = AddProtoTxEvent(sock, event);
-    if (ret < 0) {
-        DelRawSocketEvent(fd);
-        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD:%d) failed(ret:%d): %d : %s\n", ret, sock->raw_socket_, errno,
-                     strerror(errno));
-        return -1;
-    }
+    if (sock->ShouldRegisterTxEvent()) {
+        int ret = AddProtoTxEvent(sock, event);
+        if (ret < 0) {
+            DelRawSocketEvent(fd);
+            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD:%d) failed(ret:%d): %d : %s\n", ret, sock->raw_socket_, errno,
+                         strerror(errno));
+            return -1;
+        }
 
-    // 添加至后台 Tx CQE poller
-    TxCqePoller::Instance().AddSocket(sock);
+        // 添加至后台 Tx CQE poller
+        TxCqePoller::Instance().AddSocket(sock);
+    }
 
     return 0;
 }
@@ -640,16 +637,17 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
         return 0;
     }
 
-    if (UNLIKELY(EpollRunnerFactory::GetInstance(sock->Type()).DelEpollEvent(sock) != 0)) {
-        UBS_VLOG_ERR("epoll runner add epoll event failed, socket fd: %d\n", sock->raw_socket_);
-        return -1;
+    if (sock->ShouldRegisterTxEvent()) {
+        DelProtoTxEvent(sock);
+        TxCqePoller::Instance().DelSocket(sock);
     }
 
-    DelProtoTxEvent(sock);
-
-    TxCqePoller::Instance().DelSocket(sock);
     return 0;
 }
+
+template class EpollRunner<EpollRunnerType::SHARE_JFR_RX_RUNNER>;
+template class EpollRunner<EpollRunnerType::TRANSPORT_POOL_TX_RUNNER>;
+template class EpollRunner<EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER>;
 
 } // namespace ubs
 } // namespace ock

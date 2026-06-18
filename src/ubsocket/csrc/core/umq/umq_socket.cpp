@@ -16,8 +16,8 @@
 #include "umq_conn_helper.h"
 #include "umq_dfx_api.h"
 #include "umq_eid_table.h"
-#include "umq_epoll_runner_ops.h"
 #include "umq_errno_converter.h"
+#include "umq_share_jfr_epoll_runner_ops.h"
 #include "umq_socket.h"
 #include "umq_socket_acceptor.h"
 #include "umq_socket_connector.h"
@@ -138,21 +138,23 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
         return UBS_INIT_SHARED_JFR_RX_QUEUE;
     }
 
-    // 总是使用使能 TX solicited，这会导致对端 JFR 只有接收到 solicited_enable=true 的包时才会产生中断。而在客
-    // 户端本端，开启此功能后不会在 TX 上产生中断，无法通过 `epoll_wait` 唤醒，必须定期 poll cq
-    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
-    int tx_interrupt_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
-    if (tx_interrupt_fd < 0) {
-        UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
-                     static_cast<unsigned long long>(umq_handle_));
-        return UBS_ERROR;
-    }
+    if (UmqSetting::UMQ_TP_TYPE == SINGLE) {
+        // 总是使用使能 TX solicited，这会导致对端 JFR 只有接收到 solicited_enable=true 的包时才会产生中断。而在客
+        // 户端本端，开启此功能后不会在 TX 上产生中断，无法通过 `epoll_wait` 唤醒，必须定期 poll cq
+        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
+        int tx_interrupt_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
+        if (tx_interrupt_fd < 0) {
+            UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
+                         static_cast<unsigned long long>(umq_handle_));
+            return UBS_ERROR;
+        }
 
-    int ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, true, &tx_option);
-    if (ret < 0) {
-        UBS_VLOG_ERR("[UMQ_API] Failed to enable solicited mode for umq: %llu\n",
-                     static_cast<unsigned long long>(umq_handle_));
-        return UBS_ERROR;
+        int ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, true, &tx_option);
+        if (ret < 0) {
+            UBS_VLOG_ERR("[UMQ_API] Failed to enable solicited mode for umq: %llu\n",
+                         static_cast<unsigned long long>(umq_handle_));
+            return UBS_ERROR;
+        }
     }
 
     return UBS_OK;
@@ -171,7 +173,12 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
         return UMQ_INVALID_HANDLE;
     }
 
-    cfg->create_flag |= UMQ_CREATE_FLAG_SHARE_RQ | UMQ_CREATE_FLAG_UMQ_CTX | UMQ_CREATE_FLAG_SUB_UMQ;
+    if (UmqSetting::UMQ_TP_TYPE == POOL) {
+        // 池化：创建逻辑umq
+        cfg->create_flag |= UMQ_CREATE_FLAG_SHARE_RQ;
+    } else {
+        cfg->create_flag |= UMQ_CREATE_FLAG_SHARE_RQ | UMQ_CREATE_FLAG_SUB_UMQ;
+    }
     cfg->share_rq_umqh = main_umq;
     cfg->umq_ctx = (uint64_t)raw_socket_;
     uint64_t sub_umq = UmqApi::umq_create(cfg);
@@ -327,6 +334,11 @@ Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
     return 0;
 }
 
+bool UmqSocket::ShouldRegisterTxEvent()
+{
+    return UmqSetting::UMQ_TP_TYPE == SINGLE;
+}
+
 Result UmqSocket::ProcessEpollEvent(struct epoll_event &event)
 {
     auto event_data = (EpollEvent *)event.data.ptr;
@@ -335,71 +347,6 @@ Result UmqSocket::ProcessEpollEvent(struct epoll_event &event)
         NewTxEpollIn();
     }
     return UBS_OK;
-}
-
-Result UmqSocket::AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
-                                     struct epoll_event *event)
-{
-    if (UNLIKELY(epoll_fd < 0 || umq_handle_ <= 0)) {
-        UBS_VLOG_ERR("epoll_fd or umq_handle invalid, epoll_fd: %d, umq_handle: %llu\n", epoll_fd,
-                     static_cast<unsigned long long>(umq_handle_));
-    }
-    // 1. add share jfr main umq fd
-    uint64_t main_umq = share_umq_handle_;
-    umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-    auto share_jfr_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(main_umq, &main_option);
-    if (UNLIKELY(share_jfr_fd < 0)) {
-        int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, share_jfr_fd, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] Failed to get share jfr RX interrupt fd, main umq: %llu, "
-                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(main_umq), share_jfr_fd, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, share_jfr_fd), savedErrno);
-        return -1;
-    }
-
-    RunnerEventData event_data{};
-    event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
-    event_data.event_data.data = share_jfr_fd;
-
-    struct epoll_event shared_jfr_event {
-    };
-    shared_jfr_event.events = EPOLLIN | EPOLLET;
-    shared_jfr_event.data.u64 = event_data.u64;
-
-    UmqEpollRunnerOps *ops = (UmqEpollRunnerOps *)EpollRunnerFactory::GetInstance(this->Type()).GetOps();
-    if (UNLIKELY(ops == nullptr || ops->InsertJfrMainUmq(share_jfr_fd, main_umq, epoll_fd, &shared_jfr_event) < 0)) {
-        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
-        return -1;
-    }
-
-    // 3. add to socket
-    SetAddedEpollFd((EventPoll *)event_poll, event->data);
-
-    // 4. do rearm
-    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-    int ret = ock::ubs::UmqApi::umq_rearm_interrupt(main_umq, false, &rx_option);
-    if (ret < 0) {
-        int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for share jfr RX, "
-                     "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(main_umq), ret, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
-        return -1;
-    }
-    ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, false, &rx_option);
-    if (ret < 0) {
-        int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for sub umq RX, "
-                     "local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(umq_handle_), ret, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
-        return -1;
-    }
-
-    return 0;
 }
 
 int UmqSocket::GetTxFd()

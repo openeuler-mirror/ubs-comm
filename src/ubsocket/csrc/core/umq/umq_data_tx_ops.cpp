@@ -13,6 +13,8 @@
 #include "umq_buf_converter.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
+#include "umq_tp_wait_queue.h"
+#include "umq_tx_helper.h"
 
 namespace ock {
 namespace ubs {
@@ -126,7 +128,8 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     if (trace != nullptr) {
         trace->UpdateWriteLastTrace(CORE_WRITE_UMQ_POST, cur_buf->data_size, tx_total_len);
     }
-    int ret = UmqApi::umq_post(local_umqh_, tx_buf_list, UMQ_IO_TX, &bad_qbuf);
+    umq_io_option_t option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    int ret = UmqApi::umq_post(local_umqh_, tx_buf_list, &option, &bad_qbuf);
     if (trace != nullptr) {
         trace->UpdateWriteLastTraceEndTime(CORE_WRITE_UMQ_POST);
     }
@@ -148,6 +151,11 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         } else if (ret == -UMQ_ERR_EFLOWCTL) {
             errno = EIO;
             return -1;
+        } else if (errno == EMLINK || errno == ENOBUFS) {
+            // optimize: [Jetty池化] ENOBUFS是否需要在此线程尝试pollTx释放资源后重试
+            UBS_VLOG_DEBUG("[UMQ_API] umq_post() suspended: resource exhausted. Queued for automatic retry.\n");
+            UmqTpWaitQueue::Instance().Enqueue(sock);
+            errno = EAGAIN;
         } else {
             UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX, local umq: %llu, ret: %d, "
                          "mapped errno: %d(%s), original errno: %d\n",
@@ -328,247 +336,41 @@ void UmqTxOps::WakeUpTx(Socket *sock)
     }
 }
 
-int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
+bool UmqTxOps::Writable(const SocketPtr &sock)
 {
-    umq_buf_t *buf[POLL_BATCH_MAX];
-    int poll_num = UmqApi::umq_poll(local_umqh_, UMQ_IO_TX, buf, POLL_BATCH_MAX);
-    if (poll_num <= 0) {
-        if (poll_num < 0) {
-            int savedErrno = errno;
-            errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, poll_num, savedErrno);
-            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for TX, local umq: %llu, ret: %d, "
-                         "mapped errno: %d(%s), original errno: %d\n",
-                         static_cast<unsigned long long>(local_umqh_), poll_num, errno,
-                         UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, poll_num), savedErrno);
-        }
-        return poll_num;
+    UmqTpWaitQueue &queue = UmqTpWaitQueue::Instance();
+    if (queue.Empty()) {
+        return true;
     }
-
-    int wr_cnt = 0;
-    int cur_wr_cnt;
-    umq_buf_t *first_qbuf = nullptr;
-    for (int i = 0; i < poll_num; ++i) {
-        if (buf[i] == nullptr || buf[i]->status != 0 || (((umq_buf_pro_t *)buf[i]->qbuf_ext) == nullptr) ||
-            (first_qbuf = (umq_buf_t *)((umq_buf_pro_t *)(buf[i]->qbuf_ext))->user_ctx) == nullptr) {
-            // set err_code to true to force a quick exit from current function.
-            err_code = ops_error_code::NORMAL_ERROR;
-
-            if (buf[i] == nullptr) {
-                UBS_VLOG_DEBUG("TX CQE is invalid, umq buffer is empty\n");
-                continue;
-            }
-
-            if (buf[i]->status != 0) {
-                HandleTxCqeError(buf[i], wr_cnt);
-                // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
-                sock->State(SOCK_STAT_CLOSE);
-                continue;
-            }
-
-            UBS_VLOG_DEBUG("TX CQE is invalid, status: %d%s\n", buf[i]->status,
-                           first_qbuf == nullptr ? ", and umq buffer list is empty" : "");
-            continue;
-        }
-        // 探测包
-        if (HandleProbePacket(buf[i])) {
-            continue;
-        }
-        // 正常业务包
-        cur_wr_cnt = ProcessTxCqe(first_qbuf, buf[i]);
-        if (cur_wr_cnt < 0) {
-            // set err_code to true to force a quick exit from current function.
-            err_code = ops_error_code::FATAL_ERROR;
-            return wr_cnt;
-        }
-
-        wr_cnt += cur_wr_cnt;
-    }
-
-    return wr_cnt;
-}
-
-void UmqTxOps::HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt)
-{
-    // 探测包错误处理
-    if (HandleProbePacket(qbuf)) {
-        return;
-    }
-
-    // 正常错误处理流程
-    HandleErrorTxCqe(qbuf);
-    ProcessErrorTxCqe(qbuf);
-    wr_cnt++;
-
-    if (GlobalSetting::UBS_TRACE_ENABLED) {
-        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(ArraySet<Socket>::GetInstance().GetItem(fd_));
-        if (qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
-            sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_LOST_PACKET_COUNT, 1);
-        } else {
-            sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_ERROR_PACKET_COUNT, 1);
-        }
-    }
-}
-
-bool UmqTxOps::HandleProbePacket(umq_buf_t *qbuf)
-{
-    umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(qbuf->qbuf_ext);
-    if (buf_pro == nullptr) {
+    /**
+     * Jetty资源等待队列不为空：
+     * 1. 已经在等待队列的连接，继续等待，等待有空闲资源后按照先入先出顺序唤醒
+     * 2. 已唤醒的连接，状态为可写，往下执行重试Write
+     * 3. 新来的连接，由于已有连接在等待，默认无法获取资源，直接进入就等待队列
+     */
+    UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
+    if (umqSock->GetJettyAllocState() == JettyAllocState::WAITING) {
+        return false;
+    } else if (umqSock->GetJettyAllocState() == JettyAllocState::IDLE) {
+        return true;
+    } else {
+        queue.Enqueue(sock);
         return false;
     }
-
-    if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == UmqSetting::UMQ_PROBE_USER_DATA_ID) {
-        UmqApi::umq_buf_free(qbuf);
-        return true; // 已处理
-    }
-    return false; // 不是探测包
 }
 
-void UmqTxOps::HandleErrorTxCqe(umq_buf_t *buf)
+int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
 {
-    auto bufStatus = static_cast<umq_buf_status_t>(buf->status);
-    int mappedErrno = UmqErrnoConverter::ConvertBufStatus(UmqOperation::WRITEV, bufStatus, errno);
-    const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::WRITEV, bufStatus);
-    UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n", buf->status, mappedErrno, desc);
-
-    switch (buf->status) {
-        case UMQ_BUF_SUCCESS:
-            return;
-
-        case UMQ_FAKE_BUF_FC_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: flow control failed\n");
-            break;
-
-        case UMQ_BUF_UNSUPPORTED_OPCODE_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: unsupported opcode\n");
-            break;
-
-        case UMQ_BUF_LOC_LEN_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: local length too long\n");
-            break;
-
-        case UMQ_BUF_LOC_OPERATION_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: local op err\n");
-            break;
-
-        case UMQ_BUF_LOC_ACCESS_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: access to local memory error\n");
-            break;
-
-        case UMQ_BUF_REM_RESP_LEN_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote rx buffer length error\n");
-            break;
-
-        case UMQ_BUF_REM_UNSUPPORTED_REQ_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote does not support req\n");
-            break;
-
-        case UMQ_BUF_REM_OPERATION_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty can not complete op\n");
-            break;
-
-        case UMQ_BUF_REM_ACCESS_ABORT_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty access memory error\n");
-            break;
-
-        case UMQ_BUF_ACK_TIMEOUT_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty does not send ack\n");
-            break;
-
-        case UMQ_BUF_RNR_RETRY_CNT_EXC_ERR:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: remote jetty has no enough RQE\n");
-            break;
-
-        case UMQ_BUF_WR_FLUSH_ERR:
-            break;
-
-        case UMQ_BUF_WR_SUSPEND_DONE:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: suspend done\n");
-            break;
-
-        case UMQ_BUF_WR_FLUSH_ERR_DONE:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: flush err done\n");
-            break;
-
-        case UMQ_BUF_WR_UNHANDLED:
-            // See umq_ub_flush_seq
-            UBS_VLOG_ERR("[UMQ_CQE] It wont be here.\n");
-            break;
-
-        case UMQ_BUF_LOC_DATA_POISON:
-        case UMQ_BUF_REM_DATA_POISON:
-            UBS_VLOG_ERR("[UMQ_CQE] cqe error: not supported yet\n");
-            break;
-
-        default:
-            UBS_VLOG_ERR("[UMQ_CQE] unreachable! status=%d\n", buf->status);
-            break;
-    }
-
-    // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
-
-    // TODO: 快速退出, 如果 brpc-adapter 正好在 readv/writev 中可以不经过一次 epoll_wait.
-    // m_closed.store(true, std::memory_order_relaxed);
-
-    // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
-    // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
-    LibcApi::shutdown(fd_, SHUT_RD);
-    UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", fd_);
-}
-
-void UmqTxOps::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
-{
-    umq_buf_t *cur_qbuf = first_qbuf;
-    umq_buf_t *last_qbuf = nullptr;
-    int64_t left_size = (int64_t)cur_qbuf->total_data_size;
-    while (cur_qbuf != nullptr && left_size > 0) {
-        left_size -= cur_qbuf->data_size;
-        /* rpc adapter has replace brpc butil::iobuf::blockmeme_allocate() &
-            * butil::iof::blockmem_deallocate() and ensures that the starting address
-            * of the Block is aligned to an 8k boundary. */
-        ((Block *)PtrFloorToBoundary(cur_qbuf->buf_data))->DecRef();
-        last_qbuf = cur_qbuf;
-        cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
-    }
-    // 如果是一个 read OP, 那么它的 left_size=0.
-    if (last_qbuf != nullptr) {
-        QBUF_LIST_NEXT(last_qbuf) = nullptr;
-    }
-    UmqApi::umq_buf_free(first_qbuf);
-}
-
-int UmqTxOps::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf)
-{
-    int wr_cnt = 0;
-    umq_buf_t *cur_qbuf = start_qbuf;
-    umq_buf_t *last_qbuf = nullptr;
-    umq_buf_t *wr_first_buf;
-    do {
-        wr_first_buf = cur_qbuf;
-        int64_t left_size = (int64_t)wr_first_buf->total_data_size;
-        while (cur_qbuf != nullptr && left_size > 0) {
-            left_size -= cur_qbuf->data_size;
-            /* rpc adapter has replace brpc butil::iobuf::blockmeme_allocate() &
-                * butil::iof::blockmem_deallocate() and ensures that the starting address
-                * of the Block is aligned to an 8k boundary. */
-            ((Block *)PtrFloorToBoundary(cur_qbuf->buf_data))->DecRef();
-            last_qbuf = cur_qbuf;
-            cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
-        }
-        wr_cnt++;
-    } while (cur_qbuf != nullptr && wr_first_buf != end_qbuf);
-
-    if (wr_first_buf == nullptr) {
-        UBS_VLOG_ERR("TX umq buffer list is in error, TX user context does not contain the right list\n");
-        return -1;
-    }
-
-    // 如果是一个 read OP, 那么它的 left_size=0.
-    if (last_qbuf != nullptr) {
-        QBUF_LIST_NEXT(last_qbuf) = nullptr;
-    }
-    UmqApi::umq_buf_free(start_qbuf);
-
-    return wr_cnt;
+    umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
+                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    return UmqTxHelper::PollUmqTx(local_umqh_, poll_option, err_code, [this, sock](umq_buf_t *qbuf) {
+        // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
+        // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
+        // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
+        LibcApi::shutdown(fd_, SHUT_RD);
+        UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", fd_);
+        sock->State(SOCK_STAT_CLOSE);
+    });
 }
 
 int UmqTxOps::DpRearmTxInterrupt()

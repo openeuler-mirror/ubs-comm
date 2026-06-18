@@ -14,6 +14,7 @@
 #include "profiling/probe/probe_manager.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
+#include "umq_tp_wait_queue.h"
 
 namespace ock {
 namespace ubs {
@@ -83,14 +84,23 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
                     HandleErrorRxCqe(buf[i]);
                     UmqApi::umq_buf_free(buf[i]);
                     continue;
+                } else if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
+                    rx_queue_avail_num_ += 1;
+                    // try to wake up tx if necessary
+                    /* convert to umq socket */
+                    UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
+                    bool need_fc_awake =
+                        umqSock->GetTx()->GetTxOps()->need_fc_awake_.exchange(false, std::memory_order_relaxed);
+                    if (need_fc_awake && sockBase->NotifyReadable() == -1) {
+                        UBS_VLOG_ERR("eventfd_write() failed, errno: %d, errmsg: %s\n", errno, Func::Error2Str(errno));
+                    }
+                } else if (buf[i]->status == UMQ_FAKE_BUF_FC_EMLINK) {
+                    // 流控请求获取jetty资源失败，加入等待队列
+                    UBS_VLOG_WARN("[UMQ_API] fc post suspended: resource exhausted. Queued for automatic retry.\n");
+                    UmqTpWaitQueue::Instance().Enqueue(sock);
                 }
             } else {
-                rx_queue_avail_num_ += 1;
-                // try to wake up tx if necessary
-                bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_relaxed);
-                if (need_fc_awake && sockBase->NotifyReadable() == -1) {
-                    UBS_VLOG_ERR("eventfd_write() failed, errno: %d, errmsg: %s\n", errno, Func::Error2Str(errno));
-                }
+                UBS_VLOG_WARN("Unknown buffer status: %d", static_cast<int>(buf[i]->status));
             }
 
             QBUF_LIST_NEXT(buf[i]) = nullptr;
@@ -135,7 +145,9 @@ int UmqRxOps::GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num)
 
 int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
 {
-    int poll_num = UmqApi::umq_poll(local_umqh_, UMQ_IO_RX, buf, max_buf_size);
+    umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
+                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    int poll_num = UmqApi::umq_poll(local_umqh_, &poll_option, buf, max_buf_size);
     if (poll_num < 0 || (poll_num == 0 && rx_queue_avail_num_ == 0)) {
         if (poll_num < 0) {
             int savedErrno = errno;
@@ -155,7 +167,9 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
              * try to switch to tcp/ip until poll_num & m_rx.m_window_size both equal to zero */
         if (rx_buf_list != nullptr) {
             umq_buf_t *bad_qbuf = nullptr;
-            int umq_ret = UmqApi::umq_post(local_umqh_, rx_buf_list, UMQ_IO_RX, &bad_qbuf);
+            umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
+                                            UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+            int umq_ret = UmqApi::umq_post(local_umqh_, rx_buf_list, &io_rx_option, &bad_qbuf);
             if (umq_ret == UMQ_SUCCESS) {
                 rx_queue_avail_num_ += TX_REFILL_THRESHOLD;
             } else if ((rx_queue_avail_num_ += HandleBadQBuf(rx_buf_list, bad_qbuf)) == 0) {
@@ -316,8 +330,12 @@ void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
 
 int UmqRxOps::RearmRxInterrupt()
 {
+    if (UmqSetting::UMQ_TP_TYPE == POOL) {
+        return UBS_OK;
+    }
     PROF_START(CORE_READ_REARM);
-    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO,
+                                        UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
     int ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &rx_option);
     if (ret < 0) {
         int savedErrno = errno;
@@ -333,7 +351,9 @@ int UmqRxOps::RearmRxInterrupt()
 
 bool UmqRxOps::PollSubUmqRx(umq_buf_t *buf[], int i) const
 {
-    int ret = UmqApi::umq_poll(local_umqh_, UMQ_IO_RX, &buf[i], 1);
+    umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
+                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    int ret = UmqApi::umq_poll(local_umqh_, &poll_option, &buf[i], 1);
     bool pollRxSuccess = ret > 0;
     if (ret < 0) {
         UBS_VLOG_ERR("Failed to poll fc rx, local umq: %llu, ret: %d\n", static_cast<unsigned long long>(local_umqh_),
@@ -359,7 +379,9 @@ void UmqRxOps::FlushRx(const SocketPtr &sock, uint32_t timeout_ms)
             break;
         }
 
-        poll_cnt = UmqApi::umq_poll(local_umqh_, UMQ_IO_RX, buf, POLL_BATCH_MAX);
+        umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
+                                       UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+        poll_cnt = UmqApi::umq_poll(local_umqh_, &poll_option, buf, POLL_BATCH_MAX);
         if (poll_cnt < 0) {
             UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for RX flush, local umq: %llu, ret: %d\n",
                          static_cast<unsigned long long>(local_umqh_), poll_cnt);

@@ -20,9 +20,8 @@
 #include "umq_example_common.h"
 
 static const uint32_t EXAMPLE_MAX_POLL_BATCH = 64;
-static const uint32_t EXAMPLE_REQUEST_SIZE = 8192;
 static const uint32_t SOCKET_SEND_RECV_TIMEOUT = 5;
-static const uint32_t EXAMPLE_BUFFER_SIZE = 8192;
+static const uint32_t EXAMPLE_BUFFER_SIZE = 4096;
 static const uint32_t EXAMPLE_DEPTH = 128;
 
 typedef struct exchange_info {
@@ -394,15 +393,19 @@ int parse_trans_info(struct urpc_example_config *cfg, umq_init_cfg_t *init_cfg)
 
 int example_post_rx(uint64_t umqh, uint32_t depth)
 {
-    uint32_t request_size = EXAMPLE_REQUEST_SIZE;
+    uint32_t request_size = EXAMPLE_BUFFER_SIZE;
     umq_buf_t *buf = umq_buf_alloc(request_size, depth, umqh, NULL);
     if (buf == NULL) {
         LOG_PRINT_ERR("alloc buf failed\n");
         return -1;
     }
 
+    umq_io_option_t io_rx_option = {
+        .io_direction = UMQ_IO_RX,
+    };
+
     umq_buf_t *bad_buf = NULL;
-    if (umq_post(umqh, buf, UMQ_IO_RX, &bad_buf) != UMQ_SUCCESS) {
+    if (umq_post(umqh, buf, &io_rx_option, &bad_buf) != UMQ_SUCCESS) {
         LOG_PRINT_ERR("post rx failed\n");
         umq_buf_free(bad_buf);
         return -1;
@@ -420,8 +423,12 @@ int example_poll_rx(uint64_t umqh, const char *check_data, uint32_t data_size, b
     int ret = 0;
 
     uint64_t start = get_timestamp_ms();
+    umq_io_option_t io_rx_option = {
+        .io_direction = UMQ_IO_RX,
+    };
+
     while (ret == 0 && get_timestamp_ms() - start < EXAMPLE_MAX_WAIT_TIME_MS) {
-        ret = umq_poll(umqh, UMQ_IO_RX, buf, EXAMPLE_MAX_POLL_BATCH);
+        ret = umq_poll(umqh, &io_rx_option, buf, EXAMPLE_MAX_POLL_BATCH);
         usleep(EXAMPLE_SLEEP_TIME_US);
     }
 
@@ -474,7 +481,11 @@ int example_post_tx(uint64_t umqh, const char *data, uint32_t data_size)
     pro->flag.bs.complete_enable = 1;
     pro->opcode = UMQ_OPC_SEND_IMM;
     umq_buf_t *bad_buf = NULL;
-    if (umq_post(umqh, buf, UMQ_IO_TX, &bad_buf) != UMQ_SUCCESS) {
+    umq_io_option_t io_tx_option = {
+        .io_direction = UMQ_IO_TX,
+    };
+
+    if (umq_post(umqh, buf, &io_tx_option, &bad_buf) != UMQ_SUCCESS) {
         umq_buf_free(bad_buf);
         LOG_PRINT_ERR("post tx failed\n");
         return -1;
@@ -489,7 +500,12 @@ int example_poll_tx(uint64_t umqh)
     if (buf == NULL) {
         return -1;
     }
-    int ret = umq_poll(umqh, UMQ_IO_TX, buf, EXAMPLE_MAX_POLL_BATCH);
+
+    umq_io_option_t io_tx_option = {
+        .io_direction = UMQ_IO_TX,
+    };
+
+    int ret = umq_poll(umqh, &io_tx_option, buf, EXAMPLE_MAX_POLL_BATCH);
     if (ret <= 0) {
         free(buf);
         return -1;
@@ -565,9 +581,13 @@ void example_flush(uint64_t umqh)
     umq_buf_t *buf[EXAMPLE_MAX_POLL_BATCH];
     int ret = 0;
 
+    umq_io_option_t io_all_option = {
+        .io_direction = UMQ_IO_ALL,
+    };
+
     uint64_t start = get_timestamp_ms();
     while (get_timestamp_ms() - start < EXAMPLE_FLUSH_TIME_MS) {
-        ret = umq_poll(umqh, UMQ_IO_ALL, buf, EXAMPLE_MAX_POLL_BATCH);
+        ret = umq_poll(umqh, &io_all_option, buf, EXAMPLE_MAX_POLL_BATCH);
         if (ret > 0) {
             LOG_PRINT("example flush rx count: %d\n", ret);
             for (int i = 0; i < ret; i++) {

@@ -52,6 +52,11 @@ public:
 
     virtual void WakeUpTx(Socket *sock) = 0;
 
+    virtual bool Writable(const SocketPtr &sock)
+    {
+        return true;
+    }
+
 public:
     int fd_ = -1;
     std::atomic<uint16_t> tx_queue_avail_num_{GlobalSetting::UBS_TX_DEPTH}; // current window size for TX

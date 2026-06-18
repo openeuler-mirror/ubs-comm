@@ -84,6 +84,12 @@ enum class UBHandshakeMode : uint32_t
     UB_SOCK_OPT
 };
 
+typedef enum pool_type : uint8_t
+{
+    SINGLE,
+    POOL
+} pool_type_t;
+
 #ifndef TCP_UB_SOCKET_HANDSHAKE
 #define TCP_UB_SOCKET_HANDSHAKE 144
 #endif

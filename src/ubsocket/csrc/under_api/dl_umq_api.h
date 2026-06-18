@@ -262,14 +262,14 @@ public:
     {
         return umq_external_rwlock_ops_register_ptr(ops);
     }
-    static int umq_post(uint64_t umqh, umq_buf_t *qbuf, umq_io_direction_t io_direction, umq_buf_t **bad_qbuf)
+    static int umq_post(uint64_t umqh, umq_buf_t *qbuf, umq_io_option_t *option, umq_buf_t **bad_qbuf)
     {
-        return umq_post_ptr(umqh, qbuf, io_direction, bad_qbuf);
+        return umq_post_ptr(umqh, qbuf, option, bad_qbuf);
     }
 
-    static int umq_poll(uint64_t umqh, umq_io_direction_t io_direction, umq_buf_t **buf, uint32_t max_buf_count)
+    static int umq_poll(uint64_t umqh, umq_io_option_t *poll_option, umq_buf_t **buf, uint32_t max_buf_count)
     {
-        return umq_poll_ptr(umqh, io_direction, buf, max_buf_count);
+        return umq_poll_ptr(umqh, poll_option, buf, max_buf_count);
     }
 
     static int umq_interrupt_fd_get(uint64_t umqh, umq_interrupt_option_t *option)
@@ -319,6 +319,32 @@ public:
     static int umq_stats_tp_perf_info_get(umq_trans_mode_t trans_mode, char *perf_buf, uint32_t *length)
     {
         return umq_stats_tp_perf_info_get_ptr(trans_mode, perf_buf, length);
+    }
+
+    static int umq_transport_pool_resource_create(uint64_t umqh)
+    {
+        return umq_transport_pool_resource_create(umqh);
+    }
+
+    static int umq_transport_pool_resource_destroy(uint64_t umqh, uint32_t tp_handle_idx)
+    {
+        return ::umq_transport_pool_resource_destroy(umqh, tp_handle_idx);
+    }
+
+    static int umq_transport_pool_resource_modify(uint64_t umqh, uint32_t tp_handle_idx)
+    {
+        return ::umq_transport_pool_resource_modify(umqh, tp_handle_idx);
+    }
+
+    static int umq_transport_pool_eventfd_get(uint64_t umqh)
+    {
+        return ::umq_transport_pool_eventfd_get(umqh);
+    }
+
+    static int umq_interrupt_fd_list_get(uint64_t umqh, umq_interrupt_option_t *option,
+                                         umq_interrupt_fd_list_t *fd_list)
+    {
+        return ::umq_interrupt_fd_list_get(umqh, option, fd_list);
     }
 
 private:
@@ -371,6 +397,11 @@ private:
     DL_API_DECLARE(umq_stats_tp_perf_start);
     DL_API_DECLARE(umq_stats_tp_perf_stop);
     DL_API_DECLARE(umq_stats_tp_perf_info_get);
+    DL_API_DECLARE(umq_transport_pool_resource_create);
+    DL_API_DECLARE(umq_transport_pool_resource_destroy);
+    DL_API_DECLARE(umq_transport_pool_resource_modify);
+    DL_API_DECLARE(umq_transport_pool_eventfd_get);
+    DL_API_DECLARE(umq_interrupt_fd_list_get);
 
 private:
     static void UnLoadInner() noexcept;
@@ -589,14 +620,14 @@ public:
         return ::umq_external_rwlock_ops_register(ops);
     }
 
-    static int umq_post(uint64_t umqh, umq_buf_t *qbuf, umq_io_direction_t io_direction, umq_buf_t **bad_qbuf)
+    static int umq_post(uint64_t umqh, umq_buf_t *qbuf, umq_io_option_t *option, umq_buf_t **bad_qbuf)
     {
-        return ::umq_post(umqh, qbuf, io_direction, bad_qbuf);
+        return ::umq_post(umqh, qbuf, option, bad_qbuf);
     }
 
-    static int umq_poll(uint64_t umqh, umq_io_direction_t io_direction, umq_buf_t **buf, uint32_t max_buf_count)
+    static int umq_poll(uint64_t umqh, umq_io_option_t *poll_option, umq_buf_t **buf, uint32_t max_buf_count)
     {
-        return ::umq_poll(umqh, io_direction, buf, max_buf_count);
+        return ::umq_poll(umqh, poll_option, buf, max_buf_count);
     }
 
     static int umq_interrupt_fd_get(uint64_t umqh, umq_interrupt_option_t *option)
@@ -647,6 +678,32 @@ public:
     static int umq_stats_tp_perf_info_get(umq_trans_mode_t trans_mode, char *perf_buf, uint32_t *length)
     {
         return ::umq_stats_tp_perf_info_get(trans_mode, perf_buf, length);
+    }
+
+    static int umq_transport_pool_resource_create(uint64_t umqh)
+    {
+        return ::umq_transport_pool_resource_create(umqh);
+    }
+
+    static int umq_transport_pool_resource_destroy(uint64_t umqh, uint32_t tp_handle_idx)
+    {
+        return ::umq_transport_pool_resource_destroy(umqh, tp_handle_idx);
+    }
+
+    static int umq_transport_pool_resource_modify(uint64_t umqh, uint32_t tp_handle_idx)
+    {
+        return ::umq_transport_pool_resource_modify(umqh, tp_handle_idx);
+    }
+
+    static int umq_transport_pool_eventfd_get(uint64_t umqh)
+    {
+        return ::umq_transport_pool_eventfd_get(umqh);
+    }
+
+    static int umq_interrupt_fd_list_get(uint64_t umqh, umq_interrupt_option_t *option,
+                                         umq_interrupt_fd_list_t *fd_list)
+    {
+        return ::umq_interrupt_fd_list_get(umqh, option, fd_list);
     }
 };
 } // namespace ubs

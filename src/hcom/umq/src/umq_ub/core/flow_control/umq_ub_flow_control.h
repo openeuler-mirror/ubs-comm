@@ -28,17 +28,17 @@ typedef union umq_ub_fc_user_ctx {
     } bs;
 } umq_ub_fc_user_ctx_t;
 
-uint16_t umq_ub_fc_threashold_modify(uint16_t threashold, uint8_t ratio);
+uint16_t umq_ub_flow_control_threashold_modify(uint16_t threashold, uint8_t ratio);
 int umq_ub_flow_control_init(ub_flow_control_t *fc, ub_queue_t *queue, uint32_t feature, umq_flow_control_cfg_t *cfg);
 void umq_ub_flow_control_uninit(ub_flow_control_t *fc);
 int umq_ub_window_init(ub_flow_control_t *fc, umq_ub_bind_info_t *bind_info);
 void umq_ub_rx_consumed_inc(bool lock_free, volatile uint64_t *var, uint64_t count);
 uint64_t umq_ub_rx_consumed_exchange(bool lock_free, volatile uint64_t *var, uint64_t count);
 int umq_ub_shared_credit_req_send(ub_queue_t *queue);
-int umq_ub_shared_credit_req_handle(ub_queue_t *queue, umq_ub_imm_t *imm);
-void umq_ub_shared_credit_resp_handle(ub_queue_t *queue, umq_ub_imm_t *imm);
+int umq_ub_shared_credit_req_handle(ub_queue_t *queue, umq_ub_flow_control_data_t *flow_control_data);
+void umq_ub_shared_credit_resp_handle(ub_queue_t *queue, umq_ub_flow_control_data_t *flow_control_data);
 int umq_ub_shared_credit_return_req_send(ub_queue_t *queue);
-int umq_ub_shared_credit_return_req_handle(ub_queue_t *queue, umq_ub_imm_t *imm);
+int umq_ub_shared_credit_return_req_handle(ub_queue_t *queue, umq_ub_flow_control_data_t *flow_control_data);
 void umq_ub_credit_clean_up(ub_queue_t *queue);
 void umq_ub_shared_credit_recharge(ub_queue_t *queue, uint16_t recharge_count);
 void umq_ub_idle_credit_flush(ub_queue_t *queue, uint32_t cnt) ;
@@ -70,7 +70,7 @@ static ALWAYS_INLINE int umq_ub_credit_check_and_request_send(ub_flow_control_t 
         queue->checker->last_send = get_timestamp_us();
     }
     if (fc->ops.remote_rx_window_load(fc) <=
-        umq_ub_fc_threashold_modify(fc->credit_request_threshold, fc->peer_ratio)) {
+        umq_ub_flow_control_threashold_modify(fc->credit_request_threshold, fc->peer_ratio)) {
         return umq_ub_shared_credit_req_send(queue);
     }
     return UMQ_SUCCESS;

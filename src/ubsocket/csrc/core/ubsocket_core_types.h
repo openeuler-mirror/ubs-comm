@@ -45,6 +45,13 @@ enum SocketCreateType : uint8_t
     SOCK_CREATE_TYPE_COUNT
 };
 
+enum class EpollRunnerType : uint8_t
+{
+    SHARE_JFR_RX_RUNNER = 0,     /* Share JFR Rx Epoll Runner */
+    TRANSPORT_POOL_TX_RUNNER,    /* Transport Pool Tx Epoll Runner */
+    TRANSPORT_POOL_EVENT_RUNNER, /* Transport Pool Event Epoll Runner */
+};
+
 class Socket;
 using SocketPtr = Ref<Socket>;
 
@@ -93,8 +100,7 @@ public:
     virtual bool IsBindRemote() = 0;
     virtual Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
     virtual Result DelTxEvent(const SocketPtr &sock, int epoll_fd) = 0;
-    virtual Result AddRxEventToRunner(uintptr_t event_poll, const SocketPtr &sock, int epoll_fd,
-                                      struct epoll_event *event) = 0;
+    virtual bool ShouldRegisterTxEvent() = 0;
     virtual Result ProcessEpollEvent(struct epoll_event &event) = 0;
     DEFINE_REF_OPERATION_FUNC
 

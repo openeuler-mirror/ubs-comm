@@ -10,10 +10,13 @@
  */
 #include "umq_backend.h"
 #include <cstring>
+#include "core/ubsocket_event_epoll.h"
 #include "umq_conn_helper.h"
 #include "umq_eid_table.h"
 #include "umq_errno_converter.h"
 #include "umq_setting.h"
+#include "umq_share_jfr_epoll_runner_ops.h"
+#include "umq_transport_pool.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -58,6 +61,10 @@ Result UmqBackend::Init() noexcept
     umq_config.buf_pool_cfg.umq_buf_pool_max_size = UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB * IO_SIZE_MB;
     umq_config.buf_pool_cfg.tls_qbuf_pool_depth = UmqSetting::UMQ_BUF_POOL_DEPTH;
     umq_config.io_lock_free = false;
+
+    if (UmqSetting::UMQ_TP_TYPE == POOL) {
+        umq_config.tp_pool_cfg.notify_threshold = 1;
+    }
 
     /* step3: init umq */
     ret = UmqApi::umq_init(&umq_config);
@@ -131,13 +138,22 @@ Result UmqBackend::Init() noexcept
     // 预创建umq_handle
     if (GlobalSetting::UBS_ENABLE_SHARE_JFR) {
         umq_eid_t local_eid;
-        if (CreateShareMainUmq(local_eid) != UBS_OK) {
+        uint64_t main_umq_handle = UMQ_INVALID_HANDLE;
+        if ((main_umq_handle = CreateShareMainUmq(local_eid)) == UMQ_INVALID_HANDLE) {
             UBS_VLOG_ERR("Failed to init main umq.");
             return UBS_UMQ_CREATE;
         }
         if (PrefillShareMainUmq(local_eid) != UBS_OK) {
             UBS_VLOG_ERR("Failed to prefill main umq rx.");
             return UBS_PREFILL_RX;
+        }
+        if (InitShareJfrMonitering(main_umq_handle)) {
+            UBS_VLOG_ERR("Failed to init main umq share jfr event runner.");
+            return UBS_ERROR;
+        }
+        if (UmqTransportPool::Instance().WarmUp(main_umq_handle) != UBS_OK) {
+            UBS_VLOG_ERR("Failed to warm up umq shared pool.");
+            return UBS_UMQ_CREATE;
         }
     }
     UMQ_INITED = true;
@@ -258,7 +274,7 @@ Result UmqBackend::FindDevName()
     return UBS_OK;
 }
 
-Result UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
+uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
 {
     umq_create_option_t share_main_umq_cfg;
     memset(&share_main_umq_cfg, 0, sizeof(share_main_umq_cfg));
@@ -273,7 +289,7 @@ Result UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
         umq_route_list_t route_list;
         if (UmqConnHelper::GetRouteList(route_list, bonding_eid, bonding_eid) != UBS_OK) {
             UBS_VLOG_ERR("Failed to get urma route info.\n");
-            return UBS_UMQ_CREATE;
+            return UMQ_INVALID_HANDLE;
         }
         used_ports.reserve(route_list.route_num);
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
@@ -289,14 +305,14 @@ Result UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
 
     if (std::strncpy(share_main_umq_cfg.name, "ubsocket_main_umq", UMQ_NAME_MAX_LEN) == nullptr) {
         UBS_VLOG_ERR("Failed to set main umq name\n");
-        return UBS_SET_DEV_INFO;
+        return UMQ_INVALID_HANDLE;
     }
 
     // init阶段 UMQ_DEV_NAME必定有值（FindDevName)
     if (std::strncpy(share_main_umq_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_DEV_NAME.c_str(), UMQ_NAME_MAX_LEN) ==
         nullptr) {
         UBS_VLOG_ERR("Failed to set device name\n");
-        return UBS_NEW_SOCKET_FD;
+        return UMQ_INVALID_HANDLE;
     }
     if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
         share_main_umq_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
@@ -306,6 +322,7 @@ Result UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
             0) {
             UBS_VLOG_ERR("Failed to get eid by dev name:%s and eid index:%d \n", UmqSetting::UMQ_DEV_NAME.c_str(),
                          UmqSetting::UMQ_EID_INDEX);
+            return UMQ_INVALID_HANDLE;
         }
         UBS_VLOG_INFO("Use Bonding: " EID_FMT ".\n", EID_ARGS(local_eid));
     } else {
@@ -318,13 +335,13 @@ Result UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
 
     Locker sLock(UmqEidTable::Instance().GetMainMutex());
     std::vector<std::shared_ptr<MainUmqState>> main_umq_list;
-    uint64_t main_umq;
+    uint64_t main_umq_handle = UMQ_INVALID_HANDLE;
     if (!UmqEidTable::Instance().Get(local_eid, UmqSetting::UMQ_UB_TRANS_MODE, main_umq_list)) {
         share_main_umq_cfg.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
-        main_umq = UmqApi::umq_create(&share_main_umq_cfg);
-        UmqEidTable::Instance().Add(local_eid, UmqSetting::UMQ_UB_TRANS_MODE, main_umq);
+        main_umq_handle = UmqApi::umq_create(&share_main_umq_cfg);
+        UmqEidTable::Instance().Add(local_eid, UmqSetting::UMQ_UB_TRANS_MODE, main_umq_handle);
     }
-    return UBS_OK;
+    return main_umq_handle;
 }
 
 Result UmqBackend::PrefillShareMainUmq(umq_eid_t &local_eid)
@@ -346,6 +363,43 @@ Result UmqBackend::PrefillShareMainUmq(umq_eid_t &local_eid)
         }
         return UBS_OK;
     });
+}
+
+Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
+{
+    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::SHARE_JFR_RX_RUNNER);
+    uint64_t result = epoll_runner.Start();
+    if (result != UBS_OK) {
+        return result;
+    }
+    umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    auto share_jfr_fd = UmqApi::umq_interrupt_fd_get(main_umq_handle, &main_option);
+    if (UNLIKELY(share_jfr_fd < 0)) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, share_jfr_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get share jfr RX interrupt fd, main umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(main_umq_handle), share_jfr_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, share_jfr_fd), savedErrno);
+        return UBS_ERROR;
+    }
+
+    RunnerEventData event_data{};
+    event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
+    event_data.event_data.data = share_jfr_fd;
+
+    struct epoll_event share_jfr_event {
+    };
+    share_jfr_event.events = EPOLLIN | EPOLLET;
+    share_jfr_event.data.u64 = event_data.u64;
+
+    UmqShareJfrEpollRunnerOps::ExtContext ctx;
+    ctx.umq_handle = main_umq_handle;
+    if (UNLIKELY(epoll_runner.AddEpollEvent(share_jfr_fd, &share_jfr_event, &ctx))) {
+        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
+        return UBS_ERROR;
+    }
+    return UBS_OK;
 }
 
 } // namespace umq

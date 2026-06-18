@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include "umq_epoll_runner_ops.h"
+#include "umq_share_jfr_epoll_runner_ops.h"
 #include "common/ubsocket_common_includes.h"
 #include "umq_backend.h"
 #include "umq_data_rx_ops.h"
@@ -24,7 +24,7 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
+ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
 {
     uint64_t main_umq = 0;
     Socket *socket_object = nullptr;
@@ -54,7 +54,9 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
 
     umq_buf_t *buf[POLL_BATCH_MAX];
     auto umqSock = dynamic_cast<UmqSocket *>(socket_object);
-    int pollNum = UmqApi::umq_poll(umqSock->UmqHandle(), UMQ_IO_RX, buf, POLL_BATCH_MAX);
+    umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
+                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    int pollNum = UmqApi::umq_poll(umqSock->UmqHandle(), &poll_option, buf, POLL_BATCH_MAX);
     if (UNLIKELY(pollNum <= 0)) {
         if (UNLIKELY(pollNum < 0)) {
             int savedErrno = errno;
@@ -74,7 +76,7 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessOneEvent(const struct epoll_event &e
     return 0;
 }
 
-void UmqEpollRunnerOps::HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t **buf, int pollNum)
+void UmqShareJfrEpollRunnerOps::HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t **buf, int pollNum)
 {
     auto umqSock = dynamic_cast<UmqSocket *>(socketObject);
     for (int i = 0; i < pollNum; ++i) {
@@ -92,7 +94,7 @@ void UmqEpollRunnerOps::HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t 
     }
 }
 
-ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq)
+ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq)
 {
     traceTime_.umq_rearm_start_timestamp_ = ubsocket_get_timeNs();
     if (UNLIKELY(ProcessMainUmqRearm(main_umq) < 0)) {
@@ -102,7 +104,9 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
 
     umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
     traceTime_.umq_poll_start_timestamp_ = ubsocket_get_timeNs();
-    auto pollNum = UmqApi::umq_poll(main_umq, UMQ_IO_RX, buf, MAX_EPOLL_WAIT_COUNT);
+    umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
+                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    auto pollNum = UmqApi::umq_poll(main_umq, &poll_option, buf, MAX_EPOLL_WAIT_COUNT);
     traceTime_.umq_poll_end_timestamp_ = ubsocket_get_timeNs();
     if (UNLIKELY(pollNum < 0)) {
         int savedErrno = errno;
@@ -134,7 +138,9 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
         if (LIKELY(rx_buf_list != nullptr)) {
             umq_buf_t *bad_qbuf = nullptr;
             traceTime_.umq_post_start_timestamp_ = ubsocket_get_timeNs();
-            if (UmqApi::umq_post(main_umq, rx_buf_list, UMQ_IO_RX, &bad_qbuf) != UMQ_SUCCESS) {
+            umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
+                                            UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+            if (UmqApi::umq_post(main_umq, rx_buf_list, &io_rx_option, &bad_qbuf) != UMQ_SUCCESS) {
                 int savedErrno = errno;
                 errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
                 UBS_VLOG_ERR("[UMQ_API] umq_post() failed for share jfr RX refill, main umq: %llu, "
@@ -167,7 +173,8 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_eve
     return 0;
 }
 
-ALWAYS_INLINE std::unordered_set<Socket *> UmqEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count)
+ALWAYS_INLINE std::unordered_set<Socket *> UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf,
+                                                                                                     int count)
 {
     std::unordered_set<Socket *> event_reach_sockets;
     for (int i = 0; i < count; ++i) {
@@ -224,7 +231,7 @@ ALWAYS_INLINE std::unordered_set<Socket *> UmqEpollRunnerOps::SiftSocketEventsWi
     return event_reach_sockets;
 }
 
-ALWAYS_INLINE int UmqEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
+ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
 {
     umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto events_cnt = UmqApi::umq_get_cq_event(main_umq, &option);
@@ -256,6 +263,31 @@ ALWAYS_INLINE int UmqEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
     }
 
     return events_cnt;
+}
+
+int UmqShareJfrEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_event *event, ExtContext *ctx)
+{
+    if (ctx == nullptr) {
+        UBS_VLOG_ERR("Unsupported operation. Check context because context is null.\n");
+        return UBS_ERROR;
+    }
+    if (InsertJfrMainUmq(fd, ctx->umq_handle, epoll_fd, event) < 0) {
+        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
+        return UBS_ERROR;
+    }
+
+    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    int ret = UmqApi::umq_rearm_interrupt(ctx->umq_handle, false, &rx_option);
+    if (ret < 0) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for share jfr RX, "
+                     "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(ctx->umq_handle), ret, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+        return UBS_ERROR;
+    }
+    return UBS_OK;
 }
 
 } // namespace umq
