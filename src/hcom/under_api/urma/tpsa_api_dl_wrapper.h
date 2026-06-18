@@ -19,11 +19,6 @@ namespace ock {
 namespace hcom {
 class HcomTpsa {
 public:
-    static inline int UvsGetRouteList(const uvs_route_t *route, uvs_route_list_t *route_list)
-    {
-        return TpsaAPI::hcomUvsGetRouteList(route, route_list);
-    }
-
     static inline int UvsGetPathSet(const uvs_eid_t *src_bonding_eid, const uvs_eid_t *dst_bonding_eid,
                                     uvs_tp_type_t tp_type, bool multi_path, uvs_path_set_t *uvs_path_set)
     {
