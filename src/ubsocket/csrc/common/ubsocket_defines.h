@@ -114,7 +114,7 @@ typedef enum pool_type : uint8_t
 
 constexpr uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445054;
 constexpr uint32_t NEGOTIATE_SOCKET_ID_MAX_NUM = 256;
-constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 512;
+constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 8192;
 constexpr uint32_t DIVIDED_NUMBER = 2;
 constexpr uint32_t CACHE_LINE_ALIGNMENT = 64;
 constexpr uint16_t TX_HANDLE_THRESHOLD = 2;
