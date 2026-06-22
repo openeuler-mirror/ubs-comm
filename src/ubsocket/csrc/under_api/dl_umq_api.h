@@ -321,6 +321,16 @@ public:
         return umq_stats_tp_perf_info_get_ptr(trans_mode, perf_buf, length);
     }
 
+    static int umq_stats_trace_start(umq_trace_cfg_t *cfg)
+    {
+        return umq_stats_trace_start_ptr(cfg);
+    }
+
+    static int umq_stats_trace_stop()
+    {
+        return umq_stats_trace_stop_ptr();
+    }
+
     static int umq_transport_pool_resource_create(uint64_t umqh)
     {
         return umq_transport_pool_resource_create(umqh);
@@ -402,6 +412,8 @@ private:
     DL_API_DECLARE(umq_transport_pool_resource_modify);
     DL_API_DECLARE(umq_transport_pool_eventfd_get);
     DL_API_DECLARE(umq_interrupt_fd_list_get);
+    DL_API_DECLARE(umq_stats_trace_start);
+    DL_API_DECLARE(umq_stats_trace_stop);
 
 private:
     static void UnLoadInner() noexcept;
@@ -678,6 +690,16 @@ public:
     static int umq_stats_tp_perf_info_get(umq_trans_mode_t trans_mode, char *perf_buf, uint32_t *length)
     {
         return ::umq_stats_tp_perf_info_get(trans_mode, perf_buf, length);
+    }
+
+    static int umq_stats_trace_start(umq_trace_cfg_t *cfg)
+    {
+        return ::umq_stats_trace_start(cfg);
+    }
+
+    static int umq_stats_trace_stop()
+    {
+        return ::umq_stats_trace_stop();
     }
 
     static int umq_transport_pool_resource_create(uint64_t umqh)

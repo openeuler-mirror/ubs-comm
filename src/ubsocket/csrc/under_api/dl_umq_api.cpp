@@ -64,6 +64,8 @@ DL_API_DEFINE(UmqApi, umq_stats_perf_get);
 DL_API_DEFINE(UmqApi, umq_stats_tp_perf_start);
 DL_API_DEFINE(UmqApi, umq_stats_tp_perf_stop);
 DL_API_DEFINE(UmqApi, umq_stats_tp_perf_info_get);
+DL_API_DEFINE(UmqApi, umq_stats_trace_start);
+DL_API_DEFINE(UmqApi, umq_stats_trace_stop);
 
 std::mutex UmqApi::LOAD_MUTEX;
 bool UmqApi::LOADED = false;
@@ -133,6 +135,8 @@ Result UmqApi::Load() noexcept
     DL_API_LOAD(umq_stats_tp_perf_start);
     DL_API_LOAD(umq_stats_tp_perf_stop);
     DL_API_LOAD(umq_stats_tp_perf_info_get);
+    DL_API_LOAD(umq_stats_trace_start);
+    DL_API_LOAD(umq_stats_trace_stop);
 
     /* step3: close handle */
     dlclose(handle);
