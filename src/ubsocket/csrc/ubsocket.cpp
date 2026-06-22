@@ -174,10 +174,6 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
     //#endif
 
-    if (!GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
-        UmqApi::umq_log_config_set(NULL);
-    }
-
     /* step6: register signal handler */
     std::signal(SIGUSR2, ubsocket_handle_signal);
 
@@ -210,6 +206,13 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         TracePrintThread::Instance().Start();
+        umq_trace_cfg_t cfg;
+        cfg.flag = UMQ_TRACE_FLAG_RECORD_NUM;
+        cfg.record_num = GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY;
+        int trace_ret = UmqApi::umq_stats_trace_start(&cfg);
+        if (trace_ret != 0) {
+            UBS_VLOG_WARN("umq stats trace start failed, ret: %d\n", trace_ret);
+        }
     }
 
     return UBS_OK;
@@ -228,6 +231,7 @@ void ubsocket_uninit()
                 sock->split_trace_->Flush();
             }
         });
+        UmqApi::umq_stats_trace_stop();
     }
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::PrintStatsMgr::StopStatsCollection();
