@@ -263,6 +263,8 @@ void TerminalDisplay::PrintHeader(CLIDataHeader &header)
     PrintItem("Connect Calls", header.connNum);
     PrintItem("Active Conns", header.activeConn);
     PrintItem("ReTx Count", header.reTxCount);
+    PrintItem("Pool Total Capacity", header.poolTotalNum);
+    PrintItem("Pool Available Count", header.poolAvailableNum);
     NewLine();
 }
 

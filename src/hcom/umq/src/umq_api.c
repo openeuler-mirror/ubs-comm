@@ -20,7 +20,6 @@
 #include "umq_errno.h"
 #include "urpc_util.h"
 #include "util_lock.h"
-#include "umq_dfx_api.h"
 
 #ifdef UMQ_STATIC_LIB
 #include "umq_ub_api.h"
@@ -323,9 +322,8 @@ RESET_LOG:
 int umq_log_config_set(umq_log_config_t *config)
 {
     if (config == NULL) {
-        UMQ_VLOG_INFO(VLOG_UMQ, "========not print trace log\n");
- 	    umq_ub_close_perf_log();
- 	    return -UMQ_ERR_EINVAL;
+        UMQ_VLOG_ERR(VLOG_UMQ, "invalid configure\n");
+        return -UMQ_ERR_EINVAL;
     }
 
     if ((config->log_flag & UMQ_LOG_FLAG_LEVEL) &&
@@ -492,8 +490,6 @@ static void umq_thread_uninit(umq_init_cfg_t *cfg)
 
 void umq_uninit(void)
 {
-    void *args = NULL;
-    umq_ub_remain_data_print(args);
     if (!g_umq_inited) {
         UMQ_VLOG_ERR(VLOG_UMQ, "umq has not been inited\n");
         return;
@@ -1141,7 +1137,7 @@ void umq_notify(uint64_t umqh)
     return;
 }
 
-int umq_rearm_interrupt(uint64_t umqh, bool solicated, umq_interrupt_option_t *option)
+int umq_rearm_interrupt(uint64_t umqh, bool solicited, umq_interrupt_option_t *option)
 {
     uint64_t start_timestamp = umq_perf_get_start_timestamp();
     umq_t *umq = (umq_t *)(uintptr_t)umqh;
@@ -1152,7 +1148,7 @@ int umq_rearm_interrupt(uint64_t umqh, bool solicated, umq_interrupt_option_t *o
         return -UMQ_ERR_EINVAL;
     }
 
-    int ret = umq->tp_ops->umq_tp_rearm_interrupt(umq->umqh_tp, solicated, option);
+    int ret = umq->tp_ops->umq_tp_rearm_interrupt(umq->umqh_tp, solicited, option);
     umq_perf_record_write_interrupt_with_direction(UMQ_PERF_RECORD_REARM_TX, start_timestamp, option->direction);
     return ret;
 }

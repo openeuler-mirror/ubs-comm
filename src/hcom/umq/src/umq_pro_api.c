@@ -15,11 +15,6 @@
 
 int umq_post(uint64_t umqh, umq_buf_t *qbuf, umq_io_option_t *option, umq_buf_t **bad_qbuf)
 {
-    umq_data_record_t data_record;
-    umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)qbuf->qbuf_ext;
-    data_record.user_data = buf_pro->imm.user_data;
-    data_record.umq_post_start = get_timestamp_ns();
-    umq_perf_data_write(UMQ_PERF_DATA_TYPE_POST, data_record);
     uint64_t start_timestamp = umq_perf_get_start_timestamp();
     umq_t *umq = (umq_t *)(uintptr_t)umqh;
 
