@@ -48,8 +48,6 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     if (is_blocking) {
         SocketConnHelper::SetBlocking(raw_fd_);
     }
-    // m_peer_info.type_fd = 1;
-    PROF_END(CORE_CONNECT, true);
     connector_ops_->conn_info.type_fd = 1;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
