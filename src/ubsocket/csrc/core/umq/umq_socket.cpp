@@ -343,7 +343,6 @@ Result UmqSocket::ProcessEpollEvent(struct epoll_event &event)
 {
     auto event_data = (EpollEvent *)event.data.ptr;
     if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_OUT) {
-        UBS_VLOG_ERR("ProcessEpollEvent ProcessEpollEvent ProcessEpollEvent \n");
         NewTxEpollIn();
     }
     return UBS_OK;
