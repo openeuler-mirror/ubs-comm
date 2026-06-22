@@ -715,7 +715,6 @@ static ALWAYS_INLINE uint32_t umq_ub_queue_info_serialize(
     queue_info->is_binded = queue->bind_ctx != NULL ? 1 : 0;
     queue_info->token = jetty->jetty_cfg.shared.jfr->jfr_cfg.token_value;
     queue_info->rsvd = 0;
-    queue_info->order_type = queue->order_type;
     queue_info->rx_depth = queue->rx_depth;
     queue_info->tx_depth = queue->tx_depth;
     queue_info->rx_buf_size = queue->rx_buf_size;

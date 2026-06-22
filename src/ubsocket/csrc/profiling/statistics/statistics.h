@@ -27,9 +27,12 @@
 #include "cli_message.h"
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_socket_helper.h"
+#include "core/umq/umq_eid_table.h"
+#include "core/umq/umq_setting.h"
 #include "core/umq/umq_socket.h"
 #include "profiling/probe/probe_manager.h"
 #include "statistics_statsmgr.h"
+#include "umq_api.h"
 #include "umq_dfx_api.h"
 #include "umq_dfx_types.h"
 #include "umq_errno.h"
@@ -426,6 +429,25 @@ public:
         }
     }
 
+    void GetUmqPoolStats(CLIDataHeader &header)
+    {
+        uint64_t umqHandle = GetFirstUmqHandle();
+        if (umqHandle == UMQ_INVALID_HANDLE) {
+            UBS_VLOG_ERR("umqHandle is INVALID, skipping pool stats\n");
+            return;
+        }
+
+        umq_transport_pool_stats_t transportPoolStats{};
+        int poolGetRet = umq_stats_transport_pool_get(umqHandle, &transportPoolStats);
+        if (poolGetRet != 0) {
+            UBS_VLOG_ERR("umq_stats_transport_pool_get failed, ret: %d\n", poolGetRet);
+            return;
+        }
+
+        header.poolTotalNum = transportPoolStats.total_num;
+        header.poolAvailableNum = transportPoolStats.global_num + transportPoolStats.cache_num;
+    }
+
     void ProcessStatRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
     {
         // collect socket count
@@ -444,6 +466,7 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         CLIheader.reTxCount = StatsMgr::GetReTxCount();
+        GetUmqPoolStats(CLIheader);
         // collect data
         memcpy(msg.Data(), &CLIheader, headerSize);
 
@@ -481,6 +504,7 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         CLIheader.reTxCount = StatsMgr::GetReTxCount();
+        GetUmqPoolStats(CLIheader);
         // collect data
         memcpy(msg.Data(), &CLIheader, headerSize);
 
@@ -600,6 +624,7 @@ public:
         CLIheader.socketNum = sockNum;
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
+        GetUmqPoolStats(CLIheader);
         // collect data
         memcpy(msg.Data(), &CLIheader, headerSize);
 
@@ -636,6 +661,7 @@ public:
         CLIheader.socketNum = sockNum;
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
+        GetUmqPoolStats(CLIheader);
         // collect data
         memcpy(msg.Data(), &CLIheader, headerSize);
 
@@ -672,6 +698,7 @@ public:
         CLIheader.socketNum = sockNum;
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
+        GetUmqPoolStats(CLIheader);
         // collect data
         memcpy(msg.Data(), &CLIheader, headerSize);
 
@@ -708,6 +735,7 @@ public:
         CLIheader.socketNum = sockNum;
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
+        GetUmqPoolStats(CLIheader);
         // collect data
         memcpy(msg.Data(), &CLIheader, headerSize);
 
@@ -729,6 +757,14 @@ public:
 
     uint64_t GetFirstUmqHandle()
     {
+        auto mainUmq =
+            umq::UmqEidTable::Instance().GetFirst(umq::UmqSetting::UMQ_LOCAL_EID, umq::UmqSetting::UMQ_UB_TRANS_MODE);
+        if (mainUmq != nullptr) {
+            uint64_t handle = mainUmq->GetUmqHandle();
+            UBS_VLOG_INFO("[GetFirstUmqHandle] got handle from UmqEidTable: %llu", (unsigned long long)handle);
+            return handle;
+        }
+
         uint64_t result = UMQ_INVALID_HANDLE;
         ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
             if (result != UMQ_INVALID_HANDLE) {
@@ -748,9 +784,7 @@ public:
 
     uint64_t GetMainUmqHandleFromSocket(SocketPtr socket)
     {
-        // For now, return UMQ_INVALID_HANDLE to avoid compilation issues
-        // We'll need to properly include Brpc::SocketFd header in the future
-        return UMQ_INVALID_HANDLE;
+        return static_cast<umq::UmqSocket *>(socket.Get())->UmqHandle();
     }
 
     void Process(uint32_t events)
