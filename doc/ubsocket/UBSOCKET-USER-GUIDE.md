@@ -916,7 +916,21 @@ bazel build //src:ubstat
 | `-d, --dsteid ` | 必选        | 指定目的 EID，必须为有效的 IPv6 地址                  |
 | 注意事项                 | -           | `topo`命令**不支持** `-w`参数，请勿添加 |
 
-#### 9.3.5 实操示例
+#### 9.3.5 `stat` 命令输出字段说明
+
+执行 `stat` 命令后，终端首先输出统计头部（Header），包含进程级汇总信息和内存池状态，各字段含义如下：
+
+| 字段 | 含义 | 说明 |
+| --- | --- | --- |
+| Total Sockets | 当前进程的UBSocket连接总数 | 包含所有已创建的socket，无论是否活跃 |
+| Connect Calls | 累计调用`connect`的次数 | 统计进程启动以来所有connect调用总次数 |
+| Active Conns | 主动发起连接的数量 | 主动发起UB建连且处于通信状态的连接数量 |
+| ReTx Count | 累计重传次数 | 数据发送失败后重新发送的累计次数 |
+| Pool Total Capacity | UB通信内存池总容量 | 池中当前存在多少节点，用来确认资源规模 |
+| Pool Available Count | UB通信内存池当前可用空闲节点数 | 值为池中活跃且未被借出节点（`global_num`）与线程本地缓存节点（`cache_num`）之和 |
+| Pool In Use Count | UB通信内存池当前已被借用的buffer数 | 当前被logic umq借走的节点，反应真实负载 |
+
+#### 9.3.6 实操示例
 
 ##### 示例 1：查询进程 1234 的套接字详细信息
 
@@ -948,7 +962,7 @@ bazel build //src:ubstat
 ./ubstat fc -p 1234 -w
 ```
 
-#### 9.3.6 总结
+#### 9.3.7 总结
 
 1. 所有命令均​**必须指定 `-p` 参数**​（进程 ID），否则无法执行查询；
 2. `stat`、`fc` 命令支持 `-w` 实时监控，但禁用 `-s/-d`；`topo` 命令必须指定 `-s/-d`（IPv6 格式），但禁用 `-w`；

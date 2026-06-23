@@ -265,6 +265,7 @@ void TerminalDisplay::PrintHeader(CLIDataHeader &header)
     PrintItem("ReTx Count", header.reTxCount);
     PrintItem("Pool Total Capacity", header.poolTotalNum);
     PrintItem("Pool Available Count", header.poolAvailableNum);
+    PrintItem("Pool In Use Count", header.poolInUseNum);
     NewLine();
 }
 
