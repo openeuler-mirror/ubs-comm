@@ -110,8 +110,8 @@ struct __attribute__((packed)) CLIDataHeader {
     uint32_t connNum;
     uint32_t activeConn;
     uint32_t reTxCount;
-    uint32_t poolTotalNum;
-    uint32_t poolAvailableNum;
+    uint64_t poolTotalNum;
+    uint64_t poolAvailableNum;
     uint64_t poolInUseNum;
 };
 

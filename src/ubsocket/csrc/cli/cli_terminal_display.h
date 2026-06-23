@@ -52,6 +52,7 @@ public:
     void PrintHeader(CLIDataHeader &header);
     void PrintTitle(std::string title);
     void PrintItem(std::string name, uint32_t number);
+    void PrintItem64(std::string name, uint64_t number);
     void PrintSubTitle();
     void PrintSubTitleItem(std::string name);
     void PrintDelimiter();
