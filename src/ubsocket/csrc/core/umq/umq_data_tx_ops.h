@@ -62,7 +62,8 @@ public:
 private:
     // 处理 umq_post 失败时的坏 buffer
     uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
-                           uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num);
+                           uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num,
+                           uint32_t *buf_num);
     void *PtrFloorToBoundary(void *ptr);
     int PollUmqTx(const SocketPtr &sock, bool poll_to_empty);
     int PollUmqTxOnce(const SocketPtr &sock);
