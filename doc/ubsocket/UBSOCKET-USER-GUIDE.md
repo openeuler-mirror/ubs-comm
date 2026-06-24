@@ -926,9 +926,9 @@ bazel build //src:ubstat
 | Connect Calls | 累计调用`connect`的次数 | 统计进程启动以来所有connect调用总次数 |
 | Active Conns | 主动发起连接的数量 | 主动发起UB建连且处于通信状态的连接数量 |
 | ReTx Count | 累计重传次数 | 数据发送失败后重新发送的累计次数 |
-| Pool Total Capacity | UB通信内存池总容量 | 池中当前存在多少节点，用来确认资源规模 |
-| Pool Available Count | UB通信内存池当前可用空闲节点数 | 值为池中活跃且未被借出节点（`global_num`）与线程本地缓存节点（`cache_num`）之和 |
-| Pool In Use Count | UB通信内存池当前已被借用的buffer数 | 当前被logic umq借走的节点，反应真实负载 |
+| Pool Total Capacity | UB通信内存池总容量 | 池中当前总共存在多少节点，用来确认资源规模 |
+| Pool Available Count | UB通信内存池当前可用空闲节点数 | 池中活跃且未被借出节点（`global_num`）与线程本地缓存节点（`cache_num`）之和 |
+| Pool In Use Count | UB通信内存池当前已被借用节点数 | 当前被logic umq借走的节点，反应真实负载 |
 
 #### 9.3.6 实操示例
 
