@@ -83,6 +83,8 @@ private:
     std::atomic<bool> stopped_;
     std::atomic<uint32_t> startedThreadNum_;
     UbsocketRingBuffer<Runnable> tasks_;
+    std::mutex tasksMutex_;
+    std::condition_variable tasksCond_;
     std::vector<std::thread *> workerThreads_;
     std::string name_;
 };
