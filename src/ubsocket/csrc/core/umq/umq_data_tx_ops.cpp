@@ -183,16 +183,10 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             tx_total_len = 0;
             umq_socket->FetchSubSeqNum(sn_allocated);
         } else {
-            // 部分 post 失败, 处理失败缓冲区
-            // tx_avail_before: post 前可用队列数
-            // tx_queue_avail_num_ -= wr_cnt: post 后的可用队列数
-            // wr_cnt : 实际 post 成功队列数
-            // sn_allocated - (tx_avail_before - tx_queue_avail_num_) = sn_allocated - wr_cnt
-            uint32_t tx_avail_before = tx_queue_avail_num_.load(std::memory_order_acq_rel);
+            uint32_t buf_num = 0;
             tx_total_len = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf, _unsolicited_wr_num, _unsolicited_bytes,
-                                         _unsignaled_wr_num);
-            umq_socket->FetchSubSeqNum(sn_allocated -
-                                       (tx_avail_before - tx_queue_avail_num_.load(std::memory_order_acq_rel)));
+                                         _unsignaled_wr_num, &buf_num);
+            umq_socket->FetchSubSeqNum(sn_allocated - buf_num);
         }
         if (flagEIO == 1) {
             UBS_VLOG_ERR("write failed, destroy UB\n");
@@ -405,7 +399,8 @@ inline uint32_t UmqTxOps::IOBufSize()
 }
 
 uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
-                                 uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num)
+                                 uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num,
+                                 uint32_t *buf_num)
 {
     umq_buf_t *cur_qbuf = head_qbuf;
     umq_buf_t *last_qbuf = nullptr;
@@ -457,6 +452,7 @@ uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_
     unsignaled_wr_num_ = _unsignaled_wr_num;
     tx_queue_avail_num_.fetch_sub(wr_cnt, std::memory_order_acq_rel);
     successful_post_count_.fetch_add(wr_cnt, std::memory_order_acq_rel);
+    *buf_num = wr_cnt;
 
     QBUF_LIST_FIRST(&head_buf_) = head_qbuf_;
     if (last_qbuf != nullptr) {
