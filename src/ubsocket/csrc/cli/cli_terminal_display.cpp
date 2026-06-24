@@ -263,8 +263,9 @@ void TerminalDisplay::PrintHeader(CLIDataHeader &header)
     PrintItem("Connect Calls", header.connNum);
     PrintItem("Active Conns", header.activeConn);
     PrintItem("ReTx Count", header.reTxCount);
-    PrintItem("Pool Total Capacity", header.poolTotalNum);
-    PrintItem("Pool Available Count", header.poolAvailableNum);
+    PrintItem64("Pool Total Capacity", header.poolTotalNum);
+    PrintItem64("Pool Available Count", header.poolAvailableNum);
+    PrintItem64("Pool In Use Count", header.poolInUseNum);
     NewLine();
 }
 
@@ -277,6 +278,12 @@ void TerminalDisplay::PrintItem(std::string name, uint32_t number)
 {
     printf("%s%s%-15s: %s", colorBold, colorBlue, name.c_str(), colorReset);
     printf("%s%s%u%s\n", colorBold, colorYellow, number, colorReset);
+}
+
+void TerminalDisplay::PrintItem64(std::string name, uint64_t number)
+{
+    printf("%s%s%-15s: %s", colorBold, colorBlue, name.c_str(), colorReset);
+    printf("%s%s%llu%s\n", colorBold, colorYellow, (unsigned long long)number, colorReset);
 }
 
 void TerminalDisplay::PrintSubTitle()

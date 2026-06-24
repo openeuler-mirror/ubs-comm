@@ -446,6 +446,7 @@ public:
 
         header.poolTotalNum = transportPoolStats.total_num;
         header.poolAvailableNum = transportPoolStats.global_num + transportPoolStats.cache_num;
+        header.poolInUseNum = transportPoolStats.in_use_num;
     }
 
     void ProcessStatRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
