@@ -64,9 +64,13 @@ bool ExecutorService::Execute(const Runnable &runnable)
     if (!started_) {
         return false;
     }
-    if (!tasks_.PushBack(runnable)) {
-        return false;
+    {
+        std::unique_lock<std::mutex> locker{tasksMutex_};
+        if (!tasks_.PushBack(runnable)) {
+            return false;
+        }
     }
+    tasksCond_.notify_one();
     return true;
 }
 
@@ -94,11 +98,14 @@ void ExecutorService::ClearExistWorkerThread()
 {
     Runnable stopTask;
     stopTask.Type(RunnableType::STOP);
+    std::unique_lock<std::mutex> locker{tasksMutex_};
     for (auto i = 0U; i < workerThreads_.size(); i++) {
         while (!tasks_.PushBack(stopTask)) {
             std::this_thread::yield();
         }
     }
+    locker.unlock();
+    tasksCond_.notify_all();
 
     for (auto &thr : workerThreads_) {
         if (thr != nullptr) {
@@ -122,10 +129,12 @@ void ExecutorService::RunInThread()
     pthread_setname_np(pthread_self(), threadName.c_str());
     UBS_VLOG_INFO("thread %s started.", threadName.c_str());
     while (runFlag) {
+        std::unique_lock<std::mutex> locker{tasksMutex_};
         Runnable task;
         while (!tasks_.PopFront(task)) {
-            std::this_thread::yield();
+            tasksCond_.wait(locker);
         }
+        locker.unlock();
         DoRunnable(task, runFlag);
     }
     UBS_VLOG_INFO("thread %s finished.", threadName.c_str());
