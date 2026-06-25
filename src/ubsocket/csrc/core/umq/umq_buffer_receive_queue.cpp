@@ -165,7 +165,7 @@ UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::EnqueueInOrder(umq_buf_t 
     if (!UmqSeqTraits::ValidateAhead(m_expect_sn, sn)) {
         UBS_VLOG_WARN("Validate sn ahead failed, expect_sn: %u, sn: %u.\n", m_expect_sn, sn);
         UmqApi::umq_buf_free(buffer);
-        return OpResult::ERROR;
+        return OpResult::OK;
     }
 
     if (UmqSeqTraits::Normalize(m_expect_sn) == UmqSeqTraits::Normalize(sn)) {
