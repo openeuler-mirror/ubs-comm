@@ -114,12 +114,29 @@ protected:
         }
     }
 
+    inline std::shared_ptr<std::atomic<uint32_t>> GetOrCreateIpActiveCounter(const std::string &mIpAndPort)
+    {
+        std::lock_guard<std::mutex> guard(mIpActiveConnMapMutex);
+        size_t pos = mIpAndPort.find(':');
+        std::string remoteIp = mIpAndPort.substr(0, pos);
+        auto it = mIpActiveConnMap.find(remoteIp);
+        if (it != mIpActiveConnMap.end()) {
+            return it->second;
+        }
+        auto counter = std::make_shared<std::atomic<uint32_t>>(0u);
+        mIpActiveConnMap.emplace(remoteIp, counter);
+        return counter;
+    }
+
 protected:
     SockType mSockType = SockType::SOCK_TCP;
     std::vector<SockWorker *> mWorkers;
     std::vector<std::string> mFilteredIps;
     MemoryRegionChecker mMrChecker;
     NormalMemoryRegionFixedBuffer *mSockDriverSendMR = nullptr;
+
+    std::mutex mIpActiveConnMapMutex;
+    std::unordered_map<std::string, std::shared_ptr<std::atomic<uint32_t>>> mIpActiveConnMap;
 
     NResult CreateWorkerResource();
     NResult CreateOpCtxMemPool();

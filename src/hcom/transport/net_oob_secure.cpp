@@ -13,6 +13,46 @@
 
 namespace ock {
 namespace hcom {
+uint32_t OOBSecureProcess::SecProcessGetRemainEpNum(uint32_t localIpAddr, uint32_t listenPort,
+                                                    const std::string &mIpAndPort,
+                                                    const std::vector<NetOOBServer *> &oobServers)
+{
+    struct sockaddr_in addr {
+    };
+    bzero(&addr, sizeof(addr));
+    addr.sin_addr.s_addr = localIpAddr;
+    char ipStr[INET_ADDRSTRLEN] = {0};
+    if (inet_ntop(AF_INET, &(addr.sin_addr), ipStr, INET_ADDRSTRLEN) == nullptr) {
+        NN_LOG_ERROR("Failed to convert ip number to string");
+        return NN_INVALID_IP;
+    }
+    std::string localIP(ipStr);
+    std::string ip;
+    uint32_t result;
+    uint16_t port;
+
+    for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
+        result = static_cast<uint32_t>(oobServer->GetListenIp(ip));
+        result |= static_cast<uint32_t>(oobServer->GetListenPort(port));
+        if (result != NN_OK) {
+            continue;
+        }
+        if (ip == localIP || port == listenPort) {
+            size_t pos = mIpAndPort.find(':');
+            std::string remoteIp = mIpAndPort.substr(0, pos);
+            uint32_t maxConnectionNum = oobServer->GetMaxConnectionNum();
+            uint32_t currentEpNum = oobServer->GetEpNum(remoteIp);
+            uint32_t remain = (maxConnectionNum >= currentEpNum ? maxConnectionNum - currentEpNum : 0);
+            return remain;
+        }
+    }
+
+    return NN_NO0;
+}
+
 NResult OOBSecureProcess::SecProcessCompareEpNum(uint32_t localIpAddr, uint32_t listenPort,
                                                  const std::string &mIpAndPort,
                                                  const std::vector<NetOOBServer *> &oobServers)

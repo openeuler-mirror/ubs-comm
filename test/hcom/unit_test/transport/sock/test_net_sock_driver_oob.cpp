@@ -459,6 +459,11 @@ TEST_F(TestNetSockDriverOob, HandleNewOobConnWithNullLb)
                 OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType))
         .stubs()
         .will(returnValue(0));
+    uint32_t remainNUM = NN_NO250;
+    MOCKER_CPP(OOBSecureProcess::SecProcessGetRemainEpNum,
+               uint32_t(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
+        .stubs()
+        .will(returnValue(remainNUM));
     MOCKER_CPP(OOBSecureProcess::SecProcessCompareEpNum,
                NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
         .stubs()
@@ -496,6 +501,11 @@ TEST_F(TestNetSockDriverOob, HandleNewOobConnWithNullWorker)
                 OOBTCPConnection &, const std::string &, UBSHcomNetDriverSecType))
         .stubs()
         .will(returnValue(0));
+    uint32_t remainNUM = NN_NO250;
+    MOCKER_CPP(OOBSecureProcess::SecProcessGetRemainEpNum,
+               uint32_t(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
+        .stubs()
+        .will(returnValue(remainNUM));
     MOCKER_CPP(OOBSecureProcess::SecProcessCompareEpNum,
                NResult(uint32_t, uint32_t, const std::string &, const std::vector<NetOOBServer *> &))
         .stubs()
