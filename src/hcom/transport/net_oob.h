@@ -240,6 +240,17 @@ public:
         mIndex = value;
     }
 
+    inline uint32_t GetEpNum(const std::string &ip)
+    {
+        std::lock_guard<std::mutex> guard(mEpNumMutex);
+        auto iter = mIpEpNumberMap.find(ip);
+        if (iter == mIpEpNumberMap.end()) {
+            return NN_NO0;
+        }
+
+        return iter->second;
+    }
+
     inline NResult CompareEpNum(const std::string &ip)
     {
         std::lock_guard<std::mutex> guard(mEpNumMutex);
@@ -282,6 +293,11 @@ public:
     inline void SetMaxConntionNum(uint32_t maxConnectionNum)
     {
         mMaxConnectionNum = maxConnectionNum;
+    }
+
+    inline uint32_t GetMaxConnectionNum() const
+    {
+        return mMaxConnectionNum;
     }
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS

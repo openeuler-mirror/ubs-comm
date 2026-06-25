@@ -1099,6 +1099,35 @@ NResult NetDriverSockWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
     }
 
     uint32_t ip = NetFunc::GetIpByFd(conn.GetFd());
+
+    auto ipCounter = GetOrCreateIpActiveCounter(conn.GetIpAndPort());
+    ipCounter->fetch_add(1, std::memory_order_acq_rel);
+    struct IpActiveGuard {
+        std::shared_ptr<std::atomic<uint32_t>> counter;
+        bool released{false};
+        IpActiveGuard(std::shared_ptr<std::atomic<uint32_t>> c) : counter(std::move(c)) {}
+        void Release()
+        {
+            if (!released && counter) {
+                counter->fetch_sub(1, std::memory_order_acq_rel);
+                released = true;
+            }
+        }
+        ~IpActiveGuard()
+        {
+            Release();
+        }
+    } ipGuard(ipCounter);
+
+    uint32_t activeNow = ipCounter->load(std::memory_order_acquire);
+    uint32_t remainNum =
+        OOBSecureProcess::SecProcessGetRemainEpNum(ip, conn.ListenPort(), conn.GetIpAndPort(), mOobServers);
+    if (activeNow > remainNum) {
+        NN_LOG_ERROR("Sock connection num exceeds maximum for ip " << ip << " remaining(" << remainNum << ")"
+                                                                   << " activeNow(" << activeNow << ")");
+        return NN_OOB_SEC_PROCESS_ERROR;
+    }
+
     if (NN_UNLIKELY(OOBSecureProcess::SecProcessCompareEpNum(ip, conn.ListenPort(), conn.GetIpAndPort(),
                                                              mOobServers)) != NN_OK) {
         NN_LOG_ERROR("Sock connection num exceeds maximum");

@@ -22,6 +22,9 @@ public:
     /*
      * There are 32 cases for sec info process, please refer readme of this project
      */
+    static uint32_t SecProcessGetRemainEpNum(uint32_t localIpAddr, uint32_t listenPort, const std::string &mIpAndPort,
+                                             const std::vector<NetOOBServer *> &oobServers);
+
     static NResult SecProcessInOOBClient(const UBSHcomNetDriverEndpointSecInfoProvider &secInfoProvider,
                                          const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator,
                                          OOBTCPConnection *conn, const std::string &driverName, uint64_t ctx,
