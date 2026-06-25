@@ -9,8 +9,10 @@
 * See the Mulan PSL v2 for more details.
 */
 #include "umq_conn_helper.h"
+#include "core/ubsocket_event_epoll.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "umq_errno_converter.h"
+#include "umq_share_jfr_epoll_runner_ops.h"
 
 namespace ock {
 namespace ubs {
@@ -178,6 +180,44 @@ Result UmqConnHelper::GetRouteList(umq_route_list_t &route_list, const umq_eid_t
     }
     return UBS_OK;
 }
+
+Result UmqConnHelper::RegisterSharedJfrForRead(uint64_t main_umq_handle)
+{
+    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::SHARE_JFR_RX_RUNNER);
+    int result = epoll_runner.Start();
+    if (result != UBS_OK) {
+        return result;
+    }
+    umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    auto share_jfr_fd = UmqApi::umq_interrupt_fd_get(main_umq_handle, &main_option);
+    if (UNLIKELY(share_jfr_fd < 0)) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, share_jfr_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get share jfr RX interrupt fd, main umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(main_umq_handle), share_jfr_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, share_jfr_fd), savedErrno);
+        return UBS_ERROR;
+    }
+
+    RunnerEventData event_data{};
+    event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
+    event_data.event_data.data = share_jfr_fd;
+
+    struct epoll_event share_jfr_event = {
+        .events = EPOLLIN | EPOLLET,
+        .data = {.u64 = event_data.u64},
+    };
+
+    UmqShareJfrEpollRunnerOps::ExtContext ctx;
+    ctx.umq_handle = main_umq_handle;
+    if (UNLIKELY(epoll_runner.AddEpollEvent(share_jfr_fd, &share_jfr_event, &ctx))) {
+        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
+        return UBS_ERROR;
+    }
+    return UBS_OK;
+}
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock

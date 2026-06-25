@@ -34,8 +34,9 @@ public:
     void DestroySocketResources() override;
 
     struct UmqConnInfo : public ConnInfo {
-        umq_eid_t peer_eid{}; // 对端EID
-        umq_eid_t conn_eid{}; // 本端EID
+        umq_eid_t peer_eid{};         // 对端 EID
+        umq_eid_t peer_bonding_eid{}; // 对端 bonding 设备 EID
+        umq_eid_t conn_eid{};         // 本端 EID
     };
     UmqConnInfo umq_conn_info_;
 
@@ -47,7 +48,7 @@ private:
     Result ConnectExchangeSocketIDs(void);
     Result GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_t *dst_eid, umq_route_list_t &filtered_list);
     Result DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid);
-    Result DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &conn_eid, umq_used_ports_t &used_ports);
+    Result DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_ports_t &used_ports);
     Result DoUbConnectRetry(SocketPtr socketPtr, Result &ack_ret, Result &peer_ret);
     Result CheckOtherRoute(const UmqSocketPtr &umq_socket);
     Result CheckOtherRouteForClos(const UmqSocketPtr &umq_socket);

@@ -52,6 +52,7 @@ uint32_t GlobalSetting::UBS_PROBE_MS = 1000;
 uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = true;
 uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 10; /* port cooldown duration in seconds, default 10s */
+LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::BONDING_BACKUP;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"

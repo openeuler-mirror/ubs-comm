@@ -9,7 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "umq_backend.h"
+
+#include <algorithm>
 #include <cstring>
+
 #include "core/ubsocket_event_epoll.h"
 #include "umq_conn_helper.h"
 #include "umq_eid_table.h"
@@ -93,6 +96,11 @@ Result UmqBackend::Init() noexcept
         return UBS_ERROR;
     }
 
+    GlobalSetting::LINK_SELECTION_POLICY =
+        UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED  ? LinkSelectionPolicy::BONDING_BACKUP :
+        UmqSetting::UMQ_IS_BONDING && !GlobalSetting::UBS_BACKUP_LINK_ENABLED ? LinkSelectionPolicy::BONDING_ROUTE :
+                                                                                LinkSelectionPolicy::RAW_DEVICE;
+
     UmqSetting::UMQ_PROCESS_SOCKET_ID = SocketConnHelper::GetCurrentProcessSocketId();
     UmqSetting::UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
     if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
@@ -135,8 +143,8 @@ Result UmqBackend::Init() noexcept
         }
     }
 
-    // 预创建umq_handle
-    if (GlobalSetting::UBS_ENABLE_SHARE_JFR) {
+    // 直接使用 bonding 设备通信，预创建主 umq、jetty 池
+    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         umq_eid_t local_eid;
         uint64_t main_umq_handle = UMQ_INVALID_HANDLE;
         if ((main_umq_handle = CreateShareMainUmq(local_eid)) == UMQ_INVALID_HANDLE) {
@@ -185,12 +193,20 @@ void UmqBackend::UnInit() noexcept
 
 Result UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
 {
+    // 如果用户没有显式指定设备，则优先使用 bonding_dev_0，如不存在再尝试其他 bonding_dev_ 前缀的设备.
+    // 如果用户指定了裸设备则辅助查找 local_eid.
     if (UmqSetting::UMQ_DEV_NAME.empty()) {
         if (FindDevName() != UBS_OK) {
             UBS_VLOG_ERR("Failed to find bonding dev, need active input.\n");
             return UBS_ERROR;
         }
+    } else if (std::strncmp(UmqSetting::UMQ_DEV_NAME.c_str(), "udma", 4) == 0) {
+        if (FindDevEid(UmqSetting::UMQ_DEV_NAME.c_str(), UmqSetting::UMQ_EID_INDEX) != UBS_OK) {
+            UBS_VLOG_ERR("Failed to find udma dev.\n");
+            return UBS_ERROR;
+        }
     }
+
     if (UmqSetting::UMQ_DEV_NAME.length() >= DEV_NAME_STR_LEN_MAX) {
         UBS_VLOG_ERR("Device name too long.\n");
         return UBS_ERROR;
@@ -274,6 +290,42 @@ Result UmqBackend::FindDevName()
     return UBS_OK;
 }
 
+Result UmqBackend::FindDevEid(const char *dev, uint32_t eid_idx)
+{
+    const umq_trans_mode_t mode = UMQ_TRANS_MODE_UB;
+    int count = 0;
+    umq_dev_info_t *dev_info_list = UmqApi::umq_dev_info_list_get(mode, &count);
+    if (dev_info_list == nullptr || count <= 0) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] umq_dev_info_list_get() failed, ret: %p, dev count: %d, "
+                     "mapped errno: %d(%s), original errno: %d\n",
+                     dev_info_list, count, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL), savedErrno);
+        return UBS_ERROR;
+    }
+    auto free_on_exit = MakeScopeExit([mode, dev_info_list]() { UmqApi::umq_dev_info_list_free(mode, dev_info_list); });
+
+    // 找到对应的裸设备
+    auto di = std::find_if(dev_info_list, dev_info_list + count,
+                           [dev](const umq_dev_info_t &info) { return std::strcmp(info.dev_name, dev) == 0; });
+    if (di == dev_info_list + count) {
+        UBS_VLOG_ERR("There is no such device named \"%s\"\n", dev);
+        return UBS_ERROR;
+    }
+
+    // 查找 eid_idx
+    auto ei = std::find_if(di->ub.eid_list, di->ub.eid_list + di->ub.eid_cnt,
+                           [eid_idx](const umq_eid_info_t &info) { return info.eid_index == eid_idx; });
+    if (ei == di->ub.eid_list + di->ub.eid_cnt) {
+        UBS_VLOG_ERR("The device \"%s\" has no eid_idx numbered %u\n", dev, eid_idx);
+        return UBS_ERROR;
+    }
+
+    UmqSetting::UMQ_LOCAL_EID = ei->eid;
+    return UBS_OK;
+}
+
 uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
 {
     umq_create_option_t share_main_umq_cfg;
@@ -283,7 +335,7 @@ uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
     // 声明在分支外，避免悬垂指针导致 umq 创建时，取不到正确的port信息
     std::vector<umq_port_id_t> used_ports;
 
-    if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         share_main_umq_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         umq_eid_t bonding_eid = UmqSetting::UMQ_LOCAL_EID;
         umq_route_list_t route_list;
@@ -314,7 +366,8 @@ uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
         UBS_VLOG_ERR("Failed to set device name\n");
         return UMQ_INVALID_HANDLE;
     }
-    if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+
+    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         share_main_umq_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
         share_main_umq_cfg.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
 

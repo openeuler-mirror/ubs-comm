@@ -32,6 +32,7 @@ public:
     static Result GetTpInfo(umq_tp_mode_t &tp_mode, umq_tp_type_t &tp_type,
                             ub_trans_mode trans_mode = UmqSetting::UMQ_UB_TRANS_MODE);
     static Result GetRouteList(umq_route_list_t &route_list, const umq_eid_t &src_eid, const umq_eid_t &dst_eid);
+    static Result RegisterSharedJfrForRead(uint64_t main_umq_handle);
 };
 
 } // namespace umq

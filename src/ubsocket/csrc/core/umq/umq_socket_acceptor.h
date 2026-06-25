@@ -61,16 +61,15 @@ public:
     // umq_route_t umq_back_route; // 备路由
 
 private:
-    Result AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, umq_eid_t &dstEid);
+    Result AcceptNegotiate(SocketPtr socketPtr);
     Result DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &mUsedPorts);
     Result DoUbAcceptRetry(SocketPtr socketPtr, Result &ackRet, Result &peerRet);
     Result AcceptExchangeSocketIDs(int fd);
     Result FillLocalSocketIdsForNegotiate(uint32_t *socket_ids, uint32_t &socket_id_count);
+    Result CheckRouteDevAddForAccept(const umq_eid_t &conn_eid, const UmqSocketPtr &sk);
     void BuildNegotiateRsp(NegotiateRsp &rsp);
 
     umq_topo_type_t topo_type_;
-    umq_eid_t conn_eid_;
-    umq_eid_t peer_eid_;
     umq_route_t conn_route_;
     std::vector<umq_route_t> back_routes_; // 一主三备：备路组，最多3条
 
