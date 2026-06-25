@@ -33,8 +33,7 @@ Result UmqSocket::Initialize() noexcept
 
 void UmqSocket::UnInitialize() noexcept {}
 
-Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used,
-                                 umq_topo_type_t &topo_type)
+Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_topo_type_t &topo_type)
 {
     if (umq_handle_ != UMQ_INVALID_HANDLE) {
         UBS_VLOG_ERR("Create umq on a created umq.\n");
@@ -50,8 +49,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     queue_cfg.umq_ctx = raw_socket_;
     // TODO: is_bonding 待确认如何设置到 socketbase
     UBS_VLOG_INFO("UmqSetting::UMQ_IS_BONDING %b topo_type_ %d", UmqSetting::UMQ_IS_BONDING, topo_type_);
-    // UMQ_IS_BONDING为真时如果双边交换了udma，会依旧调用bonding，使得无法用udma场景，加UBS_BACKUP_LINK_ENABLED驱动udma可控
-    if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         queue_cfg.used_ports = used_ports;
         // 日志：打印 used_ports 内容，验证一主三备是否传入
@@ -93,17 +91,12 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
             UBS_VLOG_ERR("Failed to strcpy device name\n");
             return UBS_NEW_SOCKET_FD;
         }
-        // UMQ_IS_BONDING为真时如果双边交换了udma，会依旧调用bonding，使得无法用udma场景，加UBS_BACKUP_LINK_ENABLED驱动udma可控
-        if (UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+
+        if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
             queue_cfg.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
-
-            if (UmqConnHelper::GetDevEid(queue_cfg.dev_info.dev.dev_name, UmqSetting::UMQ_EID_INDEX, &local_eid) != 0) {
-                UBS_VLOG_ERR("Failed to get eid by dev name:%s and eid index:%d \n", UmqSetting::UMQ_DEV_NAME,
-                             UmqSetting::UMQ_EID_INDEX);
-            }
-            *conn_eid_used = local_eid;
-            UBS_VLOG_INFO("Use Bonding: " EID_FMT ".\n", EID_ARGS(*conn_eid_used));
+            local_eid = UmqSetting::UMQ_LOCAL_EID;
+            UBS_VLOG_INFO("Use Bonding: " EID_FMT ".\n", EID_ARGS(UmqSetting::UMQ_LOCAL_EID));
         } else {
             // init use bonding dev
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
@@ -139,7 +132,7 @@ Result UmqSocket::CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_por
     }
 
     if (UmqSetting::UMQ_TP_TYPE == SINGLE) {
-        // 总是使用使能 TX solicited，这会导致对端 JFR 只有接收到 solicited_enable=true 的包时才会产生中断。而在客
+        // 总是使能 TX solicited，这会导致对端 JFR 只有接收到 solicited_enable=true 的包时才会产生中断。而在客
         // 户端本端，开启此功能后不会在 TX 上产生中断，无法通过 `epoll_wait` 唤醒，必须定期 poll cq
         umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
         int tx_interrupt_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);

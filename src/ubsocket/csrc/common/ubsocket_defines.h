@@ -90,6 +90,18 @@ typedef enum pool_type : uint8_t
     POOL
 } pool_type_t;
 
+/// | 选项             | 对应场景                                    | 说明                                                  |
+/// |------------------|---------------------------------------------|-------------------------------------------------------|
+/// | `BONDING_BACKUP` | 指定 bonding 设备，且 `backup_link=true`    | 通过 bonding 设备通信，bonding 本身提供主备冗余       |
+/// | `BONDING_ROUTE`  | 指定 bonding 设备，但是 `backup_link=false` | 通过 bonding 设备获取裸设备路由信息，实际数据走裸设备 |
+/// | `RAW_DEVICE`     | 指定裸设备                                  | 完全不依赖 bonding 设备，直接通过裸设备通信           |
+enum class LinkSelectionPolicy : uint8_t
+{
+    BONDING_BACKUP = 0,
+    BONDING_ROUTE,
+    RAW_DEVICE,
+};
+
 #ifndef TCP_UB_SOCKET_HANDSHAKE
 #define TCP_UB_SOCKET_HANDSHAKE 144
 #endif

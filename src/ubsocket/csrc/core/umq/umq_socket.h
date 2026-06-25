@@ -163,9 +163,8 @@ public:
     Result ProcessEpollEvent(struct epoll_event &event) override;
     int GetTxFd() override;
 
-    Result CreateLocalUmq(umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_eid_t *conn_eid_used,
-                          umq_topo_type_t &topo_type);
     Result UpdateRxQueueAvailNum();
+    Result CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_topo_type_t &topo_type);
     void UnbindAndFlushRemoteUmq(const SocketPtr &sock);
     void DestroyLocalUmq();
     int AddQbuf(umq_buf_t *qbuf);

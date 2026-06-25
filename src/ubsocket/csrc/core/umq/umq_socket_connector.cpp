@@ -190,9 +190,8 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
             }
             case UBHandshakeState::kSTART: {
                 // 作为客户端，它的 Degradable 属性对于是否降级不生效. Degradable 仅当角色为服务端时生效
-                if (UmqSetting::UMQ_IS_BONDING) {
-                    ack_ret = CheckRouteDevAddForConnect(umq_conn_info_.conn_eid, umq_socket);
-                }
+                ack_ret = CheckRouteDevAddForConnect(umq_conn_info_.conn_eid, umq_socket);
+
                 std::vector<umq_port_id_t> used_port_vector;
                 if (topo_type_ == UMQ_TOPO_TYPE_CLOS && UmqSetting::UMQ_IS_BONDING) {
                     used_port_vector.push_back(conn_route_.src_port);
@@ -206,10 +205,11 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
                 } else {
                     used_port_vector = {};
                 }
+
                 umq_used_ports_t used_ports = {.port = used_port_vector.data(),
                                                .num = static_cast<uint8_t>(used_port_vector.size())};
                 if (ack_ret == UBS_OK) {
-                    ack_ret = DoUbConnect(umq_socket, umq_conn_info_.conn_eid, used_ports);
+                    ack_ret = DoUbConnect(umq_socket, used_ports);
                 }
                 if (ack_ret != UBS_OK) {
                     UBS_VLOG_ERR("Failed to finish ub bind in connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
@@ -233,10 +233,9 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
                 degradable_ = IsDegradable(peer_ret);
                 if (IsOk(ack_ret) && IsOk(peer_ret)) {
                     retry_state_ = UBHandshakeState::kOK;
-                } else if (UmqSetting::UMQ_IS_BONDING && (IsRetryable(ack_ret) || IsRetryable(peer_ret)) &&
-                           ((umq_conn_info_.conn_eid != UmqSetting::UMQ_LOCAL_EID &&
-                             topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) ||
-                            topo_type_ == UMQ_TOPO_TYPE_CLOS)) {
+                } else if ((IsRetryable(ack_ret) || IsRetryable(peer_ret)) &&
+                           GlobalSetting::LINK_SELECTION_POLICY != LinkSelectionPolicy::RAW_DEVICE) {
+                    // 裸设备不需要重试。因无法区分 1主3备 与 1主1备，两者统一重试
                     retry_state_ = UBHandshakeState::kRETRY;
                 } else if (degradable_) {
                     retry_state_ = UBHandshakeState::kDEGRADE;
@@ -394,10 +393,6 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
 
     umq_socket->SetNegotiatedVersion(negotiated_version);
 
-    umq_eid_t local_eid = UmqSetting::UMQ_LOCAL_EID;
-    dev_schedule_policy schedule_policy = UmqSetting::UMQ_DEV_SCHEDULE_POLICY;
-    umq_conn_info_.conn_eid = local_eid;
-
     // 接收NegotiateRsp body — length-prefixed
     NegotiateRsp rsp{};
     if (SocketConnHelper::RecvLengthPrefixed(raw_fd_, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) < 0) {
@@ -411,9 +406,11 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
         return UBS_ERROR;
     }
 
+    // UB 传输模式优先级协商，值越小优先级越高。例如当服务端为 RM_TP 而客户端是 RC_TP 会协商至 RC_TP.
     ub_trans_mode local_trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
     umq_socket->SetTransMode(std::min(rsp.peer_trans_mode, local_trans_mode));
 
+    const dev_schedule_policy schedule_policy = UmqSetting::UMQ_DEV_SCHEDULE_POLICY;
     if (schedule_policy == dev_schedule_policy::CPU_AFFINITY ||
         schedule_policy == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
         UBS_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY: %d in connect, fd: %d\n",
@@ -421,8 +418,13 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
         use_round_robin_ = false;
     }
 
-    if (UNLIKELY(!UmqSetting::UMQ_IS_BONDING)) {
+    const umq_eid_t local_eid = UmqSetting::UMQ_LOCAL_EID; // 客户端的 local_eid
+    const umq_eid_t peer_eid = rsp.local_eid;              // 服务端的 local_eid
+
+    // 在选择裸设备通信时，不需要再选路
+    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::RAW_DEVICE) {
         umq_conn_info_.conn_eid = local_eid;
+        umq_conn_info_.peer_eid = peer_eid;
         return UBS_OK;
     }
 
@@ -436,10 +438,11 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
         peer_all_socket_ids_.push_back(rsp.socket_ids[i]);
     }
     PrintSocketsInfo();
-    umq_conn_info_.peer_eid = rsp.local_eid;
 
-    // choose route and send to server
-    if (DoRoute(&local_eid, &umq_conn_info_.peer_eid) != 0) {
+    // BONDING_BACKUP 或者 BONDING_ROUTE 策略都依赖 bonding 设备选路。只不过前者需要 ubsocket 来显式提供主
+    // port、备 port. 而后者是直接通过选出的设备通信.
+    // 此处 local_eid, peer_eid 保证必定是 bonding 设备的 eid.
+    if (DoRoute(&local_eid, &peer_eid) != 0) {
         UBS_VLOG_ERR("Failed to get route list in connect, fd: %d\n", raw_fd_);
         return UBS_ERROR;
     }
@@ -455,25 +458,14 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     }
 
     NegotiateRoute negoRoute(topo_type_, conn_route_, back_routes_);
-    {
-        if (SocketConnHelper::SendLengthPrefixed(raw_fd_, &negoRoute, sizeof(negoRoute), CONTROL_PLANE_TIMEOUT_MS) <
-            0) {
-            UBS_VLOG_ERR("Failed to send negotiate route info in connect, fd: %d\n", raw_fd_);
-            return UBS_ERROR;
-        }
+    if (SocketConnHelper::SendLengthPrefixed(raw_fd_, &negoRoute, sizeof(negoRoute), CONTROL_PLANE_TIMEOUT_MS) < 0) {
+        UBS_VLOG_ERR("Failed to send negotiate route info in connect, fd: %d\n", raw_fd_);
+        return UBS_ERROR;
     }
+
+    umq_conn_info_.conn_eid = conn_route_.src_eid;
     umq_conn_info_.peer_eid = conn_route_.dst_eid;
-
-    if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
-        umq_conn_info_.conn_eid = conn_route_.src_eid;
-    } else {
-        if (GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
-            umq_conn_info_.conn_eid = local_eid;
-        } else {
-            umq_conn_info_.conn_eid = conn_route_.src_eid;
-        }
-    }
-
+    umq_conn_info_.peer_bonding_eid = peer_eid;
     return UBS_OK;
 }
 
@@ -528,7 +520,7 @@ Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_e
     return UBS_OK;
 }
 
-Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &conn_eid, umq_used_ports_t &used_ports)
+Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_ports_t &used_ports)
 {
     CpMsg local_cp_msg;
     CpMsg remote_cp_msg;
@@ -549,19 +541,13 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &c
     }
     // ===============================================================
 
-    // CreateLocalUmq
-    if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
-        ret =
-            umq_socket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid), topo_type_);
-    } else {
-        if (GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
-            umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
-            ret = umq_socket->CreateLocalUmq(&localEid, used_ports, &(umq_conn_info_.conn_eid), topo_type_);
-        } else {
-            ret = umq_socket->CreateLocalUmq(&(umq_conn_info_.conn_eid), used_ports, &(umq_conn_info_.conn_eid),
-                                             topo_type_);
-        }
-    }
+    // - 人工选路，使用真正的 port eid.
+    // - 裸设备、bonding 设备对外均可直接使用一开始由 devname 找到的 eid.
+    const umq_eid_t eid = GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_ROUTE ?
+                              umq_conn_info_.conn_eid :
+                              UmqSetting::UMQ_LOCAL_EID;
+    ret = umq_socket->CreateLocalUmq(&eid, used_ports, topo_type_);
+
     if (ret != UBS_OK || SocketBase::GenerateSocketCommOps(socket) != UBS_OK) {
         UBS_VLOG_ERR("Failed to create umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
@@ -636,10 +622,29 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &c
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umq_socket->SetBindRemote(true);
 
-    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && UmqConnHelper::PrefillRx(umq_socket->UmqHandle()) != UBS_OK) {
-        UBS_VLOG_ERR("Failed to fill rx buffer to umq,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
-        return UBS_PREFILL_RX;
+    if (GlobalSetting::LINK_SELECTION_POLICY != LinkSelectionPolicy::BONDING_BACKUP) {
+        // 强依赖当前实现，一个 eid 对应多 UB 传输模式不同的 umq. 如果后续逻辑有变更，需同步修改。
+        auto main_umq = UmqEidTable::Instance().GetFirst(umq_conn_info_.conn_eid, umq_socket->GetTransMode());
+        if (main_umq == nullptr) {
+            UBS_VLOG_ERR("The main umq state is removed by other thread.\n");
+            return UBS_ERROR;
+        }
+
+        const uint64_t handle = main_umq->GetUmqHandle();
+        const Result ret = main_umq->EnsurePrefilled([handle]() {
+            if (UmqConnHelper::PrefillRx(handle) != UBS_OK) {
+                UBS_VLOG_ERR("Failed to fill rx buffer to umq\n");
+                return UBS_PREFILL_RX;
+            }
+            if (UmqConnHelper::RegisterSharedJfrForRead(handle) != UBS_OK) {
+                UBS_VLOG_ERR("Failed to register shared jfr to epoll\n");
+                return UBS_PREFILL_RX;
+            }
+            return UBS_OK;
+        });
+        if (!IsOk(ret)) {
+            return ret;
+        }
     }
     umq_socket->UpdateRxQueueAvailNum();
     return UBS_OK;
@@ -702,7 +707,7 @@ Result UmqConnectorOps::DoUbConnectRetry(SocketPtr socket_ptr, Result &ack_ret, 
     UBS_VLOG_INFO("DoConnect down to back, back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
                   other_back_conn_route.src_port.bs.chip_id, other_back_conn_route.src_port.bs.die_id,
                   other_back_conn_route.src_port.bs.port_idx);
-    ack_ret = DoUbConnect(umq_socket, other_conn_route.src_eid, used_ports);
+    ack_ret = DoUbConnect(umq_socket, used_ports);
     if (!IsOk(ack_ret)) {
         UBS_VLOG_ERR("Failed to finish ub bind in retry connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
@@ -956,27 +961,17 @@ void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &all_routes, co
 
 Result UmqConnectorOps::CheckRouteDevAddForConnect(const umq_eid_t &conn_eid, const UmqSocketPtr &umq_socket)
 {
-    if (topo_type_ == UMQ_TOPO_TYPE_CLOS && GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
+    // 使用 bonding 设备/裸设备连接，在初始化阶段已将其添加，无需再添加 ub dev.
+    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP ||
+        GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::RAW_DEVICE) {
         return UBS_OK;
     }
 
+    // 主设备
     if (umq_socket->CheckDevAdd(conn_eid) != 0) {
         UBS_VLOG_ERR("Failed to check main dev add in connect, target eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
                      EID_ARGS(conn_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_UMQ_ERROR;
-    }
-
-    if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
-        return UBS_OK;
-    }
-
-    // 一主三备：检查所有备路端口（不只第一条）
-    for (size_t i = 0; i < back_routes_.size(); ++i) {
-        if (umq_socket->CheckDevAdd(back_routes_[i].src_eid) != 0) {
-            UBS_VLOG_ERR("Failed to check backup dev add[%zu] in connect, target eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
-                         i, EID_ARGS(back_routes_[i].src_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
-            return UBS_UMQ_ERROR;
-        }
     }
 
     return UBS_OK;
@@ -984,14 +979,15 @@ Result UmqConnectorOps::CheckRouteDevAddForConnect(const umq_eid_t &conn_eid, co
 
 Result UmqConnectorOps::CheckOtherRoute(const UmqSocketPtr &umq_socket)
 {
-    if (!RouteListRegistry::Instance().IsRegisteredRouteList(umq_conn_info_.peer_eid)) {
+    // 当前处于重试阶段，由于裸设备不会重试，此处保证 peer_bonding_eid 必定有效.
+    if (!RouteListRegistry::Instance().IsRegisteredRouteList(umq_conn_info_.peer_bonding_eid)) {
         UBS_VLOG_ERR("Failed to check other route to connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_CONN_ROUTE;
     }
 
     umq_route_list_t route_list = {};
-    if (!RouteListRegistry::Instance().GetRouteList(umq_conn_info_.peer_eid, route_list)) {
+    if (!RouteListRegistry::Instance().GetRouteList(umq_conn_info_.peer_bonding_eid, route_list)) {
         UBS_VLOG_ERR("Failed to get route list in map, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_CONN_ROUTE;
@@ -1016,7 +1012,7 @@ Result UmqConnectorOps::CheckOtherRoute(const UmqSocketPtr &umq_socket)
     }
 
     filtered_list.route_num = filter_mum;
-    RouteListRegistry::Instance().RegisterOrReplaceRouteList(umq_conn_info_.peer_eid, filtered_list);
+    RouteListRegistry::Instance().RegisterOrReplaceRouteList(umq_conn_info_.peer_bonding_eid, filtered_list);
 
     if (umq_socket->CheckDevAdd(other_conn_route.src_eid) != 0) {
         UBS_VLOG_ERR("CheckDevAdd() failed in CheckOtherRoute, src eid:" EID_FMT ", ret: %d\n",
@@ -1024,6 +1020,9 @@ Result UmqConnectorOps::CheckOtherRoute(const UmqSocketPtr &umq_socket)
         return UBS_CONN_ROUTE;
     }
 
+    // 如果为 BONDING_ROUTE 策略，则接下来尝试这条路径
+    umq_conn_info_.conn_eid = other_conn_route.src_eid;
+    umq_conn_info_.peer_eid = other_conn_route.dst_eid;
     return UBS_OK;
 }
 

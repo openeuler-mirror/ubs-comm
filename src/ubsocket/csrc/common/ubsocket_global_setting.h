@@ -20,6 +20,7 @@
 #include <type_traits>
 
 #include "include/ubsocket_def.h"
+#include "ubsocket_defines.h"
 #include "ubsocket_errno.h"
 #include "ubsocket_logger.h"
 #include "ubsocket_setting_validator.h"
@@ -120,6 +121,9 @@ public:
     static uint64_t UBS_TRACE_TIME;
     static uint64_t UBS_TRACE_FILE_SIZE;
     static std::string UBS_TRACE_FILE_PATH;
+
+    // 通信链路选择，不直接由外部环境变量控制
+    static LinkSelectionPolicy LINK_SELECTION_POLICY;
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept
