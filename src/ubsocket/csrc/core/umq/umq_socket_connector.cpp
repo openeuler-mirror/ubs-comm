@@ -16,6 +16,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_port_cooldown.h"
 #include "common/ubsocket_scope_exit.h"
+#include "common/ubsocket_version.h"
 #include "core/umq/umq_eid_table.h"
 #include "umq_conn_helper.h"
 #include "umq_errno_converter.h"
@@ -42,9 +43,11 @@ Result UmqConnectorOps::ConnectViaHandshakeOpt(const SocketPtr &sock, const stru
 Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
 {
     auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
-    NegotiateReq req{};
-    if (BuildNegotiateReq(&req, umq_socket) != 0) {
-        return -1;
+
+    uint8_t send_buf[NEGOTIATE_REQ_BUFFER_SIZE];
+    int buf_len = 0;
+    if (BuildNegotiateReqBuffer(send_buf, umq_socket, buf_len) != UBS_OK) {
+        return UBS_ERROR;
     }
 
     bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
@@ -60,17 +63,16 @@ Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockad
 
     constexpr int fast_open = 1;
     LibcApi::setsockopt(raw_fd_, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
-    ssize_t sendto_ret = LibcApi::sendto(raw_fd_, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
+    ssize_t sendto_ret = LibcApi::sendto(raw_fd_, send_buf, buf_len, MSG_FASTOPEN, address, address_len);
     if (sendto_ret < 0 && errno != 0) {
         UBS_VLOG_ERR("TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s\n", sendto_ret, errno,
                      Func::Error2Str(errno));
     }
     if (!SocketConnHelper::IsUbsConnection(raw_fd_)) {
-        // 首次获取cookie，创建临时socket二次发送
         UBS_VLOG_INFO("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
         const int tmp_fd = LibcApi::socket(AF_INET, SOCK_STREAM, 0);
         LibcApi::setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
-        sendto_ret = LibcApi::sendto(tmp_fd, &req, sizeof(req), MSG_FASTOPEN, address, address_len);
+        sendto_ret = LibcApi::sendto(tmp_fd, send_buf, buf_len, MSG_FASTOPEN, address, address_len);
         if (sendto_ret < 0 && errno != 0) {
             UBS_VLOG_ERR("TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s\n", sendto_ret, errno,
                          Func::Error2Str(errno));
@@ -80,12 +82,12 @@ Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockad
         LibcApi::close(tmp_fd);
         if (dup3_ret < 0) {
             UBS_VLOG_ERR("dup3 failed, ret: %d, errno %d, err msg: %s\n", dup3_ret, errno, Func::Error2Str(errno));
-            return -1;
+            return UBS_ERROR;
         }
     } else {
         UBS_VLOG_INFO("TFO Cookie exists, continue...\n");
     }
-    return sendto_ret < 0 ? -1 : 0;
+    return sendto_ret < 0 ? UBS_ERROR : UBS_OK;
 }
 
 Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
@@ -155,11 +157,11 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
 Result UmqConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
 {
     auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
-    if (ConnectNegotiate(umq_socket) != UBS_OK) {
+    Result ret = ConnectNegotiate(umq_socket);
+    if (!IsOk(ret) && !IsDegradable(ret)) {
         UBS_VLOG_ERR("Failed to negotiate in connect,Peer IP:%s, fd: %d\n", umq_conn_info_.peer_ip.c_str(), new_fd);
-        return UBS_ERROR;
     }
-    return UBS_OK;
+    return ret;
 };
 
 Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
@@ -259,8 +261,8 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
                 // 客户端在 kRETRY 错误时会进入 kRETRY_FAILED_CHECK_OTHER_ROUTE，但是服务端仍处于 kRETRY 阶段，
                 // 需要发送信令通知服务端，此种情况下 other_route 字段不可用
                 other_route_message_.ub_handshake_state = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
-                if (SocketConnHelper::SendSocketData(raw_fd_, &other_route_message_, sizeof(other_route_message_),
-                                                     CONTROL_PLANE_TIMEOUT_MS) != sizeof(other_route_message_)) {
+                if (SocketConnHelper::SendLengthPrefixed(raw_fd_, &other_route_message_, sizeof(other_route_message_),
+                                                         CONTROL_PLANE_TIMEOUT_MS) < 0) {
                     UBS_VLOG_ERR("Failed to send connect eid message in retry connect,Peer eid:" EID_FMT
                                  ",Peer IP:%s, fd: %d\n",
                                  EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
@@ -304,12 +306,36 @@ Result UmqConnectorOps::BuildNegotiateReq(NegotiateReq *req, const UmqSocketPtr 
 {
     umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
     dev_schedule_policy schedulePolicy = UmqSetting::UMQ_DEV_SCHEDULE_POLICY;
-    req->magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
     req->trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
     req->is_bonding = UmqSetting::UMQ_IS_BONDING ? 1 : 0;
     req->enable_share_jfr = GlobalSetting::UBS_ENABLE_SHARE_JFR ? 1 : 0;
     req->schedule_policy = static_cast<uint8_t>(schedulePolicy);
     req->local_eid = localEid;
+    return UBS_OK;
+}
+
+Result UmqConnectorOps::BuildNegotiateReqBuffer(uint8_t *buf, const UmqSocketPtr &umq_socket, int &buf_len)
+{
+    int offset = 0;
+
+    uint64_t magic = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
+    memcpy(buf + offset, &magic, sizeof(magic));
+    offset += sizeof(magic);
+
+    uint32_t version = UBS_PROTOCOL_VERSION;
+    memcpy(buf + offset, &version, sizeof(version));
+    offset += sizeof(version);
+
+    NegotiateReq req{};
+    BuildNegotiateReq(&req, umq_socket);
+
+    uint32_t body_len = static_cast<uint32_t>(sizeof(req));
+    memcpy(buf + offset, &body_len, sizeof(body_len));
+    offset += sizeof(body_len);
+    memcpy(buf + offset, &req, sizeof(req));
+    offset += sizeof(req);
+
+    buf_len = offset;
     return UBS_OK;
 }
 
@@ -329,24 +355,52 @@ void UmqConnectorOps::PrintSocketsInfo()
 Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
 {
     if (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::UB_SOCK_OPT) {
-        // 基于内核选项的建链，需要单独发送协商请求；TFO建链随sendto发送协商请求
-        NegotiateReq req{};
-        if (BuildNegotiateReq(&req, umq_socket) != 0) {
-            return -1;
+        uint8_t send_buf[NEGOTIATE_REQ_BUFFER_SIZE];
+        int buf_len = 0;
+        if (BuildNegotiateReqBuffer(send_buf, umq_socket, buf_len) != UBS_OK) {
+            return UBS_ERROR;
         }
-        if (SocketConnHelper::SendSocketData(raw_fd_, &req, sizeof(req), CONTROL_PLANE_TIMEOUT_MS) !=
-            static_cast<int>(sizeof(req))) {
+        if (SocketConnHelper::SendSocketData(raw_fd_, send_buf, buf_len, CONTROL_PLANE_TIMEOUT_MS) != buf_len) {
             UBS_VLOG_ERR("Failed to send negotiate request, Peer IP:%s, fd: %d\n", umq_conn_info_.peer_ip.c_str(),
                          raw_fd_);
-            return -1;
+            return UBS_ERROR;
         }
     }
+    // TFO模式: SYN包携带send_buf内容(见ConnectViaTfo，需同步改造)
+
+    // 接收negotiated_version(4B) — 独立于Rsp body
+    uint32_t negotiated_version = 0;
+    if (SocketConnHelper::RecvSocketData(raw_fd_, &negotiated_version, sizeof(negotiated_version),
+                                         CONTROL_PLANE_TIMEOUT_MS) != sizeof(negotiated_version)) {
+        UBS_VLOG_ERR("Failed to receive negotiated version in connect, Peer IP:%s, fd: %d\n",
+                     umq_conn_info_.peer_ip.c_str(), raw_fd_);
+        return UBS_ERROR;
+    }
+
+    // 校验协商结果：Major必须一致
+    VersionCheckResult vc_result = ValidateNegotiatedVersion(UBS_PROTOCOL_VERSION, negotiated_version);
+    if (vc_result == VersionCheckResult::kMajorMismatch) {
+        UBS_VLOG_WARN("Version major mismatch: negotiated=%u, local=%u, fd=%d, Peer IP:%s, fallback to TCP\n",
+                      UBS_PROTOCOL_VERSION_MAJOR(negotiated_version), UBS_PROTOCOL_VERSION_MAJOR(UBS_PROTOCOL_VERSION),
+                      raw_fd_, umq_conn_info_.peer_ip.c_str());
+        return UBS_TCP_EXCHANGE | UBS_DEGRADABLE_MASK;
+    }
+
+    // Minor/Patch差异 — 不一致时处理方式待确认
+    if (UBS_PROTOCOL_VERSION_MINOR(negotiated_version) != UBS_PROTOCOL_VERSION_MINOR(UBS_PROTOCOL_VERSION)) {
+        UBS_VLOG_INFO("Minor diff: negotiated=%u, local=%u\n", UBS_PROTOCOL_VERSION_MINOR(negotiated_version),
+                      UBS_PROTOCOL_VERSION_MINOR(UBS_PROTOCOL_VERSION));
+    }
+
+    umq_socket->SetNegotiatedVersion(negotiated_version);
+
     umq_eid_t local_eid = UmqSetting::UMQ_LOCAL_EID;
     dev_schedule_policy schedule_policy = UmqSetting::UMQ_DEV_SCHEDULE_POLICY;
     umq_conn_info_.conn_eid = local_eid;
+
+    // 接收NegotiateRsp body — length-prefixed
     NegotiateRsp rsp{};
-    if (SocketConnHelper::RecvSocketData(raw_fd_, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) !=
-        static_cast<int>(sizeof(rsp))) {
+    if (SocketConnHelper::RecvLengthPrefixed(raw_fd_, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) < 0) {
         UBS_VLOG_ERR("Failed to receive negotiate response in connect,Peer IP:%s, fd: %d\n",
                      umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_ERROR;
@@ -401,10 +455,12 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     }
 
     NegotiateRoute negoRoute(topo_type_, conn_route_, back_routes_);
-    if (SocketConnHelper::SendSocketData(raw_fd_, &negoRoute, sizeof(NegotiateRoute), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(NegotiateRoute)) {
-        UBS_VLOG_ERR("Failed to send negotiate route info in connect, fd: %d\n", raw_fd_);
-        return UBS_ERROR;
+    {
+        if (SocketConnHelper::SendLengthPrefixed(raw_fd_, &negoRoute, sizeof(negoRoute), CONTROL_PLANE_TIMEOUT_MS) <
+            0) {
+            UBS_VLOG_ERR("Failed to send negotiate route info in connect, fd: %d\n", raw_fd_);
+            return UBS_ERROR;
+        }
     }
     umq_conn_info_.peer_eid = conn_route_.dst_eid;
 
@@ -525,23 +581,27 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_eid_t &c
         return UBS_UMQ_BIND_INFO_GET | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
 
-    uint32_t len = sizeof(local_cp_msg) - sizeof(uint64_t);
-    if (SocketConnHelper::SendSocketData(raw_fd_, &local_cp_msg.queue_bind_info_size, len, CONTROL_PLANE_TIMEOUT_MS) !=
-        len) {
+    if (SocketConnHelper::SendLengthPrefixed(raw_fd_, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) <
+        0) {
         UBS_VLOG_ERR("Failed to send local control message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_ERROR;
     }
-    UBS_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %ld, bind info len: %ld", raw_fd_,
+    UBS_VLOG_DEBUG("send local control message, fd: %d, cp msg size: %zu, bind info len: %lu", raw_fd_,
                    sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
 
-    if (SocketConnHelper::RecvSocketData(raw_fd_, &remote_cp_msg, sizeof(remote_cp_msg), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(remote_cp_msg)) {
+    if (SocketConnHelper::RecvLengthPrefixed(raw_fd_, &remote_cp_msg, sizeof(remote_cp_msg), CONTROL_PLANE_TIMEOUT_MS) <
+        0) {
         UBS_VLOG_ERR("Failed to receive remote control message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
         return UBS_ERROR;
     }
-    UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %ld, bind info len: %ld", raw_fd_,
+    if (remote_cp_msg.queue_bind_info_size > UMQ_BIND_INFO_SIZE_MAX) {
+        UBS_VLOG_ERR("Receive remote invalid control message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d",
+                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_);
+        return UBS_ERROR;
+    }
+    UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg size: %zu, bind info len: %lu", raw_fd_,
                    sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
 
     struct timeval start_tv;
@@ -621,8 +681,8 @@ Result UmqConnectorOps::DoUbConnectRetry(SocketPtr socket_ptr, Result &ack_ret, 
     other_route_message_.ub_handshake_state = UBHandshakeState::kRETRY;
     other_route_message_.other_route = other_conn_route;
     other_route_message_.other_back_route = other_back_conn_route;
-    if (SocketConnHelper::SendSocketData(raw_fd_, &other_route_message_, sizeof(other_route_message_),
-                                         CONTROL_PLANE_TIMEOUT_MS) != sizeof(other_route_message_)) {
+    if (SocketConnHelper::SendLengthPrefixed(raw_fd_, &other_route_message_, sizeof(other_route_message_),
+                                             CONTROL_PLANE_TIMEOUT_MS) < 0) {
         return UBS_TCP_EXCHANGE;
     }
 

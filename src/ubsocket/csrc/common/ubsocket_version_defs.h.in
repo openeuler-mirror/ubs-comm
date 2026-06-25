@@ -1,0 +1,22 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * ubs-comm is licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *      http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+#ifndef UBS_COMM_UBSOCKET_VERSION_DEFS_H
+#define UBS_COMM_UBSOCKET_VERSION_DEFS_H
+
+// Auto-generated from UBSOCKET_VERSION. Do not edit manually.
+
+#define UBS_VERSION_MAJOR @UBS_VERSION_MAJOR@
+#define UBS_VERSION_MINOR @UBS_VERSION_MINOR@
+#define UBS_VERSION_PATCH @UBS_VERSION_PATCH@
+#define UBS_VERSION_STR "@UBS_VERSION_RAW@"
+#define UBS_VERSION_FULL_STR "@UBS_VERSION_RAW@"
+
+#endif // UBS_COMM_UBSOCKET_VERSION_DEFS_H

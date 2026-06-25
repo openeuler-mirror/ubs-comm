@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
     /* get create func for sub command */
     auto sub_cmd_name = parser.SumCommand();
     if (sub_cmd_name == "-v") {
-        std::string version = ock::ubs::UBS_LIB_VERSION_FULL;
+        std::string version = UBS_LIB_VERSION_FULL;
         version.replace(0, strlen("library "), "");
         std::cout << version << std::endl;
         return 0;

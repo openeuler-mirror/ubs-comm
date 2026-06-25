@@ -111,6 +111,7 @@ endif ()
 include_directories(
         ${UBSOCKET_BASE_DIR}/
         ${UBSOCKET_BASE_DIR}/csrc
+        ${CMAKE_CURRENT_BINARY_DIR}/csrc/common   # generated ubsocket_version_defs.h
         ${UBSOCKET_BASE_DIR}/../hcom
         ${UBSOCKET_BASE_DIR}/../hcom/umq/include/umq
 )
@@ -174,6 +175,7 @@ if (UBSOCKET_BUILD_TESTS)
             COMMAND ${CMAKE_COMMAND} -E echo "Generating HTML report..."
             COMMAND ${GENHTML_PATH} --branch-coverage
                 --output-directory ${UBSOCKET_COVERAGE_DIR}
+                --ignore-errors source
                 ${UBSOCKET_COVERAGE_FILTERED}
             COMMAND ${CMAKE_COMMAND} -E echo "Coverage summary: ${CMAKE_BINARY_DIR}/coverage_summary.txt"
             COMMAND ${CMAKE_COMMAND} -E echo "Coverage detailed: ${CMAKE_BINARY_DIR}/coverage_detailed.txt"

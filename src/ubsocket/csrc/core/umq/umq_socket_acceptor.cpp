@@ -11,6 +11,7 @@
 
 #include "umq_socket_acceptor.h"
 #include "common/ubsocket_port_cooldown.h"
+#include "common/ubsocket_version.h"
 #include "core/umq/umq_eid_table.h"
 #include "umq_conn_helper.h"
 #include "umq_errno_converter.h"
@@ -31,10 +32,13 @@ Result UmqAcceptorOps::Negotiate(SocketPtr socketPtr)
     umq_eid_t dstEid;
     umq_eid_t localEid = UmqSetting::UMQ_LOCAL_EID;
     connEid = localEid;
-    if (AcceptNegotiate(socketPtr, connEid, dstEid) != UBS_OK) {
-        UBS_VLOG_ERR("Failed to negotiate in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n", EID_ARGS(peer_eid_),
-                     conn_info.peer_ip.data(), fd);
-        return UBS_ERROR;
+    Result ret = AcceptNegotiate(socketPtr, connEid, dstEid);
+    if (!IsOk(ret)) {
+        if (!IsDegradable(ret)) {
+            UBS_VLOG_ERR("Failed to negotiate in accept,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n", EID_ARGS(peer_eid_),
+                         conn_info.peer_ip.data(), fd);
+        }
+        return ret;
     }
     UBS_VLOG_INFO("negotiate umq topo type successfully: %d\n", topo_type_);
     peer_eid_ = dstEid;
@@ -215,29 +219,23 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
         return UBS_UMQ_BIND_INFO_GET | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
 
-    if (SocketConnHelper::SendSocketData(fd, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(local_cp_msg)) {
+    if (SocketConnHelper::SendLengthPrefixed(fd, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) < 0) {
         UBS_VLOG_ERR("Failed to send local control message, fd: %d\n", fd);
         // return ubsocket::FromRaw(errno);
         return UBS_ERROR;
     }
-    UBS_VLOG_DEBUG("send local control message, fd: %d, cp msg len: %lu, bind info len: %lu\n", fd,
+    UBS_VLOG_DEBUG("send local control message, fd: %d, cp msg size: %zu, bind info len: %lu\n", fd,
                    sizeof(local_cp_msg), local_cp_msg.queue_bind_info_size);
 
-    size_t len = sizeof(remote_cp_msg) - sizeof(uint64_t);
-    if (SocketConnHelper::RecvSocketData(fd, &remote_cp_msg.queue_bind_info_size, len, CONTROL_PLANE_TIMEOUT_MS) !=
-        (ssize_t)len) {
+    if (SocketConnHelper::RecvLengthPrefixed(fd, &remote_cp_msg, sizeof(remote_cp_msg), CONTROL_PLANE_TIMEOUT_MS) < 0) {
         UBS_VLOG_ERR("Failed to receive remote control message, fd: %d\n", fd);
-        //return ubsocket::FromRaw(errno);
         return UBS_ERROR;
     }
-
     if (remote_cp_msg.queue_bind_info_size > UMQ_BIND_INFO_SIZE_MAX) {
         UBS_VLOG_ERR("Receive remote invalid control message, fd: %d\n", fd);
         return UBS_ERROR;
     }
-
-    UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg len: %lu, bind info len: %lu\n", fd,
+    UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg size: %zu, bind info len: %lu\n", fd,
                    sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
 
     struct timeval start_tv;
@@ -296,8 +294,8 @@ Result UmqAcceptorOps::DoUbAcceptRetry(SocketPtr socketPtr, Result &ack_ret, Res
     umqSocket->UnbindAndFlushRemoteUmq(socketPtr);
     umqSocket->DestroyLocalUmq();
 
-    if (SocketConnHelper::RecvSocketData(fd, &other_route_message_, sizeof(other_route_message_),
-                                         CONTROL_PLANE_TIMEOUT_MS) != sizeof(other_route_message_)) {
+    if (SocketConnHelper::RecvLengthPrefixed(fd, &other_route_message_, sizeof(other_route_message_),
+                                             CONTROL_PLANE_TIMEOUT_MS) < 0) {
         return UBS_TCP_EXCHANGE;
     }
 
@@ -390,6 +388,20 @@ int UmqAcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssi
     return 0;
 }
 
+VersionCheckResult UmqAcceptorOps::ValidateVersion(int fd, uint32_t &negotiated_version, uint32_t &peer_version)
+{
+    // 1. 读version(4B) — 独立于NegotiateReq body
+    if (SocketConnHelper::RecvSocketData(fd, &peer_version, sizeof(peer_version), NEGOTIATE_TIMEOUT_MS) !=
+        sizeof(peer_version)) {
+        UBS_VLOG_ERR("ValidateVersion: failed to recv version, fd: %d\n", fd);
+        return VersionCheckResult::kRecvFailed;
+    }
+
+    // 2. 校验+协商：Major不一致返回kMajorMismatch，一致则计算negotiated_version
+    uint32_t local_version = UBS_PROTOCOL_VERSION;
+    return NegotiateVersion(local_version, peer_version, negotiated_version);
+}
+
 Result UmqAcceptorOps::FillLocalSocketIdsForNegotiate(uint32_t *socket_ids, uint32_t &socket_id_count)
 {
     std::vector<uint32_t> ids = UmqSetting::UMQ_ALL_SOCKET_IDS;
@@ -423,13 +435,39 @@ void UmqAcceptorOps::BuildNegotiateRsp(NegotiateRsp &rsp)
 
 Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, umq_eid_t &dstEid)
 {
+    // 1. ValidateVersion: 读version(4B) + Major校验
+    uint32_t negotiated_version = 0;
+    uint32_t peer_version = 0;
+    VersionCheckResult vc_result = ValidateVersion(fd, negotiated_version, peer_version);
+    if (vc_result == VersionCheckResult::kMajorMismatch) {
+        UBS_VLOG_WARN("Version major mismatch: peer=%u, local=%u, fd=%d, Peer IP:%s, fallback to TCP\n",
+                      UBS_PROTOCOL_VERSION_MAJOR(peer_version), UBS_PROTOCOL_VERSION_MAJOR(UBS_PROTOCOL_VERSION), fd,
+                      conn_info.peer_ip.c_str());
+        uint32_t mismatch_version = UBS_PROTOCOL_VERSION;
+        SocketConnHelper::SendSocketData(fd, &mismatch_version, sizeof(mismatch_version), CONTROL_PLANE_TIMEOUT_MS);
+        uint32_t body_len = 0;
+        SocketConnHelper::RecvSocketData(fd, &body_len, sizeof(body_len), CONTROL_PLANE_TIMEOUT_MS);
+        std::vector<uint8_t> discard(body_len);
+        SocketConnHelper::RecvSocketData(fd, discard.data(), body_len, CONTROL_PLANE_TIMEOUT_MS);
+        return UBS_TCP_EXCHANGE | UBS_DEGRADABLE_MASK;
+    }
+    if (vc_result == VersionCheckResult::kRecvFailed) {
+        return UBS_TCP_EXCHANGE;
+    }
+
+    // 2. Minor/Patch差异适配 — 本次只记录，不做具体操作
+
+    // 3. 读取NegotiateReq body — length-prefixed
     NegotiateReq req{};
-    NegotiateRsp rsp{};
-    char *req_buf = reinterpret_cast<char *>(&req) + sizeof(req.magic_number);
-    size_t req_remain_size = sizeof(req) - sizeof(req.magic_number);
-    if (SocketConnHelper::RecvSocketData(fd, req_buf, req_remain_size, CONTROL_PLANE_TIMEOUT_MS) !=
-        static_cast<int>(req_remain_size)) {
+    if (SocketConnHelper::RecvLengthPrefixed(fd, &req, sizeof(req), CONTROL_PLANE_TIMEOUT_MS) < 0) {
         UBS_VLOG_ERR("Failed to receive negotiate request in accept, fd: %d\n", fd);
+        return UBS_ERROR;
+    }
+
+    // 3. 发送negotiated_version(4B) — 独立于NegotiateRsp body
+    if (SocketConnHelper::SendSocketData(fd, &negotiated_version, sizeof(negotiated_version),
+                                         CONTROL_PLANE_TIMEOUT_MS) != sizeof(negotiated_version)) {
+        UBS_VLOG_ERR("Failed to send negotiated version in accept, fd: %d\n", fd);
         return UBS_ERROR;
     }
 
@@ -439,6 +477,7 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, 
     umqSocket->SetTransMode(std::min(req.trans_mode, local_trans_mode));
 
     // src bonding mode is different from dst bonding mode
+    NegotiateRsp rsp{};
     rsp.ret_code = (UmqSetting::UMQ_IS_BONDING == (req.is_bonding != 0)) ? 0 : -1;
     rsp.local_eid = connEid;
     if (UNLIKELY(rsp.ret_code != 0)) {
@@ -446,25 +485,28 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr, umq_eid_t &connEid, 
                      UmqSetting::UMQ_IS_BONDING);
     }
     if (UNLIKELY(rsp.ret_code != 0 || req.is_bonding == 0)) {
-        if (SocketConnHelper::SendSocketData(fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) !=
-            static_cast<int>(sizeof(rsp))) {
+        // 发送negotiated_version后立即发Rsp body — length-prefixed
+        if (SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) < 0) {
             UBS_VLOG_ERR("Failed to send negotiate response in accept, fd: %d\n", fd);
             return UBS_ERROR;
         }
     }
 
     BuildNegotiateRsp(rsp);
-    if (SocketConnHelper::SendSocketData(fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) !=
-        static_cast<int>(sizeof(rsp))) {
+    // 4. 发送NegotiateRsp body — length-prefixed
+    if (SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) < 0) {
         UBS_VLOG_ERR("Failed to send negotiate response in accept, fd: %d\n", fd);
         return UBS_ERROR;
     }
 
+    // 5. 存储版本信息
+    umqSocket->SetNegotiatedVersion(negotiated_version);
+    umqSocket->SetPeerVersion(peer_version);
+
     NegotiateRoute negoRoute;
-    if (SocketConnHelper::RecvSocketData(fd, &negoRoute, sizeof(NegotiateRoute), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(NegotiateRoute)) {
-        UBS_VLOG_ERR("Failed to receive remote negoritate route in accept, Peer IP:%s, fd: %d\n",
-                     conn_info.peer_ip.c_str(), fd);
+    if (SocketConnHelper::RecvLengthPrefixed(fd, &negoRoute, sizeof(negoRoute), CONTROL_PLANE_TIMEOUT_MS) < 0) {
+        UBS_VLOG_ERR("Failed to receive negotiate route in accept, Peer IP:%s, fd: %d\n", conn_info.peer_ip.c_str(),
+                     fd);
         return UBS_ERROR;
     }
     conn_route_ = negoRoute.master_route;
