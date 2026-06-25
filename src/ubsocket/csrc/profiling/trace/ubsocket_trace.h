@@ -29,6 +29,7 @@ struct SplitTraceInfo {
     uint32_t data_size = 0;
     uint32_t offset = 0;
     ProfilingTPId type = CORE_WRITE;
+    uint32_t poll_num = 0;
     uint64_t start_timestamp = 0;
     uint64_t end_timestamp = 0;
 };
@@ -175,24 +176,39 @@ public:
         if (buf.count == 0) {
             return;
         }
-        auto &trace_info = buf.data[buf.count - 1];
-        if (trace_info.type != CORE_WRITE) {
+        uint32_t core_write_pos = buf.count;
+        for (uint32_t i = buf.count; i-- > 0;) {
+            if (buf.data[i].type == CORE_WRITE) {
+                core_write_pos = i;
+                break;
+            }
+        }
+        if (core_write_pos >= buf.count) {
             return;
         }
+        auto &trace_info = buf.data[core_write_pos];
         trace_info.seq_no = seq_no;
         trace_info.data_size = data_size;
         trace_info.offset = offset;
 
-        if (buf.count < 2) {
+        if (core_write_pos < 1) {
             return;
         }
-        auto &brpc_trace_info = buf.data[buf.count - 2];
-        if (brpc_trace_info.type != BRPC_CLIENT_CALL) {
-            return;
+        auto &brpc_trace_info = buf.data[core_write_pos - 1];
+        if (brpc_trace_info.type == BRPC_CLIENT_CALL) {
+            brpc_trace_info.seq_no = seq_no;
+            brpc_trace_info.data_size = data_size;
+            brpc_trace_info.offset = offset;
         }
-        brpc_trace_info.seq_no = seq_no;
-        brpc_trace_info.data_size = data_size;
-        brpc_trace_info.offset = offset;
+
+        for (uint32_t i = core_write_pos + 1; i < buf.count; ++i) {
+            if (buf.data[i].seq_no != 0) {
+                break;
+            }
+            buf.data[i].seq_no = seq_no;
+            buf.data[i].data_size = data_size;
+            buf.data[i].offset = offset;
+        }
     }
 
     void UpdateWriteLastTrace(ProfilingTPId type, uint32_t data_size, uint32_t offset)
@@ -242,7 +258,33 @@ public:
         buf.count++;
     }
 
-    void AddReadTrace(ProfilingTPId type, int raw_socket, uint64_t start_time, uint64_t end_time)
+    void AddWriteTrace(ProfilingTPId type, int raw_socket, uint64_t start_time, uint64_t end_time,
+                       uint32_t poll_num = 0)
+    {
+        auto idx = write_active_idx_.load(std::memory_order_acquire);
+        auto &buf = write_bufs_[idx];
+        if (buf.count >= buf_capacity_) {
+            buf.dropped_count++;
+            return;
+        }
+        if (buf.count < 1) {
+            return;
+        }
+        auto &last_trace = buf.data[buf.count - 1];
+        auto &trace_info = buf.data[buf.count];
+        trace_info.rpc_id = last_trace.rpc_id;
+        trace_info.raw_socket = raw_socket;
+        trace_info.seq_no = last_trace.seq_no;
+        trace_info.data_size = last_trace.data_size;
+        trace_info.offset = last_trace.offset;
+        trace_info.type = type;
+        trace_info.poll_num = poll_num;
+        trace_info.start_timestamp = start_time;
+        trace_info.end_timestamp = end_time;
+        buf.count++;
+    }
+
+    void AddReadTrace(ProfilingTPId type, int raw_socket, uint64_t start_time, uint64_t end_time, uint32_t poll_num = 0)
     {
         auto idx = read_active_idx_.load(std::memory_order_acquire);
         auto &buf = read_bufs_[idx];
@@ -261,6 +303,7 @@ public:
         trace_info.data_size = last_trace.data_size;
         trace_info.offset = last_trace.offset;
         trace_info.type = type;
+        trace_info.poll_num = poll_num;
         trace_info.start_timestamp = start_time;
         trace_info.end_timestamp = end_time;
         buf.count++;
@@ -370,11 +413,11 @@ private:
     static void PrintSplitTraceInfo(const SplitTraceInfo &trace_info, const char *label)
     {
         uint64_t duration = trace_info.end_timestamp > 0 ? trace_info.end_timestamp - trace_info.start_timestamp : 0;
-        UBS_VLOG_INFO("[%s] raw_socket: %d rpcid: %llu seq: %u data_size: %u offset: %u type: %u start_timestamp: %lu "
-                      "end_timestamp: %lu%s\n",
+        UBS_VLOG_INFO("[%s] raw_socket: %d rpcid: %llu seq: %u data_size: %u offset: %u type: %u poll_num: %u "
+                      "start_timestamp: %lu end_timestamp: %lu%s\n",
                       label, trace_info.raw_socket, trace_info.rpc_id, trace_info.seq_no, trace_info.data_size,
-                      trace_info.offset, static_cast<uint32_t>(trace_info.type), trace_info.start_timestamp,
-                      trace_info.end_timestamp,
+                      trace_info.offset, static_cast<uint32_t>(trace_info.type), trace_info.poll_num,
+                      trace_info.start_timestamp, trace_info.end_timestamp,
                       trace_info.end_timestamp > 0 ? (" duration: " + std::to_string(duration) + " ns").c_str() : "");
     }
 

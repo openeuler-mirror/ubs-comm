@@ -16,6 +16,8 @@ ut-gen (root)              ← 通用UT生成：mockcpp模式、fixture模板、
   ├── ut-gen-under-api     ← under_api特定：dlopen/dlsym mock、两后端模式
   ├── ut-gen-profiling     ← profiling特定：无mock纯逻辑、环形buffer测试
   └── ut-coverage-coord    ← 协调层：认领、进度、里程碑
+
+add-tracepoint (standalone)  ← tracer/tracepoint新增：SplitTrace/PROF打点, ProfilingTPId枚举, 传参, 陷阱
 ```
 
 **加载规则:** 写特定模块UT时，root skill(`ut-gen`)与对应子skill**一起加载**。协调/规划任务加载`ut-coverage-coord`。

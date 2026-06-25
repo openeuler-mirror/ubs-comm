@@ -32,7 +32,8 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
         int poll_cnt = 0;
         do {
             poll_cnt = UmqTxHelper::PollUmqTx(
-                tx_epoll_event->umq_handle, poll_option, err_code, [tx_epoll_event](umq_buf_t *qbuf) {
+                tx_epoll_event->umq_handle, poll_option, err_code,
+                [tx_epoll_event](umq_buf_t *qbuf) {
                     // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
                     // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
                     // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
@@ -47,7 +48,8 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
 
                     // 销毁重建对应的Tp
                     UmqTransportPool::Instance().RebuildTp(tx_epoll_event->umq_handle, tx_epoll_event->tp_idx);
-                });
+                },
+                SocketPtr());
         } while (poll_cnt > 0 && err_code == ops_error_code::OK);
         return UBS_OK;
     } else {

@@ -289,3 +289,72 @@ clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也
 - `csrc/core/ubsocket_socket_helper.h` — TCP工具类(SocketConnHelper)
 - `csrc/common/ubsocket_spsc_ring_queue.h` — 无锁SPSC环形队列(AsyncEventPoll使用)
 - `csrc/common/ubsocket_qbuf_queue.h` — 动态扩缩容队列(扩容2倍，使用率<=25%缩容至50%)
+
+### 关键陷阱 (SplitTrace/Profiling tracepoint 新增)
+
+以下陷阱覆盖 Write 侧、Read 侧、poller 线程、结构变更四种场景，均源于本次调试经历。
+
+#### 陷阱1: 本地变量名与已有变量冲突
+
+在函数中段新增变量时，需检查后续是否有同名变量。
+
+反面 (编译错误 `conflicting declaration 'int64_t ret'`):
+```cpp
+// data_tx.cpp WriteV() 中
+int ret = tx_ops_->PollTx(sock);        // 新增的行65
+...
+int64_t ret = tx_ops_->PostSend(...);   // 原有的行113 — 冲突！
+```
+
+正面:
+```cpp
+int poll_ret = tx_ops_->PollTx(sock);   // 用独立命名避免冲突
+```
+
+#### 陷阱2: 用错 buffer (Read vs Write)
+
+Write 路径必须进 `write_bufs_`，Read 路径进 `read_bufs_`。
+
+正面:
+```cpp
+// Write 侧: trace->AddWriteTrace(...)
+// Read 侧:  trace->AddReadTrace(...)
+```
+
+#### 陷阱3: UpdateWriteFirstTrace 硬编码相邻位，多 tracepoint 插入后全部 seq=0
+
+`UpdateWriteFirstTrace` 最初检查 `core_write_pos+1` 是否为 `CORE_WRITE_POLL_TX`。当我们在 `CORE_WRITE` 和 `CORE_WRITE_POLL_TX` 之间插入 4 个新 tracepoint（UMQ_POLL/DECREF/FREE/POLL_CQE）后，`core_write_pos+1` 不是 type=15，所有新类型 + type=15 的 seq 都是 0。
+
+**最终修复**: forward-scan — 从 `core_write_pos+1` 向前扫描，对所有 `seq_no==0` 的条目回填 seq_no/data_size/offset，遇到 `seq_no!=0` 则停。
+
+#### 陷阱4: 头文件签名与 .cpp 不一致 (out_decref_ns)
+
+添加参数后忘记同步 .cpp 定义 → Bazel/GCC release 构建报 `no declaration matches`。
+
+**规则**: 头文件和 .cpp 每次参数变更后对比签名。
+
+#### 陷阱5: RxDataSet 内部子操作打点需要 trace/fd 透传
+
+`RxDataSet` 内部调用的 `RearmRxInterrupt()` 和 `recv(MSG_PEEK)` 无法直接访问 SplitTrace。需扩展函数签名传参。
+
+正面:
+```cpp
+// ubsocket_data_rx.h
+ssize_t RxDataSet(void *buf, uint32_t size, SplitTrace *trace = nullptr, int raw_socket = -1);
+```
+
+#### 陷阱6: 新增字段到 SplitTraceInfo → 重载歧义 (bitfield)
+
+新增 `poll_num` 字段后在 `AddReadTrace` 4-param 重载加默认参数，导致与已有 5-param 重载对 bitfield 实参产生歧义。
+
+修复: 对 bitfield 实参 `static_cast<uint32_t>(buf_pro->imm.user_data)` 消歧。
+
+#### 陷阱7: Poller 线程产生 trace 爆炸
+
+`TxCqePoller` 调用 `DoUmqTxPoll → PollUmqTxInternal` 时会走 `sock->split_trace_` 写 SplitTrace，1ms 周期产生海量 trace + clock_gettime 开销。
+
+修复: poller 线程使用独立路径 `DrainTxCqe`，传 `trace=nullptr`，跳过所有 SplitTrace。
+
+#### 陷阱8: ProfilingTPId 枚举新增值必须追加在 UBSOCKET_PROF_COUNT 之前
+
+所有新 enum 值放在 `UBSOCKET_PROF_COUNT` 之前，保持已有类型号不变。

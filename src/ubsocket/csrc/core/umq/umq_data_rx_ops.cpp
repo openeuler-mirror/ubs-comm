@@ -115,8 +115,8 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
         // due to the flowcontrl buf, real buf may start with i = 1
         if (i == 0 || i == 1 || i == poll_num - 2 || i == poll_num - 1) {
             if (trace != nullptr) {
-                trace->AddReadTrace(CORE_READ_HANDLE_BUF, sock->raw_socket_, buf_pro->imm.user_data, buf[i]->data_size,
-                                    polled_size);
+                trace->AddReadTrace(CORE_READ_HANDLE_BUF, sock->raw_socket_,
+                                    static_cast<uint32_t>(buf_pro->imm.user_data), buf[i]->data_size, polled_size);
             }
         }
     }
