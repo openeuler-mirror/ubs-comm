@@ -61,12 +61,17 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     }
 
     PROF_START(CORE_WRITE_POLL_TX);
-    if (tx_ops_->PollTx(sock) < 0) {
-        PROF_END(CORE_WRITE_POLL_TX, false);
+    uint64_t start_time = ubsocket_get_timeNs();
+    int poll_ret = tx_ops_->PollTx(sock);
+    uint64_t end_time = ubsocket_get_timeNs();
+    PROF_END(CORE_WRITE_POLL_TX, poll_ret >= 0);
+    if (trace != nullptr) {
+        trace->AddWriteTrace(CORE_WRITE_POLL_TX, fd_, start_time, end_time);
+    }
+    if (poll_ret < 0) {
         PROF_END(CORE_WRITE, false);
         return UBS_ERROR;
     }
-    PROF_END(CORE_WRITE_POLL_TX, true);
 
     PROF_START(CORE_WRITE_POST_SEND);
 
@@ -94,7 +99,15 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         input_total_len += cut_total_len;
     } while (cut_total_len != 0 && ++batch < post_batch_max);
 
+    uint64_t alloc_start = 0;
+    if (trace != nullptr) {
+        alloc_start = ubsocket_get_timeNs();
+    }
     uintptr_t txBuf = tx_ops_->AllocTxBuf(0, buf_cnt);
+    if (trace != nullptr) {
+        uint64_t alloc_end = ubsocket_get_timeNs();
+        trace->AddWriteTrace(CORE_WRITE_ALLOC_TX_BUF, fd_, alloc_start, alloc_end);
+    }
     if (txBuf == 0) {
         PROF_END(CORE_WRITE_POST_SEND, false);
         PROF_END(CORE_WRITE, false);

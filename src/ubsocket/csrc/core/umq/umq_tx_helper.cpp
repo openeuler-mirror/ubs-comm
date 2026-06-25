@@ -11,6 +11,7 @@
 
 #include "umq_tx_helper.h"
 #include "iobuf/ubsocket_iobuf.h"
+#include "profiling/trace/ubsocket_trace.h"
 #include "umq_errno_converter.h"
 #include "umq_qbuf_list.h"
 #include "umq_setting.h"
@@ -20,10 +21,21 @@ namespace ubs {
 namespace umq {
 
 int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_option, ops_error_code &err_code,
-                                   ICallback &error_cb)
+                                   ICallback &error_cb, const SocketPtr &sock)
 {
+    auto *trace = sock.Get() ? sock->split_trace_ : nullptr;
+    int raw_socket = sock.Get() ? sock->raw_socket_ : -1;
     umq_buf_t *buf[POLL_BATCH_MAX];
+    uint64_t umq_poll_start = 0;
+    if (trace != nullptr) {
+        umq_poll_start = ubsocket_get_timeNs();
+    }
     int poll_num = UmqApi::umq_poll(umq_handle, &poll_option, buf, POLL_BATCH_MAX);
+    if (trace != nullptr) {
+        uint64_t umq_poll_end = ubsocket_get_timeNs();
+        trace->AddWriteTrace(CORE_WRITE_UMQ_POLL, raw_socket, umq_poll_start, umq_poll_end,
+                             static_cast<uint32_t>(poll_num));
+    }
     if (poll_num <= 0) {
         if (poll_num < 0) {
             int savedErrno = errno;
@@ -39,6 +51,10 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
     int wr_cnt = 0;
     int cur_wr_cnt;
     umq_buf_t *first_qbuf = nullptr;
+    uint64_t cqe_start = 0;
+    if (trace != nullptr) {
+        cqe_start = ubsocket_get_timeNs();
+    }
     for (int i = 0; i < poll_num; ++i) {
         if (buf[i] == nullptr || buf[i]->status != 0 || (((umq_buf_pro_t *)buf[i]->qbuf_ext) == nullptr) ||
             (first_qbuf = (umq_buf_t *)((umq_buf_pro_t *)(buf[i]->qbuf_ext))->user_ctx) == nullptr) {
@@ -65,7 +81,7 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
             continue;
         }
         // 正常业务包
-        cur_wr_cnt = ProcessTxCqe(first_qbuf, buf[i]);
+        cur_wr_cnt = ProcessTxCqe(first_qbuf, buf[i], sock, i == 0);
         if (cur_wr_cnt < 0) {
             // set err_code to true to force a quick exit from current function.
             err_code = ops_error_code::FATAL_ERROR;
@@ -75,15 +91,26 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
         wr_cnt += cur_wr_cnt;
     }
 
+    if (trace != nullptr) {
+        uint64_t cqe_end = ubsocket_get_timeNs();
+        trace->AddWriteTrace(CORE_WRITE_POLL_CQE, raw_socket, cqe_start, cqe_end);
+    }
     return wr_cnt;
 }
 
-int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf)
+int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const SocketPtr &sock, bool is_first_cqe)
 {
     int wr_cnt = 0;
     umq_buf_t *cur_qbuf = start_qbuf;
     umq_buf_t *last_qbuf = nullptr;
     umq_buf_t *wr_first_buf;
+    uint64_t decref_start = 0;
+    auto *trace = sock.Get() ? sock->split_trace_ : nullptr;
+    int raw_socket = sock.Get() ? sock->raw_socket_ : -1;
+    bool do_trace = (trace != nullptr && is_first_cqe);
+    if (do_trace) {
+        decref_start = ubsocket_get_timeNs();
+    }
     do {
         wr_first_buf = cur_qbuf;
         int64_t left_size = (int64_t)wr_first_buf->total_data_size;
@@ -99,6 +126,11 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf)
         wr_cnt++;
     } while (cur_qbuf != nullptr && wr_first_buf != end_qbuf);
 
+    if (do_trace) {
+        uint64_t decref_end = ubsocket_get_timeNs();
+        trace->AddWriteTrace(CORE_WRITE_POLL_CQE_DECREF, raw_socket, decref_start, decref_end);
+    }
+
     if (wr_first_buf == nullptr) {
         UBS_VLOG_ERR("TX umq buffer list is in error, TX user context does not contain the right list\n");
         return -1;
@@ -108,7 +140,16 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf)
     if (last_qbuf != nullptr) {
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
+
+    uint64_t free_start = 0;
+    if (do_trace) {
+        free_start = ubsocket_get_timeNs();
+    }
     UmqApi::umq_buf_free(start_qbuf);
+    if (do_trace) {
+        uint64_t free_end = ubsocket_get_timeNs();
+        trace->AddWriteTrace(CORE_WRITE_POLL_CQE_FREE, raw_socket, free_start, free_end);
+    }
 
     return wr_cnt;
 }

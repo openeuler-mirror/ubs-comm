@@ -12,10 +12,12 @@
 #define UBS_COMM_UMQ_TX_HELPER_H
 
 #include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_core_types.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
 namespace ubs {
+
 namespace umq {
 
 class UmqTxHelper {
@@ -30,7 +32,8 @@ public:
 
 public:
     template <typename F>
-    static int PollUmqTx(uint64_t umq_handle, umq_io_option_t &poll_option, ops_error_code &err_code, const F &error_cb)
+    static int PollUmqTx(uint64_t umq_handle, umq_io_option_t &poll_option, ops_error_code &err_code, const F &error_cb,
+                         const SocketPtr &sock)
     {
         struct CallbackImpl : public ICallback {
             const F &lambda;
@@ -42,13 +45,13 @@ public:
         };
 
         CallbackImpl impl(error_cb);
-        return PollUmqTxInternal(umq_handle, poll_option, err_code, impl);
+        return PollUmqTxInternal(umq_handle, poll_option, err_code, impl, sock);
     }
 
 private:
     static int PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_option, ops_error_code &err_code,
-                                 ICallback &error_cb);
-    static int ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf);
+                                 ICallback &error_cb, const SocketPtr &sock);
+    static int ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const SocketPtr &sock, bool is_first_cqe);
     static void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt);
     static bool HandleProbePacket(umq_buf_t *qbuf);
     static void LogTxCqeErrorMsg(umq_buf_t *buf);

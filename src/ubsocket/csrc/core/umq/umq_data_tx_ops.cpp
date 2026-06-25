@@ -357,14 +357,17 @@ int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
 {
     umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
                                    UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
-    return UmqTxHelper::PollUmqTx(local_umqh_, poll_option, err_code, [this, sock](umq_buf_t *qbuf) {
-        // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
-        // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
-        // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
-        LibcApi::shutdown(fd_, SHUT_RD);
-        UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", fd_);
-        sock->State(SOCK_STAT_CLOSE);
-    });
+    return UmqTxHelper::PollUmqTx(
+        local_umqh_, poll_option, err_code,
+        [this, sock](umq_buf_t *qbuf) {
+            // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
+            // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
+            // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
+            LibcApi::shutdown(fd_, SHUT_RD);
+            UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", fd_);
+            sock->State(SOCK_STAT_CLOSE);
+        },
+        sock);
 }
 
 int UmqTxOps::DpRearmTxInterrupt()

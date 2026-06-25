@@ -207,8 +207,9 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         TracePrintThread::Instance().Start();
         umq_trace_cfg_t cfg;
-        cfg.flag = UMQ_TRACE_FLAG_RECORD_NUM;
+        cfg.flag = UMQ_TRACE_FLAG_RECORD_NUM | UMQ_TRACE_FLAG_OUTPUT_LIMIT;
         cfg.record_num = GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY;
+        cfg.output_limit = 1;
         int trace_ret = UmqApi::umq_stats_trace_start(&cfg);
         if (trace_ret != 0) {
             UBS_VLOG_WARN("umq stats trace start failed, ret: %d\n", trace_ret);
