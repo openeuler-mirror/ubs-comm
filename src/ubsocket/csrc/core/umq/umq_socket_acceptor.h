@@ -38,6 +38,7 @@ public:
 
     // ======================== 建链辅助方法 ========================
     int ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size) override;
+    VersionCheckResult ValidateVersion(int fd, uint32_t &negotiated_version, uint32_t &peer_version);
 
     // ======================== 成员变量 ===========================
     struct UmqConnInfo : public ConnInfo {

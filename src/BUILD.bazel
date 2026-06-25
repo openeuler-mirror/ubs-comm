@@ -22,6 +22,20 @@ cc_import(
   visibility = ["//visibility:public"],
 )
 
+genrule(
+    name = "generate_ubsocket_version_defs",
+    srcs = ["ubsocket/UBSOCKET_VERSION"],
+    outs = ["ubsocket_version_defs.h"],
+    cmd = "V=$$(cat $<); M=$$(echo $$V | cut -d. -f1); m=$$(echo $$V | cut -d. -f2); p=$$(echo $$V | cut -d. -f3); cat > $@ << EOF\n#ifndef UBS_COMM_UBSOCKET_VERSION_DEFS_H\n#define UBS_COMM_UBSOCKET_VERSION_DEFS_H\n#define UBS_VERSION_MAJOR $$M\n#define UBS_VERSION_MINOR $$m\n#define UBS_VERSION_PATCH $$p\n#define UBS_VERSION_STR \"$$V\"\n#define UBS_VERSION_FULL_STR \"$$V\"\n#endif\nEOF\n",
+)
+
+cc_library(
+    name = "ubsocket_version_defs",
+    hdrs = [":generate_ubsocket_version_defs"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
 cc_import(
   name = "libumq",
   shared_library = ":libumq.so",
@@ -123,6 +137,7 @@ cc_library(
     ],
     deps = [
         ":boundscheck_lib",
+        ":ubsocket_version_defs",
         "//src/hcom/umq:umq",
     ],
     visibility = ["//visibility:public"],

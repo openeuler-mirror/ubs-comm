@@ -148,6 +148,58 @@ ssize_t SocketConnHelper::RecvSocketData(int fd, const void *buf, size_t size, u
     return size;
 }
 
+Result SocketConnHelper::SendLengthPrefixed(int fd, const void *body, uint32_t obj_size, uint32_t timeout_ms)
+{
+    uint32_t wire_size = sizeof(uint32_t) + obj_size;
+    std::vector<uint8_t> buf(wire_size);
+    memcpy(buf.data(), &obj_size, sizeof(obj_size));
+    memcpy(buf.data() + sizeof(obj_size), body, obj_size);
+    ssize_t ret = SendSocketData(fd, buf.data(), wire_size, timeout_ms);
+    if (ret != static_cast<ssize_t>(wire_size)) {
+        UBS_VLOG_ERR("SendLengthPrefixed failed, fd=%d, wire_size=%u, send_ret=%zd, errno=%d(%s)", fd, wire_size, ret,
+                     errno, Func::Error2Str(errno));
+        return UBS_ERROR;
+    }
+    return UBS_OK;
+}
+
+Result SocketConnHelper::RecvLengthPrefixed(int fd, void *body, uint32_t obj_size, uint32_t timeout_ms)
+{
+    uint32_t body_len = 0;
+    if (RecvSocketData(fd, &body_len, sizeof(body_len), timeout_ms) != static_cast<int>(sizeof(body_len))) {
+        UBS_VLOG_ERR("RecvLengthPrefixed failed to read prefix, fd=%d, errno=%d(%s)", fd, errno,
+                     Func::Error2Str(errno));
+        return UBS_ERROR;
+    }
+    uint32_t read_len = std::min(body_len, obj_size);
+    std::vector<uint8_t> buf(read_len);
+    if (RecvSocketData(fd, buf.data(), read_len, timeout_ms) != static_cast<int>(read_len)) {
+        UBS_VLOG_ERR("RecvLengthPrefixed failed to read body, fd=%d, body_len=%u, read_len=%u, errno=%d(%s)", fd,
+                     body_len, read_len, errno, Func::Error2Str(errno));
+        return UBS_ERROR;
+    }
+    memcpy(body, buf.data(), read_len);
+    if (read_len < obj_size) {
+        memset(static_cast<uint8_t *>(body) + read_len, 0, obj_size - read_len);
+    }
+    if (body_len > obj_size) {
+        constexpr uint32_t kMaxDiscardBytes = 64 * 1024;
+        if (body_len - obj_size > kMaxDiscardBytes) {
+            UBS_VLOG_ERR("RecvLengthPrefixed body_len overflow, fd=%d, body_len=%u, obj_size=%u, excess=%u", fd,
+                         body_len, obj_size, body_len - obj_size);
+            return UBS_ERROR;
+        }
+        uint32_t discard_len = body_len - obj_size;
+        std::vector<uint8_t> discard(discard_len);
+        if (RecvSocketData(fd, discard.data(), discard_len, timeout_ms) != static_cast<int>(discard_len)) {
+            UBS_VLOG_ERR("RecvLengthPrefixed failed to discard excess, fd=%d, discard_len=%u, errno=%d(%s)", fd,
+                         discard_len, errno, Func::Error2Str(errno));
+            return UBS_ERROR;
+        }
+    }
+    return UBS_OK;
+}
+
 void SocketConnHelper::FlushSocketMsg(int fd)
 {
     // reset errno to 0

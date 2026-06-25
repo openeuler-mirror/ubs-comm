@@ -79,11 +79,11 @@ cd src/ubsocket/build
 - `-DMOCK_VERBS` enables fake ibverbs stub
 - Test fixture pattern: `class Test<Module> : public testing::Test`, `TEST_F(Test<Module>, <Scenario>)`
 - HCOM test binaries: `hcom_ut` (UT), `hcom_test` (LLT)
-- UBSocket test binaries: `umq_errno_converter_test`, `umq_ops_errno_test`, `mock_infrastructure_test`, `profiling_test`
+- UBSocket test binaries: `umq_errno_converter_test`, `umq_socket_connector_test`, `ubsocket_signal_handler_test`, `profiling_test`
 
 ### UT约束
 
-- **stub默认不启用**: 新增UT时优先使用mockcpp(`MOCKER_CPP`/`MOCKER`)mock C API和系统调用，**默认不使用stub方式**(fake_epoll_static/AllocMockBufWithBlock/SocketTestHelper等)。只有用户明确指定需要stub实现时才启用。现有stub基础设施和mock_infrastructure_test保留不动(验证stub自身正确性)，但新增业务UT不应依赖stub。
+- **stub默认不启用**: 新增UT时优先使用mockcpp(`MOCKER_CPP`/`MOCKER`)mock C API和系统调用，**默认不使用stub方式**(fake_epoll_static/AllocMockBufWithBlock/SocketTestHelper等)。只有用户明确指定需要stub实现时才启用。现有stub基础设施保留不动(验证stub自身正确性)，但新增业务UT不应依赖stub。
 - **单用例执行≤1s**: 每个`TEST_F`用例的执行时间不超过1秒。禁止在测试中使用长时间sleep、阻塞等待、密集计算循环等。如需等待异步事件，使用短超时(≤100ms)+轮询。
 
 ### Skill系统
@@ -142,6 +142,8 @@ clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也
 
 ## Errno Mapping 工作进度 (ubsocket)
 
+> **注意**: `umq_ops_errno_test`、`mock_infrastructure_test`、`iobuf_zcopy_adapter_test` 已被 `222bdc7` 临时禁用移出CMakeLists，当前活跃test binary仅4个。以下为禁用前的历史覆盖数据。
+>
 > **详细成果固化**: AGENTS.md §Errno Mapping工作进度 + `doc/ubsocket/UBSOCKET-CLAIMING.md`
 
 ### 代码修复
@@ -232,6 +234,7 @@ clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也
 - Release构建有 `-Werror`；debug/test构建没有
 - Pre-commit hooks跑全量构建 — commit会很慢
 - `umq_errno_converter.h` 是冻结/final — 永远不要提议修改它
+- **覆盖度构建残留文件**: `brpc/`目录已从源码树移除，但build目录可能残留旧的`.gcno`文件(如`ubs_mem/ring_buffer.cpp.gcno`)引用不存在的头文件(`ub_ring_buffer.h`)，导致`genhtml`报错。修复：`rm -rf src/ubsocket/build`清干净重跑，或genhtml已加`--ignore-errors source`容错。
 - **DpRearmTxInterrupt成功路径不走Convert**: `umq_rearm_interrupt` ret==0时直接设errno=EAGAIN返回-1，不调用Convert。仅ret≠0(失败)走Convert路径
 - **Share-JFR handle变量语义陷阱**: `PrefillRx`中本地变量`umq_handle`在`UBS_ENABLE_SHARE_JFR=true`时指向`share_umq_handle_`(主UMQ), `false`时指向`umq_handle_`(子UMQ)。等ready逻辑应查`umq_handle_`(子UMQ)——因为子UMQ是刚创建的、需从IDLE→READY; 主UMQ早已ready。提取`WaitUntilReady`时若错误传入本地`umq_handle`而非`umq_handle_`, share JFR模式下会导致查错handle。此陷阱适用于任何涉及主/子UMQ双handle的函数重构。
 - **`UBS_ENABLE_SHARE_JFR`默认true** — 测试环境若未显式关闭, PrefillRx走主UMQ路径。重构时必须在两种模式下都验证。
@@ -240,3 +243,49 @@ clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也
 - **热路径不加日志**: `Init`是一次性初始化可加日志；`GetItem/OverrideItem/RemoveItem/ForEach`是高频热路径，加日志会显著影响性能，尤其`ForEach`遍历+回调场景。
 - **mermaid渲染陷阱**: 方括号`[]`在`participant as`别名中被解析为链接语法(需改为纯文本如`set_obj_idx`)；泛型尖括号`<>`、Unicode圆圈数字①②③④、emoji如❌、特殊数学符号≤×、特殊箭头←→、HTML实体`&lt;&gt;`均可能导致渲染失败。文档中mermaid图应只用纯ASCII英文+中文描述。
 - **C++11 `static constexpr` ODR-use陷阱**(严重 — 导致链接undefined reference): C++11中模板类的`static constexpr`成员变量如果被**ODR-use**(引用绑定)，需要类外提供定义，否则链接报undefined。典型场景：`std::min(const T&, const T&)`的参数是引用，直接传`static constexpr`变量会绑定引用→ODR-use→需要外部定义→未提供→链接错误。**修复方法**：`static_cast<类型>(CONSTEXPR_VAR)`创建临时rvalue，引用绑定到临时值而非原变量→不再ODR-use→不需要外部定义→链接OK。反面: `std::min(x, FD_CAPACITY_HARD_LIMIT)`；正面: `std::min(x, static_cast<uint32_t>(FD_CAPACITY_HARD_LIMIT))`。C++17的`inline constexpr`自动解决此问题(隐式提供定义)，但本项目编译C++11。**所有模板类中`static constexpr`成员传给引用参数函数(如`std::min/max/clamp`、日志函数的`%u`格式化参数等)都必须加`static_cast`避免ODR-use**。
+- **版本协商 `mismatch_version` 陷阱**: `AcceptNegotiate`的Major mismatch分支中，`mismatch_version`用于通知client降级。**绝对不能发硬编码的`0`**——Major=0的client(0.1.0/0.2.0)会误判为兼容，继续等待NegotiateRsp直到超时。正确做法: 发`UBS_PROTOCOL_VERSION`(server自身版本)——因为server只在`peer_major≠local_major`时进入此分支，client收到后Major必然不匹配。
+- **TFO数据残留陷阱**: TFO模式下SYN携带`[magic][version][body_len][body]`。Server在Major mismatch时已消费magic+version(12B)，剩余`body_len+body`仍在socket缓冲区。**必须在`return`前消费这些残留字节**，否则后续brpc接管fd后会读到垃圾。修复: 读wire上的`body_len`(4B)然后精确丢弃`body_len`字节。**不要用`FlushSocketMsg`**——非阻塞fd无数据时可能死循环（`while(received>0)`循环内`errno==EAGAIN`时`continue`回到`recv`，无限重复）。
+- **`RecvLengthPrefixed`跨版本兼容**: body_len来自对端wire，`min(body_len, obj_size)`读body，不足零填、超出丢弃。保证不同struct大小(如0.1.0无`reserved_version` vs 0.2.0有)两端可互通。**`NEGOTIATE_REQ_WIRE_SIZE`自动跟随`sizeof(NegotiateReq)`**，struct变更后不需手动维护常量。
+- **`NegotiateVersion`/`ValidateNegotiatedVersion`纯函数**: 两函数仅做位运算，不依赖`UBS_PROTOCOL_VERSION`常量（`local_version`是入参）。UT中可构造任意版本组合测试，无需重编。
+- **版本号来源**: `UBSOCKET_VERSION`文件(如`0.1.0`)→CMake `config_version.cmake`解析→`configure_file`生成`ubsocket_version_defs.h`→`ubsocket_version.h` include后定义`UBS_PROTOCOL_VERSION` constexpr。Bazel通过`genrule`等价实现。**全代码仓统一一个版本号文件**。
+
+## UBSocket 架构参考
+
+> **完整架构文档**: `doc/ubsocket/UBSOCKET-ARCHITECTURE.ch.md` (含mermaid图)
+
+### POSIX API 覆盖状态
+
+**已实现(14个)**: `socket`, `close`, `shutdown`, `bind`, `listen`, `accept`, `connect`, `readv`, `writev`, `getsockopt`, `setsockopt`, `epoll_create`, `epoll_ctl`, `epoll_wait`
+
+**桩函数返回0(13个)**: `accept4`, `send`, `recv`, `read`, `write`, `sendto`, `recvfrom`, `sendmsg`, `recvmsg`, `sendfile`, `sendfile64`, `epoll_create1`, `epoll_pwait` — 非 TCP 模式下返回0而非-1+errno，违反POSIX语义
+
+**无NATIVE_TCP守卫的桩函数(4个)**: `fcntl`, `fcntl64`, `ioctl`, `sendmsg` — 即使TCP模式也返回0而非透传libc
+
+### 已知代码问题
+
+| 问题 | 严重度 | 位置 | 说明 |
+|------|--------|------|------|
+| close()潜在递归 | 中等 | `ubsocket_sock.cpp` | 非TCP模式调用`close(fd)`而非`LibcApi::close(fd)`，若`close`被符号替换为`ubsocket_close`则无限递归 |
+| uninit()不完整 | 中等 | `ubsocket.cpp` | 不重置`UBS_INITED`、不释放`g_zcopy_allocator`、不销毁`ArraySet`、不注销信号处理器，无法安全重新初始化 |
+| 桩函数POSIX语义 | 严重 | `ubsocket_sock.cpp` | `send/recv/read/write`等返回0而非-1+errno=ENOSYS，上层可能误判为"成功但0字节"或"连接关闭" |
+| fcntl/ioctl无守卫 | 严重 | `ubsocket_sock.cpp` | TCP模式也返回0，fcntl设置non-blocking/O_CLOEXEC等静默失败 |
+| init步骤编号混乱 | 低 | `ubsocket.cpp` | 注释中step3和step5各出现两次，实际10个阶段 |
+| EventPollOps基类缺失 | 低 | `umq_epoll_ops.h` | `UmqEventPollOps`继承`EventPollOps`但该基类未找到定义 |
+
+### URMA传输层状态
+
+- **UrmaSocket** — 空壳类，无任何成员/方法覆盖
+- **UrmaWrapper** — `UrmaDevice/Context/Jfc/Jfs/Jfr/Jetty`包装类已完整实现
+- **UrmaApi** — 80+函数指针的动态加载封装(`under_api/urma/dl_urma_api.h`)
+- **DlApi::Load(LOAD_URMA)** — 已预留加载标志位
+- **EpollRunnerFactory** — 尚未添加`SOCK_TYPE_URMA` case(当前仅UMQ)
+- **SocketType枚举** — 已含`SOCK_TYPE_SHM`(无实现)
+
+### 关键目录补充
+
+- `csrc/cli/` — CLI诊断工具(CLIClient/CLIArgsParser/TerminalDisplay)，通过Unix socket通信
+- `csrc/iobuf/` — 零拷贝内存管理(Block/BlockRef/BlockCache + UbsZcopyAdapter + DynSymScanner)
+- `csrc/core/ubsocket_wakeup_event.h` — 异步Accept唤醒机制(UbsocketWakeupEvent)
+- `csrc/core/ubsocket_socket_helper.h` — TCP工具类(SocketConnHelper)
+- `csrc/common/ubsocket_spsc_ring_queue.h` — 无锁SPSC环形队列(AsyncEventPoll使用)
+- `csrc/common/ubsocket_qbuf_queue.h` — 动态扩缩容队列(扩容2倍，使用率<=25%缩容至50%)

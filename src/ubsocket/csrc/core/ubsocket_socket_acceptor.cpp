@@ -148,20 +148,18 @@ void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
     uint64_t protocol_negotiation = 0;
     ssize_t protocol_negotiation_recv_size = 0;
     int ret = acceptor_ops_->ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
-    if (ret > 0 && !GlobalSetting::UBS_AUTO_FALLBACK_TCP) {
-        UBS_VLOG_ERR("Failed to accept as protocol dismatch,Peer IP:%s\n", GetPeerIp().c_str());
+    if (ret > 0) {
+        UBS_VLOG_ERR("Protocol dismatch,Peer IP:%s, fd: %d\n", GetPeerIp().c_str(), fd);
         LibcApi::close(fd);
         return;
     }
-    if (ret > 0) {
-        LibcApi::close(fd);
-    } else if (ret == 0) {
+    if (ret == 0) {
         auto err = DoAccept(fd, peerIp);
         if (!IsOk(err)) {
             // kRETRYABLE 等错误码需要特殊处理：Degradable(err)
             if (IsDegradable(err)) {
                 // 降级至 TCP，客户端可正确工作，不应清理数据.
-                UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
+                UBS_VLOG_INFO("ubsocket is degraded to TCP, fd: %d\n", fd);
             } else {
                 UBS_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP\n", peerIp.data(), fd);
                 // Clear messages that already exist on the TCP link to prevent
@@ -192,6 +190,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     SocketPtr new_socket_obj;
     ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_UMQ, new_socket_obj);
     if (ret != UBS_OK) {
+        LibcApi::close(event_fd);
         PROF_END(CORE_ACCEPT, false);
         return ret;
     }
@@ -204,11 +203,15 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 
     ret = newSocket->acceptor_->acceptor_ops_->Negotiate(new_socket_obj);
     if (ret != UBS_OK) {
+        new_socket_obj->event_fd_ = -1;
+        LibcApi::close(event_fd);
         PROF_END(CORE_ACCEPT, false);
         return ret;
     }
     ret = newSocket->acceptor_->acceptor_ops_->CreateSocketResources(new_socket_obj);
     if (ret != UBS_OK) {
+        new_socket_obj->event_fd_ = -1;
+        LibcApi::close(event_fd);
         PROF_END(CORE_ACCEPT, false);
         return ret;
     }

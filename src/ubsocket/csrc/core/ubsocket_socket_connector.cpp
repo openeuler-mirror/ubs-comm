@@ -38,7 +38,12 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
         }
     }
     if (ret != UBS_OK) {
-        UBS_VLOG_ERR("Failed to establish UB connection, fd: %d", raw_fd_);
+        if (IsDegradable(ret)) {
+            UBS_VLOG_INFO("Version mismatch, fallback to TCP, fd: %d\n", raw_fd_);
+            ret = UBS_OK;
+        } else {
+            UBS_VLOG_ERR("Failed to establish UB connection, fd: %d\n", raw_fd_);
+        }
         ArraySet<Socket>::GetInstance().OverrideItem(raw_fd_, nullptr);
         /* Clear messages that already exist on the TCP link to prevent 
                  * dirty messages from affecting user data transmission*/
@@ -48,6 +53,7 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     if (is_blocking) {
         SocketConnHelper::SetBlocking(raw_fd_);
     }
+
     connector_ops_->conn_info.type_fd = 1;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {

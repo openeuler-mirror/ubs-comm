@@ -43,6 +43,16 @@ public:
     static bool IsUbsConnection(const int &fd);
 
     static int SetTcpNoDelay(int fd);
+
+    /**
+     * Length-prefixed wire helpers: [4B body_len][body]
+     * On success returns UBS_OK, on failure returns UBS_ERROR.
+     * RecvLengthPrefixed reads min(body_len, obj_size), zero-fills tail if shorter, discards if longer.
+     * Both functions log failure details internally (phase, fd, sizes, errno).
+     */
+    static Result SendLengthPrefixed(int fd, const void *body, uint32_t obj_size, uint32_t timeout_ms);
+    static Result RecvLengthPrefixed(int fd, void *body, uint32_t obj_size, uint32_t timeout_ms);
+
     static std::string ExtractIpFromSockAddr(const struct sockaddr *address);
     static uint16_t ExtractPortFromSockAddr(const struct sockaddr *address);
     static int GetCurrentProcessSocketId();

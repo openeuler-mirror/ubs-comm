@@ -12,6 +12,7 @@
 #define UBS_COMM_UMQ_SOCKET_H
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_version.h"
 #include "core/ubsocket_socket.h"
 #include "core/umq/umq_bounded_seq.h"
 #include "core/umq/umq_buffer_receive_queue.h"
@@ -107,6 +108,26 @@ public:
         topo_type_ = type;
     }
 
+    uint32_t GetNegotiatedVersion() const
+    {
+        return negotiated_version_;
+    }
+
+    void SetNegotiatedVersion(uint32_t version)
+    {
+        negotiated_version_ = version;
+    }
+
+    uint32_t GetPeerVersion() const
+    {
+        return peer_version_;
+    }
+
+    void SetPeerVersion(uint32_t version)
+    {
+        peer_version_ = version;
+    }
+
     ALWAYS_INLINE void NewRxEpollIn()
     {
         DataRxOps *ops = rx_.GetRxOps();
@@ -169,6 +190,9 @@ private:
     bool is_bonding_ = false;
     ub_trans_mode trans_mode_ = RM_TP;
     umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
+    // 版本协商
+    uint32_t negotiated_version_ = 0;
+    uint32_t peer_version_ = 0;
     // UMQ bind
     bool umq_is_bind_remote_ = false;
     // UMQ 句柄
@@ -191,7 +215,6 @@ struct CpMsg {
 };
 
 struct NegotiateReq {
-    uint64_t magic_number = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
     ub_trans_mode trans_mode = RM_TP;
     uint8_t is_bonding = 0;
     uint8_t enable_share_jfr = 0;
@@ -236,6 +259,10 @@ struct OtherRouteMessage {
     umq_route_t other_route;
     umq_route_t other_back_route;
 };
+
+// BuildNegotiateReqBuffer total wire size: magic(8) + version(4) + body_len(4) + NegotiateReq
+constexpr uint32_t NEGOTIATE_REQ_WIRE_SIZE =
+    sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(NegotiateReq);
 
 #ifndef EID_FMT
 #define EID_FMT "%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x:%2.2x%2.2x"

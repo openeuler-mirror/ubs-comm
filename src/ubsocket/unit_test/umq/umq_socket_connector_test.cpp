@@ -347,7 +347,6 @@ TEST_F(UmqConnectorOpsTest, BuildNegotiateReq_SetsFieldsCorrectly)
     UmqSocketPtr umqSocket = MakeRef<UmqSocket>(TEST_FD);
     NegotiateReq req{};
     EXPECT_EQ(connector_.BuildNegotiateReq(&req, umqSocket), static_cast<ock::ubs::Result>(UBS_OK));
-    EXPECT_EQ(req.magic_number, CONTROL_PLANE_PROTOCOL_NEGOTIATION);
     EXPECT_EQ(req.trans_mode, RM_TP);
     EXPECT_EQ(req.is_bonding, 0);
     EXPECT_EQ(req.enable_share_jfr, 0);
