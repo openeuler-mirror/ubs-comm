@@ -98,12 +98,7 @@ public:
     void Insert(char *data_in, uint32_t data_size)
     {
         Block *new_block = nullptr;
-        try {
-            new_block = new (data_in - sizeof(Block)) Block(data_in, data_size);
-        } catch (const std::exception &e) {
-            UBS_VLOG_ERR("Alloc new block failed: %s.\n", e.what());
-            return;
-        }
+        new_block = new (data_in - sizeof(Block)) Block(data_in, data_size);
         if (head_block_ == nullptr) {
             head_block_ = new_block;
             tail_block_ = new_block;

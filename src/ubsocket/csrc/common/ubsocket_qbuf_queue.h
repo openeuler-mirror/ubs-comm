@@ -105,6 +105,53 @@ public:
         return 0;
     }
 
+    int DequeueBatch(T *data_array, uint32_t max_count, uint32_t *dequeued_count)
+    {
+        if (data_array == nullptr || max_count == 0 || dequeued_count == nullptr) {
+            UBS_VLOG_ERR("DequeueBatch qbuf queue failed, reason: invalid parameters\n");
+            return -1;
+        }
+
+        if (isExit_) {
+            UBS_VLOG_WARN("DequeueBatch qbuf queue failed, reason: queue already exit\n");
+            return -1;
+        }
+
+        if (queue_ == nullptr) {
+            UBS_VLOG_ERR("DequeueBatch qbuf queue failed, reason: queue is null\n");
+            return -1;
+        }
+
+        *dequeued_count = 0;
+
+        if (IsEmpty()) {
+            UBS_VLOG_WARN("DequeueBatch qbuf queue failed, reason: queue is empty, head: %u, tail: %u, itemNb: %u\n",
+                          queue_->head, queue_->tail, queue_->itemNb);
+            return -1;
+        }
+
+        uint32_t batch_count = std::min(Size(), max_count);
+        for (uint32_t i = 0; i < batch_count; i++) {
+            data_array[i] = queue_->q[queue_->head];
+            queue_->head = (queue_->head == queue_->itemNb - 1) ? 0 : queue_->head + 1;
+        }
+        *dequeued_count = batch_count;
+
+        if (isMalloc_) {
+            uint32_t cur_cap = queue_->itemNb - 1;
+            uint32_t count = Size();
+            if (count <= (cur_cap >> 2) && cur_cap > (init_cap_ << 1)) {
+                uint32_t new_cap = (cur_cap >> 1);
+                if (new_cap < init_cap_) {
+                    new_cap = init_cap_;
+                }
+                Resize(new_cap);
+            }
+        }
+
+        return 0;
+    }
+
     int Dequeue(T *data)
     {
         if (data == nullptr) {
