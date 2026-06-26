@@ -17,11 +17,11 @@
 #include "qbuf_list.h"
 #include "umq_ub_api.h"
 #include "umq_symbol_private.h"
+#include "umq_ub_private.h"
 
 #define DEFAULT_RNR_RETRY 6      // Retry 6 times
 #define DEFAULT_ERR_TIMEOUT 2
 #define DEFAULT_MIN_RNR_TIMER 19 // RNR single retransmission time: 2us*2^19 = 1.049s
-#define UMQ_MAX_SGE_NUM 6
 #define UMQ_MAX_QBUF_NUM 1
 #define UMQ_ENABLE_INLINE_LIMIT_SIZE 32
 #define UMQ_INLINE_ENABLE 1
@@ -3436,7 +3436,7 @@ int umq_ub_wait_rx_interrupt(ub_queue_t *queue, int time_out, urma_jfc_t *jfc[])
     int p_num = umq_symbol_urma()->urma_wait_jfc(jfr_jfce, jfc_cnt, time_out, temp_jfc);
     umq_perf_record_write(UMQ_PERF_RECORD_TRANSPORT_WAIT_RX, start_timestamp);
     uint64_t wait_delta = umq_trace_write_delta(tp_wait_start);
-    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_WAIT_JFC, tp_wait_start, wait_delta);
+    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_WAIT_RX_JFC, tp_wait_start, wait_delta);
     if (p_num <= 0) {
         return p_num;
     }
@@ -3456,7 +3456,7 @@ int umq_ub_wait_rx_interrupt(ub_queue_t *queue, int time_out, urma_jfc_t *jfc[])
     umq_symbol_urma()->urma_ack_jfc(temp_jfc, nevents, p_num);
     umq_perf_record_write(UMQ_PERF_RECORD_TRANSPORT_ACK_RX, start_timestamp);
     uint64_t ack_delta = umq_trace_write_delta(tp_ack_start);
-    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_ACK_JFC, tp_ack_start, ack_delta);
+    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_ACK_RX_JFC, tp_ack_start, ack_delta);
     return p_num;
 }
 
@@ -3473,7 +3473,7 @@ int umq_ub_wait_tx_interrupt(ub_queue_t *queue, int time_out, urma_jfc_t *jfc[])
     int p_num = umq_symbol_urma()->urma_wait_jfc(queue->jfs_jfce, jfc_cnt, time_out, temp_jfc);
     umq_perf_record_write(UMQ_PERF_RECORD_TRANSPORT_WAIT_TX, start_timestamp);
     uint64_t wait_delta = umq_trace_write_delta(tp_wait_start);
-    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_WAIT_JFC, tp_wait_start, wait_delta);
+    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_WAIT_TX_JFC, tp_wait_start, wait_delta);
     if (p_num <= 0) {
         return p_num;
     }
@@ -3492,7 +3492,7 @@ int umq_ub_wait_tx_interrupt(ub_queue_t *queue, int time_out, urma_jfc_t *jfc[])
     umq_symbol_urma()->urma_ack_jfc(temp_jfc, nevents, p_num);
     umq_perf_record_write(UMQ_PERF_RECORD_TRANSPORT_ACK_TX, start_timestamp);
     uint64_t ack_delta = umq_trace_write_delta(tp_ack_start);
-    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_ACK_JFC, tp_ack_start, ack_delta);
+    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_ACK_TX_JFC, tp_ack_start, ack_delta);
     return p_num;
 }
 
@@ -3509,7 +3509,7 @@ int umq_ub_wait_tp_handle_tx_interrupt(urma_jfce_t *jfs_jfce, int time_out, urma
     int p_num = umq_symbol_urma()->urma_wait_jfc(jfs_jfce, jfc_cnt, time_out, temp_jfc);
     umq_perf_record_write(UMQ_PERF_RECORD_TRANSPORT_WAIT_TX, start_timestamp);
     uint64_t wait_delta = umq_trace_write_delta(tp_wait_start);
-    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_WAIT_JFC, tp_wait_start, wait_delta);
+    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_WAIT_TX_JFC, tp_wait_start, wait_delta);
     if (p_num <= 0) {
         return p_num;
     }
@@ -3523,7 +3523,7 @@ int umq_ub_wait_tp_handle_tx_interrupt(urma_jfce_t *jfs_jfce, int time_out, urma
     umq_symbol_urma()->urma_ack_jfc(temp_jfc, nevents, p_num);
     umq_perf_record_write(UMQ_PERF_RECORD_TRANSPORT_ACK_TX, start_timestamp);
     uint64_t ack_delta = umq_trace_write_delta(tp_ack_start);
-    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_ACK_JFC, tp_ack_start, ack_delta);
+    umq_trace_sub_record(UMQ_TRACE_TYPE_WAIT, UMQ_URMA_FUNC_ACK_TX_JFC, tp_ack_start, ack_delta);
     return p_num;
 }
 
