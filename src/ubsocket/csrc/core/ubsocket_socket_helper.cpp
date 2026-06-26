@@ -115,7 +115,11 @@ ssize_t SocketConnHelper::RecvSocketData(int fd, const void *buf, size_t size, u
     ssize_t received = 0;
     size_t total = size;
     auto start = std::chrono::high_resolution_clock::now();
-    fd_set readfds;
+
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLIN;
+
     while (total != 0) {
         received = LibcApi::recv(fd, cur, total, MSG_NOSIGNAL);
         if (received > 0) {
@@ -133,34 +137,31 @@ ssize_t SocketConnHelper::RecvSocketData(int fd, const void *buf, size_t size, u
             errno = 0;
             auto now = std::chrono::high_resolution_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
-            if (elapsed >= timeout_ms) {
+            if (elapsed >= (int64_t)timeout_ms) {
                 errno = ETIMEDOUT;
                 return received;
             }
 
             uint32_t remaining_ms = timeout_ms - elapsed;
-            FD_ZERO(&readfds);
-            FD_SET(fd, &readfds);
-
-            struct timeval tv;
-            tv.tv_sec = remaining_ms / 1000;
-            tv.tv_usec = (remaining_ms % 1000) * 1000;
-            int sel_ret = select(fd + 1, &readfds, NULL, NULL, &tv);
-            if (sel_ret < 0) {
+            int poll_ret = poll(&pfd, 1, remaining_ms);
+            if (poll_ret < 0) {
                 if (errno == EINTR) {
                     continue;
                 }
 
-                UBS_VLOG_ERR("select() failed, ret: %d, errno: %d, errmsg: %s, fd: %d\n", sel_ret, errno,
+                UBS_VLOG_ERR("poll() failed, ret: %d, errno: %d, errmsg: %s, fd: %d\n", poll_ret, errno,
                              Func::Error2Str(errno), fd);
                 return received;
-            } else if (sel_ret == 0) {
+            } else if (poll_ret == 0) {
                 errno = ETIMEDOUT;
                 return received;
             } else {
                 continue;
             }
         } else {
+            if (errno == EINTR) {
+                continue;
+            }
             UBS_VLOG_ERR("recv() failed, ret: %zd, errno: %d, errmsg: %s, received: %zd, fd: %d\n", received, errno,
                          Func::Error2Str(errno), received, fd);
             return received;
