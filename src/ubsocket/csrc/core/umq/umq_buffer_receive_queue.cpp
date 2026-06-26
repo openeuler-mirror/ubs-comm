@@ -111,27 +111,36 @@ UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::Enqueue(umq_buf_t *buffer
     return EnqueueInOrder(buffer);
 }
 
-UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::Dequeue(umq_buf_t **buffer)
+UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::DequeueBatch(umq_buf_t **buffers, uint32_t max_count,
+                                                                    uint32_t *dequeued_count)
 {
-    if (buffer == nullptr) {
-        UBS_VLOG_ERR("Failed to dequeue umq buffer, reason: output buffer is null.\n");
+    if (buffers == nullptr || max_count == 0 || dequeued_count == nullptr) {
+        UBS_VLOG_ERR("Failed to dequeue batch umq buffer, reason: invalid parameters.\n");
         return OpResult::ERROR;
     }
+
     if (!IsInitialized()) {
-        UBS_VLOG_ERR("Failed to dequeue umq buffer, reason: queue not initialized.\n");
+        UBS_VLOG_ERR("Failed to dequeue batch umq buffer, reason: queue not initialized.\n");
         return OpResult::ERROR;
     }
+
     if (is_shutdown_) {
-        UBS_VLOG_WARN("Reject dequeue. Queue is already shutdown.\n");
+        UBS_VLOG_WARN("Reject dequeue batch. Queue is already shutdown.\n");
         return OpResult::ERROR;
     }
+
+    *dequeued_count = 0;
+
     Locker sLock(mutex_);
+
     if (receive_queue->IsEmpty()) {
         return OpResult::QUEUE_EMPTY;
     }
-    if (receive_queue->Dequeue(buffer) != 0) {
+
+    if (receive_queue->DequeueBatch(buffers, max_count, dequeued_count) != 0) {
         return OpResult::ERROR;
     }
+
     return OpResult::OK;
 }
 

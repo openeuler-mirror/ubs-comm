@@ -378,20 +378,15 @@ int UmqSocket::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
         return -1;
     }
 
-    uint32_t i = 0;
-    while (i < max_buf_size) {
-        UmqBufferReceiveQueue::OpResult ret = rxQueue->Dequeue(&buf[i]);
-        if (ret == UmqBufferReceiveQueue::OpResult::OK) {
-            i++;
-        } else if (ret == UmqBufferReceiveQueue::OpResult::QUEUE_EMPTY) {
-            break;
-        } else {
-            return i + 1;
-        }
+    uint32_t dequeued_count = 0;
+    UmqBufferReceiveQueue::OpResult ret = rxQueue->DequeueBatch(buf, max_buf_size, &dequeued_count);
+    if (ret == UmqBufferReceiveQueue::OpResult::ERROR) {
+        UBS_VLOG_ERR("GetAndPopQbuf failed, fd: %d, ret: %d\n", raw_socket_, static_cast<int>(ret));
     }
 
-    return i;
+    return dequeued_count;
 }
+
 void UmqSocket::FlushRxQueue()
 {
     if (rxQueue == nullptr) {

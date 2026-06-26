@@ -42,7 +42,7 @@ public:
     void Shutdown();
     bool IsInitialized() const;
     OpResult Enqueue(umq_buf_t *buffer);
-    OpResult Dequeue(umq_buf_t **buffer);
+    OpResult DequeueBatch(umq_buf_t **buffers, uint32_t max_count, uint32_t *dequeued_count);
 
 private:
     static inline uint32_t GetSn(umq_buf_t *buffer)
