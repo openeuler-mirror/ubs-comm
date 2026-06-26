@@ -762,7 +762,7 @@ public:
             umq::UmqEidTable::Instance().GetFirst(umq::UmqSetting::UMQ_LOCAL_EID, umq::UmqSetting::UMQ_UB_TRANS_MODE);
         if (mainUmq != nullptr) {
             uint64_t handle = mainUmq->GetUmqHandle();
-            UBS_VLOG_INFO("[GetFirstUmqHandle] got handle from UmqEidTable: %llu", (unsigned long long)handle);
+            UBS_VLOG_DEBUG("[GetFirstUmqHandle] got handle from UmqEidTable: %llu", (unsigned long long)handle);
             return handle;
         }
 

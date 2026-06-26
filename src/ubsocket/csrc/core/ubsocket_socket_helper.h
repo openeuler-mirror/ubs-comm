@@ -110,7 +110,7 @@ ALWAYS_INLINE int SocketConnHelper::SetNonBlocking(int fd)
 ALWAYS_INLINE int SocketConnHelper::SetSockOpt(int fd, int level, int optname, const void *optval,
                                                socklen_t optlen) noexcept
 {
-    UBS_VLOG_INFO("SetSockOpt set fd %d, level %d, optname %d", fd, level, optname);
+    UBS_VLOG_DEBUG("SetSockOpt set fd %d, level %d, optname %d", fd, level, optname);
     return LibcApi::setsockopt(fd, level, optname, optval, optlen);
 }
 

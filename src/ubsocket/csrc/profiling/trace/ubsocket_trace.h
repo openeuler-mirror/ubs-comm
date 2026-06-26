@@ -455,9 +455,9 @@ private:
             return;
         }
         if (buf.dropped_count > 0) {
-            UBS_VLOG_INFO("=== %s Trace (dropped: %u) ===\n", label, buf.dropped_count);
+            UBS_VLOG_DEBUG("=== %s Trace (dropped: %u) ===\n", label, buf.dropped_count);
         } else {
-            UBS_VLOG_INFO("=== %s Trace ===\n", label);
+            UBS_VLOG_DEBUG("=== %s Trace ===\n", label);
         }
         for (uint32_t j = 0; j < buf.count; j++) {
             PrintSplitTraceInfo(buf.data[j], label);

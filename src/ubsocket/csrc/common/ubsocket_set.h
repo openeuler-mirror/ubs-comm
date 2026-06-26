@@ -30,7 +30,7 @@ public:
     int Init()
     {
         if (capacity_ != 0) {
-            UBS_VLOG_INFO("ArraySet already initialized, capacity: %u\n", capacity_);
+            UBS_VLOG_WARN("ArraySet already initialized, capacity: %u\n", capacity_);
             return 0;
         }
         struct rlimit rl;
@@ -45,8 +45,8 @@ public:
             return -1;
         }
         set_obj_.reset(new std::atomic<T *>[capacity_]());
-        UBS_VLOG_INFO("ArraySet Init capacity: %u (rlim_cur: %llu, hard_limit: %u)\n", capacity_,
-                      static_cast<unsigned long long>(rl.rlim_cur), static_cast<uint32_t>(FD_CAPACITY_HARD_LIMIT));
+        UBS_VLOG_DEBUG("ArraySet Init capacity: %u (rlim_cur: %llu, hard_limit: %u)\n", capacity_,
+                       static_cast<unsigned long long>(rl.rlim_cur), static_cast<uint32_t>(FD_CAPACITY_HARD_LIMIT));
         return 0;
     }
 

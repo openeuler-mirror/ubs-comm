@@ -332,8 +332,8 @@ void UmqTxOps::WakeUpTx(Socket *sock)
     bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_acq_rel);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (need_fc_awake && eventfd_write(sockBase->event_fd_, 1) == -1) {
-        UBS_VLOG_INFO("eventfd_write() failed, event fd: %d, raw sock fd %d: errno: %d, errmsg: %s\n",
-                      sockBase->event_fd_, sockBase->raw_socket_, errno, Func::Error2Str(errno));
+        UBS_VLOG_ERR("eventfd_write() failed, event fd: %d, raw sock fd %d: errno: %d, errmsg: %s\n",
+                     sockBase->event_fd_, sockBase->raw_socket_, errno, Func::Error2Str(errno));
     }
 }
 

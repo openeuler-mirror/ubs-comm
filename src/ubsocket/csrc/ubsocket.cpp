@@ -66,7 +66,7 @@ void ZeroCopyPrepare()
         UBS_VLOG_WARN("Failed to hook brpc allocator, fallback to TCP mode");
         GlobalSetting::UBS_NATIVE_TCP_MODE = true;
     }
-    UBS_VLOG_INFO("Successfully hooked brpc zero-copy allocator");
+    UBS_VLOG_DEBUG("Successfully hooked brpc zero-copy allocator");
 }
 
 UBS_API int ubsocket_init(u_init_options_t *options)
