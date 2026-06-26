@@ -148,7 +148,7 @@ private:
     static constexpr std::size_t maxBufStatusMappings = 24;
 
     // 统一errno映射表（原Connect/Accept与Writev/Readv映射表完全一致，合并为单表）
-    static constexpr inline std::array<UmqErrnoMapping, 13> kCommonErrnoMappings{{
+    static constexpr inline std::array<UmqErrnoMapping, 15> kCommonErrnoMappings{{
         {UMQ_SUCCESS, 0, "Success"},
         {UMQ_ERR_EPERM, EIO, "Unrecoverable error: device unavailable, invalid parameter, driver/hardware error"},
         {UMQ_ERR_EAGAIN, EAGAIN, "Resource temporarily unavailable"},
@@ -158,6 +158,8 @@ private:
         {UMQ_ERR_EINVAL, EINVAL, "Invalid argument"},
         {UMQ_ERR_ENODEV, ENODEV, "No such device"},
         {UMQ_ERR_ENOSR, ENOSR, "Out of streams resources"},
+        {UMQ_ERR_EMLINK, EMLINK, "Too many links"},
+        {UMQ_ERR_ENOBUFS, ENOBUFS, "No buffer space available"},
         {UMQ_ERR_ETIMEOUT, ETIMEDOUT, "Connection timed out"},
         {UMQ_ERR_EINPROGRESS, EINPROGRESS, "Operation now in progress"},
         {UMQ_ERR_ETSEG_NON_IMPORTED, EIO, "Cannot assign requested address"},

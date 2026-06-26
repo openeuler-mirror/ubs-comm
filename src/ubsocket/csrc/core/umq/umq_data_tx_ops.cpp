@@ -130,6 +130,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     }
     umq_io_option_t option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
     int ret = UmqApi::umq_post(local_umqh_, tx_buf_list, &option, &bad_qbuf);
+
     if (trace != nullptr) {
         trace->UpdateWriteLastTraceEndTime(CORE_WRITE_UMQ_POST);
     }
@@ -151,9 +152,14 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         } else if (ret == -UMQ_ERR_EFLOWCTL) {
             errno = EIO;
             return -1;
-        } else if (errno == EMLINK || errno == ENOBUFS) {
+        } else if (errno == EMLINK) {
             // optimize: [Jetty池化] ENOBUFS是否需要在此线程尝试pollTx释放资源后重试
             UBS_VLOG_DEBUG("[UMQ_API] umq_post() suspended: resource exhausted. Queued for automatic retry.\n");
+            UmqTpWaitQueue::Instance().Enqueue(sock);
+            errno = EAGAIN;
+        } else if (errno == ENOBUFS) {
+            // optimize: [Jetty池化] ENOBUFS是否需要在此线程尝试pollTx释放资源后重试
+            PollUmqTx(sock, true);
             UmqTpWaitQueue::Instance().Enqueue(sock);
             errno = EAGAIN;
         } else {
@@ -184,8 +190,8 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             umq_socket->FetchSubSeqNum(sn_allocated);
         } else {
             uint32_t buf_num = 0;
-            tx_total_len = HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf, _unsolicited_wr_num, _unsolicited_bytes,
-                                         _unsignaled_wr_num, &buf_num);
+            tx_total_len -= HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf, batch, _unsolicited_wr_num,
+                                          _unsolicited_bytes, _unsignaled_wr_num, &buf_num);
             umq_socket->FetchSubSeqNum(sn_allocated - buf_num);
         }
         if (flagEIO == 1) {
@@ -201,6 +207,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
                      static_cast<unsigned long long>(local_umqh_), ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
     }
+
     return tx_total_len;
 }
 
@@ -401,54 +408,27 @@ inline uint32_t UmqTxOps::IOBufSize()
     return UmqSetting::GetIOBufSize();
 }
 
-uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
+uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf, uint32_t batch,
                                  uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num,
                                  uint32_t *buf_num)
 {
     umq_buf_t *cur_qbuf = head_qbuf;
     umq_buf_t *last_qbuf = nullptr;
     umq_buf_t *head_qbuf_ = last_head_qbuf;
+    umq_buf_t *bad_qbuf_ori = bad_qbuf;
     uint32_t wr_cnt = 0;
     uint16_t _unsolicited_wr_num = unsolicited_wr_num;
     uint32_t _unsolicited_bytes = unsolicited_bytes;
     uint16_t _unsignaled_wr_num = unsignaled_wr_num;
     uint32_t total_size = 0;
 
-    while (cur_qbuf != bad_qbuf) {
-        int64_t rest_size = cur_qbuf->total_data_size;
-        umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)cur_qbuf->qbuf_ext;
-        if (buf_pro->flag.bs.solicited_enable == 1) {
-            _unsolicited_wr_num = 0;
-            _unsolicited_bytes = 0;
-        } else {
-            _unsolicited_wr_num++;
-            _unsolicited_bytes += cur_qbuf->total_data_size;
-        }
-
-        if (buf_pro->flag.bs.complete_enable == 1) {
-            _unsignaled_wr_num = 0;
-        } else {
-            _unsignaled_wr_num++;
-        }
-
-        total_size += cur_qbuf->total_data_size;
-
-        /* WriteV ensure total_data_size equals to the sum of all data_size, thus, do not consider
-             * the situation that rest_size would not reduced to zero */
-        while (cur_qbuf && rest_size > 0) {
-            rest_size -= (int64_t)cur_qbuf->data_size;
-            last_qbuf = cur_qbuf;
-            cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
-        }
-
-        if (buf_pro->flag.bs.complete_enable == 1) {
-            /* If the last successfully posted wr has 'complete_enable' set, it means no need to cache
-                 * the posted qbuf list anymore, then reset head to nullptr */
-            head_qbuf_ = (cur_qbuf != bad_qbuf) ? cur_qbuf : nullptr;
-        }
-
+    while (bad_qbuf != nullptr) {
+        cur_qbuf = bad_qbuf;
+        total_size += cur_qbuf->data_size;
+        bad_qbuf = QBUF_LIST_NEXT(cur_qbuf);
         wr_cnt++;
     }
+    wr_cnt = batch - wr_cnt;
 
     unsolicited_wr_num_ = _unsolicited_wr_num;
     unsolicited_bytes_ = _unsolicited_bytes;
@@ -465,7 +445,7 @@ uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
 
-    UmqApi::umq_buf_free(bad_qbuf);
+    UmqApi::umq_buf_free(bad_qbuf_ori);
     return total_size;
 }
 
