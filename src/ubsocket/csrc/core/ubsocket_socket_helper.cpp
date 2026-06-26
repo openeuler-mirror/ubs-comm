@@ -125,7 +125,7 @@ ssize_t SocketConnHelper::RecvSocketData(int fd, const void *buf, size_t size, u
         }
 
         if (received == 0) {
-            UBS_VLOG_INFO("The connection has been closed by peer.\n");
+            UBS_VLOG_DEBUG("The connection has been closed by peer.\n");
             return 0;
         }
 

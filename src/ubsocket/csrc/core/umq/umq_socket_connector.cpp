@@ -118,8 +118,8 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
     }
 
     if (ret == UBS_OK) {
-        UBS_VLOG_INFO("tcp connect succeed, ip %s port %d fd %d\n", umq_conn_info_.peer_ip.c_str(),
-                      SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
+        UBS_VLOG_DEBUG("tcp connect succeed, ip %s port %d fd %d\n", umq_conn_info_.peer_ip.c_str(),
+                       SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
     } else {
         /* fd是非阻塞套接字
             * 1. 第一次调用connect返回-1，errno为EINPROGRESS，网络正在建连；
@@ -198,8 +198,8 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
                     for (const auto &br : back_routes_) {
                         used_port_vector.push_back(br.src_port);
                     }
-                    UBS_VLOG_INFO("CreateSocketResources: used_ports num=%zu (1 main + %zu backup)\n",
-                                  used_port_vector.size(), back_routes_.size());
+                    UBS_VLOG_DEBUG("CreateSocketResources: used_ports num=%zu (1 main + %zu backup)\n",
+                                   used_port_vector.size(), back_routes_.size());
                 } else if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D && UmqSetting::UMQ_IS_BONDING) {
                     used_port_vector = {conn_route_.src_port};
                 } else {
@@ -348,7 +348,7 @@ void UmqConnectorOps::PrintSocketsInfo()
         }
         oss << peer_all_socket_ids_[i];
     }
-    UBS_VLOG_INFO("%s\n", oss.str().c_str());
+    UBS_VLOG_DEBUG("%s\n", oss.str().c_str());
 }
 
 Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
@@ -449,12 +449,12 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
 
     // 日志：打印即将发送的 NegotiateRoute 内容
     UBS_VLOG_INFO("Send NegotiateRoute: topo_type=%u, back_route_num=%zu\n", topo_type_, back_routes_.size());
-    UBS_VLOG_INFO("  master_route: src_port(chip=%u,die=%u,port=%u) dst_port(chip=%u,die=%u,port=%u)\n",
-                  conn_route_.src_port.bs.chip_id, conn_route_.src_port.bs.die_id, conn_route_.src_port.bs.port_idx,
-                  conn_route_.dst_port.bs.chip_id, conn_route_.dst_port.bs.die_id, conn_route_.dst_port.bs.port_idx);
+    UBS_VLOG_DEBUG("  master_route: src_port(chip=%u,die=%u,port=%u) dst_port(chip=%u,die=%u,port=%u)\n",
+                   conn_route_.src_port.bs.chip_id, conn_route_.src_port.bs.die_id, conn_route_.src_port.bs.port_idx,
+                   conn_route_.dst_port.bs.chip_id, conn_route_.dst_port.bs.die_id, conn_route_.dst_port.bs.port_idx);
     for (size_t i = 0; i < back_routes_.size(); ++i) {
-        UBS_VLOG_INFO("  back_routes[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i, back_routes_[i].src_port.bs.chip_id,
-                      back_routes_[i].src_port.bs.die_id, back_routes_[i].src_port.bs.port_idx);
+        UBS_VLOG_DEBUG("  back_routes[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i, back_routes_[i].src_port.bs.chip_id,
+                       back_routes_[i].src_port.bs.die_id, back_routes_[i].src_port.bs.port_idx);
     }
 
     NegotiateRoute negoRoute(topo_type_, conn_route_, back_routes_);
@@ -506,8 +506,8 @@ Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_e
         all_routes.insert(all_routes.end(), back_routes.begin(), back_routes.end());
 
         // 日志：打印所有路由大小
-        UBS_VLOG_INFO("DoRoute(CLOS): main_routes.size()=%zu, back_routes.size()=%zu, all_routes.size()=%zu\n",
-                      main_routes.size(), back_routes.size(), all_routes.size());
+        UBS_VLOG_DEBUG("DoRoute(CLOS): main_routes.size()=%zu, back_routes.size()=%zu, all_routes.size()=%zu\n",
+                       main_routes.size(), back_routes.size(), all_routes.size());
         RRChooseMainRoute(all_routes, dst_eid, conn_main_route, conn_back_routes);
         conn_route_ = conn_main_route;
 
@@ -863,7 +863,7 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
     std::vector<uint32_t> process_chip_id_list(process_chip_ids.begin(), process_chip_ids.end());
     process_chip_Id = GetTargetChipId(UmqSetting::UMQ_ALL_SOCKET_IDS, process_chip_id_list,
                                       UmqSetting::UMQ_PROCESS_SOCKET_ID); //得到本端芯片id
-    UBS_VLOG_INFO("process_chip_Id: %u\n", process_chip_Id);
+    UBS_VLOG_DEBUG("process_chip_Id: %u\n", process_chip_Id);
 
     // 对端
     std::set<uint32_t> peer_chip_ids;
@@ -872,7 +872,7 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
     }
     std::vector<uint32_t> peer_chip_id_list(peer_chip_ids.begin(), peer_chip_ids.end());
     peer_chip_id = GetTargetChipId(peer_all_socket_ids_, peer_chip_id_list, peer_socket_id_);
-    UBS_VLOG_INFO("peer_chip_id: %u\n", peer_chip_id);
+    UBS_VLOG_DEBUG("peer_chip_id: %u\n", peer_chip_id);
 
     for (uint32_t i = 0; i < route_list.route_num; ++i) {
         if (route_list.routes[i].src_port.bs.chip_id == process_chip_Id &&
@@ -889,7 +889,7 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
     }
 
     if (!affine_routes.empty() && !non_aff_routes.empty()) {
-        UBS_VLOG_INFO("Find umq route successfully\n");
+        UBS_VLOG_DEBUG("Find umq route successfully\n");
         return UBS_OK;
     }
 
@@ -915,7 +915,7 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
     }
 
     if (!affine_routes.empty() && !non_aff_routes.empty()) {
-        UBS_VLOG_INFO("Find umq route successfully\n");
+        UBS_VLOG_DEBUG("Find umq route successfully\n");
         return UBS_OK;
     }
 
@@ -931,7 +931,7 @@ void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &all_routes, co
     GetBondingEidMapIndex(*dst_eid, startIndex);
 
     // 一主三备：确认测试环境亲和组大小
-    UBS_VLOG_INFO("RRChooseMainRoute: all_routes.size()=%zu, startIndex=%u\n", all_routes.size(), startIndex);
+    UBS_VLOG_DEBUG("RRChooseMainRoute: all_routes.size()=%zu, startIndex=%u\n", all_routes.size(), startIndex);
 
     // 确保索引在有效范围内
     startIndex = startIndex % all_routes.size();
@@ -950,12 +950,12 @@ void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &all_routes, co
     uint32_t nextIndex = (startIndex + 1) % static_cast<uint32_t>(all_routes.size());
     EidRegistry::Instance().RegisterOrReplaceEidIndex(*dst_eid, nextIndex);
 
-    UBS_VLOG_INFO("main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", conn_main_route.src_port.bs.chip_id,
-                  conn_main_route.src_port.bs.die_id, conn_main_route.src_port.bs.port_idx);
+    UBS_VLOG_DEBUG("main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", conn_main_route.src_port.bs.chip_id,
+                   conn_main_route.src_port.bs.die_id, conn_main_route.src_port.bs.port_idx);
     for (size_t i = 0; i < conn_back_routes.size(); ++i) {
-        UBS_VLOG_INFO("back route[%zu]: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", i,
-                      conn_back_routes[i].src_port.bs.chip_id, conn_back_routes[i].src_port.bs.die_id,
-                      conn_back_routes[i].src_port.bs.port_idx);
+        UBS_VLOG_DEBUG("back route[%zu]: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n", i,
+                       conn_back_routes[i].src_port.bs.chip_id, conn_back_routes[i].src_port.bs.die_id,
+                       conn_back_routes[i].src_port.bs.port_idx);
     }
 }
 
@@ -1036,13 +1036,13 @@ Result UmqConnectorOps::CheckOtherRouteForClos(const UmqSocketPtr &umq_socket)
     // 取第一条备路，兼容 OtherRouteMessage 的二字段结构
     other_back_conn_route = temp_back_routes.empty() ? umq_route_t{} : temp_back_routes[0];
 
-    UBS_VLOG_INFO("other main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                  other_conn_route.src_port.bs.chip_id, other_conn_route.src_port.bs.die_id,
-                  other_conn_route.src_port.bs.port_idx);
+    UBS_VLOG_DEBUG("other main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                   other_conn_route.src_port.bs.chip_id, other_conn_route.src_port.bs.die_id,
+                   other_conn_route.src_port.bs.port_idx);
 
-    UBS_VLOG_INFO("other back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                  other_back_conn_route.src_port.bs.chip_id, other_back_conn_route.src_port.bs.die_id,
-                  other_back_conn_route.src_port.bs.port_idx);
+    UBS_VLOG_DEBUG("other back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                   other_back_conn_route.src_port.bs.chip_id, other_back_conn_route.src_port.bs.die_id,
+                   other_back_conn_route.src_port.bs.port_idx);
 
     if (umq_socket->CheckDevAdd(other_conn_route.src_eid) != 0) {
         return UBS_UB_DEV_ERROR;

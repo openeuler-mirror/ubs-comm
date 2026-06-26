@@ -94,8 +94,8 @@ Result UmqAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
                     for (const auto &br : back_routes_) {
                         used_port_vector.push_back(br.src_port);
                     }
-                    UBS_VLOG_INFO("Acceptor CreateSocketResources: used_ports num=%zu (1 main + %zu backup)\n",
-                                  used_port_vector.size(), back_routes_.size());
+                    UBS_VLOG_DEBUG("Acceptor CreateSocketResources: used_ports num=%zu (1 main + %zu backup)\n",
+                                   used_port_vector.size(), back_routes_.size());
                 } else if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D && UmqSetting::UMQ_IS_BONDING) {
                     used_port_vector = {conn_route_.src_port};
                 } else {
@@ -323,7 +323,7 @@ Result UmqAcceptorOps::DoUbAcceptRetry(SocketPtr socketPtr, Result &ack_ret, Res
 
     // 客户端 CheckOtherRoute 失败
     if (other_route_message_.ub_handshake_state != UBHandshakeState::kRETRY) {
-        UBS_VLOG_INFO("Client CheckOtherRoute failed, try to degrade to TCP.\n");
+        UBS_VLOG_DEBUG("Client CheckOtherRoute failed, try to degrade to TCP.\n");
         retry_state_ = UBHandshakeState::kRETRY_FAILED_CHECK_OTHER_ROUTE;
         return UBS_OK;
     }
@@ -455,7 +455,7 @@ void UmqAcceptorOps::BuildNegotiateRsp(NegotiateRsp &rsp)
         }
         msg << rsp.socket_ids[i];
     }
-    UBS_VLOG_INFO("%s\n", msg.str().c_str());
+    UBS_VLOG_DEBUG("%s\n", msg.str().c_str());
 }
 
 Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
@@ -544,11 +544,12 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
 
     // 日志：打印接收到的 NegotiateRoute 内容，验证一主三备
     UBS_VLOG_INFO("AcceptNegotiate: received back_route_num=%u\n", negoRoute.back_route_num);
-    UBS_VLOG_INFO("  master_route: src_port(chip=%u,die=%u,port=%u)\n", conn_route_.src_port.bs.chip_id,
-                  conn_route_.src_port.bs.die_id, conn_route_.src_port.bs.port_idx);
+    UBS_VLOG_DEBUG("  master_route: src_port(chip=%u,die=%u,port=%u)\n", conn_route_.src_port.bs.chip_id,
+                   conn_route_.src_port.bs.die_id, conn_route_.src_port.bs.port_idx);
     for (size_t i = 0; i < back_routes_.size(); ++i) {
-        UBS_VLOG_INFO("  back_routes_[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i, back_routes_[i].src_port.bs.chip_id,
-                      back_routes_[i].src_port.bs.die_id, back_routes_[i].src_port.bs.port_idx);
+        UBS_VLOG_DEBUG("  back_routes_[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i,
+                       back_routes_[i].src_port.bs.chip_id, back_routes_[i].src_port.bs.die_id,
+                       back_routes_[i].src_port.bs.port_idx);
     }
 
     umq_conn_info_.conn_eid = conn_route_.dst_eid;
@@ -584,7 +585,7 @@ Result UmqAcceptorOps::AcceptExchangeSocketIDs(int fd)
         }
         msg << sendAllSocketIds[i];
     }
-    UBS_VLOG_INFO("%s\n", msg.str().c_str());
+    UBS_VLOG_DEBUG("%s\n", msg.str().c_str());
     return UBS_OK;
 }
 } // namespace umq

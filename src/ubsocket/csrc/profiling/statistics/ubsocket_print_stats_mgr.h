@@ -169,8 +169,8 @@ private:
                     return;
                 }
 
-                UBS_VLOG_INFO("Successfully archive ubsocket kpi json: %s -> %s (size: %ld bytes)\n", filename,
-                              archiveFilename, st.st_size);
+                UBS_VLOG_DEBUG("Successfully archive ubsocket kpi json: %s -> %s (size: %ld bytes)\n", filename,
+                               archiveFilename, st.st_size);
             }
         }
     }

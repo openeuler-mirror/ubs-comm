@@ -143,7 +143,7 @@ public:
         // 注册 umq 打点回调
         RegisterUmqCallbacks();
 
-        UBS_VLOG_INFO("ProbeManager start probe time is %d ms, probe batch is %d\n", mIntervalMs, mProbeBatch);
+        UBS_VLOG_DEBUG("ProbeManager start probe time is %d ms, probe batch is %d\n", mIntervalMs, mProbeBatch);
     }
 
     void Stop()
@@ -169,7 +169,7 @@ public:
         mQueueSt = 0;
         mQueueEd = 0;
 
-        UBS_VLOG_INFO("ProbeManager is stop\n");
+        UBS_VLOG_DEBUG("ProbeManager is stop\n");
     }
 
     /**
@@ -182,7 +182,7 @@ public:
         if (ret != 0) {
             UBS_VLOG_ERR("Failed to register umq perf callback, ret: %d\n", ret);
         } else {
-            UBS_VLOG_INFO("UMQ perf callback registered successfully\n");
+            UBS_VLOG_DEBUG("UMQ perf callback registered successfully\n");
         }
     }
 

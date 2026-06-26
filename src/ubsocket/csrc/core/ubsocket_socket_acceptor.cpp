@@ -81,9 +81,9 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     if (GlobalSetting::AsyncAcceptorEnabled()) {
         // 懒初始化：启动 ExecutorService + 初始化 wakeup_event_
         InitWakeupEvent();
-        UBS_VLOG_INFO("async accept execute. fd:%d", fd);
+        UBS_VLOG_DEBUG("async accept execute. fd:%d", fd);
         auto exec_ret = ExecutorService::GetExecutorService()->Execute([this, fd, addr_tmp, len_tmp]() {
-            UBS_VLOG_INFO("async accept start. fd:%d\n", fd);
+            UBS_VLOG_DEBUG("async accept start. fd:%d\n", fd);
             std::string ip = SocketConnHelper::ExtractIpFromSockAddr(&addr_tmp);
             ProcessUBConnection(fd, ip);
             {
@@ -93,9 +93,9 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
             // 直接调用 WakeUpReadyEventFd() 写 eventfd，触发 epoll_wait 返回
             wakeup_event_.WakeUpReadyEventFd(raw_fd_);
             ubSocket_async_accept_info.asyncTaskNum.fetch_sub(1U);
-            UBS_VLOG_INFO("async accept success. fd:%d\n", fd);
+            UBS_VLOG_DEBUG("async accept success. fd:%d\n", fd);
         });
-        UBS_VLOG_INFO("Execute end. exec_ret:%d\n", exec_ret);
+        UBS_VLOG_DEBUG("Execute end. exec_ret:%d\n", exec_ret);
         if (exec_ret == true) {
             ubSocket_async_accept_info.asyncTaskNum.fetch_add(1U);
         } else {
@@ -255,7 +255,7 @@ void Acceptor::InitWakeupEvent()
 
         wakeup_event_.Initialize(epoll_fd);
         wakeup_event_.SetListenFd(raw_fd_);
-        UBS_VLOG_INFO("async accept: wakeup_event_ init, epoll_fd=%d, listen_fd=%d\n", epoll_fd, raw_fd_);
+        UBS_VLOG_DEBUG("async accept: wakeup_event_ init, epoll_fd=%d, listen_fd=%d\n", epoll_fd, raw_fd_);
 
         EventPollPtr aepRef = ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
         auto *aep = (AsyncEventPoll *)aepRef.Get();
@@ -264,7 +264,7 @@ void Acceptor::InitWakeupEvent()
                                    [this](struct epoll_event *ev, int me, std::unordered_map<int, EpollEvent *> &sd) {
                                        return wakeup_event_.ProcessReadyEvents(ev, me, sd);
                                    });
-            UBS_VLOG_INFO("async accept: SetWakeupCallback() called for epoll_fd: %d\n", epoll_fd);
+            UBS_VLOG_DEBUG("async accept: SetWakeupCallback() called for epoll_fd: %d\n", epoll_fd);
         } else {
             UBS_VLOG_ERR("async accept: failed to get AsyncEventPoll for epoll_fd: %d\n", epoll_fd);
         }

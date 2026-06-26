@@ -550,7 +550,7 @@ void UrmaJfc::Destroy() noexcept
     if (raw_jfc_ != nullptr) {
         auto result = UrmaApi::urma_delete_jfc(raw_jfc_);
         if (result != URMA_SUCCESS) {
-            UBS_VLOG_INFO("[URMA_API] Delete jfc, errno: %d", errno);
+            UBS_VLOG_WARN("[URMA_API] Delete jfc, errno: %d", errno);
         }
         raw_jfc_ = nullptr;
     }
@@ -558,7 +558,7 @@ void UrmaJfc::Destroy() noexcept
     if (raw_jfce_ != nullptr) {
         auto result = UrmaApi::urma_delete_jfce(raw_jfce_);
         if (result != URMA_SUCCESS) {
-            UBS_VLOG_INFO("[URMA_API] Delete jfce, errno: %d", errno);
+            UBS_VLOG_WARN("[URMA_API] Delete jfce, errno: %d", errno);
         }
         raw_jfce_ = nullptr;
     }
@@ -576,7 +576,7 @@ void UrmaJfs::Destroy() noexcept
     if (raw_jfs_ != nullptr) {
         auto result = UrmaApi::urma_delete_jfs(raw_jfs_);
         if (result != URMA_SUCCESS) {
-            UBS_VLOG_INFO("[URMA_API] Delete jfs failed, errno: %d", errno);
+            UBS_VLOG_WARN("[URMA_API] Delete jfs failed, errno: %d", errno);
         }
         raw_jfs_ = nullptr;
     }
@@ -595,7 +595,7 @@ void UrmaJfr::Destroy() noexcept
     if (raw_jfr_ != nullptr) {
         auto result = UrmaApi::urma_delete_jfr(raw_jfr_);
         if (result != URMA_SUCCESS) {
-            UBS_VLOG_INFO("[URMA_API] Delete jfr, errno: %d", errno);
+            UBS_VLOG_WARN("[URMA_API] Delete jfr, errno: %d", errno);
         }
         raw_jfr_ = nullptr;
     }
@@ -616,7 +616,7 @@ void UrmaJetty::Destroy() noexcept
         raw_target_jetty_ != nullptr) {
         auto result = UrmaApi::urma_unbind_jetty(raw_jetty_);
         if (result != URMA_SUCCESS) {
-            UBS_VLOG_INFO("[URMA_API] urma_unbind_jetty() failed, errno: %d", errno);
+            UBS_VLOG_WARN("[URMA_API] urma_unbind_jetty() failed, errno: %d", errno);
         }
     }
 
@@ -624,7 +624,7 @@ void UrmaJetty::Destroy() noexcept
     if (raw_target_jetty_ != nullptr) {
         auto result = UrmaApi::urma_unimport_jetty(raw_target_jetty_);
         if (result != URMA_SUCCESS) {
-            UBS_VLOG_INFO("[URMA_API] urma_unimport_jetty() failed, errno: %d", errno);
+            UBS_VLOG_WARN("[URMA_API] urma_unimport_jetty() failed, errno: %d", errno);
         }
         raw_target_jetty_ = nullptr;
     }
@@ -633,7 +633,7 @@ void UrmaJetty::Destroy() noexcept
     if (raw_jetty_ != nullptr) {
         auto result = UrmaApi::urma_delete_jetty(raw_jetty_);
         if (result != URMA_SUCCESS) {
-            UBS_VLOG_INFO("[URMA_API] Delete jetty failed, errno: %d", errno);
+            UBS_VLOG_WARN("[URMA_API] Delete jetty failed, errno: %d", errno);
         }
         raw_jetty_ = nullptr;
     }

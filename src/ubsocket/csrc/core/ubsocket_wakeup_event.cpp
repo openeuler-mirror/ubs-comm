@@ -53,7 +53,7 @@ int UbsocketWakeupEvent::Initialize(int epollFd)
     }
 
     readyEventFd_ = fd;
-    UBS_VLOG_INFO("UbsocketWakeupEvent: ready event fd %d initialized\n", readyEventFd_);
+    UBS_VLOG_DEBUG("UbsocketWakeupEvent: ready event fd %d initialized\n", readyEventFd_);
     return 0;
 }
 
@@ -106,8 +106,8 @@ int UbsocketWakeupEvent::ProcessReadyEvents(struct epoll_event *events, int maxe
     }
     events[0] = it->second->event;
 
-    UBS_VLOG_INFO("UbsocketWakeupEvent: ProcessReadyEvents done, pending:%llu, listen_fd:%d, epollEvent:%p\n",
-                  (unsigned long long)u, listen_fd_, it->second);
+    UBS_VLOG_DEBUG("UbsocketWakeupEvent: ProcessReadyEvents done, pending:%llu, listen_fd:%d, epollEvent:%p\n",
+                   (unsigned long long)u, listen_fd_, it->second);
     return 1;
 }
 

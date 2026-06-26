@@ -39,12 +39,12 @@ bool DynSymScanner::ParseBrpcAllocator()
     RecordApi(RTLD_DEFAULT, BRPC_ALLOC_SYMBOL_DEFAULT, alloc_addr_);
     RecordApi(RTLD_DEFAULT, BRPC_DEALLOC_SYMBOL_DEFAULT, dealloc_addr_);
     if (alloc_addr_ != nullptr && dealloc_addr_ != nullptr) {
-        UBS_VLOG_INFO("Dynamic Symbol Scanner Found: %s(default), "
-                      "(iobuf::blockmem_allocate)\n",
-                      BRPC_ALLOC_SYMBOL_DEFAULT);
-        UBS_VLOG_INFO("Dynamic Symbol Scanner Found: %s(default), "
-                      "(iobuf::blockmem_deallocate)\n",
-                      BRPC_DEALLOC_SYMBOL_DEFAULT);
+        UBS_VLOG_DEBUG("Dynamic Symbol Scanner Found: %s(default), "
+                       "(iobuf::blockmem_allocate)\n",
+                       BRPC_ALLOC_SYMBOL_DEFAULT);
+        UBS_VLOG_DEBUG("Dynamic Symbol Scanner Found: %s(default), "
+                       "(iobuf::blockmem_deallocate)\n",
+                       BRPC_DEALLOC_SYMBOL_DEFAULT);
         return true;
     }
 
@@ -64,12 +64,12 @@ bool DynSymScanner::ParseBrpcAllocator()
         if (ParseBrpcBlockMemAllocate(name)) {
             alloc_addr_ = (blockmem_allocate_t *)(ehdr_.e_type == ET_EXEC ? (char *)symbols_[i].st_value :
                                                                             (char *)base_addr_ + symbols_[i].st_value);
-            UBS_VLOG_INFO("Dynamic Symbol Scanner Found: %s, (iobuf::blockmem_allocate)\n", name);
+            UBS_VLOG_DEBUG("Dynamic Symbol Scanner Found: %s, (iobuf::blockmem_allocate)\n", name);
         } else if (ParseBrpcBlockMemDeallocate(name)) {
             dealloc_addr_ = (blockmem_deallocate_t *)(ehdr_.e_type == ET_EXEC ?
                                                           (char *)symbols_[i].st_value :
                                                           (char *)base_addr_ + symbols_[i].st_value);
-            UBS_VLOG_INFO("Dynamic Symbol Scanner Found: %s, (iobuf::blockmem_deallocate)\n", name);
+            UBS_VLOG_DEBUG("Dynamic Symbol Scanner Found: %s, (iobuf::blockmem_deallocate)\n", name);
         }
     }
 
@@ -229,9 +229,9 @@ bool DynSymScanner::ParseElfStruction()
     }
 
     if (ehdr_.e_type == ET_EXEC) {
-        UBS_VLOG_INFO("Parsing position-dependent executable file\n");
+        UBS_VLOG_DEBUG("Parsing position-dependent executable file\n");
     } else if (ehdr_.e_type == ET_DYN) {
-        UBS_VLOG_INFO("Parsing position-independent executable or shared object file\n");
+        UBS_VLOG_DEBUG("Parsing position-independent executable or shared object file\n");
     } else {
         UBS_VLOG_ERR("Invalid ELF file\n");
         return false;

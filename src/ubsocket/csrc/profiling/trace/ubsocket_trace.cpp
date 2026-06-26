@@ -43,7 +43,7 @@ void TracePrintThread::Start()
         UBS_VLOG_WARN("TracePrintThread already running, skip Start()\n");
         return;
     }
-    UBS_VLOG_INFO("TracePrintThread starting...\n");
+    UBS_VLOG_DEBUG("TracePrintThread starting...\n");
     thread_ = std::thread(&TracePrintThread::Run, this);
 }
 
@@ -54,18 +54,18 @@ void TracePrintThread::Stop()
         UBS_VLOG_WARN("TracePrintThread not running, skip Stop()\n");
         return;
     }
-    UBS_VLOG_INFO("TracePrintThread stopping...\n");
+    UBS_VLOG_DEBUG("TracePrintThread stopping...\n");
     if (thread_.joinable()) {
         thread_.join();
     }
-    UBS_VLOG_INFO("TracePrintThread stopped\n");
+    UBS_VLOG_DEBUG("TracePrintThread stopped\n");
 }
 
 void TracePrintThread::Run()
 {
     pthread_setname_np(pthread_self(), "ubs_trace");
-    UBS_VLOG_INFO("TracePrintThread running, tid: %lu, drain_interval: %u ms\n", pthread_self(),
-                  GlobalSetting::UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS);
+    UBS_VLOG_DEBUG("TracePrintThread running, tid: %lu, drain_interval: %u ms\n", pthread_self(),
+                   GlobalSetting::UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS);
     while (running_.load(std::memory_order_acquire)) {
         std::this_thread::sleep_for(std::chrono::milliseconds(GlobalSetting::UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS));
         DrainAllSockets();
