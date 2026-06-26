@@ -51,6 +51,19 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 },
                 SocketPtr());
         } while (poll_cnt > 0 && err_code == ops_error_code::OK);
+
+        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX,
+                                            UMQ_IO_TX, UMQ_FD_IO, tx_epoll_event->tp_idx};
+        int ret = UmqApi::umq_rearm_interrupt(tx_epoll_event->umq_handle, false, &tx_option);
+        if (ret < 0) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+            UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for TX, local umq: %llu, "
+                         "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(tx_epoll_event->umq_handle), ret, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+            return UBS_ERROR;
+        }
         return UBS_OK;
     } else {
         UBS_VLOG_ERR("async_epoll unknown event:(events:%x, data.type:%lu)\n", event.events, tx_epoll_event->type);
