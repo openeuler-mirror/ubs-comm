@@ -91,6 +91,19 @@ static int umq_trace_init(umq_trace_cfg_t *cfg)
     return UMQ_SUCCESS;
 }
 
+void umq_trace_timer_delete(void)
+{
+    if (g_umq_trace_ctx == NULL) {
+        return;
+    }
+    (void)pthread_spin_lock(&g_umq_trace_lock);
+    if (g_umq_trace_ctx->timer != NULL) {
+        urpc_timer_destroy(g_umq_trace_ctx->timer);
+        g_umq_trace_ctx->timer = NULL;
+    }
+    (void)pthread_spin_unlock(&g_umq_trace_lock);
+}
+
 void umq_trace_uninit(void)
 {
     if (g_umq_trace_ctx == NULL) {
@@ -107,10 +120,7 @@ void umq_trace_uninit(void)
             g_umq_trace_ctx->trace_buf[i].data_record = NULL;
         }
     }
-    if (g_umq_trace_ctx->timer != NULL) {
-        urpc_timer_destroy(g_umq_trace_ctx->timer);
-        g_umq_trace_ctx->timer = NULL;
-    }
+
     g_umq_trace_enable = false;
     free(g_umq_trace_ctx);
     g_umq_trace_ctx = NULL;
@@ -377,6 +387,10 @@ static void umq_trace_output_single(umq_trace_buf_t *cur_rec, uint32_t thread_id
     UMQ_VLOG_INFO(VLOG_UMQ, "============ thread %u records: %u--%u ===========\n",
                   thread_id, previous_output_cnt, record_cnt);
     (void)pthread_spin_lock(&g_umq_trace_lock);
+    if (cur_rec->data_record == NULL) {
+        (void)pthread_spin_unlock(&g_umq_trace_lock);
+        return;
+    }
     for (uint32_t i = 0; i < new_records; i++) {
         uint32_t idx = (previous_output_cnt + i) % g_umq_trace_record_num;
         umq_data_record_t *rec = &cur_rec->data_record[idx];
