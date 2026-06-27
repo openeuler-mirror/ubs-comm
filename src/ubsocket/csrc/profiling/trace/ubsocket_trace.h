@@ -30,6 +30,7 @@ struct SplitTraceInfo {
     uint32_t offset = 0;
     ProfilingTPId type = CORE_WRITE;
     uint32_t poll_num = 0;
+    int tid = 0;
     uint64_t start_timestamp = 0;
     uint64_t end_timestamp = 0;
 };
@@ -97,6 +98,12 @@ class SplitTrace {
     TraceBuffer epoll_bufs_[2];
 
 public:
+    static bool &SuppressTrace()
+    {
+        static thread_local bool value = false;
+        return value;
+    }
+
     SplitTrace()
     {
         buf_capacity_ = GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY;
@@ -118,7 +125,9 @@ public:
             return;
         }
         auto rpc_id = TraceRegistry::RPC_ID_OPS.get_rpc_id ? TraceRegistry::RPC_ID_OPS.get_rpc_id() : nullptr;
+        buf.data[buf.count] = SplitTraceInfo{};
         auto &trace_info = buf.data[buf.count];
+        trace_info.tid = static_cast<int>(syscall(SYS_gettid));
         trace_info.raw_socket = raw_socket;
         trace_info.rpc_id = reinterpret_cast<uint64_t>(rpc_id);
         trace_info.seq_no = 0;
@@ -140,7 +149,9 @@ public:
             return;
         }
         auto rpc_id = TraceRegistry::RPC_ID_OPS.get_rpc_id ? TraceRegistry::RPC_ID_OPS.get_rpc_id() : nullptr;
+        buf.data[buf.count] = SplitTraceInfo{};
         auto &trace_info = buf.data[buf.count];
+        trace_info.tid = static_cast<int>(syscall(SYS_gettid));
         trace_info.raw_socket = raw_socket;
         trace_info.rpc_id = reinterpret_cast<uint64_t>(rpc_id);
         trace_info.seq_no = 0;
@@ -158,9 +169,11 @@ public:
             return;
         }
         auto rpc_id = TraceRegistry::RPC_ID_OPS.get_rpc_id ? TraceRegistry::RPC_ID_OPS.get_rpc_id() : nullptr;
+        buf.data[buf.count] = SplitTraceInfo{};
         auto &trace_info = buf.data[buf.count];
-        trace_info.raw_socket = raw_socket;
+        trace_info.tid = static_cast<int>(syscall(SYS_gettid));
         trace_info.rpc_id = reinterpret_cast<uint64_t>(rpc_id);
+        trace_info.raw_socket = raw_socket;
         trace_info.seq_no = seq_no;
         trace_info.data_size = data_size;
         trace_info.offset = offset;
@@ -169,45 +182,37 @@ public:
         buf.count++;
     }
 
-    void UpdateWriteFirstTrace(ProfilingTPId type, uint32_t seq_no, uint32_t data_size, uint32_t offset)
+    void UpdateWriteFirstTrace(ProfilingTPId type, uint32_t seq_no, uint32_t data_size, uint32_t offset,
+                               uint32_t expected_backfill_count = 1)
     {
         auto idx = write_active_idx_.load(std::memory_order_acquire);
         auto &buf = write_bufs_[idx];
         if (buf.count == 0) {
             return;
         }
-        uint32_t core_write_pos = buf.count;
+        uint32_t pos = buf.count;
+        int current_tid = static_cast<int>(syscall(SYS_gettid));
         for (uint32_t i = buf.count; i-- > 0;) {
-            if (buf.data[i].type == CORE_WRITE) {
-                core_write_pos = i;
+            if (buf.data[i].type == type && buf.data[i].tid == current_tid) {
+                pos = i;
                 break;
             }
         }
-        if (core_write_pos >= buf.count) {
+        if (pos >= buf.count) {
             return;
         }
-        auto &trace_info = buf.data[core_write_pos];
-        trace_info.seq_no = seq_no;
-        trace_info.data_size = data_size;
-        trace_info.offset = offset;
-
-        if (core_write_pos < 1) {
-            return;
-        }
-        auto &brpc_trace_info = buf.data[core_write_pos - 1];
-        if (brpc_trace_info.type == BRPC_CLIENT_CALL) {
-            brpc_trace_info.seq_no = seq_no;
-            brpc_trace_info.data_size = data_size;
-            brpc_trace_info.offset = offset;
-        }
-
-        for (uint32_t i = core_write_pos + 1; i < buf.count; ++i) {
+        uint32_t backfill_count = 0;
+        for (uint32_t i = pos; i < buf.count; ++i) {
+            if (buf.data[i].tid != current_tid) {
+                continue;
+            }
             if (buf.data[i].seq_no != 0) {
                 break;
             }
             buf.data[i].seq_no = seq_no;
             buf.data[i].data_size = data_size;
             buf.data[i].offset = offset;
+            ++backfill_count;
         }
     }
 
@@ -248,6 +253,7 @@ public:
             return;
         }
         auto &trace_info = buf.data[buf.count];
+        trace_info.tid = static_cast<int>(syscall(SYS_gettid));
         trace_info.rpc_id = 0;
         trace_info.raw_socket = raw_socket;
         trace_info.seq_no = seq_no;
@@ -271,7 +277,9 @@ public:
             return;
         }
         auto &last_trace = buf.data[buf.count - 1];
+        buf.data[buf.count] = SplitTraceInfo{};
         auto &trace_info = buf.data[buf.count];
+        trace_info.tid = static_cast<int>(syscall(SYS_gettid));
         trace_info.rpc_id = last_trace.rpc_id;
         trace_info.raw_socket = raw_socket;
         trace_info.seq_no = last_trace.seq_no;
@@ -296,7 +304,9 @@ public:
             return;
         }
         auto &last_trace = buf.data[buf.count - 1];
+        buf.data[buf.count] = SplitTraceInfo{};
         auto &trace_info = buf.data[buf.count];
+        trace_info.tid = static_cast<int>(syscall(SYS_gettid));
         trace_info.rpc_id = 0;
         trace_info.raw_socket = raw_socket;
         trace_info.seq_no = last_trace.seq_no;
@@ -329,7 +339,9 @@ public:
             buf.dropped_count++;
             return;
         }
+        buf.data[buf.count] = SplitTraceInfo{};
         auto &trace_info = buf.data[buf.count];
+        trace_info.tid = static_cast<int>(syscall(SYS_gettid));
         trace_info.rpc_id = 0;
         trace_info.raw_socket = raw_socket;
         trace_info.seq_no = seq_no;
@@ -349,7 +361,9 @@ public:
             buf.dropped_count++;
             return;
         }
+        buf.data[buf.count] = SplitTraceInfo{};
         auto &trace_info = buf.data[buf.count];
+        trace_info.tid = static_cast<int>(syscall(SYS_gettid));
         trace_info.rpc_id = 0;
         trace_info.raw_socket = raw_socket;
         trace_info.seq_no = seq_no;
@@ -373,7 +387,9 @@ public:
             return;
         }
         auto &last_trace = buf.data[buf.count - 1];
+        buf.data[buf.count] = SplitTraceInfo{};
         auto &trace_info = buf.data[buf.count];
+        trace_info.tid = static_cast<int>(syscall(SYS_gettid));
         trace_info.rpc_id = 0;
         trace_info.raw_socket = last_trace.raw_socket;
         trace_info.seq_no = last_trace.seq_no;
@@ -414,9 +430,9 @@ private:
     {
         uint64_t duration = trace_info.end_timestamp > 0 ? trace_info.end_timestamp - trace_info.start_timestamp : 0;
         UBS_VLOG_INFO("[%s] raw_socket: %d rpcid: %llu seq: %u data_size: %u offset: %u type: %u poll_num: %u "
-                      "start_timestamp: %lu end_timestamp: %lu%s\n",
+                      "tid: %d start_timestamp: %lu end_timestamp: %lu%s\n",
                       label, trace_info.raw_socket, trace_info.rpc_id, trace_info.seq_no, trace_info.data_size,
-                      trace_info.offset, static_cast<uint32_t>(trace_info.type), trace_info.poll_num,
+                      trace_info.offset, static_cast<uint32_t>(trace_info.type), trace_info.poll_num, trace_info.tid,
                       trace_info.start_timestamp, trace_info.end_timestamp,
                       trace_info.end_timestamp > 0 ? (" duration: " + std::to_string(duration) + " ns").c_str() : "");
     }
