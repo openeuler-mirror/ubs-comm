@@ -14,7 +14,6 @@
 #include <netinet/tcp.h>
 
 #include "common/ubsocket_common_includes.h"
-#include "common/ubsocket_port_cooldown.h"
 #include "common/ubsocket_scope_exit.h"
 #include "common/ubsocket_version.h"
 #include "core/umq/umq_eid_table.h"
@@ -448,13 +447,15 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     }
 
     // 日志：打印即将发送的 NegotiateRoute 内容
-    UBS_VLOG_INFO("Send NegotiateRoute: topo_type=%u, back_route_num=%zu\n", topo_type_, back_routes_.size());
+    UBS_VLOG_DEBUG("Send NegotiateRoute: topo_type=%u, back_route_num=%zu\n", topo_type_, back_routes_.size());
     UBS_VLOG_DEBUG("  master_route: src_port(chip=%u,die=%u,port=%u) dst_port(chip=%u,die=%u,port=%u)\n",
                    conn_route_.src_port.bs.chip_id, conn_route_.src_port.bs.die_id, conn_route_.src_port.bs.port_idx,
                    conn_route_.dst_port.bs.chip_id, conn_route_.dst_port.bs.die_id, conn_route_.dst_port.bs.port_idx);
     for (size_t i = 0; i < back_routes_.size(); ++i) {
-        UBS_VLOG_DEBUG("  back_routes[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i, back_routes_[i].src_port.bs.chip_id,
-                       back_routes_[i].src_port.bs.die_id, back_routes_[i].src_port.bs.port_idx);
+        UBS_VLOG_DEBUG("  back_routes[%zu]: src_port(chip=%u,die=%u,port=%u) dst_port(chip=%u,die=%u,port=%u)\n", i,
+                       back_routes_[i].src_port.bs.chip_id, back_routes_[i].src_port.bs.die_id,
+                       back_routes_[i].src_port.bs.port_idx, back_routes_[i].dst_port.bs.chip_id,
+                       back_routes_[i].dst_port.bs.die_id, back_routes_[i].dst_port.bs.port_idx);
     }
 
     NegotiateRoute negoRoute(topo_type_, conn_route_, back_routes_);
@@ -527,20 +528,6 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     Result ret;
     auto socket = RefConvert<UmqSocket, Socket>(umq_socket);
 
-    // ========== 新增：umq_bind() 前检查冷却（仅 CLOS 组网）==========
-    if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {
-        for (uint8_t i = 0; i < used_ports.num; ++i) {
-            if (PortCooldownManager::IsPortInCooldown(used_ports.port[i])) {
-                UBS_VLOG_ERR("DoUbConnect: port(value=%u) in cooldown, skip umq_bind, Peer eid:" EID_FMT
-                             ", Peer IP:%s, fd: %d\n",
-                             used_ports.port[i].value, EID_ARGS(umq_conn_info_.peer_eid),
-                             umq_conn_info_.peer_ip.c_str(), raw_fd_);
-                return UBS_UMQ_BIND | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
-            }
-        }
-    }
-    // ===============================================================
-
     // - 人工选路，使用真正的 port eid.
     // - 裸设备、bonding 设备对外均可直接使用一开始由 devname 找到的 eid.
     const umq_eid_t eid = GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_ROUTE ?
@@ -606,17 +593,6 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
                      "original errno: %d, operation duration: %lld ms.\n",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), raw_fd_, umq_ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, umq_ret), savedErrno, costms);
-        // ========== 新增：umq_bind() 失败后标记冷却（仅 CLOS 组网）==========
-        if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {
-            for (uint8_t i = 0; i < used_ports.num; ++i) {
-                PortCooldownManager::MarkPortInCooldown(used_ports.port[i]);
-                UBS_VLOG_ERR("DoUbConnect: umq_bind failed, mark port(value=%u) in cooldown, Peer eid:" EID_FMT
-                             ", Peer IP:%s, fd: %d\n",
-                             used_ports.port[i].value, EID_ARGS(umq_conn_info_.peer_eid),
-                             umq_conn_info_.peer_ip.c_str(), raw_fd_);
-            }
-        }
-        // ================================================================
         return UBS_UMQ_BIND | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
     UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
@@ -880,7 +856,6 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
             affine_routes.push_back(route_list.routes[i]);
         }
     }
-
     for (uint32_t i = 0; i < route_list.route_num; ++i) {
         if (route_list.routes[i].src_port.bs.chip_id != process_chip_Id &&
             route_list.routes[i].dst_port.bs.chip_id != peer_chip_id) {

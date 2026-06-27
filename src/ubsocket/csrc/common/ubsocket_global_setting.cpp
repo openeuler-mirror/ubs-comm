@@ -51,7 +51,6 @@ std::string GlobalSetting::UBS_TRACE_FILE_PATH = "/tmp/ubsocket/log";
 uint32_t GlobalSetting::UBS_PROBE_MS = 1000;
 uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = true;
-uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 10; /* port cooldown duration in seconds, default 10s */
 LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::BONDING_BACKUP;
 
 /* environment variable name */
@@ -85,7 +84,6 @@ LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::
 #define ENV_VAR_PROBE_TIME "UBSOCKET_PROBE_TIME_MS"
 #define ENV_VAR_PROBE_BATCH "UBSOCKET_PROBE_BATCH"
 #define ENV_BACKUP_LINK_ENABLED "UBSOCKET_BACKUP_LINK_ENABLE"
-#define ENV_PORT_COOLDOWN_SEC "UBSOCKET_PORT_COOLDOWN_SEC"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -105,7 +103,6 @@ void GlobalSetting::AddRules() noexcept
         {ENV_VAR_PROBE_BATCH, false, UBSOCKET_PROBE_BATCH_MIN, UBSOCKET_PROBE_BATCH_MAX},
         {ENV_SPLIT_TRACE_BUF_CAPACITY, false, 16384, 65536},
         {ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS, false, 1, 10000},
-        {ENV_PORT_COOLDOWN_SEC, false, 1, 300},
         {ENV_UBS_THREAD_POOL_SIZE, false, 1, UINT32_MAX},
     };
 
@@ -315,10 +312,6 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidate(ENV_BACKUP_LINK_ENABLED, strEnvValue)) {
         UBS_BACKUP_LINK_ENABLED = Func::BoolFromStr(strEnvValue);
-    }
-
-    if (GetEnvAndValidate(ENV_PORT_COOLDOWN_SEC, envValue)) {
-        UBS_PORT_COOLDOWN_SEC = static_cast<uint32_t>(envValue);
     }
 
     return UBS_OK;

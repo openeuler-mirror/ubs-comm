@@ -108,8 +108,6 @@ public:
     static std::string UBS_PROF_DUMP_PATH;
     static uint32_t UBS_PROBE_MS;
     static uint32_t UBS_PROBE_BATCH;
-    static uint32_t UBS_PORT_COOLDOWN_SEC; /* port cooldown duration in seconds, from env */
-
     /* brpc malloc related */
     static bool USE_BRPC_ZCOPY;
     static std::string UBS_BRPC_ALLOC_SYM_STR;
