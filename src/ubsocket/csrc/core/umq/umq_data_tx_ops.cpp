@@ -86,8 +86,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         buf_pro->imm.user_data = seq_no;
         if (trace != nullptr) {
             if (i == 0) {
-                // first write record has no seqno
-                trace->UpdateWriteFirstTrace(CORE_WRITE, seq_no, cur_buf->data_size, tx_total_len);
+                trace->UpdateWriteFirstTrace(BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len, 0);
             } else if (i > batch - 3) {
                 trace->AddWriteTrace(CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size, tx_total_len);
             }

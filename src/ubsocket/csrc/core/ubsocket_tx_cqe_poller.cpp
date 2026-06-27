@@ -161,6 +161,7 @@ void TxCqePoller::DelSocket(const SocketPtr &sock)
 void TxCqePoller::RunInThread() noexcept
 {
     pthread_setname_np(pthread_self(), "ubs_tx_poller");
+    SplitTrace::SuppressTrace() = true;
 
     const std::size_t MaxEvents = 32;
     struct epoll_event events[MaxEvents];
