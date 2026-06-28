@@ -20,6 +20,7 @@ extern "C" {
 #endif
 
 extern int ubsocket_prof_enabled;
+extern uint64_t ubsocket_arm_cpu_freq;
 
 enum ProfilingTPId : uint32_t
 {
@@ -92,9 +93,15 @@ void ubsocket_prof_reset();
 
 static __always_inline uint64_t ubsocket_get_timeNs()
 {
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+    uint64_t timeValue = 0;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(timeValue));
+    return timeValue * 1000L / ubsocket_arm_cpu_freq;
+#else
     struct timespec tpDelay = {0, 0};
     clock_gettime(CLOCK_MONOTONIC, &tpDelay);
     return tpDelay.tv_sec * 1000000000ULL + tpDelay.tv_nsec;
+#endif
 }
 
 /* 高性能打点宏（默认）*/

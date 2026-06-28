@@ -20,6 +20,7 @@ using namespace ock::ubs::profiling;
 
 int ubsocket_prof_enabled = 0;
 static int ubsocket_prof_mode_ext = 0; // 标记是否为扩展模式（从 GlobalSetting::UBS_PROF_MODE 读取）
+uint64_t ubsocket_arm_cpu_freq = 1;
 
 int ubsocket_prof_init(ubsocket_prof_option_t *option)
 {
@@ -39,6 +40,21 @@ int ubsocket_prof_init(ubsocket_prof_option_t *option)
             return -1;
         }
     }
+
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+    /* get frequ */
+    uint64_t tmpFreq = 0;
+    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(tmpFreq));
+
+    /* calculate */
+    tmpFreq = tmpFreq / 1000L / 1000L;
+    if (tmpFreq == 0) {
+        UBS_VLOG_ERR("Ubsocket prof get cpu freq failed for arm cpu");
+        ubsocket_arm_cpu_freq = 1;
+    } else {
+        ubsocket_arm_cpu_freq = tmpFreq;
+    }
+#endif
 
     // 根据环境变量 UBSOCKET_PROF_MODE 决定初始化哪种模式
     ubsocket_prof_mode_ext = (GlobalSetting::UBS_PROF_MODE == "ext") ? 1 : 0;
