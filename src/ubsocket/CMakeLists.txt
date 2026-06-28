@@ -14,6 +14,7 @@ option(BUILD_URMA_DLOPEN_BACKEND "build urma dlopen backend" OFF)
 option(ENABLE_OBJECT_COUNTING "enable object couting to detect memory leak" OFF)
 option(UBSOCKET_ENABLE_COVERAGE "Enable coverage reporting for ubsocket UT" OFF)
 option(UBSOCKET_BUILD_CLI "Enable CLI component build" OFF)
+option(ENABLE_CPU_HARDWARE_ACCELERATION "Enable cpu instruction acceleration" OFF)
 
 if (BUILD_UMQ_ADAPTER_BACKEND AND BUILD_UMQ_DLOPEN_BACKEND)
     message(FATAL_ERROR "BUILD_UMQ_ADAPTER_BACKEND and BUILD_UMQ_DLOPEN_BACKEND cannot both be ON")
@@ -24,6 +25,7 @@ message(STATUS "ubsocket: BUILD_UMQ_DLOPEN_BACKEND = ${BUILD_UMQ_DLOPEN_BACKEND}
 message(STATUS "ubsocket: BUILD_URMA_DLOPEN_BACKEND = ${BUILD_URMA_DLOPEN_BACKEND}")
 message(STATUS "ubsocket: ENABLE_OBJECT_COUNTING = ${ENABLE_OBJECT_COUNTING}")
 message(STATUS "ubsocket: UBSOCKET_BUILD_CLI = ${UBSOCKET_BUILD_CLI}")
+message(STATUS "ubsocket: ENABLE_CPU_HARDWARE_ACCELERATION = ${ENABLE_CPU_HARDWARE_ACCELERATION}")
 
 set(UBSOCKET_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(UBSOCKET_CSRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/csrc)
@@ -106,6 +108,10 @@ endif ()
 
 if (ENABLE_OBJECT_COUNTING)
     add_definitions(-DOBJ_COUNTING_ENABLED)
+endif ()
+
+if (ENABLE_CPU_HARDWARE_ACCELERATION)
+    add_definitions(-DENABLE_CPU_MONOTONIC)
 endif ()
 
 include_directories(
