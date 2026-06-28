@@ -479,9 +479,6 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
                          strerror(errno));
             return -1;
         }
-
-        // 添加至后台 Tx CQE poller
-        TxCqePoller::Instance().AddSocket(sock);
     }
 
     return 0;
@@ -639,7 +636,6 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
 
     if (sock->ShouldRegisterTxEvent()) {
         DelProtoTxEvent(sock);
-        TxCqePoller::Instance().DelSocket(sock);
     }
 
     return 0;
