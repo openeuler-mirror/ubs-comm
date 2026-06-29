@@ -66,7 +66,7 @@ public:
     virtual ~Socket()
     {
         if (split_trace_ != nullptr) {
-            split_trace_->Flush();
+            TRACE_FLUSH(split_trace_);
             delete split_trace_;
             split_trace_ = nullptr;
         }
@@ -80,8 +80,8 @@ public:
     void State(SocketState state)
     {
         state_ = state;
-        if (state == SOCK_STAT_CLOSE && split_trace_ != nullptr) {
-            split_trace_->Flush();
+        if (state == SOCK_STAT_CLOSE) {
+            TRACE_FLUSH(split_trace_);
         }
     }
 

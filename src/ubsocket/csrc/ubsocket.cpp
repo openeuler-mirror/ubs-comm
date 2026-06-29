@@ -227,11 +227,7 @@ void ubsocket_uninit()
     /* do trace log destroy */
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         TracePrintThread::Instance().Stop();
-        ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) {
-            if (sock->split_trace_ != nullptr) {
-                sock->split_trace_->Flush();
-            }
-        });
+        ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) { TRACE_FLUSH(sock->split_trace_); });
         UmqApi::umq_stats_trace_stop();
     }
     if (GlobalSetting::UBS_TRACE_ENABLED) {

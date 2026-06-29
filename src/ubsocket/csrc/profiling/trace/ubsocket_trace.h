@@ -156,7 +156,7 @@ public:
         trace_info.rpc_id = reinterpret_cast<uint64_t>(rpc_id);
         trace_info.seq_no = 0;
         trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs();
+        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
         buf.count++;
     }
 
@@ -178,7 +178,7 @@ public:
         trace_info.data_size = data_size;
         trace_info.offset = offset;
         trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs();
+        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
         buf.count++;
     }
 
@@ -227,7 +227,7 @@ public:
         trace_info.data_size = data_size;
         trace_info.offset = offset;
         trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs();
+        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
     }
 
     void UpdateWriteLastTraceEndTime(ProfilingTPId type)
@@ -241,7 +241,7 @@ public:
         if (trace_info.type != type) {
             return;
         }
-        trace_info.end_timestamp = ubsocket_get_timeNs();
+        trace_info.end_timestamp = ubsocket_get_timeNs_compile();
     }
 
     void AddReadTrace(ProfilingTPId type, int raw_socket, uint32_t seq_no, uint32_t data_size, uint32_t offset)
@@ -260,7 +260,7 @@ public:
         trace_info.data_size = data_size;
         trace_info.offset = offset;
         trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs();
+        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
         buf.count++;
     }
 
@@ -328,7 +328,7 @@ public:
         }
         auto &trace_info = buf.data[buf.count - 1];
         trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs();
+        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
     }
 
     void AddEpollTrace(ProfilingTPId type, int raw_socket, uint32_t seq_no, uint32_t data_size, uint32_t offset)
@@ -348,7 +348,7 @@ public:
         trace_info.data_size = data_size;
         trace_info.offset = offset;
         trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs();
+        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
         buf.count++;
     }
 
@@ -396,7 +396,7 @@ public:
         trace_info.data_size = last_trace.data_size;
         trace_info.offset = last_trace.offset;
         trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs();
+        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
         buf.count++;
     }
 
@@ -507,6 +507,181 @@ private:
     std::thread thread_;
     std::atomic<bool> running_{false};
 };
+
+/* Trace macros controlled by compile-time flag - completely removed when disabled */
+#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
+#define TRACE_ADD_BRPC_WRITE(trace, type, raw_socket)         \
+    do {                                                      \
+        if ((trace) != nullptr) {                             \
+            (trace)->AddBrpcWriteTrace((type), (raw_socket)); \
+        }                                                     \
+    } while (0)
+
+#define TRACE_ADD_READ(trace, type, raw_socket, start_time, end_time)              \
+    do {                                                                           \
+        if ((trace) != nullptr) {                                                  \
+            (trace)->AddReadTrace((type), (raw_socket), (start_time), (end_time)); \
+        }                                                                          \
+    } while (0)
+
+#define TRACE_ADD_READ_DETAIL(trace, type, raw_socket, seq_no, data_size, offset)         \
+    do {                                                                                  \
+        if ((trace) != nullptr) {                                                         \
+            (trace)->AddReadTrace((type), (raw_socket), (seq_no), (data_size), (offset)); \
+        }                                                                                 \
+    } while (0)
+
+#define TRACE_UPDATE_LAST_READ(trace, type)       \
+    do {                                          \
+        if ((trace) != nullptr) {                 \
+            (trace)->UpdateLastReadTrace((type)); \
+        }                                         \
+    } while (0)
+
+#define TRACE_ADD_WRITE(trace, type, raw_socket, start_time, end_time, poll_num)                \
+    do {                                                                                        \
+        if ((trace) != nullptr) {                                                               \
+            (trace)->AddWriteTrace((type), (raw_socket), (start_time), (end_time), (poll_num)); \
+        }                                                                                       \
+    } while (0)
+
+#define TRACE_ADD_WRITE_SIMPLE(trace, type, raw_socket)   \
+    do {                                                  \
+        if ((trace) != nullptr) {                         \
+            (trace)->AddWriteTrace((type), (raw_socket)); \
+        }                                                 \
+    } while (0)
+
+#define TRACE_ADD_WRITE_DETAIL(trace, type, raw_socket, seq_no, data_size, offset)         \
+    do {                                                                                   \
+        if ((trace) != nullptr) {                                                          \
+            (trace)->AddWriteTrace((type), (raw_socket), (seq_no), (data_size), (offset)); \
+        }                                                                                  \
+    } while (0)
+
+#define TRACE_UPDATE_WRITE_FIRST(trace, type, seq_no, data_size, offset)             \
+    do {                                                                             \
+        if ((trace) != nullptr) {                                                    \
+            (trace)->UpdateWriteFirstTrace((type), (seq_no), (data_size), (offset)); \
+        }                                                                            \
+    } while (0)
+
+#define TRACE_UPDATE_WRITE_LAST(trace, type, data_size, offset)           \
+    do {                                                                  \
+        if ((trace) != nullptr) {                                         \
+            (trace)->UpdateWriteLastTrace((type), (data_size), (offset)); \
+        }                                                                 \
+    } while (0)
+
+#define TRACE_UPDATE_WRITE_LAST_END(trace, type)          \
+    do {                                                  \
+        if ((trace) != nullptr) {                         \
+            (trace)->UpdateWriteLastTraceEndTime((type)); \
+        }                                                 \
+    } while (0)
+
+#define TRACE_ADD_EPOLL(trace, type)        \
+    do {                                    \
+        if ((trace) != nullptr) {           \
+            (trace)->AddEpollTrace((type)); \
+        }                                   \
+    } while (0)
+
+#define TRACE_ADD_EPOLL_DETAIL(trace, type, raw_socket, seq_no, data_size, offset)         \
+    do {                                                                                   \
+        if ((trace) != nullptr) {                                                          \
+            (trace)->AddEpollTrace((type), (raw_socket), (seq_no), (data_size), (offset)); \
+        }                                                                                  \
+    } while (0)
+
+#define TRACE_ADD_EPOLL_FULL(trace, type, raw_socket, seq_no, data_size, offset, start, end)               \
+    do {                                                                                                   \
+        if ((trace) != nullptr) {                                                                          \
+            (trace)->AddEpollTrace((type), (raw_socket), (seq_no), (data_size), (offset), (start), (end)); \
+        }                                                                                                  \
+    } while (0)
+
+#define TRACE_TRY_SWAP(trace)     \
+    do {                          \
+        if ((trace) != nullptr) { \
+            (trace)->TrySwap();   \
+        }                         \
+    } while (0)
+
+#define TRACE_TRY_SWAP_EPOLL(trace)  \
+    do {                             \
+        if ((trace) != nullptr) {    \
+            (trace)->TrySwapEpoll(); \
+        }                            \
+    } while (0)
+
+#define TRACE_FLUSH(trace)        \
+    do {                          \
+        if ((trace) != nullptr) { \
+            (trace)->Flush();     \
+        }                         \
+    } while (0)
+
+#define TRACE_DRAIN_AND_PRINT(trace)  \
+    do {                              \
+        if ((trace) != nullptr) {     \
+            (trace)->DrainAndPrint(); \
+        }                             \
+    } while (0)
+#else
+#define TRACE_ADD_BRPC_WRITE(trace, type, raw_socket) \
+    do {                                              \
+    } while (0)
+#define TRACE_ADD_READ(trace, type, raw_socket, start_time, end_time) \
+    do {                                                              \
+    } while (0)
+#define TRACE_ADD_READ_DETAIL(trace, type, raw_socket, seq_no, data_size, offset) \
+    do {                                                                          \
+    } while (0)
+#define TRACE_UPDATE_LAST_READ(trace, type) \
+    do {                                    \
+    } while (0)
+#define TRACE_ADD_WRITE(trace, type, raw_socket, start_time, end_time, poll_num) \
+    do {                                                                         \
+    } while (0)
+#define TRACE_ADD_WRITE_SIMPLE(trace, type, raw_socket) \
+    do {                                                \
+    } while (0)
+#define TRACE_ADD_WRITE_DETAIL(trace, type, raw_socket, seq_no, data_size, offset) \
+    do {                                                                           \
+    } while (0)
+#define TRACE_UPDATE_WRITE_FIRST(trace, type, seq_no, data_size, offset) \
+    do {                                                                 \
+    } while (0)
+#define TRACE_UPDATE_WRITE_LAST(trace, type, data_size, offset) \
+    do {                                                        \
+    } while (0)
+#define TRACE_UPDATE_WRITE_LAST_END(trace, type) \
+    do {                                         \
+    } while (0)
+#define TRACE_ADD_EPOLL(trace, type) \
+    do {                             \
+    } while (0)
+#define TRACE_ADD_EPOLL_DETAIL(trace, type, raw_socket, seq_no, data_size, offset) \
+    do {                                                                           \
+    } while (0)
+#define TRACE_ADD_EPOLL_FULL(trace, type, raw_socket, seq_no, data_size, offset, start, end) \
+    do {                                                                                     \
+    } while (0)
+#define TRACE_TRY_SWAP(trace) \
+    do {                      \
+    } while (0)
+#define TRACE_TRY_SWAP_EPOLL(trace) \
+    do {                            \
+    } while (0)
+#define TRACE_FLUSH(trace) \
+    do {                   \
+    } while (0)
+#define TRACE_DRAIN_AND_PRINT(trace) \
+    do {                             \
+    } while (0)
+#endif
+
 } // namespace ubs
 } // namespace ock
 

@@ -78,9 +78,7 @@ void TracePrintThread::DrainAllSockets()
     int socket_count = 0;
     ArraySet<Socket>::GetInstance().ForEach([&socket_count](int, Socket *sock) {
         socket_count++;
-        if (sock->split_trace_ != nullptr) {
-            sock->split_trace_->DrainAndPrint();
-        }
+        TRACE_DRAIN_AND_PRINT(sock->split_trace_);
     });
 }
 } // namespace ubs
