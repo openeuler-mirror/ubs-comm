@@ -86,9 +86,11 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         buf_pro->imm.user_data = seq_no;
         if (trace != nullptr) {
             if (i == 0) {
-                trace->UpdateWriteFirstTrace(BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len, 0);
+                // first write record has no seqno
+                TRACE_UPDATE_WRITE_FIRST(trace, BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len);
             } else if (i > batch - 3) {
-                trace->AddWriteTrace(CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size, tx_total_len);
+                TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size,
+                                       tx_total_len);
             }
         }
         ++sn_allocated;
@@ -124,15 +126,11 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     // update last seqno type to CORE_WRITE_UMQ_POST, and add the timestamp
     PROF_START(CORE_WRITE_UMQ_POST);
     umq_buf_t *bad_qbuf = nullptr;
-    if (trace != nullptr) {
-        trace->UpdateWriteLastTrace(CORE_WRITE_UMQ_POST, cur_buf->data_size, tx_total_len);
-    }
+    TRACE_UPDATE_WRITE_LAST(trace, CORE_WRITE_UMQ_POST, cur_buf->data_size, tx_total_len);
     umq_io_option_t option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
     int ret = UmqApi::umq_post(local_umqh_, tx_buf_list, &option, &bad_qbuf);
 
-    if (trace != nullptr) {
-        trace->UpdateWriteLastTraceEndTime(CORE_WRITE_UMQ_POST);
-    }
+    TRACE_UPDATE_WRITE_LAST_END(trace, CORE_WRITE_UMQ_POST);
     if (ret == UMQ_SUCCESS) {
         // 全部 post成功
         tx_queue_avail_num_.fetch_sub(batch, std::memory_order_acq_rel);

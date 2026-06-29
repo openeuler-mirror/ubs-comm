@@ -28,13 +28,13 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
     umq_buf_t *buf[POLL_BATCH_MAX];
     uint64_t umq_poll_start = 0;
     if (trace != nullptr) {
-        umq_poll_start = ubsocket_get_timeNs();
+        umq_poll_start = ubsocket_get_timeNs_compile();
     }
     int poll_num = UmqApi::umq_poll(umq_handle, &poll_option, buf, POLL_BATCH_MAX);
     if (trace != nullptr) {
-        uint64_t umq_poll_end = ubsocket_get_timeNs();
-        trace->AddWriteTrace(CORE_WRITE_UMQ_POLL, raw_socket, umq_poll_start, umq_poll_end,
-                             static_cast<uint32_t>(poll_num));
+        uint64_t umq_poll_end = ubsocket_get_timeNs_compile();
+        TRACE_ADD_WRITE(trace, CORE_WRITE_UMQ_POLL, raw_socket, umq_poll_start, umq_poll_end,
+                        static_cast<uint32_t>(poll_num));
     }
     if (poll_num <= 0) {
         if (poll_num < 0) {
@@ -53,7 +53,7 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
     umq_buf_t *first_qbuf = nullptr;
     uint64_t cqe_start = 0;
     if (trace != nullptr) {
-        cqe_start = ubsocket_get_timeNs();
+        cqe_start = ubsocket_get_timeNs_compile();
     }
     for (int i = 0; i < poll_num; ++i) {
         if (buf[i] == nullptr || buf[i]->status != 0 || (((umq_buf_pro_t *)buf[i]->qbuf_ext) == nullptr) ||
@@ -92,8 +92,8 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
     }
 
     if (trace != nullptr) {
-        uint64_t cqe_end = ubsocket_get_timeNs();
-        trace->AddWriteTrace(CORE_WRITE_POLL_CQE, raw_socket, cqe_start, cqe_end);
+        uint64_t cqe_end = ubsocket_get_timeNs_compile();
+        TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE, raw_socket, cqe_start, cqe_end, 0);
     }
     return wr_cnt;
 }
@@ -109,7 +109,7 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const 
     int raw_socket = sock.Get() ? sock->raw_socket_ : -1;
     bool do_trace = (trace != nullptr && is_first_cqe);
     if (do_trace) {
-        decref_start = ubsocket_get_timeNs();
+        decref_start = ubsocket_get_timeNs_compile();
     }
     do {
         wr_first_buf = cur_qbuf;
@@ -127,8 +127,8 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const 
     } while (cur_qbuf != nullptr && wr_first_buf != end_qbuf);
 
     if (do_trace) {
-        uint64_t decref_end = ubsocket_get_timeNs();
-        trace->AddWriteTrace(CORE_WRITE_POLL_CQE_DECREF, raw_socket, decref_start, decref_end);
+        uint64_t decref_end = ubsocket_get_timeNs_compile();
+        TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE_DECREF, raw_socket, decref_start, decref_end, 0);
     }
 
     if (wr_first_buf == nullptr) {
@@ -143,12 +143,12 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const 
 
     uint64_t free_start = 0;
     if (do_trace) {
-        free_start = ubsocket_get_timeNs();
+        free_start = ubsocket_get_timeNs_compile();
     }
     UmqApi::umq_buf_free(start_qbuf);
     if (do_trace) {
-        uint64_t free_end = ubsocket_get_timeNs();
-        trace->AddWriteTrace(CORE_WRITE_POLL_CQE_FREE, raw_socket, free_start, free_end);
+        uint64_t free_end = ubsocket_get_timeNs_compile();
+        TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE_FREE, raw_socket, free_start, free_end, 0);
     }
 
     return wr_cnt;

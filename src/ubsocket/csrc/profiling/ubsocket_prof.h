@@ -91,6 +91,38 @@ int ubsocket_prof_combind(char **out_buf);
 
 void ubsocket_prof_reset();
 
+/*
+ * ubsocket_get_timeNs_compile
+ * 受 UBS_SPLIT_TRACE_ENABLED_COMPILE 控制，编译时未使能，无法使用
+ * 
+ * ubsocket_get_timeNs
+ * 受到 ubsocket_prof_enabled 控制，只用于 高性能打点宏
+ * 主流程中不调用该函数
+ */
+#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+#define ubsocket_get_timeNs_compile()                              \
+    ({                                                             \
+        uint64_t _timeValue = 0;                                   \
+        __asm__ volatile("mrs %0, cntvct_el0" : "=r"(_timeValue)); \
+        _timeValue * 1000L / ubsocket_arm_cpu_freq;                \
+    })
+#else
+#define ubsocket_get_timeNs_compile()                                                 \
+    ({                                                                                \
+        uint64_t _result = 0;                                                         \
+        do {                                                                          \
+            struct timespec _tpDelay = {0, 0};                                        \
+            clock_gettime(CLOCK_MONOTONIC, &_tpDelay);                                \
+            _result = (uint64_t)(_tpDelay.tv_sec * 1000000000ULL + _tpDelay.tv_nsec); \
+        } while (0);                                                                  \
+        _result;                                                                      \
+    })
+#endif
+#else // UBS_SPLIT_TRACE_ENABLED_COMPILE
+#define ubsocket_get_timeNs_compile() 0
+#endif // UBS_SPLIT_TRACE_ENABLED_COMPILE
+
 static __always_inline uint64_t ubsocket_get_timeNs()
 {
 #if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
