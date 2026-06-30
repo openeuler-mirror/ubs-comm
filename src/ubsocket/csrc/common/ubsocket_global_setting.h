@@ -114,6 +114,7 @@ public:
     static std::string UBS_BRPC_DEALLOC_SYM_STR;
     static UBHandshakeMode UBS_HAND_SHAKE_MODE;
     static uint32_t UBS_THREAD_POOL_SIZE;
+    static u_external_poller_ops_t *UBS_POLLER_OPS;
 
     /* trace statistic related */
     static uint64_t UBS_TRACE_TIME;

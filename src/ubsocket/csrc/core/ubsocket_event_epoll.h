@@ -11,6 +11,8 @@
 #ifndef UBS_COMM_UBSOCKET_EPOLL_FD_H
 #define UBS_COMM_UBSOCKET_EPOLL_FD_H
 
+#include <memory>
+
 #include "common/ubsocket_leaky_singleton.h"
 #include "common/ubsocket_spsc_ring_queue.h"
 #include "ubsocket_core_types.h"
@@ -167,6 +169,19 @@ public:
     virtual EpollRunnerOps *GetOps() = 0;
 };
 
+class EpollRunnerBackend {
+public:
+    virtual ~EpollRunnerBackend() = default;
+    virtual int Start() = 0;
+    virtual void Stop() = 0;
+};
+
+template <EpollRunnerType T>
+class PthreadEpollRunnerBackend;
+
+template <EpollRunnerType T>
+class ExternalPollerEpollRunnerBackend;
+
 template <EpollRunnerType T>
 class EpollRunner
     : public EpollRunnerBase
@@ -221,20 +236,25 @@ public:
     }
 
 protected:
-    int epoll_fd_;                /* used by thread */
-    int exit_efd_;                /* used to notify thread exit */
+    int epoll_fd_ = -1;           /* used by thread */
+    int exit_efd_ = -1;           /* used to notify thread exit */
     uint32_t event_ack_batch = 0; /* do ack_interrupt when epoll num reaches event_ack_batch */
-    u_mutex_t *mutex_;            /* mutex */
+    u_mutex_t *mutex_ = nullptr;  /* mutex */
     std::once_flag flag_;
-    std::thread wait_thread_;
+    std::unique_ptr<EpollRunnerBackend> backend_;
     EpollRunnerOps *ops_ = nullptr;
 
 private:
+    friend class PthreadEpollRunnerBackend<T>;
+    friend class ExternalPollerEpollRunnerBackend<T>;
+
     EpollRunner() = default;
     /**
      * @brief start thread to epoll_wait
      */
     void RunInThread() noexcept;
+    bool DrainReadyEvents(int timeout, bool *hasEvents = nullptr) noexcept;
+    std::unique_ptr<EpollRunnerBackend> CreateBackend();
 
     uint32_t event_num_{0};
 };
