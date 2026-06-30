@@ -231,7 +231,12 @@ ALWAYS_INLINE std::unordered_set<Socket *> UmqShareJfrEpollRunnerOps::SiftSocket
 
 ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
 {
-    umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    umq_interrupt_option_t option = {
+        .flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TIMESTAMP,
+        .direction = UMQ_IO_RX,
+        .fd_type = UMQ_FD_IO,
+        .timestamp = traceTime_.umq_rearm_start_timestamp_,
+    };
     auto events_cnt = UmqApi::umq_get_cq_event(main_umq, &option);
     if (UNLIKELY(events_cnt < 0)) {
         int savedErrno = errno;
