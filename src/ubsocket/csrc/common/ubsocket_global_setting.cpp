@@ -41,6 +41,7 @@ std::string GlobalSetting::UBS_BRPC_ALLOC_SYM_STR;
 std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
 uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+u_external_poller_ops_t *GlobalSetting::UBS_POLLER_OPS = nullptr;
 bool GlobalSetting::UBS_PROF_ENABLE = false;
 std::string GlobalSetting::UBS_PROF_MODE = "fast";
 uint16_t GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN = 1;

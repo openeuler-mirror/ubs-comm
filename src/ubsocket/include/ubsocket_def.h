@@ -63,6 +63,14 @@ typedef struct {
     void *(*get_rpc_id)();
     void *(*get_rpc_call_timestamp)();
 } u_external_rpc_id_ops_t;
+
+typedef void (*u_poller_event_cb_t)(void *arg);
+
+typedef struct {
+    int (*add_consumer)(int fd, void *arg, u_poller_event_cb_t callback, void **consumer);
+    void (*remove_consumer)(void *consumer, int fd);
+} u_external_poller_ops_t;
+
 /*
  * structures for ubsocket
  */
@@ -79,6 +87,7 @@ typedef struct {
     u_external_rw_lock_ops_t *rw_lock_ops; /* external lock operations, for example brpc's butex */
     u_external_semaphore_ops_t *sem_ops;   /* external lock operations, for example brpc's sem */
     u_external_rpc_id_ops_t *rpc_id_ops;
+    u_external_poller_ops_t *poller_ops; /* external poller operations, for example brpc's EventDispatcher */
 } u_init_options_t;
 
 enum class UbsocketLevel : int

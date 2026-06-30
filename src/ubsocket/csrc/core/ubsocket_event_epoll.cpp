@@ -11,6 +11,7 @@
 #include <cerrno>
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_global_setting.h"
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
 #include "ubsocket_tx_cqe_poller.h"
@@ -68,12 +69,103 @@ void CleanSocketEpollMapper(int socket_fd)
 }
 
 template <EpollRunnerType T>
+class PthreadEpollRunnerBackend : public EpollRunnerBackend {
+public:
+    explicit PthreadEpollRunnerBackend(EpollRunner<T> *runner) : runner_(runner) {}
+
+    int Start() override
+    {
+        wait_thread_ = std::thread([this]() { runner_->RunInThread(); });
+        return 0;
+    }
+
+    void Stop() override
+    {
+        if (!wait_thread_.joinable()) {
+            UBS_VLOG_ERR("async_epoll wait thread is not joinable()\n");
+            return;
+        }
+        wait_thread_.join();
+    }
+
+private:
+    EpollRunner<T> *runner_;
+    std::thread wait_thread_;
+};
+
+template <EpollRunnerType T>
+class ExternalPollerEpollRunnerBackend : public EpollRunnerBackend {
+public:
+    explicit ExternalPollerEpollRunnerBackend(EpollRunner<T> *runner) : runner_(runner) {}
+
+    int Start() override
+    {
+        ops_ = GlobalSetting::UBS_POLLER_OPS;
+        if (ops_ == nullptr || ops_->add_consumer == nullptr || ops_->remove_consumer == nullptr) {
+            UBS_VLOG_ERR("async_epoll external poller ops is invalid\n");
+            errno = EINVAL;
+            return -1;
+        }
+
+        if (ops_->add_consumer(runner_->epoll_fd_, this, DrainReadyEvents, &consumer_) != 0) {
+            UBS_VLOG_ERR("async_epoll external poller add consumer failed: %d : %s\n", errno, strerror(errno));
+            return -1;
+        }
+        started_ = true;
+        return 0;
+    }
+
+    void Stop() override
+    {
+        if (!started_) {
+            return;
+        }
+        ops_->remove_consumer(consumer_, runner_->epoll_fd_);
+        consumer_ = nullptr;
+        started_ = false;
+    }
+
+private:
+    static void DrainReadyEvents(void *arg)
+    {
+        auto *backend = static_cast<ExternalPollerEpollRunnerBackend<T> *>(arg);
+        if (UNLIKELY(backend == nullptr || backend->runner_ == nullptr)) {
+            return;
+        }
+
+        bool hasEvents = false;
+        do {
+            hasEvents = false;
+            if (backend->runner_->DrainReadyEvents(0, &hasEvents)) {
+                return;
+            }
+        } while (hasEvents);
+    }
+
+    EpollRunner<T> *runner_;
+    u_external_poller_ops_t *ops_{nullptr};
+    void *consumer_{nullptr};
+    bool started_{false};
+};
+
+template <EpollRunnerType T>
+std::unique_ptr<EpollRunnerBackend> EpollRunner<T>::CreateBackend()
+{
+    if (GlobalSetting::UBS_POLLER_OPS != nullptr) {
+        return std::unique_ptr<EpollRunnerBackend>(new ExternalPollerEpollRunnerBackend<T>(this));
+    }
+    return std::unique_ptr<EpollRunnerBackend>(new PthreadEpollRunnerBackend<T>(this));
+}
+
+template <EpollRunnerType T>
 int EpollRunner<T>::Start()
 {
-    std::call_once(flag_, [this]() {
+    int result = 0;
+    std::call_once(flag_, [this, &result]() {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
         if (mutex_ == nullptr) {
             UBS_VLOG_ERR("async_epoll g_external_lock_ops.create(LT_EXCLUSIVE) failed.");
+            result = -1;
             return -1;
         }
 
@@ -82,6 +174,7 @@ int EpollRunner<T>::Start()
             UBS_VLOG_ERR("async_epoll epoll_create1() failed : %d : %s\n", errno, strerror(errno));
             LockRegistry::LOCK_OPS.destroy(mutex_);
             mutex_ = nullptr;
+            result = -1;
             return -1;
         }
 
@@ -93,6 +186,7 @@ int EpollRunner<T>::Start()
             epoll_fd_ = -1;
             LockRegistry::LOCK_OPS.destroy(mutex_);
             mutex_ = nullptr;
+            result = -1;
             return -1;
         }
 
@@ -111,6 +205,7 @@ int EpollRunner<T>::Start()
             epoll_fd_ = -1;
             LockRegistry::LOCK_OPS.destroy(mutex_);
             mutex_ = nullptr;
+            result = -1;
             return -1;
         }
 
@@ -124,10 +219,23 @@ int EpollRunner<T>::Start()
             ops_ = new EpollRunnerOps();
         }
 
-        wait_thread_ = std::thread([this]() { RunInThread(); });
+        backend_ = CreateBackend();
+        if (backend_ == nullptr || backend_->Start() != 0) {
+            UBS_VLOG_ERR("async_epoll runner backend start failed\n");
+            delete ops_;
+            ops_ = nullptr;
+            close(exit_efd_);
+            close(epoll_fd_);
+            exit_efd_ = -1;
+            epoll_fd_ = -1;
+            LockRegistry::LOCK_OPS.destroy(mutex_);
+            mutex_ = nullptr;
+            result = -1;
+            return -1;
+        }
         return 0;
     });
-    return 0;
+    return result;
 }
 
 template <EpollRunnerType T>
@@ -143,13 +251,10 @@ void EpollRunner<T>::Stop()
         return;
     }
 
-    // 正常情况下 joinable()为真，如果不可join，可能是线程异常退出
-    if (!wait_thread_.joinable()) {
-        UBS_VLOG_ERR("async_epoll wait thread is not joinable()\n");
-        return;
+    if (backend_ != nullptr) {
+        backend_->Stop();
+        backend_.reset();
     }
-
-    wait_thread_.join();
     close(exit_efd_);
     close(epoll_fd_);
     exit_efd_ = -1;
@@ -166,32 +271,37 @@ void EpollRunner<T>::RunInThread() noexcept
     UBS_VLOG_DEBUG("async_epoll epoll_wait_async_daemon thread started.\n");
     pthread_setname_np(pthread_self(), "ubs_poller");
 
-    bool stopped = false;
+    while (LIKELY(!DrainReadyEvents(10000))) {}
+    UBS_VLOG_DEBUG("async_epoll epoll_wait_async_daemon thread exit.\n");
+}
 
+template <EpollRunnerType T>
+bool EpollRunner<T>::DrainReadyEvents(int timeout, bool *hasEvents) noexcept
+{
     std::vector<struct epoll_event> events;
     events.resize(MAX_EPOLL_WAIT_COUNT);
-    while (LIKELY(!stopped)) {
-        auto count = epoll_wait(epoll_fd_, events.data(), MAX_EPOLL_WAIT_COUNT, 10000);
-        if (UNLIKELY(count < 0)) {
-            if (errno == EINTR) {
-                continue;
-            }
-            UBS_VLOG_ERR("async_epoll epoll_wait() failed: %d : %s\n", errno, strerror(errno));
-            break;
-        }
-
-        for (auto i = 0; i < count; i++) {
-            auto event_data = (RunnerEventData *)&events[i].data;
-            if (UNLIKELY(event_data->event_data.type == RUNNER_EVENT_TYPE_STOP)) {
-                stopped = true;
-                UBS_VLOG_DEBUG("async_epoll notify exit fd received, exit now\n");
-                break;
-            }
-
-            ProcessOneEvent(events[i]);
-        }
+    auto count = epoll_wait(epoll_fd_, events.data(), MAX_EPOLL_WAIT_COUNT, timeout);
+    if (hasEvents != nullptr) {
+        *hasEvents = count > 0;
     }
-    UBS_VLOG_DEBUG("async_epoll epoll_wait_async_daemon thread exit.\n");
+    if (UNLIKELY(count < 0)) {
+        if (errno == EINTR) {
+            return false;
+        }
+        UBS_VLOG_ERR("async_epoll epoll_wait() failed: %d : %s\n", errno, strerror(errno));
+        return true;
+    }
+
+    for (auto i = 0; i < count; i++) {
+        auto event_data = (RunnerEventData *)&events[i].data;
+        if (UNLIKELY(event_data->event_data.type == RUNNER_EVENT_TYPE_STOP)) {
+            UBS_VLOG_DEBUG("async_epoll notify exit fd received, exit now\n");
+            return true;
+        }
+
+        ProcessOneEvent(events[i]);
+    }
+    return false;
 }
 
 template <EpollRunnerType T>

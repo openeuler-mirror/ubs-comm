@@ -43,6 +43,8 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
     options->lock_ops = nullptr;
     options->rw_lock_ops = nullptr;
     options->sem_ops = nullptr;
+    options->rpc_id_ops = nullptr;
+    options->poller_ops = nullptr;
     return UBS_OK;
 }
 
@@ -100,6 +102,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     if (options->async_epoll_thread_count > 0) {
         GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = options->async_epoll_thread_count;
     }
+    GlobalSetting::UBS_POLLER_OPS = options->poller_ops;
 
     auto result = GlobalSetting::VerifySetting();
     if (result != UBS_OK) {
