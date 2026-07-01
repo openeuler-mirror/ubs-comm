@@ -218,6 +218,22 @@ Result UmqConnHelper::RegisterSharedJfrForRead(uint64_t main_umq_handle)
     return UBS_OK;
 }
 
+uint32_t UmqConnHelper::GetTargetChipId(const std::vector<uint32_t> &socket_ids,
+                                        const std::vector<uint32_t> &chip_id_list, int processSocketId)
+{
+    auto it = std::find(socket_ids.begin(), socket_ids.end(), processSocketId);
+    if (it == socket_ids.end()) {
+        return UINT32_MAX; // 错误标识
+    }
+
+    size_t index = std::distance(socket_ids.begin(), it);
+    if (index >= chip_id_list.size()) {
+        return UINT32_MAX; // 索引越界
+    }
+
+    return chip_id_list[index];
+}
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock
