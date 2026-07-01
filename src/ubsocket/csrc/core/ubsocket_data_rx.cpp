@@ -56,6 +56,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
      * (2) when all the received message passed to caller, fallback to tcp/ip */
     ssize_t rx_total_len = OutputErrorMagicNumber(sock, iov, iovcnt);
     if (rx_total_len > 0) {
+        TRACE_CLAIM_JFR_RX_SEQ_NO(trace);
         TRACE_ADD_READ(trace, CORE_READ, fd_, ubsocket_get_timeNs_compile(), 0);
         PROF_END(CORE_READ, false);
         return rx_total_len;
