@@ -12,8 +12,8 @@
 #ifndef UBS_COMM_UBSOCKET_QBUF_QUEUE_H
 #define UBS_COMM_UBSOCKET_QBUF_QUEUE_H
 
-#include <malloc.h>
 #include <cstdint>
+#include <cstdlib>
 #include "../../include/ubsocket_def.h"
 #include "../common/ubsocket_lock.h"
 #include "../common/ubsocket_logger.h"
@@ -203,20 +203,12 @@ private:
     uint32_t init_cap_;
     static constexpr uint32_t MAX_CAPACITY = 0x3FFFFFFF;
 
-    size_t RoundUp(size_t size, size_t align)
-    {
-        return (size + align - 1) - ((size + align - 1) % align);
-    }
-
     int InitQueue(size_t itemNb)
     {
-        size_t pageSize = sysconf(_SC_PAGESIZE);
-        size_t headLen = sizeof(struct QbufQueueT<T>) + (itemNb + 1) * sizeof(T);
-        headLen = RoundUp(headLen, pageSize);
-        queue_ = reinterpret_cast<struct QbufQueueT<T> *>(memalign(pageSize, headLen));
+        size_t len = sizeof(struct QbufQueueT<T>) + (itemNb + 1) * sizeof(T);
+        queue_ = reinterpret_cast<struct QbufQueueT<T> *>(malloc(len));
         if (queue_ == nullptr) {
-            UBS_VLOG_ERR("Init qbuf queue memalign failed, pageSize: %zu, headLen: %zu, errno: %d\n", pageSize, headLen,
-                         errno);
+            UBS_VLOG_ERR("Init qbuf queue malloc failed, len: %zu, errno: %d\n", len, errno);
             return -1;
         }
 
@@ -235,13 +227,10 @@ private:
             return -1;
         }
 
-        size_t pageSize = sysconf(_SC_PAGESIZE);
-        size_t newHeadLen = sizeof(struct QbufQueueT<T>) + new_itemNb * sizeof(T);
-        newHeadLen = RoundUp(newHeadLen, pageSize);
-        struct QbufQueueT<T> *new_q = reinterpret_cast<struct QbufQueueT<T> *>(aligned_alloc(pageSize, newHeadLen));
+        size_t newLen = sizeof(struct QbufQueueT<T>) + new_itemNb * sizeof(T);
+        struct QbufQueueT<T> *new_q = reinterpret_cast<struct QbufQueueT<T> *>(malloc(newLen));
         if (new_q == nullptr) {
-            UBS_VLOG_ERR("Resize qbuf queue aligned_alloc failed, pageSize: %zu, headLen: %zu, errno: %d\n", pageSize,
-                         newHeadLen, errno);
+            UBS_VLOG_ERR("Resize qbuf queue malloc failed, len: %zu, errno: %d\n", newLen, errno);
             return -1;
         }
 

@@ -152,12 +152,10 @@ private:
 
     static inline T *InitHeap(size_t capacity)
     {
-        size_t pageSize = sysconf(_SC_PAGESIZE);
         size_t len = (capacity + 1) * sizeof(T);
-        void *ptr = nullptr;
-        if (posix_memalign(&ptr, pageSize, len) != 0) {
-            UBS_VLOG_ERR("Failed to init heap caused by memalign exception, pageSize: %zu, headLen: %zu, errno: %d\n",
-                         pageSize, len, errno);
+        void *ptr = malloc(len);
+        if (ptr == nullptr) {
+            UBS_VLOG_ERR("Failed to init heap caused by malloc len: %zu, errno: %d\n", len, errno);
             return nullptr;
         }
         return static_cast<T *>(ptr);
