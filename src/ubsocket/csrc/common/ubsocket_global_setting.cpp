@@ -39,7 +39,7 @@ uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
 bool GlobalSetting::USE_BRPC_ZCOPY = true;
 std::string GlobalSetting::UBS_BRPC_ALLOC_SYM_STR;
 std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
-UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
+UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::UB_SOCK_OPT;
 uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 u_external_poller_ops_t *GlobalSetting::UBS_POLLER_OPS = nullptr;
 bool GlobalSetting::UBS_PROF_ENABLE = false;
@@ -184,7 +184,7 @@ UBHandshakeMode HandShakeFromStr(const std::string &typeStr) noexcept
         return UBHandshakeMode::UB_SOCK_OPT;
     }
     // 如果字符串不匹配，返回默认值
-    return UBHandshakeMode::TFO;
+    return UBHandshakeMode::UB_SOCK_OPT;
 }
 
 Result GlobalSetting::LoadEnv() noexcept
