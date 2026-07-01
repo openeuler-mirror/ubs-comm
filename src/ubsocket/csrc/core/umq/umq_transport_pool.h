@@ -60,6 +60,8 @@ private:
 
     u_mutex_t *mutex_;
     Umqh2TpIdxMap umq_tp_pool{};
+    uint32_t aff_rr_num_;
+    uint32_t rr_num_;
 };
 
 } // namespace umq

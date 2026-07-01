@@ -33,6 +33,8 @@ public:
                             ub_trans_mode trans_mode = UmqSetting::UMQ_UB_TRANS_MODE);
     static Result GetRouteList(umq_route_list_t &route_list, const umq_eid_t &src_eid, const umq_eid_t &dst_eid);
     static Result RegisterSharedJfrForRead(uint64_t main_umq_handle);
+    static uint32_t GetTargetChipId(const std::vector<uint32_t> &socket_ids, const std::vector<uint32_t> &chip_id_list,
+                                    int processSocketId);
 };
 
 } // namespace umq

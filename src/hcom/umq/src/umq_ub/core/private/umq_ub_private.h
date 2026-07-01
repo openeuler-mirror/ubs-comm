@@ -47,7 +47,6 @@ extern "C" {
 #define UMQ_MAX_TSEG_NUM (1024)
 #define HUGE_QBUF_BUFFER_INC_BATCH 64
 #define UMQ_QBUF_ALIGN_SIZE 4096
-
 #define UMQ_MAX_SGE_NUM 6
 
 #define UMQ_UB_MAX_REMOTE_EID_NUM 1024
@@ -63,7 +62,7 @@ extern "C" {
 #define UMQ_UB_ENABLE_SHARE_FC_JFR (true)
 
 #define UMQ_UB_FLOW_CONTROL_SGE_QBUF_COUNT_MAX 512 // per-device flow control sge mgr qbuf array
-#define UMQ_UB_FLOW_CONTROL_SGE_SHARED_RECV_QBUF_MAX 256 // per-jetty shared recv qbuf array
+#define UMQ_UB_FLOW_CONTROL_SGE_SHARED_RECV_QBUF_MAX 512 // per-jetty shared recv qbuf array
 
 typedef enum umq_size_interval {
     UMQ_SIZE_0K_SMALL_INTERVAL,     // (0K, umq_buf_size_small()] size
@@ -117,8 +116,8 @@ typedef enum ub_packet_stats_type {
     UB_PACKET_STATS_TYPE_SEND_EAGAIN,
     UB_PACKET_STATS_TYPE_SEND_ERROR,
     UB_PACKET_STATS_TYPE_RECV_ERROR,
-    UB_PACKET_STATS_TYPE_RECV_DUP_REQ,
-    UB_PACKET_STATS_TYPE_RECV_DUP_RSP,
+    UB_PACKET_STATS_TYPE_RECV_DUPLICATE_REQ,
+    UB_PACKET_STATS_TYPE_RECV_DUPLICATE_RSP,
     UB_PACKET_STATS_TYPE_MAX,
 } ub_packet_stats_type_t;
 
@@ -509,6 +508,14 @@ typedef struct umq_ub_raw_dev {
     uint32_t eid_index;
 } umq_ub_raw_dev_t;
 
+typedef struct umq_create_jetty_config {
+    ub_queue_jetty_index_t jetty_idx;
+    const char *port_str;
+    urma_jfc_t *jfs_jfc;
+    bondp_port_id_t *used_port;
+    uint8_t used_port_num;
+} umq_create_jetty_config_t;
+
 int rx_buf_ctx_list_init(rx_buf_ctx_list_t *rx_buf_ctx_list, uint32_t ctx_num);
 void rx_buf_ctx_list_uninit(rx_buf_ctx_list_t *rx_buf_ctx_list);
 umq_buf_t *umq_get_buf_by_user_ctx(ub_queue_t *queue, uint64_t user_ctx, ub_queue_jetty_index_t jetty_index);
@@ -534,8 +541,7 @@ int umq_ub_bind_info_deserialize(uint8_t *bind_info_buf, uint32_t bind_info_size
 int umq_modify_ubq_to_err(ub_queue_t *queue, umq_io_direction_t direction, ub_queue_jetty_index_t jetty_idx);
 remote_imported_tseg_info_t *umq_ub_ctx_imported_info_create(void);
 void umq_ub_ctx_imported_info_destroy(umq_ub_ctx_t *ub_ctx);
-urma_jetty_t *umq_create_jetty(ub_queue_t *queue, umq_ub_ctx_t *dev_ctx, ub_queue_jetty_index_t jetty_idx,
-    const char *port_str, urma_jfc_t *jfs_jfc);
+urma_jetty_t *umq_create_jetty(ub_queue_t *queue, umq_ub_ctx_t *dev_ctx, umq_create_jetty_config_t *config);
 int check_and_set_param(umq_ub_ctx_t *dev_ctx, umq_create_option_t *option, ub_queue_t *queue);
 int umq_ub_register_seg(umq_ub_ctx_t *ctx, uint16_t mempool_id, void *addr, uint64_t size);
 void umq_ub_unregister_seg(umq_ub_ctx_t *ctx_list, uint32_t ctx_cnt, uint16_t mempool_id);
@@ -627,6 +633,8 @@ int umq_ub_delete_urma_ctx(umq_ub_ctx_t *ub_ctx);
 int umq_ub_get_jetty_node(ub_queue_t *queue, uint32_t wr_cnt);
 void umq_ub_post_release_jetty_node(ub_queue_t *queue, uint32_t failed_cnt);
 
+int umq_bondp_port_id_set(umq_used_ports_t *used_ports, bondp_port_id_t *used_port, uint8_t used_port_num);
+
 static ALWAYS_INLINE void umq_ub_io_packet_stats(
     ub_queue_t *queue, ub_packet_stats_type_t type, uint32_t cnt, bool lock_free)
 {
@@ -656,7 +664,7 @@ static ALWAYS_INLINE ub_queue_t *umq_ub_get_real_queue_by_umq_id(ub_queue_t *que
     }
 
     return (ub_queue_t *)(uintptr_t)__atomic_exchange_n(
-        &queue->dev_ctx->umq_ctx_table[umq_id], 0, __ATOMIC_ACQUIRE);
+        &queue->dev_ctx->umq_ctx_table[umq_id], 0, __ATOMIC_ACQ_REL);
 }
 
 static ALWAYS_INLINE void umq_ub_put_real_queue(ub_queue_t *queue, uint32_t umq_id)
