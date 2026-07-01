@@ -1,6 +1,6 @@
 ---
 name: add-tracepoint
-description: Skill for adding SplitTrace/PROF instrumentation tracepoints to ubsocket hot paths (WriteV, ReadV, PollTx, PollRx, RxDataSet). Covers ProfilingTPId enum, SplitTraceInfo struct, AddWriteTrace/AddReadTrace overloads, UpdateWriteFirstTrace, trace/fd parameter propagation, poll_num field. NOT for UT generation — use ut-gen* skills for that. Trigger on keywords: tracepoint, SplitTrace, tracer, profiling, AddWriteTrace, AddReadTrace, poll_num, ProfilingTPId, UpdateWriteFirstTrace, CORE_WRITE, CORE_READ, 打点.
+description: Skill for adding SplitTrace/PROF instrumentation tracepoints to ubsocket hot paths (WriteV, ReadV, PollTx, PollRx, RxDataSet). Covers ProfilingTPId enum, SplitTraceInfo struct, AddWriteTrace/AddReadTrace overloads, UpdateWriteFirstTrace, trace/fd parameter propagation, poll_num field, queue_depth, KeepWrite batching. NOT for UT generation — use ut-gen* skills for that. Trigger on keywords: tracepoint, SplitTrace, tracer, profiling, AddWriteTrace, AddReadTrace, poll_num, ProfilingTPId, UpdateWriteFirstTrace, CORE_WRITE, CORE_READ, 打点, trace分析, queue_depth, KeepWrite, seq_no.
 ---
 
 # Skill: add-tracepoint
@@ -182,6 +182,34 @@ UMQ_BUILD=on UBSOCKET_BUILD=on bash build/build_umq_and_ubsocket.sh
 |----------|---------|----------|
 | 新陷阱 | 与 SplitTrace/PROF 相关 | `AGENTS.md` §关键陷阱 |
 | 新打点模式 | 跨模块适用 | 本skill §决策矩阵 |
+
+## 上游调用约定（Trace 分析必读）
+
+**brpc KeepWrite 批量写入**: 分析 SplitTrace 时，seq 乱序/跳跃不是多线程竞争，是 KeepWrite 聚合的正常表现。
+
+```
+bthread(单线程) → Channel::CallMethod → queue_depth 允许堆积 N 个 WriteRequest
+    ↓
+ DoWrite() 触发 → 收集 1~N 个请求 → ubsocket_writev(iov, cnt=1~N)
+    ↓
+ 每个 WriteRequest → PostSend → FetchAddSeqNum(1) → 独立 seq_no → 赋予 1 个 buf
+          (TX_SGE_MAX=1, 每个 WR 只有一个 SGE)
+    ↓
+ umq_post → N 个 buf, 各自携带不同 seq_no
+    ↓
+ 对端 JFR poll → N 个 buf, 各自不同 seq → 采样记录部分 seq
+```
+
+**seq 号来源**: 每个 `umq_buf_t` 独立携带 `buf_pro->imm.user_data`（TX 侧 WriteRequest 逐迭代调用 `FetchAddSeqNum(1)` 分配，`TX_SGE_MAX=1` 保证每 WR 一个 SGE）。非"一批 buf 共享一个 seq"。
+
+**seq 跳跃原因**: queue_depth>1 时，KeepWrite 一次堆积 N 个 WriteRequest，每个消耗一个 seq_no。下次 DoWrite 时 seq 已跳 N 个号。正常现象，非丢包。
+
+| queue_depth | WriteV 批大小 | 对端 buf 数 | seq 变化 |
+|:-----------:|:------------:|:----------:|:--------:|
+| 1 | 1 req/次 | 3~5 | 连续 +1 |
+| 10 | 1~10 req/次 | 20~60 | 跳跃多个号 |
+
+不要误判为"多线程竞争导致 seq 跳跃"或"丢包"。
 
 ## 参考文件
 
