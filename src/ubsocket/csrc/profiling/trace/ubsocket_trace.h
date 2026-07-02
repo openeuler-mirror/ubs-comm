@@ -672,7 +672,7 @@ private:
     do {                                                              \
     } while (0)
 #define TRACE_ADD_READ_DETAIL(trace, type, raw_socket, seq_no, data_size, offset) \
-    do {                                                                                    \
+    do {                                                                          \
     } while (0)
 #define TRACE_UPDATE_LAST_READ(trace, type) \
     do {                                    \
