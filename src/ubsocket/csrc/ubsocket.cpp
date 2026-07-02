@@ -15,6 +15,7 @@
 #include "common/ubsocket_signal_handler.h"
 #include "common/ubsocket_version.h"
 #include "core/ubsocket_event_epoll.h"
+#include "core/ubsocket_tx_cqe_poller.h"
 #include "core/umq/umq_backend.h"
 #include "core/umq/umq_setting.h"
 #include "include/ubsocket.h"
@@ -208,6 +209,7 @@ void ubsocket_uninit()
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::PrintStatsMgr::StopStatsCollection();
     }
+    TxCqePoller::Instance().Stop();
     umq::UmqBackend::UnInit();
     return;
 }

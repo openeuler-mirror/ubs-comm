@@ -150,7 +150,22 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
         }
     }
 
+    // 保存 used_ports, 之后的遇到异常 CQE 时可以确定这些 port 都不可用（光组网）
+    auto *ports = new (std::nothrow) umq_port_id_t[used_ports.num];
+    if (ports == nullptr) {
+        UBS_VLOG_ERR("Failed to init used_ports for fd: %d\n", raw_socket_);
+        return UBS_ERROR;
+    }
+
+    std::copy_n(used_ports.port, used_ports.num, ports);
+    used_ports_.reset(ports);
+    used_ports_num_ = used_ports.num;
     return UBS_OK;
+}
+
+std::tuple<const umq_port_id_t *, std::size_t> UmqSocket::GetUsedPorts() const
+{
+    return {used_ports_.get(), used_ports_num_};
 }
 
 uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)

@@ -9,8 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "umq_data_tx_ops.h"
+
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_defines.h"
+#include "common/ubsocket_port_cooldown.h"
 #include "umq_buf_converter.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
@@ -479,6 +481,20 @@ int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
             LibcApi::shutdown(fd_, SHUT_RD);
             UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", fd_);
             sock->State(SOCK_STAT_CLOSE);
+
+            // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
+            auto umq_sock = RefStaticCast<UmqSocket>(sock);
+            if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
+                if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
+                    qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
+                    auto [ports, ports_num] = umq_sock->GetUsedPorts();
+                    for (std::size_t i = 0; i < ports_num; ++i) {
+                        UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",
+                                      ports[i].bs.chip_id, ports[i].bs.die_id, ports[i].bs.port_idx);
+                        PortCooldownManager::MarkPortInCooldown(ports[i]);
+                    }
+                }
+            }
         },
         sock);
 }

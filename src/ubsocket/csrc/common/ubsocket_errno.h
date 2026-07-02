@@ -18,14 +18,14 @@ namespace ubs {
 enum InnerCode : int32_t
 {
     UBS_OK = 0,
-    UBS_ERROR = -1,
-    UBS_DL_LOAD_SYM_FAILED = -100,
-    UBS_DL_OPEN_LIB_FAILED = -101,
-    UBS_INVALID_PARAM = -102,
-    UBS_MALLOC_FAILED = -103,
+    UBS_ERROR = static_cast<int32_t>(0x80000001u),
+    UBS_DL_LOAD_SYM_FAILED = static_cast<int32_t>(0x80000100u),
+    UBS_DL_OPEN_LIB_FAILED,
+    UBS_INVALID_PARAM,
+    UBS_MALLOC_FAILED,
 
     // UMQ 相关错误
-    UBS_UMQ_CREATE = -1025,
+    UBS_UMQ_CREATE = static_cast<int32_t>(0x80000401u),
     UBS_UMQ_DEV_ADD,
     UBS_UMQ_BIND_INFO_GET,
     UBS_UMQ_BIND,
@@ -34,7 +34,7 @@ enum InnerCode : int32_t
     UBS_UMQ_MAX,
 
     // ubsocket 相关错误
-    UBS_SET_DEV_INFO = -4097,
+    UBS_SET_DEV_INFO = static_cast<int32_t>(0x80001001u),
     UBS_PREFILL_RX,
     UBS_INIT_SHARED_JFR_RX_QUEUE,
     UBS_NEW_SOCKET_FD,
@@ -47,7 +47,7 @@ enum InnerCode : int32_t
     UBS_CONN_RETRY_FAILED,
     UBS_CONN_ROUTE,
 
-    // 特殊标记位，使用 bit 30 和 bit 29，确保转换回 int32_t 时仍然为负数
+    // 特殊标记位，使用 bit 30 和 bit 29，最高位 (bit 31) 为 1 表示负数错误
     UBS_RETRYABLE_MASK = 0x40000000,  // 可重试标记 (bit 30)
     UBS_DEGRADABLE_MASK = 0x20000000, // 可降级标记 (bit 29)
 };
