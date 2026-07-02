@@ -691,7 +691,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_TfoMode_SendtoSuccessButDup3Fail_Retu
     errno = 0;
     ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
-    EXPECT_EQ(ret, -1);
+    EXPECT_EQ(ret, UBS_ERROR);
 
     GlobalMockObject::verify();
 }
@@ -720,7 +720,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_TfoMode_SendtoFail_ReturnsMinus1)
     errno = 0;
     ock::ubs::Result ret =
         connector_.PrepareConnect(TEST_NEW_FD, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr), sock);
-    EXPECT_EQ(ret, -1);
+    EXPECT_EQ(ret, UBS_ERROR);
 
     GlobalMockObject::verify();
 }

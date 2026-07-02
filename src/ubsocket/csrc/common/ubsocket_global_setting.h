@@ -120,6 +120,9 @@ public:
 
     // 通信链路选择，不直接由外部环境变量控制
     static LinkSelectionPolicy LINK_SELECTION_POLICY;
+
+    // 故障 port 口冷却时间
+    static uint32_t UBS_PORT_COOLDOWN_SEC;
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept

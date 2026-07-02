@@ -55,6 +55,11 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
         sockBase->acceptor_ = new Acceptor(sock, acceptorOps);
         sockBase->connector_ = new Connector(sock, connectorOps);
 
+        if (UmqSetting::UMQ_TP_TYPE == SINGLE) {
+            // 启动后台 tx cqe poller
+            result = TxCqePoller::Instance().Start();
+        }
+
         if (result != UBS_OK) {
             return result;
         }

@@ -50,6 +50,7 @@ uint32_t GlobalSetting::UBS_PROBE_MS = 1000;
 uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = true;
 LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::BONDING_BACKUP;
+uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
@@ -81,6 +82,7 @@ LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::
 #define ENV_VAR_PROBE_TIME "UBSOCKET_PROBE_TIME_MS"
 #define ENV_VAR_PROBE_BATCH "UBSOCKET_PROBE_BATCH"
 #define ENV_BACKUP_LINK_ENABLED "UBSOCKET_BACKUP_LINK_ENABLE"
+#define ENV_PORT_COOLDOWN_SEC "UBSOCKET_PORT_COOLDOWN_SEC"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -101,6 +103,7 @@ void GlobalSetting::AddRules() noexcept
         {ENV_SPLIT_TRACE_BUF_CAPACITY, false, 16384, 65536},
         {ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS, false, 1, 10000},
         {ENV_UBS_THREAD_POOL_SIZE, false, 1, UINT32_MAX},
+        {ENV_PORT_COOLDOWN_SEC, false, 1, 300},
     };
 
     /* str enum rules: name, required, enum */
@@ -304,6 +307,10 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidate(ENV_BACKUP_LINK_ENABLED, strEnvValue)) {
         UBS_BACKUP_LINK_ENABLED = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GetEnvAndValidate(ENV_PORT_COOLDOWN_SEC, envValue)) {
+        UBS_PORT_COOLDOWN_SEC = static_cast<uint32_t>(envValue);
     }
 
     return UBS_OK;

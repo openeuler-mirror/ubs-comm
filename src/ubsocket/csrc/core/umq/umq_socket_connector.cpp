@@ -14,6 +14,7 @@
 #include <netinet/tcp.h>
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_port_cooldown.h"
 #include "common/ubsocket_scope_exit.h"
 #include "common/ubsocket_version.h"
 #include "core/umq/umq_eid_table.h"
@@ -576,6 +577,21 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     }
     UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg size: %zu, bind info len: %lu", raw_fd_,
                    sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
+
+    // 光组网下会一次性使用所有 port，如果它出现在 cooldown 表中，则表示所有路径
+    // 均已尝试过，无需再重试，可直接降级至 TCP.
+    if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {
+        for (uint8_t i = 0; i < used_ports.num; ++i) {
+            const auto &p = used_ports.port[i].bs;
+            if (PortCooldownManager::IsPortInCooldown(used_ports.port[i])) {
+                UBS_VLOG_WARN("used_ports[%u]: src_port(chip=%u,die=%u,port=%u) is down, skipped. Peer eid: " EID_FMT
+                              ", Peer IP: %s, fd: %d\n",
+                              i, p.chip_id, p.die_id, p.port_idx, EID_ARGS(umq_conn_info_.peer_bonding_eid),
+                              umq_conn_info_.peer_ip.c_str(), raw_fd_);
+                return UBS_UMQ_BIND | UBS_DEGRADABLE_MASK;
+            }
+        }
+    }
 
     struct timeval start_tv;
     gettimeofday(&start_tv, NULL);

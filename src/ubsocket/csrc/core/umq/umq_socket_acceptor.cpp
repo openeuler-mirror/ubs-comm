@@ -10,6 +10,8 @@
  */
 
 #include "umq_socket_acceptor.h"
+
+#include "common/ubsocket_port_cooldown.h"
 #include "common/ubsocket_version.h"
 #include "core/umq/umq_eid_table.h"
 #include "umq_conn_helper.h"
@@ -114,15 +116,20 @@ Result UmqAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
                     UBS_VLOG_ERR("Failed to finish ub bind in accept, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
                                  EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), fd);
                 }
-                if (SocketConnHelper::SendSocketData(fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) !=
-                    sizeof(ackRet)) {
-                    UBS_VLOG_ERR("Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
-                                 EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), fd);
-                    return UBS_TCP_EXCHANGE;
-                }
+
                 if (SocketConnHelper::RecvSocketData(fd, &peerRet, sizeof(peerRet), CONTROL_PLANE_TIMEOUT_MS) !=
                     sizeof(peerRet)) {
                     UBS_VLOG_ERR("Failed to receive peer ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
+                                 EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), fd);
+                    return UBS_TCP_EXCHANGE;
+                }
+
+                if (IsDegradable(peerRet) && GlobalSetting::UBS_ENABLE_DEGRADE) {
+                    ackRet |= UBS_DEGRADABLE_MASK;
+                }
+                if (SocketConnHelper::SendSocketData(fd, &ackRet, sizeof(ackRet), CONTROL_PLANE_TIMEOUT_MS) !=
+                    sizeof(ackRet)) {
+                    UBS_VLOG_ERR("Failed to send ack ret, Peer eid:" EID_FMT ",Peer IP:%s, fd: %d\n",
                                  EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), fd);
                     return UBS_TCP_EXCHANGE;
                 }
@@ -225,6 +232,21 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
     }
     UBS_VLOG_DEBUG("recv remote control message, fd: %d, cp msg size: %zu, bind info len: %lu\n", fd,
                    sizeof(remote_cp_msg), remote_cp_msg.queue_bind_info_size);
+
+    // 光组网下会一次性使用所有 port，如果它出现在 cooldown 表中，则表示所有路径
+    // 均已尝试过，无需再重试，可直接降级至 TCP.
+    if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {
+        for (uint8_t i = 0; i < used_ports.num; ++i) {
+            const auto &p = used_ports.port[i].bs;
+            if (PortCooldownManager::IsPortInCooldown(used_ports.port[i])) {
+                UBS_VLOG_WARN("used_ports[%u]: src_port(chip=%u,die=%u,port=%u) is down, skipped. Peer eid: " EID_FMT
+                              ", Peer IP: %s, fd: %d\n",
+                              i, p.chip_id, p.die_id, p.port_idx, EID_ARGS(umq_conn_info_.peer_eid),
+                              umq_conn_info_.peer_ip.c_str(), fd);
+                return UBS_UMQ_BIND | UBS_DEGRADABLE_MASK;
+            }
+        }
+    }
 
     struct timeval start_tv;
     gettimeofday(&start_tv, NULL);
@@ -345,16 +367,20 @@ Result UmqAcceptorOps::DoUbAcceptRetry(SocketPtr socketPtr, Result &ack_ret, Res
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), fd);
     }
 
-    if (SocketConnHelper::SendSocketData(fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ack_ret)) {
-        UBS_VLOG_ERR("Failed to send ack ret message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, ack_ret: %d",
-                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), fd, ack_ret);
-        return UBS_TCP_EXCHANGE;
-    }
-
     if (SocketConnHelper::RecvSocketData(fd, &peer_ret, sizeof(peer_ret), CONTROL_PLANE_TIMEOUT_MS) !=
         sizeof(peer_ret)) {
         UBS_VLOG_ERR("Failed to recv peer ret message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, peer_ret: %d",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), fd, peer_ret);
+        return UBS_TCP_EXCHANGE;
+    }
+
+    if (IsDegradable(peer_ret) && GlobalSetting::UBS_ENABLE_DEGRADE) {
+        ack_ret |= UBS_DEGRADABLE_MASK;
+    }
+
+    if (SocketConnHelper::SendSocketData(fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ack_ret)) {
+        UBS_VLOG_ERR("Failed to send ack ret message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, ack_ret: %d",
+                     EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), fd, ack_ret);
         return UBS_TCP_EXCHANGE;
     }
 

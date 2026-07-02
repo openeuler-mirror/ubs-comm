@@ -11,6 +11,9 @@
 #ifndef UBS_COMM_UMQ_SOCKET_H
 #define UBS_COMM_UMQ_SOCKET_H
 
+#include <memory>
+#include <tuple>
+
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_version.h"
 #include "core/ubsocket_socket.h"
@@ -172,6 +175,8 @@ public:
     void FlushRxQueue();
     Result CheckDevAdd(const umq_eid_t &conn_eid);
 
+    std::tuple<const umq_port_id_t *, std::size_t> GetUsedPorts() const;
+
     /* GetData Func Set For CLI*/
     virtual void OutputStats(std::ostringstream &oss);
     virtual void GetSocketCLIData(Statistics::CLISocketData *data);
@@ -203,6 +208,10 @@ private:
     UmqBufferReceiveQueue *rxQueue = nullptr;
 
     JettyAllocState jetty_alloc_state = JettyAllocState::IDLE;
+
+    // 异常 CQE 时标记这些 port 不可用
+    std::unique_ptr<umq_port_id_t[]> used_ports_;
+    std::size_t used_ports_num_ = 0;
 };
 using UmqSocketPtr = Ref<UmqSocket>;
 
