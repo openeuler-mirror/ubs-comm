@@ -30,6 +30,7 @@ struct SplitTraceInfo {
     uint32_t offset = 0;
     ProfilingTPId type = CORE_WRITE;
     uint32_t poll_num = 0;
+    bool is_first = false;
     int tid = 0;
     uint64_t start_timestamp = 0;
     uint64_t end_timestamp = 0;
@@ -173,7 +174,8 @@ public:
         buf.count++;
     }
 
-    void AddWriteTrace(ProfilingTPId type, int raw_socket, uint32_t seq_no, uint32_t data_size, uint32_t offset)
+    void AddWriteTrace(ProfilingTPId type, int raw_socket, uint32_t seq_no, uint32_t data_size, uint32_t offset,
+                       bool is_first)
     {
         auto idx = write_active_idx_.load(std::memory_order_acquire);
         auto &buf = write_bufs_[idx];
@@ -191,11 +193,12 @@ public:
         trace_info.data_size = data_size;
         trace_info.offset = offset;
         trace_info.type = type;
+        trace_info.is_first = is_first;
         trace_info.start_timestamp = ubsocket_get_timeNs_compile();
         buf.count++;
     }
 
-    void UpdateWriteFirstTrace(ProfilingTPId type, uint32_t seq_no, uint32_t data_size, uint32_t offset,
+    void UpdateWriteFirstTrace(ProfilingTPId type, uint32_t seq_no, uint32_t data_size, uint32_t offset, bool is_first,
                                uint32_t expected_backfill_count = 1)
     {
         auto idx = write_active_idx_.load(std::memory_order_acquire);
@@ -225,6 +228,7 @@ public:
             buf.data[i].seq_no = seq_no;
             buf.data[i].data_size = data_size;
             buf.data[i].offset = offset;
+            buf.data[i].is_first = is_first;
             ++backfill_count;
         }
     }
@@ -440,16 +444,18 @@ public:
         DrainBuffer(read_active_idx_, read_bufs_, "Read");
         DrainBuffer(epoll_active_idx_, epoll_bufs_, "Epoll");
     }
+    uint32_t pack_size{0};
+    std::queue<uint32_t> pack_size_list;
 
 private:
     static void PrintSplitTraceInfo(const SplitTraceInfo &trace_info, const char *label)
     {
         uint64_t duration = trace_info.end_timestamp > 0 ? trace_info.end_timestamp - trace_info.start_timestamp : 0;
-        UBS_VLOG_INFO("[%s] raw_socket: %d rpcid: %llu seq: %u data_size: %u offset: %u type: %u poll_num: %u "
-                      "tid: %d start_timestamp: %lu end_timestamp: %lu%s\n",
-                      label, trace_info.raw_socket, trace_info.rpc_id, trace_info.seq_no, trace_info.data_size,
-                      trace_info.offset, static_cast<uint32_t>(trace_info.type), trace_info.poll_num, trace_info.tid,
-                      trace_info.start_timestamp, trace_info.end_timestamp,
+        UBS_VLOG_INFO("[%s] raw_socket: %d rpcid: %llu is_first: %d seq: %u data_size: %u offset: %u type: %u "
+                      "poll_num: %u tid: %d start_timestamp: %lu end_timestamp: %lu%s\n",
+                      label, trace_info.raw_socket, trace_info.rpc_id, trace_info.is_first, trace_info.seq_no,
+                      trace_info.data_size, trace_info.offset, static_cast<uint32_t>(trace_info.type),
+                      trace_info.poll_num, trace_info.tid, trace_info.start_timestamp, trace_info.end_timestamp,
                       trace_info.end_timestamp > 0 ? (" duration: " + std::to_string(duration) + " ns").c_str() : "");
     }
 
@@ -575,18 +581,18 @@ private:
         }                                                 \
     } while (0)
 
-#define TRACE_ADD_WRITE_DETAIL(trace, type, raw_socket, seq_no, data_size, offset)         \
-    do {                                                                                   \
-        if ((trace) != nullptr) {                                                          \
-            (trace)->AddWriteTrace((type), (raw_socket), (seq_no), (data_size), (offset)); \
-        }                                                                                  \
+#define TRACE_ADD_WRITE_DETAIL(trace, type, raw_socket, seq_no, data_size, offset, is_first)           \
+    do {                                                                                               \
+        if ((trace) != nullptr) {                                                                      \
+            (trace)->AddWriteTrace((type), (raw_socket), (seq_no), (data_size), (offset), (is_first)); \
+        }                                                                                              \
     } while (0)
 
-#define TRACE_UPDATE_WRITE_FIRST(trace, type, seq_no, data_size, offset)             \
-    do {                                                                             \
-        if ((trace) != nullptr) {                                                    \
-            (trace)->UpdateWriteFirstTrace((type), (seq_no), (data_size), (offset)); \
-        }                                                                            \
+#define TRACE_UPDATE_WRITE_FIRST(trace, type, seq_no, data_size, offset, is_first)               \
+    do {                                                                                         \
+        if ((trace) != nullptr) {                                                                \
+            (trace)->UpdateWriteFirstTrace((type), (seq_no), (data_size), (offset), (is_first)); \
+        }                                                                                        \
     } while (0)
 
 #define TRACE_UPDATE_WRITE_LAST(trace, type, data_size, offset)           \
@@ -666,7 +672,7 @@ private:
     do {                                                              \
     } while (0)
 #define TRACE_ADD_READ_DETAIL(trace, type, raw_socket, seq_no, data_size, offset) \
-    do {                                                                          \
+    do {                                                                                    \
     } while (0)
 #define TRACE_UPDATE_LAST_READ(trace, type) \
     do {                                    \
@@ -680,11 +686,11 @@ private:
 #define TRACE_ADD_WRITE_SIMPLE(trace, type, raw_socket) \
     do {                                                \
     } while (0)
-#define TRACE_ADD_WRITE_DETAIL(trace, type, raw_socket, seq_no, data_size, offset) \
-    do {                                                                           \
+#define TRACE_ADD_WRITE_DETAIL(trace, type, raw_socket, seq_no, data_size, offset, is_first) \
+    do {                                                                                     \
     } while (0)
-#define TRACE_UPDATE_WRITE_FIRST(trace, type, seq_no, data_size, offset) \
-    do {                                                                 \
+#define TRACE_UPDATE_WRITE_FIRST(trace, type, seq_no, data_size, offset, is_first) \
+    do {                                                                           \
     } while (0)
 #define TRACE_UPDATE_WRITE_LAST(trace, type, data_size, offset) \
     do {                                                        \

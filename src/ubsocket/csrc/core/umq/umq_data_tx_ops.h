@@ -61,15 +61,16 @@ public:
 
 private:
     // 处理 umq_post 失败时的坏 buffer
-    uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf, uint32_t batch,
-                           uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num,
-                           uint32_t *buf_num);
+    uint32_t HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
+                           uint32_t batch, uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes,
+                           uint16_t unsignaled_wr_num, uint32_t *buf_num);
     void *PtrFloorToBoundary(void *ptr);
     int PollUmqTx(const SocketPtr &sock, bool poll_to_empty);
     int PollUmqTxOnce(const SocketPtr &sock);
     int DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code);
     int GetAndAckEvent();
     int DpRearmTxInterrupt();
+    void ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int seq_no, int i, uint64_t tx_total_len);
 
 private:
     // --- 私有成员变量 ---
