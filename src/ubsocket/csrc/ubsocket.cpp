@@ -200,6 +200,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
 
+    UBS_VLOG_DEBUG("UBSOCKET_ASYNC_ACCEPT:%d\n", GlobalSetting::AsyncAcceptorEnabled() ? 1 : 0);
     /* do trace log initial */
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         umq_trans_mode_t transMode = umq::UmqSetting::UMQ_TRANS_MODE;
