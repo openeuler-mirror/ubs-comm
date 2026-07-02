@@ -98,24 +98,11 @@ class SplitTrace {
     alignas(64) std::atomic<uint32_t> epoll_active_idx_{0};
     TraceBuffer epoll_bufs_[2];
 
-    alignas(64) std::atomic<uint32_t> pending_rx_seq_no_{0};
-
 public:
     static bool &SuppressTrace()
     {
         static thread_local bool value = false;
         return value;
-    }
-
-    void NotifyJfrRxSeqNo(uint32_t seq_no)
-    {
-        uint32_t expected = 0;
-        pending_rx_seq_no_.compare_exchange_strong(expected, seq_no, std::memory_order_release,
-                                                   std::memory_order_relaxed);
-    }
-    uint32_t ClaimJfrRxSeqNo()
-    {
-        return pending_rx_seq_no_.exchange(0, std::memory_order_acquire);
     }
 
     SplitTrace()
@@ -327,10 +314,6 @@ public:
             trace_info.seq_no = last_trace.seq_no;
             trace_info.data_size = last_trace.data_size;
             trace_info.offset = last_trace.offset;
-        }
-        uint32_t fresh = pending_rx_seq_no_.exchange(0, std::memory_order_acquire);
-        if (fresh != 0) {
-            trace_info.seq_no = fresh;
         }
         trace_info.type = type;
         trace_info.poll_num = poll_num;
@@ -560,13 +543,6 @@ private:
         }                                         \
     } while (0)
 
-#define TRACE_CLAIM_JFR_RX_SEQ_NO(trace)      \
-    do {                                      \
-        if ((trace) != nullptr) {             \
-            (void)(trace)->ClaimJfrRxSeqNo(); \
-        }                                     \
-    } while (0)
-
 #define TRACE_ADD_WRITE(trace, type, raw_socket, start_time, end_time, poll_num)                \
     do {                                                                                        \
         if ((trace) != nullptr) {                                                               \
@@ -630,13 +606,6 @@ private:
         }                                                                                                  \
     } while (0)
 
-#define TRACE_NOTIFY_JFR_RX_SEQ_NO(trace, seq_no) \
-    do {                                          \
-        if ((trace) != nullptr) {                 \
-            (trace)->NotifyJfrRxSeqNo((seq_no));  \
-        }                                         \
-    } while (0)
-
 #define TRACE_TRY_SWAP(trace)     \
     do {                          \
         if ((trace) != nullptr) { \
@@ -677,9 +646,6 @@ private:
 #define TRACE_UPDATE_LAST_READ(trace, type) \
     do {                                    \
     } while (0)
-#define TRACE_CLAIM_JFR_RX_SEQ_NO(trace) \
-    do {                                 \
-    } while (0)
 #define TRACE_ADD_WRITE(trace, type, raw_socket, start_time, end_time, poll_num) \
     do {                                                                         \
     } while (0)
@@ -706,9 +672,6 @@ private:
     } while (0)
 #define TRACE_ADD_EPOLL_FULL(trace, type, raw_socket, seq_no, data_size, offset, start, end) \
     do {                                                                                     \
-    } while (0)
-#define TRACE_NOTIFY_JFR_RX_SEQ_NO(trace, seq_no) \
-    do {                                          \
     } while (0)
 #define TRACE_TRY_SWAP(trace) \
     do {                      \
