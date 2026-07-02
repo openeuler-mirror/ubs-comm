@@ -22,15 +22,15 @@ bool SocketConnHelper::IsUbsConnection(const int &fd)
             // check TCPI_OPT_SYN_DATA
             is_tfo_connection = (info.tcpi_options & TCPI_OPT_SYN_DATA) != 0;
         }
-        UBS_VLOG_INFO("Current tcpi_options: 0x%x, tfo connection: %s \n", info.tcpi_options,
-                      is_tfo_connection ? "true" : "false");
+        UBS_VLOG_DEBUG("Current tcpi_options: 0x%x, tfo connection: %s \n", info.tcpi_options,
+                       is_tfo_connection ? "true" : "false");
         return is_tfo_connection;
     }
     if (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::UB_SOCK_OPT) {
         int opt = -1;
         socklen_t len = sizeof(opt);
         if (LibcApi::getsockopt(fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, &len) == 0) {
-            UBS_VLOG_INFO("UB handshake socket option is %s. \n", opt == 1 ? "enabled" : "disabled");
+            UBS_VLOG_DEBUG("UB handshake socket option is %s. \n", opt == 1 ? "enabled" : "disabled");
             return opt == 1;
         }
         return false;

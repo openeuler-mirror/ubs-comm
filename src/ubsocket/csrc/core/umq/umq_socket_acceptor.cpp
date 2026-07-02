@@ -35,7 +35,7 @@ Result UmqAcceptorOps::Negotiate(SocketPtr socketPtr)
         }
         return ret;
     }
-    UBS_VLOG_INFO("negotiate umq topo type successfully: %d\n", topo_type_);
+    UBS_VLOG_DEBUG("negotiate umq topo type successfully: %d\n", topo_type_);
     return UBS_OK;
 }
 
@@ -242,7 +242,7 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
                      costms);
         return UBS_UMQ_BIND | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
-    UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
+    UBS_VLOG_DEBUG("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umqSocket->SetBindRemote(true);
 
     if (GlobalSetting::LINK_SELECTION_POLICY != LinkSelectionPolicy::BONDING_BACKUP) {
@@ -324,15 +324,15 @@ Result UmqAcceptorOps::DoUbAcceptRetry(SocketPtr socketPtr, Result &ack_ret, Res
     }
     umq_used_ports_t used_ports = {.port = used_port_vector.data(),
                                    .num = static_cast<uint8_t>(used_port_vector.size())};
-    UBS_VLOG_INFO("DoAccept down to back, main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                  other_route_message_.other_route.src_port.bs.chip_id,
-                  other_route_message_.other_route.src_port.bs.die_id,
-                  other_route_message_.other_route.src_port.bs.port_idx);
+    UBS_VLOG_DEBUG("DoAccept down to back, main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                   other_route_message_.other_route.src_port.bs.chip_id,
+                   other_route_message_.other_route.src_port.bs.die_id,
+                   other_route_message_.other_route.src_port.bs.port_idx);
 
-    UBS_VLOG_INFO("DoAccept down to back, back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                  other_route_message_.other_back_route.src_port.bs.chip_id,
-                  other_route_message_.other_back_route.src_port.bs.die_id,
-                  other_route_message_.other_back_route.src_port.bs.port_idx);
+    UBS_VLOG_DEBUG("DoAccept down to back, back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                   other_route_message_.other_back_route.src_port.bs.chip_id,
+                   other_route_message_.other_back_route.src_port.bs.die_id,
+                   other_route_message_.other_back_route.src_port.bs.port_idx);
 
     // 保留在 CheckDevAdd 阶段时的错误
     ack_ret = ack_ret | DoUbAccept(socketPtr, used_ports);

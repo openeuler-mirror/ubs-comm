@@ -34,7 +34,7 @@ Result UmqConnectorOps::ConnectViaHandshakeOpt(const SocketPtr &sock, const stru
         ret = ConnectViaTfo(sock, address, address_len);
     } else {
         ret = LibcApi::connect(raw_fd_, address, address_len);
-        UBS_VLOG_INFO("Connect with UB handshake socket option.\n");
+        UBS_VLOG_DEBUG("Connect with UB handshake socket option.\n");
     }
     return ret;
 }
@@ -68,7 +68,7 @@ Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockad
                      Func::Error2Str(errno));
     }
     if (!SocketConnHelper::IsUbsConnection(raw_fd_)) {
-        UBS_VLOG_INFO("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
+        UBS_VLOG_DEBUG("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
         const int tmp_fd = LibcApi::socket(AF_INET, SOCK_STREAM, 0);
         LibcApi::setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
         sendto_ret = LibcApi::sendto(tmp_fd, send_buf, buf_len, MSG_FASTOPEN, address, address_len);
@@ -84,7 +84,7 @@ Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockad
             return UBS_ERROR;
         }
     } else {
-        UBS_VLOG_INFO("TFO Cookie exists, continue...\n");
+        UBS_VLOG_DEBUG("TFO Cookie exists, continue...\n");
     }
     return sendto_ret < 0 ? UBS_ERROR : UBS_OK;
 }
@@ -478,7 +478,7 @@ Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_e
         return UBS_ERROR;
     }
     topo_type_ = filtered_list.topo_type;
-    UBS_VLOG_INFO("Topo type's value is: %d\n", topo_type_);
+    UBS_VLOG_DEBUG("Topo type's value is: %d\n", topo_type_);
     if (topo_type_ == UMQ_TOPO_TYPE_FULLMESH_1D) {
         if (GetConnEid(filtered_list, dst_eid) != 0) {
             UBS_VLOG_ERR("Failed to get connect eid\n");
@@ -595,7 +595,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, umq_ret), savedErrno, costms);
         return UBS_UMQ_BIND | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
-    UBS_VLOG_INFO("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
+    UBS_VLOG_DEBUG("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umq_socket->SetBindRemote(true);
 
     if (GlobalSetting::LINK_SELECTION_POLICY != LinkSelectionPolicy::BONDING_BACKUP) {
@@ -677,12 +677,12 @@ Result UmqConnectorOps::DoUbConnectRetry(SocketPtr socket_ptr, Result &ack_ret, 
     }
     umq_used_ports_t used_ports = {.port = used_port_vector.data(),
                                    .num = static_cast<uint8_t>(used_port_vector.size())};
-    UBS_VLOG_INFO("DoConnect down to back, main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                  other_conn_route.src_port.bs.chip_id, other_conn_route.src_port.bs.die_id,
-                  other_conn_route.src_port.bs.port_idx);
-    UBS_VLOG_INFO("DoConnect down to back, back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
-                  other_back_conn_route.src_port.bs.chip_id, other_back_conn_route.src_port.bs.die_id,
-                  other_back_conn_route.src_port.bs.port_idx);
+    UBS_VLOG_DEBUG("DoConnect down to back, main route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                   other_conn_route.src_port.bs.chip_id, other_conn_route.src_port.bs.die_id,
+                   other_conn_route.src_port.bs.port_idx);
+    UBS_VLOG_DEBUG("DoConnect down to back, back route is: src_port(chip_id=%u, die_id=%u, port_idx=%u)\n",
+                   other_back_conn_route.src_port.bs.chip_id, other_back_conn_route.src_port.bs.die_id,
+                   other_back_conn_route.src_port.bs.port_idx);
     ack_ret = DoUbConnect(umq_socket, used_ports);
     if (!IsOk(ack_ret)) {
         UBS_VLOG_ERR("Failed to finish ub bind in retry connect, Peer eid:" EID_FMT ", Peer IP:%s, fd: %d\n",
