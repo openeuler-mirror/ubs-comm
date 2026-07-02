@@ -93,7 +93,7 @@ uint32_t UmqConnHelper::GetLeftPostRxNum(uint64_t umq_handle)
                      static_cast<unsigned long long>(umq_handle), res);
     } else {
         left_post_rx_num = cfg.rqe_post_factor * cfg.rx_depth;
-        UBS_VLOG_INFO("Successfully get umq cfg, left_post_rx_num = %u\n", left_post_rx_num);
+        UBS_VLOG_DEBUG("Successfully get umq cfg, left_post_rx_num = %u\n", left_post_rx_num);
     }
     return left_post_rx_num;
 }
@@ -111,14 +111,14 @@ Result UmqConnHelper::NewBaseUmqCreateOptions(umq_create_option_t &umq_create_op
     umq_create_option.tx_buf_size = UmqSetting::GetIOBufSize();
     umq_create_option.mode = UMQ_MODE_INTERRUPT;
 
-    UBS_VLOG_INFO("UBSOCKET_LINK_PRIORITY: %d\n", UmqSetting::UMQ_LINK_PRIORITY);
+    UBS_VLOG_DEBUG("UBSOCKET_LINK_PRIORITY: %d\n", UmqSetting::UMQ_LINK_PRIORITY);
     if (UmqSetting::UMQ_LINK_PRIORITY != UBSOCKET_LINK_PRIORITY_DEFAULT) {
         umq_create_option.priority = static_cast<uint8_t>(UmqSetting::UMQ_LINK_PRIORITY);
         umq_create_option.create_flag |= UMQ_CREATE_FLAG_PRIORITY;
     }
 
     static const char *trans_mode_str[RC_CTP + 1] = {"RC_TP", "RM_TP", "RM_CTP", "RC_CTP"};
-    UBS_VLOG_INFO("trans_mode result is: %s\n", trans_mode_str[trans_mode]);
+    UBS_VLOG_DEBUG("trans_mode result is: %s\n", trans_mode_str[trans_mode]);
     if (GetTpInfo(umq_create_option.tp_mode, umq_create_option.tp_type) != UBS_OK) {
         return UBS_ERROR;
     }

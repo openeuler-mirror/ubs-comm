@@ -75,8 +75,8 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         UBS_VLOG_DEBUG("tcp accept need try again, fd: %d, %d, %s\n", sock->raw_socket_, errno, Func::Error2Str(errno));
         return fd;
     }
-    UBS_VLOG_INFO("tcp accept ip %s port %d fd: %d\n", peerIp.c_str(),
-                  SocketConnHelper::ExtractPortFromSockAddr(address), fd);
+    UBS_VLOG_DEBUG("tcp accept ip %s port %d fd: %d\n", peerIp.c_str(),
+                   SocketConnHelper::ExtractPortFromSockAddr(address), fd);
     // 异步/同步
     if (GlobalSetting::AsyncAcceptorEnabled()) {
         // 懒初始化：启动 ExecutorService + 初始化 wakeup_event_

@@ -48,12 +48,12 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
     // 共享 JFR、AE 事件依赖 umq_ctx.
     queue_cfg.umq_ctx = raw_socket_;
     // TODO: is_bonding 待确认如何设置到 socketbase
-    UBS_VLOG_INFO("UmqSetting::UMQ_IS_BONDING %b topo_type_ %d", UmqSetting::UMQ_IS_BONDING, topo_type_);
+    UBS_VLOG_DEBUG("UmqSetting::UMQ_IS_BONDING %b topo_type_ %d", UmqSetting::UMQ_IS_BONDING, topo_type_);
     if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         queue_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
         queue_cfg.used_ports = used_ports;
         // 日志：打印 used_ports 内容，验证一主三备是否传入
-        UBS_VLOG_INFO("CreateLocalUmq: used_ports.num=%u (expect 1 main + up to 3 backup)\n", used_ports.num);
+        UBS_VLOG_DEBUG("CreateLocalUmq: used_ports.num=%u (expect 1 main + up to 3 backup)\n", used_ports.num);
         for (uint32_t i = 0; i < used_ports.num; ++i) {
             UBS_VLOG_DEBUG("  used_ports[%u]: src_port(chip=%u,die=%u,port=%u)\n", i, used_ports.port[i].bs.chip_id,
                            used_ports.port[i].bs.die_id, used_ports.port[i].bs.port_idx);
@@ -96,13 +96,13 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DEV;
             queue_cfg.dev_info.dev.eid_idx = UmqSetting::UMQ_EID_INDEX;
             local_eid = UmqSetting::UMQ_LOCAL_EID;
-            UBS_VLOG_INFO("Use Bonding: " EID_FMT ".\n", EID_ARGS(UmqSetting::UMQ_LOCAL_EID));
+            UBS_VLOG_DEBUG("Use Bonding: " EID_FMT ".\n", EID_ARGS(UmqSetting::UMQ_LOCAL_EID));
         } else {
             // init use bonding dev
             queue_cfg.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
             queue_cfg.dev_info.eid.eid = *conn_eid;
             local_eid = *conn_eid;
-            UBS_VLOG_INFO("Use UDMA: " EID_FMT ".\n", EID_ARGS(*conn_eid));
+            UBS_VLOG_DEBUG("Use UDMA: " EID_FMT ".\n", EID_ARGS(*conn_eid));
         }
     } else {
         if (strcpy(queue_cfg.dev_info.dev.dev_name, "bonding_dev_0") == nullptr) {
@@ -158,7 +158,7 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
         return UmqApi::umq_create(cfg);
     }
-    UBS_VLOG_INFO("UBS_ENABLE_SHARE_JFR = true \n");
+    UBS_VLOG_DEBUG("UBS_ENABLE_SHARE_JFR = true \n");
     Locker sLock(UmqEidTable::Instance().GetMainMutex());
     uint64_t main_umq = GetOrCreateMainUmq(cfg, local_eid);
     if (main_umq == UMQ_INVALID_HANDLE) {
