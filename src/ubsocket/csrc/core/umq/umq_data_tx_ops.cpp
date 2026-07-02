@@ -10,6 +10,7 @@
  */
 #include "umq_data_tx_ops.h"
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_defines.h"
 #include "umq_buf_converter.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
@@ -30,6 +31,70 @@ uintptr_t UmqTxOps::AllocTxBuf(uint32_t size, uint32_t count)
     }
 
     return reinterpret_cast<uintptr_t>(tx_buf_list);
+}
+
+void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int seq_no, int i, uint64_t tx_total_len)
+{
+    bool is_first = false;
+    auto *trace = sock->split_trace_;
+    // 1. 定义解析首包信息的 Lambda 表达式，支持传入起始偏移量
+    auto parse_first_packet = [&](size_t offset, char *str_first, uint32_t &val_second, bool &is_first) {
+        // 基于起始偏移量计算实际读取位置
+        auto *p_data = reinterpret_cast<uint8_t *>(cur_buf->buf_data) + offset;
+
+        // 转换 First 4 bytes 为字符串
+        memcpy(str_first, p_data, BRPC_TRACE_FIRST_STR_SIZE);
+        str_first[BRPC_TRACE_FIRST_STR_SIZE] = '\0';
+        if (strcmp(str_first, BRPC_TRACE_FIRST_STR) == 0) {
+            is_first = true;
+        } else {
+            UBS_VLOG_WARN("trace seq %d pack_size is 0, but str_first %s not match %s \n ", seq_no, str_first,
+                          BRPC_TRACE_FIRST_STR);
+        }
+        // 转换 Second 4 bytes 为 uint32_t (pack_size)
+        memcpy(&val_second, p_data + BRPC_TRACE_SECOND_VALUE_SIZE, sizeof(uint32_t));
+        val_second = ntohl(val_second); // 32位网络字节序转主机字节序
+
+        // 首包打印日志
+        UBS_VLOG_DEBUG("trace seq %d first char is %s, pack_size is %u \n", seq_no, str_first, val_second);
+    };
+
+    // 2. 首包解析逻辑
+    if (trace->pack_size == 0) {
+        char str_first[BRPC_TRACE_FIRST_STR_SIZE + 1] = {0};
+        uint32_t val_second = 0;
+
+        parse_first_packet(0, str_first, val_second, is_first);
+
+        // 更新 trace 的 pack_size (加上协议头长度 12)
+        trace->pack_size = val_second + BRPC_TRACE_HEADER_SIZE;
+        trace->pack_size_list.push(trace->pack_size);
+    }
+
+    // 3. 处理分包逻辑
+    if (trace->pack_size >= cur_buf->data_size) {
+        trace->pack_size -= cur_buf->data_size;
+        UBS_VLOG_DEBUG("trace seq %d  pack_size is %u \n", seq_no, trace->pack_size);
+    } else {
+        // 在异常截断时，重新拿取首包信息并打印
+        char str_first[BRPC_TRACE_FIRST_STR_SIZE + 1] = {0};
+        uint32_t val_second = 0;
+
+        parse_first_packet(trace->pack_size, str_first, val_second, is_first);
+        // 更新备份 trace 的 pack_size (加上协议头长度 12)
+        trace->pack_size_list.push(val_second + BRPC_TRACE_HEADER_SIZE);
+        // 当前pack_size要减去当前包剩下的大小
+        trace->pack_size -= (cur_buf->data_size - trace->pack_size);
+    }
+
+    // 4. 更新 Trace 记录
+    if (i == 0) {
+        // first write record has no seqno
+        TRACE_UPDATE_WRITE_FIRST(trace, BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len, is_first);
+    } else {
+        TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size, tx_total_len,
+                               is_first);
+    }
 }
 
 int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
@@ -55,7 +120,9 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     uint32_t tx_total_len = 0;
     uint32_t sn_allocated = 0;
     cvt->Reset();
-
+    if (trace != nullptr) {
+        trace->pack_size_list.push(trace->pack_size);
+    }
     for (uint32_t i = 0; i < batch; ++i) {
         umq_buf_t *cur_wr_first = next_buf;
         uint32_t moved_total_len = 0;
@@ -85,13 +152,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         auto seq_no = umq_socket->FetchAddSeqNum(1);
         buf_pro->imm.user_data = seq_no;
         if (trace != nullptr) {
-            if (i == 0) {
-                // first write record has no seqno
-                TRACE_UPDATE_WRITE_FIRST(trace, BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len);
-            } else if (i > batch - 3) {
-                TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size,
-                                       tx_total_len);
-            }
+            ProcessTracePacket(sock, cur_buf, seq_no, i, tx_total_len);
         }
         ++sn_allocated;
 
@@ -140,6 +201,11 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
             sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, batch);
         }
+        if (trace != nullptr) {
+            while (!trace->pack_size_list.empty()) {
+                trace->pack_size_list.pop();
+            }
+        }
     } else if (bad_qbuf != nullptr) {
         PROF_END(CORE_WRITE_UMQ_POST, false);
         int savedErrno = errno;
@@ -183,13 +249,44 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             QBUF_LIST_FIRST(&head_buf_) = head_qbuf;
             QBUF_LIST_FIRST(&tail_buf_) = tail_qbuf;
             UmqApi::umq_buf_free(bad_qbuf);
+            if (trace != nullptr) {
+                UBS_VLOG_DEBUG("trace seq all failed trace->pack_size %u trace->pack_size_list.front() %u \n",
+                               trace->pack_size, trace->pack_size_list.front());
+                trace->pack_size = trace->pack_size_list.front();
+            }
             tx_total_len = 0;
             umq_socket->FetchSubSeqNum(sn_allocated);
         } else {
             uint32_t buf_num = 0;
-            tx_total_len -= HandleBadQBuf(tx_buf_list, bad_qbuf, head_qbuf, batch, _unsolicited_wr_num,
+            tx_total_len -= HandleBadQBuf(sock, tx_buf_list, bad_qbuf, head_qbuf, batch, _unsolicited_wr_num,
                                           _unsolicited_bytes, _unsignaled_wr_num, &buf_num);
+            if (trace != nullptr) {
+                // 要恢复的大小等于当前已发完的数据大小
+                auto tmp_remaining_len = tx_total_len;
+                // 没恢复完成则循环恢复
+                while (tmp_remaining_len > 0 && !trace->pack_size_list.empty()) {
+                    // 获取当前包发送前的总数量
+                    uint32_t cur_pack = trace->pack_size_list.front();
+                    UBS_VLOG_DEBUG("trace seq some failed restore remain size %u pack_size is %u \n", tmp_remaining_len,
+                                   cur_pack);
+                    if (tmp_remaining_len <= cur_pack) {
+                        cur_pack -= tmp_remaining_len;
+                        trace->pack_size = cur_pack;
+                        break;
+                    } else if (tmp_remaining_len > cur_pack) {
+                        tmp_remaining_len -= cur_pack;
+                        trace->pack_size_list.pop();
+                        continue;
+                    }
+                }
+            }
+
             umq_socket->FetchSubSeqNum(sn_allocated - buf_num);
+        }
+        if (trace != nullptr) {
+            while (!trace->pack_size_list.empty()) {
+                trace->pack_size_list.pop();
+            }
         }
         if (flagEIO == 1) {
             UBS_VLOG_ERR("write failed, destroy UB\n");
@@ -203,6 +300,12 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
                      "local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
                      static_cast<unsigned long long>(local_umqh_), ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
+        if (trace != nullptr) {
+            while (!trace->pack_size_list.empty()) {
+                trace->pack_size_list.pop();
+            }
+            trace->pack_size = 0;
+        }
     }
 
     return tx_total_len;
@@ -405,9 +508,9 @@ inline uint32_t UmqTxOps::IOBufSize()
     return UmqSetting::GetIOBufSize();
 }
 
-uint32_t UmqTxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf, uint32_t batch,
-                                 uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num,
-                                 uint32_t *buf_num)
+uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf,
+                                 umq_buf_t *last_head_qbuf, uint32_t batch, uint16_t unsolicited_wr_num,
+                                 uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num, uint32_t *buf_num)
 {
     umq_buf_t *cur_qbuf = head_qbuf;
     umq_buf_t *last_qbuf = nullptr;

@@ -204,6 +204,10 @@ constexpr uint32_t UBSOCKET_PROBE_BATCH_MAX = 500;
 
 constexpr int8_t UBSOCKET_LINK_PRIORITY_DEFAULT = -1;
 
+constexpr uint8_t BRPC_TRACE_FIRST_STR_SIZE = 4;
+constexpr uint8_t BRPC_TRACE_SECOND_VALUE_SIZE = 4;
+constexpr uint8_t BRPC_TRACE_HEADER_SIZE = 12;
+constexpr char BRPC_TRACE_FIRST_STR[] = "PRPC";
 } // namespace ubs
 } // namespace ock
 

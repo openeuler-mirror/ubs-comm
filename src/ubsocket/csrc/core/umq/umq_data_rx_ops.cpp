@@ -102,11 +102,8 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
         }
         block_cache_.Insert((char *)(buf[i]->buf_data), buf[i]->data_size);
         polled_size += buf[i]->data_size;
-        // due to the flowcontrl buf, real buf may start with i = 1
-        if (i == 0 || i == 1 || i == poll_num - 2 || i == poll_num - 1) {
-            TRACE_ADD_READ_DETAIL(trace, CORE_READ_HANDLE_BUF, sock->raw_socket_,
-                                  static_cast<uint32_t>(buf_pro->imm.user_data), buf[i]->data_size, polled_size);
-        }
+        TRACE_ADD_READ_DETAIL(trace, CORE_READ_HANDLE_BUF, sock->raw_socket_,
+                              static_cast<uint32_t>(buf_pro->imm.user_data), buf[i]->data_size, polled_size);
     }
     PROF_END(CORE_READ_HANDLE_BUF, true);
     return 0;
