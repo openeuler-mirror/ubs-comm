@@ -135,7 +135,7 @@ int PPClient::Run()
     char pong[10]{};
 
     struct iovec send_data[1];
-    send_data[0].iov_base = ubsocket_iobuf_allocate(strlen(ping));
+    send_data[0].iov_base = ubsocket_iobuf_allocate(strlen(ping), nullptr);
     if (send_data[0].iov_base == nullptr) {
         LOG_ERROR("ubsocket_iobuf_allocate error, errno: " << errno);
         return -errno;
@@ -269,7 +269,7 @@ int PPServer::Run()
     recv_data[0].iov_len = 10;
 
     struct iovec send_data[1];
-    send_data[0].iov_base = ubsocket_iobuf_allocate(strlen(pong));
+    send_data[0].iov_base = ubsocket_iobuf_allocate(strlen(pong), nullptr);
     send_data[0].iov_len = strlen(pong);
     ssize_t expect_send_len = strlen(pong);
 

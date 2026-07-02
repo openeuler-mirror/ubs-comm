@@ -36,9 +36,6 @@ uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH = 256;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
-bool GlobalSetting::USE_BRPC_ZCOPY = true;
-std::string GlobalSetting::UBS_BRPC_ALLOC_SYM_STR;
-std::string GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::UB_SOCK_OPT;
 uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 u_external_poller_ops_t *GlobalSetting::UBS_POLLER_OPS = nullptr;
@@ -69,7 +66,6 @@ LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::
 #define ENV_TRANS_MODE "UBSOCKET_TRANS_MODE"
 #define ENV_UBS_RX_DEPTH "UBSOCKET_RX_DEPTH"
 #define ENV_UBS_TX_DEPTH "UBSOCKET_TX_DEPTH"
-#define ENV_USE_BRPC_ZCOPY "UBSOCKET_USE_BRPC_ZCOPY"
 #define ENV_UBS_HAND_SHAKE_MODE "UBSOCKET_UB_HANDSHAKE_MODE"
 #define ENV_UBS_THREAD_POOL_SIZE "UBSOCKET_THREAD_POOL_SIZE"
 #define ENV_PROF_ENABLE "UBSOCKET_PROF_ENABLE"
@@ -112,7 +108,6 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_SPLIT_TRACE_ENABLED, false, "true|false"},
                                     {ENV_AUTO_FALLBACK_TCP, false, "true|false"},
                                     {ENV_ENABLE_SHARE_JFR, false, "true|false"},
-                                    {ENV_USE_BRPC_ZCOPY, false, "true|false"},
                                     {ENV_TRANS_MODE, false, "ub|ib"},
                                     {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"},
                                     {ENV_PROF_ENABLE, false, "true|false"},
@@ -242,10 +237,6 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidate(ENV_TRANS_MODE, strEnvValue)) {
         UBS_TRANS_MODE = strEnvValue;
-    }
-
-    if (GetEnvAndValidate(ENV_USE_BRPC_ZCOPY, strEnvValue)) {
-        USE_BRPC_ZCOPY = Func::BoolFromStr(strEnvValue);
     }
 
     if (GetEnvAndValidate(ENV_UBS_TX_DEPTH, envValue)) {

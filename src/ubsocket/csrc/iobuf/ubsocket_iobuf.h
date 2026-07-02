@@ -16,12 +16,13 @@
 #include <new>
 
 #include "common/ubsocket_common_includes.h"
-#include "ubsocket_zcopy_adapter.h"
+#include "include/ubsocket.h"
 
 namespace ock {
 namespace ubs {
 
 const uint16_t IOBUF_BLOCK_FLAGS_UB = 1 << 2;
+const uint16_t IOBUF_BLOCK_FLAGS_UB_TINY_POOL = 1 << 3;
 struct Block {
     std::atomic<int> nshared;
     uint16_t flags;
@@ -55,7 +56,7 @@ struct Block {
         if (nshared.fetch_sub(1, std::memory_order_release) == 1) {
             std::atomic_thread_fence(std::memory_order_acquire);
             this->~Block();
-            blockmem_deallocate_zero_copy(this);
+            ubsocket_iobuf_deallocate(this);
         }
     }
 

@@ -47,7 +47,7 @@ private:
     uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf);
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
     int GetAndAckEvent();
-    void *PtrFloorToBoundary(void *ptr) override;
+    Block *DataToBlock(void *data) override;
     bool PollSubUmqRx(umq_buf_t *buf[], int i) const;
 
 private:
