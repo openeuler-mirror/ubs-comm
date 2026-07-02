@@ -386,8 +386,8 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
 
     // Minor/Patch差异 — 不一致时处理方式待确认
     if (UBS_PROTOCOL_VERSION_MINOR(negotiated_version) != UBS_PROTOCOL_VERSION_MINOR(UBS_PROTOCOL_VERSION)) {
-        UBS_VLOG_INFO("Minor diff: negotiated=%u, local=%u\n", UBS_PROTOCOL_VERSION_MINOR(negotiated_version),
-                      UBS_PROTOCOL_VERSION_MINOR(UBS_PROTOCOL_VERSION));
+        UBS_VLOG_DEBUG("Minor diff: negotiated=%u, local=%u\n", UBS_PROTOCOL_VERSION_MINOR(negotiated_version),
+                       UBS_PROTOCOL_VERSION_MINOR(UBS_PROTOCOL_VERSION));
     }
 
     umq_socket->SetNegotiatedVersion(negotiated_version);

@@ -59,27 +59,23 @@ enum class VersionCheckResult : int32_t
 
 // ======================== 版本协商函数 ========================
 
-// 合并校验+协商：Major不一致返回kMajorMismatch，一致则计算negotiated_version
-// 协商公式：Major一致→取较低Minor，取较低Patch
+// 合并校验+协商：Major不一致返回kMajorMismatch，一致则取较低全版本
 inline VersionCheckResult NegotiateVersion(uint32_t local_version, uint32_t peer_version, uint32_t &negotiated_version)
 {
     uint32_t local_major = UBS_PROTOCOL_VERSION_MAJOR(local_version);
-    uint32_t local_minor = UBS_PROTOCOL_VERSION_MINOR(local_version);
-    uint32_t local_patch = UBS_PROTOCOL_VERSION_PATCH(local_version);
     uint32_t peer_major = UBS_PROTOCOL_VERSION_MAJOR(peer_version);
-    uint32_t peer_minor = UBS_PROTOCOL_VERSION_MINOR(peer_version);
-    uint32_t peer_patch = UBS_PROTOCOL_VERSION_PATCH(peer_version);
 
     if (peer_major != local_major) {
         UBS_VLOG_WARN("Version negotiate failed: major mismatch, local %u.%u.%u peer %u.%u.%u", local_major,
-                      local_minor, local_patch, peer_major, peer_minor, peer_patch);
+                      UBS_PROTOCOL_VERSION_MINOR(local_version), UBS_PROTOCOL_VERSION_PATCH(local_version), peer_major,
+                      UBS_PROTOCOL_VERSION_MINOR(peer_version), UBS_PROTOCOL_VERSION_PATCH(peer_version));
         return VersionCheckResult::kMajorMismatch;
     }
-    uint32_t minor = (peer_minor < local_minor) ? peer_minor : local_minor;
-    uint32_t patch = (peer_patch < local_patch) ? peer_patch : local_patch;
-    negotiated_version = UBS_MAKE_PROTOCOL_VERSION(local_major, minor, patch);
-    UBS_VLOG_INFO("Version negotiated: local %u.%u.%u peer %u.%u.%u -> %u.%u.%u", local_major, local_minor, local_patch,
-                  peer_major, peer_minor, peer_patch, local_major, minor, patch);
+    negotiated_version = (local_version < peer_version) ? local_version : peer_version;
+    UBS_VLOG_DEBUG("Version negotiated: local %u.%u.%u peer %u.%u.%u -> %u.%u.%u", local_major,
+                   UBS_PROTOCOL_VERSION_MINOR(local_version), UBS_PROTOCOL_VERSION_PATCH(local_version), peer_major,
+                   UBS_PROTOCOL_VERSION_MINOR(peer_version), UBS_PROTOCOL_VERSION_PATCH(peer_version), local_major,
+                   UBS_PROTOCOL_VERSION_MINOR(negotiated_version), UBS_PROTOCOL_VERSION_PATCH(negotiated_version));
     return VersionCheckResult::kCompatible;
 }
 

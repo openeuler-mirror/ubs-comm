@@ -266,7 +266,7 @@ sequenceDiagram
         S-->>C: negotiated_version = UBS_PROTOCOL_VERSION（server版本）
         Note over C: ValidateNegotiatedVersion → Major不一致 → fallback TCP
     else Major一致
-        S->>S: 协商：取较低Minor、较低Patch
+        S->>S: 协商：取较低全版本（直接整数比较）
         S-->>C: negotiated_version (4B) + NegotiateRsp body
         C->>C: ValidateNegotiatedVersion() → ok
         Note over S: 随Rsp发送：ret_code + trans_mode + EID + socket_ids
@@ -274,7 +274,7 @@ sequenceDiagram
 ```
 
 关键函数 (`ubsocket_version.h`):
-- `NegotiateVersion(local, peer)` — Acceptor侧；Major一致→取较低值
+- `NegotiateVersion(local, peer)` — Acceptor侧；Major一致→取较低全版本
 - `ValidateNegotiatedVersion(local, negotiated)` — Connector侧校验
 - Major不一致→降级TCP（不可重试）；Minor/Patch差异→按较低方交互
 
