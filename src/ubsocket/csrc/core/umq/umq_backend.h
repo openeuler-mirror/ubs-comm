@@ -40,9 +40,29 @@ private:
 
 class UmqZeroCopyAllocator : public UbsZeroCopyAllocator {
 public:
-    void *allocate(size_t size) override
+    void *allocate(size_t size, const ubs_iobuf_alloc_option_t *option) override
     {
-        umq_buf_t *buf = UmqApi::umq_buf_alloc(size, BRPC_ALLOC_DEFAULT_BUF_NUM, UMQ_INVALID_HANDLE, nullptr);
+        umq_alloc_option_t umq_option = {};
+        umq_alloc_option_t *umq_option_ptr = nullptr;
+        if (option != nullptr && (option->flag & UBS_IOBUF_ALLOC_FLAG_POOL_TYPE) != 0) {
+            umq_option.flag = UMQ_ALLOC_FLAG_POOL_TYPE;
+            switch (option->pool_type) {
+                case UBS_IOBUF_POOL_TINY:
+                    umq_option.pool_type = UMQ_ALLOC_POOL_TINY;
+                    break;
+                case UBS_IOBUF_POOL_NORMAL:
+                    umq_option.pool_type = UMQ_ALLOC_POOL_NORMAL;
+                    break;
+                case UBS_IOBUF_POOL_ESCAPE:
+                    umq_option.pool_type = UMQ_ALLOC_POOL_ESCAPE;
+                    break;
+                default:
+                    return nullptr;
+            }
+            umq_option_ptr = &umq_option;
+        }
+
+        umq_buf_t *buf = UmqApi::umq_buf_alloc(size, BRPC_ALLOC_DEFAULT_BUF_NUM, UMQ_INVALID_HANDLE, umq_option_ptr);
         if (buf == nullptr) {
             return nullptr;
         }

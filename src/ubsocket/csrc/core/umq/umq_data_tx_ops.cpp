@@ -132,9 +132,13 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         for (cur_buf = cur_wr_first; cur_buf && (next_buf = cur_buf->qbuf_next, 1); cur_buf = next_buf) {
             last = cvt->MemCopy(wr_left_len, reinterpret_cast<uintptr_t>(cur_buf));
             cur_buf->io_direction = UMQ_IO_TX;
-            /* rpc adapter has replace brpc iobuf::blockmem_allocate() & iobuf::blockmem_deallocate()
-             * and ensures that the starting address of the Block is aligned to an 8k boundary. */
-            ((Block *)PtrFloorToBoundary(cur_buf->buf_data))->IncRef();
+            Block *block = DataToBlock(cur_buf->buf_data);
+            if (block == nullptr) {
+                errno = EINVAL;
+                UBS_VLOG_ERR("failed to locate brpc block for TX data %p, fd: %d\n", cur_buf->buf_data, fd_);
+                return -1;
+            }
+            block->IncRef();
             wr_left_len -= cur_buf->data_size;
             moved_total_len += cur_buf->data_size;
 
@@ -236,10 +240,12 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         umq_buf_t *cur = nullptr;
         QBUF_LIST_FOR_EACH(cur, &head)
         {
-            /* rpc adapter has replace brpc butil::iobuf::blockmem_allocate() &
-             * butil::iof::blockmem_deallocate()
-             * and ensures that the starting address of the Block is aligned to an 8k boundary. */
-            ((Block *)PtrFloorToBoundary(cur->buf_data))->DecRef();
+            Block *block = DataToBlock(cur->buf_data);
+            if (block != nullptr) {
+                block->DecRef();
+            } else {
+                UBS_VLOG_ERR("failed to locate brpc block for bad TX data %p, fd: %d\n", cur->buf_data, fd_);
+            }
         }
         if (bad_qbuf == tx_buf_list) {
             // 全部 post 失败, 恢复状态
@@ -498,9 +504,13 @@ int UmqTxOps::DpRearmTxInterrupt()
     return -1;
 }
 
-void *UmqTxOps::PtrFloorToBoundary(void *ptr)
+Block *UmqTxOps::DataToBlock(void *data)
 {
-    return (void *)((uint64_t)ptr & ~UmqSetting::FloorMask());
+    umq_buf_t *qbuf = UmqApi::umq_data_to_head(data);
+    if (qbuf == nullptr || qbuf->buf_data == nullptr) {
+        return nullptr;
+    }
+    return reinterpret_cast<Block *>(qbuf->buf_data);
 }
 
 inline uint32_t UmqTxOps::IOBufSize()
@@ -602,7 +612,13 @@ void UmqTxOps::FlushTx(const SocketPtr &sock, uint32_t timeout_ms)
             while (cur_qbuf && rest_size > 0) {
                 rest_size -= (int64_t)cur_qbuf->data_size;
                 last_qbuf = cur_qbuf;
-                ((Block *)PtrFloorToBoundary(cur_qbuf->buf_data))->DecRef();
+                Block *block = DataToBlock(cur_qbuf->buf_data);
+                if (block != nullptr) {
+                    block->DecRef();
+                } else {
+                    UBS_VLOG_ERR("failed to locate brpc block for cached TX data %p, fd: %d\n", cur_qbuf->buf_data,
+                                 fd_);
+                }
                 cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
             }
 

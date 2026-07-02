@@ -53,7 +53,7 @@ public:
     bool flow_control_failed_ = false;
 
 protected:
-    virtual void *PtrFloorToBoundary(void *ptr) = 0;
+    virtual Block *DataToBlock(void *data) = 0;
 
     friend class DataRx;
 };

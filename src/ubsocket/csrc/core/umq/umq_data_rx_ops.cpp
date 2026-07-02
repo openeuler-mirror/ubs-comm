@@ -109,9 +109,13 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
     return 0;
 }
 
-void *UmqRxOps::PtrFloorToBoundary(void *ptr)
+Block *UmqRxOps::DataToBlock(void *data)
 {
-    return (void *)((uint64_t)ptr & ~UmqSetting::FloorMask());
+    umq_buf_t *qbuf = UmqApi::umq_data_to_head(data);
+    if (qbuf == nullptr || qbuf->buf_data == nullptr) {
+        return nullptr;
+    }
+    return reinterpret_cast<Block *>(qbuf->buf_data);
 }
 
 int UmqRxOps::GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num)

@@ -17,6 +17,7 @@
 
 namespace ock {
 namespace ubs {
+struct Block;
 
 namespace umq {
 
@@ -56,7 +57,7 @@ private:
     static bool HandleProbePacket(umq_buf_t *qbuf);
     static void LogTxCqeErrorMsg(umq_buf_t *buf);
     static void ProcessErrorTxCqe(umq_buf_t *first_qbuf);
-    static void *PtrFloorToBoundary(void *ptr);
+    static Block *DataToBlock(void *data);
 };
 
 } // namespace umq

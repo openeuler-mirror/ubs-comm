@@ -57,12 +57,18 @@ Result UmqBackend::Init() noexcept
     umq_config.flow_control.initial_credit = UmqSetting::UMQ_FC_DEFAULT_CREDIT;
     umq_config.flow_control.max_credits_request = UmqSetting::UMQ_FC_MAX_CREDIT;
     umq_config.flow_control.min_reserved_credit = UmqSetting::UMQ_FC_MIN_CREDIT;
-    umq_config.block_cfg.small_block_size = UmqSetting::IO_BLOCK_TYPE;
+    umq_config.buf_pool_cfg.small_block_size = UmqSetting::IO_BLOCK_TYPE;
     umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DUMMY;
-    umq_config.trans_info[0].mem_cfg.total_size = UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB * IO_SIZE_MB;
     umq_config.trans_info[0].trans_mode = UmqSetting::UMQ_TRANS_MODE;
+    umq_config.buf_pool_cfg.umq_mem_pool_init_size = UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB * IO_SIZE_MB;
+    umq_config.buf_pool_cfg.normal_pool_block_count =
+        static_cast<uint32_t>(4ULL * GlobalSetting::UBS_RX_DEPTH + UmqSetting::UMQ_BUF_POOL_DEPTH);
     umq_config.buf_pool_cfg.umq_buf_pool_max_size = UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB * IO_SIZE_MB;
     umq_config.buf_pool_cfg.tls_qbuf_pool_depth = UmqSetting::UMQ_BUF_POOL_DEPTH;
+    umq_config.buf_pool_cfg.enable_tiny_pool = UmqSetting::UMQ_TINY_POOL_ENABLE;
+    umq_config.buf_pool_cfg.tiny_pool_block_size = UmqSetting::UMQ_TINY_POOL_BLOCK_SIZE;
+    umq_config.buf_pool_cfg.tiny_pool_block_count = UmqSetting::UMQ_TINY_POOL_BLOCK_COUNT;
+    umq_config.buf_pool_cfg.tls_tiny_pool_depth = UmqSetting::UMQ_TLS_TINY_POOL_DEPTH;
     umq_config.io_lock_free = false;
 
     if (UmqSetting::UMQ_TP_TYPE == POOL) {
@@ -216,7 +222,6 @@ Result UmqBackend::AddUbDev(umq_trans_info_t &trans_info)
     strncpy(dev_info, UmqSetting::UMQ_DEV_NAME.c_str(), DEV_NAME_STR_LEN_MAX - 1);
     dev_info[DEV_NAME_STR_LEN_MAX - 1] = '\0';
 
-    trans_info.mem_cfg.total_size = UmqSetting::UMQ_IO_TOTAL_SIZE_MB * IO_SIZE_MB;
     trans_info.trans_mode = UMQ_TRANS_MODE_UB;
     int ret = sprintf(trans_info.dev_info.dev.dev_name, "%s", dev_info);
     if (ret < 0 || ret >= UMQ_DEV_NAME_SIZE) {

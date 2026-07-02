@@ -64,7 +64,21 @@ int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *fil
  */
 int ubsocket_set_log_level(int level);
 
-void *ubsocket_iobuf_allocate(size_t size);
+typedef enum ubs_iobuf_pool_type
+{
+    UBS_IOBUF_POOL_TINY = 1,
+    UBS_IOBUF_POOL_NORMAL = 2,
+    UBS_IOBUF_POOL_ESCAPE = 3,
+} ubs_iobuf_pool_type_t;
+
+typedef struct ubs_iobuf_alloc_option {
+    uint32_t flag;
+    ubs_iobuf_pool_type_t pool_type;
+} ubs_iobuf_alloc_option_t;
+
+#define UBS_IOBUF_ALLOC_FLAG_POOL_TYPE 1U
+
+void *ubsocket_iobuf_allocate(size_t size, const ubs_iobuf_alloc_option_t *option);
 
 void ubsocket_iobuf_deallocate(void *addr);
 

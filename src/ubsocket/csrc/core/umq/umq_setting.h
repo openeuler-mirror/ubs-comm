@@ -45,6 +45,10 @@ public:
     static uint64_t UMQ_MEM_POOL_INIT_SIZE_MB;
     static uint64_t UMQ_MEM_POOL_MAX_SIZE_MB;
     static uint64_t UMQ_BUF_POOL_DEPTH;
+    static bool UMQ_TINY_POOL_ENABLE;
+    static umq_tiny_buf_block_size_t UMQ_TINY_POOL_BLOCK_SIZE;
+    static uint32_t UMQ_TINY_POOL_BLOCK_COUNT;
+    static uint64_t UMQ_TLS_TINY_POOL_DEPTH;
     static uint32_t UMQ_POST_BATCH_MAX;
     static umq_buf_block_size_t IO_BLOCK_TYPE;
     static umq_trans_mode_t IO_TRANS_MODE;
@@ -78,6 +82,7 @@ private:
     static Result VerifySetting() noexcept;
 
     static umq_buf_block_size_t BlockTypeFromStr(const std::string &typeStr) noexcept;
+    static umq_tiny_buf_block_size_t TinyBlockSizeFromStr(const std::string &typeStr) noexcept;
     static umq_trans_mode_t TransModeFromStr(const std::string &typeStr) noexcept;
     static dev_schedule_policy SchedulePolicyFromStr(const std::string &policyStr) noexcept;
 

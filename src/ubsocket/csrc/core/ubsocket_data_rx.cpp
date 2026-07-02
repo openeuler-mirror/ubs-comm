@@ -135,11 +135,12 @@ ssize_t DataRx::OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec
 
 ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
 {
-    /*
-     * rpc adapter has replace brpc butil::iobuf::blockmem_allocate() & butil::iof::blockmem_deallocate()
-     * and ensures that the starting address of the Block is aligned to an 8k boundary.
-     */
-    Block *out_first_block = (Block *)PtrFloorToBoundary(buf);
+    Block *out_first_block = DataToBlock(buf);
+    if (out_first_block == nullptr) {
+        errno = EINVAL;
+        UBS_VLOG_ERR("ReadV failed to locate brpc block for data %p, fd: %d\n", buf, fd_);
+        return UBS_ERROR;
+    }
     ssize_t rx_total_len = block_cache_.CutAndInsertAfter(size, out_first_block);
     if (rx_total_len == 0) {
         /*

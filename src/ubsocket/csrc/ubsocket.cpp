@@ -48,29 +48,6 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
     return UBS_OK;
 }
 
-void ZeroCopyPrepare()
-{
-    // new real zcopy allocator
-    uint32_t type = GlobalSetting::UBS_ALLOWED_PROTOCOL;
-    if (type == UBS_PROTOCOL_UB_RM_RTP || type == UBS_PROTOCOL_UB_RC_RTP) {
-        // delete at ubsocket_uninit
-        g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
-    } else {
-        UBS_VLOG_WARN("unknown zcopy allocator type");
-        return;
-    }
-
-    // load brpc symbol for zcopy
-    UbsZcopyAdapter adapter;
-    if (!adapter.Intercept(GlobalSetting::UBS_BRPC_ALLOC_SYM_STR.c_str(),
-                           GlobalSetting::UBS_BRPC_DEALLOC_SYM_STR.c_str())) {
-        // intercept failed，fallback to TCP
-        UBS_VLOG_WARN("Failed to hook brpc allocator, fallback to TCP mode");
-        GlobalSetting::UBS_NATIVE_TCP_MODE = true;
-    }
-    UBS_VLOG_DEBUG("Successfully hooked brpc zero-copy allocator");
-}
-
 UBS_API int ubsocket_init(u_init_options_t *options)
 {
     if (options == nullptr) {
@@ -159,12 +136,6 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     ArraySet<Socket>::GetInstance().Init();
     g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
     ArraySet<EventPoll>::GetInstance().Init();
-
-    /* step5: load brpc symbol for zcopy */
-    // TODO: UbsZcopyAdapter 中成员变量原在 context 中, 重构后需要在一个地方保存
-    if (GlobalSetting::USE_BRPC_ZCOPY) {
-        ZeroCopyPrepare();
-    }
 
     /* step5: umq backend init */
     //#ifdef UMQ_ADAPTER_BACKEND_ENABLED
@@ -293,24 +264,31 @@ UBS_API int ubsocket_set_log_level(int level)
     return umq_log_config_set(&log_cfg);
 }
 
-UBS_API void *ubsocket_iobuf_allocate(size_t size)
+UBS_API void *ubsocket_iobuf_allocate(size_t size, const ubs_iobuf_alloc_option_t *option)
 {
-    // new real zcopy allocator
+    if (g_zcopy_allocator != nullptr) {
+        return g_zcopy_allocator->allocate(size, option);
+    }
+
     uint32_t type = GlobalSetting::UBS_ALLOWED_PROTOCOL;
     if (type == UBS_PROTOCOL_UB_RM_RTP || type == UBS_PROTOCOL_UB_RC_RTP) {
         // delete at ubsocket_uninit
-        if (g_zcopy_allocator == nullptr) {
-            g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
-        }
+        g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
     } else {
         UBS_VLOG_WARN("unknown zcopy allocator type");
         return nullptr;
     }
 
-    return blockmem_allocate_zero_copy(size);
+    if (g_zcopy_allocator == nullptr) {
+        return nullptr;
+    }
+    return g_zcopy_allocator->allocate(size, option);
 }
 
 UBS_API void ubsocket_iobuf_deallocate(void *addr)
 {
-    blockmem_deallocate_zero_copy(addr);
+    if (addr == nullptr || g_zcopy_allocator == nullptr) {
+        return;
+    }
+    g_zcopy_allocator->deallocate(addr);
 }

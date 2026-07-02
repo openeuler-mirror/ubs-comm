@@ -25,6 +25,11 @@ namespace umq {
 #define ENV_UMQ_MEM_POOL_INIT_SIZE "UBSOCKET_POOL_INITIAL_SIZE"
 #define ENV_UMQ_MEM_POOL_MAX_SIZE "UBSOCKET_POOL_MAX_SIZE"
 #define ENV_UMQ_UBF_POOL_DEPTH "UBSOCKET_BUF_POOL_DEPTH"
+#define ENV_UMQ_TINY_POOL_ENABLE "UBSOCKET_UMQ_TINY_POOL_ENABLE"
+#define ENV_UMQ_TINY_POOL_BLOCK_SIZE "UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE"
+#define ENV_UMQ_TINY_POOL_BLOCK_COUNT "UBSOCKET_UMQ_TINY_POOL_BLOCK_COUNT"
+#define ENV_UMQ_TLS_TINY_POOL_DEPTH "UBSOCKET_UMQ_TLS_TINY_POOL_DEPTH"
+#define ENV_UMQ_TLS_EXPAND_TINY_POOL_DEPTH "UBSOCKET_UMQ_TLS_EXPAND_TINY_POOL_DEPTH"
 #define ENV_UMQ_SCHEDULE_POLICY "UBSOCKET_SCHEDULE_POLICY"
 #define ENV_UMQ_DEV_IP "UBSOCKET_DEV_IP"
 #define ENV_UMQ_DEV_NAME "UBSOCKET_DEV_NAME"
@@ -49,6 +54,10 @@ uint64_t UmqSetting::UMQ_IO_TOTAL_SIZE_MB = 1024;
 uint64_t UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB = 200;
 uint64_t UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB = 2048;
 uint64_t UmqSetting::UMQ_BUF_POOL_DEPTH = 12000;
+bool UmqSetting::UMQ_TINY_POOL_ENABLE = true;
+umq_tiny_buf_block_size_t UmqSetting::UMQ_TINY_POOL_BLOCK_SIZE = TINY_BLOCK_SIZE_1K;
+uint32_t UmqSetting::UMQ_TINY_POOL_BLOCK_COUNT = 8192;
+uint64_t UmqSetting::UMQ_TLS_TINY_POOL_DEPTH = 64;
 int UmqSetting::UMQ_PROCESS_SOCKET_ID = -1;
 std::vector<uint32_t> UmqSetting::UMQ_ALL_SOCKET_IDS = {};
 uint32_t UmqSetting::UMQ_POST_BATCH_MAX = 256UL;
@@ -81,10 +90,15 @@ void UmqSetting::AddRules() noexcept
                                {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 6144},
                                {ENV_UMQ_LINK_PRIORITY, false, 0, 15},
-                               {ENV_UMQ_TP_POOL_SIZE, false, 1, 1000}};
+                               {ENV_UMQ_TP_POOL_SIZE, false, 1, 1000},
+                               {ENV_UMQ_TINY_POOL_BLOCK_COUNT, false, 1, std::numeric_limits<int64_t>::max()},
+                               {ENV_UMQ_TLS_TINY_POOL_DEPTH, false, 0, std::numeric_limits<int64_t>::max()},
+                               {ENV_UMQ_TLS_EXPAND_TINY_POOL_DEPTH, false, 0, std::numeric_limits<int64_t>::max()}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_UMQ_BLOCK_TYPE, false, "tiny|default|small|medium|large"},
+                                    {ENV_UMQ_TINY_POOL_ENABLE, false, "true|false"},
+                                    {ENV_UMQ_TINY_POOL_BLOCK_SIZE, false, "512|1024|2048|4096|8192|1K|2K|4K|8K"},
                                     {ENV_UMQ_SCHEDULE_POLICY, false, "rr|affinity|affinity_priority"},
                                     {ENV_UMQ_UB_TRANS_MODE, false, "RC_TP|RM_TP|RM_CTP|RC_CTP"},
                                     {ENV_UMQ_FLOW_CONTROL_ENABLED, false, "true|false"},
@@ -138,6 +152,22 @@ Result UmqSetting::LoadEnv() noexcept
 
     if (GS::GetEnv(ENV_UMQ_MEM_POOL_MAX_SIZE, int64EnvValue)) {
         UMQ_MEM_POOL_MAX_SIZE_MB = static_cast<uint64_t>(int64EnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_TINY_POOL_ENABLE, strEnvValue)) {
+        UMQ_TINY_POOL_ENABLE = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_TINY_POOL_BLOCK_SIZE, strEnvValue)) {
+        UMQ_TINY_POOL_BLOCK_SIZE = TinyBlockSizeFromStr(strEnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_TINY_POOL_BLOCK_COUNT, int64EnvValue)) {
+        UMQ_TINY_POOL_BLOCK_COUNT = static_cast<uint32_t>(int64EnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_TLS_TINY_POOL_DEPTH, int64EnvValue)) {
+        UMQ_TLS_TINY_POOL_DEPTH = static_cast<uint64_t>(int64EnvValue);
     }
 
     if (GS::GetEnvAndValidate(ENV_UMQ_TP_TYPE, strEnvValue)) {
@@ -317,6 +347,23 @@ umq_buf_block_size_t UmqSetting::BlockTypeFromStr(const std::string &typeStr) no
     // 如果字符串不匹配，返回默认值
     return BLOCK_SIZE_8K;
 }
+
+umq_tiny_buf_block_size_t UmqSetting::TinyBlockSizeFromStr(const std::string &typeStr) noexcept
+{
+    if (typeStr == "512") {
+        return TINY_BLOCK_SIZE_512;
+    } else if (typeStr == "1024" || typeStr == "1K") {
+        return TINY_BLOCK_SIZE_1K;
+    } else if (typeStr == "2048" || typeStr == "2K") {
+        return TINY_BLOCK_SIZE_2K;
+    } else if (typeStr == "4096" || typeStr == "4K") {
+        return TINY_BLOCK_SIZE_4K;
+    } else if (typeStr == "8192" || typeStr == "8K") {
+        return TINY_BLOCK_SIZE_8K;
+    }
+    return TINY_BLOCK_SIZE_1K;
+}
+
 umq_trans_mode_t UmqSetting::TransModeFromStr(const std::string &typeStr) noexcept
 {
     return UMQ_TRANS_MODE_IB_PLUS;

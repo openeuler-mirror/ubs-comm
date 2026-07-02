@@ -116,10 +116,12 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const 
         int64_t left_size = (int64_t)wr_first_buf->total_data_size;
         while (cur_qbuf != nullptr && left_size > 0) {
             left_size -= cur_qbuf->data_size;
-            /* rpc adapter has replace brpc butil::iobuf::blockmeme_allocate() &
-                * butil::iof::blockmem_deallocate() and ensures that the starting address
-                * of the Block is aligned to an 8k boundary. */
-            ((Block *)PtrFloorToBoundary(cur_qbuf->buf_data))->DecRef();
+            Block *block = DataToBlock(cur_qbuf->buf_data);
+            if (block != nullptr) {
+                block->DecRef();
+            } else {
+                UBS_VLOG_ERR("failed to locate brpc block for TX CQE data %p\n", cur_qbuf->buf_data);
+            }
             last_qbuf = cur_qbuf;
             cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
         }
@@ -266,10 +268,12 @@ void UmqTxHelper::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
     int64_t left_size = (int64_t)cur_qbuf->total_data_size;
     while (cur_qbuf != nullptr && left_size > 0) {
         left_size -= cur_qbuf->data_size;
-        /* rpc adapter has replace brpc butil::iobuf::blockmeme_allocate() &
-            * butil::iof::blockmem_deallocate() and ensures that the starting address
-            * of the Block is aligned to an 8k boundary. */
-        ((Block *)PtrFloorToBoundary(cur_qbuf->buf_data))->DecRef();
+        Block *block = DataToBlock(cur_qbuf->buf_data);
+        if (block != nullptr) {
+            block->DecRef();
+        } else {
+            UBS_VLOG_ERR("failed to locate brpc block for error TX CQE data %p\n", cur_qbuf->buf_data);
+        }
         last_qbuf = cur_qbuf;
         cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
     }
@@ -280,9 +284,13 @@ void UmqTxHelper::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
     UmqApi::umq_buf_free(first_qbuf);
 }
 
-void *UmqTxHelper::PtrFloorToBoundary(void *ptr)
+Block *UmqTxHelper::DataToBlock(void *data)
 {
-    return (void *)((uint64_t)ptr & ~UmqSetting::FloorMask());
+    umq_buf_t *qbuf = UmqApi::umq_data_to_head(data);
+    if (qbuf == nullptr || qbuf->buf_data == nullptr) {
+        return nullptr;
+    }
+    return reinterpret_cast<Block *>(qbuf->buf_data);
 }
 
 } // namespace umq
