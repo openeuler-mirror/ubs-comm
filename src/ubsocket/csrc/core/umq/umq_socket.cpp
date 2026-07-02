@@ -159,7 +159,6 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
         return UmqApi::umq_create(cfg);
     }
     UBS_VLOG_DEBUG("UBS_ENABLE_SHARE_JFR = true \n");
-    Locker sLock(UmqEidTable::Instance().GetMainMutex());
     uint64_t main_umq = GetOrCreateMainUmq(cfg, local_eid);
     if (main_umq == UMQ_INVALID_HANDLE) {
         UBS_VLOG_ERR("GetOrCreateMainUmq() failed, ret: %llu\n", static_cast<unsigned long long>(main_umq));
@@ -181,8 +180,6 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
         return UMQ_INVALID_HANDLE;
     }
 
-    UmqEidTable::Instance().Add(*local_eid, GetTransMode(), main_umq);
-
     share_umq_handle_ = main_umq;
     return sub_umq;
 }
@@ -190,20 +187,33 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
 {
     std::vector<std::shared_ptr<MainUmqState>> main_umqs;
-    if (!UmqEidTable::Instance().Get(*localEid, GetTransMode(), main_umqs)) {
-        umq_create_option_t cfg_main;
-        memcpy(&cfg_main, cfg, sizeof(*cfg));
-        cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
-        return UmqApi::umq_create(&cfg_main);
+    if (UmqEidTable::Instance().Get(*localEid, GetTransMode(), main_umqs)) {
+        if (main_umqs.empty()) {
+            UBS_VLOG_ERR("Main umq list is empty, local eid:" EID_FMT ", ret: %llu\n", EID_ARGS(*localEid),
+                         static_cast<unsigned long long>(UMQ_INVALID_HANDLE));
+            return UMQ_INVALID_HANDLE;
+        }
+        return main_umqs.front()->GetUmqHandle();
     }
 
-    if (main_umqs.empty()) {
-        UBS_VLOG_ERR("Main umq list is empty, local eid:" EID_FMT ", ret: %llu\n", EID_ARGS(*localEid),
-                     static_cast<unsigned long long>(UMQ_INVALID_HANDLE));
+    umq_create_option_t cfg_main;
+    memcpy(&cfg_main, cfg, sizeof(*cfg));
+    cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
+    uint64_t new_umq = UmqApi::umq_create(&cfg_main);
+    if (new_umq == UMQ_INVALID_HANDLE) {
         return UMQ_INVALID_HANDLE;
     }
-    // eid 对应多个不同 UB 传输模式的主 umq. 当前实现保证此时 main_umqs 长度为 1
-    return main_umqs.front()->GetUmqHandle();
+
+    {
+        Locker sLock(UmqEidTable::Instance().GetMainMutex());
+        if (UmqEidTable::Instance().Get(*localEid, GetTransMode(), main_umqs)) {
+            // Another thread won the race — use its handle, discard ours.
+            UmqApi::umq_destroy(new_umq);
+            return main_umqs.front()->GetUmqHandle();
+        }
+        UmqEidTable::Instance().Add(*localEid, GetTransMode(), new_umq);
+        return new_umq;
+    }
 }
 
 Result UmqSocket::UpdateRxQueueAvailNum()
