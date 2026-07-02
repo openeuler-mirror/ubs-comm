@@ -193,7 +193,6 @@ ALWAYS_INLINE std::unordered_set<Socket *> UmqShareJfrEpollRunnerOps::SiftSocket
         auto *trace = socket_ptr->split_trace_;
 
         if (i == 0) {
-            TRACE_NOTIFY_JFR_RX_SEQ_NO(trace, buf_pro->imm.user_data);
             uint32_t last_seq = 0;
             if (buf_pro->imm.user_data > 0) {
                 last_seq = buf_pro->imm.user_data - 1;
