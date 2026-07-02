@@ -70,6 +70,7 @@ Result UmqBackend::Init() noexcept
     umq_config.buf_pool_cfg.tiny_pool_block_count = UmqSetting::UMQ_TINY_POOL_BLOCK_COUNT;
     umq_config.buf_pool_cfg.tls_tiny_pool_depth = UmqSetting::UMQ_TLS_TINY_POOL_DEPTH;
     umq_config.io_lock_free = false;
+    umq_config.rq_lock_free = true;
 
     if (UmqSetting::UMQ_TP_TYPE == POOL) {
         umq_config.tp_pool_cfg.notify_threshold = 1;
