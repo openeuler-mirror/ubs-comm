@@ -84,16 +84,6 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
                     HandleErrorRxCqe(buf[i]);
                     UmqApi::umq_buf_free(buf[i]);
                     continue;
-                } else if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
-                    rx_queue_avail_num_ += 1;
-                    // try to wake up tx if necessary
-                    /* convert to umq socket */
-                    UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-                    bool need_fc_awake =
-                        umqSock->GetTx()->GetTxOps()->need_fc_awake_.exchange(false, std::memory_order_relaxed);
-                    if (need_fc_awake && sockBase->NotifyReadable() == -1) {
-                        UBS_VLOG_ERR("eventfd_write() failed, errno: %d, errmsg: %s\n", errno, Func::Error2Str(errno));
-                    }
                 } else if (buf[i]->status == UMQ_FAKE_BUF_FC_EMLINK) {
                     // 流控请求获取jetty资源失败，加入等待队列
                     UBS_VLOG_DEBUG("[UMQ_API] fc post suspended: resource exhausted. Queued for automatic retry.\n");
