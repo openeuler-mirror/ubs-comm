@@ -55,6 +55,9 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
 
     // 2. 首包解析逻辑
     if (trace->pack_size == 0) {
+        if (cur_buf->data_size < 8) {
+            UBS_VLOG_WARN("trace seq %d data_size %d is less than 12 \n", seq_no, cur_buf->data_size);
+        }
         uint32_t val_second = 0;
 
         parse_first_packet(0, val_second, is_first);
@@ -69,11 +72,15 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
         trace->pack_size -= cur_buf->data_size;
         UBS_VLOG_DEBUG("trace seq %d  pack_size is %u \n", seq_no, trace->pack_size);
     } else {
+        if (cur_buf->data_size - trace->pack_size < 8) {
+            UBS_VLOG_WARN("trace seq %d (cur_buf->data_size - trace->pack_size) %d is less than 12 \n", seq_no,
+                          cur_buf->data_size - trace->pack_size);
+        }
         // 在异常截断时，重新拿取首包信息并打印
         uint32_t val_second = 0;
 
         parse_first_packet(trace->pack_size, val_second, is_first);
-        val_second += BRPC_TRACE_HEADER_SIZE;        // 更新备份 trace 的 pack_size (加上协议头长度 12)
+        val_second += BRPC_TRACE_HEADER_SIZE; // 更新备份 trace 的 pack_size (加上协议头长度 12)
         trace->pack_size_list.push(val_second);
         // 当前pack_size要减去当前包剩下的大小
         trace->pack_size = val_second - (cur_buf->data_size - trace->pack_size);

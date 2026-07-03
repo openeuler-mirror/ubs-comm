@@ -124,15 +124,13 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
             // 多打一和多打多的trace需要关联socket之间的关系
             struct sockaddr_storage local_addr;
             socklen_t local_addr_len = sizeof(local_addr);
-            if (getsockname(raw_fd_, (struct sockaddr*)&local_addr, &local_addr_len) == 0) {
-                std::string local_ip = SocketConnHelper::ExtractIpFromSockAddr((struct sockaddr*)&local_addr);
-                int local_port = SocketConnHelper::ExtractPortFromSockAddr((struct sockaddr*)&local_addr);
+            if (getsockname(raw_fd_, (struct sockaddr *)&local_addr, &local_addr_len) == 0) {
+                std::string local_ip = SocketConnHelper::ExtractIpFromSockAddr((struct sockaddr *)&local_addr);
+                int local_port = SocketConnHelper::ExtractPortFromSockAddr((struct sockaddr *)&local_addr);
 
-                UBS_VLOG_INFO("tcp connect succeed, local ip %s port %d, peer ip %s port %d, fd %d\n",
-                               local_ip.c_str(), local_port,
-                               umq_conn_info_.peer_ip.c_str(),
-                               SocketConnHelper::ExtractPortFromSockAddr(address),
-                               new_fd);
+                UBS_VLOG_INFO("tcp connect succeed, local ip %s port %d, peer ip %s port %d, fd %d\n", local_ip.c_str(),
+                              local_port, umq_conn_info_.peer_ip.c_str(),
+                              SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
             }
         }
     } else {
