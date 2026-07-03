@@ -181,14 +181,20 @@ UBS_API int ubsocket_init(u_init_options_t *options)
                                                         GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
     }
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
-        TracePrintThread::Instance().Start();
-        umq_trace_cfg_t cfg;
-        cfg.flag = UMQ_TRACE_FLAG_RECORD_NUM | UMQ_TRACE_FLAG_OUTPUT_LIMIT;
-        cfg.record_num = GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY;
-        cfg.output_limit = 1;
-        int trace_ret = UmqApi::umq_stats_trace_start(&cfg);
-        if (trace_ret != 0) {
-            UBS_VLOG_WARN("umq stats trace start failed, ret: %d\n", trace_ret);
+        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
+            TracePrintThread::Instance().Start();
+        }
+
+        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UMQ) != SplitTraceLevel::LEVEL_NONE) {
+            umq_trace_cfg_t cfg = {};
+            cfg.flag = UMQ_TRACE_FLAG_RECORD_NUM | UMQ_TRACE_FLAG_OUTPUT_LIMIT;
+            cfg.record_num = GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY;
+            cfg.output_limit = 1;
+
+            int trace_ret = UmqApi::umq_stats_trace_start(&cfg);
+            if (trace_ret != 0) {
+                UBS_VLOG_WARN("umq stats trace start failed, ret: %d\n", trace_ret);
+            }
         }
     }
 
@@ -202,9 +208,14 @@ void ubsocket_uninit()
     }
     /* do trace log destroy */
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
-        TracePrintThread::Instance().Stop();
-        ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) { TRACE_FLUSH(sock->split_trace_); });
-        UmqApi::umq_stats_trace_stop();
+        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
+            TracePrintThread::Instance().Stop();
+            ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) { TRACE_FLUSH(sock->split_trace_); });
+        }
+
+        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UMQ) != SplitTraceLevel::LEVEL_NONE) {
+            UmqApi::umq_stats_trace_stop();
+        }
     }
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::PrintStatsMgr::StopStatsCollection();

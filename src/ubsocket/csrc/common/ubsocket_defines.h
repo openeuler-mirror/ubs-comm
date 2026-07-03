@@ -102,6 +102,27 @@ enum class LinkSelectionPolicy : uint8_t
     RAW_DEVICE,
 };
 
+enum class SplitTraceLevel : uint8_t
+{
+    LEVEL_NONE = 0,
+    LEVEL_UBSOCKET = 1 << 0, // 0x01
+    LEVEL_UMQ = 1 << 1,      // 0x02
+
+    LEVEL_ALL = LEVEL_UBSOCKET | LEVEL_UMQ
+};
+
+// 重载按位与运算符，支持 enum class 直接参与位运算
+inline SplitTraceLevel operator&(SplitTraceLevel lhs, SplitTraceLevel rhs)
+{
+    return static_cast<SplitTraceLevel>(static_cast<uint8_t>(lhs) & static_cast<uint8_t>(rhs));
+}
+
+// 重载按位或运算符，方便组合
+inline SplitTraceLevel operator|(SplitTraceLevel lhs, SplitTraceLevel rhs)
+{
+    return static_cast<SplitTraceLevel>(static_cast<uint8_t>(lhs) | static_cast<uint8_t>(rhs));
+}
+
 #ifndef TCP_UB_SOCKET_HANDSHAKE
 #define TCP_UB_SOCKET_HANDSHAKE 144
 #endif

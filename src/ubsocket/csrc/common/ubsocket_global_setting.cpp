@@ -20,6 +20,7 @@ bool GlobalSetting::UBS_TRACE_ENABLED = true;
 bool GlobalSetting::UBS_SPLIT_TRACE_ENABLED = false;
 uint32_t GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY = 65535;
 uint32_t GlobalSetting::UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS = 10;
+SplitTraceLevel GlobalSetting::UBS_SPLIT_TRACE_LEVEL = SplitTraceLevel::LEVEL_ALL;
 bool GlobalSetting::UBS_CLI_ENABLED = false;
 bool GlobalSetting::UBS_PROBE_ENABLED = false;
 bool GlobalSetting::UBS_INITED = false;                      /* not inited by default */
@@ -57,6 +58,7 @@ uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 #define ENV_SPLIT_TRACE_ENABLED "UBSOCKET_SPLIT_TRACE_ENABLE"
 #define ENV_SPLIT_TRACE_BUF_CAPACITY "UBSOCKET_SPLIT_TRACE_BUF_CAPACITY"
 #define ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS "UBSOCKET_SPLIT_TRACE_DRAIN_INTERVAL_MS"
+#define ENV_SPLIT_TRACE_LEVEL "UBSOCKET_SPLIT_TRACE_LEVEL"
 #define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPT" /* match brpc_test FLAGS_ubsocket_async_accept */
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
@@ -123,7 +125,8 @@ void GlobalSetting::AddRules() noexcept
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX},
-                                             {ENV_TRACE_FILE_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
+                                             {ENV_TRACE_FILE_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX},
+                                             {ENV_SPLIT_TRACE_LEVEL, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX}};
 
     for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
@@ -183,6 +186,44 @@ UBHandshakeMode HandShakeFromStr(const std::string &typeStr) noexcept
     }
     // 如果字符串不匹配，返回默认值
     return UBHandshakeMode::UB_SOCK_OPT;
+}
+
+SplitTraceLevel SplitTraceLevelFromStr(const std::string &env_str) noexcept
+{
+    // 1. 默认打开所有 Trace 模块
+    SplitTraceLevel level = SplitTraceLevel::LEVEL_NONE;
+
+    // 2. 如果环境变量为空或纯空格，直接返回默认的 ALL
+    if (env_str.empty() || env_str.find_first_not_of(" \t") == std::string::npos) {
+        return level;
+    }
+
+    std::stringstream ss(env_str);
+    std::string token;
+
+    while (std::getline(ss, token, ',')) {
+        // 去除可能存在的前后空格
+        size_t start = token.find_first_not_of(" \t");
+        size_t end = token.find_last_not_of(" \t");
+        // 3. 处理连续逗号导致的空串（如 "ubsocket,,umq"），直接跳过
+        if (start == std::string::npos) {
+            continue;
+        }
+
+        std::string level_str = token.substr(start, end - start + 1);
+
+        if (level_str == "ubsocket") {
+            level = level | SplitTraceLevel::LEVEL_UBSOCKET;
+        } else if (level_str == "umq") {
+            level = level | SplitTraceLevel::LEVEL_UMQ;
+        } else if (level_str == "all") {
+            level = SplitTraceLevel::LEVEL_ALL;
+        } else {
+            // 4. 遇到未知配置项，打印警告日志
+            UBS_VLOG_WARN("Unknown split trace level config: [%s], ignor.\n", level_str.c_str());
+        }
+    }
+    return level;
 }
 
 Result GlobalSetting::LoadEnv() noexcept
@@ -313,6 +354,9 @@ Result GlobalSetting::LoadEnv() noexcept
         UBS_PORT_COOLDOWN_SEC = static_cast<uint32_t>(envValue);
     }
 
+    if (GetEnvAndValidateNotEmpty(ENV_SPLIT_TRACE_LEVEL, strEnvValue)) {
+        UBS_SPLIT_TRACE_LEVEL = SplitTraceLevelFromStr(strEnvValue);
+    }
     return UBS_OK;
 }
 } // namespace ubs

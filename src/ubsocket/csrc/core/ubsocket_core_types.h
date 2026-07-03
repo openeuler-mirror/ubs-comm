@@ -12,12 +12,12 @@
 #define UBS_COMM_UBSOCKET_CORE_TYPES_H
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_defines.h"
 #include "profiling/trace/ubsocket_trace.h"
 
 namespace ock {
 namespace ubs {
-enum SocketState : uint8_t
-{
+enum SocketState : uint8_t {
     SOCK_STAT_INIT = 0,        /* init */
     SOCK_STAT_RAW_ESTABLISHED, /* the raw socket established */
     SOCK_STAT_ESTABLISHED,     /* all things established */
@@ -27,16 +27,14 @@ enum SocketState : uint8_t
     SOCK_STATE_COUNT
 };
 
-enum class SocketType : uint8_t
-{
+enum class SocketType : uint8_t {
     SOCK_TYPE_TCP = 0, /* only contains raw socket */
     SOCK_TYPE_UMQ,     /* an ubsocket based on umq */
     SOCK_TYPE_SHM,     /* an ubsocket based on shm */
     SOCK_TYPE_COUNT    /* add type before COUNT */
 };
 
-enum SocketCreateType : uint8_t
-{
+enum SocketCreateType : uint8_t {
     SOCK_CREATE_TYPE_UNKNOWN = 0, /* unknown */
     SOCK_CREATE_TYPE_LISTEN,      /* created because of listen */
     SOCK_CREATE_TYPE_CONNECT,     /* created because of connect */
@@ -45,8 +43,7 @@ enum SocketCreateType : uint8_t
     SOCK_CREATE_TYPE_COUNT
 };
 
-enum class EpollRunnerType : uint8_t
-{
+enum class EpollRunnerType : uint8_t {
     SHARE_JFR_RX_RUNNER = 0,     /* Share JFR Rx Epoll Runner */
     TRANSPORT_POOL_TX_RUNNER,    /* Transport Pool Tx Epoll Runner */
     TRANSPORT_POOL_EVENT_RUNNER, /* Transport Pool Event Epoll Runner */
@@ -59,7 +56,10 @@ class Socket {
 public:
     Socket(int fd, SocketType type) : raw_socket_(fd), type_(type)
     {
-        if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        if (!GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+            return;
+        }
+        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
             split_trace_ = new SplitTrace();
         }
     }
