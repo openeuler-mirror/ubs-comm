@@ -39,58 +39,106 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
 {
     bool is_first = false;
     auto *trace = sock->split_trace_;
-    // 1. 定义解析首包信息的 Lambda 表达式，支持传入起始偏移量
-    auto parse_first_packet = [&](size_t offset, uint32_t &val_second, bool &is_first) {
-        auto *p_data = reinterpret_cast<uint8_t *>(cur_buf->buf_data) + offset;
 
-        uint32_t first_raw = *reinterpret_cast<const uint32_t *>(p_data);
+    auto try_assemble_header = [&](size_t offset, uint8_t *assembled, uint32_t &assembled_size) -> bool {
+        auto *p_data = reinterpret_cast<uint8_t *>(cur_buf->buf_data) + offset;
+        uint32_t available = cur_buf->data_size - offset;
+
+        if (trace->pending_header) {
+            uint32_t needed = 8 - trace->header_cache_size;
+            if (available >= needed) {
+                memcpy(assembled, trace->header_cache, trace->header_cache_size);
+                memcpy(assembled + trace->header_cache_size, p_data, needed);
+                assembled_size = 8;
+                trace->header_cache_size = 0;
+                trace->pending_header = false;
+                return true;
+            } else {
+                memcpy(trace->header_cache + trace->header_cache_size, p_data, available);
+                trace->header_cache_size += available;
+                return false;
+            }
+        } else {
+            if (available >= 8) {
+                memcpy(assembled, p_data, 8);
+                assembled_size = 8;
+                return true;
+            } else {
+                memcpy(trace->header_cache, p_data, available);
+                trace->header_cache_size = available;
+                trace->pending_header = true;
+                return false;
+            }
+        }
+    };
+
+    auto parse_header = [&](const uint8_t *assembled, uint32_t &val_second, bool &is_first) {
+        uint32_t first_raw = *reinterpret_cast<const uint32_t *>(assembled);
         if (first_raw == htonl(BRPC_TRACE_FIRST_MAGIC)) {
             is_first = true;
         } else {
             UBS_VLOG_WARN("trace seq %d pack_size is 0, but first magic 0x%08X not match 0x%08X \n ", seq_no, first_raw,
                           BRPC_TRACE_FIRST_MAGIC);
         }
-        val_second = ntohl(*reinterpret_cast<const uint32_t *>(p_data + BRPC_TRACE_SECOND_VALUE_SIZE));
-
+        val_second = ntohl(*reinterpret_cast<const uint32_t *>(assembled + BRPC_TRACE_SECOND_VALUE_SIZE));
         UBS_VLOG_DEBUG("trace seq %d first magic is 0x%x, pack_size is %u \n", seq_no, ntohl(first_raw), val_second);
     };
 
-    // 2. 首包解析逻辑
-    if (trace->pack_size == 0) {
-        if (cur_buf->data_size < 8) {
-            UBS_VLOG_WARN("trace seq %d data_size %d is less than 12 \n", seq_no, cur_buf->data_size);
+    if (trace->pending_header) {
+        uint8_t assembled[8];
+        uint32_t assembled_size = 0;
+        uint32_t prev_cache_size = trace->header_cache_size;
+        if (try_assemble_header(0, assembled, assembled_size)) {
+            uint32_t val_second = 0;
+            parse_header(assembled, val_second, is_first);
+            trace->pack_size = val_second + BRPC_TRACE_HEADER_SIZE - prev_cache_size;
+            trace->pack_size_list.push(trace->pack_size);
+        } else {
+            if (i == 0) {
+                TRACE_UPDATE_WRITE_FIRST(trace, BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len, is_first);
+            } else {
+                TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size,
+                                       tx_total_len, is_first);
+            }
+            return;
         }
-        uint32_t val_second = 0;
-
-        parse_first_packet(0, val_second, is_first);
-
-        // 更新 trace 的 pack_size (加上协议头长度 12)
-        trace->pack_size = val_second + BRPC_TRACE_HEADER_SIZE;
-        trace->pack_size_list.push(trace->pack_size);
+    } else if (trace->pack_size == 0) {
+        uint8_t assembled[8];
+        uint32_t assembled_size = 0;
+        if (try_assemble_header(0, assembled, assembled_size)) {
+            uint32_t val_second = 0;
+            parse_header(assembled, val_second, is_first);
+            trace->pack_size = val_second + BRPC_TRACE_HEADER_SIZE;
+            trace->pack_size_list.push(trace->pack_size);
+        } else {
+            if (i == 0) {
+                TRACE_UPDATE_WRITE_FIRST(trace, BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len, is_first);
+            } else {
+                TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size,
+                                       tx_total_len, is_first);
+            }
+            return;
+        }
     }
 
-    // 3. 处理分包逻辑
     if (trace->pack_size >= cur_buf->data_size) {
         trace->pack_size -= cur_buf->data_size;
         UBS_VLOG_DEBUG("trace seq %d  pack_size is %u \n", seq_no, trace->pack_size);
     } else {
-        if (cur_buf->data_size - trace->pack_size < 8) {
-            UBS_VLOG_WARN("trace seq %d (cur_buf->data_size - trace->pack_size) %d is less than 12 \n", seq_no,
-                          cur_buf->data_size - trace->pack_size);
+        uint8_t assembled[8];
+        uint32_t assembled_size = 0;
+        if (try_assemble_header(trace->pack_size, assembled, assembled_size)) {
+            uint32_t val_second = 0;
+            parse_header(assembled, val_second, is_first);
+            val_second += BRPC_TRACE_HEADER_SIZE;
+            trace->pack_size_list.push(val_second);
+            trace->pack_size = val_second - (cur_buf->data_size - trace->pack_size);
+        } else {
+            trace->pack_size = 0;
         }
-        // 在异常截断时，重新拿取首包信息并打印
-        uint32_t val_second = 0;
-
-        parse_first_packet(trace->pack_size, val_second, is_first);
-        val_second += BRPC_TRACE_HEADER_SIZE; // 更新备份 trace 的 pack_size (加上协议头长度 12)
-        trace->pack_size_list.push(val_second);
-        // 当前pack_size要减去当前包剩下的大小
-        trace->pack_size = val_second - (cur_buf->data_size - trace->pack_size);
     }
 
-    // 4. 更新 Trace 记录
     if (i == 0) {
-        // first write record has no seqno
         TRACE_UPDATE_WRITE_FIRST(trace, BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len, is_first);
     } else {
         TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size, tx_total_len,
@@ -109,6 +157,14 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     uint16_t _unsolicited_wr_num = unsolicited_wr_num_;
     uint32_t _unsolicited_bytes = unsolicited_bytes_;
     uint16_t _unsignaled_wr_num = unsignaled_wr_num_;
+    uint8_t _header_cache[8] = {0};
+    uint8_t _header_cache_size = 0;
+    bool _pending_header = false;
+    if (trace != nullptr) {
+        memcpy(_header_cache, trace->header_cache, sizeof(_header_cache));
+        _header_cache_size = trace->header_cache_size;
+        _pending_header = trace->pending_header;
+    }
 
     PROF_START(CORE_WRITE_MEM_COPY);
     umq_buf_t *cur_buf = tx_buf_list;
@@ -260,6 +316,9 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
                 UBS_VLOG_DEBUG("trace seq all failed trace->pack_size %u trace->pack_size_list.front() %u \n",
                                trace->pack_size, trace->pack_size_list.front());
                 trace->pack_size = trace->pack_size_list.front();
+                memcpy(trace->header_cache, _header_cache, sizeof(_header_cache));
+                trace->header_cache_size = _header_cache_size;
+                trace->pending_header = _pending_header;
             }
             tx_total_len = 0;
             umq_socket->FetchSubSeqNum(sn_allocated);
