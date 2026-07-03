@@ -25,6 +25,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
 {
     PROF_START(CORE_READ);
     PROF_START(CORE_READ_EAGAIN);
+    uint64_t read_start_time = ubsocket_get_timeNs_compile();
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::readv(fd_, iov, iovcnt);
         PROF_END(CORE_READ, size >= 0);
@@ -56,7 +57,6 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
      * (2) when all the received message passed to caller, fallback to tcp/ip */
     ssize_t rx_total_len = OutputErrorMagicNumber(sock, iov, iovcnt);
     if (rx_total_len > 0) {
-        TRACE_ADD_READ(trace, CORE_READ, fd_, ubsocket_get_timeNs_compile(), 0);
         PROF_END(CORE_READ, false);
         return rx_total_len;
     }
@@ -69,7 +69,6 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     TRACE_ADD_READ(trace, CORE_READ_POLL_RX, fd_, start_time, end_time);
 
     if (ret < 0) {
-        TRACE_ADD_READ(trace, CORE_READ, fd_, ubsocket_get_timeNs_compile(), 0);
         PROF_END(CORE_READ, false);
         return ret;
     }
@@ -92,10 +91,9 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     if (ret < 0) {
         if (!((errno == EINTR) || (errno == EAGAIN))) {
             PROF_END(CORE_READ, false);
-            TRACE_ADD_READ(trace, CORE_READ, fd_, ubsocket_get_timeNs_compile(), 0);
         } else {
             PROF_END(CORE_READ_EAGAIN, true);
-            TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, ubsocket_get_timeNs_compile(), 0);
+            TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, read_start_time, ubsocket_get_timeNs_compile());
         }
         return ret;
     }
@@ -104,7 +102,9 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
         sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
     }
-    TRACE_ADD_READ(trace, CORE_READ, fd_, ubsocket_get_timeNs_compile(), 0);
+    if (rx_total_len != 0) {
+        TRACE_ADD_READ(trace, CORE_READ, fd_, read_start_time, ubsocket_get_timeNs_compile());
+    }
     PROF_END(CORE_READ, true);
     TRACE_TRY_SWAP(trace);
     return rx_total_len;

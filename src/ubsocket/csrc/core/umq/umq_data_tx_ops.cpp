@@ -40,33 +40,29 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
     bool is_first = false;
     auto *trace = sock->split_trace_;
     // 1. 定义解析首包信息的 Lambda 表达式，支持传入起始偏移量
-    auto parse_first_packet = [&](size_t offset, char *str_first, uint32_t &val_second, bool &is_first) {
-        // 基于起始偏移量计算实际读取位置
+    auto parse_first_packet = [&](size_t offset, uint32_t &val_second, bool &is_first) {
         auto *p_data = reinterpret_cast<uint8_t *>(cur_buf->buf_data) + offset;
 
-        // 转换 First 4 bytes 为字符串
-        memcpy(str_first, p_data, BRPC_TRACE_FIRST_STR_SIZE);
-        str_first[BRPC_TRACE_FIRST_STR_SIZE] = '\0';
-        if (strcmp(str_first, BRPC_TRACE_FIRST_STR) == 0) {
+        uint32_t first_raw = *reinterpret_cast<const uint32_t *>(p_data);
+        if (first_raw == htonl(BRPC_TRACE_FIRST_MAGIC)) {
             is_first = true;
         } else {
-            UBS_VLOG_WARN("trace seq %d pack_size is 0, but str_first %s not match %s \n ", seq_no, str_first,
-                          BRPC_TRACE_FIRST_STR);
+            UBS_VLOG_WARN("trace seq %d pack_size is 0, but first magic 0x%08X not match 0x%08X \n ", seq_no, first_raw,
+                          BRPC_TRACE_FIRST_MAGIC);
         }
-        // 转换 Second 4 bytes 为 uint32_t (pack_size)
-        memcpy(&val_second, p_data + BRPC_TRACE_SECOND_VALUE_SIZE, sizeof(uint32_t));
-        val_second = ntohl(val_second); // 32位网络字节序转主机字节序
+        val_second = ntohl(*reinterpret_cast<const uint32_t *>(p_data + BRPC_TRACE_SECOND_VALUE_SIZE));
 
-        // 首包打印日志
-        UBS_VLOG_DEBUG("trace seq %d first char is %s, pack_size is %u \n", seq_no, str_first, val_second);
+        UBS_VLOG_DEBUG("trace seq %d first magic is 0x%x, pack_size is %u \n", seq_no, ntohl(first_raw), val_second);
     };
 
     // 2. 首包解析逻辑
     if (trace->pack_size == 0) {
-        char str_first[BRPC_TRACE_FIRST_STR_SIZE + 1] = {0};
+        if (cur_buf->data_size < 8) {
+            UBS_VLOG_WARN("trace seq %d data_size %d is less than 12 \n", seq_no, cur_buf->data_size);
+        }
         uint32_t val_second = 0;
 
-        parse_first_packet(0, str_first, val_second, is_first);
+        parse_first_packet(0, val_second, is_first);
 
         // 更新 trace 的 pack_size (加上协议头长度 12)
         trace->pack_size = val_second + BRPC_TRACE_HEADER_SIZE;
@@ -78,15 +74,18 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
         trace->pack_size -= cur_buf->data_size;
         UBS_VLOG_DEBUG("trace seq %d  pack_size is %u \n", seq_no, trace->pack_size);
     } else {
+        if (cur_buf->data_size - trace->pack_size < 8) {
+            UBS_VLOG_WARN("trace seq %d (cur_buf->data_size - trace->pack_size) %d is less than 12 \n", seq_no,
+                          cur_buf->data_size - trace->pack_size);
+        }
         // 在异常截断时，重新拿取首包信息并打印
-        char str_first[BRPC_TRACE_FIRST_STR_SIZE + 1] = {0};
         uint32_t val_second = 0;
 
-        parse_first_packet(trace->pack_size, str_first, val_second, is_first);
-        // 更新备份 trace 的 pack_size (加上协议头长度 12)
-        trace->pack_size_list.push(val_second + BRPC_TRACE_HEADER_SIZE);
+        parse_first_packet(trace->pack_size, val_second, is_first);
+        val_second += BRPC_TRACE_HEADER_SIZE; // 更新备份 trace 的 pack_size (加上协议头长度 12)
+        trace->pack_size_list.push(val_second);
         // 当前pack_size要减去当前包剩下的大小
-        trace->pack_size -= (cur_buf->data_size - trace->pack_size);
+        trace->pack_size = val_second - (cur_buf->data_size - trace->pack_size);
     }
 
     // 4. 更新 Trace 记录

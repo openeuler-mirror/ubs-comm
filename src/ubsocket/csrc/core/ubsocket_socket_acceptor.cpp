@@ -77,6 +77,18 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     }
     UBS_VLOG_DEBUG("tcp accept ip %s port %d fd: %d\n", peerIp.c_str(),
                    SocketConnHelper::ExtractPortFromSockAddr(address), fd);
+    if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        // 多打一和多打多的trace需要关联socket之间的关系
+        struct sockaddr_storage local_addr;
+        socklen_t local_addr_len = sizeof(local_addr);
+        if (getsockname(fd, (struct sockaddr *)&local_addr, &local_addr_len) == 0) {
+            std::string local_ip = SocketConnHelper::ExtractIpFromSockAddr((struct sockaddr *)&local_addr);
+            int local_port = SocketConnHelper::ExtractPortFromSockAddr((struct sockaddr *)&local_addr);
+
+            UBS_VLOG_INFO("tcp accept local ip %s port %d, peer ip %s port %d, fd: %d\n", local_ip.c_str(), local_port,
+                          peerIp.c_str(), SocketConnHelper::ExtractPortFromSockAddr(address), fd);
+        }
+    }
     // 异步/同步
     if (GlobalSetting::AsyncAcceptorEnabled()) {
         // 懒初始化：启动 ExecutorService + 初始化 wakeup_event_
