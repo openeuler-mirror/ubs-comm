@@ -35,9 +35,7 @@
 #include "umq_types.h"
 
 using ock::ubs::ArraySet;
-using ock::ubs::ReadLocker;
 using ock::ubs::Socket;
-using ock::ubs::SocketPtr;
 using ock::ubs::umq::UmqSetting;
 using ock::ubs::umq::UmqSocket;
 
@@ -507,17 +505,25 @@ private:
         if (sentCount >= mProbeBatch)
             return;
 
-        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
-            if (sentCount >= mProbeBatch) {
-                return;
-            }
-            UmqSocket *sockObj = (UmqSocket *)sock;
+        uint32_t currentPos = mCurrentCursor.load();
+        uint32_t scans = 0;
+        // 限制扫描范围，防止死循环
+        uint32_t maxScan = ArraySet<Socket>::GetInstance().Capacity();
+
+        while (sentCount < mProbeBatch && scans < maxScan) {
+            if (currentPos >= maxScan)
+                currentPos = 0;
+
+            UmqSocket *sockObj =
+                static_cast<UmqSocket *>(ArraySet<Socket>::GetInstance().GetItem(static_cast<int>(currentPos)).Get());
             if (sockObj && sockObj->IsClient()) {
                 SendProbePacket(sockObj);
                 sentCount++;
-                mCurrentCursor.store(fd + 1);
+                mCurrentCursor.store(currentPos + 1);
             }
-        });
+            currentPos++;
+            scans++;
+        }
     }
 
     void UpdateTimespec(struct timespec *t, uint64_t ms)
