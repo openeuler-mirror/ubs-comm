@@ -20,7 +20,7 @@ if (EXISTS ${UBS_GIT_EXECUTABLE})
 
     if (UBS_GIT_COMMIT_RESULT EQUAL 0)
         add_compile_definitions(UBS_GIT_LAST_COMMIT=${UBS_GIT_COMMIT_ID})
-        message(STATUS "ubsocket: set UBS_GIT_LAST_COMMIT to ${UBS_GIT_LAST_COMMIT} as compile definition")
+        message(STATUS "ubsocket: set UBS_GIT_LAST_COMMIT to ${UBS_GIT_COMMIT_ID} as compile definition")
     else ()
         message(STATUS "ubsocket: failed to git last commit with git")
     endif ()

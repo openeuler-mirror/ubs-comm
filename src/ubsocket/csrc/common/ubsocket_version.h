@@ -44,9 +44,23 @@ namespace ubs {
 constexpr uint32_t UBS_PROTOCOL_VERSION =
     UBS_MAKE_PROTOCOL_VERSION(UBS_VERSION_MAJOR, UBS_VERSION_MINOR, UBS_VERSION_PATCH);
 
-// 字符串版本号宏 — 供ubsocket_version() API使用
+// 字符串化辅助宏
+#define UBS_STR(x) #x
+#define UBS_XSTR(x) UBS_STR(x)
+
+// UBS_GIT_LAST_COMMIT 由 CMake config_last_commit.cmake 通过 add_compile_definitions 注入
+// Bazel 构建中不注入此宏，fallback 为 "unknown"
+#ifndef UBS_GIT_LAST_COMMIT
+#define UBS_GIT_LAST_COMMIT unknown
+#endif
+
+// 短版本号 — ubsocket_version() API 的返回值
 #define UBS_LIB_VERSION UBS_VERSION_STR
-#define UBS_LIB_VERSION_FULL UBS_VERSION_FULL_STR
+
+// 全版本号 — 含构建时间与commit hash，供 golden -v / ubsocket_version() 日志使用
+#define UBS_LIB_VERSION_FULL                                                   \
+    "library version: " UBS_VERSION_STR ", build time: " __DATE__ " " __TIME__ \
+    ", commit: " UBS_XSTR(UBS_GIT_LAST_COMMIT)
 
 // ======================== 版本校验结果 ========================
 
