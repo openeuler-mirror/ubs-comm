@@ -85,6 +85,7 @@ public:
     static bool UBS_SPLIT_TRACE_ENABLED;               /* if enable split trace, from env */
     static uint32_t UBS_SPLIT_TRACE_BUF_CAPACITY;      /* split trace buffer capacity per socket, from env */
     static uint32_t UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS; /* split trace drain interval in ms, from env */
+    static SplitTraceLevel UBS_SPLIT_TRACE_LEVEL;      /* split trace level 0 only ubsocket trace, 1 ubsocket and umq */
     static bool UBS_CLI_ENABLED;
     static bool UBS_PROBE_ENABLED;
     static bool UBS_BACKUP_LINK_ENABLED;

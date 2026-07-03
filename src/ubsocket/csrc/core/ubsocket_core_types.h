@@ -12,6 +12,7 @@
 #define UBS_COMM_UBSOCKET_CORE_TYPES_H
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_defines.h"
 #include "profiling/trace/ubsocket_trace.h"
 
 namespace ock {
@@ -59,7 +60,10 @@ class Socket {
 public:
     Socket(int fd, SocketType type) : raw_socket_(fd), type_(type)
     {
-        if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        if (!GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+            return;
+        }
+        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
             split_trace_ = new SplitTrace();
         }
     }

@@ -121,7 +121,8 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
         UBS_VLOG_DEBUG("tcp connect succeed, ip %s port %d fd %d\n", umq_conn_info_.peer_ip.c_str(),
                        SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
 
-        if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED &&
+            (GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
             // 多打一和多打多的trace需要关联socket之间的关系
             struct sockaddr_storage local_addr;
             socklen_t local_addr_len = sizeof(local_addr);
