@@ -36,6 +36,15 @@ TracePrintThread &TracePrintThread::Instance()
     return instance;
 }
 
+TracePrintThread::~TracePrintThread()
+{
+    running_.store(false, std::memory_order_release);
+    if (thread_.joinable()) {
+        thread_.join();
+    }
+    ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) { TRACE_FLUSH(sock->split_trace_); });
+}
+
 void TracePrintThread::Start()
 {
     bool expected = false;

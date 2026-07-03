@@ -502,6 +502,7 @@ private:
 class TracePrintThread {
 public:
     static TracePrintThread &Instance();
+    ~TracePrintThread();
     void Start();
     void Stop();
 
