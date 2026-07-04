@@ -428,8 +428,8 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     const dev_schedule_policy schedule_policy = UmqSetting::UMQ_DEV_SCHEDULE_POLICY;
     if (schedule_policy == dev_schedule_policy::CPU_AFFINITY ||
         schedule_policy == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
-        UBS_VLOG_WARN("Use consistent schedule policy CPU_AFFINITY: %d in connect, fd: %d\n",
-                      static_cast<int>(schedule_policy), raw_fd_);
+        UBS_VLOG_DEBUG("Use consistent schedule policy CPU_AFFINITY: %d in connect, fd: %d\n",
+                       static_cast<int>(schedule_policy), raw_fd_);
         use_round_robin_ = false;
     }
 
