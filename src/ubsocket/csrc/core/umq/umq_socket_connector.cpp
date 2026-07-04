@@ -12,6 +12,7 @@
 #include "umq_socket_connector.h"
 
 #include <netinet/tcp.h>
+#include <random>
 
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_port_cooldown.h"
@@ -525,7 +526,11 @@ Result UmqConnectorOps::DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_e
         // 日志：打印所有路由大小
         UBS_VLOG_DEBUG("DoRoute(CLOS): main_routes.size()=%zu, back_routes.size()=%zu, all_routes.size()=%zu\n",
                        main_routes.size(), back_routes.size(), all_routes.size());
-        RRChooseMainRoute(all_routes, dst_eid, conn_main_route, conn_back_routes);
+        uint32_t main_route_size = all_routes.size();
+        if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY != dev_schedule_policy::ROUND_ROBIN) {
+            main_route_size = main_routes.size();
+        }
+        RRChooseMainRoute(all_routes, main_route_size, dst_eid, conn_main_route, conn_back_routes);
         conn_route_ = conn_main_route;
 
         // 备路组：直接使用RR选择的备路（已包含亲和+不亲和的统一排序）
@@ -845,7 +850,7 @@ Result UmqConnectorOps::GetRoundRobinConnEid(umq_route_list_t &route_list, const
 void UmqConnectorOps::GetBondingEidMapIndex(const umq_eid_t &dst_eid, uint32_t &index)
 {
     if (!EidRegistry::Instance().IsRegisteredEidIndex(dst_eid)) {
-        EidRegistry::Instance().RegisterOrReplaceEidIndex(dst_eid, 0);
+        EidRegistry::Instance().RegisterOrReplaceEidIndex(dst_eid, index);
     }
 
     EidRegistry::Instance().GetEidIndex(dst_eid, index);
@@ -929,11 +934,16 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
     return UBS_ERROR;
 }
 
-void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &all_routes, const umq_eid_t *dst_eid,
-                                        umq_route_t &conn_main_route, std::vector<umq_route_t> &conn_back_routes)
+void UmqConnectorOps::RRChooseMainRoute(std::vector<umq_route_t> &all_routes, uint32_t main_route_size,
+                                        const umq_eid_t *dst_eid, umq_route_t &conn_main_route,
+                                        std::vector<umq_route_t> &conn_back_routes)
 {
-    // 获取起始索引
     uint32_t startIndex = 0;
+    if (UmqSetting::UMQ_RANDOM_ROUTE) {
+        std::minstd_rand gen(std::random_device{}());
+        std::uniform_int_distribution<int> dist(0, main_route_size - 1);
+        startIndex = dist(gen);
+    }
     GetBondingEidMapIndex(*dst_eid, startIndex);
 
     // 一主三备：确认测试环境亲和组大小
@@ -1037,7 +1047,8 @@ Result UmqConnectorOps::CheckOtherRouteForClos(const UmqSocketPtr &umq_socket)
     umq_route_t conn_main_route;
     std::vector<umq_route_t> temp_back_routes;
     // 从容灾备路池选路，适配 RRChooseMainRoute 新签名
-    RRChooseMainRoute(non_aff_route_list_, &umq_conn_info_.peer_eid, conn_main_route, temp_back_routes);
+    RRChooseMainRoute(non_aff_route_list_, non_aff_route_list_.size(), &umq_conn_info_.peer_eid, conn_main_route,
+                      temp_back_routes);
     other_conn_route = conn_main_route;
     // 取第一条备路，兼容 OtherRouteMessage 的二字段结构
     other_back_conn_route = temp_back_routes.empty() ? umq_route_t{} : temp_back_routes[0];

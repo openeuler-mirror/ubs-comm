@@ -102,6 +102,23 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
     }
     traceTime_.umq_rearm_end_timestamp_ = ubsocket_get_timeNs_compile();
 
+    static thread_local std::unique_ptr<FlashDynamicBitSet> event_reach_sockets;
+    static thread_local std::unique_ptr<FlashDynamicBitSet> event_reach_epoll_fds;
+    if (UNLIKELY(event_reach_sockets.get() == nullptr)) {
+        event_reach_sockets.reset(new (std::nothrow) FlashDynamicBitSet(ArraySet<Socket>::GetInstance().Capacity()));
+        if (UNLIKELY(event_reach_sockets.get() == nullptr)) {
+            UBS_VLOG_ERR("allocate memory for FlashDynamicBitSet failed.\n");
+            return -1;
+        }
+    }
+    if (UNLIKELY(event_reach_epoll_fds.get() == nullptr)) {
+        event_reach_epoll_fds.reset(new (std::nothrow) FlashDynamicBitSet(ArraySet<Socket>::GetInstance().Capacity()));
+        if (UNLIKELY(event_reach_epoll_fds.get() == nullptr)) {
+            UBS_VLOG_ERR("allocate memory for FlashDynamicBitSet failed.\n");
+            return -1;
+        }
+    }
+
     umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
     traceTime_.umq_poll_start_timestamp_ = ubsocket_get_timeNs_compile();
     umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
@@ -153,16 +170,23 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
         }
     }
 
-    std::set<AsyncEventPoll *> readable_epoll_fds;
+    event_reach_sockets->ClearAll();
+    event_reach_epoll_fds->ClearAll();
+
     epoll_data_t event_data{};
-    auto event_reach_sockets = SiftSocketEventsWithUmqBuffers(buf, pollNum);
-    for (auto obj : event_reach_sockets) {
-        auto socket_obj = (Socket *)obj;
+    std::vector<SocketPtr> socket_ptrs;
+    std::vector<AsyncEventPoll *> readable_epoll_fds;
+    SiftSocketEventsWithUmqBuffers(buf, pollNum, *event_reach_sockets, socket_ptrs);
+    for (auto &obj : socket_ptrs) {
+        auto socket_obj = obj.Get();
         ((UmqSocket *)socket_obj)->NewRxEpollIn();
         auto epoll_fd_obj = (AsyncEventPoll *)(((SocketBase *)socket_obj)->GetAddedEpollFd(event_data));
-        if (UNLIKELY(epoll_fd_obj != nullptr)) {
+        if (LIKELY(epoll_fd_obj != nullptr)) {
             epoll_fd_obj->AddReadableEvent(event_data);
-            readable_epoll_fds.emplace(epoll_fd_obj);
+            if (!event_reach_epoll_fds->Test(epoll_fd_obj->GetEpollFd())) {
+                readable_epoll_fds.emplace_back(epoll_fd_obj);
+                event_reach_epoll_fds->Set(epoll_fd_obj->GetEpollFd());
+            }
         }
     }
 
@@ -173,10 +197,12 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
     return 0;
 }
 
-ALWAYS_INLINE std::unordered_set<Socket *> UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf,
-                                                                                                     int count)
+void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count,
+                                                               FlashDynamicBitSet &socket_fds,
+                                                               std::vector<SocketPtr> &socket_ptrs)
 {
-    std::unordered_set<Socket *> event_reach_sockets;
+    SocketPtr socket_ptr{nullptr};
+    int last_socket_fd = -1;
     for (int i = 0; i < count; ++i) {
         auto buf_pro = (umq_buf_pro_t *)buf[i]->qbuf_ext;
         if (UNLIKELY(buf[i]->status == UMQ_FAKE_BUF_FC_ERR)) {
@@ -184,8 +210,11 @@ ALWAYS_INLINE std::unordered_set<Socket *> UmqShareJfrEpollRunnerOps::SiftSocket
         }
 
         auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
-        auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
-        if (UNLIKELY(socket_ptr == nullptr)) {
+        if (socket_fd != last_socket_fd) {
+            socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd);
+            last_socket_fd = socket_fd;
+        }
+        if (UNLIKELY(socket_ptr.Get() == nullptr)) {
             UBS_VLOG_WARN("async_epoll Get socket fd:%d object failed. \n", socket_fd);
             continue;
         }
@@ -219,14 +248,16 @@ ALWAYS_INLINE std::unordered_set<Socket *> UmqShareJfrEpollRunnerOps::SiftSocket
                                buf[i]->data_size, 0);
         TRACE_TRY_SWAP_EPOLL(trace);
 
-        if (UNLIKELY((((UmqSocket *)socket_ptr)->AddQbuf(buf[i]) != 0))) {
+        if (UNLIKELY((((UmqSocket *)socket_ptr.Get())->AddQbuf(buf[i]) != 0))) {
             UBS_VLOG_ERR("async_epoll add qbuf for socket fd: %d failed.\n", socket_fd);
             continue;
         }
 
-        event_reach_sockets.emplace(socket_ptr);
+        if (!socket_fds.Test(socket_fd)) {
+            socket_fds.Set(socket_fd);
+            socket_ptrs.emplace_back(socket_ptr);
+        }
     }
-    return event_reach_sockets;
 }
 
 ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)

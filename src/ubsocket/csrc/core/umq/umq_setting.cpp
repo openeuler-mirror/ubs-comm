@@ -79,6 +79,7 @@ umq_tp_mode_t UmqSetting::UMQ_UB_TP_MODE = UMQ_TM_RM;
 umq_tp_type_t UmqSetting::UMQ_UB_TP_TYPE = UMQ_TP_TYPE_RTP;
 bool UmqSetting::UMQ_IS_BONDING = false;
 bool UmqSetting::UMQ_FLOW_CONTROL_ENABLE = true;
+bool UmqSetting::UMQ_RANDOM_ROUTE = false;
 int8_t UmqSetting::UMQ_LINK_PRIORITY = UBSOCKET_LINK_PRIORITY_DEFAULT;
 pool_type_t UmqSetting::UMQ_TP_TYPE = SINGLE;
 uint32_t UmqSetting::UMQ_TP_POOL_SIZE = 16;

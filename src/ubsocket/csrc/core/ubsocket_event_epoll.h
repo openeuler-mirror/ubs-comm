@@ -22,7 +22,7 @@ namespace ock {
 namespace ubs {
 
 constexpr auto MAX_READABLE_FD_COUNT = 0x10000U;
-constexpr int MAX_EPOLL_WAIT_COUNT = 1024;
+constexpr int MAX_EPOLL_WAIT_COUNT = 128;
 
 enum EpollEventType : uint64_t
 {
@@ -312,12 +312,17 @@ public:
 
     virtual void WakeUpEpollFd() = 0;
 
+    ALWAYS_INLINE int GetEpollFd() const noexcept
+    {
+        return epoll_fd_;
+    }
+
     DEFINE_REF_OPERATION_FUNC;
 
 protected:
     DECLARE_REF_COUNT_VARIABLE;
 
-    int epoll_fd_;
+    const int epoll_fd_;
     u_mutex_t *ctl_mutex_;
     u_mutex_t *mutex_;
 };

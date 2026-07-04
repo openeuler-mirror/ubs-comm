@@ -278,9 +278,8 @@ void EpollRunner<T>::RunInThread() noexcept
 template <EpollRunnerType T>
 bool EpollRunner<T>::DrainReadyEvents(int timeout, bool *hasEvents) noexcept
 {
-    std::vector<struct epoll_event> events;
-    events.resize(MAX_EPOLL_WAIT_COUNT);
-    auto count = epoll_wait(epoll_fd_, events.data(), MAX_EPOLL_WAIT_COUNT, timeout);
+    struct epoll_event events[MAX_EPOLL_WAIT_COUNT];
+    auto count = epoll_wait(epoll_fd_, events, MAX_EPOLL_WAIT_COUNT, timeout);
     if (hasEvents != nullptr) {
         *hasEvents = count > 0;
     }

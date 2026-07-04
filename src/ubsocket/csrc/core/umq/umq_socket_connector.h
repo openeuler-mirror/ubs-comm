@@ -64,8 +64,8 @@ private:
     // dst_eid: 对端EID，用于轮询索引
     // conn_main_route: 输出参数，选出的主路由
     // conn_back_routes: 输出参数，选出的备路由组（最多3条）
-    void RRChooseMainRoute(std::vector<umq_route_t> &all_routes, const umq_eid_t *dst_eid, umq_route_t &conn_main_route,
-                           std::vector<umq_route_t> &conn_back_routes);
+    void RRChooseMainRoute(std::vector<umq_route_t> &all_routes, uint32_t main_route_size, const umq_eid_t *dst_eid,
+                           umq_route_t &conn_main_route, std::vector<umq_route_t> &conn_back_routes);
     // 获取CPU亲和性路由
     // affine_routes: 输出参数，亲和组路由（src/dst 均为本端芯片）
     // non_aff_routes: 输出参数，非亲和组路由（src/dst 为异芯片）
