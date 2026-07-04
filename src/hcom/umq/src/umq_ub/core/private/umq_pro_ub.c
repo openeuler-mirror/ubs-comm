@@ -396,7 +396,7 @@ int umq_ub_post_tx(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
     if (is_umq_ub_logic_queue(queue->create_flag)) {
         ret = umq_ub_get_jetty_node(queue, 0);
         if (ret != UMQ_SUCCESS) {
-            UMQ_LIMIT_VLOG_ERR(VLOG_UMQ, "UMQ(ID:%u) get jetty node failed\n", queue->umq_id);
+            UMQ_LIMIT_VLOG_DEBUG(VLOG_UMQ, "UMQ(ID:%u) get jetty node failed\n", queue->umq_id);
             *bad_qbuf = qbuf;
             goto RECOVER_WINDOW;
         }
@@ -935,7 +935,10 @@ static uint32_t umq_ub_process_fc_msg(ub_queue_t *queue, umq_ub_imm_t *imm, umq_
             fc->local_req_seq = umq_ub_fc_seq_inc(fc->local_req_seq);
             break;
         case IMM_TYPE_FC_CREDIT_RETURN_REQ: {
-            if (umq_ub_shared_credit_return_req_handle(queue, imm) != UMQ_SUCCESS) {
+            umq_errno = umq_ub_shared_credit_return_req_handle(queue, imm);
+            if (umq_errno == -UMQ_ERR_EMLINK) {
+                ret = umq_ub_fill_fc_buf(queue, buf, UMQ_FAKE_BUF_FC_EMLINK);
+            } else if (umq_errno != UMQ_SUCCESS) {
                 ret = umq_ub_fill_fc_buf(queue, buf, UMQ_FAKE_BUF_FC_ERR);
             }
             break;
@@ -1779,7 +1782,7 @@ int umq_ub_poll_tx(uint64_t umqh, umq_buf_t **buf, uint32_t buf_count, umq_io_op
     uint32_t tp_handle_idx = option->tp_handle_idx;
 
     if (queue->flow_control.enabled) {
-        if ((queue->create_flag & UMQ_CREATE_FLAG_SUB_UMQ) != 0) {
+        if ((queue->create_flag & UMQ_CREATE_FLAG_SHARE_RQ) != 0) {
             uint64_t count;
             ub_queue_idle_check_t *checker = queue->checker;
             if (__atomic_load_n(&checker->need_return_credit, __ATOMIC_ACQUIRE)) {
