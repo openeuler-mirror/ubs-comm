@@ -298,6 +298,7 @@ Result GlobalSetting::LoadEnv() noexcept
     if (GetEnvAndValidate(ENV_UBS_THREAD_POOL_SIZE, envValue)) {
         UBS_THREAD_POOL_SIZE = static_cast<uint32_t>(envValue);
     }
+    UBS_VLOG_INFO("Current thread pool size, UBSOCKET_THREAD_POOL_SIZE: %u\n", UBS_THREAD_POOL_SIZE);
 
     if (GetEnvAndValidate(ENV_PROF_ENABLE, strEnvValue)) {
         UBS_PROF_ENABLE = Func::BoolFromStr(strEnvValue);
