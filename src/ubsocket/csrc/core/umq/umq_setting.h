@@ -68,6 +68,10 @@ public:
     static pool_type_t UMQ_TP_TYPE;
     static uint32_t UMQ_TP_POOL_SIZE;
 
+    // CTP保序熔断配置
+    static uint32_t UMQ_MAX_O3_GAP;
+    static uint64_t UMQ_O3_TIMEOUT_MS;
+
     static constexpr size_t UMQ_SOCKET_SEQ_NUM_BIT_WIDTH = 24;
     static constexpr size_t UMQ_SOCKET_SEQ_NUM_MAX = (1ULL << UMQ_SOCKET_SEQ_NUM_BIT_WIDTH) - 2;
     static constexpr uint32_t UMQ_PROBE_USER_DATA_ID = 0xFFFFFF; // (2^24 - 1) 用于标识探针包的 user_data

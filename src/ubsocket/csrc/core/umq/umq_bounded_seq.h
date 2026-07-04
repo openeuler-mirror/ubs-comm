@@ -39,74 +39,76 @@ public:
 
     static inline IntType Normalize(IntType key) noexcept
     {
-        // 如果开启了自定义 MaxVal，且传入的值正好是预留的最大值或超出了，进行取模回绕
+        // 如果开启了自定义 MaxVal，且传入的值正好是预留的最大值或超出了，进行回绕
         if constexpr (MaxVal != 0) {
-            return Mask(key) % MODULUS;
+            IntType masked = Mask(key);
+            return (masked >= MODULUS) ? (masked - MODULUS) : masked;
         } else {
             return Mask(key);
         }
     }
 
-    static bool ValidateAhead(IntType base_key, IntType incoming_key) noexcept
+    static IntType Distance(IntType base_key, IntType incoming_key) noexcept
     {
         IntType base = Normalize(base_key);
         IntType inc = Normalize(incoming_key);
-        if (inc == base) {
-            return true;
-        }
-
         IntType diff_forward;
         if constexpr (MaxVal == 0) {
             // 利用掩码减法自然回绕
-            diff_forward = Mask(inc - base);
+            return Mask(inc - base);
         } else {
             // 显式计算环形正向距离
-            diff_forward = (inc >= base) ? (inc - base) : (MODULUS - base + inc);
+            return (inc >= base) ? (inc - base) : (MODULUS - base + inc);
         }
-
-        if (diff_forward > MAX_WINDOW) {
-            return false;
-        }
-        return true;
     }
 
     static bool CompareLessInCircularOrder(IntType key_a, IntType key_b) noexcept
     {
-        IntType a = Normalize(key_a);
-        IntType b = Normalize(key_b);
-        if (a == b) {
-            return false;
-        }
         if constexpr (MaxVal == 0) {
             static constexpr size_t SHIFT_AMT = sizeof(IntType) * 8 - Bits;
             using SignedT = typename std::make_signed<IntType>::type;
-            return static_cast<SignedT>((a - b) << SHIFT_AMT) < 0;
+            return static_cast<SignedT>((key_a - key_b) << SHIFT_AMT) < 0;
         } else {
-            // 计算在环上从 a 到 b 的正向距离，距离过半视为“大于”
-            IntType dist = (b >= a) ? (b - a) : (MODULUS - a + b);
-            return dist < (MAX_WINDOW + 1);
+            IntType dist = Distance(key_a, key_b);
+            return (dist > 0) && (dist <= MAX_WINDOW);
         }
     }
 
     static IntType Add(IntType base, IntType val) noexcept
     {
+        IntType b = Normalize(base);
         if constexpr (MaxVal == 0) {
-            return Mask(base + val);
+            return Mask(b + val);
         } else {
-            IntType b = Normalize(base);
             using SignedT = typename std::make_signed<IntType>::type;
             if (static_cast<SignedT>(val) < 0) {
-                IntType abs_val = static_cast<IntType>(-static_cast<SignedT>(val)) % MODULUS;
-                return (b >= abs_val) ? (b - abs_val) : (MODULUS - abs_val + b);
+                // 负数回退逻辑：转为正向加法
+                IntType abs_val = static_cast<IntType>(-static_cast<SignedT>(val));
+                if (abs_val >= MODULUS) {
+                    abs_val %= MODULUS;
+                }
+                return (b >= abs_val) ? (b - abs_val) : (b + MODULUS - abs_val);
             }
-            // 普通加法
-            return (b + (val % MODULUS)) % MODULUS;
+
+            IntType step = val;
+            if (step >= MODULUS) {
+                step %= MODULUS; // 仅在增量大于模数时才取模
+            }
+
+            IntType res = b + step;
+            return (res >= MODULUS) ? (res - MODULUS) : res;
         }
     }
 
     static IntType Next(IntType base)
     {
-        return Add(base, 1);
+        if constexpr (MaxVal == 0) {
+            return Mask(base + 1);
+        } else {
+            IntType b = Normalize(base);
+            IntType next = b + 1;
+            return (next == MODULUS) ? 0 : next;
+        }
     }
 };
 
