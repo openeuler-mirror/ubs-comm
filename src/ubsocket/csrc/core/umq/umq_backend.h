@@ -32,6 +32,7 @@ private:
     static uint64_t CreateShareMainUmq(umq_eid_t &local_eid);
     static Result PrefillShareMainUmq(umq_eid_t &local_eid);
     static Result InitShareJfrMonitering(uint64_t main_umq_handle);
+    static void UmqCleanup() noexcept;
 
 private:
     static std::mutex UMQ_MUTEX;
