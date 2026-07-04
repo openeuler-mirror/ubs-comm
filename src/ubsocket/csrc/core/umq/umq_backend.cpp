@@ -156,18 +156,22 @@ Result UmqBackend::Init() noexcept
         uint64_t main_umq_handle = UMQ_INVALID_HANDLE;
         if ((main_umq_handle = CreateShareMainUmq(local_eid)) == UMQ_INVALID_HANDLE) {
             UBS_VLOG_ERR("Failed to init main umq.");
+            UmqCleanup();
             return UBS_UMQ_CREATE;
         }
         if (PrefillShareMainUmq(local_eid) != UBS_OK) {
             UBS_VLOG_ERR("Failed to prefill main umq rx.");
+            UmqCleanup();
             return UBS_PREFILL_RX;
         }
         if (InitShareJfrMonitering(main_umq_handle)) {
             UBS_VLOG_ERR("Failed to init main umq share jfr event runner.");
+            UmqCleanup();
             return UBS_ERROR;
         }
         if (UmqTransportPool::Instance().WarmUp(main_umq_handle) != UBS_OK) {
             UBS_VLOG_ERR("Failed to warm up umq shared pool.");
+            UmqCleanup();
             return UBS_UMQ_CREATE;
         }
     }
@@ -175,6 +179,17 @@ Result UmqBackend::Init() noexcept
 
     //UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
     return UBS_OK;
+}
+
+void UmqBackend::UmqCleanup() noexcept
+{
+    UmqApi::umq_uninit();
+    UMQ_INITED = false;
+
+    if (GlobalSetting::UBS_PROF_ENABLE) {
+        UmqApi::umq_stats_perf_stop();
+        UmqApi::umq_stats_tp_perf_stop(UmqSetting::UMQ_TRANS_MODE);
+    }
 }
 
 void UmqBackend::UnInit() noexcept
