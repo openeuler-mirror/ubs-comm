@@ -42,20 +42,23 @@ int UmqTpWaitQueue::TryWakeupOne()
     }
     // optimize：sock状态更改为等待资源，并唤醒
     UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-    umqSock->NotifyReadable();
     umqSock->SetJettyAllocState(JettyAllocState::READY);
     return UBS_OK;
 }
 
 uint32_t UmqTpWaitQueue::WakeUp(uint32_t wakeUpNum)
 {
+    uint64_t queue_size = Size();
+    if (wakeUpNum > Size()) {
+        UBS_VLOG_DEBUG("Failed to wake up socket caused by invalid cnt(%u) but size(%u).\n", wakeUpNum, queue_size);
+        return 0;
+    }
     SocketPtr wakeUpBatch[wakeUpNum];
     auto count = MultiPop(wakeUpBatch, wakeUpNum);
     for (uint32_t i = 0; i < count; ++i) {
         SocketPtr sock = wakeUpBatch[i];
         // optimize：sock状态更改为等待资源，并唤醒
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-        umqSock->NotifyReadable();
         umqSock->SetJettyAllocState(JettyAllocState::READY);
     }
     return static_cast<uint32_t>(count);
