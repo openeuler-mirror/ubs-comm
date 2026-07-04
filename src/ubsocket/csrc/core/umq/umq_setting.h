@@ -64,6 +64,7 @@ public:
     static umq_tp_type_t UMQ_UB_TP_TYPE;
     static bool UMQ_IS_BONDING;
     static bool UMQ_FLOW_CONTROL_ENABLE;
+    static bool UMQ_RANDOM_ROUTE;
     static int8_t UMQ_LINK_PRIORITY;
     static pool_type_t UMQ_TP_TYPE;
     static uint32_t UMQ_TP_POOL_SIZE;

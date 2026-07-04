@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_UMQ_SHARE_JFR_EPOLL_RUNNER_OPS_H
 #define UBS_COMM_UMQ_SHARE_JFR_EPOLL_RUNNER_OPS_H
 
+#include "common/ubsocket_flash_dynamic_bitset.h"
 #include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_socket.h"
 #include "umq_types.h"
@@ -51,7 +52,8 @@ public:
 
     int ProcessMainUmqRearm(uint64_t main_umq);
 
-    std::unordered_set<Socket *> SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count);
+    void SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, int count, FlashDynamicBitSet &socket_fds,
+                                        std::vector<SocketPtr> &socket_ptrs);
 
     int InsertJfrMainUmq(int share_jfr_fd, uint64_t main_umq, int epoll_fd, struct epoll_event *shared_jfr_event)
     {

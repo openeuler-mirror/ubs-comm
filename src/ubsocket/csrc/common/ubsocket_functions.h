@@ -71,6 +71,11 @@ public:
      * @return a random uint32 if successful, 0 if failed
      */
     uint32_t SecureRandUInt32() noexcept;
+
+    static uint64_t CurrentTimeNs() noexcept;
+
+private:
+    static uint64_t GetCpuFreq() noexcept;
 };
 
 ALWAYS_INLINE bool Func::FloatLargerThan(float a, float b) noexcept
@@ -181,6 +186,34 @@ ALWAYS_INLINE uint32_t Func::SecureRandUInt32() noexcept
 
     urandom.close();
     return rand;
+}
+
+ALWAYS_INLINE uint64_t Func::CurrentTimeNs() noexcept
+{
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+    const static uint64_t freq = GetCpuFreq();
+    uint64_t timeValue = 0;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(timeValue));
+    return timeValue / freq;
+#else
+    struct timespec tpDelay = {0, 0};
+    clock_gettime(CLOCK_MONOTONIC, &tpDelay);
+    return tpDelay.tv_sec * 1000000000ULL + tpDelay.tv_nsec;
+#endif
+}
+
+ALWAYS_INLINE uint64_t Func::GetCpuFreq() noexcept
+{
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+    /* get frequ */
+    uint64_t tmpFreq = 0;
+    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(tmpFreq));
+
+    if (tmpFreq != 0) {
+        return tmpFreq / 1000L;
+    }
+#endif
+    return 1;
 }
 } // namespace ubs
 } // namespace ock
