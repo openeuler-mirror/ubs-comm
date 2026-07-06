@@ -33,6 +33,13 @@ Result UmqTransportPool::WarmUp(uint64_t main_umqh)
         UBS_VLOG_WARN("Umq transport pool is already warmed up, size: %zu.\n", PoolSize(main_umqh));
         return UBS_OK;
     }
+
+    umq_eid_t bonding_eid = UmqSetting::UMQ_LOCAL_EID;
+    if (UmqConnHelper::GetRouteList(route_list_tp_, bonding_eid, bonding_eid) != UBS_OK) {
+        UBS_VLOG_ERR("Failed to get urma route info.\n");
+        return UBS_ERROR;
+    }
+
     int ret = CreatePool(main_umqh, static_cast<int>(UmqSetting::UMQ_TP_POOL_SIZE));
     if (ret != UBS_OK) {
         Clean();
@@ -105,24 +112,13 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
 
     if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         tp_create_cfg.create_flag |= UMQ_TP_CREATE_FLAG_USED_PORTS;
-        umq_eid_t bonding_eid = UmqSetting::UMQ_LOCAL_EID;
-        umq_route_list_t route_list;
         uint32_t targetChipId;
-        if (UmqConnHelper::GetRouteList(route_list, bonding_eid, bonding_eid) != UBS_OK) {
-            UBS_VLOG_ERR("Failed to get urma route info.\n");
-            return UMQ_INVALID_HANDLE;
-        }
-        std::sort(used_ports.begin(), used_ports.end(),
-                  [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value < b.value; });
-        auto last = std::unique(used_ports.begin(), used_ports.end(),
-                                [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value == b.value; });
-        used_ports.erase(last, used_ports.end());
-
         bool use_round_robin = true;
+
         if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY != dev_schedule_policy::ROUND_ROBIN) {
             std::set<uint32_t> unique_chip_ids;
-            for (uint32_t i = 0; i < route_list.route_num; ++i) {
-                unique_chip_ids.insert(route_list.routes[i].src_port.bs.chip_id);
+            for (uint32_t i = 0; i < route_list_tp_.route_num; ++i) {
+                unique_chip_ids.insert(route_list_tp_.routes[i].src_port.bs.chip_id);
             }
             std::vector<uint32_t> chipId_list(unique_chip_ids.begin(), unique_chip_ids.end());
             targetChipId = UmqConnHelper::GetTargetChipId(UmqSetting::UMQ_ALL_SOCKET_IDS, chipId_list,
@@ -133,11 +129,11 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
         }
         if (use_round_robin == false) {
             std::vector<umq_port_id_t> aff_ports, non_aff_ports;
-            for (uint32_t i = 0; i < route_list.route_num; ++i)
-                if (route_list.routes[i].src_port.bs.chip_id == targetChipId) {
-                    aff_ports.push_back(route_list.routes[i].src_port);
+            for (uint32_t i = 0; i < route_list_tp_.route_num; ++i)
+                if (route_list_tp_.routes[i].src_port.bs.chip_id == targetChipId) {
+                    aff_ports.push_back(route_list_tp_.routes[i].src_port);
                 } else {
-                    non_aff_ports.push_back(route_list.routes[i].src_port);
+                    non_aff_ports.push_back(route_list_tp_.routes[i].src_port);
                 }
             aff_rr_num_ %= aff_ports.size();
             used_ports.insert(used_ports.end(), aff_ports.begin() + aff_rr_num_, aff_ports.end());
@@ -146,8 +142,8 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
             aff_rr_num_ += 1;
         } else {
             std::vector<umq_port_id_t> all_ports;
-            for (uint32_t i = 0; i < route_list.route_num; ++i) {
-                all_ports.push_back(route_list.routes[i].src_port);
+            for (uint32_t i = 0; i < route_list_tp_.route_num; ++i) {
+                all_ports.push_back(route_list_tp_.routes[i].src_port);
             }
             rr_num_ %= all_ports.size();
             used_ports.insert(used_ports.end(), all_ports[rr_num_]);
@@ -155,6 +151,12 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
             used_ports.insert(used_ports.end(), all_ports.begin(), all_ports.end());
             rr_num_ += 1;
         }
+
+        std::sort(used_ports.begin(), used_ports.end(),
+                  [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value < b.value; });
+        auto last = std::unique(used_ports.begin(), used_ports.end(),
+                                [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value == b.value; });
+        used_ports.erase(last, used_ports.end());
 
         UBS_VLOG_INFO("CreateOneTp: used_ports.num=%u (expect 1 main + up to 3 backup)\n", used_ports.size());
         for (uint32_t i = 0; i < used_ports.size(); ++i) {

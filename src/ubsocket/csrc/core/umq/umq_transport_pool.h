@@ -62,6 +62,7 @@ private:
     Umqh2TpIdxMap umq_tp_pool{};
     uint32_t aff_rr_num_;
     uint32_t rr_num_;
+    umq_route_list_t route_list_tp_;
 };
 
 } // namespace umq
