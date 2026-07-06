@@ -30,6 +30,7 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
     if (trace != nullptr) {
         umq_poll_start = ubsocket_get_timeNs_compile();
     }
+    PROF_START(UMQ_POLL_WRITE);
     int poll_num = UmqApi::umq_poll(umq_handle, &poll_option, buf, POLL_BATCH_MAX);
     if (trace != nullptr) {
         uint64_t umq_poll_end = ubsocket_get_timeNs_compile();
@@ -37,6 +38,7 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
                         static_cast<uint32_t>(poll_num));
     }
     if (poll_num <= 0) {
+        PROF_END(UMQ_POLL_WRITE, false);
         if (poll_num < 0) {
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, poll_num, savedErrno);
@@ -47,6 +49,7 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
         }
         return poll_num;
     }
+    PROF_END(UMQ_POLL_WRITE, true);
 
     int wr_cnt = 0;
     int cur_wr_cnt;
@@ -147,7 +150,9 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const 
     if (do_trace) {
         free_start = ubsocket_get_timeNs_compile();
     }
+    PROF_START(UMQ_BUF_FREE);
     UmqApi::umq_buf_free(start_qbuf);
+    PROF_END(UMQ_BUF_FREE, true);
     if (do_trace) {
         uint64_t free_end = ubsocket_get_timeNs_compile();
         TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE_FREE, raw_socket, free_start, free_end, 0);
@@ -173,7 +178,9 @@ bool UmqTxHelper::HandleProbePacket(umq_buf_t *qbuf)
 {
     umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(qbuf->qbuf_ext);
     if (buf_pro->opcode == UMQ_OPC_SEND_IMM && buf_pro->imm.user_data == UmqSetting::UMQ_PROBE_USER_DATA_ID) {
+        PROF_START(UMQ_BUF_FREE);
         UmqApi::umq_buf_free(qbuf);
+        PROF_END(UMQ_BUF_FREE, true);
         return true; // 已处理
     }
     return false; // 不是探测包
@@ -281,7 +288,9 @@ void UmqTxHelper::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
     if (last_qbuf != nullptr) {
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
+    PROF_START(UMQ_BUF_FREE);
     UmqApi::umq_buf_free(first_qbuf);
+    PROF_END(UMQ_BUF_FREE, true);
 }
 
 Block *UmqTxHelper::DataToBlock(void *data)

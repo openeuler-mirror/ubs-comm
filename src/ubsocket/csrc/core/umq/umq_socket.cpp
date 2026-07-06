@@ -135,19 +135,25 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
         // 总是使能 TX solicited，这会导致对端 JFR 只有接收到 solicited_enable=true 的包时才会产生中断。而在客
         // 户端本端，开启此功能后不会在 TX 上产生中断，无法通过 `epoll_wait` 唤醒，必须定期 poll cq
         umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
+        PROF_START(UMQ_INTERRUPT_FD_GET);
         int tx_interrupt_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
         if (tx_interrupt_fd < 0) {
+            PROF_END(UMQ_INTERRUPT_FD_GET, false);
             UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
                          static_cast<unsigned long long>(umq_handle_));
             return UBS_ERROR;
         }
+        PROF_END(UMQ_INTERRUPT_FD_GET, true);
 
+        PROF_START(UMQ_REARM_INTERRUPT);
         int ret = ock::ubs::UmqApi::umq_rearm_interrupt(umq_handle_, true, &tx_option);
         if (ret < 0) {
+            PROF_END(UMQ_REARM_INTERRUPT, false);
             UBS_VLOG_ERR("[UMQ_API] Failed to enable solicited mode for umq: %llu\n",
                          static_cast<unsigned long long>(umq_handle_));
             return UBS_ERROR;
         }
+        PROF_END(UMQ_REARM_INTERRUPT, true);
     }
 
     // 保存 used_ports, 之后的遇到异常 CQE 时可以确定这些 port 都不可用（光组网）
@@ -171,7 +177,10 @@ std::tuple<const umq_port_id_t *, std::size_t> UmqSocket::GetUsedPorts() const
 uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
-        return UmqApi::umq_create(cfg);
+        PROF_START(UMQ_CREATE);
+        uint64_t sub_umq = UmqApi::umq_create(cfg);
+        PROF_END(UMQ_CREATE, sub_umq != UMQ_INVALID_HANDLE);
+        return sub_umq;
     }
     UBS_VLOG_DEBUG("UBS_ENABLE_SHARE_JFR = true \n");
     uint64_t main_umq = GetOrCreateMainUmq(cfg, local_eid);
@@ -188,12 +197,15 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
     }
     cfg->share_rq_umqh = main_umq;
     cfg->umq_ctx = (uint64_t)raw_socket_;
+    PROF_START(UMQ_CREATE);
     uint64_t sub_umq = UmqApi::umq_create(cfg);
     if (sub_umq == UMQ_INVALID_HANDLE) {
+        PROF_END(UMQ_CREATE, false);
         UBS_VLOG_ERR("[UMQ_API] umq_create() failed for sub umq, ret: %llu\n",
                      static_cast<unsigned long long>(sub_umq));
         return UMQ_INVALID_HANDLE;
     }
+    PROF_END(UMQ_CREATE, true);
 
     share_umq_handle_ = main_umq;
     return sub_umq;
@@ -214,10 +226,13 @@ uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *loca
     umq_create_option_t cfg_main;
     memcpy(&cfg_main, cfg, sizeof(*cfg));
     cfg_main.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
+    PROF_START(UMQ_CREATE);
     uint64_t new_umq = UmqApi::umq_create(&cfg_main);
     if (new_umq == UMQ_INVALID_HANDLE) {
+        PROF_END(UMQ_CREATE, false);
         return UMQ_INVALID_HANDLE;
     }
+    PROF_END(UMQ_CREATE, true);
 
     {
         Locker sLock(UmqEidTable::Instance().GetMainMutex());
@@ -233,8 +248,10 @@ uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *loca
 
 Result UmqSocket::UpdateRxQueueAvailNum()
 {
+    PROF_START(UMQ_STATE_GET);
     int local_umq_state = UmqApi::umq_state_get(umq_handle_);
     if (local_umq_state != QUEUE_STATE_READY) {
+        PROF_END(UMQ_STATE_GET, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::GET_STATE, local_umq_state, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_state_get() failed to reach ready, "
@@ -243,6 +260,7 @@ Result UmqSocket::UpdateRxQueueAvailNum()
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::GET_STATE, local_umq_state), savedErrno);
         return UBS_ERROR;
     }
+    PROF_END(UMQ_STATE_GET, true);
 
     rx_.GetRxOps()->rx_queue_avail_num_ = GlobalSetting::UBS_RX_DEPTH;
     return 0;
@@ -432,14 +450,17 @@ Result UmqSocket::CheckDevAdd(const umq_eid_t &conn_eid)
     trans_info.trans_mode = UMQ_TRANS_MODE_UB;
     trans_info.dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
     trans_info.dev_info.eid.eid = conn_eid;
+    PROF_START(UMQ_DEV_ADD);
     int ret = UmqApi::umq_dev_add(&trans_info);
     if (ret != 0 && ret != -UMQ_ERR_EEXIST) {
+        PROF_END(UMQ_DEV_ADD, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::ACCEPT, ret, savedErrno);
         UBS_VLOG_ERR("umq_dev_add() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n", ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::ACCEPT, ret), savedErrno);
         return UBS_UMQ_ERROR;
     }
+    PROF_END(UMQ_DEV_ADD, true);
 
     // TODO: AE 事件处理
 #ifdef ENABLE
