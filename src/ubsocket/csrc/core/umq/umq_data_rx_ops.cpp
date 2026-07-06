@@ -60,7 +60,9 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
             if (QBUF_LIST_NEXT(buf[i]) != nullptr) {
                 UBS_VLOG_WARN("probe buf next not null\n");
             }
+            PROF_START(UMQ_BUF_FREE);
             UmqApi::umq_buf_free(buf[i]);
+            PROF_END(UMQ_BUF_FREE, true);
             continue;
         }
         // currently, umq over IB return IB cr status directly, successful = 0
@@ -74,7 +76,9 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
                 // 异步关闭. 当前处于 readv 中，等到下次 EPOLLIN 事件到来时会触发关闭
                 sock->State(SOCK_STAT_CLOSE);
             } else if (buf[i]->status == UMQ_FAKE_BUF_FC_MSG) {
+                PROF_START(UMQ_BUF_FREE);
                 UmqApi::umq_buf_free(buf[i]);
+                PROF_END(UMQ_BUF_FREE, true);
                 if (!PollSubUmqRx(buf, i)) {
                     continue;
                 }
@@ -82,7 +86,9 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
                 if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
                     flow_control_failed_ = true;
                     HandleErrorRxCqe(buf[i]);
+                    PROF_START(UMQ_BUF_FREE);
                     UmqApi::umq_buf_free(buf[i]);
+                    PROF_END(UMQ_BUF_FREE, true);
                     continue;
                 } else if (buf[i]->status == UMQ_FAKE_BUF_FC_EMLINK) {
                     // 流控请求获取jetty资源失败，加入等待队列
@@ -94,7 +100,9 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
             }
 
             QBUF_LIST_NEXT(buf[i]) = nullptr;
+            PROF_START(UMQ_BUF_FREE);
             UmqApi::umq_buf_free(buf[i]);
+            PROF_END(UMQ_BUF_FREE, true);
             continue;
         }
         if (GlobalSetting::UBS_TRACE_ENABLED) {
@@ -136,8 +144,10 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
 {
     umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
                                    UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    PROF_START(UMQ_POLL_READ);
     int poll_num = UmqApi::umq_poll(local_umqh_, &poll_option, buf, max_buf_size);
     if (poll_num < 0 || (poll_num == 0 && rx_queue_avail_num_ == 0)) {
+        PROF_END(UMQ_POLL_READ, false);
         if (poll_num < 0) {
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::READV, poll_num, savedErrno);
@@ -147,14 +157,17 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
         }
         return -1;
     }
+    PROF_END(UMQ_POLL_READ, true);
     rx_queue_avail_num_ -= static_cast<uint16_t>(poll_num);
     if (static_cast<uint16_t>(GlobalSetting::UBS_RX_DEPTH - rx_queue_avail_num_) > TX_REFILL_THRESHOLD) {
         umq_alloc_option_t option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(Block)};
+        PROF_START(UMQ_BUF_ALLOC);
         umq_buf_t *rx_buf_list =
             UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), TX_REFILL_THRESHOLD, UMQ_INVALID_HANDLE, &option);
         /* do nothing when failure occurs during refilling RX,
              * try to switch to tcp/ip until poll_num & m_rx.m_window_size both equal to zero */
         if (rx_buf_list != nullptr) {
+            PROF_END(UMQ_BUF_ALLOC, true);
             umq_buf_t *bad_qbuf = nullptr;
             umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
                                             UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
@@ -169,6 +182,8 @@ int UmqRxOps::UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size)
                              savedErrno);
                 return -1;
             }
+        } else {
+            PROF_END(UMQ_BUF_ALLOC, false);
         }
     }
     return poll_num;
@@ -193,17 +208,22 @@ uint32_t UmqRxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf)
     if (last_qbuf != nullptr) {
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
+    PROF_START(UMQ_BUF_FREE);
     UmqApi::umq_buf_free(bad_qbuf);
+    PROF_END(UMQ_BUF_FREE, true);
     return wr_cnt;
 }
 
 int UmqRxOps::GetAndAckEvent()
 {
     umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    PROF_START(UMQ_GET_CQ_EVENT);
     int events = UmqApi::umq_get_cq_event(local_umqh_, &option);
     if (events == 0) {
+        PROF_END(UMQ_GET_CQ_EVENT, true);
         return 0;
     } else if (events < 0) {
+        PROF_END(UMQ_GET_CQ_EVENT, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::READV, events, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed, local umq: %llu, ret: %d, mapped: %d(%s), original: %d\n",
@@ -211,8 +231,11 @@ int UmqRxOps::GetAndAckEvent()
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, events), savedErrno);
         return -1;
     }
+    PROF_END(UMQ_GET_CQ_EVENT, true);
     if ((ack_event_num_ += events) >= GET_PER_ACK) {
+        PROF_START(UMQ_ACK_INTERRUPT);
         UmqApi::umq_ack_interrupt(local_umqh_, ack_event_num_, &option);
+        PROF_END(UMQ_ACK_INTERRUPT, true);
         ack_event_num_ = 0;
     }
     return 0;
@@ -342,11 +365,15 @@ bool UmqRxOps::PollSubUmqRx(umq_buf_t *buf[], int i) const
 {
     umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
                                    UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    PROF_START(UMQ_POLL_READ);
     int ret = UmqApi::umq_poll(local_umqh_, &poll_option, &buf[i], 1);
     bool pollRxSuccess = ret > 0;
     if (ret < 0) {
+        PROF_END(UMQ_POLL_READ, false);
         UBS_VLOG_ERR("Failed to poll fc rx, local umq: %llu, ret: %d\n", static_cast<unsigned long long>(local_umqh_),
                      ret);
+    } else {
+        PROF_END(UMQ_POLL_READ, true);
     }
     return pollRxSuccess;
 }
@@ -361,21 +388,24 @@ void UmqRxOps::FlushRx(const SocketPtr &sock, uint32_t timeout_ms)
     umq_buf_t *buf[POLL_BATCH_MAX];
     uint32_t poll_total_cnt = 0;
     int poll_cnt = 0;
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start_ms = SocketConnHelper::GetTimeMs();
     do {
-        if (SocketConnHelper::IsTimeout(start, timeout_ms)) {
+        if (SocketConnHelper::IsTimeout(start_ms, timeout_ms)) {
             UBS_VLOG_DEBUG("Flush RX operation exceeded timeout period(%u ms)\n", timeout_ms);
             break;
         }
 
         umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
                                        UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+        PROF_START(UMQ_POLL_READ);
         poll_cnt = UmqApi::umq_poll(local_umqh_, &poll_option, buf, POLL_BATCH_MAX);
         if (poll_cnt < 0) {
+            PROF_END(UMQ_POLL_READ, false);
             UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for RX flush, local umq: %llu, ret: %d\n",
                          static_cast<unsigned long long>(local_umqh_), poll_cnt);
             break;
         }
+        PROF_END(UMQ_POLL_READ, true);
 
         for (int i = 0; i < poll_cnt; i++) {
             if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
@@ -384,7 +414,9 @@ void UmqRxOps::FlushRx(const SocketPtr &sock, uint32_t timeout_ms)
                                  errno, Func::Error2Str(errno));
                 }
             }
+            PROF_START(UMQ_BUF_FREE);
             UmqApi::umq_buf_free(buf[i]);
+            PROF_END(UMQ_BUF_FREE, true);
         }
 
         poll_total_cnt += static_cast<uint32_t>(poll_cnt);

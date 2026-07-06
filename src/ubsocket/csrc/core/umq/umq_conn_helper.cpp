@@ -21,8 +21,10 @@ namespace umq {
 Result UmqConnHelper::GetDevEid(char *dev_name, uint32_t eid_idx, umq_eid_t *eid)
 {
     umq_dev_info_t umq_dev_info = {};
+    PROF_START(UMQ_DEV_INFO_GET);
     int ret = UmqApi::umq_dev_info_get(dev_name, UMQ_TRANS_MODE_UB, &umq_dev_info);
     if (ret != 0) {
+        PROF_END(UMQ_DEV_INFO_GET, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_dev_info_get() failed, "
@@ -30,6 +32,7 @@ Result UmqConnHelper::GetDevEid(char *dev_name, uint32_t eid_idx, umq_eid_t *eid
                      ret, errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
         return UBS_ERROR;
     }
+    PROF_END(UMQ_DEV_INFO_GET, true);
 
     for (uint32_t i = 0; i < umq_dev_info.ub.eid_cnt; ++i) {
         if (umq_dev_info.ub.eid_list[i].eid_index == eid_idx) {
@@ -55,19 +58,24 @@ Result UmqConnHelper::PrefillRx(uint64_t umq_handle)
     do {
         cur_post_rx_num = left_post_rx_num > UmqSetting::UMQ_POST_BATCH_MAX ? UmqSetting::UMQ_POST_BATCH_MAX :
                                                                               left_post_rx_num;
+        PROF_START(UMQ_BUF_ALLOC);
         umq_buf_t *rx_buf_list =
             UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), cur_post_rx_num, UMQ_INVALID_HANDLE, &option);
         if (rx_buf_list == nullptr) {
+            PROF_END(UMQ_BUF_ALLOC, false);
             int rx_window_capacity = 0;
             UBS_VLOG_ERR("[UMQ_API] umq_buf_alloc() failed, RX depth: %d, ret: %p\n", rx_window_capacity, rx_buf_list);
             return UBS_ERROR;
         }
+        PROF_END(UMQ_BUF_ALLOC, true);
 
         umq_buf_t *bad_qbuf = nullptr;
         umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
                                         UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+        PROF_START(UMQ_POST_RX);
         int umq_ret = UmqApi::umq_post(umq_handle, rx_buf_list, &io_rx_option, &bad_qbuf);
         if (umq_ret != UMQ_SUCCESS) {
+            PROF_END(UMQ_POST_RX, false);
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, umq_ret, savedErrno);
             int rx_window_capacity = 0;
@@ -76,6 +84,7 @@ Result UmqConnHelper::PrefillRx(uint64_t umq_handle)
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, umq_ret), savedErrno);
             return UBS_ERROR;
         }
+        PROF_END(UMQ_POST_RX, true);
         UBS_VLOG_DEBUG("Post RX depth: %u\n", cur_post_rx_num);
     } while ((left_post_rx_num -= cur_post_rx_num) > 0);
 
@@ -87,11 +96,14 @@ uint32_t UmqConnHelper::GetLeftPostRxNum(uint64_t umq_handle)
     uint32_t left_post_rx_num = 0;
     umq_cfg_get_t cfg;
     memset(&cfg, 0, sizeof(umq_cfg_get_t));
+    PROF_START(UMQ_CFG_GET);
     int res = UmqApi::umq_cfg_get(umq_handle, &cfg);
     if (res != 0) {
+        PROF_END(UMQ_CFG_GET, false);
         UBS_VLOG_ERR("[UMQ_API] umq_cfg_get() failed, umq handle: %llu, ret: %d\n",
                      static_cast<unsigned long long>(umq_handle), res);
     } else {
+        PROF_END(UMQ_CFG_GET, true);
         left_post_rx_num = cfg.rqe_post_factor * cfg.rx_depth;
         UBS_VLOG_DEBUG("Successfully get umq cfg, left_post_rx_num = %u\n", left_post_rx_num);
     }
@@ -165,14 +177,17 @@ Result UmqConnHelper::GetRouteList(umq_route_list_t &route_list, const umq_eid_t
     }
     route.tp_type = tp_type;
 
+    PROF_START(UMQ_GET_ROUTE_LIST);
     int ret = UmqApi::umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
     if (ret != 0) {
+        PROF_END(UMQ_GET_ROUTE_LIST, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_get_route_list() failed, ret: %d, mapped errno: %d(%s), original errno: %d\n", ret,
                      errno, UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
         return UBS_ERROR;
     }
+    PROF_END(UMQ_GET_ROUTE_LIST, true);
 
     if (route_list.route_num == 0) {
         UBS_VLOG_ERR("Route list is empty.\n");
@@ -189,8 +204,10 @@ Result UmqConnHelper::RegisterSharedJfrForRead(uint64_t main_umq_handle)
         return result;
     }
     umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    PROF_START(UMQ_INTERRUPT_FD_GET);
     auto share_jfr_fd = UmqApi::umq_interrupt_fd_get(main_umq_handle, &main_option);
     if (UNLIKELY(share_jfr_fd < 0)) {
+        PROF_END(UMQ_INTERRUPT_FD_GET, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, share_jfr_fd, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] Failed to get share jfr RX interrupt fd, main umq: %llu, "
@@ -199,6 +216,7 @@ Result UmqConnHelper::RegisterSharedJfrForRead(uint64_t main_umq_handle)
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, share_jfr_fd), savedErrno);
         return UBS_ERROR;
     }
+    PROF_END(UMQ_INTERRUPT_FD_GET, true);
 
     RunnerEventData event_data{};
     event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;

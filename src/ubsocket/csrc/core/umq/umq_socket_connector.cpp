@@ -562,9 +562,11 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
         return ret;
     }
 
+    PROF_START(UMQ_BIND_INFO_GET);
     local_cp_msg.queue_bind_info_size =
         UmqApi::umq_bind_info_get(umq_socket->UmqHandle(), local_cp_msg.queue_bind_info, UMQ_BIND_INFO_SIZE_MAX);
     if (local_cp_msg.queue_bind_info_size == 0) {
+        PROF_END(UMQ_BIND_INFO_GET, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_bind_info_get() failed, Peer eid:" EID_FMT ",Peer IP:%s, "
@@ -574,6 +576,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL), savedErrno);
         return UBS_UMQ_BIND_INFO_GET | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
+    PROF_END(UMQ_BIND_INFO_GET, true);
 
     if (SocketConnHelper::SendLengthPrefixed(raw_fd_, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) <
         0) {
@@ -615,6 +618,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
 
     struct timeval start_tv;
     gettimeofday(&start_tv, NULL);
+    PROF_START(UMQ_BIND);
     int umq_ret =
         UmqApi::umq_bind(umq_socket->UmqHandle(), remote_cp_msg.queue_bind_info, remote_cp_msg.queue_bind_info_size);
     struct timeval end_tv;
@@ -622,6 +626,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     long long costms = (end_tv.tv_sec - start_tv.tv_sec) * 1000LL + (end_tv.tv_usec - start_tv.tv_usec) / 1000LL;
 
     if (umq_ret != 0) {
+        PROF_END(UMQ_BIND, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, umq_ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_bind() failed, Peer eid:" EID_FMT
@@ -631,6 +636,7 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, umq_ret), savedErrno, costms);
         return UBS_UMQ_BIND | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
+    PROF_END(UMQ_BIND, true);
     UBS_VLOG_DEBUG("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umq_socket->SetBindRemote(true);
 

@@ -25,11 +25,15 @@ namespace umq {
 
 uintptr_t UmqTxOps::AllocTxBuf(uint32_t size, uint32_t count)
 {
+    PROF_START(UMQ_BUF_ALLOC);
     umq_buf_t *tx_buf_list = UmqApi::umq_buf_alloc(size, count, UMQ_INVALID_HANDLE, nullptr);
     if (tx_buf_list == nullptr) {
+        PROF_END(UMQ_BUF_ALLOC, false);
         UBS_VLOG_ERR("[UMQ_API] umq_buf_alloc() failed for TX, local umq: %llu, ret: %p\n",
                      static_cast<unsigned long long>(local_umqh_), tx_buf_list);
         DpRearmTxInterrupt();
+    } else {
+        PROF_END(UMQ_BUF_ALLOC, true);
     }
 
     return reinterpret_cast<uintptr_t>(tx_buf_list);
@@ -180,10 +184,12 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     if (trace != nullptr) {
         trace->pack_size_list.push(trace->pack_size);
     }
+
+    const uint32_t io_buf_size = UmqSetting::GetIOBufSize();
     for (uint32_t i = 0; i < batch; ++i) {
         umq_buf_t *cur_wr_first = next_buf;
         uint32_t moved_total_len = 0;
-        uint32_t wr_left_len = UmqSetting::GetIOBufSize();
+        uint32_t wr_left_len = io_buf_size;
         uint32_t sge_idx = 0;
         bool last = false;
         for (cur_buf = cur_wr_first; cur_buf && (next_buf = cur_buf->qbuf_next, 1); cur_buf = next_buf) {
@@ -199,7 +205,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             wr_left_len -= cur_buf->data_size;
             moved_total_len += cur_buf->data_size;
 
-            if (last || ++sge_idx >= TX_SGE_MAX || moved_total_len >= UmqSetting::GetIOBufSize()) {
+            if (last || ++sge_idx >= TX_SGE_MAX || moved_total_len >= io_buf_size) {
                 break;
             }
         }
@@ -311,7 +317,9 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             unsignaled_wr_num_ = _unsignaled_wr_num;
             QBUF_LIST_FIRST(&head_buf_) = head_qbuf;
             QBUF_LIST_FIRST(&tail_buf_) = tail_qbuf;
+            PROF_START(UMQ_BUF_FREE);
             UmqApi::umq_buf_free(bad_qbuf);
+            PROF_END(UMQ_BUF_FREE, true);
             if (trace != nullptr) {
                 UBS_VLOG_DEBUG("trace seq all failed trace->pack_size %u trace->pack_size_list.front() %u \n",
                                trace->pack_size, trace->pack_size_list.front());
@@ -434,10 +442,13 @@ int UmqTxOps::GetAndAckEvent()
 {
     int ret = 0;
     umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
+    PROF_START(UMQ_GET_CQ_EVENT);
     int events = UmqApi::umq_get_cq_event(local_umqh_, &option);
     if (events == 0) {
+        PROF_END(UMQ_GET_CQ_EVENT, true);
         return 0;
     } else if (events < 0) {
+        PROF_END(UMQ_GET_CQ_EVENT, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, events, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed, local umq: %llu, ret: %d, mapped: %d(%s), original: %d\n",
@@ -445,11 +456,16 @@ int UmqTxOps::GetAndAckEvent()
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, events), savedErrno);
         return -1;
     }
+    PROF_END(UMQ_GET_CQ_EVENT, true);
     if ((ack_event_num_ += events) >= 1) {
+        PROF_START(UMQ_ACK_INTERRUPT);
         UmqApi::umq_ack_interrupt(local_umqh_, ack_event_num_, &option);
+        PROF_END(UMQ_ACK_INTERRUPT, true);
         ack_event_num_ = 0;
         // TODO: 返回值判断
+        PROF_START(UMQ_REARM_INTERRUPT);
         ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &option);
+        PROF_END(UMQ_REARM_INTERRUPT, ret == 0);
     }
     return 0;
 }
@@ -506,7 +522,7 @@ void UmqTxOps::WakeUpTx(Socket *sock)
 bool UmqTxOps::Writable(const SocketPtr &sock)
 {
     UmqTpWaitQueue &queue = UmqTpWaitQueue::Instance();
-    if (queue.Empty()) {
+    if (UmqSetting::UMQ_TP_TYPE == POOL && queue.Empty()) {
         return true;
     }
     /**
@@ -629,7 +645,9 @@ uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, um
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
 
+    PROF_START(UMQ_BUF_FREE);
     UmqApi::umq_buf_free(bad_qbuf_ori);
+    PROF_END(UMQ_BUF_FREE, true);
     return total_size;
 }
 
@@ -643,9 +661,9 @@ void UmqTxOps::FlushTx(const SocketPtr &sock, uint32_t timeout_ms)
     uint32_t poll_total_cnt = 0;
     int poll_cnt = 0;
     ops_error_code err_code = ops_error_code::OK;
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start_ms = SocketConnHelper::GetTimeMs();
     do {
-        if (SocketConnHelper::IsTimeout(start, timeout_ms)) {
+        if (SocketConnHelper::IsTimeout(start_ms, timeout_ms)) {
             /* If a timeout is triggered here, it would indicate a memory leak.
                  * In this case, processing of unsignaled wr should not continue. */
             UBS_VLOG_DEBUG("Flush TX operation exceeded timeout period(%u ms)\n", timeout_ms);
@@ -703,7 +721,9 @@ void UmqTxOps::FlushTx(const SocketPtr &sock, uint32_t timeout_ms)
             QBUF_LIST_NEXT(last_qbuf) = nullptr;
         }
 
+        PROF_START(UMQ_BUF_FREE);
         UmqApi::umq_buf_free(QBUF_LIST_FIRST(&head_buf_));
+        PROF_END(UMQ_BUF_FREE, true);
         tx_queue_avail_num_.fetch_add(cached_wr_cnt, std::memory_order_acq_rel);
     }
 

@@ -203,9 +203,11 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
         UBS_VLOG_ERR("Failed to create umq\n");
         return ret;
     }
+    PROF_START(UMQ_BIND_INFO_GET);
     local_cp_msg.queue_bind_info_size = UmqApi::umq_bind_info_get(umqSocket->UmqHandle(), local_cp_msg.queue_bind_info,
                                                                   sizeof(local_cp_msg.queue_bind_info));
     if (local_cp_msg.queue_bind_info_size == 0) {
+        PROF_END(UMQ_BIND_INFO_GET, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_bind_info_get() failed, ret: %lu, mapped errno: %d(%s), original errno: %d\n",
@@ -213,6 +215,7 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL), savedErrno);
         return UBS_UMQ_BIND_INFO_GET | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
+    PROF_END(UMQ_BIND_INFO_GET, true);
 
     if (SocketConnHelper::SendLengthPrefixed(fd, &local_cp_msg, sizeof(local_cp_msg), CONTROL_PLANE_TIMEOUT_MS) < 0) {
         UBS_VLOG_ERR("Failed to send local control message, fd: %d\n", fd);
@@ -250,12 +253,14 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
 
     struct timeval start_tv;
     gettimeofday(&start_tv, NULL);
+    PROF_START(UMQ_BIND);
     int umq_ret =
         UmqApi::umq_bind(umqSocket->UmqHandle(), remote_cp_msg.queue_bind_info, remote_cp_msg.queue_bind_info_size);
     struct timeval end_tv;
     gettimeofday(&end_tv, NULL);
     long long costms = (end_tv.tv_sec - start_tv.tv_sec) * 1000LL + (end_tv.tv_usec - start_tv.tv_usec) / 1000LL;
     if (umq_ret != UMQ_SUCCESS) {
+        PROF_END(UMQ_BIND, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::ACCEPT, umq_ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_bind() failed, ret: %d, mapped errno: %d(%s), "
@@ -264,6 +269,7 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
                      costms);
         return UBS_UMQ_BIND | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
+    PROF_END(UMQ_BIND, true);
     UBS_VLOG_DEBUG("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umqSocket->SetBindRemote(true);
 

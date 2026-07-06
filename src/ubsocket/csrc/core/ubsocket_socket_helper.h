@@ -59,8 +59,8 @@ public:
     // 获取所有 Socket ID
     static std::vector<uint32_t> GetSocketIdsViaNumaSysfs();
 
-    template <typename TimePoint>
-    static bool IsTimeout(TimePoint &start, uint32_t timeout_ms);
+    static bool IsTimeout(uint64_t start_ms, uint32_t timeout_ms);
+    static uint64_t GetTimeMs();
 
 private:
     static int SetSockOpt(int fd, int level, int optname, const void *optval, socklen_t optlen) noexcept;
@@ -73,6 +73,24 @@ private:
     static std::vector<uint32_t> GetSocketIdsViaCpuScan();
     // 解析cpulist字符串
     static int GetFirstCpuFromCpulist(const std::string &cpuListStr);
+
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+    static uint32_t InitTickMs()
+    {
+        uint64_t tmpFreq = 0;
+        __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(tmpFreq));
+        auto freq = static_cast<uint32_t>(tmpFreq);
+
+        /* calculate */
+        freq = freq / 1000U;
+        if (freq == 0) {
+            UBS_VLOG_ERR("Failed to get tick as freq is 0");
+            return 1;
+        }
+
+        return freq;
+    }
+#endif
 };
 
 ALWAYS_INLINE int SocketConnHelper::SetBlocking(int fd)
@@ -120,12 +138,24 @@ ALWAYS_INLINE int SocketConnHelper::SetTcpNoDelay(int fd)
     return SetSockOpt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 }
 
-template <typename TimePoint>
-ALWAYS_INLINE bool SocketConnHelper::IsTimeout(TimePoint &start, uint32_t timeout_ms)
+ALWAYS_INLINE bool SocketConnHelper::IsTimeout(uint64_t start_ms, uint32_t timeout_ms)
 {
-    TimePoint end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    return duration.count() > timeout_ms;
+    uint64_t now_ms = GetTimeMs();
+    return (now_ms - start_ms) > timeout_ms;
+}
+
+ALWAYS_INLINE uint64_t SocketConnHelper::GetTimeMs()
+{
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+    const static uint32_t tick_per_ms = InitTickMs();
+    uint64_t timeValue = 0;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(timeValue));
+    return timeValue / tick_per_ms;
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (static_cast<uint64_t>(ts.tv_sec)) * 1000ULL + static_cast<uint64_t>(ts.tv_nsec) / 1000000ULL;
+#endif
 }
 
 } // namespace ubs

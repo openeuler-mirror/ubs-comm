@@ -78,9 +78,9 @@ ssize_t SocketConnHelper::SendSocketData(int fd, const void *buf, size_t size, u
     char *cur = (char *)(uintptr_t)buf;
     ssize_t sent = 0;
     size_t total = size;
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start_ms = GetTimeMs();
     while (total != 0) {
-        if (IsTimeout(start, timeout_ms)) {
+        if (IsTimeout(start_ms, timeout_ms)) {
             errno = ETIMEDOUT;
             return sent;
         }
@@ -114,7 +114,7 @@ ssize_t SocketConnHelper::RecvSocketData(int fd, const void *buf, size_t size, u
     char *cur = (char *)(uintptr_t)buf;
     ssize_t received = 0;
     size_t total = size;
-    auto start = std::chrono::high_resolution_clock::now();
+    uint64_t start_ms = GetTimeMs();
 
     struct pollfd pfd;
     pfd.fd = fd;
@@ -135,14 +135,14 @@ ssize_t SocketConnHelper::RecvSocketData(int fd, const void *buf, size_t size, u
 
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             errno = 0;
-            auto now = std::chrono::high_resolution_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
-            if (elapsed >= (int64_t)timeout_ms) {
+            uint64_t now_ms = GetTimeMs();
+            uint64_t elapsed_ms = now_ms - start_ms;
+            if (elapsed_ms >= timeout_ms) {
                 errno = ETIMEDOUT;
                 return received;
             }
 
-            uint32_t remaining_ms = timeout_ms - elapsed;
+            uint32_t remaining_ms = timeout_ms - elapsed_ms;
             int poll_ret = poll(&pfd, 1, remaining_ms);
             if (poll_ret < 0) {
                 if (errno == EINTR) {

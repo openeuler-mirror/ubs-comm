@@ -69,6 +69,25 @@ enum ProfilingTPId : uint32_t
     CORE_READ_RX_DATA_SET_REARM,
     CORE_READ_RX_DATA_SET_RECV,
 
+    // umq函数级打点
+    UMQ_BIND_INFO_GET,
+    UMQ_BIND,
+    UMQ_DEV_ADD,
+    UMQ_BUF_ALLOC,
+    UMQ_INTERRUPT_FD_GET,
+    UMQ_STATE_GET,
+    UMQ_REARM_INTERRUPT,
+    UMQ_BUF_FREE,
+    UMQ_GET_CQ_EVENT,
+    UMQ_ACK_INTERRUPT,
+    UMQ_DEV_INFO_GET,
+    UMQ_GET_ROUTE_LIST,
+    UMQ_POLL_WRITE,
+    UMQ_POLL_READ,
+    UMQ_POST_RX,
+    UMQ_CFG_GET,
+    UMQ_CREATE,
+
     // count the number of ProfilingTPId
     UBSOCKET_PROF_COUNT,
 };
