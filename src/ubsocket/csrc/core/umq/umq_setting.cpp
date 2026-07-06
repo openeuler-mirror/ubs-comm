@@ -101,7 +101,8 @@ void UmqSetting::AddRules() noexcept
                                {ENV_UMQ_TLS_EXPAND_TINY_POOL_DEPTH, false, 0, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_TP_POOL_SIZE, false, 1, 1000},
                                {ENV_UMQ_MAX_O3_GAP, false, 2, 10240},
-                               {ENV_UMQ_O3_TIMEOUT_MS, false, 2, 1000}};
+                               {ENV_UMQ_O3_TIMEOUT_MS, false, 2, 1000},
+                               {ENV_UMQ_EID_IDX, false, 0, std::numeric_limits<int64_t>::max()}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_UMQ_BLOCK_TYPE, false, "tiny|default|small|medium|large"},
