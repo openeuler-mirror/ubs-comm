@@ -383,7 +383,6 @@ Result UmqAcceptorOps::DoUbAcceptRetry(SocketPtr socketPtr, Result &ack_ret, Res
     if (IsDegradable(peer_ret) && GlobalSetting::UBS_ENABLE_DEGRADE) {
         ack_ret |= UBS_DEGRADABLE_MASK;
     }
-
     if (SocketConnHelper::SendSocketData(fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ack_ret)) {
         UBS_VLOG_ERR("Failed to send ack ret message,Peer eid:" EID_FMT ",Peer IP:%s, fd: %d, ack_ret: %d",
                      EID_ARGS(umq_conn_info_.peer_eid), umq_conn_info_.peer_ip.c_str(), fd, ack_ret);
@@ -542,10 +541,27 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
         return UBS_ERROR;
     }
     conn_route_ = negoRoute.master_route;
+    // 视角翻转：client 发来的 master_route 是 client 视角，server 需要把 src/dst 互换
+    // client 视角的 src_port = server 视角的 dst_port
+    // client 视角的 dst_port = server 视角的 src_port
+    {
+        umq_route_t swapped = conn_route_;
+        conn_route_.src_port = swapped.dst_port;
+        conn_route_.dst_port = swapped.src_port;
+        conn_route_.src_eid = swapped.dst_eid;
+        conn_route_.dst_eid = swapped.src_eid;
+    }
     // 适配一主三备：从 back_routes[] 数组读取所有备路
     back_routes_.clear();
     for (uint32_t i = 0; i < negoRoute.back_route_num; ++i) {
-        back_routes_.push_back(negoRoute.back_routes[i]);
+        // 备路组同样需要视角翻转
+        umq_route_t br = negoRoute.back_routes[i];
+        umq_route_t br_swapped;
+        br_swapped.src_port = br.dst_port;
+        br_swapped.dst_port = br.src_port;
+        br_swapped.src_eid = br.dst_eid;
+        br_swapped.dst_eid = br.src_eid;
+        back_routes_.push_back(br_swapped);
     }
     topo_type_ = negoRoute.topo_type;
 
@@ -561,8 +577,8 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
                        back_routes_[i].dst_port.bs.die_id, back_routes_[i].dst_port.bs.port_idx);
     }
 
-    umq_conn_info_.conn_eid = conn_route_.dst_eid;
-    umq_conn_info_.peer_eid = conn_route_.src_eid;
+    umq_conn_info_.conn_eid = conn_route_.src_eid;
+    umq_conn_info_.peer_eid = conn_route_.dst_eid;
     return rsp.ret_code == 0 ? 0 : -1;
 }
 
