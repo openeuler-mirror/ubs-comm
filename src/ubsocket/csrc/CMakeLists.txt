@@ -63,8 +63,8 @@ add_library(ubsocket_static STATIC
 )
 set_target_properties(ubsocket_static PROPERTIES OUTPUT_NAME "ubsocket")
 if(BUILD_UMQ_ADAPTER_BACKEND)
-    target_link_directories(ubsocket_static PUBLIC ${UMQ_LIB_DIR} ${UMQ_QBUF_LIB_DIR} ${UMQ_IPC_LIB_DIR})
-    target_link_libraries(ubsocket_static PUBLIC umq umq_buf umq_ipc)
+    target_link_directories(ubsocket_static PUBLIC ${UMQ_LIB_DIR} ${UMQ_QBUF_LIB_DIR})
+    target_link_libraries(ubsocket_static PUBLIC umq umq_buf)
 endif()
 
 # shared library
@@ -79,8 +79,8 @@ add_library(ubsocket_shared SHARED
 set_target_properties(ubsocket_shared PROPERTIES OUTPUT_NAME "ubsocket")
 target_link_libraries(ubsocket_shared PUBLIC pthread)
 if(BUILD_UMQ_ADAPTER_BACKEND)
-    target_link_directories(ubsocket_shared PUBLIC ${UMQ_LIB_DIR} ${UMQ_QBUF_LIB_DIR} ${UMQ_IPC_LIB_DIR})
-    target_link_libraries(ubsocket_shared PUBLIC umq umq_buf umq_ipc)
+    target_link_directories(ubsocket_shared PUBLIC ${UMQ_LIB_DIR} ${UMQ_QBUF_LIB_DIR})
+    target_link_libraries(ubsocket_shared PUBLIC umq umq_buf)
 endif()
 
 if(UBSOCKET_BUILD_CLI)
