@@ -146,17 +146,9 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const 
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
 
-    uint64_t free_start = 0;
-    if (do_trace) {
-        free_start = ubsocket_get_timeNs_compile();
-    }
     PROF_START(UMQ_BUF_FREE);
     UmqApi::umq_buf_free(start_qbuf);
     PROF_END(UMQ_BUF_FREE, true);
-    if (do_trace) {
-        uint64_t free_end = ubsocket_get_timeNs_compile();
-        TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE_FREE, raw_socket, free_start, free_end, 0);
-    }
 
     return wr_cnt;
 }
