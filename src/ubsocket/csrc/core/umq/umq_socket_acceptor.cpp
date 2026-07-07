@@ -316,7 +316,7 @@ Result UmqAcceptorOps::DoUbAcceptRetry(SocketPtr socketPtr, Result &ack_ret, Res
         return UBS_OK;
     }
 
-    umqSocket->UnbindAndFlushRemoteUmq(socketPtr);
+    umqSocket->UnbindAndFlushRemoteUmq(socketPtr.Get());
     umqSocket->DestroyLocalUmq();
 
     if (SocketConnHelper::RecvLengthPrefixed(fd, &other_route_message_, sizeof(other_route_message_),

@@ -48,12 +48,12 @@ public:
     // 发送请求
     int PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt) override;
 
-    int PollTx(const SocketPtr &sock) override;
+    int PollTx(Socket *sock) override;
 
     uint32_t IOBufSize() override;
 
     // Flush
-    void FlushTx(const SocketPtr &sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) override;
+    void FlushTx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) override;
 
     void WakeUpTx(Socket *sock);
 
@@ -65,9 +65,9 @@ private:
                            uint32_t batch, uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes,
                            uint16_t unsignaled_wr_num, uint32_t *buf_num);
     Block *DataToBlock(void *data);
-    int PollUmqTx(const SocketPtr &sock, bool poll_to_empty);
-    int PollUmqTxOnce(const SocketPtr &sock);
-    int DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code);
+    int PollUmqTx(Socket *sock, bool poll_to_empty);
+    int PollUmqTxOnce(Socket *sock);
+    int DoUmqTxPoll(Socket *sock, ops_error_code &err_code);
     int GetAndAckEvent();
     int DpRearmTxInterrupt();
     void ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int seq_no, int i, uint64_t tx_total_len);

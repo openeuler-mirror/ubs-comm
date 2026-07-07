@@ -289,7 +289,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             errno = EAGAIN;
         } else if (errno == ENOBUFS) {
             // optimize: [Jetty池化] ENOBUFS是否需要在此线程尝试pollTx释放资源后重试
-            PollUmqTx(sock, true);
+            PollUmqTx(sock.Get(), true);
             UmqTpWaitQueue::Instance().Enqueue(sock);
             errno = EAGAIN;
         } else {
@@ -385,7 +385,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     return tx_total_len;
 }
 
-int UmqTxOps::PollTx(const SocketPtr &sock)
+int UmqTxOps::PollTx(Socket *sock)
 {
     if (get_and_ack_event_) {
         // handle tx epollin epoll event
@@ -470,7 +470,7 @@ int UmqTxOps::GetAndAckEvent()
     return 0;
 }
 
-int UmqTxOps::PollUmqTx(const SocketPtr &sock, bool poll_to_empty)
+int UmqTxOps::PollUmqTx(Socket *sock, bool poll_to_empty)
 {
     uint32_t poll_total_cnt = 0;
     int poll_cnt = 0;
@@ -495,7 +495,7 @@ int UmqTxOps::PollUmqTx(const SocketPtr &sock, bool poll_to_empty)
     return 0;
 }
 
-int UmqTxOps::PollUmqTxOnce(const SocketPtr &sock)
+int UmqTxOps::PollUmqTxOnce(Socket *sock)
 {
     PROF_START(CORE_WRITE_DO_TX_POLL);
     ops_error_code err_code = OK;
@@ -542,7 +542,7 @@ bool UmqTxOps::Writable(const SocketPtr &sock)
     }
 }
 
-int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
+int UmqTxOps::DoUmqTxPoll(Socket *sock, ops_error_code &err_code)
 {
     umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
                                    UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
@@ -557,7 +557,7 @@ int UmqTxOps::DoUmqTxPoll(const SocketPtr &sock, ops_error_code &err_code)
             sock->State(SOCK_STAT_CLOSE);
 
             // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
-            auto umq_sock = RefStaticCast<UmqSocket>(sock);
+            auto *umq_sock = static_cast<UmqSocket *>(sock);
             if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
                 if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
                     qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
@@ -651,7 +651,7 @@ uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, um
     return total_size;
 }
 
-void UmqTxOps::FlushTx(const SocketPtr &sock, uint32_t timeout_ms)
+void UmqTxOps::FlushTx(Socket *sock, uint32_t timeout_ms)
 {
     uint16_t threshold = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel);
     if (threshold <= 0) {

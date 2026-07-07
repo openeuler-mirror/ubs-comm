@@ -378,13 +378,13 @@ bool UmqRxOps::PollSubUmqRx(umq_buf_t *buf[], int i) const
     return pollRxSuccess;
 }
 
-void UmqRxOps::FlushRx(const SocketPtr &sock, uint32_t timeout_ms)
+void UmqRxOps::FlushRx(Socket *sock, uint32_t timeout_ms)
 {
     block_cache_.Flush();
     if (rx_queue_avail_num_ <= 0) {
         return;
     }
-    auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
+    auto *umq_socket = static_cast<UmqSocket *>(sock);
     umq_buf_t *buf[POLL_BATCH_MAX];
     uint32_t poll_total_cnt = 0;
     int poll_cnt = 0;

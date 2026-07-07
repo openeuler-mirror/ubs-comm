@@ -213,7 +213,7 @@ void TxCqePoller::RunInThread() noexcept
                     if (sockBase != nullptr) {
                         DataTxOps *txOps = sockBase->GetTx()->GetTxOps();
                         if (txOps != nullptr) {
-                            txOps->PollTx(sock);
+                            txOps->PollTx(sock.Get());
                         }
                     }
                 }

@@ -34,7 +34,7 @@ public:
 public:
     template <typename F>
     static int PollUmqTx(uint64_t umq_handle, umq_io_option_t &poll_option, ops_error_code &err_code, const F &error_cb,
-                         const SocketPtr &sock)
+                         Socket *sock)
     {
         struct CallbackImpl : public ICallback {
             const F &lambda;
@@ -51,8 +51,8 @@ public:
 
 private:
     static int PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_option, ops_error_code &err_code,
-                                 ICallback &error_cb, const SocketPtr &sock);
-    static int ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const SocketPtr &sock, bool is_first_cqe);
+                                 ICallback &error_cb, Socket *sock);
+    static int ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket *sock, bool is_first_cqe);
     static void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt);
     static bool HandleProbePacket(umq_buf_t *qbuf);
     static void LogTxCqeErrorMsg(umq_buf_t *buf);

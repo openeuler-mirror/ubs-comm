@@ -43,12 +43,12 @@ public:
     // 投递发送请求
     virtual int PostSend(const SocketPtr &sock, uintptr_t buf_list, uint32_t batch, const ConverterPtr &cvt) = 0;
 
-    virtual int PollTx(const SocketPtr &sock) = 0;
+    virtual int PollTx(Socket *sock) = 0;
 
     virtual uint32_t IOBufSize() = 0;
 
     // Flush
-    virtual void FlushTx(const SocketPtr &sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) = 0;
+    virtual void FlushTx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) = 0;
 
     virtual void WakeUpTx(Socket *sock) = 0;
 

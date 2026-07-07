@@ -39,7 +39,7 @@ public:
 
     void HandleErrorRxCqe(umq_buf_t *buf);
 
-    void FlushRx(const SocketPtr &sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS);
+    void FlushRx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS);
 
 private:
     int GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num);

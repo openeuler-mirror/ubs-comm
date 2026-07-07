@@ -49,7 +49,7 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                     // 销毁重建对应的Tp
                     UmqTransportPool::Instance().RebuildTp(tx_epoll_event->umq_handle, tx_epoll_event->tp_idx);
                 },
-                SocketPtr());
+                nullptr);
         } while (poll_cnt > 0 && err_code == ops_error_code::OK);
 
         umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX,

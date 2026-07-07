@@ -11,20 +11,27 @@
 #ifndef UBS_COMM_UBSOCKET_SET_H
 #define UBS_COMM_UBSOCKET_SET_H
 
+#include "ubsocket_defines.h"
+#include "ubsocket_leaky_singleton.h"
+#include "ubsocket_logger.h"
+#include "ubsocket_ref.h"
+
 #include <sys/resource.h>
 
-#include "ubsocket_common_includes.h"
+#include <functional>
+#include <memory>
 
 namespace ock {
 namespace ubs {
 
 template <typename T>
-class ArraySet {
+class ArraySet : public LeakySingleton<ArraySet<T>> {
+    friend LeakySingleton<ArraySet>;
+
 public:
     static ArraySet &GetInstance()
     {
-        static ArraySet instance;
-        return instance;
+        return LeakySingleton<ArraySet>::Instance();
     }
 
     int Init()
