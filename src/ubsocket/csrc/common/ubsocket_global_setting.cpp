@@ -211,7 +211,7 @@ SplitTraceLevel SplitTraceLevelFromStr(const std::string &env_str) noexcept
         }
 
         std::string level_str = token.substr(start, end - start + 1);
-
+        UBS_VLOG_DEBUG("split trace level config str: [%s].\n", level_str.c_str());
         if (level_str == "ubsocket") {
             level = level | SplitTraceLevel::LEVEL_UBSOCKET;
         } else if (level_str == "umq") {

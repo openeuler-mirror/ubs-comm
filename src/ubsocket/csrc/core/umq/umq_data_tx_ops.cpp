@@ -99,7 +99,7 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
             trace->pack_size_list.push(trace->pack_size);
         } else {
             if (i == 0) {
-                TRACE_UPDATE_WRITE_FIRST(trace, BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len, is_first);
+                TRACE_UPDATE_WRITE_FIRST(trace, CORE_WRITE, seq_no, cur_buf->data_size, tx_total_len, is_first);
             } else {
                 TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size,
                                        tx_total_len, is_first);
@@ -116,7 +116,7 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
             trace->pack_size_list.push(trace->pack_size);
         } else {
             if (i == 0) {
-                TRACE_UPDATE_WRITE_FIRST(trace, BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len, is_first);
+                TRACE_UPDATE_WRITE_FIRST(trace, CORE_WRITE, seq_no, cur_buf->data_size, tx_total_len, is_first);
             } else {
                 TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size,
                                        tx_total_len, is_first);
@@ -143,7 +143,7 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
     }
 
     if (i == 0) {
-        TRACE_UPDATE_WRITE_FIRST(trace, BRPC_CLIENT_CALL, seq_no, cur_buf->data_size, tx_total_len, is_first);
+        TRACE_UPDATE_WRITE_FIRST(trace, CORE_WRITE, seq_no, cur_buf->data_size, tx_total_len, is_first);
     } else {
         TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size, tx_total_len,
                                is_first);

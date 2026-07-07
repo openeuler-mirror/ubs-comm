@@ -62,11 +62,8 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     }
 
     PROF_START(CORE_READ_POLL_RX);
-    uint64_t start_time = ubsocket_get_timeNs_compile();
     int ret = rx_ops_->PollRx(sock);
-    uint64_t end_time = ubsocket_get_timeNs_compile();
     PROF_END(CORE_READ_POLL_RX, ret >= 0);
-    TRACE_ADD_READ(trace, CORE_READ_POLL_RX, fd_, start_time, end_time);
 
     if (ret < 0) {
         PROF_END(CORE_READ, false);
@@ -83,10 +80,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         }
     }
 
-    uint64_t data_set_start_time = ubsocket_get_timeNs_compile();
     ret = rx_ops_->RxDataSet(iov[0].iov_base, max_buf_size);
-    uint64_t data_set_end_time = ubsocket_get_timeNs_compile();
-    TRACE_ADD_READ(trace, CORE_READ_RX_DATA_SET, fd_, data_set_start_time, data_set_end_time);
 
     if (ret < 0) {
         if (!((errno == EINTR) || (errno == EAGAIN))) {

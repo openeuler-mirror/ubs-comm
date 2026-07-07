@@ -232,12 +232,6 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
                 TRACE_ADD_EPOLL_FULL(trace, CORE_EPOLL_REARM, socket_ptr->raw_socket_, buf_pro->imm.user_data,
                                      buf[i]->data_size, count, traceTime_.umq_rearm_start_timestamp_,
                                      traceTime_.umq_rearm_end_timestamp_);
-                TRACE_ADD_EPOLL_FULL(trace, CORE_EPOLL_POLL_RX, socket_ptr->raw_socket_, buf_pro->imm.user_data,
-                                     buf[i]->data_size, count, traceTime_.umq_poll_start_timestamp_,
-                                     traceTime_.umq_poll_end_timestamp_);
-                TRACE_ADD_EPOLL_FULL(trace, CORE_EPOLL_ALLOC_BUF, socket_ptr->raw_socket_, buf_pro->imm.user_data,
-                                     buf[i]->data_size, count, traceTime_.umq_alloc_start_timestamp_,
-                                     traceTime_.umq_alloc_end_timestamp_);
                 TRACE_ADD_EPOLL_FULL(trace, CORE_EPOLL_POST_RX, socket_ptr->raw_socket_, buf_pro->imm.user_data,
                                      buf[i]->data_size, count, traceTime_.umq_post_start_timestamp_,
                                      traceTime_.umq_post_end_timestamp_);

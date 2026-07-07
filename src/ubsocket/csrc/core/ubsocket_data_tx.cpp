@@ -22,7 +22,6 @@ DataTx::DataTx(const SocketPtr &sock, DataTxOps *ops) : fd_(sock->raw_socket_), 
 ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     auto *trace = sock->split_trace_;
-    TRACE_ADD_BRPC_WRITE(trace, BRPC_CLIENT_CALL, fd_);
     TRACE_ADD_WRITE_SIMPLE(trace, CORE_WRITE, fd_);
     PROF_START(CORE_WRITE);
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
@@ -57,11 +56,8 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     }
 
     PROF_START(CORE_WRITE_POLL_TX);
-    uint64_t start_time = ubsocket_get_timeNs_compile();
     int poll_ret = tx_ops_->PollTx(sock);
-    uint64_t end_time = ubsocket_get_timeNs_compile();
     PROF_END(CORE_WRITE_POLL_TX, poll_ret >= 0);
-    TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_TX, fd_, start_time, end_time, 0);
     if (poll_ret < 0) {
         PROF_END(CORE_WRITE, false);
         return UBS_ERROR;
@@ -93,15 +89,8 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         input_total_len += cut_total_len;
     } while (cut_total_len != 0 && ++batch < post_batch_max);
 
-    uint64_t alloc_start = 0;
-    if (trace != nullptr) {
-        alloc_start = ubsocket_get_timeNs_compile();
-    }
     uintptr_t txBuf = tx_ops_->AllocTxBuf(0, buf_cnt);
-    if (trace != nullptr) {
-        uint64_t alloc_end = ubsocket_get_timeNs_compile();
-        TRACE_ADD_WRITE(trace, CORE_WRITE_ALLOC_TX_BUF, fd_, alloc_start, alloc_end, 0);
-    }
+
     if (txBuf == 0) {
         PROF_END(CORE_WRITE_POST_SEND, false);
         PROF_END(CORE_WRITE, false);
