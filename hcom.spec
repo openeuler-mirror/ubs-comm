@@ -116,10 +116,6 @@ cp %{_builddir}/%{package_name}/src/hcom/umq/build/src/qbuf/libumq_buf.so.0.0.1 
 ln -s libumq_buf.so.0.0.1 %{buildroot}%{_libdir}/libumq_buf.so.0
 ln -s libumq_buf.so.0     %{buildroot}%{_libdir}/libumq_buf.so
 
-cp %{_builddir}/%{package_name}/src/hcom/umq/build/src/umq_ipc/libumq_ipc.so.0.0.1  %{buildroot}/usr/lib64/
-ln -s libumq_ipc.so.0.0.1 %{buildroot}%{_libdir}/libumq_ipc.so.0
-ln -s libumq_ipc.so.0     %{buildroot}%{_libdir}/libumq_ipc.so
-
 cp %{_builddir}/%{package_name}/src/ubsocket/build/csrc/libubsocket.so  %{buildroot}/usr/lib64/libubsocket.so.0.0.1
 chrpath -d %{buildroot}/usr/lib64/libubsocket.so.0.0.1
 ln -s libubsocket.so.0.0.1 %{buildroot}%{_libdir}/libubsocket.so.0
@@ -164,15 +160,12 @@ cp %{_builddir}/%{package_name}/src/ubsocket/build/csrc/libubsocket.a  %{buildro
 %{_prefix}/lib64/libumq.so
 %{_prefix}/lib64/libumq_ub.so
 %{_prefix}/lib64/libumq_buf.so
-%{_prefix}/lib64/libumq_ipc.so
 %{_prefix}/lib64/libumq.so.0
 %{_prefix}/lib64/libumq.so.0.0.1
 %{_prefix}/lib64/libumq_ub.so.0
 %{_prefix}/lib64/libumq_ub.so.0.0.1
 %{_prefix}/lib64/libumq_buf.so.0
 %{_prefix}/lib64/libumq_buf.so.0.0.1
-%{_prefix}/lib64/libumq_ipc.so.0
-%{_prefix}/lib64/libumq_ipc.so.0.0.1
 
 %files ubsocket
 %defattr(-,root,root)
@@ -183,7 +176,7 @@ cp %{_builddir}/%{package_name}/src/ubsocket/build/csrc/libubsocket.a  %{buildro
 
 %changelog
 * Wed Jun 10 2026 xxx <xxx@xxx.com> - 1.0.0-8
-- Build libubsocket package, add libumq_ipc to umq package.
+- Build libubsocket package.
 
 * Fri Jan 23 2026 xxx <xxx@xxx.com> - 1.0.0-7
 - fix tar use noncom branch, update log.
