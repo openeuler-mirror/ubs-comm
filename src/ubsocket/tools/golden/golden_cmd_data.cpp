@@ -20,6 +20,7 @@
 #include <ctime>
 #include <random>
 #include <string>
+#include <unordered_map>
 
 namespace golden {
 
@@ -356,11 +357,14 @@ private:
     int epollFd_ = -1;
     uint8_t *sendBuf_ = nullptr;
     uint8_t *recvBuf_ = nullptr;
+    size_t recvBufSize_ = 0;
     int64_t msgSent_ = 0;
     int64_t msgRecv_ = 0;
+    int64_t outstanding_ = 0;
     int64_t errorCount_ = 0;
     bool connected_ = false;
     ssize_t recvOffset_ = 0;
+    std::vector<bool> acked_;
 
     void Cleanup();
     int InitSocket();
@@ -476,8 +480,10 @@ int SubCommandData::DataClient::HandleEpollOut(uint64_t &totalBytesSent, TokenBu
             return ret;
         }
     }
-    if (msgSent_ == msgRecv_ && msgSent_ < cmd_.msgCount_) {
-        return SendOneMessage(tokenBucket, totalBytesSent);
+    while (msgSent_ < cmd_.msgCount_ && outstanding_ < kWindowSize) {
+        if (SendOneMessage(tokenBucket, totalBytesSent) < 0) {
+            return -1;
+        }
     }
     return 0;
 }
@@ -517,6 +523,7 @@ int SubCommandData::DataClient::SendOneMessage(TokenBucket &tokenBucket, uint64_
     }
 
     msgSent_++;
+    outstanding_++;
     totalBytesSent += sent;
     return 0;
 }
@@ -524,9 +531,14 @@ int SubCommandData::DataClient::SendOneMessage(TokenBucket &tokenBucket, uint64_
 int SubCommandData::DataClient::ReceiveResponses(uint64_t &totalBytesRecv)
 {
     while (true) {
+        if (recvOffset_ >= static_cast<ssize_t>(recvBufSize_)) {
+            std::cout << "Error: client receive buffer overflow" << std::endl;
+            return -1;
+        }
+
         struct iovec iov[1];
         iov[0].iov_base = recvBuf_ + recvOffset_;
-        iov[0].iov_len = HEADER_SIZE + cmd_.msgSize_ - recvOffset_;
+        iov[0].iov_len = recvBufSize_ - static_cast<size_t>(recvOffset_);
 
         ssize_t recvd = ubsocket_readv(fd_, iov, 1);
         if (recvd < 0) {
@@ -555,9 +567,16 @@ int SubCommandData::DataClient::ReceiveResponses(uint64_t &totalBytesRecv)
 int SubCommandData::DataClient::ProcessRecvBuffer()
 {
     while (recvOffset_ >= static_cast<ssize_t>(HEADER_SIZE)) {
+        uint32_t seq = ReadUint32Le(recvBuf_);
         uint32_t recvMsgSize = ReadUint32Le(recvBuf_ + sizeof(uint32_t) * 2);
         if (recvMsgSize > MAX_MSG_SIZE) {
             std::cout << "Error: invalid message size " << recvMsgSize << " from server" << std::endl;
+            return -1;
+        }
+
+        if (recvMsgSize > static_cast<uint32_t>(cmd_.msgSize_)) {
+            std::cout << "Error: received message size " << recvMsgSize << " exceeds expected " << cmd_.msgSize_
+                      << std::endl;
             return -1;
         }
 
@@ -565,14 +584,27 @@ int SubCommandData::DataClient::ProcessRecvBuffer()
             break;
         }
 
+        if (seq >= static_cast<uint32_t>(cmd_.msgCount_)) {
+            std::cout << "Error: invalid sequence number " << seq << " from server" << std::endl;
+            return -1;
+        }
+
         uint32_t recvCrc = ReadUint32Le(recvBuf_ + sizeof(uint32_t));
         uint32_t calcCrc = CalculateCRC32(recvBuf_ + HEADER_SIZE, recvMsgSize);
         if (recvCrc != calcCrc) {
             errorCount_++;
-            std::cout << "[CLIENT] Warning: CRC mismatch at message " << msgRecv_
+            std::cout << "[CLIENT] Warning: CRC mismatch at message " << seq
                       << ", direction: Server->Client, expected: " << calcCrc << ", got: " << recvCrc << std::endl;
         }
-        msgRecv_++;
+
+        if (!acked_[seq]) {
+            acked_[seq] = true;
+            outstanding_--;
+
+            while (msgRecv_ < cmd_.msgCount_ && acked_[msgRecv_]) {
+                msgRecv_++;
+            }
+        }
 
         size_t moveSize = recvOffset_ - (HEADER_SIZE + recvMsgSize);
         if (moveSize > 0) {
@@ -630,9 +662,19 @@ void SubCommandData::DataClient::PrintReport(uint64_t totalBytesSent, uint64_t t
 int SubCommandData::DataClient::Run()
 {
     sendBuf_ = reinterpret_cast<uint8_t *>(malloc(cmd_.msgSize_));
-    recvBuf_ = reinterpret_cast<uint8_t *>(malloc(cmd_.msgSize_ + HEADER_SIZE));
+    recvBufSize_ = static_cast<size_t>(kWindowSize) * (static_cast<size_t>(cmd_.msgSize_) + HEADER_SIZE);
+    recvBuf_ = reinterpret_cast<uint8_t *>(malloc(recvBufSize_));
+    acked_.resize(cmd_.msgCount_, false);
     if (!sendBuf_ || !recvBuf_) {
         std::cout << "Error: malloc failed" << std::endl;
+        if (sendBuf_) {
+            free(sendBuf_);
+            sendBuf_ = nullptr;
+        }
+        if (recvBuf_) {
+            free(recvBuf_);
+            recvBuf_ = nullptr;
+        }
         return -1;
     }
 
@@ -652,18 +694,15 @@ int SubCommandData::DataClient::Run()
     }
 
     const int defaultEpollTimeoutMs = 1000;
+    const uint64_t defaultTimeoutMs = 60000;
     TokenBucket tokenBucket(cmd_.qps_, cmd_.qps_ > 0 ? cmd_.qps_ : 0);
 
     auto timeStart = Func::TimeUs();
+    auto lastActivityTime = Func::TimeUs();
     uint64_t totalBytesSent = 0;
     uint64_t totalBytesRecv = 0;
 
     while (msgRecv_ < cmd_.msgCount_) {
-        if (connected_ && msgSent_ < cmd_.msgCount_ && msgSent_ == msgRecv_ &&
-            SendOneMessage(tokenBucket, totalBytesSent) < 0) {
-            return -1;
-        }
-
         struct epoll_event events[MAX_EVENTS];
         int nfds = ubsocket_epoll_wait(epollFd_, events, MAX_EVENTS, defaultEpollTimeoutMs);
         if (nfds < 0) {
@@ -675,6 +714,11 @@ int SubCommandData::DataClient::Run()
         }
 
         if (nfds == 0) {
+            uint64_t now = Func::TimeUs();
+            if (now - lastActivityTime > defaultTimeoutMs * 1000) {
+                std::cout << "Error: timeout, no activity for " << defaultTimeoutMs << " ms" << std::endl;
+                return -1;
+            }
             continue;
         }
 
@@ -682,6 +726,8 @@ int SubCommandData::DataClient::Run()
         if (ret < 0) {
             return ret;
         }
+
+        lastActivityTime = Func::TimeUs();
     }
 
     auto timeEnd = Func::TimeUs();
@@ -689,6 +735,19 @@ int SubCommandData::DataClient::Run()
 
     return 0;
 }
+
+struct ClientState {
+    uint8_t *recvBuf = nullptr;
+    uint8_t *sendBuf = nullptr;
+    int64_t msgRecv = 0;
+    int64_t msgSent = 0;
+    int64_t errorCount = 0;
+    ssize_t recvOffset = 0;
+    ssize_t pendingSendSize = 0;
+    uint64_t totalBytesRecv = 0;
+    uint64_t totalBytesSent = 0;
+    uint64_t timeStart = 0;
+};
 
 class SubCommandData::DataServer {
 public:
@@ -700,31 +759,20 @@ private:
     SubCommandData &cmd_;
     int listenFd_ = -1;
     int epollFd_ = -1;
-    int clientFd_ = -1;
-    uint8_t *recvBuf_ = nullptr;
-    uint8_t *sendBuf_ = nullptr;
-    int64_t msgRecv_ = 0;
-    int64_t msgSent_ = 0;
-    int64_t errorCount_ = 0;
-    ssize_t recvOffset_ = 0;
-    ssize_t pendingSendSize_ = 0;
-    uint64_t totalBytesRecv_ = 0;
-    uint64_t totalBytesSent_ = 0;
-    uint64_t timeStart_ = 0;
+    std::unordered_map<int, golden::ClientState> clients_;
 
     void Cleanup();
     int InitListener();
     int SetupEpoll();
     int AcceptClient();
-    int HandleClientOut(uint64_t &totalBytesSent);
-    int HandleClientIn(uint64_t &totalBytesRecv, uint64_t &totalBytesSent);
-    int HandleClientError();
-    int ProcessRecvData(uint64_t &totalBytesRecv, uint64_t &totalBytesSent);
-    int TrySendPending(uint64_t &totalBytesSent);
-    int TrySendEcho(uint64_t &totalBytesSent);
+    int HandleClientOut(int fd, uint64_t &totalBytesSent);
+    int HandleClientIn(int fd, uint64_t &totalBytesRecv, uint64_t &totalBytesSent);
+    int HandleClientError(int fd);
+    int ProcessRecvData(int fd, uint64_t &totalBytesRecv, uint64_t &totalBytesSent);
+    int TrySendPending(int fd, uint64_t &totalBytesSent);
+    int TrySendEcho(int fd, uint64_t &totalBytesSent);
     int ProcessEvents(epoll_event *events, int nfds, uint64_t &totalBytesRecv, uint64_t &totalBytesSent);
-    void ResetClientState(uint64_t &totalBytesRecv, uint64_t &totalBytesSent);
-    void PrintServerReport(uint64_t durationUs, uint64_t totalBytesRecv, uint64_t totalBytesSent);
+    void ResetClientState(int fd, uint64_t &totalBytesRecv, uint64_t &totalBytesSent);
 };
 
 SubCommandData::DataServer::~DataServer()
@@ -734,21 +782,23 @@ SubCommandData::DataServer::~DataServer()
 
 void SubCommandData::DataServer::Cleanup()
 {
-    if (recvBuf_) {
-        free(recvBuf_);
-        recvBuf_ = nullptr;
+    for (auto &pair : clients_) {
+        int fd = pair.first;
+        golden::ClientState &state = pair.second;
+        ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr);
+        close(fd);
+        if (state.recvBuf) {
+            free(state.recvBuf);
+        }
+        if (state.sendBuf) {
+            free(state.sendBuf);
+        }
     }
-    if (sendBuf_) {
-        free(sendBuf_);
-        sendBuf_ = nullptr;
-    }
+    clients_.clear();
+
     if (epollFd_ >= 0) {
         close(epollFd_);
         epollFd_ = -1;
-    }
-    if (clientFd_ >= 0) {
-        close(clientFd_);
-        clientFd_ = -1;
     }
     if (listenFd_ >= 0) {
         close(listenFd_);
@@ -780,7 +830,7 @@ int SubCommandData::DataServer::InitListener()
         return -errno;
     }
 
-    if (ubsocket_listen(listenFd_, 1) < 0) {
+    if (ubsocket_listen(listenFd_, 128) < 0) {
         std::cout << "Error: listen failed, errno: " << errno << std::endl;
         return -errno;
     }
@@ -820,22 +870,35 @@ int SubCommandData::DataServer::AcceptClient()
         return -errno;
     }
 
-    if (clientFd_ >= 0) {
-        close(clientFd_);
-    }
-    clientFd_ = fd;
-
-    if (SetNonBlocking(clientFd_) < 0) {
+    if (SetNonBlocking(fd) < 0) {
         std::cout << "Error: set non-blocking failed, errno: " << errno << std::endl;
+        close(fd);
         return -errno;
     }
 
+    size_t bufSize = static_cast<size_t>(kWindowSize) * (MAX_MSG_SIZE + HEADER_SIZE);
+    uint8_t *recvBuf = reinterpret_cast<uint8_t *>(malloc(bufSize));
+    uint8_t *sendBuf = reinterpret_cast<uint8_t *>(malloc(bufSize));
+    if (!recvBuf || !sendBuf) {
+        std::cout << "Error: malloc failed for client " << fd << std::endl;
+        close(fd);
+        return -1;
+    }
+
+    clients_[fd] = {recvBuf, sendBuf, 0, 0, 0, 0, 0, 0, 0, Func::TimeUs()};
+
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
-    ev.data.fd = clientFd_;
-    int epollRet = ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, clientFd_, &ev);
+    ev.data.fd = fd;
+    int epollRet = ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev);
     if (epollRet < 0) {
         std::cout << "Error: epoll_ctl add client failed, errno: " << errno << std::endl;
+        int savedFd = fd;
+        free(recvBuf);
+        free(sendBuf);
+        close(fd);
+        fd = -1;
+        clients_.erase(savedFd);
         return -errno;
     }
 
@@ -846,30 +909,38 @@ int SubCommandData::DataServer::AcceptClient()
     return 1;
 }
 
-int SubCommandData::DataServer::HandleClientOut(uint64_t &totalBytesSent)
+int SubCommandData::DataServer::HandleClientOut(int fd, uint64_t &totalBytesSent)
 {
-    return TrySendPending(totalBytesSent);
+    return TrySendPending(fd, totalBytesSent);
 }
 
-int SubCommandData::DataServer::HandleClientIn(uint64_t &totalBytesRecv, uint64_t &totalBytesSent)
+int SubCommandData::DataServer::HandleClientIn(int fd, uint64_t &totalBytesRecv, uint64_t &totalBytesSent)
 {
-    return ProcessRecvData(totalBytesRecv, totalBytesSent);
+    return ProcessRecvData(fd, totalBytesRecv, totalBytesSent);
 }
 
-int SubCommandData::DataServer::HandleClientError()
+int SubCommandData::DataServer::HandleClientError(int fd)
 {
-    std::cout << "Client disconnected (error/hangup)" << std::endl;
+    std::cout << "Client " << fd << " disconnected (error/hangup)" << std::endl;
     return -1;
 }
 
-int SubCommandData::DataServer::TrySendPending(uint64_t &totalBytesSent)
+int SubCommandData::DataServer::TrySendPending(int fd, uint64_t &totalBytesSent)
 {
-    while (pendingSendSize_ > 0) {
-        struct iovec sendIov[1];
-        sendIov[0].iov_base = sendBuf_;
-        sendIov[0].iov_len = pendingSendSize_;
+    auto it = clients_.find(fd);
+    if (it == clients_.end()) {
+        std::cout << "Error: client " << fd << " not found" << std::endl;
+        return -1;
+    }
 
-        ssize_t sent = ubsocket_writev(clientFd_, sendIov, 1);
+    golden::ClientState &state = it->second;
+
+    while (state.pendingSendSize > 0) {
+        struct iovec sendIov[1];
+        sendIov[0].iov_base = state.sendBuf;
+        sendIov[0].iov_len = state.pendingSendSize;
+
+        ssize_t sent = ubsocket_writev(fd, sendIov, 1);
         if (sent < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
@@ -879,74 +950,91 @@ int SubCommandData::DataServer::TrySendPending(uint64_t &totalBytesSent)
         }
 
         totalBytesSent += sent;
-        msgSent_++;
-        pendingSendSize_ -= sent;
+        state.totalBytesSent += sent;
+        state.msgSent++;
+        state.pendingSendSize -= sent;
     }
     return 0;
 }
 
-int SubCommandData::DataServer::TrySendEcho(uint64_t &totalBytesSent)
+int SubCommandData::DataServer::TrySendEcho(int fd, uint64_t &totalBytesSent)
 {
-    while (recvOffset_ >= static_cast<ssize_t>(HEADER_SIZE)) {
-        uint32_t msgSize = ReadUint32Le(recvBuf_ + sizeof(uint32_t) * 2);
+    auto it = clients_.find(fd);
+    if (it == clients_.end()) {
+        std::cout << "Error: client " << fd << " not found" << std::endl;
+        return -1;
+    }
+
+    golden::ClientState &state = it->second;
+
+    while (state.recvOffset >= static_cast<ssize_t>(HEADER_SIZE)) {
+        uint32_t msgSize = ReadUint32Le(state.recvBuf + sizeof(uint32_t) * 2);
         if (msgSize > MAX_MSG_SIZE) {
             std::cout << "Error: message size " << msgSize << " exceeds maximum" << std::endl;
             return -1;
         }
 
-        if (recvOffset_ < static_cast<ssize_t>(HEADER_SIZE + msgSize)) {
+        if (state.recvOffset < static_cast<ssize_t>(HEADER_SIZE + msgSize)) {
             break;
         }
 
-        uint32_t recvCrc = ReadUint32Le(recvBuf_ + sizeof(uint32_t));
-        uint32_t calcCrc = CalculateCRC32(recvBuf_ + HEADER_SIZE, msgSize);
+        uint32_t recvCrc = ReadUint32Le(state.recvBuf + sizeof(uint32_t));
+        uint32_t calcCrc = CalculateCRC32(state.recvBuf + HEADER_SIZE, msgSize);
         if (recvCrc != calcCrc) {
-            errorCount_++;
-            std::cout << "[SERVER] Warning: CRC mismatch at message " << msgRecv_
+            state.errorCount++;
+            std::cout << "[SERVER] Warning: CRC mismatch at message " << state.msgRecv
                       << ", direction: Client->Server, expected: " << calcCrc << ", got: " << recvCrc << std::endl;
         }
 
         size_t copySize = HEADER_SIZE + msgSize;
         if (copySize > 0) {
-            memcpy(sendBuf_, recvBuf_, copySize);
+            memcpy(state.sendBuf, state.recvBuf, copySize);
         }
-        pendingSendSize_ = copySize;
+        state.pendingSendSize = copySize;
 
-        int ret = TrySendPending(totalBytesSent);
+        int ret = TrySendPending(fd, totalBytesSent);
         if (ret < 0) {
             return ret;
         }
 
-        if (pendingSendSize_ > 0) {
+        if (state.pendingSendSize > 0) {
             break;
         }
 
-        msgRecv_++;
+        state.msgRecv++;
 
-        size_t moveSize = recvOffset_ - (HEADER_SIZE + msgSize);
+        size_t moveSize = state.recvOffset - (HEADER_SIZE + msgSize);
         if (moveSize > 0) {
-            memmove(recvBuf_, recvBuf_ + HEADER_SIZE + msgSize, moveSize);
+            memmove(state.recvBuf, state.recvBuf + HEADER_SIZE + msgSize, moveSize);
         }
-        recvOffset_ -= (HEADER_SIZE + msgSize);
+        state.recvOffset -= (HEADER_SIZE + msgSize);
     }
     return 0;
 }
 
-int SubCommandData::DataServer::ProcessRecvData(uint64_t &totalBytesRecv, uint64_t &totalBytesSent)
+int SubCommandData::DataServer::ProcessRecvData(int fd, uint64_t &totalBytesRecv, uint64_t &totalBytesSent)
 {
+    auto it = clients_.find(fd);
+    if (it == clients_.end()) {
+        std::cout << "Error: client " << fd << " not found" << std::endl;
+        return -1;
+    }
+
+    golden::ClientState &state = it->second;
+    size_t recvBufSize = static_cast<size_t>(kWindowSize) * (MAX_MSG_SIZE + HEADER_SIZE);
     bool keepReading = true;
     while (keepReading) {
-        if (recvOffset_ >= static_cast<ssize_t>(MAX_MSG_SIZE + HEADER_SIZE)) {
-            std::cout << "Error: recvOffset_ " << recvOffset_ << " exceeds buffer size " << (MAX_MSG_SIZE + HEADER_SIZE)
+        if (state.recvOffset >= static_cast<ssize_t>(recvBufSize)) {
+            std::cout << "Error: recvOffset " << state.recvOffset << " exceeds buffer size " << recvBufSize
                       << std::endl;
             return -1;
         }
 
         struct iovec iov[1];
-        iov[0].iov_base = recvBuf_ + recvOffset_;
-        iov[0].iov_len = MAX_MSG_SIZE + HEADER_SIZE - recvOffset_;
+        iov[0].iov_base = state.recvBuf + state.recvOffset;
+        iov[0].iov_len = recvBufSize - static_cast<size_t>(state.recvOffset);
 
-        ssize_t recvd = ubsocket_readv(clientFd_, iov, 1);
+        ssize_t recvd = ubsocket_readv(fd, iov, 1);
         if (recvd < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 keepReading = false;
@@ -956,14 +1044,15 @@ int SubCommandData::DataServer::ProcessRecvData(uint64_t &totalBytesRecv, uint64
             return -errno;
         }
         if (recvd == 0) {
-            std::cout << "Client disconnected" << std::endl;
+            std::cout << "Client " << fd << " disconnected" << std::endl;
             return -1;
         }
 
-        recvOffset_ += recvd;
+        state.recvOffset += recvd;
+        state.totalBytesRecv += recvd;
         totalBytesRecv += recvd;
 
-        int ret = TrySendEcho(totalBytesSent);
+        int ret = TrySendEcho(fd, totalBytesSent);
         if (ret < 0) {
             return ret;
         }
@@ -971,81 +1060,81 @@ int SubCommandData::DataServer::ProcessRecvData(uint64_t &totalBytesRecv, uint64
     return 0;
 }
 
-void SubCommandData::DataServer::ResetClientState(uint64_t &totalBytesRecv, uint64_t &totalBytesSent)
+void SubCommandData::DataServer::ResetClientState(int fd, uint64_t &totalBytesRecv, uint64_t &totalBytesSent)
 {
-    PrintServerReport(Func::TimeUs() - timeStart_, totalBytesRecv, totalBytesSent);
+    auto it = clients_.find(fd);
+    if (it == clients_.end()) {
+        return;
+    }
 
-    msgRecv_ = 0;
-    msgSent_ = 0;
-    errorCount_ = 0;
-    totalBytesRecv = 0;
-    totalBytesSent = 0;
-    timeStart_ = Func::TimeUs();
+    golden::ClientState &state = it->second;
+    uint64_t durationUs = Func::TimeUs() - state.timeStart;
 
-    ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_DEL, clientFd_, nullptr);
-    close(clientFd_);
-    clientFd_ = -1;
-    recvOffset_ = 0;
-    pendingSendSize_ = 0;
-}
+    std::cout << "\n=== Data Server Report (client " << fd << ") ===" << std::endl;
+    std::cout << "Messages received: " << state.msgRecv << std::endl;
+    std::cout << "Messages sent: " << state.msgSent << std::endl;
+    std::cout << "CRC errors: " << state.errorCount << std::endl;
+    std::cout << "Total bytes received: " << state.totalBytesRecv << std::endl;
+    std::cout << "Total bytes sent: " << state.totalBytesSent << std::endl;
+    std::cout << "Duration: " << durationUs / 1000.0 << " ms" << std::endl;
 
-void SubCommandData::DataServer::PrintServerReport(uint64_t durationUs, uint64_t totalBytesRecv,
-                                                   uint64_t totalBytesSent)
-{
-    double durationMs = durationUs / 1000.0;
-    std::cout << "\n=== Data Server Report ===" << std::endl;
-    std::cout << "Messages received: " << msgRecv_ << std::endl;
-    std::cout << "Messages sent: " << msgSent_ << std::endl;
-    std::cout << "CRC errors: " << errorCount_ << std::endl;
-    std::cout << "Total bytes received: " << totalBytesRecv << std::endl;
-    std::cout << "Total bytes sent: " << totalBytesSent << std::endl;
-    std::cout << "Duration: " << durationMs << " ms" << std::endl;
+    ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr);
+    close(fd);
+
+    if (state.recvBuf) {
+        free(state.recvBuf);
+    }
+    if (state.sendBuf) {
+        free(state.sendBuf);
+    }
+
+    clients_.erase(it);
 }
 
 int SubCommandData::DataServer::ProcessEvents(epoll_event *events, int nfds, uint64_t &totalBytesRecv,
                                               uint64_t &totalBytesSent)
 {
     for (int i = 0; i < nfds; ++i) {
-        if (events[i].data.fd == listenFd_) {
+        int fd = events[i].data.fd;
+
+        if (fd == listenFd_) {
             int ret = AcceptClient();
             if (ret < 0) {
                 return ret;
             }
-            if (ret > 0) {
-                timeStart_ = Func::TimeUs();
-            }
             continue;
         }
 
-        if (events[i].data.fd != clientFd_) {
+        auto it = clients_.find(fd);
+        if (it == clients_.end()) {
             continue;
         }
 
         bool clientDisconnected = false;
 
         if (events[i].events & EPOLLOUT) {
-            int ret = HandleClientOut(totalBytesSent);
+            int ret = HandleClientOut(fd, totalBytesSent);
             if (ret < 0) {
                 clientDisconnected = true;
             }
         }
 
         if (!clientDisconnected && (events[i].events & EPOLLIN)) {
-            int ret = HandleClientIn(totalBytesRecv, totalBytesSent);
+            int ret = HandleClientIn(fd, totalBytesRecv, totalBytesSent);
             if (ret < 0) {
                 clientDisconnected = true;
             }
         }
 
         if (!clientDisconnected && (events[i].events & (EPOLLERR | EPOLLHUP))) {
-            int ret = HandleClientError();
+            int ret = HandleClientError(fd);
             if (ret < 0) {
                 clientDisconnected = true;
             }
         }
 
         if (clientDisconnected) {
-            ResetClientState(totalBytesRecv, totalBytesSent);
+            ResetClientState(fd, totalBytesRecv, totalBytesSent);
         }
     }
     return 0;
@@ -1053,13 +1142,6 @@ int SubCommandData::DataServer::ProcessEvents(epoll_event *events, int nfds, uin
 
 int SubCommandData::DataServer::Run()
 {
-    sendBuf_ = reinterpret_cast<uint8_t *>(malloc(MAX_MSG_SIZE + HEADER_SIZE));
-    recvBuf_ = reinterpret_cast<uint8_t *>(malloc(MAX_MSG_SIZE + HEADER_SIZE));
-    if (!sendBuf_ || !recvBuf_) {
-        std::cout << "Error: malloc failed" << std::endl;
-        return -1;
-    }
-
     if (InitListener() < 0) {
         return -1;
     }
@@ -1078,7 +1160,6 @@ int SubCommandData::DataServer::Run()
 
     uint64_t totalBytesRecv = 0;
     uint64_t totalBytesSent = 0;
-    timeStart_ = Func::TimeUs();
 
     while (!g_quitFlag) {
         struct epoll_event events[MAX_EVENTS];

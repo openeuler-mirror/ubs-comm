@@ -16,6 +16,8 @@
 
 namespace golden {
 
+constexpr int64_t kWindowSize = 32;
+
 SubCommand *CreateData(const ParamMap &params);
 
 class SubCommandData : public SubCommand {
