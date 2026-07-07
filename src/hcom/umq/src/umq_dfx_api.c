@@ -500,14 +500,15 @@ int umq_transport_pool_stats_to_str(const umq_transport_pool_stats_t *umq_transp
     UMQ_DFX_SNPRINTF_BUF(buf, max_buf_len, str_size, "%s\n", UMQ_DFX_EQUALS_120);
     UMQ_DFX_SNPRINTF_BUF(buf, max_buf_len, str_size, "%s\n", UMQ_DFX_UNDERLINE_120);
     UMQ_DFX_SNPRINTF_BUF(buf, max_buf_len, str_size,
-        "%-15s %-15s %-15s %-15s %-15s %-15s %-15s\n",
-        "TotalTpCnt", "GlobalTpCnt", "CacheTpCnt", "InUseTpCnt", "ErrorTpCnt", "AccAllocTpCnt", "AccFreeTpCnt");
+        "%-15s %-15s %-15s %-15s %-15s %-15s %-15s %-15s\n",
+        "TotalTpCnt", "GlobalTpCnt", "CacheTpCnt", "InUseTpCnt", "ErrorTpCnt",
+        "AccAllocTpCnt", "AccFreeTpCnt", "AccMissTpCnt");
     UMQ_DFX_SNPRINTF_BUF(buf, max_buf_len, str_size,
-        "%-15lu %-15lu %-15lu %-15lu %-15lu %-15lu %-15lu\n",
+        "%-15lu %-15lu %-15lu %-15lu %-15lu %-15lu %-15lu %-15lu\n",
         umq_transport_pool_stats->total_num, umq_transport_pool_stats->global_num,
         umq_transport_pool_stats->cache_num, umq_transport_pool_stats->in_use_num,
         umq_transport_pool_stats->error_num, umq_transport_pool_stats->acc_alloc_num,
-        umq_transport_pool_stats->acc_free_num);
+        umq_transport_pool_stats->acc_free_num, umq_transport_pool_stats->acc_miss_num);
     UMQ_DFX_SNPRINTF_BUF(buf, max_buf_len, str_size, "%s\n", UMQ_DFX_UNDERLINE_120);
     return str_size;
 }
@@ -556,6 +557,7 @@ int umq_stats_perf_to_str(umq_perf_stats_t *umq_perf_stats, char *buf, int max_b
         "umq_enqueue", "umq_dequeue", "umq_dequeue_empty", "umq_post_all", "umq_post_tx", "umq_post_rx",
         "umq_poll_all", "umq_poll_tx", "umq_poll_rx", "umq_poll_all_empty", "umq_poll_tx_empty", "umq_poll_rx_empty",
         "umq_rearm_tx", "umq_rearm_rx", "umq_wait_tx", "umq_wait_rx", "umq_ack_tx", "umq_ack_rx", "umq_notify",
+        "umq_buf_alloc", "umq_buf_free", "umq_data_to_head",
         "umq_create", "umq_destroy", "umq_get_route_list", "umq_bind_info_get", "umq_bind", "umq_unbind",
         "tp_post_send", "tp_post_recv", "tp_post_send_eagain", "tp_poll_tx", "tp_poll_rx", "tp_poll_tx_empty",
         "tp_poll_rx_empty", "tp_rearm_tx", "tp_rearm_rx", "tp_wait_tx", "tp_wait_rx", "tp_ack_tx", "tp_ack_rx",

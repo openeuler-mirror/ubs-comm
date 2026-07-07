@@ -14,7 +14,6 @@ add_subdirectory(qbuf)
 if(NOT USE_URMA_STUB)
     add_subdirectory(umq_ub)
 endif()
-add_subdirectory(umq_ipc)
 
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR} UMQ_LIB_DIR_SRCS)
 

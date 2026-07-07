@@ -81,7 +81,6 @@ if (BUILD_UMQ_ADAPTER_BACKEND)
     set(UMQ_BUILD_DIR "${UBSOCKET_BASE_DIR}/../hcom/umq/build")
     set(UMQ_LIB_DIR "${UMQ_BUILD_DIR}/src")
     set(UMQ_QBUF_LIB_DIR "${UMQ_LIB_DIR}/qbuf")
-    set(UMQ_IPC_LIB_DIR "${UMQ_LIB_DIR}/umq_ipc")
 
     if (NOT EXISTS "${UMQ_LIB_DIR}/libumq.so")
         message(STATUS "ubsocket: libumq.so not found, building umq automatically...")

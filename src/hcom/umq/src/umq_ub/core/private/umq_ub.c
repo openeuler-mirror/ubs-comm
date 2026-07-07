@@ -13,7 +13,6 @@
 #include "umq_qbuf_pool.h"
 #include "umq_huge_qbuf_pool.h"
 #include "umq_ub_flow_control.h"
-#include "umq_ub_flow_control_sge.h"
 #include "qbuf_list.h"
 #include "umq_ub_api.h"
 #include "umq_symbol_private.h"
@@ -27,6 +26,7 @@
 #define UMQ_LEN_ALIGNMENT_4 4
 #define TSEG_MAP_NUM 256
 #define UMQ_CTP_MAX_BUF_SIZE 4096
+#define UMQ_INITIAL_CREDIT 2
 
 static util_id_allocator_t g_umq_ub_id_allocator = {0};
 static ub_queue_ctx_list_t g_umq_ub_queue_ctx_list;
@@ -99,8 +99,7 @@ int umq_ub_bind_info_check(ub_queue_t *queue, umq_ub_bind_info_t *info)
         return -UMQ_ERR_EINVAL;
     }
 
-    if (dev_info->umq_trans_mode != UMQ_TRANS_MODE_UB && dev_info->umq_trans_mode != UMQ_TRANS_MODE_UB_PLUS &&
-        dev_info->umq_trans_mode != UMQ_TRANS_MODE_UBMM && dev_info->umq_trans_mode != UMQ_TRANS_MODE_UBMM_PLUS) {
+    if (dev_info->umq_trans_mode != UMQ_TRANS_MODE_UB && dev_info->umq_trans_mode != UMQ_TRANS_MODE_UB_PLUS) {
         UMQ_VLOG_ERR(VLOG_UMQ, "UMQ(ID:%u), trans mode %d is not UB\n", queue->umq_id, dev_info->umq_trans_mode);
         return -UMQ_ERR_EINVAL;
     }
@@ -780,6 +779,7 @@ static ALWAYS_INLINE uint32_t umq_ub_fc_info_serialize(
     urpc_tlv_head_t *info_tlv_head = (urpc_tlv_head_t *)(uintptr_t)bind_info_buf;
     umq_ub_bind_fc_info_t *fc_info = (umq_ub_bind_fc_info_t *)(uintptr_t)info_tlv_head->value;
     fc_info->rsvd = 0;
+    fc_info->initial_credit = 0;
     if (queue->flow_control.enabled) {
         fc_info->token = jetty->jetty_cfg.shared.jfr->jfr_cfg.token_value;
         fc_info->rjetty_size = umq_ub_rjetty_get(fc_info->rjetty, UB_QUEUE_JETTY_FLOW_CONTROL,
@@ -787,6 +787,11 @@ static ALWAYS_INLINE uint32_t umq_ub_fc_info_serialize(
         if (fc_info->rjetty_size == 0) {
             return 0;
         }
+        ub_credit_pool_t *pool = &queue->jfr_ctx[UB_QUEUE_JETTY_IO]->credit;
+        uint16_t allocated = pool->ops.available_credit_dec(pool, UMQ_INITIAL_CREDIT);
+        fc_info->initial_credit = allocated;
+        (void)queue->flow_control.ops.local_rx_allocated_inc(&queue->flow_control, allocated);
+
     } else {
         fc_info->rjetty_size = 0;
         fc_info->token.token = 0;
@@ -1519,9 +1524,6 @@ void umq_ub_jfr_ctx_destroy(ub_queue_t *queue, ub_queue_jetty_index_t jetty_idx)
         }
     }
     rx_buf_ctx_list_uninit(&queue->jfr_ctx[jetty_idx]->rx_buf_ctx_list);
-    if (jetty_idx == UB_QUEUE_JETTY_FLOW_CONTROL) {
-        umq_ub_flow_control_share_rq_sge_uninit(&queue->jfr_ctx[jetty_idx]->share_rq_sge);
-    }
     free(queue->jfr_ctx[jetty_idx]);
     queue->jfr_ctx[jetty_idx] = NULL;
 }

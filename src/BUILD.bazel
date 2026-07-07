@@ -75,7 +75,6 @@ cc_binary(
 #        ":libumq_buf",
         "//src/hcom/umq/src:umq_aggregate",
         ":libumq",
-#        ":libumq_ipc",
 #        ":libumq_ub",
     ],
     linkshared = True, 
@@ -255,7 +254,6 @@ filegroup(
         ":libboundscheck",
         "//src/hcom/umq/src:umq",
         "//src/hcom/umq/src/qbuf:umq_buf",
-        "//src/hcom/umq/src/umq_ipc:umq_ipc",
         "//src/hcom/umq/src/umq_ub:umq_ub",
 
     ],
