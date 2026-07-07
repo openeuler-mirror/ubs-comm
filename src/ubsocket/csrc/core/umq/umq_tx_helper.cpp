@@ -21,10 +21,10 @@ namespace ubs {
 namespace umq {
 
 int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_option, ops_error_code &err_code,
-                                   ICallback &error_cb, const SocketPtr &sock)
+                                   ICallback &error_cb, Socket *sock)
 {
-    auto *trace = (sock.Get() && !SplitTrace::SuppressTrace()) ? sock->split_trace_ : nullptr;
-    int raw_socket = sock.Get() ? sock->raw_socket_ : -1;
+    auto *trace = (sock && !SplitTrace::SuppressTrace()) ? sock->split_trace_ : nullptr;
+    int raw_socket = sock ? sock->raw_socket_ : -1;
     umq_buf_t *buf[POLL_BATCH_MAX];
     uint64_t umq_poll_start = 0;
     if (trace != nullptr) {
@@ -101,15 +101,15 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
     return wr_cnt;
 }
 
-int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, const SocketPtr &sock, bool is_first_cqe)
+int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket *sock, bool is_first_cqe)
 {
     int wr_cnt = 0;
     umq_buf_t *cur_qbuf = start_qbuf;
     umq_buf_t *last_qbuf = nullptr;
     umq_buf_t *wr_first_buf;
     uint64_t decref_start = 0;
-    auto *trace = (sock.Get() && !SplitTrace::SuppressTrace()) ? sock->split_trace_ : nullptr;
-    int raw_socket = sock.Get() ? sock->raw_socket_ : -1;
+    auto *trace = (sock && !SplitTrace::SuppressTrace()) ? sock->split_trace_ : nullptr;
+    int raw_socket = sock ? sock->raw_socket_ : -1;
     bool do_trace = (trace != nullptr && is_first_cqe);
     if (do_trace) {
         decref_start = ubsocket_get_timeNs_compile();

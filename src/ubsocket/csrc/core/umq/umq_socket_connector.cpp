@@ -685,7 +685,7 @@ Result UmqConnectorOps::DoUbConnectRetry(SocketPtr socket_ptr, Result &ack_ret, 
         }
         return UBS_OK;
     }
-    umq_socket->UnbindAndFlushRemoteUmq(socket_ptr);
+    umq_socket->UnbindAndFlushRemoteUmq(socket_ptr.Get());
     umq_socket->DestroyLocalUmq();
 
     if (topo_type_ == UMQ_TOPO_TYPE_CLOS) {

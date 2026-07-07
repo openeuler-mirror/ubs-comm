@@ -47,7 +47,11 @@ public:
     {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
     }
-    ~UmqSocket() override = default;
+
+    ~UmqSocket() override
+    {
+        UnInitialize();
+    }
 
     Result Initialize() noexcept override;
     void UnInitialize() noexcept override;
@@ -168,7 +172,7 @@ public:
 
     Result UpdateRxQueueAvailNum();
     Result CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_topo_type_t &topo_type);
-    void UnbindAndFlushRemoteUmq(const SocketPtr &sock);
+    void UnbindAndFlushRemoteUmq(Socket *sock);
     void DestroyLocalUmq();
     int AddQbuf(umq_buf_t *qbuf);
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);

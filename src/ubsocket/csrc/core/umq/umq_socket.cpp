@@ -31,7 +31,11 @@ Result UmqSocket::Initialize() noexcept
     return UBS_OK;
 }
 
-void UmqSocket::UnInitialize() noexcept {}
+void UmqSocket::UnInitialize() noexcept
+{
+    UnbindAndFlushRemoteUmq(this);
+    DestroyLocalUmq();
+}
 
 Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_topo_type_t &topo_type)
 {
@@ -266,7 +270,7 @@ Result UmqSocket::UpdateRxQueueAvailNum()
     return 0;
 }
 
-void UmqSocket::UnbindAndFlushRemoteUmq(const SocketPtr &sock)
+void UmqSocket::UnbindAndFlushRemoteUmq(Socket *sock)
 {
     if (!umq_is_bind_remote_) {
         return;
@@ -289,6 +293,7 @@ void UmqSocket::UnbindAndFlushRemoteUmq(const SocketPtr &sock)
         UBS_VLOG_ERR("[UMQ_API] umq_unbind() failed, local umq: %llu, ret: %d\n",
                      static_cast<unsigned long long>(umq_handle_), ret);
     }
+    umq_is_bind_remote_ = false;
     tx_.GetTxOps()->FlushTx(sock);
 
     GlobalSetting::UBS_ENABLE_SHARE_JFR ? FlushRxQueue() : rx_.GetRxOps()->FlushRx(sock);

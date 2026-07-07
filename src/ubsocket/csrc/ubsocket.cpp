@@ -222,7 +222,13 @@ void ubsocket_uninit()
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::PrintStatsMgr::StopStatsCollection();
     }
+
+    // 用户需要在程序退出时调用 ubsocket_uninit 保证所有的 socket ref 释放，否则会延迟至 ArraySet 单例析构。在 brpc 场
+    // 景下，由于 brpc worker 不会主动 join, worker 可能仍会尝试访问 ArraySet<Socket> 或者 ArraySet<EventPoll>
     TxCqePoller::Instance().Stop();
+    ArraySet<Socket>::GetInstance().ReleaseAll();
+    ArraySet<EventPoll>::GetInstance().ReleaseAll();
+
     umq::UmqBackend::UnInit();
     return;
 }
