@@ -12,7 +12,7 @@
 #define UBS_COMM_URMA_WRAPPER_H
 
 #include "common/ubsocket_common_includes.h"
-#include "under_api/urma/urma_api_dl.h"
+#include "under_api/urma/dl_urma_api.h"
 #include "under_api/urma/urma_types.h"
 #include "urma_socket_types.h"
 

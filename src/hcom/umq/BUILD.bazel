@@ -35,18 +35,18 @@ cc_library(
         "src/umq_ub/core/private",
         "src",
         "util",
+        "/usr/include/ub/umdk/urma",
     ],
     copts = UMQ_DEFAULT_STATIC_COPTS + [
         "-DUMQ_STATIC_LIB",
+        "-I/usr/include/ub/umdk/urma",
     ],
-    linkopts = ["-lpthread"],
+    linkopts = ["-lpthread", "-lurma", "-ltpsa"],
     deps = [
         "//src/hcom/umq/include:framework_headers",
         "//src/hcom/umq/include:umq_headers",
         "//src/hcom/umq/include:umq_tp_headers",
         "//src/hcom/umq/include:umq_ub_headers",
-	# third party libs
-	"@urma//:urma_headers",
 	"@boringssl//:ssl",
 	"@boringssl//:crypto",
     ],

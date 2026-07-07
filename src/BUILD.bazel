@@ -84,31 +84,8 @@ cc_binary(
 cc_library(
     name = "ubsocket",
     srcs = glob([
-        # 内部私有的.cpp文件
-        "ubsocket/csrc/*.cpp",
-        "ubsocket/csrc/common/*.cpp",
-        "ubsocket/csrc/core/*.cpp",
-        "ubsocket/csrc/core/umq/*.cpp",
-        "ubsocket/csrc/iobuf/*.cpp",
-        "ubsocket/csrc/profiling/*.cpp",
-        "ubsocket/csrc/profiling/impl/*.cpp",
-        "ubsocket/csrc/profiling/probe/*.cpp",
-        "ubsocket/csrc/profiling/statistics/*.cpp",
-        "ubsocket/csrc/profiling/trace/*.cpp",
-        "ubsocket/csrc/under_api/*.cpp"
-    ]) + glob([
-        # 内部私有的.h文件
-        "ubsocket/csrc/*.h",
-        "ubsocket/csrc/common/*.h",
-        "ubsocket/csrc/core/*.h",
-        "ubsocket/csrc/core/umq/*.h",
-        "ubsocket/csrc/iobuf/*.h",
-        "ubsocket/csrc/profiling/*.h",
-        "ubsocket/csrc/profiling/impl/*.h",
-        "ubsocket/csrc/profiling/probe/*.h",
-        "ubsocket/csrc/profiling/statistics/*.h",
-        "ubsocket/csrc/profiling/trace/*.h",
-        "ubsocket/csrc/under_api/*.h"
+        "ubsocket/csrc/**/*.cpp",
+        "ubsocket/csrc/**/*.h"
     ]),
 
     # 对外公开的.h文件
@@ -150,7 +127,8 @@ cc_binary(
     ]),
     includes = [
         "ubsocket/include",
-        "ubsocket/tools/golden"
+        "ubsocket/tools/golden",
+        "ubsocket/csrc"
     ],
     copts = [
         "-D_GNU_SOURCE",

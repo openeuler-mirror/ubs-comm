@@ -69,16 +69,36 @@ UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int ma
 UBS_API int UB_API_WRAP(epoll_create1)(int flags)
 {
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::epoll_create1(flags);
+        return LibcApi::epoll_create(1024);
     }
-    return 0;
+
+    int epollFd = LibcApi::epoll_create(1024);
+    if (epollFd < 0) {
+        return epollFd;
+    }
+
+    EventPoll *eventPoll = new AsyncEventPoll(epollFd);
+    if (UNLIKELY(eventPoll == nullptr)) {
+        UBS_VLOG_ERR("create async event poll failed, epoll fd: %d\n", epollFd);
+        LibcApi::close(epollFd);
+        return -1;
+    }
+
+    ArraySet<EventPoll>::GetInstance().OverrideItem(epollFd, eventPoll);
+    return epollFd;
 }
 
 UBS_API int UB_API_WRAP(epoll_pwait)(int epfd, struct epoll_event *events, int maxevents, int timeout,
                                      const sigset_t *sigmask)
 {
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::epoll_pwait(epfd, events, maxevents, timeout, sigmask);
+        return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
     }
-    return 0;
+
+    EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
+    if (UNLIKELY(eventPoll == nullptr)) {
+        UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
+        return -1;
+    }
+    return eventPoll->EpollWait(events, maxevents, timeout);
 }
