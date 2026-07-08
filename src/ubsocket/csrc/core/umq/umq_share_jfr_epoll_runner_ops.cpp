@@ -257,10 +257,10 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
 ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_umq)
 {
     umq_interrupt_option_t option = {
-        .flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TIMESTAMP,
+        .flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TAG_TIMESTAMP,
         .direction = UMQ_IO_RX,
         .fd_type = UMQ_FD_IO,
-        .timestamp = traceTime_.umq_rearm_start_timestamp_,
+        .tag_timestamp = traceTime_.umq_rearm_start_timestamp_,
     };
     auto events_cnt = UmqApi::umq_get_cq_event(main_umq, &option);
     if (UNLIKELY(events_cnt < 0)) {
