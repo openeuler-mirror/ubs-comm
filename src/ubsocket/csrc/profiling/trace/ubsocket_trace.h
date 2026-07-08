@@ -389,6 +389,7 @@ public:
     std::queue<uint32_t> pack_size_list;
     alignas(uint32_t) uint8_t header_cache[8] = {0};
     uint8_t header_cache_size = 0;
+    uint8_t previous_write_cache_size = 0;
     bool pending_header = false;
 
 private:

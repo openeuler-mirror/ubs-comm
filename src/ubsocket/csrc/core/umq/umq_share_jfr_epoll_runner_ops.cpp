@@ -155,8 +155,9 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
         if (LIKELY(rx_buf_list != nullptr)) {
             umq_buf_t *bad_qbuf = nullptr;
             traceTime_.umq_post_start_timestamp_ = ubsocket_get_timeNs_compile();
-            umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
-                                            UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+            umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION | UMQ_IO_OPTION_FLAG_TAG_TIMESTAMP, UMQ_IO_RX,
+                                            UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
+                                            traceTime_.umq_post_start_timestamp_};
             if (UmqApi::umq_post(main_umq, rx_buf_list, &io_rx_option, &bad_qbuf) != UMQ_SUCCESS) {
                 int savedErrno = errno;
                 errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);

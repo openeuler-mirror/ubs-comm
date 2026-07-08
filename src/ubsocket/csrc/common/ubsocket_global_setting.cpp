@@ -223,6 +223,11 @@ SplitTraceLevel SplitTraceLevelFromStr(const std::string &env_str) noexcept
             UBS_VLOG_WARN("Unknown split trace level config: [%s], ignor.\n", level_str.c_str());
         }
     }
+
+    if (level == SplitTraceLevel::LEVEL_NONE) {
+        UBS_VLOG_WARN("no valid level config, use default trace level all.\n");
+        level = SplitTraceLevel::LEVEL_ALL;
+    }
     return level;
 }
 

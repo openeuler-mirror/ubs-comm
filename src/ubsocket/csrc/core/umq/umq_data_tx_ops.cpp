@@ -94,8 +94,13 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
         if (try_assemble_header(0, assembled, assembled_size)) {
             uint32_t val_second = 0;
             parse_header(assembled, val_second, is_first);
+            if (trace->previous_write_cache_size > 0) {
+                trace->pack_size_list.push(val_second + BRPC_TRACE_HEADER_SIZE - trace->previous_write_cache_size);
+                trace->previous_write_cache_size = 0;
+            } else {
+                trace->pack_size_list.push(val_second + BRPC_TRACE_HEADER_SIZE);
+            }
             trace->pack_size = val_second + BRPC_TRACE_HEADER_SIZE - prev_cache_size;
-            trace->pack_size_list.push(trace->pack_size);
         } else {
             if (i == 0) {
                 TRACE_UPDATE_WRITE_FIRST(trace, CORE_WRITE, seq_no, cur_buf->data_size, tx_total_len, is_first);
@@ -162,10 +167,13 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     uint8_t _header_cache[8] = {0};
     uint8_t _header_cache_size = 0;
     bool _pending_header = false;
+
     if (trace != nullptr) {
         memcpy(_header_cache, trace->header_cache, sizeof(_header_cache));
         _header_cache_size = trace->header_cache_size;
         _pending_header = trace->pending_header;
+        trace->previous_write_cache_size = _header_cache_size;
+        trace->pack_size_list.push(trace->pack_size);
     }
 
     PROF_START(CORE_WRITE_MEM_COPY);
@@ -179,9 +187,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     uint32_t tx_total_len = 0;
     uint32_t sn_allocated = 0;
     cvt->Reset();
-    if (trace != nullptr) {
-        trace->pack_size_list.push(trace->pack_size);
-    }
 
     const uint32_t io_buf_size = UmqSetting::GetIOBufSize();
     for (uint32_t i = 0; i < batch; ++i) {
