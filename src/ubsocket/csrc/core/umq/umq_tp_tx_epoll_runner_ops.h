@@ -47,8 +47,50 @@ public:
 
     int AddEventToRunner(int epoll_fd, int fd, struct epoll_event *event, ExtContext *ctx) override;
 
+    int DelEpollEvent(int epoll_fd, int fd) override;
+
+    ALWAYS_INLINE bool IsSocketEventDataExist(int fd) noexcept
+    {
+        return socket_data_.find(fd) != socket_data_.end();
+    }
+
+    ALWAYS_INLINE bool InsertSocketEventData(int fd, TxEpollEvent *data) noexcept
+    {
+        auto pos = socket_data_.find(fd);
+        if (UNLIKELY(pos != socket_data_.end())) {
+            return false;
+        }
+        socket_data_.emplace(fd, data);
+        return true;
+    }
+
+    ALWAYS_INLINE bool RemoveSocketEventData(int fd) noexcept
+    {
+        auto pos = socket_data_.find(fd);
+        if (UNLIKELY(pos == socket_data_.end())) {
+            return false;
+        }
+        auto removed = pos->second;
+        socket_data_.erase(pos);
+        if (removed != nullptr) {
+            delete removed;
+        }
+        return true;
+    }
+
+    ALWAYS_INLINE TxEpollEvent *GetSocketEventData(int fd) noexcept
+    {
+        auto pos = socket_data_.find(fd);
+        if (UNLIKELY(pos == socket_data_.end())) {
+            return nullptr;
+        }
+        auto res = pos->second;
+        return res;
+    }
+
 private:
     u_mutex_t *mutex_{nullptr};
+    std::unordered_map<int, TxEpollEvent *> socket_data_;
 };
 
 } // namespace umq

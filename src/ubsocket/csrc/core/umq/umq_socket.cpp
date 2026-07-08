@@ -21,6 +21,7 @@
 #include "umq_socket.h"
 #include "umq_socket_acceptor.h"
 #include "umq_socket_connector.h"
+#include "umq_tp_tx_epoll_runner_ops.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -33,6 +34,15 @@ Result UmqSocket::Initialize() noexcept
 
 void UmqSocket::UnInitialize() noexcept
 {
+    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
+    int fc_event_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
+    if (fc_event_fd < 0) {
+        UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
+                     static_cast<unsigned long long>(umq_handle_));
+        return;
+    }
+    EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).DelEpollEvent(fc_event_fd);
+
     UnbindAndFlushRemoteUmq(this);
     DestroyLocalUmq();
 }
@@ -128,7 +138,7 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, UMQ_FAIL), savedErrno);
         return UBS_UMQ_CREATE | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
-
+    RegisterFcTxEvent();
     rxQueue = new (std::nothrow) UmqBufferReceiveQueue();
     if (rxQueue == nullptr) {
         UBS_VLOG_ERR("Failed to init share jfr rx queue for fd: %d \n", raw_socket_);
@@ -287,7 +297,6 @@ void UmqSocket::UnbindAndFlushRemoteUmq(Socket *sock)
         UmqApi::umq_ack_interrupt(umq_handle_, rx_.GetRxOps()->ack_event_num_, &option);
         rx_.GetRxOps()->ack_event_num_ = 0;
     }
-
     int ret = UmqApi::umq_unbind(umq_handle_);
     if (ret != UMQ_SUCCESS) {
         UBS_VLOG_ERR("[UMQ_API] umq_unbind() failed, local umq: %llu, ret: %d\n",
@@ -584,6 +593,33 @@ void UmqSocket::GetSocketCLIData(Statistics::CLISocketData *data)
         memcpy(data->localEid, ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE);
         memcpy(data->remoteEid, ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE);
     }
+}
+
+uint64_t UmqSocket::RegisterFcTxEvent()
+{
+    // 添加流控event事件（流控信令持有超时触发归还）
+    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
+    int fc_event_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
+    if (fc_event_fd < 0) {
+        UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
+                     static_cast<unsigned long long>(umq_handle_));
+        return UBS_ERROR;
+    }
+    UmqTpTxEpollRunnerOps::TxEpollEvent *tx_epoll_event = new UmqTpTxEpollRunnerOps::TxEpollEvent{
+        RUNNER_EVENT_TYPE_FC_TX, umq_handle_, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    struct epoll_event umq_tx_event {
+    };
+    umq_tx_event.events = EPOLLIN | EPOLLET;
+    umq_tx_event.data.u64 = reinterpret_cast<uintptr_t>(tx_epoll_event);
+
+    UmqTpTxEpollRunnerOps::TpTxExtContext ctx;
+    ctx.umq_handle = umq_handle_;
+    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
+    if (UNLIKELY(epoll_runner.AddEpollEvent(fc_event_fd, &umq_tx_event, &ctx))) {
+        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) tp tx event failed: %d : %s\n", errno, strerror(errno));
+        return UBS_ERROR;
+    }
+    return 0;
 }
 
 } // namespace umq

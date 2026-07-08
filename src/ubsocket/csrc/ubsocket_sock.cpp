@@ -62,6 +62,11 @@ UBS_API int UB_API_WRAP(close)(int fd)
         return LibcApi::close(fd);
     }
 
+    SocketPtr sock_obj = ArraySet<Socket>::GetInstance().GetItem(fd);
+    if (sock_obj != nullptr) {
+        auto sockBase = RefConvert<Socket, SocketBase>(sock_obj);
+        sockBase->UnInitialize();
+    }
     ArraySet<Socket>::GetInstance().OverrideItem(fd, nullptr);
     return close(fd);
 }

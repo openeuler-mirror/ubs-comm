@@ -24,6 +24,13 @@ namespace umq {
 
 Result UmqTransportPool::WarmUp(uint64_t main_umqh)
 {
+    // tx事件线程（jetty资源池tx/流控tx）
+    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
+    uint64_t result = epoll_runner.Start();
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("Failed to start tx epoll runner.");
+        return result;
+    }
     // RM模式 + 池化模式才开启
     if (UmqSetting::UMQ_UB_TP_MODE != UMQ_TM_RM || UmqSetting::UMQ_TP_TYPE != POOL) {
         return UBS_OK;
@@ -234,10 +241,6 @@ Result UmqTransportPool::AddPollTxEvent(uint64_t umq_handle)
 {
     Locker lock(mutex_);
     EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
-    uint64_t result = epoll_runner.Start();
-    if (result != UBS_OK) {
-        return result;
-    }
     for (const auto &tp_pair : umq_tp_pool[umq_handle]) {
         uint32_t tp_idx = tp_pair.first;
         const auto &fd_vec = tp_pair.second;

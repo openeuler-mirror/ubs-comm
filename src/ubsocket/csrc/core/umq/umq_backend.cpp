@@ -19,6 +19,7 @@
 #include "umq_errno_converter.h"
 #include "umq_setting.h"
 #include "umq_share_jfr_epoll_runner_ops.h"
+#include "umq_socket.h"
 #include "umq_transport_pool.h"
 #include "under_api/dl_umq_api.h"
 

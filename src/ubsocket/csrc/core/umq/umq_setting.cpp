@@ -84,7 +84,7 @@ int8_t UmqSetting::UMQ_LINK_PRIORITY = UBSOCKET_LINK_PRIORITY_DEFAULT;
 pool_type_t UmqSetting::UMQ_TP_TYPE = SINGLE;
 uint32_t UmqSetting::UMQ_TP_POOL_SIZE = 16;
 uint32_t UmqSetting::UMQ_MAX_O3_GAP = 128;
-uint64_t UmqSetting::UMQ_O3_TIMEOUT_MS = 5;
+uint64_t UmqSetting::UMQ_O3_TIMEOUT_MS = 200;
 
 void UmqSetting::AddRules() noexcept
 {

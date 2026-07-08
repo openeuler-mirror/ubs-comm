@@ -10,6 +10,7 @@
 */
 
 #include "umq_tp_tx_epoll_runner_ops.h"
+#include "umq_backend.h"
 #include "umq_errno_converter.h"
 #include "umq_transport_pool.h"
 #include "umq_tx_helper.h"
@@ -65,6 +66,14 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
             return UBS_ERROR;
         }
         return UBS_OK;
+    } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_FC_TX) {
+        Locker slock(mutex_);
+        umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
+                                       UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+        ops_error_code err_code = ops_error_code::OK;
+        UmqTxHelper::PollUmqTx(
+            tx_epoll_event->umq_handle, poll_option, err_code, [](umq_buf_t *qbuf) {}, nullptr);
+        return UBS_OK;
     } else {
         UBS_VLOG_ERR("async_epoll unknown event:(events:%x, data.type:%lu)\n", event.events, tx_epoll_event->type);
         return UBS_ERROR;
@@ -83,18 +92,37 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
         return UBS_ERROR;
     }
 
-    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX, UMQ_IO_TX,
-                                        UMQ_FD_IO, tp_tx_ctx->tp_idx};
-    // Jetty池化场景，开启TX中断
-    int ret = UmqApi::umq_rearm_interrupt(ctx->umq_handle, false, &tx_option);
-    if (ret < 0) {
-        int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for TX, local umq: %llu, "
-                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(ctx->umq_handle), ret, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+    TxEpollEvent *tx_epoll_event = reinterpret_cast<TxEpollEvent *>(static_cast<uintptr_t>(event->data.u64));
+    InsertSocketEventData(fd, tx_epoll_event);
+    UBS_VLOG_DEBUG("[UMQ_API] Add Tx event, event type: %llu\n", static_cast<uint64_t>(tx_epoll_event->type));
+    if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX) {
+        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX,
+                                            UMQ_IO_TX, UMQ_FD_IO, tp_tx_ctx->tp_idx};
+        // Jetty池化场景，开启TX中断
+        int ret = UmqApi::umq_rearm_interrupt(ctx->umq_handle, false, &tx_option);
+        if (ret < 0) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+            UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for TX, local umq: %llu, "
+                         "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(ctx->umq_handle), ret, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+            return UBS_ERROR;
+        }
+    }
+    return UBS_OK;
+}
+
+int UmqTpTxEpollRunnerOps::DelEpollEvent(int epoll_fd, int fd)
+{
+    auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+    if (UNLIKELY(ret < 0)) {
+        UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", fd, errno, strerror(errno));
         return UBS_ERROR;
+    }
+    {
+        Locker sLock(mutex_);
+        RemoveSocketEventData(fd);
     }
     return UBS_OK;
 }
