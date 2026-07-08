@@ -48,9 +48,7 @@ int UmqTpWaitQueue::TryWakeupOne()
 
 uint32_t UmqTpWaitQueue::WakeUp(uint32_t wakeUpNum)
 {
-    uint64_t queue_size = Size();
-    if (wakeUpNum > Size()) {
-        UBS_VLOG_DEBUG("Failed to wake up socket caused by invalid cnt(%u) but size(%u).\n", wakeUpNum, queue_size);
+    if (wakeUpNum > UmqSetting::UMQ_TP_POOL_SIZE) {
         return 0;
     }
     SocketPtr wakeUpBatch[wakeUpNum];

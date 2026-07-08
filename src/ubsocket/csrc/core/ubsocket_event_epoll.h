@@ -62,6 +62,7 @@ enum RunnerEventType : uint64_t
     RUNNER_EVENT_TYPE_SHARE_JFR,
     RUNNER_EVENT_TYPE_SUB_UMQ_RX,
     RUNNER_EVENT_TYPE_TP_TX,
+    RUNNER_EVENT_TYPE_FC_TX,
     RUNNER_EVENT_TYPE_TP_EVENT,
     RUNNER_EVENT_TYPE_STOP,
     RUNNER_EVENT_TYPE_BUTT
@@ -130,6 +131,12 @@ public:
         return -1;
     }
 
+    virtual int DelEpollEvent(int epoll_fd, int fd)
+    {
+        UBS_VLOG_ERR("EpollRunner EpollRunType Not Specified.\n");
+        return -1;
+    }
+
     DEFINE_REF_OPERATION_FUNC
 protected:
     DECLARE_REF_COUNT_VARIABLE;
@@ -164,7 +171,7 @@ public:
     virtual int Start() = 0;
     virtual void Stop() = 0;
     virtual int AddEpollEvent(int fd, struct epoll_event *event, EpollRunnerOps::ExtContext *ctx) = 0;
-    virtual int DelEpollEvent(const SocketPtr &sock) = 0;
+    virtual int DelEpollEvent(int fd) = 0;
     virtual int ProcessOneEvent(const struct epoll_event &event) = 0;
     virtual EpollRunnerOps *GetOps() = 0;
 };
@@ -222,7 +229,7 @@ public:
      * @param socket_fd socket fd removed
      * @return int -1: failed; 0: success
      */
-    int DelEpollEvent(const SocketPtr &sock) override;
+    int DelEpollEvent(int fd) override;
 
     /**
      * @brief process epoll_wait event

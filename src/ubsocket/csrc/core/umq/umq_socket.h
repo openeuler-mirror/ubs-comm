@@ -193,6 +193,7 @@ public:
 private:
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
     uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid);
+    uint64_t RegisterFcTxEvent();
 
     // 链接类型相关
     bool is_bonding_ = false;

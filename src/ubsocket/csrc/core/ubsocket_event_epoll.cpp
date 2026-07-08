@@ -315,12 +315,13 @@ ALWAYS_INLINE int EpollRunner<T>::AddEpollEvent(int fd, struct epoll_event *even
 }
 
 template <EpollRunnerType T>
-ALWAYS_INLINE int EpollRunner<T>::DelEpollEvent(const SocketPtr &sock)
+ALWAYS_INLINE int EpollRunner<T>::DelEpollEvent(int fd)
 {
-    if (UNLIKELY(sock == nullptr)) {
+    if (UNLIKELY(fd < 0)) {
         UBS_VLOG_ERR("async_epoll AddEvent invalid args efd:%d\n", epoll_fd_);
         return -1;
     }
+    ops_->DelEpollEvent(epoll_fd_, fd);
     return 0;
 }
 
