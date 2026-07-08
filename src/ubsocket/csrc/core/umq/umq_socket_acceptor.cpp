@@ -298,6 +298,12 @@ Result UmqAcceptorOps::DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &used_po
         }
     }
     umqSocket->UpdateRxQueueAvailNum();
+    if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        umq_info_t umq_info{};
+        auto ret = umq_info_get(umqSocket->UmqHandle(), &umq_info);
+        UBS_VLOG_INFO("UB connection has been successfully established new fd: %d, umq id: %u \n", fd,
+                      umq_info.ub.umq_id);
+    }
     return UBS_OK;
 }
 

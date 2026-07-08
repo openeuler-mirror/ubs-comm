@@ -19,6 +19,7 @@
 #include "common/ubsocket_scope_exit.h"
 #include "common/ubsocket_version.h"
 #include "core/umq/umq_eid_table.h"
+#include "umq/include/umq/umq_dfx_types.h"
 #include "umq_conn_helper.h"
 #include "umq_errno_converter.h"
 
@@ -118,24 +119,22 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
         return ret;
     }
 
+    if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        // 多打一和多打多的trace需要关联socket之间的关系
+        struct sockaddr_storage local_addr;
+        socklen_t local_addr_len = sizeof(local_addr);
+        if (getsockname(raw_fd_, (struct sockaddr *)&local_addr, &local_addr_len) == 0) {
+            std::string local_ip = SocketConnHelper::ExtractIpFromSockAddr((struct sockaddr *)&local_addr);
+            int local_port = SocketConnHelper::ExtractPortFromSockAddr((struct sockaddr *)&local_addr);
+
+            UBS_VLOG_INFO("tcp connect, local ip %s port %d, peer ip %s port %d, fd %d\n", local_ip.c_str(), local_port,
+                          umq_conn_info_.peer_ip.c_str(), SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
+        }
+    }
     if (ret == UBS_OK) {
         UBS_VLOG_DEBUG("tcp connect succeed, ip %s port %d fd %d\n", umq_conn_info_.peer_ip.c_str(),
                        SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
 
-        if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED &&
-            (GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
-            // 多打一和多打多的trace需要关联socket之间的关系
-            struct sockaddr_storage local_addr;
-            socklen_t local_addr_len = sizeof(local_addr);
-            if (getsockname(raw_fd_, (struct sockaddr *)&local_addr, &local_addr_len) == 0) {
-                std::string local_ip = SocketConnHelper::ExtractIpFromSockAddr((struct sockaddr *)&local_addr);
-                int local_port = SocketConnHelper::ExtractPortFromSockAddr((struct sockaddr *)&local_addr);
-
-                UBS_VLOG_INFO("tcp connect succeed, local ip %s port %d, peer ip %s port %d, fd %d\n", local_ip.c_str(),
-                              local_port, umq_conn_info_.peer_ip.c_str(),
-                              SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
-            }
-        }
     } else {
         /* fd是非阻塞套接字
             * 1. 第一次调用connect返回-1，errno为EINPROGRESS，网络正在建连；
@@ -306,6 +305,13 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
     }
 
     umq_conn_info_.create_time = std::chrono::system_clock::now();
+    if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
+        umq_info_t umq_info{};
+        auto ret = umq_info_get(umq_socket->UmqHandle(), &umq_info);
+        UBS_VLOG_INFO("UB connection has been successfully established new fd: %d, umq id: %u \n", raw_fd_,
+                      umq_info.ub.umq_id);
+        return UBS_OK;
+    }
     UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", raw_fd_);
 
     return UBS_OK;

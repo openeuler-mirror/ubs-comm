@@ -85,7 +85,6 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
                           BRPC_TRACE_FIRST_MAGIC);
         }
         val_second = ntohl(*reinterpret_cast<const uint32_t *>(assembled + BRPC_TRACE_SECOND_VALUE_SIZE));
-        UBS_VLOG_DEBUG("trace seq %d first magic is 0x%x, pack_size is %u \n", seq_no, ntohl(first_raw), val_second);
     };
 
     if (trace->pending_header) {
@@ -127,7 +126,6 @@ void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int
 
     if (trace->pack_size >= cur_buf->data_size) {
         trace->pack_size -= cur_buf->data_size;
-        UBS_VLOG_DEBUG("trace seq %d  pack_size is %u \n", seq_no, trace->pack_size);
     } else {
         uint8_t assembled[8];
         uint32_t assembled_size = 0;
@@ -341,8 +339,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
                 while (tmp_remaining_len > 0 && !trace->pack_size_list.empty()) {
                     // 获取当前包发送前的总数量
                     uint32_t cur_pack = trace->pack_size_list.front();
-                    UBS_VLOG_DEBUG("trace seq some failed restore remain size %u pack_size is %u \n", tmp_remaining_len,
-                                   cur_pack);
                     if (tmp_remaining_len <= cur_pack) {
                         cur_pack -= tmp_remaining_len;
                         trace->pack_size = cur_pack;
