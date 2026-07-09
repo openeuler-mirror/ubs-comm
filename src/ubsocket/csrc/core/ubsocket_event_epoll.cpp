@@ -333,7 +333,7 @@ ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &even
 
 AsyncEventPoll::~AsyncEventPoll() noexcept
 {
-    UBS_VLOG_ERR("async_epoll destructure invoked for fd: %d\n", epoll_fd_);
+    UBS_VLOG_INFO("async_epoll destructure invoked for fd: %d\n", epoll_fd_);
     if (epoll_fd_ < 0 || sock_readable_fd_ < 0) {
         return;
     }
