@@ -220,15 +220,15 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
         PROF_END(CORE_ACCEPT, false);
         return ret;
     }
+    ArraySet<Socket>::GetInstance().OverrideItem(new_fd, new_socket_obj.Get());
     ret = newSocket->acceptor_->acceptor_ops_->CreateSocketResources(new_socket_obj);
     if (ret != UBS_OK) {
+        ArraySet<Socket>::GetInstance().OverrideItem(new_fd, nullptr);
         new_socket_obj->event_fd_ = -1;
         LibcApi::close(event_fd);
         PROF_END(CORE_ACCEPT, false);
         return ret;
     }
-
-    ArraySet<Socket>::GetInstance().OverrideItem(new_fd, new_socket_obj.Get());
 
     newSocket->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
 
