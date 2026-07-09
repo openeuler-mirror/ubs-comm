@@ -94,7 +94,7 @@ void UmqSetting::AddRules() noexcept
                                {ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
                                {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 6144},
-                               {ENV_UMQ_LINK_PRIORITY, false, 0, 15},
+                               {ENV_UMQ_LINK_PRIORITY, false, -1, 15},
                                {ENV_UMQ_TP_POOL_SIZE, false, 1, 1000},
                                {ENV_UMQ_TINY_POOL_BLOCK_COUNT, false, 1, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_TLS_TINY_POOL_DEPTH, false, 0, std::numeric_limits<int64_t>::max()},
