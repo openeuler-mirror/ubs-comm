@@ -23,10 +23,21 @@ namespace umq {
 
 int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
 {
-    uint64_t main_umq = 0;
     TxEpollEvent *tx_epoll_event = reinterpret_cast<TxEpollEvent *>(static_cast<uintptr_t>(event.data.u64));
     if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX) {
         Locker slock(mutex_);
+        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX,
+                                            UMQ_IO_TX, UMQ_FD_IO, tx_epoll_event->tp_idx};
+        auto events_cnt = UmqApi::umq_get_cq_event(tx_epoll_event->umq_handle, &tx_option);
+        if (UNLIKELY(events_cnt < 0)) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::READV, events_cnt, savedErrno);
+            UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed for share jfr TX, main umq: %llu, "
+                         "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(tx_epoll_event->umq_handle), events_cnt, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, events_cnt), savedErrno);
+            return events_cnt;
+        }
         umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION | UMQ_IO_OPTION_FLAG_TP_HANDLE_IDX, UMQ_IO_TX,
                                        tx_epoll_event->tp_idx};
         ops_error_code err_code = ops_error_code::OK;
@@ -52,9 +63,6 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 },
                 nullptr);
         } while (poll_cnt > 0 && err_code == ops_error_code::OK);
-
-        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX,
-                                            UMQ_IO_TX, UMQ_FD_IO, tx_epoll_event->tp_idx};
         int ret = UmqApi::umq_rearm_interrupt(tx_epoll_event->umq_handle, false, &tx_option);
         if (ret < 0) {
             int savedErrno = errno;
