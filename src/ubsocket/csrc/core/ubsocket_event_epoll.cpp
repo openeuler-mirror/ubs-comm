@@ -269,7 +269,7 @@ template <EpollRunnerType T>
 void EpollRunner<T>::RunInThread() noexcept
 {
     UBS_VLOG_DEBUG("async_epoll epoll_wait_async_daemon thread started.\n");
-    pthread_setname_np(pthread_self(), "ubs_poller");
+    pthread_setname_np(pthread_self(), GetRunnerName().c_str());
 
     while (LIKELY(!DrainReadyEvents(10000))) {}
     UBS_VLOG_DEBUG("async_epoll epoll_wait_async_daemon thread exit.\n");
@@ -329,6 +329,20 @@ template <EpollRunnerType T>
 ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &event)
 {
     return ops_->ProcessOneEvent(event);
+}
+
+template <EpollRunnerType T>
+ALWAYS_INLINE std::string EpollRunner<T>::GetRunnerName()
+{
+    if (T == EpollRunnerType::SHARE_JFR_RX_RUNNER) {
+        return "ubs_sh_jfr_rx";
+    } else if (T == EpollRunnerType::TRANSPORT_POOL_TX_RUNNER) {
+        return "ubs_tp_tx";
+    } else if (T == EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER) {
+        return "ubs_tp_evt";
+    } else {
+        return "ubs_runner";
+    }
 }
 
 AsyncEventPoll::~AsyncEventPoll() noexcept

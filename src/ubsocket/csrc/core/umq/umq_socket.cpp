@@ -34,14 +34,16 @@ Result UmqSocket::Initialize() noexcept
 
 void UmqSocket::UnInitialize() noexcept
 {
-    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
-    int fc_event_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
-    if (fc_event_fd < 0) {
-        UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
-                     static_cast<unsigned long long>(umq_handle_));
-        return;
+    if (UmqSetting::UMQ_FLOW_CONTROL_ENABLE && umq_handle_ > UMQ_INVALID_HANDLE) {
+        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
+        int fc_event_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
+        if (fc_event_fd < 0) {
+            UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
+                         static_cast<unsigned long long>(umq_handle_));
+            return;
+        }
+        EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).DelEpollEvent(fc_event_fd);
     }
-    EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).DelEpollEvent(fc_event_fd);
 
     UnbindAndFlushRemoteUmq(this);
     DestroyLocalUmq();
@@ -605,6 +607,9 @@ void UmqSocket::GetSocketCLIData(Statistics::CLISocketData *data)
 
 uint64_t UmqSocket::RegisterFcTxEvent()
 {
+    if (!UmqSetting::UMQ_FLOW_CONTROL_ENABLE || umq_handle_ == UMQ_INVALID_HANDLE) {
+        return 0;
+    }
     // 添加流控event事件（流控信令持有超时触发归还）
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
     int fc_event_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
