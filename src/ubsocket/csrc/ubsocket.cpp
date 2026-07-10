@@ -233,6 +233,14 @@ void ubsocket_uninit()
     ArraySet<Socket>::GetInstance().ReleaseAll();
     ArraySet<EventPoll>::GetInstance().ReleaseAll();
 
+    // EpollRunner 是 LeakySingleton, 进程退出时不会自动析构、后台 poller 线程不会自动 join。必须在 umq_uninit 之前
+    // 停止这些 runner, 否则线程仍会对已释放的 umq/mempool/tseg 执行 umq_poll, 触发 "mempool tseg not exist"。
+    // 注意顺序: TRANSPORT_POOL_TX_RUNNER 必须在 ReleaseAll(Socket) 之后停止, 因为 socket 析构链
+    // (UmqSocket::UnInitialize) 会调用其 DelEpollEvent, 而 Stop() 会将 ops_ 置空, 提前 stop 会导致空指针。
+    EpollRunnerFactory::GetInstance(EpollRunnerType::SHARE_JFR_RX_RUNNER).Stop();
+    EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).Stop();
+    EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER).Stop();
+
     umq::UmqBackend::UnInit();
     return;
 }
