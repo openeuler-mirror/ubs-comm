@@ -55,8 +55,18 @@ bool TryGetRetryCount(const char *perfBuf, size_t bufLen, uint64_t &retryCount)
 
 void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode)
 {
+    std::lock_guard<std::mutex> lock(gTpPerfSeqMutex);
+
     int ret = 0;
     int umqTransModeInt = umq_trans_mode;
+
+    const bool profEnabled = GlobalSetting::UBS_PROF_ENABLE;
+    if (!profEnabled) {
+        if (UmqApi::umq_stats_tp_perf_start(umq_trans_mode) != 0) {
+            UBS_VLOG_ERR("Failed to start tp perf: umq_trans_mode=%d\n", static_cast<int>(umq_trans_mode));
+            return;
+        }
+    }
 
     // umq_stats_tp_perf_info_get 不支持多次 get, 待后续完善
     char perfBuf[4096] = {};
@@ -71,5 +81,11 @@ void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode
         }
     } else {
         UBS_VLOG_ERR("Failed to get tp perf info: umq_trans_mode=%d\n", umqTransModeInt);
+    }
+
+    if (!profEnabled) {
+        if (UmqApi::umq_stats_tp_perf_stop(umq_trans_mode) != 0) {
+            UBS_VLOG_ERR("Failed to stop tp perf: umq_trans_mode=%d\n", static_cast<int>(umq_trans_mode));
+        }
     }
 }

@@ -16,6 +16,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -201,6 +202,7 @@ public:
     inline static std::atomic<uint64_t> mTxByteCount{0};
     inline static std::atomic<uint64_t> mTxErrorPacketCount{0};
     inline static std::atomic<uint64_t> mTxLostPacketCount{0};
+    inline static std::mutex gTpPerfSeqMutex;
 
     static uint64_t GetConnCount()
     {
