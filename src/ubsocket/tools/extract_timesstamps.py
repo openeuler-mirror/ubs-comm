@@ -518,31 +518,54 @@ def find_umq_epoll_batch(umq_entries, type9_start_ts):
     return umq_entries[batch_start:batch_end]
 
 
-def _build_umq_epoll_sub_rows(umq_entries, rnd):
-    """为单个 epoll 轮次生成 UMQ/URMA 关联行（编号为空）"""
+def _build_umq_epoll_sub_rows(umq_entries, rnd, rnd_key='type9', label=''):
+    """为单个 epoll 轮次生成 UMQ/URMA 关联行（用 rnd[rnd_key].start_ts 匹配 UMQ 条目中的 tag_ts）"""
     rows = []
-    t9 = rnd.get('type9')
-    if t9 is None:
+    data = rnd.get(rnd_key)
+    if data is None:
         return rows
-    type9_start = t9[0]
-    if type9_start is None:
+    ts = data[0]
+    if ts is None:
         return rows
 
-    batch = find_umq_epoll_batch(umq_entries, type9_start)
+    batch = find_umq_epoll_batch(umq_entries, ts)
     if batch is None:
         return rows
 
     for entry in batch:
+        if rnd_key == 'type12' and entry['type'] != 'POST':
+            continue
+        remark = '#{}'.format(entry['num'])
+        if label:
+            remark += ' ({}) tag_ts={}'.format(label, entry.get('interrupt_ts', ''))
         rows.append(('', 'UMQ#{} {}'.format(entry['num'], entry['type']),
                      entry['type'], str(entry['item_cnt']),
                      str(entry.get('umq_start', '')), str(entry.get('umq_end', '')),
-                     str(entry.get('umq_exec', '')), '#{}'.format(entry['num'])))
+                     str(entry.get('umq_exec', '')), remark))
         for sub in entry.get('subs', []):
             sub_end = '' if sub['start'] is None or sub['exec'] is None \
                 else str(sub['start'] + sub['exec'])
             rows.append(('', '  ' + sub['func'], 'URMA', '',
                          str(sub['start']), sub_end, str(sub['exec']), ''))
     return rows
+
+
+def _find_first_urma_wait_rx_end(epoll_rounds, umq_entries):
+    """从 type9 关联的 UMQ 批次中找到第一个 urma_wait_jfc(rx) 的结束时间(start+exec)"""
+    if not umq_entries or not epoll_rounds:
+        return None
+    for rnd in epoll_rounds:
+        t9 = rnd.get('type9')
+        if t9 is None or t9[0] is None:
+            continue
+        batch = find_umq_epoll_batch(umq_entries, t9[0])
+        if batch is None:
+            continue
+        for entry in batch:
+            for sub in entry.get('subs', []):
+                if sub['func'] == 'urma_wait_jfc(rx)' and sub['start'] is not None and sub['exec'] is not None:
+                    return sub['start'] + sub['exec']
+    return None
 
 
 # ========== 构建输出行 ==========
@@ -668,6 +691,7 @@ def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries
 
         if umq_entries:
             rows.extend(_build_umq_epoll_sub_rows(umq_entries, rnd))
+            rows.extend(_build_umq_epoll_sub_rows(umq_entries, rnd, 'type12', 'type12关联'))
 
         # async epoll event: read出队第一个 - buffer入队最后一个
         first_seq = rnd.get('type14_first_seq')
@@ -777,17 +801,20 @@ def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries
     side_total = 0
     if is_client:
         first_t14 = epoll_rounds[0].get('type14_first') if epoll_rounds else None
+        urma_rx_end = _find_first_urma_wait_rx_end(epoll_rounds, umq_entries)
+        actual_start = urma_rx_end if urma_rx_end is not None else (int(first_t14) if first_t14 is not None else None)
         last_t19 = None
         for group in reversed(write_data.get('writevs', [])):
             p = group.get('post')
             if p and p[1] is not None:
                 last_t19 = p[1]
                 break
-        if first_t14 is not None and last_t19 is not None:
-            side_total = int(first_t14) - int(last_t19)
+        if actual_start is not None and last_t19 is not None:
+            side_total = int(actual_start) - int(last_t19)
+            key_name = 'urma_wait_jfc(rx)_end' if urma_rx_end else 'type14_start'
             rows.append(('', 'Client等待耗时', '', '', '', '',
                           format_duration(side_total),
-                          f'type14_start={first_t14} - type19_end={last_t19}'))
+                          f'{key_name}={actual_start} - type19_end={last_t19}'))
     else:
         last_t19 = None
         for group in reversed(write_data.get('writevs', [])):
@@ -796,11 +823,14 @@ def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries
                 last_t19 = p[1]
                 break
         first_t14 = epoll_rounds[0].get('type14_first') if epoll_rounds else None
-        if last_t19 is not None and first_t14 is not None:
-            side_total = int(last_t19) - int(first_t14)
+        urma_rx_end = _find_first_urma_wait_rx_end(epoll_rounds, umq_entries)
+        actual_start = urma_rx_end if urma_rx_end is not None else (int(first_t14) if first_t14 is not None else None)
+        if last_t19 is not None and actual_start is not None:
+            side_total = int(last_t19) - int(actual_start)
+            key_name = 'urma_wait_jfc(rx)_end' if urma_rx_end else 'type14_start'
             rows.append(('', 'Server处理耗时', '', '', '', '',
                           format_duration(side_total),
-                          f'type19_end={last_t19} - type14_start={first_t14}'))
+                          f'type19_end={last_t19} - {key_name}={actual_start}'))
 
     return rows, side_total
 
@@ -1018,7 +1048,7 @@ def main():
                 else:
                     print(f"\n--- {label} UMQ no match for seq {start_seq}~{end_seq} ---")
 
-        # UMQ epoll 关联 dump
+        # UMQ epoll 关联 dump (type9)
         for label, epoll_lines, entries in [('Client', c_epoll, client_umq_entries),
                                               ('Server', s_epoll, server_umq_entries)]:
             seen_ts = set()
@@ -1041,6 +1071,32 @@ def main():
                             print(f"  {raw_line.rstrip()}")
                 else:
                     print(f"\n--- {label} UMQ epoll no match for type9 start_ts={s} ---")
+
+        # UMQ epoll 关联 dump (type12)
+        for label, epoll_lines, entries in [('Client', c_epoll, client_umq_entries),
+                                              ('Server', s_epoll, server_umq_entries)]:
+            seen_ts = set()
+            for line in epoll_lines:
+                typ = parse_type(line)
+                if typ != TYPE_UMPQ_POST:
+                    continue
+                s, _ = parse_start_end(line)
+                if s is None or s in seen_ts:
+                    continue
+                seen_ts.add(s)
+                batch = find_umq_epoll_batch(entries, s)
+                if batch:
+                    # 仅显示 POST 条目
+                    post_entries = [e for e in batch if e['type'] == 'POST']
+                    total_lines = sum(len(e['_raw']) for e in post_entries)
+                    print(f"\n--- {label} UMQ type12 batch for umq_post start_ts={s} "
+                          f"({len(post_entries)} POST entries, {total_lines} lines) ---")
+                    for e in post_entries:
+                        print(f"  # --- entry #{e['num']} {e['type']} ---")
+                        for raw_line in e['_raw']:
+                            print(f"  {raw_line.rstrip()}")
+                else:
+                    print(f"\n--- {label} UMQ type12 no match for umq_post start_ts={s} ---")
         print("===== End of dump =====\n")
 
     c_epoll_rounds = extract_epoll_rounds(c_epoll)
