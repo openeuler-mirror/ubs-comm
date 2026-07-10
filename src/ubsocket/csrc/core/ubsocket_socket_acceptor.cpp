@@ -11,6 +11,7 @@
 #include "ubsocket_socket_acceptor.h"
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_thread_pool.h"
+#include "core/umq/umq_socket_acceptor.h"
 #include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_event_epoll.h"
@@ -232,7 +233,13 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
         return ret;
     }
 
+    new_socket_obj->create_type_ = SOCK_CREATE_TYPE_ACCEPT;
     newSocket->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
+    auto *umqOps = static_cast<umq::UmqAcceptorOps *>(newSocket->acceptor_->acceptor_ops_.Get());
+    umqOps->umq_conn_info_.peer_ip = peerIp;
+    umqOps->umq_conn_info_.peer_fd = new_fd;
+    umqOps->umq_conn_info_.type_fd = 0;
+    umqOps->umq_conn_info_.create_time = std::chrono::system_clock::now();
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         newSocket->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);

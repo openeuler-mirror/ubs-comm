@@ -570,6 +570,8 @@ void UmqSocket::GetSocketCLIData(Statistics::CLISocketData *data)
 {
     stats_mgr_.GetSocketCLIData(data);
 
+    const bool use_bonding_eid = GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP;
+
     if (IsClient()) {
         UmqConnectorOps *ops = (UmqConnectorOps *)(connector_->GetConnectorOps().Get());
         auto duration =
@@ -577,17 +579,27 @@ void UmqSocket::GetSocketCLIData(Statistics::CLISocketData *data)
         data->createTime = static_cast<uint64_t>(duration.count());
 
         strcpy(data->remoteIp, ops->umq_conn_info_.peer_ip.c_str());
-        memcpy(data->localEid, ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE);
-        memcpy(data->remoteEid, ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE);
-
+        if (use_bonding_eid) {
+            memcpy(data->localEid, ops->umq_conn_info_.bonding_eid.raw, UMQ_EID_SIZE);
+            memcpy(data->remoteEid, ops->umq_conn_info_.peer_bonding_eid.raw, UMQ_EID_SIZE);
+        } else {
+            memcpy(data->localEid, ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE);
+            memcpy(data->remoteEid, ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE);
+        }
     } else {
         UmqAcceptorOps *ops = (UmqAcceptorOps *)(acceptor_->GetAcceptorOps().Get());
-        auto duration = std::chrono::duration_cast<std::chrono::seconds>(ops->conn_info.create_time.time_since_epoch());
+        auto duration =
+            std::chrono::duration_cast<std::chrono::seconds>(ops->umq_conn_info_.create_time.time_since_epoch());
         data->createTime = static_cast<uint64_t>(duration.count());
 
-        strcpy(data->remoteIp, ops->conn_info.peer_ip.c_str());
-        memcpy(data->localEid, ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE);
-        memcpy(data->remoteEid, ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE);
+        strcpy(data->remoteIp, ops->umq_conn_info_.peer_ip.c_str());
+        if (use_bonding_eid) {
+            memcpy(data->localEid, ops->umq_conn_info_.bonding_eid.raw, UMQ_EID_SIZE);
+            memcpy(data->remoteEid, ops->umq_conn_info_.peer_bonding_eid.raw, UMQ_EID_SIZE);
+        } else {
+            memcpy(data->localEid, ops->umq_conn_info_.conn_eid.raw, UMQ_EID_SIZE);
+            memcpy(data->remoteEid, ops->umq_conn_info_.peer_eid.raw, UMQ_EID_SIZE);
+        }
     }
 }
 

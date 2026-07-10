@@ -36,6 +36,7 @@ public:
     struct UmqConnInfo : public ConnInfo {
         umq_eid_t peer_eid{};         // 对端 EID
         umq_eid_t peer_bonding_eid{}; // 对端 bonding 设备 EID
+        umq_eid_t bonding_eid{};      // 本端 bonding 设备 EID
         umq_eid_t conn_eid{};         // 本端 EID
     };
     UmqConnInfo umq_conn_info_;

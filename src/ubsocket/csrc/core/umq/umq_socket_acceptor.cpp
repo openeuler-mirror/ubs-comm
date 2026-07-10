@@ -542,6 +542,15 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
     umqSocket->SetNegotiatedVersion(negotiated_version);
     umqSocket->SetPeerVersion(peer_version);
 
+    // 在选择裸设备通信时，不需要再选路
+    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::RAW_DEVICE) {
+        umq_conn_info_.conn_eid = UmqSetting::UMQ_LOCAL_EID;
+        umq_conn_info_.peer_eid = req.local_eid;
+        umq_conn_info_.bonding_eid = UmqSetting::UMQ_LOCAL_EID;
+        umq_conn_info_.peer_bonding_eid = req.local_eid;
+        return UBS_OK;
+    }
+
     NegotiateRoute negoRoute;
     if (SocketConnHelper::RecvLengthPrefixed(fd, &negoRoute, sizeof(negoRoute), CONTROL_PLANE_TIMEOUT_MS) < 0) {
         UBS_VLOG_ERR("Failed to receive negotiate route in accept, Peer IP:%s, fd: %d\n", conn_info.peer_ip.c_str(),
@@ -587,6 +596,8 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
 
     umq_conn_info_.conn_eid = conn_route_.src_eid;
     umq_conn_info_.peer_eid = conn_route_.dst_eid;
+    umq_conn_info_.peer_bonding_eid = req.local_eid;
+    umq_conn_info_.bonding_eid = UmqSetting::UMQ_LOCAL_EID;
     return rsp.ret_code == 0 ? 0 : -1;
 }
 
