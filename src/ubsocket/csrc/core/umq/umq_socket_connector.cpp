@@ -118,7 +118,7 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED || !SocketConnHelper::IsUbsConnection(new_fd)) {
         return ret;
     }
-
+#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         // 多打一和多打多的trace需要关联socket之间的关系
         struct sockaddr_storage local_addr;
@@ -131,6 +131,7 @@ Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addres
                           umq_conn_info_.peer_ip.c_str(), SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
         }
     }
+#endif
     if (ret == UBS_OK) {
         UBS_VLOG_DEBUG("tcp connect succeed, ip %s port %d fd %d\n", umq_conn_info_.peer_ip.c_str(),
                        SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
@@ -305,6 +306,7 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
     }
 
     umq_conn_info_.create_time = std::chrono::system_clock::now();
+#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         umq_info_t umq_info{};
         auto ret = umq_info_get(umq_socket->UmqHandle(), &umq_info);
@@ -312,6 +314,7 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
                       umq_info.ub.umq_id);
         return UBS_OK;
     }
+#endif
     UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", raw_fd_);
 
     return UBS_OK;
