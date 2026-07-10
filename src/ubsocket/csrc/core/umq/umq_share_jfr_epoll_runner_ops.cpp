@@ -122,7 +122,8 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
     umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
     traceTime_.umq_poll_start_timestamp_ = ubsocket_get_timeNs_compile();
     umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
-                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
+                                   traceTime_.umq_poll_start_timestamp_};
     auto pollNum = UmqApi::umq_poll(main_umq, &poll_option, buf, MAX_EPOLL_WAIT_COUNT);
     traceTime_.umq_poll_end_timestamp_ = ubsocket_get_timeNs_compile();
     if (UNLIKELY(pollNum < 0)) {
@@ -148,10 +149,8 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
     int ioPollNum = pollNum - fcBufCnt;
     if (ioPollNum != 0) {
         umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
-        traceTime_.umq_alloc_start_timestamp_ = ubsocket_get_timeNs_compile();
         umq_buf_t *rx_buf_list =
             UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), ioPollNum, UMQ_INVALID_HANDLE, &alloc_option);
-        traceTime_.umq_alloc_end_timestamp_ = ubsocket_get_timeNs_compile();
         if (LIKELY(rx_buf_list != nullptr)) {
             umq_buf_t *bad_qbuf = nullptr;
             traceTime_.umq_post_start_timestamp_ = ubsocket_get_timeNs_compile();

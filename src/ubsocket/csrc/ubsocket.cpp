@@ -182,6 +182,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
                                                         GlobalSetting::UBS_TRACE_FILE_PATH,
                                                         GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
     }
+#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
             TracePrintThread::Instance().Start();
@@ -199,6 +200,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
             }
         }
     }
+#endif
 
     return UBS_OK;
 }
@@ -208,6 +210,7 @@ void ubsocket_uninit()
     if (GlobalSetting::UBS_PROF_ENABLE) {
         Profiling::Uninit();
     }
+#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
     /* do trace log destroy */
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
@@ -219,6 +222,7 @@ void ubsocket_uninit()
             UmqApi::umq_stats_trace_stop();
         }
     }
+#endif
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::PrintStatsMgr::StopStatsCollection();
     }
