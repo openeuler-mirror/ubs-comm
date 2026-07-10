@@ -437,8 +437,11 @@ VersionCheckResult UmqAcceptorOps::ValidateVersion(int fd, uint32_t &negotiated_
     }
 
     // 2. 校验+协商：Major不一致返回kMajorMismatch，一致则计算negotiated_version
-    uint32_t local_version = UBS_PROTOCOL_VERSION;
-    return NegotiateVersion(local_version, peer_version, negotiated_version);
+    UBSVersion peer(peer_version);
+    UBSVersion negotiated;
+    VersionCheckResult result = UBS_PROTOCOL_VERSION.Negotiate(peer, negotiated);
+    negotiated_version = negotiated.GetWhole();
+    return result;
 }
 
 Result UmqAcceptorOps::FillLocalSocketIdsForNegotiate(uint32_t *socket_ids, uint32_t &socket_id_count)
@@ -479,10 +482,10 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
     uint32_t peer_version = 0;
     VersionCheckResult vc_result = ValidateVersion(fd, negotiated_version, peer_version);
     if (vc_result == VersionCheckResult::kMajorMismatch) {
-        UBS_VLOG_WARN("Version major mismatch: peer=%u, local=%u, fd=%d, Peer IP:%s, fallback to TCP\n",
-                      UBS_PROTOCOL_VERSION_MAJOR(peer_version), UBS_PROTOCOL_VERSION_MAJOR(UBS_PROTOCOL_VERSION), fd,
-                      conn_info.peer_ip.c_str());
-        uint32_t mismatch_version = UBS_PROTOCOL_VERSION;
+        UBS_SLOG_WARN("Version major mismatch: peer=" << UBSVersion(peer_version) << " local=" << UBS_PROTOCOL_VERSION
+                                                      << " fd=" << fd << " Peer IP:" << conn_info.peer_ip.c_str()
+                                                      << " fallback to TCP");
+        uint32_t mismatch_version = UBS_PROTOCOL_VERSION.GetWhole();
         SocketConnHelper::SendSocketData(fd, &mismatch_version, sizeof(mismatch_version), CONTROL_PLANE_TIMEOUT_MS);
         uint32_t body_len = 0;
         SocketConnHelper::RecvSocketData(fd, &body_len, sizeof(body_len), CONTROL_PLANE_TIMEOUT_MS);

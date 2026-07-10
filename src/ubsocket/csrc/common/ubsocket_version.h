@@ -12,6 +12,7 @@
 #define UBS_COMM_UBSOCKET_VERSION_H
 
 #include <cstdint>
+#include <stdexcept>
 
 #include "ubsocket_logger.h"
 
@@ -27,22 +28,84 @@ namespace ubs {
 //
 // 版本号来源: 由 CMake/Bazel 从 UBSOCKET_VERSION 文件自动生成 ubsocket_version_defs.h，
 // 全代码仓统一一个版本号，协议版本与软件发布版本一致。
-//
-// 位提取宏带 PROTOCOL_ 前缀，与版本常量区分:
-//   本文件: UBS_PROTOCOL_VERSION_MAJOR(v) (位操作函数宏)
-//   ubsocket_version_defs.h: UBS_VERSION_MAJOR=1 (整数常量)
 
 #include "ubsocket_version_defs.h"
 
-#define UBS_PROTOCOL_VERSION_MAJOR(v) ((v >> 26) & 0x3F)  // 6 bits
-#define UBS_PROTOCOL_VERSION_MINOR(v) ((v >> 14) & 0xFFF) // 12 bits
-#define UBS_PROTOCOL_VERSION_PATCH(v) (v & 0x3FFF)        // 14 bits
-#define UBS_MAKE_PROTOCOL_VERSION(major, minor, patch) (((major) << 26) | ((minor) << 14) | (patch))
+// 位宽上限 — Major(6bit) Minor(12bit) Patch(14bit)
+constexpr uint32_t kProtocolMajorBits = 6;
+constexpr uint32_t kProtocolMinorBits = 12;
+constexpr uint32_t kProtocolPatchBits = 14;
+constexpr uint32_t kProtocolMajorMax = 1u << kProtocolMajorBits;
+constexpr uint32_t kProtocolMinorMax = 1u << kProtocolMinorBits;
+constexpr uint32_t kProtocolPatchMax = 1u << kProtocolPatchBits;
+
+// ======================== 版本一致性校验规则 ========================
+//
+// 编码: Major(6bit) | Minor(12bit) | Patch(14bit) = 32bit  (小端: Patch=bit0-13, Minor=bit14-25, Major=bit26-31)
+//
+// 兼容性判定:
+//   Major 不一致 → kMajorMismatch  双方都回退到 TCP（Major 不兼容，线格式可能不同）
+//   Minor 不一致 → kCompatible     双方使用较低版本号继续 RDMA/UB 通信（Min/Patch 向下兼容）
+//   Patch 不一致 → kCompatible     同上
+//
+// 协商:
+//   Accept 侧  → Negotiate(peer, &negotiated)   协商整体版本号
+//   Connect 侧 → ValidateNegotiated(local)       校验Major版本是否一致
+
+enum class VersionCheckResult : int32_t
+{
+    kCompatible = 0,     // Major一致，可正常通信
+    kMajorMismatch = -1, // Major不一致，协议格式不兼容
+    kRecvFailed = -2,    // 接收version字段失败
+};
+
+// 协议版本union: 位域存取(小端: patch低位→major高位) + uint32_t wire值
+union UBSVersion {
+    struct {
+        uint32_t patch : 14; // bits 0-13
+        uint32_t minor : 12; // bits 14-25
+        uint32_t major : 6;  // bits 26-31
+    };
+    uint32_t whole;
+
+    constexpr UBSVersion() : whole(UINT32_MAX) {}
+    constexpr UBSVersion(uint32_t v) : whole(v) {}
+    constexpr UBSVersion(uint32_t maj, uint32_t min, uint32_t pat) : patch(pat), minor(min), major(maj) {}
+
+    constexpr uint32_t GetWhole() const
+    {
+        return whole;
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const UBSVersion &v)
+    {
+        return os << v.major << '.' << v.minor << '.' << v.patch;
+    }
+
+    // 协商: 取两边较低版本; Major不一致返回kMajorMismatch
+    VersionCheckResult Negotiate(const UBSVersion &peer, UBSVersion &negotiated) const
+    {
+        if (major != peer.major) {
+            UBS_SLOG_WARN("Version negotiate failed: major mismatch, local " << *this << " peer " << peer);
+            return VersionCheckResult::kMajorMismatch;
+        }
+        negotiated = (whole < peer.whole) ? *this : peer;
+        UBS_SLOG_DEBUG("Version negotiated: local " << *this << " peer " << peer << " -> " << negotiated);
+        return VersionCheckResult::kCompatible;
+    }
+
+    // 校验协商结果: Major必须与local一致, Connector侧使用
+    VersionCheckResult ValidateNegotiated(const UBSVersion &local) const
+    {
+        return (major != local.major) ? VersionCheckResult::kMajorMismatch : VersionCheckResult::kCompatible;
+    }
+};
 
 // 当前协议版本 — 复用编译定义的软件版本号
-// UBS_VERSION_PATCH 映射到补丁版本字段
-constexpr uint32_t UBS_PROTOCOL_VERSION =
-    UBS_MAKE_PROTOCOL_VERSION(UBS_VERSION_MAJOR, UBS_VERSION_MINOR, UBS_VERSION_PATCH);
+constexpr UBSVersion UBS_PROTOCOL_VERSION(UBS_VERSION_MAJOR, UBS_VERSION_MINOR, UBS_VERSION_PATCH);
+static_assert(UBS_VERSION_MAJOR < kProtocolMajorMax, "UBS_VERSION_MAJOR exceeds 6-bit limit (max 63)");
+static_assert(UBS_VERSION_MINOR < kProtocolMinorMax, "UBS_VERSION_MINOR exceeds 12-bit limit (max 4095)");
+static_assert(UBS_VERSION_PATCH < kProtocolPatchMax, "UBS_VERSION_PATCH exceeds 14-bit limit (max 16383)");
 
 // 字符串化辅助宏
 #define UBS_STR(x) #x
@@ -61,49 +124,6 @@ constexpr uint32_t UBS_PROTOCOL_VERSION =
 #define UBS_LIB_VERSION_FULL                                                   \
     "library version: " UBS_VERSION_STR ", build time: " __DATE__ " " __TIME__ \
     ", commit: " UBS_XSTR(UBS_GIT_LAST_COMMIT)
-
-// ======================== 版本校验结果 ========================
-
-enum class VersionCheckResult : int32_t
-{
-    kCompatible = 0,     // Major一致，可正常通信
-    kMajorMismatch = -1, // Major不一致，协议格式不兼容
-    kRecvFailed = -2,    // 接收version字段失败
-};
-
-// ======================== 版本协商函数 ========================
-
-// 合并校验+协商：Major不一致返回kMajorMismatch，一致则取较低全版本
-inline VersionCheckResult NegotiateVersion(uint32_t local_version, uint32_t peer_version, uint32_t &negotiated_version)
-{
-    uint32_t local_major = UBS_PROTOCOL_VERSION_MAJOR(local_version);
-    uint32_t peer_major = UBS_PROTOCOL_VERSION_MAJOR(peer_version);
-
-    if (peer_major != local_major) {
-        UBS_VLOG_WARN("Version negotiate failed: major mismatch, local %u.%u.%u peer %u.%u.%u", local_major,
-                      UBS_PROTOCOL_VERSION_MINOR(local_version), UBS_PROTOCOL_VERSION_PATCH(local_version), peer_major,
-                      UBS_PROTOCOL_VERSION_MINOR(peer_version), UBS_PROTOCOL_VERSION_PATCH(peer_version));
-        return VersionCheckResult::kMajorMismatch;
-    }
-    negotiated_version = (local_version < peer_version) ? local_version : peer_version;
-    UBS_VLOG_DEBUG("Version negotiated: local %u.%u.%u peer %u.%u.%u -> %u.%u.%u", local_major,
-                   UBS_PROTOCOL_VERSION_MINOR(local_version), UBS_PROTOCOL_VERSION_PATCH(local_version), peer_major,
-                   UBS_PROTOCOL_VERSION_MINOR(peer_version), UBS_PROTOCOL_VERSION_PATCH(peer_version), local_major,
-                   UBS_PROTOCOL_VERSION_MINOR(negotiated_version), UBS_PROTOCOL_VERSION_PATCH(negotiated_version));
-    return VersionCheckResult::kCompatible;
-}
-
-// ======================== 版本校验函数 ========================
-
-// 校验对端协商结果：Major必须一致，Minor/Patch不应高于本地（协商取较低值）
-// Connector侧使用：收到Acceptor发来的negotiated_version后校验
-inline VersionCheckResult ValidateNegotiatedVersion(uint32_t local_version, uint32_t negotiated_version)
-{
-    if (UBS_PROTOCOL_VERSION_MAJOR(negotiated_version) != UBS_PROTOCOL_VERSION_MAJOR(local_version)) {
-        return VersionCheckResult::kMajorMismatch;
-    }
-    return VersionCheckResult::kCompatible;
-}
 
 } // namespace ubs
 } // namespace ock

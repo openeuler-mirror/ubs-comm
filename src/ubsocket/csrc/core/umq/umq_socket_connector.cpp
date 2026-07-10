@@ -346,7 +346,7 @@ Result UmqConnectorOps::BuildNegotiateReqBuffer(uint8_t *buf, const UmqSocketPtr
     memcpy(buf + offset, &magic, sizeof(magic));
     offset += sizeof(magic);
 
-    uint32_t version = UBS_PROTOCOL_VERSION;
+    uint32_t version = UBS_PROTOCOL_VERSION.GetWhole();
     memcpy(buf + offset, &version, sizeof(version));
     offset += sizeof(version);
 
@@ -402,21 +402,21 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     }
 
     // 校验协商结果：Major必须一致
-    VersionCheckResult vc_result = ValidateNegotiatedVersion(UBS_PROTOCOL_VERSION, negotiated_version);
+    VersionCheckResult vc_result = UBSVersion(negotiated_version).ValidateNegotiated(UBS_PROTOCOL_VERSION);
     if (vc_result == VersionCheckResult::kMajorMismatch) {
-        UBS_VLOG_WARN("Version major mismatch: negotiated=%u, local=%u, fd=%d, Peer IP:%s, fallback to TCP\n",
-                      UBS_PROTOCOL_VERSION_MAJOR(negotiated_version), UBS_PROTOCOL_VERSION_MAJOR(UBS_PROTOCOL_VERSION),
-                      raw_fd_, umq_conn_info_.peer_ip.c_str());
+        UBS_SLOG_WARN("Version major mismatch: negotiated="
+                      << UBSVersion(negotiated_version) << " local=" << UBS_PROTOCOL_VERSION << " fd=" << raw_fd_
+                      << " Peer IP:" << umq_conn_info_.peer_ip.c_str() << " fallback to TCP");
         return UBS_TCP_EXCHANGE | UBS_DEGRADABLE_MASK;
     }
 
-    // Minor/Patch差异 — 不一致时处理方式待确认
-    if (UBS_PROTOCOL_VERSION_MINOR(negotiated_version) != UBS_PROTOCOL_VERSION_MINOR(UBS_PROTOCOL_VERSION)) {
-        UBS_VLOG_DEBUG("Minor diff: negotiated=%u, local=%u\n", UBS_PROTOCOL_VERSION_MINOR(negotiated_version),
-                       UBS_PROTOCOL_VERSION_MINOR(UBS_PROTOCOL_VERSION));
+    if (UBSVersion(negotiated_version).minor != UBS_PROTOCOL_VERSION.minor) {
+        UBS_SLOG_DEBUG("Minor diff: negotiated=" << UBSVersion(negotiated_version)
+                                                 << " local=" << UBS_PROTOCOL_VERSION);
     }
 
     umq_socket->SetNegotiatedVersion(negotiated_version);
+    UBS_SLOG_DEBUG("Version negotiated: local " << UBS_PROTOCOL_VERSION << " -> " << UBSVersion(negotiated_version));
 
     // 接收NegotiateRsp body — length-prefixed
     NegotiateRsp rsp{};
