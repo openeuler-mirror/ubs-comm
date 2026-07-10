@@ -450,6 +450,8 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::RAW_DEVICE) {
         umq_conn_info_.conn_eid = local_eid;
         umq_conn_info_.peer_eid = peer_eid;
+        umq_conn_info_.bonding_eid = local_eid;
+        umq_conn_info_.peer_bonding_eid = peer_eid;
         return UBS_OK;
     }
 
@@ -493,6 +495,8 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     umq_conn_info_.conn_eid = conn_route_.src_eid;
     umq_conn_info_.peer_eid = conn_route_.dst_eid;
     umq_conn_info_.peer_bonding_eid = peer_eid;
+    umq_conn_info_.bonding_eid = local_eid;
+
     return UBS_OK;
 }
 

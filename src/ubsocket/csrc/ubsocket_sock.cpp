@@ -110,6 +110,7 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
     if (sock == nullptr) {
         return LibcApi::listen(fd, backlog);
     }
+    sock->create_type_ = SOCK_CREATE_TYPE_LISTEN;
     UBHandshakeMode ubHandshakeMode = GlobalSetting::UBS_HAND_SHAKE_MODE;
     if (ubHandshakeMode == UBHandshakeMode::UB_SOCK_OPT) {
         UBS_VLOG_INFO("Enable ub handshake option\n");
@@ -140,6 +141,7 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
     if (sock == nullptr) {
         return LibcApi::connect(fd, address, address_len);
     }
+    sock->create_type_ = SOCK_CREATE_TYPE_CONNECT;
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     return sockBase->Connect(sock, address, address_len);
 }

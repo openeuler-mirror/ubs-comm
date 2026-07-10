@@ -200,7 +200,8 @@ public:
     {
         uint32_t sockNum = 0;
         ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
                 return;
             }
             sockNum++;
@@ -218,7 +219,8 @@ public:
             if (doneNum >= sockNum) {
                 return;
             }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
                 return;
             }
             data->socketId = fd;
@@ -240,7 +242,8 @@ public:
             if (doneNum >= sockNum) {
                 return;
             }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
                 return;
             }
             data->socketId = fd;
@@ -260,7 +263,8 @@ public:
             if (doneNum >= sockNum) {
                 return;
             }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
                 return;
             }
             data->socketId = fd;
@@ -280,7 +284,8 @@ public:
             if (doneNum >= sockNum) {
                 return;
             }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
                 return;
             }
             data->socketId = fd;
@@ -300,7 +305,8 @@ public:
             if (doneNum >= sockNum) {
                 return;
             }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
                 return;
             }
             data->socketId = fd;
@@ -321,7 +327,8 @@ public:
             if (doneNum >= sockNum) {
                 return;
             }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
                 return;
             }
             data->socketId = fd;
@@ -771,7 +778,8 @@ public:
             if (result != UMQ_INVALID_HANDLE) {
                 return;
             }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
                 return;
             }
             SocketPtr socketPtr(sock);

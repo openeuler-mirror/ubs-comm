@@ -55,6 +55,7 @@ int Connector::Connect(const SocketPtr &sock, const struct sockaddr *address, so
     }
 
     connector_ops_->conn_info.type_fd = 1;
+    sock->create_type_ = SOCK_CREATE_TYPE_CONNECT;
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
