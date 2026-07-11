@@ -535,6 +535,14 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
     }
 
     if (LIKELY(socket_readable)) {
+        uint64_t val = 0;
+        if (read(sock_readable_fd_, &val, sizeof(val)) < 0) {
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
+                UBS_VLOG_ERR("Read sock_readable_fd_ failed, fd: %d, errno: %d, errmsg: %s\n", sock_readable_fd_, errno,
+                             strerror(errno));
+            }
+        }
         auto space_size = max_events - real_count;
         if (space_size > 0) {
             real_count += (int)readable_sockets_event_queue_.MultiPop(events + real_count, space_size);

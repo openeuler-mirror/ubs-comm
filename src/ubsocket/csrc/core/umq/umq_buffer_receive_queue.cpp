@@ -258,6 +258,11 @@ void UmqBufferReceiveQueue::FlushOooQueueToReceiveQueueInternal()
     m_ooo_start_time_ns = 0;
 }
 
+bool UmqBufferReceiveQueue::Empty() const
+{
+    return receive_queue->Empty();
+}
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock

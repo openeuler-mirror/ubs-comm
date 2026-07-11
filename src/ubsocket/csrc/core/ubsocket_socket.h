@@ -61,7 +61,7 @@ public:
     int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen);
 
     EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
-    void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data = {});
+    virtual void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data = {});
     int NotifyReadable();
 
     DataRx *GetRx()

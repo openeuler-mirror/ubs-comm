@@ -40,6 +40,7 @@ public:
     UmqBufferReceiveQueue &operator=(const UmqBufferReceiveQueue &) = delete;
 
     bool IsInitialized() const;
+    bool Empty() const;
     OpResult Enqueue(umq_buf_t *buffer);
     OpResult DequeueBatch(umq_buf_t **buffers, uint32_t max_count, uint32_t *dequeued_count);
     void Shutdown();

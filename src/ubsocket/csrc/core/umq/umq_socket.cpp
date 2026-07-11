@@ -635,6 +635,15 @@ uint64_t UmqSocket::RegisterFcTxEvent()
     return 0;
 }
 
+void UmqSocket::SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data)
+{
+    SocketBase::SetAddedEpollFd(fd, data);
+
+    if (!rxQueue->Empty()) {
+        NotifyReadable();
+    }
+}
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock
