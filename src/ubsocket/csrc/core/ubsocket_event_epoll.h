@@ -173,6 +173,7 @@ public:
     virtual int AddEpollEvent(int fd, struct epoll_event *event, EpollRunnerOps::ExtContext *ctx) = 0;
     virtual int DelEpollEvent(int fd) = 0;
     virtual int ProcessOneEvent(const struct epoll_event &event) = 0;
+    virtual std::string GetRunnerName() = 0;
     virtual EpollRunnerOps *GetOps() = 0;
 };
 
@@ -236,6 +237,11 @@ public:
      * @param event event to process
      */
     int ProcessOneEvent(const struct epoll_event &event) override;
+
+    /**
+     * @brief get runner name
+     */
+    std::string GetRunnerName() override;
 
     EpollRunnerOps *GetOps() override
     {

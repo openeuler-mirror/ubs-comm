@@ -169,6 +169,7 @@ public:
     bool ShouldRegisterTxEvent() override;
     Result ProcessEpollEvent(struct epoll_event &event) override;
     int GetTxFd() override;
+    void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data = {}) override;
 
     Result UpdateRxQueueAvailNum();
     Result CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &used_ports, umq_topo_type_t &topo_type);

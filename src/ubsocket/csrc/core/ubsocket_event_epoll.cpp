@@ -269,7 +269,7 @@ template <EpollRunnerType T>
 void EpollRunner<T>::RunInThread() noexcept
 {
     UBS_VLOG_DEBUG("async_epoll epoll_wait_async_daemon thread started.\n");
-    pthread_setname_np(pthread_self(), "ubs_poller");
+    pthread_setname_np(pthread_self(), GetRunnerName().c_str());
 
     while (LIKELY(!DrainReadyEvents(10000))) {}
     UBS_VLOG_DEBUG("async_epoll epoll_wait_async_daemon thread exit.\n");
@@ -329,6 +329,20 @@ template <EpollRunnerType T>
 ALWAYS_INLINE int EpollRunner<T>::ProcessOneEvent(const struct epoll_event &event)
 {
     return ops_->ProcessOneEvent(event);
+}
+
+template <EpollRunnerType T>
+ALWAYS_INLINE std::string EpollRunner<T>::GetRunnerName()
+{
+    if (T == EpollRunnerType::SHARE_JFR_RX_RUNNER) {
+        return "ubs_sh_jfr_rx";
+    } else if (T == EpollRunnerType::TRANSPORT_POOL_TX_RUNNER) {
+        return "ubs_tp_tx";
+    } else if (T == EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER) {
+        return "ubs_tp_evt";
+    } else {
+        return "ubs_runner";
+    }
 }
 
 AsyncEventPoll::~AsyncEventPoll() noexcept
@@ -521,6 +535,14 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
     }
 
     if (LIKELY(socket_readable)) {
+        uint64_t val = 0;
+        if (read(sock_readable_fd_, &val, sizeof(val)) < 0) {
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
+                UBS_VLOG_ERR("Read sock_readable_fd_ failed, fd: %d, errno: %d, errmsg: %s\n", sock_readable_fd_, errno,
+                             strerror(errno));
+            }
+        }
         auto space_size = max_events - real_count;
         if (space_size > 0) {
             real_count += (int)readable_sockets_event_queue_.MultiPop(events + real_count, space_size);
