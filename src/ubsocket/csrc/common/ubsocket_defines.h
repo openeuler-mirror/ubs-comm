@@ -223,7 +223,8 @@ constexpr uint32_t UBSOCKET_PROBE_TIME_MS_MAX = 360000;
 constexpr uint32_t UBSOCKET_PROBE_BATCH_MIN = 1;
 constexpr uint32_t UBSOCKET_PROBE_BATCH_MAX = 500;
 
-constexpr int8_t UBSOCKET_LINK_PRIORITY_DEFAULT = -1;
+constexpr int8_t UBSOCKET_LINK_PRIORITY_NOT_SET = -1;
+constexpr int8_t UBSOCKET_LINK_PRIORITY_DEFAULT = 4;
 
 constexpr uint8_t BRPC_TRACE_FIRST_STR_SIZE = 4;
 constexpr uint8_t BRPC_TRACE_SECOND_VALUE_SIZE = 4;

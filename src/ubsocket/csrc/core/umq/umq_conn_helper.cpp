@@ -124,7 +124,7 @@ Result UmqConnHelper::NewBaseUmqCreateOptions(umq_create_option_t &umq_create_op
     umq_create_option.mode = UMQ_MODE_INTERRUPT;
 
     UBS_VLOG_DEBUG("UBSOCKET_LINK_PRIORITY: %d\n", UmqSetting::UMQ_LINK_PRIORITY);
-    if (UmqSetting::UMQ_LINK_PRIORITY != UBSOCKET_LINK_PRIORITY_DEFAULT) {
+    if (UmqSetting::UMQ_LINK_PRIORITY != UBSOCKET_LINK_PRIORITY_NOT_SET) {
         umq_create_option.priority = static_cast<uint8_t>(UmqSetting::UMQ_LINK_PRIORITY);
         umq_create_option.create_flag |= UMQ_CREATE_FLAG_PRIORITY;
     }
