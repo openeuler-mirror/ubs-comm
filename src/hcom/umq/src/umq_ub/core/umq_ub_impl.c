@@ -396,8 +396,10 @@ static uint32_t target_slot_id_calcuate(uint64_t expire_time, uint64_t current_t
 static void umq_ub_idle_checker_uninit(ub_queue_idle_check_t *checker)
 {
     checker->umq = NULL;
-    close(checker->event_fd);
-    checker->event_fd = UMQ_INVALID_FD;
+    if (checker->event_fd != UMQ_INVALID_FD) {
+        close(checker->event_fd);
+        checker->event_fd = UMQ_INVALID_FD;
+    }
     (void)util_mutex_lock_destroy(checker->lock);
     checker->lock = NULL;
     free(checker);
@@ -1452,6 +1454,10 @@ int32_t umq_ub_destroy_impl(uint64_t umqh)
             EID_ARGS(*io_eid), io_id, queue->umq_trans_mode);
         return -UMQ_ERR_EINVAL;
     }
+    if (queue->flow_control.enabled) {
+        ub_credit_pool_t *credit = &queue->jfr_ctx[UB_QUEUE_JETTY_IO]->credit;
+        umq_ub_credit_pending_req_remove_by_queue(&credit->pending_queue, queue);
+    }
     uint32_t ref_cnt = umq_fetch_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
     if (!queue->dev_ctx->io_lock_free && ref_cnt != 1) {
         UMQ_VLOG_WARN(VLOG_UMQ, "eid: " EID_FMT ", jetty_id: %u, umqh ref cnt %u is not 0\n", EID_ARGS(*io_eid),
@@ -1559,6 +1565,8 @@ int32_t umq_ub_destroy_impl(uint64_t umqh)
     if (queue->checker != NULL) {
         (void)util_mutex_lock(queue->checker->lock);
         queue->checker->umq = NULL;
+        close(queue->checker->event_fd);
+        queue->checker->event_fd = UMQ_INVALID_FD;
         (void)util_mutex_unlock(queue->checker->lock);
     }
     if (queue->used_port != NULL) {
@@ -2032,6 +2040,8 @@ int umq_ub_unbind_impl(uint64_t umqh)
         } else {
             umq_modify_ubq_to_err(queue, UMQ_IO_ALL, UB_QUEUE_JETTY_FLOW_CONTROL);
         }
+        ub_credit_pool_t *credit = &queue->jfr_ctx[UB_QUEUE_JETTY_IO]->credit;
+        umq_ub_credit_pending_req_remove_by_queue(&credit->pending_queue, queue);
     }
 
     urma_target_jetty_t *tjetty = bind_ctx->tjetty[UB_QUEUE_JETTY_IO];
