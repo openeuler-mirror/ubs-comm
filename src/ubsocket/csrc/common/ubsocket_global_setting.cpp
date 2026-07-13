@@ -30,7 +30,7 @@ int16_t GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = 0; /* disabled by defa
 int16_t GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = 1;     /* enabled by default */
 bool GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED = false;
 bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
-bool GlobalSetting::UBS_READV_UNLIMITED = false;
+bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
 bool GlobalSetting::UBS_ENABLE_DEGRADE = true;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
@@ -85,6 +85,7 @@ uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 #define ENV_VAR_PROBE_BATCH "UBSOCKET_PROBE_BATCH"
 #define ENV_BACKUP_LINK_ENABLED "UBSOCKET_BACKUP_LINK_ENABLE"
 #define ENV_PORT_COOLDOWN_SEC "UBSOCKET_PORT_COOLDOWN_SEC"
+#define ENV_READV_UNLIMITED "UBSOCKET_READV_UNLIMITED"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -121,7 +122,8 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_VAR_DEGRADE, false, "true|false"},
                                     {ENV_VAR_CLI, false, "true|false"},
                                     {ENV_VAR_PROBE, false, "true|false"},
-                                    {ENV_BACKUP_LINK_ENABLED, true, "true|false"}};
+                                    {ENV_BACKUP_LINK_ENABLED, true, "true|false"},
+                                    {ENV_READV_UNLIMITED, false, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX},
@@ -362,6 +364,9 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidateNotEmpty(ENV_SPLIT_TRACE_LEVEL, strEnvValue)) {
         UBS_SPLIT_TRACE_LEVEL = SplitTraceLevelFromStr(strEnvValue);
+    }
+    if (GetEnvAndValidate(ENV_PROF_ENABLE, strEnvValue)) {
+        UBS_READV_UNLIMITED = Func::BoolFromStr(strEnvValue);
     }
     return UBS_OK;
 }
