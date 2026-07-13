@@ -287,11 +287,16 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             return -1;
         } else if (errno == EMLINK) {
             // optimize: [Jetty池化] ENOBUFS是否需要在此线程尝试pollTx释放资源后重试
-            UBS_VLOG_DEBUG("[UMQ_API] umq_post() suspended: resource exhausted. Queued for automatic retry.\n");
+            UBS_VLOG_DEBUG(
+                "[Debug] umq_post() suspended: no available jetty. Queued for automatic retry. socket fd: %d\n",
+                sock->raw_socket_);
             UmqTpWaitQueue::Instance().Enqueue(sock);
             errno = EAGAIN;
         } else if (errno == ENOBUFS) {
             // optimize: [Jetty池化] ENOBUFS是否需要在此线程尝试pollTx释放资源后重试
+            UBS_VLOG_DEBUG(
+                "[Debug] umq_post() suspended: no enough buffers. Queued for automatic retry. socket fd: %d\n",
+                sock->raw_socket_);
             PollUmqTx(sock.Get(), true);
             UmqTpWaitQueue::Instance().Enqueue(sock);
             errno = EAGAIN;
@@ -547,31 +552,29 @@ int UmqTxOps::DoUmqTxPoll(Socket *sock, ops_error_code &err_code)
 {
     umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
                                    UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
-    return UmqTxHelper::PollUmqTx(
-        local_umqh_, poll_option, err_code,
-        [this, sock](umq_buf_t *qbuf) {
-            // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
-            // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
-            // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
-            LibcApi::shutdown(fd_, SHUT_RD);
-            UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", fd_);
-            sock->State(SOCK_STAT_CLOSE);
+    UmqTxHelper::PollArgs poll_args(local_umqh_, poll_option, err_code, sock);
+    return UmqTxHelper::PollUmqTx(poll_args, [this, sock](umq_buf_t *qbuf) {
+        // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
+        // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
+        // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
+        LibcApi::shutdown(fd_, SHUT_RD);
+        UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", fd_);
+        sock->State(SOCK_STAT_CLOSE);
 
-            // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
-            auto *umq_sock = static_cast<UmqSocket *>(sock);
-            if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
-                if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
-                    qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
-                    auto [ports, ports_num] = umq_sock->GetUsedPorts();
-                    for (std::size_t i = 0; i < ports_num; ++i) {
-                        UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",
-                                      ports[i].bs.chip_id, ports[i].bs.die_id, ports[i].bs.port_idx);
-                        PortCooldownManager::MarkPortInCooldown(ports[i]);
-                    }
+        // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
+        auto *umq_sock = static_cast<UmqSocket *>(sock);
+        if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
+            if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
+                qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
+                auto [ports, ports_num] = umq_sock->GetUsedPorts();
+                for (std::size_t i = 0; i < ports_num; ++i) {
+                    UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",
+                                  ports[i].bs.chip_id, ports[i].bs.die_id, ports[i].bs.port_idx);
+                    PortCooldownManager::MarkPortInCooldown(ports[i]);
                 }
             }
-        },
-        sock);
+        }
+    });
 }
 
 int UmqTxOps::DpRearmTxInterrupt()

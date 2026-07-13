@@ -10,6 +10,7 @@
 */
 
 #include "umq_tp_wait_queue.h"
+#include "umq_tx_helper.h"
 
 namespace ock {
 namespace ubs {
@@ -18,13 +19,14 @@ namespace umq {
 int UmqTpWaitQueue::Enqueue(const SocketPtr &sock)
 {
     if (sock == nullptr) {
-        UBS_VLOG_WARN("Sock is null, no need to wait jetty resource.");
+        UBS_VLOG_WARN("Sock is null, no need to wait jetty resource.\n");
         return UBS_ERROR;
     }
     UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
     if (umqSock->GetJettyAllocState() == JettyAllocState::IDLE) {
         // sock状态为IDLE，入队
-        if (Push(sock)) {
+        UmqTpWaitQueueElement element(sock);
+        if (Push(std::move(element))) {
             umqSock->SetJettyAllocState(JettyAllocState::WAITING);
         } else {
             return UBS_ERROR;
@@ -35,14 +37,23 @@ int UmqTpWaitQueue::Enqueue(const SocketPtr &sock)
 
 int UmqTpWaitQueue::TryWakeupOne()
 {
-    SocketPtr sock;
-    if (!Pop(sock)) {
-        UBS_VLOG_ERR("Failed to wake up socket for available jetty.");
+    UmqTpWaitQueueElement element;
+    if (!Pop(element)) {
+        UBS_VLOG_ERR("Failed to wake up socket for available jetty.\n");
         return UBS_ERROR;
     }
-    // optimize：sock状态更改为等待资源，并唤醒
-    UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-    umqSock->SetJettyAllocState(JettyAllocState::READY);
+
+    if (element.GetType() == UMQ_SOCKET) {
+        SocketPtr sock = element.GetSockPtr();
+        // optimize：sock状态更改为等待资源，并唤醒
+        UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
+        umqSock->SetJettyAllocState(JettyAllocState::READY);
+    } else if (element.GetType() == UMQ_HANDLE) {
+        uint64_t umq_handle = element.GetUmqHandle();
+        UmqTxHelper::PollUmqTxForFcReturn(umq_handle);
+    } else {
+        UBS_VLOG_WARN("Unsupported element type.\n");
+    }
     return UBS_OK;
 }
 
@@ -51,15 +62,40 @@ uint32_t UmqTpWaitQueue::WakeUp(uint32_t wakeUpNum)
     if (wakeUpNum > UmqSetting::UMQ_TP_POOL_SIZE) {
         return 0;
     }
-    SocketPtr wakeUpBatch[wakeUpNum];
-    auto count = MultiPop(wakeUpBatch, wakeUpNum);
+    std::vector<UmqTpWaitQueueElement> wakeUpBatch(wakeUpNum);
+    auto count = MultiPop(wakeUpBatch.data(), wakeUpNum);
     for (uint32_t i = 0; i < count; ++i) {
-        SocketPtr sock = wakeUpBatch[i];
-        // optimize：sock状态更改为等待资源，并唤醒
-        UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-        umqSock->SetJettyAllocState(JettyAllocState::READY);
+        auto &element = wakeUpBatch[i];
+        if (element.GetType() == UMQ_SOCKET) {
+            SocketPtr sock = element.GetSockPtr();
+            // optimize：sock状态更改为等待资源，并唤醒
+            UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
+            umqSock->SetJettyAllocState(JettyAllocState::READY);
+            UBS_VLOG_DEBUG("[Debug] umq tp wait queue wake up socket fd: %d.\n", sock->raw_socket_);
+        } else if (element.GetType() == UMQ_HANDLE) {
+            uint64_t umq_handle = element.GetUmqHandle();
+            UmqTxHelper::PollUmqTxForFcReturn(umq_handle);
+            UBS_VLOG_DEBUG("[Debug] umq tp wait queue wake up umq handle: %lu.\n", umq_handle);
+        } else {
+            UBS_VLOG_WARN("Unsupported element type.\n");
+        }
     }
     return static_cast<uint32_t>(count);
+}
+
+int UmqTpWaitQueue::Enqueue(const uint64_t umq_handle)
+{
+    if (umq_handle != UMQ_INVALID_HANDLE) {
+        UmqTpWaitQueueElement element(umq_handle);
+        if (!Push(std::move(element))) {
+            return UBS_ERROR;
+        }
+    } else {
+        UBS_VLOG_WARN("Invalid umq handle, no need to wait jetty resource.\n");
+        return UBS_ERROR;
+    }
+
+    return UBS_OK;
 }
 
 } // namespace umq
