@@ -109,7 +109,10 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_INITIAL_CREDIT | 首次流控请求所申请的信用个数, 单个 WR 消耗 1 个信用 | [1, 1024] | 128 | 否 |
 | UBSOCKET_MAX_CREDIT_PER_REQUEST | 流控信用被耗尽后会在前一次的申请个数基础上翻倍申请<br>例如第1次如果申请 128, 被耗尽后会申请 256 信令。但是最多不会超过此值 | [1, 1024] | 1024 | 否 |
 | UBSOCKET_MIN_RESERVED_CREDIT | 单个连接最小保留的的流控信用。如果连接所持有的流控信用小于此值，这些信用不会因连接无活动而归还给上层 | [1, 1024] | 2 | 否 |
-
+| UBSOCKET_SPLIT_TRACE_ENABLE | 是否开启链路级打点工具 | false, true | false             |否|
+| UBSOCKET_SPLIT_TRACE_BUF_CAPACITY | 链路级打点工具日志打印数组的大小 | [16384, 10240000] | 65535                   |否|
+| UBSOCKET_SPLIT_TRACE_DRAIN_INTERVAL_MS | 链路级打点工具日志打印的间隔 | [1, 10000] | 10                      |否|
+| UBSOCKET_SPLIT_TRACE_LEVEL | 链路级打点工具级别,默认会打印所有的点位，可以设置只打印ubsocket或者umq的点位信息 | "all", "ubsocket", "umq" | all                     |否|
 
 
 
