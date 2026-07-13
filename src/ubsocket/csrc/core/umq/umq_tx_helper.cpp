@@ -20,18 +20,17 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_option, ops_error_code &err_code,
-                                   ICallback &error_cb, Socket *sock)
+int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
 {
-    auto *trace = (sock && !SplitTrace::SuppressTrace()) ? sock->split_trace_ : nullptr;
-    int raw_socket = sock ? sock->raw_socket_ : -1;
+    auto *trace = (poll_args.sock && !SplitTrace::SuppressTrace()) ? poll_args.sock->split_trace_ : nullptr;
+    int raw_socket = poll_args.sock ? poll_args.sock->raw_socket_ : -1;
     umq_buf_t *buf[POLL_BATCH_MAX];
     uint64_t umq_poll_start = 0;
     if (trace != nullptr) {
         umq_poll_start = ubsocket_get_timeNs_compile();
     }
     PROF_START(UMQ_POLL_WRITE);
-    int poll_num = UmqApi::umq_poll(umq_handle, &poll_option, buf, POLL_BATCH_MAX);
+    int poll_num = UmqApi::umq_poll(poll_args.umq_handle, &poll_args.poll_option, buf, POLL_BATCH_MAX);
     if (trace != nullptr) {
         uint64_t umq_poll_end = ubsocket_get_timeNs_compile();
         TRACE_ADD_WRITE(trace, CORE_WRITE_UMQ_POLL, raw_socket, umq_poll_start, umq_poll_end,
@@ -39,12 +38,12 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
     }
     if (poll_num <= 0) {
         PROF_END(UMQ_POLL_WRITE, false);
-        if (poll_num < 0) {
+        if (poll_args.silent_poll_err && poll_num < 0) {
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, poll_num, savedErrno);
             UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for TX, local umq: %llu, ret: %d, "
                          "mapped errno: %d(%s), original errno: %d\n",
-                         static_cast<unsigned long long>(umq_handle), poll_num, errno,
+                         static_cast<unsigned long long>(poll_args.umq_handle), poll_num, errno,
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, poll_num), savedErrno);
         }
         return poll_num;
@@ -62,7 +61,7 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
         if (buf[i] == nullptr || buf[i]->status != 0 || (((umq_buf_pro_t *)buf[i]->qbuf_ext) == nullptr) ||
             (first_qbuf = (umq_buf_t *)((umq_buf_pro_t *)(buf[i]->qbuf_ext))->user_ctx) == nullptr) {
             // set err_code to true to force a quick exit from current function.
-            err_code = ops_error_code::NORMAL_ERROR;
+            poll_args.err_code = ops_error_code::NORMAL_ERROR;
 
             if (buf[i] == nullptr) {
                 UBS_VLOG_DEBUG("TX CQE is invalid, umq buffer is empty\n");
@@ -84,10 +83,10 @@ int UmqTxHelper::PollUmqTxInternal(uint64_t umq_handle, umq_io_option_t &poll_op
             continue;
         }
         // 正常业务包
-        cur_wr_cnt = ProcessTxCqe(first_qbuf, buf[i], sock, i == 0);
+        cur_wr_cnt = ProcessTxCqe(first_qbuf, buf[i], poll_args.sock, i == 0);
         if (cur_wr_cnt < 0) {
             // set err_code to true to force a quick exit from current function.
-            err_code = ops_error_code::FATAL_ERROR;
+            poll_args.err_code = ops_error_code::FATAL_ERROR;
             return wr_cnt;
         }
 
@@ -292,6 +291,34 @@ Block *UmqTxHelper::DataToBlock(void *data)
         return nullptr;
     }
     return reinterpret_cast<Block *>(qbuf->buf_data);
+}
+
+int UmqTxHelper::PollUmqTxForFcReturn(uint64_t umq_handle)
+{
+    umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
+                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+    ops_error_code err_code = ops_error_code::OK;
+    PollArgs poll_args(umq_handle, poll_option, err_code, nullptr);
+    poll_args.silent_poll_err = UmqSetting::UMQ_TP_TYPE == POOL;
+
+    int ret = PollUmqTx(poll_args, [](umq_buf_t *qbuf) {});
+    if (!poll_args.silent_poll_err && ret < 0) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
+        if (errno == EMLINK) {
+            UBS_VLOG_DEBUG("[Debug] fc tx umq_poll() suspended: no available jetty. Queued for automatic retry, "
+                           "umq handle: %lu.\n",
+                           umq_handle);
+            UmqTpWaitQueue::Instance().Enqueue(umq_handle);
+        } else {
+            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for fc tx, local umq: %llu, ret: %d, "
+                         "mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(umq_handle), ret, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
+            return UBS_ERROR;
+        }
+    }
+    return UBS_OK;
 }
 
 } // namespace umq

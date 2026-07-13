@@ -41,6 +41,19 @@ public:
         return true;
     }
 
+    bool Push(T &&item) noexcept
+    {
+        auto rd = __atomic_load_n(&commit_read_, __ATOMIC_ACQUIRE);
+        if (write_index_ - rd >= capacity_) {
+            return false;
+        }
+
+        buffer_[write_index_ & mask_] = std::move(item);
+        write_index_++;
+        __atomic_store_n(&commit_write_, write_index_, __ATOMIC_RELEASE);
+        return true;
+    }
+
     template <typename InputIt>
     uint64_t MultiPush(InputIt begin, InputIt end) noexcept
     {

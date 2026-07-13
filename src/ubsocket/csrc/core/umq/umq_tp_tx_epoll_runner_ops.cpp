@@ -43,45 +43,38 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
         ops_error_code err_code = ops_error_code::OK;
         int poll_cnt = 0;
         do {
-            poll_cnt = UmqTxHelper::PollUmqTx(
-                tx_epoll_event->umq_handle, poll_option, err_code,
-                [tx_epoll_event](umq_buf_t *qbuf) {
-                    // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
-                    // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
-                    // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
-                    auto buf_pro = (umq_buf_pro_t *)qbuf->qbuf_ext;
-                    auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
-                    auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
-                    if (socket_ptr) {
-                        LibcApi::shutdown(socket_fd, SHUT_RD);
-                        UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", socket_fd);
-                        socket_ptr->State(SOCK_STAT_CLOSE);
-                    }
+            UmqTxHelper::PollArgs poll_args(tx_epoll_event->umq_handle, poll_option, err_code, nullptr);
+            poll_cnt = UmqTxHelper::PollUmqTx(poll_args, [tx_epoll_event](umq_buf_t *qbuf) {
+                // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
+                // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
+                // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
+                auto buf_pro = (umq_buf_pro_t *)qbuf->qbuf_ext;
+                auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
+                auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
+                if (socket_ptr) {
+                    LibcApi::shutdown(socket_fd, SHUT_RD);
+                    UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", socket_fd);
+                    socket_ptr->State(SOCK_STAT_CLOSE);
+                }
 
-                    // 销毁重建对应的Tp
-                    UmqTransportPool::Instance().RebuildTp(tx_epoll_event->umq_handle, tx_epoll_event->tp_idx);
-                },
-                nullptr);
+                // 销毁重建对应的Tp
+                UmqTransportPool::Instance().RebuildTp(tx_epoll_event->umq_handle, tx_epoll_event->tp_idx);
+            });
         } while (poll_cnt > 0 && err_code == ops_error_code::OK);
         int ret = UmqApi::umq_rearm_interrupt(tx_epoll_event->umq_handle, false, &tx_option);
         if (ret < 0) {
             int savedErrno = errno;
-            errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+            errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
             UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for TX, local umq: %llu, "
                          "ret: %d, mapped errno: %d(%s), original errno: %d\n",
                          static_cast<unsigned long long>(tx_epoll_event->umq_handle), ret, errno,
-                         UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
             return UBS_ERROR;
         }
         return UBS_OK;
     } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_FC_TX) {
         Locker slock(mutex_);
-        umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
-                                       UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
-        ops_error_code err_code = ops_error_code::OK;
-        UmqTxHelper::PollUmqTx(
-            tx_epoll_event->umq_handle, poll_option, err_code, [](umq_buf_t *qbuf) {}, nullptr);
-        return UBS_OK;
+        return UmqTxHelper::PollUmqTxForFcReturn(tx_epoll_event->umq_handle);
     } else {
         UBS_VLOG_ERR("async_epoll unknown event:(events:%x, data.type:%lu)\n", event.events, tx_epoll_event->type);
         return UBS_ERROR;

@@ -14,7 +14,7 @@
 #include <memory>
 
 #include "common/ubsocket_leaky_singleton.h"
-#include "common/ubsocket_spsc_ring_queue.h"
+#include "common/ubsocket_mpsc_ring_queue.h"
 #include "ubsocket_core_types.h"
 #include "umq_errno.h"
 
@@ -518,7 +518,7 @@ private:
     EpollEvent sock_readable_event_ = {EPOLL_EVENT_UB_SOCKET_IN, -1, epoll_event{}};
     std::unordered_map<int, EpollEvent *> socket_data_;
     EpollEvent *removed_head_ = nullptr; // 待删除的event data列表，用wait唤醒时统一释放
-    SPSCRingQueue<struct epoll_event> readable_sockets_event_queue_{MAX_READABLE_FD_COUNT};
+    MPSCRingQueue<struct epoll_event> readable_sockets_event_queue_{MAX_READABLE_FD_COUNT};
 
     // For async accept wakeup
     EpollEvent *ready_event_ = nullptr;

@@ -92,7 +92,9 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
                     continue;
                 } else if (buf[i]->status == UMQ_FAKE_BUF_FC_EMLINK) {
                     // 流控请求获取jetty资源失败，加入等待队列
-                    UBS_VLOG_DEBUG("[UMQ_API] fc post suspended: resource exhausted. Queued for automatic retry.\n");
+                    UBS_VLOG_DEBUG(
+                        "[Debug] fc post suspended: resource exhausted. Queued for automatic retry. umq_ctx: %d\n",
+                        sock->raw_socket_);
                     UmqTpWaitQueue::Instance().Enqueue(sock);
                 }
             } else {

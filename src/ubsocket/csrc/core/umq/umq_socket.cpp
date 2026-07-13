@@ -365,6 +365,9 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
 
 Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
 {
+    if (umq_handle_ == UMQ_INVALID_HANDLE) {
+        return 0;
+    }
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {

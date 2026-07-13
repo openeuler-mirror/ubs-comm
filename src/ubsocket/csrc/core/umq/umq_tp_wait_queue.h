@@ -14,16 +14,57 @@
 
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_leaky_singleton.h"
-#include "common/ubsocket_spsc_ring_queue.h"
+#include "common/ubsocket_mpsc_ring_queue.h"
 #include "umq_socket.h"
 
 namespace ock {
 namespace ubs {
 namespace umq {
 
+enum UmqTpWaitQueueElementType : uint64_t
+{
+    UMQ_SOCKET = 0,
+    UMQ_HANDLE,
+    TYPE_COUNT
+};
+
+class UmqTpWaitQueueElement {
+public:
+    UmqTpWaitQueueElement() : sock_(nullptr), umq_handle_(0), type_(TYPE_COUNT) {}
+
+    UmqTpWaitQueueElement(const SocketPtr &sock) : sock_(sock), umq_handle_(UMQ_INVALID_HANDLE), type_(UMQ_SOCKET) {}
+
+    UmqTpWaitQueueElement(uint64_t umq_handle) : sock_(nullptr), umq_handle_(umq_handle), type_(UMQ_HANDLE) {}
+
+    UmqTpWaitQueueElement(UmqTpWaitQueueElement &&) noexcept = default;
+    UmqTpWaitQueueElement &operator=(UmqTpWaitQueueElement &&) noexcept = default;
+    UmqTpWaitQueueElement(const UmqTpWaitQueueElement &) = delete;
+    UmqTpWaitQueueElement &operator=(const UmqTpWaitQueueElement &) = delete;
+
+    ALWAYS_INLINE UmqTpWaitQueueElementType GetType()
+    {
+        return type_;
+    }
+
+    ALWAYS_INLINE SocketPtr GetSockPtr()
+    {
+        return sock_;
+    }
+
+    ALWAYS_INLINE uint64_t GetUmqHandle()
+    {
+        return umq_handle_;
+    }
+
+private:
+    SocketPtr sock_;
+    uint64_t umq_handle_;
+    UmqTpWaitQueueElementType type_;
+};
+
 class UmqTpWaitQueue
     : public LeakySingleton<UmqTpWaitQueue>
-    , public SPSCRingQueue<SocketPtr> {
+    , public MPSCRingQueue<UmqTpWaitQueueElement> {
     friend LeakySingleton<UmqTpWaitQueue>;
 
 public:
@@ -31,12 +72,14 @@ public:
 
     int Enqueue(const SocketPtr &sock);
 
+    int Enqueue(uint64_t umq_handle);
+
     int TryWakeupOne();
 
     uint32_t WakeUp(uint32_t wakeUpNum);
 
 private:
-    UmqTpWaitQueue() : SPSCRingQueue(GetCapacity()) {}
+    UmqTpWaitQueue() : MPSCRingQueue(GetCapacity()) {}
 
     static size_t GetCapacity()
     {
