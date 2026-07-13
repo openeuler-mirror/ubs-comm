@@ -215,7 +215,7 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
             last_socket_fd = socket_fd;
         }
         if (UNLIKELY(socket_ptr.Get() == nullptr)) {
-            UBS_VLOG_WARN("async_epoll Get socket fd:%d object failed. \n", socket_fd);
+            UBS_VLOG_WARN("async_epoll: socket fd: %d object is null, skipping event processing. \n", socket_fd);
             continue;
         }
 
