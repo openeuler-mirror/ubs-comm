@@ -400,7 +400,7 @@ def parse_umq_entries(lines):
     current_raw = []
 
     header_re = re.compile(r'#(\d+)\s+type=(\w+)\s+umq_id=(\d+)\s+umq_start=(\d+)\s+umq_end=(\d+)\s+umq_exec=(\d+)\s+item_cnt=(\d+)\s+ts=(\d+)\s+tag_ts=(\d+)')
-    item_re = re.compile(r'item\[(\d+)\]\s+umq_id=(\d+)\s+msn=(\d+)\s+size=(\d+)')
+    item_re = re.compile(r'item\[(\d+)\]\s+umq_id=(\d+)\s+(?:sub_umq_id=(\d+)\s+)?msn=(\d+)\s+size=(\d+)')
     sub_re = re.compile(r'sub\[(\d+)\]\s+umq_id=(\d+)\s+func=(.+?)\s+start=(\d+)\s+exec=(\d+)')
 
     for line in lines:
@@ -432,12 +432,16 @@ def parse_umq_entries(lines):
 
         m = item_re.search(line)
         if m:
-            current['items'].append({
+            item = {
                 'idx': int(m.group(1)),
                 'umq_id': int(m.group(2)),
-                'msn': int(m.group(3)),
-                'size': int(m.group(4)),
-            })
+                'msn': int(m.group(4)),
+                'size': int(m.group(5)),
+            }
+            sub_umq = m.group(3)
+            if sub_umq is not None:
+                item['sub_umq_id'] = int(sub_umq)
+            current['items'].append(item)
             continue
 
         m = sub_re.search(line)
@@ -796,41 +800,41 @@ def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries
 
     ubsocket_sum = write_sum + epoll_sum + read_sum
     rows.append(('', 'ubsocket SUM', '', '', '', '',
-                 format_duration(ubsocket_sum), 'write + epoll + read'))
+                  format_duration(ubsocket_sum), 'write + epoll + read'))
 
     side_total = 0
     if is_client:
         first_t14 = epoll_rounds[0].get('type14_first') if epoll_rounds else None
         urma_rx_end = _find_first_urma_wait_rx_end(epoll_rounds, umq_entries)
         actual_start = urma_rx_end if urma_rx_end is not None else (int(first_t14) if first_t14 is not None else None)
-        last_t19 = None
-        for group in reversed(write_data.get('writevs', [])):
+        first_t19 = None
+        for group in write_data.get('writevs', []):
             p = group.get('post')
             if p and p[1] is not None:
-                last_t19 = p[1]
+                first_t19 = p[1]
                 break
-        if actual_start is not None and last_t19 is not None:
-            side_total = int(actual_start) - int(last_t19)
+        if actual_start is not None and first_t19 is not None:
+            side_total = int(actual_start) - int(first_t19)
             key_name = 'urma_wait_jfc(rx)_end' if urma_rx_end else 'type14_start'
             rows.append(('', 'Client等待耗时', '', '', '', '',
                           format_duration(side_total),
-                          f'{key_name}={actual_start} - type19_end={last_t19}'))
+                          f'{key_name}={actual_start} - type19_end={first_t19}'))
     else:
-        last_t19 = None
-        for group in reversed(write_data.get('writevs', [])):
+        first_t19 = None
+        for group in write_data.get('writevs', []):
             p = group.get('post')
             if p and p[1] is not None:
-                last_t19 = p[1]
+                first_t19 = p[1]
                 break
         first_t14 = epoll_rounds[0].get('type14_first') if epoll_rounds else None
         urma_rx_end = _find_first_urma_wait_rx_end(epoll_rounds, umq_entries)
         actual_start = urma_rx_end if urma_rx_end is not None else (int(first_t14) if first_t14 is not None else None)
-        if last_t19 is not None and actual_start is not None:
-            side_total = int(last_t19) - int(actual_start)
+        if first_t19 is not None and actual_start is not None:
+            side_total = int(first_t19) - int(actual_start)
             key_name = 'urma_wait_jfc(rx)_end' if urma_rx_end else 'type14_start'
             rows.append(('', 'Server处理耗时', '', '', '', '',
                           format_duration(side_total),
-                          f'type19_end={last_t19} - {key_name}={actual_start}'))
+                          f'type19_end={first_t19} - {key_name}={actual_start}'))
 
     return rows, side_total
 
@@ -935,6 +939,22 @@ def find_effective_start(write_data, target_seq):
             ts = wv[0] if wv else None
             return s, ts
     return None, None
+
+
+def find_effective_type19_end(write_data, target_seq):
+    """找到 target_seq 所在的 writev 组的 type19 end_timestamp。"""
+    for group in write_data.get('writevs', []):
+        s = group.get('start_seq')
+        e = group.get('end_seq')
+        if s is not None and e is not None and s <= target_seq <= e:
+            p = group.get('post')
+            if p and p[1] is not None:
+                return p[1]
+    for group in write_data.get('writevs', []):
+        p = group.get('post')
+        if p and p[1] is not None:
+            return p[1]
+    return None
 
 # ========== 主函数 ==========
 def main():
