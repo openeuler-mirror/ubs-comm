@@ -97,6 +97,20 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_PROF_MODE                | 是否打开profiling百分位统计功能，fast：关闭，ext：打开                                        | fast, ext                     | fast            | 否                                  |
 | UBSOCKET_PROF_DUMP_INTERVAL_MIN                | 每次统计profiling打点数据时间间隔（单位s）                | [1,5]                                                                                                                                                             | 1             | 否                                  |
 | UBSOCKET_PROF_DUMP_PATH                | profiling打点数据输出路径                | [1,512]                                                                                                                                                            | /tmp/ubsocket/profiling             | 否                                  |
+| UBSOCKET_UB_TRANS_MODE | ub协议模式 |`RC_TP`，`RM_TP`, `RM_CTP`, `RC_CTP`  | `RM_CTP` | 否 |
+| UBSOCKET_FLOW_CONTROL_ENABLE | 是否开启流控 | false, true | true | 否 |
+| UBSOCKET_UB_HANDSHAKE_MODE | UB通信建链握手模式 | tfo, ub_sock_opt | ub_sock_opt | 否 |
+| UBSOCKET_THREAD_POOL_SIZE | ubsocket后台线程池的线程数 | [1,64] | 1 | 否 |
+| UBSOCKET_DEGRADE | 是否允许 ubsocket 在 UB 错误时降级成 TCP | false, true | true | 否 |
+| UBSOCKET_ASYNC_ACCEPT | 是否允许 ubsocket 在server做accept时做异步accept | false, true | false | 否 |
+| UBSOCKET_TP_TYPE | jetty连接复用方式 | single,pool | pool | 否 |
+| UBSOCKET_TP_POOL_SIZE | jetty连接池大小,jetty连接池大小需要占用fd，因此建议ulimit -n 65535 | [1, 1000] | 800 | 否 |
+| UBSOCKET_UMQ_TINY_POOL_ENABLE |是否启用UMQ tiny pool|false, true|true|否|
+| UBSOCKET_INITIAL_CREDIT | 首次流控请求所申请的信用个数, 单个 WR 消耗 1 个信用 | [1, 1024] | 128 | 否 |
+| UBSOCKET_MAX_CREDIT_PER_REQUEST | 流控信用被耗尽后会在前一次的申请个数基础上翻倍申请<br>例如第1次如果申请 128, 被耗尽后会申请 256 信令。但是最多不会超过此值 | [1, 1024] | 1024 | 否 |
+| UBSOCKET_MIN_RESERVED_CREDIT | 单个连接最小保留的的流控信用。如果连接所持有的流控信用小于此值，这些信用不会因连接无活动而归还给上层 | [1, 1024] | 2 | 否 |
+
+
 
 
 
@@ -105,6 +119,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 >
 > - 环境变量仅在通过`LD_PRELOAD`方式使用`UBSocket`时生效；`bRPC`与`UBSocket`集成在一起的场景下，`bRPC`在启动时通过gflags重新设置了全部环境变量的值，故此时各配置的值以gflags的值为准。
 > - `UBSocket`支持使用bonding设备和普通udma设备，默认使用bonding设备（不需要用户配置`UBSOCKET_DEV_NAME`、`UBSOCKET_EID_IDX`、`UBSOCKET_DEV_NAME`等）。普通udma设备通常在调试时使用，需通过`urma_admin show`查看设备情况和填充对应信息。
+> - `UBSOCKET_TP_POOL_SIZE`参数设定值初始化时需要占用fd，因此需要确保有足够的fd，建议ulimit -n 65535。
 
 参考如下命令进行环境变量配置即可。
 

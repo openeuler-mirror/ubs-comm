@@ -51,7 +51,7 @@ namespace umq {
 umq_buf_block_size_t UmqSetting::IO_BLOCK_TYPE = BLOCK_SIZE_8K;
 uint16_t UmqSetting::UMQ_FC_DEFAULT_CREDIT = 1024L;
 uint16_t UmqSetting::UMQ_FC_MAX_CREDIT = 1024L;
-uint16_t UmqSetting::UMQ_FC_MIN_CREDIT = 100L;
+uint16_t UmqSetting::UMQ_FC_MIN_CREDIT = 2;
 uint64_t UmqSetting::UMQ_IO_TOTAL_SIZE_MB = 1024;
 uint64_t UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB = 200;
 uint64_t UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB = 2048;
@@ -81,8 +81,8 @@ bool UmqSetting::UMQ_IS_BONDING = false;
 bool UmqSetting::UMQ_FLOW_CONTROL_ENABLE = true;
 bool UmqSetting::UMQ_RANDOM_ROUTE = false;
 int8_t UmqSetting::UMQ_LINK_PRIORITY = UBSOCKET_LINK_PRIORITY_DEFAULT;
-pool_type_t UmqSetting::UMQ_TP_TYPE = SINGLE;
-uint32_t UmqSetting::UMQ_TP_POOL_SIZE = 16;
+pool_type_t UmqSetting::UMQ_TP_TYPE = POOL;
+uint32_t UmqSetting::UMQ_TP_POOL_SIZE = 800;
 uint32_t UmqSetting::UMQ_MAX_O3_GAP = 128;
 uint64_t UmqSetting::UMQ_O3_TIMEOUT_MS = 200;
 
@@ -91,7 +91,7 @@ void UmqSetting::AddRules() noexcept
     /* int64 rule: name, required, min, max */
     Int64Rule rules_int64[] = {{ENV_UMQ_INITIAL_CREDIT, false, 1, 1024}, // See UMQ_UB_FC_MAX_IMM_DATA
                                {ENV_UMQ_MAX_CREDIT_PER_REQUEST, false, 1, 1024},
-                               {ENV_UMQ_MIN_RESERVED_CREDIT, false, 100, 1024},
+                               {ENV_UMQ_MIN_RESERVED_CREDIT, false, 1, 1024},
                                {ENV_UMQ_MEM_POOL_INIT_SIZE, false, 1, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_MEM_POOL_MAX_SIZE, false, 1, 6144},
                                {ENV_UMQ_LINK_PRIORITY, false, -1, 15},
@@ -99,7 +99,6 @@ void UmqSetting::AddRules() noexcept
                                {ENV_UMQ_TINY_POOL_BLOCK_COUNT, false, 1, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_TLS_TINY_POOL_DEPTH, false, 0, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_TLS_EXPAND_TINY_POOL_DEPTH, false, 0, std::numeric_limits<int64_t>::max()},
-                               {ENV_UMQ_TP_POOL_SIZE, false, 1, 1000},
                                {ENV_UMQ_MAX_O3_GAP, false, 2, 10240},
                                {ENV_UMQ_O3_TIMEOUT_MS, false, 2, 1000},
                                {ENV_UMQ_EID_IDX, false, 0, std::numeric_limits<int64_t>::max()}};
