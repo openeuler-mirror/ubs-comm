@@ -65,7 +65,7 @@ Result UmqBackend::Init() noexcept
     umq_config.buf_pool_cfg.normal_pool_block_count =
         static_cast<uint32_t>(4ULL * GlobalSetting::UBS_RX_DEPTH + UmqSetting::UMQ_BUF_POOL_DEPTH);
     umq_config.buf_pool_cfg.umq_buf_pool_max_size = UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB * IO_SIZE_MB;
-    umq_config.buf_pool_cfg.tls_qbuf_pool_depth = UmqSetting::UMQ_BUF_POOL_DEPTH;
+    umq_config.buf_pool_cfg.tls_qbuf_pool_depth = 4ULL * GlobalSetting::UBS_RX_DEPTH + UmqSetting::UMQ_BUF_POOL_DEPTH;
     umq_config.buf_pool_cfg.enable_tiny_pool = UmqSetting::UMQ_TINY_POOL_ENABLE;
     umq_config.buf_pool_cfg.tiny_pool_block_size = UmqSetting::UMQ_TINY_POOL_BLOCK_SIZE;
     umq_config.buf_pool_cfg.tiny_pool_block_count = UmqSetting::UMQ_TINY_POOL_BLOCK_COUNT;
