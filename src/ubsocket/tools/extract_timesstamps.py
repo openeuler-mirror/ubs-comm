@@ -394,7 +394,10 @@ def extract_read_rounds(lines):
 
 # ========== UMQ 日志解析 ==========
 def parse_umq_entries(lines):
-    """解析 UMQ trace 日志为结构化条目列表（同时保留原始行）"""
+    """解析 UMQ trace 日志为结构化条目列表（同时保留原始行）
+
+    新格式：header 行末尾带 ';' 后接 items，多个 item/sub 用 ';' 串在同一行。
+    """
     entries = []
     current = None
     current_raw = []
@@ -423,36 +426,40 @@ def parse_umq_entries(lines):
                 'subs': [],
             }
             current_raw = [line]
-            continue
+        elif current is not None:
+            current_raw.append(line)
 
         if current is None:
             continue
 
-        current_raw.append(line)
+        # 按 ';' 拆段，逐段匹配 item/sub
+        for seg in [s.strip() for s in line.split(';') if s.strip()]:
+            if header_re.search(seg):
+                continue
 
-        m = item_re.search(line)
-        if m:
-            item = {
-                'idx': int(m.group(1)),
-                'umq_id': int(m.group(2)),
-                'msn': int(m.group(4)),
-                'size': int(m.group(5)),
-            }
-            sub_umq = m.group(3)
-            if sub_umq is not None:
-                item['sub_umq_id'] = int(sub_umq)
-            current['items'].append(item)
-            continue
+            mi = item_re.search(seg)
+            if mi:
+                item = {
+                    'idx': int(mi.group(1)),
+                    'umq_id': int(mi.group(2)),
+                    'msn': int(mi.group(4)),
+                    'size': int(mi.group(5)),
+                }
+                sub_umq = mi.group(3)
+                if sub_umq is not None:
+                    item['sub_umq_id'] = int(sub_umq)
+                current['items'].append(item)
+                continue
 
-        m = sub_re.search(line)
-        if m:
-            current['subs'].append({
-                'idx': int(m.group(1)),
-                'umq_id': int(m.group(2)),
-                'func': m.group(3),
-                'start': int(m.group(4)),
-                'exec': int(m.group(5)),
-            })
+            ms = sub_re.search(seg)
+            if ms:
+                current['subs'].append({
+                    'idx': int(ms.group(1)),
+                    'umq_id': int(ms.group(2)),
+                    'func': ms.group(3),
+                    'start': int(ms.group(4)),
+                    'exec': int(ms.group(5)),
+                })
 
     if current:
         current['_raw'] = current_raw
@@ -941,20 +948,6 @@ def find_effective_start(write_data, target_seq):
     return None, None
 
 
-def find_effective_type19_end(write_data, target_seq):
-    """找到 target_seq 所在的 writev 组的 type19 end_timestamp。"""
-    for group in write_data.get('writevs', []):
-        s = group.get('start_seq')
-        e = group.get('end_seq')
-        if s is not None and e is not None and s <= target_seq <= e:
-            p = group.get('post')
-            if p and p[1] is not None:
-                return p[1]
-    for group in write_data.get('writevs', []):
-        p = group.get('post')
-        if p and p[1] is not None:
-            return p[1]
-    return None
 
 # ========== 主函数 ==========
 def main():
