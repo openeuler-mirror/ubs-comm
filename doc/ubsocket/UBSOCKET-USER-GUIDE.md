@@ -75,7 +75,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_RX_DEPTH                    | 接受队列深度                                          | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfr_depth`两者的最小值）                                                                                | 1024              | 否                                  |
 | UBSOCKET_READV_UNLIMITED             | 是否打开readv上报限制                                   | false，true                                                                                                                                                              | true              | 否                                  |
 | UBSOCKET_BLOCK_TYPE                  | 内存池的最小分片                                        | tiny：4k，default：8k，small：16k，medium：32k，large：64k                                                                                                                               | default           | 否                                  |
-| UBSOCKET_POOL_INITIAL_SIZE           | IO内存的总大小，单位MB                                   | 应用按需配置                                                                                                                                                                  | 1024              | 否                                  |
+| UBSOCKET_POOL_INITIAL_SIZE           | IO内存总大小（MB）                                   | 正整数                                                                                                                                                                 | 1024              | 否                                  |
 | UBSOCKET_USE_UB_FORCE                | 是否强制使用UB协议加速TCP                                 | false：通过接口参数设置socket是否开启UB加速。<br>true：强制所有socket开启UB加速。                                                                                                                 | false             | 否                                  |
 | UBSOCKET_SCHEDULE_POLICY             | 设置多平面负载分担策略                                     | affinity_priority:亲和优先策略，优先尝试使用和业务线程所在CPU亲和的IODIE进行UB通信，失败则轮询查找可用平面建链。<br>affinity：亲和策略，使用和业务线程所在CPU亲和的IODIE进行UB通信。<br>rr：轮转策略，多个socket采用round robin的策略使用不同IODIE进行UB通信。 | affinity_priority | 否                                  |
 | UBSOCKET_AUTO_FALLBACK_TCP           | 协议不匹配时是否自动降级为TCP                                | false, true                                                                                                                                                             | true              | 否                                  |
@@ -105,15 +105,16 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_ASYNC_ACCEPT | 是否允许 ubsocket 在server做accept时做异步accept | false, true | false | 否 |
 | UBSOCKET_TP_TYPE | jetty连接复用方式 | single,pool | pool | 否 |
 | UBSOCKET_TP_POOL_SIZE | jetty连接池大小,jetty连接池大小需要占用fd，因此建议ulimit -n 65535 | [1, 1000] | 800 | 否 |
-| UBSOCKET_UMQ_TINY_POOL_ENABLE |是否启用UMQ tiny pool|false, true|true|否|
 | UBSOCKET_INITIAL_CREDIT | 首次流控请求所申请的信用个数, 单个 WR 消耗 1 个信用 | [1, 1024] | 128 | 否 |
 | UBSOCKET_MAX_CREDIT_PER_REQUEST | 流控信用被耗尽后会在前一次的申请个数基础上翻倍申请<br>例如第1次如果申请 128, 被耗尽后会申请 256 信令。但是最多不会超过此值 | [1, 1024] | 1024 | 否 |
 | UBSOCKET_MIN_RESERVED_CREDIT | 单个连接最小保留的的流控信用。如果连接所持有的流控信用小于此值，这些信用不会因连接无活动而归还给上层 | [1, 1024] | 2 | 否 |
+| UBSOCKET_UMQ_TINY_POOL_ENABLE         | 是否启用UMQ tiny pool                           | false, true                                                                                                                                                           | true                              | 否                                  |
+| UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE     | UMQ tiny pool块大小                              | 512, 1024, 2048, 4096, 8192                                                                                                                                           | 1024                              | 否                                  |
+| UBSOCKET_UMQ_TINY_POOL_BLOCK_COUNT    | UMQ tiny pool块数量                              | 正整数                                                                                                                                                                 | 8192                              | 否                                  |
 | UBSOCKET_SPLIT_TRACE_ENABLE | 是否开启链路级打点工具 | false, true | false             |否|
 | UBSOCKET_SPLIT_TRACE_BUF_CAPACITY | 链路级打点工具日志打印数组的大小 | [16384, 10240000] | 65535                   |否|
 | UBSOCKET_SPLIT_TRACE_DRAIN_INTERVAL_MS | 链路级打点工具日志打印的间隔 | [1, 10000] | 10                      |否|
 | UBSOCKET_SPLIT_TRACE_LEVEL | 链路级打点工具级别,默认会打印所有的点位，可以设置只打印ubsocket或者umq的点位信息 | "all", "ubsocket", "umq" | all                     |否|
-
 
 
 
@@ -123,6 +124,8 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 > - 环境变量仅在通过`LD_PRELOAD`方式使用`UBSocket`时生效；`bRPC`与`UBSocket`集成在一起的场景下，`bRPC`在启动时通过gflags重新设置了全部环境变量的值，故此时各配置的值以gflags的值为准。
 > - `UBSocket`支持使用bonding设备和普通udma设备，默认使用bonding设备（不需要用户配置`UBSOCKET_DEV_NAME`、`UBSOCKET_EID_IDX`、`UBSOCKET_DEV_NAME`等）。普通udma设备通常在调试时使用，需通过`urma_admin show`查看设备情况和填充对应信息。
 > - `UBSOCKET_TP_POOL_SIZE`参数设定值初始化时需要占用fd，因此需要确保有足够的fd，建议ulimit -n 65535。
+> - `UBSOCKET_POOL_INITIAL_SIZE` 最小值参考（单位 MB）：((UBSOCKET_RX_DEPTH * 4 + UBSOCKET_BUF_POOL_DEPTH) * (UBSOCKET_BLOCK_TYPE分片 + 128)) / 1024 / 1024；若 `UBSOCKET_UMQ_TINY_POOL_ENABLE=true`，还需加上 ((UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE + 128) * UBSOCKET_UMQ_TINY_POOL_BLOCK_COUNT) / 1024 / 1024。该参数是在初始化时需要分配的内存池的大小，必须配置充足保证初始化成功；若运行时内存池不足，会在 `UBSOCKET_POOL_MAX_SIZE` 限制范围内弹性扩容。
+> - `UBSOCKET_UB_TRANS_MODE` 设置为 CTP 模式（`RM_CTP`/`RC_CTP`）时，`UBSOCKET_BLOCK_TYPE` 必须设为 `tiny`，且 `UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE` 最大不超过 4096，否则会超出分片大小。
 
 参考如下命令进行环境变量配置即可。
 
