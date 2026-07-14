@@ -165,7 +165,7 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
                                 [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value == b.value; });
         used_ports.erase(last, used_ports.end());
 
-        UBS_VLOG_INFO("CreateOneTp: used_ports.num=%u (expect 1 main + up to 3 backup)\n", used_ports.size());
+        UBS_VLOG_DEBUG("CreateOneTp: used_ports.num=%u (expect 1 main + up to 3 backup)\n", used_ports.size());
         for (uint32_t i = 0; i < used_ports.size(); ++i) {
             UBS_VLOG_DEBUG("  used_ports[%u]: src_port(chip=%u,die=%u,port=%u)\n", i, used_ports[i].bs.chip_id,
                            used_ports[i].bs.die_id, used_ports[i].bs.port_idx);
