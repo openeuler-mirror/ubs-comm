@@ -369,11 +369,24 @@ uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
             used_ports.push_back(route_list.routes[i].src_port);
         }
-        std::sort(used_ports.begin(), used_ports.end(),
-                  [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value < b.value; });
+        // 1主3备-DEBUG
+        UBS_VLOG_DEBUG("[1m3b-SORT] CreateShareMainUmq BEFORE sort, num=%zu\n", used_ports.size());
+        for (size_t i = 0; i < used_ports.size(); ++i) {
+            UBS_VLOG_DEBUG("[1m3b-SORT]   before[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i,
+                           used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
+                           (unsigned long)used_ports[i].value);
+        }
         auto last = std::unique(used_ports.begin(), used_ports.end(),
                                 [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value == b.value; });
         used_ports.erase(last, used_ports.end());
+        // 1主3备-DEBUG
+        UBS_VLOG_DEBUG("[1m3b-SORT] CreateShareMainUmq AFTER unique, num=%zu (final order passed to umq)\n",
+                       used_ports.size());
+        for (size_t i = 0; i < used_ports.size(); ++i) {
+            UBS_VLOG_DEBUG("[1m3b-SORT]   final[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i,
+                           used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
+                           (unsigned long)used_ports[i].value);
+        }
         share_main_umq_cfg.used_ports = {.port = used_ports.data(), .num = static_cast<uint8_t>(used_ports.size())};
     }
 

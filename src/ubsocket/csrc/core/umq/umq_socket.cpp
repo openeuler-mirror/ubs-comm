@@ -71,7 +71,7 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
         // 日志：打印 used_ports 内容，验证一主三备是否传入
         UBS_VLOG_DEBUG("CreateLocalUmq: used_ports.num=%u (expect 1 main + up to 3 backup)\n", used_ports.num);
         for (uint32_t i = 0; i < used_ports.num; ++i) {
-            UBS_VLOG_DEBUG("  used_ports[%u]: src_port(chip=%u,die=%u,port=%u)\n", i, used_ports.port[i].bs.chip_id,
+            UBS_VLOG_DEBUG("used_ports[%u]: src_port(chip=%u,die=%u,port=%u)\n", i, used_ports.port[i].bs.chip_id,
                            used_ports.port[i].bs.die_id, used_ports.port[i].bs.port_idx);
         }
     }
