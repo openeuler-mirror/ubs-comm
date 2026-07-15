@@ -159,11 +159,24 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
             rr_num_ += 1;
         }
 
-        std::sort(used_ports.begin(), used_ports.end(),
-                  [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value < b.value; });
+        // 1主3备-DEBUG
+        UBS_VLOG_DEBUG("[1m3b-SORT] CreateOneTp BEFORE sort, num=%zu\n", used_ports.size());
+        for (size_t i = 0; i < used_ports.size(); ++i) {
+            UBS_VLOG_DEBUG("[1m3b-SORT]   before[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i,
+                           used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
+                           (unsigned long)used_ports[i].value);
+        }
         auto last = std::unique(used_ports.begin(), used_ports.end(),
                                 [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value == b.value; });
         used_ports.erase(last, used_ports.end());
+        // 1主3备-DEBUG
+        UBS_VLOG_DEBUG("[1m3b-SORT] CreateOneTp AFTER unique, num=%zu (final order passed to umq)\n",
+                       used_ports.size());
+        for (size_t i = 0; i < used_ports.size(); ++i) {
+            UBS_VLOG_DEBUG("[1m3b-SORT]   final[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i,
+                           used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
+                           (unsigned long)used_ports[i].value);
+        }
 
         UBS_VLOG_DEBUG("CreateOneTp: used_ports.num=%u (expect 1 main + up to 3 backup)\n", used_ports.size());
         for (uint32_t i = 0; i < used_ports.size(); ++i) {
