@@ -369,6 +369,17 @@ uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
             used_ports.push_back(route_list.routes[i].src_port);
         }
+
+        std::sort(used_ports.begin(), used_ports.end(), [](const umq_port_id_t &a, const umq_port_id_t &b) {
+            if (a.bs.chip_id != b.bs.chip_id) {
+                return a.bs.chip_id < b.bs.chip_id;
+            }
+            if (a.bs.die_id != b.bs.die_id) {
+                return a.bs.die_id < b.bs.die_id;
+            }
+            return a.bs.port_idx < b.bs.port_idx;
+        });
+
         // 1主3备-DEBUG
         UBS_VLOG_DEBUG("[1m3b-SORT] CreateShareMainUmq BEFORE sort, num=%zu\n", used_ports.size());
         for (size_t i = 0; i < used_ports.size(); ++i) {

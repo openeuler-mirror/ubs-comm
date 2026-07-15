@@ -134,7 +134,7 @@ public:
             Block *last_cache_block = nullptr;
             Block *cache_block = head_block_;
             do {
-                if (rx_total_len + cache_block->cap <= cut_size) {
+                if (rx_total_len + cache_block->cap < cut_size) {
                     // When the size has not yet exceeded cut_size, directly link the block to the end of the list.
                     rx_total_len += cache_block->cap;
                     last_cache_block = cache_block;

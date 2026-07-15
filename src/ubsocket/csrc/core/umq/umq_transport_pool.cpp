@@ -159,6 +159,16 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
             rr_num_ += 1;
         }
 
+        std::sort(used_ports.begin(), used_ports.end(), [](const umq_port_id_t &a, const umq_port_id_t &b) {
+            if (a.bs.chip_id != b.bs.chip_id) {
+                return a.bs.chip_id < b.bs.chip_id;
+            }
+            if (a.bs.die_id != b.bs.die_id) {
+                return a.bs.die_id < b.bs.die_id;
+            }
+            return a.bs.port_idx < b.bs.port_idx;
+        });
+
         // 1主3备-DEBUG
         UBS_VLOG_DEBUG("[1m3b-SORT] CreateOneTp BEFORE sort, num=%zu\n", used_ports.size());
         for (size_t i = 0; i < used_ports.size(); ++i) {
