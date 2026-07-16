@@ -119,80 +119,82 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
         }
     }
 
-    umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
-    traceTime_.umq_poll_start_timestamp_ = ubsocket_get_timeNs_compile();
-    umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
-                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
-                                   traceTime_.umq_poll_start_timestamp_};
-    auto pollNum = UmqApi::umq_poll(main_umq, &poll_option, buf, MAX_EPOLL_WAIT_COUNT);
-    traceTime_.umq_poll_end_timestamp_ = ubsocket_get_timeNs_compile();
-    if (UNLIKELY(pollNum < 0)) {
-        int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::READV, pollNum, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for share jfr RX, main umq: %llu, "
-                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(main_umq), pollNum, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum), savedErrno);
-        return -1;
-    }
-    if (UNLIKELY(pollNum == 0)) {
-        return -1;
-    }
-    // 计算时，排除流控的buffer
-    int fcBufCnt = 0;
-    for (int i = 0; i < pollNum; ++i) {
-        if (buf[i]->status >= UMQ_FAKE_BUF_FC_UPDATE) {
-            ++fcBufCnt;
+    do {
+        umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
+        traceTime_.umq_poll_start_timestamp_ = ubsocket_get_timeNs_compile();
+        umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
+                                       UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
+                                       traceTime_.umq_poll_start_timestamp_};
+        auto pollNum = UmqApi::umq_poll(main_umq, &poll_option, buf, MAX_EPOLL_WAIT_COUNT);
+        traceTime_.umq_poll_end_timestamp_ = ubsocket_get_timeNs_compile();
+        if (UNLIKELY(pollNum < 0)) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::READV, pollNum, savedErrno);
+            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for share jfr RX, main umq: %llu, "
+                         "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(main_umq), pollNum, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum), savedErrno);
+            return -1;
         }
-    }
-
-    int ioPollNum = pollNum - fcBufCnt;
-    if (ioPollNum != 0) {
-        umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
-        umq_buf_t *rx_buf_list =
-            UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), ioPollNum, UMQ_INVALID_HANDLE, &alloc_option);
-        if (LIKELY(rx_buf_list != nullptr)) {
-            umq_buf_t *bad_qbuf = nullptr;
-            traceTime_.umq_post_start_timestamp_ = ubsocket_get_timeNs_compile();
-            umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION | UMQ_IO_OPTION_FLAG_TAG_TIMESTAMP, UMQ_IO_RX,
-                                            UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
-                                            traceTime_.umq_post_start_timestamp_};
-            if (UmqApi::umq_post(main_umq, rx_buf_list, &io_rx_option, &bad_qbuf) != UMQ_SUCCESS) {
-                int savedErrno = errno;
-                errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
-                UBS_VLOG_ERR("[UMQ_API] umq_post() failed for share jfr RX refill, main umq: %llu, "
-                             "mapped errno: %d(%s), original errno: %d\n",
-                             static_cast<unsigned long long>(main_umq), errno,
-                             UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, UMQ_FAIL), savedErrno);
-                UmqApi::umq_buf_free(bad_qbuf);
-            }
-            traceTime_.umq_post_end_timestamp_ = ubsocket_get_timeNs_compile();
+        if (UNLIKELY(pollNum == 0)) {
+            return -1;
         }
-    }
-
-    event_reach_sockets->ClearAll();
-    event_reach_epoll_fds->ClearAll();
-
-    epoll_data_t event_data{};
-    std::vector<SocketPtr> socket_ptrs;
-    std::vector<AsyncEventPoll *> readable_epoll_fds;
-    SiftSocketEventsWithUmqBuffers(buf, pollNum, *event_reach_sockets, socket_ptrs);
-    for (auto &obj : socket_ptrs) {
-        auto socket_obj = obj.Get();
-        ((UmqSocket *)socket_obj)->NewRxEpollIn();
-        auto epoll_fd_obj = (AsyncEventPoll *)(((SocketBase *)socket_obj)->GetAddedEpollFd(event_data));
-        if (LIKELY(epoll_fd_obj != nullptr)) {
-            epoll_fd_obj->AddReadableEvent(event_data);
-            if (!event_reach_epoll_fds->Test(epoll_fd_obj->GetEpollFd())) {
-                readable_epoll_fds.emplace_back(epoll_fd_obj);
-                event_reach_epoll_fds->Set(epoll_fd_obj->GetEpollFd());
+        // 计算时，排除流控的buffer
+        int fcBufCnt = 0;
+        for (int i = 0; i < pollNum; ++i) {
+            if (buf[i]->status >= UMQ_FAKE_BUF_FC_UPDATE) {
+                ++fcBufCnt;
             }
         }
-    }
 
-    for (auto epoll_fd : readable_epoll_fds) {
-        epoll_fd->SetReadableEventFd();
-    }
+        int ioPollNum = pollNum - fcBufCnt;
+        if (ioPollNum != 0) {
+            umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
+            umq_buf_t *rx_buf_list =
+                UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), ioPollNum, UMQ_INVALID_HANDLE, &alloc_option);
+            if (LIKELY(rx_buf_list != nullptr)) {
+                umq_buf_t *bad_qbuf = nullptr;
+                traceTime_.umq_post_start_timestamp_ = ubsocket_get_timeNs_compile();
+                umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION | UMQ_IO_OPTION_FLAG_TAG_TIMESTAMP,
+                                                UMQ_IO_RX, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
+                                                traceTime_.umq_post_start_timestamp_};
+                if (UmqApi::umq_post(main_umq, rx_buf_list, &io_rx_option, &bad_qbuf) != UMQ_SUCCESS) {
+                    int savedErrno = errno;
+                    errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
+                    UBS_VLOG_ERR("[UMQ_API] umq_post() failed for share jfr RX refill, main umq: %llu, "
+                                 "mapped errno: %d(%s), original errno: %d\n",
+                                 static_cast<unsigned long long>(main_umq), errno,
+                                 UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, UMQ_FAIL), savedErrno);
+                    UmqApi::umq_buf_free(bad_qbuf);
+                }
+                traceTime_.umq_post_end_timestamp_ = ubsocket_get_timeNs_compile();
+            }
+        }
+
+        event_reach_sockets->ClearAll();
+        event_reach_epoll_fds->ClearAll();
+
+        epoll_data_t event_data{};
+        std::vector<SocketPtr> socket_ptrs;
+        std::vector<AsyncEventPoll *> readable_epoll_fds;
+        SiftSocketEventsWithUmqBuffers(buf, pollNum, *event_reach_sockets, socket_ptrs);
+        for (auto &obj : socket_ptrs) {
+            auto socket_obj = obj.Get();
+            ((UmqSocket *)socket_obj)->NewRxEpollIn();
+            auto epoll_fd_obj = (AsyncEventPoll *)(((SocketBase *)socket_obj)->GetAddedEpollFd(event_data));
+            if (LIKELY(epoll_fd_obj != nullptr)) {
+                epoll_fd_obj->AddReadableEvent(event_data);
+                if (!event_reach_epoll_fds->Test(epoll_fd_obj->GetEpollFd())) {
+                    readable_epoll_fds.emplace_back(epoll_fd_obj);
+                    event_reach_epoll_fds->Set(epoll_fd_obj->GetEpollFd());
+                }
+            }
+        }
+
+        for (auto epoll_fd : readable_epoll_fds) {
+            epoll_fd->SetReadableEventFd();
+        }
+    } while (GlobalSetting::UBS_SHARE_JFR_LOOP_POLL_ENABLED);
     traceTime_.process_share_jfr_end_timestamp_ = ubsocket_get_timeNs_compile();
     return 0;
 }

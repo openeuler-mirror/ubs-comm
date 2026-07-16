@@ -32,6 +32,7 @@ bool GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED = false;
 bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
 bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
+bool GlobalSetting::UBS_SHARE_JFR_LOOP_POLL_ENABLED = true;
 bool GlobalSetting::UBS_ENABLE_DEGRADE = true;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH = 256;
@@ -64,6 +65,7 @@ uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
 #define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
 #define ENV_ENABLE_SHARE_JFR "UBSOCKET_ENABLE_SHARE_JFR"
+#define ENV_SHARE_JFR_LOOP_POLL_ENABLED "UBSOCKET_SHARE_JFR_LOOP_POLL_ENABLED"
 #define ENV_SHARE_JFR_RX_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH"
 #define ENV_SHARE_JFR_RX_O3_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_O3_QUEUE_DEPTH"
 #define ENV_TRANS_MODE "UBSOCKET_TRANS_MODE"
@@ -114,6 +116,7 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_SPLIT_TRACE_ENABLED, false, "true|false"},
                                     {ENV_AUTO_FALLBACK_TCP, false, "true|false"},
                                     {ENV_ENABLE_SHARE_JFR, false, "true|false"},
+                                    {ENV_SHARE_JFR_LOOP_POLL_ENABLED, false, "true|false"},
                                     {ENV_TRANS_MODE, false, "ub|ib"},
                                     {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"},
                                     {ENV_PROF_ENABLE, false, "true|false"},
@@ -276,6 +279,10 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidate(ENV_ENABLE_SHARE_JFR, strEnvValue)) {
         UBS_ENABLE_SHARE_JFR = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GetEnvAndValidate(ENV_SHARE_JFR_LOOP_POLL_ENABLED, strEnvValue)) {
+        UBS_SHARE_JFR_LOOP_POLL_ENABLED = Func::BoolFromStr(strEnvValue);
     }
 
     if (GetEnvAndValidate(ENV_SHARE_JFR_RX_QUEUE_DEPTH, envValue)) {
