@@ -16,7 +16,10 @@
 #include "umq_errno_converter.h"
 #include "umq_tp_event_epoll_runner_ops.h"
 #include "umq_tp_tx_epoll_runner_ops.h"
+#include "under_api/dl_libc_api.h"
 #include "under_api/dl_umq_api.h"
+
+#include <sys/timerfd.h>
 
 namespace ock {
 namespace ubs {
@@ -54,9 +57,9 @@ Result UmqTransportPool::WarmUp(uint64_t main_umqh)
     }
     UBS_VLOG_INFO("Umq transport pool finished to warm up, size: %zu.\n", PoolSize(main_umqh));
 
-    // 为每个fd注册到epoll_wait监听
-    if (AddPollTxEvent(main_umqh) != UBS_OK) {
-        UBS_VLOG_ERR("Failed to add tx epoll event for fd %llu\n", main_umqh);
+    // 注册定时器定期 poll main_umq tx 释放共享 jetty 资源
+    if (AddTimerEvent(main_umqh) != UBS_OK) {
+        UBS_VLOG_ERR("Failed to add tx poll timer event for the main umq: %llu\n", main_umqh);
         Clean();
         return UBS_ERROR;
     }
@@ -262,30 +265,63 @@ size_t UmqTransportPool::PoolSize(uint64_t main_umqh) const
     return 0;
 }
 
-Result UmqTransportPool::AddPollTxEvent(uint64_t umq_handle)
+Result UmqTransportPool::AddTimerEvent(uint64_t main_umqh)
 {
     Locker lock(mutex_);
     EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
-    for (const auto &tp_pair : umq_tp_pool[umq_handle]) {
-        uint32_t tp_idx = tp_pair.first;
-        const auto &fd_vec = tp_pair.second;
 
-        // 当前Jetty与fd是一对一关系，取第一个即可
-        UmqTpTxEpollRunnerOps::TxEpollEvent *tx_epoll_event =
-            new UmqTpTxEpollRunnerOps::TxEpollEvent{RUNNER_EVENT_TYPE_TP_TX, umq_handle, tp_idx};
-        struct epoll_event umq_tx_event {
-        };
-        umq_tx_event.events = EPOLLIN | EPOLLET;
-        umq_tx_event.data.u64 = reinterpret_cast<uintptr_t>(tx_epoll_event);
-
-        UmqTpTxEpollRunnerOps::TpTxExtContext ctx;
-        ctx.umq_handle = umq_handle;
-        ctx.tp_idx = tp_idx;
-        if (UNLIKELY(epoll_runner.AddEpollEvent(fd_vec[0], &umq_tx_event, &ctx))) {
-            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) tp tx event failed: %d : %s\n", errno, strerror(errno));
-            return UBS_ERROR;
-        }
+    int timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    if (timer_fd < 0) {
+        UBS_VLOG_ERR("timerfd_create failed: %d\n", errno);
+        return UBS_ERROR;
     }
+    auto timer_destroyer = MakeScopeExit([&timer_fd]() {
+        LibcApi::close(timer_fd);
+        timer_fd = -1;
+    });
+
+    // UMQ 要求在 poll 主 umq 时 tp_handle_idx=0
+    auto *tx_epoll_event = new (std::nothrow)
+        UmqTpTxEpollRunnerOps::TxEpollEvent{RUNNER_EVENT_TYPE_TP_TX_TIMER, main_umqh, 0, timer_fd};
+    if (tx_epoll_event == nullptr) {
+        UBS_VLOG_ERR("Unable to alloc TxEpollEvent for tx poll timer\n");
+        return UBS_ERROR;
+    }
+    auto event_cleaner = MakeScopeExit([&tx_epoll_event]() {
+        delete tx_epoll_event;
+        tx_epoll_event = nullptr;
+    });
+
+    struct epoll_event ev = {
+        .events = EPOLLIN,
+        .data =
+            {
+                .u64 = reinterpret_cast<uintptr_t>(tx_epoll_event),
+            },
+    };
+
+    // 设置定时器周期 1ms
+    struct itimerspec interval;
+    interval.it_value.tv_sec = 0;
+    interval.it_value.tv_nsec = 1'000'000;
+    interval.it_interval.tv_sec = 0;
+    interval.it_interval.tv_nsec = 1'000'000;
+    if (timerfd_settime(timer_fd, 0, &interval, nullptr) < 0) {
+        UBS_VLOG_ERR("Failed to timerfd_settime, errno : %d.\n", errno);
+        return -1;
+    }
+
+    // 注册定时器事件
+    UmqTpTxEpollRunnerOps::TpTxExtContext ctx;
+    ctx.umq_handle = main_umqh;
+    ctx.tp_idx = 0;
+    if (epoll_runner.AddEpollEvent(timer_fd, &ev, &ctx) < 0) {
+        UBS_VLOG_ERR("Failed to register timerfd to tp tx epoll runner.\n");
+        return UBS_ERROR;
+    }
+
+    timer_destroyer.Deactivate();
+    event_cleaner.Deactivate();
     return UBS_OK;
 }
 

@@ -10,6 +10,7 @@
 */
 
 #include "umq_tp_tx_epoll_runner_ops.h"
+#include "common/ubsocket_port_cooldown.h"
 #include "umq_backend.h"
 #include "umq_errno_converter.h"
 #include "umq_transport_pool.h"
@@ -24,7 +25,55 @@ namespace umq {
 int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
 {
     TxEpollEvent *tx_epoll_event = reinterpret_cast<TxEpollEvent *>(static_cast<uintptr_t>(event.data.u64));
-    if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX) {
+    if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER) {
+        uint64_t expirations = 0;
+        [[maybe_unused]] ssize_t s = LibcApi::read(tx_epoll_event->timer_fd, &expirations, sizeof(expirations));
+
+        umq_io_option_t poll_option = {
+            UMQ_IO_OPTION_FLAG_DIRECTION | UMQ_IO_OPTION_FLAG_TP_HANDLE_IDX,
+            UMQ_IO_TX,
+            tx_epoll_event->tp_idx,
+        };
+
+        ops_error_code err = ops_error_code::OK;
+        UmqTxHelper::PollArgs args(tx_epoll_event->umq_handle, poll_option, err, nullptr);
+
+        // 直到 poll tx 返回错误、或者 poll 空为止
+        int poll_cnt = 0;
+        do {
+            poll_cnt = UmqTxHelper::PollUmqTx(args, [tx_epoll_event](umq_buf_t *qbuf) {
+                auto buf_pro = (umq_buf_pro_t *)qbuf->qbuf_ext;
+                auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
+                auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
+                if (socket_ptr == nullptr) {
+                    return;
+                }
+
+                // 异步关闭. 等待下次 EPOLLIN 事件时关闭.
+                // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
+                // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
+                LibcApi::shutdown(socket_fd, SHUT_RD);
+                UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", socket_fd);
+                socket_ptr->State(SOCK_STAT_CLOSE);
+
+                // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
+                auto *umq_sock = static_cast<UmqSocket *>(socket_ptr);
+                if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
+                    if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
+                        qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
+                        auto [ports, ports_num] = umq_sock->GetUsedPorts();
+                        for (std::size_t i = 0; i < ports_num; ++i) {
+                            UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",
+                                          ports[i].bs.chip_id, ports[i].bs.die_id, ports[i].bs.port_idx);
+                            PortCooldownManager::MarkPortInCooldown(ports[i]);
+                        }
+                    }
+                }
+            });
+        } while (poll_cnt > 0);
+
+        return UBS_OK;
+    } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX) {
         Locker slock(mutex_);
         umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX,
                                             UMQ_IO_TX, UMQ_FD_IO, tx_epoll_event->tp_idx};
@@ -88,15 +137,16 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
         UBS_VLOG_ERR("Unsupported operation. Check context because context is null.\n");
         return UBS_ERROR;
     }
-    Locker sLock(mutex_);
+
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, event) < 0) {
         return UBS_ERROR;
     }
 
     TxEpollEvent *tx_epoll_event = reinterpret_cast<TxEpollEvent *>(static_cast<uintptr_t>(event->data.u64));
-    InsertSocketEventData(fd, tx_epoll_event);
-    UBS_VLOG_DEBUG("[UMQ_API] Add Tx event, event type: %llu\n", static_cast<uint64_t>(tx_epoll_event->type));
     if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX) {
+        InsertSocketEventData(fd, tx_epoll_event);
+        UBS_VLOG_DEBUG("[UMQ_API] Add Tx event, event type: %llu\n", static_cast<uint64_t>(tx_epoll_event->type));
+
         umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX,
                                             UMQ_IO_TX, UMQ_FD_IO, tp_tx_ctx->tp_idx};
         // Jetty池化场景，开启TX中断
@@ -110,6 +160,9 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
             return UBS_ERROR;
         }
+    } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER) {
+        // 定时器轮询 main_umq tx
+        UBS_VLOG_DEBUG("Add poll tx timer event.\n");
     }
     return UBS_OK;
 }

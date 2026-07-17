@@ -55,14 +55,6 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         return 0;
     }
 
-    PROF_START(CORE_WRITE_POLL_TX);
-    int poll_ret = tx_ops_->PollTx(sock.Get());
-    PROF_END(CORE_WRITE_POLL_TX, poll_ret >= 0);
-    if (poll_ret < 0) {
-        PROF_END(CORE_WRITE, false);
-        return UBS_ERROR;
-    }
-
     PROF_START(CORE_WRITE_POST_SEND);
 
     PROF_START(CORE_WRITE_BUILD_IOV);
