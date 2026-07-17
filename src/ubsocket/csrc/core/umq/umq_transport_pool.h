@@ -54,7 +54,7 @@ private:
 
     Result CreateOneTp(uint64_t main_umqh);
 
-    Result AddPollTxEvent(uint64_t umq_handle);
+    Result AddTimerEvent(uint64_t main_umqh);
 
     Result AddTransportEpollEvent(uint64_t umq_handle);
 

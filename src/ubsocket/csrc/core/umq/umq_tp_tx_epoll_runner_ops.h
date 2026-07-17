@@ -28,6 +28,7 @@ public:
         uint64_t type;
         uint64_t umq_handle;
         uint32_t tp_idx;
+        int timer_fd;
     };
 
     UmqTpTxEpollRunnerOps()
