@@ -196,12 +196,12 @@ public:
         return -1;
     }
 
-    uint32_t GetSockNum()
+    uint32_t GetSockNum(bool skipListen = false)
     {
         uint32_t sockNum = 0;
         ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
             if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
-                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
+                (skipListen && sock->create_type_ == SOCK_CREATE_TYPE_LISTEN)) {
                 return;
             }
             sockNum++;
@@ -263,8 +263,7 @@ public:
             if (doneNum >= sockNum) {
                 return;
             }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
-                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
                 return;
             }
             data->socketId = fd;
@@ -460,7 +459,7 @@ public:
     {
         // collect socket count
         uint32_t headerSize = sizeof(CLIDataHeader);
-        uint32_t sockNum = GetSockNum();
+        uint32_t sockNum = GetSockNum(true);
         uint32_t sockDataSize = sockNum * sizeof(CLISocketData);
         uint32_t totalSize = headerSize + sockDataSize;
         // malloc mem base on socket cnt
@@ -778,8 +777,7 @@ public:
             if (result != UMQ_INVALID_HANDLE) {
                 return;
             }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
-                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
                 return;
             }
             SocketPtr socketPtr(sock);
