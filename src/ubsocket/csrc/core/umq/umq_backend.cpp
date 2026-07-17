@@ -471,33 +471,68 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
     if (result != UBS_OK) {
         return result;
     }
+
     umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto share_jfr_fd = UmqApi::umq_interrupt_fd_get(main_umq_handle, &main_option);
     if (UNLIKELY(share_jfr_fd < 0)) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, share_jfr_fd, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] Failed to get share jfr RX interrupt fd, main umq: %llu, "
-                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+        UBS_VLOG_ERR("[UMQ_API] Failed to get main umq io interrupt fd, main umq: %llu, ret: %d, mapped errno: "
+                     "%d(%s), original errno: %d\n",
                      static_cast<unsigned long long>(main_umq_handle), share_jfr_fd, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, share_jfr_fd), savedErrno);
         return UBS_ERROR;
     }
 
-    RunnerEventData event_data{};
-    event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
-    event_data.event_data.data = share_jfr_fd;
+    RunnerEventData jfr_event_data{};
+    jfr_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
+    jfr_event_data.event_data.data = share_jfr_fd;
 
     struct epoll_event share_jfr_event {
     };
     share_jfr_event.events = EPOLLIN | EPOLLET;
-    share_jfr_event.data.u64 = event_data.u64;
+    share_jfr_event.data.u64 = jfr_event_data.u64;
 
-    UmqShareJfrEpollRunnerOps::ExtContext ctx;
-    ctx.umq_handle = main_umq_handle;
-    if (UNLIKELY(epoll_runner.AddEpollEvent(share_jfr_fd, &share_jfr_event, &ctx))) {
+    UmqShareJfrEpollRunnerOps::ShareJfrExtContext share_jfr_ctx;
+    share_jfr_ctx.umq_handle = main_umq_handle;
+    if (UNLIKELY(epoll_runner.AddEpollEvent(share_jfr_fd, &share_jfr_event, &share_jfr_ctx))) {
         UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
         return UBS_ERROR;
     }
+
+    if (!UmqSetting::UMQ_FLOW_CONTROL_ENABLE) {
+        return UBS_OK;
+    }
+
+    umq_interrupt_option_t retry_rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_RETRY};
+    auto retry_rx_fd = UmqApi::umq_interrupt_fd_get(main_umq_handle, &retry_rx_option);
+    if (UNLIKELY(retry_rx_fd < 0)) {
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, retry_rx_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get main umq io interrupt fd, main umq: %llu, ret: %d, mapped errno: "
+                     "%d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(main_umq_handle), retry_rx_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, retry_rx_fd), savedErrno);
+        return UBS_ERROR;
+    }
+
+    RunnerEventData retry_event_data{};
+    retry_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR_RETRY;
+    retry_event_data.event_data.data = retry_rx_fd;
+
+    struct epoll_event retry_event {
+    };
+    retry_event.events = EPOLLIN | EPOLLET;
+    retry_event.data.u64 = retry_event_data.u64;
+
+    UmqShareJfrEpollRunnerOps::ShareJfrExtContext retry_ctx;
+    retry_ctx.umq_handle = main_umq_handle;
+    retry_ctx.should_rearm_interrupt = false;
+    if (UNLIKELY(epoll_runner.AddEpollEvent(retry_rx_fd, &retry_event, &retry_ctx))) {
+        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr poll retry event failed: %d : %s\n", errno, strerror(errno));
+        return UBS_ERROR;
+    }
+
     return UBS_OK;
 }
 

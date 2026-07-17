@@ -33,6 +33,10 @@ struct UmqPollTraceTime {
 
 class UmqShareJfrEpollRunnerOps : public EpollRunnerOps {
 public:
+    struct ShareJfrExtContext : public ExtContext {
+        bool should_rearm_interrupt = true;
+    };
+
     UmqShareJfrEpollRunnerOps()
     {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
@@ -48,7 +52,7 @@ public:
      */
     int ProcessOneEvent(const struct epoll_event &event) override;
 
-    int ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq);
+    int ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq, bool should_rearm_interrupt);
 
     int ProcessMainUmqRearm(uint64_t main_umq);
 

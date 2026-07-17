@@ -652,6 +652,11 @@ void UmqSocket::SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data)
     }
 }
 
+bool UmqSocket::RxQueueEmpty()
+{
+    return rxQueue->Empty();
+}
+
 } // namespace umq
 } // namespace ubs
 } // namespace ock

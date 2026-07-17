@@ -81,10 +81,9 @@ private:
     umq_buf_list_t head_buf_ = {0};
     umq_buf_list_t tail_buf_ = {0};
 
-    uint32_t unsolicited_bytes_ = 0;                 // length of accumulated work request without setting solicited
-    uint16_t unsolicited_wr_num_ = 0;                // number of accumulated work request without setting solicited
-    uint16_t unsignaled_wr_num_ = 0;                 // number of accumulated work request without setting signaled
-    std::atomic<uint16_t> successful_post_count_{0}; // number of successfully posted work request
+    uint32_t unsolicited_bytes_ = 0;  // length of accumulated work request without setting solicited
+    uint16_t unsolicited_wr_num_ = 0; // number of accumulated work request without setting solicited
+    uint16_t unsignaled_wr_num_ = 0;  // number of accumulated work request without setting signaled
 };
 } // namespace umq
 } // namespace ubs

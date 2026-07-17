@@ -245,6 +245,8 @@ Result UmqTransportPool::RebuildTp(uint64_t main_umqh, uint32_t old_tp_idx)
         UBS_VLOG_ERR("Failed to destroy tp (idx: %u) of umq %llu\n", old_tp_idx, main_umqh);
         return UBS_ERROR;
     }
+    const auto fd_vec = tp_pair->second;
+    EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).DelEpollEvent(fd_vec[0]);
     tp_map.erase(tp_pair);
     CreateOneTp(main_umqh);
     return UBS_OK;

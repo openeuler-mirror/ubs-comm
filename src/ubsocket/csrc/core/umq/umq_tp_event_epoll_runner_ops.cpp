@@ -25,14 +25,13 @@ int UmqTpEventEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
 
     if (event_data.event_data.type == RUNNER_EVENT_TYPE_TP_EVENT) {
         Locker slock(mutex_);
-        // 获取eventfd值，决定唤醒多少个umq
         uint64_t cnt;
         if (eventfd_read(event_data.event_data.data, &cnt) == -1) {
             char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("eventfd_read() failed, fd: %d, errno: %d, errmsg: %s\n", event_data.event_data.data, errno,
                          strerror(errno));
         }
-        UmqTpWaitQueue::Instance().WakeUp(cnt);
+        UmqTpWaitQueue::Instance().TryWakeupOne();
         return UBS_OK;
     } else {
         UBS_VLOG_ERR("async_epoll unknown event:(events:%x, data.type:%lu)\n", event.events,

@@ -50,6 +50,15 @@ typedef struct umq_external_rw_lock_ops {
     int (*try_write_lock)(umq_external_rwlock_t *m);
 } umq_external_rwlock_ops_t;
 
+typedef void* util_external_thread_key_t;
+
+typedef struct umq_external_thread_key_ops {
+    util_external_thread_key_t *(*key_create)(void (*destr_function)(void *data));
+    int (*key_delete)(util_external_thread_key_t *key);
+    int (*setspecific)(util_external_thread_key_t *key, const void *data);
+    void *(*getspecific)(util_external_thread_key_t *key);
+} umq_external_thread_key_ops_t;
+
 typedef enum umq_log_level {
     UMQ_LOG_LEVEL_EMERG = 0,
     UMQ_LOG_LEVEL_ALERT,
@@ -89,8 +98,9 @@ typedef enum umq_io_direction {
 } umq_io_direction_t;
 
 typedef enum umq_fd_type {
-    UMQ_FD_IO = 0,      // get the fd related to I/O
-    UMQ_FD_EVENT,       // get the fd related to inner event, example return credit event
+    UMQ_FD_IO = 0,          // get the fd related to I/O
+    UMQ_FD_EVENT,           // get the fd related to inner event, example return credit event
+    UMQ_FD_RETRY,           // get the fd related to inner event, reprocess flow control messages
 } umq_fd_type_t;
 
 typedef enum umq_queue_mode {
@@ -225,6 +235,11 @@ typedef struct umq_flow_control_cfg {
     uint16_t pending_credit_threshold;
     // use atomic variables as flow control window
     bool use_atomic_window;
+    bool is_limited;
+    // flow control credit req rsp timeout in ms. <0 (e.g. -1) means never timeout, 0 means use default(1s),
+    // positive value is clamped to max 60000(60s). When the peer is stuck/dead and the credit rsp never returns
+    // within this duration, post_tx breaks the link.
+    int32_t fc_req_timeout_ms;
 } umq_flow_control_cfg_t;
 
 typedef enum umq_buf_block_size {
