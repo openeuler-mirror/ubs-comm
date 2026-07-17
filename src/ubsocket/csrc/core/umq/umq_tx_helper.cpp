@@ -57,6 +57,7 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
     if (trace != nullptr) {
         cqe_start = ubsocket_get_timeNs_compile();
     }
+    std::unordered_map<int, int> socket_wr_cnt_map{};
     for (int i = 0; i < poll_num; ++i) {
         if (buf[i] == nullptr || buf[i]->status != 0 || (((umq_buf_pro_t *)buf[i]->qbuf_ext) == nullptr) ||
             (first_qbuf = (umq_buf_t *)((umq_buf_pro_t *)(buf[i]->qbuf_ext))->user_ctx) == nullptr) {
@@ -91,6 +92,19 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
         }
 
         wr_cnt += cur_wr_cnt;
+
+        auto buf_pro = (umq_buf_pro_t *)buf[i]->qbuf_ext;
+        int socket_fd = raw_socket >= 0 ? raw_socket : static_cast<int>(buf_pro->umq_ctx);
+        if (socket_fd >= 0) {
+            socket_wr_cnt_map[socket_fd] += cur_wr_cnt;
+        }
+    }
+
+    for (const auto &[fd, count] : socket_wr_cnt_map) {
+        auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+        auto umq_sk = RefStaticCast<UmqSocket>(sock);
+        auto tx_ops = umq_sk->GetTx()->GetTxOps();
+        tx_ops->tx_queue_avail_num_.fetch_add(count, std::memory_order_acq_rel);
     }
 
     if (trace != nullptr) {
@@ -302,7 +316,7 @@ int UmqTxHelper::PollUmqTxForFcReturn(uint64_t umq_handle)
     poll_args.silent_poll_err = UmqSetting::UMQ_TP_TYPE == POOL;
 
     int ret = PollUmqTx(poll_args, [](umq_buf_t *qbuf) {});
-    if (!poll_args.silent_poll_err && ret < 0) {
+    if (poll_args.silent_poll_err && ret < 0) {
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
         if (errno == EMLINK) {

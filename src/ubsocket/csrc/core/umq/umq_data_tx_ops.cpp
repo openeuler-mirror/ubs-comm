@@ -265,7 +265,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     if (ret == UMQ_SUCCESS) {
         // 全部 post成功
         tx_queue_avail_num_.fetch_sub(batch, std::memory_order_acq_rel);
-        successful_post_count_.fetch_add(batch, std::memory_order_acq_rel);
         PROF_END(CORE_WRITE_UMQ_POST, true);
         if (GlobalSetting::UBS_TRACE_ENABLED) {
             SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
@@ -297,7 +296,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             UBS_VLOG_DEBUG(
                 "[Debug] umq_post() suspended: no enough buffers. Queued for automatic retry. socket fd: %d\n",
                 sock->raw_socket_);
-            PollUmqTx(sock.Get(), true);
             UmqTpWaitQueue::Instance().Enqueue(sock);
             errno = EAGAIN;
         } else {
@@ -497,7 +495,6 @@ int UmqTxOps::PollUmqTx(Socket *sock, bool poll_to_empty)
         poll_total_cnt += (uint32_t)poll_cnt;
     } while ((poll_total_cnt < TX_RETRIEVE_THRESHOLD || (poll_to_empty && poll_cnt > 0)) &&
              poll_zero_cnt < POLL_TX_RETRY_MAX_CNT && err_code == ops_error_code::OK);
-    tx_queue_avail_num_.fetch_add(poll_total_cnt, std::memory_order_acq_rel);
     return 0;
 }
 
@@ -507,11 +504,6 @@ int UmqTxOps::PollUmqTxOnce(Socket *sock)
     ops_error_code err_code = OK;
     int poll_cnt = DoUmqTxPoll(sock, err_code);
     PROF_END(CORE_WRITE_DO_TX_POLL, poll_cnt >= 0);
-
-    if (poll_cnt > 0) {
-        tx_queue_avail_num_.fetch_add(poll_cnt, std::memory_order_acq_rel);
-        successful_post_count_.fetch_sub(poll_cnt, std::memory_order_acq_rel);
-    }
     return 0;
 }
 
@@ -527,24 +519,15 @@ void UmqTxOps::WakeUpTx(Socket *sock)
 
 bool UmqTxOps::Writable(const SocketPtr &sock)
 {
-    UmqTpWaitQueue &queue = UmqTpWaitQueue::Instance();
-    if (UmqSetting::UMQ_TP_TYPE == POOL && queue.Empty()) {
+    if (UmqSetting::UMQ_TP_TYPE != POOL) {
         return true;
     }
-    /**
-     * Jetty资源等待队列不为空：
-     * 1. 已经在等待队列的连接，继续等待，等待有空闲资源后按照先入先出顺序唤醒
-     * 2. 已唤醒的连接，状态为可写，往下执行重试Write
-     * 3. 新来的连接，由于已有连接在等待，默认无法获取资源，直接进入就等待队列
-     */
+
     UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
     if (umqSock->GetJettyAllocState() == JettyAllocState::WAITING) {
         return false;
-    } else if (umqSock->GetJettyAllocState() == JettyAllocState::IDLE) {
-        return true;
     } else {
-        queue.Enqueue(sock);
-        return false;
+        return true;
     }
 }
 
@@ -638,7 +621,6 @@ uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, um
     unsolicited_bytes_ = _unsolicited_bytes;
     unsignaled_wr_num_ = _unsignaled_wr_num;
     tx_queue_avail_num_.fetch_sub(wr_cnt, std::memory_order_acq_rel);
-    successful_post_count_.fetch_add(wr_cnt, std::memory_order_acq_rel);
     *buf_num = wr_cnt;
 
     QBUF_LIST_FIRST(&head_buf_) = head_qbuf_;
@@ -682,7 +664,6 @@ void UmqTxOps::FlushTx(Socket *sock, uint32_t timeout_ms)
         poll_total_cnt += static_cast<uint32_t>(poll_cnt);
     } while (sock->Type() != SocketType::SOCK_TYPE_COUNT && poll_total_cnt < threshold &&
              err_code != ops_error_code::FATAL_ERROR);
-    tx_queue_avail_num_.fetch_add(poll_total_cnt, std::memory_order_relaxed);
 
     if (err_code != ops_error_code::FATAL_ERROR &&
         tx_queue_avail_num_.load(std::memory_order_relaxed) < GlobalSetting::UBS_TX_DEPTH && unsignaled_wr_num_ > 0) {

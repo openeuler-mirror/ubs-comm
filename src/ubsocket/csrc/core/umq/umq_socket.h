@@ -31,9 +31,8 @@ namespace umq {
 
 enum class JettyAllocState
 {
-    IDLE,    // 空闲状态，不需要申请Jetty资源
+    IDLE,    // 空闲状态
     WAITING, // 等待Jetty资源分配
-    READY    // Jetty有空闲资源，准备分配
 };
 
 using UmqSocketSeq =
@@ -154,14 +153,21 @@ public:
         }
     }
 
-    ALWAYS_INLINE void SetJettyAllocState(JettyAllocState state)
+    ALWAYS_INLINE bool TryAcquireForWaiting() noexcept
     {
-        jetty_alloc_state = state;
+        JettyAllocState expected = JettyAllocState::IDLE;
+        return jetty_alloc_state_.compare_exchange_strong(expected, JettyAllocState::WAITING, std::memory_order_acq_rel,
+                                                          std::memory_order_relaxed);
     }
 
-    ALWAYS_INLINE JettyAllocState GetJettyAllocState() const
+    ALWAYS_INLINE void ResetToIdle() noexcept
     {
-        return jetty_alloc_state;
+        jetty_alloc_state_.store(JettyAllocState::IDLE, std::memory_order_release);
+    }
+
+    ALWAYS_INLINE JettyAllocState GetJettyAllocState() noexcept
+    {
+        return jetty_alloc_state_.load(std::memory_order_acquire);
     }
 
     Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) override;
@@ -178,6 +184,7 @@ public:
     int AddQbuf(umq_buf_t *qbuf);
     int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
     void FlushRxQueue();
+    bool RxQueueEmpty();
     Result CheckDevAdd(const umq_eid_t &conn_eid);
 
     std::tuple<const umq_port_id_t *, std::size_t> GetUsedPorts() const;
@@ -213,7 +220,7 @@ private:
 
     UmqBufferReceiveQueue *rxQueue = nullptr;
 
-    JettyAllocState jetty_alloc_state = JettyAllocState::IDLE;
+    std::atomic<JettyAllocState> jetty_alloc_state_{JettyAllocState::IDLE};
 
     // 异常 CQE 时标记这些 port 不可用
     std::unique_ptr<umq_port_id_t[]> used_ports_;

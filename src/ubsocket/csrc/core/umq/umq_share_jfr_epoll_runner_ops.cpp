@@ -31,7 +31,8 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessOneEvent(const struct epoll_
     RunnerEventData event_data{};
 
     event_data.u64 = event.data.u64;
-    if (event_data.event_data.type == RUNNER_EVENT_TYPE_SHARE_JFR) {
+    if (event_data.event_data.type == RUNNER_EVENT_TYPE_SHARE_JFR ||
+        event_data.event_data.type == RUNNER_EVENT_TYPE_SHARE_JFR_RETRY) {
         Locker slock(mutex_);
         auto pos = jfr_main_umq_.find(static_cast<int>(event_data.event_data.data));
         if (pos != jfr_main_umq_.end()) {
@@ -45,7 +46,7 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessOneEvent(const struct epoll_
     }
 
     if (main_umq != 0) {
-        return ProcessShareJfrEvent(event, main_umq);
+        return ProcessShareJfrEvent(event, main_umq, event_data.event_data.type == RUNNER_EVENT_TYPE_SHARE_JFR);
     }
 
     if (socket_object == nullptr) {
@@ -94,10 +95,11 @@ void UmqShareJfrEpollRunnerOps::HandleSubUmqPollBuffers(Socket *socketObject, um
     }
 }
 
-ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq)
+ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq,
+                                                                  bool should_rearm_interrupt)
 {
     traceTime_.umq_rearm_start_timestamp_ = ubsocket_get_timeNs_compile();
-    if (UNLIKELY(ProcessMainUmqRearm(main_umq) < 0)) {
+    if (should_rearm_interrupt && UNLIKELY(ProcessMainUmqRearm(main_umq) < 0)) {
         return -1;
     }
     traceTime_.umq_rearm_end_timestamp_ = ubsocket_get_timeNs_compile();
@@ -217,7 +219,8 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
             last_socket_fd = socket_fd;
         }
         if (UNLIKELY(socket_ptr.Get() == nullptr)) {
-            UBS_VLOG_WARN("async_epoll: socket fd: %d object is null, skipping event processing. \n", socket_fd);
+            UBS_VLOG_DEBUG("[Debug] async_epoll: socket fd: %d object is null, skipping event processing. \n",
+                           socket_fd);
             continue;
         }
 
@@ -297,25 +300,28 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessMainUmqRearm(uint64_t main_u
 
 int UmqShareJfrEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_event *event, ExtContext *ctx)
 {
-    if (ctx == nullptr) {
+    ShareJfrExtContext *share_jfr_ctx = dynamic_cast<ShareJfrExtContext *>(ctx);
+    if (share_jfr_ctx == nullptr) {
         UBS_VLOG_ERR("Unsupported operation. Check context because context is null.\n");
         return UBS_ERROR;
     }
-    if (InsertJfrMainUmq(fd, ctx->umq_handle, epoll_fd, event) < 0) {
+    if (InsertJfrMainUmq(fd, share_jfr_ctx->umq_handle, epoll_fd, event) < 0) {
         UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) share jfr event failed: %d : %s\n", errno, strerror(errno));
         return UBS_ERROR;
     }
 
-    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-    int ret = UmqApi::umq_rearm_interrupt(ctx->umq_handle, false, &rx_option);
-    if (ret < 0) {
-        int savedErrno = errno;
-        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
-        UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for share jfr RX, "
-                     "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(ctx->umq_handle), ret, errno,
-                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
-        return UBS_ERROR;
+    if (share_jfr_ctx->should_rearm_interrupt) {
+        umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+        int ret = UmqApi::umq_rearm_interrupt(ctx->umq_handle, false, &rx_option);
+        if (ret < 0) {
+            int savedErrno = errno;
+            errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, ret, savedErrno);
+            UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for share jfr RX, "
+                         "main umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                         static_cast<unsigned long long>(ctx->umq_handle), ret, errno,
+                         UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, ret), savedErrno);
+            return UBS_ERROR;
+        }
     }
     return UBS_OK;
 }

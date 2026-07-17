@@ -536,7 +536,7 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
 
     if (LIKELY(socket_readable)) {
         uint64_t val = 0;
-        if (read(sock_readable_fd_, &val, sizeof(val)) < 0) {
+        if (sock_readable_fd_ >= 0 && read(sock_readable_fd_, &val, sizeof(val)) < 0) {
             if (errno != EAGAIN && errno != EWOULDBLOCK) {
                 char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
                 UBS_VLOG_ERR("Read sock_readable_fd_ failed, fd: %d, errno: %d, errmsg: %s\n", sock_readable_fd_, errno,

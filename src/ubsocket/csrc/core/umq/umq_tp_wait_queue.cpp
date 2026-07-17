@@ -23,21 +23,26 @@ int UmqTpWaitQueue::Enqueue(const SocketPtr &sock)
         return UBS_ERROR;
     }
     UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-    if (umqSock->GetJettyAllocState() == JettyAllocState::IDLE) {
-        // sock状态为IDLE，入队
+    if (umqSock->TryAcquireForWaiting()) {
         UmqTpWaitQueueElement element(sock);
         if (Push(std::move(element))) {
-            umqSock->SetJettyAllocState(JettyAllocState::WAITING);
+            return UBS_OK;
         } else {
+            umqSock->ResetToIdle();
             return UBS_ERROR;
         }
     }
+
     return UBS_OK;
 }
 
 int UmqTpWaitQueue::TryWakeupOne()
 {
     UmqTpWaitQueueElement element;
+    if (Empty()) {
+        UBS_VLOG_DEBUG("[Debug] umq tp wait queue is empty.\n");
+        return UBS_OK;
+    }
     if (!Pop(element)) {
         UBS_VLOG_ERR("Failed to wake up socket for available jetty.\n");
         return UBS_ERROR;
@@ -47,10 +52,15 @@ int UmqTpWaitQueue::TryWakeupOne()
         SocketPtr sock = element.GetSockPtr();
         // optimize：sock状态更改为等待资源，并唤醒
         UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-        umqSock->SetJettyAllocState(JettyAllocState::READY);
+        umqSock->ResetToIdle();
+        if (!umqSock->RxQueueEmpty()) {
+            umqSock->NotifyReadable();
+        }
+        UBS_VLOG_DEBUG("[Debug] umq tp wait queue wake up socket fd: %d.\n", sock->raw_socket_);
     } else if (element.GetType() == UMQ_HANDLE) {
         uint64_t umq_handle = element.GetUmqHandle();
         UmqTxHelper::PollUmqTxForFcReturn(umq_handle);
+        UBS_VLOG_DEBUG("[Debug] umq tp wait queue wake up umq handle: %lu.\n", umq_handle);
     } else {
         UBS_VLOG_WARN("Unsupported element type.\n");
     }
@@ -70,7 +80,10 @@ uint32_t UmqTpWaitQueue::WakeUp(uint32_t wakeUpNum)
             SocketPtr sock = element.GetSockPtr();
             // optimize：sock状态更改为等待资源，并唤醒
             UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-            umqSock->SetJettyAllocState(JettyAllocState::READY);
+            umqSock->ResetToIdle();
+            if (!umqSock->RxQueueEmpty()) {
+                umqSock->NotifyReadable();
+            }
             UBS_VLOG_DEBUG("[Debug] umq tp wait queue wake up socket fd: %d.\n", sock->raw_socket_);
         } else if (element.GetType() == UMQ_HANDLE) {
             uint64_t umq_handle = element.GetUmqHandle();
