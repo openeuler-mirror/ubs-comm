@@ -67,7 +67,7 @@ enum class CLIErrorCode : uint8_t
 struct __attribute__((packed)) CLIControlHeader {
     CLICommand mCmdId;
     CLIErrorCode mErrorCode;
-    uint16_t mDataSize;
+    uint32_t mDataSize;
     umq_eid_t srcEid;
     umq_eid_t dstEid;
     CLITypeParam mType;

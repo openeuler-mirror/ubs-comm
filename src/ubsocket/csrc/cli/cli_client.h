@@ -16,7 +16,7 @@
 namespace Statistics {
 class CLIClient {
 public:
-    static constexpr size_t maxResponseSize = 1 * 1024 * 1024; // 1M
+    static constexpr size_t maxResponseSize = 32 * 1024 * 1024; // 32M
     static constexpr uint32_t cliclientIoTimeoutMs = 200;
 
     explicit CLIClient(std::string severPath, int pid)
