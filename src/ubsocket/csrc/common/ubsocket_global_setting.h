@@ -100,8 +100,6 @@ public:
     static bool UBS_ENABLE_SHARE_JFR;                /* if enable share jfr, from env */
     static bool UBS_SHARE_JFR_LOOP_POLL_ENABLED;     /* if enable share jfr loop poll, from env */
     static bool UBS_ENABLE_DEGRADE;                  /* if enable degrade, from env */
-    static uint32_t UBS_SHARE_JFR_RX_QUEUE_DEPTH;    /* share jfr queue depth, from env */
-    static uint32_t UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH; /* rx out of order queue depth, from env */
     static uint32_t UBS_TX_DEPTH;                    /* tx queue depth, from env */
     static uint32_t UBS_RX_DEPTH;                    /* rx queue depth, from env */
     static bool UBS_PROF_ENABLE;

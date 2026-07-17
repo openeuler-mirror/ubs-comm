@@ -29,9 +29,7 @@ namespace umq {
 
 UmqBufferReceiveQueue::UmqBufferReceiveQueue()
 {
-    uint64_t queue_depth = GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH != 0 ?
-                               GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH :
-                               UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH;
+    uint64_t queue_depth = GlobalSetting::UBS_RX_DEPTH;
     queue_depth = (queue_depth <= 1) ? 1 : 1ULL << (64 - __builtin_clzll(queue_depth - 1));
     receive_queue = new (std::nothrow) SPSCRingQueue<umq_buf_t *>(queue_depth);
     if (receive_queue == nullptr) {
@@ -41,9 +39,7 @@ UmqBufferReceiveQueue::UmqBufferReceiveQueue()
 
     use_o3_ = (UmqSetting::UMQ_UB_TRANS_MODE == RM_CTP);
     if (use_o3_) {
-        uint32_t o3_queue_depth = GlobalSetting::UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH != 0 ?
-                                      GlobalSetting::UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH :
-                                      UmqSetting::UMQ_SHARE_JFR_RX_O3_QUEUE_DEPTH;
+        uint32_t o3_queue_depth = GlobalSetting::UBS_RX_DEPTH;
         if (o3_queue_depth > queue_depth) {
             o3_queue_depth = queue_depth;
             UBS_VLOG_WARN("O3 queue depth exceeds shared jfr rx queue depth; use share jfr rx depth instead.\n");

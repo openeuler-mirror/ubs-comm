@@ -54,8 +54,6 @@ public:
     static umq_trans_mode_t IO_TRANS_MODE;
     static umq_trans_mode_t UMQ_TRANS_MODE;
     static int UMQ_PROCESS_SOCKET_ID;
-    static uint32_t UMQ_SHARE_JFR_RX_QUEUE_DEPTH;
-    static uint32_t UMQ_SHARE_JFR_RX_O3_QUEUE_DEPTH;
     static std::vector<uint32_t> UMQ_ALL_SOCKET_IDS;
     static std::string UMQ_DEV_SCHEDULE_POLICY_NAME;
     static dev_schedule_policy UMQ_DEV_SCHEDULE_POLICY;
@@ -86,6 +84,7 @@ private:
     static Result LoadEnv() noexcept;
     static Result VerifySetting() noexcept;
 
+    static umq_buf_block_size_t DefaultBlockTypeCheck() noexcept;
     static umq_buf_block_size_t BlockTypeFromStr(const std::string &typeStr) noexcept;
     static umq_tiny_buf_block_size_t TinyBlockSizeFromStr(const std::string &typeStr) noexcept;
     static umq_trans_mode_t TransModeFromStr(const std::string &typeStr) noexcept;

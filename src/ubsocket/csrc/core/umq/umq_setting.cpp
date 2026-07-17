@@ -31,15 +31,11 @@ namespace umq {
 #define ENV_UMQ_TLS_TINY_POOL_DEPTH "UBSOCKET_UMQ_TLS_TINY_POOL_DEPTH"
 #define ENV_UMQ_TLS_EXPAND_TINY_POOL_DEPTH "UBSOCKET_UMQ_TLS_EXPAND_TINY_POOL_DEPTH"
 #define ENV_UMQ_SCHEDULE_POLICY "UBSOCKET_SCHEDULE_POLICY"
-#define ENV_UMQ_DEV_IP "UBSOCKET_DEV_IP"
-#define ENV_UMQ_DEV_NAME "UBSOCKET_DEV_NAME"
-#define ENV_UMQ_DEV_SRC_EID "UBSOCKET_SRC_EID"
-#define ENV_UMQ_EID_IDX "UBSOCKET_EID_IDX"
 #define ENV_UMQ_UB_TRANS_MODE "UBSOCKET_UB_TRANS_MODE"
 #define ENV_UMQ_FLOW_CONTROL_ENABLED "UBSOCKET_FLOW_CONTROL_ENABLE"
 #define ENV_UMQ_LINK_PRIORITY "UBSOCKET_LINK_PRIORITY"
-#define ENV_UMQ_TP_TYPE "UBSOCKET_TP_TYPE"
-#define ENV_UMQ_TP_POOL_SIZE "UBSOCKET_TP_POOL_SIZE"
+#define ENV_UMQ_TP_TYPE "UBSOCKET_JETTY_TYPE"
+#define ENV_UMQ_TP_POOL_SIZE "UBSOCKET_JETTY_POOL_SIZE"
 #define ENV_UMQ_MAX_O3_GAP "UBSOCKET_MAX_O3_GAP"
 #define ENV_UMQ_O3_TIMEOUT_MS "UBSOCKET_O3_TIMEOUT_MS"
 
@@ -49,13 +45,13 @@ namespace umq {
 #define CPU_AFFINITY_PRIORITY_DEV_SCHEDULE_POLICY "affinity_priority"
 
 umq_buf_block_size_t UmqSetting::IO_BLOCK_TYPE = BLOCK_SIZE_8K;
-uint16_t UmqSetting::UMQ_FC_DEFAULT_CREDIT = 1024L;
-uint16_t UmqSetting::UMQ_FC_MAX_CREDIT = 1024L;
+uint16_t UmqSetting::UMQ_FC_DEFAULT_CREDIT = 16L;
+uint16_t UmqSetting::UMQ_FC_MAX_CREDIT = 256L;
 uint16_t UmqSetting::UMQ_FC_MIN_CREDIT = 2;
 uint64_t UmqSetting::UMQ_IO_TOTAL_SIZE_MB = 1024;
 uint64_t UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB = 200;
 uint64_t UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB = 2048;
-uint64_t UmqSetting::UMQ_BUF_POOL_DEPTH = 12000;
+uint64_t UmqSetting::UMQ_BUF_POOL_DEPTH = 24576;
 bool UmqSetting::UMQ_TINY_POOL_ENABLE = true;
 umq_tiny_buf_block_size_t UmqSetting::UMQ_TINY_POOL_BLOCK_SIZE = TINY_BLOCK_SIZE_1K;
 uint32_t UmqSetting::UMQ_TINY_POOL_BLOCK_COUNT = 8192;
@@ -64,8 +60,6 @@ int UmqSetting::UMQ_PROCESS_SOCKET_ID = -1;
 std::vector<uint32_t> UmqSetting::UMQ_ALL_SOCKET_IDS = {};
 uint32_t UmqSetting::UMQ_POST_BATCH_MAX = 256UL;
 uint32_t UmqSetting::UMQ_EID_INDEX = 0;
-uint32_t UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
-uint32_t UmqSetting::UMQ_SHARE_JFR_RX_O3_QUEUE_DEPTH = 256;
 std::string UmqSetting::UMQ_DEV_NAME = "";
 std::string UmqSetting::UMQ_DEV_IP = "";
 std::string UmqSetting::UMQ_DEV_SRC_EID_STR = "";
@@ -101,10 +95,10 @@ void UmqSetting::AddRules() noexcept
                                {ENV_UMQ_TLS_EXPAND_TINY_POOL_DEPTH, false, 0, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_MAX_O3_GAP, false, 2, 10240},
                                {ENV_UMQ_O3_TIMEOUT_MS, false, 2, 1000},
-                               {ENV_UMQ_EID_IDX, false, 0, std::numeric_limits<int64_t>::max()}};
+                               {ENV_UMQ_UBF_POOL_DEPTH, false, 1, std::numeric_limits<int64_t>::max()}};
 
     /* str enum rules: name, required, enum */
-    StrEnumRule rules_str_enum[] = {{ENV_UMQ_BLOCK_TYPE, false, "tiny|default|small|medium|large"},
+    StrEnumRule rules_str_enum[] = {{ENV_UMQ_BLOCK_TYPE, false, "default|large"},
                                     {ENV_UMQ_TINY_POOL_ENABLE, false, "true|false"},
                                     {ENV_UMQ_TINY_POOL_BLOCK_SIZE, false, "512|1024|2048|4096|8192|1K|2K|4K|8K"},
                                     {ENV_UMQ_SCHEDULE_POLICY, false, "rr|affinity|affinity_priority"},
@@ -112,19 +106,12 @@ void UmqSetting::AddRules() noexcept
                                     {ENV_UMQ_FLOW_CONTROL_ENABLED, false, "true|false"},
                                     {ENV_UMQ_TP_TYPE, false, "single|pool"}};
 
-    /* str not empty rules: name, required */
-    StrNotEmptyRule rules_str_not_empty[] = {{ENV_UMQ_DEV_NAME, false}, {ENV_UMQ_DEV_SRC_EID, false}};
-
     for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
     }
 
     for (auto &item : rules_str_enum) {
         Validator::Instance().AddStrEnumRule(item);
-    }
-
-    for (auto &item : rules_str_not_empty) {
-        Validator::Instance().AddStrNotEmtpyRule(item);
     }
 
     UBS_SLOG_DEBUG(Validator::Instance().DumpString());
@@ -150,10 +137,6 @@ Result UmqSetting::LoadEnv() noexcept
         UMQ_FC_MIN_CREDIT = static_cast<uint16_t>(int64EnvValue);
     }
 
-    if (GS::GetEnvAndValidate(ENV_UMQ_BLOCK_TYPE, strEnvValue)) {
-        IO_BLOCK_TYPE = BlockTypeFromStr(strEnvValue);
-    }
-
     if (GS::GetEnvAndValidate(ENV_UMQ_MEM_POOL_INIT_SIZE, int64EnvValue)) {
         UMQ_MEM_POOL_INIT_SIZE_MB = static_cast<uint64_t>(int64EnvValue);
     }
@@ -174,6 +157,10 @@ Result UmqSetting::LoadEnv() noexcept
         UMQ_TINY_POOL_BLOCK_COUNT = static_cast<uint32_t>(int64EnvValue);
     }
 
+    if (GS::GetEnvAndValidate(ENV_UMQ_UBF_POOL_DEPTH, int64EnvValue)) {
+        UMQ_BUF_POOL_DEPTH = static_cast<uint64_t>(int64EnvValue);
+    }
+
     if (GS::GetEnvAndValidate(ENV_UMQ_TLS_TINY_POOL_DEPTH, int64EnvValue)) {
         UMQ_TLS_TINY_POOL_DEPTH = static_cast<uint64_t>(int64EnvValue);
     }
@@ -190,24 +177,8 @@ Result UmqSetting::LoadEnv() noexcept
         UMQ_TP_POOL_SIZE = static_cast<uint32_t>(int64EnvValue);
     }
 
-    if (GS::GetEnvAndValidate(ENV_UMQ_DEV_IP, strEnvValue)) {
-        UMQ_DEV_IP = strEnvValue;
-    }
-
-    if (GS::GetEnvAndValidateNotEmpty(ENV_UMQ_DEV_NAME, strEnvValue)) {
-        UMQ_DEV_NAME = strEnvValue;
-    }
-
     if (GS::GetEnvAndValidate(ENV_UMQ_LINK_PRIORITY, int64EnvValue)) {
         UMQ_LINK_PRIORITY = static_cast<int8_t>(int64EnvValue);
-    }
-
-    if (GS::GetEnvAndValidate(ENV_UMQ_EID_IDX, int64EnvValue)) {
-        UMQ_EID_INDEX = static_cast<uint32_t>(int64EnvValue);
-    }
-
-    if (GS::GetEnvAndValidateNotEmpty(ENV_UMQ_DEV_SRC_EID, strEnvValue)) {
-        UMQ_DEV_SRC_EID_STR = strEnvValue;
     }
 
     if (GS::GetEnvAndValidate(ENV_UMQ_FLOW_CONTROL_ENABLED, strEnvValue)) {
@@ -218,21 +189,6 @@ Result UmqSetting::LoadEnv() noexcept
         UMQ_DEV_SCHEDULE_POLICY_NAME = strEnvValue;
         UMQ_DEV_SCHEDULE_POLICY = SchedulePolicyFromStr(strEnvValue);
         UBS_VLOG_INFO("Current policy type: %s", UMQ_DEV_SCHEDULE_POLICY_NAME.c_str());
-    }
-
-    if (UMQ_DEV_IP.size() > 0) {
-        UBS_VLOG_ERR("IP address is invalid. Please double check your input(%s)\n", UMQ_DEV_IP.c_str());
-        return UBS_INVALID_PARAM;
-    } else if (UMQ_DEV_NAME.size() > 0) {
-        UBS_VLOG_INFO("%s: %s\n", ENV_UMQ_DEV_NAME, UMQ_DEV_NAME.c_str());
-        if (UMQ_DEV_SRC_EID_STR.size() > 0) {
-            if (inet_pton(AF_INET6, UMQ_DEV_SRC_EID_STR.c_str(), &(UMQ_LOCAL_EID)) == 1) {
-                UBS_VLOG_INFO("%s: %s (eid)\n", ENV_UMQ_DEV_SRC_EID, UMQ_DEV_SRC_EID_STR.c_str());
-            } else {
-                UBS_VLOG_ERR("Eid is invalid. Please double check your input(%s)\n", UMQ_DEV_SRC_EID_STR.c_str());
-                return UBS_INVALID_PARAM;
-            }
-        }
     }
 
     if (GS::GetEnvAndValidate(ENV_UMQ_UB_TRANS_MODE, strEnvValue)) {
@@ -259,6 +215,12 @@ Result UmqSetting::LoadEnv() noexcept
             UMQ_UB_TP_TYPE = UMQ_TP_TYPE_RTP;
         }
         UBS_VLOG_INFO("Current ub trans mode");
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_BLOCK_TYPE, strEnvValue)) {
+        IO_BLOCK_TYPE = BlockTypeFromStr(strEnvValue);
+    } else {
+        IO_BLOCK_TYPE = DefaultBlockTypeCheck();
     }
 
     return UBS_OK;
@@ -339,21 +301,20 @@ uint64_t UmqSetting::FloorMask() noexcept
     }
 }
 
+umq_buf_block_size_t UmqSetting::DefaultBlockTypeCheck() noexcept
+{
+    if (UMQ_UB_TRANS_MODE == ub_trans_mode::RM_CTP || UMQ_UB_TRANS_MODE == ub_trans_mode::RC_CTP) {
+        return BLOCK_SIZE_4K;
+    }
+    return BLOCK_SIZE_8K;
+}
+
 umq_buf_block_size_t UmqSetting::BlockTypeFromStr(const std::string &typeStr) noexcept
 {
-    if (typeStr == TINY_QBUF_BLOCK_TYPE) {
-        return BLOCK_SIZE_4K;
-    } else if (typeStr == DEFAULT_QBUF_BLOCK_TYPE) {
-        return BLOCK_SIZE_8K;
-    } else if (typeStr == SMALL_QBUF_BLOCK_TYPE) {
-        return BLOCK_SIZE_16K;
-    } else if (typeStr == MEDIUM_QBUF_BLOCK_TYPE) {
-        return BLOCK_SIZE_32K;
-    } else if (typeStr == LARGE_QBUF_BLOCK_TYPE) {
+    if (typeStr == LARGE_QBUF_BLOCK_TYPE) {
         return BLOCK_SIZE_64K;
     }
-    // 如果字符串不匹配，返回默认值
-    return BLOCK_SIZE_8K;
+    return DefaultBlockTypeCheck();
 }
 
 umq_tiny_buf_block_size_t UmqSetting::TinyBlockSizeFromStr(const std::string &typeStr) noexcept
