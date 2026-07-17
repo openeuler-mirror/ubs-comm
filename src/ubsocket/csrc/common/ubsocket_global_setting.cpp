@@ -34,10 +34,8 @@ bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
 bool GlobalSetting::UBS_SHARE_JFR_LOOP_POLL_ENABLED = true;
 bool GlobalSetting::UBS_ENABLE_DEGRADE = true;
-uint32_t GlobalSetting::UBS_SHARE_JFR_RX_QUEUE_DEPTH = 1024;
-uint32_t GlobalSetting::UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH = 256;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
-uint32_t GlobalSetting::UBS_RX_DEPTH = 1024;
+uint32_t GlobalSetting::UBS_RX_DEPTH = 2048;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::UB_SOCK_OPT;
 uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
 u_external_poller_ops_t *GlobalSetting::UBS_POLLER_OPS = nullptr;
@@ -55,36 +53,32 @@ LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::
 uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 
 /* environment variable name */
-#define ENV_TRACE_ENABLED "UBSOCKET_TRACE_ENABLE"
+#define ENV_TRACE_ENABLED "UBSOCKET_MONITOR_ENABLE"
 #define ENV_SPLIT_TRACE_ENABLED "UBSOCKET_SPLIT_TRACE_ENABLE"
 #define ENV_SPLIT_TRACE_BUF_CAPACITY "UBSOCKET_SPLIT_TRACE_BUF_CAPACITY"
 #define ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS "UBSOCKET_SPLIT_TRACE_DRAIN_INTERVAL_MS"
 #define ENV_SPLIT_TRACE_LEVEL "UBSOCKET_SPLIT_TRACE_LEVEL"
-#define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPT" /* match brpc_test FLAGS_ubsocket_async_accept */
+#define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPT_ENABLE" /* match brpc_test FLAGS_ubsocket_async_accept */
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
-#define ENV_AUTO_FALLBACK_TCP "UBSOCKET_AUTO_FALLBACK_TCP"
-#define ENV_ENABLE_SHARE_JFR "UBSOCKET_ENABLE_SHARE_JFR"
 #define ENV_SHARE_JFR_LOOP_POLL_ENABLED "UBSOCKET_SHARE_JFR_LOOP_POLL_ENABLED"
-#define ENV_SHARE_JFR_RX_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH"
-#define ENV_SHARE_JFR_RX_O3_QUEUE_DEPTH "UBSOCKET_SHARE_JFR_RX_O3_QUEUE_DEPTH"
-#define ENV_TRANS_MODE "UBSOCKET_TRANS_MODE"
+#define ENV_ENABLE_SHARE_JFR "UBSOCKET_SHARE_JFR_ENABLE"
 #define ENV_UBS_RX_DEPTH "UBSOCKET_RX_DEPTH"
 #define ENV_UBS_TX_DEPTH "UBSOCKET_TX_DEPTH"
 #define ENV_UBS_HAND_SHAKE_MODE "UBSOCKET_UB_HANDSHAKE_MODE"
-#define ENV_UBS_THREAD_POOL_SIZE "UBSOCKET_THREAD_POOL_SIZE"
+#define ENV_UBS_THREAD_POOL_SIZE "UBSOCKET_ASYNC_ACCEPT_THREAD_NUM"
 #define ENV_PROF_ENABLE "UBSOCKET_PROF_ENABLE"
 #define ENV_PROF_MODE "UBSOCKET_PROF_MODE"
 #define ENV_PROF_DUMP_INTERVAL_MIN "UBSOCKET_PROF_DUMP_INTERVAL_MIN"
-#define ENV_PROF_DUMP_PATH "UBSOCKET_PROF_DUMP_PATH"
-#define ENV_TRACE_TIME "UBSOCKET_TRACE_TIME"
-#define ENV_TRACE_FILE_SIZE "UBSOCKET_TRACE_FILE_SIZE"
-#define ENV_TRACE_FILE_PATH "UBSOCKET_TRACE_FILE_PATH"
-#define ENV_VAR_DEGRADE "UBSOCKET_DEGRADE"
-#define ENV_VAR_CLI "UBSOCKET_STATS_CLI"
+#define ENV_PROF_DUMP_PATH "UBSOCKET_PROF_DUMP_FILE_PATH"
+#define ENV_TRACE_TIME "UBSOCKET_MONITOR_INTERVAL"
+#define ENV_TRACE_FILE_SIZE "UBSOCKET_MONITOR_FILE_SIZE"
+#define ENV_TRACE_FILE_PATH "UBSOCKET_MONITOR_FILE_PATH"
+#define ENV_VAR_DEGRADE "UBSOCKET_DEGRADE_ENABLE"
+#define ENV_VAR_CLI "UBSOCKET_CLI_ENABLE"
 #define ENV_VAR_PROBE "UBSOCKET_PROBE_ENABLE"
-#define ENV_VAR_PROBE_TIME "UBSOCKET_PROBE_TIME_MS"
-#define ENV_VAR_PROBE_BATCH "UBSOCKET_PROBE_BATCH"
+#define ENV_VAR_PROBE_TIME "UBSOCKET_PROBE_INTERVAL_MS"
+#define ENV_VAR_PROBE_BATCH "UBSOCKET_PROBE_BATCH_SIZE"
 #define ENV_BACKUP_LINK_ENABLED "UBSOCKET_BACKUP_LINK_ENABLE"
 #define ENV_PORT_COOLDOWN_SEC "UBSOCKET_PORT_COOLDOWN_SEC"
 #define ENV_READV_UNLIMITED "UBSOCKET_READV_UNLIMITED"
@@ -96,8 +90,6 @@ void GlobalSetting::AddRules() noexcept
         {ENV_ASYNC_ACCEPTOR, false, 0, 8L},
         {ENV_ASYNC_CONNECTOR, false, 0, 8L},
         {ENV_ASYNC_EPOLL, false, 1, 1L},
-        {ENV_SHARE_JFR_RX_QUEUE_DEPTH, false, 128, 10240},
-        {ENV_SHARE_JFR_RX_O3_QUEUE_DEPTH, false, 128, 10240},
         {ENV_UBS_RX_DEPTH, false, 2, UINT32_MAX},
         {ENV_UBS_TX_DEPTH, false, 2, UINT32_MAX},
         {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5},
@@ -114,10 +106,8 @@ void GlobalSetting::AddRules() noexcept
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {{ENV_TRACE_ENABLED, true, "true|false"},
                                     {ENV_SPLIT_TRACE_ENABLED, false, "true|false"},
-                                    {ENV_AUTO_FALLBACK_TCP, false, "true|false"},
                                     {ENV_ENABLE_SHARE_JFR, false, "true|false"},
                                     {ENV_SHARE_JFR_LOOP_POLL_ENABLED, false, "true|false"},
-                                    {ENV_TRANS_MODE, false, "ub|ib"},
                                     {ENV_UBS_HAND_SHAKE_MODE, false, "tfo|ub_sock_opt"},
                                     {ENV_PROF_ENABLE, false, "true|false"},
                                     {ENV_PROF_MODE, false, "fast|ext"},
@@ -126,7 +116,7 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_VAR_CLI, false, "true|false"},
                                     {ENV_VAR_PROBE, false, "true|false"},
                                     {ENV_BACKUP_LINK_ENABLED, true, "true|false"},
-                                    {ENV_READV_UNLIMITED, false, "true|false"}};
+                                    {ENV_READV_UNLIMITED, true, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX},
@@ -273,28 +263,12 @@ Result GlobalSetting::LoadEnv() noexcept
         UBS_EPOLL_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
     }
 
-    if (GetEnvAndValidate(ENV_AUTO_FALLBACK_TCP, strEnvValue)) {
-        UBS_AUTO_FALLBACK_TCP = Func::BoolFromStr(strEnvValue);
-    }
-
     if (GetEnvAndValidate(ENV_ENABLE_SHARE_JFR, strEnvValue)) {
         UBS_ENABLE_SHARE_JFR = Func::BoolFromStr(strEnvValue);
     }
 
     if (GetEnvAndValidate(ENV_SHARE_JFR_LOOP_POLL_ENABLED, strEnvValue)) {
         UBS_SHARE_JFR_LOOP_POLL_ENABLED = Func::BoolFromStr(strEnvValue);
-    }
-
-    if (GetEnvAndValidate(ENV_SHARE_JFR_RX_QUEUE_DEPTH, envValue)) {
-        UBS_SHARE_JFR_RX_QUEUE_DEPTH = static_cast<uint32_t>(envValue);
-    }
-
-    if (GetEnvAndValidate(ENV_SHARE_JFR_RX_O3_QUEUE_DEPTH, envValue)) {
-        UBS_SHARE_JFR_RX_O3_QUEUE_DEPTH = static_cast<uint32_t>(envValue);
-    }
-
-    if (GetEnvAndValidate(ENV_TRANS_MODE, strEnvValue)) {
-        UBS_TRANS_MODE = strEnvValue;
     }
 
     if (GetEnvAndValidate(ENV_UBS_TX_DEPTH, envValue)) {
@@ -312,7 +286,7 @@ Result GlobalSetting::LoadEnv() noexcept
     if (GetEnvAndValidate(ENV_UBS_THREAD_POOL_SIZE, envValue)) {
         UBS_THREAD_POOL_SIZE = static_cast<uint32_t>(envValue);
     }
-    UBS_VLOG_INFO("Current thread pool size, UBSOCKET_THREAD_POOL_SIZE: %u\n", UBS_THREAD_POOL_SIZE);
+    UBS_VLOG_INFO("Current thread pool size, UBSOCKET_ASYNC_ACCEPT_THREAD_NUM: %u\n", UBS_THREAD_POOL_SIZE);
 
     if (GetEnvAndValidate(ENV_PROF_ENABLE, strEnvValue)) {
         UBS_PROF_ENABLE = Func::BoolFromStr(strEnvValue);

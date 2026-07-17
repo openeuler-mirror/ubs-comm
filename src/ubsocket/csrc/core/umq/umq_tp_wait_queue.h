@@ -83,7 +83,7 @@ private:
 
     static size_t GetCapacity()
     {
-        size_t cap = UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH;
+        size_t cap = GlobalSetting::UBS_RX_DEPTH;
         cap = (cap <= 1) ? 1 : size_t(1) << (sizeof(size_t) * 8 - __builtin_clzl(cap - 1));
         if (cap == 0) {
             return DEFAULT_CAPACITY;

@@ -65,49 +65,40 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 
 | 名称                                   | 含义                                              | 取值范围                                                                                                                                                                    | 默认值               | 必填                                |
 |:-------------------------------------|:------------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------------------| ----------------------------------- |
-| UBSOCKET_TRANS_MODE                  | 通信协议                                            | ub，ib                                                                                                                                                                   | ub                | 否                                  |
-| UBSOCKET_DEV_NAME                    | 设备名称                                            | 根据实际场景填写设备名称；例如，udma2或者bonding_dev_0                                                                                                                                    | NA                | 否                                  |
-| UBSOCKET_DEV_IP                      | 设备名称                                            | 根据实际场景填写，支持ipv6和ipv4写法。`ub协议下不需要填写`                                                                                                                                     | bonding设备         | 否                                  |
-| UBSOCKET_EID_IDX                     | 使用普通设备的eid编号                                    | ub协议下，通过`urma_admin show`命令查询获得                                                                                                                                         | 0                 | `UBSOCKET_DEV_NAME`为普通设备时必填 |
-| UBSOCKET_SRC_EID                     | 使用bonding设备的eid                                 | ub协议下，通过`urma_admin show`命令查询获得                                                                                                                                         | bonding设备eid      | 否                                  |
-| UBSOCKET_LOG_LEVEL                   | 日志级别（仅输出大于等于该级别的日志）                             | error：错误型<br>warn：警告型<br>notice：提示型<br>info：信息型<br>debug：调试型                                                                                                            | info              | 否                                  |
 | UBSOCKET_TX_DEPTH                    | 发送队列深度                                          | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfs_depth`两者的最小值）                                                                                | 1024              | 否                                  |
-| UBSOCKET_RX_DEPTH                    | 接受队列深度                                          | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfr_depth`两者的最小值）                                                                                | 1024              | 否                                  |
+| UBSOCKET_RX_DEPTH                    | 接受队列深度                                          | 最小值是2，设置上限由实际机器环境决定（根据命令`urma_admin show --whole`中`max_jfc_depth`与`max_jfr_depth`两者的最小值）                                                                                | 2048              | 否                                  |
 | UBSOCKET_READV_UNLIMITED             | 是否打开readv上报限制                                   | false，true                                                                                                                                                              | true              | 否                                  |
-| UBSOCKET_BLOCK_TYPE                  | 内存池的最小分片                                        | tiny：4k，default：8k，small：16k，medium：32k，large：64k                                                                                                                               | default           | 否                                  |
+| UBSOCKET_BLOCK_TYPE                  | 内存池的最小分片                                        | default：4k(CTP)/8k(TP),large:64k      | default           | 否                                  |
 | UBSOCKET_POOL_INITIAL_SIZE           | IO内存总大小（MB）                                   | 正整数                                                                                                                                                                 | 1024              | 否                                  |
 | UBSOCKET_USE_UB_FORCE                | 是否强制使用UB协议加速TCP                                 | false：通过接口参数设置socket是否开启UB加速。<br>true：强制所有socket开启UB加速。                                                                                                                 | false             | 否                                  |
 | UBSOCKET_SCHEDULE_POLICY             | 设置多平面负载分担策略                                     | affinity_priority:亲和优先策略，优先尝试使用和业务线程所在CPU亲和的IODIE进行UB通信，失败则轮询查找可用平面建链。<br>affinity：亲和策略，使用和业务线程所在CPU亲和的IODIE进行UB通信。<br>rr：轮转策略，多个socket采用round robin的策略使用不同IODIE进行UB通信。 | affinity_priority | 否                                  |
-| UBSOCKET_AUTO_FALLBACK_TCP           | 协议不匹配时是否自动降级为TCP                                | false, true                                                                                                                                                             | true              | 否                                  |
-| UBSOCKET_TRACE_ENABLE                | 是否打开trace统计                                     | false, true                                                                                                                                                             | true              | 否                                  |
-| UBSOCKET_TRACE_TIME                  | 控制维测数据输出间隔（单位s）                                 | [1, 300]                                                                                                                                                                | 10                | 否                                  |
-| UBSOCKET_TRACE_FILE_PATH             | 控制维测数据输出路径，路径长度范围在1到512bytes                    | [1, 512]                                                                                                                                                                | /tmp/ubsocket/log | 否                                  |
-| UBSOCKET_TRACE_FILE_SIZE             | 控制维测数据文件大小（MB）                                  | [1, 300]                                                                                                                                                                | 10                | 否                                  |
-| UBSOCKET_STATS_CLI                   | 是否启用trace cli功能                                 | true, false                                                                                                                                                             | false             | 否                                  |
-| UBSOCKET_ENABLE_SHARE_JFR            | 设置是否开启共享JFR                                     | false, true                                                                                                                                                             | true              | 否                                  |
-| UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH    | 设置开启共享JFR后，每个Socket链接接收缓存队列深度                   | 最小值是128，设置上限由实际机器环境决定                                                                                                                                                   | 1024              | 否                                  |
-| UBSOCKET_SHARE_JFR_RX_O3_QUEUE_DEPTH | 仅RM_CTP模式下可用，设置开启共享JFR后，每个Socket链接接收时，乱序缓存队列深度  | 最小值是128，上限为接收缓存队列深度                                                                                                                                                     | 256               | 否                                  |
 | UBSOCKET_SHARE_JFR_LOOP_POLL_ENABLED | 设置是否开启共享JFR循环轮询模式                                     | false, true                                                                                                                                                             | true              | 否                                  |
+| UBSOCKET_MONITOR_ENABLE                | 是否打开trace统计                                     | false, true                                                                                                                                                             | true              | 否                                  |
+| UBSOCKET_MONITOR_INTERVAL                  | 控制维测数据输出间隔（单位s）                                 | [1, 300]                                                                                                                                                                | 10                | 否                                  |
+| UBSOCKET_MONITOR_FILE_PATH             | 控制维测数据输出路径，路径长度范围在1到512bytes                    | [1, 512]                                                                                                                                                                | /tmp/ubsocket/log | 否                                  |
+| UBSOCKET_MONITOR_FILE_SIZE             | 控制维测数据文件大小（MB）                                  | [1, 300]                                                                                                                                                                | 10                | 否                                  |
+| UBSOCKET_CLI_ENABLE                   | 是否启用trace cli功能                                 | true, false                                                                                                                                                             | false             | 否                                  |
+| UBSOCKET_SHARE_JFR_ENABLE            | 设置是否开启共享JFR                                     | false, true                                                                                                                                                             | true              | 否                                  |
 | UBSOCKET_LINK_PRIORITY               | 设置流量优先级，按照环境配置映射到SL上                            | [-1, 15], -1表示不设置                                                                                                                                                                | 4                | 否 |
 | UBSOCKET_POOL_MAX_SIZE               | 单bRPC 进程UB 通信内存占用弹性扩容最大值，单位MB                   | `[UBSOCKET_POOL_INITIAL_SIZE + 64, 6144]`, 单次最小扩容大小为 64M，因此 `UBSOCKET_POOL_MAX_SIZE - UBSOCKET_POOL_INITIAL_SIZE >= 64M`                                                | 2048              | 否                                  |
-| UBSOCKET_BUF_POOL_DEPTH              | 单bRPC进程线程内存池深度                                  | 应用按需配置                                                                                                                                                                  | 12000             | 否                                  |
+| UBSOCKET_BUF_POOL_DEPTH              | 单bRPC进程线程内存池深度                                  | 应用按需配置                                                                                                                                                                  | 24576             | 否                                  |
 | UBSOCKET_PROBE_ENABLE                | 是否打开探测功能                                        | false, true                                                                                                                                                             | false             | 否                                  |
-| UBSOCKET_PROBE_TIME_MS               | 每次探测的时间间隔（单位ms）                                 | [1, 360000ULL]                                                                                                                                                          | 1000              | 否                                  |
-| UBSOCKET_PROBE_BATCH                 | 每次探测的连接数量                                       | [1, 500]                                                                                                                                                                | 10                | 否                                  |
+| UBSOCKET_PROBE_INTERVAL_MS               | 每次探测的时间间隔（单位ms）                                 | [1, 360000ULL]                                                                                                                                                          | 1000              | 否                                  |
+| UBSOCKET_PROBE_BATCH_SIZE                 | 每次探测的连接数量                                       | [1, 500]                                                                                                                                                                | 10                | 否                                  |
 | UBSOCKET_PROF_ENABLE                | 是否打开profiling打点功能                                        | false, true                                                                                                                                                             | false             | 否                                  |
 | UBSOCKET_PROF_MODE                | 是否打开profiling百分位统计功能，fast：关闭，ext：打开                                        | fast, ext                     | fast            | 否                                  |
 | UBSOCKET_PROF_DUMP_INTERVAL_MIN                | 每次统计profiling打点数据时间间隔（单位s）                | [1,5]                                                                                                                                                             | 1             | 否                                  |
-| UBSOCKET_PROF_DUMP_PATH                | profiling打点数据输出路径                | [1,512]                                                                                                                                                            | /tmp/ubsocket/profiling             | 否                                  |
+| UBSOCKET_PROF_DUMP_FILE_PATH                | profiling打点数据输出路径                | [1,512]                                                                                                                                                            | /tmp/ubsocket/profiling             | 否                                  |
 | UBSOCKET_UB_TRANS_MODE | ub协议模式 |`RC_TP`，`RM_TP`, `RM_CTP`, `RC_CTP`  | `RM_CTP` | 否 |
 | UBSOCKET_FLOW_CONTROL_ENABLE | 是否开启流控 | false, true | true | 否 |
 | UBSOCKET_UB_HANDSHAKE_MODE | UB通信建链握手模式 | tfo, ub_sock_opt | ub_sock_opt | 否 |
-| UBSOCKET_THREAD_POOL_SIZE | ubsocket后台线程池的线程数 | [1,64] | 1 | 否 |
-| UBSOCKET_DEGRADE | 是否允许 ubsocket 在 UB 错误时降级成 TCP | false, true | true | 否 |
-| UBSOCKET_ASYNC_ACCEPT | 是否允许 ubsocket 在server做accept时做异步accept | false, true | false | 否 |
-| UBSOCKET_TP_TYPE | jetty连接复用方式 | single,pool | pool | 否 |
-| UBSOCKET_TP_POOL_SIZE | jetty连接池大小,jetty连接池大小需要占用fd，因此建议ulimit -n 65535 | [1, 1000] | 800 | 否 |
-| UBSOCKET_INITIAL_CREDIT | 首次流控请求所申请的信用个数, 单个 WR 消耗 1 个信用 | [1, 1024] | 128 | 否 |
-| UBSOCKET_MAX_CREDIT_PER_REQUEST | 流控信用被耗尽后会在前一次的申请个数基础上翻倍申请<br>例如第1次如果申请 128, 被耗尽后会申请 256 信令。但是最多不会超过此值 | [1, 1024] | 1024 | 否 |
+| UBSOCKET_ASYNC_ACCEPT_THREAD_NUM | ubsocket后台线程池的线程数 | [1,64] | 1 | 否 |
+| UBSOCKET_DEGRADE_ENABLE | 是否允许 ubsocket 在 UB 错误时降级成 TCP | false, true | true | 否 |
+| UBSOCKET_ASYNC_ACCEPT_ENABLE | 是否允许 ubsocket 在server做accept时做异步accept | false, true | false | 否 |
+| UBSOCKET_JETTY_TYPE | jetty连接复用方式 | single,pool | pool | 否 |
+| UBSOCKET_JETTY_POOL_SIZE | jetty连接池大小,jetty连接池大小需要占用fd，因此建议ulimit -n 65535 | [1, 1000] | 800 | 否 |
+| UBSOCKET_INITIAL_CREDIT | 首次流控请求所申请的信用个数, 单个 WR 消耗 1 个信用 | [1, 1024] | 16| 否 |
+| UBSOCKET_MAX_CREDIT_PER_REQUEST | 流控信用被耗尽后会在前一次的申请个数基础上翻倍申请<br>例如第1次如果申请 16, 被耗尽后会申请 256 信令。但是最多不会超过此值 | [1, 1024] | 256| 否 |
 | UBSOCKET_MIN_RESERVED_CREDIT | 单个连接最小保留的的流控信用。如果连接所持有的流控信用小于此值，这些信用不会因连接无活动而归还给上层 | [1, 1024] | 2 | 否 |
 | UBSOCKET_UMQ_TINY_POOL_ENABLE         | 是否启用UMQ tiny pool                           | false, true                                                                                                                                                           | true                              | 否                                  |
 | UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE     | UMQ tiny pool块大小                              | 512, 1024, 2048, 4096, 8192                                                                                                                                           | 1024                              | 否                                  |
@@ -116,6 +107,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_SPLIT_TRACE_BUF_CAPACITY | 链路级打点工具日志打印数组的大小 | [16384, 10240000] | 65535                   |否|
 | UBSOCKET_SPLIT_TRACE_DRAIN_INTERVAL_MS | 链路级打点工具日志打印的间隔 | [1, 10000] | 10                      |否|
 | UBSOCKET_SPLIT_TRACE_LEVEL | 链路级打点工具级别,默认会打印所有的点位，可以设置只打印ubsocket或者umq的点位信息 | "all", "ubsocket", "umq" | all                     |否|
+|UBSOCKET_BACKUP_LINK_ENABLE | 是否打开切换主备链路功能|false, true | true |否|
 
 
 
@@ -124,9 +116,9 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 >
 > - 环境变量仅在通过`LD_PRELOAD`方式使用`UBSocket`时生效；`bRPC`与`UBSocket`集成在一起的场景下，`bRPC`在启动时通过gflags重新设置了全部环境变量的值，故此时各配置的值以gflags的值为准。
 > - `UBSocket`支持使用bonding设备和普通udma设备，默认使用bonding设备（不需要用户配置`UBSOCKET_DEV_NAME`、`UBSOCKET_EID_IDX`、`UBSOCKET_DEV_NAME`等）。普通udma设备通常在调试时使用，需通过`urma_admin show`查看设备情况和填充对应信息。
-> - `UBSOCKET_TP_POOL_SIZE`参数设定值初始化时需要占用fd，因此需要确保有足够的fd，建议ulimit -n 65535。
+> - `UBSOCKET_JETTY_POOL_SIZE`参数设定值初始化时需要占用fd，因此需要确保有足够的fd，建议ulimit -n 65535。
 > - `UBSOCKET_POOL_INITIAL_SIZE` 最小值参考（单位 MB）：((UBSOCKET_RX_DEPTH * 4 + UBSOCKET_BUF_POOL_DEPTH) * (UBSOCKET_BLOCK_TYPE分片 + 128)) / 1024 / 1024；若 `UBSOCKET_UMQ_TINY_POOL_ENABLE=true`，还需加上 ((UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE + 128) * UBSOCKET_UMQ_TINY_POOL_BLOCK_COUNT) / 1024 / 1024。该参数是在初始化时需要分配的内存池的大小，必须配置充足保证初始化成功；若运行时内存池不足，会在 `UBSOCKET_POOL_MAX_SIZE` 限制范围内弹性扩容。
-> - `UBSOCKET_UB_TRANS_MODE` 设置为 CTP 模式（`RM_CTP`/`RC_CTP`）时，`UBSOCKET_BLOCK_TYPE` 必须设为 `tiny`，且 `UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE` 最大不超过 4096，否则会超出分片大小。
+> - `UBSOCKET_UB_TRANS_MODE` 设置为 CTP 模式（`RM_CTP`/`RC_CTP`）时，`UBSOCKET_BLOCK_TYPE` 设为 `default`此时size大小为4k，且 `UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE` 最大不超过 4096，否则会超出分片大小。
 
 参考如下命令进行环境变量配置即可。
 
@@ -351,7 +343,7 @@ UBSocket提供了两种日志输出方式。
 </th>
 </tr>
 </thead>
-<tbody><tr id="row71744264512"><td class="cellrowborder" valign="top" width="23.11768823117688%" headers="mcps1.2.6.1.1 "><p id="p1036112101156"><a name="p1036112101156"></a><a name="p1036112101156"></a>UBSOCKET_TRACE_ENABLE</p>
+<tbody><tr id="row71744264512"><td class="cellrowborder" valign="top" width="23.11768823117688%" headers="mcps1.2.6.1.1 "><p id="p1036112101156"><a name="p1036112101156"></a><a name="p1036112101156"></a>UBSOCKET_MONITOR_ENABLE</p>
 </td>
 <td class="cellrowborder" valign="top" width="7.519248075192481%" headers="mcps1.2.6.1.2 "><p id="p820513440611"><a name="p820513440611"></a><a name="p820513440611"></a>true/false</p>
 </td>
@@ -362,7 +354,7 @@ UBSocket提供了两种日志输出方式。
 <td class="cellrowborder" valign="top" width="29.187081291870815%" headers="mcps1.2.6.1.5 "><p id="p43626107515"><a name="p43626107515"></a><a name="p43626107515"></a>默认设置为true。手动设置为false时无法输出日志供Filebeat采集</p>
 </td>
 </tr>
-<tr id="row191745262519"><td class="cellrowborder" valign="top" width="23.11768823117688%" headers="mcps1.2.6.1.1 "><p id="p2036215101151"><a name="p2036215101151"></a><a name="p2036215101151"></a>UBSOCKET_TRACE_TIME</p>
+<tr id="row191745262519"><td class="cellrowborder" valign="top" width="23.11768823117688%" headers="mcps1.2.6.1.1 "><p id="p2036215101151"><a name="p2036215101151"></a><a name="p2036215101151"></a>UBSOCKET_MONITOR_INTERVAL</p>
 </td>
 <td class="cellrowborder" valign="top" width="7.519248075192481%" headers="mcps1.2.6.1.2 "><p id="p4205044664"><a name="p4205044664"></a><a name="p4205044664"></a>[1,300]</p>
 </td>
@@ -373,7 +365,7 @@ UBSocket提供了两种日志输出方式。
 <td class="cellrowborder" valign="top" width="29.187081291870815%" headers="mcps1.2.6.1.5 "><p id="p17362810455"><a name="p17362810455"></a><a name="p17362810455"></a>默认10秒，可根据客户监控需求调整</p>
 </td>
 </tr>
-<tr id="row41751726458"><td class="cellrowborder" valign="top" width="23.11768823117688%" headers="mcps1.2.6.1.1 "><p id="p836211101557"><a name="p836211101557"></a><a name="p836211101557"></a>UBSOCKET_TRACE_FILE_PATH</p>
+<tr id="row41751726458"><td class="cellrowborder" valign="top" width="23.11768823117688%" headers="mcps1.2.6.1.1 "><p id="p836211101557"><a name="p836211101557"></a><a name="p836211101557"></a>UBSOCKET_MONITOR_FILE_PATH</p>
 </td>
 <td class="cellrowborder" valign="top" width="7.519248075192481%" headers="mcps1.2.6.1.2 "><p id="p18205644861"><a name="p18205644861"></a><a name="p18205644861"></a>路径字符长度小于512bytes</p>
 </td>
@@ -384,7 +376,7 @@ UBSocket提供了两种日志输出方式。
 <td class="cellrowborder" valign="top" width="29.187081291870815%" headers="mcps1.2.6.1.5 "><p id="p1136241012510"><a name="p1136241012510"></a><a name="p1136241012510"></a>默认路径可直接使用，若自定义路径，需确保Filebeat具备该路径的读取权限</p>
 </td>
 </tr>
-<tr id="row124816106207"><td class="cellrowborder" valign="top" width="23.11768823117688%" headers="mcps1.2.6.1.1 "><p id="p1548261015207"><a name="p1548261015207"></a><a name="p1548261015207"></a>UBSOCKET_TRACE_FILE_SIZE</p>
+<tr id="row124816106207"><td class="cellrowborder" valign="top" width="23.11768823117688%" headers="mcps1.2.6.1.1 "><p id="p1548261015207"><a name="p1548261015207"></a><a name="p1548261015207"></a>UBSOCKET_MONITOR_FILE_SIZE</p>
 </td>
 <td class="cellrowborder" valign="top" width="7.519248075192481%" headers="mcps1.2.6.1.2 "><p id="p1648261020209"><a name="p1648261020209"></a><a name="p1648261020209"></a>[1,300]</p>
 </td>
@@ -400,7 +392,7 @@ UBSocket提供了两种日志输出方式。
 
 ```shell
 $ # 开启UB socket流量指标采集功能
-$ export UBSOCKET_TRACE_ENABLE=true
+$ export UBSOCKET_MONITOR_ENABLE=true
 ```
 
 ### 6.4 文件内容说明

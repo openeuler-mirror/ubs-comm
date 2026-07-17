@@ -106,32 +106,23 @@ When starting `UBSocket`, you can configure environment variables. The following
 
 | Name                      | Meaning                  | Value Range                                                    | Default Value | Mandatory                              |
 | :------------------------- | :--------------------- | :----------------------------------------------------------- | :------ |----------------------------------|
-| UBSOCKET_TRANS_MODE        | Communication protocol              | ub, ib                                                      | ub      | No                               |
-| UBSOCKET_DEV_NAME          | Device name              | Set the device name based on the actual scenario, for example, udma2 or bonding_dev_0.      | N/A     |  No|
-| UBSOCKET_DEV_IP            | Device name              | Set this parameter based on the actual scenario. Both IPv6 and IPv4 addresses are supported. `You do not need to set this parameter when the UB protocol is used.`  | Bonding device    | No                               |
-| UBSOCKET_EID_IDX           | EID of a common device | When the UB protocol is used, run the `urma_admin show` command to obtain the value.                 | 0       | Mandatory when `UBSOCKET_DEV_NAME` is set to the name of a common device.     |
-| UBSOCKET_SRC_EID           | EID of a bonding device  | When the UB protocol is used, run the <idp:inline displayname="code" id="code2020184385117">urma_admin show</idp:inline> command to obtain the value.                 | EID of the bonding device| No|
-| UBSOCKET_LOG_LEVEL         | Log level              | error, warn, notice, info, debug          | info    | No                               |
-| UBSOCKET_LOG_USE_PRINTF    | Whether to print logs to the foreground  | true, false                                                        | true      | No                               |
 | UBSOCKET_TX_DEPTH          | Send queue depth          | The minimum value is 64. The upper limit is determined by the actual machine environment (the smaller value between `max_jfc_depth` and `max_jfs_depth` in the `urma_admin show --whole` command).| 1024     | No                               |
-| UBSOCKET_RX_DEPTH          | Receive queue depth          | The minimum value is 64. The upper limit is determined by the actual machine environment (the smaller value between `max_jfc_depth` and `max_jfr_depth` in the `urma_admin show --whole` command).| 1024     | No                               |
+| UBSOCKET_RX_DEPTH          | Receive queue depth          | The minimum value is 64. The upper limit is determined by the actual machine environment (the smaller value between `max_jfc_depth` and `max_jfr_depth` in the `urma_admin show --whole` command).| 2048     | No                               |
 | UBSOCKET_READV_UNLIMITED   | Whether to enable the readv reporting restriction | false, true                                                 | true   | No                               |
-| UBSOCKET_BLOCK_TYPE        | Minimum fragment of the memory pool      | default, small, medium, large                               | default | No                               |
+| UBSOCKET_BLOCK_TYPE        | Minimum fragment of the memory pool      | default, large                               | default | No                               |
 | UBSOCKET_POOL_INITIAL_SIZE | Total size of the I/O memory, in MB.| Set based on application requirements                                                | 1024    | No                               |
 | UBSOCKET_USE_UB_FORCE | Whether to forcibly use the UB protocol to accelerate TCP| false: UB is not forcibly used to accelerate TCP. true: UB is forcibly used to accelerate TCP.                                               | false    | No                               |
 | UBSOCKET_SCHEDULE_POLICY | Multi-plane load balancing policy| affinity_priority, affinity, rr                                               | affinity_priority   | No                               |
-| UBSOCKET_AUTO_FALLBACK_TCP | Whether to automatically downgrade to TCP when the protocol does not match| false, true                                                | true  | No                               |
-| UBSOCKET_TRACE_ENABLE      | Whether to enable trace statistics      | false, true                                                 | true    | No                               |
-| UBSOCKET_TRACE_TIME        | Interval for outputting maintenance and test data (unit: s)  | [1, 300]                                                    | 10       | No                              |
-| UBSOCKET_TRACE_FILE_PATH   | Output path of maintenance and test data. The path length ranges from 1 to 512 bytes. | [1, 512]                                                    | /tmp/ubsocket/log | No                       |
-| UBSOCKET_TRACE_FILE_SIZE   | Size of the maintenance and test data file (MB)  | [1, 300]                                                   | 10 | No                       |
-| UBSOCKET_STATS_CLI         | Whether to enable the trace CLI function| true, false                                                | false   | No                               |
-| UBSOCKET_ENABLE_SHARE_JFR  | Whether to enable JFR sharing| false, true                                              | true   | No                               |
-| UBSOCKET_SHARE_JFR_RX_QUEUE_DEPTH | Depth of the receive buffer queue of each socket connection after JFR sharing is enabled| The minimum value is 64. The upper limit is determined by the actual machine environment.                                               | 1024   | No                               |
+| UBSOCKET_MONITOR_ENABLE      | Whether to enable trace statistics      | false, true                                                 | true    | No                               |
+| UBSOCKET_MONITOR_INTERVAL        | Interval for outputting maintenance and test data (unit: s)  | [1, 300]                                                    | 10       | No                              |
+| UBSOCKET_MONITOR_FILE_PATH   | Output path of maintenance and test data. The path length ranges from 1 to 512 bytes. | [1, 512]                                                    | /tmp/ubsocket/log | No                       |
+| UBSOCKET_MONITOR_FILE_SIZE   | Size of the maintenance and test data file (MB)  | [1, 300]                                                   | 10 | No                       |
+| UBSOCKET_CLI_ENABLE         | Whether to enable the trace CLI function| true, false                                                | false   | No                               |
+| UBSOCKET_SHARE_JFR_ENABLE  | Whether to enable JFR sharing| false, true                                              | true   | No                               |
 | UBSOCKET_USE_BRPC_ZCOPY    | Whether to use the brpc zcopy function| false, true                                               | true   | No                               |
 | UBSOCKET_LINK_PRIORITY     | SL priority of URMA traffic| [0, 15] | -1 | No|
 | UBSOCKET_POOL_MAX_SIZE     | Maximum value for elastic capacity expansion of the UB communication memory occupied by a single bRPC process, in MB| [UBSOCKET_POOL_INITIAL_SIZE + 64, 6144]. The minimum capacity expansion size at a time is 64 MB. Therefore, UBSOCKET_POOL_MAX_SIZE minus UBSOCKET_POOL_INITIAL_SIZE is 64 MB or higher.| 2048    | No                               |
-| UBSOCKET_BUF_POOL_DEPTH    | Thread memory pool depth of a single bRPC process                    | Set based on application requirements           | 12000   | No                               |
+| UBSOCKET_BUF_POOL_DEPTH    | Thread memory pool depth of a single bRPC process                    | Set based on application requirements           | 24576   | No                               |
 
 > Note:
 >

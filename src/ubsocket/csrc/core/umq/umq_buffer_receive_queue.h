@@ -79,10 +79,9 @@ private:
     bool is_shutdown_{false};
 
     // 应用层配置：最大允许乱序度距离（不超过rx_depth，如为0则默认为rx_depth的75%）
-    uint32_t m_max_ooo_gap =
-        UmqSetting::UMQ_MAX_O3_GAP != 0 ?
-            std::min(UmqSetting::UMQ_MAX_O3_GAP, UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH) :
-            (UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH >> 1) + (UmqSetting::UMQ_SHARE_JFR_RX_QUEUE_DEPTH >> 2);
+    uint32_t m_max_ooo_gap = UmqSetting::UMQ_MAX_O3_GAP != 0 ?
+                                 std::min(UmqSetting::UMQ_MAX_O3_GAP, GlobalSetting::UBS_RX_DEPTH) :
+                                 (GlobalSetting::UBS_RX_DEPTH >> 1) + (GlobalSetting::UBS_RX_DEPTH >> 2);
     ;
     // 应用层配置：断链最大等待超时（纳秒）
     uint64_t m_ooo_timeout_ns = (UmqSetting::UMQ_O3_TIMEOUT_MS != 0 ? UmqSetting::UMQ_O3_TIMEOUT_MS : 5) * 1000000ULL;
