@@ -121,7 +121,9 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
         }
     }
 
+    traced_socket_fds_.clear();
     do {
+        traced_socket_fd_trace_map_.clear();
         umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
         traceTime_.umq_poll_start_timestamp_ = ubsocket_get_timeNs_compile();
         umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
@@ -196,8 +198,13 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
         for (auto epoll_fd : readable_epoll_fds) {
             epoll_fd->SetReadableEventFd();
         }
+
+        traceTime_.umq_post_end_timestamp_ = ubsocket_get_timeNs_compile();
+        for (auto &kv : traced_socket_fd_trace_map_) {
+            TRACE_ADD_EPOLL_FULL(kv.second, CORE_PROCESS_JRF_END, kv.first, 0, 0, pollNum,
+                                 traceTime_.umq_post_start_timestamp_, traceTime_.umq_post_end_timestamp_);
+        }
     } while (GlobalSetting::UBS_SHARE_JFR_LOOP_POLL_ENABLED);
-    traceTime_.process_share_jfr_end_timestamp_ = ubsocket_get_timeNs_compile();
     return 0;
 }
 
@@ -225,18 +232,15 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
         }
 
         auto *trace = socket_ptr->split_trace_;
-
-        if (i == 0) {
-            uint32_t last_seq = 0;
-            if (buf_pro->imm.user_data > 0) {
-                last_seq = buf_pro->imm.user_data - 1;
-            }
-            if (trace != nullptr) {
-                TRACE_ADD_EPOLL_FULL(trace, CORE_PROCESS_JRF_END, socket_ptr->raw_socket_, last_seq, buf[i]->data_size,
-                                     count, traceTime_.process_share_jfr_end_timestamp_, 0);
+        if (trace != nullptr) {
+            if (traced_socket_fds_.find(socket_ptr->raw_socket_) == traced_socket_fds_.end()) {
+                traced_socket_fds_.insert(socket_ptr->raw_socket_);
                 TRACE_ADD_EPOLL_FULL(trace, CORE_EPOLL_REARM, socket_ptr->raw_socket_, buf_pro->imm.user_data,
                                      buf[i]->data_size, count, traceTime_.umq_rearm_start_timestamp_,
                                      traceTime_.umq_rearm_end_timestamp_);
+            }
+            if (traced_socket_fd_trace_map_.find(socket_ptr->raw_socket_) == traced_socket_fd_trace_map_.end()) {
+                traced_socket_fd_trace_map_[socket_ptr->raw_socket_] = trace;
                 TRACE_ADD_EPOLL_FULL(trace, CORE_EPOLL_POST_RX, socket_ptr->raw_socket_, buf_pro->imm.user_data,
                                      buf[i]->data_size, count, traceTime_.umq_post_start_timestamp_,
                                      traceTime_.umq_post_end_timestamp_);

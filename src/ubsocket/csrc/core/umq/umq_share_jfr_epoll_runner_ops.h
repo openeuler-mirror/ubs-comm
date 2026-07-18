@@ -16,9 +16,15 @@
 #include "core/ubsocket_socket.h"
 #include "umq_types.h"
 
+#include <map>
+#include <unordered_set>
+
 namespace ock {
 namespace ubs {
 namespace umq {
+
+constexpr uint32_t TRACED_SOCKET_FDS_RESERVE_SIZE = 1024;
+
 struct UmqPollTraceTime {
     uint64_t umq_poll_start_timestamp_;
     uint64_t umq_poll_end_timestamp_;
@@ -40,6 +46,9 @@ public:
     UmqShareJfrEpollRunnerOps()
     {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
+        // for avoid expand memory
+        traced_socket_fds_.reserve(TRACED_SOCKET_FDS_RESERVE_SIZE);
+        traced_socket_fd_trace_map_.reserve(MAX_EPOLL_WAIT_COUNT);
     }
     ~UmqShareJfrEpollRunnerOps()
     {
@@ -80,6 +89,8 @@ private:
     std::unordered_map<int, uint64_t> jfr_main_umq_{};
     u_mutex_t *mutex_{nullptr};
     UmqPollTraceTime traceTime_{};
+    std::unordered_set<int> traced_socket_fds_{};
+    std::unordered_map<int, SplitTrace *> traced_socket_fd_trace_map_{};
 };
 
 } // namespace umq
