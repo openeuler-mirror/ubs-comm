@@ -188,9 +188,13 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     uint32_t sn_allocated = 0;
     cvt->Reset();
 
+    // 记录每个 WR 首片指针，用于 umq_post 部分失败时按指针匹配识别 WR 边界
+    // TX 走 without_data 分配路径，first_fragment 未初始化，不能依赖它识别 WR 边界
+    umq_buf_t *wr_first_bufs[TX_POST_BATCH_MAX];
     const uint32_t io_buf_size = UmqSetting::GetIOBufSize();
     for (uint32_t i = 0; i < batch; ++i) {
         umq_buf_t *cur_wr_first = next_buf;
+        wr_first_bufs[i] = cur_wr_first;
         uint32_t moved_total_len = 0;
         uint32_t wr_left_len = io_buf_size;
         uint32_t sge_idx = 0;
@@ -338,8 +342,8 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             umq_socket->FetchSubSeqNum(sn_allocated);
         } else {
             uint32_t buf_num = 0;
-            tx_total_len -= HandleBadQBuf(sock, tx_buf_list, bad_qbuf, head_qbuf, batch, _unsolicited_wr_num,
-                                          _unsolicited_bytes, _unsignaled_wr_num, &buf_num);
+            tx_total_len = HandleBadQBuf(sock, tx_buf_list, bad_qbuf, head_qbuf, _unsolicited_wr_num,
+                                         _unsolicited_bytes, _unsignaled_wr_num, wr_first_bufs, batch, &buf_num);
             if (trace != nullptr) {
                 // 要恢复的大小等于当前已发完的数据大小
                 auto tmp_remaining_len = tx_total_len;
@@ -596,26 +600,52 @@ inline uint32_t UmqTxOps::IOBufSize()
 }
 
 uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf,
-                                 umq_buf_t *last_head_qbuf, uint32_t batch, uint16_t unsolicited_wr_num,
-                                 uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num, uint32_t *buf_num)
+                                 umq_buf_t *last_head_qbuf, uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes,
+                                 uint16_t unsignaled_wr_num, umq_buf_t **wr_first_bufs, uint32_t batch,
+                                 uint32_t *buf_num)
 {
     umq_buf_t *cur_qbuf = head_qbuf;
     umq_buf_t *last_qbuf = nullptr;
     umq_buf_t *head_qbuf_ = last_head_qbuf;
     umq_buf_t *bad_qbuf_ori = bad_qbuf;
     uint32_t wr_cnt = 0;
+    uint32_t wr_idx = 0;
     uint16_t _unsolicited_wr_num = unsolicited_wr_num;
     uint32_t _unsolicited_bytes = unsolicited_bytes;
     uint16_t _unsignaled_wr_num = unsignaled_wr_num;
     uint32_t total_size = 0;
+    bool prev_complete = false;
 
-    while (bad_qbuf != nullptr) {
-        cur_qbuf = bad_qbuf;
+    while (cur_qbuf != nullptr && cur_qbuf != bad_qbuf) {
+        if (wr_idx < batch && cur_qbuf == wr_first_bufs[wr_idx]) {
+            if (prev_complete) {
+                head_qbuf_ = cur_qbuf;
+            }
+            wr_cnt++;
+            umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)cur_qbuf->qbuf_ext;
+            if (buf_pro->flag.bs.solicited_enable == 1) {
+                _unsolicited_wr_num = 0;
+                _unsolicited_bytes = 0;
+            } else {
+                _unsolicited_wr_num++;
+                _unsolicited_bytes += cur_qbuf->total_data_size;
+            }
+            if (buf_pro->flag.bs.complete_enable == 1) {
+                _unsignaled_wr_num = 0;
+                prev_complete = true;
+            } else {
+                _unsignaled_wr_num++;
+                prev_complete = false;
+            }
+            wr_idx++;
+        }
         total_size += cur_qbuf->data_size;
-        bad_qbuf = QBUF_LIST_NEXT(cur_qbuf);
-        wr_cnt++;
+        last_qbuf = cur_qbuf;
+        cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
     }
-    wr_cnt = batch - wr_cnt;
+    if (prev_complete) {
+        head_qbuf_ = nullptr;
+    }
 
     unsolicited_wr_num_ = _unsolicited_wr_num;
     unsolicited_bytes_ = _unsolicited_bytes;
@@ -625,8 +655,6 @@ uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, um
 
     QBUF_LIST_FIRST(&head_buf_) = head_qbuf_;
     if (last_qbuf != nullptr) {
-        /* If head set to nullptr, it means no need to cache the posted qbuf list anymore, reset head
-             * to nullptr as well */
         QBUF_LIST_FIRST(&tail_buf_) = (head_qbuf_ == nullptr) ? nullptr : last_qbuf;
         QBUF_LIST_NEXT(last_qbuf) = nullptr;
     }
