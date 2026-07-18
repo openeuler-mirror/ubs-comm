@@ -29,7 +29,8 @@ public:
     {
         OK = 0,
         ERROR = -1,
-        QUEUE_EMPTY = 1
+        QUEUE_EMPTY = -11,
+        QUEUE_FULL = -105,
     };
 
     explicit UmqBufferReceiveQueue();
@@ -63,9 +64,9 @@ private:
     OpResult EnqueueInOrder(umq_buf_t *buffer);
     void FlushOooQueueInternal() const;
     void FlushReceiveQueueInternal() const;
-    void ProcessNormalInOrder(uint64_t now, umq_buf_t *buffer);
-    void CheckAndTriggerMeltdown(uint32_t sn, uint64_t now, uint32_t gap);
-    void FlushOooQueueToReceiveQueueInternal();
+    UmqBufferReceiveQueue::OpResult ProcessNormalInOrder(uint64_t now, umq_buf_t *buffer);
+    UmqBufferReceiveQueue::OpResult CheckAndTriggerMeltdown(uint64_t now, uint32_t gap);
+    UmqBufferReceiveQueue::OpResult FlushOooQueueToReceiveQueueInternal();
 
 private:
     SPSCRingQueue<umq_buf_t *> *receive_queue = nullptr;
@@ -77,6 +78,7 @@ private:
 
     bool use_o3_{false};
     bool is_shutdown_{false};
+    OpResult pending_error_ = OpResult::OK;
 
     // 应用层配置：最大允许乱序度距离（不超过rx_depth，如为0则默认为rx_depth的75%）
     uint32_t m_max_ooo_gap = UmqSetting::UMQ_MAX_O3_GAP != 0 ?
@@ -87,6 +89,8 @@ private:
     uint64_t m_ooo_timeout_ns = (UmqSetting::UMQ_O3_TIMEOUT_MS != 0 ? UmqSetting::UMQ_O3_TIMEOUT_MS : 5) * 1000000ULL;
     // 首次发生断链（主槽位出现空洞）的时间戳
     uint64_t m_ooo_start_time_ns = 0;
+
+    static constexpr double QUEUE_DEPTH_FACTOR = 1.2;
 };
 
 } // namespace umq
