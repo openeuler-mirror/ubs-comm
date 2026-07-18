@@ -9,6 +9,7 @@
 * See the Mulan PSL v2 for more details.
 */
 #include "umq_buffer_receive_queue.h"
+#include <cmath>
 
 static ALWAYS_INLINE uint64_t GetCurrentTimeNs()
 {
@@ -29,7 +30,8 @@ namespace umq {
 
 UmqBufferReceiveQueue::UmqBufferReceiveQueue()
 {
-    uint64_t queue_depth = GlobalSetting::UBS_RX_DEPTH;
+    // rx_depth * 队列系数
+    uint64_t queue_depth = static_cast<uint64_t>(std::ceil(GlobalSetting::UBS_RX_DEPTH * QUEUE_DEPTH_FACTOR));
     queue_depth = (queue_depth <= 1) ? 1 : 1ULL << (64 - __builtin_clzll(queue_depth - 1));
     receive_queue = new (std::nothrow) SPSCRingQueue<umq_buf_t *>(queue_depth);
     if (receive_queue == nullptr) {
@@ -84,11 +86,15 @@ UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::Enqueue(umq_buf_t *buffer
     if (is_shutdown_) {
         UBS_VLOG_WARN("Reject enqueue. Queue is already shutdown.\n");
         UmqApi::umq_buf_free(buffer);
-        ClearAllocations();
         return OpResult::ERROR;
     }
     if (!use_o3_) {
-        receive_queue->Push(buffer);
+        if (!receive_queue->Push(buffer)) {
+            UBS_VLOG_ERR("Receive queue is full (No buffer space available).\n");
+            UmqApi::umq_buf_free(buffer);
+            pending_error_ = OpResult::QUEUE_FULL;
+            return OpResult::QUEUE_FULL;
+        }
         return OpResult::OK;
     }
     return EnqueueInOrder(buffer);
@@ -105,6 +111,10 @@ UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::DequeueBatch(umq_buf_t **
     if (is_shutdown_) {
         UBS_VLOG_WARN("Reject dequeue batch. Queue is already shutdown.\n");
         return OpResult::ERROR;
+    }
+
+    if (pending_error_ != OpResult::OK) {
+        return pending_error_;
     }
 
     *dequeued_count = 0;
@@ -137,7 +147,12 @@ UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::EnqueueInOrder(umq_buf_t 
     uint32_t raw_sn = buf_pro->imm.user_data;
 
     if (buffer->status >= UMQ_FAKE_BUF_FC_UPDATE || raw_sn == UmqSetting::UMQ_PROBE_USER_DATA_ID) {
-        receive_queue->Push(buffer);
+        if (!receive_queue->Push(buffer)) {
+            UBS_VLOG_ERR("Receive queue is full (No buffer space available).\n");
+            UmqApi::umq_buf_free(buffer);
+            pending_error_ = OpResult::QUEUE_FULL;
+            return OpResult::QUEUE_FULL;
+        }
         return OpResult::OK;
     }
 
@@ -153,18 +168,25 @@ UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::EnqueueInOrder(umq_buf_t 
     }
 
     uint64_t now = GetCurrentTimeNs();
-    CheckAndTriggerMeltdown(sn, now, gap);
+    if (CheckAndTriggerMeltdown(now, gap) != OpResult::OK) {
+        UmqApi::umq_buf_free(buffer);
+        return pending_error_ != OpResult::OK ? pending_error_ : OpResult::ERROR;
+    }
 
     if (current_expect == sn) {
-        ProcessNormalInOrder(now, buffer);
+        return ProcessNormalInOrder(now, buffer);
     } else {
         if (out_of_order_queue->IsEmpty()) {
             m_ooo_start_time_ns = now;
         }
-        return out_of_order_queue->Push(buffer) == UBS_OK ? OpResult::OK : OpResult::ERROR;
+        if (out_of_order_queue->Push(buffer) != UBS_OK) {
+            UBS_VLOG_ERR("Out-Of-Order receive queue is full (No buffer space available).\n");
+            UmqApi::umq_buf_free(buffer);
+            pending_error_ = OpResult::QUEUE_FULL;
+            return OpResult::QUEUE_FULL;
+        }
+        return OpResult::OK;
     }
-
-    return OpResult::OK;
 }
 
 void UmqBufferReceiveQueue::FlushOooQueueInternal() const
@@ -196,17 +218,25 @@ void UmqBufferReceiveQueue::FlushReceiveQueueInternal() const
     }
 }
 
-void UmqBufferReceiveQueue::ProcessNormalInOrder(uint64_t now, umq_buf_t *buffer)
+UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::ProcessNormalInOrder(uint64_t now, umq_buf_t *buffer)
 {
-    receive_queue->Push(buffer);
+    if (!receive_queue->Push(buffer)) {
+        UmqApi::umq_buf_free(buffer);
+        pending_error_ = OpResult::QUEUE_FULL;
+        return OpResult::QUEUE_FULL;
+    }
     uint32_t current_expect = UmqSeqTraits::Next(m_expect_sn);
     while (!out_of_order_queue->IsEmpty()) {
         umq_buf_t *top_buf = out_of_order_queue->Top();
         uint32_t top_buf_sn = GetSn(top_buf);
 
         if (current_expect == top_buf_sn) {
-            receive_queue->Push(top_buf);
             out_of_order_queue->Pop();
+            if (!receive_queue->Push(top_buf)) {
+                UmqApi::umq_buf_free(top_buf);
+                pending_error_ = OpResult::QUEUE_FULL;
+                return OpResult::QUEUE_FULL;
+            }
             current_expect = UmqSeqTraits::Next(current_expect);
         } else if (UmqSeqTraits::CompareLessInCircularOrder(current_expect, top_buf_sn)) {
             break;
@@ -218,40 +248,59 @@ void UmqBufferReceiveQueue::ProcessNormalInOrder(uint64_t now, umq_buf_t *buffer
 
     m_expect_sn = current_expect;
     m_ooo_start_time_ns = out_of_order_queue->IsEmpty() ? 0 : now;
+    return OpResult::OK;
 }
 
-void UmqBufferReceiveQueue::CheckAndTriggerMeltdown(uint32_t sn, uint64_t now, uint32_t gap)
+UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::CheckAndTriggerMeltdown(uint64_t now, uint32_t gap)
 {
+    if (pending_error_ != OpResult::OK) {
+        return pending_error_;
+    }
     if (gap > m_max_ooo_gap) {
         UBS_VLOG_ERR("Out-of-order gap exceeded threshold! Gap: %u, Max: %u. Forcing forward migration.\n", gap,
                      m_max_ooo_gap);
-        FlushOooQueueToReceiveQueueInternal();
-        return;
+        return FlushOooQueueToReceiveQueueInternal();
     }
     if (!out_of_order_queue->IsEmpty() && (now - m_ooo_start_time_ns > m_ooo_timeout_ns)) {
         UBS_VLOG_ERR("Packet loss timeout! Expect SN: %u stalled for %lu ns. Forcing forward migration.\n", m_expect_sn,
                      (now - m_ooo_start_time_ns));
-        FlushOooQueueToReceiveQueueInternal();
-        return;
+        return FlushOooQueueToReceiveQueueInternal();
     }
+    return OpResult::OK;
 }
 
-void UmqBufferReceiveQueue::FlushOooQueueToReceiveQueueInternal()
+UmqBufferReceiveQueue::OpResult UmqBufferReceiveQueue::FlushOooQueueToReceiveQueueInternal()
 {
     if (out_of_order_queue == nullptr || out_of_order_queue->IsEmpty()) {
-        return;
+        return OpResult::OK;
     }
 
     UBS_VLOG_WARN("Intervention triggered: Flushing OOO queue to receive queue. Old expect_sn: %u\n", m_expect_sn);
     while (!out_of_order_queue->IsEmpty()) {
         umq_buf_t *top_buf = out_of_order_queue->Top();
-        out_of_order_queue->Pop();
-        if (top_buf != nullptr) {
-            receive_queue->Push(top_buf);
+        if (top_buf == nullptr) {
+            out_of_order_queue->Pop();
+            continue;
+        }
+        if (receive_queue->Push(top_buf)) {
             m_expect_sn = UmqSeqTraits::Add(GetSn(top_buf), 1);
+            out_of_order_queue->Pop();
+        } else {
+            UBS_VLOG_ERR("Receive queue overflow during meltdown flush! Dropping remaining OOO packets.\n");
+            while (!out_of_order_queue->IsEmpty()) {
+                umq_buf_t *remain_buf = out_of_order_queue->Top();
+                out_of_order_queue->Pop();
+                if (remain_buf) {
+                    UmqApi::umq_buf_free(remain_buf);
+                }
+            }
+            m_ooo_start_time_ns = 0;
+            pending_error_ = OpResult::QUEUE_FULL;
+            return OpResult::QUEUE_FULL;
         }
     }
     m_ooo_start_time_ns = 0;
+    return OpResult::OK;
 }
 
 bool UmqBufferReceiveQueue::Empty() const

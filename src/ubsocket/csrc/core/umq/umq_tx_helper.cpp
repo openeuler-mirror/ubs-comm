@@ -102,6 +102,10 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
 
     for (const auto &[fd, count] : socket_wr_cnt_map) {
         auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+        if (sock.Get() == nullptr) {
+            UBS_VLOG_DEBUG("Socket %d has been removed.\n", fd);
+            continue;
+        }
         auto umq_sk = RefStaticCast<UmqSocket>(sock);
         auto tx_ops = umq_sk->GetTx()->GetTxOps();
         tx_ops->tx_queue_avail_num_.fetch_add(count, std::memory_order_acq_rel);

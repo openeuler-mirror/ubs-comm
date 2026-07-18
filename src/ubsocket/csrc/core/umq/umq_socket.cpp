@@ -427,7 +427,7 @@ int UmqSocket::AddQbuf(umq_buf_t *qbuf)
 
     UmqBufferReceiveQueue::OpResult enqueue_ret = rxQueue->Enqueue(qbuf);
     if (enqueue_ret != UmqBufferReceiveQueue::OpResult::OK) {
-        UBS_VLOG_ERR("AddQbuf failed, fd: %d, ret: %d\n", raw_socket_, static_cast<int>(enqueue_ret));
+        UBS_VLOG_DEBUG("AddQbuf failed, fd: %d, ret: %d\n", raw_socket_, static_cast<int>(enqueue_ret));
         return UBS_ERROR;
     }
 
@@ -444,6 +444,9 @@ int UmqSocket::GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size)
     UmqBufferReceiveQueue::OpResult ret = rxQueue->DequeueBatch(buf, max_buf_size, &dequeued_count);
     if (ret == UmqBufferReceiveQueue::OpResult::ERROR) {
         UBS_VLOG_ERR("GetAndPopQbuf failed, fd: %d, ret: %d\n", raw_socket_, static_cast<int>(ret));
+    } else if (ret == UmqBufferReceiveQueue::OpResult::QUEUE_FULL) {
+        errno = ENOBUFS;
+        return UBS_ERROR;
     }
 
     return dequeued_count;

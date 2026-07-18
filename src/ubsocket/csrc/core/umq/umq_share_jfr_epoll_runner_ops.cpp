@@ -252,7 +252,7 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
         TRACE_TRY_SWAP_EPOLL(trace);
 
         if (UNLIKELY((((UmqSocket *)socket_ptr.Get())->AddQbuf(buf[i]) != 0))) {
-            UBS_VLOG_ERR("async_epoll add qbuf for socket fd: %d failed.\n", socket_fd);
+            UBS_VLOG_DEBUG("async_epoll add qbuf for socket fd: %d failed.\n", socket_fd);
             continue;
         }
 
