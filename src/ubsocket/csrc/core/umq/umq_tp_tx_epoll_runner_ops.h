@@ -72,9 +72,12 @@ public:
             return false;
         }
         auto removed = pos->second;
-        socket_data_.erase(pos);
+        socket_data_.erase(pos); // fd 可被复用
         if (removed != nullptr) {
-            delete removed;
+            // 不立即 delete：TX poller 可能正从 epoll_wait 批次中处理该事件
+            // event.data.u64 仍指向此 TxEpollEvent，标记 umq_handle 无效让 poller 持锁校验后跳过
+            // 接受 ~32 字节/事件的轻微泄漏（socket 创建/销毁不频繁）
+            removed->umq_handle = UMQ_INVALID_HANDLE;
         }
         return true;
     }

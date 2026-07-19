@@ -34,17 +34,8 @@ Result UmqSocket::Initialize() noexcept
 
 void UmqSocket::UnInitialize() noexcept
 {
-    if (UmqSetting::UMQ_FLOW_CONTROL_ENABLE && umq_handle_ > UMQ_INVALID_HANDLE) {
-        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
-        int fc_event_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
-        if (fc_event_fd < 0) {
-            UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
-                         static_cast<unsigned long long>(umq_handle_));
-            return;
-        }
-        EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).DelEpollEvent(fc_event_fd);
-    }
-
+    // FC TX 事件的 DelEpollEvent 由 DestroyLocalUmq 内部统一处理，
+    // 覆盖所有 3 个调用点 (UnInitialize / DoUbAcceptRetry / DoUbConnectRetry)
     UnbindAndFlushRemoteUmq(this);
     DestroyLocalUmq();
 }
@@ -313,6 +304,18 @@ void UmqSocket::UnbindAndFlushRemoteUmq(Socket *sock)
 void UmqSocket::DestroyLocalUmq()
 {
     if (umq_handle_ != UMQ_INVALID_HANDLE) {
+        // 先从 TX poller 注销 FC TX 事件（标记 umq_handle 无效），防止 in-flight poll 与 umq_destroy 并发
+        // 覆盖所有 3 个调用点: UnInitialize / DoUbAcceptRetry / DoUbConnectRetry
+        if (UmqSetting::UMQ_FLOW_CONTROL_ENABLE) {
+            umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
+            int fc_event_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
+            if (fc_event_fd >= 0) {
+                EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).DelEpollEvent(fc_event_fd);
+            } else {
+                UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd for destroy, local umq: %llu\n",
+                             static_cast<unsigned long long>(umq_handle_));
+            }
+        }
         // need to flush
         int ret = UmqApi::umq_destroy(umq_handle_);
         if (ret != UMQ_SUCCESS) {
@@ -320,7 +323,7 @@ void UmqSocket::DestroyLocalUmq()
                          static_cast<unsigned long long>(umq_handle_), ret);
         }
         /**
-         * (1) 暂时无需 DeleteSubUmq(): umq_handle_ 会在此处释放, share_umq_handle_ 无需在此处删除, 
+         * (1) 暂时无需 DeleteSubUmq(): umq_handle_ 会在此处释放, share_umq_handle_ 无需在此处删除,
          *     在 share_umq_handle_ 做为 umq_handle_ 时会被删除
          * (2) 暂时无需 MainSubUmqTable: 记录了 share_umq_handle_ 和 umq_handle_ 和映射, 仅在 DeleteSubUmq 中使用
          * DeleteSubUmq();
