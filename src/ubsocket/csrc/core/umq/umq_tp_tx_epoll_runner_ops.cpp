@@ -123,6 +123,11 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
         return UBS_OK;
     } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_FC_TX) {
         Locker slock(mutex_);
+        // 校验 umq_handle 有效，防止 in-flight poll 与 umq_destroy 并发
+        // DelEpollEvent -> RemoveSocketEventData 会标记 umq_handle = UMQ_INVALID_HANDLE
+        if (tx_epoll_event->umq_handle == UMQ_INVALID_HANDLE) {
+            return UBS_OK; // 已被注销，跳过
+        }
         return UmqTxHelper::PollUmqTxForFcReturn(tx_epoll_event->umq_handle);
     } else {
         UBS_VLOG_ERR("async_epoll unknown event:(events:%x, data.type:%lu)\n", event.events, tx_epoll_event->type);
@@ -144,7 +149,11 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
 
     TxEpollEvent *tx_epoll_event = reinterpret_cast<TxEpollEvent *>(static_cast<uintptr_t>(event->data.u64));
     if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX) {
-        InsertSocketEventData(fd, tx_epoll_event);
+        // 持锁保护 socket_data_：DelEpollEvent 在另一线程持锁 erase，并发 emplace/erase 是 UB
+        {
+            Locker slock(mutex_);
+            InsertSocketEventData(fd, tx_epoll_event);
+        }
         UBS_VLOG_DEBUG("[UMQ_API] Add Tx event, event type: %llu\n", static_cast<uint64_t>(tx_epoll_event->type));
 
         umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX,
@@ -163,6 +172,11 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
     } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER) {
         // 定时器轮询 main_umq tx
         UBS_VLOG_DEBUG("Add poll tx timer event.\n");
+    } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_FC_TX) {
+        // FC TX 事件注册到 map，使 DelEpollEvent 能找到并标记 umq_handle 无效
+        // 持锁保护 socket_data_：DelEpollEvent 在另一线程持锁 erase，并发 emplace/erase 是 UB
+        Locker slock(mutex_);
+        InsertSocketEventData(fd, tx_epoll_event);
     }
     return UBS_OK;
 }

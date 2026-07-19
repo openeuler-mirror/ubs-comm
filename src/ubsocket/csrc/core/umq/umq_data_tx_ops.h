@@ -62,8 +62,8 @@ public:
 private:
     // 处理 umq_post 失败时的坏 buffer
     uint32_t HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
-                           uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num,
-                           umq_buf_t **wr_first_bufs, uint32_t batch, uint32_t *buf_num);
+                           uint32_t batch, uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes,
+                           uint16_t unsignaled_wr_num, uint32_t *buf_num);
     Block *DataToBlock(void *data);
     int PollUmqTx(Socket *sock, bool poll_to_empty);
     int PollUmqTxOnce(Socket *sock);
