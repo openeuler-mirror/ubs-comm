@@ -587,7 +587,7 @@ int UmqTxOps::DoUmqTxPoll(Socket *sock, ops_error_code &err_code)
         auto *umq_sock = static_cast<UmqSocket *>(sock);
         if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
             if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
-                qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
+                qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR) {
                 auto [ports, ports_num] = umq_sock->GetUsedPorts();
                 for (std::size_t i = 0; i < ports_num; ++i) {
                     UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",
