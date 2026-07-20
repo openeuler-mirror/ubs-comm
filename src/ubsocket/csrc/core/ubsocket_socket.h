@@ -62,7 +62,39 @@ public:
 
     EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
     virtual void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data = {});
-    int NotifyReadable();
+
+    void SetEvents(uint32_t events)
+    {
+        events_.store(events, std::memory_order_release);
+    }
+
+    uint32_t GetEvents() const
+    {
+        return events_.load(std::memory_order_acquire);
+    }
+
+    void SetEpollData(epoll_data_t data)
+    {
+        added_epoll_data_ = data;
+    }
+
+    epoll_data_t GetEpollData() const
+    {
+        return added_epoll_data_;
+    }
+
+    bool ExchangeWritableReady(bool b)
+    {
+        return writable_ready_.exchange(b, std::memory_order_acq_rel);
+    }
+
+    void SetWritableReady(bool b)
+    {
+        return writable_ready_.store(b, std::memory_order_release);
+    }
+
+    int NotifyReadable(bool epollout = false);
+    int NotifyWritable();
 
     DataRx *GetRx()
     {
@@ -82,6 +114,9 @@ public:
         return connector_->IsClient();
     }
 
+private:
+    int DoNotifyWritable();
+
 protected:
     static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);
     static Result CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops);
@@ -94,7 +129,9 @@ protected:
     Acceptor *acceptor_ = nullptr;   /* acceptor of ubsocket */
     Connector *connector_ = nullptr; /* connector of ubsocket */
     EventPoll *added_epoll_fd_ = nullptr;
-    epoll_data_t added_epoll_data_ = {};
+    std::atomic<uint32_t> events_{0};        // 上层关注的 epoll events 事件
+    epoll_data_t added_epoll_data_ = {};     // 上层关注的 epoll data
+    std::atomic<bool> writable_ready_{true}; // 为 true 表示已经接收到对端的流控回复报文，可写
 
     Statistics::StatsMgr stats_mgr_ = {};
 
@@ -146,13 +183,52 @@ ALWAYS_INLINE void SocketBase::SetAddedEpollFd(EventPoll *fd, const epoll_data_t
     added_epoll_data_ = data;
 }
 
-ALWAYS_INLINE int SocketBase::NotifyReadable()
+ALWAYS_INLINE int SocketBase::NotifyReadable(bool epollout)
 {
     if (added_epoll_fd_ == nullptr) {
         return eventfd_write(event_fd_, 1);
     }
 
-    if (((AsyncEventPoll *)added_epoll_fd_)->AddReadableEvent(added_epoll_data_) != 0) {
+    if (epollout && !(GetEvents() & EPOLLOUT)) {
+        UBS_VLOG_ERR("An EPOLLOUT event generated even if the socket(fd=%d) is not interested in EPOLLOUT", Fd());
+    }
+
+    auto *ep = static_cast<AsyncEventPoll *>(added_epoll_fd_);
+    if (ep->AddReadableEvent(EPOLLIN | (epollout ? +EPOLLOUT : 0), added_epoll_data_) != 0) {
+        return -1;
+    }
+
+    return ((AsyncEventPoll *)added_epoll_fd_)->SetReadableEventFd();
+}
+
+ALWAYS_INLINE int SocketBase::NotifyWritable()
+{
+    const uint32_t current = events_.load(std::memory_order_acquire);
+
+    // 如果上层还未关注 EPOLLOUT 事件，说明 UB 链路上的流控回复报文先于 `epoll_ctl(.., MOD, ..)` 到达了.
+    if (!(current & EPOLLOUT)) {
+        writable_ready_.store(true, std::memory_order_release);
+        // 如果另外一个线程 EpollCtlMod 也修改了 events...
+        if (events_.load(std::memory_order_acquire) & EPOLLOUT) {
+            if (writable_ready_.exchange(false, std::memory_order_acq_rel)) {
+                return DoNotifyWritable();
+            }
+        }
+        return 0;
+    }
+
+    // 上层已关注 EPOLLOUT 事件
+    return DoNotifyWritable();
+}
+
+ALWAYS_INLINE int SocketBase::DoNotifyWritable()
+{
+    if (added_epoll_fd_ == nullptr) {
+        return eventfd_write(event_fd_, 1);
+    }
+
+    auto *ep = static_cast<AsyncEventPoll *>(added_epoll_fd_);
+    if (ep->AddReadableEvent(EPOLLOUT, added_epoll_data_) != 0) {
         return -1;
     }
 

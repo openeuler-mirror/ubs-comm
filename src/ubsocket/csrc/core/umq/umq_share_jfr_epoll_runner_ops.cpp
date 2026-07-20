@@ -187,7 +187,7 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
             ((UmqSocket *)socket_obj)->NewRxEpollIn();
             auto epoll_fd_obj = (AsyncEventPoll *)(((SocketBase *)socket_obj)->GetAddedEpollFd(event_data));
             if (LIKELY(epoll_fd_obj != nullptr)) {
-                epoll_fd_obj->AddReadableEvent(event_data);
+                epoll_fd_obj->AddReadableEvent(EPOLLIN, event_data);
                 if (!event_reach_epoll_fds->Test(epoll_fd_obj->GetEpollFd())) {
                     readable_epoll_fds.emplace_back(epoll_fd_obj);
                     event_reach_epoll_fds->Set(epoll_fd_obj->GetEpollFd());
@@ -213,22 +213,27 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
                                                                std::vector<SocketPtr> &socket_ptrs)
 {
     SocketPtr socket_ptr{nullptr};
+    SocketBasePtr sk_base{nullptr};
     int last_socket_fd = -1;
     for (int i = 0; i < count; ++i) {
         auto buf_pro = (umq_buf_pro_t *)buf[i]->qbuf_ext;
-        if (UNLIKELY(buf[i]->status == UMQ_FAKE_BUF_FC_ERR)) {
-            UBS_VLOG_ERR("async_epoll Unreachable flow control.\n");
-        }
-
         auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
         if (socket_fd != last_socket_fd) {
             socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd);
+            sk_base = RefStaticCast<SocketBase>(socket_ptr);
             last_socket_fd = socket_fd;
         }
         if (UNLIKELY(socket_ptr.Get() == nullptr)) {
             UBS_VLOG_DEBUG("[Debug] async_epoll: socket fd: %d object is null, skipping event processing. \n",
                            socket_fd);
             continue;
+        }
+
+        if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
+            // 收到对端流控回复报文，此 socket 对象可写，唤醒写端
+            sk_base->NotifyWritable();
+        } else if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+            // 流控报文错误需要透传给具体 socket 对象，主动触发断链
         }
 
         auto *trace = socket_ptr->split_trace_;
