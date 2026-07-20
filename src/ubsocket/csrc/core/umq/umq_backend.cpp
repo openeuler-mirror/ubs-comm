@@ -355,7 +355,7 @@ uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
     UmqConnHelper::NewBaseUmqCreateOptions(share_main_umq_cfg);
 
     // 声明在分支外，避免悬垂指针导致 umq 创建时，取不到正确的port信息
-    std::vector<umq_port_id_t> used_ports;
+    std::vector<umq_port_id_t> used_ports{};
 
     if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         share_main_umq_cfg.create_flag |= UMQ_CREATE_FLAG_USED_PORTS;
@@ -365,12 +365,35 @@ uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
             UBS_VLOG_ERR("Failed to get urma route info.\n");
             return UMQ_INVALID_HANDLE;
         }
-        used_ports.reserve(route_list.route_num);
+        uint32_t targetChipId = UINT32_MAX;
+        std::set<uint32_t> unique_chip_ids;
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
-            used_ports.push_back(route_list.routes[i].src_port);
+            unique_chip_ids.insert(route_list.routes[i].src_port.bs.chip_id);
         }
+        std::vector<uint32_t> chipId_list(unique_chip_ids.begin(), unique_chip_ids.end());
+        targetChipId = UmqConnHelper::GetTargetChipId(UmqSetting::UMQ_ALL_SOCKET_IDS, chipId_list,
+                                                      UmqSetting::UMQ_PROCESS_SOCKET_ID);
 
-        std::sort(used_ports.begin(), used_ports.end(), [](const umq_port_id_t &a, const umq_port_id_t &b) {
+        std::vector<umq_port_id_t> aff_ports, non_aff_ports;
+        for (uint32_t i = 0; i < route_list.route_num; ++i) {
+            if (route_list.routes[i].src_port.bs.chip_id == targetChipId) {
+                aff_ports.push_back(route_list.routes[i].src_port);
+            } else {
+                non_aff_ports.push_back(route_list.routes[i].src_port);
+            }
+        }
+        used_ports.insert(used_ports.end(), aff_ports.begin(), aff_ports.end());
+        used_ports.insert(used_ports.end(), non_aff_ports.begin(), non_aff_ports.end());
+
+        std::sort(used_ports.begin(), used_ports.end(), [targetChipId](const umq_port_id_t &a, const umq_port_id_t &b) {
+            // 优先把等于 target_chip_id 的排在前面
+            bool a_is_target = (a.bs.chip_id == targetChipId);
+            bool b_is_target = (b.bs.chip_id == targetChipId);
+            if (a_is_target != b_is_target) {
+                return a_is_target;
+            }
+
+            // 如果都不是目标 chip，或者都是目标 chip，再按原来的规则排列
             if (a.bs.chip_id != b.bs.chip_id) {
                 return a.bs.chip_id < b.bs.chip_id;
             }
