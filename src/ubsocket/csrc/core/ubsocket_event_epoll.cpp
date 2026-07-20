@@ -463,9 +463,9 @@ int AsyncEventPoll::EpollWait(struct epoll_event *events, int maxevents, int tim
     return real_count;
 }
 
-int AsyncEventPoll::AddReadableEvent(epoll_data_t data)
+int AsyncEventPoll::AddReadableEvent(uint32_t events, epoll_data_t data)
 {
-    if (!readable_sockets_event_queue_.Push(epoll_event{.events = EPOLLIN, .data = data})) {
+    if (!readable_sockets_event_queue_.Push(epoll_event{.events = events, .data = data})) {
         return -1;
     }
     return 0;
@@ -579,9 +579,22 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         errno = EEXIST;
         return -1;
     }
-    if (UNLIKELY(AddRawSocketEvent(fd, event) != 0)) {
-        UBS_VLOG_ERR("async_epoll epoll ctl add raw socket: %d failed\n", fd);
-        return -1;
+
+    if (event->events & EPOLLET) {
+        // brpc 在 Connect 后会监听 EPOLLOUT, 当 EPOLLOUT 发生后触发 KeepWrite. 之后 brpc 会删除对 EPOLLOUT 的
+        // 关注，只关注 EPOLLIN. 不再关注 TCP fd 的 EPOLLOUT, 首次触发由 NotifyWritable() 上送.
+        struct epoll_event ev = *event;
+        ev.events &= ~EPOLLOUT;
+        if (UNLIKELY(AddRawSocketEvent(fd, &ev) != 0)) {
+            UBS_VLOG_ERR("async_epoll epoll ctl add raw socket: %d failed\n", fd);
+            return -1;
+        }
+    } else {
+        // brpc 在退出时会主动注册一个 pipefd + EPOLLOUT (无 EPOLLET)，等待它唤醒以结束 EventDispatcher.
+        if (UNLIKELY(AddRawSocketEvent(fd, event) != 0)) {
+            UBS_VLOG_ERR("async_epoll epoll ctl add raw socket: %d failed\n", fd);
+            return -1;
+        }
     }
 
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
@@ -597,9 +610,13 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     // 3. set added epoll fd
-    if ((event->events & EPOLLIN) == EPOLLIN) {
-        auto sockBase = RefConvert<Socket, SocketBase>(sock);
-        sockBase->SetAddedEpollFd(this, event->data);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    sockBase->SetAddedEpollFd(this, event->data);
+    sockBase->SetEvents(event->events);
+
+    const bool epollout = event->events & EPOLLOUT;
+    if (epollout) {
+        sockBase->NotifyWritable();
     }
 
     // 4. add proto ex exent
@@ -719,10 +736,29 @@ int AsyncEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
         return -1;
     }
 
-    if (UNLIKELY(ModRawSocketEvent(fd, event) != 0)) {
+    // 在后续通信时，brpc 只会注册 EPOLLIN (绝大多数)。如果 writev 返回 EAGAIN 则 brpc 开始关注
+    // `EPOLLIN | EPOLLOUT`. 此时需去除 EPOLLOUT, 令 tcp fd 只监听 EPOLLIN, 否则会因为 tcp fd 可写而持续触发以
+    // 下死循环: Write -> EAGAIN -> WaitEpollOut -> Write -> EAGAIN ...
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    if (UNLIKELY(sock == nullptr)) {
+        UBS_VLOG_DEBUG("sock is nullptr for origin sock, socket: %d\n", fd);
+        return 0;
+    }
+
+    struct epoll_event ev = *event;
+    ev.events &= ~EPOLLOUT;
+    if (UNLIKELY(ModRawSocketEvent(fd, &ev) != 0)) {
         UBS_VLOG_ERR("async_epoll EpollCtlMod(socket:%d) failed, not added\n", fd);
         errno = ENOENT;
         return -1;
+    }
+
+    auto sk_base = RefStaticCast<SocketBase>(sock);
+    sk_base->SetEvents(event->events);
+    sk_base->SetEpollData(event->data);
+    // 如果本次关注了可写事件，且流控报文已到达，则补发 EPOLLOUT 事件
+    if ((event->events & EPOLLOUT) && sk_base->ExchangeWritableReady(false)) {
+        sk_base->NotifyWritable();
     }
     return 0;
 }
@@ -773,7 +809,9 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
         DelProtoTxEvent(sock);
         TxCqePoller::Instance().DelSocket(sock);
     }
-
+    auto sk_base = RefStaticCast<SocketBase>(sock);
+    sk_base->SetEvents(0);
+    sk_base->SetEpollData({});
     return 0;
 }
 

@@ -276,11 +276,43 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             }
         }
     } else if (bad_qbuf != nullptr) {
+        const bool all_failed = bad_qbuf == tx_buf_list;
         PROF_END(CORE_WRITE_UMQ_POST, false);
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
         if (errno == EAGAIN) {
-            need_fc_awake_.store(true, std::memory_order_relaxed);
+            // 无流控 credit, 底层 umq 会发送流控 credit 报文给对端，对端会回复。此种情况下发包必定会全部失败.
+            // 接下来此函数会返回 -1, errno=EAGAIN. brpc 会主动监控 EPOLLIN | EPOLLOUT 事件.
+            // @See EpollCtlMod
+            //
+            // 但是流控报文通过 UB 链路传输，它可能会先到达本端的共享 JFR 中。如果在 brpc epoll_ctl MOD 之前到
+            // 达就直接通知，brpc 可能会不认这个通知？因为 brpc 还没有注册 EPOLLOUT 事件了，但是底层却上报了一
+            // 个 EPOLLOUT 通知事件。
+            // @See SiftSocketEventsWithUmqBuffers
+            // @See NotifyWritable
+            //
+            // 因此在 EpollCtlMod 与 NotifyWritable 中使用 writable_ready_ 原子变量决策，由谁来真正地向上通知
+            // EPOLLOUT 事件。
+            if (all_failed) {
+                umq_socket->SetWritableReady(false);
+                need_fc_awake_.store(true, std::memory_order_relaxed);
+            } else {
+                // 在部分数据写入成功时出现 EAGAIN, 说明 umq 的流控 credit 不足，它会发起另一个流控 credit 请
+                // 求。ubsocket 对此不关注。
+                //
+                // 通常会出现两种情况：
+                // - 下次 ubsocket writev 时选项其他 jetty node, 任由它可能会被共享 JFR 线程的
+                //   `NotifyWritable()` 被标记为 `writable_ready_=true`. 下次如果它真正出现 EAGAIN, 它的
+                //   `writable_ready_=false` 仍会被重新设置
+                // - 下次 ubsocket writev 时仍选择此 jetty node.
+                //   - 共享 JFR 的 `NotifyWritable()` 可能会先运行，它拥有足够的流控 credit, 可继续发送消息
+                //   - 迟迟收不到对端的流控 credit 回复，在时间范围内返回 EAGAIN. 如果超时会报 ETIMEOUT
+                //   - 不过已经是在等待 EPOLLOUT, 为什么还会在 EPOLLOUT 到达前调用 writev 呢？
+            }
+        } else if (errno == ETIMEDOUT) {
+            // 接收对端流控 credit 回复超时 (默认1s)
+            errno = EIO;
+            return -1;
         } else if (ret == -UMQ_ERR_EFLOWCTL) {
             errno = EIO;
             return -1;
@@ -289,15 +321,22 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             UBS_VLOG_DEBUG(
                 "[Debug] umq_post() suspended: no available jetty. Queued for automatic retry. socket fd: %d\n",
                 sock->raw_socket_);
+            umq_socket->SetWritableReady(false);
             UmqTpWaitQueue::Instance().Enqueue(sock);
             errno = EAGAIN;
         } else if (errno == ENOBUFS) {
-            // optimize: [Jetty池化] ENOBUFS是否需要在此线程尝试pollTx释放资源后重试
-            UBS_VLOG_DEBUG(
-                "[Debug] umq_post() suspended: no enough buffers. Queued for automatic retry. socket fd: %d\n",
-                sock->raw_socket_);
-            UmqTpWaitQueue::Instance().Enqueue(sock);
-            errno = EAGAIN;
+            // jetty pool 整体被占用，当前 jetty node 不允许发送数据.
+            //
+            // umq 在部分写成功时，仍旧会返回 ENOBUFS 表示 jetty pool 没有足够的 qbuf. 不过存在一种可能，如果
+            // 正好被 PollTx 释放了资源，那么此 jetty node 还是可写的，碰一下运气
+            if (all_failed) {
+                UBS_VLOG_DEBUG(
+                    "[Debug] umq_post() suspended: no enough buffers. Queued for automatic retry. socket fd: %d\n",
+                    sock->raw_socket_);
+                umq_socket->SetWritableReady(false);
+                UmqTpWaitQueue::Instance().Enqueue(sock);
+                errno = EAGAIN;
+            }
         } else {
             UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX, local umq: %llu, ret: %d, "
                          "mapped errno: %d(%s), original errno: %d\n",
@@ -334,7 +373,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
                 trace->header_cache_size = _header_cache_size;
                 trace->pending_header = _pending_header;
             }
-            tx_total_len = 0;
+            tx_total_len = -1;
             umq_socket->FetchSubSeqNum(sn_allocated);
         } else {
             uint32_t buf_num = 0;

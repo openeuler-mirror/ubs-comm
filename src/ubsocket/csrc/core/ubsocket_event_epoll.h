@@ -386,7 +386,7 @@ public:
      * @param data event_data added to event queue
      * @return 0: success; -1: failed
      */
-    int AddReadableEvent(epoll_data_t data);
+    int AddReadableEvent(uint32_t events, epoll_data_t data);
 
     int SetReadableEventFd();
 

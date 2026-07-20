@@ -52,7 +52,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         UBS_VLOG_DEBUG("WriteV socket is not writable, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                        Func::Error2Str(errno));
         PROF_END(CORE_WRITE, false);
-        return 0;
+        return -1;
     }
 
     PROF_START(CORE_WRITE_POST_SEND);
