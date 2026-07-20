@@ -36,7 +36,6 @@ namespace umq {
 #define ENV_UMQ_LINK_PRIORITY "UBSOCKET_LINK_PRIORITY"
 #define ENV_UMQ_TP_TYPE "UBSOCKET_JETTY_TYPE"
 #define ENV_UMQ_TP_POOL_SIZE "UBSOCKET_JETTY_POOL_SIZE"
-#define ENV_UMQ_MAX_O3_GAP "UBSOCKET_MAX_O3_GAP"
 #define ENV_UMQ_O3_TIMEOUT_MS "UBSOCKET_O3_TIMEOUT_MS"
 
 #define DEFAULT_DEV_SCHEDULE_POLICY "affinity_priority"
@@ -77,7 +76,6 @@ bool UmqSetting::UMQ_RANDOM_ROUTE = false;
 int8_t UmqSetting::UMQ_LINK_PRIORITY = UBSOCKET_LINK_PRIORITY_DEFAULT;
 pool_type_t UmqSetting::UMQ_TP_TYPE = POOL;
 uint32_t UmqSetting::UMQ_TP_POOL_SIZE = 800;
-uint32_t UmqSetting::UMQ_MAX_O3_GAP = 128;
 uint64_t UmqSetting::UMQ_O3_TIMEOUT_MS = 200;
 
 void UmqSetting::AddRules() noexcept
@@ -93,7 +91,6 @@ void UmqSetting::AddRules() noexcept
                                {ENV_UMQ_TINY_POOL_BLOCK_COUNT, false, 1, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_TLS_TINY_POOL_DEPTH, false, 0, std::numeric_limits<int64_t>::max()},
                                {ENV_UMQ_TLS_EXPAND_TINY_POOL_DEPTH, false, 0, std::numeric_limits<int64_t>::max()},
-                               {ENV_UMQ_MAX_O3_GAP, false, 2, 10240},
                                {ENV_UMQ_O3_TIMEOUT_MS, false, 2, 1000},
                                {ENV_UMQ_UBF_POOL_DEPTH, false, 1, std::numeric_limits<int64_t>::max()}};
 
