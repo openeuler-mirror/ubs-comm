@@ -122,7 +122,7 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
 
     if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         tp_create_cfg.create_flag |= UMQ_TP_CREATE_FLAG_USED_PORTS;
-        uint32_t targetChipId;
+        uint32_t targetChipId = UINT32_MAX;
         bool use_round_robin = true;
 
         if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY != dev_schedule_policy::ROUND_ROBIN) {
@@ -162,7 +162,15 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
             rr_num_ += 1;
         }
 
-        std::sort(used_ports.begin(), used_ports.end(), [](const umq_port_id_t &a, const umq_port_id_t &b) {
+        std::sort(used_ports.begin(), used_ports.end(), [targetChipId](const umq_port_id_t &a, const umq_port_id_t &b) {
+            // 优先把等于 target_chip_id 的排在前面
+            bool a_is_target = (a.bs.chip_id == targetChipId);
+            bool b_is_target = (b.bs.chip_id == targetChipId);
+            if (a_is_target != b_is_target) {
+                return a_is_target;
+            }
+
+            // 如果都不是目标 chip，或者都是目标 chip，再按原来的规则排列
             if (a.bs.chip_id != b.bs.chip_id) {
                 return a.bs.chip_id < b.bs.chip_id;
             }
