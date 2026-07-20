@@ -394,13 +394,16 @@ def extract_read_rounds(lines):
 
 # ========== UMQ 日志解析 ==========
 def parse_umq_entries(lines):
-    """解析 UMQ trace 日志为结构化条目列表（同时保留原始行）"""
+    """解析 UMQ trace 日志为结构化条目列表（同时保留原始行）
+
+    新格式：header 行末尾带 ';' 后接 items，多个 item/sub 用 ';' 串在同一行。
+    """
     entries = []
     current = None
     current_raw = []
 
     header_re = re.compile(r'#(\d+)\s+type=(\w+)\s+umq_id=(\d+)\s+umq_start=(\d+)\s+umq_end=(\d+)\s+umq_exec=(\d+)\s+item_cnt=(\d+)\s+ts=(\d+)\s+tag_ts=(\d+)')
-    item_re = re.compile(r'item\[(\d+)\]\s+umq_id=(\d+)\s+msn=(\d+)\s+size=(\d+)')
+    item_re = re.compile(r'item\[(\d+)\]\s+umq_id=(\d+)\s+(?:sub_umq_id=(\d+)\s+)?msn=(\d+)\s+size=(\d+)')
     sub_re = re.compile(r'sub\[(\d+)\]\s+umq_id=(\d+)\s+func=(.+?)\s+start=(\d+)\s+exec=(\d+)')
 
     for line in lines:
@@ -423,32 +426,40 @@ def parse_umq_entries(lines):
                 'subs': [],
             }
             current_raw = [line]
-            continue
+        elif current is not None:
+            current_raw.append(line)
 
         if current is None:
             continue
 
-        current_raw.append(line)
+        # 按 ';' 拆段，逐段匹配 item/sub
+        for seg in [s.strip() for s in line.split(';') if s.strip()]:
+            if header_re.search(seg):
+                continue
 
-        m = item_re.search(line)
-        if m:
-            current['items'].append({
-                'idx': int(m.group(1)),
-                'umq_id': int(m.group(2)),
-                'msn': int(m.group(3)),
-                'size': int(m.group(4)),
-            })
-            continue
+            mi = item_re.search(seg)
+            if mi:
+                item = {
+                    'idx': int(mi.group(1)),
+                    'umq_id': int(mi.group(2)),
+                    'msn': int(mi.group(4)),
+                    'size': int(mi.group(5)),
+                }
+                sub_umq = mi.group(3)
+                if sub_umq is not None:
+                    item['sub_umq_id'] = int(sub_umq)
+                current['items'].append(item)
+                continue
 
-        m = sub_re.search(line)
-        if m:
-            current['subs'].append({
-                'idx': int(m.group(1)),
-                'umq_id': int(m.group(2)),
-                'func': m.group(3),
-                'start': int(m.group(4)),
-                'exec': int(m.group(5)),
-            })
+            ms = sub_re.search(seg)
+            if ms:
+                current['subs'].append({
+                    'idx': int(ms.group(1)),
+                    'umq_id': int(ms.group(2)),
+                    'func': ms.group(3),
+                    'start': int(ms.group(4)),
+                    'exec': int(ms.group(5)),
+                })
 
     if current:
         current['_raw'] = current_raw
@@ -796,41 +807,41 @@ def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries
 
     ubsocket_sum = write_sum + epoll_sum + read_sum
     rows.append(('', 'ubsocket SUM', '', '', '', '',
-                 format_duration(ubsocket_sum), 'write + epoll + read'))
+                  format_duration(ubsocket_sum), 'write + epoll + read'))
 
     side_total = 0
     if is_client:
         first_t14 = epoll_rounds[0].get('type14_first') if epoll_rounds else None
         urma_rx_end = _find_first_urma_wait_rx_end(epoll_rounds, umq_entries)
         actual_start = urma_rx_end if urma_rx_end is not None else (int(first_t14) if first_t14 is not None else None)
-        last_t19 = None
-        for group in reversed(write_data.get('writevs', [])):
+        first_t19 = None
+        for group in write_data.get('writevs', []):
             p = group.get('post')
             if p and p[1] is not None:
-                last_t19 = p[1]
+                first_t19 = p[1]
                 break
-        if actual_start is not None and last_t19 is not None:
-            side_total = int(actual_start) - int(last_t19)
+        if actual_start is not None and first_t19 is not None:
+            side_total = int(actual_start) - int(first_t19)
             key_name = 'urma_wait_jfc(rx)_end' if urma_rx_end else 'type14_start'
             rows.append(('', 'Client等待耗时', '', '', '', '',
                           format_duration(side_total),
-                          f'{key_name}={actual_start} - type19_end={last_t19}'))
+                          f'{key_name}={actual_start} - type19_end={first_t19}'))
     else:
-        last_t19 = None
-        for group in reversed(write_data.get('writevs', [])):
+        first_t19 = None
+        for group in write_data.get('writevs', []):
             p = group.get('post')
             if p and p[1] is not None:
-                last_t19 = p[1]
+                first_t19 = p[1]
                 break
         first_t14 = epoll_rounds[0].get('type14_first') if epoll_rounds else None
         urma_rx_end = _find_first_urma_wait_rx_end(epoll_rounds, umq_entries)
         actual_start = urma_rx_end if urma_rx_end is not None else (int(first_t14) if first_t14 is not None else None)
-        if last_t19 is not None and actual_start is not None:
-            side_total = int(last_t19) - int(actual_start)
+        if first_t19 is not None and actual_start is not None:
+            side_total = int(first_t19) - int(actual_start)
             key_name = 'urma_wait_jfc(rx)_end' if urma_rx_end else 'type14_start'
             rows.append(('', 'Server处理耗时', '', '', '', '',
                           format_duration(side_total),
-                          f'type19_end={last_t19} - {key_name}={actual_start}'))
+                          f'type19_end={first_t19} - {key_name}={actual_start}'))
 
     return rows, side_total
 
@@ -935,6 +946,8 @@ def find_effective_start(write_data, target_seq):
             ts = wv[0] if wv else None
             return s, ts
     return None, None
+
+
 
 # ========== 主函数 ==========
 def main():
