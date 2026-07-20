@@ -23,7 +23,6 @@ target_include_directories(ubsocket_signal_handler_test
 target_link_libraries(ubsocket_signal_handler_test
   PRIVATE
     ubsocket_static
-    boundscheck
     mockcpp
     GTest::gtest_main
     pthread

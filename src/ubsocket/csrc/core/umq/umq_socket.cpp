@@ -654,14 +654,14 @@ void UmqSocket::SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data)
 {
     SocketBase::SetAddedEpollFd(fd, data);
 
-    if (!rxQueue->Empty()) {
+    if (rxQueue && !rxQueue->Empty()) {
         NotifyReadable();
     }
 }
 
 bool UmqSocket::RxQueueEmpty()
 {
-    return rxQueue->Empty();
+    return !rxQueue || rxQueue->Empty();
 }
 
 } // namespace umq
