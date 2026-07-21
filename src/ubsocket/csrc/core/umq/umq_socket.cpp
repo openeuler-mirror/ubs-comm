@@ -650,7 +650,8 @@ uint64_t UmqSocket::RegisterFcTxEvent()
         return UBS_ERROR;
     }
 
-    struct epoll_event umq_tx_event{};
+    struct epoll_event umq_tx_event {
+    };
     umq_tx_event.events = EPOLLIN | EPOLLET;
     umq_tx_event.data.u64 = reinterpret_cast<uintptr_t>(tx_epoll_event);
 
