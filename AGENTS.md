@@ -19,6 +19,10 @@ HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on ./build.sh  # debug + test build
 
 ### UBSocket (sub-component)
 ```bash
+# 优先
+cmake -S. -Bout -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  -DBUILD_UBSOCKET=ON -DBUILD_HCOM=OFF -DUBSOCKET_BUILD_TESTS=ON # build only
+
+# 如果需要运行 UT, 则选择
 UMQ_BUILD=on UBSOCKET_BUILD=on ./build/build_umq_and_ubsocket.sh          # build only
 UMQ_BUILD=on UBSOCKET_UT=on ./build/build_umq_and_ubsocket.sh             # build + run UT
 UMQ_BUILD=on UBSOCKET_BUILD=on UBSOCKET_UT=on ./build/build_umq_and_ubsocket.sh  # full cycle
@@ -253,6 +257,14 @@ clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也
 ## UBSocket 架构参考
 
 > **完整架构文档**: `doc/ubsocket/UBSOCKET-ARCHITECTURE.ch.md` (含mermaid图)
+
+另外一定要保证，ubsocket 一定要兼容纯 TCP 模式，通常是指那些 socket fd 未放在 `ArraySet<Socket>` 中的，要使得在使用 ubsocket 之后它们的语义无变化，如
+
+```c
+epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &event);
+```
+
+在经过 ubsocket 之后，对应的 fd 在 epfd 中该关注什么事件就是怎样的，对于其他 socket API、epoll API 都是如此。
 
 ### POSIX API 覆盖状态
 

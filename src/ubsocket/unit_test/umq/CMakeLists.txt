@@ -36,7 +36,7 @@ target_include_directories(umq_socket_connector_test PRIVATE
     ${UBSOCKET_BASE_DIR}/include
 )
 target_link_libraries(umq_socket_connector_test PRIVATE
-    ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
+    ubsocket_static mockcpp GTest::gtest_main pthread
 )
 target_sources(umq_socket_connector_test PRIVATE
     umq_socket_connector_test.cpp

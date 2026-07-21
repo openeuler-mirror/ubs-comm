@@ -65,50 +65,27 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
             PROF_END(UMQ_BUF_FREE, true);
             continue;
         }
+
         // currently, umq over IB return IB cr status directly, successful = 0
         if (buf[i]->status != 0) {
-            // 共享jfr场景由主UMQ处理流控，非共享jfr场景子UMQ各自处理
-            if (buf[i]->status != UMQ_FAKE_BUF_FC_UPDATE && buf[i]->status != UMQ_FAKE_BUF_FC_MSG) {
-                if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
+            // 流控消息处理
+            if (buf[i]->status >= UMQ_FAKE_BUF_FC_UPDATE) {
+                if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
+                    // 对端的流控回复，已在共享 JFR 接收处 inline 处理
+                } else if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
                     flow_control_failed_ = true;
+                    HandleErrorRxCqe(buf[i]);
+
+                    // 异步关闭. 当前处于 readv 中，等到下次 EPOLLIN 事件到来时会触发关闭
+                    sock->State(SOCK_STAT_CLOSE);
+                } else {
+                    UBS_VLOG_DEBUG("[Debug] Unknown buffer status: %d", static_cast<int>(buf[i]->status));
                 }
+            } else {
                 HandleErrorRxCqe(buf[i]);
 
                 // 异步关闭. 当前处于 readv 中，等到下次 EPOLLIN 事件到来时会触发关闭
                 sock->State(SOCK_STAT_CLOSE);
-            } else if (buf[i]->status == UMQ_FAKE_BUF_FC_MSG) {
-                PROF_START(UMQ_BUF_FREE);
-                UmqApi::umq_buf_free(buf[i]);
-                PROF_END(UMQ_BUF_FREE, true);
-                if (!PollSubUmqRx(buf, i)) {
-                    continue;
-                }
-
-                if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
-                    flow_control_failed_ = true;
-                    HandleErrorRxCqe(buf[i]);
-                    PROF_START(UMQ_BUF_FREE);
-                    UmqApi::umq_buf_free(buf[i]);
-                    PROF_END(UMQ_BUF_FREE, true);
-                    continue;
-                } else if (buf[i]->status == UMQ_FAKE_BUF_FC_EMLINK) {
-                    UBS_VLOG_DEBUG(
-                        "[Debug] fc post suspended: resource exhausted. Queued for automatic retry. umq_ctx: %d\n",
-                        sock->raw_socket_);
-                    // 新建一个流控包加入接收队列进行重试
-                    auto *fc_buf = UmqApi::umq_buf_alloc(0, 1, UMQ_INVALID_HANDLE, nullptr);
-                    if (fc_buf != nullptr) {
-                        fc_buf->status = UMQ_FAKE_BUF_FC_MSG;
-                        auto *qbuf_pro = reinterpret_cast<umq_buf_pro_t *>(fc_buf->qbuf_ext);
-                        qbuf_pro->opcode = UMQ_OPC_SEND_IMM;
-                        auto umqSock = dynamic_cast<UmqSocket *>(sock.Get());
-                        umqSock->AddQbuf(fc_buf);
-                        // 流控请求获取jetty资源失败，加入等待队列
-                        UmqTpWaitQueue::Instance().Enqueue(sock);
-                    }
-                }
-            } else {
-                UBS_VLOG_DEBUG("[Debug] Unknown buffer status: %d", static_cast<int>(buf[i]->status));
             }
 
             QBUF_LIST_NEXT(buf[i]) = nullptr;

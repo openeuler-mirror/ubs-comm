@@ -13,7 +13,6 @@
 #include <netinet/tcp.h>
 
 #include <gtest/gtest.h>
-#include <securec.h>
 #include <mockcpp/mockcpp.hpp>
 
 #include "common/ubsocket_common_includes.h"
