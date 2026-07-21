@@ -241,7 +241,7 @@ int UmqTpTxEpollRunnerOps::DelEpollEvent(int epoll_fd, int fd)
     }
 
     if (UNLIKELY(ret < 0)) {
-        UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", fd, errno, strerror(errno));
+        UBS_VLOG_ERR("async_epoll del pure event for socket: %d not del: %d : %s\n", fd, errno, strerror(errno));
         return UBS_ERROR;
     }
 
