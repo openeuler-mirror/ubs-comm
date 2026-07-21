@@ -79,13 +79,13 @@ public:
 
     DataTxOps *GetTxOps()
     {
-        return tx_ops_;
+        return tx_ops_.get();
     }
 
 private:
     int fd_ = -1;
     int event_fd_ = -1;
-    DataTxOps *tx_ops_ = nullptr;
+    std::unique_ptr<DataTxOps> tx_ops_;
 };
 } // namespace ubs
 } // namespace ock

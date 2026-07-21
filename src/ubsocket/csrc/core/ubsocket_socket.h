@@ -41,13 +41,23 @@ public:
     {
         stats_mgr_.InitStatsMgr();
     }
+
     ~SocketBase() override
     {
         if (GlobalSetting::UBS_TRACE_ENABLED) {
             Statistics::StatsMgr::SubMConnCount();
-            if (IsClient()) {
+            if (connector_ != nullptr && IsClient()) {
                 Statistics::StatsMgr::SubMActiveConnCount();
             }
+        }
+        if (acceptor_ != nullptr) {
+            delete acceptor_;
+            acceptor_ = nullptr;
+        }
+
+        if (connector_ != nullptr) {
+            delete connector_;
+            connector_ = nullptr;
         }
     }
 

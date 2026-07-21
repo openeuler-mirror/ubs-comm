@@ -50,6 +50,11 @@ public:
     ~UmqSocket() override
     {
         UnInitialize();
+
+        if (mutex_ != nullptr) {
+            LockRegistry::LOCK_OPS.destroy(mutex_);
+            mutex_ = nullptr;
+        }
     }
 
     Result Initialize() noexcept override;
@@ -202,6 +207,7 @@ private:
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
     uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid);
     uint64_t RegisterFcTxEvent();
+    void UnregisterFcTxEvent();
 
     // 链接类型相关
     bool is_bonding_ = false;
@@ -214,6 +220,7 @@ private:
     bool umq_is_bind_remote_ = false;
     // UMQ 句柄
     uint64_t umq_handle_ = UMQ_INVALID_HANDLE;
+    int fc_event_fd_ = -1;
 
     u_mutex_t *mutex_;
     uint64_t share_umq_handle_ = UMQ_INVALID_HANDLE;

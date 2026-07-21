@@ -22,6 +22,43 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
+UmqTpTxEpollRunnerOps::~UmqTpTxEpollRunnerOps()
+{
+    for (auto &item : socket_data_) {
+        auto *event = item.second;
+        if (event == nullptr) {
+            continue;
+        }
+
+        if (event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER && event->timer_fd >= 0) {
+            LibcApi::close(event->timer_fd);
+            event->timer_fd = -1;
+        }
+
+        delete event;
+    }
+    socket_data_.clear();
+
+    for (auto *event : removed_events_) {
+        if (event == nullptr) {
+            continue;
+        }
+
+        if (event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER && event->timer_fd >= 0) {
+            LibcApi::close(event->timer_fd);
+            event->timer_fd = -1;
+        }
+
+        delete event;
+    }
+    removed_events_.clear();
+
+    if (mutex_ != nullptr) {
+        LockRegistry::LOCK_OPS.destroy(mutex_);
+        mutex_ = nullptr;
+    }
+}
+
 int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
 {
     TxEpollEvent *tx_epoll_event = reinterpret_cast<TxEpollEvent *>(static_cast<uintptr_t>(event.data.u64));
@@ -152,7 +189,11 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
         // 持锁保护 socket_data_：DelEpollEvent 在另一线程持锁 erase，并发 emplace/erase 是 UB
         {
             Locker slock(mutex_);
-            InsertSocketEventData(fd, tx_epoll_event);
+            if (!InsertSocketEventData(fd, tx_epoll_event)) {
+                epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+                UBS_VLOG_ERR("Failed to save TP TX event, fd: %d\n", fd);
+                return UBS_ERROR;
+            }
         }
         UBS_VLOG_DEBUG("[UMQ_API] Add Tx event, event type: %llu\n", static_cast<uint64_t>(tx_epoll_event->type));
 
@@ -170,13 +211,22 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
             return UBS_ERROR;
         }
     } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER) {
-        // 定时器轮询 main_umq tx
+        {
+            Locker slock(mutex_);
+            if (!InsertSocketEventData(fd, tx_epoll_event)) {
+                epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+                UBS_VLOG_ERR("Failed to save tx timer event, fd: %d\n", fd);
+                return UBS_ERROR;
+            }
+        }
         UBS_VLOG_DEBUG("Add poll tx timer event.\n");
     } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_FC_TX) {
-        // FC TX 事件注册到 map，使 DelEpollEvent 能找到并标记 umq_handle 无效
-        // 持锁保护 socket_data_：DelEpollEvent 在另一线程持锁 erase，并发 emplace/erase 是 UB
         Locker slock(mutex_);
-        InsertSocketEventData(fd, tx_epoll_event);
+        if (!InsertSocketEventData(fd, tx_epoll_event)) {
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+            UBS_VLOG_ERR("Failed to save FC TX event, fd: %d\n", fd);
+            return UBS_ERROR;
+        }
     }
     return UBS_OK;
 }
@@ -184,14 +234,17 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
 int UmqTpTxEpollRunnerOps::DelEpollEvent(int epoll_fd, int fd)
 {
     auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
-    if (UNLIKELY(ret < 0)) {
-        UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", fd, errno, strerror(errno));
-        return UBS_ERROR;
-    }
+
     {
         Locker sLock(mutex_);
         RemoveSocketEventData(fd);
     }
+
+    if (UNLIKELY(ret < 0)) {
+        UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", fd, errno, strerror(errno));
+        return UBS_ERROR;
+    }
+
     return UBS_OK;
 }
 

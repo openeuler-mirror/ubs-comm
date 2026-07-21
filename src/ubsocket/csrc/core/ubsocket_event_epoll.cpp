@@ -68,6 +68,22 @@ void CleanSocketEpollMapper(int socket_fd)
     mapper = nullptr;
 }
 
+void CleanAllSocketEpollMappers()
+{
+    if (g_socket_epoll_lock == nullptr) {
+        return;
+    }
+
+    WriteLocker s_lock(g_socket_epoll_lock);
+    for (auto &mapper : g_socket_epoll_mappers) {
+        if (mapper.second != nullptr) {
+            delete mapper.second;
+            mapper.second = nullptr;
+        }
+    }
+    g_socket_epoll_mappers.clear();
+}
+
 template <EpollRunnerType T>
 class PthreadEpollRunnerBackend : public EpollRunnerBackend {
 public:
@@ -348,6 +364,16 @@ ALWAYS_INLINE std::string EpollRunner<T>::GetRunnerName()
 AsyncEventPoll::~AsyncEventPoll() noexcept
 {
     UBS_VLOG_INFO("async_epoll destructure invoked for fd: %d\n", epoll_fd_);
+    ReleaseRemovedEventsData();
+    {
+        Locker sLock(mutex_);
+        for (auto &socket_data : socket_data_) {
+            if (socket_data.second != nullptr) {
+                delete socket_data.second;
+            }
+        }
+        socket_data_.clear();
+    }
     if (epoll_fd_ < 0 || sock_readable_fd_ < 0) {
         return;
     }
@@ -421,7 +447,10 @@ int AsyncEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
         case EPOLL_CTL_DEL:
             ret = EpollCtlDel(fd, event);
             if (ret == 0 && mapper != nullptr) {
-                mapper->Del(epoll_fd_);
+                if (mapper->Del(epoll_fd_)) {
+                    CleanSocketEpollMapper(fd);
+                    mapper = nullptr;
+                }
             }
             break;
         default:
