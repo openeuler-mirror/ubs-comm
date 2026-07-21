@@ -310,12 +310,12 @@ Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         umq_info_t umq_info{};
         auto ret = umq_info_get(umq_socket->UmqHandle(), &umq_info);
-        UBS_VLOG_INFO("UB connection has been successfully established new fd: %d, umq id: %u \n", raw_fd_,
-                      umq_info.ub.umq_id);
+        UBS_VLOG_DEBUG("UB connection has been successfully established new fd: %d, umq id: %u \n", raw_fd_,
+                       umq_info.ub.umq_id);
         return UBS_OK;
     }
 #endif
-    UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", raw_fd_);
+    UBS_VLOG_DEBUG("UB connection has been successfully established new fd: %d\n", raw_fd_);
 
     return UBS_OK;
 };

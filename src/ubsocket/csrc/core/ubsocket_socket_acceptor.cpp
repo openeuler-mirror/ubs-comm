@@ -245,7 +245,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
         newSocket->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
     }
     //TODO: 优化建链成功的打印日志
-    UBS_VLOG_INFO("UB connection has been successfully established new fd: %d\n", new_fd);
+    UBS_VLOG_DEBUG("UB connection has been successfully established new fd: %d\n", new_fd);
     PROF_END(CORE_ACCEPT, true);
 
     return UBS_OK;

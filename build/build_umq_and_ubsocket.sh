@@ -128,10 +128,15 @@ function run_ubsocket_ut_tests() {
     local ubsocket_dir="${ROOT_DIR}/src/ubsocket"
     cd "${ubsocket_dir}"
 
+    local coverage_flag="OFF"
+    if [ "${UBSOCKET_COVERAGE}" = "on" ]; then
+        coverage_flag="ON"
+    fi
+
     if cmake -S. -Bbuild \
         -DCMAKE_BUILD_TYPE=Debug \
         -DUBSOCKET_BUILD_TESTS=ON \
-        -DUBSOCKET_ENABLE_COVERAGE=ON \
+        -DUBSOCKET_ENABLE_COVERAGE=${coverage_flag} \
         -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
         -DUMQ_LIB="${ROOT_DIR}/src/hcom/umq/build/src/libumq.so" \
         -DUMQ_BUF_LIB="${ROOT_DIR}/src/hcom/umq/build/src/qbuf/libumq_buf.so"; then
