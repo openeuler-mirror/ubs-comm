@@ -46,6 +46,7 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
                 auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
                 if (socket_ptr == nullptr) {
+                    UBS_VLOG_DEBUG("socket is NULL in socket fd=%d\n in TX CQE error", socket_fd);
                     return;
                 }
 
@@ -60,7 +61,7 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 auto *umq_sock = static_cast<UmqSocket *>(socket_ptr);
                 if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
                     if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
-                        qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
+                        qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR) {
                         auto [ports, ports_num] = umq_sock->GetUsedPorts();
                         for (std::size_t i = 0; i < ports_num; ++i) {
                             UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",
@@ -102,7 +103,7 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
                 if (socket_ptr) {
                     LibcApi::shutdown(socket_fd, SHUT_RD);
-                    UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", socket_fd);
+                    UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error for TP TX", socket_fd);
                     socket_ptr->State(SOCK_STAT_CLOSE);
                 }
 
