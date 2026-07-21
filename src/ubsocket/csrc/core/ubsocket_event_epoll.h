@@ -77,7 +77,13 @@ public:
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
     }
 
-    ~EpollMapper() {}
+    ~EpollMapper()
+    {
+        if (mutex_ != nullptr) {
+            LockRegistry::LOCK_OPS.destroy(mutex_);
+            mutex_ = nullptr;
+        }
+    }
 
     void Add(int epoll_fd)
     {
@@ -85,10 +91,11 @@ public:
         epoll_set_.insert(epoll_fd);
     }
 
-    void Del(int epoll_fd)
+    bool Del(int epoll_fd)
     {
         Locker sLock(mutex_);
         epoll_set_.erase(epoll_fd);
+        return epoll_set_.empty();
     }
 
     int QueryFirst()
@@ -110,6 +117,7 @@ private:
 };
 extern u_rw_lock_t *g_socket_epoll_lock;
 EpollMapper *GetSocketEpollMapper(int socket_fd);
+void CleanAllSocketEpollMappers();
 
 class EpollRunnerOps {
 public:

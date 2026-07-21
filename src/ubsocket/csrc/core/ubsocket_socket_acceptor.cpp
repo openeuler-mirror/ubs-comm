@@ -302,6 +302,11 @@ Acceptor::~Acceptor()
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::StatsMgr::SubMConnCount();
     }
+
+    if (ubSocket_async_accept_info.lock != nullptr) {
+        LockRegistry::LOCK_OPS.destroy(ubSocket_async_accept_info.lock);
+        ubSocket_async_accept_info.lock = nullptr;
+    }
 }
 } // namespace ubs
 } // namespace ock

@@ -68,7 +68,7 @@ public:
 
     DataRxOps *GetRxOps()
     {
-        return rx_ops_;
+        return rx_ops_.get();
     }
 
 private:
@@ -82,7 +82,7 @@ private:
     uint32_t protocol_negotiation_recv_size_ = 0;
     uint32_t protocol_negotiation_offset_ = 0;
 
-    DataRxOps *rx_ops_ = nullptr;
+    std::unique_ptr<DataRxOps> rx_ops_;
 };
 } // namespace ubs
 } // namespace ock
