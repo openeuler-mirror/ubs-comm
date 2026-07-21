@@ -34,7 +34,6 @@ Result UmqSocket::Initialize() noexcept
 
 void UmqSocket::UnInitialize() noexcept
 {
-    UnregisterFcTxEvent();
     UnbindAndFlushRemoteUmq(this);
     DestroyLocalUmq();
 
@@ -298,14 +297,7 @@ void UmqSocket::UnbindAndFlushRemoteUmq(Socket *sock)
     // 先从 TX poller 注销 FC TX 事件（标记 umq_handle 无效），防止 in-flight poll 与 umq_destroy 并发
     // 覆盖所有 3 个调用点: UnInitialize / DoUbAcceptRetry / DoUbConnectRetry
     if (UmqSetting::UMQ_FLOW_CONTROL_ENABLE) {
-        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
-        int fc_event_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
-        if (fc_event_fd >= 0) {
-            EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).DelEpollEvent(fc_event_fd);
-        } else {
-            UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd for destroy, local umq: %llu\n",
-                         static_cast<unsigned long long>(umq_handle_));
-        }
+        UnregisterFcTxEvent();
     }
     int ret = UmqApi::umq_unbind(umq_handle_);
     if (ret != UMQ_SUCCESS) {
@@ -320,8 +312,6 @@ void UmqSocket::UnbindAndFlushRemoteUmq(Socket *sock)
 
 void UmqSocket::DestroyLocalUmq()
 {
-    UnregisterFcTxEvent();
-
     if (umq_handle_ != UMQ_INVALID_HANDLE) {
         // 先从 TX poller 注销 FC TX 事件（标记 umq_handle 无效），防止 in-flight poll 与 umq_destroy 并发
         // 覆盖所有 3 个调用点: UnInitialize / DoUbAcceptRetry / DoUbConnectRetry
