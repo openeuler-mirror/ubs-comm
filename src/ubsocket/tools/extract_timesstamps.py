@@ -469,12 +469,11 @@ def parse_umq_entries(lines):
 
 
 def find_umq_batch(umq_entries, start_seq, end_seq, consumed):
-    """根据 msn 范围从 UMQ 列表中找第一个未消费的匹配批次。
-       找到后把该批次占用的索引标记为已消费，避免后续重复匹配。"""
+    """根据 msn 范围从 UMQ 列表中找第一个未消费的匹配 POST。
+       找到后把该 POST 的索引标记为已消费，避免后续重复匹配。"""
     if not umq_entries:
         return None
 
-    post_idx = None
     for i, entry in enumerate(umq_entries):
         if i in consumed:
             continue
@@ -482,25 +481,10 @@ def find_umq_batch(umq_entries, start_seq, end_seq, consumed):
             first_msn = entry['items'][0]['msn']
             last_msn = entry['items'][-1]['msn']
             if first_msn == start_seq and last_msn == end_seq:
-                post_idx = i
-                break
+                consumed.add(i)
+                return [entry]
 
-    if post_idx is None:
-        return None
-
-    # 向前找第一个未消费的 POLL（遇到已消费则停止）
-    batch_start = post_idx
-    for i in range(post_idx - 1, -1, -1):
-        if i in consumed:
-            break
-        if umq_entries[i]['type'] == 'POLL':
-            batch_start = i
-            break
-
-    batch_end = post_idx + 1
-    for k in range(batch_start, batch_end):
-        consumed.add(k)
-    return umq_entries[batch_start:batch_end]
+    return None
 
 
 def find_umq_epoll_batch(umq_entries, type9_start_ts):
@@ -1149,6 +1133,19 @@ def main():
     server_rows.append(('', '传输时间', '', '', '', '',
                         format_duration(transmission),
                         f'Client等待耗时={client_total} - Server处理耗时={server_total}'))
+
+    writev_start = None
+    readv_end = None
+    for row in client_rows:
+        if row[1] == 'writeV入口' and row[4] and writev_start is None:
+            writev_start = int(row[4])
+        if row[1] == 'readv结束' and row[5]:
+            readv_end = int(row[5])
+    if writev_start is not None and readv_end is not None:
+        total_time = readv_end - writev_start
+        server_rows.append(('', '总耗时', '', '', '', '',
+                            format_duration(total_time),
+                            f'Client readv结束_end={readv_end} - Client writeV入口_start={writev_start}'))
 
     # UMQ/URMA 关联
     if client_umq_entries:
