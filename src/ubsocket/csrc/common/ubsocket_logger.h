@@ -192,7 +192,7 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
     do {                                                               \
         if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) { \
             std::ostringstream oss;                                    \
-            oss << "[UMQ " << func << "] " << ARGS;                    \
+            oss << "[" << func << "] " << ARGS;                        \
             ock::ubs::Logger::Instance().Log(level, oss, file, ln);    \
         }                                                              \
     } while (0)
