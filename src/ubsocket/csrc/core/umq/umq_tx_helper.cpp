@@ -42,10 +42,17 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
         if (poll_args.silent_poll_err && poll_num < 0) {
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, poll_num, savedErrno);
-            UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for TX, local umq: %llu, ret: %d, "
-                         "mapped errno: %d(%s), original errno: %d\n",
-                         static_cast<unsigned long long>(poll_args.umq_handle), poll_num, errno,
-                         UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, poll_num), savedErrno);
+            // EMLINK indicates no available jetty; the periodic TX poll will handle this case, no error handling is needed here.
+            if (errno == EMLINK) {
+                UBS_VLOG_DEBUG("[Debug] tx umq_poll() suspended: no available jetty. Queued for automatic retry, "
+                            "umq handle: %lu.\n",
+                            poll_args.umq_handle);
+            } else {
+                UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for TX, local umq: %llu, ret: %d, "
+                            "mapped errno: %d(%s), original errno: %d\n",
+                            static_cast<unsigned long long>(poll_args.umq_handle), poll_num, errno,
+                            UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, poll_num), savedErrno);
+            }
         }
         return poll_num;
     }
