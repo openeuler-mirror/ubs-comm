@@ -117,15 +117,16 @@ void CLIArgsParser::PrintUsage(const char *progName)
     printf("  umqinfo   Query UMQ configuration information in the specified process\n");
     printf("  io        Query IO packet statistics in the specified process\n");
     printf("  umq       Query UMQ performance statistics in the specified process\n");
+    printf("  probe     Query probe packet trace data and communication latency in the specified process\n");
     printf("\n");
     printf("Global Options (applicable to all commands):\n");
     printf("  -p, --pid <pid>        Required, specify the process ID to query (Range: 0~%d)\n", INT32_MAX);
     printf("  -h, --help             Show this help message and exit\n");
     printf("\n");
     printf("Command-specific Options:\n");
-    printf("  [stat command only]:\n");
-    printf("    -w, --watch          Optional, enable real-time monitoring (refresh socket info every second)\n");
-    printf("    Note: The stat command does NOT require -s/-d parameters\n");
+    printf("  [stat, fc, qbuf, umqinfo, io, umq, probe commands]:\n");
+    printf("    -w, --watch          Optional, enable real-time monitoring (refresh info every second)\n");
+    printf("    Note: These commands do NOT require -s/-d parameters\n");
     printf("\n");
     printf("  [topo command only]:\n");
     printf("    -s, --srceid <eid>   Required, specify the source EID (must be a valid IPv6 address)\n");
@@ -137,22 +138,6 @@ void CLIArgsParser::PrintUsage(const char *progName)
     printf("    -v, --value <quantile>   Optional, when type is 'query' could be used\n");
     printf("    -e, --enable <enable_switches>   Required when type is 'enable', specify trace switches you want"
            " (could be a combination of (trace,quantile,log), which not use will be closed)\n");
-    printf("\n");
-    printf("  [fc command only]:\n");
-    printf("    -w, --watch          Optional, enable real-time monitoring (refresh flow control info every second)\n");
-    printf("\n");
-    printf("  [qbuf command only]:\n");
-    printf("    -w, --watch          Optional, enable real-time monitoring (refresh qbuf pool info every second)\n");
-    printf("\n");
-    printf("  [umqinfo command only]:\n");
-    printf("    -w, --watch          Optional, enable real-time monitoring (refresh umq info every second)\n");
-    printf("\n");
-    printf("  [io command only]:\n");
-    printf("    -w, --watch          Optional, enable real-time monitoring (refresh io packet info every second)\n");
-    printf("\n");
-    printf("  [umq command only]:\n");
-    printf(
-        "    -w, --watch          Optional, enable real-time monitoring (refresh umq performance info every second)\n");
     printf("\n");
     printf("Examples:\n");
     printf("  1. Query socket info of process 1234:\n");
@@ -185,6 +170,8 @@ void CLIArgsParser::PrintUsage(const char *progName)
     printf("     %s umq -p 1234\n", progName);
     printf(" 15. Real-time monitor UMQ performance statistics of process 1234:\n");
     printf("     %s umq -p 1234 -w\n", progName);
+    printf(" 16. Query probe packet trace data and communication latency of process 1234:\n");
+    printf("     %s probe -p 1234\n", progName);
     printf("=============================================\n");
 }
 
