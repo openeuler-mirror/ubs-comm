@@ -208,4 +208,38 @@ target_sources(ubsocket_queue_heap_test
     ubsocket_queue_heap_test.cpp
 )
 
+
+add_executable(ubsocket_scope_exit_ref_test "")
+add_test(NAME ubsocket_scope_exit_ref_test COMMAND ubsocket_scope_exit_ref_test)
+set_target_properties(ubsocket_scope_exit_ref_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+
+target_compile_features(ubsocket_scope_exit_ref_test
+  PRIVATE
+    cxx_std_17
+)
+
+target_compile_definitions(ubsocket_scope_exit_ref_test
+  PRIVATE
+    UBSOCKET_UNIT_TEST
+)
+
+target_include_directories(ubsocket_scope_exit_ref_test
+  PRIVATE
+    ${UBSOCKET_BASE_DIR}/csrc
+    ${UBSOCKET_BASE_DIR}/csrc/common
+)
+
+target_link_libraries(ubsocket_scope_exit_ref_test
+  PRIVATE
+    ubsocket_static
+    boundscheck
+    GTest::gtest_main
+    pthread
+)
+
+target_sources(ubsocket_scope_exit_ref_test
+  PRIVATE
+    ubsocket_scope_exit_ref_test.cpp
+)
+
 add_subdirectory(profiling)
