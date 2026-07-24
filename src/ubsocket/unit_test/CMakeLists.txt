@@ -137,4 +137,39 @@ target_sources(ubsocket_setting_validator_test
     ubsocket_setting_validator_test.cpp
 )
 
+
+add_executable(ubsocket_ring_queue_test "")
+add_test(NAME ubsocket_ring_queue_test COMMAND ubsocket_ring_queue_test)
+set_target_properties(ubsocket_ring_queue_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+
+target_compile_features(ubsocket_ring_queue_test
+  PRIVATE
+    cxx_std_17
+)
+
+target_compile_definitions(ubsocket_ring_queue_test
+  PRIVATE
+    UBSOCKET_UNIT_TEST
+)
+
+target_include_directories(ubsocket_ring_queue_test
+  PRIVATE
+    ${UBSOCKET_BASE_DIR}/csrc
+    ${UBSOCKET_BASE_DIR}/csrc/common
+)
+
+target_link_libraries(ubsocket_ring_queue_test
+  PRIVATE
+    ubsocket_static
+    boundscheck
+    mockcpp
+    GTest::gtest_main
+    pthread
+)
+
+target_sources(ubsocket_ring_queue_test
+  PRIVATE
+    ubsocket_ring_queue_test.cpp
+)
+
 add_subdirectory(profiling)
