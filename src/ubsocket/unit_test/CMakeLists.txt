@@ -34,7 +34,6 @@ target_sources(ubsocket_signal_handler_test
     ubsocket_signal_handler_test.cpp
 )
 
-
 add_executable(ubsocket_ring_buffer_test "")
 add_test(NAME ubsocket_ring_buffer_test COMMAND ubsocket_ring_buffer_test)
 set_target_properties(ubsocket_ring_buffer_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
@@ -68,6 +67,41 @@ target_link_libraries(ubsocket_ring_buffer_test
 target_sources(ubsocket_ring_buffer_test
   PRIVATE
     ubsocket_ring_buffer_test.cpp
+)
+
+
+add_executable(ubsocket_core_types_test "")
+add_test(NAME ubsocket_core_types_test COMMAND ubsocket_core_types_test)
+set_target_properties(ubsocket_core_types_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+
+target_compile_features(ubsocket_core_types_test
+  PRIVATE
+    cxx_std_17
+)
+
+target_compile_definitions(ubsocket_core_types_test
+  PRIVATE
+    UBSOCKET_UNIT_TEST
+)
+
+target_include_directories(ubsocket_core_types_test
+  PRIVATE
+    ${UBSOCKET_BASE_DIR}/csrc
+    ${UBSOCKET_BASE_DIR}/csrc/core
+)
+
+target_link_libraries(ubsocket_core_types_test
+  PRIVATE
+    ubsocket_static
+    boundscheck
+    mockcpp
+    GTest::gtest_main
+    pthread
+)
+
+target_sources(ubsocket_core_types_test
+  PRIVATE
+    ubsocket_core_types_test.cpp
 )
 
 add_subdirectory(profiling)
