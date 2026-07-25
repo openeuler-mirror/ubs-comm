@@ -33,6 +33,7 @@ namespace umq {
 #define ENV_UMQ_SCHEDULE_POLICY "UBSOCKET_SCHEDULE_POLICY"
 #define ENV_UMQ_UB_TRANS_MODE "UBSOCKET_UB_TRANS_MODE"
 #define ENV_UMQ_FLOW_CONTROL_ENABLED "UBSOCKET_FLOW_CONTROL_ENABLE"
+#define ENV_UMQ_RANDOM_ROUTE "UBSOCKET_RANDOM_ROUTE"
 #define ENV_UMQ_LINK_PRIORITY "UBSOCKET_LINK_PRIORITY"
 #define ENV_UMQ_TP_TYPE "UBSOCKET_JETTY_TYPE"
 #define ENV_UMQ_TP_POOL_SIZE "UBSOCKET_JETTY_POOL_SIZE"
@@ -101,6 +102,7 @@ void UmqSetting::AddRules() noexcept
                                     {ENV_UMQ_SCHEDULE_POLICY, false, "rr|affinity|affinity_priority"},
                                     {ENV_UMQ_UB_TRANS_MODE, false, "RC_TP|RM_TP|RM_CTP|RC_CTP"},
                                     {ENV_UMQ_FLOW_CONTROL_ENABLED, false, "true|false"},
+                                    {ENV_UMQ_RANDOM_ROUTE, false, "true|false"},
                                     {ENV_UMQ_TP_TYPE, false, "single|pool"}};
 
     for (auto &item : rules_int64) {
@@ -180,6 +182,11 @@ Result UmqSetting::LoadEnv() noexcept
 
     if (GS::GetEnvAndValidate(ENV_UMQ_FLOW_CONTROL_ENABLED, strEnvValue)) {
         UMQ_FLOW_CONTROL_ENABLE = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_UMQ_RANDOM_ROUTE, strEnvValue)) {
+        UMQ_RANDOM_ROUTE = Func::BoolFromStr(strEnvValue);
+        UBS_VLOG_DEBUG("Current random route setting: %d\n", UMQ_RANDOM_ROUTE ? 1 : 0);
     }
 
     if (GS::GetEnvAndValidate(ENV_UMQ_SCHEDULE_POLICY, strEnvValue)) {
