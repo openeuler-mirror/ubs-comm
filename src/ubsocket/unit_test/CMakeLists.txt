@@ -242,4 +242,40 @@ target_sources(ubsocket_scope_exit_ref_test
     ubsocket_scope_exit_ref_test.cpp
 )
 
+
+add_executable(ubsocket_bitset_lock_seq_test "")
+add_test(NAME ubsocket_bitset_lock_seq_test COMMAND ubsocket_bitset_lock_seq_test)
+set_target_properties(ubsocket_bitset_lock_seq_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+
+target_compile_features(ubsocket_bitset_lock_seq_test
+  PRIVATE
+    cxx_std_17
+)
+
+target_compile_definitions(ubsocket_bitset_lock_seq_test
+  PRIVATE
+    UBSOCKET_UNIT_TEST
+)
+
+target_include_directories(ubsocket_bitset_lock_seq_test
+  PRIVATE
+    ${UBSOCKET_BASE_DIR}
+    ${UBSOCKET_BASE_DIR}/csrc
+    ${UBSOCKET_BASE_DIR}/csrc/common
+    ${UBSOCKET_BASE_DIR}/csrc/core
+)
+
+target_link_libraries(ubsocket_bitset_lock_seq_test
+  PRIVATE
+    ubsocket_static
+    boundscheck
+    GTest::gtest_main
+    pthread
+)
+
+target_sources(ubsocket_bitset_lock_seq_test
+  PRIVATE
+    ubsocket_bitset_lock_seq_test.cpp
+)
+
 add_subdirectory(profiling)
