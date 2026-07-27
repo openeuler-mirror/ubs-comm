@@ -20,8 +20,7 @@ static int DefaultNewEndPoint(const std::string &ipPort, const ock::hcom::UBSHco
 int SubscriberServiceImp::ServiceRequestReceived(const UBSHcomNetRequestContext &ctx)
 {
     SubscriberContext context(ctx);
-    mSubscribeRecvHandler(context);
-    return 0;
+    return mSubscribeRecvHandler(context);
 }
 
 static int DefaultRequestPosted(const ock::hcom::UBSHcomNetRequestContext &ctx)
@@ -173,6 +172,12 @@ SubscriberServiceImp::~SubscriberServiceImp()
 
 SerResult SubscriberServiceImp::CreateSubscriber(const std::string &serverUrl, NetRef<Subscriber> &subscriber)
 {
+    return CreateSubscriber(serverUrl, mCfg.GetPublisherWkrGroupNo(), subscriber);
+}
+
+SerResult SubscriberServiceImp::CreateSubscriber(const std::string &serverUrl, uint16_t publisherGroupIdx,
+                                                 NetRef<Subscriber> &subscriber)
+{
     if (!mStarted) {
         NN_LOG_ERROR("Failed to validate state as service is not started");
         return SER_STOP;
@@ -191,7 +196,7 @@ SerResult SubscriberServiceImp::CreateSubscriber(const std::string &serverUrl, N
     }
 
     UBSHcomNetEndpointPtr ep;
-    auto result = mDriverPtr->Connect(serverUrl, "multicast", ep, 0, mCfg.GetPublisherWkrGroupNo(), 0, 0);
+    auto result = mDriverPtr->Connect(serverUrl, "multicast", ep, 0, publisherGroupIdx, 0, 0);
     if (NN_UNLIKELY(result != SER_OK)) {
         NN_LOG_ERROR("Connect to " << serverUrl << " failed, errno = " << result);
         return result;
