@@ -511,4 +511,37 @@ target_sources(ubsocket_global_setting_test
     ubsocket_global_setting_test.cpp
 )
 
+add_executable(ubsocket_version_test "")
+add_test(NAME ubsocket_version_test COMMAND ubsocket_version_test)
+set_target_properties(ubsocket_version_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+
+target_compile_features(ubsocket_version_test
+  PRIVATE
+    cxx_std_17
+)
+
+target_compile_definitions(ubsocket_version_test
+  PRIVATE
+    UBSOCKET_UNIT_TEST
+)
+
+target_include_directories(ubsocket_version_test
+  PRIVATE
+    ${UBSOCKET_BASE_DIR}/csrc
+    ${UBSOCKET_BASE_DIR}/csrc/common
+)
+
+target_link_libraries(ubsocket_version_test
+  PRIVATE
+    ubsocket_static
+    boundscheck
+    GTest::gtest_main
+    pthread
+)
+
+target_sources(ubsocket_version_test
+  PRIVATE
+    ubsocket_version_test.cpp
+)
+
 add_subdirectory(profiling)
