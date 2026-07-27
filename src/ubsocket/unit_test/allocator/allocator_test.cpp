@@ -571,7 +571,7 @@ TEST_F(AllocatorFunctionalTest, MultiThreadAllocateFree)
                 uintptr_t a = 0;
                 if (alloc_.Allocate(a)) {
                     results[t].push_back(a);
-                    *reinterpret_cast<volatile uint8_t *>(a + sizeof(FixedMiniBlock)) = static_cast<uint8_t>(t);
+                    *reinterpret_cast<volatile uint8_t *>(a) = static_cast<uint8_t>(t);
                 } else {
                     success = false;
                 }
@@ -780,17 +780,253 @@ TEST_F(AllocatorFunctionalTest, StressAllocateFreeCycle)
     EXPECT_TRUE(success);
 }
 
-TEST_F(AllocatorFunctionalTest, BatchAllocateFreeStub)
+/* =========================================================================
+ * 7. BatchAllocate / BatchFree / InnerBatchAllocate / InnerBatchFree
+ *    验证批量分配/释放的正确性、链表结构维护、边界条件
+ * ========================================================================= */
+
+TEST_F(AllocatorFunctionalTest, BatchAllocateZeroSizeReturnsTrue)
 {
-    bool alloc_ok = true;
+    bool ok = false;
     RunInWorker([&]() {
-        uintptr_t *addrs = nullptr;
-        alloc_ok = alloc_.BatchAllocate(8, addrs);
-        uintptr_t tmp[8] = {0};
-        alloc_.BatchFree(8, tmp);
+        uintptr_t dummy[1] = {0xDEAD};
+        uintptr_t *p = dummy;
+        ok = alloc_.BatchAllocate(0, p);
+        EXPECT_EQ(p, dummy);  /* 不应修改外部指针 */
+    });
+    EXPECT_FALSE(ok);
+}
+
+TEST_F(AllocatorFunctionalTest, BatchAllocateNullptrAddressesReturnsFalse)
+{
+    bool ok = true;
+    RunInWorker([&]() {
+        uintptr_t *p = nullptr;
+        ok = alloc_.BatchAllocate(8, p);
+    });
+    EXPECT_FALSE(ok);
+}
+
+TEST_F(AllocatorFunctionalTest, BatchAllocateFreeBatch16RoundTrip)
+{
+    constexpr uint16_t BATCH = 16;
+    bool ok = false;
+    uintptr_t addrs[BATCH] = {0};
+    RunInWorker([&]() {
+        uintptr_t *p = addrs;
+        ok = alloc_.BatchAllocate(BATCH, p);
+        if (ok) {
+            alloc_.BatchFree(BATCH, addrs);
+        }
+    });
+    EXPECT_TRUE(ok);
+    for (uint16_t i = 0; i < BATCH; i++) {
+        EXPECT_NE(addrs[i], 0ULL);
+    }
+    std::set<uintptr_t> unique(addrs, addrs + BATCH);
+    EXPECT_EQ(unique.size(), (size_t)BATCH);
+}
+
+TEST_F(AllocatorFunctionalTest, BatchAllocateFreeMultiBatch)
+{
+    constexpr uint16_t BATCH = 32;
+    bool ok = false;
+    std::vector<uintptr_t> addrs(BATCH, 0);
+    RunInWorker([&]() {
+        uintptr_t *p = addrs.data();
+        ok = alloc_.BatchAllocate(BATCH, p);
+        if (ok) {
+            alloc_.BatchFree(BATCH, addrs.data());
+        }
+    });
+    EXPECT_TRUE(ok);
+    std::set<uintptr_t> unique(addrs.begin(), addrs.end());
+    EXPECT_EQ(unique.size(), (size_t)BATCH);
+}
+
+TEST_F(AllocatorFunctionalTest, BatchAllocateFreeNonBatchSizeMultiple)
+{
+    constexpr uint16_t BATCH = 8;
+    bool ok = false;
+    uintptr_t addrs[BATCH] = {0};
+    RunInWorker([&]() {
+        uintptr_t *p = addrs;
+        ok = alloc_.BatchAllocate(BATCH, p);
+        if (ok) {
+            alloc_.BatchFree(BATCH, addrs);
+        }
+    });
+    EXPECT_TRUE(ok);
+    for (uint16_t i = 0; i < BATCH; i++) {
+        EXPECT_NE(addrs[i], 0ULL);
+    }
+}
+
+TEST_F(AllocatorFunctionalTest, BatchAllocateSequential)
+{
+    constexpr uint16_t BATCH = 16;
+    bool ok1 = false;
+    bool ok2 = false;
+    std::vector<uintptr_t> first(BATCH, 0);
+    std::vector<uintptr_t> second(BATCH, 0);
+    RunInWorker([&]() {
+        uintptr_t *p1 = first.data();
+        ok1 = alloc_.BatchAllocate(BATCH, p1);
+        uintptr_t *p2 = second.data();
+        ok2 = alloc_.BatchAllocate(BATCH, p2);
+        if (ok1) {
+            alloc_.BatchFree(BATCH, first.data());
+        }
+        if (ok2) {
+            alloc_.BatchFree(BATCH, second.data());
+        }
+    });
+    EXPECT_TRUE(ok1);
+    EXPECT_TRUE(ok2);
+    /* 两次分配地址集合应不重叠（除非 TC 复用，但 GC 有足够空间） */
+    std::set<uintptr_t> s1(first.begin(), first.end());
+    for (auto a : second) {
+        EXPECT_EQ(s1.count(a), 0UL);
+    }
+}
+
+TEST_F(AllocatorFunctionalTest, BatchAllocateFreeStressCycle)
+{
+    constexpr uint16_t BATCH = 16;
+    constexpr uint32_t ITER = 1000;
+    bool success = true;
+    RunInWorker([&]() {
+        uintptr_t addrs[BATCH] = {0};
+        for (uint32_t i = 0; i < ITER; i++) {
+            uintptr_t *p = addrs;
+            if (!alloc_.BatchAllocate(BATCH, p)) {
+                success = false;
+                break;
+            }
+            alloc_.BatchFree(BATCH, addrs);
+        }
+    });
+    EXPECT_TRUE(success);
+}
+
+TEST_F(AllocatorFunctionalTest, BatchFreeZeroSizeIsSafe)
+{
+    RunInWorker([&]() {
+        uintptr_t dummy[1] = {0};
+        alloc_.BatchFree(0, dummy);
         alloc_.BatchFree(0, nullptr);
     });
-    EXPECT_FALSE(alloc_ok);
+    SUCCEED();
+}
+
+TEST_F(AllocatorFunctionalTest, BatchFreeNullptrIsSafe)
+{
+    RunInWorker([&]() {
+        alloc_.BatchFree(8, nullptr);
+    });
+    SUCCEED();
+}
+
+TEST_F(AllocatorFunctionalTest, InnerBatchAllocateReturnsChainHead)
+{
+    constexpr uint16_t BATCH = 16;
+    bool ok = false;
+    uintptr_t head_addr = 0;
+    RunInWorker([&]() {
+        ok = alloc_.BatchAllocateWithLinkList(BATCH, head_addr);
+        if (ok) {
+            uintptr_t addrs[BATCH] = {0};
+            auto p = reinterpret_cast<FixedMiniBlock *>(head_addr);
+            for (uint16_t i = 0; i < BATCH; i++) {
+                addrs[i] = reinterpret_cast<uintptr_t>(p);
+                p = p->next;
+            }
+            alloc_.BatchFree(BATCH, addrs);
+        }
+    });
+    EXPECT_TRUE(ok);
+    EXPECT_NE(head_addr, 0ULL);
+}
+
+TEST_F(AllocatorFunctionalTest, InnerBatchAllocateZeroSizeReturnsTrue)
+{
+    bool ok = false;
+    uintptr_t addr = 0xDEAD;
+    RunInWorker([&]() {
+        ok = alloc_.BatchAllocateWithLinkList(0, addr);
+    });
+    EXPECT_TRUE(ok);
+    EXPECT_EQ(addr, 0ULL);
+}
+
+TEST_F(AllocatorFunctionalTest, InnerBatchAllocateFreeCycle)
+{
+    constexpr uint16_t BATCH = 16;
+    constexpr uint32_t ITER = 500;
+    bool success = true;
+    RunInWorker([&]() {
+        for (uint32_t i = 0; i < ITER; i++) {
+            uintptr_t addr = 0;
+            if (!alloc_.BatchAllocateWithLinkList(BATCH, addr)) {
+                success = false;
+                break;
+            }
+            uintptr_t addrs[BATCH] = {0};
+            auto p = reinterpret_cast<FixedMiniBlock *>(addr);
+            for (uint16_t i = 0; i < BATCH; i++) {
+                addrs[i] = reinterpret_cast<uintptr_t>(p);
+                p = p->next;
+            }
+            alloc_.BatchFree(BATCH, addrs);
+        }
+    });
+    EXPECT_TRUE(success);
+}
+
+TEST_F(AllocatorFunctionalTest, InnerBatchAllocateThenBatchFree)
+{
+    constexpr uint16_t BATCH = 16;
+    bool ok = false;
+    uintptr_t head_addr = 0;
+    RunInWorker([&]() {
+        ok = alloc_.BatchAllocateWithLinkList(BATCH, head_addr);
+        if (ok) {
+            /* 把链表展开为数组 */
+            uintptr_t addrs[BATCH] = {0};
+            auto p = reinterpret_cast<FixedMiniBlock *>(head_addr);
+            for (uint16_t i = 0; i < BATCH; i++) {
+                addrs[i] = reinterpret_cast<uintptr_t>(p);
+                p = p->next;
+            }
+            alloc_.BatchFree(BATCH, addrs);
+        }
+    });
+    EXPECT_TRUE(ok);
+}
+
+TEST_F(AllocatorFunctionalTest, MultiThreadBatchAllocateFree)
+{
+    constexpr int THREADS = 4;
+    constexpr int PER_THREAD = 16;
+    bool success = true;
+    RunInWorker([&]() {
+        std::vector<std::thread> threads;
+        for (int t = 0; t < THREADS; t++) {
+            threads.emplace_back([&, t]() {
+                uintptr_t addrs[PER_THREAD] = {0};
+                uintptr_t *p = addrs;
+                if (!alloc_.BatchAllocate(PER_THREAD, p)) {
+                    success = false;
+                    return;
+                }
+                alloc_.BatchFree(PER_THREAD, addrs);
+            });
+        }
+        for (auto &t : threads) {
+            t.join();
+        }
+    });
+    EXPECT_TRUE(success);
 }
 
 int main(int argc, char **argv)

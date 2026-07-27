@@ -72,6 +72,15 @@ public:
     void BatchFree(uint16_t batchSize, uintptr_t *addresses) noexcept;
 
     /**
+     * @brief Allocate batch of mini blocks, return chain head address
+     *
+     * @param batchSize    [in] batch size to be allocated
+     * @param address      [out] address of the first mini block (chain head)
+     * @return true if allocated
+     */
+    bool BatchAllocateWithLinkList(uint16_t batchSize, uintptr_t &address) noexcept;
+
+    /**
      * @brief Check if the address in the address range of this allocator
      *
      * @param address      [in] the address to be checked

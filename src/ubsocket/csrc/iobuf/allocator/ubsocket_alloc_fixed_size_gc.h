@@ -541,6 +541,7 @@ ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocateInnerPartial(uint16_t requ
     pthread_spin_lock(&spinlock_aligned_);
     /* if less than one batch, just return */
     if (free_mini_blocks_aligned_ < FIX_GC_BATCH_FREE_SIZE) {
+        pthread_spin_unlock(&spinlock_aligned_);
         return 0;
     }
 
@@ -560,7 +561,7 @@ ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocateInnerPartial(uint16_t requ
         blocks = aligned_mini_blocks_;
         aligned_mini_blocks_ = iter;
     }
-
+    blocks->tail->next = nullptr;
     pthread_spin_unlock(&spinlock_aligned_);
 
     return allocated;
@@ -641,9 +642,9 @@ ALWAYS_INLINE void FixedGlobalCache::BatchFree(FixedMiniBlock *block, uint16_t f
     /* step2: free aligned */
     if (LIKELY(aligned)) {
         /* get the tail of block to be freed */
-        auto tail = block;
-        while (tail != nullptr && tail->next_n_m != nullptr) {
-            tail = tail->next_n_m;
+        auto tail = block->next_n_m;
+        while (tail->next != nullptr) {
+            tail = tail->next->next_n_m;
         }
 
         /* link to aligned list */
