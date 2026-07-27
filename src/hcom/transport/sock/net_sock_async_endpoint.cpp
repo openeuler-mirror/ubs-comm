@@ -426,6 +426,26 @@ NResult NetAsyncEndpointSock::PostSendRawNoCpy(const UBSHcomNetTransRequest &req
     return result;
 }
 
+NResult NetAsyncEndpointSock::PostSendRawNoCpy(const UBSHcomNetTransRequest &request,
+                                               UBSHcomNetTransHeader &header)
+{
+    NResult result = NN_OK;
+    if (NN_UNLIKELY((result = StateValidation(mState, mId, mDriver, mSock)) != NN_OK)) {
+        NN_LOG_ERROR("Sock failed to async post send raw no copy as state validation failed");
+        return result;
+    }
+
+    auto worker = reinterpret_cast<SockWorker *>(mSock->UpContext1());
+
+    result = worker->PostSendNoCpy(mSock, header, request);
+    if (result == SS_OK) {
+        return NN_OK;
+    }
+
+    NN_LOG_ERROR("Failed to async post send request, result " << result);
+    return result;
+}
+
 NResult NetAsyncEndpointSock::PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo)
 {
     NResult result = NN_OK;

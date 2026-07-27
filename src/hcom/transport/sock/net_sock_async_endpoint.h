@@ -44,6 +44,8 @@ public:
 
     NResult PostSendRawNoCpy(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
 
+    NResult PostSendRawNoCpy(const UBSHcomNetTransRequest &request, UBSHcomNetTransHeader &header);
+
     NResult PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo) override;
 
     NResult PostRead(const UBSHcomNetTransRequest &request) override;

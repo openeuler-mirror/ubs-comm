@@ -2,56 +2,25 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
 
+#include <thread>
 #include <utility>
 
 #include "multicast_periodic_manager.h"
+#include "net_sock_driver_oob.h"
+
+#include "net_sock_async_endpoint.h"
 #include "service_ctx_store.h"
 #include "utils/multicast_lock_guard.h"
 
 namespace ock {
 namespace hcom {
-void Publisher::ProcessIO(const std::vector<MultiCastServiceTimer *> &remainCtx)
+static void PrepareTcpMulticastHeader(uint32_t seqNo, uint32_t dataLength, UBSHcomNetTransHeader &header)
 {
-    for (auto timer : (remainCtx)) {
-        if (timer->EraseSeqNoWithRet()) {
-            timer->BrokenDump();
-            timer->MarkFinished();
-            auto callback = reinterpret_cast<MultiCastCallback *>(timer->Callback());
-
-            auto publisher = timer->mPublisher;
-            if (publisher == nullptr) {
-                NN_LOG_ERROR("publisher is null");
-                continue;
-            }
-            PublisherContext *pubCtx = nullptr;
-            publisher->mPubCtxStore->GetBySeqNo(timer->SeqNo(), pubCtx);
-            if (NN_UNLIKELY(pubCtx == nullptr)) {
-                NN_LOG_ERROR("pubCtx is null");
-                continue;
-            }
-
-            UpdateSubscriberRsp(pubCtx);
-
-            if (callback == nullptr) {
-                NN_LOG_ERROR("publisher is null");
-                continue;
-            }
-            callback->Run(*pubCtx);
-            timer->DecreaseRef();
-            publisher->mPubCtxStore->RemoveSeqNo(timer->SeqNo());
-        }
-        timer->DecreaseRef();
-    }
-}
-
-void Publisher::UpdateSubscriberRsp(PublisherContext *pubCtx)
-{
-    auto subscriberRsp = pubCtx->GetSubscriberRspInfo();
-    for (auto &subRsp : subscriberRsp) {
-        if (subRsp.mStatus != SubscriberRspStatus::SUCCESS) {
-            subRsp.mStatus = SubscriberRspStatus::BROKEN;
-        }
-    }
+    header.immData = NN_NO1;
+    header.seqNo = seqNo;
+    header.flags = NTH_TWO_SIDE;
+    header.dataLength = dataLength;
+    header.headerCrc = NetFunc::CalcHeaderCrc32(header);
 }
 
 HcomServiceCtxStore *CreateAndInitCtxStore(uint32_t capacity, uintptr_t memPoolRaw, UBSHcomNetDriverProtocol protocol)
@@ -81,20 +50,12 @@ HcomServiceCtxStore *CreateAndInitCtxStore(uint32_t capacity, uintptr_t memPoolR
     return ctxStore;
 }
 
-SerResult Publisher::Initialize(uintptr_t memPool, uintptr_t pubMemPool, uintptr_t periodicMgr,
-                                uint32_t ctxStoreCapacity, UBSHcomNetDriverProtocol protocol)
+SerResult Publisher::Initialize(uintptr_t memPool, uintptr_t periodicMgr, uint32_t ctxStoreCapacity,
+                                UBSHcomNetDriverProtocol protocol)
 {
     std::lock_guard<std::mutex> locker(mMgrMutex);
     mState.Set(PublisherState::PUB_NEW);
 
-    auto header = new (std::nothrow) MultiCastTimerListHeader;
-    if (header == nullptr) {
-        NN_LOG_ERROR("Failed to create timer list header");
-        return SER_NEW_OBJECT_FAILED;
-    }
-    mTimerList = reinterpret_cast<uintptr_t>(header);
-
-    // create timer ctx store
     auto *ctxStore = CreateAndInitCtxStore(ctxStoreCapacity, memPool, protocol);
     if (NN_UNLIKELY(ctxStore == nullptr)) {
         ForceUnInitialize();
@@ -102,15 +63,7 @@ SerResult Publisher::Initialize(uintptr_t memPool, uintptr_t pubMemPool, uintptr
     }
     mCtxStore = ctxStore;
     mCtxMemPool = memPool;
-
-    // create publisher subscriber rsp inf ctx store
-    auto *pubCtxStore = CreateAndInitCtxStore(ctxStoreCapacity, pubMemPool, protocol);
-    if (NN_UNLIKELY(pubCtxStore == nullptr)) {
-        ForceUnInitialize();
-        return SER_NEW_OBJECT_FAILED;
-    }
-    mPubCtxStore = pubCtxStore;
-    mPubCtxMemPool = pubMemPool;
+    mProtocol = protocol;
 
     auto periodicMgrPtr = reinterpret_cast<MultiCastPeriodicManager *>(periodicMgr);
     if (NN_UNLIKELY(periodicMgrPtr == nullptr)) {
@@ -131,21 +84,10 @@ void Publisher::ForceUnInitialize()
         mCtxStore = nullptr;
     }
 
-    if (NN_LIKELY(mPubCtxStore != nullptr)) {
-        mPubCtxStore->DecreaseRef();
-        mPubCtxStore = nullptr;
-    }
-
     auto ctxMemPool = reinterpret_cast<NetMemPoolFixed *>(mCtxMemPool);
     if (NN_LIKELY(ctxMemPool != nullptr)) {
         ctxMemPool->DecreaseRef();
         mCtxMemPool = 0;
-    }
-
-    auto pubCtxMemPool = reinterpret_cast<NetMemPoolFixed *>(mPubCtxMemPool);
-    if (NN_LIKELY(pubCtxMemPool != nullptr)) {
-        pubCtxMemPool->DecreaseRef();
-        mPubCtxMemPool = 0;
     }
 
     auto periodicMgrPtr = reinterpret_cast<MultiCastPeriodicManager *>(mPeriodicMgr);
@@ -154,18 +96,13 @@ void Publisher::ForceUnInitialize()
         mPeriodicMgr = 0;
     }
 
-    auto timeHeader = reinterpret_cast<MultiCastServiceTimer *>(mTimerList);
-    if (NN_LIKELY(timeHeader != nullptr)) {
-        delete timeHeader;
-        mTimerList = 0;
-    }
-
     mState.Set(PublisherState::PUB_DESTROY);
 }
 
 SubscriptionInfoPtr Publisher::GetSubscribeByEpId(uint64_t id)
 {
-    RWLockGuard(mRwLock).LockRead();
+    RWLockGuard guard(mRwLock);
+    guard.LockRead();
     auto it = mSubscriptionMap.find(id);
     if (it != mSubscriptionMap.end()) {
         return it->second;
@@ -175,180 +112,243 @@ SubscriptionInfoPtr Publisher::GetSubscribeByEpId(uint64_t id)
 
 void Publisher::ProcessIoInBroken()
 {
-    auto header = reinterpret_cast<MultiCastTimerListHeader *>(mTimerList);
-    if (header == nullptr) {
-        NN_LOG_INFO("Publisher " << mName << " mTimerList is null when broken");
-        return;
-    }
-    if (header->GetCtxCount() == 0) {
-        NN_LOG_INFO("Publisher " << mName << " timer list header size is 0");
-        return;
-    }
-
-    std::vector<MultiCastServiceTimer *> remainCtx;
-    header->GetTimerCtx(remainCtx);
-    if (!remainCtx.empty()) {
-        NN_LOG_INFO("Publisher " << mName << " process io broken, size " << remainCtx.size());
-        ProcessIO(remainCtx);
-    }
-
-    /* try again to handle new add io during process */
-    header->GetTimerCtx(remainCtx);
-    if (!remainCtx.empty()) {
-        NN_LOG_INFO("Publisher " << mName << " process io broken, size " << remainCtx.size());
-        ProcessIO(remainCtx);
+    auto *periodicMgr = reinterpret_cast<MultiCastPeriodicManager *>(mPeriodicMgr);
+    if (periodicMgr != nullptr) {
+        periodicMgr->ProcessIoInBroken(this);
     }
 }
 
-SerResult Publisher::PrepareTimerContext(MultiCastCallback *cb, int16_t timeout, MultiCastTimerContext &context)
+SerResult Publisher::PrepareIoContext(const UBSHcomNetTransOpInfo &opInfo, const MultiCastCallback *done,
+                                      MultiCastIoContext *&context)
 {
-    auto timerPtr = mCtxStore->GetCtxObj<MultiCastServiceTimer>();
-    if (NN_UNLIKELY(timerPtr == nullptr)) {
-        NN_LOG_ERROR("Failed to get context object from memory pool.");
+    auto *periodicMgr = reinterpret_cast<MultiCastPeriodicManager *>(mPeriodicMgr);
+    if (NN_UNLIKELY(periodicMgr == nullptr)) {
+        DestroyCallback(done);
+        NN_LOG_ERROR("Multicast IO manager is null.");
+        return SER_TIMER_NOT_WORK;
+    }
+    context = periodicMgr->AcquireIoContext(this, done, opInfo.timeout);
+    if (NN_UNLIKELY(context == nullptr)) {
+        DestroyCallback(done);
+        NN_LOG_ERROR("Multicast IO context pool is exhausted.");
         return SER_NEW_OBJECT_FAILED;
     }
-
-    timerPtr->mCtxStore = mCtxStore;
-    // if t < 0, it means never timeout, so leave mTimeout as 0
-    if (timeout >= 0) {
-        timerPtr->mTimeout = NetMonotonic::TimeSec() + static_cast<uint64_t>(timeout);
-    }
-    timerPtr->mCallback = reinterpret_cast<uintptr_t>(cb);
-    timerPtr->mType = MultiCastSyncCBType::IO;
-    timerPtr->mPublisher = this;
-    timerPtr->mPublisher->IncreaseRef();
-    timerPtr->mState = MultiCastAsyncCBState::INIT;
-    context.timer = timerPtr;
-
-    auto result = mCtxStore->PutAndGetSeqNo(context.timer, context.seqNo);
-    if (NN_UNLIKELY(result != SER_OK)) {
-        NN_LOG_ERROR("Failed to generate seqNo by context store pool.");
-        mCtxStore->Return(timerPtr);
-        return SER_NEW_OBJECT_FAILED;
-    }
-
-    context.timer->IncreaseRef();
-    // timer seqNo is invalid, here need update by EmplaceContext() build seqNo.
-    context.timer->SeqNo(context.seqNo);
-
-    MultiCastPeriodicManagerPtr periodicMgrPtr = reinterpret_cast<MultiCastPeriodicManager *>(mPeriodicMgr);
-    result = periodicMgrPtr->AddTimer(context.timer);
-    if (NN_UNLIKELY(result != SER_OK)) {
-        NN_LOG_ERROR("Failed to add timer in for timeout control.");
-        context.timer->EraseSeqNo();
-        mCtxStore->Return(timerPtr);
-        return result;
-    }
-    context.timer->IncreaseRef();
     return SER_OK;
 }
 
-void Publisher::DestroyTimerContext(MultiCastTimerContext &context)
+SerResult Publisher::InitIoSubscribers(MultiCastIoContext &context)
 {
-    if (NN_LIKELY(context.timer->EraseSeqNoWithRet())) {
-        context.timer->DeleteCallBack();
-        context.timer->MarkFinished();
-        context.timer->DecreaseRef();
+    PublisherContext &pubCtx = context.mPublisherCtx;
+    uint32_t snapshotIndex = AcquireSubscriptionSnapshot();
+    for (const auto &group : mSubscriptionSnapshots[snapshotIndex]) {
+        SubscriptionInfoPtr selected = SelectSubscription(*group);
+        if (selected.Get() != nullptr) {
+            pubCtx.subscriberRspList.emplace_back(selected, SubscriberRspStatus::INIT);
+        }
+    }
+    ReleaseSubscriptionSnapshot(snapshotIndex);
+    if (NN_UNLIKELY(pubCtx.subscriberRspList.empty())) {
+        return SER_INVALID_PARAM;
+    }
+    pubCtx.repliedCount = 0;
+    return SER_OK;
+}
+
+SerResult Publisher::InitIoSubscriber(MultiCastIoContext &context, const std::string &remoteIp)
+{
+    PublisherContext &pubCtx = context.mPublisherCtx;
+    uint32_t snapshotIndex = AcquireSubscriptionSnapshot();
+    for (const auto &group : mSubscriptionSnapshots[snapshotIndex]) {
+        if (group == nullptr || group->subscribers.empty() || group->subscribers.front()->mIp != remoteIp) {
+            continue;
+        }
+        SubscriptionInfoPtr selected = SelectSubscription(*group);
+        if (selected.Get() != nullptr) {
+            pubCtx.subscriberRspList.emplace_back(selected, SubscriberRspStatus::INIT);
+        }
+        break;
+    }
+    ReleaseSubscriptionSnapshot(snapshotIndex);
+    if (NN_UNLIKELY(pubCtx.subscriberRspList.empty())) {
+        NN_LOG_ERROR("Failed to find multicast subscriber, remote ip:" << remoteIp << ".");
+        return SER_INVALID_PARAM;
+    }
+    pubCtx.repliedCount = 0;
+    return SER_OK;
+}
+
+uint32_t Publisher::AcquireSubscriptionSnapshot()
+{
+    for (;;) {
+        uint32_t index = mSubscriptionSnapshotIndex.load(std::memory_order_acquire);
+        mSubscriptionSnapshotReaders[index].fetch_add(1, std::memory_order_acquire);
+        if (index == mSubscriptionSnapshotIndex.load(std::memory_order_acquire)) {
+            return index;
+        }
+        mSubscriptionSnapshotReaders[index].fetch_sub(1, std::memory_order_release);
     }
 }
 
-void Publisher::DestroyPubContext(PublisherContext &context)
+void Publisher::ReleaseSubscriptionSnapshot(uint32_t index)
 {
-    context.subscriberRspList.clear();
-    mPubCtxStore->Return(&context);
+    mSubscriptionSnapshotReaders[index].fetch_sub(1, std::memory_order_release);
+}
+
+void Publisher::DestroyIoContext(MultiCastIoContext *context)
+{
+    auto *periodicMgr = reinterpret_cast<MultiCastPeriodicManager *>(mPeriodicMgr);
+    if (periodicMgr != nullptr) {
+        periodicMgr->ReleaseIoContext(context);
+    }
+}
+
+void Publisher::TryCompleteIoContext(MultiCastIoContext *context)
+{
+    if (!context->mSendReady.load(std::memory_order_acquire) ||
+        context->mPublisherCtx.GetReplyCount() < context->mPublisherCtx.GetSendCount()) {
+        return;
+    }
+
+    MultiCastIoState expected = MultiCastIoState::INIT;
+    if (!context->mState.compare_exchange_strong(expected, MultiCastIoState::FINISHED, std::memory_order_acq_rel,
+                                                 std::memory_order_acquire)) {
+        return;
+    }
+
+    const MultiCastCallback *callback = context->mCallback;
+    context->mCallback = nullptr;
+    if (callback != nullptr) {
+        const_cast<MultiCastCallback *>(callback)->Run(context->mPublisherCtx);
+    }
+    auto *periodicMgr = reinterpret_cast<MultiCastPeriodicManager *>(mPeriodicMgr);
+    periodicMgr->CompleteIoContext(context);
+}
+
+SerResult Publisher::FinishIoSend(MultiCastIoContext *context, SerResult result)
+{
+    context->mSendReady.store(true, std::memory_order_release);
+    if (NN_LIKELY(result != SER_MULTICAST_SEND_ALL_FAILED)) {
+        TryCompleteIoContext(context);
+        context->ReleaseAccess();
+        return SER_OK;
+    }
+
+    MultiCastIoState expected = MultiCastIoState::INIT;
+    if (!context->mState.compare_exchange_strong(expected, MultiCastIoState::FINISHED, std::memory_order_acq_rel,
+                                                 std::memory_order_acquire)) {
+        context->ReleaseAccess();
+        return SER_OK;
+    }
+
+    DestroyCallback(context->mCallback);
+    context->mCallback = nullptr;
+    auto *periodicMgr = reinterpret_cast<MultiCastPeriodicManager *>(mPeriodicMgr);
+    periodicMgr->CompleteIoContext(context);
+    context->ReleaseAccess();
+    NN_LOG_ERROR("Multicast Call all failed result " << result << ".");
+    return result;
 }
 
 SerResult Publisher::Call(const UBSHcomNetTransOpInfo &opInfo, const MultiRequest &req, const MultiCastCallback *done)
 {
-    if (NN_UNLIKELY(mSubCount == 0)) {
+    if (NN_UNLIKELY(GetSubscriberNum() == 0)) {
+        DestroyCallback(done);
         NN_LOG_ERROR("Failed to send, no subscriber exist");
         return SER_INVALID_PARAM;
     }
-
-    MultiCastTimerContext context{};
-    MultiCastCallback *cb = NewMultiCastCallback(
-        [this, done](PublisherContext &context) { const_cast<MultiCastCallback *>(done)->Run(context); },
-        std::placeholders::_1);
-    if (NN_UNLIKELY(!cb)) {
-        NN_LOG_ERROR("Publisher Call malloc callback failed");
+    if (NN_UNLIKELY(done == nullptr)) {
+        NN_LOG_ERROR("Multicast callback is null.");
+        return SER_INVALID_PARAM;
     }
-
-    SerResult result = PrepareTimerContext(cb, opInfo.timeout, context);
+    MultiCastIoContext *context = nullptr;
+    SerResult result = PrepareIoContext(opInfo, done, context);
     if (NN_UNLIKELY(result != SER_OK)) {
         return result;
     }
-
-    auto pubCtxPtr = mPubCtxStore->GetCtxObj<PublisherContext>();
-    if (NN_UNLIKELY(pubCtxPtr == nullptr)) {
-        NN_LOG_ERROR("Failed to get pub context object from memory pool.");
-        DestroyTimerContext(context);
-        return SER_NEW_OBJECT_FAILED;
-    }
-
-    auto ctx = new (pubCtxPtr) PublisherContext(mMaxSubscriberNum);
-    result = ctx->InitSubscribers(mSubscriptionMap);
+    result = InitIoSubscribers(*context);
     if (NN_UNLIKELY(result != SER_OK)) {
-        DestroyTimerContext(context);
-        DestroyPubContext(*ctx);
+        DestroyIoContext(context);
         return result;
     }
 
-    result = mPubCtxStore->PutBySeqNo(ctx, context.seqNo);
-    if (NN_UNLIKELY(result != SER_OK)) {
-        DestroyTimerContext(context);
-        DestroyPubContext(*ctx);
-        return result;
-    }
+    auto *periodicMgr = reinterpret_cast<MultiCastPeriodicManager *>(mPeriodicMgr);
+    periodicMgr->SubmitIoContext(context);
 
+    uint32_t seqNo = context->SeqNo();
     UBSHcomNetTransRequest netReq(reinterpret_cast<uintptr_t>(req.data), 0, req.lkey, 0, req.size,
                                   sizeof(SerTransContext));
-    SetServiceTransCtx(netReq.upCtxData, context.seqNo);
-    result = PostSendAll(context, netReq, ctx, result);
-    if (NN_UNLIKELY(result == SER_MULTICAST_SEND_ALL_FAILED)) {
-        // 全部失败才清理ctx，否则在收到所有数据，或超时的时候再清理
-        NN_LOG_ERROR("Multicast Call all failed result " << result);
-        DestroyTimerContext(context);
-        DestroyPubContext(*ctx);
+    SetServiceTransCtx(netReq.upCtxData, seqNo);
+    result = PostSendAll(*context, netReq, seqNo, result);
+    result = FinishIoSend(context, result);
+    return result;
+}
+
+SerResult Publisher::Call(const UBSHcomNetTransOpInfo &opInfo, const std::string &remoteIp, const MultiRequest &req,
+                          const MultiCastCallback *done)
+{
+    if (NN_UNLIKELY(remoteIp.empty() || GetSubscriberNum() == 0)) {
+        DestroyCallback(done);
+        NN_LOG_ERROR("Failed to send, remote ip is empty or no subscriber exist.");
+        return SER_INVALID_PARAM;
+    }
+    if (NN_UNLIKELY(done == nullptr)) {
+        NN_LOG_ERROR("Multicast callback is null.");
+        return SER_INVALID_PARAM;
+    }
+
+    MultiCastIoContext *context = nullptr;
+    SerResult result = PrepareIoContext(opInfo, done, context);
+    if (NN_UNLIKELY(result != SER_OK)) {
         return result;
     }
 
-    return SER_OK;
-}
-
-SerResult Publisher::PostSendAll(const MultiCastTimerContext &context, const UBSHcomNetTransRequest &netReq,
-                                 PublisherContext *ctx, SerResult &result)
-{
-    uint32_t failedCount = 0;
-    uint32_t toSendCount = 0;
-    std::vector<UBSHcomNetEndpoint *> eps;
-    {
-        // 1. 加读写锁，拷贝 endpoint 指针
-        RWLockGuard(mRwLock).LockRead();
-        eps.reserve(mSubCount);
-        toSendCount = mSubCount;
-        for (const auto &pair : mEpMap) {
-            eps.push_back(pair.second.Get());
-        }
+    result = InitIoSubscriber(*context, remoteIp);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        DestroyIoContext(context);
+        return result;
     }
 
-    // 2. 在无锁状态下发送消息，避免阻塞其他线程
-    ctx->SetSendCount(toSendCount);
-    for (const auto &ep : eps) {
+    auto *periodicMgr = reinterpret_cast<MultiCastPeriodicManager *>(mPeriodicMgr);
+    periodicMgr->SubmitIoContext(context);
+
+    uint32_t seqNo = context->SeqNo();
+    UBSHcomNetTransRequest netReq(reinterpret_cast<uintptr_t>(req.data), 0, req.lkey, 0, req.size,
+                                  sizeof(SerTransContext));
+    SetServiceTransCtx(netReq.upCtxData, seqNo);
+    result = PostSendAll(*context, netReq, seqNo, result);
+    result = FinishIoSend(context, result);
+    return result;
+}
+
+SerResult Publisher::PostSendAll(MultiCastIoContext &context, const UBSHcomNetTransRequest &netReq, uint32_t seqNo,
+                                 SerResult &result)
+{
+    uint32_t failedCount = 0;
+    PublisherContext &pubCtx = context.mPublisherCtx;
+    uint32_t toSendCount = pubCtx.subscriberRspList.size();
+    UBSHcomNetTransHeader header{};
+    if (mProtocol == UBSHcomNetDriverProtocol::TCP) {
+        PrepareTcpMulticastHeader(seqNo, netReq.size, header);
+    }
+
+    pubCtx.SetSendCount(toSendCount);
+    for (auto &response : pubCtx.subscriberRspList) {
+        SubscriptionInfoPtr &sub = response.mSubInfo;
+        auto ep = sub.Get() == nullptr ? nullptr : sub->mEp.Get();
         if (NN_UNLIKELY(ep == nullptr)) {
+            (void)pubCtx.SetResponseStatus(sub, nullptr, SubscriberRspStatus::SEND_ERROR);
             failedCount++;
-            NN_LOG_ERROR("ep is null! failedCount " << failedCount);
+            NN_LOG_ERROR("Endpoint is null, failed count " << failedCount << ".");
             continue;
         }
-
-        result = ep->PostSendRawNoCpy(netReq, context.seqNo);
+        if (mProtocol == UBSHcomNetDriverProtocol::TCP) {
+            auto *sockEp = static_cast<NetAsyncEndpointSock *>(ep);
+            result = sockEp->PostSendRawNoCpy(netReq, header);
+        } else {
+            result = ep->PostSendRawNoCpy(netReq, seqNo);
+        }
         if (NN_UNLIKELY(result != SER_OK)) {
-            auto sub = GetSubscribeByEpId(ep->Id());
-            if (NN_UNLIKELY(sub.Get() == nullptr)) {
-                NN_LOG_ERROR("Subscription of ep " << ep->Id() << " is nullptr");
-                failedCount++;
-                continue;
-            }
-            ctx->SetResponseStatus(sub, nullptr, SubscriberRspStatus::SEND_ERROR);
+            (void)pubCtx.SetResponseStatus(sub, nullptr, SubscriberRspStatus::SEND_ERROR);
             NN_LOG_ERROR("Failed to send to ep " << ep->Id() << ", error: " << result << " set sub info " << sub->mName
                                                  << " to SEND_ERROR");
             failedCount++;
@@ -359,11 +359,49 @@ SerResult Publisher::PostSendAll(const MultiCastTimerContext &context, const UBS
         return SER_OK;
     }
     // 记录发送成功的数量，回调汇聚的时候用
-    ctx->SetSendCount(toSendCount - failedCount);
+    pubCtx.SetSendCount(toSendCount - failedCount);
     if (NN_UNLIKELY(failedCount == toSendCount)) {
         return SER_MULTICAST_SEND_ALL_FAILED;
     }
     return SER_OK;
+}
+
+void Publisher::RebuildSubscriptionGroupsLocked()
+{
+    mSubscriptionGroups.clear();
+    for (const auto &item : mSubscriptionMap) {
+        if (item.second.Get() == nullptr) {
+            continue;
+        }
+        SubscriptionGroupPtr &group = mSubscriptionGroups[item.second->mIp];
+        if (group == nullptr) {
+            group = std::make_shared<SubscriptionGroup>();
+        }
+        group->subscribers.emplace_back(item.second);
+    }
+
+    uint32_t activeIndex = mSubscriptionSnapshotIndex.load(std::memory_order_acquire);
+    uint32_t nextIndex = activeIndex ^ 1U;
+    while (mSubscriptionSnapshotReaders[nextIndex].load(std::memory_order_acquire) != 0) {
+        std::this_thread::yield();
+    }
+    SubscriptionSnapshot &snapshot = mSubscriptionSnapshots[nextIndex];
+    snapshot.clear();
+    snapshot.reserve(mSubscriptionGroups.size());
+    for (const auto &item : mSubscriptionGroups) {
+        snapshot.emplace_back(item.second);
+    }
+    mSubscriptionSnapshotIndex.store(nextIndex, std::memory_order_release);
+}
+
+SubscriptionInfoPtr Publisher::SelectSubscription(SubscriptionGroup &group)
+{
+    const auto &subs = group.subscribers;
+    if (subs.empty()) {
+        return nullptr;
+    }
+    auto index = group.rr.fetch_add(1, std::memory_order_relaxed) % subs.size();
+    return subs[index];
 }
 
 bool Publisher::AddSubscription(SubscriptionInfoPtr &info)
@@ -373,12 +411,8 @@ bool Publisher::AddSubscription(SubscriptionInfoPtr &info)
     }
     NN_LOG_DEBUG("begin to add subscribe info id :" << info->mId << " name:" << info->mName);
 
-    if (info->mEp == nullptr) {
-        NN_LOG_ERROR("Add subscription failed as mEp is null");
-        return false;
-    }
-
-    RWLockGuard(mRwLock).LockWrite();
+    RWLockGuard guard(mRwLock);
+    guard.LockWrite();
     info->mEp->UpCtx(reinterpret_cast<uint64_t>(info.Get()));
 
     UBSHcomEpOptions epOptions;
@@ -388,7 +422,8 @@ bool Publisher::AddSubscription(SubscriptionInfoPtr &info)
 
     mEpMap.emplace(info->mId, info->mEp);
     mSubscriptionMap.emplace(info->mId, info);
-    mSubCount++;
+    RebuildSubscriptionGroupsLocked();
+    mSubCount.fetch_add(1, std::memory_order_release);
     return true;
 }
 
@@ -399,26 +434,34 @@ bool Publisher::DelSubscription(SubscriptionInfoPtr &info)
         return false;
     }
     // 此时可能还有ep正在做发送消息操作，避免core，ep通过延迟释放，此处仅仅移除subscription
-    RWLockGuard(mRwLock).LockWrite();
+    RWLockGuard guard(mRwLock);
+    guard.LockWrite();
+    mEpMap.erase(info->mId);
     mSubscriptionMap.erase(info->mId);
+    RebuildSubscriptionGroupsLocked();
+    mSubCount.store(static_cast<uint32_t>(mSubscriptionMap.size()), std::memory_order_release);
     return true;
 }
 
 uint32_t Publisher::GetSubscriberNum()
 {
-    RWLockGuard(mRwLock).LockRead();
-    return mSubscriptionMap.size();
+    uint32_t snapshotIndex = AcquireSubscriptionSnapshot();
+    uint32_t count = mSubscriptionSnapshots[snapshotIndex].size();
+    ReleaseSubscriptionSnapshot(snapshotIndex);
+    return count;
 }
 
 std::vector<SubscriptionInfoPtr> Publisher::GetAllSubscriberInfo()
 {
-    RWLockGuard(mRwLock).LockRead();
+    RWLockGuard guard(mRwLock);
+    guard.LockRead();
     std::vector<SubscriptionInfoPtr> subscriptionVec;
+    subscriptionVec.reserve(mSubscriptionMap.size());
     for (const auto &sub : mSubscriptionMap) {
         if (sub.second.Get() == nullptr) {
             continue;
         }
-        subscriptionVec.push_back(sub.second);
+        subscriptionVec.emplace_back(sub.second);
     }
     return subscriptionVec;
 }

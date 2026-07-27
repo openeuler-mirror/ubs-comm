@@ -16,6 +16,7 @@ bool MulticastConfigImp::Init(const std::string &name, const MulticastServiceOpt
     mOptions.name = name;
     mOptions.maxSendRecvDataSize = opt.maxSendRecvDataSize;
     mOptions.maxSendRecvDataCount = opt.maxSendRecvDataCount;
+    mOptions.multicastIoContextCount = opt.multicastIoContextCount;
     mOptions.workerGroupMode = opt.workerGroupMode;
     if (NN_LIKELY(opt.workerGroupThreadCount != 0)) {
         UBSHcomWorkerGroupInfo groupInfo;
@@ -242,6 +243,11 @@ void MulticastConfigImp::SetPeriodicThreadNum(uint32_t threadNum)
 const uint32_t MulticastConfigImp::GetPeriodicThreadNum() const
 {
     return mOptions.periodicThreadNum;
+}
+
+const uint32_t MulticastConfigImp::GetMulticastIoContextCount() const
+{
+    return mOptions.multicastIoContextCount;
 }
 
 void MulticastConfigImp::SetMaxSubscriberNum(uint32_t maxSubscriberNum)

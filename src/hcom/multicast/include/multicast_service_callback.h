@@ -33,8 +33,7 @@ public:
     uintptr_t mCallback = 0;                                    /* callback obj address */
     uint32_t mSeqNo = 0;                                        /* seq no for find query map */
     MultiCastSyncCBType mType = MultiCastSyncCBType::IO;        /* callback type */
-    MultiCastAsyncCBState mState = MultiCastAsyncCBState::INIT; /* atomic status to handle the trace condition
-                                                                 * between timeout  handle thread and polling thread */
+    MultiCastAsyncCBState mState = MultiCastAsyncCBState::INIT; /* accessed through atomic builtins */
 public:
     inline void SeqNo(uint32_t seqNo)
     {
@@ -58,7 +57,7 @@ public:
 
     inline MultiCastAsyncCBState State() const
     {
-        return mState;
+        return __atomic_load_n(&mState, __ATOMIC_ACQUIRE);
     }
 
     inline void TimeoutDump() const
@@ -113,7 +112,7 @@ public:
 
     inline bool IsFinished() const
     {
-        return mState == MultiCastAsyncCBState::FINISHED;
+        return State() == MultiCastAsyncCBState::FINISHED;
     }
 
     /*
@@ -124,7 +123,7 @@ public:
      */
     inline void MarkFinished()
     {
-        mState = MultiCastAsyncCBState::FINISHED;
+        __atomic_store_n(&mState, MultiCastAsyncCBState::FINISHED, __ATOMIC_RELEASE);
     }
 
     inline void RunCallBack(PublisherContext &ctx)
@@ -141,7 +140,7 @@ public:
         if (mCallback != 0) {
             auto callback = reinterpret_cast<MultiCastCallback *>(mCallback);
             mCallback = 0;
-            delete callback;
+            callback->Destroy();
         }
     }
 
@@ -153,7 +152,7 @@ public:
      */
     inline void MarkTimeout()
     {
-        mState = MultiCastAsyncCBState::TIMEOUT;
+        __atomic_store_n(&mState, MultiCastAsyncCBState::TIMEOUT, __ATOMIC_RELEASE);
     }
 
     bool IsTimeOut() const
@@ -223,11 +222,17 @@ public:
     }
 
     friend class MultiCastTimerListHeader;
+    friend class MultiCastPeriodicManager;
 
 private:
     int32_t mRefCount = 0;
     class MultiCastServiceTimer *mPrev = nullptr;
     class MultiCastServiceTimer *mNext = nullptr;
+    class MultiCastServiceTimer *mPeriodicPrev = nullptr;
+    class MultiCastServiceTimer *mPeriodicNext = nullptr;
+    uint16_t mPeriodicThreadId = 0;
+    uint16_t mPeriodicQueueId = 0;
+    bool mInPeriodicQueue = false;
 };
 
 class MultiCastTimerListHeader {
@@ -240,21 +245,21 @@ public:
      */
     inline void AddTimerCtx(MultiCastServiceTimer *ctx)
     {
-        if (NN_LIKELY(ctx != nullptr)) {
-            // bi-direction linked list, 4 step to insert to head
-            ctx->mPrev = &mTimerCtx;
-            mLock.Lock();
-            // head -><- first -><- second -><- third -> nullptr
-            // insert into the head place
-            ctx->mNext = mTimerCtx.mNext;
-            if (mTimerCtx.mNext != nullptr) {
-                mTimerCtx.mNext->mPrev = ctx;
-            }
-            mTimerCtx.mNext = ctx;
-            ++mCtxCount;
-            mLock.Unlock();
-            ctx->IncreaseRef();
+        if (NN_UNLIKELY(ctx == nullptr)) {
+            return;
         }
+
+        TimerListShard &shard = GetShard(ctx);
+        shard.lock.Lock();
+        ctx->mPrev = nullptr;
+        ctx->mNext = shard.head;
+        if (shard.head != nullptr) {
+            shard.head->mPrev = ctx;
+        }
+        shard.head = ctx;
+        ++shard.count;
+        shard.lock.Unlock();
+        ctx->IncreaseRef();
     }
 
     /*
@@ -263,28 +268,29 @@ public:
      */
     inline void RemoveTimerCtx(MultiCastServiceTimer *ctx)
     {
-        if (NN_LIKELY(ctx != nullptr)) {
-            // bi-direction linked list, 4 step to remove one
-            mLock.Lock();
+        if (NN_UNLIKELY(ctx == nullptr)) {
+            return;
+        }
 
-            // repeat remove
-            if (ctx->mPrev == nullptr) {
-                mLock.Unlock();
+        TimerListShard &shard = GetShard(ctx);
+        shard.lock.Lock();
+        if (ctx->mPrev == nullptr) {
+            if (shard.head != ctx) {
+                shard.lock.Unlock();
                 return;
             }
-
-            // head-><- first -><- second -><- third -> nullptr
+            shard.head = ctx->mNext;
+        } else {
             ctx->mPrev->mNext = ctx->mNext;
-            if (ctx->mNext != nullptr) {
-                ctx->mNext->mPrev = ctx->mPrev;
-            }
-            --mCtxCount;
-
-            ctx->mPrev = nullptr;
-            ctx->mNext = nullptr;
-            mLock.Unlock();
-            ctx->DecreaseRef();
         }
+        if (ctx->mNext != nullptr) {
+            ctx->mNext->mPrev = ctx->mPrev;
+        }
+        --shard.count;
+        ctx->mPrev = nullptr;
+        ctx->mNext = nullptr;
+        shard.lock.Unlock();
+        ctx->DecreaseRef();
     }
 
     /*
@@ -293,39 +299,51 @@ public:
      */
     inline void GetTimerCtx(std::vector<MultiCastServiceTimer *> &remainCtx)
     {
-        MultiCastServiceTimer *remain = nullptr;
-        MultiCastServiceTimer *next = nullptr;
         remainCtx.clear();
-        remainCtx.reserve(mCtxCount);
-
-        mLock.Lock();
-        // head -> first -><- second -><- third -> nullptr
-        remain = mTimerCtx.mNext;
-        mTimerCtx.mNext = nullptr;
-        mCtxCount = 0;
-
-        while (remain != nullptr) {
-            next = remain->mNext;
-            remain->mNext = nullptr;
-            remain->mPrev = nullptr;
-            remainCtx.emplace_back(remain);
-            remain = next;
+        for (uint32_t index = 0; index < TIMER_LIST_SHARD_NUM; ++index) {
+            TimerListShard &shard = mShards[index];
+            shard.lock.Lock();
+            MultiCastServiceTimer *remain = shard.head;
+            shard.head = nullptr;
+            shard.count = 0;
+            while (remain != nullptr) {
+                MultiCastServiceTimer *next = remain->mNext;
+                remain->mNext = nullptr;
+                remain->mPrev = nullptr;
+                remainCtx.emplace_back(remain);
+                remain = next;
+            }
+            shard.lock.Unlock();
         }
-        mLock.Unlock();
     }
 
     inline uint32_t GetCtxCount()
     {
-        mLock.Lock();
-        auto tmp = mCtxCount;
-        mLock.Unlock();
-        return tmp;
+        uint32_t count = 0;
+        for (uint32_t index = 0; index < TIMER_LIST_SHARD_NUM; ++index) {
+            TimerListShard &shard = mShards[index];
+            shard.lock.Lock();
+            count += shard.count;
+            shard.lock.Unlock();
+        }
+        return count;
     }
 
 private:
-    MultiCastServiceTimer mTimerCtx{};
-    NetSpinLock mLock;
-    uint32_t mCtxCount = NN_NO0;
+    static constexpr uint32_t TIMER_LIST_SHARD_NUM = 16;
+
+    struct TimerListShard {
+        MultiCastServiceTimer *head = nullptr;
+        NetSpinLock lock;
+        uint32_t count = 0;
+    };
+
+    inline TimerListShard &GetShard(const MultiCastServiceTimer *ctx)
+    {
+        return mShards[ctx->SeqNo() % TIMER_LIST_SHARD_NUM];
+    }
+
+    TimerListShard mShards[TIMER_LIST_SHARD_NUM];
 };
 
 struct MultiCastTimerContext {

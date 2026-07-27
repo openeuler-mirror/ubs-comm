@@ -17,6 +17,7 @@ struct MulticastServiceOptionsInner {
     uint32_t qpPrePostSize = 64;
     uint32_t maxSendRecvDataSize = 1024;
     uint32_t maxSendRecvDataCount = 8192;
+    uint32_t multicastIoContextCount = 8192;
     uint32_t maxConnCount = 250;
     uint32_t timeOutDetectThreadNum = 1;
     uint16_t pollingBatchSize = 4;
@@ -108,6 +109,8 @@ public:
 
     void SetPublisherWkrGroupNo(uint8_t groupNo);
     const uint8_t GetPublisherWkrGroupNo() const;
+
+    const uint32_t GetMulticastIoContextCount() const;
 
     NetDriverOobType GetOobType() const;
 

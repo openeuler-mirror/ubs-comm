@@ -87,6 +87,16 @@ public:
     virtual void RegisterTLSCaCallback(const UBSHcomTLSCaCallback &cb) = 0;
     virtual void RegisterTLSCertificationCallback(const UBSHcomTLSCertificationCallback &cb) = 0;
     virtual void RegisterTLSPrivateKeyCallback(const UBSHcomTLSPrivateKeyCallback &cb) = 0;
+
+    /**
+     * @brief 创建subscriber并指定对端publisher worker group
+     * @param serverUrl 目标url，如：tcp://127.0.0.1:9981
+     * @param publisherGroupIdx 对端publisher worker group编号
+     * @param subscriber 返回创建出的subscriber
+     * @return int32_t 成功：0；失败：错误码
+     */
+    virtual int32_t CreateSubscriber(const std::string &serverUrl, uint16_t publisherGroupIdx,
+                                     NetRef<Subscriber> &subscriber) = 0;
 };
 } // namespace hcom
 } // namespace ock
