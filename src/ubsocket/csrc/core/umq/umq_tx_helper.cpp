@@ -78,8 +78,8 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
             }
 
             if (buf[i]->status != 0) {
-                HandleTxCqeError(buf[i], wr_cnt);
                 error_cb.invoke(buf[i]);
+                HandleTxCqeError(buf[i], wr_cnt);
                 continue;
             }
 
@@ -287,6 +287,10 @@ void UmqTxHelper::LogTxCqeErrorMsg(umq_buf_t *buf)
 
 void UmqTxHelper::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
 {
+    if (first_qbuf->status >= UMQ_FAKE_BUF_FC_UPDATE) {
+        UmqApi::umq_buf_free(first_qbuf);
+        return;
+    }
     umq_buf_t *cur_qbuf = first_qbuf;
     umq_buf_t *last_qbuf = nullptr;
     int64_t left_size = (int64_t)cur_qbuf->total_data_size;
