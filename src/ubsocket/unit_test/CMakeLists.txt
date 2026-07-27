@@ -345,4 +345,38 @@ target_sources(ubsocket_leaky_singleton_test
     ubsocket_leaky_singleton_test.cpp
 )
 
+add_executable(ubsocket_buf_converter_test "")
+add_test(NAME ubsocket_buf_converter_test COMMAND ubsocket_buf_converter_test)
+set_target_properties(ubsocket_buf_converter_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+
+target_compile_features(ubsocket_buf_converter_test
+  PRIVATE
+    cxx_std_17
+)
+
+target_compile_definitions(ubsocket_buf_converter_test
+  PRIVATE
+    UBSOCKET_UNIT_TEST
+)
+
+target_include_directories(ubsocket_buf_converter_test
+  PRIVATE
+    ${UBSOCKET_BASE_DIR}/csrc
+    ${UBSOCKET_BASE_DIR}/csrc/common
+    ${UBSOCKET_BASE_DIR}/csrc/core
+)
+
+target_link_libraries(ubsocket_buf_converter_test
+  PRIVATE
+    ubsocket_static
+    boundscheck
+    GTest::gtest_main
+    pthread
+)
+
+target_sources(ubsocket_buf_converter_test
+  PRIVATE
+    ubsocket_buf_converter_test.cpp
+)
+
 add_subdirectory(profiling)
