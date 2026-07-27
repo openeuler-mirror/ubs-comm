@@ -544,4 +544,37 @@ target_sources(ubsocket_version_test
     ubsocket_version_test.cpp
 )
 
+add_executable(ubsocket_port_cooldown_test "")
+add_test(NAME ubsocket_port_cooldown_test COMMAND ubsocket_port_cooldown_test)
+set_target_properties(ubsocket_port_cooldown_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+
+target_compile_features(ubsocket_port_cooldown_test
+  PRIVATE
+    cxx_std_17
+)
+
+target_compile_definitions(ubsocket_port_cooldown_test
+  PRIVATE
+    UBSOCKET_UNIT_TEST
+)
+
+target_include_directories(ubsocket_port_cooldown_test
+  PRIVATE
+    ${UBSOCKET_BASE_DIR}/csrc
+    ${UBSOCKET_BASE_DIR}/csrc/common
+)
+
+target_link_libraries(ubsocket_port_cooldown_test
+  PRIVATE
+    ubsocket_static
+    boundscheck
+    GTest::gtest_main
+    pthread
+)
+
+target_sources(ubsocket_port_cooldown_test
+  PRIVATE
+    ubsocket_port_cooldown_test.cpp
+)
+
 add_subdirectory(profiling)
