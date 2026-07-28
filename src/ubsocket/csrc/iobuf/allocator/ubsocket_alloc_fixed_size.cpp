@@ -128,6 +128,21 @@ void FixedAllocator::BatchFree(uint16_t batchSize, uintptr_t *addresses) noexcep
     return GetTC().BatchFree(batchSize, addresses);
 }
 
+bool FixedAllocator::BatchAllocateWithLinkList(uint16_t batchSize, uintptr_t &address) noexcept
+{
+    if (UNLIKELY(gc_ == nullptr)) {
+        UBS_VLOG_ERR("Not initialized");
+        return false;
+    }
+
+    if (UNLIKELY(batchSize == 0)) {
+        address = 0;
+        return true;
+    }
+
+    return GetTC().InnerBatchAllocate(batchSize, address);
+}
+
 bool FixedAllocator::InRange(uintptr_t address, uint64_t size) noexcept
 {
     if (UNLIKELY(gc_ == nullptr)) {

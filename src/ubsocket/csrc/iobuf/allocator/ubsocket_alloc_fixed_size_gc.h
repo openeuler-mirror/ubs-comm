@@ -102,7 +102,7 @@ public:
      *
      * @return 0 if successful
      */
-    Result HandleExpandBlock(uint32_t flags, FixedBlock &expandedBlock) noexcept;
+    Result HandleExpandBlock(bool flags, FixedBlock &expandedBlock) noexcept;
 
 private:
     void UnInitInner() noexcept;
@@ -541,6 +541,7 @@ ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocateInnerPartial(uint16_t requ
     pthread_spin_lock(&spinlock_aligned_);
     /* if less than one batch, just return */
     if (free_mini_blocks_aligned_ < FIX_GC_BATCH_FREE_SIZE) {
+        pthread_spin_unlock(&spinlock_aligned_);
         return 0;
     }
 
@@ -560,7 +561,7 @@ ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocateInnerPartial(uint16_t requ
         blocks = aligned_mini_blocks_;
         aligned_mini_blocks_ = iter;
     }
-
+    blocks->tail->next = nullptr;
     pthread_spin_unlock(&spinlock_aligned_);
 
     return allocated;
@@ -641,9 +642,9 @@ ALWAYS_INLINE void FixedGlobalCache::BatchFree(FixedMiniBlock *block, uint16_t f
     /* step2: free aligned */
     if (LIKELY(aligned)) {
         /* get the tail of block to be freed */
-        auto tail = block;
-        while (tail != nullptr && tail->next_n_m != nullptr) {
-            tail = tail->next_n_m;
+        auto tail = block->next_n_m;
+        while (tail->next != nullptr) {
+            tail = tail->next->next_n_m;
         }
 
         /* link to aligned list */
@@ -717,10 +718,18 @@ ALWAYS_INLINE void FixedGlobalCache::DirectFree(uintptr_t address) noexcept
     direct_allocator_.DirectFree(address);
 }
 
-ALWAYS_INLINE Result FixedGlobalCache::HandleExpandBlock(uint32_t flags, FixedBlock &expandedBlock) noexcept
+ALWAYS_INLINE Result FixedGlobalCache::HandleExpandBlock(bool flags, FixedBlock &expandedBlock) noexcept
 {
     std::lock_guard<std::mutex> locker(mutex_);
-    return ExpandBlock(true);
+    Result ret = ExpandBlock(flags);
+    if (ret == UBS_OK) {
+        if (flags) {
+            expandedBlock = direct_alloc_blocks_.back();
+        } else {
+            expandedBlock = tc_alloc_blocks_.back();
+        }
+    }
+    return ret;
 }
 } // namespace allocator
 } // namespace ubs

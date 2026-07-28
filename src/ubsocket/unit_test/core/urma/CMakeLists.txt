@@ -19,7 +19,7 @@ endfunction()
 add_urma_test(urma_errno_converter_test)
 target_link_libraries(urma_errno_converter_test PRIVATE GTest::gtest_main)
 target_sources(urma_errno_converter_test PRIVATE
-    urma_errno_converter_test.cpp
+        urma_errno_converter_test.cpp
 )
 
 add_urma_test(urma_socket_test)
@@ -35,7 +35,7 @@ target_link_libraries(urma_socket_test PRIVATE
     ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
 )
 target_sources(urma_socket_test PRIVATE
-    urma_socket_test.cpp
+        urma_socket_test.cpp
 )
 
 add_urma_test(urma_acceptor_test)
@@ -52,7 +52,7 @@ target_link_libraries(urma_acceptor_test PRIVATE
     ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
 )
 target_sources(urma_acceptor_test PRIVATE
-    urma_acceptor_test.cpp
+        urma_acceptor_test.cpp
 )
 
 add_urma_test(urma_connector_test)
@@ -69,7 +69,7 @@ target_link_libraries(urma_connector_test PRIVATE
     ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
 )
 target_sources(urma_connector_test PRIVATE
-    urma_connector_test.cpp
+        urma_connector_test.cpp
 )
 
 add_urma_test(urma_exchange_test)
@@ -86,7 +86,7 @@ target_link_libraries(urma_exchange_test PRIVATE
     ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
 )
 target_sources(urma_exchange_test PRIVATE
-    urma_exchange_test.cpp
+        urma_exchange_test.cpp
 )
 
 add_urma_test(urma_data_rx_test)
@@ -103,7 +103,7 @@ target_link_libraries(urma_data_rx_test PRIVATE
     ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
 )
 target_sources(urma_data_rx_test PRIVATE
-    urma_data_rx_test.cpp
+        urma_data_rx_test.cpp
 )
 
 add_urma_test(urma_event_epoll_test)
@@ -120,5 +120,5 @@ target_link_libraries(urma_event_epoll_test PRIVATE
     ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
 )
 target_sources(urma_event_epoll_test PRIVATE
-    urma_event_epoll_test.cpp
+        urma_event_epoll_test.cpp
 )

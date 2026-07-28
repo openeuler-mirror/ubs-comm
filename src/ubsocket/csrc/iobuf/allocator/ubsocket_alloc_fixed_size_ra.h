@@ -49,6 +49,8 @@ public:
         free_addresses_ = std::pmr::map<uintptr_t, uint32_t>(&address_pool_);
         free_ranges_ = std::pmr::set<Range, RangeCompSizeFirst>(&range_pool_);
         allocated_addresses_ = std::pmr::map<uintptr_t, uint32_t>(&allocated_address_pool_);
+        free_addresses_.emplace(base_address_, free_size_bytes_);
+        free_ranges_.emplace(Range{base_address_, free_size_bytes_});
     }
 
     ~SingleAllocator() noexcept = default;
@@ -92,12 +94,6 @@ using SingleAllocatorPtr = Ref<SingleAllocator>;
 
 ALWAYS_INLINE uintptr_t SingleAllocator::Allocate(uint32_t size_bytes) noexcept
 {
-    /* step0: initialize free ranges set */
-    if (UNLIKELY(free_size_bytes_ == size_bytes_)) {
-        free_addresses_.emplace(base_address_, free_size_bytes_);
-        free_ranges_.emplace(Range{base_address_, free_size_bytes_});
-    }
-
     /* step1: no more space */
     if (free_size_bytes_ < size_bytes) {
         return 0;
@@ -281,7 +277,7 @@ ALWAYS_INLINE bool FixedRangeAllocator::DirectAllocate(uint32_t size, uintptr_t 
 
     /* step2: no enough memory and expand */
     FixedBlock new_block;
-    auto expand_result = expand_handler_(0, new_block);
+    auto expand_result = expand_handler_(true, new_block);
     if (expand_result != UBS_OK) {
         UBS_VLOG_ERR("Failed to expand new block, probably out of memory");
         return false;
