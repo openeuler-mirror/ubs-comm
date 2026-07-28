@@ -36,7 +36,7 @@ Result UrmaSocket::Initialize() noexcept
     uint32_t recv_buf_size = URMA_RECV_BUF_DEFAULT_KB * 1024;
 
     auto buffer = UrmaBackend::GetAllocator()->direct_allocate(recv_buf_size + send_buf_size);
-    if (buffer == nullptr) {
+    if (UNLIKELY(buffer == nullptr)) {
         UBS_SLOG_ERR("UrmaSocket: malloc buf failed, fd=" << raw_socket_);
         send_buf_addr_ = 0;
         recv_buf_addr_ = 0;
@@ -48,7 +48,7 @@ Result UrmaSocket::Initialize() noexcept
     send_buf_addr_ = recv_buf_addr_ + recv_buf_size;
 
     send_buf_ = new (std::nothrow) UrmaSockRingBuf(send_buf_size);
-    if (send_buf_ == nullptr) {
+    if (UNLIKELY(send_buf_ == nullptr)) {
         UBS_SLOG_ERR("UrmaSocket: ringbuf alloc failed, fd=" << raw_socket_);
         UrmaBackend::GetAllocator()->direct_release(buffer);
         send_buf_addr_ = 0;
