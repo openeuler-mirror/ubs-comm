@@ -484,7 +484,7 @@ TEST_F(AllocatorFunctionalTest, MultipleDirectAllocateFree)
     bool reuse_ok = false;
     uintptr_t reuse;
     RunInWorker([&]() {
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 2048; i++) {
             uintptr_t a = 100;
             if (!alloc_.DirectAllocate(8192, a)) {
                 all_ok = false;
@@ -493,8 +493,8 @@ TEST_F(AllocatorFunctionalTest, MultipleDirectAllocateFree)
             addrs.push_back(a);
         }
         if (all_ok) {
-            for (auto a : addrs) {
-                alloc_.DirectFree(a);
+            for (auto a = addrs.rbegin(); a != addrs.rend(); ++a) {
+                alloc_.DirectFree(*a);
             }
             reuse_ok = alloc_.DirectAllocate(8192, reuse);
             if (reuse_ok) {
@@ -829,7 +829,7 @@ TEST_F(AllocatorFunctionalTest, BatchAllocateFreeBatch16RoundTrip)
 
 TEST_F(AllocatorFunctionalTest, BatchAllocateFreeMultiBatch)
 {
-    constexpr uint16_t BATCH = 32;
+    constexpr uint16_t BATCH = 2048;
     bool ok = false;
     std::vector<uintptr_t> addrs(BATCH, 0);
     RunInWorker([&]() {

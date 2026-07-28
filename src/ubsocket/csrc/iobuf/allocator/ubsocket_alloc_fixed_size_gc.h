@@ -102,7 +102,7 @@ public:
      *
      * @return 0 if successful
      */
-    Result HandleExpandBlock(uint32_t flags, FixedBlock &expandedBlock) noexcept;
+    Result HandleExpandBlock(bool flags, FixedBlock &expandedBlock) noexcept;
 
 private:
     void UnInitInner() noexcept;
@@ -718,10 +718,18 @@ ALWAYS_INLINE void FixedGlobalCache::DirectFree(uintptr_t address) noexcept
     direct_allocator_.DirectFree(address);
 }
 
-ALWAYS_INLINE Result FixedGlobalCache::HandleExpandBlock(uint32_t flags, FixedBlock &expandedBlock) noexcept
+ALWAYS_INLINE Result FixedGlobalCache::HandleExpandBlock(bool flags, FixedBlock &expandedBlock) noexcept
 {
     std::lock_guard<std::mutex> locker(mutex_);
-    return ExpandBlock(true);
+    Result ret = ExpandBlock(flags);
+    if (ret == UBS_OK) {
+        if (flags) {
+            expandedBlock = direct_alloc_blocks_.back();
+        } else {
+            expandedBlock = tc_alloc_blocks_.back();
+        }
+    }
+    return ret;
 }
 } // namespace allocator
 } // namespace ubs

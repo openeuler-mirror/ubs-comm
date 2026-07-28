@@ -27,5 +27,5 @@ target_link_libraries(allocator_test PRIVATE
 )
 
 target_sources(allocator_test PRIVATE
-    allocator_test.cpp
+        allocator_test.cpp
 )
