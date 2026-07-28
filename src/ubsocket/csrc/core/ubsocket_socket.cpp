@@ -156,9 +156,7 @@ Result SocketBase::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOp
         /* set out ops */
         ops = umqOps;
         return UBS_OK;
-    }
-
-    if (value == SocketType::SOCK_TYPE_URMA) {
+    } else if (value == SocketType::SOCK_TYPE_URMA) {
         auto urma_socket = RefConvert<Socket, urma::UrmaSocket>(sock);
         auto tx_ops = new (std::nothrow) urma::UrmaTxOps(sock->raw_socket_);
         if (tx_ops == nullptr) {
@@ -192,9 +190,7 @@ Result SocketBase::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOp
         /* set out ops */
         ops = umqOps;
         return UBS_OK;
-    }
-
-    if (value == SocketType::SOCK_TYPE_URMA) {
+    } else if (value == SocketType::SOCK_TYPE_URMA) {
         auto urma_socket = RefConvert<Socket, urma::UrmaSocket>(sock);
         auto rx_ops = new (std::nothrow) urma::UrmaRxOps(sock->raw_socket_);
         if (rx_ops == nullptr) {
