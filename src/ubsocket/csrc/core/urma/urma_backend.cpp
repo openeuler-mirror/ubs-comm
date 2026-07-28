@@ -217,12 +217,12 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
         if (cr[i].opcode == URMA_CR_OPC_WRITE_WITH_IMM) {
             auto fd = static_cast<int>(cr[i].user_ctx);
             auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-            if (sock == nullptr) {
+            if (UNLIKELY(sock == nullptr)) {
                 UBS_VLOG_ERR("socket is nullptr for fd: %d", fd);
                 continue;
             }
 
-            UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+            auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
             urma_sock->HandleRecvCqe(cr[i].imm_data);
         } else {
             // TODO: other opcode
