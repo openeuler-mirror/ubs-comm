@@ -225,8 +225,7 @@ ALWAYS_INLINE bool FixedThreadCache::InnerBatchAllocate(uint16_t batchSize, uint
     uint32_t req_left_block_num = batchSize % FIX_GC_BATCH_FREE_SIZE;
     uint32_t cur_batch_num = count_ / FIX_GC_BATCH_FREE_SIZE;
     uint32_t cur_left_block_num = count_ % FIX_GC_BATCH_FREE_SIZE;
-    if (req_batch_num > cur_batch_num ||
-        (req_batch_num == cur_batch_num && req_left_block_num > cur_left_block_num)) {
+    if (req_batch_num > cur_batch_num || (req_batch_num == cur_batch_num && req_left_block_num > cur_left_block_num)) {
         uint32_t expand_batch_num = req_batch_num - cur_batch_num;
         if (req_left_block_num > cur_left_block_num) {
             expand_batch_num += 1;
@@ -288,7 +287,8 @@ ALWAYS_INLINE bool FixedThreadCache::InnerBatchAllocate(uint16_t batchSize, uint
             }
         }
         if (req_count != 0) {
-            UBS_VLOG_ERR("BatchAllocate error, which should not happen, req_count: %lu, cur_count: %lu.\n", req_left_block_num, req_left_block_num - req_count);
+            UBS_VLOG_ERR("BatchAllocate error, which should not happen, req_count: %lu, cur_count: %lu.\n",
+                         req_left_block_num, req_left_block_num - req_count);
         }
         out_tail->next = nullptr;
         count_ -= (req_left_block_num - req_count);
@@ -324,7 +324,6 @@ ALWAYS_INLINE void FixedThreadCache::InnerBatchFree(uint16_t batchSize, uintptr_
 
     /* step1: Check whether the current TC can expand a complete batch. */
     uint32_t free_batch_num = batchSize / FIX_GC_BATCH_FREE_SIZE;
-    uint32_t free_left_block_num = batchSize % FIX_GC_BATCH_FREE_SIZE;
     uint32_t cur_batch_num = count_ / FIX_GC_BATCH_FREE_SIZE;
     uint32_t tc_max_batch_num = FIX_GC_BATCH_FREE_THRESHOLD / FIX_GC_BATCH_FREE_SIZE;
     uint32_t tc_expand_batch_num = (cur_batch_num < tc_max_batch_num) ? (tc_max_batch_num - cur_batch_num) : 0;
@@ -332,7 +331,7 @@ ALWAYS_INLINE void FixedThreadCache::InnerBatchFree(uint16_t batchSize, uintptr_
 
     /* step2: Preferentially place the complete batch to the current TC. */
     uint32_t free_count = 0;
-    for (int i = 0; i < batch_to_tc; ++i) {
+    for (uint32_t i = 0; i < batch_to_tc; ++i) {
         if (next_ == nullptr) {
             next_ = block_list;
             next_n_ = block_list->next_n;
