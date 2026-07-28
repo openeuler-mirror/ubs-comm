@@ -14,48 +14,41 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
-#include <memory>
 
 #include "common/ubsocket_common_includes.h"
-#include "iobuf/ubsocket_iobuf.h"
 #include "ubsocket_core_types.h"
 
 namespace ock {
 namespace ubs {
-// 接口层，实现 Polltx等动作
+/*
+ * Operation interface for data receive:
+ * urma backend, shm backend, rdma backend, umq backend, need to implement this for data tx
+ */
 class DataRxOps {
 public:
-    DataRxOps() = default;
     virtual ~DataRxOps() = default;
 
     /**
-     * poll rx and put data into block_cache_
+     * @brief Simplified read interface for different protocol
+     *
+     * @param sock         [in] the socket object to be operated on
+     * @param iov          [in] io vector for data receiving
+     * @param iovcnt       [in] count of vector
+     * @param flags        [in] optional flags
+     *
+     * @return size of data read or error
+     */
+    virtual ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) = 0;
+
+    /**
+     * @brief Trigger poll in event
+     *
+     * @param sock         [in] the socket object to be operated on
+     * @param event        [in] the reached data event for IN
+     * @param flags        [in] optional flags
      * @return
      */
-    virtual int PollRx(const SocketPtr &sock) = 0;
-    ssize_t RxDataSet(void *buf, uint32_t size);
-    virtual int RearmRxInterrupt() = 0;
-    virtual void FlushRx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) = 0;
-
-public:
-    int fd_ = -1;
-    // RX fields
-    uint8_t epoll_in_msg_ = 0;
-    uint8_t epoll_in_msg_recv_size_ = 0;
-    uint16_t rx_queue_avail_num_ = 0; // current window size for RX
-    uint16_t ack_event_num_ = 0;
-    std::atomic<int> epoll_event_num_{0};
-    int expect_epoll_event_num_ = 0;
-    bool get_and_ack_event_ = false;
-    bool poll_ = false;
-    BlockCache block_cache_;
-    size_t remaining_size_ = 0;
-    bool flow_control_failed_ = false;
-
-protected:
-    virtual Block *DataToBlock(void *data) = 0;
-
-    friend class DataRx;
+    virtual Result TriggerPollIn(const SocketPtr &sock, uint32_t flags) = 0;
 };
 
 // 通用层：缓存获取数据，故障回退
@@ -66,10 +59,7 @@ public:
 
     ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
-    DataRxOps *GetRxOps()
-    {
-        return rx_ops_.get();
-    }
+    DataRxOps *GetRxOps() const noexcept;
 
 private:
     ssize_t OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
@@ -82,8 +72,13 @@ private:
     uint32_t protocol_negotiation_recv_size_ = 0;
     uint32_t protocol_negotiation_offset_ = 0;
 
-    std::unique_ptr<DataRxOps> rx_ops_;
+    DataRxOps *rx_ops_ = nullptr;
 };
+
+ALWAYS_INLINE DataRxOps *DataRx::GetRxOps() const noexcept
+{
+    return rx_ops_;
+}
 } // namespace ubs
 } // namespace ock
 #endif // UBS_COMM_UBSOCKET_DATA_RX_H

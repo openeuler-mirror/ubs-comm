@@ -10,6 +10,7 @@
  */
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_event_epoll.h"
+#include "core/urma/urma_event_epoll.h"
 #include "include/ubsocket.h"
 #include "under_api/dl_libc_api.h"
 
@@ -26,7 +27,7 @@ UBS_API int UB_API_WRAP(epoll_create)(int size)
         return epollFd;
     }
 
-    EventPoll *eventPoll = new AsyncEventPoll(epollFd);
+    EventPoll *eventPoll = new (std::nothrow) urma::UrmaEventPoll(epollFd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("create async event poll failed, epoll fd: %d\n", epollFd);
         LibcApi::close(epollFd);

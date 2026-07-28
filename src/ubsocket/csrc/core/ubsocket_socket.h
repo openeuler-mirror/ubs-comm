@@ -65,7 +65,7 @@ public:
     virtual void UnInitialize() noexcept = 0;
 
     int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
-    int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
+    int Connect(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     int WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     int ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen);
@@ -161,7 +161,7 @@ ALWAYS_INLINE int SocketBase::Accept(const SocketPtr &sock, struct sockaddr *add
     return acceptor_->Accept(sock, address, address_len);
 }
 
-ALWAYS_INLINE int SocketBase::Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
+ALWAYS_INLINE int SocketBase::Connect(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
 {
     if (connector_ == nullptr) {
         errno = EINVAL;

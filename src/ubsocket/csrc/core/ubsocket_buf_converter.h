@@ -13,6 +13,7 @@
 
 #include <sys/uio.h>
 #include <cstdint>
+#include "common/ubsocket_ref.h"
 
 namespace ock {
 namespace ubs {

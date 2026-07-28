@@ -22,8 +22,7 @@ extern "C" {
 extern int ubsocket_prof_enabled;
 extern uint64_t ubsocket_arm_cpu_freq;
 
-enum ProfilingTPId : uint32_t
-{
+enum ProfilingTPId : uint32_t {
     CORE_CONNECT = 0,
     CORE_ACCEPT,
     CORE_WRITE,
@@ -119,6 +118,10 @@ void ubsocket_prof_reset();
  * 主流程中不调用该函数
  */
 #ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
+#define PROF_TRACE_TIMESTAMP_DEFINE(timestamp) uint64_t #timestamp = 0
+#define PROF_TRACE_TIMESTAMP(timestamp) uint64_t #timestamp = ubsocket_get_timeNs_compile()
+#define PROF_TRACE_TIMESTAMP_ASSIGN(timestamp) #timestamp = ubsocket_get_timeNs_compile()
+
 #if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
 #define ubsocket_get_timeNs_compile()                              \
     ({                                                             \
@@ -139,6 +142,17 @@ void ubsocket_prof_reset();
     })
 #endif
 #else // UBS_SPLIT_TRACE_ENABLED_COMPILE
+
+#define PROF_TRACE_TIMESTAMP_DEFINE(timestamp) \
+    do {                                       \
+    } while (0)
+#define PROF_TRACE_TIMESTAMP(timestamp) \
+    do {                                \
+    } while (0)
+#define PROF_TRACE_TIMESTAMP_ASSIGN(timestamp) \
+    do {                                       \
+    } while (0)
+
 #define ubsocket_get_timeNs_compile() 0
 #endif // UBS_SPLIT_TRACE_ENABLED_COMPILE
 

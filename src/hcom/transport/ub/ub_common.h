@@ -44,8 +44,7 @@ namespace hcom {
  */
 using UResult = int;
 
-enum UBCode
-{
+enum UBCode {
     UB_OK = 0,
     UB_PARAM_INVALID = 200,
     UB_MEMORY_ALLOCATE_FAILED = 201,
@@ -133,8 +132,7 @@ using UBSendSglRWRequest = UBSHcomNetTransSglRequest;
 
 // the size of UBOpContextInfo is 64 bytes which fit to single CPU cache line
 struct UBOpContextInfo {
-    enum OpType : uint8_t
-    {
+    enum OpType : uint8_t {
         SEND = 0,
         SEND_RAW = 1,
         SEND_RAW_SGL = 2,
@@ -148,8 +146,7 @@ struct UBOpContextInfo {
         SEND_SGL_INLINE = 10,
     };
 
-    enum OpResultType : uint8_t
-    {
+    enum OpResultType : uint8_t {
         SUCCESS = 0,
         ERR_TIMEOUT = 1,
         ERR_CANCELED = 2,
@@ -273,8 +270,7 @@ struct UBSgeCtxInfo {
     explicit UBSgeCtxInfo(UBSglContextInfo *sglCtx) : ctx(sglCtx) {}
 } __attribute__((packed));
 
-enum UBPollingMode : uint8_t
-{
+enum UBPollingMode : uint8_t {
     UB_BUSY_POLLING = 0,
     UB_EVENT_POLLING = 1,
 };

@@ -12,7 +12,7 @@
 
 namespace ock {
 namespace ubs {
-const std::string &SocketStateToStr(SocketState value)
+const std::string &SocketStateToStr(const SocketState value)
 {
     static std::string strings[SOCK_STATE_COUNT + 1L] = {
         "init", "raw_socket_established", "established", "shutdown", "closed", "unknown"};
@@ -24,7 +24,7 @@ const std::string &SocketStateToStr(SocketState value)
 }
 const std::string &SocketTypeToStr(SocketType value)
 {
-    static std::string strings[static_cast<uint8_t>(SocketType::SOCK_TYPE_COUNT) + 1L] = {"TCP", "UMQ", "unknown"};
+    static std::string strings[static_cast<uint8_t>(SocketType::SOCK_TYPE_COUNT) + 1L] = {"TCP", "UMQ", "SHM", "URMA"};
     if (SocketTypeValid(value)) {
         return strings[static_cast<uint8_t>(value)];
     }

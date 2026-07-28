@@ -41,8 +41,7 @@ int UbsocketWakeupEvent::Initialize(int epollFd)
         return -1;
     }
 
-    struct epoll_event event {
-    };
+    struct epoll_event event {};
     event.events = EPOLLIN;
     event.data.ptr = &ready_event_;
     int ret = epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &event);

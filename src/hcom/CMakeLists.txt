@@ -104,7 +104,7 @@ if (${CMAKE_BUILD_TYPE} MATCHES "release")
         -Wsign-compare
         -Wfloat-equal
         -Wextra
-        -std=c++11
+        -std=c++17
         -fPIC
         -fstack-protector-strong
         -Wl,-z,relro,-z,now,-z,noexecstack
@@ -128,7 +128,7 @@ else ()
         -Wsign-compare
         -Wfloat-equal
         -Wextra
-        -std=c++11
+        -std=c++17
         #-fsanitize=address
         #-fno-omit-frame-pointer
         -fstack-protector-strong

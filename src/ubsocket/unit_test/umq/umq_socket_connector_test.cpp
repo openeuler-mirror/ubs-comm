@@ -385,8 +385,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_HandshakeOpt_SetsockoptSuccess_Connec
     umqSocket->state_ = SOCK_STAT_RAW_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -414,8 +413,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_HandshakeOpt_SetsockoptFailEnoprotoop
     umqSocket->state_ = SOCK_STAT_RAW_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -443,8 +441,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_HandshakeOpt_SetsockoptFailEopnotsupp
     umqSocket->state_ = SOCK_STAT_RAW_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -468,8 +465,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_HandshakeOpt_SetsockoptFailOtherErrno
     umqSocket->state_ = SOCK_STAT_RAW_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -496,8 +492,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_Einprogress_RetCorrectedToOk)
     umqSocket->state_ = SOCK_STAT_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -523,8 +518,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_Ealready_RetCorrectedToOk)
     umqSocket->state_ = SOCK_STAT_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -550,8 +544,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_Eisconn_ContinuesWithOk)
     umqSocket->state_ = SOCK_STAT_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -576,8 +569,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_OtherErrno_ReturnsError)
     umqSocket->state_ = SOCK_STAT_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -603,8 +595,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_RawEstablishedState_ReturnsEarly)
     umqSocket->state_ = SOCK_STAT_RAW_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -629,8 +620,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_NotUbsConnection_ReturnsEarly)
     umqSocket->state_ = SOCK_STAT_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -681,8 +671,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_TfoMode_SendtoSuccessButDup3Fail_Retu
     umqSocket->state_ = SOCK_STAT_RAW_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);
@@ -710,8 +699,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_TfoMode_SendtoFail_ReturnsMinus1)
     umqSocket->state_ = SOCK_STAT_RAW_ESTABLISHED;
     SocketPtr sock = RefConvert<UmqSocket, Socket>(umqSocket);
 
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(8080);

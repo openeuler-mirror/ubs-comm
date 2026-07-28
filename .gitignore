@@ -1,9 +1,11 @@
+.idea/
 .vscode/
 .DS_Store
 **/build/
 out/
 dist/
 tmp_build_dir/
+/Testing/
 compile_commands.json
 bazel-bin
 bazel-out

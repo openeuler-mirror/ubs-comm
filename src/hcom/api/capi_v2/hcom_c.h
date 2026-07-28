@@ -43,8 +43,7 @@ typedef uintptr_t ubs_hcom_endpoint;
  */
 typedef uintptr_t ubs_hcom_memory_region;
 
-typedef enum
-{
+typedef enum {
     NET_C_EP_SELF_POLLING = NET_C_FLAGS_BIT(0),
     NET_C_EP_EVENT_POLLING = NET_C_FLAGS_BIT(1)
 } ubs_hcom_polling_mode;
@@ -52,8 +51,7 @@ typedef enum
 /*
  * @brief Request type, part of ubs_hcom_request_context
  */
-typedef enum
-{
+typedef enum {
     C_SENT = 0,
     C_SENT_RAW = 1,
     C_SENT_RAW_SGL = 2,
@@ -73,14 +71,12 @@ typedef enum
  * 2 For TCP/UDS
  * only event pooling is supported
  */
-typedef enum
-{
+typedef enum {
     C_BUSY_POLLING = 0,
     C_EVENT_POLLING = 1,
 } ubs_hcom_driver_working_mode;
 
-typedef enum
-{
+typedef enum {
     C_DRIVER_RDMA = 0,
     C_DRIVER_TCP = 1,
     C_DRIVER_UDS = 2,
@@ -91,8 +87,7 @@ typedef enum
 /*
  * @brief DriverOobType working mode
  */
-typedef enum
-{
+typedef enum {
     C_NET_OOB_TCP = 0,
     C_NET_OOB_UDS = 1,
 } ubs_hcom_driver_oob_type;
@@ -100,15 +95,13 @@ typedef enum
 /*
  * @brief Enum for secure type
  */
-typedef enum
-{
+typedef enum {
     C_NET_SEC_DISABLED = 0,
     C_NET_SEC_ONE_WAY = 1,
     C_NET_SEC_TWO_WAY = 2,
 } ubs_hcom_driver_sec_type;
 
-typedef enum
-{
+typedef enum {
     C_TLS_1_2 = 771,
     C_TLS_1_3 = 772,
 } ubs_hcom_driver_tls_version;
@@ -116,8 +109,7 @@ typedef enum
 /*
  * @brief DriverCipherSuite mode
  */
-typedef enum
-{
+typedef enum {
     C_AES_GCM_128 = 0,
     C_AES_GCM_256 = 1,
     C_AES_CCM_128 = 2,
@@ -127,8 +119,7 @@ typedef enum
 /*
  * @brief Memory allocator cache tier policy
  */
-typedef enum
-{
+typedef enum {
     C_TIER_TIMES = 0, /* tier by times of min-block-size */
     C_TIER_POWER = 1, /* tier by power of min-block-size */
 } ubs_hcom_memory_allocator_cache_tier_policy;
@@ -136,8 +127,7 @@ typedef enum
 /*
  * @brief Enum for tls callback, set peer cert verify type
  */
-typedef enum
-{
+typedef enum {
     C_VERIFY_BY_NONE = 0,
     C_VERIFY_BY_DEFAULT = 1,
     C_VERIFY_BY_CUSTOM_FUNC = 2,
@@ -146,8 +136,7 @@ typedef enum
 /*
  * @brief Type of allocator
  */
-typedef enum
-{
+typedef enum {
     C_DYNAMIC_SIZE = 0,            /* allocate dynamic memory size, there is alignment with X KB */
     C_DYNAMIC_SIZE_WITH_CACHE = 1, /* allocator with dynamic memory size, with pre-allocate cache for performance */
 } ubs_hcom_memory_allocator_type;
@@ -155,8 +144,7 @@ typedef enum
 /*
  * @brief Enum for callback register [new endpoint connected or endpoint broken]
  */
-typedef enum
-{
+typedef enum {
     C_EP_NEW = 0,
     C_EP_BROKEN = 1,
 } ubs_hcom_ep_handler_type;
@@ -164,8 +152,7 @@ typedef enum
 /*
  * @brief Enum for callback register [request received, request posted, read/write done]
  */
-typedef enum
-{
+typedef enum {
     C_OP_REQUEST_RECEIVED = 0,
     C_OP_REQUEST_POSTED = 1,
     C_OP_READWRITE_DONE = 2,

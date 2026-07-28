@@ -19,8 +19,7 @@
 namespace ock {
 namespace hcom {
 
-enum class InsertResultCode
-{
+enum class InsertResultCode {
     NO_NEED_COMPERSS,
     NEED_COMPERSS
 };

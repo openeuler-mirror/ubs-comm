@@ -12,25 +12,156 @@
 #define UBS_COMM_URMA_SOCKET_TYPES_H
 
 #include "common/ubsocket_common_includes.h"
+#include "under_api/urma/urma_types.h"
 #include "urma_setting.h"
 
 namespace ock {
 namespace ubs {
 namespace urma {
-enum TransportType : int8_t
-{
+
+constexpr uint32_t URMA_CONTROL_PLANE_MAGIC = 0x55424C49;                /* "UBLI" */
+constexpr uint32_t URMA_SND_BUFF_ALLOC_UNIT = 128;                       /* 128B: inline WRITE_IN_BAND allocate unit */
+constexpr uint32_t URMA_INLINE_THRESHOLD = 2 * URMA_SND_BUFF_ALLOC_UNIT; /* 256B: with head size */
+constexpr uint32_t URMA_SEND_BUF_DEFAULT_KB = 128;
+constexpr uint32_t URMA_RECV_BUF_DEFAULT_KB = 128;
+constexpr uint32_t URMA_SEND_BUF_OFFSET_GRANULARITY = 8192;     /* 8K */
+constexpr uint32_t URMA_SEND_LEN_GRANULARITY = 1024;            /* 1K */
+constexpr size_t URMA_SHARED_BUF_DEFAULT_PAGE_SIZE = 16 * 1024; /* 16KB */
+constexpr uint32_t kDefaultQueueDepth = 1024;
+constexpr uint32_t kDefaultCqPollBatch = 32;
+
+union WriteImmData {
+    uint64_t data;
+    struct {
+        uint64_t user_data : 20; /* bits 0-19 User-defined custom data */
+        uint64_t reserved : 2;   /* bits 20-21 Reserved for URMA */
+        uint64_t vjetty_id : 16; /* bits 22-37 Virtual jetty identifier (0-65535) */
+        uint64_t cr_opcode : 2;  /* bits 38-39 Operation code tag (0-3) */
+        uint64_t msn : 24;       /* bits 40-63 Message sequence number (0-16M) */
+    } urma;
+    struct {
+        uint64_t opcode : 4;         /* bits 0~5 UBSocket ring buffer io op code (0~15) */
+        uint64_t buffer_offset : 16; /* offset in ring buffer, 128 granularity (0 ~ 8M) */
+        uint64_t urma_reserved : 44; /* bits 20~63 URMA reserved */
+    } ubsocket;
+
+    WriteImmData() noexcept {}
+    WriteImmData(uint64_t data) noexcept
+    {
+        this->data = data;
+    }
+    WriteImmData(uint64_t op, uint64_t buf_off) noexcept
+    {
+        this->ubsocket.opcode = op;
+        this->ubsocket.buffer_offset = buf_off;
+    }
+};
+
+enum IOOpcode : uint8_t {
+    PRE_WRITE = 0,         /* pre-write: trigger receiver to RDMA_READ */
+    POST_WRITE = 1,        /* post-write: trigger sender to free buffers */
+    WRITE_IN_BAND = 2,     /* small IO inline write */
+    WRITE_IN_BAND_ACK = 3, /* small IO write acknowledgment */
+};
+
+struct UrmaMessageHead {
+    uint64_t request_id;
+    uint64_t sequence_no;
+    uint32_t flags;
+    uint32_t data_offset;
+    uint16_t message_size;
+    uint16_t reserved[3];
+};
+
+struct UrmaMessageDataBody {
+    uint32_t buffer_count;
+    struct {
+        uint64_t addr;
+        uint32_t size;
+        uint32_t flags;
+    } sender_buffers[0];
+};
+
+struct UrmaMessageInlineBody {
+    uint32_t body_size;
+    uint8_t data[0];
+};
+
+struct UrmaCtrlMessage {
+    UrmaMessageHead head;
+    union {
+        UrmaMessageDataBody large_io;
+        UrmaMessageInlineBody small_io;
+    };
+};
+constexpr uint32_t URMA_INLINE_MESSAGE_CTRL_COST = static_cast<uint32_t>(offsetof(UrmaCtrlMessage, small_io.data));
+constexpr uint32_t URMA_INLINE_DATA_THRESHOLD = URMA_INLINE_THRESHOLD - URMA_INLINE_MESSAGE_CTRL_COST;
+
+struct UramWriteMessage {
+    uint64_t request_id;
+    uint64_t sequence_no;
+    uint32_t flags;
+    uint16_t message_size;
+    uint16_t reserved;
+    uint32_t total_bytes;
+    uint32_t buffer_count;
+    struct {
+        uint64_t addr;
+        uint32_t size;
+        uint32_t flags;
+    } sender_buffers[0];
+};
+
+enum TransportType : int8_t {
     TPT_CTP = 0,
     TPT_RTP,
     /* add here */
     TPT_COUNT
 };
 
-enum TransportMode : int8_t
-{
+enum TransportMode : int8_t {
     TPM_RC = 0,
     TPM_RM,
     /* add here */
     TPM_COUNT
+};
+
+struct UrmaNegotiateReq {
+    uint32_t peer_version;
+    TransportType tp_type;
+    TransportMode tp_mode;
+    uint32_t send_buf_kb;
+    uint32_t recv_buf_kb;
+    urma_eid_t local_eid;
+};
+
+struct UrmaNegotiateRsp {
+    int32_t ret_code;
+    TransportType tp_type;
+    TransportMode tp_mode;
+    uint32_t send_buf_kb;
+    uint32_t recv_buf_kb;
+    urma_eid_t local_eid;
+};
+
+struct UrmaSockBufInfo {
+    uintptr_t buf = 0; /* address of buf */
+    uint32_t size = 0; /* size in bytes */
+};
+
+/**
+ * Exchange info for connecting
+ */
+struct UrmaSockExInfo {
+    TransportMode mode = TPM_RC;   /* rc or rm */
+    TransportType type = TPT_CTP;  /* ctp, rtp, utp */
+    uint32_t my_jetty_id = 0;      /* jetty id */
+    UrmaSockBufInfo my_send_buf;   /* my address and size info for send */
+    UrmaSockBufInfo my_recv_buf;   /* my address and size info for receive */
+    bool is_async_connect = false; /* aysnc connect or not */
+    urma_jetty_id_t raw_jetty_id{};
+    uint32_t token = 0;
+    // eid related
 };
 } // namespace urma
 } // namespace ubs

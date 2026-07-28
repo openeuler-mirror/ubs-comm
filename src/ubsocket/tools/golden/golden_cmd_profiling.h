@@ -16,8 +16,7 @@
 #include "profiling/ubsocket_prof.h"
 
 namespace golden {
-enum GoldenProfEnum
-{
+enum GoldenProfEnum {
     CONN_URMA_CREATE_JFC = 0,
     CONN_URMA_CREATE_JFS,
     CONN_URMA_CREATE_JFR,

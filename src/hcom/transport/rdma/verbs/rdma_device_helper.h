@@ -26,8 +26,7 @@ struct RDMADeviceSimpleInfo {
     UBSHcomNetDriverDeviceInfo deviceInfo;
 };
 
-enum RDMARoCEVersion
-{
+enum RDMARoCEVersion {
     RoCE_UNKNOWN = 0,
     RoCE_V1 = 1,
     RoCE_V15 = 2,

@@ -23,8 +23,7 @@ using UBSHcomRequestContext = UBSHcomNetRequestContext;
 
 constexpr uint16_t EPIDX_BIT_NUM = 32;
 
-enum class Operation : uint8_t
-{
+enum class Operation : uint8_t {
     SER_RECEIVED = 0,           /* support invoke all functions */
     SER_RECEIVED_RAW = 1,       /* support invoke most functions except OpInfo() */
     SER_SENT = 2,               /* support invoke basic functions except
@@ -45,8 +44,7 @@ enum class Operation : uint8_t
  */
 class UBSHcomServiceContext {
 public:
-    enum Operation : uint8_t
-    {
+    enum Operation : uint8_t {
         SER_RECEIVED = 0,     /* support invoke all functions */
         SER_RECEIVED_RAW = 1, /* support invoke most functions except OpInfo() */
         SER_SENT = 2,         /* support invoke basic functions except
@@ -131,8 +129,7 @@ public:
 protected:
     UBSHcomServiceContext(const UBSHcomRequestContext &ctx, UBSHcomChannel *ch);
 
-    enum DataType : uint8_t
-    {
+    enum DataType : uint8_t {
         OUTER_DATA = 0,    /* assign by UBSHcomRequestContext.Message()->Data() */
         MEM_POOL_DATA = 1, /* alloc from channel mem pool */
 

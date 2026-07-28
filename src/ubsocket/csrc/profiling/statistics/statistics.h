@@ -59,8 +59,7 @@ public:
         uint32_t m_data_size;
     };
 
-    enum RpcAdptCmdType
-    {
+    enum RpcAdptCmdType {
         UBS_CMD_STATS,
         UBS_CMD_MAX
     };
@@ -444,7 +443,7 @@ public:
         }
 
         umq_transport_pool_stats_t transportPoolStats{};
-        int poolGetRet = umq_stats_transport_pool_get(umqHandle, &transportPoolStats);
+        int poolGetRet = UmqApi::umq_stats_transport_pool_get(umqHandle, &transportPoolStats);
         if (poolGetRet != 0) {
             UBS_VLOG_ERR("umq_stats_transport_pool_get failed, ret: %d\n", poolGetRet);
             return;

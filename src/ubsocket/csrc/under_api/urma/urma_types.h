@@ -89,8 +89,7 @@ typedef struct urma_init_attr {
 } urma_init_attr_t;
 
 /* device information */
-typedef enum urma_mtu
-{
+typedef enum urma_mtu {
     URMA_MTU_256 = 1,
     URMA_MTU_512,
     URMA_MTU_1024,
@@ -99,8 +98,7 @@ typedef enum urma_mtu
     URMA_MTU_8192,
 } urma_mtu_t;
 
-typedef enum urma_port_state
-{
+typedef enum urma_port_state {
     URMA_PORT_NOP = 0,
     URMA_PORT_DOWN,
     URMA_PORT_INIT,
@@ -109,8 +107,7 @@ typedef enum urma_port_state
     URMA_PORT_ACTIVE_DEFER,
 } urma_port_state_t;
 
-typedef enum urma_speed
-{
+typedef enum urma_speed {
     URMA_SP_10M = 0,
     URMA_SP_100M,
     URMA_SP_1G,
@@ -127,8 +124,7 @@ typedef enum urma_speed
     URMA_SP_800G,
 } urma_speed_t;
 
-typedef enum urma_link_width
-{
+typedef enum urma_link_width {
     URMA_LINK_X1 = 0x1,
     URMA_LINK_X2 = 0x1 << 1,
     URMA_LINK_X4 = 0x1 << 2,
@@ -322,22 +318,19 @@ struct urma_ref;
 struct urma_ops;
 struct urma_provider_ops;
 
-typedef enum urma_transport_type
-{
+typedef enum urma_transport_type {
     URMA_TRANSPORT_INVALID = -1,
     URMA_TRANSPORT_UB = 0,
     URMA_TRANSPORT_MAX
 } urma_transport_type_t;
 
-typedef enum urma_transport_mode
-{
+typedef enum urma_transport_mode {
     URMA_TM_RM = 0x1,      /* Reliable message */
     URMA_TM_RC = 0x1 << 1, /* Reliable connection */
     URMA_TM_UM = 0x1 << 2, /* Unreliable message */
 } urma_transport_mode_t;
 
-typedef enum urma_tp_cc_alg
-{
+typedef enum urma_tp_cc_alg {
     URMA_TP_CC_NONE = 0,
     URMA_TP_CC_DCQCN,
     URMA_TP_CC_DCQCN_AND_NETWORK_CC,
@@ -350,8 +343,7 @@ typedef enum urma_tp_cc_alg
     URMA_TP_CC_NUM,
 } urma_tp_cc_alg_t; /* larger means better */
 
-typedef enum urma_congestion_ctrl_alg
-{
+typedef enum urma_congestion_ctrl_alg {
     URMA_CC_NONE = 0x1 << URMA_TP_CC_NONE,
     URMA_CC_DCQCN = 0x1 << URMA_TP_CC_DCQCN,
     URMA_CC_DCQCN_AND_NETWORK_CC = 0x1 << URMA_TP_CC_DCQCN_AND_NETWORK_CC,
@@ -378,13 +370,11 @@ typedef struct urma_device {
     struct urma_sysfs_dev *sysfs_dev; /* [Private] internal device corresponding to the urma device */
 } urma_device_t;
 
-typedef enum urma_context_opt_name
-{
+typedef enum urma_context_opt_name {
     URMA_OPT_AGGR_MODE,
 } urma_opt_name_t;
 
-typedef enum urma_context_aggr_mode
-{
+typedef enum urma_context_aggr_mode {
     URMA_AGGR_MODE_STANDALONE,
     URMA_AGGR_MODE_ACTIVE_BACKUP,
     URMA_AGGR_MODE_BALANCE,
@@ -438,8 +428,7 @@ typedef struct urma_jfc_cfg {
     uint64_t user_ctx;    /* [Optional] private data of jfc, set to NULL by default */
 } urma_jfc_cfg_t;
 
-typedef enum urma_jfc_attr_mask
-{
+typedef enum urma_jfc_attr_mask {
     JFC_MODERATE_COUNT = 0x1,
     JFC_MODERATE_PERIOD = 0x1 << 1
 } urma_jfc_attr_mask_t;
@@ -500,8 +489,7 @@ typedef struct urma_jfc {
     urma_jfc_opt_t urma_jfc_opt;
 } urma_jfc_t;
 
-typedef enum urma_order_type
-{
+typedef enum urma_order_type {
     URMA_DEF_ORDER,
     URMA_OT, // target ordering
     URMA_OI, // initiator ordering
@@ -587,8 +575,7 @@ typedef struct urma_jfs {
     urma_jfs_opt_t urma_jfs_opt;
 } urma_jfs_t;
 
-typedef enum urma_jfs_attr_mask
-{
+typedef enum urma_jfs_attr_mask {
     JFS_STATE = 0x1
 } urma_jfs_attr_mask_t;
 
@@ -663,8 +650,7 @@ typedef struct urma_jfr_cfg {
     uint64_t user_ctx;                /* [Optional] private data of jfr */
 } urma_jfr_cfg_t;
 
-typedef enum urma_jfr_attr_mask
-{
+typedef enum urma_jfr_attr_mask {
     JFR_RX_THRESHOLD = 0x1,
     JFR_STATE = 0x1 << 1
 } urma_jfr_attr_mask_t;
@@ -707,8 +693,7 @@ typedef union urma_import_jetty_flag {
     } user_tag;
 } urma_import_jetty_flag_t;
 
-typedef enum urma_tp_type
-{
+typedef enum urma_tp_type {
     URMA_RTP,
     URMA_CTP,
     URMA_UTP
@@ -757,14 +742,12 @@ typedef struct urma_jetty_cfg {
     uint64_t user_ctx;           /* [Optional] private data of jetty */
 } urma_jetty_cfg_t;
 
-typedef enum urma_jetty_grp_policy
-{
+typedef enum urma_jetty_grp_policy {
     URMA_JETTY_GRP_POLICY_RR = 0,
     URMA_JETTY_GRP_POLICY_HASH_HINT = 1
 } urma_jetty_grp_policy_t;
 
-typedef enum urma_target_type
-{
+typedef enum urma_target_type {
     URMA_JFR = 0,
     URMA_JETTY,
     URMA_JETTY_GROUP
@@ -791,8 +774,7 @@ typedef struct urma_target_jetty {
     urma_tp_type_t tp_type;
 } urma_target_jetty_t;
 
-typedef enum urma_jetty_attr_mask
-{
+typedef enum urma_jetty_attr_mask {
     JETTY_RX_THRESHOLD = 0x1,
     JETTY_STATE = 0x1 << 1
 } urma_jetty_attr_mask_t;
@@ -828,8 +810,7 @@ typedef struct urma_notifier {
     void *incomplete_tjetty_list;
 } urma_notifier_t;
 
-typedef enum urma_notify_type
-{
+typedef enum urma_notify_type {
     URMA_IMPORT_JETTY_NOTIFY = 0,
     URMA_BIND_JETTY_NOTIFY
 } urma_notify_type_t;
@@ -1302,8 +1283,7 @@ typedef union urma_tp_mod_flag {
     uint32_t value;
 } urma_tp_mod_flag_t;
 
-typedef enum urma_tp_state
-{
+typedef enum urma_tp_state {
     URMA_TP_STATE_RESET = 0,
     URMA_TP_STATE_PASSIVE,
     URMA_TP_STATE_ACTIVE,
@@ -1420,8 +1400,7 @@ typedef void (*urma_async_event_cb)(urma_async_event_t *event, void *cb_arg);
   advise_result is the result of advise jfr or jetty */
 typedef void (*urma_advise_async_cb_func)(urma_status_t advise_result, void *cb_arg);
 
-typedef enum urma_vlog_level
-{
+typedef enum urma_vlog_level {
     URMA_VLOG_LEVEL_EMERG = 0,
     URMA_VLOG_LEVEL_ALERT = 1,
     URMA_VLOG_LEVEL_CRIT = 2,

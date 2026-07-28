@@ -21,8 +21,7 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-int UmqAcceptorOps::PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
-                                   const SocketPtr &sock)
+int UmqAcceptorOps::PrepareConnect(int new_fd)
 {
     return 0;
 }
@@ -411,39 +410,6 @@ Result UmqAcceptorOps::DoUbAcceptRetry(SocketPtr socketPtr, Result &ack_ret, Res
 
 void UmqAcceptorOps::DestroySocketResources() {}
 
-int UmqAcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size)
-{
-    protocol_negotiation_recv_size =
-        SocketConnHelper::RecvSocketData(fd, &protocol_negotiation, sizeof(protocol_negotiation), NEGOTIATE_TIMEOUT_MS);
-    if (protocol_negotiation_recv_size <= 0) {
-        UBS_VLOG_ERR("Validate protocol failed, fd: %d, ret: %zd\n", fd, protocol_negotiation_recv_size);
-        return -1;
-    }
-    if (protocol_negotiation_recv_size != sizeof(protocol_negotiation) ||
-        protocol_negotiation != CONTROL_PLANE_PROTOCOL_NEGOTIATION) {
-        UBS_VLOG_ERR("Validate protocol mismatch, fd: %d, ret: %zd\n", fd, protocol_negotiation_recv_size);
-        return protocol_negotiation_recv_size;
-    }
-    return 0;
-}
-
-VersionCheckResult UmqAcceptorOps::ValidateVersion(int fd, uint32_t &negotiated_version, uint32_t &peer_version)
-{
-    // 1. 读version(4B) — 独立于NegotiateReq body
-    if (SocketConnHelper::RecvSocketData(fd, &peer_version, sizeof(peer_version), NEGOTIATE_TIMEOUT_MS) !=
-        sizeof(peer_version)) {
-        UBS_VLOG_ERR("ValidateVersion: failed to recv version, fd: %d\n", fd);
-        return VersionCheckResult::kRecvFailed;
-    }
-
-    // 2. 校验+协商：Major不一致返回kMajorMismatch，一致则计算negotiated_version
-    UBSVersion peer(peer_version);
-    UBSVersion negotiated;
-    VersionCheckResult result = UBS_PROTOCOL_VERSION.Negotiate(peer, negotiated);
-    negotiated_version = negotiated.GetWhole();
-    return result;
-}
-
 Result UmqAcceptorOps::FillLocalSocketIdsForNegotiate(uint32_t *socket_ids, uint32_t &socket_id_count)
 {
     std::vector<uint32_t> ids = UmqSetting::UMQ_ALL_SOCKET_IDS;
@@ -477,24 +443,12 @@ void UmqAcceptorOps::BuildNegotiateRsp(NegotiateRsp &rsp)
 
 Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
 {
-    // 1. ValidateVersion: 读version(4B) + Major校验
+    // 1. 基类共用版本协商: 读version(4B) + Major校验 + 协商
     uint32_t negotiated_version = 0;
     uint32_t peer_version = 0;
-    VersionCheckResult vc_result = ValidateVersion(fd, negotiated_version, peer_version);
-    if (vc_result == VersionCheckResult::kMajorMismatch) {
-        UBS_SLOG_WARN("Version major mismatch: peer=" << UBSVersion(peer_version) << " local=" << UBS_PROTOCOL_VERSION
-                                                      << " fd=" << fd << " Peer IP:" << conn_info.peer_ip.c_str()
-                                                      << " fallback to TCP");
-        uint32_t mismatch_version = UBS_PROTOCOL_VERSION.GetWhole();
-        SocketConnHelper::SendSocketData(fd, &mismatch_version, sizeof(mismatch_version), CONTROL_PLANE_TIMEOUT_MS);
-        uint32_t body_len = 0;
-        SocketConnHelper::RecvSocketData(fd, &body_len, sizeof(body_len), CONTROL_PLANE_TIMEOUT_MS);
-        std::vector<uint8_t> discard(body_len);
-        SocketConnHelper::RecvSocketData(fd, discard.data(), body_len, CONTROL_PLANE_TIMEOUT_MS);
-        return UBS_TCP_EXCHANGE | UBS_DEGRADABLE_MASK;
-    }
-    if (vc_result == VersionCheckResult::kRecvFailed) {
-        return UBS_TCP_EXCHANGE;
+    Result ret = DoVersionNegotiate(fd, negotiated_version, peer_version);
+    if (ret != UBS_OK) {
+        return ret;
     }
 
     // 2. Minor/Patch差异适配 — 本次只记录，不做具体操作

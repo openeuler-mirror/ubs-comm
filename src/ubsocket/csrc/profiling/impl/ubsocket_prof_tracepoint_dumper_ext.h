@@ -143,8 +143,7 @@ private:
             << std::setw(COL_WIDTH_MIN_EXT) << "AVG(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "MAX(ns)"
             << std::setw(COL_WIDTH_MIN_EXT) << "MIN(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "P50(ns)"
             << std::setw(COL_WIDTH_MIN_EXT) << "P90(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "P95(ns)"
-            << std::setw(COL_WIDTH_MIN_EXT) << "P99(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "P999(ns)"
-            << "\n";
+            << std::setw(COL_WIDTH_MIN_EXT) << "P99(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "P999(ns)" << "\n";
     }
 
     int CreateDirectoryExt(std::string &path)

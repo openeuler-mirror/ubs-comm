@@ -12,13 +12,122 @@
 #define UBS_COMM_URMA_SOCKET_H
 
 #include "core/ubsocket_socket.h"
+#include "urma_backend.h"
+#include "urma_socket_buf.h"
 #include "urma_socket_types.h"
+#include "urma_wrapper.h"
 
 namespace ock {
 namespace ubs {
 namespace urma {
 class UrmaSocket : public SocketBase {
+public:
+    explicit UrmaSocket(int fd) : SocketBase(fd, SocketType::SOCK_TYPE_URMA) {}
+    ~UrmaSocket() override = default;
+
+    Result Initialize() noexcept override;
+    void UnInitialize() noexcept override;
+
+    Result CreateUrmaResources();
+    void DestroyUrmaResources();
+
+    Result ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool send_first = true);
+
+    UrmaJettyPtr Jetty() const
+    {
+        return jetty_;
+    }
+
+    bool IsBindRemote() override;
+
+    void SetBindRemote(bool bound)
+    {
+        is_bind_remote_ = bound;
+    }
+
+    uint32_t GetNegotiatedVersion() const
+    {
+        return negotiated_version_;
+    }
+
+    void SetNegotiatedVersion(uint32_t version)
+    {
+        negotiated_version_ = version;
+    }
+
+    uint32_t GetPeerVersion() const
+    {
+        return peer_version_;
+    }
+
+    void SetPeerVersion(uint32_t version)
+    {
+        peer_version_ = version;
+    }
+
+    urma_eid_t GetPeerEid() const
+    {
+        return peer_eid_;
+    }
+
+    void SetPeerEid(const urma_eid_t &eid)
+    {
+        peer_eid_ = eid;
+    }
+
+    int NotifySocketReadable();
+    void HandleRecvCqe(const WriteImmData &imm);
+    void HandlePostWrite(const WriteImmData &imm);
+    void HandleWriteInBandAck(const WriteImmData &imm);
+    void HandlePreWrite(const WriteImmData &imm);
+    void HandleWriteInBand(const WriteImmData &imm);
+
+    bool ExchangeSocketReadableReady(bool b)
+    {
+        return socket_readable_ready_.exchange(b, std::memory_order_acq_rel);
+    }
+
+    void SetSocketReadableReady(bool b)
+    {
+        return socket_readable_ready_.store(b, std::memory_order_release);
+    }
+
+private:
+    UrmaJettyPtr jetty_;      /* could be dedicated jetty or shared jetty */
+    uintptr_t send_buf_addr_; /* dedicate send buffer, i.e. not shared */
+    uintptr_t recv_buf_addr_; /* dedicate send buffer, i.e. not shared */
+    uintptr_t rmt_send_buf_addr_;
+    uintptr_t rmt_recv_buf_addr_;
+    uint32_t send_buf_size_;           /* size of dedicate send buffer, max size 4GB */
+    uint32_t recv_buf_size_;           /* size of dedicate recv buffer, max size 4GB */
+    UrmaSockBufPtr send_buf_{nullptr}; /* local/send buffer and remote buffer allocator */
+    UrmaContextPtr context_{nullptr};
+    UrmaJfcPtr jfc_{nullptr};
+    UrmaJfsPtr jfs_{nullptr};
+    UrmaJfrPtr jfr_{nullptr};
+    urma_target_seg_t *local_ctrl_target_seg_{nullptr};
+    urma_target_seg_t *remote_ctrl_target_seg_{nullptr};
+    RemoteSegmentsPtr remote_target_segs_{nullptr};
+
+    urma_eid_t local_eid_{};
+    urma_eid_t peer_eid_{};
+
+    size_t recv_data_size_{0};
+    size_t recv_data_offset_{0};
+    bool recv_data_ready_{false};
+
+    bool is_bind_remote_{false};
+
+    uint32_t negotiated_version_{0};
+    uint32_t peer_version_{0};
+    std::atomic<bool> socket_readable_ready_{false}; // socket初始状态为不可读
+    friend class UrmaAcceptorOps;
+    friend class UrmaConnectorOps;
+    friend class UrmaTxOps;
+    friend class UrmaRxOps;
 };
+using UrmaSocketPtr = Ref<UrmaSocket>;
+
 } // namespace urma
 } // namespace ubs
 } // namespace ock

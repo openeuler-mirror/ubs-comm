@@ -11,6 +11,7 @@
 #include "ubsocket_socket_acceptor.h"
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_thread_pool.h"
+#include "common/ubsocket_version.h"
 #include "core/umq/umq_socket_acceptor.h"
 #include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_core_types.h"
@@ -20,7 +21,59 @@
 
 namespace ock {
 namespace ubs {
-// ======================== 基础方法 ========================
+
+// ======================== AcceptorOps 基类共用方法 ========================
+
+Result AcceptorOps::DoVersionNegotiate(int fd, uint32_t &negotiated_version, uint32_t &peer_version)
+{
+    // 1. 读取对端版本号 (4B)
+    if (SocketConnHelper::RecvSocketData(fd, &peer_version, sizeof(peer_version), NEGOTIATE_TIMEOUT_MS) !=
+        sizeof(peer_version)) {
+        UBS_VLOG_ERR("DoVersionNegotiate: failed to recv version, fd: %d\n", fd);
+        return UBS_TCP_EXCHANGE;
+    }
+
+    // 2. 校验 + 协商：Major 不一致返回 kMajorMismatch
+    UBSVersion local_version = UBS_PROTOCOL_VERSION;
+    UBSVersion peer_ver(peer_version);
+    UBSVersion negotiated;
+    VersionCheckResult vc_result = local_version.Negotiate(peer_ver, negotiated);
+    negotiated_version = negotiated.GetWhole();
+
+    if (vc_result == VersionCheckResult::kMajorMismatch) {
+        UBS_VLOG_WARN("Version major mismatch: peer=%u, local=%u, fd=%d, Peer IP:%s, fallback to TCP\n", peer_ver.major,
+                      local_version.major, fd, conn_info.peer_ip.c_str());
+        // 发送 mismatch 版本号通知对端
+        uint32_t mismatch_version = local_version.GetWhole();
+        SocketConnHelper::SendSocketData(fd, &mismatch_version, sizeof(mismatch_version), CONTROL_PLANE_TIMEOUT_MS);
+        // 丢弃对端后续 body
+        uint32_t body_len = 0;
+        SocketConnHelper::RecvSocketData(fd, &body_len, sizeof(body_len), CONTROL_PLANE_TIMEOUT_MS);
+        std::vector<uint8_t> discard(body_len);
+        SocketConnHelper::RecvSocketData(fd, discard.data(), body_len, CONTROL_PLANE_TIMEOUT_MS);
+        return UBS_TCP_EXCHANGE | UBS_DEGRADABLE_MASK;
+    }
+
+    return UBS_OK;
+}
+
+int AcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size)
+{
+    protocol_negotiation_recv_size =
+        SocketConnHelper::RecvSocketData(fd, &protocol_negotiation, sizeof(protocol_negotiation), NEGOTIATE_TIMEOUT_MS);
+    if (protocol_negotiation_recv_size <= 0) {
+        UBS_VLOG_ERR("Validate protocol failed, fd: %d, ret: %zd\n", fd, protocol_negotiation_recv_size);
+        return -1;
+    }
+    if (protocol_negotiation_recv_size != sizeof(protocol_negotiation) ||
+        protocol_negotiation != CONTROL_PLANE_PROTOCOL_NEGOTIATION) {
+        UBS_VLOG_ERR("Validate protocol mismatch, fd: %d, ret: %zd\n", fd, protocol_negotiation_recv_size);
+        return protocol_negotiation_recv_size;
+    }
+    return 0;
+}
+
+// ======================== Acceptor 基础方法 ========================
 int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len)
 {
     int fd = -1;
@@ -203,7 +256,8 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 
     // TODO；使用 Socket 工厂方法统一创建, create 增加三种create fd透传
     SocketPtr new_socket_obj;
-    ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_UMQ, new_socket_obj);
+    // ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_UMQ, new_socket_obj);
+    ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_URMA, new_socket_obj);
     if (ret != UBS_OK) {
         LibcApi::close(event_fd);
         PROF_END(CORE_ACCEPT, false);
@@ -216,6 +270,13 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     newSocket->acceptor_->acceptor_ops_->conn_info.peer_fd = new_fd;
     newSocket->acceptor_->acceptor_ops_->conn_info.type_fd = 0;
 
+    ret = newSocket->acceptor_->acceptor_ops_->PrepareConnect(new_fd);
+    if (ret != UBS_OK) {
+        new_socket_obj->event_fd_ = -1;
+        LibcApi::close(event_fd);
+        PROF_END(CORE_ACCEPT, false);
+        return ret;
+    }
     ret = newSocket->acceptor_->acceptor_ops_->Negotiate(new_socket_obj);
     if (ret != UBS_OK) {
         new_socket_obj->event_fd_ = -1;

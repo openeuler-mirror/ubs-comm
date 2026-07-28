@@ -11,6 +11,8 @@
 #include "dl_api.h"
 #include "dl_libc_api.h"
 #include "dl_umq_api.h"
+#include "urma/dl_urma_api.h"
+#include "urma/dl_uvs_api.h"
 
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
 #include "urma/dl_urma_api.h"
@@ -41,7 +43,7 @@ Result DlApi::Load(int libraries) noexcept
         }
     }
 
-#ifdef URMA_DLOPEN_BACKEND_ENABLED
+    /* load urma and uvs api */
     if ((libraries & LOAD_URMA) == LOAD_URMA) {
         UBS_VLOG_DEBUG("load urma api");
         result = UrmaApi::Load();
@@ -50,7 +52,15 @@ Result DlApi::Load(int libraries) noexcept
             goto ERROR;
         }
     }
-#endif
+
+    if ((libraries & LOAD_URMA) == LOAD_URMA) {
+        UBS_VLOG_DEBUG("load uvs api");
+        result = UvsApi::Load();
+        UBS_VLOG_DEBUG("finished uvs api loading, result: %d", result);
+        if (result != UBS_OK) {
+            goto ERROR;
+        }
+    }
 
     goto OK;
 
@@ -58,9 +68,8 @@ ERROR:
     LibcApi::UnLoad();
     UmqApi::UnLoad();
 
-#ifdef URMA_DLOPEN_BACKEND_ENABLED
     UrmaApi::UnLoad();
-#endif
+    UvsApi::UnLoad();
 
 OK:
     return result;
@@ -71,9 +80,8 @@ void DlApi::UnLoad(int libraries) noexcept
     LibcApi::UnLoad();
     UmqApi::UnLoad();
 
-#ifdef URMA_DLOPEN_BACKEND_ENABLED
     UrmaApi::UnLoad();
-#endif
+    UvsApi::UnLoad();
 }
 } // namespace ubs
 } // namespace ock

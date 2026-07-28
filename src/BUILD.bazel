@@ -66,7 +66,7 @@ cc_binary(
     ]),
     copts = [
         "-D_GNU_SOURCE",
-        "-std=c++14",
+        "-std=c++17",
         "-fPIC",
     ],
     includes = [".", "ubsocket", "ubsocket/brpc"],
@@ -94,7 +94,7 @@ cc_library(
         "-D_GNU_SOURCE",
         # 指定和umq一起编译
         "-DUMQ_ADAPTER_BACKEND_ENABLED",
-        "-std=c++14",
+        "-std=c++17",
         "-fPIC",
     ],
     includes = [
@@ -104,9 +104,12 @@ cc_library(
         "ubsocket/csrc/common",
         "ubsocket/csrc/core",
         "ubsocket/csrc/core/umq",
+        "ubsocket/csrc/core/urma",
+        "ubsocket/csrc/core/urma/credit_scheduler",
         "ubsocket/csrc/iobuf",
         "ubsocket/csrc/profiling",
         "ubsocket/csrc/under_api",
+        "ubsocket/csrc/under_api/urma",
 
         # 需要使用hcom中的umq头文件
         "hcom/"
@@ -132,7 +135,7 @@ cc_binary(
     ],
     copts = [
         "-D_GNU_SOURCE",
-        "-std=c++14",
+        "-std=c++17",
         "-fPIC",
         "-Wno-unused-function"
     ],
@@ -151,7 +154,7 @@ cc_binary(
     ]),
     copts = [
         "-D_GNU_SOURCE",
-        "-std=c++14",
+        "-std=c++17",
         "-fPIC"
     ],
     includes = [".", "ubsocket", "ubsocket/csrc/cli"],

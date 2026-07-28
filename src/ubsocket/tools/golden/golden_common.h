@@ -67,8 +67,7 @@ static SubCmd cmds[] = {{SUB_CMD_PINGPONG, "pingpong test to check if network is
 #define PARAM_CONN_DEV_EID "device-eid-index"
 #define PARAM_CONN_THREAD "thread-count"
 
-enum ParamDataType : int8_t
-{
+enum ParamDataType : int8_t {
     PDT_NONE = 0,
     PDT_INT64,
     PDT_STR,

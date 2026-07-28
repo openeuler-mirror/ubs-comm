@@ -45,7 +45,7 @@ int SubCommandShow::DoExecute() noexcept
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
         using namespace ock::ubs;
         using namespace ock::ubs::urma;
-        auto result = Urma::Init();
+        auto result = UrmaBackend::Init();
         if (result != 0) {
             std::cout << "Init urma backend failed" << std::endl;
             return -1;

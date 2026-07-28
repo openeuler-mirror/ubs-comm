@@ -282,8 +282,7 @@ public:
                 return SH_TIME_OUT;
             }
 
-            struct timespec semTimeout {
-            };
+            struct timespec semTimeout {};
             if (timeoutInMs < 0) {
                 // set 0 means never timeout
                 semTimeout.tv_sec = 0;
@@ -465,8 +464,7 @@ private:
     uint32_t mMaxEnqueueTimeout = 20;
     uint64_t mTempProdIdx = UINT64_MAX;
     uint64_t mFailedProd = UINT64_MAX;
-    struct timespec mFailedTime {
-    };
+    struct timespec mFailedTime {};
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };

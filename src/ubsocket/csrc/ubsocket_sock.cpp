@@ -35,7 +35,8 @@ UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
         return -1;
     }
     SocketPtr socketPtr;
-    Result ret = SocketBase::Create(fd, SocketType::SOCK_TYPE_UMQ, socketPtr);
+    // Result ret = SocketBase::Create(fd, SocketType::SOCK_TYPE_UMQ, socketPtr);
+    Result ret = SocketBase::Create(fd, SocketType::SOCK_TYPE_URMA, socketPtr);
     if (ret != UBS_OK) {
         UBS_VLOG_ERR("CreateSocketFd() failed, fd: %d, event fd: %d, ret: %d\n", fd, event_fd, ret);
         LibcApi::close(fd);

@@ -52,8 +52,7 @@ constexpr uint32_t kProtocolPatchMax = 1u << kProtocolPatchBits;
 //   Accept 侧  → Negotiate(peer, &negotiated)   协商整体版本号
 //   Connect 侧 → ValidateNegotiated(local)       校验Major版本是否一致
 
-enum class VersionCheckResult : int32_t
-{
+enum class VersionCheckResult : int32_t {
     kCompatible = 0,     // Major一致，可正常通信
     kMajorMismatch = -1, // Major不一致，协议格式不兼容
     kRecvFailed = -2,    // 接收version字段失败

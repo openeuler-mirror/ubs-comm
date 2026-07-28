@@ -1,4 +1,6 @@
 add_subdirectory(umq)
+add_subdirectory(urma)
+add_subdirectory(allocator)
 
 add_executable(ubsocket_signal_handler_test "")
 add_test(NAME ubsocket_signal_handler_test COMMAND ubsocket_signal_handler_test)

@@ -96,16 +96,14 @@
 #define URMA_MAX_PRIORITY 15
 
 /* operation information */
-typedef enum urma_place_order
-{
+typedef enum urma_place_order {
     URMA_NO_ORDER = 0, // No order
     URMA_RELAX_ORDER,  // Relax order
     URMA_STRONG_ORDER  // Strong order
 } urma_place_order_t;
 
 /* opcode definition */
-typedef enum urma_opcode
-{
+typedef enum urma_opcode {
     URMA_OPC_WRITE = 0x00,
     URMA_OPC_WRITE_IMM = 0x01,
     URMA_OPC_WRITE_NOTIFY = 0x02, // not support result will return for URMA_OPC_WRITE_NOTIFY
@@ -137,8 +135,7 @@ typedef int urma_status_t;
 #define URMA_FAIL 0x1000 /* 0x1000 */
 
 /* completion information */
-typedef enum urma_cr_status
-{ // completion record status
+typedef enum urma_cr_status { // completion record status
     URMA_CR_SUCCESS = 0,
     URMA_CR_UNSUPPORTED_OPCODE_ERR, /* Opcode in the WR is not supported */
     URMA_CR_LOC_LEN_ERR,            /* Local data too long error */
@@ -158,8 +155,7 @@ typedef enum urma_cr_status
     URMA_CR_REM_DATA_POISON,       /* Remote Data Poison */
 } urma_cr_status_t;
 
-typedef enum urma_cr_opcode
-{
+typedef enum urma_cr_opcode {
     URMA_CR_OPC_SEND = 0x00,
     URMA_CR_OPC_SEND_WITH_IMM,
     URMA_CR_OPC_SEND_WITH_INV,
@@ -167,8 +163,7 @@ typedef enum urma_cr_opcode
 } urma_cr_opcode_t;
 
 /* event information */
-typedef enum urma_async_event_type
-{
+typedef enum urma_async_event_type {
     URMA_EVENT_JFC_ERR,
     URMA_EVENT_JFS_ERR,
     URMA_EVENT_JFR_ERR,
@@ -184,23 +179,20 @@ typedef enum urma_async_event_type
     URMA_EVENT_ELR_DONE    /* Entity flush done */
 } urma_async_event_type_t;
 
-typedef enum urma_jfc_state
-{
+typedef enum urma_jfc_state {
     URMA_JFC_STATE_INVALID = 0,
     URMA_JFC_STATE_VALID,
     URMA_JFC_STATE_ERROR
 } urma_jfc_state_t;
 
-typedef enum urma_jetty_state
-{
+typedef enum urma_jetty_state {
     URMA_JETTY_STATE_RESET = 0,
     URMA_JETTY_STATE_READY,
     URMA_JETTY_STATE_SUSPENDED,
     URMA_JETTY_STATE_ERROR
 } urma_jetty_state_t;
 
-typedef enum urma_jfr_state
-{
+typedef enum urma_jfr_state {
     URMA_JFR_STATE_RESET = 0,
     URMA_JFR_STATE_READY,
     URMA_JFR_STATE_ERROR

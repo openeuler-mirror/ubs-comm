@@ -144,7 +144,7 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
     if (UmqSetting::UMQ_TP_TYPE == SINGLE) {
         // 总是使能 TX solicited，这会导致对端 JFR 只有接收到 solicited_enable=true 的包时才会产生中断。而在客
         // 户端本端，开启此功能后不会在 TX 上产生中断，无法通过 `epoll_wait` 唤醒，必须定期 poll cq
-        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
+        umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO, 0, 0};
         PROF_START(UMQ_INTERRUPT_FD_GET);
         int tx_interrupt_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
         if (tx_interrupt_fd < 0) {
@@ -272,7 +272,7 @@ Result UmqSocket::UpdateRxQueueAvailNum()
     }
     PROF_END(UMQ_STATE_GET, true);
 
-    rx_.GetRxOps()->rx_queue_avail_num_ = GlobalSetting::UBS_RX_DEPTH;
+    static_cast<UmqRxOps *>(rx_.GetRxOps())->rx_queue_avail_num_ = GlobalSetting::UBS_RX_DEPTH;
     return 0;
 }
 
@@ -282,16 +282,18 @@ void UmqSocket::UnbindAndFlushRemoteUmq(Socket *sock)
         return;
     }
 
-    if (tx_.GetTxOps()->ack_event_num_ > 0) {
-        umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
-        UmqApi::umq_ack_interrupt(umq_handle_, tx_.GetTxOps()->ack_event_num_, &option);
-        tx_.GetTxOps()->ack_event_num_ = 0;
+    auto *txOps = static_cast<UmqTxOps *>(tx_.GetTxOps());
+    if (txOps->ack_event_num_ > 0) {
+        umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO, 0, 0};
+        UmqApi::umq_ack_interrupt(umq_handle_, txOps->ack_event_num_, &option);
+        txOps->ack_event_num_ = 0;
     }
 
-    if (rx_.GetRxOps()->ack_event_num_ > 0) {
-        umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
-        UmqApi::umq_ack_interrupt(umq_handle_, rx_.GetRxOps()->ack_event_num_, &option);
-        rx_.GetRxOps()->ack_event_num_ = 0;
+    auto *rxOps = static_cast<UmqRxOps *>(rx_.GetRxOps());
+    if (rxOps->ack_event_num_ > 0) {
+        umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO, 0, 0};
+        UmqApi::umq_ack_interrupt(umq_handle_, rxOps->ack_event_num_, &option);
+        rxOps->ack_event_num_ = 0;
     }
 
     // 先从 TX poller 注销 FC TX 事件（标记 umq_handle 无效），防止 in-flight poll 与 umq_destroy 并发
@@ -305,9 +307,9 @@ void UmqSocket::UnbindAndFlushRemoteUmq(Socket *sock)
                      static_cast<unsigned long long>(umq_handle_), ret);
     }
     umq_is_bind_remote_ = false;
-    tx_.GetTxOps()->FlushTx(sock);
+    static_cast<UmqTxOps *>(tx_.GetTxOps())->FlushTx(sock);
 
-    GlobalSetting::UBS_ENABLE_SHARE_JFR ? FlushRxQueue() : rx_.GetRxOps()->FlushRx(sock);
+    GlobalSetting::UBS_ENABLE_SHARE_JFR ? FlushRxQueue() : static_cast<UmqRxOps *>(rx_.GetRxOps())->FlushRx(sock);
 }
 
 void UmqSocket::DestroyLocalUmq()
@@ -333,7 +335,7 @@ void UmqSocket::DestroyLocalUmq()
 
 Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event)
 {
-    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
+    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO, 0, 0};
     int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
         int savedErrno = errno;
@@ -407,7 +409,7 @@ Result UmqSocket::ProcessEpollEvent(struct epoll_event &event)
 
 int UmqSocket::GetTxFd()
 {
-    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
+    umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO, 0, 0};
     int tx_interrupt_fd = ock::ubs::UmqApi::umq_interrupt_fd_get(umq_handle_, &tx_option);
     if (UNLIKELY(tx_interrupt_fd < 0)) {
         int savedErrno = errno;
@@ -510,7 +512,7 @@ void UmqSocket::GetSocketFlowControlData(Statistics::CLIFlowControlData *data)
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(ops->conn_info.create_time.time_since_epoch());
     data->createTime = static_cast<uint64_t>(duration.count());
 
-    if (umq_stats_flow_control_get(umq_handle_, &(data->umqFlowControlStat)) != 0) {
+    if (UmqApi::umq_stats_flow_control_get(umq_handle_, &(data->umqFlowControlStat)) != 0) {
         UBS_VLOG_WARN("Failed to get umq flow control info\n");
     }
 }
@@ -521,7 +523,7 @@ void UmqSocket::GetSocketQbufPoolData(Statistics::CLIQbufPoolData *data)
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(ops->conn_info.create_time.time_since_epoch());
     data->createTime = static_cast<uint64_t>(duration.count());
 
-    if (umq_stats_qbuf_pool_get(umq_handle_, &(data->umqQbufPoolStat)) != 0) {
+    if (UmqApi::umq_stats_qbuf_pool_get(umq_handle_, &(data->umqQbufPoolStat)) != 0) {
         UBS_VLOG_WARN("Failed to get umq qbuf pool info\n");
     }
 }
@@ -532,7 +534,7 @@ void UmqSocket::GetSocketUmqInfoData(Statistics::CLIUmqInfoData *data)
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(ops->conn_info.create_time.time_since_epoch());
     data->createTime = static_cast<uint64_t>(duration.count());
 
-    if (umq_info_get(umq_handle_, &(data->umqInfo)) != 0) {
+    if (UmqApi::umq_info_get(umq_handle_, &(data->umqInfo)) != 0) {
         UBS_VLOG_WARN("Failed to get umq info\n");
     }
 }
@@ -543,7 +545,7 @@ void UmqSocket::GetSocketIoPacketData(Statistics::CLIIoPacketData *data)
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(ops->conn_info.create_time.time_since_epoch());
     data->createTime = static_cast<uint64_t>(duration.count());
 
-    if (umq_stats_io_get(umq_handle_, &(data->umqPacketStat)) != 0) {
+    if (UmqApi::umq_stats_io_get(umq_handle_, &(data->umqPacketStat)) != 0) {
         UBS_VLOG_WARN("Failed to get umq io packet stats\n");
     }
 }
@@ -640,8 +642,7 @@ uint64_t UmqSocket::RegisterFcTxEvent()
         return UBS_ERROR;
     }
 
-    struct epoll_event umq_tx_event {
-    };
+    struct epoll_event umq_tx_event {};
     umq_tx_event.events = EPOLLIN | EPOLLET;
     umq_tx_event.data.u64 = reinterpret_cast<uintptr_t>(tx_epoll_event);
 

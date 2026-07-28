@@ -42,7 +42,7 @@ add_library(under_api_objects OBJECT ${UNDER_API_SRCS})
 target_compile_options(under_api_objects PRIVATE -fPIC)
 
 # iobuf objects
-file(GLOB IOBUF_SRCS ${UBSOCKET_CSRC_DIR}/iobuf/*.cpp)
+file(GLOB_RECURSE IOBUF_SRCS ${UBSOCKET_CSRC_DIR}/iobuf/*.cpp)
 add_library(iobuf_objects OBJECT ${IOBUF_SRCS})
 target_compile_options(iobuf_objects PRIVATE -fPIC)
 

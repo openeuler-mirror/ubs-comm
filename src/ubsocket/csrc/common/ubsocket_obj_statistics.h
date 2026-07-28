@@ -16,8 +16,7 @@
 namespace ock {
 namespace ubs {
 
-enum ObjectEnum
-{
+enum ObjectEnum {
     /* ubsocket related */
     UBS_SOCKET = 0,
 

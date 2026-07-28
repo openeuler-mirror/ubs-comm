@@ -70,7 +70,7 @@ public:
      *
      * @return a random uint32 if successful, 0 if failed
      */
-    uint32_t SecureRandUInt32() noexcept;
+    static uint32_t SecureRandUInt32() noexcept;
 
     static uint64_t CurrentTimeNs() noexcept;
 

@@ -356,11 +356,9 @@ void NetDriverRDMAWithOob::RunInRdmaEventThread()
         return;
     }
 
-    struct ibv_async_event event {
-    };
+    struct ibv_async_event event {};
     while (!mNeedStopEvent) {
-        struct pollfd fd {
-        };
+        struct pollfd fd {};
         int timeoutMs = NN_NO100;
         fd.fd = mContext->Context()->async_fd;
         fd.events = POLLIN;
@@ -612,8 +610,7 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
     }
 
     if (mOptions.oobType == NET_OOB_UDS) {
-        struct ucred remoteIds {
-        };
+        struct ucred remoteIds {};
         socklen_t len = sizeof(struct ucred);
         if (NN_UNLIKELY(getsockopt(conn.GetFd(), SOL_SOCKET, SO_PEERCRED, &remoteIds, &len) != 0)) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};

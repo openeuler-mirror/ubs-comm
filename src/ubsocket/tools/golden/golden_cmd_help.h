@@ -44,10 +44,8 @@ protected:
         }
 
         printf("\nSupported options:\n");
-        std::cout << "  " << std::left << std::setw(10) << "-v"
-                  << "print version" << std::endl;
-        std::cout << "  " << std::left << std::setw(10) << "-h"
-                  << "print help tips" << std::endl;
+        std::cout << "  " << std::left << std::setw(10) << "-v" << "print version" << std::endl;
+        std::cout << "  " << std::left << std::setw(10) << "-h" << "print help tips" << std::endl;
 
         return 0;
     }

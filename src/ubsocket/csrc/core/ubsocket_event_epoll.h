@@ -24,8 +24,7 @@ namespace ubs {
 constexpr auto MAX_READABLE_FD_COUNT = 0x10000U;
 constexpr int MAX_EPOLL_WAIT_COUNT = 128;
 
-enum EpollEventType : uint64_t
-{
+enum EpollEventType : uint64_t {
     EPOLL_EVENT_RAW_SOCKET = 0,
     EPOLL_EVENT_UB_SOCKET_IN,
     EPOLL_EVENT_UB_SOCKET_OUT,
@@ -35,8 +34,7 @@ enum EpollEventType : uint64_t
 struct EpollEvent {
     EpollEventType event_type;
     int socket_fd = -1;
-    struct epoll_event event {
-    };
+    struct epoll_event event {};
     EpollEvent *next{nullptr};
     EpollEvent(EpollEventType type, int socket, const struct epoll_event &evt) noexcept
         : event_type{type},
@@ -56,8 +54,7 @@ union RunnerEventData {
     } event_data;
     uint64_t u64;
 };
-enum RunnerEventType : uint64_t
-{
+enum RunnerEventType : uint64_t {
     RUNNER_EVENT_TYPE_INVALID = 0,
     RUNNER_EVENT_TYPE_SHARE_JFR,
     RUNNER_EVENT_TYPE_SHARE_JFR_RETRY,

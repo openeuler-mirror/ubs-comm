@@ -67,7 +67,7 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessOneEvent(const struct epoll_
                          static_cast<unsigned long long>(umqSock->UmqHandle()), pollNum, errno,
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum), savedErrno);
         }
-        if (umqSock->GetRx()->GetRxOps()->RearmRxInterrupt() < 0) {
+        if (static_cast<UmqRxOps *>(umqSock->GetRx()->GetRxOps())->RearmRxInterrupt() < 0) {
             UBS_VLOG_ERR("Rearm sub umq failed, socket fd:%d\n", socket_object->raw_socket_);
         }
         return -1;
@@ -320,7 +320,7 @@ int UmqShareJfrEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epo
     }
 
     if (share_jfr_ctx->should_rearm_interrupt) {
-        umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+        umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO, 0, 0};
         int ret = UmqApi::umq_rearm_interrupt(ctx->umq_handle, false, &rx_option);
         if (ret < 0) {
             int savedErrno = errno;

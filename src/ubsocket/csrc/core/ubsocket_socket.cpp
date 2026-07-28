@@ -17,6 +17,11 @@
 #include "umq/umq_socket.h"
 #include "umq/umq_socket_acceptor.h"
 #include "umq/umq_socket_connector.h"
+#include "urma/urma_data_rx_ops.h"
+#include "urma/urma_data_tx_ops.h"
+#include "urma/urma_socket.h"
+#include "urma/urma_socket_acceptor_ops.h"
+#include "urma/urma_socket_connector_ops.h"
 
 namespace ock {
 namespace ubs {
@@ -69,6 +74,42 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
         outSocket = sock;
 
         return UBS_OK;
+    } else if (t == SocketType::SOCK_TYPE_URMA) {
+        using namespace urma;
+        auto urmaSock = MakeRef<UrmaSocket>(fd);
+        if (urmaSock == nullptr) {
+            return UBS_MALLOC_FAILED;
+        }
+
+        auto result = urmaSock->Initialize();
+        if (result != UBS_OK) {
+            return result;
+        }
+
+        auto sock = RefConvert<UrmaSocket, Socket>(urmaSock);
+        auto sockBase = RefConvert<UrmaSocket, SocketBase>(urmaSock);
+
+        AcceptorOps *acceptorOps = nullptr;
+        result = CreateAcceptorOps(t, sock, acceptorOps);
+        if (result != UBS_OK) {
+            return result;
+        }
+
+        ConnectorOps *connectorOps = nullptr;
+        result = CreateConnectorOps(t, sock, connectorOps);
+        if (result != UBS_OK) {
+            delete acceptorOps;
+            return result;
+        }
+
+        sockBase->acceptor_ = new Acceptor(sock, acceptorOps);
+        sockBase->connector_ = new Connector(sock, connectorOps);
+
+        if (result != UBS_OK) {
+            return result;
+        }
+        outSocket = sock;
+        return UBS_OK;
     } else {
         return UBS_INVALID_PARAM;
     }
@@ -115,10 +156,20 @@ Result SocketBase::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOp
         /* set out ops */
         ops = umqOps;
         return UBS_OK;
-    } else {
-        /* invalid type */
-        return UBS_INVALID_PARAM;
     }
+
+    if (value == SocketType::SOCK_TYPE_URMA) {
+        auto urma_socket = RefConvert<Socket, urma::UrmaSocket>(sock);
+        auto tx_ops = new (std::nothrow) urma::UrmaTxOps(sock->raw_socket_);
+        if (tx_ops == nullptr) {
+            return UBS_MALLOC_FAILED;
+        }
+        ops = tx_ops;
+        return UBS_OK;
+    }
+
+    /* invalid type */
+    return UBS_INVALID_PARAM;
 }
 
 Result SocketBase::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops)
@@ -141,10 +192,21 @@ Result SocketBase::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOp
         /* set out ops */
         ops = umqOps;
         return UBS_OK;
-    } else {
-        /* invalid type */
-        return UBS_INVALID_PARAM;
     }
+
+    if (value == SocketType::SOCK_TYPE_URMA) {
+        auto urma_socket = RefConvert<Socket, urma::UrmaSocket>(sock);
+        auto rx_ops = new (std::nothrow) urma::UrmaRxOps(sock->raw_socket_);
+        if (rx_ops == nullptr) {
+            return UBS_MALLOC_FAILED;
+        }
+
+        ops = rx_ops;
+        return UBS_OK;
+    }
+
+    /* invalid type */
+    return UBS_INVALID_PARAM;
 }
 Result SocketBase::CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptorOps)
 {
@@ -165,6 +227,17 @@ Result SocketBase::CreateAcceptorOps(SocketType value, const SocketPtr &sock, Ac
 
         /* set out ops */
         acceptorOps = umqOps;
+        return UBS_OK;
+    } else if (value == SocketType::SOCK_TYPE_URMA) {
+        using namespace urma;
+        UrmaSocketPtr urmaSock = RefConvert<Socket, UrmaSocket>(sock);
+
+        auto urmaOps = new (std::nothrow) UrmaAcceptorOps(sock->raw_socket_);
+        if (urmaOps == nullptr) {
+            return UBS_MALLOC_FAILED;
+        }
+
+        acceptorOps = urmaOps;
         return UBS_OK;
     } else {
         /* invalid type */
@@ -192,6 +265,16 @@ Result SocketBase::CreateConnectorOps(SocketType value, const SocketPtr &sock, C
         /* set out ops */
         connectorOps = umqOps;
 
+        return UBS_OK;
+    } else if (value == SocketType::SOCK_TYPE_URMA) {
+        using namespace urma;
+        UrmaSocketPtr urmaSock = RefConvert<Socket, UrmaSocket>(sock);
+        auto urmaOps = new (std::nothrow) UrmaConnectorOps(sock->raw_socket_);
+        if (urmaOps == nullptr) {
+            return UBS_MALLOC_FAILED;
+        }
+
+        connectorOps = urmaOps;
         return UBS_OK;
     } else {
         /* invalid type */
