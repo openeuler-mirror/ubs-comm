@@ -11,8 +11,12 @@
 #include "urma_backend.h"
 
 #include "under_api/dl_api.h"
+#include "urma_data_rx_ops.h"
+#include "urma_data_tx_ops.h"
 #include "urma_poller.h"
 #include "urma_socket.h"
+#include "urma_socket_acceptor_ops.h"
+#include "urma_socket_connector_ops.h"
 #include "urma_wrapper.h"
 
 namespace ock {
@@ -603,7 +607,34 @@ void UrmaBackendImpl::SetLogLevel(int level) noexcept
 
 Result UrmaBackendImpl::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
 {
-    // TODO
+    (void)flags;
+    for (auto i = 0; i < cr_count; i++) {
+        if (cr[i].status != URMA_CR_SUCCESS) {
+            // TODO: add process for error status
+            UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr[i].status,
+                         cr[i].user_ctx, cr[i].opcode, cr[i].flag.value);
+            continue;
+        }
+
+        if (cr[i].flag.bs.s_r == 0) { // sender side
+            continue;
+        }
+
+        // receiver side
+        if (cr[i].opcode == URMA_CR_OPC_WRITE_WITH_IMM) {
+            auto fd = static_cast<int>(cr[i].user_ctx);
+            auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+            if (UNLIKELY(sock == nullptr)) {
+                UBS_VLOG_ERR("socket is nullptr for fd: %d", fd);
+                continue;
+            }
+
+            auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+            urma_sock->HandleRecvCqe(cr[i].imm_data);
+        } else {
+            // TODO: other opcode
+        }
+    }
     return UBS_OK;
 }
 
@@ -614,21 +645,50 @@ Result UrmaBackendImpl::CreateSocket(int fd, SocketType t, SocketPtr &outSocket)
 
 Result UrmaBackendImpl::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops) noexcept
 {
+    auto tx_ops = new (std::nothrow) UrmaTxOps(sock->raw_socket_);
+    if (UNLIKELY(tx_ops == nullptr)) {
+        UBS_VLOG_ERR("Failed to create urma tx ops, probably out of memory");
+        return UBS_MALLOC_FAILED;
+    }
+
+    ops = tx_ops;
     return UBS_OK;
 }
 
 Result UrmaBackendImpl::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops) noexcept
 {
+    auto rx_ops = new (std::nothrow) UrmaRxOps(sock->raw_socket_);
+    if (UNLIKELY(rx_ops == nullptr)) {
+        UBS_VLOG_ERR("Failed to create urma rx ops, probably out of memory");
+        return UBS_MALLOC_FAILED;
+    }
+
+    ops = rx_ops;
     return UBS_OK;
 }
 
-Result UrmaBackendImpl::CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptor) noexcept
+Result UrmaBackendImpl::CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&ops) noexcept
 {
+    (void)value;
+    auto tmp_ops = new (std::nothrow) UrmaAcceptorOps(sock->raw_socket_);
+    if (UNLIKELY(tmp_ops == nullptr)) {
+        UBS_VLOG_ERR("Failed to create urma acceptor ops, probably out of memory");
+        return UBS_MALLOC_FAILED;
+    }
+
+    ops = tmp_ops;
     return UBS_OK;
 }
 
-Result UrmaBackendImpl::CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&connector) noexcept
+Result UrmaBackendImpl::CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&ops) noexcept
 {
+    auto tmp_ops = new (std::nothrow) UrmaConnectorOps(sock->raw_socket_);
+    if (UNLIKELY(tmp_ops == nullptr)) {
+        UBS_VLOG_ERR("Failed to create urma connector ops, probably out of memory");
+        return UBS_MALLOC_FAILED;
+    }
+
+    ops = tmp_ops;
     return UBS_OK;
 }
 

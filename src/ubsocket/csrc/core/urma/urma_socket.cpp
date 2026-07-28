@@ -189,8 +189,8 @@ void UrmaSocket::HandleRecvCqe(const WriteImmData &imm)
 void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
 {
     // TODO: implement pre-write CQE handling
-    auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
-    auto req = reinterpret_cast<UramWriteMessage *>(recv_buf_addr_ + recv_offset);
+    //auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+    //auto req = reinterpret_cast<UramWriteMessage *>(recv_buf_addr_ + recv_offset);
     recv_data_ready_ = true;
     NotifySocketReadable();
 }

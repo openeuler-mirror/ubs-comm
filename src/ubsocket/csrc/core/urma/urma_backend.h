@@ -42,10 +42,10 @@ public:
     void SetLogLevel(int level) noexcept;
 
     Result CreateSocket(int fd, SocketType t, SocketPtr &outSocket) noexcept;
-    Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops) noexcept;
-    Result CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops) noexcept;
-    Result CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptor) noexcept;
-    Result CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&connector) noexcept;
+    static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops) noexcept;
+    static Result CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops) noexcept;
+    static Result CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptor) noexcept;
+    static Result CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&connector) noexcept;
 
 private:
     void UnInitInner() noexcept;
