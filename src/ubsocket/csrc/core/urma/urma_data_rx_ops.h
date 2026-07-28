@@ -23,10 +23,7 @@ namespace urma {
 
 class UrmaRxOps : public DataRxOps {
 public:
-    explicit UrmaRxOps(int fd)
-    {
-        fd_ = fd;
-    }
+    explicit UrmaRxOps(int fd) : fd_(fd) {}
 
     ~UrmaRxOps() override = default;
 
@@ -45,10 +42,11 @@ private:
         uint64_t write_imm{0};
     };
 
+private:
     int fd_ = -1;
-    DataSlot data_slots_[RING_SIZE];
     std::atomic<uint64_t> consume_seq_no_{0};
     uint64_t consume_offset_{0};
+    DataSlot data_slots_[RING_SIZE];
 };
 
 } // namespace urma
