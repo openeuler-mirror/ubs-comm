@@ -29,9 +29,46 @@ namespace umq {
 std::mutex UmqBackend::UMQ_MUTEX;
 bool UmqBackend::UMQ_INITED = false;
 
+void UmqExtLogger(int level, const char *file, const char *function, int line, char *log_msg)
+{
+    auto new_level = umq_log_level::UMQ_LOG_LEVEL_DEBUG - level;
+    if (new_level <= LogLevel::LEVEL_ERR) {
+        UBS_LOG_STREAM_EXT_RAW(new_level, file, function, line, log_msg);
+    } else {
+        static const char *OTHER_LEVEL[] = {"EMERG", "ALERT", "CRIT"};
+        UBS_LOG_STREAM_EXT_RAW(LogLevel::LEVEL_ERR, file, function, line,
+                               OTHER_LEVEL[level % (sizeof(OTHER_LEVEL))] << ", " << log_msg);
+    }
+}
+
+void UmqBackend::SetLogLevel(int level) noexcept
+{
+    if (!UMQ_INITED) {
+        //UBS_VLOG_DEBUG("umq already initialized");
+        return;
+    }
+
+    umq_log_config_t log_cfg;
+    log_cfg.log_flag = UMQ_LOG_FLAG_LEVEL;
+    log_cfg.func = nullptr;
+    log_cfg.ext_func = nullptr;
+    log_cfg.level = static_cast<umq_log_level_t>(umq_log_level::UMQ_LOG_LEVEL_DEBUG - level);
+    UmqApi::umq_log_config_set(&log_cfg);
+}
+
+void UmqBackend::SetLogger() noexcept
+{
+    /* step0: set umq logger */
+    umq_log_config_t log_cfg;
+    log_cfg.log_flag = UMQ_LOG_FLAG_LEVEL | UMQ_LOG_FLAG_EXT_FUNC;
+    log_cfg.func = nullptr;
+    log_cfg.ext_func = UmqExtLogger;
+    log_cfg.level = static_cast<umq_log_level_t>(umq_log_level::UMQ_LOG_LEVEL_DEBUG - Logger::Instance().GetLogLevel());
+    UmqApi::umq_log_config_set(&log_cfg);
+}
+
 Result UmqBackend::Init() noexcept
 {
-    //UBS_VLOG_DEBUG("enter");
     Result ret = UBS_OK;
     std::lock_guard<std::mutex> guard(UMQ_MUTEX);
     if (UMQ_INITED) {
@@ -103,6 +140,9 @@ Result UmqBackend::Init() noexcept
         UBS_VLOG_ERR("AddIbDev()/AddUbDev() failed, ret: %d\n", ret);
         return UBS_ERROR;
     }
+
+    SetLogger();
+    SetLogLevel(Logger::Instance().GetLogLevel());
 
     GlobalSetting::LINK_SELECTION_POLICY =
         UmqSetting::UMQ_IS_BONDING && GlobalSetting::UBS_BACKUP_LINK_ENABLED  ? LinkSelectionPolicy::BONDING_BACKUP :
@@ -495,7 +535,9 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
         return result;
     }
 
-    umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    umq_interrupt_option_t main_option;
+    main_option.flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION;
+    main_option.direction = UMQ_IO_RX;
     auto share_jfr_fd = UmqApi::umq_interrupt_fd_get(main_umq_handle, &main_option);
     if (UNLIKELY(share_jfr_fd < 0)) {
         int savedErrno = errno;
@@ -511,8 +553,7 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
     jfr_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
     jfr_event_data.event_data.data = share_jfr_fd;
 
-    struct epoll_event share_jfr_event {
-    };
+    struct epoll_event share_jfr_event {};
     share_jfr_event.events = EPOLLIN | EPOLLET;
     share_jfr_event.data.u64 = jfr_event_data.u64;
 
@@ -543,8 +584,7 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
     retry_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR_RETRY;
     retry_event_data.event_data.data = retry_rx_fd;
 
-    struct epoll_event retry_event {
-    };
+    struct epoll_event retry_event {};
     retry_event.events = EPOLLIN | EPOLLET;
     retry_event.data.u64 = retry_event_data.u64;
 

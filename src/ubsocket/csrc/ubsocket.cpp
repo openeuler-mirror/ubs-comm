@@ -18,6 +18,7 @@
 #include "core/ubsocket_tx_cqe_poller.h"
 #include "core/umq/umq_backend.h"
 #include "core/umq/umq_setting.h"
+#include "core/urma/urma_backend.h"
 #include "include/ubsocket.h"
 #include "profiling/probe/probe_manager.h"
 #include "profiling/statistics/statistics.h"
@@ -142,7 +143,8 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     /* step5: umq backend init */
     //#ifdef UMQ_ADAPTER_BACKEND_ENABLED
-    result = umq::UmqBackend::Init();
+    result = urma::UrmaBackend::Init();
+    // result = umq::UmqBackend::Init();
     if (result != UBS_OK) {
         // ResetBrpcAllocator();
         // SetSocketFdTransMode(SOCKET_FD_TRANS_MODE_TCP);
@@ -254,48 +256,17 @@ UBS_API const char *ubsocket_version()
     return UBS_LIB_VERSION;
 }
 
-void UmqLogger(int level, char *log_msg)
-{
-    auto new_level = umq_log_level::UMQ_LOG_LEVEL_DEBUG - level;
-    if (new_level <= LogLevel::LEVEL_ERR) {
-        UBS_LOG_STREAM_RAW(new_level, log_msg);
-    } else {
-        static const char *OTHER_LEVEL[] = {"EMERG", "ALERT", "CRIT"};
-        UBS_LOG_STREAM_RAW(LogLevel::LEVEL_ERR, OTHER_LEVEL[level % (sizeof(OTHER_LEVEL))] << ", " << log_msg);
-    }
-}
-
-void UmqExtLogger(int level, const char *file, const char *function, int line, char *log_msg)
-{
-    auto new_level = umq_log_level::UMQ_LOG_LEVEL_DEBUG - level;
-    if (new_level <= LogLevel::LEVEL_ERR) {
-        UBS_LOG_STREAM_EXT_RAW(new_level, file, function, line, log_msg);
-    } else {
-        static const char *OTHER_LEVEL[] = {"EMERG", "ALERT", "CRIT"};
-        UBS_LOG_STREAM_EXT_RAW(LogLevel::LEVEL_ERR, file, function, line,
-                               OTHER_LEVEL[level % (sizeof(OTHER_LEVEL))] << ", " << log_msg);
-    }
-}
-
 UBS_API int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *filename, int line))
 {
     Logger::Instance().SetExternalLogFunction(func);
-    umq_log_config_t log_cfg = {
-        .log_flag = UMQ_LOG_FLAG_LEVEL | UMQ_LOG_FLAG_EXT_FUNC,
-        .func = nullptr,
-        .ext_func = UmqExtLogger,
-        .level = static_cast<umq_log_level_t>(umq_log_level::UMQ_LOG_LEVEL_DEBUG - Logger::Instance().GetLogLevel())};
-    return umq_log_config_set(&log_cfg);
+    return UBS_OK;
 }
 
 UBS_API int ubsocket_set_log_level(int level)
 {
     Logger::Instance().SetLogLevel(level);
-    umq_log_config_t log_cfg = {.log_flag = UMQ_LOG_FLAG_LEVEL,
-                                .func = nullptr,
-                                .ext_func = nullptr,
-                                .level = static_cast<umq_log_level_t>(umq_log_level::UMQ_LOG_LEVEL_DEBUG - level)};
-    return umq_log_config_set(&log_cfg);
+    ock::ubs::umq::UmqBackend::SetLogLevel(level);
+    return UBS_OK;
 }
 
 UBS_API void *ubsocket_iobuf_allocate(size_t size, const ubs_iobuf_alloc_option_t *option)

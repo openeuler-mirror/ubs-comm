@@ -24,6 +24,8 @@ class UmqBackend {
 public:
     static Result Init() noexcept;
     static void UnInit() noexcept;
+    static void SetLogLevel(int level) noexcept;
+    static void SetLogger() noexcept;
 
 private:
     static Result AddUbDev(umq_trans_info_t &trans_info);

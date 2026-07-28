@@ -141,8 +141,7 @@ private:
         oss << std::left << std::setw(COL_WIDTH_MAX) << "[TRACE_NAME]" << std::setw(COL_WIDTH_MIN) << "SUCCESS"
             << std::setw(COL_WIDTH_MIN) << "FAILURE" << std::setw(COL_WIDTH_MIN) << "TOTAL(ns)"
             << std::setw(COL_WIDTH_MIN) << "AVG(ns)" << std::setw(COL_WIDTH_MIN) << "MAX(ns)"
-            << std::setw(COL_WIDTH_MIN) << "MIN(ns)"
-            << "\n";
+            << std::setw(COL_WIDTH_MIN) << "MIN(ns)" << "\n";
     }
 
     int CreateDirectory(std::string &path)

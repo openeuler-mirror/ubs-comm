@@ -61,10 +61,34 @@ using umq_external_mutex_lock_ops_register_api = int (*)(umq_external_mutex_lock
 using umq_external_rwlock_ops_register_api = int (*)(umq_external_rwlock_ops_t *ops);
 
 /* pro api */
-using umq_post_api = int (*)(uint64_t umqh, umq_buf_t *qbuf, umq_io_direction_t io_direction, umq_buf_t **bad_qbuf);
-using umq_poll_api = int (*)(uint64_t umqh, umq_io_direction_t io_direction, umq_buf_t **buf, uint32_t max_buf_count);
+using umq_post_api = int (*)(uint64_t umqh, umq_buf_t *qbuf, umq_io_option_t *option, umq_buf_t **bad_qbuf);
+using umq_poll_api = int (*)(uint64_t umqh, umq_io_option_t *poll_option, umq_buf_t **buf, uint32_t max_buf_count);
 using umq_interrupt_fd_get_api = int (*)(uint64_t umqh, umq_interrupt_option_t *option);
 using umq_get_cq_event_api = int (*)(uint64_t umqh, umq_interrupt_option_t *option);
+
+using umq_stats_perf_start_api = int (*)(void);
+using umq_stats_perf_stop_api = int (*)(void);
+using umq_stats_perf_to_str_api = int (*)(umq_perf_stats_t *umq_perf_stats, char *buf, int max_buf_len);
+using umq_stats_perf_reset_api = int (*)(umq_perf_stats_cfg_t *perf_stats_cfg);
+using umq_stats_perf_get_api = int (*)(umq_perf_stats_t *umq_perf_stats);
+using umq_stats_tp_perf_start_api = int (*)(umq_trans_mode_t trans_mode);
+using umq_stats_tp_perf_stop_api = int (*)(umq_trans_mode_t trans_mode);
+using umq_stats_tp_perf_info_get_api = int (*)(umq_trans_mode_t trans_mode, char *perf_buf, uint32_t *length);
+using umq_transport_pool_resource_create_api = uint32_t (*)(uint64_t umqh);
+using umq_transport_pool_resource_create_ext_api = int (*)(uint64_t umqh, umq_tp_resource_create_option_t *option);
+using umq_transport_pool_resource_destroy_api = int (*)(uint64_t umqh, uint32_t tp_handle_idx);
+using umq_transport_pool_resource_modify_api = int (*)(uint64_t umqh, uint32_t tp_handle_idx);
+using umq_transport_pool_eventfd_get_api = int (*)(uint64_t umqh);
+using umq_interrupt_fd_list_get_api = int (*)(uint64_t umqh, umq_interrupt_option_t *option,
+                                              umq_interrupt_fd_list_t *fd_list);
+using umq_stats_trace_start_api = int (*)(umq_trace_cfg_t *cfg);
+using umq_stats_trace_stop_api = int (*)(void);
+using umq_info_get_api = int (*)(uint64_t umqh, umq_info_t *umq_info);
+using umq_stats_io_get_api = int (*)(uint64_t umqh, umq_packet_stats_t *packet_stats);
+using umq_stats_transport_pool_get_api = int (*)(uint64_t umqh, umq_transport_pool_stats_t *umq_transport_pool_stats);
+using umq_stats_flow_control_get_api = int (*)(uint64_t umqh, umq_flow_control_stats_t *flow_control_stats);
+using umq_stats_qbuf_pool_get_api = int (*)(uint64_t umqh, umq_qbuf_pool_stats_t *qbuf_pool_stats);
+using umq_io_perf_callback_register_api = int (*)(umq_io_perf_callback_t func);
 
 class UmqApi {
 public:
@@ -331,30 +355,63 @@ public:
         return umq_stats_trace_stop_ptr();
     }
 
-    static int umq_transport_pool_resource_create(uint64_t umqh)
+    static uint32_t umq_transport_pool_resource_create(uint64_t umqh)
     {
-        return umq_transport_pool_resource_create(umqh);
+        return umq_transport_pool_resource_create_ptr(umqh);
+    }
+
+    static int umq_transport_pool_resource_create(uint64_t umqh, umq_tp_resource_create_option_t *option)
+    {
+        return umq_transport_pool_resource_create_ext_ptr(umqh, option);
     }
 
     static int umq_transport_pool_resource_destroy(uint64_t umqh, uint32_t tp_handle_idx)
     {
-        return ::umq_transport_pool_resource_destroy(umqh, tp_handle_idx);
+        return umq_transport_pool_resource_destroy_ptr(umqh, tp_handle_idx);
     }
 
     static int umq_transport_pool_resource_modify(uint64_t umqh, uint32_t tp_handle_idx)
     {
-        return ::umq_transport_pool_resource_modify(umqh, tp_handle_idx);
+        return umq_transport_pool_resource_modify_ptr(umqh, tp_handle_idx);
     }
 
     static int umq_transport_pool_eventfd_get(uint64_t umqh)
     {
-        return ::umq_transport_pool_eventfd_get(umqh);
+        return umq_transport_pool_eventfd_get_ptr(umqh);
     }
 
     static int umq_interrupt_fd_list_get(uint64_t umqh, umq_interrupt_option_t *option,
                                          umq_interrupt_fd_list_t *fd_list)
     {
-        return ::umq_interrupt_fd_list_get(umqh, option, fd_list);
+        return umq_interrupt_fd_list_get_ptr(umqh, option, fd_list);
+    }
+
+    static int umq_info_get(uint64_t umqh, umq_info_t *umq_info)
+    {
+        return umq_info_get_ptr(umqh, umq_info);
+    }
+    static int umq_stats_io_get(uint64_t umqh, umq_packet_stats_t *packet_stats)
+    {
+        return umq_stats_io_get_ptr(umqh, packet_stats);
+    }
+    static int umq_stats_transport_pool_get(uint64_t umqh, umq_transport_pool_stats_t *umq_transport_pool_stats)
+    {
+        return umq_stats_transport_pool_get_ptr(umqh, umq_transport_pool_stats);
+    }
+
+    static int umq_stats_flow_control_get(uint64_t umqh, umq_flow_control_stats_t *flow_control_stats)
+    {
+        return umq_stats_flow_control_get_ptr(umqh, flow_control_stats);
+    }
+
+    static int umq_stats_qbuf_pool_get(uint64_t umqh, umq_qbuf_pool_stats_t *qbuf_pool_stats)
+    {
+        return umq_stats_qbuf_pool_get_ptr(umqh, qbuf_pool_stats);
+    }
+
+    static int umq_io_perf_callback_register(umq_io_perf_callback_t func)
+    {
+        return umq_io_perf_callback_register_ptr(func);
     }
 
 private:
@@ -408,12 +465,20 @@ private:
     DL_API_DECLARE(umq_stats_tp_perf_stop);
     DL_API_DECLARE(umq_stats_tp_perf_info_get);
     DL_API_DECLARE(umq_transport_pool_resource_create);
+    DL_API_DECLARE(umq_transport_pool_resource_create_ext);
     DL_API_DECLARE(umq_transport_pool_resource_destroy);
     DL_API_DECLARE(umq_transport_pool_resource_modify);
     DL_API_DECLARE(umq_transport_pool_eventfd_get);
     DL_API_DECLARE(umq_interrupt_fd_list_get);
     DL_API_DECLARE(umq_stats_trace_start);
     DL_API_DECLARE(umq_stats_trace_stop);
+    DL_API_DECLARE(umq_get_cq_event);
+    DL_API_DECLARE(umq_info_get);
+    DL_API_DECLARE(umq_stats_io_get);
+    DL_API_DECLARE(umq_stats_transport_pool_get);
+    DL_API_DECLARE(umq_stats_flow_control_get);
+    DL_API_DECLARE(umq_stats_qbuf_pool_get);
+    DL_API_DECLARE(umq_io_perf_callback_register);
 
 private:
     static void UnLoadInner() noexcept;
@@ -704,7 +769,7 @@ public:
 
     static int umq_transport_pool_resource_create(uint64_t umqh, umq_tp_resource_create_option_t *option)
     {
-        return ::umq_transport_pool_resource_create(umqh, option);
+        return umq_transport_pool_resource_create_ext_ptr(umqh, option);
     }
 
     static int umq_transport_pool_resource_destroy(uint64_t umqh, uint32_t tp_handle_idx)
@@ -726,6 +791,36 @@ public:
                                          umq_interrupt_fd_list_t *fd_list)
     {
         return ::umq_interrupt_fd_list_get(umqh, option, fd_list);
+    }
+
+    static int umq_info_get(uint64_t umqh, umq_info_t *umq_info)
+    {
+        return ::umq_info_get(umqh, umq_info);
+    }
+
+    static int umq_stats_io_get(uint64_t umqh, umq_packet_stats_t *packet_stats)
+    {
+        return ::umq_stats_io_get(umqh, packet_stats);
+    }
+
+    static int umq_stats_transport_pool_get(uint64_t umqh, umq_transport_pool_stats_t *umq_transport_pool_stats)
+    {
+        return ::umq_stats_transport_pool_get(umqh, umq_transport_pool_stats);
+    }
+
+    static int umq_stats_flow_control_get(uint64_t umqh, umq_flow_control_stats_t *flow_control_stats)
+    {
+        return ::umq_stats_flow_control_get(umqh, flow_control_stats);
+    }
+
+    static int umq_stats_qbuf_pool_get(uint64_t umqh, umq_qbuf_pool_stats_t *qbuf_pool_stats)
+    {
+        return ::umq_stats_qbuf_pool_get(umqh, qbuf_pool_stats);
+    }
+
+    static int umq_io_perf_callback_register(umq_io_perf_callback_t func)
+    {
+        return ::umq_io_perf_callback_register(func);
     }
 };
 } // namespace ubs

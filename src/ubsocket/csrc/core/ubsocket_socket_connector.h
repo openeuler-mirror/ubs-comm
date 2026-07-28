@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_SOCKET_CONNECTOR_H
 #define UBS_COMM_UBSOCKET_SOCKET_CONNECTOR_H
 
+#include "../common/ubsocket_defines.h"
 #include "common/ubsocket_common_includes.h"
 #include "ubsocket_core_types.h"
 
@@ -23,8 +24,6 @@ class ConnectorOps {
 public:
     virtual ~ConnectorOps() = default;
 
-    RawConnInfoV4 conn_info;
-
     // ======================== 主流程方法 ========================
     // 阶段0：准备连接( TCP 辅助建链, 包括 TFO 发送 等 DoConnect 和 DoAccept 的前置操作)
     virtual Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
@@ -32,12 +31,24 @@ public:
     // 阶段1：协商信息
     virtual Result Negotiate(int new_fd, const SocketPtr &sock) = 0;
     // 阶段2：创建资源（例如：umq create + bind + prefill rx）
-    virtual Result CreateSocketResources(const SocketPtr &sock) = 0;
+    virtual Result CreateSocketResources(SocketPtr &sock) = 0;
     // 阶段3：销毁资源（握手失败/重试时清理已创建的资源）
     virtual void DestroySocketResources() = 0;
 
     DEFINE_REF_OPERATION_FUNC
+
+public:
+    RawConnInfoV4 conn_info;
+
 protected:
+    Result DoTcpConnect(int new_fd, const struct sockaddr *address, socklen_t address_len, const SocketPtr &sock);
+
+    Result DoConnectViaHandshakeOpt(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
+
+    Result DoConnectViaTfo(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
+
+    virtual Result BuildTfoPayload(uint8_t *buf, int &buf_len, const SocketPtr &sock) = 0;
+
     int raw_fd_ = -1; // 传入 sock 的原生 socket fd
     DECLARE_REF_COUNT_VARIABLE;
 };
@@ -53,24 +64,26 @@ public:
     }
     ~Connector();
 
-    int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
+    int Connect(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
 
-    ConnectorOpsPtr GetConnectorOps()
-    {
-        return connector_ops_;
-    }
+    ConnectorOpsPtr GetConnectorOps() const;
 
-    ALWAYS_INLINE bool IsClient(void)
-    {
-        return connector_ops_->conn_info.type_fd == 1 ? true : false;
-    }
+    bool IsClient() const noexcept;
 
 private:
-    // ======================== 成员变量 ========================
     int raw_fd_ = -1;   // 传入 sock 的原生 socket fd
     int event_fd_ = -1; // eventfd（通知上层可读）
-    Ref<ConnectorOps> connector_ops_ = nullptr;
+    ConnectorOpsPtr connector_ops_ = nullptr;
 };
+
+ALWAYS_INLINE ConnectorOpsPtr Connector::GetConnectorOps() const
+{
+    return connector_ops_;
+}
+ALWAYS_INLINE bool Connector::IsClient() const noexcept
+{
+    return connector_ops_->conn_info.type_fd == 1 ? true : false;
+}
 
 } // namespace ubs
 } // namespace ock

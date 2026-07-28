@@ -8,9 +8,9 @@
 # IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 #
-option(BUILD_UMQ_ADAPTER_BACKEND "build umq adapter backend" ON)
-option(BUILD_UMQ_DLOPEN_BACKEND "build umq dlopen backend" OFF)
-option(BUILD_URMA_DLOPEN_BACKEND "build urma dlopen backend" OFF)
+option(BUILD_UMQ_ADAPTER_BACKEND "build umq adapter backend" OFF)
+option(BUILD_UMQ_DLOPEN_BACKEND "build umq dlopen backend" ON)
+option(BUILD_URMA_DLOPEN_BACKEND "build urma dlopen backend" ON)
 option(ENABLE_OBJECT_COUNTING "enable object couting to detect memory leak" OFF)
 option(UBSOCKET_ENABLE_COVERAGE "Enable coverage reporting for ubsocket UT" OFF)
 option(UBSOCKET_BUILD_CLI "Enable CLI component build" OFF)
@@ -123,6 +123,7 @@ include_directories(
 
 add_subdirectory(csrc)
 add_subdirectory(tools/golden)
+add_subdirectory(tools/allocator)
 
 option(UBSOCKET_BUILD_TESTS "Build tests" OFF)
 if (UBSOCKET_BUILD_TESTS)

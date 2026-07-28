@@ -26,8 +26,7 @@ typedef void *u_mutex_t;
 typedef void *u_rw_lock_t;
 typedef void *u_semaphore_t;
 
-typedef enum
-{
+typedef enum {
     LT_EXCLUSIVE = 0,
     LT_RECURSIVE,
     LT_BUTT,
@@ -90,14 +89,12 @@ typedef struct {
     u_external_poller_ops_t *poller_ops; /* external poller operations, for example brpc's EventDispatcher */
 } u_init_options_t;
 
-enum class UbsocketLevel : int
-{
+enum class UbsocketLevel : int {
     // Does not conflict with the native level of the system
     SOL_UB = 0x1000,
 };
 
-enum class UbSocketOpt : int
-{
+enum class UbSocketOpt : int {
     UBS_OPT_PROTOCOL = 1,
 };
 

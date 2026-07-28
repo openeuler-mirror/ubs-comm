@@ -13,13 +13,17 @@
 
 #include <cstdint>
 
+#include "core/ubsocket_buf_converter.h"
 #include "core/ubsocket_data_tx.h"
+#include "iobuf/ubsocket_iobuf.h"
 #include "umq_backend.h"
 #include "umq_setting.h"
 
 namespace ock {
 namespace ubs {
 namespace umq {
+
+class UmqSocket;
 
 class UmqTxOps : public DataTxOps {
 public:
@@ -38,26 +42,28 @@ public:
 
     ~UmqTxOps() override = default;
 
-    ConverterPtr BuildIovConverter(const struct iovec *iov, int iovcnt) override;
-
-    ConverterPtr BuildBufferConverter(const void *buf, size_t size) override;
+    ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept override;
+    Result Flush(const SocketPtr &sock, uint32_t flags) noexcept override;
+    Result TriggerPollOut(const SocketPtr &sock, uint32_t flags) noexcept override;
+    ConverterPtr BuildIovConverter(const struct iovec *iov, int iovcnt);
+    ConverterPtr BuildBufferConverter(const void *buf, size_t size);
 
     // 分配发送缓冲区
-    uintptr_t AllocTxBuf(uint32_t size, uint32_t count) override;
+    uintptr_t AllocTxBuf(uint32_t size, uint32_t count);
 
     // 发送请求
-    int PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt) override;
+    int PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt);
 
-    int PollTx(Socket *sock) override;
+    int PollTx(Socket *sock);
 
-    uint32_t IOBufSize() override;
+    uint32_t IOBufSize();
 
     // Flush
-    void FlushTx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) override;
+    void FlushTx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS);
 
     void WakeUpTx(Socket *sock);
 
-    bool Writable(const SocketPtr &sock) override;
+    bool Writable(const SocketPtr &sock);
 
 private:
     // 处理 umq_post 失败时的坏 buffer
@@ -81,9 +87,21 @@ private:
     umq_buf_list_t head_buf_ = {0};
     umq_buf_list_t tail_buf_ = {0};
 
-    uint32_t unsolicited_bytes_ = 0;  // length of accumulated work request without setting solicited
-    uint16_t unsolicited_wr_num_ = 0; // number of accumulated work request without setting solicited
-    uint16_t unsignaled_wr_num_ = 0;  // number of accumulated work request without setting signaled
+    uint32_t unsolicited_bytes_ = 0;                 // length of accumulated work request without setting solicited
+    uint16_t unsolicited_wr_num_ = 0;                // number of accumulated work request without setting solicited
+    uint16_t unsignaled_wr_num_ = 0;                 // number of accumulated work request without setting signaled
+    std::atomic<uint32_t> successful_post_count_{0}; // number of successfully posted work request
+
+public:
+    int fd_ = -1;
+    std::atomic<uint32_t> tx_queue_avail_num_{GlobalSetting::UBS_TX_DEPTH}; // current window size for TX
+    uint16_t ack_event_num_ = 0;
+    bool get_and_ack_event_ = false;
+    std::atomic<int> epoll_event_num_{0};
+    int expect_epoll_event_num_ = 0;
+    std::atomic<bool> need_fc_awake_{false};
+
+    friend class UmqSocket;
 };
 } // namespace umq
 } // namespace ubs

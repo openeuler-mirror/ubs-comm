@@ -40,8 +40,7 @@ protected:
 
     SearchResult Search(PgtAddress from, PgtAddress to)
     {
-        NN_LOG_INFO("Begin to search from "
-                    << "[0x" << std::hex << from << ".. 0x" << std::hex << to << "]");
+        NN_LOG_INFO("Begin to search from " << "[0x" << std::hex << from << ".. 0x" << std::hex << to << "]");
         SearchResult result;
         mPgTable.SearchRange(from, to, pgdSearchCb, reinterpret_cast<void *>(&result));
         return result;

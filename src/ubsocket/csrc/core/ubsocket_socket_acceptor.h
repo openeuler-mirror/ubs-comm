@@ -28,8 +28,7 @@ public:
 
     // ======================== 主流程方法 ========================
     // 阶段0：准备连接( TCP 辅助建链, 包括 TFO 发送 等 DoConnect 和 DoAccept 的前置操作)
-    virtual Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
-                                  const SocketPtr &sock) = 0;
+    virtual Result PrepareConnect(int new_fd) = 0;
 
     // 阶段1：协商信息
     virtual Result Negotiate(SocketPtr socketPtr) = 0;
@@ -39,14 +38,15 @@ public:
     virtual void DestroySocketResources() = 0;
 
     // ======================== 仅 accept ===========================
-    virtual int ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size) = 0;
+    virtual int ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size);
 
     DEFINE_REF_OPERATION_FUNC
 
 protected:
+    Result DoVersionNegotiate(int fd, uint32_t &negotiated_version, uint32_t &peer_version);
+
     DECLARE_REF_COUNT_VARIABLE;
 
-protected:
     int fd;
     int event_fd;
 
@@ -103,7 +103,7 @@ private:
     static constexpr int kControlPlaneTimeoutMs = 5000;
     static constexpr int kNegotiateTimeoutMs = 10000;
 
-    // ======================== 成员变量 ========================
+private:
     int raw_fd_; // 传入 sock 的原生 socket fd
     Ref<AcceptorOps> acceptor_ops_ = nullptr;
     struct AsyncAcceptInfo {

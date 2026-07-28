@@ -17,8 +17,7 @@
 
 namespace ock {
 namespace ubs {
-enum class RunnableType
-{
+enum class RunnableType {
     NORMAL = 0,
     STOP = 1,
 };

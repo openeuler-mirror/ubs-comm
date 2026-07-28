@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_URMA_WRAPPER_H
 #define UBS_COMM_URMA_WRAPPER_H
 
+#include "../../common/ubsocket_defines.h"
 #include "common/ubsocket_common_includes.h"
 #include "under_api/urma/dl_urma_api.h"
 #include "under_api/urma/urma_types.h"
@@ -131,8 +132,7 @@ ALWAYS_INLINE const urma_device_attr_t &UrmaDevice::DeviceAttributes() const noe
     return attributes_;
 }
 
-enum UrmaJfcPollingType
-{
+enum UrmaJfcPollingType {
     BUSY_POLLING = 0,
     EVENT_POLLING
 };
@@ -145,6 +145,7 @@ constexpr uint8_t URMA_JFS_ERROR_TIMEOUT = 2;
 class UrmaContext : public Referable {
 public:
     static Result CreateContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out);
+    static Result LookupContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out);
     static uint32_t NewJettyId() noexcept;
 
 public:
@@ -173,6 +174,10 @@ public:
                        UrmaJettyPtr &out);
 
     const urma_eid_info_t &EidInfo() const noexcept;
+    urma_context_t *Handle() const noexcept
+    {
+        return raw_context_;
+    }
 
 private:
     urma_context_t *raw_context_{nullptr};
@@ -210,6 +215,17 @@ public:
 
     void Destroy() noexcept;
 
+    const UrmaContextPtr &Context() const noexcept;
+    const UrmaJfcPollingType &PollingType() const noexcept;
+
+    urma_jfc_t *Handle() const noexcept;
+    urma_jfce_t *JfceHandle() const noexcept;
+
+    Result EventWait(int timeout_ms) noexcept;
+    int Poll(int cr_count, urma_cr_t *jfc) noexcept;
+    Result Rearm(bool solicited_only) noexcept;
+    void Ack(uint32_t eventCount) noexcept;
+
 private:
     urma_jfc_t *raw_jfc_ = nullptr;         /* raw jfc */
     urma_jfce_t *raw_jfce_ = nullptr;       /* raw jfce */
@@ -218,6 +234,48 @@ private:
 
     friend class UrmaContext;
 };
+
+ALWAYS_INLINE const UrmaContextPtr &UrmaJfc::Context() const noexcept
+{
+    return context_;
+}
+
+ALWAYS_INLINE urma_jfc_t *UrmaJfc::Handle() const noexcept
+{
+    return raw_jfc_;
+}
+
+ALWAYS_INLINE urma_jfce_t *UrmaJfc::JfceHandle() const noexcept
+{
+    return raw_jfce_;
+}
+
+ALWAYS_INLINE const UrmaJfcPollingType &UrmaJfc::PollingType() const noexcept
+{
+    return polling_type_;
+}
+
+ALWAYS_INLINE int UrmaJfc::Poll(int cr_count, urma_cr_t *cr) noexcept
+{
+    return UrmaApi::urma_poll_jfc(raw_jfc_, cr_count, cr);
+}
+
+ALWAYS_INLINE Result UrmaJfc::Rearm(bool solicited_only) noexcept
+{
+    return UrmaApi::urma_rearm_jfc(raw_jfc_, solicited_only);
+}
+
+ALWAYS_INLINE Result UrmaJfc::EventWait(int timeout_ms) noexcept
+{
+    urma_jfc_t *jfc[1]{};
+    auto num = UrmaApi::urma_wait_jfc(raw_jfce_, 1, timeout_ms, jfc);
+    return num <= 0 ? UBS_ERROR : UBS_OK;
+}
+
+ALWAYS_INLINE void UrmaJfc::Ack(uint32_t eventCount) noexcept
+{
+    UrmaApi::urma_ack_jfc(&raw_jfc_, &eventCount, 1);
+}
 
 class UrmaJfs : public Referable {
 public:
@@ -230,6 +288,11 @@ public:
     ~UrmaJfs() override;
 
     void Destroy() noexcept;
+
+    urma_jfs_t *Handle() const noexcept
+    {
+        return raw_jfs_;
+    }
 
 private:
     urma_jfs_t *raw_jfs_ = nullptr; /* raw jfs */
@@ -255,6 +318,10 @@ public:
 
     void Destroy() noexcept;
 
+    urma_jfr_t *Handle() const noexcept;
+
+    uint32_t Token() const noexcept;
+
 private:
     urma_jfr_t *raw_jfr_ = nullptr; /* raw jfr */
     const UrmaContextPtr context_;  /* hold the reference */
@@ -263,6 +330,16 @@ private:
 
     friend class UrmaContext;
 };
+
+ALWAYS_INLINE urma_jfr_t *UrmaJfr::Handle() const noexcept
+{
+    return raw_jfr_;
+}
+
+ALWAYS_INLINE uint32_t UrmaJfr::Token() const noexcept
+{
+    return token_;
+}
 
 class UrmaJetty : public Referable {
 public:
@@ -304,14 +381,24 @@ public:
      */
     void Destroy() noexcept;
 
-    /**
-     * @brief Import peer jetty
-     *
-     * @param jettyId      [in] jetty struct of peer
-     * @param token        [in] token value of peer
-     * @return 0 if sucessful
-     */
+    urma_jetty_t *Handle() const noexcept;
+
     Result ImportRemoteJetty(urma_jetty_id_t &jettyId, uint32_t &token) noexcept;
+
+    /**
+     * @brief Post a send work request to the jetty
+     */
+    urma_status_t PostSendWr(urma_jfs_wr_t *wr, urma_jfs_wr_t **bad_wr) noexcept;
+
+    /**
+     * @brief Post a receive work request to the jetty
+     */
+    urma_status_t PostRecvWr(urma_jfr_wr_t *wr, urma_jfr_wr_t **bad_wr) noexcept;
+
+    /**
+     * @brief Post a WRITE_IMM send work request with the given rw descriptor and user context
+     */
+    urma_status_t PostWriteImm(const urma_rw_wr_t &rw, uint64_t user_ctx) noexcept;
 
     friend std::ostream &operator<<(std::ostream &os, const UrmaJetty &o);
 
@@ -346,11 +433,43 @@ ALWAYS_INLINE urma_jetty_id_t UrmaJetty::RawJettyId() const noexcept
 ALWAYS_INLINE uint32_t UrmaJetty::Token() const noexcept
 {
     uint32_t tmp = 0;
-    if (LIKELY(raw_jetty_ != nullptr)) {
-        tmp = raw_jetty_->jetty_cfg.jfr_cfg->token_value.token;
+    if (LIKELY(jfr_ != nullptr)) {
+        tmp = jfr_->Token();
     }
 
     return tmp;
+}
+
+ALWAYS_INLINE urma_jetty_t *UrmaJetty::Handle() const noexcept
+{
+    return raw_jetty_;
+}
+
+ALWAYS_INLINE urma_status_t UrmaJetty::PostSendWr(urma_jfs_wr_t *wr, urma_jfs_wr_t **bad_wr) noexcept
+{
+    wr->tjetty = raw_target_jetty_;
+    return UrmaApi::urma_post_jetty_send_wr(raw_jetty_, wr, bad_wr);
+}
+
+ALWAYS_INLINE urma_status_t UrmaJetty::PostRecvWr(urma_jfr_wr_t *wr, urma_jfr_wr_t **bad_wr) noexcept
+{
+    return UrmaApi::urma_post_jetty_recv_wr(raw_jetty_, wr, bad_wr);
+}
+
+ALWAYS_INLINE urma_status_t UrmaJetty::PostWriteImm(const urma_rw_wr_t &rw, uint64_t user_ctx) noexcept
+{
+    urma_jfs_wr_t wr = {};
+    wr.opcode = URMA_OPC_WRITE_IMM;
+    wr.tjetty = raw_target_jetty_;
+    wr.user_ctx = user_ctx;
+    wr.rw = rw;
+    wr.next = nullptr;
+    wr.flag.bs.comp_order = 1;
+    wr.flag.bs.complete_enable = 1;
+    wr.flag.bs.inline_flag = 0;
+
+    urma_jfs_wr_t *bad_wr = nullptr;
+    return PostSendWr(&wr, &bad_wr);
 }
 
 std::ostream &operator<<(std::ostream &os, const urma_eid_t &o);
@@ -361,8 +480,7 @@ std::ostream &operator<<(std::ostream &os, const urma_jfs_cfg_t &o);
 std::ostream &operator<<(std::ostream &os, const urma_jetty_cfg_t &o);
 std::ostream &operator<<(std::ostream &os, const urma_jetty_t &o);
 
-class UrmaSegment : public Referable {
-};
+class UrmaSegment : public Referable {};
 } // namespace urma
 } // namespace ubs
 } // namespace ock

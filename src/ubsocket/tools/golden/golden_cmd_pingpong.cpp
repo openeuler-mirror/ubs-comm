@@ -219,8 +219,7 @@ int PPServer::Run()
     fd_ = fd;
 
     int opt = 1;
-    struct sockaddr_in address {
-    };
+    struct sockaddr_in address {};
     ubsocket_setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     ubsocket_setsockopt(fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
@@ -239,8 +238,7 @@ int PPServer::Run()
     LOG_DEBUG("listen at '" << cmd_.ip_ << ":" << cmd_.port_ << "'");
 
     /* step3: accept one client */
-    struct sockaddr_in client_address {
-    };
+    struct sockaddr_in client_address {};
     socklen_t addr_len = sizeof(address);
     client_fd_ = ubsocket_accept(fd_, (struct sockaddr *)&client_address, &addr_len);
     LOG_DEBUG("accepted one");

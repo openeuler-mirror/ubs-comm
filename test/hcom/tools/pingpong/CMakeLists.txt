@@ -40,7 +40,7 @@ set(CXX_FLAGS
     -fPIE -pie
     -fstack-protector-strong
     -Wl,-z,relro,-z,now,-z,noexecstack
-    -std=c++11
+    -std=c++17
 )
 add_compile_options(${CXX_FLAGS})
 

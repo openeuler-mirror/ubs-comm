@@ -26,146 +26,22 @@
 namespace ock {
 namespace ubs {
 namespace umq {
-Result UmqConnectorOps::ConnectViaHandshakeOpt(const SocketPtr &sock, const struct sockaddr *address,
-                                               socklen_t address_len)
-{
-    int opt = 1;
-    int ret = LibcApi::setsockopt(raw_fd_, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, sizeof(opt));
-    if (ret < 0 && (errno == ENOPROTOOPT || errno == EOPNOTSUPP)) {
-        UBS_VLOG_WARN("UB handshake socket option not supported. Handshake mode fallback to TFO.\n");
-        GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::TFO;
-        ret = ConnectViaTfo(sock, address, address_len);
-    } else {
-        ret = LibcApi::connect(raw_fd_, address, address_len);
-        UBS_VLOG_DEBUG("Connect with UB handshake socket option.\n");
-    }
-    return ret;
-}
-
-Result UmqConnectorOps::ConnectViaTfo(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
+Result UmqConnectorOps::BuildTfoPayload(uint8_t *buf, int &buf_len, const SocketPtr &sock)
 {
     auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
-
-    uint8_t send_buf[NEGOTIATE_REQ_BUFFER_SIZE];
-    int buf_len = 0;
-    if (BuildNegotiateReqBuffer(send_buf, umq_socket, buf_len) != UBS_OK) {
-        return UBS_ERROR;
-    }
-
-    bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
-    if (!is_blocking) {
-        SocketConnHelper::SetBlocking(raw_fd_);
-    }
-    int reset_fd = raw_fd_;
-    auto blocking_reset = MakeScopeExit([is_blocking, reset_fd]() {
-        if (!is_blocking) {
-            SocketConnHelper::SetNonBlocking(reset_fd);
-        }
-    });
-
-    constexpr int fast_open = 1;
-    LibcApi::setsockopt(raw_fd_, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
-    ssize_t sendto_ret = LibcApi::sendto(raw_fd_, send_buf, buf_len, MSG_FASTOPEN, address, address_len);
-    if (sendto_ret < 0 && errno != 0) {
-        UBS_VLOG_ERR("TFO sendto[1] failed, ret: %zd, errno %d, err msg: %s\n", sendto_ret, errno,
-                     Func::Error2Str(errno));
-    }
-    if (!SocketConnHelper::IsUbsConnection(raw_fd_)) {
-        UBS_VLOG_DEBUG("TFO Cookie not found or not used. Retrying for immediate SYN+Data.\n");
-        const int tmp_fd = LibcApi::socket(AF_INET, SOCK_STREAM, 0);
-        LibcApi::setsockopt(tmp_fd, SOL_TCP, TCP_FASTOPEN, &fast_open, sizeof(fast_open));
-        sendto_ret = LibcApi::sendto(tmp_fd, send_buf, buf_len, MSG_FASTOPEN, address, address_len);
-        if (sendto_ret < 0 && errno != 0) {
-            UBS_VLOG_ERR("TFO sendto[2] failed, ret: %zd, errno %d, err msg: %s\n", sendto_ret, errno,
-                         Func::Error2Str(errno));
-        }
-
-        int dup3_ret = dup3(tmp_fd, raw_fd_, O_CLOEXEC);
-        LibcApi::close(tmp_fd);
-        if (dup3_ret < 0) {
-            UBS_VLOG_ERR("dup3 failed, ret: %d, errno %d, err msg: %s\n", dup3_ret, errno, Func::Error2Str(errno));
-            return UBS_ERROR;
-        }
-    } else {
-        UBS_VLOG_DEBUG("TFO Cookie exists, continue...\n");
-    }
-    return sendto_ret < 0 ? UBS_ERROR : UBS_OK;
+    return BuildNegotiateReqBuffer(buf, umq_socket, buf_len);
 }
 
 Result UmqConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
                                        const SocketPtr &sock)
 {
-    Result ret = UBS_OK;
-    UBHandshakeMode handshake_mode = GlobalSetting::UBS_HAND_SHAKE_MODE;
-    if (handshake_mode == UBHandshakeMode::UB_SOCK_OPT) {
-        ret = ConnectViaHandshakeOpt(sock, address, address_len);
-    } else if (handshake_mode == UBHandshakeMode::TFO) {
-        ret = ConnectViaTfo(sock, address, address_len);
-    } else {
-        return LibcApi::connect(raw_fd_, address, address_len);
-    }
+    // 调用基类共用 TCP 建链逻辑
+    Result ret = DoTcpConnect(new_fd, address, address_len, sock);
 
-    if (address != nullptr) {
-        // 使用提取的接口获取IP地址
-        std::string peer_ip = SocketConnHelper::ExtractIpFromSockAddr(address);
-        umq_conn_info_.peer_ip = peer_ip;
-        // 对端fd就是accept返回的fd
-        umq_conn_info_.peer_fd = new_fd;
-        umq_conn_info_.create_time = std::chrono::system_clock::now();
-    }
-
-    // TODO: m_tx_use_tcp || m_rx_use_tcp 如何处理
-    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED || !SocketConnHelper::IsUbsConnection(new_fd)) {
-        return ret;
-    }
-#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
-    if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
-        // 多打一和多打多的trace需要关联socket之间的关系
-        struct sockaddr_storage local_addr;
-        socklen_t local_addr_len = sizeof(local_addr);
-        if (getsockname(raw_fd_, (struct sockaddr *)&local_addr, &local_addr_len) == 0) {
-            std::string local_ip = SocketConnHelper::ExtractIpFromSockAddr((struct sockaddr *)&local_addr);
-            int local_port = SocketConnHelper::ExtractPortFromSockAddr((struct sockaddr *)&local_addr);
-
-            UBS_VLOG_INFO("tcp connect, local ip %s port %d, peer ip %s port %d, fd %d\n", local_ip.c_str(), local_port,
-                          umq_conn_info_.peer_ip.c_str(), SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
-        }
-    }
-#endif
-    if (ret == UBS_OK) {
-        UBS_VLOG_DEBUG("tcp connect succeed, ip %s port %d fd %d\n", umq_conn_info_.peer_ip.c_str(),
-                       SocketConnHelper::ExtractPortFromSockAddr(address), new_fd);
-
-    } else {
-        /* fd是非阻塞套接字
-            * 1. 第一次调用connect返回-1，errno为EINPROGRESS，网络正在建连；
-            * 2. 若未建连状态下，第n次对fd调用connect，n>=2，返回-1，errno为EALREADY；
-            * 3. 若建连成功，且当前不是第二次调connect，返回-1，errno为EISCONN；否则返回0（非阻塞套接字）
-            *
-            * 若ret = 0 或者errno 是EISCONN，tcp连接已完成，则执行DoConnect，且需要等待连接完成再返回，
-            * 若errno是EINPROGRESS/EALREADY，fd最终会变为连接状态，则执行DoConnect，且不需要等待ub连接完成
-            * 若errno是EINTR/EADDRNOTAVAIL/EHOSTUNREACH等错误码，tcp连接失败，则不执行DoConnect，保持原错误码直接返回上层，由上层应用决定后续动作
-            */
-        if (errno == EINPROGRESS || errno == EALREADY) {
-            UBS_VLOG_DEBUG("tcp connect inprogress:%s, fd %d\n", Func::Error2Str(errno), new_fd);
-            // 内核选项建链场景：fd是非阻塞套接字，调用connect返回-1，errno为EINPROGRESS，网络正在建连，需修正ret，确保后续正常协商
-            ret = UBS_OK;
-        } else if (errno != EISCONN) {
-            UBS_VLOG_ERR("connect() failed, ret: %d, errno: %d, errmsg: %s, fd: %d\n", ret, errno,
-                         Func::Error2Str(errno), new_fd);
-            return ret;
-        }
-    }
-
-    int tcpNoDelayRet = SocketConnHelper::SetTcpNoDelay(new_fd);
-    if (tcpNoDelayRet != 0) {
-        UBS_VLOG_WARN("Set TCP_NODELAY failed, fd %d, ret %d, errno %d\n", new_fd, tcpNoDelayRet, errno);
-    }
-    bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
-    if (!is_blocking) {
-        // set non_blocking to apply timeout by chrono(send/recv can be returned immediately)
-        SocketConnHelper::SetNonBlocking(new_fd);
-    }
+    // 同步 conn_info 到 UMQ 扩展 conn_info
+    umq_conn_info_.peer_ip = conn_info.peer_ip;
+    umq_conn_info_.peer_fd = conn_info.peer_fd;
+    umq_conn_info_.create_time = conn_info.create_time;
 
     return ret;
 }
@@ -180,7 +56,7 @@ Result UmqConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     return ret;
 };
 
-Result UmqConnectorOps::CreateSocketResources(const SocketPtr &sock)
+Result UmqConnectorOps::CreateSocketResources(SocketPtr &sock)
 {
     /**
      * 1. 用户直接指定普通设备建链，不重试、可降级

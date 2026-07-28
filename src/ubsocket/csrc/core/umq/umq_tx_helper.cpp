@@ -10,6 +10,7 @@
 */
 
 #include "umq_tx_helper.h"
+#include "../../profiling/ubsocket_prof.h"
 #include "common/ubsocket_port_cooldown.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "profiling/trace/ubsocket_trace.h"
@@ -26,14 +27,11 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
     auto *trace = (poll_args.sock && !SplitTrace::SuppressTrace()) ? poll_args.sock->split_trace_ : nullptr;
     int raw_socket = poll_args.sock ? poll_args.sock->raw_socket_ : -1;
     umq_buf_t *buf[POLL_BATCH_MAX];
-    uint64_t umq_poll_start = 0;
-    if (trace != nullptr) {
-        umq_poll_start = ubsocket_get_timeNs_compile();
-    }
+    PROF_TRACE_TIMESTAMP(umq_poll_start);
     PROF_START(UMQ_POLL_WRITE);
     int poll_num = UmqApi::umq_poll(poll_args.umq_handle, &poll_args.poll_option, buf, POLL_BATCH_MAX);
     if (trace != nullptr) {
-        uint64_t umq_poll_end = ubsocket_get_timeNs_compile();
+        PROF_TRACE_TIMESTAMP(umq_poll_end);
         TRACE_ADD_WRITE(trace, CORE_WRITE_UMQ_POLL, raw_socket, umq_poll_start, umq_poll_end,
                         static_cast<uint32_t>(poll_num));
     }
@@ -45,13 +43,13 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
             // EMLINK indicates no available jetty; the periodic TX poll will handle this case, no error handling is needed here.
             if (errno == EMLINK) {
                 UBS_VLOG_DEBUG("[Debug] tx umq_poll() suspended: no available jetty. Queued for automatic retry, "
-                            "umq handle: %lu.\n",
-                            poll_args.umq_handle);
+                               "umq handle: %lu.\n",
+                               poll_args.umq_handle);
             } else {
                 UBS_VLOG_ERR("[UMQ_API] umq_poll() failed for TX, local umq: %llu, ret: %d, "
-                            "mapped errno: %d(%s), original errno: %d\n",
-                            static_cast<unsigned long long>(poll_args.umq_handle), poll_num, errno,
-                            UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, poll_num), savedErrno);
+                             "mapped errno: %d(%s), original errno: %d\n",
+                             static_cast<unsigned long long>(poll_args.umq_handle), poll_num, errno,
+                             UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, poll_num), savedErrno);
             }
         }
         return poll_num;
@@ -115,12 +113,12 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
             continue;
         }
         auto umq_sk = RefStaticCast<UmqSocket>(sock);
-        auto tx_ops = umq_sk->GetTx()->GetTxOps();
+        auto *tx_ops = static_cast<UmqTxOps *>(umq_sk->GetTx()->GetTxOps());
         tx_ops->tx_queue_avail_num_.fetch_add(count, std::memory_order_acq_rel);
     }
 
     if (trace != nullptr) {
-        uint64_t cqe_end = ubsocket_get_timeNs_compile();
+        PROF_TRACE_TIMESTAMP(cqe_end);
         TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE, raw_socket, cqe_start, cqe_end, 0);
     }
     return wr_cnt;
@@ -132,12 +130,11 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket
     umq_buf_t *cur_qbuf = start_qbuf;
     umq_buf_t *last_qbuf = nullptr;
     umq_buf_t *wr_first_buf;
-    uint64_t decref_start = 0;
+    PROF_TRACE_TIMESTAMP_DEFINE(decref_start);
     auto *trace = (sock && !SplitTrace::SuppressTrace()) ? sock->split_trace_ : nullptr;
-    int raw_socket = sock ? sock->raw_socket_ : -1;
     bool do_trace = (trace != nullptr && is_first_cqe);
     if (do_trace) {
-        decref_start = ubsocket_get_timeNs_compile();
+        PROF_TRACE_TIMESTAMP_ASSIGN(decref_start);
     }
     do {
         wr_first_buf = cur_qbuf;
@@ -157,7 +154,7 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket
     } while (cur_qbuf != nullptr && wr_first_buf != end_qbuf);
 
     if (do_trace) {
-        uint64_t decref_end = ubsocket_get_timeNs_compile();
+        PROF_TRACE_TIMESTAMP(decref_end);
         TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE_DECREF, raw_socket, decref_start, decref_end, 0);
     }
 

@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(HCOM_UNIT_TEST C CXX)
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 # define macro that will be used in source code
 add_compile_options(-DMOCK_VERBS -DTEST_LLT)
@@ -154,7 +154,7 @@ set(CXX_FLAGS
     -Wsign-compare
     -Wfloat-equal
     -Wextra
-    -std=c++11
+    -std=c++17
     #-fsanitize=address
     #-fno-omit-frame-pointer
     -fstack-protector-strong

@@ -25,8 +25,7 @@ bool SocketConnHelper::IsUbsConnection(const int &fd)
         UBS_VLOG_DEBUG("Current tcpi_options: 0x%x, tfo connection: %s \n", info.tcpi_options,
                        is_tfo_connection ? "true" : "false");
         return is_tfo_connection;
-    }
-    if (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::UB_SOCK_OPT) {
+    } else if (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::UB_SOCK_OPT) {
         int opt = -1;
         socklen_t len = sizeof(opt);
         if (LibcApi::getsockopt(fd, IPPROTO_TCP, TCP_UB_SOCKET_HANDSHAKE, &opt, &len) == 0) {

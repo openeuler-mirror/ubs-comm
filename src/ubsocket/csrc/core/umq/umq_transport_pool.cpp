@@ -178,8 +178,8 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
 
         UBS_VLOG_DEBUG("[1m3b] CreateOneTp before unique, num=%zu\n", used_ports.size());
         for (size_t i = 0; i < used_ports.size(); ++i) {
-            UBS_VLOG_DEBUG("[1m3b]   before[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i,
-                           used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
+            UBS_VLOG_DEBUG("[1m3b]   before[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i, used_ports[i].bs.chip_id,
+                           used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
                            static_cast<unsigned long>(used_ports[i].value));
         }
 
@@ -195,32 +195,31 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
         }
         used_ports.swap(unique_ports);
 
-        UBS_VLOG_DEBUG("[1m3b] CreateOneTp after unique, num=%zu (final order passed to umq)\n",
-                       used_ports.size());
+        UBS_VLOG_DEBUG("[1m3b] CreateOneTp after unique, num=%zu (final order passed to umq)\n", used_ports.size());
         for (size_t i = 0; i < used_ports.size(); ++i) {
-            UBS_VLOG_DEBUG("[1m3b]   final[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i,
-                           used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
+            UBS_VLOG_DEBUG("[1m3b]   final[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i, used_ports[i].bs.chip_id,
+                           used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
                            static_cast<unsigned long>(used_ports[i].value));
         }
 
         UBS_VLOG_DEBUG("CreateOneTp: used_ports.num=%zu (expect 1 main + up to 3 backup)\n", used_ports.size());
         for (size_t i = 0; i < used_ports.size(); ++i) {
-            UBS_VLOG_DEBUG("  used_ports[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i,
-                           used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx);
+            UBS_VLOG_DEBUG("  used_ports[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i, used_ports[i].bs.chip_id,
+                           used_ports[i].bs.die_id, used_ports[i].bs.port_idx);
         }
 
         tp_create_cfg.used_ports = {.port = used_ports.data(), .num = static_cast<uint8_t>(used_ports.size())};
     }
 
     // 调用创建接口，返回tp_idx
-    uint32_t tp_idx = umq_transport_pool_resource_create(main_umqh, &tp_create_cfg);
+    uint32_t tp_idx = UmqApi::umq_transport_pool_resource_create(main_umqh, &tp_create_cfg);
     if (tp_idx == UINT32_MAX) {
         return UBS_ERROR;
     }
 
     std::vector<int> &fd_vec = umq_tp_pool[main_umqh][tp_idx];
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION | UMQ_INTERRUPT_FLAG_TP_HANDLE_IDX, UMQ_IO_TX,
-                                        UMQ_FD_IO, tp_idx};
+                                        UMQ_FD_IO, tp_idx, 0};
     // optimize: 待urma支持——umq_interrupt_fd_list_t fd_list = {};
     // optimize: 待urma支持——int ret = UmqApi::umq_interrupt_fd_list_get(main_umqh, &tx_option, &fd_list);
     int fd = UmqApi::umq_interrupt_fd_get(main_umqh, &tx_option);
@@ -350,8 +349,7 @@ Result UmqTransportPool::AddTransportEpollEvent(uint64_t umq_handle)
     runner_event.event_data.type = RUNNER_EVENT_TYPE_TP_EVENT;
     runner_event.event_data.data = event_fd;
 
-    struct epoll_event event {
-    };
+    struct epoll_event event {};
     event.events = EPOLLIN | EPOLLET;
     event.data.u64 = runner_event.u64;
     UmqTpEventEpollRunnerOps::ExtContext ctx;

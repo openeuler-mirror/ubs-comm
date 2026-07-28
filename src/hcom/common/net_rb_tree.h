@@ -14,8 +14,7 @@
 
 namespace ock {
 namespace hcom {
-enum NetRbColor : uint8_t
-{
+enum NetRbColor : uint8_t {
     RB_RED,
     RB_BLACK
 };

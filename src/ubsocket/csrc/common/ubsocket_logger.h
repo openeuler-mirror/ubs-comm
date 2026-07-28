@@ -30,8 +30,7 @@ namespace ubs {
 
 using ExternalLog = void (*)(int level, const char *msg, const char *filename, int line);
 
-enum LogLevel
-{
+enum LogLevel {
     LEVEL_DEBUG = 0,
     LEVEL_INFO,
     LEVEL_NOTICE,
@@ -129,8 +128,7 @@ ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const c
 {
     static const char *levelStr[] = {"D", "I", "N", "W", "E"};
 
-    struct timeval tv {
-    };
+    struct timeval tv {};
     char strTime[24L];
 
     int ret = gettimeofday(&tv, nullptr);
@@ -139,8 +137,7 @@ ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const c
     }
 
     time_t timeStamp = tv.tv_sec;
-    struct tm localTime {
-    };
+    struct tm localTime {};
     struct tm *resultTime = localtime_r(&timeStamp, &localTime);
     if ((resultTime != nullptr) && (strftime(strTime, sizeof strTime, "%Y%m%d %H:%M:%S.", resultTime) != 0)) {
         std::cout << levelStr[level] << strTime << tv.tv_usec << PID_TID << " " << filename << ":" << line << "] "
@@ -222,6 +219,14 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
             UBS_SLOG_ERR("Assert " << #CONDITION); \
             return RETURN_VALUE;                   \
         }                                          \
+    } while (0)
+
+#define UBS_ASSERT_MSG_RETURN(CONDITION, RETURN_VALUE, MSG) \
+    do {                                                    \
+        if (UNLIKELY(!(CONDITION))) {                       \
+            UBS_SLOG_ERR(MSG);                              \
+            return RETURN_VALUE;                            \
+        }                                                   \
     } while (0)
 
 #endif // UBS_COMM_UBSOCKET_LOGGER_H

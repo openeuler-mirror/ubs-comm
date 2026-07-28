@@ -157,8 +157,7 @@ private:
 };
 class StatsMgr {
 public:
-    enum trace_stats_type
-    {
+    enum trace_stats_type {
         CONN_COUNT,
         ACTIVE_OPEN_COUNT,
         RX_PACKET_COUNT,
@@ -232,41 +231,19 @@ public:
             UBS_VLOG_ERR("Failed to create timeStamp.\n");
         }
 
-        oss << "{"
-            << "\"timeStamp\":\"" << timeBuf << "\","
-            << "\"pid\":\"" << pid << "\","
-            << "\"trafficRecords\":{";
+        oss << "{" << "\"timeStamp\":\"" << timeBuf << "\"," << "\"pid\":\"" << pid << "\"," << "\"trafficRecords\":{";
 
-        oss << "\""
-            << "totalConnections"
-            << "\":" << mConnCount.load() << ",";
-        oss << "\""
-            << "activeConnections"
-            << "\":" << mActiveConnCount.load() << ",";
-        oss << "\""
-            << "reTxCount"
-            << "\":" << mReTxCount.load() << ",";
-        oss << "\""
-            << "sendPackets"
-            << "\":" << mTxPacketCount.load() << ",";
-        oss << "\""
-            << "receivePackets"
-            << "\":" << mRxPacketCount.load() << ",";
-        oss << "\""
-            << "sendBytes"
-            << "\":" << mTxByteCount.load() << ",";
-        oss << "\""
-            << "receiveBytes"
-            << "\":" << mRxByteCount.load() << ",";
-        oss << "\""
-            << "errorPackets"
-            << "\":" << mTxErrorPacketCount.load() << ",";
-        oss << "\""
-            << "lostPackets"
-            << "\":" << mTxLostPacketCount.load() << "";
+        oss << "\"" << "totalConnections" << "\":" << mConnCount.load() << ",";
+        oss << "\"" << "activeConnections" << "\":" << mActiveConnCount.load() << ",";
+        oss << "\"" << "reTxCount" << "\":" << mReTxCount.load() << ",";
+        oss << "\"" << "sendPackets" << "\":" << mTxPacketCount.load() << ",";
+        oss << "\"" << "receivePackets" << "\":" << mRxPacketCount.load() << ",";
+        oss << "\"" << "sendBytes" << "\":" << mTxByteCount.load() << ",";
+        oss << "\"" << "receiveBytes" << "\":" << mRxByteCount.load() << ",";
+        oss << "\"" << "errorPackets" << "\":" << mTxErrorPacketCount.load() << ",";
+        oss << "\"" << "lostPackets" << "\":" << mTxLostPacketCount.load() << "";
 
-        oss << "}"
-            << "}";
+        oss << "}" << "}";
     }
 
     static void UpdateReTxCount(umq_trans_mode_t umq_trans_mode);

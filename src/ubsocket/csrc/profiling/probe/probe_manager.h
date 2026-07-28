@@ -28,14 +28,19 @@
 #include "core/umq/umq_setting.h"
 #include "core/umq/umq_socket.h"
 
-#include "umq_api.h"
-#include "umq_dfx_api.h"
-#include "umq_pro_api.h"
-#include "umq_pro_types.h"
-#include "umq_types.h"
+#include "under_api/dl_umq_api.h"
+
+// #include "umq_api.h"
+// #include "umq_dfx_api.h"
+// #include "umq_pro_api.h"
+// #include "umq_pro_types.h"
+// #include "umq_types.h"
 
 using ock::ubs::ArraySet;
+using ock::ubs::ReadLocker;
 using ock::ubs::Socket;
+using ock::ubs::SocketPtr;
+using ock::ubs::UmqApi;
 using ock::ubs::umq::UmqSetting;
 using ock::ubs::umq::UmqSocket;
 
@@ -47,15 +52,13 @@ static constexpr uint64_t PROBE_SEM_MS_TO_NS = 1000000ULL;
 static constexpr uint64_t PROBE_SEM_S_TO_NS = 1000000000ULL;
 
 // --- 探测类型枚举 ---
-enum ProbeType
-{
+enum ProbeType {
     PROBE_TYPE_REQUEST = 1, // 请求包
     PROBE_TYPE_RESPONSE = 2 // 响应包
 };
 
 // --- 更新掩码定义 ---
-enum ProbeUpdateMask
-{
+enum ProbeUpdateMask {
     MASK_NONE = 0x00,
     MASK_CLIENT_SEND = 0x01,
     MASK_CLIENT_RSP = 0x02,
@@ -176,7 +179,7 @@ public:
     void RegisterUmqCallbacks()
     {
         // 调用 umq 官方接口注册回调
-        int ret = umq_io_perf_callback_register(&ProbeManager::UmqPerfCallback);
+        int ret = UmqApi::umq_io_perf_callback_register(&ProbeManager::UmqPerfCallback);
         if (ret != 0) {
             UBS_VLOG_ERR("Failed to register umq perf callback, ret: %d\n", ret);
         } else {
@@ -266,7 +269,7 @@ public:
             payloadSize = sizeof(ProbeTimeInfo);
         }
 
-        umq_buf_t *buf = umq_buf_alloc(payloadSize, 1, UMQ_INVALID_HANDLE, nullptr);
+        umq_buf_t *buf = UmqApi::umq_buf_alloc(payloadSize, 1, UMQ_INVALID_HANDLE, nullptr);
         if (buf == nullptr) {
             UBS_VLOG_ERR("Failed to allocate probe buffer\n");
             return -1;
@@ -303,9 +306,9 @@ public:
         UpdateBuffer(probeInfo, MASK_CLIENT_SEND);
         umq_io_option_t option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
-        int ret = umq_post(umqh, buf, &option, &bad_qbuf);
+        int ret = UmqApi::umq_post(umqh, buf, &option, &bad_qbuf);
         if (ret != 0) {
-            umq_buf_free(buf);
+            UmqApi::umq_buf_free(buf);
             return -1;
         }
         // 如果成功调用后，poll tx在brpc业务writev的时候执行，poll到buf直接释放
@@ -322,7 +325,7 @@ public:
             payloadSize = sizeof(ProbeTimeInfo);
         }
 
-        umq_buf_t *buf = umq_buf_alloc(payloadSize, 1, UMQ_INVALID_HANDLE, nullptr);
+        umq_buf_t *buf = UmqApi::umq_buf_alloc(payloadSize, 1, UMQ_INVALID_HANDLE, nullptr);
         if (buf == nullptr)
             return -1;
 
@@ -345,10 +348,10 @@ public:
         umq_buf_t *bad_qbuf = nullptr;
         umq_io_option_t option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
                                   UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
-        int ret = umq_post(sockObj->UmqHandle(), buf, &option, &bad_qbuf);
+        int ret = UmqApi::umq_post(sockObj->UmqHandle(), buf, &option, &bad_qbuf);
         if (ret != 0) {
             UBS_VLOG_ERR("Failed to Send Probe Packet\n");
-            umq_buf_free(buf);
+            UmqApi::umq_buf_free(buf);
             return -1;
         }
         return 0;

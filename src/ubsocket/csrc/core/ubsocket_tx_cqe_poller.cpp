@@ -18,6 +18,7 @@
 #include "common/ubsocket_lock.h"
 #include "common/ubsocket_logger.h"
 #include "common/ubsocket_scope_exit.h"
+#include "core/umq/umq_data_tx_ops.h"
 #include "ubsocket_data_tx.h"
 #include "ubsocket_socket.h"
 
@@ -211,7 +212,7 @@ void TxCqePoller::RunInThread() noexcept
                     // TODO dynamic_cast -> static_cast
                     auto sockBase = RefDynamicCast<SocketBase>(sock);
                     if (sockBase != nullptr) {
-                        DataTxOps *txOps = sockBase->GetTx()->GetTxOps();
+                        auto *txOps = static_cast<umq::UmqTxOps *>(sockBase->GetTx()->GetTxOps());
                         if (txOps != nullptr) {
                             txOps->PollTx(sock.Get());
                         }

@@ -15,6 +15,7 @@
 
 #include "ubsocket_lock.h"
 #include "ubsocket_logger.h"
+#include "under_api/dl_umq_api.h"
 
 namespace ock {
 namespace ubs {
@@ -221,7 +222,7 @@ Result LockRegistry::RegisterLockOps(u_external_lock_ops_t *ops)
         .lock = (int (*)(umq_external_mutex_t *))ops->lock,
         .unlock = (int (*)(umq_external_mutex_t *))ops->unlock,
         .trylock = (int (*)(umq_external_mutex_t *))ops->try_lock};
-    return umq_external_mutex_lock_ops_register(&umq_mutex_ops);
+    return UmqApi::umq_external_mutex_lock_ops_register(&umq_mutex_ops);
 }
 
 Result LockRegistry::RegisterRwLockOps(u_external_rw_lock_ops_t *ops)
@@ -240,7 +241,7 @@ Result LockRegistry::RegisterRwLockOps(u_external_rw_lock_ops_t *ops)
                                                .unlock = (int (*)(umq_external_rwlock_t *))ops->unlock_rw,
                                                .try_read_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_read,
                                                .try_write_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_write};
-    return umq_external_rwlock_ops_register(&umq_rwlock_ops);
+    return UmqApi::umq_external_rwlock_ops_register(&umq_rwlock_ops);
 }
 
 Result LockRegistry::RegisterSemOps(u_external_semaphore_ops_t *ops)

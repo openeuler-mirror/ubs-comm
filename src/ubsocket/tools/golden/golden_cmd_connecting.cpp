@@ -80,7 +80,7 @@ int SubCommandConnecting::DoExecuteUrma() noexcept
 #ifdef URMA_BACKEND_ENABLED
     using namespace ock::ubs;
     using namespace ock::ubs::urma;
-    auto result = Urma::Init();
+    auto result = UrmaBackend::Init();
     if (result != 0) {
         std::cout << "Init urma backend failed" << std::endl;
         return -1;
@@ -333,8 +333,7 @@ int UrmaServer::Run() noexcept
     socket_listen_fd_ = fd;
 
     int opt = 1;
-    struct sockaddr_in address {
-    };
+    struct sockaddr_in address {};
     setsockopt(socket_listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     setsockopt(socket_listen_fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
@@ -355,8 +354,8 @@ int UrmaServer::Run() noexcept
     /* step3: accept clients */
     std::cout << "Waiting for client to connect, please run following cmd for client:" << std::endl;
     std::cout << "  golden conn --role=client --protocol=" << cmd_.protocol_ << " --ip=" << cmd_.ip_
-              << " --port=" << cmd_.port_ << " --thread-count=8 --device-eid-index=0"
-              << " --device-name=..." << std::endl;
+              << " --port=" << cmd_.port_ << " --thread-count=8 --device-eid-index=0" << " --device-name=..."
+              << std::endl;
 
     uint32_t client_max = 8192;
     std::cout
@@ -366,8 +365,7 @@ int UrmaServer::Run() noexcept
 
     uint32_t accepted_count = 0;
     while (client_max-- > 0) {
-        struct sockaddr_in client_address {
-        };
+        struct sockaddr_in client_address {};
         socklen_t addr_len = sizeof(address);
         auto client_fd = accept(socket_listen_fd_, (struct sockaddr *)&client_address, &addr_len);
 

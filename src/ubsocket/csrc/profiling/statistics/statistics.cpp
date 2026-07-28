@@ -71,7 +71,7 @@ void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode
     // umq_stats_tp_perf_info_get 不支持多次 get, 待后续完善
     char perfBuf[4096] = {};
     uint32_t perfLen = sizeof(perfBuf);
-    ret = umq_stats_tp_perf_info_get(umq_trans_mode, perfBuf, &perfLen);
+    ret = UmqApi::umq_stats_tp_perf_info_get(umq_trans_mode, perfBuf, &perfLen);
     if (ret == 0 && perfLen > 0) {
         uint64_t retryCount = 0;
         if (TryGetRetryCount(perfBuf, perfLen, retryCount)) {

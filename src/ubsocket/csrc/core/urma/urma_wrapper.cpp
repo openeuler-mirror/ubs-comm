@@ -63,7 +63,7 @@ void UrmaDevice::Init() noexcept
             }
 
             ALL_DEVICES.emplace(dev->name, new_dev);
-#ifdef ENABLED
+
             /* get eids */
             uint32_t eid_count = 0;
             auto eid_list = UrmaApi::urma_get_eid_list(dev, &eid_count);
@@ -76,7 +76,9 @@ void UrmaDevice::Init() noexcept
                 auto eid = eid_list[j];
                 new_dev->eid_list_.push_back(eid);
             }
-#endif
+
+            UrmaApi::urma_free_eid_list(eid_list);
+
         } else {
             UBS_VLOG_ERR("[URMA_API] urma_query_device() failed, errno %d", errno);
         }
@@ -148,10 +150,12 @@ std::string UrmaDevice::ToString(bool whole, const std::string &prefix, const st
         oss << prefix << std::left << std::setw(width) << "max write: " << attributes_.dev_cap.max_write_size
             << seperator;
 
+        oss << prefix << std::left << std::setw(width) << "eid count: " << eid_list_.size() << seperator;
+        char tmp_buf[128]{};
         uint32_t eid_index = 0;
         for (auto &eid : eid_list_) {
-            oss << prefix << std::left << std::setw(width) << "eid  " << eid_index++ << ": " << eid.eid.raw
-                << seperator;
+            sprintf(tmp_buf, EID_FMT, EID_ARGS(eid.eid));
+            oss << prefix << std::left << std::setw(width) << " - eid " << eid_index++ << ": " << tmp_buf << seperator;
         }
     }
 
@@ -165,6 +169,19 @@ std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> UrmaContext::ALL_CONT
 std::mutex UrmaContext::ALL_CONTEXTS_MUTEX;
 std::atomic<uint32_t> UrmaContext::AUTO_INCREASE_JETTY_ID(0);
 
+Result UrmaContext::LookupContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out)
+{
+    auto tmp_key = std::pair<std::string, uint32_t>(devName, eidIndex);
+    std::lock_guard<std::mutex> guard(ALL_CONTEXTS_MUTEX);
+    auto context_iter = ALL_CONTEXTS.find(tmp_key);
+    if (context_iter != ALL_CONTEXTS.end()) {
+        out = context_iter->second;
+        return UBS_OK;
+    }
+
+    return UBS_ERROR;
+}
+
 Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out)
 {
     UBS_VLOG_DEBUG("enter dev=%s eid index=%d", devName.c_str(), eidIndex);
@@ -173,23 +190,21 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
         return UBS_INVALID_PARAM;
     }
 
-    /* double confirm uarm device is initialized */
+    /* double confirm urma device is initialized */
     UrmaDevice::Init();
 
-    /* step1: loop cache device with name */
+    /* find target device name and object */
     std::string target_dev_name;
     UrmaDevicePtr target_dev;
     auto devices = UrmaDevice::AllDevices();
     for (auto &iter : devices) {
         if (iter.first.find(devName) != std::string::npos) {
-            /* use the first matched dev */
             target_dev_name = iter.first;
             target_dev = iter.second;
             break;
         }
     }
 
-    /* step2: check if there is any right dev */
     if (target_dev_name.empty()) {
         UBS_VLOG_ERR("Not found device name matched '%s'", devName.c_str());
         return UBS_INVALID_PARAM;
@@ -197,17 +212,12 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
 
     UBS_VLOG_DEBUG("found device %s", target_dev_name.c_str());
 
-    /* step3: find context from previously created context, return if found */
-    auto tmp_key = std::pair<std::string, uint32_t>(target_dev_name, eidIndex);
-    /* take mutex */
-    std::lock_guard<std::mutex> guard(ALL_CONTEXTS_MUTEX);
-    auto context_iter = ALL_CONTEXTS.find(tmp_key);
-    if (context_iter != ALL_CONTEXTS.end()) {
-        out = context_iter->second;
+    /* try lookup first, return if already created */
+    if (LookupContext(target_dev_name, eidIndex, out) == UBS_OK) {
         return UBS_OK;
     }
 
-    /* step4: no previously created context, create one and put into all contexts */
+    /* not found, need to create a new one */
     auto raw_dev = UrmaApi::urma_get_device_by_name(const_cast<char *>(target_dev_name.c_str()));
     if (raw_dev == nullptr) {
         UBS_VLOG_ERR("[URMA_API] urma_get_device_by_name() failed for '%s', errno: %d", target_dev_name.c_str(), errno);
@@ -230,14 +240,22 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
         return UBS_UB_DEV_ERROR;
     }
 
-    if (eidIndex >= eid_count) {
+    urma_eid_info_t *matched_eid_info = nullptr;
+    for (uint32_t i = 0; i < eid_count; i++) {
+        if (eid_list[i].eid_index == eidIndex) {
+            matched_eid_info = &eid_list[i];
+            break;
+        }
+    }
+
+    if (matched_eid_info == nullptr) {
         UrmaApi::urma_free_eid_list(eid_list);
         UrmaApi::urma_delete_context(raw_context);
-        UBS_VLOG_ERR("Eid index %d is out of range, eid count is %d", eidIndex, eid_count);
+        UBS_VLOG_ERR("Eid index %d not found in eid list (eid count is %d)", eidIndex, eid_count);
         return UBS_UB_DEV_ERROR;
     }
 
-    auto eid_info = eid_list[eidIndex];
+    auto eid_info = *matched_eid_info;
 
     /* step6: create our context */
     auto tmp_context = MakeRef<UrmaContext>(raw_context, target_dev, eid_info);
@@ -250,6 +268,7 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
     }
 
     /* step7: insert into all context */
+    auto tmp_key = std::pair<std::string, uint32_t>(target_dev_name, eidIndex);
     ALL_CONTEXTS.emplace(tmp_key, tmp_context);
 
     /* step8: assign to out */
@@ -654,7 +673,7 @@ Result UrmaJetty::ImportRemoteJetty(urma_jetty_id_t &jettyId, uint32_t &token) n
     remote_jetty.type = URMA_JETTY;
     remote_jetty.trans_mode = raw_jetty_->jetty_cfg.jfs_cfg.trans_mode;
     remote_jetty.jetty_id = jettyId;
-    remote_jetty.trans_mode = raw_jetty_->jetty_cfg.jfs_cfg.trans_mode;
+
     urma_token_t raw_token{token};
     if (token != 0) {
         remote_jetty.flag.bs.token_policy = URMA_TOKEN_POLICY_PLAIN_TEXT;

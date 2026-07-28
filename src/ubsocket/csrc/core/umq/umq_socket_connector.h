@@ -30,7 +30,7 @@ public:
     Result PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
                           const SocketPtr &sock) override;
     Result Negotiate(int new_fd, const SocketPtr &sock) override;
-    Result CreateSocketResources(const SocketPtr &sock) override;
+    Result CreateSocketResources(SocketPtr &sock) override;
     void DestroySocketResources() override;
 
     struct UmqConnInfo : public ConnInfo {
@@ -40,6 +40,9 @@ public:
         umq_eid_t conn_eid{};         // 本端 EID
     };
     UmqConnInfo umq_conn_info_;
+
+protected:
+    Result BuildTfoPayload(uint8_t *buf, int &buf_len, const SocketPtr &sock) override;
 
 private:
     // ======================== 建链辅助方法 ========================
@@ -72,8 +75,6 @@ private:
     // non_aff_routes: 输出参数，非亲和组路由（src/dst 为异芯片）
     Result GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std::vector<umq_route_t> &affine_routes,
                                   std::vector<umq_route_t> &non_aff_routes);
-    Result ConnectViaHandshakeOpt(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
-    Result ConnectViaTfo(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     void PrintSocketsInfo();
 
     // ======================== 成员变量 ===========================

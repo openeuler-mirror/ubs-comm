@@ -67,6 +67,19 @@ DL_API_DEFINE(UmqApi, umq_stats_tp_perf_info_get);
 DL_API_DEFINE(UmqApi, umq_stats_trace_start);
 DL_API_DEFINE(UmqApi, umq_stats_trace_stop);
 
+DL_API_DEFINE(UmqApi, umq_info_get);
+DL_API_DEFINE(UmqApi, umq_transport_pool_resource_create);
+DL_API_DEFINE(UmqApi, umq_transport_pool_resource_create_ext);
+DL_API_DEFINE(UmqApi, umq_transport_pool_resource_destroy);
+DL_API_DEFINE(UmqApi, umq_transport_pool_resource_modify);
+DL_API_DEFINE(UmqApi, umq_transport_pool_eventfd_get);
+DL_API_DEFINE(UmqApi, umq_interrupt_fd_list_get);
+DL_API_DEFINE(UmqApi, umq_stats_io_get);
+DL_API_DEFINE(UmqApi, umq_stats_transport_pool_get);
+DL_API_DEFINE(UmqApi, umq_stats_flow_control_get);
+DL_API_DEFINE(UmqApi, umq_stats_qbuf_pool_get);
+DL_API_DEFINE(UmqApi, umq_io_perf_callback_register);
+
 std::mutex UmqApi::LOAD_MUTEX;
 bool UmqApi::LOADED = false;
 
@@ -137,6 +150,19 @@ Result UmqApi::Load() noexcept
     DL_API_LOAD(umq_stats_tp_perf_info_get);
     DL_API_LOAD(umq_stats_trace_start);
     DL_API_LOAD(umq_stats_trace_stop);
+
+    DL_API_LOAD(umq_info_get);
+    DL_API_LOAD(umq_transport_pool_resource_create);
+    DL_API_LOAD(umq_transport_pool_resource_create_ext);
+    DL_API_LOAD(umq_transport_pool_resource_destroy);
+    DL_API_LOAD(umq_transport_pool_resource_modify);
+    DL_API_LOAD(umq_transport_pool_eventfd_get);
+    DL_API_LOAD(umq_interrupt_fd_list_get);
+    DL_API_LOAD(umq_stats_io_get);
+    DL_API_LOAD(umq_stats_transport_pool_get);
+    DL_API_LOAD(umq_stats_flow_control_get);
+    DL_API_LOAD(umq_stats_qbuf_pool_get);
+    DL_API_LOAD(umq_io_perf_callback_register);
 
     /* step3: close handle */
     dlclose(handle);
@@ -209,6 +235,19 @@ void UmqApi::UnLoadInner() noexcept
     DL_API_SET_NULL(umq_stats_tp_perf_start);
     DL_API_SET_NULL(umq_stats_tp_perf_stop);
     DL_API_SET_NULL(umq_stats_tp_perf_info_get);
+
+    DL_API_SET_NULL(umq_info_get);
+    DL_API_SET_NULL(umq_transport_pool_resource_create);
+    DL_API_SET_NULL(umq_transport_pool_resource_create_ext);
+    DL_API_SET_NULL(umq_transport_pool_resource_destroy);
+    DL_API_SET_NULL(umq_transport_pool_resource_modify);
+    DL_API_SET_NULL(umq_transport_pool_eventfd_get);
+    DL_API_SET_NULL(umq_interrupt_fd_list_get);
+    DL_API_SET_NULL(umq_stats_io_get);
+    DL_API_SET_NULL(umq_stats_transport_pool_get);
+    DL_API_SET_NULL(umq_stats_flow_control_get);
+    DL_API_SET_NULL(umq_stats_qbuf_pool_get);
+    DL_API_SET_NULL(umq_io_perf_callback_register);
 }
 } // namespace ubs
 } // namespace ock

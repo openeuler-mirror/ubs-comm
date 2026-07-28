@@ -17,8 +17,7 @@
 
 namespace ock {
 namespace ubs {
-enum SocketState : uint8_t
-{
+enum SocketState : uint8_t {
     SOCK_STAT_INIT = 0,        /* init */
     SOCK_STAT_RAW_ESTABLISHED, /* the raw socket established */
     SOCK_STAT_ESTABLISHED,     /* all things established */
@@ -28,16 +27,15 @@ enum SocketState : uint8_t
     SOCK_STATE_COUNT
 };
 
-enum class SocketType : uint8_t
-{
+enum class SocketType : uint8_t {
     SOCK_TYPE_TCP = 0, /* only contains raw socket */
     SOCK_TYPE_UMQ,     /* an ubsocket based on umq */
     SOCK_TYPE_SHM,     /* an ubsocket based on shm */
+    SOCK_TYPE_URMA,    /* an ubsocket based on urma */
     SOCK_TYPE_COUNT    /* add type before COUNT */
 };
 
-enum SocketCreateType : uint8_t
-{
+enum SocketCreateType : uint8_t {
     SOCK_CREATE_TYPE_UNKNOWN = 0, /* unknown */
     SOCK_CREATE_TYPE_LISTEN,      /* created because of listen */
     SOCK_CREATE_TYPE_CONNECT,     /* created because of connect */
@@ -46,8 +44,7 @@ enum SocketCreateType : uint8_t
     SOCK_CREATE_TYPE_COUNT
 };
 
-enum class EpollRunnerType : uint8_t
-{
+enum class EpollRunnerType : uint8_t {
     SHARE_JFR_RX_RUNNER = 0,     /* Share JFR Rx Epoll Runner */
     TRANSPORT_POOL_TX_RUNNER,    /* Transport Pool Tx Epoll Runner */
     TRANSPORT_POOL_EVENT_RUNNER, /* Transport Pool Event Epoll Runner */
@@ -64,7 +61,7 @@ public:
             return;
         }
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
-            split_trace_ = new SplitTrace();
+            split_trace_ = new (std::nothrow) SplitTrace();
         }
     }
     virtual ~Socket()
@@ -76,47 +73,59 @@ public:
         }
     }
 
-    ALWAYS_INLINE SocketState State() const noexcept
-    {
-        return state_;
-    }
+    /**
+     * Get and set socket state
+     */
+    SocketState State() const noexcept;
+    void State(const SocketState state) noexcept;
 
-    void State(SocketState state)
-    {
-        state_ = state;
-        if (state == SOCK_STAT_CLOSE) {
-            TRACE_FLUSH(split_trace_);
-        }
-    }
+    /**
+     * Get the socket type tcp, urma, etc
+     */
+    SocketType Type() const noexcept;
 
-    SocketType Type() const noexcept
-    {
-        return type_;
-    }
-
-    int Fd() const noexcept
-    {
-        return raw_socket_;
-    }
+    /**
+     * Get the raw fd
+     */
+    int Fd() const noexcept;
 
 public:
-    virtual int GetTxFd() = 0;
     virtual bool IsBindRemote() = 0;
-    virtual Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) = 0;
-    virtual Result DelTxEvent(const SocketPtr &sock, int epoll_fd) = 0;
-    virtual bool ShouldRegisterTxEvent() = 0;
-    virtual Result ProcessEpollEvent(struct epoll_event &event) = 0;
+
     DEFINE_REF_OPERATION_FUNC
 
 public:
     DECLARE_REF_COUNT_VARIABLE;                               /* ref count int16_t */
-    int raw_socket_ = -1;                                     /* fd of raw socket */
-    int event_fd_ = -1;                                       /* event fd */
     SocketState state_ = SOCK_STAT_INIT;                      /* state of ubsocket */
     SocketType type_ = SocketType::SOCK_TYPE_TCP;             /* type of ubsocket */
     SocketCreateType create_type_ = SOCK_CREATE_TYPE_UNKNOWN; /* created because of what */
+    int raw_socket_ = -1;                                     /* fd of raw socket */
+    int event_fd_ = -1;                                       /* event fd */
     SplitTrace *split_trace_ = nullptr;
 };
+
+ALWAYS_INLINE SocketState Socket::State() const noexcept
+{
+    return state_;
+}
+
+ALWAYS_INLINE SocketType Socket::Type() const noexcept
+{
+    return type_;
+}
+
+ALWAYS_INLINE void Socket::State(const SocketState state) noexcept
+{
+    state_ = state;
+    if (state == SOCK_STAT_CLOSE) {
+        TRACE_FLUSH(split_trace_);
+    }
+}
+
+ALWAYS_INLINE int Socket::Fd() const noexcept
+{
+    return raw_socket_;
+}
 
 struct ConnInfo {
     std::string peer_ip; // 对端IP地址
@@ -139,7 +148,7 @@ struct AsyncAcceptInfo {
     u_mutex_t *lock = nullptr;
 };
 
-const std::string &SocketStateToStr(SocketState value);
+const std::string &SocketStateToStr(const SocketState value);
 const std::string &SocketTypeToStr(SocketType value);
 const std::string &SocketCreateTypeToStr(SocketCreateType value);
 bool SocketStateValid(SocketState value);

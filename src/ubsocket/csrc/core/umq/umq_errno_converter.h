@@ -41,8 +41,7 @@ namespace umq {
  *    - CREATE(umq_create): 仅透传EINVAL/EPERM，其余EIO
  *    - BIND_INFO_GET(umq_bind_info_get/umq_dev_info_list_get): 仅透传ENOMEM/EINVAL，其余EIO
  */
-enum class UmqOperation
-{
+enum class UmqOperation {
     CONNECT,
     ACCEPT,
     WRITEV,

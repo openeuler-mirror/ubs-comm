@@ -12,6 +12,7 @@
 #include "umq_data_rx_ops.h"
 #include "common/ubsocket_common_includes.h"
 #include "profiling/probe/probe_manager.h"
+#include "profiling/ubsocket_prof.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
 #include "umq_tp_wait_queue.h"
@@ -205,7 +206,7 @@ uint32_t UmqRxOps::HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf)
 
 int UmqRxOps::GetAndAckEvent()
 {
-    umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO, 0, 0};
     PROF_START(UMQ_GET_CQ_EVENT);
     int events = UmqApi::umq_get_cq_event(local_umqh_, &option);
     if (events == 0) {
@@ -336,7 +337,7 @@ int UmqRxOps::RearmRxInterrupt()
     }
     PROF_START(CORE_READ_REARM);
     umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO,
-                                        UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
+                                        UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX, 0};
     int ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &rx_option);
     if (ret < 0) {
         int savedErrno = errno;
@@ -367,13 +368,13 @@ bool UmqRxOps::PollSubUmqRx(umq_buf_t *buf[], int i) const
     return pollRxSuccess;
 }
 
-void UmqRxOps::FlushRx(Socket *sock, uint32_t timeout_ms)
+void UmqRxOps::FlushRx(const SocketPtr &sock, uint32_t timeout_ms)
 {
     block_cache_.Flush();
     if (rx_queue_avail_num_ <= 0) {
         return;
     }
-    auto *umq_socket = static_cast<UmqSocket *>(sock);
+    auto *umq_socket = static_cast<UmqSocket *>(sock.Get());
     umq_buf_t *buf[POLL_BATCH_MAX];
     uint32_t poll_total_cnt = 0;
     int poll_cnt = 0;
@@ -414,6 +415,123 @@ void UmqRxOps::FlushRx(Socket *sock, uint32_t timeout_ms)
     if ((rx_queue_avail_num_ -= poll_total_cnt) > 0) {
         UBS_VLOG_DEBUG("Failed to flush umq(RX), leak %u piece(s) of buffer\n", rx_queue_avail_num_);
     }
+}
+
+ssize_t UmqRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags)
+{
+    (void)flags;
+
+    PROF_START(CORE_READ);
+    PROF_START(CORE_READ_EAGAIN);
+
+    auto *trace = sock->split_trace_;
+
+    PROF_START(CORE_READ_POLL_RX);
+    PROF_TRACE_TIMESTAMP(start_time);
+    int ret = PollRx(sock);
+    PROF_TRACE_TIMESTAMP(end_time);
+    PROF_END(CORE_READ_POLL_RX, ret >= 0);
+    TRACE_ADD_READ(trace, CORE_READ_POLL_RX, fd_, start_time, end_time);
+
+    if (ret < 0) {
+        TRACE_ADD_READ(trace, CORE_READ, fd_, ubsocket_get_timeNs_compile(), 0);
+        PROF_END(CORE_READ, false);
+        return ret;
+    }
+
+    uint32_t max_buf_size;
+    if (GlobalSetting::UBS_READV_UNLIMITED) {
+        max_buf_size = UINT32_MAX;
+    } else {
+        max_buf_size = 0;
+        for (int i = 0; i < iovcnt; i++) {
+            max_buf_size += iov[i].iov_len;
+        }
+    }
+
+    PROF_TRACE_TIMESTAMP(data_set_start_time);
+    ret = RxDataSet(iov[0].iov_base, max_buf_size);
+    PROF_TRACE_TIMESTAMP(data_set_end_time);
+    TRACE_ADD_READ(trace, CORE_READ_RX_DATA_SET, fd_, data_set_start_time, data_set_end_time);
+
+    if (ret < 0) {
+        if (!((errno == EINTR) || (errno == EAGAIN))) {
+            PROF_END(CORE_READ, false);
+            TRACE_ADD_READ(trace, CORE_READ, fd_, ubsocket_get_timeNs_compile(), 0);
+        } else {
+            PROF_END(CORE_READ_EAGAIN, true);
+            TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, ubsocket_get_timeNs_compile(), 0);
+        }
+        return ret;
+    }
+    ssize_t rx_total_len = ret;
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
+    }
+    TRACE_ADD_READ(trace, CORE_READ, fd_, ubsocket_get_timeNs_compile(), 0);
+    PROF_END(CORE_READ, true);
+    TRACE_TRY_SWAP(trace);
+    return rx_total_len;
+}
+
+ssize_t UmqRxOps::RxDataSet(void *buf, uint32_t size)
+{
+    /*
+     * rpc adapter has replace brpc butil::iobuf::blockmem_allocate() & butil::iof::blockmem_deallocate()
+     * and ensures that the starting address of the Block is aligned to an 8k boundary.
+     */
+    Block *out_first_block = DataToBlock(buf);
+    ssize_t rx_total_len = block_cache_.CutAndInsertAfter(size, out_first_block);
+    if (rx_total_len == 0) {
+        if (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0, std::memory_order_release,
+                                                      std::memory_order_acquire)) {
+            poll_ = true;
+            errno = EINTR;
+            return UBS_ERROR;
+        }
+        if (ArraySet<Socket>::GetInstance().GetItem(fd_)->State() == SOCK_STAT_CLOSE) {
+            return 0;
+        }
+
+        if (flow_control_failed_) {
+            errno = EIO;
+            UBS_VLOG_ERR("ReadV flow control failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                         Func::Error2Str(errno));
+            return UBS_ERROR;
+        }
+
+        if (RearmRxInterrupt() < 0) {
+            errno = EIO;
+            UBS_VLOG_ERR("ReadV RearmRxInterrupt() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                         Func::Error2Str(errno));
+            return UBS_ERROR;
+        }
+
+        char b[1];
+        int n = LibcApi::recv(fd_, b, sizeof(b), MSG_PEEK | MSG_DONTWAIT);
+        if (n == 0) {
+            UBS_VLOG_INFO("The TCP connection has been closed by peer.\n");
+            auto trace_sock = ArraySet<Socket>::GetInstance().GetItem(fd_);
+            if (trace_sock != nullptr) {
+                TRACE_FLUSH(trace_sock->split_trace_);
+            }
+            return 0;
+        }
+
+        errno = EAGAIN;
+        return UBS_ERROR;
+    }
+
+    out_first_block->size = out_first_block->cap;
+    return rx_total_len;
+}
+
+Result UmqRxOps::TriggerPollIn(const SocketPtr &sock, uint32_t flags)
+{
+    (void)sock;
+    (void)flags;
+    return UBS_OK;
 }
 
 } // namespace umq

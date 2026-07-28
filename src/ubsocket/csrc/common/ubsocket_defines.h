@@ -40,15 +40,13 @@ using Result = int32_t;
 
 #define RPC_ADPT_FD_MAX (8192)
 
-enum dev_schedule_policy
-{
+enum dev_schedule_policy {
     ROUND_ROBIN = 1,
     CPU_AFFINITY = 2,
     CPU_AFFINITY_PRIORITY = 3,
 };
 
-enum ub_trans_mode
-{
+enum ub_trans_mode {
     RC_TP,
     RM_TP,
     RM_CTP,
@@ -56,8 +54,7 @@ enum ub_trans_mode
 };
 
 // 描述在 Connect/Accept 间的握手状态
-enum class UBHandshakeState : uint32_t
-{
+enum class UBHandshakeState : uint32_t {
     kOK = 0,
     // 初次握手
     kSTART = 1,
@@ -71,21 +68,18 @@ enum class UBHandshakeState : uint32_t
     kFAILED = 6,
 };
 
-enum ops_error_code
-{
+enum ops_error_code {
     OK,
     NORMAL_ERROR,
     FATAL_ERROR
 };
 
-enum class UBHandshakeMode : uint32_t
-{
+enum class UBHandshakeMode : uint32_t {
     TFO,
     UB_SOCK_OPT
 };
 
-typedef enum pool_type : uint8_t
-{
+typedef enum pool_type : uint8_t {
     SINGLE,
     POOL
 } pool_type_t;
@@ -95,15 +89,13 @@ typedef enum pool_type : uint8_t
 /// | `BONDING_BACKUP` | 指定 bonding 设备，且 `backup_link=true`    | 通过 bonding 设备通信，bonding 本身提供主备冗余       |
 /// | `BONDING_ROUTE`  | 指定 bonding 设备，但是 `backup_link=false` | 通过 bonding 设备获取裸设备路由信息，实际数据走裸设备 |
 /// | `RAW_DEVICE`     | 指定裸设备                                  | 完全不依赖 bonding 设备，直接通过裸设备通信           |
-enum class LinkSelectionPolicy : uint8_t
-{
+enum class LinkSelectionPolicy : uint8_t {
     BONDING_BACKUP = 0,
     BONDING_ROUTE,
     RAW_DEVICE,
 };
 
-enum class SplitTraceLevel : uint8_t
-{
+enum class SplitTraceLevel : uint8_t {
     LEVEL_NONE = 0,
     LEVEL_UBSOCKET = 1 << 0, // 0x01
     LEVEL_UMQ = 1 << 1,      // 0x02
@@ -166,11 +158,15 @@ constexpr uint32_t FLUSH_TIMEOUT_MS = 200;
 constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 200000;
 constexpr uint64_t UMQ_MEM_MIN_EXPAND_SIZE_MB = 64;
 
+constexpr uint64_t SIZE_1K = 1024;
 constexpr uint64_t SIZE_4K = 4096;
 constexpr uint64_t SIZE_8K = 8192;
 constexpr uint64_t SIZE_16K = 16384;
 constexpr uint64_t SIZE_32K = 32768;
 constexpr uint64_t SIZE_64K = 65536;
+constexpr uint64_t SIZE_1M = 1048576;
+constexpr uint64_t SIZE_1G = 1073741824;
+constexpr uint64_t SIZE_1T = 1099511627776;
 constexpr uint64_t MASK_DIFF = 1;
 constexpr uint64_t IOBUF_DIFF = 32;
 constexpr uint16_t REFILL_THRESHOLD = 32;

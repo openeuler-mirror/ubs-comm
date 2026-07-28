@@ -16,6 +16,7 @@
 #include "ubsocket_socket.h"
 #include "ubsocket_tx_cqe_poller.h"
 #include "umq/umq_share_jfr_epoll_runner_ops.h"
+#include "umq/umq_socket.h"
 #include "umq/umq_tp_event_epoll_runner_ops.h"
 #include "umq/umq_tp_tx_epoll_runner_ops.h"
 
@@ -207,8 +208,7 @@ int EpollRunner<T>::Start()
         }
 
         RunnerEventData event_data{};
-        struct epoll_event event {
-        };
+        struct epoll_event event {};
         event.events = EPOLLIN | EPOLLET;
         event_data.event_data.type = RUNNER_EVENT_TYPE_STOP;
         event_data.event_data.data = exit_efd_;
@@ -400,8 +400,7 @@ int AsyncEventPoll::AddSockReadableEvent()
         return -1;
     }
 
-    struct epoll_event event {
-    };
+    struct epoll_event event {};
     event.events = EPOLLIN | EPOLLET;
     event.data.ptr = &sock_readable_event_;
     sock_readable_event_.socket_fd = fd;
@@ -551,7 +550,8 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
 
         auto sock = ArraySet<Socket>::GetInstance().GetItem(event_data->socket_fd);
         if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_OUT) {
-            sock->ProcessEpollEvent(events[i]);
+            auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
+            umqSock->ProcessEpollEvent(events[i]);
             events[real_count].events = EPOLLOUT;
             events[real_count].data = event_data->event.data;
             real_count++;
@@ -641,17 +641,17 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     // 4. add proto ex exent
-    if (sock->ShouldRegisterTxEvent()) {
-        int ret = AddProtoTxEvent(sock, event);
-        if (ret < 0) {
-            DelRawSocketEvent(fd);
-            UBS_VLOG_ERR("async_epoll epoll_ctl(ADD:%d) failed(ret:%d): %d : %s\n", ret, sock->raw_socket_, errno,
-                         strerror(errno));
-            return -1;
+    if (sock->Type() == SocketType::SOCK_TYPE_UMQ) {
+        auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
+        if (umqSock->ShouldRegisterTxEvent()) {
+            int ret = AddProtoTxEvent(sock, event);
+            if (ret < 0) {
+                DelRawSocketEvent(fd);
+                UBS_VLOG_ERR("async_epoll epoll_ctl(ADD:%d) failed(ret:%d): %d : %s\n", ret, sock->raw_socket_, errno,
+                             strerror(errno));
+                return -1;
+            }
         }
-
-        // 添加至后台 tx cqe poller
-        TxCqePoller::Instance().AddSocket(sock);
     }
 
     return 0;
@@ -659,8 +659,7 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
 
 int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 {
-    struct epoll_event raw_event {
-    };
+    struct epoll_event raw_event {};
     auto event_data = new (std::nothrow) EpollEvent(EPOLL_EVENT_RAW_SOCKET, fd, *event);
     if (UNLIKELY(event_data == nullptr)) {
         UBS_VLOG_ERR("async_epoll add out event for socket fd: %d alloc failed.\n", fd);
@@ -688,11 +687,11 @@ int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 
 int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *event)
 {
-    if (UNLIKELY(IsSocketEventDataExist(sock->GetTxFd()))) {
+    auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
+    if (UNLIKELY(IsSocketEventDataExist(umqSock->GetTxFd()))) {
         return 0;
     }
-    struct epoll_event add_event {
-    };
+    struct epoll_event add_event {};
     auto event_data = new (std::nothrow) EpollEvent(EPOLL_EVENT_UB_SOCKET_OUT, sock->raw_socket_, *event);
     if (UNLIKELY(event_data == nullptr)) {
         UBS_VLOG_ERR("async_epoll add out event for socket fd: %d alloc failed.\n", sock->raw_socket_);
@@ -701,7 +700,7 @@ int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *e
 
     add_event.events = EPOLLIN | EPOLLET;
     add_event.data.ptr = event_data;
-    int ret = sock->AddTxEvent(sock, epoll_fd_, &add_event);
+    int ret = umqSock->AddTxEvent(sock, epoll_fd_, &add_event);
     if (ret < 0) {
         delete event_data;
         UBS_VLOG_ERR("add proto tx event(ADD:%d) failed(ret:%d): %d : %s\n", ret, sock->raw_socket_, errno,
@@ -709,7 +708,7 @@ int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *e
         return -1;
     }
 
-    if (UNLIKELY(!InsertSocketEventData(sock->GetTxFd(), event_data))) {
+    if (UNLIKELY(!InsertSocketEventData(umqSock->GetTxFd(), event_data))) {
         delete event_data;
         UBS_VLOG_ERR("async_epoll add proto tx event for socket fd: %d insert event data failed\n", sock->raw_socket_);
         return -1;
@@ -719,12 +718,13 @@ int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *e
 
 int AsyncEventPoll::DelProtoTxEvent(const SocketPtr &sock)
 {
-    int ret = sock->DelTxEvent(sock, epoll_fd_);
+    auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
+    int ret = umqSock->DelTxEvent(sock, epoll_fd_);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("del tx event for socket fd: %d failed\n", sock->raw_socket_);
         return -1;
     }
-    RemoveSocketEventData(sock->GetTxFd());
+    RemoveSocketEventData(umqSock->GetTxFd());
     return 0;
 }
 
@@ -792,8 +792,7 @@ int AsyncEventPoll::ModRawSocketEvent(int fd, struct epoll_event *event)
         return -1;
     }
 
-    struct epoll_event raw_event {
-    };
+    struct epoll_event raw_event {};
     raw_event.events = event->events;
     raw_event.data.ptr = event_data;
     auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &raw_event);
@@ -818,16 +817,17 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
         return -1;
     }
 
-    DelRawSocketEvent(fd);
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr)) {
         UBS_VLOG_DEBUG("sock is nullptr for origin sock, socket: %d\n", fd);
         return 0;
     }
 
-    if (sock->ShouldRegisterTxEvent()) {
-        DelProtoTxEvent(sock);
-        TxCqePoller::Instance().DelSocket(sock);
+    if (sock->Type() == SocketType::SOCK_TYPE_UMQ) {
+        auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
+        if (umqSock->ShouldRegisterTxEvent()) {
+            DelProtoTxEvent(sock);
+        }
     }
     auto sk_base = RefStaticCast<SocketBase>(sock);
     sk_base->SetEvents(0);

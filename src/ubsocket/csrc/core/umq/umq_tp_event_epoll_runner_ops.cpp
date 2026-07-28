@@ -27,7 +27,6 @@ int UmqTpEventEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
         Locker slock(mutex_);
         uint64_t cnt;
         if (eventfd_read(event_data.event_data.data, &cnt) == -1) {
-            char errno_buf[NET_STR_ERROR_BUF_SIZE] = {0};
             UBS_VLOG_ERR("eventfd_read() failed, fd: %d, errno: %d, errmsg: %s\n", event_data.event_data.data, errno,
                          strerror(errno));
         }

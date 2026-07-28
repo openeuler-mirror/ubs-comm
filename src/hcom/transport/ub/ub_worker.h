@@ -39,8 +39,7 @@ using UBIdleHandler = UBSHcomNetDriverIdleHandler;
 using UBOpContextInfoPool = OpContextInfoPool<UBOpContextInfo>;
 using UBSglContextInfoPool = OpContextInfoPool<UBSglContextInfo>;
 
-enum UBWorkerType : uint8_t
-{
+enum UBWorkerType : uint8_t {
     UB_SENDER = 0,
     UB_RECEIVER = 1,
     UB_SENDER_RECEIVER = 2,

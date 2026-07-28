@@ -25,8 +25,7 @@ using UmqSeqTraits =
 
 class UmqBufferReceiveQueue {
 public:
-    enum class OpResult : int
-    {
+    enum class OpResult : int {
         OK = 0,
         ERROR = -1,
         QUEUE_EMPTY = -11,

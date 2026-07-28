@@ -15,8 +15,7 @@
 
 namespace ock {
 namespace ubs {
-enum InnerCode : int32_t
-{
+enum InnerCode : int32_t {
     UBS_OK = 0,
     UBS_ERROR = static_cast<int32_t>(0x80000001u),
     UBS_DL_LOAD_SYM_FAILED = static_cast<int32_t>(0x80000100u),
@@ -46,6 +45,7 @@ enum InnerCode : int32_t
     UBS_UMQ_ERROR,
     UBS_CONN_RETRY_FAILED,
     UBS_CONN_ROUTE,
+    UBS_LATER_SEQ,
 
     // 特殊标记位，使用 bit 30 和 bit 29，最高位 (bit 31) 为 1 表示负数错误
     UBS_RETRYABLE_MASK = 0x40000000,  // 可重试标记 (bit 30)

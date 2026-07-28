@@ -129,13 +129,9 @@ std::string HostInfo::ToString(bool detail)
         }
     } else {
         if (IsActive()) {
-            ss << "  "
-               << "localHost "
-               << "(status: active) ";
+            ss << "  " << "localHost " << "(status: active) ";
         } else {
-            ss << "  "
-               << "localHost "
-               << "(status: inactive) ";
+            ss << "  " << "localHost " << "(status: inactive) ";
         }
     }
     return ss.str();

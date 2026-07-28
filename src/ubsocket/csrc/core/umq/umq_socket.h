@@ -19,6 +19,8 @@
 #include "core/ubsocket_socket.h"
 #include "core/umq/umq_bounded_seq.h"
 #include "core/umq/umq_buffer_receive_queue.h"
+#include "core/umq/umq_data_rx_ops.h"
+#include "core/umq/umq_data_tx_ops.h"
 #include "core/umq/umq_setting.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "profiling/statistics/cli_message.h"
@@ -29,8 +31,7 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-enum class JettyAllocState
-{
+enum class JettyAllocState {
     IDLE,    // 空闲状态
     WAITING, // 等待Jetty资源分配
 };
@@ -141,7 +142,7 @@ public:
 
     ALWAYS_INLINE void NewRxEpollIn()
     {
-        DataRxOps *ops = rx_.GetRxOps();
+        UmqRxOps *ops = static_cast<UmqRxOps *>(rx_.GetRxOps());
         if (ops->epoll_event_num_.fetch_add(1, std::memory_order_acq_rel) == 0) {
             ops->get_and_ack_event_ = true;
             ops->poll_ = true;
@@ -151,7 +152,7 @@ public:
 
     ALWAYS_INLINE void NewTxEpollIn()
     {
-        DataTxOps *ops = tx_.GetTxOps();
+        UmqTxOps *ops = static_cast<UmqTxOps *>(tx_.GetTxOps());
         if (ops->epoll_event_num_.fetch_add(1, std::memory_order_acq_rel) == 0) {
             ops->get_and_ack_event_ = true;
             ops->expect_epoll_event_num_ = 1;
@@ -175,11 +176,11 @@ public:
         return jetty_alloc_state_.load(std::memory_order_acquire);
     }
 
-    Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event) override;
-    Result DelTxEvent(const SocketPtr &sock, int epoll_fd) override;
-    bool ShouldRegisterTxEvent() override;
-    Result ProcessEpollEvent(struct epoll_event &event) override;
-    int GetTxFd() override;
+    Result AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_event *event);
+    Result DelTxEvent(const SocketPtr &sock, int epoll_fd);
+    bool ShouldRegisterTxEvent();
+    Result ProcessEpollEvent(struct epoll_event &event);
+    int GetTxFd();
     void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data = {}) override;
 
     Result UpdateRxQueueAvailNum();
@@ -262,8 +263,7 @@ struct NegotiateRsp {
 };
 
 struct NegotiateRoute {
-    enum : uint32_t
-    {
+    enum : uint32_t {
         BACK_ROUTE_MAX_NUM = 3
     };
     umq_topo_type_t topo_type;

@@ -17,8 +17,7 @@ uint32_t OOBSecureProcess::SecProcessGetRemainEpNum(uint32_t localIpAddr, uint32
                                                     const std::string &mIpAndPort,
                                                     const std::vector<NetOOBServer *> &oobServers)
 {
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     bzero(&addr, sizeof(addr));
     addr.sin_addr.s_addr = localIpAddr;
     char ipStr[INET_ADDRSTRLEN] = {0};
@@ -57,8 +56,7 @@ NResult OOBSecureProcess::SecProcessCompareEpNum(uint32_t localIpAddr, uint32_t 
                                                  const std::string &mIpAndPort,
                                                  const std::vector<NetOOBServer *> &oobServers)
 {
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     bzero(&addr, sizeof(addr));
     addr.sin_addr.s_addr = localIpAddr;
     char ipStr[INET_ADDRSTRLEN] = {0};
@@ -117,8 +115,7 @@ NResult OOBSecureProcess::SecProcessCompareEpNum(const std::string &localUdsName
 void OOBSecureProcess::SecProcessAddEpNum(uint32_t localIpAddr, uint32_t listenPort, const std::string &mIpAndPort,
                                           const std::vector<NetOOBServer *> &oobServers)
 {
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     bzero(&addr, sizeof(addr));
     addr.sin_addr.s_addr = localIpAddr;
     char ipStr[INET_ADDRSTRLEN] = {0};
@@ -175,8 +172,7 @@ void OOBSecureProcess::SecProcessAddEpNum(const std::string &localUdsName, const
 void OOBSecureProcess::SecProcessDelEpNum(uint32_t localIpAddr, uint32_t listenPort, const std::string &mIpAndPort,
                                           const std::vector<NetOOBServer *> &oobServers)
 {
-    struct sockaddr_in addr {
-    };
+    struct sockaddr_in addr {};
     bzero(&addr, sizeof(addr));
     addr.sin_addr.s_addr = localIpAddr;
     char ipStr[INET_ADDRSTRLEN] = {0};

@@ -203,7 +203,7 @@ Result UmqConnHelper::RegisterSharedJfrForRead(uint64_t main_umq_handle)
     if (result != UBS_OK) {
         return result;
     }
-    umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    umq_interrupt_option_t main_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO, 0, 0};
     PROF_START(UMQ_INTERRUPT_FD_GET);
     auto share_jfr_fd = UmqApi::umq_interrupt_fd_get(main_umq_handle, &main_option);
     if (UNLIKELY(share_jfr_fd < 0)) {

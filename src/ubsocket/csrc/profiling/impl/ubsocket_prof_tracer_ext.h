@@ -22,7 +22,7 @@ namespace ubs {
 namespace profiling {
 
 // 最大 CPU 核心数（支持最多 1024 个 CPU）
-constexpr size_t MAX_CPU_AGENTS_EXT = 1024;
+constexpr int MAX_CPU_AGENTS_EXT = 1024;
 
 struct TracerOptionsExt {
     uint32_t tracepoint_count = 0;  // 跟踪点数量上限

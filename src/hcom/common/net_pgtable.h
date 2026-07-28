@@ -21,8 +21,7 @@ namespace hcom {
 /* Define the address type */
 using PgtAddress = uintptr_t;
 
-enum class EntryFlags : PgtAddress
-{
+enum class EntryFlags : PgtAddress {
     REGION = 1uL << 0,
     DIR = 1uL << 1
 };

@@ -15,8 +15,7 @@
 namespace ock {
 namespace hcom {
 
-enum NNCode
-{
+enum NNCode {
     NN_OK = 0,
     NN_ERROR = 100,
     NN_INVALID_IP = 101,
@@ -69,8 +68,7 @@ enum NNCode
     NN_URMA_ACK_TIMEOUT = 148,
 };
 
-enum SerCode
-{
+enum SerCode {
     SER_OK = 0,
     SER_ERROR = 500,
     SER_INVALID_PARAM = 501,

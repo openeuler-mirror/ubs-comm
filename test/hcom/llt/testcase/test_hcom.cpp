@@ -71,8 +71,7 @@ void TestHcom::TearDown()
 
 static void Log(int level, const char *msg)
 {
-    struct timeval tv {
-    };
+    struct timeval tv {};
     char strTime[24];
 
     (void)gettimeofday(&tv, nullptr);

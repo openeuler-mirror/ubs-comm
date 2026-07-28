@@ -619,8 +619,7 @@ void TerminalDisplay::PrintProfTitle(std::ostringstream &oss)
     oss << "timeStamp: " << timeBuf << "\n";
     oss << std::left << std::setw(COL_WIDTH_MAX) << "[TRACE_NAME]" << std::setw(COL_WIDTH_MIN) << "SUCCESS"
         << std::setw(COL_WIDTH_MIN) << "FAILURE" << std::setw(COL_WIDTH_MIN) << "TOTAL(ns)" << std::setw(COL_WIDTH_MIN)
-        << "AVG(ns)" << std::setw(COL_WIDTH_MIN) << "MAX(ns)" << std::setw(COL_WIDTH_MIN) << "MIN(ns)"
-        << "\n";
+        << "AVG(ns)" << std::setw(COL_WIDTH_MIN) << "MAX(ns)" << std::setw(COL_WIDTH_MIN) << "MIN(ns)" << "\n";
 }
 
 void TerminalDisplay::PrintProfData(std::string &outPutData)
