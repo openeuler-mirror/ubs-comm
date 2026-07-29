@@ -18,6 +18,7 @@
 #include "core/ubsocket_socket_helper.h"
 #include "under_api/urma/dl_urma_api.h"
 #include "urma_data_rx_ops.h"
+#include "urma_poller.h"
 #include "urma_socket.h"
 
 namespace ock {
@@ -80,24 +81,21 @@ void UrmaSocket::UnInitialize() noexcept
 }
 Result UrmaSocket::CreateUrmaResources()
 {
-    const std::string &dev_name = UrmaSetting::UB_DEV_NAME;
-    uint32_t eid_index = UrmaSetting::UB_EID_INDEX;
+    context_ = UrmaBackend::GetUrmaContext();
+    if (context_ == nullptr) {
+        UBS_SLOG_ERR("UrmaSocket: GetUrmaContext failed, fd=" << raw_socket_);
+        return UBS_ERROR;
+    }
 
-    Result ret = UrmaContext::CreateContext(dev_name, eid_index, context_);
+    auto ret = UrmaPollerSet::Instance().SelectPoller(jfc_);
     if (ret != UBS_OK) {
-        UBS_SLOG_ERR("UrmaSocket: CreateContext failed, fd=" << raw_socket_);
+        UBS_SLOG_ERR("UrmaSocket: SelectPoller failed, fd=" << raw_socket_);
         return ret;
     }
+
 
     const urma_eid_info_t &eid_info = context_->EidInfo();
     memcpy(&local_eid_, &eid_info.eid, sizeof(urma_eid_t));
-
-    urma_jfc_cfg_t jfc_cfg = context_->CreateJfcCfg(kDefaultQueueDepth, 0);
-    ret = context_->CreateJfc(jfc_cfg, BUSY_POLLING, jfc_);
-    if (ret != UBS_OK) {
-        UBS_SLOG_ERR("UrmaSocket: CreateJfc failed, fd=" << raw_socket_);
-        return ret;
-    }
 
     urma_jfs_cfg_t jfs_cfg = context_->CreateJfsCfg(kDefaultQueueDepth, URMA_TM_RC, 0);
     ret = context_->CreateJfs(jfs_cfg, jfc_, jfs_);

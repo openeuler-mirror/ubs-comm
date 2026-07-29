@@ -769,7 +769,7 @@ public:
 
     static int umq_transport_pool_resource_create(uint64_t umqh, umq_tp_resource_create_option_t *option)
     {
-        return umq_transport_pool_resource_create_ext_ptr(umqh, option);
+        return ::umq_transport_pool_resource_create(umqh, option);
     }
 
     static int umq_transport_pool_resource_destroy(uint64_t umqh, uint32_t tp_handle_idx)
