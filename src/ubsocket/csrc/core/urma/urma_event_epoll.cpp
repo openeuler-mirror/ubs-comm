@@ -115,7 +115,7 @@ int UrmaEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (sock == nullptr) {
+    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
         return AddRawSocketEvent(fd, event);
     }
 
@@ -149,7 +149,7 @@ int UrmaEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
     }
 
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (sock == nullptr) {
+    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
         return ModRawSocketEvent(fd, event);
     }
 
@@ -184,7 +184,7 @@ int UrmaEventPoll::EpollCtlDel(int fd)
     }
 
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (UNLIKELY(sock == nullptr)) {
+    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
         UBS_VLOG_DEBUG("sock is nullptr for origin sock, socket: %d", fd);
         return DelRawSocketEvent(fd);
     }

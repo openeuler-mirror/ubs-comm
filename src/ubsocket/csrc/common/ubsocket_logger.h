@@ -25,6 +25,8 @@
 
 #include "ubsocket_defines.h"
 
+#define UBS_LOG_TRACE_ENABLED
+
 namespace ock {
 namespace ubs {
 
@@ -205,6 +207,14 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
 #define UBS_SLOG_NOTICE(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_NOTICE, ARGS)
 #define UBS_SLOG_INFO(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_INFO, ARGS)
 #define UBS_SLOG_DEBUG(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_DEBUG, ARGS)
+
+#ifdef UBS_LOG_TRACE_ENABLED
+#define UBS_VLOG_TRACE(__format, ...)   UBS_LOG(ock::ubs::LEVEL_INFO, "[TRACE]" __format, ##__VA_ARGS__)
+#define UBS_SLOG_TRACE(ARGS)            UBS_LOG_STREAM(ock::ubs::LEVEL_DEBUG, "[TRACE]" << ARGS)
+#else
+#define UBS_VLOG_TRACE(__format, ...)
+#define UBS_SLOG_TRACE(ARGS)
+#endif
 
 #define UBS_ASSERT(CONDITION)                      \
     do {                                           \

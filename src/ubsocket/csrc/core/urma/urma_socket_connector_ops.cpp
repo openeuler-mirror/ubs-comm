@@ -58,6 +58,8 @@ Result UrmaConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addre
     conn_info.peer_ip = SocketConnHelper::ExtractIpFromSockAddr(address);
     conn_info.create_time = std::chrono::system_clock::now();
     conn_info.type_fd = 1;
+    UBS_VLOG_TRACE("prepare connect fd=%d, ip=%s, create_time=%lu", raw_fd_, conn_info.peer_ip.c_str(),
+                  conn_info.create_time);
     return UBS_OK;
 }
 
@@ -65,7 +67,8 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
 {
     (void)new_fd;
     UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
-    if (urma_sock == nullptr) {
+    if (UNLIKELY(urma_sock == nullptr)) {
+        UBS_VLOG_ERR("negotiate fd=%d, socket not urma-socket.");
         return UBS_INVALID_PARAM;
     }
 
@@ -79,6 +82,8 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
 
     Result ret = SocketConnHelper::SendLengthPrefixed(raw_fd_, &req, sizeof(req), NEGOTIATE_TIMEOUT_MS);
     if (ret != UBS_OK) {
+        UBS_VLOG_ERR("negotiate fd=%d, send length prefixed for req(%zu: ver=%u) buff_size_kb(%u, %u) failed: %d",
+                     new_fd, sizeof(req), req.peer_version, req.send_buf_kb, req.recv_buf_kb, ret);
         return ret;
     }
 
@@ -86,12 +91,14 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     ssize_t n = SocketConnHelper::RecvSocketData(raw_fd_, &negotiated_version, sizeof(negotiated_version),
                                                  NEGOTIATE_TIMEOUT_MS);
     if (n != static_cast<ssize_t>(sizeof(negotiated_version))) {
+        UBS_VLOG_ERR("negotiate fd=%d, recv negotiated_version failed: %d", raw_fd_, n);
         return UBS_TCP_EXCHANGE;
     }
 
     UBSVersion negotiated_ver(negotiated_version);
     VersionCheckResult ver_result = negotiated_ver.ValidateNegotiated(local_version);
     if (ver_result != VersionCheckResult::kCompatible) {
+        UBS_VLOG_ERR("negotiate fd=%d, ValidateNegotiated negotiated_version failed: %d", raw_fd_, ver_result);
         return UBS_TCP_EXCHANGE;
     }
     urma_sock->SetNegotiatedVersion(negotiated_version);
@@ -99,14 +106,18 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     UrmaNegotiateRsp rsp = {};
     ret = SocketConnHelper::RecvLengthPrefixed(raw_fd_, &rsp, sizeof(rsp), NEGOTIATE_TIMEOUT_MS);
     if (ret != UBS_OK) {
+        UBS_VLOG_ERR("negotiate fd=%d, recv rsp of size=%zu failed: %d", raw_fd_, sizeof(rsp), ret);
         return ret;
     }
 
     if (rsp.ret_code != 0) {
+        UBS_VLOG_ERR("negotiate fd=%d, recv rsp ret code=%d", raw_fd_, rsp.ret_code);
         return UBS_TCP_EXCHANGE;
     }
 
     urma_sock->SetPeerEid(rsp.local_eid);
+    UBS_VLOG_TRACE("negotiate fd=%d, buf_size(%u, %u) eid(%lx, %lx)", raw_fd_, rsp.send_buf_kb, rsp.recv_buf_kb,
+                  rsp.local_eid.in6.subnet_prefix, rsp.local_eid.in6.interface_id);
 
     return UBS_OK;
 }
@@ -115,6 +126,7 @@ Result UrmaConnectorOps::CreateSocketResources(SocketPtr &sock)
 {
     UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
     if (urma_sock == nullptr) {
+        UBS_VLOG_ERR("CreateSocketResources fd=%d, socket not urma-socket.");
         return UBS_INVALID_PARAM;
     }
 

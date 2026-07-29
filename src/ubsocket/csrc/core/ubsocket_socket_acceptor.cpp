@@ -77,8 +77,10 @@ int AcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_
 int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len)
 {
     int fd = -1;
+    UBS_VLOG_TRACE("accept on socket(%d)", sock->Fd());
     // 1. 异步accept模式下，从ready_queue中取fd
     if (GlobalSetting::AsyncAcceptorEnabled() && TryPopAsyncReadyFd(fd, address, address_len)) {
+        UBS_VLOG_TRACE("accept on socket(%d) async got fd=%d", sock->Fd(), fd);
         return fd;
     }
     // 2. 同步accept模式下，TCP 建链，返回fd
@@ -86,8 +88,10 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     socklen_t len_tmp = sizeof(addr_tmp); // 初始化 addrlen
     fd = LibcApi::accept(raw_fd_, &addr_tmp, &len_tmp);
     if (fd >= 0) {
+        UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d", sock->Fd(), fd);
         // 前置判断，如果不是TFO连接，作为普通TCP连接处理
         if (!SocketConnHelper::IsUbsConnection(fd)) {
+            UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d, not TFO return", sock->Fd(), fd);
             return fd;
         }
         int tcpNoDelayRet = SocketConnHelper::SetTcpNoDelay(fd);
@@ -103,6 +107,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         peerIp = SocketConnHelper::ExtractIpFromSockAddr(address);
         SocketPtr sock_obj = ArraySet<Socket>::GetInstance().GetItem(fd);
         if (sock_obj != nullptr) {
+            UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d array set exist", sock->Fd(), fd);
             auto sockBase = RefConvert<Socket, SocketBase>(sock_obj);
             sockBase->acceptor_->acceptor_ops_->conn_info.peer_ip = peerIp;
             sockBase->acceptor_->acceptor_ops_->conn_info.peer_fd = fd;
@@ -110,6 +115,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         }
     }
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d state established", sock->Fd(), fd);
         return fd;
     }
     if (fd < 0) {
@@ -172,6 +178,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
             return fd;
         }
 
+        UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d for async return EAGAIN.", sock->Fd(), fd);
         errno = EAGAIN;
         return -1;
     } else {

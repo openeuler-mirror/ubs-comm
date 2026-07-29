@@ -63,7 +63,7 @@ void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode
     const bool profEnabled = GlobalSetting::UBS_PROF_ENABLE;
     if (!profEnabled) {
         if (UmqApi::umq_stats_tp_perf_start(umq_trans_mode) != 0) {
-            UBS_VLOG_ERR("Failed to start tp perf: umq_trans_mode=%d\n", static_cast<int>(umq_trans_mode));
+            // UBS_VLOG_ERR("Failed to start tp perf: umq_trans_mode=%d\n", static_cast<int>(umq_trans_mode));
             return;
         }
     }

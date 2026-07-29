@@ -27,7 +27,7 @@ using BlockExpandCallback = std::function<Result(uintptr_t address, uint64_t siz
 
 struct FixedAllocatorOptions {
     uint32_t pool_space_start_tb = 2;                /* desired start virtual address of pool from os */
-    uint32_t pool_space_size_gb = 32;                /* capacity of pool */
+    uint32_t pool_space_size_gb = 4;                 /* capacity of pool */
     uint16_t block_size_mb = 8;                      /* size of one block, expand one from os one time */
     uint16_t init_block_count = 32;                  /* how many blocks expand  */
     uint32_t mini_block_size_kb = 8;                 /* size of one mini block */

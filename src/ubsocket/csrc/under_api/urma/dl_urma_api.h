@@ -124,7 +124,7 @@ using urma_free_token_id_api = urma_status_t (*)(urma_token_id_t *token_id);
 using urma_register_seg_api = urma_target_seg_t *(*)(urma_context_t *ctx, urma_seg_cfg_t *seg_cfg);
 using urma_unregister_seg_api = urma_status_t (*)(urma_target_seg_t *target_seg);
 using urma_import_seg_api = urma_target_seg_t *(*)(urma_context_t *ctx, urma_seg_t *seg, urma_token_t *token_value,
-                                                   uint64_t addr);
+                                                   uint64_t addr, urma_import_seg_flag_t flag);
 using urma_unimport_seg_api = urma_status_t (*)(urma_target_seg_t *tseg);
 
 using urma_post_jfs_wr_api = urma_status_t (*)(urma_jfs_t *jfs, urma_jfs_wr_t *wr, urma_jfs_wr_t **bad_wr);
@@ -641,9 +641,9 @@ public:
     }
 
     static urma_target_seg_t *urma_import_seg(urma_context_t *ctx, urma_seg_t *seg, urma_token_t *token_value,
-                                              uint64_t addr)
+                                              uint64_t addr, urma_import_seg_flag_t flag)
     {
-        return urma_import_seg_ptr(ctx, seg, token_value, addr);
+        return urma_import_seg_ptr(ctx, seg, token_value, addr, flag);
     }
 
     static urma_status_t urma_unimport_seg(urma_target_seg_t *tseg)
