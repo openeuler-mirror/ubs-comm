@@ -128,7 +128,7 @@ ALWAYS_INLINE uintptr_t SingleAllocator::Allocate(uint32_t size_bytes) noexcept
     }
 
     /* step7: insert into allocated map */
-    allocated_addresses_.emplace(target_address, target_size);
+    allocated_addresses_.emplace(target_address, size_bytes);
 
     /* step8: decrease free bytes */
     free_size_bytes_ -= size_bytes;
@@ -219,7 +219,6 @@ private:
     std::mutex mutex_;
     sub::SingleAllocatorPtr sub_allocator_{nullptr};
     FixedExpandHandler expand_handler_ = nullptr;
-    std::vector<FixedBlock> blocks_;
 };
 
 ALWAYS_INLINE Result FixedRangeAllocator::Init(const FixedBlock &firstBlock, const FixedExpandHandler &handler) noexcept
@@ -232,8 +231,6 @@ ALWAYS_INLINE Result FixedRangeAllocator::Init(const FixedBlock &firstBlock, con
     if (firstBlock.address == 0 || firstBlock.size_kb == 0 || firstBlock.size_kb != firstBlock.free_size_kb) {
         return UBS_INVALID_PARAM;
     }
-
-    blocks_.push_back(firstBlock);
 
     auto allocator = MakeRef<sub::SingleAllocator>(firstBlock.address, SIZE_1K * firstBlock.size_kb);
     if (allocator == nullptr) {
@@ -255,7 +252,6 @@ ALWAYS_INLINE void FixedRangeAllocator::UnInit() noexcept
         return;
     }
 
-    blocks_.clear();
     sub_allocator_ = nullptr;
     expand_handler_ = nullptr;
 }
