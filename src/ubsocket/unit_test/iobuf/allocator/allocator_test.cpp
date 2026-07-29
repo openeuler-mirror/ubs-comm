@@ -59,7 +59,8 @@ FixedAllocatorOptions MakeDefaultOptions()
     opts.block_size_mb = 8;
     opts.init_block_count = 2;
     opts.mini_block_size_kb = 8;
-    opts.async_expand = false;
+    opts.async_expand = true;
+    opts.async_expand_threshold = 0.4;
     opts.expanded_callback = [](uintptr_t a, uint64_t s, uint32_t f) {
         return g_callback_counter(a, s, f);
     };
