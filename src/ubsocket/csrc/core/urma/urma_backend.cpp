@@ -57,7 +57,7 @@ urma_vlog_level_t UrmaGetLogLevel()
 
 Result UrmaBackend::Init() noexcept
 {
-    UBS_SLOG_DEBUG("enter");
+    UBS_SLOG_INFO("enter");
 
     std::lock_guard<std::mutex> guard(urma_mutex_);
     if (urma_inited_) {
@@ -101,7 +101,7 @@ Result UrmaBackend::Init() noexcept
     urma_context_ = ctx;
     urma_inited_ = true;
 
-    UBS_SLOG_DEBUG("leave, inited = " << urma_inited_);
+    UBS_SLOG_INFO("leave, inited = " << urma_inited_);
     return UBS_OK;
 }
 
@@ -184,6 +184,8 @@ Result UrmaBackend::InitZeroCopyAllocator(const UrmaContextPtr &ctx)
         UBS_SLOG_ERR("urma allocator initialize failed: " << res);
         return res;
     }
+
+    g_zcopy_allocator = &urma_allocator_;
 
     return UBS_OK;
 }

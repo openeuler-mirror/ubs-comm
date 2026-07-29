@@ -260,7 +260,7 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
     /* step7: create thread for dynamic expand for thread cache in background */
 
     init_ = true;
-    UBS_VLOG_DEBUG("Initialized");
+    UBS_VLOG_INFO("Initialized");
     return UBS_OK;
 }
 

@@ -278,7 +278,8 @@ UBS_API void *ubsocket_iobuf_allocate(size_t size, const ubs_iobuf_alloc_option_
     uint32_t type = GlobalSetting::UBS_ALLOWED_PROTOCOL;
     if (type == UBS_PROTOCOL_UB_RM_RTP || type == UBS_PROTOCOL_UB_RC_RTP) {
         // delete at ubsocket_uninit
-        g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
+        // g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
+        g_zcopy_allocator = urma::UrmaBackend::GetAllocator();
     } else {
         UBS_VLOG_WARN("unknown zcopy allocator type");
         return nullptr;

@@ -43,7 +43,6 @@ void UrmaDevice::Init() noexcept
         return;
     }
 
-    urma_device_attr_t tmp_attr{};
     for (int i = 0; i < num_devices; i++) {
         auto dev = device_list[i];
         if (UNLIKELY(dev == nullptr)) {
@@ -52,7 +51,9 @@ void UrmaDevice::Init() noexcept
         }
 
         /* get device attributes and get eid list */
+        urma_device_attr_t tmp_attr;
         auto result = UrmaApi::urma_query_device(dev, &tmp_attr);
+        UBS_VLOG_INFO("urma_query_device(%s, %s) return %d", dev->name, dev->path, result);
         if (LIKELY(result == URMA_SUCCESS)) {
             /* create new device and add into all devices */
             auto new_dev = MakeRef<UrmaDevice>(dev->name, dev->path, tmp_attr);
@@ -78,7 +79,6 @@ void UrmaDevice::Init() noexcept
             }
 
             UrmaApi::urma_free_eid_list(eid_list);
-
         } else {
             UBS_VLOG_ERR("[URMA_API] urma_query_device() failed, errno %d", errno);
         }
@@ -88,6 +88,7 @@ void UrmaDevice::Init() noexcept
     UrmaApi::urma_free_device_list(device_list);
 
     LOADED = true;
+    UBS_VLOG_INFO("urma device init finished.");
 }
 
 UrmaDevice::UrmaDevice(const std::string &name, const std::string &sys_path, const urma_device_attr_t &attr)

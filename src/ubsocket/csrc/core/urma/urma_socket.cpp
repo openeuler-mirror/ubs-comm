@@ -136,10 +136,8 @@ void UrmaSocket::DestroyUrmaResources()
         jfs_->Destroy();
         jfs_ = nullptr;
     }
-    if (jfc_ != nullptr) {
-        jfc_->Destroy();
-        jfc_ = nullptr;
-    }
+
+    jfc_ = nullptr;
     context_ = nullptr;
 }
 
@@ -263,15 +261,18 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
     local.seg = local_seg->seg;
     if (send_first) {
         if (SocketConnHelper::SendSocketData(fd, &local, sizeof(local), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local)) {
+            UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", fd, sizeof(local));
             return UBS_TCP_EXCHANGE;
         }
     }
 
     if (SocketConnHelper::RecvSocketData(fd, &peer, sizeof(peer), CONTROL_PLANE_TIMEOUT_MS) != sizeof(peer)) {
+        UBS_VLOG_ERR("UrmaSocket recv socket(%d) data size(%zu) failed.", fd, sizeof(peer));
         return UBS_TCP_EXCHANGE;
     }
 
     if (urma_sock.Jetty()->ImportRemoteJetty(peer.ex.raw_jetty_id, peer.ex.token) != UBS_OK) {
+        UBS_VLOG_ERR("UrmaSocket import remote jetty failed.", fd, sizeof(peer));
         return UBS_ERROR;
     }
 
@@ -289,6 +290,7 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
 
     if (!send_first) {
         if (SocketConnHelper::SendSocketData(fd, &local, sizeof(local), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local)) {
+            UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", fd, sizeof(local));
             return UBS_TCP_EXCHANGE;
         }
     }
@@ -296,10 +298,12 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
     Result ack_ret = UBS_OK;
     Result peer_ret = UBS_OK;
     if (SocketConnHelper::SendSocketData(fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ack_ret)) {
+        UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", fd, sizeof(ack_ret));
         return UBS_TCP_EXCHANGE;
     }
     if (SocketConnHelper::RecvSocketData(fd, &peer_ret, sizeof(peer_ret), CONTROL_PLANE_TIMEOUT_MS) !=
         sizeof(peer_ret)) {
+        UBS_VLOG_ERR("UrmaSocket recv socket(%d) data size(%zu) failed.", fd, sizeof(ack_ret));
         return UBS_TCP_EXCHANGE;
     }
 
@@ -317,6 +321,8 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
     urma_sock.rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
     urma_sock.rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
     urma_sock.SetBindRemote(true);
+    UBS_VLOG_TRACE("urma socket exchange socket result success, peer buf=(0x%lx:0x%lx), local buf=(0x%lx:0x%lx)",
+                  peer.ex.my_send_buf.buf, peer.ex.my_recv_buf.buf, local.ex.my_send_buf.buf, local.ex.my_recv_buf.buf);
     return UBS_OK;
 }
 

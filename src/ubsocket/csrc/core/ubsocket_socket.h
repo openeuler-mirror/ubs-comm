@@ -154,6 +154,7 @@ protected:
 ALWAYS_INLINE int SocketBase::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len)
 {
     if (acceptor_ == nullptr) {
+        UBS_VLOG_ERR("acceptor is not set for socket(%d)", raw_socket_);
         errno = EINVAL;
         return UBS_ERROR;
     }

@@ -23,6 +23,7 @@ UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
         return LibcApi::socket(domain, type, protocol);
     }
     int fd;
+    UBS_VLOG_TRACE("create socket with domain(%d) AF_SMC=%d.", domain, AF_SMC);
     if (domain == AF_SMC) {
         fd = LibcApi::socket(AF_INET, type, protocol);
     } else {
@@ -43,6 +44,7 @@ UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
         LibcApi::close(event_fd);
         return -1;
     }
+    UBS_VLOG_TRACE("create urma socket(%d) success.", fd);
     socketPtr->event_fd_ = event_fd;
     ArraySet<Socket>::GetInstance().OverrideItem(fd, socketPtr.Get());
     return fd;
@@ -75,9 +77,11 @@ UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *add
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
+        UBS_VLOG_TRACE("accept on fd(%d) not ubsocket, use libc accept.", fd);
         return LibcApi::accept(fd, address, address_len);
     }
 
+    UBS_VLOG_TRACE("accept on fd(%d) is ubsocket, use ubsocket accept.", fd);
     return sockBase->Accept(sock, address, address_len);
 }
 

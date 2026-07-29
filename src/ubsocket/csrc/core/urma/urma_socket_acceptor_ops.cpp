@@ -51,12 +51,14 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
 {
     UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(socketPtr);
     if (urma_sock == nullptr) {
+        UBS_VLOG_ERR("negotiate fd=%d, socket not urma-socket.");
         return UBS_INVALID_PARAM;
     }
 
     UrmaNegotiateReq req = {};
     Result ret = SocketConnHelper::RecvLengthPrefixed(fd, &req, sizeof(req), NEGOTIATE_TIMEOUT_MS);
     if (ret != UBS_OK) {
+        UBS_VLOG_ERR("negotiate fd=%d, recv rsp of size=%zu failed: %d", fd, sizeof(req), ret);
         return ret;
     }
 
@@ -67,6 +69,7 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
     uint32_t negotiated_version = negotiated.GetWhole();
 
     if (ver_result == VersionCheckResult::kMajorMismatch) {
+        UBS_VLOG_ERR("negotiate fd=%d, ValidateNegotiated negotiated_version failed: %d", fd, ver_result);
         uint32_t mismatch_version = local_version.GetWhole();
         SocketConnHelper::SendSocketData(fd, &mismatch_version, sizeof(mismatch_version), NEGOTIATE_TIMEOUT_MS);
         return UBS_TCP_EXCHANGE;
@@ -75,6 +78,7 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
     ssize_t n =
         SocketConnHelper::SendSocketData(fd, &negotiated_version, sizeof(negotiated_version), NEGOTIATE_TIMEOUT_MS);
     if (n != static_cast<ssize_t>(sizeof(negotiated_version))) {
+        UBS_VLOG_ERR("negotiate fd=%d, send negotiated_version failed: %d", fd, n);
         return UBS_TCP_EXCHANGE;
     }
 
@@ -90,10 +94,14 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
 
     ret = SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), NEGOTIATE_TIMEOUT_MS);
     if (ret != UBS_OK) {
+        UBS_VLOG_ERR("negotiate fd=%d, send length prefixed for rsp(%zu: code=%u) buff_size_kb(%u, %u) failed: %d",
+                     fd, sizeof(rsp), rsp.ret_code, rsp.send_buf_kb, rsp.recv_buf_kb, ret);
         return ret;
     }
 
     urma_sock->SetPeerEid(req.local_eid);
+    UBS_VLOG_TRACE("negotiate fd=%d, buf_size(%u, %u) eid(%lx, %lx)", fd, rsp.send_buf_kb, rsp.recv_buf_kb,
+                  rsp.local_eid.in6.subnet_prefix, rsp.local_eid.in6.interface_id);
 
     return UBS_OK;
 }
