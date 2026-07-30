@@ -94,21 +94,11 @@ public:
      */
     void DirectFree(uintptr_t address) noexcept;
 
-    /**
-     * @brief Callback function of expand function,
-     * called by range allocator, async expand thread etc
-     *
-     * @param flags        [in] optional flags
-     * @param expandedBlock[out] expanded block
-     *
-     * @return 0 if successful
-     */
-    Result HandleExpandBlock(bool flags, FixedBlock &expandedBlock) noexcept;
-
 private:
     void UnInitInner() noexcept;
     Result ReserveSpace() noexcept;
     Result ExpandBlock(bool forDirectAllocation) noexcept;
+    Result HandleDirectExpandBlock(bool async_expand, FixedBlock &expandedBlock) noexcept;
     void ShrinkAllBlocks() noexcept;
     Result MakeMiniBlocks(uint32_t &mini_blocks_created, FixedMiniBlock *&blocks) noexcept;
 
@@ -139,7 +129,7 @@ private:
     pthread_spinlock_t spinlock_aligned_;             /* allocate first lock spin lock from aligned */
     pthread_spinlock_t spinlock_unaligned_;           /* allocate first lock spin lock from unaligned */
     uint64_t total_mini_blocks_ = 0;                  /* total mini blocks created, protected by spinlock_aligned_ */
-    bool async_expand_enable = false;                 /* whether use async expand */
+    bool async_expand_enable_ = false;                /* whether use async expand */
     bool init_ = false;                               /* inited or not */
 
     /* not-hot used variables */
@@ -267,7 +257,7 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
     /* step6: create range allocator */
     result = direct_allocator_.Init(
         direct_alloc_blocks_.at(0),
-        std::bind(&FixedGlobalCache::HandleExpandBlock, this, std::placeholders::_1, std::placeholders::_2));
+        std::bind(&FixedGlobalCache::HandleDirectExpandBlock, this, std::placeholders::_1, std::placeholders::_2));
     if (result != UBS_OK) {
         UnInitInner();
         return result;
@@ -275,7 +265,7 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
 
     /* step7: create thread for dynamic expand for thread cache in background */
     if (options_.async_expand) {
-        async_expand_enable = true;
+        async_expand_enable_ = true;
         StartAsyncExpandThread();
     }
 
@@ -286,11 +276,6 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
 
 ALWAYS_INLINE void FixedGlobalCache::UnInit() noexcept
 {
-    /* stop expand thread */
-    if (async_expand_enable) {
-        StopAsyncExpandThread();
-    }
-
     std::lock_guard<std::mutex> lock(mutex_);
     if (!init_) {
         UBS_VLOG_DEBUG("Uninitialized");
@@ -465,6 +450,11 @@ ALWAYS_INLINE Result FixedGlobalCache::MakeMiniBlocks(uint32_t &mini_blocks_crea
 
 ALWAYS_INLINE void FixedGlobalCache::UnInitInner() noexcept
 {
+    /* stop expand thread */
+    if (async_expand_enable_) {
+        StopAsyncExpandThread();
+    }
+
     /* shrink all blocks */
     ShrinkAllBlocks();
 
@@ -517,7 +507,7 @@ ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocateInner(uint16_t requestSize
         }
 
         /* step2: if need async expand */
-        if (async_expand_enable && NeedAsyncExpand()) {
+        if (async_expand_enable_ && NeedAsyncExpand()) {
             sem_post(&async_expand_sem_);
         }
 
@@ -527,7 +517,7 @@ ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocateInner(uint16_t requestSize
         }
 
         /* step4: continue for expand is trigger async in step2 */
-        if (async_expand_enable) {
+        if (async_expand_enable_) {
             continue;
         }
 
@@ -761,17 +751,14 @@ ALWAYS_INLINE void FixedGlobalCache::DirectFree(uintptr_t address) noexcept
     direct_allocator_.DirectFree(address);
 }
 
-ALWAYS_INLINE Result FixedGlobalCache::HandleExpandBlock(bool flags, FixedBlock &expandedBlock) noexcept
+ALWAYS_INLINE Result FixedGlobalCache::HandleDirectExpandBlock(bool async_expand, FixedBlock &expandedBlock) noexcept
 {
-    std::lock_guard<std::mutex> locker(mutex_);
-    Result ret = ExpandBlock(flags);
-    if (ret == UBS_OK) {
-        if (flags) {
-            expandedBlock = direct_alloc_blocks_.back();
-        } else {
-            expandedBlock = tc_alloc_blocks_.back();
-        }
+    std::unique_lock<std::mutex> locker(mutex_, std::defer_lock);
+    if (!async_expand) {
+        locker.lock();
     }
+    Result ret = ExpandBlock(true);
+    expandedBlock = direct_alloc_blocks_.back();
     return ret;
 }
 
@@ -783,6 +770,7 @@ ALWAYS_INLINE void FixedGlobalCache::StartAsyncExpandThread() noexcept
     }
 
     sem_init(&async_expand_sem_, 0, 0);
+    direct_allocator_.AsyncExpandEnable(async_expand_sem_, options_.async_expand_threshold);
     async_expand_thread_ = std::thread(&FixedGlobalCache::RunInThread, this);
     UBS_VLOG_DEBUG("Async expand thread started");
 }
@@ -792,6 +780,8 @@ ALWAYS_INLINE void FixedGlobalCache::StopAsyncExpandThread() noexcept
     if (!async_expand_running_.exchange(false)) {
         return;
     }
+
+    direct_allocator_.AsyncExpandDisable();
 
     sem_post(&async_expand_sem_);
 
@@ -817,8 +807,13 @@ ALWAYS_INLINE void FixedGlobalCache::RunInThread() noexcept
             break;
         }
 
-        if (ret == 0 && NeedAsyncExpand()) {
-            DoAsyncExpand();
+        if (ret == 0) {
+            if (NeedAsyncExpand()) {
+                DoAsyncExpand();
+            }
+            if (direct_allocator_.NeedAsyncExpand()) {
+                direct_allocator_.DoAsyncExpand();
+            }
         }
     }
     UBS_VLOG_INFO("Ubs iobuf expand thread is end.");
@@ -841,7 +836,6 @@ ALWAYS_INLINE Result FixedGlobalCache::DoAsyncExpand() noexcept
     if (!NeedAsyncExpand()) {
         return UBS_OK;
     }
-    std::lock_guard<std::mutex> locker(mutex_);
     auto result = ExpandBlock(false);
     if (result == UBS_OK) {
         uint32_t miniBlocksCreated = 0;
