@@ -81,8 +81,9 @@ UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *add
         return LibcApi::accept(fd, address, address_len);
     }
 
-    UBS_VLOG_TRACE("accept on fd(%d) is ubsocket, use ubsocket accept.", fd);
-    return sockBase->Accept(sock, address, address_len);
+    auto ret = sockBase->Accept(sock, address, address_len);
+    UBS_VLOG_TRACE("accept on fd(%d) is ubsocket, use ubsocket accept return %d.", fd, ret);
+    return ret;
 }
 
 UBS_API int UB_API_WRAP(accept4)(int fd, struct sockaddr *address, socklen_t *address_len, int flags)
@@ -153,12 +154,14 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
 
 UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
 {
+    UBS_VLOG_TRACE("enter readv fd=%d, iovcnt=%d, iov[0].buf=%p", fd, iovcnt, iov[0].iov_base);
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::readv(fd, iov, iovcnt);
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
+        UBS_VLOG_TRACE("enter posix libc readv fd=%d, iovcnt=%d, iov[0].buf=%p", fd, iovcnt, iov[0].iov_base);
         return LibcApi::readv(fd, iov, iovcnt);
     }
     return sockBase->ReadV(sock, iov, iovcnt);
@@ -166,12 +169,14 @@ UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
 
 UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
 {
+    UBS_VLOG_TRACE("enter writev fd=%d, iovcnt=%d, iov[0].buf=%p", fd, iovcnt, iov[0].iov_base);
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::writev(fd, iov, iovcnt);
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
+        UBS_VLOG_TRACE("enter posix libc writev fd=%d, iovcnt=%d, iov[0].buf=%p", fd, iovcnt, iov[0].iov_base);
         return LibcApi::writev(fd, iov, iovcnt);
     }
     return sockBase->WriteV(sock, iov, iovcnt);

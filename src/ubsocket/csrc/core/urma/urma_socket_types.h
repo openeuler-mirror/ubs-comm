@@ -97,21 +97,6 @@ struct UrmaCtrlMessage {
 constexpr uint32_t URMA_INLINE_MESSAGE_CTRL_COST = static_cast<uint32_t>(offsetof(UrmaCtrlMessage, small_io.data));
 constexpr uint32_t URMA_INLINE_DATA_THRESHOLD = URMA_INLINE_THRESHOLD - URMA_INLINE_MESSAGE_CTRL_COST;
 
-struct UramWriteMessage {
-    uint64_t request_id;
-    uint64_t sequence_no;
-    uint32_t flags;
-    uint16_t message_size;
-    uint16_t reserved;
-    uint32_t total_bytes;
-    uint32_t buffer_count;
-    struct {
-        uint64_t addr;
-        uint32_t size;
-        uint32_t flags;
-    } sender_buffers[0];
-};
-
 enum TransportType : int8_t {
     TPT_CTP = 0,
     TPT_RTP,

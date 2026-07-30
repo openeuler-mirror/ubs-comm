@@ -135,7 +135,7 @@ urma_target_seg_t *UrmaIoBufferPool::get_remote_target_seg(RemoteSegmentsPtr &re
     return remote->remote_target_segs_[block_index];
 }
 
-Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, const urma_seg_t &seg,
+Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma_seg_t &seg,
                                                  urma_target_seg_t *&tgt) noexcept
 {
     if (UNLIKELY(remote == nullptr)) {
@@ -152,22 +152,16 @@ Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, cons
         return UBS_OK;
     }
 
-    urma_seg_cfg_t seg_cfg;
-    seg_cfg.va = seg.ubva.va;
-    seg_cfg.len = seg.len;
-    seg_cfg.token_id = nullptr;
-    seg_cfg.token_value.token = 0; // TODO: user token
-    seg_cfg.flag.bs.token_policy = URMA_TOKEN_NONE;
-    seg_cfg.flag.bs.cacheable = URMA_NON_CACHEABLE;
-    seg_cfg.flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE | URMA_ACCESS_ATOMIC;
-    seg_cfg.flag.bs.token_id_valid = 0;
-    seg_cfg.flag.bs.reserved = 0;
-    seg_cfg.user_ctx = 0;
-    seg_cfg.iova = 0;
+    urma_token_t token = {seg.token_id};
+    urma_import_seg_flag_t flag{};
+    flag.value = 0;
+    flag.bs.cacheable = URMA_NON_CACHEABLE;
+    flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE | URMA_ACCESS_ATOMIC;
+    flag.bs.mapping = URMA_SEG_NOMAP;
 
     pthread_spin_lock(&remote->target_lock_);
     if (LIKELY(remote->remote_target_segs_[block_index] == nullptr)) {
-        auto target = UrmaApi::urma_register_seg(UrmaBackend::GetUrmaContext()->Handle(), &seg_cfg);
+        auto target = UrmaApi::urma_import_seg(UrmaBackend::GetUrmaContext()->Handle(), &seg, &token, 0, flag);
         if (UNLIKELY(target == nullptr)) {
             pthread_spin_unlock(&remote->target_lock_);
             UBS_SLOG_ERR("Urma urma_register_seg failed!");

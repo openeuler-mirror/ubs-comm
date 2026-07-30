@@ -64,6 +64,7 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
     }
 
     uint64_t event_read_val;
+    UBS_VLOG_TRACE("urma epoll wait(epfd=%d, max=%d, timeout=%d) start...", epoll_fd_, maxevents, timeout);
     int ret = epoll_wait(epoll_fd_, events, maxevents, timeout);
     for (auto i = 0; i < ret && i < maxevents; ++i) {
         auto event_data = static_cast<EpollEvent *>(events[i].data.ptr);
@@ -74,6 +75,8 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
 
         if (event_data->event_type == EPOLL_EVENT_RAW_SOCKET) {
             events[i].data = event_data->event.data;
+            UBS_VLOG_TRACE("urma epoll(%d) raw socket event(evt=0x%x, data=%lx)", epoll_fd_, events[i].events,
+                           events[i].data.u64);
             continue;
         }
 
@@ -86,12 +89,9 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
         }
 
         auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
-        if ((event_data->event.events & EPOLLOUT) != 0 && urma_sock->ExchangeWritableReady(false)) {
-            events[i].events |= EPOLLOUT;
-        }
-        if ((event_data->event.events & EPOLLIN) != 0 && urma_sock->ExchangeSocketReadableReady(false)) {
-            events[i].events |= EPOLLIN;
-        }
+        events[i].events = urma_sock->GetReachEpollEvents() & event_data->event.events;
+        UBS_VLOG_TRACE("urma epoll(%d) urma socket event(evt=0x%x, data=%lx)", epoll_fd_, events[i].events,
+                           events[i].data.u64);
         eventfd_read(urma_sock->event_fd_, &event_read_val);
     }
 
@@ -108,6 +108,7 @@ int UrmaEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         return -1;
     }
 
+    UBS_VLOG_TRACE("urma epoll(%d) add(fd=%d, event=0x%x, data=%lx)", epoll_fd_, fd, event->events, event->data);
     if (UNLIKELY(IsSocketEventDataExist(fd))) {
         UBS_VLOG_ERR("urma_event_poll EpollCtlAdd(socket=%d) already added.", fd);
         errno = EEXIST;
@@ -127,14 +128,15 @@ int UrmaEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
 
     urma_sock->SetAddedEpollFd(nullptr, event->data);
     urma_sock->SetEvents(event->events);
-    bool should_notify = false;
+    uint32_t notify_events = 0;
     if ((event->events & EPOLLOUT) && urma_sock->ExchangeWritableReady(false)) {
-        should_notify = true;
+        notify_events |= EPOLLOUT;
     }
     if ((event->events & EPOLLIN) && urma_sock->ExchangeSocketReadableReady(false)) {
-        should_notify = true;
+        notify_events |= EPOLLIN;
     }
-    if (should_notify) {
+    if (notify_events != 0) {
+        urma_sock->SetReachEpollEvents(notify_events);
         eventfd_write(urma_sock->event_fd_, 1);
     }
     return 0;
@@ -148,6 +150,7 @@ int UrmaEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
         return -1;
     }
 
+    UBS_VLOG_TRACE("urma epoll(%d) mod(fd=%d, event=0x%x, data=%lx)", epoll_fd_, fd, event->events, event->data);
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
         return ModRawSocketEvent(fd, event);
@@ -161,14 +164,15 @@ int UrmaEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
 
     urma_sock->SetEvents(event->events);
     urma_sock->SetEpollData(event->data);
-    bool should_notify = false;
+    uint32_t notify_events = 0;
     if ((event->events & EPOLLOUT) && urma_sock->ExchangeWritableReady(false)) {
-        should_notify = true;
+        notify_events |= EPOLLOUT;
     }
     if ((event->events & EPOLLIN) && urma_sock->ExchangeSocketReadableReady(false)) {
-        should_notify = true;
+        notify_events |= EPOLLIN;
     }
-    if (should_notify) {
+    if (notify_events != 0) {
+        urma_sock->SetReachEpollEvents(notify_events);
         eventfd_write(urma_sock->event_fd_, 1);
     }
 
@@ -183,6 +187,7 @@ int UrmaEventPoll::EpollCtlDel(int fd)
         return -1;
     }
 
+    UBS_VLOG_TRACE("urma epoll(%d) del(fd=%d)", epoll_fd_, fd);
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
         UBS_VLOG_DEBUG("sock is nullptr for origin sock, socket: %d", fd);
@@ -275,6 +280,8 @@ int UrmaEventPoll::AddUrmaSocketEvent(UrmaSocketPtr &socket, struct epoll_event 
 
     raw_event.events = EPOLLIN;
     raw_event.data.ptr = event_data;
+    UBS_VLOG_TRACE("real epoll(%d) add(fd=%d, event=0x%x, data=%lx)", epoll_fd_, socket->event_fd_, raw_event.events,
+                   raw_event.data);
     auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, socket->event_fd_, &raw_event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("urma_event_poll add pure event for socket fd: %d, event fd: %d failed: %d : %s",
@@ -308,6 +315,8 @@ int UrmaEventPoll::ModUrmaSocketEvent(UrmaSocketPtr &socket, struct epoll_event 
     raw_event.events = EPOLLIN;
     raw_event.data.ptr = event_data;
     event_data->event = *event;
+    UBS_VLOG_TRACE("real epoll(%d) mod(fd=%d, event=0x%x, data=%lx)", epoll_fd_, socket->event_fd_, raw_event.events,
+                   raw_event.data);
     auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, socket->event_fd_, &raw_event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("urma_event_poll EpollCtlMod(socket:%d, event fd: %d) failed: %d : %s\n", socket->raw_socket_,
@@ -324,6 +333,7 @@ int UrmaEventPoll::DelUrmaSocketEvent(UrmaSocketPtr &socket)
                       socket->raw_socket_);
         return 0;
     }
+    UBS_VLOG_TRACE("real epoll(%d) del(fd=%d, event=0x%x, data=%lx)", epoll_fd_, socket->event_fd_);
     auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, socket->event_fd_, nullptr);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("urma_event_poll del urma event for socket: %d, event fd: %d failed: %d : %s\n",

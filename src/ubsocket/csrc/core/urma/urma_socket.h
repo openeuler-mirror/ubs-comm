@@ -89,8 +89,26 @@ public:
 
     void SetSocketReadableReady(bool b)
     {
-        return socket_readable_ready_.store(b, std::memory_order_release);
+        socket_readable_ready_.store(b, std::memory_order_release);
     }
+
+    void SetReachEpollEvents(uint32_t events)
+    {
+        reach_epoll_events_.store(events, std::memory_order_relaxed);
+    }
+
+    uint32_t FetchOrReachEpollEvents(uint32_t events)
+    {
+        return reach_epoll_events_.fetch_or(events, std::memory_order_relaxed);
+    }
+
+    uint32_t GetReachEpollEvents() const
+    {
+        return reach_epoll_events_.load(std::memory_order_relaxed);
+    }
+
+protected:
+    int DoNotifyWritable() override;
 
 private:
     UrmaJettyPtr jetty_;      /* could be dedicated jetty or shared jetty */
@@ -120,6 +138,7 @@ private:
 
     uint32_t negotiated_version_{0};
     uint32_t peer_version_{0};
+    std::atomic<uint32_t> reach_epoll_events_{0};
     std::atomic<bool> socket_readable_ready_{false}; // socket初始状态为不可读
     friend class UrmaAcceptorOps;
     friend class UrmaConnectorOps;
@@ -127,6 +146,12 @@ private:
     friend class UrmaRxOps;
 };
 using UrmaSocketPtr = Ref<UrmaSocket>;
+
+ALWAYS_INLINE int UrmaSocket::DoNotifyWritable()
+{
+    FetchOrReachEpollEvents(EPOLLOUT);
+    return eventfd_write(event_fd_, 1);
+}
 
 } // namespace urma
 } // namespace ubs

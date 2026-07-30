@@ -23,7 +23,9 @@ DataRx::DataRx(const SocketPtr &sock, DataRxOps *ops) : fd_(sock->raw_socket_), 
 
 ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
+    UBS_VLOG_TRACE("enter DataRx::ReadV fd=%d, iovcnt=%d, iov[0].buf=%p", sock->Fd(), iovcnt, iov[0].iov_base);
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        UBS_VLOG_TRACE("socket(%d) state raw established, run libc readv.", sock->Fd());
         return LibcApi::readv(fd_, iov, iovcnt);
     }
 
@@ -45,6 +47,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
 
     if (UNLIKELY(rx_ops_ == nullptr)) {
         errno = ENOTCONN;
+        UBS_VLOG_ERR("socket(%d) rx ops null", sock->Fd());
         return -1;
     }
 

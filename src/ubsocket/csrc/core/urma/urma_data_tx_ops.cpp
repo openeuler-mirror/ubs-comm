@@ -28,6 +28,7 @@ ssize_t UrmaTxOps::WriteV(const SocketPtr &sock, const struct iovec *iov, int io
         total_size += iov[i].iov_len;
     }
 
+    UBS_VLOG_TRACE("writev on urma socket(%d) iovcnt=%d, bytes=%zu, flag=%x", sock->Fd(), iovcnt, total_size, flags);
     if (UNLIKELY(iovcnt <= 0 || total_size == 0)) {
         return 0;
     }
@@ -111,9 +112,12 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
     ctrl_message.head.reserved[1] = 0;
     ctrl_message.head.reserved[2] = 0;
     ctrl_message.small_io.body_size = static_cast<uint32_t>(total);
+    UBS_VLOG_TRACE("ctl_msg(req_id=%lx, seq_no=%lx, msg_size=%hu, body_size=%u", ctrl_message.head.request_id,
+                   ctrl_message.head.sequence_no, ctrl_message.head.message_size, ctrl_message.small_io.body_size);
+
     std::vector<iovec> data_iov(iovcnt + 1);
     data_iov[0].iov_base = reinterpret_cast<char *>(&ctrl_message);
-    data_iov[0].iov_len = sizeof(URMA_INLINE_MESSAGE_CTRL_COST);
+    data_iov[0].iov_len = URMA_INLINE_MESSAGE_CTRL_COST;
     for (auto i = 0; i < iovcnt; i++) {
         data_iov[i + 1].iov_base = reinterpret_cast<char *>(iov[i].iov_base);
         data_iov[i + 1].iov_len = iov[i].iov_len;
@@ -144,6 +148,11 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
         src_sg.num_sge++;
         dst_sg.num_sge++;
     }
+    CopyFromIovToSendBuf(data_iov, src_sges);
+    auto real_req = (UrmaCtrlMessage *)(src_sges[0].addr);
+    UBS_VLOG_TRACE("real_req(req_id=%lx, seq_no=%lx, msg_size=%hu, body_size=%u", real_req->head.request_id,
+                   real_req->head.sequence_no, real_req->head.message_size, real_req->small_io.body_size);
+
     /*
      * For WRITE_IMM, the immediate data is stored in rw.notify_data.
      * The server receives this as cr.imm_data via URMA_CR_OPC_WRITE_WITH_IMM.

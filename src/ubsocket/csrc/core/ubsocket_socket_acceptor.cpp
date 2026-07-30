@@ -153,6 +153,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
 #endif
     // 异步/同步
     if (GlobalSetting::AsyncAcceptorEnabled()) {
+        UBS_VLOG_TRACE("async acceptor enabled.");
         // 懒初始化：启动 ExecutorService + 初始化 wakeup_event_
         InitWakeupEvent();
         UBS_VLOG_DEBUG("async accept execute. fd:%d", fd);
@@ -182,6 +183,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         errno = EAGAIN;
         return -1;
     } else {
+        UBS_VLOG_TRACE("async acceptor disabled.");
         if (peerIp.length() == 0) {
             peerIp = SocketConnHelper::ExtractIpFromSockAddr(&addr_tmp);
         }
@@ -303,17 +305,19 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 
     new_socket_obj->create_type_ = SOCK_CREATE_TYPE_ACCEPT;
     newSocket->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
+#if 0 // TODO: umq / urma socket 识别
     auto *umqOps = static_cast<umq::UmqAcceptorOps *>(newSocket->acceptor_->acceptor_ops_.Get());
     umqOps->umq_conn_info_.peer_ip = peerIp;
     umqOps->umq_conn_info_.peer_fd = new_fd;
     umqOps->umq_conn_info_.type_fd = 0;
     umqOps->umq_conn_info_.create_time = std::chrono::system_clock::now();
+#endif
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         newSocket->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);
     }
     //TODO: 优化建链成功的打印日志
-    UBS_VLOG_DEBUG("UB connection has been successfully established new fd: %d\n", new_fd);
+    UBS_VLOG_TRACE("UB connection has been successfully established new fd: %d\n", new_fd);
     PROF_END(CORE_ACCEPT, true);
 
     return UBS_OK;

@@ -51,8 +51,11 @@ Result UrmaConnectorOps::BuildTfoPayload(uint8_t *buf, int &buf_len, const Socke
 Result UrmaConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *address, socklen_t address_len,
                                         const SocketPtr &sock)
 {
-    (void)address_len;
-    (void)sock;
+    Result ret = DoTcpConnect(new_fd, address, address_len, sock);
+    if (ret != UBS_OK) {
+        UBS_VLOG_ERR("urma socket connect tcp failed: %d", ret);
+        return ret;
+    }
     raw_fd_ = new_fd;
     SocketConnHelper::SetTcpNoDelay(new_fd);
     conn_info.peer_ip = SocketConnHelper::ExtractIpFromSockAddr(address);
@@ -128,6 +131,12 @@ Result UrmaConnectorOps::CreateSocketResources(SocketPtr &sock)
     if (urma_sock == nullptr) {
         UBS_VLOG_ERR("CreateSocketResources fd=%d, socket not urma-socket.");
         return UBS_INVALID_PARAM;
+    }
+
+    auto res = urma_sock->GenerateSocketCommOps(sock);
+    if (UNLIKELY(res != UBS_OK)) {
+        UBS_VLOG_ERR("GenerateSocketCommOps failed: %d", res);
+        return res;
     }
 
     return urma_sock->ExchangeSocketResources(raw_fd_, *urma_sock.Get());
