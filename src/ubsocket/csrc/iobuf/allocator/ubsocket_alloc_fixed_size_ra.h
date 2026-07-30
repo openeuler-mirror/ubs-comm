@@ -13,6 +13,7 @@
 #define UBS_COMM_UBSOCKET_ALLOC_FIXED_SIZE_RA_H
 
 #include <memory_resource>
+#include <semaphore.h>
 
 #include "ubsocket_alloc_fixed_size_types.h"
 
@@ -79,9 +80,13 @@ public:
      */
     void ExpandRange(uintptr_t address, uint32_t size_bytes) noexcept;
 
+    /* getters for async expand threshold check */
+    uint32_t GetTotalSize() const noexcept { return size_bytes_; }
+    uint32_t GetFreeSize() const noexcept { return free_size_bytes_; }
+
 private:
     const uintptr_t base_address_;                                  /* address of the whole range */
-    const uint32_t size_bytes_;                                     /* size of the whole range */
+    uint32_t size_bytes_;                                           /* size of the whole range */
     uint32_t free_size_bytes_ = 0;                                  /* left free space of whole range */
     std::pmr::map<uintptr_t, uint32_t> free_addresses_;             /* free ranges for merge */
     std::pmr::map<uintptr_t, uint32_t> allocated_addresses_;        /* free ranges for merge */
@@ -128,7 +133,7 @@ ALWAYS_INLINE uintptr_t SingleAllocator::Allocate(uint32_t size_bytes) noexcept
     }
 
     /* step7: insert into allocated map */
-    allocated_addresses_.emplace(target_address, target_size);
+    allocated_addresses_.emplace(target_address, size_bytes);
 
     /* step8: decrease free bytes */
     free_size_bytes_ -= size_bytes;
@@ -200,6 +205,7 @@ ALWAYS_INLINE void SingleAllocator::ExpandRange(uintptr_t address, uint32_t size
 
     /* increase total free size */
     free_size_bytes_ += size_bytes;
+    size_bytes_ += size_bytes;
 }
 
 } // namespace sub
@@ -207,19 +213,35 @@ ALWAYS_INLINE void SingleAllocator::ExpandRange(uintptr_t address, uint32_t size
 class FixedRangeAllocator {
 public:
     FixedRangeAllocator() = default;
-    ~FixedRangeAllocator() = default;
+    ~FixedRangeAllocator()
+    {
+        UnInit();
+    }
 
     Result Init(const FixedBlock &firstBlock, const FixedExpandHandler &handler) noexcept;
     void UnInit() noexcept;
+
+    /* async expand related */
+    void AsyncExpandEnable(sem_t &sem, float threshold) noexcept;
+    void AsyncExpandDisable() noexcept;
+    bool NeedAsyncExpand() noexcept;
+    Result DoAsyncExpand() noexcept;
 
     bool DirectAllocate(uint32_t size, uintptr_t &address) noexcept;
     void DirectFree(uintptr_t address) noexcept;
 
 private:
+    Result DoSyncExpand() noexcept;
+    bool NeedAsyncExpandLocked() noexcept;
+
     std::mutex mutex_;
     sub::SingleAllocatorPtr sub_allocator_{nullptr};
     FixedExpandHandler expand_handler_ = nullptr;
-    std::vector<FixedBlock> blocks_;
+
+    /* async expand related */
+    bool async_expand_enable_ = false;
+    sem_t *async_expand_sem_ = nullptr;
+    float async_expand_threshold_ = 0.8f;
 };
 
 ALWAYS_INLINE Result FixedRangeAllocator::Init(const FixedBlock &firstBlock, const FixedExpandHandler &handler) noexcept
@@ -232,8 +254,6 @@ ALWAYS_INLINE Result FixedRangeAllocator::Init(const FixedBlock &firstBlock, con
     if (firstBlock.address == 0 || firstBlock.size_kb == 0 || firstBlock.size_kb != firstBlock.free_size_kb) {
         return UBS_INVALID_PARAM;
     }
-
-    blocks_.push_back(firstBlock);
 
     auto allocator = MakeRef<sub::SingleAllocator>(firstBlock.address, SIZE_1K * firstBlock.size_kb);
     if (allocator == nullptr) {
@@ -255,43 +275,112 @@ ALWAYS_INLINE void FixedRangeAllocator::UnInit() noexcept
         return;
     }
 
-    blocks_.clear();
     sub_allocator_ = nullptr;
     expand_handler_ = nullptr;
+    async_expand_enable_ = false;
+    async_expand_sem_ = nullptr;
 }
 
-ALWAYS_INLINE bool FixedRangeAllocator::DirectAllocate(uint32_t size, uintptr_t &address) noexcept
+ALWAYS_INLINE void FixedRangeAllocator::AsyncExpandEnable(sem_t &sem, float threshold) noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
+    async_expand_sem_ = &sem;
+    async_expand_threshold_ = threshold;
+    async_expand_enable_ = true;
+    UBS_VLOG_DEBUG("Range allocator async expand enabled, threshold=%.2f", threshold);
+}
+
+ALWAYS_INLINE void FixedRangeAllocator::AsyncExpandDisable() noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    async_expand_enable_ = false;
+    async_expand_sem_ = nullptr;
+}
+
+ALWAYS_INLINE bool FixedRangeAllocator::NeedAsyncExpandLocked() noexcept
+{
+    if (UNLIKELY(!async_expand_enable_ || sub_allocator_ == nullptr)) {
+        return false;
+    }
+    uint32_t total = sub_allocator_->GetTotalSize();
+    uint32_t freeSize = sub_allocator_->GetFreeSize();
+    float usedRatio = 1.0f - static_cast<float>(freeSize) / static_cast<float>(total);
+    return usedRatio >= async_expand_threshold_;
+}
+
+ALWAYS_INLINE bool FixedRangeAllocator::NeedAsyncExpand() noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return NeedAsyncExpandLocked();
+}
+
+ALWAYS_INLINE Result FixedRangeAllocator::DoAsyncExpand() noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (UNLIKELY(!async_expand_enable_ || expand_handler_ == nullptr || sub_allocator_ == nullptr)) {
+        UBS_VLOG_ERR("Failed to async expand for parameter invalid.");
+        return UBS_ERROR;
+    }
+    if (!NeedAsyncExpandLocked()) {
+        return UBS_OK;
+    }
+
+    FixedBlock new_block;
+    auto result = expand_handler_(true, new_block);
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("Failed to async expand for direct allocator");
+        return result;
+    }
+    sub_allocator_->ExpandRange(new_block.address, SIZE_1K * new_block.size_kb);
+    return UBS_OK;
+}
+
+ALWAYS_INLINE Result FixedRangeAllocator::DoSyncExpand() noexcept
+{
+    FixedBlock new_block;
     if (UNLIKELY(expand_handler_ == nullptr)) {
         UBS_VLOG_ERR("FixedRangeAllocator is not initialized");
         return UBS_ERROR;
     }
-
-    /* step1：allocate from sub allocator */
-    address = sub_allocator_->Allocate(size);
-    if (address != 0) {
-        UBS_VLOG_DEBUG("FixedRangeAllocator::DirectAllocate succeeded, %x", address);
-        return true;
-    }
-
-    /* step2: no enough memory and expand */
-    FixedBlock new_block;
-    auto expand_result = expand_handler_(true, new_block);
+    auto expand_result = expand_handler_(false, new_block);
     if (expand_result != UBS_OK) {
         UBS_VLOG_ERR("Failed to expand new block, probably out of memory");
-        return false;
+        return UBS_ERROR;
     }
 
-    /* step3: allocate again */
     sub_allocator_->ExpandRange(new_block.address, SIZE_1K * new_block.size_kb);
-    address = sub_allocator_->Allocate(size);
-    if (address != 0) {
-        UBS_VLOG_DEBUG("FixedRangeAllocator::DirectAllocate succeeded, %x", address);
-        return true;
-    }
+    return UBS_OK;
+}
 
-    UBS_VLOG_ERR("Un-reachable path");
+ALWAYS_INLINE bool FixedRangeAllocator::DirectAllocate(uint32_t size, uintptr_t &address) noexcept
+{
+    address = 0;
+    while (address == 0) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        /* step1：allocate from sub allocator */
+        address = sub_allocator_->Allocate(size);
+
+        /* step2: if need async expand */
+        if (async_expand_enable_ && NeedAsyncExpandLocked()) {
+            sem_post(async_expand_sem_);
+        }
+
+        /* step3: if satisfied */
+        if (address != 0) {
+            UBS_VLOG_DEBUG("FixedRangeAllocator::DirectAllocate succeeded, %x", address);
+            return true;
+        }
+
+        /* step4: continue for expand is trigger async in step2 */
+        if (async_expand_enable_) {
+            continue;
+        }
+
+        /* step5: execute sync expand */
+        if (DoSyncExpand() != UBS_OK) {
+            break;
+        }
+    }
     return false;
 }
 

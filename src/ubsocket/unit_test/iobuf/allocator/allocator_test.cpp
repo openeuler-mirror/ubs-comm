@@ -59,7 +59,8 @@ FixedAllocatorOptions MakeDefaultOptions()
     opts.block_size_mb = 8;
     opts.init_block_count = 2;
     opts.mini_block_size_kb = 8;
-    opts.async_expand = false;
+    opts.async_expand = true;
+    opts.async_expand_threshold = 0.4;
     opts.expanded_callback = [](uintptr_t a, uint64_t s, uint32_t f) {
         return g_callback_counter(a, s, f);
     };
@@ -484,7 +485,7 @@ TEST_F(AllocatorFunctionalTest, MultipleDirectAllocateFree)
     bool reuse_ok = false;
     uintptr_t reuse;
     RunInWorker([&]() {
-        for (int i = 0; i < 2048; i++) {
+        for (int i = 0; i < 4096; i++) {
             uintptr_t a = 100;
             if (!alloc_.DirectAllocate(8192, a)) {
                 all_ok = false;
@@ -829,7 +830,7 @@ TEST_F(AllocatorFunctionalTest, BatchAllocateFreeBatch16RoundTrip)
 
 TEST_F(AllocatorFunctionalTest, BatchAllocateFreeMultiBatch)
 {
-    constexpr uint16_t BATCH = 2048;
+    constexpr uint16_t BATCH = 4096;
     bool ok = false;
     std::vector<uintptr_t> addrs(BATCH, 0);
     RunInWorker([&]() {
@@ -1027,6 +1028,71 @@ TEST_F(AllocatorFunctionalTest, MultiThreadBatchAllocateFree)
         }
     });
     EXPECT_TRUE(success);
+}
+
+class AllocatorSyncFunctionalTest : public testing::Test {
+protected:
+    FixedAllocator alloc_;
+    FixedAllocatorOptions opts_{MakeDefaultOptions()};
+    static constexpr uint64_t MINI_BLOCK_SIZE = 8 * 1024ULL;
+
+    void SetUp() override
+    {
+        g_callback_counter.Reset();
+        opts_.async_expand = false;
+        ASSERT_EQ(alloc_.Init(opts_), UBS_OK);
+    }
+    void TearDown() override
+    {
+        alloc_.UnInit();
+    }
+};
+
+TEST_F(AllocatorSyncFunctionalTest, MultipleDirectAllocateFree)
+{
+    std::vector<uintptr_t> addrs;
+    bool all_ok = true;
+    bool reuse_ok = false;
+    uintptr_t reuse;
+    RunInWorker([&]() {
+        for (int i = 0; i < 4096; i++) {
+            uintptr_t a = 100;
+            if (!alloc_.DirectAllocate(8192, a)) {
+                all_ok = false;
+                break;
+            }
+            addrs.push_back(a);
+        }
+        if (all_ok) {
+            for (auto a = addrs.rbegin(); a != addrs.rend(); ++a) {
+                alloc_.DirectFree(*a);
+            }
+            reuse_ok = alloc_.DirectAllocate(8192, reuse);
+            if (reuse_ok) {
+                alloc_.DirectFree(reuse);
+            }
+        }
+    });
+    EXPECT_TRUE(all_ok);
+    EXPECT_TRUE(reuse_ok);
+    EXPECT_NE(reuse, 0ULL);
+}
+
+TEST_F(AllocatorSyncFunctionalTest, BatchAllocateFreeMultiBatch)
+{
+    constexpr uint16_t BATCH = 4096;
+    bool ok = false;
+    std::vector<uintptr_t> addrs(BATCH, 0);
+    RunInWorker([&]() {
+        uintptr_t *p = addrs.data();
+        ok = alloc_.BatchAllocate(BATCH, p);
+        if (ok) {
+            alloc_.BatchFree(BATCH, addrs.data());
+        }
+    });
+    EXPECT_TRUE(ok);
+    std::set<uintptr_t> unique(addrs.begin(), addrs.end());
+    EXPECT_EQ(unique.size(), (size_t)BATCH);
 }
 
 int main(int argc, char **argv)

@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_ALLOC_GLOBAL_CACHE_H
 #define UBS_COMM_UBSOCKET_ALLOC_GLOBAL_CACHE_H
 
+#include <semaphore.h>
 #include <condition_variable>
 
 #include "ubsocket_alloc_fixed_size_ra.h"
@@ -93,21 +94,11 @@ public:
      */
     void DirectFree(uintptr_t address) noexcept;
 
-    /**
-     * @brief Callback function of expand function,
-     * called by range allocator, async expand thread etc
-     *
-     * @param flags        [in] optional flags
-     * @param expandedBlock[out] expanded block
-     *
-     * @return 0 if successful
-     */
-    Result HandleExpandBlock(bool flags, FixedBlock &expandedBlock) noexcept;
-
 private:
     void UnInitInner() noexcept;
     Result ReserveSpace() noexcept;
     Result ExpandBlock(bool forDirectAllocation) noexcept;
+    Result HandleDirectExpandBlock(bool async_expand, FixedBlock &expandedBlock) noexcept;
     void ShrinkAllBlocks() noexcept;
     Result MakeMiniBlocks(uint32_t &mini_blocks_created, FixedMiniBlock *&blocks) noexcept;
 
@@ -116,6 +107,14 @@ private:
 
     uint32_t BatchAllocateInner(uint16_t requestSize, FixedMiniBlock *&blocks) noexcept;
     uint32_t BatchAllocateInnerPartial(uint16_t requestSize, FixedMiniBlock *&blocks) noexcept;
+    Result DoSyncExpand() noexcept;
+
+    /* async expand related */
+    void StartAsyncExpandThread() noexcept;
+    void StopAsyncExpandThread() noexcept;
+    void RunInThread() noexcept;
+    bool NeedAsyncExpand() noexcept;
+    Result DoAsyncExpand() noexcept;
 
 private:
     /* hot used variables, make sure its size is 64 bytes */
@@ -129,18 +128,24 @@ private:
     uint32_t free_mini_blocks_unaligned_ = 0;         /* how many mini blocks freed which is un-aligned */
     pthread_spinlock_t spinlock_aligned_;             /* allocate first lock spin lock from aligned */
     pthread_spinlock_t spinlock_unaligned_;           /* allocate first lock spin lock from unaligned */
+    uint64_t total_mini_blocks_ = 0;                  /* total mini blocks created, protected by spinlock_aligned_ */
+    bool async_expand_enable_ = false;                /* whether use async expand */
     bool init_ = false;                               /* inited or not */
-    uint64_t reserved[1]{0};                          /* reserved */
 
     /* not-hot used variables */
-    std::mutex mutex_;                            /* mutex for init/un-init, direct allocate/free */
-    FixedRangeAllocator direct_allocator_;        /* range based memory allocator for direct alloc and free */
-    uintptr_t next_expand_start_address_ = 0;     /* start address for next expand */
-    std::condition_variable sync_expand_cv_;      /* cv for sync expanding */
-    bool sync_expanding_ = false;                 /* flag for sync expanding */
-    std::vector<FixedBlock> direct_alloc_blocks_; /* all blocks for directly alloc */
-    std::vector<FixedBlock> tc_alloc_blocks_;     /* blocks for thread cache */
-    FixedAllocatorOptions options_;               /* options */
+    std::mutex mutex_;                                /* mutex for init/un-init, direct allocate/free */
+    FixedRangeAllocator direct_allocator_;            /* range based memory allocator for direct alloc and free */
+    uintptr_t next_expand_start_address_ = 0;         /* start address for next expand */
+    std::condition_variable sync_expand_cv_;          /* cv for sync expanding */
+    bool sync_expanding_ = false;                     /* flag for sync expanding */
+    std::vector<FixedBlock> direct_alloc_blocks_;     /* all blocks for directly alloc */
+    std::vector<FixedBlock> tc_alloc_blocks_;         /* blocks for thread cache */
+    FixedAllocatorOptions options_;                   /* options */
+
+    /* async expand related */
+    std::thread async_expand_thread_;                 /* thread for async expand */
+    std::atomic<bool> async_expand_running_{false}; /* running flag for async expand thread */
+    sem_t async_expand_sem_;                          /* semaphore for periodic wakeup */
 };
 
 ALWAYS_INLINE uint32_t FixedGlobalCache::AlignUpToSingleBatchSize(uint32_t size) noexcept
@@ -246,18 +251,23 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
     pthread_spin_lock(&spinlock_aligned_);
     aligned_mini_blocks_ = mini_blocks_created;
     free_mini_blocks_aligned_ += mini_block_created_count;
+    total_mini_blocks_ += mini_block_created_count;
     pthread_spin_unlock(&spinlock_aligned_);
 
     /* step6: create range allocator */
     result = direct_allocator_.Init(
         direct_alloc_blocks_.at(0),
-        std::bind(&FixedGlobalCache::HandleExpandBlock, this, std::placeholders::_1, std::placeholders::_2));
+        std::bind(&FixedGlobalCache::HandleDirectExpandBlock, this, std::placeholders::_1, std::placeholders::_2));
     if (result != UBS_OK) {
         UnInitInner();
         return result;
     }
 
     /* step7: create thread for dynamic expand for thread cache in background */
+    if (options_.async_expand) {
+        async_expand_enable_ = true;
+        StartAsyncExpandThread();
+    }
 
     init_ = true;
     UBS_VLOG_INFO("Initialized");
@@ -407,8 +417,10 @@ ALWAYS_INLINE Result FixedGlobalCache::MakeMiniBlocks(uint32_t &mini_blocks_crea
         uint32_t loop_count = static_cast<uint32_t>(options_.block_size_mb) * SIZE_1K / options_.mini_block_size_kb - 1;
 
         mini_blocks_created += loop_count + 1;
+        auto tmp_head = blocks;
         blocks = reinterpret_cast<FixedMiniBlock *>(block.address);
         blocks->tail = reinterpret_cast<FixedMiniBlock *>(block.address + stride * loop_count);
+        blocks->tail->next = tmp_head;
 
         /* split to mini blocks and link them */
         uintptr_t address = block.address;
@@ -438,6 +450,11 @@ ALWAYS_INLINE Result FixedGlobalCache::MakeMiniBlocks(uint32_t &mini_blocks_crea
 
 ALWAYS_INLINE void FixedGlobalCache::UnInitInner() noexcept
 {
+    /* stop expand thread */
+    if (async_expand_enable_) {
+        StopAsyncExpandThread();
+    }
+
     /* shrink all blocks */
     ShrinkAllBlocks();
 
@@ -489,45 +506,61 @@ ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocateInner(uint16_t requestSize
             }
         }
 
-        /* step2: if satisfied */
+        /* step2: if need async expand */
+        if (async_expand_enable_ && NeedAsyncExpand()) {
+            sem_post(&async_expand_sem_);
+        }
+
+        /* step3: if satisfied */
         if (allocated == aligned_request_size) {
             break;
         }
 
-        /* step3: need to expand or wait for expand */
-        std::unique_lock<std::mutex> lock(mutex_);
-        /* wait if already expand by another thread */
-        sync_expand_cv_.wait(lock, [&]() { return !sync_expanding_; });
-        if (free_mini_blocks_aligned_ < FIX_GC_BATCH_FREE_SIZE) {
+        /* step4: continue for expand is trigger async in step2 */
+        if (async_expand_enable_) {
             continue;
         }
-        sync_expanding_ = true;
 
-        auto result = ExpandBlock(false);
-        if (result == UBS_OK) {
-            /* make mini blocks */
-            uint32_t mini_blocks_created = 0;
-            FixedMiniBlock *tmp_mini_blocks_created = nullptr;
-            auto make_mini_block_result = MakeMiniBlocks(mini_blocks_created, tmp_mini_blocks_created);
-            if (make_mini_block_result == UBS_OK) {
-                /* attach to aligned list */
-                pthread_spin_lock(&spinlock_aligned_);
-                tmp_mini_blocks_created->tail = aligned_mini_blocks_;
-                aligned_mini_blocks_ = tmp_mini_blocks_created;
-                free_mini_blocks_aligned_ += mini_blocks_created;
-                pthread_spin_unlock(&spinlock_aligned_);
-            }
-        }
-
-        sync_expanding_ = false;
-        sync_expand_cv_.notify_all();
-        if (result != UBS_OK) {
+        /* step5: execute sync expand */
+        if (DoSyncExpand() != UBS_OK) {
             break;
         }
     }
 
     blocks = head;
     return allocated;
+}
+
+ALWAYS_INLINE Result FixedGlobalCache::DoSyncExpand() noexcept
+{
+    /* need to expand or wait for expand */
+    std::unique_lock<std::mutex> lock(mutex_);
+    /* wait if already expand by another thread */
+    sync_expand_cv_.wait(lock, [&]() { return !sync_expanding_; });
+    if (free_mini_blocks_aligned_ > FIX_GC_BATCH_FREE_SIZE) {
+        sync_expand_cv_.notify_all();
+        return UBS_OK;
+    }
+    sync_expanding_ = true;
+    auto result = ExpandBlock(false);
+    if (result == UBS_OK) {
+        /* make mini blocks */
+        uint32_t mini_blocks_created = 0;
+        FixedMiniBlock *tmp_mini_blocks_created = nullptr;
+        auto make_mini_block_result = MakeMiniBlocks(mini_blocks_created, tmp_mini_blocks_created);
+        if (make_mini_block_result == UBS_OK) {
+            /* attach to aligned list */
+            pthread_spin_lock(&spinlock_aligned_);
+            tmp_mini_blocks_created->tail = aligned_mini_blocks_;
+            aligned_mini_blocks_ = tmp_mini_blocks_created;
+            free_mini_blocks_aligned_ += mini_blocks_created;
+            total_mini_blocks_ += mini_blocks_created;
+            pthread_spin_unlock(&spinlock_aligned_);
+        }
+    }
+    sync_expanding_ = false;
+    sync_expand_cv_.notify_all();
+    return result;
 }
 
 ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocateInnerPartial(uint16_t requestSize,
@@ -560,8 +593,8 @@ ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocateInnerPartial(uint16_t requ
     if (allocated > 0) {
         blocks = aligned_mini_blocks_;
         aligned_mini_blocks_ = iter;
+        blocks->tail->next = nullptr;
     }
-    blocks->tail->next = nullptr;
     pthread_spin_unlock(&spinlock_aligned_);
 
     return allocated;
@@ -718,18 +751,106 @@ ALWAYS_INLINE void FixedGlobalCache::DirectFree(uintptr_t address) noexcept
     direct_allocator_.DirectFree(address);
 }
 
-ALWAYS_INLINE Result FixedGlobalCache::HandleExpandBlock(bool flags, FixedBlock &expandedBlock) noexcept
+ALWAYS_INLINE Result FixedGlobalCache::HandleDirectExpandBlock(bool async_expand, FixedBlock &expandedBlock) noexcept
 {
-    std::lock_guard<std::mutex> locker(mutex_);
-    Result ret = ExpandBlock(flags);
-    if (ret == UBS_OK) {
-        if (flags) {
-            expandedBlock = direct_alloc_blocks_.back();
-        } else {
-            expandedBlock = tc_alloc_blocks_.back();
+    std::unique_lock<std::mutex> locker(mutex_, std::defer_lock);
+    if (!async_expand) {
+        locker.lock();
+    }
+    Result ret = ExpandBlock(true);
+    expandedBlock = direct_alloc_blocks_.back();
+    return ret;
+}
+
+ALWAYS_INLINE void FixedGlobalCache::StartAsyncExpandThread() noexcept
+{
+    if (async_expand_running_.exchange(true)) {
+        UBS_VLOG_DEBUG("Async expand thread already running");
+        return;
+    }
+
+    sem_init(&async_expand_sem_, 0, 0);
+    direct_allocator_.AsyncExpandEnable(async_expand_sem_, options_.async_expand_threshold);
+    async_expand_thread_ = std::thread(&FixedGlobalCache::RunInThread, this);
+    UBS_VLOG_DEBUG("Async expand thread started");
+}
+
+ALWAYS_INLINE void FixedGlobalCache::StopAsyncExpandThread() noexcept
+{
+    if (!async_expand_running_.exchange(false)) {
+        return;
+    }
+
+    direct_allocator_.AsyncExpandDisable();
+
+    sem_post(&async_expand_sem_);
+
+    if (async_expand_thread_.joinable()) {
+        try {
+            async_expand_thread_.join();
+        } catch (...) {
+            UBS_VLOG_ERR("Exception caught during async expand thread join");
         }
     }
-    return ret;
+
+    sem_destroy(&async_expand_sem_);
+}
+
+ALWAYS_INLINE void FixedGlobalCache::RunInThread() noexcept
+{
+    pthread_setname_np(pthread_self(), "ubs_iobuf_expand");
+
+    while (async_expand_running_.load()) {
+        int ret = sem_wait(&async_expand_sem_);
+
+        if (!async_expand_running_.load()) {
+            break;
+        }
+
+        if (ret == 0) {
+            if (NeedAsyncExpand()) {
+                DoAsyncExpand();
+            }
+            if (direct_allocator_.NeedAsyncExpand()) {
+                direct_allocator_.DoAsyncExpand();
+            }
+        }
+    }
+    UBS_VLOG_INFO("Ubs iobuf expand thread is end.");
+}
+
+ALWAYS_INLINE bool FixedGlobalCache::NeedAsyncExpand() noexcept
+{
+    /* read free counts under their respective spinlocks to get consistent values */
+    pthread_spin_lock(&spinlock_aligned_);
+    uint32_t total = total_mini_blocks_;
+    uint32_t freeAligned = free_mini_blocks_aligned_;
+    pthread_spin_unlock(&spinlock_aligned_);
+
+    float usageRatio = static_cast<float>(total - freeAligned) / static_cast<float>(total);
+    return usageRatio >= options_.async_expand_threshold;
+}
+
+ALWAYS_INLINE Result FixedGlobalCache::DoAsyncExpand() noexcept
+{
+    if (!NeedAsyncExpand()) {
+        return UBS_OK;
+    }
+    auto result = ExpandBlock(false);
+    if (result == UBS_OK) {
+        uint32_t miniBlocksCreated = 0;
+        FixedMiniBlock *tmpMiniBlocksCreated = nullptr;
+        auto makeResult = MakeMiniBlocks(miniBlocksCreated, tmpMiniBlocksCreated);
+        if (makeResult == UBS_OK) {
+            pthread_spin_lock(&spinlock_aligned_);
+            tmpMiniBlocksCreated->tail = aligned_mini_blocks_;
+            aligned_mini_blocks_ = tmpMiniBlocksCreated;
+            free_mini_blocks_aligned_ += miniBlocksCreated;
+            total_mini_blocks_ += miniBlocksCreated;
+            pthread_spin_unlock(&spinlock_aligned_);
+        }
+    }
+    return result;
 }
 } // namespace allocator
 } // namespace ubs
