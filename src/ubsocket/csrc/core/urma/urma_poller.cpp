@@ -99,13 +99,20 @@ void UrmaPoller::EventPoll() noexcept
                 continue;
             }
 
-            cnt = jfc_->Poll(POLL_BATCH_SIZE, crs);
-            if (cnt <= 0) {
-                continue;
+            jfc_->Ack(1);
+            bool first_time = true;
+            while (true) {
+                cnt = jfc_->Poll(POLL_BATCH_SIZE, crs);
+                if (cnt <= 0) {
+                    break;
+                }
+                auto result = cqe_handler_(0, cnt, crs);
+                UBS_VLOG_TRACE("cqe handler processed (%d) and return %d, continue polling", cnt, result);
+                if (first_time) {
+                    first_time = false;
+                    jfc_->Rearm(false);
+                }
             }
-
-            auto result = cqe_handler_(0, cnt, crs);
-            UBS_VLOG_INFO("cqe handler processed and return failed error %d, continue polling", result);
         } catch (...) {
             UBS_VLOG_ERR("Exception caught in UrmaPoller");
         }
@@ -122,7 +129,7 @@ void UrmaPoller::BusyPoll() noexcept
             if (polled_count > 0) { /* if polled */
                 auto result = cqe_handler_(0, polled_count, crs);
                 if (UNLIKELY(result != UBS_OK)) {
-                    UBS_VLOG_INFO("cqe handler processed and return failed error %d, continue polling", result);
+                    UBS_VLOG_INFO("cqe handler processed and return %d, continue polling", result);
                 }
             } else {
                 // TODO

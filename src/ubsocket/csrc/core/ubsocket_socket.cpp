@@ -74,7 +74,9 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
         outSocket = sock;
 
         return UBS_OK;
-    } else if (t == SocketType::SOCK_TYPE_URMA) {
+    }
+
+    if (t == SocketType::SOCK_TYPE_URMA) {
         using namespace urma;
         auto urmaSock = MakeRef<UrmaSocket>(fd);
         if (urmaSock == nullptr) {
@@ -105,14 +107,11 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
         sockBase->acceptor_ = new (std::nothrow) Acceptor(sock, acceptorOps);
         sockBase->connector_ = new (std::nothrow) Connector(sock, connectorOps);
 
-        if (result != UBS_OK) {
-            return result;
-        }
         outSocket = sock;
         return UBS_OK;
-    } else {
-        return UBS_INVALID_PARAM;
     }
+
+    return UBS_INVALID_PARAM;
 } // namespace ubs
 
 Result SocketBase::GenerateSocketCommOps(const SocketPtr &sock)

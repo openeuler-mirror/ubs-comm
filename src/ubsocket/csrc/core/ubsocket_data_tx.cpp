@@ -53,6 +53,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     ssize_t result;
     if (UNLIKELY(tx_ops_ == nullptr)) {
         errno = ENOTCONN;
+        UBS_VLOG_ERR("data tx for socket(%d) not set tx_ops", fd_);
         result = -1;
     } else {
         result = tx_ops_->WriteV(sock, iov, iovcnt, 0);

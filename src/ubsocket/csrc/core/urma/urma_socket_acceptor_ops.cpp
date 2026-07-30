@@ -113,6 +113,12 @@ Result UrmaAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
         return UBS_INVALID_PARAM;
     }
 
+    auto res = urma_sock->GenerateSocketCommOps(socketPtr);
+    if (UNLIKELY(res != UBS_OK)) {
+        UBS_VLOG_ERR("GenerateSocketCommOps failed: %d", res);
+        return res;
+    }
+
     return urma_sock->ExchangeSocketResources(fd, *urma_sock.Get());
 }
 

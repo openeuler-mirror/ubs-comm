@@ -124,10 +124,9 @@ public:
         return connector_->IsClient();
     }
 
-private:
-    int DoNotifyWritable();
 
 protected:
+    virtual int DoNotifyWritable();
     static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);
     static Result CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops);
     static Result CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptor);
@@ -179,6 +178,7 @@ ALWAYS_INLINE int SocketBase::WriteV(const SocketPtr &sock, const struct iovec *
 
 ALWAYS_INLINE int SocketBase::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
+    UBS_VLOG_TRACE("enter SocketBase::ReadV fd=%d, iovcnt=%d, iov[0].buf=%p", sock->Fd(), iovcnt, iov[0].iov_base);
     return rx_.ReadV(sock, iov, iovcnt);
 }
 

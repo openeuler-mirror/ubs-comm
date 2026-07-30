@@ -33,10 +33,10 @@ Result UrmaSocket::Initialize() noexcept
         return UBS_ERROR;
     }
 
-    uint32_t send_buf_size = URMA_SEND_BUF_DEFAULT_KB * 1024;
-    uint32_t recv_buf_size = URMA_RECV_BUF_DEFAULT_KB * 1024;
+    send_buf_size_ = URMA_SEND_BUF_DEFAULT_KB * 1024;
+    recv_buf_size_ = URMA_RECV_BUF_DEFAULT_KB * 1024;
 
-    auto buffer = UrmaBackend::GetAllocator()->direct_allocate(recv_buf_size + send_buf_size);
+    auto buffer = UrmaBackend::GetAllocator()->direct_allocate(recv_buf_size_ + send_buf_size_);
     if (UNLIKELY(buffer == nullptr)) {
         UBS_SLOG_ERR("UrmaSocket: malloc buf failed, fd=" << raw_socket_);
         send_buf_addr_ = 0;
@@ -46,9 +46,9 @@ Result UrmaSocket::Initialize() noexcept
         return UBS_MALLOC_FAILED;
     }
     recv_buf_addr_ = reinterpret_cast<uintptr_t>(buffer);
-    send_buf_addr_ = recv_buf_addr_ + recv_buf_size;
+    send_buf_addr_ = recv_buf_addr_ + recv_buf_size_;
 
-    send_buf_ = new (std::nothrow) UrmaSockRingBuf(send_buf_size);
+    send_buf_ = new (std::nothrow) UrmaSockRingBuf(send_buf_size_);
     if (UNLIKELY(send_buf_ == nullptr)) {
         UBS_SLOG_ERR("UrmaSocket: ringbuf alloc failed, fd=" << raw_socket_);
         UrmaBackend::GetAllocator()->direct_release(buffer);
@@ -97,14 +97,14 @@ Result UrmaSocket::CreateUrmaResources()
     const urma_eid_info_t &eid_info = context_->EidInfo();
     memcpy(&local_eid_, &eid_info.eid, sizeof(urma_eid_t));
 
-    urma_jfs_cfg_t jfs_cfg = context_->CreateJfsCfg(kDefaultQueueDepth, URMA_TM_RC, 0);
+    urma_jfs_cfg_t jfs_cfg = context_->CreateJfsCfg(kDefaultQueueDepth, URMA_TM_RM, 0);
     ret = context_->CreateJfs(jfs_cfg, jfc_, jfs_);
     if (ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: CreateJfs failed, fd=" << raw_socket_);
         return ret;
     }
 
-    urma_jfr_cfg_t jfr_cfg = context_->CreateJfrCfg(kDefaultQueueDepth, URMA_TM_RC, 0, 0);
+    urma_jfr_cfg_t jfr_cfg = context_->CreateJfrCfg(kDefaultQueueDepth, URMA_TM_RM, 0, 0);
     ret = context_->CreateJfr(jfr_cfg, jfc_, jfr_);
     if (ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: CreateJfr failed, fd=" << raw_socket_);
@@ -153,11 +153,14 @@ int UrmaSocket::NotifySocketReadable()
         socket_readable_ready_.store(true, std::memory_order_release);
         if ((events_.load(std::memory_order_acquire) & EPOLLIN) != 0) { // double check
             if (socket_readable_ready_.exchange(false, std::memory_order_acq_rel)) {
+                FetchOrReachEpollEvents(EPOLLIN);
                 return eventfd_write(event_fd_, 1);
             }
         }
         return 0;
     }
+
+    FetchOrReachEpollEvents(EPOLLIN);
     return eventfd_write(event_fd_, 1);
 }
 
@@ -186,7 +189,7 @@ void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
 {
     // TODO: implement pre-write CQE handling
     //auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
-    //auto req = reinterpret_cast<UramWriteMessage *>(recv_buf_addr_ + recv_offset);
+    //auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
     recv_data_ready_ = true;
     NotifySocketReadable();
 }
@@ -194,15 +197,15 @@ void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
 void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
 {
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
-    auto req = reinterpret_cast<UramWriteMessage *>(send_buf_addr_ + send_offset);
+    auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
 
     /*
      * TODO:
      *  checker req->flags, all page read finished -> release req buf, release finished pages
      */
 
-    if (send_buf_ != nullptr && req->message_size > 0) {
-        send_buf_->Release(send_offset, req->message_size);
+    if (send_buf_ != nullptr && req->head.message_size > 0) {
+        send_buf_->Release(send_offset, req->head.message_size);
     }
 }
 
@@ -210,8 +213,9 @@ void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
 {
     auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
-    auto req = reinterpret_cast<UramWriteMessage *>(recv_buf_addr_ + recv_offset);
-    auto res = rdma_rx_ops->DataReached(this, req->sequence_no, imm.data);
+    auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
+    UBS_VLOG_TRACE("HandleWriteInBand imm_off:%lu, recv_off:%lu, req->seq_no=%lu", imm.ubsocket.buffer_offset, recv_offset, req->head.sequence_no);
+    auto res = rdma_rx_ops->DataReached(this, req->head.sequence_no, imm.data);
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
     }
@@ -220,9 +224,9 @@ void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
 void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
 {
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
-    auto req = reinterpret_cast<UramWriteMessage *>(send_buf_addr_ + send_offset);
-    if (send_buf_ != nullptr && req->message_size > 0) {
-        send_buf_->Release(send_offset, req->message_size);
+    auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
+    if (send_buf_ != nullptr && req->head.message_size > 0) {
+        send_buf_->Release(send_offset, req->head.message_size);
         NotifyWritable();
     }
 }
@@ -252,6 +256,15 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
     local.node = UrmaBackend::GetLocalIdentifyNode();
     local.pool_start_addr = allocator->get_local_start_addr();
     auto local_seg = allocator->get_local_target_seg(urma_sock.recv_buf_addr_);
+    UBS_VLOG_TRACE(
+        "send buf(0x%lx, %u) recv buf(0x%lx, %u) jetty-id(eid=(%lx:%lx), uasid=%u, id=%u) "
+        "seg(start_ptr=0x%lx, seg(va=0x%lx, len=%lu, attr=%x, token_id=%u), user_ctx=0x%lx, mva=0x%lx, token_id=%p",
+        urma_sock.send_buf_addr_, urma_sock.send_buf_size_, urma_sock.recv_buf_addr_, urma_sock.recv_buf_addr_,
+        local.ex.raw_jetty_id.eid.in6.subnet_prefix, local.ex.raw_jetty_id.eid.in6.interface_id,
+        local.ex.raw_jetty_id.uasid, local.ex.raw_jetty_id.id, local.pool_start_addr, local_seg->seg.ubva.va,
+        local_seg->seg.len, local_seg->seg.attr, local_seg->seg.token_id, local_seg->user_ctx, local_seg->mva,
+        local_seg->token_id);
+
     if (local.pool_start_addr == 0 || local_seg == nullptr) {
         UBS_SLOG_ERR("UrmaSocket: Failed local pool address: " << std::hex << local.pool_start_addr
                                                                << " get local target_seg @0x" << std::hex

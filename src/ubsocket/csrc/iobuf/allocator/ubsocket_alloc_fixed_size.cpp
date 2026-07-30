@@ -178,7 +178,7 @@ bool FixedAllocator::DirectAllocate(uint32_t size, uintptr_t &address) noexcept
         return false;
     }
 
-    if (UNLIKELY(address == 0 || size == 0)) {
+    if (UNLIKELY(size == 0)) {
         return false;
     }
 

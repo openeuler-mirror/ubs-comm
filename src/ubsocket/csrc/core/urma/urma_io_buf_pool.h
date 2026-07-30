@@ -153,7 +153,7 @@ public:
     urma_target_seg_t *get_local_target_seg(uintptr_t ptr) const noexcept;
     RemoteSegmentsPtr get_remote_segments(const IdentifyNode &remote) noexcept;
     urma_target_seg_t *get_remote_target_seg(RemoteSegmentsPtr &remote, uintptr_t ptr) const noexcept;
-    Result store_remote_target_seg(RemoteSegmentsPtr &remote, const urma_seg_t &seg, urma_target_seg_t *&tgt) noexcept;
+    Result store_remote_target_seg(RemoteSegmentsPtr &remote, urma_seg_t &seg, urma_target_seg_t *&tgt) noexcept;
 
     DEFINE_REF_OPERATION_FUNC
 
