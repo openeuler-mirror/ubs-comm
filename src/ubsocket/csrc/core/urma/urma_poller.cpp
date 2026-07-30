@@ -103,9 +103,17 @@ void UrmaPoller::EventPoll() noexcept
             bool first_time = true;
             while (true) {
                 cnt = jfc_->Poll(POLL_BATCH_SIZE, crs);
-                if (cnt <= 0) {
+                if (UNLIKELY(cnt == 0)) {
+                    jfc_->Rearm(false);
                     break;
                 }
+
+                if (UNLIKELY(cnt < 0)) {
+                    stopping_ = true;
+                    UBS_VLOG_ERR("poll jfc failed return: %d", cnt);
+                    break;
+                }
+
                 auto result = cqe_handler_(0, cnt, crs);
                 UBS_VLOG_TRACE("cqe handler processed (%d) and return %d, continue polling", cnt, result);
                 if (first_time) {
