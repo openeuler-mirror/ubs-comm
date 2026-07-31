@@ -39,8 +39,8 @@ extern "C" {
 #define URMA_MAX_PRIORITY_CNT 16
 #define URMA_IPV4_MAP_IPV6_PREFIX (0x0000ffff)
 #define URMA_MAX_EID_CNT 1024     /* refer to UBCORE_MAX_SIP */
-#define URMA_CC_IDX_TABLE_SIZE 80   /* support 8 priorities and 10 algorithms */
-                                        /* same as UBCORE_CC_IDX_TABLE_SIZE */
+#define URMA_CC_IDX_TABLE_SIZE 80 /* support 8 priorities and 10 algorithms */
+                                  /* same as UBCORE_CC_IDX_TABLE_SIZE */
 #define URMA_OPT_REVERSED_NUM 4
 
 #define URMA_EID_STR_LEN (39)
@@ -279,14 +279,14 @@ typedef struct urma_device_cap {
     urma_atomic_feature_t atomic_feat; /* [Public] support atomic feature of device */
     uint16_t trans_mode;               /* [Public] bit OR of supported transport modes */
     uint16_t reserved;
-    uint16_t congestion_ctrl_alg;      /* [Public] one or more mode from urma_congestion_ctrl_alg_t */
-    uint32_t ceq_cnt;                  /* [Public] ceq_cnt */
-    uint32_t max_tp_in_tpg;            /* [Public] max tp in tpg */
-    uint32_t max_eid_cnt;              /* [Public] max eid count */
-    uint64_t page_size_cap;            /* [Public] page size capability, must include PAGE_SIZE(4k) */
-    uint32_t max_oor_cnt;              /* [Public] max OOR window size by packet, only for user tp */
-    uint32_t mn;                       /* [Public] only for user tp */
-    uint32_t max_netaddr_cnt;          /* [Public] only for user tp */
+    uint16_t congestion_ctrl_alg; /* [Public] one or more mode from urma_congestion_ctrl_alg_t */
+    uint32_t ceq_cnt;             /* [Public] ceq_cnt */
+    uint32_t max_tp_in_tpg;       /* [Public] max tp in tpg */
+    uint32_t max_eid_cnt;         /* [Public] max eid count */
+    uint64_t page_size_cap;       /* [Public] page size capability, must include PAGE_SIZE(4k) */
+    uint32_t max_oor_cnt;         /* [Public] max OOR window size by packet, only for user tp */
+    uint32_t mn;                  /* [Public] only for user tp */
+    uint32_t max_netaddr_cnt;     /* [Public] only for user tp */
     urma_order_type_cap_t rm_order_cap;
     urma_order_type_cap_t rc_order_cap;
     urma_tp_type_cap_t rm_tp_cap;
@@ -604,11 +604,11 @@ typedef union urma_jfr_flag {
         uint32_t tag_matching : 1; /* 0: URMA_NO_TAG_MATCHING.
                                       1: URMA_WITH_TAG_MATCHING. */
         uint32_t lock_free : 1;
-        uint32_t order_type : 8; /* (0x0): default, auto config by driver */
-                                 /* (0x1): OT, target ordering */
-                                 /* (0x2): OI, initiator ordering */
-                                 /* (0x3): OL, low layer ordering */
-                                 /* (0x4): UNO, unreliable non ordering */
+        uint32_t order_type : 8;  /* (0x0): default, auto config by driver */
+                                  /* (0x1): OT, target ordering */
+                                  /* (0x2): OI, initiator ordering */
+                                  /* (0x3): OL, low layer ordering */
+                                  /* (0x4): UNO, unreliable non ordering */
         uint32_t has_drv_ext : 1; /* 0: no extension data.
                                       1: extension data is appended after urma_rjetty_t. */
         uint32_t non_blocking : 1;
@@ -684,14 +684,14 @@ typedef struct urma_jfr {
 typedef union urma_import_jetty_flag {
     struct {
         uint32_t token_policy : 3;
-        uint32_t order_type : 8; /* (0x0): default, auto config by driver */
-                                 /* (0x1): OT, target ordering */
-                                 /* (0x2): OI, initiator ordering */
-                                 /* (0x3): OL, low layer ordering */
-                                 /* (0x4): UNO, unreliable non ordering */
-        uint32_t share_tp : 1;   /* 1: shared tp; 0: non-shared tp. When rc mode is not ta dst ordering,
+        uint32_t order_type : 8;    /* (0x0): default, auto config by driver */
+                                    /* (0x1): OT, target ordering */
+                                    /* (0x2): OI, initiator ordering */
+                                    /* (0x3): OL, low layer ordering */
+                                    /* (0x4): UNO, unreliable non ordering */
+        uint32_t share_tp : 1;      /* 1: shared tp; 0: non-shared tp. When rc mode is not ta dst ordering,
                                          this flag can only be set to 0. */
-        uint32_t has_drv_ext : 1; /* Driver-defined behavior for import_jetty, such as affinity control. */
+        uint32_t has_drv_ext : 1;   /* Driver-defined behavior for import_jetty, such as affinity control. */
         uint32_t has_user_info : 1; /* 0: no extension data.
                                        1: extension data is appended after urma_rjetty_t. */
         uint32_t reserved : 18;
@@ -721,7 +721,7 @@ typedef union urma_jetty_flag {
         uint32_t share_jfr : 1; /* 0: URMA_NO_SHARE_JFR.
                                       1: URMA_SHARE_JFR. */
         uint32_t non_blocking : 1;
-        uint32_t has_drv_ext : 1; /* Driver-defined behavior for create/import jetty, such as affinity control. */
+        uint32_t has_drv_ext : 1;   /* Driver-defined behavior for create/import jetty, such as affinity control. */
         uint32_t has_user_info : 1; /* 0: no extension data.
                                        1: extension data is appended after jetty object. */
         uint32_t reserved : 28;

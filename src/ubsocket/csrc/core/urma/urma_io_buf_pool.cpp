@@ -161,7 +161,8 @@ Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma
 
     pthread_spin_lock(&remote->target_lock_);
     if (LIKELY(remote->remote_target_segs_[block_index] == nullptr)) {
-        auto target = UrmaApi::urma_import_seg(UrmaBackend::GetUrmaContext()->Handle(), &seg, &token, 0, flag);
+        auto target =
+            UrmaApi::urma_import_seg(UrmaBackend::Instance().GetUrmaContext()->Handle(), &seg, &token, 0, flag);
         if (UNLIKELY(target == nullptr)) {
             pthread_spin_unlock(&remote->target_lock_);
             UBS_SLOG_ERR("Urma urma_register_seg failed!");

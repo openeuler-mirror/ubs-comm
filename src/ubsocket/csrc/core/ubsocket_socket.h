@@ -124,7 +124,6 @@ public:
         return connector_->IsClient();
     }
 
-
 protected:
     virtual int DoNotifyWritable();
     static Result CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops);

@@ -156,7 +156,7 @@ Result SocketBase::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOp
         ops = umqOps;
         return UBS_OK;
     } else if (value == SocketType::SOCK_TYPE_URMA) {
-        return urma::UrmaBackendImpl::CreateTxOps(value, sock, ops);
+        return urma::UrmaBackend::CreateTxOps(value, sock, ops);
     }
 
     /* invalid type */
@@ -184,7 +184,7 @@ Result SocketBase::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOp
         ops = umqOps;
         return UBS_OK;
     } else if (value == SocketType::SOCK_TYPE_URMA) {
-        return urma::UrmaBackendImpl::CreateRxOps(value, sock, ops);
+        return urma::UrmaBackend::CreateRxOps(value, sock, ops);
     }
 
     /* invalid type */
@@ -207,7 +207,7 @@ Result SocketBase::CreateAcceptorOps(SocketType value, const SocketPtr &sock, Ac
         acceptorOps = umqOps;
         return UBS_OK;
     } else if (value == SocketType::SOCK_TYPE_URMA) {
-        return urma::UrmaBackendImpl::CreateAcceptorOps(value, sock, acceptorOps);
+        return urma::UrmaBackend::CreateAcceptorOps(value, sock, acceptorOps);
     } else {
         /* invalid type */
         return UBS_INVALID_PARAM;
@@ -232,7 +232,7 @@ Result SocketBase::CreateConnectorOps(SocketType value, const SocketPtr &sock, C
 
         return UBS_OK;
     } else if (value == SocketType::SOCK_TYPE_URMA) {
-        return urma::UrmaBackendImpl::CreateConnectorOps(value, sock, connectorOps);
+        return urma::UrmaBackend::CreateConnectorOps(value, sock, connectorOps);
     } else {
         /* invalid type */
         return UBS_INVALID_PARAM;

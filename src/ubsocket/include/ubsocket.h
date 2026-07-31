@@ -64,8 +64,7 @@ int ubsocket_set_logger(void (*func)(int level, const char *msg, const char *fil
  */
 int ubsocket_set_log_level(int level);
 
-typedef enum ubs_iobuf_pool_type
-{
+typedef enum ubs_iobuf_pool_type {
     UBS_IOBUF_POOL_TINY = 1,
     UBS_IOBUF_POOL_NORMAL = 2,
     UBS_IOBUF_POOL_ESCAPE = 3,

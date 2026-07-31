@@ -62,7 +62,7 @@ Result UrmaConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addre
     conn_info.create_time = std::chrono::system_clock::now();
     conn_info.type_fd = 1;
     UBS_VLOG_TRACE("prepare connect fd=%d, ip=%s, create_time=%lu", raw_fd_, conn_info.peer_ip.c_str(),
-                  conn_info.create_time);
+                   conn_info.create_time);
     return UBS_OK;
 }
 
@@ -120,7 +120,7 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
 
     urma_sock->SetPeerEid(rsp.local_eid);
     UBS_VLOG_TRACE("negotiate fd=%d, buf_size(%u, %u) eid(%lx, %lx)", raw_fd_, rsp.send_buf_kb, rsp.recv_buf_kb,
-                  rsp.local_eid.in6.subnet_prefix, rsp.local_eid.in6.interface_id);
+                   rsp.local_eid.in6.subnet_prefix, rsp.local_eid.in6.interface_id);
 
     return UBS_OK;
 }

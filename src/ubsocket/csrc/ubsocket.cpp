@@ -143,7 +143,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     /* step5: umq backend init */
     //#ifdef UMQ_ADAPTER_BACKEND_ENABLED
-    result = urma::UrmaBackend::Init();
+    result = urma::UrmaBackend::Instance().Init();
     // result = umq::UmqBackend::Init();
     if (result != UBS_OK) {
         // ResetBrpcAllocator();
@@ -279,7 +279,7 @@ UBS_API void *ubsocket_iobuf_allocate(size_t size, const ubs_iobuf_alloc_option_
     if (type == UBS_PROTOCOL_UB_RM_RTP || type == UBS_PROTOCOL_UB_RC_RTP) {
         // delete at ubsocket_uninit
         // g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
-        g_zcopy_allocator = urma::UrmaBackend::GetAllocator();
+        g_zcopy_allocator = urma::UrmaBackend::Instance().GetAllocator();
     } else {
         UBS_VLOG_WARN("unknown zcopy allocator type");
         return nullptr;

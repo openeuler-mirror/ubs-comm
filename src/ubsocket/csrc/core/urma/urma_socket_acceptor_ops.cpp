@@ -94,14 +94,14 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
 
     ret = SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), NEGOTIATE_TIMEOUT_MS);
     if (ret != UBS_OK) {
-        UBS_VLOG_ERR("negotiate fd=%d, send length prefixed for rsp(%zu: code=%u) buff_size_kb(%u, %u) failed: %d",
-                     fd, sizeof(rsp), rsp.ret_code, rsp.send_buf_kb, rsp.recv_buf_kb, ret);
+        UBS_VLOG_ERR("negotiate fd=%d, send length prefixed for rsp(%zu: code=%u) buff_size_kb(%u, %u) failed: %d", fd,
+                     sizeof(rsp), rsp.ret_code, rsp.send_buf_kb, rsp.recv_buf_kb, ret);
         return ret;
     }
 
     urma_sock->SetPeerEid(req.local_eid);
     UBS_VLOG_TRACE("negotiate fd=%d, buf_size(%u, %u) eid(%lx, %lx)", fd, rsp.send_buf_kb, rsp.recv_buf_kb,
-                  rsp.local_eid.in6.subnet_prefix, rsp.local_eid.in6.interface_id);
+                   rsp.local_eid.in6.subnet_prefix, rsp.local_eid.in6.interface_id);
 
     return UBS_OK;
 }

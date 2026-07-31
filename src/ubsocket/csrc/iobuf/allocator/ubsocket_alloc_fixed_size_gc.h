@@ -133,19 +133,19 @@ private:
     bool init_ = false;                               /* inited or not */
 
     /* not-hot used variables */
-    std::mutex mutex_;                                /* mutex for init/un-init, direct allocate/free */
-    FixedRangeAllocator direct_allocator_;            /* range based memory allocator for direct alloc and free */
-    uintptr_t next_expand_start_address_ = 0;         /* start address for next expand */
-    std::condition_variable sync_expand_cv_;          /* cv for sync expanding */
-    bool sync_expanding_ = false;                     /* flag for sync expanding */
-    std::vector<FixedBlock> direct_alloc_blocks_;     /* all blocks for directly alloc */
-    std::vector<FixedBlock> tc_alloc_blocks_;         /* blocks for thread cache */
-    FixedAllocatorOptions options_;                   /* options */
+    std::mutex mutex_;                            /* mutex for init/un-init, direct allocate/free */
+    FixedRangeAllocator direct_allocator_;        /* range based memory allocator for direct alloc and free */
+    uintptr_t next_expand_start_address_ = 0;     /* start address for next expand */
+    std::condition_variable sync_expand_cv_;      /* cv for sync expanding */
+    bool sync_expanding_ = false;                 /* flag for sync expanding */
+    std::vector<FixedBlock> direct_alloc_blocks_; /* all blocks for directly alloc */
+    std::vector<FixedBlock> tc_alloc_blocks_;     /* blocks for thread cache */
+    FixedAllocatorOptions options_;               /* options */
 
     /* async expand related */
-    std::thread async_expand_thread_;                 /* thread for async expand */
+    std::thread async_expand_thread_;               /* thread for async expand */
     std::atomic<bool> async_expand_running_{false}; /* running flag for async expand thread */
-    sem_t async_expand_sem_;                          /* semaphore for periodic wakeup */
+    sem_t async_expand_sem_;                        /* semaphore for periodic wakeup */
 };
 
 ALWAYS_INLINE uint32_t FixedGlobalCache::AlignUpToSingleBatchSize(uint32_t size) noexcept

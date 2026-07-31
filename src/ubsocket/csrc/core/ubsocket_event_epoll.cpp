@@ -208,7 +208,7 @@ int EpollRunner<T>::Start()
         }
 
         RunnerEventData event_data{};
-        struct epoll_event event{};
+        struct epoll_event event {};
         event.events = EPOLLIN | EPOLLET;
         event_data.event_data.type = RUNNER_EVENT_TYPE_STOP;
         event_data.event_data.data = exit_efd_;
@@ -400,7 +400,7 @@ int AsyncEventPoll::AddSockReadableEvent()
         return -1;
     }
 
-    struct epoll_event event{};
+    struct epoll_event event {};
     event.events = EPOLLIN | EPOLLET;
     event.data.ptr = &sock_readable_event_;
     sock_readable_event_.socket_fd = fd;
@@ -658,7 +658,7 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
 
 int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 {
-    struct epoll_event raw_event{};
+    struct epoll_event raw_event {};
     auto event_data = new (std::nothrow) EpollEvent(EPOLL_EVENT_RAW_SOCKET, fd, *event);
     if (UNLIKELY(event_data == nullptr)) {
         UBS_VLOG_ERR("async_epoll add out event for socket fd: %d alloc failed.\n", fd);
@@ -690,7 +690,7 @@ int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *e
     if (UNLIKELY(IsSocketEventDataExist(umqSock->GetTxFd()))) {
         return 0;
     }
-    struct epoll_event add_event{};
+    struct epoll_event add_event {};
     auto event_data = new (std::nothrow) EpollEvent(EPOLL_EVENT_UB_SOCKET_OUT, sock->raw_socket_, *event);
     if (UNLIKELY(event_data == nullptr)) {
         UBS_VLOG_ERR("async_epoll add out event for socket fd: %d alloc failed.\n", sock->raw_socket_);
@@ -791,7 +791,7 @@ int AsyncEventPoll::ModRawSocketEvent(int fd, struct epoll_event *event)
         return -1;
     }
 
-    struct epoll_event raw_event{};
+    struct epoll_event raw_event {};
     raw_event.events = event->events;
     raw_event.data.ptr = event_data;
     auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &raw_event);
