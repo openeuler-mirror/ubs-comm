@@ -50,13 +50,15 @@ urma_vlog_level_t UrmaGetLogLevel()
     return static_cast<urma_vlog_level_t>(URMA_VLOG_LEVEL_DEBUG - Logger::Instance().GetLogLevel());
 }
 
-Result UrmaBackend::Init() noexcept
+Result UrmaBackend::Init(bool initUrmaOnly) noexcept
 {
     std::lock_guard<std::mutex> locker(mutex_);
     if (inited_) {
         UBS_VLOG_ERR("Already initialize, skip initialization");
         return UBS_OK;
     }
+
+    init_urma_only_ = initUrmaOnly;
 
     /* step0: init setting */
     UrmaSetting::Init();
@@ -77,52 +79,54 @@ Result UrmaBackend::Init() noexcept
         return UBS_ERROR;
     }
 
-    /* step3: init context pool */
-    result = InitContextPool();
-    if (UNLIKELY(result != UBS_OK)) {
-        UnInitInner();
-        UBS_VLOG_ERR("Failed to initialize backend as init context pool failed");
-        return UBS_ERROR;
-    }
+    if (!initUrmaOnly) {
+        /* step3: init context pool */
+        result = InitContextPool();
+        if (UNLIKELY(result != UBS_OK)) {
+            UnInitInner();
+            UBS_VLOG_ERR("Failed to initialize backend as init context pool failed");
+            return UBS_ERROR;
+        }
 
-    /* step4: init poller pool for cqe */
-    result = InitPollerSet();
-    if (UNLIKELY(result != UBS_OK)) {
-        UnInitInner();
-        UBS_VLOG_ERR("Failed to initialize backend as init poller set failed");
-        return UBS_ERROR;
-    }
+        /* step4: init poller pool for cqe */
+        result = InitPollerSet();
+        if (UNLIKELY(result != UBS_OK)) {
+            UnInitInner();
+            UBS_VLOG_ERR("Failed to initialize backend as init poller set failed");
+            return UBS_ERROR;
+        }
 
-    /* step5: init jetty pool with shared mode or dedicated mode */
-    result = InitJettyPool();
-    if (UNLIKELY(result != UBS_OK)) {
-        UnInitInner();
-        UBS_VLOG_ERR("Failed to initialize backend as init jetty pool failed");
-        return UBS_ERROR;
-    }
+        /* step5: init jetty pool with shared mode or dedicated mode */
+        result = InitJettyPool();
+        if (UNLIKELY(result != UBS_OK)) {
+            UnInitInner();
+            UBS_VLOG_ERR("Failed to initialize backend as init jetty pool failed");
+            return UBS_ERROR;
+        }
 
-    /* step6: init io buffer pool and allocator */
-    result = InitIoBufPool();
-    if (UNLIKELY(result != UBS_OK)) {
-        UnInitInner();
-        UBS_VLOG_ERR("Failed to initialize backend as init jetty pool failed");
-        return UBS_ERROR;
-    }
+        /* step6: init io buffer pool and allocator */
+        result = InitIoBufPool();
+        if (UNLIKELY(result != UBS_OK)) {
+            UnInitInner();
+            UBS_VLOG_ERR("Failed to initialize backend as init jetty pool failed");
+            return UBS_ERROR;
+        }
 
-    /* step7: init local identify node info */
-    result = InitLocalIdentifyNodeInfo();
-    if (UNLIKELY(result != UBS_OK)) {
-        UnInitInner();
-        UBS_VLOG_ERR("Failed to initialize backend as init local identify node failed");
-        return UBS_ERROR;
-    }
+        /* step7: init local identify node info */
+        result = InitLocalIdentifyNodeInfo();
+        if (UNLIKELY(result != UBS_OK)) {
+            UnInitInner();
+            UBS_VLOG_ERR("Failed to initialize backend as init local identify node failed");
+            return UBS_ERROR;
+        }
 
-    /* step8: init object pool */
-    result = InitObjectPool();
-    if (UNLIKELY(result != UBS_OK)) {
-        UnInitInner();
-        UBS_VLOG_ERR("Failed to initialize backend as init object pool failed");
-        return UBS_ERROR;
+        /* step8: init object pool */
+        result = InitObjectPool();
+        if (UNLIKELY(result != UBS_OK)) {
+            UnInitInner();
+            UBS_VLOG_ERR("Failed to initialize backend as init object pool failed");
+            return UBS_ERROR;
+        }
     }
 
     return UBS_OK;
@@ -145,17 +149,19 @@ void UrmaBackend::UnInit() noexcept
 void UrmaBackend::UnInitInner() noexcept
 {
     /* do reverse step with init */
-    UnInitObjectPool();
+    if (init_urma_only_) {
+        UnInitObjectPool();
 
-    UnInitIoBufPool();
-    g_zcopy_allocator = nullptr;
+        UnInitIoBufPool();
+        g_zcopy_allocator = nullptr;
 
-    UnInitJettyPool();
+        UnInitJettyPool();
 
-    UnInitPollerSet();
+        UnInitPollerSet();
 
-    UnInitContextPool();
-    best_context_ = nullptr;
+        UnInitContextPool();
+        best_context_ = nullptr;
+    }
 
     UnInitUrma();
 
@@ -228,12 +234,6 @@ Result UrmaBackend::InitContextPool() noexcept
         return UBS_ERROR;
     }
 
-    auto tmp_ub_port_selector = MakeRef<UrmaPortSelector>(tmp_context_pool);
-    if (tmp_ub_port_selector == nullptr) {
-        UBS_VLOG_ERR("Create ub port selector failed, probably out of memory");
-        return UBS_ERROR;
-    }
-
     /* add dev and eid index
      * case1: if dev name and eid index if set in ENV
      * case2: if not set in ENV, get first available dev
@@ -241,8 +241,10 @@ Result UrmaBackend::InitContextPool() noexcept
     Result result = UBS_OK;
     if (UrmaSetting::UB_DEV_NAME.empty()) {
         result = tmp_context_pool->AddEidIndex(UrmaSetting::UB_DEV_NAME, UrmaSetting::UB_EID_INDEX);
+    } else if (UrmaSetting::UB_USING_BOUNDING_DEV) {
+        result = tmp_context_pool->AutoAddEidIndex();
     } else {
-        result = tmp_context_pool->AutoAddBoundingDevIndex();
+        result = tmp_context_pool->AutoAddEidIndex(false);
     }
 
     if (result != UBS_OK) {
@@ -266,16 +268,12 @@ Result UrmaBackend::InitContextPool() noexcept
 
     /* set object to member variables */
     context_pool_ = tmp_context_pool;
-    ub_port_selector = tmp_ub_port_selector;
 
     return UBS_OK;
 }
 
 void UrmaBackend::UnInitContextPool() noexcept
 {
-    /* release the ref of context pool firstly */
-    ub_port_selector = nullptr;
-
     /* un-init context pool */
     if (context_pool_ != nullptr) {
         context_pool_->UnInit();

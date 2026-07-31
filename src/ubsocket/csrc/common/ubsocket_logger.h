@@ -130,7 +130,7 @@ ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const c
 {
     static const char *levelStr[] = {"D", "I", "N", "W", "E"};
 
-    struct timeval tv {};
+    struct timeval tv{};
     char strTime[24L];
 
     int ret = gettimeofday(&tv, nullptr);
@@ -139,7 +139,7 @@ ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const c
     }
 
     time_t timeStamp = tv.tv_sec;
-    struct tm localTime {};
+    struct tm localTime{};
     struct tm *resultTime = localtime_r(&timeStamp, &localTime);
     if ((resultTime != nullptr) && (strftime(strTime, sizeof strTime, "%Y%m%d %H:%M:%S.", resultTime) != 0)) {
         std::cout << levelStr[level] << strTime << tv.tv_usec << PID_TID << " " << filename << ":" << line << "] "
@@ -209,8 +209,8 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
 #define UBS_SLOG_DEBUG(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_DEBUG, ARGS)
 
 #ifdef UBS_LOG_TRACE_ENABLED
-#define UBS_VLOG_TRACE(__format, ...) UBS_LOG(ock::ubs::LEVEL_INFO, "[TRACE]" __format, ##__VA_ARGS__)
-#define UBS_SLOG_TRACE(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_DEBUG, "[TRACE]" << ARGS)
+#define UBS_VLOG_TRACE(__format, ...) UBS_LOG(ock::ubs::LEVEL_INFO, "[TRACE] " __format, ##__VA_ARGS__)
+#define UBS_SLOG_TRACE(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_DEBUG, "[TRACE] " << ARGS)
 #else
 #define UBS_VLOG_TRACE(__format, ...)
 #define UBS_SLOG_TRACE(ARGS)

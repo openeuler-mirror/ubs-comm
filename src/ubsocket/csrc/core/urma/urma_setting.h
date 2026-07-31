@@ -24,6 +24,7 @@ public:
     static void Init() noexcept;
 
 public:
+    static bool UB_USING_BOUNDING_DEV;
     static std::string UB_DEV_NAME;
     static std::string UB_DEV_EID;
     static uint32_t UB_EID_INDEX;

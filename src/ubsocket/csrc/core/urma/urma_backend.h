@@ -16,10 +16,10 @@
 #include "common/ubsocket_defines.h"
 #include "common/ubsocket_obj_pool.h"
 #include "core/ubsocket_socket.h"
+#include "urma_context_pool.h"
 #include "urma_io_buf_pool.h"
 #include "urma_jetty_pool.h"
 #include "urma_poller.h"
-#include "urma_port_selector.h"
 #include "urma_setting.h"
 #include "urma_wrapper.h"
 
@@ -36,7 +36,7 @@ public:
     }
 
 public:
-    Result Init() noexcept;
+    Result Init(bool initUrmaOnly = true) noexcept;
     void UnInit() noexcept;
 
     void SetLogLevel(int level) noexcept;
@@ -81,17 +81,17 @@ private:
 
 private:
     /* put the hottest used variables on the head */
-    UrmaIoBufferPoolPtr io_buff_pool_;    /* io buffer pool */
-    UrmaContextPoolPtr context_pool_;     /* urma context pool */
-    UrmaPortSelectorPtr ub_port_selector; /* ub port selector for HA, 1 master 3 backup */
-    UrmaContextPtr best_context_;         /* best urma context */
-    IdentifyNode local_identify_node_;    /* local identify node info */
-    UrmaJettyPoolPtr jetty_pool_;         /* jetty pool */
+    UrmaIoBufferPoolPtr io_buff_pool_; /* io buffer pool */
+    UrmaContextPoolPtr context_pool_;  /* urma context pool */
+    UrmaContextPtr best_context_;      /* best urma context */
+    IdentifyNode local_identify_node_; /* local identify node info */
+    UrmaJettyPoolPtr jetty_pool_;      /* jetty pool */
 
     /* non-hot variables */
     std::mutex mutex_;         /* mutex for things */
     bool inited_ = false;      /* init flag for whole backend */
     bool urma_inited_ = false; /* init flag for urma init */
+    bool init_urma_only_ = false;
 };
 
 } // namespace urma

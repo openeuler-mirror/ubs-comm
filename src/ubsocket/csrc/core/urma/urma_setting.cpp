@@ -16,6 +16,7 @@ namespace urma {
 #define ENV_URMA_DEV_NAME "UBSOCKET_UB_DEV"
 #define ENV_URMA_EID_IDX "UBSOCKET_UB_EID_IDX"
 
+bool UrmaSetting::UB_USING_BOUNDING_DEV = true;
 std::string UrmaSetting::UB_DEV_NAME = "";
 std::string UrmaSetting::UB_DEV_EID;
 uint32_t UrmaSetting::UB_EID_INDEX = 0;

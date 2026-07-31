@@ -68,6 +68,8 @@ public:
     std::string ToString(bool whole = false, const std::string &prefix = "",
                          const std::string &seperator = "") const noexcept;
 
+    const std::vector<urma_eid_info_t> &EidList() const noexcept;
+
 private:
     std::string device_name_;
     std::string device_sys_path_;
@@ -130,6 +132,11 @@ ALWAYS_INLINE const std::map<std::string, UrmaDevicePtr> &UrmaDevice::AllDevices
 ALWAYS_INLINE const urma_device_attr_t &UrmaDevice::DeviceAttributes() const noexcept
 {
     return attributes_;
+}
+
+ALWAYS_INLINE const std::vector<urma_eid_info_t> &UrmaDevice::EidList() const noexcept
+{
+    return eid_list_;
 }
 
 enum UrmaJfcPollingType {

@@ -53,7 +53,7 @@ void UrmaDevice::Init() noexcept
         /* get device attributes and get eid list */
         urma_device_attr_t tmp_attr;
         auto result = UrmaApi::urma_query_device(dev, &tmp_attr);
-        UBS_VLOG_INFO("urma_query_device(%s, %s) return %d", dev->name, dev->path, result);
+        UBS_VLOG_TRACE("urma_query_device(%s, %s) return %d", dev->name, dev->path, result);
         if (LIKELY(result == URMA_SUCCESS)) {
             /* create new device and add into all devices */
             auto new_dev = MakeRef<UrmaDevice>(dev->name, dev->path, tmp_attr);
@@ -68,6 +68,9 @@ void UrmaDevice::Init() noexcept
             /* get eids */
             uint32_t eid_count = 0;
             auto eid_list = UrmaApi::urma_get_eid_list(dev, &eid_count);
+
+            UBS_VLOG_TRACE("urma_get_eid_list(%s, %d) return %d", dev->name, eid_count, eid_list != nullptr);
+
             if (UNLIKELY(eid_list == nullptr)) {
                 UBS_VLOG_DEBUG("Get eid list failed");
                 continue;
@@ -88,7 +91,7 @@ void UrmaDevice::Init() noexcept
     UrmaApi::urma_free_device_list(device_list);
 
     LOADED = true;
-    UBS_VLOG_INFO("urma device init finished.");
+    UBS_VLOG_TRACE("urma device init finished.");
 }
 
 UrmaDevice::UrmaDevice(const std::string &name, const std::string &sys_path, const urma_device_attr_t &attr)

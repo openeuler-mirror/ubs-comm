@@ -9,8 +9,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#ifndef UBS_COMM_URMA_PORT_SELECTOR_H
-#define UBS_COMM_URMA_PORT_SELECTOR_H
+#ifndef UBS_COMM_URMA_CONTEXT_POOL_H
+#define UBS_COMM_URMA_CONTEXT_POOL_H
 
 #include "urma_socket_types.h"
 #include "urma_wrapper.h"
@@ -18,11 +18,39 @@
 namespace ock {
 namespace ubs {
 namespace urma {
+class UrmaContextPool;
+using UrmaContextPoolPtr = Ref<UrmaContextPool>;
+
 enum UrmaPortSelectionPolicy {
     PSP_ROUND_ROBIN = 0,
     PSP_RANDOM,
 
     PSP_COUNT,
+};
+
+class UrmaPortSelector {
+public:
+    /**
+     * @brief Select a port by policy
+     *
+     * @param affinityFirst   [in] first consider affinity
+     * @param preferredChipId [in] preferred chip id, only enabled when affinityFirst is true
+     * @param policy          [in] policy
+     * @return index
+     */
+    static UrmaContextPtr SelectPort(const UrmaContextPool &pool, bool affinityFirst, int16_t preferredChipId = -1,
+                                     UrmaPortSelectionPolicy policy = PSP_ROUND_ROBIN) noexcept;
+
+    /**
+     * @brief Get the chip id that current thread running on
+     *
+     * @return chip id
+     */
+    static int16_t GetMyChipId() noexcept;
+
+private:
+    static UrmaContextPtr RoundRobin(const UrmaContextPool &pool, bool affinity, int16_t preferredChipId) noexcept;
+    static UrmaContextPtr Random(const UrmaContextPool &pool, bool affinity, int16_t preferredChipId) noexcept;
 };
 
 class UrmaContextPool : public Referable {
@@ -35,7 +63,7 @@ public:
      *
      * @return 0 if successful
      */
-    Result AutoAddBoundingDevIndex() noexcept;
+    Result AutoAddEidIndex(bool bondingDevice = true) noexcept;
 
     /**
      * @brief Add one eid index with dev name for creating context
@@ -47,6 +75,11 @@ public:
      * UBS_ERROR return if already existed or already initialized
      */
     Result AddEidIndex(const std::string &devName, uint32_t eid_index) noexcept;
+
+    /**
+     * @brief Clear all eid with index
+     */
+    void ClearEidIndex() noexcept;
 
     /**
      * @brief Initialize the context with dev name and eid index added by @see AddEidIndex()
@@ -83,39 +116,16 @@ public:
 private:
     std::mutex mutex_;                                                    /* mutex for protect all members */
     bool inited_ = false;                                                 /* init flag */
+    int16_t my_chip_id_ = 0;                                              /* which chip this process running on */
     std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> contexts_; /* eid_index to context map */
+
+    friend class UrmaPortSelector;
 };
 using UrmaContextPoolPtr = Ref<UrmaContextPool>;
 
-class UrmaPortSelector : public Referable {
-public:
-    explicit UrmaPortSelector(const UrmaContextPoolPtr &contextPool) noexcept : contextPool_(contextPool) {}
-
-    ~UrmaPortSelector() override = default;
-
-    /**
-     * @brief Select a port by policy
-     *
-     * @param policy       [in] policy
-     * @return index
-     */
-    int16_t SelectPort(UrmaPortSelectionPolicy policy = PSP_ROUND_ROBIN) noexcept;
-
-private:
-    int16_t SelectWithRoundRobin() noexcept;
-    int16_t SelectWithRandom() noexcept;
-    int16_t CreatePortCpuRelationship() noexcept;
-
-private:
-    const UrmaContextPoolPtr &contextPool_;
-    std::map<int16_t, int16_t> port_cpu_map_;
-    std::mutex mutex_;
-};
-using UrmaPortSelectorPtr = Ref<UrmaPortSelector>;
-
 /***********************************************************************************/
 
-ALWAYS_INLINE Result UrmaContextPool::AutoAddBoundingDevIndex() noexcept
+ALWAYS_INLINE Result UrmaContextPool::AutoAddEidIndex(bool bondingDevice) noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
     if (inited_) {
@@ -134,18 +144,40 @@ ALWAYS_INLINE Result UrmaContextPool::AutoAddBoundingDevIndex() noexcept
 
     UBS_VLOG_DEBUG("There are %d devices found", devices.size());
 
-    /* get the first one */
-    auto first = devices.begin();
-    auto &dev_name = first->first;
-    auto eid_index = 0;
+    for (auto &iter : devices) {
+        auto &dev_name = iter.first;
+        /* case 1: skip non bonding device */
+        if (bondingDevice && dev_name.find("bonding") == std::string::npos) {
+            continue;
+        }
 
-    /* insert an empty context */
-    if (contexts_.find(std::make_pair(dev_name, eid_index)) != contexts_.end()) {
-        UBS_VLOG_DEBUG("Eid index already exists");
-        return UBS_ERROR;
+        /* case 2: skip bonding device */
+        if (!bondingDevice && dev_name.find("bonding") != std::string::npos) {
+            continue;
+        }
+
+        UBS_VLOG_TRACE("found bonding device (%s)", dev_name.c_str());
+        auto &device = iter.second;
+        if (UNLIKELY(device == nullptr)) {
+            UBS_VLOG_ERR("Un-reachable path, device is null");
+            continue;
+        }
+
+        auto &eid_list = device->EidList();
+        for (auto &item : eid_list) {
+            UBS_VLOG_TRACE("Adding device(%d) with eid index(%d)", dev_name.c_str(), item.eid_index);
+
+            if (contexts_.find(std::make_pair(dev_name, item.eid_index)) != contexts_.end()) {
+                UBS_VLOG_DEBUG("Eid index already exists");
+                return UBS_ERROR;
+            }
+
+            /* insert an empty context */
+            contexts_[std::make_pair(dev_name, item.eid_index)] = nullptr;
+        }
     }
 
-    contexts_[std::make_pair(dev_name, eid_index)] = nullptr;
+    UBS_VLOG_TRACE("Total added items count(%d)", contexts_.size());
 
     return UBS_OK;
 }
@@ -168,6 +200,12 @@ ALWAYS_INLINE Result UrmaContextPool::AddEidIndex(const std::string &devName, ui
     return UBS_OK;
 }
 
+ALWAYS_INLINE void UrmaContextPool::ClearEidIndex() noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    contexts_.clear();
+}
+
 ALWAYS_INLINE Result UrmaContextPool::Init() noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -179,6 +217,8 @@ ALWAYS_INLINE Result UrmaContextPool::Init() noexcept
     for (auto &iter : contexts_) {
         /* skip the context that already created */
         if (iter.second != nullptr) {
+            UBS_VLOG_TRACE("context for device name(%s) eid index(%d) already created", iter.first.first.c_str(),
+                           iter.first.second);
             continue;
         }
 
@@ -188,9 +228,14 @@ ALWAYS_INLINE Result UrmaContextPool::Init() noexcept
             UBS_VLOG_ERR("Create urma context failed with dev name: %s, eid index: %d", iter.first.first.c_str(),
                          iter.first.second);
         }
+
+        UBS_VLOG_TRACE("created context for device name(%s) eid index(%d) ", iter.first.first.c_str(),
+                       iter.first.second);
     }
 
+    my_chip_id_ = UrmaPortSelector::GetMyChipId();
     inited_ = true;
+    UBS_VLOG_TRACE("initialized, context size(%d)", contexts_.size());
     return UBS_OK;
 }
 
@@ -247,48 +292,90 @@ ALWAYS_INLINE Result UrmaContextPool::GetContext(const std::string &devName, uin
 }
 
 /***********************************************************************************/
-ALWAYS_INLINE int16_t UrmaPortSelector::CreatePortCpuRelationship() noexcept
+
+ALWAYS_INLINE UrmaContextPtr UrmaPortSelector::SelectPort(const UrmaContextPool &pool, bool affinityFirst,
+                                                          int16_t preferredChipId,
+                                                          UrmaPortSelectionPolicy policy) noexcept
 {
-    if (UNLIKELY(!port_cpu_map_.empty())) {
-        return 0;
+    /* case1: no context */
+    if (pool.contexts_.size() == 0) {
+        return nullptr;
     }
 
-    // TODO
-
-    return -1;
-}
-
-ALWAYS_INLINE int16_t UrmaPortSelector::SelectPort(UrmaPortSelectionPolicy policy) noexcept
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto result = CreatePortCpuRelationship();
-    if (UNLIKELY(result < 0)) {
-        return result;
+    /* case2: only one context */
+    if (pool.contexts_.size() == 1) {
+        return pool.contexts_.begin()->second;
     }
 
     if (policy == PSP_ROUND_ROBIN) {
-        return SelectWithRoundRobin();
+        return RoundRobin(pool, affinityFirst, preferredChipId);
     } else if (policy == PSP_RANDOM) {
-        return SelectWithRandom();
+        return Random(pool, affinityFirst, preferredChipId);
     } else {
         UBS_VLOG_ERR("Invalid policy, un-reachable path");
-        return -1;
+        return nullptr;
     }
 }
 
-ALWAYS_INLINE int16_t UrmaPortSelector::SelectWithRoundRobin() noexcept
+ALWAYS_INLINE UrmaContextPtr UrmaPortSelector::RoundRobin(const UrmaContextPool &pool, bool affinityFirst,
+                                                          int16_t preferredChipId) noexcept
 {
     // TODO
-    return -1;
+    return nullptr;
 }
 
-ALWAYS_INLINE int16_t UrmaPortSelector::SelectWithRandom() noexcept
+ALWAYS_INLINE UrmaContextPtr UrmaPortSelector::Random(const UrmaContextPool &pool, bool affinityFirst,
+                                                      int16_t preferredChipId) noexcept
 {
     // TODO
-    return -1;
+    return nullptr;
+}
+
+ALWAYS_INLINE int16_t UrmaPortSelector::GetMyChipId() noexcept
+{
+    int logic_cpu_id = 0;
+    /* step1: get logic cpu id that this thread running with */
+    std::string path = "/proc/self/stat";
+    std::ifstream fs_logic_pid(path);
+    if (!fs_logic_pid.is_open()) {
+        UBS_VLOG_INFO("Failed to get my chip id as open file (%s) failed", path.c_str());
+        return -1;
+    }
+
+    /* read the content into line string */
+    std::string line;
+    std::getline(fs_logic_pid, line);
+
+    /* read field one by one */
+    std::istringstream iss(line);
+    std::string tmp;
+
+    /* the 38 field is the last logic cpu id that scheduled */
+    for (int i = 0; i <= 38; ++i) {
+        iss >> tmp;
+    }
+    logic_cpu_id = std::atoi(tmp.c_str());
+
+    UBS_VLOG_TRACE("this thread running on logic cpu id(%d)", logic_cpu_id);
+
+    /* step2: get physical socket id by logic cpu id */
+    path = "/sys/devices/system/cpu/cpu" + std::to_string(logic_cpu_id) + "/topology/physical_package_id";
+    std::ifstream fs_chip(path);
+    if (!fs_chip.is_open()) {
+        UBS_VLOG_INFO("Failed to get my chip id as open file (%s) failed", path.c_str());
+        return -1;
+    }
+
+    int physical_cpu_id = -1;
+    fs_chip >> physical_cpu_id;
+    fs_chip.close();
+
+    UBS_VLOG_TRACE("this thread running on physical cpu id(%d)", physical_cpu_id);
+
+    return physical_cpu_id;
 }
 } // namespace urma
 } // namespace ubs
 } // namespace ock
 
-#endif // UBS_COMM_URMA_PORT_SELECTOR_H
+#endif // UBS_COMM_URMA_CONTEXT_POOL_H
