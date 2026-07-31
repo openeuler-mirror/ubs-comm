@@ -304,7 +304,7 @@ ALWAYS_INLINE Result FixedGlobalCache::ReserveSpace() noexcept
         if (result != MAP_FAILED) {
             pool_space_start_address_ = spase_start_bytes;
             madvise((void *)pool_space_start_address_, space_size_bytes, MADV_HUGEPAGE);
-#ifdef 0
+#ifdef ENABLE_OPEN_EULER
             madvise((void *)pool_space_start_address_, space_size_bytes, MADV_FCMA_ENABLE);
 #endif
             break;
