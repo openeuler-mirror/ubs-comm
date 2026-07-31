@@ -347,8 +347,6 @@ private:
     uint16_t batch_free_count_ = 0;
 
     friend class ObjectGlobalCache;
-    template <uint8_t KeyMax>
-    friend class KeyedThreadLocalCache;
 };
 
 ALWAYS_INLINE ObjectGlobalCache::ObjectGlobalCache(const std::string &name, const ObjectPoolOptions &options)

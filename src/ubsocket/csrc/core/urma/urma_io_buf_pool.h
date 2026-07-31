@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <vector>
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_obj_pool.h"
 #include "iobuf/allocator/ubsocket_alloc_fixed_size.h"
 #include "iobuf/ubsocket_zcopy_adapter.h"
 #include "under_api/urma/urma_types.h"
@@ -169,6 +170,103 @@ private:
 };
 using UrmaIoBufferPoolPtr = Ref<UrmaIoBufferPool>;
 
+class UrmaDataMetaPool {
+public:
+    static UrmaDataMetaPool &Instance()
+    {
+        static UrmaDataMetaPool meta_pool;
+        return meta_pool;
+    }
+
+public:
+    Result Init() noexcept;
+    void UnInit() noexcept;
+
+    UrmaDataMeta *Allocate() noexcept;
+    void Free(UrmaDataMeta *m) noexcept;
+
+    UrmaDataMeta *BatchAllocate(uint16_t batchSize) noexcept;
+    void BatchFree(UrmaDataMeta *m) noexcept;
+
+private:
+    ObjectThreadCache &GetTc() noexcept;
+
+private:
+    ObjectGlobalCachePtr global_cache_;
+    std::mutex mutex_;
+};
+
+ALWAYS_INLINE Result UrmaDataMetaPool::Init() noexcept
+{
+    std::lock_guard<std::mutex> locker(mutex_);
+    if (global_cache_ != nullptr) {
+        UBS_VLOG_DEBUG("Already initialized, skip");
+        return UBS_OK;
+    }
+
+    ObjectPoolOptions options;
+    options.block_size_mb = 2;
+    options.mini_block_size_bytes = 64;
+    options.tc_batch_alloc_count = 128;
+
+    auto tmp_gc = MakeRef<ObjectGlobalCache>("UrmaDataMetaPool", options);
+    if (tmp_gc == nullptr) {
+        UBS_VLOG_ERR("Failed to init UrmaDataMetaPool ojbect, as create global cache failed, probably out of memory");
+        return UBS_ERROR;
+    }
+
+    auto result = tmp_gc->Initialize();
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("Failed to init UrmaDataMetaPool ojbect as init global cache failed");
+        return UBS_ERROR;
+    }
+
+    global_cache_ = tmp_gc;
+
+    UBS_VLOG_DEBUG("Init UrmaDataMetaPool finished");
+    return UBS_OK;
+}
+
+ALWAYS_INLINE void UrmaDataMetaPool::UnInit() noexcept
+{
+    std::lock_guard<std::mutex> locker(mutex_);
+    if (global_cache_ == nullptr) {
+        UBS_VLOG_DEBUG("Not initialized, skip");
+        return;
+    }
+
+    global_cache_->UnInitialize();
+    global_cache_ = nullptr;
+}
+
+ALWAYS_INLINE ObjectThreadCache &UrmaDataMetaPool::GetTc() noexcept
+{
+    static thread_local ObjectThreadCache tc(global_cache_.Get());
+    return tc;
+}
+
+ALWAYS_INLINE UrmaDataMeta *UrmaDataMetaPool::Allocate() noexcept
+{
+    return reinterpret_cast<UrmaDataMeta *>(GetTc().Allocate());
+}
+
+ALWAYS_INLINE void UrmaDataMetaPool::Free(UrmaDataMeta *m) noexcept
+{
+    GetTc().Free(reinterpret_cast<void *>(m));
+}
+
+ALWAYS_INLINE UrmaDataMeta *BatchAllocate(uint16_t batchSize) noexcept
+{
+    // TODO
+    (void)batchSize;
+    return nullptr;
+}
+
+ALWAYS_INLINE void BatchFree(UrmaDataMeta *m) noexcept
+{
+    (void)m;
+    // TODO
+}
 } // namespace urma
 } // namespace ubs
 } // namespace ock

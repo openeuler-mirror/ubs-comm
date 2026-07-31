@@ -31,7 +31,7 @@ constexpr uint32_t kDefaultQueueDepth = 1024;
 constexpr uint32_t kDefaultCqPollBatch = 32;
 
 union WriteImmData {
-    uint64_t data;
+    uint64_t data = 0;
     struct {
         uint64_t user_data : 20; /* bits 0-19 User-defined custom data */
         uint64_t reserved : 2;   /* bits 20-21 Reserved for URMA */
@@ -148,6 +148,46 @@ struct UrmaSockExInfo {
     uint32_t token = 0;
     // eid related
 };
+
+enum UrmaDataSizeType : uint8_t {
+    DST_SMALL_DATA = 0,
+    DST_LARGE_DATA,
+
+    /* add here */
+    DST_COUNT
+};
+
+enum UrmaDataState : uint8_t {
+    DS_INIT = 0,            /* init state */
+    DS_DURING_READ_WRITE,   /* issued read/write */
+    DS_READ_WRITE_FINISHED, /* read/write finished successfully */
+    DS_READ_WRITE_FAILED,   /* read/write failed */
+    DS_READY,               /* ready for user to read */
+    DS_READ,                /* read by user */
+    DS_DELETED,             /* between */
+
+    /* add here */
+    DS_COUNT,
+};
+
+enum UrmaDataRBColour : uint8_t {
+    RB_RED = 0,
+    RB_BLACK,
+};
+
+/* make sure the size is 64bytes */
+struct UrmaDataMeta {
+    UrmaDataMeta *next = nullptr;                /* link to meta for batch read/write */
+    void *io_buf = nullptr;                      /* pointer to really io buf */
+    UrmaDataSizeType data_type = DST_SMALL_DATA; /* data size type */
+    UrmaDataState state = DS_INIT;               /* state to store the type  */
+    uint8_t reserved[5]{};                       /* reserved */
+    UrmaDataRBColour rb_parent_colour = RB_RED;  /* parent node color for rb tree */
+    UrmaDataMeta *rb_left_child = nullptr;       /* left child for rb tree */
+    UrmaDataMeta *rb_right_child = nullptr;      /* right child for rb tree */
+    uint64_t reserved2[3]{};                     /* reserved */
+};
+
 } // namespace urma
 } // namespace ubs
 } // namespace ock

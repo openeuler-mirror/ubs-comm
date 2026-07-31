@@ -117,6 +117,14 @@ Result UrmaBackend::Init() noexcept
         return UBS_ERROR;
     }
 
+    /* step8: init object pool */
+    result = InitObjectPool();
+    if (UNLIKELY(result != UBS_OK)) {
+        UnInitInner();
+        UBS_VLOG_ERR("Failed to initialize backend as init object pool failed");
+        return UBS_ERROR;
+    }
+
     return UBS_OK;
 }
 
@@ -137,6 +145,8 @@ void UrmaBackend::UnInit() noexcept
 void UrmaBackend::UnInitInner() noexcept
 {
     /* do reverse step with init */
+    UnInitObjectPool();
+
     UnInitIoBufPool();
     g_zcopy_allocator = nullptr;
 
@@ -514,6 +524,15 @@ Result UrmaBackend::InitLocalIdentifyNodeInfo() noexcept
     return UBS_OK;
 }
 
+Result UrmaBackend::InitObjectPool() noexcept
+{
+    return UrmaDataMetaPool::Instance().Init();
+}
+
+void UrmaBackend::UnInitObjectPool() noexcept
+{
+    UrmaDataMetaPool::Instance().UnInit();
+}
 } // namespace urma
 } // namespace ubs
 } // namespace ock

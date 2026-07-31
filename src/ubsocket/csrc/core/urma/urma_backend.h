@@ -72,8 +72,12 @@ private:
     Result InitIoBufPool() noexcept;
     void UnInitIoBufPool() noexcept;
 
-    Result HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr);
     Result InitLocalIdentifyNodeInfo() noexcept;
+
+    Result InitObjectPool() noexcept;
+    void UnInitObjectPool() noexcept;
+
+    Result HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr);
 
 private:
     /* put the hottest used variables on the head */
