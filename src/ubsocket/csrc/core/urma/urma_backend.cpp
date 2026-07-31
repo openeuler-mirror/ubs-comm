@@ -22,11 +22,6 @@
 namespace ock {
 namespace ubs {
 namespace urma {
-std::mutex UrmaBackend::urma_mutex_;
-bool UrmaBackend::urma_inited_ = false;
-UrmaContextPtr UrmaBackend::urma_context_{nullptr};
-IdentifyNode UrmaBackend::local_identify_node_;
-UrmaIoBufferPool UrmaBackend::urma_allocator_;
 
 void UrmaLog(int level, char *message)
 {
@@ -56,207 +51,6 @@ urma_vlog_level_t UrmaGetLogLevel()
 }
 
 Result UrmaBackend::Init() noexcept
-{
-    UBS_SLOG_INFO("enter");
-
-    std::lock_guard<std::mutex> guard(urma_mutex_);
-    if (urma_inited_) {
-        UBS_SLOG_DEBUG("urma already initialized");
-        return UBS_OK;
-    }
-
-    Result ret = LoadUrmaApi();
-    if (ret != UBS_OK) {
-        return ret;
-    }
-
-    ret = InitUrmaCore();
-    if (ret != UBS_OK) {
-        return ret;
-    }
-
-    UrmaContextPtr ctx;
-    ret = UrmaContext::CreateContext(UrmaSetting::UB_DEV_NAME, UrmaSetting::UB_EID_INDEX, ctx);
-    if (ret != UBS_OK) {
-        UBS_SLOG_ERR("Create urma context failed, dev: " << UrmaSetting::UB_DEV_NAME << ", eid: "
-                                                         << UrmaSetting::UB_EID_INDEX << ", result: " << ret);
-        return ret;
-    }
-
-    ret = InitPoller(ctx);
-    if (ret != UBS_OK) {
-        return ret;
-    }
-
-    ret = InitZeroCopyAllocator(ctx);
-    if (ret != UBS_OK) {
-        return ret;
-    }
-
-    ret = InitLocalIdentifyNodeInfo(ctx);
-    if (ret != UBS_OK) {
-        return ret;
-    }
-
-    urma_context_ = ctx;
-    urma_inited_ = true;
-
-    UBS_SLOG_INFO("leave, inited = " << urma_inited_);
-    return UBS_OK;
-}
-
-Result UrmaBackend::CreateSocket(int fd, SocketType t, SocketPtr &outSocket)
-{
-    return UBS_OK;
-}
-
-Result UrmaBackend::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops)
-{
-    return UBS_OK;
-}
-
-Result UrmaBackend::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops)
-{
-    return UBS_OK;
-}
-
-Result UrmaBackend::CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&acceptor)
-{
-    return UBS_OK;
-}
-
-Result UrmaBackend::CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&connector)
-{
-    return UBS_OK;
-}
-
-Result UrmaBackend::LoadUrmaApi()
-{
-    auto result = DlApi::Load(LOAD_URMA);
-    if (result != UBS_OK) {
-        UBS_SLOG_ERR("Load urma api failed, result: " << result);
-        return result;
-    }
-
-    UrmaSetting::Init();
-    return UBS_OK;
-}
-
-Result UrmaBackend::InitUrmaCore()
-{
-    urma_init_attr_t init_attr;
-    bzero(&init_attr, sizeof(init_attr));
-    auto result = UrmaApi::urma_init(&init_attr);
-    if (result != 0) {
-        UBS_SLOG_ERR("Init urma failed, result: " << result);
-        return result;
-    }
-
-    result = UrmaApi::urma_register_log_func(UrmaLog);
-    if (result != URMA_SUCCESS) {
-        UBS_SLOG_WARN("Set urma log function failed, result " << result);
-    }
-
-    UrmaApi::urma_log_set_level(UrmaGetLogLevel());
-    return UBS_OK;
-}
-
-Result UrmaBackend::InitPoller(const UrmaContextPtr &ctx)
-{
-    UrmaPollerOptions poller_opts;
-    poller_opts.context_ = ctx;
-    poller_opts.cqe_handler = HandleCqe;
-    poller_opts.jfc_depth = 1024;
-    poller_opts.poller_count = 2;
-
-    auto result = UrmaPollerSet::Instance().Init(poller_opts);
-    if (result != UBS_OK) {
-        UBS_SLOG_ERR("Init urma poller set failed, result: " << result);
-        return result;
-    }
-    return UBS_OK;
-}
-
-Result UrmaBackend::InitZeroCopyAllocator(const UrmaContextPtr &ctx)
-{
-    auto res = urma_allocator_.init(ctx);
-    if (res != UBS_OK) {
-        UBS_SLOG_ERR("urma allocator initialize failed: " << res);
-        return res;
-    }
-
-    g_zcopy_allocator = &urma_allocator_;
-
-    return UBS_OK;
-}
-
-Result UrmaBackend::InitLocalIdentifyNodeInfo(const UrmaContextPtr &ctx)
-{
-    auto len = readlink("/proc/self/ns/net", local_identify_node_.ns, NAME_MAX);
-    if (len < 0) {
-        UBS_SLOG_ERR("readlink /proc/self/ns/net failed: " << errno << " : " << strerror(errno));
-        return UBS_ERROR;
-    }
-
-    local_identify_node_.eid = ctx->EidInfo().eid;
-    local_identify_node_.pid = getpid();
-    local_identify_node_.ns[len] = '\0';
-    return UBS_OK;
-}
-
-Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
-{
-    (void)flags;
-    for (auto i = 0; i < cr_count; i++) {
-        if (cr[i].status != URMA_CR_SUCCESS) {
-            // TODO: add process for error status
-            UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr[i].status,
-                         cr[i].user_ctx, cr[i].opcode, cr[i].flag.value);
-            continue;
-        }
-
-        if (cr[i].flag.bs.s_r == 0) { // sender side
-            continue;
-        }
-
-        // receiver side
-        if (cr[i].opcode == URMA_CR_OPC_WRITE_WITH_IMM) {
-            auto fd = static_cast<int>(cr[i].user_ctx);
-            auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-            if (UNLIKELY(sock == nullptr)) {
-                UBS_VLOG_ERR("socket is nullptr for fd: %d", fd);
-                continue;
-            }
-
-            auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
-            urma_sock->HandleRecvCqe(cr[i].imm_data);
-        } else {
-            // TODO: other opcode
-        }
-    }
-    return UBS_OK;
-}
-
-void UrmaBackend::UnInit() noexcept
-{
-    UBS_SLOG_DEBUG("enter");
-
-    std::lock_guard<std::mutex> guard(urma_mutex_);
-    if (!urma_inited_) {
-        UBS_SLOG_DEBUG("urma not initialized");
-        return;
-    }
-
-    urma_allocator_.un_init();
-    UrmaPollerSet::Instance().UnInit();
-    UrmaApi::urma_uninit();
-    urma_inited_ = false;
-    urma_context_ = nullptr;
-
-    UBS_SLOG_DEBUG("leave, inited = " << urma_inited_);
-}
-
-Result UrmaBackendImpl::Init() noexcept
 {
     std::lock_guard<std::mutex> locker(mutex_);
     if (inited_) {
@@ -315,10 +109,18 @@ Result UrmaBackendImpl::Init() noexcept
         return UBS_ERROR;
     }
 
+    /* step7: init local identify node info */
+    result = InitLocalIdentifyNodeInfo();
+    if (UNLIKELY(result != UBS_OK)) {
+        UnInitInner();
+        UBS_VLOG_ERR("Failed to initialize backend as init local identify node failed");
+        return UBS_ERROR;
+    }
+
     return UBS_OK;
 }
 
-void UrmaBackendImpl::UnInit() noexcept
+void UrmaBackend::UnInit() noexcept
 {
     std::lock_guard<std::mutex> locker(mutex_);
     if (!inited_) {
@@ -332,10 +134,11 @@ void UrmaBackendImpl::UnInit() noexcept
     UBS_VLOG_DEBUG("Un-initialized");
 }
 
-void UrmaBackendImpl::UnInitInner() noexcept
+void UrmaBackend::UnInitInner() noexcept
 {
     /* do reverse step with init */
     UnInitIoBufPool();
+    g_zcopy_allocator = nullptr;
 
     UnInitJettyPool();
 
@@ -349,7 +152,7 @@ void UrmaBackendImpl::UnInitInner() noexcept
     UnLoadUrmaApi();
 }
 
-Result UrmaBackendImpl::LoadUrmaApi() noexcept
+Result UrmaBackend::LoadUrmaApi() noexcept
 {
     auto result = DlApi::Load(LOAD_URMA);
     if (result != UBS_OK) {
@@ -362,14 +165,14 @@ Result UrmaBackendImpl::LoadUrmaApi() noexcept
     return UBS_OK;
 }
 
-void UrmaBackendImpl::UnLoadUrmaApi() noexcept
+void UrmaBackend::UnLoadUrmaApi() noexcept
 {
     DlApi::UnLoad(LOAD_URMA);
 
     UBS_VLOG_DEBUG("urma api unloaded");
 }
 
-Result UrmaBackendImpl::InitUrma() noexcept
+Result UrmaBackend::InitUrma() noexcept
 {
     UBS_VLOG_DEBUG("enter");
 
@@ -397,7 +200,7 @@ Result UrmaBackendImpl::InitUrma() noexcept
     return UBS_OK;
 }
 
-void UrmaBackendImpl::UnInitUrma() noexcept
+void UrmaBackend::UnInitUrma() noexcept
 {
     if (!urma_inited_) {
         return;
@@ -407,7 +210,7 @@ void UrmaBackendImpl::UnInitUrma() noexcept
     urma_inited_ = false;
 }
 
-Result UrmaBackendImpl::InitContextPool() noexcept
+Result UrmaBackend::InitContextPool() noexcept
 {
     auto tmp_context_pool = MakeRef<UrmaContextPool>();
     if (tmp_context_pool == nullptr) {
@@ -445,7 +248,7 @@ Result UrmaBackendImpl::InitContextPool() noexcept
     }
 
     /* get best context */
-    result = context_pool_->GetBestContext(best_context_);
+    result = tmp_context_pool->GetBestContext(best_context_);
     if (result != UBS_OK) {
         UBS_VLOG_ERR("Failed to get best urma context pool, result: %d", result);
         return result;
@@ -458,7 +261,7 @@ Result UrmaBackendImpl::InitContextPool() noexcept
     return UBS_OK;
 }
 
-void UrmaBackendImpl::UnInitContextPool() noexcept
+void UrmaBackend::UnInitContextPool() noexcept
 {
     /* release the ref of context pool firstly */
     ub_port_selector = nullptr;
@@ -470,12 +273,7 @@ void UrmaBackendImpl::UnInitContextPool() noexcept
     }
 }
 
-UrmaIoBufferPool *UrmaBackend::GetAllocator() noexcept
-{
-    return &urma_allocator_;
-}
-
-Result UrmaBackendImpl::InitJettyPool() noexcept
+Result UrmaBackend::InitJettyPool() noexcept
 {
     if (best_context_ == nullptr) {
         UBS_VLOG_ERR("No best context set, probably not init context pool");
@@ -510,7 +308,7 @@ Result UrmaBackendImpl::InitJettyPool() noexcept
     return UBS_OK;
 }
 
-void UrmaBackendImpl::UnInitJettyPool() noexcept
+void UrmaBackend::UnInitJettyPool() noexcept
 {
     if (jetty_pool_ != nullptr) {
         jetty_pool_->UnInit();
@@ -518,7 +316,7 @@ void UrmaBackendImpl::UnInitJettyPool() noexcept
     }
 }
 
-Result UrmaBackendImpl::InitPollerSet() noexcept
+Result UrmaBackend::InitPollerSet() noexcept
 {
     if (best_context_ == nullptr) {
         UBS_VLOG_ERR("No best context set, probably not init poller pool");
@@ -530,35 +328,24 @@ Result UrmaBackendImpl::InitPollerSet() noexcept
     options.jfc_depth = UrmaSetting::UB_POLLER_JFC_DEPTH;
     options.context_ = best_context_;
     options.polling_type = UrmaSetting::UB_POLLER_BUSY_POLLING ? BUSY_POLLING : EVENT_POLLING;
-    options.cqe_handler = std::bind(&UrmaBackendImpl::HandleCqe, this, std::placeholders::_1, std::placeholders::_2,
-                                    std::placeholders::_3);
+    options.cqe_handler =
+        std::bind(&UrmaBackend::HandleCqe, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
-    auto tmp_poller_set = MakeRef<UrmaPollerSet>();
-    if (tmp_poller_set == nullptr) {
-        UBS_VLOG_ERR("Failed to create Urma poller set, probably out of memory");
-        return UBS_ERROR;
-    }
-
-    auto result = tmp_poller_set->Init(options);
+    auto result = UrmaPollerSet::Instance().Init(options);
     if (result != UBS_OK) {
         UBS_VLOG_ERR("Failed to init Urma poller set, result %d", result);
         return UBS_ERROR;
     }
 
-    poller_set_ = tmp_poller_set;
-
     return UBS_OK;
 }
 
-void UrmaBackendImpl::UnInitPollerSet() noexcept
+void UrmaBackend::UnInitPollerSet() noexcept
 {
-    if (poller_set_ != nullptr) {
-        poller_set_->UnInit();
-        poller_set_ = nullptr;
-    }
+    UrmaPollerSet::Instance().UnInit();
 }
 
-Result UrmaBackendImpl::InitIoBufPool() noexcept
+Result UrmaBackend::InitIoBufPool() noexcept
 {
     if (best_context_ == nullptr) {
         UBS_VLOG_ERR("No best context set, probably not init io buff pool");
@@ -585,11 +372,12 @@ Result UrmaBackendImpl::InitIoBufPool() noexcept
     }
 
     io_buff_pool_ = tmp_io_buf_pool;
+    g_zcopy_allocator = io_buff_pool_.Get();
 
     return UBS_OK;
 }
 
-void UrmaBackendImpl::UnInitIoBufPool() noexcept
+void UrmaBackend::UnInitIoBufPool() noexcept
 {
     if (io_buff_pool_ != nullptr) {
         io_buff_pool_->un_init();
@@ -597,7 +385,7 @@ void UrmaBackendImpl::UnInitIoBufPool() noexcept
     }
 }
 
-void UrmaBackendImpl::SetLogLevel(int level) noexcept
+void UrmaBackend::SetLogLevel(int level) noexcept
 {
     std::lock_guard<std::mutex> locker(mutex_);
     if (!inited_) {
@@ -607,7 +395,7 @@ void UrmaBackendImpl::SetLogLevel(int level) noexcept
     UrmaApi::urma_log_set_level(UrmaGetLogLevel());
 }
 
-Result UrmaBackendImpl::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
+Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
 {
     (void)flags;
     for (auto i = 0; i < cr_count; i++) {
@@ -640,12 +428,12 @@ Result UrmaBackendImpl::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
     return UBS_OK;
 }
 
-Result UrmaBackendImpl::CreateSocket(int fd, SocketType t, SocketPtr &outSocket) noexcept
+Result UrmaBackend::CreateSocket(int fd, SocketType t, SocketPtr &outSocket) noexcept
 {
     return UBS_OK;
 }
 
-Result UrmaBackendImpl::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops) noexcept
+Result UrmaBackend::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOps *&ops) noexcept
 {
     auto tx_ops = new (std::nothrow) UrmaTxOps(sock->raw_socket_);
     if (UNLIKELY(tx_ops == nullptr)) {
@@ -657,7 +445,7 @@ Result UrmaBackendImpl::CreateTxOps(SocketType value, const SocketPtr &sock, Dat
     return UBS_OK;
 }
 
-Result UrmaBackendImpl::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops) noexcept
+Result UrmaBackend::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOps *&ops) noexcept
 {
     auto rx_ops = new (std::nothrow) UrmaRxOps(sock->raw_socket_);
     if (UNLIKELY(rx_ops == nullptr)) {
@@ -669,7 +457,7 @@ Result UrmaBackendImpl::CreateRxOps(SocketType value, const SocketPtr &sock, Dat
     return UBS_OK;
 }
 
-Result UrmaBackendImpl::CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&ops) noexcept
+Result UrmaBackend::CreateAcceptorOps(SocketType value, const SocketPtr &sock, AcceptorOps *&ops) noexcept
 {
     (void)value;
     auto tmp_ops = new (std::nothrow) UrmaAcceptorOps(sock->raw_socket_);
@@ -682,7 +470,7 @@ Result UrmaBackendImpl::CreateAcceptorOps(SocketType value, const SocketPtr &soc
     return UBS_OK;
 }
 
-Result UrmaBackendImpl::CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&ops) noexcept
+Result UrmaBackend::CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&ops) noexcept
 {
     auto tmp_ops = new (std::nothrow) UrmaConnectorOps(sock->raw_socket_);
     if (UNLIKELY(tmp_ops == nullptr)) {
@@ -691,6 +479,38 @@ Result UrmaBackendImpl::CreateConnectorOps(SocketType value, const SocketPtr &so
     }
 
     ops = tmp_ops;
+    return UBS_OK;
+}
+
+UrmaIoBufferPool *UrmaBackend::GetAllocator() noexcept
+{
+    if (UNLIKELY(io_buff_pool_ == nullptr)) {
+        io_buff_pool_ = MakeRef<UrmaIoBufferPool>();
+    }
+    return io_buff_pool_.Get();
+}
+
+const IdentifyNode &UrmaBackend::GetLocalIdentifyNode() noexcept
+{
+    return local_identify_node_;
+}
+
+const UrmaContextPtr &UrmaBackend::GetUrmaContext() noexcept
+{
+    return best_context_;
+}
+
+Result UrmaBackend::InitLocalIdentifyNodeInfo() noexcept
+{
+    auto len = readlink("/proc/self/ns/net", local_identify_node_.ns, NAME_MAX);
+    if (len < 0) {
+        UBS_SLOG_ERR("readlink /proc/self/ns/net failed: " << errno << " : " << strerror(errno));
+        return UBS_ERROR;
+    }
+
+    local_identify_node_.eid = best_context_->EidInfo().eid;
+    local_identify_node_.pid = getpid();
+    local_identify_node_.ns[len] = '\0';
     return UBS_OK;
 }
 

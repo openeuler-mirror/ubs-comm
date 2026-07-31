@@ -121,6 +121,7 @@ protected:
         sock->event_fd_ = TEST_EVENT_FD;
         sock->writable_ready_.store(true, std::memory_order_release);
         sock->socket_readable_ready_.store(false, std::memory_order_release);
+        sock->is_bind_remote_ = true;
         ArraySet<Socket>::GetInstance().OverrideItem(TEST_SOCK_FD, sock.Get());
     }
 };
@@ -547,6 +548,9 @@ TEST_F(UrmaEventPollTest, EpollWait_UbSocketInEvent_EpoolOut_WritableReady_Repor
     kernel_evt.data.ptr = &event_data;
 
     CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    urma_sock->SetReachEpollEvents(EPOLLOUT);
     SetUpMocks();
     g_epollWaitReturn = 1;
     UrmaEventPoll poll(TEST_EPOLL_FD);

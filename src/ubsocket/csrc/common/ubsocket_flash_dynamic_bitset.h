@@ -24,7 +24,7 @@ namespace ock::ubs {
 constexpr int32_t DBS_CHUNK_SHIFT = 6;            // right shift bits
 constexpr int32_t DBS_CHUNK_MASK = 63;            // mask for bit ops
 #define DBS_CHUNK_POS(x) ((x) >> DBS_CHUNK_SHIFT) // chunk pos
-#define DBS_BIT_POS(x) ((x)&DBS_CHUNK_MASK)       // bit pos
+#define DBS_BIT_POS(x) ((x) & DBS_CHUNK_MASK)     // bit pos
 
 /**
  * @brief A bitset which dynamic bit count

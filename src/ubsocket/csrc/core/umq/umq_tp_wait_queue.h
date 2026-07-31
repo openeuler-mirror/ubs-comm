@@ -21,8 +21,7 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-enum UmqTpWaitQueueElementType : uint64_t
-{
+enum UmqTpWaitQueueElementType : uint64_t {
     UMQ_SOCKET = 0,
     UMQ_HANDLE,
     TYPE_COUNT

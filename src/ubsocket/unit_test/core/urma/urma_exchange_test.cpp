@@ -174,11 +174,12 @@ protected:
         sock_->recv_buf_size_ = 4096 * 1024;
         sock_->jetty_ = jetty_;
 
-        UrmaBackend::GetAllocator()->local_start_addr_ = 0x1000;
-        UrmaBackend::local_identify_node_.eid = {};
-        UrmaBackend::local_identify_node_.pid = 1234;
-        memset(UrmaBackend::local_identify_node_.ns, 0, sizeof(UrmaBackend::local_identify_node_.ns));
-        strncpy(UrmaBackend::local_identify_node_.ns, "test_ns", NAME_MAX + 1);
+        UrmaBackend::Instance().GetAllocator()->local_start_addr_ = 0x1000;
+        UrmaBackend::Instance().local_identify_node_.eid = {};
+        UrmaBackend::Instance().local_identify_node_.pid = 1234;
+        memset(UrmaBackend::Instance().local_identify_node_.ns, 0,
+               sizeof(UrmaBackend::Instance().local_identify_node_.ns));
+        strncpy(UrmaBackend::Instance().local_identify_node_.ns, "test_ns", NAME_MAX + 1);
     }
 
     void TearDown() override
@@ -226,7 +227,7 @@ TEST_F(ExchangeSocketResourcesTest, CreateUrmaResources_Fails_ReturnsError)
 
 TEST_F(ExchangeSocketResourcesTest, PoolStartAddrZero_ReturnsTcpExchange)
 {
-    UrmaBackend::GetAllocator()->local_start_addr_ = 0;
+    UrmaBackend::Instance().GetAllocator()->local_start_addr_ = 0;
 
     MOCKER_CPP(&UrmaSocket::CreateUrmaResources).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(returnValue(&g_fake_urg_seg));

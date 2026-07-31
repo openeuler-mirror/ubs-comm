@@ -12,8 +12,8 @@
 #ifndef UBS_COMM_UBSOCKET_ALLOC_FIXED_SIZE_RA_H
 #define UBS_COMM_UBSOCKET_ALLOC_FIXED_SIZE_RA_H
 
-#include <memory_resource>
 #include <semaphore.h>
+#include <memory_resource>
 
 #include "ubsocket_alloc_fixed_size_types.h"
 
@@ -81,8 +81,14 @@ public:
     void ExpandRange(uintptr_t address, uint32_t size_bytes) noexcept;
 
     /* getters for async expand threshold check */
-    uint32_t GetTotalSize() const noexcept { return size_bytes_; }
-    uint32_t GetFreeSize() const noexcept { return free_size_bytes_; }
+    uint32_t GetTotalSize() const noexcept
+    {
+        return size_bytes_;
+    }
+    uint32_t GetFreeSize() const noexcept
+    {
+        return free_size_bytes_;
+    }
 
 private:
     const uintptr_t base_address_;                                  /* address of the whole range */

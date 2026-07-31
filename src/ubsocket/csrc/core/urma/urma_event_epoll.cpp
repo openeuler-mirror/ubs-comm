@@ -91,7 +91,7 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
         auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
         events[i].events = urma_sock->GetReachEpollEvents() & event_data->event.events;
         UBS_VLOG_TRACE("urma epoll(%d) urma socket event(evt=0x%x, data=%lx)", epoll_fd_, events[i].events,
-                           events[i].data.u64);
+                       events[i].data.u64);
         eventfd_read(urma_sock->event_fd_, &event_read_val);
     }
 

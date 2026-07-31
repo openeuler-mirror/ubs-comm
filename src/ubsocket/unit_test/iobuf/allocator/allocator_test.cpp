@@ -793,7 +793,7 @@ TEST_F(AllocatorFunctionalTest, BatchAllocateZeroSizeReturnsTrue)
         uintptr_t dummy[1] = {0xDEAD};
         uintptr_t *p = dummy;
         ok = alloc_.BatchAllocate(0, p);
-        EXPECT_EQ(p, dummy);  /* 不应修改外部指针 */
+        EXPECT_EQ(p, dummy); /* 不应修改外部指针 */
     });
     EXPECT_FALSE(ok);
 }
@@ -922,9 +922,7 @@ TEST_F(AllocatorFunctionalTest, BatchFreeZeroSizeIsSafe)
 
 TEST_F(AllocatorFunctionalTest, BatchFreeNullptrIsSafe)
 {
-    RunInWorker([&]() {
-        alloc_.BatchFree(8, nullptr);
-    });
+    RunInWorker([&]() { alloc_.BatchFree(8, nullptr); });
     SUCCEED();
 }
 
@@ -953,9 +951,7 @@ TEST_F(AllocatorFunctionalTest, InnerBatchAllocateZeroSizeReturnsTrue)
 {
     bool ok = false;
     uintptr_t addr = 0xDEAD;
-    RunInWorker([&]() {
-        ok = alloc_.BatchAllocateWithLinkList(0, addr);
-    });
+    RunInWorker([&]() { ok = alloc_.BatchAllocateWithLinkList(0, addr); });
     EXPECT_TRUE(ok);
     EXPECT_EQ(addr, 0ULL);
 }

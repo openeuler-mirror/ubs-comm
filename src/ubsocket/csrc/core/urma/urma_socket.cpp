@@ -36,7 +36,7 @@ Result UrmaSocket::Initialize() noexcept
     send_buf_size_ = URMA_SEND_BUF_DEFAULT_KB * 1024;
     recv_buf_size_ = URMA_RECV_BUF_DEFAULT_KB * 1024;
 
-    auto buffer = UrmaBackend::GetAllocator()->direct_allocate(recv_buf_size_ + send_buf_size_);
+    auto buffer = UrmaBackend::Instance().GetAllocator()->direct_allocate(recv_buf_size_ + send_buf_size_);
     if (UNLIKELY(buffer == nullptr)) {
         UBS_SLOG_ERR("UrmaSocket: malloc buf failed, fd=" << raw_socket_);
         send_buf_addr_ = 0;
@@ -51,7 +51,7 @@ Result UrmaSocket::Initialize() noexcept
     send_buf_ = new (std::nothrow) UrmaSockRingBuf(send_buf_size_);
     if (UNLIKELY(send_buf_ == nullptr)) {
         UBS_SLOG_ERR("UrmaSocket: ringbuf alloc failed, fd=" << raw_socket_);
-        UrmaBackend::GetAllocator()->direct_release(buffer);
+        UrmaBackend::Instance().GetAllocator()->direct_release(buffer);
         send_buf_addr_ = 0;
         recv_buf_addr_ = 0;
         close(event_fd_);
@@ -69,7 +69,7 @@ void UrmaSocket::UnInitialize() noexcept
     send_buf_ = nullptr;
     auto buffer = reinterpret_cast<void *>(recv_buf_addr_);
     if (buffer != 0) {
-        UrmaBackend::GetAllocator()->direct_release(buffer);
+        UrmaBackend::Instance().GetAllocator()->direct_release(buffer);
     }
     send_buf_addr_ = 0;
     recv_buf_addr_ = 0;
@@ -81,7 +81,7 @@ void UrmaSocket::UnInitialize() noexcept
 }
 Result UrmaSocket::CreateUrmaResources()
 {
-    context_ = UrmaBackend::GetUrmaContext();
+    context_ = UrmaBackend::Instance().GetUrmaContext();
     if (context_ == nullptr) {
         UBS_SLOG_ERR("UrmaSocket: GetUrmaContext failed, fd=" << raw_socket_);
         return UBS_ERROR;
@@ -92,7 +92,6 @@ Result UrmaSocket::CreateUrmaResources()
         UBS_SLOG_ERR("UrmaSocket: SelectPoller failed, fd=" << raw_socket_);
         return ret;
     }
-
 
     const urma_eid_info_t &eid_info = context_->EidInfo();
     memcpy(&local_eid_, &eid_info.eid, sizeof(urma_eid_t));
@@ -214,7 +213,8 @@ void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
     auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
-    UBS_VLOG_TRACE("HandleWriteInBand imm_off:%lu, recv_off:%lu, req->seq_no=%lu", imm.ubsocket.buffer_offset, recv_offset, req->head.sequence_no);
+    UBS_VLOG_TRACE("HandleWriteInBand imm_off:%lu, recv_off:%lu, req->seq_no=%lu", imm.ubsocket.buffer_offset,
+                   recv_offset, req->head.sequence_no);
     auto res = rdma_rx_ops->DataReached(this, req->head.sequence_no, imm.data);
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
@@ -252,8 +252,8 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
     local.ex.raw_jetty_id = urma_sock.Jetty()->RawJettyId();
     local.ex.token = urma_sock.Jetty()->Token();
 
-    auto allocator = UrmaBackend::GetAllocator();
-    local.node = UrmaBackend::GetLocalIdentifyNode();
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    local.node = UrmaBackend::Instance().GetLocalIdentifyNode();
     local.pool_start_addr = allocator->get_local_start_addr();
     auto local_seg = allocator->get_local_target_seg(urma_sock.recv_buf_addr_);
     UBS_VLOG_TRACE(
@@ -335,7 +335,8 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
     urma_sock.rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
     urma_sock.SetBindRemote(true);
     UBS_VLOG_TRACE("urma socket exchange socket result success, peer buf=(0x%lx:0x%lx), local buf=(0x%lx:0x%lx)",
-                  peer.ex.my_send_buf.buf, peer.ex.my_recv_buf.buf, local.ex.my_send_buf.buf, local.ex.my_recv_buf.buf);
+                   peer.ex.my_send_buf.buf, peer.ex.my_recv_buf.buf, local.ex.my_send_buf.buf,
+                   local.ex.my_recv_buf.buf);
     return UBS_OK;
 }
 
