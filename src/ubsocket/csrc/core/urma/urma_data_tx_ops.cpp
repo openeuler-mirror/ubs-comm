@@ -57,7 +57,9 @@ Result UrmaTxOps::TriggerPollOut(const SocketPtr &sock, uint32_t flags) noexcept
 
 bool UrmaTxOps::Writable(const SocketPtr &sock) noexcept
 {
-    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    /* here we already hold the reference by input param, use raw pointer directly,
+     * to avoid increase and def ref */
+    auto urma_sock = dynamic_cast<UrmaSocket *>(sock.Get());
     return urma_sock->send_buf_->Available() >= URMA_SND_BUFF_ALLOC_UNIT;
 }
 
@@ -88,11 +90,14 @@ void UrmaTxOps::CopyFromIovToSendBuf(const std::vector<iovec> &iov, const std::v
 ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total,
                                uint32_t flags) noexcept
 {
-    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    /* here we already hold the reference by input param, use raw pointer directly,
+     * to avoid increase and def ref */
+    auto urma_sock = dynamic_cast<UrmaSocket *>(sock.Get());
     if (UNLIKELY(urma_sock->send_buf_ == nullptr)) {
         errno = ENOTCONN;
         return -1;
     }
+
     constexpr size_t unit = URMA_SND_BUFF_ALLOC_UNIT;
     auto min_bytes = ((URMA_INLINE_MESSAGE_CTRL_COST + 1UL + unit - 1) / unit) * unit;
     auto max_bytes = ((URMA_INLINE_MESSAGE_CTRL_COST + total + unit - 1) / unit) * unit;

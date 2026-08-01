@@ -67,10 +67,10 @@ enum IOOpcode : uint8_t {
 struct UrmaMessageHead {
     uint64_t request_id;
     uint64_t sequence_no;
-    uint32_t flags;
+    uint32_t flags = 0;
     uint32_t data_offset;
     uint16_t message_size;
-    uint16_t reserved[3];
+    uint16_t reserved[3]{};
 };
 
 struct UrmaMessageDataBody {
