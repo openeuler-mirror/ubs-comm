@@ -172,6 +172,7 @@ std::string UrmaDevice::ToString(bool whole, const std::string &prefix, const st
 std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> UrmaContext::ALL_CONTEXTS;
 std::mutex UrmaContext::ALL_CONTEXTS_MUTEX;
 std::atomic<uint32_t> UrmaContext::AUTO_INCREASE_JETTY_ID(0);
+std::atomic<uint32_t> UrmaContext::AUTO_INCREASE_CONTEXT_ID(0);
 
 Result UrmaContext::LookupContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out)
 {
@@ -270,6 +271,8 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
         UBS_VLOG_ERR("Create UrmaContext object failed, probaly out of memory");
         return UBS_MALLOC_FAILED;
     }
+
+    tmp_context->context_id_ = AUTO_INCREASE_CONTEXT_ID.fetch_add(1);
 
     /* step7: insert into all context */
     auto tmp_key = std::pair<std::string, uint32_t>(target_dev_name, eidIndex);

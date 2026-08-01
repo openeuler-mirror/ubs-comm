@@ -11,7 +11,7 @@
 #ifndef UBS_COMM_URMA_WRAPPER_H
 #define UBS_COMM_URMA_WRAPPER_H
 
-#include "../../common/ubsocket_defines.h"
+#include "common/ubsocket_defines.h"
 #include "common/ubsocket_common_includes.h"
 #include "under_api/urma/dl_urma_api.h"
 #include "under_api/urma/urma_types.h"
@@ -181,20 +181,22 @@ public:
                        UrmaJettyPtr &out);
 
     const urma_eid_info_t &EidInfo() const noexcept;
-    urma_context_t *Handle() const noexcept
-    {
-        return raw_context_;
-    }
+
+    uint32_t Id() const noexcept;
+
+    urma_context_t *Handle() const noexcept;
 
 private:
     urma_context_t *raw_context_{nullptr};
     UrmaDevicePtr device_{nullptr};
     urma_eid_info_t eid_info_{};
+    uint32_t context_id_ = UINT16_MAX;
 
 private:
     static std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> ALL_CONTEXTS;
     static std::mutex ALL_CONTEXTS_MUTEX;
     static std::atomic<uint32_t> AUTO_INCREASE_JETTY_ID;
+    static std::atomic<uint32_t> AUTO_INCREASE_CONTEXT_ID;
 
     friend class UrmaJetty;
 };
@@ -202,6 +204,16 @@ private:
 ALWAYS_INLINE const urma_eid_info_t &UrmaContext::EidInfo() const noexcept
 {
     return eid_info_;
+}
+
+ALWAYS_INLINE uint32_t UrmaContext::Id() const noexcept
+{
+    return context_id_;
+}
+
+ALWAYS_INLINE urma_context_t *UrmaContext::Handle() const noexcept
+{
+    return raw_context_;
 }
 
 class UrmaJfc : public Referable {
