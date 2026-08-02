@@ -15,6 +15,7 @@
 #include "ubsocket_alloc_fixed_size_gc.h"
 #include "ubsocket_alloc_fixed_size_tc.h"
 #include "ubsocket_alloc_fixed_size_tc2.h"
+#include "ubsocket_alloc_fixed_size_twin.h"
 
 namespace ock {
 namespace ubs {

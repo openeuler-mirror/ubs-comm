@@ -38,6 +38,18 @@ struct FixedAllocatorOptions {
     friend std::ostream &operator<<(std::ostream &os, const FixedAllocatorOptions &o);
 };
 
+struct FixedTwinBornAllocOptions {
+    uintptr_t brother_space_base_address = 0;
+    uint16_t brother_space_size_gb = 4;
+    uint16_t brother_single_data_size_kb = 8;
+    uint16_t brother_init_space_mb = 8;
+    uint16_t my_single_data_size_bytes = 64;
+};
+
+struct FixedLinkedBlock {
+    FixedLinkedBlock *next = nullptr;
+};
+
 /***********************************************/
 /* inner data structure */
 struct FixedBlock {
