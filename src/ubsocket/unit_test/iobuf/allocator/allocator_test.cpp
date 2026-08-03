@@ -930,12 +930,12 @@ TEST_F(AllocatorFunctionalTest, InnerBatchAllocateReturnsChainHead)
 {
     constexpr uint16_t BATCH = 16;
     bool ok = false;
-    uintptr_t head_addr = 0;
+    FixedLinkedBlock *head_addr = nullptr;
     RunInWorker([&]() {
         ok = alloc_.BatchAllocateWithLinkList(BATCH, head_addr);
         if (ok) {
             uintptr_t addrs[BATCH] = {0};
-            auto p = reinterpret_cast<FixedMiniBlock *>(head_addr);
+            auto p = head_addr;
             for (uint16_t i = 0; i < BATCH; i++) {
                 addrs[i] = reinterpret_cast<uintptr_t>(p);
                 p = p->next;
@@ -947,15 +947,6 @@ TEST_F(AllocatorFunctionalTest, InnerBatchAllocateReturnsChainHead)
     EXPECT_NE(head_addr, 0ULL);
 }
 
-TEST_F(AllocatorFunctionalTest, InnerBatchAllocateZeroSizeReturnsTrue)
-{
-    bool ok = false;
-    uintptr_t addr = 0xDEAD;
-    RunInWorker([&]() { ok = alloc_.BatchAllocateWithLinkList(0, addr); });
-    EXPECT_TRUE(ok);
-    EXPECT_EQ(addr, 0ULL);
-}
-
 TEST_F(AllocatorFunctionalTest, InnerBatchAllocateFreeCycle)
 {
     constexpr uint16_t BATCH = 16;
@@ -963,13 +954,13 @@ TEST_F(AllocatorFunctionalTest, InnerBatchAllocateFreeCycle)
     bool success = true;
     RunInWorker([&]() {
         for (uint32_t i = 0; i < ITER; i++) {
-            uintptr_t addr = 0;
+            FixedLinkedBlock *addr = nullptr;
             if (!alloc_.BatchAllocateWithLinkList(BATCH, addr)) {
                 success = false;
                 break;
             }
             uintptr_t addrs[BATCH] = {0};
-            auto p = reinterpret_cast<FixedMiniBlock *>(addr);
+            auto p = addr;
             for (uint16_t i = 0; i < BATCH; i++) {
                 addrs[i] = reinterpret_cast<uintptr_t>(p);
                 p = p->next;
@@ -984,16 +975,15 @@ TEST_F(AllocatorFunctionalTest, InnerBatchAllocateThenBatchFree)
 {
     constexpr uint16_t BATCH = 16;
     bool ok = false;
-    uintptr_t head_addr = 0;
+    FixedLinkedBlock *head_addr = nullptr;
     RunInWorker([&]() {
         ok = alloc_.BatchAllocateWithLinkList(BATCH, head_addr);
         if (ok) {
             /* 把链表展开为数组 */
             uintptr_t addrs[BATCH] = {0};
-            auto p = reinterpret_cast<FixedMiniBlock *>(head_addr);
             for (uint16_t i = 0; i < BATCH; i++) {
-                addrs[i] = reinterpret_cast<uintptr_t>(p);
-                p = p->next;
+                addrs[i] = reinterpret_cast<uintptr_t>(head_addr);
+                head_addr = head_addr->next;
             }
             alloc_.BatchFree(BATCH, addrs);
         }

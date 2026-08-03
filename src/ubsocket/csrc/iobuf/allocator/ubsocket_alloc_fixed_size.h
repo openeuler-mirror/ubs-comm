@@ -77,10 +77,10 @@ public:
      * @brief Allocate batch of mini blocks, return chain head address
      *
      * @param batchSize    [in] batch size to be allocated
-     * @param address      [out] address of the first mini block (chain head)
+     * @param blocks      [out] Allocated blocks of the first mini block (chain head)
      * @return true if allocated
      */
-    bool BatchAllocateWithLinkList(uint16_t batchSize, uintptr_t &address) noexcept;
+    bool BatchAllocateWithLinkList(uint16_t batchSize, FixedLinkedBlock *&blocks) noexcept;
 
     /**
      * @brief Check if the address in the address range of this allocator
