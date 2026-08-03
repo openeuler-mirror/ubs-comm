@@ -36,7 +36,7 @@ public:
     }
 
 public:
-    Result Init(bool initUrmaOnly = true) noexcept;
+    Result Init(bool initUrmaOnly = false) noexcept;
     void UnInit() noexcept;
 
     void SetLogLevel(int level) noexcept;
