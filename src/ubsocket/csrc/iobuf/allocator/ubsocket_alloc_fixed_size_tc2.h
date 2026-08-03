@@ -73,11 +73,6 @@ private:
     void FreeToGC() noexcept;
 
     void TryFreeToNMAligned() noexcept;
-    void FreeManyToUnAligned(uint16_t batchSize, FixedMiniBlock *head, FixedMiniBlock *tail) noexcept;
-
-    /* inner batch allocate function for array */
-    bool BatchAllocFromUnAligned(uint16_t &remaining_count, uintptr_t *&address, uint16_t &addressIndex) noexcept;
-    bool BatchAllocFromNMAligned(uint16_t &remaining_count, uintptr_t *&address, uint16_t &addressIndex) noexcept;
 
     /* batch allocate function for linked list */
     bool BatchAllocFromUnAligned(uint16_t &remaining_count, FixedMiniBlock *&head, FixedMiniBlock *&tail) noexcept;
@@ -261,70 +256,6 @@ ALWAYS_INLINE void FixedThreadCache2::FreeToGC() noexcept
     /* free to global cache */
     tmp_n_m_aligned->next_n_m->next = nullptr;
     gc_->BatchFree(tmp_n_m_aligned, FIX_GC_BATCH_FREE_SIZE);
-}
-
-ALWAYS_INLINE void FixedThreadCache2::FreeManyToUnAligned(uint16_t batchSize, FixedMiniBlock *head,
-                                                          FixedMiniBlock *tail) noexcept
-{
-    if (UNLIKELY(batchSize >= FIX_GC_BATCH_FREE_SIZE)) {
-        UBS_VLOG_ERR("Invalid param, batch size (%d) should be less than (%d)", batchSize, FIX_GC_BATCH_FREE_SIZE);
-        return;
-    }
-
-    if (UNLIKELY(head == nullptr || tail == nullptr)) {
-        UBS_VLOG_ERR("Invalid param, head(%x) or tail(%x) is nullptr", head, tail);
-        return;
-    }
-
-    const auto tmp_unaligned_free_count = batchSize + unaligned_free_count_;
-    /* case1: total count less than FIX_TC_MINI_BLOCK_LINKED_COUNT */
-    if (tmp_unaligned_free_count < FIX_GC_BATCH_FREE_SIZE) {
-        tail->next = unaligned_head_;
-        unaligned_head_ = head;
-        unaligned_tail_ = (unaligned_free_count_ == 0) ? tail : unaligned_tail_;
-        unaligned_free_count_ = tmp_unaligned_free_count;
-        return;
-    }
-
-    /* case2: total count is equal to FIX_TC_MINI_BLOCK_LINKED_COUNT, move to n_aligned,
-     * NOTES: in this case, unaligned_head_ and unaligned_tail_ must NOT be null */
-    if (tmp_unaligned_free_count == FIX_GC_BATCH_FREE_SIZE) {
-        /* link together */
-        tail->next = unaligned_head_;
-        unaligned_head_ = head;
-        unaligned_free_count_ = tmp_unaligned_free_count;
-
-        /* try to free to n_aligned */
-        TryFreeToNMAligned();
-        return;
-    }
-
-    /* case3: total count is larger than FIX_TC_MINI_BLOCK_LINKED_COUNT,
-     * NOTES: in this case, unaligned_head_ and unaligned_tail_ must NOT be null */
-    const auto still_required = FIX_GC_BATCH_FREE_SIZE - unaligned_free_count_;
-    unaligned_tail_->next = head;
-    unaligned_tail_ = tail;
-
-    auto iter = head;
-    for (uint16_t i = 0; i < still_required - 1; i++) {
-        iter = iter->next;
-    }
-
-    /* set next_n_m of n_aligned head to tail */
-    unaligned_head_->next_n_m = iter;
-    iter->next = n_m_aligned_head_;
-
-    /* adjust n_aligned */
-    n_m_aligned_head_ = unaligned_head_;
-    n_m_aligned_tail_ = (n_m_aligned_free_count_ == 0) ? iter : n_m_aligned_tail_;
-    n_m_aligned_free_count_ += FIX_TC_MINI_BLOCK_LINKED_COUNT;
-
-    /* adjust unaligned */
-    unaligned_head_ = iter->next;
-    unaligned_free_count_ = tmp_unaligned_free_count - FIX_TC_MINI_BLOCK_LINKED_COUNT;
-
-    /* try to free to global cache */
-    FreeToGC();
 }
 
 ALWAYS_INLINE bool FixedThreadCache2::BatchAllocate(uint16_t batchSize, uintptr_t *&address) noexcept
