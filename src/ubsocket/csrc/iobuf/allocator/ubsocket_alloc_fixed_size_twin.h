@@ -109,7 +109,7 @@ ALWAYS_INLINE Result FixedTwinBornAllocator::Init(const FixedTwinBornAllocOption
         return result;
     }
 
-    UBS_VLOG_TRACE("inited");
+    UBS_VLOG_TRACE("FixedTwinBornAllocator is inited");
     return UBS_OK;
 }
 
@@ -121,16 +121,16 @@ ALWAYS_INLINE void FixedTwinBornAllocator::UnInit() noexcept
     }
 
     DestroyMemory();
-    UBS_VLOG_TRACE("un-inited");
+    UBS_VLOG_TRACE("FixedTwinBornAllocator is un-inited");
 }
 
 ALWAYS_INLINE Result
 FixedTwinBornAllocator::CreateMemory(const ock::ubs::allocator::FixedTwinBornAllocOptions &options) noexcept
 {
     auto tmp_bro_data_size = (SIZE_1K * options.brother_single_data_size_kb);
-    auto tmp_my_init_size = SIZE_1M * options.brother_init_space_mb / tmp_bro_data_size;
+    auto tmp_my_init_size = SIZE_1M * options.brother_init_space_mb / tmp_bro_data_size * options.my_single_data_size_bytes;
     auto tmp_bro_space_size = (SIZE_1G * options.brother_space_size_gb);
-    auto tmp_my_space_size = tmp_bro_space_size / tmp_bro_data_size;
+    auto tmp_my_space_size = tmp_bro_space_size / tmp_bro_data_size * options.my_single_data_size_bytes;
 
     /* get memory space */
     auto tmp_address = mmap(NULL, tmp_my_space_size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
@@ -206,7 +206,8 @@ ALWAYS_INLINE bool FixedTwinBornAllocator::AllocateTwin(uintptr_t brotherAddress
     }
 
     const uint64_t offset = (brotherAddress - brother_space_base_address_) / brother_single_size_bytes_;
-    return my_space_base_address_ + offset * my_single_data_size_bytes_;
+    myAddress =  my_space_base_address_ + offset * my_single_data_size_bytes_;
+    return true;
 }
 
 ALWAYS_INLINE Result FixedTwinBornAllocator::HandleExpand(uintptr_t brotherAddress, uint64_t brotherSizeBytes,
@@ -225,7 +226,7 @@ ALWAYS_INLINE Result FixedTwinBornAllocator::HandleExpand(uintptr_t brotherAddre
 
     const uint64_t offset = (brotherAddress - brother_space_base_address_) / brother_single_size_bytes_;
     const uintptr_t my_address = my_space_base_address_ + offset * my_single_data_size_bytes_;
-    const uintptr_t my_address_end = my_address + brotherSizeBytes - my_single_data_size_bytes_;
+    const uintptr_t my_address_end = my_address + (brotherSizeBytes / brother_single_size_bytes_ - 1) * my_single_data_size_bytes_;
 
     if (UNLIKELY(my_address_end > my_space_base_address_end_)) {
         UBS_VLOG_ERR("Invalid brother address(%x) with size(%x)", brotherAddress, brotherSizeBytes);
@@ -236,7 +237,7 @@ ALWAYS_INLINE Result FixedTwinBornAllocator::HandleExpand(uintptr_t brotherAddre
                    brotherSizeBytes, my_space_base_address_, my_address);
 
     if (flags == BlockExpandFlag::ADD) {
-        bzero(reinterpret_cast<void *>(my_address), brotherSizeBytes);
+        bzero(reinterpret_cast<void *>(my_address), (brotherSizeBytes / brother_single_size_bytes_) * my_single_data_size_bytes_);
     }
 
     return UBS_OK;

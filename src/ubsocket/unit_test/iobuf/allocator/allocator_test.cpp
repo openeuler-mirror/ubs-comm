@@ -845,6 +845,23 @@ TEST_F(AllocatorFunctionalTest, BatchAllocateFreeMultiBatch)
     EXPECT_EQ(unique.size(), (size_t)BATCH);
 }
 
+TEST_F(AllocatorFunctionalTest, BatchAllocateFreeMultiBatchUnaligned)
+{
+    constexpr uint16_t BATCH = 3758;
+    bool ok = false;
+    std::vector<uintptr_t> addrs(BATCH, 0);
+    RunInWorker([&]() {
+        uintptr_t *p = addrs.data();
+        ok = alloc_.BatchAllocate(BATCH, p);
+        if (ok) {
+            alloc_.BatchFree(BATCH, addrs.data());
+        }
+    });
+    EXPECT_TRUE(ok);
+    std::set<uintptr_t> unique(addrs.begin(), addrs.end());
+    EXPECT_EQ(unique.size(), (size_t)BATCH);
+}
+
 TEST_F(AllocatorFunctionalTest, BatchAllocateFreeNonBatchSizeMultiple)
 {
     constexpr uint16_t BATCH = 8;
@@ -989,6 +1006,23 @@ TEST_F(AllocatorFunctionalTest, InnerBatchAllocateThenBatchFree)
         }
     });
     EXPECT_TRUE(ok);
+}
+
+TEST_F(AllocatorFunctionalTest, InnerBatchAllocateFreeStressCycleUnaligned)
+{
+    constexpr uint16_t BATCH = 5;
+    constexpr uint32_t ITER = 1000;
+    bool success = true;
+    RunInWorker([&]() {
+        FixedLinkedBlock *head_block = nullptr;
+        for (uint32_t i = 0; i < ITER; i++) {
+            if (!alloc_.BatchAllocateWithLinkList(BATCH, head_block)) {
+                success = false;
+                break;
+            }
+        }
+    });
+    EXPECT_TRUE(success);
 }
 
 TEST_F(AllocatorFunctionalTest, MultiThreadBatchAllocateFree)

@@ -97,7 +97,7 @@ void FixedAllocator::Free(uintptr_t address) noexcept
         return;
     }
 
-    return GetTC().Free(address);
+    GetTC().Free(address);
 }
 
 bool FixedAllocator::BatchAllocate(uint16_t batchSize, uintptr_t *&addresses) noexcept
@@ -125,7 +125,9 @@ void FixedAllocator::BatchFree(uint16_t batchSize, uintptr_t *addresses) noexcep
         return;
     }
 
-    return GetTC().BatchFree(batchSize, addresses);
+    for (int i = 0; i < batchSize; ++i) {
+        GetTC().Free(addresses[i]);
+    }
 }
 
 bool FixedAllocator::BatchAllocateWithLinkList(uint16_t batchSize, FixedLinkedBlock *&blocks) noexcept
@@ -135,11 +137,11 @@ bool FixedAllocator::BatchAllocateWithLinkList(uint16_t batchSize, FixedLinkedBl
         return false;
     }
 
-    uintptr_t head_addr = 0;
-    if (UNLIKELY(!GetTC().InnerBatchAllocate(batchSize, head_addr))) {
+    FixedMiniBlock *head_block = 0;
+    if (UNLIKELY(!GetTC().BatchAllocate(batchSize, head_block))) {
         return false;
     }
-    blocks = reinterpret_cast<FixedLinkedBlock *>(head_addr);
+    blocks = reinterpret_cast<FixedLinkedBlock *>(head_block);
     return true;
 }
 
