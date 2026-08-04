@@ -11,8 +11,8 @@
 #ifndef UBS_COMM_URMA_WRAPPER_H
 #define UBS_COMM_URMA_WRAPPER_H
 
-#include "common/ubsocket_defines.h"
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_defines.h"
 #include "under_api/urma/dl_urma_api.h"
 #include "under_api/urma/urma_types.h"
 #include "urma_socket_types.h"
@@ -186,6 +186,8 @@ public:
 
     urma_context_t *Handle() const noexcept;
 
+    const UrmaDevicePtr &Device() const noexcept;
+
 private:
     urma_context_t *raw_context_{nullptr};
     UrmaDevicePtr device_{nullptr};
@@ -214,6 +216,11 @@ ALWAYS_INLINE uint32_t UrmaContext::Id() const noexcept
 ALWAYS_INLINE urma_context_t *UrmaContext::Handle() const noexcept
 {
     return raw_context_;
+}
+
+ALWAYS_INLINE const UrmaDevicePtr &UrmaContext::Device() const noexcept
+{
+    return device_;
 }
 
 class UrmaJfc : public Referable {
