@@ -118,7 +118,7 @@ public:
 private:
     Result VerifyOptions(FixedAllocatorOptions &options) noexcept;
     void UnInitInner() noexcept;
-    FixedThreadCache &GetTC() noexcept;
+    FixedThreadCache2 &GetTC() noexcept;
 
     static uint32_t AlignUp4K(uint32_t size) noexcept;
 
@@ -127,9 +127,9 @@ private:
     std::mutex mutex_;
 };
 
-ALWAYS_INLINE FixedThreadCache &FixedAllocator::GetTC() noexcept
+ALWAYS_INLINE FixedThreadCache2 &FixedAllocator::GetTC() noexcept
 {
-    static thread_local FixedThreadCache tc(gc_, FIX_GC_BATCH_ALLOC_SIZE, FIX_GC_BATCH_FREE_SIZE);
+    static thread_local FixedThreadCache2 tc(gc_, FIX_GC_BATCH_ALLOC_SIZE, FIX_GC_BATCH_FREE_SIZE);
     return tc;
 }
 

@@ -475,7 +475,6 @@ ALWAYS_INLINE uint32_t FixedGlobalCache::BatchAllocate(uint16_t requestSize, boo
                                                        FixedMiniBlock *&blocks)
 {
     if (UNLIKELY(requestSize == 0)) {
-        UBS_VLOG_ERR("Invalid request size, which should not happen");
         return 0;
     }
 
