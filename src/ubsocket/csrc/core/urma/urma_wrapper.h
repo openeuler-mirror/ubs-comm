@@ -473,7 +473,11 @@ ALWAYS_INLINE urma_jetty_t *UrmaJetty::Handle() const noexcept
 
 ALWAYS_INLINE urma_status_t UrmaJetty::PostSendWr(urma_jfs_wr_t *wr, urma_jfs_wr_t **bad_wr) noexcept
 {
-    wr->tjetty = raw_target_jetty_;
+    auto pos = wr;
+    while (pos != nullptr) {
+        pos->tjetty = raw_target_jetty_;
+        pos = pos->next;
+    }
     return UrmaApi::urma_post_jetty_send_wr(raw_jetty_, wr, bad_wr);
 }
 

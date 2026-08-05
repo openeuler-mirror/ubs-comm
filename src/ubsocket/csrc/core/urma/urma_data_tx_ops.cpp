@@ -235,7 +235,6 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
     need_size = ((need_size + unit - 1) / unit) * unit;
 
     uint64_t buf_offset = 0;
-    UBS_VLOG_TRACE("socket(%d) write total(%zu) need_size(%zu)", sock->Fd(), total, need_size);
     if (!urma_sock->send_buf_->Allocate(need_size, buf_offset)) {
         UBS_VLOG_ERR("socket(%d) allocate send buf with size(%lu) failed.", sock->Fd(), need_size);
         errno = EAGAIN;

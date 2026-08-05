@@ -340,6 +340,7 @@ ALWAYS_INLINE bool FixedThreadCache2::BatchAllocFromUnAligned(uint16_t &remainin
     unaligned_head_ = iter->next;
     unaligned_free_count_ -= tmp_alloc_count;
     unaligned_tail_ = (unaligned_free_count_ == 0) ? nullptr : unaligned_tail_;
+    tail->next = nullptr;
 
     /* step4: update remaining */
     remaining_count -= tmp_alloc_count;
@@ -401,6 +402,7 @@ ALWAYS_INLINE bool FixedThreadCache2::BatchAllocFromNMAligned(uint16_t &remainin
 
     /* step4: update remaining and check if satisfied */
     if (remaining_count == 0) {
+        tail->next = nullptr;
         return true;
     }
 
@@ -433,6 +435,7 @@ ALWAYS_INLINE bool FixedThreadCache2::BatchAllocFromNMAligned(uint16_t &remainin
     n_m_aligned_head_ = unaligned_tail_->next;
     n_m_aligned_free_count_ -= FIX_GC_BATCH_FREE_SIZE;
     n_m_aligned_tail_ = (n_m_aligned_free_count_ == 0) ? nullptr : n_m_aligned_tail_;
+    tail->next = nullptr;
     return true;
 }
 

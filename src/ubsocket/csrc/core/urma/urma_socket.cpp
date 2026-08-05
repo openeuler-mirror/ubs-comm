@@ -207,19 +207,18 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
 {
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
-
-    auto block_ref_ptr = reinterpret_cast<std::vector<BlockRef> *>(req->head.user_ctx1);
+    auto block_refs_ptr = reinterpret_cast<std::vector<BlockRef> *>(req->head.user_ctx1);
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
     }
 
-    if (block_ref_ptr != nullptr) {
+    if (block_refs_ptr != nullptr) {
         req->head.user_ctx1 = 0;
-        for (auto &block_ref : *block_ref_ptr) {
+        for (auto &block_ref : *block_refs_ptr) {
             block_ref.block->DecRef();
         }
 
-        delete block_ref_ptr;
+        delete block_refs_ptr;
     }
 }
 
@@ -239,7 +238,10 @@ void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
 void UrmaSocket::DataReadFinsihed(uint32_t seq_no)
 {
     auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
-    rdma_rx_ops->DataReadFinished(this, seq_no);
+    auto res = rdma_rx_ops->DataReadFinished(this, seq_no);
+    if (LIKELY(res == UBS_OK)) {
+        NotifySocketReadable();
+    }
 }
 
 void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
