@@ -232,6 +232,23 @@ Ref<To> RefDynamicCast(const Ref<From> &from)
 {
     return Ref<To>(dynamic_cast<To *>(from.Get()));
 }
+
+/**
+ * @param zero overhead cast, use this if the following conditions satisfied:
+ * 1 if you sure the the child class is certain class, you can use this one
+ * 2 if you don't switch thread and make sure you hold the reference
+ *
+ * @tparam To              [in] target class type
+ * @tparam From            [in] source class type
+ * @param from             [in] source ref object
+ * @return target raw ptr
+ */
+template <typename To, typename From>
+inline To *RefStaticCastToRaw(const Ref<From> &from)
+{
+    return static_cast<To *>(from.Get());
+}
+
 } // namespace ubs
 } // namespace ock
 
