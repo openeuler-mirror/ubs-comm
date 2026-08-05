@@ -65,11 +65,26 @@ private:
         size_t written;
     };
 
+    struct BuildReadWrCtx {
+        UrmaIoBufferPool *allocator;
+        UrmaSocket *urma_sock;
+        uint64_t user_ctx;
+        std::vector<urma_jfs_wr_t> wrs;
+        std::vector<urma_sge_t> src_sges;
+        std::vector<urma_sge_t> dst_sges;
+
+        BuildReadWrCtx(UrmaIoBufferPool *alloca, UrmaSocket *sock, uint64_t ctx) noexcept: allocator(alloca), urma_sock(sock), user_ctx(ctx)
+        {
+            wrs.reserve(256U);
+            src_sges.reserve(256U);
+            dst_sges.reserve(256U);
+        }
+    };
+
     Result ResponseCtrlMessage(const SocketPtr &sock, IOOpcode opcode, uint64_t offset, uint32_t flags) noexcept;
     Result ReadDataToBlocks(const SocketPtr &sock, uint64_t seq_no, uint64_t write_imm, DataSlot &slot) noexcept;
     Block *AllocBlocksForReq(uint32_t total_bytes) noexcept;
-    void BuildReadWrs(const UrmaCtrlMessage *req, Block *head_block, UrmaIoBufferPool *allocator, UrmaSocket *urma_sock,
-                      uint64_t user_ctx, std::vector<urma_jfs_wr_t> &wrs) noexcept;
+    void BuildReadWrs(const UrmaCtrlMessage *req, Block *head_block, BuildReadWrCtx &ctx) noexcept;
     void ImportRemoteSegments(const SocketPtr &sock, const UrmaCtrlMessage *req) noexcept;
     ssize_t ZeroCopyRead(const SocketPtr &sock, DataSlot &slot, uint64_t seq, const WriteImmData &imm_data,
                          IovWriter &w, uint32_t flags) noexcept;

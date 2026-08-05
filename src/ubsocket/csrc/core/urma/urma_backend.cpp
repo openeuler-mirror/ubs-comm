@@ -239,7 +239,7 @@ Result UrmaBackend::InitContextPool() noexcept
      * case2: if not set in ENV, get first available dev
      */
     Result result = UBS_OK;
-    if (UrmaSetting::UB_DEV_NAME.empty()) {
+    if (!UrmaSetting::UB_DEV_NAME.empty()) {
         result = tmp_context_pool->AddEidIndex(UrmaSetting::UB_DEV_NAME, UrmaSetting::UB_EID_INDEX);
     } else if (UrmaSetting::UB_USING_BOUNDING_DEV) {
         result = tmp_context_pool->AutoAddEidIndex();
@@ -418,7 +418,7 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
 
             if (cr[i].user_ctx != 0) {
                 auto sock_fd = static_cast<int>(cr[i].user_ctx >> 32);
-                auto seq_no = static_cast<uint32_t>(cr[i].user_ctx & 0xffffffff);
+                auto seq_no = static_cast<uint32_t>(cr[i].user_ctx & std::numeric_limits<uint32_t>::max());
                 auto sock = ArraySet<Socket>::GetInstance().GetItem(sock_fd);
                 if (UNLIKELY(sock == nullptr)) {
                     UBS_VLOG_ERR("socket is nullptr for fd: %d", sock_fd);

@@ -66,8 +66,8 @@ public:
 
     int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
     int Connect(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
-    int WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
-    int ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen);
 
     EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
@@ -170,15 +170,17 @@ ALWAYS_INLINE int SocketBase::Connect(SocketPtr &sock, const struct sockaddr *ad
     return connector_->Connect(sock, address, address_len);
 }
 
-ALWAYS_INLINE int SocketBase::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+ALWAYS_INLINE ssize_t SocketBase::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     return tx_.WriteV(sock, iov, iovcnt);
 }
 
-ALWAYS_INLINE int SocketBase::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+ALWAYS_INLINE ssize_t SocketBase::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
-    UBS_VLOG_TRACE("enter SocketBase::ReadV fd=%d, iovcnt=%d, iov[0].buf=%p", sock->Fd(), iovcnt, iov[0].iov_base);
-    return rx_.ReadV(sock, iov, iovcnt);
+    auto ret = rx_.ReadV(sock, iov, iovcnt);
+    UBS_VLOG_TRACE("enter SocketBase::ReadV fd=%d, iovcnt=%d, iov[0]=(buf=%p, size=%zu) return %zd", sock->Fd(), iovcnt,
+                   iov[0].iov_base, iov[0].iov_len, ret);
+    return ret;
 }
 
 ALWAYS_INLINE EventPoll *SocketBase::GetAddedEpollFd(epoll_data_t &data) const
