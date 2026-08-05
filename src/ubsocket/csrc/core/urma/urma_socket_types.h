@@ -69,21 +69,25 @@ struct UrmaMessageHead {
     uint64_t sequence_no;
     uint32_t flags = 0;
     uint32_t data_offset;
+    uint32_t data_count; // small io: bytes count, large io: buffer count
     uint16_t message_size;
-    uint16_t reserved[3]{};
+    uint16_t reserved = 0;
+    uintptr_t user_ctx1 = 0;
+    uintptr_t user_ctx2 = 0;
+};
+static_assert(sizeof(UrmaMessageHead) % 16 == 0, "UrmaMessageHead size must be 16B-aligned");
+
+struct PageBufferInMessage {
+    uint64_t addr;
+    uint32_t size;
+    uint32_t flags;
 };
 
 struct UrmaMessageDataBody {
-    uint32_t buffer_count;
-    struct {
-        uint64_t addr;
-        uint32_t size;
-        uint32_t flags;
-    } sender_buffers[0];
+    PageBufferInMessage sender_buffers[0];
 };
 
 struct UrmaMessageInlineBody {
-    uint32_t body_size;
     uint8_t data[0];
 };
 
@@ -94,7 +98,7 @@ struct UrmaCtrlMessage {
         UrmaMessageInlineBody small_io;
     };
 };
-constexpr uint32_t URMA_INLINE_MESSAGE_CTRL_COST = static_cast<uint32_t>(offsetof(UrmaCtrlMessage, small_io.data));
+constexpr uint32_t URMA_INLINE_MESSAGE_CTRL_COST = sizeof(UrmaMessageHead);
 constexpr uint32_t URMA_INLINE_DATA_THRESHOLD = URMA_INLINE_THRESHOLD - URMA_INLINE_MESSAGE_CTRL_COST;
 
 enum TransportType : int8_t {

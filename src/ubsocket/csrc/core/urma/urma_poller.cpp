@@ -115,7 +115,11 @@ void UrmaPoller::EventPoll() noexcept
                 }
 
                 auto result = cqe_handler_(0, cnt, crs);
+#ifdef UBS_LOG_TRACE_ENABLED
                 UBS_VLOG_TRACE("cqe handler processed (%d) and return %d, continue polling", cnt, result);
+#else
+                (void)result;
+#endif
                 if (first_time) {
                     first_time = false;
                     jfc_->Rearm(false);

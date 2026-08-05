@@ -18,6 +18,7 @@
 #include "core/ubsocket_socket_helper.h"
 #include "under_api/urma/dl_urma_api.h"
 #include "urma_data_rx_ops.h"
+#include "urma_data_tx_ops.h"
 #include "urma_poller.h"
 #include "urma_socket.h"
 
@@ -186,11 +187,20 @@ void UrmaSocket::HandleRecvCqe(const WriteImmData &imm)
 
 void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
 {
-    // TODO: implement pre-write CQE handling
-    //auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
-    //auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
-    recv_data_ready_ = true;
-    NotifySocketReadable();
+    auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
+    auto recv_ctl_off = static_cast<uint32_t>(imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT);
+    if (UNLIKELY(recv_ctl_off >= recv_buf_size_)) {
+        UBS_VLOG_ERR("socket fd(%) receive invalid imm(opcode: %lx, off:%lx) off_by_bytes: %lx", raw_socket_,
+                     imm.ubsocket.opcode, imm.ubsocket.buffer_offset, recv_ctl_off);
+        return;
+    }
+    auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_ctl_off);
+    UBS_VLOG_TRACE("socket(%d) HandlePreWrite imm_off:%lu, recv_off:%u, req->seq_no=%lu", raw_socket_,
+                   imm.ubsocket.buffer_offset, recv_ctl_off, req->head.sequence_no);
+    auto res = rdma_rx_ops->DataReached(this, req->head.sequence_no, imm.data);
+    if (UNLIKELY(res != UBS_OK)) {
+        UBS_VLOG_ERR("socket fd(%d) process large io ctrl message failed: %d", raw_socket_, res);
+    }
 }
 
 void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
@@ -198,27 +208,38 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
 
-    /*
-     * TODO:
-     *  checker req->flags, all page read finished -> release req buf, release finished pages
-     */
-
+    auto block_ref_ptr = reinterpret_cast<std::vector<BlockRef> *>(req->head.user_ctx1);
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
+    }
+
+    if (block_ref_ptr != nullptr) {
+        req->head.user_ctx1 = 0;
+        for (auto &block_ref : *block_ref_ptr) {
+            block_ref.block->DecRef();
+        }
+
+        delete block_ref_ptr;
     }
 }
 
 void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
 {
-    auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
+    auto urma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
     UBS_VLOG_TRACE("HandleWriteInBand imm_off:%lu, recv_off:%lu, req->seq_no=%lu", imm.ubsocket.buffer_offset,
                    recv_offset, req->head.sequence_no);
-    auto res = rdma_rx_ops->DataReached(this, req->head.sequence_no, imm.data);
+    auto res = urma_rx_ops->DataReached(this, req->head.sequence_no, imm.data);
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
     }
+}
+
+void UrmaSocket::DataReadFinsihed(uint32_t seq_no)
+{
+    auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
+    rdma_rx_ops->DataReadFinished(this, seq_no);
 }
 
 void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
@@ -241,6 +262,7 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
     struct UrmaSockSegExInfo {
         UrmaSockExInfo ex{};
         IdentifyNode node;
+        uint32_t uasid;
         uintptr_t pool_start_addr;
         urma_seg_t seg{};
     } local, peer;
@@ -254,8 +276,15 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
 
     auto allocator = UrmaBackend::Instance().GetAllocator();
     local.node = UrmaBackend::Instance().GetLocalIdentifyNode();
+    local.uasid = context_->Handle()->uasid;
     local.pool_start_addr = allocator->get_local_start_addr();
     auto local_seg = allocator->get_local_target_seg(urma_sock.recv_buf_addr_);
+    if (local.pool_start_addr == 0 || local_seg == nullptr) {
+        UBS_SLOG_ERR("UrmaSocket: Failed local pool address: " << std::hex << local.pool_start_addr
+                                                               << " get local target_seg @0x" << std::hex
+                                                               << urma_sock.recv_buf_addr_);
+        return UBS_TCP_EXCHANGE;
+    }
     UBS_VLOG_TRACE(
         "send buf(0x%lx, %u) recv buf(0x%lx, %u) jetty-id(eid=(%lx:%lx), uasid=%u, id=%u) "
         "seg(start_ptr=0x%lx, seg(va=0x%lx, len=%lu, attr=%x, token_id=%u), user_ctx=0x%lx, mva=0x%lx, token_id=%p",
@@ -264,13 +293,6 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
         local.ex.raw_jetty_id.uasid, local.ex.raw_jetty_id.id, local.pool_start_addr, local_seg->seg.ubva.va,
         local_seg->seg.len, local_seg->seg.attr, local_seg->seg.token_id, local_seg->user_ctx, local_seg->mva,
         local_seg->token_id);
-
-    if (local.pool_start_addr == 0 || local_seg == nullptr) {
-        UBS_SLOG_ERR("UrmaSocket: Failed local pool address: " << std::hex << local.pool_start_addr
-                                                               << " get local target_seg @0x" << std::hex
-                                                               << urma_sock.recv_buf_addr_);
-        return UBS_TCP_EXCHANGE;
-    }
     local.seg = local_seg->seg;
     if (send_first) {
         if (SocketConnHelper::SendSocketData(fd, &local, sizeof(local), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local)) {
@@ -333,6 +355,8 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
 
     urma_sock.rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
     urma_sock.rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
+    urma_sock.remote_uasid_ = peer.uasid;
+    urma_sock.peer_eid_ = peer.node.eid;
     urma_sock.SetBindRemote(true);
     UBS_VLOG_TRACE("urma socket exchange socket result success, peer buf=(0x%lx:0x%lx), local buf=(0x%lx:0x%lx)",
                    peer.ex.my_send_buf.buf, peer.ex.my_recv_buf.buf, local.ex.my_send_buf.buf,

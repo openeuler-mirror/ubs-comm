@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "urma_data_rx_ops.h"
+#include "urma_backend.h"
 #include "urma_socket.h"
 
 namespace ock {
@@ -21,7 +22,7 @@ Result UrmaRxOps::DataReached(const SocketPtr &sock, uint64_t seq_no, uint64_t w
     auto &slot = data_slots_[idx];
 
     uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
-    if (UNLIKELY(slot.valid.load(std::memory_order_acquire))) {
+    if (UNLIKELY(slot.rx_state.load(std::memory_order_acquire) != URMA_RX_STS_IDLE)) {
         uint64_t occupied_seq = slot.seq_no;
         if (UNLIKELY(occupied_seq == INVALID_SEQ || consumed <= occupied_seq)) {
             UBS_VLOG_ERR("cannot fill for fd(%d) data reached seq(%lu) slot(%zu) slot_seq(%lu)", sock->Fd(), seq_no,
@@ -29,13 +30,76 @@ Result UrmaRxOps::DataReached(const SocketPtr &sock, uint64_t seq_no, uint64_t w
             return UBS_PREFILL_RX;
         }
     }
-
     slot.write_imm = write_imm;
     slot.seq_no = seq_no;
-    slot.valid.store(true, std::memory_order_release);
+
+    WriteImmData imm_data{slot.write_imm};
+    if (imm_data.ubsocket.opcode == PRE_WRITE) {
+        return ReadDataToBlocks(sock, seq_no, write_imm, slot);
+    }
+
+    slot.rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
     auto res = seq_no == consumed ? UBS_OK : UBS_LATER_SEQ;
-    UBS_VLOG_TRACE("data reached seq_no(%lu) consumed(%lu) res(%d)", seq_no, consumed, res);
+    UBS_VLOG_TRACE("socket(%d) data reached seq_no(%lu) consumed(%lu) res(%d)", sock->Fd(), seq_no, consumed, res);
     return res;
+}
+
+Result UrmaRxOps::DataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexcept
+{
+    size_t idx = seq_no % RING_SIZE;
+    auto &slot = data_slots_[idx];
+
+    uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
+    auto curr_state = slot.rx_state.load(std::memory_order_acquire);
+    if (UNLIKELY(curr_state != URMA_RX_STS_READING)) {
+        UBS_VLOG_ERR("urma socket fd(%d) data state seq(%lu) slot(%zu) should be(%hhu) but(%hhu)", sock->Fd(), seq_no,
+                     idx, URMA_RX_STS_READING, curr_state);
+        return UBS_ERROR;
+    }
+
+    slot.rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
+    auto res = seq_no == consumed ? UBS_OK : UBS_LATER_SEQ;
+    UBS_VLOG_TRACE("socket(%d) data reached seq_no(%lu) consumed(%lu) res(%d)", sock->Fd(), seq_no, consumed, res);
+    return res;
+}
+
+ssize_t UrmaRxOps::ZeroCopyRead(const SocketPtr &sock, DataSlot &slot, uint64_t seq, const WriteImmData &imm_data,
+                            IovWriter &w, uint32_t flags) noexcept
+{
+    if (slot.rx_state.load(std::memory_order_acquire) != URMA_RX_STS_DATA_READY || slot.seq_no != seq) {
+        errno = EAGAIN;
+        return -1;
+    }
+
+    size_t iov_total = 0;
+    for (auto i = 0; i < w.iovcnt; i++) {
+        iov_total += w.iov[i].iov_len;
+    }
+
+    UBS_VLOG_TRACE("socket(%d)zcopy_read seq(%lu) read total(%zu)", sock->Fd(), seq, iov_total);
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    auto block = allocator->get_mini_block_head(reinterpret_cast<uintptr_t>(w.iov[0].iov_base));
+    if (block == 0) {
+        UBS_VLOG_ERR("zcopy read fd(%d) first addr: %p invalid", fd_, w.iov[0].iov_base);
+        errno = EINVAL;
+        return -1;
+    }
+
+    auto out_first_block = reinterpret_cast<Block *>(block);
+    ssize_t rx_total_len = block_cache_.CutAndInsertAfter(iov_total, out_first_block);
+    if (rx_total_len == 0) {
+        UBS_VLOG_ERR("zcopy read fd(%d) first addr: %p invalid, return 0", fd_, w.iov[0].iov_base);
+        errno = EIO;
+        return UBS_ERROR;
+    }
+
+    out_first_block->size = out_first_block->cap;
+    ResponseCtrlMessage(sock, POST_WRITE, imm_data.ubsocket.buffer_offset, flags);
+    slot.rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
+    consume_seq_no_.store(seq + 1, std::memory_order_release);
+    ReleaseBlockInSlot(slot);
+    UBS_VLOG_TRACE("socket(%d)zcopy_read seq(%lu) read total(%zu) real(%zd)", sock->Fd(), seq, iov_total, rx_total_len);
+    return rx_total_len;
 }
 
 ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags)
@@ -47,95 +111,60 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
     }
 
     (void)flags;
-    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
     UBS_VLOG_TRACE("readv fd=%d iovcnt=%d enter", sock->Fd(), iovcnt);
 
-    size_t total = 0;
-    bool has_data = false;
-    int iov_idx = 0;
-    size_t iov_offset = 0;
+    IovWriter w{};
+    w.iov = iov;
+    w.iovcnt = iovcnt;
 
-    // 按序号顺序消费 data_slots_ 中的消息
-    while (iov_idx < iovcnt) {
-        auto seq = consume_seq_no_.load(std::memory_order_relaxed);
-        auto &slot = data_slots_[seq % RING_SIZE];
-        if (!slot.valid.load(std::memory_order_acquire)) {
+    /* PRE_WRITE 大 IO: 从 block_cache_ 直接取数据 */
+    auto seq = consume_seq_no_.load(std::memory_order_relaxed);
+    auto &slot = data_slots_[seq % RING_SIZE];
+    WriteImmData imm_data{slot.write_imm};
+    if (imm_data.ubsocket.opcode == PRE_WRITE && (flags & UBS_IO_FLAG_USE_BRPC_BLOCK) == UBS_IO_FLAG_USE_BRPC_BLOCK) {
+        return ZeroCopyRead(sock, slot, seq, imm_data, w, flags);
+    }
+
+    /* WRITE_IN_BAND 小 IO: 按 slot 顺序消费 */
+    bool has_data = false;
+    w.idx = 0;
+    w.offset = 0;
+    w.written = 0;
+
+    while (w.idx < w.iovcnt) {
+        seq = consume_seq_no_.load(std::memory_order_relaxed);
+        auto &inline_slot = data_slots_[seq % RING_SIZE];
+        if (inline_slot.rx_state.load(std::memory_order_acquire) != URMA_RX_STS_DATA_READY) {
             UBS_VLOG_TRACE("readv fd=%d slot(%zu) not valid, break", sock->Fd(), seq % RING_SIZE);
             break;
         }
-        if (slot.seq_no != seq) {
+        if (inline_slot.seq_no != seq) {
             UBS_VLOG_TRACE("readv fd=%d slot(%zu) seq_mismatch slot_seq=%lu expect=%lu, break", sock->Fd(),
-                           seq % RING_SIZE, slot.seq_no, seq);
+                           seq % RING_SIZE, inline_slot.seq_no, seq);
             break;
         }
         has_data = true;
 
-        // 从 slot 解码 recv_offset，定位环形缓冲区中的消息
-        WriteImmData imm_data{slot.write_imm};
-        auto recv_offset = imm_data.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
-        auto req = reinterpret_cast<UrmaCtrlMessage *>(urma_sock->recv_buf_addr_ + recv_offset);
-        auto body_start = recv_offset + URMA_INLINE_MESSAGE_CTRL_COST;
-        auto available = static_cast<size_t>(req->small_io.body_size) - consume_offset_;
-        UBS_VLOG_TRACE("recv_offset=%lu, req=%p, msg_size=%hu, body_size=%u, head_cost=%u", recv_offset, req,
-                       req->head.message_size, req->small_io.body_size, URMA_INLINE_MESSAGE_CTRL_COST);
-        UBS_VLOG_TRACE("readv fd=%d slot(%zu) seq=%lu body_size=%u avail=%zu offset_in_msg=%zu", sock->Fd(),
-                       seq % RING_SIZE, seq, req->small_io.body_size, available, consume_offset_);
-
-        size_t copied = 0;
-        // 将消息体分散写入 iov 数组，一条消息跨多个 iov 条目时顺序填充
-        while (iov_idx < iovcnt && copied < available) {
-            auto iov_remain = static_cast<size_t>(iov[iov_idx].iov_len) - iov_offset;
-            auto copy_len = std::min(iov_remain, available - copied);
-            auto *iov_dst = static_cast<uint8_t *>(iov[iov_idx].iov_base) + iov_offset;
-            auto read_offset = body_start + consume_offset_ + copied;
-            auto *src_base = reinterpret_cast<uint8_t *>(urma_sock->recv_buf_addr_);
-
-            if (read_offset + copy_len <= urma_sock->recv_buf_size_) {
-                std::memcpy(iov_dst, src_base + read_offset, copy_len);
-            } else {
-                // 环形缓冲区回绕，分两段拷贝
-                auto part0 = urma_sock->recv_buf_size_ - read_offset;
-                UBS_VLOG_TRACE("readv fd=%d ringbuf wrap read_offset=%zu part0=%zu part1=%zu", sock->Fd(), read_offset,
-                               part0, copy_len - part0);
-                std::memcpy(iov_dst, src_base + read_offset, part0);
-                std::memcpy(iov_dst + part0, src_base, copy_len - part0);
-            }
-
-            UBS_VLOG_TRACE("readv fd=%d copy iov[%d]+%zu -> buf_off=%zu copy_len=%zu", sock->Fd(), iov_idx, iov_offset,
-                           read_offset, copy_len);
-            copied += copy_len;
-            total += copy_len;
-            iov_offset += copy_len;
-            if (iov_offset >= static_cast<size_t>(iov[iov_idx].iov_len)) {
-                iov_idx++;
-                iov_offset = 0;
-            }
-        }
-
-        if (copied == available) {
-            // 消息完整消费，释放 slot 供生产者复用
-            UBS_VLOG_TRACE("readv fd=%d slot(%zu) seq=%lu fully consumed, send ACK", sock->Fd(), seq % RING_SIZE, seq);
-            ResponseCtrlMessage(sock, WRITE_IN_BAND_ACK, imm_data.ubsocket.buffer_offset, flags);
-            slot.valid.store(false, std::memory_order_release);
-            consume_seq_no_.store(seq + 1, std::memory_order_release);
-            consume_offset_ = 0;
+        WriteImmData slot_imm{inline_slot.write_imm};
+        bool fully_consumed;
+        if (slot_imm.ubsocket.opcode == PRE_WRITE) {
+            fully_consumed = ReadBlockData(sock, inline_slot, w, flags);
         } else {
-            // 部分消费，记录偏移，下次 ReadV 从此处继续
-            consume_offset_ += copied;
-            UBS_VLOG_TRACE("readv fd=%d slot(%zu) seq=%lu partial consume_offset=%zu copied=%zu, break", sock->Fd(),
-                           seq % RING_SIZE, seq, consume_offset_, copied);
+            fully_consumed = ReadInlineData(sock, inline_slot, w, flags);
+        }
+        if (!fully_consumed) {
             break;
         }
     }
 
     if (!has_data) {
-        UBS_VLOG_TRACE("readv fd=%d no data iov fill=%zu return EAGAIN", sock->Fd(), total);
+        UBS_VLOG_TRACE("readv fd=%d no data iov fill=%zu return EAGAIN", sock->Fd(), w.written);
         errno = EAGAIN;
         return -1;
     }
 
-    UBS_VLOG_TRACE("readv fd=%d done total=%zu return", sock->Fd(), total);
-    return static_cast<ssize_t>(total);
+    UBS_VLOG_TRACE("readv fd=%d done total=%zu return", sock->Fd(), w.written);
+    return static_cast<ssize_t>(w.written);
 }
 
 Result UrmaRxOps::TriggerPollIn(const SocketPtr &sock, uint32_t flags)
@@ -160,7 +189,7 @@ Result UrmaRxOps::ResponseCtrlMessage(const SocketPtr &sock, IOOpcode opcode, ui
     src_sge.addr = urma_sock->recv_buf_addr_ + recv_offset;
     src_sge.len = len;
     src_sge.tseg = urma_sock->local_ctrl_target_seg_;
-    dst_sge.addr = urma_sock->rmt_recv_buf_addr_ + recv_offset;
+    dst_sge.addr = urma_sock->rmt_send_buf_addr_ + recv_offset;
     dst_sge.len = len;
     dst_sge.tseg = urma_sock->remote_ctrl_target_seg_;
 
@@ -170,13 +199,298 @@ Result UrmaRxOps::ResponseCtrlMessage(const SocketPtr &sock, IOOpcode opcode, ui
     urma_rw_wr_t rw = {.src = src_sg, .dst = dst_sg, .target_hint = 0, .notify_data = imm_data.data};
     UBS_VLOG_TRACE("urma sock(%d) resp(opcode:%hhu, offset:%lu, src_addr=%p, dst_addr=%p, len=%u)", urma_sock->Fd(),
                    opcode, recv_offset, src_sge.addr, dst_sge.addr, len);
-    auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, resp->head.request_id);
+    auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, 0);
     if (urma_ret != URMA_SUCCESS) {
         UBS_SLOG_ERR("Urma post write_imm for response: " << resp->head.request_id << " return " << urma_ret);
         return UBS_ERROR;
     }
 
     return UBS_OK;
+}
+
+Result UrmaRxOps::ReadDataToBlocks(const SocketPtr &sock, uint64_t seq_no, uint64_t write_imm, DataSlot &slot) noexcept
+{
+    WriteImmData imm_data{write_imm};
+    auto urma_sock = static_cast<UrmaSocket *>(sock.Get());
+    auto offset = imm_data.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+    auto req = reinterpret_cast<UrmaCtrlMessage *>(urma_sock->recv_buf_addr_ + offset);
+    uint32_t total_bytes = 0;
+    for (auto i = 0U; i < req->head.data_count; i++) {
+        total_bytes += req->large_io.sender_buffers[i].size;
+    }
+
+    UBS_VLOG_TRACE("read data to block for socket(%d) seq(%lu) imm(%hhu, %lu) total size=%u", sock->Fd(), seq_no,
+                   imm_data.ubsocket.opcode, imm_data.ubsocket.buffer_offset, total_bytes);
+    ImportRemoteSegments(sock, req);
+    auto *head_block = AllocBlocksForReq(total_bytes);
+    if (UNLIKELY(head_block == nullptr)) {
+        UBS_VLOG_ERR("socket(fd) allocate for seq(%lu) bytes(%u) allocate failed.", sock->Fd(), seq_no, total_bytes);
+        return UBS_ERROR;
+    }
+    slot.data_block = head_block;
+
+    const auto user_ctx = (static_cast<uint64_t>(urma_sock->Fd()) << 32) | (seq_no & 0xFFFFFFFFUL);
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    std::vector<urma_jfs_wr_t> wrs;
+    BuildReadWrs(req, head_block, allocator, urma_sock, user_ctx, wrs);
+
+    if (UNLIKELY(wrs.empty())) {
+        UBS_VLOG_ERR("send request READ for socket(%d) seq_no(%lu) wrs is empty", sock->Fd(), seq_no);
+        return UBS_ERROR;
+    }
+
+    urma_jfs_wr_t *bad_wr = nullptr;
+    auto ret = urma_sock->jetty_->PostSendWr(&wrs[0], &bad_wr);
+    if (ret != URMA_SUCCESS) {
+        UBS_VLOG_ERR("send request READ for socket(%d) seq_no(%lu) failed: %d", sock->Fd(), seq_no, ret);
+        ReleaseBlockInSlot(slot);
+        return UBS_ERROR;
+    }
+
+    while (head_block != nullptr) {
+        auto next_block = head_block->GetNext();
+        block_cache_.Insert(head_block->data, head_block->size);
+        head_block = next_block;
+    }
+    slot.rx_state.store(URMA_RX_STS_READING, std::memory_order_release);
+    UBS_VLOG_TRACE("socket(%d) read data to blocks success.", sock->Fd());
+    return UBS_OK;
+}
+
+Block *UrmaRxOps::AllocBlocksForReq(uint32_t total_bytes) noexcept
+{
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    auto block_size = allocator->get_mini_block_size();
+    auto block_count = static_cast<uint16_t>((total_bytes + block_size - 1) / block_size);
+
+    allocator::FixedLinkedBlock *mini_block_head = nullptr;
+    if (UNLIKELY(!allocator->multi_allocate(block_count, mini_block_head) || mini_block_head == nullptr)) {
+        UBS_VLOG_ERR("allocate for bytes(%u) block_count(%hu) failed.", total_bytes, block_count);
+        return nullptr;
+    }
+
+    Block *head_block = nullptr;
+    Block *tail_block = nullptr;
+    auto data_left = total_bytes;
+    auto block_capacity = static_cast<uint32_t>(block_size - sizeof(Block));
+    while (mini_block_head != nullptr) {
+        auto curr_capacity = std::min(block_capacity, data_left);
+        auto mini_block_next = mini_block_head->next;
+        auto curr_block = new (mini_block_head) Block(reinterpret_cast<char *>(mini_block_head), curr_capacity);
+        if (tail_block == nullptr) {
+            head_block = tail_block = curr_block;
+        } else {
+            tail_block = tail_block->SetNext(curr_block);
+        }
+        mini_block_head = mini_block_next;
+    }
+    return head_block;
+}
+
+void UrmaRxOps::BuildReadWrs(const UrmaCtrlMessage *req, Block *head_block, UrmaIoBufferPool *allocator,
+                              UrmaSocket *urma_sock, uint64_t user_ctx, std::vector<urma_jfs_wr_t> &wrs) noexcept
+{
+    std::vector<urma_sge_t> src_sges;
+    std::vector<urma_sge_t> dst_sges;
+
+    size_t remote_idx = 0;
+    uint32_t remote_offset = 0;
+    Block *local_block = head_block;
+    uint32_t local_offset = 0;
+
+    while (remote_idx < req->head.data_count && local_block != nullptr) {
+        uint32_t remote_remain = req->large_io.sender_buffers[remote_idx].size - remote_offset;
+        uint32_t local_remain = local_block->cap - local_offset;
+        uint32_t seg_size = std::min(remote_remain, local_remain);
+
+        src_sges.emplace_back();
+        dst_sges.emplace_back();
+        auto &src_sge = src_sges.back();
+        auto &dst_sge = dst_sges.back();
+
+        src_sge.addr = req->large_io.sender_buffers[remote_idx].addr + remote_offset;
+        src_sge.len = seg_size;
+        src_sge.tseg = allocator->get_remote_target_seg(urma_sock->remote_target_segs_,
+                                                         req->large_io.sender_buffers[remote_idx].addr);
+
+        dst_sge.addr = reinterpret_cast<uintptr_t>(local_block->data) + local_offset;
+        dst_sge.len = seg_size;
+        dst_sge.tseg = allocator->get_local_target_seg(reinterpret_cast<uintptr_t>(local_block->data));
+
+        urma_jfs_wr_t wr = {};
+        wr.opcode = URMA_OPC_READ;
+        wr.user_ctx = user_ctx;
+        wr.rw.src = {.sge = &src_sge, .num_sge = 1};
+        wr.rw.dst = {.sge = &dst_sge, .num_sge = 1};
+        wrs.push_back(wr);
+
+        remote_offset += seg_size;
+        if (remote_offset >= req->large_io.sender_buffers[remote_idx].size) {
+            remote_idx++;
+            remote_offset = 0;
+        }
+
+        local_offset += seg_size;
+        if (local_offset >= local_block->cap) {
+            local_block = local_block->GetNext();
+            local_offset = 0;
+        }
+    }
+
+    for (size_t i = 0; i + 1 < wrs.size(); i++) {
+        wrs[i].next = &wrs[i + 1];
+    }
+    if (!wrs.empty()) {
+        wrs.back().flag.bs.complete_enable = 1;
+    }
+}
+
+void UrmaRxOps::ImportRemoteSegments(const SocketPtr &sock, const UrmaCtrlMessage *req) noexcept
+{
+    auto urma_socket = static_cast<UrmaSocket *>(sock.Get());
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    auto remote_segs = urma_socket->remote_target_segs_;
+    for (auto i = 0U; i < req->head.data_count; i++) {
+        allocator->store_remote_target_seg(remote_segs, urma_socket->peer_eid_, urma_socket->remote_uasid_,
+                                           req->large_io.sender_buffers[i].addr, req->large_io.sender_buffers[i].flags);
+    }
+}
+
+bool UrmaRxOps::ReadBlockData(const SocketPtr &sock, DataSlot &slot, IovWriter &w, uint32_t flags) noexcept
+{
+    WriteImmData imm_data{slot.write_imm};
+    auto seq = slot.seq_no;
+
+    Block *block = slot.data_block;
+    if (UNLIKELY(block == nullptr)) {
+        UBS_VLOG_ERR("readv fd=%d pre_write seq=%lu data_block is null", sock->Fd(), seq);
+        return false;
+    }
+
+    size_t total_block_bytes = 0;
+    for (auto *b = block; b != nullptr; b = b->GetNext()) {
+        total_block_bytes += b->cap;
+    }
+    auto available = total_block_bytes - consume_offset_;
+
+    uint64_t skip = consume_offset_;
+    while (block != nullptr && skip >= block->cap) {
+        skip -= block->cap;
+        block = block->GetNext();
+    }
+
+    size_t copied = 0;
+    while (w.idx < w.iovcnt && copied < available) {
+        auto iov_remain = static_cast<size_t>(w.iov[w.idx].iov_len) - w.offset;
+        auto copy_len = std::min(iov_remain, available - copied);
+        auto copy_len_from_block = std::min(copy_len, static_cast<size_t>(block->cap - skip));
+
+        auto *iov_dst = static_cast<uint8_t *>(w.iov[w.idx].iov_base) + w.offset;
+        std::memcpy(iov_dst, block->data + skip, copy_len_from_block);
+
+        UBS_VLOG_TRACE("readv fd=%d pre_write seq=%lu copy iov[%d]+%zu block=%p+%lu len=%zu", sock->Fd(), seq,
+                       w.idx, w.offset, block, skip, copy_len_from_block);
+
+        copied += copy_len_from_block;
+        w.written += copy_len_from_block;
+        w.offset += copy_len_from_block;
+        skip += copy_len_from_block;
+
+        if (w.offset >= static_cast<size_t>(w.iov[w.idx].iov_len)) {
+            w.idx++;
+            w.offset = 0;
+        }
+        if (skip >= block->cap) {
+            block = block->GetNext();
+            skip = 0;
+        }
+    }
+
+    if (copied == available) {
+        UBS_VLOG_TRACE("readv fd=%d pre_write seq=%lu fully consumed, send POST_WRITE", sock->Fd(), seq);
+        ResponseCtrlMessage(sock, POST_WRITE, imm_data.ubsocket.buffer_offset, flags);
+        slot.rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
+        consume_seq_no_.store(seq + 1, std::memory_order_release);
+        consume_offset_ = 0;
+        // TODO: release data_block
+        return true;
+    }
+
+    consume_offset_ += copied;
+    UBS_VLOG_TRACE("readv fd=%d pre_write seq=%lu partial consume_offset=%zu copied=%zu", sock->Fd(), seq,
+                   consume_offset_, copied);
+    return false;
+}
+
+bool UrmaRxOps::ReadInlineData(const SocketPtr &sock, DataSlot &slot, IovWriter &w, uint32_t flags) noexcept
+{
+    WriteImmData imm_data{slot.write_imm};
+    auto seq = slot.seq_no;
+    auto urma_sock = static_cast<UrmaSocket *>(sock.Get());
+
+    auto recv_offset = imm_data.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+    auto req = reinterpret_cast<UrmaCtrlMessage *>(urma_sock->recv_buf_addr_ + recv_offset);
+    auto body_start = recv_offset + URMA_INLINE_MESSAGE_CTRL_COST;
+    auto available = static_cast<size_t>(req->head.data_count) - consume_offset_;
+    UBS_VLOG_TRACE("recv_offset=%lu, req=%p, msg_size=%hu, body_size=%u, head_cost=%u", recv_offset, req,
+                   req->head.message_size, req->head.data_count, URMA_INLINE_MESSAGE_CTRL_COST);
+    UBS_VLOG_TRACE("readv fd=%d slot(%zu) seq=%lu body_size=%u avail=%zu offset_in_msg=%zu", sock->Fd(),
+                   seq % RING_SIZE, seq, req->head.data_count, available, consume_offset_);
+
+    size_t copied = 0;
+    while (w.idx < w.iovcnt && copied < available) {
+        auto iov_remain = static_cast<size_t>(w.iov[w.idx].iov_len) - w.offset;
+        auto copy_len = std::min(iov_remain, available - copied);
+        auto *iov_dst = static_cast<uint8_t *>(w.iov[w.idx].iov_base) + w.offset;
+        auto read_offset = body_start + consume_offset_ + copied;
+        auto *src_base = reinterpret_cast<uint8_t *>(urma_sock->recv_buf_addr_);
+
+        if (read_offset + copy_len <= urma_sock->recv_buf_size_) {
+            std::memcpy(iov_dst, src_base + read_offset, copy_len);
+        } else {
+            auto part0 = urma_sock->recv_buf_size_ - read_offset;
+            UBS_VLOG_TRACE("readv fd=%d ringbuf wrap read_offset=%zu part0=%zu part1=%zu", sock->Fd(), read_offset,
+                           part0, copy_len - part0);
+            std::memcpy(iov_dst, src_base + read_offset, part0);
+            std::memcpy(iov_dst + part0, src_base, copy_len - part0);
+        }
+
+        UBS_VLOG_TRACE("readv fd=%d copy iov[%d]+%zu -> buf_off=%zu copy_len=%zu", sock->Fd(), w.idx, w.offset,
+                       read_offset, copy_len);
+        copied += copy_len;
+        w.written += copy_len;
+        w.offset += copy_len;
+        if (w.offset >= static_cast<size_t>(w.iov[w.idx].iov_len)) {
+            w.idx++;
+            w.offset = 0;
+        }
+    }
+
+    if (copied == available) {
+        UBS_VLOG_TRACE("readv fd=%d slot(%zu) seq=%lu fully consumed, send ACK", sock->Fd(), seq % RING_SIZE, seq);
+        ResponseCtrlMessage(sock, WRITE_IN_BAND_ACK, imm_data.ubsocket.buffer_offset, flags);
+        slot.rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
+        consume_seq_no_.store(seq + 1, std::memory_order_release);
+        consume_offset_ = 0;
+        return true;
+    }
+
+    consume_offset_ += copied;
+    UBS_VLOG_TRACE("readv fd=%d slot(%zu) seq=%lu partial consume_offset=%zu copied=%zu, break", sock->Fd(),
+                   seq % RING_SIZE, seq, consume_offset_, copied);
+    return false;
+}
+
+void UrmaRxOps::ReleaseBlockInSlot(DataSlot &slot) noexcept
+{
+    auto block = slot.data_block;
+    slot.data_block = nullptr;
+
+    while (block != nullptr) {
+        auto next = block->GetNext();
+        block->DecRef();
+        block = next;
+    }
 }
 
 } // namespace urma

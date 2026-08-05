@@ -77,6 +77,11 @@ typedef struct {
 #define UBS_PROTOCOL_UB_RM_RTP 1 << 1L
 #define UBS_PROTOCOL_UB_RC_RTP 1 << 2L
 
+/**
+ * @brief readv/writev flag define
+ */
+#define UBS_IO_FLAG_USE_BRPC_BLOCK      (1U << 0) ///< using brpc BlockIO
+
 typedef struct {
     uint32_t allowed_protocol;             /* allowed underlay protocol */
     uint32_t async_acceptor_thread_count;  /* thread count of async acceptor, 0 means async disabled */

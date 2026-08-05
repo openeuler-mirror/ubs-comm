@@ -12,6 +12,7 @@
 #ifndef UBS_COMM_UBSOCKET_ALLOC_FIXED_H
 #define UBS_COMM_UBSOCKET_ALLOC_FIXED_H
 
+#include "ubsocket_alloc_fixed_size_types.h"
 #include "ubsocket_alloc_fixed_size_gc.h"
 #include "ubsocket_alloc_fixed_size_tc.h"
 #include "ubsocket_alloc_fixed_size_tc2.h"
@@ -91,6 +92,17 @@ public:
     bool InRange(uintptr_t address, uint64_t size) noexcept;
 
     /**
+     * @brief Get the head address of the mini block that contains the given address.
+     *
+     * Aligns the address down to the mini block size boundary (e.g. 8KB).
+     * The mask is computed as ~(mini_block_size_kb * 1024UL - 1UL).
+     *
+     * @param address      [in] an arbitrary address within a mini block
+     * @return head address of the enclosing mini block
+     */
+    uintptr_t MiniBlockHead(uintptr_t address) const noexcept;
+
+    /**
      * @brief Check if a batch of addresses in range or not
      *
      * @param batchSize    [in] batch of the addresses
@@ -124,6 +136,7 @@ private:
 
 private:
     FixedGlobalCache *gc_ = nullptr;
+    uint64_t mini_block_head_mask_ = 0;
     std::mutex mutex_;
 };
 
@@ -138,6 +151,13 @@ ALWAYS_INLINE uint32_t FixedAllocator::AlignUp4K(uint32_t size) noexcept
     constexpr uint32_t ALIGN_4K_MASK = ~(static_cast<uint32_t>(SIZE_4K) - 1);
     return (size + SIZE_4K - 1UL) & ALIGN_4K_MASK;
 }
+
+
+ALWAYS_INLINE uintptr_t FixedAllocator::MiniBlockHead(uintptr_t address) const noexcept
+{
+    return address & mini_block_head_mask_;
+}
+
 } // namespace allocator
 } // namespace ubs
 } // namespace ock

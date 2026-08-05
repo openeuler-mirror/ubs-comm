@@ -16,6 +16,7 @@
 
 #include "core/ubsocket_data_tx.h"
 #include "iobuf/allocator/ubsocket_alloc_fixed_size.h"
+#include "iobuf/ubsocket_iobuf.h"
 #include "urma_socket.h"
 
 namespace ock {
@@ -36,8 +37,20 @@ public:
     Result TriggerPollOut(const SocketPtr &sock, uint32_t flags) noexcept override;
 
 private:
+    struct SgeContext {
+        std::vector<urma_sge_t> src_sges;
+        std::vector<urma_sge_t> dst_sges;
+        urma_sg_t src_sg;
+        urma_sg_t dst_sg;
+    };
+
     ssize_t WriteInline(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total, uint32_t flags) noexcept;
+    ssize_t WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total, uint32_t flags) noexcept;
     void CopyFromIovToSendBuf(const std::vector<iovec> &iov, const std::vector<urma_sge_t> &dest) noexcept;
+
+    void SetupSgeContext(const UrmaSocketPtr &sock, uint64_t buf_offset, uint64_t alloc_size,
+                         SgeContext &ctx) noexcept;
+    void BuildBlockRefs(const struct iovec *iov, int iovcnt, std::vector<BlockRef> &block_refs) noexcept;
 
     bool Writable(const SocketPtr &sock) noexcept;
     int fd_ = -1;

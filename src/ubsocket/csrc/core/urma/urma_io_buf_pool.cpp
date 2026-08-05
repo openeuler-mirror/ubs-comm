@@ -125,14 +125,20 @@ urma_target_seg_t *UrmaIoBufferPool::get_remote_target_seg(RemoteSegmentsPtr &re
     }
 
     if (UNLIKELY(remote->remote_start_addr_ == 0)) {
+        UBS_VLOG_TRACE("checking seg remote start address not set, is null.");
         return nullptr;
     }
 
     uint32_t block_index = static_cast<uint32_t>(((ptr - remote->remote_start_addr_) >> 20) / options_.block_size_mb);
     if (UNLIKELY(block_index >= remote->remote_target_segs_.size())) {
+        UBS_VLOG_TRACE("checking seg remote ptr=0x%lx, block_index=%u, now size = %zu", ptr, block_index,
+                       remote->remote_target_segs_.size());
         return nullptr;
     }
-    return remote->remote_target_segs_[block_index];
+
+    auto res = remote->remote_target_segs_[block_index];
+    UBS_VLOG_TRACE("checking seg remote ptr=0x%lx, block_index=%u, res=%p", ptr, block_index, res);
+    return res;
 }
 
 Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma_seg_t &seg,
@@ -149,6 +155,7 @@ Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma
         return UBS_ERROR;
     }
     if (LIKELY((tgt = remote->remote_target_segs_[block_index]) != nullptr)) {
+        UBS_VLOG_INFO("store_remote_target_seg: block_index = %d already set.", block_index);
         return UBS_OK;
     }
 
@@ -172,6 +179,61 @@ Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma
         tgt = remote->remote_target_segs_[block_index] = target;
     }
     pthread_spin_unlock(&remote->target_lock_);
+    UBS_VLOG_TRACE("remote seg(0x%lx : 0x%lx) index(%u) import success.", seg.ubva.va, seg.len, block_index);
+    return UBS_OK;
+}
+
+Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma_eid_t &eid, uint32_t uasid,
+                                                 uintptr_t addr, uint32_t token) noexcept
+{
+    if (UNLIKELY(remote == nullptr)) {
+        return UBS_ERROR;
+    }
+
+    uint32_t block_index = static_cast<uint32_t>(((addr - remote->remote_start_addr_) >> 20) / options_.block_size_mb);
+    if (UNLIKELY(block_index >= remote->remote_target_segs_.size())) {
+        UBS_SLOG_WARN("store_remote_target_seg: block_index = " << block_index);
+        return UBS_ERROR;
+    }
+
+    if (LIKELY(remote->remote_target_segs_[block_index] != nullptr)) {
+        UBS_VLOG_TRACE("store_remote_target_seg: block_index = %d already set.", block_index);
+        return UBS_OK;
+    }
+
+    urma_seg_t urma_seg{};
+    urma_seg.ubva.eid = eid;
+    urma_seg.ubva.uasid = uasid;
+    urma_seg.ubva.va = remote->remote_start_addr_ + ((1UL * block_index * options_.block_size_mb) << 20);
+    urma_seg.len = get_block_size();
+    urma_seg.attr.value = 0;
+    urma_seg.attr.bs.token_policy = URMA_TOKEN_NONE;
+    urma_seg.attr.bs.cacheable = URMA_NON_CACHEABLE;
+    urma_seg.attr.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE | URMA_ACCESS_ATOMIC;
+    urma_seg.token_id = token;
+
+    urma_token_t urma_token = {token};
+    urma_import_seg_flag_t flag{};
+    flag.value = 0;
+    flag.bs.cacheable = URMA_NON_CACHEABLE;
+    flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE | URMA_ACCESS_ATOMIC;
+    flag.bs.mapping = URMA_SEG_NOMAP;
+
+    UBS_SLOG_TRACE("import segment @0x" << std::hex << urma_seg.ubva.va << ", seg=" << urma_seg);
+    pthread_spin_lock(&remote->target_lock_);
+    if (LIKELY(remote->remote_target_segs_[block_index] == nullptr)) {
+        auto target = UrmaApi::urma_import_seg(UrmaBackend::Instance().GetUrmaContext()->Handle(), &urma_seg,
+                                               &urma_token, 0, flag);
+        if (UNLIKELY(target == nullptr)) {
+            pthread_spin_unlock(&remote->target_lock_);
+            UBS_SLOG_ERR("Urma urma_register_seg failed!");
+            return UBS_ERROR;
+        }
+        remote->remote_target_segs_[block_index] = target;
+    }
+    pthread_spin_unlock(&remote->target_lock_);
+    UBS_VLOG_TRACE("remote seg(0x%lx : 0x%lx) index(%u) import success.", addr, urma_seg.len, block_index);
+
     return UBS_OK;
 }
 
@@ -183,23 +245,23 @@ Result UrmaIoBufferPool::register_mem(const UrmaContextPtr &ctx, uintptr_t ptr, 
     uint32_t block_index = static_cast<uint32_t>(((ptr - local_start_addr_) >> 20) / options_.block_size_mb);
 
     urma_reg_seg_flag_t flag{};
+    flag.value = 0;
     flag.bs.token_policy = URMA_TOKEN_NONE;
     flag.bs.cacheable = URMA_NON_CACHEABLE;
     flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE | URMA_ACCESS_ATOMIC;
-    flag.bs.token_id_valid = 0;
-    flag.bs.reserved = 0;
 
     urma_seg_cfg_t seg_cfg = {
         .va = ptr, .len = size, .token_id = nullptr, .token_value = 0, .flag = flag, .user_ctx = 0, .iova = 0};
 
     auto local_seg = UrmaApi::urma_register_seg(ctx->Handle(), &seg_cfg);
     if (local_seg == nullptr) {
-        UBS_SLOG_ERR("urma register_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed!");
+        UBS_VLOG_ERR("urma register_seg(ptr=0x%lx, size=0x%lx) failed!", ptr, size);
         return UBS_ERROR;
     }
 
     target_segments_.local_target_segs_[block_index] = local_seg;
-    UBS_SLOG_DEBUG("urma register_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") success.");
+    UBS_VLOG_TRACE("urma register_seg(ptr=0x%lx, size=0x%lx) token-id: 0x%x OK", ptr, size, local_seg->seg.token_id);
+    UBS_SLOG_TRACE("register got segment: " << local_seg->seg);
     return UBS_OK;
 }
 

@@ -81,6 +81,7 @@ public:
     void HandleWriteInBandAck(const WriteImmData &imm);
     void HandlePreWrite(const WriteImmData &imm);
     void HandleWriteInBand(const WriteImmData &imm);
+    void DataReadFinsihed(uint32_t seq_no);
 
     bool ExchangeSocketReadableReady(bool b)
     {
@@ -135,7 +136,7 @@ private:
     bool recv_data_ready_{false};
 
     bool is_bind_remote_{false};
-
+    uint32_t remote_uasid_{0};
     uint32_t negotiated_version_{0};
     uint32_t peer_version_{0};
     std::atomic<uint32_t> reach_epoll_events_{0};
