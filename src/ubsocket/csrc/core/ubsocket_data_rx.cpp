@@ -51,7 +51,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         return -1;
     }
 
-    return rx_ops_->ReadV(sock, iov, iovcnt, 0);
+    return rx_ops_->ReadV(sock, iov, iovcnt, UBS_IO_FLAG_USE_BRPC_BLOCK);
 }
 
 ssize_t DataRx::OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec *iov, int iovcnt)

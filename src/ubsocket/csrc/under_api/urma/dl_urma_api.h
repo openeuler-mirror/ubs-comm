@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_DL_URMA_API_H
 #define UBS_COMM_DL_URMA_API_H
 
+#include <ostream>
 #include "under_api/dl_api.h"
 #include "urma_types.h"
 
@@ -963,4 +964,12 @@ private:
 } // namespace ubs
 } // namespace ock
 
+ALWAYS_INLINE std::ostream &operator<<(std::ostream &os, const urma_seg_t &seg) noexcept
+{
+    os << "{eid: 0x" << std::hex << seg.ubva.eid.in6.subnet_prefix << ":0x" << seg.ubva.eid.in6.interface_id
+       << ", uasid: " << std::dec << seg.ubva.uasid << ", va: 0x" << std::hex << seg.ubva.va
+       << ", len: " << std::dec << seg.len << ", attr: 0x" << std::hex << seg.attr.value
+       << ", token_id: " << std::dec << seg.token_id << "}";
+    return os;
+}
 #endif // UBS_COMM_DL_URMA_API_H

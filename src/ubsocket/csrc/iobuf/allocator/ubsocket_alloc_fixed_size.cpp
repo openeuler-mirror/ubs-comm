@@ -48,6 +48,7 @@ Result FixedAllocator::Init(FixedAllocatorOptions &options) noexcept
     }
 
     gc_ = tmp_gc;
+    mini_block_head_mask_ = ~(options.mini_block_size_kb * 1024UL - 1UL);
     UBS_VLOG_DEBUG("Initialized");
     return UBS_OK;
 }

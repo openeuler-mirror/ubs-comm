@@ -415,7 +415,19 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
         }
 
         if (cr[i].flag.bs.s_r == 0) { // sender side
-            continue;
+
+            if (cr[i].user_ctx != 0) {
+                auto sock_fd = static_cast<int>(cr[i].user_ctx >> 32);
+                auto seq_no = static_cast<uint32_t>(cr[i].user_ctx & 0xffffffff);
+                auto sock = ArraySet<Socket>::GetInstance().GetItem(sock_fd);
+                if (UNLIKELY(sock == nullptr)) {
+                    UBS_VLOG_ERR("socket is nullptr for fd: %d", sock_fd);
+                    continue;
+                }
+                auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+                urma_sock->DataReadFinsihed(seq_no);
+                continue;
+            }
         }
 
         // receiver side

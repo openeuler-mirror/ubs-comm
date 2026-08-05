@@ -145,16 +145,19 @@ public:
     void *allocate(size_t size) override;
     void *allocate(size_t size, const ubs_iobuf_alloc_option_t *option) override;
     void deallocate(void *ptr) override;
+    bool multi_allocate(uint16_t count, allocator::FixedLinkedBlock *&blocks) noexcept;
     void *direct_allocate(size_t size) noexcept;
     void direct_release(void *ptr) noexcept;
-    uintptr_t get_local_start_addr() const noexcept
-    {
-        return local_start_addr_;
-    }
+    uintptr_t get_local_start_addr() const noexcept;
+    uintptr_t get_mini_block_head(uintptr_t addr) const noexcept;
+    uint32_t get_mini_block_size() const noexcept;
+    uint32_t get_block_size() const noexcept;
     urma_target_seg_t *get_local_target_seg(uintptr_t ptr) const noexcept;
     RemoteSegmentsPtr get_remote_segments(const IdentifyNode &remote) noexcept;
     urma_target_seg_t *get_remote_target_seg(RemoteSegmentsPtr &remote, uintptr_t ptr) const noexcept;
     Result store_remote_target_seg(RemoteSegmentsPtr &remote, urma_seg_t &seg, urma_target_seg_t *&tgt) noexcept;
+    Result store_remote_target_seg(RemoteSegmentsPtr &remote, urma_eid_t &eid, uint32_t uasid, uintptr_t addr,
+                                   uint32_t token) noexcept;
 
     DEFINE_REF_OPERATION_FUNC
 
@@ -169,6 +172,32 @@ private:
     allocator::FixedAllocatorOptions options_;
 };
 using UrmaIoBufferPoolPtr = Ref<UrmaIoBufferPool>;
+
+ALWAYS_INLINE bool UrmaIoBufferPool::multi_allocate(uint16_t count, allocator::FixedLinkedBlock *&blocks) noexcept
+{
+    return fixed_allocator_.BatchAllocateWithLinkList(count, blocks);
+}
+
+
+ALWAYS_INLINE uintptr_t UrmaIoBufferPool::get_local_start_addr() const noexcept
+{
+    return local_start_addr_;
+}
+
+ALWAYS_INLINE uintptr_t UrmaIoBufferPool::get_mini_block_head(uintptr_t addr) const noexcept
+{
+    return fixed_allocator_.MiniBlockHead(addr);
+}
+
+ALWAYS_INLINE uint32_t UrmaIoBufferPool::get_mini_block_size() const noexcept
+{
+    return options_.mini_block_size_kb << 10;;
+}
+
+ALWAYS_INLINE uint32_t UrmaIoBufferPool::get_block_size() const noexcept
+{
+    return static_cast<uint32_t>(options_.block_size_mb) << 20;;
+}
 
 class UrmaDataMetaPool {
 public:

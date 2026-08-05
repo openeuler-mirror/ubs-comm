@@ -56,7 +56,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         UBS_VLOG_ERR("data tx for socket(%d) not set tx_ops", fd_);
         result = -1;
     } else {
-        result = tx_ops_->WriteV(sock, iov, iovcnt, 0);
+        result = tx_ops_->WriteV(sock, iov, iovcnt, UBS_IO_FLAG_USE_BRPC_BLOCK);
     }
     PROF_END(CORE_WRITE, result >= 0);
     TRACE_TRY_SWAP(trace);

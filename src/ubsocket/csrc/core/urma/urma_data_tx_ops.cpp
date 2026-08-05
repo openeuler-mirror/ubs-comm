@@ -12,7 +12,7 @@
 
 #include <algorithm>
 #include <cstring>
-
+#include "iobuf/ubsocket_iobuf.h"
 #include "urma_socket_types.h"
 
 namespace ock {
@@ -25,6 +25,9 @@ ssize_t UrmaTxOps::WriteV(const SocketPtr &sock, const struct iovec *iov, int io
 
     size_t total_size = 0;
     for (auto i = 0; i < iovcnt; i++) {
+        if (iov[i].iov_base == nullptr) {
+            continue;
+        }
         total_size += iov[i].iov_len;
     }
 
@@ -35,6 +38,10 @@ ssize_t UrmaTxOps::WriteV(const SocketPtr &sock, const struct iovec *iov, int io
 
     if (total_size <= URMA_INLINE_DATA_THRESHOLD) {
         return WriteInline(sock, iov, iovcnt, total_size, flags);
+    }
+
+    if ((flags & UBS_IO_FLAG_USE_BRPC_BLOCK) == UBS_IO_FLAG_USE_BRPC_BLOCK) {
+        return WriteZeroCopy(sock, iov, iovcnt, total_size, flags);
     }
 
     errno = ENOSYS;
@@ -87,6 +94,36 @@ void UrmaTxOps::CopyFromIovToSendBuf(const std::vector<iovec> &iov, const std::v
     }
 }
 
+void UrmaTxOps::SetupSgeContext(const UrmaSocketPtr &sock, uint64_t buf_offset, uint64_t alloc_size,
+                                SgeContext &ctx) noexcept
+{
+    ctx.src_sges.resize(2);
+    ctx.dst_sges.resize(2);
+    ctx.src_sges[0].addr = sock->send_buf_addr_ + buf_offset;
+    ctx.src_sges[0].len = static_cast<uint32_t>(alloc_size);
+    ctx.src_sges[0].tseg = sock->local_ctrl_target_seg_;
+    ctx.dst_sges[0].addr = sock->rmt_recv_buf_addr_ + buf_offset;
+    ctx.dst_sges[0].len = static_cast<uint32_t>(alloc_size);
+    ctx.dst_sges[0].tseg = sock->remote_ctrl_target_seg_;
+
+    ctx.src_sg = {.sge = ctx.src_sges.data(), .num_sge = 1};
+    ctx.dst_sg = {.sge = ctx.dst_sges.data(), .num_sge = 1};
+
+    auto capacity = sock->send_buf_->Capacity();
+    if (UNLIKELY(buf_offset + alloc_size > capacity)) {
+        uint32_t part0 = static_cast<uint32_t>(capacity - buf_offset);
+        uint32_t part1 = static_cast<uint32_t>(alloc_size - part0);
+        ctx.src_sges[1] = ctx.src_sges[0];
+        ctx.dst_sges[1] = ctx.dst_sges[0];
+        ctx.src_sges[0].len = ctx.dst_sges[0].len = part0;
+        ctx.src_sges[1].len = ctx.dst_sges[1].len = part1;
+        ctx.src_sges[1].addr = sock->send_buf_addr_;
+        ctx.dst_sges[1].addr = sock->rmt_recv_buf_addr_;
+        ctx.src_sg.num_sge++;
+        ctx.dst_sg.num_sge++;
+    }
+}
+
 ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total,
                                uint32_t flags) noexcept
 {
@@ -113,59 +150,35 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
     ctrl_message.head.sequence_no = seq_no;
     ctrl_message.head.flags = 0;
     ctrl_message.head.message_size = real_size;
-    ctrl_message.head.reserved[0] = 0;
-    ctrl_message.head.reserved[1] = 0;
-    ctrl_message.head.reserved[2] = 0;
-    ctrl_message.small_io.body_size = static_cast<uint32_t>(total);
+    ctrl_message.head.data_count = static_cast<uint32_t>(total);
     UBS_VLOG_TRACE("ctl_msg(req_id=%lx, seq_no=%lx, msg_size=%hu, body_size=%u", ctrl_message.head.request_id,
-                   ctrl_message.head.sequence_no, ctrl_message.head.message_size, ctrl_message.small_io.body_size);
+                   ctrl_message.head.sequence_no, ctrl_message.head.message_size, ctrl_message.head.data_count);
 
     std::vector<iovec> data_iov(iovcnt + 1);
     data_iov[0].iov_base = reinterpret_cast<char *>(&ctrl_message);
     data_iov[0].iov_len = URMA_INLINE_MESSAGE_CTRL_COST;
+    size_t data_idx = 1;
     for (auto i = 0; i < iovcnt; i++) {
-        data_iov[i + 1].iov_base = reinterpret_cast<char *>(iov[i].iov_base);
-        data_iov[i + 1].iov_len = iov[i].iov_len;
+        if (iov[i].iov_base == nullptr || iov[i].iov_len == 0) {
+            continue;
+        }
+        data_iov[data_idx].iov_base = reinterpret_cast<char *>(iov[i].iov_base);
+        data_iov[data_idx].iov_len = iov[i].iov_len;
+        data_idx++;
     }
+    data_iov.resize(data_idx);
 
-    std::vector<urma_sge_t> src_sges(2);
-    std::vector<urma_sge_t> dst_sges(2);
-    src_sges[0].addr = urma_sock->send_buf_addr_ + buf_offset;
-    src_sges[0].len = static_cast<uint32_t>(real_size);
-    src_sges[0].tseg = urma_sock->local_ctrl_target_seg_;
-    dst_sges[0].addr = urma_sock->rmt_recv_buf_addr_ + buf_offset;
-    dst_sges[0].len = static_cast<uint32_t>(real_size);
-    dst_sges[0].tseg = urma_sock->remote_ctrl_target_seg_;
-
-    urma_sg_t src_sg = {.sge = src_sges.data(), .num_sge = 1};
-    urma_sg_t dst_sg = {.sge = dst_sges.data(), .num_sge = 1};
-
-    auto capacity = urma_sock->send_buf_->Capacity();
-    if (UNLIKELY(buf_offset + real_size > capacity)) {
-        uint32_t part0 = static_cast<uint32_t>(capacity - buf_offset);
-        uint32_t part1 = static_cast<uint32_t>(real_size - part0);
-        src_sges[1] = src_sges[0];
-        dst_sges[1] = dst_sges[0];
-        src_sges[0].len = dst_sges[0].len = part0;
-        src_sges[1].len = dst_sges[1].len = part1;
-        src_sges[1].addr = urma_sock->send_buf_addr_;
-        dst_sges[1].addr = urma_sock->rmt_recv_buf_addr_;
-        src_sg.num_sge++;
-        dst_sg.num_sge++;
-    }
-    CopyFromIovToSendBuf(data_iov, src_sges);
-    auto real_req = (UrmaCtrlMessage *)(src_sges[0].addr);
+    SgeContext ctx;
+    SetupSgeContext(urma_sock, buf_offset, real_size, ctx);
+    CopyFromIovToSendBuf(data_iov, ctx.src_sges);
+#ifdef UBS_LOG_TRACE_ENABLED
+    auto real_req = (UrmaCtrlMessage *)(ctx.src_sges[0].addr);
     UBS_VLOG_TRACE("real_req(req_id=%lx, seq_no=%lx, msg_size=%hu, body_size=%u", real_req->head.request_id,
-                   real_req->head.sequence_no, real_req->head.message_size, real_req->small_io.body_size);
+                   real_req->head.sequence_no, real_req->head.message_size, real_req->head.data_count);
+#endif
 
-    /*
-     * For WRITE_IMM, the immediate data is stored in rw.notify_data.
-     * The server receives this as cr.imm_data via URMA_CR_OPC_WRITE_WITH_IMM.
-     */
-    WriteImmData imm_data{0};
-    imm_data.ubsocket.opcode = WRITE_IN_BAND;
-    imm_data.ubsocket.buffer_offset = buf_offset / unit;
-    urma_rw_wr_t rw = {.src = src_sg, .dst = dst_sg, .target_hint = 0, .notify_data = imm_data.data};
+    WriteImmData imm_data{WRITE_IN_BAND, buf_offset / unit};
+    urma_rw_wr_t rw = {.src = ctx.src_sg, .dst = ctx.dst_sg, .target_hint = 0, .notify_data = imm_data.data};
 
     auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, ctrl_message.head.request_id);
     if (urma_ret != URMA_SUCCESS) {
@@ -176,6 +189,131 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
     }
 
     return static_cast<ssize_t>(real_size - URMA_INLINE_MESSAGE_CTRL_COST);
+}
+
+
+void UrmaTxOps::BuildBlockRefs(const struct iovec *iov, int iovcnt, std::vector<BlockRef> &block_refs) noexcept
+{
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    uint32_t valid_count = 0;
+    for (auto i = 0; i < iovcnt; i++) {
+        if (iov[i].iov_base == nullptr || iov[i].iov_len == 0) {
+            continue;
+        }
+        auto block_head = allocator->get_mini_block_head(reinterpret_cast<uintptr_t>(iov[i].iov_base));
+        auto data = block_head + sizeof(Block);
+        block_refs[valid_count].block = reinterpret_cast<Block *>(block_head);
+        block_refs[valid_count].offset = reinterpret_cast<uintptr_t>(iov[i].iov_base) - data;
+        block_refs[valid_count].length = iov[i].iov_len;
+        valid_count++;
+    }
+    block_refs.resize(valid_count);
+}
+
+ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total,
+                                  uint32_t flags) noexcept
+{
+    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    if (UNLIKELY(urma_sock->send_buf_ == nullptr)) {
+        errno = ENOTCONN;
+        return -1;
+    }
+
+    auto block_refs_ptr = new(std::nothrow) std::vector<BlockRef>(iovcnt);
+    if (UNLIKELY(block_refs_ptr == nullptr)) {
+        UBS_VLOG_ERR("socket(%d) write bytes(%zu) allocate BlockRef with count(%d) failed!", sock->Fd(), total, iovcnt);
+        errno = ENOMEM;
+        return -1;
+    }
+
+    auto &block_refs = *block_refs_ptr;
+    BuildBlockRefs(iov, iovcnt, block_refs);
+    auto valid_count = static_cast<uint32_t>(block_refs.size());
+
+    constexpr size_t unit = URMA_SND_BUFF_ALLOC_UNIT;
+    auto need_size =  sizeof(UrmaCtrlMessage) + valid_count * sizeof(PageBufferInMessage);
+    need_size = ((need_size + unit - 1) / unit) * unit;
+
+    uint64_t buf_offset = 0;
+    UBS_VLOG_TRACE("socket(%d) write total(%zu) need_size(%zu)", sock->Fd(), total, need_size);
+    if (!urma_sock->send_buf_->Allocate(need_size, buf_offset)) {
+        UBS_VLOG_ERR("socket(%d) allocate send buf with size(%lu) failed.", sock->Fd(), need_size);
+        errno = EAGAIN;
+        return -1;
+    }
+
+    SgeContext ctx;
+    SetupSgeContext(urma_sock, buf_offset, need_size, ctx);
+
+    auto seq_no = __atomic_fetch_add(&seq_gen_, 1U, __ATOMIC_RELAXED);
+    const auto request_id = (static_cast<uint64_t>(fd_) << 32) | (seq_no & 0xFFFFFFFFUL);
+
+    const bool is_wrap = (ctx.src_sg.num_sge > 1);
+    char *dst = reinterpret_cast<char *>(ctx.src_sges[0].addr);
+    auto *head = reinterpret_cast<UrmaMessageHead *>(dst);
+    head->request_id = request_id;
+    head->sequence_no = seq_no;
+    head->flags = 0;
+    head->data_offset = 0;
+    head->message_size = static_cast<uint16_t>(need_size);
+    head->data_count = valid_count;
+    head->user_ctx1 = reinterpret_cast<uintptr_t>(block_refs_ptr);
+
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    auto start_addr = allocator->get_local_start_addr();
+    auto *bufs = reinterpret_cast<PageBufferInMessage *>(head + 1);
+    if (!is_wrap) {
+        for (uint32_t i = 0; i < valid_count; i++) {
+            bufs[i].addr = reinterpret_cast<uint64_t>(block_refs[i].block->data + block_refs[i].offset);
+            bufs[i].size = block_refs[i].length;
+            bufs[i].flags = allocator->get_local_target_seg(bufs[i].addr)->seg.token_id;
+        }
+    } else {
+        uint32_t part0 = ctx.src_sges[0].len;
+        uint32_t seg_remain = part0 >= sizeof(UrmaMessageHead) ? part0 - sizeof(UrmaMessageHead) : 0;
+        char *cur = dst + sizeof(UrmaMessageHead);
+        for (uint32_t i = 0; i < valid_count; i++) {
+            PageBufferInMessage entry;
+            entry.addr = reinterpret_cast<uint64_t>(block_refs[i].block->data + block_refs[i].offset);
+            entry.size = block_refs[i].length;
+            entry.flags = allocator->get_local_target_seg(entry.addr)->seg.token_id;
+            if (seg_remain >= sizeof(entry)) {
+                memcpy(cur, &entry, sizeof(entry));
+                cur += sizeof(entry);
+                seg_remain -= sizeof(entry);
+            } else if (seg_remain > 0) {
+                memcpy(cur, &entry, seg_remain);
+                memcpy(reinterpret_cast<char *>(ctx.src_sges[1].addr),
+                       reinterpret_cast<const char *>(&entry) + seg_remain, sizeof(entry) - seg_remain);
+                cur = reinterpret_cast<char *>(ctx.src_sges[1].addr) + (sizeof(entry) - seg_remain);
+                seg_remain = ctx.src_sges[1].len - (sizeof(entry) - seg_remain);
+            } else {
+                memcpy(cur, &entry, sizeof(entry));
+                cur += sizeof(entry);
+            }
+        }
+    }
+
+    WriteImmData imm_data{PRE_WRITE, buf_offset / unit};
+    urma_rw_wr_t rw = {.src = ctx.src_sg, .dst = ctx.dst_sg, .target_hint = 0, .notify_data = imm_data.data};
+
+    auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, request_id);
+    if (urma_ret != URMA_SUCCESS) {
+        urma_sock->send_buf_->Release(buf_offset, need_size);
+        UBS_SLOG_ERR("Urma post write_imm for request: " << request_id << " return " << urma_ret);
+        errno = EAGAIN;
+        head->user_ctx1 = 0;
+        delete block_refs_ptr;
+        return -1;
+    }
+
+    for (uint32_t i = 0; i < valid_count; i++) {
+        block_refs[i].block->IncRef();
+    }
+
+    UBS_VLOG_TRACE("ctl_msg(req_id=%lx, seq_no=%lx, msg_size=%hu, data_count=%u, buf_count=%u, return %zu", request_id,
+                   seq_no, head->message_size, head->data_count, valid_count, total);
+    return static_cast<ssize_t>(total);
 }
 
 } // namespace urma

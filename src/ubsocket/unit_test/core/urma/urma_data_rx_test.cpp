@@ -20,6 +20,9 @@
 #include "core/urma/urma_data_rx_ops.h"
 #include "core/urma/urma_socket.h"
 #include "core/urma/urma_socket_types.h"
+#include "core/urma/urma_backend.h"
+#include "core/urma/urma_io_buf_pool.h"
+#include "iobuf/ubsocket_iobuf.h"
 
 using namespace ock::ubs;
 using namespace ock::ubs::urma;
@@ -27,7 +30,30 @@ using namespace ock::ubs::urma;
 namespace {
 static const int TEST_FD = 100;
 static const size_t BUF_SIZE = 4 * 1024 * 1024;
+static const size_t ZC_BLOCK_SIZE = 8192;
 static uint8_t g_recv_buf[BUF_SIZE];
+alignas(8192) static uint8_t g_zc_mem[2 * ZC_BLOCK_SIZE];
+static UrmaIoBufferPool g_dummy_alloc;
+static int g_zc_block_idx = 0;
+
+static Block *AllocZcBlock()
+{
+    int idx = g_zc_block_idx++;
+    auto *block = new (g_zc_mem + idx * ZC_BLOCK_SIZE) Block(
+        reinterpret_cast<char *>(g_zc_mem + idx * ZC_BLOCK_SIZE + sizeof(Block)),
+        ZC_BLOCK_SIZE - sizeof(Block));
+    block->nshared.store(100, std::memory_order_relaxed);
+    return block;
+}
+
+static uintptr_t MockMiniBlockHead(uintptr_t addr)
+{
+    auto base = reinterpret_cast<uintptr_t>(g_zc_mem);
+    if (addr >= base && addr < base + sizeof(g_zc_mem)) {
+        return base + ((addr - base) / ZC_BLOCK_SIZE) * ZC_BLOCK_SIZE;
+    }
+    return 0;
+}
 } // namespace
 
 class UrmaDataRxTest : public ::testing::Test {
@@ -52,6 +78,12 @@ protected:
         MOCKER(::eventfd_write).stubs().will(returnValue(0));
         MOCKER(::eventfd).stubs().will(returnValue(42));
         MOCKER_CPP(&UrmaRxOps::ResponseCtrlMessage).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
+        MOCKER_CPP(&UrmaBackend::GetAllocator).stubs().will(returnValue(&g_dummy_alloc));
+        MOCKER_CPP(&UrmaIoBufferPool::get_mini_block_head).stubs().will(invoke(MockMiniBlockHead));
+
+        g_dummy_alloc.fixed_allocator_.mini_block_head_mask_ = ~(ZC_BLOCK_SIZE - 1UL);
+
+        g_zc_block_idx = 0;
     }
 
     void TearDown() override
@@ -74,14 +106,18 @@ protected:
 TEST_F(UrmaDataRxTest, DataReached_SlotFree_ReturnsOk)
 {
     UrmaRxOps rx(TEST_FD);
-    auto result = rx.DataReached(sock_, 0, 0x1000);
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    auto result = rx.DataReached(sock_, 0, imm.data);
     EXPECT_EQ(UBS_OK, result);
 }
 
 TEST_F(UrmaDataRxTest, DataReached_SlotOccupied_ReturnsPrefillRx)
 {
     UrmaRxOps rx(TEST_FD);
-    ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, 0x1000));
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
     auto result = rx.DataReached(sock_, 256, 0x2000);
     EXPECT_EQ(UBS_PREFILL_RX, result);
 }
@@ -89,24 +125,30 @@ TEST_F(UrmaDataRxTest, DataReached_SlotOccupied_ReturnsPrefillRx)
 TEST_F(UrmaDataRxTest, DataReached_OutOfOrder_ReturnsDataOrder)
 {
     UrmaRxOps rx(TEST_FD);
-    auto result = rx.DataReached(sock_, 1, 0x1000);
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    auto result = rx.DataReached(sock_, 1, imm.data);
     EXPECT_EQ(UBS_LATER_SEQ, result);
 }
 
 TEST_F(UrmaDataRxTest, DataReached_StaleSlot_ReturnsOk)
 {
     UrmaRxOps rx(TEST_FD);
-    ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, 0x1000));
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
     rx.consume_seq_no_.store(1, std::memory_order_release);
 
-    auto result = rx.DataReached(sock_, 0, 0x2000);
+    auto result = rx.DataReached(sock_, 0, imm.data);
     EXPECT_EQ(UBS_LATER_SEQ, result);
 }
 
 TEST_F(UrmaDataRxTest, DataReached_SameSeqAsConsumed_ReturnsOk)
 {
     UrmaRxOps rx(TEST_FD);
-    auto result = rx.DataReached(sock_, 0, 0x1000);
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    auto result = rx.DataReached(sock_, 0, imm.data);
     EXPECT_EQ(UBS_OK, result);
 }
 
@@ -150,11 +192,12 @@ TEST_F(UrmaDataRxTest, ReadV_SingleMsgSingleIov_ReturnsFullData)
 
     const uint32_t body_size = 10;
     auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 128);
-    ctrl->small_io.body_size = body_size;
+    ctrl->head.data_count = body_size;
     const char test_data[] = "0123456789";
     memcpy(ctrl->small_io.data, test_data, body_size);
 
     WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
     imm.ubsocket.buffer_offset = 128 / URMA_SND_BUFF_ALLOC_UNIT;
 
     ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
@@ -175,15 +218,17 @@ TEST_F(UrmaDataRxTest, ReadV_MultiMsgMultiIov_ReturnsTotalData)
     const uint32_t body1 = 5;
     const uint32_t body2 = 5;
     auto *ctrl1 = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 128);
-    ctrl1->small_io.body_size = body1;
+    ctrl1->head.data_count = body1;
     memcpy(ctrl1->small_io.data, "hello", body1);
     WriteImmData imm1;
+    imm1.ubsocket.opcode = WRITE_IN_BAND;
     imm1.ubsocket.buffer_offset = 128 / URMA_SND_BUFF_ALLOC_UNIT;
 
     auto *ctrl2 = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 256);
-    ctrl2->small_io.body_size = body2;
+    ctrl2->head.data_count = body2;
     memcpy(ctrl2->small_io.data, "world", body2);
     WriteImmData imm2;
+    imm2.ubsocket.opcode = WRITE_IN_BAND;
     imm2.ubsocket.buffer_offset = 256 / URMA_SND_BUFF_ALLOC_UNIT;
 
     ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm1.data));
@@ -209,11 +254,12 @@ TEST_F(UrmaDataRxTest, ReadV_PartialRead_ReturnsPartialData)
 
     const uint32_t body_size = 20;
     auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 128);
-    ctrl->small_io.body_size = body_size;
+    ctrl->head.data_count = body_size;
     const char test_data[] = "0123456789ABCDEFGHIJ";
     memcpy(ctrl->small_io.data, test_data, body_size);
 
     WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
     imm.ubsocket.buffer_offset = 128 / URMA_SND_BUFF_ALLOC_UNIT;
 
     ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
@@ -233,9 +279,10 @@ TEST_F(UrmaDataRxTest, ReadV_LaterSeqArrivedFirst_ReturnsEAGAIN)
 
     const uint32_t body_size = 10;
     auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 256);
-    ctrl->small_io.body_size = body_size;
+    ctrl->head.data_count = body_size;
     memcpy(ctrl->small_io.data, "ABCDEFGHIJ", body_size);
     WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
     imm.ubsocket.buffer_offset = 256 / URMA_SND_BUFF_ALLOC_UNIT;
 
     ASSERT_EQ(UBS_LATER_SEQ, rx.DataReached(sock_, 1, imm.data));
@@ -248,4 +295,95 @@ TEST_F(UrmaDataRxTest, ReadV_LaterSeqArrivedFirst_ReturnsEAGAIN)
     auto ret = rx.ReadV(sock_, &iov, 1, 0);
     EXPECT_EQ(-1, ret);
     EXPECT_EQ(EAGAIN, errno);
+}
+
+TEST_F(UrmaDataRxTest, ZeroCopyRead_Success_LinksBlocksAndSendsPostWrite)
+{
+    auto *cache_block = AllocZcBlock();
+    auto *iov_block = AllocZcBlock();
+    const char test_data[] = "hello_zero_copy!";
+    memcpy(cache_block->data, test_data, sizeof(test_data));
+    cache_block->size = sizeof(test_data);
+
+    UrmaRxOps rx(TEST_FD);
+    rx.block_cache_.Insert(cache_block->data, cache_block->size);
+
+    auto &slot = rx.data_slots_[0];
+    WriteImmData imm;
+    imm.ubsocket.opcode = PRE_WRITE;
+    imm.ubsocket.buffer_offset = 0;
+    slot.write_imm = imm.data;
+    slot.seq_no = 0;
+    slot.data_block = cache_block;
+    slot.rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
+    rx.consume_seq_no_.store(0, std::memory_order_relaxed);
+
+    struct iovec zc_iov;
+    zc_iov.iov_base = iov_block->data;
+    zc_iov.iov_len = 64;
+
+    auto zc_ret = rx.ReadV(sock_, &zc_iov, 1, UBS_IO_FLAG_USE_BRPC_BLOCK);
+    EXPECT_GT(zc_ret, 0);
+    EXPECT_NE(iov_block->GetNext(), static_cast<void *>(nullptr));
+    EXPECT_EQ(slot.rx_state.load(), URMA_RX_STS_IDLE);
+    EXPECT_EQ(rx.consume_seq_no_.load(), 1ULL);
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaDataRxTest, ZeroCopyRead_NotDataReady_ReturnsEagain)
+{
+    auto *iov_block = AllocZcBlock();
+
+    UrmaRxOps rx(TEST_FD);
+    WriteImmData imm;
+    imm.ubsocket.opcode = PRE_WRITE;
+    rx.data_slots_[0].write_imm = imm.data;
+    rx.data_slots_[0].rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
+    rx.consume_seq_no_.store(0, std::memory_order_relaxed);
+
+    struct iovec zc_iov;
+    zc_iov.iov_base = iov_block->data;
+    zc_iov.iov_len = 64;
+
+    errno = 0;
+    auto zc_ret = rx.ReadV(sock_, &zc_iov, 1, UBS_IO_FLAG_USE_BRPC_BLOCK);
+    EXPECT_EQ(-1, zc_ret);
+    EXPECT_EQ(EAGAIN, errno);
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaDataRxTest, DataReadFinished_WrongState_ReturnsError)
+{
+    UrmaRxOps rx(TEST_FD);
+    rx.data_slots_[0].rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
+
+    auto result = rx.DataReadFinished(sock_, 0);
+    EXPECT_EQ(UBS_ERROR, result);
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaDataRxTest, DataReadFinished_SeqMatchesConsumed_ReturnsOk)
+{
+    UrmaRxOps rx(TEST_FD);
+    rx.consume_seq_no_.store(5, std::memory_order_relaxed);
+    auto &slot = rx.data_slots_[5 % 256];
+    slot.rx_state.store(URMA_RX_STS_READING, std::memory_order_release);
+
+    auto result = rx.DataReadFinished(sock_, 5);
+    EXPECT_EQ(UBS_OK, result);
+    EXPECT_EQ(URMA_RX_STS_DATA_READY, slot.rx_state.load());
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaDataRxTest, DataReadFinished_SeqNotConsumed_ReturnsLaterSeq)
+{
+    UrmaRxOps rx(TEST_FD);
+    rx.consume_seq_no_.store(3, std::memory_order_relaxed);
+    auto &slot = rx.data_slots_[7 % 256];
+    slot.rx_state.store(URMA_RX_STS_READING, std::memory_order_release);
+
+    auto result = rx.DataReadFinished(sock_, 7);
+    EXPECT_EQ(UBS_LATER_SEQ, result);
+    EXPECT_EQ(URMA_RX_STS_DATA_READY, slot.rx_state.load());
+    GlobalMockObject::verify();
 }
