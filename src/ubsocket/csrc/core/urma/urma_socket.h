@@ -23,7 +23,10 @@ namespace urma {
 class UrmaSocket : public SocketBase {
 public:
     explicit UrmaSocket(int fd) : SocketBase(fd, SocketType::SOCK_TYPE_URMA) {}
-    ~UrmaSocket() override = default;
+    ~UrmaSocket() override
+    {
+        UnInitialize();
+    }
 
     Result Initialize() noexcept override;
     void UnInitialize() noexcept override;

@@ -56,6 +56,12 @@ class DataRx {
 public:
     DataRx() = default;
     DataRx(const SocketPtr &sock, DataRxOps *ops);
+    ~DataRx();
+
+    DataRx(DataRx &&other) noexcept;
+    DataRx &operator=(DataRx &&other) noexcept;
+    DataRx(const DataRx &) = delete;
+    DataRx &operator=(const DataRx &) = delete;
 
     ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 

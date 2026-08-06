@@ -304,9 +304,9 @@ TEST_F(UrmaDataRxTest, ZeroCopyRead_Success_LinksBlocksAndSendsPostWrite)
     const char test_data[] = "hello_zero_copy!";
     memcpy(cache_block->data, test_data, sizeof(test_data));
     cache_block->size = sizeof(test_data);
+    cache_block->cap = sizeof(test_data);
 
     UrmaRxOps rx(TEST_FD);
-    rx.block_cache_.Insert(cache_block->data, cache_block->size);
 
     auto &slot = rx.data_slots_[0];
     WriteImmData imm;
