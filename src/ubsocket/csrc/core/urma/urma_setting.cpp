@@ -15,6 +15,7 @@ namespace ubs {
 namespace urma {
 #define ENV_URMA_DEV_NAME "UBSOCKET_UB_DEV"
 #define ENV_URMA_EID_IDX "UBSOCKET_UB_EID_IDX"
+#define ENV_URMA_BOUNDING_DEV "UBSOCKET_UB_BOUNDING_DEV"
 
 bool UrmaSetting::UB_USING_BOUNDING_DEV = true;
 std::string UrmaSetting::UB_DEV_NAME = "";
@@ -53,7 +54,7 @@ void UrmaSetting::Init() noexcept
 void UrmaSetting::AddRules()
 {
     /* int64 rule: name, required, min, max */
-    Int64Rule rules_int64[] = {{ENV_URMA_EID_IDX, false, 0, 1024}};
+    Int64Rule rules_int64[] = {{ENV_URMA_EID_IDX, false, 0, 1024}, {ENV_URMA_BOUNDING_DEV, false, 0, 1}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {};
@@ -88,6 +89,10 @@ Result UrmaSetting::LoadEnv()
 
     if (GS::GetEnvAndValidate(ENV_URMA_EID_IDX, int64EnvValue)) {
         UB_EID_INDEX = static_cast<uint32_t>(int64EnvValue);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_URMA_BOUNDING_DEV, int64EnvValue)) {
+        UB_USING_BOUNDING_DEV = (int64EnvValue != 0);
     }
     return UBS_OK;
 }

@@ -312,6 +312,12 @@ void UrmaRxOps::BuildReadWrs(uint32_t data_count, uint64_t msg_offset, bool is_w
     Block *local_block = head_block;
     uint32_t local_offset = 0;
 
+    uint32_t common_complete_enable = 0;
+    uint64_t common_user_ctx = 0;
+    if (UrmaSetting::UB_USING_BOUNDING_DEV) {
+        common_complete_enable = 1;
+        common_user_ctx = ctx.user_ctx;
+    }
     while (remote_idx < data_count && local_block != nullptr) {
         uint64_t entry_offset = msg_offset + sizeof(UrmaMessageHead) + remote_idx * sizeof(PageBufferInMessage);
         if (is_wrap && entry_offset >= ctx.urma_sock->recv_buf_size_) {
@@ -338,10 +344,10 @@ void UrmaRxOps::BuildReadWrs(uint32_t data_count, uint64_t msg_offset, bool is_w
 
         urma_jfs_wr_t wr = {};
         wr.opcode = URMA_OPC_READ;
-        wr.user_ctx = 0;
+        wr.user_ctx = common_user_ctx;
         wr.rw.src = {.sge = &src_sge, .num_sge = 1};
         wr.rw.dst = {.sge = &dst_sge, .num_sge = 1};
-        wr.flag.bs.complete_enable = 1;
+        wr.flag.bs.complete_enable = common_complete_enable;
         ctx.wrs.push_back(wr);
 
         remote_offset += seg_size;
@@ -362,6 +368,7 @@ void UrmaRxOps::BuildReadWrs(uint32_t data_count, uint64_t msg_offset, bool is_w
     }
     if (!ctx.wrs.empty()) {
         ctx.wrs.back().user_ctx = ctx.user_ctx;
+        ctx.wrs.back().flag.bs.complete_enable = 1;
     }
 }
 
