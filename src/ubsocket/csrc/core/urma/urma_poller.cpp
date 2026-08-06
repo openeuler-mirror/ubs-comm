@@ -55,6 +55,13 @@ void UrmaPoller::Stop() noexcept
 {
     UBS_VLOG_DEBUG("Stopping");
     stopping_ = true;
+    // TODO 后续改为jfr消息触发
+    struct sigaction sa = {0};
+    sa.sa_handler = [](int){};
+    sa.sa_flags = 0;
+    sigaction(SIGUSR1, &sa, NULL);
+
+    pthread_kill(thread_.native_handle(), SIGUSR1);
     if (thread_.joinable()) {
         thread_.join();
     }
@@ -94,6 +101,9 @@ void UrmaPoller::EventPoll() noexcept
     while (!stopping_) {
         try {
             auto cnt = UrmaApi::urma_wait_jfc(jfc_->JfceHandle(), 1, -1, &ev_jfc);
+            if (stopping_) {
+                break;
+            }
             if (cnt < 0 || (cnt == 1 && jfc_->Handle() != ev_jfc)) {
                 UBS_VLOG_ERR("Failed to wait jfc cnt: %d", cnt);
                 continue;

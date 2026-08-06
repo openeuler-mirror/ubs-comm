@@ -244,7 +244,8 @@ void ubsocket_uninit()
     EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).Stop();
     EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER).Stop();
 
-    umq::UmqBackend::UnInit();
+    //umq::UmqBackend::UnInit();
+    urma::UrmaBackend::Instance().UnInit();
     return;
 }
 

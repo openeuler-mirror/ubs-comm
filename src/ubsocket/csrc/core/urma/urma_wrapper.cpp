@@ -333,13 +333,14 @@ Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingTyp
             return UBS_ERROR;
         }
 
-        auto tmp_ctl = fcntl(raw_jfce->fd, F_GETFL);
+        // O_NONBLOCK导致裸设备urma_wait_jfc不做等待poller循环调用，待urma功能完善后放开
+        /*auto tmp_ctl = fcntl(raw_jfce->fd, F_GETFL);
         if (fcntl(raw_jfce->fd, F_SETFL, static_cast<uint32_t>(tmp_ctl) | O_NONBLOCK) < 0) {
             UrmaApi::urma_delete_jfce(raw_jfce);
             UrmaApi::urma_delete_jfc(raw_jfc);
             UBS_VLOG_ERR("fcntl() set jfc fd to non-blocking failed, errno %d", errno);
             return UBS_ERROR;
-        }
+        }*/
 
         auto jfc = MakeRef<UrmaJfc>(pollingType, raw_jfc, raw_jfce, this);
         if (jfc == nullptr) {
