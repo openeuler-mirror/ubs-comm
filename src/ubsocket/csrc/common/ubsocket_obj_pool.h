@@ -444,7 +444,7 @@ ALWAYS_INLINE Result ObjectGlobalCache::ExpandFromOs(bool holdFreeListLock)
 {
     // uint64_t startTime = NetMonotonic::TimeNs();
     /* allocate memory */
-    auto superBlkSize = options_.block_size_mb;
+    auto superBlkSize = (total_block_size_ == 0) ? (options_.block_size_mb * SIZE_1K * SIZE_1K) : total_block_size_;
     auto mem = memalign(SIZE_4K, superBlkSize);
     if (mem == nullptr) {
         UBS_SLOG_ERR("Failed to malloc memory for supper block in mem pool " << name_);
