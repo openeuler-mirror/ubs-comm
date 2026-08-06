@@ -415,10 +415,14 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
         }
 
         if (cr[i].flag.bs.s_r == 0) { // sender side
-
             if (cr[i].user_ctx != 0) {
-                auto sock_fd = static_cast<int>(cr[i].user_ctx >> 32);
-                auto seq_no = static_cast<uint32_t>(cr[i].user_ctx & std::numeric_limits<uint32_t>::max());
+                SenderCRContext cr_context{cr[i].user_ctx};
+                if (cr_context.type != READ_DATA_REQUEST) {
+                    continue;
+                }
+                auto sock_fd = cr_context.fd;
+                auto seq_no = cr_context.seq_no;
+                UBS_VLOG_TRACE("send side cqe user ctx(0x%lx) socket(%d) seq_no(%u)", cr[i].user_ctx, sock_fd, seq_no);
                 auto sock = ArraySet<Socket>::GetInstance().GetItem(sock_fd);
                 if (UNLIKELY(sock == nullptr)) {
                     UBS_VLOG_ERR("socket is nullptr for fd: %d", sock_fd);
@@ -432,6 +436,9 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
 
         // receiver side
         if (cr[i].opcode == URMA_CR_OPC_WRITE_WITH_IMM) {
+            if (cr[i].user_ctx == 0) { // TODO: why write imm receiver user ctx = 0
+                continue;
+            }
             auto fd = static_cast<int>(cr[i].user_ctx);
             auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
             if (UNLIKELY(sock == nullptr)) {

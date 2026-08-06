@@ -250,7 +250,7 @@ Result UrmaRxOps::IssueReadRequest(const SocketPtr &sock, uint64_t seq_no, uint6
     }
     slot.data_block = head_block;
 
-    const auto user_ctx = (static_cast<uint64_t>(urma_sock->Fd()) << 32) | (seq_no & 0xFFFFFFFFUL);
+    const auto user_ctx = SenderCRContext{READ_DATA_REQUEST, seq_no, urma_sock->Fd()}.value;
     auto allocator = UrmaBackend::Instance().GetAllocator();
     BuildReadWrCtx build_ctx{allocator, urma_sock, user_ctx};
     BuildReadWrs(data_count, offset, is_wrap, head_block, build_ctx);
@@ -269,7 +269,7 @@ Result UrmaRxOps::IssueReadRequest(const SocketPtr &sock, uint64_t seq_no, uint6
     }
 
     slot.rx_state.store(URMA_RX_STS_READING, std::memory_order_release);
-    UBS_VLOG_TRACE("socket(%d) send read data to blocks request success.", sock->Fd());
+    UBS_VLOG_TRACE("socket(%d) send read data to blocks request for seq(%lu) success.", sock->Fd(), seq_no);
     return UBS_OK;
 }
 
