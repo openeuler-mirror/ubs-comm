@@ -48,6 +48,8 @@ Result UrmaRxOps::DataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexc
 {
     size_t idx = seq_no % RING_SIZE;
     auto &slot = data_slots_[idx];
+    auto used = ubsocket_get_timeNs() - slot.start_read_time;
+    PROF_RECORD(URMA_SOCKET_READ_DATA, used, true);
 
     uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
     auto curr_state = slot.rx_state.load(std::memory_order_acquire);
@@ -261,6 +263,7 @@ Result UrmaRxOps::IssueReadRequest(const SocketPtr &sock, uint64_t seq_no, uint6
     }
 
     urma_jfs_wr_t *bad_wr = nullptr;
+    slot.start_read_time = ubsocket_get_timeNs();
     auto ret = urma_sock->jetty_->PostSendWr(&build_ctx.wrs[0], &bad_wr);
     if (ret != URMA_SUCCESS) {
         UBS_VLOG_ERR("send request READ for socket(%d) seq_no(%lu) failed: %d", sock->Fd(), seq_no, ret);

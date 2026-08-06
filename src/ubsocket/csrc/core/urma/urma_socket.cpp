@@ -210,13 +210,15 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
 {
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
-    auto block_refs_ptr = reinterpret_cast<std::vector<BlockRef> *>(req->head.user_ctx1);
+    auto used = ubsocket_get_timeNs() - req->head.trace_time;
+    PROF_RECORD(URMA_SOCKET_WRITE_LARGE, used, true);
+    auto block_refs_ptr = reinterpret_cast<std::vector<BlockRef> *>(req->head.user_ctx);
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
     }
 
     if (block_refs_ptr != nullptr) {
-        req->head.user_ctx1 = 0;
+        req->head.user_ctx = 0;
         for (auto &block_ref : *block_refs_ptr) {
             block_ref.block->DecRef();
         }
@@ -251,6 +253,8 @@ void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
 {
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
+    auto used = ubsocket_get_timeNs() - req->head.trace_time;
+    PROF_RECORD(URMA_SOCKET_WRITE_INLINE, used, true);
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
         NotifyWritable();

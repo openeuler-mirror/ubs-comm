@@ -112,8 +112,8 @@ struct UrmaMessageHead {
     uint32_t data_count; // small io: bytes count, large io: buffer count
     uint16_t message_size;
     uint16_t reserved = 0;
-    uintptr_t user_ctx1 = 0;
-    uintptr_t user_ctx2 = 0;
+    uintptr_t user_ctx = 0;
+    uintptr_t trace_time = 0;
 };
 static_assert(sizeof(UrmaMessageHead) % 16 == 0, "UrmaMessageHead size must be 16B-aligned");
 
