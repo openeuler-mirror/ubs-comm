@@ -448,6 +448,7 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
 
             auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
             urma_sock->HandleRecvCqe(cr[i].imm_data);
+            urma_sock->PostEmptyRecvWorkerRecords();
         } else {
             // TODO: other opcode
         }

@@ -26,6 +26,19 @@ namespace ock {
 namespace ubs {
 namespace urma {
 
+UrmaSocket::UrmaSocket(int fd) noexcept: SocketBase(fd, SocketType::SOCK_TYPE_URMA)
+{
+    empty_recv_sge_.addr = 0;
+    empty_recv_sge_.len = 0;
+    empty_recv_sge_.tseg = nullptr;
+    empty_recv_sge_.user_tseg = nullptr;
+
+    empty_recv_wr_.src.sge = &empty_recv_sge_;
+    empty_recv_wr_.src.num_sge = 1;
+    empty_recv_wr_.user_ctx = static_cast<uint64_t>(fd);
+    empty_recv_wr_.next = nullptr;
+}
+
 Result UrmaSocket::Initialize() noexcept
 {
     send_buf_size_ = URMA_SEND_BUF_DEFAULT_KB * 1024;
@@ -334,17 +347,8 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
         return UBS_TCP_EXCHANGE;
     }
 
-    urma_jfr_wr_t *bad_wr = nullptr;
-    urma_sge_t recv_sge = {.addr = 0, .len = 0, .tseg = local_ctrl_target_seg_, .user_tseg = nullptr};
-    urma_sg_t recv_sg = {.sge = &recv_sge, .num_sge = 1};
-    urma_jfr_wr_t recv_wr = {.src = recv_sg, .user_ctx = static_cast<uint64_t>(fd), .next = nullptr};
-    for (auto i = 0U; i < 128U; i++) { // TODO : post recv count
-        if (jetty_->PostRecvWr(&recv_wr, &bad_wr) != URMA_SUCCESS) {
-            UBS_SLOG_ERR("Failed to post recv wr for WRITE_IMM failed with index: " << i);
-            return UBS_TCP_EXCHANGE;
-        }
-    }
-
+    empty_recv_sge_.tseg = local_ctrl_target_seg_;
+    PostEmptyRecvWorkerRecords(128U); // TODO : post recv count
     urma_sock.rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
     urma_sock.rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
     urma_sock.remote_uasid_ = peer.uasid;
@@ -354,6 +358,16 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
                    peer.ex.my_send_buf.buf, peer.ex.my_recv_buf.buf, local.ex.my_send_buf.buf,
                    local.ex.my_recv_buf.buf);
     return UBS_OK;
+}
+
+void UrmaSocket::PostEmptyRecvWorkerRecords(uint32_t count)
+{
+    urma_jfr_wr_t *bad_wr = nullptr;
+    for (auto i = 0U; i < count; i++) {
+        if (jetty_->PostRecvWr(&empty_recv_wr_, &bad_wr) != URMA_SUCCESS) {
+            UBS_SLOG_ERR("Failed to post recv wr for WRITE_IMM failed with index: " << i);
+        }
+    }
 }
 
 } // namespace urma

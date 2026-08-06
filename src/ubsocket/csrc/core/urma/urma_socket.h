@@ -22,7 +22,7 @@ namespace ubs {
 namespace urma {
 class UrmaSocket : public SocketBase {
 public:
-    explicit UrmaSocket(int fd) : SocketBase(fd, SocketType::SOCK_TYPE_URMA) {}
+    explicit UrmaSocket(int fd) noexcept;
     ~UrmaSocket() override
     {
         UnInitialize();
@@ -85,6 +85,7 @@ public:
     void HandlePreWrite(const WriteImmData &imm);
     void HandleWriteInBand(const WriteImmData &imm);
     void DataReadFinsihed(uint32_t seq_no);
+    void PostEmptyRecvWorkerRecords(uint32_t count = 1);
 
     bool ExchangeSocketReadableReady(bool b)
     {
@@ -144,6 +145,9 @@ private:
     uint32_t peer_version_{0};
     std::atomic<uint32_t> reach_epoll_events_{0};
     std::atomic<bool> socket_readable_ready_{false}; // socket初始状态为不可读
+
+    urma_sge_t empty_recv_sge_;
+    urma_jfr_wr_t empty_recv_wr_;
     friend class UrmaAcceptorOps;
     friend class UrmaConnectorOps;
     friend class UrmaTxOps;
