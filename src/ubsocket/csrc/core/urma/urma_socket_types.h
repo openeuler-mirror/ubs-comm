@@ -30,6 +30,46 @@ constexpr size_t URMA_SHARED_BUF_DEFAULT_PAGE_SIZE = 16 * 1024; /* 16KB */
 constexpr uint32_t kDefaultQueueDepth = 1024;
 constexpr uint32_t kDefaultCqPollBatch = 32;
 
+/*
+ * OneSideSenderType encodes the single-sided operation type stored in the URMA completion record's
+ * user_ctx field. The receiver uses it to dispatch the correct CQE handler upon operation completion.
+ */
+enum OneSideSenderType : uint8_t {
+    CTRL_DATA_REQUEST = 1,  /* write-in-band: inline-data RDMA WRITE_IMM CQE */
+    CTRL_DATA_RESPONSE,     /* post-write: response to a PRE_WRITE or inline-data ack */
+    READ_DATA_REQUEST,      /* pre-write large IO: RDMA READ completion, data now in local blocks */
+};
+
+/*
+ * SenderCRContext packs operation type, sequence number and socket fd into a 64-bit value
+ * stored in the URMA completion record's user_ctx field. When a CQE is polled, the receiver
+ * decodes user_ctx via this union to locate the corresponding connection and dispatch the handler.
+ *
+ * Bit layout:
+ *   type    [ 0: 3]  4 bits  — OneSideSenderType
+ *   seq_no  [ 4:33] 30 bits  — message sequence number
+ *   fd      [34:53] 20 bits  — socket file descriptor
+ *   reserved[54:63] 10 bits  — reserved
+ */
+union SenderCRContext {
+    struct {
+        uint64_t type : 4;     /* operation type (OneSideSenderType) */
+        uint64_t seq_no : 30;  /* message sequence number */
+        uint64_t fd : 20;      /* socket file descriptor */
+        uint64_t reserved : 10;/* reserved */
+    };
+    uint64_t value;
+
+    SenderCRContext(uint64_t val = 0) noexcept : value{val} {}
+    SenderCRContext(OneSideSenderType t, uint64_t seq, int fd_in) noexcept
+        : type(t),
+          seq_no{seq},
+          fd{static_cast<uint64_t>(fd_in)},
+          reserved{0}
+    {
+    }
+};
+
 union WriteImmData {
     uint64_t data = 0;
     struct {

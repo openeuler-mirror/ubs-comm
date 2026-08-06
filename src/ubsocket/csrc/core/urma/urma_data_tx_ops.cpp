@@ -180,7 +180,8 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
     WriteImmData imm_data{WRITE_IN_BAND, buf_offset / unit};
     urma_rw_wr_t rw = {.src = ctx.src_sg, .dst = ctx.dst_sg, .target_hint = 0, .notify_data = imm_data.data};
 
-    auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, ctrl_message.head.request_id);
+    auto user_ctx = SenderCRContext{CTRL_DATA_REQUEST, seq_no, fd_}.value;
+    auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, user_ctx);
     if (urma_ret != URMA_SUCCESS) {
         urma_sock->send_buf_->Release(buf_offset, real_size);
         UBS_SLOG_ERR("Urma post write_imm for request: " << ctrl_message.head.request_id << " return " << urma_ret);
@@ -296,7 +297,8 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
     WriteImmData imm_data{PRE_WRITE, buf_offset / unit};
     urma_rw_wr_t rw = {.src = ctx.src_sg, .dst = ctx.dst_sg, .target_hint = 0, .notify_data = imm_data.data};
 
-    auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, request_id);
+    auto user_ctx = SenderCRContext{CTRL_DATA_REQUEST, seq_no, fd_}.value;
+    auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, user_ctx);
     if (urma_ret != URMA_SUCCESS) {
         urma_sock->send_buf_->Release(buf_offset, need_size);
         UBS_SLOG_ERR("Urma post write_imm for request: " << request_id << " return " << urma_ret);
