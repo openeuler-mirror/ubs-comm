@@ -99,7 +99,7 @@ union WriteImmData {
 
 enum IOOpcode : uint8_t {
     PRE_WRITE = 0,         /* pre-write: trigger receiver to RDMA_READ */
-    POST_WRITE = 1,        /* post-write: trigger sender to free buffers */
+    POST_WRITE = 1,        /* post-write: trigger sender to release send_buf and un-reference blocks */
     WRITE_IN_BAND = 2,     /* small IO inline write */
     WRITE_IN_BAND_ACK = 3, /* small IO write acknowledgment */
 };

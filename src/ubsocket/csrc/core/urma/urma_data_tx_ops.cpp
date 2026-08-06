@@ -44,8 +44,7 @@ ssize_t UrmaTxOps::WriteV(const SocketPtr &sock, const struct iovec *iov, int io
         return WriteZeroCopy(sock, iov, iovcnt, total_size, flags);
     }
 
-    errno = ENOSYS;
-    return -1;
+    return WriteLargeIO(sock, iov, iovcnt, total_size, flags);
 }
 
 Result UrmaTxOps::Flush(const SocketPtr &sock, uint32_t flags) noexcept
@@ -315,6 +314,82 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
     UBS_VLOG_TRACE("ctl_msg(req_id=%lx, seq_no=%lx, msg_size=%hu, data_count=%u, buf_count=%u, return %zu", request_id,
                    seq_no, head->message_size, head->data_count, valid_count, total);
     return static_cast<ssize_t>(total);
+}
+
+ssize_t UrmaTxOps::WriteLargeIO(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total,
+                                uint32_t flags) noexcept
+{
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    auto block_capacity = allocator->get_mini_block_size() - sizeof(Block);
+    auto block_count = static_cast<uint16_t>((total + block_capacity - 1) / block_capacity);
+
+    allocator::FixedLinkedBlock *mini_block_head = nullptr;
+    if (UNLIKELY(!allocator->multi_allocate(block_count, mini_block_head) || mini_block_head == nullptr)) {
+        UBS_VLOG_ERR("socket(%d) write bytes(%zu) allocate(%hu) block failed.", sock->Fd(), total, block_count);
+        errno = ENOMEM;
+        return -1L;
+    }
+
+    Block *head_block = nullptr;
+    Block *tail_block = nullptr;
+    auto data_left = total;
+    uint32_t i = 0;
+    std::vector<iovec> zc_iov(block_count);
+    while (mini_block_head != nullptr) {
+        auto curr_capacity = std::min(block_capacity, data_left);
+        auto mini_block_next = mini_block_head->next;
+        auto curr_block = new (mini_block_head) Block(reinterpret_cast<char *>(mini_block_head) + sizeof(Block), curr_capacity);
+        if (tail_block == nullptr) {
+            head_block = tail_block = curr_block;
+        } else {
+            tail_block = tail_block->SetNext(curr_block);
+        }
+
+        zc_iov[i].iov_base = curr_block->data;
+        zc_iov[i].iov_len = curr_block->cap;
+        i++;
+
+        mini_block_head = mini_block_next;
+        data_left -= curr_capacity;
+    }
+
+    size_t src_idx = 0;
+    size_t src_offset = 0;
+    for (uint32_t d = 0; d < block_count && src_idx < static_cast<size_t>(iovcnt); d++) {
+        if (iov[src_idx].iov_base == nullptr) {
+            src_idx++;
+            d--;
+            continue;
+        }
+        char *dst = static_cast<char *>(zc_iov[d].iov_base);
+        auto dst_remain = zc_iov[d].iov_len;
+        size_t dst_copied = 0;
+
+        while (src_idx < static_cast<size_t>(iovcnt) && dst_copied < dst_remain) {
+            if (iov[src_idx].iov_base == nullptr) {
+                src_idx++;
+                src_offset = 0;
+                continue;
+            }
+            size_t src_remain = iov[src_idx].iov_len - src_offset;
+            size_t n = std::min(src_remain, dst_remain - dst_copied);
+            memcpy(dst + dst_copied, static_cast<const char *>(iov[src_idx].iov_base) + src_offset, n);
+            dst_copied += n;
+            src_offset += n;
+            if (src_offset >= iov[src_idx].iov_len) {
+                src_idx++;
+                src_offset = 0;
+            }
+        }
+    }
+
+    auto ret = WriteZeroCopy(sock, zc_iov.data(), block_count, total, flags);
+    while (head_block != nullptr) {
+        auto next_block  = head_block->GetNext();
+        head_block->DecRef();
+        head_block = next_block;
+    }
+    return ret;
 }
 
 } // namespace urma

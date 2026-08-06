@@ -46,6 +46,7 @@ private:
 
     ssize_t WriteInline(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total, uint32_t flags) noexcept;
     ssize_t WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total, uint32_t flags) noexcept;
+    ssize_t WriteLargeIO(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total, uint32_t flags) noexcept;
     void CopyFromIovToSendBuf(const std::vector<iovec> &iov, const std::vector<urma_sge_t> &dest) noexcept;
 
     void SetupSgeContext(const UrmaSocketPtr &sock, uint64_t buf_offset, uint64_t alloc_size,
