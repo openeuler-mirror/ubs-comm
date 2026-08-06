@@ -22,15 +22,6 @@ namespace ock {
 namespace ubs {
 namespace urma {
 
-/**
- * @brief 数据接收状态
- * IDLE --(收到写消息，且是大IO)--> CTRL_REQ_RECV
- * CTRL_REQ_RECV --(本地未import 对端seg, 发送消息请求SEG信息)--> WAIT_REMOTE_SEG
- * CTRL_REQ_RECV --(本地已import，已发送单边读)--> READING
- * WAIT_REMOTE_SEG --(收到对端seg信息，已import，已发送单边读)--> READING
- * READING --(读完成)--> DATA_READY
- * IDLE --(收到写消息，且是小IO)--> DATA_READY
- */
 enum LargeIoRxState : uint8_t {
     URMA_RX_STS_IDLE = 0,
     URMA_RX_STS_READING,
@@ -82,14 +73,14 @@ private:
     };
 
     Result ResponseCtrlMessage(const SocketPtr &sock, IOOpcode opcode, uint64_t offset, uint32_t flags) noexcept;
-    Result ReadDataToBlocks(const SocketPtr &sock, uint64_t seq_no, uint64_t write_imm, DataSlot &slot) noexcept;
+    Result IssueReadRequest(const SocketPtr &sock, uint64_t seq_no, uint64_t write_imm, DataSlot &slot) noexcept;
     Block *AllocBlocksForReq(uint32_t total_bytes) noexcept;
-    void BuildReadWrs(const UrmaCtrlMessage *req, Block *head_block, BuildReadWrCtx &ctx) noexcept;
-    void ImportRemoteSegments(const SocketPtr &sock, const UrmaCtrlMessage *req) noexcept;
-    ssize_t ZeroCopyRead(const SocketPtr &sock, DataSlot &slot, uint64_t seq, const WriteImmData &imm_data,
-                         IovWriter &w, uint32_t flags) noexcept;
-    bool ReadBlockData(const SocketPtr &sock, DataSlot &slot, IovWriter &w, uint32_t flags) noexcept;
-    bool ReadInlineData(const SocketPtr &sock, DataSlot &slot, IovWriter &w, uint32_t flags) noexcept;
+    void BuildReadWrs(uint32_t data_count, uint64_t msg_offset, bool is_wrap, Block *head_block,
+                      BuildReadWrCtx &ctx) noexcept;
+    void ImportRemoteSegments(const SocketPtr &sock, uint32_t data_count, uint64_t offset, bool is_wrap) noexcept;
+    ssize_t ZeroCopyRead(const SocketPtr &sock, DataSlot &slot, uint64_t seq, IovWriter &w) noexcept;
+    bool ConsumeBlockData(const SocketPtr &sock, DataSlot &slot, IovWriter &w, uint32_t flags) noexcept;
+    bool ConsumeInlineData(const SocketPtr &sock, DataSlot &slot, IovWriter &w, uint32_t flags) noexcept;
     static void ReleaseBlockInSlot(DataSlot &slot) noexcept;
     static constexpr size_t RING_SIZE = 256;
     static constexpr uint64_t INVALID_SEQ = UINT64_MAX;

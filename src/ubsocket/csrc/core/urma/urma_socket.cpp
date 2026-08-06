@@ -28,12 +28,6 @@ namespace urma {
 
 Result UrmaSocket::Initialize() noexcept
 {
-    event_fd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-    if (event_fd_ < 0) {
-        UBS_SLOG_ERR("UrmaSocket: eventfd failed, fd=" << raw_socket_ << " errno=" << errno);
-        return UBS_ERROR;
-    }
-
     send_buf_size_ = URMA_SEND_BUF_DEFAULT_KB * 1024;
     recv_buf_size_ = URMA_RECV_BUF_DEFAULT_KB * 1024;
 
@@ -42,8 +36,6 @@ Result UrmaSocket::Initialize() noexcept
         UBS_SLOG_ERR("UrmaSocket: malloc buf failed, fd=" << raw_socket_);
         send_buf_addr_ = 0;
         recv_buf_addr_ = 0;
-        close(event_fd_);
-        event_fd_ = -1;
         return UBS_MALLOC_FAILED;
     }
     recv_buf_addr_ = reinterpret_cast<uintptr_t>(buffer);
@@ -55,8 +47,6 @@ Result UrmaSocket::Initialize() noexcept
         UrmaBackend::Instance().GetAllocator()->direct_release(buffer);
         send_buf_addr_ = 0;
         recv_buf_addr_ = 0;
-        close(event_fd_);
-        event_fd_ = -1;
         return UBS_MALLOC_FAILED;
     }
 

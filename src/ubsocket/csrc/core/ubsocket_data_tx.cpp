@@ -22,6 +22,29 @@ DataTx::DataTx(const SocketPtr &sock, DataTxOps *ops) : fd_(sock->raw_socket_), 
     /* caller must make sure ops is not null */
 }
 
+DataTx::~DataTx()
+{
+    delete tx_ops_;
+    tx_ops_ = nullptr;
+}
+
+DataTx::DataTx(DataTx &&other) noexcept : fd_(other.fd_), event_fd_(other.event_fd_), tx_ops_(other.tx_ops_)
+{
+    other.tx_ops_ = nullptr;
+}
+
+DataTx &DataTx::operator=(DataTx &&other) noexcept
+{
+    if (this != &other) {
+        delete tx_ops_;
+        fd_ = other.fd_;
+        event_fd_ = other.event_fd_;
+        tx_ops_ = other.tx_ops_;
+        other.tx_ops_ = nullptr;
+    }
+    return *this;
+}
+
 ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt) noexcept
 {
     auto *trace = sock->split_trace_;

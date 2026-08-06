@@ -21,6 +21,29 @@ DataRx::DataRx(const SocketPtr &sock, DataRxOps *ops) : fd_(sock->raw_socket_), 
     /* caller must make sure ops is not null */
 }
 
+DataRx::~DataRx()
+{
+    delete rx_ops_;
+    rx_ops_ = nullptr;
+}
+
+DataRx::DataRx(DataRx &&other) noexcept : fd_(other.fd_), event_fd_(other.event_fd_), rx_ops_(other.rx_ops_)
+{
+    other.rx_ops_ = nullptr;
+}
+
+DataRx &DataRx::operator=(DataRx &&other) noexcept
+{
+    if (this != &other) {
+        delete rx_ops_;
+        fd_ = other.fd_;
+        event_fd_ = other.event_fd_;
+        rx_ops_ = other.rx_ops_;
+        other.rx_ops_ = nullptr;
+    }
+    return *this;
+}
+
 ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     UBS_VLOG_TRACE("enter DataRx::ReadV fd=%d, iovcnt=%d, iov[0].buf=%p", sock->Fd(), iovcnt, iov[0].iov_base);

@@ -64,6 +64,12 @@ class DataTx {
 public:
     DataTx() = default;
     DataTx(const SocketPtr &sock, DataTxOps *ops);
+    ~DataTx();
+
+    DataTx(DataTx &&other) noexcept;
+    DataTx &operator=(DataTx &&other) noexcept;
+    DataTx(const DataTx &) = delete;
+    DataTx &operator=(const DataTx &) = delete;
 
     ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt) noexcept;
 
