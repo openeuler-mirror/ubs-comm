@@ -16,6 +16,7 @@ namespace urma {
 #define ENV_URMA_DEV_NAME "UBSOCKET_UB_DEV"
 #define ENV_URMA_EID_IDX "UBSOCKET_UB_EID_IDX"
 #define ENV_URMA_BOUNDING_DEV "UBSOCKET_UB_BOUNDING_DEV"
+#define ENV_URMA_BUSY_POLLING "UBSOCKET_UB_BUSY_POLLING"
 
 bool UrmaSetting::UB_USING_BOUNDING_DEV = true;
 std::string UrmaSetting::UB_DEV_NAME = "";
@@ -93,6 +94,10 @@ Result UrmaSetting::LoadEnv()
 
     if (GS::GetEnvAndValidate(ENV_URMA_BOUNDING_DEV, int64EnvValue)) {
         UB_USING_BOUNDING_DEV = (int64EnvValue != 0);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_URMA_BUSY_POLLING, int64EnvValue)) {
+        UB_POLLER_BUSY_POLLING = (int64EnvValue != 0);
     }
     return UBS_OK;
 }

@@ -143,6 +143,7 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
         errno = EAGAIN;
         return -1;
     }
+
     UrmaCtrlMessage ctrl_message;
     auto seq_no = __atomic_fetch_add(&seq_gen_, 1U, __ATOMIC_RELAXED);
     ctrl_message.head.request_id = (static_cast<uint64_t>(fd_) << 32) | (seq_no & 0xFFFFFFFFUL);
@@ -170,16 +171,12 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
     SgeContext ctx;
     SetupSgeContext(urma_sock, buf_offset, real_size, ctx);
     CopyFromIovToSendBuf(data_iov, ctx.src_sges);
-#ifdef UBS_LOG_TRACE_ENABLED
-    auto real_req = (UrmaCtrlMessage *)(ctx.src_sges[0].addr);
-    UBS_VLOG_TRACE("real_req(req_id=%lx, seq_no=%lx, msg_size=%hu, body_size=%u", real_req->head.request_id,
-                   real_req->head.sequence_no, real_req->head.message_size, real_req->head.data_count);
-#endif
 
     WriteImmData imm_data{WRITE_IN_BAND, buf_offset / unit};
     urma_rw_wr_t rw = {.src = ctx.src_sg, .dst = ctx.dst_sg, .target_hint = 0, .notify_data = imm_data.data};
 
     auto user_ctx = SenderCRContext{CTRL_DATA_REQUEST, seq_no, fd_}.value;
+    ((UrmaCtrlMessage *)(ctx.src_sges[0].addr))->head.trace_time = ubsocket_get_timeNs();
     auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, user_ctx);
     if (urma_ret != URMA_SUCCESS) {
         urma_sock->send_buf_->Release(buf_offset, real_size);
@@ -256,7 +253,7 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
     head->data_offset = 0;
     head->message_size = static_cast<uint16_t>(need_size);
     head->data_count = valid_count;
-    head->user_ctx1 = reinterpret_cast<uintptr_t>(block_refs_ptr);
+    head->user_ctx = reinterpret_cast<uintptr_t>(block_refs_ptr);
 
     auto allocator = UrmaBackend::Instance().GetAllocator();
     auto start_addr = allocator->get_local_start_addr();
@@ -297,12 +294,13 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
     urma_rw_wr_t rw = {.src = ctx.src_sg, .dst = ctx.dst_sg, .target_hint = 0, .notify_data = imm_data.data};
 
     auto user_ctx = SenderCRContext{CTRL_DATA_REQUEST, seq_no, fd_}.value;
+    head->trace_time = ubsocket_get_timeNs();
     auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, user_ctx);
     if (urma_ret != URMA_SUCCESS) {
         urma_sock->send_buf_->Release(buf_offset, need_size);
         UBS_SLOG_ERR("Urma post write_imm for request: " << request_id << " return " << urma_ret);
         errno = EAGAIN;
-        head->user_ctx1 = 0;
+        head->user_ctx = 0;
         delete block_refs_ptr;
         return -1;
     }

@@ -87,6 +87,11 @@ enum ProfilingTPId : uint32_t {
     UMQ_CFG_GET,
     UMQ_CREATE,
 
+    // urma_socket打点
+    URMA_SOCKET_WRITE_INLINE,
+    URMA_SOCKET_WRITE_LARGE,
+    URMA_SOCKET_READ_DATA,
+
     // count the number of ProfilingTPId
     UBSOCKET_PROF_COUNT,
 };

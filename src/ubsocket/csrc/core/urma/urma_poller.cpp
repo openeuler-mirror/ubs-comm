@@ -149,6 +149,7 @@ void UrmaPoller::BusyPoll() noexcept
         try {
             int polled_count = jfc_->Poll(POLL_BATCH_SIZE, crs);
             if (polled_count > 0) { /* if polled */
+                jfc_->Ack(1);
                 auto result = cqe_handler_(0, polled_count, crs);
                 if (UNLIKELY(result != UBS_OK)) {
                     UBS_VLOG_INFO("cqe handler processed and return %d, continue polling", result);

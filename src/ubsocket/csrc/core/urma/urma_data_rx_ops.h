@@ -46,6 +46,7 @@ private:
         uint64_t seq_no{INVALID_SEQ};
         uint64_t write_imm{0};
         Block *data_block{nullptr};
+        uint64_t start_read_time{0};
     };
 
     struct IovWriter {
