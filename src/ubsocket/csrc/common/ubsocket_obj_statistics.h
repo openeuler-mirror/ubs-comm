@@ -26,6 +26,7 @@ enum ObjectEnum {
     UBS_URMA_JFS,
     UBS_URMA_JFR,
     UBS_URMA_JFC,
+    UBS_URMA_JFCE,
 
     /* umq related */
     UBS_UMQ_SOCKET,

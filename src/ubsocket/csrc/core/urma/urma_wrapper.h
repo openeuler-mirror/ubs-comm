@@ -32,6 +32,7 @@ class UrmaJetty;
 class UrmaJfs;
 class UrmaJfr;
 class UrmaJfc;
+class UrmaJfce;
 class UrmaSegment;
 using UrmaDevicePtr = Ref<UrmaDevice>;
 using UrmaContextPtr = Ref<UrmaContext>;
@@ -39,6 +40,7 @@ using UrmaJettyPtr = Ref<UrmaJetty>;
 using UrmaJfsPtr = Ref<UrmaJfs>;
 using UrmaJfrPtr = Ref<UrmaJfr>;
 using UrmaJfcPtr = Ref<UrmaJfc>;
+using UrmaJfcePtr = Ref<UrmaJfce>;
 using UrmaSegmentPtr = Ref<UrmaSegment>;
 
 struct UrmaDeviceBandWidth {
@@ -174,7 +176,9 @@ public:
                                 uint64_t userCtx = 0);
     urma_jetty_cfg_t CreateJettyCfg(uint64_t userCtx = 0);
 
+    Result CreateJfce(UrmaJfcePtr &out);
     Result CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingType, UrmaJfcPtr &out);
+    Result CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcePtr &jfce, UrmaJfcPtr &out);
     Result CreateJfs(urma_jfs_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJfsPtr &out);
     Result CreateJfr(urma_jfr_cfg_t &cfg, const UrmaJfcPtr &jfc, UrmaJfrPtr &out);
     Result CreateJetty(urma_jetty_cfg_t &cfg, urma_tp_type_t rtp_ctp_utp, const UrmaJfsPtr &jfs, const UrmaJfrPtr &jfr,
@@ -221,6 +225,51 @@ ALWAYS_INLINE urma_context_t *UrmaContext::Handle() const noexcept
 ALWAYS_INLINE const UrmaDevicePtr &UrmaContext::Device() const noexcept
 {
     return device_;
+}
+
+class UrmaJfce : public Referable {
+public:
+    explicit UrmaJfce(urma_jfce_t *jfce, const UrmaContextPtr &ctx) noexcept : raw_jfce_(jfce), context_(ctx)
+    {
+        UBS_ASSERT(jfce != nullptr);
+        UBS_ASSERT(ctx != nullptr);
+        OBJ_INC_COUNT(UBS_URMA_JFCE);
+    }
+
+    ~UrmaJfce() noexcept override;
+
+    /**
+     * @param Destroy jfce
+     */
+    void Destroy() noexcept;
+
+    /**
+     * @brief Get the fd for epoll_wait or poll
+     *
+     * @return real fd if ok, -1 if failed
+     */
+    int Fd() const noexcept;
+
+    /*
+     * @brief Set the fd to non-blocking
+     */
+    Result SetNonBlocking() noexcept;
+
+private:
+    urma_jfce_t *raw_jfce_ = nullptr;
+    const UrmaContextPtr &context_;
+
+    friend class UrmaContext;
+};
+
+ALWAYS_INLINE int UrmaJfce::Fd() const noexcept
+{
+    if (UNLIKELY(raw_jfce_ != nullptr)) {
+        return raw_jfce_->fd;
+    }
+
+    UBS_VLOG_TRACE("Failed to get fd for jfce as raw jfce is null");
+    return -1;
 }
 
 class UrmaJfc : public Referable {

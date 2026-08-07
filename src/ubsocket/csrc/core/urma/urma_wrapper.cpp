@@ -301,6 +301,33 @@ UrmaContext::~UrmaContext()
     OBJ_DEC_COUNT(UBS_URMA_CONTEXT);
 }
 
+Result UrmaContext::CreateJfce(UrmaJfcePtr &out)
+{
+    UBS_VLOG_TRACE("enter");
+    if (UNLIKELY(raw_context_ == nullptr)) {
+        UBS_VLOG_ERR("Create jfce failed, as context is null");
+        return UBS_ERROR;
+    }
+
+    urma_jfce_t *raw_jfce = UrmaApi::urma_create_jfce(raw_context_);
+    if (raw_jfce == nullptr) {
+        UBS_VLOG_ERR("[URMA_API] Create jfce failed, errno %d", errno);
+        return UBS_ERROR;
+    }
+
+    auto tmp = MakeRef<UrmaJfce>(raw_jfce, this);
+    if (tmp == nullptr) {
+        UBS_VLOG_ERR("Create UrmaJfce object failed, probably out of memory");
+        UrmaApi::urma_delete_jfce(raw_jfce);
+        return UBS_MALLOC_FAILED;
+    }
+
+    out = tmp;
+
+    UBS_VLOG_TRACE("created jfce with fd(%d) at context(%d)", )
+    return UBS_OK;
+}
+
 Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingType, UrmaJfcPtr &out)
 {
     UBS_VLOG_DEBUG("enter");
@@ -370,6 +397,47 @@ Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingTyp
     }
 
     UBS_VLOG_DEBUG("jfc created");
+    return UBS_OK;
+}
+
+Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcePtr &jfce, UrmaJfcPtr &out)
+{
+    UBS_VLOG_TRACE("enter");
+    if (UNLIKELY(raw_context_ == nullptr)) {
+        UBS_VLOG_ERR("Create jfc failed, as context is null");
+        return UBS_ERROR;
+    }
+
+    if (UNLIKELY(jfce == nullptr || jfce->raw_jfce_ == nullptr)) {
+        UBS_VLOG_ERR("Create jfc failed, as context is null");
+        return UBS_INVALID_PARAM;
+    }
+
+    cfg.jfce = jfce->raw_jfce_;
+    UBS_SLOG_TRACE(cfg);
+
+    auto raw_jfc = UrmaApi::urma_create_jfc(this->raw_context_, &cfg);
+    if (raw_jfc == nullptr) {
+        UBS_SLOG_ERR("[URMA_API] Create jfc failed, errno " << errno << ", " << cfg);
+        return UBS_ERROR;
+    }
+
+    if (UrmaApi::urma_rearm_jfc(raw_jfc, 0) != URMA_SUCCESS) {
+        UrmaApi::urma_delete_jfc(raw_jfc);
+        UBS_VLOG_ERR("[URMA_API] create jfc failed as rearm jfc failed, errno %d", errno);
+        return UBS_ERROR;
+    }
+
+    auto jfc = MakeRef<UrmaJfc>(EVENT_POLLING, raw_jfc, jfce->raw_jfce_, this);
+    if (jfc == nullptr) {
+        UrmaApi::urma_delete_jfc(raw_jfc);
+        UBS_VLOG_ERR("Create UrmaJfc object failed, probably out of memory");
+        return UBS_MALLOC_FAILED;
+    }
+
+    out = jfc;
+
+    UBS_VLOG_TRACE("jfc created");
     return UBS_OK;
 }
 
@@ -562,6 +630,41 @@ urma_jetty_cfg_t UrmaContext::CreateJettyCfg(uint64_t userCtx)
     cfg.user_ctx = userCtx;
 
     return cfg;
+}
+
+/* jfce related functions */
+UrmaJfce::~UrmaJfce() noexcept
+{
+    Destroy();
+    OBJ_DEC_COUNT(UBS_URMA_JFCE);
+}
+
+void UrmaJfce::Destroy() noexcept
+{
+    if (raw_jfce_ != nullptr) {
+        auto result = UrmaApi::urma_delete_jfce(raw_jfce_);
+        if (result != URMA_SUCCESS) {
+            UBS_VLOG_WARN("[URMA_API] Delete jfc, errno: %d", errno);
+        }
+        raw_jfce_ = nullptr;
+    }
+}
+
+Result UrmaJfce::SetNonBlocking() noexcept
+{
+    if (UNLIKELY(raw_jfce_ == nullptr)) {
+        UBS_VLOG_ERR("Failed to set fd of jfce to non blocking as raw jfce is null");
+        return UBS_ERROR;
+    }
+
+    auto tmp_ctl = fcntl(raw_jfce_->fd, F_GETFL);
+    if (fcntl(raw_jfce_->fd, F_SETFL, static_cast<uint32_t>(tmp_ctl) | O_NONBLOCK) < 0) {
+        UBS_VLOG_ERR("fcntl() set jfc fd to non-blocking failed, errno %d", errno);
+        return UBS_ERROR;
+    }
+
+    UBS_VLOG_TRACE("set fd(%d) of jfce to nonblocking", raw_jfce_->fd);
+    return UBS_OK;
 }
 
 /* urma jfc related function */
