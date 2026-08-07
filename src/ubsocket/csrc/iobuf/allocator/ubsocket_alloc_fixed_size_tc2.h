@@ -285,7 +285,7 @@ ALWAYS_INLINE bool FixedThreadCache2::BatchAllocate(uint16_t batchSize, FixedMin
     /* step1: allocate from unaligned list */
     uint16_t aligned_count = AlignDown(batchSize);
     uint16_t un_aligned_count = batchSize - aligned_count;
-    if (BatchAllocFromUnAligned(un_aligned_count, block, tail)) {
+    if (BatchAllocFromUnAligned(un_aligned_count, block, tail) && aligned_count == 0) {
         return true;
     }
 

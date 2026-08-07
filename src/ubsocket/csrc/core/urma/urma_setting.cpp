@@ -55,7 +55,8 @@ void UrmaSetting::Init() noexcept
 void UrmaSetting::AddRules()
 {
     /* int64 rule: name, required, min, max */
-    Int64Rule rules_int64[] = {{ENV_URMA_EID_IDX, false, 0, 1024}, {ENV_URMA_BOUNDING_DEV, false, 0, 1}};
+    Int64Rule rules_int64[] = {
+        {ENV_URMA_EID_IDX, false, 0, 1024}, {ENV_URMA_BOUNDING_DEV, false, 0, 1}, {ENV_URMA_BUSY_POLLING, false, 0, 1}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {};

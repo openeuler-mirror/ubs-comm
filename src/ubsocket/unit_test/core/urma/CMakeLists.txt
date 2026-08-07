@@ -156,3 +156,15 @@ target_link_libraries(urma_context_pool_test PRIVATE
 target_sources(urma_context_pool_test PRIVATE
         urma_context_pool_test.cpp
 )
+
+add_urma_test(urma_socket_buf_test)
+target_include_directories(urma_socket_buf_test PRIVATE
+        ${UBSOCKET_BASE_DIR}/csrc
+        ${UBSOCKET_BASE_DIR}/csrc/common
+)
+target_link_libraries(urma_socket_buf_test PRIVATE
+        ubsocket_static GTest::gtest_main pthread
+)
+target_sources(urma_socket_buf_test PRIVATE
+        urma_socket_buf_test.cpp
+)

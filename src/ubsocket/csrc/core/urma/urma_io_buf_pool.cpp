@@ -137,7 +137,6 @@ urma_target_seg_t *UrmaIoBufferPool::get_remote_target_seg(RemoteSegmentsPtr &re
     }
 
     auto res = remote->remote_target_segs_[block_index];
-    UBS_VLOG_TRACE("checking seg remote ptr=0x%lx, block_index=%u, res=%p", ptr, block_index, res);
     return res;
 }
 
@@ -197,7 +196,6 @@ Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma
     }
 
     if (LIKELY(remote->remote_target_segs_[block_index] != nullptr)) {
-        UBS_VLOG_TRACE("store_remote_target_seg: block_index = %d already set.", block_index);
         return UBS_OK;
     }
 

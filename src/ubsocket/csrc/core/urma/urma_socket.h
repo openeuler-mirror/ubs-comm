@@ -157,8 +157,11 @@ using UrmaSocketPtr = Ref<UrmaSocket>;
 
 ALWAYS_INLINE int UrmaSocket::DoNotifyWritable()
 {
+    PROF_START(URMA_SOCKET_EVENT_WRITE);
     FetchOrReachEpollEvents(EPOLLOUT);
-    return eventfd_write(event_fd_, 1);
+    auto ret = eventfd_write(event_fd_, 1);
+    PROF_END(URMA_SOCKET_EVENT_WRITE, true);
+    return ret;
 }
 
 } // namespace urma

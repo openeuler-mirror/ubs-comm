@@ -153,6 +153,8 @@ private:
 
     // ---- Bitmap (reclaimer exclusive read/write, cache line 4+) ----
     alignas(64) uint64_t bitmap_[UrmaSockBuf::kMaxChunks / 64];
+
+    friend class UrmaSockContinuousBuf;
 };
 
 /**
@@ -202,6 +204,137 @@ private:
     std::pmr::unsynchronized_pool_resource pool_res_;
     std::pmr::map<uint64_t, uint64_t> addressTree_;      ///< Free blocks by offset, key=offset, value=size
     std::pmr::set<SpaceRange, RangeSizeFirst> sizeTree_; ///< Free blocks by size (best-fit lookup)
+};
+
+/**
+ * @brief Offset-shifting decorator for URMA socket buffer allocators
+ *
+ * Wraps any UrmaSockBuf and applies a logical offset shift: Allocate returns
+ * `(base_offset + shift_bytes) % capacity_`, and Release reverse-shifts back.
+ * The underlying buffer capacity and space accounting are unchanged —
+ * Available, Used, and Capacity delegate directly to the base allocator.
+ *
+ * Primary use case: reserve a guard region at the "logical end" of a ring buffer
+ * for URMA control messages, preventing the allocator from returning offsets
+ * near the capacity boundary where a small allocation would immediately wrap.
+ *
+ * - **Coordinate transform**: `caller_offset = (base_offset + shift_bytes) % capacity_`
+ * - **Reverse transform**: `base_offset = (caller_offset + capacity_ - shift_bytes) % capacity_`
+ * - **Ownership**: takes ownership of base, deletes in destructor
+ * - **Shift normalization**: constructor applies `shift % capacity_` to keep shift in [0, capacity_)
+ */
+class UrmaSockShiftBuf : public UrmaSockBuf {
+public:
+    /**
+     * @brief Construct with a base allocator and offset shift
+     * @param base  Underlying allocator (ownership transferred)
+     * @param shift Byte offset to add to all returned offsets (normalized mod capacity_)
+     */
+    explicit UrmaSockShiftBuf(UrmaSockBuf *base, uint64_t shift) noexcept
+        : base_{base},
+          shift_bytes{shift % base_->Capacity()},
+          capacity_{base->Capacity()}
+    {
+    }
+    ~UrmaSockShiftBuf() override
+    {
+        delete base_;
+        base_ = nullptr;
+    }
+    bool Allocate(uint64_t size, uint64_t &offset) noexcept override;
+    uint64_t Allocate(uint64_t minSize, uint64_t maxSize, uint64_t &offset) noexcept override;
+    void Release(uint64_t offset, uint64_t size) noexcept override;
+    uint64_t Available() const noexcept override;
+    uint64_t Used() const noexcept override;
+    uint64_t Capacity() const noexcept override
+    {
+        return capacity_;
+    }
+
+private:
+    UrmaSockBuf *base_;
+    const uint64_t shift_bytes; ///< Normalized offset shift applied to Allocate/Release
+    const uint64_t capacity_;   ///< Cached from base for inline Capacity()
+};
+
+/**
+ * @brief Contiguous-allocation decorator for URMA socket buffer allocators
+ *
+ * Guarantees that every returned allocation is physically contiguous — the caller
+ * always sees `offset + size <= capacity_`, even when the base allocator (e.g. a ring buffer)
+ * returns an allocation that wraps around the buffer boundary.
+ *
+ * ## How it handles wrapping
+ *
+ * When the base allocator produces a wrapped allocation spanning `[base_offset, capacity_)`
+ * (end_size) and `[0, wrap_size)` (wrap_size), the decorator reshapes it:
+ *
+ *    1. Release the end portion `[base_offset, capacity_)` — it's no longer needed
+ *    2. Allocate `end_size` additional bytes to extend the wrap portion into a full block
+ *    3. Verify the new allocation is contiguous: `append_offset == wrap_size`
+ *    4. Return `offset = 0, size = wrap_size + end_size` — a single contiguous region
+ *
+ * ## Best-effort min/max semantics
+ *
+ * When the base returns less than max_size and wrapping occurs, the decorator releases
+ * the end portion and returns only the wrap_size bytes (if >= min_size) rather than
+ * performing a secondary allocation. This avoids fragmenting the buffer with an
+ * expensive re-allocation when the caller accepts a smaller result.
+ *
+ * - **Ownership**: takes ownership of base, deletes in destructor
+ * - **Release**: transparent pass-through — contiguous allocations never wrap on release
+ * - **Capacity/Available/Used**: delegate directly to base
+ */
+class UrmaSockContinuousBuf : public UrmaSockBuf {
+public:
+    /**
+     * @brief Construct with a base allocator
+     * @param base Underlying allocator (ownership transferred)
+     */
+    explicit UrmaSockContinuousBuf(UrmaSockBuf *base, uintptr_t addr) noexcept
+        : base_{static_cast<UrmaSockRingBuf *>(base)},
+          capacity_{base->Capacity()}, start_addr_{addr}
+    {
+        pthread_spin_init(&lock_, 0);
+    }
+    ~UrmaSockContinuousBuf() override
+    {
+        delete base_;
+        base_ = nullptr;
+        pthread_spin_destroy(&lock_);
+    }
+
+    bool Allocate(uint64_t size, uint64_t &offset) noexcept override;
+    uint64_t Allocate(uint64_t min_size, uint64_t max_size, uint64_t &offset) noexcept override;
+    void Release(uint64_t offset, uint64_t size) noexcept override;
+    uint64_t Available() const noexcept override;
+    uint64_t Used() const noexcept override;
+    uint64_t Capacity() const noexcept override
+    {
+        return capacity_;
+    }
+
+private:
+    struct LaterReleaseNode {
+        LaterReleaseNode *next;
+        uint64_t offset;
+        uint64_t size;
+
+        LaterReleaseNode() noexcept: next{nullptr}, offset{0}, size{0} {}
+        LaterReleaseNode(uint64_t o, uint64_t s) noexcept : next{nullptr}, offset{o}, size{s} {}
+    };
+
+    void AddLaterReleaseNode(uint64_t offset, uint64_t size) noexcept;
+    void AddLaterReleaseNode(uint64_t offset1, uint64_t size1, uint64_t offset2, uint64_t size2) noexcept;
+    void ReleaseAllLaterNodes() noexcept;
+
+    UrmaSockRingBuf *base_;
+    const uint64_t capacity_; ///< Cached from base for inline Capacity()
+    const uintptr_t start_addr_;
+    pthread_spinlock_t lock_{};
+    LaterReleaseNode *later_release_head_{nullptr};
+    std::atomic<uint64_t> later_release_node_count{0};
+    std::atomic<uint64_t> wrap_end_offset_{0};
 };
 
 } // namespace urma

@@ -394,6 +394,7 @@ Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingTyp
             UBS_VLOG_ERR("Create UrmaJfc object failed, probably out of memory");
             return UBS_MALLOC_FAILED;
         }
+        out = jfc;
     }
 
     UBS_VLOG_DEBUG("jfc created");
