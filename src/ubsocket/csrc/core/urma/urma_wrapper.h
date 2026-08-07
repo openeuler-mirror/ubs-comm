@@ -281,7 +281,7 @@ public:
           context_(ctx)
     {
         UBS_ASSERT(jfc != nullptr);
-        UBS_ASSERT(pollingType == EVENT_POLLING && jfce != nullptr);
+        UBS_ASSERT(jfce != nullptr);
         UBS_ASSERT(ctx != nullptr);
         OBJ_INC_COUNT(UBS_URMA_JFC);
     }

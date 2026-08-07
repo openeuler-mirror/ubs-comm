@@ -54,9 +54,19 @@ Result UrmaSocket::Initialize() noexcept
     recv_buf_addr_ = reinterpret_cast<uintptr_t>(buffer);
     send_buf_addr_ = recv_buf_addr_ + recv_buf_size_;
 
-    send_buf_ = new (std::nothrow) UrmaSockRingBuf(send_buf_size_);
+    UrmaSockBuf *base_ring_buf = new (std::nothrow) UrmaSockRingBuf(send_buf_size_);
+    if (UNLIKELY(base_ring_buf == nullptr)) {
+        UBS_SLOG_ERR("UrmaSocket: ringbuf alloc failed, fd=" << raw_socket_);
+        UrmaBackend::Instance().GetAllocator()->direct_release(buffer);
+        send_buf_addr_ = 0;
+        recv_buf_addr_ = 0;
+        return UBS_MALLOC_FAILED;
+    }
+
+    send_buf_ = new (std::nothrow) UrmaSockContinuousBuf(base_ring_buf, send_buf_addr_);
     if (UNLIKELY(send_buf_ == nullptr)) {
         UBS_SLOG_ERR("UrmaSocket: ringbuf alloc failed, fd=" << raw_socket_);
+        delete base_ring_buf;
         UrmaBackend::Instance().GetAllocator()->direct_release(buffer);
         send_buf_addr_ = 0;
         recv_buf_addr_ = 0;
@@ -151,20 +161,26 @@ bool UrmaSocket::IsBindRemote()
 
 int UrmaSocket::NotifySocketReadable()
 {
+    PROF_START(URMA_SOCKET_EVENT_WRITE);
     auto current_events = events_.load(std::memory_order_acquire);
     if ((current_events & EPOLLIN) == 0) { // 未关注 IN 事件，仅记录可读不通知eventfd
         socket_readable_ready_.store(true, std::memory_order_release);
         if ((events_.load(std::memory_order_acquire) & EPOLLIN) != 0) { // double check
             if (socket_readable_ready_.exchange(false, std::memory_order_acq_rel)) {
                 FetchOrReachEpollEvents(EPOLLIN);
-                return eventfd_write(event_fd_, 1);
+                auto ret = eventfd_write(event_fd_, 1);
+                PROF_END(URMA_SOCKET_EVENT_WRITE, true);
+                return ret;
             }
         }
+        PROF_END(URMA_SOCKET_EVENT_WRITE, true);
         return 0;
     }
 
     FetchOrReachEpollEvents(EPOLLIN);
-    return eventfd_write(event_fd_, 1);
+    auto ret = eventfd_write(event_fd_, 1);
+    PROF_END(URMA_SOCKET_EVENT_WRITE, true);
+    return ret;
 }
 
 void UrmaSocket::HandleRecvCqe(const WriteImmData &imm)
@@ -190,28 +206,39 @@ void UrmaSocket::HandleRecvCqe(const WriteImmData &imm)
 
 void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
 {
+    PROF_START(URMA_SOCKET_DATA_REACH_PROC);
     auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_ctl_off = static_cast<uint32_t>(imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT);
     if (UNLIKELY(recv_ctl_off >= recv_buf_size_)) {
-        UBS_VLOG_ERR("socket fd(%) receive invalid imm(opcode: %lx, off:%lx) off_by_bytes: %lx", raw_socket_,
-                     imm.ubsocket.opcode, imm.ubsocket.buffer_offset, recv_ctl_off);
+        UBS_VLOG_ERR("socket fd(%d) receive invalid imm(opcode: %u, off:%u) off_by_bytes: %u", raw_socket_,
+                     static_cast<unsigned>(imm.ubsocket.opcode), static_cast<unsigned>(imm.ubsocket.buffer_offset),
+                     recv_ctl_off);
         return;
     }
     auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_ctl_off);
-    UBS_VLOG_TRACE("socket(%d) HandlePreWrite imm_off:%lu, recv_off:%u, req->seq_no=%lu", raw_socket_,
-                   imm.ubsocket.buffer_offset, recv_ctl_off, req->head.sequence_no);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv req write_imm(%u:%u) req_id(%lu) seq(%lu)",
+               raw_socket_, static_cast<unsigned>(imm.ubsocket.opcode),
+               static_cast<unsigned>(imm.ubsocket.buffer_offset), req->head.request_id,
+               req->head.sequence_no);
     auto res = rdma_rx_ops->DataReached(this, req->head.sequence_no, imm.data);
     if (UNLIKELY(res != UBS_OK)) {
         UBS_VLOG_ERR("socket fd(%d) process large io ctrl message failed: %d", raw_socket_, res);
     }
+    PROF_END(URMA_SOCKET_DATA_REACH_PROC, true);
 }
 
 void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
 {
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
-    auto used = ubsocket_get_timeNs() - req->head.trace_time;
-    PROF_RECORD(URMA_SOCKET_WRITE_LARGE, used, true);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv resp write_imm(%u:%u) req_id(%lu) seq(%lu)",
+           raw_socket_, static_cast<unsigned>(imm.ubsocket.opcode),
+           static_cast<unsigned>(imm.ubsocket.buffer_offset), req->head.request_id,
+           req->head.sequence_no);
+    if (ubsocket_prof_enabled != 0) {
+        auto used = ubsocket_get_timeNs() - req->head.trace_time;
+        ubsocket_prof_record(URMA_SOCKET_FULL_WRITE_LARGE, "URMA_SOCKET_FULL_WRITE_LARGE", used, true);
+    }
     auto block_refs_ptr = reinterpret_cast<std::vector<BlockRef> *>(req->head.user_ctx);
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
@@ -229,32 +256,45 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
 
 void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
 {
+    PROF_START(URMA_SOCKET_DATA_REACH_PROC);
     auto urma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
-    UBS_VLOG_TRACE("HandleWriteInBand imm_off:%lu, recv_off:%lu, req->seq_no=%lu", imm.ubsocket.buffer_offset,
-                   recv_offset, req->head.sequence_no);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv req write_imm(%u:%u) req_id(%lu) seq(%lu)",
+           raw_socket_, static_cast<unsigned>(imm.ubsocket.opcode),
+           static_cast<unsigned>(imm.ubsocket.buffer_offset), req->head.request_id,
+           req->head.sequence_no);
     auto res = urma_rx_ops->DataReached(this, req->head.sequence_no, imm.data);
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
     }
+    PROF_END(URMA_SOCKET_DATA_REACH_PROC, true);
 }
 
 void UrmaSocket::DataReadFinsihed(uint32_t seq_no)
 {
+    PROF_START(URMA_SOCKET_PULL_FINISH_PROC);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv data read finished cr seq(%u)", raw_socket_, seq_no);
     auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto res = rdma_rx_ops->DataReadFinished(this, seq_no);
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
     }
+    PROF_END(URMA_SOCKET_PULL_FINISH_PROC, true);
 }
 
 void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
 {
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
-    auto used = ubsocket_get_timeNs() - req->head.trace_time;
-    PROF_RECORD(URMA_SOCKET_WRITE_INLINE, used, true);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv resp write_imm(%u:%u) req_id(%lu) seq(%lu)",
+       raw_socket_, static_cast<unsigned>(imm.ubsocket.opcode),
+       static_cast<unsigned>(imm.ubsocket.buffer_offset), req->head.request_id,
+       req->head.sequence_no);
+    if (ubsocket_prof_enabled != 0) {
+        auto used = ubsocket_get_timeNs() - req->head.trace_time;
+        ubsocket_prof_record(URMA_SOCKET_FULL_WRITE_INLINE, "URMA_SOCKET_FULL_WRITE_INLINE", used, true);
+    }
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
         NotifyWritable();

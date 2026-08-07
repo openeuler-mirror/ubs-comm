@@ -96,8 +96,8 @@ void UrmaTxOps::CopyFromIovToSendBuf(const std::vector<iovec> &iov, const std::v
 void UrmaTxOps::SetupSgeContext(const UrmaSocketPtr &sock, uint64_t buf_offset, uint64_t alloc_size,
                                 SgeContext &ctx) noexcept
 {
-    ctx.src_sges.resize(2);
-    ctx.dst_sges.resize(2);
+    ctx.src_sges.resize(1);
+    ctx.dst_sges.resize(1);
     ctx.src_sges[0].addr = sock->send_buf_addr_ + buf_offset;
     ctx.src_sges[0].len = static_cast<uint32_t>(alloc_size);
     ctx.src_sges[0].tseg = sock->local_ctrl_target_seg_;
@@ -107,20 +107,6 @@ void UrmaTxOps::SetupSgeContext(const UrmaSocketPtr &sock, uint64_t buf_offset, 
 
     ctx.src_sg = {.sge = ctx.src_sges.data(), .num_sge = 1};
     ctx.dst_sg = {.sge = ctx.dst_sges.data(), .num_sge = 1};
-
-    auto capacity = sock->send_buf_->Capacity();
-    if (UNLIKELY(buf_offset + alloc_size > capacity)) {
-        uint32_t part0 = static_cast<uint32_t>(capacity - buf_offset);
-        uint32_t part1 = static_cast<uint32_t>(alloc_size - part0);
-        ctx.src_sges[1] = ctx.src_sges[0];
-        ctx.dst_sges[1] = ctx.dst_sges[0];
-        ctx.src_sges[0].len = ctx.dst_sges[0].len = part0;
-        ctx.src_sges[1].len = ctx.dst_sges[1].len = part1;
-        ctx.src_sges[1].addr = sock->send_buf_addr_;
-        ctx.dst_sges[1].addr = sock->rmt_recv_buf_addr_;
-        ctx.src_sg.num_sge++;
-        ctx.dst_sg.num_sge++;
-    }
 }
 
 ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total,
@@ -176,8 +162,13 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
     urma_rw_wr_t rw = {.src = ctx.src_sg, .dst = ctx.dst_sg, .target_hint = 0, .notify_data = imm_data.data};
 
     auto user_ctx = SenderCRContext{CTRL_DATA_REQUEST, seq_no, fd_}.value;
-    ((UrmaCtrlMessage *)(ctx.src_sges[0].addr))->head.trace_time = ubsocket_get_timeNs();
+    auto req = (UrmaCtrlMessage *)(ctx.src_sges[0].addr);
+    req->head.trace_time = ubsocket_get_timeNs();
     auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, user_ctx);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) send req write_imm(%u:%u) req_id(%lu) seq(%lu) return(%d)",
+                   sock->Fd(), static_cast<unsigned>(imm_data.ubsocket.opcode),
+                   static_cast<unsigned>(imm_data.ubsocket.buffer_offset), req->head.request_id,
+                   req->head.sequence_no, urma_ret);
     if (urma_ret != URMA_SUCCESS) {
         urma_sock->send_buf_->Release(buf_offset, real_size);
         UBS_SLOG_ERR("Urma post write_imm for request: " << ctrl_message.head.request_id << " return " << urma_ret);
@@ -233,7 +224,9 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
 
     uint64_t buf_offset = 0;
     if (!urma_sock->send_buf_->Allocate(need_size, buf_offset)) {
-        UBS_VLOG_ERR("socket(%d) allocate send buf with size(%lu) failed.", sock->Fd(), need_size);
+        UBS_VLOG_ERR("socket(%d) allocate send buf with size(%lu) failed, cap(%lu) used(%lu) ava(%lu).", sock->Fd(),
+                     need_size, urma_sock->send_buf_->Capacity(), urma_sock->send_buf_->Used(),
+                     urma_sock->send_buf_->Available());
         errno = EAGAIN;
         return -1;
     }
@@ -244,7 +237,6 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
     auto seq_no = __atomic_fetch_add(&seq_gen_, 1U, __ATOMIC_RELAXED);
     const auto request_id = (static_cast<uint64_t>(fd_) << 32) | (seq_no & 0xFFFFFFFFUL);
 
-    const bool is_wrap = (ctx.src_sg.num_sge > 1);
     char *dst = reinterpret_cast<char *>(ctx.src_sges[0].addr);
     auto *head = reinterpret_cast<UrmaMessageHead *>(dst);
     head->request_id = request_id;
@@ -256,38 +248,11 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
     head->user_ctx = reinterpret_cast<uintptr_t>(block_refs_ptr);
 
     auto allocator = UrmaBackend::Instance().GetAllocator();
-    auto start_addr = allocator->get_local_start_addr();
     auto *bufs = reinterpret_cast<PageBufferInMessage *>(head + 1);
-    if (!is_wrap) {
-        for (uint32_t i = 0; i < valid_count; i++) {
-            bufs[i].addr = reinterpret_cast<uint64_t>(block_refs[i].block->data + block_refs[i].offset);
-            bufs[i].size = block_refs[i].length;
-            bufs[i].flags = allocator->get_local_target_seg(bufs[i].addr)->seg.token_id;
-        }
-    } else {
-        uint32_t part0 = ctx.src_sges[0].len;
-        uint32_t seg_remain = part0 >= sizeof(UrmaMessageHead) ? part0 - sizeof(UrmaMessageHead) : 0;
-        char *cur = dst + sizeof(UrmaMessageHead);
-        for (uint32_t i = 0; i < valid_count; i++) {
-            PageBufferInMessage entry;
-            entry.addr = reinterpret_cast<uint64_t>(block_refs[i].block->data + block_refs[i].offset);
-            entry.size = block_refs[i].length;
-            entry.flags = allocator->get_local_target_seg(entry.addr)->seg.token_id;
-            if (seg_remain >= sizeof(entry)) {
-                memcpy(cur, &entry, sizeof(entry));
-                cur += sizeof(entry);
-                seg_remain -= sizeof(entry);
-            } else if (seg_remain > 0) {
-                memcpy(cur, &entry, seg_remain);
-                memcpy(reinterpret_cast<char *>(ctx.src_sges[1].addr),
-                       reinterpret_cast<const char *>(&entry) + seg_remain, sizeof(entry) - seg_remain);
-                cur = reinterpret_cast<char *>(ctx.src_sges[1].addr) + (sizeof(entry) - seg_remain);
-                seg_remain = ctx.src_sges[1].len - (sizeof(entry) - seg_remain);
-            } else {
-                memcpy(cur, &entry, sizeof(entry));
-                cur += sizeof(entry);
-            }
-        }
+    for (uint32_t i = 0; i < valid_count; i++) {
+        bufs[i].addr = reinterpret_cast<uint64_t>(block_refs[i].block->data + block_refs[i].offset);
+        bufs[i].size = block_refs[i].length;
+        bufs[i].flags = allocator->get_local_target_seg(bufs[i].addr)->seg.token_id;
     }
 
     WriteImmData imm_data{PRE_WRITE, buf_offset / unit};
@@ -295,18 +260,25 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
 
     auto user_ctx = SenderCRContext{CTRL_DATA_REQUEST, seq_no, fd_}.value;
     head->trace_time = ubsocket_get_timeNs();
+    for (uint32_t i = 0; i < valid_count; i++) {
+        block_refs[i].block->IncRef();
+    }
+
     auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, user_ctx);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) send req write_imm(%u:%u) req_id(%lu) seq(%lu) return(%d)",
+                   sock->Fd(), static_cast<unsigned>(imm_data.ubsocket.opcode),
+                   static_cast<unsigned>(imm_data.ubsocket.buffer_offset), head->request_id,
+                   head->sequence_no, urma_ret);
     if (urma_ret != URMA_SUCCESS) {
         urma_sock->send_buf_->Release(buf_offset, need_size);
         UBS_SLOG_ERR("Urma post write_imm for request: " << request_id << " return " << urma_ret);
         errno = EAGAIN;
         head->user_ctx = 0;
+        for (uint32_t i = 0; i < valid_count; i++) {
+            block_refs[i].block->DecRef();
+        }
         delete block_refs_ptr;
         return -1;
-    }
-
-    for (uint32_t i = 0; i < valid_count; i++) {
-        block_refs[i].block->IncRef();
     }
 
     UBS_VLOG_TRACE("ctl_msg(req_id=%lx, seq_no=%lx, msg_size=%hu, data_count=%u, buf_count=%u, return %zu", request_id,

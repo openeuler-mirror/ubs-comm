@@ -14,6 +14,8 @@
 
 #include "urma_socket_buf.h"
 
+#include "common/ubsocket_logger.h"
+
 namespace ock {
 namespace ubs {
 namespace urma {
@@ -661,6 +663,199 @@ uint64_t UrmaSockRbTreeBuf::Available() const noexcept
 uint64_t UrmaSockRbTreeBuf::Used() const noexcept
 {
     return capacity_ - Available();
+}
+
+bool UrmaSockShiftBuf::Allocate(uint64_t size, uint64_t &offset) noexcept
+{
+    uint64_t base_offset = 0;
+    auto success = base_->Allocate(size, base_offset);
+    if (!success) {
+        return false;
+    }
+
+    offset = (base_offset + shift_bytes) % capacity_;
+    return true;
+}
+
+uint64_t UrmaSockShiftBuf::Allocate(uint64_t minSize, uint64_t maxSize, uint64_t &offset) noexcept
+{
+    uint64_t base_offset = 0;
+    auto success_size = base_->Allocate(minSize, maxSize, base_offset);
+    if (success_size == 0) {
+        return 0;
+    }
+
+    offset = (base_offset + shift_bytes) % capacity_;
+    return success_size;
+}
+
+uint64_t UrmaSockShiftBuf::Available() const noexcept
+{
+    return base_->Available();
+}
+
+uint64_t UrmaSockShiftBuf::Used() const noexcept
+{
+    return base_->Used();
+}
+
+void UrmaSockShiftBuf::Release(uint64_t offset, uint64_t size) noexcept
+{
+    uint64_t base_offset = (offset + capacity_ - shift_bytes) % capacity_;
+    base_->Release(base_offset, size);
+}
+
+bool UrmaSockContinuousBuf::Allocate(uint64_t size, uint64_t &offset) noexcept
+{
+    uint64_t base_offset = 0;
+    auto success = base_->Allocate(size, base_offset);
+    if (UNLIKELY(!success)) {
+        return false;
+    }
+
+    if (LIKELY(base_offset + size <= capacity_)) {
+        offset = base_offset;
+        return true;
+    }
+
+    auto end_size = capacity_ - base_offset;
+    auto wrap_size = size - end_size;
+    uint64_t append_offset = 0;
+    success = base_->Allocate(end_size, append_offset);
+    if (UNLIKELY(!success)) {
+        AddLaterReleaseNode(base_offset, size);
+        return false; // allocator crash
+    }
+
+    if (UNLIKELY(append_offset != wrap_size)) {
+        AddLaterReleaseNode(base_offset, size, append_offset, end_size);
+        return false; // allocator crash
+    }
+
+    offset = 0;
+    wrap_end_offset_.store(base_offset, std::memory_order_relaxed);
+    return true;
+}
+
+uint64_t UrmaSockContinuousBuf::Allocate(uint64_t min_size, uint64_t max_size, uint64_t &offset) noexcept
+{
+    uint64_t base_offset = 0;
+    auto success_size = base_->Allocate(min_size, max_size, base_offset);
+    if (UNLIKELY(success_size < min_size)) {
+        return 0;
+    }
+
+    if (LIKELY(base_offset + success_size <= capacity_)) {
+        offset = base_offset;
+        return success_size;
+    }
+
+    auto end_size = capacity_ - base_offset;
+    auto wrap_size = success_size - end_size;
+    if (success_size < max_size) {
+        if (wrap_size < min_size) {
+            AddLaterReleaseNode(base_offset, success_size);
+            return 0; // allocator crash
+        }
+
+        offset = 0;
+        wrap_end_offset_.store(base_offset, std::memory_order_relaxed);
+        return wrap_size;
+    }
+
+    uint64_t append_offset = 0;
+    if (UNLIKELY(!base_->Allocate(end_size, append_offset))) {
+        offset = 0;
+        wrap_end_offset_.store(base_offset, std::memory_order_relaxed);
+        return wrap_size;
+    }
+
+    if (UNLIKELY(append_offset != wrap_size)) {
+        offset = 0;
+        wrap_end_offset_.store(base_offset, std::memory_order_relaxed);
+        return wrap_size; // allocator crash
+    }
+
+    offset = 0;
+    wrap_end_offset_.store(base_offset, std::memory_order_relaxed);
+    return success_size;
+}
+
+void UrmaSockContinuousBuf::Release(uint64_t offset, uint64_t size) noexcept
+{
+    if (later_release_node_count.load(std::memory_order_relaxed) > 0) {
+        ReleaseAllLaterNodes();
+    }
+
+    uint64_t real_offset = offset;
+    uint64_t real_size = size;
+    if (UNLIKELY(offset == 0)) {
+        real_offset = wrap_end_offset_.exchange(0U, std::memory_order_relaxed);
+        if (real_offset != 0) {
+            real_size += (capacity_ - real_offset);
+        }
+    }
+    base_->Release(real_offset, real_size);
+}
+
+uint64_t UrmaSockContinuousBuf::Available() const noexcept
+{
+    return base_->Available();
+}
+
+uint64_t UrmaSockContinuousBuf::Used() const noexcept
+{
+    return base_->Used();
+}
+
+void UrmaSockContinuousBuf::AddLaterReleaseNode(uint64_t offset, uint64_t size) noexcept
+{
+    auto node = reinterpret_cast<LaterReleaseNode *>(start_addr_ + offset);
+    node->offset = offset;
+    node->size = size;
+
+    pthread_spin_lock(&lock_);
+    node->next = later_release_head_;
+    later_release_head_ = node;
+    pthread_spin_unlock(&lock_);
+    later_release_node_count.fetch_add(1UL, std::memory_order_relaxed);
+}
+
+void UrmaSockContinuousBuf::AddLaterReleaseNode(uint64_t offset1, uint64_t size1, uint64_t offset2,
+                                                uint64_t size2) noexcept
+{
+    auto node1 = reinterpret_cast<LaterReleaseNode *>(start_addr_ + offset1);
+    node1->offset = offset1;
+    node1->size = size1;
+
+    auto node2 = reinterpret_cast<LaterReleaseNode *>(start_addr_ + offset2);
+    node2->offset = offset2;
+    node2->size = size2;
+    node1->next = node2;
+
+    pthread_spin_lock(&lock_);
+    node2->next = later_release_head_;
+    later_release_head_ = node1;
+    pthread_spin_unlock(&lock_);
+    later_release_node_count.fetch_add(2UL, std::memory_order_relaxed);
+}
+
+void UrmaSockContinuousBuf::ReleaseAllLaterNodes() noexcept
+{
+    pthread_spin_lock(&lock_);
+    auto header = later_release_head_;
+    later_release_head_ = nullptr;
+    pthread_spin_unlock(&lock_);
+
+    auto count = 0UL;
+    while (header != nullptr) {
+        auto next = header->next;
+        base_->Release(header->offset, header->size);
+        header = next;
+        count++;
+    }
+
+    later_release_node_count.fetch_sub(count, std::memory_order_relaxed);
 }
 
 } // namespace urma
