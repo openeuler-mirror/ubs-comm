@@ -106,8 +106,8 @@ ssize_t UrmaRxOps::ZeroCopyRead(const SocketPtr &sock, DataSlot &slot, uint64_t 
     ssize_t rx_total_len = block_cache_.CutAndInsertAfter(iov_total, out_first_block);
     if (rx_total_len == 0) {
         UBS_VLOG_ERR("zcopy read fd(%d) first addr: %p invalid, return 0", fd_, w.iov[0].iov_base);
-        errno = EIO;
-        return UBS_ERROR;
+        errno = EAGAIN;
+        return -1;
     }
 
     out_first_block->size = out_first_block->cap;
