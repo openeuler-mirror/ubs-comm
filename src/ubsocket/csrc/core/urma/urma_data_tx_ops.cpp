@@ -201,7 +201,7 @@ void UrmaTxOps::BuildBlockRefs(const struct iovec *iov, int iovcnt, std::vector<
 ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total,
                                   uint32_t flags) noexcept
 {
-    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    UrmaSocketPtr urma_sock = RefStaticCast<UrmaSocket>(sock);
     if (UNLIKELY(urma_sock->send_buf_ == nullptr)) {
         errno = ENOTCONN;
         return -1;

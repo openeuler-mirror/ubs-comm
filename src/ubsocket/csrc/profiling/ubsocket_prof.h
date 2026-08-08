@@ -166,7 +166,7 @@ void ubsocket_prof_reset();
 
 static __always_inline uint64_t ubsocket_get_timeNs()
 {
-#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+#if defined(__aarch64__)
     uint64_t timeValue = 0;
     __asm__ volatile("mrs %0, cntvct_el0" : "=r"(timeValue));
     return timeValue * 1000L / ubsocket_arm_cpu_freq;

@@ -75,7 +75,7 @@ UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *add
     }
 
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     if (sockBase == nullptr) {
         UBS_VLOG_TRACE("accept on fd(%d) not ubsocket, use libc accept.", fd);
         return LibcApi::accept(fd, address, address_len);
@@ -148,7 +148,7 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
         return LibcApi::connect(fd, address, address_len);
     }
     sock->create_type_ = SOCK_CREATE_TYPE_CONNECT;
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     return sockBase->Connect(sock, address, address_len);
 }
 
@@ -159,7 +159,7 @@ UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
         return LibcApi::readv(fd, iov, iovcnt);
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     if (sockBase == nullptr) {
         UBS_VLOG_TRACE("enter posix libc readv fd=%d, iovcnt=%d, iov[0].buf=%p", fd, iovcnt, iov[0].iov_base);
         return LibcApi::readv(fd, iov, iovcnt);
@@ -174,7 +174,7 @@ UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
         return LibcApi::writev(fd, iov, iovcnt);
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     if (sockBase == nullptr) {
         UBS_VLOG_TRACE("enter posix libc writev fd=%d, iovcnt=%d, iov[0].buf=%p", fd, iovcnt, iov[0].iov_base);
         return LibcApi::writev(fd, iov, iovcnt);
@@ -300,7 +300,7 @@ UBS_API int UB_API_WRAP(getsockopt)(int fd, int level, int optname, void *optval
     }
 
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     if (sockBase == nullptr) {
         return LibcApi::getsockopt(fd, level, optname, optval, optlen);
     }

@@ -209,12 +209,11 @@ void TxCqePoller::RunInThread() noexcept
                     break;
                 }
                 if (sock != nullptr) {
-                    // TODO dynamic_cast -> static_cast
-                    auto sockBase = RefDynamicCast<SocketBase>(sock);
+                    SocketBase *sockBase = RefStaticCastToRaw<SocketBase>(sock);
                     if (sockBase != nullptr) {
                         auto *txOps = static_cast<umq::UmqTxOps *>(sockBase->GetTx()->GetTxOps());
                         if (txOps != nullptr) {
-                            txOps->PollTx(sock.Get());
+                            txOps->PollTx(sockBase);
                         }
                     }
                 }

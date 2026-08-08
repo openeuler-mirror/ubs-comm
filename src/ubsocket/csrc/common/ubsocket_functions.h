@@ -190,7 +190,7 @@ ALWAYS_INLINE uint32_t Func::SecureRandUInt32() noexcept
 
 ALWAYS_INLINE uint64_t Func::CurrentTimeNs() noexcept
 {
-#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+#if defined(__aarch64__)
     const static uint64_t freq = GetCpuFreq();
     uint64_t timeValue = 0;
     __asm__ volatile("mrs %0, cntvct_el0" : "=r"(timeValue));
@@ -204,7 +204,7 @@ ALWAYS_INLINE uint64_t Func::CurrentTimeNs() noexcept
 
 ALWAYS_INLINE uint64_t Func::GetCpuFreq() noexcept
 {
-#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+#if defined(__aarch64__)
     /* get frequ */
     uint64_t tmpFreq = 0;
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(tmpFreq));

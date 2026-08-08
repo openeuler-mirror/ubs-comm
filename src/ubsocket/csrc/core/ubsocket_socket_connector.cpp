@@ -162,7 +162,7 @@ int Connector::Connect(SocketPtr &sock, const struct sockaddr *address, socklen_
     }
 
     PROF_START(CORE_CONNECT);
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     bool is_blocking = SocketConnHelper::IsBlocking(raw_fd_);
 
     Result ret = connector_ops_->PrepareConnect(raw_fd_, address, address_len, sock);

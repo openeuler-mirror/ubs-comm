@@ -49,7 +49,7 @@ int UrmaAcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation, ss
 
 Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
 {
-    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(socketPtr);
+    UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(socketPtr);
     if (urma_sock == nullptr) {
         UBS_VLOG_ERR("negotiate fd=%d, socket not urma-socket.");
         return UBS_INVALID_PARAM;
@@ -108,7 +108,7 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
 
 Result UrmaAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
 {
-    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(socketPtr);
+    UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(socketPtr);
     if (urma_sock == nullptr) {
         return UBS_INVALID_PARAM;
     }
@@ -119,7 +119,7 @@ Result UrmaAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
         return res;
     }
 
-    return urma_sock->ExchangeSocketResources(fd, *urma_sock.Get());
+    return urma_sock->ExchangeSocketResources(fd, *urma_sock);
 }
 
 void UrmaAcceptorOps::DestroySocketResources() {}

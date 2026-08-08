@@ -428,7 +428,7 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
                     UBS_VLOG_ERR("socket is nullptr for fd: %d", sock_fd);
                     continue;
                 }
-                auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+                auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
                 urma_sock->DataReadFinsihed(seq_no);
                 continue;
             }
@@ -446,7 +446,7 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
                 continue;
             }
 
-            auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+            auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
             urma_sock->HandleRecvCqe(cr[i].imm_data);
             urma_sock->PostEmptyRecvWorkerRecords();
         } else {

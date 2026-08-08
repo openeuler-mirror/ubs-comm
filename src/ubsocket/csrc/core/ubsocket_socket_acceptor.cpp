@@ -108,7 +108,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         SocketPtr sock_obj = ArraySet<Socket>::GetInstance().GetItem(fd);
         if (sock_obj != nullptr) {
             UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d array set exist", sock->Fd(), fd);
-            auto sockBase = RefConvert<Socket, SocketBase>(sock_obj);
+            auto sockBase = RefStaticCastToRaw<SocketBase>(sock_obj);
             sockBase->acceptor_->acceptor_ops_->conn_info.peer_ip = peerIp;
             sockBase->acceptor_->acceptor_ops_->conn_info.peer_fd = fd;
             sockBase->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
@@ -273,7 +273,7 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
         return ret;
     }
     new_socket_obj->event_fd_ = event_fd;
-    auto newSocket = RefConvert<Socket, SocketBase>(new_socket_obj);
+    auto newSocket = RefStaticCastToRaw<SocketBase>(new_socket_obj);
     newSocket->acceptor_->acceptor_ops_->event_fd = event_fd;
     newSocket->acceptor_->acceptor_ops_->conn_info.peer_ip = peerIp;
     newSocket->acceptor_->acceptor_ops_->conn_info.peer_fd = new_fd;

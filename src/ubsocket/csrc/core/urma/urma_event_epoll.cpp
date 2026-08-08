@@ -88,7 +88,7 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
             continue;
         }
 
-        auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+        auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
         events[i].events = urma_sock->GetReachEpollEvents() & event_data->event.events;
         UBS_VLOG_TRACE("urma epoll(%d) urma socket event(evt=0x%x, data=%lx)", epoll_fd_, events[i].events,
                        events[i].data.u64);
@@ -120,7 +120,7 @@ int UrmaEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         return AddRawSocketEvent(fd, event);
     }
 
-    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    auto urma_sock = RefStaticCast<UrmaSocket>(sock);
     auto ret = AddUrmaSocketEvent(urma_sock, event);
     if (ret != 0) {
         return ret;
@@ -156,7 +156,7 @@ int UrmaEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
         return ModRawSocketEvent(fd, event);
     }
 
-    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    auto urma_sock = RefStaticCast<UrmaSocket>(sock);
     auto ret = ModUrmaSocketEvent(urma_sock, event);
     if (ret != 0) {
         return ret;
@@ -194,7 +194,7 @@ int UrmaEventPoll::EpollCtlDel(int fd)
         return DelRawSocketEvent(fd);
     }
 
-    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    auto urma_sock = RefStaticCast<UrmaSocket>(sock);
     auto ret = DelUrmaSocketEvent(urma_sock);
     if (ret != 0) {
         return ret;

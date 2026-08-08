@@ -88,8 +88,8 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
             return result;
         }
 
-        auto sock = RefConvert<UrmaSocket, Socket>(urmaSock);
-        auto sockBase = RefConvert<UrmaSocket, SocketBase>(urmaSock);
+        auto sock = RefStaticCast<Socket>(urmaSock);
+        auto sockBase = RefStaticCast<SocketBase>(urmaSock);
 
         AcceptorOps *acceptorOps = nullptr;
         result = CreateAcceptorOps(t, sock, acceptorOps);
@@ -116,7 +116,7 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
 
 Result SocketBase::GenerateSocketCommOps(const SocketPtr &sock)
 {
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     DataTxOps *txOps = nullptr;
     Result result = CreateTxOps(sock->type_, sock, txOps);
     if (UNLIKELY(result != UBS_OK)) {
