@@ -566,6 +566,7 @@ urma_jfc_cfg_t UrmaContext::CreateJfcCfg(uint32_t queueDepth, uint64_t userCtx)
 
     cfg.depth = queueDepth;
     cfg.user_ctx = userCtx;
+    cfg.flag.bs.lock_free = 1;
 
     return cfg;
 }

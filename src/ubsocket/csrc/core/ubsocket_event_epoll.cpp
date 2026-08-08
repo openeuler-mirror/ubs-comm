@@ -630,7 +630,7 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     // 3. set added epoll fd
-    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     sockBase->SetAddedEpollFd(this, event->data);
     sockBase->SetEvents(event->events);
 

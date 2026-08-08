@@ -196,7 +196,7 @@ Result UrmaRxOps::ResponseCtrlMessage(const SocketPtr &sock, IOOpcode opcode, ui
 {
     (void)flags;
     WriteImmData imm_data{opcode, offset};
-    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
     auto recv_offset = imm_data.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto resp = reinterpret_cast<UrmaCtrlMessage *>(urma_sock->recv_buf_addr_ + recv_offset);
 

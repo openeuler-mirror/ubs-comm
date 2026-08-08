@@ -69,7 +69,7 @@ Result UrmaConnectorOps::PrepareConnect(int new_fd, const struct sockaddr *addre
 Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
 {
     (void)new_fd;
-    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
     if (UNLIKELY(urma_sock == nullptr)) {
         UBS_VLOG_ERR("negotiate fd=%d, socket not urma-socket.");
         return UBS_INVALID_PARAM;
@@ -127,7 +127,7 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
 
 Result UrmaConnectorOps::CreateSocketResources(SocketPtr &sock)
 {
-    UrmaSocketPtr urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
     if (urma_sock == nullptr) {
         UBS_VLOG_ERR("CreateSocketResources fd=%d, socket not urma-socket.");
         return UBS_INVALID_PARAM;
@@ -139,7 +139,7 @@ Result UrmaConnectorOps::CreateSocketResources(SocketPtr &sock)
         return res;
     }
 
-    return urma_sock->ExchangeSocketResources(raw_fd_, *urma_sock.Get());
+    return urma_sock->ExchangeSocketResources(raw_fd_, *urma_sock);
 }
 
 void UrmaConnectorOps::DestroySocketResources() {}
