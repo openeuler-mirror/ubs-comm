@@ -142,6 +142,11 @@ public:
      */
     bool IsBadPort(const std::string &devName, uint32_t eidIndex) noexcept;
 
+    /**
+     * @brief Get all contexts
+     */
+    std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> Contexts() noexcept;
+
 private:
     std::mutex mutex_;                                                        /* mutex for protect all members */
     bool inited_ = false;                                                     /* init flag */
@@ -326,6 +331,12 @@ ALWAYS_INLINE Result UrmaContextPool::GetContext(const std::string &devName, uin
     }
 
     return UBS_ERROR;
+}
+
+ALWAYS_INLINE std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> UrmaContextPool::Contexts() noexcept
+{
+    std::lock_guard<std::mutex> guard(mutex_);
+    return contexts_;
 }
 
 /***********************************************************************************/

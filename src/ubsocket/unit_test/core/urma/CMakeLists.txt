@@ -108,16 +108,16 @@ target_sources(urma_data_rx_test PRIVATE
 
 add_urma_test(urma_data_tx_test)
 target_include_directories(urma_data_tx_test PRIVATE
-    ${UBSOCKET_BASE_DIR}/csrc
-    ${UBSOCKET_BASE_DIR}/csrc/core
-    ${UBSOCKET_BASE_DIR}/csrc/common
-    ${UBSOCKET_BASE_DIR}/csrc/iobuf
-    ${UBSOCKET_BASE_DIR}/csrc/under_api
-    ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
-    ${UBSOCKET_BASE_DIR}/include
+        ${UBSOCKET_BASE_DIR}/csrc
+        ${UBSOCKET_BASE_DIR}/csrc/core
+        ${UBSOCKET_BASE_DIR}/csrc/common
+        ${UBSOCKET_BASE_DIR}/csrc/iobuf
+        ${UBSOCKET_BASE_DIR}/csrc/under_api
+        ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
+        ${UBSOCKET_BASE_DIR}/include
 )
 target_link_libraries(urma_data_tx_test PRIVATE
-    ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
+        ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
 )
 target_sources(urma_data_tx_test PRIVATE
         urma_data_tx_test.cpp
@@ -155,6 +155,23 @@ target_link_libraries(urma_context_pool_test PRIVATE
 )
 target_sources(urma_context_pool_test PRIVATE
         urma_context_pool_test.cpp
+)
+
+add_urma_test(urma_poller_agg_test)
+target_include_directories(urma_poller_agg_test PRIVATE
+        ${UBSOCKET_BASE_DIR}/csrc
+        ${UBSOCKET_BASE_DIR}/csrc/core
+        ${UBSOCKET_BASE_DIR}/csrc/common
+        ${UBSOCKET_BASE_DIR}/csrc/iobuf
+        ${UBSOCKET_BASE_DIR}/csrc/under_api
+        ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
+        ${UBSOCKET_BASE_DIR}/include
+)
+target_link_libraries(urma_poller_agg_test PRIVATE
+        ubsocket_static GTest::gtest_main pthread
+)
+target_sources(urma_poller_agg_test PRIVATE
+        urma_poller_agg.cpp
 )
 
 add_urma_test(urma_socket_buf_test)

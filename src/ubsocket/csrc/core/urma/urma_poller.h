@@ -18,14 +18,6 @@ namespace ock {
 namespace ubs {
 namespace urma {
 
-/**
- * Urma cqe handler,
- * @param flags            [in] optional flags
- * @param cr_count         [in] completion count
- * @param cr               [in] completion array ptr
- */
-using UrmaCqeHandler = std::function<Result(uint32_t flags, int cr_count, urma_cr_t *cr)>;
-
 struct UrmaPollerOptions {
     uint16_t poller_count = 2;
     uint16_t jfc_depth = 16000;

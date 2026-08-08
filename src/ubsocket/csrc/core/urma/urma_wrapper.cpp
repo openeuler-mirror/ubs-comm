@@ -324,7 +324,7 @@ Result UrmaContext::CreateJfce(UrmaJfcePtr &out)
 
     out = tmp;
 
-    UBS_VLOG_TRACE("created jfce with fd(%d) at context(%d)", )
+    UBS_VLOG_TRACE("created jfce with fd(%d) at context(%d)", raw_jfce->fd, context_id_);
     return UBS_OK;
 }
 

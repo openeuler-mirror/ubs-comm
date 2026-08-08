@@ -25,7 +25,7 @@
 
 #include "ubsocket_defines.h"
 
-// #define UBS_LOG_TRACE_ENABLED
+#define UBS_LOG_TRACE_ENABLED
 
 namespace ock {
 namespace ubs {

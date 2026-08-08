@@ -35,9 +35,9 @@ constexpr uint32_t kDefaultCqPollBatch = 32;
  * user_ctx field. The receiver uses it to dispatch the correct CQE handler upon operation completion.
  */
 enum OneSideSenderType : uint8_t {
-    CTRL_DATA_REQUEST = 1,  /* write-in-band: inline-data RDMA WRITE_IMM CQE */
-    CTRL_DATA_RESPONSE,     /* post-write: response to a PRE_WRITE or inline-data ack */
-    READ_DATA_REQUEST,      /* pre-write large IO: RDMA READ completion, data now in local blocks */
+    CTRL_DATA_REQUEST = 1, /* write-in-band: inline-data RDMA WRITE_IMM CQE */
+    CTRL_DATA_RESPONSE,    /* post-write: response to a PRE_WRITE or inline-data ack */
+    READ_DATA_REQUEST,     /* pre-write large IO: RDMA READ completion, data now in local blocks */
 };
 
 /*
@@ -53,10 +53,10 @@ enum OneSideSenderType : uint8_t {
  */
 union SenderCRContext {
     struct {
-        uint64_t type : 4;     /* operation type (OneSideSenderType) */
-        uint64_t seq_no : 30;  /* message sequence number */
-        uint64_t fd : 20;      /* socket file descriptor */
-        uint64_t reserved : 10;/* reserved */
+        uint64_t type : 4;      /* operation type (OneSideSenderType) */
+        uint64_t seq_no : 30;   /* message sequence number */
+        uint64_t fd : 20;       /* socket file descriptor */
+        uint64_t reserved : 10; /* reserved */
     };
     uint64_t value;
 
@@ -232,6 +232,13 @@ struct UrmaDataMeta {
     uint64_t reserved2[3]{};                     /* reserved */
 };
 
+/**
+ * Urma cqe handler
+ * @param flags            [in] optional flags
+ * @param cr_count         [in] completion count
+ * @param cr               [in] completion array ptr
+ */
+using UrmaCqeHandler = std::function<Result(uint32_t flags, int cr_count, urma_cr_t *cr)>;
 } // namespace urma
 } // namespace ubs
 } // namespace ock
