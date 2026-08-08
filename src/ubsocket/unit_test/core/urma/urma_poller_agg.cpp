@@ -54,4 +54,6 @@ TEST_F(UrmaPollerAggTest, AGG_POLLER_THREAD)
 
     UrmaAggPollerSet poller;
     poller.Init(options);
+
+    getchar();
 }

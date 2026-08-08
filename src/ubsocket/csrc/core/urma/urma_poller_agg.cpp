@@ -8,6 +8,7 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include <csignal>
 
 #include "urma_poller_agg.h"
 
@@ -21,7 +22,20 @@ Result UrmaAggPoller::Start() noexcept
         return UBS_OK;
     }
 
-    return UBS_ERROR;
+    Result result = UBS_OK;
+    if (run_in_thread_) {
+        result = StartWithThread();
+    } else {
+        result = StartWithoutThread();
+    }
+
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("Failed to start agg poller, result(%d)", result);
+        return result;
+    }
+
+    UBS_VLOG_TRACE("agg poller started");
+    return UBS_OK;
 }
 
 void UrmaAggPoller::Stop() noexcept
@@ -38,6 +52,15 @@ void UrmaAggPoller::Stop() noexcept
 void UrmaAggPoller::StopInner() noexcept
 {
     if (run_in_thread_) {
+        // TODO 后续改为jfr消息触发
+        struct sigaction sa = {0};
+        sa.sa_handler = [](int) {
+        };
+        sa.sa_flags = 0;
+        sigaction(SIGUSR1, &sa, NULL);
+
+        pthread_kill(thread_.native_handle(), SIGUSR1);
+
         stopping_ = true;
         if (thread_.joinable()) {
             thread_.join();
@@ -47,12 +70,56 @@ void UrmaAggPoller::StopInner() noexcept
 
 Result UrmaAggPoller::StartWithThread() noexcept
 {
+    if (cqe_handler_ == nullptr) {
+        UBS_VLOG_ERR("Failed to start urma agg poller %d as cqe_handler is nullptr", index_);
+        return UBS_ERROR;
+    }
+
+    thread_ = std::thread(&UrmaAggPoller::RunInThread, this);
+
+    /* wait for 5 seconds to ensure the thread is started */
+    for (uint16_t i = 0; i < 5000L; i++) {
+        if (started_.load()) {
+            break;
+        } else {
+            usleep(1000L);
+        }
+    }
+
+    UBS_VLOG_TRACE("agg poller %d started", index_);
     return UBS_OK;
 }
 
 Result UrmaAggPoller::StartWithoutThread() noexcept
 {
+    started_.store(true);
     return UBS_OK;
+}
+
+void UrmaAggPoller::RunInThread() noexcept
+{
+    started_.store(true);
+    UBS_VLOG_TRACE("thread for urma agg poller(%d) is started", index_);
+    std::string thread_name = "ubs_apoller_" + std::to_string(index_);
+    pthread_setname_np(pthread_self(), thread_name.c_str());
+
+    if (busy_poll_) {
+        BusyPoll();
+    } else {
+        EventPoll();
+    }
+
+    UBS_VLOG_INFO("thread for urma agg poller(%d) exiting", index_);
+}
+
+void UrmaAggPoller::BusyPoll() noexcept
+{
+    // TODO
+}
+
+void UrmaAggPoller::EventPoll() noexcept
+{
+    // TODO
 }
 
 /* for agg poller set */
@@ -143,7 +210,8 @@ Result UrmaAggPollerSet::CreatePollers() noexcept
             }
 
             /* create poller */
-            tmp_poller = MakeRef<UrmaAggPoller>(ctx, nullptr, options_.cqe_handler, index_creator_++, true, jfc_vector);
+            tmp_poller = MakeRef<UrmaAggPoller>(ctx, nullptr, options_.cqe_handler, index_creator_++, true, jfc_vector,
+                                                options_.polling_type == BUSY_POLLING);
             if (UNLIKELY(tmp_poller == nullptr)) {
                 UBS_VLOG_ERR("Failed to create agg poller for dev(%s) eid index(%d)", iter.first.first.c_str(),
                              iter.first.second);

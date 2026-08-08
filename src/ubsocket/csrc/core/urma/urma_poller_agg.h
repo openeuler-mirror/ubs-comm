@@ -42,13 +42,14 @@ struct UrmaAggPollerOptions {
 class UrmaAggPoller : public Referable {
 public:
     UrmaAggPoller(const UrmaContextPtr &ctx, const UrmaJfcePtr &jfce, const UrmaCqeHandler &h, uint16_t index,
-                  const bool runInThread, const std::vector<UrmaJfcPtr> &jfcVector) noexcept
+                  const bool runInThread, const std::vector<UrmaJfcPtr> &jfcVector, bool busyPoll = false) noexcept
         : context_(ctx),
           jfce_(jfce),
           cqe_handler_(h),
           index_(index),
           run_in_thread_(runInThread),
-          jfc_vector_(jfcVector)
+          jfc_vector_(jfcVector),
+          busy_poll_(busyPoll)
     {
     }
 
@@ -73,12 +74,17 @@ private:
     Result StartWithoutThread() noexcept;
     void StopInner() noexcept;
 
+    void RunInThread() noexcept;
+    void EventPoll() noexcept;
+    void BusyPoll() noexcept;
+
 private:
     const UrmaContextPtr context_;       /* context ref */
     const UrmaJfcePtr jfce_;             /* jfce ref */
     const UrmaCqeHandler cqe_handler_;   /* callback function of  */
     const uint16_t index_;               /* index of the poller */
     const bool run_in_thread_;           /* if run in thread or not */
+    const bool busy_poll_ = false;       /* is busy poll or not */
     std::atomic<bool> started_{false};   /* started sign */
     bool stopping_{false};               /* stop sign to stop poller thread */
     std::thread thread_;                 /* thread to call urma poll or epoll_wait */
