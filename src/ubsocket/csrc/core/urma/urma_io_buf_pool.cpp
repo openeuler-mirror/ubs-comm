@@ -44,13 +44,31 @@ Result UrmaIoBufferPool::init(const UrmaContextPtr &ctx) noexcept
 Result UrmaIoBufferPool::init(const allocator::FixedAllocatorOptions &options, const UrmaContextPtr &ctx) noexcept
 {
     options_ = options;
+    auto mini_block_count = ((1UL * options.pool_space_size_gb) << 20) / options.mini_block_size_kb;
+    auto mirror_size =  mini_block_count * sizeof(void *);
+    auto addr = mmap(nullptr, mirror_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (addr == MAP_FAILED) {
+        UBS_VLOG_ERR("map mirror memory with size(%lu) failed: %d : %s", mirror_size, errno, strerror(errno));
+        return UBS_ERROR;
+    }
 
-    return init(ctx);
+    auto ret = init(ctx);
+    if (ret != UBS_OK) {
+        munmap(addr, mirror_size);
+        addr = nullptr;
+    }
+
+    mirror_start_addr_ = reinterpret_cast<uintptr_t>(addr);
+    return ret;
 }
 
 void UrmaIoBufferPool::un_init() noexcept
 {
     fixed_allocator_.UnInit();
+    auto mini_block_count = ((1UL * options_.pool_space_size_gb) << 20) / options_.mini_block_size_kb;
+    auto mirror_size =  mini_block_count * sizeof(void *);
+    munmap(reinterpret_cast<void *>(mirror_start_addr_), mirror_size);
+    mirror_start_addr_ = 0;
 }
 
 void *UrmaIoBufferPool::allocate(size_t size)
