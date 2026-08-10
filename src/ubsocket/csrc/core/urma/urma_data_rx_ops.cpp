@@ -82,8 +82,12 @@ Result UrmaRxOps::DataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexc
 ssize_t UrmaRxOps::ZeroCopyRead(const SocketPtr &sock, DataSlot &slot, uint64_t seq, IovWriter &w) noexcept
 {
     size_t iov_total = 0;
-    for (auto i = 0; i < w.iovcnt; i++) {
-        iov_total += w.iov[i].iov_len;
+    if (GlobalSetting::UBS_READV_UNLIMITED) {
+        iov_total = UINT32_MAX;
+    } else {
+        for (auto i = 0; i < w.iovcnt; i++) {
+            iov_total += w.iov[i].iov_len;
+        }
     }
 
     UBS_VLOG_TRACE("socket(%d)zcopy_read seq(%lu) read total(%zu)", sock->Fd(), seq, iov_total);
