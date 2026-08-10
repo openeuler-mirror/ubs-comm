@@ -75,11 +75,6 @@ Result UrmaRxOps::DataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexc
 
 ssize_t UrmaRxOps::ZeroCopyRead(const SocketPtr &sock, DataSlot &slot, uint64_t seq, IovWriter &w) noexcept
 {
-    if (slot.rx_state.load(std::memory_order_acquire) != URMA_RX_STS_DATA_READY || slot.seq_no != seq) {
-        errno = EAGAIN;
-        return -1;
-    }
-
     size_t iov_total = 0;
     for (auto i = 0; i < w.iovcnt; i++) {
         iov_total += w.iov[i].iov_len;
@@ -137,10 +132,16 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
 
     /* PRE_WRITE 大 IO: 从 block_cache_ 直接取数据 */
     auto seq = consume_seq_no_.load(std::memory_order_relaxed);
-    auto &slot = data_slots_[seq % RING_SIZE];
-    WriteImmData imm_data{slot.write_imm};
+    auto slot = &data_slots_[seq % RING_SIZE];
+    auto rx_state = slot->rx_state.load(std::memory_order_acquire);
+    if (rx_state != URMA_RX_STS_DATA_READY || slot->seq_no != seq) {
+        errno = EAGAIN;
+        return -1;
+    }
+
+    WriteImmData imm_data{slot->write_imm};
     if (imm_data.ubsocket.opcode == PRE_WRITE && (flags & UBS_IO_FLAG_USE_BRPC_BLOCK) == UBS_IO_FLAG_USE_BRPC_BLOCK) {
-        return ZeroCopyRead(sock, slot, seq, w);
+        return ZeroCopyRead(sock, *slot, seq, w);
     }
 
     /* WRITE_IN_BAND 小 IO: 按 slot 顺序消费 */
@@ -148,29 +149,24 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
     w.idx = 0;
     w.offset = 0;
     w.written = 0;
-
     while (w.idx < w.iovcnt) {
-        seq = consume_seq_no_.load(std::memory_order_relaxed);
-        auto &inline_slot = data_slots_[seq % RING_SIZE];
-        if (inline_slot.rx_state.load(std::memory_order_acquire) != URMA_RX_STS_DATA_READY) {
-            UBS_VLOG_TRACE("readv fd=%d slot(%zu) not valid, break", sock->Fd(), seq % RING_SIZE);
-            break;
-        }
-        if (inline_slot.seq_no != seq) {
-            UBS_VLOG_TRACE("readv fd=%d slot(%zu) seq_mismatch slot_seq=%lu expect=%lu, break", sock->Fd(),
-                           seq % RING_SIZE, inline_slot.seq_no, seq);
-            break;
-        }
         has_data = true;
-
-        WriteImmData slot_imm{inline_slot.write_imm};
         bool fully_consumed;
-        if (slot_imm.ubsocket.opcode == PRE_WRITE) {
-            fully_consumed = ConsumeBlockData(sock, inline_slot, w, flags);
+        if (imm_data.ubsocket.opcode == PRE_WRITE) {
+            fully_consumed = ConsumeBlockData(sock, *slot, w, flags);
         } else {
-            fully_consumed = ConsumeInlineData(sock, inline_slot, w, flags);
+            fully_consumed = ConsumeInlineData(sock, *slot, w, flags);
         }
         if (!fully_consumed) {
+            break;
+        }
+
+        seq = consume_seq_no_.load(std::memory_order_relaxed);
+        rx_state = slot->rx_state.load(std::memory_order_acquire);
+        imm_data.data = slot->write_imm;
+        if (rx_state != URMA_RX_STS_DATA_READY || slot->seq_no != seq ||
+            (imm_data.ubsocket.opcode == PRE_WRITE &&
+             (flags & UBS_IO_FLAG_USE_BRPC_BLOCK) == UBS_IO_FLAG_USE_BRPC_BLOCK)) {
             break;
         }
     }
