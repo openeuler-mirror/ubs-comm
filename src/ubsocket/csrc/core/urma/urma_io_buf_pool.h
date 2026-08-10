@@ -19,7 +19,6 @@
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_obj_pool.h"
 #include "iobuf/allocator/ubsocket_alloc_fixed_size.h"
-#include "iobuf/ubsocket_iobuf.h"
 #include "iobuf/ubsocket_zcopy_adapter.h"
 #include "under_api/urma/urma_types.h"
 #include "urma_wrapper.h"
@@ -140,10 +139,7 @@ struct MemPoolTargetSegments {
  */
 class UrmaIoBufferPool : public UbsZeroCopyAllocator {
 public:
-    struct MirrorBlock {
-        MirrorBlock *next;
-    };
-
+    Result init(const UrmaContextPtr &ctx) noexcept;
     Result init(const allocator::FixedAllocatorOptions &options, const UrmaContextPtr &ctx) noexcept;
     void un_init() noexcept;
     void *allocate(size_t size) override;
@@ -162,20 +158,14 @@ public:
     Result store_remote_target_seg(RemoteSegmentsPtr &remote, urma_seg_t &seg, urma_target_seg_t *&tgt) noexcept;
     Result store_remote_target_seg(RemoteSegmentsPtr &remote, urma_eid_t &eid, uint32_t uasid, uintptr_t addr,
                                    uint32_t token) noexcept;
-    uintptr_t mini_block_addr_to_mirror(uintptr_t block_addr) const noexcept;
-    uintptr_t mirror_to_mini_block_addr(uintptr_t block_addr) const noexcept;
-    void increase_block_ref_count(MirrorBlock *head) noexcept;
-    void decrease_block_ref_count(MirrorBlock *head) noexcept;
 
     DEFINE_REF_OPERATION_FUNC
 
 private:
-    Result init(const UrmaContextPtr &ctx) noexcept;
     Result register_mem(const UrmaContextPtr &ctx, uintptr_t ptr, size_t size) noexcept;
     Result deregister_mem(const UrmaContextPtr &ctx, uintptr_t ptr, size_t size) noexcept;
 
     uintptr_t local_start_addr_{0};
-    uintptr_t mirror_start_addr_{0};
     MemPoolTargetSegments target_segments_;
     DECLARE_REF_COUNT_VARIABLE;
     allocator::FixedAllocator fixed_allocator_;
@@ -208,39 +198,6 @@ ALWAYS_INLINE uint32_t UrmaIoBufferPool::get_block_size() const noexcept
 {
     return static_cast<uint32_t>(options_.block_size_mb) << 20;;
 }
-
-ALWAYS_INLINE uintptr_t UrmaIoBufferPool::mini_block_addr_to_mirror(uintptr_t block_addr) const noexcept
-{
-    auto block_index = ((block_addr - local_start_addr_) >> 10) / options_.mini_block_size_kb;
-    return mirror_start_addr_ + block_index * sizeof(void *);
-}
-
-ALWAYS_INLINE uintptr_t UrmaIoBufferPool::mirror_to_mini_block_addr(uintptr_t mirror_addr) const noexcept
-{
-    auto block_index = (mirror_addr - mirror_start_addr_) / sizeof(void *);
-    return local_start_addr_ + block_index * (options_.mini_block_size_kb << 10);
-}
-
-ALWAYS_INLINE void UrmaIoBufferPool::increase_block_ref_count(MirrorBlock *head) noexcept
-{
-    auto mirror_node = head;
-    while (mirror_node != nullptr) {
-        auto block = mirror_to_mini_block_addr(reinterpret_cast<uintptr_t>(mirror_node));
-        reinterpret_cast<Block *>(block)->IncRef();
-        mirror_node = mirror_node->next;
-    }
-}
-
-ALWAYS_INLINE void UrmaIoBufferPool::decrease_block_ref_count(MirrorBlock *head) noexcept
-{
-    auto mirror_node = head;
-    while (mirror_node != nullptr) {
-        auto block = mirror_to_mini_block_addr(reinterpret_cast<uintptr_t>(mirror_node));
-        reinterpret_cast<Block *>(block)->DecRef();
-        mirror_node = mirror_node->next;
-    }
-}
-
 
 class UrmaDataMetaPool {
 public:
