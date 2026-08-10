@@ -27,6 +27,7 @@ enum ProfilingTPId : uint32_t {
     CORE_ACCEPT,
     CORE_WRITE,
     CORE_READ,
+
     CORE_READ_EAGAIN,
     CORE_READ_POLL_RX,
     CORE_READ_HANDLE_BUF,
@@ -88,12 +89,14 @@ enum ProfilingTPId : uint32_t {
     UMQ_CREATE,
 
     // urma_socket打点
-    URMA_SOCKET_FULL_WRITE_INLINE,  // 大IO通信处理完整流程用时
-    URMA_SOCKET_FULL_WRITE_LARGE,   // 小IO通信处理完整流程用时
-    URMA_SOCKET_DATA_REACH_PROC,    // 接收端收到数据到达处理用时
-    URMA_SOCKET_PULL_BLOCK_DATA,    // 接收端拉起数据块用时
-    URMA_SOCKET_PULL_FINISH_PROC,   // 接收端收到ru 拉取
-    URMA_SOCKET_EVENT_WRITE,        // event_fd wr
+    URMA_FULL_IO_INLINE,     // 大IO通信处理完整流程用时
+    URMA_FULL_IO_LARGE,      // 小IO通信处理完整流程用时
+    URMA_DATA_REACH_PROC,    // 接收端收到数据到达处理用时
+    URMA_LARGE_DATA_PULL,    // 接收端拉起数据块用时
+    URMA_PULL_FINISH_PROC,   // 接收端收到ru 拉取
+    URMA_EVENT_WRITE,        // event_fd wr
+    URMA_DEAL_SLOT_DATA,     // slot数据准备完成到读取时间
+    URMA_ALLOC_SEND_BUF,     // 申请send_buf
 
     // count the number of ProfilingTPId
     UBSOCKET_PROF_COUNT,
@@ -166,7 +169,7 @@ void ubsocket_prof_reset();
 
 static __always_inline uint64_t ubsocket_get_timeNs()
 {
-#if defined(__aarch64__)
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
     uint64_t timeValue = 0;
     __asm__ volatile("mrs %0, cntvct_el0" : "=r"(timeValue));
     return timeValue * 1000L / ubsocket_arm_cpu_freq;

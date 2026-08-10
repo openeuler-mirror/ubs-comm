@@ -161,7 +161,7 @@ bool UrmaSocket::IsBindRemote()
 
 int UrmaSocket::NotifySocketReadable()
 {
-    PROF_START(URMA_SOCKET_EVENT_WRITE);
+    PROF_START(URMA_EVENT_WRITE);
     auto current_events = events_.load(std::memory_order_acquire);
     if ((current_events & EPOLLIN) == 0) { // 未关注 IN 事件，仅记录可读不通知eventfd
         socket_readable_ready_.store(true, std::memory_order_release);
@@ -169,17 +169,17 @@ int UrmaSocket::NotifySocketReadable()
             if (socket_readable_ready_.exchange(false, std::memory_order_acq_rel)) {
                 FetchOrReachEpollEvents(EPOLLIN);
                 auto ret = eventfd_write(event_fd_, 1);
-                PROF_END(URMA_SOCKET_EVENT_WRITE, true);
+                PROF_END(URMA_EVENT_WRITE, true);
                 return ret;
             }
         }
-        PROF_END(URMA_SOCKET_EVENT_WRITE, true);
+        PROF_END(URMA_EVENT_WRITE, true);
         return 0;
     }
 
     FetchOrReachEpollEvents(EPOLLIN);
     auto ret = eventfd_write(event_fd_, 1);
-    PROF_END(URMA_SOCKET_EVENT_WRITE, true);
+    PROF_END(URMA_EVENT_WRITE, true);
     return ret;
 }
 
@@ -206,7 +206,7 @@ void UrmaSocket::HandleRecvCqe(const WriteImmData &imm)
 
 void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
 {
-    PROF_START(URMA_SOCKET_DATA_REACH_PROC);
+    PROF_START(URMA_DATA_REACH_PROC);
     auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_ctl_off = static_cast<uint32_t>(imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT);
     if (UNLIKELY(recv_ctl_off >= recv_buf_size_)) {
@@ -224,7 +224,7 @@ void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
     if (UNLIKELY(res != UBS_OK)) {
         UBS_VLOG_ERR("socket fd(%d) process large io ctrl message failed: %d", raw_socket_, res);
     }
-    PROF_END(URMA_SOCKET_DATA_REACH_PROC, true);
+    PROF_END(URMA_DATA_REACH_PROC, true);
 }
 
 void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
@@ -237,7 +237,7 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
            req->head.sequence_no);
     if (ubsocket_prof_enabled != 0) {
         auto used = ubsocket_get_timeNs() - req->head.trace_time;
-        ubsocket_prof_record(URMA_SOCKET_FULL_WRITE_LARGE, "URMA_SOCKET_FULL_WRITE_LARGE", used, true);
+        PROF_RECORD(URMA_FULL_IO_LARGE, used, true);
     }
     auto block_refs_ptr = reinterpret_cast<std::vector<BlockRef> *>(req->head.user_ctx);
     if (send_buf_ != nullptr && req->head.message_size > 0) {
@@ -256,7 +256,7 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
 
 void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
 {
-    PROF_START(URMA_SOCKET_DATA_REACH_PROC);
+    PROF_START(URMA_DATA_REACH_PROC);
     auto urma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
@@ -268,19 +268,19 @@ void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
     }
-    PROF_END(URMA_SOCKET_DATA_REACH_PROC, true);
+    PROF_END(URMA_DATA_REACH_PROC, true);
 }
 
 void UrmaSocket::DataReadFinsihed(uint32_t seq_no)
 {
-    PROF_START(URMA_SOCKET_PULL_FINISH_PROC);
+    PROF_START(URMA_PULL_FINISH_PROC);
     UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv data read finished cr seq(%u)", raw_socket_, seq_no);
     auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto res = rdma_rx_ops->DataReadFinished(this, seq_no);
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
     }
-    PROF_END(URMA_SOCKET_PULL_FINISH_PROC, true);
+    PROF_END(URMA_PULL_FINISH_PROC, true);
 }
 
 void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
@@ -293,7 +293,7 @@ void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
        req->head.sequence_no);
     if (ubsocket_prof_enabled != 0) {
         auto used = ubsocket_get_timeNs() - req->head.trace_time;
-        ubsocket_prof_record(URMA_SOCKET_FULL_WRITE_INLINE, "URMA_SOCKET_FULL_WRITE_INLINE", used, true);
+        PROF_RECORD(URMA_FULL_IO_INLINE, used, true);
     }
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
