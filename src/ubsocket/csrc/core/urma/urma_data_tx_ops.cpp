@@ -227,7 +227,7 @@ UrmaIoBufferPool::MirrorBlock *UrmaTxOps::IovecToBlockList(const struct iovec *i
         last_block->next = first_block;
     }
     if (last_block != nullptr) {
-        last_block->next = first_block;
+        last_block->next = nullptr;
     }
 
     return first_block;
