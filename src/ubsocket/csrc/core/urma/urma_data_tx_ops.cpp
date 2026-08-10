@@ -224,13 +224,16 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
     need_size = ((need_size + unit - 1) / unit) * unit;
 
     uint64_t buf_offset = 0;
+    PROF_START(URMA_ALLOC_SEND_BUF);
     if (!urma_sock->send_buf_->Allocate(need_size, buf_offset)) {
+        PROF_END(URMA_ALLOC_SEND_BUF, false);
         UBS_VLOG_ERR("socket(%d) allocate send buf with size(%lu) failed, cap(%lu) used(%lu) ava(%lu).", sock->Fd(),
                      need_size, urma_sock->send_buf_->Capacity(), urma_sock->send_buf_->Used(),
                      urma_sock->send_buf_->Available());
         errno = EAGAIN;
         return -1;
     }
+    PROF_END(URMA_ALLOC_SEND_BUF, true);
 
     SgeContext ctx;
     SetupSgeContext(urma_sock, buf_offset, need_size, ctx);

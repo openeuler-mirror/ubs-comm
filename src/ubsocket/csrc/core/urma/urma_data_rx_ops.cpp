@@ -38,6 +38,9 @@ Result UrmaRxOps::DataReached(const SocketPtr &sock, uint64_t seq_no, uint64_t w
         return IssueReadRequest(sock, seq_no, write_imm, slot);
     }
 
+    if (ubsocket_prof_enabled != 0) {
+        slot.start_read_time = ubsocket_get_timeNs();
+    }
     slot.rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
     auto res = seq_no == consumed ? UBS_OK : UBS_LATER_SEQ;
     UBS_VLOG_TRACE("socket(%d) data reached seq_no(%lu) consumed(%lu) res(%d)", sock->Fd(), seq_no, consumed, res);
@@ -50,7 +53,7 @@ Result UrmaRxOps::DataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexc
     auto &slot = data_slots_[idx];
     if (ubsocket_prof_enabled != 0) {
         auto used = ubsocket_get_timeNs() - slot.start_read_time;
-        ubsocket_prof_record(URMA_SOCKET_PULL_BLOCK_DATA, "URMA_SOCKET_PULL_BLOCK_DATA", used, true);
+        PROF_RECORD(URMA_LARGE_DATA_PULL, used, true);
     }
 
     uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
@@ -63,6 +66,9 @@ Result UrmaRxOps::DataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexc
 
     WriteImmData imm_data{slot.write_imm};
     ResponseCtrlMessage(sock, POST_WRITE, imm_data.ubsocket.buffer_offset, 0);
+    if (ubsocket_prof_enabled != 0) {
+        slot.start_read_time = ubsocket_get_timeNs();
+    }
     slot.rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
     auto res = seq_no == consumed ||
                        (data_slots_[consume_seq_no_.load(std::memory_order_acquire) % RING_SIZE].rx_state ==
@@ -122,7 +128,7 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
         UBS_VLOG_TRACE("readv fd=%d invalid args iov=%p iovcnt=%d, return EINVAL", sock->Fd(), iov, iovcnt);
         return -1;
     }
-
+    PROF_START(CORE_READ);
     (void)flags;
     UBS_VLOG_TRACE("readv fd=%d iovcnt=%d enter", sock->Fd(), iovcnt);
 
@@ -139,9 +145,16 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
         return -1;
     }
 
+    if (ubsocket_prof_enabled != 0) {
+        auto used = ubsocket_get_timeNs() - slot->start_read_time;
+        PROF_RECORD(URMA_DEAL_SLOT_DATA, used, true);
+    }
+
     WriteImmData imm_data{slot->write_imm};
     if (imm_data.ubsocket.opcode == PRE_WRITE && (flags & UBS_IO_FLAG_USE_BRPC_BLOCK) == UBS_IO_FLAG_USE_BRPC_BLOCK) {
-        return ZeroCopyRead(sock, *slot, seq, w);
+        ssize_t size = ZeroCopyRead(sock, *slot, seq, w);
+        PROF_END(CORE_READ, size >= 0);
+        return size;
     }
 
     /* WRITE_IN_BAND 小 IO: 按 slot 顺序消费 */
@@ -177,6 +190,7 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
         return -1;
     }
 
+    PROF_END(CORE_READ, true);
     UBS_VLOG_TRACE("readv fd=%d done total=%zu return", sock->Fd(), w.written);
     return static_cast<ssize_t>(w.written);
 }
