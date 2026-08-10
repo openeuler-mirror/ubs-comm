@@ -316,6 +316,9 @@ ALWAYS_INLINE bool FixedThreadCache2::BatchAllocFromUnAligned(uint16_t &remainin
                                                               FixedMiniBlock *&tail) noexcept
 {
     /* step0: check */
+    if (remaining_count == 0) {
+        return true;
+    }
     if (unaligned_free_count_ == 0) {
         return false;
     }
