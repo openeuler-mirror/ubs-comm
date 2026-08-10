@@ -118,8 +118,6 @@ private:
      */
     void BuildBlockRefs(const struct iovec *iov, int iovcnt, std::vector<BlockRef> &block_refs) noexcept;
 
-    Block *IovecToBlockList(const struct iovec *iov, int iovcnt) const;
-
     /*
      * Checks if the send_buf has enough free space for at least one allocation
      * unit, indicating the socket is ready for more writes.
