@@ -25,9 +25,8 @@ ssize_t UrmaTxOps::WriteV(const SocketPtr &sock, const struct iovec *iov, int io
 
     size_t total_size = 0;
     for (auto i = 0; i < iovcnt; i++) {
-        if (UNLIKELY(iov[i].iov_base == nullptr || iov[i].iov_len == 0)) {
-            errno = EINVAL;
-            return -1;
+        if (iov[i].iov_base == nullptr) {
+            continue;
         }
         total_size += iov[i].iov_len;
     }
@@ -199,37 +198,6 @@ void UrmaTxOps::BuildBlockRefs(const struct iovec *iov, int iovcnt, std::vector<
     block_refs.resize(valid_count);
 }
 
-Block *UrmaTxOps::IovecToBlockList(const struct iovec *iov, int iovcnt) const
-{
-    auto allocator = UrmaBackend::Instance().GetAllocator();
-    Block *first_block = nullptr;
-    Block *last_block = nullptr;
-    for (auto i = 0; i < iovcnt; i++) {
-        auto block_head = allocator->get_mini_block_head(reinterpret_cast<uintptr_t>(iov[i].iov_base));
-        auto block = reinterpret_cast<Block *>(block_head);
-        block->SetNext(nullptr);
-    }
-
-    for (auto i = 0; i < iovcnt; i++) {
-        auto block_head = allocator->get_mini_block_head(reinterpret_cast<uintptr_t>(iov[i].iov_base));
-        auto block = reinterpret_cast<Block *>(block_head);
-        if (block->GetNext() != nullptr) {
-            continue;
-        }
-        if (last_block == nullptr) {
-            first_block = last_block = block;
-        } else {
-            last_block = last_block->SetNext(block);
-        }
-        last_block->SetNext(first_block);
-    }
-
-    if (LIKELY(last_block != nullptr)) {
-        last_block->SetNext(nullptr);
-    }
-    return first_block;
-}
-
 ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int iovcnt, size_t total,
                                   uint32_t flags) noexcept
 {
@@ -238,8 +206,20 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
         errno = ENOTCONN;
         return -1;
     }
+
+    auto block_refs_ptr = new(std::nothrow) std::vector<BlockRef>(iovcnt);
+    if (UNLIKELY(block_refs_ptr == nullptr)) {
+        UBS_VLOG_ERR("socket(%d) write bytes(%zu) allocate BlockRef with count(%d) failed!", sock->Fd(), total, iovcnt);
+        errno = ENOMEM;
+        return -1;
+    }
+
+    auto &block_refs = *block_refs_ptr;
+    BuildBlockRefs(iov, iovcnt, block_refs);
+    auto valid_count = static_cast<uint32_t>(block_refs.size());
+
     constexpr size_t unit = URMA_SND_BUFF_ALLOC_UNIT;
-    auto need_size =  sizeof(UrmaCtrlMessage) + iovcnt * sizeof(PageBufferInMessage);
+    auto need_size =  sizeof(UrmaCtrlMessage) + valid_count * sizeof(PageBufferInMessage);
     need_size = ((need_size + unit - 1) / unit) * unit;
 
     uint64_t buf_offset = 0;
@@ -259,20 +239,19 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
 
     char *dst = reinterpret_cast<char *>(ctx.src_sges[0].addr);
     auto *head = reinterpret_cast<UrmaMessageHead *>(dst);
-    auto zcopy_blocks = IovecToBlockList(iov, iovcnt);
     head->request_id = request_id;
     head->sequence_no = seq_no;
     head->flags = 0;
     head->data_offset = 0;
     head->message_size = static_cast<uint16_t>(need_size);
-    head->data_count = iovcnt;
-    head->user_ctx = reinterpret_cast<uintptr_t>(zcopy_blocks);
+    head->data_count = valid_count;
+    head->user_ctx = reinterpret_cast<uintptr_t>(block_refs_ptr);
 
     auto allocator = UrmaBackend::Instance().GetAllocator();
     auto *bufs = reinterpret_cast<PageBufferInMessage *>(head + 1);
-    for (auto i = 0; i < iovcnt; i++) {
-        bufs[i].addr = reinterpret_cast<uintptr_t>(iov[i].iov_base);
-        bufs[i].size = iov[i].iov_len;
+    for (uint32_t i = 0; i < valid_count; i++) {
+        bufs[i].addr = reinterpret_cast<uint64_t>(block_refs[i].block->data + block_refs[i].offset);
+        bufs[i].size = block_refs[i].length;
         bufs[i].flags = allocator->get_local_target_seg(bufs[i].addr)->seg.token_id;
     }
 
@@ -281,8 +260,8 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
 
     auto user_ctx = SenderCRContext{CTRL_DATA_REQUEST, seq_no, fd_}.value;
     head->trace_time = ubsocket_get_timeNs();
-    for (auto block = zcopy_blocks; block != nullptr; block = block->GetNext()) {
-        block->IncRef();
+    for (uint32_t i = 0; i < valid_count; i++) {
+        block_refs[i].block->IncRef();
     }
 
     auto urma_ret = urma_sock->jetty_->PostWriteImm(rw, user_ctx);
@@ -295,9 +274,10 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
         UBS_SLOG_ERR("Urma post write_imm for request: " << request_id << " return " << urma_ret);
         errno = EAGAIN;
         head->user_ctx = 0;
-        for (auto block = zcopy_blocks; block != nullptr; block = block->GetNext()) {
-            block->DecRef();
+        for (uint32_t i = 0; i < valid_count; i++) {
+            block_refs[i].block->DecRef();
         }
+        delete block_refs_ptr;
         return -1;
     }
 

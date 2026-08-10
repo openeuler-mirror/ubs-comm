@@ -239,19 +239,18 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
         auto used = ubsocket_get_timeNs() - req->head.trace_time;
         ubsocket_prof_record(URMA_SOCKET_FULL_WRITE_LARGE, "URMA_SOCKET_FULL_WRITE_LARGE", used, true);
     }
-    auto block_list = reinterpret_cast<Block *>(req->head.user_ctx);
+    auto block_refs_ptr = reinterpret_cast<std::vector<BlockRef> *>(req->head.user_ctx);
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
     }
 
-    if (block_list != nullptr) {
+    if (block_refs_ptr != nullptr) {
         req->head.user_ctx = 0;
-        auto block = block_list;
-        while (block != nullptr) {
-            auto next = block->GetNext();
-            block->DecRef();
-            block = next;
+        for (auto &block_ref : *block_refs_ptr) {
+            block_ref.block->DecRef();
         }
+
+        delete block_refs_ptr;
     }
 }
 
