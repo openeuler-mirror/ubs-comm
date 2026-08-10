@@ -148,13 +148,15 @@ public:
                         break;
                     }
                     /* Increase nshared to 2, and ensure cap equals size. Based on the logic from brpc's dec_ref
-                     * (release the block when nshared reduces to 1) and make sure the block can be removed from 
+                     * (release the block when nshared reduces to 1) and make sure the block can be removed from
                      * _block cache list to prevent it from being used by brpc again. */
                     partial_block_.offset = cut_size - rx_total_len;
                     partial_block_.length = cache_block->cap - partial_block_.offset;
                     partial_block_.block = cache_block;
                     partial_block_.block->cap = partial_block_.offset;
                     cache_block->IncRef();
+                } else {
+                    break;
                 }
                 last_cache_block = cache_block;
                 rx_total_len = cut_size;
