@@ -49,7 +49,7 @@ UBSHcomServiceContext::UBSHcomServiceContext(const UBSHcomRequestContext &ctx, U
 
 SerResult UBSHcomServiceContext::CopyData(void *data, uint32_t dataLen)
 {
-    if (NN_UNLIKELY(mData != nullptr)) {
+    if (NN_UNLIKELY(mDataType == MEM_POOL_DATA && mData != nullptr)) {
         free(mData);
         mData = nullptr;
     }
