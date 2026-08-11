@@ -506,7 +506,12 @@ NResult NetSyncEndpointShm::Receive(int32_t timeout, UBSHcomNetResponseContext &
     NResult result = NN_OK;
     mDemandPollingOpType = ShmOpContextInfo::SH_RECEIVE;
     uint32_t immData = 0;
+    uint64_t deadlineMs = (timeout < 0) ? UINT64_MAX : NetMonotonic::TimeMs() + (uint64_t)timeout * NN_NO1000;
+    bool firstAttempt = true;
 
+RECEIVE_RETRY:
+    opCtx = ShmOpContextInfo{};
+    immData = 0;
     if (NN_UNLIKELY(mExistDelayEvent)) {
         mExistDelayEvent = false;
 
@@ -526,9 +531,25 @@ NResult NetSyncEndpointShm::Receive(int32_t timeout, UBSHcomNetResponseContext &
         opCtx = ShmOpContextInfo(ch, address, mDelayHandleReceiveEvent.dataSize,
                                  static_cast<ShmOpContextInfo::ShmOpType>(mDelayHandleReceiveEvent.opType),
                                  ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);
-    } else if (NN_UNLIKELY((result = mShmEp->Receive(timeout, opCtx, immData)) != NN_OK)) {
-        NN_LOG_ERROR("Shm Failed to receive response from peer, result " << result);
-        return result;
+    } else {
+        int32_t remainSec;
+        if (deadlineMs == UINT64_MAX) {
+            remainSec = -1;
+        } else if (firstAttempt) {
+            // 首次调用保留原始 timeout 语义(如 timeout=0 非阻塞轮询)
+            remainSec = timeout;
+        } else {
+            int64_t remainMs = static_cast<int64_t>(deadlineMs - NetMonotonic::TimeMs());
+            if (remainMs <= 0) {
+                return NN_SEQ_NO_NOT_MATCHED;
+            }
+            remainSec = static_cast<int32_t>(remainMs / NN_NO1000);
+        }
+        firstAttempt = false;
+        if (NN_UNLIKELY((result = mShmEp->Receive(remainSec, opCtx, immData)) != NN_OK)) {
+            NN_LOG_ERROR("Shm Failed to receive response from peer, result " << result);
+            return result;
+        }
     }
 
     if (NN_UNLIKELY(opCtx.opType != mDemandPollingOpType)) {
@@ -538,7 +559,16 @@ NResult NetSyncEndpointShm::Receive(int32_t timeout, UBSHcomNetResponseContext &
     }
 
     auto *tmpHeader = reinterpret_cast<UBSHcomNetTransHeader *>(opCtx.dataAddress);
-    result = NetFunc::ValidateHeaderWithSeqNo(*tmpHeader, opCtx.dataSize, mLastSendSeqNo);
+    if (NN_UNLIKELY(tmpHeader->seqNo != mLastSendSeqNo)) {
+        NN_LOG_WARN("Shm Received un-matched seq no " << tmpHeader->seqNo << ", demand " << mLastSendSeqNo << ", ep "
+                                                      << Id() << ", discard stale and retry");
+        opCtx.channel->DCMarkPeerBuckFree(opCtx.dataAddress);
+        if (deadlineMs != UINT64_MAX && NetMonotonic::TimeMs() >= deadlineMs) {
+            return NN_SEQ_NO_NOT_MATCHED;
+        }
+        goto RECEIVE_RETRY;
+    }
+    result = NetFunc::ValidateHeaderWithDataSize(*tmpHeader, opCtx.dataSize);
     if (NN_UNLIKELY(result != NN_OK)) {
         NN_LOG_ERROR("Shm Failed to validate received header param, ep " << Id());
         opCtx.channel->DCMarkPeerBuckFree(opCtx.dataAddress);
@@ -601,6 +631,13 @@ NResult NetSyncEndpointShm::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContex
     NResult result = NN_OK;
     mDemandPollingOpType = ShmOpContextInfo::SH_RECEIVE;
     uint32_t immData = 0;
+
+    uint64_t deadlineMs = (timeout < 0) ? UINT64_MAX : NetMonotonic::TimeMs() + (uint64_t)timeout * NN_NO1000;
+    bool firstAttempt = true;
+
+RECEIVE_RAW_RETRY:
+    opCtx = ShmOpContextInfo{};
+    immData = 0;
     if (NN_UNLIKELY(mExistDelayEvent)) {
         mExistDelayEvent = false;
 
@@ -619,9 +656,25 @@ NResult NetSyncEndpointShm::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContex
                                  static_cast<ShmOpContextInfo::ShmOpType>(mDelayHandleReceiveEvent.opType),
                                  ShmOpContextInfo::ShmErrorType::SH_NO_ERROR);
         immData = mDelayHandleReceiveEvent.immData;
-    } else if (NN_UNLIKELY((result = mShmEp->Receive(timeout, opCtx, immData)) != NN_OK)) {
-        NN_LOG_ERROR("Failed to get operation,time out");
-        return result;
+    } else {
+        int32_t remainSec;
+        if (deadlineMs == UINT64_MAX) {
+            remainSec = -1;
+        } else if (firstAttempt) {
+            // 首次调用保留原始 timeout 语义(如 timeout=0 非阻塞轮询)
+            remainSec = timeout;
+        } else {
+            int64_t remainMs = static_cast<int64_t>(deadlineMs - NetMonotonic::TimeMs());
+            if (remainMs <= 0) {
+                return NN_SEQ_NO_NOT_MATCHED;
+            }
+            remainSec = static_cast<int32_t>(remainMs / NN_NO1000);
+        }
+        firstAttempt = false;
+        if (NN_UNLIKELY((result = mShmEp->Receive(remainSec, opCtx, immData)) != NN_OK)) {
+            NN_LOG_ERROR("Failed to get operation,time out");
+            return result;
+        }
     }
 
     if (NN_UNLIKELY(opCtx.opType != mDemandPollingOpType)) {
@@ -630,9 +683,13 @@ NResult NetSyncEndpointShm::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContex
         return NN_ERROR;
     }
     if (NN_UNLIKELY(immData != mLastSendSeqNo)) {
-        NN_LOG_ERROR("Received un-matched seq no " << immData << ", demand seq no " << mLastSendSeqNo);
+        NN_LOG_WARN("Received un-matched seq no " << immData << ", demand " << mLastSendSeqNo << ", ep " << Id()
+                                                  << ", discard stale and retry");
         opCtx.channel->DCMarkPeerBuckFree(opCtx.dataAddress);
-        return NN_SEQ_NO_NOT_MATCHED;
+        if (deadlineMs != UINT64_MAX && NetMonotonic::TimeMs() >= deadlineMs) {
+            return NN_SEQ_NO_NOT_MATCHED;
+        }
+        goto RECEIVE_RAW_RETRY;
     }
 
     size_t realDataSize = 0;
@@ -687,6 +744,19 @@ NResult NetSyncEndpointShm::WaitCompletion(int32_t timeout)
     ShmEvent event{};
     NResult result = NN_OK;
 
+    // 新一次 call 进入时，若残留上一次的延迟 SH_RECEIVE 事件必定 stale，主动丢弃
+    if (NN_UNLIKELY(mExistDelayEvent)) {
+        NN_LOG_WARN("Discard stale delayed SH_RECEIVE event before wait, ep " << Id());
+        auto *ch = reinterpret_cast<ShmChannel *>(mDelayHandleReceiveEvent.peerChannelAddress);
+        if (ch != nullptr) {
+            uintptr_t address = 0;
+            if (ch->GetPeerDataAddressByOffset(mDelayHandleReceiveEvent.dataOffset, address) == SH_OK) {
+                ch->DCMarkPeerBuckFree(address);
+            }
+        }
+        mExistDelayEvent = false;
+    }
+
 POLL_EVENT:
     if (NN_UNLIKELY(result = mShmEp->DequeueEvent(timeout, event)) != NN_OK) {
         return result;
@@ -699,8 +769,38 @@ POLL_EVENT:
             mExistDelayEvent = true;
             goto POLL_EVENT;
         } else {
-            NN_LOG_ERROR("Receive operation type has double received, prev context is not process");
-            return SH_ERROR;
+            // 双收时比较 seqNo，优先保留匹配当前请求的响应，避免误丢正确响应
+            auto *prevCh = reinterpret_cast<ShmChannel *>(mDelayHandleReceiveEvent.peerChannelAddress);
+            auto *curCh = reinterpret_cast<ShmChannel *>(event.peerChannelAddress);
+            uintptr_t prevAddr = 0;
+            uintptr_t curAddr = 0;
+            uint32_t prevSeq = 0;
+            uint32_t curSeq = 0;
+            if (prevCh != nullptr &&
+                prevCh->GetPeerDataAddressByOffset(mDelayHandleReceiveEvent.dataOffset, prevAddr) == SH_OK) {
+                prevSeq = reinterpret_cast<UBSHcomNetTransHeader *>(prevAddr)->seqNo;
+            }
+            if (curCh != nullptr && curCh->GetPeerDataAddressByOffset(event.dataOffset, curAddr) == SH_OK) {
+                curSeq = reinterpret_cast<UBSHcomNetTransHeader *>(curAddr)->seqNo;
+            }
+            if (prevSeq == mLastSendSeqNo && curSeq != mLastSendSeqNo) {
+                // prev 匹配，保留 prev 丢弃 cur
+                NN_LOG_WARN("Double received SH_RECEIVE, keep prev seq " << prevSeq << ", discard cur seq " << curSeq
+                                                                         << ", ep " << Id());
+                if (curAddr != 0) {
+                    curCh->DCMarkPeerBuckFree(curAddr);
+                }
+            } else {
+                // cur 匹配或都不匹配，保留 cur 丢弃 prev
+                NN_LOG_WARN("Double received SH_RECEIVE, discard prev seq " << prevSeq << ", keep cur seq " << curSeq
+                                                                            << ", ep " << Id());
+                if (prevAddr != 0) {
+                    prevCh->DCMarkPeerBuckFree(prevAddr);
+                }
+                mDelayHandleReceiveEvent = event;
+            }
+            mExistDelayEvent = true;
+            goto POLL_EVENT;
         }
     }
 
