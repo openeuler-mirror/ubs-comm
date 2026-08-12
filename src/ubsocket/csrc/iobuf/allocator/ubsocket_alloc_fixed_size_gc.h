@@ -179,6 +179,12 @@ ALWAYS_INLINE Result FixedGlobalCache::VerifyOptions(FixedAllocatorOptions &opti
         options.mini_block_size_kb = 8;
     }
 
+    if ((options.block_size_mb * SIZE_1M) % (options.mini_block_size_kb * SIZE_1K) != 0 ||
+        ((options.block_size_mb * SIZE_1M) / (options.mini_block_size_kb * SIZE_1K)) % FIX_GC_BATCH_FREE_SIZE != 0) {
+        UBS_VLOG_ERR("Option 'block_size_mb':%u and 'mini_block_size_kb':%u is invalid", options.block_size_mb, options.mini_block_size_kb);
+        return UBS_ERROR;
+    }
+
     auto init_mem_size = SIZE_1M * options.block_size_mb * options.init_block_count;
     if (init_mem_size > SIZE_1G * options.pool_space_size_gb) {
         UBS_VLOG_ERR(
