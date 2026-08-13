@@ -38,8 +38,8 @@ void UrmaDevice::Init() noexcept
     urma_device_t **device_list = nullptr;
     int num_devices = 0;
     device_list = UrmaApi::urma_get_device_list(&num_devices);
-    if (device_list == nullptr) {
-        UBS_VLOG_DEBUG("[URMA_API] No urma device found in the system, please use 'urma_admin show' to double check");
+    if (device_list == nullptr || num_devices == 0) {
+        UBS_VLOG_ERR("[URMA_API] No urma device found in the system, please use 'urma_admin show' to double check");
         return;
     }
 
