@@ -20,7 +20,7 @@ namespace ubs {
 namespace urma {
 
 constexpr uint32_t URMA_CONTROL_PLANE_MAGIC = 0x55424C49;                /* "UBLI" */
-constexpr uint32_t URMA_SND_BUFF_ALLOC_UNIT = 128;                       /* 128B: inline WRITE_IN_BAND allocate unit */
+constexpr uint32_t URMA_SND_BUFF_ALLOC_UNIT = 1024;                       /* 128B: inline WRITE_IN_BAND allocate unit */
 constexpr uint32_t URMA_INLINE_THRESHOLD = 2 * URMA_SND_BUFF_ALLOC_UNIT; /* 256B: with head size */
 constexpr uint32_t URMA_SEND_BUF_DEFAULT_KB = 128;
 constexpr uint32_t URMA_RECV_BUF_DEFAULT_KB = 128;

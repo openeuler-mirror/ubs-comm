@@ -39,7 +39,7 @@ bool UrmaSetting::UB_POLLER_BUSY_POLLING = false;
 uint32_t UrmaSetting::UB_BUF_POOL_SPACE_SIZE = 32;
 uint16_t UrmaSetting::UB_BUF_BLOCK_SIZE_MB = 16;
 uint16_t UrmaSetting::UB_BUF_INIT_MEM_SIZE_MB = 256;
-uint16_t UrmaSetting::UB_BUF_PAGE_SIZE_KB = 8;
+uint16_t UrmaSetting::UB_BUF_PAGE_SIZE_KB = 64;
 bool UrmaSetting::UB_BUF_ASYNC_EXPAND = false;
 
 void UrmaSetting::Init() noexcept
