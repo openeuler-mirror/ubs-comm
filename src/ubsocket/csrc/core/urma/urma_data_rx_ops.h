@@ -81,6 +81,12 @@ public:
      */
     Result TriggerPollIn(const SocketPtr &sock, uint32_t flags) override;
 
+    /*
+     * Obtains the trace time of the current slot.
+     * @return trace time of the current slot, 0 for error
+     */
+    uint64_t CurrentTraceNsTime();
+
 private:
     /* Ring buffer slot tracking per-message receive state. 64-byte aligned for cache-line isolation. */
     struct alignas(64) DataSlot {

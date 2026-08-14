@@ -206,7 +206,7 @@ void UrmaSocket::HandleRecvCqe(const WriteImmData &imm)
 
 void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
 {
-    PROF_START(URMA_DATA_REACH_PROC);
+    PROF_START(URMA_IMM_REACH_PROC);
     auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_ctl_off = static_cast<uint32_t>(imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT);
     if (UNLIKELY(recv_ctl_off >= recv_buf_size_)) {
@@ -224,7 +224,7 @@ void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
     if (UNLIKELY(res != UBS_OK)) {
         UBS_VLOG_ERR("socket fd(%d) process large io ctrl message failed: %d", raw_socket_, res);
     }
-    PROF_END(URMA_DATA_REACH_PROC, true);
+    PROF_END(URMA_IMM_REACH_PROC, true);
 }
 
 void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
@@ -256,7 +256,7 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
 
 void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
 {
-    PROF_START(URMA_DATA_REACH_PROC);
+    PROF_START(URMA_IMM_REACH_PROC);
     auto urma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
@@ -268,7 +268,7 @@ void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
     }
-    PROF_END(URMA_DATA_REACH_PROC, true);
+    PROF_END(URMA_IMM_REACH_PROC, true);
 }
 
 void UrmaSocket::DataReadFinsihed(uint32_t seq_no)

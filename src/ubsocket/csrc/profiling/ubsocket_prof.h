@@ -89,14 +89,16 @@ enum ProfilingTPId : uint32_t {
     UMQ_CREATE,
 
     // urma_socket打点
-    URMA_FULL_IO_INLINE,     // 大IO通信处理完整流程用时
-    URMA_FULL_IO_LARGE,      // 小IO通信处理完整流程用时
-    URMA_DATA_REACH_PROC,    // 接收端收到数据到达处理用时
+    URMA_ALLOC_SEND_BUF,     // 申请send_buf
+    URMA_FULL_IO_INLINE,     // 小IO通信处理完整流程用时
+    URMA_FULL_IO_LARGE,      // 大IO通信处理完整流程用时
+    URMA_IMM_REACH_PROC,     // 接收端收到IMM数据处理用时
     URMA_LARGE_DATA_PULL,    // 接收端拉起数据块用时
     URMA_PULL_FINISH_PROC,   // 接收端收到ru 拉取
-    URMA_EVENT_WRITE,        // event_fd wr
     URMA_DEAL_SLOT_DATA,     // slot数据准备完成到读取时间
-    URMA_ALLOC_SEND_BUF,     // 申请send_buf
+    URMA_SLOT_EPOLL_PROC,    // slot数据准备完到收到epoll事件时间
+    URMA_EVENT_WRITE,        // event_fd wr
+    URMA_DEAL_EPOLL_EVENT,   // epoll事件处理用时
 
     // count the number of ProfilingTPId
     UBSOCKET_PROF_COUNT,
