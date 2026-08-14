@@ -527,6 +527,9 @@ void UrmaRxOps::ReleaseBlockInSlot(DataSlot &slot) noexcept
 
 uint64_t UrmaRxOps::CurrentTraceNsTime()
 {
+    if (ubsocket_prof_enabled == 0) {
+        return 0;
+    }
     uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
     size_t idx = consumed % RING_SIZE;
     auto &slot = data_slots_[idx];
