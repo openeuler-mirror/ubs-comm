@@ -49,22 +49,36 @@ UBSHcomServiceContext::UBSHcomServiceContext(const UBSHcomRequestContext &ctx, U
 
 SerResult UBSHcomServiceContext::CopyData(void *data, uint32_t dataLen)
 {
-    if (NN_UNLIKELY(mDataType == MEM_POOL_DATA && mData != nullptr)) {
-        free(mData);
+    if (dataLen == NN_NO0) {
+        if (mDataType == MEM_POOL_DATA && mData != nullptr) {
+            free(mData);
+        }
         mData = nullptr;
+        mDataLen = NN_NO0;
+        mDataType = INVALID_DATA;
+        return SER_OK;
     }
-    mData = malloc(dataLen);
-    if (NN_UNLIKELY(mData == nullptr)) {
+    if (NN_UNLIKELY(data == nullptr)) {
+        NN_LOG_ERROR("Invalid source data");
+        return SER_INVALID_PARAM;
+    }
+
+    void *newData = malloc(dataLen);
+    if (NN_UNLIKELY(newData == nullptr)) {
         NN_LOG_ERROR("Invalid msg size " << dataLen << ", alloc failed");
         return SER_NEW_OBJECT_FAILED;
     }
-    if (NN_UNLIKELY(memcpy_s(mData, dataLen, data, dataLen) != SER_OK)) {
-        free(mData);
-        mData = nullptr;
+    if (NN_UNLIKELY(memcpy_s(newData, dataLen, data, dataLen) != SER_OK)) {
+        free(newData);
         NN_LOG_ERROR("Failed to copy data");
         return SER_ERROR;
     }
 
+    if (mDataType == MEM_POOL_DATA && mData != nullptr) {
+        free(mData);
+    }
+    mData = newData;
+    mDataLen = dataLen;
     mDataType = MEM_POOL_DATA;
     return SER_OK;
 }
@@ -72,16 +86,36 @@ SerResult UBSHcomServiceContext::CopyData(void *data, uint32_t dataLen)
 SerResult UBSHcomServiceContext::Clone(UBSHcomServiceContext &newOne, const UBSHcomServiceContext &oldOne,
                                        bool copyData)
 {
-    newOne = oldOne;
-
-    if (copyData && oldOne.mDataLen > NN_NO0) {
-        newOne.mDataLen = oldOne.mDataLen;
-        return newOne.CopyData(oldOne.mData, oldOne.mDataLen);
-    } else {
-        newOne.mDataType = INVALID_DATA;
-        newOne.mDataLen = NN_NO0;
-        newOne.mData = nullptr;
+    if (&newOne == &oldOne) {
+        if (copyData && oldOne.mDataLen > NN_NO0) {
+            return newOne.CopyData(oldOne.mData, oldOne.mDataLen);
+        }
+        return newOne.CopyData(nullptr, NN_NO0);
     }
+
+    void *newData = nullptr;
+    if (copyData && oldOne.mDataLen > NN_NO0) {
+        if (NN_UNLIKELY(oldOne.mData == nullptr)) {
+            NN_LOG_ERROR("Invalid source data");
+            return SER_INVALID_PARAM;
+        }
+        newData = malloc(oldOne.mDataLen);
+        if (NN_UNLIKELY(newData == nullptr)) {
+            NN_LOG_ERROR("Invalid msg size " << oldOne.mDataLen << ", alloc failed");
+            return SER_NEW_OBJECT_FAILED;
+        }
+        if (NN_UNLIKELY(memcpy_s(newData, oldOne.mDataLen, oldOne.mData, oldOne.mDataLen) != SER_OK)) {
+            free(newData);
+            NN_LOG_ERROR("Failed to copy data");
+            return SER_ERROR;
+        }
+    }
+
+    newOne.Invalidate();
+    newOne = oldOne;
+    newOne.mData = newData;
+    newOne.mDataLen = newData == nullptr ? NN_NO0 : oldOne.mDataLen;
+    newOne.mDataType = newData == nullptr ? INVALID_DATA : MEM_POOL_DATA;
     return SER_OK;
 }
 } // namespace hcom
