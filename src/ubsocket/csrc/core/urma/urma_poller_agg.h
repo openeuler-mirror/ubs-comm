@@ -39,35 +39,86 @@ struct UrmaAggPollerOptions {
     }
 };
 
+struct UrmaAppPollerStartOptions {
+    UrmaJfcePtr jfce;
+    UrmaCqeHandler handler;
+    uint16_t index = 0;
+    bool runInThread = false;
+    bool busyPoll = false;
+    std::vector<UrmaJfcPtr> jfcVector;
+};
+
 class UrmaAggPoller : public Referable {
 public:
-    UrmaAggPoller(const UrmaContextPtr &ctx, const UrmaJfcePtr &jfce, const UrmaCqeHandler &h, uint16_t index,
-                  const bool runInThread, const std::vector<UrmaJfcPtr> &jfcVector, bool busyPoll = false) noexcept
-        : context_(ctx),
-          jfce_(jfce),
-          cqe_handler_(h),
-          index_(index),
-          run_in_thread_(runInThread),
-          jfc_vector_(jfcVector),
-          busy_poll_(busyPoll)
-    {
-    }
+    ~UrmaAggPoller() override = default;
 
-    ~UrmaAggPoller() noexcept override
+    /**
+     * @brief Start or initialize the poller with/without thread
+     *
+     * @param options      [in] options to be started with
+     *
+     * @return 0 if successful
+     */
+    virtual Result Start(const UrmaAppPollerStartOptions &options) noexcept = 0;
+
+    /*
+     * @brief Stop or un-initialize the poller
+     */
+    virtual void Stop() noexcept = 0;
+
+    /**
+     * @brief Get the jfce object
+     *
+     * @return jfce object
+     */
+    virtual UrmaJfcePtr Jfce() const noexcept = 0;
+
+    /**
+     * @brief Select an existing jfc or create a new one
+     *
+     * @param jfc          [in] jfc selected or created
+     * @return 0 if successful
+     */
+    virtual Result SelectJfc(UrmaJfcPtr &jfc) noexcept = 0;
+};
+using UrmaAggPollerPtr = Ref<UrmaAggPoller>;
+
+class UrmaDedicatedJfcAggPoller : public UrmaAggPoller {
+public:
+    ~UrmaDedicatedJfcAggPoller() override
     {
         Stop();
     }
 
-    /**
-     * @brief Start the aggregated poller
-     * @return
-     */
-    Result Start() noexcept;
+    Result Start(const UrmaAppPollerStartOptions &options) noexcept override;
 
-    /**
-     * @brief Stop the aggregated poller
-     */
-    void Stop() noexcept;
+    void Stop() noexcept override;
+
+    UrmaJfcePtr Jfce() const noexcept override;
+
+    Result SelectJfc(UrmaJfcPtr &jfc) noexcept override;
+
+private:
+    UrmaJfcePtr jfce_;
+    UrmaCqeHandler handler_;
+    uint16_t index_ = 0;
+    std::vector<UrmaJfcPtr> jfc_vector_;
+};
+
+class UrmaSharedJfcAggPollerWithThread : public UrmaAggPoller {
+public:
+    ~UrmaSharedJfcAggPollerWithThread() override
+    {
+        Stop();
+    }
+
+    Result Start(const UrmaAppPollerStartOptions &options) noexcept override;
+
+    void Stop() noexcept override;
+
+    UrmaJfcePtr Jfce() const noexcept override;
+
+    Result SelectJfc(UrmaJfcPtr &jfc) noexcept override;
 
 private:
     Result StartWithThread() noexcept;
@@ -79,20 +130,16 @@ private:
     void BusyPoll() noexcept;
 
 private:
-    const UrmaContextPtr context_;       /* context ref */
-    const UrmaJfcePtr jfce_;             /* jfce ref */
-    const UrmaCqeHandler cqe_handler_;   /* callback function of  */
-    const uint16_t index_;               /* index of the poller */
-    const bool run_in_thread_;           /* if run in thread or not */
-    const bool busy_poll_ = false;       /* is busy poll or not */
+    UrmaJfcePtr jfce_;                   /* jfce ref */
+    UrmaCqeHandler cqe_handler_;         /* callback function of  */
+    uint16_t index_;                     /* index of the poller */
+    bool run_in_thread_;                 /* if run in thread or not */
+    bool busy_poll_ = false;             /* is busy poll or not */
     std::atomic<bool> started_{false};   /* started sign */
     bool stopping_{false};               /* stop sign to stop poller thread */
     std::thread thread_;                 /* thread to call urma poll or epoll_wait */
     std::vector<UrmaJfcPtr> jfc_vector_; /* one poller contains one urma poller */
-
-    friend class UrmaAggPollerSet;
 };
-using UrmaAggPollerPtr = Ref<UrmaAggPoller>;
 
 class UrmaAggPollerSet : public Referable {
 public:
