@@ -304,7 +304,8 @@ Block *UrmaRxOps::AllocBlocksForReq(uint32_t total_bytes) noexcept
 {
     auto allocator = UrmaBackend::Instance().GetAllocator();
     auto block_size = allocator->get_mini_block_size();
-    auto block_count = static_cast<uint16_t>((total_bytes + block_size - 1) / block_size);
+    auto block_capacity = static_cast<uint32_t>(block_size - sizeof(Block));
+    auto block_count = static_cast<uint16_t>((total_bytes + block_capacity - 1) / block_capacity);
 
     allocator::FixedLinkedBlock *mini_block_head = nullptr;
     if (UNLIKELY(!allocator->multi_allocate(block_count, mini_block_head) || mini_block_head == nullptr)) {
@@ -315,7 +316,6 @@ Block *UrmaRxOps::AllocBlocksForReq(uint32_t total_bytes) noexcept
     Block *head_block = nullptr;
     Block *tail_block = nullptr;
     auto data_left = total_bytes;
-    auto block_capacity = static_cast<uint32_t>(block_size - sizeof(Block));
     while (mini_block_head != nullptr) {
         auto curr_capacity = std::min(block_capacity, data_left);
         auto mini_block_next = mini_block_head->next;
@@ -367,8 +367,6 @@ void UrmaRxOps::BuildReadWrs(uint32_t data_count, uint64_t msg_offset, Block *he
         urma_jfs_wr_t wr = {};
         wr.opcode = URMA_OPC_READ;
         wr.user_ctx = 0;
-        wr.rw.src = {.sge = &src_sge, .num_sge = 1};
-        wr.rw.dst = {.sge = &dst_sge, .num_sge = 1};
         wr.flag.bs.complete_enable = common_complete_enable;
         ctx.wrs.push_back(wr);
 
@@ -385,12 +383,16 @@ void UrmaRxOps::BuildReadWrs(uint32_t data_count, uint64_t msg_offset, Block *he
         }
     }
 
-    for (size_t i = 0; i + 1 < ctx.wrs.size(); i++) {
-        ctx.wrs[i].next = &ctx.wrs[i + 1];
-    }
-    if (!ctx.wrs.empty()) {
-        ctx.wrs.back().user_ctx = ctx.user_ctx;
-        ctx.wrs.back().flag.bs.complete_enable = 1;
+    // During the loop, src_sges and dst_sges may be realloc. As a result, the sge pointer embedded in the WR becomes invalid.
+    for (size_t i = 0; i < ctx.wrs.size(); i++) {
+        ctx.wrs[i].rw.src = {.sge = &ctx.src_sges[i], .num_sge = 1};
+        ctx.wrs[i].rw.dst = {.sge = &ctx.dst_sges[i], .num_sge = 1};
+        if (i + 1 < ctx.wrs.size()) {
+            ctx.wrs[i].next = &ctx.wrs[i + 1];
+        } else {
+            ctx.wrs[i].user_ctx = ctx.user_ctx;
+            ctx.wrs[i].flag.bs.complete_enable = 1;
+        }
     }
 }
 
