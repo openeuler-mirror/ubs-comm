@@ -304,7 +304,8 @@ Block *UrmaRxOps::AllocBlocksForReq(uint32_t total_bytes) noexcept
 {
     auto allocator = UrmaBackend::Instance().GetAllocator();
     auto block_size = allocator->get_mini_block_size();
-    auto block_count = static_cast<uint16_t>((total_bytes + block_size - 1) / block_size);
+    auto block_capacity = static_cast<uint32_t>(block_size - sizeof(Block));
+    auto block_count = static_cast<uint16_t>((total_bytes + block_capacity - 1) / block_capacity);
 
     allocator::FixedLinkedBlock *mini_block_head = nullptr;
     if (UNLIKELY(!allocator->multi_allocate(block_count, mini_block_head) || mini_block_head == nullptr)) {
@@ -315,7 +316,6 @@ Block *UrmaRxOps::AllocBlocksForReq(uint32_t total_bytes) noexcept
     Block *head_block = nullptr;
     Block *tail_block = nullptr;
     auto data_left = total_bytes;
-    auto block_capacity = static_cast<uint32_t>(block_size - sizeof(Block));
     while (mini_block_head != nullptr) {
         auto curr_capacity = std::min(block_capacity, data_left);
         auto mini_block_next = mini_block_head->next;
