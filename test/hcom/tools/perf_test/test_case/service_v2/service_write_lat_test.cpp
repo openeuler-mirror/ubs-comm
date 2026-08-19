@@ -1,12 +1,12 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
-#include <functional>
-#include "securec.h"
-
-#include "common/perf_test_logger.h"
-#include "test_case/perf_test_factory.h"
 #include "test_case/service_v2/service_write_lat_test.h"
+
+#include <functional>
+#include "common/perf_test_logger.h"
+#include "securec.h"
+#include "test_case/perf_test_factory.h"
 
 namespace hcom {
 namespace perftest {

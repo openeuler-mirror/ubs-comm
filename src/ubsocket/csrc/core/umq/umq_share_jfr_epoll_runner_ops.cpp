@@ -260,7 +260,6 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
             UBS_VLOG_DEBUG("async_epoll add qbuf for socket fd: %d failed.\n", socket_fd);
             continue;
         }
-
         if (!socket_fds.Test(socket_fd)) {
             socket_fds.Set(socket_fd);
             socket_ptrs.emplace_back(socket_ptr);

@@ -2,7 +2,7 @@
 
 ## Product
 
-HCOM — high-performance communication library (RDMA, TCP, SHM, UB transports). Namespace: `ock::hcom`. C++11 compiled, aarch64 (Kunpeng) target. Mulan PSL v2 license.
+HCOM — high-performance communication library (RDMA, TCP, SHM, UB transports). Namespace: `ock::hcom`. C++11 compiled. Primary deployment target: aarch64 (Kunpeng 920/950). x86_64 compilation is also supported via `build.sh` auto-detection (`uname -m`). Mulan PSL v2 license.
 
 ## Build Commands
 
@@ -25,6 +25,9 @@ UMQ_BUILD=on UBSOCKET_BUILD=on UBSOCKET_UT=on ./build/build_umq_and_ubsocket.sh 
 ```
 
 UBSocket UT使用**ctest**运行(不是直接跑gtest binary)。UMQ必须先构建——ubsocket依赖`libumq.so`。
+
+**构建选项补充:**
+- `USE_URMA_STUB`(optional, default `OFF`): 无完整 URMA SDK 时设为 `ON`，使用 `src/hcom/umq/stub/urma/` 下的 stub 头文件构建 UMQ。
 
 ### Bazel (alternative)
 ```bash
@@ -80,6 +83,7 @@ cd src/ubsocket/build
 - Test fixture pattern: `class Test<Module> : public testing::Test`, `TEST_F(Test<Module>, <Scenario>)`
 - HCOM test binaries: `hcom_ut` (UT), `hcom_test` (LLT)
 - UBSocket test binaries: `umq_errno_converter_test`, `umq_socket_connector_test`, `ubsocket_signal_handler_test`, `profiling_test`
+- 已禁用: `umq_ops_errno_test`、`mock_infrastructure_test`、`iobuf_zcopy_adapter_test` (commit `222bdc7` 移出CMakeLists)
 
 ### UT约束
 
@@ -142,23 +146,13 @@ clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也
 
 ## Errno Mapping 工作进度 (ubsocket)
 
-> **注意**: `umq_ops_errno_test`、`mock_infrastructure_test`、`iobuf_zcopy_adapter_test` 已被 `222bdc7` 临时禁用移出CMakeLists，当前活跃test binary仅4个。以下为禁用前的历史覆盖数据。
->
-> **详细成果固化**: AGENTS.md §Errno Mapping工作进度 + `doc/ubsocket/UBSOCKET-CLAIMING.md`
+> 已禁用test binary见 [Testing Framework](#testing-framework)，历史覆盖数据见 `doc/ubsocket/UBSOCKET-CLAIMING.md`。
 
 ### 代码修复
 - `umq_errno_converter.cpp:24` — Convert(GET_STATE): ERR||MAX→EIO, else→0
 - `umq_backend.cpp:199` — printf `%d→%zu`; `umq_socket.cpp:220` — `%u→%d`; `umq_socket.cpp:331` — `%d→%llu+cast`
 
-### UT覆盖率 (220 total, 5 binaries)
-| Binary | Count | Type |
-|--------|-------|------|
-| `umq_errno_converter_test` | 91 | converter级 (全部映射逻辑+override+BufStatus+HandleResult+GET_STATE) |
-| `umq_ops_errno_test` | 51 | ops级 (RX/TX poll+rearm+cqe+handleError+AddUbDev+FindDevName+GetTxFd+GetDevEid+CheckDevAdd) |
-| `mock_infrastructure_test` | 32 | mock基础设施验证 (Helper方式2 + Static方式19 + Block方式5 + Socket方式6) |
-| `iobuf_zcopy_adapter_test` | 45 | iobuf模块全覆盖 (BlockMem 6 + ZcopyAdapter 15 + DynSymScanner 24) |
-| `profiling_test` | 1 | profiling (DumpLoop无sleep) |
-
+### 覆盖度摘要
 - 13/36 调用点已覆盖ops级; 所有7个UmqOperation枚举值均有ops级覆盖
 - 23个未覆盖调用点因SocketPtr/epoll/connector/acceptor复杂依赖暂不测试
 
@@ -231,6 +225,9 @@ clang-tidy当前有预存配置问题(no checks enabled)，hcom release build也
 - `IncludeBlocks: Preserve` 在clang-format中意味着自动排序不会重排includes；手动排序必须遵循依赖链(如 `umq_data_tx_ops.h` 必须在 `umq_buf_converter.h` 之前，因为后者用到 `umq_buf_t`)
 - `SortIncludes: true` 实际上只在Preserve块内排序，不是全局排序
 - Bazel构建没有UT目标；`HCOM_BUILD_TESTS=on` with Bazel会回退到CMake跑测试
+- **无 URMA SDK 时 UMQ 构建需 `USE_URMA_STUB=ON`** — `umq_ub` 子模块依赖 `urma_api.h`/`uvs_api.h`，默认从 `dist/hcom_3rdparty/umdk/urma/include/` 查找。若该目录不存在(未安装完整 URMA SDK)，必须 `cmake -DUSE_URMA_STUB=ON ..`，使用 `src/hcom/umq/stub/urma/` 下的 stub 头文件；否则 `umq_ub` 编译报 `fatal error: urma_api.h: No such file or directory`
+- **UMQ CMakeLists 默认 `OPENSSL_ROOT_DIR` 指向 Homebrew 路径** — UMQ 的 `CMakeLists.txt:32` 设为 `/usr/local/opt/openssl`（macOS Homebrew 默认），在 Linux 上需手动覆盖。UMQ 为外部引入代码，不做修改
+- **TLS 测试证书有效期** — `test/hcom/opensslcrt/` 下的 X509 测试证书有有效期，过期后 OpenSSL 3.0+ 会拒绝加载（报 "TLS use certification file chain failed"）。详见 `test/hcom/opensslcrt/README.md` 的重新生成方法
 - Release构建有 `-Werror`；debug/test构建没有
 - Pre-commit hooks跑全量构建 — commit会很慢
 - `umq_errno_converter.h` 是冻结/final — 永远不要提议修改它

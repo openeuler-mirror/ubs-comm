@@ -9,7 +9,7 @@ repos:
         files: ^(?!test/).*(\.(h|c|cpp|sh|cmake)|CMakeLists\.txt)$
       - id: run-build-test
         name: Run Tests Build
-        entry: bash build.sh test --skip-run-tests
+        entry: HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on bash build.sh
         language: system
         pass_filenames: false
         files: ^test/.*\.(h|c|cpp|sh|cmake)$|^test/CMakeLists\.txt$
@@ -25,10 +25,10 @@ repos:
         entry: clang-tidy
         language: system
         files: ^(?!test/).*\.(h|c|cpp)$
-        args: [-p=cmake-build-release, -header-filter=.*, --fix]
+        args: [-p=tmp_build_dir, -header-filter=.*, --fix]
       - id: clang-tidy-test
         name: Run clang-tidy check for test files
         entry: clang-tidy
         language: system
         files: ^test/.*\.(h|c|cpp)$
-        args: [-p=cmake-build-debug, --fix]
+        args: [-p=tmp_build_dir, --fix]

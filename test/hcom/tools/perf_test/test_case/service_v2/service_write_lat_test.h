@@ -4,6 +4,7 @@
 #ifndef HCOM_PERF_TEST_SERVICE_WRITE_LAT_H
 #define HCOM_PERF_TEST_SERVICE_WRITE_LAT_H
 #include <semaphore.h>
+#include "common/perf_test_logger.h"
 #include "hcom/hcom.h"
 #include "test_case/perf_test_base.h"
 #include "test_case/service_v2/service_helper.h"

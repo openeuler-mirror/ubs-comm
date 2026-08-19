@@ -186,23 +186,14 @@ static bool CACallback(const std::string &name, std::string &caPath, std::string
 
 int ValidateTlsCert()
 {
-    char *buffer;
-
-    if ((buffer = getcwd(NULL, 0)) == NULL) {
-        NN_LOG_ERROR("Cet path for TLS cert failed");
-        return -1;
-    }
-
-    std::string currentPath = buffer;
-
-    certPath = currentPath + "/../test/hcom/opensslcrt/normalCert1";
-    otherCertPath = currentPath + "/../test/hcom/opensslcrt/normalCert2";
-    expiredCertPath = currentPath + "/../test/hcom/opensslcrt/expiredCert";
-    revokedCertPath = currentPath + "/../test/hcom/opensslcrt/crlRevokedCert";
-    cliVerifyByNoneCertPath = currentPath + "/../test/hcom/opensslcrt/serExpCertCliNoCheck";
-    multiCertPath = currentPath + "/../test/hcom/opensslcrt/multiLevelCert";
-    abnormalCertChainPath = currentPath + "/../test/hcom/opensslcrt/abnormalCertChain";
-    normalCertChainPath = currentPath + "/../test/hcom/opensslcrt/normalCertChain";
+    certPath = HCOM_TEST_OPENSSLCRT_DIR "/normalCert1";
+    otherCertPath = HCOM_TEST_OPENSSLCRT_DIR "/normalCert2";
+    expiredCertPath = HCOM_TEST_OPENSSLCRT_DIR "/expiredCert";
+    revokedCertPath = HCOM_TEST_OPENSSLCRT_DIR "/crlRevokedCert";
+    cliVerifyByNoneCertPath = HCOM_TEST_OPENSSLCRT_DIR "/serExpCertCliNoCheck";
+    multiCertPath = HCOM_TEST_OPENSSLCRT_DIR "/multiLevelCert";
+    abnormalCertChainPath = HCOM_TEST_OPENSSLCRT_DIR "/abnormalCertChain";
+    normalCertChainPath = HCOM_TEST_OPENSSLCRT_DIR "/normalCertChain";
 
     if (!CanonicalPath(certPath)) {
         NN_LOG_ERROR("TLS cert path check failed " << certPath);
@@ -468,8 +459,8 @@ bool ServerCreateDriverTlsWithCVerifyByNone()
     }
 
     cVerifyByNoneTlsDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA, "cliVerifyByNoneServer", true);
-    if (certRevokedTlsDriver == nullptr) {
-        NN_LOG_ERROR("failed to create cVerifyByNoneTlsDriver already created");
+    if (cVerifyByNoneTlsDriver == nullptr) {
+        NN_LOG_ERROR("failed to create cVerifyByNoneTlsDriver");
         return false;
     }
 
@@ -1103,7 +1094,7 @@ bool ClientCreateDriverWithTlsVerifyByNone()
 bool SyncClientConnectWithTlsVerifyByNone()
 {
     if (tlsClientVerifyByNoneDriver == nullptr) {
-        NN_LOG_ERROR("tlsClientCertRevokedDriver is null");
+        NN_LOG_ERROR("tlsClientVerifyByNoneDriver is null");
         return false;
     }
 

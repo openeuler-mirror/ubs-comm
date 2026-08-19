@@ -128,10 +128,16 @@ function run_ubsocket_ut_tests() {
     local ubsocket_dir="${ROOT_DIR}/src/ubsocket"
     cd "${ubsocket_dir}"
 
+    # 覆盖率默认关闭，仅显式 UBSOCKET_COVERAGE=on 时启用（openEuler 默认仓库无 lcov 包）
+    local coverage_flag="OFF"
+    if [ "${UBSOCKET_COVERAGE}" == "on" ]; then
+        coverage_flag="ON"
+    fi
+
     if cmake -S. -Bbuild \
         -DCMAKE_BUILD_TYPE=Debug \
         -DUBSOCKET_BUILD_TESTS=ON \
-        -DUBSOCKET_ENABLE_COVERAGE=ON \
+        -DUBSOCKET_ENABLE_COVERAGE=${coverage_flag} \
         -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
         -DUMQ_LIB="${ROOT_DIR}/src/hcom/umq/build/src/libumq.so" \
         -DUMQ_BUF_LIB="${ROOT_DIR}/src/hcom/umq/build/src/qbuf/libumq_buf.so"; then
@@ -150,7 +156,8 @@ function run_ubsocket_ut_tests() {
         exit 1
     fi
 
-    if ctest --test-dir build --output-on-failure; then
+    if LD_LIBRARY_PATH="${ROOT_DIR}/src/hcom/umq/build/src:${ROOT_DIR}/src/hcom/umq/build/src/qbuf" \
+        ctest --test-dir build --output-on-failure; then
         echo "All ubsocket UT tests successfully."
         return 0
     else

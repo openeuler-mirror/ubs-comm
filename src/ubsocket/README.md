@@ -21,6 +21,18 @@ UBSocket is designed highly extendable to support different hardware, for exampl
 
 ## 🚀Quickstart
 
+### 方式一：仅构建 UMQ + UBSocket
+
+跳过 HCOM 构建，直接执行 UMQ/UBSocket 编译脚本：
+
+```shell
+UMQ_BUILD=on UBSOCKET_BUILD=on bash build/build_umq_and_ubsocket.sh
+```
+
+### 方式二：手动 cmake 编译
+
+编译和运行详见 [UBSocket 使用手册 §构建和运行](./../../doc/ubsocket/UBSOCKET-USER-GUIDE.md#4-构建和运行)。
+
 ## 📑How to use
 
 * [Get Started](./../../doc/ubsocket/UBSOCKET-USER-GUIDE.md)

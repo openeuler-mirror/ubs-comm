@@ -37,15 +37,7 @@ static int g_nameSeed = 0;
 
 int ShmValidateTlsCert()
 {
-    char *buffer;
-
-    if ((buffer = getcwd(NULL, 0)) == NULL) {
-        NN_LOG_ERROR("Cet path for TLS cert failed");
-        return -1;
-    }
-
-    std::string currentPath = buffer;
-    shmCertPath = currentPath + "/../test/hcom/opensslcrt/normalCert1";
+    shmCertPath = HCOM_TEST_OPENSSLCRT_DIR "/normalCert1";
 
     if (!CanonicalPath(shmCertPath)) {
         NN_LOG_ERROR("TLS cert path check failed " << shmCertPath);

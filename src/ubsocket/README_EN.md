@@ -45,6 +45,16 @@ sysctl -p
 
 ### 2.2 Compilation
 
+#### Method 1: Build UMQ + UBSocket via script
+
+Skip the HCOM build and directly run the UMQ/UBSocket build script from the repository root:
+
+```shell
+UMQ_BUILD=on UBSOCKET_BUILD=on bash build/build_umq_and_ubsocket.sh
+```
+
+#### Method 2: Manual cmake build
+
 `UBSocket` belongs to the `UBS Comm` project and uses some common capabilities of the project. Therefore, the compilation has two parts. Before compiling the source code, download the `UBS Comm` source code and switch to the target branch or tag.
 
 ```shell
