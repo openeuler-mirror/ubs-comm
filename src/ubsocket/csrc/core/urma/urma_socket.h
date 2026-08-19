@@ -157,10 +157,10 @@ using UrmaSocketPtr = Ref<UrmaSocket>;
 
 ALWAYS_INLINE int UrmaSocket::DoNotifyWritable()
 {
-    PROF_START(URMA_EVENT_WRITE);
+    PROF_START(___URMA_EVENT_WRITE);
     FetchOrReachEpollEvents(EPOLLOUT);
     auto ret = eventfd_write(event_fd_, 1);
-    PROF_END(URMA_EVENT_WRITE, true);
+    PROF_END(___URMA_EVENT_WRITE, true);
     return ret;
 }
 

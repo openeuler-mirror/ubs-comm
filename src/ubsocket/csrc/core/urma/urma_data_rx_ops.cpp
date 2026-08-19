@@ -53,7 +53,7 @@ Result UrmaRxOps::DataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexc
     auto &slot = data_slots_[idx];
     if (ubsocket_prof_enabled != 0) {
         auto used = ubsocket_get_timeNs() - slot.start_read_time;
-        PROF_RECORD(URMA_LARGE_DATA_PULL, used, true);
+        PROF_RECORD(_URMA_LARGE_DATA_PULL, used, true);
     }
 
     uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
@@ -151,7 +151,7 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
 
     if (ubsocket_prof_enabled != 0) {
         auto used = ubsocket_get_timeNs() - slot->start_read_time;
-        PROF_RECORD(URMA_DEAL_SLOT_DATA, used, true);
+        PROF_RECORD(_URMA_DEAL_SLOT_DATA, used, true);
     }
 
     WriteImmData imm_data{slot->write_imm};

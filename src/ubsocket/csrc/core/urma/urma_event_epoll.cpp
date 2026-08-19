@@ -67,7 +67,7 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
     uint64_t event_read_val;
     UBS_VLOG_TRACE("urma epoll wait(epfd=%d, max=%d, timeout=%d) start...", epoll_fd_, maxevents, timeout);
     int ret = epoll_wait(epoll_fd_, events, maxevents, timeout);
-    PROF_START(URMA_DEAL_EPOLL_EVENT);
+    PROF_START(__URMA_DEAL_EPOLL_EVENT);
     for (auto i = 0; i < ret && i < maxevents; ++i) {
         auto event_data = static_cast<EpollEvent *>(events[i].data.ptr);
         if (UNLIKELY(event_data == nullptr)) {
@@ -100,11 +100,11 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
             uint64_t traceTime = rxOps->CurrentTraceNsTime();
             if (traceTime != 0) {
                 auto used = ubsocket_get_timeNs() - traceTime;
-                PROF_RECORD(URMA_SLOT_EPOLL_PROC, used, true);
+                PROF_RECORD(__URMA_SLOT_EPOLL_PROC, used, true);
             }
         }
     }
-    PROF_END(URMA_DEAL_EPOLL_EVENT, true);
+    PROF_END(__URMA_DEAL_EPOLL_EVENT, true);
     return ret;
 }
 
