@@ -55,7 +55,7 @@ if(NOT LIBBOUNDCHECK_INCLUDE_DIR OR NOT LIBBOUNDCHECK_SHARED_LIBRARY)
                 FetchContent_GetProperties(libboundscheck)
                 set(SECUREC_SRC_DIR ${libboundscheck_SOURCE_DIR}/src/hcom)
                 execute_process(
-                        COMMAND make CC=gcc
+                        COMMAND make CC=${CMAKE_C_COMPILER}
                         WORKING_DIRECTORY ${libboundscheck_SOURCE_DIR}
                         RESULT_VARIABLE MAKE_RESULT
                 )

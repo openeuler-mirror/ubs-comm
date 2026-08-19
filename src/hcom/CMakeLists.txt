@@ -190,6 +190,7 @@ set(HCOM_SRC_INCLUDE_PATH
 )
 
 file(GLOB_RECURSE HCOM *.cpp *.h)
+list(FILTER HCOM EXCLUDE REGEX "umq/build/")
 
 file(GLOB HCOM_RDMA_COMMON "${HCOM_SRC_DIR}/src/hcom/transport/rdma/*")
 file(GLOB_RECURSE HCOM_RDMA_SRCS

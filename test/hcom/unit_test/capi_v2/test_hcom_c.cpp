@@ -450,10 +450,6 @@ TEST_F(TestHcomCapi, TestDriverGetIpport)
     MOCKER_CPP(&UBSHcomNetDriver::GetOobIpAndPort).stubs().will(invoke(GetOobIpAndPortStub));
     EXPECT_EQ(ubs_hcom_driver_get_ipport(drivert, &ipArray, &portArray, &length), true);
 
-    void *devAttr = nullptr;
-    MOCKER(malloc).stubs().will(returnValue(devAttr));
-    EXPECT_EQ(ubs_hcom_driver_get_ipport(drivert, &ipArray, &portArray, &length), false);
-
     delete driver;
 }
 

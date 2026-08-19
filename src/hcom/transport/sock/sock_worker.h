@@ -12,6 +12,7 @@
 #ifndef OCK_HCOM_SOCK_WORKER_H_234214
 #define OCK_HCOM_SOCK_WORKER_H_234214
 
+#include <sys/epoll.h>
 #include <sys/resource.h>
 
 #include "hcom.h"

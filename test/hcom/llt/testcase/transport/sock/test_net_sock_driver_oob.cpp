@@ -89,14 +89,7 @@ static int Verify(void *x509, const char *path)
 
 int SockOobValidateTlsCert()
 {
-    char *buffer;
-    if ((buffer = getcwd(NULL, 0)) == NULL) {
-        NN_LOG_ERROR("Cet path for TLS cert failed");
-        return -1;
-    }
-
-    std::string currentPath = buffer;
-    certificatePath = currentPath + "/../test/hcom/opensslcrt/normalCert1";
+    certificatePath = HCOM_TEST_OPENSSLCRT_DIR "/normalCert1";
 
     if (!CanonicalPath(certificatePath)) {
         NN_LOG_ERROR("TLS cert path check failed " << certificatePath);

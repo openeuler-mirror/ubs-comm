@@ -1,133 +1,107 @@
-# HCOM
+# UBS-COMM
 
-`HCOM`是一个适用于C/S架构应用程序的高性能通信库，主要有以下特征：
+本仓库包含两个独立出包的通信库子项目：
 
-- **高易用性**：`HCOM`底层支持多种网卡硬件及通信协议（如`RDMA`、`TCP`、`SHM`、`UB`），屏蔽了这些硬件或传输协议间的差异，向开发者提供统一的API。此外，`HCOM`还提供了`QoS`能力（如流控、故障检测、消息重传等），认证加密能力等，进一步方便开发者使用。
-- **高性能**：`HCOM`通过软硬件结合，实现极致高性能。针对不同的场景，软件实现了多线程管理、`RNDV`（Rendezvous协议，用于大包场景）、`MultiRail`（多网口聚合，充分利用网络带宽）等加速特性。
+| 子项目 | 目录 | 详细文档 |
+|--------|------|----------|
+| **HCOM** | `src/hcom/` | [`src/hcom/README.md`](src/hcom/README.md) |
+| **UBSocket** | `src/ubsocket/` | [`src/ubsocket/README.md`](src/ubsocket/README.md) |
+
+> 两个子项目支持通过 `build.sh` 一站式构建, 也可分别独立编译和测试。**编译和测试前必须阅读各子项目文档（见上方表格链接）。**
 
 ## 1 源码下载
 
-可以使用如下两种方式下载HCOM源码。
-
 ```shell
 # 方法一
-$ git clone <hcom-repo-url>
+$ git clone <repo-url>
 $ git submodule update --init --recursive
 # 方法二
-$ git clone <hcom-repo-url> --recurse-submodules
+$ git clone <repo-url> --recurse-submodules
 ```
 
 ## 2 源码目录结构
 
-`HCOM`源码的主要目录结构如下所示。
-
 ```shell
 .
-├── build   // 存放项目中使用的脚本文件
-├── doc       // 存放项目文档，例如《代码架构设计》
-├── src       // 存放项目的功能实现源码，仅该目录参与构建出包
-├── test      // 存放项目的ut和dtfuzz等
-└── build.sh  // 统一的构建入口
+├── build      // 构建脚本
+├── doc        // 项目文档
+├── src        // 子项目源码
+│   ├── hcom   // HCOM
+│   └── ubsocket  // UBSocket
+├── test       // UT 和性能测试
+└── build.sh   // HCOM 构建入口
 ```
 
-## 3 用户指南
+## 3 平台兼容性说明
 
-`HCOM`提供给开发者的的资料主要有以下几本。
-《UBS-COMM-API-Spec》
-《UBS-COMM-Architecture-Design-Specification》
-《UBS-Comm-Tutorial-Demo》
-《UBS-Comm-Tutorial-UseCase》
+> **重要：单元测试（UT）通过 ≠ 端到端（E2E）验证通过。**
 
-## 4 编译
+| 组件 | x86_64 | aarch64 | 说明 |
+|------|--------|---------|------|
+| HCOM — TCP | 编译 + UT | 编译 + UT | E2E 需对应传输硬件 |
+| HCOM — RDMA | 编译 + UT | 编译 + UT | **E2E 需 RDMA 网卡** |
+| HCOM — SHM | 编译 + UT | 编译 + UT | **E2E 需共享内存支持** |
+| HCOM — UB | 编译 + UT | 编译 + UT + **E2E** | **E2E 仅 aarch64**（Kunpeng） |
+| UBSocket | 编译 + UT | 编译 + UT + **E2E** | **E2E 仅 aarch64**（Kunpeng） |
 
-`HCOM`在代码仓中提供了统一的编译构建脚本（即`build.sh`），可以直接执行该脚本编译构建（该脚本同时用于CI流水线构建出包）。默认无需任何配置项，直接执行即可。
+- **UT**：使用 mockcpp + fake_ibv_static + urma stub 模拟底层依赖，与平台无关，x86 和 ARM 均可全量通过。
+- **E2E**（实际物理机端到端验证）：需要对应传输层的硬件支持。
+  - TCP 需要网络栈和网卡，适用性最广。
+  - RDMA 需要 RDMA 网卡（如 InfiniBand/RoCE）。
+  - SHM 需要共享内存支持（同一宿主机进程间通信）。
+  - UB 依赖 Kunpeng 硬件，UBSocket 依赖 UMQ/URMA 运行时，**仅 aarch64（Kunpeng 920/950）可用**。
+
+## 4 编译构建
+
+### 4.1 构建依赖
+
+构建前需安装以下工具链和依赖（**仅支持 openEuler**）：
 
 ```shell
+$ dnf install -y cmake gcc gcc-c++ make git rdma-core-devel openssl-devel libboundscheck time
+```
+
+### 4.2 编译
+
+`build.sh` 支持一站式构建全部子项目：
+
+```shell
+# 仅 HCOM（默认）
 $ ./build.sh
+
+# HCOM + UMQ + UBSocket
+$ UMQ_BUILD=on UBSOCKET_BUILD=on ./build.sh
+
+# HCOM debug + UT + UMQ + UBSocket + UBSocket UT
+$ HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on UMQ_BUILD=on UBSOCKET_BUILD=on UBSOCKET_UT=on ./build.sh
 ```
 
-执行完毕后可以在源码的dist目录中找到一个`xxx.tar.gz`的软件包，其核心内容及介绍如下所示。
+> **注意**：仅执行UT，无需进行E2E测试，未安装完整 URMA SDK 时增加 `USE_URMA_STUB=ON`，提供 `umq_ub` 编译需要的依赖。
+>
+> 各子项目的独立编译、测试、样例命令，**必须分别阅读**：
+> - HCOM 构建命令：[`src/hcom/README.md §编译`](src/hcom/README.md)
+> - UBSocket 构建与测试命令：[`src/ubsocket/README.md`](src/ubsocket/README.md)
+
+直接运行 test binary 前需设置 `LD_LIBRARY_PATH`（包含 `dist/hcom_3rdparty/libboundscheck/lib` 和 `dist/hcom/lib`）。
+
+运行 UBSocket 单元测试：
 
 ```shell
-$ tree
-.
-├── include  // C&C++头文件
-│   └── hcom
-│       ├── capi
-│       │   ├── hcom_c.h
-│       │   └── hcom_service_c.h
-│       ├── hcom.h
-│       └── hcom_service.h
-└── lib     // C&C++动态库和静态库
-    ├── libhcom.so
-    └── libhcom_static.a
+$ ctest --test-dir src/ubsocket/build --output-on-failure
 ```
 
-可以通过环境变量，对`build.sh`的编译过程进行控制，如下所示。
+### 4.3 容器/Docker 环境说明
 
-```shell
-$ cat build.sh | head -n 23
-#!/bin/bash
-# ***********************************************************************
-# Copyright: (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
-# Script for building HCOM.
-# Build options can be configured through environment variables.
-# (1) HCOM_BUILD_TYPE(optional, default is release) => set build type.(release/debug)
-# (2) HCOM_BUILD_TESTS(optional, default is off) => enable build test or not.(on/off)
-# (3) HCOM_BUILD_JAVA_SDK(optional, default is off) => build java sdk or not.(on/off)
-# (4) HCOM_BUILD_SERVICE(optional, default is on) => build service level or not.(on/off)
-# (5) HCOM_BUILD_RDMA(optional, default is on) => build rdma or not.(on/off)
-# (6) HCOM_BUILD_SOCK(optional, default is on) => build sock (tcp/uds) or not.(on/off)
-# (7) HCOM_BUILD_SHM(optional, default is on) => build shm or not.(on/off)
-# (8) HCOM_BUILD_EXAMPLE(optional, default is off) => build example and perf.(on/off)
-# (9) HCOM_ENABLE_ARM_KP(optional, default is on) => check kunpeng or not.(on/off)
-# (10) HCOM_TEST_TOOL_PATH(optional) => test tool install path.(mockcpp/gtest/dtfuzz)
-# (11) HCOM_CI_WORKSPACE(optional) => ci workspace, for buildInfo.properties file.
-# (12) HCOM_BUILD_RPM(optional, default is on) => build rpm.(on/off)
-# (13) HCOM_BUILD_TOOLS_PERF(optional, default is off) => build rpm.(on/off)
-# (14) HCOM_BUILD_HW_CRC(optional, default is off) => build with hardware based crc.(on/off)
-# (15) HCOM_BUILD_MULTICAST(optional, default is off) => build multicast or not.(on/off)
+编译和运行环境仅支持：**openEuler**。
 
-# version: 1.0.0
-# change log:
-# ***********************************************************************
-```
+在容器（或任何最小化环境）中构建和运行测试前，确保已安装上述工具链和依赖。仓库无需额外 Dockerfile，`build.sh` 直接管理构建流程。
 
-## 5 编译和执行HCOM性能测试工具
-
-HCOM的示例存放在两个目录：
-
-- test/tools/perf_test目录：存放性能用例，用例链接`HCOM`静态库。
-
-考虑门禁构建时间，默认不会编译perf_test用例，请参考以下README文档编译
-```
-lingqu\test\tools\perf_test\README.md
-```
-或执行以下命令，开启环境变量后编译
-```
-export HCOM_BUILD_TOOLS_PERF=on
-bash build.sh
-```
-
-## 6 编译和执行UT用例
-可以按照如下方式，手动编译和执行UT用例。
-
-```shell
-# ut用例中涉及较多mock，mock框架需要知道具体的符号，只能以debug模式编译
-$ export HCOM_BUILD_TYPE=debug
-# 构建出包时，默认不编译ut，需手动开启
-$ export HCOM_BUILD_TESTS=on
-# 直接执行构建脚本，即可编译
-$ ./build.sh
-# 执行UT用例并生成测试报告，耗时较长，结果存放在build目录中
-$ ./build/generate_gtest_report.sh
-# 生成UT覆盖率信息，结果存放在build目录中
-$ ./build/generate_lcov_report.sh
-```
+测试二进制通过 `dlopen` 动态加载 `libibverbs.so` 和 `libssl.so`，即使使用 `fake_ibv_static` 模拟 RDMA verbs 也是如此。
 
 ## License
-HCOM 采用 Mulan V2 License.
+
+UBS-COMM 采用 Mulan V2 License.
 
 ## 贡献指南
-请阅读 贡献指南 `CONTRIBUTING.md`  以了解如何贡献项目。
 
+请阅读 `CONTRIBUTING.md` 以了解如何贡献项目。

@@ -255,6 +255,8 @@ make -j32
 
 完成`UBSocket`的编译后，可以得到`build/csrc/libubsocket.so`目标编译产物。
 
+> 运行单元测试时需确保 UMQ 库在 `LD_LIBRARY_PATH` 中（`libumq.so`、`libumq_buf.so`），使用 `build/build_umq_and_ubsocket.sh` 脚本已自动处理，无需手动设置。
+
 > 说明：
 >
 > 在编译UBSocket时，可以通过`-DUMQ_INCLUDE=/path/to/umq_include -DUMQ_LIB=/path/to/umq_lib`来指定umq的头文件和lib库文件路径（如`=-DUMQ_INCLUDE=/prefix/ubs-comm/src/hcom/umq/include/umq/  -DUMQ_LIB=/prefix/ubs-comm/src/hcom/umq/build/src/libumq.so`）。
