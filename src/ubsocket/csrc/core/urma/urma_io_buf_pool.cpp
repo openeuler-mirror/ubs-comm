@@ -265,8 +265,22 @@ Result UrmaIoBufferPool::register_mem(const UrmaContextPtr &ctx, uintptr_t ptr, 
 
 Result UrmaIoBufferPool::deregister_mem(const UrmaContextPtr &ctx, uintptr_t ptr, size_t size) noexcept
 {
-    UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") not supported!");
-    return UBS_ERROR;
+    uint32_t block_index = static_cast<uint32_t>(((ptr - local_start_addr_) >> 20) / options_.block_size_mb);
+    if (target_segments_.local_target_segs_.size() <= block_index) {
+        UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed for block_index error!");
+        return UBS_ERROR;
+    }
+    auto local_seg = target_segments_.local_target_segs_[block_index];
+    if (local_seg == nullptr) {
+        UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed for seg is null!");
+        return UBS_ERROR;
+    }
+    if (UrmaApi::urma_unregister_seg(local_seg) != URMA_SUCCESS) {
+        UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed!");
+        return UBS_ERROR;
+    }
+    target_segments_.local_target_segs_[block_index] = nullptr;
+    return UBS_OK;
 }
 
 } // namespace urma
