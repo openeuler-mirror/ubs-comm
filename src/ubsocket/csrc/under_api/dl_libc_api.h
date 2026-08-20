@@ -74,6 +74,15 @@ using signal_api = sighandler_t (*)(int signum, sighandler_t handler);
 
 namespace ock {
 namespace ubs {
+#define ENSURE_LOADED(err_val)            \
+    do {                                  \
+        if (UNLIKELY(!LOADED)) {          \
+            if (Load() != UBS_OK) {       \
+                return (err_val);         \
+            }                             \
+        }                                 \
+    } while (0)
+
 class LibcApi {
 public:
     static Result Load() noexcept;
@@ -81,6 +90,7 @@ public:
 
     static int open(const char *file, int oflag, ...)
     {
+        ENSURE_LOADED(-1);
         unsigned long int arg{0};
         va_list va;
         va_start(va, oflag);
@@ -91,51 +101,61 @@ public:
 
     static int socket(int domain, int type, int protocol)
     {
+        ENSURE_LOADED(-1);
         return socket_ptr(domain, type, protocol);
     }
 
     static int close(int fd)
     {
+        ENSURE_LOADED(-1);
         return close_ptr(fd);
     }
 
     static int shutdown(int fd, int how)
     {
+        ENSURE_LOADED(-1);
         return shutdown_ptr(fd, how);
     }
 
     static int accept(int socket, struct sockaddr *address, socklen_t *address_len)
     {
+        ENSURE_LOADED(-1);
         return accept_ptr(socket, address, address_len);
     }
 
     static int accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
     {
+        ENSURE_LOADED(-1);
         return accept4_ptr(fd, addr, addrlen, flags);
     }
 
     static int bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
     {
+        ENSURE_LOADED(-1);
         return bind_ptr(fd, addr, addrlen);
     }
 
     static int connect(int socket, const struct sockaddr *address, socklen_t address_len)
     {
+        ENSURE_LOADED(-1);
         return connect_ptr(socket, address, address_len);
     }
 
     static int listen(int fd, int backlog)
     {
+        ENSURE_LOADED(-1);
         return listen_ptr(fd, backlog);
     }
 
     static int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen)
     {
+        ENSURE_LOADED(-1);
         return setsockopt_ptr(fd, level, optname, optval, optlen);
     }
 
     static int fcntl(int fd, int cmd, ...)
     {
+        ENSURE_LOADED(-1);
         unsigned long int arg{0};
         va_list va;
         va_start(va, cmd);
@@ -146,6 +166,7 @@ public:
 
     static int fcntl64(int fd, int cmd, ...)
     {
+        ENSURE_LOADED(-1);
         unsigned long int arg{0};
         va_list va;
         va_start(va, cmd);
@@ -156,6 +177,7 @@ public:
 
     static int ioctl(int fd, unsigned long int request, ...)
     {
+        ENSURE_LOADED(-1);
         unsigned long int arg{0};
         va_list va;
         va_start(va, request);
@@ -166,91 +188,109 @@ public:
 
     static ssize_t read(int fd, void *buf, size_t nbytes)
     {
+        ENSURE_LOADED(-1);
         return read_ptr(fd, buf, nbytes);
     }
 
     static ssize_t readv(int fildes, const struct iovec *iov, int iovcnt)
     {
+        ENSURE_LOADED(-1);
         return readv_ptr(fildes, iov, iovcnt);
     }
 
     static ssize_t recv(int sockfd, void *buf, size_t size, int flags)
     {
+        ENSURE_LOADED(-1);
         return recv_ptr(sockfd, buf, size, flags);
     }
 
     static ssize_t recvmsg(int fd, struct msghdr *message, int flags)
     {
+        ENSURE_LOADED(-1);
         return recvmsg_ptr(fd, message, flags);
     }
 
     static ssize_t recvfrom(int fd, void *buf, size_t n, int flags, struct sockaddr *from, socklen_t *fromlen)
     {
+        ENSURE_LOADED(-1);
         return recvfrom_ptr(fd, buf, n, flags, from, fromlen);
     }
 
     static ssize_t write(int fd, const void *buf, size_t n)
     {
+        ENSURE_LOADED(-1);
         return write_ptr(fd, buf, n);
     }
 
     static ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
     {
+        ENSURE_LOADED(-1);
         return writev_ptr(fildes, iov, iovcnt);
     }
 
     static ssize_t send(int sockfd, const void *buf, size_t size, int flags)
     {
+        ENSURE_LOADED(-1);
         return send_ptr(sockfd, buf, size, flags);
     }
 
     static ssize_t sendmsg(int fd, const struct msghdr *message, int flags)
     {
+        ENSURE_LOADED(-1);
         return sendmsg_ptr(fd, message, flags);
     }
 
     static ssize_t sendto(int fd, const void *buf, size_t n, int flags, const struct sockaddr *to, socklen_t tolen)
     {
+        ENSURE_LOADED(-1);
         return sendto_ptr(fd, buf, n, flags, to, tolen);
     }
 
     static ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count)
     {
+        ENSURE_LOADED(-1);
         return sendfile_ptr(out_fd, in_fd, offset, count);
     }
 
     static ssize_t sendfile64(int out_fd, int in_fd, off64_t *offset, size_t count)
     {
+        ENSURE_LOADED(-1);
         return sendfile64_ptr(out_fd, in_fd, offset, count);
     }
 
     static int epoll_create(int size)
     {
+        ENSURE_LOADED(-1);
         return epoll_create_ptr(size);
     }
 
     static int epoll_create1(int flags)
     {
+        ENSURE_LOADED(-1);
         return epoll_create1_ptr(flags);
     }
 
     static int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
     {
+        ENSURE_LOADED(-1);
         return epoll_ctl_ptr(epfd, op, fd, event);
     }
 
     static int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
     {
+        ENSURE_LOADED(-1);
         return epoll_wait_ptr(epfd, events, maxevents, timeout);
     }
 
     static int epoll_pwait(int epfd, struct epoll_event *events, int maxevents, int timeout, const sigset_t *sigmask)
     {
+        ENSURE_LOADED(-1);
         return epoll_pwait_ptr(epfd, events, maxevents, timeout, sigmask);
     }
 
     static int getsockopt(int fd, int level, int optname, void *optval, socklen_t *optlen)
     {
+        ENSURE_LOADED(-1);
         return getsockopt_ptr(fd, level, optname, optval, optlen);
     }
 
