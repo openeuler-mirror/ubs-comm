@@ -112,6 +112,8 @@ UBS Comm主要分为服务层和传输层。其中，服务层（[图1-1](#fig42
 
 1.  软件架构
 
+**![image-20251029102007735](C:\Users\y00835993\AppData\Roaming\Typora\typora-user-images\image-20251029102007735.png)**
+
 3.  特性介绍
 
 - 线程模型
@@ -131,6 +133,8 @@ UBS Comm会创建3种类型的线程：主线程、Worker线程和心跳线程�
   2.  TCP模式下，使用TCP协议的keepalive特性，配置TCP_KEEPIDLE/TCP_KEEPINTVL等字段，保证链路状态正常。
 
       1.  线程模型
+
+> ![image-20251029102016672](C:\Users\y00835993\AppData\Roaming\Typora\typora-user-images\image-20251029102016672.png)
 
 - 双向RPC
 
@@ -194,7 +198,7 @@ UBS Comm组网可由2台服务器组成，其中：
 
 - Server用于等待其他节点建链，也可以主动向其他节点建链，并可以使用链路来向对端发送消息。
 
-- Client用于主动向其他节点建链，并可以使用链路来向对端发送消息。
+- Client用于主动向其他节点建链，并可以使用链路来向对端发送消息。![image-20251029101933187](C:\Users\y00835993\AppData\Roaming\Typora\typora-user-images\image-20251029101933187.png)
 
   
 
