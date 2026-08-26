@@ -114,6 +114,8 @@ private:
 };
 extern u_rw_lock_t *g_socket_epoll_lock;
 EpollMapper *GetSocketEpollMapper(int socket_fd);
+bool CreateSocketEpollMapper(int socket_fd, EpollMapper *&mapper);
+void CleanSocketEpollMapper(int socket_fd);
 void CleanAllSocketEpollMappers();
 
 class EpollRunnerOps {
@@ -337,6 +339,18 @@ public:
         return epoll_fd_;
     }
 
+    /**
+     * @brief Set wakeup callback for async accept (works for both AsyncEventPoll and UrmaEventPoll)
+     * @param ready_event Pointer to the ready_event EpollEvent (from UbsocketWakeupEvent)
+     * @param cb Callback function to process ready events
+     */
+    void SetWakeupCallback(EpollEvent *ready_event,
+                           std::function<int(struct epoll_event *, int, std::unordered_map<int, EpollEvent *> &)> cb)
+    {
+        ready_event_ = ready_event;
+        wakeup_callback_ = cb;
+    }
+
     DEFINE_REF_OPERATION_FUNC;
 
 protected:
@@ -345,6 +359,10 @@ protected:
     const int epoll_fd_;
     u_mutex_t *ctl_mutex_;
     u_mutex_t *mutex_;
+
+    // For async accept wakeup
+    EpollEvent *ready_event_ = nullptr;
+    std::function<int(struct epoll_event *, int, std::unordered_map<int, EpollEvent *> &)> wakeup_callback_;
 };
 using EventPollPtr = Ref<EventPoll>;
 
@@ -396,18 +414,6 @@ public:
     int SetReadableEventFd();
 
     void WakeUpEpollFd() override;
-
-    /**
-     * @brief Set wakeup callback for async accept
-     * @param ready_event Pointer to the ready_event EpollEvent (from UbsocketWakeupEvent)
-     * @param cb Callback function to process ready events
-     */
-    void SetWakeupCallback(EpollEvent *ready_event,
-                           std::function<int(struct epoll_event *, int, std::unordered_map<int, EpollEvent *> &)> cb)
-    {
-        ready_event_ = ready_event;
-        wakeup_callback_ = cb;
-    }
 
 private:
     /**
@@ -526,10 +532,6 @@ private:
     std::unordered_map<int, EpollEvent *> socket_data_;
     EpollEvent *removed_head_ = nullptr; // 待删除的event data列表，用wait唤醒时统一释放
     MPSCRingQueue<struct epoll_event> readable_sockets_event_queue_{MAX_READABLE_FD_COUNT};
-
-    // For async accept wakeup
-    EpollEvent *ready_event_ = nullptr;
-    std::function<int(struct epoll_event *, int, std::unordered_map<int, EpollEvent *> &)> wakeup_callback_;
 };
 using AsyncEventPollPtr = Ref<AsyncEventPoll>;
 

@@ -351,15 +351,14 @@ void Acceptor::InitWakeupEvent()
         UBS_VLOG_DEBUG("async accept: wakeup_event_ init, epoll_fd=%d, listen_fd=%d\n", epoll_fd, raw_fd_);
 
         EventPollPtr aepRef = ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
-        auto *aep = (AsyncEventPoll *)aepRef.Get();
-        if (aep != nullptr) {
-            aep->SetWakeupCallback(wakeup_event_.GetReadyEvent(),
-                                   [this](struct epoll_event *ev, int me, std::unordered_map<int, EpollEvent *> &sd) {
-                                       return wakeup_event_.ProcessReadyEvents(ev, me, sd);
-                                   });
+        if (aepRef != nullptr) {
+            aepRef->SetWakeupCallback(wakeup_event_.GetReadyEvent(),
+                                      [this](struct epoll_event *ev, int me, std::unordered_map<int, EpollEvent *> &sd) {
+                                          return wakeup_event_.ProcessReadyEvents(ev, me, sd);
+                                      });
             UBS_VLOG_DEBUG("async accept: SetWakeupCallback() called for epoll_fd: %d\n", epoll_fd);
         } else {
-            UBS_VLOG_ERR("async accept: failed to get AsyncEventPoll for epoll_fd: %d\n", epoll_fd);
+            UBS_VLOG_ERR("async accept: failed to get EventPoll for epoll_fd: %d\n", epoll_fd);
         }
     });
 }
