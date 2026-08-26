@@ -136,6 +136,8 @@ UWAL的Client和Server对接了UBS Comm使用service层接口完成RDMA和TCP协
 
 1.  数据库场景典型应用
 
+![img](file:///C:/Users/Y00835~1/AppData/Local/Temp/msohtmlclip1/01/clip_image002.jpg)
+
 在数据库场景中，openGauss中UWAL模块借助UBS Comm极致数据传输能力，TPC-C tmpC性能提升12.8%。
 
 ## HPC场景
@@ -146,6 +148,8 @@ SDK和Daemon进程的Cache组件使用了UBS Comm的SHM协议，MF组件节点�
 
 1.  HPC场景应用
 
+![img](file:///C:/Users/Y00835~1/AppData/Local/Temp/msohtmlclip1/01/clip_image002.jpg)
+
 HPC场景中，IO缓存采用UBS Comm读写效率提升30%。
 
 ## 对接X交易所场景
@@ -155,6 +159,8 @@ HPC场景中，IO缓存采用UBS Comm读写效率提升30%。
 X交易系统中，使用UBS Comm的Transport层C++接口层进行RDMA通信。
 
 1.  X交易所对接
+
+![img](file:///C:/Users/Y00835~1/AppData/Local/Temp/msohtmlclip1/01/clip_image002.jpg)
 
 X交易所对接场景中，基于MLX5网卡，使用RDMA协议通信，实现256B小包单向时延不高于1.5us。
 

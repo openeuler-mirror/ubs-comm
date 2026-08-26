@@ -768,7 +768,7 @@ UBSocket接口返回值含义与原生Socket接口保持一致，返回-1表示�
 
 - bRPC client端日志出现 `[E1008]Reached timeout=...ms` 等超时报错，表示请求发送后长时间未收到响应。超时时间取决于bRPC启动时配置的`rpc_timeout_ms`参数值，例如配置`rpc_timeout_ms=400000`时，超时时间为400秒：
   ```
-  E20260604 23:28:06.174492 3438444 client.cpp:206] RPC call failed: [E1008]Reached timeout=400000ms @xxx.xx.xx.xx:30010
+  E20260604 23:28:06.174492 3438444 client.cpp:206] RPC call failed: [E1008]Reached timeout=400000ms @141.62.32.93:30010
   ```
 - UBSocket内部日志出现 `[UBSOCKET Poll] epoll_wait() failed ... Interrupted system call` 等epoll中断报错：
   ```
