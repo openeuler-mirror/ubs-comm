@@ -1501,8 +1501,14 @@ int32_t HcomServiceImp::ServiceRequestReceived(const UBSHcomRequestContext &ctx)
             HcomSeqNo dumpSeq(ctx.Header().seqNo);
             NN_LOG_ERROR("UBSHcomService Channel " << ch->GetId() << " fetch " << dumpSeq.ToString() <<
                 " context failed");
+            // [TIMER-TRACE] 这里直接 return 既不 MarkFinished 也不 DecreaseRef，对应 timer 的
+            // 调用方引用 ① 永远不会释放；timer 也就永远不是 finished，周期线程不会收集它，
+            // ②③ 引用随之泄漏，对象永远不 Return 回 ServiceContextTimer-* 内存池。
+            // 这是 [MEMPOOL-LEAK] 的头号嫌疑路径，务必观察 resp-miss 计数是否单调增长。
+            ctxStorePtr->TraceMiss(HcomTimerEvent::RESP_MISS, ctx.Header().seqNo, ch->GetId());
             return SER_ERROR;
         }
+        ctxStorePtr->TraceMark(HcomTimerEvent::RESP_HIT);
 
         auto timer = reinterpret_cast<HcomServiceTimer *>(tmp);
         timer->RunCallBack(context);
@@ -1561,8 +1567,11 @@ bool HcomServiceImp::RunRequestCallback(UBSHcomChannel *channel, const UBSHcomRe
     if (NN_UNLIKELY(ctxStorePtr->GetSeqNoAndRemove(seqNo, tmp) != SER_OK)) {
         HcomSeqNo dumpSeq(seqNo);
         NN_LOG_ERROR("Channel " << channel->GetId() << " fetch " << dumpSeq.ToString() << " context failed");
+        // [TIMER-TRACE] 发送完成回调路径未命中，同样会漏掉调用方引用 ①
+        ctxStorePtr->TraceMiss(HcomTimerEvent::POSTED_MISS, seqNo, channel->GetId());
         return false;
     }
+    ctxStorePtr->TraceMark(HcomTimerEvent::POSTED_HIT);
 
     auto timer = reinterpret_cast<HcomServiceTimer *>(tmp);
     timer->RunCallBack(context);

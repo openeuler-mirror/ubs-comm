@@ -519,6 +519,46 @@ public:
         }                                                                                                             \
     } while (0)
 
+/*
+ * [leak-trace] Build with -DHCOM_OPCTX_LEAK_TRACE to enable.
+ *
+ * This is the drain side of mSendQueue. Every op context that reaches here for a SEND type is
+ * handed to mSendPostedHandler (NetDriverSockWithOOB::HandleReqPosted) and then RETURNED to the
+ * op ctx pool (see the Return added in the SEND branch below — this fixes the UDS op-ctx leak
+ * documented in hcom_uds_opctx_mem_leak_root_cause.md). HandleReqPosted only returns the send MR
+ * buffer / headerRequest / sendCtx, never the op context itself, so the pool Return must happen
+ * here. mDbgSendCtxDrained counts SEND ctx drained via this path; with the fix in place it should
+ * track 1:1 with mDbgSendCtxQueued and the op-ctx pool outstanding count should stay bounded.
+ */
+#ifdef HCOM_OPCTX_LEAK_TRACE
+#define TRACE_SEND_CTX_QUEUED(ctx)                                                                            \
+    do {                                                                                                      \
+        ++mDbgSendCtxQueued;                                                                                  \
+        NN_LOG_TRACE_INFO("[OPCTX-LEAK] sock " << mId << " queued send ctx " << static_cast<void *>(ctx)       \
+                                               << " opType " << static_cast<int>((ctx)->opType) << ", queued " \
+                                               << mDbgSendCtxQueued);                                         \
+    } while (0)
+
+#define TRACE_SEND_CTX_DRAINED(popReq)                                                                          \
+    do {                                                                                                        \
+        ++mDbgSendCtxDrained;                                                                                   \
+        if (NN_UNLIKELY((mDbgSendCtxDrained & 0xFFFULL) == 0)) {                                                \
+            NN_LOG_WARN("[OPCTX-LEAK] sock " << mId << " drained send ctx " << static_cast<void *>(popReq)      \
+                                             << " opType " << static_cast<int>((popReq)->opType)                \
+                                             << " WITHOUT returning it to the op ctx pool, queued "             \
+                                             << mDbgSendCtxQueued << ", drained " << mDbgSendCtxDrained         \
+                                             << ", send queue size " << mSendQueue.Size());                     \
+        }                                                                                                       \
+    } while (0)
+#else
+#define TRACE_SEND_CTX_QUEUED(ctx) \
+    do {                           \
+    } while (0)
+#define TRACE_SEND_CTX_DRAINED(popReq) \
+    do {                               \
+    } while (0)
+#endif
+
 #define POST_PROCESS(popReq)                                                       \
     do {                                                                           \
         ReturnQueueSpace(NN_NO1);                                                  \
@@ -526,9 +566,10 @@ public:
             (popReq)->opType == SockOpContextInfo::SockOpType::SS_SEND_RAW ||      \
             (popReq)->opType == SockOpContextInfo::SockOpType::SS_SEND_RAW_SGL) {  \
             mSendPostedHandler((popReq));                                          \
-        }                                                                          \
-                                                                                   \
-        if ((popReq)->opType == SockOpContextInfo::SockOpType::SS_WRITE_ACK ||     \
+            TRACE_SEND_CTX_DRAINED(popReq);                                        \
+            mOpCtxInfoPool.Return((popReq));                                       \
+            (popReq) = nullptr;                                                    \
+        } else if ((popReq)->opType == SockOpContextInfo::SockOpType::SS_WRITE_ACK || \
             (popReq)->opType == SockOpContextInfo::SockOpType::SS_READ_ACK ||      \
             (popReq)->opType == SockOpContextInfo::SockOpType::SS_SGL_WRITE_ACK || \
             (popReq)->opType == SockOpContextInfo::SockOpType::SS_SGL_READ_ACK) {  \
@@ -667,6 +708,7 @@ public:
 
             if (mCbByWorkerInBlocking) {
                 ctx->isSent = true;
+                TRACE_SEND_CTX_QUEUED(ctx);
                 mSendQueue.PushBack(ctx);
                 return SS_SOCK_SEND_EAGAIN;
             }
@@ -677,6 +719,7 @@ public:
                 reinterpret_cast<SockTransHeader *>(ctx->sendBuff)->dataLength);
             return SS_OK;
         } else {
+            TRACE_SEND_CTX_QUEUED(ctx);
             mSendQueue.PushBack(ctx);
             return SS_SOCK_SEND_EAGAIN;
         }
@@ -1520,6 +1563,14 @@ protected:
     SockHeaderReqInfoPool mHeaderReqInfoPool;
     SockPostedHandler mSendPostedHandler = nullptr;
     SockOneSideHandler mOneSideDoneHandler = nullptr;
+
+    /* [MEMPOOL-LEAK] diagnostic counters (guarded by HCOM_OPCTX_LEAK_TRACE).
+     * mDbgSendCtxQueued  : # of SockOpContextInfo pushed into mSendQueue (EAGAIN path).
+     * mDbgSendCtxDrained : # of SockOpContextInfo popped from mSendQueue by POST_PROCESS.
+     * Under the UDS RPC leak, drained NEVER catches up to queued -> these diverge and the
+     * op context is never returned to the pool. The gap == number of leaked ctx objects. */
+    uint64_t mDbgSendCtxQueued = 0;
+    uint64_t mDbgSendCtxDrained = 0;
     NormalMemoryRegionFixedBuffer *mSockDriverSendMR = nullptr;
     MemoryRegionChecker *mMrChecker = nullptr;
 
