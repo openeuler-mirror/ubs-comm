@@ -89,25 +89,34 @@ void HcomPeriodicManager::ProcessCleanUp(uint16_t tId)
     HcomServiceGlobalObject::BuildTimeOutCtx(timeoutCtx);
     timeoutCtx.mResult = SER_STOP;
     for (uint32_t i = 0; i < M_MAX_BATCH_NUM; i++) {
-        auto currentQueue = &(mQueue[tId].queue[i]);
+        auto &currentQueue = mQueue[tId].queue[i];
         std::lock_guard<std::mutex> guard(mQueue[tId].lock[i]);
-        while (!currentQueue->empty()) {
-            NN_LOG_TRACE_INFO("Process clean up seq no " << currentQueue->top()->SeqNo() << " timeout "
-                                                         << currentQueue->top()->mTimeout << ", current time "
-                                                         << NetMonotonic::TimeSec());
-            if (currentQueue->top()->EraseSeqNoWithRet()) {
-                currentQueue->top()->TimeoutDump();
-                currentQueue->top()->MarkTimeout();
-                auto callback = reinterpret_cast<Callback *>(currentQueue->top()->Callback());
-                timeoutCtx.mCh = currentQueue->top()->mChannel;
-                callback->Run(timeoutCtx);
-                currentQueue->top()->DecreaseRef();
+        for (HcomServiceTimer *timer : currentQueue) {
+            NN_LOG_TRACE_INFO("Process clean up seq no " << timer->SeqNo() << " timeout " << timer->mTimeout
+                                                         << ", current time " << NetMonotonic::TimeSec());
+            /* [TIMER-TRACE] 服务停止时回收一个 timer（STOP_COLLECT） */
+            if (timer->mCtxStore != nullptr) {
+                timer->mCtxStore->TraceMark(HcomTimerEvent::STOP_COLLECT);
             }
-            RemoveLinkedList(currentQueue->top());
-            currentQueue->top()->DecreaseRef();
-            currentQueue->pop();
+            if (timer->EraseSeqNoWithRet()) {
+                timer->TimeoutDump();
+                timer->MarkTimeout();
+                auto callback = reinterpret_cast<Callback *>(timer->Callback());
+                timeoutCtx.mCh = timer->mChannel;
+                /* [TIMER-TRACE] callback 为空时跳过 Run，避免解引用空指针崩溃；
+                   残留对象仍由后续 DecreaseRef 归还内存池 */
+                if (callback != nullptr) {
+                    callback->Run(timeoutCtx);
+                } else if (timer->mCtxStore != nullptr) {
+                    timer->mCtxStore->TraceMark(HcomTimerEvent::TIMEOUT_NULL_CB);
+                }
+                timer->DecreaseRef();
+            }
+            RemoveLinkedList(timer);
+            timer->DecreaseRef();
             timeoutCtx.mCh.Set(nullptr);
         }
+        currentQueue.clear();
     }
 }
 
@@ -119,20 +128,25 @@ void HcomPeriodicManager::ProcessTimeOut(uint16_t tId)
     }
     mHandleQueue[tId].clear();
     for (int32_t i = M_MAX_BATCH_NUM - 1; i >= 0; i--) {
-        auto currentQueue = &(mQueue[tId].queue[i]);
+        auto &currentQueue = mQueue[tId].queue[i];
         std::lock_guard<std::mutex> guard(mQueue[tId].lock[i]);
-        while (!currentQueue->empty()) {
-            NN_LOG_TRACE_INFO("Process time out seq no " << currentQueue->top()->SeqNo() << " timeout "
-                                                         << currentQueue->top()->mTimeout << ", current time "
-                                                         << NetMonotonic::TimeSec());
-            if (currentQueue->top()->IsFinished() || currentQueue->top()->IsTimeOut()) {
-                mHandleQueue[tId].emplace_back(currentQueue->top());
-                currentQueue->pop();
+        // 整表扫描 + 原地压缩：任意位置的已完成/已超时 timer 都可在本轮回收，
+        // 消除"小顶堆队头未完成 timer 永久阻塞整条队列"的队头阻塞
+        // （见 hlc_udp_multicast_mem_leak_root_cause.md §12）。
+        size_t writeIdx = 0;
+        for (size_t readIdx = 0; readIdx < currentQueue.size(); readIdx++) {
+            HcomServiceTimer *timer = currentQueue[readIdx];
+            if (timer->IsFinished() || timer->IsTimeOut()) {
+                /* [TIMER-TRACE] 周期线程收集到一个 timer（TIMEOUT_COLLECT） */
+                if (timer->mCtxStore != nullptr) {
+                    timer->mCtxStore->TraceMark(HcomTimerEvent::TIMEOUT_COLLECT);
+                }
+                mHandleQueue[tId].emplace_back(timer); // 摘走回收
                 continue;
             }
-
-            break;
+            currentQueue[writeIdx++] = timer; // 仍在途，原地前移压缩
         }
+        currentQueue.resize(writeIdx);
     }
 
     UBSHcomServiceContext timeoutCtx{};
@@ -141,9 +155,18 @@ void HcomPeriodicManager::ProcessTimeOut(uint16_t tId)
         if (i->EraseSeqNoWithRet()) {
             i->TimeoutDump();
             i->MarkTimeout();
+            /* [TIMER-TRACE] 周期线程真正触发了超时回调（TIMEOUT_FIRED） */
+            if (i->mCtxStore != nullptr) {
+                i->mCtxStore->TraceMark(HcomTimerEvent::TIMEOUT_FIRED);
+            }
             auto callback = reinterpret_cast<Callback *>(i->Callback());
             timeoutCtx.mCh = i->mChannel;
-            callback->Run(timeoutCtx);
+            /* [TIMER-TRACE] callback 为空时跳过 Run，避免解引用空指针崩溃 */
+            if (callback != nullptr) {
+                callback->Run(timeoutCtx);
+            } else if (i->mCtxStore != nullptr) {
+                i->mCtxStore->TraceMark(HcomTimerEvent::TIMEOUT_NULL_CB);
+            }
             i->DecreaseRef();
         }
         RemoveLinkedList(i); /* if remove success, decrease linked list ref auto */
@@ -171,9 +194,23 @@ void HcomPeriodicManager::RunInThread(int16_t tId)
     }
 
     NN_LOG_INFO("PeriodicManager for timeout [name: " << mName << ", index: " << tId << "] working thread start");
+    if (tId == 0) {
+        /* 诊断构建版本横幅：每次重新打包 timer 泄漏诊断能力时打印一次，
+           用于确认线上运行的 libhcom.so 与本次源码一致（build=编译时间戳）。 */
+        NN_LOG_INFO("[VERSION] hcom timer-diagnostic build="
+                    << HcomTimerDiagVersion() << ", two-side-timeout=60s, periodic-scan=" << gMaxTimeout << "ms"
+                    << ", timeOutDetectThreadNum default 1"
+                    << "; expect ALLOC≈RETURN (no leak), RESP_HIT/SEND_FAIL/TIMEOUT_FIRED release ref①,"
+                    << " TIMEOUT_COLLECT releases ref②③. See [TIMER-TRACE] census every "
+                    << HcomTimerTrace::IntervalSec() << "s");
+    }
     while (!mNeedStop) {
         auto startTime = NetMonotonic::TimeMs();
         ProcessTimeOut(tId);
+        /* [TIMER-TRACE] 线程 0 周期性打印全量 census，便于现网定位 timer 泄漏 */
+        if (tId == 0) {
+            HcomServiceCtxStore::MaybeDumpAll();
+        }
         auto duration = NetMonotonic::TimeMs() - startTime;
 
         struct epoll_event ev {

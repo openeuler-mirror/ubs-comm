@@ -189,6 +189,10 @@ NResult NetDriverShmWithOOB::CreateWorkerResource()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NextPower2(sizeof(ShmOpCompInfo));
     options.tcExpandBlkCnt = NN_NO64;
+    /* interface parameter: op-completion pool: bypass per-thread cache (safe for cross-thread reuse) */
+    options.tlsPolicy.enabled = false;
+    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+    options.tlsPolicy.flushMs = 0;
     mOpCompMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mOpCompMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for op completion info pool in driver "
@@ -203,6 +207,10 @@ NResult NetDriverShmWithOOB::CreateWorkerResource()
         return result;
     }
 
+    /* interface parameter: op-context pool: per-thread cache disabled by default (bypass; cross-thread safe), enable via config */
+    options.tlsPolicy.enabled = false;
+    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+    options.tlsPolicy.flushMs = 0;
     mOpCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mOpCtxMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for op ctx info pool in driver " << mName
@@ -220,6 +228,10 @@ NResult NetDriverShmWithOOB::CreateWorkerResource()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NO512; // the sgl context is 448, not power of 2, set to the closest num 512
     options.tcExpandBlkCnt = NN_NO64;
+    /* interface parameter: sgl-context pool: bypass per-thread cache (safe for cross-thread reuse) */
+    options.tlsPolicy.enabled = false;
+    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+    options.tlsPolicy.flushMs = 0;
     mSglCompMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mSglCompMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for sgl op context in driver " << mName

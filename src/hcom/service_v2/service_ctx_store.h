@@ -12,10 +12,15 @@
 #ifndef HCOM_SERVICE_V2_SERVICE_CTX_STORE_H_
 #define HCOM_SERVICE_V2_SERVICE_CTX_STORE_H_
 
+#include <algorithm>
+#include <mutex>
+#include <vector>
+
 #include "common/net_mem_pool_fixed.h"
 #include "hcom_def.h"
 #include "hcom_ref.h"
 #include "service_common.h"
+#include "service_timer_trace.h"
 
 namespace ock {
 namespace hcom {
@@ -33,11 +38,14 @@ public:
           mCtxMemPool(ctxPool),
           mProtocol(protocol)
     {
+        TraceRegister(this);
         OBJ_GC_INCREASE(HcomServiceCtxStore);
     }
 
     ~HcomServiceCtxStore()
     {
+        /* 必须先摘出注册表，再释放内部资源，否则 census 线程可能读到已释放的 flat buckets */
+        TraceUnregister(this);
         UnInitialize();
         OBJ_GC_DECREASE(HcomServiceCtxStore);
     }
@@ -179,13 +187,19 @@ public:
         output = sn.wholeSeq;
         {
             std::lock_guard<std::mutex> guard(mHashCtxMutex[mapIndex]);
-            return mHashCtxMap[mapIndex].emplace(sn.wholeSeq, value).second ? SER_OK : SER_STORE_SEQ_DUP;
+            if (NN_UNLIKELY(!mHashCtxMap[mapIndex].emplace(sn.wholeSeq, value).second)) {
+                return SER_STORE_SEQ_DUP;
+            }
         }
+        /* [TIMER-TRACE] 在途 seqNo +1，census 用它反推"注册了却没人来取"的 timer 数量 */
+        mSeqInflight.fetch_add(1, std::memory_order_relaxed);
+        return SER_OK;
 
         /* if occupied one flat bucket within 3 times try. */
     STORE_IN_FLAT:
         sn.SetValue(1, static_cast<uint32_t>(version), seqNo);
         output = sn.wholeSeq;
+        mSeqInflight.fetch_add(1, std::memory_order_relaxed);
         return SER_OK;
     }
 
@@ -222,6 +236,7 @@ public:
 
             // Try to CAS into the bucket only if it's currently 0 (empty)
             if (__sync_bool_compare_and_swap(&mFlatCtxBucks[sn.realSeq], 0ULL, storedValue)) {
+                mSeqInflight.fetch_add(1, std::memory_order_relaxed);
                 return SER_OK;
             } else {
                 // Slot already occupied
@@ -235,7 +250,11 @@ public:
 
         std::lock_guard<std::mutex> guard(mHashCtxMutex[mapIndex]);
         auto result = mHashCtxMap[mapIndex].emplace(sn.wholeSeq, value);
-        return result.second ? SER_OK : SER_STORE_SEQ_DUP;
+        if (NN_LIKELY(result.second)) {
+            mSeqInflight.fetch_add(1, std::memory_order_relaxed);
+            return SER_OK;
+        }
+        return SER_STORE_SEQ_DUP;
     }
 
     /*
@@ -320,6 +339,8 @@ public:
                 }
 
                 out = reinterpret_cast<T *>(value);
+                /* [TIMER-TRACE] 在途 seqNo -1，只有摘除成功才减，和 Put 严格配对 */
+                mSeqInflight.fetch_sub(1, std::memory_order_relaxed);
                 return SER_OK;
             }
 
@@ -334,6 +355,7 @@ public:
             if (NN_LIKELY(iter != mHashCtxMap[mapIndex].end())) {
                 out = reinterpret_cast<T *>(iter->second & PTR_MASK);
                 mHashCtxMap[mapIndex].erase(iter);
+                mSeqInflight.fetch_sub(1, std::memory_order_relaxed);
                 return SER_OK;
             }
         }
@@ -360,7 +382,11 @@ public:
     template <typename T>
     inline T *GetCtxObj()
     {
-        return GetOrReturn<T>(nullptr);
+        T *ctx = GetOrReturn<T>(nullptr);
+        if (NN_LIKELY(ctx != nullptr)) {
+            TraceMark(HcomTimerEvent::ALLOC);
+        }
+        return ctx;
     }
 
     /*
@@ -372,33 +398,224 @@ public:
     inline void Return(T *obj)
     {
         /* no need to check obj is nullptr, because is checked in inner function */
+        if (NN_LIKELY(obj != nullptr)) {
+            TraceMark(HcomTimerEvent::RETURN);
+        }
         (void)GetOrReturn(obj, false);
+    }
+
+    /* ------------------------------ [TIMER-TRACE] 打点接口 ------------------------------ */
+
+    /*
+     * @brief 记录一次 timer 生命周期事件，同时累加到本 store（按通道定位）和进程级汇总
+     *
+     * @param event        [in] 事件类型
+     */
+    inline void TraceMark(HcomTimerEvent event)
+    {
+        /* Defensive: some callers (e.g. unit tests) fire diagnostics on a channel/ctx
+           store that was never initialized (mCtxStore == nullptr). A null deref here would
+           crash before any real work; in production mCtxStore is always valid so this guard
+           never triggers. */
+        if (NN_UNLIKELY(this == nullptr)) {
+            return;
+        }
+        if (NN_UNLIKELY(!HcomTimerTrace::Enabled())) {
+            return;
+        }
+        mTrace.Mark(event);
+        HcomTimerTrace::Global().Mark(event);
+    }
+
+    /*
+     * @brief 响应未命中 seqNo 时调用：计数 + 按采样率打印明细，避免刷屏
+     *
+     * @param event        [in] RESP_MISS 或 POSTED_MISS
+     * @param seqNo        [in] 未命中的 seqNo
+     * @param channelId    [in] 通道 id
+     */
+    inline void TraceMiss(HcomTimerEvent event, uint32_t seqNo, uint64_t channelId)
+    {
+        if (NN_UNLIKELY(this == nullptr)) {
+            return;
+        }
+        if (NN_UNLIKELY(!HcomTimerTrace::Enabled())) {
+            return;
+        }
+        TraceMark(event);
+        const uint64_t missCount = mTrace.Get(event);
+        if (missCount % HcomTimerTrace::MissSample() != 1 && HcomTimerTrace::MissSample() != 1) {
+            return;
+        }
+        HcomSeqNo dumpSeq(seqNo);
+        NN_LOG_WARN("[TIMER-TRACE] " << HcomTimerEventName(static_cast<uint32_t>(event)) << " channel " << channelId
+                                     << " store " << this << " " << dumpSeq.ToString() << ", accumulated miss "
+                                     << missCount << ", seq-inflight " << SeqInflight() << ", live-timer "
+                                     << mTrace.LiveTimer()
+                                     << ", the seqNo carried by the response does not exist in the ctx store, "
+                                        "the caller reference of its timer will never be released");
+    }
+
+    /* 已注册但尚未被取走的 seqNo 数量，等价于"在途未回收的 timer" */
+    inline int64_t SeqInflight() const
+    {
+        return mSeqInflight.load(std::memory_order_relaxed);
+    }
+
+    inline const HcomTimerTraceCounters &TraceCounters() const
+    {
+        return mTrace;
+    }
+
+    /* 通道 id，仅用于日志定位，由 HcomChannelImp::Initialize 设置 */
+    inline void SetTraceTag(uint64_t channelId)
+    {
+        mTraceTag = channelId;
+    }
+
+    inline uint64_t TraceTag() const
+    {
+        return mTraceTag;
+    }
+
+    std::string TraceToString()
+    {
+        std::ostringstream oss;
+        oss << "channel " << mTraceTag << ", store " << this << ", protocol " << static_cast<int>(mProtocol)
+            << ", flat-capacity " << mFlatCapacity << ", seq-inflight " << SeqInflight() << ", " << mTrace.ToString();
+        if (mCtxMemPool.Get() != nullptr) {
+            oss << " | " << mCtxMemPool.Get()->WaterMark();
+        }
+        return oss.str();
+    }
+
+    /*
+     * @brief 由周期线程调用：到达间隔就打印一次全量 census（每个 ctx store 一行）
+     *
+     * 只在超时线程 0 上调用，间隔由 HCOM_TIMER_TRACE_INTERVAL_SEC 控制（默认 60s）。
+     */
+    static void MaybeDumpAll()
+    {
+        if (NN_UNLIKELY(!HcomTimerTrace::Enabled())) {
+            return;
+        }
+
+        const uint64_t now = NetMonotonic::TimeSec();
+        uint64_t last = TraceLastDumpSec().load(std::memory_order_relaxed);
+        if (now < last + HcomTimerTrace::IntervalSec()) {
+            return;
+        }
+        /* CAS 保证多线程同时到点时只有一个线程真正打印 */
+        if (!TraceLastDumpSec().compare_exchange_strong(last, now, std::memory_order_relaxed)) {
+            return;
+        }
+
+        DumpAll("periodic");
+    }
+
+    /*
+     * @brief 打印所有存活 ctx store 的 timer 计数快照
+     *
+     * @param reason       [in] 触发原因，便于在日志里区分周期打印和主动打印
+     */
+    static void DumpAll(const char *reason)
+    {
+        NN_LOG_INFO("[TIMER-TRACE] census (" << reason << ") build=" << HcomTimerDiagVersion()
+                                             << " global: " << HcomTimerTrace::Global().ToString());
+
+        std::lock_guard<std::mutex> guard(TraceRegistryLock());
+        for (auto *store : TraceRegistry()) {
+            if (store == nullptr) {
+                continue;
+            }
+            const std::string line = store->TraceToString();
+            if (store->SeqInflight() >= HcomTimerTrace::InflightWarn()) {
+                NN_LOG_WARN("[TIMER-TRACE] census (" << reason << ") " << line
+                                                     << ", seq-inflight exceeds threshold, suspected timer leak");
+            } else {
+                NN_LOG_INFO("[TIMER-TRACE] census (" << reason << ") " << line);
+            }
+        }
     }
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
 private:
-    /* alloc/free in the same function to make sure use the same thread_local variable */
+    /*
+     * 存活 ctx store 注册表。构造时登记、析构时摘除，census 遍历时持锁，
+     * 保证不会读到已经析构的 store。用 leaky 单例避免进程退出时的静态析构顺序问题
+     * （store 可能比函数内 static 容器活得更久）。
+     */
+    static std::mutex &TraceRegistryLock()
+    {
+        static std::mutex *lock = new std::mutex();
+        return *lock;
+    }
+
+    static std::vector<HcomServiceCtxStore *> &TraceRegistry()
+    {
+        static std::vector<HcomServiceCtxStore *> *registry = new std::vector<HcomServiceCtxStore *>();
+        return *registry;
+    }
+
+    static std::atomic<uint64_t> &TraceLastDumpSec()
+    {
+        static std::atomic<uint64_t> lastSec(0);
+        return lastSec;
+    }
+
+    static void TraceRegister(HcomServiceCtxStore *store)
+    {
+        std::lock_guard<std::mutex> guard(TraceRegistryLock());
+        TraceRegistry().emplace_back(store);
+    }
+
+    static void TraceUnregister(HcomServiceCtxStore *store)
+    {
+        std::lock_guard<std::mutex> guard(TraceRegistryLock());
+        auto &registry = TraceRegistry();
+        auto iter = std::find(registry.begin(), registry.end(), store);
+        if (iter != registry.end()) {
+            (void)registry.erase(iter);
+        }
+    }
+
+private:
+    /*
+     * POLICY-DRIVEN allocation for timer/ctx objects. When the pool's
+     * NetMemPoolTlsPolicy::enabled is true, use the per-protocol KeyedThreadLocalCache
+     * (UpdateIf binds each protocol to the correct pool, avoiding cross-pool alias);
+     * otherwise take the DEFAULT bypass path (TCAllocOne/TCFreeOne straight to the shared
+     * free-list). The bypass is the safe default because these objects are allocated on one
+     * thread and freed on another (timer/timeout thread); a per-thread cache would pin the
+     * blocks forever. The [TIMER-TRACE] census (alloc/return/live-timer + pool
+     * outstanding-blk) reports both sides.
+     */
     template <typename T>
     inline T *GetOrReturn(T *returnCtx, bool get = true)
     {
-        static thread_local KeyedThreadLocalCache<UBSHcomNetDriverProtocol::UBC> threadCache;
-        // 有 2 种场景需要更新:
-        // - 第一次运行，初始值为 `nullptr`, 需要更新成当前在用的内存池
-        // - 主线程不退出，开始时先启动了 Service1, 主线程中进行 Send 会使用 Service1 的内存池；而后 Service1 退出、内存
-        //   池回收，主线程中的 `thread_local` cache 仍保存的是 Service1 的内存池地址。在新启动 Service2 后，如果在主线
-        //   程中进行 Send 会更新 `thread_local` cache 指向的内存池。此时原有 Service1 的内存池才会真正被归还至 OS.
-        //
-        // 注意：上层应当**禁止同时创建同种协议的 2 个不同 Service 实例**，否则此处仍旧会出现 Service2 引用 Service1 内
-        // 存池中的地址。
-        threadCache.UpdateIf(mProtocol, mCtxMemPool.Get());
+        auto *pool = mCtxMemPool.Get();
+        if (NN_UNLIKELY(pool == nullptr)) {
+            return nullptr;
+        }
 
-        if (get) {
-            return threadCache.Allocate<T>(mProtocol);
-        } else {
+        if (pool->TlsPolicy().enabled) {
+            static thread_local KeyedThreadLocalCache<UBSHcomNetDriverProtocol::UBC> threadCache;
+            threadCache.UpdateIf(mProtocol, pool);
+            if (get) {
+                return threadCache.Allocate<T>(mProtocol);
+            }
             threadCache.Free<T>(mProtocol, returnCtx);
             return nullptr;
         }
+
+        /* DEFAULT bypass: ctx allocated on one thread, freed on another (timer thread).
+           Go straight to the shared free-list; no per-thread cache, no cross-thread pinning. */
+        if (get) {
+            return pool->TCAllocOne<T>();
+        }
+        pool->TCFreeOne<T>(returnCtx);
+        return nullptr;
     }
 
 private:
@@ -424,6 +641,11 @@ private:
     std::mutex mHashCtxMutex[HASH_COUNT];                           /* mutex to guard unordered_map */
     std::unordered_map<uint32_t, uint64_t> mHashCtxMap[HASH_COUNT]; /* unordered_map to store un-flat */
     UBSHcomNetDriverProtocol mProtocol = UBSHcomNetDriverProtocol::UNKNOWN;
+
+    /* [TIMER-TRACE] 泄漏定位打点，不参与任何业务逻辑 */
+    HcomTimerTraceCounters mTrace;        /* 本 store（即本通道）的分事件累计计数 */
+    std::atomic<int64_t> mSeqInflight{0}; /* 已注册但尚未取走的 seqNo 数量 */
+    uint64_t mTraceTag = 0;               /* 通道 id，仅日志用 */
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
