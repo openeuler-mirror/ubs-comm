@@ -13,7 +13,9 @@
 #define OCK_HCOM_NET_MEM_POOL_H
 
 #include <array>
+#include <atomic>
 #include <condition_variable>
+#include <cstdlib>
 #include <memory>
 
 #include "hcom.h"
@@ -50,16 +52,42 @@ struct NetMemPoolMinBlock {
 /*
  * Options of fixed size memory pool
  */
+/*
+ * Thread-local cache policy for a fixed-size pool. Set by the caller via
+ * NetMemPoolFixedOptions (interface parameter) at pool construction; the pool no longer reads
+ *   enabled    : true (default) = use the per-thread cache for speed. false = bypass the
+ *                per-thread cache (TCAllocOne/TCFreeOne go straight to the shared free-list;
+ *                no cross-thread pinning -> no leak).
+ *   cacheBlkCnt: per-thread cache high-water reserve, i.e. NetTCacheFixed::mFreeSteps.
+ *   flushMs    : idle flush timeout. A thread that has not alloc/free for flushMs ms returns its
+ *                reserve to the shared pool. 0 = flush only on thread exit (legacy behavior).
+ */
+struct NetMemPoolTlsPolicy {
+    bool enabled = false;
+    uint16_t cacheBlkCnt = NN_NO128;
+    uint32_t flushMs = 0;
+
+    std::string ToString() const
+    {
+        std::ostringstream oss;
+        oss << "tls-enabled: " << (enabled ? 1 : 0) << ", tls-cache-blk: " << cacheBlkCnt
+            << ", tls-flush-ms: " << flushMs;
+        return oss.str();
+    }
+} __attribute__((packed));
+
 struct NetMemPoolFixedOptions {
     uint16_t superBlkSizeMB = NN_NO4;   /* size of each super block, by default 4 MB */
     uint16_t minBlkSize = NN_NO64;      /* size of min block by default is 64 bytes */
     uint16_t tcExpandBlkCnt = NN_NO128; /* count of min block to expand from shared pool at one time */
+    NetMemPoolTlsPolicy
+        tlsPolicy; /* thread-local cache policy, set by caller via NetMemPoolFixedOptions (interface parameter) */
 
     std::string ToString() const
     {
         std::ostringstream oss;
         oss << "super-blk-size-mb: " << superBlkSizeMB << ", min-blk-size: " << minBlkSize
-            << ", thread-cache-blk-count: " << tcExpandBlkCnt;
+            << ", thread-cache-blk-count: " << tcExpandBlkCnt << ", " << tlsPolicy.ToString();
         return oss.str();
     }
 } __attribute__((packed));
@@ -114,11 +142,114 @@ public:
         NN_ASSERT_LOG_RETURN(head != nullptr, NN_NOT_INITIALIZED)
         NN_ASSERT_LOG_RETURN(head->nextN != nullptr, NN_NOT_INITIALIZED)
 
+        /* [leak-trace] record before attaching, count may be reused after the block goes back to free list */
+        const uint32_t returnedBlks = head->count;
+
         mTcMutex.Lock();
         (void)AttacheToFreeList(head, head->nextN, head->count);
         mTcMutex.Unlock();
 
+        mTcFreeBlks.fetch_add(returnedBlks, std::memory_order_relaxed);
+
         return NN_OK;
+    }
+
+    /*
+     * @brief Allocate ONE min block from the shared pool, bypassing the per-thread
+     *        cache. This is the DEFAULT allocation path when the pool's
+     *        NetMemPoolTlsPolicy::enabled is false (no per-thread cache): it is also
+     *        safe for cross-thread block reuse (e.g. the timer/ctx store frees blocks
+     *        on a different worker/timeout thread, so a per-thread cache would pin it
+     *        forever and the pool would balloon). When TLS cache is enabled, callers
+     *        use NetTCacheFixed instead.
+     *
+     *        TCAlloc always returns a whole batch of tcExpandBlkCnt blocks, so this
+     *        grabs one batch, hands the object out, and returns the remainder to the
+     *        shared pool immediately. Every call takes mTcMutex.
+     */
+    template <typename T>
+    T *TCAllocOne()
+    {
+        NetMemPoolMinBlock head;
+        if (NN_UNLIKELY(TCAlloc(head) != NN_OK)) {
+            return nullptr;
+        }
+
+        T *obj = reinterpret_cast<T *>(head.next);
+
+        /* TCAlloc returns a batch of tcExpandBlkCnt blocks. Hand the rest back to the
+         * shared pool so only one block leaves this call. The remainder is a PERSISTENT
+         * batch: its header is head.next->next (block[2], a real block in the super
+         * block), and its .next chain is already intact from MakeFreeList — only its
+         * .nextN (batch tail) and .count need (re)setting. A batch of 1 (previously
+         * freed via TCFreeOne) has no remainder, so skip the return in that case. */
+        if (head.next->count > 1) {
+            NetMemPoolMinBlock *rest = head.next->next; /* block[2], persistent */
+            rest->nextN = head.next->nextN;             /* original batch tail */
+            rest->count = head.next->count - 1;
+            (void)TCFree(rest);
+        }
+
+        return obj;
+    }
+
+    /*
+     * @brief Free ONE min block back to the shared pool directly, bypassing the
+     *        per-thread cache. This is the DEFAULT free path when the pool's
+     *        NetMemPoolTlsPolicy::enabled is false. Packs the block as a single-block
+     *        batch (tail == self) so TCAlloc can pop it later. Goes through mTcMutex.
+     */
+    template <typename T>
+    void TCFreeOne(T *obj)
+    {
+        if (NN_UNLIKELY(obj == nullptr)) {
+            return;
+        }
+        NetMemPoolMinBlock *blk = reinterpret_cast<NetMemPoolMinBlock *>(obj);
+        blk->next = nullptr;
+        blk->nextN = blk; /* single-block batch: tail == head */
+        blk->count = 1;
+        (void)TCFree(blk);
+    }
+
+    /*
+     * @brief [leak-trace] one-line water mark of the pool, used to tell "pool is really leaking"
+     *        apart from "pool is only fragmented / cached in thread caches"
+     *        outstanding == blocks handed out to thread caches but never returned to the shared pool
+     */
+    inline std::string WaterMark()
+    {
+        const uint64_t allocBlks = mTcAllocBlks.load(std::memory_order_relaxed);
+        const uint64_t freeBlks = mTcFreeBlks.load(std::memory_order_relaxed);
+
+        std::ostringstream oss;
+        oss << "pool " << mName << "@" << this << ", min-blk-size " << mOptions.minBlkSize << ", super-blks "
+            << mSuperBlocks.size() << ", total-bytes " << mTotalSuperBlkSize << ", total-min-blk " << mTotalMinBlkCount
+            << ", free-min-blk " << mFreeCount << ", active-caches "
+            << mActiveCacheCount.load(std::memory_order_relaxed) << ", tc-alloc-blk " << allocBlks << ", tc-free-blk "
+            << freeBlks << ", outstanding-blk " << (allocBlks - freeBlks);
+        return oss.str();
+    }
+
+    /*
+     * @brief [leak-trace] blocks handed out to thread caches but never returned to the
+     *        shared free list (tc-alloc-blk - tc-free-blk). Printed by HCOM_OPCTX_TRACE and
+     *        any diagnostic to split "destructor called but block pinned in thread cache"
+     *        apart from "destructor never called".
+     */
+    inline uint64_t OutstandingBlocks() const
+    {
+        return mTcAllocBlks.load(std::memory_order_relaxed) - mTcFreeBlks.load(std::memory_order_relaxed);
+    }
+
+    /*
+     * @brief Thread-local cache policy for this pool (interface parameter set via (op-context /
+     *        ctx pools) consult enabled() to decide bypass (TCAllocOne/TCFreeOne) vs the
+     *        per-thread cache path.
+     */
+    inline const NetMemPoolTlsPolicy &TlsPolicy() const
+    {
+        return mOptions.tlsPolicy;
     }
 
     std::string ToString();
@@ -205,6 +336,16 @@ private:
     std::vector<NetMemPoolSuperBlock> mSuperBlocks;
     uint64_t mTotalSuperBlkSize = 0;
 
+    /* [leak-trace] accumulated min blocks ever created / handed to thread caches / returned by thread caches */
+    uint64_t mTotalMinBlkCount = 0;
+    std::atomic<uint64_t> mTcAllocBlks{0};
+    std::atomic<uint64_t> mTcFreeBlks{0};
+
+    /* [tcache-trace] count of live thread caches (NetTCacheFixed) currently bound to this pool.
+       Incremented in NetTCacheFixed ctor, decremented in dtor. Helps tell "many threads each
+       pinning a cache" apart from "few caches hoarding unbounded" when reading outstanding-blk. */
+    std::atomic<uint32_t> mActiveCacheCount{0};
+
     std::string mName;
     bool mInited = false;
 
@@ -218,12 +359,28 @@ private:
  */
 class NetTCacheFixed {
 public:
-    explicit NetTCacheFixed(NetMemPoolFixed *sharePool);
+    explicit NetTCacheFixed(NetMemPoolFixed *sharePool, const NetMemPoolTlsPolicy &policy);
     ~NetTCacheFixed()
     {
+        /* [tcache-dtor] Count destructors that actually ran. Compare against the
+           per-pool mActiveCacheCount printed by [MEMPOOL-LEAK]: if this logs rarely
+           while active-caches climbs into the tens of thousands, transient threads
+           are exiting without running their TLS destructor (glibc dlclose / abrupt
+           pthread_exit), pinning their 256-block reserve forever. Throttled to every
+           1024th dtor to bound log volume. */
+        static std::atomic<uint64_t> sDtorCalls{0};
+        uint64_t n = sDtorCalls.fetch_add(1, std::memory_order_relaxed) + 1;
+        if ((n & 0x3FF) == 0) {
+            uint32_t live = (mSharedPool != nullptr) ? mSharedPool->mActiveCacheCount.load(std::memory_order_relaxed) :
+                                                       0;
+            NN_LOG_WARN("[TCACHE-DTOR] pool=" << (mSharedPool != nullptr ? mSharedPool->mName : std::string("?"))
+                                              << " active-caches=" << live << " total-dtor=" << n);
+        }
+
         FreeAllToPool();
 
         if (mSharedPool != nullptr) {
+            mSharedPool->mActiveCacheCount.fetch_sub(1, std::memory_order_relaxed);
             mSharedPool->DecreaseRef();
             mSharedPool = nullptr;
         }
@@ -235,12 +392,15 @@ public:
     template <typename T>
     T *Allocate()
     {
+        MaybeFlushIdle();
         if (NN_LIKELY(mHead.next != nullptr)) {
             /* allocate from head */
             auto tmp = mHead.next;
             mHead.next = tmp->next;
             /* assign tail to null if it is empty */
             --mCurrentFree;
+            ++mDbgAllocCount;
+            TraceCache();
             return reinterpret_cast<T *>(tmp);
         }
 
@@ -259,6 +419,8 @@ public:
         /* move head to next and return first */
         auto tmp = mHead.next;
         mHead.next = mHead.next->next;
+        ++mDbgAllocCount;
+        TraceCache();
         return reinterpret_cast<T *>(tmp);
     }
 
@@ -268,6 +430,7 @@ public:
     template <typename T>
     void Free(T *value)
     {
+        MaybeFlushIdle();
         if (NN_LIKELY(value == nullptr)) {
             return;
         }
@@ -278,6 +441,8 @@ public:
         mHead.next = tmp;
 
         ++mCurrentFree;
+        ++mDbgFreeCount;
+        TraceCache();
         /* judge is current free count is 2 times larger than free steps
          * 1 no：just return
          * 2 yes: return many to shared pool, which means return in batch to reduce the cost of mutex in shared pool
@@ -288,18 +453,34 @@ public:
 
         /* step 1: get first */
         auto head = mHead.next;
-
-        /* step 2: move head forward mFreeSteps and get tail */
-        const uint16_t returnCount = mFreeSteps - 1;
-        for (uint16_t i = 0; i < returnCount; ++i) {
-            mHead.next = mHead.next->next;
+        if (NN_UNLIKELY(head == nullptr)) {
+            return;
         }
-        head->nextN = mHead.next;
 
-        /* step 3: move head one more */
-        mHead.next = mHead.next->next;
+        /* step 2: walk mFreeSteps blocks to locate the batch tail (prev) and the
+         * remaining free-chain head (cur). The returned batch is [head .. prev],
+         * exactly mFreeSteps blocks linked by ->next. head->nextN must point at the
+         * batch tail so TCFree/AttacheToFreeList can terminate it; mHead.next must
+         * advance to cur (blocks kept in this thread cache).
+         * Guard: if the free chain is shorter than mFreeSteps (mCurrentFree ever
+         * mis-counted, e.g. cross-thread free into a per-thread cache), stop early
+         * instead of dereferencing a null/wild ->next - keep blocks in the thread
+         * cache rather than corrupting the shared free list. */
+        NetMemPoolMinBlock *prev = head;
+        NetMemPoolMinBlock *cur = mHead.next;
+        for (uint16_t i = 0; i < mFreeSteps && cur != nullptr; ++i) {
+            prev = cur;
+            cur = cur->next;
+        }
+        if (NN_UNLIKELY(prev == head)) {
+            /* chain too short / mis-counted: leave blocks in the thread cache */
+            return;
+        }
 
-        head->nextN->next = nullptr;
+        head->nextN = prev;   /* batch tail, consumed by TCFree as AttacheToFreeList tail */
+        prev->next = nullptr; /* terminate returned batch's ->next chain */
+        mHead.next = cur;     /* remaining free-chain head */
+
         head->count = mFreeSteps;
 
         /* step 4: decrease current */
@@ -311,9 +492,27 @@ public:
         mSharedPool->TCFree(head);
     }
 
+    /*
+     * @brief [leak-trace] the pool this thread cache was bound to at construction time.
+     *        A thread_local NetTCacheFixed is constructed ONCE per thread, so this may differ
+     *        from the pool the current caller intends to use.
+     */
+    inline NetMemPoolFixed *SharedPoolForTrace() const
+    {
+        return mSharedPool;
+    }
+
     std::string ToString();
 
 private:
+    /*
+     * Flush the thread cache reserve back to the shared pool when idle for more than
+     * mFlushMs. Only returns blocks sitting in the cache freelist (mCurrentFree), never
+     * live objects handed out to callers. Called from Allocate/Free which run on the owning
+     * thread only (thread_local), so no extra lock is needed. No-op when mFlushMs == 0.
+     */
+    void MaybeFlushIdle();
+
     /*
      * Free all to pool
      */
@@ -327,19 +526,25 @@ private:
 
         /* step 1: get first */
         auto head = mHead.next;
-
-        /* step 2: move head forward mFreeSteps and get tail */
-        const uint16_t returnCount = mCurrentFree - 1;
-        for (uint16_t i = 0; i < returnCount; ++i) {
-            mHead.next = mHead.next->next;
+        if (NN_UNLIKELY(head == nullptr)) {
+            return;
         }
-        head->nextN = mHead.next;
+
+        /* step 2: walk to the last free block (tail). Guard against a free chain
+         * shorter than mCurrentFree (mis-counted) so we never dereference a null/wild
+         * ->next and corrupt the shared pool. */
+        NetMemPoolMinBlock *tail = head;
+        const uint16_t returnCount = mCurrentFree - 1;
+        for (uint16_t i = 0; i < returnCount && tail->next != nullptr; ++i) {
+            tail = tail->next;
+        }
 
         /* step 3: reset */
+        head->nextN = tail;
         mHead.next = nullptr;
 
         /* step 4: free */
-        head->nextN->next = nullptr;
+        tail->next = nullptr;
         head->count = mCurrentFree;
         mSharedPool->TCFree(head);
 
@@ -353,6 +558,45 @@ private:
     NetMemPoolFixed *mSharedPool = nullptr;
     uint16_t mCurrentFree = 0;
     uint16_t mFreeSteps = 0;
+    uint32_t mFlushMs = 0;      /* idle flush timeout from policy; 0 = disabled (legacy) */
+    uint64_t mLastActiveMs = 0; /* last alloc/free timestamp (ms) for MaybeFlushIdle */
+
+    /* [leak-trace] per-cache get/return counters, read by the TCACHE-TRACE trace (TraceCache below).
+     * NOTE: the op-context pool (net_ctx_info_pool.h) bypasses this thread cache via TCAllocOne /
+     * TCFreeOne and keeps its own program-wide counters in HCOM_OPCTX_TRACE, so these counters are
+     * NOT read by HCOM_OPCTX_TRACE. They are still used by the [TCACHE-TRACE] diagnostic for the
+     * pools that DO go through NetTCacheFixed. */
+    uint64_t mDbgAllocCount = 0;
+    uint64_t mDbgFreeCount = 0;
+
+    /* [tcache-trace] runtime WARN trace of this thread cache, gated by env HCOM_TCACHE_TRACE (default on).
+       Reports per-cache get/return/outstanding so that pool outstanding-blk can be split into
+       "blocks hoarded by thread caches" vs "blocks in live objects". */
+    static bool TcacheTraceEnabled()
+    {
+        static const bool enabled = []() {
+            const char *e = std::getenv("HCOM_TCACHE_TRACE");
+            return (e == nullptr) || (e[0] != '0'); /* default ON */
+        }();
+        return enabled;
+    }
+
+    void TraceCache() const
+    {
+        if (!TcacheTraceEnabled()) {
+            return;
+        }
+        /* throttle: log once every 0x100000 (≈1M) get+free ops on this cache, coarser than HCOM_OPCTX_TRACE */
+        if (((mDbgAllocCount + mDbgFreeCount) & 0xFFFFFULL) != 0) {
+            return;
+        }
+        const uint32_t activeCaches =
+            (mSharedPool != nullptr) ? mSharedPool->mActiveCacheCount.load(std::memory_order_relaxed) : 0;
+        NN_LOG_WARN("[TCACHE-TRACE] pool " << mSharedPool << " cache " << this << " get " << mDbgAllocCount
+                                           << ", return " << mDbgFreeCount << ", outstanding "
+                                           << (mDbgAllocCount - mDbgFreeCount) << ", free-steps " << mFreeSteps
+                                           << ", active-caches " << activeCaches);
+    }
 
     friend class NetMemPoolFixed;
     template <uint8_t KeyMax>
@@ -404,7 +648,7 @@ public:
         }
 
         if (!mTCacheFixeds[key] || mTCacheFixeds[key]->mSharedPool != mempool) {
-            mTCacheFixeds[key].reset(new (std::nothrow) NetTCacheFixed(mempool));
+            mTCacheFixeds[key].reset(new (std::nothrow) NetTCacheFixed(mempool, mempool->TlsPolicy()));
         }
     }
 

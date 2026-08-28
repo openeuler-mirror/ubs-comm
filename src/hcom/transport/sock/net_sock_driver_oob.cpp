@@ -295,6 +295,10 @@ NResult NetDriverSockWithOOB::CreateOpCtxMemPool()
     options.minBlkSize = sizeof(SockOpContextInfo);
     options.tcExpandBlkCnt = NN_NO64;
 
+    /* interface parameter: op-context pool: per-thread cache disabled by default (bypass; cross-thread safe), enable via config */
+    options.tlsPolicy.enabled = false;
+    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+    options.tlsPolicy.flushMs = 0;
     mOpCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mOpCtxMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for sock op context pool " << mName << ", probably out of memory");
@@ -318,6 +322,10 @@ NResult NetDriverSockWithOOB::CreateSglCtxMemPool()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NO512; // the sgl context is 468, not power of 2, set to the closest num 512
     options.tcExpandBlkCnt = NN_NO64;
+    /* interface parameter: sgl-context pool: bypass per-thread cache (safe for cross-thread reuse) */
+    options.tlsPolicy.enabled = false;
+    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+    options.tlsPolicy.flushMs = 0;
     mSglCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mSglCtxMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for sgl op context in driver " << mName
@@ -342,6 +350,10 @@ NResult NetDriverSockWithOOB::CreateHeaderReqMemPool()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NextPower2(sizeof(SockHeaderReqInfo));
     options.tcExpandBlkCnt = NN_NO64;
+    /* interface parameter: header-req pool: bypass per-thread cache (safe for cross-thread reuse) */
+    options.tlsPolicy.enabled = false;
+    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+    options.tlsPolicy.flushMs = 0;
     mHeaderReqMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mHeaderReqMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for header request context in driver "
