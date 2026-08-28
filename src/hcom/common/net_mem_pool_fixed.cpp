@@ -56,6 +56,7 @@ void NetMemPoolFixed::DoUnInitialize()
     mSuperBlocks.clear();
     mTotalSuperBlkSize = 0;
     mFreeCount = 0;
+    mTotalMinBlkCount = 0;
 }
 
 NResult NetMemPoolFixed::Validate()
@@ -104,8 +105,7 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
 {
     uint64_t startTime = NetMonotonic::TimeNs();
     /* allocate memory */
-    auto superBlkSize = (mTotalSuperBlkSize == 0) ?
-        (mOptions.superBlkSizeMB * NN_NO1024 * NN_NO1024) : mTotalSuperBlkSize;
+    auto superBlkSize = mOptions.superBlkSizeMB * NN_NO1024 * NN_NO1024;
     auto mem = memalign(NN_NO4096, superBlkSize);
     if (mem == nullptr) {
         NN_LOG_ERROR("Failed to malloc memory for supper block in mem pool " << mName);
@@ -143,14 +143,38 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
         return result;
     }
 
+    mTotalMinBlkCount += count;
+
     if (holdFreeListLock) {
         mTcMutex.Unlock();
     }
 
-    NN_LOG_INFO("Fixed size memory pool " << mName << " allocated " << mOptions.superBlkSizeMB <<
-        "MB memory from os, total block size " << mTotalSuperBlkSize << " and split to " << count <<
-        " min block with size " << mOptions.minBlkSize << " which took " <<
-        (NetMonotonic::TimeNs() - startTime) / NN_NO1000 << "us, current free min block is " << mFreeCount);
+    /*
+     * [leak-trace] This build allocates a FIXED superBlkSize (= superBlkSizeMB) on every expansion
+     * (the old exponential doubling driven by mTotalSuperBlkSize was removed). The log prints the real
+     * per-expansion size and the running total (mTotalSuperBlkSize) so a monotonically growing total with
+     * a bounded per-expansion size confirms no leak and no runaway growth.
+     */
+    NN_LOG_INFO("Fixed size memory pool "
+                << mName << "@" << this << " allocated " << (superBlkSize / NN_NO1024 / NN_NO1024)
+                << "MB memory from os, total block size " << mTotalSuperBlkSize << " and split to " << count
+                << " min block with size " << mOptions.minBlkSize << " which took "
+                << (NetMonotonic::TimeNs() - startTime) / NN_NO1000 << "us, current free min block is " << mFreeCount
+                << " | " << WaterMark());
+
+    /*
+     * [leak-trace] outstanding == blocks taken by thread caches and never given back.
+     * A healthy pool converges; a leaking pool keeps outstanding ~= total-min-blk on every expansion.
+     */
+    const uint64_t outstanding =
+        mTcAllocBlks.load(std::memory_order_relaxed) - mTcFreeBlks.load(std::memory_order_relaxed);
+    if (mSuperBlocks.size() > 1 && outstanding * NN_NO2 >= mTotalMinBlkCount) {
+        NN_LOG_WARN("[MEMPOOL-LEAK] Fixed size memory pool "
+                    << mName << "@" << this << " keeps expanding: outstanding " << outstanding << " of "
+                    << mTotalMinBlkCount << " min blocks are held by callers and never returned, expanded "
+                    << mSuperBlocks.size() << " times to " << (mTotalSuperBlkSize / NN_NO1024 / NN_NO1024)
+                    << "MB. Check the caller that allocates from this pool without a matching Return()");
+    }
 
     return NN_OK;
 }
@@ -164,10 +188,13 @@ NResult NetMemPoolFixed::TCAlloc(NetMemPoolMinBlock &head)
         mTcMutex.Lock();
         if (mFreeCount > 0) {
             head.next = mFreeMinBlkList.next;
+            /* [leak-trace] blocks handed out to the calling thread cache in this batch */
+            const uint32_t gotBlks = mFreeMinBlkList.next->count;
             mFreeCount -= mFreeMinBlkList.next->count;
             mFreeMinBlkList.next = head.next->nextN->next;
             head.next->nextN->next = nullptr;
             mTcMutex.Unlock();
+            mTcAllocBlks.fetch_add(gotBlks, std::memory_order_relaxed);
             flag = false;
             return NN_OK;
         }
@@ -234,6 +261,7 @@ NetTCacheFixed::NetTCacheFixed(NetMemPoolFixed *sharePool) : mSharedPool(sharePo
     }
 
     mSharedPool->IncreaseRef();
+    mSharedPool->mActiveCacheCount.fetch_add(1, std::memory_order_relaxed);
 
     mFreeSteps = mSharedPool->mOptions.tcExpandBlkCnt;
 }
