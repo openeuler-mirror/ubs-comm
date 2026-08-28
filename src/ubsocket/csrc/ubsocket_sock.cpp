@@ -11,6 +11,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_raw_socket.h"
 #include "core/ubsocket_data_tx.h"
 #include "core/ubsocket_socket.h"
 #include "core/ubsocket_socket_helper.h"
@@ -24,28 +25,31 @@ UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
     }
     int fd;
     UBS_VLOG_TRACE("create socket with domain(%d) AF_SMC=%d.", domain, AF_SMC);
-    if (domain == AF_SMC) {
-        fd = LibcApi::socket(AF_INET, type, protocol);
-    } else {
-        return LibcApi::socket(domain, type, protocol);
-    }
-    int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-    if (event_fd < 0) {
-        UBS_VLOG_ERR("eventfd() failed, ret: %d, errno: %d, errmsg: %s\n", event_fd, errno, Func::Error2Str(errno));
-        LibcApi::close(fd);
-        return -1;
+    bool useUb = domain == AF_SMC;
+    domain = useUb ? AF_INET : domain;
+    fd = LibcApi::socket(domain, type, protocol);
+    if (fd < 0) {
+        UBS_VLOG_ERR("socket() failed, ret: %d, errno: %d, errmsg: %s\n", fd, errno, Func::Error2Str(errno));
+        return fd;
     }
     SocketPtr socketPtr;
-    // Result ret = SocketBase::Create(fd, SocketType::SOCK_TYPE_UMQ, socketPtr);
-    Result ret = SocketBase::Create(fd, SocketType::SOCK_TYPE_URMA, socketPtr);
+    SocketType socketType = useUb ? SocketType::SOCK_TYPE_URMA : SocketType::SOCK_TYPE_TCP;
+    Result ret = SocketBase::Create(fd, socketType, socketPtr);
     if (ret != UBS_OK) {
-        UBS_VLOG_ERR("CreateSocketFd() failed, fd: %d, event fd: %d, ret: %d\n", fd, event_fd, ret);
+        UBS_VLOG_ERR("CreateSocketFd() failed, fd: %d, ret: %d\n", fd, ret);
         LibcApi::close(fd);
-        LibcApi::close(event_fd);
         return -1;
     }
-    UBS_VLOG_TRACE("create urma socket(%d) success.", fd);
-    socketPtr->event_fd_ = event_fd;
+    if (useUb) {
+        int event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+        if (event_fd < 0) {
+            UBS_VLOG_ERR("eventfd() failed, ret: %d, errno: %d, errmsg: %s\n", event_fd, errno, Func::Error2Str(errno));
+            LibcApi::close(fd);
+            return -1;
+        }
+        socketPtr->event_fd_ = event_fd;
+    }
+    UBS_VLOG_TRACE("create ub socket(%d) success.", fd);
     ArraySet<Socket>::GetInstance().OverrideItem(fd, socketPtr.Get());
     return fd;
 }
@@ -75,12 +79,11 @@ UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *add
     }
 
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
-    if (sockBase == nullptr) {
-        UBS_VLOG_TRACE("accept on fd(%d) not ubsocket, use libc accept.", fd);
-        return LibcApi::accept(fd, address, address_len);
+    if (sock == nullptr) {
+        errno = EBADF;
+        return -1;
     }
-
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     auto ret = sockBase->Accept(sock, address, address_len);
     UBS_VLOG_TRACE("accept on fd(%d) is ubsocket, use ubsocket accept return %d.", fd, ret);
     return ret;
@@ -114,6 +117,10 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
 
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
+        errno = EBADF;
+        return -1;
+    }
+    if (sock->Type() == SocketType::SOCK_TYPE_TCP) {
         return LibcApi::listen(fd, backlog);
     }
     sock->create_type_ = SOCK_CREATE_TYPE_LISTEN;
@@ -145,7 +152,8 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
-        return LibcApi::connect(fd, address, address_len);
+        errno = EBADF;
+        return -1;
     }
     sock->create_type_ = SOCK_CREATE_TYPE_CONNECT;
     auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
@@ -159,11 +167,11 @@ UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
         return LibcApi::readv(fd, iov, iovcnt);
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
-    if (sockBase == nullptr) {
-        UBS_VLOG_TRACE("enter posix libc readv fd=%d, iovcnt=%d, iov[0].buf=%p", fd, iovcnt, iov[0].iov_base);
-        return LibcApi::readv(fd, iov, iovcnt);
+    if (sock == nullptr) {
+        errno = EBADF;
+        return -1;
     }
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     return sockBase->ReadV(sock, iov, iovcnt);
 }
 
@@ -174,11 +182,11 @@ UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
         return LibcApi::writev(fd, iov, iovcnt);
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
-    if (sockBase == nullptr) {
-        UBS_VLOG_TRACE("enter posix libc writev fd=%d, iovcnt=%d, iov[0].buf=%p", fd, iovcnt, iov[0].iov_base);
-        return LibcApi::writev(fd, iov, iovcnt);
+    if (sock == nullptr) {
+        errno = EBADF;
+        return -1;
     }
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
     return sockBase->WriteV(sock, iov, iovcnt);
 }
 
@@ -300,10 +308,11 @@ UBS_API int UB_API_WRAP(getsockopt)(int fd, int level, int optname, void *optval
     }
 
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
-    if (sockBase == nullptr) {
-        return LibcApi::getsockopt(fd, level, optname, optval, optlen);
+    if (sock == nullptr) {
+        errno = EBADF;
+        return -1;
     }
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
 
     if (level < static_cast<int>(UbsocketLevel::SOL_UB)) {
         return LibcApi::getsockopt(fd, level, optname, optval, optlen);

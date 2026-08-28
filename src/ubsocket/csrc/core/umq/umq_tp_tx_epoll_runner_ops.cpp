@@ -82,8 +82,8 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 auto buf_pro = (umq_buf_pro_t *)qbuf->qbuf_ext;
                 auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
                 auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
-                if (socket_ptr == nullptr) {
-                    UBS_VLOG_DEBUG("socket is NULL in socket fd=%d\n in TX CQE error", socket_fd);
+                if (socket_ptr == nullptr || socket_ptr->Type() != SocketType::SOCK_TYPE_UMQ) {
+                    UBS_VLOG_DEBUG("socket is invalid in socket fd=%d\n in TX CQE error", socket_fd);
                     return;
                 }
 
@@ -138,7 +138,7 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 auto buf_pro = (umq_buf_pro_t *)qbuf->qbuf_ext;
                 auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
                 auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
-                if (socket_ptr) {
+                if (socket_ptr && socket_ptr->Type() == SocketType::SOCK_TYPE_UMQ) {
                     LibcApi::shutdown(socket_fd, SHUT_RD);
                     UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error for TP TX", socket_fd);
                     socket_ptr->State(SOCK_STAT_CLOSE);

@@ -110,8 +110,8 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
         events[i].events = 0;
         events[i].data = event_data->event.data;
         auto sock = ArraySet<Socket>::GetInstance().GetItem(event_data->socket_fd);
-        if (UNLIKELY(sock == nullptr)) {
-            UBS_VLOG_ERR("event wait wake up socket(%d) not found.", event_data->socket_fd);
+        if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP)) {
+            UBS_VLOG_ERR("event wait wake up socket(%d) invalid.", event_data->socket_fd);
             continue;
         }
 
@@ -151,7 +151,7 @@ int UrmaEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
+    if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP || !sock->IsBindRemote())) {
         return AddRawSocketEvent(fd, event);
     }
 
@@ -187,7 +187,7 @@ int UrmaEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
 
     UBS_VLOG_TRACE("urma epoll(%d) mod(fd=%d, event=0x%x, data=%lx)", epoll_fd_, fd, event->events, event->data);
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
+    if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP || !sock->IsBindRemote())) {
         return ModRawSocketEvent(fd, event);
     }
 
@@ -224,7 +224,7 @@ int UrmaEventPoll::EpollCtlDel(int fd)
 
     UBS_VLOG_TRACE("urma epoll(%d) del(fd=%d)", epoll_fd_, fd);
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
+    if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP || !sock->IsBindRemote())) {
         UBS_VLOG_DEBUG("sock is nullptr for origin sock, socket: %d", fd);
         return DelRawSocketEvent(fd);
     }

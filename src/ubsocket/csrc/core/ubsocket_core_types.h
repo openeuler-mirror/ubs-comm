@@ -57,6 +57,9 @@ class Socket {
 public:
     Socket(int fd, SocketType type) : raw_socket_(fd), type_(type)
     {
+        if (type == SocketType::SOCK_TYPE_TCP) {
+            return;
+        }
         if (!GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
             return;
         }
@@ -66,6 +69,9 @@ public:
     }
     virtual ~Socket()
     {
+        if (type_ == SocketType::SOCK_TYPE_TCP) {
+            return;
+        }
         if (split_trace_ != nullptr) {
             TRACE_FLUSH(split_trace_);
             delete split_trace_;

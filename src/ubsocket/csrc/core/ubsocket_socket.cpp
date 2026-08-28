@@ -11,6 +11,7 @@
 #include "ubsocket_socket.h"
 #include "ubsocket_data_rx.h"
 #include "ubsocket_data_tx.h"
+#include "ubsocket_raw_socket.h"
 #include "ubsocket_tx_cqe_poller.h"
 #include "umq/umq_data_rx_ops.h"
 #include "umq/umq_data_tx_ops.h"
@@ -27,6 +28,17 @@ namespace ock {
 namespace ubs {
 Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
 {
+    if (t == SocketType::SOCK_TYPE_TCP) {
+        auto rawSock = MakeRef<RawSocket>(fd);
+        if (rawSock == nullptr) {
+            return UBS_MALLOC_FAILED;
+        }
+        rawSock->State(SocketState::SOCK_STAT_RAW_ESTABLISHED);
+        auto sock = RefStaticCast<Socket>(rawSock);
+        outSocket = sock;
+        return UBS_OK;
+    }
+
     if (t == SocketType::SOCK_TYPE_UMQ) {
         /* step1: create umq socket */
         using namespace umq;

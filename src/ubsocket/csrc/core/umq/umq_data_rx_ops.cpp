@@ -490,7 +490,12 @@ ssize_t UmqRxOps::RxDataSet(void *buf, uint32_t size)
             errno = EINTR;
             return UBS_ERROR;
         }
-        if (ArraySet<Socket>::GetInstance().GetItem(fd_)->State() == SOCK_STAT_CLOSE) {
+        auto socket = ArraySet<Socket>::GetInstance().GetItem(fd_);
+        if (socket == nullptr) {
+            errno = EIO;
+            return UBS_ERROR;
+        }
+        if (socket->State() == SOCK_STAT_CLOSE) {
             return 0;
         }
 
@@ -512,9 +517,8 @@ ssize_t UmqRxOps::RxDataSet(void *buf, uint32_t size)
         int n = LibcApi::recv(fd_, b, sizeof(b), MSG_PEEK | MSG_DONTWAIT);
         if (n == 0) {
             UBS_VLOG_INFO("The TCP connection has been closed by peer.\n");
-            auto trace_sock = ArraySet<Socket>::GetInstance().GetItem(fd_);
-            if (trace_sock != nullptr) {
-                TRACE_FLUSH(trace_sock->split_trace_);
+            if (socket->Type() != SocketType::SOCK_TYPE_TCP) {
+                TRACE_FLUSH(socket->split_trace_);
             }
             return 0;
         }

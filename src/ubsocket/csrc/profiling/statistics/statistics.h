@@ -927,6 +927,9 @@ protected:
         Statistics::Recorder::GetTitle(m_oss);
         {
             ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+                if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+                    return;
+                }
                 UmqSocket *umqSock = (UmqSocket *)sock;
                 if (umqSock == nullptr) {
                     return;

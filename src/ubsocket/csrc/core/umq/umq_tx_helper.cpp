@@ -108,8 +108,8 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
 
     for (const auto &[fd, count] : socket_wr_cnt_map) {
         auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-        if (sock.Get() == nullptr) {
-            UBS_VLOG_DEBUG("Socket %d has been removed.\n", fd);
+        if (sock.Get() == nullptr || sock->Type() != SocketType::SOCK_TYPE_UMQ) {
+            UBS_VLOG_DEBUG("Socket %d is invalid.\n", fd);
             continue;
         }
         auto umq_sk = RefStaticCast<UmqSocket>(sock);
@@ -332,8 +332,8 @@ int UmqTxHelper::PollUmqTxForFcReturn(uint64_t umq_handle)
         auto buf_pro = (umq_buf_pro_t *)qbuf->qbuf_ext;
         auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
         auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
-        if (socket_ptr == nullptr) {
-            UBS_VLOG_DEBUG("socket is NULL in socket fd=%d\n in TX CQE error for FC", socket_fd);
+        if (socket_ptr == nullptr || socket_ptr->Type() != SocketType::SOCK_TYPE_UMQ) {
+            UBS_VLOG_DEBUG("socket is invalid in socket fd=%d\n in TX CQE error for FC", socket_fd);
             return;
         }
 
