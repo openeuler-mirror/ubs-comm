@@ -32,15 +32,34 @@ UrmaEventPoll::~UrmaEventPoll()
 int UrmaEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
 {
     int ret = -1;
+    bool mapper_create = false;
+    EpollMapper *mapper = nullptr;
+    if (op == EPOLL_CTL_ADD) {
+        mapper_create = CreateSocketEpollMapper(fd, mapper);
+    } else {
+        mapper = GetSocketEpollMapper(fd);
+    }
     switch (op) {
         case EPOLL_CTL_ADD:
             ret = EpollCtlAdd(fd, event);
+            if (ret == 0 && mapper != nullptr) {
+                mapper->Add(epoll_fd_);
+            } else if (mapper_create) {
+                CleanSocketEpollMapper(fd);
+                mapper = nullptr;
+            }
             break;
         case EPOLL_CTL_MOD:
             ret = EpollCtlMod(fd, event);
             break;
         case EPOLL_CTL_DEL:
             ret = EpollCtlDel(fd);
+            if (ret == 0 && mapper != nullptr) {
+                if (mapper->Del(epoll_fd_)) {
+                    CleanSocketEpollMapper(fd);
+                    mapper = nullptr;
+                }
+            }
             break;
         default:
             UBS_VLOG_ERR("epollctl(epfd:%d) for fd(%d) with unknown op %d", epoll_fd_, fd, op);
@@ -72,6 +91,12 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
         auto event_data = static_cast<EpollEvent *>(events[i].data.ptr);
         if (UNLIKELY(event_data == nullptr)) {
             UBS_VLOG_ERR("urma epoll wait event(%d) data null.", i);
+            continue;
+        }
+
+        // Handle wakeup event for async accept (pointer comparison with ready_event_)
+        if (ready_event_ != nullptr && event_data == ready_event_ && wakeup_callback_ != nullptr) {
+            wakeup_callback_(events + i, 1, socket_data_);
             continue;
         }
 
