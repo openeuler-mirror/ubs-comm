@@ -39,11 +39,17 @@ public:
 public:
     SocketBase(int fd, SocketType type) : Socket(fd, type)
     {
+        if (type == SocketType::SOCK_TYPE_TCP) {
+            return;
+        }
         stats_mgr_.InitStatsMgr();
     }
 
     ~SocketBase() override
     {
+        if (type_ == SocketType::SOCK_TYPE_TCP) {
+            return;
+        }
         if (GlobalSetting::UBS_TRACE_ENABLED) {
             Statistics::StatsMgr::SubMConnCount();
             if (connector_ != nullptr && IsClient()) {
@@ -64,11 +70,11 @@ public:
     virtual Result Initialize() noexcept = 0;
     virtual void UnInitialize() noexcept = 0;
 
-    int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
-    int Connect(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
-    ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
-    ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
-    int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen);
+    virtual int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
+    virtual int Connect(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
+    virtual ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    virtual ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    virtual int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen);
 
     EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
     virtual void SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data = {});

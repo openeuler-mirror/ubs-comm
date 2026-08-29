@@ -42,7 +42,12 @@ TracePrintThread::~TracePrintThread()
     if (thread_.joinable()) {
         thread_.join();
     }
-    ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) { TRACE_FLUSH(sock->split_trace_); });
+    ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) {
+        if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            return;
+        }
+        TRACE_FLUSH(sock->split_trace_);
+    });
 }
 
 void TracePrintThread::Start()
@@ -86,6 +91,9 @@ void TracePrintThread::DrainAllSockets()
 {
     int socket_count = 0;
     ArraySet<Socket>::GetInstance().ForEach([&socket_count](int, Socket *sock) {
+        if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
+            return;
+        }
         socket_count++;
         TRACE_DRAIN_AND_PRINT(sock->split_trace_);
     });

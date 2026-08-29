@@ -220,6 +220,10 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
         auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
         if (socket_fd != last_socket_fd) {
             socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd);
+            if (socket_ptr == nullptr || socket_ptr->Type() != SocketType::SOCK_TYPE_UMQ) {
+                UBS_VLOG_ERR("async_epoll add qbuf for socket fd: %d failed, socket is invalid.\n", socket_fd);
+                continue;
+            }
             sk_base = RefStaticCast<SocketBase>(socket_ptr);
             last_socket_fd = socket_fd;
         }

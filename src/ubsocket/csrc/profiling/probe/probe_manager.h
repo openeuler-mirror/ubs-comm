@@ -484,7 +484,16 @@ private:
                 }
                 // 获取 fd 和 对象指针
                 int fd = mRecvQueue[mQueueSt].mSockFd;
-                sockObj = ((UmqSocket *)ArraySet<Socket>::GetInstance().GetItem(fd).Get());
+                auto socket = ArraySet<Socket>::GetInstance().GetItem(fd);
+                if (socket == nullptr) {
+                    break;
+                }
+                if (socket->Type() != ock::ubs::SocketType::SOCK_TYPE_UMQ) {
+                    if (++mQueueSt == RPC_ADPT_FD_MAX)
+                        mQueueSt = 0U;
+                    continue;
+                }
+                sockObj = ((UmqSocket *)socket.Get());
                 // 获取有效数据
                 if (sockObj) {
                     info = mRecvQueue[mQueueSt].mProbeInfo;
@@ -516,9 +525,13 @@ private:
         while (sentCount < mProbeBatch && scans < maxScan) {
             if (currentPos >= maxScan)
                 currentPos = 0;
-
-            UmqSocket *sockObj =
-                static_cast<UmqSocket *>(ArraySet<Socket>::GetInstance().GetItem(static_cast<int>(currentPos)).Get());
+            auto socket = ArraySet<Socket>::GetInstance().GetItem(static_cast<int>(currentPos));
+            if (socket == nullptr || socket->Type() != ock::ubs::SocketType::SOCK_TYPE_UMQ) {
+                currentPos++;
+                scans++;
+                continue;
+            }
+            UmqSocket *sockObj = static_cast<UmqSocket *>(socket.Get());
             if (sockObj && sockObj->IsClient()) {
                 SendProbePacket(sockObj);
                 sentCount++;

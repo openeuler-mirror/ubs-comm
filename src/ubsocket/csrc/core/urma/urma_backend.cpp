@@ -424,8 +424,8 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
                 auto seq_no = cr_context.seq_no;
                 UBS_VLOG_TRACE("send side cqe user ctx(0x%lx) socket(%d) seq_no(%u)", cr[i].user_ctx, sock_fd, seq_no);
                 auto sock = ArraySet<Socket>::GetInstance().GetItem(sock_fd);
-                if (UNLIKELY(sock == nullptr)) {
-                    UBS_VLOG_ERR("socket is nullptr for fd: %d", sock_fd);
+                if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
+                    UBS_VLOG_ERR("socket is invalid for fd: %d", sock_fd);
                     continue;
                 }
                 auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
@@ -441,8 +441,8 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
             }
             auto fd = static_cast<int>(cr[i].user_ctx);
             auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-            if (UNLIKELY(sock == nullptr)) {
-                UBS_VLOG_ERR("socket is nullptr for fd: %d", fd);
+            if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
+                UBS_VLOG_ERR("socket is invalid for fd: %d", fd);
                 continue;
             }
 

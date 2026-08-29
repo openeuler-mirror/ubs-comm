@@ -106,7 +106,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         // 使用提取的接口获取IP地址
         peerIp = SocketConnHelper::ExtractIpFromSockAddr(address);
         SocketPtr sock_obj = ArraySet<Socket>::GetInstance().GetItem(fd);
-        if (sock_obj != nullptr) {
+        if (sock_obj != nullptr && sock_obj->Type() != SocketType::SOCK_TYPE_TCP) {
             UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d array set exist", sock->Fd(), fd);
             auto sockBase = RefStaticCastToRaw<SocketBase>(sock_obj);
             sockBase->acceptor_->acceptor_ops_->conn_info.peer_ip = peerIp;

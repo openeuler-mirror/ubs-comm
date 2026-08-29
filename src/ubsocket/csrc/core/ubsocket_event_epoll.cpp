@@ -549,6 +549,10 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
         }
 
         auto sock = ArraySet<Socket>::GetInstance().GetItem(event_data->socket_fd);
+        if (sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_UMQ) {
+            UBS_VLOG_ERR("async_epoll(%d) wait get invalid socket(%d)\n", epoll_fd_, event_data->socket_fd);
+            continue;
+        }
         if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_OUT) {
             auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
             umqSock->ProcessEpollEvent(events[i]);
@@ -610,7 +614,7 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
 
     // 非 ubsocket_socket API 创建的 fd 不做特殊处理
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (sock == nullptr) {
+    if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP)) {
         return AddRawSocketEvent(fd, event);
     }
 
@@ -757,7 +761,7 @@ int AsyncEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
     }
 
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (sock == nullptr) {
+    if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP)) {
         return ModRawSocketEvent(fd, event);
     }
 
@@ -817,8 +821,8 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
     }
 
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (UNLIKELY(sock == nullptr)) {
-        UBS_VLOG_DEBUG("sock is nullptr for origin sock, socket: %d\n", fd);
+    if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP)) {
+        UBS_VLOG_DEBUG("sock is nullptr or is origin sock, socket: %d\n", fd);
         return 0;
     }
 
