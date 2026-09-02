@@ -68,15 +68,16 @@ UResult UBJetty::CreateUrmaJetty(uintptr_t seg_pa, uint32_t seg_len, uint32_t se
         bondp_jetty_cfg_t bondp_cfg{};
         bondp_cfg.base = jetty_cfg;
         bondp_port_id_t portIdx[2];
-        portIdx[0].chip_id = 1;
-        portIdx[0].die_id = 1;
-        portIdx[0].port_idx = mainRouteSrcPortEid;
-        portIdx[1].chip_id = 1;
-        portIdx[1].die_id = 1;
-        portIdx[1].port_idx = backRouteSrcPortEid;
+        portIdx[0].bs.chip_id = 1;
+        portIdx[0].bs.die_id = 1;
+        portIdx[0].bs.port_idx = mainRouteSrcPortEid;
+        portIdx[1].bs.chip_id = 1;
+        portIdx[1].bs.die_id = 1;
+        portIdx[1].bs.port_idx = backRouteSrcPortEid;
         bondp_cfg.port_ids = portIdx;
         bondp_cfg.port_count = sizeof(portIdx) / sizeof(portIdx[0]);
-        NN_LOG_INFO("bondp_port_id_t: " << +bondp_cfg.port_ids[0].port_idx << ", " << +bondp_cfg.port_ids[1].port_idx);
+        NN_LOG_INFO("bondp_port_id_t: " << +bondp_cfg.port_ids[0].bs.port_idx << ", "
+                                        << +bondp_cfg.port_ids[1].bs.port_idx);
         tmpJetty = HcomUrma::CreateJetty(mUBContext->mUrmaContext, &bondp_cfg.base);
     } else {
         tmpJetty = HcomUrma::CreateJetty(mUBContext->mUrmaContext, &jetty_cfg);
