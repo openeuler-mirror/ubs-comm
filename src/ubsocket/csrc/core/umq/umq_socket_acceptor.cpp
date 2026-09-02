@@ -169,8 +169,6 @@ Result UmqAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
                 break;
             }
             case UBHandshakeState::kDEGRADE: {
-                // 不调用 OverrideFdObj，当此连接上有请求时直接使用裸 socket API.
-                UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
                 return UBS_UB_ACCEPT | UBS_DEGRADABLE_MASK;
             }
             case UBHandshakeState::kFAILED: {

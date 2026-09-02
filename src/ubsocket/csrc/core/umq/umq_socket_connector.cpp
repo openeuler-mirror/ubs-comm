@@ -168,9 +168,7 @@ Result UmqConnectorOps::CreateSocketResources(SocketPtr &sock)
             }
 
             case UBHandshakeState::kDEGRADE: {
-                ArraySet<Socket>::GetInstance().OverrideItem(raw_fd_, nullptr);
-                UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
-                return UBS_OK;
+                return UBS_ERROR | UBS_DEGRADABLE_MASK;
             }
 
             case UBHandshakeState::kFAILED: {

@@ -110,14 +110,14 @@ Result UrmaSocket::CreateUrmaResources()
     const urma_eid_info_t &eid_info = context_->EidInfo();
     memcpy(&local_eid_, &eid_info.eid, sizeof(urma_eid_t));
 
-    urma_jfs_cfg_t jfs_cfg = context_->CreateJfsCfg(kDefaultQueueDepth, URMA_TM_RM, 0);
+    urma_jfs_cfg_t jfs_cfg = context_->CreateJfsCfg(kDefaultQueueDepth, GetUrmaTransMode(), 0);
     ret = context_->CreateJfs(jfs_cfg, jfc_, jfs_);
     if (ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: CreateJfs failed, fd=" << raw_socket_);
         return ret;
     }
 
-    urma_jfr_cfg_t jfr_cfg = context_->CreateJfrCfg(kDefaultQueueDepth, URMA_TM_RM, 0, 0);
+    urma_jfr_cfg_t jfr_cfg = context_->CreateJfrCfg(kDefaultQueueDepth, GetUrmaTransMode(), 0, 0);
     ret = context_->CreateJfr(jfr_cfg, jfc_, jfr_);
     if (ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: CreateJfr failed, fd=" << raw_socket_);
@@ -125,7 +125,7 @@ Result UrmaSocket::CreateUrmaResources()
     }
 
     urma_jetty_cfg_t jetty_cfg = context_->CreateJettyCfg(0);
-    ret = context_->CreateJetty(jetty_cfg, URMA_CTP, jfs_, jfr_, jetty_);
+    ret = context_->CreateJetty(jetty_cfg, GetUrmaTpType(), jfs_, jfr_, jetty_);
     if (ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: CreateJetty failed, fd=" << raw_socket_);
         return ret;
@@ -301,13 +301,29 @@ void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
     }
 }
 
-Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool send_first)
+Result UrmaSocket::ExchangeSocketResources(bool send_first)
 {
-    Result ret = urma_sock.CreateUrmaResources();
-    if (ret != UBS_OK) {
-        return ret;
-    }
+    Result ret;
+    do {
+        ret = DoExchangeSocketResources(send_first);
+        if (ret == UBS_OK) {
+            return ret;
+        }
+    } while (LinkSwitchEnable());
 
+    if (DegradeEnable()) {
+        ret |= UBS_DEGRADABLE_MASK;
+    }
+    return ret;
+}
+
+Result UrmaSocket::DoExchangeSocketResources(bool send_first)
+{
+    Result ack_ret = UBS_OK;
+    Result peer_ret = UBS_OK;
+    RemoteSegmentsPtr remote_segments;
+    urma_target_seg_t *local_seg;
+    auto allocator = UrmaBackend::Instance().GetAllocator();
     struct UrmaSockSegExInfo {
         UrmaSockExInfo ex{};
         IdentifyNode node;
@@ -316,92 +332,107 @@ Result UrmaSocket::ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool s
         urma_seg_t seg{};
     } local, peer;
 
-    local.ex.my_send_buf.buf = urma_sock.send_buf_addr_;
-    local.ex.my_send_buf.size = urma_sock.send_buf_size_;
-    local.ex.my_recv_buf.buf = urma_sock.recv_buf_addr_;
-    local.ex.my_recv_buf.size = urma_sock.recv_buf_size_;
-    local.ex.raw_jetty_id = urma_sock.Jetty()->RawJettyId();
-    local.ex.token = urma_sock.Jetty()->Token();
+    ack_ret = CreateUrmaResources();
+    if (ack_ret != UBS_OK) {
+        goto CLEAN_URMA_RESOURCE;
+    }
 
-    auto allocator = UrmaBackend::Instance().GetAllocator();
+    local.ex.my_send_buf.buf = send_buf_addr_;
+    local.ex.my_send_buf.size = send_buf_size_;
+    local.ex.my_recv_buf.buf = recv_buf_addr_;
+    local.ex.my_recv_buf.size = recv_buf_size_;
+    local.ex.raw_jetty_id = jetty_->RawJettyId();
+    // token交换需要安全通道，当前需约束在安全网络下
+    local.ex.token = jetty_->Token();
     local.node = UrmaBackend::Instance().GetLocalIdentifyNode();
     local.uasid = context_->Handle()->uasid;
     local.pool_start_addr = allocator->get_local_start_addr();
-    auto local_seg = allocator->get_local_target_seg(urma_sock.recv_buf_addr_);
+    local_seg = allocator->get_local_target_seg(recv_buf_addr_);
     if (local.pool_start_addr == 0 || local_seg == nullptr) {
         UBS_SLOG_ERR("UrmaSocket: Failed local pool address: " << std::hex << local.pool_start_addr
-                                                               << " get local target_seg @0x" << std::hex
-                                                               << urma_sock.recv_buf_addr_);
-        return UBS_TCP_EXCHANGE;
+                     << " get local target_seg @0x" << std::hex << recv_buf_addr_);
+        ack_ret = UBS_TCP_EXCHANGE;
+        goto CLEAN_URMA_RESOURCE;
     }
     UBS_VLOG_TRACE(
         "send buf(0x%lx, %u) recv buf(0x%lx, %u) jetty-id(eid=(%lx:%lx), uasid=%u, id=%u) "
         "seg(start_ptr=0x%lx, seg(va=0x%lx, len=%lu, attr=%x, token_id=%u), user_ctx=0x%lx, mva=0x%lx, token_id=%p",
-        urma_sock.send_buf_addr_, urma_sock.send_buf_size_, urma_sock.recv_buf_addr_, urma_sock.recv_buf_addr_,
+        send_buf_addr_, send_buf_size_, recv_buf_addr_, recv_buf_addr_,
         local.ex.raw_jetty_id.eid.in6.subnet_prefix, local.ex.raw_jetty_id.eid.in6.interface_id,
         local.ex.raw_jetty_id.uasid, local.ex.raw_jetty_id.id, local.pool_start_addr, local_seg->seg.ubva.va,
         local_seg->seg.len, local_seg->seg.attr, local_seg->seg.token_id, local_seg->user_ctx, local_seg->mva,
         local_seg->token_id);
     local.seg = local_seg->seg;
     if (send_first) {
-        if (SocketConnHelper::SendSocketData(fd, &local, sizeof(local), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local)) {
-            UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", fd, sizeof(local));
-            return UBS_TCP_EXCHANGE;
+        if (SocketConnHelper::SendSocketData(raw_socket_, &local, sizeof(local), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local)) {
+            UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", raw_socket_, sizeof(local));
+            ack_ret = UBS_TCP_EXCHANGE;
+            goto CLEAN_URMA_RESOURCE;
         }
     }
 
-    if (SocketConnHelper::RecvSocketData(fd, &peer, sizeof(peer), CONTROL_PLANE_TIMEOUT_MS) != sizeof(peer)) {
-        UBS_VLOG_ERR("UrmaSocket recv socket(%d) data size(%zu) failed.", fd, sizeof(peer));
-        return UBS_TCP_EXCHANGE;
+    if (SocketConnHelper::RecvSocketData(raw_socket_, &peer, sizeof(peer), CONTROL_PLANE_TIMEOUT_MS) != sizeof(peer)) {
+        UBS_VLOG_ERR("UrmaSocket recv socket(%d) data size(%zu) failed.", raw_socket_, sizeof(peer));
+        ack_ret = UBS_TCP_EXCHANGE;
+        goto CLEAN_URMA_RESOURCE;
     }
 
-    if (urma_sock.Jetty()->ImportRemoteJetty(peer.ex.raw_jetty_id, peer.ex.token) != UBS_OK) {
-        UBS_VLOG_ERR("UrmaSocket import remote jetty failed.", fd, sizeof(peer));
-        return UBS_ERROR;
+    if (jetty_->ImportRemoteJetty(peer.ex.raw_jetty_id, peer.ex.token) != UBS_OK) {
+        UBS_VLOG_ERR("UrmaSocket import remote jetty failed.", raw_socket_, sizeof(peer));
+        ack_ret = UBS_TCP_EXCHANGE;
+        goto CLEAN_URMA_RESOURCE;
     }
 
-    auto remote = allocator->get_remote_segments(peer.node);
-    remote->remote_start_addr_ = peer.pool_start_addr;
-    auto res = allocator->store_remote_target_seg(remote, peer.seg, remote_ctrl_target_seg_);
-    if (res != UBS_OK) {
+    remote_segments = allocator->get_remote_segments(peer.node);
+    remote_segments->remote_start_addr_ = peer.pool_start_addr;
+    ack_ret = allocator->store_remote_target_seg(remote_segments, peer.seg, remote_ctrl_target_seg_);
+    if (ack_ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: Failed to store remote segments(0x"
-                     << std::hex << peer.seg.ubva.va << ", 0x" << peer.seg.len << ") return: " << std::oct << res);
-        return res;
+                     << std::hex << peer.seg.ubva.va << ", 0x" << peer.seg.len << ") return: " << std::oct << ack_ret);
+        goto CLEAN_REMOTE_SEG;
     }
 
     local_ctrl_target_seg_ = local_seg;
-    remote_target_segs_ = remote;
+    remote_target_segs_ = remote_segments;
 
     if (!send_first) {
-        if (SocketConnHelper::SendSocketData(fd, &local, sizeof(local), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local)) {
-            UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", fd, sizeof(local));
-            return UBS_TCP_EXCHANGE;
+        if (SocketConnHelper::SendSocketData(raw_socket_, &local, sizeof(local), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local)) {
+            UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", raw_socket_, sizeof(local));
+            ack_ret = UBS_TCP_EXCHANGE;
+            goto CLEAN_REMOTE_SEG;
         }
     }
 
-    Result ack_ret = UBS_OK;
-    Result peer_ret = UBS_OK;
-    if (SocketConnHelper::SendSocketData(fd, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ack_ret)) {
-        UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", fd, sizeof(ack_ret));
-        return UBS_TCP_EXCHANGE;
+    if (SocketConnHelper::SendSocketData(raw_socket_, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ack_ret)) {
+        UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", raw_socket_, sizeof(ack_ret));
+        ack_ret = UBS_TCP_EXCHANGE;
+        goto CLEAN_REMOTE_SEG;
     }
-    if (SocketConnHelper::RecvSocketData(fd, &peer_ret, sizeof(peer_ret), CONTROL_PLANE_TIMEOUT_MS) !=
-        sizeof(peer_ret)) {
-        UBS_VLOG_ERR("UrmaSocket recv socket(%d) data size(%zu) failed.", fd, sizeof(ack_ret));
-        return UBS_TCP_EXCHANGE;
+    if (SocketConnHelper::RecvSocketData(raw_socket_, &peer_ret, sizeof(peer_ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(peer_ret)) {
+        UBS_VLOG_ERR("UrmaSocket recv socket(%d) data size(%zu) failed.", raw_socket_, sizeof(ack_ret));
+        ack_ret = UBS_TCP_EXCHANGE;
+        goto CLEAN_REMOTE_SEG;
     }
 
     empty_recv_sge_.tseg = local_ctrl_target_seg_;
     PostEmptyRecvWorkerRecords(128U); // TODO : post recv count
-    urma_sock.rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
-    urma_sock.rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
-    urma_sock.remote_uasid_ = peer.uasid;
-    urma_sock.peer_eid_ = peer.node.eid;
-    urma_sock.SetBindRemote(true);
+    rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
+    rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
+    remote_uasid_ = peer.uasid;
+    peer_eid_ = peer.node.eid;
+    SetBindRemote(true);
     UBS_VLOG_TRACE("urma socket exchange socket result success, peer buf=(0x%lx:0x%lx), local buf=(0x%lx:0x%lx)",
                    peer.ex.my_send_buf.buf, peer.ex.my_recv_buf.buf, local.ex.my_send_buf.buf,
                    local.ex.my_recv_buf.buf);
     return UBS_OK;
+
+CLEAN_REMOTE_SEG:
+    allocator->rm_remote_segments(peer.node);
+
+CLEAN_URMA_RESOURCE:
+    DestroyUrmaResources();
+
+    return ack_ret;
 }
 
 void UrmaSocket::PostEmptyRecvWorkerRecords(uint32_t count)

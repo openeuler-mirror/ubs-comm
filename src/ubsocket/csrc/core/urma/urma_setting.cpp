@@ -23,6 +23,7 @@ std::string UrmaSetting::UB_DEV_NAME = "";
 std::string UrmaSetting::UB_DEV_EID;
 uint32_t UrmaSetting::UB_EID_INDEX = 0;
 
+ub_trans_mode UrmaSetting::UB_TANS_MODE = ub_trans_mode::RM_CTP;
 bool UrmaSetting::UB_JETTY_SHARED_ENABLED = false;
 uint16_t UrmaSetting::UB_JETTY_INIT_COUNT = 2;
 uint16_t UrmaSetting::UB_JETTY_MAX_COUNT = 2;

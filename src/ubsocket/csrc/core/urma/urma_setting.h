@@ -28,6 +28,8 @@ public:
     static std::string UB_DEV_NAME;
     static std::string UB_DEV_EID;
     static uint32_t UB_EID_INDEX;
+    /* setting for tp */
+    static ub_trans_mode UB_TANS_MODE;
     /* setting for jetty pool */
     static bool UB_JETTY_SHARED_ENABLED;
     static uint16_t UB_JETTY_INIT_COUNT;

@@ -168,30 +168,29 @@ int Connector::Connect(SocketPtr &sock, const struct sockaddr *address, socklen_
     Result ret = connector_ops_->PrepareConnect(raw_fd_, address, address_len, sock);
     if (ret != UBS_OK) {
         PROF_END(CORE_CONNECT, false);
-        ArraySet<Socket>::GetInstance().OverrideItem(raw_fd_, nullptr);
-        SocketConnHelper::FlushSocketMsg(raw_fd_);
         return ret;
     }
 
     ret = connector_ops_->Negotiate(raw_fd_, sock);
     if (ret == UBS_OK) {
         ret = connector_ops_->CreateSocketResources(sock);
-    } else {
-        if (IsDegradable(ret)) {
-            UBS_VLOG_INFO("Version mismatch, fallback to TCP, fd: %d\n", raw_fd_);
-            ret = UBS_OK;
-        } else {
-            UBS_VLOG_ERR("Failed to establish UB connection, fd: %d\n", raw_fd_);
-        }
-
-        ArraySet<Socket>::GetInstance().OverrideItem(raw_fd_, nullptr);
-        /* Clear messages that already exist on the TCP link to prevent 
-                 * dirty messages from affecting user data transmission*/
-        SocketConnHelper::FlushSocketMsg(raw_fd_);
     }
 
     if (is_blocking) {
         SocketConnHelper::SetBlocking(raw_fd_);
+    }
+
+    if (ret != UBS_OK && IsDegradable(ret)) {
+        SocketPtr socketPtr;
+        ret = SocketBase::Create(raw_fd_, SocketType::SOCK_TYPE_TCP, socketPtr);
+        if (ret != UBS_OK) {
+            UBS_VLOG_ERR("Create raw socketFd failed, fd: %d, ret: %d\n", raw_fd_, ret);
+            return ret;
+        }
+        socketPtr->create_type_ = SOCK_CREATE_TYPE_CONNECT;
+        ArraySet<Socket>::GetInstance().OverrideItem(raw_fd_, socketPtr.Get());
+        UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
+        return UBS_OK;
     }
 
     connector_ops_->conn_info.type_fd = 1;
