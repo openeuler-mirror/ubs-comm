@@ -48,7 +48,7 @@ if(NOT LIBBOUNDCHECK_INCLUDE_DIR OR NOT LIBBOUNDCHECK_SHARED_LIBRARY)
                 FetchContent_Declare(
                         libboundscheck
                         GIT_REPOSITORY https://atomgit.com/openeuler/libboundscheck.git
-                        GIT_TAG        master
+                        GIT_TAG        v1.1.16
                 )
                 FetchContent_MakeAvailable(libboundscheck)
                 # 获取 hcom 源码路径
