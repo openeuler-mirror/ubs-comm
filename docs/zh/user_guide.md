@@ -128,7 +128,7 @@ UBS Comm组网可由2台服务器组成，其中：
 
 |软件名称|软件版本|
 |--|--|
-|OS|openEuler 22.03 LTSopenEuler 24.03 LTS|
+|OS|openEuler 22.03 LTS<br>openEuler 24.03 LTS|
 |RDMA-Core|42.7|
 |GCC|7.3.0|
 |CCA|VPP V300R024C10SPC001|
@@ -139,7 +139,7 @@ UBS Comm组网可由2台服务器组成，其中：
 
 |名称|包名|发布类型|说明|获取地址|
 |--|--|--|--|--|
-|UBS Comm|ubs-comm-lib-*{version}*.oe2403sp3.aarch64.rpmubs-comm-devel-1.0.0-15.oe2403sp3.aarch64.rpm|闭源|UBS Comm软件安装包。|BeiMing对应CMC版本库中获取|
+|UBS Comm|ubs-comm-lib-*{version}*.oe2403sp3.aarch64.rpm<br>ubs-comm-devel-1.0.0-15.oe2403sp3.aarch64.rpm|闭源|UBS Comm软件安装包。|BeiMing对应CMC版本库中获取|
 
 **校验软件包完整性<a name="section11491417131511"></a>**
 
@@ -168,17 +168,11 @@ UBS Comm支持查询软件版本。
     cat {hcom_package_name}/version.property
     ```
 
-### 安装使用<a name="ZH-CN_TOPIC_0000002596637711"></a>
+## 安装使用<a name="ZH-CN_TOPIC_0000002596637711"></a>
 
-- **[安装MLNX\_OFED驱动](#ZH-CN_TOPIC_0000002566158050)**  
-
-- **[配置服务器侧RDMA网卡无损特性](#ZH-CN_TOPIC_0000002596757661)**  
 RDMA无损配置可以提高网络传输的性能和效率，确保数据传输的可靠性和一致性，同时减少CPU的负担。
-- **[安装UBS Comm](#ZH-CN_TOPIC_0000002596637747)**  
 
-- **[UBC仿真环境](#ZH-CN_TOPIC_0000002596757653)**  
-
-#### 安装MLNX\_OFED驱动<a name="ZH-CN_TOPIC_0000002566158050"></a>
+### 安装MLNX\_OFED驱动<a name="ZH-CN_TOPIC_0000002566158050"></a>
 
 >[!NOTICE]说明
 >使用RDMA通信协议时，请在UBS Comm所有通信节点执行本章节操作。未使用RDMA通信协议，则可跳过本章节。
@@ -349,7 +343,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     ./uninstall.sh
     ```
 
-#### 配置服务器侧RDMA网卡无损特性<a name="ZH-CN_TOPIC_0000002596757661"></a>
+### 配置服务器侧RDMA网卡无损特性<a name="ZH-CN_TOPIC_0000002596757661"></a>
 
 RDMA无损配置可以提高网络传输的性能和效率，确保数据传输的可靠性和一致性，同时减少CPU的负担。
 
@@ -386,7 +380,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     echo 1 >/sys/class/net/${net_card}/ecn/roce_rp/enable/3
     ```
 
-#### 安装UBS Comm<a name="ZH-CN_TOPIC_0000002596637747"></a>
+### 安装UBS Comm<a name="ZH-CN_TOPIC_0000002596637747"></a>
 
 **前提条件<a name="section1340093619408"></a>**
 
