@@ -133,32 +133,46 @@ EXPOSE_C_DEFINE int connect(int socket, const struct sockaddr *address, socklen_
 
 EXPOSE_C_DEFINE ssize_t readv(int fildes, const struct iovec *iov, int iovcnt)
 {
-    return ubs_normalize_posix_ret(UB_API_WRAP(readv)(fildes, iov, iovcnt));
+    return ubs_normalize_posix_ret(UB_API_WRAP(readv_copy)(fildes, iov, iovcnt));
 }
 
 EXPOSE_C_DEFINE ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
 {
-    return ubs_normalize_posix_ret(UB_API_WRAP(writev)(fildes, iov, iovcnt));
+    return ubs_normalize_posix_ret(UB_API_WRAP(writev_copy)(fildes, iov, iovcnt));
 }
 
 EXPOSE_C_DEFINE ssize_t send(int sockfd, const void *buf, size_t len, int flags)
 {
-    return ubs_normalize_posix_ret(UB_API_WRAP(send)(sockfd, buf, len, flags));
+    /* For connected UB sockets, send is equivalent to write (flags ignored). Route to copy
+     * variant so LD_PRELOAD applications with arbitrary (non-iobuf-aligned) buffers are safe. */
+    (void)flags;
+    struct iovec iov;
+    iov.iov_base = const_cast<void *>(buf);
+    iov.iov_len = len;
+    return ubs_normalize_posix_ret(UB_API_WRAP(writev_copy)(sockfd, &iov, 1));
 }
 
 EXPOSE_C_DEFINE ssize_t recv(int sockfd, void *buf, size_t len, int flags)
 {
-    return ubs_normalize_posix_ret(UB_API_WRAP(recv)(sockfd, buf, len, flags));
+    return ubs_normalize_posix_ret(UB_API_WRAP(recv_copy)(sockfd, buf, len, flags));
 }
 
 EXPOSE_C_DEFINE ssize_t read(int fildes, void *buf, size_t nbyte)
 {
-    return ubs_normalize_posix_ret(UB_API_WRAP(read)(fildes, buf, nbyte));
+    /* Route single-buffer read through copy variant for LD_PRELOAD safety. */
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = nbyte;
+    return ubs_normalize_posix_ret(UB_API_WRAP(readv_copy)(fildes, &iov, 1));
 }
 
 EXPOSE_C_DEFINE ssize_t write(int fildes, const void *buf, size_t nbyte)
 {
-    return ubs_normalize_posix_ret(UB_API_WRAP(write)(fildes, buf, nbyte));
+    /* Route single-buffer write through copy variant for LD_PRELOAD safety. */
+    struct iovec iov;
+    iov.iov_base = const_cast<void *>(buf);
+    iov.iov_len = nbyte;
+    return ubs_normalize_posix_ret(UB_API_WRAP(writev_copy)(fildes, &iov, 1));
 }
 
 EXPOSE_C_DEFINE ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,

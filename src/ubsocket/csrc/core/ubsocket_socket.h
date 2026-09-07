@@ -59,6 +59,9 @@ public:
     int WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     int ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     int Recv(const SocketPtr &sock, void *buf, size_t len, int flags);
+    int WriteVCopy(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    int ReadVCopy(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    int RecvCopy(const SocketPtr &sock, void *buf, size_t len, int flags);
     int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen);
 
     EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
@@ -195,6 +198,19 @@ ALWAYS_INLINE int SocketBase::Recv(const SocketPtr &sock, void *buf, size_t len,
 ALWAYS_INLINE int SocketBase::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     return rx_.ReadV(sock, iov, iovcnt);
+}
+
+ALWAYS_INLINE int SocketBase::WriteVCopy(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+{
+    return tx_.WriteVCopy(sock, iov, iovcnt);
+}
+ALWAYS_INLINE int SocketBase::ReadVCopy(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+{
+    return rx_.ReadVCopy(sock, iov, iovcnt);
+}
+ALWAYS_INLINE int SocketBase::RecvCopy(const SocketPtr &sock, void *buf, size_t len, int flags)
+{
+    return rx_.RecvCopy(sock, buf, len, flags);
 }
 
 ALWAYS_INLINE EventPoll *SocketBase::GetAddedEpollFd(epoll_data_t &data) const

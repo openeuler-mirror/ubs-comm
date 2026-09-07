@@ -65,8 +65,10 @@ public:
     DataRx() = default;
     DataRx(const SocketPtr &sock, DataRxOps *ops);
 
-    ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    ssize_t ReadVCopy(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    ssize_t RecvCopy(const SocketPtr &sock, void *buf, size_t len, int flags);
 
+    ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     ssize_t Recv(const SocketPtr &sock, void *buf, size_t len, int flags);
 
     DataRxOps *GetRxOps()

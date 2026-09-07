@@ -205,7 +205,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     return UBS_OK;
 }
 
-void ubsocket_uninit()
+UBS_API void ubsocket_uninit()
 {
     if (GlobalSetting::UBS_PROF_ENABLE) {
         Profiling::Uninit();

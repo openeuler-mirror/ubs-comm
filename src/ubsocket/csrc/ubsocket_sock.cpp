@@ -199,6 +199,45 @@ UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     return ret;
 }
 
+UBS_API ssize_t UB_API_WRAP(readv_copy)(int fd, const struct iovec *iov, int iovcnt)
+{
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+        return LibcApi::readv(fd, iov, iovcnt);
+    }
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (sockBase == nullptr) {
+        return LibcApi::readv(fd, iov, iovcnt);
+    }
+    return sockBase->ReadVCopy(sock, iov, iovcnt);
+}
+
+UBS_API ssize_t UB_API_WRAP(recv_copy)(int fd, void *buf, size_t len, int flags)
+{
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+        return LibcApi::recv(fd, buf, len, flags);
+    }
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (sockBase == nullptr) {
+        return LibcApi::recv(fd, buf, len, flags);
+    }
+    return sockBase->RecvCopy(sock, buf, len, flags);
+}
+
+UBS_API ssize_t UB_API_WRAP(writev_copy)(int fd, const struct iovec *iov, int iovcnt)
+{
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+        return LibcApi::writev(fd, iov, iovcnt);
+    }
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (sockBase == nullptr) {
+        return LibcApi::writev(fd, iov, iovcnt);
+    }
+    return sockBase->WriteVCopy(sock, iov, iovcnt);
+}
+
 UBS_API ssize_t UB_API_WRAP(send)(int fd, const void *buf, size_t len, int flags)
 {
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {

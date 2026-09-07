@@ -34,6 +34,9 @@ ssize_t UB_API_WRAP(send)(int sockfd, const void *buf, size_t len, int flags);
 ssize_t UB_API_WRAP(recv)(int sockfd, void *buf, size_t len, int flags);
 ssize_t UB_API_WRAP(read)(int fildes, void *buf, size_t nbyte);
 ssize_t UB_API_WRAP(write)(int fildes, const void *buf, size_t nbyte);
+ssize_t UB_API_WRAP(readv_copy)(int fildes, const struct iovec *iov, int iovcnt);
+ssize_t UB_API_WRAP(writev_copy)(int fildes, const struct iovec *iov, int iovcnt);
+ssize_t UB_API_WRAP(recv_copy)(int sockfd, void *buf, size_t len, int flags);
 ssize_t UB_API_WRAP(sendto)(int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr,
                             socklen_t addrlen);
 ssize_t UB_API_WRAP(recvfrom)(int sockfd, void *buf, size_t len, int flags, struct sockaddr *dest_addr,

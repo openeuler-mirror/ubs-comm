@@ -21,7 +21,7 @@ DataRx::DataRx(const SocketPtr &sock, DataRxOps *ops) : fd_(sock->raw_socket_), 
     /* caller must make sure ops is not null */
 }
 
-ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+ssize_t DataRx::ReadVCopy(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     PROF_START(CORE_READ);
     PROF_START(CORE_READ_EAGAIN);
@@ -88,13 +88,9 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     struct iovec tmp_iov = {anchor->data, anchor->cap};
 
     uint32_t max_buf_size;
-    if (GlobalSetting::UBS_READV_UNLIMITED) {
-        max_buf_size = UINT32_MAX;
-    } else {
-        max_buf_size = 0;
-        for (int i = 0; i < iovcnt; i++) {
-            max_buf_size += iov[i].iov_len;
-        }
+    max_buf_size = 0;
+    for (int i = 0; i < iovcnt; i++) {
+        max_buf_size += iov[i].iov_len;
     }
 
     ret = rx_ops_->RxDataSet(tmp_iov.iov_base, max_buf_size);
@@ -158,7 +154,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     return rx_total_len;
 }
 
-ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
+ssize_t DataRx::RecvCopy(const SocketPtr &sock, void *buf, size_t len, int flags)
 {
     PROF_START(CORE_READ);
     PROF_START(CORE_READ_EAGAIN);
@@ -262,6 +258,131 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
     ubsocket_iobuf_deallocate(anchor_block);
     PROF_END(CORE_READ_COPY_FREE_ANCHOR, true);
 
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
+    }
+    if (rx_total_len != 0) {
+        TRACE_ADD_READ(trace, CORE_READ, fd_, read_start_time, ubsocket_get_timeNs_compile());
+    }
+    PROF_END(CORE_READ, true);
+    TRACE_TRY_SWAP(trace);
+    return rx_total_len;
+}
+
+ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+{
+    PROF_START(CORE_READ);
+    PROF_START(CORE_READ_EAGAIN);
+    uint64_t read_start_time = ubsocket_get_timeNs_compile();
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        ssize_t size = LibcApi::readv(fd_, iov, iovcnt);
+        PROF_END(CORE_READ, size >= 0);
+        return size;
+    }
+    if (iov == nullptr || iovcnt == 0) {
+        errno = EINVAL;
+        UBS_VLOG_WARN("ReadV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                      Func::Error2Str(errno));
+        PROF_END(CORE_READ, false);
+        return UBS_ERROR;
+    }
+    for (int i = 0; i < iovcnt; i++) {
+        if (iov[i].iov_base == nullptr) {
+            errno = EINVAL;
+            UBS_VLOG_WARN("ReadV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                          Func::Error2Str(errno));
+            PROF_END(CORE_READ, false);
+            return UBS_ERROR;
+        }
+    }
+    auto *trace = sock->split_trace_;
+    ssize_t rx_total_len = OutputErrorMagicNumber(sock, iov, iovcnt);
+    if (rx_total_len > 0) {
+        PROF_END(CORE_READ, false);
+        return rx_total_len;
+    }
+    PROF_START(CORE_READ_POLL_RX);
+    int ret = rx_ops_->PollRx(sock);
+    PROF_END(CORE_READ_POLL_RX, ret >= 0);
+    if (ret < 0) {
+        PROF_END(CORE_READ, false);
+        return ret;
+    }
+    uint32_t max_buf_size;
+    if (GlobalSetting::UBS_READV_UNLIMITED) {
+        max_buf_size = UINT32_MAX;
+    } else {
+        max_buf_size = 0;
+        for (int i = 0; i < iovcnt; i++) {
+            max_buf_size += iov[i].iov_len;
+        }
+    }
+    ret = rx_ops_->RxDataSet(iov[0].iov_base, max_buf_size);
+    if (ret < 0) {
+        if (!((errno == EINTR) || (errno == EAGAIN))) {
+            PROF_END(CORE_READ, false);
+        } else {
+            PROF_END(CORE_READ_EAGAIN, true);
+            TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, read_start_time, ubsocket_get_timeNs_compile());
+        }
+        return ret;
+    }
+    rx_total_len = ret;
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
+    }
+    if (rx_total_len != 0) {
+        TRACE_ADD_READ(trace, CORE_READ, fd_, read_start_time, ubsocket_get_timeNs_compile());
+    }
+    PROF_END(CORE_READ, true);
+    TRACE_TRY_SWAP(trace);
+    return rx_total_len;
+}
+
+ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
+{
+    PROF_START(CORE_READ);
+    PROF_START(CORE_READ_EAGAIN);
+    uint64_t read_start_time = ubsocket_get_timeNs_compile();
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        ssize_t size = LibcApi::recv(fd_, buf, len, flags);
+        PROF_END(CORE_READ, size >= 0);
+        return size;
+    }
+    if (buf == nullptr || len == 0) {
+        errno = EINVAL;
+        UBS_VLOG_WARN("Recv invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                      Func::Error2Str(errno));
+        PROF_END(CORE_READ, false);
+        return UBS_ERROR;
+    }
+    const struct iovec user_iov = {.iov_base = buf, .iov_len = len};
+    auto *trace = sock->split_trace_;
+    ssize_t rx_total_len = OutputErrorMagicNumber(sock, &user_iov, 1);
+    if (rx_total_len > 0) {
+        PROF_END(CORE_READ, false);
+        return rx_total_len;
+    }
+    PROF_START(CORE_READ_POLL_RX);
+    int ret = rx_ops_->PollRx(sock);
+    PROF_END(CORE_READ_POLL_RX, ret >= 0);
+    if (ret < 0) {
+        PROF_END(CORE_READ, false);
+        return ret;
+    }
+    ret = rx_ops_->RxDataSet(buf, len);
+    if (ret < 0) {
+        if (!((errno == EINTR) || (errno == EAGAIN))) {
+            PROF_END(CORE_READ, false);
+        } else {
+            PROF_END(CORE_READ_EAGAIN, true);
+            TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, read_start_time, ubsocket_get_timeNs_compile());
+        }
+        return ret;
+    }
+    rx_total_len = ret;
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
         sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
