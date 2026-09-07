@@ -2260,6 +2260,16 @@ public:
         return mDevIndex;
     }
 
+    inline void SetMemPoolThreadCache(bool enable)
+    {
+        mMemPoolThreadCache = enable;
+    }
+
+    inline bool GetMemPoolThreadCache() const
+    {
+        return mMemPoolThreadCache;
+    }
+
     uint8_t GetBandWidth() const;
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
@@ -2314,6 +2324,7 @@ protected:
     bool mStartOobSvr = true;
     UBSHcomNetDriverProtocol mProtocol = UBSHcomNetDriverProtocol::RDMA;
     bool mEnableTls = true;
+    bool mMemPoolThreadCache = true;
     uint32_t mMajorVersion = NN_NO1;
     uint32_t mMinorVersion = 0;
     std::atomic_bool mInited{false};

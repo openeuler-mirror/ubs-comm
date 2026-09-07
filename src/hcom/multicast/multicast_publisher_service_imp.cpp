@@ -318,9 +318,9 @@ SerResult PublisherServiceImp::CreateResource(uint32_t threadNum)
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NO128;
     options.tcExpandBlkCnt = NN_NO256;
-    /* interface parameter: service ctx (timer) pool: per-thread cache disabled by default (bypass; cross-thread safe), enable via config */
-    options.tlsPolicy.enabled = false;
-    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+
+    options.tlsPolicy.enabled = true;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
     options.tlsPolicy.flushMs = 0;
     NetMemPoolFixedPtr ctxMemPool = new (std::nothrow) NetMemPoolFixed("PublisherServiceCtxTimer", options);
     if (NN_UNLIKELY(ctxMemPool.Get() == nullptr)) {

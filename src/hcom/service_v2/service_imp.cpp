@@ -343,6 +343,7 @@ SerResult HcomServiceImp::InitDriver()
         NN_LOG_ERROR("failed to create driver for service " << mOptions.name);
         return SER_ERROR;
     }
+    driver->SetMemPoolThreadCache(mOptions.enableMemPoolThreadCache);
     mDriverPtrs.emplace_back(driver);
 
     if (mOptions.startOobSvr) {
@@ -387,6 +388,7 @@ SerResult HcomServiceImp::CreateMultiRailDriver()
             NN_LOG_WARN("Failed to new driver in devIndex " << i << "for " << RDMA);
             continue;
         }
+        driver->SetMemPoolThreadCache(mOptions.enableMemPoolThreadCache);
         driver->SetDeviceId(i);
         NN_LOG_INFO("create driver " << driver->Name());
         mDriverPtrs.emplace_back(driver);
@@ -562,9 +564,8 @@ SerResult HcomServiceImp::CreateCtxMemPool()
         options.minBlkSize = NN_NO64 * NN_NO4;
     }
     options.tcExpandBlkCnt = NN_NO256;
-    /* interface parameter: service ctx (timer) pool: per-thread cache disabled by default (bypass; cross-thread safe), enable via config */
-    options.tlsPolicy.enabled = false;
-    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+    options.tlsPolicy.enabled = mOptions.enableMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
     options.tlsPolicy.flushMs = 0;
     NetMemPoolFixedPtr contextMemPool = new (std::nothrow)
         NetMemPoolFixed("ServiceContextTimer-" + mOptions.name, options);
@@ -1089,6 +1090,11 @@ void HcomServiceImp::SetTcpUserTimeOutSec(uint16_t timeOutSec)
 void HcomServiceImp::SetTcpSendZCopy(bool tcpSendZCopy)
 {
     mOptions.tcpSendZCopy = tcpSendZCopy;
+}
+
+void HcomServiceImp::SetEnableMemPoolThreadCache(bool enable)
+{
+    mOptions.enableMemPoolThreadCache = enable;
 }
 
 void HcomServiceImp::SetDeviceIpMask(const std::vector<std::string> &ipMasks)

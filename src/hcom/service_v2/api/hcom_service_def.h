@@ -140,6 +140,7 @@ struct UBSHcomServiceOptions {
     UBSHcomWorkerMode workerGroupMode = NET_BUSY_POLLING; // worker线程工作模式，默认busy_polling
     int8_t workerThreadPriority = 0; // 线程优先级[-20,19]，19优先级最低，-20优先级最高，同nice值
     std::pair<uint32_t, uint32_t> workerGroupCpuIdsRange = {UINT32_MAX, UINT32_MAX}; // default not bind
+    bool enableMemPoolThreadCache = true; // 内存池线程本地缓存开关，默认为true，false表示不启用threadlocal cache
 };
 
 struct UBSHcomConnectOptions {
