@@ -309,13 +309,16 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
     if (rx_total_len == 0) {
         /*
          * m_rx.epoll_event_num_ not equals to m_rx.m_expect_epoll_event_num means another epoll event is reported
-         * during readv processing procedure, set m_rx.m_poll to enable poll RX operation and set errno to EINTR
-         * to let brpc retry and call readv()
+         * during readv processing procedure, set m_rx.m_poll to enable poll RX operation on next entry and return
+         * EAGAIN so that callers (brpc/envoy/kitex) uniformly treat it as "no data yet, retry later".
+         * EINTR was previously used to hint brpc to retry immediately, but it is a synthesized errno (no real
+         * signal interruption) and envoy does not auto-retry on EINTR for non-blocking fds, which caused
+         * spurious connection errors. EAGAIN is the POSIX-correct errno for "no data available right now".
          */
         if (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0, std::memory_order_release,
                                                       std::memory_order_acquire)) {
             poll_ = true;
-            errno = EINTR;
+            errno = EAGAIN;
             return UBS_ERROR;
         }
         if (ArraySet<Socket>::GetInstance().GetItem(fd_)->State() == SOCK_STAT_CLOSE) {

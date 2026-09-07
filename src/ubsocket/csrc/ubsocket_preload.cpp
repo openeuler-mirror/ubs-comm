@@ -79,6 +79,18 @@ __attribute__((destructor)) static void ubsocket_preload_fini(void)
 
 #define EXPOSE_C_DEFINE extern "C" __attribute__((visibility("default")))
 
+/* Internal ubsocket functions may return UBS_* error codes (e.g. UBS_ERROR,
+ * UBS_TCP_EXCHANGE, UBS_CONN_RETRY_FAILED, ...) — all are negative int32_t
+ * values with the high bit set, distinct from the POSIX error return -1.
+ * At the LD_PRELOAD POSIX boundary, normalize any such non-standard negative
+ * return to -1 so that applications observe conventional POSIX semantics.
+ * errno is already set by the internal path before the error code is returned. */
+template <typename T>
+static inline T ubs_normalize_posix_ret(T ret)
+{
+    return (ret < 0 && ret != -1) ? -1 : ret;
+}
+
 EXPOSE_C_DEFINE int socket(int domain, int type, int protocol)
 {
     return UB_API_WRAP(socket)(domain, type, protocol);
@@ -96,12 +108,12 @@ EXPOSE_C_DEFINE int close(int fd)
 
 EXPOSE_C_DEFINE int accept(int socket, struct sockaddr *address, socklen_t *address_len)
 {
-    return UB_API_WRAP(accept)(socket, address, address_len);
+    return ubs_normalize_posix_ret(UB_API_WRAP(accept)(socket, address, address_len));
 }
 
 EXPOSE_C_DEFINE int accept4(int socket, struct sockaddr *address, socklen_t *address_len, int flags)
 {
-    return UB_API_WRAP(accept4)(socket, address, address_len, flags);
+    return ubs_normalize_posix_ret(UB_API_WRAP(accept4)(socket, address, address_len, flags));
 }
 
 EXPOSE_C_DEFINE int bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
@@ -116,49 +128,49 @@ EXPOSE_C_DEFINE int listen(int fd, int backlog)
 
 EXPOSE_C_DEFINE int connect(int socket, const struct sockaddr *address, socklen_t address_len)
 {
-    return UB_API_WRAP(connect)(socket, address, address_len);
+    return ubs_normalize_posix_ret(UB_API_WRAP(connect)(socket, address, address_len));
 }
 
 EXPOSE_C_DEFINE ssize_t readv(int fildes, const struct iovec *iov, int iovcnt)
 {
-    return UB_API_WRAP(readv)(fildes, iov, iovcnt);
+    return ubs_normalize_posix_ret(UB_API_WRAP(readv)(fildes, iov, iovcnt));
 }
 
 EXPOSE_C_DEFINE ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
 {
-    return UB_API_WRAP(writev)(fildes, iov, iovcnt);
+    return ubs_normalize_posix_ret(UB_API_WRAP(writev)(fildes, iov, iovcnt));
 }
 
 EXPOSE_C_DEFINE ssize_t send(int sockfd, const void *buf, size_t len, int flags)
 {
-    return UB_API_WRAP(send)(sockfd, buf, len, flags);
+    return ubs_normalize_posix_ret(UB_API_WRAP(send)(sockfd, buf, len, flags));
 }
 
 EXPOSE_C_DEFINE ssize_t recv(int sockfd, void *buf, size_t len, int flags)
 {
-    return UB_API_WRAP(recv)(sockfd, buf, len, flags);
+    return ubs_normalize_posix_ret(UB_API_WRAP(recv)(sockfd, buf, len, flags));
 }
 
 EXPOSE_C_DEFINE ssize_t read(int fildes, void *buf, size_t nbyte)
 {
-    return UB_API_WRAP(read)(fildes, buf, nbyte);
+    return ubs_normalize_posix_ret(UB_API_WRAP(read)(fildes, buf, nbyte));
 }
 
 EXPOSE_C_DEFINE ssize_t write(int fildes, const void *buf, size_t nbyte)
 {
-    return UB_API_WRAP(write)(fildes, buf, nbyte);
+    return ubs_normalize_posix_ret(UB_API_WRAP(write)(fildes, buf, nbyte));
 }
 
 EXPOSE_C_DEFINE ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
                                const struct sockaddr *dest_addr, socklen_t addrlen)
 {
-    return UB_API_WRAP(sendto)(sockfd, buf, len, flags, dest_addr, addrlen);
+    return ubs_normalize_posix_ret(UB_API_WRAP(sendto)(sockfd, buf, len, flags, dest_addr, addrlen));
 }
 
 EXPOSE_C_DEFINE ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
                                  struct sockaddr *dest_addr, socklen_t *addrlen)
 {
-    return UB_API_WRAP(recvfrom)(sockfd, buf, len, flags, dest_addr, addrlen);
+    return ubs_normalize_posix_ret(UB_API_WRAP(recvfrom)(sockfd, buf, len, flags, dest_addr, addrlen));
 }
 
 EXPOSE_C_DEFINE ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags)

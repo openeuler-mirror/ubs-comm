@@ -111,8 +111,19 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
             UBS_VLOG_DEBUG("Socket %d has been removed.\n", fd);
             continue;
         }
+        // fd 复用防护：被轮询 socket 的 fd 可能在本轮 umq_poll 期间被 close 并复用给新 socket，
+        // 此时 GetItem(fd) 返回新 socket，其 tx_ops 可能尚未初始化（nullptr）。
+        // 历史故障：直接对新 socket 的 tx_ops 解引用 -> SIGSEGV @ 0xc (tx_queue_avail_num_ 偏移)。
+        // CQE 归属的旧 socket 已在销毁中，窗口额度丢弃即可，绝不可返还给 fd 复用后的新 socket。
+        if (poll_args.sock != nullptr && sock.Get() != poll_args.sock) {
+            UBS_VLOG_DEBUG("Socket fd %d has been reused by another socket, skip tx credit return.\n", fd);
+            continue;
+        }
         auto umq_sk = RefStaticCast<UmqSocket>(sock);
         auto tx_ops = umq_sk->GetTx()->GetTxOps();
+        if (tx_ops == nullptr) {
+            continue;
+        }
         tx_ops->tx_queue_avail_num_.fetch_add(count, std::memory_order_acq_rel);
     }
 
