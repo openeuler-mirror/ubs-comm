@@ -226,14 +226,22 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
         if (UNLIKELY(socket_ptr.Get() == nullptr)) {
             UBS_VLOG_DEBUG("[Debug] async_epoll: socket fd: %d object is null, skipping event processing. \n",
                            socket_fd);
+            QBUF_LIST_NEXT(buf[i]) = nullptr;
+            UmqApi::umq_buf_free(buf[i]);
             continue;
         }
 
-        if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
-            // 收到对端流控回复报文，此 socket 对象可写，唤醒写端
-            sk_base->NotifyWritable();
-        } else if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
-            // 流控报文错误需要透传给具体 socket 对象，主动触发断链
+        if (buf[i]->status >= UMQ_FAKE_BUF_FC_UPDATE) {
+            if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
+                sk_base->NotifyWritable();
+            } else if (buf[i]->status != UMQ_FAKE_BUF_FC_MSG) {
+                auto rx_ops = dynamic_cast<UmqRxOps *>(((UmqSocket *)socket_ptr.Get())->GetRx()->GetRxOps());
+                rx_ops->HandleErrorRxCqe(buf[i]);
+                socket_ptr->State(SOCK_STAT_CLOSE);
+            }
+            QBUF_LIST_NEXT(buf[i]) = nullptr;
+            UmqApi::umq_buf_free(buf[i]);
+            continue;
         }
 
         auto *trace = socket_ptr->split_trace_;

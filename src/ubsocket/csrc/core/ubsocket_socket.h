@@ -132,7 +132,7 @@ protected:
     EventPoll *added_epoll_fd_ = nullptr;
     std::atomic<uint32_t> events_{0};        // 上层关注的 epoll events 事件
     epoll_data_t added_epoll_data_ = {};     // 上层关注的 epoll data
-    std::atomic<bool> writable_ready_{true}; // 为 true 表示已经接收到对端的流控回复报文，可写
+    std::atomic<bool> writable_ready_{true}; // Latent readiness token consumed by EPOLL_CTL_MOD.
 
     Statistics::StatsMgr stats_mgr_ = {};
 

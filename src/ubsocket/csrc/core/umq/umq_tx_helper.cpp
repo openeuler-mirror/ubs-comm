@@ -201,7 +201,13 @@ void UmqTxHelper::LogTxCqeErrorMsg(umq_buf_t *buf)
     auto bufStatus = static_cast<umq_buf_status_t>(buf->status);
     int mappedErrno = UmqErrnoConverter::ConvertBufStatus(UmqOperation::WRITEV, bufStatus, errno);
     const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::WRITEV, bufStatus);
-    UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n", buf->status, mappedErrno, desc);
+    if (bufStatus == UMQ_FAKE_BUF_FC_ERR) {
+        auto *bufPro = reinterpret_cast<umq_buf_pro_t *>(buf->qbuf_ext);
+        UBS_VLOG_ERR("cqe error: buf status %lu, underlying FC CQE status: %llu, mapped errno: %d, desc: %s\n",
+                     buf->status, static_cast<unsigned long long>(bufPro->rsvd1), mappedErrno, desc);
+    } else {
+        UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n", buf->status, mappedErrno, desc);
+    }
 
     switch (buf->status) {
         case UMQ_BUF_SUCCESS:
@@ -278,6 +284,24 @@ void UmqTxHelper::LogTxCqeErrorMsg(umq_buf_t *buf)
     }
 }
 
+bool UmqTxHelper::IsPortFailure(const umq_buf_t *qbuf)
+{
+    if (qbuf == nullptr) {
+        return false;
+    }
+    if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
+        qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
+        return true;
+    }
+    if (qbuf->status != UMQ_FAKE_BUF_FC_ERR) {
+        return false;
+    }
+
+    auto *bufPro = reinterpret_cast<const umq_buf_pro_t *>(qbuf->qbuf_ext);
+    return bufPro->rsvd1 == UMQ_BUF_LOC_LEN_ERR || bufPro->rsvd1 == UMQ_BUF_LOC_ACCESS_ERR ||
+           bufPro->rsvd1 == UMQ_BUF_ACK_TIMEOUT_ERR;
+}
+
 void UmqTxHelper::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
 {
     umq_buf_t *cur_qbuf = first_qbuf;
@@ -339,8 +363,7 @@ int UmqTxHelper::PollUmqTxForFcReturn(uint64_t umq_handle)
         // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
         auto *umq_sock = static_cast<UmqSocket *>(socket_ptr);
         if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
-            if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
-                qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR) {
+            if (IsPortFailure(qbuf)) {
                 auto [ports, ports_num] = umq_sock->GetUsedPorts();
                 for (std::size_t i = 0; i < ports_num; ++i) {
                     UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",

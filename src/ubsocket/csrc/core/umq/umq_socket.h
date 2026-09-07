@@ -29,8 +29,7 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-enum class JettyAllocState
-{
+enum class JettyAllocState {
     IDLE,    // 空闲状态
     WAITING, // 等待Jetty资源分配
 };
@@ -201,7 +200,7 @@ public:
 private:
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
     uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid);
-    uint64_t RegisterFcTxEvent();
+    Result RegisterFcTxEvent();
 
     // 链接类型相关
     bool is_bonding_ = false;
@@ -255,8 +254,7 @@ struct NegotiateRsp {
 };
 
 struct NegotiateRoute {
-    enum : uint32_t
-    {
+    enum : uint32_t {
         BACK_ROUTE_MAX_NUM = 3
     };
     umq_topo_type_t topo_type;

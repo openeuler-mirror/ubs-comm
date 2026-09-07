@@ -464,8 +464,9 @@ Result UmqAcceptorOps::BuildNegotiateRsp(NegotiateRsp &rsp)
     rsp.aff_sock_id = UmqSetting::UMQ_PROCESS_SOCKET_ID;
     /* socket_ids 仅在 CPU_AFFINITY / CPU_AFFINITY_PRIORITY 调度策略下需要填充。
      * ROUND_ROBIN 策略不依赖 socket_id 选路，跳过避免在无 NUMA sysfs 时失败。 */
-    if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY ||
-        UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
+    if (GlobalSetting::LINK_SELECTION_POLICY != LinkSelectionPolicy::RAW_DEVICE &&
+        (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY ||
+         UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY_PRIORITY)) {
         if (FillLocalSocketIdsForNegotiate(rsp.socket_ids, rsp.socket_id_count) != UBS_OK) {
             return UBS_ERROR;
         }
@@ -534,24 +535,18 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
         UBS_VLOG_ERR("client bonding mode is not equal to server bonding mode, client:%d, server:%d\n", req.is_bonding,
                      UmqSetting::UMQ_IS_BONDING);
     }
-    if (UNLIKELY(rsp.ret_code != 0 || req.is_bonding == 0)) {
-        // 发送negotiated_version后立即发Rsp body — length-prefixed
-        if (SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) < 0) {
-            UBS_VLOG_ERR("Failed to send negotiate response in accept, fd: %d\n", fd);
-            return UBS_ERROR;
-        }
-        return UBS_TCP_EXCHANGE;
-    }
-
-    if (BuildNegotiateRsp(rsp) != UBS_OK) {
+    if (rsp.ret_code == 0 && BuildNegotiateRsp(rsp) != UBS_OK) {
         UBS_VLOG_ERR("Failed to build negotiate response in accept, Peer IP:%s, fd: %d\n", conn_info.peer_ip.c_str(),
                      fd);
-        return UBS_ERROR;
+        rsp.ret_code = -1;
     }
     // 4. 发送NegotiateRsp body — length-prefixed
     if (SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) < 0) {
         UBS_VLOG_ERR("Failed to send negotiate response in accept, fd: %d\n", fd);
         return UBS_ERROR;
+    }
+    if (UNLIKELY(rsp.ret_code != 0)) {
+        return UBS_TCP_EXCHANGE;
     }
 
     // 5. 存储版本信息

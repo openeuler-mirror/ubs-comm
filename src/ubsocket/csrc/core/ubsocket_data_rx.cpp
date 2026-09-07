@@ -70,12 +70,12 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         return ret;
     }
 
-    char *anchor_block = static_cast<char*>(ubsocket_iobuf_allocate(IOBUF_DIFF + rx_ops_->IOBufSize(), nullptr));
+    char *anchor_block = static_cast<char *>(ubsocket_iobuf_allocate(IOBUF_DIFF + rx_ops_->IOBufSize(), nullptr));
     if (anchor_block == nullptr) {
         errno = ENOMEM;
         return -1;
     }
-    Block *anchor = reinterpret_cast<Block*>(anchor_block);
+    Block *anchor = reinterpret_cast<Block *>(anchor_block);
     anchor->nshared.store(1, std::memory_order_relaxed);
     anchor->flags = 0;
     anchor->abi_check = 0;
@@ -85,7 +85,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     anchor->data = anchor_block + IOBUF_DIFF;
 
     // 构造临时 iov，指向锚点块的 payload 区
-    struct iovec tmp_iov = { anchor->data, anchor->cap };
+    struct iovec tmp_iov = {anchor->data, anchor->cap};
 
     uint32_t max_buf_size;
     if (GlobalSetting::UBS_READV_UNLIMITED) {
@@ -97,7 +97,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         }
     }
 
-    ret = rx_ops_->RxDataSet(iov[0].iov_base, max_buf_size);
+    ret = rx_ops_->RxDataSet(tmp_iov.iov_base, max_buf_size);
 
     if (ret < 0) {
         if (!((errno == EINTR) || (errno == EAGAIN))) {
@@ -126,10 +126,10 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
                     // 理论上不会发生
                     break;
                 }
-                char *dest = (char*)iov[iov_idx].iov_base + iov_off;
+                char *dest = (char *)iov[iov_idx].iov_base + iov_off;
                 size_t left_in_iov = iov[iov_idx].iov_len - iov_off;
                 size_t to_copy = std::min(copy_len - done, left_in_iov);
-                memcpy(dest, (char*)blk->data + done, to_copy);
+                memcpy(dest, (char *)blk->data + done, to_copy);
                 done += to_copy;
                 iov_off += to_copy;
                 if (iov_off >= iov[iov_idx].iov_len) {
@@ -143,8 +143,8 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
             blk->DecRef();
             blk = next_blk;
         }
-        ubsocket_iobuf_deallocate(anchor_block);
     }
+    ubsocket_iobuf_deallocate(anchor_block);
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
@@ -172,7 +172,7 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
         return UBS_ERROR;
     }
 
-    const struct iovec user_iov = { .iov_base = buf, .iov_len = len };
+    const struct iovec user_iov = {.iov_base = buf, .iov_len = len};
 
     /* if socket failed to pass protocol negotiation validation, then
      * (1) pass the received protocol negotiation as message to caller;
@@ -187,12 +187,12 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
         return ret;
     }
 
-    char *anchor_block = static_cast<char*>(ubsocket_iobuf_allocate(IOBUF_DIFF + rx_ops_->IOBufSize(), nullptr));
+    char *anchor_block = static_cast<char *>(ubsocket_iobuf_allocate(IOBUF_DIFF + rx_ops_->IOBufSize(), nullptr));
     if (anchor_block == nullptr) {
         errno = ENOMEM;
         return -1;
     }
-    Block *anchor = reinterpret_cast<Block*>(anchor_block);
+    Block *anchor = reinterpret_cast<Block *>(anchor_block);
     anchor->nshared.store(1, std::memory_order_relaxed);
     anchor->flags = 0;
     anchor->abi_check = 0;
@@ -202,7 +202,7 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
     anchor->data = anchor_block + IOBUF_DIFF;
 
     // 构造临时 iov，指向锚点块的 payload 区
-    struct iovec tmp_iov = { anchor->data, anchor->cap };
+    struct iovec tmp_iov = {anchor->data, anchor->cap};
 
     uint32_t max_buf_size;
     max_buf_size = len;
@@ -219,15 +219,16 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
         Block *blk = first->GetNext();
         size_t remain = rx_total_len;
         size_t offset = 0;
- 	 
+
         while (blk != nullptr && remain > 0) {
             size_t copy_len = std::min(remain, (size_t)blk->cap);
             if (offset + copy_len > len) {
                 copy_len = len - offset;
             }
-            if (copy_len == 0) break;
+            if (copy_len == 0)
+                break;
 
-            memcpy((char*)buf + offset, blk->data, copy_len);
+            memcpy((char *)buf + offset, blk->data, copy_len);
             offset += copy_len;
             remain -= copy_len;
 
@@ -235,8 +236,8 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
             blk->DecRef();
             blk = next_blk;
         }
-        ubsocket_iobuf_deallocate(anchor_block);
     }
+    ubsocket_iobuf_deallocate(anchor_block);
     return rx_total_len;
 }
 

@@ -220,6 +220,11 @@ Result UmqSetting::LoadEnv() noexcept
         IO_BLOCK_TYPE = DefaultBlockTypeCheck();
     }
 
+    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && UMQ_TP_TYPE == POOL) {
+        UBS_VLOG_WARN("UBSOCKET_JETTY_TYPE=pool requires shared JFR; use single Jetty when shared JFR is disabled.\n");
+        UMQ_TP_TYPE = SINGLE;
+    }
+
     return UBS_OK;
 }
 

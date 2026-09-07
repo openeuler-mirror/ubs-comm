@@ -58,11 +58,13 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     const struct iovec *final_iov = iov;
     int final_iovcnt = iovcnt;
     std::vector<struct iovec> new_iovs;
-    std::vector<void*> allocated_blocks; // 用于错误回滚
+    std::vector<void *> allocated_blocks; // 用于错误回滚
 
     size_t total_len = 0;
-    for (int i = 0; i < iovcnt; ++i) total_len += iov[i].iov_len;
-    if (total_len == 0) return 0;
+    for (int i = 0; i < iovcnt; ++i)
+        total_len += iov[i].iov_len;
+    if (total_len == 0)
+        return 0;
 
     const size_t PAYLOAD = tx_ops_->IOBufSize();
     uint32_t num_blocks = (total_len + PAYLOAD - 1) / PAYLOAD;
@@ -82,16 +84,17 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
 
     while (remain > 0) {
         size_t copy_len = std::min(remain, PAYLOAD);
-        char *block = static_cast<char*>(ubsocket_iobuf_allocate(IOBUF_DIFF + copy_len, nullptr));
+        char *block = static_cast<char *>(ubsocket_iobuf_allocate(IOBUF_DIFF + copy_len, nullptr));
         if (block == nullptr) {
-            for (auto b : allocated_blocks) ubsocket_iobuf_deallocate(b);
+            for (auto b : allocated_blocks)
+                ubsocket_iobuf_deallocate(b);
             errno = ENOMEM;
             return -1;
         }
         allocated_blocks.push_back(block);
 
         // 手动初始化 Block 头
-        Block *blk = reinterpret_cast<Block*>(block);
+        Block *blk = reinterpret_cast<Block *>(block);
         blk->nshared.store(0, std::memory_order_relaxed);
         blk->flags = 0;
         blk->abi_check = 0;
@@ -106,7 +109,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
             const struct iovec &v = iov[iov_idx];
             size_t left = v.iov_len - iov_off;
             size_t to_copy = std::min(copy_len - done, left);
-            memcpy(payload + done, (char*)v.iov_base + iov_off, to_copy);
+            memcpy(payload + done, (char *)v.iov_base + iov_off, to_copy);
             done += to_copy;
             iov_off += to_copy;
             if (iov_off >= v.iov_len) {
@@ -158,6 +161,13 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
 
     PROF_END(CORE_WRITE_BUILD_IOV, true);
 
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    /*
+     * Clear the latent EPOLLOUT token before posting. A concurrent flow-control or
+     * resource wakeup can then restore it without being overwritten after umq_post().
+     */
+    sockBase->SetWritableReady(false);
+
     uint32_t tx_total_len;
     int64_t ret = tx_ops_->PostSend(sock, txBuf, batch, converterPtr);
     if (ret < 0) {
@@ -168,9 +178,16 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     PROF_END(CORE_WRITE_POST_SEND, true);
     tx_total_len = ret;
 
+    if (tx_total_len == input_total_len) {
+        /*
+         * EPOLLOUT is removed from the raw socket registration. Keep one readiness
+         * token so a later EPOLL_CTL_MOD can synthesize the next edge-triggered event.
+         */
+        sockBase->SetWritableReady(true);
+    }
+
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
-        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_BYTE_COUNT, tx_total_len);
+        sockBase->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_BYTE_COUNT, tx_total_len);
     }
     PROF_END(CORE_WRITE, true);
     TRACE_TRY_SWAP(trace);

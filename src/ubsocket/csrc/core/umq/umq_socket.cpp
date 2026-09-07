@@ -132,7 +132,10 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, UMQ_FAIL), savedErrno);
         return UBS_UMQ_CREATE | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
-    RegisterFcTxEvent();
+    Result fcEventResult = RegisterFcTxEvent();
+    if (fcEventResult != UBS_OK) {
+        return fcEventResult;
+    }
     rxQueue = new (std::nothrow) UmqBufferReceiveQueue();
     if (rxQueue == nullptr) {
         UBS_VLOG_ERR("Failed to init share jfr rx queue for fd: %d \n", raw_socket_);
@@ -232,6 +235,18 @@ uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *loca
     for (ub_trans_mode mode : candidate_modes) {
         if (UmqEidTable::Instance().Get(*localEid, mode, main_umqs) && !main_umqs.empty()) {
             return main_umqs.front()->GetUmqHandle();
+        }
+    }
+    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
+        std::shared_ptr<MainUmqState> unique_main_umq;
+        for (ub_trans_mode mode : candidate_modes) {
+            if (UmqEidTable::Instance().GetUniqueByMode(mode, unique_main_umq)) {
+                UBS_VLOG_WARN("Reuse unique bonding main umq for mismatched local eid, local eid:" EID_FMT
+                              ", mode:%d, handle:%llu\n",
+                              EID_ARGS(*localEid), static_cast<int>(mode),
+                              static_cast<unsigned long long>(unique_main_umq->GetUmqHandle()));
+                return unique_main_umq->GetUmqHandle();
+            }
         }
     }
 
@@ -625,10 +640,10 @@ void UmqSocket::GetSocketCLIData(Statistics::CLISocketData *data)
     }
 }
 
-uint64_t UmqSocket::RegisterFcTxEvent()
+Result UmqSocket::RegisterFcTxEvent()
 {
     if (!UmqSetting::UMQ_FLOW_CONTROL_ENABLE || umq_handle_ == UMQ_INVALID_HANDLE) {
-        return 0;
+        return UBS_OK;
     }
     // 添加流控event事件（流控信令持有超时触发归还）
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
@@ -638,21 +653,31 @@ uint64_t UmqSocket::RegisterFcTxEvent()
                      static_cast<unsigned long long>(umq_handle_));
         return UBS_ERROR;
     }
-    UmqTpTxEpollRunnerOps::TxEpollEvent *tx_epoll_event = new UmqTpTxEpollRunnerOps::TxEpollEvent{
+    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
+    if (UNLIKELY(epoll_runner.Start() != UBS_OK)) {
+        UBS_VLOG_ERR("Failed to start transport TX runner for FC event, local umq: %llu\n",
+                     static_cast<unsigned long long>(umq_handle_));
+        return UBS_ERROR;
+    }
+
+    UmqTpTxEpollRunnerOps::TxEpollEvent *tx_epoll_event = new (std::nothrow) UmqTpTxEpollRunnerOps::TxEpollEvent{
         RUNNER_EVENT_TYPE_FC_TX, umq_handle_, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
-    struct epoll_event umq_tx_event {
-    };
+    if (tx_epoll_event == nullptr) {
+        UBS_VLOG_ERR("Failed to allocate FC TX event, local umq: %llu\n", static_cast<unsigned long long>(umq_handle_));
+        return UBS_ERROR;
+    }
+    struct epoll_event umq_tx_event {};
     umq_tx_event.events = EPOLLIN | EPOLLET;
     umq_tx_event.data.u64 = reinterpret_cast<uintptr_t>(tx_epoll_event);
 
     UmqTpTxEpollRunnerOps::TpTxExtContext ctx;
     ctx.umq_handle = umq_handle_;
-    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
     if (UNLIKELY(epoll_runner.AddEpollEvent(fc_event_fd, &umq_tx_event, &ctx))) {
         UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) tp tx event failed: %d : %s\n", errno, strerror(errno));
+        delete tx_epoll_event;
         return UBS_ERROR;
     }
-    return 0;
+    return UBS_OK;
 }
 
 void UmqSocket::SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data)

@@ -158,7 +158,8 @@ Result UmqBackend::Init() noexcept
     }
 
     // 直接使用 bonding 设备通信，预创建主 umq、jetty 池
-    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
+    if (GlobalSetting::UBS_ENABLE_SHARE_JFR &&
+        GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         umq_eid_t local_eid;
         uint64_t main_umq_handle = UMQ_INVALID_HANDLE;
         if ((main_umq_handle = CreateShareMainUmq(local_eid)) == UMQ_INVALID_HANDLE) {
@@ -517,8 +518,7 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
     jfr_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
     jfr_event_data.event_data.data = share_jfr_fd;
 
-    struct epoll_event share_jfr_event {
-    };
+    struct epoll_event share_jfr_event {};
     share_jfr_event.events = EPOLLIN | EPOLLET;
     share_jfr_event.data.u64 = jfr_event_data.u64;
 
@@ -549,8 +549,7 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
     retry_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR_RETRY;
     retry_event_data.event_data.data = retry_rx_fd;
 
-    struct epoll_event retry_event {
-    };
+    struct epoll_event retry_event {};
     retry_event.events = EPOLLIN | EPOLLET;
     retry_event.data.u64 = retry_event_data.u64;
 
