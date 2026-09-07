@@ -16,6 +16,7 @@ option(UBSOCKET_ENABLE_COVERAGE "Enable coverage reporting for ubsocket UT" OFF)
 option(UBSOCKET_BUILD_CLI "Enable CLI component build" OFF)
 option(ENABLE_CPU_HARDWARE_ACCELERATION "Enable cpu instruction acceleration" OFF)
 option(UBSOCKET_ENABLE_INTERCEPT "Enable posix socket API interception for LD_PRELOAD transparent hijacking" OFF)
+option(UBSOCKET_ENABLE_SPLIT_TRACE "Enable split trace" OFF)
 
 if (BUILD_UMQ_ADAPTER_BACKEND AND BUILD_UMQ_DLOPEN_BACKEND)
     message(FATAL_ERROR "BUILD_UMQ_ADAPTER_BACKEND and BUILD_UMQ_DLOPEN_BACKEND cannot both be ON")
@@ -113,6 +114,11 @@ endif ()
 
 if (ENABLE_CPU_HARDWARE_ACCELERATION)
     add_definitions(-DENABLE_CPU_MONOTONIC)
+endif ()
+
+if (UBSOCKET_ENABLE_SPLIT_TRACE)
+    add_definitions(-DUBS_SPLIT_TRACE_ENABLED_COMPILE)
+    message(STATUS "ubsocket: split trace ENABLED")
 endif ()
 
 include_directories(

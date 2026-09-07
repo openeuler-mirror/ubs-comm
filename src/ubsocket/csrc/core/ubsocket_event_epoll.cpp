@@ -581,11 +581,19 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         return -1;
     }
 
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+
     if (event->events & EPOLLET) {
         // brpc 在 Connect 后会监听 EPOLLOUT, 当 EPOLLOUT 发生后触发 KeepWrite. 之后 brpc 会删除对 EPOLLOUT 的
         // 关注，只关注 EPOLLIN. 不再关注 TCP fd 的 EPOLLOUT, 首次触发由 NotifyWritable() 上送.
+        // 注意: 仅在已绑定远端(IsBindRemote)时才剥离 EPOLLOUT. 客户端在默认 UB_SOCK_OPT 握手下 connect 返回
+        // EINPROGRESS、SetBindRemote 延迟, 会在 connect 完成前就 epoll_ctl(ADD), 此时 IsBindRemote() 尚为 false,
+        // 必须保留裸 socket 的 EPOLLOUT, 否则建链完成的 EPOLLOUT 既不会经裸 socket 上送(被剥离)也不会经
+        // NotifyWritable 上送(被 IsBindRemote 门控), 客户端永远拿不到可写事件 -> 不发送数据.
         struct epoll_event ev = *event;
-        ev.events &= ~EPOLLOUT;
+        if (sock != nullptr && sock->IsBindRemote()) {
+            ev.events &= ~EPOLLOUT;
+        }
         if (UNLIKELY(AddRawSocketEvent(fd, &ev) != 0)) {
             UBS_VLOG_ERR("async_epoll epoll ctl add raw socket: %d failed\n", fd);
             return -1;
@@ -598,8 +606,13 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         }
     }
 
-    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) { /* listen fd */
+    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
+        // listen fd 或客户端 connect 完成前(预绑定)的 ADD: 暂存事件, 待 SetBindRemote(true) 后由
+        // CompleteEpollBind() 补全绑定, 使客户端 UB 收发事件通道与服务端完全一致.
+        if (sock != nullptr && !sock->IsBindRemote()) {
+            auto sockBase = RefConvert<Socket, SocketBase>(sock);
+            sockBase->SetPendingEpollAdd(this, event->data, event->events);
+        }
         UBS_VLOG_DEBUG("sock is nullptr or socket is not bind remote, socket: %d\n", fd);
         return 0;
     }
@@ -631,6 +644,54 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         }
 
         // 添加至后台 tx cqe poller
+        TxCqePoller::Instance().AddSocket(sock);
+    }
+
+    return 0;
+}
+
+int AsyncEventPoll::CompleteDeferredAdd(int fd, const epoll_data_t &data, uint32_t events)
+{
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    if (UNLIKELY(sock == nullptr)) {
+        UBS_VLOG_ERR("async_epoll CompleteDeferredAdd(socket:%d) failed, sock null\n", fd);
+        return -1;
+    }
+
+    // 1. 建立 UB 事件唤醒通道(幂等): sock_readable_fd_ 挂入内部 epoll.
+    if (UNLIKELY(AddSockReadableEvent() != 0)) {
+        UBS_VLOG_ERR("async_epoll CompleteDeferredAdd add readable fd failed, socket: %d\n", fd);
+        return -1;
+    }
+
+    // 2. 补做 EpollCtlAdd 已绑定分支的 SetAddedEpollFd / SetEvents.
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    sockBase->SetAddedEpollFd(this, data);
+    sockBase->SetEvents(events);
+
+    // 3. 绑定完成后写就绪改由 UB 流控 NotifyWritable 驱动, 剥离裸 socket 的 EPOLLOUT(对齐服务端 ADD 行为).
+    struct epoll_event mod_event {};
+    mod_event.events = (events | EPOLLIN) & ~EPOLLOUT;
+    if (UNLIKELY(ModRawSocketEvent(fd, &mod_event) != 0)) {
+        UBS_VLOG_ERR("async_epoll CompleteDeferredAdd mod raw socket failed, socket: %d\n", fd);
+    }
+
+    // 4. 若应用关注 EPOLLOUT, 由 UB 流控补发首次可写事件.
+    if (events & EPOLLOUT) {
+        sockBase->NotifyWritable();
+    }
+
+    // 5. SINGLE jetty: 注册 per-socket TX 中断事件(EpollCtlAdd 第 4 步在预绑定早退时被跳过).
+    if (sock->ShouldRegisterTxEvent()) {
+        struct epoll_event add_event {};
+        add_event.events = events;
+        add_event.data = data;
+        int ret = AddProtoTxEvent(sock, &add_event);
+        if (UNLIKELY(ret < 0)) {
+            UBS_VLOG_ERR("async_epoll CompleteDeferredAdd AddProtoTxEvent failed(ret:%d), socket: %d: %d : %s\n", ret,
+                         fd, errno, strerror(errno));
+            return -1;
+        }
         TxCqePoller::Instance().AddSocket(sock);
     }
 

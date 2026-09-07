@@ -37,6 +37,7 @@ namespace umq {
 #define ENV_UMQ_TP_TYPE "UBSOCKET_JETTY_TYPE"
 #define ENV_UMQ_TP_POOL_SIZE "UBSOCKET_JETTY_POOL_SIZE"
 #define ENV_UMQ_O3_TIMEOUT_MS "UBSOCKET_O3_TIMEOUT_MS"
+#define ENV_UMQ_DEV_NAME "UBSOCKET_DEV_NAME"
 
 #define DEFAULT_DEV_SCHEDULE_POLICY "affinity_priority"
 #define ROUND_ROBIN_DEV_SCHEDULE_POLICY "rr"
@@ -103,12 +104,18 @@ void UmqSetting::AddRules() noexcept
                                     {ENV_UMQ_FLOW_CONTROL_ENABLED, false, "true|false"},
                                     {ENV_UMQ_TP_TYPE, false, "single|pool"}};
 
+    StrNotEmptyRule rules_str_not_empty[] = {{ENV_UMQ_DEV_NAME, false, 64}};
+
     for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
     }
 
     for (auto &item : rules_str_enum) {
         Validator::Instance().AddStrEnumRule(item);
+    }
+
+    for (auto &item : rules_str_not_empty) {
+        Validator::Instance().AddStrNotEmtpyRule(item);
     }
 
     UBS_SLOG_DEBUG(Validator::Instance().DumpString());
@@ -186,6 +193,10 @@ Result UmqSetting::LoadEnv() noexcept
         UMQ_DEV_SCHEDULE_POLICY_NAME = strEnvValue;
         UMQ_DEV_SCHEDULE_POLICY = SchedulePolicyFromStr(strEnvValue);
         UBS_VLOG_INFO("Current policy type: %s", UMQ_DEV_SCHEDULE_POLICY_NAME.c_str());
+    }
+
+    if (GS::GetEnvAndValidateNotEmpty(ENV_UMQ_DEV_NAME, strEnvValue)) {
+        UMQ_DEV_NAME = strEnvValue;
     }
 
     if (GS::GetEnvAndValidate(ENV_UMQ_UB_TRANS_MODE, strEnvValue)) {

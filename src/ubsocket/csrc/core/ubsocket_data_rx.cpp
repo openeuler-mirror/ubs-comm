@@ -160,8 +160,12 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
 
 ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
 {
+    PROF_START(CORE_READ);
+    PROF_START(CORE_READ_EAGAIN);
+    uint64_t read_start_time = ubsocket_get_timeNs_compile();
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
         ssize_t size = LibcApi::recv(fd_, buf, len, flags);
+        PROF_END(CORE_READ, size >= 0);
         return size;
     }
 
@@ -169,21 +173,28 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
         errno = EINVAL;
         UBS_VLOG_WARN("Recv invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                       Func::Error2Str(errno));
+        PROF_END(CORE_READ, false);
         return UBS_ERROR;
     }
 
     const struct iovec user_iov = {.iov_base = buf, .iov_len = len};
+
+    auto *trace = sock->split_trace_;
 
     /* if socket failed to pass protocol negotiation validation, then
      * (1) pass the received protocol negotiation as message to caller;
      * (2) when all the received message passed to caller, fallback to tcp/ip */
     ssize_t rx_total_len = OutputErrorMagicNumber(sock, &user_iov, 1);
     if (rx_total_len > 0) {
+        PROF_END(CORE_READ, false);
         return rx_total_len;
     }
 
+    PROF_START(CORE_READ_POLL_RX);
     int ret = rx_ops_->PollRx(sock);
+    PROF_END(CORE_READ_POLL_RX, ret >= 0);
     if (ret < 0) {
+        PROF_END(CORE_READ, false);
         return ret;
     }
 
@@ -210,6 +221,12 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
     ret = rx_ops_->RxDataSet(tmp_iov.iov_base, max_buf_size);
 
     if (ret < 0) {
+        if (!((errno == EINTR) || (errno == EAGAIN))) {
+            PROF_END(CORE_READ, false);
+        } else {
+            PROF_END(CORE_READ_EAGAIN, true);
+            TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, read_start_time, ubsocket_get_timeNs_compile());
+        }
         ubsocket_iobuf_deallocate(anchor_block);
         return ret;
     }
@@ -238,6 +255,16 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
         }
     }
     ubsocket_iobuf_deallocate(anchor_block);
+
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
+    }
+    if (rx_total_len != 0) {
+        TRACE_ADD_READ(trace, CORE_READ, fd_, read_start_time, ubsocket_get_timeNs_compile());
+    }
+    PROF_END(CORE_READ, true);
+    TRACE_TRY_SWAP(trace);
     return rx_total_len;
 }
 

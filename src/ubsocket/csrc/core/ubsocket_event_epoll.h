@@ -404,6 +404,18 @@ public:
         wakeup_callback_ = cb;
     }
 
+    /**
+     * @brief 补全客户端预绑定(connect 完成前 epoll_ctl(ADD)) 时被跳过的绑定工作.
+     *        由 UmqSocket::CompleteEpollBind() 在 SetBindRemote(true) 后调用, 补做 EpollCtlAdd 中
+     *        因 !IsBindRemote() 提前返回而缺失的步骤: AddSockReadableEvent / SetAddedEpollFd /
+     *        SetEvents / 剥离裸 socket EPOLLOUT / NotifyWritable / AddProtoTxEvent(SINGLE jetty).
+     * @param fd raw socket fd
+     * @param data 应用 ADD 时的 epoll_data
+     * @param events 应用 ADD 时关注的事件
+     * @return 0: success; -1: failed
+     */
+    int CompleteDeferredAdd(int fd, const epoll_data_t &data, uint32_t events);
+
 private:
     /**
      * @brief handle epoll_ctl with EPOLL_CTL_ADD operation

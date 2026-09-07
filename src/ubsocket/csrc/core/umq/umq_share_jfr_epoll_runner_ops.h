@@ -43,6 +43,15 @@ public:
         bool should_rearm_interrupt = true;
     };
 
+    /**
+     * 关闭共享 JFR（UBSOCKET_SHARE_JFR_ENABLE=false）时，per-socket umq 的 RX 中断注册上下文。
+     * 事件 data 携带 socket fd（而非对象指针），处理事件时按 fd 从 ArraySet 查表取引用计数
+     * 对象，规避连接关闭后的悬垂指针问题（与共享路径 SiftSocketEventsWithUmqBuffers 一致）。
+     */
+    struct SubUmqRxExtContext : public ExtContext {
+        int socket_fd = -1;
+    };
+
     UmqShareJfrEpollRunnerOps()
     {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
@@ -62,6 +71,17 @@ public:
     int ProcessOneEvent(const struct epoll_event &event) override;
 
     int ProcessShareJfrEvent(const struct epoll_event &event, uint64_t main_umq, bool should_rearm_interrupt);
+
+    /**
+     * 关闭共享 JFR 时 per-socket umq 的 RX 完成事件处理（runner-drain 模型，与共享 JFR
+     * 数据面一致）：get_cq_event/rearm/ack 后，在 runner 内 umq_poll(sub_umq) →
+     * SiftSocketEventsWithUmqBuffers（FC_UPDATE→NotifyWritable、错误 CQE→HandleErrorRxCqe、
+     * 数据→AddQbuf 入 rxQueue）→ 按真实消耗 1:1 补投 RX 缓冲。
+     * FC 信用在 runner 线程内即译成 EPOLLOUT，与 EPOLLIN 同批入队，应用一次 epoll_wait
+     * 可同时拿到两者（1 次唤醒语义，RTT 与共享 JFR 等价）。
+     * 应用侧取数走 GetQbuf → GetAndPopQbuf（pop rxQueue），runner 独占 drain 本 umq。
+     */
+    int ProcessSubUmqRxEvent(int socket_fd);
 
     int ProcessMainUmqRearm(uint64_t main_umq);
 
@@ -83,8 +103,9 @@ public:
 
     int AddEventToRunner(int epoll_fd, int fd, struct epoll_event *event, ExtContext *ctx) override;
 
+    int DelEpollEvent(int epoll_fd, int fd) override;
+
 private:
-    void HandleSubUmqPollBuffers(Socket *socketObject, umq_buf_t **buf, int pollNum);
     uint32_t event_num_{0};
     std::unordered_map<int, uint64_t> jfr_main_umq_{};
     u_mutex_t *mutex_{nullptr};
