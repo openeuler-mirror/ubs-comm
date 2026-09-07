@@ -111,7 +111,7 @@ git_repository(
 git_repository(
 	name = "libboundscheck",
 	remote = "https://atomgit.com/openeuler/libboundscheck.git",
-	branch = "master",  # optional: pin to a specific branch
+	commit = "6ad12812c133297b1580d7da6e197af3bae9c749",
 	build_file = "//src/ubsocket/3rdparty/boundscheck:BUILD.bazel",
 )
 hcom_urma_repository( 

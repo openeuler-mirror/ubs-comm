@@ -60,10 +60,10 @@ cc_binary(
         "ubsocket/*.cpp",
         "ubsocket/*.c",
         "ubsocket/brpc/*.cpp",
-    ]) + glob([  # 头文件现在也放在 srcs 里
+    ], allow_empty = True) + glob([  # 头文件现在也放在 srcs 里
         "ubsocket/*.h",
         "ubsocket/brpc/*.h",
-    ]),
+    ], allow_empty = True),
     copts = [
         "-D_GNU_SOURCE",
         "-std=c++14",
@@ -177,7 +177,7 @@ cc_library(
         "ubsocket/*.cpp",
         "ubsocket/*.c",
         "ubsocket/brpc/*.cpp",
-    ]),
+    ], allow_empty = True),
     hdrs = glob([
         "src/hcom/umq/src/dfx/*.h",
         "src/hcom/umq/src/qbuf/*.h",
@@ -186,7 +186,7 @@ cc_library(
         "src/hcom/umq/util/*.h",
         "ubsocket/*.h",
         "ubsocket/brpc/*.h",
-    ]),
+    ], allow_empty = True),
     includes = [
     ".", "ubsocket", "ubsocket/brpc",
         "src/hcom/umq/src/dfx",

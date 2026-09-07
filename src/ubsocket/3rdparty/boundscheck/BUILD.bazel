@@ -4,12 +4,12 @@ cc_library(
     srcs = glob([
         "src/**/*.c",
         "src/**/*.cpp",
-    ]),
+    ], allow_empty = True),
     hdrs = glob([
         "include/**/*.h",
         "src/**/*.h",
         "**/*.inl",
-    ]),
+    ], allow_empty = True),
     includes = ["include"],
     linkstatic = True,
     alwayslink = True,
@@ -20,7 +20,7 @@ cc_library(
     name = "boundscheck_headers",
     hdrs = glob([
         "include/**/*.h",
-    ]),
+    ], allow_empty = True),
     includes = ["include"],
     visibility = ["//visibility:public"],
 )

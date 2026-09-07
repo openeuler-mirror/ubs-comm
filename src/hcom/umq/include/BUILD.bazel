@@ -24,7 +24,7 @@ cc_library(
 
 cc_library(
     name = "umq_ub_headers",
-    hdrs = glob(["src/hcom/umq/umq_ub/*.h"]),
-    includes = ["src/hcom/umq/umq_ub/"],
+    hdrs = glob(["umq/umq_ub/*.h"]),
+    includes = ["umq/umq_ub/"],
     visibility = ["//visibility:public"],
 )
