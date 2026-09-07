@@ -70,6 +70,23 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         return ret;
     }
 
+    char *anchor_block = static_cast<char*>(ubsocket_iobuf_allocate(IOBUF_DIFF + rx_ops_->IOBufSize(), nullptr));
+    if (anchor_block == nullptr) {
+        errno = ENOMEM;
+        return -1;
+    }
+    Block *anchor = reinterpret_cast<Block*>(anchor_block);
+    anchor->nshared.store(1, std::memory_order_relaxed);
+    anchor->flags = 0;
+    anchor->abi_check = 0;
+    anchor->size = 0;
+    anchor->cap = rx_ops_->IOBufSize();
+    anchor->u.portal_next = nullptr;
+    anchor->data = anchor_block + IOBUF_DIFF;
+
+    // 构造临时 iov，指向锚点块的 payload 区
+    struct iovec tmp_iov = { anchor->data, anchor->cap };
+
     uint32_t max_buf_size;
     if (GlobalSetting::UBS_READV_UNLIMITED) {
         max_buf_size = UINT32_MAX;
@@ -89,9 +106,46 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
             PROF_END(CORE_READ_EAGAIN, true);
             TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, read_start_time, ubsocket_get_timeNs_compile());
         }
+        ubsocket_iobuf_deallocate(anchor_block);
         return ret;
     }
     rx_total_len = ret;
+    if (rx_total_len > 0) {
+        Block *first = rx_ops_->DataToBlock(tmp_iov.iov_base);
+        Block *blk = first->GetNext();
+        size_t remain = rx_total_len;
+        int iov_idx = 0;
+        size_t iov_off = 0;
+
+        // 拷贝数据到上层iov
+        while (blk != nullptr && remain > 0) {
+            size_t copy_len = std::min(remain, (size_t)blk->cap);
+            size_t done = 0;
+            while (done < copy_len) {
+                if (iov_idx >= iovcnt) {
+                    // 理论上不会发生
+                    break;
+                }
+                char *dest = (char*)iov[iov_idx].iov_base + iov_off;
+                size_t left_in_iov = iov[iov_idx].iov_len - iov_off;
+                size_t to_copy = std::min(copy_len - done, left_in_iov);
+                memcpy(dest, (char*)blk->data + done, to_copy);
+                done += to_copy;
+                iov_off += to_copy;
+                if (iov_off >= iov[iov_idx].iov_len) {
+                    ++iov_idx;
+                    iov_off = 0;
+                }
+            }
+            remain -= copy_len;
+
+            Block *next_blk = blk->GetNext();
+            blk->DecRef();
+            blk = next_blk;
+        }
+        ubsocket_iobuf_deallocate(anchor_block);
+    }
+
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
         sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
@@ -101,6 +155,88 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
     }
     PROF_END(CORE_READ, true);
     TRACE_TRY_SWAP(trace);
+    return rx_total_len;
+}
+
+ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
+{
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        ssize_t size = LibcApi::recv(fd_, buf, len, flags);
+        return size;
+    }
+
+    if (buf == nullptr || len == 0) {
+        errno = EINVAL;
+        UBS_VLOG_WARN("Recv invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                      Func::Error2Str(errno));
+        return UBS_ERROR;
+    }
+
+    const struct iovec user_iov = { .iov_base = buf, .iov_len = len };
+
+    /* if socket failed to pass protocol negotiation validation, then
+     * (1) pass the received protocol negotiation as message to caller;
+     * (2) when all the received message passed to caller, fallback to tcp/ip */
+    ssize_t rx_total_len = OutputErrorMagicNumber(sock, &user_iov, 1);
+    if (rx_total_len > 0) {
+        return rx_total_len;
+    }
+
+    int ret = rx_ops_->PollRx(sock);
+    if (ret < 0) {
+        return ret;
+    }
+
+    char *anchor_block = static_cast<char*>(ubsocket_iobuf_allocate(IOBUF_DIFF + rx_ops_->IOBufSize(), nullptr));
+    if (anchor_block == nullptr) {
+        errno = ENOMEM;
+        return -1;
+    }
+    Block *anchor = reinterpret_cast<Block*>(anchor_block);
+    anchor->nshared.store(1, std::memory_order_relaxed);
+    anchor->flags = 0;
+    anchor->abi_check = 0;
+    anchor->size = 0;
+    anchor->cap = rx_ops_->IOBufSize();
+    anchor->u.portal_next = nullptr;
+    anchor->data = anchor_block + IOBUF_DIFF;
+
+    // 构造临时 iov，指向锚点块的 payload 区
+    struct iovec tmp_iov = { anchor->data, anchor->cap };
+
+    uint32_t max_buf_size;
+    max_buf_size = len;
+
+    ret = rx_ops_->RxDataSet(tmp_iov.iov_base, max_buf_size);
+
+    if (ret < 0) {
+        ubsocket_iobuf_deallocate(anchor_block);
+        return ret;
+    }
+    rx_total_len = ret;
+    if (rx_total_len > 0) {
+        Block *first = rx_ops_->DataToBlock(tmp_iov.iov_base);
+        Block *blk = first->GetNext();
+        size_t remain = rx_total_len;
+        size_t offset = 0;
+ 	 
+        while (blk != nullptr && remain > 0) {
+            size_t copy_len = std::min(remain, (size_t)blk->cap);
+            if (offset + copy_len > len) {
+                copy_len = len - offset;
+            }
+            if (copy_len == 0) break;
+
+            memcpy((char*)buf + offset, blk->data, copy_len);
+            offset += copy_len;
+            remain -= copy_len;
+
+            Block *next_blk = blk->GetNext();
+            blk->DecRef();
+            blk = next_blk;
+        }
+        ubsocket_iobuf_deallocate(anchor_block);
+    }
     return rx_total_len;
 }
 

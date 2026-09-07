@@ -8,8 +8,11 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <cstdarg>
+#include <sys/socket.h>
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_data_tx.h"
 #include "core/ubsocket_socket.h"
@@ -62,7 +65,9 @@ UBS_API int UB_API_WRAP(close)(int fd)
         return LibcApi::close(fd);
     }
     ArraySet<Socket>::GetInstance().OverrideItem(fd, nullptr);
-    return close(fd);
+    /* Must call LibcApi::close instead of bare close() to avoid recursion
+     * when libubsocket.so is loaded via LD_PRELOAD (close symbol is intercepted). */
+    return LibcApi::close(fd);
 }
 
 UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *address_len)
@@ -86,7 +91,20 @@ UBS_API int UB_API_WRAP(accept4)(int fd, struct sockaddr *address, socklen_t *ad
         return LibcApi::accept4(fd, address, address_len, flags);
     }
 
-    return 0;
+    /* Reuse accept logic. SOCK_NONBLOCK/SOCK_CLOEXEC flags are handled by
+     * SocketBase::Accept path via setsockopt/fcntl on the accepted fd. */
+    int newFd = UB_API_WRAP(accept)(fd, address, address_len);
+    if (newFd < 0) {
+        return newFd;
+    }
+    if (flags & SOCK_CLOEXEC) {
+        LibcApi::fcntl(newFd, F_SETFD, FD_CLOEXEC);
+    }
+    if (flags & SOCK_NONBLOCK) {
+        int cur = LibcApi::fcntl(newFd, F_GETFL, 0);
+        LibcApi::fcntl(newFd, F_SETFL, cur | O_NONBLOCK);
+    }
+    return newFd;
 }
 
 UBS_API int UB_API_WRAP(bind)(int fd, const struct sockaddr *addr, socklen_t addrlen)
@@ -177,8 +195,9 @@ UBS_API ssize_t UB_API_WRAP(send)(int fd, const void *buf, size_t len, int flags
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::send(fd, buf, len, flags);
     }
-
-    return 0;
+    /* For connected UB sockets, send is equivalent to write (flags ignored). */
+    (void)flags;
+    return UB_API_WRAP(write)(fd, buf, len);
 }
 
 UBS_API ssize_t UB_API_WRAP(recv)(int fd, void *buf, size_t len, int flags)
@@ -186,8 +205,12 @@ UBS_API ssize_t UB_API_WRAP(recv)(int fd, void *buf, size_t len, int flags)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::recv(fd, buf, len, flags);
     }
-
-    return 0;
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (sockBase == nullptr) {
+        return LibcApi::recv(fd, buf, len, flags);
+    }
+    return sockBase->Recv(sock, buf, len, flags);
 }
 
 UBS_API ssize_t UB_API_WRAP(read)(int fd, void *buf, size_t nbyte)
@@ -195,8 +218,11 @@ UBS_API ssize_t UB_API_WRAP(read)(int fd, void *buf, size_t nbyte)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::read(fd, buf, nbyte);
     }
-
-    return 0;
+    /* Wrap single-buffer read as 1-element readv. */
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = nbyte;
+    return UB_API_WRAP(readv)(fd, &iov, 1);
 }
 
 UBS_API ssize_t UB_API_WRAP(write)(int fd, const void *buf, size_t nbyte)
@@ -204,7 +230,11 @@ UBS_API ssize_t UB_API_WRAP(write)(int fd, const void *buf, size_t nbyte)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::write(fd, buf, nbyte);
     }
-    return 0;
+    /* Wrap single-buffer write as 1-element writev. */
+    struct iovec iov;
+    iov.iov_base = const_cast<void *>(buf);
+    iov.iov_len = nbyte;
+    return UB_API_WRAP(writev)(fd, &iov, 1);
 }
 
 UBS_API ssize_t UB_API_WRAP(sendto)(int fd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr,
@@ -213,8 +243,12 @@ UBS_API ssize_t UB_API_WRAP(sendto)(int fd, const void *buf, size_t len, int fla
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::sendto(fd, buf, len, flags, dest_addr, addrlen);
     }
-
-    return 0;
+    /* For connected UB sockets with NULL dest_addr, behave as send. */
+    if (dest_addr == nullptr) {
+        return UB_API_WRAP(send)(fd, buf, len, flags);
+    }
+    /* Unconnected socket sendto not supported in UB mode, fallback to libc. */
+    return LibcApi::sendto(fd, buf, len, flags, dest_addr, addrlen);
 }
 
 UBS_API ssize_t UB_API_WRAP(recvfrom)(int fd, void *buf, size_t len, int flags, struct sockaddr *dest_addr,
@@ -223,13 +257,18 @@ UBS_API ssize_t UB_API_WRAP(recvfrom)(int fd, void *buf, size_t len, int flags, 
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::recvfrom(fd, buf, len, flags, dest_addr, addrlen);
     }
-
-    return 0;
+    /* For connected UB sockets with NULL dest_addr, behave as recv. */
+    if (dest_addr == nullptr) {
+        return UB_API_WRAP(recv)(fd, buf, len, flags);
+    }
+    /* Unconnected socket recvfrom not supported in UB mode, fallback to libc. */
+    return LibcApi::recvfrom(fd, buf, len, flags, dest_addr, addrlen);
 }
 
 UBS_API ssize_t UB_API_WRAP(sendmsg)(int fd, const struct msghdr *msg, int flags)
 {
-    return 0;
+    /* sendmsg not accelerated in UB mode, always fallback to libc. */
+    return LibcApi::sendmsg(fd, msg, flags);
 }
 
 UBS_API ssize_t UB_API_WRAP(recvmsg)(int fd, struct msghdr *msg, int flags)
@@ -237,41 +276,53 @@ UBS_API ssize_t UB_API_WRAP(recvmsg)(int fd, struct msghdr *msg, int flags)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::recvmsg(fd, msg, flags);
     }
-
-    return 0;
+    /* recvmsg not accelerated in UB mode, always fallback to libc. */
+    return LibcApi::recvmsg(fd, msg, flags);
 }
 
 UBS_API ssize_t UB_API_WRAP(sendfile)(int out_fd, int in_fd, off_t *offset, size_t count)
 {
-    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::sendfile64(out_fd, in_fd, offset, count);
-    }
-
-    return 0;
+    /* sendfile not accelerated in UB mode, always fallback to libc. */
+    return LibcApi::sendfile(out_fd, in_fd, offset, count);
 }
 
 UBS_API ssize_t UB_API_WRAP(sendfile64)(int out_fd, int in_fd, off64_t *offset, size_t count)
 {
-    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::sendfile64(out_fd, in_fd, offset, count);
-    }
-
-    return 0;
+    /* sendfile not accelerated in UB mode, always fallback to libc. */
+    return LibcApi::sendfile64(out_fd, in_fd, offset, count);
 }
 
 UBS_API int UB_API_WRAP(fcntl)(int fd, int cmd, ...)
 {
-    return 0;
+    /* fcntl not intercepted in UB mode, always fallback to libc. */
+    unsigned long int arg{0};
+    va_list va;
+    va_start(va, cmd);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    return LibcApi::fcntl(fd, cmd, arg);
 }
 
 UBS_API int UB_API_WRAP(fcntl64)(int fd, int cmd, ...)
 {
-    return 0;
+    /* fcntl64 not intercepted in UB mode, always fallback to libc. */
+    unsigned long int arg{0};
+    va_list va;
+    va_start(va, cmd);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    return LibcApi::fcntl64(fd, cmd, arg);
 }
 
 UBS_API int UB_API_WRAP(ioctl)(int fd, unsigned long request, ...)
 {
-    return 0;
+    /* ioctl not intercepted in UB mode, always fallback to libc. */
+    unsigned long int arg{0};
+    va_list va;
+    va_start(va, request);
+    arg = va_arg(va, decltype(arg));
+    va_end(va);
+    return LibcApi::ioctl(fd, request, arg);
 }
 
 UBS_API int UB_API_WRAP(setsockopt)(int fd, int level, int optname, const void *optval, socklen_t optlen)

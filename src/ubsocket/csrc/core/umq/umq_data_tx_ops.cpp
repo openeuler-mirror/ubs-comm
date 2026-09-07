@@ -425,6 +425,14 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         }
     }
 
+    /* Proactively recover TX window when in-flight WRs are high (large packet scenario).
+     * Poll to empty to drain all available CQEs, not just up to the retrieve threshold.
+     * This mirrors the 0711 fix from ubs-comm: PollTx(retrieve_threshold, true). */
+    if (tx_total_len > 0 &&
+        (GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel)) >= TX_HANDLE_THRESHOLD) {
+        (void)PollUmqTx(sock.Get(), true);
+    }
+
     return tx_total_len;
 }
 

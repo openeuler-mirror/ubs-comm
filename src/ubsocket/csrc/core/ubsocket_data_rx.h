@@ -36,6 +36,7 @@ public:
     ssize_t RxDataSet(void *buf, uint32_t size);
     virtual int RearmRxInterrupt() = 0;
     virtual void FlushRx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) = 0;
+    virtual uint32_t IOBufSize() = 0;
 
 public:
     int fd_ = -1;
@@ -65,6 +66,8 @@ public:
     DataRx(const SocketPtr &sock, DataRxOps *ops);
 
     ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+
+    ssize_t Recv(const SocketPtr &sock, void *buf, size_t len, int flags);
 
     DataRxOps *GetRxOps()
     {

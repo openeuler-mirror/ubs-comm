@@ -58,6 +58,7 @@ public:
     int Connect(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     int WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     int ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    int Recv(const SocketPtr &sock, void *buf, size_t len, int flags);
     int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen);
 
     EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
@@ -164,6 +165,11 @@ ALWAYS_INLINE int SocketBase::Connect(const SocketPtr &sock, const struct sockad
 ALWAYS_INLINE int SocketBase::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     return tx_.WriteV(sock, iov, iovcnt);
+}
+
+ALWAYS_INLINE int SocketBase::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
+{
+    return rx_.Recv(sock, buf, len, flags);
 }
 
 ALWAYS_INLINE int SocketBase::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)

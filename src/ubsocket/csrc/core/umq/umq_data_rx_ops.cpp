@@ -115,6 +115,11 @@ Block *UmqRxOps::DataToBlock(void *data)
     return reinterpret_cast<Block *>(qbuf->buf_data);
 }
 
+inline uint32_t UmqRxOps::IOBufSize()
+{
+    return UmqSetting::GetIOBufSize();
+}
+
 int UmqRxOps::GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {

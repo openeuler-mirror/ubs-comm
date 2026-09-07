@@ -55,10 +55,76 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         return -1;
     }
 
+    const struct iovec *final_iov = iov;
+    int final_iovcnt = iovcnt;
+    std::vector<struct iovec> new_iovs;
+    std::vector<void*> allocated_blocks; // 用于错误回滚
+
+    size_t total_len = 0;
+    for (int i = 0; i < iovcnt; ++i) total_len += iov[i].iov_len;
+    if (total_len == 0) return 0;
+
+    const size_t PAYLOAD = tx_ops_->IOBufSize();
+    uint32_t num_blocks = (total_len + PAYLOAD - 1) / PAYLOAD;
+
+    // 提前检查窗口
+    if (num_blocks > tx_ops_->tx_queue_avail_num_.load(std::memory_order_acq_rel)) {
+        errno = EAGAIN;
+        return -1;
+    }
+
+    new_iovs.reserve(num_blocks);
+    allocated_blocks.reserve(num_blocks);
+
+    size_t remain = total_len;
+    int iov_idx = 0;
+    size_t iov_off = 0;
+
+    while (remain > 0) {
+        size_t copy_len = std::min(remain, PAYLOAD);
+        char *block = static_cast<char*>(ubsocket_iobuf_allocate(IOBUF_DIFF + copy_len, nullptr));
+        if (block == nullptr) {
+            for (auto b : allocated_blocks) ubsocket_iobuf_deallocate(b);
+            errno = ENOMEM;
+            return -1;
+        }
+        allocated_blocks.push_back(block);
+
+        // 手动初始化 Block 头
+        Block *blk = reinterpret_cast<Block*>(block);
+        blk->nshared.store(0, std::memory_order_relaxed);
+        blk->flags = 0;
+        blk->abi_check = 0;
+        blk->size = copy_len;
+        blk->cap = PAYLOAD;
+        blk->u.portal_next = nullptr;
+        blk->data = block + IOBUF_DIFF;
+        char *payload = blk->data;
+        // 拷贝数据
+        size_t done = 0;
+        while (done < copy_len) {
+            const struct iovec &v = iov[iov_idx];
+            size_t left = v.iov_len - iov_off;
+            size_t to_copy = std::min(copy_len - done, left);
+            memcpy(payload + done, (char*)v.iov_base + iov_off, to_copy);
+            done += to_copy;
+            iov_off += to_copy;
+            if (iov_off >= v.iov_len) {
+                ++iov_idx;
+                iov_off = 0;
+            }
+        }
+        new_iovs.push_back({payload, copy_len});
+        remain -= copy_len;
+    }
+
+    final_iov = new_iovs.data();
+    final_iovcnt = new_iovs.size();
+
     PROF_START(CORE_WRITE_POST_SEND);
 
     PROF_START(CORE_WRITE_BUILD_IOV);
-    ConverterPtr converterPtr = tx_ops_->BuildIovConverter(iov, iovcnt);
+    ConverterPtr converterPtr = tx_ops_->BuildIovConverter(final_iov, final_iovcnt);
     uint32_t input_total_len = 0;
     uint32_t batch = 0;
     uint32_t post_batch_max = tx_ops_->tx_queue_avail_num_.load(std::memory_order_acq_rel) > TX_POST_BATCH_MAX ?

@@ -19,6 +19,12 @@ target_compile_options(common_objects PRIVATE -fPIC)
 file(GLOB ENTRY_SRCS ${UBSOCKET_CSRC_DIR}/*.cpp)
 add_library(entry_objects OBJECT ${ENTRY_SRCS})
 target_compile_options(entry_objects PRIVATE -fPIC)
+# When intercept is enabled, ubsocket_preload.cpp (in this directory) exports
+# standard POSIX symbols (socket, close, accept, etc.) for LD_PRELOAD
+# transparent hijacking. The macro gates the entire file content.
+if(UBSOCKET_ENABLE_INTERCEPT)
+    target_compile_definitions(entry_objects PRIVATE UBSOCKET_ENABLE_INTERCEPT)
+endif()
 
 # core objects
 file(GLOB CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/*.cpp)
@@ -77,7 +83,7 @@ add_library(ubsocket_shared SHARED
         $<TARGET_OBJECTS:profiling_objects>
 )
 set_target_properties(ubsocket_shared PROPERTIES OUTPUT_NAME "ubsocket")
-target_link_libraries(ubsocket_shared PUBLIC pthread)
+target_link_libraries(ubsocket_shared PUBLIC pthread ${CMAKE_DL_LIBS})
 if(BUILD_UMQ_ADAPTER_BACKEND)
     target_link_directories(ubsocket_shared PUBLIC ${UMQ_LIB_DIR} ${UMQ_QBUF_LIB_DIR})
     target_link_libraries(ubsocket_shared PUBLIC umq umq_buf)
