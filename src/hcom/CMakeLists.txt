@@ -166,9 +166,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
 
 # add header path and add source files
-set(HCOM_SRC_DIR ${CMAKE_SOURCE_DIR})
-set(HCOM_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/dist)
-set(HCOM_BUILD_PATH ${CMAKE_SOURCE_DIR}/build)
+get_filename_component(HCOM_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+set(HCOM_OUTPUT_PATH ${HCOM_SRC_DIR}/dist)
+set(HCOM_BUILD_PATH ${HCOM_SRC_DIR}/build)
 set(HCOM_SRC_INCLUDE_PATH
     ${HCOM_SRC_DIR}/src/hcom/under_api/verbs
     ${HCOM_SRC_DIR}/src/hcom/under_api/urma
