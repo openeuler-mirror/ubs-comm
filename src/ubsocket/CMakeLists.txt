@@ -44,9 +44,11 @@ add_compile_options(-Wunused-variable -Wunused-value -Wcast-align)
 add_compile_options(-fpermissive -Wno-error)
 add_compile_options(-Wcast-qual -Winvalid-pch -Wwrite-strings -Wsign-compare -Wfloat-equal -Wextra -Wno-deprecated-declarations)
 
+string(TOUPPER "${CMAKE_BUILD_TYPE}" UBSOCKET_BUILD_TYPE)
+
 if (${CMAKE_BUILD_TYPE} MATCHES "RELEASE")
     add_compile_options(-fvisibility=hidden -fvisibility-inlines-hidden)
-    add_compile_options(-fstack-protector-strong -Wstack-usage=16384 -Werror)
+    add_compile_options(-fstack-protector-strong -Wstack-usage=16384)
     add_compile_options(-Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now -fPIE -fPIC -ftrapv -s)
     add_compile_options(-D_FORTIFY_SOURCE=2 -O2)
     add_link_options(-Wl,-z,noexecstack,-z,relro,-z,now)
@@ -58,7 +60,8 @@ elseif (${CMAKE_BUILD_TYPE} MATCHES "ASAN")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=${SANITIZERS}")
     add_link_options(-fsanitize=${SANITIZERS})
 else ()
-    add_compile_options(-g -ggdb3 -O0 -fno-omit-frame-pointer -rdynamic -fPIC)
+    message(FATAL_ERROR
+	    "Unsupported CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 endif ()
 
 if (UBSOCKET_ENABLE_COVERAGE)

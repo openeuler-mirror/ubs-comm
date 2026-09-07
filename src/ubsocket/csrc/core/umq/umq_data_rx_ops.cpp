@@ -29,7 +29,13 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
     umq_buf_t *buf[POLL_BATCH_MAX];
     int poll_num = 0;
     if (poll_) {
+        /*
+         * 消费侧取数。CORE_READ_GET_QBUF 与内层 CORE_READ_POP_QBUF 的差值即为
+         * dynamic_cast<UmqSocket*> 等外壳开销，用于确认是否为 runner-drain 模型引入的额外成本。
+         */
+        PROF_START(CORE_READ_GET_QBUF);
         poll_num = GetQbuf(sock, buf, POLL_BATCH_MAX);
+        PROF_END(CORE_READ_GET_QBUF, poll_num >= 0);
         if (poll_num < 0) {
             UBS_VLOG_ERR("ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
@@ -124,7 +130,10 @@ int UmqRxOps::GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num)
     // 否则与 runner 双端消费同一 umq：FC_UPDATE 可能被应用侧摘走而错过 NotifyWritable，
     // EPOLLOUT 丢失后发送方永久卡死（能建链、无法持续发送）。
     auto umqSock = dynamic_cast<UmqSocket *>(sock.Get());
+    /* 跨线程队列交接的消费端: 从 rxQueue pop 出 runner 线程放入的 qbuf */
+    PROF_START(CORE_READ_POP_QBUF);
     int poll_num = umqSock->GetAndPopQbuf(buf, max_num);
+    PROF_END(CORE_READ_POP_QBUF, poll_num >= 0);
     if (poll_num < 0) {
         UBS_VLOG_ERR("GetQbuf failed, fd: %d, ret: %d\n", fd_, poll_num);
         return -1;

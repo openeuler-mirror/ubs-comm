@@ -52,27 +52,36 @@ Result TracerExt::InitExt(const TracerOptionsExt &options) noexcept
 
 void TracerExt::UnInitExt() noexcept
 {
-    std::lock_guard<std::mutex> guard(mutex_);
-    if (!inited_) {
-        UBS_VLOG_DEBUG("Tracer ext not initialized");
-        return;
-    }
-
-    if (dump_thread_ != nullptr) {
-        dump_thread_->DumpStopExt();
+    DumpThreadExtPtr dumper = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (!inited_) {
+            UBS_VLOG_DEBUG("Tracer ext not initialized");
+            return;
+        }
+        dumper = dump_thread_;
         dump_thread_ = nullptr;
     }
 
-    // 清理所有代理
-    for (size_t i = 0; i < MAX_CPU_AGENTS_EXT; i++) {
-        TraceGroupExt *agent = agents_[i].load();
-        if (agent != nullptr) {
-            agent->DecreaseRef();
-            agents_[i].store(nullptr);
-        }
+    // DumpStopExt 内部会执行最后一次 DumpDataExt，必须放在 tracer 锁之外调用，
+    // 因为 DumpDataExt() -> CombineExt() 会再次获取 mutex_。
+    if (dumper != nullptr) {
+        dumper->DumpStopExt();
     }
 
-    inited_ = false;
+    {
+        std::lock_guard<std::mutex> guard(mutex_);
+        // 清理所有代理
+        for (size_t i = 0; i < MAX_CPU_AGENTS_EXT; i++) {
+            TraceGroupExt *agent = agents_[i].load();
+            if (agent != nullptr) {
+                agent->DecreaseRef();
+                agents_[i].store(nullptr);
+            }
+        }
+
+        inited_ = false;
+    }
     UBS_VLOG_INFO("Ubsocket tracer ext uninit success.");
 }
 

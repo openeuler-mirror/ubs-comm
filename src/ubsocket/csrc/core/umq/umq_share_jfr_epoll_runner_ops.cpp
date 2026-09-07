@@ -39,7 +39,10 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessOneEvent(const struct epoll_
         }
     } else if (event_data.event_data.type == RUNNER_EVENT_TYPE_SUB_UMQ_RX) {
         // 关闭共享 JFR：per-socket umq 的 RX 完成中断，event data 携带 socket fd
-        return ProcessSubUmqRxEvent(static_cast<int>(event_data.event_data.data));
+        PROF_START(CORE_EPOLL_PROCESS_RX_EVENT);
+        auto ret = ProcessSubUmqRxEvent(static_cast<int>(event_data.event_data.data));
+        PROF_END(CORE_EPOLL_PROCESS_RX_EVENT, true);
+        return ret;
     } else {
         UBS_VLOG_ERR("async_epoll unknown event:(events:%x, data.type:%lu)\n", event.events,
                      event_data.event_data.type);
@@ -73,6 +76,8 @@ int UmqShareJfrEpollRunnerOps::ProcessSubUmqRxEvent(int socket_fd)
     // get_cq_event -> rearm -> ack；rearm 先于下方 umq_poll，poll 可兜住 rearm 前
     // 已入队的 CQE，不会丢事件。
     traceTime_.umq_rearm_start_timestamp_ = ubsocket_get_timeNs_compile();
+
+    PROF_START(CORE_EPOLL_CQ_GET_AND_REARM);
     umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
     auto events_cnt = UmqApi::umq_get_cq_event(sub_umq, &option);
     if (UNLIKELY(events_cnt < 0)) {
@@ -99,6 +104,11 @@ int UmqShareJfrEpollRunnerOps::ProcessSubUmqRxEvent(int socket_fd)
     }
     traceTime_.umq_rearm_end_timestamp_ = ubsocket_get_timeNs_compile();
 
+    PROF_END(CORE_EPOLL_CQ_GET_AND_REARM, true);
+    // CORE_EPOLL_REARM 与编译期 TRACE 同区间（get_cq_event + rearm + ack），
+    // 复用 begin 时间戳，使环境变量模式下该点位同样有数据
+    PROF_END_FROM(CORE_EPOLL_REARM, tpBeginCORE_EPOLL_CQ_GET_AND_REARM, true);
+
     // runner 内直接收割（与共享 JFR 数据面一致，RTT 零劣化的关键）：
     //   umq_poll(sub_umq) -> SiftSocketEventsWithUmqBuffers -> replenish
     // FC_UPDATE 在 runner 线程内即译成 NotifyWritable()->EPOLLOUT，与 EPOLLIN 同批入队，
@@ -119,9 +129,12 @@ int UmqShareJfrEpollRunnerOps::ProcessSubUmqRxEvent(int socket_fd)
 
     traced_socket_fds_.clear();
     do {
+        // CORE_PROCESS_JRF_END: runner 单轮完整处理（poll -> refill -> sift -> 跨线程通知）
+        PROF_START(CORE_PROCESS_JRF_END);
         traced_socket_fd_trace_map_.clear();
         umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
         traceTime_.umq_poll_start_timestamp_ = ubsocket_get_timeNs_compile();
+        PROF_START(CORE_EPOLL_UMQ_POLL);
         umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
                                        UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
                                        traceTime_.umq_poll_start_timestamp_};
@@ -134,12 +147,17 @@ int UmqShareJfrEpollRunnerOps::ProcessSubUmqRxEvent(int socket_fd)
                          "ret: %d, mapped errno: %d(%s), original errno: %d\n",
                          static_cast<unsigned long long>(sub_umq), pollNum, errno,
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum), savedErrno);
+            PROF_END(CORE_EPOLL_UMQ_POLL, false);
+            PROF_END(CORE_PROCESS_JRF_END, false);
             return -1;
         }
         if (pollNum == 0) {
             // 中断触发但 CQE 已被上一轮 poll 兜走（rearm 先于 poll 的正常竞态），静默返回
+            PROF_END(CORE_EPOLL_UMQ_POLL, true);
+            PROF_END(CORE_PROCESS_JRF_END, true);
             return 0;
         }
+        PROF_END(CORE_EPOLL_UMQ_POLL, true);
 
         // 补投 RX 缓冲：排除流控 fake buffer，仅按真实消耗的 RX WQE 数量 1:1 回填到
         // per-socket umq（共享路径回填到 main_umq，此处回填到 sub_umq，其余逻辑一致）。
@@ -151,6 +169,7 @@ int UmqShareJfrEpollRunnerOps::ProcessSubUmqRxEvent(int socket_fd)
         }
         int ioPollNum = pollNum - fcBufCnt;
         if (ioPollNum != 0) {
+            PROF_START(CORE_EPOLL_POST_REFILL);
             umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
             umq_buf_t *rx_buf_list =
                 UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), ioPollNum, UMQ_INVALID_HANDLE, &alloc_option);
@@ -160,7 +179,11 @@ int UmqShareJfrEpollRunnerOps::ProcessSubUmqRxEvent(int socket_fd)
                 umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION | UMQ_IO_OPTION_FLAG_TAG_TIMESTAMP,
                                                 UMQ_IO_RX, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
                                                 traceTime_.umq_post_start_timestamp_};
-                if (UmqApi::umq_post(sub_umq, rx_buf_list, &io_rx_option, &bad_qbuf) != UMQ_SUCCESS) {
+                // CORE_EPOLL_POST_RX: 仅覆盖 umq_post 本身（POST_REFILL 还含 buf_alloc）
+                PROF_START(CORE_EPOLL_POST_RX);
+                int post_ret = UmqApi::umq_post(sub_umq, rx_buf_list, &io_rx_option, &bad_qbuf);
+                PROF_END(CORE_EPOLL_POST_RX, post_ret == UMQ_SUCCESS);
+                if (post_ret != UMQ_SUCCESS) {
                     int savedErrno = errno;
                     errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
                     UBS_VLOG_ERR("[UMQ_API] umq_post() failed for sub umq RX refill, umq: %llu, "
@@ -171,6 +194,7 @@ int UmqShareJfrEpollRunnerOps::ProcessSubUmqRxEvent(int socket_fd)
                 }
                 traceTime_.umq_post_end_timestamp_ = ubsocket_get_timeNs_compile();
             }
+            PROF_END(CORE_EPOLL_POST_REFILL, true);
         }
 
         sub_event_reach_sockets->ClearAll();
@@ -179,7 +203,20 @@ int UmqShareJfrEpollRunnerOps::ProcessSubUmqRxEvent(int socket_fd)
         // 数据 -> AddQbuf(rxQueue)。sub umq 创建时已设 umq_ctx=socket fd，Sift 按 fd 路由成立。
         epoll_data_t event_data{};
         std::vector<SocketPtr> socket_ptrs;
+        PROF_START(CORE_EPOLL_SIFT_PROCESS);
+        /*
+         * 拆细: SIFT_PROCESS = SIFT_SOCKET(分拣+入 rxQueue) + 下方跨线程通知循环。
+         * 两段分开看才能判断劣化来自"runner 收割慢"还是"跨线程通知贵"。
+         */
+        PROF_START(CORE_EPOLL_SIFT_SOCKET);
         SiftSocketEventsWithUmqBuffers(buf, pollNum, *sub_event_reach_sockets, socket_ptrs);
+        PROF_END(CORE_EPOLL_SIFT_SOCKET, true);
+        /*
+         * CORE_EPOLL_ENQUEUE: 跨线程通知段（SIFT_PROCESS 的第二段）
+         * SIFT_PROCESS ≈ SIFT_SOCKET + ENQUEUE，两段分开才能判断劣化来自
+         * "runner 收割慢" 还是 "唤醒应用线程贵"。
+         */
+        PROF_START(CORE_EPOLL_ENQUEUE);
         for (auto &obj : socket_ptrs) {
             auto socket_obj = obj.Get();
             ((UmqSocket *)socket_obj)->NewRxEpollIn();
@@ -189,11 +226,15 @@ int UmqShareJfrEpollRunnerOps::ProcessSubUmqRxEvent(int socket_fd)
                 epoll_fd_obj->SetReadableEventFd();
             }
         }
+        PROF_END(CORE_EPOLL_ENQUEUE, true);
 
         for (auto &kv : traced_socket_fd_trace_map_) {
             TRACE_ADD_EPOLL_FULL(kv.second, CORE_PROCESS_JRF_END, kv.first, 0, 0, pollNum,
                                  traceTime_.umq_post_start_timestamp_, traceTime_.umq_post_end_timestamp_);
         }
+
+        PROF_END(CORE_EPOLL_SIFT_PROCESS, true);
+        PROF_END(CORE_PROCESS_JRF_END, true);
     } while (GlobalSetting::UBS_SHARE_JFR_LOOP_POLL_ENABLED);
     return 0;
 }
@@ -202,9 +243,12 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
                                                                   bool should_rearm_interrupt)
 {
     traceTime_.umq_rearm_start_timestamp_ = ubsocket_get_timeNs_compile();
+    PROF_START(CORE_EPOLL_REARM);
     if (should_rearm_interrupt && UNLIKELY(ProcessMainUmqRearm(main_umq) < 0)) {
+        PROF_END(CORE_EPOLL_REARM, false);
         return -1;
     }
+    PROF_END(CORE_EPOLL_REARM, true);
     traceTime_.umq_rearm_end_timestamp_ = ubsocket_get_timeNs_compile();
 
     static thread_local std::unique_ptr<FlashDynamicBitSet> event_reach_sockets;
@@ -226,13 +270,17 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
 
     traced_socket_fds_.clear();
     do {
+        // CORE_PROCESS_JRF_END: runner 单轮完整处理（poll -> refill -> sift -> 跨线程通知）
+        PROF_START(CORE_PROCESS_JRF_END);
         traced_socket_fd_trace_map_.clear();
         umq_buf_t *buf[MAX_EPOLL_WAIT_COUNT];
         traceTime_.umq_poll_start_timestamp_ = ubsocket_get_timeNs_compile();
+        PROF_START(CORE_EPOLL_UMQ_POLL);
         umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_RX,
                                        UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
                                        traceTime_.umq_poll_start_timestamp_};
         auto pollNum = UmqApi::umq_poll(main_umq, &poll_option, buf, MAX_EPOLL_WAIT_COUNT);
+        PROF_END(CORE_EPOLL_UMQ_POLL, pollNum > 0);
         traceTime_.umq_poll_end_timestamp_ = ubsocket_get_timeNs_compile();
         if (UNLIKELY(pollNum < 0)) {
             int savedErrno = errno;
@@ -241,9 +289,11 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
                          "ret: %d, mapped errno: %d(%s), original errno: %d\n",
                          static_cast<unsigned long long>(main_umq), pollNum, errno,
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::READV, pollNum), savedErrno);
+            PROF_END(CORE_PROCESS_JRF_END, false);
             return -1;
         }
         if (UNLIKELY(pollNum == 0)) {
+            PROF_END(CORE_PROCESS_JRF_END, false);
             return -1;
         }
         // 计算时，排除流控的buffer
@@ -256,6 +306,7 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
 
         int ioPollNum = pollNum - fcBufCnt;
         if (ioPollNum != 0) {
+            PROF_START(CORE_EPOLL_POST_REFILL);
             umq_alloc_option_t alloc_option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(ock::ubs::Block)};
             umq_buf_t *rx_buf_list =
                 UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), ioPollNum, UMQ_INVALID_HANDLE, &alloc_option);
@@ -265,7 +316,11 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
                 umq_io_option_t io_rx_option = {UMQ_IO_OPTION_FLAG_DIRECTION | UMQ_IO_OPTION_FLAG_TAG_TIMESTAMP,
                                                 UMQ_IO_RX, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX,
                                                 traceTime_.umq_post_start_timestamp_};
-                if (UmqApi::umq_post(main_umq, rx_buf_list, &io_rx_option, &bad_qbuf) != UMQ_SUCCESS) {
+                // CORE_EPOLL_POST_RX: 仅覆盖 umq_post 本身（POST_REFILL 还含 buf_alloc）
+                PROF_START(CORE_EPOLL_POST_RX);
+                int post_ret = UmqApi::umq_post(main_umq, rx_buf_list, &io_rx_option, &bad_qbuf);
+                PROF_END(CORE_EPOLL_POST_RX, post_ret == UMQ_SUCCESS);
+                if (post_ret != UMQ_SUCCESS) {
                     int savedErrno = errno;
                     errno = UmqErrnoConverter::Convert(UmqOperation::READV, UMQ_FAIL, savedErrno);
                     UBS_VLOG_ERR("[UMQ_API] umq_post() failed for share jfr RX refill, main umq: %llu, "
@@ -276,6 +331,7 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
                 }
                 traceTime_.umq_post_end_timestamp_ = ubsocket_get_timeNs_compile();
             }
+            PROF_END(CORE_EPOLL_POST_REFILL, true);
         }
 
         event_reach_sockets->ClearAll();
@@ -284,7 +340,12 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
         epoll_data_t event_data{};
         std::vector<SocketPtr> socket_ptrs;
         std::vector<AsyncEventPoll *> readable_epoll_fds;
+        PROF_START(CORE_EPOLL_SIFT_PROCESS);
+        PROF_START(CORE_EPOLL_SIFT_SOCKET);
         SiftSocketEventsWithUmqBuffers(buf, pollNum, *event_reach_sockets, socket_ptrs);
+        PROF_END(CORE_EPOLL_SIFT_SOCKET, true);
+        // CORE_EPOLL_ENQUEUE: 跨线程通知段（SIFT_PROCESS 的第二段）
+        PROF_START(CORE_EPOLL_ENQUEUE);
         for (auto &obj : socket_ptrs) {
             auto socket_obj = obj.Get();
             ((UmqSocket *)socket_obj)->NewRxEpollIn();
@@ -301,12 +362,15 @@ ALWAYS_INLINE int UmqShareJfrEpollRunnerOps::ProcessShareJfrEvent(const struct e
         for (auto epoll_fd : readable_epoll_fds) {
             epoll_fd->SetReadableEventFd();
         }
+        PROF_END(CORE_EPOLL_ENQUEUE, true);
+        PROF_END(CORE_EPOLL_SIFT_PROCESS, true);
 
         traceTime_.umq_post_end_timestamp_ = ubsocket_get_timeNs_compile();
         for (auto &kv : traced_socket_fd_trace_map_) {
             TRACE_ADD_EPOLL_FULL(kv.second, CORE_PROCESS_JRF_END, kv.first, 0, 0, pollNum,
                                  traceTime_.umq_post_start_timestamp_, traceTime_.umq_post_end_timestamp_);
         }
+        PROF_END(CORE_PROCESS_JRF_END, true);
     } while (GlobalSetting::UBS_SHARE_JFR_LOOP_POLL_ENABLED);
     return 0;
 }
@@ -367,7 +431,11 @@ void UmqShareJfrEpollRunnerOps::SiftSocketEventsWithUmqBuffers(umq_buf_t **buf, 
                                buf[i]->data_size, 0);
         TRACE_TRY_SWAP_EPOLL(trace);
 
-        if (UNLIKELY((((UmqSocket *)socket_ptr.Get())->AddQbuf(buf[i]) != 0))) {
+        /* 生产侧入队: runner 线程把收到的 qbuf 挂进 socket 的 rxQueue, 与应用线程 GetQbuf 配对 */
+        PROF_START(CORE_EPOLL_ADD_QBUF);
+        int add_qbuf_ret = ((UmqSocket *)socket_ptr.Get())->AddQbuf(buf[i]);
+        PROF_END(CORE_EPOLL_ADD_QBUF, add_qbuf_ret == 0);
+        if (UNLIKELY(add_qbuf_ret != 0)) {
             UBS_VLOG_DEBUG("async_epoll add qbuf for socket fd: %d failed.\n", socket_fd);
             continue;
         }

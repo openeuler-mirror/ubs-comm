@@ -425,22 +425,31 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     /* Proactively recover TX window when in-flight WRs are high (large packet scenario).
      * Poll to empty to drain all available CQEs, not just up to the retrieve threshold.
      * This mirrors the 0711 fix from ubs-comm: PollTx(retrieve_threshold, true). */
+    PROF_START(CORE_WRITE_POLL_UMQ_TX);
     if (tx_total_len > 0 &&
         (GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel)) >= TX_HANDLE_THRESHOLD) {
         (void)PollUmqTx(sock.Get(), true);
     }
+    PROF_END(CORE_WRITE_POLL_UMQ_TX, true);
 
     return tx_total_len;
 }
 
 int UmqTxOps::PollTx(Socket *sock)
 {
+    /*
+     * TX CQE 回收总入口。SINGLE jetty 下由 TxCqePoller(100ms) 与写路径共同触发,
+     * 三条分支(FIRST/SECOND/THIRD)的占比可直接看出 TX 是"中断驱动"还是"退化为定时轮询"。
+     */
+    PROF_START(CORE_WRITE_POLL_TX);
+
     if (get_and_ack_event_) {
         // handle tx epollin epoll event
         do {
             PROF_START(CORE_WRITE_REARM);
             if (GetAndAckEvent() < 0) {
                 PROF_END(CORE_WRITE_REARM, false);
+                PROF_END(CORE_WRITE_POLL_TX, false);
                 UBS_VLOG_ERR("WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                              Func::Error2Str(errno));
                 return -1;
@@ -471,6 +480,7 @@ int UmqTxOps::PollTx(Socket *sock)
         PROF_END(CORE_WRITE_POLL_TX_THIRD, true);
     }
 
+    PROF_END(CORE_WRITE_POLL_TX, true);
     return 0;
 }
 

@@ -84,6 +84,10 @@ public:
             dump_thread_.join();
         }
 
+        // 退出前做最后一次落盘：即使本次运行时间短于一个 dump 周期，
+        // 也能保证产出 profiling 文件，便于离线分析。
+        DumpDataExt();
+
         if (dump_file_.is_open()) {
             dump_file_.close();
             dir_created_ = false;

@@ -218,7 +218,9 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
     uint32_t max_buf_size;
     max_buf_size = len;
 
+    PROF_START(CORE_READ_RX_DATA_SET);
     ret = rx_ops_->RxDataSet(tmp_iov.iov_base, max_buf_size);
+    PROF_END(CORE_READ_RX_DATA_SET, ret >= 0);
 
     if (ret < 0) {
         if (!((errno == EINTR) || (errno == EAGAIN))) {
@@ -231,6 +233,7 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
         return ret;
     }
     rx_total_len = ret;
+    PROF_START(CORE_READ_COPY);
     if (rx_total_len > 0) {
         Block *first = rx_ops_->DataToBlock(tmp_iov.iov_base);
         Block *blk = first->GetNext();
@@ -254,7 +257,10 @@ ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
             blk = next_blk;
         }
     }
+    PROF_END(CORE_READ_COPY, true);
+    PROF_START(CORE_READ_COPY_FREE_ANCHOR);
     ubsocket_iobuf_deallocate(anchor_block);
+    PROF_END(CORE_READ_COPY_FREE_ANCHOR, true);
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
@@ -323,7 +329,16 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
             return UBS_ERROR;
         }
 
-        if (RearmRxInterrupt() < 0) {
+        /*
+         * 空读分支的两笔系统调用开销。若新架构因 runner 跨线程通知与数据落盘的时序差,
+         * 造成"EPOLLIN 已上送但 rxQueue 还没数据"的空读变多, 每次空读都要多付
+         * RearmRxInterrupt + recv(MSG_PEEK) 两次系统调用, 直接抬高 RTT。
+         * 因此这两个点位的 total(调用次数) 比 avg 更有诊断价值, 需与旧版逐点对比。
+         */
+        PROF_START(CORE_READ_RX_DATA_SET_REARM);
+        int rearm_ret = RearmRxInterrupt();
+        PROF_END(CORE_READ_RX_DATA_SET_REARM, rearm_ret >= 0);
+        if (rearm_ret < 0) {
             errno = EIO;
             UBS_VLOG_ERR("ReadV RearmRxInterrupt() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
@@ -333,7 +348,9 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
         // UB 链路上无数据，但还是触发了 EPOLLIN 事件，可能是对端 TCP 连接关闭了，此种场景下向 brpc
         // 返回 0 暗示读到 EOF, brpc 随后会主动关闭连接.
         char b[1];
+        PROF_START(CORE_READ_RX_DATA_SET_RECV);
         int n = LibcApi::recv(fd_, b, sizeof(b), MSG_PEEK | MSG_DONTWAIT);
+        PROF_END(CORE_READ_RX_DATA_SET_RECV, n >= 0);
         if (n == 0) {
             UBS_VLOG_INFO("The TCP connection has been closed by peer.\n");
             auto trace_sock = ArraySet<Socket>::GetInstance().GetItem(fd_);

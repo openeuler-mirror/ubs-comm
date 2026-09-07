@@ -11,6 +11,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_event_epoll.h"
 #include "include/ubsocket.h"
+#include "profiling/ubsocket_prof.h"
 #include "under_api/dl_libc_api.h"
 
 using namespace ock::ubs;
@@ -60,12 +61,19 @@ UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int ma
         return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
     }
 
+    /*
+     * API 边界点位: 覆盖 ArraySet 查表 + AsyncEventPoll::EpollWait 全程。
+     * CORE_API_EPOLL_WAIT 与 CORE_EPOLL_WAIT_TOTAL 的差值即为拦截层查表开销。
+     */
+    PROF_START(CORE_API_EPOLL_WAIT);
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
         /* Fallback to native epoll_wait for fds not tracked by UB. */
         return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
     }
-    return eventPoll->EpollWait(events, maxevents, timeout);
+    int ret = eventPoll->EpollWait(events, maxevents, timeout);
+    PROF_END(CORE_API_EPOLL_WAIT, ret >= 0);
+    return ret;
 }
 
 UBS_API int UB_API_WRAP(epoll_create1)(int flags)

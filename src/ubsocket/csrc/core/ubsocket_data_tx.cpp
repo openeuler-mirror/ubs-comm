@@ -82,6 +82,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     int iov_idx = 0;
     size_t iov_off = 0;
 
+    PROF_START(CORE_WRITE_COPY);
     while (remain > 0) {
         size_t copy_len = std::min(remain, PAYLOAD);
         char *block = static_cast<char *>(ubsocket_iobuf_allocate(IOBUF_DIFF + copy_len, nullptr));
@@ -120,14 +121,17 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         new_iovs.push_back({payload, copy_len});
         remain -= copy_len;
     }
+    PROF_END(CORE_WRITE_COPY, true);
 
     final_iov = new_iovs.data();
     final_iovcnt = new_iovs.size();
 
-    PROF_START(CORE_WRITE_POST_SEND);
 
     PROF_START(CORE_WRITE_BUILD_IOV);
+    /* 拆细 BUILD_IOV: INNER 仅覆盖 converter 构造, 其余为切分循环 + AllocTxBuf */
+    PROF_START(CORE_WRITE_BUILD_IOV_INNER);
     ConverterPtr converterPtr = tx_ops_->BuildIovConverter(final_iov, final_iovcnt);
+    PROF_END(CORE_WRITE_BUILD_IOV_INNER, converterPtr != nullptr);
     uint32_t input_total_len = 0;
     uint32_t batch = 0;
     uint32_t post_batch_max = tx_ops_->tx_queue_avail_num_.load(std::memory_order_acq_rel) > TX_POST_BATCH_MAX ?
@@ -150,16 +154,24 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         input_total_len += cut_total_len;
     } while (cut_total_len != 0 && ++batch < post_batch_max);
 
+    /*
+     * TX buffer 申请。SINGLE jetty 场景下 TX CQE 仅由 TxCqePoller 的 100ms 定时器回收，
+     * 一旦 buffer 池吃紧，这里会成为写路径的阻塞点，是 RTT 长尾的重点怀疑项。
+     * 失败次数(failure 列)同样关键：失败即意味着本次 writev 退化为 EAGAIN 重试。
+     */
+    PROF_START(CORE_WRITE_ALLOC_TX_BUF);
     uintptr_t txBuf = tx_ops_->AllocTxBuf(0, buf_cnt);
+    PROF_END(CORE_WRITE_ALLOC_TX_BUF, txBuf != 0);
 
     if (txBuf == 0) {
-        PROF_END(CORE_WRITE_POST_SEND, false);
         PROF_END(CORE_WRITE, false);
         PROF_END(CORE_WRITE_BUILD_IOV, false);
         return -1;
     }
 
     PROF_END(CORE_WRITE_BUILD_IOV, true);
+
+    PROF_START(CORE_WRITE_POST_SEND);
 
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     /*

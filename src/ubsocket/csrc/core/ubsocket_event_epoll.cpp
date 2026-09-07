@@ -12,6 +12,7 @@
 
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
+#include "profiling/ubsocket_prof.h"
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
 #include "ubsocket_tx_cqe_poller.h"
@@ -25,6 +26,27 @@ namespace ubs {
 
 std::unordered_map<int, EpollMapper *> g_socket_epoll_mappers{};
 u_rw_lock_t *g_socket_epoll_lock = nullptr;
+
+namespace {
+/*
+ * 跨线程唤醒延迟结算。
+ *
+ * 生产侧(SHARE_JFR_RX_RUNNER 线程)在 AddReadableEvent() 登记入队时刻，消费侧(应用线程)在真正
+ * 从就绪队列取出事件后调用本函数，得到 CORE_EPOLL_WAKEUP_LATENCY。
+ * 该点位直接量化"RX 数据已就绪 -> 应用线程拿到事件"的跨线程排队时间，是新架构相对旧版
+ * (应用线程自行 drain RX，无跨线程交接) 新增的开销，属于 RTT 劣化的重点怀疑项。
+ *
+ * 打点未开启时直接返回，不做任何原子 RMW，正常路径零额外开销。
+ */
+ALWAYS_INLINE void SettleWakeupLatency(std::atomic<uint64_t> &slot)
+{
+    if (LIKELY(ubsocket_prof_enabled != 1)) {
+        return;
+    }
+    uint64_t begin_ts = slot.exchange(0, std::memory_order_acquire);
+    PROF_END_FROM(CORE_EPOLL_WAKEUP_LATENCY, begin_ts, true);
+}
+} // namespace
 
 EpollMapper *GetSocketEpollMapper(int socket_fd)
 {
@@ -280,7 +302,17 @@ template <EpollRunnerType T>
 bool EpollRunner<T>::DrainReadyEvents(int timeout, bool *hasEvents) noexcept
 {
     struct epoll_event events[MAX_EPOLL_WAIT_COUNT];
+
+    /*
+     * 打点说明: timeout != 0 时本次 epoll_wait 是阻塞等待, 统计值绝大部分是线程空闲时间, 没有分析
+     * 价值且会污染分位数, 因此仅在非阻塞轮询(外部 poller 驱动, timeout == 0)时记录 syscall 耗时。
+     */
+    PROF_START(CORE_EPOLL_RUNNER_SYSCALL);
     auto count = LibcApi::epoll_wait(epoll_fd_, events, MAX_EPOLL_WAIT_COUNT, timeout);
+    if (timeout == 0) {
+        PROF_END(CORE_EPOLL_RUNNER_SYSCALL, count >= 0);
+    }
+
     if (hasEvents != nullptr) {
         *hasEvents = count > 0;
     }
@@ -291,7 +323,13 @@ bool EpollRunner<T>::DrainReadyEvents(int timeout, bool *hasEvents) noexcept
         UBS_VLOG_ERR("async_epoll epoll_wait() failed: %d : %s\n", errno, strerror(errno));
         return true;
     }
+    if (count == 0) {
+        return false;
+    }
 
+    /* runner 线程单轮批量大小 + 单轮处理耗时: 用于判断 RX runner 是否成为串行瓶颈 */
+    PROF_RECORD(CORE_EPOLL_RUNNER_BATCH, (uint64_t)count, true);
+    PROF_START(CORE_EPOLL_RUNNER_LOOP);
     for (auto i = 0; i < count; i++) {
         auto event_data = (RunnerEventData *)&events[i].data;
         if (UNLIKELY(event_data->event_data.type == RUNNER_EVENT_TYPE_STOP)) {
@@ -301,6 +339,7 @@ bool EpollRunner<T>::DrainReadyEvents(int timeout, bool *hasEvents) noexcept
 
         ProcessOneEvent(events[i]);
     }
+    PROF_END(CORE_EPOLL_RUNNER_LOOP, true);
     return false;
 }
 
@@ -446,28 +485,65 @@ int AsyncEventPoll::EpollWait(struct epoll_event *events, int maxevents, int tim
         return -1;
     }
 
+    PROF_START(CORE_EPOLL_WAIT_TOTAL);
+
     auto exist_count = readable_sockets_event_queue_.Size();
     if (UNLIKELY(exist_count > 0)) {
+        /*
+         * 快路径: RX runner 已把就绪事件放进队列, 应用线程无需真正陷入 epoll_wait。
+         * 若 FASTPATH 命中率低而 SYSCALL 占比高, 说明唤醒链路没有跑在预期的"数据先到"节奏上。
+         */
+        PROF_START(CORE_EPOLL_WAIT_FASTPATH);
         auto count = readable_sockets_event_queue_.MultiPop(events, maxevents);
         if (count > 0) {
+            SettleWakeupLatency(readable_notify_ts_);
+            PROF_END(CORE_EPOLL_WAIT_FASTPATH, true);
+            PROF_END(CORE_EPOLL_WAIT_TOTAL, true);
             return (int)count;
         }
     }
 
+    /*
+     * 慢路径: 真正陷入 libc epoll_wait。在 ping-pong 型 benchmark 中, 该点位包含了
+     * "对端处理 + 网络往返 + 本端被唤醒" 的全部时间, 是新旧版本 RTT 对比的主锚点。
+     */
     int ret = 0;
+    PROF_START(CORE_EPOLL_WAIT_SYSCALL);
     if (UNLIKELY(maxevents == 0 || (ret = LibcApi::epoll_wait(epoll_fd_, events, maxevents, timeout)) <= 0)) {
+        PROF_END(CORE_EPOLL_WAIT_SYSCALL, ret >= 0);
+        PROF_END(CORE_EPOLL_WAIT_TOTAL, ret >= 0);
         return ret;
     }
+    PROF_END(CORE_EPOLL_WAIT_SYSCALL, true);
 
+    PROF_START(CORE_EPOLL_ARRANGE);
     auto real_count = ArrangeWakeUpEvents(events, ret, maxevents);
+    PROF_END(CORE_EPOLL_ARRANGE, true);
     ReleaseRemovedEventsData();
+    PROF_END(CORE_EPOLL_WAIT_TOTAL, true);
     return real_count;
 }
 
 int AsyncEventPoll::AddReadableEvent(uint32_t events, epoll_data_t data)
 {
-    if (!readable_sockets_event_queue_.Push(epoll_event{.events = events, .data = data})) {
+    /* 生产侧成本: RX runner 线程把就绪 socket 推入应用线程就绪队列 */
+    PROF_START(CORE_EPOLL_NOTIFY_READABLE);
+    bool pushed = readable_sockets_event_queue_.Push(epoll_event{.events = events, .data = data});
+    PROF_END(CORE_EPOLL_NOTIFY_READABLE, pushed);
+    if (!pushed) {
         return -1;
+    }
+
+    /*
+     * 登记入队时刻, 供应用线程在 EpollWait/ArrangeWakeUpEvents 中结算 CORE_EPOLL_WAKEUP_LATENCY。
+     * 只在槽位为空时写入, 保留的是"最早一个尚未被消费事件"的时刻, 反映最坏排队时长。
+     * 打点关闭时 PROF_TIMESTAMP() 返回 0, 此处退化为一次判断, 无原子写。
+     */
+    uint64_t notify_ts = PROF_TIMESTAMP();
+    if (UNLIKELY(notify_ts != 0)) {
+        uint64_t expected = 0;
+        readable_notify_ts_.compare_exchange_strong(expected, notify_ts, std::memory_order_release,
+                                                    std::memory_order_relaxed);
     }
     return 0;
 }
@@ -546,7 +622,11 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
         }
         auto space_size = max_events - real_count;
         if (space_size > 0) {
-            real_count += (int)readable_sockets_event_queue_.MultiPop(events + real_count, space_size);
+            auto popped = readable_sockets_event_queue_.MultiPop(events + real_count, space_size);
+            if (popped > 0) {
+                SettleWakeupLatency(readable_notify_ts_);
+            }
+            real_count += (int)popped;
         }
     }
 

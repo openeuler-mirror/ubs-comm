@@ -37,6 +37,8 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
         TRACE_ADD_WRITE(trace, CORE_WRITE_UMQ_POLL, raw_socket, umq_poll_start, umq_poll_end,
                         static_cast<uint32_t>(poll_num));
     }
+    // 运行时打点：与上面的编译期 TRACE 同一区间，复用 begin 时间戳，环境变量模式下亦可采集
+    PROF_END_FROM(CORE_WRITE_UMQ_POLL, tpBeginUMQ_POLL_WRITE, poll_num > 0);
     if (poll_num <= 0) {
         PROF_END(UMQ_POLL_WRITE, false);
         if (poll_args.silent_poll_err && poll_num < 0) {
@@ -58,6 +60,7 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
     if (trace != nullptr) {
         cqe_start = ubsocket_get_timeNs_compile();
     }
+    PROF_START(CORE_WRITE_POLL_CQE);
     std::unordered_map<int, int> socket_wr_cnt_map{};
     for (int i = 0; i < poll_num; ++i) {
         if (buf[i] == nullptr || buf[i]->status != 0 || (((umq_buf_pro_t *)buf[i]->qbuf_ext) == nullptr) ||
@@ -89,6 +92,7 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
         if (cur_wr_cnt < 0) {
             // set err_code to true to force a quick exit from current function.
             poll_args.err_code = ops_error_code::FATAL_ERROR;
+            PROF_END(CORE_WRITE_POLL_CQE, false);
             return wr_cnt;
         }
 
@@ -116,6 +120,7 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
         uint64_t cqe_end = ubsocket_get_timeNs_compile();
         TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE, raw_socket, cqe_start, cqe_end, 0);
     }
+    PROF_END(CORE_WRITE_POLL_CQE, true);
     return wr_cnt;
 }
 
@@ -132,6 +137,7 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket
     if (do_trace) {
         decref_start = ubsocket_get_timeNs_compile();
     }
+    PROF_START(CORE_WRITE_POLL_CQE_DECREF);
     do {
         wr_first_buf = cur_qbuf;
         int64_t left_size = (int64_t)wr_first_buf->total_data_size;
@@ -153,6 +159,7 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket
         uint64_t decref_end = ubsocket_get_timeNs_compile();
         TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE_DECREF, raw_socket, decref_start, decref_end, 0);
     }
+    PROF_END(CORE_WRITE_POLL_CQE_DECREF, wr_first_buf != nullptr);
 
     if (wr_first_buf == nullptr) {
         UBS_VLOG_ERR("TX umq buffer list is in error, TX user context does not contain the right list\n");
@@ -167,6 +174,8 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket
     PROF_START(UMQ_BUF_FREE);
     UmqApi::umq_buf_free(start_qbuf);
     PROF_END(UMQ_BUF_FREE, true);
+    // CQE 回收路径下的 buf 释放（与 UMQ_BUF_FREE 同区间，复用 begin 时间戳）
+    PROF_END_FROM(CORE_WRITE_POLL_CQE_FREE, tpBeginUMQ_BUF_FREE, true);
 
     return wr_cnt;
 }

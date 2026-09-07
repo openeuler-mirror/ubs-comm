@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_EPOLL_FD_H
 #define UBS_COMM_UBSOCKET_EPOLL_FD_H
 
+#include <atomic>
 #include <memory>
 
 #include "common/ubsocket_leaky_singleton.h"
@@ -533,6 +534,19 @@ private:
     std::unordered_map<int, EpollEvent *> socket_data_;
     EpollEvent *removed_head_ = nullptr; // 待删除的event data列表，用wait唤醒时统一释放
     MPSCRingQueue<struct epoll_event> readable_sockets_event_queue_{MAX_READABLE_FD_COUNT};
+
+    /*
+     * 跨线程唤醒延迟观测槽位（仅用于性能打点，不参与业务逻辑）
+     *
+     * 生产侧: SHARE_JFR_RX_RUNNER 线程在 AddReadableEvent() 入队时，若槽位为空则写入当前时刻，
+     *         保留的是"最早一个尚未被应用线程消费的事件"的入队时间。
+     * 消费侧: 应用线程在 EpollWait() / ArrangeWakeUpEvents() 真正取出事件后置换出该时间戳，
+     *         算出 CORE_EPOLL_WAKEUP_LATENCY = 事件就绪到应用拿到事件的跨线程等待时长。
+     *
+     * 打点关闭时 PROF_TIMESTAMP() 返回 0，生产侧退化为一次 relaxed 读，消费侧不做任何 exchange，
+     * 因此对正常路径的额外开销可以忽略。
+     */
+    std::atomic<uint64_t> readable_notify_ts_{0};
 
     // For async accept wakeup
     EpollEvent *ready_event_ = nullptr;

@@ -18,6 +18,7 @@
 #include "core/ubsocket_socket.h"
 #include "core/ubsocket_socket_helper.h"
 #include "include/ubsocket.h"
+#include "profiling/ubsocket_prof.h"
 
 using namespace ock::ubs;
 UBS_API int UB_API_WRAP(socket)(int domain, int type, int protocol)
@@ -169,12 +170,16 @@ UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::readv(fd, iov, iovcnt);
     }
+    /* API 边界点位: 含 fd->Socket 查表, 与内层 CORE_READ 对比可分离拦截层开销 */
+    PROF_START(CORE_API_READV);
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
         return LibcApi::readv(fd, iov, iovcnt);
     }
-    return sockBase->ReadV(sock, iov, iovcnt);
+    ssize_t ret = sockBase->ReadV(sock, iov, iovcnt);
+    PROF_END(CORE_API_READV, ret >= 0);
+    return ret;
 }
 
 UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
@@ -182,12 +187,16 @@ UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::writev(fd, iov, iovcnt);
     }
+    /* API 边界点位: 含 fd->Socket 查表, 与内层 CORE_WRITE 对比可分离拦截层开销 */
+    PROF_START(CORE_API_WRITEV);
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
         return LibcApi::writev(fd, iov, iovcnt);
     }
-    return sockBase->WriteV(sock, iov, iovcnt);
+    ssize_t ret = sockBase->WriteV(sock, iov, iovcnt);
+    PROF_END(CORE_API_WRITEV, ret >= 0);
+    return ret;
 }
 
 UBS_API ssize_t UB_API_WRAP(send)(int fd, const void *buf, size_t len, int flags)
@@ -205,12 +214,16 @@ UBS_API ssize_t UB_API_WRAP(recv)(int fd, void *buf, size_t len, int flags)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::recv(fd, buf, len, flags);
     }
+    /* API 边界点位: ub_bench_epoll 的收包入口, 是 RTT 对比的另一个主锚点 */
+    PROF_START(CORE_API_RECV);
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     if (sockBase == nullptr) {
         return LibcApi::recv(fd, buf, len, flags);
     }
-    return sockBase->Recv(sock, buf, len, flags);
+    ssize_t ret = sockBase->Recv(sock, buf, len, flags);
+    PROF_END(CORE_API_RECV, ret >= 0);
+    return ret;
 }
 
 UBS_API ssize_t UB_API_WRAP(read)(int fd, void *buf, size_t nbyte)
