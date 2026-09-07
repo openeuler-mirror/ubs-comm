@@ -22,6 +22,7 @@
 #include "umq_socket_acceptor.h"
 #include "umq_socket_connector.h"
 #include "umq_tp_tx_epoll_runner_ops.h"
+#include "under_api/dl_libc_api.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -346,7 +347,7 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, tx_interrupt_fd), savedErrno);
         return -1;
     }
-    auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, tx_interrupt_fd, event);
+    auto ret = LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_ADD, tx_interrupt_fd, event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll add out event for socket fd: %d failed: %d : %s\n", sock->raw_socket_, errno,
                      strerror(errno));
@@ -383,7 +384,7 @@ Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, tx_interrupt_fd), savedErrno);
         return -1;
     }
-    auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, tx_interrupt_fd, nullptr);
+    auto ret = LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_DEL, tx_interrupt_fd, nullptr);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll del out event for socket event fd: %d failed: %d : %s\n", tx_interrupt_fd, errno,
                      strerror(errno));

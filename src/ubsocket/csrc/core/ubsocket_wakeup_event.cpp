@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
+#include "under_api/dl_libc_api.h"
 
 namespace ock {
 namespace ubs {
@@ -45,10 +46,10 @@ int UbsocketWakeupEvent::Initialize(int epollFd)
     };
     event.events = EPOLLIN;
     event.data.ptr = &ready_event_;
-    int ret = epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &event);
+    int ret = LibcApi::epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("UbsocketWakeupEvent: epoll_ctl add ready event fd failed: %d : %s\n", errno, strerror(errno));
-        close(fd);
+        LibcApi::close(fd);
         return -1;
     }
 
@@ -61,9 +62,9 @@ void UbsocketWakeupEvent::CleanUp()
 {
     if (readyEventFd_ >= 0) {
         if (epollFd_ >= 0) {
-            epoll_ctl(epollFd_, EPOLL_CTL_DEL, readyEventFd_, nullptr);
+            LibcApi::epoll_ctl(epollFd_, EPOLL_CTL_DEL, readyEventFd_, nullptr);
         }
-        close(readyEventFd_);
+        LibcApi::close(readyEventFd_);
         readyEventFd_ = -1;
     }
 
@@ -93,7 +94,7 @@ int UbsocketWakeupEvent::ProcessReadyEvents(struct epoll_event *events, int maxe
 {
     // Step 1: consume the eventfd counter (wakeup notification)
     uint64_t u;
-    ssize_t s = read(readyEventFd_, &u, sizeof(uint64_t));
+    ssize_t s = LibcApi::read(readyEventFd_, &u, sizeof(uint64_t));
     if (s != sizeof(uint64_t)) {
         UBS_VLOG_ERR("UbsocketWakeupEvent: ProcessReadyEvents read failed\n");
     }

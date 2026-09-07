@@ -144,7 +144,7 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
         return UBS_ERROR;
     }
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, event) < 0) {
+    if (LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, event) < 0) {
         return UBS_ERROR;
     }
 
@@ -184,7 +184,7 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
 
 int UmqTpTxEpollRunnerOps::DelEpollEvent(int epoll_fd, int fd)
 {
-    auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+    auto ret = LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", fd, errno, strerror(errno));
         return UBS_ERROR;

@@ -18,6 +18,7 @@
 #include "umq/umq_share_jfr_epoll_runner_ops.h"
 #include "umq/umq_tp_event_epoll_runner_ops.h"
 #include "umq/umq_tp_tx_epoll_runner_ops.h"
+#include "under_api/dl_libc_api.h"
 
 namespace ock {
 namespace ubs {
@@ -169,7 +170,7 @@ int EpollRunner<T>::Start()
             return -1;
         }
 
-        epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
+        epoll_fd_ = LibcApi::epoll_create1(EPOLL_CLOEXEC);
         if (epoll_fd_ < 0) {
             UBS_VLOG_ERR("async_epoll epoll_create1() failed : %d : %s\n", errno, strerror(errno));
             LockRegistry::LOCK_OPS.destroy(mutex_);
@@ -182,7 +183,7 @@ int EpollRunner<T>::Start()
         exit_efd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
         if (exit_efd_ < 0) {
             UBS_VLOG_ERR("async_epoll eventfd() failed : %d : %s\n", errno, strerror(errno));
-            close(epoll_fd_);
+            LibcApi::close(epoll_fd_);
             epoll_fd_ = -1;
             LockRegistry::LOCK_OPS.destroy(mutex_);
             mutex_ = nullptr;
@@ -197,10 +198,10 @@ int EpollRunner<T>::Start()
         event_data.event_data.type = RUNNER_EVENT_TYPE_STOP;
         event_data.event_data.data = exit_efd_;
         event.data.u64 = event_data.u64;
-        if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, exit_efd_, &event) == -1) {
+        if (LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, exit_efd_, &event) == -1) {
             UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) failed : %d : %s\n", errno, strerror(errno));
-            close(exit_efd_);
-            close(epoll_fd_);
+            LibcApi::close(exit_efd_);
+            LibcApi::close(epoll_fd_);
             exit_efd_ = -1;
             epoll_fd_ = -1;
             LockRegistry::LOCK_OPS.destroy(mutex_);
@@ -224,8 +225,8 @@ int EpollRunner<T>::Start()
             UBS_VLOG_ERR("async_epoll runner backend start failed\n");
             delete ops_;
             ops_ = nullptr;
-            close(exit_efd_);
-            close(epoll_fd_);
+            LibcApi::close(exit_efd_);
+            LibcApi::close(epoll_fd_);
             exit_efd_ = -1;
             epoll_fd_ = -1;
             LockRegistry::LOCK_OPS.destroy(mutex_);
@@ -255,8 +256,8 @@ void EpollRunner<T>::Stop()
         backend_->Stop();
         backend_.reset();
     }
-    close(exit_efd_);
-    close(epoll_fd_);
+    LibcApi::close(exit_efd_);
+    LibcApi::close(epoll_fd_);
     exit_efd_ = -1;
     epoll_fd_ = -1;
     delete ops_;
@@ -279,7 +280,7 @@ template <EpollRunnerType T>
 bool EpollRunner<T>::DrainReadyEvents(int timeout, bool *hasEvents) noexcept
 {
     struct epoll_event events[MAX_EPOLL_WAIT_COUNT];
-    auto count = epoll_wait(epoll_fd_, events, MAX_EPOLL_WAIT_COUNT, timeout);
+    auto count = LibcApi::epoll_wait(epoll_fd_, events, MAX_EPOLL_WAIT_COUNT, timeout);
     if (hasEvents != nullptr) {
         *hasEvents = count > 0;
     }
@@ -352,8 +353,8 @@ AsyncEventPoll::~AsyncEventPoll() noexcept
         return;
     }
 
-    epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, sock_readable_fd_, nullptr);
-    close(sock_readable_fd_);
+    LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, sock_readable_fd_, nullptr);
+    LibcApi::close(sock_readable_fd_);
     sock_readable_fd_ = -1;
 }
 
@@ -379,10 +380,10 @@ int AsyncEventPoll::AddSockReadableEvent()
     event.events = EPOLLIN | EPOLLET;
     event.data.ptr = &sock_readable_event_;
     sock_readable_event_.socket_fd = fd;
-    auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event);
+    auto ret = LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll epoll_ctl add for epoll readable failed: %d : %s\n", errno, strerror(errno));
-        close(fd);
+        LibcApi::close(fd);
         return -1;
     }
 
@@ -454,7 +455,7 @@ int AsyncEventPoll::EpollWait(struct epoll_event *events, int maxevents, int tim
     }
 
     int ret = 0;
-    if (UNLIKELY(maxevents == 0 || (ret = epoll_wait(epoll_fd_, events, maxevents, timeout)) <= 0)) {
+    if (UNLIKELY(maxevents == 0 || (ret = LibcApi::epoll_wait(epoll_fd_, events, maxevents, timeout)) <= 0)) {
         return ret;
     }
 
@@ -648,7 +649,7 @@ int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 
     raw_event.events = event->events;
     raw_event.data.ptr = event_data;
-    auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &raw_event);
+    auto ret = LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &raw_event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll add pure event for socket fd: %d failed: %d : %s\n", fd, errno, strerror(errno));
         delete event_data;
@@ -657,7 +658,7 @@ int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 
     if (UNLIKELY(!InsertSocketEventData(fd, event_data))) {
         UBS_VLOG_ERR("async_epoll add pure event for socket fd: %d insert event data failed\n", fd);
-        epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
+        LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
         delete event_data;
         return -1;
     }
@@ -713,7 +714,7 @@ int AsyncEventPoll::DelRawSocketEvent(int fd)
         UBS_VLOG_WARN("async_epoll del pure event for socket: %d failed, RemoveSocketEventData failed\n", fd);
         return 0;
     }
-    auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
+    auto ret = LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", fd, errno, strerror(errno));
         return -1;
@@ -776,7 +777,7 @@ int AsyncEventPoll::ModRawSocketEvent(int fd, struct epoll_event *event)
     };
     raw_event.events = event->events;
     raw_event.data.ptr = event_data;
-    auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &raw_event);
+    auto ret = LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &raw_event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll EpollCtlMod(socket:%d) failed: %d : %s\n", fd, errno, strerror(errno));
         return -1;

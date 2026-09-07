@@ -72,7 +72,7 @@ public:
     {
         Locker sLock(mutex_);
         if (UNLIKELY(jfr_main_umq_.count(share_jfr_fd) == 0)) {
-            if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, share_jfr_fd, shared_jfr_event) < 0) {
+            if (LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_ADD, share_jfr_fd, shared_jfr_event) < 0) {
                 return -1;
             }
             jfr_main_umq_.emplace(share_jfr_fd, main_umq);
