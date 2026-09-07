@@ -191,6 +191,7 @@ static bool ConvertServiceOptionsToInnerOptions(const ubs_hcom_service_options &
         return false;
     }
     innerOptions.workerGroupCpuIdsRange = cpuIdsRange;
+    innerOptions.enableMemPoolThreadCache = (options.disableMemPoolThreadCache == 0);
     return true;
 }
 

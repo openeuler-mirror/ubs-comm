@@ -19,9 +19,6 @@ NetMemPoolFixed::NetMemPoolFixed(const std::string &name, const NetMemPoolFixedO
     : mOptions(options),
       mName(name)
 {
-    /* Thread-local cache policy is now an interface parameter: the caller passes it via
-       NetMemPoolFixedOptions at construction (no environment variable is read). enabled=true
-       (default) => per-thread cache ON; enabled=false => TCAllocOne/TCFreeOne bypass. */
     NN_LOG_INFO("Fixed size memory pool "
                 << name << " thread-local cache "
                 << (mOptions.tlsPolicy.enabled ? "ENABLED" : "BYPASSED (TCAllocOne/TCFreeOne)") << " ("

@@ -333,6 +333,13 @@ public:
      */
     virtual void SetTcpEpollMode(bool isTcpEpollLT = false) = 0;
 
+    /**
+     * @brief 设置内存池线程本地缓存
+     *
+     * @param enable 内存池线程本地缓存开关，默认为true开启
+     */
+    virtual void SetEnableMemPoolThreadCache(bool enable) = 0;
+
     virtual ~UBSHcomService() {}
 
     DEFINE_RDMA_REF_COUNT_FUNCTIONS

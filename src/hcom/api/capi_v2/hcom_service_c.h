@@ -263,7 +263,8 @@ typedef struct {
     uint16_t workerGroupThreadCount;
     ubs_hcom_service_worker_mode workerGroupMode;
     int8_t workerThreadPriority;
-    char workerGroupCpuRange[64]; // worker group cpu range, for example 6-10
+    char workerGroupCpuRange[64];      // worker group cpu range, for example 6-10
+    uint8_t disableMemPoolThreadCache; // 0 = mem pool thread-local cache on (default)
 } ubs_hcom_service_options;
 
 typedef struct {

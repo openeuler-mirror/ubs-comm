@@ -52,18 +52,12 @@ struct NetMemPoolMinBlock {
 /*
  * Options of fixed size memory pool
  */
-/*
- * Thread-local cache policy for a fixed-size pool. Set by the caller via
- * NetMemPoolFixedOptions (interface parameter) at pool construction; the pool no longer reads
- *   enabled    : true (default) = use the per-thread cache for speed. false = bypass the
- *                per-thread cache (TCAllocOne/TCFreeOne go straight to the shared free-list;
- *                no cross-thread pinning -> no leak).
- *   cacheBlkCnt: per-thread cache high-water reserve, i.e. NetTCacheFixed::mFreeSteps.
- *   flushMs    : idle flush timeout. A thread that has not alloc/free for flushMs ms returns its
- *                reserve to the shared pool. 0 = flush only on thread exit (legacy behavior).
- */
+// Thread-local cache policy for a fixed-size pool:
+//   enabled    : true (default) = per-thread cache on, false = bypass (shared free-list path)
+//   cacheBlkCnt: per-thread cache reserve size, i.e. NetTCacheFixed::mFreeSteps
+//   flushMs    : idle flush timeout in ms, 0 = flush only on thread exit
 struct NetMemPoolTlsPolicy {
-    bool enabled = false;
+    bool enabled = true;
     uint16_t cacheBlkCnt = NN_NO128;
     uint32_t flushMs = 0;
 

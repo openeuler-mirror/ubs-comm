@@ -68,6 +68,7 @@ struct HcomServiceImpOptions {
     std::string name;
     std::string eid;
     bool enableRndv = false;
+    bool enableMemPoolThreadCache = true; // 内存池线程本地缓存开关
     bool tcpSendZCopy = false;
     bool startOobSvr = false;
     bool activateBackup = false;  // 主备开关
@@ -93,6 +94,7 @@ public:
         mOptions.name = name;
         mOptions.maxSendRecvDataSize = opt.maxSendRecvDataSize;
         mOptions.workerGroupMode = opt.workerGroupMode;
+        mOptions.enableMemPoolThreadCache = opt.enableMemPoolThreadCache;
         if (NN_LIKELY(opt.workerGroupThreadCount != 0)) {
             UBSHcomWorkerGroupInfo groupInfo;
             groupInfo.threadPriority = opt.workerThreadPriority;
@@ -398,6 +400,13 @@ public:
      * @param isTcpEpollLT tcp epoll mode, default is ET
      */
     void SetTcpEpollMode(bool isTcpEpollLT) override;
+
+    /**
+     * @brief 设置内存池线程本地缓存
+     *
+     * @param enable 内存池线程本地缓存开关，默认为true开启
+     */
+    void SetEnableMemPoolThreadCache(bool enable) override;
 
 private:
     SerResult ValidateServiceOption();

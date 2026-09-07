@@ -243,9 +243,9 @@ NResult NetDriverUB::CreateOpCtxMemPool()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NextPower2(sizeof(UBOpContextInfo));
     options.tcExpandBlkCnt = NN_NO64;
-    /* interface parameter: op-context pool: per-thread cache disabled by default (bypass; cross-thread safe), enable via config */
-    options.tlsPolicy.enabled = false;
-    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+    // per-thread cache switch, see UBSHcomServiceOptions::enableMemPoolThreadCache
+    options.tlsPolicy.enabled = mMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
     options.tlsPolicy.flushMs = 0;
     mOpCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mOpCtxMemPool.Get() == nullptr) {
@@ -269,9 +269,9 @@ NResult NetDriverUB::CreateSglCtxMemPool()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NextPower2(sizeof(UBSglContextInfo));
     options.tcExpandBlkCnt = NN_NO64;
-    /* interface parameter: sgl-context pool: bypass per-thread cache (safe for cross-thread reuse) */
-    options.tlsPolicy.enabled = false;
-    options.tlsPolicy.cacheBlkCnt = NN_NO256;
+    // per-thread cache switch, see UBSHcomServiceOptions::enableMemPoolThreadCache
+    options.tlsPolicy.enabled = mMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
     options.tlsPolicy.flushMs = 0;
     mSglCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mSglCtxMemPool.Get() == nullptr) {
