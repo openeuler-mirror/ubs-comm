@@ -109,11 +109,17 @@ Result UmqBackend::Init() noexcept
         UmqSetting::UMQ_IS_BONDING && !GlobalSetting::UBS_BACKUP_LINK_ENABLED ? LinkSelectionPolicy::BONDING_ROUTE :
                                                                                 LinkSelectionPolicy::RAW_DEVICE;
 
-    UmqSetting::UMQ_PROCESS_SOCKET_ID = SocketConnHelper::GetCurrentProcessSocketId();
-    UmqSetting::UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
-    if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
-        UBS_VLOG_ERR("Failed get socket id in cpu affinity policy.\n");
-        return UBS_ERROR;
+    /* socket_id 仅在 CPU_AFFINITY / CPU_AFFINITY_PRIORITY 调度策略下需要。
+     * ROUND_ROBIN 策略不依赖 NUMA socket_id 选路，跳过检测避免在无 NUMA sysfs
+     * 的环境（如某些容器）中初始化失败。参考 ubs-comm brpc_context.h 的条件初始化。 */
+    if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY ||
+        UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
+        UmqSetting::UMQ_PROCESS_SOCKET_ID = SocketConnHelper::GetCurrentProcessSocketId();
+        UmqSetting::UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
+        if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
+            UBS_VLOG_ERR("Failed get socket id in cpu affinity policy.\n");
+            return UBS_ERROR;
+        }
     }
 
     /* step4: umq perf start */

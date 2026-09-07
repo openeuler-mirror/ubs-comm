@@ -17,13 +17,23 @@ target_compile_options(common_objects PRIVATE -fPIC)
 
 # entry objects
 file(GLOB ENTRY_SRCS ${UBSOCKET_CSRC_DIR}/*.cpp)
+set(PRELOAD_SRC ${UBSOCKET_CSRC_DIR}/ubsocket_preload.cpp)
+list(REMOVE_ITEM ENTRY_SRCS ${PRELOAD_SRC})
 add_library(entry_objects OBJECT ${ENTRY_SRCS})
 target_compile_options(entry_objects PRIVATE -fPIC)
+
 # When intercept is enabled, ubsocket_preload.cpp (in this directory) exports
 # standard POSIX symbols (socket, close, accept, etc.) for LD_PRELOAD
 # transparent hijacking. The macro gates the entire file content.
+#
+# Keep this source in a dedicated object target and link it last. Its constructor
+# calls ubsocket_init(), so all C++ global objects used during initialization
+# must be constructed first. The reverse destruction order also ensures that
+# ubsocket_preload_fini() runs before those objects are destroyed.
+add_library(preload_objects OBJECT ${PRELOAD_SRC})
+target_compile_options(preload_objects PRIVATE -fPIC)
 if(UBSOCKET_ENABLE_INTERCEPT)
-    target_compile_definitions(entry_objects PRIVATE UBSOCKET_ENABLE_INTERCEPT)
+    target_compile_definitions(preload_objects PRIVATE UBSOCKET_ENABLE_INTERCEPT)
 endif()
 
 # core objects
@@ -66,6 +76,7 @@ add_library(ubsocket_static STATIC
         $<TARGET_OBJECTS:under_api_objects>
         $<TARGET_OBJECTS:iobuf_objects>
         $<TARGET_OBJECTS:profiling_objects>
+        $<TARGET_OBJECTS:preload_objects>
 )
 set_target_properties(ubsocket_static PROPERTIES OUTPUT_NAME "ubsocket")
 if(BUILD_UMQ_ADAPTER_BACKEND)
@@ -81,6 +92,7 @@ add_library(ubsocket_shared SHARED
         $<TARGET_OBJECTS:under_api_objects>
         $<TARGET_OBJECTS:iobuf_objects>
         $<TARGET_OBJECTS:profiling_objects>
+        $<TARGET_OBJECTS:preload_objects>
 )
 set_target_properties(ubsocket_shared PROPERTIES OUTPUT_NAME "ubsocket")
 target_link_libraries(ubsocket_shared PUBLIC pthread ${CMAKE_DL_LIBS})

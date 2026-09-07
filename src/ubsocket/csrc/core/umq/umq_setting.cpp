@@ -67,9 +67,9 @@ std::string UmqSetting::UMQ_DEV_SCHEDULE_POLICY_NAME = DEFAULT_DEV_SCHEDULE_POLI
 dev_schedule_policy UmqSetting::UMQ_DEV_SCHEDULE_POLICY = CPU_AFFINITY_PRIORITY;
 // TODO: 根据 UBS_TRANS_MODE 来设置 UMQ_TRANS_MODE, 待增加 ENV转换器
 umq_trans_mode_t UmqSetting::UMQ_TRANS_MODE = UMQ_TRANS_MODE_UB;
-ub_trans_mode UmqSetting::UMQ_UB_TRANS_MODE = RM_TP;
+ub_trans_mode UmqSetting::UMQ_UB_TRANS_MODE = RM_CTP;
 umq_tp_mode_t UmqSetting::UMQ_UB_TP_MODE = UMQ_TM_RM;
-umq_tp_type_t UmqSetting::UMQ_UB_TP_TYPE = UMQ_TP_TYPE_RTP;
+umq_tp_type_t UmqSetting::UMQ_UB_TP_TYPE = UMQ_TP_TYPE_CTP;
 bool UmqSetting::UMQ_IS_BONDING = false;
 bool UmqSetting::UMQ_FLOW_CONTROL_ENABLE = true;
 bool UmqSetting::UMQ_RANDOM_ROUTE = false;

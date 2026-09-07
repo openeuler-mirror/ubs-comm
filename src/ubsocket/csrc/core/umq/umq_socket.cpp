@@ -222,13 +222,17 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
 {
     std::vector<std::shared_ptr<MainUmqState>> main_umqs;
-    if (UmqEidTable::Instance().Get(*localEid, GetTransMode(), main_umqs)) {
-        if (main_umqs.empty()) {
-            UBS_VLOG_ERR("Main umq list is empty, local eid:" EID_FMT ", ret: %llu\n", EID_ARGS(*localEid),
-                         static_cast<unsigned long long>(UMQ_INVALID_HANDLE));
-            return UMQ_INVALID_HANDLE;
+    /* 优先按协商后的传输模式查找；若未命中，回退到后端在初始化阶段已预创建/预热的全局默认
+     * 模式（UmqSetting::UMQ_UB_TRANS_MODE）主 umq。
+     * 背景：UB 传输模式经 std::min 协商可能从全局默认降级（例如客户端 RM_CTP 而对端仍为
+     * RM_TP 时协商为 RM_TP），而后端预建主 umq 与 transport pool 是按全局默认模式准备的，
+     * 二者键不一致会导致此处查找落空、进而惰性 umq_create(MAIN_UMQ) 失败（ENOENT）。
+     * 主 umq 仅为共享接收队列基础设施、与具体 ub_trans_mode 无关，复用全局模式主 umq 安全。 */
+    ub_trans_mode candidate_modes[] = {GetTransMode(), UmqSetting::UMQ_UB_TRANS_MODE};
+    for (ub_trans_mode mode : candidate_modes) {
+        if (UmqEidTable::Instance().Get(*localEid, mode, main_umqs) && !main_umqs.empty()) {
+            return main_umqs.front()->GetUmqHandle();
         }
-        return main_umqs.front()->GetUmqHandle();
     }
 
     umq_create_option_t cfg_main;

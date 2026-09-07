@@ -205,7 +205,7 @@ private:
 
     // 链接类型相关
     bool is_bonding_ = false;
-    ub_trans_mode trans_mode_ = RM_TP;
+    ub_trans_mode trans_mode_ = RM_CTP;
     umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
     // 版本协商
     uint32_t negotiated_version_ = 0;
@@ -236,7 +236,7 @@ struct CpMsg {
 };
 
 struct NegotiateReq {
-    ub_trans_mode trans_mode = RM_TP;
+    ub_trans_mode trans_mode = RM_CTP;
     uint8_t is_bonding = 0;
     uint8_t enable_share_jfr = 0;
     uint8_t schedule_policy = static_cast<uint8_t>(dev_schedule_policy::ROUND_ROBIN);
@@ -246,7 +246,7 @@ struct NegotiateReq {
 struct NegotiateRsp {
     int32_t ret_code = 0;
     int32_t aff_sock_id = 0;
-    ub_trans_mode peer_trans_mode = RM_TP;
+    ub_trans_mode peer_trans_mode = RM_CTP;
     uint8_t is_bonding = 0;
     uint8_t reserved[2] = {0};
     uint32_t socket_id_count = 0;

@@ -458,11 +458,18 @@ Result UmqAcceptorOps::FillLocalSocketIdsForNegotiate(uint32_t *socket_ids, uint
     return UBS_OK;
 }
 
-void UmqAcceptorOps::BuildNegotiateRsp(NegotiateRsp &rsp)
+Result UmqAcceptorOps::BuildNegotiateRsp(NegotiateRsp &rsp)
 {
     rsp.peer_trans_mode = UmqSetting::UMQ_UB_TRANS_MODE;
     rsp.aff_sock_id = UmqSetting::UMQ_PROCESS_SOCKET_ID;
-    FillLocalSocketIdsForNegotiate(rsp.socket_ids, rsp.socket_id_count);
+    /* socket_ids 仅在 CPU_AFFINITY / CPU_AFFINITY_PRIORITY 调度策略下需要填充。
+     * ROUND_ROBIN 策略不依赖 socket_id 选路，跳过避免在无 NUMA sysfs 时失败。 */
+    if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY ||
+        UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
+        if (FillLocalSocketIdsForNegotiate(rsp.socket_ids, rsp.socket_id_count) != UBS_OK) {
+            return UBS_ERROR;
+        }
+    }
     // 打印
     std::ostringstream msg;
     msg << "send local all socket ids in accept: ";
@@ -473,6 +480,7 @@ void UmqAcceptorOps::BuildNegotiateRsp(NegotiateRsp &rsp)
         msg << rsp.socket_ids[i];
     }
     UBS_VLOG_DEBUG("%s\n", msg.str().c_str());
+    return UBS_OK;
 }
 
 Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
@@ -532,9 +540,14 @@ Result UmqAcceptorOps::AcceptNegotiate(SocketPtr socketPtr)
             UBS_VLOG_ERR("Failed to send negotiate response in accept, fd: %d\n", fd);
             return UBS_ERROR;
         }
+        return UBS_TCP_EXCHANGE;
     }
 
-    BuildNegotiateRsp(rsp);
+    if (BuildNegotiateRsp(rsp) != UBS_OK) {
+        UBS_VLOG_ERR("Failed to build negotiate response in accept, Peer IP:%s, fd: %d\n", conn_info.peer_ip.c_str(),
+                     fd);
+        return UBS_ERROR;
+    }
     // 4. 发送NegotiateRsp body — length-prefixed
     if (SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), CONTROL_PLANE_TIMEOUT_MS) < 0) {
         UBS_VLOG_ERR("Failed to send negotiate response in accept, fd: %d\n", fd);
