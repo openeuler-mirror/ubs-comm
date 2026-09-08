@@ -1,4 +1,6 @@
 # UBS Comm
+ 
+English | [简体中文](./RELEASE-NOTES.md)
 
 ## 1.0.0
 
