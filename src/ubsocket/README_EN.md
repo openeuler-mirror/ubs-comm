@@ -1,5 +1,7 @@
 # UBSocket
 
+English | [简体中文](./README.md)
+
 ## 1 Introduction
 
 The `UBSocket` communication acceleration library intercepts `POSIX Socket API` in TCP applications and converts TCP communication into UB high-performance communication, thereby accelerating communication. With `UBSocket`, traditional TCP applications or TCP communication libraries can quickly enable UB communication with minimal or even no modification to the source code. The communication acceleration capability of `UBSocket` has been verified on [bRPC](https://brpc.apache.org/zh/docs/overview/), achieving a performance improvement of over 40% compared to native TCP. In the future, more scenarios will be explored.

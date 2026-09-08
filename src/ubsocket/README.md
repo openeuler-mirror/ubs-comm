@@ -1,5 +1,8 @@
 ## 🔄Latest News
 
+ 
+简体中文 | [English](./README_EN.md)
+
 * UB Support May 30, 2026
 
 ## 🎉Introduction
@@ -11,13 +14,13 @@ UBSocket is an easy and high performance communication library on top of Unified
 * <b>well integrated</b>: well integrated with bRPC and so on
 
 ## Architecture overview
-![architecture](../../doc/ubsocket/figures/ubsocket_architecture.png)
+![architecture](../../docs/ubsocket/figures/ubsocket_architecture.png)
 
 UBSocket is designed highly extendable to support different hardware, for example: Unified Bus, and RoCE/Posix SHM in the future.
 
 ## 🔥Performance
 
-* [Details](./../../doc/ubsocket/performance/perf.md)
+* [Details](./../../docs/ubsocket/performance/perf.md)
 
 ## 🚀Quickstart
 
@@ -31,12 +34,12 @@ UMQ_BUILD=on UBSOCKET_BUILD=on bash build/build_umq_and_ubsocket.sh
 
 ### 方式二：手动 cmake 编译
 
-编译和运行详见 [UBSocket 使用手册 §构建和运行](./../../doc/ubsocket/UBSOCKET-USER-GUIDE.md#4-构建和运行)。
+编译和运行详见 [UBSocket 使用手册 §构建和运行](./../../docs/ubsocket/UBSOCKET-USER-GUIDE.md#4-构建和运行)。
 
 ## 📑How to use
 
-* [Get Started](./../../doc/ubsocket/UBSOCKET-USER-GUIDE.md)
-* [API Reference](./../../doc/ubsocket/api/api.md)
+* [Get Started](./../../docs/ubsocket/UBSOCKET-USER-GUIDE.md)
+* [API Reference](./../../docs/ubsocket/api/api.md)
 
 ## 📦Pre-request hardware and software
 
