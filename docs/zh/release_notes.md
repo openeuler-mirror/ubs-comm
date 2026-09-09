@@ -77,7 +77,7 @@
 ## 版本配套文档
 
 <table style="undefined;table-layout: fixed; width: 855px"><colgroup>
-<col style="width: 451px">
+<col style="width: 200px">
 <col style="width: 285px">
 <col style="width: 119px">
 </colgroup>
@@ -89,22 +89,27 @@
   </tr></thead>
 <tbody>
   <tr>
-    <td>《[版本说明书](../zh/release_notes.md)》</td>
+    <td><a href="../zh/release_notes.md">版本说明书</a></td>
     <td>本文档提供UBS Comm的版本发布信息。</td>
     <td>开源仓</td>
   </tr>
+    <tr>
+    <td><a href="ubscomm_installation_deployment.md">安装部署</a></td>
+    <td>本文档提供UBS Comm安装部署说明。</td>
+    <td>开源仓</td>
+  </tr>
   <tr>
-    <td>《[用户指南](../zh/user_guide.md)》</td>
+    <td><a href="../zh/ubscomm_user_guide.md">用户指南</a></td>
     <td>本文档提供UBS Comm特性介绍、安装部署及使用指导。</td>
     <td>开源仓</td>
   </tr>
     <tr>
-    <td>《[API参考](../zh/api_reference.md)》</td>
+    <td><a href="../zh/ubscomm_api_reference.md">API参考</a></td>
     <td>本文档提供UBS Comm API接口说明。</td>
     <td>开源仓</td>
   </tr>
       <tr>
-    <td>《[安全技术白皮书](../zh/security_technical_whitepaper.md)》</td>
+    <td><a href="../zh/ubscomm_security_technical_whitepaper.md">安全技术白皮书</a></td>
     <td>本文档提供基于UBS Comm的应用使能方案的安全。</td>
     <td>开源仓</td>
   </tr>

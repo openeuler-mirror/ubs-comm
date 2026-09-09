@@ -53,13 +53,11 @@ UBS Comm主要分为服务层和传输层。其中，服务层（**图 1** [软�
 
 - 认证加密
 
-    UBS Comm提供了加密认证的能力，可以选择AES\_128\_GCM\_SHA256、AES\_256\_GCM\_SHA384、AES\_128\_CCM\_SHA256、TLS\_CHACHA20\_POLY1305\_SHA256四种加密算法进行加密，同时可以选择设置TLS版本，当前默认且仅支持TLS 1.3版本。用户只需要把“enableTls”参数设置为“true”，然后配置“cipherSuite”参数，注册三个TLS相关的回调函数（具体可参见“《BeiMing 26.0.RC1 UBS CommOM API参考》 \> 高级API参考”），提供CA证书、公钥、私钥信息，即可开启加密的流程。
+    UBS Comm提供了加密认证的能力，可以选择AES\_128\_GCM\_SHA256、AES\_256\_GCM\_SHA384、AES\_128\_CCM\_SHA256、TLS\_CHACHA20\_POLY1305\_SHA256四种加密算法进行加密，同时可以选择设置TLS版本，当前默认且仅支持TLS 1.3版本。用户只需要把“enableTls”参数设置为“true”，然后配置“cipherSuite”参数，注册三个TLS相关的回调函数，详情请参见[API参考](../zh/ubscomm_api_reference.md)，提供CA证书、公钥、私钥信息，即可开启加密的流程。
 
-    >[!NOTICE]说明
-    > 
-    >- 传输口令，密钥，银行账号等敏感数据、敏感个人数据和批量个人数据时，建议开启TLS能力。
-    >- 当用户使用UBS Comm时，应该自己做好三面隔离，如果将UBS Comm使用在登录认证场景时，用户需要自己做好管理接口提供接入认证机制。
-    >- 当用户使用TLS加密能力时，建议用户做好证书安全管理，参见[证书安全管理](#section1911412125313)。
+    - 传输口令，密钥，银行账号等敏感数据、敏感个人数据和批量个人数据时，建议开启TLS能力。
+    - 当用户使用UBS Comm时，应该自己做好三面隔离，如果将UBS Comm使用在登录认证场景时，用户需要自己做好管理接口提供接入认证机制。
+    - 当用户使用TLS加密能力时，建议用户做好证书安全管理，参见[证书安全管理](#section1911412125313)。
 
 - RDMA协议加速特性Device Memory
 
@@ -152,10 +150,8 @@ UBS Comm组网可由2台服务器组成，其中：
 
 3. 根据《OpenPGP签名验证指南》进行软件安装包完整性检查。
 
-    >[!NOTICE]说明
-    >
-    >- 如果校验失败，请不要使用该软件包，先联系华为技术支持工程师解决。
-    >- 使用软件包安装或升级之前，也需要按上述过程先验证软件包的数字签名，确保软件包未被篡改。
+    - 如果校验失败，请不要使用该软件包，先联系华为技术支持工程师解决。
+    - 使用软件包安装或升级之前，也需要按上述过程先验证软件包的数字签名，确保软件包未被篡改。
 
 **UBS Comm软件版本可查询<a name="section589224416153"></a>**
 
@@ -174,8 +170,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
 
 ### 安装MLNX\_OFED驱动<a name="ZH-CN_TOPIC_0000002566158050"></a>
 
->[!NOTICE]说明
->使用RDMA通信协议时，请在UBS Comm所有通信节点执行本章节操作。未使用RDMA通信协议，则可跳过本章节。
+使用RDMA通信协议时，请在UBS Comm所有通信节点执行本章节操作。未使用RDMA通信协议，则可跳过本章节。
 
 **安装步骤<a name="section925845918215"></a>**
 
@@ -219,8 +214,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     mount openEuler-20.03-LTS-aarch64-dvd.iso /mnt/iso
     ```
 
-    >[!NOTICE]说明 
-    >操作系统镜像名称请根据实际情况进行修改。
+    操作系统镜像名称请根据实际情况进行修改。
 
 5. 配置操作系统镜像源，此处以配置本地镜像源为例，配置前请做好镜像源配置文件备份。
     1. 执行以下命令打开镜像源配置文件。
@@ -271,10 +265,8 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
         ./mlnxofedinstall  --without-fw-update
         ```
 
-    >[!NOTICE]说明 
-    >
-    >- 安装程序将删除所有之前安装的OFED驱动，并重新安装，系统会提示您确认删除旧包。
-    >- **./mlnxofedinstall -h**可查询参数配置，请根据实际情况选择参数。
+        - 安装程序将删除所有之前安装的OFED驱动，并重新安装，系统会提示您确认删除旧包。
+        - ./mlnxofedinstall -h可查询参数配置，请根据实际情况选择参数。
 
 9. 安装完成后，执行以下命令重启服务器。
 
@@ -331,8 +323,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     2          1000             10.60              10.11              5.298300
     ```
 
-    >[!NOTICE]说明
-    >当对RDMA通信协议有性能调优需求时，请参见[Performance Tuning for Mellanox Adapters](https://enterprise-support.nvidia.com/s/article/performance-tuning-for-mellanox-adapters)。
+    当对RDMA通信协议有性能调优需求时，请参见[Performance Tuning for Mellanox Adapters](https://enterprise-support.nvidia.com/s/article/performance-tuning-for-mellanox-adapters)。
 
 **卸载<a name="section15780193142318"></a>**
 
@@ -347,8 +338,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
 
 RDMA无损配置可以提高网络传输的性能和效率，确保数据传输的可靠性和一致性，同时减少CPU的负担。
 
->[!NOTICE]说明
->未使用RDMA通信协议时，以下操作步骤可以不执行；否则需要在使用UBS Comm的所有通信节点上执行。
+未使用RDMA通信协议时，以下操作步骤可以不执行；否则需要在使用UBS Comm的所有通信节点上执行。
 
 1. <a name="li1919910204286"></a>登录服务器，执行以下命令查询CX5网卡设备net\_card信息，以CX5网卡为例。
 
@@ -364,8 +354,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     ifconfig ${net_card} mtu 4500
     ```
 
-    >[!NOTICE]说明
-    >服务器每次重启后都需要重新执行当前步骤进行配置。
+    服务器每次重启后都需要重新执行当前步骤进行配置。
 
 3. 执行以下命令配置网卡的CNP中的DSCP字段。
 
@@ -462,8 +451,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     NetService *service = NetService::Instance(NetDriverProtocol::RDMA, "server1", true);
     ```
 
-    >[!NOTICE]说明 
-    >此处创建了一个使用RDMA协议的名为server1的服务端Driver，true代表启动监听线程，可以接收其他Driver对象的建链请求。
+    此处创建了一个使用RDMA协议的名为server1的服务端Driver，true代表启动监听线程，可以接收其他Driver对象的建链请求。
 
 2. 设置NetServiceOptions选项，使用service对象注册回调函数，并用service的SetOobIpAndPort方法设置需要侦听的IP地址和端口。
 
@@ -479,11 +467,9 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     service->SetOobIpAndPort(oobIp, oobPort);
     ```
 
-    >[!NOTICE]说明 
-    >
-    >- NetServiceOptions的参数，详情请参见《BeiMing 26.0.RC1 UBS Comm API参考》的“NetService::Start”章节。
-    >- 注册回调函数，详情请参见《BeiMing 26.0.RC1 UBS Comm API参考》的“NetServiceContext::ReplySendRawSgl”章节。
-    >- SetOobIpAndPort用来设置需要侦听的IP地址和端口。
+    - NetServiceOptions的参数，详情请参见[API参考](../zh/ubscomm_api_reference.md)的“NetService::Start”章节。
+    - 注册回调函数，详情请参见[API参考](../zh/ubscomm_api_reference.md)的“NetServiceContext::ReplySendRawSgl”章节。
+    - SetOobIpAndPort用来设置需要侦听的IP地址和端口。
 
 3. 使用设置好的NetServiceOptions选项作为参数来调用service的Start方法，完成服务端的启动。
 
@@ -528,12 +514,39 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     service->Connect(oobIp, oobPort, "hello service", channel, options);
     ```
 
-    >[!NOTICE]说明 
-    >- oobIp：需要建链的IP地址。
-    >- oobPort：需要建链的Port。
-    >- "hello service"：需要发送给对端的消息，对端在NewChannel回调函数的第三个参数中获得。
-    >- channel：Connect函数的返回值，即为得到的链路的本端，对端的NetChannel在NewChannel回调函数的第二个参数中获得。
-    >- options：设置这条链路的选项。详情请参见《BeiMing 26.0.RC1 UBS Comm API参考》的“connect”章节。
+    参数说明如下所示。
+    <table style="undefined;table-layout: fixed; width: 789px"><colgroup>
+    <col style="width: 274px">
+    <col style="width: 515px">
+    </colgroup>
+    <thead>
+    <tr>
+        <th>参数</th>
+        <th>说明</th>
+    </tr></thead>
+    <tbody>
+    <tr>
+        <td>oobIp</td>
+        <td>需要建链的IP地址。</td>
+    </tr>
+    <tr>
+        <td>oobPort</td>
+        <td>需要建链的Port。</td>
+    </tr>
+    <tr>
+        <td>"hello service"</td>
+        <td>需要发送给对端的消息，对端在NewChannel回调函数的第三个参数中获得。</td>
+    </tr>
+    <tr>
+        <td>channel</td>
+        <td>Connect函数的返回值，即为得到的链路的本端，对端的NetChannel在NewChannel回调函数的第二个参数中获得。</td>
+    </tr>
+    <tr>
+        <td>options</td>
+        <td>设置这条链路的选项。详情请参见<a href="../zh/ubscomm_api_reference.md">API参考</a>的“connect”章节。</td>
+    </tr>
+    </tbody>
+    </table>
 
 2. 连接成功后，服务端与客户端都会获得一个NetChannel对象，服务端与客户端都可以使用该对象来调用各种消息发送接口向对端发送消息。
 
@@ -543,7 +556,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     channel->Send(opInfo, message, nullptr);
     ```
 
-    详情请参见《BeiMing 26.0.RC1 UBS Comm API参考》的“send”章节。
+    详情请参见[API参考](../zh/ubscomm_api_reference.md)的“send”章节。
 
 #### 服务层编程<a name="ZH-CN_TOPIC_0000002566158004"></a>
 
@@ -1223,9 +1236,8 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     ```cmd
     NetDriver *driver = NetDriver::Instance(NetDriverProtocol::RDMA, "server1", true);
     ```
-
-    >[!NOTICE]说明  
-    >此处创建了一个使用RDMA协议的名为server1的服务端Driver。true代表启动监听线程，可以接收其他Driver对象的建链请求。
+ 
+    此处创建了一个使用RDMA协议的名为server1的服务端Driver。true代表启动监听线程，可以接收其他Driver对象的建链请求。
 
 2. 设置NetDriverOptions选项，使用Driver对象注册回调函数，并用Driver的OobIpAndPort方法设置需要侦听的IP地址和端口。
 
@@ -1241,11 +1253,9 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     driver->OobIpAndPort(oobIp, oobPort);
     ```
 
-    >[!NOTICE]说明 
-    >
-    >- NetDriverOptions的参数，详情请参见《BeiMing 26.0.RC1 UBS Comm API参考》的“NetDriver::Initialize”章节。
-    >- 注册回调函数，详情请参见《BeiMing 26.0.RC1 UBS Comm API参考》的“NetDriver::RegisterTLSCaCallback”章节和“TLSEraseKeypass函数类型”章节。
-    >- OobIpAndPort用来设置需要侦听的IP地址和端口。
+    - NetDriverOptions的参数，详情请参见[API参考](../zh/ubscomm_api_reference.md)的“NetDriver::Initialize”章节。
+    - 注册回调函数，详情请参见[API参考](../zh/ubscomm_api_reference.md)的“NetDriver::RegisterTLSCaCallback”章节和“TLSEraseKeypass函数类型”章节。
+    - OobIpAndPort用来设置需要侦听的IP地址和端口。
 
 3. 使用设置好的NetDriverOptions选项作为参数来调用Driver的Initialize方法，然后调用Driver的Start方法，完成服务端的启动。
 
@@ -1262,8 +1272,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     NetDriver *driver = NetDriver::Instance(NetDriverProtocol::RDMA, "client1", false);
     ```
 
-    >[!NOTICE]说明 
-    >第三个参数可以为false，因为客户端通常不需要被建链，无需启动监听线程。
+    第三个参数可以为false，因为客户端通常不需要被建链，无需启动监听线程。
 
 2. 设置NetDriverOptions选项，使用Driver对象注册回调函数，并用Driver的OobIpAndPort方法设置需要建立连接的IP地址和端口。若不启动监听线程，则RegisterNewEPHandler可以不注册，但其它四个回调函数依旧需要注册。
 
@@ -1308,7 +1317,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     ep->PostSend(1, req);
     ```
 
-    此处仅以PostSend为例，更多消息发送接口，请参见《BeiMing 26.0.RC1 UBS Comm API参考》的“NetEndpoint::PostSend”章节、“NetEndpoint::WaitCompletion”章节“NetEndpoint::PostSendRaw”章节和“NetEndpoint::ReceiveRawSgl”章节。
+    此处仅以PostSend为例，更多消息发送接口，请参见[API参考](../zh/ubscomm_api_reference.md)的“NetEndpoint::PostSend”章节、“NetEndpoint::WaitCompletion”章节“NetEndpoint::PostSendRaw”章节和“NetEndpoint::ReceiveRawSgl”章节。
 
     - 1：用户指定的opCode，取值范围0 \~ 1023。
     - req：需要发送内容的结构体，结构体中的data为发送消息体。
@@ -3102,7 +3111,7 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
 
 **推荐环境变量配置<a name="section11865714109"></a>**
 
-环境变量配置，请参见《BeiMing 26.0.RC1 UBS Comm API参考》的“环境变量参考”章节。
+环境变量配置，请参见[API参考](../zh/ubscomm_api_reference.md)的“环境变量参考”章节。
 
 **防病毒软件例行检查<a name="section15343147131013"></a>**
 
@@ -3183,13 +3192,11 @@ RDMA无损配置可以提高网络传输的性能和效率，确保数据传输�
     cat /proc/sys/kernel/random/entropy_avail
     ```
 
-    >[!NOTICE]说明 
-    >正常情况下，未启动Haveged，熵值为100以上，启动Haveged之后会增大到1000以上甚至2000。
+   正常情况下，未启动Haveged，熵值为100以上，启动Haveged之后会增大到1000以上甚至2000。
 
 6. 停止Haveged。
 
-    >[!NOTICE]说明 
-    >使用完UBC建链与监听建链功能后可选该步骤，在使用UBC建链与监听建链功能过程中，请保证Haveged服务一直开启。
+    使用完UBC建链与监听建链功能后可选该步骤，在使用UBC建链与监听建链功能过程中，请保证Haveged服务一直开启。
 
     ```cmd
     service haveged stop
@@ -3206,8 +3213,7 @@ gcc -o <输出文件名称> <被链接的文件> -L<动态库路径> -lhcom -lst
 gcc -o <输出文件名称> <被链接的文件> -L<静态库路径> -lhcom_static -lm -lstdc++ -I<HCOM头文件目录>
 ```
 
->[!NOTICE]说明  
->静态库在编译期就已经被链接到可执行文件中，无需像动态库一样在运行期加载，故执行效率更高。但静态库会增加可执行文件大小，多个程序同时使用同一静态库时，会造成存储资源浪费。另外库文件更新时，使用动态库场景可以仅更新动态库文件，使用静态库场景必须重新编译应用程序。
+静态库在编译期就已经被链接到可执行文件中，无需像动态库一样在运行期加载，故执行效率更高。但静态库会增加可执行文件大小，多个程序同时使用同一静态库时，会造成存储资源浪费。另外库文件更新时，使用动态库场景可以仅更新动态库文件，使用静态库场景必须重新编译应用程序。
 
 ## 公网地址声明<a name="ZH-CN_TOPIC_0000002565998376"></a>
 
