@@ -66,8 +66,7 @@ static ock::ubs::Result MockRecvRspOk(int, void *body, uint32_t, uint32_t)
 {
     UrmaNegotiateRsp *rsp = static_cast<UrmaNegotiateRsp *>(body);
     rsp->ret_code = 0;
-    rsp->tp_type = TPT_CTP;
-    rsp->tp_mode = TPM_RC;
+    rsp->trans_mode = RM_CTP;
     rsp->send_buf_kb = 16;
     rsp->recv_buf_kb = 16;
     return UBS_OK;

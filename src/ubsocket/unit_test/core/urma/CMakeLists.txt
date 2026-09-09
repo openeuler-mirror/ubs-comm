@@ -22,6 +22,22 @@ target_sources(urma_errno_converter_test PRIVATE
         urma_errno_converter_test.cpp
 )
 
+add_urma_test(urma_readable_event_queue_test)
+target_include_directories(urma_readable_event_queue_test PRIVATE
+        ${UBSOCKET_BASE_DIR}/csrc
+        ${UBSOCKET_BASE_DIR}/csrc/core
+        ${UBSOCKET_BASE_DIR}/csrc/common
+        ${UBSOCKET_BASE_DIR}/csrc/under_api
+        ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
+        ${UBSOCKET_BASE_DIR}/include
+)
+target_link_libraries(urma_readable_event_queue_test PRIVATE
+        ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
+)
+target_sources(urma_readable_event_queue_test PRIVATE
+        urma_readable_event_queue_test.cpp
+)
+
 add_urma_test(urma_socket_test)
 target_include_directories(urma_socket_test PRIVATE
         ${UBSOCKET_BASE_DIR}/csrc
@@ -140,39 +156,42 @@ target_sources(urma_event_epoll_test PRIVATE
         urma_event_epoll_test.cpp
 )
 
-add_urma_test(urma_context_pool_test)
-target_include_directories(urma_context_pool_test PRIVATE
-        ${UBSOCKET_BASE_DIR}/csrc
-        ${UBSOCKET_BASE_DIR}/csrc/core
-        ${UBSOCKET_BASE_DIR}/csrc/common
-        ${UBSOCKET_BASE_DIR}/csrc/iobuf
-        ${UBSOCKET_BASE_DIR}/csrc/under_api
-        ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
-        ${UBSOCKET_BASE_DIR}/include
-)
-target_link_libraries(urma_context_pool_test PRIVATE
-        ubsocket_static GTest::gtest_main pthread
-)
-target_sources(urma_context_pool_test PRIVATE
-        urma_context_pool_test.cpp
-)
-
-add_urma_test(urma_poller_agg_test)
-target_include_directories(urma_poller_agg_test PRIVATE
-        ${UBSOCKET_BASE_DIR}/csrc
-        ${UBSOCKET_BASE_DIR}/csrc/core
-        ${UBSOCKET_BASE_DIR}/csrc/common
-        ${UBSOCKET_BASE_DIR}/csrc/iobuf
-        ${UBSOCKET_BASE_DIR}/csrc/under_api
-        ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
-        ${UBSOCKET_BASE_DIR}/include
-)
-target_link_libraries(urma_poller_agg_test PRIVATE
-        ubsocket_static GTest::gtest_main pthread
-)
-target_sources(urma_poller_agg_test PRIVATE
-        urma_poller_agg.cpp
-)
+# NOTE: urma_context_pool_test / urma_poller_agg_test 为硬件冒烟测试 —— 无 driver mock, 依赖真实 URMA
+# 设备枚举/context 创建(poller_agg 用例还以 getchar() 阻塞等待), 在无驱动 CI/UT 环境必然空指针
+# SegFault, 不满足 UT 单用例<=1s/禁止阻塞约束。故默认不纳入自动化 UT; 有驱动环境可临时放开。
+# add_urma_test(urma_context_pool_test)
+# target_include_directories(urma_context_pool_test PRIVATE
+#         ${UBSOCKET_BASE_DIR}/csrc
+#         ${UBSOCKET_BASE_DIR}/csrc/core
+#         ${UBSOCKET_BASE_DIR}/csrc/common
+#         ${UBSOCKET_BASE_DIR}/csrc/iobuf
+#         ${UBSOCKET_BASE_DIR}/csrc/under_api
+#         ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
+#         ${UBSOCKET_BASE_DIR}/include
+# )
+# target_link_libraries(urma_context_pool_test PRIVATE
+#         ubsocket_static GTest::gtest_main pthread
+# )
+# target_sources(urma_context_pool_test PRIVATE
+#         urma_context_pool_test.cpp
+# )
+#
+# add_urma_test(urma_poller_agg_test)
+# target_include_directories(urma_poller_agg_test PRIVATE
+#         ${UBSOCKET_BASE_DIR}/csrc
+#         ${UBSOCKET_BASE_DIR}/csrc/core
+#         ${UBSOCKET_BASE_DIR}/csrc/common
+#         ${UBSOCKET_BASE_DIR}/csrc/iobuf
+#         ${UBSOCKET_BASE_DIR}/csrc/under_api
+#         ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
+#         ${UBSOCKET_BASE_DIR}/include
+# )
+# target_link_libraries(urma_poller_agg_test PRIVATE
+#         ubsocket_static GTest::gtest_main pthread
+# )
+# target_sources(urma_poller_agg_test PRIVATE
+#         urma_poller_agg.cpp
+# )
 
 add_urma_test(urma_socket_buf_test)
 target_include_directories(urma_socket_buf_test PRIVATE

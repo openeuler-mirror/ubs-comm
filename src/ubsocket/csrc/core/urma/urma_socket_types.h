@@ -20,7 +20,7 @@ namespace ubs {
 namespace urma {
 
 constexpr uint32_t URMA_CONTROL_PLANE_MAGIC = 0x55424C49;                /* "UBLI" */
-constexpr uint32_t URMA_SND_BUFF_ALLOC_UNIT = 1024;                       /* 128B: inline WRITE_IN_BAND allocate unit */
+constexpr uint32_t URMA_SND_BUFF_ALLOC_UNIT = 1024;                      /* 128B: inline WRITE_IN_BAND allocate unit */
 constexpr uint32_t URMA_INLINE_THRESHOLD = 2 * URMA_SND_BUFF_ALLOC_UNIT; /* 256B: with head size */
 constexpr uint32_t URMA_SEND_BUF_DEFAULT_KB = 128;
 constexpr uint32_t URMA_RECV_BUF_DEFAULT_KB = 128;
@@ -221,6 +221,82 @@ struct UrmaDataMeta {
  * @param cr               [in] completion array ptr
  */
 using UrmaCqeHandler = std::function<Result(uint32_t flags, int cr_count, urma_cr_t *cr)>;
+
+/**
+ * @brief Event types dispatched from the poller thread to the consumer thread in the
+ *        epoll_wait-driven dispatcher mode (see EpollHandleMode).
+ *
+ * Names follow the UrmaRxOps processor method each event is forwarded to. Payload layout is
+ * defined by EpollDispatchCommandUnion and carried through the MPSC dispatch queue
+ * (MPSCRingQueue<uint64_t>).
+ */
+enum class EpollDispatchCommandType : uint16_t {
+    DATA_REACHED,       /**< WRITE_IMM arrived (imm_data); forwarded to UrmaRxOps::ProcessDataReached */
+    DATA_READ_FINISHED, /**< RDMA READ completed (seq_no); forwarded to UrmaRxOps::ProcessDataReadFinished */
+};
+
+/**
+ * @brief 64-bit dispatch payload shared between the poller thread and the consumer thread.
+ *
+ * Layout: [payload(4B) | reserved(2B) | type(2B)]. Produced by MakeDataReached /
+ * MakeDataReadFinished, carried as a uint64_t through the MPSC queue, and decoded by the consumer
+ * thread through Type()/ImmData()/SeqNo().
+ *
+ * Producer and consumer always run inside the same binary, so the in-memory layout stays
+ * consistent regardless of the CPU byte order of the uint64_t representation.
+ */
+union EpollDispatchCommandUnion {
+    struct EpollDispatchCommand {
+        union Event {
+            uint32_t imm_data; /**< DATA_REACHED: imm data (low 20 bits: opcode + buffer_offset) */
+            uint32_t seq_no;   /**< DATA_READ_FINISHED: message sequence number */
+        } event;
+
+        uint16_t reserved;
+        EpollDispatchCommandType type;
+    } command;
+    uint64_t value; /**< raw uint64_t payload passed through the dispatch queue */
+
+    explicit EpollDispatchCommandUnion(uint64_t val = 0) noexcept : value(val) {}
+
+    static EpollDispatchCommandUnion MakeDataReached(uint32_t write_imm) noexcept
+    {
+        EpollDispatchCommandUnion cmd;
+        cmd.command.type = EpollDispatchCommandType::DATA_REACHED;
+        cmd.command.reserved = 0;
+        cmd.command.event.imm_data = write_imm;
+        return cmd;
+    }
+
+    static EpollDispatchCommandUnion MakeDataReadFinished(uint32_t seq_no) noexcept
+    {
+        EpollDispatchCommandUnion cmd;
+        cmd.command.type = EpollDispatchCommandType::DATA_READ_FINISHED;
+        cmd.command.reserved = 0;
+        cmd.command.event.seq_no = seq_no;
+        return cmd;
+    }
+
+    EpollDispatchCommandType Type() const noexcept
+    {
+        return command.type;
+    }
+
+    /* Valid when Type() == DATA_REACHED. */
+    uint32_t ImmData() const noexcept
+    {
+        return command.event.imm_data;
+    }
+
+    /* Valid when Type() == DATA_READ_FINISHED. */
+    uint32_t SeqNo() const noexcept
+    {
+        return command.event.seq_no;
+    }
+};
+
+static_assert(sizeof(EpollDispatchCommandUnion) == sizeof(uint64_t),
+              "EpollDispatchCommandUnion must stay a single 8-byte payload for the MPSC queue");
 } // namespace urma
 } // namespace ubs
 } // namespace ock

@@ -17,12 +17,12 @@
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_lock.h"
 #include "core/ubsocket_socket.h"
+#include "core/urma/urma_backend.h"
 #include "core/urma/urma_data_tx_ops.h"
+#include "core/urma/urma_io_buf_pool.h"
+#include "core/urma/urma_setting.h"
 #include "core/urma/urma_socket.h"
 #include "core/urma/urma_socket_types.h"
-#include "core/urma/urma_setting.h"
-#include "core/urma/urma_backend.h"
-#include "core/urma/urma_io_buf_pool.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "under_api/urma/dl_urma_api.h"
 
@@ -54,8 +54,8 @@ static int g_next_io_block = 0;
 static char *AllocIoBlock()
 {
     int idx = g_next_io_block++;
-    auto *block = new (g_io_mem + idx * BLOCK_SIZE) Block(
-        reinterpret_cast<char *>(g_io_mem + idx * BLOCK_SIZE + sizeof(Block)), BLOCK_SIZE - sizeof(Block));
+    auto *block = new (g_io_mem + idx * BLOCK_SIZE)
+        Block(reinterpret_cast<char *>(g_io_mem + idx * BLOCK_SIZE + sizeof(Block)), BLOCK_SIZE - sizeof(Block));
     block->nshared.store(100, std::memory_order_relaxed);
     return block->data;
 }
@@ -190,18 +190,20 @@ TEST_F(UrmaTxOpsTest, WriteV_LargeIo_Success)
     UrmaTxOps tx(TEST_FD);
     auto sock = MakeTestSocket();
 
+    /* 数据量需超过内联阈值(URMA_INLINE_DATA_THRESHOLD≈2000B)才走 PRE_WRITE 大 IO 路径 */
+    const size_t data_len = 4096;
     char *data = AllocIoBlock();
-    memset(data, 'X', 256);
+    memset(data, 'X', data_len);
     struct iovec iov;
     iov.iov_base = data;
-    iov.iov_len = 256;
+    iov.iov_len = data_len;
 
     auto *block = reinterpret_cast<Block *>(reinterpret_cast<uintptr_t>(data) - sizeof(Block));
     int nshared_before = block->nshared.load();
 
     uint32_t flags = UBS_IO_FLAG_USE_BRPC_BLOCK;
     auto ret = tx.WriteV(sock, &iov, 1, flags);
-    EXPECT_EQ(256, ret);
+    EXPECT_EQ(static_cast<ssize_t>(data_len), ret);
 
     EXPECT_EQ(nshared_before + 1, block->nshared.load());
 
@@ -209,7 +211,7 @@ TEST_F(UrmaTxOpsTest, WriteV_LargeIo_Success)
     EXPECT_EQ(1u, ctrl->head.data_count);
     auto *body = reinterpret_cast<PageBufferInMessage *>(ctrl + 1);
     EXPECT_EQ(reinterpret_cast<uint64_t>(data), body[0].addr);
-    EXPECT_EQ(256u, body[0].size);
+    EXPECT_EQ(data_len, body[0].size);
     EXPECT_EQ(0u, body[0].flags);
 }
 
@@ -218,30 +220,32 @@ TEST_F(UrmaTxOpsTest, WriteV_LargeIo_MultiBlock_Success)
     UrmaTxOps tx(TEST_FD);
     auto sock = MakeTestSocket();
 
+    const size_t len1 = 1500;
+    const size_t len2 = 1500;
     char *data1 = AllocIoBlock();
     char *data2 = AllocIoBlock();
-    memset(data1, 'A', 500);
-    memset(data2, 'B', 300);
+    memset(data1, 'A', len1);
+    memset(data2, 'B', len2);
     struct iovec iov[2];
     iov[0].iov_base = data1;
-    iov[0].iov_len = 500;
+    iov[0].iov_len = len1;
     iov[1].iov_base = data2;
-    iov[1].iov_len = 300;
+    iov[1].iov_len = len2;
 
     auto *block1 = reinterpret_cast<Block *>(reinterpret_cast<uintptr_t>(data1) - sizeof(Block));
     auto *block2 = reinterpret_cast<Block *>(reinterpret_cast<uintptr_t>(data2) - sizeof(Block));
 
     uint32_t flags = UBS_IO_FLAG_USE_BRPC_BLOCK;
     auto ret = tx.WriteV(sock, iov, 2, flags);
-    EXPECT_EQ(800, ret);
+    EXPECT_EQ(static_cast<ssize_t>(len1 + len2), ret);
 
     auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf);
     EXPECT_EQ(2u, ctrl->head.data_count);
     auto *body = reinterpret_cast<PageBufferInMessage *>(ctrl + 1);
     EXPECT_EQ(reinterpret_cast<uint64_t>(data1), body[0].addr);
-    EXPECT_EQ(500u, body[0].size);
+    EXPECT_EQ(len1, body[0].size);
     EXPECT_EQ(reinterpret_cast<uint64_t>(data2), body[1].addr);
-    EXPECT_EQ(300u, body[1].size);
+    EXPECT_EQ(len2, body[1].size);
 }
 
 TEST_F(UrmaTxOpsTest, WriteV_LargeIo_PostWriteImmFail_ReturnsEagain)
@@ -251,10 +255,10 @@ TEST_F(UrmaTxOpsTest, WriteV_LargeIo_PostWriteImmFail_ReturnsEagain)
     UrmaApi::urma_post_jetty_send_wr_ptr = MockPostSendWrFail;
 
     char *data = AllocIoBlock();
-    memset(data, 'X', 256);
+    memset(data, 'X', 4096);
     struct iovec iov;
     iov.iov_base = data;
-    iov.iov_len = 256;
+    iov.iov_len = 4096;
 
     errno = 0;
     uint32_t flags = UBS_IO_FLAG_USE_BRPC_BLOCK;
@@ -273,10 +277,10 @@ TEST_F(UrmaTxOpsTest, WriteV_LargeIo_AllocFail_ReturnsEagain)
     urma_sock->send_buf_->Allocate(SEND_BUF_SIZE - 64UL, pre_offset);
 
     char *data = AllocIoBlock();
-    memset(data, 'X', 256);
+    memset(data, 'X', 4096);
     struct iovec iov;
     iov.iov_base = data;
-    iov.iov_len = 256;
+    iov.iov_len = 4096;
 
     errno = 0;
     uint32_t flags = UBS_IO_FLAG_USE_BRPC_BLOCK;

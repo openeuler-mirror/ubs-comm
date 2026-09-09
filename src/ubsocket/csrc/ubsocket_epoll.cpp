@@ -27,12 +27,14 @@ UBS_API int UB_API_WRAP(epoll_create)(int size)
         return epollFd;
     }
 
-    EventPoll *eventPoll = new (std::nothrow) urma::UrmaEventPoll(epollFd);
-    if (UNLIKELY(eventPoll == nullptr)) {
+    auto urma_poll = new (std::nothrow) urma::UrmaEventPoll(epollFd);
+    if (UNLIKELY(urma_poll == nullptr || urma_poll->Init() != UBS_OK)) {
         UBS_VLOG_ERR("create async event poll failed, epoll fd: %d\n", epollFd);
+        delete urma_poll;
         LibcApi::close(epollFd);
         return -1;
     }
+    EventPoll *eventPoll = urma_poll;
 
     ArraySet<EventPoll>::GetInstance().OverrideItem(epollFd, eventPoll);
     return epollFd;

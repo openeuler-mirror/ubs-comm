@@ -103,6 +103,41 @@ enum class SplitTraceLevel : uint8_t {
     LEVEL_ALL = LEVEL_UBSOCKET | LEVEL_UMQ
 };
 
+/**
+ * @brief Describes how epoll events are handled for multiple concurrent connections
+ *        in ubsocket: which thread (or thread group) executes the read/write
+ *        operations once epoll_wait returns ready events.
+ */
+enum EpollHandleMode : uint8_t {
+    EPOLL_HANDLE_MODE_MIN = 0,
+
+    /**
+     * @brief Thread-per-connection mode.
+     *
+     * Each connection owns a dedicated thread that blocks in epoll_wait;
+     * when an event arrives, read/write is executed on that same thread.
+     *
+     * Pros: lock-free, no cross-thread switching, low read/write latency.
+     * Cons: thread overhead grows with the number of connections.
+     */
+    THREAD_PER_CONNECTION = EPOLL_HANDLE_MODE_MIN,
+
+    /**
+     * @brief Dispatcher + external IO thread pool mode ("DISPATCHER_THREAD_POOL" is a
+     *        historical name: ubsocket itself spawns NO worker pool).
+     *
+     * A single dispatcher (epoll_wait) thread polls the JFC inline and turns ready urma sockets
+     * into readable events; the actual read/write is executed on an EXTERNAL IO thread pool of
+     * the application (e.g. brpc IO threads calling readv/writev).
+     *
+     * Pros: thread count is bounded by the external pool, scales to a large number of connections.
+     * Cons: cross-thread dispatch overhead and lock contention.
+     */
+    DISPATCHER_THREAD_POOL,
+
+    EPOLL_HANDLE_MODE_COUNT
+};
+
 // 重载按位与运算符，支持 enum class 直接参与位运算
 inline SplitTraceLevel operator&(SplitTraceLevel lhs, SplitTraceLevel rhs)
 {

@@ -105,7 +105,8 @@ static RemoteSegmentsPtr MockGetRemoteSegments(const IdentifyNode &)
     return g_fake_remote;
 }
 
-using StoreRemoteSeg3Arg = ock::ubs::Result (UrmaIoBufferPool::*)(RemoteSegmentsPtr &, urma_seg_t &, urma_target_seg_t *&);
+using StoreRemoteSeg3Arg = ock::ubs::Result (UrmaIoBufferPool::*)(RemoteSegmentsPtr &, urma_seg_t &,
+                                                                  urma_target_seg_t *&);
 
 static int g_sendCall = 0;
 static int g_recvCall = 0;
@@ -224,7 +225,7 @@ TEST_F(ExchangeSocketResourcesTest, CreateUrmaResources_Fails_ReturnsError)
 {
     MOCKER_CPP(&UrmaSocket::CreateUrmaResources).stubs().will(returnValue(static_cast<int32_t>(UBS_ERROR)));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get());
+    ock::ubs::Result ret = sock_->ExchangeSocketResources();
     EXPECT_EQ(UBS_ERROR, ret);
     GlobalMockObject::verify();
 }
@@ -237,7 +238,7 @@ TEST_F(ExchangeSocketResourcesTest, PoolStartAddrZero_ReturnsTcpExchange)
     MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(returnValue(&g_fake_urg_seg));
     MOCKER_CPP(&UrmaJetty::ImportRemoteJetty).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get());
+    ock::ubs::Result ret = sock_->ExchangeSocketResources();
     EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
     GlobalMockObject::verify();
 }
@@ -250,7 +251,7 @@ TEST_F(ExchangeSocketResourcesTest, LocalSegNull_ReturnsTcpExchange)
         .will(returnValue(static_cast<urma_target_seg_t *>(nullptr)));
     MOCKER_CPP(&UrmaJetty::ImportRemoteJetty).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get());
+    ock::ubs::Result ret = sock_->ExchangeSocketResources();
     EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
     GlobalMockObject::verify();
 }
@@ -262,7 +263,7 @@ TEST_F(ExchangeSocketResourcesTest, SendFirst_SendSocketDataFails_ReturnsTcpExch
     MOCKER_CPP(&UrmaJetty::ImportRemoteJetty).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendFail));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get(), true);
+    ock::ubs::Result ret = sock_->ExchangeSocketResources(true);
     EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
     GlobalMockObject::verify();
 }
@@ -275,7 +276,7 @@ TEST_F(ExchangeSocketResourcesTest, SendFirst_RecvSocketDataFails_ReturnsTcpExch
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendSuccess));
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvFail));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get(), true);
+    ock::ubs::Result ret = sock_->ExchangeSocketResources(true);
     EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
     GlobalMockObject::verify();
 }
@@ -288,7 +289,7 @@ TEST_F(ExchangeSocketResourcesTest, SendFirst_ImportRemoteJettyFails_ReturnsErro
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendSuccess));
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvSuccess));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get(), true);
+    ock::ubs::Result ret = sock_->ExchangeSocketResources(true);
     EXPECT_EQ(UBS_ERROR, ret);
     GlobalMockObject::verify();
 }
@@ -299,11 +300,13 @@ TEST_F(ExchangeSocketResourcesTest, SendFirst_StoreRemoteTargetSegFails_ReturnsE
     MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(returnValue(&g_fake_urg_seg));
     MOCKER_CPP(&UrmaJetty::ImportRemoteJetty).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&UrmaIoBufferPool::get_remote_segments).stubs().will(invoke(MockGetRemoteSegments));
-    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg))).stubs().will(returnValue(static_cast<int32_t>(UBS_ERROR)));
+    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg)))
+        .stubs()
+        .will(returnValue(static_cast<int32_t>(UBS_ERROR)));
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendSuccess));
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvSuccess));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get(), true);
+    ock::ubs::Result ret = sock_->ExchangeSocketResources(true);
     EXPECT_EQ(UBS_ERROR, ret);
     GlobalMockObject::verify();
 }
@@ -314,13 +317,15 @@ TEST_F(ExchangeSocketResourcesTest, SendFirst_AckSendFails_ReturnsTcpExchange)
     MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(returnValue(&g_fake_urg_seg));
     MOCKER_CPP(&UrmaJetty::ImportRemoteJetty).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&UrmaIoBufferPool::get_remote_segments).stubs().will(invoke(MockGetRemoteSegments));
-    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg))).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
+    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg)))
+        .stubs()
+        .will(returnValue(static_cast<int32_t>(UBS_OK)));
 
     g_sendCall = 0;
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendAckFail));
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvSuccess));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get(), true);
+    ock::ubs::Result ret = sock_->ExchangeSocketResources(true);
     EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
     GlobalMockObject::verify();
 }
@@ -331,13 +336,15 @@ TEST_F(ExchangeSocketResourcesTest, SendFirst_AckRecvFails_ReturnsTcpExchange)
     MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(returnValue(&g_fake_urg_seg));
     MOCKER_CPP(&UrmaJetty::ImportRemoteJetty).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&UrmaIoBufferPool::get_remote_segments).stubs().will(invoke(MockGetRemoteSegments));
-    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg))).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
+    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg)))
+        .stubs()
+        .will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendSuccess));
 
     g_recvCall = 0;
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvAckFail));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get(), true);
+    ock::ubs::Result ret = sock_->ExchangeSocketResources(true);
     EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
     GlobalMockObject::verify();
 }
@@ -348,11 +355,13 @@ TEST_F(ExchangeSocketResourcesTest, SendFirst_Success_ReturnsOk)
     MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(returnValue(&g_fake_urg_seg));
     MOCKER_CPP(&UrmaJetty::ImportRemoteJetty).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&UrmaIoBufferPool::get_remote_segments).stubs().will(invoke(MockGetRemoteSegments));
-    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg))).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
+    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg)))
+        .stubs()
+        .will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendSuccess));
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvSuccess));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get(), true);
+    ock::ubs::Result ret = sock_->ExchangeSocketResources(true);
     EXPECT_EQ(UBS_OK, ret);
     EXPECT_TRUE(sock_->IsBindRemote());
     GlobalMockObject::verify();
@@ -364,11 +373,13 @@ TEST_F(ExchangeSocketResourcesTest, NotSendFirst_SendSocketDataFails_ReturnsTcpE
     MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(returnValue(&g_fake_urg_seg));
     MOCKER_CPP(&UrmaJetty::ImportRemoteJetty).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&UrmaIoBufferPool::get_remote_segments).stubs().will(invoke(MockGetRemoteSegments));
-    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg))).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
+    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg)))
+        .stubs()
+        .will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvSuccess));
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendFail));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get(), false);
+    ock::ubs::Result ret = sock_->ExchangeSocketResources(false);
     EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
     GlobalMockObject::verify();
 }
@@ -379,11 +390,13 @@ TEST_F(ExchangeSocketResourcesTest, NotSendFirst_Success_ReturnsOk)
     MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(returnValue(&g_fake_urg_seg));
     MOCKER_CPP(&UrmaJetty::ImportRemoteJetty).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&UrmaIoBufferPool::get_remote_segments).stubs().will(invoke(MockGetRemoteSegments));
-    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg))).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
+    MOCKER_CPP((static_cast<StoreRemoteSeg3Arg>(&UrmaIoBufferPool::store_remote_target_seg)))
+        .stubs()
+        .will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvSuccess));
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendSuccess));
 
-    ock::ubs::Result ret = sock_->ExchangeSocketResources(TEST_FD, *sock_.Get(), false);
+    ock::ubs::Result ret = sock_->ExchangeSocketResources(false);
     EXPECT_EQ(UBS_OK, ret);
     EXPECT_TRUE(sock_->IsBindRemote());
     GlobalMockObject::verify();

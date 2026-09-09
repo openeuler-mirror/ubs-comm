@@ -12,6 +12,7 @@
 #define UBS_COMM_URMA_SETTING_H
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_defines.h"
 #include "common/ubsocket_global_setting.h"
 #include "under_api/urma/dl_urma_api.h"
 #include "under_api/urma/urma_types.h"
@@ -49,6 +50,8 @@ public:
     static uint16_t UB_BUF_INIT_MEM_SIZE_MB;
     static uint16_t UB_BUF_PAGE_SIZE_KB;
     static bool UB_BUF_ASYNC_EXPAND;
+    /* setting for epoll handle mode */
+    static EpollHandleMode UB_EPOLL_HANDLE_MODE;
 
 private:
     static void AddRules();
