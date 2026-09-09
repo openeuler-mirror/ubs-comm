@@ -157,7 +157,7 @@ X交易所对接场景中，基于MLX5网卡，使用RDMA协议通信，实现25
 
 **功能举例<a name="section1049115019287"></a>**
 
-- 支持多种协议（RDMA/TCP/UDS/SHM/UBC）
+- 支持多种协议（RDMA/TCP/UDS/SHM/UBC）。
 - 支持点对点消息Send/Receive双边通信，Read/Write单边通信。
 - 支持多种加密算法的认证和加密通信。
 - 支持保活功能。
@@ -172,20 +172,39 @@ X交易所对接场景中，基于MLX5网卡，使用RDMA协议通信，实现25
 
 **表 1** 硬件要求<a id="硬件要求"></a>
 
-|硬件环境|通信节点|
-|--|--|
-|服务器名称|TaiShan服务器|
-|网卡|Mellanox CX5 (仅使用RDMA通信协议时必须，使用其他通信协议不需要)|
-|CPU|通过系统文件“/sys/devices/system/cpu/cpu0/regs/identification/midr_el1”中获取CPU厂商信息判断，当前配套机型鲲鹏处理器型号为0x48。|
+<table style="undefined;table-layout: fixed; width: 751px"><colgroup>
+<col style="width: 261px">
+<col style="width: 490px">
+</colgroup>
+<thead>
+  <tr>
+    <th>硬件环境</th>
+    <th>通信节点</th>
+  </tr></thead>
+<tbody>
+  <tr>
+    <td>服务器名称</td>
+    <td>TaiShan服务器</td>
+  </tr>
+  <tr>
+    <td>网卡</td>
+    <td>Mellanox CX5 (仅使用RDMA通信协议时必须，使用其他通信协议不需要)</td>
+  </tr>
+  <tr>
+    <td>CPU</td>
+    <td>通过系统文件“/sys/devices/system/cpu/cpu0/regs/identification/midr_el1”中获取CPU厂商信息判断，当前配套机型鲲鹏处理器型号为0x48。</td>
+  </tr>
+</tbody>
+</table>
 
 **操作系统和软件要求<a name="section15923759174210"></a>**
 
 **表 2** 操作系统和软件要求<a id="操作系统和软件要求"></a>
 
-<table style="undefined;table-layout: fixed; width: 754px"><colgroup>
-<col style="width: 120px">
-<col style="width: 198px">
-<col style="width: 436px">
+<table style="undefined;table-layout: fixed; width: 1084px"><colgroup>
+<col style="width: 272px">
+<col style="width: 274px">
+<col style="width: 538px">
 </colgroup>
 <thead>
   <tr>
@@ -196,7 +215,7 @@ X交易所对接场景中，基于MLX5网卡，使用RDMA协议通信，实现25
 <tbody>
   <tr>
     <td>操作系统</td>
-    <td>openEuler 20.03<br>LTSopenEuler 22.03<br>LTSCentOS 7.6</td>
+    <td>openEuler 20.03LTS<br>openEuler 22.03LTS<br>CentOS 7.6</td>
     <td>非openEuler系统：通过系统文件“/sys/devices/system/cpu/cpu0/regs/identification/midr_el1”中获取CPU厂商信息判断，当前配套机型KP型号为0x48。<br>openEuler系统：通过系统文件“/sys/devices/system/cpu/cpu0/regs/identification/midr_el1”中获取CPU厂商信息判断，当前配套机型KP型号为0x48，并且通过lscpu回显中Model name为包含字段“Kunpeng”。</td>
   </tr>
   <tr>
@@ -219,26 +238,93 @@ X交易所对接场景中，基于MLX5网卡，使用RDMA协议通信，实现25
 
 **表 1** 特性规格清单<a id="特性规格清单"></a>
 
-|特性|子特性/规格|特性/规格描述|
-|--|--|--|
-|传输层|RDMA|支持配置RDMA通信功能，使用RDMA协议通信。|
-|TCP|支持配置TCP通信功能，使用TCP协议通信。|
-|UDS|支持配置UDS通信功能，使用UDS协议通信。|
-|SHM|支持配置SHM通信功能，使用SHM通信。|
-|双边通信|支持使用双边通信接口，进行双边通信。|
-|单边通信|支持使用单边通信接口，进行单边通信。|
-|加密认证和通信|支持使能加密功能，进行加密认证和通信。|
-|保活|默认开启保活功能。|
-|服务层|RDMA|支持配置RDMA通信功能，使用RDMA协议通信。|
-|TCP|支持配置TCP通信功能，使用TCP协议通信。|
-|UDS|支持配置UDS通信功能，使用UDS协议通信。|
-|SHM|支持配置SHM通信功能，使用SHM通信。|
-|双边通信|支持使用双边通信接口，进行双边通信。|
-|单边通信|支持使用单边通信接口，进行单边通信。|
-|加密认证和通信|支持使能加密功能，进行加密认证和通信。|
-|保活|默认开启保活功能。|
-|RNDV|支持使能RNDV协议，进行单边+双边结合的方式通信。|
-|MULTIRAIL|支持使能MULTIRAIL功能，RDMA多网口带宽聚合通信。|
+<table style="undefined;table-layout: fixed; width: 1118px"><colgroup>
+<col style="width: 286px">
+<col style="width: 342px">
+<col style="width: 490px">
+</colgroup>
+<thead>
+  <tr>
+    <th>特性</th>
+    <th>子特性/规格</th>
+    <th>特性/规格描述</th>
+  </tr></thead>
+<tbody>
+  <tr>
+    <td rowspan="8">传输层</td>
+    <td>RDMA</td>
+    <td>支持配置RDMA通信功能，使用RDMA协议通信。</td>
+  </tr>
+  <tr>
+    <td>TCP</td>
+    <td>支持配置TCP通信功能，使用TCP协议通信。</td>
+  </tr>
+  <tr>
+    <td>UDS</td>
+    <td>支持配置UDS通信功能，使用UDS协议通信。</td>
+  </tr>
+  <tr>
+    <td>SHM</td>
+    <td>支持配置SHM通信功能，使用SHM通信。</td>
+  </tr>
+  <tr>
+    <td>双边通信</td>
+    <td>支持使用双边通信接口，进行双边通信。</td>
+  </tr>
+  <tr>
+    <td>单边通信</td>
+    <td>支持使用单边通信接口，进行单边通信。</td>
+  </tr>
+  <tr>
+    <td>加密认证和通信</td>
+    <td>支持使能加密功能，进行加密认证和通信。</td>
+  </tr>
+  <tr>
+    <td>保活</td>
+    <td>默认开启保活功能。</td>
+  </tr>
+  <tr>
+    <td rowspan="10">服务层</td>
+    <td>RDMA</td>
+    <td>支持配置RDMA通信功能，使用RDMA协议通信。</td>
+  </tr>
+  <tr>
+    <td>TCP</td>
+    <td>支持配置TCP通信功能，使用TCP协议通信。</td>
+  </tr>
+  <tr>
+    <td>UDS</td>
+    <td>支持配置UDS通信功能，使用UDS协议通信。</td>
+  </tr>
+  <tr>
+    <td>SHM</td>
+    <td>支持配置SHM通信功能，使用SHM通信。</td>
+  </tr>
+  <tr>
+    <td>双边通信</td>
+    <td>支持使用双边通信接口，进行双边通信。</td>
+  </tr>
+  <tr>
+    <td>单边通信</td>
+    <td>支持使用单边通信接口，进行单边通信。</td>
+  </tr>
+  <tr>
+    <td>加密认证和通信</td>
+    <td>支持使能加密功能，进行加密认证和通信。</td>
+  </tr>
+  <tr>
+    <td>保活</td>
+    <td>默认开启保活功能。</td>
+  </tr>
+  <tr>
+    <td>RNDV</td>
+    <td>支持使能RNDV协议，进行单边+双边结合的方式通信。</td>
+  </tr>
+  <tr>
+    <td>MULTIRAIL</td>
+    <td>支持使能MULTIRAIL功能，RDMA多网口带宽聚合通信。</td>
+  </tr>
+</tbody></table>
 
 ## 术语<a name="ZH-CN_TOPIC_0000002565998400"></a>
 

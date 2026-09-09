@@ -421,15 +421,15 @@ void UBSHcomService::RegisterOneSideHandler\(const UBSHcomServiceOneSideDoneHand
 
 **函数定义<a name="section4292195611128"></a>**
 
-1. 异步模式下，向对端回复一个消息，配合Call接口使用
+- 异步模式下，向对端回复一个消息，配合Call接口使用
 
-2. 同步模式下，向对端回复一个消息，配合Call接口使用
+- 同步模式下，向对端回复一个消息，配合Call接口使用
 
 **实现方法<a name="section12476114016714"></a>**
 
-1. int32\_t UBSHcomChannel::Reply\(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback \*done\)
+- int32\_t UBSHcomChannel::Reply\(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback \*done\)
 
-2. int32\_t UBSHcomChannel::Reply\(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req\)
+- int32\_t UBSHcomChannel::Reply\(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req\)
 
 **参数说明<a name="section8984192751117"></a>**
 
@@ -449,13 +449,14 @@ void UBSHcomService::RegisterOneSideHandler\(const UBSHcomServiceOneSideDoneHand
 
 **函数定义<a name="section4292195611128"></a>**
 
-1. 同步模式下，发送一个读请求给对方。
-2. 异步模式下，发送一个读请求给对方。
+- 同步模式下，发送一个读请求给对方。
+- 异步模式下，发送一个读请求给对方。
 
 **实现方法<a name="section1672474211472"></a>**
 
-1. int32\_t UBSHcomChannel::Get\(const UBSHcomOneSideRequest &req, const Callback \*done\)
-2. int32\_t UBSHcomChannel::Get\(const UBSHcomOneSideRequest &req\)
+-int32\_t UBSHcomChannel::Get\(const UBSHcomOneSideRequest &req, const Callback \*done\)
+
+- int32\_t UBSHcomChannel::Get\(const UBSHcomOneSideRequest &req\)
 
 **参数说明<a name="section8984192751117"></a>**
 
@@ -474,13 +475,14 @@ void UBSHcomService::RegisterOneSideHandler\(const UBSHcomServiceOneSideDoneHand
 
 **函数定义<a name="section4292195611128"></a>**
 
-1. 同步模式下，发送一个写请求给对方。
-2. 异步模式下，发送一个写请求给对方。
+- 同步模式下，发送一个写请求给对方。
+- 异步模式下，发送一个写请求给对方。
 
 **实现方法<a name="section1672474211472"></a>**
 
-1. int32\_t UBSHcomChannel::Put\(const UBSHcomOneSideRequest &req, const Callback \*done\)
-2. int32\_t UBSHcomChannel::Put\(const UBSHcomOneSideRequest &req\)
+- int32\_t UBSHcomChannel::Put\(const UBSHcomOneSideRequest &req, const Callback \*done\)
+
+- int32\_t UBSHcomChannel::Put\(const UBSHcomOneSideRequest &req\)
 
 **参数说明<a name="section8984192751117"></a>**
 
@@ -1347,7 +1349,7 @@ int ubs\_hcom\_channel\_call\(ubs\_hcom\_channel channel, ubs\_hcom\_channel\_re
 
 **函数定义<a name="section4292195611128"></a>**
 
-回复双边消息，接收端配合Call使用
+回复双边消息，接收端配合Call使用。
 
 **实现方法<a name="section169444462015"></a>**
 
@@ -3511,13 +3513,7 @@ template <typename... Args\> Callback \*UBSHcomNewCallback\(Args... args\)；
 
 #### 传输层<a name="ZH-CN_TOPIC_0000002566159056"></a>
 
-##### UBSHcomNetDriver::RegisterTLSCaCallback<a name="ZH-CN_TOPIC_0000002596638735"></a>
-
-- **[接口使用方法](#ZH-CN_TOPIC_0000002566158990)**  
-
-- **[UBSHcomTLSCaCallback函数类型](#ZH-CN_TOPIC_0000002565998550)**  
-
-- **[UBSHcomTLSCertVerifyCallback函数类型](#ZH-CN_TOPIC_0000002565999228)**  
+##### UBSHcomNetDriver::RegisterTLSCaCallback<a name="ZH-CN_TOPIC_0000002596638735"></a> 
 
 ###### 接口使用方法<a name="ZH-CN_TOPIC_0000002566158990"></a>
 
@@ -3618,10 +3614,6 @@ using UBSHcomTLSCertVerifyCallback = std::function<int\(void \*, const char \*\)
 表示函数执行结果，返回值为0表示证书验证成功。
 
 ##### UBSHcomNetDriver::RegisterTLSCertificationCallback<a name="ZH-CN_TOPIC_0000002596758699"></a>
-
-- **[接口使用方法](#ZH-CN_TOPIC_0000002596638599)**  
-
-- **[UBSHcomTLSCertificationCallback函数类型](#ZH-CN_TOPIC_0000002565999136)**  
 
 ###### 接口使用方法<a name="ZH-CN_TOPIC_0000002596638599"></a>
 
@@ -3797,10 +3789,6 @@ using UBSHcomTLSEraseKeypass = std::function<void\(void \*, int\)\>;
 
 ##### UBSHcomNetDriver::RegisterPskUseSessionCb<a name="ZH-CN_TOPIC_0000002566158922"></a>
 
-- **[接口使用方法](#ZH-CN_TOPIC_0000002596638705)**  
-
-- **[UBSHcomPskUseSessionCb函数类型](#ZH-CN_TOPIC_0000002596758455)**  
-
 ###### 接口使用方法<a name="ZH-CN_TOPIC_0000002596638705"></a>
 
 **函数定义<a name="section4292195611128"></a>**
@@ -3849,10 +3837,6 @@ int类型。
 - 0：表示回调函数执行失败。
 
 ##### UBSHcomNetDriver::RegisterPskFindSessionCb<a name="ZH-CN_TOPIC_0000002596638507"></a>
-
-- **[接口使用方法](#ZH-CN_TOPIC_0000002596758223)**  
-
-- **[UBSHcomPskFindSessionCb函数类型](#ZH-CN_TOPIC_0000002596637909)**  
 
 ###### 接口使用方法<a name="ZH-CN_TOPIC_0000002596758223"></a>
 
