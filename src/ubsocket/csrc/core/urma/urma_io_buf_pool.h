@@ -91,6 +91,13 @@ public:
 
     ~RemoteSegments() override
     {
+        pthread_spin_lock(&target_lock_);
+        for (auto target_seg : remote_target_segs_) {
+            if (target_seg != nullptr && UrmaApi::urma_unimport_seg(target_seg) != URMA_SUCCESS) {
+                UBS_SLOG_ERR("unimport urma_seg failed.");
+            }
+        }
+        pthread_spin_unlock(&target_lock_);
         pthread_spin_destroy(&target_lock_);
     }
 };
@@ -154,6 +161,7 @@ public:
     uint32_t get_block_size() const noexcept;
     urma_target_seg_t *get_local_target_seg(uintptr_t ptr) const noexcept;
     RemoteSegmentsPtr get_remote_segments(const IdentifyNode &remote) noexcept;
+    void rm_remote_segments(const IdentifyNode &remote) noexcept;
     urma_target_seg_t *get_remote_target_seg(RemoteSegmentsPtr &remote, uintptr_t ptr) const noexcept;
     Result store_remote_target_seg(RemoteSegmentsPtr &remote, urma_seg_t &seg, urma_target_seg_t *&tgt) noexcept;
     Result store_remote_target_seg(RemoteSegmentsPtr &remote, urma_eid_t &eid, uint32_t uasid, uintptr_t addr,

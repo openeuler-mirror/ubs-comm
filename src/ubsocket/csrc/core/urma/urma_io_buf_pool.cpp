@@ -118,6 +118,13 @@ RemoteSegmentsPtr UrmaIoBufferPool::get_remote_segments(const IdentifyNode &remo
     return remote_segments;
 }
 
+void UrmaIoBufferPool::rm_remote_segments(const IdentifyNode &remote) noexcept
+{
+    pthread_spin_lock(&target_segments_.remote_segments_lock_);
+    target_segments_.remote_target_segs_.erase(remote);
+    pthread_spin_unlock(&target_segments_.remote_segments_lock_);
+}
+
 urma_target_seg_t *UrmaIoBufferPool::get_remote_target_seg(RemoteSegmentsPtr &remote, uintptr_t ptr) const noexcept
 {
     if (UNLIKELY(remote == nullptr)) {

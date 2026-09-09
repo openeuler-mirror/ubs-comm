@@ -78,10 +78,11 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     UBSVersion local_version = UBS_PROTOCOL_VERSION;
     UrmaNegotiateReq req = {};
     req.peer_version = local_version.GetWhole();
-    req.tp_type = TPT_CTP;
-    req.tp_mode = TPM_RC;
+    req.trans_mode = UrmaSetting::UB_TANS_MODE;
     req.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
     req.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
+    req.conn_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? UBS_DEGRADABLE_MASK : 0;
+    req.conn_flag |= GlobalSetting::UBS_ENABLE_LINK_SWITCH ? UBS_RETRYABLE_MASK : 0;
 
     Result ret = SocketConnHelper::SendLengthPrefixed(raw_fd_, &req, sizeof(req), NEGOTIATE_TIMEOUT_MS);
     if (ret != UBS_OK) {
@@ -89,22 +90,6 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
                      new_fd, sizeof(req), req.peer_version, req.send_buf_kb, req.recv_buf_kb, ret);
         return ret;
     }
-
-    uint32_t negotiated_version = 0;
-    ssize_t n = SocketConnHelper::RecvSocketData(raw_fd_, &negotiated_version, sizeof(negotiated_version),
-                                                 NEGOTIATE_TIMEOUT_MS);
-    if (n != static_cast<ssize_t>(sizeof(negotiated_version))) {
-        UBS_VLOG_ERR("negotiate fd=%d, recv negotiated_version failed: %d", raw_fd_, n);
-        return UBS_TCP_EXCHANGE;
-    }
-
-    UBSVersion negotiated_ver(negotiated_version);
-    VersionCheckResult ver_result = negotiated_ver.ValidateNegotiated(local_version);
-    if (ver_result != VersionCheckResult::kCompatible) {
-        UBS_VLOG_ERR("negotiate fd=%d, ValidateNegotiated negotiated_version failed: %d", raw_fd_, ver_result);
-        return UBS_TCP_EXCHANGE;
-    }
-    urma_sock->SetNegotiatedVersion(negotiated_version);
 
     UrmaNegotiateRsp rsp = {};
     ret = SocketConnHelper::RecvLengthPrefixed(raw_fd_, &rsp, sizeof(rsp), NEGOTIATE_TIMEOUT_MS);
@@ -118,6 +103,16 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
         return UBS_TCP_EXCHANGE;
     }
 
+    uint32_t negotiated_version = rsp.negotiated_version;
+    UBSVersion negotiated_ver(negotiated_version);
+    VersionCheckResult ver_result = negotiated_ver.ValidateNegotiated(local_version);
+    if (ver_result != VersionCheckResult::kCompatible) {
+        UBS_VLOG_ERR("negotiate fd=%d, ValidateNegotiated negotiated_version failed: %d", raw_fd_, ver_result);
+        return UBS_TCP_EXCHANGE;
+    }
+    urma_sock->SetNegotiatedVersion(negotiated_version);
+    urma_sock->SetTransMode(rsp.trans_mode);
+    urma_sock->SetConnFlag(rsp.conn_flag);
     urma_sock->SetPeerEid(rsp.local_eid);
     UBS_VLOG_TRACE("negotiate fd=%d, buf_size(%u, %u) eid(%lx, %lx)", raw_fd_, rsp.send_buf_kb, rsp.recv_buf_kb,
                    rsp.local_eid.in6.subnet_prefix, rsp.local_eid.in6.interface_id);
@@ -139,7 +134,7 @@ Result UrmaConnectorOps::CreateSocketResources(SocketPtr &sock)
         return res;
     }
 
-    return urma_sock->ExchangeSocketResources(raw_fd_, *urma_sock);
+    return urma_sock->ExchangeSocketResources();
 }
 
 void UrmaConnectorOps::DestroySocketResources() {}

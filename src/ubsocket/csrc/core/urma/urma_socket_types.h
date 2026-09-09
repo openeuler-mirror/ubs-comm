@@ -141,36 +141,23 @@ struct UrmaCtrlMessage {
 constexpr uint32_t URMA_INLINE_MESSAGE_CTRL_COST = sizeof(UrmaMessageHead);
 constexpr uint32_t URMA_INLINE_DATA_THRESHOLD = URMA_INLINE_THRESHOLD - URMA_INLINE_MESSAGE_CTRL_COST;
 
-enum TransportType : int8_t {
-    TPT_CTP = 0,
-    TPT_RTP,
-    /* add here */
-    TPT_COUNT
-};
-
-enum TransportMode : int8_t {
-    TPM_RC = 0,
-    TPM_RM,
-    /* add here */
-    TPM_COUNT
-};
-
 struct UrmaNegotiateReq {
     uint32_t peer_version;
-    TransportType tp_type;
-    TransportMode tp_mode;
+    ub_trans_mode trans_mode;
     uint32_t send_buf_kb;
     uint32_t recv_buf_kb;
     urma_eid_t local_eid;
+    uint32_t conn_flag;
 };
 
 struct UrmaNegotiateRsp {
     int32_t ret_code;
-    TransportType tp_type;
-    TransportMode tp_mode;
+    uint32_t negotiated_version;
+    ub_trans_mode trans_mode;
     uint32_t send_buf_kb;
     uint32_t recv_buf_kb;
     urma_eid_t local_eid;
+    uint32_t conn_flag;
 };
 
 struct UrmaSockBufInfo {
@@ -182,15 +169,10 @@ struct UrmaSockBufInfo {
  * Exchange info for connecting
  */
 struct UrmaSockExInfo {
-    TransportMode mode = TPM_RC;   /* rc or rm */
-    TransportType type = TPT_CTP;  /* ctp, rtp, utp */
-    uint32_t my_jetty_id = 0;      /* jetty id */
     UrmaSockBufInfo my_send_buf;   /* my address and size info for send */
     UrmaSockBufInfo my_recv_buf;   /* my address and size info for receive */
-    bool is_async_connect = false; /* aysnc connect or not */
     urma_jetty_id_t raw_jetty_id{};
     uint32_t token = 0;
-    // eid related
 };
 
 enum UrmaDataSizeType : uint8_t {

@@ -34,7 +34,7 @@ public:
     Result CreateUrmaResources();
     void DestroyUrmaResources();
 
-    Result ExchangeSocketResources(int fd, UrmaSocket &urma_sock, bool send_first = true);
+    Result ExchangeSocketResources(bool send_first = true);
 
     UrmaJettyPtr Jetty() const
     {
@@ -78,6 +78,45 @@ public:
         peer_eid_ = eid;
     }
 
+    void SetTransMode(ub_trans_mode mode)
+    {
+        trans_mode = mode;
+    }
+
+    urma_transport_mode_t GetUrmaTransMode()
+    {
+        if (trans_mode == ub_trans_mode::RM_CTP || trans_mode == ub_trans_mode::RM_TP) {
+            return urma_transport_mode_t::URMA_TM_RM;
+        } else {
+            return urma_transport_mode_t::URMA_TM_RC;
+        }
+    }
+
+    urma_tp_type_t GetUrmaTpType()
+    {
+        if (trans_mode == ub_trans_mode::RC_TP || trans_mode == ub_trans_mode::RM_TP) {
+            return urma_tp_type_t::URMA_RTP;
+        } else {
+            return urma_tp_type_t::URMA_CTP;
+        }
+    }
+
+    void SetConnFlag(uint32_t flag)
+    {
+        conn_flag = flag;
+    }
+
+    bool DegradeEnable()
+    {
+        return (conn_flag & UBS_DEGRADABLE_MASK) != 0;
+    }
+
+    bool LinkSwitchEnable()
+    {
+        // TODO check used_port
+        return (conn_flag & UBS_RETRYABLE_MASK) != 0 && false;
+    }
+
     int NotifySocketReadable();
     void HandleRecvCqe(const WriteImmData &imm);
     void HandlePostWrite(const WriteImmData &imm);
@@ -116,6 +155,9 @@ protected:
     int DoNotifyWritable() override;
 
 private:
+    Result DoExchangeSocketResources(bool send_first);
+
+private:
     UrmaJettyPtr jetty_;      /* could be dedicated jetty or shared jetty */
     uintptr_t send_buf_addr_; /* dedicate send buffer, i.e. not shared */
     uintptr_t recv_buf_addr_; /* dedicate send buffer, i.e. not shared */
@@ -131,6 +173,9 @@ private:
     urma_target_seg_t *local_ctrl_target_seg_{nullptr};
     urma_target_seg_t *remote_ctrl_target_seg_{nullptr};
     RemoteSegmentsPtr remote_target_segs_{nullptr};
+
+    ub_trans_mode trans_mode{RM_CTP};
+    uint32_t conn_flag{0};
 
     urma_eid_t local_eid_{};
     urma_eid_t peer_eid_{};

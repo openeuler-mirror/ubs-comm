@@ -233,16 +233,10 @@ void Acceptor::ProcessUBConnection(int fd, const std::string &peerIp)
     if (ret == 0) {
         auto err = DoAccept(fd, peerIp);
         if (!IsOk(err)) {
-            // kRETRYABLE 等错误码需要特殊处理：Degradable(err)
-            if (IsDegradable(err)) {
-                // 降级至 TCP，客户端可正确工作，不应清理数据.
-                UBS_VLOG_INFO("ubsocket is degraded to TCP, fd: %d\n", fd);
-            } else {
-                UBS_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP\n", peerIp.data(), fd);
-                // Clear messages that already exist on the TCP link to prevent
-                // dirty messages from affecting user data transmission
-                SocketConnHelper::FlushSocketMsg(fd);
-            }
+            UBS_VLOG_WARN("Fatal error occurred,Peer IP:%s, fd: %d fallback to TCP/IP\n", peerIp.data(), fd);
+            // Clear messages that already exist on the TCP link to prevent
+            // dirty messages from affecting user data transmission
+            SocketConnHelper::FlushSocketMsg(fd);
         }
     }
 
@@ -296,6 +290,18 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     ArraySet<Socket>::GetInstance().OverrideItem(new_fd, new_socket_obj.Get());
     ret = newSocket->acceptor_->acceptor_ops_->CreateSocketResources(new_socket_obj);
     if (ret != UBS_OK) {
+        if (IsDegradable(ret)) {
+            SocketPtr socketPtr;
+            ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_TCP, socketPtr);
+            if (ret != UBS_OK) {
+                UBS_VLOG_ERR("Create raw socketFd failed, fd: %d, ret: %d\n", new_fd, ret);
+                return ret;
+            }
+            socketPtr->create_type_ = SOCK_CREATE_TYPE_ACCEPT;
+            ArraySet<Socket>::GetInstance().OverrideItem(new_fd, socketPtr.Get());
+            UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
+            return UBS_OK;
+        }
         ArraySet<Socket>::GetInstance().OverrideItem(new_fd, nullptr);
         new_socket_obj->event_fd_ = -1;
         LibcApi::close(event_fd);

@@ -34,6 +34,7 @@ bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
 bool GlobalSetting::UBS_SHARE_JFR_LOOP_POLL_ENABLED = true;
 bool GlobalSetting::UBS_ENABLE_DEGRADE = true;
+bool GlobalSetting::UBS_ENABLE_LINK_SWITCH = true;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 2048;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::UB_SOCK_OPT;

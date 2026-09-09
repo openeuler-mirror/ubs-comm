@@ -47,6 +47,14 @@ int UrmaAcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation, ss
     return 0;
 }
 
+uint32_t NegotiateConnFlag(uint32_t peer_flag)
+{
+    uint32_t ret_flag = 0;
+    ret_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? (peer_flag & UBS_DEGRADABLE_MASK) : 0;
+    ret_flag |= GlobalSetting::UBS_ENABLE_LINK_SWITCH ? (peer_flag & UBS_RETRYABLE_MASK) : 0;
+    return ret_flag;
+}
+
 Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
 {
     UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(socketPtr);
@@ -75,22 +83,19 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
         return UBS_TCP_EXCHANGE;
     }
 
-    ssize_t n =
-        SocketConnHelper::SendSocketData(fd, &negotiated_version, sizeof(negotiated_version), NEGOTIATE_TIMEOUT_MS);
-    if (n != static_cast<ssize_t>(sizeof(negotiated_version))) {
-        UBS_VLOG_ERR("negotiate fd=%d, send negotiated_version failed: %d", fd, n);
-        return UBS_TCP_EXCHANGE;
-    }
-
     urma_sock->SetNegotiatedVersion(negotiated_version);
     urma_sock->SetPeerVersion(peer_version.GetWhole());
+    urma_sock->SetPeerEid(req.local_eid);
+    urma_sock->SetTransMode(std::min(req.trans_mode, UrmaSetting::UB_TANS_MODE));
+    urma_sock->SetConnFlag(NegotiateConnFlag(req.conn_flag));
 
     UrmaNegotiateRsp rsp = {};
     rsp.ret_code = 0;
-    rsp.tp_type = TPT_CTP;
-    rsp.tp_mode = TPM_RC;
+    rsp.negotiated_version = negotiated_version;
+    rsp.trans_mode = urma_sock->trans_mode;
     rsp.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
     rsp.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
+    rsp.conn_flag = urma_sock->conn_flag;
 
     ret = SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), NEGOTIATE_TIMEOUT_MS);
     if (ret != UBS_OK) {
@@ -98,8 +103,6 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
                      sizeof(rsp), rsp.ret_code, rsp.send_buf_kb, rsp.recv_buf_kb, ret);
         return ret;
     }
-
-    urma_sock->SetPeerEid(req.local_eid);
     UBS_VLOG_TRACE("negotiate fd=%d, buf_size(%u, %u) eid(%lx, %lx)", fd, rsp.send_buf_kb, rsp.recv_buf_kb,
                    rsp.local_eid.in6.subnet_prefix, rsp.local_eid.in6.interface_id);
 
@@ -119,7 +122,7 @@ Result UrmaAcceptorOps::CreateSocketResources(SocketPtr socketPtr)
         return res;
     }
 
-    return urma_sock->ExchangeSocketResources(fd, *urma_sock);
+    return urma_sock->ExchangeSocketResources();
 }
 
 void UrmaAcceptorOps::DestroySocketResources() {}
