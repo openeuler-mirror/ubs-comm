@@ -11,6 +11,8 @@
 #ifndef UBS_COMM_URMA_SOCKET_H
 #define UBS_COMM_URMA_SOCKET_H
 
+#include <pthread.h>
+
 #include "core/ubsocket_socket.h"
 #include "urma_backend.h"
 #include "urma_socket_buf.h"
@@ -183,6 +185,41 @@ public:
         return readable_notifier_.load(std::memory_order_acquire);
     }
 
+    /*
+     * pthread_cond doorbell shared by blocking readv/writev: let blocked
+     * threads sleep on I/O events instead of busy-polling the transport.
+     */
+    void RegisterBlockingWaiter() noexcept;
+    void UnregisterBlockingWaiter() noexcept;
+
+    /*
+     * Sleep until an event of interest fires and return the bits that fired.
+     * A return of 0 means the explicit deadline expired. When deadline is
+     * nullptr, the wait rechecks every 2 minutes so an unset SO_*TIMEO cannot
+     * stall forever on a lost wakeup. Only interest bits are consumed;
+     * CLOSED/PEER_CLOSED stay sticky so a local close is never missed.
+     */
+    uint32_t WaitBlockingSignal(uint32_t interest_flags, const struct timespec *deadline) noexcept;
+
+    void NotifyBlockingWritable() noexcept;
+    void NotifyBlockingReadable() noexcept;
+
+    /*
+     * TODO: peer death surfaces only through error CQEs (HandleCqe, currently
+     * log-only). Wire that branch here so blocked I/O stops waiting on a peer
+     * that is gone.
+     */
+    void NotifyBlockingPeerClosed() noexcept;
+
+    /*
+     * Read SO_SNDTIMEO/SO_RCVTIMEO (sec + usec) and convert it into an absolute
+     * CLOCK_MONOTONIC deadline. Returns false when the option is unset
+     * ({0, 0}) or getsockopt fails.
+     */
+    bool GetBlockTimeoutDeadline(int optname, struct timespec &deadline) noexcept;
+
+    void NotifyLocalClose() noexcept override;
+
 protected:
     int DoNotifyWritable() override;
 
@@ -226,6 +263,22 @@ private:
 
     urma_sge_t empty_recv_sge_;
     urma_jfr_wr_t empty_recv_wr_;
+
+    /* Blocking predicate bits, guarded by block_mutex_. */
+    enum BlockingFlag : uint32_t
+    {
+        BLOCKING_FLAG_WRITABLE = 1U << 0,    /* producer doorbell: send buffer freed (writev) */
+        BLOCKING_FLAG_CLOSED = 1U << 1,      /* local close */
+        BLOCKING_FLAG_PEER_CLOSED = 1U << 2, /* peer close (future URMA error event hook) */
+        BLOCKING_FLAG_READABLE = 1U << 3,    /* producer doorbell: data arrived (readv) */
+    };
+
+    /* predicate and condvar are guarded by block_mutex_. */
+    pthread_mutex_t block_mutex_;
+    pthread_cond_t block_cond_; /* initialized with CLOCK_MONOTONIC */
+    std::atomic<uint32_t> block_waiters_{0};
+    std::atomic<uint32_t> block_flags_{0}; /* predicate bits: BLOCKING_FLAG_* */
+
     friend class UrmaAcceptorOps;
     friend class UrmaConnectorOps;
     friend class UrmaTxOps;

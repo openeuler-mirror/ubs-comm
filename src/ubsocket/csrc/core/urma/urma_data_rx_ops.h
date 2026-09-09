@@ -102,6 +102,12 @@ public:
     uint64_t CurrentTraceNsTime();
 
 private:
+    /*
+     * Single read attempt: consumes whatever data is ready. EAGAIN means
+     * nothing was consumed, so the blocking loop can retry after a wakeup.
+     */
+    ssize_t ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags);
+
     /* Ring buffer slot tracking per-message receive state. 64-byte aligned for cache-line isolation. */
     struct alignas(64) DataSlot {
         std::atomic<LargeIoRxState> rx_state{URMA_RX_STS_IDLE}; /* current state in the state machine */

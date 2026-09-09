@@ -9,13 +9,19 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include <errno.h>
+#include <pthread.h>
 #include <sys/eventfd.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 #include <cstring>
 
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_defines.h"
 #include "core/ubsocket_socket_helper.h"
+#include "under_api/dl_libc_api.h"
 #include "under_api/urma/dl_urma_api.h"
 #include "urma_data_rx_ops.h"
 #include "urma_data_tx_ops.h"
@@ -37,6 +43,13 @@ UrmaSocket::UrmaSocket(int fd) noexcept : SocketBase(fd, SocketType::SOCK_TYPE_U
     empty_recv_wr_.src.num_sge = 1;
     empty_recv_wr_.user_ctx = static_cast<uint64_t>(fd);
     empty_recv_wr_.next = nullptr;
+
+    pthread_mutex_init(&block_mutex_, nullptr);
+    pthread_condattr_t cond_attr;
+    pthread_condattr_init(&cond_attr);
+    pthread_condattr_setclock(&cond_attr, CLOCK_MONOTONIC);
+    pthread_cond_init(&block_cond_, &cond_attr);
+    pthread_condattr_destroy(&cond_attr);
 }
 
 Result UrmaSocket::Initialize() noexcept
@@ -92,7 +105,125 @@ void UrmaSocket::UnInitialize() noexcept
         close(event_fd_);
         event_fd_ = -1;
     }
+
+    pthread_mutex_destroy(&block_mutex_);
+    pthread_cond_destroy(&block_cond_);
 }
+
+void UrmaSocket::RegisterBlockingWaiter() noexcept
+{
+    block_waiters_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void UrmaSocket::UnregisterBlockingWaiter() noexcept
+{
+    uint32_t waiters = block_waiters_.load(std::memory_order_relaxed);
+    while (waiters > 0) {
+        if (block_waiters_.compare_exchange_weak(waiters, waiters - 1, std::memory_order_relaxed,
+                                                 std::memory_order_relaxed)) {
+            break;
+        }
+    }
+}
+
+void UrmaSocket::NotifyBlockingWritable() noexcept
+{
+    pthread_mutex_lock(&block_mutex_);
+    block_flags_.fetch_or(BLOCKING_FLAG_WRITABLE, std::memory_order_relaxed);
+    pthread_cond_broadcast(&block_cond_);
+    pthread_mutex_unlock(&block_mutex_);
+}
+
+void UrmaSocket::NotifyBlockingReadable() noexcept
+{
+    pthread_mutex_lock(&block_mutex_);
+    block_flags_.fetch_or(BLOCKING_FLAG_READABLE, std::memory_order_relaxed);
+    pthread_cond_broadcast(&block_cond_);
+    pthread_mutex_unlock(&block_mutex_);
+}
+
+void UrmaSocket::NotifyBlockingPeerClosed() noexcept
+{
+    /* TODO: wire from UrmaBackend::HandleCqe error-CQE branch (status != URMA_CR_SUCCESS). */
+    pthread_mutex_lock(&block_mutex_);
+    block_flags_.fetch_or(BLOCKING_FLAG_PEER_CLOSED, std::memory_order_relaxed);
+    pthread_cond_broadcast(&block_cond_);
+    pthread_mutex_unlock(&block_mutex_);
+}
+
+void UrmaSocket::NotifyLocalClose() noexcept
+{
+    pthread_mutex_lock(&block_mutex_);
+    block_flags_.fetch_or(BLOCKING_FLAG_CLOSED, std::memory_order_relaxed);
+    pthread_cond_broadcast(&block_cond_);
+    pthread_mutex_unlock(&block_mutex_);
+}
+
+bool UrmaSocket::GetBlockTimeoutDeadline(int optname, struct timespec &deadline) noexcept
+{
+    struct timeval timeout = {};
+    socklen_t len = sizeof(timeout);
+    if (LibcApi::getsockopt(raw_socket_, SOL_SOCKET, optname, &timeout, &len) != 0) {
+        return false;
+    }
+    if (timeout.tv_sec == 0 && timeout.tv_usec == 0) {
+        return false;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
+    deadline.tv_sec += timeout.tv_sec;
+    deadline.tv_nsec += static_cast<long>(timeout.tv_usec) * 1000L;
+    if (deadline.tv_nsec >= 1000000000L) {
+        deadline.tv_sec += 1;
+        deadline.tv_nsec -= 1000000000L;
+    }
+    return true;
+}
+
+constexpr long kDefaultBlockRecheckSec = 120;
+
+uint32_t UrmaSocket::WaitBlockingSignal(uint32_t interest_flags, const struct timespec *deadline) noexcept
+{
+    const uint32_t relevant = interest_flags | BLOCKING_FLAG_CLOSED | BLOCKING_FLAG_PEER_CLOSED;
+
+    pthread_mutex_lock(&block_mutex_);
+    while ((block_flags_.load(std::memory_order_relaxed) & relevant) == 0) {
+        struct timespec default_deadline = {};
+        const struct timespec *wait_until = deadline;
+        if (wait_until == nullptr) {
+            /* default 2min recheck window when SO_*TIMEO unset */
+            clock_gettime(CLOCK_MONOTONIC, &default_deadline);
+            default_deadline.tv_sec += kDefaultBlockRecheckSec;
+            wait_until = &default_deadline;
+        }
+
+        int ret = pthread_cond_timedwait(&block_cond_, &block_mutex_, wait_until);
+        if (ret == ETIMEDOUT) {
+            if (deadline == nullptr) {
+                /* window expired: recheck predicate, keep waiting if still empty */
+                if ((block_flags_.load(std::memory_order_relaxed) & relevant) == 0) {
+                    continue;
+                }
+                break;
+            }
+            pthread_mutex_unlock(&block_mutex_);
+            return 0;
+        }
+        if (ret != 0) { /* non-Linux platforms may report EINTR */
+            pthread_mutex_unlock(&block_mutex_);
+            errno = ret;
+            return 0; /* treat as timeout; cannot happen on Linux */
+        }
+        /* ret == 0: spurious wakeup, re-check predicates in the while condition */
+    }
+
+    const uint32_t signalledFlags = block_flags_.load(std::memory_order_relaxed) & relevant;
+    /* consume only caller-interest doorbells; CLOSED/PEER sticky */
+    block_flags_.fetch_and(~interest_flags, std::memory_order_relaxed);
+    pthread_mutex_unlock(&block_mutex_);
+    return signalledFlags;
+}
+
 Result UrmaSocket::CreateUrmaResources()
 {
     context_ = UrmaBackend::Instance().GetUrmaContext();
@@ -161,6 +292,7 @@ bool UrmaSocket::IsBindRemote()
 
 int UrmaSocket::NotifySocketReadable()
 {
+    NotifyBlockingReadable(); /* wake blocking readv waiters (data visible before this call) */
     PROF_START(___URMA_EVENT_WRITE);
     auto current_events = events_.load(std::memory_order_acquire);
     if ((current_events & EPOLLIN) == 0) { // 未关注 IN 事件，仅记录可读不通知eventfd
@@ -258,6 +390,7 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
     auto block_refs_ptr = reinterpret_cast<std::vector<BlockRef> *>(req->head.user_ctx);
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
+        NotifyBlockingWritable(); /* wake blocking writev waiters */
     }
 
     if (block_refs_ptr != nullptr) {
@@ -316,6 +449,7 @@ void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
     if (send_buf_ != nullptr && req->head.message_size > 0) {
         send_buf_->Release(send_offset, req->head.message_size);
         NotifyWritable();
+        NotifyBlockingWritable(); /* wake blocking writev waiters */
     }
 }
 
