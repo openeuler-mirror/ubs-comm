@@ -8,17 +8,123 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-
 #include "urma_event_epoll.h"
 #include "common/ubsocket_common_includes.h"
 #include "urma_data_rx_ops.h"
+#include "urma_event_dispatch.h"
+#include "urma_poller.h"
 
 namespace ock {
 namespace ubs {
 namespace urma {
 
+namespace {
+/* Depth of the deferred readable-event queue (see ReadableEventQueue). */
+constexpr uint32_t READABLE_EVENT_QUEUE_CAPACITY = 4096;
+
+/* 当前正在执行 epoll_wait 内联派发的 UrmaEventPoll(thread_local, 单 wait 线程) */
+thread_local UrmaEventPoll *g_tls_active_event_poll = nullptr;
+
+class ActiveEventPollGuard {
+public:
+    explicit ActiveEventPollGuard(UrmaEventPoll *ep) noexcept : prev_(g_tls_active_event_poll)
+    {
+        g_tls_active_event_poll = ep;
+    }
+
+    ~ActiveEventPollGuard() noexcept
+    {
+        g_tls_active_event_poll = prev_;
+    }
+
+private:
+    UrmaEventPoll *prev_;
+};
+} // namespace
+
+UrmaEventPoll::UrmaEventPoll(int epoll_fd) noexcept : EventPoll(epoll_fd), dispatch_caps_(UrmaHandleModeCapsNow()) {}
+
+Result UrmaEventPoll::Init() noexcept
+{
+    if (inited_) {
+        return UBS_OK;
+    }
+    /*
+     * Queue/Dispatcher mode: epoll_wait registers the pollers' JFCE fds and polls the JFC
+     * inline. Any failure rolls back the already-registered handlers and returns UBS_ERROR.
+     */
+    if (!dispatch_caps_.epoll_wait_driven) {
+        inited_ = true;
+        return UBS_OK;
+    }
+
+    auto init_ret = readable_events_.Init(READABLE_EVENT_QUEUE_CAPACITY);
+    if (UNLIKELY(init_ret != UBS_OK)) {
+        UBS_VLOG_ERR("urma epoll(%d) init failed: alloc readable event queue.", epoll_fd_);
+        return init_ret;
+    }
+
+    auto pollers = UrmaPollerSet::Instance().GetAllPollers();
+    if (UNLIKELY(pollers.empty())) {
+        UBS_VLOG_ERR("urma epoll(%d) init failed: no poller is registered.", epoll_fd_);
+        return UBS_ERROR;
+    }
+
+    bool failed = false;
+    for (auto &poller : pollers) {
+        auto jfc = poller->GetJFC();
+        if (UNLIKELY(jfc == nullptr)) {
+            UBS_VLOG_ERR("urma epoll(%d) init failed: poller has null jfc.", epoll_fd_);
+            failed = true;
+            break;
+        }
+
+        auto fd = jfc->GetInterruptFd();
+        if (UNLIKELY(fd < 0)) {
+            UBS_VLOG_ERR("urma epoll(%d) init failed: invalid interrupt fd(%d) of poller.", epoll_fd_, fd);
+            failed = true;
+            break;
+        }
+
+        struct epoll_event raw_event {};
+        auto event_data = AllocateEpollEvent(EPOLL_EVENT_JFCE_FD, fd, raw_event);
+        if (UNLIKELY(event_data == nullptr)) {
+            UBS_VLOG_ERR("urma epoll(%d) init failed: alloc EpollEvent for JFCE fd(%d).", epoll_fd_, fd);
+            failed = true;
+            break;
+        }
+
+        /*
+         * Consistent with socket registration: the kernel epoll's data.ptr points to the
+         * EpollEvent, whose payload directly stores the poller owning this interrupt fd, so
+         * handling a JFCE event does not need a jfc->poller lookup.
+         */
+        event_data->event.data.ptr = poller.Get();
+        raw_event.events = EPOLLIN;
+        raw_event.data.ptr = event_data;
+        auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &raw_event);
+        if (UNLIKELY(ret != 0)) {
+            delete event_data;
+            UBS_VLOG_ERR("urma epoll(%d) add JFCE fd(%d) failed: %s", epoll_fd_, fd, strerror(errno));
+            failed = true;
+            break;
+        }
+
+        jfce_handlers_.emplace(fd, event_data);
+    }
+
+    if (UNLIKELY(failed)) {
+        ClearJfceHandlers();
+        return UBS_ERROR;
+    }
+    inited_ = true;
+    return UBS_OK;
+}
+
 UrmaEventPoll::~UrmaEventPoll()
 {
+    UnbindReadableNotifiers();
+    ClearJfceHandlers();
     Locker sLock(mutex_);
     auto removed_head = removed_head_;
     removed_head_ = nullptr;
@@ -26,6 +132,29 @@ UrmaEventPoll::~UrmaEventPoll()
         auto next = removed_head->next;
         delete removed_head;
         removed_head = next;
+    }
+}
+
+void UrmaEventPoll::UnbindReadableNotifiers() noexcept
+{
+    /*
+     * The poll is going away: sockets still registered here keep a readable_notifier_ hook that
+     * points at this object, so detach it to avoid a dangling call on a later NotifySocketReadable.
+     */
+    Locker lock(mutex_);
+    for (auto &it : socket_data_) {
+        auto *event_data = it.second;
+        if (UNLIKELY(event_data == nullptr || event_data->event_type != EPOLL_EVENT_UB_SOCKET_IN)) {
+            continue;
+        }
+        auto sock = ArraySet<Socket>::GetInstance().GetItem(event_data->socket_fd);
+        if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
+            continue;
+        }
+        auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
+        if (urma_sock->GetReadableNotifier() == this) {
+            urma_sock->SetReadableNotifier(nullptr);
+        }
     }
 }
 
@@ -83,6 +212,13 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
         return -1;
     }
 
+    /* 先吐出上次 JFCE 内联产出、未放下的可读 socket 事件(不阻塞) */
+    uint32_t out = DrainPendingReadable(events, static_cast<uint32_t>(maxevents));
+    if (out > 0) {
+        return static_cast<int>(out);
+    }
+
+    ActiveEventPollGuard guard(this);
     uint64_t event_read_val;
     UBS_VLOG_TRACE("urma epoll wait(epfd=%d, max=%d, timeout=%d) start...", epoll_fd_, maxevents, timeout);
     int ret = epoll_wait(epoll_fd_, events, maxevents, timeout);
@@ -94,21 +230,36 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
             continue;
         }
 
-        // Handle wakeup event for async accept (pointer comparison with ready_event_)
+        /* 异步 accept 唤醒事件: 需放回出参数组, 供上层处理 (处理到事件槽位) */
         if (ready_event_ != nullptr && event_data == ready_event_ && wakeup_callback_ != nullptr) {
-            wakeup_callback_(events + i, 1, socket_data_);
+            if (out < static_cast<uint32_t>(maxevents)) {
+                auto processed = wakeup_callback_(events + out, maxevents - static_cast<int>(out), socket_data_);
+                out += static_cast<uint32_t>(processed > 0 ? processed : 0);
+            }
+            continue;
+        }
+
+        /* JFCE 中断事件: 仅内部唤醒, 不外发; 内联 poll+派发, 直接产出可读 socket 事件 */
+        if (event_data->event_type == EPOLL_EVENT_JFCE_FD) {
+            HandleJfceEvent(event_data);
+            continue;
+        }
+
+        if (out >= static_cast<uint32_t>(maxevents)) {
+            /* 出参已满: 内核中仍就绪的事件留待下次 epoll_wait, 不丢失 */
             continue;
         }
 
         if (event_data->event_type == EPOLL_EVENT_RAW_SOCKET) {
-            events[i].data = event_data->event.data;
-            UBS_VLOG_TRACE("urma epoll(%d) raw socket event(evt=0x%x, data=%lx)", epoll_fd_, events[i].events,
-                           events[i].data.u64);
+            events[out] = events[i];
+            events[out].data = event_data->event.data; /* 对外事件需携带应用注册的 data */
+            UBS_VLOG_TRACE("urma epoll(%d) raw socket event(evt=0x%x, data=%lx)", epoll_fd_, events[out].events,
+                           events[out].data.u64);
+            out++;
             continue;
         }
 
-        events[i].events = 0;
-        events[i].data = event_data->event.data;
+        /* 常规 urma socket eventfd 事件(如 EPOLLOUT / 跨线程通知), 与原有处理一致 */
         auto sock = ArraySet<Socket>::GetInstance().GetItem(event_data->socket_fd);
         if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP)) {
             UBS_VLOG_ERR("event wait wake up socket(%d) invalid.", event_data->socket_fd);
@@ -116,9 +267,12 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
         }
 
         auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
-        events[i].events = urma_sock->GetReachEpollEvents() & event_data->event.events;
-        UBS_VLOG_TRACE("urma epoll(%d) urma socket event(evt=0x%x, data=%lx)", epoll_fd_, events[i].events,
-                       events[i].data.u64);
+        events[out].events = urma_sock->GetReachEpollEvents() & event_data->event.events;
+        events[out].data = event_data->event.data;
+        UBS_VLOG_TRACE("urma epoll(%d) urma socket event(evt=0x%x, data=%lx)", epoll_fd_, events[out].events,
+                       events[out].data.u64);
+        /* The kernel eventfd path already delivers this fd: clear pending to avoid a duplicate. */
+        readable_events_.ClearPending(event_data->socket_fd);
         eventfd_read(urma_sock->event_fd_, &event_read_val);
         if (ubsocket_prof_enabled != 0) {
             UrmaRxOps *rxOps = static_cast<UrmaRxOps *>(urma_sock->GetRx()->GetRxOps());
@@ -128,9 +282,80 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
                 PROF_RECORD(__URMA_SLOT_EPOLL_PROC, used, true);
             }
         }
+        out++;
     }
     PROF_END(__URMA_DEAL_EPOLL_EVENT, true);
-    return ret;
+
+    /* 把本次 JFCE 内联产出的可读 socket 事件尽量带回, 放不下的留给下次 */
+    if (out < static_cast<uint32_t>(maxevents)) {
+        out += DrainPendingReadable(events + out, static_cast<uint32_t>(maxevents) - out);
+    }
+    return static_cast<int>(out);
+}
+
+void UrmaEventPoll::HandleJfceEvent(EpollEvent *event_data)
+{
+    auto poller = static_cast<UrmaPoller *>(event_data->event.data.ptr);
+    if (UNLIKELY(poller == nullptr)) {
+        UBS_VLOG_ERR("urma epoll(%d) jfce event with null poller.", epoll_fd_);
+        return;
+    }
+
+    UBS_VLOG_TRACE("urma epoll(%d) jfce event, poller(%p) poll and dispatch inline.", epoll_fd_,
+                   static_cast<void *>(poller));
+    poller->PollAndDispatch(true);
+}
+
+bool UrmaEventPoll::RecordReadableSocket(UrmaSocket *urma_sock)
+{
+    auto fd = urma_sock->Fd();
+
+    EpollEvent *event_data = nullptr;
+    {
+        Locker lock(mutex_);
+        auto pos = socket_data_.find(fd);
+        if (UNLIKELY(pos == socket_data_.end())) {
+            /* socket is not registered on this epoll yet; fall back to the eventfd path */
+            return false;
+        }
+        event_data = pos->second;
+    }
+
+    struct epoll_event ev {};
+    ev.events = urma_sock->GetReachEpollEvents() & event_data->event.events;
+    ev.data = event_data->event.data;
+    if (UNLIKELY((ev.events & EPOLLIN) == 0)) {
+        /* the app registered without EPOLLIN: do not produce a readable event */
+        return false;
+    }
+
+    /* De-dup and buffering live in ReadableEventQueue; a full ring falls back to eventfd. */
+    if (UNLIKELY(!readable_events_.TryRecord(fd, ev))) {
+        UBS_VLOG_ERR("urma epoll(%d) readable event queue full, fd(%d) fallback to eventfd.", epoll_fd_, fd);
+        return false;
+    }
+    return true;
+}
+
+uint32_t UrmaEventPoll::DrainPendingReadable(struct epoll_event *events, uint32_t maxevents)
+{
+    return readable_events_.Drain(events, maxevents, [this](int fd) {
+        Locker lock(mutex_);
+        return socket_data_.find(fd) != socket_data_.end();
+    });
+}
+
+bool UrmaEventPoll::NotifyReadable(UrmaSocket &sock) noexcept
+{
+    /*
+     * Only this poll's own epoll_wait thread, while it is inside the inline JFCE dispatch
+     * (Queue/Dispatcher mode), may record the socket readable inline. Other threads or modes
+     * report false so the socket falls back to the eventfd notification.
+     */
+    if (g_tls_active_event_poll != this || !dispatch_caps_.epoll_wait_driven) {
+        return false;
+    }
+    return RecordReadableSocket(&sock);
 }
 
 void UrmaEventPoll::WakeUpEpollFd() {}
@@ -223,6 +448,8 @@ int UrmaEventPoll::EpollCtlDel(int fd)
     }
 
     UBS_VLOG_TRACE("urma epoll(%d) del(fd=%d)", epoll_fd_, fd);
+    /* May run on another thread: ForgetFd clears only the pending mark; the drain drops the entry as stale. */
+    readable_events_.ForgetFd(fd);
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP || !sock->IsBindRemote())) {
         UBS_VLOG_DEBUG("sock is nullptr for origin sock, socket: %d", fd);
@@ -333,6 +560,8 @@ int UrmaEventPoll::AddUrmaSocketEvent(UrmaSocketPtr &socket, struct epoll_event 
         return -1;
     }
 
+    /* This poll may now deliver the socket's readable events inline (see UrmaReadableNotifier). */
+    socket->SetReadableNotifier(this);
     return 0;
 }
 
@@ -367,6 +596,11 @@ int UrmaEventPoll::DelUrmaSocketEvent(UrmaSocketPtr &socket)
         UBS_VLOG_WARN("urma_event_poll del urma event for socket: %d failed, RemoveSocketEventData failed\n",
                       socket->raw_socket_);
         return 0;
+    }
+
+    /* The socket is no longer on this poll: drop our inline-reader hook if it points here. */
+    if (socket->GetReadableNotifier() == this) {
+        socket->SetReadableNotifier(nullptr);
     }
     UBS_VLOG_TRACE("real epoll(%d) del(fd=%d, event=0x%x, data=%lx)", epoll_fd_, socket->event_fd_);
     auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, socket->event_fd_, nullptr);

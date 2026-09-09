@@ -429,7 +429,7 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
                     continue;
                 }
                 auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
-                urma_sock->DataReadFinsihed(seq_no);
+                urma_sock->DataReadFinished(seq_no);
                 continue;
             }
         }

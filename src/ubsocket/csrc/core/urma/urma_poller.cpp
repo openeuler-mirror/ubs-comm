@@ -22,6 +22,11 @@ std::atomic<uint16_t> UrmaPollerSet::INDEX_CREATOR{0};
 Result UrmaPoller::Start() noexcept
 {
     UBS_VLOG_DEBUG("Starting");
+    /* Queue/Dispatcher mode: epoll_wait drives the JFC polling, no independent poller thread. */
+    if (!handle_mode_caps_.dedicated_poller_thread) {
+        UBS_VLOG_INFO("epoll wait drives JFC polling, skip independent poller thread.");
+        return UBS_OK;
+    }
     if (started_.load()) {
         return UBS_OK;
     }
@@ -54,10 +59,16 @@ Result UrmaPoller::Start() noexcept
 void UrmaPoller::Stop() noexcept
 {
     UBS_VLOG_DEBUG("Stopping");
+    /* Queue/Dispatcher mode: no independent poller thread was started (see Start). */
+    if (!handle_mode_caps_.dedicated_poller_thread) {
+        UBS_VLOG_INFO("epoll wait drives JFC polling, skip stopping independent poller thread.");
+        return;
+    }
     stopping_ = true;
     // TODO 后续改为jfr消息触发
     struct sigaction sa = {0};
-    sa.sa_handler = [](int){};
+    sa.sa_handler = [](int) {
+    };
     sa.sa_flags = 0;
     sigaction(SIGUSR1, &sa, NULL);
 
@@ -96,7 +107,6 @@ void UrmaPoller::RunInThread()
 void UrmaPoller::EventPoll() noexcept
 {
     constexpr int32_t POLL_BATCH_SIZE = 32;
-    urma_cr_t crs[POLL_BATCH_SIZE]{};
     urma_jfc_t *ev_jfc;
     while (!stopping_) {
         try {
@@ -110,35 +120,56 @@ void UrmaPoller::EventPoll() noexcept
             }
 
             jfc_->Ack(1);
-            bool first_time = true;
-            while (true) {
-                cnt = jfc_->Poll(POLL_BATCH_SIZE, crs);
-                if (UNLIKELY(cnt == 0)) {
-                    jfc_->Rearm(false);
-                    break;
-                }
-
-                if (UNLIKELY(cnt < 0)) {
-                    stopping_ = true;
-                    UBS_VLOG_ERR("poll jfc failed return: %d", cnt);
-                    break;
-                }
-
-                auto result = cqe_handler_(0, cnt, crs);
-#ifdef UBS_LOG_TRACE_ENABLED
-                UBS_VLOG_TRACE("cqe handler processed (%d) and return %d, continue polling", cnt, result);
-#else
-                (void)result;
-#endif
-                if (first_time) {
-                    first_time = false;
-                    jfc_->Rearm(false);
-                }
-            }
+            DrainCqes(false);
         } catch (...) {
             UBS_VLOG_ERR("Exception caught in UrmaPoller");
         }
     }
+}
+
+Result UrmaPoller::PollAndDispatch(bool ackFirst) noexcept
+{
+    if (stopping_ || jfc_ == nullptr || cqe_handler_ == nullptr) {
+        UBS_VLOG_ERR("poller(%d) invalid to poll and dispatch.", index_);
+        return UBS_ERROR;
+    }
+    return DrainCqes(ackFirst);
+}
+
+Result UrmaPoller::DrainCqes(bool ackFirst) noexcept
+{
+    constexpr int32_t POLL_BATCH_SIZE = 32;
+    urma_cr_t crs[POLL_BATCH_SIZE]{};
+    if (ackFirst) {
+        jfc_->Ack(1);
+    }
+
+    bool first_time = true;
+    while (!stopping_) {
+        auto cnt = jfc_->Poll(POLL_BATCH_SIZE, crs);
+        if (UNLIKELY(cnt == 0)) {
+            jfc_->Rearm(false);
+            break;
+        }
+
+        if (UNLIKELY(cnt < 0)) {
+            stopping_ = true;
+            UBS_VLOG_ERR("poll jfc failed return: %d", cnt);
+            return UBS_ERROR;
+        }
+
+        auto result = cqe_handler_(0, cnt, crs);
+#ifdef UBS_LOG_TRACE_ENABLED
+        UBS_VLOG_TRACE("cqe handler processed (%d) and return %d, continue polling", cnt, result);
+#else
+        (void)result;
+#endif
+        if (first_time) {
+            first_time = false;
+            jfc_->Rearm(false);
+        }
+    }
+    return UBS_OK;
 }
 
 void UrmaPoller::BusyPoll() noexcept

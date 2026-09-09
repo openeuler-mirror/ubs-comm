@@ -17,11 +17,12 @@
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_lock.h"
 #include "core/ubsocket_socket.h"
+#include "core/urma/urma_backend.h"
 #include "core/urma/urma_data_rx_ops.h"
+#include "core/urma/urma_io_buf_pool.h"
+#include "core/urma/urma_setting.h"
 #include "core/urma/urma_socket.h"
 #include "core/urma/urma_socket_types.h"
-#include "core/urma/urma_backend.h"
-#include "core/urma/urma_io_buf_pool.h"
 #include "iobuf/ubsocket_iobuf.h"
 
 using namespace ock::ubs;
@@ -39,9 +40,8 @@ static int g_zc_block_idx = 0;
 static Block *AllocZcBlock()
 {
     int idx = g_zc_block_idx++;
-    auto *block = new (g_zc_mem + idx * ZC_BLOCK_SIZE) Block(
-        reinterpret_cast<char *>(g_zc_mem + idx * ZC_BLOCK_SIZE + sizeof(Block)),
-        ZC_BLOCK_SIZE - sizeof(Block));
+    auto *block = new (g_zc_mem + idx * ZC_BLOCK_SIZE)
+        Block(reinterpret_cast<char *>(g_zc_mem + idx * ZC_BLOCK_SIZE + sizeof(Block)), ZC_BLOCK_SIZE - sizeof(Block));
     block->nshared.store(100, std::memory_order_relaxed);
     return block;
 }
@@ -191,14 +191,15 @@ TEST_F(UrmaDataRxTest, ReadV_SingleMsgSingleIov_ReturnsFullData)
     UrmaRxOps rx(TEST_FD);
 
     const uint32_t body_size = 10;
-    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 128);
+    const uint32_t buf_unit = 1; /* ctrl 消息按 URMA_SND_BUFF_ALLOC_UNIT 对齐放置 */
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + buf_unit * URMA_SND_BUFF_ALLOC_UNIT);
     ctrl->head.data_count = body_size;
     const char test_data[] = "0123456789";
     memcpy(ctrl->small_io.data, test_data, body_size);
 
     WriteImmData imm;
     imm.ubsocket.opcode = WRITE_IN_BAND;
-    imm.ubsocket.buffer_offset = 128 / URMA_SND_BUFF_ALLOC_UNIT;
+    imm.ubsocket.buffer_offset = buf_unit;
 
     ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
 
@@ -217,19 +218,21 @@ TEST_F(UrmaDataRxTest, ReadV_MultiMsgMultiIov_ReturnsTotalData)
 
     const uint32_t body1 = 5;
     const uint32_t body2 = 5;
-    auto *ctrl1 = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 128);
+    const uint32_t buf_unit1 = 1;
+    const uint32_t buf_unit2 = 2;
+    auto *ctrl1 = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + buf_unit1 * URMA_SND_BUFF_ALLOC_UNIT);
     ctrl1->head.data_count = body1;
     memcpy(ctrl1->small_io.data, "hello", body1);
     WriteImmData imm1;
     imm1.ubsocket.opcode = WRITE_IN_BAND;
-    imm1.ubsocket.buffer_offset = 128 / URMA_SND_BUFF_ALLOC_UNIT;
+    imm1.ubsocket.buffer_offset = buf_unit1;
 
-    auto *ctrl2 = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 256);
+    auto *ctrl2 = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + buf_unit2 * URMA_SND_BUFF_ALLOC_UNIT);
     ctrl2->head.data_count = body2;
     memcpy(ctrl2->small_io.data, "world", body2);
     WriteImmData imm2;
     imm2.ubsocket.opcode = WRITE_IN_BAND;
-    imm2.ubsocket.buffer_offset = 256 / URMA_SND_BUFF_ALLOC_UNIT;
+    imm2.ubsocket.buffer_offset = buf_unit2;
 
     ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm1.data));
     ASSERT_EQ(UBS_LATER_SEQ, rx.DataReached(sock_, 1, imm2.data));
@@ -253,14 +256,15 @@ TEST_F(UrmaDataRxTest, ReadV_PartialRead_ReturnsPartialData)
     UrmaRxOps rx(TEST_FD);
 
     const uint32_t body_size = 20;
-    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 128);
+    const uint32_t buf_unit = 1;
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + buf_unit * URMA_SND_BUFF_ALLOC_UNIT);
     ctrl->head.data_count = body_size;
     const char test_data[] = "0123456789ABCDEFGHIJ";
     memcpy(ctrl->small_io.data, test_data, body_size);
 
     WriteImmData imm;
     imm.ubsocket.opcode = WRITE_IN_BAND;
-    imm.ubsocket.buffer_offset = 128 / URMA_SND_BUFF_ALLOC_UNIT;
+    imm.ubsocket.buffer_offset = buf_unit;
 
     ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
 
@@ -386,4 +390,145 @@ TEST_F(UrmaDataRxTest, DataReadFinished_SeqNotConsumed_ReturnsLaterSeq)
     EXPECT_EQ(UBS_LATER_SEQ, result);
     EXPECT_EQ(URMA_RX_STS_DATA_READY, slot.rx_state.load());
     GlobalMockObject::verify();
+}
+
+/*
+ * Dispatcher (QueueRxDispatcher) mode: poller-side entries only enqueue + wake (UBS_DEFERRED);
+ * ReadV drains the queue and performs the real processing on the consumer thread.
+ */
+class UrmaDataRxDispatcherTest : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        errno = 0;
+        LockRegistry::RegisterDefaultOps();
+        ArraySet<Socket>::GetInstance().Init();
+        GlobalSetting::UBS_TRACE_ENABLED = false;
+        GlobalSetting::UBS_SPLIT_TRACE_ENABLED = false;
+
+        memset(g_recv_buf, 0, BUF_SIZE);
+
+        auto urma_sock = MakeRef<UrmaSocket>(TEST_FD);
+        urma_sock->recv_buf_addr_ = reinterpret_cast<uintptr_t>(g_recv_buf);
+        urma_sock->recv_buf_size_ = static_cast<uint32_t>(BUF_SIZE);
+        urma_sock->send_buf_addr_ = reinterpret_cast<uintptr_t>(g_recv_buf);
+        urma_sock->send_buf_size_ = static_cast<uint32_t>(BUF_SIZE);
+        sock_ = RefConvert<UrmaSocket, Socket>(urma_sock);
+
+        saved_mode_ = UrmaSetting::UB_EPOLL_HANDLE_MODE;
+        UrmaSetting::UB_EPOLL_HANDLE_MODE = DISPATCHER_THREAD_POOL;
+
+        MOCKER(::eventfd_write).stubs().will(returnValue(0));
+        MOCKER(::eventfd).stubs().will(returnValue(42));
+        MOCKER_CPP(&UrmaRxOps::ResponseCtrlMessage).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
+        MOCKER_CPP(&UrmaBackend::GetAllocator).stubs().will(returnValue(&g_dummy_alloc));
+        MOCKER_CPP(&UrmaIoBufferPool::get_mini_block_head).stubs().will(invoke(MockMiniBlockHead));
+
+        g_dummy_alloc.fixed_allocator_.mini_block_head_mask_ = ~(ZC_BLOCK_SIZE - 1UL);
+        g_zc_block_idx = 0;
+    }
+
+    void TearDown() override
+    {
+        UrmaSetting::UB_EPOLL_HANDLE_MODE = saved_mode_;
+        errno = 0;
+        GlobalMockObject::verify();
+        ArraySet<Socket>::GetInstance().ReleaseAll();
+        sock_ = nullptr;
+    }
+
+    EpollHandleMode saved_mode_;
+    SocketPtr sock_{nullptr};
+};
+
+TEST_F(UrmaDataRxDispatcherTest, DataReached_DefersAndLeavesSlotIdle)
+{
+    UrmaRxOps rx(TEST_FD);
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+
+    auto result = rx.DataReached(sock_, 0, imm.data);
+    EXPECT_EQ(UBS_DEFERRED, result);
+    /* poller side never touches the slot: state machine is advanced only by the ReadV drain */
+    EXPECT_EQ(URMA_RX_STS_IDLE, rx.data_slots_[0].rx_state.load(std::memory_order_acquire));
+}
+
+TEST_F(UrmaDataRxDispatcherTest, DataReadFinished_DefersReturnsDeferred)
+{
+    UrmaRxOps rx(TEST_FD);
+
+    auto result = rx.DataReadFinished(sock_, 0);
+    EXPECT_EQ(UBS_DEFERRED, result);
+
+    /* drain runs on ReadV; the deferred event has no READING slot, so ReadV yields EAGAIN */
+    uint8_t buf[64] = {};
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    errno = 0;
+    auto ret = rx.ReadV(sock_, &iov, 1, 0);
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(EAGAIN, errno);
+}
+
+TEST_F(UrmaDataRxDispatcherTest, ReadV_DrainsDeferredInlineMessage_ReturnsData)
+{
+    UrmaRxOps rx(TEST_FD);
+
+    const uint32_t body_size = 10;
+    const uint32_t buf_unit = 1;
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + buf_unit * URMA_SND_BUFF_ALLOC_UNIT);
+    ctrl->head.data_count = body_size;
+    ctrl->head.sequence_no = 0; /* seq re-read by the drain from recv_buf */
+    const char test_data[] = "0123456789";
+    memcpy(ctrl->small_io.data, test_data, body_size);
+
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    imm.ubsocket.buffer_offset = buf_unit;
+
+    ASSERT_EQ(UBS_DEFERRED, rx.DataReached(sock_, 0, imm.data));
+    ASSERT_EQ(URMA_RX_STS_IDLE, rx.data_slots_[0].rx_state.load(std::memory_order_acquire));
+
+    uint8_t buf[64] = {};
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    auto ret = rx.ReadV(sock_, &iov, 1, 0);
+    EXPECT_EQ(body_size, ret);
+    EXPECT_EQ(0, memcmp(buf, test_data, body_size));
+}
+
+TEST_F(UrmaDataRxDispatcherTest, ReadV_DrainsMultipleDeferredMessages_InOrder)
+{
+    UrmaRxOps rx(TEST_FD);
+
+    const uint32_t buf_unit1 = 1;
+    const uint32_t buf_unit2 = 2;
+    auto *ctrl1 = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + buf_unit1 * URMA_SND_BUFF_ALLOC_UNIT);
+    ctrl1->head.data_count = 5;
+    ctrl1->head.sequence_no = 0;
+    memcpy(ctrl1->small_io.data, "hello", 5);
+    WriteImmData imm1;
+    imm1.ubsocket.opcode = WRITE_IN_BAND;
+    imm1.ubsocket.buffer_offset = buf_unit1;
+
+    auto *ctrl2 = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + buf_unit2 * URMA_SND_BUFF_ALLOC_UNIT);
+    ctrl2->head.data_count = 5;
+    ctrl2->head.sequence_no = 1;
+    memcpy(ctrl2->small_io.data, "world", 5);
+    WriteImmData imm2;
+    imm2.ubsocket.opcode = WRITE_IN_BAND;
+    imm2.ubsocket.buffer_offset = buf_unit2;
+
+    ASSERT_EQ(UBS_DEFERRED, rx.DataReached(sock_, 0, imm1.data));
+    ASSERT_EQ(UBS_DEFERRED, rx.DataReached(sock_, 1, imm2.data));
+
+    uint8_t buf[64] = {};
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    auto ret = rx.ReadV(sock_, &iov, 1, 0);
+    EXPECT_EQ(10, ret);
+    EXPECT_EQ(0, memcmp(buf, "helloworld", 10));
 }

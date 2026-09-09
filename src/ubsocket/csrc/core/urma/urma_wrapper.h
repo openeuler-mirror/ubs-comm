@@ -300,6 +300,7 @@ public:
     int Poll(int cr_count, urma_cr_t *jfc) noexcept;
     Result Rearm(bool solicited_only) noexcept;
     void Ack(uint32_t eventCount) noexcept;
+    int GetInterruptFd() const noexcept;
 
 private:
     urma_jfc_t *raw_jfc_ = nullptr;         /* raw jfc */
@@ -350,6 +351,11 @@ ALWAYS_INLINE Result UrmaJfc::EventWait(int timeout_ms) noexcept
 ALWAYS_INLINE void UrmaJfc::Ack(uint32_t eventCount) noexcept
 {
     UrmaApi::urma_ack_jfc(&raw_jfc_, &eventCount, 1);
+}
+
+ALWAYS_INLINE int UrmaJfc::GetInterruptFd() const noexcept
+{
+    return raw_jfce_ == nullptr ? -1 : raw_jfce_->fd;
 }
 
 class UrmaJfs : public Referable {

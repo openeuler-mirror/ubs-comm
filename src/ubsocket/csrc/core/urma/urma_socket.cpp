@@ -26,7 +26,7 @@ namespace ock {
 namespace ubs {
 namespace urma {
 
-UrmaSocket::UrmaSocket(int fd) noexcept: SocketBase(fd, SocketType::SOCK_TYPE_URMA)
+UrmaSocket::UrmaSocket(int fd) noexcept : SocketBase(fd, SocketType::SOCK_TYPE_URMA)
 {
     empty_recv_sge_.addr = 0;
     empty_recv_sge_.len = 0;
@@ -168,7 +168,7 @@ int UrmaSocket::NotifySocketReadable()
         if ((events_.load(std::memory_order_acquire) & EPOLLIN) != 0) { // double check
             if (socket_readable_ready_.exchange(false, std::memory_order_acq_rel)) {
                 FetchOrReachEpollEvents(EPOLLIN);
-                auto ret = eventfd_write(event_fd_, 1);
+                auto ret = DeliverReadable();
                 PROF_END(___URMA_EVENT_WRITE, true);
                 return ret;
             }
@@ -178,9 +178,22 @@ int UrmaSocket::NotifySocketReadable()
     }
 
     FetchOrReachEpollEvents(EPOLLIN);
-    auto ret = eventfd_write(event_fd_, 1);
+    auto ret = DeliverReadable();
     PROF_END(___URMA_EVENT_WRITE, true);
     return ret;
+}
+
+int UrmaSocket::DeliverReadable()
+{
+    /*
+     * The poll this socket is registered on may deliver the readable event inline (dispatcher
+     * mode, its own epoll_wait thread); otherwise keep the eventfd notification semantics.
+     */
+    auto notifier = readable_notifier_.load(std::memory_order_acquire);
+    if (notifier != nullptr && notifier->NotifyReadable(*this)) {
+        return 0;
+    }
+    return eventfd_write(event_fd_, 1);
 }
 
 void UrmaSocket::HandleRecvCqe(const WriteImmData &imm)
@@ -216,12 +229,16 @@ void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
         return;
     }
     auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_ctl_off);
-    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv req write_imm(%u:%u) req_id(%lu) seq(%lu)",
-               raw_socket_, static_cast<unsigned>(imm.ubsocket.opcode),
-               static_cast<unsigned>(imm.ubsocket.buffer_offset), req->head.request_id,
-               req->head.sequence_no);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv req write_imm(%u:%u) req_id(%lu) seq(%lu)", raw_socket_,
+                   static_cast<unsigned>(imm.ubsocket.opcode), static_cast<unsigned>(imm.ubsocket.buffer_offset),
+                   req->head.request_id, req->head.sequence_no);
     auto res = rdma_rx_ops->DataReached(this, req->head.sequence_no, imm.data);
-    if (UNLIKELY(res != UBS_OK)) {
+    /*
+     * Only genuine failures are logged. UBS_LATER_SEQ (stored out of order) and UBS_DEFERRED
+     * (enqueued, handled by the ReadV drain in Dispatcher mode) are non-fatal although their
+     * codes are negative.
+     */
+    if (UNLIKELY(res != UBS_OK && res != UBS_LATER_SEQ && res != UBS_DEFERRED)) {
         UBS_VLOG_ERR("socket fd(%d) process large io ctrl message failed: %d", raw_socket_, res);
     }
     PROF_END(_URMA_IMM_REACH_PROC, true);
@@ -231,10 +248,9 @@ void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
 {
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
-    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv resp write_imm(%u:%u) req_id(%lu) seq(%lu)",
-           raw_socket_, static_cast<unsigned>(imm.ubsocket.opcode),
-           static_cast<unsigned>(imm.ubsocket.buffer_offset), req->head.request_id,
-           req->head.sequence_no);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv resp write_imm(%u:%u) req_id(%lu) seq(%lu)", raw_socket_,
+                   static_cast<unsigned>(imm.ubsocket.opcode), static_cast<unsigned>(imm.ubsocket.buffer_offset),
+                   req->head.request_id, req->head.sequence_no);
     if (ubsocket_prof_enabled != 0) {
         auto used = ubsocket_get_timeNs() - req->head.trace_time;
         PROF_RECORD(URMA_FULL_IO_LARGE, used, true);
@@ -260,18 +276,19 @@ void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
     auto urma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
     auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
-    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv req write_imm(%u:%u) req_id(%lu) seq(%lu)",
-           raw_socket_, static_cast<unsigned>(imm.ubsocket.opcode),
-           static_cast<unsigned>(imm.ubsocket.buffer_offset), req->head.request_id,
-           req->head.sequence_no);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv req write_imm(%u:%u) req_id(%lu) seq(%lu)", raw_socket_,
+                   static_cast<unsigned>(imm.ubsocket.opcode), static_cast<unsigned>(imm.ubsocket.buffer_offset),
+                   req->head.request_id, req->head.sequence_no);
     auto res = urma_rx_ops->DataReached(this, req->head.sequence_no, imm.data);
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
+    } else if (UNLIKELY(res != UBS_LATER_SEQ && res != UBS_DEFERRED)) {
+        UBS_VLOG_ERR("socket fd(%d) process inline io ctrl message failed: %d", raw_socket_, res);
     }
     PROF_END(_URMA_IMM_REACH_PROC, true);
 }
 
-void UrmaSocket::DataReadFinsihed(uint32_t seq_no)
+void UrmaSocket::DataReadFinished(uint32_t seq_no)
 {
     PROF_START(_URMA_PULL_FINISH_PROC);
     UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv data read finished cr seq(%u)", raw_socket_, seq_no);
@@ -279,6 +296,8 @@ void UrmaSocket::DataReadFinsihed(uint32_t seq_no)
     auto res = rdma_rx_ops->DataReadFinished(this, seq_no);
     if (LIKELY(res == UBS_OK)) {
         NotifySocketReadable();
+    } else if (UNLIKELY(res != UBS_LATER_SEQ && res != UBS_DEFERRED)) {
+        UBS_VLOG_ERR("socket fd(%d) process data read finished failed: %d", raw_socket_, res);
     }
     PROF_END(_URMA_PULL_FINISH_PROC, true);
 }
@@ -287,10 +306,9 @@ void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
 {
     auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
-    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv resp write_imm(%u:%u) req_id(%lu) seq(%lu)",
-       raw_socket_, static_cast<unsigned>(imm.ubsocket.opcode),
-       static_cast<unsigned>(imm.ubsocket.buffer_offset), req->head.request_id,
-       req->head.sequence_no);
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv resp write_imm(%u:%u) req_id(%lu) seq(%lu)", raw_socket_,
+                   static_cast<unsigned>(imm.ubsocket.opcode), static_cast<unsigned>(imm.ubsocket.buffer_offset),
+                   req->head.request_id, req->head.sequence_no);
     if (ubsocket_prof_enabled != 0) {
         auto used = ubsocket_get_timeNs() - req->head.trace_time;
         PROF_RECORD(URMA_FULL_IO_INLINE, used, true);

@@ -15,6 +15,7 @@
 
 #include "core/ubsocket_data_rx.h"
 #include "iobuf/ubsocket_iobuf.h"
+#include "urma_event_dispatch.h"
 #include "urma_socket.h"
 #include "urma_socket_types.h"
 
@@ -35,35 +36,48 @@ enum LargeIoRxState : uint8_t {
     URMA_RX_STS_DATA_READY,
     URMA_RX_STS_COUNT
 };
-
 class UrmaRxOps : public DataRxOps {
 public:
-    explicit UrmaRxOps(int fd) : fd_(fd) {}
-
+    explicit UrmaRxOps(int fd) : fd_(fd), rx_dispatcher_(CreateUrmaRxDispatcher()) {}
     ~UrmaRxOps() override = default;
 
     /*
-     * Called from CQE poller when an URMA WRITE_IMM completion arrives. Stores the
-     * sequence number and immediate data into the ring slot. For PRE_WRITE (large IO),
-     * triggers RDMA READ via IssueReadRequest; for WRITE_IN_BAND, marks slot as
-     * DATA_READY for consumer to pick up via ReadV.
+     * Poller/CQE-side "data reached" entry, invoked when a WRITE_IMM CQE arrives.
+     * Places the message onto a slot so ReadV can consume it:
+     *   - WRITE_IN_BAND: slot transitions to DATA_READY;
+     *   - PRE_WRITE: triggers RDMA READ (IssueReadRequest).
      *
-     * Returns: UBS_OK if slot is free and data was stored,
-     *          UBS_LATER_SEQ if out-of-order (higher seq_no than consumed),
-     *          UBS_PREFILL_RX if slot is occupied by a live message.
+     * Delegates to the rx_dispatcher_ strategy selected by the EpollHandleMode at construction:
+     *   - Inline mode: the poller thread processes the event immediately and the caller wakes
+     *     the read side on UBS_OK (see returns below).
+     *   - Dispatcher mode: the event is enqueued and the read side is woken inside the strategy,
+     *     returning UBS_DEFERRED — the actual slot progression runs later inside ReadV.
+     *
+     * Returns: UBS_OK head-of-line is ready, caller may wake the read side;
+     *          UBS_LATER_SEQ stored out of order (wake when head-of-line arrives);
+     *          UBS_PREFILL_RX slot occupied by an in-flight message;
+     *          UBS_ERROR enqueue/processing failure;
+     *          UBS_DEFERRED Dispatcher only: already enqueued and woken, caller must not wake again.
      */
-    Result DataReached(const SocketPtr &sock, uint64_t seq_no, uint64_t write_imm) noexcept;
+    Result DataReached(const SocketPtr &sock, uint64_t seq_no, uint64_t write_imm) noexcept
+    {
+        return rx_dispatcher_->HandleDataReached(*this, sock, seq_no, write_imm);
+    }
 
     /*
-     * Called from CQE poller when a previously issued RDMA READ completes. Validates
-     * slot state is READING, sends a POST_WRITE response to the sender (via
-     * ResponseCtrlMessage), and transitions slot to DATA_READY.
+     * Poller/CQE-side "RDMA READ finished" entry, invoked when a READ_DATA_REQUEST CQE arrives.
+     * Validates the slot is in READING, replies POST_WRITE to the sender, and transitions
+     * the slot to DATA_READY. Strategy semantics match DataReached.
      *
-     * Returns: UBS_OK if the consumed seq_no matches (consumer can proceed),
-     *          UBS_LATER_SEQ if out-of-order,
-     *          UBS_ERROR if state was not READING.
+     * Returns: UBS_OK consumer may proceed;
+     *          UBS_LATER_SEQ out of order;
+     *          UBS_ERROR slot state is not READING or enqueue failed;
+     *          UBS_DEFERRED Dispatcher only: already enqueued and woken.
      */
-    Result DataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexcept;
+    Result DataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexcept
+    {
+        return rx_dispatcher_->HandleDataReadFinished(*this, sock, seq_no);
+    }
 
     /*
      * Main read entry point (override of DataRxOps::ReadV). Consumes ready data from
@@ -91,10 +105,10 @@ private:
     /* Ring buffer slot tracking per-message receive state. 64-byte aligned for cache-line isolation. */
     struct alignas(64) DataSlot {
         std::atomic<LargeIoRxState> rx_state{URMA_RX_STS_IDLE}; /* current state in the state machine */
-        uint64_t seq_no{INVALID_SEQ};                            /* message sequence number */
-        uint64_t write_imm{0};                                   /* WRITE_IMM immediate data (opcode + buffer offset) */
-        Block *data_block{nullptr};                              /* chain of received data blocks (PRE_WRITE path) */
-        uint64_t start_read_time{0};                             /* timestamp when RDMA READ was issued (for timeout) */
+        uint64_t seq_no{INVALID_SEQ};                           /* message sequence number */
+        uint64_t write_imm{0};                                  /* WRITE_IMM immediate data (opcode + buffer offset) */
+        Block *data_block{nullptr};                             /* chain of received data blocks (PRE_WRITE path) */
+        uint64_t start_read_time{0};                            /* timestamp when RDMA READ was issued (for timeout) */
     };
 
     /* Cursor tracking scatter-gather read progress across iov entries. */
@@ -156,8 +170,7 @@ private:
      * Pairs each remote buffer segment with the corresponding local Block.
      * Results accumulated into ctx.wrs as a linked list.
      */
-    void BuildReadWrs(uint32_t data_count, uint64_t msg_offset, Block *head_block,
-                      BuildReadWrCtx &ctx) noexcept;
+    void BuildReadWrs(uint32_t data_count, uint64_t msg_offset, Block *head_block, BuildReadWrCtx &ctx) noexcept;
 
     /*
      * Stores remote memory segment mappings (addr → target_seg) for each buffer
@@ -199,15 +212,35 @@ private:
      * slot.data_block to nullptr. Static — does not depend on instance state.
      */
     static void ReleaseBlockInSlot(DataSlot &slot) noexcept;
+
+    /*
+     * Real processing backend: places the message onto a slot
+     * (WRITE_IN_BAND -> DATA_READY, PRE_WRITE -> IssueReadRequest).
+     * Executed by one of two actors — the poller thread in Inline mode, or the ReadV drain
+     * in Dispatcher mode; the rx_dispatcher_ strategy guarantees they never run concurrently.
+     */
+    Result ProcessDataReached(const SocketPtr &sock, uint64_t seq_no, uint64_t write_imm) noexcept;
+
+    /*
+     * Real processing backend: validates READING -> sends POST_WRITE response -> sets
+     * DATA_READY. Actors same as above.
+     */
+    Result ProcessDataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexcept;
+
+    friend class InlineRxDispatcher;
+    friend class QueueRxDispatcher;
+
     static constexpr size_t RING_SIZE = 256;
     static constexpr uint64_t INVALID_SEQ = UINT64_MAX;
 
 private:
-    int fd_ = -1;                                       /* socket file descriptor */
-    std::atomic<uint64_t> consume_seq_no_{0};         /* next sequence number expected by consumer (ReadV) */
-    uint64_t consume_offset_{0};                        /* bytes already consumed from current slot (partial read) */
-    DataSlot data_slots_[RING_SIZE];                    /* per-sequence-number receive state ring */
-    BlockCache block_cache_;                            /* cache for zero-copy block management */
+    int fd_ = -1;                             /* socket file descriptor */
+    std::atomic<uint64_t> consume_seq_no_{0}; /* next sequence number expected by consumer (ReadV) */
+    uint64_t consume_offset_{0};              /* bytes already consumed from current slot (partial read) */
+    /* per-seq indexed slot array (receive state machine); NOT a FIFO, no ring reused */
+    DataSlot data_slots_[RING_SIZE];
+    BlockCache block_cache_;                          /* cache for zero-copy block management */
+    std::unique_ptr<UrmaRxDispatcher> rx_dispatcher_; /* mode-selected RX event delivery strategy */
 };
 
 } // namespace urma

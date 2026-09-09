@@ -66,8 +66,7 @@ static ock::ubs::Result MockRecvPrefixedMajorMismatch(int, void *body, uint32_t,
 {
     UrmaNegotiateReq *req = static_cast<UrmaNegotiateReq *>(body);
     req->peer_version = 0xFF000000;
-    req->tp_type = TPT_CTP;
-    req->tp_mode = TPM_RC;
+    req->trans_mode = RM_CTP;
     req->send_buf_kb = 16;
     req->recv_buf_kb = 16;
     return UBS_OK;
@@ -77,8 +76,7 @@ static ock::ubs::Result MockRecvPrefixedCompatible(int, void *body, uint32_t, ui
 {
     UrmaNegotiateReq *req = static_cast<UrmaNegotiateReq *>(body);
     req->peer_version = TEST_VERSION;
-    req->tp_type = TPT_CTP;
-    req->tp_mode = TPM_RC;
+    req->trans_mode = RM_CTP;
     req->send_buf_kb = 16;
     req->recv_buf_kb = 16;
     return UBS_OK;

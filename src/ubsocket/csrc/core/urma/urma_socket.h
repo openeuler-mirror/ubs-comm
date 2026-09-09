@@ -20,6 +20,27 @@
 namespace ock {
 namespace ubs {
 namespace urma {
+
+class UrmaSocket;
+
+/*
+ * Installed onto an UrmaSocket by the event poll it is registered on. When the socket becomes
+ * readable, NotifySocketReadable asks the notifier to surface the event without a kernel wakeup
+ * (inline record into the poll's pending-readable queue). The notifier returns false when it
+ * cannot deliver inline (different thread, non-dispatcher poll, socket not registered there) and
+ * the socket then falls back to writing its eventfd.
+ *
+ * Keeping this behind an interface keeps the socket layer independent of the poll implementation
+ * (in particular of the poll's thread-local "active wait" bookkeeping).
+ */
+class UrmaReadableNotifier {
+public:
+    virtual ~UrmaReadableNotifier() = default;
+
+    /* @return true if the readable event was delivered inline; false -> caller uses the eventfd. */
+    virtual bool NotifyReadable(UrmaSocket &sock) noexcept = 0;
+};
+
 class UrmaSocket : public SocketBase {
 public:
     explicit UrmaSocket(int fd) noexcept;
@@ -123,7 +144,7 @@ public:
     void HandleWriteInBandAck(const WriteImmData &imm);
     void HandlePreWrite(const WriteImmData &imm);
     void HandleWriteInBand(const WriteImmData &imm);
-    void DataReadFinsihed(uint32_t seq_no);
+    void DataReadFinished(uint32_t seq_no);
     void PostEmptyRecvWorkerRecords(uint32_t count = 1);
 
     bool ExchangeSocketReadableReady(bool b)
@@ -151,13 +172,24 @@ public:
         return reach_epoll_events_.load(std::memory_order_relaxed);
     }
 
+    /* The poll this socket is registered on may deliver readable events inline. */
+    void SetReadableNotifier(UrmaReadableNotifier *notifier) noexcept
+    {
+        readable_notifier_.store(notifier, std::memory_order_release);
+    }
+
+    UrmaReadableNotifier *GetReadableNotifier() const noexcept
+    {
+        return readable_notifier_.load(std::memory_order_acquire);
+    }
+
 protected:
     int DoNotifyWritable() override;
 
 private:
+    int DeliverReadable();
     Result DoExchangeSocketResources(bool send_first);
 
-private:
     UrmaJettyPtr jetty_;      /* could be dedicated jetty or shared jetty */
     uintptr_t send_buf_addr_; /* dedicate send buffer, i.e. not shared */
     uintptr_t recv_buf_addr_; /* dedicate send buffer, i.e. not shared */
@@ -189,7 +221,8 @@ private:
     uint32_t negotiated_version_{0};
     uint32_t peer_version_{0};
     std::atomic<uint32_t> reach_epoll_events_{0};
-    std::atomic<bool> socket_readable_ready_{false}; // socket初始状态为不可读
+    std::atomic<bool> socket_readable_ready_{false};                 // socket初始状态为不可读
+    std::atomic<UrmaReadableNotifier *> readable_notifier_{nullptr}; /* poll that may deliver readable inline */
 
     urma_sge_t empty_recv_sge_;
     urma_jfr_wr_t empty_recv_wr_;
@@ -197,6 +230,7 @@ private:
     friend class UrmaConnectorOps;
     friend class UrmaTxOps;
     friend class UrmaRxOps;
+    friend class QueueRxDispatcher; /* drains deferred events: re-reads seq from recv_buf */
 };
 using UrmaSocketPtr = Ref<UrmaSocket>;
 

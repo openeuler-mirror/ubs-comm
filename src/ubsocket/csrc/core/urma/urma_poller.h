@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_URMA_POLLER_H
 #define UBS_COMM_URMA_POLLER_H
 
+#include "urma_event_dispatch.h"
 #include "urma_socket_types.h"
 #include "urma_wrapper.h"
 
@@ -38,7 +39,8 @@ public:
     UrmaPoller(uint16_t index, const UrmaCqeHandler &h, const UrmaJfcPtr &jfc) noexcept
         : jfc_(jfc),
           cqe_handler_(h),
-          index_(index)
+          index_(index),
+          handle_mode_caps_(UrmaHandleModeCapsNow())
     {
     }
 
@@ -46,6 +48,18 @@ public:
     {
         Stop();
     }
+
+    const UrmaJfcPtr &GetJFC() const noexcept
+    {
+        return jfc_;
+    }
+
+    /*
+     * DISPATCHER_THREAD_POOL 模式(无独立 poller 线程)下, 由 UrmaEventPoll 在 epoll_wait
+     * 的 JFCE 事件处理中调用: 内联 ack + 批 poll + 经 cqe_handler_ 派发到各 socket。
+     * @param ackFirst 是否先 Ack(1) 一次中断事件(inline JFCE 路径传 true)
+     */
+    Result PollAndDispatch(bool ackFirst = false) noexcept;
 
 private:
     /**
@@ -66,14 +80,16 @@ private:
 
     void EventPoll() noexcept;
     void BusyPoll() noexcept;
+    Result DrainCqes(bool ackFirst) noexcept;
 
 private:
-    UrmaJfcPtr jfc_{nullptr};          /* one poller contains one urma poller */
-    const UrmaCqeHandler cqe_handler_; /* callback function of  */
-    const uint16_t index_;             /* index of the poller */
-    std::atomic<bool> started_{false}; /* started sign */
-    bool stopping_{false};             /* stop sign to stop poller thread */
-    std::thread thread_;               /* thread to call urma poll or epoll_wait */
+    UrmaJfcPtr jfc_{nullptr};             /* one poller contains one urma poller */
+    const UrmaCqeHandler cqe_handler_;    /* callback function of  */
+    const uint16_t index_;                /* index of the poller */
+    UrmaHandleModeCaps handle_mode_caps_; /* ctor snapshot of the handle-mode capabilities */
+    std::atomic<bool> started_{false};    /* started sign */
+    bool stopping_{false};                /* stop sign to stop poller thread */
+    std::thread thread_;                  /* thread to call urma poll or epoll_wait */
 
     friend class UrmaPollerSet;
 };
@@ -92,6 +108,10 @@ public:
     void UnInit() noexcept;
 
     Result SelectPoller(UrmaJfcPtr &jfc) noexcept;
+    const std::vector<UrmaPollerPtr> &GetAllPollers() const noexcept
+    {
+        return pollers_;
+    }
 
 private:
     void UnInitInner() noexcept;

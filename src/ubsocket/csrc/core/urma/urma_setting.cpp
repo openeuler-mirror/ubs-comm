@@ -17,6 +17,7 @@ namespace urma {
 #define ENV_URMA_EID_IDX "UBSOCKET_UB_EID_IDX"
 #define ENV_URMA_BOUNDING_DEV "UBSOCKET_UB_BOUNDING_DEV"
 #define ENV_URMA_BUSY_POLLING "UBSOCKET_UB_BUSY_POLLING"
+#define ENV_URMA_EPOLL_HANDLE_MODE "UBSOCKET_EPOLL_HANDLE_MODE"
 
 bool UrmaSetting::UB_USING_BOUNDING_DEV = true;
 std::string UrmaSetting::UB_DEV_NAME = "";
@@ -42,6 +43,7 @@ uint16_t UrmaSetting::UB_BUF_BLOCK_SIZE_MB = 16;
 uint16_t UrmaSetting::UB_BUF_INIT_MEM_SIZE_MB = 256;
 uint16_t UrmaSetting::UB_BUF_PAGE_SIZE_KB = 64;
 bool UrmaSetting::UB_BUF_ASYNC_EXPAND = false;
+EpollHandleMode UrmaSetting::UB_EPOLL_HANDLE_MODE = THREAD_PER_CONNECTION;
 
 void UrmaSetting::Init() noexcept
 {
@@ -56,8 +58,10 @@ void UrmaSetting::Init() noexcept
 void UrmaSetting::AddRules()
 {
     /* int64 rule: name, required, min, max */
-    Int64Rule rules_int64[] = {
-        {ENV_URMA_EID_IDX, false, 0, 1024}, {ENV_URMA_BOUNDING_DEV, false, 0, 1}, {ENV_URMA_BUSY_POLLING, false, 0, 1}};
+    Int64Rule rules_int64[] = {{ENV_URMA_EID_IDX, false, 0, 1024},
+                               {ENV_URMA_BOUNDING_DEV, false, 0, 1},
+                               {ENV_URMA_BUSY_POLLING, false, 0, 1},
+                               {ENV_URMA_EPOLL_HANDLE_MODE, false, EPOLL_HANDLE_MODE_MIN, EPOLL_HANDLE_MODE_COUNT - 1}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {};
@@ -100,6 +104,10 @@ Result UrmaSetting::LoadEnv()
 
     if (GS::GetEnvAndValidate(ENV_URMA_BUSY_POLLING, int64EnvValue)) {
         UB_POLLER_BUSY_POLLING = (int64EnvValue != 0);
+    }
+
+    if (GS::GetEnvAndValidate(ENV_URMA_EPOLL_HANDLE_MODE, int64EnvValue)) {
+        UB_EPOLL_HANDLE_MODE = static_cast<EpollHandleMode>(int64EnvValue);
     }
     return UBS_OK;
 }

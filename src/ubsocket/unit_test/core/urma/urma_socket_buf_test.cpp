@@ -10,8 +10,8 @@
  */
 #include <gtest/gtest.h>
 #include <cerrno>
-#include <vector>
 #include <list>
+#include <vector>
 
 #include "core/urma/urma_socket_buf.h"
 
@@ -21,6 +21,10 @@ namespace {
 
 static constexpr uint64_t TEST_CAPACITY = 256;
 static constexpr uint64_t TEST_CHUNK = UrmaSockBuf::kChunkSize;
+
+/* UrmaSockContinuousBuf 构造需传入 buffer 起始地址(wrap 场景 in-band later-release 节点写入用);
+ * 测试用假 base 无实际内存, 提供一块可写后备内存承载这些写入 */
+alignas(64) static uint8_t g_continuous_mem[256 * 1024];
 
 class TestUrmaSockBuf : public UrmaSockBuf {
 public:
@@ -87,7 +91,7 @@ private:
     uint64_t capacity_;
 };
 
-}  // namespace
+} // namespace
 
 class UrmaSockShiftBufTest : public ::testing::Test {
 protected:
@@ -217,7 +221,7 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_NoWrap_OffsetUnchanged)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->alloc_offset_ = 64;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     ASSERT_TRUE(buf.Allocate(128, offset));
     EXPECT_EQ(64U, offset);
@@ -227,7 +231,7 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_Failure_ReturnsFalse)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->alloc_fail_ = true;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     EXPECT_FALSE(buf.Allocate(TEST_CHUNK, offset));
 }
@@ -236,7 +240,7 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_ProducesContiguousAtOffsetZero)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->alloc_offsets_ = {200, 44};
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     ASSERT_TRUE(buf.Allocate(100, offset));
 
@@ -251,7 +255,7 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_SecondAllocFails_Rollback)
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->alloc_offsets_ = {200};
     base->fail_on_count_ = 1;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     EXPECT_FALSE(buf.Allocate(100, offset));
 
@@ -264,7 +268,7 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_WrongAppendOffset_Rollback)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->alloc_offsets_ = {200, 128};
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     EXPECT_FALSE(buf.Allocate(100, offset));
 
@@ -279,7 +283,7 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_AtNonZeroBaseOffset_ProducesCont
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->alloc_offsets_ = {192, 64};
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     ASSERT_TRUE(buf.Allocate(128, offset));
 
@@ -294,7 +298,7 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_NoWrap_ReturnsUnchanged)
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->minmax_alloc_size_ = 128;
     base->minmax_offset_ = 32;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     EXPECT_EQ(128U, buf.Allocate(TEST_CHUNK, 256, offset));
     EXPECT_EQ(32U, offset);
@@ -304,7 +308,7 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_Failure_ReturnsZero)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->minmax_alloc_size_ = 32;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     EXPECT_EQ(0U, buf.Allocate(TEST_CHUNK, 256, offset));
 }
@@ -314,7 +318,7 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapLessThanMax_WrapSizeSuffici
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->minmax_alloc_size_ = 128;
     base->minmax_offset_ = 200;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     uint64_t wrap_size = 128 - (TEST_CAPACITY - 200);
     EXPECT_EQ(wrap_size, buf.Allocate(TEST_CHUNK, 256, offset));
@@ -330,7 +334,7 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapLessThanMax_WrapSizeInsuffi
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->minmax_alloc_size_ = 128;
     base->minmax_offset_ = 240;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     EXPECT_EQ(0U, buf.Allocate(128, 256, offset));
 
@@ -345,7 +349,7 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapEqualsMax_SecondAllocSuccee
     base->minmax_alloc_size_ = 128;
     base->minmax_offset_ = 200;
     base->alloc_offset_ = 72;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     EXPECT_EQ(128U, buf.Allocate(TEST_CHUNK, 128, offset));
     EXPECT_EQ(0U, offset);
@@ -361,7 +365,7 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapEqualsMax_SecondAllocFails_
     base->minmax_alloc_size_ = 128;
     base->minmax_offset_ = 200;
     base->alloc_fail_ = true;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     uint64_t wrap_size = 128 - (TEST_CAPACITY - 200);
     EXPECT_EQ(wrap_size, buf.Allocate(TEST_CHUNK, 128, offset));
@@ -374,7 +378,7 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapEqualsMax_WrongAppendOffset
     base->minmax_alloc_size_ = 128;
     base->minmax_offset_ = 200;
     base->alloc_offset_ = 64;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     uint64_t offset = 0;
     uint64_t wrap_size = 128 - (TEST_CAPACITY - 200);
     EXPECT_EQ(wrap_size, buf.Allocate(TEST_CHUNK, 128, offset));
@@ -387,7 +391,7 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapEqualsMax_WrongAppendOffset
 TEST_F(UrmaSockContinuousBufTest, Release_PassThrough)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     buf.Release(42, 123);
     ASSERT_EQ(1U, base->release_calls_.size());
     EXPECT_EQ(42U, base->release_calls_[0].offset);
@@ -398,7 +402,7 @@ TEST_F(UrmaSockContinuousBufTest, Available_DelegatesToBase)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->available_ = 789;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     EXPECT_EQ(789U, buf.Available());
 }
 
@@ -406,14 +410,14 @@ TEST_F(UrmaSockContinuousBufTest, Used_DelegatesToBase)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
     base->used_ = 321;
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     EXPECT_EQ(321U, buf.Used());
 }
 
 TEST_F(UrmaSockContinuousBufTest, Capacity_MatchesBase)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(TEST_CAPACITY);
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
     EXPECT_EQ(TEST_CAPACITY, buf.Capacity());
 }
 
@@ -421,7 +425,7 @@ TEST_F(UrmaSockContinuousBufTest, Keep_LongAllocate)
 {
     TestUrmaSockBuf *base = new TestUrmaSockBuf(128 * 1024);
     ASSERT_TRUE(base != nullptr);
-    UrmaSockContinuousBuf buf(base);
+    UrmaSockContinuousBuf buf(base, reinterpret_cast<uintptr_t>(g_continuous_mem));
 
     auto unit = 128U;
     std::list<std::pair<uint64_t, uint64_t>> chunks;
@@ -436,7 +440,8 @@ TEST_F(UrmaSockContinuousBufTest, Keep_LongAllocate)
     }
 
     for (auto i = 0U; i < 100000U; i++) {
-        auto n = (abs(rand()) % 8) + 1;uint64_t size = n * unit;
+        auto n = (abs(rand()) % 8) + 1;
+        uint64_t size = n * unit;
         uint64_t offset = 0;
         auto success = buf.Allocate(n * unit, offset);
         ASSERT_TRUE(success) << "times: " << i << ", size=" << size;
