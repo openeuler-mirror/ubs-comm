@@ -294,7 +294,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             // 因此在 EpollCtlMod 与 NotifyWritable 中使用 writable_ready_ 原子变量决策，由谁来真正地向上通知
             // EPOLLOUT 事件。
             if (all_failed) {
-                umq_socket->SetWritableReady(false);
                 need_fc_awake_.store(true, std::memory_order_relaxed);
             } else {
                 // 在部分数据写入成功时出现 EAGAIN, 说明 umq 的流控 credit 不足，它会发起另一个流控 credit 请
@@ -321,7 +320,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             UBS_VLOG_DEBUG(
                 "[Debug] umq_post() suspended: no available jetty. Queued for automatic retry. socket fd: %d\n",
                 sock->raw_socket_);
-            umq_socket->SetWritableReady(false);
             UmqTpWaitQueue::Instance().Enqueue(sock);
             errno = EAGAIN;
         } else if (errno == ENOBUFS) {
@@ -333,7 +331,6 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
                 UBS_VLOG_DEBUG(
                     "[Debug] umq_post() suspended: no enough buffers. Queued for automatic retry. socket fd: %d\n",
                     sock->raw_socket_);
-                umq_socket->SetWritableReady(false);
                 UmqTpWaitQueue::Instance().Enqueue(sock);
                 errno = EAGAIN;
             }
@@ -425,17 +422,34 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         }
     }
 
+    /* Proactively recover TX window when in-flight WRs are high (large packet scenario).
+     * Poll to empty to drain all available CQEs, not just up to the retrieve threshold.
+     * This mirrors the 0711 fix from ubs-comm: PollTx(retrieve_threshold, true). */
+    PROF_START(CORE_WRITE_POLL_UMQ_TX);
+    if (tx_total_len > 0 &&
+        (GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel)) >= TX_HANDLE_THRESHOLD) {
+        (void)PollUmqTx(sock.Get(), true);
+    }
+    PROF_END(CORE_WRITE_POLL_UMQ_TX, true);
+
     return tx_total_len;
 }
 
 int UmqTxOps::PollTx(Socket *sock)
 {
+    /*
+     * TX CQE 回收总入口。SINGLE jetty 下由 TxCqePoller(100ms) 与写路径共同触发,
+     * 三条分支(FIRST/SECOND/THIRD)的占比可直接看出 TX 是"中断驱动"还是"退化为定时轮询"。
+     */
+    PROF_START(CORE_WRITE_POLL_TX);
+
     if (get_and_ack_event_) {
         // handle tx epollin epoll event
         do {
             PROF_START(CORE_WRITE_REARM);
             if (GetAndAckEvent() < 0) {
                 PROF_END(CORE_WRITE_REARM, false);
+                PROF_END(CORE_WRITE_POLL_TX, false);
                 UBS_VLOG_ERR("WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                              Func::Error2Str(errno));
                 return -1;
@@ -466,6 +480,7 @@ int UmqTxOps::PollTx(Socket *sock)
         PROF_END(CORE_WRITE_POLL_TX_THIRD, true);
     }
 
+    PROF_END(CORE_WRITE_POLL_TX, true);
     return 0;
 }
 
@@ -586,8 +601,7 @@ int UmqTxOps::DoUmqTxPoll(Socket *sock, ops_error_code &err_code)
         // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
         auto *umq_sock = static_cast<UmqSocket *>(sock);
         if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
-            if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
-                qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR) {
+            if (UmqTxHelper::IsPortFailure(qbuf)) {
                 auto [ports, ports_num] = umq_sock->GetUsedPorts();
                 for (std::size_t i = 0; i < ports_num; ++i) {
                     UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",

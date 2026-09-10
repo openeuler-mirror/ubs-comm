@@ -37,6 +37,7 @@ namespace umq {
 #define ENV_UMQ_TP_TYPE "UBSOCKET_JETTY_TYPE"
 #define ENV_UMQ_TP_POOL_SIZE "UBSOCKET_JETTY_POOL_SIZE"
 #define ENV_UMQ_O3_TIMEOUT_MS "UBSOCKET_O3_TIMEOUT_MS"
+#define ENV_UMQ_DEV_NAME "UBSOCKET_DEV_NAME"
 
 #define DEFAULT_DEV_SCHEDULE_POLICY "affinity_priority"
 #define ROUND_ROBIN_DEV_SCHEDULE_POLICY "rr"
@@ -67,9 +68,9 @@ std::string UmqSetting::UMQ_DEV_SCHEDULE_POLICY_NAME = DEFAULT_DEV_SCHEDULE_POLI
 dev_schedule_policy UmqSetting::UMQ_DEV_SCHEDULE_POLICY = CPU_AFFINITY_PRIORITY;
 // TODO: 根据 UBS_TRANS_MODE 来设置 UMQ_TRANS_MODE, 待增加 ENV转换器
 umq_trans_mode_t UmqSetting::UMQ_TRANS_MODE = UMQ_TRANS_MODE_UB;
-ub_trans_mode UmqSetting::UMQ_UB_TRANS_MODE = RM_TP;
+ub_trans_mode UmqSetting::UMQ_UB_TRANS_MODE = RM_CTP;
 umq_tp_mode_t UmqSetting::UMQ_UB_TP_MODE = UMQ_TM_RM;
-umq_tp_type_t UmqSetting::UMQ_UB_TP_TYPE = UMQ_TP_TYPE_RTP;
+umq_tp_type_t UmqSetting::UMQ_UB_TP_TYPE = UMQ_TP_TYPE_CTP;
 bool UmqSetting::UMQ_IS_BONDING = false;
 bool UmqSetting::UMQ_FLOW_CONTROL_ENABLE = true;
 bool UmqSetting::UMQ_RANDOM_ROUTE = false;
@@ -103,12 +104,18 @@ void UmqSetting::AddRules() noexcept
                                     {ENV_UMQ_FLOW_CONTROL_ENABLED, false, "true|false"},
                                     {ENV_UMQ_TP_TYPE, false, "single|pool"}};
 
+    StrNotEmptyRule rules_str_not_empty[] = {{ENV_UMQ_DEV_NAME, false, 64}};
+
     for (auto &item : rules_int64) {
         Validator::Instance().AddNumRule(item);
     }
 
     for (auto &item : rules_str_enum) {
         Validator::Instance().AddStrEnumRule(item);
+    }
+
+    for (auto &item : rules_str_not_empty) {
+        Validator::Instance().AddStrNotEmtpyRule(item);
     }
 
     UBS_SLOG_DEBUG(Validator::Instance().DumpString());
@@ -188,6 +195,10 @@ Result UmqSetting::LoadEnv() noexcept
         UBS_VLOG_INFO("Current policy type: %s", UMQ_DEV_SCHEDULE_POLICY_NAME.c_str());
     }
 
+    if (GS::GetEnvAndValidateNotEmpty(ENV_UMQ_DEV_NAME, strEnvValue)) {
+        UMQ_DEV_NAME = strEnvValue;
+    }
+
     if (GS::GetEnvAndValidate(ENV_UMQ_UB_TRANS_MODE, strEnvValue)) {
         std::string ub_trans_mode_str = strEnvValue;
         if (ub_trans_mode_str == "RM_TP") {
@@ -218,6 +229,11 @@ Result UmqSetting::LoadEnv() noexcept
         IO_BLOCK_TYPE = BlockTypeFromStr(strEnvValue);
     } else {
         IO_BLOCK_TYPE = DefaultBlockTypeCheck();
+    }
+
+    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && UMQ_TP_TYPE == POOL) {
+        UBS_VLOG_WARN("UBSOCKET_JETTY_TYPE=pool requires shared JFR; use single Jetty when shared JFR is disabled.\n");
+        UMQ_TP_TYPE = SINGLE;
     }
 
     return UBS_OK;

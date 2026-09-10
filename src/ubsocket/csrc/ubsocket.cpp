@@ -205,7 +205,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     return UBS_OK;
 }
 
-void ubsocket_uninit()
+UBS_API void ubsocket_uninit()
 {
     if (GlobalSetting::UBS_PROF_ENABLE) {
         Profiling::Uninit();
@@ -304,11 +304,12 @@ UBS_API void *ubsocket_iobuf_allocate(size_t size, const ubs_iobuf_alloc_option_
     }
 
     uint32_t type = GlobalSetting::UBS_ALLOWED_PROTOCOL;
-    if (type == UBS_PROTOCOL_UB_RM_RTP || type == UBS_PROTOCOL_UB_RC_RTP) {
+    constexpr uint32_t ubProtocolMask = UBS_PROTOCOL_UB_RM_RTP | UBS_PROTOCOL_UB_RC_RTP;
+    if ((type & ubProtocolMask) != 0) {
         // delete at ubsocket_uninit
         g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
     } else {
-        UBS_VLOG_WARN("unknown zcopy allocator type");
+        UBS_VLOG_WARN("unknown zcopy allocator type: %u", type);
         return nullptr;
     }
 

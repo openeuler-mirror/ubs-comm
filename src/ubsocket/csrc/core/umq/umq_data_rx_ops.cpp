@@ -21,22 +21,21 @@ namespace ubs {
 namespace umq {
 int UmqRxOps::PollRx(const SocketPtr &sock)
 {
-    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR && get_and_ack_event_) {
-        PROF_START(CORE_READ_REARM);
-        if (GetAndAckEvent() < 0) {
-            PROF_END(CORE_READ_REARM, false);
-            UBS_VLOG_ERR("ReadV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
-                         Func::Error2Str(errno));
-            return -1;
-        }
-        PROF_END(CORE_READ_REARM, true);
-        get_and_ack_event_ = false;
-    }
+    // 注意：独享模式（!UBS_ENABLE_SHARE_JFR）下 RX 中断的 get_cq_event/rearm/ack 全部由
+    // SHARE_JFR_RX_RUNNER::ProcessSubUmqRxEvent 独占完成（runner-drain 模型），应用侧
+    // 不得再调 GetAndAckEvent()——否则会与 runner 竞争消费同一中断 fd：应用先抢走 cq event
+    // 时 runner 读到 0 而跳过 rearm，中断链断裂，接收永久静默。
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
     umq_buf_t *buf[POLL_BATCH_MAX];
     int poll_num = 0;
     if (poll_) {
+        /*
+         * 消费侧取数。CORE_READ_GET_QBUF 与内层 CORE_READ_POP_QBUF 的差值即为
+         * dynamic_cast<UmqSocket*> 等外壳开销，用于确认是否为 runner-drain 模型引入的额外成本。
+         */
+        PROF_START(CORE_READ_GET_QBUF);
         poll_num = GetQbuf(sock, buf, POLL_BATCH_MAX);
+        PROF_END(CORE_READ_GET_QBUF, poll_num >= 0);
         if (poll_num < 0) {
             UBS_VLOG_ERR("ReadV GetQbuf() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
@@ -71,7 +70,10 @@ int UmqRxOps::PollRx(const SocketPtr &sock)
             // 流控消息处理
             if (buf[i]->status >= UMQ_FAKE_BUF_FC_UPDATE) {
                 if (buf[i]->status == UMQ_FAKE_BUF_FC_UPDATE) {
-                    // 对端的流控回复，已在共享 JFR 接收处 inline 处理
+                    // 对端的流控回复：共享 JFR 与独享模式均已在 runner 的
+                    // SiftSocketEventsWithUmqBuffers 中 inline 处理（NotifyWritable）。
+                    // 正常路径下 FC fake buffer 不会入 rxQueue，此处仅为防御性兜底。
+                    sockBase->NotifyWritable();
                 } else if (buf[i]->status == UMQ_FAKE_BUF_FC_ERR) {
                     flow_control_failed_ = true;
                     HandleErrorRxCqe(buf[i]);
@@ -115,13 +117,23 @@ Block *UmqRxOps::DataToBlock(void *data)
     return reinterpret_cast<Block *>(qbuf->buf_data);
 }
 
+inline uint32_t UmqRxOps::IOBufSize()
+{
+    return UmqSetting::GetIOBufSize();
+}
+
 int UmqRxOps::GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num)
 {
-    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
-        return UmqPollAndRefillRx(buf, max_num);
-    }
+    // 共享 JFR 与独享模式统一为 runner-drain 模型：runner（ProcessShareJfrEvent /
+    // ProcessSubUmqRxEvent）负责 umq_poll + FC 处理 + RX 补投，数据经 AddQbuf 入 rxQueue，
+    // 应用侧只 pop 队列。独享模式不得再走 UmqPollAndRefillRx（应用侧 umq_poll），
+    // 否则与 runner 双端消费同一 umq：FC_UPDATE 可能被应用侧摘走而错过 NotifyWritable，
+    // EPOLLOUT 丢失后发送方永久卡死（能建链、无法持续发送）。
     auto umqSock = dynamic_cast<UmqSocket *>(sock.Get());
+    /* 跨线程队列交接的消费端: 从 rxQueue pop 出 runner 线程放入的 qbuf */
+    PROF_START(CORE_READ_POP_QBUF);
     int poll_num = umqSock->GetAndPopQbuf(buf, max_num);
+    PROF_END(CORE_READ_POP_QBUF, poll_num >= 0);
     if (poll_num < 0) {
         UBS_VLOG_ERR("GetQbuf failed, fd: %d, ret: %d\n", fd_, poll_num);
         return -1;
@@ -331,6 +343,12 @@ void UmqRxOps::HandleErrorRxCqe(umq_buf_t *buf)
 
 int UmqRxOps::RearmRxInterrupt()
 {
+    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
+        // 独享模式：RX 中断的 get_cq_event/rearm/ack 由 SHARE_JFR_RX_RUNNER 的
+        // ProcessSubUmqRxEvent 独占（runner-drain 模型），应用侧不得重复 rearm，
+        // 否则双重 arm 会产生伪中断、干扰 runner 的事件计数。
+        return UBS_OK;
+    }
     if (UmqSetting::UMQ_TP_TYPE == POOL) {
         return UBS_OK;
     }

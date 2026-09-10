@@ -75,6 +75,8 @@ public:
     DataTx() = default;
     DataTx(const SocketPtr &sock, DataTxOps *ops);
 
+    ssize_t WriteVCopy(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+
     ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
 
     DataTxOps *GetTxOps()

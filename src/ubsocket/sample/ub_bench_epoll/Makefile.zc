@@ -1,0 +1,24 @@
+CC = g++
+CFLAGS = -std=c++11 -Wall -Wextra -O2 -pthread
+
+# 本 Makefile 位于 src/ubsocket/sample/ub_bench_epoll/, 相对当前 ubsocket 源码树:
+#   include -> ../../include            (ubsocket.h / ubsocket_epoll.h / ubsocket_sock.h)
+#   lib     -> ../../build/csrc         (UMQ_BUILD=on UBSOCKET_BUILD=on bash build/build_umq_and_ubsocket.sh 构建后生成 libubsocket.so 在此目录)
+# 需要时可在 make 命令行覆盖, 例如:
+#   make -f Makefile.zc UBS_LIB=/path/to/other/build
+MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+UBS_INCLUDE ?= $(MAKEFILE_DIR)../../include
+UBS_LIB     ?= $(MAKEFILE_DIR)../../build/csrc
+
+TARGET = ub_bench_epoll_zc
+SRC    = ub_bench_epoll_zc.cpp
+
+all: $(TARGET)
+
+$(TARGET): $(SRC)
+	$(CC) $(CFLAGS) -I$(UBS_INCLUDE) -o $@ $(SRC) -L$(UBS_LIB) -lubsocket -Wl,-rpath,$(UBS_LIB)
+
+clean:
+	rm -f $(TARGET)
+
+.PHONY: all clean

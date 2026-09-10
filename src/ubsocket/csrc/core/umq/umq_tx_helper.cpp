@@ -37,6 +37,8 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
         TRACE_ADD_WRITE(trace, CORE_WRITE_UMQ_POLL, raw_socket, umq_poll_start, umq_poll_end,
                         static_cast<uint32_t>(poll_num));
     }
+    // 运行时打点：与上面的编译期 TRACE 同一区间，复用 begin 时间戳，环境变量模式下亦可采集
+    PROF_END_FROM(CORE_WRITE_UMQ_POLL, tpBeginUMQ_POLL_WRITE, poll_num > 0);
     if (poll_num <= 0) {
         PROF_END(UMQ_POLL_WRITE, false);
         if (poll_args.silent_poll_err && poll_num < 0) {
@@ -58,6 +60,7 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
     if (trace != nullptr) {
         cqe_start = ubsocket_get_timeNs_compile();
     }
+    PROF_START(CORE_WRITE_POLL_CQE);
     std::unordered_map<int, int> socket_wr_cnt_map{};
     for (int i = 0; i < poll_num; ++i) {
         if (buf[i] == nullptr || buf[i]->status != 0 || (((umq_buf_pro_t *)buf[i]->qbuf_ext) == nullptr) ||
@@ -89,6 +92,7 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
         if (cur_wr_cnt < 0) {
             // set err_code to true to force a quick exit from current function.
             poll_args.err_code = ops_error_code::FATAL_ERROR;
+            PROF_END(CORE_WRITE_POLL_CQE, false);
             return wr_cnt;
         }
 
@@ -107,8 +111,19 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
             UBS_VLOG_DEBUG("Socket %d has been removed.\n", fd);
             continue;
         }
+        // fd 复用防护：被轮询 socket 的 fd 可能在本轮 umq_poll 期间被 close 并复用给新 socket，
+        // 此时 GetItem(fd) 返回新 socket，其 tx_ops 可能尚未初始化（nullptr）。
+        // 历史故障：直接对新 socket 的 tx_ops 解引用 -> SIGSEGV @ 0xc (tx_queue_avail_num_ 偏移)。
+        // CQE 归属的旧 socket 已在销毁中，窗口额度丢弃即可，绝不可返还给 fd 复用后的新 socket。
+        if (poll_args.sock != nullptr && sock.Get() != poll_args.sock) {
+            UBS_VLOG_DEBUG("Socket fd %d has been reused by another socket, skip tx credit return.\n", fd);
+            continue;
+        }
         auto umq_sk = RefStaticCast<UmqSocket>(sock);
         auto tx_ops = umq_sk->GetTx()->GetTxOps();
+        if (tx_ops == nullptr) {
+            continue;
+        }
         tx_ops->tx_queue_avail_num_.fetch_add(count, std::memory_order_acq_rel);
     }
 
@@ -116,6 +131,7 @@ int UmqTxHelper::PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb)
         uint64_t cqe_end = ubsocket_get_timeNs_compile();
         TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE, raw_socket, cqe_start, cqe_end, 0);
     }
+    PROF_END(CORE_WRITE_POLL_CQE, true);
     return wr_cnt;
 }
 
@@ -132,6 +148,7 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket
     if (do_trace) {
         decref_start = ubsocket_get_timeNs_compile();
     }
+    PROF_START(CORE_WRITE_POLL_CQE_DECREF);
     do {
         wr_first_buf = cur_qbuf;
         int64_t left_size = (int64_t)wr_first_buf->total_data_size;
@@ -153,6 +170,7 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket
         uint64_t decref_end = ubsocket_get_timeNs_compile();
         TRACE_ADD_WRITE(trace, CORE_WRITE_POLL_CQE_DECREF, raw_socket, decref_start, decref_end, 0);
     }
+    PROF_END(CORE_WRITE_POLL_CQE_DECREF, wr_first_buf != nullptr);
 
     if (wr_first_buf == nullptr) {
         UBS_VLOG_ERR("TX umq buffer list is in error, TX user context does not contain the right list\n");
@@ -167,6 +185,8 @@ int UmqTxHelper::ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket
     PROF_START(UMQ_BUF_FREE);
     UmqApi::umq_buf_free(start_qbuf);
     PROF_END(UMQ_BUF_FREE, true);
+    // CQE 回收路径下的 buf 释放（与 UMQ_BUF_FREE 同区间，复用 begin 时间戳）
+    PROF_END_FROM(CORE_WRITE_POLL_CQE_FREE, tpBeginUMQ_BUF_FREE, true);
 
     return wr_cnt;
 }
@@ -201,7 +221,13 @@ void UmqTxHelper::LogTxCqeErrorMsg(umq_buf_t *buf)
     auto bufStatus = static_cast<umq_buf_status_t>(buf->status);
     int mappedErrno = UmqErrnoConverter::ConvertBufStatus(UmqOperation::WRITEV, bufStatus, errno);
     const char *desc = UmqErrnoConverter::GetBufStatusDescription(UmqOperation::WRITEV, bufStatus);
-    UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n", buf->status, mappedErrno, desc);
+    if (bufStatus == UMQ_FAKE_BUF_FC_ERR) {
+        auto *bufPro = reinterpret_cast<umq_buf_pro_t *>(buf->qbuf_ext);
+        UBS_VLOG_ERR("cqe error: buf status %lu, underlying FC CQE status: %llu, mapped errno: %d, desc: %s\n",
+                     buf->status, static_cast<unsigned long long>(bufPro->rsvd1), mappedErrno, desc);
+    } else {
+        UBS_VLOG_ERR("cqe error: buf status %lu, mapped errno: %d, desc: %s\n", buf->status, mappedErrno, desc);
+    }
 
     switch (buf->status) {
         case UMQ_BUF_SUCCESS:
@@ -278,6 +304,24 @@ void UmqTxHelper::LogTxCqeErrorMsg(umq_buf_t *buf)
     }
 }
 
+bool UmqTxHelper::IsPortFailure(const umq_buf_t *qbuf)
+{
+    if (qbuf == nullptr) {
+        return false;
+    }
+    if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
+        qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR) {
+        return true;
+    }
+    if (qbuf->status != UMQ_FAKE_BUF_FC_ERR) {
+        return false;
+    }
+
+    auto *bufPro = reinterpret_cast<const umq_buf_pro_t *>(qbuf->qbuf_ext);
+    return bufPro->rsvd1 == UMQ_BUF_LOC_LEN_ERR || bufPro->rsvd1 == UMQ_BUF_LOC_ACCESS_ERR ||
+           bufPro->rsvd1 == UMQ_BUF_ACK_TIMEOUT_ERR;
+}
+
 void UmqTxHelper::ProcessErrorTxCqe(umq_buf_t *first_qbuf)
 {
     umq_buf_t *cur_qbuf = first_qbuf;
@@ -339,8 +383,7 @@ int UmqTxHelper::PollUmqTxForFcReturn(uint64_t umq_handle)
         // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
         auto *umq_sock = static_cast<UmqSocket *>(socket_ptr);
         if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
-            if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
-                qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR) {
+            if (IsPortFailure(qbuf)) {
                 auto [ports, ports_num] = umq_sock->GetUsedPorts();
                 for (std::size_t i = 0; i < ports_num; ++i) {
                     UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",

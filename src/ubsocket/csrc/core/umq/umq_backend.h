@@ -24,6 +24,7 @@ class UmqBackend {
 public:
     static Result Init() noexcept;
     static void UnInit() noexcept;
+    static Result InitShareJfrMonitering(uint64_t main_umq_handle);
 
 private:
     static Result AddUbDev(umq_trans_info_t &trans_info);
@@ -31,7 +32,6 @@ private:
     static Result FindDevEid(const char *dev, uint32_t eid_idx);
     static uint64_t CreateShareMainUmq(umq_eid_t &local_eid);
     static Result PrefillShareMainUmq(umq_eid_t &local_eid);
-    static Result InitShareJfrMonitering(uint64_t main_umq_handle);
     static void UmqCleanup() noexcept;
 
 private:

@@ -21,7 +21,7 @@ DataRx::DataRx(const SocketPtr &sock, DataRxOps *ops) : fd_(sock->raw_socket_), 
     /* caller must make sure ops is not null */
 }
 
-ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+ssize_t DataRx::ReadVCopy(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
     PROF_START(CORE_READ);
     PROF_START(CORE_READ_EAGAIN);
@@ -70,6 +70,245 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         return ret;
     }
 
+    char *anchor_block = static_cast<char *>(ubsocket_iobuf_allocate(IOBUF_DIFF + rx_ops_->IOBufSize(), nullptr));
+    if (anchor_block == nullptr) {
+        errno = ENOMEM;
+        return -1;
+    }
+    Block *anchor = reinterpret_cast<Block *>(anchor_block);
+    anchor->nshared.store(1, std::memory_order_relaxed);
+    anchor->flags = 0;
+    anchor->abi_check = 0;
+    anchor->size = 0;
+    anchor->cap = rx_ops_->IOBufSize();
+    anchor->u.portal_next = nullptr;
+    anchor->data = anchor_block + IOBUF_DIFF;
+
+    // 构造临时 iov，指向锚点块的 payload 区
+    struct iovec tmp_iov = {anchor->data, anchor->cap};
+
+    uint32_t max_buf_size;
+    max_buf_size = 0;
+    for (int i = 0; i < iovcnt; i++) {
+        max_buf_size += iov[i].iov_len;
+    }
+
+    ret = rx_ops_->RxDataSet(tmp_iov.iov_base, max_buf_size);
+
+    if (ret < 0) {
+        if (!((errno == EINTR) || (errno == EAGAIN))) {
+            PROF_END(CORE_READ, false);
+        } else {
+            PROF_END(CORE_READ_EAGAIN, true);
+            TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, read_start_time, ubsocket_get_timeNs_compile());
+        }
+        ubsocket_iobuf_deallocate(anchor_block);
+        return ret;
+    }
+    rx_total_len = ret;
+    if (rx_total_len > 0) {
+        Block *first = rx_ops_->DataToBlock(tmp_iov.iov_base);
+        Block *blk = first->GetNext();
+        size_t remain = rx_total_len;
+        int iov_idx = 0;
+        size_t iov_off = 0;
+
+        // 拷贝数据到上层iov
+        while (blk != nullptr && remain > 0) {
+            size_t copy_len = std::min(remain, (size_t)blk->cap);
+            size_t done = 0;
+            while (done < copy_len) {
+                if (iov_idx >= iovcnt) {
+                    // 理论上不会发生
+                    break;
+                }
+                char *dest = (char *)iov[iov_idx].iov_base + iov_off;
+                size_t left_in_iov = iov[iov_idx].iov_len - iov_off;
+                size_t to_copy = std::min(copy_len - done, left_in_iov);
+                memcpy(dest, (char *)blk->data + done, to_copy);
+                done += to_copy;
+                iov_off += to_copy;
+                if (iov_off >= iov[iov_idx].iov_len) {
+                    ++iov_idx;
+                    iov_off = 0;
+                }
+            }
+            remain -= copy_len;
+
+            Block *next_blk = blk->GetNext();
+            blk->DecRef();
+            blk = next_blk;
+        }
+    }
+    ubsocket_iobuf_deallocate(anchor_block);
+
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
+    }
+    if (rx_total_len != 0) {
+        TRACE_ADD_READ(trace, CORE_READ, fd_, read_start_time, ubsocket_get_timeNs_compile());
+    }
+    PROF_END(CORE_READ, true);
+    TRACE_TRY_SWAP(trace);
+    return rx_total_len;
+}
+
+ssize_t DataRx::RecvCopy(const SocketPtr &sock, void *buf, size_t len, int flags)
+{
+    PROF_START(CORE_READ);
+    PROF_START(CORE_READ_EAGAIN);
+    uint64_t read_start_time = ubsocket_get_timeNs_compile();
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        ssize_t size = LibcApi::recv(fd_, buf, len, flags);
+        PROF_END(CORE_READ, size >= 0);
+        return size;
+    }
+
+    if (buf == nullptr || len == 0) {
+        errno = EINVAL;
+        UBS_VLOG_WARN("Recv invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                      Func::Error2Str(errno));
+        PROF_END(CORE_READ, false);
+        return UBS_ERROR;
+    }
+
+    const struct iovec user_iov = {.iov_base = buf, .iov_len = len};
+
+    auto *trace = sock->split_trace_;
+
+    /* if socket failed to pass protocol negotiation validation, then
+     * (1) pass the received protocol negotiation as message to caller;
+     * (2) when all the received message passed to caller, fallback to tcp/ip */
+    ssize_t rx_total_len = OutputErrorMagicNumber(sock, &user_iov, 1);
+    if (rx_total_len > 0) {
+        PROF_END(CORE_READ, false);
+        return rx_total_len;
+    }
+
+    PROF_START(CORE_READ_POLL_RX);
+    int ret = rx_ops_->PollRx(sock);
+    PROF_END(CORE_READ_POLL_RX, ret >= 0);
+    if (ret < 0) {
+        PROF_END(CORE_READ, false);
+        return ret;
+    }
+
+    char *anchor_block = static_cast<char *>(ubsocket_iobuf_allocate(IOBUF_DIFF + rx_ops_->IOBufSize(), nullptr));
+    if (anchor_block == nullptr) {
+        errno = ENOMEM;
+        return -1;
+    }
+    Block *anchor = reinterpret_cast<Block *>(anchor_block);
+    anchor->nshared.store(1, std::memory_order_relaxed);
+    anchor->flags = 0;
+    anchor->abi_check = 0;
+    anchor->size = 0;
+    anchor->cap = rx_ops_->IOBufSize();
+    anchor->u.portal_next = nullptr;
+    anchor->data = anchor_block + IOBUF_DIFF;
+
+    // 构造临时 iov，指向锚点块的 payload 区
+    struct iovec tmp_iov = {anchor->data, anchor->cap};
+
+    uint32_t max_buf_size;
+    max_buf_size = len;
+
+    PROF_START(CORE_READ_RX_DATA_SET);
+    ret = rx_ops_->RxDataSet(tmp_iov.iov_base, max_buf_size);
+    PROF_END(CORE_READ_RX_DATA_SET, ret >= 0);
+
+    if (ret < 0) {
+        if (!((errno == EINTR) || (errno == EAGAIN))) {
+            PROF_END(CORE_READ, false);
+        } else {
+            PROF_END(CORE_READ_EAGAIN, true);
+            TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, read_start_time, ubsocket_get_timeNs_compile());
+        }
+        ubsocket_iobuf_deallocate(anchor_block);
+        return ret;
+    }
+    rx_total_len = ret;
+    PROF_START(CORE_READ_COPY);
+    if (rx_total_len > 0) {
+        Block *first = rx_ops_->DataToBlock(tmp_iov.iov_base);
+        Block *blk = first->GetNext();
+        size_t remain = rx_total_len;
+        size_t offset = 0;
+
+        while (blk != nullptr && remain > 0) {
+            size_t copy_len = std::min(remain, (size_t)blk->cap);
+            if (offset + copy_len > len) {
+                copy_len = len - offset;
+            }
+            if (copy_len == 0)
+                break;
+
+            memcpy((char *)buf + offset, blk->data, copy_len);
+            offset += copy_len;
+            remain -= copy_len;
+
+            Block *next_blk = blk->GetNext();
+            blk->DecRef();
+            blk = next_blk;
+        }
+    }
+    PROF_END(CORE_READ_COPY, true);
+    PROF_START(CORE_READ_COPY_FREE_ANCHOR);
+    ubsocket_iobuf_deallocate(anchor_block);
+    PROF_END(CORE_READ_COPY_FREE_ANCHOR, true);
+
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
+    }
+    if (rx_total_len != 0) {
+        TRACE_ADD_READ(trace, CORE_READ, fd_, read_start_time, ubsocket_get_timeNs_compile());
+    }
+    PROF_END(CORE_READ, true);
+    TRACE_TRY_SWAP(trace);
+    return rx_total_len;
+}
+
+ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+{
+    PROF_START(CORE_READ);
+    PROF_START(CORE_READ_EAGAIN);
+    uint64_t read_start_time = ubsocket_get_timeNs_compile();
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        ssize_t size = LibcApi::readv(fd_, iov, iovcnt);
+        PROF_END(CORE_READ, size >= 0);
+        return size;
+    }
+    if (iov == nullptr || iovcnt == 0) {
+        errno = EINVAL;
+        UBS_VLOG_WARN("ReadV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                      Func::Error2Str(errno));
+        PROF_END(CORE_READ, false);
+        return UBS_ERROR;
+    }
+    for (int i = 0; i < iovcnt; i++) {
+        if (iov[i].iov_base == nullptr) {
+            errno = EINVAL;
+            UBS_VLOG_WARN("ReadV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                          Func::Error2Str(errno));
+            PROF_END(CORE_READ, false);
+            return UBS_ERROR;
+        }
+    }
+    auto *trace = sock->split_trace_;
+    ssize_t rx_total_len = OutputErrorMagicNumber(sock, iov, iovcnt);
+    if (rx_total_len > 0) {
+        PROF_END(CORE_READ, false);
+        return rx_total_len;
+    }
+    PROF_START(CORE_READ_POLL_RX);
+    int ret = rx_ops_->PollRx(sock);
+    PROF_END(CORE_READ_POLL_RX, ret >= 0);
+    if (ret < 0) {
+        PROF_END(CORE_READ, false);
+        return ret;
+    }
     uint32_t max_buf_size;
     if (GlobalSetting::UBS_READV_UNLIMITED) {
         max_buf_size = UINT32_MAX;
@@ -79,9 +318,61 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
             max_buf_size += iov[i].iov_len;
         }
     }
-
     ret = rx_ops_->RxDataSet(iov[0].iov_base, max_buf_size);
+    if (ret < 0) {
+        if (!((errno == EINTR) || (errno == EAGAIN))) {
+            PROF_END(CORE_READ, false);
+        } else {
+            PROF_END(CORE_READ_EAGAIN, true);
+            TRACE_ADD_READ(trace, CORE_READ_EAGAIN, fd_, read_start_time, ubsocket_get_timeNs_compile());
+        }
+        return ret;
+    }
+    rx_total_len = ret;
+    if (GlobalSetting::UBS_TRACE_ENABLED) {
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, rx_total_len);
+    }
+    if (rx_total_len != 0) {
+        TRACE_ADD_READ(trace, CORE_READ, fd_, read_start_time, ubsocket_get_timeNs_compile());
+    }
+    PROF_END(CORE_READ, true);
+    TRACE_TRY_SWAP(trace);
+    return rx_total_len;
+}
 
+ssize_t DataRx::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
+{
+    PROF_START(CORE_READ);
+    PROF_START(CORE_READ_EAGAIN);
+    uint64_t read_start_time = ubsocket_get_timeNs_compile();
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        ssize_t size = LibcApi::recv(fd_, buf, len, flags);
+        PROF_END(CORE_READ, size >= 0);
+        return size;
+    }
+    if (buf == nullptr || len == 0) {
+        errno = EINVAL;
+        UBS_VLOG_WARN("Recv invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                      Func::Error2Str(errno));
+        PROF_END(CORE_READ, false);
+        return UBS_ERROR;
+    }
+    const struct iovec user_iov = {.iov_base = buf, .iov_len = len};
+    auto *trace = sock->split_trace_;
+    ssize_t rx_total_len = OutputErrorMagicNumber(sock, &user_iov, 1);
+    if (rx_total_len > 0) {
+        PROF_END(CORE_READ, false);
+        return rx_total_len;
+    }
+    PROF_START(CORE_READ_POLL_RX);
+    int ret = rx_ops_->PollRx(sock);
+    PROF_END(CORE_READ_POLL_RX, ret >= 0);
+    if (ret < 0) {
+        PROF_END(CORE_READ, false);
+        return ret;
+    }
+    ret = rx_ops_->RxDataSet(buf, len);
     if (ret < 0) {
         if (!((errno == EINTR) || (errno == EAGAIN))) {
             PROF_END(CORE_READ, false);
@@ -139,13 +430,16 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
     if (rx_total_len == 0) {
         /*
          * m_rx.epoll_event_num_ not equals to m_rx.m_expect_epoll_event_num means another epoll event is reported
-         * during readv processing procedure, set m_rx.m_poll to enable poll RX operation and set errno to EINTR
-         * to let brpc retry and call readv()
+         * during readv processing procedure, set m_rx.m_poll to enable poll RX operation on next entry and return
+         * EAGAIN so that callers (brpc/envoy/kitex) uniformly treat it as "no data yet, retry later".
+         * EINTR was previously used to hint brpc to retry immediately, but it is a synthesized errno (no real
+         * signal interruption) and envoy does not auto-retry on EINTR for non-blocking fds, which caused
+         * spurious connection errors. EAGAIN is the POSIX-correct errno for "no data available right now".
          */
         if (!epoll_event_num_.compare_exchange_strong(expect_epoll_event_num_, 0, std::memory_order_release,
                                                       std::memory_order_acquire)) {
             poll_ = true;
-            errno = EINTR;
+            errno = EAGAIN;
             return UBS_ERROR;
         }
         if (ArraySet<Socket>::GetInstance().GetItem(fd_)->State() == SOCK_STAT_CLOSE) {
@@ -159,7 +453,16 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
             return UBS_ERROR;
         }
 
-        if (RearmRxInterrupt() < 0) {
+        /*
+         * 空读分支的两笔系统调用开销。若新架构因 runner 跨线程通知与数据落盘的时序差,
+         * 造成"EPOLLIN 已上送但 rxQueue 还没数据"的空读变多, 每次空读都要多付
+         * RearmRxInterrupt + recv(MSG_PEEK) 两次系统调用, 直接抬高 RTT。
+         * 因此这两个点位的 total(调用次数) 比 avg 更有诊断价值, 需与旧版逐点对比。
+         */
+        PROF_START(CORE_READ_RX_DATA_SET_REARM);
+        int rearm_ret = RearmRxInterrupt();
+        PROF_END(CORE_READ_RX_DATA_SET_REARM, rearm_ret >= 0);
+        if (rearm_ret < 0) {
             errno = EIO;
             UBS_VLOG_ERR("ReadV RearmRxInterrupt() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
                          Func::Error2Str(errno));
@@ -169,7 +472,9 @@ ssize_t DataRxOps::RxDataSet(void *buf, uint32_t size)
         // UB 链路上无数据，但还是触发了 EPOLLIN 事件，可能是对端 TCP 连接关闭了，此种场景下向 brpc
         // 返回 0 暗示读到 EOF, brpc 随后会主动关闭连接.
         char b[1];
+        PROF_START(CORE_READ_RX_DATA_SET_RECV);
         int n = LibcApi::recv(fd_, b, sizeof(b), MSG_PEEK | MSG_DONTWAIT);
+        PROF_END(CORE_READ_RX_DATA_SET_RECV, n >= 0);
         if (n == 0) {
             UBS_VLOG_INFO("The TCP connection has been closed by peer.\n");
             auto trace_sock = ArraySet<Socket>::GetInstance().GetItem(fd_);

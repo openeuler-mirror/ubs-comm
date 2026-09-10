@@ -18,6 +18,7 @@
 #include "common/ubsocket_lock.h"
 #include "common/ubsocket_logger.h"
 #include "common/ubsocket_scope_exit.h"
+#include "profiling/ubsocket_prof.h"
 #include "ubsocket_data_tx.h"
 #include "ubsocket_socket.h"
 
@@ -197,6 +198,12 @@ void TxCqePoller::RunInThread() noexcept
         }
 
         if (need_poll) {
+            /*
+             * SINGLE jetty 场景下 TX CQE 仅由本 100ms 定时器回收。
+             * 该点位用于观测单轮回收扫描的耗时: 若耗时明显且与应用写路径争抢同一把锁/同一 umq,
+             * 会周期性地把应用线程的 writev 顶高, 表现为 RTT 长尾。
+             */
+            PROF_START(CORE_TX_POLLER_LOOP);
             std::vector<SocketPtr> activeSockets;
             {
                 Locker sLock(mutex_);
@@ -218,6 +225,7 @@ void TxCqePoller::RunInThread() noexcept
                     }
                 }
             }
+            PROF_END(CORE_TX_POLLER_LOOP, true);
         }
     }
 }

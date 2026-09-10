@@ -37,6 +37,8 @@ public:
 
     int RearmRxInterrupt() override;
 
+    uint32_t IOBufSize() override;
+
     void HandleErrorRxCqe(umq_buf_t *buf);
 
     void FlushRx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS);

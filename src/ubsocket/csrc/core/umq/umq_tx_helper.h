@@ -68,6 +68,7 @@ public:
     }
 
     static int PollUmqTxForFcReturn(uint64_t umq_handle);
+    static bool IsPortFailure(const umq_buf_t *qbuf);
 
 private:
     static int PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb);

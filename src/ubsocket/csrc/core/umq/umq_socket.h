@@ -29,8 +29,7 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-enum class JettyAllocState
-{
+enum class JettyAllocState {
     IDLE,    // 空闲状态
     WAITING, // 等待Jetty资源分配
 };
@@ -82,7 +81,14 @@ public:
     void SetBindRemote(bool bound)
     {
         umq_is_bind_remote_ = bound;
+        // 绑定远端完成后, 补全客户端在 connect 完成前(预绑定)epoll_ctl(ADD) 时遗留的事件绑定,
+        // 使 added_epoll_fd_ / sock_readable_fd_ 被正确建立, 客户端 UB 收发事件通道与服务端一致.
+        if (bound) {
+            CompleteEpollBind();
+        }
     }
+
+    int CompleteEpollBind() override;
 
     bool IsBindind() const
     {
@@ -201,11 +207,17 @@ public:
 private:
     uint64_t CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid);
     uint64_t GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid);
-    uint64_t RegisterFcTxEvent();
+    Result RegisterFcTxEvent();
+    /**
+     * 关闭共享 JFR（UBSOCKET_SHARE_JFR_ENABLE=false）时，把 per-socket umq 的 RX 完成中断
+     * 注册到 SHARE_JFR_RX_RUNNER（SUB_UMQ_RX 事件，data=socket fd）。否则没有任何 runner
+     * 收割 per-socket umq 的 RX：NewRxEpollIn 永不被调、poll_ 恒为 false，接收侧永远取不到数据。
+     */
+    Result RegisterSubUmqRxEvent();
 
     // 链接类型相关
     bool is_bonding_ = false;
-    ub_trans_mode trans_mode_ = RM_TP;
+    ub_trans_mode trans_mode_ = RM_CTP;
     umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
     // 版本协商
     uint32_t negotiated_version_ = 0;
@@ -214,6 +226,8 @@ private:
     bool umq_is_bind_remote_ = false;
     // UMQ 句柄
     uint64_t umq_handle_ = UMQ_INVALID_HANDLE;
+    // 关闭共享 JFR 时注册到 SHARE_JFR_RX_RUNNER 的 per-socket RX 中断 fd（-1 表示未注册）
+    int sub_umq_rx_interrupt_fd_ = -1;
 
     u_mutex_t *mutex_;
     uint64_t share_umq_handle_ = UMQ_INVALID_HANDLE;
@@ -236,7 +250,7 @@ struct CpMsg {
 };
 
 struct NegotiateReq {
-    ub_trans_mode trans_mode = RM_TP;
+    ub_trans_mode trans_mode = RM_CTP;
     uint8_t is_bonding = 0;
     uint8_t enable_share_jfr = 0;
     uint8_t schedule_policy = static_cast<uint8_t>(dev_schedule_policy::ROUND_ROBIN);
@@ -246,7 +260,7 @@ struct NegotiateReq {
 struct NegotiateRsp {
     int32_t ret_code = 0;
     int32_t aff_sock_id = 0;
-    ub_trans_mode peer_trans_mode = RM_TP;
+    ub_trans_mode peer_trans_mode = RM_CTP;
     uint8_t is_bonding = 0;
     uint8_t reserved[2] = {0};
     uint32_t socket_id_count = 0;
@@ -255,8 +269,7 @@ struct NegotiateRsp {
 };
 
 struct NegotiateRoute {
-    enum : uint32_t
-    {
+    enum : uint32_t {
         BACK_ROUTE_MAX_NUM = 3
     };
     umq_topo_type_t topo_type;

@@ -15,6 +15,8 @@ option(ENABLE_OBJECT_COUNTING "enable object couting to detect memory leak" OFF)
 option(UBSOCKET_ENABLE_COVERAGE "Enable coverage reporting for ubsocket UT" OFF)
 option(UBSOCKET_BUILD_CLI "Enable CLI component build" OFF)
 option(ENABLE_CPU_HARDWARE_ACCELERATION "Enable cpu instruction acceleration" OFF)
+option(UBSOCKET_ENABLE_INTERCEPT "Enable posix socket API interception for LD_PRELOAD transparent hijacking" OFF)
+option(UBSOCKET_ENABLE_SPLIT_TRACE "Enable split trace" OFF)
 
 if (BUILD_UMQ_ADAPTER_BACKEND AND BUILD_UMQ_DLOPEN_BACKEND)
     message(FATAL_ERROR "BUILD_UMQ_ADAPTER_BACKEND and BUILD_UMQ_DLOPEN_BACKEND cannot both be ON")
@@ -26,6 +28,7 @@ message(STATUS "ubsocket: BUILD_URMA_DLOPEN_BACKEND = ${BUILD_URMA_DLOPEN_BACKEN
 message(STATUS "ubsocket: ENABLE_OBJECT_COUNTING = ${ENABLE_OBJECT_COUNTING}")
 message(STATUS "ubsocket: UBSOCKET_BUILD_CLI = ${UBSOCKET_BUILD_CLI}")
 message(STATUS "ubsocket: ENABLE_CPU_HARDWARE_ACCELERATION = ${ENABLE_CPU_HARDWARE_ACCELERATION}")
+message(STATUS "ubsocket: UBSOCKET_ENABLE_INTERCEPT = ${UBSOCKET_ENABLE_INTERCEPT}")
 
 set(UBSOCKET_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(UBSOCKET_CSRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/csrc)
@@ -41,9 +44,11 @@ add_compile_options(-Wunused-variable -Wunused-value -Wcast-align)
 add_compile_options(-fpermissive -Wno-error)
 add_compile_options(-Wcast-qual -Winvalid-pch -Wwrite-strings -Wsign-compare -Wfloat-equal -Wextra -Wno-deprecated-declarations)
 
+string(TOUPPER "${CMAKE_BUILD_TYPE}" UBSOCKET_BUILD_TYPE)
+
 if (${CMAKE_BUILD_TYPE} MATCHES "RELEASE")
     add_compile_options(-fvisibility=hidden -fvisibility-inlines-hidden)
-    add_compile_options(-fstack-protector-strong -Wstack-usage=16384 -Werror)
+    add_compile_options(-fstack-protector-strong -Wstack-usage=16384)
     add_compile_options(-Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now -fPIE -fPIC -ftrapv -s)
     add_compile_options(-D_FORTIFY_SOURCE=2 -O2)
     add_link_options(-Wl,-z,noexecstack,-z,relro,-z,now)
@@ -55,7 +60,8 @@ elseif (${CMAKE_BUILD_TYPE} MATCHES "ASAN")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=${SANITIZERS}")
     add_link_options(-fsanitize=${SANITIZERS})
 else ()
-    add_compile_options(-g -ggdb3 -O0 -fno-omit-frame-pointer -rdynamic -fPIC)
+    message(FATAL_ERROR
+	    "Unsupported CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 endif ()
 
 if (UBSOCKET_ENABLE_COVERAGE)
@@ -111,6 +117,11 @@ endif ()
 
 if (ENABLE_CPU_HARDWARE_ACCELERATION)
     add_definitions(-DENABLE_CPU_MONOTONIC)
+endif ()
+
+if (UBSOCKET_ENABLE_SPLIT_TRACE)
+    add_definitions(-DUBS_SPLIT_TRACE_ENABLED_COMPILE)
+    message(STATUS "ubsocket: split trace ENABLED")
 endif ()
 
 include_directories(

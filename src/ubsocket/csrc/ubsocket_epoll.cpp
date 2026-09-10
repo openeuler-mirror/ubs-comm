@@ -11,13 +11,14 @@
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_event_epoll.h"
 #include "include/ubsocket.h"
+#include "profiling/ubsocket_prof.h"
 #include "under_api/dl_libc_api.h"
 
 using namespace ock::ubs;
 
 UBS_API int UB_API_WRAP(epoll_create)(int size)
 {
-    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE || !GlobalSetting::UBS_INITED) {
         return LibcApi::epoll_create(size);
     }
 
@@ -39,14 +40,16 @@ UBS_API int UB_API_WRAP(epoll_create)(int size)
 
 UBS_API int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epoll_event *event)
 {
-    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE || !GlobalSetting::UBS_INITED) {
         return LibcApi::epoll_ctl(epfd, op, fd, event);
     }
 
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
-        UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
-        return -1;
+        /* Fallback to native epoll for fds not created via UB (e.g. created
+         * during ubsocket_init before UBS_INITED was set, or by libc/runtime).
+         * Returning -1 here would break the caller's epoll loop. */
+        return LibcApi::epoll_ctl(epfd, op, fd, event);
     }
 
     return eventPoll->EpollCtl(op, fd, event);
@@ -54,25 +57,32 @@ UBS_API int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epoll_event 
 
 UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
-    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE || !GlobalSetting::UBS_INITED) {
         return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
     }
 
+    /*
+     * API 边界点位: 覆盖 ArraySet 查表 + AsyncEventPoll::EpollWait 全程。
+     * CORE_API_EPOLL_WAIT 与 CORE_EPOLL_WAIT_TOTAL 的差值即为拦截层查表开销。
+     */
+    PROF_START(CORE_API_EPOLL_WAIT);
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
-        UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
-        return -1;
+        /* Fallback to native epoll_wait for fds not tracked by UB. */
+        return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
     }
-    return eventPoll->EpollWait(events, maxevents, timeout);
+    int ret = eventPoll->EpollWait(events, maxevents, timeout);
+    PROF_END(CORE_API_EPOLL_WAIT, ret >= 0);
+    return ret;
 }
 
 UBS_API int UB_API_WRAP(epoll_create1)(int flags)
 {
-    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::epoll_create(1024);
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE || !GlobalSetting::UBS_INITED) {
+        return LibcApi::epoll_create1(flags);
     }
 
-    int epollFd = LibcApi::epoll_create(1024);
+    int epollFd = LibcApi::epoll_create1(flags);
     if (epollFd < 0) {
         return epollFd;
     }
@@ -91,14 +101,14 @@ UBS_API int UB_API_WRAP(epoll_create1)(int flags)
 UBS_API int UB_API_WRAP(epoll_pwait)(int epfd, struct epoll_event *events, int maxevents, int timeout,
                                      const sigset_t *sigmask)
 {
-    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE || !GlobalSetting::UBS_INITED) {
         return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
     }
 
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
-        UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
-        return -1;
+        /* Fallback to native epoll_wait for fds not tracked by UB. */
+        return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
     }
     return eventPoll->EpollWait(events, maxevents, timeout);
 }

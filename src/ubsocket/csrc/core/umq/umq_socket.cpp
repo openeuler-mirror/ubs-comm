@@ -12,6 +12,7 @@
 #include <iostream>
 
 #include "core/ubsocket_tx_cqe_poller.h"
+#include "core/ubsocket_event_epoll.h"
 #include "profiling/statistics/statistics.h"
 #include "umq_conn_helper.h"
 #include "umq_dfx_api.h"
@@ -22,6 +23,7 @@
 #include "umq_socket_acceptor.h"
 #include "umq_socket_connector.h"
 #include "umq_tp_tx_epoll_runner_ops.h"
+#include "under_api/dl_libc_api.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -131,11 +133,25 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CREATE, UMQ_FAIL), savedErrno);
         return UBS_UMQ_CREATE | UBS_RETRYABLE_MASK | UBS_DEGRADABLE_MASK;
     }
-    RegisterFcTxEvent();
+    Result fcEventResult = RegisterFcTxEvent();
+    if (fcEventResult != UBS_OK) {
+        return fcEventResult;
+    }
+    // rxQueue 必须先于 RegisterSubUmqRxEvent 分配：独享模式下注册完成后 runner 随时可能
+    // 收到 RX 事件并经 SiftSocketEventsWithUmqBuffers→AddQbuf 入队，若此时 rxQueue 仍为
+    // null 会导致数据丢失。
     rxQueue = new (std::nothrow) UmqBufferReceiveQueue();
     if (rxQueue == nullptr) {
         UBS_VLOG_ERR("Failed to init share jfr rx queue for fd: %d \n", raw_socket_);
         return UBS_INIT_SHARED_JFR_RX_QUEUE;
+    }
+    // 关闭共享 JFR 时必须注册 per-socket RX 中断到 runner（runner-drain 模型），否则接收侧
+    // 无人收割、FC 信用也无法译成 EPOLLOUT
+    if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
+        Result subRxResult = RegisterSubUmqRxEvent();
+        if (subRxResult != UBS_OK) {
+            return subRxResult;
+        }
     }
 
     if (UmqSetting::UMQ_TP_TYPE == SINGLE) {
@@ -184,9 +200,26 @@ std::tuple<const umq_port_id_t *, std::size_t> UmqSocket::GetUsedPorts() const
 uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 {
     if (!GlobalSetting::UBS_ENABLE_SHARE_JFR) {
+        // 共享 JFR 关闭时每个连接使用独立的 per-socket umq（无共享主 umq），必须显式绑定
+        // socket 上下文，便于后续（如 SUB_UMQ_RX 路径）按 socket 路由。
+        cfg->umq_ctx = static_cast<uint64_t>(raw_socket_);
         PROF_START(UMQ_CREATE);
         uint64_t sub_umq = UmqApi::umq_create(cfg);
         PROF_END(UMQ_CREATE, sub_umq != UMQ_INVALID_HANDLE);
+        if (sub_umq == UMQ_INVALID_HANDLE) {
+            return sub_umq;
+        }
+        // 共享 JFR 关闭时，没有共享主 umq 来托管初始 RX 接收缓冲；必须自行给 per-socket umq 投递
+        // 初始 RX WQE，否则接收侧无 RX WQE，RC 发送端收不到 ACK（"remote jetty does not send ack"
+        // / Acknowledgement timeout）。这与 ubs-comm brpc 适配层在 share JFR off 时
+        // PrefillRx(m_local_umqh) 的逻辑一致。on-demand 补投（UmqPollAndRefillRx）因
+        // rx_queue_avail_num_ 初值=满而不会自举，故此处必须显式预填。
+        if (UmqConnHelper::PrefillRx(sub_umq) != UBS_OK) {
+            UBS_VLOG_ERR("PrefillRx() failed for per-socket umq (share JFR off), umq: %llu\n",
+                         static_cast<unsigned long long>(sub_umq));
+            UmqApi::umq_destroy(sub_umq);
+            return UMQ_INVALID_HANDLE;
+        }
         return sub_umq;
     }
     UBS_VLOG_DEBUG("UBS_ENABLE_SHARE_JFR = true \n");
@@ -221,13 +254,29 @@ uint64_t UmqSocket::CreateSubUmq(umq_create_option_t *cfg, umq_eid_t *local_eid)
 uint64_t UmqSocket::GetOrCreateMainUmq(umq_create_option_t *cfg, umq_eid_t *localEid)
 {
     std::vector<std::shared_ptr<MainUmqState>> main_umqs;
-    if (UmqEidTable::Instance().Get(*localEid, GetTransMode(), main_umqs)) {
-        if (main_umqs.empty()) {
-            UBS_VLOG_ERR("Main umq list is empty, local eid:" EID_FMT ", ret: %llu\n", EID_ARGS(*localEid),
-                         static_cast<unsigned long long>(UMQ_INVALID_HANDLE));
-            return UMQ_INVALID_HANDLE;
+    /* 优先按协商后的传输模式查找；若未命中，回退到后端在初始化阶段已预创建/预热的全局默认
+     * 模式（UmqSetting::UMQ_UB_TRANS_MODE）主 umq。
+     * 背景：UB 传输模式经 std::min 协商可能从全局默认降级（例如客户端 RM_CTP 而对端仍为
+     * RM_TP 时协商为 RM_TP），而后端预建主 umq 与 transport pool 是按全局默认模式准备的，
+     * 二者键不一致会导致此处查找落空、进而惰性 umq_create(MAIN_UMQ) 失败（ENOENT）。
+     * 主 umq 仅为共享接收队列基础设施、与具体 ub_trans_mode 无关，复用全局模式主 umq 安全。 */
+    ub_trans_mode candidate_modes[] = {GetTransMode(), UmqSetting::UMQ_UB_TRANS_MODE};
+    for (ub_trans_mode mode : candidate_modes) {
+        if (UmqEidTable::Instance().Get(*localEid, mode, main_umqs) && !main_umqs.empty()) {
+            return main_umqs.front()->GetUmqHandle();
         }
-        return main_umqs.front()->GetUmqHandle();
+    }
+    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
+        std::shared_ptr<MainUmqState> unique_main_umq;
+        for (ub_trans_mode mode : candidate_modes) {
+            if (UmqEidTable::Instance().GetUniqueByMode(mode, unique_main_umq)) {
+                UBS_VLOG_WARN("Reuse unique bonding main umq for mismatched local eid, local eid:" EID_FMT
+                              ", mode:%d, handle:%llu\n",
+                              EID_ARGS(*localEid), static_cast<int>(mode),
+                              static_cast<unsigned long long>(unique_main_umq->GetUmqHandle()));
+                return unique_main_umq->GetUmqHandle();
+            }
+        }
     }
 
     umq_create_option_t cfg_main;
@@ -317,6 +366,14 @@ void UmqSocket::UnbindAndFlushRemoteUmq(Socket *sock)
 void UmqSocket::DestroyLocalUmq()
 {
     if (umq_handle_ != UMQ_INVALID_HANDLE) {
+        // 关闭共享 JFR：先从 SHARE_JFR_RX_RUNNER 注销 per-socket RX 中断，再销毁 umq，
+        // 防止 runner 在 umq_destroy 之后仍收到并处理该 umq 的中断事件。
+        // 覆盖所有 3 个调用点: UnInitialize / DoUbAcceptRetry / DoUbConnectRetry
+        if (sub_umq_rx_interrupt_fd_ >= 0) {
+            EpollRunnerFactory::GetInstance(EpollRunnerType::SHARE_JFR_RX_RUNNER)
+                .DelEpollEvent(sub_umq_rx_interrupt_fd_);
+            sub_umq_rx_interrupt_fd_ = -1;
+        }
         // need to flush
         int ret = UmqApi::umq_destroy(umq_handle_);
         if (ret != UMQ_SUCCESS) {
@@ -346,7 +403,7 @@ Result UmqSocket::AddTxEvent(const SocketPtr &sock, int epoll_fd, struct epoll_e
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, tx_interrupt_fd), savedErrno);
         return -1;
     }
-    auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, tx_interrupt_fd, event);
+    auto ret = LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_ADD, tx_interrupt_fd, event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll add out event for socket fd: %d failed: %d : %s\n", sock->raw_socket_, errno,
                      strerror(errno));
@@ -383,7 +440,7 @@ Result UmqSocket::DelTxEvent(const SocketPtr &sock, int epoll_fd)
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, tx_interrupt_fd), savedErrno);
         return -1;
     }
-    auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, tx_interrupt_fd, nullptr);
+    auto ret = LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_DEL, tx_interrupt_fd, nullptr);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll del out event for socket event fd: %d failed: %d : %s\n", tx_interrupt_fd, errno,
                      strerror(errno));
@@ -620,10 +677,10 @@ void UmqSocket::GetSocketCLIData(Statistics::CLISocketData *data)
     }
 }
 
-uint64_t UmqSocket::RegisterFcTxEvent()
+Result UmqSocket::RegisterFcTxEvent()
 {
     if (!UmqSetting::UMQ_FLOW_CONTROL_ENABLE || umq_handle_ == UMQ_INVALID_HANDLE) {
-        return 0;
+        return UBS_OK;
     }
     // 添加流控event事件（流控信令持有超时触发归还）
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_EVENT};
@@ -633,21 +690,74 @@ uint64_t UmqSocket::RegisterFcTxEvent()
                      static_cast<unsigned long long>(umq_handle_));
         return UBS_ERROR;
     }
-    UmqTpTxEpollRunnerOps::TxEpollEvent *tx_epoll_event = new UmqTpTxEpollRunnerOps::TxEpollEvent{
+    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
+    if (UNLIKELY(epoll_runner.Start() != UBS_OK)) {
+        UBS_VLOG_ERR("Failed to start transport TX runner for FC event, local umq: %llu\n",
+                     static_cast<unsigned long long>(umq_handle_));
+        return UBS_ERROR;
+    }
+
+    UmqTpTxEpollRunnerOps::TxEpollEvent *tx_epoll_event = new (std::nothrow) UmqTpTxEpollRunnerOps::TxEpollEvent{
         RUNNER_EVENT_TYPE_FC_TX, umq_handle_, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
-    struct epoll_event umq_tx_event {
-    };
+    if (tx_epoll_event == nullptr) {
+        UBS_VLOG_ERR("Failed to allocate FC TX event, local umq: %llu\n", static_cast<unsigned long long>(umq_handle_));
+        return UBS_ERROR;
+    }
+    struct epoll_event umq_tx_event {};
     umq_tx_event.events = EPOLLIN | EPOLLET;
     umq_tx_event.data.u64 = reinterpret_cast<uintptr_t>(tx_epoll_event);
 
     UmqTpTxEpollRunnerOps::TpTxExtContext ctx;
     ctx.umq_handle = umq_handle_;
-    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
     if (UNLIKELY(epoll_runner.AddEpollEvent(fc_event_fd, &umq_tx_event, &ctx))) {
         UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) tp tx event failed: %d : %s\n", errno, strerror(errno));
+        delete tx_epoll_event;
         return UBS_ERROR;
     }
-    return 0;
+    return UBS_OK;
+}
+
+Result UmqSocket::RegisterSubUmqRxEvent()
+{
+    if (umq_handle_ == UMQ_INVALID_HANDLE) {
+        return UBS_ERROR;
+    }
+    // 取 per-socket umq 的 RX 完成中断 fd（option 写法与 GetAndAckEvent/InitShareJfrMonitering 一致）
+    umq_interrupt_option_t rx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_RX, UMQ_FD_IO};
+    PROF_START(UMQ_INTERRUPT_FD_GET);
+    int rx_interrupt_fd = UmqApi::umq_interrupt_fd_get(umq_handle_, &rx_option);
+    if (rx_interrupt_fd < 0) {
+        PROF_END(UMQ_INTERRUPT_FD_GET, false);
+        int savedErrno = errno;
+        errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, rx_interrupt_fd, savedErrno);
+        UBS_VLOG_ERR("[UMQ_API] Failed to get RX interrupt fd for sub umq, local umq: %llu, "
+                     "ret: %d, mapped errno: %d(%s), original errno: %d\n",
+                     static_cast<unsigned long long>(umq_handle_), rx_interrupt_fd, errno,
+                     UmqErrnoConverter::GetErrorDescription(UmqOperation::CONNECT, rx_interrupt_fd), savedErrno);
+        return UBS_ERROR;
+    }
+    PROF_END(UMQ_INTERRUPT_FD_GET, true);
+
+    // Start() 内部为 std::call_once，多连接并发注册也只会启动一个 runner 线程（幂等）。
+    // 共享 JFR 关闭时 InitShareJfrMonitering 不会被调用，runner 由此处首个连接拉起。
+    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::SHARE_JFR_RX_RUNNER);
+    if (UNLIKELY(epoll_runner.Start() != UBS_OK)) {
+        UBS_VLOG_ERR("Failed to start share jfr rx runner for sub umq RX, local umq: %llu\n",
+                     static_cast<unsigned long long>(umq_handle_));
+        return UBS_ERROR;
+    }
+
+    UmqShareJfrEpollRunnerOps::SubUmqRxExtContext sub_rx_ctx;
+    sub_rx_ctx.umq_handle = umq_handle_;
+    sub_rx_ctx.socket_fd = raw_socket_;
+    struct epoll_event sub_rx_event {};
+    if (UNLIKELY(epoll_runner.AddEpollEvent(rx_interrupt_fd, &sub_rx_event, &sub_rx_ctx) != UBS_OK)) {
+        UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) sub umq rx event failed, socket fd: %d, errno: %d : %s\n",
+                     raw_socket_, errno, strerror(errno));
+        return UBS_ERROR;
+    }
+    sub_umq_rx_interrupt_fd_ = rx_interrupt_fd;
+    return UBS_OK;
 }
 
 void UmqSocket::SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data)
@@ -657,6 +767,22 @@ void UmqSocket::SetAddedEpollFd(EventPoll *fd, const epoll_data_t &data)
     if (!rxQueue->Empty()) {
         NotifyReadable();
     }
+}
+
+int UmqSocket::CompleteEpollBind()
+{
+    if (!epoll_added_before_bind_ || pending_epoll_fd_ == nullptr) {
+        return UBS_OK;
+    }
+
+    // 补全客户端在 connect 完成前(预绑定)epoll_ctl(ADD) 时被 EpollCtlAdd 跳过的绑定工作,
+    // 具体步骤由 AsyncEventPoll::CompleteDeferredAdd 完成(与服务端 ADD 时 IsBindRemote 为真的行为一致).
+    auto *ep = static_cast<AsyncEventPoll *>(pending_epoll_fd_);
+    int ret = ep->CompleteDeferredAdd(raw_socket_, pending_epoll_data_, pending_epoll_events_);
+
+    epoll_added_before_bind_ = false;
+    pending_epoll_fd_ = nullptr;
+    return ret == 0 ? UBS_OK : UBS_ERROR;
 }
 
 bool UmqSocket::RxQueueEmpty()

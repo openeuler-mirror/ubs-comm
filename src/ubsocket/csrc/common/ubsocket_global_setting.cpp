@@ -346,7 +346,7 @@ Result GlobalSetting::LoadEnv() noexcept
     if (GetEnvAndValidateNotEmpty(ENV_SPLIT_TRACE_LEVEL, strEnvValue)) {
         UBS_SPLIT_TRACE_LEVEL = SplitTraceLevelFromStr(strEnvValue);
     }
-    if (GetEnvAndValidate(ENV_PROF_ENABLE, strEnvValue)) {
+    if (GetEnvAndValidate(ENV_READV_UNLIMITED, strEnvValue)) {
         UBS_READV_UNLIMITED = Func::BoolFromStr(strEnvValue);
     }
     return UBS_OK;

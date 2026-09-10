@@ -57,18 +57,28 @@ Result Tracer::Init(const TracerOptions &options) noexcept
 
 void Tracer::UnInit() noexcept
 {
-    std::lock_guard<std::mutex> guard(mutex_);
-    if (!inited_) {
-        UBS_VLOG_DEBUG("Tracer not initialized");
-        return;
-    }
-
-    if (dump_thread_ != nullptr) {
-        dump_thread_->DumpStop();
+    DumpThreadPtr dumper = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (!inited_) {
+            UBS_VLOG_DEBUG("Tracer not initialized");
+            return;
+        }
+        dumper = dump_thread_;
         dump_thread_ = nullptr;
     }
 
-    inited_ = false;
+    // DumpStop 内部会执行最后一次 DumpData，必须放在 tracer 锁之外调用，
+    // 因为 DumpData() -> Combine() 会再次获取 mutex_；此时 inited_ 仍为 true，
+    // 因此最终的 Combine() 能成功汇总数据。
+    if (dumper != nullptr) {
+        dumper->DumpStop();
+    }
+
+    {
+        std::lock_guard<std::mutex> guard(mutex_);
+        inited_ = false;
+    }
     UBS_VLOG_INFO("Ubsocket tracer uninit success.");
 }
 

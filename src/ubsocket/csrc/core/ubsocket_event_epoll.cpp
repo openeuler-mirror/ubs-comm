@@ -12,18 +12,41 @@
 
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
+#include "profiling/ubsocket_prof.h"
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
 #include "ubsocket_tx_cqe_poller.h"
 #include "umq/umq_share_jfr_epoll_runner_ops.h"
 #include "umq/umq_tp_event_epoll_runner_ops.h"
 #include "umq/umq_tp_tx_epoll_runner_ops.h"
+#include "under_api/dl_libc_api.h"
 
 namespace ock {
 namespace ubs {
 
 std::unordered_map<int, EpollMapper *> g_socket_epoll_mappers{};
 u_rw_lock_t *g_socket_epoll_lock = nullptr;
+
+namespace {
+/*
+ * 跨线程唤醒延迟结算。
+ *
+ * 生产侧(SHARE_JFR_RX_RUNNER 线程)在 AddReadableEvent() 登记入队时刻，消费侧(应用线程)在真正
+ * 从就绪队列取出事件后调用本函数，得到 CORE_EPOLL_WAKEUP_LATENCY。
+ * 该点位直接量化"RX 数据已就绪 -> 应用线程拿到事件"的跨线程排队时间，是新架构相对旧版
+ * (应用线程自行 drain RX，无跨线程交接) 新增的开销，属于 RTT 劣化的重点怀疑项。
+ *
+ * 打点未开启时直接返回，不做任何原子 RMW，正常路径零额外开销。
+ */
+ALWAYS_INLINE void SettleWakeupLatency(std::atomic<uint64_t> &slot)
+{
+    if (LIKELY(ubsocket_prof_enabled != 1)) {
+        return;
+    }
+    uint64_t begin_ts = slot.exchange(0, std::memory_order_acquire);
+    PROF_END_FROM(CORE_EPOLL_WAKEUP_LATENCY, begin_ts, true);
+}
+} // namespace
 
 EpollMapper *GetSocketEpollMapper(int socket_fd)
 {
@@ -169,7 +192,7 @@ int EpollRunner<T>::Start()
             return -1;
         }
 
-        epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
+        epoll_fd_ = LibcApi::epoll_create1(EPOLL_CLOEXEC);
         if (epoll_fd_ < 0) {
             UBS_VLOG_ERR("async_epoll epoll_create1() failed : %d : %s\n", errno, strerror(errno));
             LockRegistry::LOCK_OPS.destroy(mutex_);
@@ -182,7 +205,7 @@ int EpollRunner<T>::Start()
         exit_efd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
         if (exit_efd_ < 0) {
             UBS_VLOG_ERR("async_epoll eventfd() failed : %d : %s\n", errno, strerror(errno));
-            close(epoll_fd_);
+            LibcApi::close(epoll_fd_);
             epoll_fd_ = -1;
             LockRegistry::LOCK_OPS.destroy(mutex_);
             mutex_ = nullptr;
@@ -197,10 +220,10 @@ int EpollRunner<T>::Start()
         event_data.event_data.type = RUNNER_EVENT_TYPE_STOP;
         event_data.event_data.data = exit_efd_;
         event.data.u64 = event_data.u64;
-        if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, exit_efd_, &event) == -1) {
+        if (LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, exit_efd_, &event) == -1) {
             UBS_VLOG_ERR("async_epoll epoll_ctl(ADD) failed : %d : %s\n", errno, strerror(errno));
-            close(exit_efd_);
-            close(epoll_fd_);
+            LibcApi::close(exit_efd_);
+            LibcApi::close(epoll_fd_);
             exit_efd_ = -1;
             epoll_fd_ = -1;
             LockRegistry::LOCK_OPS.destroy(mutex_);
@@ -224,8 +247,8 @@ int EpollRunner<T>::Start()
             UBS_VLOG_ERR("async_epoll runner backend start failed\n");
             delete ops_;
             ops_ = nullptr;
-            close(exit_efd_);
-            close(epoll_fd_);
+            LibcApi::close(exit_efd_);
+            LibcApi::close(epoll_fd_);
             exit_efd_ = -1;
             epoll_fd_ = -1;
             LockRegistry::LOCK_OPS.destroy(mutex_);
@@ -255,8 +278,8 @@ void EpollRunner<T>::Stop()
         backend_->Stop();
         backend_.reset();
     }
-    close(exit_efd_);
-    close(epoll_fd_);
+    LibcApi::close(exit_efd_);
+    LibcApi::close(epoll_fd_);
     exit_efd_ = -1;
     epoll_fd_ = -1;
     delete ops_;
@@ -279,7 +302,17 @@ template <EpollRunnerType T>
 bool EpollRunner<T>::DrainReadyEvents(int timeout, bool *hasEvents) noexcept
 {
     struct epoll_event events[MAX_EPOLL_WAIT_COUNT];
-    auto count = epoll_wait(epoll_fd_, events, MAX_EPOLL_WAIT_COUNT, timeout);
+
+    /*
+     * 打点说明: timeout != 0 时本次 epoll_wait 是阻塞等待, 统计值绝大部分是线程空闲时间, 没有分析
+     * 价值且会污染分位数, 因此仅在非阻塞轮询(外部 poller 驱动, timeout == 0)时记录 syscall 耗时。
+     */
+    PROF_START(CORE_EPOLL_RUNNER_SYSCALL);
+    auto count = LibcApi::epoll_wait(epoll_fd_, events, MAX_EPOLL_WAIT_COUNT, timeout);
+    if (timeout == 0) {
+        PROF_END(CORE_EPOLL_RUNNER_SYSCALL, count >= 0);
+    }
+
     if (hasEvents != nullptr) {
         *hasEvents = count > 0;
     }
@@ -290,7 +323,13 @@ bool EpollRunner<T>::DrainReadyEvents(int timeout, bool *hasEvents) noexcept
         UBS_VLOG_ERR("async_epoll epoll_wait() failed: %d : %s\n", errno, strerror(errno));
         return true;
     }
+    if (count == 0) {
+        return false;
+    }
 
+    /* runner 线程单轮批量大小 + 单轮处理耗时: 用于判断 RX runner 是否成为串行瓶颈 */
+    PROF_RECORD(CORE_EPOLL_RUNNER_BATCH, (uint64_t)count, true);
+    PROF_START(CORE_EPOLL_RUNNER_LOOP);
     for (auto i = 0; i < count; i++) {
         auto event_data = (RunnerEventData *)&events[i].data;
         if (UNLIKELY(event_data->event_data.type == RUNNER_EVENT_TYPE_STOP)) {
@@ -300,6 +339,7 @@ bool EpollRunner<T>::DrainReadyEvents(int timeout, bool *hasEvents) noexcept
 
         ProcessOneEvent(events[i]);
     }
+    PROF_END(CORE_EPOLL_RUNNER_LOOP, true);
     return false;
 }
 
@@ -352,8 +392,8 @@ AsyncEventPoll::~AsyncEventPoll() noexcept
         return;
     }
 
-    epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, sock_readable_fd_, nullptr);
-    close(sock_readable_fd_);
+    LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, sock_readable_fd_, nullptr);
+    LibcApi::close(sock_readable_fd_);
     sock_readable_fd_ = -1;
 }
 
@@ -379,10 +419,10 @@ int AsyncEventPoll::AddSockReadableEvent()
     event.events = EPOLLIN | EPOLLET;
     event.data.ptr = &sock_readable_event_;
     sock_readable_event_.socket_fd = fd;
-    auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event);
+    auto ret = LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll epoll_ctl add for epoll readable failed: %d : %s\n", errno, strerror(errno));
-        close(fd);
+        LibcApi::close(fd);
         return -1;
     }
 
@@ -445,28 +485,65 @@ int AsyncEventPoll::EpollWait(struct epoll_event *events, int maxevents, int tim
         return -1;
     }
 
+    PROF_START(CORE_EPOLL_WAIT_TOTAL);
+
     auto exist_count = readable_sockets_event_queue_.Size();
     if (UNLIKELY(exist_count > 0)) {
+        /*
+         * 快路径: RX runner 已把就绪事件放进队列, 应用线程无需真正陷入 epoll_wait。
+         * 若 FASTPATH 命中率低而 SYSCALL 占比高, 说明唤醒链路没有跑在预期的"数据先到"节奏上。
+         */
+        PROF_START(CORE_EPOLL_WAIT_FASTPATH);
         auto count = readable_sockets_event_queue_.MultiPop(events, maxevents);
         if (count > 0) {
+            SettleWakeupLatency(readable_notify_ts_);
+            PROF_END(CORE_EPOLL_WAIT_FASTPATH, true);
+            PROF_END(CORE_EPOLL_WAIT_TOTAL, true);
             return (int)count;
         }
     }
 
+    /*
+     * 慢路径: 真正陷入 libc epoll_wait。在 ping-pong 型 benchmark 中, 该点位包含了
+     * "对端处理 + 网络往返 + 本端被唤醒" 的全部时间, 是新旧版本 RTT 对比的主锚点。
+     */
     int ret = 0;
-    if (UNLIKELY(maxevents == 0 || (ret = epoll_wait(epoll_fd_, events, maxevents, timeout)) <= 0)) {
+    PROF_START(CORE_EPOLL_WAIT_SYSCALL);
+    if (UNLIKELY(maxevents == 0 || (ret = LibcApi::epoll_wait(epoll_fd_, events, maxevents, timeout)) <= 0)) {
+        PROF_END(CORE_EPOLL_WAIT_SYSCALL, ret >= 0);
+        PROF_END(CORE_EPOLL_WAIT_TOTAL, ret >= 0);
         return ret;
     }
+    PROF_END(CORE_EPOLL_WAIT_SYSCALL, true);
 
+    PROF_START(CORE_EPOLL_ARRANGE);
     auto real_count = ArrangeWakeUpEvents(events, ret, maxevents);
+    PROF_END(CORE_EPOLL_ARRANGE, true);
     ReleaseRemovedEventsData();
+    PROF_END(CORE_EPOLL_WAIT_TOTAL, true);
     return real_count;
 }
 
 int AsyncEventPoll::AddReadableEvent(uint32_t events, epoll_data_t data)
 {
-    if (!readable_sockets_event_queue_.Push(epoll_event{.events = events, .data = data})) {
+    /* 生产侧成本: RX runner 线程把就绪 socket 推入应用线程就绪队列 */
+    PROF_START(CORE_EPOLL_NOTIFY_READABLE);
+    bool pushed = readable_sockets_event_queue_.Push(epoll_event{.events = events, .data = data});
+    PROF_END(CORE_EPOLL_NOTIFY_READABLE, pushed);
+    if (!pushed) {
         return -1;
+    }
+
+    /*
+     * 登记入队时刻, 供应用线程在 EpollWait/ArrangeWakeUpEvents 中结算 CORE_EPOLL_WAKEUP_LATENCY。
+     * 只在槽位为空时写入, 保留的是"最早一个尚未被消费事件"的时刻, 反映最坏排队时长。
+     * 打点关闭时 PROF_TIMESTAMP() 返回 0, 此处退化为一次判断, 无原子写。
+     */
+    uint64_t notify_ts = PROF_TIMESTAMP();
+    if (UNLIKELY(notify_ts != 0)) {
+        uint64_t expected = 0;
+        readable_notify_ts_.compare_exchange_strong(expected, notify_ts, std::memory_order_release,
+                                                    std::memory_order_relaxed);
     }
     return 0;
 }
@@ -545,7 +622,11 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
         }
         auto space_size = max_events - real_count;
         if (space_size > 0) {
-            real_count += (int)readable_sockets_event_queue_.MultiPop(events + real_count, space_size);
+            auto popped = readable_sockets_event_queue_.MultiPop(events + real_count, space_size);
+            if (popped > 0) {
+                SettleWakeupLatency(readable_notify_ts_);
+            }
+            real_count += (int)popped;
         }
     }
 
@@ -580,11 +661,19 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         return -1;
     }
 
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+
     if (event->events & EPOLLET) {
         // brpc 在 Connect 后会监听 EPOLLOUT, 当 EPOLLOUT 发生后触发 KeepWrite. 之后 brpc 会删除对 EPOLLOUT 的
         // 关注，只关注 EPOLLIN. 不再关注 TCP fd 的 EPOLLOUT, 首次触发由 NotifyWritable() 上送.
+        // 注意: 仅在已绑定远端(IsBindRemote)时才剥离 EPOLLOUT. 客户端在默认 UB_SOCK_OPT 握手下 connect 返回
+        // EINPROGRESS、SetBindRemote 延迟, 会在 connect 完成前就 epoll_ctl(ADD), 此时 IsBindRemote() 尚为 false,
+        // 必须保留裸 socket 的 EPOLLOUT, 否则建链完成的 EPOLLOUT 既不会经裸 socket 上送(被剥离)也不会经
+        // NotifyWritable 上送(被 IsBindRemote 门控), 客户端永远拿不到可写事件 -> 不发送数据.
         struct epoll_event ev = *event;
-        ev.events &= ~EPOLLOUT;
+        if (sock != nullptr && sock->IsBindRemote()) {
+            ev.events &= ~EPOLLOUT;
+        }
         if (UNLIKELY(AddRawSocketEvent(fd, &ev) != 0)) {
             UBS_VLOG_ERR("async_epoll epoll ctl add raw socket: %d failed\n", fd);
             return -1;
@@ -597,8 +686,13 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
         }
     }
 
-    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
-    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) { /* listen fd */
+    if (UNLIKELY(sock == nullptr || !sock->IsBindRemote())) {
+        // listen fd 或客户端 connect 完成前(预绑定)的 ADD: 暂存事件, 待 SetBindRemote(true) 后由
+        // CompleteEpollBind() 补全绑定, 使客户端 UB 收发事件通道与服务端完全一致.
+        if (sock != nullptr && !sock->IsBindRemote()) {
+            auto sockBase = RefConvert<Socket, SocketBase>(sock);
+            sockBase->SetPendingEpollAdd(this, event->data, event->events);
+        }
         UBS_VLOG_DEBUG("sock is nullptr or socket is not bind remote, socket: %d\n", fd);
         return 0;
     }
@@ -636,6 +730,54 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     return 0;
 }
 
+int AsyncEventPoll::CompleteDeferredAdd(int fd, const epoll_data_t &data, uint32_t events)
+{
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    if (UNLIKELY(sock == nullptr)) {
+        UBS_VLOG_ERR("async_epoll CompleteDeferredAdd(socket:%d) failed, sock null\n", fd);
+        return -1;
+    }
+
+    // 1. 建立 UB 事件唤醒通道(幂等): sock_readable_fd_ 挂入内部 epoll.
+    if (UNLIKELY(AddSockReadableEvent() != 0)) {
+        UBS_VLOG_ERR("async_epoll CompleteDeferredAdd add readable fd failed, socket: %d\n", fd);
+        return -1;
+    }
+
+    // 2. 补做 EpollCtlAdd 已绑定分支的 SetAddedEpollFd / SetEvents.
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    sockBase->SetAddedEpollFd(this, data);
+    sockBase->SetEvents(events);
+
+    // 3. 绑定完成后写就绪改由 UB 流控 NotifyWritable 驱动, 剥离裸 socket 的 EPOLLOUT(对齐服务端 ADD 行为).
+    struct epoll_event mod_event {};
+    mod_event.events = (events | EPOLLIN) & ~EPOLLOUT;
+    if (UNLIKELY(ModRawSocketEvent(fd, &mod_event) != 0)) {
+        UBS_VLOG_ERR("async_epoll CompleteDeferredAdd mod raw socket failed, socket: %d\n", fd);
+    }
+
+    // 4. 若应用关注 EPOLLOUT, 由 UB 流控补发首次可写事件.
+    if (events & EPOLLOUT) {
+        sockBase->NotifyWritable();
+    }
+
+    // 5. SINGLE jetty: 注册 per-socket TX 中断事件(EpollCtlAdd 第 4 步在预绑定早退时被跳过).
+    if (sock->ShouldRegisterTxEvent()) {
+        struct epoll_event add_event {};
+        add_event.events = events;
+        add_event.data = data;
+        int ret = AddProtoTxEvent(sock, &add_event);
+        if (UNLIKELY(ret < 0)) {
+            UBS_VLOG_ERR("async_epoll CompleteDeferredAdd AddProtoTxEvent failed(ret:%d), socket: %d: %d : %s\n", ret,
+                         fd, errno, strerror(errno));
+            return -1;
+        }
+        TxCqePoller::Instance().AddSocket(sock);
+    }
+
+    return 0;
+}
+
 int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 {
     struct epoll_event raw_event {
@@ -648,7 +790,7 @@ int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 
     raw_event.events = event->events;
     raw_event.data.ptr = event_data;
-    auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &raw_event);
+    auto ret = LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &raw_event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll add pure event for socket fd: %d failed: %d : %s\n", fd, errno, strerror(errno));
         delete event_data;
@@ -657,7 +799,7 @@ int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 
     if (UNLIKELY(!InsertSocketEventData(fd, event_data))) {
         UBS_VLOG_ERR("async_epoll add pure event for socket fd: %d insert event data failed\n", fd);
-        epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
+        LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
         delete event_data;
         return -1;
     }
@@ -713,7 +855,7 @@ int AsyncEventPoll::DelRawSocketEvent(int fd)
         UBS_VLOG_WARN("async_epoll del pure event for socket: %d failed, RemoveSocketEventData failed\n", fd);
         return 0;
     }
-    auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
+    auto ret = LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", fd, errno, strerror(errno));
         return -1;
@@ -776,7 +918,7 @@ int AsyncEventPoll::ModRawSocketEvent(int fd, struct epoll_event *event)
     };
     raw_event.events = event->events;
     raw_event.data.ptr = event_data;
-    auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &raw_event);
+    auto ret = LibcApi::epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &raw_event);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll EpollCtlMod(socket:%d) failed: %d : %s\n", fd, errno, strerror(errno));
         return -1;

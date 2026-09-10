@@ -12,6 +12,7 @@
 #include "umq_tp_event_epoll_runner_ops.h"
 #include "umq_errno_converter.h"
 #include "umq_tp_wait_queue.h"
+#include "under_api/dl_libc_api.h"
 #include "under_api/dl_umq_api.h"
 
 namespace ock {
@@ -43,7 +44,7 @@ int UmqTpEventEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
 int UmqTpEventEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_event *event, ExtContext *ctx)
 {
     Locker sLock(mutex_);
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, event) < 0) {
+    if (LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, event) < 0) {
         return UBS_ERROR;
     }
     return UBS_OK;

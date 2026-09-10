@@ -166,6 +166,25 @@ public:
         return {};
     }
 
+    bool GetUniqueByMode(ub_trans_mode mode, std::shared_ptr<MainUmqState> &out)
+    {
+        Locker lock(mutex);
+        out.reset();
+        for (const auto &entry : table) {
+            for (const auto &state : entry.second) {
+                if (state->GetUbTransMode() != mode) {
+                    continue;
+                }
+                if (out != nullptr && out->GetUmqHandle() != state->GetUmqHandle()) {
+                    out.reset();
+                    return false;
+                }
+                out = state;
+            }
+        }
+        return out != nullptr;
+    }
+
     void Remove(const umq_eid_t &eid)
     {
         Locker sLock(mutex);

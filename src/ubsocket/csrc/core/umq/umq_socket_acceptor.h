@@ -69,7 +69,7 @@ private:
     Result AcceptExchangeSocketIDs(int fd);
     Result FillLocalSocketIdsForNegotiate(uint32_t *socket_ids, uint32_t &socket_id_count);
     Result CheckRouteDevAddForAccept(const umq_eid_t &conn_eid, const UmqSocketPtr &sk);
-    void BuildNegotiateRsp(NegotiateRsp &rsp);
+    Result BuildNegotiateRsp(NegotiateRsp &rsp);
 
     umq_topo_type_t topo_type_;
     umq_route_t conn_route_;

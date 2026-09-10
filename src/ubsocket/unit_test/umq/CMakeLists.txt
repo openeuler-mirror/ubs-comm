@@ -41,3 +41,22 @@ target_link_libraries(umq_socket_connector_test PRIVATE
 target_sources(umq_socket_connector_test PRIVATE
     umq_socket_connector_test.cpp
 )
+
+add_umq_test(ubsocket_data_tx_test)
+target_include_directories(ubsocket_data_tx_test PRIVATE
+    ${UBSOCKET_BASE_DIR}/csrc
+    ${UBSOCKET_BASE_DIR}/csrc/core
+    ${UBSOCKET_BASE_DIR}/csrc/common
+    ${UBSOCKET_BASE_DIR}/csrc/iobuf
+    ${UBSOCKET_BASE_DIR}/csrc/under_api
+    ${UBSOCKET_BASE_DIR}/csrc/profiling
+    ${UBSOCKET_BASE_DIR}/csrc/profiling/impl
+    ${UBSOCKET_BASE_DIR}/csrc/profiling/statistics
+    ${UBSOCKET_BASE_DIR}/include
+)
+target_link_libraries(ubsocket_data_tx_test PRIVATE
+    ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
+)
+target_sources(ubsocket_data_tx_test PRIVATE
+    ubsocket_data_tx_test.cpp
+)

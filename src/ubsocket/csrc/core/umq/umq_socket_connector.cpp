@@ -456,15 +456,21 @@ Result UmqConnectorOps::ConnectNegotiate(const UmqSocketPtr &umq_socket)
     }
 
     peer_socket_id_ = rsp.aff_sock_id;
-    if (UNLIKELY(rsp.socket_id_count == 0 || (rsp.socket_id_count > NEGOTIATE_SOCKET_ID_MAX_NUM))) {
-        UBS_VLOG_ERR("Invalid peer socket count, fd: %d\n", raw_fd_);
-        return UBS_ERROR;
+    /* socket_ids 仅在 CPU_AFFINITY / CPU_AFFINITY_PRIORITY 调度策略下需要校验。
+     * ROUND_ROBIN 策略不依赖 socket_id 选路，服务端可能不填充（socket_id_count=0），
+     * 此时不应该报错。 */
+    if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY ||
+        UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
+        if (UNLIKELY(rsp.socket_id_count == 0 || (rsp.socket_id_count > NEGOTIATE_SOCKET_ID_MAX_NUM))) {
+            UBS_VLOG_ERR("Invalid peer socket count, fd: %d\n", raw_fd_);
+            return UBS_ERROR;
+        }
+        peer_all_socket_ids_.reserve(rsp.socket_id_count);
+        for (size_t i = 0; i < rsp.socket_id_count; i++) {
+            peer_all_socket_ids_.push_back(rsp.socket_ids[i]);
+        }
+        PrintSocketsInfo();
     }
-    peer_all_socket_ids_.reserve(rsp.socket_id_count);
-    for (size_t i = 0; i < rsp.socket_id_count; i++) {
-        peer_all_socket_ids_.push_back(rsp.socket_ids[i]);
-    }
-    PrintSocketsInfo();
 
     // BONDING_BACKUP 或者 BONDING_ROUTE 策略都依赖 bonding 设备选路。只不过前者需要 ubsocket 来显式提供主
     // port、备 port. 而后者是直接通过选出的设备通信.
@@ -653,7 +659,8 @@ Result UmqConnectorOps::DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_por
     UBS_VLOG_DEBUG("umq_bind success, ret: %d, operation duration: %lld ms.\n", umq_ret, costms);
     umq_socket->SetBindRemote(true);
 
-    if (GlobalSetting::LINK_SELECTION_POLICY != LinkSelectionPolicy::BONDING_BACKUP) {
+    if (GlobalSetting::UBS_ENABLE_SHARE_JFR &&
+        GlobalSetting::LINK_SELECTION_POLICY != LinkSelectionPolicy::BONDING_BACKUP) {
         // 强依赖当前实现，一个 eid 对应多 UB 传输模式不同的 umq. 如果后续逻辑有变更，需同步修改。
         auto main_umq = UmqEidTable::Instance().GetFirst(umq_conn_info_.conn_eid, umq_socket->GetTransMode());
         if (main_umq == nullptr) {
@@ -904,6 +911,22 @@ Result UmqConnectorOps::GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std
     std::vector<uint32_t> peer_chip_id_list(peer_chip_ids.begin(), peer_chip_ids.end());
     peer_chip_id = GetTargetChipId(peer_all_socket_ids_, peer_chip_id_list, peer_socket_id_);
     UBS_VLOG_DEBUG("peer_chip_id: %u\n", peer_chip_id);
+
+    /* ROUND_ROBIN 策略不依赖 NUMA socket_id 选路：backend 初始化与连接协商阶段会
+     * 跳过填充 UMQ_ALL_SOCKET_IDS / UMQ_PROCESS_SOCKET_ID（以及对端 socket id），
+     * 此时 GetTargetChipId 返回 UINT32_MAX，无法按本端/对端 chip_id 做亲和性分组。
+     * 直接把所有路由作为候选，交由后续的 RRChooseMainRoute 统一轮询；
+     * 同时兜底：即便在亲和策略下本端/对端 chip_id 无法解析，也避免直接失败。
+     * 与 GetConnEid 在 FULLMESH 下 targetChipId==UINT32_MAX 时回退到
+     * GetRoundRobinConnEid 的处理保持一致。 */
+    if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::ROUND_ROBIN ||
+        process_chip_Id == UINT32_MAX || peer_chip_id == UINT32_MAX) {
+        for (uint32_t i = 0; i < route_list.route_num; ++i) {
+            affine_routes.push_back(route_list.routes[i]);
+        }
+        UBS_VLOG_DEBUG("RR/non-affinity route selection, candidate routes: %zu\n", affine_routes.size());
+        return UBS_OK;
+    }
 
     for (uint32_t i = 0; i < route_list.route_num; ++i) {
         if (route_list.routes[i].src_port.bs.chip_id == process_chip_Id &&

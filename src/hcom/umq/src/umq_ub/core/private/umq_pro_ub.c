@@ -913,6 +913,7 @@ static int umq_ub_fill_fc_buf(ub_queue_t *queue, umq_buf_t **buf, umq_buf_status
     umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)fc_buf->qbuf_ext;
     buf_pro->opcode = UMQ_OPC_SEND;
     buf_pro->umq_ctx = ((queue == NULL) ? 0 : queue->umq_ctx);
+    buf_pro->rsvd1 = 0;
     *buf = fc_buf;
     return 1;
 }
@@ -1149,7 +1150,7 @@ static int umq_ub_fc_msg_retry_dequeue(ub_queue_t *queue, umq_ub_fc_msg_retry_li
             break;
         case -UMQ_ERR_EAGAIN:
             new_retry_type = UMQ_UB_RETRY_TYPE_EAGAIN;
-            want_list = &retry_list->no_jetty_list;
+            want_list = &retry_list->retry_list;
             break;
         default: {
             // Other errors occurred while reprocessing FC messages, returning failure
@@ -1900,6 +1901,7 @@ int umq_ub_poll_fc_tx(ub_queue_t *queue, umq_buf_t **buf, uint32_t buf_count, ui
                 (fill_buf_cnt = (int32_t)umq_ub_fill_fc_buf(queue, &buf[qbuf_cnt], UMQ_FAKE_BUF_FC_ERR)) > 0) {
                 umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)buf[qbuf_cnt]->qbuf_ext;
                 buf_pro->umq_ctx = obj.bs.umq_ctx;
+                buf_pro->rsvd1 = (uint64_t)cr[i].status;
                 qbuf_cnt += fill_buf_cnt;
             }
             failed_cnt++;

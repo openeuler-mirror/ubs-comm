@@ -60,8 +60,7 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
                 auto *umq_sock = static_cast<UmqSocket *>(socket_ptr);
                 if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
-                    if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
-                        qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR) {
+                    if (UmqTxHelper::IsPortFailure(qbuf)) {
                         auto [ports, ports_num] = umq_sock->GetUsedPorts();
                         for (std::size_t i = 0; i < ports_num; ++i) {
                             UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",
@@ -144,7 +143,7 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
         return UBS_ERROR;
     }
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, event) < 0) {
+    if (LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, event) < 0) {
         return UBS_ERROR;
     }
 
@@ -184,7 +183,7 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
 
 int UmqTpTxEpollRunnerOps::DelEpollEvent(int epoll_fd, int fd)
 {
-    auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+    auto ret = LibcApi::epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
     if (UNLIKELY(ret < 0)) {
         UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", fd, errno, strerror(errno));
         return UBS_ERROR;

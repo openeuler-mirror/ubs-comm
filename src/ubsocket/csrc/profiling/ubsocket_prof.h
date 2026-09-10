@@ -26,11 +26,12 @@ enum ProfilingTPId : uint32_t
 {
     CORE_CONNECT = 0,
     CORE_ACCEPT,
-    CORE_WRITE,
     CORE_READ,
     CORE_READ_EAGAIN,
     CORE_READ_POLL_RX,
     CORE_READ_HANDLE_BUF,
+    CORE_READ_COPY,
+    CORE_READ_COPY_FREE_ANCHOR,
     CORE_READ_RX_DATA_SET,
     CORE_READ_REARM,
     CORE_EPOLL_REARM,
@@ -39,11 +40,21 @@ enum ProfilingTPId : uint32_t
     CORE_EPOLL_POST_RX,
     CORE_PROCESS_JRF_END,
     CORE_EPOLL_ENQUEUE,
+
+    CORE_EPOLL_PROCESS_RX_EVENT,
+    CORE_EPOLL_CQ_GET_AND_REARM,
+    CORE_EPOLL_UMQ_POLL,
+    CORE_EPOLL_POST_REFILL,
+    CORE_EPOLL_SIFT_PROCESS,
+
     CORE_WRITE_POLL_TX,
-    CORE_WRITE_POST_SEND,
+    CORE_WRITE,
+    CORE_WRITE_COPY,
     CORE_WRITE_BUILD_IOV,
+    CORE_WRITE_POST_SEND,
     CORE_WRITE_MEM_COPY,
     CORE_WRITE_UMQ_POST,
+    CORE_WRITE_POLL_UMQ_TX,
     CORE_WRITE_POLL_CQE,
     CORE_WRITE_DO_TX_POLL,
     CORE_WRITE_REARM,
@@ -87,6 +98,47 @@ enum ProfilingTPId : uint32_t
     UMQ_POST_RX,
     UMQ_CFG_GET,
     UMQ_CREATE,
+
+    /*
+     * ===== 性能定界补充点位（RC_TP + single jetty + share_jfr off 场景）=====
+     * 说明：以下点位用于补齐"跨线程唤醒链路"与"队列交接链路"的观测空白。
+     * 旧版 ubs-comm 中应用线程自行 drain RX，本版引入 runner 线程独占 drain 后
+     * 再跨线程唤醒应用，这段链路此前完全没有探针，是 RTT 劣化的重点怀疑区。
+     */
+
+    // 系统调用拦截层入口（fd -> Socket 查表开销）
+    CORE_API_WRITEV,
+    CORE_API_RECV,
+    CORE_API_READV,
+    CORE_API_EPOLL_WAIT,
+
+    // 应用线程 epoll 侧
+    CORE_EPOLL_WAIT_TOTAL,   // AsyncEventPoll::EpollWait 全程
+    CORE_EPOLL_WAIT_FASTPATH,// 就绪队列命中（无需真正 epoll_wait）
+    CORE_EPOLL_WAIT_SYSCALL, // 真正陷入 libc epoll_wait
+    CORE_EPOLL_ARRANGE,      // ArrangeWakeUpEvents
+
+    /*
+     * ★ 核心点位：runner 线程 AddReadableEvent 入队 -> 应用线程 EpollWait 取出
+     * 直接量化跨线程唤醒延迟，这是新架构相对旧版新增的开销
+     */
+    CORE_EPOLL_WAKEUP_LATENCY,
+    CORE_EPOLL_NOTIFY_READABLE, // AddReadableEvent + SetReadableEventFd（生产侧成本）
+
+    // runner 线程事件循环
+    CORE_EPOLL_RUNNER_LOOP,    // DrainReadyEvents 全程
+    CORE_EPOLL_RUNNER_SYSCALL, // runner 内 epoll_wait
+    CORE_EPOLL_RUNNER_BATCH,   // 单轮处理的事件数（PROF_RECORD 记录个数）
+    CORE_EPOLL_SIFT_SOCKET,    // SiftSocketEventsWithUmqBuffers
+
+    // RX qbuf 队列跨线程交接
+    CORE_EPOLL_ADD_QBUF, // 生产侧 UmqSocket::AddQbuf
+    CORE_READ_GET_QBUF,  // 消费侧 UmqRxOps::GetQbuf
+    CORE_READ_POP_QBUF,  // 消费侧 UmqSocket::GetAndPopQbuf
+
+    // 其余细分
+    CORE_WRITE_BUILD_IOV_INNER, // BuildIovConverter 函数体
+    CORE_TX_POLLER_LOOP,        // TxCqePoller::RunInThread 单轮
 
     // count the number of ProfilingTPId
     UBSOCKET_PROF_COUNT,
@@ -176,6 +228,27 @@ static __always_inline uint64_t ubsocket_get_timeNs()
         if (ubsocket_prof_enabled == 1) {                      \
             ubsocket_prof_record(TP_ID, #TP_ID, TP_NUM, GOOD); \
         }                                                      \
+    } while (0)
+
+/*
+ * 跨线程 / 跨函数配对计时
+ *
+ * PROF_TIMESTAMP()  取当前时间戳（未开启打点时返回 0，零开销）
+ * PROF_END_FROM()   与 PROF_TIMESTAMP() 配对，记录从 BEGIN_TS 到当前的耗时
+ *
+ * 用途：生产者线程记录时间戳并随事件传递，消费者线程取出后计算端到端延迟。
+ * 典型场景为 runner 线程 AddReadableEvent -> 应用线程 EpollWait 返回。
+ */
+#define PROF_TIMESTAMP() ((ubsocket_prof_enabled == 1) ? ubsocket_get_timeNs() : 0)
+
+#define PROF_END_FROM(TP_ID, BEGIN_TS, GOOD)                                            \
+    do {                                                                                \
+        if (ubsocket_prof_enabled == 1 && (BEGIN_TS) != 0) {                            \
+            uint64_t _now = ubsocket_get_timeNs();                                      \
+            if (_now >= (BEGIN_TS)) {                                                   \
+                ubsocket_prof_record(TP_ID, #TP_ID, _now - (uint64_t)(BEGIN_TS), GOOD); \
+            }                                                                           \
+        }                                                                               \
     } while (0)
 
 #ifdef __cplusplus

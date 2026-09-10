@@ -109,11 +109,17 @@ Result UmqBackend::Init() noexcept
         UmqSetting::UMQ_IS_BONDING && !GlobalSetting::UBS_BACKUP_LINK_ENABLED ? LinkSelectionPolicy::BONDING_ROUTE :
                                                                                 LinkSelectionPolicy::RAW_DEVICE;
 
-    UmqSetting::UMQ_PROCESS_SOCKET_ID = SocketConnHelper::GetCurrentProcessSocketId();
-    UmqSetting::UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
-    if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
-        UBS_VLOG_ERR("Failed get socket id in cpu affinity policy.\n");
-        return UBS_ERROR;
+    /* socket_id 仅在 CPU_AFFINITY / CPU_AFFINITY_PRIORITY 调度策略下需要。
+     * ROUND_ROBIN 策略不依赖 NUMA socket_id 选路，跳过检测避免在无 NUMA sysfs
+     * 的环境（如某些容器）中初始化失败。参考 ubs-comm brpc_context.h 的条件初始化。 */
+    if (UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY ||
+        UmqSetting::UMQ_DEV_SCHEDULE_POLICY == dev_schedule_policy::CPU_AFFINITY_PRIORITY) {
+        UmqSetting::UMQ_PROCESS_SOCKET_ID = SocketConnHelper::GetCurrentProcessSocketId();
+        UmqSetting::UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
+        if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
+            UBS_VLOG_ERR("Failed get socket id in cpu affinity policy.\n");
+            return UBS_ERROR;
+        }
     }
 
     /* step4: umq perf start */
@@ -152,7 +158,8 @@ Result UmqBackend::Init() noexcept
     }
 
     // 直接使用 bonding 设备通信，预创建主 umq、jetty 池
-    if (GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
+    if (GlobalSetting::UBS_ENABLE_SHARE_JFR &&
+        GlobalSetting::LINK_SELECTION_POLICY == LinkSelectionPolicy::BONDING_BACKUP) {
         umq_eid_t local_eid;
         uint64_t main_umq_handle = UMQ_INVALID_HANDLE;
         if ((main_umq_handle = CreateShareMainUmq(local_eid)) == UMQ_INVALID_HANDLE) {
@@ -511,8 +518,7 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
     jfr_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
     jfr_event_data.event_data.data = share_jfr_fd;
 
-    struct epoll_event share_jfr_event {
-    };
+    struct epoll_event share_jfr_event {};
     share_jfr_event.events = EPOLLIN | EPOLLET;
     share_jfr_event.data.u64 = jfr_event_data.u64;
 
@@ -543,8 +549,7 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
     retry_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR_RETRY;
     retry_event_data.event_data.data = retry_rx_fd;
 
-    struct epoll_event retry_event {
-    };
+    struct epoll_event retry_event {};
     retry_event.events = EPOLLIN | EPOLLET;
     retry_event.data.u64 = retry_event_data.u64;
 
