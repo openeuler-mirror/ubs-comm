@@ -56,10 +56,9 @@ public:
 
     /*
      * DISPATCHER_THREAD_POOL 模式(无独立 poller 线程)下, 由 UrmaEventPoll 在 epoll_wait
-     * 的 JFCE 事件处理中调用: 内联 ack + 批 poll + 经 cqe_handler_ 派发到各 socket。
-     * @param ackFirst 是否先 Ack(1) 一次中断事件(inline JFCE 路径传 true)
+     * 的 JFCE 事件处理中调用: 批 poll + 经 cqe_handler_ 派发到各 socket
      */
-    Result PollAndDispatch(bool ackFirst = false) noexcept;
+    Result PollAndDispatch() noexcept;
 
 private:
     /**
@@ -80,7 +79,7 @@ private:
 
     void EventPoll() noexcept;
     void BusyPoll() noexcept;
-    Result DrainCqes(bool ackFirst) noexcept;
+    Result DrainCqes() noexcept;
 
 private:
     UrmaJfcPtr jfc_{nullptr};             /* one poller contains one urma poller */

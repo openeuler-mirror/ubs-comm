@@ -303,7 +303,7 @@ void UrmaEventPoll::HandleJfceEvent(EpollEvent *event_data)
 
     UBS_VLOG_TRACE("urma epoll(%d) jfce event, poller(%p) poll and dispatch inline.", epoll_fd_,
                    static_cast<void *>(poller));
-    poller->PollAndDispatch(true);
+    poller->PollAndDispatch();
 }
 
 bool UrmaEventPoll::RecordReadableSocket(UrmaSocket *urma_sock)
