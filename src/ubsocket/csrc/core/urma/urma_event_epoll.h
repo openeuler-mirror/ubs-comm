@@ -90,6 +90,7 @@ private:
         result->socket_fd = socket;
         result->event = evt;
         result->next = nullptr;
+        result->oneshot_disabled = false;
         return result;
     }
 

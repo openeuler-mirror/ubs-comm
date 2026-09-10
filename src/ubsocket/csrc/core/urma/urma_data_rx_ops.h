@@ -233,6 +233,13 @@ private:
      */
     Result ProcessDataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexcept;
 
+    /*
+     * LT support hook: called at ReadV exit. Clears EPOLLIN reachability and resets readable flag,
+     * then re-checks the slot at consume cursor. If still ready, refills via NotifySocketReadable
+     * (clear-then-check-then-refill prevents lost wakeup race with notifier).
+     */
+    void ClearReadableIfDrained(const SocketPtr &sock) noexcept;
+
     friend class InlineRxDispatcher;
     friend class QueueRxDispatcher;
 

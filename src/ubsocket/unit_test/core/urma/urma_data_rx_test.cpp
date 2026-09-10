@@ -42,6 +42,8 @@ namespace {
 static const int TEST_FD = 100;
 static const size_t BUF_SIZE = 4 * 1024 * 1024;
 static const size_t ZC_BLOCK_SIZE = 8192;
+constexpr size_t CTRL_OFF1 = URMA_SND_BUFF_ALLOC_UNIT;
+constexpr size_t CTRL_OFF2 = 2 * URMA_SND_BUFF_ALLOC_UNIT;
 static uint8_t g_recv_buf[BUF_SIZE];
 alignas(8192) static uint8_t g_zc_mem[2 * ZC_BLOCK_SIZE];
 static UrmaIoBufferPool g_dummy_alloc;
@@ -225,6 +227,49 @@ TEST_F(UrmaDataRxTest, ReadV_NoData_ReturnsEAGAIN)
     EXPECT_EQ(EAGAIN, errno);
 }
 
+TEST_F(UrmaDataRxTest, ReadV_ClosedNoData_ReturnsZeroEof)
+{
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    ASSERT_EQ(0, urma_sock->NotifyClosed());
+
+    UrmaRxOps rx(TEST_FD);
+    uint8_t buf[128];
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    errno = 0;
+    auto ret = rx.ReadV(sock_, &iov, 1, 0);
+    EXPECT_EQ(0, ret);
+}
+
+TEST_F(UrmaDataRxTest, ReadV_ClosedWithData_DrainsThenEof)
+{
+    UrmaRxOps rx(TEST_FD);
+
+    const uint32_t body_size = 10;
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + CTRL_OFF1);
+    ctrl->head.data_count = body_size;
+    const char test_data[] = "0123456789";
+    memcpy(ctrl->small_io.data, test_data, body_size);
+
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    imm.ubsocket.buffer_offset = CTRL_OFF1 / URMA_SND_BUFF_ALLOC_UNIT;
+    ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
+
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    ASSERT_EQ(0, urma_sock->NotifyClosed());
+
+    uint8_t buf[64] = {};
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    EXPECT_EQ(static_cast<ssize_t>(body_size), rx.ReadV(sock_, &iov, 1, 0));
+
+    errno = 0;
+    EXPECT_EQ(0, rx.ReadV(sock_, &iov, 1, 0));
+}
+
 TEST_F(UrmaDataRxTest, ReadV_SingleMsgSingleIov_ReturnsFullData)
 {
     UrmaRxOps rx(TEST_FD);
@@ -321,12 +366,12 @@ TEST_F(UrmaDataRxTest, ReadV_LaterSeqArrivedFirst_ReturnsEAGAIN)
     UrmaRxOps rx(TEST_FD);
 
     const uint32_t body_size = 10;
-    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + 256);
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + CTRL_OFF2);
     ctrl->head.data_count = body_size;
     memcpy(ctrl->small_io.data, "ABCDEFGHIJ", body_size);
     WriteImmData imm;
     imm.ubsocket.opcode = WRITE_IN_BAND;
-    imm.ubsocket.buffer_offset = 256 / URMA_SND_BUFF_ALLOC_UNIT;
+    imm.ubsocket.buffer_offset = CTRL_OFF2 / URMA_SND_BUFF_ALLOC_UNIT;
 
     ASSERT_EQ(UBS_LATER_SEQ, rx.DataReached(sock_, 1, imm.data));
 
@@ -745,4 +790,65 @@ TEST_F(UrmaDataRxTest, ReadV_Blocking_RcvTimeout_ReturnsEagain)
 
     ASSERT_EQ(0, ::close(fd_pair[0]));
     ASSERT_EQ(0, ::close(fd_pair[1]));
+}
+
+TEST_F(UrmaDataRxTest, ReadV_NoData_ClearsReachEpollIn)
+{
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    urma_sock->SetEvents(EPOLLIN); /* 模拟已注册 EPOLLIN */
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+    UrmaRxOps rx(TEST_FD);
+    uint8_t buf[128];
+    struct iovec iov { buf, sizeof(buf) };
+    errno = 0;
+    EXPECT_EQ(-1, rx.ReadV(sock_, &iov, 1, 0));
+    EXPECT_EQ(EAGAIN, errno);
+    /* 无数据：EPOLLIN 达位被清，LT 不再空转 */
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents() & EPOLLIN);
+}
+
+TEST_F(UrmaDataRxTest, ReadV_ConsumeAll_ClearsReachEpollIn)
+{
+    UrmaRxOps rx(TEST_FD);
+    const uint32_t body_size = 10;
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + CTRL_OFF1);
+    ctrl->head.data_count = body_size;
+    memcpy(ctrl->small_io.data, "0123456789", body_size);
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    imm.ubsocket.buffer_offset = CTRL_OFF1 / URMA_SND_BUFF_ALLOC_UNIT;
+    ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
+
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    urma_sock->SetEvents(EPOLLIN);
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+
+    uint8_t buf[64] = {};
+    struct iovec iov { buf, sizeof(buf) };
+    EXPECT_EQ(static_cast<ssize_t>(body_size), rx.ReadV(sock_, &iov, 1, 0));
+    /* 一次读完：EPOLLIN 达位被清 */
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents() & EPOLLIN);
+}
+
+TEST_F(UrmaDataRxTest, ReadV_PartialRead_KeepsReachEpollIn)
+{
+    UrmaRxOps rx(TEST_FD);
+    const uint32_t body_size = 20;
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + CTRL_OFF1);
+    ctrl->head.data_count = body_size;
+    memcpy(ctrl->small_io.data, "0123456789ABCDEFGHIJ", body_size);
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    imm.ubsocket.buffer_offset = CTRL_OFF1 / URMA_SND_BUFF_ALLOC_UNIT;
+    ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
+
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    urma_sock->SetEvents(EPOLLIN);
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+
+    uint8_t buf[10] = {};
+    struct iovec iov { buf, sizeof(buf) };
+    EXPECT_EQ(10, rx.ReadV(sock_, &iov, 1, 0));
+    /* 剩余数据未读完：EPOLLIN 达位经复查补灌保留（LT 持续上报直至读完） */
+    EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLIN);
 }

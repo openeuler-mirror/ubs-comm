@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "common/ubsocket_common_includes.h"
+#include <signal.h>
 #include "core/ubsocket_event_epoll.h"
 #include "core/urma/urma_event_epoll.h"
 #include "include/ubsocket.h"
@@ -49,6 +50,7 @@ UBS_API int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epoll_event 
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
+        errno = EBADF;
         return -1;
     }
 
@@ -61,9 +63,16 @@ UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int ma
         return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
     }
 
+    if (UNLIKELY(maxevents <= 0)) {
+        UBS_VLOG_ERR("epoll_wait maxevents(%d) invalid\n", maxevents);
+        errno = EINVAL;
+        return -1;
+    }
+
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
+        errno = EBADF;
         return -1;
     }
     return eventPoll->EpollWait(events, maxevents, timeout);
@@ -71,22 +80,36 @@ UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int ma
 
 UBS_API int UB_API_WRAP(epoll_create1)(int flags)
 {
-    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::epoll_create(1024);
+    if (UNLIKELY((flags & ~EPOLL_CLOEXEC) != 0)) {
+        UBS_VLOG_ERR("epoll_create1 invalid flags: 0x%x\n", flags);
+        errno = EINVAL;
+        return -1;
     }
 
-    int epollFd = LibcApi::epoll_create(1024);
+    if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
+        return LibcApi::epoll_create1(flags);
+    }
+
+    int epollFd = LibcApi::epoll_create1(flags);
     if (epollFd < 0) {
         return epollFd;
     }
 
-    EventPoll *eventPoll = new AsyncEventPoll(epollFd);
-    if (UNLIKELY(eventPoll == nullptr)) {
-        UBS_VLOG_ERR("create async event poll failed, epoll fd: %d\n", epollFd);
+    auto urma_poll = new (std::nothrow) urma::UrmaEventPoll(epollFd);
+    if (UNLIKELY(urma_poll == nullptr)) {
+        UBS_VLOG_ERR("create urma event poll failed, epoll fd: %d\n", epollFd);
+        LibcApi::close(epollFd);
+        errno = ENOMEM;
+        return -1;
+    }
+    if (UNLIKELY(urma_poll->Init() != UBS_OK)) {
+        UBS_VLOG_ERR("init urma event poll failed, epoll fd: %d\n", epollFd);
+        delete urma_poll;
         LibcApi::close(epollFd);
         return -1;
     }
 
+    EventPoll *eventPoll = urma_poll;
     ArraySet<EventPoll>::GetInstance().OverrideItem(epollFd, eventPoll);
     return epollFd;
 }
@@ -95,13 +118,33 @@ UBS_API int UB_API_WRAP(epoll_pwait)(int epfd, struct epoll_event *events, int m
                                      const sigset_t *sigmask)
 {
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::epoll_wait(epfd, events, maxevents, timeout);
+        /* Pass through kernel epoll_pwait, sigmask replaced by kernel during wait */
+        return LibcApi::epoll_pwait(epfd, events, maxevents, timeout, sigmask);
     }
 
+    sigset_t origin_mask;
+    const bool mask_replaced = (sigmask != nullptr);
+    if (mask_replaced) {
+        /* pthread_sigmask returns the error number directly, not via errno */
+        int rc = pthread_sigmask(SIG_SETMASK, sigmask, &origin_mask);
+        if (rc != 0) {
+            UBS_VLOG_ERR("epoll_pwait set sigmask failed, rc: %d\n", rc);
+            errno = rc;
+            return -1;
+        }
+    }
+
+    int ret = -1;
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
-        return -1;
+        errno = EBADF;
+    } else {
+        ret = eventPoll->EpollWait(events, maxevents, timeout);
     }
-    return eventPoll->EpollWait(events, maxevents, timeout);
+
+    if (mask_replaced) {
+        pthread_sigmask(SIG_SETMASK, &origin_mask, nullptr);
+    }
+    return ret;
 }

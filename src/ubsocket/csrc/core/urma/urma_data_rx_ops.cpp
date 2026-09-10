@@ -215,6 +215,13 @@ ssize_t UrmaRxOps::ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int
     auto slot = &data_slots_[seq % RING_SIZE];
     auto rx_state = slot->rx_state.load(std::memory_order_acquire);
     if (rx_state != URMA_RX_STS_DATA_READY || slot->seq_no != seq) {
+        ClearReadableIfDrained(sock);
+        /* Peer closed with no data to read: return 0 for EOF instead of EAGAIN */
+        if (RefStaticCastToRaw<UrmaSocket>(sock)->IsClosed()) {
+            PROF_END(CORE_READ, true);
+            UBS_VLOG_TRACE("readv fd=%d closed no data, return 0 (EOF)", sock->Fd());
+            return 0;
+        }
         errno = EAGAIN;
         return -1;
     }
@@ -228,6 +235,7 @@ ssize_t UrmaRxOps::ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int
     if (imm_data.ubsocket.opcode == PRE_WRITE && (flags & UBS_IO_FLAG_USE_BRPC_BLOCK) == UBS_IO_FLAG_USE_BRPC_BLOCK) {
         ssize_t size = ZeroCopyRead(sock, *slot, seq, w);
         PROF_END(CORE_READ, size >= 0);
+        ClearReadableIfDrained(sock);
         return size;
     }
 
@@ -262,13 +270,31 @@ ssize_t UrmaRxOps::ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int
 
     if (!has_data) {
         UBS_VLOG_TRACE("readv fd=%d no data iov fill=%zu return EAGAIN", sock->Fd(), w.written);
+        ClearReadableIfDrained(sock);
         errno = EAGAIN;
         return -1;
     }
 
     PROF_END(CORE_READ, true);
+    ClearReadableIfDrained(sock);
     UBS_VLOG_TRACE("readv fd=%d done total=%zu return", sock->Fd(), w.written);
     return static_cast<ssize_t>(w.written);
+}
+
+void UrmaRxOps::ClearReadableIfDrained(const SocketPtr &sock) noexcept
+{
+    auto urma_sock = dynamic_cast<UrmaSocket *>(sock.Get());
+    if (urma_sock == nullptr) {
+        return;
+    }
+    /* Clear bit first, then re-check and refill: prevents lost wakeup race with NotifySocketReadable */
+    urma_sock->FetchAndReachEpollEvents(EPOLLIN);
+    urma_sock->SetSocketReadableReady(false);
+    auto seq = consume_seq_no_.load(std::memory_order_relaxed);
+    auto &slot = data_slots_[seq % RING_SIZE];
+    if (slot.rx_state.load(std::memory_order_acquire) == URMA_RX_STS_DATA_READY && slot.seq_no == seq) {
+        (void)urma_sock->NotifySocketReadable();
+    }
 }
 
 Result UrmaRxOps::TriggerPollIn(const SocketPtr &sock, uint32_t flags)

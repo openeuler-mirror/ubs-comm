@@ -42,14 +42,19 @@ static int g_epollCtlOp = -1;
 static int g_epollCtlFd = -1;
 static int g_epollCtlAddCount = 0;
 static int g_epollCtlReturn = 0;
+static void *g_lastAddDataPtr = nullptr; /* ADD 时传给内核的内部条目指针 */
+static bool g_epollWaitAutoFill = false; /* 开启后模拟内核回传内部条目 */
 
-static int MockEpollCtl(int, int op, int fd, struct epoll_event *)
+static int MockEpollCtl(int, int op, int fd, struct epoll_event *event)
 {
     if (op == EPOLL_CTL_ADD) {
         g_epollCtlAddCount++;
     }
     g_epollCtlOp = op;
     g_epollCtlFd = fd;
+    if (op == EPOLL_CTL_ADD && event != nullptr) {
+        g_lastAddDataPtr = event->data.ptr;
+    }
     return g_epollCtlReturn;
 }
 
@@ -63,6 +68,9 @@ static int MockEpollWait(int, struct epoll_event *events, int maxevents, int)
     g_epollWaitCalls++;
     g_lastEvents = events;
     g_lastMaxevents = maxevents;
+    if (g_epollWaitAutoFill && g_lastAddDataPtr != nullptr && maxevents > 0) {
+        events[0].data.ptr = g_lastAddDataPtr; /* 模拟内核回传注册时的 data.ptr */
+    }
     return g_epollWaitReturn;
 }
 
@@ -142,6 +150,8 @@ static void ResetMockCounters()
     g_epollCtlFd = -1;
     g_epollCtlAddCount = 0;
     g_epollCtlReturn = 0;
+    g_lastAddDataPtr = nullptr;
+    g_epollWaitAutoFill = false;
     g_lastEvents = nullptr;
     g_lastMaxevents = 0;
     g_epollWaitReturn = 0;
@@ -189,15 +199,15 @@ protected:
         MOCKER(eventfd_read).stubs().will(invoke(MockEventfdRead));
     }
 
-    void CreateAndRegisterUrmaSocket()
+    void CreateAndRegisterUrmaSocket(int fd = TEST_SOCK_FD, int event_fd = TEST_EVENT_FD)
     {
-        auto sock = MakeRef<UrmaSocket>(TEST_SOCK_FD);
-        sock->raw_socket_ = TEST_SOCK_FD;
-        sock->event_fd_ = TEST_EVENT_FD;
+        auto sock = MakeRef<UrmaSocket>(fd);
+        sock->raw_socket_ = fd;
+        sock->event_fd_ = event_fd;
         sock->writable_ready_.store(true, std::memory_order_release);
         sock->socket_readable_ready_.store(false, std::memory_order_release);
         sock->is_bind_remote_ = true;
-        ArraySet<Socket>::GetInstance().OverrideItem(TEST_SOCK_FD, sock.Get());
+        ArraySet<Socket>::GetInstance().OverrideItem(fd, sock.Get());
     }
 };
 
@@ -300,6 +310,19 @@ TEST_F(UrmaEventPollTest, EpollCtlDel_RawSocket_RemoveExisting_Success)
     GlobalMockObject::verify();
 }
 
+TEST_F(UrmaEventPollTest, EpollCtlDel_RawSocket_NotRegistered_ReturnsENOENT)
+{
+    SetUpMocks();
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    errno = 0;
+    int ret = poll.EpollCtl(EPOLL_CTL_DEL, TEST_SOCK_FD, nullptr);
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(ENOENT, errno);
+
+    GlobalMockObject::verify();
+}
+
 TEST_F(UrmaEventPollTest, EpollCtlDel_RawSocket_EpollCtlDelFails_ReturnsMinusOne)
 {
     SetUpMocks();
@@ -335,13 +358,45 @@ TEST_F(UrmaEventPollTest, EpollCtlMod_NullEvent_SetsErrnoEINVAL)
     EXPECT_EQ(EINVAL, errno);
 }
 
-TEST_F(UrmaEventPollTest, EpollCtlMod_RawSocket_NoEventData_SetsErrnoEINVAL)
+TEST_F(UrmaEventPollTest, EpollCtlMod_RawSocket_NoEventData_SetsErrnoENOENT)
 {
     SetUpMocks();
     UrmaEventPoll poll(TEST_EPOLL_FD);
     struct epoll_event evt {};
     int ret = poll.EpollCtl(EPOLL_CTL_MOD, TEST_SOCK_FD, &evt);
     EXPECT_EQ(-1, ret);
+    EXPECT_EQ(ENOENT, errno);
+
+    GlobalMockObject::verify();
+}
+
+/* 内核语义：MOD 未注册 fd 返回 -1/ENOENT（与 DEL 一致），urma socket 路径亦然 */
+TEST_F(UrmaEventPollTest, EpollCtlMod_UrmaSocket_NotRegistered_ReturnsENOENT)
+{
+    SetUpMocks();
+    CreateAndRegisterUrmaSocket();
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    struct epoll_event evt {};
+    evt.events = EPOLLIN; /* 已注册 ArraySet 的 urma socket，但从未 ADD 到本 epoll */
+
+    int ret = poll.EpollCtl(EPOLL_CTL_MOD, TEST_SOCK_FD, &evt);
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(ENOENT, errno);
+
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, EpollCtl_FdEqualsEpfd_SetsErrnoEINVAL)
+{
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    struct epoll_event evt {};
+    evt.events = EPOLLIN;
+
+    EXPECT_EQ(-1, poll.EpollCtl(EPOLL_CTL_ADD, TEST_EPOLL_FD, &evt));
+    EXPECT_EQ(EINVAL, errno);
+    EXPECT_EQ(-1, poll.EpollCtl(EPOLL_CTL_MOD, TEST_EPOLL_FD, &evt));
+    EXPECT_EQ(EINVAL, errno);
+    EXPECT_EQ(-1, poll.EpollCtl(EPOLL_CTL_DEL, TEST_EPOLL_FD, nullptr));
     EXPECT_EQ(EINVAL, errno);
 
     GlobalMockObject::verify();
@@ -389,10 +444,29 @@ TEST_F(UrmaEventPollTest, EpollCtlMod_RawSocket_EpollCtlModFails_ReturnsMinusOne
 
 TEST_F(UrmaEventPollTest, EpollWait_NullEvents_SetsErrnoEFAULT)
 {
+    SetUpMocks();
+    g_epollWaitReturn = 0; /* 底层无就绪事件 */
     UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    int ret = poll.EpollWait(nullptr, 1, 0);
+    EXPECT_EQ(0, ret);
+    EXPECT_EQ(nullptr, g_lastEvents);
+
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, EpollWait_NullEvents_Ready_ReturnsEFAULT)
+{
+    SetUpMocks();
+    g_epollWaitReturn = -1;
+    errno = EFAULT;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
     int ret = poll.EpollWait(nullptr, 1, 0);
     EXPECT_EQ(-1, ret);
     EXPECT_EQ(EFAULT, errno);
+
+    GlobalMockObject::verify();
 }
 
 TEST_F(UrmaEventPollTest, EpollWait_NegativeMaxevents_SetsErrnoEINVAL)
@@ -400,6 +474,16 @@ TEST_F(UrmaEventPollTest, EpollWait_NegativeMaxevents_SetsErrnoEINVAL)
     UrmaEventPoll poll(TEST_EPOLL_FD);
     struct epoll_event evt {};
     int ret = poll.EpollWait(&evt, -1, 0);
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(EINVAL, errno);
+}
+
+TEST_F(UrmaEventPollTest, EpollWait_ZeroMaxevents_SetsErrnoEINVAL)
+{
+    /* 对齐内核契约：maxevents == 0 属非法入参（内核返回 EINVAL） */
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    struct epoll_event evt {};
+    int ret = poll.EpollWait(&evt, 0, 0);
     EXPECT_EQ(-1, ret);
     EXPECT_EQ(EINVAL, errno);
 }
@@ -635,6 +719,153 @@ TEST_F(UrmaEventPollTest, EpollWait_UbSocketInEvent_EpoolOut_WritableReady_Repor
     EXPECT_NE(static_cast<uint32_t>(0), evt.events & EPOLLOUT);
     EXPECT_EQ(TEST_EVENT_FD, g_eventfdReadFd);
 
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, EpollWait_LtMode_RewritesEventfd_KeepsReachBits)
+{
+    struct epoll_event kernel_evt {};
+    kernel_evt.events = EPOLLIN; /* 未置 EPOLLET → LT */
+    EpollEvent event_data(EPOLL_EVENT_UB_SOCKET_IN, TEST_SOCK_FD, kernel_evt);
+    kernel_evt.data.ptr = &event_data;
+
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.data.ptr = &event_data;
+    int ret = poll.EpollWait(&evt, 1, 100);
+    EXPECT_EQ(1, ret);
+    EXPECT_NE(0u, evt.events & EPOLLIN);
+    EXPECT_EQ(TEST_EVENT_FD, g_eventfdReadFd);  /* 事件 eventfd 被读空 */
+    EXPECT_EQ(TEST_EVENT_FD, g_eventfdWriteFd); /* LT 保活：回写 eventfd */
+    EXPECT_EQ(1, g_eventfdWriteCount);
+    EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLIN); /* 达位保留 */
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, EpollWait_EtMode_ClearsReachBits_NoEventfdWrite)
+{
+    struct epoll_event kernel_evt {};
+    kernel_evt.events = EPOLLIN | EPOLLET; /* ET */
+    EpollEvent event_data(EPOLL_EVENT_UB_SOCKET_IN, TEST_SOCK_FD, kernel_evt);
+    kernel_evt.data.ptr = &event_data;
+
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.data.ptr = &event_data;
+    int ret = poll.EpollWait(&evt, 1, 100);
+    EXPECT_EQ(1, ret);
+    EXPECT_NE(0u, evt.events & EPOLLIN); /* 本轮正常上报 */
+    EXPECT_EQ(-1, g_eventfdWriteFd);     /* 不回写 */
+    EXPECT_EQ(0, g_eventfdWriteCount);
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents() & EPOLLIN); /* 达位已清 */
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, EpollWait_NoReachBits_DoesNotRewriteNorClear)
+{
+    struct epoll_event kernel_evt {};
+    kernel_evt.events = EPOLLIN; /* LT 但无达位数据 */
+    EpollEvent event_data(EPOLL_EVENT_UB_SOCKET_IN, TEST_SOCK_FD, kernel_evt);
+    kernel_evt.data.ptr = &event_data;
+
+    CreateAndRegisterUrmaSocket(); /* reach 默认 0 */
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.data.ptr = &event_data;
+    int ret = poll.EpollWait(&evt, 1, 100);
+    EXPECT_EQ(0, ret); /* 无达位空事件被过滤，不返回给调用方（对齐内核：无事件返回 0） */
+    EXPECT_EQ(0u, evt.events);
+    EXPECT_EQ(-1, g_eventfdWriteFd);
+    EXPECT_EQ(0, g_eventfdWriteCount); /* 无数据不保活，防 LT 空转 */
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents());
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, NotifyClosed_ReachHupRdhup_WakesEventfd)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+
+    /* NotifyClosed 不依赖上层关注位（events_ 为 0 也必须注入） */
+    EXPECT_EQ(0, urma_sock->NotifyClosed());
+
+    EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLHUP);
+    EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLRDHUP);
+    EXPECT_EQ(TEST_EVENT_FD, g_eventfdWriteFd); /* 唤醒 eventfd 使 epoll_wait 可感知 */
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, EpollWait_ClosedSocket_ReportsHupUnconditionally)
+{
+    struct epoll_event kernel_evt {};
+    kernel_evt.events = EPOLLIN | EPOLLET; /* 上层只关注 IN，HUP 仍须上报 */
+    EpollEvent event_data(EPOLL_EVENT_UB_SOCKET_IN, TEST_SOCK_FD, kernel_evt);
+    kernel_evt.data.ptr = &event_data;
+
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    ASSERT_EQ(0, urma_sock->NotifyClosed());
+    g_eventfdWriteFd = -1; /* 清除 NotifyClosed 的唤醒记录，仅观察 EpollWait 是否回写 */
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.data.ptr = &event_data;
+    int ret = poll.EpollWait(&evt, 1, 100);
+    EXPECT_EQ(1, ret);
+    EXPECT_NE(0u, evt.events & EPOLLHUP);
+    EXPECT_NE(0u, evt.events & EPOLLRDHUP);
+    EXPECT_EQ(-1, g_eventfdWriteFd); /* 关闭终态：不回写 eventfd，防空转 */
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, EpollWait_LtMode_ClosedSocket_NoEventfdRewrite)
+{
+    struct epoll_event kernel_evt {};
+    kernel_evt.events = EPOLLIN; /* LT */
+    EpollEvent event_data(EPOLL_EVENT_UB_SOCKET_IN, TEST_SOCK_FD, kernel_evt);
+    kernel_evt.data.ptr = &event_data;
+
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    ASSERT_EQ(0, urma_sock->NotifyClosed());
+    g_eventfdWriteFd = -1; /* 清除 NotifyClosed 的唤醒记录，仅观察 EpollWait 是否回写 */
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.data.ptr = &event_data;
+    int ret = poll.EpollWait(&evt, 1, 100);
+    EXPECT_EQ(1, ret);
+    EXPECT_NE(0u, evt.events & EPOLLHUP); /* LT 下关闭同样无条件上报 */
+    EXPECT_NE(0u, evt.events & EPOLLRDHUP);
+    EXPECT_EQ(-1, g_eventfdWriteFd);      /* 不回写，防关闭后 LT 空转 */
+    EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLHUP); /* HUP 达位保留（终态） */
     GlobalMockObject::verify();
 }
 
@@ -1006,4 +1237,263 @@ TEST_F(UrmaEventPollDispatcherTest, Poller_PollAndDispatch_AckThenDrainUntilZero
     EXPECT_EQ(1, g_cqeHandlerCalls);
     EXPECT_EQ(2, g_cqeHandlerLastCnt);
     EXPECT_GE(g_rearmJfcCalls, 1);
+}
+
+/* ===================== P4: EPOLLONESHOT =====================
+ * ONESHOT 用例统一走 g_epollWaitAutoFill（内核回传内部条目）路径，
+ * 保证"触发置禁 / 门控 / MOD 清禁用"落在同一 EpollEvent 上形成闭环 */
+
+TEST_F(UrmaEventPollTest, Oneshot_FirstWaitReports_SecondWaitSilent)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+
+    g_epollWaitAutoFill = true;
+    struct epoll_event wait_evt {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt, 1, 100));
+    EXPECT_NE(0u, wait_evt.events & EPOLLIN); /* 第一次正常上报 */
+    EXPECT_EQ(0, g_eventfdWriteCount);        /* ONESHOT 触发不回写（对齐内核） */
+
+    /* 数据未消费，第二次 wait 应静默（disabled 门控） */
+    struct epoll_event wait_evt2 {};
+    ASSERT_EQ(0, poll.EpollWait(&wait_evt2, 1, 100)); /* 禁用门控：空事件被过滤，返回 0 */
+    EXPECT_EQ(0u, wait_evt2.events); /* 上报一次后禁用 */
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, Oneshot_Disabled_NewDataStillSilent)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+
+    g_epollWaitAutoFill = true;
+    struct epoll_event wait_evt {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt, 1, 100)); /* 触发 → 禁用 */
+    EXPECT_NE(0u, wait_evt.events & EPOLLIN);
+
+    /* 禁用期间新数据注入：达位累计但不上报 */
+    urma_sock->FetchOrReachEpollEvents(EPOLLIN);
+    struct epoll_event wait_evt2 {};
+    ASSERT_EQ(0, poll.EpollWait(&wait_evt2, 1, 100)); /* 禁用即静默：空事件被过滤，返回 0 */
+    EXPECT_EQ(0u, wait_evt2.events); /* 禁用即静默 */
+    EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLIN); /* 达位保留待重武装 */
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, Oneshot_ModReArm_ReportsPendingAgain)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+
+    g_epollWaitAutoFill = true;
+    struct epoll_event wait_evt {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt, 1, 100)); /* 触发 → 禁用 */
+
+    /* 禁用期注入 pending，MOD 重武装（保持 ONESHOT 语义） */
+    urma_sock->FetchOrReachEpollEvents(EPOLLIN);
+    struct epoll_event rearm_evt {};
+    rearm_evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_MOD, TEST_SOCK_FD, &rearm_evt));
+
+    struct epoll_event wait_evt2 {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt2, 1, 100));
+    EXPECT_NE(0u, wait_evt2.events & EPOLLIN); /* 重武装后立即上报 pending */
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, Oneshot_ModReArm_WakesBlockedWait)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    /* 注册（无达位，种子不点火）→ 注入达位 → wait 触发禁用 */
+    struct epoll_event evt {};
+    evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+
+    g_epollWaitAutoFill = true;
+    struct epoll_event wait_evt {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt, 1, 100)); /* 触发 → 禁用 */
+    GlobalMockObject::verify();
+
+    /* 禁用期注入 pending（仅 FetchOr，无 eventfd 令牌；种子标志均置 false） */
+    SetUpMocks();
+    urma_sock->writable_ready_.store(false, std::memory_order_release);
+    urma_sock->socket_readable_ready_.store(false, std::memory_order_release);
+    urma_sock->FetchOrReachEpollEvents(EPOLLIN);
+    g_eventfdWriteFd = -1;
+    g_eventfdWriteCount = 0;
+
+    struct epoll_event rearm_evt {};
+    rearm_evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_MOD, TEST_SOCK_FD, &rearm_evt));
+    /* 唤醒补灌：种子 Exchange 均为 false，pending 只体现在达位上，
+     * MOD 必须检查 reach & mask 并补灌 eventfd，否则阻塞的 wait 无人唤醒 */
+    EXPECT_EQ(TEST_EVENT_FD, g_eventfdWriteFd);
+    EXPECT_EQ(1, g_eventfdWriteCount);
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, Oneshot_DelAfterFire_Succeeds)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+
+    g_epollWaitAutoFill = true;
+    struct epoll_event wait_evt {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt, 1, 100)); /* 触发 → 禁用（非摘除） */
+
+    /* 内核契约：触发后 DEL 仍成功（注册关系保留） */
+    errno = 0;
+    EXPECT_EQ(0, poll.EpollCtl(EPOLL_CTL_DEL, TEST_SOCK_FD, nullptr));
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, Oneshot_AddAfterFire_StillEexist)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+    urma_sock->SetReachEpollEvents(EPOLLIN);
+
+    g_epollWaitAutoFill = true;
+    struct epoll_event wait_evt {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt, 1, 100)); /* 触发 → 禁用 */
+
+    /* 内核契约：禁用态注册关系仍在，重 ADD 返回 EEXIST 而非成功 */
+    errno = 0;
+    struct epoll_event add_evt {};
+    add_evt.events = EPOLLIN | EPOLLONESHOT;
+    EXPECT_EQ(-1, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &add_evt));
+    EXPECT_EQ(EEXIST, errno);
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, Oneshot_Closed_FiresOnceThenSilent)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    SetUpMocks();
+    ASSERT_EQ(0, urma_sock->NotifyClosed());
+    g_eventfdWriteFd = -1;
+    g_eventfdWriteCount = 0;
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt {};
+    evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+
+    g_epollWaitAutoFill = true;
+    /* 第一次：HUP 无条件上报 */
+    struct epoll_event wait_evt {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt, 1, 100));
+    EXPECT_NE(0u, wait_evt.events & EPOLLHUP);
+    EXPECT_NE(0u, wait_evt.events & EPOLLRDHUP);
+
+    /* 第二次：触发后禁用，HUP 达位常驻也不再上报（无条件位同样被门控） */
+    struct epoll_event wait_evt2 {};
+    ASSERT_EQ(0, poll.EpollWait(&wait_evt2, 1, 100)); /* 空事件被过滤，返回 0 */
+    EXPECT_EQ(0u, wait_evt2.events);
+
+    /* MOD 重武装后：HUP 达位保留 → 立即再报（对齐内核 closed fd 重武装行为） */
+    struct epoll_event rearm_evt {};
+    rearm_evt.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_MOD, TEST_SOCK_FD, &rearm_evt));
+    struct epoll_event wait_evt3 {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt3, 1, 100));
+    EXPECT_NE(0u, wait_evt3.events & EPOLLHUP);
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, Oneshot_FreelistReuse_NotDisabled)
+{
+    static const int TEST_SOCK_FD2 = 101;
+    static const int TEST_EVENT_FD2 = 201;
+
+    /* fd A：注册 ONESHOT → 内核回传触发禁用 → DEL（条目进 freelist） */
+    CreateAndRegisterUrmaSocket(TEST_SOCK_FD, TEST_EVENT_FD);
+    auto sock_a = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD);
+    auto urma_sock_a = RefConvert<Socket, UrmaSocket>(sock_a);
+    SetUpMocks();
+    g_epollWaitReturn = 1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+
+    struct epoll_event evt_a {};
+    evt_a.events = EPOLLIN | EPOLLONESHOT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt_a));
+    urma_sock_a->SetReachEpollEvents(EPOLLIN);
+
+    g_epollWaitAutoFill = true; /* wait 经内核回传真实内部条目，禁用标记落在其上 */
+    struct epoll_event wait_evt {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt, 1, 100));
+    EXPECT_NE(0u, wait_evt.events & EPOLLIN); /* A 触发上报 */
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_DEL, TEST_SOCK_FD, nullptr)); /* 禁用条目回收 */
+    GlobalMockObject::verify();
+
+    /* fd B：ADD 复用 A 的条目，oneshot_disabled 必须被复位，否则 B 永久静默 */
+    SetUpMocks();
+    CreateAndRegisterUrmaSocket(TEST_SOCK_FD2, TEST_EVENT_FD2);
+    auto sock_b = ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD2);
+    auto urma_sock_b = RefConvert<Socket, UrmaSocket>(sock_b);
+
+    struct epoll_event evt_b {};
+    evt_b.events = EPOLLIN;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD2, &evt_b));
+    urma_sock_b->SetReachEpollEvents(EPOLLIN);
+
+    g_epollWaitAutoFill = true; /* 回传的是复用条目（内核视角 data.ptr 不变） */
+    struct epoll_event wait_evt_b {};
+    ASSERT_EQ(1, poll.EpollWait(&wait_evt_b, 1, 100));
+    EXPECT_NE(0u, wait_evt_b.events & EPOLLIN); /* 复用条目未带禁用脏状态 */
+    GlobalMockObject::verify();
 }

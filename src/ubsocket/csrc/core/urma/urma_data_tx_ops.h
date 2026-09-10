@@ -129,6 +129,13 @@ private:
      */
     bool Writable(const SocketPtr &sock) noexcept;
 
+    /*
+     * LT support hook: called at WriteV EAGAIN exit. Clears EPOLLOUT reachability, then re-checks
+     * send buffer. If still writable, refills via NotifyWritable (clear-then-check-then-refill
+     * prevents lost wakeup race with notifier).
+     */
+    void ClearWritableIfBlocked(const SocketPtr &sock) noexcept;
+
     int fd_ = -1;          /* socket file descriptor */
     uint64_t seq_gen_ = 0; /* atomic sequence number generator for request IDs */
 };

@@ -99,6 +99,7 @@ enum ProfilingTPId : uint32_t {
     _URMA_DEAL_SLOT_DATA,    // slot数据准备完成到读取时间
     __URMA_SLOT_EPOLL_PROC,  // slot数据准备完到收到epoll事件时间
     ___URMA_EVENT_WRITE,     // event_fd wr
+    ___URMA_EVENT_CLOSED,    // socket closed notify
     __URMA_DEAL_EPOLL_EVENT, // epoll事件处理用时
 
     // count the number of ProfilingTPId
