@@ -119,30 +119,26 @@ void UrmaPoller::EventPoll() noexcept
                 continue;
             }
 
-            jfc_->Ack(1);
-            DrainCqes(false);
+            DrainCqes();
         } catch (...) {
             UBS_VLOG_ERR("Exception caught in UrmaPoller");
         }
     }
 }
 
-Result UrmaPoller::PollAndDispatch(bool ackFirst) noexcept
+Result UrmaPoller::PollAndDispatch() noexcept
 {
     if (stopping_ || jfc_ == nullptr || cqe_handler_ == nullptr) {
         UBS_VLOG_ERR("poller(%d) invalid to poll and dispatch.", index_);
         return UBS_ERROR;
     }
-    return DrainCqes(ackFirst);
+    return DrainCqes();
 }
 
-Result UrmaPoller::DrainCqes(bool ackFirst) noexcept
+Result UrmaPoller::DrainCqes() noexcept
 {
     constexpr int32_t POLL_BATCH_SIZE = 32;
     urma_cr_t crs[POLL_BATCH_SIZE]{};
-    if (ackFirst) {
-        jfc_->Ack(1);
-    }
 
     bool first_time = true;
     while (!stopping_) {
@@ -180,7 +176,6 @@ void UrmaPoller::BusyPoll() noexcept
         try {
             int polled_count = jfc_->Poll(POLL_BATCH_SIZE, crs);
             if (polled_count > 0) { /* if polled */
-                jfc_->Ack(1);
                 auto result = cqe_handler_(0, polled_count, crs);
                 if (UNLIKELY(result != UBS_OK)) {
                     UBS_VLOG_INFO("cqe handler processed and return %d, continue polling", result);

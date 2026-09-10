@@ -90,6 +90,7 @@ enum ProfilingTPId : uint32_t {
 
     // urma_socket打点
     URMA_ALLOC_SEND_BUF,     // 申请send_buf
+    URMA_INLINE_MEM_CPY,      // 小IOmemcpy耗时
     URMA_FULL_IO_INLINE,     // 小IO通信处理完整流程用时
     URMA_FULL_IO_LARGE,      // 大IO通信处理完整流程用时
     _URMA_IMM_REACH_PROC,    // 接收端收到IMM数据处理用时

@@ -220,7 +220,9 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
 
     SgeContext ctx;
     SetupSgeContext(urma_sock, buf_offset, real_size, ctx);
+    PROF_START(URMA_INLINE_MEM_CPY);
     CopyFromIovToSendBuf(data_iov, ctx.src_sges);
+    PROF_END(URMA_INLINE_MEM_CPY, true);
 
     WriteImmData imm_data{WRITE_IN_BAND, buf_offset / unit};
     urma_rw_wr_t rw = {.src = ctx.src_sg, .dst = ctx.dst_sg, .target_hint = 0, .notify_data = imm_data.data};
