@@ -8,11 +8,20 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include <fcntl.h>
 #include <gtest/gtest.h>
 #include <sys/eventfd.h>
+#include <sys/socket.h>
+#include <sys/syscall.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <atomic>
 #include <cerrno>
+#include <chrono>
+#include <cstdarg>
 #include <cstring>
 #include <mockcpp/mockcpp.hpp>
+#include <thread>
 
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_lock.h"
@@ -24,6 +33,7 @@
 #include "core/urma/urma_socket.h"
 #include "core/urma/urma_socket_types.h"
 #include "iobuf/ubsocket_iobuf.h"
+#include "under_api/dl_libc_api.h"
 #include "under_api/urma/dl_urma_api.h"
 
 using namespace ock::ubs;
@@ -35,6 +45,29 @@ static const uint32_t SEND_BUF_SIZE = 8192;
 static uint8_t g_send_buf[SEND_BUF_SIZE];
 static urma_target_seg_t g_local_tseg = {};
 static urma_target_seg_t g_remote_tseg = {};
+
+/* bypass ubsocket/libc wrappers: set a real SO_*TIMEO on a test socketpair */
+static int RawSetSockTimeout(int fd, int optname, long usec)
+{
+    struct timeval tv = {0, usec};
+    return static_cast<int>(syscall(__NR_setsockopt, fd, SOL_SOCKET, optname, &tv, sizeof(tv)));
+}
+
+static int (*g_origFcntlPtr)(int, int, ...) = nullptr;
+
+/* fake TEST_FD has no real kernel fd: pretend it is non-blocking so EAGAIN tests
+ * do not hit a failing fcntl; real fds delegate to libc. */
+static int MockFcntlForTestFd(int fd, int cmd, ...)
+{
+    if (fd == TEST_FD && cmd == F_GETFL) {
+        return O_NONBLOCK;
+    }
+    va_list args;
+    va_start(args, cmd);
+    long arg = va_arg(args, long);
+    va_end(args);
+    return g_origFcntlPtr(fd, cmd, arg);
+}
 
 static urma_status_t MockPostSendWrSuccess(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **)
 {
@@ -101,6 +134,10 @@ protected:
         MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(invoke(MockGetLocalTargetSeg));
 
         g_dummy_alloc.fixed_allocator_.mini_block_head_mask_ = ~(BLOCK_SIZE - 1UL);
+
+        (void)LibcApi::Load(); /* ensure fcntl_ptr is not reloaded over our mock */
+        g_origFcntlPtr = LibcApi::fcntl_ptr;
+        LibcApi::fcntl_ptr = MockFcntlForTestFd;
     }
 
     void TearDown() override
@@ -114,6 +151,8 @@ protected:
             free(dummy_jetty_);
             dummy_jetty_ = nullptr;
         }
+        LibcApi::fcntl_ptr = g_origFcntlPtr;
+        g_origFcntlPtr = nullptr;
     }
 
     SocketPtr MakeTestSocket()
@@ -416,4 +455,117 @@ TEST_F(UrmaTxOpsTest, WriteV_InlineAllocFail_ReturnsEagain)
     auto ret = tx.WriteV(sock, &iov, 1, 0);
     EXPECT_EQ(-1, ret);
     EXPECT_EQ(EAGAIN, errno);
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_Blocking_WaitsForWritableThenSucceeds)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    UrmaTxOps tx(fd_pair[0]);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    urma_sock->raw_socket_ = fd_pair[0]; /* real blocking fd for fcntl/getsockopt */
+
+    uint64_t pre_offset = 0;
+    urma_sock->send_buf_->Allocate(SEND_BUF_SIZE - 64UL, pre_offset); /* fill send buf -> EAGAIN */
+
+    char data[] = "blocking writev";
+    struct iovec iov;
+    iov.iov_base = data;
+    iov.iov_len = sizeof(data);
+
+    ssize_t ret = 0;
+    std::atomic<bool> done{false};
+    std::thread worker([&]() {
+        ret = tx.WriteV(sock, &iov, 1, 0);
+        done.store(true, std::memory_order_release);
+    });
+
+    for (int i = 0; i < 500 && urma_sock->block_waiters_.load() == 0; i++) {
+        usleep(1000);
+    }
+    EXPECT_GT(urma_sock->block_waiters_.load(), 0U);
+    EXPECT_FALSE(done.load(std::memory_order_acquire));
+
+    urma_sock->send_buf_->Release(pre_offset, SEND_BUF_SIZE - 64UL);
+    urma_sock->NotifyBlockingWritable(); /* ACK-equivalent wakeup */
+    worker.join();
+
+    EXPECT_TRUE(done.load(std::memory_order_acquire));
+    EXPECT_GT(ret, 0);
+    EXPECT_EQ(0U, urma_sock->block_waiters_.load());
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_Blocking_LocalClose_ReturnsEpipe)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    UrmaTxOps tx(fd_pair[0]);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    urma_sock->raw_socket_ = fd_pair[0];
+
+    uint64_t pre_offset = 0;
+    urma_sock->send_buf_->Allocate(SEND_BUF_SIZE - 64UL, pre_offset);
+
+    char data[] = "x";
+    struct iovec iov;
+    iov.iov_base = data;
+    iov.iov_len = sizeof(data);
+
+    ssize_t ret = 0;
+    int worker_errno = 0;
+    std::atomic<bool> done{false};
+    std::thread worker([&]() {
+        errno = 0;
+        ret = tx.WriteV(sock, &iov, 1, 0);
+        worker_errno = errno;
+        done.store(true, std::memory_order_release);
+    });
+
+    for (int i = 0; i < 500 && urma_sock->block_waiters_.load() == 0; i++) {
+        usleep(1000);
+    }
+    urma_sock->State(SOCK_STAT_CLOSE);
+    urma_sock->NotifyLocalClose();
+    worker.join();
+
+    EXPECT_TRUE(done.load(std::memory_order_acquire));
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(EPIPE, worker_errno);
+    EXPECT_EQ(0U, urma_sock->block_waiters_.load());
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_Blocking_SndTimeout_ReturnsEagain)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    ASSERT_EQ(0, RawSetSockTimeout(fd_pair[0], SO_SNDTIMEO, 60000));
+
+    UrmaTxOps tx(fd_pair[0]);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    urma_sock->raw_socket_ = fd_pair[0];
+
+    uint64_t pre_offset = 0;
+    urma_sock->send_buf_->Allocate(SEND_BUF_SIZE - 64UL, pre_offset);
+
+    char data[] = "timeout";
+    struct iovec iov;
+    iov.iov_base = data;
+    iov.iov_len = sizeof(data);
+
+    auto start = std::chrono::steady_clock::now();
+    errno = 0;
+    auto ret = tx.WriteV(sock, &iov, 1, 0);
+    auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(EAGAIN, errno);
+    EXPECT_GE(elapsed_ms, 40);
+    EXPECT_EQ(0U, urma_sock->block_waiters_.load());
 }

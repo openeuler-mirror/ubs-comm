@@ -10,8 +10,11 @@
  */
 #include "urma_data_tx_ops.h"
 
+#include <sys/socket.h>
 #include <algorithm>
 #include <cstring>
+
+#include "core/ubsocket_socket_helper.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "urma_socket_types.h"
 
@@ -20,6 +23,66 @@ namespace ubs {
 namespace urma {
 
 ssize_t UrmaTxOps::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept
+{
+    auto urma_sock = dynamic_cast<UrmaSocket *>(sock.Get());
+    if (UNLIKELY(urma_sock == nullptr)) {
+        errno = ENOTCONN;
+        return -1;
+    }
+
+    bool registered = false;
+    auto unregister_waiter = MakeScopeExit([&registered, urma_sock]() {
+        if (registered) {
+            urma_sock->UnregisterBlockingWaiter();
+        }
+    });
+
+    bool has_deadline = false;
+    struct timespec deadline = {0, 0};
+    for (;;) {
+        ssize_t ret = WriteVOnce(sock, iov, iovcnt, flags);
+        if (ret >= 0 || errno != EAGAIN) {
+            return ret;
+        }
+        if (!SocketConnHelper::IsBlocking(fd_)) {
+            return ret;
+        }
+        if (UNLIKELY(urma_sock->State() == SOCK_STAT_CLOSE)) {
+            errno = EPIPE;
+            return -1;
+        }
+
+        if (!has_deadline) {
+            has_deadline = urma_sock->GetBlockTimeoutDeadline(SO_SNDTIMEO, deadline);
+        }
+        if (!registered) {
+            urma_sock->RegisterBlockingWaiter();
+            registered = true;
+            continue; // retry once after registering to eat state changes that raced registration
+        }
+
+        const uint32_t signalledFlags =
+            urma_sock->WaitBlockingSignal(UrmaSocket::BLOCKING_FLAG_WRITABLE, has_deadline ? &deadline : nullptr);
+        if ((signalledFlags & (UrmaSocket::BLOCKING_FLAG_CLOSED | UrmaSocket::BLOCKING_FLAG_PEER_CLOSED)) != 0) {
+            errno = EPIPE;
+            return -1;
+        }
+        if (signalledFlags == 0) {
+            /* explicit SO_SNDTIMEO expiry: retry once to close the race, then report EAGAIN */
+            ssize_t last = WriteVOnce(sock, iov, iovcnt, flags);
+            if (last >= 0 || errno != EAGAIN) {
+                return last;
+            }
+            UBS_VLOG_INFO("UrmaTxOps::WriteV fd=%d: SO_SNDTIMEO expired, final retry still EAGAIN, return EAGAIN",
+                          sock->Fd());
+            errno = EAGAIN;
+            return -1;
+        }
+        // writable or spurious wakeup: loop and let the real write decide
+    }
+}
+
+ssize_t UrmaTxOps::WriteVOnce(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept
 {
     (void)flags;
 

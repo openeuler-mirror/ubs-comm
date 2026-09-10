@@ -98,6 +98,12 @@ public:
 public:
     virtual bool IsBindRemote() = 0;
 
+    /*
+     * Wake blocked I/O waiters on local close before the fd is dropped.
+     * No-op unless a transport keeps waiters (e.g., condvar broadcast).
+     */
+    virtual void NotifyLocalClose() noexcept {}
+
     DEFINE_REF_OPERATION_FUNC
 
 public:

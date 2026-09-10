@@ -68,6 +68,11 @@ UBS_API int UB_API_WRAP(close)(int fd)
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
         return LibcApi::close(fd);
     }
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    if (sock.Get() != nullptr) {
+        sock->State(SOCK_STAT_CLOSE);
+        sock->NotifyLocalClose();
+    }
     ArraySet<Socket>::GetInstance().OverrideItem(fd, nullptr);
     return LibcApi::close(fd);
 }

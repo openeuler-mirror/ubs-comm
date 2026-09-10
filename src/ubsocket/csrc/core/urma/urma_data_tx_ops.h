@@ -56,6 +56,12 @@ public:
 
 private:
     /*
+     * Single non-blocking send attempt. EAGAIN means zero bytes were sent,
+     * which lets the blocking loop safely retry the whole batch after a wakeup.
+     */
+    ssize_t WriteVOnce(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept;
+
+    /*
      * Holds the source/destination SGE arrays for a single RDMA write operation.
      * The underlying send_buf (UrmaSockContinuousBuf) guarantees physically
      * contiguous allocations, so only one SGE per side is needed.
@@ -108,8 +114,7 @@ private:
      * recv_buf. The allocation is guaranteed contiguous (UrmaSockContinuousBuf),
      * so only a single SGE is needed per side.
      */
-    void SetupSgeContext(const UrmaSocketPtr &sock, uint64_t buf_offset, uint64_t alloc_size,
-                         SgeContext &ctx) noexcept;
+    void SetupSgeContext(const UrmaSocketPtr &sock, uint64_t buf_offset, uint64_t alloc_size, SgeContext &ctx) noexcept;
 
     /*
      * Builds a vector of BlockRef descriptors from the iov entries. Each BRPC
@@ -124,8 +129,8 @@ private:
      */
     bool Writable(const SocketPtr &sock) noexcept;
 
-    int fd_ = -1;            /* socket file descriptor */
-    uint64_t seq_gen_ = 0;   /* atomic sequence number generator for request IDs */
+    int fd_ = -1;          /* socket file descriptor */
+    uint64_t seq_gen_ = 0; /* atomic sequence number generator for request IDs */
 };
 
 } // namespace urma

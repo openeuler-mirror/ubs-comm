@@ -8,11 +8,20 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include <fcntl.h>
 #include <gtest/gtest.h>
 #include <sys/eventfd.h>
+#include <sys/socket.h>
+#include <sys/syscall.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <atomic>
 #include <cerrno>
+#include <chrono>
+#include <cstdarg>
 #include <cstring>
 #include <mockcpp/mockcpp.hpp>
+#include <thread>
 
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_lock.h"
@@ -24,6 +33,7 @@
 #include "core/urma/urma_socket.h"
 #include "core/urma/urma_socket_types.h"
 #include "iobuf/ubsocket_iobuf.h"
+#include "under_api/dl_libc_api.h"
 
 using namespace ock::ubs;
 using namespace ock::ubs::urma;
@@ -36,6 +46,29 @@ static uint8_t g_recv_buf[BUF_SIZE];
 alignas(8192) static uint8_t g_zc_mem[2 * ZC_BLOCK_SIZE];
 static UrmaIoBufferPool g_dummy_alloc;
 static int g_zc_block_idx = 0;
+
+/* bypass ubsocket/libc wrappers: set a real SO_*TIMEO on a test socketpair */
+static int RawSetSockTimeout(int fd, int optname, long usec)
+{
+    struct timeval tv = {0, usec};
+    return static_cast<int>(syscall(__NR_setsockopt, fd, SOL_SOCKET, optname, &tv, sizeof(tv)));
+}
+
+static int (*g_origFcntlPtr)(int, int, ...) = nullptr;
+
+/* fake TEST_FD has no real kernel fd: pretend it is non-blocking so EAGAIN tests
+ * do not hit a failing fcntl; real fds delegate to libc. */
+static int MockFcntlForTestFd(int fd, int cmd, ...)
+{
+    if (fd == TEST_FD && cmd == F_GETFL) {
+        return O_NONBLOCK;
+    }
+    va_list args;
+    va_start(args, cmd);
+    long arg = va_arg(args, long);
+    va_end(args);
+    return g_origFcntlPtr(fd, cmd, arg);
+}
 
 static Block *AllocZcBlock()
 {
@@ -84,6 +117,10 @@ protected:
         g_dummy_alloc.fixed_allocator_.mini_block_head_mask_ = ~(ZC_BLOCK_SIZE - 1UL);
 
         g_zc_block_idx = 0;
+
+        (void)LibcApi::Load(); /* ensure fcntl_ptr is not reloaded over our mock */
+        g_origFcntlPtr = LibcApi::fcntl_ptr;
+        LibcApi::fcntl_ptr = MockFcntlForTestFd;
     }
 
     void TearDown() override
@@ -92,6 +129,8 @@ protected:
         GlobalMockObject::verify();
         ArraySet<Socket>::GetInstance().ReleaseAll();
         sock_ = nullptr;
+        LibcApi::fcntl_ptr = g_origFcntlPtr;
+        g_origFcntlPtr = nullptr;
     }
 
     void PrepareSlot(uint64_t seq_no, uint64_t write_imm)
@@ -426,6 +465,10 @@ protected:
 
         g_dummy_alloc.fixed_allocator_.mini_block_head_mask_ = ~(ZC_BLOCK_SIZE - 1UL);
         g_zc_block_idx = 0;
+
+        (void)LibcApi::Load(); /* ensure fcntl_ptr is not reloaded over our mock */
+        g_origFcntlPtr = LibcApi::fcntl_ptr;
+        LibcApi::fcntl_ptr = MockFcntlForTestFd;
     }
 
     void TearDown() override
@@ -435,6 +478,8 @@ protected:
         GlobalMockObject::verify();
         ArraySet<Socket>::GetInstance().ReleaseAll();
         sock_ = nullptr;
+        LibcApi::fcntl_ptr = g_origFcntlPtr;
+        g_origFcntlPtr = nullptr;
     }
 
     EpollHandleMode saved_mode_;
@@ -531,4 +576,173 @@ TEST_F(UrmaDataRxDispatcherTest, ReadV_DrainsMultipleDeferredMessages_InOrder)
     auto ret = rx.ReadV(sock_, &iov, 1, 0);
     EXPECT_EQ(10, ret);
     EXPECT_EQ(0, memcmp(buf, "helloworld", 10));
+}
+
+TEST_F(UrmaDataRxDispatcherTest, ReadV_Blocking_WakesAfterDeferredDataReached)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    UrmaRxOps rx(fd_pair[0]);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    urma_sock->raw_socket_ = fd_pair[0]; /* real blocking fd for fcntl/getsockopt */
+
+    uint8_t buf[64] = {};
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+
+    ssize_t ret = 0;
+    std::atomic<bool> done{false};
+    std::thread reader([&]() {
+        ret = rx.ReadV(sock_, &iov, 1, 0);
+        done.store(true, std::memory_order_release);
+    });
+
+    for (int i = 0; i < 500 && urma_sock->block_waiters_.load() == 0; i++) {
+        usleep(1000);
+    }
+    EXPECT_GT(urma_sock->block_waiters_.load(), 0U);
+    EXPECT_FALSE(done.load(std::memory_order_acquire));
+
+    const uint32_t buf_unit = 1;
+    const char test_data[] = "0123456789";
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + buf_unit * URMA_SND_BUFF_ALLOC_UNIT);
+    ctrl->head.data_count = sizeof(test_data) - 1;
+    ctrl->head.sequence_no = 0; /* re-read by the drain from recv_buf */
+    memcpy(ctrl->small_io.data, test_data, sizeof(test_data) - 1);
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    imm.ubsocket.buffer_offset = buf_unit;
+
+    /* Queue dispatcher: only enqueues + wakes; slot is advanced by the ReadV drain. */
+    ASSERT_EQ(UBS_DEFERRED, rx.DataReached(sock_, 0, imm.data));
+    reader.join();
+
+    EXPECT_TRUE(done.load(std::memory_order_acquire));
+    EXPECT_EQ(static_cast<ssize_t>(sizeof(test_data) - 1), ret);
+    EXPECT_EQ(0, memcmp(buf, test_data, sizeof(test_data) - 1));
+    EXPECT_EQ(0U, urma_sock->block_waiters_.load());
+
+    ASSERT_EQ(0, ::close(fd_pair[0]));
+    ASSERT_EQ(0, ::close(fd_pair[1]));
+}
+
+TEST_F(UrmaDataRxTest, ReadV_Blocking_WaitsForDataThenReturns)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    UrmaRxOps rx(fd_pair[0]);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    urma_sock->raw_socket_ = fd_pair[0]; /* real blocking fd for fcntl/getsockopt */
+
+    uint8_t buf[64] = {};
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+
+    ssize_t ret = 0;
+    std::atomic<bool> done{false};
+    std::thread reader([&]() {
+        ret = rx.ReadV(sock_, &iov, 1, 0);
+        done.store(true, std::memory_order_release);
+    });
+
+    for (int i = 0; i < 500 && urma_sock->block_waiters_.load() == 0; i++) {
+        usleep(1000);
+    }
+    EXPECT_GT(urma_sock->block_waiters_.load(), 0U);
+    EXPECT_FALSE(done.load(std::memory_order_acquire));
+
+    const uint32_t buf_unit = 1;
+    const char test_data[] = "0123456789";
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + buf_unit * URMA_SND_BUFF_ALLOC_UNIT);
+    ctrl->head.data_count = sizeof(test_data) - 1;
+    memcpy(ctrl->small_io.data, test_data, sizeof(test_data) - 1);
+    WriteImmData imm;
+    imm.ubsocket.opcode = WRITE_IN_BAND;
+    imm.ubsocket.buffer_offset = buf_unit;
+    ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, imm.data));
+    urma_sock->NotifySocketReadable(); /* data-arrival wakeup */
+    reader.join();
+
+    EXPECT_TRUE(done.load(std::memory_order_acquire));
+    EXPECT_EQ(static_cast<ssize_t>(sizeof(test_data) - 1), ret);
+    EXPECT_EQ(0, memcmp(buf, test_data, sizeof(test_data) - 1));
+    EXPECT_EQ(0U, urma_sock->block_waiters_.load());
+
+    ASSERT_EQ(0, ::close(fd_pair[0]));
+    ASSERT_EQ(0, ::close(fd_pair[1]));
+}
+
+TEST_F(UrmaDataRxTest, ReadV_Blocking_LocalClose_ReturnsEbadf)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    UrmaRxOps rx(fd_pair[0]);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    urma_sock->raw_socket_ = fd_pair[0];
+
+    uint8_t buf[64] = {};
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+
+    ssize_t ret = 0;
+    int worker_errno = 0;
+    std::atomic<bool> done{false};
+    std::thread reader([&]() {
+        errno = 0;
+        ret = rx.ReadV(sock_, &iov, 1, 0);
+        worker_errno = errno;
+        done.store(true, std::memory_order_release);
+    });
+
+    for (int i = 0; i < 500 && urma_sock->block_waiters_.load() == 0; i++) {
+        usleep(1000);
+    }
+    urma_sock->State(SOCK_STAT_CLOSE);
+    urma_sock->NotifyLocalClose();
+    reader.join();
+
+    EXPECT_TRUE(done.load(std::memory_order_acquire));
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(EBADF, worker_errno);
+    EXPECT_EQ(0U, urma_sock->block_waiters_.load());
+
+    ASSERT_EQ(0, ::close(fd_pair[0]));
+    ASSERT_EQ(0, ::close(fd_pair[1]));
+}
+
+TEST_F(UrmaDataRxTest, ReadV_Blocking_RcvTimeout_ReturnsEagain)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    ASSERT_EQ(0, RawSetSockTimeout(fd_pair[0], SO_RCVTIMEO, 60000));
+
+    UrmaRxOps rx(fd_pair[0]);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    urma_sock->raw_socket_ = fd_pair[0];
+
+    uint8_t buf[64] = {};
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+
+    auto start = std::chrono::steady_clock::now();
+    errno = 0;
+    auto ret = rx.ReadV(sock_, &iov, 1, 0);
+    auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(EAGAIN, errno);
+    EXPECT_GE(elapsed_ms, 40);
+    EXPECT_EQ(0U, urma_sock->block_waiters_.load());
+
+    ASSERT_EQ(0, ::close(fd_pair[0]));
+    ASSERT_EQ(0, ::close(fd_pair[1]));
 }
