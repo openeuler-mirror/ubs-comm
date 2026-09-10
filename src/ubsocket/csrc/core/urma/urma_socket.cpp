@@ -509,7 +509,7 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
     UBS_VLOG_TRACE(
         "send buf(0x%lx, %u) recv buf(0x%lx, %u) jetty-id(eid=(%lx:%lx), uasid=%u, id=%u) "
         "seg(start_ptr=0x%lx, seg(va=0x%lx, len=%lu, attr=%x, token_id=%u), user_ctx=0x%lx, mva=0x%lx, token_id=%p",
-        send_buf_addr_, send_buf_size_, recv_buf_addr_, recv_buf_addr_,
+        send_buf_addr_, send_buf_size_, recv_buf_addr_, recv_buf_size_,
         local.ex.raw_jetty_id.eid.in6.subnet_prefix, local.ex.raw_jetty_id.eid.in6.interface_id,
         local.ex.raw_jetty_id.uasid, local.ex.raw_jetty_id.id, local.pool_start_addr, local_seg->seg.ubva.va,
         local_seg->seg.len, local_seg->seg.attr, local_seg->seg.token_id, local_seg->user_ctx, local_seg->mva,

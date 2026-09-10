@@ -224,6 +224,25 @@ TEST_F(UrmaTxOpsTest, WriteV_NullSendBuf_ReturnsEnotconn)
     EXPECT_EQ(ENOTCONN, errno);
 }
 
+TEST_F(UrmaTxOpsTest, WriteV_Closed_ReturnsEpipe)
+{
+    MOCKER(::eventfd_write).stubs().will(returnValue(0));
+
+    UrmaTxOps tx(TEST_FD);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    ASSERT_EQ(0, urma_sock->NotifyClosed());
+
+    struct iovec iov;
+    iov.iov_base = g_send_buf;
+    iov.iov_len = 10;
+
+    errno = 0;
+    auto ret = tx.WriteV(sock, &iov, 1, 0);
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(EPIPE, errno);
+}
+
 TEST_F(UrmaTxOpsTest, WriteV_LargeIo_Success)
 {
     UrmaTxOps tx(TEST_FD);
@@ -339,7 +358,7 @@ TEST_F(UrmaTxOpsTest, WriteV_Inline_Success)
     iov.iov_len = sizeof(data);
 
     auto ret = tx.WriteV(sock, &iov, 1, 0);
-    EXPECT_EQ(static_cast<ssize_t>(URMA_SND_BUFF_ALLOC_UNIT - URMA_INLINE_MESSAGE_CTRL_COST), ret);
+    EXPECT_EQ(static_cast<ssize_t>(sizeof(data)), ret);
 
     auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf);
     EXPECT_EQ(static_cast<uint32_t>(sizeof(data)), ctrl->head.data_count);
@@ -362,7 +381,7 @@ TEST_F(UrmaTxOpsTest, WriteV_Inline_NullIovSkipped_Success)
     iov[2].iov_len = 20;
 
     auto ret = tx.WriteV(sock, iov, 3, 0);
-    EXPECT_EQ(static_cast<ssize_t>(URMA_SND_BUFF_ALLOC_UNIT - URMA_INLINE_MESSAGE_CTRL_COST), ret);
+    EXPECT_EQ(static_cast<ssize_t>(sizeof(data)), ret);
 
     auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf);
     EXPECT_EQ(static_cast<uint32_t>(sizeof(data)), ctrl->head.data_count);
@@ -384,9 +403,7 @@ TEST_F(UrmaTxOpsTest, WriteV_Inline_MultiIov_Success)
 
     auto ret = tx.WriteV(sock, iov, 2, 0);
     size_t total = sizeof(data1) + sizeof(data2);
-    auto unit = URMA_SND_BUFF_ALLOC_UNIT;
-    auto alloc_size = ((URMA_INLINE_MESSAGE_CTRL_COST + total + unit - 1) / unit) * unit;
-    EXPECT_EQ(static_cast<ssize_t>(alloc_size - URMA_INLINE_MESSAGE_CTRL_COST), ret);
+    EXPECT_EQ(static_cast<ssize_t>(total), ret);
 
     auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf);
     EXPECT_EQ(static_cast<uint32_t>(total), ctrl->head.data_count);
@@ -429,7 +446,7 @@ TEST_F(UrmaTxOpsTest, WriteV_Inline_RingBufWrap_Success)
     iov.iov_len = sizeof(data);
 
     auto ret = tx.WriteV(sock, &iov, 1, 0);
-    EXPECT_EQ(static_cast<ssize_t>(URMA_SND_BUFF_ALLOC_UNIT - URMA_INLINE_MESSAGE_CTRL_COST), ret);
+    EXPECT_EQ(static_cast<ssize_t>(sizeof(data)), ret);
 
     uintptr_t buf_offset = SEND_BUF_SIZE - 64UL;
     auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf + buf_offset);
@@ -568,4 +585,49 @@ TEST_F(UrmaTxOpsTest, WriteV_Blocking_SndTimeout_ReturnsEagain)
     EXPECT_EQ(EAGAIN, errno);
     EXPECT_GE(elapsed_ms, 40);
     EXPECT_EQ(0U, urma_sock->block_waiters_.load());
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_Eagain_BufferFull_ClearsReachEpollOut)
+{
+    UrmaTxOps tx(TEST_FD);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    urma_sock->SetEvents(EPOLLOUT); /* 模拟已注册 EPOLLOUT */
+    urma_sock->SetReachEpollEvents(EPOLLOUT);
+
+    uint64_t pre_offset = 0;
+    urma_sock->send_buf_->Allocate(SEND_BUF_SIZE - 64UL, pre_offset);
+
+    char data[] = "testdata";
+    struct iovec iov;
+    iov.iov_base = data;
+    iov.iov_len = sizeof(data);
+
+    errno = 0;
+    EXPECT_EQ(-1, tx.WriteV(sock, &iov, 1, 0));
+    EXPECT_EQ(EAGAIN, errno);
+    /* 发送缓冲仍满：EPOLLOUT 达位被清，LT 不再空转 */
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents() & EPOLLOUT);
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_Eagain_PostFail_ClearsReachEpollOut_AndRearms)
+{
+    UrmaTxOps tx(TEST_FD);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    UrmaApi::urma_post_jetty_send_wr_ptr = MockPostSendWrFail;
+    MOCKER(::eventfd_write).stubs().will(returnValue(0));
+    urma_sock->SetEvents(EPOLLOUT);
+    urma_sock->SetReachEpollEvents(EPOLLOUT);
+
+    char data[] = "hello";
+    struct iovec iov;
+    iov.iov_base = data;
+    iov.iov_len = sizeof(data);
+
+    errno = 0;
+    EXPECT_EQ(-1, tx.WriteV(sock, &iov, 1, 0));
+    EXPECT_EQ(EAGAIN, errno);
+    /* post 失败但发送缓冲已回滚（仍可写）：复查后 EPOLLOUT 达位重灌，LT 持续上报 */
+    EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLOUT);
 }

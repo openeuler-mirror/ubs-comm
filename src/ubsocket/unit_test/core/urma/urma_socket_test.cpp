@@ -175,3 +175,27 @@ TEST_F(UrmaSocketTest, NegVersion_SetNoCrash)
     sock.SetNegotiatedVersion(0x010203);
     sock.SetPeerVersion(0x040506);
 }
+
+TEST_F(UrmaSocketTest, FetchAndReachEpollEvents_ClearsOnlyGivenBits)
+{
+    auto urma_sock = MakeRef<UrmaSocket>(TEST_FD);
+    urma_sock->SetReachEpollEvents(EPOLLIN | EPOLLOUT);
+
+    auto old = urma_sock->FetchAndReachEpollEvents(EPOLLIN);
+
+    EXPECT_NE(0u, old & EPOLLIN);
+    EXPECT_NE(0u, old & EPOLLOUT);
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents() & EPOLLIN);
+    EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLOUT);
+}
+
+TEST_F(UrmaSocketTest, FetchAndReachEpollEvents_CleanBit_ReturnsZeroAndNoop)
+{
+    auto urma_sock = MakeRef<UrmaSocket>(TEST_FD);
+    urma_sock->SetReachEpollEvents(0);
+
+    auto old = urma_sock->FetchAndReachEpollEvents(EPOLLIN);
+
+    EXPECT_EQ(0u, old);
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents());
+}

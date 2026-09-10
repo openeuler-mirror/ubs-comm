@@ -20,8 +20,8 @@ namespace ubs {
 namespace urma {
 
 constexpr uint32_t URMA_CONTROL_PLANE_MAGIC = 0x55424C49;                /* "UBLI" */
-constexpr uint32_t URMA_SND_BUFF_ALLOC_UNIT = 1024;                      /* 128B: inline WRITE_IN_BAND allocate unit */
-constexpr uint32_t URMA_INLINE_THRESHOLD = 2 * URMA_SND_BUFF_ALLOC_UNIT; /* 256B: with head size */
+constexpr uint32_t URMA_SND_BUFF_ALLOC_UNIT = 1024;                      /* 1KB: inline WRITE_IN_BAND allocate unit */
+constexpr uint32_t URMA_INLINE_THRESHOLD = 2 * URMA_SND_BUFF_ALLOC_UNIT; /* 2KB: with head size */
 constexpr uint32_t URMA_SEND_BUF_DEFAULT_KB = 128;
 constexpr uint32_t URMA_RECV_BUF_DEFAULT_KB = 128;
 constexpr uint32_t URMA_SEND_BUF_OFFSET_GRANULARITY = 8192;     /* 8K */
@@ -81,7 +81,7 @@ union WriteImmData {
     } urma;
     struct {
         uint64_t opcode : 4;         /* bits 0~5 UBSocket ring buffer io op code (0~15) */
-        uint64_t buffer_offset : 16; /* offset in ring buffer, 128 granularity (0 ~ 8M) */
+        uint64_t buffer_offset : 16; /* offset in ring buffer, 1KB (URMA_SND_BUFF_ALLOC_UNIT) granularity (0 ~ 64M) */
         uint64_t urma_reserved : 44; /* bits 20~63 URMA reserved */
     } ubsocket;
 

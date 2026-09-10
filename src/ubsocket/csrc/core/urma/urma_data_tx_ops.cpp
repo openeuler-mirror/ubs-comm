@@ -16,6 +16,7 @@
 
 #include "core/ubsocket_socket_helper.h"
 #include "iobuf/ubsocket_iobuf.h"
+#include "urma_socket.h"
 #include "urma_socket_types.h"
 
 namespace ock {
@@ -98,6 +99,12 @@ ssize_t UrmaTxOps::WriteVOnce(const SocketPtr &sock, const struct iovec *iov, in
     UBS_VLOG_TRACE("writev on urma socket(%d) iovcnt=%d, bytes=%zu, flag=%x", sock->Fd(), iovcnt, total_size, flags);
     if (UNLIKELY(iovcnt <= 0 || total_size == 0)) {
         return 0;
+    }
+
+    if (UNLIKELY(RefStaticCastToRaw<UrmaSocket>(sock)->IsClosed())) {
+        UBS_VLOG_ERR("writev on closed urma socket(%d), return EPIPE", sock->Fd());
+        errno = EPIPE;
+        return -1;
     }
 
     if (total_size <= URMA_INLINE_DATA_THRESHOLD) {
@@ -190,6 +197,7 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
     uint64_t buf_offset = 0;
     auto real_size = urma_sock->send_buf_->Allocate(min_bytes, max_bytes, buf_offset);
     if (real_size < min_bytes) {
+        ClearWritableIfBlocked(sock);
         errno = EAGAIN;
         return -1;
     }
@@ -238,12 +246,27 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
     if (urma_ret != URMA_SUCCESS) {
         urma_sock->send_buf_->Release(buf_offset, real_size);
         UBS_SLOG_ERR("Urma post write_imm for request: " << ctrl_message.head.request_id << " return " << urma_ret);
+        ClearWritableIfBlocked(sock);
         errno = EAGAIN;
         return -1;
     }
 
-    return static_cast<ssize_t>(real_size - URMA_INLINE_MESSAGE_CTRL_COST);
+    return static_cast<ssize_t>(total);
 }
+
+void UrmaTxOps::ClearWritableIfBlocked(const SocketPtr &sock) noexcept
+{
+    auto urma_sock = dynamic_cast<UrmaSocket *>(sock.Get());
+    if (urma_sock == nullptr) {
+        return;
+    }
+    /* Clear bit first, then re-check and refill: prevents lost wakeup race with NotifyWritabl */
+    urma_sock->FetchAndReachEpollEvents(EPOLLOUT);
+    if (Writable(sock)) {
+        (void)urma_sock->NotifyWritable();
+    }
+}
+
 
 void UrmaTxOps::BuildBlockRefs(const struct iovec *iov, int iovcnt, std::vector<BlockRef> &block_refs) noexcept
 {
@@ -294,6 +317,7 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
         UBS_VLOG_ERR("socket(%d) allocate send buf with size(%lu) failed, cap(%lu) used(%lu) ava(%lu).", sock->Fd(),
                      need_size, urma_sock->send_buf_->Capacity(), urma_sock->send_buf_->Used(),
                      urma_sock->send_buf_->Available());
+        ClearWritableIfBlocked(sock);
         errno = EAGAIN;
         return -1;
     }
@@ -346,6 +370,7 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
             block_refs[i].block->DecRef();
         }
         delete block_refs_ptr;
+        ClearWritableIfBlocked(sock);
         return -1;
     }
 

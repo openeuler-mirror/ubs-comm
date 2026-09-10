@@ -160,6 +160,12 @@ void UrmaEventPoll::UnbindReadableNotifiers() noexcept
 
 int UrmaEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
 {
+    if (UNLIKELY(fd == epoll_fd_)) {
+        UBS_VLOG_ERR("urma epoll(%d) ctl(fd=%d) target equals epfd\n", epoll_fd_, fd);
+        errno = EINVAL;
+        return -1;
+    }
+
     int ret = -1;
     bool mapper_create = false;
     EpollMapper *mapper = nullptr;
@@ -206,7 +212,7 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
         return -1;
     }
 
-    if (UNLIKELY(maxevents < 0)) {
+    if (UNLIKELY(maxevents <= 0)) {
         UBS_VLOG_ERR("urma_event_poll EpollWait maxevents(%d) invalid.\n", maxevents);
         errno = EINVAL;
         return -1;
@@ -222,6 +228,9 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
     uint64_t event_read_val;
     UBS_VLOG_TRACE("urma epoll wait(epfd=%d, max=%d, timeout=%d) start...", epoll_fd_, maxevents, timeout);
     int ret = epoll_wait(epoll_fd_, events, maxevents, timeout);
+    if (UNLIKELY(ret < 0)) {
+        return ret;
+    }
     PROF_START(__URMA_DEAL_EPOLL_EVENT);
     for (auto i = 0; i < ret && i < maxevents; ++i) {
         auto event_data = static_cast<EpollEvent *>(events[i].data.ptr);
@@ -267,13 +276,45 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
         }
 
         auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
-        events[out].events = urma_sock->GetReachEpollEvents() & event_data->event.events;
+        uint32_t reach = urma_sock->GetReachEpollEvents();
+        /* Closed state (HUP|RDHUP) reported unconditionally regardless of user interest, aligning with kernel semantics */
+        uint32_t closed_bits = reach & (EPOLLHUP | EPOLLRDHUP);
+        uint32_t reported = (reach & event_data->event.events) | closed_bits;
+        if (event_data->oneshot_disabled.load(std::memory_order_acquire)) {
+            /* ONESHOT disabled period: reachability bits preserved, token consumed (prevent busy polling), but no events reported */
+            reported = 0;
+        }
+        events[out].events = reported;
         events[out].data = event_data->event.data;
         UBS_VLOG_TRACE("urma epoll(%d) urma socket event(evt=0x%x, data=%lx)", epoll_fd_, events[out].events,
                        events[out].data.u64);
         /* The kernel eventfd path already delivers this fd: clear pending to avoid a duplicate. */
         readable_events_.ClearPending(event_data->socket_fd);
         eventfd_read(urma_sock->event_fd_, &event_read_val);
+        if (event_data->oneshot_disabled.load(std::memory_order_relaxed)) {
+            /* Disabled period: do not touch reachability bits (including HUP persistent bit), wait for MOD re-arm to refill and report */
+        } else if (reported != 0 && (event_data->event.events & EPOLLONESHOT) != 0) {
+            /* ONESHOT triggered: report once then disable, do not rewrite eventfd (align with kernel: no more wakeups before re-arm);
+             * clear normal bits but preserve closed_bits terminal state for immediate re-check after re-arm */
+            event_data->oneshot_disabled.store(true, std::memory_order_release);
+            urma_sock->FetchAndReachEpollEvents(reported & ~closed_bits);
+            if (closed_bits != 0) {
+                UBS_VLOG_INFO("urma epoll(%d) socket(%d) closed, oneshot fired once(0x%x)", epoll_fd_,
+                              event_data->socket_fd, closed_bits);
+            }
+        } else if (closed_bits != 0) {
+            UBS_VLOG_INFO("urma epoll(%d) socket(%d) closed, report HUP(0x%x)", epoll_fd_, event_data->socket_fd,
+                          closed_bits);
+        } else if (reported != 0) {
+            if ((event_data->event.events & EPOLLET) != 0) {
+                /* ET: event reported and consumed, clear bits to avoid duplicate notification */
+                urma_sock->FetchAndReachEpollEvents(reported);
+            } else {
+                /* LT: preserve reachability and rewrite eventfd for continuous wakeup until
+                 * data plane clears bits and "reported == 0" terminates naturally */
+                eventfd_write(urma_sock->event_fd_, 1);
+            }
+        }
         if (ubsocket_prof_enabled != 0) {
             UrmaRxOps *rxOps = static_cast<UrmaRxOps *>(urma_sock->GetRx()->GetRxOps());
             uint64_t traceTime = rxOps->CurrentTraceNsTime();
@@ -282,7 +323,12 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
                 PROF_RECORD(__URMA_SLOT_EPOLL_PROC, used, true);
             }
         }
-        out++;
+        /* 空事件(reported==0)：eventfd 残留 token 但达位已被数据面(readv)清除，
+         * 不返回给调用方，否则 epoll_wait 返回 events==0 的伪事件，
+         * 破坏 LT/ET/ONESHOT 静默期语义（epoll_wait 应返回 0 而非空事件） */
+        if (reported != 0) {
+            out++;
+        }
     }
     PROF_END(__URMA_DEAL_EPOLL_EVENT, true);
 
@@ -432,7 +478,15 @@ int UrmaEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
         notify_events |= EPOLLIN;
     }
     if (notify_events != 0) {
-        urma_sock->SetReachEpollEvents(notify_events);
+        urma_sock->FetchOrReachEpollEvents(notify_events);
+    }
+
+    /* Re-arm: wakeup refill. Pending events injected during disabled period only appear in reachability bits (no eventfd token),
+     * blocked wait has no one to wake it, must check reach & mask match and refill token.
+     * FetchOr(0) is RMW read, atomic serial with injector-side fetch_or, prevents "check-inject" window race;
+     * when seed matches mask this check also applies, token write unified from here */
+    uint32_t reach = urma_sock->FetchOrReachEpollEvents(0);
+    if ((reach & event->events) != 0) {
         eventfd_write(urma_sock->event_fd_, 1);
     }
 
@@ -500,7 +554,7 @@ int UrmaEventPoll::ModRawSocketEvent(int fd, struct epoll_event *event)
     auto event_data = GetSocketEventData(fd);
     if (UNLIKELY(event_data == nullptr)) {
         UBS_VLOG_ERR("urma_event_poll EpollCtlMod(socket:%d) failed, event_data null", fd);
-        errno = EINVAL;
+        errno = ENOENT;
         return -1;
     }
 
@@ -518,8 +572,10 @@ int UrmaEventPoll::ModRawSocketEvent(int fd, struct epoll_event *event)
 int UrmaEventPoll::DelRawSocketEvent(int fd)
 {
     if (!RemoveSocketEventData(fd)) {
-        UBS_VLOG_WARN("urma_event_poll del pure event for socket: %d failed, RemoveSocketEventData failed\n", fd);
-        return 0;
+        /* Kernel semantics: DEL on unregistered fd returns ENOENT, not silent success */
+        UBS_VLOG_ERR("urma_event_poll del raw event for socket: %d not registered\n", fd);
+        errno = ENOENT;
+        return -1;
     }
     auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, nullptr);
     if (UNLIKELY(ret < 0)) {
@@ -569,9 +625,10 @@ int UrmaEventPoll::ModUrmaSocketEvent(UrmaSocketPtr &socket, struct epoll_event 
 {
     auto event_data = GetSocketEventData(socket->raw_socket_);
     if (UNLIKELY(event_data == nullptr)) {
+        /* Kernel semantics: MOD on unregistered fd returns ENOENT (consistent with DEL) */
         UBS_VLOG_ERR("urma_event_poll EpollCtlMod(socket: %d, event fd: %d) failed, event_data null",
                      socket->raw_socket_, socket->event_fd_);
-        errno = EINVAL;
+        errno = ENOENT;
         return -1;
     }
 
@@ -587,15 +644,17 @@ int UrmaEventPoll::ModUrmaSocketEvent(UrmaSocketPtr &socket, struct epoll_event 
                      socket->event_fd_, errno, strerror(errno));
         return -1;
     }
+    event_data->oneshot_disabled.store(false, std::memory_order_release);
     return 0;
 }
 
 int UrmaEventPoll::DelUrmaSocketEvent(UrmaSocketPtr &socket)
 {
     if (!RemoveSocketEventData(socket->raw_socket_)) {
-        UBS_VLOG_WARN("urma_event_poll del urma event for socket: %d failed, RemoveSocketEventData failed\n",
-                      socket->raw_socket_);
-        return 0;
+        /* Kernel semantics: DEL unregistered fd returns ENOENT */
+        UBS_VLOG_ERR("urma_event_poll del urma event for socket: %d not registered\n", socket->raw_socket_);
+        errno = ENOENT;
+        return -1;
     }
 
     /* The socket is no longer on this poll: drop our inline-reader hook if it points here. */

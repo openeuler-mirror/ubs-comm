@@ -141,6 +141,13 @@ public:
     }
 
     int NotifySocketReadable();
+    int NotifyClosed();
+    /* Closed state check: after NotifyClosed injects, HUP bit is persistent */
+    bool IsClosed() const
+    {
+        return (GetReachEpollEvents() & EPOLLHUP) != 0;
+    }
+
     void HandleRecvCqe(const WriteImmData &imm);
     void HandlePostWrite(const WriteImmData &imm);
     void HandleWriteInBandAck(const WriteImmData &imm);
@@ -166,7 +173,16 @@ public:
 
     uint32_t FetchOrReachEpollEvents(uint32_t events)
     {
-        return reach_epoll_events_.fetch_or(events, std::memory_order_relaxed);
+        /* acq_rel: pairs with clear-side FetchAnd via release/acquire,
+         * ensures post-clear re-check sees pre-set state writes */
+        return reach_epoll_events_.fetch_or(events, std::memory_order_acq_rel);
+    }
+
+    uint32_t FetchAndReachEpollEvents(uint32_t events)
+    {
+        /* acq_rel: pairs with set-side FetchOr via release/acquire,
+         * ensures post-clear re-check sees notifier's prior state writes */
+        return reach_epoll_events_.fetch_and(~events, std::memory_order_acq_rel);
     }
 
     uint32_t GetReachEpollEvents() const
@@ -293,6 +309,15 @@ ALWAYS_INLINE int UrmaSocket::DoNotifyWritable()
     FetchOrReachEpollEvents(EPOLLOUT);
     auto ret = eventfd_write(event_fd_, 1);
     PROF_END(___URMA_EVENT_WRITE, true);
+    return ret;
+}
+
+ALWAYS_INLINE int UrmaSocket::NotifyClosed()
+{
+    PROF_START(___URMA_EVENT_CLOSED);
+    FetchOrReachEpollEvents(EPOLLHUP | EPOLLRDHUP);
+    auto ret = eventfd_write(event_fd_, 1);
+    PROF_END(___URMA_EVENT_CLOSED, true);
     return ret;
 }
 

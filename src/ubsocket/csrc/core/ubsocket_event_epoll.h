@@ -12,6 +12,7 @@
 #define UBS_COMM_UBSOCKET_EPOLL_FD_H
 
 #include <memory>
+#include <atomic>
 
 #include "common/ubsocket_leaky_singleton.h"
 #include "common/ubsocket_mpsc_ring_queue.h"
@@ -37,6 +38,7 @@ struct EpollEvent {
     int socket_fd = -1;
     struct epoll_event event {};
     EpollEvent *next{nullptr};
+    std::atomic<bool> oneshot_disabled{false};  // EPOLLONESHOT: disabled after triggered, cleared on MOD re-arm.
     EpollEvent(EpollEventType type, int socket, const struct epoll_event &evt) noexcept
         : event_type{type},
           socket_fd{socket},
