@@ -43,12 +43,25 @@ static inline int16_t faa_int16_acq_rel(int16_t *val, int16_t add)
                  : "memory");
     return old;
 }
+
+static inline int16_t faa_int16_release(int16_t *val, int16_t add)
+{
+    int16_t old;
+    asm volatile("ldaddlh %w[add], %w[old], [%[addr]]"
+                 : [old] "=r"(old), "+Q"(*val)
+                 : [addr] "r"(val), [add] "r"(add)
+                 : "memory");
+    return old;
+}
+
 #define ATOMIC_INT16_FAA_RELAX(VAR_PTR, N) faa_int16_relax(VAR_PTR, N)
 #define ATOMIC_INT16_FAA_ACQ_REL(VAR_PTR, N) faa_int16_acq_rel(VAR_PTR, N)
+#define ATOMIC_INT16_FAA_REL(VAR_PTR, N) faa_int16_release(VAR_PTR, N)
 
 #else
 #define ATOMIC_INT16_FAA_RELAX(VAR_PTR, N) __atomic_fetch_add(VAR_PTR, N, __ATOMIC_RELAXED)
 #define ATOMIC_INT16_FAA_ACQ_REL(VAR_PTR, N) __atomic_fetch_add(VAR_PTR, N, __ATOMIC_ACQ_REL)
+#define ATOMIC_INT16_FAA_REL(VAR_PTR, N) __atomic_fetch_add(VAR_PTR, N, __ATOMIC_RELEASE)
 #endif
 
 class Referable {
@@ -63,7 +76,8 @@ public:
 
     ALWAYS_INLINE void DecreaseRef()
     {
-        if (ATOMIC_INT16_FAA_ACQ_REL(&ref_count_, -1) == 1) {
+        if (ATOMIC_INT16_FAA_REL(&ref_count_, -1) == 1) {
+            __atomic_thread_fence(__ATOMIC_ACQUIRE);
             delete this;
         }
     }
@@ -82,7 +96,8 @@ protected:
                                                               \
     ALWAYS_INLINE void DecreaseRef()                          \
     {                                                         \
-        if (ATOMIC_INT16_FAA_ACQ_REL(&ref_count_, -1) == 1) { \
+        if (ATOMIC_INT16_FAA_REL(&ref_count_, -1) == 1) {     \
+            __atomic_thread_fence(__ATOMIC_ACQUIRE);          \
             delete this;                                      \
         }                                                     \
     }
