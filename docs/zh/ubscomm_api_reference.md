@@ -6,7 +6,7 @@
 
 - 编程语言
 
-    UBS Comm主体使用C++语言开发，对外提供C++ API。为了方便不同场景的开发者使用，UBS Comm还对C++ API做了一层封装，对外提供C和Java API。
+    UBS Comm主体使用C++语言开发，对外提供C++ API。为了方便不同场景的开发者使用，UBS Comm还对C++ API做了一层封装，对外提供C API。
 
 - 功能架构
 

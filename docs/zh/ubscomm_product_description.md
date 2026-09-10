@@ -18,7 +18,7 @@ UBS Comm提供点对点消息Send/Receive、Read/Write的单双边通信接口�
 
 #### 易集成<a name="ZH-CN_TOPIC_0000002566158046"></a>
 
-- 支持多语言（C/C++、Java、Go）API。
+- 支持多语言（C/C++）API。
 - 支持多种协议通信（RDMA/TCP/UDS/SHM）。
 
 #### 可靠性<a name="ZH-CN_TOPIC_0000002565998392"></a>
@@ -149,7 +149,7 @@ X交易所对接场景中，基于MLX5网卡，使用RDMA协议通信，实现25
 
 **客户价值<a name="section175091519282"></a>**
 
-提供双向服务层API接口，提供流量控制、多语言（C/C++、Java、Go）API、MULTIRAIL（多端口）、RNDV等高级功能。
+提供双向服务层API接口，提供流量控制、多语言（C/C++）API、MULTIRAIL（多端口）、RNDV等高级功能。
 
 **场景举例<a name="section642515291287"></a>**
 
@@ -162,7 +162,7 @@ X交易所对接场景中，基于MLX5网卡，使用RDMA协议通信，实现25
 - 支持多种加密算法的认证和加密通信。
 - 支持保活功能。
 - 支持流量控制功能。
-- 支持多语言（C/C++、Java、Go）API。
+- 支持多语言（C/C++）API。
 - 支持MULTIRAIL功能。
 - 支持RNDV功能。
 
