@@ -128,7 +128,7 @@ UBS Comm组网可由2台服务器组成，其中：
 |--|--|
 |OS|openEuler 22.03 LTS<br>openEuler 24.03 LTS|
 |RDMA-Core|42.7|
-|GCC|7.3.0|
+|GCC|12.3.1（openEuler 24.03 LTS 默认）|
 |CCA|VPP V300R024C10SPC001|
 
 **获取软件安装包<a name="section3489574613"></a>**

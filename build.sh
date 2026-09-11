@@ -19,6 +19,8 @@
 # (14) HCOM_BUILD_HW_CRC(optional, default is off) => build with hardware based crc.(on/off)
 # (15) BUILD_HCOM(optional, default is ON) => build hcom.(ON/OFF)
 # (16) HCOM_BUILD_MULTICAST(optional, default is off) => build multicast or not.(on/off)
+# (17) VERBOSE(optional, default is empty) => output detailed build logs.(1/empty)
+# (18) USE_URMA_STUB(optional, default is off) => use urma stub or not.(on/off)
 
 # version: 1.0.0
 # change log:
@@ -155,10 +157,14 @@ cmake -S"${HCOM_ROOT_DIR}" -B"${HCOM_BUILD_DIR}" \
     -DENABLE_ARM_KP=${HCOM_ENABLE_ARM_KP} \
     -DHCOM_COMPONENT_VERSION="${HCOM_COMPONENT_VERSION}"
 
-cmake --build "${HCOM_BUILD_DIR}" -j $(nproc)
+# VERBOSE=1 时输出详细编译日志（cmake --build --verbose），便于排查编译错误
+CMAKE_BUILD_VERBOSE=""
+[[ "${VERBOSE}" == "1" ]] && CMAKE_BUILD_VERBOSE="--verbose"
+
+cmake --build "${HCOM_BUILD_DIR}" -j $(nproc) ${CMAKE_BUILD_VERBOSE}
 
 # Install to the specified path
-cmake --build "${HCOM_BUILD_DIR}" --target install
+cmake --build "${HCOM_BUILD_DIR}" --target install ${CMAKE_BUILD_VERBOSE}
 
 # collect objects and make software package
 output=$(HCOM_COMPONENT_VERSION=${HCOM_COMPONENT_VERSION} bash "${HCOM_ROOT_DIR}/build/make_software_package.sh" -t "${HCOM_BUILD_TYPE}")

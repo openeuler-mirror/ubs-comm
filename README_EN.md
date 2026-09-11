@@ -28,7 +28,7 @@ $ git clone <repo-url> --recurse-submodules
 ```shell
 .
 ├── build      // Build scripts
-├── doc        // Project documentation
+├── docs       // Project documentation
 ├── src        // Sub-project source code
 │   ├── hcom   // HCOM
 │   └── ubsocket  // UBSocket
@@ -43,7 +43,7 @@ $ git clone <repo-url> --recurse-submodules
 Install the following toolchains and dependencies before building (**openEuler only**):
 
 ```shell
-$ dnf install -y cmake gcc gcc-c++ make git rdma-core-devel openssl-devel time
+$ dnf install -y cmake gcc gcc-c++ make git rdma-core-devel openssl-devel libboundscheck time
 ```
 
 ### Compilation
@@ -63,6 +63,8 @@ $ HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on UMQ_BUILD=on UBSOCKET_BUILD=on UBSOC
 
 Add `USE_URMA_STUB=ON` when no full URMA SDK is installed.
 
+> When building UMQ manually (`src/hcom/umq/`), the CMakeLists.txt defaults `OPENSSL_ROOT_DIR` to macOS Homebrew path (`/usr/local/opt/openssl`). On Linux, override it via `-DOPENSSL_ROOT_DIR=/usr` to point to the system OpenSSL, see [UBSocket User Guide §4.4](docs/ubsocket/UBSOCKET-USER-GUIDE.md#44-编译构建) for details. When using `build.sh` one-stop build, this is handled automatically.
+
 For each sub-project's build, test, and sample commands, you must read each.
 
 - HCOM build: [`src/hcom/README_EN.md §Compilation`](src/hcom/README_EN.md#2-compilation).
@@ -81,7 +83,7 @@ $ ctest --test-dir src/ubsocket/build --output-on-failure
 
 The build and runtime environment only supports **openEuler**.
 
-Before building and running tests in a container (or any minimal environment), ensure the above toolchains and dependencies are installed. The repository does not require a separate Dockerfile; `build.sh` directly manages the build process.
+Before building and running tests in a container (or any minimal environment), ensure the above toolchains and dependencies are installed. The repository provides `docker/Dockerfile` for building container images, or `build.sh` can directly manage the build process. See [`docs/zh/ubscomm_installation_deployment.md`](docs/zh/ubscomm_installation_deployment.md#容器镜像部署可选) for the container deployment chapter.
 
 Test binaries dynamically load `libibverbs.so` and `libssl.so` via `dlopen`, even when using `fake_ibv_static` to mock RDMA verbs.
 

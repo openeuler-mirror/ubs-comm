@@ -28,7 +28,7 @@ $ git clone <repo-url> --recurse-submodules
 ```shell
 .
 ├── build      // 构建脚本
-├── doc        // 项目文档
+├── docs       // 项目文档
 ├── src        // 子项目源码
 │   ├── hcom   // HCOM
 │   └── ubsocket  // UBSocket
@@ -82,6 +82,8 @@ $ HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on UMQ_BUILD=on UBSOCKET_BUILD=on UBSOC
 
 仅执行UT，无需进行E2E测试，未安装完整 URMA SDK 时增加 `USE_URMA_STUB=ON`，提供 `umq_ub` 编译需要的依赖。
 
+> 手动编译 UMQ（`src/hcom/umq/`）时，CMakeLists.txt 默认 `OPENSSL_ROOT_DIR` 指向 macOS Homebrew 路径（`/usr/local/opt/openssl`），Linux 上需通过 `-DOPENSSL_ROOT_DIR=/usr` 指定系统 OpenSSL 路径，详见 [UBSocket 使用手册 §4.4](docs/ubsocket/UBSOCKET-USER-GUIDE.md#44-编译构建)。使用 `build.sh` 一站式构建时无需关心此设置。
+
 各子项目的独立编译、测试、样例命令，必须分别阅读。
 
 - HCOM 构建命令：[`src/hcom/README.md §编译`](src/hcom/README.md)。
@@ -90,17 +92,21 @@ $ HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on UMQ_BUILD=on UBSOCKET_BUILD=on UBSOC
 
 直接运行 test binary 前需设置 `LD_LIBRARY_PATH`（包含 `dist/hcom_3rdparty/libboundscheck/lib` 和 `dist/hcom/lib`）。
 
+> 若存在 `src/hcom/umq/build/` 目录（此前手动 cmake 编译 UMQ 的残留），运行 `build.sh` 前需先删除，否则残留产物可能导致 `multiple definition of 'main'` 链接错误。
+
 运行 UBSocket 单元测试。
 
 ```shell
 $ ctest --test-dir src/ubsocket/build --output-on-failure
 ```
 
+> 说明：执行上述 ctest 前，需先以 debug+UT 模式完成构建（`HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on UMQ_BUILD=on UBSOCKET_BUILD=on UBSOCKET_UT=on ./build.sh`），否则 `src/ubsocket/build` 下没有测试二进制。
+
 ### 容器/Docker 环境说明
 
 编译和运行环境仅支持openEuler。
 
-在容器（或任何最小化环境）中构建和运行测试前，确保已安装上述工具链和依赖。仓库无需额外 Dockerfile，`build.sh` 直接管理构建流程。
+在容器（或任何最小化环境）中构建和运行测试前，确保已安装上述工具链和依赖。仓库提供了 `docker/Dockerfile` 用于构建容器镜像，也可直接使用 `build.sh` 管理构建流程。详见 [`docs/zh/ubscomm_installation_deployment.md`](docs/zh/ubscomm_installation_deployment.md#容器镜像部署可选) 的容器镜像部署章节。
 
 测试二进制通过 `dlopen` 动态加载 `libibverbs.so` 和 `libssl.so`，即使使用 `fake_ibv_static` 模拟 RDMA verbs 也是如此。
 

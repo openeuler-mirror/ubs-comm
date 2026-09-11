@@ -14,12 +14,15 @@ UBSocket通信加速库，支持拦截TCP应用中的POSIX Socket API，将TCP�
 
 | 目录               | 代码说明                         |
 | ------------------ | -------------------------------- |
-| ubsocket           | ubsocket代码主目录。             |
+| ubsocket           | ubsocket代码主目录（不包含 `brpc`、`example` 子目录，见下方说明）。 |
+| ubsocket/csrc      | ubsocket核心源码目录（含 cli/common/core/iobuf/profiling/under_api 等）。 |
+| ubsocket/include   | ubsocket对外头文件目录。         |
 | ubsocket/3rdparty  | ubsocket依赖的三方库目录。       |
-| ubsocket/brpc      | ubsocket与bRPC适配相关代码目录。 |
-| ubsocket/cli       | ubsocket运维相关代码目录。       |
-| ubsocket/example   | ubsocket编程样例目录。           |
+| ubsocket/cmake     | ubsocket CMake 配置模块目录。    |
+| ubsocket/tools     | ubsocket工具脚本目录。           |
 | ubsocket/unit_test | ubsocket单元测试目录。           |
+
+> 说明：`ubsocket/brpc`（bRPC 适配）与 `ubsocket/example`（编程样例）目录在独立出包的 ubs-comm 仓库中不包含，相关样例（如 echo\_c++\_server / echo\_c++\_client）由 bRPC 集成场景编译提供，详见本文档第 4 章。
 
 
 ## 2 配套说明
@@ -264,12 +267,12 @@ make -j32
 
 ### 4.5 用例执行
 
-参考4.4节中cmake构建方式，以echo\_c++\_server和echo\_c++\_client为例，通过如下命令启动开启UB加速能力：
+echo\_c++\_server 和 echo\_c++\_client 由 bRPC 集成（bazel）构建产出，独立 cmake 构建不生成这两个二进制。以下命令以已有编译好的 echo\_c++\_server/echo\_c++\_client 为例，演示通过 LD_PRELOAD 加载 libubsocket.so 启动 UB 加速：
 
 ```shell
 $ export LD_PRELOAD=libubsocket.so
 $ export UBSOCKET_UB_FORCE=true
-$ ./echo_c++_srever  # 或者./echo_c++_client
+$ ./echo_c++_server  # 或者./echo_c++_client
 ```
 
 启动完成以后，执行成功的截图如下所示。

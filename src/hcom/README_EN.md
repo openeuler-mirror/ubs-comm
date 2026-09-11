@@ -7,11 +7,11 @@
 
 ## 1. User Guide
 
-`HCOM` provides the following documents for developers (located in `doc/hcom/`):
-- [`HCOM-API-Spec.md`](../../doc/hcom/HCOM-API-Spec.md)
-- [`HCOM-Architecture-Design-Specification.md`](../../doc/hcom/HCOM-Architecture-Design-Specification.md)
-- [`HCOM-Tutorial-Demo.md`](../../doc/hcom/HCOM-Tutorial-Demo.md)
-- [`HCOM-Tutorial-UseCase.md`](../../doc/hcom/HCOM-Tutorial-UseCase.md)
+`HCOM` provides the following documents for developers (located in `docs/hcom/`):
+- [`HCOM-API-Spec.md`](../../docs/hcom/HCOM-API-Spec.md)
+- [`HCOM-Architecture-Design-Specification.md`](../../docs/hcom/HCOM-Architecture-Design-Specification.md)
+- [`HCOM-Tutorial-Demo.md`](../../docs/hcom/HCOM-Tutorial-Demo.md)
+- [`HCOM-Tutorial-UseCase.md`](../../docs/hcom/HCOM-Tutorial-UseCase.md)
 
 ## 2. Compilation
 

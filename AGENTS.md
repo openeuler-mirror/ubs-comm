@@ -139,7 +139,7 @@ opencode skill 系统位于 `.opencode/skills/`,指导 AI 生成符合项目约�
 | `src/ubsocket/csrc/core/`     | 通用抽象层                     | `ubsocket_*` 文件, 不引用 `umq/` 头文件 (工厂类例外, 见依赖方向规则)                          |
 | `test/hcom/`                  | HCOM tests                | `unit_test/`, `llt/`, `stub/`, `opensslcrt/`              |
 | `src/ubsocket/unit_test/`     | UBSocket tests            | gtest+mockcpp, ctest runner                               |
-| `doc/`                        | Documentation             | Design docs in `doc/ubsocket/` and `doc/hcom/`            |
+| `docs/`                       | Documentation             | Design docs in `docs/ubsocket/` and `docs/hcom/`            |
 
 ### 依赖方向规则
 
@@ -151,7 +151,7 @@ opencode skill 系统位于 `.opencode/skills/`,指导 AI 生成符合项目约�
 
 ### UBSocket 架构参考
 
-> **完整架构文档**: `doc/ubsocket/UBSOCKET-ARCHITECTURE.ch.md` (含 mermaid 图)
+> **完整架构文档**: `docs/ubsocket/UBSOCKET-ARCHITECTURE.ch.md` (含 mermaid 图)
 
 #### POSIX API 覆盖状态
 
@@ -228,14 +228,14 @@ clang-tidy 已启用白名单检查 (见 `.clang-tidy`, bugprone/cert/clang-anal
 
 ## Coverage Baseline (csrc UT)
 
-> **详细分析**: `doc/ubsocket/UBSOCKET-COVERAGE-ANALYSIS.ch.md`
+> **详细分析**: `docs/ubsocket/UBSOCKET-COVERAGE-ANALYSIS.ch.md`
 
 | 指标    | 基线               | 目标   | 缺口      |
 | ----- | ---------------- | ---- | ------- |
 | 行覆盖率  | 15.1% (850/5637) | ≥80% | +3650行  |
 | 分支覆盖率 | 7.0% (479/6861)  | ≥50% | +2953分支 |
 
-> 注: 15.1% 为 `doc/ubsocket/UBSOCKET-COVERAGE-ANALYSIS.ch.md` 中 "iobuf后" 列数值 (该文档口径基线为 11.1%), 即当前基线。
+> 注: 15.1% 为 `docs/ubsocket/UBSOCKET-COVERAGE-ANALYSIS.ch.md` 中 "iobuf后" 列数值 (该文档口径基线为 11.1%), 即当前基线。
 
 - 构建: `UMQ_BUILD=on UBSOCKET_UT=on UBSOCKET_COVERAGE=on bash build/build_umq_and_ubsocket.sh`
 - 报告: `src/ubsocket/build/coverage_report/`, `coverage_summary.txt`, `coverage_detailed.txt`

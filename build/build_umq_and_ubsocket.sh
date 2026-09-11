@@ -9,6 +9,7 @@
 # (4) USE_URMA_STUB(optional, default is OFF) => in CI environment, use urma stub or not.(ON/OFF)
 # (5) UBSOCKET_PASS_RATE(optional, default is off) => run ubsocket ut pass rate or not.(on/off)
 # (6) UBSOCKET_COVERAGE(optional, default is off) => run ubsocket ut coverage or not.(on/off)
+# (7) VERBOSE(optional, default is empty) => output detailed build logs.(1/empty)
 # version: 1.0.0
 # change log:
 # ***********************************************************************
@@ -67,11 +68,19 @@ function umq_build() {
 
     local num_cores=$(nproc 2>/dev/null || echo 4)
 
-    if ! make -j"${num_cores}"; then
+    local make_verbose=""
+    [[ "${VERBOSE}" == "1" ]] && make_verbose="VERBOSE=1"
+
+    if ! make -j"${num_cores}" ${make_verbose}; then
         echo "[Error]: umq make failed."
         exit 1
     fi
     echo "umq make successfully."
+
+    # USE_URMA_STUB=ON 时 umq_ub 依赖的完整 URMA SDK 不存在，libumq_ub.so 不会产出
+    if [ "${USE_URMA_STUB}" == "ON" ]; then
+        echo "Info: USE_URMA_STUB=ON, libumq_ub.so is not built (requires full URMA SDK)."
+    fi
 }
 # build ubsocket, .so will store in "./src/ubsocket/build/brpc/librpc_adapter_brpc.so"
 function ubsocket_build() {
@@ -104,8 +113,10 @@ function ubsocket_build() {
     cd build
 
     local num_cores=$(nproc 2>/dev/null || echo 4)
+    local make_verbose=""
+    [[ "${VERBOSE}" == "1" ]] && make_verbose="VERBOSE=1"
 
-    if ! make -j"${num_cores}"; then
+    if ! make -j"${num_cores}" ${make_verbose}; then
         echo "[Error]: ubsocket make failed."
         exit 1
     fi
