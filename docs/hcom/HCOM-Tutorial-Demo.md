@@ -219,7 +219,7 @@ UBS Comm组网可由2台服务器组成，其中：
 | --------- | ------------------------------------------------------------ |
 | OS        | l   openEuler 20.03 LTS  l   openEuler 22.03 LTS  l   openEuler 24.03 LTS  l   CentOS 7.6 |
 | rdma-core | 42.7                                                         |
-| GCC       | 7.3.0                                                        |
+| GCC       | 12.3.1（openEuler 24.03 LTS 默认）                          |
 | CCA       | VPP V300R024C10SPC001                                        |
 
 3. 获取软件安装包

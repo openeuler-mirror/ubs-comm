@@ -22,7 +22,7 @@
   </tr>
   <tr>
     <td>GCC</td>
-    <td>7.3.0</td>
+    <td>12.3.1（openEuler 24.03 LTS 默认）</td>
   </tr>
     <tr>
     <td>CCA</td>

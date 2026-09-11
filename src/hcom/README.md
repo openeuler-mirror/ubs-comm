@@ -7,11 +7,11 @@
 
 ## 1 用户指南
 
-`HCOM`提供给开发者的资料（位于 `doc/hcom/`）主要有以下几本：
-- [`HCOM-API-Spec.md`](../../doc/hcom/HCOM-API-Spec.md)
-- [`HCOM-Architecture-Design-Specification.md`](../../doc/hcom/HCOM-Architecture-Design-Specification.md)
-- [`HCOM-Tutorial-Demo.md`](../../doc/hcom/HCOM-Tutorial-Demo.md)
-- [`HCOM-Tutorial-UseCase.md`](../../doc/hcom/HCOM-Tutorial-UseCase.md)
+`HCOM`提供给开发者的资料（位于 `docs/hcom/`）主要有以下几本：
+- [`HCOM-API-Spec.md`](../../docs/hcom/HCOM-API-Spec.md)
+- [`HCOM-Architecture-Design-Specification.md`](../../docs/hcom/HCOM-Architecture-Design-Specification.md)
+- [`HCOM-Tutorial-Demo.md`](../../docs/hcom/HCOM-Tutorial-Demo.md)
+- [`HCOM-Tutorial-UseCase.md`](../../docs/hcom/HCOM-Tutorial-UseCase.md)
 
 ## 2 编译
 

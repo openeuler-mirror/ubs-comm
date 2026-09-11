@@ -38,7 +38,7 @@
 |--|--|
 |OS|openEuler 22.03 LTS<br>openEuler 24.03 LTS|
 |RDMA-Core|42.7|
-|GCC|7.3.0|
+|GCC|12.3.1（openEuler 24.03 LTS 默认）|
 |CCA|VPP V300R024C10SPC001|
 
 ## 节点规划
@@ -49,15 +49,13 @@
 
 **前提条件<a name="section1340093619408"></a>**
 
-前置依赖libboundscheck（华为开源的安全函数库），可通过以下方式安装。
+前置依赖可通过 dnf 安装：
 
-- 有欧拉yum镜像源时，可以直接yum install安装。
+```cmd
+$ dnf install -y cmake gcc gcc-c++ make git rdma-core-devel openssl-devel libboundscheck time
+```
 
-    ```cmd
-    yum install libboundscheck
-    ```
-
-- 源码编译安装。
+libboundscheck 也可通过源码安装：
 
     [https://gitee.com/openeuler/libboundscheck](https://gitee.com/openeuler/libboundscheck)
 
@@ -77,6 +75,8 @@
         cp lib/libboundscheck.so /usr/lib64
         ```
 
+> 说明：openEuler 24.03 系统 dnf 仓库提供的 libboundscheck 版本为 v1.1.11，可直接用于编译和运行；仅当需要 v1.1.16 的特定修复时才需按上述步骤源码编译。
+
 **操作步骤<a name="section078195334012"></a>**
 
 若环境上已安装UBS Comm，则先卸载再安装，否则直接安装即可。
@@ -94,3 +94,138 @@
     rpm -ivh ubs-comm-lib-1.0.0-*rpm --force
     rpm -ivh ubs-comm-devel-1.0.0-*rpm --force (开发包，运行时可选)
     ```
+
+## 容器镜像部署（可选）<a name="容器镜像部署可选"></a>
+
+容器环境部署有两种方式：
+
+- 基于 openEuler 基础环境从零安装
+- 基于镜像构建容器环境
+
+### 方式一：基于 openEuler 基础环境从零安装
+
+不使用镜像时，参照本章「前提条件」安装依赖后，在ubs-comm源码根目录执行：
+
+```cmd
+UMQ_BUILD=on UBSOCKET_BUILD=on ./build.sh
+```
+
+> 说明：该方式需手动安装全部构建依赖（见「前提条件」），耗时较长。
+
+### 方式二：基于镜像构建容器环境
+
+基于镜像构建容器环境，首先需要获取镜像。获取镜像有两种方式：
+
+- 直接从镜像仓库拉取预构建镜像
+- 从 Dockerfile 构建镜像
+
+**步骤 1：获取镜像**
+
+先确认本机 CPU 架构，不同架构的镜像获取方式不同：
+
+```cmd
+$ uname -m    # x86_64 或 aarch64
+```
+
+> 架构说明：
+>
+> - 预构建镜像当前**仅提供 x86_64（amd64）架构**，仅适用于 x86_64 机器。
+> - aarch64（Kunpeng）机器请使用选项二（Dockerfile 构建）：`docker/Dockerfile` 的 `FROM hub.oepkgs.net/openeuler/openeuler:24.03-lts-sp3` 为多架构镜像（amd64/arm64/loong64），`docker build` 会自动拉取与本机架构匹配的基础镜像，无需修改 Dockerfile。
+
+选项一：直接拉取预构建镜像（仅 x86_64）
+
+```cmd
+docker pull swr.cn-north-4.myhuaweicloud.com/ubscore/ubs-comm-openeuler:24.03-sp3-1.0.0
+```
+
+选项二：从 Dockerfile 构建镜像（x86_64 与 aarch64 均适用）
+
+Dockerfile 位于仓库 `docker/Dockerfile`，内容如下（仅打包编译依赖环境，不含源码）：
+
+```dockerfile
+ARG BASE_IMAGE=hub.oepkgs.net/openeuler/openeuler:24.03-lts-sp3
+FROM ${BASE_IMAGE}
+
+ARG REPO_DIR=/workspace
+
+# 安装构建/UT 依赖（openEuler 工具链 + ubs-comm 构建依赖）
+# 镜像仅提供预装依赖的环境，不打包源码；源码通过挂载 /workspace 提供
+RUN dnf install -y \
+        cmake gcc gcc-c++ make git \
+        rdma-core-devel openssl-devel libboundscheck time \
+        python3 python3-pip \
+        gtest gtest-devel gmock gmock-devel \
+    && dnf clean all
+
+WORKDIR ${REPO_DIR}
+CMD ["/bin/bash"]
+```
+
+构建环境镜像：
+
+```cmd
+cd ubs-comm
+docker build -f docker/Dockerfile -t ubs-comm-openeuler:24.03-sp3-1.0.0 .
+```
+
+**步骤 2：创建容器**
+
+按步骤 1 选择的获取方式，使用对应的镜像名创建容器：
+
+- 选项一（预构建镜像）：
+
+  ```cmd
+  docker run -d --privileged --name ubs-comm-ttfhw \
+      -v /home/workspace/ubs-comm-verify:/workspace \
+      swr.cn-north-4.myhuaweicloud.com/ubscore/ubs-comm-openeuler:24.03-sp3-1.0.0 \
+      sleep infinity
+  ```
+
+- 选项二（Dockerfile 构建）：
+
+  ```cmd
+  docker run -d --privileged --name ubs-comm-ttfhw \
+      -v /home/workspace/ubs-comm-verify:/workspace \
+      ubs-comm-openeuler:24.03-sp3-1.0.0 \
+      sleep infinity
+  ```
+
+> 说明：
+>
+> - 构建/UT 场景无需挂载 NPU 设备；镜像默认工作目录为 `/workspace`，不建议挂载整个 `/home` 目录。
+> - **代码必须事先克隆到宿主机 `/home/workspace/ubs-comm-verify` 目录**，镜像不包含源码，必须通过 `-v` 挂载提供。
+> - `docker run` 执行后，建议先验证挂载成功：
+>
+>   ```cmd
+>   $ ls /home/workspace/ubs-comm-verify/build.sh
+>   ```
+>
+>   若文件不存在，请先执行 `git clone <仓库URL> --depth 1 --branch <分支> /home/workspace/ubs-comm-verify`。
+
+**步骤 3：进入容器**
+
+```cmd
+docker exec -it ubs-comm-ttfhw bash
+```
+
+> 镜像不包含源码，进入容器前请确认 `/workspace` 已正确挂载宿主机代码目录：
+>
+> ```cmd
+> $ ls /workspace/build.sh
+> ```
+>
+> 若提示 No such file 或为空，请检查 `docker run` 的 `-v` 挂载参数，然后重新执行步骤 2。
+
+进入容器后，在 `/workspace` 下执行：
+
+```cmd
+cd /workspace
+UMQ_BUILD=on UBSOCKET_BUILD=on USE_URMA_STUB=ON ./build.sh   # Release 构建 HCOM+UMQ+UBSocket，产物在 dist/ 目录
+```
+
+> 说明：
+>
+> - 容器内无完整 URMA SDK，使用 `USE_URMA_STUB=ON` 启用 stub 头文件编译 `umq_ub`。
+> - `UMQ_BUILD=on UBSOCKET_BUILD=on` 由 `build.sh` 转发至 `build/build_umq_and_ubsocket.sh`，完整构建 HCOM、UMQ 和 UBSocket 三个组件。仅执行 `./build.sh` 只会构建 HCOM。
+>
+> 推荐使用方式二（镜像构建），可复用预装依赖的镜像环境，无需每次手动安装依赖。
