@@ -127,15 +127,10 @@ UMQ_BUILD=on UBSOCKET_BUILD=on ./build.sh
 $ uname -m    # x86_64 或 aarch64
 ```
 
-> 架构说明：
->
-> - 预构建镜像当前**仅提供 x86_64（amd64）架构**，仅适用于 x86_64 机器。
-> - aarch64（Kunpeng）机器请使用选项二（Dockerfile 构建）：`docker/Dockerfile` 的 `FROM hub.oepkgs.net/openeuler/openeuler:24.03-lts-sp3` 为多架构镜像（amd64/arm64/loong64），`docker build` 会自动拉取与本机架构匹配的基础镜像，无需修改 Dockerfile。
-
-选项一：直接拉取预构建镜像（仅 x86_64）
+选项一：直接拉取预构建镜像
 
 ```cmd
-docker pull swr.cn-north-4.myhuaweicloud.com/ubscore/ubs-comm-openeuler:24.03-sp3-1.0.0
+docker pull swr.cn-north-4.myhuaweicloud.com/ubscore/ubs-comm:24.03-sp3-1.0.0
 ```
 
 选项二：从 Dockerfile 构建镜像（x86_64 与 aarch64 均适用）
