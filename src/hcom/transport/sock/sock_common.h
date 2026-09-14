@@ -60,7 +60,7 @@ inline const std::string &SockTypeToString(SockType v)
 
 struct SockOptions {
     uint16_t receiveBufSizeKB = NN_NO1; /* default receive buffer size, 1KB */
-    uint16_t sendBufSizeKB = 0;         /* default send buffer size, 0KB */
+    uint32_t sendBufSizeKB = 0;         /* default send buffer size, 0KB */
     uint16_t sendQueueSize = NN_NO256;  /* send queue size */
     bool sendZCopy = false;             /* whether copy send request */
 };
