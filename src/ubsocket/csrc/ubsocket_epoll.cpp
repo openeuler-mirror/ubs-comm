@@ -69,10 +69,10 @@ UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int ma
 UBS_API int UB_API_WRAP(epoll_create1)(int flags)
 {
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::epoll_create(1024);
+        return LibcApi::epoll_create1(flags);
     }
 
-    int epollFd = LibcApi::epoll_create(1024);
+    int epollFd = LibcApi::epoll_create1(flags);
     if (epollFd < 0) {
         return epollFd;
     }
