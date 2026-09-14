@@ -62,7 +62,7 @@ UBS_API int UB_API_WRAP(close)(int fd)
         return LibcApi::close(fd);
     }
     ArraySet<Socket>::GetInstance().OverrideItem(fd, nullptr);
-    return close(fd);
+    return LibcApi::close(fd);
 }
 
 UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *address_len)
