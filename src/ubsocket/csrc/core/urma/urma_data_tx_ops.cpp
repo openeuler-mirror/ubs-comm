@@ -341,10 +341,11 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
 
     auto allocator = UrmaBackend::Instance().GetAllocator();
     auto *bufs = reinterpret_cast<PageBufferInMessage *>(head + 1);
+    auto socket_ctx = urma_sock->GetContext();
     for (uint32_t i = 0; i < valid_count; i++) {
         bufs[i].addr = reinterpret_cast<uint64_t>(block_refs[i].block->data + block_refs[i].offset);
         bufs[i].size = block_refs[i].length;
-        bufs[i].flags = allocator->get_local_target_seg(bufs[i].addr)->seg.token_id;
+        bufs[i].flags = allocator->get_local_target_seg(socket_ctx, bufs[i].addr)->seg.token_id;
     }
 
     WriteImmData imm_data{PRE_WRITE, buf_offset / unit};

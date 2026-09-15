@@ -13,7 +13,6 @@
 #include "under_api/dl_api.h"
 #include "urma_data_rx_ops.h"
 #include "urma_data_tx_ops.h"
-#include "urma_poller.h"
 #include "urma_socket.h"
 #include "urma_socket_acceptor_ops.h"
 #include "urma_socket_connector_ops.h"
@@ -112,15 +111,7 @@ Result UrmaBackend::Init(bool initUrmaOnly) noexcept
             return UBS_ERROR;
         }
 
-        /* step7: init local identify node info */
-        result = InitLocalIdentifyNodeInfo();
-        if (UNLIKELY(result != UBS_OK)) {
-            UnInitInner();
-            UBS_VLOG_ERR("Failed to initialize backend as init local identify node failed");
-            return UBS_ERROR;
-        }
-
-        /* step8: init object pool */
+        /* step7: init object pool */
         result = InitObjectPool();
         if (UNLIKELY(result != UBS_OK)) {
             UnInitInner();
@@ -160,7 +151,6 @@ void UrmaBackend::UnInitInner() noexcept
         UnInitPollerSet();
 
         UnInitContextPool();
-        best_context_ = nullptr;
     }
 
     UnInitUrma();
@@ -259,13 +249,6 @@ Result UrmaBackend::InitContextPool() noexcept
         return result;
     }
 
-    /* get best context */
-    result = tmp_context_pool->GetBestContext(best_context_);
-    if (result != UBS_OK) {
-        UBS_VLOG_ERR("Failed to get best urma context pool, result: %d", result);
-        return result;
-    }
-
     /* set object to member variables */
     context_pool_ = tmp_context_pool;
 
@@ -283,8 +266,8 @@ void UrmaBackend::UnInitContextPool() noexcept
 
 Result UrmaBackend::InitJettyPool() noexcept
 {
-    if (best_context_ == nullptr) {
-        UBS_VLOG_ERR("No best context set, probably not init context pool");
+    if (context_pool_ == nullptr) {
+        UBS_VLOG_ERR("No context_pool_ set, probably not init context pool");
         return UBS_ERROR;
     }
 
@@ -297,7 +280,7 @@ Result UrmaBackend::InitJettyPool() noexcept
     options.jfr_depth = UrmaSetting::UB_JETTY_JFR_DEPTH;
     options.transport_mode = UrmaSetting::UB_JETTY_TRANS_MODE;
     options.tp_type = UrmaSetting::UB_JETTY_TP_TYPE;
-    options.context_ = best_context_;
+    options.context_pool = context_pool_;
 
     auto tmp_jetty_pool = MakeRef<UrmaJettyPool>(options);
     if (tmp_jetty_pool == nullptr) {
@@ -326,37 +309,46 @@ void UrmaBackend::UnInitJettyPool() noexcept
 
 Result UrmaBackend::InitPollerSet() noexcept
 {
-    if (best_context_ == nullptr) {
-        UBS_VLOG_ERR("No best context set, probably not init poller pool");
+    if (context_pool_ == nullptr) {
+        UBS_VLOG_ERR("No context_pool_ probably not init poller pool");
         return UBS_ERROR;
     }
 
-    UrmaPollerOptions options;
-    options.poller_count = UrmaSetting::UB_POLLER_COUNT;
-    options.jfc_depth = UrmaSetting::UB_POLLER_JFC_DEPTH;
-    options.context_ = best_context_;
-    options.polling_type = UrmaSetting::UB_POLLER_BUSY_POLLING ? BUSY_POLLING : EVENT_POLLING;
-    options.cqe_handler =
-        std::bind(&UrmaBackend::HandleCqe, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+    auto tmp_poller_set = MakeRef<UrmaAggPollerSet>();
+    if (tmp_poller_set == nullptr) {
+        UBS_VLOG_ERR("Failed to create Urma poller set, probably out of memory");
+        return UBS_ERROR;
+    }
 
-    auto result = UrmaPollerSet::Instance().Init(options);
+    UrmaAggPollerOptions options;
+    options.context_pool = context_pool_;
+    options.run_in_thread = UrmaSetting::UB_EPOLL_HANDLE_MODE == THREAD_PER_CONNECTION;
+    options.polling_type = UrmaSetting::UB_POLLER_BUSY_POLLING ? BUSY_POLLING : EVENT_POLLING;;
+    options.poller_count_per_context = UrmaSetting::UB_POLLER_COUNT;
+    options.jfc_depth = UrmaSetting::UB_POLLER_JFC_DEPTH;
+    options.cqe_handler = std::bind(&UrmaBackend::HandleCqe, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+
+    auto result = tmp_poller_set->Init(options);
     if (result != UBS_OK) {
         UBS_VLOG_ERR("Failed to init Urma poller set, result %d", result);
         return UBS_ERROR;
     }
-
+    poller_set_ = tmp_poller_set;
     return UBS_OK;
 }
 
 void UrmaBackend::UnInitPollerSet() noexcept
 {
-    UrmaPollerSet::Instance().UnInit();
+    if (poller_set_ == nullptr) {
+        return;
+    }
+    poller_set_->UnInit();
 }
 
 Result UrmaBackend::InitIoBufPool() noexcept
 {
-    if (best_context_ == nullptr) {
-        UBS_VLOG_ERR("No best context set, probably not init io buff pool");
+    if (context_pool_ == nullptr) {
+        UBS_VLOG_ERR("No context_pool_ probably not init poller pool");
         return UBS_ERROR;
     }
 
@@ -373,7 +365,7 @@ Result UrmaBackend::InitIoBufPool() noexcept
     options.mini_block_size_kb = UrmaSetting::UB_BUF_PAGE_SIZE_KB;
     options.async_expand = UrmaSetting::UB_BUF_ASYNC_EXPAND;
 
-    auto result = tmp_io_buf_pool->init(options, best_context_);
+    auto result = tmp_io_buf_pool->init(options, context_pool_);
     if (result != UBS_OK) {
         UBS_VLOG_ERR("Failed to init io buff pool, result %d", result);
         return UBS_ERROR;
@@ -518,30 +510,6 @@ UrmaIoBufferPool *UrmaBackend::GetAllocator() noexcept
     return io_buff_pool_.Get();
 }
 
-const IdentifyNode &UrmaBackend::GetLocalIdentifyNode() noexcept
-{
-    return local_identify_node_;
-}
-
-const UrmaContextPtr &UrmaBackend::GetUrmaContext() noexcept
-{
-    return best_context_;
-}
-
-Result UrmaBackend::InitLocalIdentifyNodeInfo() noexcept
-{
-    auto len = readlink("/proc/self/ns/net", local_identify_node_.ns, NAME_MAX);
-    if (len < 0) {
-        UBS_SLOG_ERR("readlink /proc/self/ns/net failed: " << errno << " : " << strerror(errno));
-        return UBS_ERROR;
-    }
-
-    local_identify_node_.eid = best_context_->EidInfo().eid;
-    local_identify_node_.pid = getpid();
-    local_identify_node_.ns[len] = '\0';
-    return UBS_OK;
-}
-
 Result UrmaBackend::InitObjectPool() noexcept
 {
     return UrmaDataMetaPool::Instance().Init();
@@ -550,6 +518,15 @@ Result UrmaBackend::InitObjectPool() noexcept
 void UrmaBackend::UnInitObjectPool() noexcept
 {
     UrmaDataMetaPool::Instance().UnInit();
+}
+
+UrmaContextPoolPtr UrmaBackend::GetContextPoll() noexcept
+{
+    return context_pool_;
+}
+UrmaAggPollerSetPtr UrmaBackend::GetPollerSet() noexcept
+{
+    return poller_set_;
 }
 } // namespace urma
 } // namespace ubs

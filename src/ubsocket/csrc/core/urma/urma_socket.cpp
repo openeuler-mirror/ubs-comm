@@ -25,7 +25,6 @@
 #include "under_api/urma/dl_urma_api.h"
 #include "urma_data_rx_ops.h"
 #include "urma_data_tx_ops.h"
-#include "urma_poller.h"
 #include "urma_socket.h"
 
 namespace ock {
@@ -226,13 +225,13 @@ uint32_t UrmaSocket::WaitBlockingSignal(uint32_t interest_flags, const struct ti
 
 Result UrmaSocket::CreateUrmaResources()
 {
-    context_ = UrmaBackend::Instance().GetUrmaContext();
+    context_ = UrmaBackend::Instance().GetContextPoll()->SelectContext(UrmaPortSelectionPolicy::PSP_ROUND_ROBIN);
     if (context_ == nullptr) {
         UBS_SLOG_ERR("UrmaSocket: GetUrmaContext failed, fd=" << raw_socket_);
         return UBS_ERROR;
     }
 
-    auto ret = UrmaPollerSet::Instance().SelectPoller(jfc_);
+    auto ret = UrmaBackend::Instance().GetPollerSet()->SelectJfc(context_, jfc_);
     if (ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: SelectPoller failed, fd=" << raw_socket_);
         return ret;
@@ -496,10 +495,10 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
     local.ex.raw_jetty_id = jetty_->RawJettyId();
     // token交换需要安全通道，当前需约束在安全网络下
     local.ex.token = jetty_->Token();
-    local.node = UrmaBackend::Instance().GetLocalIdentifyNode();
+    local.node = context_->GetLocalIdentifyNode();
     local.uasid = context_->Handle()->uasid;
     local.pool_start_addr = allocator->get_local_start_addr();
-    local_seg = allocator->get_local_target_seg(recv_buf_addr_);
+    local_seg = allocator->get_local_target_seg(context_, recv_buf_addr_);
     if (local.pool_start_addr == 0 || local_seg == nullptr) {
         UBS_SLOG_ERR("UrmaSocket: Failed local pool address: " << std::hex << local.pool_start_addr
                      << " get local target_seg @0x" << std::hex << recv_buf_addr_);
@@ -537,7 +536,7 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
 
     remote_segments = allocator->get_remote_segments(peer.node);
     remote_segments->remote_start_addr_ = peer.pool_start_addr;
-    ack_ret = allocator->store_remote_target_seg(remote_segments, peer.seg, remote_ctrl_target_seg_);
+    ack_ret = allocator->store_remote_target_seg(context_, remote_segments, peer.seg, remote_ctrl_target_seg_);
     if (ack_ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: Failed to store remote segments(0x"
                      << std::hex << peer.seg.ubva.va << ", 0x" << peer.seg.len << ") return: " << std::oct << ack_ret);

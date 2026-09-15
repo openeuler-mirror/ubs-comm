@@ -373,7 +373,7 @@ Result UrmaRxOps::IssueReadRequest(const SocketPtr &sock, uint64_t seq_no, uint6
     const auto user_ctx = SenderCRContext{READ_DATA_REQUEST, seq_no, urma_sock->Fd()}.value;
     auto allocator = UrmaBackend::Instance().GetAllocator();
     BuildReadWrCtx build_ctx{allocator, urma_sock, user_ctx};
-    BuildReadWrs(data_count, offset, head_block, build_ctx);
+    BuildReadWrs(urma_sock->GetContext(), data_count, offset, head_block, build_ctx);
 
     if (UNLIKELY(build_ctx.wrs.empty())) {
         UBS_VLOG_ERR("send request READ for socket(%d) seq_no(%lu) wrs is empty", sock->Fd(), seq_no);
@@ -430,7 +430,7 @@ Block *UrmaRxOps::AllocBlocksForReq(uint32_t total_bytes) noexcept
     return head_block;
 }
 
-void UrmaRxOps::BuildReadWrs(uint32_t data_count, uint64_t msg_offset, Block *head_block, BuildReadWrCtx &ctx) noexcept
+void UrmaRxOps::BuildReadWrs(UrmaContextPtr socket_ctx, uint32_t data_count, uint64_t msg_offset, Block *head_block, BuildReadWrCtx &ctx) noexcept
 {
     size_t remote_idx = 0;
     uint32_t remote_offset = 0;
@@ -459,7 +459,7 @@ void UrmaRxOps::BuildReadWrs(uint32_t data_count, uint64_t msg_offset, Block *he
 
         dst_sge.addr = reinterpret_cast<uintptr_t>(local_block->data) + local_offset;
         dst_sge.len = seg_size;
-        dst_sge.tseg = ctx.allocator->get_local_target_seg(reinterpret_cast<uintptr_t>(local_block->data));
+        dst_sge.tseg = ctx.allocator->get_local_target_seg(socket_ctx, reinterpret_cast<uintptr_t>(local_block->data));
 
         urma_jfs_wr_t wr = {};
         wr.opcode = URMA_OPC_READ;
@@ -501,7 +501,7 @@ void UrmaRxOps::ImportRemoteSegments(const SocketPtr &sock, uint32_t data_count,
     for (auto i = 0U; i < data_count; i++) {
         uint64_t entry_offset = offset + sizeof(UrmaMessageHead) + i * sizeof(PageBufferInMessage);
         const auto *buf = reinterpret_cast<const PageBufferInMessage *>(urma_socket->recv_buf_addr_ + entry_offset);
-        allocator->store_remote_target_seg(remote_segs, urma_socket->peer_eid_, urma_socket->remote_uasid_, buf->addr,
+        allocator->store_remote_target_seg(urma_socket->context_, remote_segs, urma_socket->peer_eid_, urma_socket->remote_uasid_, buf->addr,
                                            buf->flags);
     }
 }

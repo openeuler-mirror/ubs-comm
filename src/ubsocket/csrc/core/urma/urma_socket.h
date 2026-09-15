@@ -236,6 +236,11 @@ public:
 
     void NotifyLocalClose() noexcept override;
 
+    UrmaContextPtr GetContext() noexcept
+    {
+        return context_;
+    }
+
 protected:
     int DoNotifyWritable() override;
 

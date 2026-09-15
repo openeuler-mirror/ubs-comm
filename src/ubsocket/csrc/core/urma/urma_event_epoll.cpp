@@ -12,7 +12,6 @@
 #include "common/ubsocket_common_includes.h"
 #include "urma_data_rx_ops.h"
 #include "urma_event_dispatch.h"
-#include "urma_poller.h"
 
 namespace ock {
 namespace ubs {
@@ -64,22 +63,26 @@ Result UrmaEventPoll::Init() noexcept
         return init_ret;
     }
 
-    auto pollers = UrmaPollerSet::Instance().GetAllPollers();
+    auto poller_set = UrmaBackend::Instance().GetPollerSet();
+    if (poller_set == nullptr) {
+        UBS_VLOG_ERR("urma epoll(%d) init failed: poller_set is nullptr.", epoll_fd_);
+        return UBS_ERROR;
+    }
+    auto pollers = poller_set->GetAllPollers();
     if (UNLIKELY(pollers.empty())) {
         UBS_VLOG_ERR("urma epoll(%d) init failed: no poller is registered.", epoll_fd_);
         return UBS_ERROR;
     }
 
     bool failed = false;
-    for (auto &poller : pollers) {
-        auto jfc = poller->GetJFC();
-        if (UNLIKELY(jfc == nullptr)) {
-            UBS_VLOG_ERR("urma epoll(%d) init failed: poller has null jfc.", epoll_fd_);
+    for (auto &iter : pollers) {
+        if (UNLIKELY(iter.second == nullptr)) {
+            UBS_VLOG_ERR("urma epoll(%d) init failed: poller is nullptr.", epoll_fd_);
             failed = true;
             break;
         }
 
-        auto fd = jfc->GetInterruptFd();
+        auto fd = iter.second->Jfce()->Fd();
         if (UNLIKELY(fd < 0)) {
             UBS_VLOG_ERR("urma epoll(%d) init failed: invalid interrupt fd(%d) of poller.", epoll_fd_, fd);
             failed = true;
@@ -99,7 +102,7 @@ Result UrmaEventPoll::Init() noexcept
          * EpollEvent, whose payload directly stores the poller owning this interrupt fd, so
          * handling a JFCE event does not need a jfc->poller lookup.
          */
-        event_data->event.data.ptr = poller.Get();
+        event_data->event.data.ptr = iter.second.Get();
         raw_event.events = EPOLLIN;
         raw_event.data.ptr = event_data;
         auto ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &raw_event);
@@ -341,7 +344,7 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
 
 void UrmaEventPoll::HandleJfceEvent(EpollEvent *event_data)
 {
-    auto poller = static_cast<UrmaPoller *>(event_data->event.data.ptr);
+    auto poller = static_cast<UrmaAggPoller *>(event_data->event.data.ptr);
     if (UNLIKELY(poller == nullptr)) {
         UBS_VLOG_ERR("urma epoll(%d) jfce event with null poller.", epoll_fd_);
         return;
@@ -349,7 +352,7 @@ void UrmaEventPoll::HandleJfceEvent(EpollEvent *event_data)
 
     UBS_VLOG_TRACE("urma epoll(%d) jfce event, poller(%p) poll and dispatch inline.", epoll_fd_,
                    static_cast<void *>(poller));
-    poller->PollAndDispatch();
+    poller->poll();
 }
 
 bool UrmaEventPoll::RecordReadableSocket(UrmaSocket *urma_sock)

@@ -17,20 +17,30 @@ namespace ock {
 namespace ubs {
 namespace urma {
 
-Result UrmaIoBufferPool::init(const UrmaContextPtr &ctx) noexcept
+Result UrmaIoBufferPool::init(const UrmaContextPoolPtr &ctx_pool) noexcept
 {
-    options_.expanded_callback = [this, ctx](uintptr_t address, uint64_t size, uint32_t flags) -> Result {
+    options_.expanded_callback = [this, ctx_pool](uintptr_t address, uint64_t size, uint32_t flags) -> Result {
         if (flags == allocator::ADD) {
-            return this->register_mem(ctx, address, size);
+            return this->register_mem(ctx_pool, address, size);
         }
         if (flags == allocator::REMOVE) {
-            return this->deregister_mem(ctx, address, size);
+            return this->deregister_mem(ctx_pool, address, size);
         }
         return UBS_ERROR;
     };
 
     auto block_count = (options_.pool_space_size_gb << 10) / options_.block_size_mb;
-    target_segments_.local_target_segs_.resize(block_count, nullptr);
+    auto all_contexts = ctx_pool->Contexts();
+    for (auto &iter : all_contexts) {
+        auto &ctx = iter.second;
+        if (ctx == nullptr) {
+            UBS_VLOG_WARN("context for dev(%s) eid index(%d) is null, dont create jfce for this device",
+                          iter.first.first.c_str(), iter.first.second);
+            continue;
+        }
+        target_segments_.local_target_segs_.emplace(ctx->Id(),
+                                                    std::vector<urma_target_seg_t *>(block_count, nullptr));
+    }
 
     auto res = fixed_allocator_.Init(options_);
     if (res != UBS_OK) {
@@ -41,11 +51,11 @@ Result UrmaIoBufferPool::init(const UrmaContextPtr &ctx) noexcept
     return UBS_OK;
 }
 
-Result UrmaIoBufferPool::init(const allocator::FixedAllocatorOptions &options, const UrmaContextPtr &ctx) noexcept
+Result UrmaIoBufferPool::init(const allocator::FixedAllocatorOptions &options, const UrmaContextPoolPtr &ctx_pool) noexcept
 {
     options_ = options;
 
-    return init(ctx);
+    return init(ctx_pool);
 }
 
 void UrmaIoBufferPool::un_init() noexcept
@@ -91,13 +101,17 @@ void UrmaIoBufferPool::direct_release(void *ptr) noexcept
     fixed_allocator_.DirectFree(reinterpret_cast<uintptr_t>(ptr));
 }
 
-urma_target_seg_t *UrmaIoBufferPool::get_local_target_seg(uintptr_t ptr) const noexcept
+urma_target_seg_t *UrmaIoBufferPool::get_local_target_seg(UrmaContextPtr ctx, uintptr_t ptr) const noexcept
 {
     uint32_t block_index = static_cast<uint32_t>(((ptr - local_start_addr_) >> 20) / options_.block_size_mb);
-    if (UNLIKELY(block_index >= target_segments_.local_target_segs_.size())) {
+    if (UNLIKELY(block_index >= (options_.pool_space_size_gb << 10) / options_.block_size_mb)) {
         return nullptr;
     }
-    return target_segments_.local_target_segs_[block_index];
+    auto iter = target_segments_.local_target_segs_.find(ctx->Id());
+    if (UNLIKELY(iter == target_segments_.local_target_segs_.end())) {
+        return nullptr;
+    }
+    return iter->second[block_index];
 }
 
 RemoteSegmentsPtr UrmaIoBufferPool::get_remote_segments(const IdentifyNode &remote) noexcept
@@ -108,7 +122,8 @@ RemoteSegmentsPtr UrmaIoBufferPool::get_remote_segments(const IdentifyNode &remo
     auto pos = target_segments_.remote_target_segs_.find(remote);
     if (UNLIKELY(pos == target_segments_.remote_target_segs_.end())) {
         remote_segments = MakeRef<RemoteSegments>();
-        remote_segments->remote_target_segs_.resize(target_segments_.local_target_segs_.size());
+        auto block_count = (options_.pool_space_size_gb << 10) / options_.block_size_mb;
+        remote_segments->remote_target_segs_.resize(block_count);
         target_segments_.remote_target_segs_.emplace(remote, remote_segments);
     } else {
         remote_segments = pos->second;
@@ -147,7 +162,7 @@ urma_target_seg_t *UrmaIoBufferPool::get_remote_target_seg(RemoteSegmentsPtr &re
     return res;
 }
 
-Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma_seg_t &seg,
+Result UrmaIoBufferPool::store_remote_target_seg(UrmaContextPtr ctx, RemoteSegmentsPtr &remote, urma_seg_t &seg,
                                                  urma_target_seg_t *&tgt) noexcept
 {
     if (UNLIKELY(remote == nullptr)) {
@@ -175,7 +190,7 @@ Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma
     pthread_spin_lock(&remote->target_lock_);
     if (LIKELY(remote->remote_target_segs_[block_index] == nullptr)) {
         auto target =
-            UrmaApi::urma_import_seg(UrmaBackend::Instance().GetUrmaContext()->Handle(), &seg, &token, 0, flag);
+            UrmaApi::urma_import_seg(ctx->Handle(), &seg, &token, 0, flag);
         if (UNLIKELY(target == nullptr)) {
             pthread_spin_unlock(&remote->target_lock_);
             UBS_SLOG_ERR("Urma urma_register_seg failed!");
@@ -189,7 +204,7 @@ Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma
     return UBS_OK;
 }
 
-Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma_eid_t &eid, uint32_t uasid,
+Result UrmaIoBufferPool::store_remote_target_seg(UrmaContextPtr ctx, RemoteSegmentsPtr &remote, urma_eid_t &eid, uint32_t uasid,
                                                  uintptr_t addr, uint32_t token) noexcept
 {
     if (UNLIKELY(remote == nullptr)) {
@@ -227,7 +242,7 @@ Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma
     UBS_SLOG_TRACE("import segment @0x" << std::hex << urma_seg.ubva.va << ", seg=" << urma_seg);
     pthread_spin_lock(&remote->target_lock_);
     if (LIKELY(remote->remote_target_segs_[block_index] == nullptr)) {
-        auto target = UrmaApi::urma_import_seg(UrmaBackend::Instance().GetUrmaContext()->Handle(), &urma_seg,
+        auto target = UrmaApi::urma_import_seg(ctx->Handle(), &urma_seg,
                                                &urma_token, 0, flag);
         if (UNLIKELY(target == nullptr)) {
             pthread_spin_unlock(&remote->target_lock_);
@@ -242,7 +257,7 @@ Result UrmaIoBufferPool::store_remote_target_seg(RemoteSegmentsPtr &remote, urma
     return UBS_OK;
 }
 
-Result UrmaIoBufferPool::register_mem(const UrmaContextPtr &ctx, uintptr_t ptr, size_t size) noexcept
+Result UrmaIoBufferPool::register_mem(const UrmaContextPoolPtr &ctx_pool, uintptr_t ptr, size_t size) noexcept
 {
     if (local_start_addr_ == 0) {
         local_start_addr_ = ptr;
@@ -257,36 +272,47 @@ Result UrmaIoBufferPool::register_mem(const UrmaContextPtr &ctx, uintptr_t ptr, 
 
     urma_seg_cfg_t seg_cfg = {
         .va = ptr, .len = size, .token_id = nullptr, .token_value = 0, .flag = flag, .user_ctx = 0, .iova = 0};
+    auto all_contexts = ctx_pool->Contexts();
+    for (auto &iter : all_contexts) {
+        auto &ctx = iter.second;
+        if (ctx == nullptr) {
+            UBS_VLOG_WARN("context for dev(%s) eid index(%d) is null, dont create jfce for this device",
+                          iter.first.first.c_str(), iter.first.second);
+            continue;
+        }
+        auto local_seg = UrmaApi::urma_register_seg(ctx->Handle(), &seg_cfg);
+        if (local_seg == nullptr) {
+            UBS_VLOG_ERR("urma register_seg(ptr=0x%lx, size=0x%lx) failed!", ptr, size);
+            return UBS_ERROR;
+        }
 
-    auto local_seg = UrmaApi::urma_register_seg(ctx->Handle(), &seg_cfg);
-    if (local_seg == nullptr) {
-        UBS_VLOG_ERR("urma register_seg(ptr=0x%lx, size=0x%lx) failed!", ptr, size);
-        return UBS_ERROR;
+        target_segments_.local_target_segs_[ctx->Id()][block_index] = local_seg;
+        UBS_VLOG_TRACE("urma register_seg(ptr=0x%lx, size=0x%lx) token-id: 0x%x OK", ptr, size, local_seg->seg.token_id);
+        UBS_SLOG_TRACE("register got segment: " << local_seg->seg);
     }
-
-    target_segments_.local_target_segs_[block_index] = local_seg;
-    UBS_VLOG_TRACE("urma register_seg(ptr=0x%lx, size=0x%lx) token-id: 0x%x OK", ptr, size, local_seg->seg.token_id);
-    UBS_SLOG_TRACE("register got segment: " << local_seg->seg);
     return UBS_OK;
 }
 
-Result UrmaIoBufferPool::deregister_mem(const UrmaContextPtr &ctx, uintptr_t ptr, size_t size) noexcept
+Result UrmaIoBufferPool::deregister_mem(const UrmaContextPoolPtr &ctx_pool, uintptr_t ptr, size_t size) noexcept
 {
     uint32_t block_index = static_cast<uint32_t>(((ptr - local_start_addr_) >> 20) / options_.block_size_mb);
-    if (target_segments_.local_target_segs_.size() <= block_index) {
-        UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed for block_index error!");
-        return UBS_ERROR;
+    for (auto iter : target_segments_.local_target_segs_) {
+        auto target_segs = iter.second;
+        if (target_segs.size() <= block_index) {
+            UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed for block_index error!");
+            return UBS_ERROR;
+        }
+        auto local_seg = target_segs[block_index];
+        if (local_seg == nullptr) {
+            UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed for seg is null!");
+            return UBS_ERROR;
+        }
+        if (UrmaApi::urma_unregister_seg(local_seg) != URMA_SUCCESS) {
+            UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed!");
+            return UBS_ERROR;
+        }
+        target_segs[block_index] = nullptr;
     }
-    auto local_seg = target_segments_.local_target_segs_[block_index];
-    if (local_seg == nullptr) {
-        UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed for seg is null!");
-        return UBS_ERROR;
-    }
-    if (UrmaApi::urma_unregister_seg(local_seg) != URMA_SUCCESS) {
-        UBS_SLOG_ERR("urma deregister_seg(ptr=0x" << std::hex << ptr << ", size=0x" << size << ") failed!");
-        return UBS_ERROR;
-    }
-    target_segments_.local_target_segs_[block_index] = nullptr;
     return UBS_OK;
 }
 
