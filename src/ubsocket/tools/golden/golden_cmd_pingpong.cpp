@@ -138,6 +138,7 @@ int PPClient::Run()
     send_data[0].iov_base = ubsocket_iobuf_allocate(strlen(ping), nullptr);
     if (send_data[0].iov_base == nullptr) {
         LOG_ERROR("ubsocket_iobuf_allocate error, errno: " << errno);
+        close(epollFd);
         return -errno;
     }
 
@@ -160,6 +161,8 @@ int PPClient::Run()
                 continue;
             }
             std::cout << "Write 'ping' to server failed, result " << result << " errno " << errno << std::endl;
+            close(epollFd);
+            ubsocket_iobuf_deallocate(send_data[0].iov_base);
             return -errno;
         }
         LOG_DEBUG("write ping successfully");
@@ -176,6 +179,8 @@ int PPClient::Run()
         }
         if (result < 0) {
             std::cout << "Read 'pong' to server failed, result " << result << " errno " << errno << std::endl;
+            close(epollFd);
+            ubsocket_iobuf_deallocate(send_data[0].iov_base);
             return -errno;
         }
         LOG_DEBUG("read pong successfully");
@@ -187,6 +192,8 @@ int PPClient::Run()
     std::cout << "- loop times:\t" << cmd_.loop_times << std::endl;
     std::cout << "- cost time:\t" << (time_end - time_start) << "us" << std::endl;
 
+    close(epollFd);
+    ubsocket_iobuf_deallocate(send_data[0].iov_base);
     return 0;
 }
 
@@ -257,6 +264,7 @@ int PPServer::Run()
     int ret = ubsocket_epoll_ctl(epollFd, EPOLL_CTL_ADD, client_fd_, &evt);
     if (ret < 0) {
         LOG_ERROR("ubsocket_epoll_ctl error, ret: '" << ret << ", errno: " << errno);
+        close(epollFd);
         return -errno;
     }
 
@@ -270,6 +278,11 @@ int PPServer::Run()
 
     struct iovec send_data[1];
     send_data[0].iov_base = ubsocket_iobuf_allocate(strlen(pong), nullptr);
+    if (send_data[0].iov_base == nullptr) {
+        LOG_ERROR("ubsocket_iobuf_allocate error, errno: " << errno);
+        close(epollFd);
+        return -errno;
+    }
     send_data[0].iov_len = strlen(pong);
     ssize_t expect_send_len = strlen(pong);
 
@@ -283,6 +296,8 @@ int PPServer::Run()
                 continue;
             }
             std::cout << "Read 'ping' from client failed, result " << result << " errno " << errno << std::endl;
+            close(epollFd);
+            ubsocket_iobuf_deallocate(send_data[0].iov_base);
             return -errno;
         }
         LOG_DEBUG("read ping successfully");
@@ -298,6 +313,8 @@ int PPServer::Run()
         }
         if (result != expect_send_len) {
             std::cout << "Write 'pong' to client failed, result " << result << " errno " << errno << std::endl;
+            close(epollFd);
+            ubsocket_iobuf_deallocate(send_data[0].iov_base);
             return -errno;
         }
         LOG_DEBUG("write pong successfully");
@@ -305,6 +322,8 @@ int PPServer::Run()
 
     std::cout << "Pingpong server finished after times pingpong" << std::endl;
     std::cout << "- loop times:\t" << cmd_.loop_times << std::endl;
+    close(epollFd);
+    ubsocket_iobuf_deallocate(send_data[0].iov_base);
     return 0;
 }
 } // namespace golden

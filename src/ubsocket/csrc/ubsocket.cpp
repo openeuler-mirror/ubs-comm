@@ -138,6 +138,10 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* step3: socket related initialization */
     ArraySet<Socket>::GetInstance().Init();
     g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
+    if (g_socket_epoll_lock == nullptr) {
+        UBS_VLOG_ERR("Failed to create g_socket_epoll_lock\n");
+        return UBS_ERROR;
+    }
     ArraySet<EventPoll>::GetInstance().Init();
 
     /* step5: umq backend init */
@@ -225,6 +229,12 @@ void ubsocket_uninit()
 #endif
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::PrintStatsMgr::StopStatsCollection();
+    }
+
+    /* 退出前消费可能残留的 SIGUSR2 dump 请求（monitor 关闭时事件循环不运行，
+     * 标志位可能未被消费；此处兜底，确保诊断信息不丢失） */
+    if (ConsumeDumpRequest()) {
+        UBS_SLOG_ERR(ObjectStatistics::Instance().DumpStr());
     }
 
     // 用户需要在程序退出时调用 ubsocket_uninit 保证所有的 socket ref 释放，否则会延迟至 ArraySet 单例析构。在 brpc 场

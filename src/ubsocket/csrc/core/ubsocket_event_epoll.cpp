@@ -27,6 +27,9 @@ u_rw_lock_t *g_socket_epoll_lock = nullptr;
 
 EpollMapper *GetSocketEpollMapper(int socket_fd)
 {
+    if (g_socket_epoll_lock == nullptr) {
+        return nullptr;
+    }
     ReadLocker s_lock(g_socket_epoll_lock);
     auto iter = g_socket_epoll_mappers.find(socket_fd);
     if (iter == g_socket_epoll_mappers.end()) {
@@ -37,6 +40,9 @@ EpollMapper *GetSocketEpollMapper(int socket_fd)
 
 bool CreateSocketEpollMapper(int socket_fd, EpollMapper *&mapper)
 {
+    if (g_socket_epoll_lock == nullptr) {
+        return false;
+    }
     bool result = false;
     WriteLocker s_lock(g_socket_epoll_lock);
     auto iter = g_socket_epoll_mappers.find(socket_fd);
@@ -60,6 +66,9 @@ void CleanSocketEpollMapper(int socket_fd)
         return;
     }
     {
+        if (g_socket_epoll_lock == nullptr) {
+            return;
+        }
         WriteLocker s_lock(g_socket_epoll_lock);
         g_socket_epoll_mappers.erase(socket_fd);
     }
@@ -407,6 +416,11 @@ int AsyncEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
             if (ret == 0 && mapper != nullptr) {
                 mapper->Add(epoll_fd_);
             } else if (mapper_create) {
+                if (g_socket_epoll_lock == nullptr) {
+                    /* 并发 uninit：CleanAllSocketEpollMappers 已释放 mapper，
+                     * 不可再 delete（double-free），直接返回错误 */
+                    return UBS_ERROR;
+                }
                 WriteLocker s_lock(g_socket_epoll_lock);
                 g_socket_epoll_mappers.erase(fd);
                 if (mapper != nullptr) {
@@ -522,6 +536,11 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
 
         auto sock = ArraySet<Socket>::GetInstance().GetItem(event_data->socket_fd);
         if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_OUT) {
+            if (sock == nullptr) {
+                UBS_VLOG_WARN("async_epoll(%d) OUT event for socket_fd %d but socket not found\n", epoll_fd_,
+                              event_data->socket_fd);
+                continue;
+            }
             sock->ProcessEpollEvent(events[i]);
             events[real_count].events = EPOLLOUT;
             events[real_count].data = event_data->event.data;

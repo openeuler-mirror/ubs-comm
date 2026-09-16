@@ -184,11 +184,9 @@ TEST_F(BufferConverterTest, IndexMove_ExactEnd)
     char buf[50] = {};
     TestBufferConverter cvt(buf, sizeof(buf));
 
-    // Note: when m_offset + len >= m_size, code sets m_offset=m_size first
-    // then returns m_size - m_offset (= 0). The return value is always 0
-    // when the end condition is hit, not the remaining bytes.
+    // m_offset + len == m_size: clamp to end, return remaining (50), not 0
     uint32_t moved = cvt.IndexMove(50);
-    EXPECT_EQ(moved, 0U);
+    EXPECT_EQ(moved, 50U);
 }
 
 TEST_F(BufferConverterTest, IndexMove_PastEnd_Clamped)
@@ -196,8 +194,9 @@ TEST_F(BufferConverterTest, IndexMove_PastEnd_Clamped)
     char buf[50] = {};
     TestBufferConverter cvt(buf, sizeof(buf));
 
+    // len > remaining: clamp to end, return actual remaining (50), not 0
     uint32_t moved = cvt.IndexMove(100);
-    EXPECT_EQ(moved, 0U);
+    EXPECT_EQ(moved, 50U);
 }
 
 TEST_F(BufferConverterTest, IndexMove_AfterClamp_ReturnsZero)
@@ -220,6 +219,20 @@ TEST_F(BufferConverterTest, IndexMove_StepwiseWithinBounds)
     EXPECT_EQ(cvt.IndexMove(40), 40U);
     // at offset 70, remaining is 30; len=20 fits
     EXPECT_EQ(cvt.IndexMove(20), 20U);
+}
+
+TEST_F(BufferConverterTest, IndexMove_StepwiseExactEnd_ReturnsRemaining)
+{
+    char buf[100] = {};
+    TestBufferConverter cvt(buf, sizeof(buf));
+
+    // stepwise: 30 + 40 = 70, remaining = 30
+    EXPECT_EQ(cvt.IndexMove(30), 30U);
+    EXPECT_EQ(cvt.IndexMove(40), 40U);
+    // last chunk: len == remaining, clamp to end, must return 30 (not 0)
+    EXPECT_EQ(cvt.IndexMove(30), 30U);
+    // buffer exhausted: subsequent call returns 0
+    EXPECT_EQ(cvt.IndexMove(10), 0U);
 }
 
 TEST_F(BufferConverterTest, Reset_AfterMove)

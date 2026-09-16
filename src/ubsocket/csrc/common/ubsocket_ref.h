@@ -24,31 +24,31 @@ namespace ubs {
  * 2 macro for master ptr if not use base class
  */
 #if defined(ENABLE_ARM_ATOMICS) && defined(__aarch64__)
-static inline int16_t faa_int16_relax(int16_t *val, int16_t add)
+static inline int32_t faa_int32_relax(int32_t *val, int32_t add)
 {
-    int16_t old;
-    asm volatile("ldaddh %w[add], %w[old], [%[addr]]"
+    int32_t old;
+    asm volatile("ldadd %w[add], %w[old], [%[addr]]"
                  : [old] "=r"(old), "+Q"(*val)
                  : [addr] "r"(val), [add] "r"(add)
                  : "memory");
     return old;
 }
 
-static inline int16_t faa_int16_acq_rel(int16_t *val, int16_t add)
+static inline int32_t faa_int32_acq_rel(int32_t *val, int32_t add)
 {
-    int16_t old;
-    asm volatile("ldaddalh %w[add], %w[old], [%[addr]]"
+    int32_t old;
+    asm volatile("ldaddal %w[add], %w[old], [%[addr]]"
                  : [old] "=r"(old), "+Q"(*val)
                  : [addr] "r"(val), [add] "r"(add)
                  : "memory");
     return old;
 }
-#define ATOMIC_INT16_FAA_RELAX(VAR_PTR, N) faa_int16_relax(VAR_PTR, N)
-#define ATOMIC_INT16_FAA_ACQ_REL(VAR_PTR, N) faa_int16_acq_rel(VAR_PTR, N)
+#define ATOMIC_INT32_FAA_RELAX(VAR_PTR, N) faa_int32_relax(VAR_PTR, N)
+#define ATOMIC_INT32_FAA_ACQ_REL(VAR_PTR, N) faa_int32_acq_rel(VAR_PTR, N)
 
 #else
-#define ATOMIC_INT16_FAA_RELAX(VAR_PTR, N) __atomic_fetch_add(VAR_PTR, N, __ATOMIC_RELAXED)
-#define ATOMIC_INT16_FAA_ACQ_REL(VAR_PTR, N) __atomic_fetch_add(VAR_PTR, N, __ATOMIC_ACQ_REL)
+#define ATOMIC_INT32_FAA_RELAX(VAR_PTR, N) __atomic_fetch_add(VAR_PTR, N, __ATOMIC_RELAXED)
+#define ATOMIC_INT32_FAA_ACQ_REL(VAR_PTR, N) __atomic_fetch_add(VAR_PTR, N, __ATOMIC_ACQ_REL)
 #endif
 
 class Referable {
@@ -58,31 +58,31 @@ public:
 
     ALWAYS_INLINE void IncreaseRef()
     {
-        ATOMIC_INT16_FAA_RELAX(&ref_count_, 1);
+        ATOMIC_INT32_FAA_RELAX(&ref_count_, 1);
     }
 
     ALWAYS_INLINE void DecreaseRef()
     {
-        if (ATOMIC_INT16_FAA_ACQ_REL(&ref_count_, -1) == 1) {
+        if (ATOMIC_INT32_FAA_ACQ_REL(&ref_count_, -1) == 1) {
             delete this;
         }
     }
 
 protected:
-    int16_t ref_count_ = 0;
+    int32_t ref_count_ = 0;
 };
 
-#define DECLARE_REF_COUNT_VARIABLE int16_t ref_count_ = 0;
+#define DECLARE_REF_COUNT_VARIABLE int32_t ref_count_ = 0;
 
 #define DEFINE_REF_OPERATION_FUNC                             \
     ALWAYS_INLINE void IncreaseRef()                          \
     {                                                         \
-        ATOMIC_INT16_FAA_RELAX(&ref_count_, 1);               \
+        ATOMIC_INT32_FAA_RELAX(&ref_count_, 1);               \
     }                                                         \
                                                               \
     ALWAYS_INLINE void DecreaseRef()                          \
     {                                                         \
-        if (ATOMIC_INT16_FAA_ACQ_REL(&ref_count_, -1) == 1) { \
+        if (ATOMIC_INT32_FAA_ACQ_REL(&ref_count_, -1) == 1) { \
             delete this;                                      \
         }                                                     \
     }

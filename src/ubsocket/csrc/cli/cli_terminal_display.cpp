@@ -24,6 +24,16 @@ constexpr int COL_WIDTH_MIN = 20;
 constexpr int COL_WIDTH_MAX = 30;
 constexpr int PROF_VALUE_SUM = 7;
 
+/* 防止整数溢出绕过长度校验：在 size_t（64 位）中计算 headerSize + count * elementSize，
+ * 避免截断到 uint32_t 后被取模绕过。若结果超出 uint32_t 范围，必然不等于 dataLen，
+ * 校验自然失败。count=... elementSize=1 时等价于纯加法校验。 */
+static inline bool ValidatePayloadSize(uint32_t headerSize, uint32_t count, size_t elementSize,
+                                       uint32_t dataLen) noexcept
+{
+    size_t expected = static_cast<size_t>(headerSize) + static_cast<size_t>(count) * elementSize;
+    return expected == static_cast<size_t>(dataLen);
+}
+
 char *In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufSize)
 {
     if (in6Addr == nullptr || dstBuf == nullptr || bufSize < INET6_ADDRSTRLEN) {
@@ -57,11 +67,15 @@ void TerminalDisplay::DisplayTopoInfo(umq_route_list_t *routeList, const uint32_
         return;
     }
     uint32_t num = routeList->route_num;
-    umq_route_t *data = routeList->routes;
     if (num == 0) {
         CLI_LOG("Filter num is zero no topo data");
         return;
     }
+    if (num > UMQ_MAX_ROUTES) {
+        CLI_LOG("Invalid route num: %u, max %d\n", num, UMQ_MAX_ROUTES);
+        return;
+    }
+    umq_route_t *data = routeList->routes;
     PrintTitle("CLI UB Topology Query");
     NewLine();
     for (uint32_t i = 0; i < num; i++) {
@@ -98,8 +112,7 @@ void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
     memcpy(&header, data, headerSize);
 
     uint32_t SocketNum = header.socketNum;
-    uint32_t expectedSize = headerSize + SocketNum * sizeof(CLISocketData);
-    if (dataLen != expectedSize) {
+    if (!ValidatePayloadSize(headerSize, SocketNum, sizeof(CLISocketData), dataLen)) {
         CLI_LOG("Invalid data size\n");
         return;
     }
@@ -131,8 +144,7 @@ void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataL
     memcpy(&header, data, headerSize);
 
     uint32_t SocketNum = header.socketNum;
-    uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIFlowControlData);
-    if (dataLen != expectedSize) {
+    if (!ValidatePayloadSize(headerSize, SocketNum, sizeof(CLIFlowControlData), dataLen)) {
         CLI_LOG("Invalid data size\n");
         return;
     }
@@ -226,8 +238,7 @@ void TerminalDisplay::DisplayProbeInfo(uint8_t *data, const uint32_t dataLen)
 
     // 3. 长度一致性校验
     uint32_t sockNum = header.socketNum;
-    uint32_t expectedSize = headerSize + sockNum * sizeof(CLIProbeData);
-    if (dataLen != expectedSize) {
+    if (!ValidatePayloadSize(headerSize, sockNum, sizeof(CLIProbeData), dataLen)) {
         CLI_LOG("Invalid data size\n");
         return;
     }
@@ -464,8 +475,7 @@ void TerminalDisplay::DisplayUmqInfo(uint8_t *data, uint32_t dataLen)
     memcpy(&header, data, headerSize);
 
     uint32_t SocketNum = header.socketNum;
-    uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIUmqInfoData);
-    if (dataLen != expectedSize) {
+    if (!ValidatePayloadSize(headerSize, SocketNum, sizeof(CLIUmqInfoData), dataLen)) {
         CLI_LOG("Invalid data size\n");
         return;
     }
@@ -502,8 +512,7 @@ void TerminalDisplay::DisplayIoPacketInfo(uint8_t *data, uint32_t dataLen)
     memcpy(&header, data, headerSize);
 
     uint32_t SocketNum = header.socketNum;
-    uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIIoPacketData);
-    if (dataLen != expectedSize) {
+    if (!ValidatePayloadSize(headerSize, SocketNum, sizeof(CLIIoPacketData), dataLen)) {
         CLI_LOG("Invalid data size\n");
         return;
     }
@@ -540,8 +549,7 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
     memcpy(&header, data, headerSize);
 
     uint32_t SocketNum = header.socketNum;
-    uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIUmqPerfData);
-    if (dataLen != expectedSize) {
+    if (!ValidatePayloadSize(headerSize, SocketNum, sizeof(CLIUmqPerfData), dataLen)) {
         CLI_LOG("Invalid data size\n");
         return;
     }
@@ -589,8 +597,7 @@ void TerminalDisplay::DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen)
         printf("Error occur while deal delay operation\n");
         return;
     }
-    uint32_t expectedSize = headerSize + header.tracePointDataSize;
-    if (dataLen != expectedSize) {
+    if (!ValidatePayloadSize(headerSize, header.tracePointDataSize, 1, dataLen)) {
         CLI_LOG("Invalid data size\n");
         return;
     }

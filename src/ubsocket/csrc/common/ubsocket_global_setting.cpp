@@ -90,8 +90,8 @@ void GlobalSetting::AddRules() noexcept
         {ENV_ASYNC_ACCEPTOR, false, 0, 8L},
         {ENV_ASYNC_CONNECTOR, false, 0, 8L},
         {ENV_ASYNC_EPOLL, false, 1, 1L},
-        {ENV_UBS_RX_DEPTH, false, 2, UINT32_MAX},
-        {ENV_UBS_TX_DEPTH, false, 2, UINT32_MAX},
+        {ENV_UBS_RX_DEPTH, false, 2, UBSOCKET_RX_DEPTH_MAX},
+        {ENV_UBS_TX_DEPTH, false, 2, UBSOCKET_TX_DEPTH_MAX},
         {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5},
         {ENV_TRACE_TIME, false, UBSOCKET_TRACE_TIME_MIN, UBSOCKET_TRACE_TIME_MAX},
         {ENV_TRACE_FILE_SIZE, false, UBSOCKET_TRACE_FILE_SIZE_MIN, UBSOCKET_TRACE_FILE_SIZE_MAX},
@@ -99,7 +99,7 @@ void GlobalSetting::AddRules() noexcept
         {ENV_VAR_PROBE_BATCH, false, UBSOCKET_PROBE_BATCH_MIN, UBSOCKET_PROBE_BATCH_MAX},
         {ENV_SPLIT_TRACE_BUF_CAPACITY, false, 16384, 10240000},
         {ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS, false, 1, 10000},
-        {ENV_UBS_THREAD_POOL_SIZE, false, 1, UINT32_MAX},
+        {ENV_UBS_THREAD_POOL_SIZE, false, 1, UBSOCKET_THREAD_POOL_SIZE_MAX},
         {ENV_PORT_COOLDOWN_SEC, false, 1, 300},
     };
 

@@ -109,7 +109,7 @@ public:
     DEFINE_REF_OPERATION_FUNC
 
 public:
-    DECLARE_REF_COUNT_VARIABLE;                               /* ref count int16_t */
+    DECLARE_REF_COUNT_VARIABLE;                               /* ref count int32_t */
     int raw_socket_ = -1;                                     /* fd of raw socket */
     int event_fd_ = -1;                                       /* event fd */
     SocketState state_ = SOCK_STAT_INIT;                      /* state of ubsocket */

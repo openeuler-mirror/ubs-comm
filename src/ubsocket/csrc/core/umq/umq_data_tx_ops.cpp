@@ -312,10 +312,10 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         } else if (errno == ETIMEDOUT) {
             // 接收对端流控 credit 回复超时 (默认1s)
             errno = EIO;
-            return -1;
+            flagEIO = 1;
         } else if (ret == -UMQ_ERR_EFLOWCTL) {
             errno = EIO;
-            return -1;
+            flagEIO = 1;
         } else if (errno == EMLINK) {
             // optimize: [Jetty池化] ENOBUFS是否需要在此线程尝试pollTx释放资源后重试
             UBS_VLOG_DEBUG(

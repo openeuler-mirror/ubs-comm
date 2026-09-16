@@ -353,6 +353,11 @@ public:
         return ::aligned_alloc(alignof(AsyncEventPoll), size);
     }
 
+    static void *operator new(std::size_t size, const std::nothrow_t &) noexcept
+    {
+        return ::aligned_alloc(alignof(AsyncEventPoll), size);
+    }
+
     static void operator delete(void *ptr)
     {
         free(ptr);

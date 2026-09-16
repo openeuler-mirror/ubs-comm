@@ -10,20 +10,32 @@
  */
 #include <csignal>
 
-#include "ubsocket_logger.h"
-#include "ubsocket_obj_statistics.h"
 #include "ubsocket_signal_handler.h"
 
 namespace ock {
 namespace ubs {
+
+/* volatile sig_atomic_t — POSIX 标准信号安全标志类型：
+ * 信号处理器仅对此标志赋值（1），保证 async-signal-safe。
+ * 实际的 DumpStr / 日志输出由 ConsumeDumpRequest() 在普通线程上下文完成。 */
+static volatile sig_atomic_t g_dumpRequested = 0;
+
 void ubsocket_handle_signal(int signal)
 {
     if (signal != SIGUSR2) {
         return;
     }
 
-    /* dump object */
-    UBS_SLOG_ERR(ObjectStatistics::Instance().DumpStr());
+    g_dumpRequested = 1;
+}
+
+bool ConsumeDumpRequest() noexcept
+{
+    if (g_dumpRequested) {
+        g_dumpRequested = 0;
+        return true;
+    }
+    return false;
 }
 } // namespace ubs
 } // namespace ock

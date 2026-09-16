@@ -31,6 +31,9 @@
 #include <thread>
 
 #include "common/ubsocket_global_setting.h"
+#include "common/ubsocket_logger.h"
+#include "common/ubsocket_obj_statistics.h"
+#include "common/ubsocket_signal_handler.h"
 #include "statistics_statsmgr.h"
 
 namespace Statistics {
@@ -58,6 +61,11 @@ public:
         while (mgr->m_running) {
             mgr->ProcessStats();
 
+            /* SIGUSR2 dump 请求：信号处理器只设标志位（async-signal-safe），
+             * 实际的 ObjectStatistics dump 在此普通线程上下文完成 */
+            if (ConsumeDumpRequest()) {
+                UBS_SLOG_ERR(ObjectStatistics::Instance().DumpStr());
+            }
             // for exit quickly
             std::unique_lock<std::mutex> lock(mgr->m_mutex);
             mgr->m_cv.wait_for(lock, std::chrono::seconds(mgr->ubsocketTraceTime), [mgr] { return !mgr->m_running; });

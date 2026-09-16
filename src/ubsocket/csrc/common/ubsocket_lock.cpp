@@ -27,7 +27,11 @@ static u_mutex_t *default_lock_create(u_mutex_type_t type)
         return nullptr;
     }
     pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
+    if (pthread_mutexattr_init(&attr) != 0) {
+        UBS_VLOG_ERR("Error to execute pthread_mutexattr_init\n");
+        delete mutex;
+        return nullptr;
+    }
 
     if (type == LT_RECURSIVE) {
         pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
@@ -46,7 +50,8 @@ static int default_lock_destroy(u_mutex_t *m)
         UBS_VLOG_ERR("Error to execute external_lock_destroy for the pointer is nullptr \n");
         return -1;
     }
-    if (int ret = pthread_mutex_destroy(reinterpret_cast<pthread_mutex_t *>(m)) != 0) {
+    int ret = pthread_mutex_destroy(reinterpret_cast<pthread_mutex_t *>(m));
+    if (ret != 0) {
         UBS_VLOG_ERR("Error to execute pthread_mutex_destroy, ret: %d \n", ret);
         return ret;
     }
@@ -98,7 +103,8 @@ static int default_rw_lock_destroy(u_rw_lock_t *m)
         UBS_VLOG_ERR("Error to execute rw_lock_destroy for the pointer is nullptr \n");
         return -1;
     }
-    if (int ret = pthread_rwlock_destroy(reinterpret_cast<pthread_rwlock_t *>(m)) != 0) {
+    int ret = pthread_rwlock_destroy(reinterpret_cast<pthread_rwlock_t *>(m));
+    if (ret != 0) {
         UBS_VLOG_ERR("Error to execute pthread_rwlock_destroy, ret: %d \n", ret);
         return ret;
     }
@@ -167,7 +173,8 @@ static int default_semaphore_destroy(u_semaphore_t *s)
         UBS_VLOG_ERR("Error to execute semaphore_destroy for the pointer is nullptr \n");
         return -1;
     }
-    if (int ret = sem_destroy(reinterpret_cast<sem_t *>(s)) != 0) {
+    int ret = sem_destroy(reinterpret_cast<sem_t *>(s));
+    if (ret != 0) {
         UBS_VLOG_ERR("Error to execute sem_destroy, ret: %d \n", ret);
         return ret;
     }
