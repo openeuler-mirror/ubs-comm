@@ -6374,6 +6374,30 @@ void UBSHcomService::SetUBSHcomHeartBeatOptions(const UBSHcomHeartBeatOptions &o
 
 无
 
+##### UBSHcomService::SetActiveBackup
+
+- 断链后需所有端口恢复才能重新建链（部分端口恢复无法建链），这是底层组件的限制，非本接口可配置项。
+
+1.  函数定义
+
+设置主备切换功能。
+
+2.  实现说明
+
+void UBSHcomService::SetActiveBackup(bool enable);
+
+3.  参数说明
+
+    1.  参数说明
+
+| 参数名 | 数据类型 | 参数类型 | 描述 |
+|----|----|----|----|
+| enable | bool | 入参 | 是否启用主备切换功能。 |
+
+4.  返回值
+
+无
+
 ##### UBSHcomService::SetUBSHcomMultiRailOptions
 
 1.  函数定义
