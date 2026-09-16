@@ -963,7 +963,7 @@ public:
         }
         if (address + size <= address) {
             pthread_rwlock_unlock(&mRwlock);
-            NN_LOG_ERROR("Address overflow, address:" << address << ", size:" << size);
+            NN_LOG_ERROR("Address overflow, size:" << size);
             return NN_ERROR;
         }
         mRangeCache[key] = {address, address + size};

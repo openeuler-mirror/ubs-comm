@@ -597,6 +597,10 @@ uint64_t ubs_hcom_channel_get_id(ubs_hcom_channel channel)
 int ubs_hcom_context_get_rspctx(ubs_hcom_service_context context, ubs_hcom_channel_reply_context *rspCtx)
 {
     VALIDATE_CONTEXT(context)
+    if (NN_UNLIKELY(rspCtx == nullptr)) {
+        NN_LOG_ERROR("Invalid param, rspCtx must be correct address");
+        return SER_INVALID_PARAM;
+    }
     auto innerContext = reinterpret_cast<UBSHcomServiceContext *>(context);
     rspCtx->rspCtx = reinterpret_cast<void *>(innerContext->RspCtx());
     return SER_OK;

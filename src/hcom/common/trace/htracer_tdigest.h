@@ -247,7 +247,7 @@ public:
         }
 
         const auto &last = active->GetAndSetCentroids().back();
-        if (last.GetWeight() > NN_NO1 && active->GetTotalWeight() - index <= last.GetWeight() / NN_NO2) {
+        if (last.GetWeight() > NN_NO3 && active->GetTotalWeight() - index <= last.GetWeight() / NN_NO2) {
             return (maxValue - static_cast<double>(active->GetTotalWeight() - index - NN_NO1) /
                                    (last.GetWeight() / NN_NO2 - NN_NO1) * (maxValue - last.GetMean()));
         }

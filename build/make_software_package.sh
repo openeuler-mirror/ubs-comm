@@ -54,10 +54,6 @@ echo "${HCOM_LOG_TAG} HCOM install directory: ${HCOM_INSTALL_DIR}"
 [[ -z "${HCOM_COMPONENT_VERSION}" ]] && HCOM_COMPONENT_VERSION="1.0.0"
 [[ -z "${HCOM_PACKAGE_PATH}" ]] && HCOM_PACKAGE_PATH="${HCOM_ROOT_DIR}/dist"
 [[ -z "${HCOM_BUILD_OS_ARCH}" ]] && HCOM_BUILD_OS_ARCH="aarch64"
-HCOM_COMPONENT_COMMIT_ID=""
-if [ -d "${HCOM_ROOT_DIR}/.git" ] || (cd "${HCOM_ROOT_DIR}" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
-    HCOM_COMPONENT_COMMIT_ID=$(cd "${HCOM_ROOT_DIR}" && git rev-parse HEAD 2>/dev/null)
-fi
 # prepare HCOM software package directory
 # hcom is published by BoostKit
 cd "${HCOM_PACKAGE_PATH}"
@@ -118,7 +114,6 @@ product_version=@HCOM_PRODUCT_VERSION@
 # component info
 component_name=@HCOM_COMPONENT_NAME@
 component_version=@HCOM_COMPONENT_VERSION@
-component_commit_id=@HCOM_COMPONENT_COMMIT_ID@
 
 # build info
 build_time=@HCOM_BUILD_TIME@

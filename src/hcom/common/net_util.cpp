@@ -76,7 +76,7 @@ uint32_t GenerateSecureRandomUint32()
         NN_LOG_ERROR("Failed to read from urandom");
     }
     urandom.close();
-    return rand;
+    return rand == 0 ? NN_NO1 : rand;
 }
 } // namespace hcom
 } // namespace ock

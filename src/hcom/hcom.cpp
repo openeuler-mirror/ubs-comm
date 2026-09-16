@@ -1448,12 +1448,25 @@ NResult UBSHcomNetDriverOptions::ValidateCommonOptions()
         return NN_INVALID_PARAM;
     }
 
+    /* detect uint16_t wrap-around after rounding up to the next power of 2 */
     if (!POWER_OF_2(tcpSendBufSize)) {
-        tcpSendBufSize = NN_NextPower2(tcpSendBufSize);
+        uint16_t oldSendBufSize = tcpSendBufSize;
+        tcpSendBufSize = static_cast<uint16_t>(NN_NextPower2(tcpSendBufSize));
+        if (NN_UNLIKELY(tcpSendBufSize < oldSendBufSize)) {
+            NN_LOG_ERROR("Option 'tcpSendBufSize' is invalid, "
+                         << oldSendBufSize << " overflows after rounding up to a power of 2");
+            return NN_INVALID_PARAM;
+        } 
     }
 
     if (!POWER_OF_2(tcpReceiveBufSize)) {
-        tcpReceiveBufSize = NN_NextPower2(tcpReceiveBufSize);
+        uint16_t oldRecvBufSize = tcpReceiveBufSize;
+        tcpReceiveBufSize = static_cast<uint16_t>(NN_NextPower2(tcpReceiveBufSize));
+        if (NN_UNLIKELY(tcpReceiveBufSize < oldRecvBufSize)) {
+            NN_LOG_ERROR("Option 'tcpReceiveBufSize' is invalid, "
+                         << oldRecvBufSize << " overflows after rounding up to a power of 2");
+            return NN_INVALID_PARAM;
+        }
     }
 
     if (!POWER_OF_2(qpSendQueueSize)) {
