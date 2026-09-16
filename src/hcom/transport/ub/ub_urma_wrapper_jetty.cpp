@@ -27,7 +27,7 @@ uint32_t UBJetty::G_INDEX = 1;
 UResult UBJetty::CreateUrmaJetty(uintptr_t seg_pa, uint32_t seg_len, uint32_t seg_count, uint32_t token)
 {
     if (mUBContext == nullptr || mUBContext->mUrmaContext == nullptr || mSendJfc == nullptr ||
-        mSendJfc->mUrmaJfc == nullptr) {
+        mSendJfc->mUrmaJfc == nullptr || mRecvJfc == nullptr || mRecvJfc->mUrmaJfc == nullptr) {
         NN_LOG_ERROR("Invalid parameter for jetty creating");
         return UB_PARAM_INVALID;
     }

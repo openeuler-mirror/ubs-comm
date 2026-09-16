@@ -43,6 +43,7 @@ public:
 private:
     SerResult InitDriver();
     SerResult StartDriver();
+    void ReleaseDriver();
 
 private:
     int ServiceRequestReceived(const UBSHcomNetRequestContext &ctx);

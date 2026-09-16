@@ -215,13 +215,14 @@ public:
     {
         const uint64_t allocBlks = mTcAllocBlks.load(std::memory_order_relaxed);
         const uint64_t freeBlks = mTcFreeBlks.load(std::memory_order_relaxed);
+        const uint64_t outstanding = allocBlks > freeBlks ? allocBlks - freeBlks : 0;
 
         std::ostringstream oss;
         oss << "pool " << mName << "@" << this << ", min-blk-size " << mOptions.minBlkSize << ", super-blks "
             << mSuperBlocks.size() << ", total-bytes " << mTotalSuperBlkSize << ", total-min-blk " << mTotalMinBlkCount
             << ", free-min-blk " << mFreeCount << ", active-caches "
             << mActiveCacheCount.load(std::memory_order_relaxed) << ", tc-alloc-blk " << allocBlks << ", tc-free-blk "
-            << freeBlks << ", outstanding-blk " << (allocBlks - freeBlks);
+            << freeBlks << ", outstanding-blk " << outstanding;
         return oss.str();
     }
 
@@ -233,7 +234,9 @@ public:
      */
     inline uint64_t OutstandingBlocks() const
     {
-        return mTcAllocBlks.load(std::memory_order_relaxed) - mTcFreeBlks.load(std::memory_order_relaxed);
+        const uint64_t allocBlks = mTcAllocBlks.load(std::memory_order_relaxed);
+        const uint64_t freeBlks = mTcFreeBlks.load(std::memory_order_relaxed);
+        return allocBlks > freeBlks ? allocBlks - freeBlks : 0;
     }
 
     /*

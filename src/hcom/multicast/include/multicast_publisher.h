@@ -416,6 +416,11 @@ public:
     inline bool SetResponseStatus(const SubscriptionInfoPtr &sub, UBSHcomNetMessage *message,
                                   SubscriberRspStatus status)
     {
+        if (NN_UNLIKELY(sub == nullptr)) {
+            NN_LOG_ERROR("Invalid param, subscription info is null");
+            return false;
+        }
+
         for (auto &item : subscriberRspList) {
             if (NN_UNLIKELY(item.mSubInfo.Get() == nullptr)) {
                 continue;

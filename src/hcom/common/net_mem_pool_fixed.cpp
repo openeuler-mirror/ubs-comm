@@ -141,6 +141,10 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
     uint32_t count = 0;
     NResult result = NN_OK;
     if ((result = MakeFreeList(blk, head, tail, count)) != NN_OK) {
+        /* rollback: this super block never became usable, undo the list/counter updates above */
+        mSuperBlocks.pop_back();
+        mTotalSuperBlkSize -= superBlkSize;
+        free(mem);
         return result;
     }
 
@@ -155,6 +159,11 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
         if (holdFreeListLock) {
             mTcMutex.Unlock();
         }
+        /* rollback: free list not attached, the blocks are invisible, undo everything */
+        mTotalMinBlkCount -= count;
+        mTotalSuperBlkSize -= superBlkSize;
+        mSuperBlocks.pop_back();
+        free(mem);
         return result;
     }
 
