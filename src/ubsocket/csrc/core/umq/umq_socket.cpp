@@ -37,6 +37,11 @@ void UmqSocket::UnInitialize() noexcept
     // FC TX 事件的 DelEpollEvent 由 DestroyLocalUmq 内部统一处理，
     // 覆盖所有 3 个调用点 (UnInitialize / DoUbAcceptRetry / DoUbConnectRetry)
     UnbindAndFlushRemoteUmq(this);
+    /* rxQueue 不依赖 umq_handle_，无论 handle 是否有效都必须释放
+     *（DestroyLocalUmq 被其他路径调用后 umq_handle_ 变 INVALID，
+     * 但 rxQueue 可能仍有效，原实现因 early return 跳过 reset 导致泄漏） */
+    delete rxQueue;
+    rxQueue = nullptr;
     DestroyLocalUmq();
 }
 
@@ -148,6 +153,9 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
             PROF_END(UMQ_INTERRUPT_FD_GET, false);
             UBS_VLOG_ERR("[UMQ_API] Failed to get TX interrupt fd, local umq: %llu\n",
                          static_cast<unsigned long long>(umq_handle_));
+            DestroyLocalUmq();
+            delete rxQueue;
+            rxQueue = nullptr;
             return UBS_ERROR;
         }
         PROF_END(UMQ_INTERRUPT_FD_GET, true);
@@ -158,6 +166,9 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
             PROF_END(UMQ_REARM_INTERRUPT, false);
             UBS_VLOG_ERR("[UMQ_API] Failed to enable solicited mode for umq: %llu\n",
                          static_cast<unsigned long long>(umq_handle_));
+            DestroyLocalUmq();
+            delete rxQueue;
+            rxQueue = nullptr;
             return UBS_ERROR;
         }
         PROF_END(UMQ_REARM_INTERRUPT, true);
@@ -167,6 +178,9 @@ Result UmqSocket::CreateLocalUmq(const umq_eid_t *conn_eid, umq_used_ports_t &us
     auto *ports = new (std::nothrow) umq_port_id_t[used_ports.num];
     if (ports == nullptr) {
         UBS_VLOG_ERR("Failed to init used_ports for fd: %d\n", raw_socket_);
+        DestroyLocalUmq();
+        delete rxQueue;
+        rxQueue = nullptr;
         return UBS_ERROR;
     }
 

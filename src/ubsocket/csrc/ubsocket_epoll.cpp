@@ -26,7 +26,7 @@ UBS_API int UB_API_WRAP(epoll_create)(int size)
         return epollFd;
     }
 
-    EventPoll *eventPoll = new AsyncEventPoll(epollFd);
+    EventPoll *eventPoll = new (std::nothrow) AsyncEventPoll(epollFd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("create async event poll failed, epoll fd: %d\n", epollFd);
         LibcApi::close(epollFd);
@@ -77,7 +77,7 @@ UBS_API int UB_API_WRAP(epoll_create1)(int flags)
         return epollFd;
     }
 
-    EventPoll *eventPoll = new AsyncEventPoll(epollFd);
+    EventPoll *eventPoll = new (std::nothrow) AsyncEventPoll(epollFd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("create async event poll failed, epoll fd: %d\n", epollFd);
         LibcApi::close(epollFd);

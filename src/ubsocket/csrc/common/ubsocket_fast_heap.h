@@ -189,13 +189,18 @@ private:
 
     int Reserve(size_t new_capacity)
     {
-        uint32_t reserve_capacity = (new_capacity > MAX_CAPACITY) ? MAX_CAPACITY : new_capacity;
-        if (reserve_capacity == m_capacity) {
-            UBS_VLOG_ERR("Failed to resize heap, new capacity is equal to old capacity: %d\n", reserve_capacity);
+        /* 白盒检视修复：Reserve 作为实际内存分配入口，独立约束 m_max_capacity，
+         * 不依赖 PushImpl 的前置检查。GetMaxCapacity() 已内含 MAX_CAPACITY 封顶。 */
+        size_t maxCapacity = GetMaxCapacity();
+        if (new_capacity > maxCapacity) {
+            new_capacity = maxCapacity;
+        }
+        if (new_capacity == m_capacity) {
+            UBS_VLOG_ERR("Failed to resize heap, new capacity is equal to old capacity: %zu\n", new_capacity);
             return UBS_ERROR;
         }
 
-        T *new_heap = InitHeap(reserve_capacity);
+        T *new_heap = InitHeap(new_capacity);
         if (new_heap == nullptr) {
             UBS_VLOG_ERR("Failed to init heap.\n");
             return UBS_ERROR;
@@ -206,7 +211,7 @@ private:
         }
         free(m_heap);
         m_heap = new_heap;
-        m_capacity = reserve_capacity;
+        m_capacity = new_capacity;
         return UBS_OK;
     }
 

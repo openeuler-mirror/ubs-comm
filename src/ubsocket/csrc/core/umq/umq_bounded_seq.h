@@ -52,7 +52,6 @@ public:
     {
         IntType base = Normalize(base_key);
         IntType inc = Normalize(incoming_key);
-        IntType diff_forward;
         if constexpr (MaxVal == 0) {
             // 利用掩码减法自然回绕
             return Mask(inc - base);

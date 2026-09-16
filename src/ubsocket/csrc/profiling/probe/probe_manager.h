@@ -225,6 +225,9 @@ public:
 
         // --- 解析 umq_buf_pro_t ---
         umq_buf_pro_t *buf_pro = reinterpret_cast<umq_buf_pro_t *>(qbuf->qbuf_ext);
+        if (buf_pro == nullptr) {
+            return;
+        }
 
         // --- 校验是否为探针包 ---
         if (buf_pro->imm.user_data != PROBE_USER_DATA_ID) {

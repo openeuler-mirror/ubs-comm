@@ -275,6 +275,9 @@ Result UmqBackend::FindDevName()
     int devCount = 0;
     umq_dev_info_t *umqDevInfo = UmqApi::umq_dev_info_list_get(transMode, &devCount);
     if (umqDevInfo == nullptr || devCount <= 0) {
+        if (umqDevInfo != nullptr) {
+            UmqApi::umq_dev_info_list_free(transMode, umqDevInfo);
+        }
         int savedErrno = errno;
         errno = UmqErrnoConverter::ConvertHandleResult(UmqOperation::BIND_INFO_GET, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_dev_info_list_get() failed, ret: %p, dev count: %d, "
@@ -283,6 +286,8 @@ Result UmqBackend::FindDevName()
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::BIND_INFO_GET, UMQ_FAIL), savedErrno);
         return UBS_ERROR;
     }
+    auto free_on_exit =
+        MakeScopeExit([transMode, umqDevInfo]() { UmqApi::umq_dev_info_list_free(transMode, umqDevInfo); });
 
     int index = 0;
     int bondingIndex = -1;
@@ -308,7 +313,6 @@ Result UmqBackend::FindDevName()
     }
 
     UmqSetting::UMQ_LOCAL_EID = umqDevInfo[bondingIndex].ub.eid_list[0].eid;
-    UmqApi::umq_dev_info_list_free(transMode, umqDevInfo);
     return UBS_OK;
 }
 

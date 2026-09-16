@@ -10,6 +10,9 @@
 */
 #include "ubsocket_socket_helper.h"
 
+#include <climits>
+#include <cstdlib>
+
 namespace ock {
 namespace ubs {
 bool SocketConnHelper::IsUbsConnection(const int &fd)
@@ -256,14 +259,33 @@ int SocketConnHelper::GetCurrentProcessSocketId()
 // 从 CPU ID 获取其 Socket ID（physical_package_id）
 int SocketConnHelper::GetSocketIdOfCpu(int cpu)
 {
-    std::string path =
-        std::string(SOCKET_ID_PERFIX_PATH) + "cpu" + std::to_string(cpu) + std::string(SOCKET_ID_SUFFIX_PATH);
-    std::ifstream file(path);
+    // CPU 号范围检查：拦截负数与垃圾值，避免构造无意义路径
+    if (cpu < 0 || cpu > UBSOCKET_CPU_ID_MAX) {
+        UBS_VLOG_ERR("GetSocketIdOfCpu invalid cpu: %d, range [0, %d]\n", cpu, UBSOCKET_CPU_ID_MAX);
+        return -1;
+    }
+    std::string cpuStr = "cpu" + std::to_string(cpu);
+    std::string path = std::string(SOCKET_ID_PERFIX_PATH) + cpuStr + std::string(SOCKET_ID_SUFFIX_PATH);
+    // 符号链接逃逸检查：realpath 解析全路径中的符号链接，若结果与预期路径不一致则拒绝
+    char resolvedBuf[PATH_MAX] = {0};
+    char *resolvedPtr = realpath(path.c_str(), resolvedBuf);
+    if (resolvedPtr == nullptr) {
+        UBS_VLOG_ERR("GetSocketIdOfCpu realpath failed, cpu: %d, path: %s\n", cpu, path.c_str());
+        return -1;
+    }
+    std::string resolvedPath(resolvedPtr);
+    std::string expectedPath = std::string(SOCKET_ID_PERFIX_PATH) + cpuStr + std::string(SOCKET_ID_SUFFIX_PATH);
+    if (resolvedPath != expectedPath) {
+        UBS_VLOG_ERR("GetSocketIdOfCpu symlink escape detected, cpu: %d, path: %s, resolved: %s\n", cpu, path.c_str(),
+                     resolvedPath.c_str());
+        return -1;
+    }
+    std::ifstream file(resolvedPath);
     int socketId;
     if (file >> socketId) {
         return socketId;
     }
-    UBS_VLOG_ERR("GetSocketIdOfCpu failed, cpu: %d, path: %s\n", cpu, path.c_str());
+    UBS_VLOG_ERR("GetSocketIdOfCpu failed, cpu: %d, path: %s\n", cpu, resolvedPath.c_str());
     return -1; // 读取失败
 }
 

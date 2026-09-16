@@ -166,6 +166,17 @@ constexpr uint32_t FLUSH_TIMEOUT_MS = 200;
 constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 200000;
 constexpr uint64_t UMQ_MEM_MIN_EXPAND_SIZE_MB = 64;
 
+/* 环境变量 UBSOCKET_TX_DEPTH / UBSOCKET_RX_DEPTH 校验上限。
+ * 65536 (2^16) 对齐硬件 JFS/JFR 深度典型上限；UMQ 层会按设备实际能力
+ * (max_jfs_depth / max_jfr_depth / max_jfc_depth) 与流控开关做二次校验，
+ * validator 仅在 ubsocket 入口拦截明显非法值。 */
+constexpr uint32_t UBSOCKET_TX_DEPTH_MAX = 65536;
+constexpr uint32_t UBSOCKET_RX_DEPTH_MAX = 65536;
+
+/* 环境变量 UBSOCKET_ASYNC_ACCEPT_THREAD_NUM 校验上限：async accept 线程池
+ * 工作线程数，128 已远超实际需要，防止误配过大导致线程爆炸。 */
+constexpr uint32_t UBSOCKET_THREAD_POOL_SIZE_MAX = 128;
+
 constexpr uint64_t SIZE_4K = 4096;
 constexpr uint64_t SIZE_8K = 8192;
 constexpr uint64_t SIZE_16K = 16384;
@@ -200,6 +211,10 @@ constexpr char SOCKET_ID_PERFIX_PATH[] = "/sys/devices/system/cpu/";
 constexpr char SOCKET_ID_SUFFIX_PATH[] = "/topology/physical_package_id";
 constexpr uint16_t CPU_STR_SIZE = 3;
 constexpr uint16_t NODE_STR_SIZE = 4;
+
+/* CPU ID 校验上限：覆盖所有现网架构（arm64 ≤4096、x86_64 ≤8192），
+ * 65535 用于拦截明显非法值（负数、垃圾值），真实上限由 sysfs 文件是否存在决定 */
+constexpr int UBSOCKET_CPU_ID_MAX = 65535;
 
 static const std::string EMPTY_STR;
 

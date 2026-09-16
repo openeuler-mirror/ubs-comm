@@ -87,8 +87,9 @@ public:
     uint32_t IndexMove(uint32_t len) override
     {
         if (m_offset + len >= m_size) {
+            uint32_t remaining = static_cast<uint32_t>(m_size - m_offset);
             m_offset = m_size;
-            return m_size - m_offset;
+            return remaining;
         }
         m_offset += len;
         return len;

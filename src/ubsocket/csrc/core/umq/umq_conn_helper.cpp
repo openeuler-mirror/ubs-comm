@@ -76,6 +76,13 @@ Result UmqConnHelper::PrefillRx(uint64_t umq_handle)
         int umq_ret = UmqApi::umq_post(umq_handle, rx_buf_list, &io_rx_option, &bad_qbuf);
         if (umq_ret != UMQ_SUCCESS) {
             PROF_END(UMQ_POST_RX, false);
+            if (bad_qbuf != nullptr) {
+                UmqApi::umq_buf_free(bad_qbuf);
+            } else {
+                /* bad_qbuf == nullptr：umq_post 失败且未返回失败点，
+                 * rx_buf_list 整条链未被 UMQ 消费，需释放避免泄漏 */
+                UmqApi::umq_buf_free(rx_buf_list);
+            }
             int savedErrno = errno;
             errno = UmqErrnoConverter::Convert(UmqOperation::CONNECT, umq_ret, savedErrno);
             int rx_window_capacity = 0;
