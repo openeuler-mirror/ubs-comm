@@ -429,6 +429,25 @@ public:
         }
     }
 
+    /* dequeue with timeout in milliseconds; returns false on timeout so caller can re-check the stop flag */
+    inline bool TimedDequeue(T &item, uint32_t timeoutMs)
+    {
+        while (!mRingBuffer.PopFront(item)) {
+            struct timespec timeout {
+            };
+            clock_gettime(CLOCK_REALTIME, &timeout);
+            int64_t nsec = static_cast<int64_t>(timeout.tv_nsec) + static_cast<int64_t>(timeoutMs) * NN_NO1000000;
+            timeout.tv_sec += static_cast<time_t>(nsec / NN_NO1000000000);
+            timeout.tv_nsec = static_cast<long>(nsec % NN_NO1000000000);
+
+            if (sem_timedwait(&mSem, &timeout) != 0) {
+                // timeout or interrupted, let caller handle by re-checking stop flag
+                return false;
+            }
+        }
+        return true;
+    }
+
     inline bool InterruptableEnqueue(const T &item, bool &isInterrupted)
     {
         auto result = mRingBuffer.InterruptablePushBack(item, isInterrupted);

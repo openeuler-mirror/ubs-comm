@@ -2361,7 +2361,7 @@ int32_t HcomChannelImp::Recv(const UBSHcomServiceContext &context, uintptr_t add
     }
     uintptr_t endAddr = address + size - NN_NO1;
     if (endAddr < address) { //溢出判断
-        NN_LOG_ERROR(" Address overflow, address " << std::hex << address << ", size " << size);
+        NN_LOG_ERROR(" Address overflow, size " << size);
         DestroyCallback(done);
         return SER_INVALID_PARAM;
     }

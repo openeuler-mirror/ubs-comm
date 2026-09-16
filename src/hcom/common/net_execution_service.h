@@ -55,6 +55,7 @@ private:
 using NetRunnablePtr = NetRef<NetRunnable>;
 
 constexpr uint32_t ES_MAX_THR_NUM = 256;
+constexpr uint32_t ES_STOP_POLL_TIMEOUT_MS = 1000;
 
 class NetExecutorService;
 using NetExecutorServicePtr = NetRef<NetExecutorService>;
@@ -117,7 +118,11 @@ public:
         }
 
         tmp->IncreaseRef();
-        return mRunnableQueue.Enqueue(tmp);
+        if (NN_UNLIKELY(!mRunnableQueue.Enqueue(tmp))) {
+            tmp->DecreaseRef();
+            return false;
+        }
+        return true;
     }
 
     /*
@@ -154,6 +159,7 @@ private:
           mThreads(0),
           mStarted(false),
           mStopped(false),
+          mStopping(false),
           mStartedThreadNum(0)
     {
     }
@@ -170,6 +176,7 @@ private:
 
     std::atomic<bool> mStarted;
     std::atomic<bool> mStopped;
+    std::atomic<bool> mStopping;
     std::atomic<uint16_t> mStartedThreadNum;
 
     std::string mThreadName;

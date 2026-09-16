@@ -432,7 +432,7 @@ void NetDriverShmWithOOB::ClearShmLeftFile()
             continue;
         }
 
-        auto tmpFd = shm_open(ent->d_name, O_CREAT | O_RDWR, NN_NO400);
+        auto tmpFd = shm_open(ent->d_name, O_RDONLY, 0);
         if (NN_UNLIKELY(tmpFd < 0)) {
             continue;
         }

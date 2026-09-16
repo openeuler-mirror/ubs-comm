@@ -209,10 +209,13 @@ public:
             if (i >= MAX_MULTI_RAIL_NUM) {
                 break;
             }
+            if (mHcomMrs[i] == nullptr) {
+                continue;
+            }
             mrKey.keys[i] = mHcomMrs[i]->GetLKey();
             mrKey.tokens[i] = reinterpret_cast<uint64_t>(mHcomMrs[i]->GetMemorySeg());
         }
-        if (mHcomMrs.size() > 0 && mHcomMrs[0]->GetEidRaw() != nullptr) {
+        if (mHcomMrs.size() > 0 && mHcomMrs[0] != nullptr && mHcomMrs[0]->GetEidRaw() != nullptr) {
             auto ret = memcpy_s(mrKey.eid, sizeof(mrKey.eid), mHcomMrs[0]->GetEidRaw(), sizeof(mrKey.eid));
             if (ret != 0) {
                 NN_LOG_WARN("memcpy eid failed");

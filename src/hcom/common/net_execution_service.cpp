@@ -21,6 +21,8 @@ bool NetExecutorService::Start()
         return true;
     }
 
+    mStopping.store(false);
+
     /* init ring buffer blocking queue */
     auto result = mRunnableQueue.Initialize();
     if (result != 0) {
@@ -51,17 +53,21 @@ bool NetExecutorService::Start()
 
 void NetExecutorService::ForceStop()
 {
+    mStopping.store(true);
+
     for (uint32_t i = 0; i < mThreads.size(); ++i) {
         NetRunnablePtr stopTask = new (std::nothrow) NetRunnable();
         if (stopTask == nullptr) {
             NN_LOG_ERROR("Failed to new stop task, probably out of memory");
-            break;
+            continue;
         }
         stopTask->Type(NetRunnableType::STOP);
 
         NetRunnable *tmp = stopTask.Get();
         tmp->IncreaseRef();
         if (!mRunnableQueue.EnqueueFirst(tmp)) {
+            tmp->DecreaseRef();
+            NN_LOG_WARN("Failed to enqueue stop task, rely on stopping flag");
             continue;
         }
     }
@@ -69,6 +75,15 @@ void NetExecutorService::ForceStop()
     for (auto &thr : mThreads) {
         if (thr != nullptr) {
             thr->join();
+        }
+    }
+
+    /* drain leftover tasks (e.g. STOP tasks not consumed by workers that exited via timeout), and release their
+       queue-held reference to avoid leak */
+    NetRunnable *leftover = nullptr;
+    while (mRunnableQueue.TimedDequeue(leftover, 0)) {
+        if (leftover != nullptr) {
+            leftover->DecreaseRef();
         }
     }
 
@@ -94,7 +109,12 @@ void NetExecutorService::DoRunnable(bool &flag)
 {
     try {
         NetRunnable *task = nullptr;
-        mRunnableQueue.Dequeue(task);
+        if (!mRunnableQueue.TimedDequeue(task, ES_STOP_POLL_TIMEOUT_MS)) {
+            if (mStopping.load()) {
+                flag = false;
+            }
+            return;
+        }
         if (task != nullptr) {
             /* the ref count of `task` was manually increased when enqueue, and it will be automatically increased again
             when assignning to `runnable`, so it should be decreased explicitly after assignment to make the

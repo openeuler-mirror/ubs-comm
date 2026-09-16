@@ -122,8 +122,7 @@ public:
 
     void Run(UBSHcomServiceContext &context) override
     {
-        __sync_fetch_and_add(&mRunTime, 1);
-        if (mRunTime < mTotalTime) {
+        if (__sync_add_and_fetch(&mRunTime, 1) < mTotalTime) {
             return;
         }
         if (mFunction != nullptr) {

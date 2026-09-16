@@ -1099,8 +1099,6 @@ void NetDriverSockWithOOB::DestroyEndpointById(uint64_t id)
         NN_LOG_WARN("Unable to destroy sock endpoint as ep " << id << " doesn't exist, maybe cleaned already");
         return;
     }
-
-    mEndPoints[id].Set(nullptr);
 }
 
 NResult NetDriverSockWithOOB::HandleNewOobConn(OOBTCPConnection &conn)

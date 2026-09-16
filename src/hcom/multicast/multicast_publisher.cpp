@@ -141,6 +141,9 @@ SerResult Publisher::InitIoSubscribers(MultiCastIoContext &context)
     PublisherContext &pubCtx = context.mPublisherCtx;
     uint32_t snapshotIndex = AcquireSubscriptionSnapshot();
     for (const auto &group : mSubscriptionSnapshots[snapshotIndex]) {
+        if (group == nullptr) {
+            continue;
+        }
         SubscriptionInfoPtr selected = SelectSubscription(*group);
         if (selected.Get() != nullptr) {
             pubCtx.subscriberRspList.emplace_back(selected, SubscriberRspStatus::INIT);
