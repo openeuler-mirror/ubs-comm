@@ -308,6 +308,7 @@ NResult NetDriverUB::CreateWorkerResource()
     result = CreateSglCtxMemPool();
     if (NN_UNLIKELY(result != NN_OK)) {
         NN_LOG_ERROR("UB failed to create Sgl ctx memory pool");
+        return result;
     }
 
     return NN_OK;

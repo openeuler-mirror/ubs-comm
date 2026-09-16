@@ -172,6 +172,11 @@ NResult NetDriverRDMA::CreateContext()
         if (result != NN_OK) {
             return result;
         }
+
+        if (NN_UNLIKELY(enableIps.empty() || static_cast<size_t>(mDevIndex) >= enableIps.size())) {
+            NN_LOG_ERROR("Invalid dev index " << mDevIndex << ", enable ip count " << enableIps.size());
+            return NN_INVALID_PARAM;
+        }
         mMatchIp = enableIps[mDevIndex];
     } else {
         // filter ip by mask

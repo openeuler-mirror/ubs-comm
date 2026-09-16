@@ -987,6 +987,7 @@ NResult OOBTCPClient::ConnectWithFd(const std::string &filename, int &fd)
     setsockopt(tmpFD, IPPROTO_TCP, TCP_SYNCNT, &synCnt, sizeof(synCnt));
 
     uint32_t timesRetried = 0;
+    uint32_t eintrRetried = 0;
     long maxConnRetryTimes = NN_NO5;
     long maxConnRetryInterval = NN_NO20;
     ConfigureSocketTimeouts(tmpFD, maxConnRetryTimes, maxConnRetryInterval);
@@ -1010,6 +1011,13 @@ NResult OOBTCPClient::ConnectWithFd(const std::string &filename, int &fd)
         }
 
         if (errno == EINTR) {
+            /* The signal only interrupted connect(): retry without consuming the retry budget,
+               but bound it so persistent signals can never turn this into an infinite loop. */
+            if (++eintrRetried > NN_NO100) {
+                NN_LOG_ERROR("Trying to connect to " << filename
+                                                     << " was interrupted by signals too many times, giving up");
+                break;
+            }
             continue;
         }
 

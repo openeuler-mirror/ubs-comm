@@ -458,7 +458,7 @@ TEST_F(TestNetDriverUB, CreateWorkerResourceSuccess)
     MOCKER_CPP(&NetDriverUB::CreateOpCtxMemPool).stubs().will(returnValue(0));
     MOCKER_CPP(&NetDriverUB::CreateSglCtxMemPool).stubs().will(returnValue(1)).then(returnValue(0));
 
-    EXPECT_EQ(driver->CreateWorkerResource(), 0);
+    EXPECT_EQ(driver->CreateWorkerResource(), 1);
     EXPECT_EQ(driver->CreateWorkerResource(), 0);
 }
 

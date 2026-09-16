@@ -78,7 +78,7 @@ SerResult SubscriberServiceImp::InitDriver()
 
     int32_t res = mDriverPtr->Initialize(driverOpt);
     if (NN_UNLIKELY(res != SER_OK)) {
-        Stop();
+        ReleaseDriver();
         return res;
     }
 
@@ -121,7 +121,7 @@ SerResult SubscriberServiceImp::StartDriver()
     SerResult result = SER_OK;
     result = mDriverPtr->Start();
     if (NN_UNLIKELY(result != SER_OK)) {
-        Stop();
+        ReleaseDriver();
         return result;
     }
 
@@ -146,6 +146,17 @@ SerResult SubscriberServiceImp::StartDriver()
     return SER_OK;
 }
 
+void SubscriberServiceImp::ReleaseDriver()
+{
+    if (mDriverPtr == nullptr) {
+        return;
+    }
+    mDriverPtr->Stop();
+    mDriverPtr->UnInitialize();
+    UBSHcomNetDriver::DestroyInstance(mDriverPtr->Name());
+    mDriverPtr = nullptr;
+}
+
 void SubscriberServiceImp::Stop()
 {
     std::lock_guard<std::mutex> locker(mStartMutex);
@@ -158,9 +169,7 @@ void SubscriberServiceImp::Stop()
     }
     mOobServers.clear();
 
-    mDriverPtr->Stop();
-    mDriverPtr->UnInitialize();
-    UBSHcomNetDriver::DestroyInstance(mDriverPtr->Name());
+    ReleaseDriver();
 
     mStarted = false;
 }

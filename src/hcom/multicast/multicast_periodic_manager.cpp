@@ -664,13 +664,13 @@ SerResult MultiCastPeriodicManager::AddTimerCheck(MultiCastServiceTimer *&timer)
 
 void MultiCastPeriodicManager::RunInThread(int16_t tId)
 {
-    mHandleQueue[tId].reserve(NN_NO8192);
-
-    if (tId >= mThreadCount) {
+    if (NN_UNLIKELY(tId < 0 || tId >= static_cast<int16_t>(mThreadCount))) {
         NN_LOG_WARN("Invalid thread id " << tId << " to run periodic manager.");
         mWorkerStartFailed.store(true, std::memory_order_release);
         return;
     }
+
+    mHandleQueue[tId].reserve(NN_NO8192);
 
     int eFd = epoll_create(1);
     if (eFd < 0) {

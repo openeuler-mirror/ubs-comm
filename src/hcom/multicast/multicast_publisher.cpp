@@ -409,7 +409,7 @@ SubscriptionInfoPtr Publisher::SelectSubscription(SubscriptionGroup &group)
 
 bool Publisher::AddSubscription(SubscriptionInfoPtr &info)
 {
-    if (info == nullptr) {
+    if (info == nullptr || info->mEp == nullptr) {
         return false;
     }
     NN_LOG_DEBUG("begin to add subscribe info id :" << info->mId << " name:" << info->mName);

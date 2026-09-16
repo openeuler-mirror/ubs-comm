@@ -239,6 +239,8 @@ private:
 
     SerResult PrepareTimerContext(const Callback *cb, int16_t timeout, TimerCtx &context);
     void DestroyTimerContext(TimerCtx &context);
+    void RollbackSplicedEntry(UBSHcomFragmentMessageId msgId,
+                              const std::shared_ptr<std::pair<uint32_t, std::string>> &inserted);
 
     Callback *GetAsyncCB(uint16_t multiNum, const Callback *done);
     SerResult OneSideInner(const UBSHcomOneSideRequest &request, const Callback *done, bool isWrite);

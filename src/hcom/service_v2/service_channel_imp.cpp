@@ -655,6 +655,16 @@ SerResult HcomChannelImp::SyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
     return syncParam.Result();
 }
 
+void HcomChannelImp::RollbackSplicedEntry(UBSHcomFragmentMessageId msgId,
+                                          const std::shared_ptr<std::pair<uint32_t, std::string>> &inserted)
+{
+    std::lock_guard<std::mutex> lock(mMsgReceivedMutex);
+    auto it = mMsgReceived.find(msgId);
+    if (it != mMsgReceived.end() && it->second == inserted) {
+        mMsgReceived.erase(it);
+    }
+}
+
 auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
     -> std::tuple<SpliceMessageResultType, SerResult, std::string>
 {
@@ -721,6 +731,7 @@ auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isR
                 std::placeholders::_1, NetRef<HcomChannelImp>{this});
             if (!cb) {
                 NN_LOG_ERROR("SpliceMessage malloc callback failed");
+                RollbackSplicedEntry(msgId, incompleteMsg);
                 return std::make_tuple(SpliceMessageResultType::ERROR, SER_NEW_OBJECT_FAILED, "");
             }
 
@@ -738,6 +749,7 @@ auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isR
             if (result != SER_OK) {
                 NN_LOG_ERROR("Prepare timer context failed when creating timer for SpliceMessage");
                 delete cb;
+                RollbackSplicedEntry(msgId, incompleteMsg);
                 return std::make_tuple(SpliceMessageResultType::ERROR, result, "");
             }
 
@@ -2531,6 +2543,13 @@ SerResult HcomChannelImp::OneSideSglAsyncWithWorkerPoll(const UBSHcomOneSideSglR
 
 SerResult HcomChannelImp::OneSideSglInner(const UBSHcomOneSideSglRequest &request, const Callback *done, bool isWrite)
 {
+    if (NN_UNLIKELY(request.iov == nullptr || request.iovCount == 0 || request.iovCount > NET_SGE_MAX_IOV)) {
+        NN_LOG_ERROR("Invalid sgl iov ptr " << request.iov << " or count " << request.iovCount
+                                            << " in OneSideSglInner, max " << NET_SGE_MAX_IOV);
+        DestroyCallback(done);
+        return SER_INVALID_PARAM;
+    }
+
     if (mOptions.enableMultiRail) {
         NN_LOG_DEBUG("Multirail not supported in oneside sgl, using single rail.");
     }
