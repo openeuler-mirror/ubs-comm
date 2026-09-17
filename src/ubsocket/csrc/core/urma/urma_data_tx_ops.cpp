@@ -23,6 +23,71 @@ namespace ock {
 namespace ubs {
 namespace urma {
 
+namespace {
+/* POSIX: once bytes are committed, report them instead of the failure. */
+ssize_t Committed(size_t done) noexcept
+{
+    return done > 0 ? static_cast<ssize_t>(done) : -1;
+}
+} // namespace
+
+size_t UrmaTxOps::SumValidIov(const struct iovec *iov, int iovcnt) noexcept
+{
+    if (UNLIKELY(iov == nullptr || iovcnt <= 0)) {
+        return 0;
+    }
+
+    size_t total = 0;
+    for (int i = 0; i < iovcnt; ++i) {
+        if (iov[i].iov_base == nullptr || iov[i].iov_len == 0) {
+            /* 跳过 null/空 iov: 与 DataTx 上层(如 brpc)传入的稀疏 iov 语义一致 */
+            continue;
+        }
+        total += iov[i].iov_len;
+    }
+    return total;
+}
+
+void UrmaTxOps::MakeIovRange(const struct iovec *iov, int iovcnt, size_t skip, size_t len,
+                             std::vector<struct iovec> &out) noexcept
+{
+    if (UNLIKELY(iov == nullptr || iovcnt <= 0 || len == 0)) {
+        return;
+    }
+
+    const size_t rangeEnd = skip + len;
+    size_t validOffset = 0;
+    for (int i = 0; i < iovcnt && validOffset < rangeEnd; ++i) {
+        if (iov[i].iov_base == nullptr || iov[i].iov_len == 0) {
+            continue;
+        }
+
+        const size_t segEnd = validOffset + iov[i].iov_len;
+        const size_t begin = std::max(validOffset, skip);
+        const size_t end = std::min(segEnd, rangeEnd);
+        if (begin < end) {
+            struct iovec seg;
+            seg.iov_base = static_cast<char *>(iov[i].iov_base) + (begin - validOffset);
+            seg.iov_len = end - begin;
+            out.push_back(seg);
+        }
+        validOffset = segEnd;
+    }
+}
+
+ssize_t UrmaTxOps::SubmitOnce(const SocketPtr &sock, WriteRequest &req) noexcept
+{
+    const struct iovec *view = req.iov;
+    int viewCnt = req.iovcnt;
+    if (req.done > 0) { /* the caller's list is only used for the first attempt */
+        req.remainder.clear();
+        MakeIovRange(req.iov, req.iovcnt, req.done, req.total - req.done, req.remainder);
+        view = req.remainder.data();
+        viewCnt = static_cast<int>(req.remainder.size());
+    }
+    return WriteVOnce(sock, view, viewCnt, req.flags);
+}
+
 ssize_t UrmaTxOps::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept
 {
     auto urma_sock = dynamic_cast<UrmaSocket *>(sock.Get());
@@ -31,73 +96,61 @@ ssize_t UrmaTxOps::WriteV(const SocketPtr &sock, const struct iovec *iov, int io
         return -1;
     }
 
-    bool registered = false;
-    auto unregister_waiter = MakeScopeExit([&registered, urma_sock]() {
-        if (registered) {
-            urma_sock->UnregisterBlockingWaiter();
-        }
-    });
+    WriteRequest req(iov, iovcnt, SumValidIov(iov, iovcnt), flags);
+    if (UNLIKELY(req.total == 0)) {
+        return 0; /* POSIX: writev() without data returns 0 */
+    }
 
-    bool has_deadline = false;
-    struct timespec deadline = {0, 0};
+    /* A blocking fd finishes a short write here; a non-blocking fd (or MSG_DONTWAIT) hands the
+     * partial count back to the caller (POSIX). */
+    const bool shortWriteAllowed = (flags & UBS_IO_FLAG_DONT_WAIT) != 0 || !SocketConnHelper::IsBlocking(fd_);
+
+    BlockingWaiter waiter(urma_sock, UrmaSocket::BLOCKING_FLAG_WRITABLE, SO_SNDTIMEO);
+
     for (;;) {
-        ssize_t ret = WriteVOnce(sock, iov, iovcnt, flags);
-        if (ret >= 0 || errno != EAGAIN) {
+        const ssize_t ret = SubmitOnce(sock, req);
+        if (shortWriteAllowed) {
             return ret;
         }
-        if (!SocketConnHelper::IsBlocking(fd_)) {
-            return ret;
-        }
-        if (UNLIKELY(urma_sock->State() == SOCK_STAT_CLOSE)) {
-            errno = EPIPE;
-            return -1;
-        }
-
-        if (!has_deadline) {
-            has_deadline = urma_sock->GetBlockTimeoutDeadline(SO_SNDTIMEO, deadline);
-        }
-        if (!registered) {
-            urma_sock->RegisterBlockingWaiter();
-            registered = true;
-            continue; // retry once after registering to eat state changes that raced registration
-        }
-
-        const uint32_t signalledFlags =
-            urma_sock->WaitBlockingSignal(UrmaSocket::BLOCKING_FLAG_WRITABLE, has_deadline ? &deadline : nullptr);
-        if ((signalledFlags & (UrmaSocket::BLOCKING_FLAG_CLOSED | UrmaSocket::BLOCKING_FLAG_PEER_CLOSED)) != 0) {
-            errno = EPIPE;
-            return -1;
-        }
-        if (signalledFlags == 0) {
-            /* explicit SO_SNDTIMEO expiry: retry once to close the race, then report EAGAIN */
-            ssize_t last = WriteVOnce(sock, iov, iovcnt, flags);
-            if (last >= 0 || errno != EAGAIN) {
-                return last;
+        if (ret > 0) {
+            req.done += static_cast<size_t>(ret);
+            if (req.done < req.total) {
+                continue; /* blocking fd: submit the remainder */
             }
-            UBS_VLOG_INFO("UrmaTxOps::WriteV fd=%d: SO_SNDTIMEO expired, final retry still EAGAIN, return EAGAIN",
-                          sock->Fd());
-            errno = EAGAIN;
-            return -1;
+            return Committed(req.done);
         }
-        // writable or spurious wakeup: loop and let the real write decide
+        if (errno != EAGAIN || ret == 0) { /* empty view: unreachable while total > 0, fail instead of spinning */
+            return Committed(req.done);
+        }
+
+        switch (waiter.Wait()) {
+            case WaitOutcome::RETRY:
+                continue;
+            case WaitOutcome::LOCAL_CLOSED:
+            case WaitOutcome::PEER_CLOSED:
+                errno = EPIPE;
+                return Committed(req.done);
+            case WaitOutcome::TIMEOUT:
+                break;
+        }
+
+        /* SO_SNDTIMEO expiry: submit once more to close the race, then report what was sent */
+        const ssize_t last = SubmitOnce(sock, req);
+        if (last > 0) {
+            req.done += static_cast<size_t>(last);
+        } else if (req.done == 0 && errno == EAGAIN) {
+            UBS_VLOG_INFO("UrmaTxOps::WriteV fd=%d: SO_SNDTIMEO expired, final retry still EAGAIN", sock->Fd());
+        }
+        return Committed(req.done);
     }
 }
 
 ssize_t UrmaTxOps::WriteVOnce(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept
 {
-    (void)flags;
-
-    size_t total_size = 0;
-    for (auto i = 0; i < iovcnt; i++) {
-        if (iov[i].iov_base == nullptr || iov[i].iov_len == 0) {
-            /* 跳过 null/空 iov: 与 DataTx 上层(如 brpc)传入的稀疏 iov 语义一致 */
-            continue;
-        }
-        total_size += iov[i].iov_len;
-    }
+    const size_t total_size = SumValidIov(iov, iovcnt);
 
     UBS_VLOG_TRACE("writev on urma socket(%d) iovcnt=%d, bytes=%zu, flag=%x", sock->Fd(), iovcnt, total_size, flags);
-    if (UNLIKELY(iovcnt <= 0 || total_size == 0)) {
+    if (UNLIKELY(total_size == 0)) {
         return 0;
     }
 
@@ -202,29 +255,34 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
         return -1;
     }
 
+    /* The best-effort block may be too small for header + payload: send the prefix that fits and
+     * keep head.data_count equal to it, otherwise the peer reads bytes that were never written. */
+    const size_t payload_capacity = static_cast<size_t>(real_size) - URMA_INLINE_MESSAGE_CTRL_COST;
+    const size_t payload_len = (total < payload_capacity) ? total : payload_capacity;
+    if (UNLIKELY(payload_len == 0)) {
+        urma_sock->send_buf_->Release(buf_offset, real_size);
+        ClearWritableIfBlocked(sock);
+        errno = EAGAIN;
+        return -1;
+    }
+
     UrmaCtrlMessage ctrl_message;
     auto seq_no = __atomic_fetch_add(&seq_gen_, 1U, __ATOMIC_RELAXED);
     ctrl_message.head.request_id = (static_cast<uint64_t>(fd_) << 32) | (seq_no & 0xFFFFFFFFUL);
     ctrl_message.head.sequence_no = seq_no;
     ctrl_message.head.flags = 0;
     ctrl_message.head.message_size = real_size;
-    ctrl_message.head.data_count = static_cast<uint32_t>(total);
+    ctrl_message.head.data_count = static_cast<uint32_t>(payload_len);
     UBS_VLOG_TRACE("ctl_msg(req_id=%lx, seq_no=%lx, msg_size=%hu, body_size=%u", ctrl_message.head.request_id,
                    ctrl_message.head.sequence_no, ctrl_message.head.message_size, ctrl_message.head.data_count);
 
-    std::vector<iovec> data_iov(iovcnt + 1);
-    data_iov[0].iov_base = reinterpret_cast<char *>(&ctrl_message);
-    data_iov[0].iov_len = URMA_INLINE_MESSAGE_CTRL_COST;
-    size_t data_idx = 1;
-    for (auto i = 0; i < iovcnt; i++) {
-        if (iov[i].iov_base == nullptr || iov[i].iov_len == 0) {
-            continue;
-        }
-        data_iov[data_idx].iov_base = reinterpret_cast<char *>(iov[i].iov_base);
-        data_iov[data_idx].iov_len = iov[i].iov_len;
-        data_idx++;
-    }
-    data_iov.resize(data_idx);
+    std::vector<iovec> data_iov;
+    data_iov.reserve(static_cast<size_t>(iovcnt) + 1U);
+    struct iovec ctrl_iov;
+    ctrl_iov.iov_base = reinterpret_cast<char *>(&ctrl_message);
+    ctrl_iov.iov_len = URMA_INLINE_MESSAGE_CTRL_COST;
+    data_iov.push_back(ctrl_iov);
+    MakeIovRange(iov, iovcnt, 0, payload_len, data_iov);
 
     SgeContext ctx;
     SetupSgeContext(urma_sock, buf_offset, real_size, ctx);
@@ -251,7 +309,8 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
         return -1;
     }
 
-    return static_cast<ssize_t>(total);
+    /* POSIX: report the payload bytes committed, not the padded block. */
+    return static_cast<ssize_t>(payload_len);
 }
 
 void UrmaTxOps::ClearWritableIfBlocked(const SocketPtr &sock) noexcept
@@ -266,7 +325,6 @@ void UrmaTxOps::ClearWritableIfBlocked(const SocketPtr &sock) noexcept
         (void)urma_sock->NotifyWritable();
     }
 }
-
 
 void UrmaTxOps::BuildBlockRefs(const struct iovec *iov, int iovcnt, std::vector<BlockRef> &block_refs) noexcept
 {

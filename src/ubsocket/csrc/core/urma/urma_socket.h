@@ -299,6 +299,7 @@ private:
     friend class UrmaConnectorOps;
     friend class UrmaTxOps;
     friend class UrmaRxOps;
+    friend class BlockingWaiter;    /* shared blocking readv/writev wait bookkeeping (BLOCKING_FLAG_*) */
     friend class QueueRxDispatcher; /* drains deferred events: re-reads seq from recv_buf */
 };
 using UrmaSocketPtr = Ref<UrmaSocket>;

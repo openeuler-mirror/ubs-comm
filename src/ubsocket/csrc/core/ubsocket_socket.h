@@ -178,7 +178,12 @@ ALWAYS_INLINE int SocketBase::Connect(SocketPtr &sock, const struct sockaddr *ad
 
 ALWAYS_INLINE ssize_t SocketBase::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
-    return tx_.WriteV(sock, iov, iovcnt);
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        UBS_VLOG_TRACE("socket(%d) state raw established, run libc writev.", sock->Fd());
+        return LibcApi::writev(sock->Fd(), iov, iovcnt);
+    }
+
+    return tx_.WriteV(sock, iov, iovcnt, UBS_IO_FLAG_USE_BRPC_BLOCK);
 }
 
 ALWAYS_INLINE ssize_t SocketBase::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)

@@ -78,9 +78,10 @@ typedef struct {
 #define UBS_PROTOCOL_UB_RC_RTP 1 << 2L
 
 /**
- * @brief readv/writev flag define
+ * @brief readv/writev/send/recv internal io flag define
  */
-#define UBS_IO_FLAG_USE_BRPC_BLOCK      (1U << 0) ///< using brpc BlockIO
+#define UBS_IO_FLAG_USE_BRPC_BLOCK (1U << 0) ///< using brpc BlockIO
+#define UBS_IO_FLAG_DONT_WAIT (1U << 1)      ///< same word as UBS_IO_FLAG_USE_BRPC_BLOCK, so MSG_* can't be reused
 
 typedef struct {
     uint32_t allowed_protocol;             /* allowed underlay protocol */

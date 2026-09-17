@@ -22,6 +22,7 @@
 #include <cstring>
 #include <mockcpp/mockcpp.hpp>
 #include <thread>
+#include <vector>
 
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_lock.h"
@@ -105,6 +106,45 @@ static uintptr_t MockMiniBlockHead(uintptr_t addr)
 static urma_target_seg_t *MockGetLocalTargetSeg(uintptr_t)
 {
     return &g_local_tseg;
+}
+
+/* Records the head.data_count of every posted control message. Atomics keep it race-free: the
+ * blocking short-write case drives the sender from a worker thread while the test thread polls. */
+static std::atomic<uint32_t> g_postedCount{0};
+static std::atomic<uint32_t> g_postedDataCount0{0};
+static std::atomic<uint32_t> g_postedDataCount1{0};
+
+static urma_status_t MockPostSendWrRecordPosts(urma_jetty_t *, urma_jfs_wr_t *wr, urma_jfs_wr_t **)
+{
+    if (wr != nullptr && wr->rw.src.sge != nullptr) {
+        const auto *ctrl = reinterpret_cast<const UrmaCtrlMessage *>(wr->rw.src.sge[0].addr);
+        const uint32_t idx = g_postedCount.fetch_add(1U, std::memory_order_acq_rel);
+        if (idx == 0U) {
+            g_postedDataCount0.store(ctrl->head.data_count, std::memory_order_release);
+        } else if (idx == 1U) {
+            g_postedDataCount1.store(ctrl->head.data_count, std::memory_order_release);
+        }
+    }
+    return URMA_SUCCESS;
+}
+
+/* deterministic payload pattern: byte i = (i * 31 + seed) & 0xFF */
+static void FillTestPayload(std::vector<char> &buf, unsigned seed)
+{
+    for (size_t i = 0; i < buf.size(); ++i) {
+        buf[i] = static_cast<char>((i * 31U + seed) & 0xFFU);
+    }
+}
+
+/* Leave exactly `available` bytes free in the send area: the pre-allocation is intentionally never
+ * released, so the allocator can only satisfy what fits in the remaining room. */
+static bool LeaveSendBufAvailable(const UrmaSocketPtr &urmaSock, uint64_t available)
+{
+    uint64_t preOffset = 0;
+    if (!urmaSock->send_buf_->Allocate(SEND_BUF_SIZE - available, preOffset)) {
+        return false;
+    }
+    return urmaSock->send_buf_->Available() == available;
 }
 } // namespace
 
@@ -474,6 +514,159 @@ TEST_F(UrmaTxOpsTest, WriteV_InlineAllocFail_ReturnsEagain)
     EXPECT_EQ(EAGAIN, errno);
 }
 
+TEST_F(UrmaTxOpsTest, WriteV_Inline_BlockTooSmall_SendsPayloadPrefix)
+{
+    UrmaTxOps tx(TEST_FD);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    ASSERT_TRUE(LeaveSendBufAvailable(urma_sock, 1088UL)); /* 1088 - 48 = 1040 payload bytes fit */
+
+    std::vector<char> data(1522);
+    FillTestPayload(data, 7);
+    struct iovec iov;
+    iov.iov_base = data.data();
+    iov.iov_len = data.size();
+
+    /* TEST_FD is mocked as non-blocking, so the caller gets the short write back */
+    const auto ret = tx.WriteV(sock, &iov, 1, 0);
+
+    EXPECT_EQ(static_cast<ssize_t>(1040), ret);
+    EXPECT_EQ(0UL, urma_sock->send_buf_->Available());
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf + (SEND_BUF_SIZE - 1088UL));
+    EXPECT_EQ(1040U, ctrl->head.data_count); /* the copied prefix, never the requested total */
+    EXPECT_EQ(1088U, ctrl->head.message_size);
+    EXPECT_EQ(0, memcmp(ctrl->small_io.data, data.data(), 1040U));
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_Inline_BlockTooSmall_MinBlockBoundary)
+{
+    UrmaTxOps tx(TEST_FD);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    ASSERT_TRUE(LeaveSendBufAvailable(urma_sock, 1024UL));
+
+    std::vector<char> data(2000);
+    FillTestPayload(data, 11);
+    struct iovec iov;
+    iov.iov_base = data.data();
+    iov.iov_len = data.size();
+
+    const auto ret = tx.WriteV(sock, &iov, 1, 0);
+
+    EXPECT_EQ(static_cast<ssize_t>(976), ret); /* 1024 - sizeof(UrmaMessageHead) */
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf + (SEND_BUF_SIZE - 1024UL));
+    EXPECT_EQ(976U, ctrl->head.data_count);
+    EXPECT_EQ(1024U, ctrl->head.message_size);
+    EXPECT_EQ(0, memcmp(ctrl->small_io.data, data.data(), 976U));
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_Inline_BlockEnough_SendsWholePayload)
+{
+    UrmaTxOps tx(TEST_FD);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    ASSERT_TRUE(LeaveSendBufAvailable(urma_sock, 2048UL));
+
+    std::vector<char> data(1522);
+    FillTestPayload(data, 3);
+    struct iovec iov;
+    iov.iov_base = data.data();
+    iov.iov_len = data.size();
+
+    const auto ret = tx.WriteV(sock, &iov, 1, 0);
+
+    EXPECT_EQ(static_cast<ssize_t>(1522), ret);
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf + (SEND_BUF_SIZE - 2048UL));
+    EXPECT_EQ(1522U, ctrl->head.data_count);
+    EXPECT_EQ(2048U, ctrl->head.message_size);
+    EXPECT_EQ(0, memcmp(ctrl->small_io.data, data.data(), data.size()));
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_Inline_BlockTooSmall_SplitsInsideSecondIov)
+{
+    UrmaTxOps tx(TEST_FD);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    ASSERT_TRUE(LeaveSendBufAvailable(urma_sock, 1088UL));
+
+    std::vector<char> first(1000);
+    std::vector<char> second(600);
+    FillTestPayload(first, 1);
+    FillTestPayload(second, 2);
+    struct iovec iov[2];
+    iov[0].iov_base = first.data();
+    iov[0].iov_len = first.size();
+    iov[1].iov_base = second.data();
+    iov[1].iov_len = second.size();
+
+    const auto ret = tx.WriteV(sock, iov, 2, 0);
+
+    EXPECT_EQ(static_cast<ssize_t>(1040), ret);
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf + (SEND_BUF_SIZE - 1088UL));
+    EXPECT_EQ(1040U, ctrl->head.data_count);
+    EXPECT_EQ(0, memcmp(ctrl->small_io.data, first.data(), first.size()));
+    EXPECT_EQ(0, memcmp(ctrl->small_io.data + first.size(), second.data(), 40U));
+}
+
+/* A blocking fd must not surface the short write: the remainder goes out once the send area is
+ * recycled, and the call returns only after the whole request is committed. */
+TEST_F(UrmaTxOpsTest, WriteV_Blocking_ShortWrite_ContinuesUntilWholePayloadSent)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    UrmaTxOps tx(fd_pair[0]);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    urma_sock->raw_socket_ = fd_pair[0]; /* real blocking fd for fcntl()/getsockopt() */
+
+    const uint64_t preSize = SEND_BUF_SIZE - 1088UL;
+    uint64_t preOffset = 0;
+    ASSERT_TRUE(urma_sock->send_buf_->Allocate(preSize, preOffset));
+
+    std::vector<char> data(1522);
+    FillTestPayload(data, 5);
+    struct iovec iov;
+    iov.iov_base = data.data();
+    iov.iov_len = data.size();
+
+    g_postedCount.store(0);
+    g_postedDataCount0.store(0);
+    g_postedDataCount1.store(0);
+    UrmaApi::urma_post_jetty_send_wr_ptr = MockPostSendWrRecordPosts;
+
+    ssize_t ret = 0;
+    std::atomic<bool> done{false};
+    std::thread worker([&]() {
+        ret = tx.WriteV(sock, &iov, 1, 0);
+        done.store(true, std::memory_order_release);
+    });
+
+    /* the first message carries the 1040 payload bytes the block can hold; the remaining 482 have
+     * to wait for the send area to be recycled (peer ACK equivalent) */
+    for (int i = 0; i < 500 && g_postedCount.load(std::memory_order_acquire) < 1U; i++) {
+        usleep(1000);
+    }
+    EXPECT_EQ(1U, g_postedCount.load(std::memory_order_acquire));
+    EXPECT_EQ(1040U, g_postedDataCount0.load(std::memory_order_acquire));
+    EXPECT_FALSE(done.load(std::memory_order_acquire));
+
+    urma_sock->send_buf_->Release(preOffset, preSize);
+    urma_sock->NotifyBlockingWritable(); /* ACK-equivalent wakeup */
+    worker.join();
+
+    EXPECT_TRUE(done.load(std::memory_order_acquire));
+    EXPECT_EQ(static_cast<ssize_t>(1522), ret); /* blocking fd: the whole request is committed */
+    EXPECT_EQ(2U, g_postedCount.load(std::memory_order_acquire));
+    EXPECT_EQ(482U, g_postedDataCount1.load(std::memory_order_acquire));
+
+    /* the second message carries exactly the remaining slice - no duplicated bytes */
+    auto *firstCtrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf + (SEND_BUF_SIZE - 1088UL));
+    auto *secondCtrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf);
+    EXPECT_EQ(0, memcmp(firstCtrl->small_io.data, data.data(), 1040U));
+    EXPECT_EQ(0, memcmp(secondCtrl->small_io.data, data.data() + 1040U, 482U));
+}
+
 TEST_F(UrmaTxOpsTest, WriteV_Blocking_WaitsForWritableThenSucceeds)
 {
     int fd_pair[2] = {-1, -1};
@@ -630,4 +823,33 @@ TEST_F(UrmaTxOpsTest, WriteV_Eagain_PostFail_ClearsReachEpollOut_AndRearms)
     EXPECT_EQ(EAGAIN, errno);
     /* post 失败但发送缓冲已回滚（仍可写）：复查后 EPOLLOUT 达位重灌，LT 持续上报 */
     EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLOUT);
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_DontWait_ReturnsEagainWithoutWaiting)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    UrmaTxOps tx(fd_pair[0]);
+    auto sock = MakeTestSocket();
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+    urma_sock->raw_socket_ = fd_pair[0]; /* real blocking fd: only the flag can skip the wait */
+
+    uint64_t pre_offset = 0;
+    urma_sock->send_buf_->Allocate(SEND_BUF_SIZE - 64UL, pre_offset); /* fill send buf -> EAGAIN */
+
+    char data[] = "dontwait writev";
+    struct iovec iov;
+    iov.iov_base = data;
+    iov.iov_len = sizeof(data);
+
+    errno = 0;
+    ssize_t ret = tx.WriteV(sock, &iov, 1, UBS_IO_FLAG_USE_BRPC_BLOCK | UBS_IO_FLAG_DONT_WAIT);
+
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(EAGAIN, errno);
+    EXPECT_EQ(0U, urma_sock->block_waiters_.load());
+
+    ASSERT_EQ(0, ::close(fd_pair[0]));
+    ASSERT_EQ(0, ::close(fd_pair[1]));
 }
