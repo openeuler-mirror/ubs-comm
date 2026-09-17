@@ -137,58 +137,57 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
         return -1;
     }
 
-    bool registered = false;
-    auto unregister_waiter = MakeScopeExit([&registered, urma_sock]() {
-        if (registered) {
-            urma_sock->UnregisterBlockingWaiter();
-        }
-    });
+    if (UNLIKELY(iov == nullptr || iovcnt <= 0)) {
+        errno = EINVAL;
+        UBS_VLOG_TRACE("readv fd=%d invalid args iov=%p iovcnt=%d, return EINVAL", sock->Fd(), iov, iovcnt);
+        return -1;
+    }
 
-    bool has_deadline = false;
-    struct timespec deadline = {0, 0};
+    /* A non-blocking fd (or MSG_DONTWAIT) reports EAGAIN to the caller instead of waiting for data,
+     * so the blocking loop below only runs for a blocking fd without MSG_DONTWAIT. */
+    const bool shortReadAllowed = (flags & UBS_IO_FLAG_DONT_WAIT) != 0 || !SocketConnHelper::IsBlocking(fd_);
+
+    BlockingWaiter waiter(urma_sock, UrmaSocket::BLOCKING_FLAG_READABLE, SO_RCVTIMEO);
+
     for (;;) {
         if (UNLIKELY(urma_sock->State() == SOCK_STAT_CLOSE)) {
             errno = EBADF;
             return -1;
         }
 
-        ssize_t ret = ReadVOnce(sock, iov, iovcnt, flags);
-        if (ret >= 0 || errno != EAGAIN) {
+        const ssize_t ret = ReadVOnce(sock, iov, iovcnt, flags);
+        if (shortReadAllowed) {
+            return ret; /* POSIX: hand the partial count, EOF or EAGAIN straight back to the caller */
+        }
+        if (ret >= 0) {
+            return ret; /* data consumed, or 0 for EOF */
+        }
+        if (errno != EAGAIN) {
             return ret;
-        }
-        if (!SocketConnHelper::IsBlocking(fd_)) {
-            return ret;
-        }
-        if (!has_deadline) {
-            has_deadline = urma_sock->GetBlockTimeoutDeadline(SO_RCVTIMEO, deadline);
-        }
-        if (!registered) {
-            urma_sock->RegisterBlockingWaiter();
-            registered = true;
-            continue; // retry once after registering to eat state changes that raced registration
         }
 
-        const uint32_t signalledFlags =
-            urma_sock->WaitBlockingSignal(UrmaSocket::BLOCKING_FLAG_READABLE, has_deadline ? &deadline : nullptr);
-        if ((signalledFlags & UrmaSocket::BLOCKING_FLAG_CLOSED) != 0) {
-            errno = EBADF;
-            return -1;
+        switch (waiter.Wait()) {
+            case WaitOutcome::RETRY:
+                continue;
+            case WaitOutcome::LOCAL_CLOSED:
+                errno = EBADF;
+                return -1;
+            case WaitOutcome::PEER_CLOSED:
+                /* TODO: EOF(返回0) 与异常(透传 errno) 的区分依赖接入事件携带的语义 */
+                errno = ECONNRESET;
+                return -1;
+            case WaitOutcome::TIMEOUT:
+                break;
         }
-        if ((signalledFlags & UrmaSocket::BLOCKING_FLAG_PEER_CLOSED) != 0) {
-            /* TODO: EOF(返回0) 与异常(透传 errno) 的区分依赖接入事件携带的语义 */
-            errno = ECONNRESET;
-            return -1;
+
+        /* explicit SO_RCVTIMEO expiry: retry once to close the race, then report EAGAIN */
+        const ssize_t last = ReadVOnce(sock, iov, iovcnt, flags);
+        if (last >= 0 || errno != EAGAIN) {
+            return last;
         }
-        if (signalledFlags == 0) {
-            /* explicit SO_RCVTIMEO expiry: retry once to close the race, then report EAGAIN */
-            ssize_t last = ReadVOnce(sock, iov, iovcnt, flags);
-            if (last >= 0 || errno != EAGAIN) {
-                return last;
-            }
-            errno = EAGAIN;
-            return -1;
-        }
-        // readable or spurious wakeup: loop and let the real read decide
+        UBS_VLOG_INFO("UrmaRxOps::ReadV fd=%d: SO_RCVTIMEO expired, final retry still EAGAIN", sock->Fd());
+        errno = EAGAIN;
+        return -1;
     }
 }
 

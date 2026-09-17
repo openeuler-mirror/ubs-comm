@@ -201,7 +201,17 @@ UBS_API ssize_t UB_API_WRAP(send)(int fd, const void *buf, size_t len, int flags
         return LibcApi::send(fd, buf, len, flags);
     }
 
-    return 0;
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    if (sock == nullptr) {
+        UBS_VLOG_TRACE("send on fd(%d) not ubsocket, use libc send.", fd);
+        return LibcApi::send(fd, buf, len, flags);
+    }
+    if (len == 0) {
+        return 0;
+    }
+
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
+    return sockBase->Send(sock, buf, len, flags);
 }
 
 UBS_API ssize_t UB_API_WRAP(recv)(int fd, void *buf, size_t len, int flags)
@@ -210,7 +220,17 @@ UBS_API ssize_t UB_API_WRAP(recv)(int fd, void *buf, size_t len, int flags)
         return LibcApi::recv(fd, buf, len, flags);
     }
 
-    return 0;
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    if (sock == nullptr) {
+        UBS_VLOG_TRACE("recv on fd(%d) not ubsocket, use libc recv.", fd);
+        return LibcApi::recv(fd, buf, len, flags);
+    }
+    if (len == 0) {
+        return 0;
+    }
+
+    auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
+    return sockBase->Recv(sock, buf, len, flags);
 }
 
 UBS_API ssize_t UB_API_WRAP(read)(int fd, void *buf, size_t nbyte)

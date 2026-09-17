@@ -26,6 +26,78 @@
 
 namespace ock {
 namespace ubs {
+namespace {
+/*
+ * POSIX flags parsed by the UB managed data path. Any other bit - supported by send/recv but not
+ * implemented here, or undefined - is rejected with -1/EINVAL instead of being silently ignored.
+ */
+constexpr int MANAGED_SEND_FLAG_MASK = MSG_DONTWAIT | MSG_NOSIGNAL;
+constexpr int MANAGED_RECV_FLAG_MASK = MSG_DONTWAIT | MSG_WAITALL | MSG_NOSIGNAL;
+
+} // namespace
+
+ssize_t SocketBase::Send(const SocketPtr &sock, const void *buf, size_t len, int flags)
+{
+    if (UNLIKELY(sock->State() == SOCK_STAT_RAW_ESTABLISHED)) {
+        return LibcApi::send(sock->Fd(), buf, len, flags);
+    }
+
+    if (UNLIKELY((flags & ~MANAGED_SEND_FLAG_MASK) != 0)) {
+        errno = EINVAL;
+        UBS_VLOG_WARN("send unsupported flags, fd: %d, flags: %#x, supported: %#x\n", sock->Fd(), flags,
+                      MANAGED_SEND_FLAG_MASK);
+        return -1;
+    }
+
+    uint32_t ioFlags = UBS_IO_FLAG_USE_BRPC_BLOCK;
+    if ((flags & MSG_DONTWAIT) != 0) {
+        ioFlags |= UBS_IO_FLAG_DONT_WAIT;
+    }
+
+    struct iovec iov = {const_cast<void *>(buf), len};
+    return tx_.WriteV(sock, &iov, 1, ioFlags);
+}
+
+ssize_t SocketBase::Recv(const SocketPtr &sock, void *buf, size_t len, int flags)
+{
+    if (UNLIKELY(sock->State() == SOCK_STAT_RAW_ESTABLISHED)) {
+        return LibcApi::recv(sock->Fd(), buf, len, flags);
+    }
+
+    if (UNLIKELY((flags & ~MANAGED_RECV_FLAG_MASK) != 0)) {
+        errno = EINVAL;
+        UBS_VLOG_WARN("recv unsupported flags, fd: %d, flags: %#x, supported: %#x\n", sock->Fd(), flags,
+                      MANAGED_RECV_FLAG_MASK);
+        return -1;
+    }
+
+    const bool dontWait = (flags & MSG_DONTWAIT) != 0;
+    const bool waitAll = (flags & MSG_WAITALL) != 0;
+    uint32_t ioFlags = UBS_IO_FLAG_USE_BRPC_BLOCK;
+    if (dontWait) {
+        ioFlags |= UBS_IO_FLAG_DONT_WAIT;
+    }
+
+    size_t total = 0;
+    while (total < len) {
+        struct iovec iov = {static_cast<char *>(buf) + total, len - total};
+        ssize_t ret = rx_.ReadV(sock, &iov, 1, ioFlags);
+        if (ret > 0) {
+            total += static_cast<size_t>(ret);
+            if (!waitAll || dontWait) {
+                return static_cast<ssize_t>(total);
+            }
+            continue; /* MSG_WAITALL on a blocking fd: keep reading until len is filled */
+        }
+        if (ret == 0) { /* EOF */
+            return total > 0 ? static_cast<ssize_t>(total) : 0;
+        }
+        /* error/EAGAIN: bytes already read are returned, otherwise the error is passed through */
+        return total > 0 ? static_cast<ssize_t>(total) : -1;
+    }
+    return static_cast<ssize_t>(total);
+}
+
 Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
 {
     if (t == SocketType::SOCK_TYPE_TCP) {

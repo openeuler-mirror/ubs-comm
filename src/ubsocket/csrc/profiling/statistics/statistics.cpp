@@ -55,6 +55,10 @@ bool TryGetRetryCount(const char *perfBuf, size_t bufLen, uint64_t &retryCount)
 
 void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode)
 {
+    if (!UmqApi::IsLoaded()) {
+        return;
+    }
+
     std::lock_guard<std::mutex> lock(gTpPerfSeqMutex);
 
     int ret = 0;

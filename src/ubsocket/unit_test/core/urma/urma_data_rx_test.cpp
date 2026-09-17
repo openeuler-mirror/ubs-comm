@@ -852,3 +852,28 @@ TEST_F(UrmaDataRxTest, ReadV_PartialRead_KeepsReachEpollIn)
     /* 剩余数据未读完：EPOLLIN 达位经复查补灌保留（LT 持续上报直至读完） */
     EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLIN);
 }
+
+TEST_F(UrmaDataRxTest, ReadV_DontWait_ReturnsEagainWithoutWaiting)
+{
+    int fd_pair[2] = {-1, -1};
+    ASSERT_EQ(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd_pair));
+
+    UrmaRxOps rx(fd_pair[0]);
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    urma_sock->raw_socket_ = fd_pair[0]; /* real blocking fd: only the flag can skip the wait */
+
+    uint8_t buf[64] = {};
+    struct iovec iov;
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+
+    errno = 0;
+    ssize_t ret = rx.ReadV(sock_, &iov, 1, UBS_IO_FLAG_USE_BRPC_BLOCK | UBS_IO_FLAG_DONT_WAIT);
+
+    EXPECT_EQ(-1, ret);
+    EXPECT_EQ(EAGAIN, errno);
+    EXPECT_EQ(0U, urma_sock->block_waiters_.load());
+
+    ASSERT_EQ(0, ::close(fd_pair[0]));
+    ASSERT_EQ(0, ::close(fd_pair[1]));
+}

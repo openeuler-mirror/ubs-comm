@@ -53,6 +53,16 @@ public:
         return LibcApi::readv(sock->Fd(), iov, iovcnt);
     }
 
+    ALWAYS_INLINE ssize_t Send(const SocketPtr &sock, const void *buf, size_t len, int flags) override
+    {
+        return LibcApi::send(sock->Fd(), buf, len, flags);
+    }
+
+    ALWAYS_INLINE ssize_t Recv(const SocketPtr &sock, void *buf, size_t len, int flags) override
+    {
+        return LibcApi::recv(sock->Fd(), buf, len, flags);
+    }
+
     ALWAYS_INLINE int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen) override
     {
         return LibcApi::getsockopt(fd, level, optname, optval, optlen);
