@@ -17,6 +17,7 @@
 #include "core/ubsocket_data_tx.h"
 #include "iobuf/allocator/ubsocket_alloc_fixed_size.h"
 #include "iobuf/ubsocket_iobuf.h"
+#include "urma_blocking_waiter.h"
 #include "urma_socket.h"
 
 namespace ock {
@@ -38,7 +39,9 @@ public:
      *   UBS_IO_FLAG_USE_BRPC_BLOCK flag set    → WriteZeroCopy (large IO with BlockRef descriptors)
      *   otherwise                              → WriteLargeIO
      *
-     * Returns: bytes sent, or -1 with errno set.
+     * Large IO paths are all-or-nothing; the inline path may report a short write, which a blocking
+     * fd finishes here and a non-blocking fd (or MSG_DONTWAIT) hands back to the caller.
+     * Returns: bytes sent (may be less than the requested total), or -1 with errno set.
      */
     ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept override;
 
@@ -56,10 +59,39 @@ public:
 
 private:
     /*
-     * Single non-blocking send attempt. EAGAIN means zero bytes were sent,
-     * which lets the blocking loop safely retry the whole batch after a wakeup.
+     * One WriteV() request and its progress. `iov` stays intact so every attempt can re-derive the
+     * remainder from `done`, and `remainder` is reused instead of reallocated.
      */
+    struct WriteRequest {
+        WriteRequest(const struct iovec *list, int cnt, size_t len, uint32_t f) noexcept
+            : iov(list),
+              iovcnt(cnt),
+              total(len),
+              flags(f)
+        {
+        }
+
+        const struct iovec *iov;
+        int iovcnt;
+        size_t total; /* valid bytes of the caller's list */
+        uint32_t flags;
+        size_t done = 0; /* bytes already committed */
+        std::vector<struct iovec> remainder;
+    };
+
+    /* Submit attempt over [req.done, req.total): the caller's list on the first attempt, the
+     * narrowed remainder afterwards. Returns bytes committed (> 0) or -1 with errno set. */
+    ssize_t SubmitOnce(const SocketPtr &sock, WriteRequest &req) noexcept;
+
+    /* One send attempt: may commit only part of the payload; EAGAIN means nothing was committed. */
     ssize_t WriteVOnce(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept;
+
+    /* Shared accounting for WriteV()/WriteVOnce(): null and zero-length iovecs contribute nothing. */
+    static size_t SumValidIov(const struct iovec *iov, int iovcnt) noexcept;
+
+    /* Collect the segments of the valid iovec sequence covering [skip, skip + len) into `out`. */
+    static void MakeIovRange(const struct iovec *iov, int iovcnt, size_t skip, size_t len,
+                             std::vector<struct iovec> &out) noexcept;
 
     /*
      * Holds the source/destination SGE arrays for a single RDMA write operation.

@@ -18,6 +18,7 @@
 
 #include "core/ubsocket_data_rx.h"
 #include "iobuf/ubsocket_iobuf.h"
+#include "urma_blocking_waiter.h"
 #include "urma_event_dispatch.h"
 #include "urma_socket.h"
 #include "urma_socket_types.h"

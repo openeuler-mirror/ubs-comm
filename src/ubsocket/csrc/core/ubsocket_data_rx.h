@@ -63,7 +63,7 @@ public:
     DataRx(const DataRx &) = delete;
     DataRx &operator=(const DataRx &) = delete;
 
-    ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags);
 
     DataRxOps *GetRxOps() const noexcept;
 

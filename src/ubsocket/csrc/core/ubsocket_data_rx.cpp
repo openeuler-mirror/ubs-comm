@@ -44,13 +44,9 @@ DataRx &DataRx::operator=(DataRx &&other) noexcept
     return *this;
 }
 
-ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
+ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags)
 {
     UBS_VLOG_TRACE("enter DataRx::ReadV fd=%d, iovcnt=%d, iov[0].buf=%p", sock->Fd(), iovcnt, iov[0].iov_base);
-    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
-        UBS_VLOG_TRACE("socket(%d) state raw established, run libc readv.", sock->Fd());
-        return LibcApi::readv(fd_, iov, iovcnt);
-    }
 
     if (UNLIKELY(iov == nullptr || iovcnt == 0)) {
         errno = EINVAL;
@@ -74,7 +70,7 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
         return -1;
     }
 
-    return rx_ops_->ReadV(sock, iov, iovcnt, UBS_IO_FLAG_USE_BRPC_BLOCK);
+    return rx_ops_->ReadV(sock, iov, iovcnt, flags);
 }
 
 ssize_t DataRx::OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec *iov, int iovcnt)

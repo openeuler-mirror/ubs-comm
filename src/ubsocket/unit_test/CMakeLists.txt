@@ -1,4 +1,5 @@
 add_subdirectory(common)
+add_subdirectory(core/socket)
 add_subdirectory(core/umq)
 add_subdirectory(core/urma)
 add_subdirectory(iobuf/allocator)

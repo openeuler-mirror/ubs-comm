@@ -74,6 +74,8 @@ public:
     virtual int Connect(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     virtual ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     virtual ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
+    virtual ssize_t Send(const SocketPtr &sock, const void *buf, size_t len, int flags);
+    virtual ssize_t Recv(const SocketPtr &sock, void *buf, size_t len, int flags);
     virtual int GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen);
 
     EventPoll *GetAddedEpollFd(epoll_data_t &data) const;
@@ -178,12 +180,22 @@ ALWAYS_INLINE int SocketBase::Connect(SocketPtr &sock, const struct sockaddr *ad
 
 ALWAYS_INLINE ssize_t SocketBase::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
-    return tx_.WriteV(sock, iov, iovcnt);
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        UBS_VLOG_TRACE("socket(%d) state raw established, run libc writev.", sock->Fd());
+        return LibcApi::writev(sock->Fd(), iov, iovcnt);
+    }
+
+    return tx_.WriteV(sock, iov, iovcnt, UBS_IO_FLAG_USE_BRPC_BLOCK);
 }
 
 ALWAYS_INLINE ssize_t SocketBase::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
-    auto ret = rx_.ReadV(sock, iov, iovcnt);
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        UBS_VLOG_TRACE("socket(%d) state raw established, run libc readv.", sock->Fd());
+        return LibcApi::readv(sock->Fd(), iov, iovcnt);
+    }
+
+    auto ret = rx_.ReadV(sock, iov, iovcnt, UBS_IO_FLAG_USE_BRPC_BLOCK);
     UBS_VLOG_TRACE("enter SocketBase::ReadV fd=%d, iovcnt=%d, iov[0]=(buf=%p, size=%zu) return %zd", sock->Fd(), iovcnt,
                    iov[0].iov_base, iov[0].iov_len, ret);
     return ret;

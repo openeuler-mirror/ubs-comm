@@ -45,17 +45,11 @@ DataTx &DataTx::operator=(DataTx &&other) noexcept
     return *this;
 }
 
-ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt) noexcept
+ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept
 {
     auto *trace = sock->split_trace_;
     TRACE_ADD_WRITE_SIMPLE(trace, CORE_WRITE, fd_);
     PROF_START(CORE_WRITE);
-    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
-        ssize_t size = LibcApi::writev(fd_, iov, iovcnt);
-        PROF_END(CORE_WRITE, size >= 0);
-        TRACE_TRY_SWAP(trace);
-        return size;
-    }
 
     if (UNLIKELY(iov == nullptr || iovcnt == 0)) {
         errno = EINVAL;
@@ -79,7 +73,7 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         UBS_VLOG_ERR("data tx for socket(%d) not set tx_ops", fd_);
         result = -1;
     } else {
-        result = tx_ops_->WriteV(sock, iov, iovcnt, UBS_IO_FLAG_USE_BRPC_BLOCK);
+        result = tx_ops_->WriteV(sock, iov, iovcnt, flags);
     }
     PROF_END(CORE_WRITE, result >= 0);
     TRACE_TRY_SWAP(trace);

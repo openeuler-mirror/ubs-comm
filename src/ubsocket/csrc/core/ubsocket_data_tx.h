@@ -71,7 +71,7 @@ public:
     DataTx(const DataTx &) = delete;
     DataTx &operator=(const DataTx &) = delete;
 
-    ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt) noexcept;
+    ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags) noexcept;
 
     DataTxOps *GetTxOps() const noexcept;
 

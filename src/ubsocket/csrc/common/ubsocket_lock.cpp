@@ -215,6 +215,9 @@ Result LockRegistry::RegisterLockOps(u_external_lock_ops_t *ops)
     }
 
     LOCK_OPS = *ops;
+    if (!UmqApi::IsLoaded()) {
+        return UBS_OK;
+    }
 
     umq_external_mutex_lock_ops_t umq_mutex_ops = {
         .create = (umq_external_mutex_t * (*)(umq_external_mutex_attr_t)) ops->create,
