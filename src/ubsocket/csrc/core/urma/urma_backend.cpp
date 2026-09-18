@@ -63,20 +63,27 @@ Result UrmaBackend::Init(bool initUrmaOnly) noexcept
     /* step0: init setting */
     UrmaSetting::Init();
 
-    /* step1: init context pool */
-    auto result = LoadUrmaApi();
-    if (UNLIKELY(result != UBS_OK)) {
-        UnInitInner();
-        UBS_VLOG_ERR("Failed to initialize backend as load urma api failed");
-        return UBS_ERROR;
-    }
+    Result result = UBS_OK;
+    /*
+     * Urma core may already be up when Init(true) ran first; skip the load/init steps so a
+     * following full Init() only builds the upper layers instead of re-initializing urma.
+     */
+    if (!urma_inited_) {
+        /* step1: load urma api */
+        result = LoadUrmaApi();
+        if (UNLIKELY(result != UBS_OK)) {
+            UnInitInner();
+            UBS_VLOG_ERR("Failed to initialize backend as load urma api failed");
+            return UBS_ERROR;
+        }
 
-    /* step2: init context pool */
-    result = InitUrma();
-    if (UNLIKELY(result != UBS_OK)) {
-        UnInitInner();
-        UBS_VLOG_ERR("Failed to initialize backend as init urma failed");
-        return UBS_ERROR;
+        /* step2: init urma core */
+        result = InitUrma();
+        if (UNLIKELY(result != UBS_OK)) {
+            UnInitInner();
+            UBS_VLOG_ERR("Failed to initialize backend as init urma failed");
+            return UBS_ERROR;
+        }
     }
 
     if (!initUrmaOnly) {
@@ -127,6 +134,9 @@ Result UrmaBackend::Init(bool initUrmaOnly) noexcept
             UBS_VLOG_ERR("Failed to initialize backend as init object pool failed");
             return UBS_ERROR;
         }
+
+        /* only a full init (context/poller/jetty/object pools) marks the backend usable */
+        inited_ = true;
     }
 
     return UBS_OK;
@@ -148,16 +158,20 @@ void UrmaBackend::UnInit() noexcept
 
 void UrmaBackend::UnInitInner() noexcept
 {
-    /* do reverse step with init */
-    if (init_urma_only_) {
+    /* do reverse step with init; upper layers exist only after a full (non urma-only) init */
+    if (!init_urma_only_) {
+        /*
+         * Stop the CQE pollers first: while they run they may still AcquireSlot/Free from the
+         * object pools below, so the pools must not be torn down under a live poller thread.
+         */
+        UnInitPollerSet();
+
         UnInitObjectPool();
 
         UnInitIoBufPool();
         g_zcopy_allocator = nullptr;
 
         UnInitJettyPool();
-
-        UnInitPollerSet();
 
         UnInitContextPool();
         best_context_ = nullptr;
@@ -544,11 +558,16 @@ Result UrmaBackend::InitLocalIdentifyNodeInfo() noexcept
 
 Result UrmaBackend::InitObjectPool() noexcept
 {
-    return UrmaDataMetaPool::Instance().Init();
+    auto result = UrmaDataMetaPool::Instance().Init();
+    if (UNLIKELY(result != UBS_OK)) {
+        return result;
+    }
+    return UrmaDataSlotPool::Instance().Init();
 }
 
 void UrmaBackend::UnInitObjectPool() noexcept
 {
+    UrmaDataSlotPool::Instance().UnInit();
     UrmaDataMetaPool::Instance().UnInit();
 }
 } // namespace urma

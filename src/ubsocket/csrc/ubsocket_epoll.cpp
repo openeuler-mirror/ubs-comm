@@ -8,8 +8,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "common/ubsocket_common_includes.h"
 #include <signal.h>
+#include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_event_epoll.h"
 #include "core/urma/urma_event_epoll.h"
 #include "include/ubsocket.h"
@@ -37,6 +37,8 @@ UBS_API int UB_API_WRAP(epoll_create)(int size)
     }
     EventPoll *eventPoll = urma_poll;
 
+    /* Ensure the registry exists even if the caller creates an epoll before ubsocket_init(). */
+    (void)ArraySet<EventPoll>::GetInstance().Init();
     ArraySet<EventPoll>::GetInstance().OverrideItem(epollFd, eventPoll);
     return epollFd;
 }
@@ -110,6 +112,8 @@ UBS_API int UB_API_WRAP(epoll_create1)(int flags)
     }
 
     EventPoll *eventPoll = urma_poll;
+    /* Ensure the registry exists even if the caller creates an epoll before ubsocket_init(). */
+    (void)ArraySet<EventPoll>::GetInstance().Init();
     ArraySet<EventPoll>::GetInstance().OverrideItem(epollFd, eventPoll);
     return epollFd;
 }

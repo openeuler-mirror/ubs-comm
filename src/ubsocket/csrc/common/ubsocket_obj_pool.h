@@ -84,6 +84,7 @@ public:
     ~ObjectGlobalCache()
     {
         UnInitialize();
+        (void)pthread_spin_destroy(&tc_alloc_lock_);
     }
 
     Result Initialize();
@@ -215,6 +216,7 @@ private:
  */
 class ObjectThreadCache {
 public:
+    ObjectThreadCache() = default;
     explicit ObjectThreadCache(ObjectGlobalCache *sharePool);
     ~ObjectThreadCache()
     {
@@ -223,6 +225,38 @@ public:
         if (global_cache_ != nullptr) {
             global_cache_->DecreaseRef();
             global_cache_ = nullptr;
+        }
+    }
+
+    /*
+     * @brief Rebind this thread cache to the given shared pool.
+     *
+     * GetTc() caches one ObjectThreadCache per thread, but the owning pool can be
+     * UnInitialize()d and re-Initialize()d to a brand new ObjectGlobalCache. In that case the
+     * thread-local still points at the old (already uninitialized) cache. Rebind drops the
+     * stale binding/link list and attaches to the current one, so a later Free() can never
+     * write into memory that the old cache already released.
+     */
+    void Rebind(ObjectGlobalCache *sharePool)
+    {
+        if (global_cache_ == sharePool) {
+            return;
+        }
+
+        /* return cached mini blocks to the previous cache only if it is still usable */
+        FreeAllToGlobalCache();
+        if (global_cache_ != nullptr) {
+            global_cache_->DecreaseRef();
+        }
+
+        global_cache_ = sharePool;
+        head_.next = nullptr;
+        free_mini_blocks_count_ = 0;
+        batch_free_count_ = 0;
+
+        if (global_cache_ != nullptr) {
+            global_cache_->IncreaseRef();
+            batch_free_count_ = global_cache_->options_.tc_batch_alloc_count;
         }
     }
 
@@ -241,7 +275,7 @@ public:
         }
 
         /* allocate from shared pool */
-        UBS_ASSERT_RETURN(global_cache_ != nullptr, nullptr);
+        UBS_ASSERT_RETURN(global_cache_ != nullptr && global_cache_->inited_, nullptr);
 
         if (global_cache_->BatchAlloc(head_) != UBS_OK) {
             return nullptr;
@@ -262,6 +296,11 @@ public:
     void Free(void *value)
     {
         if (LIKELY(value == nullptr)) {
+            return;
+        }
+
+        /* the shared pool is gone (uninitialized/destroyed): its blocks were already reclaimed */
+        if (UNLIKELY(global_cache_ == nullptr || !global_cache_->inited_)) {
             return;
         }
 
@@ -319,6 +358,13 @@ private:
             return;
         }
 
+        /* the shared pool was uninitialized: its super blocks are already freed, drop ours */
+        if (UNLIKELY(!global_cache_->inited_)) {
+            head_.next = nullptr;
+            free_mini_blocks_count_ = 0;
+            return;
+        }
+
         /* step 1: get first */
         auto head = head_.next;
 
@@ -353,6 +399,7 @@ ALWAYS_INLINE ObjectGlobalCache::ObjectGlobalCache(const std::string &name, cons
     : options_(options),
       name_(name)
 {
+    (void)pthread_spin_init(&tc_alloc_lock_, PTHREAD_PROCESS_PRIVATE);
 }
 
 ALWAYS_INLINE Result ObjectGlobalCache::Initialize()

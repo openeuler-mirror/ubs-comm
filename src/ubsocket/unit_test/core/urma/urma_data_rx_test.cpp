@@ -396,14 +396,14 @@ TEST_F(UrmaDataRxTest, ZeroCopyRead_Success_LinksBlocksAndSendsPostWrite)
 
     UrmaRxOps rx(TEST_FD);
 
-    auto &slot = rx.data_slots_[0];
+    auto *slot = rx.InsertSlot(0);
+    ASSERT_NE(slot, nullptr);
     WriteImmData imm;
     imm.ubsocket.opcode = PRE_WRITE;
     imm.ubsocket.buffer_offset = 0;
-    slot.write_imm = imm.data;
-    slot.seq_no = 0;
-    slot.data_block = cache_block;
-    slot.rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
+    slot->write_imm = imm.data;
+    slot->data_block = cache_block;
+    slot->rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
     rx.consume_seq_no_.store(0, std::memory_order_relaxed);
 
     struct iovec zc_iov;
@@ -413,7 +413,8 @@ TEST_F(UrmaDataRxTest, ZeroCopyRead_Success_LinksBlocksAndSendsPostWrite)
     auto zc_ret = rx.ReadV(sock_, &zc_iov, 1, UBS_IO_FLAG_USE_BRPC_BLOCK);
     EXPECT_GT(zc_ret, 0);
     EXPECT_NE(iov_block->GetNext(), static_cast<void *>(nullptr));
-    EXPECT_EQ(slot.rx_state.load(), URMA_RX_STS_IDLE);
+    /* fully drained: the head slot is retired and the sequence advances */
+    EXPECT_EQ(rx.FindSlot(0), nullptr);
     EXPECT_EQ(rx.consume_seq_no_.load(), 1ULL);
     GlobalMockObject::verify();
 }
@@ -425,8 +426,10 @@ TEST_F(UrmaDataRxTest, ZeroCopyRead_NotDataReady_ReturnsEagain)
     UrmaRxOps rx(TEST_FD);
     WriteImmData imm;
     imm.ubsocket.opcode = PRE_WRITE;
-    rx.data_slots_[0].write_imm = imm.data;
-    rx.data_slots_[0].rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
+    auto *slot = rx.InsertSlot(0);
+    ASSERT_NE(slot, nullptr);
+    slot->write_imm = imm.data;
+    slot->rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
     rx.consume_seq_no_.store(0, std::memory_order_relaxed);
 
     struct iovec zc_iov;
@@ -443,7 +446,7 @@ TEST_F(UrmaDataRxTest, ZeroCopyRead_NotDataReady_ReturnsEagain)
 TEST_F(UrmaDataRxTest, DataReadFinished_WrongState_ReturnsError)
 {
     UrmaRxOps rx(TEST_FD);
-    rx.data_slots_[0].rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
+    ASSERT_NE(rx.InsertSlot(0), nullptr); /* defaults to IDLE */
 
     auto result = rx.DataReadFinished(sock_, 0);
     EXPECT_EQ(UBS_ERROR, result);
@@ -454,12 +457,13 @@ TEST_F(UrmaDataRxTest, DataReadFinished_SeqMatchesConsumed_ReturnsOk)
 {
     UrmaRxOps rx(TEST_FD);
     rx.consume_seq_no_.store(5, std::memory_order_relaxed);
-    auto &slot = rx.data_slots_[5 % 256];
-    slot.rx_state.store(URMA_RX_STS_READING, std::memory_order_release);
+    auto *slot = rx.InsertSlot(5);
+    ASSERT_NE(slot, nullptr);
+    slot->rx_state.store(URMA_RX_STS_READING, std::memory_order_release);
 
     auto result = rx.DataReadFinished(sock_, 5);
     EXPECT_EQ(UBS_OK, result);
-    EXPECT_EQ(URMA_RX_STS_DATA_READY, slot.rx_state.load());
+    EXPECT_EQ(URMA_RX_STS_DATA_READY, slot->rx_state.load());
     GlobalMockObject::verify();
 }
 
@@ -467,12 +471,13 @@ TEST_F(UrmaDataRxTest, DataReadFinished_SeqNotConsumed_ReturnsLaterSeq)
 {
     UrmaRxOps rx(TEST_FD);
     rx.consume_seq_no_.store(3, std::memory_order_relaxed);
-    auto &slot = rx.data_slots_[7 % 256];
-    slot.rx_state.store(URMA_RX_STS_READING, std::memory_order_release);
+    auto *slot = rx.InsertSlot(7);
+    ASSERT_NE(slot, nullptr);
+    slot->rx_state.store(URMA_RX_STS_READING, std::memory_order_release);
 
     auto result = rx.DataReadFinished(sock_, 7);
     EXPECT_EQ(UBS_LATER_SEQ, result);
-    EXPECT_EQ(URMA_RX_STS_DATA_READY, slot.rx_state.load());
+    EXPECT_EQ(URMA_RX_STS_DATA_READY, slot->rx_state.load());
     GlobalMockObject::verify();
 }
 
@@ -539,8 +544,8 @@ TEST_F(UrmaDataRxDispatcherTest, DataReached_DefersAndLeavesSlotIdle)
 
     auto result = rx.DataReached(sock_, 0, imm.data);
     EXPECT_EQ(UBS_DEFERRED, result);
-    /* poller side never touches the slot: state machine is advanced only by the ReadV drain */
-    EXPECT_EQ(URMA_RX_STS_IDLE, rx.data_slots_[0].rx_state.load(std::memory_order_acquire));
+    /* poller side never creates the slot: state machine is advanced only by the ReadV drain */
+    EXPECT_EQ(rx.FindSlot(0), nullptr);
 }
 
 TEST_F(UrmaDataRxDispatcherTest, DataReadFinished_DefersReturnsDeferred)
@@ -578,7 +583,7 @@ TEST_F(UrmaDataRxDispatcherTest, ReadV_DrainsDeferredInlineMessage_ReturnsData)
     imm.ubsocket.buffer_offset = buf_unit;
 
     ASSERT_EQ(UBS_DEFERRED, rx.DataReached(sock_, 0, imm.data));
-    ASSERT_EQ(URMA_RX_STS_IDLE, rx.data_slots_[0].rx_state.load(std::memory_order_acquire));
+    ASSERT_EQ(rx.FindSlot(0), nullptr);
 
     uint8_t buf[64] = {};
     struct iovec iov;
@@ -799,7 +804,9 @@ TEST_F(UrmaDataRxTest, ReadV_NoData_ClearsReachEpollIn)
     urma_sock->SetReachEpollEvents(EPOLLIN);
     UrmaRxOps rx(TEST_FD);
     uint8_t buf[128];
-    struct iovec iov { buf, sizeof(buf) };
+    struct iovec iov {
+        buf, sizeof(buf)
+    };
     errno = 0;
     EXPECT_EQ(-1, rx.ReadV(sock_, &iov, 1, 0));
     EXPECT_EQ(EAGAIN, errno);
@@ -824,7 +831,9 @@ TEST_F(UrmaDataRxTest, ReadV_ConsumeAll_ClearsReachEpollIn)
     urma_sock->SetReachEpollEvents(EPOLLIN);
 
     uint8_t buf[64] = {};
-    struct iovec iov { buf, sizeof(buf) };
+    struct iovec iov {
+        buf, sizeof(buf)
+    };
     EXPECT_EQ(static_cast<ssize_t>(body_size), rx.ReadV(sock_, &iov, 1, 0));
     /* 一次读完：EPOLLIN 达位被清 */
     EXPECT_EQ(0u, urma_sock->GetReachEpollEvents() & EPOLLIN);
@@ -847,7 +856,9 @@ TEST_F(UrmaDataRxTest, ReadV_PartialRead_KeepsReachEpollIn)
     urma_sock->SetReachEpollEvents(EPOLLIN);
 
     uint8_t buf[10] = {};
-    struct iovec iov { buf, sizeof(buf) };
+    struct iovec iov {
+        buf, sizeof(buf)
+    };
     EXPECT_EQ(10, rx.ReadV(sock_, &iov, 1, 0));
     /* 剩余数据未读完：EPOLLIN 达位经复查补灌保留（LT 持续上报直至读完） */
     EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLIN);
