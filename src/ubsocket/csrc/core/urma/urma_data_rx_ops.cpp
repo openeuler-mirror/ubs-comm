@@ -20,32 +20,251 @@ namespace ock {
 namespace ubs {
 namespace urma {
 
-Result UrmaRxOps::ProcessDataReached(const SocketPtr &sock, uint64_t seq_no, uint64_t write_imm) noexcept
-{
-    size_t idx = seq_no % RING_SIZE;
-    auto &slot = data_slots_[idx];
+namespace {
+/* RAII guard for the per-connection slot-list spinlock. */
+class SpinGuard {
+public:
+    explicit SpinGuard(pthread_spinlock_t *lock) : lock_(lock)
+    {
+        (void)pthread_spin_lock(lock_);
+    }
+    ~SpinGuard()
+    {
+        (void)pthread_spin_unlock(lock_);
+    }
+    SpinGuard(const SpinGuard &) = delete;
+    SpinGuard &operator=(const SpinGuard &) = delete;
 
-    uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
-    if (UNLIKELY(slot.rx_state.load(std::memory_order_acquire) != URMA_RX_STS_IDLE)) {
-        uint64_t occupied_seq = slot.seq_no;
-        if (UNLIKELY(occupied_seq == INVALID_SEQ || consumed <= occupied_seq)) {
-            UBS_VLOG_ERR("cannot fill for fd(%d) data reached seq(%lu) slot(%zu) slot_seq(%lu)", sock->Fd(), seq_no,
-                         idx, slot.seq_no);
-            return UBS_PREFILL_RX;
+private:
+    pthread_spinlock_t *lock_;
+};
+} // namespace
+
+UrmaRxOps::UrmaRxOps(int fd) : fd_(fd), rx_dispatcher_(CreateUrmaRxDispatcher())
+{
+    (void)pthread_spin_init(&slot_lock_, PTHREAD_PROCESS_PRIVATE);
+}
+
+UrmaRxOps::~UrmaRxOps()
+{
+    ReleaseAllSlots();
+    (void)pthread_spin_destroy(&slot_lock_);
+}
+
+UrmaRxOps::DataSlot *UrmaRxOps::AcquireSlot(uint64_t seq_no) noexcept
+{
+    auto *mem = UrmaDataSlotPool::Instance().Allocate();
+    if (UNLIKELY(mem == nullptr)) {
+        UBS_VLOG_ERR("socket(%d) allocate rx slot for seq(%lu) failed", fd_, seq_no);
+        return nullptr;
+    }
+
+    auto *slot = new (mem) DataSlot();
+    slot->seq_no = seq_no;
+    return slot;
+}
+
+void UrmaRxOps::ReleaseSlot(DataSlot *slot) noexcept
+{
+    if (slot == nullptr) {
+        return;
+    }
+    slot->~DataSlot();
+    UrmaDataSlotPool::Instance().Free(slot);
+}
+
+UrmaRxOps::DataSlot *UrmaRxOps::FindSlotLocked(uint64_t seq_no) noexcept
+{
+    for (auto *slot = head_; slot != nullptr && slot->seq_no <= seq_no; slot = slot->next) {
+        if (slot->seq_no == seq_no) {
+            return slot;
         }
     }
-    slot.write_imm = write_imm;
-    slot.seq_no = seq_no;
+    return nullptr;
+}
 
-    WriteImmData imm_data{slot.write_imm};
+void UrmaRxOps::InsertSlotLocked(DataSlot *slot) noexcept
+{
+    if (head_ == nullptr) {
+        head_ = tail_ = slot;
+        return;
+    }
+    if (slot->seq_no > tail_->seq_no) {
+        tail_->next = slot;
+        tail_ = slot;
+        return;
+    }
+
+    DataSlot *prev = nullptr;
+    DataSlot *curr = head_;
+    while (curr != nullptr && curr->seq_no < slot->seq_no) {
+        prev = curr;
+        curr = curr->next;
+    }
+    slot->next = curr;
+    if (prev == nullptr) {
+        head_ = slot;
+    } else {
+        prev->next = slot;
+    }
+}
+
+UrmaRxOps::DataSlot *UrmaRxOps::FindSlot(uint64_t seq_no) noexcept
+{
+    SpinGuard guard(&slot_lock_);
+    return FindSlotLocked(seq_no);
+}
+
+UrmaRxOps::DataSlot *UrmaRxOps::InsertSlot(uint64_t seq_no) noexcept
+{
+    auto *slot = AcquireSlot(seq_no);
+    if (UNLIKELY(slot == nullptr)) {
+        return nullptr;
+    }
+
+    SpinGuard guard(&slot_lock_);
+    auto *existing = FindSlotLocked(seq_no);
+    if (existing != nullptr) {
+        ReleaseSlot(slot);
+        return existing;
+    }
+    InsertSlotLocked(slot);
+    return slot;
+}
+
+UrmaRxOps::DataSlot *UrmaRxOps::HeadSlot() noexcept
+{
+    SpinGuard guard(&slot_lock_);
+    return head_;
+}
+
+void UrmaRxOps::RetireHead(DataSlot *slot) noexcept
+{
+    if (slot == nullptr) {
+        return;
+    }
+    ReleaseBlockInSlot(*slot);
+
+    uint64_t retired_seq = slot->seq_no;
+    {
+        SpinGuard guard(&slot_lock_);
+        if (UNLIKELY(head_ != slot)) {
+            UBS_VLOG_ERR("socket(%d) retire non-head slot seq(%lu)", fd_, retired_seq);
+            return;
+        }
+        head_ = slot->next;
+        if (head_ == nullptr) {
+            tail_ = nullptr;
+        }
+        consume_seq_no_.store(retired_seq + 1, std::memory_order_release);
+        consume_offset_ = 0;
+    }
+    ReleaseSlot(slot);
+}
+
+void UrmaRxOps::RemoveSlot(DataSlot *slot) noexcept
+{
+    if (slot == nullptr) {
+        return;
+    }
+    ReleaseBlockInSlot(*slot);
+    {
+        SpinGuard guard(&slot_lock_);
+        DataSlot *prev = nullptr;
+        for (auto *curr = head_; curr != nullptr; prev = curr, curr = curr->next) {
+            if (curr != slot) {
+                continue;
+            }
+            if (prev == nullptr) {
+                head_ = curr->next;
+            } else {
+                prev->next = curr->next;
+            }
+            if (tail_ == curr) {
+                tail_ = prev;
+            }
+            break;
+        }
+        /*
+         * Quarantine rather than free: a reader thread may still hold the raw pointer it got
+         * from HeadSlot()/FindSlot() just before this unlink. The node is only returned to the
+         * pool in ReleaseAllSlots(), once the connection (and every reader) is done.
+         */
+        zombie_slots_.push_back(slot);
+    }
+}
+
+void UrmaRxOps::ReleaseAllSlots() noexcept
+{
+    DataSlot *slot = nullptr;
+    std::vector<DataSlot *> zombies;
+    {
+        SpinGuard guard(&slot_lock_);
+        slot = head_;
+        head_ = nullptr;
+        tail_ = nullptr;
+        zombies.swap(zombie_slots_);
+    }
+
+    while (slot != nullptr) {
+        DataSlot *next = slot->next;
+        ReleaseBlockInSlot(*slot);
+        ReleaseSlot(slot);
+        slot = next;
+    }
+
+    for (auto *zombie : zombies) {
+        ReleaseSlot(zombie);
+    }
+}
+
+Result UrmaRxOps::ProcessDataReached(const SocketPtr &sock, uint64_t seq_no, uint64_t write_imm) noexcept
+{
+    uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
+    if (seq_no < consumed) {
+        /* Already consumed: stale/duplicate delivery, ignore (mirrors the old slot-reuse path). */
+        return UBS_LATER_SEQ;
+    }
+    if (UNLIKELY(seq_no >= consumed + MAX_IN_FLIGHT)) {
+        UBS_VLOG_ERR("socket(%d) data reached seq(%lu) beyond window consumed(%lu) max(%lu)", sock->Fd(), seq_no,
+                     consumed, MAX_IN_FLIGHT);
+        return UBS_PREFILL_RX;
+    }
+
+    auto *slot = AcquireSlot(seq_no);
+    if (UNLIKELY(slot == nullptr)) {
+        return UBS_ERROR;
+    }
+
+    {
+        SpinGuard guard(&slot_lock_);
+        if (UNLIKELY(FindSlotLocked(seq_no) != nullptr)) {
+            UBS_VLOG_ERR("socket(%d) data reached seq(%lu) already in flight", sock->Fd(), seq_no);
+            ReleaseSlot(slot);
+            return UBS_PREFILL_RX;
+        }
+        slot->write_imm = write_imm;
+        InsertSlotLocked(slot);
+    }
+
+    WriteImmData imm_data{write_imm};
     if (imm_data.ubsocket.opcode == PRE_WRITE) {
-        return IssueReadRequest(sock, seq_no, write_imm, slot);
+        auto res = IssueReadRequest(sock, seq_no, write_imm, *slot);
+        if (UNLIKELY(res != UBS_OK)) {
+            /* Keep the slot reusable by a retransmit, matching the old IDLE-slot reuse behavior. */
+            RemoveSlot(slot);
+        }
+        return res;
     }
 
-    if (ubsocket_prof_enabled != 0) {
-        slot.start_read_time = ubsocket_get_timeNs();
+    {
+        /* publish the fully-initialized slot to the reader under the same lock that guards head_ */
+        SpinGuard guard(&slot_lock_);
+        if (ubsocket_prof_enabled != 0) {
+            slot->start_read_time = ubsocket_get_timeNs();
+        }
+        slot->rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
     }
-    slot.rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
     auto res = seq_no == consumed ? UBS_OK : UBS_LATER_SEQ;
     UBS_VLOG_TRACE("socket(%d) data reached seq_no(%lu) consumed(%lu) res(%d)", sock->Fd(), seq_no, consumed, res);
     return res;
@@ -53,32 +272,45 @@ Result UrmaRxOps::ProcessDataReached(const SocketPtr &sock, uint64_t seq_no, uin
 
 Result UrmaRxOps::ProcessDataReadFinished(const SocketPtr &sock, uint64_t seq_no) noexcept
 {
-    size_t idx = seq_no % RING_SIZE;
-    auto &slot = data_slots_[idx];
+    uint64_t write_imm = 0;
+    uint64_t prev_start_read_time = 0;
+    {
+        SpinGuard guard(&slot_lock_);
+        auto *slot = FindSlotLocked(seq_no);
+        if (UNLIKELY(slot == nullptr || slot->rx_state.load(std::memory_order_acquire) != URMA_RX_STS_READING)) {
+            UBS_VLOG_ERR("urma socket fd(%d) data state seq(%lu) should be(%hhu) but missing or mismatched", sock->Fd(),
+                         seq_no, URMA_RX_STS_READING);
+            return UBS_ERROR;
+        }
+
+        /*
+         * Keep every field access under slot_lock_: once the state flips to DATA_READY a reader
+         * may RetireHead() and free this node, so nothing may be dereferenced after the unlock.
+         */
+        prev_start_read_time = slot->start_read_time;
+        write_imm = slot->write_imm;
+        if (ubsocket_prof_enabled != 0) {
+            slot->start_read_time = ubsocket_get_timeNs();
+        }
+        slot->rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
+    }
+
     if (ubsocket_prof_enabled != 0) {
-        auto used = ubsocket_get_timeNs() - slot.start_read_time;
+        auto used = ubsocket_get_timeNs() - prev_start_read_time;
         PROF_RECORD(_URMA_LARGE_DATA_PULL, used, true);
     }
 
-    uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
-    auto curr_state = slot.rx_state.load(std::memory_order_acquire);
-    if (UNLIKELY(curr_state != URMA_RX_STS_READING)) {
-        UBS_VLOG_ERR("urma socket fd(%d) data state seq(%lu) slot(%zu) should be(%hhu) but(%hhu)", sock->Fd(), seq_no,
-                     idx, URMA_RX_STS_READING, curr_state);
-        return UBS_ERROR;
-    }
-
-    WriteImmData imm_data{slot.write_imm};
+    WriteImmData imm_data{write_imm};
     ResponseCtrlMessage(sock, POST_WRITE, imm_data.ubsocket.buffer_offset, 0);
-    if (ubsocket_prof_enabled != 0) {
-        slot.start_read_time = ubsocket_get_timeNs();
+
+    uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
+    bool head_ready = false;
+    if (seq_no != consumed) {
+        SpinGuard guard(&slot_lock_);
+        head_ready = head_ != nullptr && head_->seq_no == consumed &&
+                     head_->rx_state.load(std::memory_order_acquire) == URMA_RX_STS_DATA_READY;
     }
-    slot.rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
-    auto res = seq_no == consumed ||
-                       (data_slots_[consume_seq_no_.load(std::memory_order_acquire) % RING_SIZE].rx_state ==
-                        URMA_RX_STS_DATA_READY) ?
-                   UBS_OK :
-                   UBS_LATER_SEQ;
+    auto res = (seq_no == consumed || head_ready) ? UBS_OK : UBS_LATER_SEQ;
     UBS_VLOG_TRACE("socket(%d) data reached seq_no(%lu) consumed(%lu) res(%d)", sock->Fd(), seq_no, consumed, res);
     return res;
 }
@@ -121,9 +353,7 @@ ssize_t UrmaRxOps::ZeroCopyRead(const SocketPtr &sock, DataSlot &slot, uint64_t 
 
     out_first_block->size = out_first_block->cap;
     if (block_cache_.GetCacheLen() == 0) {
-        consume_seq_no_.store(seq + 1, std::memory_order_release);
-        slot.rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
-        ReleaseBlockInSlot(slot);
+        RetireHead(&slot);
     }
     UBS_VLOG_TRACE("socket(%d)zcopy_read seq(%lu) read total(%zu) real(%zd)", sock->Fd(), seq, iov_total, rx_total_len);
     return rx_total_len;
@@ -212,9 +442,9 @@ ssize_t UrmaRxOps::ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int
 
     /* PRE_WRITE 大 IO: 从 block_cache_ 直接取数据 */
     auto seq = consume_seq_no_.load(std::memory_order_relaxed);
-    auto slot = &data_slots_[seq % RING_SIZE];
-    auto rx_state = slot->rx_state.load(std::memory_order_acquire);
-    if (rx_state != URMA_RX_STS_DATA_READY || slot->seq_no != seq) {
+    auto *slot = HeadSlot();
+    auto rx_state = slot != nullptr ? slot->rx_state.load(std::memory_order_acquire) : URMA_RX_STS_IDLE;
+    if (slot == nullptr || rx_state != URMA_RX_STS_DATA_READY || slot->seq_no != seq) {
         ClearReadableIfDrained(sock);
         /* Peer closed with no data to read: return 0 for EOF instead of EAGAIN */
         if (RefStaticCastToRaw<UrmaSocket>(sock)->IsClosed()) {
@@ -256,9 +486,13 @@ ssize_t UrmaRxOps::ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int
             break;
         }
 
-        seq = consume_seq_no_.load(std::memory_order_relaxed);
         /* 上一消息已整体消费并推进 consume_seq_no_, 需按新 seq 重新定位槽位 */
-        slot = &data_slots_[seq % RING_SIZE];
+        RetireHead(slot);
+        seq = consume_seq_no_.load(std::memory_order_relaxed);
+        slot = HeadSlot();
+        if (slot == nullptr) {
+            break;
+        }
         rx_state = slot->rx_state.load(std::memory_order_acquire);
         imm_data.data = slot->write_imm;
         if (rx_state != URMA_RX_STS_DATA_READY || slot->seq_no != seq ||
@@ -291,8 +525,14 @@ void UrmaRxOps::ClearReadableIfDrained(const SocketPtr &sock) noexcept
     urma_sock->FetchAndReachEpollEvents(EPOLLIN);
     urma_sock->SetSocketReadableReady(false);
     auto seq = consume_seq_no_.load(std::memory_order_relaxed);
-    auto &slot = data_slots_[seq % RING_SIZE];
-    if (slot.rx_state.load(std::memory_order_acquire) == URMA_RX_STS_DATA_READY && slot.seq_no == seq) {
+    bool head_ready = false;
+    {
+        /* inspect the head under slot_lock_: it may be unlinked/freed by a poller after the unlock */
+        SpinGuard guard(&slot_lock_);
+        head_ready = head_ != nullptr && head_->seq_no == seq &&
+                     head_->rx_state.load(std::memory_order_acquire) == URMA_RX_STS_DATA_READY;
+    }
+    if (head_ready) {
         (void)urma_sock->NotifySocketReadable();
     }
 }
@@ -558,9 +798,6 @@ bool UrmaRxOps::ConsumeBlockData(const SocketPtr &sock, DataSlot &slot, IovWrite
 
     if (copied == available) {
         UBS_VLOG_TRACE("readv fd=%d pre_write seq=%lu fully consumed, send POST_WRITE", sock->Fd(), seq);
-        consume_seq_no_.store(seq + 1, std::memory_order_release);
-        slot.rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
-        consume_offset_ = 0;
         return true;
     }
 
@@ -602,9 +839,6 @@ bool UrmaRxOps::ConsumeInlineData(const SocketPtr &sock, DataSlot &slot, IovWrit
 
     if (copied == available) {
         ResponseCtrlMessage(sock, WRITE_IN_BAND_ACK, imm_data.ubsocket.buffer_offset, flags);
-        consume_seq_no_.store(seq + 1, std::memory_order_release);
-        slot.rx_state.store(URMA_RX_STS_IDLE, std::memory_order_release);
-        consume_offset_ = 0;
         return true;
     }
 
@@ -630,10 +864,12 @@ uint64_t UrmaRxOps::CurrentTraceNsTime()
         return 0;
     }
     uint64_t consumed = consume_seq_no_.load(std::memory_order_acquire);
-    size_t idx = consumed % RING_SIZE;
-    auto &slot = data_slots_[idx];
-    if (slot.rx_state == URMA_RX_STS_DATA_READY) {
-        return slot.start_read_time;
+    /* read the head and its fields under slot_lock_ to avoid racing with a poller unlink/free */
+    SpinGuard guard(&slot_lock_);
+    auto *slot = head_;
+    if (slot != nullptr && slot->seq_no == consumed &&
+        slot->rx_state.load(std::memory_order_acquire) == URMA_RX_STS_DATA_READY) {
+        return slot->start_read_time;
     }
     return 0;
 }

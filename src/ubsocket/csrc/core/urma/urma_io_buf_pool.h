@@ -186,7 +186,6 @@ ALWAYS_INLINE bool UrmaIoBufferPool::multi_allocate(uint16_t count, allocator::F
     return fixed_allocator_.BatchAllocateWithLinkList(count, blocks);
 }
 
-
 ALWAYS_INLINE uintptr_t UrmaIoBufferPool::get_local_start_addr() const noexcept
 {
     return local_start_addr_;
@@ -199,12 +198,14 @@ ALWAYS_INLINE uintptr_t UrmaIoBufferPool::get_mini_block_head(uintptr_t addr) co
 
 ALWAYS_INLINE uint32_t UrmaIoBufferPool::get_mini_block_size() const noexcept
 {
-    return options_.mini_block_size_kb << 10;;
+    return options_.mini_block_size_kb << 10;
+    ;
 }
 
 ALWAYS_INLINE uint32_t UrmaIoBufferPool::get_block_size() const noexcept
 {
-    return static_cast<uint32_t>(options_.block_size_mb) << 20;;
+    return static_cast<uint32_t>(options_.block_size_mb) << 20;
+    ;
 }
 
 class UrmaDataMetaPool {
@@ -278,7 +279,9 @@ ALWAYS_INLINE void UrmaDataMetaPool::UnInit() noexcept
 
 ALWAYS_INLINE ObjectThreadCache &UrmaDataMetaPool::GetTc() noexcept
 {
-    static thread_local ObjectThreadCache tc(global_cache_.Get());
+    /* rebind every call: the shared cache may have been re-created by UnInit()/Init() */
+    static thread_local ObjectThreadCache tc;
+    tc.Rebind(global_cache_.Get());
     return tc;
 }
 
@@ -303,6 +306,100 @@ ALWAYS_INLINE void BatchFree(UrmaDataMeta *m) noexcept
 {
     (void)m;
     // TODO
+}
+
+/*
+ * Fixed-size object pool for UrmaRxOps::DataSlot nodes. A DataSlot is an intrusive linked-list
+ * node (~48B) that must fit the 64B mini block of the shared ObjectGlobalCache. This replaces the
+ * former 256-entry inline array (16KB per connection) so that idle connections hold no slot memory
+ * and active ones hold only as many nodes as there are in-flight messages.
+ */
+class UrmaDataSlotPool {
+public:
+    static UrmaDataSlotPool &Instance()
+    {
+        static UrmaDataSlotPool slot_pool;
+        return slot_pool;
+    }
+
+public:
+    Result Init() noexcept;
+    void UnInit() noexcept;
+
+    void *Allocate() noexcept;
+    void Free(void *slot) noexcept;
+
+private:
+    ObjectThreadCache &GetTc() noexcept;
+
+private:
+    ObjectGlobalCachePtr global_cache_;
+    std::mutex mutex_;
+};
+
+ALWAYS_INLINE Result UrmaDataSlotPool::Init() noexcept
+{
+    std::lock_guard<std::mutex> locker(mutex_);
+    if (global_cache_ != nullptr) {
+        return UBS_OK;
+    }
+
+    ObjectPoolOptions options;
+    options.block_size_mb = 2;
+    options.mini_block_size_bytes = 64; /* must hold one DataSlot (~48B) */
+    options.tc_batch_alloc_count = 128;
+
+    auto tmp_gc = MakeRef<ObjectGlobalCache>("UrmaDataSlotPool", options);
+    if (tmp_gc == nullptr) {
+        UBS_VLOG_ERR("Failed to init UrmaDataSlotPool as create global cache failed");
+        return UBS_ERROR;
+    }
+
+    auto result = tmp_gc->Initialize();
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("Failed to init UrmaDataSlotPool as init global cache failed");
+        return UBS_ERROR;
+    }
+
+    global_cache_ = tmp_gc;
+    return UBS_OK;
+}
+
+ALWAYS_INLINE void UrmaDataSlotPool::UnInit() noexcept
+{
+    std::lock_guard<std::mutex> locker(mutex_);
+    if (global_cache_ == nullptr) {
+        return;
+    }
+
+    global_cache_->UnInitialize();
+    global_cache_ = nullptr;
+}
+
+ALWAYS_INLINE ObjectThreadCache &UrmaDataSlotPool::GetTc() noexcept
+{
+    /* rebind every call: the shared cache may have been re-created by UnInit()/Init() */
+    static thread_local ObjectThreadCache tc;
+    tc.Rebind(global_cache_.Get());
+    return tc;
+}
+
+ALWAYS_INLINE void *UrmaDataSlotPool::Allocate() noexcept
+{
+    if (UNLIKELY(global_cache_ == nullptr)) {
+        if (UNLIKELY(Init() != UBS_OK)) {
+            return nullptr;
+        }
+    }
+    return GetTc().Allocate();
+}
+
+ALWAYS_INLINE void UrmaDataSlotPool::Free(void *slot) noexcept
+{
+    if (slot == nullptr || global_cache_ == nullptr) {
+        return;
+    }
+    GetTc().Free(slot);
 }
 } // namespace urma
 } // namespace ubs

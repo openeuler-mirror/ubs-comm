@@ -11,7 +11,10 @@
 #ifndef UBS_COMM_URMA_DATA_RX_OPS_H
 #define UBS_COMM_URMA_DATA_RX_OPS_H
 
+#include <pthread.h>
+#include <atomic>
 #include <cstdint>
+#include <vector>
 
 #include "core/ubsocket_data_rx.h"
 #include "iobuf/ubsocket_iobuf.h"
@@ -38,8 +41,8 @@ enum LargeIoRxState : uint8_t {
 };
 class UrmaRxOps : public DataRxOps {
 public:
-    explicit UrmaRxOps(int fd) : fd_(fd), rx_dispatcher_(CreateUrmaRxDispatcher()) {}
-    ~UrmaRxOps() override = default;
+    explicit UrmaRxOps(int fd);
+    ~UrmaRxOps() override;
 
     /*
      * Poller/CQE-side "data reached" entry, invoked when a WRITE_IMM CQE arrives.
@@ -108,8 +111,14 @@ private:
      */
     ssize_t ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags);
 
-    /* Ring buffer slot tracking per-message receive state. 64-byte aligned for cache-line isolation. */
-    struct alignas(64) DataSlot {
+    /*
+     * Per-message receive state machine node. Nodes are recycled through the shared
+     * UrmaDataSlotPool, so the slot footprint follows the in-flight window instead of a
+     * fixed 256-entry inline array. Links and the head/tail cursors are guarded by slot_lock_;
+     * rx_state stays atomic so the producer/consumer handoff remains lock-free.
+     */
+    struct DataSlot {
+        DataSlot *next{nullptr};                                /* next slot in ascending seq_no order */
         std::atomic<LargeIoRxState> rx_state{URMA_RX_STS_IDLE}; /* current state in the state machine */
         uint64_t seq_no{INVALID_SEQ};                           /* message sequence number */
         uint64_t write_imm{0};                                  /* WRITE_IMM immediate data (opcode + buffer offset) */
@@ -240,18 +249,58 @@ private:
      */
     void ClearReadableIfDrained(const SocketPtr &sock) noexcept;
 
+    /* ---- slot list management (head_/tail_/next guarded by slot_lock_) ---- */
+
+    /* Allocates a slot node from the shared object pool, initialized for seq_no. nullptr on OOM. */
+    DataSlot *AcquireSlot(uint64_t seq_no) noexcept;
+
+    /* Returns a slot node to the shared object pool. */
+    void ReleaseSlot(DataSlot *slot) noexcept;
+
+    /* Finds the slot for seq_no, or nullptr. Caller must hold slot_lock_. */
+    DataSlot *FindSlotLocked(uint64_t seq_no) noexcept;
+
+    /* Inserts slot in ascending seq_no order. Caller must hold slot_lock_. */
+    void InsertSlotLocked(DataSlot *slot) noexcept;
+
+    /* Lock-taking wrappers (tests / read-only consumers). */
+    DataSlot *FindSlot(uint64_t seq_no) noexcept;
+    DataSlot *InsertSlot(uint64_t seq_no) noexcept;
+    DataSlot *HeadSlot() noexcept;
+
+    /* Unlinks and releases the fully-consumed head slot; advances consume_seq_no_. */
+    void RetireHead(DataSlot *slot) noexcept;
+
+    /* Unlinks and releases an arbitrary slot without advancing consume_seq_no_ (failure cleanup). */
+    void RemoveSlot(DataSlot *slot) noexcept;
+
+    /* Releases every remaining slot (destructor path). */
+    void ReleaseAllSlots() noexcept;
+
     friend class InlineRxDispatcher;
     friend class QueueRxDispatcher;
 
-    static constexpr size_t RING_SIZE = 256;
+    /* Reorder window bound: reject a seq more than this far ahead of the consumer. */
+    static constexpr uint64_t MAX_IN_FLIGHT = 256;
     static constexpr uint64_t INVALID_SEQ = UINT64_MAX;
 
 private:
     int fd_ = -1;                             /* socket file descriptor */
     std::atomic<uint64_t> consume_seq_no_{0}; /* next sequence number expected by consumer (ReadV) */
     uint64_t consume_offset_{0};              /* bytes already consumed from current slot (partial read) */
-    /* per-seq indexed slot array (receive state machine); NOT a FIFO, no ring reused */
-    DataSlot data_slots_[RING_SIZE];
+
+    /* In-flight slots ordered by ascending seq_no: head_ is next to consume, tail_ the newest. */
+    DataSlot *head_{nullptr};
+    DataSlot *tail_{nullptr};
+    /*
+     * Unlinked-but-not-yet-freed nodes (see RemoveSlot). A reader thread may still hold a raw
+     * pointer handed out by HeadSlot()/FindSlot() before the unlink, so the node is quarantined
+     * here and only returned to the pool in ReleaseAllSlots(), when the connection is gone.
+     */
+    std::vector<DataSlot *> zombie_slots_;
+    /* Guards head_/tail_/DataSlot::next/zombie_slots_ and pool acquire/release; rx_state stays atomic. */
+    pthread_spinlock_t slot_lock_{};
+
     BlockCache block_cache_;                          /* cache for zero-copy block management */
     std::unique_ptr<UrmaRxDispatcher> rx_dispatcher_; /* mode-selected RX event delivery strategy */
 };
