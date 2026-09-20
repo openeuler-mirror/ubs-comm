@@ -1347,5 +1347,269 @@ TEST_F(TestNetChannelImp, TestSyncSpliceMessageOne)
     ctx.mMessage = nullptr;
 }
 
+SerResult MockReceiveSetRawAndOk(int32_t timeout, UBSHcomNetResponseContext &ctx)
+{
+    ctx.mHeader.extHeaderType = UBSHcomExtHeaderType::RAW;
+    return SER_OK;
+}
+
+TEST_F(TestNetChannelImp, TestSyncSpliceMessageRaw)
+{
+    auto tmpEp = ep.Get();
+    std::string acc;
+    void *data = nullptr;
+    uint32_t dataLen = 0;
+
+    UBSHcomNetResponseContext ctx;
+    UBSHcomNetTransHeader header;
+    header.extHeaderType = UBSHcomExtHeaderType::RAW;
+    ctx.mHeader = header;
+
+    char payload[8] = {0};
+    UBSHcomNetMessage message{};
+    message.mBuf = payload;
+    message.mDataLen = sizeof(payload);
+    ctx.mMessage = &message;
+
+    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_OK)));
+
+    EXPECT_EQ(SyncSpliceMessage(ctx, tmpEp, 1, acc, data, dataLen), SER_OK);
+    EXPECT_EQ(data, static_cast<void *>(payload));
+    EXPECT_EQ(dataLen, static_cast<uint32_t>(sizeof(payload)));
+
+    message.mBuf = nullptr;
+    ctx.mMessage = nullptr;
+}
+
+TEST_F(TestNetChannelImp, TestSyncSpliceMessageTooSmall)
+{
+    auto tmpEp = ep.Get();
+    std::string acc;
+    void *data = nullptr;
+    uint32_t dataLen = 0;
+
+    UBSHcomNetResponseContext ctx;
+    UBSHcomNetTransHeader header;
+    header.extHeaderType = UBSHcomExtHeaderType::FRAGMENT;
+    ctx.mHeader = header;
+
+    char buf[sizeof(UBSHcomFragmentHeader)] = {0};
+    UBSHcomNetMessage message{};
+    message.mBuf = buf;
+    message.mDataLen = sizeof(UBSHcomFragmentHeader) - 1;
+    ctx.mMessage = &message;
+
+    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_OK)));
+
+    EXPECT_EQ(SyncSpliceMessage(ctx, tmpEp, 1, acc, data, dataLen), SER_ERROR);
+
+    message.mBuf = nullptr;
+    ctx.mMessage = nullptr;
+}
+
+TEST_F(TestNetChannelImp, TestSyncSpliceMessageTotalLengthTooLarge)
+{
+    auto tmpEp = ep.Get();
+    std::string acc;
+    void *data = nullptr;
+    uint32_t dataLen = 0;
+
+    UBSHcomNetResponseContext ctx;
+    UBSHcomNetTransHeader header;
+    header.extHeaderType = UBSHcomExtHeaderType::FRAGMENT;
+    ctx.mHeader = header;
+
+    alignas(UBSHcomFragmentHeader) char fragBuf[sizeof(UBSHcomFragmentHeader) + 1] = {0};
+    auto *frag = reinterpret_cast<UBSHcomFragmentHeader *>(fragBuf);
+    frag->msgId = {0, 0x11};
+    frag->totalLength = SERVICE_MAX_TOTAL_LENGTH;
+    frag->offset = 0;
+
+    UBSHcomNetMessage message{};
+    message.mBuf = fragBuf;
+    message.mDataLen = sizeof(UBSHcomFragmentHeader) + 1;
+    ctx.mMessage = &message;
+
+    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_OK)));
+
+    EXPECT_EQ(SyncSpliceMessage(ctx, tmpEp, 1, acc, data, dataLen), SER_SPLIT_INVALID_MSG);
+
+    message.mBuf = nullptr;
+    ctx.mMessage = nullptr;
+}
+
+TEST_F(TestNetChannelImp, TestSyncSpliceMessageOffsetOverflow)
+{
+    auto tmpEp = ep.Get();
+    std::string acc;
+    acc.resize(2);
+    void *data = nullptr;
+    uint32_t dataLen = 0;
+
+    UBSHcomNetResponseContext ctx;
+    UBSHcomNetTransHeader header;
+    header.extHeaderType = UBSHcomExtHeaderType::FRAGMENT;
+    ctx.mHeader = header;
+
+    // totalLength 与首包分配的 acc 大小一致，但 offset 越界，视为来自另一条消息
+    auto *frag = GetFragmentHeader(0x11, 2, 8);
+    UBSHcomNetMessage message{};
+    message.mBuf = frag;
+    message.mDataLen = sizeof(UBSHcomFragmentHeader) + 1;
+    ctx.mMessage = &message;
+
+    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_OK)));
+
+    EXPECT_EQ(SyncSpliceMessage(ctx, tmpEp, 1, acc, data, dataLen), SER_SPLIT_INVALID_MSG);
+
+    message.mBuf = nullptr;
+    ctx.mMessage = nullptr;
+}
+
+TEST_F(TestNetChannelImp, TestSyncSpliceMessageComplete)
+{
+    auto tmpEp = ep.Get();
+    std::string acc;
+    void *data = nullptr;
+    uint32_t dataLen = 0;
+
+    UBSHcomNetResponseContext ctx;
+    UBSHcomNetTransHeader header;
+    header.extHeaderType = UBSHcomExtHeaderType::FRAGMENT;
+    ctx.mHeader = header;
+
+    // totalLength = payloadLen = 1，单次收包即可拼完
+    auto *frag = GetFragmentHeader(0x11, 1, 0);
+    UBSHcomNetMessage message{};
+    message.mBuf = frag;
+    message.mDataLen = sizeof(UBSHcomFragmentHeader) + 1;
+    ctx.mMessage = &message;
+
+    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_OK)));
+
+    EXPECT_EQ(SyncSpliceMessage(ctx, tmpEp, 1, acc, data, dataLen), SER_OK);
+    EXPECT_EQ(dataLen, static_cast<uint32_t>(1));
+
+    message.mBuf = nullptr;
+    ctx.mMessage = nullptr;
+}
+
+TEST_F(TestNetChannelImp, TestSyncSpliceMessageRecvFailMidway)
+{
+    auto tmpEp = ep.Get();
+    std::string acc;
+    void *data = nullptr;
+    uint32_t dataLen = 0;
+
+    UBSHcomNetResponseContext ctx;
+    UBSHcomNetTransHeader header;
+    header.extHeaderType = UBSHcomExtHeaderType::FRAGMENT;
+    ctx.mHeader = header;
+
+    // totalLength = 2 但单包只带 1 字节，需要再收一次；第二次收包失败
+    auto *frag = GetFragmentHeader(0x11, 2, 0);
+    UBSHcomNetMessage message{};
+    message.mBuf = frag;
+    message.mDataLen = sizeof(UBSHcomFragmentHeader) + 1;
+    ctx.mMessage = &message;
+
+    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_OK)))
+        .then(returnValue(static_cast<int>(SER_INVALID_PARAM)));
+
+    EXPECT_EQ(SyncSpliceMessage(ctx, tmpEp, 1, acc, data, dataLen), SER_INVALID_PARAM);
+
+    message.mBuf = nullptr;
+    ctx.mMessage = nullptr;
+}
+
+TEST_F(TestNetChannelImp, TestSyncSpliceMessageRawDuringSplice)
+{
+    auto tmpEp = ep.Get();
+    std::string acc;
+    void *data = nullptr;
+    uint32_t dataLen = 0;
+
+    UBSHcomNetResponseContext ctx;
+    UBSHcomNetTransHeader header;
+    header.extHeaderType = UBSHcomExtHeaderType::FRAGMENT;
+    ctx.mHeader = header;
+
+    auto *frag = GetFragmentHeader(0x11, 2, 0);
+    UBSHcomNetMessage message{};
+    message.mBuf = frag;
+    message.mDataLen = sizeof(UBSHcomFragmentHeader) + 1;
+    ctx.mMessage = &message;
+
+    MOCKER_CPP_VIRTUAL(*(ep.Get()), &UBSHcomNetEndpoint::Receive,
+                       SerResult(UBSHcomNetEndpoint::*)(int32_t, UBSHcomNetResponseContext &))
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_OK)))
+        .then(invoke(MockReceiveSetRawAndOk));
+
+    EXPECT_EQ(SyncSpliceMessage(ctx, tmpEp, 1, acc, data, dataLen), SER_ERROR);
+
+    message.mBuf = nullptr;
+    ctx.mMessage = nullptr;
+}
+
+TEST_F(TestNetChannelImp, TestSpliceMessageDuplicateId)
+{
+    auto ctx = CreateNRC();
+    MockPrepareTimerContext(SER_OK);
+
+    SpliceMessageResultType result;
+    SerResult code;
+    std::string out;
+
+    auto first = GetFragmentHeader(0x21, 2, 0);
+    SetNRCPayload(*ctx, first);
+    std::tie(result, code, out) = channel->SpliceMessage(*ctx, false);
+    EXPECT_EQ(result, SpliceMessageResultType::INDETERMINATE);
+    EXPECT_EQ(code, SER_OK);
+
+    // 同一个 msgId 再次以首包(offset=0)出现，命中去重分支，直接失败
+    auto dup = GetFragmentHeader(0x21, 2, 0);
+    SetNRCPayload(*ctx, dup);
+    std::tie(result, code, out) = channel->SpliceMessage(*ctx, false);
+    EXPECT_EQ(result, SpliceMessageResultType::ERROR);
+    EXPECT_EQ(code, SER_ERROR);
+}
+
+TEST_F(TestNetChannelImp, TestSpliceMessageTimerCtxFailed)
+{
+    channel->IncreaseRef();
+
+    auto ctx = CreateNRC();
+    MockPrepareTimerContext(SER_NEW_OBJECT_FAILED);
+
+    SpliceMessageResultType result;
+    SerResult code;
+    std::string out;
+
+    auto first = GetFragmentHeader(0x31, 2, 0);
+    SetNRCPayload(*ctx, first);
+    std::tie(result, code, out) = channel->SpliceMessage(*ctx, false);
+    EXPECT_EQ(result, SpliceMessageResultType::ERROR);
+    EXPECT_EQ(code, SER_NEW_OBJECT_FAILED);
+}
+
 } // namespace hcom
 } // namespace ock
