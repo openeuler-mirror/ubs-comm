@@ -392,5 +392,99 @@ TEST_F(TestHcomServiceV2, TestSetTraceIdInner)
     EXPECT_NO_FATAL_FAILURE(SetTraceIdInner(traceId));
 #endif
 }
+
+TEST_F(TestHcomServiceV2, TestHcomConnectTimestamp)
+{
+    HcomConnectTimestamp ts(NN_NO100, NN_NO200, NN_NO10);
+
+    // 超时时间非正时直接返回 0
+    EXPECT_EQ(ts.GetRemoteTimestamp(static_cast<int16_t>(0)), NN_NO0);
+    EXPECT_EQ(ts.GetRemoteTimestamp(static_cast<int16_t>(-1)), NN_NO0);
+
+    // 超时时间大于 0 时按对端时间轴推算，结果非 0
+    EXPECT_NE(ts.GetRemoteTimestamp(static_cast<int16_t>(60)), NN_NO0);
+}
+
+TEST_F(TestHcomServiceV2, TestHcomServiceRndvMessageIsTimeout)
+{
+    HcomServiceRndvMessage message;
+
+    // timestamp 为 0 表示不超时
+    EXPECT_FALSE(message.IsTimeout());
+
+    // 远大于当前时间的 timestamp，未超时
+    message.timestamp = UINT64_MAX;
+    EXPECT_FALSE(message.IsTimeout());
+
+    // 极小的 timestamp 必然已过期（除非系统刚启动不到 1us）
+    message.timestamp = NN_NO1;
+    EXPECT_TRUE(message.IsTimeout());
+}
+
+TEST_F(TestHcomServiceV2, TestHcomServiceGlobalObjectBuildTimeOutCtx)
+{
+    UBSHcomServiceContext ctx;
+    EXPECT_NO_FATAL_FAILURE(HcomServiceGlobalObject::BuildTimeOutCtx(ctx));
+    EXPECT_EQ(ctx.Result(), SER_TIMEOUT);
+    EXPECT_EQ(ctx.Channel().Get(), nullptr);
+}
+
+TEST_F(TestHcomServiceV2, TestServiceContextCopyData)
+{
+    UBSHcomServiceContext ctx;
+
+    // dataLen 为 0：清空数据，置为无效
+    EXPECT_EQ(ctx.CopyData(nullptr, NN_NO0), SER_OK);
+    EXPECT_EQ(ctx.MessageData(), nullptr);
+    EXPECT_EQ(ctx.MessageDataLen(), NN_NO0);
+
+    // data 为空但 dataLen 大于 0：非法入参
+    EXPECT_EQ(ctx.CopyData(nullptr, NN_NO8), SER_INVALID_PARAM);
+
+    // 正常拷贝：数据被 malloc 复制，长度被更新
+    char buf[NN_NO8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    EXPECT_EQ(ctx.CopyData(buf, sizeof(buf)), SER_OK);
+    EXPECT_NE(ctx.MessageData(), nullptr);
+    EXPECT_NE(ctx.MessageData(), static_cast<void *>(buf));
+    EXPECT_EQ(ctx.MessageDataLen(), static_cast<uint32_t>(sizeof(buf)));
+
+    // 再次以 dataLen 为 0 调用，释放上次的堆内存
+    EXPECT_EQ(ctx.CopyData(nullptr, NN_NO0), SER_OK);
+    EXPECT_EQ(ctx.MessageData(), nullptr);
+    EXPECT_EQ(ctx.MessageDataLen(), NN_NO0);
+}
+
+TEST_F(TestHcomServiceV2, TestServiceContextClone)
+{
+    UBSHcomServiceContext oldOne;
+    char buf[NN_NO8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    ASSERT_EQ(oldOne.CopyData(buf, sizeof(buf)), SER_OK);
+    ASSERT_EQ(oldOne.MessageDataLen(), static_cast<uint32_t>(sizeof(buf)));
+
+    // copyData = false：只同步元数据，不复制数据内容
+    UBSHcomServiceContext noData;
+    EXPECT_EQ(UBSHcomServiceContext::Clone(noData, oldOne, false), SER_OK);
+    EXPECT_EQ(noData.MessageData(), nullptr);
+    EXPECT_EQ(noData.MessageDataLen(), NN_NO0);
+
+    // copyData = true：独立分配并复制数据，地址与源不同
+    UBSHcomServiceContext withData;
+    EXPECT_EQ(UBSHcomServiceContext::Clone(withData, oldOne, true), SER_OK);
+    EXPECT_NE(withData.MessageData(), nullptr);
+    EXPECT_NE(withData.MessageData(), oldOne.MessageData());
+    EXPECT_EQ(withData.MessageDataLen(), static_cast<uint32_t>(sizeof(buf)));
+
+    // newOne 与 oldOne 为同一对象时走自拷贝分支
+    EXPECT_EQ(UBSHcomServiceContext::Clone(oldOne, oldOne, true), SER_OK);
+    EXPECT_NE(oldOne.MessageData(), nullptr);
+    EXPECT_EQ(oldOne.MessageDataLen(), static_cast<uint32_t>(sizeof(buf)));
+
+    // 源对象标记为带数据但指针为空：直接返回非法参数
+    UBSHcomServiceContext broken;
+    broken.mDataLen = NN_NO8;
+    broken.mData = nullptr;
+    UBSHcomServiceContext target;
+    EXPECT_EQ(UBSHcomServiceContext::Clone(target, broken, true), SER_INVALID_PARAM);
+}
 } // namespace hcom
 } // namespace ock
