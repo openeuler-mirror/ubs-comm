@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_URMA_WRAPPER_H
 #define UBS_COMM_URMA_WRAPPER_H
 
+#include <climits>
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_defines.h"
 #include "under_api/urma/dl_urma_api.h"
@@ -151,6 +152,41 @@ constexpr uint8_t URMA_JFR_RNR_TIMER_DEFAULT = 19; /* RNR single retransmission 
 constexpr uint8_t URMA_JFS_RNR_RETRY_DEFAULT = 6;
 constexpr uint8_t URMA_JFS_ERROR_TIMEOUT = 2;
 
+/**
+ * @brief Unique identifier for a remote node
+ *
+ * A remote node is identified by the triple (EID, process-id, namespace).
+ * Used as the key in unordered_map for remote segment lookup.
+ */
+struct IdentifyNode {
+    urma_eid_t eid;        /**< URMA endpoint identifier (16 bytes) */
+    uint32_t pid;          /**< OS process identifier */
+    char ns[NAME_MAX + 1]; /**< Logical namespace for multi-tenancy */
+
+    IdentifyNode() noexcept : eid({0}), pid(0)
+    {
+        ns[0] = '\0';
+    }
+
+    explicit IdentifyNode(urma_eid_t e, uint32_t p, const char *n) noexcept : eid(e), pid(p)
+    {
+        strncpy(ns, n, NAME_MAX + 1);
+        ns[NAME_MAX] = '\0';
+    }
+
+    bool operator==(const IdentifyNode &other) const
+    {
+        return eid.in6.subnet_prefix == other.eid.in6.subnet_prefix &&
+               eid.in6.interface_id == other.eid.in6.interface_id && pid == other.pid &&
+               strncmp(ns, other.ns, NAME_MAX + 1) == 0;
+    }
+};
+
+struct UrmaBadPortRecord {
+    int16_t last_error = 0;
+    uint64_t error_occurred_time = 0;
+};
+
 class UrmaContext : public Referable {
 public:
     static Result CreateContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out);
@@ -192,11 +228,33 @@ public:
 
     const UrmaDevicePtr &Device() const noexcept;
 
+    const IdentifyNode &GetLocalIdentifyNode() noexcept;
+
+    bool IsBadPort() noexcept;
+
+    void RecordPortError(int16_t errorCode) noexcept;
+
+    void SetAffinity(bool affinity) noexcept
+    {
+        affinity_ = affinity;
+    }
+
+    bool IsAffinity() noexcept
+    {
+        return affinity_;
+    }
+
+private:
+    Result InitLocalIdentifyNodeInfo() noexcept;
+
 private:
     urma_context_t *raw_context_{nullptr};
     UrmaDevicePtr device_{nullptr};
     urma_eid_info_t eid_info_{};
     uint32_t context_id_ = UINT16_MAX;
+    IdentifyNode local_identify_node_; /* local identify node info */
+    UrmaBadPortRecord bad_record_;
+    bool affinity_;
 
 private:
     static std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> ALL_CONTEXTS;
@@ -254,6 +312,8 @@ public:
      * @brief Set the fd to non-blocking
      */
     Result SetNonBlocking() noexcept;
+
+    urma_jfce_t *GetRawJfce() noexcept;
 
 private:
     urma_jfce_t *raw_jfce_ = nullptr;

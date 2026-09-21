@@ -52,6 +52,7 @@ public:
     static bool UB_BUF_ASYNC_EXPAND;
     /* setting for epoll handle mode */
     static EpollHandleMode UB_EPOLL_HANDLE_MODE;
+    static uint64_t UB_BAD_PORT_RECOVER_SECONDS;
 
 private:
     static void AddRules();

@@ -28,39 +28,6 @@ enum UrmaPortSelectionPolicy {
     PSP_COUNT,
 };
 
-struct UrmaBadPortRecord {
-    int16_t last_error = 0;
-    uint64_t error_occurred_time = 0;
-};
-
-class UrmaPortSelector {
-public:
-    /**
-     * @brief Select a port by policy
-     *
-     * @param affinityFirst   [in] first consider affinity
-     * @param preferredChipId [in] preferred chip id, only enabled when affinityFirst is true
-     * @param policy          [in] policy
-     * @return index
-     */
-    static UrmaContextPtr SelectPort(const UrmaContextPool &pool, bool affinityFirst, int16_t preferredChipId = -1,
-                                     UrmaPortSelectionPolicy policy = PSP_ROUND_ROBIN) noexcept;
-
-    /**
-     * @brief Get the chip id that current thread running on
-     *
-     * @return chip id
-     */
-    static int16_t GetMyChipId() noexcept;
-
-private:
-    static UrmaContextPtr RoundRobin(const UrmaContextPool &pool, bool affinity, int16_t preferredChipId) noexcept;
-    static UrmaContextPtr Random(const UrmaContextPool &pool, bool affinity, int16_t preferredChipId) noexcept;
-    static void GetCandidates(const UrmaContextPool &pool, int16_t preferredChipId,
-                              std::vector<UrmaContextPtr> &candidateOnSameChip,
-                              std::vector<UrmaContextPtr> &candidateOnDifferentChip);
-};
-
 class UrmaContextPool : public Referable {
 public:
     UrmaContextPool() = default;
@@ -102,15 +69,6 @@ public:
     void UnInit() noexcept;
 
     /**
-     * @brief Get the best context
-     * 
-     * @param ctx          [out] the context got
-     * 
-     * @return UBS_OK if got good context 
-     */
-    Result GetBestContext(UrmaContextPtr &ctx) noexcept;
-
-    /**
      * @brief Get context by dev name and eid index
      * 
      * @param devName      [in] name of device
@@ -122,49 +80,27 @@ public:
     Result GetContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &ctx) noexcept;
 
     /**
-     * @brief Record port as bad one
-     *
-     * @param devName      [in] name of the device
-     * @param eidIndex     [in] index of eid
-     * @param errorCode    [in] error code
-     */
-    void RecordBadPort(const std::string &devName, uint32_t eidIndex, int16_t errorCode) noexcept
-    {
-        // TODO
-    }
-
-    /**
-     * @param Check if the port is error one
-     *
-     * @param devName      [in] device name
-     * @param eidIndex     [in] index of eid
-     * @return true if bad port
-     */
-    bool IsBadPort(const std::string &devName, uint32_t eidIndex) noexcept;
-
-    /**
      * @brief Get all contexts
      */
     std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> Contexts() noexcept;
 
+    UrmaContextPtr SelectContext(UrmaPortSelectionPolicy policy) noexcept;
+
+private:
+    void InitSortedContexts() noexcept;
+
+    static int16_t GetMyChipId() noexcept;
+
 private:
     std::mutex mutex_;                                                        /* mutex for protect all members */
     bool inited_ = false;                                                     /* init flag */
-    UrmaPortSelectionPolicy select_policy_ = PSP_ROUND_ROBIN;                 /* select port policy */
     int16_t my_chip_id_ = 0;                                                  /* which chip this process running on */
     std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> contexts_;     /* eidIndex to context map */
-    std::map<std::pair<std::string, uint32_t>, UrmaBadPortRecord> bad_ports_; /* bad port records */
+    std::vector<UrmaContextPtr> sorted_contexts_;                             /* sorted contexts */
+    std::atomic<uint64_t> seq_{0};
     const bool SKIP_PRIMARY_EID = true;                                       /* skip primary eid */
-
-    friend class UrmaPortSelector;
 };
 using UrmaContextPoolPtr = Ref<UrmaContextPool>;
-
-/***********************************************************************************/
-ALWAYS_INLINE bool UrmaContextPool::IsBadPort(const std::string &devName, uint32_t eidIndex) noexcept
-{
-    return bad_ports_.find(std::pair<std::string, uint32_t>(devName, eidIndex)) != bad_ports_.end();
-}
 
 ALWAYS_INLINE Result UrmaContextPool::AutoAddEidIndex(bool bondingDevice) noexcept
 {
@@ -273,8 +209,8 @@ ALWAYS_INLINE Result UrmaContextPool::Init() noexcept
         UBS_VLOG_TRACE("created context for device name(%s) eid index(%d) context id(%d)", iter.first.first.c_str(),
                        iter.first.second, iter.second->Id());
     }
-
-    my_chip_id_ = UrmaPortSelector::GetMyChipId();
+    InitSortedContexts();
+    my_chip_id_ = GetMyChipId();
     inited_ = true;
     UBS_VLOG_TRACE("initialized, context size(%d)", contexts_.size());
     return UBS_OK;
@@ -287,32 +223,58 @@ ALWAYS_INLINE void UrmaContextPool::UnInit() noexcept
         UBS_VLOG_DEBUG("UrmaContextPool is NOT initialized");
         return;
     }
-
+    sorted_contexts_.clear();
     contexts_.clear();
-    bad_ports_.clear();
-
     inited_ = false;
 }
 
-ALWAYS_INLINE Result UrmaContextPool::GetBestContext(UrmaContextPtr &ctx) noexcept
+ALWAYS_INLINE void UrmaContextPool::InitSortedContexts() noexcept
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (UNLIKELY(!inited_)) {
-        UBS_VLOG_DEBUG("UrmaContextPool not initialized");
-        return UBS_ERROR;
-    }
+    const std::string my_preferred_udma_device_name = "udmac" + std::to_string(my_chip_id_);
+    UBS_VLOG_TRACE("preferred device prefix(%s), context pool size(%d),  chip id(%d)",
+                   my_preferred_udma_device_name.c_str(), contexts_.size(), my_chip_id_);
+    std::vector<UrmaContextPtr> candidateOnSameChip;
+    std::vector<UrmaContextPtr> candidateOnDifferentChip;
+    candidateOnSameChip.reserve(contexts_.size());
+    candidateOnDifferentChip.reserve(contexts_.size());
 
-    auto chosen_ctx = UrmaPortSelector::SelectPort(*this, true, -1, select_policy_);
-    if (chosen_ctx != nullptr) {
-        UBS_VLOG_TRACE("Choose context dev name (%s) eid index (%d)",
-                       (chosen_ctx->Device() != nullptr ? chosen_ctx->Device()->DeviceName().c_str() : "null"),
-                       chosen_ctx->EidInfo().eid_index);
-        ctx = chosen_ctx;
-        return UBS_OK;
-    }
+    uint32_t first_eid_index = UINT32_MAX;
+    for (auto &item : contexts_) {
+        const auto dev_name = item.first.first;
+        const auto eid_index = item.first.second;
+        /* skip the first one */
+        if (SKIP_PRIMARY_EID && UrmaSetting::UB_DEV_NAME.empty() && !UrmaSetting::UB_USING_BOUNDING_DEV && first_eid_index == UINT32_MAX) {
+            UBS_VLOG_TRACE("Skip primary eid, dev name (%s) eid (%d)", dev_name.c_str(), eid_index);
+            first_eid_index = eid_index;
+            continue;
+        }
 
-    UBS_VLOG_ERR("Failed to find any urma context in pool, context map size: %d", contexts_.size());
-    return UBS_ERROR;
+        /* skip the same eid index for other devices */
+        if (first_eid_index == eid_index) {
+            UBS_VLOG_TRACE("Skip primary eid, dev name (%s) eid (%d)", dev_name.c_str(), eid_index);
+            continue;
+        }
+
+        /* skip bad ports */
+        if (item.second == nullptr || item.second->IsBadPort()) {
+            UBS_VLOG_TRACE("Skip bad port, dev name (%s) eid (%d)", dev_name.c_str(), eid_index);
+            continue;
+        }
+
+        /* add to candidate */
+        if (item.first.first.find(my_preferred_udma_device_name) == std::string::npos) {
+            item.second->SetAffinity(false);
+            candidateOnDifferentChip.emplace_back(item.second);
+            UBS_VLOG_TRACE("Added dev(%s) eid_idx(%d) into different chip candidate list", dev_name.c_str(), eid_index);
+        } else {
+            item.second->SetAffinity(true);
+            candidateOnSameChip.emplace_back(item.second);
+            UBS_VLOG_TRACE("Added dev(%s) eid_idx(%d) into same chip candidate list", dev_name.c_str(), eid_index);
+        }
+    }
+    sorted_contexts_.swap(candidateOnSameChip);
+    sorted_contexts_.insert(sorted_contexts_.end(),
+                           candidateOnDifferentChip.begin(), candidateOnDifferentChip.end());
 }
 
 ALWAYS_INLINE Result UrmaContextPool::GetContext(const std::string &devName, uint32_t eidIndex,
@@ -339,130 +301,7 @@ ALWAYS_INLINE std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> UrmaCon
     return contexts_;
 }
 
-/***********************************************************************************/
-
-ALWAYS_INLINE UrmaContextPtr UrmaPortSelector::SelectPort(const UrmaContextPool &pool, bool affinityFirst,
-                                                          int16_t preferredChipId,
-                                                          UrmaPortSelectionPolicy policy) noexcept
-{
-    UBS_VLOG_TRACE("Select port with param affinityFirst(%d), preferredChipId(%d), policy(%d)", affinityFirst,
-                   preferredChipId, policy);
-
-    /* case1: no context */
-    if (UNLIKELY(pool.contexts_.size() == 0)) {
-        return nullptr;
-    }
-
-    /* case2: only one context */
-    if (pool.contexts_.size() == 1) {
-        return pool.contexts_.begin()->second;
-    }
-
-    /* case3: based on policy */
-    if (policy == PSP_ROUND_ROBIN) {
-        return RoundRobin(pool, affinityFirst, preferredChipId);
-    } else if (policy == PSP_RANDOM) {
-        return Random(pool, affinityFirst, preferredChipId);
-    } else {
-        UBS_VLOG_ERR("Invalid policy, un-reachable path");
-        return nullptr;
-    }
-}
-
-ALWAYS_INLINE void UrmaPortSelector::GetCandidates(const UrmaContextPool &pool, int16_t preferredChipId,
-                                                   std::vector<UrmaContextPtr> &candidateOnSameChip,
-                                                   std::vector<UrmaContextPtr> &candidateOnDifferentChip)
-{
-    const auto chip_id = (preferredChipId == -1) ? pool.my_chip_id_ : preferredChipId;
-    const std::string my_preferred_udma_device_name = "udmac" + std::to_string(chip_id);
-    UBS_VLOG_TRACE("preferred device prefix(%s), context pool size(%d),  preferred chip id(%d)",
-                   my_preferred_udma_device_name.c_str(), pool.contexts_.size(), preferredChipId);
-
-    candidateOnSameChip.reserve(pool.contexts_.size());
-    candidateOnDifferentChip.reserve(pool.contexts_.size());
-
-    uint32_t first_eid_index = UINT32_MAX;
-    for (auto &item : pool.contexts_) {
-        const auto dev_name = item.first.first;
-        const auto eid_index = item.first.second;
-        /* skip the first one */
-        if (pool.SKIP_PRIMARY_EID && first_eid_index == UINT32_MAX) {
-            UBS_VLOG_TRACE("Skip primary eid, dev name (%s) eid (%d)", dev_name.c_str(), eid_index);
-            first_eid_index = eid_index;
-            continue;
-        }
-
-        /* skip the same eid index for other devices */
-        if (first_eid_index == eid_index) {
-            UBS_VLOG_TRACE("Skip primary eid, dev name (%s) eid (%d)", dev_name.c_str(), eid_index);
-            continue;
-        }
-
-        /* skip bad ports */
-        if (pool.bad_ports_.find(std::pair<std::string, uint32_t>(dev_name, eid_index)) != pool.bad_ports_.end()) {
-            UBS_VLOG_TRACE("Skip bad port, dev name (%s) eid (%d)", dev_name.c_str(), eid_index);
-            continue;
-        }
-
-        /* add to candidate */
-        if (item.first.first.find(my_preferred_udma_device_name) == std::string::npos) {
-            candidateOnDifferentChip.emplace_back(item.second);
-            UBS_VLOG_TRACE("Added dev(%s) eid_idx(%d) into different chip candidate list", dev_name.c_str(), eid_index);
-        } else {
-            candidateOnSameChip.emplace_back(item.second);
-            UBS_VLOG_TRACE("Added dev(%s) eid_idx(%d) into same chip candidate list", dev_name.c_str(), eid_index);
-        }
-    }
-}
-
-ALWAYS_INLINE UrmaContextPtr UrmaPortSelector::RoundRobin(const UrmaContextPool &pool, bool affinityFirst,
-                                                          int16_t preferredChipId) noexcept
-{
-    static uint32_t ROUND_ROBIN_INDEX = 0;
-    const auto this_round = ROUND_ROBIN_INDEX++;
-
-    /* get candidate */
-    std::vector<UrmaContextPtr> candidate_on_same_chip;
-    std::vector<UrmaContextPtr> candidate_on_different_chip;
-    GetCandidates(pool, preferredChipId, candidate_on_same_chip, candidate_on_different_chip);
-
-    /* do round-robin in on same chip candidates */
-    if (!candidate_on_same_chip.empty()) {
-        return candidate_on_same_chip.at(this_round % candidate_on_same_chip.size());
-    }
-
-    /* do round-robin on different chip candidate */
-    if (!candidate_on_different_chip.empty()) {
-        return candidate_on_different_chip.at(this_round % candidate_on_different_chip.size());
-    }
-
-    return nullptr;
-}
-
-ALWAYS_INLINE UrmaContextPtr UrmaPortSelector::Random(const UrmaContextPool &pool, bool affinityFirst,
-                                                      int16_t preferredChipId) noexcept
-{
-    const auto randon = Func::SecureRandUInt32();
-
-    /* get candidate */
-    std::vector<UrmaContextPtr> candidate_on_same_chip;
-    std::vector<UrmaContextPtr> candidate_on_different_chip;
-    GetCandidates(pool, preferredChipId, candidate_on_same_chip, candidate_on_different_chip);
-
-    /* do round-robin in on same chip candidates */
-    if (!candidate_on_same_chip.empty()) {
-        return candidate_on_same_chip.at(randon % candidate_on_same_chip.size());
-    }
-
-    /* do round-robin on different chip candidate */
-    if (!candidate_on_different_chip.empty()) {
-        return candidate_on_different_chip.at(randon % candidate_on_different_chip.size());
-    }
-
-    return nullptr;
-}
-
-ALWAYS_INLINE int16_t UrmaPortSelector::GetMyChipId() noexcept
+ALWAYS_INLINE int16_t UrmaContextPool::GetMyChipId() noexcept
 {
     int logic_cpu_id = 0;
     /* step1: get logic cpu id that this thread running with */
@@ -504,6 +343,37 @@ ALWAYS_INLINE int16_t UrmaPortSelector::GetMyChipId() noexcept
     UBS_VLOG_TRACE("this thread running on physical cpu id(%d)", physical_cpu_id);
 
     return physical_cpu_id;
+}
+
+inline UrmaContextPtr UrmaContextPool::SelectContext(UrmaPortSelectionPolicy policy) noexcept
+{
+    std::vector<UrmaContextPtr> optionalContexts;
+    optionalContexts.reserve(contexts_.size());
+    for (auto context : sorted_contexts_) {
+        if (context->IsAffinity() && !context->IsBadPort()) {
+            optionalContexts.emplace_back(context);
+        } else if (!context->IsAffinity() && !optionalContexts.empty()) {
+            break;
+        } else if (!context->IsBadPort()) {
+            optionalContexts.emplace_back(context);
+        }
+    }
+    if (UNLIKELY(optionalContexts.empty())) {
+        return nullptr;
+    }
+    if (optionalContexts.size() == 1) {
+        return optionalContexts[0];
+    }
+    if (policy == PSP_ROUND_ROBIN) {
+        uint32_t seq = seq_.fetch_add(1);
+        return optionalContexts[seq % optionalContexts.size()];
+    } else if (policy == PSP_RANDOM) {
+        const auto randon = Func::SecureRandUInt32();
+        return optionalContexts[randon % optionalContexts.size()];
+    } else {
+        UBS_VLOG_ERR("Invalid policy, un-reachable path");
+        return nullptr;
+    }
 }
 } // namespace urma
 } // namespace ubs

@@ -272,17 +272,58 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
         return UBS_MALLOC_FAILED;
     }
 
+    /* step7: init local identify info */
+    auto result = tmp_context->InitLocalIdentifyNodeInfo();
+    if (UNLIKELY(result != UBS_OK)) {
+        UrmaApi::urma_delete_context(raw_context);
+        UBS_VLOG_ERR("Failed to initialize backend as init local identify node failed");
+        return UBS_ERROR;
+    }
+
     tmp_context->context_id_ = AUTO_INCREASE_CONTEXT_ID.fetch_add(1);
 
-    /* step7: insert into all context */
+    /* step8: insert into all context */
     auto tmp_key = std::pair<std::string, uint32_t>(target_dev_name, eidIndex);
     ALL_CONTEXTS.emplace(tmp_key, tmp_context);
 
-    /* step8: assign to out */
+    /* step9: assign to out */
     out = tmp_context;
 
     UBS_VLOG_DEBUG("created");
     return UBS_OK;
+}
+
+const IdentifyNode &UrmaContext::GetLocalIdentifyNode() noexcept
+{
+    return local_identify_node_;
+}
+
+Result UrmaContext::InitLocalIdentifyNodeInfo() noexcept
+{
+    auto len = readlink("/proc/self/ns/net", local_identify_node_.ns, NAME_MAX);
+    if (len < 0) {
+        UBS_SLOG_ERR("readlink /proc/self/ns/net failed: " << errno << " : " << strerror(errno));
+        return UBS_ERROR;
+    }
+
+    local_identify_node_.eid = eid_info_.eid;
+    local_identify_node_.pid = getpid();
+    local_identify_node_.ns[len] = '\0';
+    return UBS_OK;
+}
+
+bool UrmaContext::IsBadPort() noexcept
+{
+    if (bad_record_.error_occurred_time == 0) {
+        return false;
+    }
+    return (ubsocket_get_timeNs() - bad_record_.error_occurred_time) < (UrmaSetting::UB_BAD_PORT_RECOVER_SECONDS * 1000000000UL);
+}
+
+void UrmaContext::RecordPortError(int16_t errorCode) noexcept
+{
+    bad_record_.last_error = errorCode;
+    bad_record_.error_occurred_time = ubsocket_get_timeNs();
 }
 
 uint32_t UrmaContext::NewJettyId() noexcept
@@ -337,14 +378,17 @@ Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingTyp
     }
 
     if (pollingType == EVENT_POLLING) {
-        auto raw_jfce = UrmaApi::urma_create_jfce(this->raw_context_);
-        if (raw_jfce == nullptr) {
-            UBS_VLOG_ERR("[URMA_API] Create jfce failed, errno %d", errno);
-            return UBS_ERROR;
-        }
+        if (cfg.jfce == nullptr) {
+            auto raw_jfce = UrmaApi::urma_create_jfce(this->raw_context_);
+            if (raw_jfce == nullptr) {
+                UBS_VLOG_ERR("[URMA_API] Create jfce failed, errno %d", errno);
+                return UBS_ERROR;
+            }
 
-        cfg.jfce = raw_jfce;
-        UBS_SLOG_DEBUG(cfg);
+            cfg.jfce = raw_jfce;
+            UBS_SLOG_DEBUG(cfg);
+        }
+        auto raw_jfce = cfg.jfce;
 
         auto raw_jfc = UrmaApi::urma_create_jfc(this->raw_context_, &cfg);
         if (raw_jfc == nullptr) {
@@ -667,6 +711,11 @@ Result UrmaJfce::SetNonBlocking() noexcept
 
     UBS_VLOG_TRACE("set fd(%d) of jfce to nonblocking", raw_jfce_->fd);
     return UBS_OK;
+}
+
+urma_jfce_t *UrmaJfce::GetRawJfce() noexcept
+{
+    return raw_jfce_;
 }
 
 /* urma jfc related function */

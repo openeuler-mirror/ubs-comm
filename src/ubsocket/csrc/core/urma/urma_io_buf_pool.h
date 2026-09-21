@@ -21,41 +21,12 @@
 #include "iobuf/allocator/ubsocket_alloc_fixed_size.h"
 #include "iobuf/ubsocket_zcopy_adapter.h"
 #include "under_api/urma/urma_types.h"
+#include "urma_context_pool.h"
 #include "urma_wrapper.h"
 
 namespace ock {
 namespace ubs {
 namespace urma {
-
-/**
- * @brief Unique identifier for a remote node
- *
- * A remote node is identified by the triple (EID, process-id, namespace).
- * Used as the key in unordered_map for remote segment lookup.
- */
-struct IdentifyNode {
-    urma_eid_t eid;        /**< URMA endpoint identifier (16 bytes) */
-    uint32_t pid;          /**< OS process identifier */
-    char ns[NAME_MAX + 1]; /**< Logical namespace for multi-tenancy */
-
-    IdentifyNode() noexcept : eid({0}), pid(0)
-    {
-        ns[0] = '\0';
-    }
-
-    explicit IdentifyNode(urma_eid_t e, uint32_t p, const char *n) noexcept : eid(e), pid(p)
-    {
-        strncpy(ns, n, NAME_MAX + 1);
-        ns[NAME_MAX] = '\0';
-    }
-
-    bool operator==(const IdentifyNode &other) const
-    {
-        return eid.in6.subnet_prefix == other.eid.in6.subnet_prefix &&
-               eid.in6.interface_id == other.eid.in6.interface_id && pid == other.pid &&
-               strncmp(ns, other.ns, NAME_MAX + 1) == 0;
-    }
-};
 
 /**
  * @brief Hash functor for IdentifyNode
@@ -107,14 +78,15 @@ using RemoteSegmentsPtr = Ref<RemoteSegments>;
  * @brief Local and remote segment registry for zero-copy allocator
  *
  * Manages two-level segment lookup:
- * - local_target_segs_: URMA segments for local buffer blocks (indexed by block index)
+ * - local_target_segs_: per-context URMA segments for local buffer blocks
+ *   (keyed by context id, indexed by block index)
  * - remote_target_segs_: per-remote-node segment vectors (keyed by IdentifyNode)
  *
  * Protected by a pthread spinlock for concurrent remote segment insertion/lookup.
  * Constructed and destroyed together with the owning UrmaIoBufferPool.
  */
 struct MemPoolTargetSegments {
-    std::vector<urma_target_seg_t *> local_target_segs_; /**< Local buffer segments */
+    std::unordered_map<uint32_t, std::vector<urma_target_seg_t *>> local_target_segs_; /**< Local buffer segments */
     std::unordered_map<IdentifyNode, RemoteSegmentsPtr, RemoteNodeHash>
         remote_target_segs_;                  /**< Remote buffer segments */
     pthread_spinlock_t remote_segments_lock_; /**< Protects remote_target_segs_ */
@@ -146,8 +118,8 @@ struct MemPoolTargetSegments {
  */
 class UrmaIoBufferPool : public UbsZeroCopyAllocator {
 public:
-    Result init(const UrmaContextPtr &ctx) noexcept;
-    Result init(const allocator::FixedAllocatorOptions &options, const UrmaContextPtr &ctx) noexcept;
+    Result init(const UrmaContextPoolPtr &ctx_pool) noexcept;
+    Result init(const allocator::FixedAllocatorOptions &options, const UrmaContextPoolPtr &ctx_pool) noexcept;
     void un_init() noexcept;
     void *allocate(size_t size) override;
     void *allocate(size_t size, const ubs_iobuf_alloc_option_t *option) override;
@@ -159,19 +131,19 @@ public:
     uintptr_t get_mini_block_head(uintptr_t addr) const noexcept;
     uint32_t get_mini_block_size() const noexcept;
     uint32_t get_block_size() const noexcept;
-    urma_target_seg_t *get_local_target_seg(uintptr_t ptr) const noexcept;
+    urma_target_seg_t *get_local_target_seg(UrmaContextPtr ctx, uintptr_t ptr) const noexcept;
     RemoteSegmentsPtr get_remote_segments(const IdentifyNode &remote) noexcept;
     void rm_remote_segments(const IdentifyNode &remote) noexcept;
     urma_target_seg_t *get_remote_target_seg(RemoteSegmentsPtr &remote, uintptr_t ptr) const noexcept;
-    Result store_remote_target_seg(RemoteSegmentsPtr &remote, urma_seg_t &seg, urma_target_seg_t *&tgt) noexcept;
-    Result store_remote_target_seg(RemoteSegmentsPtr &remote, urma_eid_t &eid, uint32_t uasid, uintptr_t addr,
+    Result store_remote_target_seg(UrmaContextPtr ctx, RemoteSegmentsPtr &remote, urma_seg_t &seg, urma_target_seg_t *&tgt) noexcept;
+    Result store_remote_target_seg(UrmaContextPtr ctx, RemoteSegmentsPtr &remote, urma_eid_t &eid, uint32_t uasid, uintptr_t addr,
                                    uint32_t token) noexcept;
 
     DEFINE_REF_OPERATION_FUNC
 
 private:
-    Result register_mem(const UrmaContextPtr &ctx, uintptr_t ptr, size_t size) noexcept;
-    Result deregister_mem(const UrmaContextPtr &ctx, uintptr_t ptr, size_t size) noexcept;
+    Result register_mem(const UrmaContextPoolPtr &ctx_pool, uintptr_t ptr, size_t size) noexcept;
+    Result deregister_mem(const UrmaContextPoolPtr &ctx_pool, uintptr_t ptr, size_t size) noexcept;
 
     uintptr_t local_start_addr_{0};
     MemPoolTargetSegments target_segments_;

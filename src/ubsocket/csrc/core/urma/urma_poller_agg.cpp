@@ -22,9 +22,11 @@ Result UrmaDedicatedJfcAggPoller::Start(const UrmaAppPollerStartOptions &options
         UBS_VLOG_INFO("Already started");
         return UBS_OK;
     }
-
-    // TODO
-
+    jfce_ = options.jfce;
+    handler_ = options.handler;
+    index_ = options.index;
+    jfc_vector_.assign(options.jfcVector.begin(), options.jfcVector.end());
+    UBS_VLOG_TRACE("agg poller %d started", index_);
     return UBS_OK;
 }
 
@@ -34,9 +36,8 @@ void UrmaDedicatedJfcAggPoller::Stop() noexcept
         UBS_VLOG_INFO("Not started");
         return;
     }
-
+    stopping_ = true;
     jfc_vector_.clear();
-
     jfce_ = nullptr;
 }
 
@@ -47,13 +48,68 @@ UrmaJfcePtr UrmaDedicatedJfcAggPoller::Jfce() const noexcept
 
 Result UrmaDedicatedJfcAggPoller::SelectJfc(UrmaJfcPtr &jfc) noexcept
 {
-    if (UNLIKELY(jfce_ == nullptr)) {
+    if (UNLIKELY(jfce_ == nullptr) || UNLIKELY(jfc_vector_.empty())) {
         UBS_VLOG_INFO("Not started");
         return UBS_ERROR;
     }
+    if (jfc_vector_.size() == 1) {
+        jfc = jfc_vector_[0];
+        return UBS_OK;
+    }
 
-    // TODO
+    uint32_t seq = seq_.fetch_add(1);
+    jfc = jfc_vector_[seq % jfc_vector_.size()];
+    return UBS_OK;
+}
 
+Result UrmaDedicatedJfcAggPoller::poll() noexcept
+{
+    if (jfc_vector_.empty() || handler_ == nullptr) {
+        UBS_VLOG_ERR("poller(%d) invalid to poll and dispatch.", index_);
+        return UBS_ERROR;
+    }
+
+    constexpr int32_t POLL_BATCH_SIZE = 32;
+    urma_cr_t crs[POLL_BATCH_SIZE]{};
+    bool first_time = true;
+    uint32_t jfc_cnt = jfc_vector_.size();
+    uint32_t try_count[jfc_cnt];
+    memset(try_count, 0, sizeof(try_count));
+    uint32_t try_max = 1;
+    while (!stopping_) {
+        bool finish = true;
+        for (uint32_t i = 0; i < jfc_cnt; ++i) {
+            if (try_count[i] >= try_max) {
+                continue;
+            }
+            auto cnt = jfc_vector_[i]->Poll(POLL_BATCH_SIZE, crs);
+            if (UNLIKELY(cnt == 0)) {
+                jfc_vector_[i]->Rearm(false);
+                try_count[i]++;
+                continue;
+            }
+            if (UNLIKELY(cnt < 0)) {
+                UBS_VLOG_ERR("poll jfc failed return: %d", cnt);
+                return UBS_ERROR;
+            }
+            finish = false;
+
+            auto result = handler_(0, cnt, crs);
+#ifdef UBS_LOG_TRACE_ENABLED
+            UBS_VLOG_TRACE("cqe handler processed (%d) and return %d, continue polling", cnt, result);
+#else
+            (void)result;
+#endif
+            if (first_time) {
+                first_time = false;
+                jfc_vector_[i]->Rearm(false);
+                try_count[i] = 0;
+            }
+        }
+        if (finish) {
+            break;
+        }
+    }
     return UBS_OK;
 }
 
@@ -65,13 +121,17 @@ UrmaJfcePtr UrmaSharedJfcAggPollerWithThread::Jfce() const noexcept
 
 Result UrmaSharedJfcAggPollerWithThread::SelectJfc(UrmaJfcPtr &jfc) noexcept
 {
-    if (UNLIKELY(jfce_ == nullptr)) {
+    if (UNLIKELY(jfce_ == nullptr) || UNLIKELY(jfc_vector_.empty())) {
         UBS_VLOG_INFO("Not started");
         return UBS_ERROR;
     }
+    if (jfc_vector_.size() == 1) {
+        jfc = jfc_vector_[0];
+        return UBS_OK;
+    }
 
-    // TODO
-
+    uint32_t seq = seq_.fetch_add(1);
+    jfc = jfc_vector_[seq % jfc_vector_.size()];
     return UBS_OK;
 }
 
@@ -82,54 +142,12 @@ Result UrmaSharedJfcAggPollerWithThread::Start(const UrmaAppPollerStartOptions &
         return UBS_OK;
     }
 
-    Result result = UBS_OK;
-    if (run_in_thread_) {
-        result = StartWithThread();
-    } else {
-        result = StartWithoutThread();
-    }
+    jfce_ = options.jfce;
+    cqe_handler_ = options.handler;
+    index_ = options.index;
+    busy_poll_ = options.busyPoll;
+    jfc_vector_.assign(options.jfcVector.begin(), options.jfcVector.end());
 
-    if (result != UBS_OK) {
-        UBS_VLOG_ERR("Failed to start agg poller, result(%d)", result);
-        return result;
-    }
-
-    UBS_VLOG_TRACE("agg poller started");
-    return UBS_OK;
-}
-
-void UrmaSharedJfcAggPollerWithThread::Stop() noexcept
-{
-    if (!started_.load()) {
-        UBS_VLOG_DEBUG("Not started");
-        return;
-    }
-
-    StopInner();
-    started_.store(false);
-}
-
-void UrmaSharedJfcAggPollerWithThread::StopInner() noexcept
-{
-    if (run_in_thread_) {
-        // TODO 后续改为jfr消息触发
-        struct sigaction sa = {0};
-        sa.sa_handler = [](int) {
-        };
-        sa.sa_flags = 0;
-        sigaction(SIGUSR1, &sa, NULL);
-
-        pthread_kill(thread_.native_handle(), SIGUSR1);
-
-        stopping_ = true;
-        if (thread_.joinable()) {
-            thread_.join();
-        }
-    }
-}
-
-Result UrmaSharedJfcAggPollerWithThread::StartWithThread() noexcept
-{
     if (cqe_handler_ == nullptr) {
         UBS_VLOG_ERR("Failed to start urma agg poller %d as cqe_handler is nullptr", index_);
         return UBS_ERROR;
@@ -150,10 +168,32 @@ Result UrmaSharedJfcAggPollerWithThread::StartWithThread() noexcept
     return UBS_OK;
 }
 
-Result UrmaSharedJfcAggPollerWithThread::StartWithoutThread() noexcept
+void UrmaSharedJfcAggPollerWithThread::Stop() noexcept
 {
-    started_.store(true);
-    return UBS_OK;
+    if (!started_.load()) {
+        UBS_VLOG_DEBUG("Not started");
+        return;
+    }
+
+    StopInner();
+    started_.store(false);
+}
+
+void UrmaSharedJfcAggPollerWithThread::StopInner() noexcept
+{
+    stopping_ = true;
+    // TODO 后续改为jfr消息触发
+    struct sigaction sa = {0};
+    sa.sa_handler = [](int) {
+    };
+    sa.sa_flags = 0;
+    sigaction(SIGUSR1, &sa, NULL);
+
+    pthread_kill(thread_.native_handle(), SIGUSR1);
+
+    if (thread_.joinable()) {
+        thread_.join();
+    }
 }
 
 void UrmaSharedJfcAggPollerWithThread::RunInThread() noexcept
@@ -174,12 +214,105 @@ void UrmaSharedJfcAggPollerWithThread::RunInThread() noexcept
 
 void UrmaSharedJfcAggPollerWithThread::BusyPoll() noexcept
 {
-    // TODO
+    constexpr int32_t POLL_BATCH_SIZE = 32;
+    urma_cr_t crs[POLL_BATCH_SIZE]{};
+    while (!stopping_) {
+        for (auto jfc_ : jfc_vector_) {
+            try {
+                int polled_count = jfc_->Poll(POLL_BATCH_SIZE, crs);
+                if (polled_count > 0) { /* if polled */
+                    auto result = cqe_handler_(0, polled_count, crs);
+                    if (UNLIKELY(result != UBS_OK)) {
+                        UBS_VLOG_INFO("cqe handler processed and return %d, continue polling", result);
+                    }
+                } else {
+                    // TODO
+                }
+            } catch (...) {
+                UBS_VLOG_ERR("Exception caught in UrmaPoller");
+            }
+        }
+    }
 }
 
 void UrmaSharedJfcAggPollerWithThread::EventPoll() noexcept
 {
-    // TODO
+    constexpr uint32_t MAX_EV_JFC_CNT = 64;
+    uint32_t jfc_cnt = jfc_vector_.size();
+    if (UNLIKELY(jfc_cnt == 0 || jfc_cnt > MAX_EV_JFC_CNT)) {
+        UBS_VLOG_ERR("Invalid jfc count(%u) for agg poller(%d)", jfc_cnt, index_);
+        return;
+    }
+    urma_jfc_t *ev_jfc[MAX_EV_JFC_CNT] = {nullptr};
+    uint32_t ack[MAX_EV_JFC_CNT] = {1};
+    while (!stopping_) {
+        try {
+            auto cnt = UrmaApi::urma_wait_jfc(jfce_->GetRawJfce(), jfc_cnt, -1, ev_jfc);
+            if (stopping_) {
+                break;
+            }
+            if (cnt < 0) {
+                UBS_VLOG_ERR("Failed to wait jfc cnt: %d", cnt);
+                continue;
+            }
+            if (UNLIKELY(cnt == 0)) {
+                continue;
+            }
+            UrmaApi::urma_ack_jfc(ev_jfc, ack, cnt);
+            DrainCqes(ev_jfc, static_cast<uint32_t>(cnt));
+        } catch (...) {
+            UBS_VLOG_ERR("Exception caught in UrmaPoller");
+        }
+    }
+}
+
+Result UrmaSharedJfcAggPollerWithThread::DrainCqes(urma_jfc_t **ev_jfc, uint32_t jfc_cnt) noexcept
+{
+    constexpr int32_t POLL_BATCH_SIZE = 32;
+    urma_cr_t crs[POLL_BATCH_SIZE]{};
+
+    bool first_time = true;
+    uint32_t try_count[jfc_cnt];
+    memset(try_count, 0, sizeof(try_count));
+    uint32_t try_max = 1;
+    while (!stopping_) {
+        bool finish = true;
+        for (uint32_t i = 0; i < jfc_cnt; ++i) {
+            if (UNLIKELY(ev_jfc[i] == nullptr)) {
+                continue;
+            }
+            if (try_count[i] >= try_max) {
+                continue;
+            }
+            auto cnt = UrmaApi::urma_poll_jfc(ev_jfc[i], POLL_BATCH_SIZE, crs);
+            if (UNLIKELY(cnt == 0)) {
+                UrmaApi::urma_rearm_jfc(ev_jfc[i], false);
+                try_count[i]++;
+                continue;
+            }
+
+            if (UNLIKELY(cnt < 0)) {
+                stopping_ = true;
+                UBS_VLOG_ERR("poll jfc failed return: %d", cnt);
+                return UBS_ERROR;
+            }
+            finish = false;
+            auto result = cqe_handler_(0, cnt, crs);
+#ifdef UBS_LOG_TRACE_ENABLED
+            UBS_VLOG_TRACE("cqe handler processed (%d) and return %d, continue polling", cnt, result);
+#else
+            (void)result;
+#endif
+            if (first_time) {
+                first_time = false;
+                UrmaApi::urma_rearm_jfc(ev_jfc[i], false);
+            }
+        }
+        if (finish) {
+            break;
+        }
+    }
+    return UBS_OK;
 }
 
 /* for agg poller set */
@@ -189,11 +322,6 @@ Result UrmaAggPollerSet::VerifyOptions() noexcept
         UBS_VLOG_ERR("Option poller_count_per_context(%d) is valid, which should be <=16",
                      options_.poller_count_per_context);
         return UBS_INVALID_PARAM;
-    }
-
-    if (!options_.run_in_thread) {
-        options_.create_dedicated_jfc = true;
-        UBS_VLOG_DEBUG("Set option the create_dedicated_jfc to %d", options_.create_dedicated_jfc);
     }
 
     if (options_.cqe_handler == nullptr) {
@@ -253,23 +381,36 @@ Result UrmaAggPollerSet::CreatePollers() noexcept
 
         std::vector<UrmaJfcPtr> jfc_vector;
         UrmaAggPollerPtr tmp_poller;
-        /* case1: for async poller, which is running in thread */
-        if (options_.run_in_thread) {
-            /* create jfc */
-            for (uint16_t i = 0; i < options_.poller_count_per_context; i++) {
-                urma_jfc_cfg_t jfc_cfg = ctx->CreateJfcCfg(options_.jfc_depth);
-                UrmaJfcPtr jfc;
-                if (ctx->CreateJfc(jfc_cfg, options_.polling_type, jfc) != UBS_OK) {
-                    UBS_VLOG_ERR("Failed to create UrmaJfc with dev(%s) eid index(%d)", iter.first.first.c_str(),
-                                 iter.first.second);
-                    UnInitInner();
-                    return UBS_ERROR;
-                }
-
-                jfc_vector.emplace_back(jfc);
+        /* create jfce */
+        UrmaJfcePtr jfce;
+        if (ctx->CreateJfce(jfce) != UBS_OK) {
+            UBS_VLOG_ERR("Failed to create UrmaJfce with dev(%s) eid index(%d)", iter.first.first.c_str(),
+                         iter.first.second);
+            UnInitInner();
+            return UBS_ERROR;
+        }
+        /* create jfc */
+        for (uint16_t i = 0; i < options_.poller_count_per_context; i++) {
+            urma_jfc_cfg_t jfc_cfg = ctx->CreateJfcCfg(options_.jfc_depth);
+            jfc_cfg.jfce = jfce->GetRawJfce();
+            UrmaJfcPtr jfc;
+            if (ctx->CreateJfc(jfc_cfg, options_.polling_type, jfc) != UBS_OK) {
+                UBS_VLOG_ERR("Failed to create UrmaJfc with dev(%s) eid index(%d)", iter.first.first.c_str(),
+                             iter.first.second);
+                UnInitInner();
+                return UBS_ERROR;
             }
 
-            /* create poller */
+            jfc_vector.emplace_back(jfc);
+        }
+        UrmaAppPollerStartOptions start_options;
+        start_options.jfce = jfce;
+        start_options.handler = options_.cqe_handler;
+        start_options.index = index_creator_++;
+        start_options.jfcVector.swap(jfc_vector);
+        start_options.busyPoll = options_.polling_type == BUSY_POLLING;
+        if (options_.run_in_thread) {
+            /* case1: for async poller, which is running in thread */
             tmp_poller = new (std::nothrow) UrmaSharedJfcAggPollerWithThread();
             if (UNLIKELY(tmp_poller == nullptr)) {
                 UBS_VLOG_ERR("Failed to create agg poller for dev(%s) eid index(%d)", iter.first.first.c_str(),
@@ -277,36 +418,8 @@ Result UrmaAggPollerSet::CreatePollers() noexcept
                 UnInitInner();
                 return UBS_MALLOC_FAILED;
             }
-
-            /* start poller */
-            UrmaAppPollerStartOptions start_options;
-            start_options.runInThread = true;
-            start_options.jfce = nullptr;
-            start_options.handler = options_.cqe_handler;
-            start_options.index = index_creator_++;
-            start_options.jfcVector.swap(jfc_vector);
-            start_options.busyPoll = options_.polling_type == BUSY_POLLING;
-
-            auto result = tmp_poller->Start(start_options);
-            if (UNLIKELY(result != UBS_OK)) {
-                UBS_VLOG_ERR("Failed to start agg poller for dev(%s) eid index(%d)", iter.first.first.c_str(),
-                             iter.first.second);
-                UnInitInner();
-                return UBS_ERROR;
-            }
         } else {
             /*case2: for sync poller */
-            /* create jfce */
-            UrmaJfcePtr jfce;
-            auto result = ctx->CreateJfce(jfce);
-            if (UNLIKELY(result != UBS_OK)) {
-                UBS_VLOG_ERR("Failed to create jfce for dev(%s) eid index(%d)", iter.first.first.c_str(),
-                             iter.first.second);
-                UnInitInner();
-                return UBS_ERROR;
-            }
-
-            /* create poller */
             tmp_poller = new (std::nothrow) UrmaDedicatedJfcAggPoller();
             if (UNLIKELY(tmp_poller == nullptr)) {
                 UBS_VLOG_ERR("Failed to create agg poller for dev(%s) eid index(%d)", iter.first.first.c_str(),
@@ -314,22 +427,14 @@ Result UrmaAggPollerSet::CreatePollers() noexcept
                 UnInitInner();
                 return UBS_MALLOC_FAILED;
             }
-
-            /* start poller */
-            UrmaAppPollerStartOptions start_options;
-            start_options.jfce = jfce;
-            start_options.handler = options_.cqe_handler;
-            start_options.index = index_creator_++;
-
-            result = tmp_poller->Start(start_options);
-            if (UNLIKELY(result != UBS_OK)) {
-                UBS_VLOG_ERR("Failed to start agg poller for dev(%s) eid index(%d)", iter.first.first.c_str(),
-                             iter.first.second);
-                UnInitInner();
-                return UBS_ERROR;
-            }
         }
-
+        auto result = tmp_poller->Start(start_options);
+        if (UNLIKELY(result != UBS_OK)) {
+            UBS_VLOG_ERR("Failed to start agg poller for dev(%s) eid index(%d)", iter.first.first.c_str(),
+                         iter.first.second);
+            UnInitInner();
+            return UBS_ERROR;
+        }
         /* emplace poller */
         pollers_.emplace(ctx->Id(), tmp_poller);
         UBS_VLOG_TRACE("Create agg poller for dev(%s) eid index(%d)", iter.first.first.c_str(), iter.first.second);

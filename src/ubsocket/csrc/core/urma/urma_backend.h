@@ -19,7 +19,7 @@
 #include "urma_context_pool.h"
 #include "urma_io_buf_pool.h"
 #include "urma_jetty_pool.h"
-#include "urma_poller.h"
+#include "urma_poller_agg.h"
 #include "urma_setting.h"
 #include "urma_wrapper.h"
 
@@ -48,8 +48,10 @@ public:
     static Result CreateConnectorOps(SocketType value, const SocketPtr &sock, ConnectorOps *&connector) noexcept;
 
     UrmaIoBufferPool *GetAllocator() noexcept;
-    const IdentifyNode &GetLocalIdentifyNode() noexcept;
-    const UrmaContextPtr &GetUrmaContext() noexcept;
+
+    UrmaContextPoolPtr GetContextPoll() noexcept;
+
+    UrmaAggPollerSetPtr GetPollerSet() noexcept;
 
 private:
     void UnInitInner() noexcept;
@@ -72,8 +74,6 @@ private:
     Result InitIoBufPool() noexcept;
     void UnInitIoBufPool() noexcept;
 
-    Result InitLocalIdentifyNodeInfo() noexcept;
-
     Result InitObjectPool() noexcept;
     void UnInitObjectPool() noexcept;
 
@@ -83,8 +83,7 @@ private:
     /* put the hottest used variables on the head */
     UrmaIoBufferPoolPtr io_buff_pool_; /* io buffer pool */
     UrmaContextPoolPtr context_pool_;  /* urma context pool */
-    UrmaContextPtr best_context_;      /* best urma context */
-    IdentifyNode local_identify_node_; /* local identify node info */
+    UrmaAggPollerSetPtr poller_set_;   /* urma poller set */
     UrmaJettyPoolPtr jetty_pool_;      /* jetty pool */
 
     /* non-hot variables */

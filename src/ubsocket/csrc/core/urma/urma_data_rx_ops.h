@@ -186,7 +186,7 @@ private:
      * Pairs each remote buffer segment with the corresponding local Block.
      * Results accumulated into ctx.wrs as a linked list.
      */
-    void BuildReadWrs(uint32_t data_count, uint64_t msg_offset, Block *head_block, BuildReadWrCtx &ctx) noexcept;
+    void BuildReadWrs(UrmaContextPtr socket_ctx, uint32_t data_count, uint64_t msg_offset, Block *head_block, BuildReadWrCtx &ctx) noexcept;
 
     /*
      * Stores remote memory segment mappings (addr → target_seg) for each buffer

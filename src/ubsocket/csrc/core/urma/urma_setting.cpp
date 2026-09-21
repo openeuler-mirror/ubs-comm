@@ -42,6 +42,7 @@ uint32_t UrmaSetting::UB_BUF_POOL_SPACE_SIZE = 32;
 uint16_t UrmaSetting::UB_BUF_BLOCK_SIZE_MB = 16;
 uint16_t UrmaSetting::UB_BUF_INIT_MEM_SIZE_MB = 256;
 uint16_t UrmaSetting::UB_BUF_PAGE_SIZE_KB = 64;
+uint64_t UrmaSetting::UB_BAD_PORT_RECOVER_SECONDS = 300;
 bool UrmaSetting::UB_BUF_ASYNC_EXPAND = false;
 EpollHandleMode UrmaSetting::UB_EPOLL_HANDLE_MODE = THREAD_PER_CONNECTION;
 

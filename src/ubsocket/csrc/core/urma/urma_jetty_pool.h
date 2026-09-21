@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_URMA_JETTY_POOL_H
 #define UBS_COMM_URMA_JETTY_POOL_H
 
+#include "urma_context_pool.h"
 #include "urma_setting.h"
 #include "urma_wrapper.h"
 
@@ -35,7 +36,7 @@ struct UrmaJettyPoolOptions {
     uint16_t jfr_depth = 256;                          /* queue depth of jfr */
     urma_transport_mode_t transport_mode = URMA_TM_RM; /* trans mode */
     urma_tp_type_t tp_type = URMA_CTP;                 /* rtp/ctp/utp */
-    UrmaContextPtr context_ = nullptr;                 /* urma context */
+    UrmaContextPoolPtr context_pool = nullptr;         /* urma context */
 };
 
 class UrmaJettyPool : public Referable {

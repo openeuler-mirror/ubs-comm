@@ -23,7 +23,6 @@ namespace urma {
  */
 struct UrmaAggPollerOptions {
     bool run_in_thread = false;
-    bool create_dedicated_jfc = false;
     UrmaJfcPollingType polling_type = EVENT_POLLING;
     uint16_t poller_count_per_context = 1;
     uint16_t jfc_depth = 16000;
@@ -43,7 +42,6 @@ struct UrmaAppPollerStartOptions {
     UrmaJfcePtr jfce;
     UrmaCqeHandler handler;
     uint16_t index = 0;
-    bool runInThread = false;
     bool busyPoll = false;
     std::vector<UrmaJfcPtr> jfcVector;
 };
@@ -80,6 +78,8 @@ public:
      * @return 0 if successful
      */
     virtual Result SelectJfc(UrmaJfcPtr &jfc) noexcept = 0;
+
+    virtual Result poll() noexcept = 0;
 };
 using UrmaAggPollerPtr = Ref<UrmaAggPoller>;
 
@@ -98,11 +98,15 @@ public:
 
     Result SelectJfc(UrmaJfcPtr &jfc) noexcept override;
 
+    Result poll() noexcept override;
+
 private:
     UrmaJfcePtr jfce_;
     UrmaCqeHandler handler_;
     uint16_t index_ = 0;
     std::vector<UrmaJfcPtr> jfc_vector_;
+    bool stopping_{false};
+    std::atomic<uint64_t> seq_{0};
 };
 
 class UrmaSharedJfcAggPollerWithThread : public UrmaAggPoller {
@@ -120,25 +124,29 @@ public:
 
     Result SelectJfc(UrmaJfcPtr &jfc) noexcept override;
 
+    Result poll() noexcept override
+    {
+        return UBS_OK;
+    }
+
 private:
-    Result StartWithThread() noexcept;
-    Result StartWithoutThread() noexcept;
     void StopInner() noexcept;
 
     void RunInThread() noexcept;
     void EventPoll() noexcept;
+    Result DrainCqes(urma_jfc_t **ev_jfc, uint32_t jfc_cnt) noexcept;
     void BusyPoll() noexcept;
 
 private:
     UrmaJfcePtr jfce_;                   /* jfce ref */
     UrmaCqeHandler cqe_handler_;         /* callback function of  */
     uint16_t index_;                     /* index of the poller */
-    bool run_in_thread_;                 /* if run in thread or not */
     bool busy_poll_ = false;             /* is busy poll or not */
     std::atomic<bool> started_{false};   /* started sign */
     bool stopping_{false};               /* stop sign to stop poller thread */
     std::thread thread_;                 /* thread to call urma poll or epoll_wait */
     std::vector<UrmaJfcPtr> jfc_vector_; /* one poller contains one urma poller */
+    std::atomic<uint64_t> seq_{0};
 };
 
 class UrmaAggPollerSet : public Referable {
@@ -173,13 +181,15 @@ public:
      */
     Result SelectJfc(const UrmaContextPtr &ctx, UrmaJfcPtr &out) noexcept;
 
+    const std::map<uint32_t, UrmaAggPollerPtr> &GetAllPollers() const noexcept
+    {
+        return pollers_;
+    }
+
 private:
     Result CreatePollers() noexcept;
     Result VerifyOptions() noexcept;
     void UnInitInner() noexcept;
-
-    Result SelectJfcWithThread(const UrmaContextPtr &ctx, UrmaJfcPtr &out) noexcept;
-    Result SelectJfcWithoutThread(const UrmaContextPtr &ctx, UrmaJfcPtr &out) noexcept;
 
 private:
     std::mutex mutex_;                             /* mutex for this class */
