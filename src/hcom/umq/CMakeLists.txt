@@ -79,6 +79,7 @@ if("${STRIP}" STREQUAL "enable")
 endif()
 
 add_compile_definitions(URPC_VERSION="${PROJECT_VERSION}")
+add_compile_definitions(UMQ_QBUF_DEBUG)
 message("Using build version ${URPC_VERSION}")
 
 add_compile_definitions(URPC_RELEASE_VERSION="${PROJECT_VERSION_MAJOR}")
@@ -92,7 +93,8 @@ message("Using build timestamp ${BUILD_DATE}")
 
 set(CMAKE_FLAGS_ARM64 " -march=armv8-a+crc -DUB_ARCH_ARM64")
 set(CMAKE_FLAGS_x86_64 " -msse4.2 -DUB_ARCH_X86_64")
-if("${CMAKE_HOST_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
+message(STATUS "DEBUG: CMAKE_SYSTEM_PROCESSOR value: '${CMAKE_SYSTEM_PROCESSOR}'")
+if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "aarch64")
     set(CMAKE_C_FLAGS  "${CMAKE_FLAGS_PUBILC} ${CMAKE_FLAGS_ARM64} -std=gnu11")
     set(CMAKE_CXX_FLAGS  "${CMAKE_FLAGS_PUBILC} ${CMAKE_FLAGS_ARM64} -std=c++11")
 else()

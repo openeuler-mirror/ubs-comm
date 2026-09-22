@@ -23,6 +23,12 @@ namespace ubs {
 
 const uint16_t IOBUF_BLOCK_FLAGS_UB = 1 << 2;
 const uint16_t IOBUF_BLOCK_FLAGS_UB_TINY_POOL = 1 << 3;
+const uint16_t IOBUF_BLOCK_FLAGS_UB_HUGE_POOL = 1 << 4;
+/* design §4.1/§4.4: marks large UB blocks whose data starts 8B into the usable
+ * area, leaving headroom at the front for the 8-byte read_gen value. The sender
+ * writes gen into (data - 8) during post; the receiver checks this flag to
+ * decide whether to extend READ range and validate gen. */
+const uint16_t IOBUF_BLOCK_FLAGS_GEN_HEADROOM = 1 << 5;
 struct Block {
     std::atomic<int> nshared;
     uint16_t flags;

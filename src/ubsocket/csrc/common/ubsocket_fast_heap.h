@@ -32,6 +32,7 @@ public:
         if (m_capacity < MIN_CAPACITY) {
             m_capacity = MIN_CAPACITY;
         }
+        m_initial_capacity = m_capacity;
         m_heap = InitHeap(m_capacity);
     }
 
@@ -47,7 +48,12 @@ public:
 
     FastHeap &operator=(const FastHeap &) = delete;
 
-    FastHeap(FastHeap &&other) noexcept : m_heap(other.m_heap), m_size(other.m_size), m_capacity(other.m_capacity)
+    FastHeap(FastHeap &&other) noexcept
+        : m_max_capacity(other.m_max_capacity),
+          m_heap(other.m_heap),
+          m_size(other.m_size),
+          m_capacity(other.m_capacity),
+          m_initial_capacity(other.m_initial_capacity)
     {
         other.m_heap = nullptr;
         other.m_size = 0;
@@ -63,6 +69,8 @@ public:
             m_heap = other.m_heap;
             m_size = other.m_size;
             m_capacity = other.m_capacity;
+            m_max_capacity = other.m_max_capacity;
+            m_initial_capacity = other.m_initial_capacity;
             other.m_heap = nullptr;
             other.m_size = 0;
             other.m_capacity = 0;
@@ -88,6 +96,24 @@ public:
     inline void clear() noexcept
     {
         m_size = 0;
+    }
+
+    /*
+     * 空堆时将容量回缩到初始容量，用于乱序突发结束后归还内存。
+     * 先申请后释放：新堆申请失败则保持原堆不变，不影响正确性。
+     */
+    void TryShrink() noexcept
+    {
+        if (m_size != 0 || m_capacity <= m_initial_capacity) {
+            return;
+        }
+        T *newHeap = InitHeap(m_initial_capacity);
+        if (newHeap == nullptr) {
+            return;
+        }
+        free(m_heap);
+        m_heap = newHeap;
+        m_capacity = m_initial_capacity;
     }
 
     int Push(const T &item)
@@ -169,7 +195,17 @@ private:
             return UBS_ERROR;
         }
         if (__builtin_expect(m_size >= m_capacity, 0)) {
-            if (Reserve((m_capacity - 1) * RESERVE_FACTOR) != 0) {
+            /* 按需扩容，硬上限为 m_max_capacity（原实现未约束上限，可增长至 MAX_CAPACITY） */
+            size_t maxCapacity = GetMaxCapacity();
+            if (m_capacity >= maxCapacity) {
+                UBS_VLOG_ERR("Failed to push element to heap, reason: heap reached max capacity: %zu.\n", maxCapacity);
+                return UBS_ERROR;
+            }
+            size_t newCapacity = m_capacity * RESERVE_FACTOR;
+            if (newCapacity > maxCapacity) {
+                newCapacity = maxCapacity;
+            }
+            if (Reserve(newCapacity) != 0) {
                 UBS_VLOG_ERR("Failed to push element to heap, reason: heap is full and resize failed.\n");
                 return UBS_ERROR;
             }
@@ -215,7 +251,7 @@ private:
         return UBS_OK;
     }
 
-    int GetMaxCapacity()
+    size_t GetMaxCapacity() const
     {
         if (m_max_capacity != 0 && m_max_capacity <= MAX_CAPACITY) {
             return m_max_capacity;
@@ -228,6 +264,7 @@ private:
     T *m_heap;
     size_t m_size;
     size_t m_capacity;
+    size_t m_initial_capacity;
     Compare m_comp;
 };
 

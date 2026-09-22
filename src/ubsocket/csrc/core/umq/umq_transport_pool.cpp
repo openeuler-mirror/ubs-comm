@@ -11,6 +11,7 @@
 
 #include "umq_transport_pool.h"
 #include "core/ubsocket_event_epoll.h"
+#include "core/ubsocket_tx_cqe_poller.h"
 #include "umq_conn_helper.h"
 #include "umq_eid_table.h"
 #include "umq_errno_converter.h"
@@ -27,12 +28,23 @@ namespace umq {
 
 Result UmqTransportPool::WarmUp(uint64_t main_umqh)
 {
-    // tx事件线程（jetty资源池tx/流控tx）
-    EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
-    uint64_t result = epoll_runner.Start();
-    if (result != UBS_OK) {
-        UBS_VLOG_ERR("Failed to start tx epoll runner.");
-        return result;
+    /* flag=ON + flow-control OFF: keep TRANSPORT_POOL_TX_RUNNER running
+     * as a fallback. SweepOrphanPools (on SHARE_JFR_RX_RUNNER) provides
+     * us-level jetty recycling, but the 1ms TP_TX_TIMER remains as a
+     * safety net for edge cases (e.g., SHARE_JFR interrupt missing late
+     * CQEs at test teardown causing 25s timeouts).
+     * The WakeUp fix (NotifyWritable in WakeUp) ensures both paths
+     * correctly wake EMLINK-blocked sockets. */
+    const bool unifiedEnabled = GlobalSetting::UBS_TX_UNIFIED_POLL_ENABLED;
+    const bool fcEnabled = UmqSetting::UMQ_FLOW_CONTROL_ENABLE;
+    const bool skipRunner = false;
+    if (!skipRunner) {
+        EpollRunnerBase &epoll_runner = EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER);
+        uint64_t result = epoll_runner.Start();
+        if (result != UBS_OK) {
+            UBS_VLOG_ERR("Failed to start tx epoll runner.");
+            return result;
+        }
     }
     // RM模式 + 池化模式才开启
     if (UmqSetting::UMQ_UB_TP_MODE != UMQ_TM_RM || UmqSetting::UMQ_TP_TYPE != POOL) {
@@ -57,11 +69,19 @@ Result UmqTransportPool::WarmUp(uint64_t main_umqh)
     }
     UBS_VLOG_INFO("Umq transport pool finished to warm up, size: %zu.\n", PoolSize(main_umqh));
 
-    // 注册定时器定期 poll main_umq tx 释放共享 jetty 资源
-    if (AddTimerEvent(main_umqh) != UBS_OK) {
-        UBS_VLOG_ERR("Failed to add tx poll timer event for the main umq: %llu\n", main_umqh);
-        Clean();
-        return UBS_ERROR;
+    if (unifiedEnabled) {
+        /* flag=ON: TP_TX_TIMER (1ms round-robin poll of main umq) is
+         * replaced by TxCqePoller::SweepOrphanPools, which runs at us-level
+         * cadence inside the unified ACTIVE loop. Register the main umq
+         * so the poller sweeps it for orphan CQEs + jetty release. */
+        TxCqePoller::Instance().RegisterOrphanSweep(main_umqh);
+    } else {
+        /* flag=OFF: keep the 1ms TP_TX_TIMER (legacy path). */
+        if (AddTimerEvent(main_umqh) != UBS_OK) {
+            UBS_VLOG_ERR("Failed to add tx poll timer event for the main umq: %llu\n", main_umqh);
+            Clean();
+            return UBS_ERROR;
+        }
     }
 
     // 注册transport pool事件
@@ -77,10 +97,13 @@ Result UmqTransportPool::WarmUp(uint64_t main_umqh)
 Result UmqTransportPool::CreatePool(uint64_t main_umqh, int pool_size)
 {
     Locker slock(mutex_);
+    int success_cnt = 0;
     for (int i = 0; i < pool_size; ++i) {
-        if (CreateOneTp(main_umqh)) {
-            UBS_VLOG_ERR("Failed to create tp resources, umq: %llu, pool_size: %d, success_cnt: %d\n", main_umqh,
-                         pool_size, i);
+        if (CreateOneTp(main_umqh) != UBS_OK) {
+            UBS_VLOG_ERR("Failed to create tp resources, umq: %llu, pool_size: %d, failed_idx: %d, success_cnt: %d\n",
+                         main_umqh, pool_size, i, success_cnt);
+        } else {
+            ++success_cnt;
         }
     }
     return UBS_OK;
@@ -137,14 +160,22 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
                 use_round_robin = false;
             }
         }
+
         if (use_round_robin == false) {
             std::vector<umq_port_id_t> aff_ports, non_aff_ports;
-            for (uint32_t i = 0; i < route_list_tp_.route_num; ++i)
+            for (uint32_t i = 0; i < route_list_tp_.route_num; ++i) {
                 if (route_list_tp_.routes[i].src_port.bs.chip_id == targetChipId) {
                     aff_ports.push_back(route_list_tp_.routes[i].src_port);
                 } else {
                     non_aff_ports.push_back(route_list_tp_.routes[i].src_port);
                 }
+            }
+
+            if (aff_ports.empty()) {
+                UBS_VLOG_ERR("CreateOneTp failed, no affinity port found for target chip: %u\n", targetChipId);
+                return UBS_ERROR;
+            }
+
             aff_rr_num_ %= aff_ports.size();
             used_ports.insert(used_ports.end(), aff_ports.begin() + aff_rr_num_, aff_ports.end());
             used_ports.insert(used_ports.end(), aff_ports.begin(), aff_ports.begin() + aff_rr_num_);
@@ -155,6 +186,12 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
             for (uint32_t i = 0; i < route_list_tp_.route_num; ++i) {
                 all_ports.push_back(route_list_tp_.routes[i].src_port);
             }
+
+            if (all_ports.empty()) {
+                UBS_VLOG_ERR("CreateOneTp failed, route list is empty\n");
+                return UBS_ERROR;
+            }
+
             rr_num_ %= all_ports.size();
             used_ports.insert(used_ports.end(), all_ports[rr_num_]);
             all_ports.erase(all_ports.begin() + rr_num_);
@@ -162,46 +199,35 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
             rr_num_ += 1;
         }
 
-        std::sort(used_ports.begin(), used_ports.end(), [targetChipId](const umq_port_id_t &a, const umq_port_id_t &b) {
-            // 优先把等于 target_chip_id 的排在前面
-            bool a_is_target = (a.bs.chip_id == targetChipId);
-            bool b_is_target = (b.bs.chip_id == targetChipId);
-            if (a_is_target != b_is_target) {
-                return a_is_target;
-            }
-
-            // 如果都不是目标 chip，或者都是目标 chip，再按原来的规则排列
-            if (a.bs.chip_id != b.bs.chip_id) {
-                return a.bs.chip_id < b.bs.chip_id;
-            }
-            if (a.bs.die_id != b.bs.die_id) {
-                return a.bs.die_id < b.bs.die_id;
-            }
-            return a.bs.port_idx < b.bs.port_idx;
-        });
-
-        // 1主3备-DEBUG
-        UBS_VLOG_DEBUG("[1m3b-SORT] CreateOneTp BEFORE sort, num=%zu\n", used_ports.size());
+        UBS_VLOG_DEBUG("[1m3b] CreateOneTp before unique, num=%zu\n", used_ports.size());
         for (size_t i = 0; i < used_ports.size(); ++i) {
-            UBS_VLOG_DEBUG("[1m3b-SORT]   before[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i,
-                           used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
-                           (unsigned long)used_ports[i].value);
-        }
-        auto last = std::unique(used_ports.begin(), used_ports.end(),
-                                [](const umq_port_id_t &a, const umq_port_id_t &b) { return a.value == b.value; });
-        used_ports.erase(last, used_ports.end());
-        // 1主3备-DEBUG
-        UBS_VLOG_DEBUG("[1m3b-SORT] CreateOneTp AFTER unique, num=%zu (final order passed to umq)\n",
-                       used_ports.size());
-        for (size_t i = 0; i < used_ports.size(); ++i) {
-            UBS_VLOG_DEBUG("[1m3b-SORT]   final[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i,
-                           used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
-                           (unsigned long)used_ports[i].value);
+            UBS_VLOG_DEBUG("[1m3b]   before[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i, used_ports[i].bs.chip_id,
+                           used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
+                           static_cast<unsigned long>(used_ports[i].value));
         }
 
-        UBS_VLOG_DEBUG("CreateOneTp: used_ports.num=%u (expect 1 main + up to 3 backup)\n", used_ports.size());
-        for (uint32_t i = 0; i < used_ports.size(); ++i) {
-            UBS_VLOG_DEBUG("  used_ports[%u]: src_port(chip=%u,die=%u,port=%u)\n", i, used_ports[i].bs.chip_id,
+        // 保持主备顺序去重，避免改变 used_ports[0] 的主路
+        std::vector<umq_port_id_t> unique_ports;
+        unique_ports.reserve(used_ports.size());
+        for (const auto &port : used_ports) {
+            auto iter = std::find_if(unique_ports.begin(), unique_ports.end(),
+                                     [&port](const umq_port_id_t &item) { return item.value == port.value; });
+            if (iter == unique_ports.end()) {
+                unique_ports.push_back(port);
+            }
+        }
+        used_ports.swap(unique_ports);
+
+        UBS_VLOG_DEBUG("[1m3b] CreateOneTp after unique, num=%zu (final order passed to umq)\n", used_ports.size());
+        for (size_t i = 0; i < used_ports.size(); ++i) {
+            UBS_VLOG_DEBUG("[1m3b]   final[%zu]: chip=%u, die=%u, port=%u, value=0x%lx\n", i, used_ports[i].bs.chip_id,
+                           used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
+                           static_cast<unsigned long>(used_ports[i].value));
+        }
+
+        UBS_VLOG_DEBUG("CreateOneTp: used_ports.num=%zu (expect 1 main + up to 3 backup)\n", used_ports.size());
+        for (size_t i = 0; i < used_ports.size(); ++i) {
+            UBS_VLOG_DEBUG("  used_ports[%zu]: src_port(chip=%u,die=%u,port=%u)\n", i, used_ports[i].bs.chip_id,
                            used_ports[i].bs.die_id, used_ports[i].bs.port_idx);
         }
 
@@ -209,7 +235,7 @@ Result UmqTransportPool::CreateOneTp(uint64_t main_umqh)
     }
 
     // 调用创建接口，返回tp_idx
-    uint32_t tp_idx = umq_transport_pool_resource_create(main_umqh, &tp_create_cfg);
+    uint32_t tp_idx = UmqApi::umq_transport_pool_resource_create(main_umqh, &tp_create_cfg);
     if (tp_idx == UINT32_MAX) {
         return UBS_ERROR;
     }

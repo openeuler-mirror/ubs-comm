@@ -48,7 +48,12 @@ public:
 
     int ProcessDelayQuery(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
 
-    int ProcessProbeQuery(int sockfd, CLIMessage &response);
+    int ProcessProbe(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
+
+    int ProcessTxStat(int sockfd, CLIMessage &response);
+    int ProcessRxStat(int sockfd, CLIMessage &response);
+    int ProcessSplitTrace(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
+    int ProcessQbufPoolStats(int sockfd, CLIMessage &response);
 
 private:
     std::string mServerPath;

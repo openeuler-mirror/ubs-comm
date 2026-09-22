@@ -85,6 +85,8 @@ uint32_t UmqTpWaitQueue::WakeUp(uint32_t wakeUpNum)
             umqSock->ResetToIdle();
             if (!umqSock->RxQueueEmpty()) {
                 umqSock->NotifyReadable();
+            } else {
+                umqSock->NotifyWritable();
             }
             UBS_VLOG_DEBUG("[Debug] umq tp wait queue wake up socket fd: %d.\n", sock->raw_socket_);
         } else if (element.GetType() == UMQ_HANDLE) {

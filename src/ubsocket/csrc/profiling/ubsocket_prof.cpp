@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_prof.h"
+#include <atomic>
 #include <string>
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
@@ -19,7 +20,10 @@ using namespace ock::ubs;
 using namespace ock::ubs::profiling;
 
 int ubsocket_prof_enabled = 0;
-static int ubsocket_prof_mode_ext = 0; // 标记是否为扩展模式（从 GlobalSetting::UBS_PROF_MODE 读取）
+/* 标记是否为扩展模式（从 GlobalSetting::UBS_PROF_MODE 读取）。
+ * CLI 热切换（PROF_OP_MODE → Uninit/Init 写）与业务线程打点（读）并发访问，
+ * 必须用 atomic 保证可见性与有序性。 */
+static std::atomic<int> ubsocket_prof_mode_ext{0};
 uint64_t ubsocket_arm_cpu_freq = 1;
 
 int ubsocket_prof_init(ubsocket_prof_option_t *option)
@@ -57,9 +61,9 @@ int ubsocket_prof_init(ubsocket_prof_option_t *option)
 #endif
 
     // 根据环境变量 UBSOCKET_PROF_MODE 决定初始化哪种模式
-    ubsocket_prof_mode_ext = (GlobalSetting::UBS_PROF_MODE == "ext") ? 1 : 0;
+    ubsocket_prof_mode_ext.store((GlobalSetting::UBS_PROF_MODE == "ext") ? 1 : 0, std::memory_order_release);
 
-    if (ubsocket_prof_mode_ext == 1) {
+    if (ubsocket_prof_mode_ext.load(std::memory_order_acquire) == 1) {
         // 扩展模式：只初始化 TracerExt
         TracerOptionsExt optionsExt{};
         optionsExt.tracepoint_count = option->tracepoint_count;
@@ -91,19 +95,19 @@ int ubsocket_prof_init(ubsocket_prof_option_t *option)
 int ubsocket_prof_uninit()
 {
     ubsocket_prof_enabled = 0;
-    if (ubsocket_prof_mode_ext == 1) {
+    if (ubsocket_prof_mode_ext.load(std::memory_order_acquire) == 1) {
         TracerExt::Instance().UnInitExt();
     } else {
         Tracer::Instance().UnInit();
     }
-    ubsocket_prof_mode_ext = 0;
+    ubsocket_prof_mode_ext.store(0, std::memory_order_release);
     return 0;
 }
 
 /* 打点接口 - 根据模式自动选择实现 */
 int ubsocket_prof_record(uint32_t tracepoint_id, const char *tracepoint_name, uint64_t timestamp, bool good)
 {
-    if (ubsocket_prof_mode_ext == 1) {
+    if (ubsocket_prof_mode_ext.load(std::memory_order_acquire) == 1) {
         // 扩展模式：使用 TracerExt（支持百分位统计）
         return TracerExt::Instance().RecordExt(tracepoint_id, tracepoint_name, timestamp, good);
     } else {
@@ -114,7 +118,7 @@ int ubsocket_prof_record(uint32_t tracepoint_id, const char *tracepoint_name, ui
 
 int ubsocket_prof_combind(char **out_buf)
 {
-    if (ubsocket_prof_mode_ext == 1) {
+    if (ubsocket_prof_mode_ext.load(std::memory_order_acquire) == 1) {
         // 扩展模式，输出百分位统计
         return TracerExt::Instance().CombineExt(out_buf);
     } else {
@@ -125,7 +129,7 @@ int ubsocket_prof_combind(char **out_buf)
 
 void ubsocket_prof_reset()
 {
-    if (ubsocket_prof_mode_ext == 1) {
+    if (ubsocket_prof_mode_ext.load(std::memory_order_acquire) == 1) {
         TracerExt::Instance().ResetExt();
     } else {
         Tracer::Instance().Reset();

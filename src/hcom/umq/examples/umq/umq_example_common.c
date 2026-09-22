@@ -71,6 +71,10 @@ int example_init_umq(struct urpc_example_config *cfg)
         return -1;
     }
     init_cfg->feature = cfg->feature;
+    init_cfg->buf_pool_cfg.small_block_size = BLOCK_SIZE_4K;
+    init_cfg->buf_pool_cfg.size_class_count = 2;
+    init_cfg->buf_pool_cfg.explicit_block_sizes[0] = 4096;
+    init_cfg->buf_pool_cfg.explicit_block_sizes[1] = 131072;
 
     if (parse_trans_info(cfg, init_cfg) != 0) {
         free(init_cfg);

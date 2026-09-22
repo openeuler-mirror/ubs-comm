@@ -26,7 +26,7 @@ UBS_API int UB_API_WRAP(epoll_create)(int size)
         return epollFd;
     }
 
-    EventPoll *eventPoll = new (std::nothrow) AsyncEventPoll(epollFd);
+    EventPoll *eventPoll = new AsyncEventPoll(epollFd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("create async event poll failed, epoll fd: %d\n", epollFd);
         LibcApi::close(epollFd);
@@ -45,7 +45,13 @@ UBS_API int UB_API_WRAP(epoll_ctl)(int epfd, int op, int fd, struct epoll_event 
 
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
+        if (UNLIKELY(!GlobalSetting::UBS_INITED)) {
+            UBS_VLOG_WARN("event poll not found during teardown, epoll fd: %d\n", epfd);
+            errno = EAGAIN;
+            return -1;
+        }
         UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
+        errno = EBADF;
         return -1;
     }
 
@@ -60,7 +66,13 @@ UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int ma
 
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
+        if (UNLIKELY(!GlobalSetting::UBS_INITED)) {
+            UBS_VLOG_WARN("event poll not found during teardown, epoll fd: %d\n", epfd);
+            errno = EAGAIN;
+            return -1;
+        }
         UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
+        errno = EBADF;
         return -1;
     }
     return eventPoll->EpollWait(events, maxevents, timeout);
@@ -69,15 +81,15 @@ UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int ma
 UBS_API int UB_API_WRAP(epoll_create1)(int flags)
 {
     if (GlobalSetting::UBS_NATIVE_TCP_MODE) {
-        return LibcApi::epoll_create1(flags);
+        return LibcApi::epoll_create(1024);
     }
 
-    int epollFd = LibcApi::epoll_create1(flags);
+    int epollFd = LibcApi::epoll_create(1024);
     if (epollFd < 0) {
         return epollFd;
     }
 
-    EventPoll *eventPoll = new (std::nothrow) AsyncEventPoll(epollFd);
+    EventPoll *eventPoll = new AsyncEventPoll(epollFd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("create async event poll failed, epoll fd: %d\n", epollFd);
         LibcApi::close(epollFd);
@@ -97,7 +109,13 @@ UBS_API int UB_API_WRAP(epoll_pwait)(int epfd, struct epoll_event *events, int m
 
     EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
+        if (UNLIKELY(!GlobalSetting::UBS_INITED)) {
+            UBS_VLOG_WARN("event poll not found during teardown, epoll fd: %d\n", epfd);
+            errno = EAGAIN;
+            return -1;
+        }
         UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
+        errno = EBADF;
         return -1;
     }
     return eventPoll->EpollWait(events, maxevents, timeout);

@@ -22,8 +22,7 @@ extern "C" {
 extern int ubsocket_prof_enabled;
 extern uint64_t ubsocket_arm_cpu_freq;
 
-enum ProfilingTPId : uint32_t
-{
+enum ProfilingTPId : uint32_t {
     CORE_CONNECT = 0,
     CORE_ACCEPT,
     CORE_WRITE,
@@ -88,6 +87,132 @@ enum ProfilingTPId : uint32_t
     UMQ_CFG_GET,
     UMQ_CREATE,
 
+    /* TX/RX unified poller latency tracepoints.
+     * TX_CQE_LATENCY: post READ (umq_post TX) → HandleTxCompletion
+     * (TX CQE reclamation) end-to-end latency. The core metric for the
+     * unified poller: P99 target < 100us with eventfd wake. */
+    TX_CQE_LATENCY_POST_READ,
+    TX_CQE_LATENCY_HANDLE_COMPLETION,
+
+    // Native data-plane receive dispatch latency (brpc use_ub_native path):
+    //   RX_READ  = poller dispatch entry -> ubs_poll returned data (adopt)
+    //   RX_PROC  = ubs_poll returned data -> ProcessNewMessage done (bthread wake)
+    BRPC_NATIVE_RX_READ,
+    BRPC_NATIVE_RX_PROC,
+
+    // Native data-plane send post latency (ubs_post in DoUbsNativeWrite)
+    BRPC_NATIVE_TX_POST,
+
+    // Server service handler pure execution time (PerfTestServiceImpl::Test)
+    BRPC_SERVER_SERVICE,
+
+    // Full wire-to-wire gap measurements for ub_native path:
+    //   CLI_PRE_POST    = client CallMethod entry -> ubs_post start
+    //                     (total client pre-send overhead: serialize + IssueRPC + Write + StartWrite)
+    //   SRV_DISPATCH_SVC = server data arrived (OnUbNativeMessages) -> service starts (Test entry)
+    //                     (dispatch + ProcessNewMessage + bthread scheduling + deserialize)
+    //   SRV_SVC_TO_POST  = server service done (Test exit) -> ubs_post start
+    //                     (done->Run + SendRpcResponse + serialize response + Write + StartWrite)
+    //   SRV_SVC_DONE_STAMP = stamp slot for service-done time (not a prof histogram entry)
+    BRPC_CLI_PRE_POST,
+    BRPC_SRV_DISPATCH_SVC,
+    BRPC_SRV_SVC_TO_POST,
+    BRPC_SRV_SVC_DONE_STAMP,
+
+    // Pure bthread scheduling delay: ubs_poll return → ProcessInputMessage entry
+    BRPC_BTHREAD_SCHED,
+
+    /* =========================================================================
+     * ub_native / bigdata adaptive send-receive flow overhead tracepoints.
+     * Maps 1:1 to the stages in docs/ubsocket/UBSOCKET-BRPC-UB-NATIVE-FLOW.ch.md.
+     * Safe on poller/RX threads (thread_local storage, no locks).
+     * ========================================================================= */
+
+    /* Send path (TrySenderPost): route small/large segments, build bufs, submit */
+    UBS_NATIVE_TRY_SENDER_POST,
+    UBS_NATIVE_HANDLE_SMALL_SEGMENT,
+    UBS_NATIVE_BUILD_SMALL_DATA,
+    UBS_NATIVE_HANDLE_COALESCED_SMALL_SEGMENT,
+    UBS_NATIVE_BUILD_COALESCED_SMALL_DATA,
+    UBS_NATIVE_HANDLE_LARGE_SEGMENT,
+    UBS_NATIVE_FLUSH_PENDING_OFFER,
+    UBS_NATIVE_UMQ_POST_SEND,
+
+    /* TX CQE completion (HandleTxCompletion): READ / BIG_CTRL / SEND branches */
+    UBS_NATIVE_HANDLE_TX_COMPLETION,
+    UBS_NATIVE_TX_CQE_READ,
+    UBS_NATIVE_TX_CQE_CTRL,
+    UBS_NATIVE_TX_CQE_SEND,
+    UBS_NATIVE_FINALIZE_IO,
+    UBS_NATIVE_DELIVER_TO_RX_QUEUE,
+    UBS_NATIVE_DRAIN_DEFERRED_CTRL,
+    UBS_NATIVE_RETRY_PENDING_READS,
+
+    /* RX path (HandleRxControl / DoReadOffer): parse offer, import mempool, post READ WRs */
+    UBS_NATIVE_HANDLE_RX_CONTROL,
+    UBS_NATIVE_DO_READ_OFFER,
+    UBS_NATIVE_PARSE_READ_OFFER,
+    UBS_NATIVE_MEMPOOL_IMPORT,
+    UBS_NATIVE_READ_WR_ALLOC,
+    UBS_NATIVE_CONFIGURE_ORDERED_READ,
+    UBS_NATIVE_UMQ_POST_READ,
+    UBS_NATIVE_SEND_SIMPLE_CTRL,
+
+    /* End-to-end p99 breakdown tracepoints (added to localise p99=215us long-tail).
+     * UBS_NATIVE_BRPC_QUEUE: Channel::CallMethod entry → ubs_post start
+     *                       (= brpc-side pre-send overhead incl. bthread queue,
+     *                        IssueRPC, serialize, Write, StartWrite).
+     * UBS_NATIVE_NET_RTT:    sender ubs_post end → receiver DoUbsNativeRead entry
+     *                       (= wire transport latency, the missing p99 gap).
+     * UBS_NATIVE_SRV_DISPATCH: server ubs_post end → ProcessInputMessage entry
+     *                       (= server-side wake + bthread scheduling).
+     * UBS_NATIVE_FULL_RPC:   Channel::CallMethod entry → final done.Run entry
+     *                       (= true end-to-end RPC wall-time, used as p99 anchor). */
+    UBS_NATIVE_BRPC_QUEUE,
+    UBS_NATIVE_NET_RTT,
+    UBS_NATIVE_SRV_DISPATCH,
+    UBS_NATIVE_FULL_RPC,
+
+    /* FinalizeIo sub-stage tracepoints (added to localise p99=13.6us long-tail).
+     * Break the 8.3us avg / 13.6us p99 of UBS_NATIVE_FINALIZE_IO into the
+     * individual segments so we can see which part owns the long-tail:
+     *   FINALIZE_LINK           - LinkReadQbufsInOrder chain walk
+     *   FINALIZE_STATE_LOCK     - state->mutex + active_io.erase + destroying check
+     *   FINALIZE_ARRAYSET_GET   - ArraySet<Socket>::GetItem(fd) for DeliverToRxQueue
+     *   FINALIZE_DELIVER_ENQ    - RX-enqueue stripe lock + rxQueue->Enqueue (incl. OOO)
+     *   FINALIZE_DELIVER_WAKE   - NotifyReadable (eventfd_write / epoll dispatch)
+     *   FINALIZE_DONE_ALLOC     - SendSimpleCtrl umq_buf_alloc
+     *   FINALIZE_DONE_POST      - SendSimpleCtrl umq_post doorbell */
+    UBS_NATIVE_FINALIZE_LINK,
+    UBS_NATIVE_FINALIZE_STATE_LOCK,
+    UBS_NATIVE_FINALIZE_ARRAYSET_GET,
+    UBS_NATIVE_FINALIZE_DELIVER_ENQ,
+    UBS_NATIVE_FINALIZE_DELIVER_WAKE,
+    UBS_NATIVE_FINALIZE_DONE_ALLOC,
+    UBS_NATIVE_FINALIZE_DONE_POST,
+
+    /* =========================================================================
+     * DIAG tracepoints: gen-check overhead breakdown (added to localise the
+     * +5us P99 regression in CORE_WRITE_DO_TX_POLL observed when gen-check
+     * feature was merged).
+     *   SWEEP_FOR_SOCK     - full SweepExpiredForSocket wall-time (4 calls/
+     *                        socket per poller tick). The "tax" we pay even
+     *                        when the feature is off.
+     *   SWEEP_FASTPATH     - time spent in the fast-path branch only (feature
+     *                        off OR zero-deadline counters). Should be ~30ns.
+     *   SWEEP_FULL         - time spent in the full sweep branch (mutex lock
+     *                        + container iteration). Non-zero only when
+     *                        effective_timeout != 0.
+     *   PINNED_SEAL_ONLY   - SealOnly wall-time incl. create_ns timestamp +
+     *                        PinnedEntry construction. Hot path on every READ.
+     *   READ_GEN_FETCH_ADD - g_read_gen.fetch_add(1) in TrySenderPost. */
+    UBS_NATIVE_SWEEP_FOR_SOCK,
+    UBS_NATIVE_SWEEP_FASTPATH,
+    UBS_NATIVE_SWEEP_FULL,
+    UBS_NATIVE_PINNED_SEAL_ONLY,
+    UBS_NATIVE_READ_GEN_FETCH_ADD,
+    UBS_NATIVE_RETRY_READS_FOR_SOCK,
+
     // count the number of ProfilingTPId
     UBSOCKET_PROF_COUNT,
 };
@@ -112,13 +237,12 @@ void ubsocket_prof_reset();
 
 /*
  * ubsocket_get_timeNs_compile
- * 受 UBS_SPLIT_TRACE_ENABLED_COMPILE 控制，编译时未使能，无法使用
- * 
+ * 始终返回真实时间戳, 供 SplitTrace 等模块使用 (运行时开关控制)
+ *
  * ubsocket_get_timeNs
  * 受到 ubsocket_prof_enabled 控制，只用于 高性能打点宏
  * 主流程中不调用该函数
  */
-#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
 #if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
 #define ubsocket_get_timeNs_compile()                              \
     ({                                                             \
@@ -138,9 +262,6 @@ void ubsocket_prof_reset();
         _result;                                                                      \
     })
 #endif
-#else // UBS_SPLIT_TRACE_ENABLED_COMPILE
-#define ubsocket_get_timeNs_compile() 0
-#endif // UBS_SPLIT_TRACE_ENABLED_COMPILE
 
 static __always_inline uint64_t ubsocket_get_timeNs()
 {

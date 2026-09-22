@@ -1,7 +1,5 @@
 # UBSocket
 
-English | [简体中文](./README.md)
-
 ## 1 Introduction
 
 The `UBSocket` communication acceleration library intercepts `POSIX Socket API` in TCP applications and converts TCP communication into UB high-performance communication, thereby accelerating communication. With `UBSocket`, traditional TCP applications or TCP communication libraries can quickly enable UB communication with minimal or even no modification to the source code. The communication acceleration capability of `UBSocket` has been verified on [bRPC](https://brpc.apache.org/zh/docs/overview/), achieving a performance improvement of over 40% compared to native TCP. In the future, more scenarios will be explored.
@@ -103,7 +101,7 @@ UBSOCKET_TRANS_MODE=ub \
 UBSOCKET_DEV_NAME="bonding_dev_0" \
 UBSOCKET_SRC_EID="xxxx:xxxx:0000:0000:0000:0000:0100:0000" \
 UBSOCKET_LOG_LEVEL=info \
-UBSOCKET_TX_DEPTH=1024 \
+UBSOCKET_TX_DEPTH=256 \
 UBSOCKET_RX_DEPTH=1024 \
 UBSOCKET_READV_UNLIMITED=true \
 ./application
@@ -118,23 +116,26 @@ When starting `UBSocket`, you can configure environment variables. The following
 
 | Name                      | Meaning                  | Value Range                                                    | Default Value | Mandatory                              |
 | :------------------------- | :--------------------- | :----------------------------------------------------------- | :------ |----------------------------------|
-| UBSOCKET_TX_DEPTH          | Send queue depth          | The minimum value is 64. The upper limit is determined by the actual machine environment (the smaller value between `max_jfc_depth` and `max_jfs_depth` in the `urma_admin show --whole` command).| 1024     | No                               |
-| UBSOCKET_RX_DEPTH          | Receive queue depth          | The minimum value is 64. The upper limit is determined by the actual machine environment (the smaller value between `max_jfc_depth` and `max_jfr_depth` in the `urma_admin show --whole` command).| 2048     | No                               |
+| UBSOCKET_TX_DEPTH          | Send queue depth          | The minimum value is 64. The upper limit is determined by the actual machine environment (the smaller value between `max_jfc_depth` and `max_jfs_depth` in the `urma_admin show --whole` command).| 256     | No                               |
+| UBSOCKET_RX_DEPTH          | Receive queue depth          | The minimum value is 64. The upper limit is determined by the actual machine environment (the smaller value between `max_jfc_depth` and `max_jfr_depth` in the `urma_admin show --whole` command).| 1024     | No                               |
 | UBSOCKET_READV_UNLIMITED   | Whether to enable the readv reporting restriction | false, true                                                 | true   | No                               |
 | UBSOCKET_BLOCK_TYPE        | Minimum fragment of the memory pool      | default, large                               | default | No                               |
-| UBSOCKET_POOL_INITIAL_SIZE | Total size of the I/O memory, in MB.| Set based on application requirements                                                | 1024    | No                               |
+| UBSOCKET_SMALL_BUF_POOL_DEPTH     | Small(4K) SC per-thread TLS depth limit            | [1, 15360]                                                | 1024    | No                               |
+| UBSOCKET_SMALL_GLOBAL_POOL_DEPTH  | Small(4K) SC global pool initial block count (extra pre-allocation beyond TLS) | [0, 15360]                                                | 512     | No                               |
+| UBSOCKET_MIDDLE_BUF_POOL_DEPTH    | Middle SC per-thread TLS depth limit               | [1, 15360]                                                | 1024    | No                               |
+| UBSOCKET_MIDDLE_GLOBAL_POOL_DEPTH | Middle SC global pool initial block count (extra pre-allocation beyond TLS) | [0, 15360]                                                | 512     | No                               |
+| UBSOCKET_MIDDLE_POOL_BLOCK_SIZE   | Middle SC block size (bytes), must be 4K*2^n       | [8192, 1048576] and must be 4K*2^n                        | 65536   | No                               |
 | UBSOCKET_USE_UB_FORCE | Whether to forcibly use the UB protocol to accelerate TCP| false: UB is not forcibly used to accelerate TCP. true: UB is forcibly used to accelerate TCP.                                               | false    | No                               |
 | UBSOCKET_SCHEDULE_POLICY | Multi-plane load balancing policy| affinity_priority, affinity, rr                                               | affinity_priority   | No                               |
 | UBSOCKET_MONITOR_ENABLE      | Whether to enable trace statistics      | false, true                                                 | true    | No                               |
 | UBSOCKET_MONITOR_INTERVAL        | Interval for outputting maintenance and test data (unit: s)  | [1, 300]                                                    | 10       | No                              |
 | UBSOCKET_MONITOR_FILE_PATH   | Output path of maintenance and test data. The path length ranges from 1 to 512 bytes. | [1, 512]                                                    | /tmp/ubsocket/log | No                       |
-| UBSOCKET_MONITOR_FILE_SIZE   | Size of the maintenance and test data file (MB)  | [1, 300]                                                   | 10 | No                       |
+| UBSOCKET_MONITOR_FILE_SIZE   | Total disk usage cap for KPI maintenance/test data (MB); at most 2 files (1 active + 1 slot), per-file rotation size = cap / 2; when the active file exceeds the per-file size it is rotated into the single slot and the oldest file is overwritten in rotation | [10, 600] | 40 | No |
 | UBSOCKET_CLI_ENABLE         | Whether to enable the trace CLI function| true, false                                                | false   | No                               |
 | UBSOCKET_SHARE_JFR_ENABLE  | Whether to enable JFR sharing| false, true                                              | true   | No                               |
 | UBSOCKET_USE_BRPC_ZCOPY    | Whether to use the brpc zcopy function| false, true                                               | true   | No                               |
 | UBSOCKET_LINK_PRIORITY     | SL priority of URMA traffic| [0, 15] | -1 | No|
-| UBSOCKET_POOL_MAX_SIZE     | Maximum value for elastic capacity expansion of the UB communication memory occupied by a single bRPC process, in MB| [UBSOCKET_POOL_INITIAL_SIZE + 64, 6144]. The minimum capacity expansion size at a time is 64 MB. Therefore, UBSOCKET_POOL_MAX_SIZE minus UBSOCKET_POOL_INITIAL_SIZE is 64 MB or higher.| 2048    | No                               |
-| UBSOCKET_BUF_POOL_DEPTH    | Thread memory pool depth of a single bRPC process                    | Set based on application requirements           | 24576   | No                               |
+| UBSOCKET_POOL_MAX_SIZE     | Maximum value for elastic capacity expansion of the UB communication memory occupied by a single bRPC process, in MB (controls all pools total: tiny+rx+normal)| [1, 6144]                                                    | 2048    | No                               |
 
 > Note:
 >
@@ -151,4 +152,4 @@ The `bRPC` implements memory pool management. The default size of a single memor
 
 > Note:
 >
-> After a larger memory block is enabled, more memory may be consumed. You can use `UBSOCKET_POOL_INITIAL_SIZE` to configure the size of the `UBSocket` memory pool.
+> After a larger memory block is enabled, more memory may be consumed. The total memory pool size is controlled by `UBSOCKET_POOL_MAX_SIZE` (including tiny+rx+normal pools). The initial block count is determined by `UBSOCKET_SMALL_BUF_POOL_DEPTH`+`UBSOCKET_SMALL_GLOBAL_POOL_DEPTH` (4K SC) and `UBSOCKET_MIDDLE_BUF_POOL_DEPTH`+`UBSOCKET_MIDDLE_GLOBAL_POOL_DEPTH` (Middle SC).

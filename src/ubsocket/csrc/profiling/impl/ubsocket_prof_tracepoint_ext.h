@@ -26,6 +26,7 @@ constexpr double PERCENTILE_P90_EXT = 90.0;  // 第90百分位
 constexpr double PERCENTILE_P95_EXT = 95.0;  // 第95百分位
 constexpr double PERCENTILE_P99_EXT = 99.0;  // 第99百分位
 constexpr double PERCENTILE_P999_EXT = 99.9; // 第99.9百分位
+constexpr double PERCENTILE_P9999_EXT = 99.99; // 第99.99百分位
 
 // 快速随机数生成器（参考 brpc 的实现）
 // 使用线性同余生成器，无锁且高性能
@@ -67,6 +68,7 @@ struct TracepointExt {
         uint64_t pp95_time = 0;
         uint64_t pp99_time = 0;
         uint64_t pp999_time = 0;
+        uint64_t pp9999_time = 0;
     } data;
 
     void RecordExt(uint64_t timestamp, bool good) noexcept;
@@ -133,6 +135,7 @@ struct TracepointExt {
         data.pp95_time = other.data.pp95_time;
         data.pp99_time = other.data.pp99_time;
         data.pp999_time = other.data.pp999_time;
+        data.pp9999_time = other.data.pp9999_time;
 
         if (other.name != nullptr) {
             size_t len = strlen(other.name);
@@ -177,6 +180,7 @@ struct TracepointExt {
         data.pp95_time = other.data.pp95_time;
         data.pp99_time = other.data.pp99_time;
         data.pp999_time = other.data.pp999_time;
+        data.pp9999_time = other.data.pp9999_time;
 
         name = nullptr;
         if (other.name != nullptr) {
@@ -216,6 +220,7 @@ struct TracepointExt {
         data.pp95_time = other.data.pp95_time;
         data.pp99_time = other.data.pp99_time;
         data.pp999_time = other.data.pp999_time;
+        data.pp9999_time = other.data.pp9999_time;
     }
 
     // move operator=
@@ -252,6 +257,7 @@ struct TracepointExt {
         data.pp95_time = other.data.pp95_time;
         data.pp99_time = other.data.pp99_time;
         data.pp999_time = other.data.pp999_time;
+        data.pp9999_time = other.data.pp9999_time;
 
         return *this;
     }
@@ -310,6 +316,7 @@ inline void TracepointExt::ComputePercentilesExt() noexcept
         data.pp95_time = 0;
         data.pp99_time = 0;
         data.pp999_time = 0;
+        data.pp9999_time = 0;
         return;
     }
 
@@ -346,6 +353,7 @@ inline void TracepointExt::ComputePercentilesExt() noexcept
     data.pp95_time = get_percentile(PERCENTILE_P95_EXT);
     data.pp99_time = get_percentile(PERCENTILE_P99_EXT);
     data.pp999_time = get_percentile(PERCENTILE_P999_EXT);
+    data.pp9999_time = get_percentile(PERCENTILE_P9999_EXT);
 }
 
 inline void TracepointExt::ResetExt() noexcept
@@ -363,6 +371,7 @@ inline void TracepointExt::ResetExt() noexcept
     data.pp95_time = 0;
     data.pp99_time = 0;
     data.pp999_time = 0;
+    data.pp9999_time = 0;
 }
 
 } // namespace profiling

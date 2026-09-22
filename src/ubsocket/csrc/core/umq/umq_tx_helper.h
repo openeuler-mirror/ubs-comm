@@ -11,6 +11,8 @@
 #ifndef UBS_COMM_UMQ_TX_HELPER_H
 #define UBS_COMM_UMQ_TX_HELPER_H
 
+#include <unordered_set>
+
 #include "common/ubsocket_common_includes.h"
 #include "core/ubsocket_core_types.h"
 #include "umq_errno_converter.h"
@@ -72,10 +74,11 @@ public:
 private:
     static int PollUmqTxInternal(PollArgs &poll_args, ICallback &error_cb);
     static int ProcessTxCqe(umq_buf_t *start_qbuf, umq_buf_t *end_qbuf, Socket *sock, bool is_first_cqe);
-    static void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt);
+    static void HandleTxCqeError(umq_buf_t *qbuf, int &wr_cnt, Socket *sock);
     static bool HandleProbePacket(umq_buf_t *qbuf);
-    static void LogTxCqeErrorMsg(umq_buf_t *buf);
+    static void LogTxCqeErrorMsg(umq_buf_t *buf, Socket *sock);
     static void ProcessErrorTxCqe(umq_buf_t *first_qbuf);
+    static void HandleRnrNotify(Socket *sock, umq_buf_t *buf, std::unordered_set<int> &rnr_notify_fds);
     static Block *DataToBlock(void *data);
 };
 

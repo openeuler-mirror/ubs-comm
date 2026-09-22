@@ -1,8 +1,5 @@
 ## 🔄Latest News
 
- 
-简体中文 | [English](./README_EN.md)
-
 * UB Support May 30, 2026
 
 ## 🎉Introduction

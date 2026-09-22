@@ -29,6 +29,11 @@ protected:
     int DoInitialize() noexcept override;
     int DoExecute() noexcept override;
 
+    bool IsUbProtocol() const noexcept
+    {
+        return protocol_ == "ub_rm_rtp" || protocol_ == "ub_rc_rtp" || protocol_ == "ub_rm_ctp";
+    }
+
 private:
     int ValidateCommonParams() noexcept;
     int ValidateClientParams() noexcept;

@@ -3,6 +3,8 @@
  * ubs-comm is licensed under the Mulan PSL v2.
  */
 
+#include <sys/resource.h>
+#include <algorithm>
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -10,6 +12,7 @@
 #include <vector>
 
 #include "common/ubsocket_set.h"
+#include "common/ubsocket_lock.h"
 
 using namespace ock::ubs;
 
@@ -41,6 +44,11 @@ struct ThreadItem : public Referable {
 
 class ArraySetTest : public ::testing::Test {
 protected:
+    static void SetUpTestSuite()
+    {
+        LockRegistry::RegisterDefaultOps();
+    }
+
     void SetUp() override
     {
         ArraySet<TestItem>::GetInstance().ReleaseAll();
@@ -79,7 +87,99 @@ TEST_F(ArraySetTest, Capacity_AfterInit)
     set.Init();
     uint32_t cap = set.Capacity();
     EXPECT_GT(cap, 0u);
-    EXPECT_LE(cap, 65536u);
+    /* issue #44: the ceiling follows RLIMIT_NOFILE up to 1M; 65536 was a hidden wall */
+    struct rlimit rl {};
+    ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &rl), 0);
+    EXPECT_LE(cap, 1u << 20);
+    EXPECT_EQ(cap, std::min(static_cast<uint32_t>(rl.rlim_cur), 1u << 20));
+}
+
+/* issue #44: capacity used to be min(rlimit, 65536); a process allowed 1M fds still could not register
+ * fd >= 65536 and only found out at the first ubs_poll. Capacity must follow the rlimit up to 1M. */
+struct FdCapacityProbe : public Referable {};
+
+TEST_F(ArraySetTest, Capacity_FollowsRlimitAboveLegacy65536)
+{
+    struct rlimit saved {};
+    ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &saved), 0);
+    constexpr rlim_t WANT = 70000;
+    if (saved.rlim_max != RLIM_INFINITY && saved.rlim_max < WANT) {
+        GTEST_SKIP() << "hard nofile limit " << saved.rlim_max << " below " << WANT;
+    }
+    struct rlimit rl = saved;
+    rl.rlim_cur = WANT;
+    ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rl), 0);
+
+    auto &set = ArraySet<FdCapacityProbe>::GetInstance();
+    const int init_ret = set.Init();
+    (void)setrlimit(RLIMIT_NOFILE, &saved);
+    ASSERT_EQ(init_ret, 0);
+    EXPECT_EQ(set.Capacity(), static_cast<uint32_t>(WANT));
+
+    auto *probe = new FdCapacityProbe();
+    const int last_fd = static_cast<int>(WANT) - 1;
+    set.OverrideItem(last_fd, probe);
+    EXPECT_EQ(set.GetItem(last_fd).Get(), probe);
+    EXPECT_EQ(set.GetItem(static_cast<int>(WANT)).Get(), nullptr);
+    set.OverrideItem(last_fd, nullptr);
+    set.DrainDeferredRelease();
+}
+
+// --- deferred release: notifier + counted drain (issue #49) ---
+
+static std::atomic<int> g_deferredNotifyCnt{0};
+static void *g_deferredNotifyCtx = nullptr;
+static void CountDeferredNotify(void *ctx)
+{
+    g_deferredNotifyCtx = ctx;
+    ++g_deferredNotifyCnt;
+}
+
+/* 摘表把最后一个引用停进延迟队列时必须叫醒监听者：这是失败链路（不经 close/Retire）
+ * 能被释放的唯一信号。无监听者时入队照旧。 */
+TEST_F(ArraySetTest, EnqueueDeferred_NotifiesRegisteredListener)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    ASSERT_EQ(set.Init(), 0);
+    g_deferredNotifyCnt = 0;
+    g_deferredNotifyCtx = nullptr;
+    int token = 0;
+    set.SetDeferredNotifier(&CountDeferredNotify, &token);
+
+    auto *item = new TestItem();
+    set.OverrideItem(3, item);
+    EXPECT_EQ(g_deferredNotifyCnt, 0); /* 登记不入队 */
+    set.OverrideItem(3, nullptr);      /* 摘除：旧引用入队 → 通知 */
+    EXPECT_EQ(g_deferredNotifyCnt, 1);
+    EXPECT_EQ(g_deferredNotifyCtx, &token);
+    EXPECT_EQ(set.DeferredCount(), 1u);
+
+    set.SetDeferredNotifier(nullptr, nullptr);
+    auto *item2 = new TestItem();
+    set.OverrideItem(4, item2);
+    set.OverrideItem(4, nullptr);
+    EXPECT_EQ(g_deferredNotifyCnt, 1); /* 已卸载：不再通知，但照常入队 */
+    EXPECT_EQ(set.DeferredCount(), 2u);
+    EXPECT_EQ(set.DrainDeferredRelease(), 2u);
+    EXPECT_EQ(set.DeferredCount(), 0u);
+}
+
+TEST_F(ArraySetTest, DrainDeferredRelease_ReturnsCountAndDestroys)
+{
+    auto &set = ArraySet<CountItem>::GetInstance();
+    ASSERT_EQ(set.Init(), 0);
+    CountItem::alive = 0;
+    for (int i = 10; i < 13; ++i) {
+        set.OverrideItem(i, new CountItem());
+    }
+    EXPECT_EQ(CountItem::alive, 3);
+    for (int i = 10; i < 13; ++i) {
+        set.OverrideItem(i, nullptr); /* 返回的引用随即丢弃：对象只剩队列里那份 */
+    }
+    EXPECT_EQ(CountItem::alive, 3); /* 排空前不死 */
+    EXPECT_EQ(set.DrainDeferredRelease(), 3u);
+    EXPECT_EQ(CountItem::alive, 0);
+    EXPECT_EQ(set.DrainDeferredRelease(), 0u);
 }
 
 // --- GetItem ---
@@ -367,4 +467,85 @@ TEST_F(ArraySetTest, ThreadSafety_ConcurrentOverrideAndGet)
     }
     EXPECT_EQ(errors.load(), 0);
     set.ReleaseAll();
+}
+
+// ==================== ArraySet: edge cases ====================
+
+TEST_F(ArraySetTest, GetItem_OutOfRange_ReturnsNullRef)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    auto ref = set.GetItem(-1);
+    EXPECT_EQ(ref.Get(), nullptr);
+    ref = set.GetItem(99999);
+    EXPECT_EQ(ref.Get(), nullptr);
+}
+
+TEST_F(ArraySetTest, OverrideItem_OutOfRange_ReturnsNullRef)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    auto ref = set.OverrideItem(-1, nullptr);
+    EXPECT_EQ(ref.Get(), nullptr);
+    ref = set.OverrideItem(99999, nullptr);
+    EXPECT_EQ(ref.Get(), nullptr);
+}
+
+TEST_F(ArraySetTest, RemoveItem_OutOfRange_ReturnsNullRef)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    auto ref = set.RemoveItem(-1);
+    EXPECT_EQ(ref.Get(), nullptr);
+    ref = set.RemoveItem(99999);
+    EXPECT_EQ(ref.Get(), nullptr);
+}
+
+TEST_F(ArraySetTest, OverrideItem_NullNewItem_NoOp)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    auto ref = set.OverrideItem(0, nullptr);
+    EXPECT_EQ(ref.Get(), nullptr);
+}
+
+TEST_F(ArraySetTest, RemoveItem_EmptySlot_ReturnsNullRef)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    auto ref = set.RemoveItem(0);
+    EXPECT_EQ(ref.Get(), nullptr);
+}
+
+TEST_F(ArraySetTest, DrainDeferredRelease_NoMutex_NoCrash)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    auto *saved = set.deferred_mtx_;
+    set.deferred_mtx_ = nullptr;
+    set.DrainDeferredRelease();
+    set.deferred_mtx_ = saved;
+}
+
+TEST_F(ArraySetTest, EnqueueDeferred_NoMutex_NoCrash)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    auto *saved = set.deferred_mtx_;
+    set.deferred_mtx_ = nullptr;
+    set.EnqueueDeferred(nullptr);
+    set.deferred_mtx_ = saved;
+}
+
+TEST_F(ArraySetTest, Size_ZeroWhenEmpty)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    EXPECT_EQ(set.Size(), 0u);
+}
+
+TEST_F(ArraySetTest, Capacity_NonZero)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    EXPECT_GT(set.Capacity(), 0u);
+}
+
+TEST_F(ArraySetTest, ForEach_EmptySet_NoCalls)
+{
+    auto &set = ArraySet<TestItem>::GetInstance();
+    uint32_t count = 0;
+    set.ForEach([&count](int fd, TestItem *p) { count++; });
+    EXPECT_EQ(count, 0u);
 }

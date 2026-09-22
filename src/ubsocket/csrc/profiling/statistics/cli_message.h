@@ -40,14 +40,28 @@ enum class CLICommand : uint8_t
     IO = 7,
     UMQ = 8,
     PROBE = 9,
+    TX_STAT = 10,
+    RX_STAT = 11,
+    SPLIT_TRACE = 12,
+    QBUF_POOL_STATS = 13,
 };
 
 enum class CLITypeParam : uint8_t
 {
     INVALID = 0,
-    TRACE_OP_QUERY,
-    TRACE_OP_RESET,
-    TRACE_OP_ENABLE_TRACE,
+    PROF_OP_QUERY,
+    PROF_OP_RESET,
+    PROF_OP_ENABLE,
+    PROF_OP_DISABLE,
+    PROF_OP_INTERVAL,
+    PROF_OP_PATH,
+    PROF_OP_MODE,
+    PROBE_OP_QUERY,
+    PROBE_OP_ENABLE,
+    PROBE_OP_DISABLE,
+    PROBE_OP_SET_DUMP_PATH,
+    SPLIT_TRACE_OP_SET_SAMPLE_RATE,
+    SPLIT_TRACE_OP_SET_DRAIN_INTERVAL,
 };
 
 enum class CLISwitchPosition : uint8_t
@@ -127,6 +141,22 @@ struct __attribute__((packed)) CLISocketData {
     uint64_t sendBytes;
     uint64_t errorPackets;
     uint64_t lostPackets;
+    uint64_t bigdataCtrlRecv;
+    uint64_t bigdataRead;
+    uint64_t bigdataCtrlSend;
+};
+
+struct __attribute__((packed)) CLITxStatData {
+    uint64_t socketId;
+    uint32_t post_err[9];
+    uint32_t cqe_err[6];
+};
+
+struct __attribute__((packed)) CLIRxStatData {
+    uint64_t socketId;
+    uint32_t poll_err[5];
+    uint32_t cqe_err[6];
+    uint32_t dataset_err[4];
 };
 
 struct CLIFlowControlData {
@@ -138,6 +168,13 @@ struct CLIFlowControlData {
 struct CLIQbufPoolData {
     uint64_t socketId;
     uint64_t createTime;
+    umq_qbuf_pool_stats_t umqQbufPoolStat;
+};
+
+/* 全局 qbuf 池统计（umq_qbuf_pool_info_get + umq_tiny_qbuf_pool_info_get，normal + tiny 两池），
+ * 与 30s 周期落盘的 ubsocket_qbuf.txt 数据同源 */
+struct CLIQbufPoolStatsData {
+    int32_t retCode; /* 池级 info_get 返回值，0 成功；非 0 时 umqQbufPoolStat 内容无效 */
     umq_qbuf_pool_stats_t umqQbufPoolStat;
 };
 

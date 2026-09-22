@@ -64,19 +64,39 @@ public:
 
 private:
     Result AcceptNegotiate(SocketPtr socketPtr);
-    Result DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &mUsedPorts);
+    Result DoUbAccept(SocketPtr socketPtr, umq_used_ports_t &mUsedPorts, bool early_prepared = false);
+    /* DoUbAccept 的后半段（cooldown 校验 + umq_bind + prefill/注册收尾），供
+     * 方案B 在协商应答前提前执行；info/info_len 为对端 bind_info。 */
+    Result BindPeerAndFinalize(SocketPtr socketPtr, umq_used_ports_t &used_ports, uint8_t *info,
+                               uint64_t info_len);
+    /* 方案B/并行 bind 的提前 bind：按当前 used_ports 调 BindPeerAndFinalize，结果经降级
+     * 开关掩码后存入 early_ack_ret_ 并置 early_bound_。 */
+    void BindPeerEarly(SocketPtr socketPtr, NegotiateReqExt &req_ext);
     Result DoUbAcceptRetry(SocketPtr socketPtr, Result &ackRet, Result &peerRet);
-    Result AcceptExchangeSocketIDs(int fd);
+    Result AcceptExchangeSocketIDs(const SocketPtr &socketPtr, int fd);
     Result FillLocalSocketIdsForNegotiate(uint32_t *socket_ids, uint32_t &socket_id_count);
     Result CheckRouteDevAddForAccept(const umq_eid_t &conn_eid, const UmqSocketPtr &sk);
     void BuildNegotiateRsp(NegotiateRsp &rsp);
+    /* 方案A'：协商应答前提前完成路检 + 本地 umq 创建 + bind_info 提取（携带进
+     * 应答尾部）。失败时半成品自清并返回非 OK——调用方发经典应答，后续
+     * DoUbAccept 走原路径重新创建，语义零变化。 */
+    Result PrepareLocalUmqEarly(SocketPtr socketPtr, NegotiateRspExt &ext);
 
-    umq_topo_type_t topo_type_;
-    umq_route_t conn_route_;
-    std::vector<umq_route_t> back_routes_; // 一主三备：备路组，最多3条
+    umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
+
+    // 方案A'（NEGO_CAP_CARRY_BINDINFO）：对端能力位 + 本轮已提前建好本地 umq（一次性消费）
+    bool peer_nego_carry_ = false;
+    bool early_prepared_ = false;
+    /* 方案B：create+bind+腿⑥ 已在协商应答前完成并随应答送出；kSTART 一次性消费。 */
+    bool early_bound_ = false;
+    Result early_ack_ret_ = UBS_OK;
+    /* 并行 bind：应答先于 bind 送出，bind 结果需在 kSTART 以交叉 ack 补发（一次性消费） */
+    bool early_ack_deferred_ = false;
 
     // degrade & retry
     bool degradable_ = false;
+    // 交叉 ack 能力（AcceptNegotiate 从 NegotiateReq.cap_flags 解析；仅 kSTART 轮使用）
+    bool peer_early_ack_ = false;
     OtherRouteMessage other_route_message_;
     UBHandshakeState retry_state_ = UBHandshakeState::kSTART;
 };

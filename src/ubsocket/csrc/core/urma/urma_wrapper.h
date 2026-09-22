@@ -50,6 +50,7 @@ struct UrmaDeviceBandWidth {
 class UrmaDevice : public Referable {
 public:
     static void Init() noexcept;
+    static void ClearAll() noexcept;
 
     static const std::map<std::string, UrmaDevicePtr> &AllDevices() noexcept;
 
@@ -146,6 +147,7 @@ class UrmaContext : public Referable {
 public:
     static Result CreateContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out);
     static uint32_t NewJettyId() noexcept;
+    static void ClearAll() noexcept;
 
 public:
     UrmaContext(urma_context_t *urmaContext, const UrmaDevicePtr &dev, const urma_eid_info_t &eidInfo)

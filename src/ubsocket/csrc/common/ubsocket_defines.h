@@ -40,15 +40,13 @@ using Result = int32_t;
 
 #define RPC_ADPT_FD_MAX (8192)
 
-enum dev_schedule_policy
-{
+enum dev_schedule_policy {
     ROUND_ROBIN = 1,
     CPU_AFFINITY = 2,
     CPU_AFFINITY_PRIORITY = 3,
 };
 
-enum ub_trans_mode
-{
+enum ub_trans_mode {
     RC_TP,
     RM_TP,
     RM_CTP,
@@ -56,8 +54,7 @@ enum ub_trans_mode
 };
 
 // 描述在 Connect/Accept 间的握手状态
-enum class UBHandshakeState : uint32_t
-{
+enum class UBHandshakeState : uint32_t {
     kOK = 0,
     // 初次握手
     kSTART = 1,
@@ -71,21 +68,18 @@ enum class UBHandshakeState : uint32_t
     kFAILED = 6,
 };
 
-enum ops_error_code
-{
+enum ops_error_code {
     OK,
     NORMAL_ERROR,
     FATAL_ERROR
 };
 
-enum class UBHandshakeMode : uint32_t
-{
+enum class UBHandshakeMode : uint32_t {
     TFO,
     UB_SOCK_OPT
 };
 
-typedef enum pool_type : uint8_t
-{
+typedef enum pool_type : uint8_t {
     SINGLE,
     POOL
 } pool_type_t;
@@ -95,33 +89,11 @@ typedef enum pool_type : uint8_t
 /// | `BONDING_BACKUP` | 指定 bonding 设备，且 `backup_link=true`    | 通过 bonding 设备通信，bonding 本身提供主备冗余       |
 /// | `BONDING_ROUTE`  | 指定 bonding 设备，但是 `backup_link=false` | 通过 bonding 设备获取裸设备路由信息，实际数据走裸设备 |
 /// | `RAW_DEVICE`     | 指定裸设备                                  | 完全不依赖 bonding 设备，直接通过裸设备通信           |
-enum class LinkSelectionPolicy : uint8_t
-{
+enum class LinkSelectionPolicy : uint8_t {
     BONDING_BACKUP = 0,
     BONDING_ROUTE,
     RAW_DEVICE,
 };
-
-enum class SplitTraceLevel : uint8_t
-{
-    LEVEL_NONE = 0,
-    LEVEL_UBSOCKET = 1 << 0, // 0x01
-    LEVEL_UMQ = 1 << 1,      // 0x02
-
-    LEVEL_ALL = LEVEL_UBSOCKET | LEVEL_UMQ
-};
-
-// 重载按位与运算符，支持 enum class 直接参与位运算
-inline SplitTraceLevel operator&(SplitTraceLevel lhs, SplitTraceLevel rhs)
-{
-    return static_cast<SplitTraceLevel>(static_cast<uint8_t>(lhs) & static_cast<uint8_t>(rhs));
-}
-
-// 重载按位或运算符，方便组合
-inline SplitTraceLevel operator|(SplitTraceLevel lhs, SplitTraceLevel rhs)
-{
-    return static_cast<SplitTraceLevel>(static_cast<uint8_t>(lhs) | static_cast<uint8_t>(rhs));
-}
 
 #ifndef TCP_UB_SOCKET_HANDSHAKE
 #define TCP_UB_SOCKET_HANDSHAKE 144
@@ -148,7 +120,9 @@ inline SplitTraceLevel operator|(SplitTraceLevel lhs, SplitTraceLevel rhs)
 constexpr uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445054;
 constexpr uint32_t NEGOTIATE_SOCKET_ID_MAX_NUM = 256;
 constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 8192;
-constexpr uint32_t NEGOTIATE_REQ_BUFFER_SIZE = 64;
+/* 方案B：NegotiateReq 尾部可携带客户端 bind_info（≤ UMQ_BIND_INFO_SIZE_MAX），
+ * 发送缓冲随之扩大：magic+version+len(16) + req(≤64) + size(8) + bind_info(8192)。 */
+constexpr uint32_t NEGOTIATE_REQ_BUFFER_SIZE = 8320;
 constexpr uint32_t DIVIDED_NUMBER = 2;
 constexpr uint32_t CACHE_LINE_ALIGNMENT = 64;
 constexpr uint16_t TX_HANDLE_THRESHOLD = 2;
@@ -160,11 +134,18 @@ constexpr uint32_t TX_SGE_MAX = 1;
 /* unsolicited bytes use the same setting as brpc
  * accumulated bytes exceed UNSOLICITED_BYTES_MAX will generate a solicited interrupt event at remote */
 constexpr uint32_t TX_UNSOLICITED_BYTES_MAX = 1048576;
-constexpr uint32_t NEGOTIATE_TIMEOUT_MS = 10;
+constexpr uint32_t NEGOTIATE_TIMEOUT_MS = 20000;
+constexpr uint32_t SEND_RECV_POLL_SLICE_MS = 10;
 constexpr uint32_t FLUSH_SOCKET_MSG_BUFFER_LEN = 1024;
 constexpr uint32_t FLUSH_TIMEOUT_MS = 200;
-constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 200000;
+constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 20000;
+// 析构路径 flush 超时: 覆盖硬件 RNR 重试周期 (rnr_retry=6, err_timeout=2s => 12s) + 3s 余量
+constexpr uint32_t UMQ_DESTROY_FLUSH_TIMEOUT_MS = 15000;
+// umq_destroy 重试: jetty 仍 BUSY 时 (in-flight WR 未完成) 间隔重试
+constexpr int UMQ_DESTROY_MAX_RETRIES = 3;
+constexpr int UMQ_DESTROY_RETRY_INTERVAL_US = 500000;
 constexpr uint64_t UMQ_MEM_MIN_EXPAND_SIZE_MB = 64;
+constexpr uint32_t UBS_RX_PORT_NUM = 4;
 
 /* 环境变量 UBSOCKET_TX_DEPTH / UBSOCKET_RX_DEPTH 校验上限。
  * 65536 (2^16) 对齐硬件 JFS/JFR 深度典型上限；UMQ 层会按设备实际能力
@@ -182,6 +163,10 @@ constexpr uint64_t SIZE_8K = 8192;
 constexpr uint64_t SIZE_16K = 16384;
 constexpr uint64_t SIZE_32K = 32768;
 constexpr uint64_t SIZE_64K = 65536;
+constexpr uint64_t SIZE_128K = 131072;
+constexpr uint64_t SIZE_256K = 262144;
+constexpr uint64_t SIZE_512K = 524288;
+constexpr uint64_t SIZE_1M = 1048576;
 constexpr uint64_t MASK_DIFF = 1;
 constexpr uint64_t IOBUF_DIFF = 32;
 constexpr uint16_t REFILL_THRESHOLD = 32;
@@ -192,8 +177,6 @@ constexpr uint32_t GET_PER_ACK = 32;
 // 256 is better on RM_CTP.
 // see #66
 constexpr uint32_t POLL_BATCH_MAX = 256;
-
-constexpr uint32_t POLL_TX_RETRY_MAX_CNT = 50;
 
 constexpr const uint32_t NET_STR_ERROR_BUF_SIZE = 128;
 
@@ -222,9 +205,12 @@ constexpr uint32_t UBSOCKET_TRACE_TIME_DEFAULT = 10;
 constexpr uint32_t UBSOCKET_TRACE_TIME_MIN = 1;
 constexpr uint32_t UBSOCKET_TRACE_TIME_MAX = 300;
 
-constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_DEFAULT = 10;
-constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_MIN = 1;
-constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_MAX = 300;
+/* KPI 落盘：UBSOCKET_MONITOR_FILE_SIZE 现为磁盘总占用上限（覆盖式轮转，单位 MB），
+   环境变量可配，默认 40MB，范围 [10, 600]。落盘最多 2 个文件（1 活动 + 1 轮转槽位），
+   单文件轮转大小 = 上限 / 2，超阈值后循环覆写最旧的槽位文件。 */
+constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_DEFAULT = 40;
+constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_MIN = 10;
+constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_MAX = 600;
 
 constexpr uint32_t UBSOCKET_TRACE_FILE_PATH_LEN_MIN = 1;
 constexpr uint32_t UBSOCKET_TRACE_FILE_PATH_LEN_MAX = 512;
@@ -234,6 +220,19 @@ constexpr uint32_t UBSOCKET_PROBE_TIME_MS_MAX = 360000;
 
 constexpr uint32_t UBSOCKET_PROBE_BATCH_MIN = 1;
 constexpr uint32_t UBSOCKET_PROBE_BATCH_MAX = 500;
+
+/* TX-STAT: 发送侧流控统计探测（默认开启；采样间隔/落盘文件可配置） */
+constexpr bool UBSOCKET_TX_STAT_ENABLE_DEFAULT = true;
+constexpr uint32_t UBSOCKET_TX_STAT_INTERVAL_MS_DEFAULT = 1000; /* 1s */
+constexpr uint32_t UBSOCKET_TX_STAT_INTERVAL_MS_MIN = 1000;     /* 下限 1s 硬约束 */
+constexpr uint32_t UBSOCKET_TX_STAT_INTERVAL_MS_MAX = 3600000;  /* 1h */
+constexpr uint32_t UBSOCKET_TX_STAT_MAX_MB_DEFAULT = 64;
+constexpr uint32_t UBSOCKET_TX_STAT_MAX_MB_MIN = 1;
+constexpr uint32_t UBSOCKET_TX_STAT_MAX_MB_MAX = 4096;
+constexpr uint32_t UBSOCKET_TX_STAT_HEARTBEAT_SEC_DEFAULT = 0; /* 0=关闭心跳 */
+constexpr uint32_t UBSOCKET_TX_STAT_HEARTBEAT_SEC_MAX = 3600;
+constexpr uint32_t UBSOCKET_TX_STAT_FILE_LEN_MAX = 256;
+constexpr const char *UBSOCKET_TX_STAT_FILE_DEFAULT = "/tmp/ubsocket/stat/tx_stat_<pid>.log";
 
 constexpr int8_t UBSOCKET_LINK_PRIORITY_NOT_SET = -1;
 constexpr int8_t UBSOCKET_LINK_PRIORITY_DEFAULT = 4;

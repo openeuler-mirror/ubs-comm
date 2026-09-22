@@ -48,7 +48,7 @@ target_compile_options(iobuf_objects PRIVATE -fPIC)
 
 file(GLOB_RECURSE PROFILING_SRCS ${UBSOCKET_CSRC_DIR}/profiling/*.cpp)
 add_library(profiling_objects OBJECT ${PROFILING_SRCS})
-target_compile_options(profiling_objects PRIVATE -fPIC)
+target_compile_options(profiling_objects PRIVATE -fPIC -ftls-model=initial-exec)
 
 ###########################################################################
 ## libraries

@@ -12,8 +12,10 @@
 #define UBS_COMM_UMQ_DATA_TX_H
 
 #include <cstdint>
+#include <memory>
 
 #include "core/ubsocket_data_tx.h"
+#include "profiling/statistics/tx_stat_defs.h"
 #include "umq_backend.h"
 #include "umq_setting.h"
 
@@ -21,70 +23,10 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-class UmqTxOps : public DataTxOps {
-public:
-    explicit UmqTxOps(int fd, uint64_t umq_handle = UMQ_INVALID_HANDLE) : local_umqh_(umq_handle)
-    {
-        fd_ = fd;
-        // 初始化链表头尾为空
-        QBUF_LIST_INIT(&head_buf_);
-        QBUF_LIST_INIT(&tail_buf_);
+/* v1.7 去虚化合并：唯一实现已下沉为 DataTxOps 本体（见 core/ubsocket_data_tx.h），
+ * 本别名保留既有引用与 UmqTxOps(fd, umq_handle) 构造形式。 */
+using UmqTxOps = ::ock::ubs::DataTxOps;
 
-        // 初始化流控与统计计数器为 0
-        unsolicited_bytes_ = 0;
-        unsolicited_wr_num_ = 0;
-        unsignaled_wr_num_ = 0;
-    }
-
-    ~UmqTxOps() override = default;
-
-    ConverterPtr BuildIovConverter(const struct iovec *iov, int iovcnt) override;
-
-    ConverterPtr BuildBufferConverter(const void *buf, size_t size) override;
-
-    // 分配发送缓冲区
-    uintptr_t AllocTxBuf(uint32_t size, uint32_t count) override;
-
-    // 发送请求
-    int PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt) override;
-
-    int PollTx(Socket *sock) override;
-
-    uint32_t IOBufSize() override;
-
-    // Flush
-    void FlushTx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) override;
-
-    void WakeUpTx(Socket *sock);
-
-    bool Writable(const SocketPtr &sock) override;
-
-private:
-    // 处理 umq_post 失败时的坏 buffer
-    uint32_t HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf, umq_buf_t *last_head_qbuf,
-                           uint32_t batch, uint16_t unsolicited_wr_num, uint32_t unsolicited_bytes,
-                           uint16_t unsignaled_wr_num, uint32_t *buf_num);
-    Block *DataToBlock(void *data);
-    int PollUmqTx(Socket *sock, bool poll_to_empty);
-    int PollUmqTxOnce(Socket *sock);
-    int DoUmqTxPoll(Socket *sock, ops_error_code &err_code);
-    int GetAndAckEvent();
-    int DpRearmTxInterrupt();
-    void ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int seq_no, int i, uint64_t tx_total_len);
-
-private:
-    // --- 私有成员变量 ---
-    // umq 相关的句柄
-    uint64_t local_umqh_ = UMQ_INVALID_HANDLE;
-
-    /* m_tx.m_head_buf -> |umq_buf 0| -> |umq_buf 1| -> ... -> |umq_buf n| <- m_tx.m_tailbuf */
-    umq_buf_list_t head_buf_ = {0};
-    umq_buf_list_t tail_buf_ = {0};
-
-    uint32_t unsolicited_bytes_ = 0;  // length of accumulated work request without setting solicited
-    uint16_t unsolicited_wr_num_ = 0; // number of accumulated work request without setting solicited
-    uint16_t unsignaled_wr_num_ = 0;  // number of accumulated work request without setting signaled
-};
 } // namespace umq
 } // namespace ubs
 } // namespace ock

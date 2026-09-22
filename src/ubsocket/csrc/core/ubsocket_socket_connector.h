@@ -23,7 +23,6 @@ class ConnectorOps {
 public:
     virtual ~ConnectorOps() = default;
 
-    RawConnInfoV4 conn_info;
 
     // ======================== 主流程方法 ========================
     // 阶段0：准备连接( TCP 辅助建链, 包括 TFO 发送 等 DoConnect 和 DoAccept 的前置操作)
@@ -60,15 +59,15 @@ public:
         return connector_ops_;
     }
 
-    ALWAYS_INLINE bool IsClient(void)
+    /* 建链完成后释放协商 ops（此后 Connect() 直接以 EISCONN 拒绝） */
+    void ReleaseOps()
     {
-        return connector_ops_->conn_info.type_fd == 1 ? true : false;
+        connector_ops_ = nullptr;
     }
 
 private:
     // ======================== 成员变量 ========================
-    int raw_fd_ = -1;   // 传入 sock 的原生 socket fd
-    int event_fd_ = -1; // eventfd（通知上层可读）
+    int raw_fd_ = -1; // 传入 sock 的原生 socket fd
     Ref<ConnectorOps> connector_ops_ = nullptr;
 };
 

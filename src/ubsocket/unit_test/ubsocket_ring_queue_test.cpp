@@ -285,3 +285,108 @@ TEST_F(MPSCRingQueueTest, InvalidCapacity_Throws)
     EXPECT_NO_THROW(MPSCRingQueue<int>(16));
     EXPECT_NO_THROW(MPSCRingQueue<int>(256));
 }
+
+// --- MPSC: Pop empty ---
+
+TEST_F(MPSCRingQueueTest, Pop_EmptyReturnsFalse)
+{
+    int val;
+    EXPECT_FALSE(q_.Pop(val));
+}
+
+// --- MPSC: MultiPop max_count=0 ---
+
+TEST_F(MPSCRingQueueTest, MultiPop_MaxCountZero_ReturnsZero)
+{
+    q_.Push(42);
+    std::vector<int> out;
+    EXPECT_EQ(q_.MultiPop(std::back_inserter(out), 0), 0u);
+}
+
+// --- MPSC: MultiPop empty ---
+
+TEST_F(MPSCRingQueueTest, MultiPop_EmptyReturnsZero)
+{
+    std::vector<int> out;
+    EXPECT_EQ(q_.MultiPop(std::back_inserter(out), 10), 0u);
+}
+
+// --- MPSC: MultiPop partial ---
+
+TEST_F(MPSCRingQueueTest, MultiPop_Partial_ReturnsAvailable)
+{
+    for (int i = 0; i < 5; i++) {
+        q_.Push(i);
+    }
+    std::vector<int> out;
+    EXPECT_EQ(q_.MultiPop(std::back_inserter(out), 3), 3u);
+    EXPECT_EQ(out.size(), 3u);
+    // Remaining 2
+    EXPECT_EQ(q_.Size(), 2u);
+}
+
+// --- MPSC: Size and Empty ---
+
+TEST_F(MPSCRingQueueTest, SizeAndEmpty)
+{
+    EXPECT_TRUE(q_.Empty());
+    EXPECT_EQ(q_.Size(), 0u);
+    q_.Push(1);
+    EXPECT_FALSE(q_.Empty());
+    EXPECT_EQ(q_.Size(), 1u);
+    int val;
+    q_.Pop(val);
+    EXPECT_TRUE(q_.Empty());
+    EXPECT_EQ(q_.Size(), 0u);
+}
+
+// --- MPSC: Push full returns false ---
+
+TEST_F(MPSCRingQueueTest, Push_FullReturnsFalse)
+{
+    MPSCRingQueue<int> q(4);
+    for (int i = 0; i < 4; i++) {
+        EXPECT_TRUE(q.Push(i));
+    }
+    EXPECT_FALSE(q.Push(100));
+}
+
+// --- MPSC: Push rvalue ---
+
+TEST_F(MPSCRingQueueTest, Push_Rvalue)
+{
+    MPSCRingQueue<std::string> q(64);
+    std::string val = "hello";
+    q.Push(std::move(val));
+    std::string out;
+    EXPECT_TRUE(q.Pop(out));
+    EXPECT_EQ(out, "hello");
+}
+
+// --- MPSC: concurrent push yield path (>64 spins) ---
+
+TEST_F(MPSCRingQueueTest, ConcurrentPush_YieldPath)
+{
+    MPSCRingQueue<int> q(4);
+    std::atomic<int> done{0};
+    std::thread t1([&]() {
+        for (int i = 0; i < 100; i++) {
+            while (!q.Push(i)) {
+                std::this_thread::yield();
+            }
+        }
+        done.fetch_add(1);
+    });
+    std::thread t2([&]() {
+        for (int i = 0; i < 100; i++) {
+            int val;
+            while (!q.Pop(val)) {
+                std::this_thread::yield();
+            }
+        }
+        done.fetch_add(1);
+    });
+    t1.join();
+    t2.join();
+    EXPECT_EQ(done.load(), 2);
+}

@@ -118,7 +118,9 @@ include_directories(
         ${UBSOCKET_BASE_DIR}/csrc
         ${CMAKE_CURRENT_BINARY_DIR}/csrc/common   # generated ubsocket_version_defs.h
         ${UBSOCKET_BASE_DIR}/../hcom
+        ${UBSOCKET_BASE_DIR}/../hcom/umq/include
         ${UBSOCKET_BASE_DIR}/../hcom/umq/include/umq
+        ${UBSOCKET_BASE_DIR}/csrc/core/umq
 )
 
 add_subdirectory(csrc)
@@ -140,40 +142,47 @@ if (UBSOCKET_BUILD_TESTS)
         set(UBSOCKET_COVERAGE_INITIAL ${CMAKE_BINARY_DIR}/coverage_initial.info)
         set(UBSOCKET_COVERAGE_COMBINED ${CMAKE_BINARY_DIR}/coverage_combined.info)
         set(UBSOCKET_COVERAGE_FILTERED ${CMAKE_BINARY_DIR}/coverage_filtered.info)
+        # lcov config file to exclude log-macro branches from branch coverage
+        set(UBSOCKET_LCOVRC ${CMAKE_BINARY_DIR}/lcovrc)
+        file(WRITE ${UBSOCKET_LCOVRC}
+            "lcov_branch_coverage = 1\n"
+            "lcov_excl_br_line = UBS_VLOG_|UBS_SLOG_|UBS_DATAPATH_LOG|UBS_LOG\n"
+        )
 
         add_custom_target(coverage
             COMMAND ${CMAKE_COMMAND} -E echo "Zeroing coverage counters..."
-            COMMAND ${LCOV_PATH} --directory ${CMAKE_BINARY_DIR} --zerocounters --rc lcov_branch_coverage=1
+            COMMAND ${LCOV_PATH} --config-file ${UBSOCKET_LCOVRC} --directory ${CMAKE_BINARY_DIR} --zerocounters
             COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
             COMMAND ${CMAKE_COMMAND} -E echo "Capturing initial zero-coverage baseline..."
-            COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1
+            COMMAND ${LCOV_PATH} --config-file ${UBSOCKET_LCOVRC}
                 --directory ${CMAKE_BINARY_DIR}
                 --base-directory ${UBSOCKET_BASE_DIR}/csrc
                 --initial --capture --output-file ${UBSOCKET_COVERAGE_INITIAL}
                 --ignore-errors gcov
             COMMAND ${CMAKE_COMMAND} -E echo "Capturing runtime coverage data..."
-            COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1
+            COMMAND ${LCOV_PATH} --config-file ${UBSOCKET_LCOVRC}
                 --directory ${CMAKE_BINARY_DIR}
                 --base-directory ${UBSOCKET_BASE_DIR}/csrc
                 --capture --output-file ${UBSOCKET_COVERAGE_INFO}
                 --ignore-errors gcov
             COMMAND ${CMAKE_COMMAND} -E echo "Combining initial and runtime coverage..."
-            COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1
+            COMMAND ${LCOV_PATH} --config-file ${UBSOCKET_LCOVRC}
                 -a ${UBSOCKET_COVERAGE_INITIAL}
                 -a ${UBSOCKET_COVERAGE_INFO}
                 --output-file ${UBSOCKET_COVERAGE_COMBINED}
+                --ignore-errors gcov
             COMMAND ${CMAKE_COMMAND} -E echo "Filtering coverage data..."
-            COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1
+            COMMAND ${LCOV_PATH} --config-file ${UBSOCKET_LCOVRC}
                 --remove ${UBSOCKET_COVERAGE_COMBINED}
-                '*/_deps/*' '/usr/include/*' '*/3rdparty/*' '*/unit_test/*' '*/tools/*'
+                '*/_deps/*' '*/usr/include/*' '/opt/*' '*/3rdparty/*' '*/unit_test/*' '*/tools/*' '*/csrc/under_api/*'
                 --output-file ${UBSOCKET_COVERAGE_FILTERED}
                 --ignore-errors gcov
             COMMAND ${CMAKE_COMMAND} -E echo "Generating TXT summary report..."
-            COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1
+            COMMAND ${LCOV_PATH} --config-file ${UBSOCKET_LCOVRC}
                 --summary ${UBSOCKET_COVERAGE_FILTERED}
                 > ${CMAKE_BINARY_DIR}/coverage_summary.txt
                 2>&1 || true
-            COMMAND ${LCOV_PATH} --rc lcov_branch_coverage=1
+            COMMAND ${LCOV_PATH} --config-file ${UBSOCKET_LCOVRC}
                 --list ${UBSOCKET_COVERAGE_FILTERED}
                 > ${CMAKE_BINARY_DIR}/coverage_detailed.txt
                 2>&1 || true

@@ -13,6 +13,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_signal_handler.h"
+#include "common/ubsocket_thread_pool.h"
 #include "common/ubsocket_version.h"
 #include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_tx_cqe_poller.h"
@@ -23,8 +24,10 @@
 #include "profiling/statistics/statistics.h"
 #include "profiling/statistics/ubsocket_print_stats_mgr.h"
 #include "profiling/trace/ubsocket_trace.h"
+#include "profiling/trace/ubs_pkt_trace.h"
 #include "ubsocket_struct_helper.h"
 #include "under_api/dl_api.h"
+#include "under_api/dl_libc_api.h"
 
 using namespace ock::ubs;
 
@@ -60,6 +63,15 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     std::lock_guard<std::mutex> guard(GlobalSetting::MUTEX);
     if (GlobalSetting::UBS_INITED) {
         return UBS_OK;
+    }
+
+    /* ubsocket_uninit() 是不可逆的进程级收尾：它置位的 UBS_EXITING（MarkExiting）
+     * 与 TxCqePoller 的 shutdown_ 闩锁均无法复位，此时重新 init 只会得到"表面成功、
+     * 实则无法建链"的半残状态。此处明确拒绝，把"不支持重新初始化"暴露为 API 契约。 */
+    if (GlobalSetting::IsExiting()) {
+        UBS_VLOG_ERR("ubsocket_init rejected after ubsocket_uninit: re-initialization is not supported\n");
+        errno = EPERM;
+        return UBS_ERROR;
     }
 
     /* do initialization */
@@ -142,6 +154,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         UBS_VLOG_ERR("Failed to create g_socket_epoll_lock\n");
         return UBS_ERROR;
     }
+    ReserveSocketEpollMappers(ArraySet<Socket>::GetInstance().Capacity());
     ArraySet<EventPoll>::GetInstance().Init();
 
     /* step5: umq backend init */
@@ -154,6 +167,21 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         return UBS_ERROR;
     }
     //#endif
+
+    UmqApi::umq_exiting_set(false);
+
+    if (g_zcopy_allocator == nullptr && (GlobalSetting::UBS_ALLOWED_PROTOCOL == UBS_PROTOCOL_UB_RM_RTP ||
+                                         GlobalSetting::UBS_ALLOWED_PROTOCOL == UBS_PROTOCOL_UB_RC_RTP)) {
+        g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
+    }
+
+    // Init ubsocket async acceptor thread pool
+    if (GlobalSetting::AsyncAcceptorEnabled()) {
+        auto exec_service = ExecutorService::GetExecutorService();
+        if (!exec_service->Start()) {
+            UBS_VLOG_ERR("Failed to start ExecutorService for async accept");
+        }
+    }
 
     /* step6: register signal handler */
     std::signal(SIGUSR2, ubsocket_handle_signal);
@@ -180,46 +208,60 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     UBS_VLOG_DEBUG("UBSOCKET_ASYNC_ACCEPT_ENABLE:%d\n", GlobalSetting::AsyncAcceptorEnabled() ? 1 : 0);
     /* do trace log initial */
-    if (GlobalSetting::UBS_TRACE_ENABLED) {
+    if (GlobalSetting::UBS_MONITOR_ENABLE) {
         umq_trans_mode_t transMode = umq::UmqSetting::UMQ_TRANS_MODE;
-        Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_TRACE_TIME,
-                                                        GlobalSetting::UBS_TRACE_FILE_PATH,
-                                                        GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
+        Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_MONITOR_INTERVAL,
+                                                        GlobalSetting::UBS_MONITOR_FILE_PATH,
+                                                        GlobalSetting::UBS_MONITOR_FILE_SIZE_MB, transMode);
     }
-#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
+    /* SplitTrace: lazy init — memory allocated when feature enabled, not at init */
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
-        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
-            TracePrintThread::Instance().Start();
-        }
-
-        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UMQ) != SplitTraceLevel::LEVEL_NONE) {
-            umq_trace_cfg_t cfg = {};
-            cfg.flag = UMQ_TRACE_FLAG_RECORD_NUM | UMQ_TRACE_FLAG_OUTPUT_LIMIT;
-            cfg.record_num = GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY;
-            cfg.output_limit = 1;
-
-            int trace_ret = UmqApi::umq_stats_trace_start(&cfg);
-            if (trace_ret != 0) {
-                UBS_VLOG_WARN("umq stats trace start failed, ret: %d\n", trace_ret);
-            }
+        if (GlobalTracePool::Instance().LazyInit()) {
+            SplitTraceDrainThread::Instance().Start();
+            UBS_VLOG_INFO("SplitTrace initialized at ubsocket_init (LazyInit ok, drain thread started)\n");
+        } else {
+            UBS_VLOG_ERR("SplitTrace LazyInit failed at ubsocket_init (memory allocation error)\n");
         }
     }
-#endif
+
+    /* Per-packet RX delivery trace (byte-offset bridge); no-op unless
+     * UBS_PKT_TRACE_ENABLE is set. Starts its own flush thread. */
+    UbsPktTraceStart();
 
     return UBS_OK;
 }
 
 void ubsocket_uninit()
 {
+    /* 标记进程退出：后续 ReleaseAll(Socket) 会释放 jfc/jetty 等 urma 资源，
+     * 但 TX/RX runner 的 worker 线程在 Stop() 通知到达前仍可能 poll 这些
+     * 已释放资源。经 umq 接口置位后，umq_ub_poll_fc_tx 等 poll 入口会跳过访问，
+     * 避免退出时序竞态导致的 UAF (SEGV in urma_poll_jfc)。 */
+    UmqApi::umq_exiting_set(true);
+    GlobalSetting::MarkExiting(); /* 本仓拆链路径用（见 RetireSweep / UnbindAndFlushRemoteUmq） */
+
+    if (GlobalSetting::UBS_PROBE_ENABLED) {
+        Statistics::ProbeManager::GetInstance().Stop();
+    }
+
+    if (GlobalSetting::AsyncAcceptorEnabled()) {
+        ExecutorService::GetExecutorService()->Stop();
+    }
+
     if (GlobalSetting::UBS_PROF_ENABLE) {
         Profiling::Uninit();
     }
+    /* SplitTrace: stop drain thread, then release pool memory */
+    SplitTraceDrainThread::Instance().Stop();
+    GlobalTracePool::Instance().DestroyPool();
+    /* Per-packet RX delivery trace: stop flush thread (drains remaining). */
+    UbsPktTraceStop();
 #ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
     /* do trace log destroy */
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
             TracePrintThread::Instance().Stop();
-            ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) { TRACE_FLUSH(sock->split_trace_); });
+            ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) { TRACE_FLUSH(sock->GetSplitTrace()); });
         }
 
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UMQ) != SplitTraceLevel::LEVEL_NONE) {
@@ -227,7 +269,7 @@ void ubsocket_uninit()
         }
     }
 #endif
-    if (GlobalSetting::UBS_TRACE_ENABLED) {
+    if (GlobalSetting::UBS_MONITOR_ENABLE) {
         Statistics::PrintStatsMgr::StopStatsCollection();
     }
 
@@ -240,8 +282,19 @@ void ubsocket_uninit()
     // 用户需要在程序退出时调用 ubsocket_uninit 保证所有的 socket ref 释放，否则会延迟至 ArraySet 单例析构。在 brpc 场
     // 景下，由于 brpc worker 不会主动 join, worker 可能仍会尝试访问 ArraySet<Socket> 或者 ArraySet<EventPoll>
     TxCqePoller::Instance().Stop();
+    // 拆除 socket 前先 shutdown 所有 fd：uninit 期间 brpc worker 线程可能仍在 writev，此时 ArraySet
+    // 已释放但 fd 仍开，writev 会回退到原生 TCP 把真实数据发到对端(对端 UMQ 模式读不到，导致残留数据
+    // 堵住 FIN 检测、socket 泄漏)。shutdown(SHUT_RDWR) 使窗口内 writev 拿到 EPIPE，并立即向对端发 FIN。
+    // 注意跳过 listen fd：shutdown 后 accept() 会持续返回 EINVAL，而 brpc 的 accept 循环对非 EAGAIN
+    // 错误是 continue 重试，会导致 accept bthread 忙循环；且 listen fd 上 brpc 从不 writev，无收益。
+    ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) {
+        if (sock != nullptr && sock->create_type_ != SOCK_CREATE_TYPE_LISTEN) {
+            LibcApi::shutdown(sock->Fd(), SHUT_RDWR);
+        }
+    });
     ArraySet<Socket>::GetInstance().ReleaseAll();
     ArraySet<EventPoll>::GetInstance().ReleaseAll();
+    CleanAllSocketEpollMappers();
 
     // EpollRunner 是 LeakySingleton, 进程退出时不会自动析构、后台 poller 线程不会自动 join。必须在 umq_uninit 之前
     // 停止这些 runner, 否则线程仍会对已释放的 umq/mempool/tseg 执行 umq_poll, 触发 "mempool tseg not exist"。
@@ -251,7 +304,19 @@ void ubsocket_uninit()
     EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).Stop();
     EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER).Stop();
 
+    if (g_zcopy_allocator != nullptr) {
+        delete g_zcopy_allocator;
+        g_zcopy_allocator = nullptr;
+    }
+
     umq::UmqBackend::UnInit();
+
+    if (g_socket_epoll_lock != nullptr) {
+        LockRegistry::RW_LOCK_OPS.destroy(g_socket_epoll_lock);
+        g_socket_epoll_lock = nullptr;
+    }
+
+    GlobalSetting::UBS_INITED = false;
     return;
 }
 
@@ -309,19 +374,6 @@ UBS_API int ubsocket_set_log_level(int level)
 
 UBS_API void *ubsocket_iobuf_allocate(size_t size, const ubs_iobuf_alloc_option_t *option)
 {
-    if (g_zcopy_allocator != nullptr) {
-        return g_zcopy_allocator->allocate(size, option);
-    }
-
-    uint32_t type = GlobalSetting::UBS_ALLOWED_PROTOCOL;
-    if (type == UBS_PROTOCOL_UB_RM_RTP || type == UBS_PROTOCOL_UB_RC_RTP) {
-        // delete at ubsocket_uninit
-        g_zcopy_allocator = new (std::nothrow) umq::UmqZeroCopyAllocator();
-    } else {
-        UBS_VLOG_WARN("unknown zcopy allocator type");
-        return nullptr;
-    }
-
     if (g_zcopy_allocator == nullptr) {
         return nullptr;
     }

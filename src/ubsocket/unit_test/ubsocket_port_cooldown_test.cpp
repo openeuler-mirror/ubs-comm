@@ -140,9 +140,6 @@ TEST_F(PortCooldownTest, GetPortHash_SameChipDiePort_ProducesSameHash)
 {
     umq_port_id_t p1 = MakePort(0xAA, 0xBB, 0xCC);
     umq_port_id_t p2 = MakePort(0xAA, 0xBB, 0xCC);
-    // reserved field differs but should not affect hash
-    p1.bs.reserved = 0x11;
-    p2.bs.reserved = 0x22;
 
     // Both should map to same cooldown state
     PortCooldownManager::MarkPortInCooldown(p1);

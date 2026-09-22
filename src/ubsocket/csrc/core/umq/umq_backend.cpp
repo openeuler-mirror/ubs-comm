@@ -14,6 +14,7 @@
 #include <cstring>
 
 #include "core/ubsocket_event_epoll.h"
+#include "iobuf/ubsocket_iobuf.h"
 #include "umq_conn_helper.h"
 #include "umq_eid_table.h"
 #include "umq_errno_converter.h"
@@ -28,6 +29,8 @@ namespace ubs {
 namespace umq {
 std::mutex UmqBackend::UMQ_MUTEX;
 bool UmqBackend::UMQ_INITED = false;
+std::vector<umq_port_id_t> UmqBackend::used_ports_ = {};
+umq_topo_type_t UmqBackend::topo_type_ = UMQ_TOPO_TYPE_CLOS;
 
 Result UmqBackend::Init() noexcept
 {
@@ -49,28 +52,51 @@ Result UmqBackend::Init() noexcept
     /* step2: init umq init config */
     umq_init_cfg_t umq_config;
     bzero(&umq_config, sizeof(umq_config));
-    umq_config.feature = UMQ_FEATURE_API_PRO |
+    umq_config.feature = UMQ_FEATURE_API_PRO | UMQ_FEATURE_ENABLE_REMOTE_MEM_ACCESS |
                          (UmqSetting::UMQ_FLOW_CONTROL_ENABLE ? UMQ_FEATURE_ENABLE_FLOW_CONTROL : 0);
     umq_config.buf_mode = UMQ_BUF_SPLIT;
-    umq_config.io_lock_free = true;
     umq_config.trans_info_num = 1;
+    umq_config.headroom_size = sizeof(Block); /* reserve headroom for brpc IOBuf::Block placement-new */
     umq_config.flow_control.use_atomic_window = true;
     umq_config.flow_control.initial_credit = UmqSetting::UMQ_FC_DEFAULT_CREDIT;
     umq_config.flow_control.max_credits_request = UmqSetting::UMQ_FC_MAX_CREDIT;
     umq_config.flow_control.min_reserved_credit = UmqSetting::UMQ_FC_MIN_CREDIT;
-    umq_config.buf_pool_cfg.small_block_size = UmqSetting::IO_BLOCK_TYPE;
+    umq_config.buf_pool_cfg.small_block_size = UmqSetting::UMQ_POOL_BASE_BLOCK_SIZE;
+    umq_config.buf_pool_cfg.size_class_count = UmqSetting::UMQ_SIZE_CLASS_COUNT;
+    memcpy(umq_config.buf_pool_cfg.explicit_block_sizes,
+           UmqSetting::UMQ_EXPLICIT_BLOCK_SIZES,
+           sizeof(uint32_t) * UmqSetting::UMQ_SIZE_CLASS_COUNT);
     umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DUMMY;
     umq_config.trans_info[0].trans_mode = UmqSetting::UMQ_TRANS_MODE;
-    umq_config.buf_pool_cfg.umq_mem_pool_init_size = UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB * IO_SIZE_MB;
-    umq_config.buf_pool_cfg.normal_pool_block_count =
-        static_cast<uint32_t>(4ULL * GlobalSetting::UBS_RX_DEPTH + UmqSetting::UMQ_BUF_POOL_DEPTH);
+    umq_config.buf_pool_cfg.rx_block_count = UBS_RX_PORT_NUM * GlobalSetting::UBS_RX_DEPTH;
     umq_config.buf_pool_cfg.umq_buf_pool_max_size = UmqSetting::UMQ_MEM_POOL_MAX_SIZE_MB * IO_SIZE_MB;
-    umq_config.buf_pool_cfg.tls_qbuf_pool_depth = 4ULL * GlobalSetting::UBS_RX_DEPTH + UmqSetting::UMQ_BUF_POOL_DEPTH;
+    umq_config.buf_pool_cfg.per_sc_block_counts[0] = UmqSetting::UMQ_SMALL_BUF_POOL_DEPTH + UmqSetting::UMQ_SMALL_GLOBAL_POOL_DEPTH;
+    umq_config.buf_pool_cfg.per_sc_tls_qbuf_pool_depth[0] = UmqSetting::UMQ_SMALL_BUF_POOL_DEPTH;
+    umq_config.buf_pool_cfg.per_sc_block_counts[1] = UmqSetting::UMQ_MIDDLE_BUF_POOL_DEPTH + UmqSetting::UMQ_MIDDLE_GLOBAL_POOL_DEPTH;
+    umq_config.buf_pool_cfg.per_sc_tls_qbuf_pool_depth[1] = UmqSetting::UMQ_MIDDLE_BUF_POOL_DEPTH;
     umq_config.buf_pool_cfg.enable_tiny_pool = UmqSetting::UMQ_TINY_POOL_ENABLE;
     umq_config.buf_pool_cfg.tiny_pool_block_size = UmqSetting::UMQ_TINY_POOL_BLOCK_SIZE;
     umq_config.buf_pool_cfg.tiny_pool_block_count = UmqSetting::UMQ_TINY_POOL_BLOCK_COUNT;
     umq_config.buf_pool_cfg.tls_tiny_pool_depth = UmqSetting::UMQ_TLS_TINY_POOL_DEPTH;
+    umq_config.buf_pool_cfg.shrink_decay_ms = UmqSetting::UMQ_SHRINK_DECAY_MS;
+    /* 逃逸 malloc 的内存未注册 UB 设备,发送会 EFAULT(READ_ABORT),故默认关闭:
+     * 池耗尽时直接返回 ENOMEM,在分配点尽早暴露问题 */
+    umq_config.buf_pool_cfg.disable_malloc_escape = true;
+    /* io_lock_free MUST stay false: umq brackets every poll with
+     * umq_inc_ref/umq_dec_ref on the queue and gates umq_destroy on
+     * ref_cnt==1 (EBUSY otherwise, we retry). With lock_free=true those
+     * refs become plain ++/-- ("user should ensure thread safety",
+     * umq_api.h) and the whole poll-vs-destroy protection is void — we
+     * poll from dispatchers, the share-jfr runner AND the reaper. A dead
+     * `io_lock_free = true` used to sit earlier in this function; it was
+     * harmless only because this later assignment won. Removed so nobody
+     * "cleans up" the wrong line and silently voids every refcount. */
     umq_config.io_lock_free = false;
+    /* rq_lock_free=true is safe ONLY under the current single-RX-poster
+     * invariant: per queue, RQ ops (prefill at handshake, runtime refill)
+     * are done by one thread at a time (share-jfr RX runner; prefill is
+     * pre-bind single-threaded). Adding a second concurrent RX poster
+     * breaks the ring per umq's contract — flip this to false first. */
     umq_config.rq_lock_free = true;
 
     if (UmqSetting::UMQ_TP_TYPE == POOL) {
@@ -97,10 +123,12 @@ Result UmqBackend::Init() noexcept
             break;
         default:
             UBS_VLOG_ERR("Un-supported protocol.\n");
+            UmqCleanup();
             return UBS_ERROR;
     }
     if (ret != 0) {
         UBS_VLOG_ERR("AddIbDev()/AddUbDev() failed, ret: %d\n", ret);
+        UmqCleanup();
         return UBS_ERROR;
     }
 
@@ -113,6 +141,7 @@ Result UmqBackend::Init() noexcept
     UmqSetting::UMQ_ALL_SOCKET_IDS = SocketConnHelper::GetSocketIdsViaNumaSysfs();
     if (UmqSetting::UMQ_ALL_SOCKET_IDS.empty() || UmqSetting::UMQ_PROCESS_SOCKET_ID == -1) {
         UBS_VLOG_ERR("Failed get socket id in cpu affinity policy.\n");
+        UmqCleanup();
         return UBS_ERROR;
     }
 
@@ -184,13 +213,30 @@ Result UmqBackend::Init() noexcept
 
 void UmqBackend::UmqCleanup() noexcept
 {
-    UmqApi::umq_uninit();
-    UMQ_INITED = false;
-
     if (GlobalSetting::UBS_PROF_ENABLE) {
-        UmqApi::umq_stats_perf_stop();
         UmqApi::umq_stats_tp_perf_stop(UmqSetting::UMQ_TRANS_MODE);
     }
+
+    DestroyShareMainUmq();
+    UmqApi::umq_uninit();
+    UMQ_INITED = false;
+}
+
+void UmqBackend::DestroyShareMainUmq()
+{
+    UmqTransportPool::Instance().Clean();
+
+    std::vector<uint64_t> main_umq_handles = UmqEidTable::Instance().GetAllUmqHandles();
+    for (uint64_t handle : main_umq_handles) {
+        if (handle != UMQ_INVALID_HANDLE) {
+            int ret = UmqApi::umq_destroy(handle);
+            if (ret != UMQ_SUCCESS) {
+                UBS_VLOG_ERR("umq_destroy() failed for main umq: %llu, ret: %d\n",
+                             static_cast<unsigned long long>(handle), ret);
+            }
+        }
+    }
+    UmqEidTable::Instance().Clean();
 }
 
 void UmqBackend::UnInit() noexcept
@@ -203,13 +249,7 @@ void UmqBackend::UnInit() noexcept
         return;
     }
 
-    UmqApi::umq_uninit();
-    UMQ_INITED = false;
-
-    if (GlobalSetting::UBS_PROF_ENABLE) {
-        UmqApi::umq_stats_perf_stop();
-        UmqApi::umq_stats_tp_perf_stop(UmqSetting::UMQ_TRANS_MODE);
-    }
+    UmqCleanup();
 
     UBS_VLOG_DEBUG("leave, inited = %d", UMQ_INITED);
 }
@@ -308,6 +348,7 @@ Result UmqBackend::FindDevName()
 
     UmqSetting::UMQ_DEV_NAME = umqDevInfo[bondingIndex].dev_name;
     if (UmqSetting::UMQ_DEV_NAME.size() >= UMQ_DEV_NAME_SIZE) {
+        UmqApi::umq_dev_info_list_free(transMode, umqDevInfo);
         UBS_VLOG_ERR("Failed to set device name, name size: %zu\n", UmqSetting::UMQ_DEV_NAME.size());
         return UBS_ERROR;
     }
@@ -369,6 +410,7 @@ uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
             UBS_VLOG_ERR("Failed to get urma route info.\n");
             return UMQ_INVALID_HANDLE;
         }
+        topo_type_ = route_list.topo_type;
         uint32_t targetChipId = UINT32_MAX;
         std::set<uint32_t> unique_chip_ids;
         for (uint32_t i = 0; i < route_list.route_num; ++i) {
@@ -425,6 +467,7 @@ uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
                            used_ports[i].bs.chip_id, used_ports[i].bs.die_id, used_ports[i].bs.port_idx,
                            (unsigned long)used_ports[i].value);
         }
+        used_ports_.assign(used_ports.begin(), used_ports.end());
         share_main_umq_cfg.used_ports = {.port = used_ports.data(), .num = static_cast<uint8_t>(used_ports.size())};
     }
 
@@ -465,7 +508,13 @@ uint64_t UmqBackend::CreateShareMainUmq(umq_eid_t &local_eid)
     if (!UmqEidTable::Instance().Get(local_eid, UmqSetting::UMQ_UB_TRANS_MODE, main_umq_list)) {
         share_main_umq_cfg.create_flag |= UMQ_CREATE_FLAG_MAIN_UMQ;
         main_umq_handle = UmqApi::umq_create(&share_main_umq_cfg);
+        if (main_umq_handle == UMQ_INVALID_HANDLE) {
+            UBS_VLOG_ERR("[UMQ_API] umq_create() failed for main umq\n");
+            return UMQ_INVALID_HANDLE;
+        }
         UmqEidTable::Instance().Add(local_eid, UmqSetting::UMQ_UB_TRANS_MODE, main_umq_handle);
+    } else if (!main_umq_list.empty()) {
+        main_umq_handle = main_umq_list.front()->GetUmqHandle();
     }
     return main_umq_handle;
 }
@@ -515,8 +564,7 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
     jfr_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR;
     jfr_event_data.event_data.data = share_jfr_fd;
 
-    struct epoll_event share_jfr_event {
-    };
+    struct epoll_event share_jfr_event{};
     share_jfr_event.events = EPOLLIN | EPOLLET;
     share_jfr_event.data.u64 = jfr_event_data.u64;
 
@@ -547,8 +595,7 @@ Result UmqBackend::InitShareJfrMonitering(uint64_t main_umq_handle)
     retry_event_data.event_data.type = RUNNER_EVENT_TYPE_SHARE_JFR_RETRY;
     retry_event_data.event_data.data = retry_rx_fd;
 
-    struct epoll_event retry_event {
-    };
+    struct epoll_event retry_event{};
     retry_event.events = EPOLLIN | EPOLLET;
     retry_event.data.u64 = retry_event_data.u64;
 

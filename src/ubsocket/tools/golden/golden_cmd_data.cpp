@@ -14,6 +14,7 @@
 
 #include <fcntl.h>
 #include <sys/epoll.h>
+#include <sys/uio.h>
 #include <unistd.h>
 #include <csignal>
 #include <cstring>
@@ -22,7 +23,96 @@
 #include <string>
 #include <unordered_map>
 
+#include "iobuf/ubsocket_iobuf.h"
+#include <core/umq/umq_setting.h>
+
 namespace golden {
+
+using namespace ock::ubs;
+
+static void *PtrFloorToBoundary(void *ptr)
+{
+    return (void *)((uint64_t)ptr & ~umq::UmqSetting::FloorMask());
+}
+
+// Allocate a single UB page (8K). The returned pointer is the Block data area, suitable for
+// use as the head of a zero-copy Block chain during UB receive, or as a staging buffer for send.
+// For send buffers that must hold more than one page of data, use malloc() instead and call
+// SendDataUb() which handles the UB zero-copy requirement by staging through UB pages.
+static void *AllocUbBuf(size_t dataSize)
+{
+    // UMQ buffer allocation must use the full page size so that
+    // PtrFloorToBoundary() can correctly locate the Block header.
+    // The page size = UmqSetting::GetIOBufSize() + IOBUF_DIFF (typically 8K).
+    // The caller's dataSize must be <= UmqSetting::GetIOBufSize().
+    size_t pageSize = umq::UmqSetting::GetIOBufSize() + IOBUF_DIFF;
+    (void)dataSize;  // dataSize is validated by caller; we always allocate a full page
+    ubs_iobuf_alloc_option_t option = {};
+    option.flag = UBS_IOBUF_ALLOC_FLAG_POOL_TYPE;
+    option.pool_type = UBS_IOBUF_POOL_NORMAL;
+    void *raw = ubsocket_iobuf_allocate(pageSize, &option);
+    if (raw == nullptr) {
+        return nullptr;
+    }
+    Block *block = new (raw) Block(reinterpret_cast<char *>(raw) + sizeof(Block),
+                                   static_cast<uint32_t>(pageSize - sizeof(Block)), IOBUF_BLOCK_FLAGS_UB);
+    return block->data;
+}
+
+static void FreeUbBuf(void *data)
+{
+    if (data == nullptr) {
+        return;
+    }
+    Block *block = reinterpret_cast<Block *>(PtrFloorToBoundary(data));
+    block->DecRef();
+}
+
+// Send data over a UB socket in page-sized chunks.
+// UB writev uses zero-copy (UmqIovConverter), which requires each chunk of data to reside
+// within a UB-allocated page so that DataToBlock() can locate the Block header.  This helper
+// allocates a UB staging page for each chunk, copies the data in, posts it via ubsocket_writev,
+// and then releases the staging page (safe because PostSend calls IncRef on the Block).
+// The caller's data buffer can be any readable memory (e.g. malloc).
+//
+// Returns the total number of bytes sent on success, or -1 on fatal error.
+static ssize_t SendDataUb(int fd, const uint8_t *data, size_t len)
+{
+    size_t chunkSize = umq::UmqSetting::GetIOBufSize();
+    size_t totalSent = 0;
+
+    while (totalSent < len) {
+        size_t thisChunk = std::min(chunkSize, len - totalSent);
+
+        void *ubPage = AllocUbBuf(thisChunk);
+        if (ubPage == nullptr) {
+            errno = ENOMEM;
+            return -1;
+        }
+        memcpy(ubPage, data + totalSent, thisChunk);
+
+        struct iovec iov[1];
+        iov[0].iov_base = ubPage;
+        iov[0].iov_len = thisChunk;
+
+        ssize_t sent = ubsocket_writev(fd, iov, 1);
+
+        // Free the staging page now — PostSend already called IncRef on the Block, so the
+        // page stays alive until the TX completion does the matching DecRef.
+        FreeUbBuf(ubPage);
+
+        if (sent < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+                usleep(100);  // brief back-off to avoid spinning on a full TX queue
+                continue;
+            }
+            std::cout << "Error: writev failed, errno: " << errno << std::endl;
+            return -1;
+        }
+        totalSent += static_cast<size_t>(sent);
+    }
+    return static_cast<ssize_t>(totalSent);
+}
 
 constexpr int MAX_EVENTS = 16;
 constexpr size_t HEADER_SIZE = sizeof(uint32_t) * 3;
@@ -92,7 +182,7 @@ static bool ValidateParamNotEmpty(const std::string &name, const std::string &va
 void SubCommandData::SetRules() noexcept
 {
     param_rules_[PARAM_ROLE] = {PARAM_ROLE, PDT_STR_ENUM, true, "", "client|server", ""};
-    param_rules_[PARAM_PROTOCOL] = {PARAM_PROTOCOL, PDT_STR_ENUM, true, "tcp", "tcp|ub_rm_rtp|ub_rc_rtp", ""};
+    param_rules_[PARAM_PROTOCOL] = {PARAM_PROTOCOL, PDT_STR_ENUM, true, "tcp", "tcp|ub_rm_rtp|ub_rc_rtp|ub_rm_ctp", ""};
     param_rules_[PARAM_IP] = {PARAM_IP, PDT_STR, false, "", "", "Server IP address (client only)"};
     param_rules_[PARAM_PORT] = {PARAM_PORT, PDT_INT64, true, 10001L, 10000, 65535, ""};
 
@@ -138,8 +228,8 @@ int SubCommandData::ValidateCommonParams() noexcept
         return -1;
     }
 
-    if (protocol_ != "tcp" && protocol_ != "ub_rm_rtp" && protocol_ != "ub_rc_rtp") {
-        std::cout << "Error: Invalid protocol '" << protocol_ << "', must be 'tcp', 'ub_rm_rtp' or 'ub_rc_rtp'"
+    if (protocol_ != "tcp" && protocol_ != "ub_rm_rtp" && protocol_ != "ub_rc_rtp" && protocol_ != "ub_rm_ctp") {
+        std::cout << "Error: Invalid protocol '" << protocol_ << "', must be 'tcp', 'ub_rm_rtp', 'ub_rc_rtp' or 'ub_rm_ctp'"
                   << std::endl;
         return -1;
     }
@@ -276,19 +366,36 @@ struct MessageHeader {
     uint32_t msgSize;
 };
 
-static ssize_t SendMessage(int fd, uint32_t seq, uint32_t crc, uint32_t msgSize, const uint8_t *msgData)
+static ssize_t SendMessage(int fd, const uint8_t *buf, size_t totalLen, bool isUb)
 {
-    struct iovec iov[MSG_IOVEC_COUNT];
-    iov[0].iov_base = &seq;
-    iov[0].iov_len = sizeof(uint32_t);
-    iov[1].iov_base = &crc;
-    iov[1].iov_len = sizeof(uint32_t);
-    iov[2].iov_base = &msgSize;
-    iov[2].iov_len = sizeof(uint32_t);
-    iov[3].iov_base = const_cast<uint8_t *>(msgData);
-    iov[3].iov_len = msgSize;
+    struct iovec iov[1];
+    iov[0].iov_base = const_cast<uint8_t *>(buf);
+    iov[0].iov_len = totalLen;
 
-    return ubsocket_writev(fd, iov, MSG_IOVEC_COUNT);
+    return isUb ? ubsocket_writev(fd, iov, 1) : ::writev(fd, iov, 1);
+}
+
+// For UB mode: copy received data from zero-copy Block chain (rooted at ubChunk) into the flat dest buffer.
+// Returns the number of bytes copied (should equal totalRecvd on success).
+static ssize_t CopyRecvFromBlockChain(uint8_t *ubChunk, uint8_t *destBuf, ssize_t destOffset, ssize_t totalRecvd)
+{
+    if (totalRecvd <= 0) {
+        return totalRecvd;
+    }
+    Block *head = reinterpret_cast<Block *>(PtrFloorToBoundary(ubChunk));
+    head->size = 0;
+    Block *rxBlock = head->GetNext();
+    size_t copied = 0;
+    while (rxBlock != nullptr && copied < static_cast<size_t>(totalRecvd)) {
+        uint32_t dataSize = rxBlock->cap;
+        memcpy(destBuf + destOffset + copied, rxBlock->data, dataSize);
+        copied += dataSize;
+        Block *next = rxBlock->GetNext();
+        rxBlock->DecRef();
+        rxBlock = next;
+    }
+    head->SetNext(nullptr);
+    return static_cast<ssize_t>(copied);
 }
 
 static bool ReadHeader(int fd, uint8_t *buf, ssize_t &offset)
@@ -357,7 +464,9 @@ private:
     int epollFd_ = -1;
     uint8_t *sendBuf_ = nullptr;
     uint8_t *recvBuf_ = nullptr;
+    uint8_t *recvUbChunk_ = nullptr;
     size_t recvBufSize_ = 0;
+    size_t recvUbChunkSize_ = 0;
     int64_t msgSent_ = 0;
     int64_t msgRecv_ = 0;
     int64_t outstanding_ = 0;
@@ -389,8 +498,13 @@ SubCommandData::DataClient::~DataClient()
 void SubCommandData::DataClient::Cleanup()
 {
     if (sendBuf_) {
+        // sendBuf_ is always malloc'd (see Run()), regardless of protocol
         free(sendBuf_);
         sendBuf_ = nullptr;
+    }
+    if (recvUbChunk_) {
+        FreeUbBuf(recvUbChunk_);
+        recvUbChunk_ = nullptr;
     }
     if (recvBuf_) {
         free(recvBuf_);
@@ -408,7 +522,11 @@ void SubCommandData::DataClient::Cleanup()
 
 int SubCommandData::DataClient::InitSocket()
 {
-    fd_ = ubsocket_socket(AF_INET, SOCK_STREAM, 0);
+    if (cmd_.IsUbProtocol()) {
+        fd_ = ubsocket_socket(AF_SMC, SOCK_STREAM, 0);
+    } else {
+        fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
+    }
     if (fd_ < 0) {
         std::cout << "Error: create socket failed, errno: " << errno << std::endl;
         return -errno;
@@ -425,7 +543,8 @@ int SubCommandData::DataClient::InitSocket()
     addr.sin_port = htons(cmd_.port_);
     inet_pton(AF_INET, cmd_.ip_.c_str(), &addr.sin_addr);
 
-    int ret = ubsocket_connect(fd_, AsSockaddr(&addr), sizeof(addr));
+    int ret = cmd_.IsUbProtocol() ? ubsocket_connect(fd_, AsSockaddr(&addr), sizeof(addr))
+                                  : ::connect(fd_, AsSockaddr(&addr), sizeof(addr));
     if (ret < 0 && errno != EINPROGRESS) {
         std::cout << "Error: connect failed, errno: " << errno << std::endl;
         Cleanup();
@@ -437,7 +556,11 @@ int SubCommandData::DataClient::InitSocket()
 
 int SubCommandData::DataClient::SetupEpoll()
 {
-    epollFd_ = ubsocket_epoll_create1(0);
+    if (cmd_.IsUbProtocol()) {
+        epollFd_ = ubsocket_epoll_create1(0);
+    } else {
+        epollFd_ = ::epoll_create1(0);
+    }
     if (epollFd_ < 0) {
         std::cout << "Error: create epoll failed, errno: " << errno << std::endl;
         Cleanup();
@@ -447,7 +570,8 @@ int SubCommandData::DataClient::SetupEpoll()
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
     ev.data.fd = fd_;
-    if (ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd_, &ev) < 0) {
+    if (cmd_.IsUbProtocol() ? ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd_, &ev) < 0
+                            : ::epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd_, &ev) < 0) {
         std::cout << "Error: epoll_ctl add failed, errno: " << errno << std::endl;
         Cleanup();
         return -errno;
@@ -481,9 +605,17 @@ int SubCommandData::DataClient::HandleEpollOut(uint64_t &totalBytesSent, TokenBu
         }
     }
     while (msgSent_ < cmd_.msgCount_ && outstanding_ < kWindowSize) {
-        if (SendOneMessage(tokenBucket, totalBytesSent) < 0) {
+        int64_t before = msgSent_;
+        int ret = SendOneMessage(tokenBucket, totalBytesSent);
+        if (ret < 0) {
             return -1;
         }
+        if (msgSent_ == before) {
+            // No message was sent (EAGAIN or QPS-limited); stop and wait for next event
+            break;
+        }
+
+        usleep(10);
     }
     return 0;
 }
@@ -509,13 +641,24 @@ int SubCommandData::DataClient::SendOneMessage(TokenBucket &tokenBucket, uint64_
         return 0;
     }
 
-    uint32_t crc = CalculateCRC32(sendBuf_, cmd_.msgSize_);
+    uint32_t crc = CalculateCRC32(sendBuf_ + HEADER_SIZE, static_cast<size_t>(cmd_.msgSize_));
     uint32_t seq = static_cast<uint32_t>(msgSent_);
     uint32_t msgSize = static_cast<uint32_t>(cmd_.msgSize_);
 
-    ssize_t sent = SendMessage(fd_, seq, crc, msgSize, sendBuf_);
+    // Pack header at the beginning of sendBuf_
+    memcpy(sendBuf_, &seq, sizeof(uint32_t));
+    memcpy(sendBuf_ + sizeof(uint32_t), &crc, sizeof(uint32_t));
+    memcpy(sendBuf_ + sizeof(uint32_t) * 2, &msgSize, sizeof(uint32_t));
+
+    size_t totalLen = HEADER_SIZE + static_cast<size_t>(msgSize);
+    ssize_t sent;
+    if (cmd_.IsUbProtocol()) {
+        sent = SendDataUb(fd_, sendBuf_, totalLen);
+    } else {
+        sent = SendMessage(fd_, sendBuf_, totalLen, false);
+    }
     if (sent < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
             return 0;
         }
         std::cout << "Error: writev failed, errno: " << errno << std::endl;
@@ -536,13 +679,21 @@ int SubCommandData::DataClient::ReceiveResponses(uint64_t &totalBytesRecv)
             return -1;
         }
 
+        bool isUb = cmd_.IsUbProtocol();
         struct iovec iov[1];
-        iov[0].iov_base = recvBuf_ + recvOffset_;
-        iov[0].iov_len = recvBufSize_ - static_cast<size_t>(recvOffset_);
+        if (isUb) {
+            // Use the small UB chunk as the readv iov target (Block chain head).
+            // Data arrives in the Block chain, not in this buffer.
+            iov[0].iov_base = recvUbChunk_;
+            iov[0].iov_len = recvUbChunkSize_;
+        } else {
+            iov[0].iov_base = recvBuf_ + recvOffset_;
+            iov[0].iov_len = recvBufSize_ - static_cast<size_t>(recvOffset_);
+        }
 
-        ssize_t recvd = ubsocket_readv(fd_, iov, 1);
+        ssize_t recvd = isUb ? ubsocket_readv(fd_, iov, 1) : ::readv(fd_, iov, 1);
         if (recvd < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 break;
             }
             std::cout << "Error: readv failed, errno: " << errno << std::endl;
@@ -551,6 +702,10 @@ int SubCommandData::DataClient::ReceiveResponses(uint64_t &totalBytesRecv)
         if (recvd == 0) {
             std::cout << "[CLIENT] Error: connection closed by peer" << std::endl;
             return -1;
+        }
+
+        if (isUb) {
+            recvd = CopyRecvFromBlockChain(recvUbChunk_, recvBuf_, recvOffset_, recvd);
         }
 
         recvOffset_ += recvd;
@@ -640,6 +795,16 @@ int SubCommandData::DataClient::ProcessEvents(epoll_event *events, int nfds, Tok
         if (events[i].events & (EPOLLERR | EPOLLHUP)) {
             return HandleEpollError();
         }
+
+        // Edge-triggered epoll: EPOLLOUT may have been processed above while the window was full.
+        // After EPOLLIN acks freed window slots, we must try sending again — the socket has been
+        // writable all along, so no new EPOLLOUT transition will fire.
+        if (msgSent_ < cmd_.msgCount_ && outstanding_ < kWindowSize) {
+            int ret = HandleEpollOut(totalBytesSent, tokenBucket);
+            if (ret < 0) {
+                return ret;
+            }
+        }
     }
     return 0;
 }
@@ -661,20 +826,50 @@ void SubCommandData::DataClient::PrintReport(uint64_t totalBytesSent, uint64_t t
 
 int SubCommandData::DataClient::Run()
 {
-    sendBuf_ = reinterpret_cast<uint8_t *>(malloc(cmd_.msgSize_));
+    // Create socket and connect first — required to initialize UMQ before buffer allocation
+    if (InitSocket() < 0) {
+        return -1;
+    }
+
+    if (SetupEpoll() < 0) {
+        return -1;
+    }
+
+    bool isUb = cmd_.IsUbProtocol();
+
+    // recvBuf_ is a malloc'd flat buffer for the sliding window.
+    // Only the send side data lives in it (after being copied from the UB chain).
     recvBufSize_ = static_cast<size_t>(kWindowSize) * (static_cast<size_t>(cmd_.msgSize_) + HEADER_SIZE);
     recvBuf_ = reinterpret_cast<uint8_t *>(malloc(recvBufSize_));
+
+    // For UB mode: allocate a small UB chunk as the readv iov target (Block chain head).
+    // The actual received data arrives in the chain, not in this buffer.
+    if (isUb) {
+        recvUbChunkSize_ = umq::UmqSetting::GetIOBufSize();
+        recvUbChunk_ = reinterpret_cast<uint8_t *>(AllocUbBuf(recvUbChunkSize_));
+    }
+
+    size_t sendDataSize = HEADER_SIZE + static_cast<size_t>(cmd_.msgSize_);
+    // sendBuf_ is always malloc'd — SendDataUb() handles the UB zero-copy requirement by
+    // staging through UB pages internally.
+    sendBuf_ = reinterpret_cast<uint8_t *>(malloc(sendDataSize));
+
     acked_.resize(cmd_.msgCount_, false);
-    if (!sendBuf_ || !recvBuf_) {
-        std::cout << "Error: malloc failed" << std::endl;
+    if (!sendBuf_ || !recvBuf_ || (isUb && !recvUbChunk_)) {
+        std::cout << "Error: failed to allocate buffer" << std::endl;
         if (sendBuf_) {
             free(sendBuf_);
             sendBuf_ = nullptr;
+        }
+        if (recvUbChunk_) {
+            FreeUbBuf(recvUbChunk_);
+            recvUbChunk_ = nullptr;
         }
         if (recvBuf_) {
             free(recvBuf_);
             recvBuf_ = nullptr;
         }
+        Cleanup();
         return -1;
     }
 
@@ -682,15 +877,7 @@ int SubCommandData::DataClient::Run()
     std::mt19937 gen(rd());
     std::uniform_int_distribution<uint32_t> dist(0, 0xFFFFFFFF);
     for (size_t i = 0; i < static_cast<size_t>(cmd_.msgSize_); ++i) {
-        sendBuf_[i] = static_cast<uint8_t>(dist(gen) & 0xFF);
-    }
-
-    if (InitSocket() < 0) {
-        return -1;
-    }
-
-    if (SetupEpoll() < 0) {
-        return -1;
+        sendBuf_[HEADER_SIZE + i] = static_cast<uint8_t>(dist(gen) & 0xFF);
     }
 
     const int defaultEpollTimeoutMs = 1000;
@@ -703,8 +890,10 @@ int SubCommandData::DataClient::Run()
     uint64_t totalBytesRecv = 0;
 
     while (msgRecv_ < cmd_.msgCount_) {
+        // std::cout << "===xzd " << __FUNCTION__ << ":" << __LINE__ << std::endl;
         struct epoll_event events[MAX_EVENTS];
-        int nfds = ubsocket_epoll_wait(epollFd_, events, MAX_EVENTS, defaultEpollTimeoutMs);
+        int nfds = cmd_.IsUbProtocol() ? ubsocket_epoll_wait(epollFd_, events, MAX_EVENTS, defaultEpollTimeoutMs)
+                                        : ::epoll_wait(epollFd_, events, MAX_EVENTS, defaultEpollTimeoutMs);
         if (nfds < 0) {
             if (errno == EINTR) {
                 continue;
@@ -739,6 +928,7 @@ int SubCommandData::DataClient::Run()
 struct ClientState {
     uint8_t *recvBuf = nullptr;
     uint8_t *sendBuf = nullptr;
+    uint8_t *recvUbChunk = nullptr;
     int64_t msgRecv = 0;
     int64_t msgSent = 0;
     int64_t errorCount = 0;
@@ -785,12 +975,20 @@ void SubCommandData::DataServer::Cleanup()
     for (auto &pair : clients_) {
         int fd = pair.first;
         golden::ClientState &state = pair.second;
-        ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr);
+        if (cmd_.IsUbProtocol()) {
+            ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr);
+        } else {
+            ::epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr);
+        }
         close(fd);
+        if (state.recvUbChunk) {
+            FreeUbBuf(state.recvUbChunk);
+        }
         if (state.recvBuf) {
             free(state.recvBuf);
         }
         if (state.sendBuf) {
+            // sendBuf is always malloc'd (see AcceptClient()), regardless of protocol
             free(state.sendBuf);
         }
     }
@@ -808,7 +1006,11 @@ void SubCommandData::DataServer::Cleanup()
 
 int SubCommandData::DataServer::InitListener()
 {
-    listenFd_ = ubsocket_socket(AF_INET, SOCK_STREAM, 0);
+    if (cmd_.IsUbProtocol()) {
+        listenFd_ = ubsocket_socket(AF_SMC, SOCK_STREAM, 0);
+    } else {
+        listenFd_ = ::socket(AF_INET, SOCK_STREAM, 0);
+    }
     if (listenFd_ < 0) {
         std::cout << "Error: create socket failed, errno: " << errno << std::endl;
         return -errno;
@@ -825,12 +1027,14 @@ int SubCommandData::DataServer::InitListener()
     addr.sin_port = htons(cmd_.port_);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (ubsocket_bind(listenFd_, AsSockaddr(&addr), sizeof(addr)) < 0) {
+    if (cmd_.IsUbProtocol() ? ubsocket_bind(listenFd_, AsSockaddr(&addr), sizeof(addr)) < 0
+                            : ::bind(listenFd_, AsSockaddr(&addr), sizeof(addr)) < 0) {
         std::cout << "Error: bind failed, errno: " << errno << std::endl;
         return -errno;
     }
 
-    if (ubsocket_listen(listenFd_, 128) < 0) {
+    if (cmd_.IsUbProtocol() ? ubsocket_listen(listenFd_, 128) < 0
+                            : ::listen(listenFd_, 128) < 0) {
         std::cout << "Error: listen failed, errno: " << errno << std::endl;
         return -errno;
     }
@@ -840,7 +1044,11 @@ int SubCommandData::DataServer::InitListener()
 
 int SubCommandData::DataServer::SetupEpoll()
 {
-    epollFd_ = ubsocket_epoll_create1(0);
+    if (cmd_.IsUbProtocol()) {
+        epollFd_ = ubsocket_epoll_create1(0);
+    } else {
+        epollFd_ = ::epoll_create1(0);
+    }
     if (epollFd_ < 0) {
         std::cout << "Error: create epoll failed, errno: " << errno << std::endl;
         return -errno;
@@ -849,7 +1057,8 @@ int SubCommandData::DataServer::SetupEpoll()
     struct epoll_event ev;
     ev.events = EPOLLIN;
     ev.data.fd = listenFd_;
-    if (ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, listenFd_, &ev) < 0) {
+    if (cmd_.IsUbProtocol() ? ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, listenFd_, &ev) < 0
+                            : ::epoll_ctl(epollFd_, EPOLL_CTL_ADD, listenFd_, &ev) < 0) {
         std::cout << "Error: epoll_ctl add listen failed, errno: " << errno << std::endl;
         return -errno;
     }
@@ -861,7 +1070,8 @@ int SubCommandData::DataServer::AcceptClient()
 {
     struct sockaddr_in clientAddr;
     socklen_t len = sizeof(clientAddr);
-    int fd = ubsocket_accept(listenFd_, AsSockaddr(&clientAddr), &len);
+    int fd = cmd_.IsUbProtocol() ? ubsocket_accept(listenFd_, AsSockaddr(&clientAddr), &len)
+                                 : ::accept(listenFd_, AsSockaddr(&clientAddr), &len);
     if (fd < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return 0;
@@ -877,23 +1087,48 @@ int SubCommandData::DataServer::AcceptClient()
     }
 
     size_t bufSize = static_cast<size_t>(kWindowSize) * (MAX_MSG_SIZE + HEADER_SIZE);
+    bool isUb = cmd_.IsUbProtocol();
+    // recvBuf is a malloc'd flat buffer for the sliding window
     uint8_t *recvBuf = reinterpret_cast<uint8_t *>(malloc(bufSize));
-    uint8_t *sendBuf = reinterpret_cast<uint8_t *>(malloc(bufSize));
-    if (!recvBuf || !sendBuf) {
-        std::cout << "Error: malloc failed for client " << fd << std::endl;
+    // For UB mode: allocate a small UB chunk as the readv iov target (Block chain head)
+    uint8_t *recvUbChunk = nullptr;
+    if (isUb) {
+        size_t chunkSize = umq::UmqSetting::GetIOBufSize();
+        recvUbChunk = reinterpret_cast<uint8_t *>(AllocUbBuf(chunkSize));
+    }
+    uint8_t *sendBuf = nullptr;
+    // sendBuf is always malloc'd — SendDataUb() handles the UB zero-copy requirement by
+    // staging through UB pages internally.
+    sendBuf = reinterpret_cast<uint8_t *>(malloc(bufSize));
+    if (!recvBuf || !sendBuf || (isUb && !recvUbChunk)) {
+        std::cout << "Error: failed to allocate buffer for client " << fd << std::endl;
+        if (recvUbChunk) {
+            FreeUbBuf(recvUbChunk);
+        }
+        if (recvBuf) {
+            free(recvBuf);
+        }
+        if (sendBuf) {
+            free(sendBuf);
+        }
         close(fd);
         return -1;
     }
 
-    clients_[fd] = {recvBuf, sendBuf, 0, 0, 0, 0, 0, 0, 0, Func::TimeUs()};
+    clients_[fd] = {recvBuf, sendBuf, recvUbChunk, 0, 0, 0, 0, 0, 0, Func::TimeUs()};
 
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
     ev.data.fd = fd;
-    int epollRet = ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev);
+    int epollRet = cmd_.IsUbProtocol() ? ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev)
+                                        : ::epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd, &ev);
     if (epollRet < 0) {
         std::cout << "Error: epoll_ctl add client failed, errno: " << errno << std::endl;
         int savedFd = fd;
+        bool ubProto = cmd_.IsUbProtocol();
+        if (ubProto) {
+            FreeUbBuf(recvUbChunk);
+        }
         free(recvBuf);
         free(sendBuf);
         close(fd);
@@ -911,7 +1146,22 @@ int SubCommandData::DataServer::AcceptClient()
 
 int SubCommandData::DataServer::HandleClientOut(int fd, uint64_t &totalBytesSent)
 {
-    return TrySendPending(fd, totalBytesSent);
+    // First, flush any pending send data left over from a previous EAGAIN.
+    int ret = TrySendPending(fd, totalBytesSent);
+    if (ret < 0) {
+        return ret;
+    }
+
+    // If the pending send was fully drained, try to echo more accumulated received data.
+    // This is necessary with edge-triggered epoll: EPOLLOUT fires when the socket becomes
+    // writable after a send-buffer-full EAGAIN, but HandleClientIn (the only other caller of
+    // TrySendEcho) won't run unless new client data (EPOLLIN) arrives — which may never come
+    // if the client is waiting for these very echoes.
+    auto it = clients_.find(fd);
+    if (it != clients_.end() && it->second.pendingSendSize <= 0) {
+        ret = TrySendEcho(fd, totalBytesSent);
+    }
+    return ret;
 }
 
 int SubCommandData::DataServer::HandleClientIn(int fd, uint64_t &totalBytesRecv, uint64_t &totalBytesSent)
@@ -935,25 +1185,32 @@ int SubCommandData::DataServer::TrySendPending(int fd, uint64_t &totalBytesSent)
 
     golden::ClientState &state = it->second;
 
-    while (state.pendingSendSize > 0) {
+    if (state.pendingSendSize <= 0) {
+        return 0;
+    }
+
+    ssize_t sent;
+    if (cmd_.IsUbProtocol()) {
+        sent = SendDataUb(fd, state.sendBuf, static_cast<size_t>(state.pendingSendSize));
+    } else {
         struct iovec sendIov[1];
         sendIov[0].iov_base = state.sendBuf;
-        sendIov[0].iov_len = state.pendingSendSize;
-
-        ssize_t sent = ubsocket_writev(fd, sendIov, 1);
-        if (sent < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                break;
-            }
-            std::cout << "Error: writev failed, errno: " << errno << std::endl;
-            return -errno;
-        }
-
-        totalBytesSent += sent;
-        state.totalBytesSent += sent;
-        state.msgSent++;
-        state.pendingSendSize -= sent;
+        sendIov[0].iov_len = static_cast<size_t>(state.pendingSendSize);
+        sent = ::writev(fd, sendIov, 1);
     }
+
+    if (sent < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+            return 0;
+        }
+        std::cout << "Error: writev failed, errno: " << errno << std::endl;
+        return -errno;
+    }
+
+    totalBytesSent += static_cast<uint64_t>(sent);
+    state.totalBytesSent += static_cast<uint64_t>(sent);
+    state.msgSent++;
+    state.pendingSendSize -= sent;
     return 0;
 }
 
@@ -1022,23 +1279,28 @@ int SubCommandData::DataServer::ProcessRecvData(int fd, uint64_t &totalBytesRecv
 
     golden::ClientState &state = it->second;
     size_t recvBufSize = static_cast<size_t>(kWindowSize) * (MAX_MSG_SIZE + HEADER_SIZE);
-    bool keepReading = true;
-    while (keepReading) {
+    while (true) {
         if (state.recvOffset >= static_cast<ssize_t>(recvBufSize)) {
             std::cout << "Error: recvOffset " << state.recvOffset << " exceeds buffer size " << recvBufSize
                       << std::endl;
             return -1;
         }
 
+        bool isUb = cmd_.IsUbProtocol();
         struct iovec iov[1];
-        iov[0].iov_base = state.recvBuf + state.recvOffset;
-        iov[0].iov_len = recvBufSize - static_cast<size_t>(state.recvOffset);
+        if (isUb) {
+            size_t chunkSize = umq::UmqSetting::GetIOBufSize();
+            iov[0].iov_base = state.recvUbChunk;
+            iov[0].iov_len = chunkSize;
+        } else {
+            iov[0].iov_base = state.recvBuf + state.recvOffset;
+            iov[0].iov_len = recvBufSize - static_cast<size_t>(state.recvOffset);
+        }
 
-        ssize_t recvd = ubsocket_readv(fd, iov, 1);
+        ssize_t recvd = isUb ? ubsocket_readv(fd, iov, 1) : ::readv(fd, iov, 1);
         if (recvd < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                keepReading = false;
-                continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+                break;
             }
             std::cout << "Error: readv failed, errno: " << errno << std::endl;
             return -errno;
@@ -1046,6 +1308,10 @@ int SubCommandData::DataServer::ProcessRecvData(int fd, uint64_t &totalBytesRecv
         if (recvd == 0) {
             std::cout << "Client " << fd << " disconnected" << std::endl;
             return -1;
+        }
+
+        if (isUb) {
+            recvd = CopyRecvFromBlockChain(state.recvUbChunk, state.recvBuf, state.recvOffset, recvd);
         }
 
         state.recvOffset += recvd;
@@ -1078,13 +1344,21 @@ void SubCommandData::DataServer::ResetClientState(int fd, uint64_t &totalBytesRe
     std::cout << "Total bytes sent: " << state.totalBytesSent << std::endl;
     std::cout << "Duration: " << durationUs / 1000.0 << " ms" << std::endl;
 
-    ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr);
+    if (cmd_.IsUbProtocol()) {
+        ubsocket_epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr);
+    } else {
+        ::epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd, nullptr);
+    }
     close(fd);
 
+    if (state.recvUbChunk) {
+        FreeUbBuf(state.recvUbChunk);
+    }
     if (state.recvBuf) {
         free(state.recvBuf);
     }
     if (state.sendBuf) {
+        // sendBuf is always malloc'd (see AcceptClient()), regardless of protocol
         free(state.sendBuf);
     }
 
@@ -1163,7 +1437,8 @@ int SubCommandData::DataServer::Run()
 
     while (!g_quitFlag) {
         struct epoll_event events[MAX_EVENTS];
-        int nfds = ubsocket_epoll_wait(epollFd_, events, MAX_EVENTS, 1000);
+        int nfds = cmd_.IsUbProtocol() ? ubsocket_epoll_wait(epollFd_, events, MAX_EVENTS, 1000)
+                                        : ::epoll_wait(epollFd_, events, MAX_EVENTS, 1000);
         if (nfds == 0) {
             continue;
         }
@@ -1186,17 +1461,24 @@ int SubCommandData::DataServer::Run()
 
 int SubCommandData::DoExecute() noexcept
 {
-    u_init_options_t options;
-    if (ubsocket_init_options(&options) != 0) {
-        std::cout << "Inner error: set ubsocket options failed" << std::endl;
-        return -1;
-    }
+    if (protocol_ != "tcp") {
+        u_init_options_t options;
+        if (ubsocket_init_options(&options) != 0) {
+            std::cout << "Inner error: set ubsocket options failed" << std::endl;
+            return -1;
+        }
 
-    options.allowed_protocol = Func::ProtocolFromString(protocol_);
+        options.allowed_protocol = Func::ProtocolFromString(protocol_);
+        GlobalSetting::UBS_BACKUP_LINK_ENABLED = true;
+        ::setenv("UBSOCKET_FLOW_CONTROL_ENABLE", "false", 1);
+        ::setenv("UBSOCKET_UB_TRANS_MODE", "RM_CTP", 1);
 
-    if (ubsocket_init(&options) != 0) {
-        std::cout << "Inner error: initialize ubsocket failed" << std::endl;
-        return -1;
+        if (ubsocket_init(&options) != 0) {
+            std::cout << "Inner error: initialize ubsocket failed" << std::endl;
+            return -1;
+        }
+    } else {
+        GlobalSetting::UBS_NATIVE_TCP_MODE = true;
     }
 
     if (role_ == "client") {

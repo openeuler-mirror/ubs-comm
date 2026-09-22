@@ -14,9 +14,12 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <memory>
 
 #include "common/ubsocket_qbuf_queue.h"
 #include "core/ubsocket_data_rx.h"
+#include "profiling/statistics/rx_stat_defs.h"
 #include "umq_backend.h"
 #include "umq_setting.h"
 
@@ -24,36 +27,10 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
-class UmqRxOps : public DataRxOps {
-public:
-    explicit UmqRxOps(int fd, uint64_t umq_handle = UMQ_INVALID_HANDLE) : local_umqh_(umq_handle)
-    {
-        fd_ = fd;
-    }
+/* v1.7 去虚化合并：唯一实现已下沉为 DataRxOps 本体（见 core/ubsocket_data_rx.h），
+ * 本别名保留既有引用与 UmqRxOps(fd, umq_handle) 构造形式。 */
+using UmqRxOps = ::ock::ubs::DataRxOps;
 
-    ~UmqRxOps() override = default;
-
-    int PollRx(const SocketPtr &sock) override;
-
-    int RearmRxInterrupt() override;
-
-    void HandleErrorRxCqe(umq_buf_t *buf);
-
-    void FlushRx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS);
-
-private:
-    int GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num);
-    int UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size);
-    uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf);
-    int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
-    int GetAndAckEvent();
-    Block *DataToBlock(void *data) override;
-    bool PollSubUmqRx(umq_buf_t *buf[], int i) const;
-
-private:
-    // umq 相关的句柄
-    uint64_t local_umqh_ = UMQ_INVALID_HANDLE;
-};
 } // namespace umq
 } // namespace ubs
 } // namespace ock

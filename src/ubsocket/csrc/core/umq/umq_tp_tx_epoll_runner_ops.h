@@ -12,6 +12,7 @@
 #ifndef UBS_COMM_UMQ_TP_TX_EPOLL_RUNNER_OPS_H
 #define UBS_COMM_UMQ_TP_TX_EPOLL_RUNNER_OPS_H
 
+#include <vector>
 #include "core/ubsocket_event_epoll.h"
 
 namespace ock {
@@ -35,10 +36,7 @@ public:
     {
         mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
     }
-    ~UmqTpTxEpollRunnerOps()
-    {
-        LockRegistry::LOCK_OPS.destroy(mutex_);
-    }
+    ~UmqTpTxEpollRunnerOps() override;
 
     /**
      * @brief process epoll_wait event
@@ -71,13 +69,13 @@ public:
         if (UNLIKELY(pos == socket_data_.end())) {
             return false;
         }
+
         auto removed = pos->second;
-        socket_data_.erase(pos); // fd 可被复用
+        socket_data_.erase(pos);
         if (removed != nullptr) {
-            // 不立即 delete：TX poller 可能正从 epoll_wait 批次中处理该事件
-            // event.data.u64 仍指向此 TxEpollEvent，标记 umq_handle 无效让 poller 持锁校验后跳过
-            // 接受 ~32 字节/事件的轻微泄漏（socket 创建/销毁不频繁）
+            // epoll_wait 可能已经返回该事件，先标记失效，runner 停止后统一释放
             removed->umq_handle = UMQ_INVALID_HANDLE;
+            removed_events_.push_back(removed);
         }
         return true;
     }
@@ -95,6 +93,7 @@ public:
 private:
     u_mutex_t *mutex_{nullptr};
     std::unordered_map<int, TxEpollEvent *> socket_data_;
+    std::vector<TxEpollEvent *> removed_events_;
 };
 
 } // namespace umq

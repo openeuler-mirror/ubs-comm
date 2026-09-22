@@ -30,6 +30,9 @@ public:
         std::string type;
         std::string enable;
         double value = 0;
+        std::string valueStr; /* -v 原始字符串参数（mode 传 fast/ext；interval 传数字） */
+        uint32_t sampleRate = 0;
+        uint32_t drainInterval = 0;
     };
 
     static bool Parse(int argc, char *argv[], ParsedArgs &args);

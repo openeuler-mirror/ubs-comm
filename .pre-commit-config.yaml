@@ -9,7 +9,7 @@ repos:
         files: ^(?!test/).*(\.(h|c|cpp|sh|cmake)|CMakeLists\.txt)$
       - id: run-build-test
         name: Run Tests Build
-        entry: HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on bash build.sh
+        entry: bash -c 'rm -rf src/hcom/umq/build && HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on bash build.sh'
         language: system
         pass_filenames: false
         files: ^test/.*\.(h|c|cpp|sh|cmake)$|^test/CMakeLists\.txt$
@@ -18,7 +18,7 @@ repos:
         entry: clang-format
         language: system
         files: \.(h|c|cpp)$
-        exclude: ^(src/hcom/umq|src/hcom/hcom.cpp|src/hcom/hcom_obj_statistics.cpp|src/hcom/transport/sock/net_sock_async_endpoint.cpp|src/hcom/transport/sock/net_sock_async_endpoint.h|src/hcom/transport/sock/net_sock_sync_endpoint.cpp|src/hcom/transport/sock/net_sock_sync_endpoint.h|src/hcom/transport/rdma/verbs/rdma_verbs_wrapper_ctx.h|test/hcom/llt/testcase/common/test_net_rbtree.cpp|test/hcom/unit_test/transport/sock/test_net_sock_async_endpoint.cpp|test/hcom/unit_test/transport/sock/test_net_sock_driver_oob.cpp)
+        exclude: ^(src/hcom/umq|test/hcom/unit_test/umq/qbuf_pool_tool|src/ubsocket|src/hcom/hcom.cpp|src/hcom/hcom_obj_statistics.cpp|src/hcom/transport/sock/net_sock_async_endpoint.cpp|src/hcom/transport/sock/net_sock_async_endpoint.h|src/hcom/transport/sock/net_sock_sync_endpoint.cpp|src/hcom/transport/sock/net_sock_sync_endpoint.h|src/hcom/transport/rdma/verbs/rdma_verbs_wrapper_ctx.h|test/hcom/llt/testcase/common/test_net_rbtree.cpp|test/hcom/unit_test/transport/sock/test_net_sock_async_endpoint.cpp|test/hcom/unit_test/transport/sock/test_net_sock_driver_oob.cpp)
         args: [-style=file, -i]
       - id: clang-tidy
         name: Run clang-tidy check

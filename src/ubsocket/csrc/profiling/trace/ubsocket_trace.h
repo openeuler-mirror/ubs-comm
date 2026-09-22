@@ -12,8 +12,12 @@
 #define UBS_COMM_UBSOCKET_TRACE_H
 
 #include <atomic>
-#include <memory>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <algorithm>
 #include <thread>
+#include <chrono>
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
 #include "include/ubsocket_def.h"
@@ -21,19 +25,233 @@
 namespace ock {
 namespace ubs {
 
-struct SplitTraceInfo {
-    uint64_t start_timestamp = 0;
-    uint64_t end_timestamp = 0;
-    int raw_socket = -1;
-    int peer_socket = -1;
-    uint32_t seq_no = 0;
-    uint32_t data_size = 0;
-    uint32_t offset = 0;
-    ProfilingTPId type = CORE_WRITE;
-    uint32_t poll_num = 0;
-    bool is_first = false;
+class Socket;
+
+enum TracePath : uint8_t {
+    PATH_TX_WRITEV = 0,
+    PATH_TX_POST   = 1,
+    PATH_RX_READV  = 2,
+    PATH_RX_POLL   = 3,
 };
 
+inline bool IsTxPath(uint8_t path) noexcept { return path == PATH_TX_WRITEV || path == PATH_TX_POST; }
+
+enum TxWritevPhase : uint16_t {
+    TX_WV_ENTRY = 0,
+    TX_WV_BUILD_IOV,
+    TX_WV_ALLOC_BUF,
+    TX_WV_MEM_COPY,
+    TX_WV_UMQ_POST,
+    TX_WV_EXIT,
+    TX_WV_ASYNC_UMQ_POLL,
+    TX_WV_ASYNC_PROCESS_CQE,
+    TX_WV_ASYNC_BUF_FREE,
+    TX_WV_ASYNC_NOTIFY,
+    TX_WV_PHASE_COUNT,
+};
+
+enum TxPostPhase : uint16_t {
+    TX_POST_ENTRY = 0,
+    TX_POST_SENDER_POST,
+    TX_POST_HANDLE_SMALL,
+    TX_POST_HANDLE_LARGE,
+    TX_POST_UMQ_POST,
+    TX_POST_EXIT,
+    TX_POST_ASYNC_UMQ_POLL,
+    TX_POST_ASYNC_PROCESS_CQE,
+    TX_POST_ASYNC_BUF_FREE,
+    TX_POST_ASYNC_NOTIFY,
+    TX_POST_PHASE_COUNT,
+};
+
+enum RxReadvPhase : uint16_t {
+    RX_RV_ENTRY = 0,
+    RX_RV_POLL_RX,
+    RX_RV_HANDLE_BUF,
+    RX_RV_DATA_SET,
+    RX_RV_REARM,
+    RX_RV_EXIT,
+    RX_RV_ASYNC_UMQ_POLL,
+    RX_RV_ASYNC_SIFT,
+    RX_RV_ASYNC_ENQUEUE,
+    RX_RV_ASYNC_NOTIFY,
+    RX_RV_ASYNC_ALLOC_BUF,
+    RX_RV_ASYNC_POST_RX,
+    RX_RV_ASYNC_REARM,
+    RX_RV_PHASE_COUNT,
+};
+
+enum RxPollPhase : uint16_t {
+    RX_POLL_ENTRY = 0,
+    RX_POLL_GET_AND_POP,
+    RX_POLL_BIG_CTRL,
+    RX_POLL_DELIVER_SEG,
+    RX_POLL_EXIT,
+    RX_POLL_ASYNC_UMQ_POLL,
+    RX_POLL_ASYNC_SIFT,
+    RX_POLL_ASYNC_ENQUEUE,
+    RX_POLL_ASYNC_NOTIFY,
+    RX_POLL_ASYNC_ALLOC_BUF,
+    RX_POLL_ASYNC_POST_RX,
+    RX_POLL_ASYNC_REARM,
+    RX_POLL_PHASE_COUNT,
+};
+
+template <uint16_t N>
+struct PhaseData {
+    uint64_t phase_start[N];
+    uint64_t phase_end[N];
+    std::atomic<uint64_t> phase_bitmap[(N + 63) / 64];
+
+    void ResetBitmap() noexcept
+    {
+        for (uint16_t i = 0; i < (N + 63) / 64; i++) {
+            phase_bitmap[i].store(0, std::memory_order_relaxed);
+        }
+        for (uint16_t i = 0; i < N; i++) {
+            phase_start[i] = 0;
+            phase_end[i] = 0;
+        }
+    }
+
+    void RecordPhase(uint16_t idx, uint64_t s, uint64_t e) noexcept
+    {
+        if (idx >= N) {
+            return;
+        }
+        phase_start[idx] = s;
+        phase_end[idx] = e;
+        std::atomic_thread_fence(std::memory_order_release);
+        phase_bitmap[idx / 64].fetch_or(1ULL << (idx % 64), std::memory_order_relaxed);
+    }
+
+    bool HasPhase(uint16_t idx) const noexcept
+    {
+        if (idx >= N) {
+            return false;
+        }
+        return (phase_bitmap[idx / 64].load(std::memory_order_acquire) & (1ULL << (idx % 64))) != 0;
+    }
+};
+
+struct TraceSlot {
+    static constexpr uint32_t INVALID_SEQ = 0;
+    static constexpr uint8_t STATE_IDLE = 0;
+    static constexpr uint8_t STATE_TRACING = 1;
+    static constexpr uint8_t STATE_DONE = 2;
+
+    std::atomic<uint8_t> state{0};
+    uint8_t path{0};
+    uint32_t seq_no{0};
+    int32_t fd{-1};
+    uint64_t io_start_ts{0};
+    uint64_t io_end_ts{0};
+    uint32_t data_size{0};
+    uint32_t offset{0};
+
+    union {
+        PhaseData<TX_WV_PHASE_COUNT>   tx_writev;
+        PhaseData<TX_POST_PHASE_COUNT>  tx_post;
+        PhaseData<RX_RV_PHASE_COUNT>    rx_readv;
+        PhaseData<RX_POLL_PHASE_COUNT>   rx_poll;
+    } phases;
+
+    void Reset() noexcept;
+    void RecordPhase(uint8_t p, uint16_t idx, uint64_t s, uint64_t e) noexcept;
+};
+
+class GlobalTracePool {
+public:
+    static constexpr uint16_t MAX_SLOTS = 256;
+    static constexpr uint32_t LOOKUP_SIZE = 8192;  // O(1) 查找表大小 (2 的幂)
+    static constexpr uint32_t LOOKUP_MASK = LOOKUP_SIZE - 1;
+
+    static GlobalTracePool &Instance();
+
+    int16_t AllocSlot(uint32_t seqNo, int fd, uint8_t path) noexcept;
+    void EndSlot(int16_t slotIdx, uint32_t dataSize, uint32_t offset) noexcept;
+    TraceSlot *FindSlot(uint32_t seqNo, uint8_t path, int fd) noexcept;
+    TraceSlot &Slot(int16_t idx) noexcept { return slots_[static_cast<uint16_t>(idx)]; }
+    void DrainAll(uint64_t now) noexcept;
+    void ClearLookup(uint32_t seqNo, int fd) noexcept;
+
+    bool LazyInit() noexcept;
+    void DestroyPool() noexcept;
+    bool IsReady() const noexcept { return slots_ != nullptr; }
+
+    std::atomic<uint16_t> done_count_{0};
+
+    static uint32_t MixLookupKey(uint32_t seqNo, int fd) noexcept
+    {
+        return seqNo ^ (static_cast<uint32_t>(fd) * 0x9E3779B9u);
+    }
+
+    static uint64_t PackLookup(uint32_t seqNo, int fd, uint16_t slotIdx) noexcept
+    {
+        return (static_cast<uint64_t>(seqNo))
+             | (static_cast<uint64_t>(static_cast<uint32_t>(fd)) << 32)
+             | (static_cast<uint64_t>(slotIdx) << 56);
+    }
+
+    static bool UnpackLookup(uint64_t packed, uint32_t seqNo, int fd, uint16_t &outSlot) noexcept
+    {
+        if (packed == 0) return false;
+        if (static_cast<uint32_t>(packed) != seqNo) return false;
+        if (static_cast<int32_t>((packed >> 32) & 0xFFFFFF) != fd) return false;
+        outSlot = static_cast<uint16_t>(packed >> 56);
+        return true;
+    }
+
+private:
+    GlobalTracePool() = default;
+    ~GlobalTracePool() { DestroyPool(); }
+
+    TraceSlot *slots_{nullptr};
+    std::atomic<uint16_t> next_hint_{0};
+    std::atomic<uint64_t> *lookup_table_{nullptr};
+};
+
+class SplitTraceDrainThread {
+public:
+    static SplitTraceDrainThread &Instance();
+    ~SplitTraceDrainThread();
+    void Start();
+    void Stop();
+    static void EnsureSplitTraceDir() noexcept;
+    static const char *PhaseName(uint8_t path, uint16_t idx) noexcept;
+    static int FormatSlot(char *buf, int bufsize, const TraceSlot &slot) noexcept;
+
+private:
+    void Run();
+    void DrainAll();
+
+    std::thread thread_;
+    std::atomic<bool> running_{false};
+    uint64_t drain_count_{0};
+};
+
+bool SplitTraceTrySample(Socket *sock, int fd, uint32_t seqNo, uint8_t path);
+void SplitTraceAdd(Socket *sock, uint8_t path, uint16_t idx,
+                   uint32_t seqNo, uint64_t startTs, uint64_t endTs);
+void SplitTraceEndSample(Socket *sock, uint8_t path, uint32_t seqNo,
+                         uint32_t dataSize, uint32_t offset);
+void SplitTraceAddSampled(int fd, uint8_t path, uint16_t idx,
+                          uint32_t seqNo,
+                          uint64_t startTs, uint64_t endTs);
+
+#define STRACE_TRY_SAMPLE(sock, fd, seq_no, path) \
+    ::ock::ubs::SplitTraceTrySample(sock, fd, seq_no, path)
+
+#define STRACE_ADD(sock, path, idx, seq_no, start_ts, end_ts) \
+    ::ock::ubs::SplitTraceAdd(sock, path, idx, seq_no, start_ts, end_ts)
+
+#define STRACE_END(sock, path, seq_no, data_size, offset) \
+    ::ock::ubs::SplitTraceEndSample(sock, path, seq_no, data_size, offset)
+
+#define STRACE_SAMPLED(fd, path, idx, seq_no, start_ts, end_ts) \
+    ::ock::ubs::SplitTraceAddSampled(fd, path, idx, seq_no, start_ts, end_ts)
+
+struct SplitTraceInfo;
 class TraceRegistry {
 public:
     static Result RegisterRpcIdOps(u_external_rpc_id_ops_t *ops);
@@ -41,604 +259,6 @@ public:
 public:
     static u_external_rpc_id_ops_t RPC_ID_OPS;
 };
-
-class SplitTrace {
-    static constexpr uint32_t DEFAULT_BUF_CAPACITY = 65535;
-    static constexpr uint32_t DEFAULT_DRAIN_INTERVAL_MS = 10;
-
-    struct TraceBuffer {
-        std::unique_ptr<SplitTraceInfo[]> data;
-        uint32_t capacity{0};
-        uint32_t count{0};
-        uint32_t dropped_count{0};
-        alignas(64) std::atomic<bool> frozen{false};
-
-        TraceBuffer() = default;
-        explicit TraceBuffer(uint32_t cap) : data(std::make_unique<SplitTraceInfo[]>(cap)), capacity(cap) {}
-        TraceBuffer(TraceBuffer &&other) noexcept
-            : data(std::move(other.data)),
-              capacity(other.capacity),
-              count(other.count),
-              dropped_count(other.dropped_count),
-              frozen(other.frozen.load(std::memory_order_relaxed))
-        {
-        }
-        TraceBuffer &operator=(TraceBuffer &&other) noexcept
-        {
-            if (this != &other) {
-                data = std::move(other.data);
-                capacity = other.capacity;
-                count = other.count;
-                dropped_count = other.dropped_count;
-                frozen.store(other.frozen.load(std::memory_order_relaxed), std::memory_order_relaxed);
-            }
-            return *this;
-        }
-        TraceBuffer(const TraceBuffer &) = delete;
-        TraceBuffer &operator=(const TraceBuffer &) = delete;
-
-        void Reset()
-        {
-            count = 0;
-            dropped_count = 0;
-        }
-    };
-
-    uint32_t buf_capacity_{DEFAULT_BUF_CAPACITY};
-    uint32_t swap_threshold_{DEFAULT_BUF_CAPACITY / 2};
-
-    alignas(64) std::atomic<uint32_t> write_active_idx_{0};
-    TraceBuffer write_bufs_[2];
-
-    alignas(64) std::atomic<uint32_t> read_active_idx_{0};
-    TraceBuffer read_bufs_[2];
-
-    alignas(64) std::atomic<uint32_t> epoll_active_idx_{0};
-    TraceBuffer epoll_bufs_[2];
-
-public:
-    static bool &SuppressTrace()
-    {
-        static thread_local bool value = false;
-        return value;
-    }
-
-    SplitTrace()
-    {
-        buf_capacity_ = GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY;
-        swap_threshold_ = buf_capacity_ / 2;
-        write_bufs_[0] = TraceBuffer(buf_capacity_);
-        write_bufs_[1] = TraceBuffer(buf_capacity_);
-        read_bufs_[0] = TraceBuffer(buf_capacity_);
-        read_bufs_[1] = TraceBuffer(buf_capacity_);
-        epoll_bufs_[0] = TraceBuffer(buf_capacity_);
-        epoll_bufs_[1] = TraceBuffer(buf_capacity_);
-    }
-
-    void AddWriteTrace(ProfilingTPId type, int raw_socket)
-    {
-        auto idx = write_active_idx_.load(std::memory_order_acquire);
-        auto &buf = write_bufs_[idx];
-        if (buf.count >= buf_capacity_) {
-            buf.dropped_count++;
-            return;
-        }
-        auto &trace_info = buf.data[buf.count];
-        trace_info.raw_socket = raw_socket;
-        trace_info.seq_no = 0;
-        trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
-        buf.count++;
-    }
-
-    void AddWriteTrace(ProfilingTPId type, int raw_socket, uint32_t seq_no, uint32_t data_size, uint32_t offset,
-                       bool is_first)
-    {
-        auto idx = write_active_idx_.load(std::memory_order_acquire);
-        auto &buf = write_bufs_[idx];
-        if (buf.count >= buf_capacity_) {
-            buf.dropped_count++;
-            return;
-        }
-        auto &trace_info = buf.data[buf.count];
-        trace_info.raw_socket = raw_socket;
-        trace_info.seq_no = seq_no;
-        trace_info.data_size = data_size;
-        trace_info.offset = offset;
-        trace_info.type = type;
-        trace_info.is_first = is_first;
-        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
-        buf.count++;
-    }
-
-    void UpdateWriteFirstTrace(ProfilingTPId type, uint32_t seq_no, uint32_t data_size, uint32_t offset, bool is_first,
-                               uint32_t expected_backfill_count = 1)
-    {
-        auto idx = write_active_idx_.load(std::memory_order_acquire);
-        auto &buf = write_bufs_[idx];
-        if (buf.count == 0) {
-            return;
-        }
-        uint32_t pos = buf.count;
-        for (uint32_t i = buf.count; i-- > 0;) {
-            if (buf.data[i].type == type) {
-                pos = i;
-                break;
-            }
-        }
-        if (pos >= buf.count) {
-            return;
-        }
-        uint32_t backfill_count = 0;
-        for (uint32_t i = pos; i < buf.count; ++i) {
-            if (buf.data[i].seq_no != 0) {
-                break;
-            }
-            buf.data[i].seq_no = seq_no;
-            buf.data[i].data_size = data_size;
-            buf.data[i].offset = offset;
-            buf.data[i].is_first = is_first;
-            ++backfill_count;
-        }
-    }
-
-    void UpdateWriteLastTrace(ProfilingTPId type, uint32_t data_size, uint32_t offset)
-    {
-        auto idx = write_active_idx_.load(std::memory_order_acquire);
-        auto &buf = write_bufs_[idx];
-        if (buf.count == 0) {
-            return;
-        }
-        auto &trace_info = buf.data[buf.count - 1];
-        trace_info.data_size = data_size;
-        trace_info.offset = offset;
-        trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
-    }
-
-    void UpdateWriteLastTraceEndTime(ProfilingTPId type)
-    {
-        auto idx = write_active_idx_.load(std::memory_order_acquire);
-        auto &buf = write_bufs_[idx];
-        if (buf.count == 0) {
-            return;
-        }
-        auto &trace_info = buf.data[buf.count - 1];
-        if (trace_info.type != type) {
-            return;
-        }
-        trace_info.end_timestamp = ubsocket_get_timeNs_compile();
-
-        // write end time record
-        uint32_t pos = buf.count;
-        for (uint32_t i = buf.count; i-- > 0;) {
-            if (buf.data[i].type == CORE_WRITE) {
-                pos = i;
-                break;
-            }
-        }
-        if (pos >= buf.count) {
-            return;
-        }
-        buf.data[pos].end_timestamp = trace_info.end_timestamp;
-    }
-
-    void AddReadTrace(ProfilingTPId type, int raw_socket, uint32_t seq_no, uint32_t data_size, uint32_t offset)
-    {
-        auto idx = read_active_idx_.load(std::memory_order_acquire);
-        auto &buf = read_bufs_[idx];
-        if (buf.count >= buf_capacity_) {
-            buf.dropped_count++;
-            return;
-        }
-        auto &trace_info = buf.data[buf.count];
-        trace_info.raw_socket = raw_socket;
-        trace_info.seq_no = seq_no;
-        trace_info.data_size = data_size;
-        trace_info.offset = offset;
-        trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
-        buf.count++;
-    }
-
-    void AddWriteTrace(ProfilingTPId type, int raw_socket, uint64_t start_time, uint64_t end_time,
-                       uint32_t poll_num = 0)
-    {
-        auto idx = write_active_idx_.load(std::memory_order_acquire);
-        auto &buf = write_bufs_[idx];
-        if (buf.count >= buf_capacity_) {
-            buf.dropped_count++;
-            return;
-        }
-        auto &trace_info = buf.data[buf.count];
-        trace_info.raw_socket = raw_socket;
-        if (buf.count >= 1) {
-            auto &last_trace = buf.data[buf.count - 1];
-            trace_info.seq_no = last_trace.seq_no;
-            trace_info.data_size = last_trace.data_size;
-            trace_info.offset = last_trace.offset;
-        }
-        trace_info.type = type;
-        trace_info.poll_num = poll_num;
-        trace_info.start_timestamp = start_time;
-        trace_info.end_timestamp = end_time;
-        buf.count++;
-    }
-
-    void AddReadTrace(ProfilingTPId type, int raw_socket, uint64_t start_time, uint64_t end_time, uint32_t poll_num = 0)
-    {
-        auto idx = read_active_idx_.load(std::memory_order_acquire);
-        auto &buf = read_bufs_[idx];
-        if (buf.count >= buf_capacity_) {
-            buf.dropped_count++;
-            return;
-        }
-        auto &trace_info = buf.data[buf.count];
-        trace_info.raw_socket = raw_socket;
-        if (buf.count >= 1) {
-            auto &last_trace = buf.data[buf.count - 1];
-            trace_info.seq_no = last_trace.seq_no;
-            trace_info.data_size = last_trace.data_size;
-            trace_info.offset = last_trace.offset;
-        }
-        trace_info.type = type;
-        trace_info.poll_num = poll_num;
-        trace_info.start_timestamp = start_time;
-        trace_info.end_timestamp = end_time;
-        buf.count++;
-    }
-
-    void UpdateLastReadTrace(ProfilingTPId type)
-    {
-        auto idx = read_active_idx_.load(std::memory_order_acquire);
-        auto &buf = read_bufs_[idx];
-        if (buf.count == 0) {
-            return;
-        }
-        auto &trace_info = buf.data[buf.count - 1];
-        trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
-    }
-
-    void AddEpollTrace(ProfilingTPId type, int raw_socket, uint32_t seq_no, uint32_t data_size, uint32_t offset)
-    {
-        auto idx = epoll_active_idx_.load(std::memory_order_acquire);
-        auto &buf = epoll_bufs_[idx];
-        if (buf.count >= buf_capacity_) {
-            buf.dropped_count++;
-            return;
-        }
-        buf.data[buf.count] = SplitTraceInfo{};
-        auto &trace_info = buf.data[buf.count];
-        trace_info.raw_socket = raw_socket;
-        trace_info.seq_no = seq_no;
-        trace_info.data_size = data_size;
-        trace_info.offset = offset;
-        trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
-        buf.count++;
-    }
-
-    void AddEpollTrace(ProfilingTPId type, int raw_socket, uint32_t seq_no, uint32_t data_size, uint32_t offset,
-                       uint64_t start_timestamp, uint64_t end_timestamp)
-    {
-        auto idx = epoll_active_idx_.load(std::memory_order_acquire);
-        auto &buf = epoll_bufs_[idx];
-        if (buf.count >= buf_capacity_) {
-            buf.dropped_count++;
-            return;
-        }
-        auto &trace_info = buf.data[buf.count];
-        trace_info.raw_socket = raw_socket;
-        trace_info.seq_no = seq_no;
-        trace_info.data_size = data_size;
-        trace_info.offset = offset;
-        trace_info.type = type;
-        trace_info.start_timestamp = start_timestamp;
-        trace_info.end_timestamp = end_timestamp;
-        buf.count++;
-    }
-
-    void AddEpollTrace(ProfilingTPId type)
-    {
-        auto idx = epoll_active_idx_.load(std::memory_order_acquire);
-        auto &buf = epoll_bufs_[idx];
-        if (buf.count >= buf_capacity_) {
-            buf.dropped_count++;
-            return;
-        }
-        if (buf.count < 1) {
-            return;
-        }
-        auto &last_trace = buf.data[buf.count - 1];
-        auto &trace_info = buf.data[buf.count];
-        trace_info.raw_socket = last_trace.raw_socket;
-        trace_info.seq_no = last_trace.seq_no;
-        trace_info.data_size = last_trace.data_size;
-        trace_info.offset = last_trace.offset;
-        trace_info.type = type;
-        trace_info.start_timestamp = ubsocket_get_timeNs_compile();
-        buf.count++;
-    }
-
-    void TrySwap()
-    {
-        TrySwapBuffer(write_active_idx_, write_bufs_);
-        TrySwapBuffer(read_active_idx_, read_bufs_);
-    }
-
-    void TrySwapEpoll()
-    {
-        TrySwapBuffer(epoll_active_idx_, epoll_bufs_);
-    }
-
-    void Flush()
-    {
-        FlushBuffer(write_active_idx_, write_bufs_, "Write");
-        FlushBuffer(read_active_idx_, read_bufs_, "Read");
-        FlushBuffer(epoll_active_idx_, epoll_bufs_, "Epoll");
-    }
-
-    void DrainAndPrint()
-    {
-        DrainBuffer(write_active_idx_, write_bufs_, "Write");
-        DrainBuffer(read_active_idx_, read_bufs_, "Read");
-        DrainBuffer(epoll_active_idx_, epoll_bufs_, "Epoll");
-    }
-    uint32_t pack_size{0};
-    std::queue<uint32_t> pack_size_list;
-    alignas(uint32_t) uint8_t header_cache[8] = {0};
-    uint8_t header_cache_size = 0;
-    uint8_t previous_write_cache_size = 0;
-    bool pending_header = false;
-
-private:
-    static void PrintSplitTraceInfo(const SplitTraceInfo &trace_info, const char *label)
-    {
-        uint64_t duration = trace_info.end_timestamp > 0 ? trace_info.end_timestamp - trace_info.start_timestamp : 0;
-        UBS_VLOG_INFO("[%s] raw_socket: %d is_first: %d seq: %u data_size: %u offset: %u type: %u "
-                      "poll_num: %u start_timestamp: %lu end_timestamp: %lu%s\n",
-                      label, trace_info.raw_socket, trace_info.is_first, trace_info.seq_no, trace_info.data_size,
-                      trace_info.offset, static_cast<uint32_t>(trace_info.type), trace_info.poll_num,
-                      trace_info.start_timestamp, trace_info.end_timestamp,
-                      trace_info.end_timestamp > 0 ? (" duration: " + std::to_string(duration) + " ns").c_str() : "");
-    }
-
-    void TrySwapBuffer(std::atomic<uint32_t> &active_idx, TraceBuffer bufs[2])
-    {
-        auto idx = active_idx.load(std::memory_order_acquire);
-        if (bufs[idx].count < swap_threshold_) {
-            return;
-        }
-        auto other = 1 - idx;
-        if (bufs[other].frozen.load(std::memory_order_acquire)) {
-            return;
-        }
-        if (bufs[other].count > 0) {
-            return;
-        }
-        bufs[idx].frozen.store(true, std::memory_order_release);
-        active_idx.store(other, std::memory_order_release);
-    }
-
-    void FlushBuffer(std::atomic<uint32_t> &active_idx, TraceBuffer bufs[2], const char *label)
-    {
-        auto idx = active_idx.load(std::memory_order_acquire);
-        auto other = 1 - idx;
-        PrintBuffer(bufs[other], label);
-        bufs[other].Reset();
-        bufs[other].frozen.store(false, std::memory_order_release);
-        PrintBuffer(bufs[idx], label);
-        bufs[idx].Reset();
-    }
-
-    void PrintBuffer(const TraceBuffer &buf, const char *label) const
-    {
-        if (buf.count == 0) {
-            return;
-        }
-        if (buf.dropped_count > 0) {
-            UBS_VLOG_WARN("=== %s Trace (dropped: %u) ===\n", label, buf.dropped_count);
-        } else {
-            UBS_VLOG_DEBUG("=== %s Trace ===\n", label);
-        }
-        for (uint32_t j = 0; j < buf.count; j++) {
-            PrintSplitTraceInfo(buf.data[j], label);
-        }
-    }
-
-    void DrainBuffer(std::atomic<uint32_t> &active_idx, TraceBuffer bufs[2], const char *label)
-    {
-        auto idx = active_idx.load(std::memory_order_acquire);
-        auto drain_idx = 1 - idx;
-        auto &buf = bufs[drain_idx];
-        if (!buf.frozen.load(std::memory_order_acquire)) {
-            return;
-        }
-        PrintBuffer(buf, label);
-        buf.Reset();
-        buf.frozen.store(false, std::memory_order_release);
-    }
-};
-
-class TracePrintThread {
-public:
-    static TracePrintThread &Instance();
-    ~TracePrintThread();
-    void Start();
-    void Stop();
-
-private:
-    void Run();
-    void DrainAllSockets();
-
-    std::thread thread_;
-    std::atomic<bool> running_{false};
-};
-
-/* Trace macros controlled by compile-time flag - completely removed when disabled */
-#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
-#define TRACE_ADD_READ(trace, type, raw_socket, start_time, end_time)              \
-    do {                                                                           \
-        if ((trace) != nullptr) {                                                  \
-            (trace)->AddReadTrace((type), (raw_socket), (start_time), (end_time)); \
-        }                                                                          \
-    } while (0)
-
-#define TRACE_ADD_READ_DETAIL(trace, type, raw_socket, seq_no, data_size, offset)         \
-    do {                                                                                  \
-        if ((trace) != nullptr) {                                                         \
-            (trace)->AddReadTrace((type), (raw_socket), (seq_no), (data_size), (offset)); \
-        }                                                                                 \
-    } while (0)
-
-#define TRACE_UPDATE_LAST_READ(trace, type)       \
-    do {                                          \
-        if ((trace) != nullptr) {                 \
-            (trace)->UpdateLastReadTrace((type)); \
-        }                                         \
-    } while (0)
-
-#define TRACE_ADD_WRITE(trace, type, raw_socket, start_time, end_time, poll_num)                \
-    do {                                                                                        \
-        if ((trace) != nullptr) {                                                               \
-            (trace)->AddWriteTrace((type), (raw_socket), (start_time), (end_time), (poll_num)); \
-        }                                                                                       \
-    } while (0)
-
-#define TRACE_ADD_WRITE_SIMPLE(trace, type, raw_socket)   \
-    do {                                                  \
-        if ((trace) != nullptr) {                         \
-            (trace)->AddWriteTrace((type), (raw_socket)); \
-        }                                                 \
-    } while (0)
-
-#define TRACE_ADD_WRITE_DETAIL(trace, type, raw_socket, seq_no, data_size, offset, is_first)           \
-    do {                                                                                               \
-        if ((trace) != nullptr) {                                                                      \
-            (trace)->AddWriteTrace((type), (raw_socket), (seq_no), (data_size), (offset), (is_first)); \
-        }                                                                                              \
-    } while (0)
-
-#define TRACE_UPDATE_WRITE_FIRST(trace, type, seq_no, data_size, offset, is_first)               \
-    do {                                                                                         \
-        if ((trace) != nullptr) {                                                                \
-            (trace)->UpdateWriteFirstTrace((type), (seq_no), (data_size), (offset), (is_first)); \
-        }                                                                                        \
-    } while (0)
-
-#define TRACE_UPDATE_WRITE_LAST(trace, type, data_size, offset)           \
-    do {                                                                  \
-        if ((trace) != nullptr) {                                         \
-            (trace)->UpdateWriteLastTrace((type), (data_size), (offset)); \
-        }                                                                 \
-    } while (0)
-
-#define TRACE_UPDATE_WRITE_LAST_END(trace, type)          \
-    do {                                                  \
-        if ((trace) != nullptr) {                         \
-            (trace)->UpdateWriteLastTraceEndTime((type)); \
-        }                                                 \
-    } while (0)
-
-#define TRACE_ADD_EPOLL(trace, type)        \
-    do {                                    \
-        if ((trace) != nullptr) {           \
-            (trace)->AddEpollTrace((type)); \
-        }                                   \
-    } while (0)
-
-#define TRACE_ADD_EPOLL_DETAIL(trace, type, raw_socket, seq_no, data_size, offset)         \
-    do {                                                                                   \
-        if ((trace) != nullptr) {                                                          \
-            (trace)->AddEpollTrace((type), (raw_socket), (seq_no), (data_size), (offset)); \
-        }                                                                                  \
-    } while (0)
-
-#define TRACE_ADD_EPOLL_FULL(trace, type, raw_socket, seq_no, data_size, offset, start, end)               \
-    do {                                                                                                   \
-        if ((trace) != nullptr) {                                                                          \
-            (trace)->AddEpollTrace((type), (raw_socket), (seq_no), (data_size), (offset), (start), (end)); \
-        }                                                                                                  \
-    } while (0)
-
-#define TRACE_TRY_SWAP(trace)     \
-    do {                          \
-        if ((trace) != nullptr) { \
-            (trace)->TrySwap();   \
-        }                         \
-    } while (0)
-
-#define TRACE_TRY_SWAP_EPOLL(trace)  \
-    do {                             \
-        if ((trace) != nullptr) {    \
-            (trace)->TrySwapEpoll(); \
-        }                            \
-    } while (0)
-
-#define TRACE_FLUSH(trace)        \
-    do {                          \
-        if ((trace) != nullptr) { \
-            (trace)->Flush();     \
-        }                         \
-    } while (0)
-
-#define TRACE_DRAIN_AND_PRINT(trace)  \
-    do {                              \
-        if ((trace) != nullptr) {     \
-            (trace)->DrainAndPrint(); \
-        }                             \
-    } while (0)
-#else
-#define TRACE_ADD_READ(trace, type, raw_socket, start_time, end_time) \
-    do {                                                              \
-    } while (0)
-#define TRACE_ADD_READ_DETAIL(trace, type, raw_socket, seq_no, data_size, offset) \
-    do {                                                                          \
-    } while (0)
-#define TRACE_UPDATE_LAST_READ(trace, type) \
-    do {                                    \
-    } while (0)
-#define TRACE_ADD_WRITE(trace, type, raw_socket, start_time, end_time, poll_num) \
-    do {                                                                         \
-    } while (0)
-#define TRACE_ADD_WRITE_SIMPLE(trace, type, raw_socket) \
-    do {                                                \
-    } while (0)
-#define TRACE_ADD_WRITE_DETAIL(trace, type, raw_socket, seq_no, data_size, offset, is_first) \
-    do {                                                                                     \
-    } while (0)
-#define TRACE_UPDATE_WRITE_FIRST(trace, type, seq_no, data_size, offset, is_first) \
-    do {                                                                           \
-    } while (0)
-#define TRACE_UPDATE_WRITE_LAST(trace, type, data_size, offset) \
-    do {                                                        \
-    } while (0)
-#define TRACE_UPDATE_WRITE_LAST_END(trace, type) \
-    do {                                         \
-    } while (0)
-#define TRACE_ADD_EPOLL(trace, type) \
-    do {                             \
-    } while (0)
-#define TRACE_ADD_EPOLL_DETAIL(trace, type, raw_socket, seq_no, data_size, offset) \
-    do {                                                                           \
-    } while (0)
-#define TRACE_ADD_EPOLL_FULL(trace, type, raw_socket, seq_no, data_size, offset, start, end) \
-    do {                                                                                     \
-    } while (0)
-#define TRACE_TRY_SWAP(trace) \
-    do {                      \
-    } while (0)
-#define TRACE_TRY_SWAP_EPOLL(trace) \
-    do {                            \
-    } while (0)
-#define TRACE_FLUSH(trace) \
-    do {                   \
-    } while (0)
-#define TRACE_DRAIN_AND_PRINT(trace) \
-    do {                             \
-    } while (0)
-#endif
 
 } // namespace ubs
 } // namespace ock

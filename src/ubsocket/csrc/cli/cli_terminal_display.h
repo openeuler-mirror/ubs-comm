@@ -25,6 +25,7 @@ class TerminalDisplay {
     static constexpr const char *colorGreen = "\033[32m";
     static constexpr const char *colorYellow = "\033[33m";
     static constexpr const char *colorBlue = "\033[34m";
+    static constexpr const char *colorCyan = "\033[36m";
     static constexpr const char *colorGrey = "\033[30m";
     static constexpr const char *colorBold = "\033[1m";
     static constexpr const char *colorReset = "\033[0m";
@@ -76,9 +77,12 @@ public:
 
     void DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen);
 
+    void DisplayTxStatInfo(uint8_t *data, uint32_t dataLen);
+    void DisplayRxStatInfo(uint8_t *data, uint32_t dataLen);
+    // global qbuf pool (normal + tiny) stats display
+    void DisplayQbufPoolStatsInfo(uint8_t *data, uint32_t dataLen);
+
 private:
-    void PrintProfTitle(std::ostringstream &oss);
-    void PrintProfData(std::string &outPutData);
     void PrintProfValue();
 
     void DetectTerminal()

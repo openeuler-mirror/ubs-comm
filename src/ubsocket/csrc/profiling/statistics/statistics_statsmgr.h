@@ -11,20 +11,21 @@
 #ifndef STATISTICS_STATSMGR_H
 #define STATISTICS_STATSMGR_H
 
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <string>
-#include <vector>
 
 #include "cli_message.h"
+#include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_logger.h"
 #include "under_api/umq_api.h"
 
-#define RPC_VAR (2)
 
 namespace Statistics {
 class Recorder {
@@ -35,30 +36,21 @@ public:
     const static uint32_t DEFAULT_PRECISION = 3;
     const static uint32_t TOTAL_PRECISION = 7;
 
-    Recorder(const char *name)
-    {
-        if (name == nullptr) {
-            throw std::runtime_error("Input invalid name");
-        }
+    /*
+     * Recorder 不再持有名字副本：统计项名字是编译期静态表（GetStatsStr），
+     * 每个 socket 的 Recorder 各存一份 std::string 纯属浪费（每链路 16~32B + 超过
+     * SSO 的名字还会额外堆分配）。打印时由调用方传入名字。
+     */
+    Recorder() = default;
 
-        m_name = name;
-        if (m_name.length() > NAME_WIDTH_MAX) {
-            throw std::runtime_error("Input name length(" + std::to_string(m_name.length()) + ") exceeds upper limit(" +
-                                     std::to_string(NAME_WIDTH_MAX) + ")");
-        }
-    }
-
+    /*
+     * Recorder 收敛为单一累加计数器：原 Welford 统计字段（m_mean/m_m2/m_max/m_min）
+     * 与其读取接口（GetMean/GetVar/GetStd/GetCV）全仓无任何调用者，Update 亦从未
+     * 更新过它们（仅累加 m_cnt），属死数据。删除后每槽位 32B -> 8B，
+     * 每链路统计内联占用 264B -> ~72B。
+     */
     ALWAYS_INLINE void Update(uint32_t input)
     {
-        /* Here use Welford algorithm to calculate mean and variance
-         * (1) mean update equation: M(new) = M(old) + (x(new) - M(old)) / n
-         * (2) variance update equation: M2(new) = M2(old) + (x(new) - M(old)) * (x(new) - M(new))
-         * (3) sample variance: s^2 = M2 / (n - 1)
-         * M: mean of inputsamples
-         * x: new input
-         * n: number of total input
-         * M2: Intermediate quantilties used for calculating sample variance,
-         * the sum of squares of differences from the current mean */
         m_cnt += input;
     }
 
@@ -67,51 +59,21 @@ public:
         return m_cnt;
     }
 
-    double GetMean()
-    {
-        return m_mean;
-    }
-
-    double GetVar()
-    {
-        return (m_cnt < RPC_VAR) ? 0 : m_m2 / (m_cnt - 1);
-    }
-
-    double GetStd()
-    {
-        return std::sqrt(GetVar());
-    }
-
-    double GetCV()
-    {
-        /* CV < 1: Indicates it has relatively low dispersion. The volatility is below the average level.
-         * CV = 1: Indicates it has dispersion comparable to the average level.
-         * CV > 1: Indicates it has relatively high dispersion. The volatility is above the average level.
-         * CV >1.5 or higher: Typically suggests it has very high volatility, possibly containing extreme
-         * values or multipe distinct groups. */
-        return (m_cnt == 0 || IsZero(m_mean)) ? 0 : GetStd() / m_mean;
-    }
-
     void Reset()
     {
         m_cnt = 0;
-        m_mean = 0.0;
-        m_m2 = 0.0;
-        m_max = 0;
-        m_min = UINT32_MAX;
     }
 
-    void GetInfo(int fd, std::ostringstream &oss)
+    void GetInfo(int fd, const char *name, std::ostringstream &oss)
     {
-        if (m_min == UINT32_MAX && m_max == 0) {
-            /* When both the maximum and minimum values remain unchanged, it is considered that no statistical
-             * information for this variable has been recorded, and a '-' is directly output. */
-            oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd) << std::setw(NAME_WIDTH_MAX) << m_name
+        if (m_cnt == 0) {
+            /* Nothing has been accumulated for this variable, output a '-' directly. */
+            oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd) << std::setw(NAME_WIDTH_MAX) << name
                 << std::setw(FIELD_WIDTH_MAX) << "-" << std::endl;
             return;
         }
 
-        oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd) << std::setw(NAME_WIDTH_MAX) << m_name
+        oss << std::left << std::setw(FD_WIDTH_MAX) << std::to_string(fd) << std::setw(NAME_WIDTH_MAX) << name
             << std::setw(FIELD_WIDTH_MAX) << m_cnt << std::endl;
     }
 
@@ -123,12 +85,19 @@ public:
 
     static void FillEmptyForm(std::ostringstream &oss)
     {
-        static std::once_flag once_flag;
-        std::call_once(once_flag, []() {
-            std::ostringstream title_oss;
-            GetTitle(title_oss);
-            m_title_len = title_oss.str().length();
-        });
+        /* bthread 上禁用 std::call_once（原因见 ubsocket_leaky_singleton.h） */
+        static pthread_mutex_t once_mtx = PTHREAD_MUTEX_INITIALIZER;
+        static std::atomic<bool> once_done{false};
+        if (!once_done.load(std::memory_order_acquire)) {
+            (void)pthread_mutex_lock(&once_mtx);
+            if (!once_done.load(std::memory_order_relaxed)) {
+                std::ostringstream title_oss;
+                GetTitle(title_oss);
+                m_title_len = title_oss.str().length();
+                once_done.store(true, std::memory_order_release);
+            }
+            (void)pthread_mutex_unlock(&once_mtx);
+        }
 
         /* Here, the use if length rather than content comparison is to enhance the efficiency of the comparsion,
          * with the caller ensuring that the content does not deviate from expectations. */
@@ -142,17 +111,7 @@ public:
     }
 
 private:
-    bool IsZero(double a)
-    {
-        return std::fabs(a) < std::numeric_limits<double>::epsilon();
-    }
-
     uint64_t m_cnt = 0;
-    double m_mean = 0;
-    double m_m2 = 0;
-    uint32_t m_max = 0;
-    uint32_t m_min = UINT32_MAX;
-    std::string m_name;
     static uint32_t m_title_len;
 };
 class StatsMgr {
@@ -165,8 +124,9 @@ public:
         TX_PACKET_COUNT,
         RX_BYTE_COUNT,
         TX_BYTE_COUNT,
-        TX_ERROR_PACKET_COUNT,
-        TX_LOST_PACKET_COUNT,
+        BIGDATA_CTRL_RECV_COUNT,
+        BIGDATA_READ_COUNT,
+        BIGDATA_CTRL_SEND_COUNT,
 
         TRACE_STATE_TYPE_MAX
     };
@@ -179,47 +139,51 @@ public:
 
     bool InitStatsMgr()
     {
-        for (int i = 0; i < TRACE_STATE_TYPE_MAX; ++i) {
-            try {
-                m_recorder_vec.emplace_back(GetStatsStr((enum trace_stats_type)i));
-            } catch (std::exception &e) {
-                UBS_VLOG_ERR("Failed to construct statistics manager, %s\n", e.what());
-                return false;
+        if (ock::ubs::GlobalSetting::UBS_MONITOR_ENABLE) {
+            m_recorder_vec.reset(new std::array<Recorder, TRACE_STATE_TYPE_MAX>());
+            for (auto &r : *m_recorder_vec) {
+                r.Reset();
             }
+            m_stats_enable = true;
         }
-
-        m_stats_enable = true;
-
         return true;
     }
 
-    inline static std::atomic<uint64_t> mConnCount{0};
-    inline static std::atomic<uint64_t> mActiveConnCount{0};
-    inline static std::atomic<uint64_t> mReTxCount{0};
-    inline static std::atomic<uint64_t> mRxPacketCount{0};
-    inline static std::atomic<uint64_t> mTxPacketCount{0};
-    inline static std::atomic<uint64_t> mRxByteCount{0};
-    inline static std::atomic<uint64_t> mTxByteCount{0};
-    inline static std::atomic<uint64_t> mTxErrorPacketCount{0};
-    inline static std::atomic<uint64_t> mTxLostPacketCount{0};
+    inline static std::atomic<uint32_t> mConnCount{0};
+    inline static std::atomic<uint32_t> mActiveConnCount{0};
+    inline static std::atomic<uint32_t> mReTxCount{0};
     inline static std::mutex gTpPerfSeqMutex;
 
-    static uint64_t GetConnCount()
+    static uint32_t GetConnCount()
     {
         return mConnCount.load(std::memory_order_relaxed);
     }
 
-    static uint64_t GetActiveConnCount()
+    static uint32_t GetActiveConnCount()
     {
         return mActiveConnCount.load(std::memory_order_relaxed);
     }
 
-    static uint64_t GetReTxCount()
+    static uint32_t GetReTxCount()
     {
         return mReTxCount.load(std::memory_order_relaxed);
     }
 
-    static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss, uint32_t pid)
+    /* Aggregated per-socket totals (summed across all UmqSocket in ArraySet).
+     * Filled by AggregatePerSocketStats() before OutputAllStats() so the KPI
+     * JSON includes sendPackets/receivePackets/sendBytes/receiveBytes/errorPackets/
+     * lostPackets without relying on the deleted global atomics. */
+    struct AggregatedStats {
+        uint64_t sendPackets = 0;
+        uint64_t receivePackets = 0;
+        uint64_t sendBytes = 0;
+        uint64_t receiveBytes = 0;
+        uint64_t errorPackets = 0;
+        uint64_t lostPackets = 0;
+    };
+
+    static ALWAYS_INLINE void OutputAllStats(std::ostringstream &oss, uint32_t pid,
+                                             const AggregatedStats &agg)
     {
         constexpr int timeBufSize = 32;
         time_t now = time(nullptr);
@@ -248,22 +212,22 @@ public:
             << "\":" << mReTxCount.load() << ",";
         oss << "\""
             << "sendPackets"
-            << "\":" << mTxPacketCount.load() << ",";
+            << "\":" << agg.sendPackets << ",";
         oss << "\""
             << "receivePackets"
-            << "\":" << mRxPacketCount.load() << ",";
+            << "\":" << agg.receivePackets << ",";
         oss << "\""
             << "sendBytes"
-            << "\":" << mTxByteCount.load() << ",";
+            << "\":" << agg.sendBytes << ",";
         oss << "\""
             << "receiveBytes"
-            << "\":" << mRxByteCount.load() << ",";
+            << "\":" << agg.receiveBytes << ",";
         oss << "\""
             << "errorPackets"
-            << "\":" << mTxErrorPacketCount.load() << ",";
+            << "\":" << agg.errorPackets << ",";
         oss << "\""
             << "lostPackets"
-            << "\":" << mTxLostPacketCount.load() << "";
+            << "\":" << agg.lostPackets << "";
 
         oss << "}"
             << "}";
@@ -271,13 +235,13 @@ public:
 
     static void UpdateReTxCount(umq_trans_mode_t umq_trans_mode);
 
+    /* Sum per-socket Recorder values across all UmqSocket in ArraySet<Socket>.
+     * Implemented in statistics.cpp (has access to ArraySet and UmqSocket). */
+    static void AggregatePerSocketStats(AggregatedStats &out);
+
     // data plane interface, caller ensure input validation
     ALWAYS_INLINE void UpdateTraceStats(enum trace_stats_type type, uint32_t value)
     {
-        if (!m_stats_enable) {
-            return;
-        }
-
         switch (type) {
             case CONN_COUNT:
                 mConnCount.fetch_add(value, std::memory_order_relaxed);
@@ -288,33 +252,15 @@ public:
                 break;
 
             case RX_PACKET_COUNT:
-                mRxPacketCount.fetch_add(value, std::memory_order_relaxed);
-                m_recorder_vec[type].Update(value);
-                break;
-
             case TX_PACKET_COUNT:
-                mTxPacketCount.fetch_add(value, std::memory_order_relaxed);
-                m_recorder_vec[type].Update(value);
-                break;
-
             case RX_BYTE_COUNT:
-                mRxByteCount.fetch_add(value, std::memory_order_relaxed);
-                m_recorder_vec[type].Update(value);
-                break;
-
             case TX_BYTE_COUNT:
-                mTxByteCount.fetch_add(value, std::memory_order_relaxed);
-                m_recorder_vec[type].Update(value);
-                break;
-
-            case TX_ERROR_PACKET_COUNT:
-                mTxErrorPacketCount.fetch_add(value, std::memory_order_relaxed);
-                m_recorder_vec[type].Update(value);
-                break;
-
-            case TX_LOST_PACKET_COUNT:
-                mTxLostPacketCount.fetch_add(value, std::memory_order_relaxed);
-                m_recorder_vec[type].Update(value);
+            case BIGDATA_CTRL_RECV_COUNT:
+            case BIGDATA_READ_COUNT:
+            case BIGDATA_CTRL_SEND_COUNT:
+                if (m_recorder_vec != nullptr) {
+                    (*m_recorder_vec)[type].Update(value);
+                }
                 break;
 
             default:
@@ -338,12 +284,12 @@ public:
 
     void OutputStats(int fd, std::ostringstream &oss)
     {
-        if (!m_stats_enable) {
+        if (m_recorder_vec == nullptr) {
             return;
         }
 
         for (int i = 0; i < TRACE_STATE_TYPE_MAX; ++i) {
-            m_recorder_vec[i].GetInfo(fd, oss);
+            (*m_recorder_vec)[i].GetInfo(fd, GetStatsStr(static_cast<enum trace_stats_type>(i)), oss);
         }
     }
 
@@ -351,27 +297,41 @@ public:
     {
         const static char *state_type_str[TRACE_STATE_TYPE_MAX] = {
             "totalConnections", "activeConnections", "sendPackets",  "receivePackets",
-            "sendBytes",        "receiveBytes",      "errorPackets", "lostPackets",
-        };
+            "sendBytes",        "receiveBytes",      "bigdataCtrlRecv", "bigdataRead",
+            "bigdataCtrlSend"};
 
         return state_type_str[type];
     }
 
     void GetSocketCLIData(Statistics::CLISocketData *data)
     {
-        if (!m_stats_enable || data == nullptr) {
+        if (m_recorder_vec == nullptr || data == nullptr) {
+            if (data != nullptr) {
+                data->sendPackets = 0;
+                data->recvPackets = 0;
+                data->sendBytes = 0;
+                data->recvBytes = 0;
+                data->bigdataCtrlRecv = 0;
+                data->bigdataRead = 0;
+                data->bigdataCtrlSend = 0;
+                data->errorPackets = 0;
+                data->lostPackets = 0;
+            }
             return;
         }
-        data->sendPackets = m_recorder_vec[TX_PACKET_COUNT].GetCnt();
-        data->recvPackets = m_recorder_vec[RX_PACKET_COUNT].GetCnt();
-        data->sendBytes = m_recorder_vec[TX_BYTE_COUNT].GetCnt();
-        data->recvBytes = m_recorder_vec[RX_BYTE_COUNT].GetCnt();
-        data->errorPackets = m_recorder_vec[TX_ERROR_PACKET_COUNT].GetCnt();
-        data->lostPackets = m_recorder_vec[TX_LOST_PACKET_COUNT].GetCnt();
+        data->sendPackets = (*m_recorder_vec)[TX_PACKET_COUNT].GetCnt();
+        data->recvPackets = (*m_recorder_vec)[RX_PACKET_COUNT].GetCnt();
+        data->sendBytes = (*m_recorder_vec)[TX_BYTE_COUNT].GetCnt();
+        data->recvBytes = (*m_recorder_vec)[RX_BYTE_COUNT].GetCnt();
+        data->bigdataCtrlRecv = (*m_recorder_vec)[BIGDATA_CTRL_RECV_COUNT].GetCnt();
+        data->bigdataRead = (*m_recorder_vec)[BIGDATA_READ_COUNT].GetCnt();
+        data->bigdataCtrlSend = (*m_recorder_vec)[BIGDATA_CTRL_SEND_COUNT].GetCnt();
+        data->errorPackets = 0;
+        data->lostPackets = 0;
     }
 
 protected:
-    std::vector<Statistics::Recorder> m_recorder_vec;
+    std::unique_ptr<std::array<Statistics::Recorder, TRACE_STATE_TYPE_MAX>> m_recorder_vec;
     bool m_stats_enable = false;
 };
 } // namespace Statistics

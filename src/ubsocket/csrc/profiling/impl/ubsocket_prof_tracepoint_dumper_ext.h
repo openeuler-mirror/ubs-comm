@@ -13,15 +13,20 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <dirent.h>
 #include <unistd.h>
+#include <algorithm>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_global_setting.h"
 
 namespace ock {
 namespace ubs {
@@ -30,17 +35,20 @@ namespace profiling {
 constexpr const char *DEFAULT_DUMP_PATH_EXT = "/tmp/ubsocket/profiling";
 constexpr const char *DUMP_FILE_PREFIX_EXT = "/ubsocket_profiling_";
 constexpr const char *DUMP_FILE_SUFFIX_EXT = ".log";
+constexpr const char *DUMP_ARCHIVE_SUFFIX_EXT = ".gz";
 constexpr uint16_t INTERVAL_DEFAULT_MIN_EXT = 1;
 constexpr uint16_t INTERVAL_MIN_MIN_EXT = 1;
 constexpr uint16_t INTERVAL_MAX_MIN_EXT = 5;
 constexpr int COL_WIDTH_MIN_EXT = 20;
-constexpr int COL_WIDTH_MAX_EXT = 30;
+constexpr int COL_WIDTH_MAX_EXT = 45;
 constexpr int SLEEP_CHUNK_MS_EXT = 10;
 constexpr int UT_SLEEP_DURATION_MS_EXT = 10;
+constexpr int64_t DUMP_FILE_MAX_SIZE_EXT = 10 * 1024 * 1024; /* 10 MB */
+constexpr int DUMP_MAX_ARCHIVES_EXT = 3;
 
 class DumpThreadExt : public Referable {
 public:
-    DumpThreadExt() : interval_min_(INTERVAL_DEFAULT_MIN_EXT), running_(false) {}
+    DumpThreadExt() : running_(false) {}
 
     ~DumpThreadExt()
     {
@@ -50,21 +58,14 @@ public:
     DumpThreadExt(const DumpThreadExt &) = delete;
     DumpThreadExt &operator=(const DumpThreadExt &) = delete;
 
-    // start dump thread
+    // start dump thread (filePath and intervalMin are unused; DumpThreadExt reads from GlobalSetting at runtime)
     void DumpStartExt(const std::string &filePath, int intervalMin)
     {
+        (void)filePath;
+        (void)intervalMin;
         std::lock_guard<std::mutex> lock(start_mutex_);
         if (running_) {
             return;
-        }
-
-        interval_min_ = intervalMin;
-        if (interval_min_ < INTERVAL_MIN_MIN_EXT || interval_min_ > INTERVAL_MAX_MIN_EXT) {
-            interval_min_ = INTERVAL_DEFAULT_MIN_EXT;
-        }
-        file_path_ = filePath;
-        if (file_path_.empty()) {
-            file_path_ = DEFAULT_DUMP_PATH_EXT;
         }
 
         running_ = true;
@@ -111,6 +112,10 @@ private:
             }
             DumpDataExt();
         }
+
+        // Final drain before exit: guarantee the last batch of samples is
+        // flushed to disk.
+        DumpDataExt();
     }
 
     std::chrono::milliseconds GetSleepDurationExt() const
@@ -118,7 +123,11 @@ private:
 #ifdef UBSOCKET_UNIT_TEST
         return std::chrono::milliseconds(UT_SLEEP_DURATION_MS_EXT);
 #else
-        return std::chrono::minutes(interval_min_);
+        uint16_t interval = GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN;
+        if (interval < INTERVAL_MIN_MIN_EXT || interval > INTERVAL_MAX_MIN_EXT) {
+            interval = INTERVAL_DEFAULT_MIN_EXT;
+        }
+        return std::chrono::minutes(interval);
 #endif
     }
 
@@ -141,10 +150,8 @@ private:
         oss << std::left << std::setw(COL_WIDTH_MAX_EXT) << "[TRACE_NAME]" << std::setw(COL_WIDTH_MIN_EXT) << "SUCCESS"
             << std::setw(COL_WIDTH_MIN_EXT) << "FAILURE" << std::setw(COL_WIDTH_MIN_EXT) << "TOTAL(ns)"
             << std::setw(COL_WIDTH_MIN_EXT) << "AVG(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "MAX(ns)"
-            << std::setw(COL_WIDTH_MIN_EXT) << "MIN(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "P50(ns)"
-            << std::setw(COL_WIDTH_MIN_EXT) << "P90(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "P95(ns)"
-            << std::setw(COL_WIDTH_MIN_EXT) << "P99(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "P999(ns)"
-            << "\n";
+            << std::setw(COL_WIDTH_MIN_EXT) << "MIN(ns)" << std::setw(COL_WIDTH_MIN_EXT) << "P99(ns)"
+            << std::setw(COL_WIDTH_MIN_EXT) << "P9999(ns)" << "\n";
     }
 
     int CreateDirectoryExt(std::string &path)
@@ -185,13 +192,31 @@ private:
 
     int WriteDumpDataExt(std::ostringstream &oss)
     {
-        if (CreateDirectoryExt(file_path_) != 0) {
+        std::string currentPath;
+        {
+            std::lock_guard<std::mutex> lock(GlobalSetting::ProfDumpMutex);
+            currentPath = GlobalSetting::UBS_PROF_DUMP_PATH;
+        }
+        if (currentPath.empty()) {
+            currentPath = DEFAULT_DUMP_PATH_EXT;
+        }
+
+        if (currentPath != last_file_path_) {
+            if (dump_file_.is_open()) {
+                dump_file_.close();
+            }
+            file_name_.clear();
+            dir_created_ = false;
+            last_file_path_ = currentPath;
+        }
+
+        if (CreateDirectoryExt(currentPath) != 0) {
             return -1;
         }
 
         if (file_name_.empty()) {
             std::ostringstream ossFileName;
-            ossFileName << file_path_ << DUMP_FILE_PREFIX_EXT << getpid() << DUMP_FILE_SUFFIX_EXT;
+            ossFileName << currentPath << DUMP_FILE_PREFIX_EXT << getpid() << DUMP_FILE_SUFFIX_EXT;
             file_name_ = ossFileName.str();
         }
 
@@ -210,15 +235,93 @@ private:
             dump_file_ << oss.str() << std::endl;
             dump_file_.flush();
         }
+
+        RotateDumpFileExt();
         return 0;
     }
 
+    bool CompressFileExt(const std::string &filePath)
+    {
+        pid_t pid = fork();
+        if (pid < 0) {
+            UBS_VLOG_WARN("fork failed for compress, errno: %d.\n", errno);
+            return false;
+        }
+        if (pid == 0) {
+            execlp("gzip", "gzip", "-f", filePath.c_str(), nullptr);
+            _exit(127);
+        }
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0) {
+            UBS_VLOG_WARN("waitpid failed for compress, errno: %d.\n", errno);
+            return false;
+        }
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            return true;
+        }
+        UBS_VLOG_WARN("gzip compress failed for %s, status: %d.\n", filePath.c_str(), status);
+        return false;
+    }
+
+    void RotateDumpFileExt()
+    {
+        struct stat st;
+        if (stat(file_name_.c_str(), &st) != 0) {
+            return;
+        }
+        if (st.st_size < DUMP_FILE_MAX_SIZE_EXT) {
+            return;
+        }
+
+        if (dump_file_.is_open()) {
+            dump_file_.close();
+        }
+
+        if (!CompressFileExt(file_name_)) {
+            unlink(file_name_.c_str());
+        }
+
+        std::string archivePattern =
+            DUMP_FILE_PREFIX_EXT + std::to_string(getpid()) + DUMP_FILE_SUFFIX_EXT;
+        std::vector<std::string> archives;
+        DIR *dir = opendir(last_file_path_.c_str());
+        if (dir != nullptr) {
+            struct dirent *entry = nullptr;
+            while ((entry = readdir(dir)) != nullptr) {
+                std::string name(entry->d_name);
+                if (name.find(archivePattern) != std::string::npos &&
+                    name.size() > archivePattern.size() &&
+                    name.substr(archivePattern.size()) == DUMP_ARCHIVE_SUFFIX_EXT) {
+                    archives.push_back(last_file_path_ + "/" + name);
+                }
+            }
+            closedir(dir);
+        }
+
+        std::sort(archives.begin(), archives.end(), [](const std::string &a, const std::string &b) {
+            struct stat sa, sb;
+            if (stat(a.c_str(), &sa) != 0) {
+                return true;
+            }
+            if (stat(b.c_str(), &sb) != 0) {
+                return false;
+            }
+            return sa.st_mtime < sb.st_mtime;
+        });
+
+        while (static_cast<int>(archives.size()) > DUMP_MAX_ARCHIVES_EXT) {
+            unlink(archives.front().c_str());
+            archives.erase(archives.begin());
+        }
+
+        file_name_.clear();
+    }
+
 private:
-    std::string file_path_;
+    std::string last_file_path_;
     bool dir_created_ = false;
     std::string file_name_;
     std::ofstream dump_file_;
-    uint16_t interval_min_ = INTERVAL_DEFAULT_MIN_EXT;
     std::atomic<bool> running_{false};
     std::thread dump_thread_;
     std::mutex start_mutex_;

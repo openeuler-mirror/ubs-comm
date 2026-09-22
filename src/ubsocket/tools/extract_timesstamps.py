@@ -6,27 +6,21 @@ UBSOCKET 性能分析工具 ? 最终版（Read 过滤基于 type3 结尾）
 import re, sys, math, argparse, csv, bisect
 
 # ========== 常量定义 ==========
-EPOLL_ROWS_PER_ROUND_CLIENT = 12
-EPOLL_ROWS_PER_ROUND_SERVER = 11
-READ_ROWS_PER_ROUND = 7
+EPOLL_ROWS_PER_ROUND_CLIENT = 10
+EPOLL_ROWS_PER_ROUND_SERVER = 9
+READ_ROWS_PER_ROUND = 5
 CLIENT_WRITE_BASE = 1
 SERVER_WRITE_BASE = 1
 
 TYPE_WRITEV = 2
-TYPE_POST = 19
-TYPE_DATA_SPLIT = 18
+TYPE_MEM_COPY = 18
 TYPE_EPOLL_REARM = 9
-TYPE_RECV_POLL = 10
-TYPE_BUFF_ALLOC = 11
 TYPE_UMPQ_POST = 12
 TYPE_BUFFER_ENQUEUE = 14
 TYPE_EPOLL_END = 13
 TYPE_READ_DEQUEUE = 6
-TYPE_POLL_QBUF = 5
-TYPE_DATASET = 7
 TYPE_READV_END = 3
-TYPE_UMQ_ALLOC = 35
-TYPE_UMQ_FREE = 37
+TYPE_POST = 19
 
 # ========== 解析函数 ==========
 def parse_start_end(line):
@@ -66,6 +60,23 @@ def parse_raw_socket(line):
 def has_is_first(line):
     return bool(re.search(r'\bis_first:\s*1\b', line))
 
+def parse_latency(log_lines):
+    """从日志中提取 99th-Latency 值（微秒 → 纳秒）。"""
+    for line in log_lines:
+        m = re.search(r'99th-Latency:\s*(\d+)', line)
+        if m:
+            return int(m.group(1)) * 1000  # us → ns
+    return None
+
+def parse_connection_established(lines):
+    """从建链日志中提取 fd -> umq_id 映射"""
+    mapping = {}
+    for line in lines:
+        m = re.search(r'UB connection has been successfully established new fd:\s*(\d+),\s*umq id:\s*(\d+)', line)
+        if m:
+            mapping[int(m.group(1))] = int(m.group(2))
+    return mapping
+
 # ========== 过滤函数 ==========
 def filter_lines_by_seq(lines, start_seq, end_seq, include_zero=False):
     filtered = []
@@ -87,7 +98,8 @@ def filter_epoll_by_range(epoll_lines, start_seq, end_seq):
     if not epoll_lines:
         return []
     pos_start = next((i for i, line in enumerate(epoll_lines)
-                      if parse_seq(line) == start_seq), None)
+                       if parse_seq(line) == start_seq
+                       and parse_type(line) != TYPE_EPOLL_END), None)
     if pos_start is None:
         return []
     begin = pos_start
@@ -211,7 +223,7 @@ def find_write_range(write_lines, target_seq, total_data_size, side):
         typ = parse_type(line)
         seq = parse_seq(line)
         ds = parse_data_size(line)
-        if typ in (TYPE_DATA_SPLIT, TYPE_POST, TYPE_WRITEV) and ds is not None and seq is not None:
+        if typ in (TYPE_MEM_COPY, TYPE_POST, TYPE_WRITEV) and ds is not None and seq is not None:
             offset = seq - target_seq
             if offset < 0:
                 continue
@@ -286,12 +298,8 @@ def extract_write(lines):
                 result['brpc'] = (s, e, d)
             if current_group is not None:
                 result['writevs'].append(current_group)
-            current_group = {'writev': (s,e,d), 'umq_alloc': None, 'umq_free': None, 'post': None,
+            current_group = {'writev': (s,e,d), 'post': None,
                              'start_seq': parse_seq(line), 'end_seq': None}
-        elif typ == TYPE_UMQ_ALLOC and current_group is not None:
-            current_group['umq_alloc'] = (s,e,d)
-        elif typ == TYPE_UMQ_FREE and current_group is not None:
-            current_group['umq_free'] = (s,e,d)
         elif typ == TYPE_POST and current_group is not None:
             current_group['post'] = (s,e,d)
             current_group['end_seq'] = parse_seq(line)
@@ -316,9 +324,7 @@ def extract_epoll_rounds(lines):
             current = {
                 'offset9': parse_offset(line),
                 'type9': (s, e, d),
-                'type10': None,
-                'type11': None,
-                'type12': None,
+                'type12': [],
                 'type14_first': None,
                 'type14_first_seq': None,
                 'type14_last': None,
@@ -329,12 +335,8 @@ def extract_epoll_rounds(lines):
         elif current:
             s, e = parse_start_end(line)
             d = parse_duration(line)
-            if typ == TYPE_RECV_POLL:
-                current['type10'] = (s, e, d)
-            elif typ == TYPE_BUFF_ALLOC:
-                current['type11'] = (s, e, d)
-            elif typ == TYPE_UMPQ_POST:
-                current['type12'] = (s, e, d)
+            if typ == TYPE_UMPQ_POST:
+                current['type12'].append((s, e, d))
             elif typ == TYPE_BUFFER_ENQUEUE:
                 ts, _ = s, e
                 seq = parse_seq(line)
@@ -367,8 +369,6 @@ def extract_read_rounds(lines):
                     'type6_first_seq': None,
                     'type6_last': None,
                     'type6_last_seq': None,
-                    'type5': None,
-                    'type7': None,
                     'type3': None,
                 }
             ts, _ = parse_start_end(line)
@@ -380,11 +380,7 @@ def extract_read_rounds(lines):
         elif current:
             s, e = parse_start_end(line)
             d = parse_duration(line)
-            if typ == TYPE_POLL_QBUF:
-                current['type5'] = (s, e, d)
-            elif typ == TYPE_DATASET:
-                current['type7'] = (s, e, d)
-            elif typ == TYPE_READV_END:
+            if typ == TYPE_READV_END:
                 current['type3'] = (s, e, d)
                 rounds.append(current)
                 current = None
@@ -468,14 +464,16 @@ def parse_umq_entries(lines):
     return entries
 
 
-def find_umq_batch(umq_entries, start_seq, end_seq, consumed):
+def find_umq_batch(umq_entries, start_seq, end_seq, consumed, umq_id=None):
     """根据 msn 范围从 UMQ 列表中找第一个未消费的匹配 POST。
-       找到后把该 POST 的索引标记为已消费，避免后续重复匹配。"""
+        找到后把该 POST 的索引标记为已消费，避免后续重复匹配。"""
     if not umq_entries:
         return None
 
     for i, entry in enumerate(umq_entries):
         if i in consumed:
+            continue
+        if umq_id is not None and entry.get('umq_id') != umq_id:
             continue
         if entry['type'] == 'POST' and entry.get('items'):
             first_msn = entry['items'][0]['msn']
@@ -487,61 +485,81 @@ def find_umq_batch(umq_entries, start_seq, end_seq, consumed):
     return None
 
 
-def find_umq_epoll_batch(umq_entries, type9_start_ts):
-    """根据 type9 的 start_timestamp 匹配 UMQ 批次：
-       interrupt_ts 匹配的连续条目 + 紧随其后的第一个 POLL"""
-    if not umq_entries or type9_start_ts is None:
-        return None
+def find_umq_epoll_batch(umq_entries, match_ts):
+    """根据 interrupt_ts 匹配 UMQ 条目，返回 (batch, last_matched_index)"""
+    if not umq_entries or match_ts is None:
+        return None, -1
 
     matched_indices = []
     for i, entry in enumerate(umq_entries):
-        if entry.get('interrupt_ts') == type9_start_ts:
+        if entry.get('interrupt_ts') == match_ts:
             matched_indices.append(i)
 
     if not matched_indices:
-        return None
+        return None, -1
 
     batch_start = matched_indices[0]
-    batch_end = matched_indices[-1] + 1  # 含最后一个匹配条目
+    batch_end = matched_indices[-1] + 1
+    return umq_entries[batch_start:batch_end], matched_indices[-1]
 
-    # 从最后一个匹配条目往后找第一个 POLL（包含）
-    for i in range(matched_indices[-1] + 1, len(umq_entries)):
-        if umq_entries[i]['type'] == 'POLL':
-            batch_end = i + 1
-            break
 
-    return umq_entries[batch_start:batch_end]
+def _umq_entry_rows(entry):
+    """为单个 UMQ 条目生成输出行"""
+    rows = []
+    remark = '#{}'.format(entry['num'])
+    rows.append(('', 'UMQ#{} {}'.format(entry['num'], entry['type']),
+                 entry['type'], str(entry['item_cnt']),
+                 str(entry.get('umq_start', '')), str(entry.get('umq_end', '')),
+                 str(entry.get('umq_exec', '')), remark))
+    for sub in entry.get('subs', []):
+        sub_end = '' if sub['start'] is None or sub['exec'] is None \
+            else str(sub['start'] + sub['exec'])
+        rows.append(('', '  ' + sub['func'], 'URMA', '',
+                     str(sub['start']), sub_end, str(sub['exec']), ''))
+    return rows
 
 
 def _build_umq_epoll_sub_rows(umq_entries, rnd, rnd_key='type9', label=''):
-    """为单个 epoll 轮次生成 UMQ/URMA 关联行（用 rnd[rnd_key].start_ts 匹配 UMQ 条目中的 tag_ts）"""
     rows = []
-    data = rnd.get(rnd_key)
-    if data is None:
-        return rows
-    ts = data[0]
-    if ts is None:
-        return rows
-
-    batch = find_umq_epoll_batch(umq_entries, ts)
-    if batch is None:
-        return rows
-
-    for entry in batch:
-        if rnd_key == 'type12' and entry['type'] != 'POST':
-            continue
-        remark = '#{}'.format(entry['num'])
-        if label:
-            remark += ' ({}) tag_ts={}'.format(label, entry.get('interrupt_ts', ''))
-        rows.append(('', 'UMQ#{} {}'.format(entry['num'], entry['type']),
-                     entry['type'], str(entry['item_cnt']),
-                     str(entry.get('umq_start', '')), str(entry.get('umq_end', '')),
-                     str(entry.get('umq_exec', '')), remark))
-        for sub in entry.get('subs', []):
-            sub_end = '' if sub['start'] is None or sub['exec'] is None \
-                else str(sub['start'] + sub['exec'])
-            rows.append(('', '  ' + sub['func'], 'URMA', '',
-                         str(sub['start']), sub_end, str(sub['exec']), ''))
+    if rnd_key == 'type12':
+        t12_list = rnd.get('type12') or []
+        for t12 in t12_list:
+            ts = t12[0] if t12 else None
+            if ts is None:
+                continue
+            batch, last_idx = find_umq_epoll_batch(umq_entries, ts)
+            if batch is None:
+                continue
+            # lookback POLL first (自然顺序: umq_poll 在 umq_post 之前)
+            poll_idx = last_idx - 1
+            if poll_idx >= 0:
+                prev = umq_entries[poll_idx]
+                if prev['type'] == 'POLL':
+                    rows.extend(_umq_entry_rows(prev))
+            entry = batch[-1]  # POST
+            if entry['type'] == 'POST':
+                remark = '#{} ({}) tag_ts={}'.format(entry['num'], label, entry.get('interrupt_ts', ''))
+                rows.append(('', 'UMQ#{} {}'.format(entry['num'], entry['type']),
+                             entry['type'], str(entry['item_cnt']),
+                             str(entry.get('umq_start', '')), str(entry.get('umq_end', '')),
+                             str(entry.get('umq_exec', '')), remark))
+                for sub in entry.get('subs', []):
+                    sub_end = '' if sub['start'] is None or sub['exec'] is None \
+                        else str(sub['start'] + sub['exec'])
+                    rows.append(('', '  ' + sub['func'], 'URMA', '',
+                                 str(sub['start']), sub_end, str(sub['exec']), ''))
+    else:
+        data = rnd.get(rnd_key)
+        if data is None:
+            return rows
+        ts = data[0]
+        if ts is None:
+            return rows
+        batch, _ = find_umq_epoll_batch(umq_entries, ts)
+        if batch is None:
+            return rows
+        for entry in batch:
+            rows.extend(_umq_entry_rows(entry))
     return rows
 
 
@@ -553,7 +571,7 @@ def _find_first_urma_wait_rx_end(epoll_rounds, umq_entries):
         t9 = rnd.get('type9')
         if t9 is None or t9[0] is None:
             continue
-        batch = find_umq_epoll_batch(umq_entries, t9[0])
+        batch, _ = find_umq_epoll_batch(umq_entries, t9[0])
         if batch is None:
             continue
         for entry in batch:
@@ -598,69 +616,50 @@ def _compute_side_sums(rows):
             urma_sum += dur
     return umq_sum, urma_sum
 
-def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries=None):
+def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries=None, umq_id=None):
     rows = []
     is_client = (side == 'Client')
     consumed = set()
 
     if is_client:
-        rows.append((str(CLIENT_WRITE_BASE), 'bRPC start', '暂未统计', '',
-                      '', '', '', ''))
-        rows.append(('', 'bRPC end', '暂未统计', '', '', '', '', ''))
-        base = CLIENT_WRITE_BASE + 1
+        base = CLIENT_WRITE_BASE
         writevs = write_data.get('writevs', [])
         for idx, group in enumerate(writevs):
-            num = base + idx * 4
+            num = base + idx * 2
             writev = group.get('writev')
             seq_info = f"seq: {group.get('start_seq', '?')}~{group.get('end_seq', '?')}"
             rows.append((str(num), 'writeV入口', str(TYPE_WRITEV), '',
                           safe_tuple(writev, 0), safe_tuple(writev, 1),
                           format_duration(writev[2] if writev else None), seq_info))
-            alloc = group.get('umq_alloc')
-            rows.append((str(num+1), 'umq_alloc', str(TYPE_UMQ_ALLOC), '',
-                          safe_tuple(alloc, 0), safe_tuple(alloc, 1),
-                          format_duration(alloc[2] if alloc else None), ''))
-            free = group.get('umq_free')
-            rows.append((str(num+2), 'umq_free', str(TYPE_UMQ_FREE), '',
-                          safe_tuple(free, 0), safe_tuple(free, 1),
-                          format_duration(free[2] if free else None), ''))
             post = group.get('post')
-            rows.append((str(num+3), 'post', str(TYPE_POST), '',
+            rows.append((str(num+1), 'post', str(TYPE_POST), '',
                           safe_tuple(post, 0), safe_tuple(post, 1),
                           format_duration(post[2] if post else None), ''))
             if umq_entries:
                 batch = find_umq_batch(umq_entries, group.get('start_seq'),
-                                        group.get('end_seq'), consumed)
+                                        group.get('end_seq'), consumed, umq_id)
                 rows.extend(_build_umq_sub_rows_from_batch(batch))
-        epoll_base = CLIENT_WRITE_BASE + 1 + 4 * len(writevs)
+        epoll_base = CLIENT_WRITE_BASE + 2 * len(writevs)
         epoll_rows_per_round = EPOLL_ROWS_PER_ROUND_CLIENT
     else:
         base = SERVER_WRITE_BASE
         writevs = write_data.get('writevs', [])
         for idx, group in enumerate(writevs):
-            num = base + idx * 4
+            num = base + idx * 2
             writev = group.get('writev')
             seq_info = f"seq: {group.get('start_seq', '?')}~{group.get('end_seq', '?')}"
             rows.append((str(num), 'writeV入口', str(TYPE_WRITEV), '',
                           safe_tuple(writev, 0), safe_tuple(writev, 1),
                           format_duration(writev[2] if writev else None), seq_info))
-            alloc = group.get('umq_alloc')
-            rows.append((str(num+1), 'umq_alloc', str(TYPE_UMQ_ALLOC), '',
-                          safe_tuple(alloc, 0), safe_tuple(alloc, 1),
-                          format_duration(alloc[2] if alloc else None), ''))
-            free = group.get('umq_free')
-            rows.append((str(num+2), 'umq_free', str(TYPE_UMQ_FREE), '',
-                          safe_tuple(free, 0), safe_tuple(free, 1),
-                          format_duration(free[2] if free else None), ''))
             post = group.get('post')
-            rows.append((str(num+3), 'post', str(TYPE_POST), '',
+            rows.append((str(num+1), 'post', str(TYPE_POST), '',
                           safe_tuple(post, 0), safe_tuple(post, 1),
                           format_duration(post[2] if post else None), ''))
             if umq_entries:
                 batch = find_umq_batch(umq_entries, group.get('start_seq'),
-                                        group.get('end_seq'), consumed)
+                                        group.get('end_seq'), consumed, umq_id)
                 rows.extend(_build_umq_sub_rows_from_batch(batch))
-        epoll_base = SERVER_WRITE_BASE + 4 * len(writevs)
+        epoll_base = SERVER_WRITE_BASE + 2 * len(writevs)
         epoll_rows_per_round = EPOLL_ROWS_PER_ROUND_SERVER
 
     for idx, rnd in enumerate(epoll_rounds):
@@ -668,21 +667,22 @@ def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries
 
         t9_data = rnd.get('type9')
         t13_data = rnd.get('type13')
-        if t9_data and isinstance(t9_data, tuple) and t9_data[0] is not None \
-           and t13_data and isinstance(t13_data, tuple) and t13_data[0] is not None:
+
+        if t9_data and isinstance(t9_data, tuple) and t9_data[0] is not None:
             t9_start = t9_data[0]
-            t13_start = t13_data[0]
-            dur = int(t13_start) - int(t9_start)
-            ep_remark = ''
-            fs = rnd.get('type14_first_seq')
-            ls = rnd.get('type14_last_seq')
-            if fs is not None and ls is not None:
-                ep_remark = 'seq:{}~{}'.format(fs, ls)
-            rows.append(('', 'process one event', '9/13', '',
-                         str(t9_start), str(t13_start),
-                         format_duration(dur), ep_remark))
-        else:
-            rows.append(('', 'process one event', '9/13', '', '', '', '', ''))
+            t14_last = rnd.get('type14_last')
+            if t14_last is not None:
+                dur = int(t14_last) - int(t9_start)
+                ep_remark = ''
+                fs = rnd.get('type14_first_seq')
+                ls = rnd.get('type14_last_seq')
+                if fs is not None and ls is not None:
+                    ep_remark = 'seq:{}~{}'.format(fs, ls)
+                rows.append(('', 'process one event', '9/13', '',
+                             str(t9_start), str(t14_last),
+                             format_duration(dur), ep_remark))
+            else:
+                rows.append(('', 'process one event', '9/13', '', '', '', '', ''))
 
         if umq_entries:
             rows.extend(_build_umq_epoll_sub_rows(umq_entries, rnd))
@@ -714,25 +714,18 @@ def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries
                       safe_tuple(t9, 0), safe_tuple(t9, 1),
                       format_duration(t9[2] if t9 else None),
                       '使用offset记录，对应本次poll的buffer数量'))
-        t10 = rnd.get('type10')
-        rows.append((str(base+1), 'recv thread poll', str(TYPE_RECV_POLL), '',
-                      safe_tuple(t10, 0), safe_tuple(t10, 1),
-                      format_duration(t10[2] if t10 else None), ''))
-        t11 = rnd.get('type11')
-        rows.append((str(base+2), 'umq_buff_alloc', str(TYPE_BUFF_ALLOC), '',
-                      safe_tuple(t11, 0), safe_tuple(t11, 1),
-                      format_duration(t11[2] if t11 else None), ''))
-        t12 = rnd.get('type12')
-        rows.append((str(base+3), 'umq_post', str(TYPE_UMPQ_POST), '',
+        t12_list = rnd.get('type12', [])
+        t12 = t12_list[-1] if t12_list else None
+        rows.append((str(base+1), 'umq_post', str(TYPE_UMPQ_POST), '',
                       safe_tuple(t12, 0), safe_tuple(t12, 1),
                       format_duration(t12[2] if t12 else None), ''))
-        rows.append((str(base+4), 'buffer入队列第一个', str(TYPE_BUFFER_ENQUEUE), '',
+        rows.append((str(base+2), 'buffer入队列第一个', str(TYPE_BUFFER_ENQUEUE), '',
                       str(rnd.get('type14_first', '')), '', '', '此处应有X条打印，只取第1条'))
-        rows.append((str(base+5), 'buffer入队列最后一个', str(TYPE_BUFFER_ENQUEUE), '',
+        rows.append((str(base+3), 'buffer入队列最后一个', str(TYPE_BUFFER_ENQUEUE), '',
                       str(rnd.get('type14_last', '')), '', '', '此处应有X条打印，只取第X条'))
         t13 = rnd.get('type13')
         desc = '触发事件后process jfr end' if idx == 0 else 'process jfr end'
-        rows.append((str(base+6), desc, str(TYPE_EPOLL_END), '',
+        rows.append((str(base+4), desc, str(TYPE_EPOLL_END), '',
                       safe_tuple(t13, 0), safe_tuple(t13, 1),
                       format_duration(t13[2] if t13 else None), ''))
 
@@ -743,21 +736,13 @@ def build_rows_for_side(side, write_data, epoll_rounds, read_rounds, umq_entries
                       str(rnd.get('type6_first', '')), '', '', 'event事件时间'))
         rows.append((str(base+1), 'read出队最后一个', str(TYPE_READ_DEQUEUE), '',
                       str(rnd.get('type6_last', '')), '', '', ''))
-        t5 = rnd.get('type5')
-        rows.append((str(base+2), 'poll Qbuf', str(TYPE_POLL_QBUF), '',
-                      safe_tuple(t5, 0), safe_tuple(t5, 1),
-                      format_duration(t5[2] if t5 else None), ''))
-        t7 = rnd.get('type7')
-        rows.append((str(base+3), 'dataset', str(TYPE_DATASET), '',
-                      safe_tuple(t7, 0), safe_tuple(t7, 1),
-                      format_duration(t7[2] if t7 else None), ''))
         t3 = rnd.get('type3')
         r3_remark = ''
         fs = rnd.get('type6_first_seq')
         ls = rnd.get('type6_last_seq')
         if fs is not None and ls is not None:
             r3_remark = 'seq:{}~{}'.format(fs, ls)
-        rows.append((str(base+4), 'readv结束', str(TYPE_READV_END), '',
+        rows.append((str(base+2), 'readv结束', str(TYPE_READV_END), '',
                       safe_tuple(t3, 0), safe_tuple(t3, 1),
                        format_duration(t3[2] if t3 else None), r3_remark))
 
@@ -850,7 +835,7 @@ def _compute_brpc_time(server_rows):
                          f'writeV入口_start={writev_start} - readv结束_end={readv_end}'))
 
 # ========== UMQ/URMA 关联行构建 ==========
-def build_umq_urma_rows(side, write_data, umq_entries):
+def build_umq_urma_rows(side, write_data, umq_entries, umq_id=None):
     """对每个 writev 分组，匹配 UMQ 批次并生成关联行"""
     rows = []
     if not umq_entries:
@@ -864,7 +849,7 @@ def build_umq_urma_rows(side, write_data, umq_entries):
         if start_seq is None or end_seq is None:
             continue
 
-        batch = find_umq_batch(umq_entries, start_seq, end_seq, consumed)
+        batch = find_umq_batch(umq_entries, start_seq, end_seq, consumed, umq_id)
         if batch is None:
             print(f"[WARN] [{side}] 未找到匹配 writev seq {start_seq}~{end_seq} 的 UMQ POST，跳过")
             continue
@@ -931,6 +916,585 @@ def find_effective_start(write_data, target_seq):
             return s, ts
     return None, None
 
+
+
+# ========== 新格式CSV输出（4级层次+阶段分组+轮次展开）==========
+def build_target_csv(c_write_data, c_epoll_rounds, c_read_rounds,
+                      s_write_data, s_epoll_rounds, s_read_rounds,
+                      client_umq_entries, server_umq_entries,
+                      client_umq_id=None, server_umq_id=None):
+    """按目标CSV格式生成4级层次行。列数根据实际轮次动态确定。
+    返回 list of lists: [阶段描述, L1bPRC, L2UBSocket, L3UMQ, L4UMRA,
+                         调用次数, 第1次, 第2次, ..., 第N次, 总耗时]
+    阶段头与首行数据合并: 阶段名称写入首行的A列。
+    """
+    # --- compute max rounds across all phases ---
+    max_rounds = max(
+        len(c_write_data.get('writevs', [])),
+        len(s_write_data.get('writevs', [])),
+        len(c_epoll_rounds),
+        len(s_epoll_rounds),
+        len(c_read_rounds),
+        len(s_read_rounds),
+        1,
+    )
+
+    def _round_header(i):
+        CH = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+        if i < 10:
+            return '第{}次'.format(CH[i])
+        return '第{}次'.format(i)
+
+    round_headers = [_round_header(i + 1) for i in range(max_rounds)]
+    empty_cols = [''] * max_rounds
+
+    def _blank():
+        return [''] * (7 + max_rounds)
+
+    def _hdr(name):
+        r = _blank()
+        r[0] = name
+        return r
+
+    rows = []
+    rows.append(['目的：定界，耗时定界分析'] + [''] * (5 + max_rounds + 1))
+    rows.append(['', 'L1 bPRC', 'L2 UBSocket', 'L3 UMQ', 'L4 UMRA',
+                 '调用次数'] + round_headers + ['总耗时'])
+
+    def _rvals(values):
+        non_zero = [v for v in values if v and v > 0]
+        call_count = len(non_zero)
+        total = sum(non_zero)
+        cols = [str(int(v)) if v and v > 0 else '' for v in values[:max_rounds]]
+        while len(cols) < max_rounds:
+            cols.append('')
+        return call_count, cols, total
+
+    def _row(a, b, c, d, e, cc, cols, total):
+        return [a, b, c, d, e,
+                str(cc) if cc else ''] + cols + [str(total) if total else '']
+
+    def _empty_row(a, b, c, d, e):
+        return [a, b, c, d, e, ''] + empty_cols + ['']
+
+    def _merge_phase(phase_rows, name):
+        """Merge phase header name into col A of first data row."""
+        if phase_rows:
+            phase_rows[0][0] = name
+        return phase_rows
+
+    def _collect_umq_write_data(writevs, umq_entries, umq_id=None):
+        result = []
+        consumed = set()
+        for group in writevs:
+            data = {
+                'post_exec': 0, 'post_subs': {},
+                'post_item_cnt': 0,
+            }
+            batch = find_umq_batch(umq_entries, group.get('start_seq'),
+                                    group.get('end_seq'), consumed, umq_id)
+            if batch:
+                for entry in batch:
+                    if entry['type'] == 'POST':
+                        data['post_exec'] = entry.get('umq_exec', 0) or 0
+                        subs_map = {}
+                        for sub in entry.get('subs', []):
+                            subs_map[sub['func']] = sub.get('exec', 0) or 0
+                        data['post_subs'] = subs_map
+                        data['post_item_cnt'] = entry.get('item_cnt', 0)
+            result.append(data)
+        return result
+
+    def _collect_umq_epoll_data(epoll_rounds, umq_entries):
+        result = []
+        for rnd in epoll_rounds:
+            t9 = rnd.get('type9')
+            t9_start = t9[0] if t9 else None
+            data = {
+                'rearm_exec': 0, 'rearm_subs': {},
+                'wait_exec': 0, 'wait_subs': {},
+                'poll_exec': 0, 'poll_subs': {},
+                'post_exec': 0, 'post_subs': {},
+            }
+            batch, last_idx = find_umq_epoll_batch(umq_entries, t9_start) if t9_start else (None, -1)
+            if batch:
+                for entry in batch:
+                    subs_map = {}
+                    for sub in entry.get('subs', []):
+                        subs_map[sub['func']] = sub.get('exec', 0) or 0
+                    if entry['type'] == 'REARM':
+                        data['rearm_exec'] = entry.get('umq_exec', 0) or 0
+                        data['rearm_subs'] = subs_map
+                    elif entry['type'] == 'WAIT':
+                        data['wait_exec'] = entry.get('umq_exec', 0) or 0
+                        data['wait_subs'] = subs_map
+            # type12 每轮匹配 POST + 往前一条 POLL
+            t12_list = rnd.get('type12') or []
+            for t12_data in t12_list:
+                t12_start = t12_data[0] if t12_data else None
+                batch12, last12 = find_umq_epoll_batch(umq_entries, t12_start) if t12_start else (None, -1)
+                if batch12:
+                    entry = batch12[-1]
+                    if entry['type'] == 'POST':
+                        data['post_exec'] += entry.get('umq_exec', 0) or 0
+                        for sub in entry.get('subs', []):
+                            s_exec = sub.get('exec', 0) or 0
+                            data['post_subs'][sub['func']] = data['post_subs'].get(sub['func'], 0) + s_exec
+                # lookback POLL
+                poll_idx = last12 - 1
+                if poll_idx >= 0:
+                    prev = umq_entries[poll_idx]
+                    if prev['type'] == 'POLL':
+                        data['poll_exec'] += prev.get('umq_exec', 0) or 0
+                        for sub in prev.get('subs', []):
+                            s_exec = sub.get('exec', 0) or 0
+                            data['poll_subs'][sub['func']] = data['poll_subs'].get(sub['func'], 0) + s_exec
+            result.append(data)
+        return result
+
+    def _build_write_phase(write_data, umq_entries, brpc_label='bRPCsend', umq_id=None):
+        phase_rows = []
+        writevs = write_data.get('writevs', [])
+        umq_data_list = _collect_umq_write_data(writevs, umq_entries, umq_id)
+
+        wv_vals = []; post_vals = []; post_umq_vals = []
+
+        for i, group in enumerate(writevs):
+            wv = group.get('writev')
+            wv_vals.append(wv[2] if wv and wv[2] else 0)
+            post = group.get('post')
+            post_vals.append(post[2] if post and post[2] else 0)
+
+            ud = umq_data_list[i] if i < len(umq_data_list) else {}
+            post_umq_vals.append(ud.get('post_exec', 0))
+
+        phase_rows.append(_empty_row('', brpc_label, '', '', ''))
+
+        cc, cols, total = _rvals(wv_vals)
+        phase_rows.append(_row('', '', 'writev', '', '', cc, cols, total))
+
+        cc, cols, total = _rvals(post_vals)
+        phase_rows.append(_row('', '', 'post', '', '', cc, cols, total))
+        cc, cols, total = _rvals(post_umq_vals)
+        phase_rows.append(_row('', '', '', 'umq_post', '', cc, cols, total))
+        for func_name in sorted({n for ud in umq_data_list for n in ud.get('post_subs', {})}):
+            vals = [ud.get('post_subs', {}).get(func_name, 0) for ud in umq_data_list]
+            cc, cols, total = _rvals(vals)
+            phase_rows.append(_row('', '', '', '', func_name, cc, cols, total))
+
+        return phase_rows
+
+    def _build_epoll_phase(epoll_rounds, read_rounds, umq_entries, brpc_recv_value=None,
+                            brpc_label='Server bRpc recv req'):
+        phase_rows = []
+        umq_data_list = _collect_umq_epoll_data(epoll_rounds, umq_entries)
+
+        poe_vals = []; async_vals = []; readv_vals = []
+        rearm_vals = []
+        ack_vals = []
+        poll_vals = []
+        umq_post_vals = []
+
+        for i, rnd in enumerate(epoll_rounds):
+            t9 = rnd.get('type9')
+            t14_last = rnd.get('type14_last')
+            if t9 and t9[0] is not None and t14_last is not None:
+                poe_vals.append(int(t14_last) - int(t9[0]))
+            else:
+                poe_vals.append(0)
+
+            ud = umq_data_list[i] if i < len(umq_data_list) else {}
+            rearm_vals.append(ud.get('rearm_exec', 0))
+
+            umq_post_vals.append(ud.get('post_exec', 0))
+
+            ack_vals.append(ud.get('wait_exec', 0))
+            poll_vals.append(ud.get('poll_exec', 0))
+
+        cc, cols, total = _rvals(poe_vals)
+        phase_rows.append(_row('', '', 'processs one event', '', '', cc, cols, total))
+
+        cc, cols, total = _rvals(rearm_vals)
+        phase_rows.append(_row('', '', '', 'umq rearm', '', cc, cols, total))
+        for func_name in sorted({n for ud in umq_data_list for n in ud.get('rearm_subs', {})}):
+            vals = [ud.get('rearm_subs', {}).get(func_name, 0) for ud in umq_data_list]
+            cc, cols, total = _rvals(vals)
+            phase_rows.append(_row('', '', '', '', func_name, cc, cols, total))
+
+        cc, cols, total = _rvals(ack_vals)
+        phase_rows.append(_row('', '', '', 'umq ack', '', cc, cols, total))
+        for func_name in sorted({n for ud in umq_data_list for n in ud.get('wait_subs', {})}):
+            vals = [ud.get('wait_subs', {}).get(func_name, 0) for ud in umq_data_list]
+            cc, cols, total = _rvals(vals)
+            phase_rows.append(_row('', '', '', '', func_name, cc, cols, total))
+
+        cc, cols, total = _rvals(poll_vals)
+        phase_rows.append(_row('', '', '', 'umq_poll', '', cc, cols, total))
+        for func_name in sorted({n for ud in umq_data_list for n in ud.get('poll_subs', {})}):
+            vals = [ud.get('poll_subs', {}).get(func_name, 0) for ud in umq_data_list]
+            cc, cols, total = _rvals(vals)
+            phase_rows.append(_row('', '', '', '', func_name, cc, cols, total))
+
+        cc, cols, total = _rvals(umq_post_vals)
+        phase_rows.append(_row('', '', '', 'umq_post', '', cc, cols, total))
+        for func_name in sorted({n for ud in umq_data_list for n in ud.get('post_subs', {})}):
+            vals = [ud.get('post_subs', {}).get(func_name, 0) for ud in umq_data_list]
+            cc, cols, total = _rvals(vals)
+            phase_rows.append(_row('', '', '', '', func_name, cc, cols, total))
+
+        for rnd in epoll_rounds:
+            t14_last = rnd.get('type14_last')
+            first_seq = rnd.get('type14_first_seq')
+            last_seq = rnd.get('type14_last_seq')
+            val = 0
+            if t14_last:
+                for rd in read_rounds:
+                    rd_first = rd.get('type6_first_seq')
+                    rd_last = rd.get('type6_last_seq')
+                    t6_first = rd.get('type6_first')
+                    if rd_first is not None and rd_last is not None and t6_first and \
+                       rd_first <= last_seq and rd_last >= first_seq:
+                        val = int(t6_first) - int(t14_last)
+                        break
+            async_vals.append(val)
+        cc, cols, total = _rvals(async_vals)
+        async_total = total
+        phase_rows.append(_row('', '', 'async epoll event', '', '', cc, cols, total))
+
+        phase_rows.append(_empty_row('', '', 'UB-epoll waiter', '', ''))
+
+        if brpc_recv_value is not None and brpc_recv_value > 0:
+            r = _blank()
+            r[0] = ''; r[1] = brpc_label
+            r[5] = '1'
+            r[6] = str(brpc_recv_value)
+            r[6 + max_rounds] = str(brpc_recv_value)
+            phase_rows.append(r)
+        else:
+            phase_rows.append(_empty_row('', brpc_label, '', '', ''))
+
+        for rd in read_rounds:
+            t3 = rd.get('type3')
+            readv_vals.append(t3[2] if t3 and t3[2] else 0)
+        cc, cols, total = _rvals(readv_vals)
+        phase_rows.append(_row('', '', 'readV', '', '', cc, cols, total))
+
+        if brpc_recv_value is not None and brpc_recv_value > 0:
+            r = _blank()
+            r[0] = ''; r[1] = 'Server bRPC process'
+            r[5] = '1'
+            r[6] = str(brpc_recv_value)
+            r[6 + max_rounds] = str(brpc_recv_value)
+            phase_rows.append(r)
+        else:
+            phase_rows.append(_empty_row('', 'Server bRPC process', '', '', ''))
+
+        return phase_rows, async_total
+
+    # Phase 1: 发送请求流程 (Client Write)
+    rows.extend(_merge_phase(
+        _build_write_phase(c_write_data, client_umq_entries or [], umq_id=client_umq_id), '发送请求流程'))
+    rows.append(_blank())
+
+    # Phase 2: 接受请求流程 (Server Epoll → Read)
+    os_schedule = 0
+    brpc_recv = 0
+    s_wv = s_write_data.get('writevs')
+    if s_wv and s_read_rounds:
+        wv = s_wv[0].get('writev')
+        last_t3 = s_read_rounds[-1].get('type3')
+        if wv and wv[0] and last_t3 and last_t3[1]:
+            brpc_recv = int(wv[0]) - int(last_t3[1])
+    phase_rows, async_total = _build_epoll_phase(s_epoll_rounds, s_read_rounds,
+                                                  server_umq_entries or [], brpc_recv)
+    os_schedule += async_total
+    rows.extend(_merge_phase(phase_rows, '接受请求流程'))
+    rows.append(_blank())
+
+    # Phase 3: 发送响应流程 (Server Write)
+    rows.extend(_merge_phase(
+        _build_write_phase(s_write_data, server_umq_entries or [], 'Server bRPC send rsp', umq_id=server_umq_id),
+        '发送响应流程'))
+    rows.append(_blank())
+
+    # Phase 4: 接收响应流程 (Client Epoll → Read)
+    phase_rows, async_total = _build_epoll_phase(c_epoll_rounds, c_read_rounds,
+                                                  client_umq_entries or [], None, 'Server bRpc recv rsp')
+    os_schedule += async_total
+    rows.extend(_merge_phase(phase_rows, '接收响应流程'))
+    rows.append(_blank())
+
+    # brpc process end
+    r = _blank()
+    r[1] = 'brpc process end'
+    r[5] = '1'
+    r[6] = ''
+    r[6 + max_rounds] = ''
+    rows.append(r)
+
+    return rows, max_rounds, os_schedule
+
+
+def write_target_csv(prefix, rows):
+    """Write target-format CSV with 4-level hierarchy."""
+    filename = prefix + '_target.csv'
+    with open(filename, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f, quoting=csv.QUOTE_ALL)
+        for row in rows:
+            writer.writerow([str(item) for item in row])
+    print(f"[CSV] 已导出(新格式)：{filename}")
+
+
+# ========== 软件单元时延表 ==========
+def build_software_unit_csv(c_write_data, c_epoll_rounds, c_read_rounds,
+                              s_write_data, s_epoll_rounds, s_read_rounds,
+                              c_umq, s_umq,
+                              brpc_time, total_time, lat_ns,
+                              transmission,
+                              client_umq_id=None, server_umq_id=None):
+    """按软件单元时延数据.csv格式生成软件单元时延表。
+    Columns: Client发送Req | Client接收Rsp | Server接收Req | Server发送Rsp (各含子功能+时延)
+    """
+
+    def _ufmt(v):
+        """Format value for display (None → empty)."""
+        return str(v) if v is not None else ''
+
+    def _p(label, val):
+        """Return (label, formatted_value) pair; if label is empty, value is also empty."""
+        return label, _ufmt(val) if label else ''
+
+    # ---- Phase 1: Client发送Req = Client Write ----
+    def _write_totals(write_data, umq_entries, umq_id=None):
+        writevs = write_data.get('writevs', [])
+        consumed = set()
+        l2_w, l2_post = 0, 0
+        l3_post = 0
+        l4_post_subs = {}
+
+        for group in writevs:
+            wv = group.get('writev')
+            if wv and wv[2]: l2_w += wv[2]
+            post = group.get('post')
+            if post and post[2]: l2_post += post[2]
+
+            batch = find_umq_batch(umq_entries, group.get('start_seq'),
+                                    group.get('end_seq'), consumed, umq_id)
+            if batch:
+                for entry in batch:
+                    if entry['type'] == 'POST':
+                        l3_post += entry.get('umq_exec', 0) or 0
+                        for sub in entry.get('subs', []):
+                            s_exec = sub.get('exec', 0) or 0
+                            l4_post_subs[sub['func']] = l4_post_subs.get(sub['func'], 0) + s_exec
+
+        l2_total = l2_w + l2_post
+        l3_total = l3_post
+        l4_total = sum(l4_post_subs.values())
+
+        return {
+            'l2_total': l2_total, 'l3_total': l3_total, 'l4_total': l4_total,
+            'l2_w': l2_w, 'l2_post': l2_post,
+            'l3_poll': 0, 'l3_post': l3_post,
+            'l4_poll_subs': {}, 'l4_post_subs': l4_post_subs,
+        }
+
+    # ---- Phase 2/4: Epoll + Read phases ----
+    def _epoll_totals(epoll_rounds, read_rounds, umq_entries):
+        l2_poe, l2_readv, l2_async = 0, 0, 0
+        l3_rearm, l3_ack, l3_poll, l3_post = 0, 0, 0, 0
+        l4_rearm_subs, l4_wait_subs, l4_poll_subs, l4_post_subs = {}, {}, {}, {}
+
+        for rnd in epoll_rounds:
+            t9 = rnd.get('type9')
+            t14_last = rnd.get('type14_last')
+            if t9 and t9[0] and t14_last is not None:
+                l2_poe += int(t14_last) - int(t9[0])
+
+            t9_start = t9[0] if t9 else None
+            batch, last_idx = find_umq_epoll_batch(umq_entries, t9_start) if t9_start else (None, -1)
+            if batch:
+                for entry in batch:
+                    exec_v = entry.get('umq_exec', 0) or 0
+                    subs_d = {}
+                    for sub in entry.get('subs', []):
+                        s_exec = sub.get('exec', 0) or 0
+                        subs_d[sub['func']] = subs_d.get(sub['func'], 0) + s_exec
+
+                    if entry['type'] == 'REARM':
+                        l3_rearm += exec_v
+                        for k, v in subs_d.items():
+                            l4_rearm_subs[k] = l4_rearm_subs.get(k, 0) + v
+                    elif entry['type'] == 'WAIT':
+                        l3_ack += exec_v
+                        for k, v in subs_d.items():
+                            l4_wait_subs[k] = l4_wait_subs.get(k, 0) + v
+            # type12 每轮: POST + 往前一条 POLL
+            t12_list = rnd.get('type12') or []
+            for t12_data in t12_list:
+                t12_start = t12_data[0] if t12_data else None
+                batch12, last12 = find_umq_epoll_batch(umq_entries, t12_start) if t12_start else (None, -1)
+                if batch12:
+                    entry = batch12[-1]
+                    if entry['type'] == 'POST':
+                        l3_post += entry.get('umq_exec', 0) or 0
+                        for sub in entry.get('subs', []):
+                            s_exec = sub.get('exec', 0) or 0
+                            l4_post_subs[sub['func']] = l4_post_subs.get(sub['func'], 0) + s_exec
+                # lookback POLL
+                poll_idx = last12 - 1
+                if poll_idx >= 0:
+                    prev = umq_entries[poll_idx]
+                    if prev['type'] == 'POLL':
+                        l3_poll += prev.get('umq_exec', 0) or 0
+                        for sub in prev.get('subs', []):
+                            s_exec = sub.get('exec', 0) or 0
+                            l4_poll_subs[sub['func']] = l4_poll_subs.get(sub['func'], 0) + s_exec
+
+        # async
+        for rnd in epoll_rounds:
+            t14_last = rnd.get('type14_last')
+            fs = rnd.get('type14_first_seq')
+            ls = rnd.get('type14_last_seq')
+            if t14_last:
+                for rd in read_rounds:
+                    rf = rd.get('type6_first_seq')
+                    rl = rd.get('type6_last_seq')
+                    t6f = rd.get('type6_first')
+                    if rf and rl and t6f and rf <= ls and rl >= fs:
+                        l2_async += int(t6f) - int(t14_last)
+                        break
+
+        for rd in read_rounds:
+            t3 = rd.get('type3')
+            if t3 and t3[2]: l2_readv += t3[2]
+
+        l2_total = l2_poe + l2_readv + l2_async
+        l3_total = l3_rearm + l3_ack + l3_poll + l3_post
+        l4_total = sum(l4_rearm_subs.values()) + sum(l4_wait_subs.values()) + \
+                   sum(l4_poll_subs.values()) + sum(l4_post_subs.values())
+
+        return {
+            'l2_total': l2_total, 'l3_total': l3_total, 'l4_total': l4_total,
+            'l2_poe': l2_poe, 'l2_readv': l2_readv, 'l2_async': l2_async,
+            'l3_rearm': l3_rearm, 'l3_ack': l3_ack, 'l3_poll': l3_poll,
+            'l3_post': l3_post,
+            'l4_rearm_subs': l4_rearm_subs, 'l4_wait_subs': l4_wait_subs,
+            'l4_poll_subs': l4_poll_subs, 'l4_post_subs': l4_post_subs,
+        }
+
+    p1 = _write_totals(c_write_data, c_umq or [], client_umq_id)
+    p4 = _epoll_totals(c_epoll_rounds, c_read_rounds, c_umq or [])
+    p2 = _epoll_totals(s_epoll_rounds, s_read_rounds, s_umq or [])
+    p3 = _write_totals(s_write_data, s_umq or [], server_umq_id)
+
+    # ---- Build output rows ----
+    rows = []
+    rows.append(['', 'Client发送Req', '', 'Client接收Rsp', '', 'Server接收Req', '', 'Server发送Rsp', ''])
+    rows.append(['软件单元', '子功能', '时延', '子功能', '时延', '子功能', '时延', '子功能', '时延'])
+
+    # bRPC client侧 = P99时延 - 总耗时(writev→readv)
+    b_client = (lat_ns - total_time) if lat_ns is not None else 0
+    if lat_ns is not None and total_time > lat_ns:
+        print(f"[WARN] total_time ({total_time} ns) > P99_latency ({lat_ns} ns)，"
+              f"bRPC client时延为负({b_client} ns)，请检查seq是否匹配P99区间")
+    b_client_desc = 'Call method(P99 - 总耗时)'
+    b_server_desc = 'Call method(writeV入口 - readv结束)'
+    rows.append(['bRPC', b_client_desc, '', '', _ufmt(b_client), b_server_desc, '', '', _ufmt(brpc_time)])
+
+    # UBSocket — L2 sub-functions: WriteV, Process one event, ReadV
+    # Each subtracts L3 entries in its own interval (up to next L2 sub-function)
+    # WriteV: interval covers all L3 in write phase (l3_total), own duration = l2_w
+    ubs_write_p1 = p1['l2_w']  - p1['l3_total']
+    ubs_write_p3 = p3['l2_w']  - p3['l3_total']
+    # POE: interval covers all L3 in recv phase (l3_total), own duration = l2_poe
+    ubs_poe_p4   = p4['l2_poe'] - p4['l3_total']
+    ubs_poe_p2   = p2['l2_poe'] - p2['l3_total']
+    rows.append(['UBSocket', 'WriteV', _ufmt(ubs_write_p1),
+                 'Process one event', _ufmt(ubs_poe_p4),
+                 'Process one event', _ufmt(ubs_poe_p2),
+                 'WriteV', _ufmt(ubs_write_p3)])
+    rows.append(['', '', '', 'ReadV', _ufmt(p4['l2_readv']), 'ReadV', _ufmt(p2['l2_readv']), '', ''])
+
+    # UMQ — each sub-function: exec - associated L4 subs total
+    def _l4sum(d):
+        return sum(d.values()) if d else 0
+
+    umq_post_p1 = p1['l3_post'] - _l4sum(p1.get('l4_post_subs', {}))
+    umq_post_p3 = p3['l3_post'] - _l4sum(p3.get('l4_post_subs', {}))
+
+    umq_rearm_p4 = p4['l3_rearm'] - _l4sum(p4.get('l4_rearm_subs', {}))
+    umq_ack_p4   = p4['l3_ack']   - _l4sum(p4.get('l4_wait_subs', {}))
+    umq_poll_p4  = p4['l3_poll']  - _l4sum(p4.get('l4_poll_subs', {}))
+    umq_post_p4  = p4['l3_post']  - _l4sum(p4.get('l4_post_subs', {}))
+    umq_rearm_p2 = p2['l3_rearm'] - _l4sum(p2.get('l4_rearm_subs', {}))
+    umq_ack_p2   = p2['l3_ack']   - _l4sum(p2.get('l4_wait_subs', {}))
+    umq_poll_p2  = p2['l3_poll']  - _l4sum(p2.get('l4_poll_subs', {}))
+    umq_post_p2  = p2['l3_post']  - _l4sum(p2.get('l4_post_subs', {}))
+
+    rows.append(['UMQ', *_p('umq_post', umq_post_p1), *_p('umq_rearm', umq_rearm_p4),
+                 *_p('umq_rearm', umq_rearm_p2), *_p('umq_post', umq_post_p3)])
+    rows.append(['', '', '', *_p('umq_ack', umq_ack_p4),
+                 *_p('umq_ack', umq_ack_p2), '', ''])
+    rows.append(['', '', '', *_p('umq_poll', umq_poll_p4),
+                 *_p('umq_poll', umq_poll_p2), '', ''])
+    rows.append(['', '', '', *_p('umq_post', umq_post_p4),
+                 *_p('umq_post', umq_post_p2), '', ''])
+
+    # URMA — collection of subs by phase
+    def _l4_subs_all(p):
+        d = {}
+        for src in [p.get('l4_poll_subs', {}), p.get('l4_post_subs', {}),
+                    p.get('l4_rearm_subs', {}), p.get('l4_wait_subs', {})]:
+            for k, v in src.items():
+                d[k] = d.get(k, 0) + v
+        return d
+
+    p1_urma = _l4_subs_all(p1)
+    p4_urma = _l4_subs_all(p4)
+    p2_urma = _l4_subs_all(p2)
+    p3_urma = _l4_subs_all(p3)
+
+    all_urma_names = sorted(set(list(p1_urma.keys()) + list(p4_urma.keys()) +
+                                 list(p2_urma.keys()) + list(p3_urma.keys())))
+
+    for idx, name in enumerate(all_urma_names):
+        label = 'URMA' if idx == 0 else ''
+        p1_name = name if name in p1_urma else ''
+        p4_name = name if name in p4_urma else ''
+        p2_name = name if name in p2_urma else ''
+        p3_name = name if name in p3_urma else ''
+        rows.append([label,
+                     p1_name, _ufmt(p1_urma.get(name, 0)) if p1_name else '',
+                     p4_name, _ufmt(p4_urma.get(name, 0)) if p4_name else '',
+                     p2_name, _ufmt(p2_urma.get(name, 0)) if p2_name else '',
+                     p3_name, _ufmt(p3_urma.get(name, 0)) if p3_name else ''])
+
+    # UDMA — 复用 URMA 数据（无独立 trace，仅做 urma→udma 名称替换）
+    for idx, name in enumerate(all_urma_names):
+        label = 'UDMA' if idx == 0 else ''
+        udma_name = name.replace('urma', 'udma', 1)
+        p1_name = udma_name if name in p1_urma else ''
+        p4_name = udma_name if name in p4_urma else ''
+        p2_name = udma_name if name in p2_urma else ''
+        p3_name = udma_name if name in p3_urma else ''
+        rows.append([label,
+                     p1_name, _ufmt(p1_urma.get(name, 0)) if p1_name else '',
+                     p4_name, _ufmt(p4_urma.get(name, 0)) if p4_name else '',
+                     p2_name, _ufmt(p2_urma.get(name, 0)) if p2_name else '',
+                     p3_name, _ufmt(p3_urma.get(name, 0)) if p3_name else ''])
+
+    # OS — async epoll event
+    rows.append(['OS', '-', '', f'event_write->epoll_wait', _ufmt(p4['l2_async']),
+                 f'event_write->epoll_wait', _ufmt(p2['l2_async']), '-', ''])
+
+    rows.append([])
+    rows.append(['传输时延', '', '', '', '', '', '', '', str(transmission) if transmission else ''])
+
+    rows.append(['[注] bRPC client侧 = P99时延 - 总耗时，请配合pick_calc_p99_multi.py选择匹配P99的seq使用', '', '', '', '', '', '', '', ''])
+    rows.append(['[注] UDMA与URMA同值，无独立trace', '', '', '', '', '', '', '', ''])
+
+    return rows
 
 
 # ========== 主函数 ==========
@@ -1016,6 +1580,27 @@ def main():
     client_umq_entries = parse_umq_entries(c_cats['UMQ'])
     server_umq_entries = parse_umq_entries(s_cats['UMQ'])
 
+    # 从建链日志提取 fd -> umq_id 映射，供 find_umq_batch 匹配时按 umq_id 过滤
+    client_umq_id = None
+    server_umq_id = None
+    if args.client_fd is not None:
+        client_fd_to_umq = parse_connection_established(all_clines)
+        client_umq_id = client_fd_to_umq.get(args.client_fd)
+        if client_umq_id is not None:
+            print(f"[INFO] [Client] fd={args.client_fd} -> umq_id={client_umq_id}")
+        else:
+            print(f"[WARN] [Client] 未找到 fd={args.client_fd} 对应的 umq_id")
+    if args.server_fd is not None:
+        server_fd_to_umq = parse_connection_established(all_slines)
+        server_umq_id = server_fd_to_umq.get(args.server_fd)
+        if server_umq_id is not None:
+            print(f"[INFO] [Server] fd={args.server_fd} -> umq_id={server_umq_id}")
+        else:
+            print(f"[WARN] [Server] 未找到 fd={args.server_fd} 对应的 umq_id")
+
+    # Parse 99th-Latency from client log (before dump)
+    lat_ns = parse_latency(all_clines)
+
     if args.dump:
         print("\n===== Dump of filtered lines =====")
         for label, w, e, r in [('Client', c_write, c_epoll, c_read),
@@ -1025,15 +1610,15 @@ def main():
                 for i, line in enumerate(lst, 1):
                     print(f"  [{i}] {line.rstrip()}")
         # UMQ: 仅 dump 匹配到的批次
-        for label, wd, entries in [('Client', c_write_data, client_umq_entries),
-                                    ('Server', s_write_data, server_umq_entries)]:
+        for label, wd, entries, umq_id in [('Client', c_write_data, client_umq_entries, client_umq_id),
+                                            ('Server', s_write_data, server_umq_entries, server_umq_id)]:
             consumed = set()
             for group in wd.get('writevs', []):
                 start_seq = group.get('start_seq')
                 end_seq = group.get('end_seq')
                 if start_seq is None or end_seq is None:
                     continue
-                batch = find_umq_batch(entries, start_seq, end_seq, consumed)
+                batch = find_umq_batch(entries, start_seq, end_seq, consumed, umq_id)
                 if batch:
                     total_lines = sum(len(e['_raw']) for e in batch)
                     print(f"\n--- {label} UMQ matched batch for seq {start_seq}~{end_seq} "
@@ -1057,7 +1642,7 @@ def main():
                 if s is None or s in seen_ts:
                     continue
                 seen_ts.add(s)
-                batch = find_umq_epoll_batch(entries, s)
+                batch, _ = find_umq_epoll_batch(entries, s)
                 if batch:
                     total_lines = sum(len(e['_raw']) for e in batch)
                     print(f"\n--- {label} UMQ epoll batch for type9 start_ts={s} "
@@ -1081,19 +1666,34 @@ def main():
                 if s is None or s in seen_ts:
                     continue
                 seen_ts.add(s)
-                batch = find_umq_epoll_batch(entries, s)
+                batch, last_idx = find_umq_epoll_batch(entries, s)
                 if batch:
-                    # 仅显示 POST 条目
                     post_entries = [e for e in batch if e['type'] == 'POST']
                     total_lines = sum(len(e['_raw']) for e in post_entries)
                     print(f"\n--- {label} UMQ type12 batch for umq_post start_ts={s} "
                           f"({len(post_entries)} POST entries, {total_lines} lines) ---")
+                    # lookback POLL (umq_poll 在 umq_post 之前，自然顺序)
+                    poll_idx = last_idx - 1
+                    if poll_idx >= 0:
+                        prev = entries[poll_idx]
+                        if prev['type'] == 'POLL':
+                            print(f"  # --- lookback POLL #{prev['num']} (same iteration) ---")
+                            for raw_line in prev['_raw']:
+                                print(f"  {raw_line.rstrip()}")
                     for e in post_entries:
                         print(f"  # --- entry #{e['num']} {e['type']} ---")
                         for raw_line in e['_raw']:
                             print(f"  {raw_line.rstrip()}")
                 else:
                     print(f"\n--- {label} UMQ type12 no match for umq_post start_ts={s} ---")
+        # Latency line from client log
+        if lat_ns is not None:
+            print(f"\n--- Latency (client log) ---")
+            for i, line in enumerate(all_clines, 1):
+                if '99th-Latency' in line:
+                    print(f"  [行{i}] {line.rstrip()}")
+                    break
+            print(f"  99th-Latency: {lat_ns} ns ({lat_ns // 1000} us)")
         print("===== End of dump =====\n")
 
     c_epoll_rounds = extract_epoll_rounds(c_epoll)
@@ -1111,9 +1711,11 @@ def main():
           f"Epoll={len(s_epoll)}, Read={len(s_read)}")
 
     client_rows, client_total = build_rows_for_side('Client', c_write_data, c_epoll_rounds, c_read_rounds,
-                                                        client_umq_entries if client_umq_entries else None)
+                                                        client_umq_entries if client_umq_entries else None,
+                                                        umq_id=client_umq_id)
     server_rows, server_total = build_rows_for_side('Server', s_write_data, s_epoll_rounds, s_read_rounds,
-                                                      server_umq_entries if server_umq_entries else None)
+                                                      server_umq_entries if server_umq_entries else None,
+                                                      umq_id=server_umq_id)
 
     def _sum_row(rows, label):
         for row in rows:
@@ -1141,11 +1743,17 @@ def main():
             writev_start = int(row[4])
         if row[1] == 'readv结束' and row[5]:
             readv_end = int(row[5])
+    total_time = 0
     if writev_start is not None and readv_end is not None:
         total_time = readv_end - writev_start
         server_rows.append(('', '总耗时', '', '', '', '',
                             format_duration(total_time),
                             f'Client readv结束_end={readv_end} - Client writeV入口_start={writev_start}'))
+
+    if lat_ns is not None:
+        server_rows.append(('', 'P99时延', '', '', '', '',
+                             format_duration(lat_ns), f'99th-Latency={lat_ns}ns ({lat_ns//1000}us)'))
+
 
     # UMQ/URMA 关联
     if client_umq_entries:
@@ -1158,6 +1766,45 @@ def main():
 
     if args.output_csv:
         write_csv(args.output_csv, client_rows, server_rows)
+
+        target_rows, max_rounds, os_schedule = build_target_csv(c_write_data, c_epoll_rounds, c_read_rounds,
+                                                                  s_write_data, s_epoll_rounds, s_read_rounds,
+                                                                  client_umq_entries, server_umq_entries,
+                                                                  client_umq_id=client_umq_id,
+                                                                  server_umq_id=server_umq_id)
+
+        target_rows.append([''] * (7 + max_rounds))
+
+        for desc, val in [
+            ('Total UMQ SUM',      _sum_row(client_rows, 'UMQ SUM') + _sum_row(server_rows, 'UMQ SUM')),
+            ('Total urma SUM',     _sum_row(client_rows, 'urma SUM') + _sum_row(server_rows, 'urma SUM')),
+            ('Total ubsocket SUM', _sum_row(client_rows, 'ubsocket SUM') + _sum_row(server_rows, 'ubsocket SUM')),
+            ('BRPC耗时',            _sum_row(server_rows, 'BRPC耗时')),
+            ('Client等待耗时',      client_total),
+            ('Server处理耗时',      server_total),
+            ('传输时间',            client_total - server_total),
+            ('OS调度耗时',          os_schedule),
+            ('总耗时',              total_time),
+        ]:
+            target_rows.append([desc] + [''] * (5 + max_rounds) + [str(val)])
+
+        if lat_ns is not None:
+            target_rows.append(['P99时延'] + [''] * (5 + max_rounds) + [str(lat_ns)])
+
+        brpc_time = _sum_row(server_rows, 'BRPC耗时')
+        sw_rows = build_software_unit_csv(c_write_data, c_epoll_rounds, c_read_rounds,
+                                            s_write_data, s_epoll_rounds, s_read_rounds,
+                                            client_umq_entries, server_umq_entries,
+                                            brpc_time, total_time, lat_ns,
+                                            transmission,
+                                            client_umq_id=client_umq_id,
+                                            server_umq_id=server_umq_id)
+        target_rows.append([])
+        target_rows.append([])
+        target_rows.append([])
+        target_rows.extend(sw_rows)
+
+        write_target_csv(args.output_csv, target_rows)
 
 if __name__ == "__main__":
     main()

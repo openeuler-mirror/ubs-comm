@@ -43,10 +43,25 @@ int main(int argc, char *argv[])
             player.DisplayFlowControlInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
     } else if (args.command == Statistics::CLICommand::DELAY) {
-        if (client.Query(args, response) != 0) {
-            return 0;
+        if (args.type == "enable" || args.type == "disable" ||
+            args.type == "interval" || args.type == "path") {
+            if (client.Query(args, response) == 0) {
+                printf("Profiling %s successfully\n", args.type.c_str());
+            } else {
+                printf("Failed to %s profiling\n", args.type.c_str());
+            }
+        } else if (args.type == "mode") {
+            if (client.Query(args, response) == 0) {
+                printf("Profiling mode switched to %s successfully\n", args.valueStr.c_str());
+            } else {
+                printf("Failed to switch profiling mode to %s\n", args.valueStr.c_str());
+            }
+        } else {
+            if (client.Query(args, response) != 0) {
+                return 0;
+            }
+            player.DisplayDelayTraceInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
-        player.DisplayDelayTraceInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
     } else if (args.command == Statistics::CLICommand::QBUF_POOL) {
         client.Query(args, response);
         player.DisplayQbufPoolInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
@@ -80,13 +95,49 @@ int main(int argc, char *argv[])
             player.DisplayUmqPerfInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
     } else if (args.command == Statistics::CLICommand::PROBE) {
+        if (args.type == "enable" || args.type == "disable") {
+            if (client.Query(args, response) == 0) {
+                printf("Probe %s successfully\n", args.type.c_str());
+            } else {
+                printf("Failed to %s probe\n", args.type.c_str());
+            }
+        } else if (args.type == "dumppath") {
+            if (client.Query(args, response) == 0) {
+                printf("Probe dump path set to %s successfully\n", args.valueStr.c_str());
+            } else {
+                printf("Failed to set probe dump path\n");
+            }
+        } else {
+            client.Query(args, response);
+            player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+            while (args.watch) {
+                sleep(1);
+                client.Query(args, response);
+                player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+            }
+        }
+    } else if (args.command == Statistics::CLICommand::TX_STAT) {
         client.Query(args, response);
-        player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+        player.DisplayTxStatInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         while (args.watch) {
             sleep(1);
             client.Query(args, response);
-            player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+            player.DisplayTxStatInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
+    } else if (args.command == Statistics::CLICommand::RX_STAT) {
+        client.Query(args, response);
+        player.DisplayRxStatInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+        while (args.watch) {
+            sleep(1);
+            client.Query(args, response);
+            player.DisplayRxStatInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
+        }
+    } else if (args.command == Statistics::CLICommand::SPLIT_TRACE) {
+        client.Query(args, response);
+    } else if (args.command == Statistics::CLICommand::QBUF_POOL_STATS) {
+        /* qbuf 池统计数据量大, 不支持 -w 持续刷新, 仅单次查询 */
+        client.Query(args, response);
+        player.DisplayQbufPoolStatsInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
     } else {
         CLI_LOG("Invalid command\n");
     }

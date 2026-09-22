@@ -13,6 +13,9 @@
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_defines.h"
 #include "common/ubsocket_port_cooldown.h"
+#include "core/ubsocket_event_epoll.h"
+#include "core/ubsocket_tx_cqe_poller.h"
+#include "profiling/statistics/tx_stat_block.h" // TX-STAT: UMQ_POST_* 宏, g_tx_stat_on
 #include "umq_buf_converter.h"
 #include "umq_errno_converter.h"
 #include "umq_socket.h"
@@ -21,16 +24,32 @@
 
 namespace ock {
 namespace ubs {
-namespace umq {
+/* 去虚化合并：类本体已下沉到 ock::ubs；umq 命名空间符号经 using 引入 */
+using namespace umq;
 
-uintptr_t UmqTxOps::AllocTxBuf(uint32_t size, uint32_t count)
+/* 生产实例（DataPlaneEntry 内）owner_ 非空：fd/句柄恒读 socket 本体；
+ * 独立实例（UT 栈对象等）回退构造参数。 */
+int DataTxOps::OwnerFd() const
+{
+    return owner_ != nullptr ? owner_->Fd() : fd_;
+}
+
+uint64_t DataTxOps::OwnerUmqh() const
+{
+    return owner_ != nullptr ? owner_->UmqHandle() : fallback_umqh_;
+}
+
+
+using namespace txstat; // TX-STAT: PostErr/POST_ERR_* 位于 txstat 命名空间
+
+uintptr_t DataTxOps::AllocTxBuf(uint32_t size, uint32_t count)
 {
     PROF_START(UMQ_BUF_ALLOC);
     umq_buf_t *tx_buf_list = UmqApi::umq_buf_alloc(size, count, UMQ_INVALID_HANDLE, nullptr);
     if (tx_buf_list == nullptr) {
         PROF_END(UMQ_BUF_ALLOC, false);
         UBS_VLOG_ERR("[UMQ_API] umq_buf_alloc() failed for TX, local umq: %llu, ret: %p\n",
-                     static_cast<unsigned long long>(local_umqh_), tx_buf_list);
+                     static_cast<unsigned long long>(OwnerUmqh()), tx_buf_list);
         DpRearmTxInterrupt();
     } else {
         PROF_END(UMQ_BUF_ALLOC, true);
@@ -39,142 +58,16 @@ uintptr_t UmqTxOps::AllocTxBuf(uint32_t size, uint32_t count)
     return reinterpret_cast<uintptr_t>(tx_buf_list);
 }
 
-void UmqTxOps::ProcessTracePacket(const SocketPtr &sock, umq_buf_t *cur_buf, int seq_no, int i, uint64_t tx_total_len)
-{
-    bool is_first = false;
-    auto *trace = sock->split_trace_;
-
-    auto try_assemble_header = [&](size_t offset, uint8_t *assembled, uint32_t &assembled_size) -> bool {
-        auto *p_data = reinterpret_cast<uint8_t *>(cur_buf->buf_data) + offset;
-        uint32_t available = cur_buf->data_size - offset;
-
-        if (trace->pending_header) {
-            uint32_t needed = 8 - trace->header_cache_size;
-            if (available >= needed) {
-                memcpy(assembled, trace->header_cache, trace->header_cache_size);
-                memcpy(assembled + trace->header_cache_size, p_data, needed);
-                assembled_size = 8;
-                trace->header_cache_size = 0;
-                trace->pending_header = false;
-                return true;
-            } else {
-                memcpy(trace->header_cache + trace->header_cache_size, p_data, available);
-                trace->header_cache_size += available;
-                return false;
-            }
-        } else {
-            if (available >= 8) {
-                memcpy(assembled, p_data, 8);
-                assembled_size = 8;
-                return true;
-            } else {
-                memcpy(trace->header_cache, p_data, available);
-                trace->header_cache_size = available;
-                trace->pending_header = true;
-                return false;
-            }
-        }
-    };
-
-    auto parse_header = [&](const uint8_t *assembled, uint32_t &val_second, bool &is_first) {
-        uint32_t first_raw = *reinterpret_cast<const uint32_t *>(assembled);
-        if (first_raw == htonl(BRPC_TRACE_FIRST_MAGIC)) {
-            is_first = true;
-        } else {
-            UBS_VLOG_WARN("trace seq %d pack_size is 0, but first magic 0x%08X not match 0x%08X \n ", seq_no, first_raw,
-                          BRPC_TRACE_FIRST_MAGIC);
-        }
-        val_second = ntohl(*reinterpret_cast<const uint32_t *>(assembled + BRPC_TRACE_SECOND_VALUE_SIZE));
-    };
-
-    if (trace->pending_header) {
-        uint8_t assembled[8];
-        uint32_t assembled_size = 0;
-        uint32_t prev_cache_size = trace->header_cache_size;
-        if (try_assemble_header(0, assembled, assembled_size)) {
-            uint32_t val_second = 0;
-            parse_header(assembled, val_second, is_first);
-            if (trace->previous_write_cache_size > 0) {
-                trace->pack_size_list.push(val_second + BRPC_TRACE_HEADER_SIZE - trace->previous_write_cache_size);
-                trace->previous_write_cache_size = 0;
-            } else {
-                trace->pack_size_list.push(val_second + BRPC_TRACE_HEADER_SIZE);
-            }
-            trace->pack_size = val_second + BRPC_TRACE_HEADER_SIZE - prev_cache_size;
-        } else {
-            if (i == 0) {
-                TRACE_UPDATE_WRITE_FIRST(trace, CORE_WRITE, seq_no, cur_buf->data_size, tx_total_len, is_first);
-            } else {
-                TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size,
-                                       tx_total_len, is_first);
-            }
-            return;
-        }
-    } else if (trace->pack_size == 0) {
-        uint8_t assembled[8];
-        uint32_t assembled_size = 0;
-        if (try_assemble_header(0, assembled, assembled_size)) {
-            uint32_t val_second = 0;
-            parse_header(assembled, val_second, is_first);
-            trace->pack_size = val_second + BRPC_TRACE_HEADER_SIZE;
-            trace->pack_size_list.push(trace->pack_size);
-        } else {
-            if (i == 0) {
-                TRACE_UPDATE_WRITE_FIRST(trace, CORE_WRITE, seq_no, cur_buf->data_size, tx_total_len, is_first);
-            } else {
-                TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size,
-                                       tx_total_len, is_first);
-            }
-            return;
-        }
-    }
-
-    if (trace->pack_size >= cur_buf->data_size) {
-        trace->pack_size -= cur_buf->data_size;
-    } else {
-        uint8_t assembled[8];
-        uint32_t assembled_size = 0;
-        if (try_assemble_header(trace->pack_size, assembled, assembled_size)) {
-            uint32_t val_second = 0;
-            parse_header(assembled, val_second, is_first);
-            val_second += BRPC_TRACE_HEADER_SIZE;
-            trace->pack_size_list.push(val_second);
-            trace->pack_size = val_second - (cur_buf->data_size - trace->pack_size);
-        } else {
-            trace->pack_size = 0;
-        }
-    }
-
-    if (i == 0) {
-        TRACE_UPDATE_WRITE_FIRST(trace, CORE_WRITE, seq_no, cur_buf->data_size, tx_total_len, is_first);
-    } else {
-        TRACE_ADD_WRITE_DETAIL(trace, CORE_WRITE_MEM_COPY, sock->raw_socket_, seq_no, cur_buf->data_size, tx_total_len,
-                               is_first);
-    }
-}
-
-int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
+int DataTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt)
 {
     umq_buf_t *tx_buf_list = reinterpret_cast<umq_buf_t *>(buf);
     auto umq_socket = RefConvert<Socket, UmqSocket>(sock);
-    auto *trace = sock->split_trace_;
     int flagEIO = -1;
     umq_buf_t *head_qbuf = QBUF_LIST_FIRST(&head_buf_);
     umq_buf_t *tail_qbuf = QBUF_LIST_FIRST(&tail_buf_);
     uint16_t _unsolicited_wr_num = unsolicited_wr_num_;
     uint32_t _unsolicited_bytes = unsolicited_bytes_;
     uint16_t _unsignaled_wr_num = unsignaled_wr_num_;
-    uint8_t _header_cache[8] = {0};
-    uint8_t _header_cache_size = 0;
-    bool _pending_header = false;
-
-    if (trace != nullptr) {
-        memcpy(_header_cache, trace->header_cache, sizeof(_header_cache));
-        _header_cache_size = trace->header_cache_size;
-        _pending_header = trace->pending_header;
-        trace->previous_write_cache_size = _header_cache_size;
-        trace->pack_size_list.push(trace->pack_size);
-    }
 
     PROF_START(CORE_WRITE_MEM_COPY);
     umq_buf_t *cur_buf = tx_buf_list;
@@ -201,7 +94,13 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             Block *block = DataToBlock(cur_buf->buf_data);
             if (block == nullptr) {
                 errno = EINVAL;
-                UBS_VLOG_ERR("failed to locate brpc block for TX data %p, fd: %d\n", cur_buf->buf_data, fd_);
+                UBS_VLOG_ERR("failed to locate brpc block for TX data %p, fd: %d\n", cur_buf->buf_data, OwnerFd());
+                for (umq_buf_t *b = cur_wr_first; b != cur_buf; b = QBUF_LIST_NEXT(b)) {
+                    Block *prev = DataToBlock(b->buf_data);
+                    if (prev != nullptr) {
+                        prev->DecRef();
+                    }
+                }
                 return -1;
             }
             block->IncRef();
@@ -213,6 +112,12 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             }
         }
 
+        if (moved_total_len == 0) {
+            UBS_VLOG_ERR("PostSend: moved_total_len=0, skip empty WR, fd: %d, batch: %u, i: %u\n", OwnerFd(), batch, i);
+            next_buf = cur_wr_first->qbuf_next;
+            continue;
+        }
+
         tx_total_len += moved_total_len;
         cur_wr_first->total_data_size = moved_total_len;
         umq_buf_pro_t *buf_pro = (umq_buf_pro_t *)cur_wr_first->qbuf_ext;
@@ -221,12 +126,9 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
         buf_pro->user_ctx = 0;
         auto seq_no = umq_socket->FetchAddSeqNum(1);
         buf_pro->imm.user_data = seq_no;
-        if (trace != nullptr) {
-            ProcessTracePacket(sock, cur_buf, seq_no, i, tx_total_len);
-        }
         ++sn_allocated;
 
-        if (tx_queue_avail_num_.load(std::memory_order_acq_rel) == 1 || i + 1 == batch) {
+        if (tx_queue_avail_num_.load(std::memory_order_acquire) == 1 || i + 1 == batch) {
             buf_pro->flag.bs.solicited_enable = 1;
         } else {
             if (unsolicited_wr_num_ > TX_REPORT_THRESHOLD || unsolicited_bytes_ > TX_UNSOLICITED_BYTES_MAX) {
@@ -254,26 +156,30 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     QBUF_LIST_FIRST(&tail_buf_) = cur_buf;
     PROF_END(CORE_WRITE_MEM_COPY, true);
 
+    const uint32_t pre = umq_socket->GetVersionedWritableReady(std::memory_order_acquire);
+
     // update last seqno type to CORE_WRITE_UMQ_POST, and add the timestamp
     PROF_START(CORE_WRITE_UMQ_POST);
     umq_buf_t *bad_qbuf = nullptr;
-    TRACE_UPDATE_WRITE_LAST(trace, CORE_WRITE_UMQ_POST, cur_buf->data_size, tx_total_len);
     umq_io_option_t option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX, UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
-    int ret = UmqApi::umq_post(local_umqh_, tx_buf_list, &option, &bad_qbuf);
+    int ret = UmqApi::umq_post(OwnerUmqh(), tx_buf_list, &option, &bad_qbuf);
 
-    TRACE_UPDATE_WRITE_LAST_END(trace, CORE_WRITE_UMQ_POST);
     if (ret == UMQ_SUCCESS) {
-        // 全部 post成功
         tx_queue_avail_num_.fetch_sub(batch, std::memory_order_acq_rel);
+        TxCqePoller::Instance().MarkActive(sock);
         PROF_END(CORE_WRITE_UMQ_POST, true);
-        if (GlobalSetting::UBS_TRACE_ENABLED) {
+        if (GlobalSetting::UBS_MONITOR_ENABLE) {
             SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
-            sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, batch);
-        }
-        if (trace != nullptr) {
-            while (!trace->pack_size_list.empty()) {
-                trace->pack_size_list.pop();
+            if (auto *mgr = sockptr->GetStatsMgr()) {
+                mgr->UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, batch);
             }
+        }
+        /* Cross-thread wake: PostSend runs on the app thread, so we must
+         * both mark inflight and wake the poller via eventfd. flag=OFF:
+         * NotifyInflight/NotifyPosted are no-ops (poller not started). */
+        if (GlobalSetting::UBS_TX_UNIFIED_POLL_ENABLED) {
+            TxCqePoller::Instance().NotifyInflight();
+            TxCqePoller::Instance().NotifyPosted();
         }
     } else if (bad_qbuf != nullptr) {
         const bool all_failed = bad_qbuf == tx_buf_list;
@@ -291,12 +197,16 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             // @See SiftSocketEventsWithUmqBuffers
             // @See NotifyWritable
             //
-            // 因此在 EpollCtlMod 与 NotifyWritable 中使用 writable_ready_ 原子变量决策，由谁来真正地向上通知
-            // EPOLLOUT 事件。
+            // 因此在 EpollCtlMod 与 NotifyWritable 中使用 versioned_writable_ready_ 原子变量决策，由谁来真正
+            // 地向上通知 EPOLLOUT 事件。
             if (all_failed) {
-                umq_socket->SetWritableReady(false);
+                // 目前版本号仅会在通知可写时增加，如果此时 CAS 失败，说明一个可写通知已经送达，这个时候不会改
+                // 写它的 writable 属性。在之后 EpollCtlMod 时可以检测到它是可写的，会补发一个可写通知
+                umq_socket->SetNotWritableReadyIfUnchanged(pre);
+                UMQ_POST_ERR_ADD(POST_ERR_EAGAIN_ALL); // TX-STAT: 全部 post 失败（信用耗尽）
                 need_fc_awake_.store(true, std::memory_order_relaxed);
             } else {
+                UMQ_POST_ERR_ADD(POST_ERR_EAGAIN_PART); // TX-STAT: 部分 post 成功、部分失败
                 // 在部分数据写入成功时出现 EAGAIN, 说明 umq 的流控 credit 不足，它会发起另一个流控 credit 请
                 // 求。ubsocket 对此不关注。
                 //
@@ -310,38 +220,49 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
                 //   - 不过已经是在等待 EPOLLOUT, 为什么还会在 EPOLLOUT 到达前调用 writev 呢？
             }
         } else if (errno == ETIMEDOUT) {
+            UMQ_POST_ERR_ADD(POST_ERR_ETIMEDOUT); // TX-STAT: 接收对端流控 credit 回复超时 (默认1s)
             // 接收对端流控 credit 回复超时 (默认1s)
             errno = EIO;
             flagEIO = 1;
-        } else if (ret == -UMQ_ERR_EFLOWCTL) {
+        } else if (ret == -UMQ_ERR_EFLOWCTL || ret == -UMQ_ERR_EFLOWCTL_FATAL || ret == -UMQ_ERR_EFLOWCTL_EAGAIN) {
+            UMQ_POST_ERR_ADD(POST_ERR_EFLOWCTL); // TX-STAT: 流控失败（含 FATAL/EAGAIN）
             errno = EIO;
             flagEIO = 1;
         } else if (errno == EMLINK) {
-            // optimize: [Jetty池化] ENOBUFS是否需要在此线程尝试pollTx释放资源后重试
+            UMQ_POST_ERR_ADD(POST_ERR_EMLINK); // TX-STAT: jetty pool 繁忙，无法分配 jetty node
+            // jetty pool 繁忙，无法分配 jetty node
             UBS_VLOG_DEBUG(
                 "[Debug] umq_post() suspended: no available jetty. Queued for automatic retry. socket fd: %d\n",
                 sock->raw_socket_);
-            umq_socket->SetWritableReady(false);
-            UmqTpWaitQueue::Instance().Enqueue(sock);
+            // 期间没有可写通知到达，需要真正排队等待。如果失败了，说明存在一个可写通知，此时 writable 仍旧为
+            // true. 后续在 EpollCtlMod 时会补发一个可写通知
+            if (umq_socket->SetNotWritableReadyIfUnchanged(pre)) {
+                UmqTpWaitQueue::Instance().Enqueue(sock);
+            }
             errno = EAGAIN;
         } else if (errno == ENOBUFS) {
             // jetty pool 整体被占用，当前 jetty node 不允许发送数据.
             //
             // umq 在部分写成功时，仍旧会返回 ENOBUFS 表示 jetty pool 没有足够的 qbuf. 不过存在一种可能，如果
-            // 正好被 PollTx 释放了资源，那么此 jetty node 还是可写的，碰一下运气
+            // 正好被 PollTx 释放了资源，那么此 jetty node 还是可写的，尝试一下
             if (all_failed) {
+                UMQ_POST_ERR_ADD(POST_ERR_ENOBUFS_ALL); // TX-STAT: 全部 post 失败（jetty/qbuf 池耗尽）
                 UBS_VLOG_DEBUG(
                     "[Debug] umq_post() suspended: no enough buffers. Queued for automatic retry. socket fd: %d\n",
                     sock->raw_socket_);
-                umq_socket->SetWritableReady(false);
-                UmqTpWaitQueue::Instance().Enqueue(sock);
+                // 目前版本号仅会在通知可写时增加，如果此时 CAS 失败，说明一个可写通知已经送达，这个时候不会改
+                // 写它的 writable 属性。在之后 EpollCtlMod 时可以检测到它是可写的，会补发一个可写通知
+                umq_socket->SetNotWritableReadyIfUnchanged(pre);
                 errno = EAGAIN;
+            } else {
+                UMQ_POST_ERR_ADD(POST_ERR_ENOBUFS_PART); // TX-STAT: 部分 post 成功、部分失败
             }
         } else {
             UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX, local umq: %llu, ret: %d, "
                          "mapped errno: %d(%s), original errno: %d\n",
-                         static_cast<unsigned long long>(local_umqh_), ret, errno,
+                         static_cast<unsigned long long>(OwnerUmqh()), ret, errno,
                          UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
+            UMQ_POST_ERR_ADD(POST_ERR_OTHER); // TX-STAT
             flagEIO = 1;
         }
         umq_buf_list_t head = {bad_qbuf};
@@ -352,7 +273,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             if (block != nullptr) {
                 block->DecRef();
             } else {
-                UBS_VLOG_ERR("failed to locate brpc block for bad TX data %p, fd: %d\n", cur->buf_data, fd_);
+                UBS_VLOG_ERR("failed to locate brpc block for bad TX data %p, fd: %d\n", cur->buf_data, OwnerFd());
             }
         }
         if (bad_qbuf == tx_buf_list) {
@@ -365,45 +286,26 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
             PROF_START(UMQ_BUF_FREE);
             UmqApi::umq_buf_free(bad_qbuf);
             PROF_END(UMQ_BUF_FREE, true);
-            if (trace != nullptr) {
-                UBS_VLOG_DEBUG("trace seq all failed trace->pack_size %u trace->pack_size_list.front() %u \n",
-                               trace->pack_size, trace->pack_size_list.front());
-                trace->pack_size = trace->pack_size_list.front();
-                memcpy(trace->header_cache, _header_cache, sizeof(_header_cache));
-                trace->header_cache_size = _header_cache_size;
-                trace->pending_header = _pending_header;
-            }
             tx_total_len = -1;
             umq_socket->FetchSubSeqNum(sn_allocated);
         } else {
             uint32_t buf_num = 0;
             tx_total_len -= HandleBadQBuf(sock, tx_buf_list, bad_qbuf, head_qbuf, batch, _unsolicited_wr_num,
                                           _unsolicited_bytes, _unsignaled_wr_num, &buf_num);
-            if (trace != nullptr) {
-                // 要恢复的大小等于当前已发完的数据大小
-                auto tmp_remaining_len = tx_total_len;
-                // 没恢复完成则循环恢复
-                while (tmp_remaining_len > 0 && !trace->pack_size_list.empty()) {
-                    // 获取当前包发送前的总数量
-                    uint32_t cur_pack = trace->pack_size_list.front();
-                    if (tmp_remaining_len <= cur_pack) {
-                        cur_pack -= tmp_remaining_len;
-                        trace->pack_size = cur_pack;
-                        break;
-                    } else if (tmp_remaining_len > cur_pack) {
-                        tmp_remaining_len -= cur_pack;
-                        trace->pack_size_list.pop();
-                        continue;
-                    }
+            if (GlobalSetting::UBS_MONITOR_ENABLE && buf_num > 0) {
+                SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+                if (auto *mgr = sockptr->GetStatsMgr()) {
+                    mgr->UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, buf_num);
                 }
             }
 
             umq_socket->FetchSubSeqNum(sn_allocated - buf_num);
         }
-        if (trace != nullptr) {
-            while (!trace->pack_size_list.empty()) {
-                trace->pack_size_list.pop();
-            }
+        /* Partial success: some WRs were posted, so mark inflight and
+         * wake the poller. Same cross-thread path as full success. */
+        if (GlobalSetting::UBS_TX_UNIFIED_POLL_ENABLED) {
+            TxCqePoller::Instance().NotifyInflight();
+            TxCqePoller::Instance().NotifyPosted();
         }
         if (flagEIO == 1) {
             UBS_VLOG_ERR("write failed, destroy UB\n");
@@ -412,23 +314,18 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     } else {
         PROF_END(CORE_WRITE_UMQ_POST, false);
         int savedErrno = errno;
+        UMQ_POST_ERR_ADD(POST_ERR_NO_BADQBUF); // TX-STAT: umq_post 返回无 bad_qbuf 的异常分支
         errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_post() failed for TX without bad_qbuf, "
                      "local umq: %llu, ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                     static_cast<unsigned long long>(local_umqh_), ret, errno,
+                     static_cast<unsigned long long>(OwnerUmqh()), ret, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
-        if (trace != nullptr) {
-            while (!trace->pack_size_list.empty()) {
-                trace->pack_size_list.pop();
-            }
-            trace->pack_size = 0;
-        }
     }
 
     return tx_total_len;
 }
 
-int UmqTxOps::PollTx(Socket *sock)
+int DataTxOps::PollTx(Socket *sock)
 {
     if (get_and_ack_event_) {
         // handle tx epollin epoll event
@@ -436,7 +333,7 @@ int UmqTxOps::PollTx(Socket *sock)
             PROF_START(CORE_WRITE_REARM);
             if (GetAndAckEvent() < 0) {
                 PROF_END(CORE_WRITE_REARM, false);
-                UBS_VLOG_ERR("WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+                UBS_VLOG_ERR("WriteV GetAndAckEvent() failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", OwnerFd(), -1, errno,
                              Func::Error2Str(errno));
                 return -1;
             }
@@ -451,10 +348,10 @@ int UmqTxOps::PollTx(Socket *sock)
                                                            std::memory_order_acquire));
 
         get_and_ack_event_ = false;
-    } else if (tx_queue_avail_num_.load(std::memory_order_acq_rel) == 0) {
+    } else if (tx_queue_avail_num_.load(std::memory_order_acquire) == 0) {
         PROF_START(CORE_WRITE_POLL_TX_SECOND);
         PollUmqTx(sock, false);
-        if (tx_queue_avail_num_.load(std::memory_order_acq_rel) == 0) {
+        if (tx_queue_avail_num_.load(std::memory_order_acquire) == 0) {
             // 暂时禁用，否则会关闭 solicited mode.
             // return DpRearmTxInterrupt();
         }
@@ -469,24 +366,24 @@ int UmqTxOps::PollTx(Socket *sock)
     return 0;
 }
 
-ConverterPtr UmqTxOps::BuildIovConverter(const struct iovec *iov, int iovcnt)
+ConverterPtr DataTxOps::BuildIovConverter(const struct iovec *iov, int iovcnt)
 {
     auto umqConverter = MakeRef<UmqIovConverter>(iov, iovcnt);
     return RefConvert<UmqIovConverter, UbSocketBufConverter>(umqConverter);
 }
 
-ConverterPtr UmqTxOps::BuildBufferConverter(const void *buf, size_t size)
+ConverterPtr DataTxOps::BuildBufferConverter(const void *buf, size_t size)
 {
     auto umqConverter = MakeRef<UmqBufferConverter>(buf, size);
     return RefConvert<UmqBufferConverter, UbSocketBufConverter>(umqConverter);
 }
 
-int UmqTxOps::GetAndAckEvent()
+int DataTxOps::GetAndAckEvent()
 {
     int ret = 0;
     umq_interrupt_option_t option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
     PROF_START(UMQ_GET_CQ_EVENT);
-    int events = UmqApi::umq_get_cq_event(local_umqh_, &option);
+    int events = UmqApi::umq_get_cq_event(OwnerUmqh(), &option);
     if (events == 0) {
         PROF_END(UMQ_GET_CQ_EVENT, true);
         return 0;
@@ -495,74 +392,92 @@ int UmqTxOps::GetAndAckEvent()
         int savedErrno = errno;
         errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, events, savedErrno);
         UBS_VLOG_ERR("[UMQ_API] umq_get_cq_event() failed, local umq: %llu, ret: %d, mapped: %d(%s), original: %d\n",
-                     static_cast<unsigned long long>(local_umqh_), events, errno,
+                     static_cast<unsigned long long>(OwnerUmqh()), events, errno,
                      UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, events), savedErrno);
         return -1;
     }
     PROF_END(UMQ_GET_CQ_EVENT, true);
     if ((ack_event_num_ += events) >= 1) {
         PROF_START(UMQ_ACK_INTERRUPT);
-        UmqApi::umq_ack_interrupt(local_umqh_, ack_event_num_, &option);
+        UmqApi::umq_ack_interrupt(OwnerUmqh(), ack_event_num_, &option);
         PROF_END(UMQ_ACK_INTERRUPT, true);
         ack_event_num_ = 0;
         // TODO: 返回值判断
         PROF_START(UMQ_REARM_INTERRUPT);
-        ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &option);
+        ret = UmqApi::umq_rearm_interrupt(OwnerUmqh(), false, &option);
         PROF_END(UMQ_REARM_INTERRUPT, ret == 0);
     }
     return 0;
 }
 
-int UmqTxOps::PollUmqTx(Socket *sock, bool poll_to_empty)
+int DataTxOps::PollUmqTx(Socket *sock, bool poll_to_empty)
 {
     uint32_t poll_total_cnt = 0;
     int poll_cnt = 0;
-    uint32_t poll_zero_cnt = 0;
     ops_error_code err_code = ops_error_code::OK;
     do {
         PROF_START(CORE_WRITE_DO_TX_POLL);
         poll_cnt = DoUmqTxPoll(sock, err_code);
         PROF_END(CORE_WRITE_DO_TX_POLL, poll_cnt >= 0);
-        if (poll_cnt < 0) {
+        if (poll_cnt <= 0) {
             break;
-        } else if (poll_cnt == 0) {
-            poll_zero_cnt++;
-        } else if (poll_zero_cnt != 0) {
-            // reset poll_zero_cnt when actually get tx cqe(s)
-            poll_zero_cnt = 0;
         }
         poll_total_cnt += (uint32_t)poll_cnt;
-    } while ((poll_total_cnt < TX_RETRIEVE_THRESHOLD || (poll_to_empty && poll_cnt > 0)) &&
-             poll_zero_cnt < POLL_TX_RETRY_MAX_CNT && err_code == ops_error_code::OK);
+    } while ((poll_total_cnt < TX_RETRIEVE_THRESHOLD || poll_to_empty) && err_code == ops_error_code::OK);
     return 0;
 }
 
-int UmqTxOps::PollUmqTxOnce(Socket *sock)
+int DataTxOps::PollUmqTxOnce(Socket *sock)
 {
     PROF_START(CORE_WRITE_DO_TX_POLL);
     ops_error_code err_code = OK;
     int poll_cnt = DoUmqTxPoll(sock, err_code);
     PROF_END(CORE_WRITE_DO_TX_POLL, poll_cnt >= 0);
-    return 0;
+    return poll_cnt > 0 ? poll_cnt : 0;
 }
 
-void UmqTxOps::WakeUpTx(Socket *sock)
+void DataTxOps::ForceDrainTx(Socket *sock)
+{
+    /* poll_to_empty=true: drain all pending TX CQEs until umq_poll returns
+     * 0 (first-empty-exit), reclaiming SQ slots. Used by the background
+     * TxCqePoller to prevent status:12 (SQ full) under high throughput. */
+    (void)PollUmqTx(sock, true);
+}
+
+void DataTxOps::QuickPollTx(Socket *sock)
+{
+    /* Single-shot poll: reclaim at most one batch of CQEs (POLL_BATCH_MAX=256)
+     * without drain-to-empty. Bounds per-socket TX poll latency in the RX
+     * active loop; remaining CQEs are reclaimed by the TX-only active loop
+     * (TX_CQE_TIMER / TX_WAKE events) which calls ForceDrainTx. */
+    (void)PollUmqTxOnce(sock);
+}
+
+void DataTxOps::WakeUpTx(Socket *sock)
 {
     bool need_fc_awake = need_fc_awake_.exchange(false, std::memory_order_acq_rel);
     auto sockBase = RefConvert<Socket, SocketBase>(sock);
-    if (need_fc_awake && eventfd_write(sockBase->event_fd_, 1) == -1) {
-        UBS_VLOG_ERR("eventfd_write() failed, event fd: %d, raw sock fd %d: errno: %d, errmsg: %s\n",
-                     sockBase->event_fd_, sockBase->raw_socket_, errno, Func::Error2Str(errno));
+    if (need_fc_awake && sockBase->NotifyWritable() == -1) {
+        UBS_VLOG_ERR("NotifyWritable() failed, raw sock fd %d: errno: %d, errmsg: %s\n", sockBase->raw_socket_, errno,
+                     Func::Error2Str(errno));
     }
 }
 
-bool UmqTxOps::Writable(const SocketPtr &sock)
+bool DataTxOps::Writable(const SocketPtr &sock)
 {
+    // writev 热路径：调用方 DataTx::WriteV 持有 SocketPtr(sock) 保证本次调用内存活，
+    // 无需自持引用；static_cast 省去 RefConvert 的 RTTI(dynamic_cast) + 两次原子 refcount。
+    auto *umqSock = static_cast<UmqSocket *>(sock.Get());
+
+    // RNR 反压期间不可写，writev 返回 EAGAIN
+    if (umqSock->IsRnrBlocked()) {
+        return false;
+    }
+
     if (UmqSetting::UMQ_TP_TYPE != POOL) {
         return true;
     }
 
-    UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
     if (umqSock->GetJettyAllocState() == JettyAllocState::WAITING) {
         return false;
     } else {
@@ -570,24 +485,40 @@ bool UmqTxOps::Writable(const SocketPtr &sock)
     }
 }
 
-int UmqTxOps::DoUmqTxPoll(Socket *sock, ops_error_code &err_code)
+int DataTxOps::DoUmqTxPoll(Socket *sock, ops_error_code &err_code)
 {
+    // RNR 反压 fatal 超时检查（周期触发点：active loop / TX timer / writev 尾部
+    // QuickPollTx 均经此进入）。放在批处理前，纯 RNR 通知（无 wr_cnt 贡献）的
+    // socket 也能被覆盖，比批末 socket_wr_cnt_map 循环更可靠。sock 可能为 null
+    // （FC-return 轮询场景），仅对非 null socket 做检查。
+    if (sock != nullptr) {
+        auto *umq_sock = static_cast<UmqSocket *>(sock);
+        if (umq_sock->TryRnrBlockFatal()) {
+            UBS_VLOG_WARN("RNR backpressure fatal timeout, fd: %d, disconnecting (poll path)\n", sock->raw_socket_);
+            LibcApi::shutdown(sock->raw_socket_, SHUT_RD);
+            sock->State(SOCK_STAT_CLOSE);
+            return 0;
+        }
+    }
     umq_io_option_t poll_option = {UMQ_IO_OPTION_FLAG_DIRECTION, UMQ_IO_TX,
                                    UmqSetting::UMQ_IO_OPTION_DEFAULT_TP_HANDLE_IDX};
-    UmqTxHelper::PollArgs poll_args(local_umqh_, poll_option, err_code, sock);
+    UmqTxHelper::PollArgs poll_args(OwnerUmqh(), poll_option, err_code, sock);
     return UmqTxHelper::PollUmqTx(poll_args, [this, sock](umq_buf_t *qbuf) {
         // 异步关闭. 当前处于 writev 尾部, 等待下次 EPOLLIN 事件时关闭
         // brpc 总是会关注 EPOLLIN 事件, 将读端关闭会产生一次 epoll 事件, 之后 brpc 会尝试从 m_fd 读
         // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
-        LibcApi::shutdown(fd_, SHUT_RD);
-        UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error", fd_);
+        LibcApi::shutdown(OwnerFd(), SHUT_RD);
+        // TX CQE 异常断链：记录实际 status，便于区分 status=99(RNR 重试耗尽) 等 fatal 码。
+        UBS_VLOG_WARN("closing socket fd=%d on TX CQE error, status: %lu\n", OwnerFd(),
+                      static_cast<unsigned long>(qbuf->status));
         sock->State(SOCK_STAT_CLOSE);
 
         // 光组网下，如果出现了异常 CQE 2/4/9 则说明底层 URMA 已将所有 port 都给重试了
         auto *umq_sock = static_cast<UmqSocket *>(sock);
         if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
             if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
-                qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR) {
+                qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR ||
+                qbuf->status == UMQ_FAKE_BUF_FC_ERR_FATAL) {
                 auto [ports, ports_num] = umq_sock->GetUsedPorts();
                 for (std::size_t i = 0; i < ports_num; ++i) {
                     UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",
@@ -599,11 +530,11 @@ int UmqTxOps::DoUmqTxPoll(Socket *sock, ops_error_code &err_code)
     });
 }
 
-int UmqTxOps::DpRearmTxInterrupt()
+int DataTxOps::DpRearmTxInterrupt()
 {
     PROF_START(CORE_WRITE_REARM);
     umq_interrupt_option_t tx_option = {UMQ_INTERRUPT_FLAG_IO_DIRECTION, UMQ_IO_TX, UMQ_FD_IO};
-    int ret = UmqApi::umq_rearm_interrupt(local_umqh_, false, &tx_option);
+    int ret = UmqApi::umq_rearm_interrupt(OwnerUmqh(), false, &tx_option);
     if (ret == 0) {
         PROF_END(CORE_WRITE_REARM, true);
         errno = EAGAIN;
@@ -614,13 +545,13 @@ int UmqTxOps::DpRearmTxInterrupt()
     errno = UmqErrnoConverter::Convert(UmqOperation::WRITEV, ret, savedErrno);
     UBS_VLOG_ERR("[UMQ_API] umq_rearm_interrupt() failed for TX, local umq: %llu, "
                  "ret: %d, mapped errno: %d(%s), original errno: %d\n",
-                 static_cast<unsigned long long>(local_umqh_), ret, errno,
+                 static_cast<unsigned long long>(OwnerUmqh()), ret, errno,
                  UmqErrnoConverter::GetErrorDescription(UmqOperation::WRITEV, ret), savedErrno);
     PROF_END(CORE_WRITE_REARM, false);
     return -1;
 }
 
-Block *UmqTxOps::DataToBlock(void *data)
+Block *DataTxOps::DataToBlock(void *data)
 {
     umq_buf_t *qbuf = UmqApi::umq_data_to_head(data);
     if (qbuf == nullptr || qbuf->buf_data == nullptr) {
@@ -629,12 +560,15 @@ Block *UmqTxOps::DataToBlock(void *data)
     return reinterpret_cast<Block *>(qbuf->buf_data);
 }
 
-inline uint32_t UmqTxOps::IOBufSize()
+/* 去虚化后本方法被跨 TU 直接调用（原先经 vtable 间接、符号必然发射）：
+ * cpp 内 inline 定义在其它 TU 只留下未定义引用（ld: undefined reference，
+ * 见 issue #12）。去掉 inline，按普通外部符号发射。 */
+uint32_t DataTxOps::IOBufSize()
 {
     return UmqSetting::GetIOBufSize();
 }
 
-uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf,
+uint32_t DataTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf,
                                  umq_buf_t *last_head_qbuf, uint32_t batch, uint16_t unsolicited_wr_num,
                                  uint32_t unsolicited_bytes, uint16_t unsignaled_wr_num, uint32_t *buf_num)
 {
@@ -652,6 +586,7 @@ uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, um
         cur_qbuf = bad_qbuf;
         total_size += cur_qbuf->data_size;
         bad_qbuf = QBUF_LIST_NEXT(cur_qbuf);
+        last_qbuf = cur_qbuf;
         wr_cnt++;
     }
     wr_cnt = batch - wr_cnt;
@@ -660,6 +595,9 @@ uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, um
     unsolicited_bytes_ = _unsolicited_bytes;
     unsignaled_wr_num_ = _unsignaled_wr_num;
     tx_queue_avail_num_.fetch_sub(wr_cnt, std::memory_order_acq_rel);
+    if (wr_cnt > 0) {
+        TxCqePoller::Instance().MarkActive(sock);
+    }
     *buf_num = wr_cnt;
 
     QBUF_LIST_FIRST(&head_buf_) = head_qbuf_;
@@ -676,9 +614,9 @@ uint32_t UmqTxOps::HandleBadQBuf(const SocketPtr &sock, umq_buf_t *head_qbuf, um
     return total_size;
 }
 
-void UmqTxOps::FlushTx(Socket *sock, uint32_t timeout_ms)
+void DataTxOps::FlushTx(Socket *sock, uint32_t timeout_ms)
 {
-    uint16_t threshold = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel);
+    uint16_t threshold = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acquire);
     if (threshold <= 0) {
         return;
     }
@@ -687,6 +625,7 @@ void UmqTxOps::FlushTx(Socket *sock, uint32_t timeout_ms)
     int poll_cnt = 0;
     ops_error_code err_code = ops_error_code::OK;
     auto start_ms = SocketConnHelper::GetTimeMs();
+    uint64_t next_yield_ms = start_ms + 1;
     do {
         if (SocketConnHelper::IsTimeout(start_ms, timeout_ms)) {
             /* If a timeout is triggered here, it would indicate a memory leak.
@@ -701,12 +640,23 @@ void UmqTxOps::FlushTx(Socket *sock, uint32_t timeout_ms)
         }
 
         poll_total_cnt += static_cast<uint32_t>(poll_cnt);
+        /* Fallback synchronous teardown may wait for the full destroy timeout.
+         * Yield periodically while no CQE arrives so it cannot monopolize a
+         * host worker for that entire interval. */
+        const uint64_t now_ms = SocketConnHelper::GetTimeMs();
+        if (poll_cnt == 0 && now_ms >= next_yield_ms && sock->Type() != SocketType::SOCK_TYPE_COUNT &&
+            poll_total_cnt < threshold && err_code != ops_error_code::FATAL_ERROR) {
+            PollerYield();
+            next_yield_ms = SocketConnHelper::GetTimeMs() + 1;
+        } else if (poll_cnt > 0) {
+            next_yield_ms = now_ms + 1;
+        }
     } while (sock->Type() != SocketType::SOCK_TYPE_COUNT && poll_total_cnt < threshold &&
              err_code != ops_error_code::FATAL_ERROR);
 
     if (err_code != ops_error_code::FATAL_ERROR &&
         tx_queue_avail_num_.load(std::memory_order_relaxed) < GlobalSetting::UBS_TX_DEPTH && unsignaled_wr_num_ > 0) {
-        uint32_t left_wr_num = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel);
+        uint32_t left_wr_num = GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acquire);
         umq_buf_t *cur_qbuf = QBUF_LIST_FIRST(&head_buf_);
         umq_buf_t *last_qbuf = nullptr;
         uint32_t cached_wr_cnt = 0;
@@ -733,7 +683,7 @@ void UmqTxOps::FlushTx(Socket *sock, uint32_t timeout_ms)
                     block->DecRef();
                 } else {
                     UBS_VLOG_ERR("failed to locate brpc block for cached TX data %p, fd: %d\n", cur_qbuf->buf_data,
-                                 fd_);
+                                 OwnerFd());
                 }
                 cur_qbuf = QBUF_LIST_NEXT(cur_qbuf);
             }
@@ -751,12 +701,12 @@ void UmqTxOps::FlushTx(Socket *sock, uint32_t timeout_ms)
         tx_queue_avail_num_.fetch_add(cached_wr_cnt, std::memory_order_acq_rel);
     }
 
-    if (tx_queue_avail_num_.load(std::memory_order_acq_rel) < GlobalSetting::UBS_TX_DEPTH) {
+    if (tx_queue_avail_num_.load(std::memory_order_acquire) < GlobalSetting::UBS_TX_DEPTH) {
         UBS_VLOG_DEBUG("Failed to flush umq(TX), leak %u wr(s) of buffer\n",
-                       GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acq_rel));
+                       GlobalSetting::UBS_TX_DEPTH - tx_queue_avail_num_.load(std::memory_order_acquire));
     }
 }
 
-} // namespace umq
+
 } // namespace ubs
 } // namespace ock
