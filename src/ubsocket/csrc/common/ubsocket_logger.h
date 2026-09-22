@@ -192,7 +192,7 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
     do {                                                               \
         if ((level) >= (ock::ubs::Logger::Instance().GetLogLevel())) { \
             std::ostringstream oss;                                    \
-            oss << "[UMQ " << func << "] " << ARGS;                    \
+            oss << "[" << func << "] " << ARGS;                        \
             ock::ubs::Logger::Instance().Log(level, oss, file, ln);    \
         }                                                              \
     } while (0)
@@ -208,6 +208,23 @@ ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const c
 #define UBS_SLOG_NOTICE(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_NOTICE, ARGS)
 #define UBS_SLOG_INFO(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_INFO, ARGS)
 #define UBS_SLOG_DEBUG(ARGS) UBS_LOG_STREAM(ock::ubs::LEVEL_DEBUG, ARGS)
+
+/*
+ * Adaptive I/O data-path routing trace. Compile with -DUBS_DATAPATH_DEBUG=1 to
+ * confirm which path (SMALL_DATA SEND vs READ_OFFER/RDMA READ) each segment took
+ * on both the send and receive sides. Compiled out (zero cost) by default.
+ */
+#ifndef UBS_DATAPATH_DEBUG
+#define UBS_DATAPATH_DEBUG 0
+#endif
+
+#if UBS_DATAPATH_DEBUG
+#define UBS_DATAPATH_LOG(__format, ...) UBS_VLOG_NOTICE(__format, ##__VA_ARGS__)
+#else
+#define UBS_DATAPATH_LOG(__format, ...) \
+    do {                                \
+    } while (0)
+#endif
 
 #define UBS_ASSERT(CONDITION)                      \
     do {                                           \

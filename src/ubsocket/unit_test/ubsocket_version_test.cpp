@@ -7,15 +7,36 @@
 
 #include <sstream>
 
+#include "common/ubsocket_logger.h"
 #include "common/ubsocket_version.h"
 
 using namespace ock::ubs;
+
+static void MockExternalLog(int level, const char *msg, const char *filename, int line)
+{
+    (void)level;
+    (void)msg;
+    (void)filename;
+    (void)line;
+}
 
 // ==================== UBSVersion Tests ====================
 
 class UBSVersionTest : public ::testing::Test {
 protected:
-    void SetUp() override {}
+    void SetUp() override
+    {
+        savedLogLevel_ = Logger::Instance().GetLogLevel();
+    }
+
+    void TearDown() override
+    {
+        Logger::Instance().mLogFunc = nullptr;
+        Logger::Instance().SetLogLevel(savedLogLevel_);
+    }
+
+private:
+    int savedLogLevel_{LEVEL_INFO};
 };
 
 // --- Construction ---
@@ -185,4 +206,75 @@ TEST_F(UBSVersionTest, Negotiate_MaxValues)
     EXPECT_EQ(negotiated.major, 63u);
     EXPECT_EQ(negotiated.minor, 4095u);
     EXPECT_EQ(negotiated.patch, 16383u);
+}
+
+// --- Logging branch coverage ---
+
+TEST_F(UBSVersionTest, Negotiate_MajorMismatch_WarnLogSuppressed)
+{
+    // Set log level above LEVEL_WARN so UBS_SLOG_WARN body is skipped
+    Logger::Instance().SetLogLevel(LEVEL_ERR);
+    UBSVersion local(1, 5, 10);
+    UBSVersion peer(2, 5, 10);
+    UBSVersion negotiated;
+    auto result = local.Negotiate(peer, negotiated);
+    EXPECT_EQ(result, VersionCheckResult::kMajorMismatch);
+}
+
+TEST_F(UBSVersionTest, Negotiate_Compatible_DebugLogEnabled)
+{
+    // Set log level to LEVEL_DEBUG so UBS_SLOG_DEBUG body executes
+    Logger::Instance().SetLogLevel(LEVEL_DEBUG);
+    UBSVersion local(1, 5, 10);
+    UBSVersion peer(1, 3, 5);
+    UBSVersion negotiated;
+    auto result = local.Negotiate(peer, negotiated);
+    EXPECT_EQ(result, VersionCheckResult::kCompatible);
+}
+
+TEST_F(UBSVersionTest, Negotiate_Compatible_DebugLogSuppressed)
+{
+    // Default log level (LEVEL_INFO) — UBS_SLOG_DEBUG is skipped
+    Logger::Instance().SetLogLevel(LEVEL_INFO);
+    UBSVersion local(1, 5, 10);
+    UBSVersion peer(1, 3, 5);
+    UBSVersion negotiated;
+    auto result = local.Negotiate(peer, negotiated);
+    EXPECT_EQ(result, VersionCheckResult::kCompatible);
+}
+
+TEST_F(UBSVersionTest, Negotiate_MajorMismatch_WarnLogWithExternalLog)
+{
+    // Set external log function so mLogFunc != nullptr path is taken
+    Logger::Instance().mLogFunc = MockExternalLog;
+    Logger::Instance().SetLogLevel(LEVEL_DEBUG);
+    UBSVersion local(1, 5, 10);
+    UBSVersion peer(2, 5, 10);
+    UBSVersion negotiated;
+    auto result = local.Negotiate(peer, negotiated);
+    EXPECT_EQ(result, VersionCheckResult::kMajorMismatch);
+}
+
+TEST_F(UBSVersionTest, Negotiate_Compatible_DebugLogWithExternalLog)
+{
+    // Set external log function so mLogFunc != nullptr path is taken
+    Logger::Instance().mLogFunc = MockExternalLog;
+    Logger::Instance().SetLogLevel(LEVEL_DEBUG);
+    UBSVersion local(1, 5, 10);
+    UBSVersion peer(1, 3, 5);
+    UBSVersion negotiated;
+    auto result = local.Negotiate(peer, negotiated);
+    EXPECT_EQ(result, VersionCheckResult::kCompatible);
+}
+
+TEST_F(UBSVersionTest, Negotiate_MajorMismatch_WarnLogWithDefaultLog)
+{
+    // No external log function — mLogFunc == nullptr, LogDefault path
+    Logger::Instance().mLogFunc = nullptr;
+    Logger::Instance().SetLogLevel(LEVEL_DEBUG);
+    UBSVersion local(1, 5, 10);
+    UBSVersion peer(2, 5, 10);
+    UBSVersion negotiated;
+    auto result = local.Negotiate(peer, negotiated);
+    EXPECT_EQ(result, VersionCheckResult::kMajorMismatch);
 }

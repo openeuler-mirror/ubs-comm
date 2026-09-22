@@ -43,6 +43,8 @@ inline int Func::ProtocolFromString(const std::string &src) noexcept
             allowedProtocol |= UBS_PROTOCOL_UB_RM_RTP;
         } else if (item == "ub_rc_rtp") {
             allowedProtocol |= UBS_PROTOCOL_UB_RC_RTP;
+        } else if (item == "ub_rm_ctp") {
+            allowedProtocol |= UBS_PROTOCOL_UB_RM_RTP;
         }
     }
 

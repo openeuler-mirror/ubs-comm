@@ -11,8 +11,9 @@
 #ifndef UBSOCKET_LEAKY_SINGLETON_H_
 #define UBSOCKET_LEAKY_SINGLETON_H_
 
+#include <pthread.h>
+
 #include <atomic>
-#include <mutex>
 
 namespace ock {
 namespace ubs {
@@ -45,23 +46,41 @@ public:
     LeakySingleton(const LeakySingleton &rhs) = delete;
     LeakySingleton &operator=(const LeakySingleton &rhs) = delete;
 
-    // 获取单例实例，使用 std::call_once 保证多线程环境下的延迟初始化安全性
+    // 获取单例实例：双重检查 + pthread 互斥保证多线程惰性初始化安全。
+    //
+    // 不用 std::call_once：libstdc++ 的实现经由两个"OS 线程局部(TLS)变量"把可调用对象
+    // 传给 __once_proxy 执行，而本工程运行在 bthread（M:N 协程）上——协程在锁上让出后
+    // 可能迁移到另一个 worker OS 线程，编译器缓存在寄存器里的线程指针随之失效，写入的
+    // TLS 落在旧线程、__once_proxy 在新线程读到空指针后直接尾跳转到 0，进程 SIGSEGV
+    // （collab issue #10：多打多并发建链 coredump，崩溃点即
+    //  LeakySingleton<PortCooldownManager>::m_flag 的首次初始化）。
+    // pthread 互斥阻塞的是 OS 线程、全程不涉及 TLS，对协程迁移天然免疫。
     static T &Instance()
     {
-        std::call_once(m_flag, []() { m_instance.store(new T, std::memory_order_release); });
-        return *m_instance.load(std::memory_order_acquire);
+        T *p = m_instance.load(std::memory_order_acquire);
+        if (p != nullptr) {
+            return *p;
+        }
+        (void)pthread_mutex_lock(&m_mtx);
+        p = m_instance.load(std::memory_order_relaxed);
+        if (p == nullptr) {
+            p = new T;
+            m_instance.store(p, std::memory_order_release);
+        }
+        (void)pthread_mutex_unlock(&m_mtx);
+        return *p;
     }
 
 private:
     static std::atomic<T *> m_instance;
-    static std::once_flag m_flag;
+    static pthread_mutex_t m_mtx;
 };
 
 template <typename T>
 std::atomic<T *> LeakySingleton<T>::m_instance{nullptr};
 
 template <typename T>
-std::once_flag LeakySingleton<T>::m_flag;
+pthread_mutex_t LeakySingleton<T>::m_mtx = PTHREAD_MUTEX_INITIALIZER;
 } // namespace ubs
 } // namespace ock
 

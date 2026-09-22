@@ -14,7 +14,7 @@ namespace ock {
 namespace ubs {
 namespace profiling {
 constexpr int COL_WIDTH_MIN_EXT = 20;
-constexpr int COL_WIDTH_MAX_EXT = 30;
+constexpr int COL_WIDTH_MAX_EXT = 45;
 
 void TraceCombinerExt::OutputTraceGroupExt(std::ostringstream &oss, const TraceGroupExtPtr &allTraceGroup)
 {
@@ -26,9 +26,7 @@ void TraceCombinerExt::OutputTraceGroupExt(std::ostringstream &oss, const TraceG
 int TraceCombinerExt::OutputTraceGroupCliExt(char **out_buf, const TraceGroupExtPtr &allTraceGroup)
 {
     std::ostringstream oss;
-    for (size_t i = 0; i < allTraceGroup->points_.size(); i++) {
-        OutputTracePointCliExt(oss, allTraceGroup->points_[i]);
-    }
+    OutputTraceGroupExt(oss, allTraceGroup);
     std::string outStr = oss.str();
     size_t dataLen = outStr.size();
     if (dataLen == 0 || dataLen > SIZE_MAX) {
@@ -46,28 +44,14 @@ int TraceCombinerExt::OutputTraceGroupCliExt(char **out_buf, const TraceGroupExt
 
 void TraceCombinerExt::OutputTracePointCliExt(std::ostringstream &oss, const TracepointExt &totalTracePoint)
 {
-    uint64_t avgTime = totalTracePoint.data.success_count > 0 ?
-                           totalTracePoint.data.total_time / totalTracePoint.data.success_count :
-                           0;
-
-    uint64_t maxTime = totalTracePoint.data.max_time;
-    uint64_t minTime = totalTracePoint.data.min_time;
-    // 防御性处理：如果没有成功样本，min_time保持UINT64_MAX，需要转换为0
-    if (minTime == UINT64_MAX) {
-        minTime = 0;
-        maxTime = 0;
-    }
-
-    oss << "[" << (totalTracePoint.has_name ? totalTracePoint.GetNameExt() : std::string("--")) << "],"
-        << totalTracePoint.data.success_count << "," << totalTracePoint.data.failure_count << ","
-        << totalTracePoint.data.total_time << "," << avgTime << "," << maxTime << "," << minTime << ","
-        << totalTracePoint.data.pp50_time << "," << totalTracePoint.data.pp90_time << ","
-        << totalTracePoint.data.pp95_time << "," << totalTracePoint.data.pp99_time << ","
-        << totalTracePoint.data.pp999_time << ";";
+    OutputTracePointStatsExt(oss, totalTracePoint);
 }
 
 void TraceCombinerExt::OutputTracePointStatsExt(std::ostringstream &oss, const TracepointExt &totalTracePoint)
 {
+    if (totalTracePoint.has_name == 0) {
+        return;
+    }
     uint64_t avgTime = totalTracePoint.data.success_count > 0 ?
                            totalTracePoint.data.total_time / totalTracePoint.data.success_count :
                            0;
@@ -80,15 +64,13 @@ void TraceCombinerExt::OutputTracePointStatsExt(std::ostringstream &oss, const T
         maxTime = 0;
     }
 
-    std::string traceName = "[" + (totalTracePoint.has_name ? totalTracePoint.GetNameExt() : std::string("--")) + "]";
+    std::string traceName = std::string("[") + totalTracePoint.GetNameExt() + "]";
     oss << std::left << std::setw(COL_WIDTH_MAX_EXT) << traceName << std::setw(COL_WIDTH_MIN_EXT)
         << totalTracePoint.data.success_count << std::setw(COL_WIDTH_MIN_EXT) << totalTracePoint.data.failure_count
         << std::setw(COL_WIDTH_MIN_EXT) << totalTracePoint.data.total_time << std::setw(COL_WIDTH_MIN_EXT) << avgTime
-        << std::setw(COL_WIDTH_MIN_EXT) << maxTime << std::setw(COL_WIDTH_MIN_EXT) << minTime
-        << std::setw(COL_WIDTH_MIN_EXT) << totalTracePoint.data.pp50_time << std::setw(COL_WIDTH_MIN_EXT)
-        << totalTracePoint.data.pp90_time << std::setw(COL_WIDTH_MIN_EXT) << totalTracePoint.data.pp95_time
-        << std::setw(COL_WIDTH_MIN_EXT) << totalTracePoint.data.pp99_time << std::setw(COL_WIDTH_MIN_EXT)
-        << totalTracePoint.data.pp999_time << "\n";
+        << std::setw(COL_WIDTH_MIN_EXT) << maxTime << std::setw(COL_WIDTH_MIN_EXT)
+        << minTime << std::setw(COL_WIDTH_MIN_EXT) << totalTracePoint.data.pp99_time
+        << std::setw(COL_WIDTH_MIN_EXT) << totalTracePoint.data.pp9999_time << "\n";
 }
 } // namespace profiling
 } // namespace ubs

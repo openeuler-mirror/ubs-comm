@@ -10,6 +10,7 @@
 #define STATISTICS_H
 
 #include <arpa/inet.h>
+#include <limits.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -31,6 +32,7 @@
 #include "core/umq/umq_setting.h"
 #include "core/umq/umq_socket.h"
 #include "profiling/probe/probe_manager.h"
+#include "profiling/trace/ubsocket_trace.h"
 #include "statistics_statsmgr.h"
 #include "umq_api.h"
 #include "umq_dfx_api.h"
@@ -337,6 +339,67 @@ public:
         });
     }
 
+    void GetAllTxStatData(CLITxStatData *data, uint32_t sockNum)
+    {
+        if (data == nullptr) {
+            return;
+        }
+        uint32_t doneNum = 0;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (doneNum >= sockNum) {
+                return;
+            }
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
+                return;
+            }
+            data->socketId = fd;
+            auto *umqSock = static_cast<UmqSocket *>(sock);
+            auto *txc = umqSock->GetUmqTxOps()->GetTxStatCounters();
+            if (txc != nullptr) {
+                memcpy(data->post_err, const_cast<const uint32_t *>(txc->post_err), sizeof(data->post_err));
+                memcpy(data->cqe_err, const_cast<const uint32_t *>(txc->cqe_err), sizeof(data->cqe_err));
+            } else {
+                memset(data->post_err, 0, sizeof(data->post_err));
+                memset(data->cqe_err, 0, sizeof(data->cqe_err));
+            }
+            data += 1;
+            doneNum += 1;
+        });
+    }
+
+    void GetAllRxStatData(CLIRxStatData *data, uint32_t sockNum)
+    {
+        if (data == nullptr) {
+            return;
+        }
+        uint32_t doneNum = 0;
+        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
+            if (doneNum >= sockNum) {
+                return;
+            }
+            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
+                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
+                return;
+            }
+            data->socketId = fd;
+            auto *umqSock = static_cast<UmqSocket *>(sock);
+            auto *rxc = umqSock->GetUmqRxOps()->GetRxStatCounters();
+            if (rxc != nullptr) {
+                memcpy(data->poll_err, const_cast<const uint32_t *>(rxc->poll_err), sizeof(data->poll_err));
+                memcpy(data->cqe_err, const_cast<const uint32_t *>(rxc->cqe_err), sizeof(data->cqe_err));
+                memcpy(data->dataset_err, const_cast<const uint32_t *>(rxc->dataset_err),
+                       sizeof(data->dataset_err));
+            } else {
+                memset(data->poll_err, 0, sizeof(data->poll_err));
+                memset(data->cqe_err, 0, sizeof(data->cqe_err));
+                memset(data->dataset_err, 0, sizeof(data->dataset_err));
+            }
+            data += 1;
+            doneNum += 1;
+        });
+    }
+
     void Poll(void)
     {
         struct epoll_event events[MAX_EPOLL_EVENT_NUM];
@@ -370,28 +433,82 @@ public:
         return true;
     }
 
-    void DealDelayOperation(CLIDelayHeader &delayHeader, std::string &outTracePointStr, CLIControlHeader header)
+    void DealDelayOperation(CLIDelayHeader &delayHeader, std::string &outTracePointStr, CLIControlHeader header,
+                            const std::string &pathPayload = "")
     {
         int ret = UBS_OK;
         switch (header.mType) {
-            case CLITypeParam::TRACE_OP_QUERY:
+            case CLITypeParam::PROF_OP_QUERY:
                 ret = Profiling::Combine(outTracePointStr);
                 delayHeader.tracePointDataSize = outTracePointStr.size();
                 if (ret != UBS_OK) {
                     UBS_VLOG_WARN("Cli request profiling combine is not completed.");
                 }
                 break;
-            case CLITypeParam::TRACE_OP_RESET:
+            case CLITypeParam::PROF_OP_RESET:
                 Profiling::Reset();
                 break;
-            case CLITypeParam::TRACE_OP_ENABLE_TRACE:
+            case CLITypeParam::PROF_OP_ENABLE:
                 ret = Profiling::Init(ProfilingTPId::UBSOCKET_PROF_COUNT, GlobalSetting::UBS_PROF_DUMP_PATH.c_str(),
                                       GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN);
                 if (ret != UBS_OK) {
                     UBS_VLOG_WARN("Profiling is not initialize.");
+                    delayHeader.retCode = -1;
+                } else {
+                    GlobalSetting::UBS_PROF_ENABLE = true;
                 }
-                GlobalSetting::UBS_PROF_ENABLE = true;
                 break;
+            case CLITypeParam::PROF_OP_DISABLE:
+                Profiling::Uninit();
+                GlobalSetting::UBS_PROF_ENABLE = false;
+                break;
+            case CLITypeParam::PROF_OP_INTERVAL: {
+                uint16_t newInterval = static_cast<uint16_t>(header.mValue);
+                /* 范围须与 DumpThread 的 clamp 及环境变量校验规则(1~5)一致；
+                 * 越界直接拒绝，避免写入后被 DumpThread 静默回退默认值造成"不生效" */
+                if (newInterval < 1 || newInterval > 5) {
+                    delayHeader.retCode = -1;
+                    UBS_VLOG_WARN("Invalid prof dump interval: %u, must be 1~5 minutes.", newInterval);
+                    break;
+                }
+                GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN = newInterval;
+                break;
+            }
+            case CLITypeParam::PROF_OP_PATH: {
+                std::string newPath = pathPayload;
+                if (!newPath.empty()) {
+                    std::lock_guard<std::mutex> lock(GlobalSetting::ProfDumpMutex);
+                    GlobalSetting::UBS_PROF_DUMP_PATH = newPath;
+                }
+                break;
+            }
+            case CLITypeParam::PROF_OP_MODE: {
+                std::string newMode = pathPayload;
+                if (newMode != "fast" && newMode != "ext") {
+                    delayHeader.retCode = -1;
+                    UBS_VLOG_WARN("Invalid prof mode: %s, expected 'fast' or 'ext'", newMode.c_str());
+                    break;
+                }
+                if (GlobalSetting::UBS_PROF_MODE == newMode) {
+                    break; // 模式未变化，幂等返回
+                }
+                GlobalSetting::UBS_PROF_MODE = newMode;
+                if (GlobalSetting::UBS_PROF_ENABLE) {
+                    /* 已在运行 → Uninit + 按新模式重新 Init。
+                     * Uninit 先置 ubsocket_prof_enabled=0，切换窗口内打点静默，不会访问已析构的 tracer。 */
+                    Profiling::Uninit();
+                    ret = Profiling::Init(ProfilingTPId::UBSOCKET_PROF_COUNT,
+                                          GlobalSetting::UBS_PROF_DUMP_PATH.c_str(),
+                                          GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN);
+                    if (ret != UBS_OK) {
+                        GlobalSetting::UBS_PROF_ENABLE = false; /* 兜底：re-init 失败等同 disable */
+                        delayHeader.retCode = -1;
+                        UBS_VLOG_WARN("Profiling re-init with mode %s failed.", newMode.c_str());
+                    }
+                }
+                /* 未启用时只更新 GlobalSetting，下次 enable 按新模式生效 */
+                break;
+            }
             case CLITypeParam::INVALID:
             default:
                 delayHeader.retCode = -1;
@@ -402,9 +519,19 @@ public:
 
     void ProcessDelayRequest(int fd, CLIMessage &msg, CLIControlHeader header)
     {
+        std::string pathPayload;
+        if ((header.mType == CLITypeParam::PROF_OP_PATH || header.mType == CLITypeParam::PROF_OP_MODE) &&
+            header.mDataSize > 0 && header.mDataSize <= PATH_MAX) {
+            std::vector<char> pathBuf(header.mDataSize + 1, '\0');
+            if (SocketConnHelper::RecvSocketData(fd, pathBuf.data(), header.mDataSize,
+                                                  LISTENER_SEND_RECV_TIMEOUT_MS) == static_cast<ssize_t>(header.mDataSize)) {
+                pathPayload = std::string(pathBuf.data());
+            }
+        }
+
         CLIDelayHeader delayHeader{};
         std::string outTracePointStr;
-        DealDelayOperation(delayHeader, outTracePointStr, header);
+        DealDelayOperation(delayHeader, outTracePointStr, header, pathPayload);
         uint32_t headerSize = sizeof(CLIDelayHeader);
         uint32_t traceDataSize = outTracePointStr.size();
         uint32_t totalSize = headerSize + traceDataSize;
@@ -423,6 +550,9 @@ public:
         }
         header.Reset();
         header.mDataSize = totalSize;
+        if (delayHeader.retCode != 0) {
+            header.mErrorCode = CLIErrorCode::INTERNAL_ERROR;
+        }
         if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
             sizeof(CLIControlHeader)) {
             UBS_VLOG_ERR("Failed to send CLIControlHeader.");
@@ -581,6 +711,53 @@ public:
         }
     }
 
+    void ProcessProbeControl(int fd, CLIControlHeader &header, bool enable)
+    {
+        if (enable) {
+            GlobalSetting::UBS_PROBE_ENABLED = true;
+            ProbeManager::GetInstance().Start(
+                GlobalSetting::UBS_PROBE_MS, GlobalSetting::UBS_PROBE_BATCH, -1);
+            UBS_VLOG_DEBUG("Probe dynamically enabled (interval=%u ms, batch=%u)\n",
+                           GlobalSetting::UBS_PROBE_MS, GlobalSetting::UBS_PROBE_BATCH);
+        } else {
+            ProbeManager::GetInstance().Stop();
+            GlobalSetting::UBS_PROBE_ENABLED = false;
+            UBS_VLOG_DEBUG("Probe dynamically disabled\n");
+        }
+
+        header.mErrorCode = CLIErrorCode::OK;
+        header.mDataSize = 0;
+        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CLIControlHeader)) {
+            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
+        }
+    }
+
+    void ProcessProbeDumpPath(int fd, CLIControlHeader &header)
+    {
+        std::string pathPayload;
+        if (header.mDataSize > 0 && header.mDataSize <= PATH_MAX) {
+            std::vector<char> pathBuf(header.mDataSize + 1, '\0');
+            if (SocketConnHelper::RecvSocketData(fd, pathBuf.data(), header.mDataSize,
+                                                  LISTENER_SEND_RECV_TIMEOUT_MS) == static_cast<ssize_t>(header.mDataSize)) {
+                pathPayload = std::string(pathBuf.data());
+            }
+        }
+
+        if (!pathPayload.empty()) {
+            std::lock_guard<std::mutex> lock(GlobalSetting::ProbeDumpMutex);
+            GlobalSetting::UBS_PROBE_DUMP_PATH = pathPayload;
+            UBS_VLOG_DEBUG("Probe dump path set to %s\n", pathPayload.c_str());
+        }
+
+        header.mErrorCode = CLIErrorCode::OK;
+        header.mDataSize = 0;
+        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader),
+                                             LISTENER_SEND_RECV_TIMEOUT_MS) != sizeof(CLIControlHeader)) {
+            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
+        }
+    }
+
     void ProcessTopoRequest(int fd, CLIControlHeader &header)
     {
         umq_route_key_t route{};
@@ -648,6 +825,32 @@ public:
         if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
             UBS_VLOG_ERR("Failed to send CLIQbufPoolData\n");
             return;
+        }
+    }
+
+    /* 单次查询全局 qbuf 池统计：直接调用 umq 池级接口（normal + tiny，统计在 umq 侧完成），
+     * 与周期落盘 ubsocket_qbuf.txt 的数据同源 */
+    void ProcessQbufPoolStatsRequest(int fd, CLIControlHeader &header)
+    {
+        CLIQbufPoolStatsData data{};
+        data.retCode = umq_qbuf_pool_info_get(&data.umqQbufPoolStat);
+        if (data.retCode == 0) {
+            data.retCode = umq_tiny_qbuf_pool_info_get(&data.umqQbufPoolStat);
+        }
+        if (data.retCode != 0) {
+            UBS_VLOG_WARN("qbuf pool info get failed, ret: %d\n", data.retCode);
+        }
+
+        header.Reset();
+        header.mDataSize = sizeof(data);
+        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CLIControlHeader)) {
+            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
+            return;
+        }
+
+        if (SocketConnHelper::SendSocketData(fd, &data, sizeof(data), LISTENER_SEND_RECV_TIMEOUT_MS) != sizeof(data)) {
+            UBS_VLOG_ERR("Failed to send CLIQbufPoolStatsData\n");
         }
     }
 
@@ -725,6 +928,52 @@ public:
         }
     }
 
+    void ProcessSplitTraceRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
+    {
+        (void)msg;
+        if (header.mType == CLITypeParam::SPLIT_TRACE_OP_SET_SAMPLE_RATE) {
+            uint32_t rate = static_cast<uint32_t>(header.mValue);
+            if (rate >= 1 && rate <= 1000) {
+                GlobalSetting::UBS_SPLIT_TRACE_SAMPLE_RATE = rate;
+                UBS_VLOG_INFO("SplitTrace sample-rate set to %u via CLI\n", rate);
+            } else {
+                UBS_VLOG_ERR("SplitTrace sample-rate %u out of range (1~1000)\n", rate);
+            }
+        } else if (header.mType == CLITypeParam::SPLIT_TRACE_OP_SET_DRAIN_INTERVAL) {
+            uint32_t interval = static_cast<uint32_t>(header.mValue);
+            if (interval >= 1 && interval <= 10000) {
+                GlobalSetting::UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS = interval;
+                UBS_VLOG_INFO("SplitTrace drain-interval set to %u ms via CLI\n", interval);
+            } else {
+                UBS_VLOG_ERR("SplitTrace drain-interval %u out of range (1~10000)\n", interval);
+            }
+        } else {
+            bool enable = header.GetSwitch(CLISwitchPosition::IS_TRACE_ENABLE);
+            bool wasEnabled = GlobalSetting::UBS_SPLIT_TRACE_ENABLED;
+            GlobalSetting::UBS_SPLIT_TRACE_ENABLED = enable;
+
+            if (enable && !wasEnabled) {
+                if (GlobalTracePool::Instance().LazyInit()) {
+                    SplitTraceDrainThread::Instance().Start();
+                    UBS_VLOG_INFO("SplitTrace enabled via CLI (was disabled)\n");
+                } else {
+                    GlobalSetting::UBS_SPLIT_TRACE_ENABLED = false;
+                    UBS_VLOG_ERR("SplitTrace LazyInit failed, memory allocation error\n");
+                }
+            } else if (!enable && wasEnabled) {
+                SplitTraceDrainThread::Instance().Stop();
+                UBS_VLOG_INFO("SplitTrace disabled via CLI (was enabled)\n");
+            }
+        }
+
+        header.Reset();
+        header.mDataSize = 0;
+        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader),
+                                             LISTENER_SEND_RECV_TIMEOUT_MS) != sizeof(CLIControlHeader)) {
+            UBS_VLOG_ERR("Failed to send SplitTrace CLI response\n");
+        }
+    }
+
     void ProcessUmqRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
     {
         // collect socket count
@@ -758,6 +1007,66 @@ public:
 
         if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
             UBS_VLOG_ERR("Failed to send CLIUmqPerfData\n");
+            return;
+        }
+    }
+
+    void ProcessTxStatRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
+    {
+        uint32_t headerSize = sizeof(CLIDataHeader);
+        uint32_t sockNum = GetSockNum(true);
+        uint32_t sockDataSize = sockNum * sizeof(CLITxStatData);
+        uint32_t totalSize = headerSize + sockDataSize;
+        if (!msg.AllocateIfNeed(totalSize)) {
+            UBS_VLOG_ERR("Failed to alloc response memory\n");
+            return;
+        }
+        msg.ResetBuf();
+        CLIDataHeader CLIheader{};
+        CLIheader.socketNum = sockNum;
+        memcpy(msg.Data(), &CLIheader, headerSize);
+
+        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
+        GetAllTxStatData(reinterpret_cast<CLITxStatData *>(data), sockNum);
+        header.Reset();
+        header.mDataSize = totalSize;
+        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CLIControlHeader)) {
+            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
+            return;
+        }
+        if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
+            UBS_VLOG_ERR("Failed to send CLITxStatData\n");
+            return;
+        }
+    }
+
+    void ProcessRxStatRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
+    {
+        uint32_t headerSize = sizeof(CLIDataHeader);
+        uint32_t sockNum = GetSockNum(true);
+        uint32_t sockDataSize = sockNum * sizeof(CLIRxStatData);
+        uint32_t totalSize = headerSize + sockDataSize;
+        if (!msg.AllocateIfNeed(totalSize)) {
+            UBS_VLOG_ERR("Failed to alloc response memory\n");
+            return;
+        }
+        msg.ResetBuf();
+        CLIDataHeader CLIheader{};
+        CLIheader.socketNum = sockNum;
+        memcpy(msg.Data(), &CLIheader, headerSize);
+
+        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
+        GetAllRxStatData(reinterpret_cast<CLIRxStatData *>(data), sockNum);
+        header.Reset();
+        header.mDataSize = totalSize;
+        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
+            sizeof(CLIControlHeader)) {
+            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
+            return;
+        }
+        if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
+            UBS_VLOG_ERR("Failed to send CLIRxStatData\n");
             return;
         }
     }
@@ -845,7 +1154,23 @@ public:
         } else if (header.mCmdId == CLICommand::UMQ) {
             ProcessUmqRequest(fd, msg, header);
         } else if (header.mCmdId == CLICommand::PROBE) {
-            ProcessProbeRequest(fd, msg, header);
+            if (header.mType == CLITypeParam::PROBE_OP_ENABLE) {
+                ProcessProbeControl(fd, header, true);
+            } else if (header.mType == CLITypeParam::PROBE_OP_DISABLE) {
+                ProcessProbeControl(fd, header, false);
+            } else if (header.mType == CLITypeParam::PROBE_OP_SET_DUMP_PATH) {
+                ProcessProbeDumpPath(fd, header);
+            } else {
+                ProcessProbeRequest(fd, msg, header);
+            }
+        } else if (header.mCmdId == CLICommand::TX_STAT) {
+            ProcessTxStatRequest(fd, msg, header);
+        } else if (header.mCmdId == CLICommand::RX_STAT) {
+            ProcessRxStatRequest(fd, msg, header);
+        } else if (header.mCmdId == CLICommand::SPLIT_TRACE) {
+            ProcessSplitTraceRequest(fd, msg, header);
+        } else if (header.mCmdId == CLICommand::QBUF_POOL_STATS) {
+            ProcessQbufPoolStatsRequest(fd, header);
         }
         return;
     }
@@ -1000,6 +1325,18 @@ private:
     static volatile bool m_running;
     umq_trans_mode_t m_trans_mode;
 };
+
+/* Export StatsMgr + TxStatReporter + RxStatReporter snapshot to a single text file.
+ * Called by PrintStatsMgr::ProcessStats each cycle. Format: timestamp header + three
+ * statistics sections (same as CLI output, plain text, no ANSI codes).
+ * File rotation: same strategy as KPI JSON (overwrite-style, 2 files max). */
+void ExportStatsSnapshot(const std::string &path, uint32_t pid, uint64_t perFileThresholdMB);
+
+/* Export QbufPoolStats (UMQ normal + tiny pool, global pool-level) snapshot to
+ * ubsocket_qbuf.txt. Called by PrintStatsMgr::ExportQbufPoolStatsTick every 30s.
+ * Skips the round (debug log only) when the UMQ normal pool is not initialized yet.
+ * File rotation: same strategy as KPI JSON (overwrite-style, 2 files max). */
+void ExportQbufPoolStats(const std::string &path, uint32_t pid, uint64_t perFileThresholdMB);
 
 }; // namespace Statistics
 

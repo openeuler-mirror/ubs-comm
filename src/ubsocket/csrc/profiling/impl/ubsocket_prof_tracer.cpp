@@ -57,18 +57,27 @@ Result Tracer::Init(const TracerOptions &options) noexcept
 
 void Tracer::UnInit() noexcept
 {
-    std::lock_guard<std::mutex> guard(mutex_);
-    if (!inited_) {
-        UBS_VLOG_DEBUG("Tracer not initialized");
-        return;
+    DumpThreadPtr dump_thread;
+    {
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (!inited_) {
+            UBS_VLOG_DEBUG("Tracer not initialized");
+            return;
+        }
+        // Move the dump thread out under the lock, but do not stop it here.
+        // The dumper thread performs its final DumpData() -> Combine() before
+        // exiting, and Combine() locks mutex_ itself.
+        dump_thread = std::move(dump_thread_);
     }
 
-    if (dump_thread_ != nullptr) {
-        dump_thread_->DumpStop();
-        dump_thread_ = nullptr;
+    if (dump_thread != nullptr) {
+        dump_thread->DumpStop();
     }
 
-    inited_ = false;
+    {
+        std::lock_guard<std::mutex> guard(mutex_);
+        inited_ = false;
+    }
     UBS_VLOG_INFO("Ubsocket tracer uninit success.");
 }
 

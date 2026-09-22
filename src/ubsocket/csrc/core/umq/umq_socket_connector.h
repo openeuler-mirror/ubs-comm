@@ -41,37 +41,28 @@ public:
     };
     UmqConnInfo umq_conn_info_;
 
+    /* 交叉 ack（NEGO_CAP_EARLY_ACK）下客户端的降级共识合成。
+     * 经典路径由服务端把 "客户端可降级失败 && 服务端允许降级" 回声(echo)进应答；
+     * 交叉路径应答不含回声，客户端用协商轮下发的 consent 位本地合成同一结果。
+     * 两者对全部组合逐一等价（见 umq_socket_connector_test.cpp 的 8 组合等价性测试）。 */
+    static bool ClientDegradableVerdict(Result peer_ret, Result ack_ret, bool peer_early_ack, bool peer_degrade_consent)
+    {
+        return IsDegradable(peer_ret) || (peer_early_ack && peer_degrade_consent && IsDegradable(ack_ret));
+    }
+
 private:
     // ======================== 建链辅助方法 ========================
     Result BuildNegotiateReq(NegotiateReq *req, const UmqSocketPtr &umq_socket);
     Result BuildNegotiateReqBuffer(uint8_t *buf, const UmqSocketPtr &umq_socket, int &buf_len);
     Result ConnectNegotiate(const UmqSocketPtr &umq_socket);
-    Result ConnectExchangeSocketIDs(void);
-    Result GetDevRouteList(const umq_eid_t *src_eid, const umq_eid_t *dst_eid, umq_route_list_t &filtered_list);
-    Result DoRoute(const umq_eid_t *src_eid, const umq_eid_t *dst_eid);
-    Result DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_ports_t &used_ports);
+    Result DoUbConnect(const UmqSocketPtr &umq_socket, umq_used_ports_t &used_ports, bool umq_precreated = false);
     Result DoUbConnectRetry(SocketPtr socketPtr, Result &ack_ret, Result &peer_ret);
-    Result CheckOtherRoute(const UmqSocketPtr &umq_socket);
-    Result CheckOtherRouteForClos(const UmqSocketPtr &umq_socket);
     Result CheckRouteDevAddForConnect(const umq_eid_t &conn_eid, const UmqSocketPtr &umq_socket);
+    void TryPrecreateLocalUmq(const UmqSocketPtr &umq_socket);
+    void DiscardPrecreatedUmq(const UmqSocketPtr &umq_socket);
 
-    Result GetRoundRobinConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid);
-    void GetBondingEidMapIndex(const umq_eid_t &dst_eid, uint32_t &index);
     uint32_t GetTargetChipId(const std::vector<uint32_t> &socket_ids, const std::vector<uint32_t> &chip_id_list,
                              int processSocketId);
-    Result GetConnEid(umq_route_list_t &route_list, const umq_eid_t *dst_eid);
-    // 从所有路由中RR轮询选取主路由和备路由组（一主三备，不区分亲和/不亲和）
-    // all_routes: 所有可用路由（亲和组 + 不亲和组合并）
-    // dst_eid: 对端EID，用于轮询索引
-    // conn_main_route: 输出参数，选出的主路由
-    // conn_back_routes: 输出参数，选出的备路由组（最多3条）
-    void RRChooseMainRoute(std::vector<umq_route_t> &all_routes, uint32_t main_route_size, const umq_eid_t *dst_eid,
-                           umq_route_t &conn_main_route, std::vector<umq_route_t> &conn_back_routes);
-    // 获取CPU亲和性路由
-    // affine_routes: 输出参数，亲和组路由（src/dst 均为本端芯片）
-    // non_aff_routes: 输出参数，非亲和组路由（src/dst 为异芯片）
-    Result GetCpuAffinityUmqRoute(umq_route_list_t &route_list, std::vector<umq_route_t> &affine_routes,
-                                  std::vector<umq_route_t> &non_aff_routes);
     Result ConnectViaHandshakeOpt(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     Result ConnectViaTfo(const SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     void PrintSocketsInfo();
@@ -80,16 +71,28 @@ private:
     bool use_round_robin_ = true;
     int peer_socket_id_ = -1;                   // 对端socket id
     std::vector<uint32_t> peer_all_socket_ids_; // 对端所有socket id
-    umq_route_t conn_route_;
-    // TODO: 主备切换逻辑待优化
-    std::vector<umq_route_t> back_routes_;        // 备路由组，最多3条（一主三备）
-    std::vector<umq_route_t> non_aff_route_list_; // 非亲和路由列表，用于容灾重试
     umq_topo_type_t topo_type_ = UMQ_TOPO_TYPE_FULLMESH_1D;
     // retry & degrade
     bool degradable_ = false;
+    // 协商等待期预建本地 umq（见 TryPrecreateLocalUmq；仅首轮 kSTART 消费）
+    bool precreate_done_ = false;
+    // 交叉 ack 能力（协商轮从 NegotiateRsp.reserved[0] 解析）
+    bool peer_early_ack_ = false;
+    // 方案A'：NegotiateRsp 尾部携带的服务端 bind_info（len==0 = 未携带/回退经典 CpMsg 轮）
+    uint64_t peer_bind_info_len_ = 0;
+    uint8_t peer_bind_info_[UMQ_BIND_INFO_SIZE_MAX] = {};
+    /* 方案B：发起连接前预建 umq 并暂存本端 bind_info（挂 NegotiateReq 尾部）。
+     * len==0 表示本轮不携带（预建失败/开关关/BONDING_ROUTE）。 */
+    uint64_t local_bind_info_len_ = 0;
+    uint8_t local_bind_info_[UMQ_BIND_INFO_SIZE_MAX] = {};
+    /* 方案B：服务端确认消费了请求携带的 bind_info ⇒ 应答已含其 bind 结果（腿⑥），
+     * ack 轮免收；一次性消费，重试轮回退经典。 */
+    bool peer_req_carry_consumed_ = false;
+    Result peer_carried_ack_ = UBS_OK;
+    /* 并行 bind：服务端确认推迟 ⇒ 应答不含 bind 结果，末尾 ack 轮照收腿⑥（一次性消费） */
+    bool peer_ack_deferred_ = false;
+    bool peer_degrade_consent_ = false;
     OtherRouteMessage other_route_message_;
-    umq_route_t other_conn_route;
-    umq_route_t other_back_conn_route;
     UBHandshakeState retry_state_ = UBHandshakeState::kSTART;
 };
 using UmqConnectorOpsPtr = Ref<UmqConnectorOps>;

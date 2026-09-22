@@ -12,6 +12,7 @@
 
 namespace ock {
 namespace ubs {
+
 const std::string &SocketStateToStr(SocketState value)
 {
     static std::string strings[SOCK_STATE_COUNT + 1L] = {
@@ -29,7 +30,7 @@ const std::string &SocketTypeToStr(SocketType value)
         return strings[static_cast<uint8_t>(value)];
     }
 
-    return strings[static_cast<uint8_t>(value)];
+    return strings[static_cast<uint8_t>(SocketType::SOCK_TYPE_COUNT)];
 }
 
 const std::string &SocketCreateTypeToStr(SocketCreateType value)
@@ -39,7 +40,7 @@ const std::string &SocketCreateTypeToStr(SocketCreateType value)
         return strings[value];
     }
 
-    return strings[value];
+    return strings[SOCK_CREATE_TYPE_COUNT];
 }
 
 bool SocketStateValid(SocketState value)

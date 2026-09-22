@@ -128,3 +128,84 @@ TEST_F(ExecutorServiceTest, Runnable_NullTaskDoesNotCrash)
     r.Run();
     SUCCEED();
 }
+
+// ==================== ExecutorService: edge cases ====================
+
+TEST_F(ExecutorServiceTest, Execute_NotStarted_ReturnsFalse)
+{
+    ExecutorService svc;
+    EXPECT_FALSE(svc.Execute([]() {}));
+}
+
+TEST_F(ExecutorServiceTest, Start_AlreadyStarted_ReturnsTrue)
+{
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+    ExecutorService svc;
+    ASSERT_TRUE(svc.Start(64));
+    EXPECT_TRUE(svc.Start(64)); // already started, should return true
+    svc.Stop();
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+}
+
+TEST_F(ExecutorServiceTest, Start_ZeroThreadNum_ReturnsFalse)
+{
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 0;
+    ExecutorService svc;
+    EXPECT_FALSE(svc.Start(64));
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+}
+
+TEST_F(ExecutorServiceTest, Destructor_NotStopped_CallsStop)
+{
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+    {
+        ExecutorService svc;
+        ASSERT_TRUE(svc.Start(64));
+        // Destructor should call Stop() since stopped_ is false
+    }
+    // If we reach here, no crash/deadlock
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+}
+
+TEST_F(ExecutorServiceTest, DoRunnable_ThrowingTask_NoCrash)
+{
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+    ExecutorService svc;
+    ASSERT_TRUE(svc.Start(64));
+    std::atomic<bool> done{false};
+    // Task that throws runtime_error
+    svc.Execute([&done]() {
+        throw std::runtime_error("test error");
+    });
+    // Task that throws unknown exception
+    svc.Execute([&done]() {
+        throw 42;
+    });
+    // Normal task to verify pool still works
+    svc.Execute([&done]() {
+        done.store(true);
+    });
+    // Wait for normal task
+    for (int i = 0; i < 1000 && !done.load(); i++) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    EXPECT_TRUE(done.load());
+    svc.Stop();
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+}
+
+TEST_F(ExecutorServiceTest, Stop_NotStarted_NoOp)
+{
+    ExecutorService svc;
+    svc.Stop(); // should not crash
+}
+
+TEST_F(ExecutorServiceTest, Stop_AlreadyStopped_NoOp)
+{
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+    ExecutorService svc;
+    ASSERT_TRUE(svc.Start(64));
+    svc.Stop();
+    svc.Stop(); // already stopped, should be no-op
+    GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+}

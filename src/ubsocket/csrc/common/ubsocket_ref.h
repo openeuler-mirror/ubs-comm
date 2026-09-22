@@ -105,6 +105,10 @@ public:
         }
     }
 
+    struct adopt_ref_t {};
+    static constexpr adopt_ref_t adopt_ref{};
+    Ref(T *newObj, adopt_ref_t) noexcept : mObj(newObj) {}
+
     Ref(const Ref<T> &other) noexcept
     {
         /*
@@ -208,6 +212,9 @@ public:
 private:
     T *mObj = nullptr;
 };
+
+template <typename T>
+constexpr typename Ref<T>::adopt_ref_t Ref<T>::adopt_ref;
 
 template <typename C, typename... ARGS>
 inline Ref<C> MakeRef(ARGS... args)

@@ -13,15 +13,20 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <dirent.h>
 #include <unistd.h>
+#include <algorithm>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_global_setting.h"
 
 namespace ock {
 namespace ubs {
@@ -30,17 +35,20 @@ namespace profiling {
 constexpr const char *DEFAULT_DUMP_PATH = "/tmp/ubsocket/profiling";
 constexpr const char *DUMP_FILE_PREFIX = "/ubsocket_profiling_";
 constexpr const char *DUMP_FILE_SUFFIX = ".log";
+constexpr const char *DUMP_ARCHIVE_SUFFIX = ".gz";
 constexpr uint16_t INTERVAL_DEFAULT_MIN = 1;
 constexpr uint16_t INTERVAL_MIN_MIN = 1;
 constexpr uint16_t INTERVAL_MAX_MIN = 5;
 constexpr int COL_WIDTH_MIN = 20;
-constexpr int COL_WIDTH_MAX = 30;
+constexpr int COL_WIDTH_MAX = 45;
 constexpr int SLEEP_CHUNK_MS = 10;
 constexpr int UT_SLEEP_DURATION_MS = 10;
+constexpr int64_t DUMP_FILE_MAX_SIZE = 10 * 1024 * 1024; /* 10 MB */
+constexpr int DUMP_MAX_ARCHIVES = 3;
 
 class DumpThread : public Referable {
 public:
-    DumpThread() : interval_min_(INTERVAL_DEFAULT_MIN), running_(false) {}
+    DumpThread() : running_(false) {}
 
     ~DumpThread()
     {
@@ -50,28 +58,20 @@ public:
     DumpThread(const DumpThread &) = delete;
     DumpThread &operator=(const DumpThread &) = delete;
 
-    // start dump thread
+    // start dump thread (filePath and intervalMin are unused; DumpThread reads from GlobalSetting at runtime)
     void DumpStart(const std::string &filePath, int intervalMin)
     {
+        (void)filePath;
+        (void)intervalMin;
         std::lock_guard<std::mutex> lock(start_mutex_);
         if (running_) {
             return;
-        }
-
-        interval_min_ = intervalMin;
-        if (interval_min_ < INTERVAL_MIN_MIN || interval_min_ > INTERVAL_MAX_MIN) {
-            interval_min_ = INTERVAL_DEFAULT_MIN;
-        }
-        file_path_ = filePath;
-        if (file_path_.empty()) {
-            file_path_ = DEFAULT_DUMP_PATH;
         }
 
         running_ = true;
         dump_thread_ = std::thread(&DumpThread::DumpLoop, this);
     }
 
-    // stop dump thread
     void DumpStop()
     {
         std::lock_guard<std::mutex> lock(start_mutex_);
@@ -111,6 +111,10 @@ private:
             }
             DumpData();
         }
+
+        // Final drain before exit: guarantee the last batch of samples is
+        // flushed to disk.
+        DumpData();
     }
 
     std::chrono::milliseconds GetSleepDuration() const
@@ -118,7 +122,11 @@ private:
 #ifdef UBSOCKET_UNIT_TEST
         return std::chrono::milliseconds(UT_SLEEP_DURATION_MS);
 #else
-        return std::chrono::minutes(interval_min_);
+        uint16_t interval = GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN;
+        if (interval < INTERVAL_MIN_MIN || interval > INTERVAL_MAX_MIN) {
+            interval = INTERVAL_DEFAULT_MIN;
+        }
+        return std::chrono::minutes(interval);
 #endif
     }
 
@@ -183,13 +191,32 @@ private:
 
     int WriteDumpData(std::ostringstream &oss)
     {
-        if (CreateDirectory(file_path_) != 0) {
+        std::string currentPath;
+        {
+            std::lock_guard<std::mutex> lock(GlobalSetting::ProfDumpMutex);
+            currentPath = GlobalSetting::UBS_PROF_DUMP_PATH;
+        }
+        if (currentPath.empty()) {
+            currentPath = DEFAULT_DUMP_PATH;
+        }
+
+        /* detect path change: close current file and reset state */
+        if (currentPath != last_file_path_) {
+            if (dump_file_.is_open()) {
+                dump_file_.close();
+            }
+            file_name_.clear();
+            dir_created_ = false;
+            last_file_path_ = currentPath;
+        }
+
+        if (CreateDirectory(currentPath) != 0) {
             return -1;
         }
 
         if (file_name_.empty()) {
             std::ostringstream ossFileName;
-            ossFileName << file_path_ << DUMP_FILE_PREFIX << getpid() << DUMP_FILE_SUFFIX;
+            ossFileName << currentPath << DUMP_FILE_PREFIX << getpid() << DUMP_FILE_SUFFIX;
             file_name_ = ossFileName.str();
         }
 
@@ -208,15 +235,109 @@ private:
             dump_file_ << oss.str() << std::endl;
             dump_file_.flush();
         }
+
+        RotateDumpFile();
         return 0;
     }
 
+    /* Compress file at filePath to filePath.gz via gzip.
+     * Returns true on success, false on compress failure or gzip not found.
+     * On success the original file is removed by gzip (gzip replaces in-place). */
+    bool CompressFile(const std::string &filePath)
+    {
+        pid_t pid = fork();
+        if (pid < 0) {
+            UBS_VLOG_WARN("fork failed for compress, errno: %d.\n", errno);
+            return false;
+        }
+        if (pid == 0) {
+            /* child */
+            execlp("gzip", "gzip", "-f", filePath.c_str(), nullptr);
+            /* exec failed */
+            _exit(127);
+        }
+        /* parent */
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0) {
+            UBS_VLOG_WARN("waitpid failed for compress, errno: %d.\n", errno);
+            return false;
+        }
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            return true;
+        }
+        UBS_VLOG_WARN("gzip compress failed for %s, status: %d.\n", filePath.c_str(), status);
+        return false;
+    }
+
+    /* Rotate the dump file when it exceeds DUMP_FILE_MAX_SIZE.
+     * Closes the current file, compresses it to .gz, deletes oldest archives
+     * beyond DUMP_MAX_ARCHIVES, and resets file_name_ so a new file is opened
+     * on the next WriteDumpData call. */
+    void RotateDumpFile()
+    {
+        struct stat st;
+        if (stat(file_name_.c_str(), &st) != 0) {
+            return;
+        }
+        if (st.st_size < DUMP_FILE_MAX_SIZE) {
+            return;
+        }
+
+        /* close current file */
+        if (dump_file_.is_open()) {
+            dump_file_.close();
+        }
+
+        /* compress the rotated file; on failure remove it manually so
+         * subsequent dumps can start fresh */
+        if (!CompressFile(file_name_)) {
+            unlink(file_name_.c_str());
+        }
+
+        /* prune oldest .gz archives: keep at most DUMP_MAX_ARCHIVES */
+        std::string archivePattern = DUMP_FILE_PREFIX + std::to_string(getpid()) + DUMP_FILE_SUFFIX;
+        std::vector<std::string> archives;
+        DIR *dir = opendir(last_file_path_.c_str());
+        if (dir != nullptr) {
+            struct dirent *entry = nullptr;
+            while ((entry = readdir(dir)) != nullptr) {
+                std::string name(entry->d_name);
+                if (name.find(archivePattern) != std::string::npos &&
+                    name.size() > archivePattern.size() &&
+                    name.substr(archivePattern.size()) == DUMP_ARCHIVE_SUFFIX) {
+                    archives.push_back(last_file_path_ + "/" + name);
+                }
+            }
+            closedir(dir);
+        }
+
+        /* sort by modification time ascending (oldest first) */
+        std::sort(archives.begin(), archives.end(), [](const std::string &a, const std::string &b) {
+            struct stat sa, sb;
+            if (stat(a.c_str(), &sa) != 0) {
+                return true;
+            }
+            if (stat(b.c_str(), &sb) != 0) {
+                return false;
+            }
+            return sa.st_mtime < sb.st_mtime;
+        });
+
+        /* remove oldest archives beyond the limit */
+        while (static_cast<int>(archives.size()) > DUMP_MAX_ARCHIVES) {
+            unlink(archives.front().c_str());
+            archives.erase(archives.begin());
+        }
+
+        /* reset file_name_ so next WriteDumpData opens a fresh .log */
+        file_name_.clear();
+    }
+
 private:
-    std::string file_path_;
+    std::string last_file_path_;
     bool dir_created_ = false;
     std::string file_name_;
     std::ofstream dump_file_;
-    uint16_t interval_min_ = INTERVAL_DEFAULT_MIN;
     std::atomic<bool> running_{false};
     std::thread dump_thread_;
     std::mutex start_mutex_;

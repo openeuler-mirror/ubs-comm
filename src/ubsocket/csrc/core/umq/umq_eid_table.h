@@ -190,6 +190,18 @@ public:
         table.clear();
     }
 
+    std::vector<uint64_t> GetAllUmqHandles()
+    {
+        Locker sLock(mutex);
+        std::unordered_set<uint64_t> unique_handles;
+        for (const auto &pair : table) {
+            for (const auto &state : pair.second) {
+                unique_handles.insert(state->GetUmqHandle());
+            }
+        }
+        return std::vector<uint64_t>(unique_handles.begin(), unique_handles.end());
+    }
+
     u_mutex_t *GetMainMutex()
     {
         return main_mutex;

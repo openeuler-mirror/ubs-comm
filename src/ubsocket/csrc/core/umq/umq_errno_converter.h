@@ -148,7 +148,7 @@ private:
     static constexpr std::size_t maxBufStatusMappings = 24;
 
     // 统一errno映射表（原Connect/Accept与Writev/Readv映射表完全一致，合并为单表）
-    static constexpr inline std::array<UmqErrnoMapping, 15> kCommonErrnoMappings{{
+    static constexpr inline std::array<UmqErrnoMapping, 17> kCommonErrnoMappings{{
         {UMQ_SUCCESS, 0, "Success"},
         {UMQ_ERR_EPERM, EIO, "Unrecoverable error: device unavailable, invalid parameter, driver/hardware error"},
         {UMQ_ERR_EAGAIN, EAGAIN, "Resource temporarily unavailable"},
@@ -164,6 +164,8 @@ private:
         {UMQ_ERR_EINPROGRESS, EINPROGRESS, "Operation now in progress"},
         {UMQ_ERR_ETSEG_NON_IMPORTED, EIO, "Cannot assign requested address"},
         {UMQ_ERR_EFLOWCTL, EIO, "Flow control error"},
+        {UMQ_ERR_EFLOWCTL_FATAL, EIO, "Fatal flow control error"},
+        {UMQ_ERR_EFLOWCTL_EAGAIN, EIO, "Flow control error, try again"},
     }};
 
     // Connect/Accept的Buf状态映射表，一般是回调抛出的内部驱动/硬件错误，所有错误统一映射为EIO
@@ -188,7 +190,7 @@ private:
     }};
 
     // Writev的Buf状态映射表，一般是回调抛出的内部驱动/硬件错误，所有错误统一映射为EIO
-    static constexpr inline std::array<UmqBufStatusMapping, 24> kWritevBufStatusMappings{{
+    static constexpr inline std::array<UmqBufStatusMapping, 25> kWritevBufStatusMappings{{
         {UMQ_BUF_SUCCESS, 0, "Buffer operation success"},
         {UMQ_BUF_UNSUPPORTED_OPCODE_ERR, EIO, "Protocol not supported"},
         {UMQ_BUF_LOC_LEN_ERR, EIO, "Message too long"},
@@ -213,10 +215,11 @@ private:
         {UMQ_IMPORT_TSEG_FAILED, EIO, "Import TSEG failed"},
         {UMQ_FAKE_BUF_FC_UPDATE, 0, "Fake buffer flow control update success"},
         {UMQ_FAKE_BUF_FC_ERR, EIO, "Fake buffer flow control error"},
+        {UMQ_FAKE_BUF_FC_ERR_FATAL, EIO, "Fake buffer flow control fatal error"},
     }};
 
     // Readv的Buf状态映射表，一般是回调抛出的内部驱动/硬件错误，所有错误统一映射为EIO
-    static constexpr inline std::array<UmqBufStatusMapping, 24> kReadvBufStatusMappings{{
+    static constexpr inline std::array<UmqBufStatusMapping, 25> kReadvBufStatusMappings{{
         {UMQ_BUF_SUCCESS, 0, "Buffer operation success"},
         {UMQ_BUF_UNSUPPORTED_OPCODE_ERR, EIO, "Protocol not supported"},
         {UMQ_BUF_LOC_LEN_ERR, EIO, "Message too long"},
@@ -241,6 +244,7 @@ private:
         {UMQ_IMPORT_TSEG_FAILED, EIO, "Import TSEG failed"},
         {UMQ_FAKE_BUF_FC_UPDATE, 0, "Fake buffer flow control update success"},
         {UMQ_FAKE_BUF_FC_ERR, EIO, "Fake buffer flow control error"},
+        {UMQ_FAKE_BUF_FC_ERR_FATAL, EIO, "Fake buffer flow control fatal error"},
     }};
 
     template <typename Mapping, std::size_t N>

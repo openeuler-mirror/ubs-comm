@@ -1,9 +1,10 @@
 .vscode/
 .DS_Store
 **/build/
-!./build/
+out/
 dist/
 tmp_build_dir/
+build_qbuf_tool/
 compile_commands.json
 bazel-bin
 bazel-out

@@ -33,11 +33,12 @@ public:
     static int SetBlocking(int fd);
     static int SetNonBlocking(int fd);
 
-    /**
-     * Send data and recv data with in timeout period
-     */
+    // 在 timeout_ms 时间内发送 size 字节，返回值为实际发送字节数。在返回值小于 size 时会设置 errno.
     static ssize_t SendSocketData(int fd, const void *buf, size_t size, uint32_t timeout_ms);
+
+    // 在 timeout_ms 时间内读取 size 字节，返回值为实际读取字节数。在返回值小于 size 时会设置 errno.
     static ssize_t RecvSocketData(int fd, const void *buf, size_t size, uint32_t timeout_ms);
+
     static void FlushSocketMsg(int fd);
 
     static bool IsUbsConnection(const int &fd);
@@ -54,6 +55,8 @@ public:
     static Result RecvLengthPrefixed(int fd, void *body, uint32_t obj_size, uint32_t timeout_ms);
 
     static std::string ExtractIpFromSockAddr(const struct sockaddr *address);
+    /* 零分配版本：直接 inet_ntop 写入调用方缓冲（建议容量 INET6_ADDRSTRLEN） */
+    static void ExtractIpFromSockAddr(const struct sockaddr *address, char *buf, size_t buf_len);
     static uint16_t ExtractPortFromSockAddr(const struct sockaddr *address);
     static int GetCurrentProcessSocketId();
     // 获取所有 Socket ID

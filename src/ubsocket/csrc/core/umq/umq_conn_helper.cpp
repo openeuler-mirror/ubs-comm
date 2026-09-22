@@ -12,6 +12,7 @@
 #include "core/ubsocket_event_epoll.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "umq_errno_converter.h"
+#include "umq_qbuf_list.h"
 #include "umq_share_jfr_epoll_runner_ops.h"
 
 namespace ock {
@@ -54,13 +55,23 @@ Result UmqConnHelper::PrefillRx(uint64_t umq_handle)
     }
 
     uint32_t cur_post_rx_num = 0;
-    umq_alloc_option_t option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE, sizeof(Block)};
+    umq_alloc_option_t option = {UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE | UMQ_ALLOC_FLAG_POOL_TYPE, sizeof(Block),
+                                 UMQ_ALLOC_POOL_RX};
     do {
         cur_post_rx_num = left_post_rx_num > UmqSetting::UMQ_POST_BATCH_MAX ? UmqSetting::UMQ_POST_BATCH_MAX :
                                                                               left_post_rx_num;
         PROF_START(UMQ_BUF_ALLOC);
-        umq_buf_t *rx_buf_list =
-            UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSize(), cur_post_rx_num, UMQ_INVALID_HANDLE, &option);
+        uint32_t sc_counts[UMQ_SIZE_CLASS_MAX] = {0};
+        sc_counts[0] = cur_post_rx_num;
+        UBS_VLOG_DEBUG("[RX_PREFILL] PrefillRx: total=%u, sc0_count=%u (only 4K SC)\n", cur_post_rx_num, sc_counts[0]);
+        umq_buf_t *sc_lists[UMQ_SIZE_CLASS_MAX] = {nullptr};
+        for (uint32_t sc = 0; sc < UmqSetting::GetSizeClassCount(); sc++) {
+            if (sc_counts[sc] > 0) {
+                sc_lists[sc] = UmqApi::umq_buf_alloc(UmqSetting::GetIOBufSizeByClass(sc), sc_counts[sc],
+                                                     UMQ_INVALID_HANDLE, &option);
+            }
+        }
+        umq_buf_t *rx_buf_list = UmqSetting::MergeBufLists(sc_lists, sc_counts, UMQ_SIZE_CLASS_MAX);
         if (rx_buf_list == nullptr) {
             PROF_END(UMQ_BUF_ALLOC, false);
             int rx_window_capacity = 0;

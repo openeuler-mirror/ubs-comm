@@ -6,7 +6,7 @@
 #ifndef UBSOCKET_WAKEUP_EVENT_H
 #define UBSOCKET_WAKEUP_EVENT_H
 
-#include <queue>
+#include <functional>
 #include <unordered_map>
 #include "ubsocket_core_types.h"
 #include "ubsocket_event_epoll.h"
@@ -88,10 +88,10 @@ public:
     }
 
 private:
+    /* 原 ready_event_queue_/ready_event_mutex_ 为死代码（无任何写入者），且 std::queue
+     * 底层 deque 默认构造即预分配 512B 块 —— 每个 socket 白付 0.5KB，已删除 */
     int epollFd_ = -1;
     int readyEventFd_ = -1;
-    std::queue<int> ready_event_queue_;
-    u_mutex_t *ready_event_mutex_ = nullptr;
     EpollEvent ready_event_ = {EPOLL_EVENT_UB_SOCKET_IN, -1, {}};
     int listen_fd_ = -1;                      // listen fd for injecting EPOLLIN after wakeup
     std::function<void()> accept_callback_{}; // callback to trigger Accept() again

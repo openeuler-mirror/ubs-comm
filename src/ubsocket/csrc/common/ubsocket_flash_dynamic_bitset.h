@@ -144,12 +144,8 @@ ALWAYS_INLINE FlashDynamicBitSet::FlashDynamicBitSet(uint32_t capacity) noexcept
       capacity_{capacity},
       trueCount_{0}
 {
-    UBS_SLOG_DEBUG("chunkCount: " << chunkCount_ << ", capacity: " << capacity_);
     data_.resize(chunkCount_);
     bitChunks_ = data_.data();
-    UBS_SLOG_DEBUG("DynamicBitset initialized, this: " << std::hex << this << ", bitChunks: " << bitChunks_ << std::dec
-                                                       << ", capacity: " << capacity_ << ", chunkCount: " << chunkCount_
-                                                       << ", trueCount: " << trueCount_);
 }
 
 inline FlashDynamicBitSet::FlashDynamicBitSet(uintptr_t memAddress, uint32_t capacity, bool clearBits) noexcept

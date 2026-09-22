@@ -4,7 +4,7 @@ namespace ock {
 namespace ubs {
 namespace profiling {
 constexpr int COL_WIDTH_MIN = 20;
-constexpr int COL_WIDTH_MAX = 30;
+constexpr int COL_WIDTH_MAX = 45;
 
 int TraceCombiner::CombinerTracePoint(Tracepoint &outTracePoint, const Tracepoint &pointB)
 {
@@ -36,31 +36,22 @@ void TraceCombiner::OutputTraceGroup(std::ostringstream &oss, const TraceGroupPt
 int TraceCombiner::OutputTraceGroupCli(char **out_buf, const TraceGroupPtr &allTraceGroup)
 {
     std::ostringstream oss;
-    for (size_t i = 0; i < allTraceGroup->points_.size(); i++) {
-        OutputTracePointCli(oss, allTraceGroup->points_[i]);
-    }
+    OutputTraceGroup(oss, allTraceGroup);
     std::string out_str = oss.str();
     size_t data_len = out_str.size();
-    char *buf = (char *)malloc(data_len);
+    char *buf = (char *)malloc(data_len + 1);
     if (!buf) {
         return -1;
     }
     memcpy(buf, out_str.c_str(), data_len);
+    buf[data_len] = '\0';
     *out_buf = buf;
-    return data_len;
+    return static_cast<int>(data_len);
 }
 
 void TraceCombiner::OutputTracePointCli(std::ostringstream &oss, const Tracepoint &totalTracePoint)
 {
-    if (!totalTracePoint.has_name) {
-        return;
-    }
-    oss << ("[" + std::string(totalTracePoint.GetName()) + "]") << "," << totalTracePoint.data.success_count << ","
-        << totalTracePoint.data.failure_count << "," << totalTracePoint.data.total_time << ","
-        << (totalTracePoint.data.success_count ? totalTracePoint.data.total_time / totalTracePoint.data.success_count :
-                                                 0)
-        << "," << totalTracePoint.data.max_time << ","
-        << (totalTracePoint.data.success_count ? totalTracePoint.data.min_time : 0) << ";";
+    OutputTracePointStats(oss, totalTracePoint);
 }
 
 void TraceCombiner::OutputTracePointStats(std::ostringstream &oss, const Tracepoint &totalTracePoint)

@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 
 #ifdef __cplusplus
@@ -66,9 +67,46 @@ typedef struct {
 
 typedef void (*u_poller_event_cb_t)(void *arg);
 
+/*
+ * callback to process one epoll event polled by the external direct poller.
+ * return 0 to continue polling; return 1 when a STOP event is received and
+ * the external poller should exit its poll loop.
+ */
+typedef int (*u_poller_process_event_cb_t)(void *arg, const struct epoll_event *event);
+
+/*
+ * direct dispatch mode: deliver one socket's ready event (epoll_data is the
+ * value registered by the external epoll_ctl caller, events is EPOLLIN /
+ * EPOLLOUT) straight to the external poller for in-place handling, instead
+ * of queueing it and waking the external epoll_wait via the readable eventfd.
+ */
+typedef void (*u_poller_dispatch_event_cb_t)(uint64_t epoll_data, uint32_t events);
+
 typedef struct {
     int (*add_consumer)(int fd, void *arg, u_poller_event_cb_t callback, void **consumer);
     void (*remove_consumer)(void *consumer, int fd);
+    /*
+     * direct poller mode: the external poller does blocking epoll_wait on
+     * epoll_fd directly and invokes process_cb for each polled event, instead
+     * of nesting epoll_fd into another epoll and draining via callback.
+     */
+    int (*add_direct_poller)(int epoll_fd, void *arg, u_poller_process_event_cb_t process_cb, void **poller);
+    void (*remove_direct_poller)(void *poller, int epoll_fd);
+    /* optional, see u_poller_dispatch_event_cb_t; NULL falls back to the readable eventfd path */
+    u_poller_dispatch_event_cb_t dispatch_event;
+    /*
+     * optional; when the external poller defers handler wakeups inside
+     * dispatch_event (enqueue without signaling), this is invoked after a
+     * batch of dispatch_event calls to wake up all queued handlers at once.
+     */
+    void (*dispatch_flush)();
+    /*
+     * Optional host-provided cooperative yield. It may be called from a
+     * poller loop or synchronous teardown, on either a worker fiber or a
+     * regular pthread, and must not depend on poller-local state. NULL falls
+     * back to sched_yield (dedicated-pthread semantics).
+     */
+    void (*poller_yield)();
 } u_external_poller_ops_t;
 
 /*
@@ -99,6 +137,7 @@ enum class UbsocketLevel : int
 enum class UbSocketOpt : int
 {
     UBS_OPT_PROTOCOL = 1,
+    UBS_OPT_RPC_TIMEOUT_MS = 2, /* design §4.2: set connection-level RPC timeout (uint32, ms) */
 };
 
 #define UB_API_WRAP(FUNC) ubsocket_##FUNC

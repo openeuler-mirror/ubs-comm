@@ -11,29 +11,29 @@
 #include "ubsocket_data_tx.h"
 #include "profiling/ubsocket_prof.h"
 #include "ubsocket_socket.h"
+#include "core/umq/umq_socket.h"
 
 namespace ock {
 namespace ubs {
-DataTx::DataTx(const SocketPtr &sock, DataTxOps *ops) : fd_(sock->raw_socket_), event_fd_(sock->event_fd_), tx_ops_(ops)
+DataTx::DataTx(const SocketPtr &sock, DataTxOps *ops) : tx_ops_(ops)
 {
     /* caller must make sure ops is not null */
+    (void)sock;
 }
 
 ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt)
 {
-    auto *trace = sock->split_trace_;
-    TRACE_ADD_WRITE_SIMPLE(trace, CORE_WRITE, fd_);
+    auto ts_entry_start = ubsocket_get_timeNs_compile();
     PROF_START(CORE_WRITE);
     if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
-        ssize_t size = LibcApi::writev(fd_, iov, iovcnt);
+        ssize_t size = LibcApi::writev(sock->raw_socket_, iov, iovcnt);
         PROF_END(CORE_WRITE, size >= 0);
-        TRACE_TRY_SWAP(trace);
         return size;
     }
 
     if (iov == nullptr || iovcnt == 0) {
         errno = EINVAL;
-        UBS_VLOG_ERR("WriteV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+        UBS_VLOG_ERR("WriteV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", sock->raw_socket_, -1, errno,
                      Func::Error2Str(errno));
         PROF_END(CORE_WRITE, false);
         return UBS_ERROR;
@@ -41,29 +41,41 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
 
     if (sock->State() == SOCK_STAT_CLOSE) {
         errno = EPIPE;
-        UBS_VLOG_ERR("WriteV socket is closed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+        UBS_VLOG_ERR("WriteV socket is closed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", sock->raw_socket_, -1, errno,
                      Func::Error2Str(errno));
         PROF_END(CORE_WRITE, false);
         return UBS_ERROR;
     }
 
     if (!tx_ops_->Writable(sock)) {
+        if (RefConvert<Socket, SocketBase>(sock)->FatalIfWriteBlocked()) {
+            UBS_VLOG_WARN("RNR backpressure fatal timeout, fd: %d, disconnecting\n", sock->raw_socket_);
+            LibcApi::shutdown(sock->raw_socket_, SHUT_RD);
+            sock->State(SOCK_STAT_CLOSE);
+            errno = EPIPE;
+            PROF_END(CORE_WRITE, false);
+            return -1;
+        }
         errno = EAGAIN;
-        UBS_VLOG_DEBUG("WriteV socket is not writable, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,
+        UBS_VLOG_DEBUG("WriteV socket is not writable, fd: %d, ret: %d, errno: %d, errmsg: %s\n", sock->raw_socket_, -1, errno,
                        Func::Error2Str(errno));
         PROF_END(CORE_WRITE, false);
         return -1;
     }
 
+    auto ts_entry_end = ubsocket_get_timeNs_compile();
+
     PROF_START(CORE_WRITE_POST_SEND);
 
     PROF_START(CORE_WRITE_BUILD_IOV);
+    auto ts_iov_start = ubsocket_get_timeNs_compile();
     ConverterPtr converterPtr = tx_ops_->BuildIovConverter(iov, iovcnt);
+    auto ts_iov_end = ubsocket_get_timeNs_compile();
     uint32_t input_total_len = 0;
     uint32_t batch = 0;
-    uint32_t post_batch_max = tx_ops_->tx_queue_avail_num_.load(std::memory_order_acq_rel) > TX_POST_BATCH_MAX ?
+    uint32_t post_batch_max = tx_ops_->tx_queue_avail_num_.load(std::memory_order_acquire) > TX_POST_BATCH_MAX ?
                                   TX_POST_BATCH_MAX :
-                                  tx_ops_->tx_queue_avail_num_.load(std::memory_order_acq_rel);
+                                  tx_ops_->tx_queue_avail_num_.load(std::memory_order_acquire);
     uint32_t buf_cnt = 0;
     uint32_t cut_total_len = 0;
 
@@ -81,19 +93,28 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
         input_total_len += cut_total_len;
     } while (cut_total_len != 0 && ++batch < post_batch_max);
 
+    auto ts_alloc_start = ubsocket_get_timeNs_compile();
     uintptr_t txBuf = tx_ops_->AllocTxBuf(0, buf_cnt);
+    auto ts_alloc_end = ubsocket_get_timeNs_compile();
 
     if (txBuf == 0) {
         PROF_END(CORE_WRITE_POST_SEND, false);
         PROF_END(CORE_WRITE, false);
         PROF_END(CORE_WRITE_BUILD_IOV, false);
+        errno = ENOBUFS;
+        UBS_VLOG_ERR("WriteV AllocTxBuf failed, fd: %d, ret: %d, errno: %d, errmsg: %s\n", sock->raw_socket_, -1, errno,
+                     Func::Error2Str(errno));
         return -1;
     }
 
     PROF_END(CORE_WRITE_BUILD_IOV, true);
 
     uint32_t tx_total_len;
+    auto *umq_socket = RefConvert<Socket, umq::UmqSocket>(sock).Get();
+    uint32_t pre_seq = umq_socket != nullptr ? umq_socket->LoadSeqNum() : 0;
+    auto ts_post_start = ubsocket_get_timeNs_compile();
     int64_t ret = tx_ops_->PostSend(sock, txBuf, batch, converterPtr);
+    auto ts_post_end = ubsocket_get_timeNs_compile();
     if (ret < 0) {
         PROF_END(CORE_WRITE_POST_SEND, false);
         PROF_END(CORE_WRITE, false);
@@ -102,12 +123,28 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     PROF_END(CORE_WRITE_POST_SEND, true);
     tx_total_len = ret;
 
-    if (GlobalSetting::UBS_TRACE_ENABLED) {
+    /* SplitTrace: approach A (delayed write) — PostSend returns, get seq_no, sample + batch write */
+    uint32_t post_seq = umq_socket != nullptr ? umq_socket->LoadSeqNum() : 0;
+    if (post_seq != pre_seq) {
+        uint32_t seq_no = post_seq - 1;
+        bool do_trace = STRACE_TRY_SAMPLE(sock.Get(), sock->raw_socket_, seq_no, PATH_TX_WRITEV);
+        if (do_trace) {
+            STRACE_ADD(sock.Get(), PATH_TX_WRITEV, TX_WV_ENTRY, seq_no, ts_entry_start, ts_entry_end);
+            STRACE_ADD(sock.Get(), PATH_TX_WRITEV, TX_WV_BUILD_IOV, seq_no, ts_iov_start, ts_iov_end);
+            STRACE_ADD(sock.Get(), PATH_TX_WRITEV, TX_WV_ALLOC_BUF, seq_no, ts_alloc_start, ts_alloc_end);
+            STRACE_ADD(sock.Get(), PATH_TX_WRITEV, TX_WV_MEM_COPY, seq_no, ts_post_start, ts_post_end);
+            STRACE_ADD(sock.Get(), PATH_TX_WRITEV, TX_WV_UMQ_POST, seq_no, ts_post_start, ts_post_end);
+            STRACE_END(sock.Get(), PATH_TX_WRITEV, seq_no, tx_total_len, 0);
+        }
+    }
+
+    if (GlobalSetting::UBS_MONITOR_ENABLE) {
         SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
-        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_BYTE_COUNT, tx_total_len);
+        if (auto *mgr = sockptr->GetStatsMgr()) {
+            mgr->UpdateTraceStats(Statistics::StatsMgr::TX_BYTE_COUNT, tx_total_len);
+        }
     }
     PROF_END(CORE_WRITE, true);
-    TRACE_TRY_SWAP(trace);
     return tx_total_len;
 }
 } // namespace ubs

@@ -88,6 +88,12 @@ void UrmaDevice::Init() noexcept
     LOADED = true;
 }
 
+void UrmaDevice::ClearAll() noexcept
+{
+    std::lock_guard<std::mutex> lock(MUTEX);
+    ALL_DEVICES.clear();
+}
+
 UrmaDevice::UrmaDevice(const std::string &name, const std::string &sys_path, const urma_device_attr_t &attr)
     : device_name_(name),
       device_sys_path_(sys_path),
@@ -239,6 +245,13 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
 
     auto eid_info = eid_list[eidIndex];
 
+    if (target_dev == nullptr) {
+        UBS_VLOG_ERR("Matched device '%s' has null wrapper", target_dev_name.c_str());
+        UrmaApi::urma_free_eid_list(eid_list);
+        UrmaApi::urma_delete_context(raw_context);
+        return UBS_UB_DEV_ERROR;
+    }
+
     /* step6: create our context */
     auto tmp_context = MakeRef<UrmaContext>(raw_context, target_dev, eid_info);
     UrmaApi::urma_free_eid_list(eid_list);
@@ -263,6 +276,12 @@ uint32_t UrmaContext::NewJettyId() noexcept
 {
     ++AUTO_INCREASE_JETTY_ID;
     return AUTO_INCREASE_JETTY_ID.load();
+}
+
+void UrmaContext::ClearAll() noexcept
+{
+    std::lock_guard<std::mutex> guard(ALL_CONTEXTS_MUTEX);
+    ALL_CONTEXTS.clear();
 }
 
 UrmaContext::~UrmaContext()
@@ -301,24 +320,24 @@ Result UrmaContext::CreateJfc(urma_jfc_cfg_t &cfg, UrmaJfcPollingType pollingTyp
         }
 
         if (UrmaApi::urma_rearm_jfc(raw_jfc, 0) != URMA_SUCCESS) {
-            UrmaApi::urma_delete_jfce(raw_jfce);
             UrmaApi::urma_delete_jfc(raw_jfc);
+            UrmaApi::urma_delete_jfce(raw_jfce);
             UBS_VLOG_ERR("[URMA_API] create jfc failed as rearm jfc failed, errno %d", errno);
             return UBS_ERROR;
         }
 
         auto tmp_ctl = fcntl(raw_jfce->fd, F_GETFL);
         if (fcntl(raw_jfce->fd, F_SETFL, static_cast<uint32_t>(tmp_ctl) | O_NONBLOCK) < 0) {
-            UrmaApi::urma_delete_jfce(raw_jfce);
             UrmaApi::urma_delete_jfc(raw_jfc);
+            UrmaApi::urma_delete_jfce(raw_jfce);
             UBS_VLOG_ERR("fcntl() set jfc fd to non-blocking failed, errno %d", errno);
             return UBS_ERROR;
         }
 
         auto jfc = MakeRef<UrmaJfc>(pollingType, raw_jfc, raw_jfce, this);
         if (jfc == nullptr) {
-            UrmaApi::urma_delete_jfce(raw_jfce);
             UrmaApi::urma_delete_jfc(raw_jfc);
+            UrmaApi::urma_delete_jfce(raw_jfce);
             UBS_VLOG_ERR("Create UrmaJfc object failed, probably out of memory");
             return UBS_MALLOC_FAILED;
         }

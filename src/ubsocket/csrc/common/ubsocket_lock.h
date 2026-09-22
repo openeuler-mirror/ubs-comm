@@ -52,6 +52,11 @@ public:
     static Result RegisterSemOps(u_external_semaphore_ops_t *ops);
 
 public:
+    /* 外部（bthread 感知）ops 是否已注册：握手事件等待器据此选择
+     * "外部 sem 直等 / LOCK_OPS 闸门交接 / 传统 poll 回退" 三档机制 */
+    static bool ExternalLockOpsRegistered();
+    static bool ExternalSemOpsRegistered();
+
     static u_external_lock_ops_t LOCK_OPS;       /* global lock ops, registered from external or use default ops */
     static u_external_rw_lock_ops_t RW_LOCK_OPS; /* global rw lock ops, registered from external or use default ops */
     static u_external_semaphore_ops_t SEM_OPS;   /* global sem ops, registered from external or use default ops */

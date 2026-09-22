@@ -7,7 +7,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
 
 # define macro that will be used in source code
-add_compile_options(-DMOCK_VERBS -DTEST_LLT)
+add_compile_options(-DMOCK_VERBS -DTEST_LLT -DUMQ_QBUF_DEBUG)
 message(STATUS "LIBBOUNDCHECK_SHARED_LIBRARY: ${LIBBOUNDCHECK_SHARED_LIBRARY}")
 option(BUILD_WITH_HW_CRC "Build with hardware crc" OFF)
 option(BUILD_WITH_SERVICE "Build with SERVICE" ON)
@@ -67,6 +67,7 @@ aux_source_directory(transport/ub SOURCE_FILES)
 aux_source_directory(transport/common SOURCE_FILES)
 aux_source_directory(under_api/openssl SOURCE_FILES)
 aux_source_directory(under_api/urma SOURCE_FILES)
+aux_source_directory(umq SOURCE_FILES)
 
 if (BUILD_WITH_HTRACER)
 aux_source_directory(common/trace SOURCE_FILES)
@@ -89,6 +90,7 @@ endif()
 set(HCOM_UT hcom_ut)
 
 link_directories(${GTEST_INSTALL_DIR}/lib64)
+link_directories(${GTEST_INSTALL_DIR}/lib)
 
 message("TEST_TOOL_INSTALL_PATH: ${TEST_TOOL_INSTALL_PATH}")
 # include&link mockcpp
@@ -125,6 +127,14 @@ target_include_directories(${HCOM_UT} PRIVATE ${HCOM_OUTPUT_PATH}/hcom_3rdparty/
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${HCOM_UT} PRIVATE ${HCOM_STUB_SRC_DIR})
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/api/capi_v2/)
+# umq qbuf pool multi-level test includes umq_qbuf_pool.c directly
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/src/qbuf)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/include/umq)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/include)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/src)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/util)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/include/umq/transport_layer)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/include/umq/umq_ub)
 # enable gcov
 target_compile_options(${HCOM_UT} PUBLIC --coverage)
 target_link_options(${HCOM_UT} PUBLIC --coverage)

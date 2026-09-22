@@ -9,7 +9,6 @@
 # (4) USE_URMA_STUB(optional, default is OFF) => in CI environment, use urma stub or not.(ON/OFF)
 # (5) UBSOCKET_PASS_RATE(optional, default is off) => run ubsocket ut pass rate or not.(on/off)
 # (6) UBSOCKET_COVERAGE(optional, default is off) => run ubsocket ut coverage or not.(on/off)
-# (7) VERBOSE(optional, default is empty) => output detailed build logs.(1/empty)
 # version: 1.0.0
 # change log:
 # ***********************************************************************
@@ -68,19 +67,11 @@ function umq_build() {
 
     local num_cores=$(nproc 2>/dev/null || echo 4)
 
-    local make_verbose=""
-    [[ "${VERBOSE}" == "1" ]] && make_verbose="VERBOSE=1"
-
-    if ! make -j"${num_cores}" ${make_verbose}; then
+    if ! make -j"${num_cores}"; then
         echo "[Error]: umq make failed."
         exit 1
     fi
     echo "umq make successfully."
-
-    # USE_URMA_STUB=ON 时 umq_ub 依赖的完整 URMA SDK 不存在，libumq_ub.so 不会产出
-    if [ "${USE_URMA_STUB}" == "ON" ]; then
-        echo "Info: USE_URMA_STUB=ON, libumq_ub.so is not built (requires full URMA SDK)."
-    fi
 }
 # build ubsocket, .so will store in "./src/ubsocket/build/brpc/librpc_adapter_brpc.so"
 function ubsocket_build() {
@@ -113,10 +104,8 @@ function ubsocket_build() {
     cd build
 
     local num_cores=$(nproc 2>/dev/null || echo 4)
-    local make_verbose=""
-    [[ "${VERBOSE}" == "1" ]] && make_verbose="VERBOSE=1"
 
-    if ! make -j"${num_cores}" ${make_verbose}; then
+    if ! make -j"${num_cores}"; then
         echo "[Error]: ubsocket make failed."
         exit 1
     fi
@@ -139,9 +128,8 @@ function run_ubsocket_ut_tests() {
     local ubsocket_dir="${ROOT_DIR}/src/ubsocket"
     cd "${ubsocket_dir}"
 
-    # 覆盖率默认关闭，仅显式 UBSOCKET_COVERAGE=on 时启用（openEuler 默认仓库无 lcov 包）
     local coverage_flag="OFF"
-    if [ "${UBSOCKET_COVERAGE}" == "on" ]; then
+    if [ "${UBSOCKET_COVERAGE}" = "on" ]; then
         coverage_flag="ON"
     fi
 
@@ -159,7 +147,7 @@ function run_ubsocket_ut_tests() {
         exit 1
     fi
 
-    if cmake --build build -j32; then
+    if cmake --build build -j$(nproc 2>/dev/null || echo 4); then
         echo "UT tests build successfully."
     else
         echo "[Error]: UT tests build failed."

@@ -4,6 +4,7 @@
  */
 
 #include "ubsocket_wakeup_event.h"
+#include "ubsocket_socket.h"
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <unistd.h>
@@ -13,18 +14,11 @@
 namespace ock {
 namespace ubs {
 
-UbsocketWakeupEvent::UbsocketWakeupEvent() : epollFd_(-1), readyEventFd_(-1), ready_event_mutex_(nullptr)
-{
-    ready_event_mutex_ = LockRegistry::LOCK_OPS.create(LT_EXCLUSIVE);
-}
+UbsocketWakeupEvent::UbsocketWakeupEvent() : epollFd_(-1), readyEventFd_(-1) {}
 
 UbsocketWakeupEvent::~UbsocketWakeupEvent()
 {
     CleanUp();
-    if (ready_event_mutex_ != nullptr) {
-        LockRegistry::LOCK_OPS.destroy(ready_event_mutex_);
-        ready_event_mutex_ = nullptr;
-    }
 }
 
 int UbsocketWakeupEvent::Initialize(int epollFd)
@@ -61,30 +55,32 @@ void UbsocketWakeupEvent::CleanUp()
 {
     if (readyEventFd_ >= 0) {
         if (epollFd_ >= 0) {
+            /* Drop this listener's entry from the poll's wakeup table before the eventfd goes:
+             * the registered callback captures our owner, which is being torn down. */
+            EventPollPtr aepRef = ArraySet<EventPoll>::GetInstance().GetItem(epollFd_);
+            auto *aep = (AsyncEventPoll *)aepRef.Get();
+            if (aep != nullptr) {
+                aep->RemoveWakeupCallback(&ready_event_);
+            }
             epoll_ctl(epollFd_, EPOLL_CTL_DEL, readyEventFd_, nullptr);
         }
         close(readyEventFd_);
         readyEventFd_ = -1;
-    }
-
-    if (ready_event_mutex_ != nullptr) {
-        Locker sLock(ready_event_mutex_);
-        while (!ready_event_queue_.empty()) {
-            ready_event_queue_.pop();
-        }
     }
 }
 
 void UbsocketWakeupEvent::WakeUpReadyEventFd(int fd)
 {
     if (UNLIKELY(readyEventFd_ < 0)) {
-        UBS_VLOG_WARN("UbsocketWakeupEvent: WakeUpReadyEventFd failed, not initialized.\n");
+        UBS_VLOG_WARN("UbsocketWakeupEvent: WakeUpReadyEventFd failed, not initialized. listen_fd=%d\n", fd);
         return;
     }
 
     uint64_t notification = 1;
     if (eventfd_write(readyEventFd_, notification) < 0) {
-        UBS_VLOG_ERR("UbsocketWakeupEvent: WakeUpReadyEventFd eventfd_write failed.\n");
+        UBS_VLOG_ERR("UbsocketWakeupEvent: WakeUpReadyEventFd eventfd_write failed. eventfd=%d listen_fd=%d "
+                     "errno=%d (%s)\n",
+                     readyEventFd_, fd, errno, strerror(errno));
     }
 }
 
@@ -97,17 +93,27 @@ int UbsocketWakeupEvent::ProcessReadyEvents(struct epoll_event *events, int maxe
     if (s != sizeof(uint64_t)) {
         UBS_VLOG_ERR("UbsocketWakeupEvent: ProcessReadyEvents read failed\n");
     }
-    // Step2: 通过 listen_fd_ 从 socket_data 取出对应的 EpollEvent*
-    //         填到 events[0].data.ptr，使 ArrangeWakeUpEvents 能索引到原始 socketid
-    auto it = socket_data.find(listen_fd_);
-    if (UNLIKELY(it == socket_data.end())) {
-        UBS_VLOG_ERR("UbsocketWakeupEvent: listen_fd_=%d not found in socket_data\n", listen_fd_);
+    // Step2: 通过 ArraySet<Socket> 线程安全地获取 listen_fd_ 对应的 SocketBase
+    //         （原子加载 + 引用计数），再从 SocketBase 中取出注册 epoll 时保存的
+    //         event.data（brpc SocketId）和 event.events，构造返回事件。
+    //         避免直接访问 socket_data_（unordered_map）与 RemoveSocketEventData
+    //         持锁 erase 的并发数据竞争。
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(listen_fd_);
+    if (UNLIKELY(sock == nullptr)) {
+        UBS_VLOG_ERR("UbsocketWakeupEvent: listen_fd_=%d not found in ArraySet<Socket>\n", listen_fd_);
         return 0;
     }
-    events[0] = it->second->event;
 
-    UBS_VLOG_DEBUG("UbsocketWakeupEvent: ProcessReadyEvents done, pending:%llu, listen_fd:%d, epollEvent:%p\n",
-                   (unsigned long long)u, listen_fd_, it->second);
+    auto sockBase = RefConvert<Socket, SocketBase>(sock);
+    if (UNLIKELY(sockBase == nullptr)) {
+        UBS_VLOG_ERR("UbsocketWakeupEvent: listen_fd_=%d failed to convert to SocketBase\n", listen_fd_);
+        return 0;
+    }
+    events[0].events = sockBase->GetEvents();
+    events[0].data = sockBase->GetEpollData();
+
+    UBS_VLOG_DEBUG("UbsocketWakeupEvent: ProcessReadyEvents done, pending:%llu, listen_fd:%d",
+                   (unsigned long long)u, listen_fd_);
     return 1;
 }
 

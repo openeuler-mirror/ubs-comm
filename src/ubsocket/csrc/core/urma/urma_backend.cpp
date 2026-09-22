@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "urma_backend.h"
+#include "urma_wrapper.h"
 #include "under_api/dl_api.h"
 
 namespace ock {
@@ -19,6 +20,9 @@ bool Urma::URMA_INITED = false;
 
 void UrmaLog(int level, char *message)
 {
+    if (message == nullptr) {
+        return;
+    }
     /*
     URMA_VLOG_LEVEL_EMERG = 0,
     URMA_VLOG_LEVEL_ALERT = 1,
@@ -95,6 +99,8 @@ void Urma::UnInit() noexcept
         return;
     }
 
+    UrmaContext::ClearAll();
+    UrmaDevice::ClearAll();
     UrmaApi::urma_uninit();
 
     URMA_INITED = false;

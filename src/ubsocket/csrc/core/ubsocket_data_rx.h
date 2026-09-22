@@ -18,27 +18,48 @@
 
 #include "common/ubsocket_common_includes.h"
 #include "iobuf/ubsocket_iobuf.h"
+#include "profiling/statistics/rx_stat_defs.h"
 #include "ubsocket_core_types.h"
+#include "under_api/dl_umq_api.h"
 
 namespace ock {
 namespace ubs {
-// 接口层，实现 Polltx等动作
+namespace umq {
+class UmqSocket;
+} // namespace umq
+/* RX ops：PollRx / RxDataSet 等动作的唯一实现（原 UmqRxOps）。
+ * 去虚化依据同 DataTxOps：TCP 直通在 DataRx 壳层短路，
+ * GenerateSocketCommOps 只为 UMQ 类型接线——虚表与动态分发是纯开销。
+ * UMQ 侧方法体在 umq_data_rx_ops.cpp。 */
 class DataRxOps {
 public:
-    DataRxOps() = default;
-    virtual ~DataRxOps() = default;
+    /* owner_ 显式后向指针，见 DataTxOps 同注释 */
+    explicit DataRxOps(int fd, uint64_t umq_handle = 0, umq::UmqSocket *owner = nullptr)
+        : fd_(fd), fallback_umqh_(umq_handle), owner_(owner)
+    {
+        if (GlobalSetting::UBS_MONITOR_ENABLE) {
+            rx_stat_counters_.reset(new rxstat::RxStatCounters());
+            std::memset(rx_stat_counters_.get(), 0, sizeof(rxstat::RxStatCounters));
+        }
+    }
+    ~DataRxOps() = default;
 
     /**
      * poll rx and put data into block_cache_
      * @return
      */
-    virtual int PollRx(const SocketPtr &sock) = 0;
+    int PollRx(const SocketPtr &sock);
     ssize_t RxDataSet(void *buf, uint32_t size);
-    virtual int RearmRxInterrupt() = 0;
-    virtual void FlushRx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS) = 0;
+    int RearmRxInterrupt();
+    void FlushRx(Socket *sock, uint32_t timeout_ms = FLUSH_TIMEOUT_MS);
+    void HandleErrorRxCqe(umq_buf_t *buf);
+
+    rxstat::RxStatCounters *GetRxStatCounters()
+    {
+        return rx_stat_counters_.get();
+    }
 
 public:
-    int fd_ = -1;
     // RX fields
     uint8_t epoll_in_msg_ = 0;
     uint8_t epoll_in_msg_recv_size_ = 0;
@@ -51,9 +72,32 @@ public:
     BlockCache block_cache_;
     size_t remaining_size_ = 0;
     bool flow_control_failed_ = false;
+    uint32_t last_rx_seq_no_{0};
 
 protected:
-    virtual Block *DataToBlock(void *data) = 0;
+    Block *DataToBlock(void *data);
+
+private:
+    int GetQbuf(const SocketPtr &sock, umq_buf_t **buf, int max_num);
+    int UmqPollAndRefillRx(umq_buf_t **buf, uint32_t max_buf_size);
+    uint32_t HandleBadQBuf(umq_buf_t *head_qbuf, umq_buf_t *bad_qbuf);
+    int GetAndPopQbuf(umq_buf_t **buf, uint32_t max_buf_size);
+    int GetAndAckEvent();
+    bool PollSubUmqRx(umq_buf_t *buf[], int i) const;
+
+private:
+    umq::UmqSocket *Owner() const
+    {
+        return owner_;
+    }
+    int OwnerFd() const;
+    uint64_t OwnerUmqh() const;
+
+    int fd_ = -1;                 /* 无宿主实例的回退 fd */
+    uint64_t fallback_umqh_ = 0;  /* 无宿主实例的回退句柄 */
+    umq::UmqSocket *owner_ = nullptr;
+
+    std::unique_ptr<rxstat::RxStatCounters> rx_stat_counters_;
 
     friend class DataRx;
 };
@@ -72,16 +116,10 @@ public:
     }
 
 private:
-    ssize_t OutputErrorMagicNumber(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
-
 private:
-    int fd_ = -1;
-    int event_fd_ = -1;
-    // TODO 初始化赋值
-    uint64_t protocol_negotiation_ = 0;
-    uint32_t protocol_negotiation_recv_size_ = 0;
-    uint32_t protocol_negotiation_offset_ = 0;
+    /* fd 不再另存一份：入口方法都携带 sock，直接读 sock->raw_socket_ */
 
+    /* 非拥有指针：ops 按值内嵌于 UmqSocket，生命周期随 socket 本体 */
     DataRxOps *rx_ops_ = nullptr;
 };
 } // namespace ubs

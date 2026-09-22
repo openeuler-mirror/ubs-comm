@@ -40,12 +40,14 @@ struct SubCmd {
 #define SUB_CMD_PINGPONG "pp"
 #define SUB_CMD_PINGPONG_EPOLL "pp-epoll"
 #define SUB_CMD_DATA "data"
+#define SUB_CMD_UB_NATIVE_DATA "ub-native-data"
 #define SUB_CMD_SHOW "show"
 #define SUB_CMD_CONN "conn"
 
 static SubCmd cmds[] = {{SUB_CMD_PINGPONG, "pingpong test to check if network is ok"},
                         {SUB_CMD_PINGPONG_EPOLL, "pingpong test using epoll to check if network is ok"},
                         {SUB_CMD_DATA, "pingpong test to check if data transfer is correct"},
+                        {SUB_CMD_UB_NATIVE_DATA, "pingpong test over ubs_post/ubs_poll to check data"},
                         {SUB_CMD_SHOW, "show device info e.g. UB and RoCE"},
                         {SUB_CMD_CONN, "concurrent connecting performance test for UB and RoCE"}};
 

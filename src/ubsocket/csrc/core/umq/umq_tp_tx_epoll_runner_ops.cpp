@@ -22,10 +22,55 @@ namespace ock {
 namespace ubs {
 namespace umq {
 
+UmqTpTxEpollRunnerOps::~UmqTpTxEpollRunnerOps()
+{
+    for (auto &item : socket_data_) {
+        auto *event = item.second;
+        if (event == nullptr) {
+            continue;
+        }
+
+        if (event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER && event->timer_fd >= 0) {
+            LibcApi::close(event->timer_fd);
+            event->timer_fd = -1;
+        }
+
+        delete event;
+    }
+    socket_data_.clear();
+
+    for (auto *event : removed_events_) {
+        if (event == nullptr) {
+            continue;
+        }
+
+        if (event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER && event->timer_fd >= 0) {
+            LibcApi::close(event->timer_fd);
+            event->timer_fd = -1;
+        }
+
+        delete event;
+    }
+    removed_events_.clear();
+
+    if (mutex_ != nullptr) {
+        LockRegistry::LOCK_OPS.destroy(mutex_);
+        mutex_ = nullptr;
+    }
+}
+
 int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
 {
     TxEpollEvent *tx_epoll_event = reinterpret_cast<TxEpollEvent *>(static_cast<uintptr_t>(event.data.u64));
     if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER) {
+        /* Legacy 1ms round-robin TX poll of main umq (flag=OFF path).
+         * When UBS_TX_UNIFIED_POLL_ENABLED=ON, this timer is no longer
+         * registered (see UmqTransportPool::WarmUp); the equivalent
+         * round-robin poll is performed by TxCqePoller::SweepOrphanPools
+         * inside the unified ACTIVE loop at us-level cadence. This branch
+         * is retained for the flag=OFF fallback and matches the
+         * SweepOrphanPools implementation (umq_io_option_t with
+         * FLAG_TP_HANDLE_IDX, tp_idx=0, umq_ctx-based error callback). */
         uint64_t expirations = 0;
         [[maybe_unused]] ssize_t s = LibcApi::read(tx_epoll_event->timer_fd, &expirations, sizeof(expirations));
 
@@ -44,7 +89,8 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
             poll_cnt = UmqTxHelper::PollUmqTx(args, [tx_epoll_event](umq_buf_t *qbuf) {
                 auto buf_pro = (umq_buf_pro_t *)qbuf->qbuf_ext;
                 auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
-                auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
+                auto sock_ref = ArraySet<Socket>::GetInstance().GetItem(socket_fd);
+                auto *socket_ptr = sock_ref.Get();
                 if (socket_ptr == nullptr) {
                     UBS_VLOG_DEBUG("socket is NULL in socket fd=%d\n in TX CQE error", socket_fd);
                     return;
@@ -61,7 +107,8 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 auto *umq_sock = static_cast<UmqSocket *>(socket_ptr);
                 if (umq_sock->GetTopoType() == UMQ_TOPO_TYPE_CLOS) {
                     if (qbuf->status == UMQ_BUF_LOC_LEN_ERR || qbuf->status == UMQ_BUF_LOC_ACCESS_ERR ||
-                        qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR) {
+                        qbuf->status == UMQ_BUF_ACK_TIMEOUT_ERR || qbuf->status == UMQ_FAKE_BUF_FC_ERR ||
+                        qbuf->status == UMQ_FAKE_BUF_FC_ERR_FATAL) {
                         auto [ports, ports_num] = umq_sock->GetUsedPorts();
                         for (std::size_t i = 0; i < ports_num; ++i) {
                             UBS_VLOG_WARN("port is down, new UB connection will not use port(chip=%u,die=%u,port=%u)\n",
@@ -71,7 +118,7 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                     }
                 }
             });
-        } while (poll_cnt > 0);
+        } while (poll_cnt > 0 && err == ops_error_code::OK);  // fatal CQE 错误立即停止 timer 收割
 
         return UBS_OK;
     } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX) {
@@ -100,8 +147,9 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
                 // 取数据, 预期返回 0 表示 EOF. 之后 brpc 会自动处理 socket 的关闭.
                 auto buf_pro = (umq_buf_pro_t *)qbuf->qbuf_ext;
                 auto socket_fd = static_cast<int>(buf_pro->umq_ctx);
-                auto socket_ptr = ArraySet<Socket>::GetInstance().GetItem(socket_fd).Get();
-                if (socket_ptr) {
+                auto sock_ref = ArraySet<Socket>::GetInstance().GetItem(socket_fd);
+                auto *socket_ptr = sock_ref.Get();
+                if (socket_ptr != nullptr) {
                     LibcApi::shutdown(socket_fd, SHUT_RD);
                     UBS_VLOG_DEBUG("closing socket fd=%d\n in TX CQE error for TP TX", socket_fd);
                     socket_ptr->State(SOCK_STAT_CLOSE);
@@ -129,7 +177,8 @@ int UmqTpTxEpollRunnerOps::ProcessOneEvent(const struct epoll_event &event)
         if (tx_epoll_event->umq_handle == UMQ_INVALID_HANDLE) {
             return UBS_OK; // 已被注销，跳过
         }
-        return UmqTxHelper::PollUmqTxForFcReturn(tx_epoll_event->umq_handle);
+        int fctx_ret = UmqTxHelper::PollUmqTxForFcReturn(tx_epoll_event->umq_handle);  // TX-STAT
+        return fctx_ret;
     } else {
         UBS_VLOG_ERR("async_epoll unknown event:(events:%x, data.type:%lu)\n", event.events, tx_epoll_event->type);
         return UBS_ERROR;
@@ -153,7 +202,11 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
         // 持锁保护 socket_data_：DelEpollEvent 在另一线程持锁 erase，并发 emplace/erase 是 UB
         {
             Locker slock(mutex_);
-            InsertSocketEventData(fd, tx_epoll_event);
+            if (!InsertSocketEventData(fd, tx_epoll_event)) {
+                epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+                UBS_VLOG_ERR("Failed to save TP TX event, fd: %d\n", fd);
+                return UBS_ERROR;
+            }
         }
         UBS_VLOG_DEBUG("[UMQ_API] Add Tx event, event type: %llu\n", static_cast<uint64_t>(tx_epoll_event->type));
 
@@ -171,13 +224,22 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
             return UBS_ERROR;
         }
     } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_TP_TX_TIMER) {
-        // 定时器轮询 main_umq tx
+        {
+            Locker slock(mutex_);
+            if (!InsertSocketEventData(fd, tx_epoll_event)) {
+                epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+                UBS_VLOG_ERR("Failed to save tx timer event, fd: %d\n", fd);
+                return UBS_ERROR;
+            }
+        }
         UBS_VLOG_DEBUG("Add poll tx timer event.\n");
     } else if (tx_epoll_event->type == RUNNER_EVENT_TYPE_FC_TX) {
-        // FC TX 事件注册到 map，使 DelEpollEvent 能找到并标记 umq_handle 无效
-        // 持锁保护 socket_data_：DelEpollEvent 在另一线程持锁 erase，并发 emplace/erase 是 UB
         Locker slock(mutex_);
-        InsertSocketEventData(fd, tx_epoll_event);
+        if (!InsertSocketEventData(fd, tx_epoll_event)) {
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+            UBS_VLOG_ERR("Failed to save FC TX event, fd: %d\n", fd);
+            return UBS_ERROR;
+        }
     }
     return UBS_OK;
 }
@@ -185,14 +247,17 @@ int UmqTpTxEpollRunnerOps::AddEventToRunner(int epoll_fd, int fd, struct epoll_e
 int UmqTpTxEpollRunnerOps::DelEpollEvent(int epoll_fd, int fd)
 {
     auto ret = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
-    if (UNLIKELY(ret < 0)) {
-        UBS_VLOG_ERR("async_epoll del pure event for socket: %d failed: %d : %s\n", fd, errno, strerror(errno));
-        return UBS_ERROR;
-    }
+
     {
         Locker sLock(mutex_);
         RemoveSocketEventData(fd);
     }
+
+    if (UNLIKELY(ret < 0)) {
+        UBS_VLOG_ERR("async_epoll del pure event for socket: %d not del: %d : %s\n", fd, errno, strerror(errno));
+        return UBS_ERROR;
+    }
+
     return UBS_OK;
 }
 

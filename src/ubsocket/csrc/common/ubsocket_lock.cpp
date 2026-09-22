@@ -18,6 +18,20 @@
 
 namespace ock {
 namespace ubs {
+
+static bool g_external_lock_ops_registered = false;
+static bool g_external_sem_ops_registered = false;
+
+bool LockRegistry::ExternalLockOpsRegistered()
+{
+    return g_external_lock_ops_registered;
+}
+
+bool LockRegistry::ExternalSemOpsRegistered()
+{
+    return g_external_sem_ops_registered;
+}
+
 namespace default_locks {
 static u_mutex_t *default_lock_create(u_mutex_type_t type)
 {
@@ -221,6 +235,7 @@ Result LockRegistry::RegisterLockOps(u_external_lock_ops_t *ops)
     }
 
     LOCK_OPS = *ops;
+    g_external_lock_ops_registered = true;
 
     umq_external_mutex_lock_ops_t umq_mutex_ops = {
         .create = (umq_external_mutex_t * (*)(umq_external_mutex_attr_t)) ops->create,
@@ -257,6 +272,7 @@ Result LockRegistry::RegisterSemOps(u_external_semaphore_ops_t *ops)
     }
 
     SEM_OPS = *ops;
+    g_external_sem_ops_registered = true;
     return 0;
 }
 

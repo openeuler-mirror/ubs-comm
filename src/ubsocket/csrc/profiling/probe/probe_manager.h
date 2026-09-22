@@ -13,10 +13,19 @@
 #include <pthread.h>
 #include <sched.h>
 #include <semaphore.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <ctime>
 #include <cstring>
+#include <fstream>
+#include <iomanip>
 #include <mutex>
 #include <sstream>
 #include <thread>
@@ -24,9 +33,11 @@
 #include <vector>
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_global_setting.h"
 #include "core/ubsocket_core_types.h"
 #include "core/umq/umq_setting.h"
 #include "core/umq/umq_socket.h"
+#include "profiling/statistics/cli_message.h"
 
 #include "umq_api.h"
 #include "umq_dfx_api.h"
@@ -36,6 +47,7 @@
 
 using ock::ubs::ArraySet;
 using ock::ubs::Socket;
+using ock::ubs::SocketPtr;
 using ock::ubs::umq::UmqSetting;
 using ock::ubs::umq::UmqSocket;
 
@@ -45,6 +57,15 @@ static constexpr uint32_t PROBE_INTERVAL_SEC = 1;
 static constexpr uint32_t PROBE_USER_DATA_ID = UmqSetting::UMQ_PROBE_USER_DATA_ID;
 static constexpr uint64_t PROBE_SEM_MS_TO_NS = 1000000ULL;
 static constexpr uint64_t PROBE_SEM_S_TO_NS = 1000000000ULL;
+
+// --- dump constants ---
+static constexpr const char *PROBE_DUMP_DEFAULT_PATH = "/tmp/ubsocket/probe";
+static constexpr const char *PROBE_DUMP_FILE_PREFIX = "/ubsocket_probe_";
+static constexpr const char *PROBE_DUMP_FILE_SUFFIX = ".log";
+static constexpr const char *PROBE_DUMP_ARCHIVE_SUFFIX = ".gz";
+static constexpr int64_t PROBE_DUMP_FILE_MAX_SIZE = 10 * 1024 * 1024;
+static constexpr int PROBE_DUMP_MAX_ARCHIVES = 3;
+static constexpr int PROBE_DUMP_SLEEP_CHUNK_MS = 10;
 
 // --- 探测类型枚举 ---
 enum ProbeType
@@ -141,6 +162,9 @@ public:
         // 注册 umq 打点回调
         RegisterUmqCallbacks();
 
+        // 启动 dump 线程
+        DumpStart();
+
         UBS_VLOG_DEBUG("ProbeManager start probe time is %d ms, probe batch is %d\n", mIntervalMs, mProbeBatch);
     }
 
@@ -148,6 +172,9 @@ public:
     {
         if (!mRunning.exchange(false))
             return;
+
+        // 先停 dump 线程（它在 DumpData 中会调 GetCLIProbeData 加 mMutex，必须在工作线程 join 之前停止）
+        DumpStop();
 
         std::lock_guard<std::mutex> lock(mMutex);
         sem_post(&mSem);
@@ -282,8 +309,8 @@ public:
         buf_pro->opcode = UMQ_OPC_SEND_IMM;
         buf_pro->flag.value = 0;
         buf_pro->flag.bs.complete_enable = 1;
-        buf_pro->user_ctx = 0;
-        buf_pro->imm.user_data = PROBE_USER_DATA_ID; // 标记为探针包
+        buf_pro->imm_data = 0;                                // 清零整个 imm 联合体 (含 rsvd0)
+        buf_pro->imm.user_data = PROBE_USER_DATA_ID;          // 标记为探针包
 
         // --- 初始化 ProbeTimeInfo ---
         {
@@ -474,6 +501,7 @@ private:
 
         while (sentCount < mProbeBatch) {
             ProbeTimeInfo info;
+            SocketPtr sockRef;
             UmqSocket *sockObj = nullptr;
 
             {
@@ -484,7 +512,8 @@ private:
                 }
                 // 获取 fd 和 对象指针
                 int fd = mRecvQueue[mQueueSt].mSockFd;
-                sockObj = ((UmqSocket *)ArraySet<Socket>::GetInstance().GetItem(fd).Get());
+                sockRef = ArraySet<Socket>::GetInstance().GetItem(fd);
+                sockObj = static_cast<UmqSocket *>(sockRef.Get());
                 // 获取有效数据
                 if (sockObj) {
                     info = mRecvQueue[mQueueSt].mProbeInfo;
@@ -565,6 +594,296 @@ private:
         }
     }
 
+    // --- dump 线程 ---
+
+    void DumpStart()
+    {
+        std::lock_guard<std::mutex> lock(mDumpStartMutex);
+        if (mDumpRunning) {
+            return;
+        }
+        mDumpRunning = true;
+        mDumpThread = std::thread(&ProbeManager::DumpLoop, this);
+    }
+
+    void DumpStop()
+    {
+        std::lock_guard<std::mutex> lock(mDumpStartMutex);
+        if (!mDumpRunning) {
+            return;
+        }
+        mDumpRunning = false;
+        if (mDumpThread.joinable()) {
+            try {
+                mDumpThread.join();
+            } catch (...) {
+                UBS_VLOG_ERR("Exception caught during dump thread join\n");
+            }
+        }
+        if (mDumpFile.is_open()) {
+            mDumpFile.close();
+            mDumpDirCreated = false;
+        }
+    }
+
+    void DumpLoop()
+    {
+        pthread_setname_np(pthread_self(), "ubs_probe_dump");
+
+        while (mDumpRunning) {
+            auto sleepDuration = std::chrono::milliseconds(mIntervalMs);
+            auto chunkMs = std::chrono::milliseconds(PROBE_DUMP_SLEEP_CHUNK_MS);
+            auto elapsed = std::chrono::milliseconds(0);
+            while (mDumpRunning && elapsed < sleepDuration) {
+                auto remaining = sleepDuration - elapsed;
+                auto sleepChunk = (remaining < chunkMs) ? remaining : chunkMs;
+                std::this_thread::sleep_for(sleepChunk);
+                elapsed += sleepChunk;
+            }
+            if (!mDumpRunning) {
+                break;
+            }
+            DumpData();
+        }
+
+        // final drain
+        DumpData();
+    }
+
+    void DumpData() noexcept
+    {
+        std::vector<CLIProbeData> probeDataList;
+        GetCLIProbeData(probeDataList);
+
+        // server 端无探测记录，跳过 dump（与 probe 只在 client 端发起的规格一致）
+        if (probeDataList.empty()) {
+            return;
+        }
+
+        std::ostringstream oss;
+        WriteDumpTitle(oss, static_cast<uint32_t>(probeDataList.size()));
+
+        for (const auto &probeData : probeDataList) {
+            WriteProbeRow(oss, &probeData);
+            WriteProbeDetails(oss, &probeData);
+        }
+
+        if (WriteDumpData(oss) != 0) {
+            UBS_VLOG_WARN("Probe dump data write skipped, please check path and permissions.\n");
+            return;
+        }
+        UBS_VLOG_DEBUG("Probe dump thread success");
+    }
+
+    void WriteDumpTitle(std::ostringstream &oss, uint32_t sockNum)
+    {
+        constexpr int timeBufSize = 32;
+        time_t now = time(nullptr);
+        char timeBuf[timeBufSize];
+        struct tm timeInfo;
+        if (localtime_r(&now, &timeInfo) != nullptr) {
+            std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &timeInfo);
+        } else {
+            timeBuf[0] = '\0';
+        }
+        oss << "timeStamp: " << timeBuf << "\n";
+        oss << "=== Probe Statistics ===\n";
+        oss << "Total Probes (SocketNum): " << sockNum << "\n\n";
+        oss << "FD       | UBS RTT(ns) | Cli\xCE\x94(ns)   | Srv\xCE\x94(ns)   | "
+               "UMQ RTT(ns)  | UMQ Cli\xCE\x94(ns) | UMQ Srv\xCE\x94(ns)\n";
+        oss << "---------------------------------------------------------------------------------------------------"
+               "-------------------------------\n";
+    }
+
+    void WriteProbeRow(std::ostringstream &oss, const CLIProbeData *probeData)
+    {
+        double clientDelta = static_cast<double>(probeData->client_recv_rsp_time_ns - probeData->client_send_time_ns);
+        double serverDelta = static_cast<double>(probeData->server_rsp_time_ns - probeData->server_recv_time_ns);
+        double ubsRtt = clientDelta - serverDelta;
+        double umqClientDelta =
+            static_cast<double>(probeData->umq_client_recv_time_ns - probeData->umq_client_post_time_ns);
+        double umqServerDelta =
+            static_cast<double>(probeData->umq_server_rsp_time_ns - probeData->umq_server_recv_time_ns);
+        double umqRtt = umqClientDelta - umqServerDelta;
+
+        oss << std::left << std::setw(8) << probeData->fd << " | "
+            << std::setw(10) << std::fixed << std::setprecision(3) << ubsRtt << " | "
+            << std::setw(10) << clientDelta << " | "
+            << std::setw(10) << serverDelta << " | "
+            << std::setw(12) << umqRtt << " | "
+            << std::setw(12) << umqClientDelta << " | "
+            << std::setw(12) << umqServerDelta << "\n";
+    }
+
+    void WriteProbeDetails(std::ostringstream &oss, const CLIProbeData *probeData)
+    {
+        oss << "  +-- [Client] ubsocket_client_send(ns): " << probeData->client_send_time_ns
+            << " | ubsocket_client_recv(ns): " << probeData->client_recv_rsp_time_ns << "\n";
+        oss << "  |            umq_post(ns): " << probeData->umq_client_post_time_ns
+            << " | umq_recv(ns): " << probeData->umq_client_recv_time_ns << "\n";
+        oss << "  +-- [Server] ubsocket_server_recv(ns): " << probeData->server_recv_time_ns
+            << " | ubsocket_server_rsp(ns): " << probeData->server_rsp_time_ns << "\n";
+        oss << "  |            umq_recv(ns): " << probeData->umq_server_recv_time_ns
+            << " | umq_rsp(ns): " << probeData->umq_server_rsp_time_ns << "\n";
+        oss << "\n";
+    }
+
+    int WriteDumpData(std::ostringstream &oss)
+    {
+        std::string currentPath;
+        {
+            std::lock_guard<std::mutex> lock(ock::ubs::GlobalSetting::ProbeDumpMutex);
+            currentPath = ock::ubs::GlobalSetting::UBS_PROBE_DUMP_PATH;
+        }
+        if (currentPath.empty()) {
+            currentPath = PROBE_DUMP_DEFAULT_PATH;
+        }
+
+        if (currentPath != mDumpLastFilePath) {
+            if (mDumpFile.is_open()) {
+                mDumpFile.close();
+            }
+            mDumpFileName.clear();
+            mDumpDirCreated = false;
+            mDumpLastFilePath = currentPath;
+        }
+
+        if (CreateDumpDirectory(currentPath) != 0) {
+            return -1;
+        }
+
+        if (mDumpFileName.empty()) {
+            std::ostringstream ossFileName;
+            ossFileName << currentPath << PROBE_DUMP_FILE_PREFIX << getpid() << PROBE_DUMP_FILE_SUFFIX;
+            mDumpFileName = ossFileName.str();
+        }
+
+        if (!mDumpFile.is_open()) {
+            mDumpFile.open(mDumpFileName, std::ios::out | std::ios::app);
+            if (!mDumpFile.is_open()) {
+                UBS_VLOG_WARN("File %s open skipped, errno: %d, errmsg: %s.\n", mDumpFileName.c_str(), errno,
+                              ock::ubs::Func::Error2Str(errno));
+                return -1;
+            }
+        }
+
+        if (mDumpFile.is_open()) {
+            mDumpFile << oss.str() << std::endl;
+            mDumpFile.flush();
+        }
+
+        RotateDumpFile();
+        return 0;
+    }
+
+    int CreateDumpDirectory(std::string &path)
+    {
+        if (mDumpDirCreated) {
+            return 0;
+        }
+        if (path.empty()) {
+            path = PROBE_DUMP_DEFAULT_PATH;
+        }
+        constexpr mode_t DEFAULT_DIR_PERMISSION = 0750;
+        std::string currentPath;
+        for (char c : path) {
+            currentPath += c;
+            if (c == '/') {
+                if (mkdir(currentPath.c_str(), DEFAULT_DIR_PERMISSION) == -1) {
+                    if (errno == EEXIST) {
+                        continue;
+                    }
+                    UBS_VLOG_WARN("File path %s creation skipped, errno: %d, errmsg: %s.\n", currentPath.c_str(),
+                                  errno, ock::ubs::Func::Error2Str(errno));
+                    return -1;
+                }
+            }
+        }
+        if (mkdir(path.c_str(), DEFAULT_DIR_PERMISSION) == -1 && errno != EEXIST) {
+            UBS_VLOG_WARN("File path %s creation skipped, errno: %d, errmsg: %s.\n", path.c_str(), errno,
+                          ock::ubs::Func::Error2Str(errno));
+            return -1;
+        }
+        mDumpDirCreated = true;
+        return 0;
+    }
+
+    bool CompressDumpFile(const std::string &filePath)
+    {
+        pid_t pid = fork();
+        if (pid < 0) {
+            UBS_VLOG_WARN("fork failed for compress, errno: %d.\n", errno);
+            return false;
+        }
+        if (pid == 0) {
+            execlp("gzip", "gzip", "-f", filePath.c_str(), nullptr);
+            _exit(127);
+        }
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0) {
+            UBS_VLOG_WARN("waitpid failed for compress, errno: %d.\n", errno);
+            return false;
+        }
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            return true;
+        }
+        UBS_VLOG_WARN("gzip compress failed for %s, status: %d.\n", filePath.c_str(), status);
+        return false;
+    }
+
+    void RotateDumpFile()
+    {
+        struct stat st;
+        if (stat(mDumpFileName.c_str(), &st) != 0) {
+            return;
+        }
+        if (st.st_size < PROBE_DUMP_FILE_MAX_SIZE) {
+            return;
+        }
+
+        if (mDumpFile.is_open()) {
+            mDumpFile.close();
+        }
+
+        if (!CompressDumpFile(mDumpFileName)) {
+            unlink(mDumpFileName.c_str());
+        }
+
+        std::string archivePattern = PROBE_DUMP_FILE_PREFIX + std::to_string(getpid()) + PROBE_DUMP_FILE_SUFFIX;
+        std::vector<std::string> archives;
+        DIR *dir = opendir(mDumpLastFilePath.c_str());
+        if (dir != nullptr) {
+            struct dirent *entry = nullptr;
+            while ((entry = readdir(dir)) != nullptr) {
+                std::string name(entry->d_name);
+                if (name.find(archivePattern) != std::string::npos &&
+                    name.size() > archivePattern.size() &&
+                    name.substr(archivePattern.size()) == PROBE_DUMP_ARCHIVE_SUFFIX) {
+                    archives.push_back(mDumpLastFilePath + "/" + name);
+                }
+            }
+            closedir(dir);
+        }
+
+        std::sort(archives.begin(), archives.end(), [](const std::string &a, const std::string &b) {
+            struct stat sa, sb;
+            if (stat(a.c_str(), &sa) != 0) {
+                return true;
+            }
+            if (stat(b.c_str(), &sb) != 0) {
+                return false;
+            }
+            return sa.st_mtime < sb.st_mtime;
+        });
+
+        while (static_cast<int>(archives.size()) > PROBE_DUMP_MAX_ARCHIVES) {
+            unlink(archives.front().c_str());
+            archives.erase(archives.begin());
+        }
+
+        mDumpFileName.clear();
+    }
+
 private:
     std::thread mWorkerThread;
     std::atomic<bool> mRunning;
@@ -581,6 +900,15 @@ private:
     ProbeRecord mRecvQueue[RPC_ADPT_FD_MAX];
     uint32_t mQueueSt;
     uint32_t mQueueEd;
+
+    // --- dump members ---
+    std::thread mDumpThread;
+    std::atomic<bool> mDumpRunning{false};
+    std::mutex mDumpStartMutex;
+    std::string mDumpLastFilePath;
+    bool mDumpDirCreated = false;
+    std::string mDumpFileName;
+    std::ofstream mDumpFile;
 };
 } // namespace Statistics
 #endif // PROBE_MANAGER_H

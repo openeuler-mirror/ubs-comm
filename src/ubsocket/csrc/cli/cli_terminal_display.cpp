@@ -13,6 +13,9 @@
 #include "umq_dfx_types.h"
 #include "umq_types.h"
 
+#include "profiling/statistics/tx_stat_defs.h"
+#include "profiling/statistics/rx_stat_defs.h"
+
 namespace Statistics {
 
 static constexpr int IPV6_HEXTET_COUNT = 8;
@@ -21,8 +24,13 @@ static constexpr int IPV6_HEXTET_BYTE_COUNT = 2;
 static constexpr int BYTE_BIT_WIDTH = 8;
 static constexpr int MAX_FLOW_CONTROL_STR = 4096;
 constexpr int COL_WIDTH_MIN = 20;
-constexpr int COL_WIDTH_MAX = 30;
-constexpr int PROF_VALUE_SUM = 7;
+constexpr int COL_WIDTH_MAX = 45;    // 45 is the max width of the column
+constexpr int PROF_VALUE_SUM = 7;   // fast mode: name + 6 stats
+constexpr int PROF_VALUE_SUM_EXT = 9; // ext mode: name + 6 stats + p99 + p9999
+constexpr int STAT_STR_BUF_SIZE = 8192;
+constexpr int PERF_STAT_STR_BUF_SIZE = 16384;
+constexpr int QBUF_POOL_STAT_STR_BUF_SIZE = 32768; // per-SC breakdown output is large, same as server-side dump
+constexpr int TIME_STR_BUF_SIZE = 80;
 
 /* 防止整数溢出绕过长度校验：在 size_t（64 位）中计算 headerSize + count * elementSize，
  * 避免截断到 uint32_t 后被取模绕过。若结果超出 uint32_t 范围，必然不等于 dataLen，
@@ -324,6 +332,12 @@ void TerminalDisplay::PrintSubTitle()
     PrintSubTitleItem("Error Packets");
     PrintDelimiter();
     PrintSubTitleItem("Lost Packets");
+    PrintDelimiter();
+    PrintSubTitleItem("Bigdata CtrlRcv");
+    PrintDelimiter();
+    PrintSubTitleItem("Bigdata Read");
+    PrintDelimiter();
+    PrintSubTitleItem("Bigdata CtrlSnd");
     NewLine();
 }
 
@@ -362,6 +376,12 @@ void TerminalDisplay::PrintData(CLISocketData *sockData)
     PrintDataItem("Error Packets", std::to_string(sockData->errorPackets), colorRed, sockData->errorPackets == 0);
     PrintDelimiter();
     PrintDataItem("Lost Packets", std::to_string(sockData->lostPackets), colorRed, sockData->lostPackets == 0);
+    PrintDelimiter();
+    PrintDataItem("Bigdata CtrlRcv", std::to_string(sockData->bigdataCtrlRecv), colorCyan, sockData->bigdataCtrlRecv == 0);
+    PrintDelimiter();
+    PrintDataItem("Bigdata Read", std::to_string(sockData->bigdataRead), colorCyan, sockData->bigdataRead == 0);
+    PrintDelimiter();
+    PrintDataItem("Bigdata CtrlSnd", std::to_string(sockData->bigdataCtrlSend), colorCyan, sockData->bigdataCtrlSend == 0);
     NewLine();
 }
 
@@ -404,7 +424,7 @@ std::string TerminalDisplay::ConvertTimeToString(uint64_t timestamp)
     struct tm time_struct;
     time_t time_seconds = static_cast<time_t>(timestamp);
     localtime_r(&time_seconds, &time_struct);
-    char buffer[80];
+    char buffer[TIME_STR_BUF_SIZE];
     (void)strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &time_struct);
     return std::string(buffer);
 }
@@ -428,34 +448,23 @@ void TerminalDisplay::DisplayQbufPoolInfo(uint8_t *data, uint32_t dataLen)
         CLI_LOG("Invalid data, data is null\n");
         return;
     }
-    uint32_t headerSize = sizeof(CLIDataHeader);
-    if (dataLen < headerSize) {
+    uint32_t oneSockSize = sizeof(CLIDataHeader) + sizeof(CLIQbufPoolData);
+    if (dataLen < oneSockSize) {
         CLI_LOG("Invalid data size\n");
         return;
     }
     CLIDataHeader header{};
-    memcpy(&header, data, headerSize);
+    memcpy(&header, data, sizeof(CLIDataHeader));
 
-    uint32_t SocketNum = header.socketNum;
-    uint32_t expectedSize = headerSize + SocketNum * sizeof(CLIQbufPoolData);
-    if (dataLen != expectedSize) {
-        CLI_LOG("Invalid data size\n");
-        return;
-    }
-    // print data
     Refresh();
     PrintHeader(header);
 
-    char qbufPoolStatStr[8192] = {}; // 8KB buffer for qbuf pool stats
-    CLIQbufPoolData *sockData = reinterpret_cast<CLIQbufPoolData *>(data + headerSize);
-    for (uint32_t i = 0; i < SocketNum; i++) {
-        if (umq_qbuf_pool_stats_to_str(&(sockData->umqQbufPoolStat), qbufPoolStatStr, sizeof(qbufPoolStatStr)) < 0) {
-            CLI_LOG("Failed to generate qbuf pool info string\n");
-        }
-        printf("Socket %d:\n", i);
-        printf("%s", qbufPoolStatStr);
-        sockData += 1;
+    char qbufPoolStatStr[STAT_STR_BUF_SIZE] = {};
+    CLIQbufPoolData *sockData = reinterpret_cast<CLIQbufPoolData *>(data + sizeof(CLIDataHeader));
+    if (umq_qbuf_pool_stats_to_str(&(sockData->umqQbufPoolStat), qbufPoolStatStr, sizeof(qbufPoolStatStr)) < 0) {
+        CLI_LOG("Failed to generate qbuf pool info string\n");
     }
+    printf("%s", qbufPoolStatStr);
     NewLine();
     printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
 }
@@ -483,7 +492,7 @@ void TerminalDisplay::DisplayUmqInfo(uint8_t *data, uint32_t dataLen)
     Refresh();
     PrintHeader(header);
 
-    char umqInfoStr[8192] = {}; // 8KB buffer for umq info
+    char umqInfoStr[STAT_STR_BUF_SIZE] = {};
     CLIUmqInfoData *sockData = reinterpret_cast<CLIUmqInfoData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
         if (umq_info_to_str(&(sockData->umqInfo), umqInfoStr, sizeof(umqInfoStr)) < 0) {
@@ -520,7 +529,7 @@ void TerminalDisplay::DisplayIoPacketInfo(uint8_t *data, uint32_t dataLen)
     Refresh();
     PrintHeader(header);
 
-    char ioPacketStatStr[8192] = {}; // 8KB buffer for io packet stats
+    char ioPacketStatStr[STAT_STR_BUF_SIZE] = {};
     CLIIoPacketData *sockData = reinterpret_cast<CLIIoPacketData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
         if (umq_io_stats_to_str(&(sockData->umqPacketStat), ioPacketStatStr, sizeof(ioPacketStatStr)) < 0) {
@@ -557,7 +566,7 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
     Refresh();
     PrintHeader(header);
 
-    char umqPerfStatStr[16384] = {}; // 16KB buffer for umq perf stats
+    char umqPerfStatStr[PERF_STAT_STR_BUF_SIZE] = {};
     CLIUmqPerfData *sockData = reinterpret_cast<CLIUmqPerfData *>(data + headerSize);
     for (uint32_t i = 0; i < SocketNum; i++) {
         if (umq_stats_perf_to_str(&(sockData->umqPerfStat), umqPerfStatStr, sizeof(umqPerfStatStr)) < 0) {
@@ -608,55 +617,8 @@ void TerminalDisplay::DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen)
     }
 
     std::string recvDataStr(reinterpret_cast<char *>(data + headerSize), header.tracePointDataSize);
-    PrintProfData(recvDataStr);
-}
-
-void TerminalDisplay::PrintProfTitle(std::ostringstream &oss)
-{
-    constexpr int timeBufSize = 32;
-    time_t now = time(nullptr);
-    char timeBuf[timeBufSize];
-    struct tm timeInfo;
-    if (localtime_r(&now, &timeInfo) != nullptr) {
-        std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &timeInfo);
-    } else {
-        timeBuf[0] = '\0';
-        CLI_LOG("Failed to create timeStamp.\n");
-    }
-    oss << "timeStamp: " << timeBuf << "\n";
-    oss << std::left << std::setw(COL_WIDTH_MAX) << "[TRACE_NAME]" << std::setw(COL_WIDTH_MIN) << "SUCCESS"
-        << std::setw(COL_WIDTH_MIN) << "FAILURE" << std::setw(COL_WIDTH_MIN) << "TOTAL(ns)" << std::setw(COL_WIDTH_MIN)
-        << "AVG(ns)" << std::setw(COL_WIDTH_MIN) << "MAX(ns)" << std::setw(COL_WIDTH_MIN) << "MIN(ns)"
-        << "\n";
-}
-
-void TerminalDisplay::PrintProfData(std::string &outPutData)
-{
-    std::ostringstream oss;
-    PrintProfTitle(oss);
-
-    auto tp_items = Split(outPutData, ';');
-    for (const auto &item : tp_items) {
-        if (item.empty()) {
-            continue;
-        }
-        auto fields = Split(item, ',');
-        if (fields.size() != PROF_VALUE_SUM) {
-            continue;
-        }
-        oss << std::left;
-        for (auto i = 0; i < fields.size(); ++i) {
-            if (!i) {
-                oss << std::setw(COL_WIDTH_MAX);
-            } else {
-                oss << std::setw(COL_WIDTH_MIN);
-            }
-            oss << fields[i];
-        }
-        oss << "\n";
-    }
-    oss << "Success to deal delay operation. \n";
-    printf("%s", oss.str().c_str());
+    printf("%s", recvDataStr.c_str());
+    printf("Success to deal delay operation. \n");
 }
 
 void TerminalDisplay::PrintProfValue()
@@ -664,5 +626,137 @@ void TerminalDisplay::PrintProfValue()
     std::ostringstream oss;
     oss << "Success to deal delay operation. \n";
     printf("%s", oss.str().c_str());
+}
+
+static void PrintTxStatRow(const CLITxStatData *d)
+{
+    using namespace ock::ubs::txstat;
+    printf("%-8llu | %-10u | %-11u | %-10u | %-13u | %-6u | %-7u | %-8u | %-10u | %-5u | "
+           "%-7u | %-15u | %-6u | %-10u | %-9u | %-9u\n",
+           static_cast<unsigned long long>(d->socketId),
+           d->post_err[POST_ERR_EAGAIN_ALL], d->post_err[POST_ERR_EAGAIN_PART],
+           d->post_err[POST_ERR_ENOBUFS_ALL], d->post_err[POST_ERR_ENOBUFS_PART],
+           d->post_err[POST_ERR_EMLINK], d->post_err[POST_ERR_ETIMEDOUT],
+           d->post_err[POST_ERR_EFLOWCTL], d->post_err[POST_ERR_NO_BADQBUF],
+           d->post_err[POST_ERR_OTHER],
+           d->cqe_err[CQE_ERR_RNR], d->cqe_err[CQE_ERR_ACK_TIMEOUT], d->cqe_err[CQE_ERR_FC],
+           d->cqe_err[CQE_ERR_REMOTE], d->cqe_err[CQE_ERR_LOCAL], d->cqe_err[CQE_ERR_OTHER]);
+}
+
+void TerminalDisplay::DisplayTxStatInfo(uint8_t *data, const uint32_t dataLen)
+{
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
+    uint32_t headerSize = sizeof(CLIDataHeader);
+    if (dataLen < headerSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    CLIDataHeader header{};
+    memcpy(&header, data, headerSize);
+    uint32_t sockNum = header.socketNum;
+    uint32_t expectedSize = headerSize + sockNum * sizeof(CLITxStatData);
+    if (dataLen != expectedSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    Refresh();
+    PrintTitle("CLI TX STATISTICS MONITOR");
+    NewLine();
+    printf("%-8s | %-10s | %-11s | %-10s | %-13s | %-6s | %-7s | %-8s | %-10s | %-5s | "
+           "%-7s | %-15s | %-6s | %-10s | %-9s | %-9s\n",
+           "SocketFd", "eagain_all", "eagain_part", "enobufs_all", "enobufs_part",
+           "emlink", "timeout", "eflowctl", "no_badqbuf", "other",
+           "cqe_rnr", "cqe_ack_timeout", "cqe_fc", "cqe_remote", "cqe_local", "cqe_other");
+    CLITxStatData *sockData = reinterpret_cast<CLITxStatData *>(data + headerSize);
+    for (uint32_t i = 0; i < sockNum; i++) {
+        PrintTxStatRow(sockData);
+        sockData += 1;
+    }
+    NewLine();
+    printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
+}
+
+static void PrintRxStatRow(const CLIRxStatData *d)
+{
+    using namespace ock::ubs::rxstat;
+    printf("%-8llu | %-14u | %-9u | %-17u | %-16u | %-13u | %-6u | %-10u | %-9u | %-13u | "
+           "%-8u | %-9u | %-16u | %-16u | %-10u | %-11u\n",
+           static_cast<unsigned long long>(d->socketId),
+           d->poll_err[RX_POLL_GET_EVENT_FAIL], d->poll_err[RX_POLL_FAIL],
+           d->poll_err[RX_REFILL_ALLOC_FAIL], d->poll_err[RX_REFILL_POST_FAIL],
+           d->poll_err[RX_QBUF_POP_FAIL],
+           d->cqe_err[RXCQE_FC], d->cqe_err[RXCQE_REMOTE], d->cqe_err[RXCQE_LOCAL],
+           d->cqe_err[RXCQE_ACK_TIMEOUT], d->cqe_err[RXCQE_RNR], d->cqe_err[RXCQE_OTHER],
+           d->dataset_err[RX_DATASET_NO_BLOCK], d->dataset_err[RX_FLOW_CTRL_FAILED],
+           d->dataset_err[RX_REARM_FAIL], d->dataset_err[RX_PEER_CLOSED]);
+}
+
+void TerminalDisplay::DisplayRxStatInfo(uint8_t *data, const uint32_t dataLen)
+{
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
+    uint32_t headerSize = sizeof(CLIDataHeader);
+    if (dataLen < headerSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    CLIDataHeader header{};
+    memcpy(&header, data, headerSize);
+    uint32_t sockNum = header.socketNum;
+    uint32_t expectedSize = headerSize + sockNum * sizeof(CLIRxStatData);
+    if (dataLen != expectedSize) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    Refresh();
+    PrintTitle("CLI RX STATISTICS MONITOR");
+    NewLine();
+    printf("%-8s | %-14s | %-9s | %-17s | %-16s | %-13s | %-6s | %-10s | %-9s | %-13s | "
+           "%-8s | %-9s | %-16s | %-16s | %-10s | %-11s\n",
+           "SocketFd", "get_event_fail", "poll_fail", "refill_alloc_fail",
+           "refill_post_fail", "qbuf_pop_fail", "rxe_fc", "rxe_remote", "rxe_local",
+           "rxe_ack_timeout", "rxe_rnr", "rxe_other", "dataset_no_block",
+           "flow_ctrl_failed", "rearm_fail", "peer_closed");
+    CLIRxStatData *sockData = reinterpret_cast<CLIRxStatData *>(data + headerSize);
+    for (uint32_t i = 0; i < sockNum; i++) {
+        PrintRxStatRow(sockData);
+        sockData += 1;
+    }
+    NewLine();
+    printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
+}
+
+void TerminalDisplay::DisplayQbufPoolStatsInfo(uint8_t *data, uint32_t dataLen)
+{
+    if (data == nullptr) {
+        CLI_LOG("Invalid data, data is null\n");
+        return;
+    }
+    if (dataLen != sizeof(CLIQbufPoolStatsData)) {
+        CLI_LOG("Invalid data size\n");
+        return;
+    }
+    CLIQbufPoolStatsData *statsData = reinterpret_cast<CLIQbufPoolStatsData *>(data);
+
+    PrintTitle("CLI GLOBAL QBUF POOL (NORMAL + TINY) STATISTICS");
+    NewLine();
+    if (statsData->retCode != 0) {
+        printf("%sFailed to get qbuf pool info, retCode: %d%s\n", colorRed, statsData->retCode, colorReset);
+        return;
+    }
+
+    /* 与 30s 周期落盘 ubsocket_qbuf.txt 相同的格式化输出 */
+    char poolStatStr[QBUF_POOL_STAT_STR_BUF_SIZE] = {};
+    if (umq_qbuf_pool_stats_to_str(&(statsData->umqQbufPoolStat), poolStatStr, sizeof(poolStatStr)) <= 0) {
+        CLI_LOG("Failed to generate qbuf pool stats string\n");
+        return;
+    }
+    printf("%s", poolStatStr);
+    NewLine();
 }
 } // namespace Statistics
