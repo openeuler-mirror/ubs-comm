@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 # define macro that will be used in source code
 add_compile_options(-DMOCK_VERBS -DTEST_LLT -DUMQ_QBUF_DEBUG)
-message(STATUS "LIBBOUNDCHECK_SHARED_LIBRARY: ${LIBBOUNDCHECK_SHARED_LIBRARY}")
+message(STATUS "LIBBOUNDSCHECK_SHARED_LIBRARY: ${LIBBOUNDSCHECK_SHARED_LIBRARY}")
 option(BUILD_WITH_HW_CRC "Build with hardware crc" OFF)
 option(BUILD_WITH_SERVICE "Build with SERVICE" ON)
 option(BUILD_WITH_RDMA "Build with RDMA" ON)

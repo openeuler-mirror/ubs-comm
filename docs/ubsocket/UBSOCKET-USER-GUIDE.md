@@ -162,8 +162,8 @@ UBSocket支持两种构建方式：
     # 安装openssl
     $ yum install -y openssl
     
-    # 安装libboundcheck
-    $ yum install -y libboundcheck
+    # 安装libboundscheck
+    $ yum install -y libboundscheck
     
     # 安装cmake
     $ yum install cmake
