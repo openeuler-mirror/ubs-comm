@@ -54,6 +54,7 @@ public:
     uintptr_t remote_start_addr_;                         /**< Base address of remote buffer pool */
     std::vector<urma_target_seg_t *> remote_target_segs_; /**< URMA target segments indexed by block */
     pthread_spinlock_t target_lock_;
+    uint32_t ctx_id;
 
     RemoteSegments() noexcept : remote_start_addr_(0)
     {
@@ -132,8 +133,8 @@ public:
     uint32_t get_mini_block_size() const noexcept;
     uint32_t get_block_size() const noexcept;
     urma_target_seg_t *get_local_target_seg(UrmaContextPtr ctx, uintptr_t ptr) const noexcept;
-    RemoteSegmentsPtr get_remote_segments(const IdentifyNode &remote) noexcept;
-    void rm_remote_segments(const IdentifyNode &remote) noexcept;
+    RemoteSegmentsPtr get_remote_segments(UrmaContextPtr ctx, const IdentifyNode &remote) noexcept;
+    void rm_remote_segments(UrmaContextPtr ctx, const IdentifyNode &remote) noexcept;
     urma_target_seg_t *get_remote_target_seg(RemoteSegmentsPtr &remote, uintptr_t ptr) const noexcept;
     Result store_remote_target_seg(UrmaContextPtr ctx, RemoteSegmentsPtr &remote, urma_seg_t &seg, urma_target_seg_t *&tgt) noexcept;
     Result store_remote_target_seg(UrmaContextPtr ctx, RemoteSegmentsPtr &remote, urma_eid_t &eid, uint32_t uasid, uintptr_t addr,

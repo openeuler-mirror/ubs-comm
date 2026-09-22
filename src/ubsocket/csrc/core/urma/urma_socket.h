@@ -43,6 +43,22 @@ public:
     virtual bool NotifyReadable(UrmaSocket &sock) noexcept = 0;
 };
 
+constexpr uint32_t URMA_SOCKET_MASK_LINK_SWITCH = 0x1; /* bit 0: link switch enabled */
+constexpr uint32_t URMA_SOCKET_MASK_DEGRADE = 0x2;     /* bit 1: degrade to tcp enabled */
+constexpr uint32_t URMA_SOCKET_MASK_BIND_REMOTE = 0x4; /* bit 2: remote resources bound (local state, never on wire) */
+
+ALWAYS_INLINE Result SocketMaskToErrnoFlag(uint32_t conn_flag)
+{
+    Result ret = 0;
+    if ((conn_flag & URMA_SOCKET_MASK_DEGRADE) != 0) {
+        ret |= UBS_DEGRADABLE_MASK;
+    }
+    if ((conn_flag & URMA_SOCKET_MASK_LINK_SWITCH) != 0) {
+        ret |= UBS_RETRYABLE_MASK;
+    }
+    return ret;
+}
+
 class UrmaSocket : public SocketBase {
 public:
     explicit UrmaSocket(int fd) noexcept;
@@ -66,21 +82,6 @@ public:
 
     bool IsBindRemote() override;
 
-    void SetBindRemote(bool bound)
-    {
-        is_bind_remote_ = bound;
-    }
-
-    uint32_t GetNegotiatedVersion() const
-    {
-        return negotiated_version_;
-    }
-
-    void SetNegotiatedVersion(uint32_t version)
-    {
-        negotiated_version_ = version;
-    }
-
     uint32_t GetPeerVersion() const
     {
         return peer_version_;
@@ -91,14 +92,9 @@ public:
         peer_version_ = version;
     }
 
-    urma_eid_t GetPeerEid() const
+    IdentifyNode GetPeerNode() const
     {
-        return peer_eid_;
-    }
-
-    void SetPeerEid(const urma_eid_t &eid)
-    {
-        peer_eid_ = eid;
+        return peer_node_;
     }
 
     void SetTransMode(ub_trans_mode mode)
@@ -124,20 +120,29 @@ public:
         }
     }
 
-    void SetConnFlag(uint32_t flag)
+    void SetSocketFlags(uint32_t mask)
     {
-        conn_flag = flag;
+        socket_flags |= mask;
+    }
+
+    uint64_t GetConnId() const
+    {
+        return conn_id_;
+    }
+
+    void SetConnId(uint64_t id)
+    {
+        conn_id_ = id;
     }
 
     bool DegradeEnable()
     {
-        return (conn_flag & UBS_DEGRADABLE_MASK) != 0;
+        return (socket_flags & URMA_SOCKET_MASK_DEGRADE) != 0;
     }
 
     bool LinkSwitchEnable()
     {
-        // TODO check used_port
-        return (conn_flag & UBS_RETRYABLE_MASK) != 0 && false;
+        return (socket_flags & URMA_SOCKET_MASK_LINK_SWITCH) != 0;
     }
 
     int NotifySocketReadable();
@@ -265,34 +270,18 @@ private:
     RemoteSegmentsPtr remote_target_segs_{nullptr};
 
     ub_trans_mode trans_mode{RM_CTP};
-    uint32_t conn_flag{0};
+    uint32_t socket_flags : 3;
 
-    urma_eid_t local_eid_{};
-    urma_eid_t peer_eid_{};
-
-    size_t recv_data_size_{0};
-    size_t recv_data_offset_{0};
-    bool recv_data_ready_{false};
-
-    bool is_bind_remote_{false};
+    IdentifyNode peer_node_{};
     uint32_t remote_uasid_{0};
-    uint32_t negotiated_version_{0};
     uint32_t peer_version_{0};
+    uint64_t conn_id_{0}; /* acceptor-assigned connection id, 0 means not negotiated yet */
     std::atomic<uint32_t> reach_epoll_events_{0};
     std::atomic<bool> socket_readable_ready_{false};                 // socket初始状态为不可读
     std::atomic<UrmaReadableNotifier *> readable_notifier_{nullptr}; /* poll that may deliver readable inline */
 
     urma_sge_t empty_recv_sge_;
     urma_jfr_wr_t empty_recv_wr_;
-
-    /* Blocking predicate bits, guarded by block_mutex_. */
-    enum BlockingFlag : uint32_t
-    {
-        BLOCKING_FLAG_WRITABLE = 1U << 0,    /* producer doorbell: send buffer freed (writev) */
-        BLOCKING_FLAG_CLOSED = 1U << 1,      /* local close */
-        BLOCKING_FLAG_PEER_CLOSED = 1U << 2, /* peer close (future URMA error event hook) */
-        BLOCKING_FLAG_READABLE = 1U << 3,    /* producer doorbell: data arrived (readv) */
-    };
 
     /* predicate and condvar are guarded by block_mutex_. */
     pthread_mutex_t block_mutex_;

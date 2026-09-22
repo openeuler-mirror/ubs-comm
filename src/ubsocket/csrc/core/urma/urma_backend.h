@@ -53,6 +53,12 @@ public:
 
     UrmaAggPollerSetPtr GetPollerSet() noexcept;
 
+    void RecordBrokenConn(uint64_t conn_addr_id, uint64_t conn_id) noexcept;
+
+    uint64_t TakeBrokenConnId(uint64_t conn_addr_id) noexcept;
+
+    void EraseBrokenConn(uint64_t conn_addr_id) noexcept;
+
 private:
     void UnInitInner() noexcept;
 
@@ -79,6 +85,8 @@ private:
 
     Result HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr);
 
+    void HandleErrorCqe(urma_cr_t *cr);
+
 private:
     /* put the hottest used variables on the head */
     UrmaIoBufferPoolPtr io_buff_pool_; /* io buffer pool */
@@ -91,6 +99,9 @@ private:
     bool inited_ = false;      /* init flag for whole backend */
     bool urma_inited_ = false; /* init flag for urma init */
     bool init_urma_only_ = false;
+
+    std::mutex broken_conn_mutex_;                   /* guards broken_conns_ */
+    std::map<uint64_t, uint64_t> broken_conns_{};    /* peer addr id -> last broken conn_id */
 };
 
 } // namespace urma

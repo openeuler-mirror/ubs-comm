@@ -51,6 +51,12 @@ ssize_t DataTx::WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcn
     TRACE_ADD_WRITE_SIMPLE(trace, CORE_WRITE, fd_);
     PROF_START(CORE_WRITE);
 
+    if (sock->State() == SOCK_STAT_BROKEN) {
+        errno = EPIPE;
+        UBS_VLOG_TRACE("socket(%d) is broken for physical link error.", sock->Fd());
+        return -1;
+    }
+
     if (UNLIKELY(iov == nullptr || iovcnt == 0)) {
         errno = EINVAL;
         UBS_VLOG_ERR("WriteV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,

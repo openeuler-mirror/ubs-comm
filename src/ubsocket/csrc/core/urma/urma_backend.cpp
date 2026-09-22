@@ -409,14 +409,103 @@ void UrmaBackend::SetLogLevel(int level) noexcept
     UrmaApi::urma_log_set_level(UrmaGetLogLevel());
 }
 
+void UrmaBackend::RecordBrokenConn(uint64_t conn_addr_id, uint64_t conn_id) noexcept
+{
+    if (conn_addr_id == 0 || conn_id == 0) {
+        return;
+    }
+    std::lock_guard<std::mutex> locker(broken_conn_mutex_);
+    broken_conns_[conn_addr_id] = conn_id;
+}
+
+uint64_t UrmaBackend::TakeBrokenConnId(uint64_t conn_addr_id) noexcept
+{
+    std::lock_guard<std::mutex> locker(broken_conn_mutex_);
+    auto iter = broken_conns_.find(conn_addr_id);
+    if (iter == broken_conns_.end()) {
+        return 0;
+    }
+    return iter->second;
+}
+
+void UrmaBackend::EraseBrokenConn(uint64_t conn_addr_id) noexcept
+{
+    std::lock_guard<std::mutex> locker(broken_conn_mutex_);
+    broken_conns_.erase(conn_addr_id);
+}
+
+void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
+{
+    switch (cr->status) {
+        case URMA_CR_SUCCESS:
+            break;
+        // case need switch route
+        case URMA_CR_LOC_LEN_ERR:
+        case URMA_CR_LOC_ACCESS_ERR:
+        case URMA_CR_ACK_TIMEOUT_ERR:
+        case URMA_CR_RNR_RETRY_CNT_EXC_ERR:
+        case URMA_CR_LOC_DATA_POISON:
+        {
+            if (cr->user_ctx == 0) {
+                UBS_VLOG_ERR("handle error cr failed for user_ctx invalid: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
+                             cr->user_ctx, cr->opcode, cr->flag.value);
+                break;
+            }
+            SenderCRContext cr_context{cr->user_ctx};
+            auto sock_fd = cr_context.fd;
+            auto sock = ArraySet<Socket>::GetInstance().GetItem(sock_fd);
+            if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
+                UBS_VLOG_ERR("handle error cr failed for fd invalid: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd: %d", cr->status,
+                             cr->user_ctx, cr->opcode, cr->flag.value, sock_fd);
+                break;
+            }
+            auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
+            if (!urma_sock->LinkSwitchEnable()) {
+                UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd: %d", cr->status,
+                             cr->user_ctx, cr->opcode, cr->flag.value, sock_fd);
+                break;
+            }
+            if (urma_sock->State() == SocketState::SOCK_STAT_BROKEN) {
+                UBS_VLOG_TRACE("handle error cr success: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd=%d, sender_type=%d", cr->status,
+                               cr->user_ctx, cr->opcode, cr->flag.value, sock_fd, cr_context.type);
+                break;
+            }
+            urma_sock->GetContext()->RecordPortError(cr->status);
+            if (urma_sock->create_type_ == SOCK_CREATE_TYPE_CONNECT) {
+                UrmaBackend::Instance().RecordBrokenConn(urma_sock->GetPeerAddrId(), urma_sock->GetConnId());
+            }
+            io_buff_pool_->rm_remote_segments(urma_sock->GetContext(), urma_sock->GetPeerNode());
+            urma_sock->State(SocketState::SOCK_STAT_BROKEN);
+            LibcApi::shutdown(urma_sock->Fd(), SHUT_RD);
+            urma_sock->NotifySocketReadable();
+            UBS_VLOG_WARN("handle error cr for channel broken: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd=%d, sender_type=%d, conn_id=%d", cr->status,
+                           cr->user_ctx, cr->opcode, cr->flag.value, sock_fd, cr_context.type, urma_sock->GetConnId());
+            break;
+        }
+        // case report error
+        case URMA_CR_UNSUPPORTED_OPCODE_ERR:
+        case URMA_CR_LOC_OPERATION_ERR:
+        case URMA_CR_REM_RESP_LEN_ERR:
+        case URMA_CR_REM_UNSUPPORTED_REQ_ERR:
+        case URMA_CR_REM_OPERATION_ERR:
+        case URMA_CR_REM_ACCESS_ABORT_ERR:
+        case URMA_CR_WR_FLUSH_ERR:
+        case URMA_CR_WR_SUSPEND_DONE:
+        case URMA_CR_WR_FLUSH_ERR_DONE:
+        case URMA_CR_WR_UNHANDLED:
+        case URMA_CR_REM_DATA_POISON:
+        default:
+            UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
+                         cr->user_ctx, cr->opcode, cr->flag.value);
+    }
+}
+
 Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
 {
     (void)flags;
     for (auto i = 0; i < cr_count; i++) {
         if (cr[i].status != URMA_CR_SUCCESS) {
-            // TODO: add process for error status
-            UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr[i].status,
-                         cr[i].user_ctx, cr[i].opcode, cr[i].flag.value);
+            HandleErrorCqe(&cr[i]);
             continue;
         }
 
@@ -445,7 +534,8 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
             if (cr[i].user_ctx == 0) { // TODO: why write imm receiver user ctx = 0
                 continue;
             }
-            auto fd = static_cast<int>(cr[i].user_ctx);
+            SenderCRContext cr_context{cr[i].user_ctx};
+            auto fd = static_cast<int>(cr_context.fd);
             auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
             if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
                 UBS_VLOG_ERR("socket is invalid for fd: %d", fd);

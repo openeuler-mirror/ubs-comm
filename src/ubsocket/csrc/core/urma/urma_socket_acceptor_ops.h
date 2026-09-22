@@ -28,6 +28,11 @@ public:
     Result CreateSocketResources(SocketPtr socketPtr) override;
     void DestroySocketResources() override;
     int ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size) override;
+
+private:
+    /* peer reported a previously broken conn: mark the stale server-side socket broken
+     * so readv/shutdown can release its resources */
+    ALWAYS_INLINE void CleanStaleSock(uint64_t stale_conn_id, Socket *cur_sock);
 };
 
 } // namespace urma

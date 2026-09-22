@@ -114,28 +114,41 @@ urma_target_seg_t *UrmaIoBufferPool::get_local_target_seg(UrmaContextPtr ctx, ui
     return iter->second[block_index];
 }
 
-RemoteSegmentsPtr UrmaIoBufferPool::get_remote_segments(const IdentifyNode &remote) noexcept
+RemoteSegmentsPtr UrmaIoBufferPool::get_remote_segments(UrmaContextPtr ctx, const IdentifyNode &remote) noexcept
 {
     RemoteSegmentsPtr remote_segments{nullptr};
 
     pthread_spin_lock(&target_segments_.remote_segments_lock_);
     auto pos = target_segments_.remote_target_segs_.find(remote);
-    if (UNLIKELY(pos == target_segments_.remote_target_segs_.end())) {
-        remote_segments = MakeRef<RemoteSegments>();
-        auto block_count = (options_.pool_space_size_gb << 10) / options_.block_size_mb;
-        remote_segments->remote_target_segs_.resize(block_count);
-        target_segments_.remote_target_segs_.emplace(remote, remote_segments);
-    } else {
-        remote_segments = pos->second;
+    if (pos != target_segments_.remote_target_segs_.end() && pos->second != nullptr) {
+        if (pos->second->ctx_id == ctx->Id()) {
+            remote_segments = pos->second;
+            pthread_spin_unlock(&target_segments_.remote_segments_lock_);
+            return remote_segments;
+        }
+        UBS_VLOG_WARN("Context is changed that expired remote_target_segs will removed.");
+        target_segments_.remote_target_segs_.erase(remote);
     }
+    remote_segments = MakeRef<RemoteSegments>();
+    auto block_count = (options_.pool_space_size_gb << 10) / options_.block_size_mb;
+    remote_segments->remote_target_segs_.resize(block_count);
+    remote_segments->ctx_id = ctx->Id();
+    target_segments_.remote_target_segs_.emplace(remote, remote_segments);
     pthread_spin_unlock(&target_segments_.remote_segments_lock_);
 
     return remote_segments;
 }
 
-void UrmaIoBufferPool::rm_remote_segments(const IdentifyNode &remote) noexcept
+void UrmaIoBufferPool::rm_remote_segments(UrmaContextPtr ctx, const IdentifyNode &remote) noexcept
 {
     pthread_spin_lock(&target_segments_.remote_segments_lock_);
+    auto pos = target_segments_.remote_target_segs_.find(remote);
+    if (pos != target_segments_.remote_target_segs_.end() &&
+        pos->second != nullptr && pos->second->ctx_id != ctx->Id()) {
+        UBS_VLOG_WARN("Context is changed that current remote_target_segs will not removed.");
+        pthread_spin_unlock(&target_segments_.remote_segments_lock_);
+        return;
+    }
     target_segments_.remote_target_segs_.erase(remote);
     pthread_spin_unlock(&target_segments_.remote_segments_lock_);
 }
@@ -166,6 +179,11 @@ Result UrmaIoBufferPool::store_remote_target_seg(UrmaContextPtr ctx, RemoteSegme
                                                  urma_target_seg_t *&tgt) noexcept
 {
     if (UNLIKELY(remote == nullptr)) {
+        return UBS_ERROR;
+    }
+
+    if (remote->ctx_id != ctx->Id()) {
+        UBS_VLOG_ERR("Context is changed that current remote_target_segs is invalid.");
         return UBS_ERROR;
     }
 
@@ -208,6 +226,11 @@ Result UrmaIoBufferPool::store_remote_target_seg(UrmaContextPtr ctx, RemoteSegme
                                                  uintptr_t addr, uint32_t token) noexcept
 {
     if (UNLIKELY(remote == nullptr)) {
+        return UBS_ERROR;
+    }
+
+    if (remote->ctx_id != ctx->Id()) {
+        UBS_VLOG_ERR("Context is changed that current remote_target_segs is invalid.");
         return UBS_ERROR;
     }
 

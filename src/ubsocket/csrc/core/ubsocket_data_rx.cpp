@@ -48,6 +48,12 @@ ssize_t DataRx::ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt
 {
     UBS_VLOG_TRACE("enter DataRx::ReadV fd=%d, iovcnt=%d, iov[0].buf=%p", sock->Fd(), iovcnt, iov[0].iov_base);
 
+    if (sock->State() == SOCK_STAT_BROKEN) {
+        errno = EPIPE;
+        UBS_VLOG_TRACE("socket(%d) is broken for physical link error.", sock->Fd());
+        return -1;
+    }
+
     if (UNLIKELY(iov == nullptr || iovcnt == 0)) {
         errno = EINVAL;
         UBS_VLOG_WARN("ReadV invalid argument, fd: %d, ret: %d, errno: %d, errmsg: %s\n", fd_, -1, errno,

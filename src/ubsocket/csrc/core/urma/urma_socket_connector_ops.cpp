@@ -81,8 +81,21 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     req.trans_mode = UrmaSetting::UB_TANS_MODE;
     req.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
     req.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
-    req.conn_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? UBS_DEGRADABLE_MASK : 0;
-    req.conn_flag |= GlobalSetting::UBS_ENABLE_LINK_SWITCH ? UBS_RETRYABLE_MASK : 0;
+    req.conn_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? URMA_SOCKET_MASK_DEGRADE : 0;
+    req.conn_flag |= GlobalSetting::UBS_ENABLE_LINK_SWITCH ? URMA_SOCKET_MASK_LINK_SWITCH : 0;
+
+    /* fill local context health list from sorted_contexts_ */
+    auto sorted_contexts = UrmaBackend::Instance().GetContextPoll()->SortedContexts();
+    req.context_count = std::min(static_cast<uint32_t>(sorted_contexts.size()), URMA_MAX_CONTEXT_COUNT);
+    for (uint32_t i = 0; i < req.context_count; ++i) {
+        const auto &ctx = sorted_contexts[i];
+        req.context_health[i].eid_index = ctx->EidInfo().eid_index;
+        req.context_health[i].is_bad = ctx->IsBadPort() ? 1 : 0;
+    }
+
+    /* carry last broken conn_id for this peer so server can clean stale resources */
+    uint64_t peer_addr_id = urma_sock->GetPeerAddrId();
+    req.last_conn_id = UrmaBackend::Instance().TakeBrokenConnId(peer_addr_id);
 
     Result ret = SocketConnHelper::SendLengthPrefixed(raw_fd_, &req, sizeof(req), NEGOTIATE_TIMEOUT_MS);
     if (ret != UBS_OK) {
@@ -110,12 +123,21 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
         UBS_VLOG_ERR("negotiate fd=%d, ValidateNegotiated negotiated_version failed: %d", raw_fd_, ver_result);
         return UBS_TCP_EXCHANGE;
     }
-    urma_sock->SetNegotiatedVersion(negotiated_version);
+    /* negotiate succeeded: drop the broken record for this peer */
+    if (req.last_conn_id != 0) {
+        UrmaBackend::Instance().EraseBrokenConn(peer_addr_id);
+    }
     urma_sock->SetTransMode(rsp.trans_mode);
-    urma_sock->SetConnFlag(rsp.conn_flag);
-    urma_sock->SetPeerEid(rsp.local_eid);
-    UBS_VLOG_TRACE("negotiate fd=%d, buf_size(%u, %u) eid(%lx, %lx)", raw_fd_, rsp.send_buf_kb, rsp.recv_buf_kb,
-                   rsp.local_eid.in6.subnet_prefix, rsp.local_eid.in6.interface_id);
+    urma_sock->SetSocketFlags(rsp.conn_flag);
+    urma_sock->SetConnId(rsp.conn_id);
+    /* apply negotiated context if acceptor selected one */
+    if (rsp.selected_context_index < 0 || static_cast<uint32_t>(rsp.selected_context_index) >= req.context_count) {
+        UBS_VLOG_WARN("negotiate fd=%d, has no context valid: %d", raw_fd_, rsp.selected_context_index);
+        return UBS_TCP_EXCHANGE | SocketMaskToErrnoFlag(urma_sock->socket_flags);
+    }
+    urma_sock->context_ = sorted_contexts[rsp.selected_context_index];
+    UBS_VLOG_TRACE("negotiate fd=%d, buf_size(%u, %u) eid(%lx, %lx) sel_ctx=%d", raw_fd_, rsp.send_buf_kb, rsp.recv_buf_kb,
+                   urma_sock->context_->EidInfo().eid.in6.subnet_prefix, urma_sock->context_->EidInfo().eid.in6.interface_id, rsp.selected_context_index);
 
     return UBS_OK;
 }

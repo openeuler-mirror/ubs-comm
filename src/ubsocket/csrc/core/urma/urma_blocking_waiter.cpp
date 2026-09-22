@@ -46,10 +46,10 @@ WaitOutcome BlockingWaiter::Wait() noexcept
     }
 
     const uint32_t signalled = sock_->WaitBlockingSignal(interestFlags_, hasDeadline_ ? &deadline_ : nullptr);
-    if ((signalled & UrmaSocket::BLOCKING_FLAG_CLOSED) != 0) {
+    if ((signalled & BLOCKING_FLAG_CLOSED) != 0) {
         return WaitOutcome::LOCAL_CLOSED;
     }
-    if ((signalled & UrmaSocket::BLOCKING_FLAG_PEER_CLOSED) != 0) {
+    if ((signalled & BLOCKING_FLAG_PEER_CLOSED) != 0) {
         return WaitOutcome::PEER_CLOSED;
     }
     return (signalled == 0) ? WaitOutcome::TIMEOUT : WaitOutcome::RETRY;

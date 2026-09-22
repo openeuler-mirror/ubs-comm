@@ -37,6 +37,7 @@ constexpr uint32_t kDefaultCqPollBatch = 32;
 enum OneSideSenderType : uint8_t {
     CTRL_DATA_REQUEST = 1, /* write-in-band: inline-data RDMA WRITE_IMM CQE */
     CTRL_DATA_RESPONSE,    /* post-write: response to a PRE_WRITE or inline-data ack */
+    CTRL_DATA_RECEiVE,     /* post jetty for recv ctrl data */
     READ_DATA_REQUEST,     /* pre-write large IO: RDMA READ completion, data now in local blocks */
 };
 
@@ -123,6 +124,15 @@ struct PageBufferInMessage {
     uint32_t flags;
 };
 
+/* Blocking predicate bits, guarded by block_mutex_. */
+enum BlockingFlag : uint32_t
+{
+    BLOCKING_FLAG_WRITABLE = 1U << 0,    /* producer doorbell: send buffer freed (writev) */
+    BLOCKING_FLAG_CLOSED = 1U << 1,      /* local close */
+    BLOCKING_FLAG_PEER_CLOSED = 1U << 2, /* peer close (future URMA error event hook) */
+    BLOCKING_FLAG_READABLE = 1U << 3,    /* producer doorbell: data arrived (readv) */
+};
+
 struct UrmaMessageDataBody {
     PageBufferInMessage sender_buffers[0];
 };
@@ -141,13 +151,22 @@ struct UrmaCtrlMessage {
 constexpr uint32_t URMA_INLINE_MESSAGE_CTRL_COST = sizeof(UrmaMessageHead);
 constexpr uint32_t URMA_INLINE_DATA_THRESHOLD = URMA_INLINE_THRESHOLD - URMA_INLINE_MESSAGE_CTRL_COST;
 
+constexpr uint32_t URMA_MAX_CONTEXT_COUNT = 32;
+
+struct UrmaContextHealthEntry {
+    uint32_t eid_index;
+    uint8_t is_bad;
+};
+
 struct UrmaNegotiateReq {
     uint32_t peer_version;
     ub_trans_mode trans_mode;
     uint32_t send_buf_kb;
     uint32_t recv_buf_kb;
-    urma_eid_t local_eid;
     uint32_t conn_flag;
+    uint32_t context_count;
+    UrmaContextHealthEntry context_health[URMA_MAX_CONTEXT_COUNT];
+    uint64_t last_conn_id; /* previous broken conn_id for this peer, 0 means none */
 };
 
 struct UrmaNegotiateRsp {
@@ -156,8 +175,9 @@ struct UrmaNegotiateRsp {
     ub_trans_mode trans_mode;
     uint32_t send_buf_kb;
     uint32_t recv_buf_kb;
-    urma_eid_t local_eid;
     uint32_t conn_flag;
+    int32_t selected_context_index;
+    uint64_t conn_id; /* acceptor-assigned connection id, 0 means invalid */
 };
 
 struct UrmaSockBufInfo {

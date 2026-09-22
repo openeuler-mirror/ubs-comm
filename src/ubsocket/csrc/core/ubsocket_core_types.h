@@ -22,6 +22,7 @@ enum SocketState : uint8_t {
     SOCK_STAT_RAW_ESTABLISHED, /* the raw socket established */
     SOCK_STAT_ESTABLISHED,     /* all things established */
     SOCK_STAT_SHUTDOWN,        /* shutdown */
+    SOCK_STAT_BROKEN,          /* broken */
     SOCK_STAT_CLOSE,           /* closed */
                                /* add state before COUNT */
     SOCK_STATE_COUNT
@@ -95,6 +96,8 @@ public:
      */
     int Fd() const noexcept;
 
+    uint64_t GetPeerAddrId() const noexcept;
+
 public:
     virtual bool IsBindRemote() = 0;
 
@@ -113,6 +116,7 @@ public:
     SocketCreateType create_type_ = SOCK_CREATE_TYPE_UNKNOWN; /* created because of what */
     int raw_socket_ = -1;                                     /* fd of raw socket */
     int event_fd_ = -1;                                       /* event fd */
+    uint64_t conn_add_id = 0;                                 /* packed peer address: (ipv4 << 16) | port, 0 = unset */
     SplitTrace *split_trace_ = nullptr;
 };
 
@@ -137,6 +141,11 @@ ALWAYS_INLINE void Socket::State(const SocketState state) noexcept
 ALWAYS_INLINE int Socket::Fd() const noexcept
 {
     return raw_socket_;
+}
+
+ALWAYS_INLINE uint64_t Socket::GetPeerAddrId() const noexcept
+{
+    return conn_add_id;
 }
 
 struct ConnInfo {

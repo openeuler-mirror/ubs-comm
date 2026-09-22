@@ -105,7 +105,7 @@ ssize_t UrmaTxOps::WriteV(const SocketPtr &sock, const struct iovec *iov, int io
      * partial count back to the caller (POSIX). */
     const bool shortWriteAllowed = (flags & UBS_IO_FLAG_DONT_WAIT) != 0 || !SocketConnHelper::IsBlocking(fd_);
 
-    BlockingWaiter waiter(urma_sock, UrmaSocket::BLOCKING_FLAG_WRITABLE, SO_SNDTIMEO);
+    BlockingWaiter waiter(urma_sock, BLOCKING_FLAG_WRITABLE, SO_SNDTIMEO);
 
     for (;;) {
         const ssize_t ret = SubmitOnce(sock, req);
