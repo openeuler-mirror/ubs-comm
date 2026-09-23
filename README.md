@@ -59,11 +59,18 @@ $ git clone <repo-url> --recurse-submodules
 
 ### 构建依赖
 
-构建前需安装以下工具链和依赖。仅支持openEuler。
+构建前需安装以下工具链和依赖。推荐 openEuler 24.03 LTS SP3 或更高版本，下载地址：<https://www.openeuler.org/zh/download/>。
 
 ```shell
 $ dnf install -y cmake gcc gcc-c++ make git rdma-core-devel openssl-devel libboundscheck time
 ```
+
+UMQ/URMA 依赖说明（编译与运行均涉及）：
+
+- **编译**：UBSocket 依赖 UMQ（源码在本仓 `src/hcom/umq/`，一站式构建 `UMQ_BUILD=on` 自动编译，无需额外安装）；UMQ 的 `umq_ub` 子模块依赖 URMA 头文件（`urma_api.h`/`uvs_api.h`），头文件来源二选一：
+  - **完整 URMA SDK**：真实 URMA 接口声明，编译产物对接真实 URMA 运行时，编译、运行链路完整；
+  - **URMA stub（`USE_URMA_STUB=ON`）**：使用仓内 `src/hcom/umq/stub/urma/` 下的同名接口声明副本，只含声明、无任何实现，供无 SDK 环境完成编译与 UT（x86_64/aarch64 均可），无法运行 UB 传输。
+- **运行**：UB 传输 E2E 需要 UMQ/URMA 完整运行时库（stub 不包含运行时 so），仅 aarch64（Kunpeng 920/950）可用。
 
 ### 编译
 
@@ -104,7 +111,7 @@ $ ctest --test-dir src/ubsocket/build --output-on-failure
 
 ### 容器/Docker 环境说明
 
-编译和运行环境仅支持openEuler。
+编译和运行环境推荐使用 openEuler 24.03 LTS SP3 或更高版本。
 
 在容器（或任何最小化环境）中构建和运行测试前，确保已安装上述工具链和依赖。仓库提供了 `docker/Dockerfile` 用于构建容器镜像，也可直接使用 `build.sh` 管理构建流程。详见 [`docs/zh/ubscomm_installation_deployment.md`](docs/zh/ubscomm_installation_deployment.md#容器镜像部署可选) 的容器镜像部署章节。
 

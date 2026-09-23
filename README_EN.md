@@ -40,11 +40,18 @@ $ git clone <repo-url> --recurse-submodules
 
 ### Build Dependencies
 
-Install the following toolchains and dependencies before building (**openEuler only**):
+Install the following toolchains and dependencies before building (openEuler 24.03 LTS SP3 or later is recommended). Download: <https://www.openeuler.org/zh/download/>
 
 ```shell
 $ dnf install -y cmake gcc gcc-c++ make git rdma-core-devel openssl-devel libboundscheck time
 ```
+
+Notes on UMQ/URMA dependencies (required for both building and running):
+
+- **Build**: UBSocket depends on UMQ (source code in this repository under `src/hcom/umq/`; the one-stop build with `UMQ_BUILD=on` compiles it automatically, no extra installation needed). The `umq_ub` submodule of UMQ depends on URMA headers (`urma_api.h`/`uvs_api.h`), which come from either of two sources:
+  - **Full URMA SDK**: real URMA interface declarations; build artifacts link against the real URMA runtime, providing a complete build-and-run chain.
+  - **URMA stub (`USE_URMA_STUB=ON`)**: uses duplicate interface declarations under `src/hcom/umq/stub/urma/` in this repository; declarations only, no implementation. It allows building and running UT without the SDK (on both x86_64 and aarch64), but cannot run the UB transport.
+- **Runtime**: UB transport E2E requires the full UMQ/URMA runtime libraries (the stub does not include runtime .so files), available only on aarch64 (Kunpeng 920/950).
 
 ### Compilation
 
@@ -81,7 +88,7 @@ $ ctest --test-dir src/ubsocket/build --output-on-failure
 
 ### Container/Docker Environment
 
-The build and runtime environment only supports **openEuler**.
+The build and runtime environment recommends **openEuler 24.03 LTS SP3 or later**.
 
 Before building and running tests in a container (or any minimal environment), ensure the above toolchains and dependencies are installed. The repository provides `docker/Dockerfile` for building container images, or `build.sh` can directly manage the build process. See [`docs/zh/ubscomm_installation_deployment.md`](docs/zh/ubscomm_installation_deployment.md#容器镜像部署可选) for the container deployment chapter.
 
