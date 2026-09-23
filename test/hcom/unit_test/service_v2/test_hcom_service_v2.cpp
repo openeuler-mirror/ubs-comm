@@ -10,13 +10,20 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <gtest/gtest.h>
+#include <sys/epoll.h>
 #include <cstdint>
+#include <map>
 #include <mockcpp/mockcpp.hpp>
+#include <mutex>
 
 #include "hcom.h"
 #include "net_rdma_async_endpoint.h"
 #include "service_callback.h"
 #include "service_channel_imp.h"
+#include "service_common.h"
+#include "service_ctx_store.h"
+#include "service_periodic_manager.h"
+#include "service_timer_trace.h"
 #include "under_api/urma/urma_api_wrapper.h"
 
 namespace ock {
@@ -62,6 +69,23 @@ TEST_F(TestHcomServiceV2, TestHcomServiceV2Destroy)
     MOCKER_CPP_VIRTUAL(*service, &UBSHcomService::DoDestroy).stubs().will(returnValue(static_cast<int>(SER_ERROR)));
     EXPECT_EQ(UBSHcomService::Destroy("client1"), SER_ERROR);
     delete service;
+}
+
+TEST_F(TestHcomServiceV2, TestHcomServiceV2CreateInvalidOptions)
+{
+    UBSHcomServiceOptions options{};
+    options.maxSendRecvDataSize = NN_NO1024;
+    options.workerGroupMode = static_cast<UBSHcomWorkerMode>(NN_NO3);
+    EXPECT_EQ(UBSHcomService::Create(UBSHcomNetDriverProtocol::RDMA, "client-invalid-mode", options), nullptr);
+
+    options.workerGroupMode = NET_BUSY_POLLING;
+    options.workerThreadPriority = static_cast<int8_t>(NN_NO20);
+    EXPECT_EQ(UBSHcomService::Create(UBSHcomNetDriverProtocol::RDMA, "client-invalid-priority", options), nullptr);
+
+    options.workerThreadPriority = static_cast<int8_t>(NN_NOF20);
+    UBSHcomService *service = UBSHcomService::Create(UBSHcomNetDriverProtocol::RDMA, "client-valid-opt", options);
+    EXPECT_NE(service, nullptr);
+    EXPECT_EQ(UBSHcomService::Destroy("client-valid-opt"), SER_OK);
 }
 
 TEST_F(TestHcomServiceV2, TestHcomServiceTimer)
@@ -486,5 +510,392 @@ TEST_F(TestHcomServiceV2, TestServiceContextClone)
     UBSHcomServiceContext target;
     EXPECT_EQ(UBSHcomServiceContext::Clone(target, broken, true), SER_INVALID_PARAM);
 }
+
+// 周期线程循环的退出开关由桩驱动：绝不依赖真实 epoll_wait 超时，避免用例阻塞
+HcomPeriodicManager *g_periodicMgrForStop = nullptr;
+uint32_t g_epollWaitCallCount = 0;
+uint32_t g_maybeDumpAllCallCount = 0;
+uint32_t g_callbackRunCount = 0;
+uint32_t g_nullCbTraceCount = 0;
+
+// seqNo -> timer 映射：让被 mock 的 GetSeqNoAndRemove 把出参写成 timer 自身，
+// 以命中 EraseSeqNoWithRet 中 `timer != this` 的判定；未登记的 seqNo 返回 false 语义
+std::map<uint32_t, HcomServiceTimer *> g_mockSeqTimerMap;
+
+int MockEpollWaitStopLoop(int epFd, struct epoll_event *events, int maxEvents, int timeoutMs)
+{
+    ++g_epollWaitCallCount;
+    if (g_periodicMgrForStop != nullptr) {
+        g_periodicMgrForStop->mNeedStop = true;
+    }
+    return 0;
+}
+
+void MockMaybeDumpAllCount()
+{
+    ++g_maybeDumpAllCallCount;
+}
+
+void MockTraceMarkCountNullCb(HcomTimerEvent event)
+{
+    if (event == HcomTimerEvent::TIMEOUT_NULL_CB) {
+        ++g_nullCbTraceCount;
+    }
+}
+
+NResult MockGetSeqNoAndRemoveBySeqNo(uint32_t seqNo, HcomServiceTimer *&out)
+{
+    auto iter = g_mockSeqTimerMap.find(seqNo);
+    if (iter == g_mockSeqTimerMap.end()) {
+        out = nullptr; // timer != this，EraseSeqNoWithRet 返回 false
+        return SER_OK;
+    }
+    out = iter->second;
+    return SER_OK;
+}
+
+class TestHcomPeriodicManager : public testing::Test {
+public:
+    virtual void SetUp(void);
+    virtual void TearDown(void);
+
+    HcomPeriodicManager *mgr = nullptr;
+    HcomServiceCtxStore *store = nullptr;
+};
+
+void TestHcomPeriodicManager::SetUp()
+{
+    mgr = new (std::nothrow) HcomPeriodicManager(NN_NO1, "periodic-manager-ut");
+    ASSERT_NE(mgr, nullptr);
+    // 默认 true：显式置位，保证任何用例都不会进入 RunInThread 的循环等待
+    mgr->mNeedStop = true;
+
+    g_periodicMgrForStop = nullptr;
+    g_epollWaitCallCount = 0;
+    g_maybeDumpAllCallCount = 0;
+    g_callbackRunCount = 0;
+    g_nullCbTraceCount = 0;
+    g_mockSeqTimerMap.clear();
+}
+
+void TestHcomPeriodicManager::TearDown()
+{
+    GlobalMockObject::verify();
+    g_periodicMgrForStop = nullptr;
+    g_mockSeqTimerMap.clear();
+
+    if (store != nullptr) {
+        delete store;
+        store = nullptr;
+    }
+
+    if (mgr != nullptr) {
+        delete mgr; // 未 Start，析构中的 Stop 直接返回
+        mgr = nullptr;
+    }
+}
+
+HcomServiceTimer *NewTimer(uint32_t seqNo, uint64_t timeoutSecond)
+{
+    HcomServiceTimer *timer = new (std::nothrow) HcomServiceTimer();
+    if (timer == nullptr) {
+        return nullptr;
+    }
+    timer->SeqNo(seqNo);
+    timer->mTimeout = timeoutSecond;
+    return timer;
+}
+
+// 引用计数初值为 0，DecreaseRef 归零才自释放；预留 decrements 次 + 1，使断言期间对象仍存活
+void AddTimerRefs(HcomServiceTimer *timer, int32_t decrements)
+{
+    for (int32_t i = 0; i <= decrements; i++) {
+        timer->IncreaseRef();
+    }
+}
+
+void PushTimerToQueue(HcomPeriodicManager *manager, uint16_t tId, uint32_t index, HcomServiceTimer *timer)
+{
+    std::lock_guard<std::mutex> guard(manager->mQueue[tId].lock[index]);
+    manager->mQueue[tId].queue[index].push_back(timer);
+}
+
+Callback *NewCountingCallback()
+{
+    return UBSHcomNewCallback([](UBSHcomServiceContext &context) { ++g_callbackRunCount; }, std::placeholders::_1);
+}
+
+HcomServiceCtxStore *NewStoreForTimer()
+{
+    return new (std::nothrow) HcomServiceCtxStore(NN_NO1, nullptr, UBSHcomNetDriverProtocol::RDMA);
+}
+
+TEST_F(TestHcomPeriodicManager, TestProcessCleanUpInvalidTId)
+{
+    // tId 越界：直接返回，不做任何队列处理
+    EXPECT_NO_FATAL_FAILURE(mgr->ProcessCleanUp(static_cast<uint16_t>(M_MAX_THREAD_NUM)));
+    EXPECT_TRUE(mgr->mHandleQueue[NN_NO0].empty());
+}
+
+TEST_F(TestHcomPeriodicManager, TestProcessCleanUpEmptyQueue)
+{
+    EXPECT_NO_FATAL_FAILURE(mgr->ProcessCleanUp(NN_NO0));
+    for (uint32_t i = 0; i < static_cast<uint32_t>(M_MAX_BATCH_NUM); i++) {
+        EXPECT_TRUE(mgr->mQueue[NN_NO0].queue[i].empty());
+    }
+}
+
+TEST_F(TestHcomPeriodicManager, TestProcessCleanUpWithCallback)
+{
+    store = NewStoreForTimer();
+    ASSERT_NE(store, nullptr);
+    MOCKER_CPP(&HcomServiceCtxStore::TraceMark).stubs();
+    MOCKER_CPP(&HcomServiceCtxStore::GetSeqNoAndRemove<HcomServiceTimer>)
+        .stubs()
+        .will(invoke(MockGetSeqNoAndRemoveBySeqNo));
+
+    HcomServiceTimer *timer = NewTimer(NN_NO1, NN_NO1); // 已超时时间（仅用于标记）
+    ASSERT_NE(timer, nullptr);
+    timer->mCtxStore = store;
+    timer->mCallback = reinterpret_cast<uintptr_t>(NewCountingCallback());
+    ASSERT_NE(timer->mCallback, static_cast<uintptr_t>(NN_NO0));
+    g_mockSeqTimerMap[timer->SeqNo()] = timer;
+    AddTimerRefs(timer, NN_NO2); // ProcessCleanUp 会 DecreaseRef 2 次
+    PushTimerToQueue(mgr, NN_NO0, NN_NO0, timer);
+
+    mgr->ProcessCleanUp(NN_NO0);
+
+    EXPECT_EQ(g_callbackRunCount, static_cast<uint32_t>(NN_NO1));
+    EXPECT_EQ(timer->State(), HcomAsyncCBState::CBS_TIMEOUT);
+    EXPECT_TRUE(mgr->mQueue[NN_NO0].queue[NN_NO0].empty());
+    timer->DecreaseRef(); // 归零自释放
+}
+
+TEST_F(TestHcomPeriodicManager, TestProcessCleanUpNullCallback)
+{
+    store = NewStoreForTimer();
+    ASSERT_NE(store, nullptr);
+    MOCKER_CPP(&HcomServiceCtxStore::TraceMark).stubs().will(invoke(MockTraceMarkCountNullCb));
+    MOCKER_CPP(&HcomServiceCtxStore::GetSeqNoAndRemove<HcomServiceTimer>)
+        .stubs()
+        .will(invoke(MockGetSeqNoAndRemoveBySeqNo));
+
+    HcomServiceTimer *timer = NewTimer(NN_NO1, NN_NO1);
+    ASSERT_NE(timer, nullptr);
+    timer->mCtxStore = store;
+    timer->mCallback = NN_NO0; // 空回调：走 TIMEOUT_NULL_CB 分支，不解引用空指针
+    g_mockSeqTimerMap[timer->SeqNo()] = timer;
+    AddTimerRefs(timer, NN_NO2);
+    PushTimerToQueue(mgr, NN_NO0, NN_NO0, timer);
+
+    mgr->ProcessCleanUp(NN_NO0);
+
+    EXPECT_EQ(g_callbackRunCount, static_cast<uint32_t>(NN_NO0));
+    EXPECT_EQ(g_nullCbTraceCount, static_cast<uint32_t>(NN_NO1));
+    EXPECT_EQ(timer->State(), HcomAsyncCBState::CBS_TIMEOUT);
+    EXPECT_TRUE(mgr->mQueue[NN_NO0].queue[NN_NO0].empty());
+    timer->DecreaseRef();
+}
+
+TEST_F(TestHcomPeriodicManager, TestProcessCleanUpEraseSeqNoFail)
+{
+    HcomServiceTimer *timer = NewTimer(NN_NO1, NN_NO1);
+    ASSERT_NE(timer, nullptr);
+    timer->mCtxStore = nullptr;  // EraseSeqNoWithRet 直接返回 false
+    timer->mCallback = NN_NO0;   // 回调不会被触发，不构造自删除回调以免泄漏
+    AddTimerRefs(timer, NN_NO1); // 只 DecreaseRef 1 次
+    PushTimerToQueue(mgr, NN_NO0, NN_NO0, timer);
+
+    mgr->ProcessCleanUp(NN_NO0);
+
+    EXPECT_EQ(g_callbackRunCount, static_cast<uint32_t>(NN_NO0));
+    EXPECT_EQ(timer->State(), HcomAsyncCBState::CBS_INIT); // 未标记超时
+    EXPECT_TRUE(mgr->mQueue[NN_NO0].queue[NN_NO0].empty());
+    timer->DecreaseRef();
+}
+
+TEST_F(TestHcomPeriodicManager, TestProcessTimeOutCompressAndCollect)
+{
+    MOCKER_CPP(&HcomServiceCtxStore::TraceMark).stubs();
+
+    uint64_t notTimeout = NetMonotonic::TimeSec() + NN_NO60; // 未来 60s：本用例内不会超时
+    HcomServiceTimer *inflight1 = NewTimer(NN_NO1, notTimeout);
+    HcomServiceTimer *finished = NewTimer(NN_NO2, notTimeout);
+    HcomServiceTimer *inflight2 = NewTimer(NN_NO3, notTimeout);
+    ASSERT_NE(inflight1, nullptr);
+    ASSERT_NE(finished, nullptr);
+    ASSERT_NE(inflight2, nullptr);
+    finished->MarkFinished();
+    AddTimerRefs(finished, NN_NO1); // 被摘走时 DecreaseRef 1 次
+    PushTimerToQueue(mgr, NN_NO0, NN_NO0, inflight1);
+    PushTimerToQueue(mgr, NN_NO0, NN_NO0, finished);
+    PushTimerToQueue(mgr, NN_NO0, NN_NO0, inflight2);
+
+    mgr->ProcessTimeOut(NN_NO0);
+
+    // 已完成的被摘走；在途的原地压缩保留且顺序不变
+    ASSERT_EQ(mgr->mHandleQueue[NN_NO0].size(), static_cast<size_t>(NN_NO1));
+    EXPECT_EQ(mgr->mHandleQueue[NN_NO0][NN_NO0], finished);
+    ASSERT_EQ(mgr->mQueue[NN_NO0].queue[NN_NO0].size(), static_cast<size_t>(NN_NO2));
+    EXPECT_EQ(mgr->mQueue[NN_NO0].queue[NN_NO0][NN_NO0], inflight1);
+    EXPECT_EQ(mgr->mQueue[NN_NO0].queue[NN_NO0][NN_NO1], inflight2);
+    EXPECT_EQ(inflight1->State(), HcomAsyncCBState::CBS_INIT);
+    // mCtxStore 为空：摘走后不会重新标记状态
+    EXPECT_EQ(finished->State(), HcomAsyncCBState::CBS_FINISHED);
+
+    finished->DecreaseRef();
+    delete inflight1;
+    delete inflight2;
+}
+
+TEST_F(TestHcomPeriodicManager, TestProcessTimeOutTimeoutFired)
+{
+    store = NewStoreForTimer();
+    ASSERT_NE(store, nullptr);
+    MOCKER_CPP(&HcomServiceCtxStore::TraceMark).stubs();
+    MOCKER_CPP(&HcomServiceCtxStore::GetSeqNoAndRemove<HcomServiceTimer>)
+        .stubs()
+        .will(invoke(MockGetSeqNoAndRemoveBySeqNo));
+
+    HcomServiceTimer *fired = NewTimer(NN_NO1, NN_NO1); // 已超时
+    HcomServiceTimer *skipped = NewTimer(NN_NO2, NN_NO1);
+    ASSERT_NE(fired, nullptr);
+    ASSERT_NE(skipped, nullptr);
+    fired->mCtxStore = store;
+    fired->mCallback = reinterpret_cast<uintptr_t>(NewCountingCallback());
+    skipped->mCtxStore = store;
+    skipped->mCallback = NN_NO0;               // erase 失败不会触发回调，不构造自删除回调以免泄漏
+    g_mockSeqTimerMap[fired->SeqNo()] = fired; // skipped 未登记 -> EraseSeqNoWithRet false
+    AddTimerRefs(fired, NN_NO2);               // erase 成功：DecreaseRef 2 次
+    AddTimerRefs(skipped, NN_NO1);             // erase 失败：DecreaseRef 1 次
+    // 同一批次按插入顺序处理，保证与 seqNo 映射的行为一一对应
+    PushTimerToQueue(mgr, NN_NO0, NN_NO0, fired);
+    PushTimerToQueue(mgr, NN_NO0, NN_NO0, skipped);
+
+    mgr->ProcessTimeOut(NN_NO0);
+
+    EXPECT_EQ(g_callbackRunCount, static_cast<uint32_t>(NN_NO1)); // 只有 fired 触发回调
+    EXPECT_EQ(fired->State(), HcomAsyncCBState::CBS_TIMEOUT);
+    EXPECT_EQ(skipped->State(), HcomAsyncCBState::CBS_INIT);                  // 未登记 seqNo，跳过标记与回调
+    EXPECT_EQ(mgr->mHandleQueue[NN_NO0].size(), static_cast<size_t>(NN_NO2)); // 超时的都被摘走
+    EXPECT_TRUE(mgr->mQueue[NN_NO0].queue[NN_NO0].empty());
+    fired->DecreaseRef();
+    skipped->DecreaseRef();
+}
+
+TEST_F(TestHcomPeriodicManager, TestProcessTimeOutMultiBatchNullCallback)
+{
+    store = NewStoreForTimer();
+    ASSERT_NE(store, nullptr);
+    MOCKER_CPP(&HcomServiceCtxStore::TraceMark).stubs().will(invoke(MockTraceMarkCountNullCb));
+    MOCKER_CPP(&HcomServiceCtxStore::GetSeqNoAndRemove<HcomServiceTimer>)
+        .stubs()
+        .will(invoke(MockGetSeqNoAndRemoveBySeqNo));
+
+    HcomServiceTimer *timer3 = NewTimer(NN_NO3, NN_NO1);
+    HcomServiceTimer *timer15 = NewTimer(NN_NO4, NN_NO1);
+    ASSERT_NE(timer3, nullptr);
+    ASSERT_NE(timer15, nullptr);
+    timer3->mCtxStore = store;
+    timer3->mCallback = NN_NO0;
+    timer15->mCtxStore = store;
+    timer15->mCallback = NN_NO0;
+    g_mockSeqTimerMap[timer3->SeqNo()] = timer3;
+    g_mockSeqTimerMap[timer15->SeqNo()] = timer15;
+    AddTimerRefs(timer3, NN_NO2);
+    AddTimerRefs(timer15, NN_NO2);
+    // 分散在不同批次：覆盖 15 -> 0 的逆序扫描
+    PushTimerToQueue(mgr, NN_NO0, NN_NO3, timer3);
+    PushTimerToQueue(mgr, NN_NO0, NN_NO15, timer15);
+
+    mgr->ProcessTimeOut(NN_NO0);
+
+    EXPECT_EQ(g_callbackRunCount, static_cast<uint32_t>(NN_NO0));
+    EXPECT_EQ(g_nullCbTraceCount, static_cast<uint32_t>(NN_NO2)); // 两个空回调都被标记
+    EXPECT_EQ(mgr->mHandleQueue[NN_NO0].size(), static_cast<size_t>(NN_NO2));
+    EXPECT_TRUE(mgr->mQueue[NN_NO0].queue[NN_NO3].empty());
+    EXPECT_TRUE(mgr->mQueue[NN_NO0].queue[NN_NO15].empty());
+    timer3->DecreaseRef();
+    timer15->DecreaseRef();
+}
+
+TEST_F(TestHcomPeriodicManager, TestProcessTimeOutInvalidTId)
+{
+    EXPECT_NO_FATAL_FAILURE(mgr->ProcessTimeOut(static_cast<uint16_t>(M_MAX_THREAD_NUM)));
+    EXPECT_TRUE(mgr->mHandleQueue[NN_NO0].empty());
+}
+
+TEST_F(TestHcomPeriodicManager, TestRunInThreadInvalidTId)
+{
+    mgr->mThreadCount = NN_NO1;
+    int16_t before = mgr->mStartedWorkingThreads.load();
+    EXPECT_NO_FATAL_FAILURE(mgr->RunInThread(static_cast<int16_t>(NN_NO1))); // tId >= mThreadCount
+    // 线程计数在越界判断之前自增
+    EXPECT_EQ(mgr->mStartedWorkingThreads.load(), static_cast<int16_t>(before + NN_NO1));
+    EXPECT_EQ(g_epollWaitCallCount, static_cast<uint32_t>(NN_NO0));
+}
+
+TEST_F(TestHcomPeriodicManager, TestRunInThreadEpollCreateFail)
+{
+    // 涉外系统调用打桩：epoll_create 失败分支
+    MOCKER(::epoll_create).stubs().will(returnValue(static_cast<int>(NN_NOF1)));
+    int16_t before = mgr->mStartedWorkingThreads.load();
+
+    EXPECT_NO_FATAL_FAILURE(mgr->RunInThread(NN_NO0));
+
+    EXPECT_EQ(mgr->mStartedWorkingThreads.load(), static_cast<int16_t>(before + NN_NO1));
+    EXPECT_EQ(g_epollWaitCallCount, static_cast<uint32_t>(NN_NO0)); // 未进入循环
+}
+
+TEST_F(TestHcomPeriodicManager, TestRunInThreadOnceAndExit)
+{
+    // 循环内可能阻塞的接口全部打桩，并由桩驱动 mNeedStop 退出循环
+    // epoll_create 不阻塞，返回真实 fd 后由 NN_SafeCloseFd 正常关闭，故不打桩
+    MOCKER(::epoll_wait).stubs().will(invoke(MockEpollWaitStopLoop));
+    MOCKER(HcomServiceCtxStore::MaybeDumpAll).stubs().will(invoke(MockMaybeDumpAllCount));
+    g_periodicMgrForStop = mgr;
+    mgr->mNeedStop = false;
+    int16_t before = mgr->mStartedWorkingThreads.load();
+
+    EXPECT_NO_FATAL_FAILURE(mgr->RunInThread(NN_NO0)); // tId 0：额外覆盖 VERSION banner 分支
+
+    EXPECT_EQ(g_epollWaitCallCount, static_cast<uint32_t>(NN_NO1)); // 恰好 1 轮循环
+    EXPECT_EQ(g_maybeDumpAllCallCount, static_cast<uint32_t>(NN_NO1));
+    EXPECT_EQ(mgr->mStartedWorkingThreads.load(), static_cast<int16_t>(before + NN_NO1));
+    EXPECT_TRUE(mgr->mNeedStop);
+}
+
+TEST_F(TestHcomPeriodicManager, TestRunInThreadNonZeroTId)
+{
+    // tId != 0 且进入循环：覆盖 banner 的假分支与循环内 MaybeDumpAll 的假分支
+    MOCKER(::epoll_wait).stubs().will(invoke(MockEpollWaitStopLoop));
+    MOCKER(HcomServiceCtxStore::MaybeDumpAll).stubs().will(invoke(MockMaybeDumpAllCount));
+    g_periodicMgrForStop = mgr;
+    mgr->mThreadCount = NN_NO2;
+    mgr->mNeedStop = false;
+    int16_t before = mgr->mStartedWorkingThreads.load();
+
+    EXPECT_NO_FATAL_FAILURE(mgr->RunInThread(static_cast<int16_t>(NN_NO1)));
+
+    EXPECT_EQ(g_epollWaitCallCount, static_cast<uint32_t>(NN_NO1));    // 恰好 1 轮循环
+    EXPECT_EQ(g_maybeDumpAllCallCount, static_cast<uint32_t>(NN_NO0)); // tId != 0 不 dump
+    EXPECT_EQ(mgr->mStartedWorkingThreads.load(), static_cast<int16_t>(before + NN_NO1));
+    EXPECT_TRUE(mgr->mNeedStop);
+}
+
+TEST_F(TestHcomPeriodicManager, TestRunInThreadNeedStopTrue)
+{
+    MOCKER(::epoll_wait).stubs().will(invoke(MockEpollWaitStopLoop));
+    mgr->mNeedStop = true; // 循环条件为假：不进入循环体
+    int16_t before = mgr->mStartedWorkingThreads.load();
+
+    // tId 必须小于 mThreadCount 才会走到循环判断（否则命中越界分支）
+    EXPECT_NO_FATAL_FAILURE(mgr->RunInThread(NN_NO0));
+
+    EXPECT_EQ(g_epollWaitCallCount, static_cast<uint32_t>(NN_NO0));
+    EXPECT_EQ(g_maybeDumpAllCallCount, static_cast<uint32_t>(NN_NO0));
+    EXPECT_EQ(mgr->mStartedWorkingThreads.load(), static_cast<int16_t>(before + NN_NO1));
+}
+
 } // namespace hcom
 } // namespace ock
