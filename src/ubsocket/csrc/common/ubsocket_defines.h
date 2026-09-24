@@ -187,10 +187,17 @@ constexpr uint32_t TX_SGE_MAX = 1;
 /* unsolicited bytes use the same setting as brpc
  * accumulated bytes exceed UNSOLICITED_BYTES_MAX will generate a solicited interrupt event at remote */
 constexpr uint32_t TX_UNSOLICITED_BYTES_MAX = 1048576;
-constexpr uint32_t NEGOTIATE_TIMEOUT_MS = 10;
 constexpr uint32_t FLUSH_SOCKET_MSG_BUFFER_LEN = 1024;
 constexpr uint32_t FLUSH_TIMEOUT_MS = 200;
 constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 2000;
+/* 协商超时拆分（客户端等响应 vs 服务端等首包，对超时需求相反，共用一个常量会互相伤害）：
+ * 1) NEGOTIATE_REPLY_TIMEOUT_MS(2s) — 客户端连接发起后等对端响应(rsp)的预算。全异步 server 的
+ *    rsp 由 poll 线程收 req 后内联发送，不经重活队列，延迟仅为 poll 调度量级；
+ *    但 poll 线程可能被其他连接的收发占用，故给足一个控制面预算(2s)而非原来的 10ms。
+ * 2) NEGOTIATE_ACCEPT_TIMEOUT_MS(10ms) — 服务端同步/半异步 worker 等客户端首包(req)及回包。该路径
+ *    每连接独占 worker，短超时可及时回收"只连不发"的连接；放大到秒级会让少数坏连接钉死 worker。 */
+constexpr uint32_t NEGOTIATE_REPLY_TIMEOUT_MS = 2000;
+constexpr uint32_t NEGOTIATE_ACCEPT_TIMEOUT_MS = 10;
 constexpr uint64_t UMQ_MEM_MIN_EXPAND_SIZE_MB = 64;
 
 constexpr uint64_t SIZE_1K = 1024;

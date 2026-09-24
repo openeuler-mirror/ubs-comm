@@ -13,10 +13,13 @@
 
 #include <sys/socket.h>
 #include <chrono>
+#include <memory>
+#include <mutex>
 
 #include "common/ubsocket_common_includes.h"
 #include "include/ubsocket_def.h"
 #include "profiling/statistics/statistics_statsmgr.h"
+#include "ubsocket_conn_types.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_data_rx.h"
 #include "ubsocket_data_tx.h"
@@ -30,11 +33,23 @@ namespace ubs {
 class SocketBase;
 using SocketBasePtr = Ref<SocketBase>;
 
+class UBConnOpsBase; /* defined in core/ubsocket_conn_ops_base.h */
+
 class SocketBase : public Socket {
 public:
     static Result Create(int fd, SocketType t, SocketPtr &sock);
 
     static Result GenerateSocketCommOps(const SocketPtr &sock);
+
+    /*
+     * 全异步建链状态机工厂（通用层唯一可引用具体实现的地方，约束同 SocketBase::Create）。
+     * 按 role 创建统一的 UrmaConnOps：client 额外注入应用 socket 与 per-socket connector ops
+     * （route/retry 状态必须复用同一实例），server 传 nullptr。当前目标传输层固定 URMA，
+     * 后续扩展传输时在此按 SocketType 分发即可。
+     */
+    static Result CreateConnOps(ConnRole role, int fd, const SocketPtr &sock, const ConnectorOpsPtr &connector_ops,
+                                const struct sockaddr &addr, socklen_t addr_len, SocketType t,
+                                std::shared_ptr<UBConnOpsBase> &ops);
 
 public:
     SocketBase(int fd, SocketType type) : Socket(fd, type)
@@ -72,6 +87,12 @@ public:
 
     virtual int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len);
     virtual int Connect(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
+    /*
+     * 非阻塞异步建链：置 CONNECTING + 创建 client 状态机 + 提交共享 poll 池，立即返回 0（调用方据此
+     * 返回 -1/EINPROGRESS）。提交失败（工厂/reactor/队列）返回非 0，调用方回退同步 Connect。
+     * 不改变 POSIX 语义：仅对非阻塞 fd 使用。
+     */
+    int ConnectAsync(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len);
     virtual ssize_t WriteV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     virtual ssize_t ReadV(const SocketPtr &sock, const struct iovec *iov, int iovcnt);
     virtual ssize_t Send(const SocketPtr &sock, const void *buf, size_t len, int flags);
@@ -114,6 +135,21 @@ public:
     int NotifyReadable(bool epollout = false);
     int NotifyWritable();
 
+    /*
+     * CONNECTING 期 epoll_ctl 延迟注册（详见 Client 设计文档 §8.3）：
+     * 建链中应用 epoll_ctl(ADD) 时最终类型未定（可能降级纯 TCP），故先只记录应用的 epoll/events/data，
+     * 待建链收尾按最终类型注册。写 pending 与读 State / 读 pending 与切终态构成双重检查，保证事件不丢。
+     */
+    void DeferEpollAdd(EventPoll *ep, uint32_t events, const epoll_data_t &data);
+    void UpdatePendingEpoll(uint32_t events, const epoll_data_t &data);
+    void ClearPendingEpoll();
+    void RegisterPendingEpollAdd();
+    /* 失败收尾：把 EPOLLERR 并入待注册事件后落注册，保证应用 epoll_wait 被唤醒 */
+    void NotifyConnectFailed();
+
+    /* 异步建链状态：connect 失败原因（POSIX errno，读后由 getsockopt(SO_ERROR) 清零） */
+    std::atomic<int> connect_error_{0};
+
     DataRx *GetRx()
     {
         return &rx_;
@@ -148,6 +184,11 @@ protected:
     std::atomic<uint32_t> events_{0};        // 上层关注的 epoll events 事件
     epoll_data_t added_epoll_data_ = {};     // 上层关注的 epoll data
     std::atomic<bool> writable_ready_{true}; // 为 true 表示已经接收到对端的流控回复报文，可写
+
+    std::mutex pending_epoll_mutex_; /* 保护 pending_epoll_*（应用线程 EpollCtlAdd 与 poll 线程收尾并发） */
+    EventPoll *pending_epoll_ = nullptr; /* 建链中应用 epoll_ctl(ADD) 的 epoll；收尾时按最终类型注册 */
+    uint32_t pending_epoll_events_ = 0;  /* 应用关注的 events（收尾注册时使用） */
+    epoll_data_t pending_epoll_data_ = {}; /* 应用关注的 data（收尾注册时使用） */
 
     Statistics::StatsMgr stats_mgr_ = {};
 
@@ -185,6 +226,12 @@ ALWAYS_INLINE ssize_t SocketBase::WriteV(const SocketPtr &sock, const struct iov
         return LibcApi::writev(sock->Fd(), iov, iovcnt);
     }
 
+    /* 建链中数据面拒绝：不得落进 UB 路径；错误优先于 EAGAIN（对齐 POSIX 非阻塞 connect 语义） */
+    if (UNLIKELY(sock->State() == SOCK_STAT_CONNECTING)) {
+        int err = connect_error_.load(std::memory_order_acquire);
+        errno = (err != 0) ? err : EAGAIN;
+        return -1;
+    }
     return tx_.WriteV(sock, iov, iovcnt, UBS_IO_FLAG_USE_BRPC_BLOCK);
 }
 
@@ -195,6 +242,11 @@ ALWAYS_INLINE ssize_t SocketBase::ReadV(const SocketPtr &sock, const struct iove
         return LibcApi::readv(sock->Fd(), iov, iovcnt);
     }
 
+    if (UNLIKELY(sock->State() == SOCK_STAT_CONNECTING)) {
+        int err = connect_error_.load(std::memory_order_acquire);
+        errno = (err != 0) ? err : EAGAIN;
+        return -1;
+    }
     auto ret = rx_.ReadV(sock, iov, iovcnt, UBS_IO_FLAG_USE_BRPC_BLOCK);
     UBS_VLOG_TRACE("enter SocketBase::ReadV fd=%d, iovcnt=%d, iov[0]=(buf=%p, size=%zu) return %zd", sock->Fd(), iovcnt,
                    iov[0].iov_base, iov[0].iov_len, ret);

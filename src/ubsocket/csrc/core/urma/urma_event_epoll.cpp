@@ -418,13 +418,23 @@ int UrmaEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     UBS_VLOG_TRACE("urma epoll(%d) add(fd=%d, event=0x%x, data=%lx)", epoll_fd_, fd, event->events, event->data);
+
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    /* 建链中（异步 connect）：最终类型未定，先记录应用 events/data，待收尾按最终类型注册（延迟注册） */
+    if (sock != nullptr && sock->State() == SOCK_STAT_CONNECTING) {
+        auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
+        if (sockBase != nullptr) {
+            sockBase->DeferEpollAdd(this, event->events, event->data);
+            return 0;
+        }
+    }
+
     if (UNLIKELY(IsSocketEventDataExist(fd))) {
         UBS_VLOG_ERR("urma_event_poll EpollCtlAdd(socket=%d) already added.", fd);
         errno = EEXIST;
         return -1;
     }
 
-    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP || !sock->IsBindRemote())) {
         return AddRawSocketEvent(fd, event);
     }
@@ -461,6 +471,15 @@ int UrmaEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
 
     UBS_VLOG_TRACE("urma epoll(%d) mod(fd=%d, event=0x%x, data=%lx)", epoll_fd_, fd, event->events, event->data);
     auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    /* 建链中：仅更新延迟注册的 events/data，不碰内核（尚未注册） */
+    if (sock != nullptr && sock->State() == SOCK_STAT_CONNECTING) {
+        auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
+        if (sockBase != nullptr) {
+            sockBase->UpdatePendingEpoll(event->events, event->data);
+            return 0;
+        }
+    }
+
     if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP || !sock->IsBindRemote())) {
         return ModRawSocketEvent(fd, event);
     }
@@ -505,9 +524,18 @@ int UrmaEventPoll::EpollCtlDel(int fd)
     }
 
     UBS_VLOG_TRACE("urma epoll(%d) del(fd=%d)", epoll_fd_, fd);
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    /* 建链中：本就没注册内核，仅清空延迟注册的 pending（不能走 IsSocketEventDataExist 的 ENOENT 分支） */
+    if (sock != nullptr && sock->State() == SOCK_STAT_CONNECTING) {
+        auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
+        if (sockBase != nullptr) {
+            sockBase->ClearPendingEpoll();
+            return 0;
+        }
+    }
+
     /* May run on another thread: ForgetFd clears only the pending mark; the drain drops the entry as stale. */
     readable_events_.ForgetFd(fd);
-    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP || !sock->IsBindRemote())) {
         UBS_VLOG_DEBUG("sock is nullptr for origin sock, socket: %d", fd);
         return DelRawSocketEvent(fd);

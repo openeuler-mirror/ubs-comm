@@ -14,6 +14,7 @@
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_signal_handler.h"
 #include "common/ubsocket_version.h"
+#include "core/ubsocket_conn_reactor.h"
 #include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_tx_cqe_poller.h"
 #include "core/umq/umq_backend.h"
@@ -41,7 +42,9 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
     options->allowed_protocol = UBS_PROTOCOL_TCP; /* use raw tcp by default */
     options->async_acceptor_thread_count = 0;     /* tune off by default */
     options->async_connector_thread_count = 0;    /* tune off by default */
+    options->async_connector_enable = false;      /* client fully-async connect: off by default */
     options->async_epoll_thread_count = 1;        /* tune on by default */
+    options->server_async_enable = 0;             /* server fully-async(reactor) conn: off by default */
     options->lock_ops = nullptr;
     options->rw_lock_ops = nullptr;
     options->sem_ops = nullptr;
@@ -78,8 +81,14 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     if (options->async_connector_thread_count > 0) {
         GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = options->async_connector_thread_count;
     }
+    if (options->async_connector_enable) {
+        GlobalSetting::UBS_CONNECTOR_ASYNC_ENABLE = true;
+    }
     if (options->async_epoll_thread_count > 0) {
         GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = options->async_epoll_thread_count;
+    }
+    if (options->server_async_enable > 0) {
+        GlobalSetting::UBS_SERVER_ASYNC_ENABLE = true;
     }
     if (options->poller_ops != nullptr) {
         GlobalSetting::UBS_POLLER_OPS = options->poller_ops;
@@ -152,6 +161,20 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         return UBS_ERROR;
     }
     //#endif
+
+    /* step5.5: Server/Client 共享全异步建链 poll 线程池启动（每 thread 创建专属 event fd 并注册进
+     * ConnEventFdTable）。Server accept 侧与 Client connect 侧投递到同一池，按统一负载均衡选线程。
+     * 重活内联在 poll 线程执行，线程数须满足吞吐约束；配置为 0 时回退 UBS_THREAD_POOL_SIZE。 */
+    if (GlobalSetting::ServerAsyncEnabled() || GlobalSetting::AllAsyncConnectorEnabled()) {
+        uint32_t poll_threads = GlobalSetting::UBS_CONN_POLL_THREAD_NUM;
+        if (poll_threads == 0) {
+            poll_threads = GlobalSetting::UBS_THREAD_POOL_SIZE;
+        }
+        result = ConnDispatcher::Instance().Start(poll_threads);
+        if (result != UBS_OK) {
+            UBS_VLOG_WARN("conn dispatcher start failed, ret: %d, fallback to sync conn\n", result);
+        }
+    }
 
     /* step6: register signal handler */
     std::signal(SIGUSR2, ubsocket_handle_signal);
@@ -231,6 +254,10 @@ void ubsocket_uninit()
 
     // 用户需要在程序退出时调用 ubsocket_uninit 保证所有的 socket ref 释放，否则会延迟至 ArraySet 单例析构。在 brpc 场
     // 景下，由于 brpc worker 不会主动 join, worker 可能仍会尝试访问 ArraySet<Socket> 或者 ArraySet<EventPoll>
+    // server 全异步建链线程池必须先于 socket 资源回收停止：poll 线程与未完成建链的 UrmaConnOps
+    // 析构（→ UrmaSocket::UnInitialize）都会访问 urma/mempool 资源，晚于 UrmaBackend::UnInit 停止会触发"释放后仍 poll"。
+    // Stop() 幂等，开关关闭时是 no-op。
+    ConnDispatcher::Instance().Stop();
     TxCqePoller::Instance().Stop();
     ArraySet<Socket>::GetInstance().ReleaseAll();
     ArraySet<EventPoll>::GetInstance().ReleaseAll();

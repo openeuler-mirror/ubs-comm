@@ -23,6 +23,7 @@ enum SocketState : uint8_t {
     SOCK_STAT_ESTABLISHED,     /* all things established */
     SOCK_STAT_SHUTDOWN,        /* shutdown */
     SOCK_STAT_CLOSE,           /* closed */
+    SOCK_STAT_CONNECTING,      /* non-blocking connect in flight (async connector) */
                                /* add state before COUNT */
     SOCK_STATE_COUNT
 };

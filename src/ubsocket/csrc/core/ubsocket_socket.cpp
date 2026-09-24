@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "ubsocket_socket.h"
+#include "ubsocket_conn_reactor.h"
 #include "ubsocket_data_rx.h"
 #include "ubsocket_data_tx.h"
 #include "ubsocket_raw_socket.h"
@@ -18,6 +19,7 @@
 #include "umq/umq_socket.h"
 #include "umq/umq_socket_acceptor.h"
 #include "umq/umq_socket_connector.h"
+#include "urma/urma_conn_ops.h"
 #include "urma/urma_data_rx_ops.h"
 #include "urma/urma_data_tx_ops.h"
 #include "urma/urma_socket.h"
@@ -321,6 +323,127 @@ Result SocketBase::CreateConnectorOps(SocketType value, const SocketPtr &sock, C
         /* invalid type */
         return UBS_INVALID_PARAM;
     }
+}
+
+Result SocketBase::CreateConnOps(ConnRole role, int fd, const SocketPtr &sock, const ConnectorOpsPtr &connector_ops,
+                                 const struct sockaddr &addr, socklen_t addr_len, SocketType t,
+                                 std::shared_ptr<UBConnOpsBase> &ops)
+{
+    if (t != SocketType::SOCK_TYPE_URMA) {
+        UBS_VLOG_ERR("CreateConnOps unsupported socket type: %d\n", static_cast<int>(t));
+        return UBS_INVALID_PARAM;
+    }
+    if (role == ConnRole::kClient && (sock == nullptr || connector_ops == nullptr)) {
+        return UBS_INVALID_PARAM;
+    }
+
+    std::shared_ptr<UBConnOpsBase> conn_ops =
+        std::make_shared<urma::UrmaConnOps>(role, fd, sock, connector_ops, addr, addr_len);
+    if (conn_ops == nullptr) {
+        return UBS_MALLOC_FAILED;
+    }
+    ops = std::move(conn_ops);
+    return UBS_OK;
+}
+
+int SocketBase::ConnectAsync(SocketPtr &sock, const struct sockaddr *address, socklen_t address_len)
+{
+    if (connector_ == nullptr || sock.Get() == nullptr || address == nullptr) {
+        return UBS_ERROR;
+    }
+    ConnectorOpsPtr connector_ops = connector_->GetConnectorOps();
+    if (connector_ops == nullptr) {
+        return UBS_ERROR;
+    }
+
+    /* 进入异步建链：State=CONNECTING、清 writable_ready_（§8.4 初值陷阱）、清 events 与 connect_error_ */
+    sock->State(SOCK_STAT_CONNECTING);
+    SetWritableReady(false);
+    SetEvents(0);
+    connect_error_.store(0, std::memory_order_release);
+
+    std::shared_ptr<UBConnOpsBase> ops;
+    Result ret =
+        CreateConnOps(ConnRole::kClient, raw_socket_, sock, connector_ops, *address, address_len, sock->Type(), ops);
+    if (ret == UBS_OK) {
+        ret = ConnDispatcher::Instance().Submit(raw_socket_, *address, address_len, ConnReactorThread::DoneCallback(),
+                                                ops);
+    }
+    if (ret != UBS_OK) {
+        /* 提交失败：回退同步 connect，调用方据返回值决定后续 */
+        sock->State(SOCK_STAT_INIT);
+        return ret;
+    }
+    return 0; /* 提交成功：调用方返回 -1 且 errno=EINPROGRESS */
+}
+
+void SocketBase::DeferEpollAdd(EventPoll *ep, uint32_t events, const epoll_data_t &data)
+{
+    bool need_register = false;
+    {
+        std::lock_guard<std::mutex> lock(pending_epoll_mutex_);
+        pending_epoll_ = ep;
+        pending_epoll_events_ = events;
+        pending_epoll_data_ = data;
+        /* 写后读：若收尾已切终态，则自行消费 pending（与收尾的读后写构成双重检查） */
+        need_register = (state_ != SOCK_STAT_CONNECTING);
+    }
+    if (need_register) {
+        RegisterPendingEpollAdd();
+    }
+}
+
+void SocketBase::UpdatePendingEpoll(uint32_t events, const epoll_data_t &data)
+{
+    std::lock_guard<std::mutex> lock(pending_epoll_mutex_);
+    if (pending_epoll_ != nullptr) {
+        pending_epoll_events_ = events;
+        pending_epoll_data_ = data;
+    }
+}
+
+void SocketBase::ClearPendingEpoll()
+{
+    std::lock_guard<std::mutex> lock(pending_epoll_mutex_);
+    pending_epoll_ = nullptr;
+    pending_epoll_events_ = 0;
+    pending_epoll_data_ = {};
+}
+
+void SocketBase::RegisterPendingEpollAdd()
+{
+    EventPoll *ep = nullptr;
+    uint32_t events = 0;
+    epoll_data_t data = {};
+    {
+        std::lock_guard<std::mutex> lock(pending_epoll_mutex_);
+        if (pending_epoll_ == nullptr) {
+            return; /* 应用尚未 ADD，无需注册 */
+        }
+        ep = pending_epoll_;
+        events = pending_epoll_events_;
+        data = pending_epoll_data_;
+        /* 先清，避免重入 EEXIST；此时 ArraySet[fd] 已是最终类型（UB/降级 TCP/失败） */
+        pending_epoll_ = nullptr;
+        pending_epoll_events_ = 0;
+        pending_epoll_data_ = {};
+    }
+
+    struct epoll_event ev = {};
+    ev.events = events;
+    ev.data = data;
+    (void)ep->EpollCtl(EPOLL_CTL_ADD, raw_socket_, &ev);
+}
+
+void SocketBase::NotifyConnectFailed()
+{
+    {
+        std::lock_guard<std::mutex> lock(pending_epoll_mutex_);
+        if (pending_epoll_ != nullptr) {
+            pending_epoll_events_ |= EPOLLERR;
+        }
+    }
+    RegisterPendingEpollAdd();
 }
 
 int SocketBase::GetSockOpt(int fd, int level, int optname, void *optval, socklen_t *optlen)

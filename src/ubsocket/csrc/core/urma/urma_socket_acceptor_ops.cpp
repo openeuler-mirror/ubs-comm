@@ -64,7 +64,7 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
     }
 
     UrmaNegotiateReq req = {};
-    Result ret = SocketConnHelper::RecvLengthPrefixed(fd, &req, sizeof(req), NEGOTIATE_TIMEOUT_MS);
+    Result ret = SocketConnHelper::RecvLengthPrefixed(fd, &req, sizeof(req), NEGOTIATE_ACCEPT_TIMEOUT_MS);
     if (ret != UBS_OK) {
         UBS_VLOG_ERR("negotiate fd=%d, recv rsp of size=%zu failed: %d", fd, sizeof(req), ret);
         return ret;
@@ -79,7 +79,7 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
     if (ver_result == VersionCheckResult::kMajorMismatch) {
         UBS_VLOG_ERR("negotiate fd=%d, ValidateNegotiated negotiated_version failed: %d", fd, ver_result);
         uint32_t mismatch_version = local_version.GetWhole();
-        SocketConnHelper::SendSocketData(fd, &mismatch_version, sizeof(mismatch_version), NEGOTIATE_TIMEOUT_MS);
+        SocketConnHelper::SendSocketData(fd, &mismatch_version, sizeof(mismatch_version), NEGOTIATE_ACCEPT_TIMEOUT_MS);
         return UBS_TCP_EXCHANGE;
     }
 
@@ -97,7 +97,7 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
     rsp.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
     rsp.conn_flag = urma_sock->conn_flag;
 
-    ret = SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), NEGOTIATE_TIMEOUT_MS);
+    ret = SocketConnHelper::SendLengthPrefixed(fd, &rsp, sizeof(rsp), NEGOTIATE_ACCEPT_TIMEOUT_MS);
     if (ret != UBS_OK) {
         UBS_VLOG_ERR("negotiate fd=%d, send length prefixed for rsp(%zu: code=%u) buff_size_kb(%u, %u) failed: %d", fd,
                      sizeof(rsp), rsp.ret_code, rsp.send_buf_kb, rsp.recv_buf_kb, ret);

@@ -12,6 +12,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_thread_pool.h"
 #include "common/ubsocket_version.h"
+#include "core/ubsocket_conn_reactor.h"
 #include "core/umq/umq_socket_acceptor.h"
 #include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_core_types.h"
@@ -27,7 +28,7 @@ namespace ubs {
 Result AcceptorOps::DoVersionNegotiate(int fd, uint32_t &negotiated_version, uint32_t &peer_version)
 {
     // 1. 读取对端版本号 (4B)
-    if (SocketConnHelper::RecvSocketData(fd, &peer_version, sizeof(peer_version), NEGOTIATE_TIMEOUT_MS) !=
+    if (SocketConnHelper::RecvSocketData(fd, &peer_version, sizeof(peer_version), NEGOTIATE_ACCEPT_TIMEOUT_MS) !=
         sizeof(peer_version)) {
         UBS_VLOG_ERR("DoVersionNegotiate: failed to recv version, fd: %d\n", fd);
         return UBS_TCP_EXCHANGE;
@@ -59,8 +60,8 @@ Result AcceptorOps::DoVersionNegotiate(int fd, uint32_t &negotiated_version, uin
 
 int AcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size)
 {
-    protocol_negotiation_recv_size =
-        SocketConnHelper::RecvSocketData(fd, &protocol_negotiation, sizeof(protocol_negotiation), NEGOTIATE_TIMEOUT_MS);
+    protocol_negotiation_recv_size = SocketConnHelper::RecvSocketData(
+        fd, &protocol_negotiation, sizeof(protocol_negotiation), NEGOTIATE_ACCEPT_TIMEOUT_MS);
     if (protocol_negotiation_recv_size <= 0) {
         UBS_VLOG_ERR("Validate protocol failed, fd: %d, ret: %zd\n", fd, protocol_negotiation_recv_size);
         return -1;
@@ -79,7 +80,10 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     int fd = -1;
     UBS_VLOG_TRACE("accept on socket(%d)", sock->Fd());
     // 1. 异步accept模式下，从ready_queue中取fd
-    if (GlobalSetting::AsyncAcceptorEnabled() && TryPopAsyncReadyFd(fd, address, address_len)) {
+    // 二次 accept 门槛：半异步线程池（AsyncAcceptorEnabled）与全异步 reactor（ServerAsyncEnabled）共享同一套
+    // ready_queue + wakeup_event_ 完成通知，两者任一开启都允许从 ready_queue 取 fd。
+    if ((GlobalSetting::AsyncAcceptorEnabled() || GlobalSetting::ServerAsyncEnabled()) &&
+        TryPopAsyncReadyFd(fd, address, address_len)) {
         UBS_VLOG_TRACE("accept on socket(%d) async got fd=%d", sock->Fd(), fd);
         return fd;
     }
@@ -152,6 +156,42 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     }
 #endif
     // 异步/同步
+    // 全异步建链路径优先于半异步线程池：recv 状态机与重活均在 poll 线程内联驱动，
+    // 完成后经注入的 done_cb push ready_queue + WakeUpReadyEventFd，此处返回 EAGAIN。
+    if (GlobalSetting::ServerAsyncEnabled()) {
+        UBS_VLOG_TRACE("server async(reactor) acceptor enabled.");
+        // 懒初始化 wakeup_event_（与半异步共享 ready_queue 通知机制）
+        InitWakeupEvent();
+        auto done_cb = [this](int done_fd, const struct sockaddr &done_addr, socklen_t done_addr_len) {
+            {
+                Locker sLock(ubSocket_async_accept_info.lock);
+                ubSocket_async_accept_info.ready_queue.push(std::make_tuple(done_fd, done_addr, done_addr_len));
+            }
+            // 直接调用 WakeUpReadyEventFd() 写 eventfd，触发 epoll_wait 返回
+            wakeup_event_.WakeUpReadyEventFd(raw_fd_);
+            UBS_VLOG_DEBUG("server async(reactor) conn established. fd:%d\n", done_fd);
+        };
+        std::shared_ptr<UBConnOpsBase> conn_ops;
+        Result submit_ret = SocketBase::CreateConnOps(ConnRole::kServer, fd, nullptr, nullptr, addr_tmp, len_tmp,
+                                                      SocketType::SOCK_TYPE_URMA, conn_ops);
+        if (submit_ret == UBS_OK) {
+            submit_ret = ConnDispatcher::Instance().Submit(fd, addr_tmp, len_tmp, done_cb, conn_ops);
+        }
+        if (submit_ret == UBS_OK) {
+            UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d for server-async return EAGAIN.", sock->Fd(),
+                           fd);
+            errno = EAGAIN;
+            return -1;
+        }
+        // 创建/分发失败（类型不支持/ops 分配失败/reactor 未启动/队列满等）：回退同步建链，避免丢连接
+        UBS_VLOG_DEBUG("submit server async(reactor) conn failed, use sync accept. fd:%d ret:%d\n", fd, submit_ret);
+        if (peerIp.length() == 0) {
+            peerIp = SocketConnHelper::ExtractIpFromSockAddr(&addr_tmp);
+        }
+        ProcessUBConnection(fd, peerIp);
+        return fd;
+    }
+
     if (GlobalSetting::AsyncAcceptorEnabled()) {
         UBS_VLOG_TRACE("async acceptor enabled.");
         // 懒初始化：启动 ExecutorService + 初始化 wakeup_event_
@@ -334,10 +374,13 @@ void Acceptor::InitWakeupEvent()
 {
     static std::once_flag initFlag;
     std::call_once(initFlag, [this]() {
-        // 1. 启动 ExecutorService 线程池
-        auto exec_service = ExecutorService::GetExecutorService();
-        if (!exec_service->Start()) {
-            UBS_VLOG_ERR("Failed to start ExecutorService for async accept");
+        // 1. 启动 ExecutorService 线程池（半异步 accept 跑 ProcessUBConnection）。
+        //    全异步建链重活已内联在 poll 线程，不再使用共享 ExecutorService，故仅半异步时启动。
+        if (GlobalSetting::AsyncAcceptorEnabled()) {
+            auto exec_service = ExecutorService::GetExecutorService();
+            if (!exec_service->Start()) {
+                UBS_VLOG_ERR("Failed to start ExecutorService for async accept");
+            }
         }
 
         // 2. 初始化 wakeup_event_：获取 epoll_fd，注册 eventfd 进 epoll
@@ -358,10 +401,10 @@ void Acceptor::InitWakeupEvent()
 
         EventPollPtr aepRef = ArraySet<EventPoll>::GetInstance().GetItem(epoll_fd);
         if (aepRef != nullptr) {
-            aepRef->SetWakeupCallback(wakeup_event_.GetReadyEvent(),
-                                      [this](struct epoll_event *ev, int me, std::unordered_map<int, EpollEvent *> &sd) {
-                                          return wakeup_event_.ProcessReadyEvents(ev, me, sd);
-                                      });
+            aepRef->SetWakeupCallback(wakeup_event_.GetReadyEvent(), [this](struct epoll_event *ev, int me,
+                                                                            std::unordered_map<int, EpollEvent *> &sd) {
+                return wakeup_event_.ProcessReadyEvents(ev, me, sd);
+            });
             UBS_VLOG_DEBUG("async accept: SetWakeupCallback() called for epoll_fd: %d\n", epoll_fd);
         } else {
             UBS_VLOG_ERR("async accept: failed to get EventPoll for epoll_fd: %d\n", epoll_fd);
