@@ -405,7 +405,7 @@ private:
                 break;
             case (UBOpContextInfo::OpType::RECEIVE): /* NOTE, up context is store imm data */
                 (contextInfo).dataSize = wc.completion_len;
-                *((int32_t *)(void *)&((contextInfo).upCtx)) = wc.imm_data;
+                *reinterpret_cast<uint32_t *>(&(contextInfo).upCtx) = UnpackUbImm(wc.imm_data);
                 mNewRequestHandler(&contextInfo);
                 break;
             case (UBOpContextInfo::OpType::WRITE):
