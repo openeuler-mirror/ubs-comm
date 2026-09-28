@@ -106,6 +106,31 @@ constexpr uint32_t JFC_COUNT = NN_NO1024;
 constexpr uint32_t JETTY_MAX_CTP_SEND_BUFF_SIZE = 4096;
 
 /*
+ * 聚合设备(bonding)的 imm_data 是 64 bit, 其中 bit[21:39] 被 urma bondp provider 占用
+ * (reserved/vjetty_id/cr_opcode), 用户只有 bit[20:0] 可用; MSN 保序关闭后 bit[63:40] 也归用户。
+ * 因此 32 bit 的 raw seqNo 需要拼接后搬运, 不能在低 32 bit 内直接承载。
+ */
+constexpr uint32_t UB_IMM_LOW_BITS = 21;
+constexpr uint32_t UB_IMM_LOW_MASK = (1U << UB_IMM_LOW_BITS) - 1;
+constexpr uint32_t UB_IMM_HIGH_SHIFT = 40;
+constexpr uint32_t UB_IMM_HIGH_BITS = 32 - UB_IMM_LOW_BITS;
+constexpr uint32_t UB_IMM_HIGH_MASK = (1U << UB_IMM_HIGH_BITS) - 1;
+
+/* 发送侧: seqNo 低 21 bit 放 bit[20:0], 剩余 11 bit 放 bit[40:50] */
+inline uint64_t PackUbImm(uint32_t seqNo)
+{
+    return (static_cast<uint64_t>(seqNo) & UB_IMM_LOW_MASK) |
+           (static_cast<uint64_t>(seqNo >> UB_IMM_LOW_BITS) << UB_IMM_HIGH_SHIFT);
+}
+
+/* 接收侧: 从 imm_data 还原 32 bit seqNo */
+inline uint32_t UnpackUbImm(uint64_t immData)
+{
+    return static_cast<uint32_t>((immData & UB_IMM_LOW_MASK) |
+                                 (((immData >> UB_IMM_HIGH_SHIFT) & UB_IMM_HIGH_MASK) << UB_IMM_LOW_BITS));
+}
+
+/*
  * class forward declaration
  */
 class UBMemoryRegionFixedBuffer;
