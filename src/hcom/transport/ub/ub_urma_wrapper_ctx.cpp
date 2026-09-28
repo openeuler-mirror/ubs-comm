@@ -73,6 +73,14 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
         NN_LOG_INFO("Set bonding mode for device successfully");
     }
 
+    // 聚合设备 imm_data 的高 24 bit 只有在 MSN 保序关闭后才承载用户数据, 必须显式关闭
+    ret = DisableMSN();
+    if (ret != 0) {
+        free(mDevAttr);
+        mDevAttr = nullptr;
+        return ret;
+    }
+
     int tmpMaxSge = std::min(mDevAttr->dev_cap.max_jfs_sge, mDevAttr->dev_cap.max_jfr_sge);
     mMaxSge = tmpMaxSge < mMaxSge ? tmpMaxSge : mMaxSge;
 
@@ -122,6 +130,22 @@ UResult UBContext::SetBondingMode(UBSHcomUbcMode ubcMode)
         return ret;
     }
     NN_LOG_INFO("Set bonding mode for device successfully");
+    return UB_OK;
+}
+
+/* 与 urma_ubagg.h 中 bondp_user_ctl_opcode 的取值保持一致 */
+static const uint32_t BONDP_USER_CTL_DISABLE_MSN = 11;
+
+UResult UBContext::DisableMSN()
+{
+    urma_user_ctl_in_t in = {.addr = 0, .len = 0, .opcode = BONDP_USER_CTL_DISABLE_MSN};
+    urma_user_ctl_out_t out = {0};
+    UResult ret = HcomUrma::UserCtl(mUrmaContext, &in, &out);
+    if (ret != 0) {
+        NN_LOG_ERROR("Failed to disable MSN for bonding device, ret " << ret);
+        return ret;
+    }
+    NN_LOG_INFO("Disable MSN for bonding device successfully");
     return UB_OK;
 }
 

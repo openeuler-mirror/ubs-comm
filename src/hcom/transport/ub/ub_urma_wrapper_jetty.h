@@ -211,7 +211,7 @@ public:
         wr.user_ctx = reinterpret_cast<uint64_t>(context);
         wr.send.src.sge = &local_sge;
         wr.send.src.num_sge = 1;
-        wr.send.imm_data = immData;
+        wr.send.imm_data = PackUbImm(immData);
         wr.next = nullptr;
         wr.opcode = URMA_OPC_SEND_IMM;
         wr.flag.bs.complete_enable = 1;
@@ -248,7 +248,7 @@ public:
         wr.user_ctx = reinterpret_cast<uint64_t>(context);
         wr.send.src.sge = list;
         wr.send.src.num_sge = iovCount;
-        wr.send.imm_data = immData;
+        wr.send.imm_data = PackUbImm(immData);
         wr.next = nullptr;
         wr.opcode = URMA_OPC_SEND_IMM;
         wr.flag.bs.complete_enable = 1;
@@ -286,7 +286,7 @@ public:
         wr.user_ctx = reinterpret_cast<uint64_t>(context);
         wr.send.src.sge = list;
         wr.send.src.num_sge = iovCount;
-        wr.send.imm_data = immData;
+        wr.send.imm_data = PackUbImm(immData);
         wr.next = nullptr;
         wr.opcode = URMA_OPC_SEND_IMM;
         wr.flag.bs.inline_flag = 1;
@@ -328,7 +328,7 @@ public:
         wr.user_ctx = reinterpret_cast<uint64_t>(context);
         wr.send.src.sge = list;
         wr.send.src.num_sge = iovCount;
-        wr.send.imm_data = immData;
+        wr.send.imm_data = PackUbImm(immData);
         wr.next = nullptr;
         wr.opcode = URMA_OPC_SEND_IMM;
         wr.flag.bs.complete_enable = 1;
