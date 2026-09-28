@@ -84,7 +84,17 @@ public:
      */
     std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> Contexts() noexcept;
 
-    UrmaContextPtr SelectContext(UrmaPortSelectionPolicy policy) noexcept;
+    /**
+     * @brief Get sorted contexts (same-chip first, then different-chip)
+     */
+    std::vector<UrmaContextPtr> SortedContexts() noexcept;
+
+    /**
+     * @brief Select a context by policy
+     */
+    UrmaContextPtr SelectContext(UrmaPortSelectionPolicy policy, int32_t *selected_index = nullptr,
+                                  const UrmaContextHealthEntry *context_health = nullptr,
+                                  uint32_t context_count = 0) noexcept;
 
 private:
     void InitSortedContexts() noexcept;
@@ -301,6 +311,12 @@ ALWAYS_INLINE std::map<std::pair<std::string, uint32_t>, UrmaContextPtr> UrmaCon
     return contexts_;
 }
 
+ALWAYS_INLINE std::vector<UrmaContextPtr> UrmaContextPool::SortedContexts() noexcept
+{
+    std::lock_guard<std::mutex> guard(mutex_);
+    return sorted_contexts_;
+}
+
 ALWAYS_INLINE int16_t UrmaContextPool::GetMyChipId() noexcept
 {
     int logic_cpu_id = 0;
@@ -345,35 +361,60 @@ ALWAYS_INLINE int16_t UrmaContextPool::GetMyChipId() noexcept
     return physical_cpu_id;
 }
 
-inline UrmaContextPtr UrmaContextPool::SelectContext(UrmaPortSelectionPolicy policy) noexcept
+inline UrmaContextPtr UrmaContextPool::SelectContext(UrmaPortSelectionPolicy policy, int32_t *selected_index,
+                                                      const UrmaContextHealthEntry *context_health,
+                                                      uint32_t context_count) noexcept
 {
+    uint32_t context_size = sorted_contexts_.size();
+    if (context_health != nullptr && context_count > 0) {
+        context_size = std::min(context_size, context_count);
+    }
+
+    /* local selection by policy */
     std::vector<UrmaContextPtr> optionalContexts;
-    optionalContexts.reserve(contexts_.size());
-    for (auto context : sorted_contexts_) {
-        if (context->IsAffinity() && !context->IsBadPort()) {
-            optionalContexts.emplace_back(context);
-        } else if (!context->IsAffinity() && !optionalContexts.empty()) {
+    std::vector<int32_t> contextsIndexes;
+    optionalContexts.reserve(context_size);
+    std::lock_guard<std::mutex> guard(mutex_);
+    for (uint32_t i = 0; i < context_size; ++i) {
+        auto ctx = sorted_contexts_[i];
+        bool isBad = ctx->IsBadPort();
+        if (context_health != nullptr && i < context_count) {
+            UBS_VLOG_TRACE("Context select info, peer_eid_index: %d, peer_context_bad: %d, local_eid_index: %d, local_context_bad: %d",
+                           context_health[i].eid_index, context_health[i].is_bad, ctx->EidInfo().eid_index, isBad);
+            if (context_health[i].is_bad) {
+                continue;
+            }
+        }
+        if (ctx->IsAffinity() && !isBad) {
+            contextsIndexes.emplace_back(i);
+            optionalContexts.emplace_back(ctx);
+        } else if (!ctx->IsAffinity() && !optionalContexts.empty()) {
             break;
-        } else if (!context->IsBadPort()) {
-            optionalContexts.emplace_back(context);
+        } else if (!isBad) {
+            contextsIndexes.emplace_back(i);
+            optionalContexts.emplace_back(ctx);
         }
     }
     if (UNLIKELY(optionalContexts.empty())) {
         return nullptr;
     }
+    uint32_t pos;
     if (optionalContexts.size() == 1) {
-        return optionalContexts[0];
-    }
-    if (policy == PSP_ROUND_ROBIN) {
-        uint32_t seq = seq_.fetch_add(1);
-        return optionalContexts[seq % optionalContexts.size()];
+        pos = 0;
+    } else if (policy == PSP_ROUND_ROBIN) {
+        pos = seq_.fetch_add(1) % optionalContexts.size();
     } else if (policy == PSP_RANDOM) {
-        const auto randon = Func::SecureRandUInt32();
-        return optionalContexts[randon % optionalContexts.size()];
+        pos = Func::SecureRandUInt32() % optionalContexts.size();
     } else {
         UBS_VLOG_ERR("Invalid policy, un-reachable path");
         return nullptr;
     }
+    if (selected_index != nullptr) {
+        *selected_index = contextsIndexes[pos];
+    }
+    UBS_VLOG_INFO("Selected context success, pos: %d, selected_index: %d, peer_eid: %d, local_eid: %d",
+                  pos, *selected_index, context_health[*selected_index].eid_index, optionalContexts[pos]->EidInfo().eid_index);
+    return optionalContexts[pos];
 }
 } // namespace urma
 } // namespace ubs

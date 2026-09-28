@@ -281,14 +281,10 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
         return ret;
     }
     ret = newSocket->acceptor_->acceptor_ops_->Negotiate(new_socket_obj);
-    if (ret != UBS_OK) {
-        new_socket_obj->event_fd_ = -1;
-        LibcApi::close(event_fd);
-        PROF_END(CORE_ACCEPT, false);
-        return ret;
+    if (ret == UBS_OK) {
+        ArraySet<Socket>::GetInstance().OverrideItem(new_fd, new_socket_obj.Get());
+        ret = newSocket->acceptor_->acceptor_ops_->CreateSocketResources(new_socket_obj);
     }
-    ArraySet<Socket>::GetInstance().OverrideItem(new_fd, new_socket_obj.Get());
-    ret = newSocket->acceptor_->acceptor_ops_->CreateSocketResources(new_socket_obj);
     if (ret != UBS_OK) {
         if (IsDegradable(ret)) {
             SocketPtr socketPtr;

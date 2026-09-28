@@ -510,6 +510,11 @@ public:
 
     static void UnLoad() noexcept {}
 
+    static bool IsLoaded() noexcept
+    {
+        return true;
+    }
+
     static int umq_init(umq_init_cfg_t *cfg)
     {
         return ::umq_init(cfg);

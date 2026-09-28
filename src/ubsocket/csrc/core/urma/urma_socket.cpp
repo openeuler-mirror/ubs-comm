@@ -40,7 +40,7 @@ UrmaSocket::UrmaSocket(int fd) noexcept : SocketBase(fd, SocketType::SOCK_TYPE_U
 
     empty_recv_wr_.src.sge = &empty_recv_sge_;
     empty_recv_wr_.src.num_sge = 1;
-    empty_recv_wr_.user_ctx = static_cast<uint64_t>(fd);
+    empty_recv_wr_.user_ctx = SenderCRContext{CTRL_DATA_RECEiVE, 0, fd}.value;
     empty_recv_wr_.next = nullptr;
 
     pthread_mutex_init(&block_mutex_, nullptr);
@@ -90,6 +90,7 @@ Result UrmaSocket::Initialize() noexcept
 
 void UrmaSocket::UnInitialize() noexcept
 {
+    UrmaBackend::Instance().GetAllocator()->rm_remote_segments(context_, peer_node_);
     DestroyUrmaResources();
 
     send_buf_ = nullptr;
@@ -225,7 +226,6 @@ uint32_t UrmaSocket::WaitBlockingSignal(uint32_t interest_flags, const struct ti
 
 Result UrmaSocket::CreateUrmaResources()
 {
-    context_ = UrmaBackend::Instance().GetContextPoll()->SelectContext(UrmaPortSelectionPolicy::PSP_ROUND_ROBIN);
     if (context_ == nullptr) {
         UBS_SLOG_ERR("UrmaSocket: GetUrmaContext failed, fd=" << raw_socket_);
         return UBS_ERROR;
@@ -236,9 +236,6 @@ Result UrmaSocket::CreateUrmaResources()
         UBS_SLOG_ERR("UrmaSocket: SelectPoller failed, fd=" << raw_socket_);
         return ret;
     }
-
-    const urma_eid_info_t &eid_info = context_->EidInfo();
-    memcpy(&local_eid_, &eid_info.eid, sizeof(urma_eid_t));
 
     urma_jfs_cfg_t jfs_cfg = context_->CreateJfsCfg(kDefaultQueueDepth, GetUrmaTransMode(), 0);
     ret = context_->CreateJfs(jfs_cfg, jfc_, jfs_);
@@ -281,12 +278,13 @@ void UrmaSocket::DestroyUrmaResources()
     }
 
     jfc_ = nullptr;
+    remote_target_segs_ = nullptr;
     context_ = nullptr;
 }
 
 bool UrmaSocket::IsBindRemote()
 {
-    return is_bind_remote_;
+    return (socket_flags & URMA_SOCKET_MASK_BIND_REMOTE) != 0;
 }
 
 int UrmaSocket::NotifySocketReadable()
@@ -454,13 +452,10 @@ void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
 
 Result UrmaSocket::ExchangeSocketResources(bool send_first)
 {
-    Result ret;
-    do {
-        ret = DoExchangeSocketResources(send_first);
-        if (ret == UBS_OK) {
-            return ret;
-        }
-    } while (LinkSwitchEnable());
+    Result ret = DoExchangeSocketResources(send_first);
+    if (ret == UBS_OK) {
+        return ret;
+    }
 
     if (DegradeEnable()) {
         ret |= UBS_DEGRADABLE_MASK;
@@ -534,7 +529,7 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
         goto CLEAN_URMA_RESOURCE;
     }
 
-    remote_segments = allocator->get_remote_segments(peer.node);
+    remote_segments = allocator->get_remote_segments(context_, peer.node);
     remote_segments->remote_start_addr_ = peer.pool_start_addr;
     ack_ret = allocator->store_remote_target_seg(context_, remote_segments, peer.seg, remote_ctrl_target_seg_);
     if (ack_ret != UBS_OK) {
@@ -570,15 +565,15 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
     rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
     rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
     remote_uasid_ = peer.uasid;
-    peer_eid_ = peer.node.eid;
-    SetBindRemote(true);
+    peer_node_ = peer.node;
+    SetSocketFlags(URMA_SOCKET_MASK_BIND_REMOTE);
     UBS_VLOG_TRACE("urma socket exchange socket result success, peer buf=(0x%lx:0x%lx), local buf=(0x%lx:0x%lx)",
                    peer.ex.my_send_buf.buf, peer.ex.my_recv_buf.buf, local.ex.my_send_buf.buf,
                    local.ex.my_recv_buf.buf);
     return UBS_OK;
 
 CLEAN_REMOTE_SEG:
-    allocator->rm_remote_segments(peer.node);
+    allocator->rm_remote_segments(context_, peer.node);
 
 CLEAN_URMA_RESOURCE:
     DestroyUrmaResources();

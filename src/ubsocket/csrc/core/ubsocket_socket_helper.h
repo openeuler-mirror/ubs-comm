@@ -55,6 +55,8 @@ public:
 
     static std::string ExtractIpFromSockAddr(const struct sockaddr *address);
     static uint16_t ExtractPortFromSockAddr(const struct sockaddr *address);
+    /* pack IPv4 addr+port into one unique id: (host-order ip << 16) | port; 0 = unset/unsupported */
+    static uint64_t PackSockAddrToId(const struct sockaddr *address);
     static int GetCurrentProcessSocketId();
     // 获取所有 Socket ID
     static std::vector<uint32_t> GetSocketIdsViaNumaSysfs();

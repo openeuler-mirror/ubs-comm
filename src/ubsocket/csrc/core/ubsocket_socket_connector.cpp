@@ -16,6 +16,7 @@
 #include "common/ubsocket_scope_exit.h"
 #include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_socket.h"
+#include "ubsocket_socket_helper.h"
 
 namespace ock {
 namespace ubs {
@@ -170,6 +171,7 @@ int Connector::Connect(SocketPtr &sock, const struct sockaddr *address, socklen_
         PROF_END(CORE_CONNECT, false);
         return ret;
     }
+    sock->conn_add_id = SocketConnHelper::PackSockAddrToId(address);
 
     ret = connector_ops_->Negotiate(raw_fd_, sock);
     if (ret == UBS_OK) {

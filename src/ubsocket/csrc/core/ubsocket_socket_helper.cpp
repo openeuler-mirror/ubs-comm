@@ -55,6 +55,15 @@ std::string SocketConnHelper::ExtractIpFromSockAddr(const struct sockaddr *addre
     return (result != nullptr) ? std::string(ip_str) : "";
 }
 
+uint64_t SocketConnHelper::PackSockAddrToId(const struct sockaddr *address)
+{
+    if (address == nullptr || address->sa_family != AF_INET) {
+        return 0;
+    }
+    const sockaddr_in *addr_in = reinterpret_cast<const sockaddr_in *>(address);
+    return (static_cast<uint64_t>(ntohl(addr_in->sin_addr.s_addr)) << 16) | ntohs(addr_in->sin_port);
+}
+
 uint16_t SocketConnHelper::ExtractPortFromSockAddr(const struct sockaddr *address)
 {
     uint16_t port = 0;
