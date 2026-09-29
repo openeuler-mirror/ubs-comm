@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_UBSOCKET_DEF_H
 #define UBS_COMM_UBSOCKET_DEF_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -87,7 +88,9 @@ typedef struct {
     uint32_t allowed_protocol;             /* allowed underlay protocol */
     uint32_t async_acceptor_thread_count;  /* thread count of async acceptor, 0 means async disabled */
     uint32_t async_connector_thread_count; /* thread count of async connector, 0 means async disabled */
+    bool async_connector_enable;           /* true: client 侧全异步建链使能，false: 同步建链 */
     uint32_t async_epoll_thread_count;     /* thread count of async epoll_wait, 0 means async disabled */
+    uint32_t server_async_enable;          /* 1: server 侧全异步建链(reactor)使能，0: 关闭 */
     u_external_lock_ops_t *lock_ops;       /* external lock operations, for example brpc's butex */
     u_external_rw_lock_ops_t *rw_lock_ops; /* external lock operations, for example brpc's butex */
     u_external_semaphore_ops_t *sem_ops;   /* external lock operations, for example brpc's sem */

@@ -10,7 +10,9 @@
  */
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <cstdarg>
 #include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_conn_reactor.h"
 #include "core/ubsocket_raw_socket.h"
 #include "core/ubsocket_data_tx.h"
 #include "core/ubsocket_socket.h"
@@ -75,6 +77,10 @@ UBS_API int UB_API_WRAP(close)(int fd)
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock.Get() != nullptr) {
+        /* 建链中 close：先让 reactor 停止推进并移出监听（fd 归应用，不在此 close），再注销 ArraySet 并 close */
+        if (sock->State() == SOCK_STAT_CONNECTING) {
+            ConnDispatcher::Instance().Cancel(fd);
+        }
         sock->State(SOCK_STAT_CLOSE);
         sock->OnLocalClose();
     }
@@ -176,6 +182,22 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
     }
     sock->create_type_ = SOCK_CREATE_TYPE_CONNECT;
     auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
+
+    /* 全异步 connect 分流：仅非阻塞 fd、非 TFO、非纯 TCP。TFO 会临时切阻塞，不能污染共享 poll 线程。 */
+    bool nonblocking = !SocketConnHelper::IsBlocking(fd);
+    bool tfo = (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::TFO);
+    if (GlobalSetting::AllAsyncConnectorEnabled() && nonblocking && !tfo && sock->Type() != SocketType::SOCK_TYPE_TCP) {
+        /* 建链中二次 connect：不重复提交，透传 libc 得到 EALREADY/EISCONN/0（对齐 POSIX） */
+        if (sock->State() == SOCK_STAT_CONNECTING) {
+            return LibcApi::connect(fd, address, address_len);
+        }
+
+        if (sockBase->ConnectAsync(sock, address, address_len) == 0) {
+            errno = EINPROGRESS;
+            return -1;
+        }
+        UBS_VLOG_WARN("async connect submit failed, fallback to sync connect, fd: %d\n", fd);
+    }
     return sockBase->Connect(sock, address, address_len);
 }
 

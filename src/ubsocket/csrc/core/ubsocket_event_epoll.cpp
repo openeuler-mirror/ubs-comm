@@ -631,6 +631,15 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     // 1. add original socket fd to epoll fd
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    /* 建链中（异步 connect）：最终类型未定，先记录应用 events/data，待收尾按最终类型注册（延迟注册） */
+    if (sock != nullptr && sock->State() == SOCK_STAT_CONNECTING) {
+        auto connecting_base = RefStaticCastToRaw<SocketBase>(sock);
+        if (connecting_base != nullptr) {
+            connecting_base->DeferEpollAdd(this, event->events, event->data);
+            return 0;
+        }
+    }
     if (UNLIKELY(IsSocketEventDataExist(fd))) {
         UBS_VLOG_ERR("async_epoll EpollCtlAdd(socket=%d) already added.", fd);
         errno = EEXIST;
@@ -638,7 +647,6 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     // 非 ubsocket_socket API 创建的 fd 不做特殊处理
-    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP)) {
         return AddRawSocketEvent(fd, event);
     }
@@ -779,13 +787,22 @@ int AsyncEventPoll::EpollCtlMod(int fd, struct epoll_event *event)
         return -1;
     }
 
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    /* 建链中：仅更新延迟注册的 events/data，不碰内核（尚未注册） */
+    if (sock != nullptr && sock->State() == SOCK_STAT_CONNECTING) {
+        auto connecting_base = RefStaticCastToRaw<SocketBase>(sock);
+        if (connecting_base != nullptr) {
+            connecting_base->UpdatePendingEpoll(event->events, event->data);
+            return 0;
+        }
+    }
+
     if (UNLIKELY((event->events & EPOLLET) == 0)) {
         UBS_VLOG_ERR("async_epoll EpollCtlMod must be edge-triggered notification.\n");
         errno = EINVAL;
         return -1;
     }
 
-    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP)) {
         return ModRawSocketEvent(fd, event);
     }
@@ -839,13 +856,22 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
         return -1;
     }
 
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    /* 建链中：本就没注册内核，仅清空延迟注册的 pending（不能走 IsSocketEventDataExist 的 ENOENT 分支） */
+    if (sock != nullptr && sock->State() == SOCK_STAT_CONNECTING) {
+        auto connecting_base = RefStaticCastToRaw<SocketBase>(sock);
+        if (connecting_base != nullptr) {
+            connecting_base->ClearPendingEpoll();
+            return 0;
+        }
+    }
+
     if (UNLIKELY(!IsSocketEventDataExist(fd))) {
         UBS_VLOG_ERR("async_epoll EpollCtlDel(socket:%d) failed, not added\n", fd);
         errno = ENOENT;
         return -1;
     }
 
-    auto sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (UNLIKELY(sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP)) {
         UBS_VLOG_DEBUG("sock is nullptr or is origin sock, socket: %d\n", fd);
         return 0;

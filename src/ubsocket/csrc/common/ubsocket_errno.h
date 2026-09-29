@@ -49,6 +49,8 @@ enum InnerCode : int32_t {
     // Dispatcher mode: event enqueued onto the rx dispatch queue and read side woken;
     // actual processing happens when ReadV drains the queue
     UBS_DEFERRED,
+    // 非阻塞 send 遇 EAGAIN：本次未发完（非错误），需等 fd 可写后重试
+    UBS_WOULD_BLOCK,
 
     // 特殊标记位，使用 bit 30 和 bit 29，最高位 (bit 31) 为 1 表示负数错误
     UBS_RETRYABLE_MASK = 0x40000000,  // 可重试标记 (bit 30)

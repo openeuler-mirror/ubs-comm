@@ -82,7 +82,7 @@ private:
     void ProcessUBConnection(int fd, const std::string &peerIp);
     Result DoAccept(int new_fd, const std::string &peerIp);
 
-    // 懒初始化：启动 ExecutorService + 初始化 wakeup_event_
+    // 懒初始化：半异步时启动 ExecutorService，并初始化 wakeup_event_
     void InitWakeupEvent();
 
     // ======================== Accept 其他辅助函数 ========================

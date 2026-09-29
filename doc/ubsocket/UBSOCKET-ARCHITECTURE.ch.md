@@ -711,7 +711,7 @@ flowchart TD
 |------|--------|------|
 | `allowed_protocol` | `UBS_PROTOCOL_TCP` | 允许的传输协议 |
 | `async_acceptor_thread_count` | 0 | 异步Accept线程数（0=同步） |
-| `async_connector_thread_count` | 0 | 异步Connector线程数 |
+| `async_connector_enable` | `false` | Client 全异步建链开关（true=异步，false=同步） |
 | `async_epoll_thread_count` | 1 | 后台epoll线程数 |
 | `lock_ops` | nullptr | 外部互斥锁注入（brpc butex等） |
 | `rw_lock_ops` | nullptr | 外部读写锁注入 |

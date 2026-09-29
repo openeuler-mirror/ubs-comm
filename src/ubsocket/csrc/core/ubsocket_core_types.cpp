@@ -15,7 +15,7 @@ namespace ubs {
 const std::string &SocketStateToStr(const SocketState value)
 {
     static std::string strings[SOCK_STATE_COUNT + 1L] = {
-        "init", "raw_socket_established", "established", "shutdown", "closed", "unknown"};
+        "init", "raw_socket_established", "established", "shutdown", "closed", "connecting", "unknown"};
     if (SocketStateValid(value)) {
         return strings[value];
     }

@@ -25,6 +25,8 @@ namespace urma {
 
 class UrmaSocket;
 
+struct UrmaSockSegExInfo; /* defined in urma_socket_seg_ex.h */
+
 /*
  * Installed onto an UrmaSocket by the event poll it is registered on. When the socket becomes
  * readable, NotifySocketReadable asks the notifier to surface the event without a kernel wakeup
@@ -75,6 +77,19 @@ public:
 
     Result ExchangeSocketResources(bool send_first = true);
 
+    /*
+     * 全异步 server 建链专用入口（无 friend 注入通道，供外部状态机复用本 socket 资源状态）：
+     * - BuildLocalSegExInfo: CreateUrmaResources() 完成后调用，填充本端段信息 wire 帧，
+     *   并缓存本端控制面 target seg 供 ImportPeerSegments/CommitRemotePeer 使用。
+     * - ImportPeerSegments: 收到对端段信息后调用（重活线程），导入对端 jetty、注册对端段、
+     *   绑定本地收包 seg 并预投空 recv WR。
+     * - CommitRemotePeer: 收到对端 ack 后调用（轻量），记录对端地址信息并置 bind-remote。
+     * 以上方法与同步路径的阻塞流程互不共享，仅在本 socket 对象上做等价的状态推进。
+     */
+    Result BuildLocalSegExInfo(UrmaSockSegExInfo &local) noexcept;
+    Result ImportPeerSegments(const UrmaSockSegExInfo &peer) noexcept;
+    void CommitRemotePeer(const UrmaSockSegExInfo &peer) noexcept;
+
     UrmaJettyPtr Jetty() const
     {
         return jetty_;
@@ -104,20 +119,12 @@ public:
 
     urma_transport_mode_t GetUrmaTransMode()
     {
-        if (trans_mode == ub_trans_mode::RM_CTP || trans_mode == ub_trans_mode::RM_TP) {
-            return urma_transport_mode_t::URMA_TM_RM;
-        } else {
-            return urma_transport_mode_t::URMA_TM_RC;
-        }
+        return UrmaTransModeOf(trans_mode);
     }
 
     urma_tp_type_t GetUrmaTpType()
     {
-        if (trans_mode == ub_trans_mode::RC_TP || trans_mode == ub_trans_mode::RM_TP) {
-            return urma_tp_type_t::URMA_RTP;
-        } else {
-            return urma_tp_type_t::URMA_CTP;
-        }
+        return UrmaTpTypeOf(trans_mode);
     }
 
     void SetSocketFlags(uint32_t mask)

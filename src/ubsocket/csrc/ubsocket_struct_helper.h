@@ -21,6 +21,7 @@ static inline std::ostream &operator<<(std::ostream &os, const u_init_options_t 
     os << "u_init_options_t [allowed_protocol: " << o.allowed_protocol
        << ", async_acceptor_thread_count: " << o.async_acceptor_thread_count
        << ", async_connector_thread_count: " << o.async_connector_thread_count
+       << ", async_connector_enable: " << o.async_connector_enable
        << ", async_epoll_thread_count: " << o.async_epoll_thread_count << ", lock_ops: " << std::hex << o.lock_ops
        << ", rw_lock_ops: " << o.rw_lock_ops << ", sem_ops: " << o.sem_ops << ", rpc_id_ops: " << o.rpc_id_ops
        << ", poller_ops: " << o.poller_ops << "]";

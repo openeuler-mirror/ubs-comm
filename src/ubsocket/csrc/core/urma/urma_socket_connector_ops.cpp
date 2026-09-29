@@ -97,7 +97,7 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     uint64_t peer_addr_id = urma_sock->GetPeerAddrId();
     req.last_conn_id = UrmaBackend::Instance().TakeBrokenConnId(peer_addr_id);
 
-    Result ret = SocketConnHelper::SendLengthPrefixed(raw_fd_, &req, sizeof(req), NEGOTIATE_TIMEOUT_MS);
+    Result ret = SocketConnHelper::SendLengthPrefixed(raw_fd_, &req, sizeof(req), NEGOTIATE_REPLY_TIMEOUT_MS);
     if (ret != UBS_OK) {
         UBS_VLOG_ERR("negotiate fd=%d, send length prefixed for req(%zu: ver=%u) buff_size_kb(%u, %u) failed: %d",
                      new_fd, sizeof(req), req.peer_version, req.send_buf_kb, req.recv_buf_kb, ret);
@@ -105,7 +105,7 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     }
 
     UrmaNegotiateRsp rsp = {};
-    ret = SocketConnHelper::RecvLengthPrefixed(raw_fd_, &rsp, sizeof(rsp), NEGOTIATE_TIMEOUT_MS);
+    ret = SocketConnHelper::RecvLengthPrefixed(raw_fd_, &rsp, sizeof(rsp), NEGOTIATE_REPLY_TIMEOUT_MS);
     if (ret != UBS_OK) {
         UBS_VLOG_ERR("negotiate fd=%d, recv rsp of size=%zu failed: %d", raw_fd_, sizeof(rsp), ret);
         return ret;

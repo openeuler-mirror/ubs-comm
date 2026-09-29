@@ -29,6 +29,7 @@
 #include "urma_data_rx_ops.h"
 #include "urma_data_tx_ops.h"
 #include "urma_socket.h"
+#include "urma_socket_seg_ex.h"
 
 namespace ock {
 namespace ubs {
@@ -857,6 +858,82 @@ void UrmaSocket::PostEmptyRecvWorkerRecords(uint32_t count)
             UBS_SLOG_ERR("Failed to post recv wr for WRITE_IMM failed with index: " << i);
         }
     }
+}
+
+/* ==================== 全异步 server 建链专用注入方法（无 friend 通道） ==================== */
+
+Result UrmaSocket::BuildLocalSegExInfo(UrmaSockSegExInfo &local) noexcept
+{
+    if (UNLIKELY(context_ == nullptr || jetty_ == nullptr || send_buf_ == nullptr)) {
+        UBS_SLOG_ERR("UrmaSocket: BuildLocalSegExInfo resource not created, fd=" << raw_socket_);
+        return UBS_ERROR;
+    }
+
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    local.ex.my_send_buf.buf = send_buf_addr_;
+    local.ex.my_send_buf.size = send_buf_size_;
+    local.ex.my_recv_buf.buf = recv_buf_addr_;
+    local.ex.my_recv_buf.size = recv_buf_size_;
+    local.ex.raw_jetty_id = jetty_->RawJettyId();
+    /* token 交换需要安全通道，当前需约束在安全网络下 */
+    local.ex.token = jetty_->Token();
+    local.node = context_->GetLocalIdentifyNode();
+    local.uasid = context_->Handle()->uasid;
+    local.pool_start_addr = allocator->get_local_start_addr();
+    urma_target_seg_t *local_seg = allocator->get_local_target_seg(context_, recv_buf_addr_);
+    if (UNLIKELY(local.pool_start_addr == 0 || local_seg == nullptr)) {
+        UBS_SLOG_ERR("UrmaSocket: BuildLocalSegExInfo failed, pool_start=0x" << std::hex << local.pool_start_addr
+                                                                             << " fd=" << raw_socket_);
+        return UBS_TCP_EXCHANGE;
+    }
+    local.seg = local_seg->seg;
+    local_ctrl_target_seg_ = local_seg; /* 供 ImportPeerSegments 绑定收包 sge 使用 */
+    return UBS_OK;
+}
+
+Result UrmaSocket::ImportPeerSegments(const UrmaSockSegExInfo &peer) noexcept
+{
+    if (UNLIKELY(jetty_ == nullptr)) {
+        UBS_SLOG_ERR("UrmaSocket: ImportPeerSegments jetty not created, fd=" << raw_socket_);
+        return UBS_ERROR;
+    }
+
+    auto allocator = UrmaBackend::Instance().GetAllocator();
+    urma_jetty_id_t peer_jetty_id = peer.ex.raw_jetty_id;
+    uint32_t peer_token = peer.ex.token;
+    Result jetty_ret = jetty_->ImportRemoteJetty(peer_jetty_id, peer_token);
+    if (jetty_ret != UBS_OK) {
+        UBS_SLOG_ERR("UrmaSocket: ImportRemoteJetty failed, fd=" << raw_socket_);
+        return UBS_TCP_EXCHANGE;
+    }
+
+    RemoteSegmentsPtr remote_segments = allocator->get_remote_segments(peer.node);
+    remote_segments->remote_start_addr_ = peer.pool_start_addr;
+    urma_seg_t seg_copy = peer.seg;
+    Result ret = allocator->store_remote_target_seg(context_, remote_segments, seg_copy, remote_ctrl_target_seg_);
+    if (UNLIKELY(ret != UBS_OK)) {
+        UBS_SLOG_ERR("UrmaSocket: store remote segments failed, ret=" << ret << ", fd=" << raw_socket_);
+        allocator->rm_remote_segments(peer.node);
+        return ret;
+    }
+
+    local_ctrl_target_seg_ = (local_ctrl_target_seg_ != nullptr) ? local_ctrl_target_seg_ :
+                                                                   allocator->get_local_target_seg(context_, recv_buf_addr_);
+    remote_target_segs_ = remote_segments;
+    if (local_ctrl_target_seg_ != nullptr) {
+        empty_recv_sge_.tseg = local_ctrl_target_seg_;
+        PostEmptyRecvWorkerRecords(128U); /* TODO: post recv count */
+    }
+    return UBS_OK;
+}
+
+void UrmaSocket::CommitRemotePeer(const UrmaSockSegExInfo &peer) noexcept
+{
+    rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
+    rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
+    remote_uasid_ = peer.uasid;
+    peer_eid_ = peer.node.eid;
+    SetBindRemote(true);
 }
 
 } // namespace urma

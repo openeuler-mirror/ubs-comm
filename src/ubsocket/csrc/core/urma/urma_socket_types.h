@@ -31,6 +31,26 @@ constexpr uint32_t kDefaultQueueDepth = 1024;
 constexpr uint32_t kDefaultCqPollBatch = 32;
 
 /*
+ * ub_trans_mode -> URMA transport mode / tp type 的集中映射，供 UrmaSocket 与预创建资源池共用，
+ * 避免两处各写一份判断导致预创建 bundle 与连接实际所需模式不一致。
+ */
+inline urma_transport_mode_t UrmaTransModeOf(ub_trans_mode mode) noexcept
+{
+    if (mode == ub_trans_mode::RM_CTP || mode == ub_trans_mode::RM_TP) {
+        return urma_transport_mode_t::URMA_TM_RM;
+    }
+    return urma_transport_mode_t::URMA_TM_RC;
+}
+
+inline urma_tp_type_t UrmaTpTypeOf(ub_trans_mode mode) noexcept
+{
+    if (mode == ub_trans_mode::RC_TP || mode == ub_trans_mode::RM_TP) {
+        return urma_tp_type_t::URMA_RTP;
+    }
+    return urma_tp_type_t::URMA_CTP;
+}
+
+/*
  * OneSideSenderType encodes the single-sided operation type stored in the URMA completion record's
  * user_ctx field. The receiver uses it to dispatch the correct CQE handler upon operation completion.
  */

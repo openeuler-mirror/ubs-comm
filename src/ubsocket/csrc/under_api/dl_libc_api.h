@@ -295,6 +295,12 @@ public:
         return epoll_pwait_ptr(epfd, events, maxevents, timeout, sigmask);
     }
 
+    static int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+    {
+        ENSURE_LOADED(-1);
+        return poll_ptr(fds, nfds, timeout);
+    }
+
     static int getsockopt(int fd, int level, int optname, void *optval, socklen_t *optlen)
     {
         ENSURE_LOADED(-1);

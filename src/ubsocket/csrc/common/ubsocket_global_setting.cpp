@@ -27,8 +27,10 @@ bool GlobalSetting::UBS_INITED = false;                      /* not inited by de
 std::string GlobalSetting::UBS_TRANS_MODE = "ub";            /* transport mode, from env */
 int16_t GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = 0;  /* disabled by default */
 int16_t GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = 0; /* disabled by default */
+bool GlobalSetting::UBS_CONNECTOR_ASYNC_ENABLE = false;      /* disabled by default */
 int16_t GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = 1;     /* enabled by default */
 bool GlobalSetting::UBS_ACCEPTOR_ASYNC_ENABLED = false;
+bool GlobalSetting::UBS_SERVER_ASYNC_ENABLE = false; /* disabled by default */
 bool GlobalSetting::UBS_AUTO_FALLBACK_TCP = true;
 bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
@@ -39,6 +41,7 @@ uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 2048;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::UB_SOCK_OPT;
 uint32_t GlobalSetting::UBS_THREAD_POOL_SIZE = 1;
+uint32_t GlobalSetting::UBS_CONN_POLL_THREAD_NUM = 0; /* 0 = follow UBS_THREAD_POOL_SIZE */
 u_external_poller_ops_t *GlobalSetting::UBS_POLLER_OPS = nullptr;
 bool GlobalSetting::UBS_PROF_ENABLE = false;
 std::string GlobalSetting::UBS_PROF_MODE = "fast";
@@ -61,6 +64,8 @@ uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 #define ENV_SPLIT_TRACE_LEVEL "UBSOCKET_SPLIT_TRACE_LEVEL"
 #define ENV_ASYNC_ACCEPTOR "UBSOCKET_ASYNC_ACCEPT_ENABLE" /* match brpc_test FLAGS_ubsocket_async_accept */
 #define ENV_ASYNC_CONNECTOR "UBSOCKET_ASYNC_CONNECTOR_THREAD_COUNT"
+#define ENV_SERVER_ASYNC "UBSOCKET_SERVER_ASYNC_ENABLE"   /* server fully-async(reactor) conn switch */
+#define ENV_ASYNC_CONNECTOR_ENABLE "UBSOCKET_ASYNC_CONNECTOR_ENABLE"
 #define ENV_ASYNC_EPOLL "UBSOCKET_ASYNC_EPOLL_WAIT_THREAD_COUNT"
 #define ENV_SHARE_JFR_LOOP_POLL_ENABLED "UBSOCKET_SHARE_JFR_LOOP_POLL_ENABLED"
 #define ENV_ENABLE_SHARE_JFR "UBSOCKET_SHARE_JFR_ENABLE"
@@ -68,6 +73,8 @@ uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 #define ENV_UBS_TX_DEPTH "UBSOCKET_TX_DEPTH"
 #define ENV_UBS_HAND_SHAKE_MODE "UBSOCKET_UB_HANDSHAKE_MODE"
 #define ENV_UBS_THREAD_POOL_SIZE "UBSOCKET_ASYNC_ACCEPT_THREAD_NUM"
+#define ENV_CONN_POLL_THREAD_NUM "UBSOCKET_CONN_POLL_THREAD_NUM"              /* 全异步建链 poll 线程数 */
+#define ENV_SERVER_HANDLER_NUM_DEPRECATED "UBSOCKET_SERVER_ASYNC_HANDLER_NUM" /* 旧名，兼容读取 */
 #define ENV_PROF_ENABLE "UBSOCKET_PROF_ENABLE"
 #define ENV_PROF_MODE "UBSOCKET_PROF_MODE"
 #define ENV_PROF_DUMP_INTERVAL_MIN "UBSOCKET_PROF_DUMP_INTERVAL_MIN"
@@ -101,6 +108,8 @@ void GlobalSetting::AddRules() noexcept
         {ENV_SPLIT_TRACE_BUF_CAPACITY, false, 16384, 10240000},
         {ENV_SPLIT_TRACE_DRAIN_INTERVAL_MS, false, 1, 10000},
         {ENV_UBS_THREAD_POOL_SIZE, false, 1, UINT32_MAX},
+        {ENV_CONN_POLL_THREAD_NUM, false, 0, UINT32_MAX},
+        {ENV_SERVER_HANDLER_NUM_DEPRECATED, false, 0, UINT32_MAX},
         {ENV_PORT_COOLDOWN_SEC, false, 1, 300},
     };
 
@@ -113,6 +122,8 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_PROF_ENABLE, false, "true|false"},
                                     {ENV_PROF_MODE, false, "fast|ext"},
                                     {ENV_ASYNC_ACCEPTOR, false, "true|false"},
+                                    {ENV_ASYNC_CONNECTOR_ENABLE, false, "true|false"},
+                                    {ENV_SERVER_ASYNC, false, "true|false"},
                                     {ENV_VAR_DEGRADE, false, "true|false"},
                                     {ENV_VAR_CLI, false, "true|false"},
                                     {ENV_VAR_PROBE, false, "true|false"},
@@ -256,12 +267,20 @@ Result GlobalSetting::LoadEnv() noexcept
         }
     }
 
+    if (GetEnvAndValidate(ENV_ASYNC_CONNECTOR_ENABLE, strEnvValue)) {
+        UBS_CONNECTOR_ASYNC_ENABLE = Func::BoolFromStr(strEnvValue);
+    }
+
     if (GetEnvAndValidate(ENV_ASYNC_CONNECTOR, envValue)) {
         UBS_CONNECTOR_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
     }
 
     if (GetEnvAndValidate(ENV_ASYNC_EPOLL, envValue)) {
         UBS_EPOLL_ASYNC_THREAD_COUNT = static_cast<int16_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_SERVER_ASYNC, strEnvValue)) {
+        UBS_SERVER_ASYNC_ENABLE = Func::BoolFromStr(strEnvValue);
     }
 
     if (GetEnvAndValidate(ENV_ENABLE_SHARE_JFR, strEnvValue)) {
@@ -288,6 +307,14 @@ Result GlobalSetting::LoadEnv() noexcept
         UBS_THREAD_POOL_SIZE = static_cast<uint32_t>(envValue);
     }
     UBS_VLOG_INFO("Current thread pool size, UBSOCKET_ASYNC_ACCEPT_THREAD_NUM: %u\n", UBS_THREAD_POOL_SIZE);
+
+    if (GetEnvAndValidate(ENV_CONN_POLL_THREAD_NUM, envValue)) {
+        UBS_CONN_POLL_THREAD_NUM = static_cast<uint32_t>(envValue);
+    } else if (GetEnvAndValidate(ENV_SERVER_HANDLER_NUM_DEPRECATED, envValue)) {
+        UBS_CONN_POLL_THREAD_NUM = static_cast<uint32_t>(envValue);
+        UBS_VLOG_WARN("UBSOCKET_SERVER_ASYNC_HANDLER_NUM is deprecated, use UBSOCKET_CONN_POLL_THREAD_NUM\n");
+    }
+    UBS_VLOG_INFO("Current conn poll thread num, UBSOCKET_CONN_POLL_THREAD_NUM: %u\n", UBS_CONN_POLL_THREAD_NUM);
 
     if (GetEnvAndValidate(ENV_PROF_ENABLE, strEnvValue)) {
         UBS_PROF_ENABLE = Func::BoolFromStr(strEnvValue);
