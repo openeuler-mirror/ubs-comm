@@ -560,7 +560,7 @@ ALWAYS_INLINE Result FixedGlobalCache::DoSyncExpand() noexcept
         if (make_mini_block_result == UBS_OK) {
             /* attach to aligned list */
             pthread_spin_lock(&spinlock_aligned_);
-            tmp_mini_blocks_created->tail = aligned_mini_blocks_;
+            tmp_mini_blocks_created->tail->next = aligned_mini_blocks_;
             aligned_mini_blocks_ = tmp_mini_blocks_created;
             free_mini_blocks_aligned_ += mini_blocks_created;
             total_mini_blocks_ += mini_blocks_created;
@@ -852,7 +852,7 @@ ALWAYS_INLINE Result FixedGlobalCache::DoAsyncExpand() noexcept
         auto makeResult = MakeMiniBlocks(miniBlocksCreated, tmpMiniBlocksCreated);
         if (makeResult == UBS_OK) {
             pthread_spin_lock(&spinlock_aligned_);
-            tmpMiniBlocksCreated->tail = aligned_mini_blocks_;
+            tmpMiniBlocksCreated->tail->next = aligned_mini_blocks_;
             aligned_mini_blocks_ = tmpMiniBlocksCreated;
             free_mini_blocks_aligned_ += miniBlocksCreated;
             total_mini_blocks_ += miniBlocksCreated;
