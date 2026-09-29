@@ -288,7 +288,7 @@ protected:
         sock->event_fd_ = event_fd;
         sock->writable_ready_.store(true, std::memory_order_release);
         sock->socket_readable_ready_.store(false, std::memory_order_release);
-        sock->is_bind_remote_ = true;
+        sock->SetSocketFlags(URMA_SOCKET_MASK_BIND_REMOTE);
         ArraySet<Socket>::GetInstance().OverrideItem(fd, sock.Get());
     }
 };
@@ -1070,7 +1070,7 @@ protected:
         sock->event_fd_ = eventFd;
         sock->writable_ready_.store(true, std::memory_order_release);
         sock->socket_readable_ready_.store(false, std::memory_order_release);
-        sock->is_bind_remote_ = true;
+        sock->SetSocketFlags(URMA_SOCKET_MASK_BIND_REMOTE);
         ArraySet<Socket>::GetInstance().OverrideItem(fd, sock.Get());
     }
 

@@ -546,6 +546,7 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
         case URMA_CR_RNR_RETRY_CNT_EXC_ERR:
         case URMA_CR_LOC_DATA_POISON:
         {
+            SenderCRContext cr_context{cr->user_ctx};
             if (!urma_sock->LinkSwitchEnable()) {
                 UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd: %d", cr->status,
                              cr->user_ctx, cr->opcode, cr->flag.value, sock_fd);

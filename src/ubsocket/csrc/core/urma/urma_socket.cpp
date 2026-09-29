@@ -283,7 +283,7 @@ bool UrmaSocket::PostCloseToPeer(int timeout_ms) noexcept
 {
     /* 跳过条件: 未建链 / jetty 无效 / 对端已关 (幂等) / 连接已 reset (对端不可达,
      * drain 空等无意义, post 必失败) / 无发送缓冲 */
-    if (!is_bind_remote_ || jetty_ == nullptr || IsPeerClosed() || IsPeerReset() || send_buf_ == nullptr) {
+    if (!IsBindRemote() || jetty_ == nullptr || IsPeerClosed() || IsPeerReset() || send_buf_ == nullptr) {
         return false;
     }
 
@@ -366,7 +366,7 @@ int UrmaSocket::Shutdown(int how) noexcept
         errno = EINVAL;
         return -1;
     }
-    if (!is_bind_remote_) { /* 未建链 shutdown → ENOTCONN */
+    if (!IsBindRemote()) { /* 未建链 shutdown → ENOTCONN */
         errno = ENOTCONN;
         return -1;
     }
