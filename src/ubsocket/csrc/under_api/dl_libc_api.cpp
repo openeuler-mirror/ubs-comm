@@ -16,6 +16,7 @@ DL_API_DEFINE(LibcApi, creat)
 DL_API_DEFINE(LibcApi, open)
 DL_API_DEFINE(LibcApi, dup)
 DL_API_DEFINE(LibcApi, dup2)
+DL_API_DEFINE(LibcApi, dup3)
 DL_API_DEFINE(LibcApi, pipe)
 DL_API_DEFINE(LibcApi, socket)
 DL_API_DEFINE(LibcApi, socketpair)
@@ -88,6 +89,7 @@ Result LibcApi::Load() noexcept
     DL_API_LOAD(open);
     DL_API_LOAD(dup);
     DL_API_LOAD(dup2);
+    DL_API_LOAD(dup3);
     DL_API_LOAD(pipe);
     DL_API_LOAD(socket);
     DL_API_LOAD(socketpair);
@@ -162,6 +164,7 @@ void LibcApi::UnLoadInner() noexcept
     DL_API_SET_NULL(open)
     DL_API_SET_NULL(dup)
     DL_API_SET_NULL(dup2)
+    DL_API_SET_NULL(dup3)
     DL_API_SET_NULL(pipe)
     DL_API_SET_NULL(socket)
     DL_API_SET_NULL(socketpair)

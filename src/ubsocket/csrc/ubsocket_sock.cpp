@@ -60,6 +60,11 @@ UBS_API int UB_API_WRAP(shutdown)(int fd, int how)
         return LibcApi::shutdown(fd, how);
     }
 
+    /* URMA socket 半关闭走 Shutdown 虚方法 (post SHUTDOWN / 收发门控); */
+    SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+    if (sock.Get() != nullptr && sock->Type() == SocketType::SOCK_TYPE_URMA) {
+        return sock->Shutdown(how);
+    }
     return LibcApi::shutdown(fd, how);
 }
 
@@ -71,9 +76,18 @@ UBS_API int UB_API_WRAP(close)(int fd)
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock.Get() != nullptr) {
         sock->State(SOCK_STAT_CLOSE);
-        sock->NotifyLocalClose();
+        sock->OnLocalClose();
     }
     ArraySet<Socket>::GetInstance().OverrideItem(fd, nullptr);
+    OnSocketClosed(fd);
+    /* 有序关闭 — 本端即将 close, 发送 FIN-like CLOSE 通知对端 */
+    if (sock.Get() != nullptr) {
+        if (sock->PostCloseToPeer()) {
+            /* fd 号已被传输层占位接管, 由 hold 释放路径 close 归还;
+             * 此处再 close 会把占位号提前还给内核, fd 复用防护窗口失效 */
+            return 0;
+        }
+    }
     return LibcApi::close(fd);
 }
 
@@ -323,6 +337,20 @@ UBS_API int UB_API_WRAP(setsockopt)(int fd, int level, int optname, const void *
         return LibcApi::setsockopt(fd, level, optname, optval, optlen);
     }
 
+    /* SO_LINGER: 传输后端影子配置 (URMA 用于控制 close 行为), 其余 socket 类型透传内核。 */
+    if (level == SOL_SOCKET && optname == SO_LINGER) {
+        SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
+        if (sock != nullptr && sock->Type() == SocketType::SOCK_TYPE_URMA) {
+            if (optval == nullptr || optlen < sizeof(struct linger)) {
+                errno = EINVAL;
+                return -1;
+            }
+            if (sock->SetLingerOpt(*static_cast<const struct linger *>(optval)) == 0) {
+                return 0;
+            }
+        }
+    }
+
     return LibcApi::setsockopt(fd, level, optname, optval, optlen);
 }
 
@@ -338,6 +366,20 @@ UBS_API int UB_API_WRAP(getsockopt)(int fd, int level, int optname, void *optval
         return -1;
     }
     auto sockBase = RefStaticCastToRaw<SocketBase>(sock);
+
+    /* SO_LINGER: URMA 影子配置回读 */
+    if (level == SOL_SOCKET && optname == SO_LINGER && sock->Type() == SocketType::SOCK_TYPE_URMA) {
+        if (optval == nullptr || optlen == nullptr || *optlen < sizeof(struct linger)) {
+            errno = EINVAL;
+            return -1;
+        }
+        struct linger value = {};
+        if (sock->GetLingerOpt(value) == 0) {
+            *static_cast<struct linger *>(optval) = value;
+            *optlen = sizeof(struct linger);
+            return 0;
+        }
+    }
 
     if (level < static_cast<int>(UbsocketLevel::SOL_UB)) {
         return LibcApi::getsockopt(fd, level, optname, optval, optlen);

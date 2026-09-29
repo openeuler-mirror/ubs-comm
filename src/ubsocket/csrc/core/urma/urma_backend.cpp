@@ -11,6 +11,7 @@
 #include "urma_backend.h"
 
 #include "under_api/dl_api.h"
+#include "under_api/dl_libc_api.h"
 #include "urma_data_rx_ops.h"
 #include "urma_data_tx_ops.h"
 #include "urma_socket.h"
@@ -140,6 +141,9 @@ void UrmaBackend::UnInit() noexcept
         UBS_VLOG_DEBUG("Not initialized");
         return;
     }
+
+
+    ClearPendingClose();
 
     UnInitInner();
 
@@ -409,6 +413,81 @@ void UrmaBackend::SetLogLevel(int level) noexcept
     UrmaApi::urma_log_set_level(UrmaGetLogLevel());
 }
 
+void UrmaBackend::HoldPendingClose(int fd, Socket *sock) noexcept
+{
+    std::lock_guard<std::mutex> locker(pending_close_mutex_);
+    /* SocketPtr(raw) constructor takes a reference; re-hold on same fd replaces stale entry */
+    pending_close_holds_[fd] = PendingCloseEntry{SocketPtr(sock), false};
+}
+
+void UrmaBackend::ReleasePendingClose(int fd) noexcept
+{
+    std::lock_guard<std::mutex> locker(pending_close_mutex_);
+    auto it = pending_close_holds_.find(fd);
+    if (it != pending_close_holds_.end()) {
+        if (it->second.placeholder_taken) {
+            /* return the placeholder-held fd number to the kernel pool */
+            (void)LibcApi::close(fd);
+        }
+        /* erase drops the held reference; refcount reaching 0 triggers ~UrmaSocket safely */
+        pending_close_holds_.erase(it);
+        UBS_VLOG_TRACE("pending-close hold released for fd(%d)", fd);
+    }
+}
+
+bool UrmaBackend::HasPendingClose(int fd) noexcept
+{
+    std::lock_guard<std::mutex> locker(pending_close_mutex_);
+    return pending_close_holds_.find(fd) != pending_close_holds_.end();
+}
+
+void UrmaBackend::ClearPendingClose() noexcept
+{
+    std::lock_guard<std::mutex> locker(pending_close_mutex_);
+    for (auto &kv : pending_close_holds_) {
+        if (kv.second.placeholder_taken) {
+            (void)LibcApi::close(kv.first);
+        }
+    }
+    pending_close_holds_.clear();
+}
+
+bool UrmaBackend::TakeFdPlaceholder(int fd) noexcept
+{
+    std::lock_guard<std::mutex> locker(pending_close_mutex_);
+    auto it = pending_close_holds_.find(fd);
+    if (it == pending_close_holds_.end()) {
+        /* send CQE already arrived and released the hold (race window): the WR is
+         * done, the caller closing the fd itself */
+        return false;
+    }
+    if (it->second.placeholder_taken) {
+        return true;
+    }
+    /* shared /dev/null placeholder source, opened lazily once per process */
+    static const int devnull_fd = LibcApi::open("/dev/null", O_RDWR | O_CLOEXEC);
+    if (devnull_fd < 0) {
+        const int openErrno = errno;
+        UBS_VLOG_WARN("open /dev/null for fd(%d) placeholder failed (errno=%d), degrade to no placeholder",
+                      fd, openErrno);
+        return false;
+    }
+    /* dup3 atomically replaces the TCP socket with /dev/null under the fd number:
+     * the original socket is closed by the kernel (FIN sent), while the number
+     * stays occupied until the hold release path closes it.
+     * NOTE: dup3 returns newfd (== fd) on success and -1 on error — never 0 */
+    const int dupRet = LibcApi::dup3(devnull_fd, fd, O_CLOEXEC);
+    if (dupRet != fd) {
+        const int dupErrno = errno; /* save errno before logging */
+        UBS_VLOG_WARN("dup3 /dev/null placeholder onto fd(%d) failed (devnull_fd=%d, ret=%d, errno=%d), "
+                      "degrade to no placeholder",
+                      fd, devnull_fd, dupRet, dupErrno);
+        return false;
+    }
+    it->second.placeholder_taken = true;
+    return true;
+}
+
 void UrmaBackend::RecordBrokenConn(uint64_t conn_addr_id, uint64_t conn_id) noexcept
 {
     if (conn_addr_id == 0 || conn_id == 0) {
@@ -436,6 +515,27 @@ void UrmaBackend::EraseBrokenConn(uint64_t conn_addr_id) noexcept
 
 void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
 {
+    int sock_fd = -1;
+    if (cr->user_ctx != 0) {
+        sock_fd = static_cast<int>(SenderCRContext{cr->user_ctx}.fd);
+    }
+    if (sock_fd < 0) {
+        UBS_VLOG_ERR("error cr has no valid user_ctx, skip notify: status=%u", cr->status);
+        return;
+    }
+
+    auto sock = ArraySet<Socket>::GetInstance().GetItem(sock_fd);
+    if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
+        /* pending-close hold */
+        if (sock == nullptr) {
+            ReleasePendingClose(sock_fd);
+        }
+        UBS_VLOG_ERR("handle error cr failed for fd invalid: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd: %d",
+                cr->status, cr->user_ctx, cr->opcode, cr->flag.value, sock_fd);
+        return;
+    }
+
+    auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
     switch (cr->status) {
         case URMA_CR_SUCCESS:
             break;
@@ -446,20 +546,6 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
         case URMA_CR_RNR_RETRY_CNT_EXC_ERR:
         case URMA_CR_LOC_DATA_POISON:
         {
-            if (cr->user_ctx == 0) {
-                UBS_VLOG_ERR("handle error cr failed for user_ctx invalid: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
-                             cr->user_ctx, cr->opcode, cr->flag.value);
-                break;
-            }
-            SenderCRContext cr_context{cr->user_ctx};
-            auto sock_fd = cr_context.fd;
-            auto sock = ArraySet<Socket>::GetInstance().GetItem(sock_fd);
-            if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
-                UBS_VLOG_ERR("handle error cr failed for fd invalid: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd: %d", cr->status,
-                             cr->user_ctx, cr->opcode, cr->flag.value, sock_fd);
-                break;
-            }
-            auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
             if (!urma_sock->LinkSwitchEnable()) {
                 UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd: %d", cr->status,
                              cr->user_ctx, cr->opcode, cr->flag.value, sock_fd);
@@ -482,7 +568,7 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
                            cr->user_ctx, cr->opcode, cr->flag.value, sock_fd, cr_context.type, urma_sock->GetConnId());
             break;
         }
-        // case report error
+        /* connection-level error: reset the socket, inject HUP|RDHUP and release waiters */
         case URMA_CR_UNSUPPORTED_OPCODE_ERR:
         case URMA_CR_LOC_OPERATION_ERR:
         case URMA_CR_REM_RESP_LEN_ERR:
@@ -497,6 +583,8 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
         default:
             UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
                          cr->user_ctx, cr->opcode, cr->flag.value);
+            urma_sock->OnPeerReset();
+            break;
     }
 }
 
@@ -512,6 +600,23 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
         if (cr[i].flag.bs.s_r == 0) { // sender side
             if (cr[i].user_ctx != 0) {
                 SenderCRContext cr_context{cr[i].user_ctx};
+                if (cr_context.type == CLOSE_NOTIFY) {
+                    /* pending-close hold: the CLOSE WR has been flushed to the peer —
+                     * the held socket (fd already left ArraySet) can now be released */
+                    ReleasePendingClose(cr_context.fd);
+                    continue;
+                }
+                if (cr_context.type == SHUTDOWN_NOTIFY) {
+                    /* SHUTDOWN WR flushed — release the ctrl slot.
+                     * Unlike CLOSE, the socket is still alive in the ArraySet. */
+                    auto sock = ArraySet<Socket>::GetInstance().GetItem(cr_context.fd);
+                    if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
+                        UBS_VLOG_ERR("socket is invalid for fd: %d", cr_context.fd);
+                        continue;
+                    }
+                    RefStaticCastToRaw<UrmaSocket>(sock)->OnShutdownWriteFinished(cr_context.seq_no);
+                    continue;
+                }
                 if (cr_context.type != READ_DATA_REQUEST) {
                     continue;
                 }

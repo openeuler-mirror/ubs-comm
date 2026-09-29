@@ -11,9 +11,12 @@
 #include <gtest/gtest.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <atomic>
 #include <cerrno>
 #include <memory>
 #include <mockcpp/mockcpp.hpp>
+#include <thread>
+#include <vector>
 
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_lock.h"
@@ -25,6 +28,8 @@
 #include "core/urma/urma_setting.h"
 #include "core/urma/urma_socket.h"
 #include "core/urma/urma_wrapper.h"
+#include "ubsocket_sock.h"
+#include "under_api/dl_libc_api.h"
 #include "under_api/urma/dl_urma_api.h"
 
 using namespace ock::ubs;
@@ -91,10 +96,34 @@ static int MockEventfdRead(int fd, uint64_t *)
     return 0;
 }
 
+/* ---- close() 拦截: ubsocket_close 全链路不触碰真实 fd ---- */
+static int g_libcCloseCalls = 0;
+static int MockLibcCloseForTest(int)
+{
+    g_libcCloseCalls++;
+    return 0;
+}
+
+static int (*g_origClosePtr)(int) = nullptr;
+static void RestoreClosePtr()
+{
+    if (g_origClosePtr != nullptr) {
+        LibcApi::close_ptr = g_origClosePtr;
+        g_origClosePtr = nullptr;
+    }
+}
+
 /* ---- DISPATCHER mode driver mocks ---- */
 static int g_cqeHandlerCalls = 0;
 static int g_cqeHandlerLastCnt = 0;
 static int g_ackJfcCalls = 0;
+static uint32_t g_ackJfcLastNevents = 0;
+static int g_deleteJfcCalls = 0;
+static int g_waitJfcCalls = 0;
+static int g_waitJfcSeq[4] = {0};
+static int g_waitJfcSeqLen = 0;
+static urma_jfc_t *g_waitJfcOut = nullptr;
+static UrmaPoller *g_pollerToStop = nullptr;
 static int g_rearmJfcCalls = 0;
 static int g_pollJfcCalls = 0;
 static int g_pollJfcSeqPos = 0;
@@ -124,14 +153,33 @@ static urma_status_t MockRearmJfc(urma_jfc_t *, bool)
     return URMA_SUCCESS;
 }
 
-static void MockAckJfc(urma_jfc_t *[], uint32_t[], uint32_t)
+static void MockAckJfc(urma_jfc_t *[], uint32_t nevents[], uint32_t cnt)
 {
     g_ackJfcCalls++;
+    if (cnt > 0) {
+        g_ackJfcLastNevents = nevents[0];
+    }
 }
 
 static urma_status_t MockDeleteJfc(urma_jfc_t *)
 {
+    g_deleteJfcCalls++;
     return URMA_SUCCESS;
+}
+
+/* wait_jfc mock: 序列驱动返回值；返回 1 时回填 g_waitJfcOut；
+ * 第二次及以后调用若设置了 g_pollerToStop 则置 stopping_ 让 EventPoll 循环退出 */
+static int MockWaitJfc(urma_jfce_t *, uint32_t, int, urma_jfc_t *jfc[])
+{
+    int idx = g_waitJfcCalls++;
+    if (idx > 0 && g_pollerToStop != nullptr) {
+        g_pollerToStop->stopping_ = true;
+    }
+    int ret = (idx < g_waitJfcSeqLen) ? g_waitJfcSeq[idx] : -1;
+    if (ret == 1) {
+        jfc[0] = g_waitJfcOut;
+    }
+    return ret;
 }
 
 static urma_status_t MockDeleteJfce(urma_jfce_t *)
@@ -159,9 +207,18 @@ static void ResetMockCounters()
     g_eventfdWriteFd = -1;
     g_eventfdWriteCount = 0;
     g_eventfdReadFd = -1;
+    g_libcCloseCalls = 0;
     g_cqeHandlerCalls = 0;
     g_cqeHandlerLastCnt = 0;
     g_ackJfcCalls = 0;
+    g_ackJfcLastNevents = 0;
+    g_deleteJfcCalls = 0;
+    g_waitJfcCalls = 0;
+    g_waitJfcSeq[0] = 0;
+    g_waitJfcSeq[1] = 0;
+    g_waitJfcSeqLen = 0;
+    g_waitJfcOut = nullptr;
+    g_pollerToStop = nullptr;
     g_rearmJfcCalls = 0;
     g_pollJfcCalls = 0;
     g_pollJfcSeqPos = 0;
@@ -177,6 +234,11 @@ protected:
         GlobalSetting::UBS_TRACE_ENABLED = false;
         GlobalSetting::UBS_SPLIT_TRACE_ENABLED = false;
         LockRegistry::RegisterDefaultOps();
+        /* UT 不经过 ubsocket_init: 手动创建全局 socket-epoll 读写锁, 让 mapper 的加锁
+         * 路径被真实覆盖; 否则句柄为空, 加锁形同虚设且每次访问都刷 "pointer is nullptr" */
+        if (g_socket_epoll_lock == nullptr) {
+            g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
+        }
         ArraySet<Socket>::GetInstance().Init();
         UrmaSetting::Init();
         ResetMockCounters();
@@ -188,7 +250,12 @@ protected:
     {
         errno = 0;
         GlobalMockObject::verify();
+        RestoreClosePtr(); /* 防止 close_ptr mock 残留污染后续用例 */
         ArraySet<Socket>::GetInstance().ReleaseAll();
+        if (g_socket_epoll_lock != nullptr) {
+            LockRegistry::RW_LOCK_OPS.destroy(g_socket_epoll_lock);
+            g_socket_epoll_lock = nullptr;
+        }
     }
 
     void SetUpMocks()
@@ -197,6 +264,21 @@ protected:
         MOCKER(epoll_wait).stubs().will(invoke(MockEpollWait));
         MOCKER(eventfd_write).stubs().will(invoke(MockEventfdWrite));
         MOCKER(eventfd_read).stubs().will(invoke(MockEventfdRead));
+    }
+
+    /* SetUpMocks + close 双路拦截 (LibcApi::close_ptr 与裸 close) */
+    void SetUpCloseMocks()
+    {
+        SetUpMocks();
+        if (LibcApi::close_ptr == nullptr) {
+            (void)LibcApi::Load(); /* close_ptr 原始地址只保存一次 */
+        }
+        if (g_origClosePtr == nullptr) {
+            g_origClosePtr = LibcApi::close_ptr;
+        }
+        /* 拦截两条 close 路径: LibcApi::close_ptr(ubsocket_close 尾部) 与裸 close(event_fd_)(UnInitialize) */
+        LibcApi::close_ptr = MockLibcCloseForTest;
+        MOCKER(::close).stubs().will(invoke(MockLibcCloseForTest));
     }
 
     void CreateAndRegisterUrmaSocket(int fd = TEST_SOCK_FD, int event_fd = TEST_EVENT_FD)
@@ -909,6 +991,10 @@ protected:
         GlobalSetting::UBS_TRACE_ENABLED = false;
         GlobalSetting::UBS_SPLIT_TRACE_ENABLED = false;
         LockRegistry::RegisterDefaultOps();
+        /* 同 UrmaEventPollTest: UT 不经过 ubsocket_init, 手动创建全局 socket-epoll 读写锁 */
+        if (g_socket_epoll_lock == nullptr) {
+            g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
+        }
         ArraySet<Socket>::GetInstance().Init();
         UrmaSetting::Init();
         savedMode_ = UrmaSetting::UB_EPOLL_HANDLE_MODE;
@@ -929,6 +1015,10 @@ protected:
         errno = 0;
         GlobalMockObject::verify();
         ArraySet<Socket>::GetInstance().ReleaseAll();
+        if (g_socket_epoll_lock != nullptr) {
+            LockRegistry::RW_LOCK_OPS.destroy(g_socket_epoll_lock);
+            g_socket_epoll_lock = nullptr;
+        }
     }
 
     void RegisterDriverMocks()
@@ -936,6 +1026,7 @@ protected:
         UrmaApi::urma_poll_jfc_ptr = MockPollJfc;
         UrmaApi::urma_rearm_jfc_ptr = MockRearmJfc;
         UrmaApi::urma_ack_jfc_ptr = MockAckJfc;
+        UrmaApi::urma_wait_jfc_ptr = MockWaitJfc;
         UrmaApi::urma_delete_jfc_ptr = MockDeleteJfc;
         UrmaApi::urma_delete_jfce_ptr = MockDeleteJfce;
         UrmaApi::urma_delete_context_ptr = MockDeleteContext;
@@ -946,6 +1037,7 @@ protected:
         UrmaApi::urma_poll_jfc_ptr = nullptr;
         UrmaApi::urma_rearm_jfc_ptr = nullptr;
         UrmaApi::urma_ack_jfc_ptr = nullptr;
+        UrmaApi::urma_wait_jfc_ptr = nullptr;
         UrmaApi::urma_delete_jfc_ptr = nullptr;
         UrmaApi::urma_delete_jfce_ptr = nullptr;
         UrmaApi::urma_delete_context_ptr = nullptr;
@@ -1192,7 +1284,7 @@ TEST_F(UrmaEventPollDispatcherTest, EpollWait_JfceEvent_NotReturned_InlinePollIn
 
     EXPECT_EQ(0, ret); /* JFCE 事件本身不外发给应用 */
     EXPECT_GE(g_cqeHandlerCalls, 1);
-    EXPECT_EQ(1, g_ackJfcCalls);
+    EXPECT_EQ(0, g_ackJfcCalls); /* jfc_->Ack removed */
     EXPECT_GE(g_rearmJfcCalls, 1);
 }
 
@@ -1224,19 +1316,68 @@ TEST_F(UrmaEventPollDispatcherTest, Poller_StartStop_SkipIndependentThread)
     poller->Stop();
 }
 
-TEST_F(UrmaEventPollDispatcherTest, Poller_PollAndDispatch_AckThenDrainUntilZero)
+TEST_F(UrmaEventPollDispatcherTest, Poller_PollAndDispatch_DrainUntilZero)
 {
     auto env = MakeDispatcherPollerEnv();
 
     g_pollJfcSeq[0] = 2;
     g_pollJfcSeq[1] = 0;
     g_pollJfcSeqLen = 2;
-    ock::ubs::Result res = env.poller->PollAndDispatch(true);
+    ock::ubs::Result res = env.poller->PollAndDispatch();
     EXPECT_EQ(UBS_OK, res);
-    EXPECT_EQ(1, g_ackJfcCalls);
+    EXPECT_EQ(0, g_ackJfcCalls);
     EXPECT_EQ(1, g_cqeHandlerCalls);
     EXPECT_EQ(2, g_cqeHandlerLastCnt);
     EXPECT_GE(g_rearmJfcCalls, 1);
+}
+
+TEST_F(UrmaEventPollDispatcherTest, Poller_EventPoll_AcksAfterEachWait)
+{
+    auto env = MakeDispatcherPollerEnv();
+    g_waitJfcOut = env.rawJfc.get(); /* wait 返回本 poller 的 jfc 句柄 */
+    g_pollerToStop = env.poller.Get();
+    g_waitJfcSeq[0] = 1; /* 首次 wait 返回事件；第二次由 mock 置 stopping_ 并返回 -1 退出循环 */
+    g_waitJfcSeqLen = 1;
+    g_pollJfcSeq[0] = 0; /* DrainCqes 首轮 poll 返回 0 → rearm → 退出 */
+    g_pollJfcSeqLen = 1;
+
+    env.poller->EventPoll();
+
+    EXPECT_EQ(2, g_waitJfcCalls);      /* 一次事件 + 一次退出 */
+    EXPECT_EQ(1, g_ackJfcCalls);       /* 每个 wait 事件恰好 ack 一次 */
+    EXPECT_EQ(1u, g_ackJfcLastNevents); /* nevents=1 */
+    EXPECT_GE(g_rearmJfcCalls, 1);
+}
+
+TEST_F(UrmaEventPollDispatcherTest, Poller_EventPoll_WaitError_NoAck)
+{
+    auto env = MakeDispatcherPollerEnv();
+    g_pollerToStop = env.poller.Get();
+    g_waitJfcSeqLen = 0; /* 所有 wait 返回 -1（错误）；第二次置 stopping_ 退出 */
+
+    env.poller->EventPoll();
+
+    EXPECT_EQ(2, g_waitJfcCalls);
+    EXPECT_EQ(0, g_ackJfcCalls); /* 错误返回无事件，不得 ack */
+}
+
+/* Destroy 兜底：停止竞态残留事件（stop 前最后一波）也必须排空并 ack，
+ * 否则 delete_jfc 仍会失败 */
+TEST_F(UrmaEventPollDispatcherTest, Jfc_Destroy_DrainsAndAcksResidualEvents)
+{
+    auto env = MakeDispatcherPollerEnv();
+    g_waitJfcOut = env.rawJfc.get();
+    g_waitJfcSeq[0] = 1; /* 一条残留事件，随后 wait 返回 -1 表示无更多 */
+    g_waitJfcSeqLen = 1;
+    g_pollJfcSeq[0] = 3; /* 残留 CQE 一批 3 条，随后 0 表示排空 */
+    g_pollJfcSeq[1] = 0;
+    g_pollJfcSeqLen = 2;
+
+    env.jfc->Destroy();
+
+    EXPECT_EQ(1, g_ackJfcCalls);       /* 残留事件被 ack */
+    EXPECT_GE(g_pollJfcCalls, 2);      /* CQE 轮询到排空 */
+    EXPECT_EQ(1, g_deleteJfcCalls);    /* delete_jfc 正常执行 */
 }
 
 /* ===================== P4: EPOLLONESHOT =====================
@@ -1495,5 +1636,111 @@ TEST_F(UrmaEventPollTest, Oneshot_FreelistReuse_NotDisabled)
     struct epoll_event wait_evt_b {};
     ASSERT_EQ(1, poll.EpollWait(&wait_evt_b, 1, 100));
     EXPECT_NE(0u, wait_evt_b.events & EPOLLIN); /* 复用条目未带禁用脏状态 */
+    GlobalMockObject::verify();
+}
+
+/* ---- close 注册表清理钩子 OnSocketClosed ---- */
+class ScopedEventPollRegistration {
+public:
+    ScopedEventPollRegistration(int epfd, EventPoll *poll) : epfd_(epfd)
+    {
+        (void)ArraySet<EventPoll>::GetInstance().Init();
+        (void)ArraySet<EventPoll>::GetInstance().OverrideItem(epfd_, poll);
+    }
+
+    ~ScopedEventPollRegistration()
+    {
+        (void)ArraySet<EventPoll>::GetInstance().OverrideItem(epfd_, nullptr);
+    }
+
+private:
+    int epfd_;
+};
+
+TEST_F(UrmaEventPollTest, Close_UrmaSocket_CleansMapperAndSocketData)
+{
+    SetUpCloseMocks();
+    CreateAndRegisterUrmaSocket();
+    Ref<UrmaEventPoll> pollRef = MakeRef<UrmaEventPoll>(TEST_EPOLL_FD);
+    UrmaEventPoll *poll = pollRef.Get();
+    ScopedEventPollRegistration pollReg(TEST_EPOLL_FD, poll);
+
+    struct epoll_event evt {};
+    evt.events = EPOLLIN;
+    ASSERT_EQ(0, poll->EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+    ASSERT_NE(nullptr, GetSocketEpollMapper(TEST_SOCK_FD));
+    ASSERT_TRUE(poll->socket_data_.find(TEST_SOCK_FD) != poll->socket_data_.end());
+
+    EXPECT_EQ(0, ubsocket_close(TEST_SOCK_FD));
+
+    /* close 后注册表双残留必须被清: 全局 EpollMapper + EventPoll 实例的 socket_data_ */
+    EXPECT_EQ(nullptr, GetSocketEpollMapper(TEST_SOCK_FD));
+    EXPECT_TRUE(poll->socket_data_.find(TEST_SOCK_FD) == poll->socket_data_.end());
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaEventPollTest, Close_FdReuse_AddAgain_NoEEXIST)
+{
+    SetUpCloseMocks();
+    CreateAndRegisterUrmaSocket();
+    Ref<UrmaEventPoll> pollRef = MakeRef<UrmaEventPoll>(TEST_EPOLL_FD);
+    UrmaEventPoll *poll = pollRef.Get();
+    ScopedEventPollRegistration pollReg(TEST_EPOLL_FD, poll);
+
+    struct epoll_event evt {};
+    evt.events = EPOLLIN;
+    ASSERT_EQ(0, poll->EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+    ASSERT_EQ(0, ubsocket_close(TEST_SOCK_FD));
+    GlobalMockObject::verify();
+
+    /* mockcpp: verify() 会校验并重置所有桩——后续 epoll_ctl/close 必须重新挂载,
+     * 否则第二个 ADD 内部的 epoll_ctl(假 epfd=42) 打到真实 libc 返回 -1/EBADF */
+    SetUpCloseMocks();
+
+    /* fd 复用: 新 socket 同 fd, 再次 ADD 不应被残留条目误判为重复注册 */
+    CreateAndRegisterUrmaSocket();
+    errno = 0;
+    int ret = poll->EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt);
+    EXPECT_EQ(0, ret);
+    EXPECT_NE(EEXIST, errno);
+    GlobalMockObject::verify();
+
+    /* cleanup: 第二个 socket (verify 已重置桩, cleanup close 前同样恢复拦截) */
+    SetUpCloseMocks();
+    (void)ubsocket_close(TEST_SOCK_FD);
+    GlobalMockObject::verify();
+}
+
+/* ---- 并发安全: 并发 OnSocketClosed 不得 double-free ---- */
+TEST_F(UrmaEventPollTest, OnSocketClosed_ConcurrentCalls_NoUafNoDoubleFree)
+{
+    SetUpCloseMocks();
+    constexpr int ROUNDS = 200;
+    for (int i = 0; i < ROUNDS; ++i) {
+        CreateAndRegisterUrmaSocket();
+        Ref<UrmaEventPoll> pollRef = MakeRef<UrmaEventPoll>(TEST_EPOLL_FD);
+        UrmaEventPoll *poll = pollRef.Get();
+        ScopedEventPollRegistration pollReg(TEST_EPOLL_FD, poll);
+
+        struct epoll_event evt {};
+        evt.events = EPOLLIN;
+        ASSERT_EQ(0, poll->EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &evt));
+
+        std::atomic<int> go(0);
+        auto racer = [&go]() {
+            while (go.load(std::memory_order_acquire) == 0) {
+            }
+            OnSocketClosed(TEST_SOCK_FD); /* 与主线程竞速同一 mapper 的清理 */
+        };
+        std::thread t(racer);
+        go.store(1, std::memory_order_release);
+        OnSocketClosed(TEST_SOCK_FD);
+        t.join();
+
+        /* 收尾: mapper 已删, 第二次(串行)调用应零开销返回 */
+        OnSocketClosed(TEST_SOCK_FD);
+        EXPECT_EQ(nullptr, GetSocketEpollMapper(TEST_SOCK_FD));
+        (void)ubsocket_close(TEST_SOCK_FD);
+    }
     GlobalMockObject::verify();
 }

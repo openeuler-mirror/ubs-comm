@@ -154,8 +154,18 @@ ssize_t UrmaTxOps::WriteVOnce(const SocketPtr &sock, const struct iovec *iov, in
         return 0;
     }
 
-    if (UNLIKELY(RefStaticCastToRaw<UrmaSocket>(sock)->IsClosed())) {
+    /* 对端已终结 (收到 CLOSE / 连接级错误) — 对端传输资源随后销毁, 写不可达, 立即 EPIPE。
+     * 不单独依赖 IsClosed()(HUP 位) 间接判断, 避免 HUP 注入源变化时此处静默失效; IsClosed() 作为兜底保留。 */
+    auto *urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
+    if (UNLIKELY(urma_sock->IsPeerClosed() || urma_sock->IsPeerReset() || urma_sock->IsClosed())) {
         UBS_VLOG_ERR("writev on closed urma socket(%d), return EPIPE", sock->Fd());
+        errno = EPIPE;
+        return -1;
+    }
+
+    /* 本端 SHUT_WR — 后续 writev 返回 -1/EPIPE */
+    if (UNLIKELY(urma_sock->IsWriteShutdown())) {
+        UBS_VLOG_ERR("writev on write-shutdown urma socket(%d), return EPIPE", sock->Fd());
         errno = EPIPE;
         return -1;
     }

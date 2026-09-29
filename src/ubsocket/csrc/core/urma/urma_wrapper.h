@@ -368,6 +368,9 @@ private:
     const UrmaJfcPollingType polling_type_; /* polling type */
     const UrmaContextPtr context_;          /* hold the reference */
 
+    /* Ack residual jfc events and discard residual completions */
+    void DrainEventsBeforeDelete() noexcept;
+
     friend class UrmaContext;
 };
 

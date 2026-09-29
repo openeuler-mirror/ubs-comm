@@ -16,6 +16,8 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <atomic>
+#include <chrono>
 #include <cstring>
 
 #include "common/ubsocket_common_includes.h"
@@ -23,6 +25,7 @@
 #include "core/ubsocket_socket_helper.h"
 #include "under_api/dl_libc_api.h"
 #include "under_api/urma/dl_urma_api.h"
+#include "urma_backend.h"
 #include "urma_data_rx_ops.h"
 #include "urma_data_tx_ops.h"
 #include "urma_socket.h"
@@ -144,19 +147,278 @@ void UrmaSocket::NotifyBlockingReadable() noexcept
 
 void UrmaSocket::NotifyBlockingPeerClosed() noexcept
 {
-    /* TODO: wire from UrmaBackend::HandleCqe error-CQE branch (status != URMA_CR_SUCCESS). */
+    /* wired from UrmaBackend::HandleCqe error-CQE branch (status != URMA_CR_SUCCESS). */
     pthread_mutex_lock(&block_mutex_);
     block_flags_.fetch_or(BLOCKING_FLAG_PEER_CLOSED, std::memory_order_relaxed);
     pthread_cond_broadcast(&block_cond_);
     pthread_mutex_unlock(&block_mutex_);
 }
 
-void UrmaSocket::NotifyLocalClose() noexcept
+void UrmaSocket::OnLocalClose() noexcept
 {
     pthread_mutex_lock(&block_mutex_);
     block_flags_.fetch_or(BLOCKING_FLAG_CLOSED, std::memory_order_relaxed);
     pthread_cond_broadcast(&block_cond_);
     pthread_mutex_unlock(&block_mutex_);
+}
+
+/* 对端状态推进: 终态 (CLOSED/RESET) 吸收后续事件, 其余按偏序前进。
+ * CAS 无锁: 错误 CQE 与 CLOSE/SHUTDOWN 可能来自不同 poller 线程。 */
+void UrmaSocket::AdvancePeerCloseState(PeerCloseState next) noexcept
+{
+    auto cur = peer_close_.load(std::memory_order_relaxed);
+    while (true) {
+        if (cur == PeerCloseState::CLOSED || cur == PeerCloseState::RESET) {
+            /* 终态吸收: 已上报的读语义 (EOF / ECONNRESET) 不被后续事件翻转 */
+            return;
+        }
+        if (peer_close_.compare_exchange_weak(cur, next, std::memory_order_release,
+                                              std::memory_order_relaxed)) {
+            return;
+        }
+    }
+}
+
+/* 本端半关闭置位: 位或合并 (SHUT_WR + SHUT_RD → SHUT_RDWR), 幂等 */
+void UrmaSocket::MergeLocalCloseState(LocalCloseState next) noexcept
+{
+    auto cur = local_close_.load(std::memory_order_relaxed);
+    while (true) {
+        auto merged = static_cast<LocalCloseState>(static_cast<uint8_t>(cur) | static_cast<uint8_t>(next));
+        if (merged == cur) {
+            return; /* 已置位 */
+        }
+        if (local_close_.compare_exchange_weak(cur, merged, std::memory_order_release,
+                                               std::memory_order_relaxed)) {
+            return;
+        }
+    }
+}
+
+void UrmaSocket::OnPeerClose() noexcept
+{
+    /* 对端有序关闭 (CLOSE opcode) — 数据已排尽 */
+    AdvancePeerCloseState(PeerCloseState::CLOSED);
+    NotifyClosed();
+    NotifyBlockingPeerClosed();
+}
+
+void UrmaSocket::OnPeerReset() noexcept
+{
+    /* 连接级错误 CQE 路径 — 异常断开 */
+    AdvancePeerCloseState(PeerCloseState::RESET);
+    NotifyClosed();
+    NotifyBlockingPeerClosed();
+}
+
+/* CLOSE/SHUTDOWN 通知的序号发生器: 独立于数据通道 */
+static std::atomic<uint32_t> g_close_seq_gen{0};
+
+int UrmaSocket::SetLingerOpt(const struct linger &value) noexcept
+{
+    linger_ = value;
+    return 0;
+}
+
+int UrmaSocket::GetLingerOpt(struct linger &value) noexcept
+{
+    value = linger_;
+    return 0;
+}
+
+Result UrmaSocket::PostCtrlOnlyNotification(IOOpcode opcode, OneSideSenderType notify) noexcept
+{
+    constexpr uint64_t unit = URMA_SND_BUFF_ALLOC_UNIT;
+    constexpr uint64_t need_size = URMA_CTRL_ONLY_BUF_SIZE;
+    uint64_t buf_offset = 0;
+    const uint64_t real_size = send_buf_->Allocate(need_size, need_size, buf_offset);
+    if (real_size < need_size) {
+        UBS_SLOG_ERR("UrmaSocket(" << raw_socket_ << "): allocate send buf for ctrl notification failed");
+        return UBS_ERROR;
+    }
+
+    /* 与 WRITE_IN_BAND 一致的 sge/post 范式, 仅 opcode 不同 */
+    urma_sge_t src_sge = {};
+    src_sge.addr = send_buf_addr_ + buf_offset;
+    src_sge.len = static_cast<uint32_t>(real_size);
+    src_sge.tseg = local_ctrl_target_seg_;
+    urma_sge_t dst_sge = {};
+    dst_sge.addr = rmt_recv_buf_addr_ + buf_offset;
+    dst_sge.len = static_cast<uint32_t>(real_size);
+    dst_sge.tseg = remote_ctrl_target_seg_;
+
+    auto seq_no = g_close_seq_gen.fetch_add(1, std::memory_order_relaxed);
+    auto *head = reinterpret_cast<UrmaMessageHead *>(send_buf_addr_ + buf_offset);
+    head->request_id = (static_cast<uint64_t>(raw_socket_) << 32) | (seq_no & 0xFFFFFFFFUL);
+    head->sequence_no = seq_no;
+    head->message_size = 0; /* 无 payload, 接收方仅消费 imm opcode */
+
+    urma_rw_wr_t rw = {};
+    rw.src.sge = &src_sge;
+    rw.src.num_sge = 1;
+    rw.dst.sge = &dst_sge;
+    rw.dst.num_sge = 1;
+    rw.target_hint = 0;
+    rw.notify_data = WriteImmData{opcode, buf_offset / unit}.data;
+
+    /* ctx 第二字段语义随 notify 类型: CLOSE→seq_no (CQE 侧仅按 fd 释放 hold),
+     * SHUTDOWN→buf_offset_units (CQE 侧据此 Release ctrl 槽, 不释放会在后续
+     * linger close 的 drain 检查中空等到超时) */
+    const uint64_t ctx_arg = (notify == SHUTDOWN_NOTIFY) ? (buf_offset / unit) : seq_no;
+    const auto user_ctx = SenderCRContext{notify, ctx_arg, raw_socket_}.value;
+    UBS_VLOG_TRACE("urma_socket_message: socket(%d) send ctrl notification (opcode %u, imm off %u)", raw_socket_,
+                   static_cast<unsigned>(opcode), static_cast<unsigned>(buf_offset / unit));
+
+    auto urma_ret = jetty_->PostWriteImm(rw, user_ctx);
+    if (urma_ret != URMA_SUCCESS) {
+        send_buf_->Release(buf_offset, real_size);
+        UBS_SLOG_ERR("UrmaSocket(" << raw_socket_ << "): post ctrl notification write_imm failed, ret=" << urma_ret);
+        return UBS_ERROR;
+    }
+    return UBS_OK;
+}
+
+bool UrmaSocket::PostCloseToPeer(int timeout_ms) noexcept
+{
+    /* 跳过条件: 未建链 / jetty 无效 / 对端已关 (幂等) / 连接已 reset (对端不可达,
+     * drain 空等无意义, post 必失败) / 无发送缓冲 */
+    if (!is_bind_remote_ || jetty_ == nullptr || IsPeerClosed() || IsPeerReset() || send_buf_ == nullptr) {
+        return false;
+    }
+
+    /*
+     * SO_LINGER 语义分流 (默认调用 timeout_ms<0 时按 linger_ 影子配置):
+     *  - onoff=1 && linger=0 → abortive (对齐 TCP RST): 跳过 drain 与 CLOSE post,
+     *    本端销毁传输资源后对端收错误 CQE → OnPeerReset → readv 返回 ECONNRESET
+     *  - onoff=1 && linger>0 → drain timeout = linger*1000ms (对齐 TCP 阻塞 close)
+     *  - onoff=0 (默认)      → 不等待 drain, 立即 post (对齐 TCP close 立即返回;)
+     * 显式 timeout_ms>=0 仅覆盖 graceful drain 超时。
+     */
+    uint32_t drain_ms = 0;
+    if (timeout_ms >= 0) {
+        drain_ms = static_cast<uint32_t>(timeout_ms);
+    } else if (IsAbortiveLinger(linger_)) {
+        UBS_VLOG_WARN("UrmaSocket(%d): abortive close (SO_LINGER {1,0}), skip posting CLOSE", raw_socket_);
+        return false;
+    } else {
+        drain_ms = LingerToDrainTimeoutMs(linger_);
+    }
+
+    /*
+     * 有序关闭: 限时排空在途占用 (所有已发数据被对端 POST_WRITE/WRITE_IN_BAND_ACK 释放后
+     * 再 post CLOSE)。超时兜底保证 close 不会无限阻塞。
+     */
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(drain_ms);
+    if (drain_ms > 0 && send_buf_->Used() > 0) {
+        while (send_buf_->Used() > 0) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                UBS_VLOG_WARN("UrmaSocket(%d): PostCloseToPeer drain timeout after %ums, remaining used %lu bytes, "
+                              "post CLOSE anyway",
+                              raw_socket_, drain_ms, send_buf_->Used());
+                break;
+            }
+            usleep(1000); /* 1ms 轮询 */
+        }
+    }
+
+    /*
+     * pending-close hold: fd 已从 ArraySet 移除, 本 close 调用链返回后本地 SocketPtr 释放,
+     * 若无 hold, ~UrmaSocket 会立刻销毁 jetty 并 flush 的 CLOSE WR — 对端将收到
+     * 错误 CQE (ECONNRESET) 而非 graceful EOF。注册表持引用直至 CLOSE 发送 CQE 到达。
+     * 先登记再 post: 发送 CQE 由 poller 线程异步消费, 避免因 post 返回早于登记,
+     * ReleasePendingClose 会因查不到条目而静默放过, 随后登记的 hold 永无人释放。
+     */
+    UrmaBackend::Instance().HoldPendingClose(raw_socket_, this);
+
+    /* 空 ctrl 消息 post CLOSE (imm 携带 CLOSE opcode) */
+    if (PostCtrlOnlyNotification(CLOSE, CLOSE_NOTIFY) != UBS_OK) {
+        UrmaBackend::Instance().ReleasePendingClose(raw_socket_); /* post 失败不会有 CQE, 回滚 hold */
+        return false;
+    }
+
+    /*
+     * fd placeholder: post 成功后把 fd 号换成 /dev/null (dup3)。原 TCP socket 被内核关闭
+     * (FIN 发出), fd 号保持占用直至 hold 释放路径 close — close 返回到 CLOSE CQE 到达的
+     * 窗口期内, 该 fd 号不可被内核复用, 陈旧 CQE 不会误路由到新建连接。占位失败或发送 CQE
+     * 已抢先释放 hold (WR 已完成) 时返回 false, 由调用方负责 close(fd)。
+     */
+    const bool placeholder_taken = UrmaBackend::Instance().TakeFdPlaceholder(raw_socket_);
+
+    /* linger{1,N} 阻塞语义: 等 CLOSE WR 上屏 (发送 CQE 释放 hold) 或超时, 与 drain 共享预算 */
+    if (drain_ms > 0) {
+        while (UrmaBackend::Instance().HasPendingClose(raw_socket_)) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                UBS_VLOG_WARN("UrmaSocket(%d): PostCloseToPeer CLOSE-CQE wait timeout after %ums, "
+                              "socket held until CQE or sweep",
+                              raw_socket_, drain_ms);
+                break;
+            }
+            usleep(1000);
+        }
+    }
+    return placeholder_taken;
+}
+
+int UrmaSocket::Shutdown(int how) noexcept
+{
+    if (how != SHUT_WR && how != SHUT_RDWR && how != SHUT_RD) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (!is_bind_remote_) { /* 未建链 shutdown → ENOTCONN */
+        errno = ENOTCONN;
+        return -1;
+    }
+
+    const bool doWr = (how == SHUT_WR || how == SHUT_RDWR);
+    const bool doRd = (how == SHUT_RD || how == SHUT_RDWR);
+    if (doWr && !IsWriteShutdown()) {
+        if (jetty_ == nullptr || send_buf_ == nullptr) { /* 传输资源已销毁视作断链 */
+            errno = ENOTCONN;
+            return -1;
+        }
+        /* 先关门再 post: 与并发 writev 竞争时尽早阻断新数据  */
+        MergeLocalCloseState(LocalCloseState::SHUT_WR);
+        if (PostShutdownWriteToPeer() != UBS_OK) {
+            /* best-effort: 半关闭本端语义已生效, 通知失败仅记录 */
+            UBS_SLOG_ERR("UrmaSocket(" << raw_socket_ << "): post SHUTDOWN failed, half-close is local-only");
+        }
+    }
+    if (doRd && !IsReadShutdown()) {
+        /* SHUT_RD 仅本端生效 (后续 read 返回 EOF), 对对端无可靠通知 */
+        MergeLocalCloseState(LocalCloseState::SHUT_RD);
+    }
+    return 0;
+}
+
+Result UrmaSocket::PostShutdownWriteToPeer() noexcept
+{
+    /* 对端已关/reset: 通知不可达, 跳过 post (本端半关闭态已置, 语义仍成立) */
+    if (IsPeerClosed() || IsPeerReset()) {
+        return UBS_OK;
+    }
+
+    return PostCtrlOnlyNotification(SHUTDOWN, SHUTDOWN_NOTIFY);
+}
+
+void UrmaSocket::OnShutdownWriteFinished(uint64_t buf_offset_units) noexcept
+{
+    /* SHUTDOWN WR: 释放 ctrl 占用 (socket 存活, 不随 close 整体释放) */
+    if (send_buf_ != nullptr) {
+        send_buf_->Release(buf_offset_units * URMA_SND_BUFF_ALLOC_UNIT, URMA_CTRL_ONLY_BUF_SIZE);
+    }
+}
+
+void UrmaSocket::OnPeerShutdownWrite() noexcept
+{
+    /* 对端半关闭 (SHUTDOWN opcode, FIN-like) — 数据排尽后 readv 返回 0/EOF。
+     * 区别于 CLOSE: 对端仍可接收, 本端 close 仍需 post CLOSE (只有 CLOSED 才抑制) */
+    AdvancePeerCloseState(PeerCloseState::SHUT_WR);
+    PROF_START(___URMA_EVENT_CLOSED);
+    FetchOrReachEpollEvents(EPOLLRDHUP);
+    (void)eventfd_write(event_fd_, 1);
+    PROF_END(___URMA_EVENT_CLOSED, true);
+    NotifyBlockingReadable();
 }
 
 bool UrmaSocket::GetBlockTimeoutDeadline(int optname, struct timespec &deadline) noexcept
@@ -339,6 +601,12 @@ void UrmaSocket::HandleRecvCqe(const WriteImmData &imm)
             break;
         case WRITE_IN_BAND_ACK:
             HandleWriteInBandAck(imm);
+            break;
+        case CLOSE:
+            OnPeerClose();
+            break;
+        case SHUTDOWN:
+            OnPeerShutdownWrite();
             break;
         default:
             UBS_SLOG_ERR("UrmaSocket: poll unknown imm ubsocket opcode: " << imm.ubsocket.opcode);

@@ -754,7 +754,7 @@ TEST_F(UrmaDataRxTest, ReadV_Blocking_LocalClose_ReturnsEbadf)
         usleep(1000);
     }
     urma_sock->State(SOCK_STAT_CLOSE);
-    urma_sock->NotifyLocalClose();
+    urma_sock->OnLocalClose();
     reader.join();
 
     EXPECT_TRUE(done.load(std::memory_order_acquire));
@@ -887,4 +887,65 @@ TEST_F(UrmaDataRxTest, ReadV_DontWait_ReturnsEagainWithoutWaiting)
 
     ASSERT_EQ(0, ::close(fd_pair[0]));
     ASSERT_EQ(0, ::close(fd_pair[1]));
+}
+
+/* ===================== CLOSE opcode 的 ReadV 语义 ===================== */
+
+/* graceful CLOSE 到达且无数据: readv 返回 0 (对齐 TCP EOF) */
+TEST_F(UrmaDataRxTest, ReadV_PeerClosedNoData_ReturnsZeroEof)
+{
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    WriteImmData imm;
+    imm.ubsocket.opcode = CLOSE;
+    urma_sock->HandleRecvCqe(imm);
+
+    UrmaRxOps rx(TEST_FD);
+    uint8_t buf[64] = {};
+    struct iovec iov { buf, sizeof(buf) };
+    errno = 0;
+    EXPECT_EQ(0, rx.ReadV(sock_, &iov, 1, 0));
+}
+
+/* 有序关闭: CLOSE 前有滞留数据 — 先读尽数据, 再收 EOF (对齐 TCP FIN 语义) */
+TEST_F(UrmaDataRxTest, ReadV_PeerClosedWithData_DrainsInOrderThenEof)
+{
+    UrmaRxOps rx(TEST_FD);
+
+    /* 数据先到 (seq 0) */
+    const uint32_t body_size = 10;
+    auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + CTRL_OFF1);
+    ctrl->head.data_count = body_size;
+    memcpy(ctrl->small_io.data, "0123456789", body_size);
+    WriteImmData data_imm;
+    data_imm.ubsocket.opcode = WRITE_IN_BAND;
+    data_imm.ubsocket.buffer_offset = CTRL_OFF1 / URMA_SND_BUFF_ALLOC_UNIT;
+    ASSERT_EQ(UBS_OK, rx.DataReached(sock_, 0, data_imm.data));
+
+    /* CLOSE 后到 (RDMA 队列有序, 必然排在数据之后) */
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    WriteImmData close_imm;
+    close_imm.ubsocket.opcode = CLOSE;
+    urma_sock->HandleRecvCqe(close_imm);
+
+    uint8_t buf[64] = {};
+    struct iovec iov { buf, sizeof(buf) };
+    EXPECT_EQ(static_cast<ssize_t>(body_size), rx.ReadV(sock_, &iov, 1, 0)); /* 先读尽滞留数据 */
+    EXPECT_EQ(0, memcmp(buf, "0123456789", body_size));
+
+    errno = 0;
+    EXPECT_EQ(0, rx.ReadV(sock_, &iov, 1, 0)); /* 数据排空后 EOF */
+}
+
+/* 错误 CQE (reset) 路径: readv 返回 -1/ECONNRESET, 不误报 EOF */
+TEST_F(UrmaDataRxTest, ReadV_PeerReset_ReturnsEconnreset)
+{
+    auto urma_sock = RefConvert<Socket, UrmaSocket>(sock_);
+    urma_sock->OnPeerReset();
+
+    UrmaRxOps rx(TEST_FD);
+    uint8_t buf[64] = {};
+    struct iovec iov { buf, sizeof(buf) };
+    errno = 0;
+    EXPECT_EQ(-1, rx.ReadV(sock_, &iov, 1, 0));
+    EXPECT_EQ(ECONNRESET, errno);
 }

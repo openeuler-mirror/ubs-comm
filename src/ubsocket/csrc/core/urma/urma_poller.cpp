@@ -119,6 +119,7 @@ void UrmaPoller::EventPoll() noexcept
                 continue;
             }
 
+            jfc_->Ack(1);
             DrainCqes();
         } catch (...) {
             UBS_VLOG_ERR("Exception caught in UrmaPoller");

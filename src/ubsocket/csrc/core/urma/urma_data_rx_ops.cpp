@@ -403,9 +403,8 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
                 errno = EBADF;
                 return -1;
             case WaitOutcome::PEER_CLOSED:
-                /* TODO: EOF(返回0) 与异常(透传 errno) 的区分依赖接入事件携带的语义 */
-                errno = ECONNRESET;
-                return -1;
+                /* EOF/异常语义由 ReadVOnce 根据对端状态 (CLOSED/RESET) 判定 */
+                continue;
             case WaitOutcome::TIMEOUT:
                 break;
         }
@@ -431,6 +430,12 @@ ssize_t UrmaRxOps::ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int
         UBS_VLOG_TRACE("readv fd=%d invalid args iov=%p iovcnt=%d, return EINVAL", sock->Fd(), iov, iovcnt);
         return -1;
     }
+
+    /* 本端 SHUT_RD 后 — readv 立即返回 0/EOF, 不再消费数据 */
+    if (UNLIKELY(RefStaticCastToRaw<UrmaSocket>(sock)->IsReadShutdown())) {
+        UBS_VLOG_TRACE("readv fd=%d read-shutdown, return 0 (EOF)", sock->Fd());
+        return 0;
+    }
     PROF_START(CORE_READ);
     (void)flags;
     UBS_VLOG_TRACE("readv fd=%d iovcnt=%d enter", sock->Fd(), iovcnt);
@@ -445,10 +450,24 @@ ssize_t UrmaRxOps::ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int
     auto rx_state = slot != nullptr ? slot->rx_state.load(std::memory_order_acquire) : URMA_RX_STS_IDLE;
     if (slot == nullptr || rx_state != URMA_RX_STS_DATA_READY || slot->seq_no != seq) {
         ClearReadableIfDrained(sock);
-        /* Peer closed with no data to read: return 0 for EOF instead of EAGAIN */
-        if (RefStaticCastToRaw<UrmaSocket>(sock)->IsClosed()) {
+        /*
+         * Peer closed semantics (PeerCloseState):
+         *  - RESET          → connection error → -1/ECONNRESET (abnormal disconnect)
+         *  - CLOSED         + no data left → 0/EOF (orderly close, same as TCP FIN)
+         *  - IsClosed()     local close → 0/EOF (backward compatibility)
+         * Peer half-close semantics:
+         *  - SHUT_WR        + no data left → 0/EOF (peer SHUT_WR, drained;
+         *    RDMA queue ordering guarantees the SHUTDOWN imm sorts after all data)
+         */
+        auto *urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
+        if (urma_sock->IsPeerReset()) {
+            PROF_END(CORE_READ, false);
+            errno = ECONNRESET;
+            return -1;
+        }
+        if (urma_sock->IsPeerClosed() || urma_sock->IsClosed() || urma_sock->IsPeerWriteShutdown()) {
             PROF_END(CORE_READ, true);
-            UBS_VLOG_TRACE("readv fd=%d closed no data, return 0 (EOF)", sock->Fd());
+            UBS_VLOG_TRACE("readv fd=%d peer closed no data, return 0 (EOF)", sock->Fd());
             return 0;
         }
         errno = EAGAIN;
