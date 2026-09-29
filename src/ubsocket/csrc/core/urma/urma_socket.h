@@ -153,6 +153,53 @@ public:
         return (GetReachEpollEvents() & EPOLLHUP) != 0;
     }
 
+    /* graceful close — peer sent CLOSE (FIN-like), readv returns 0/EOF after drain */
+    bool IsPeerClosed() const noexcept
+    {
+        return peer_close_.load(std::memory_order_relaxed) == PeerCloseState::CLOSED;
+    }
+
+    /* abnormal close — connection-level error CQE, readv returns -1/ECONNRESET */
+    bool IsPeerReset() const noexcept
+    {
+        return peer_close_.load(std::memory_order_relaxed) == PeerCloseState::RESET;
+    }
+
+    void OnPeerClose() noexcept;
+    void OnPeerReset() noexcept;
+
+    /* peer half-closed its write side (SHUTDOWN opcode, FIN-like) — readv drains then EOF,
+     * but peer still receives: our close must still post CLOSE (unlike CLOSED) */
+    void OnPeerShutdownWrite() noexcept;
+    /* 对端已进入 CLOSED/RESET 时返回 false (终态覆写了半关闭态) */
+    bool IsPeerWriteShutdown() const noexcept
+    {
+        return peer_close_.load(std::memory_order_relaxed) == PeerCloseState::SHUT_WR;
+    }
+    /* local SHUT_WR done — writev gated with EPIPE */
+    bool IsWriteShutdown() const noexcept
+    {
+        return (static_cast<uint8_t>(local_close_.load(std::memory_order_relaxed)) &
+                static_cast<uint8_t>(LocalCloseState::SHUT_WR)) != 0;
+    }
+    /* local SHUT_RD done — readv returns 0/EOF immediately */
+    bool IsReadShutdown() const noexcept
+    {
+        return (static_cast<uint8_t>(local_close_.load(std::memory_order_relaxed)) &
+                static_cast<uint8_t>(LocalCloseState::SHUT_RD)) != 0;
+    }
+    /* shutdown(how) half-close — SHUT_WR posts a SHUTDOWN notification to the peer,
+     * SHUT_RD gates local reads. return 0 on success, -1 with errno (EINVAL/ENOTCONN) */
+    int Shutdown(int how) noexcept override;
+    /* SHUTDOWN WR flushed (send CQE) — release the ctrl slot; */
+    void OnShutdownWriteFinished(uint64_t buf_offset_units) noexcept;
+
+    bool PostCloseToPeer(int timeout_ms = -1) noexcept override;
+
+    /* SO_LINGER shadow config: drain timeout derived from linger on close. */
+    int SetLingerOpt(const struct linger &value) noexcept override;
+    int GetLingerOpt(struct linger &value) noexcept override;
+
     void HandleRecvCqe(const WriteImmData &imm);
     void HandlePostWrite(const WriteImmData &imm);
     void HandleWriteInBandAck(const WriteImmData &imm);
@@ -226,8 +273,8 @@ public:
     void NotifyBlockingReadable() noexcept;
 
     /*
-     * TODO: peer death surfaces only through error CQEs (HandleCqe, currently
-     * log-only). Wire that branch here so blocked I/O stops waiting on a peer
+     * Peer death surfaces through error CQEs: UrmaBackend::HandleCqe routes
+     * connection-level errors here so blocked I/O stops waiting on a peer
      * that is gone.
      */
     void NotifyBlockingPeerClosed() noexcept;
@@ -239,7 +286,7 @@ public:
      */
     bool GetBlockTimeoutDeadline(int optname, struct timespec &deadline) noexcept;
 
-    void NotifyLocalClose() noexcept override;
+    void OnLocalClose() noexcept override;
 
     UrmaContextPtr GetContext() noexcept
     {
@@ -252,6 +299,12 @@ protected:
 private:
     int DeliverReadable();
     Result DoExchangeSocketResources(bool send_first);
+    Result PostShutdownWriteToPeer() noexcept;
+    Result PostCtrlOnlyNotification(IOOpcode opcode, OneSideSenderType notify) noexcept;
+    /* 对端状态推进: 终态 (CLOSED/RESET) 吸收后续事件, 其余按序前进  */
+    void AdvancePeerCloseState(PeerCloseState next) noexcept;
+    /* 本端半关闭置位: 位或合并 (SHUT_WR + SHUT_RD → SHUT_RDWR) */
+    void MergeLocalCloseState(LocalCloseState next) noexcept;
 
     UrmaJettyPtr jetty_;      /* could be dedicated jetty or shared jetty */
     uintptr_t send_buf_addr_; /* dedicate send buffer, i.e. not shared */
@@ -277,8 +330,21 @@ private:
     uint32_t peer_version_{0};
     uint64_t conn_id_{0}; /* acceptor-assigned connection id, 0 means not negotiated yet */
     std::atomic<uint32_t> reach_epoll_events_{0};
-    std::atomic<bool> socket_readable_ready_{false};                 // socket初始状态为不可读
-    std::atomic<UrmaReadableNotifier *> readable_notifier_{nullptr}; /* poll that may deliver readable inline */
+    std::atomic<bool> socket_readable_ready_{false}; // socket初始状态为不可读
+    std::atomic<PeerCloseState> peer_close_{PeerCloseState::NONE};    /* 对端: SHUT_WR/CLOSED/RESET */
+    std::atomic<LocalCloseState> local_close_{LocalCloseState::NONE}; /* 本端: SHUT_WR/SHUT_RD 位 */
+    std::atomic<UrmaReadableNotifier *> readable_notifier_{nullptr};  /* poll that may deliver readable inline */
+    /* SO_LINGER 影子配置 */
+    struct linger linger_ = {0, 0};
+
+    static bool IsAbortiveLinger(const struct linger &l) noexcept
+    {
+        return l.l_onoff != 0 && l.l_linger == 0;
+    }
+    static uint32_t LingerToDrainTimeoutMs(const struct linger &l) noexcept
+    {
+        return l.l_onoff == 0 ? 0U : static_cast<uint32_t>(l.l_linger) * 1000U;
+    }
 
     urma_sge_t empty_recv_sge_;
     urma_jfr_wr_t empty_recv_wr_;

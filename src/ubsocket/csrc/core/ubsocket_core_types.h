@@ -11,6 +11,8 @@
 #ifndef UBS_COMM_UBSOCKET_CORE_TYPES_H
 #define UBS_COMM_UBSOCKET_CORE_TYPES_H
 
+#include <sys/socket.h> /* struct linger */
+
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_defines.h"
 #include "profiling/trace/ubsocket_trace.h"
@@ -102,10 +104,53 @@ public:
     virtual bool IsBindRemote() = 0;
 
     /*
-     * Wake blocked I/O waiters on local close before the fd is dropped.
+     * Local-close hook invoked by ubsocket_close before the fd is dropped.
      * No-op unless a transport keeps waiters (e.g., condvar broadcast).
      */
-    virtual void NotifyLocalClose() noexcept {}
+    virtual void OnLocalClose() noexcept {}
+
+    /*
+     * Actively notify the peer that closing this socket, e.g. post a
+     * FIN-like message if the transport supports it (URMA CLOSE opcode).
+     * @param timeout_ms: drain timeout override in ms; -1 (default) derives
+     *                    from the socket's SO_LINGER shadow config.
+     * @return true: the transport took over the fd (placeholder swap); the hold
+     *               registry returns the fd number later — caller must NOT close it.
+     *               false: caller still owns the fd and must close it (skipped,
+     *               post failed, or placeholder degraded).
+     */
+    virtual bool PostCloseToPeer(int timeout_ms = -1) noexcept
+    {
+        (void)timeout_ms;
+        return false;
+    }
+
+    /*
+     * SOL_SOCKET/SO_LINGER transport hook (shadow config).
+     * return 0: consumed by the transport; -1: not supported, caller falls
+     * back to libc passthrough.
+     */
+    virtual int SetLingerOpt(const struct linger &value) noexcept
+    {
+        (void)value;
+        return -1;
+    }
+    virtual int GetLingerOpt(struct linger &value) noexcept
+    {
+        (void)value;
+        return -1;
+    }
+
+    /*
+     * shutdown(how) transport hook (half-close, SHUT_WR/SHUT_RD/SHUT_RDWR).
+     * return 0: consumed by the transport; -1: not supported, caller falls
+     * back to libc passthrough.
+     */
+    virtual int Shutdown(int how) noexcept
+    {
+        (void)how;
+        return -1;
+    }
 
     DEFINE_REF_OPERATION_FUNC
 

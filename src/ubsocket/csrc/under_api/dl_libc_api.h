@@ -22,6 +22,7 @@ using creat_api = int (*)(const char *pathname, mode_t mode);
 using open_api = int (*)(const char *file, int oflag, ...);
 using dup_api = int (*)(int fildes);
 using dup2_api = int (*)(int fildes, int fildes2);
+using dup3_api = int (*)(int oldfd, int newfd, int flags);
 using pipe_api = int (*)(int filedes[2]);
 using socket_api = int (*)(int domain, int type, int protocol);
 using socketpair_api = int (*)(int domain, int type, int protocol, int sv[2]);
@@ -115,6 +116,12 @@ public:
     {
         ENSURE_LOADED(-1);
         return shutdown_ptr(fd, how);
+    }
+
+    static int dup3(int oldfd, int newfd, int flags)
+    {
+        ENSURE_LOADED(-1);
+        return dup3_ptr(oldfd, newfd, flags);
     }
 
     static int accept(int socket, struct sockaddr *address, socklen_t *address_len)
@@ -299,6 +306,7 @@ private:
     DL_API_DECLARE(open);
     DL_API_DECLARE(dup);
     DL_API_DECLARE(dup2);
+    DL_API_DECLARE(dup3);
     DL_API_DECLARE(pipe);
     DL_API_DECLARE(socket);
     DL_API_DECLARE(socketpair);

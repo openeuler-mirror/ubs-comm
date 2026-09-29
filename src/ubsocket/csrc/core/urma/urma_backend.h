@@ -53,6 +53,28 @@ public:
 
     UrmaAggPollerSetPtr GetPollerSet() noexcept;
 
+    /*
+     * Pending-close hold: after PostCloseToPeer succeeds, the socket's fd has
+     * been removed from ArraySet but the CLOSE WR is not yet flushed to the peer. Hold a
+     * SocketPtr reference so the jetty stays alive until the CLOSE send CQE arrives
+     * (or an error CQE / UnInit sweep releases it). Otherwise ~UrmaSocket would destroy
+     * the jetty and flush the in-flight CLOSE WR — the peer would see an error CQE
+     * (ECONNRESET) instead of the graceful EOF.
+     */
+    void HoldPendingClose(int fd, Socket *sock) noexcept;
+    void ReleasePendingClose(int fd) noexcept;
+    bool HasPendingClose(int fd) noexcept;
+    void ClearPendingClose() noexcept; /* sweep all holds (UnInit safety net) */
+
+    /*
+     * fd placeholder: atomically swap the socket fd for a shared /dev/null via
+     * dup3 so the fd number stays occupied.
+     * @return true: fd taken over (original TCP socket closed by dup3, caller must
+     *               NOT close the fd again); false: degraded (entry already released
+     *               by a racing CQE, or dup3 failed) — caller still owns the fd.
+     */
+    bool TakeFdPlaceholder(int fd) noexcept;
+
     void RecordBrokenConn(uint64_t conn_addr_id, uint64_t conn_id) noexcept;
 
     uint64_t TakeBrokenConnId(uint64_t conn_addr_id) noexcept;
@@ -84,7 +106,6 @@ private:
     void UnInitObjectPool() noexcept;
 
     Result HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr);
-
     void HandleErrorCqe(urma_cr_t *cr);
 
 private:
@@ -99,6 +120,15 @@ private:
     bool inited_ = false;      /* init flag for whole backend */
     bool urma_inited_ = false; /* init flag for urma init */
     bool init_urma_only_ = false;
+
+    /* pending-close hold registry: fd → held SocketPtr (guards in-flight CLOSE WR);
+     * placeholder_taken marks the fd number being held by a /dev/null placeholder */
+    struct PendingCloseEntry {
+        SocketPtr sock;
+        bool placeholder_taken = false;
+    };
+    std::unordered_map<int, PendingCloseEntry> pending_close_holds_;
+    std::mutex pending_close_mutex_;
 
     std::mutex broken_conn_mutex_;                   /* guards broken_conns_ */
     std::map<uint64_t, uint64_t> broken_conns_{};    /* peer addr id -> last broken conn_id */

@@ -139,6 +139,11 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* step3: socket related initialization */
     ArraySet<Socket>::GetInstance().Init();
     g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
+    if (g_socket_epoll_lock == nullptr) {
+        UBS_VLOG_ERR("create socket epoll rw lock failed\n");
+        errno = ENOMEM;
+        return UBS_ERROR;
+    }
     ArraySet<EventPoll>::GetInstance().Init();
 
     /* step5: umq backend init */

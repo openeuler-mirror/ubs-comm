@@ -19,6 +19,7 @@
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_lock.h"
 #include "common/ubsocket_set.h"
+#include "core/ubsocket_event_epoll.h"
 #include "core/urma/urma_event_epoll.h"
 #include "core/urma/urma_setting.h"
 
@@ -51,6 +52,11 @@ protected:
         /* UT does not go through ubsocket_init, must manually register default lock ops,
          * otherwise EventPoll construction will segfault due to LOCK_OPS.create being nullptr */
         (void)LockRegistry::RegisterDefaultOps();
+        /* ubsocket_init also creates this global lock. Without it the socket->epoll mapper runs
+         * unserialized and every access logs a meaningless "pointer is nullptr" error. */
+        if (g_socket_epoll_lock == nullptr) {
+            g_socket_epoll_lock = LockRegistry::RW_LOCK_OPS.create();
+        }
         ArraySet<EventPoll>::GetInstance().Init();
     }
 
@@ -58,6 +64,10 @@ protected:
     {
         GlobalMockObject::verify();
         ArraySet<EventPoll>::GetInstance().ReleaseAll();
+        if (g_socket_epoll_lock != nullptr) {
+            LockRegistry::RW_LOCK_OPS.destroy(g_socket_epoll_lock);
+            g_socket_epoll_lock = nullptr;
+        }
     }
 };
 

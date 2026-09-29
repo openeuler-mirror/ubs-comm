@@ -47,6 +47,8 @@ public:
     int EpollCtl(int op, int fd, struct epoll_event *event) override;
     int EpollWait(struct epoll_event *events, int maxevents, int timeout) override;
     void WakeUpEpollFd() override;
+    /* socket fd 关闭: 清 socket_data_ 注册残留 */
+    void OnSocketClosed(int fd) override;
 
     /*
      * UrmaReadableNotifier (installed on sockets registered on this poll): record a readable

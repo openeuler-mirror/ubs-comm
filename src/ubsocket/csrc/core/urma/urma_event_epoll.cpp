@@ -161,6 +161,12 @@ void UrmaEventPoll::UnbindReadableNotifiers() noexcept
     }
 }
 
+void UrmaEventPoll::OnSocketClosed(int fd)
+{
+    /* 内核侧随 fd/event_fd_ 关闭自动注销, 此处仅清用户态 socket_data_; */
+    (void)RemoveSocketEventData(fd);
+}
+
 int UrmaEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
 {
     if (UNLIKELY(fd == epoll_fd_)) {
@@ -209,22 +215,26 @@ int UrmaEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
 
 int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int timeout)
 {
-    if (UNLIKELY(events == nullptr)) {
-        UBS_VLOG_ERR("urma_event_poll EpollWait events is null.\n");
-        errno = EFAULT;
-        return -1;
-    }
-
     if (UNLIKELY(maxevents <= 0)) {
         UBS_VLOG_ERR("urma_event_poll EpollWait maxevents(%d) invalid.\n", maxevents);
         errno = EINVAL;
         return -1;
     }
 
-    /* 先吐出上次 JFCE 内联产出、未放下的可读 socket 事件(不阻塞) */
-    uint32_t out = DrainPendingReadable(events, static_cast<uint32_t>(maxevents));
-    if (out > 0) {
-        return static_cast<int>(out);
+    uint32_t out = 0;
+    if (UNLIKELY(events == nullptr)) {
+        /* 内核语义: events==nullptr 不在入口拦截——无就绪事件返回 0,
+         * 有就绪事件时拷贝出参失败报 EFAULT(在此等价模拟,底层就绪事件由底层 epoll_wait 透传 -1/EFAULT) */
+        if (readable_events_.PendingCount() > 0) {
+            errno = EFAULT;
+            return -1;
+        }
+    } else {
+        /* 先吐出上次 JFCE 内联产出、未放下的可读 socket 事件(不阻塞) */
+        out = DrainPendingReadable(events, static_cast<uint32_t>(maxevents));
+        if (out > 0) {
+            return static_cast<int>(out);
+        }
     }
 
     ActiveEventPollGuard guard(this);
@@ -336,7 +346,7 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
     PROF_END(__URMA_DEAL_EPOLL_EVENT, true);
 
     /* 把本次 JFCE 内联产出的可读 socket 事件尽量带回, 放不下的留给下次 */
-    if (out < static_cast<uint32_t>(maxevents)) {
+    if (events != nullptr && out < static_cast<uint32_t>(maxevents)) {
         out += DrainPendingReadable(events + out, static_cast<uint32_t>(maxevents) - out);
     }
     return static_cast<int>(out);

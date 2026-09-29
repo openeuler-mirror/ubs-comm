@@ -56,13 +56,17 @@ bool CreateSocketEpollMapper(int socket_fd, EpollMapper *&mapper)
 
 void CleanSocketEpollMapper(int socket_fd)
 {
-    EpollMapper *mapper = GetSocketEpollMapper(socket_fd);
-    if (mapper == nullptr) {
-        return;
-    }
+    EpollMapper *mapper = nullptr;
     {
+        /* find+erase 同一临界区: 只有真正 erase 掉的线程拿到删除权,
+         * 并发调用者 find 不到直接返回——杜绝 double free */
         WriteLocker s_lock(g_socket_epoll_lock);
-        g_socket_epoll_mappers.erase(socket_fd);
+        auto iter = g_socket_epoll_mappers.find(socket_fd);
+        if (iter == g_socket_epoll_mappers.end()) {
+            return;
+        }
+        mapper = iter->second;
+        g_socket_epoll_mappers.erase(iter);
     }
     mapper->Clear();
     delete mapper;
@@ -83,6 +87,27 @@ void CleanAllSocketEpollMappers()
         }
     }
     g_socket_epoll_mappers.clear();
+}
+
+void OnSocketClosed(int socket_fd)
+{
+    std::vector<int> epfds;
+    {
+        ReadLocker s_lock(g_socket_epoll_lock);
+        auto iter = g_socket_epoll_mappers.find(socket_fd);
+        if (iter == g_socket_epoll_mappers.end() || iter->second == nullptr) {
+            return; /* fd 从未注册进任何 EventPoll (纯 TCP fd/eventfd 等), 零开销返回 */
+        }
+        epfds = iter->second->GetEpollFds();
+    }
+    /* 通知该 fd 注册过的每个 EventPoll 清理实例级注册表 (socket_data_ 等) */
+    for (int epfd : epfds) {
+        EventPollPtr poll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
+        if (poll != nullptr) {
+            poll->OnSocketClosed(socket_fd);
+        }
+    }
+    CleanSocketEpollMapper(socket_fd);
 }
 
 template <EpollRunnerType T>

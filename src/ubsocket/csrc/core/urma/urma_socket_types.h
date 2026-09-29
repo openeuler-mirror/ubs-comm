@@ -39,6 +39,8 @@ enum OneSideSenderType : uint8_t {
     CTRL_DATA_RESPONSE,    /* post-write: response to a PRE_WRITE or inline-data ack */
     CTRL_DATA_RECEiVE,     /* post jetty for recv ctrl data */
     READ_DATA_REQUEST,     /* pre-write large IO: RDMA READ completion, data now in local blocks */
+    CLOSE_NOTIFY,          /* pending-close hold: CLOSE WR flushed to peer, may release the held socket */
+    SHUTDOWN_NOTIFY,       /* SHUT_WR half-close: SHUTDOWN WR flushed, release the ctrl slot (socket stays alive) */
 };
 
 /*
@@ -103,6 +105,29 @@ enum IOOpcode : uint8_t {
     POST_WRITE = 1,        /* post-write: trigger sender to release send_buf and un-reference blocks */
     WRITE_IN_BAND = 2,     /* small IO inline write */
     WRITE_IN_BAND_ACK = 3, /* small IO write acknowledgment */
+    CLOSE = 4,             /* FIN-like orderly close : sender has no more data to send */
+    SHUTDOWN = 5,          /* FIN-like half-close (SHUT_WR): no more data to send, but socket stays open */
+};
+
+/*
+ * 对端侧关闭状态 — 单向偏序: NONE →(SHUTDOWN)→ SHUT_WR →(CLOSE)→ CLOSED
+ */
+enum class PeerCloseState : uint8_t {
+    NONE = 0,
+    SHUT_WR = 1, /* 对端 SHUT_WR: 数据排尽后 readv 得 EOF, 本端仍可写 */
+    CLOSED = 2,  /* 对端 CLOSE (其 fd 已关): 连接终态, readv EOF, 本端写不可达 */
+    RESET = 3,   /* 连接级错误 CQE */
+};
+
+/*
+ * 本端侧半关闭状态 — SHUT_WR / SHUT_RD 可分别置位并合并为 SHUT_RDWR,
+ * 取值即位标志 (SHUT_RDWR == SHUT_WR | SHUT_RD), 合并用位或 + CAS。
+ */
+enum class LocalCloseState : uint8_t {
+    NONE = 0,
+    SHUT_WR = 1,   /* 本端 SHUT_WR: writev → -1/EPIPE */
+    SHUT_RD = 2,   /* 本端 SHUT_RD: readv → 0/EOF */
+    SHUT_RDWR = 3, /* 两个方向同时生效 */
 };
 
 struct UrmaMessageHead {
@@ -150,6 +175,9 @@ struct UrmaCtrlMessage {
 };
 constexpr uint32_t URMA_INLINE_MESSAGE_CTRL_COST = sizeof(UrmaMessageHead);
 constexpr uint32_t URMA_INLINE_DATA_THRESHOLD = URMA_INLINE_THRESHOLD - URMA_INLINE_MESSAGE_CTRL_COST;
+/* ctrl-only notification size (CLOSE/SHUTDOWN carry no payload) */
+constexpr uint32_t URMA_CTRL_ONLY_BUF_SIZE =
+    ((sizeof(UrmaMessageHead) + URMA_SND_BUFF_ALLOC_UNIT - 1) / URMA_SND_BUFF_ALLOC_UNIT) * URMA_SND_BUFF_ALLOC_UNIT;
 
 constexpr uint32_t URMA_MAX_CONTEXT_COUNT = 32;
 

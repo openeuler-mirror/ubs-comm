@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <atomic>
+#include <vector>
 
 #include "common/ubsocket_leaky_singleton.h"
 #include "common/ubsocket_mpsc_ring_queue.h"
@@ -108,6 +109,13 @@ public:
         }
     }
 
+    /* 快照该 fd 注册过的所有 epoll fd (供 close 清理钩子使用) */
+    std::vector<int> GetEpollFds()
+    {
+        Locker sLock(mutex_);
+        return std::vector<int>(epoll_set_.begin(), epoll_set_.end());
+    }
+
     void Clear() {}
 
 private:
@@ -120,6 +128,7 @@ EpollMapper *GetSocketEpollMapper(int socket_fd);
 bool CreateSocketEpollMapper(int socket_fd, EpollMapper *&mapper);
 void CleanSocketEpollMapper(int socket_fd);
 void CleanAllSocketEpollMappers();
+void OnSocketClosed(int socket_fd);
 
 class EpollRunnerOps {
 public:
@@ -336,6 +345,16 @@ public:
     virtual int EpollWait(struct epoll_event *events, int maxevents, int timeout) = 0;
 
     virtual void WakeUpEpollFd() = 0;
+
+    /**
+     * @brief socket fd 关闭通知: 清理本 poll 实例内该 fd 的用户态注册表残留
+     *        (内核侧随 fd/eventfd 关闭自动注销, 此处仅清 socket_data_ 等映射)
+     * @param fd closed socket fd
+     */
+    virtual void OnSocketClosed(int fd)
+    {
+        (void)fd;
+    }
 
     ALWAYS_INLINE int GetEpollFd() const noexcept
     {

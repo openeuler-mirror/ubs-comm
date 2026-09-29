@@ -283,6 +283,44 @@ TEST_F(UrmaTxOpsTest, WriteV_Closed_ReturnsEpipe)
     EXPECT_EQ(EPIPE, errno);
 }
 
+/* 对端终结 (CLOSE opcode / 连接级错误) 后本端写不可达 — 走真实触发路径锁定「对端终结 ⇒ 不可写」,
+ * 而不是只依赖 NotifyClosed 注入的 HUP 位间接判断 */
+TEST_F(UrmaTxOpsTest, WriteV_PeerClosedOrReset_ReturnsEpipe)
+{
+    MOCKER(::eventfd_write).stubs().will(returnValue(0));
+
+    struct iovec iov;
+    iov.iov_base = g_send_buf;
+    iov.iov_len = 10;
+
+    {
+        SCOPED_TRACE("case: peer_close_opcode");
+        UrmaTxOps tx(TEST_FD);
+        auto sock = MakeTestSocket();
+        auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+        WriteImmData imm;
+        imm.ubsocket.opcode = CLOSE;
+        urma_sock->HandleRecvCqe(imm);
+        ASSERT_TRUE(urma_sock->IsPeerClosed());
+
+        errno = 0;
+        EXPECT_EQ(-1, tx.WriteV(sock, &iov, 1, 0));
+        EXPECT_EQ(EPIPE, errno);
+    }
+    {
+        SCOPED_TRACE("case: connection_level_error_reset");
+        UrmaTxOps tx(TEST_FD);
+        auto sock = MakeTestSocket();
+        auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
+        urma_sock->OnPeerReset();
+        ASSERT_TRUE(urma_sock->IsPeerReset());
+
+        errno = 0;
+        EXPECT_EQ(-1, tx.WriteV(sock, &iov, 1, 0));
+        EXPECT_EQ(EPIPE, errno);
+    }
+}
+
 TEST_F(UrmaTxOpsTest, WriteV_LargeIo_Success)
 {
     UrmaTxOps tx(TEST_FD);
@@ -739,7 +777,7 @@ TEST_F(UrmaTxOpsTest, WriteV_Blocking_LocalClose_ReturnsEpipe)
         usleep(1000);
     }
     urma_sock->State(SOCK_STAT_CLOSE);
-    urma_sock->NotifyLocalClose();
+    urma_sock->OnLocalClose();
     worker.join();
 
     EXPECT_TRUE(done.load(std::memory_order_acquire));

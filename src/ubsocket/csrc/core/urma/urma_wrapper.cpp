@@ -726,9 +726,38 @@ UrmaJfc::~UrmaJfc()
     OBJ_DEC_COUNT(UBS_URMA_JFC);
 }
 
+void UrmaJfc::DrainEventsBeforeDelete() noexcept
+{
+    if (raw_jfc_ == nullptr || raw_jfce_ == nullptr) {
+        return;
+    }
+
+    /* bounded: defensive against stuck jfc */
+    constexpr uint32_t MAX_DRAIN_ROUNDS = 64;
+    urma_jfc_t *ev_jfc = nullptr;
+    for (uint32_t i = 0; i < MAX_DRAIN_ROUNDS; i++) {
+        auto cnt = UrmaApi::urma_wait_jfc(raw_jfce_, 1, 0, &ev_jfc);
+        if (cnt <= 0) {
+            break;
+        }
+        Ack(1); /* per-event ack */
+    }
+
+    /* discard residual completions */
+    constexpr int32_t POLL_BATCH_SIZE = 32;
+    urma_cr_t crs[POLL_BATCH_SIZE];
+    for (uint32_t i = 0; i < MAX_DRAIN_ROUNDS; i++) {
+        auto cnt = UrmaApi::urma_poll_jfc(raw_jfc_, POLL_BATCH_SIZE, crs);
+        if (cnt <= 0) {
+            break;
+        }
+    }
+}
+
 void UrmaJfc::Destroy() noexcept
 {
     if (raw_jfc_ != nullptr) {
+        DrainEventsBeforeDelete();
         auto result = UrmaApi::urma_delete_jfc(raw_jfc_);
         if (result != URMA_SUCCESS) {
             UBS_VLOG_WARN("[URMA_API] Delete jfc, errno: %d", errno);
