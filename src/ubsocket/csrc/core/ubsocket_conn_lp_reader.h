@@ -20,11 +20,24 @@ namespace ock {
 namespace ubs {
 
 /*
+ * 增量读结果（Read 返回）：
+ * kError    — 帧错误（对端关闭 / recv 错误 / body_len=0 / 超丢弃上限），连接应终止；
+ * kPartial  — 半包未收齐，调用方保留 fd 等下次可读重入续读；
+ * kComplete — 一帧完整读出，target 已就绪可消费。
+ */
+enum class LpReadResult : int8_t
+{
+    kError = -1,
+    kPartial = 0,
+    kComplete = 1,
+};
+
+/*
  * 长度前缀控制面帧的增量读取器（Server/Client 共用）。
  * wire 为 [4B body_len][body]，body 长度可能大于本地结构体（跨版本）。语义对齐同步路径
  * RecvLengthPrefixed：body 按 min(body_len, target_size) 直接读入 target，不足补零、超出丢弃
  * （丢弃上限 kMaxDiscardBytes）。
- * 非阻塞：半包返回 0（调用方保留 fd 等下次可读续读），出错返回 -1，完整返回 1。
+ * 非阻塞：半包返回 kPartial（调用方保留 fd 等下次可读续读），出错返回 kError，完整返回 kComplete。
  */
 class LengthPrefixedReader {
 public:
@@ -43,8 +56,8 @@ public:
         return stage_ == Stage::kDone;
     }
 
-    /* 驱动一次增量读：-1=出错，0=半包，1=完整 */
-    int Read(int fd, AsyncConnBuffer &buf, const char *tag);
+    /* 驱动一次增量读 */
+    LpReadResult Read(int fd, AsyncConnBuffer &buf, const char *tag);
 
 private:
     enum class Stage : uint8_t

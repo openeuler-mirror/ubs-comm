@@ -363,6 +363,7 @@ private:
     std::atomic<uint32_t> block_flags_{0}; /* predicate bits: BLOCKING_FLAG_* */
 
     friend class UrmaAcceptorOps;
+    friend class UrmaConnOps;
     friend class UrmaConnectorOps;
     friend class UrmaTxOps;
     friend class UrmaRxOps;

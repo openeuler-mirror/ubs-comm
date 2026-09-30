@@ -907,13 +907,13 @@ Result UrmaSocket::ImportPeerSegments(const UrmaSockSegExInfo &peer) noexcept
         return UBS_TCP_EXCHANGE;
     }
 
-    RemoteSegmentsPtr remote_segments = allocator->get_remote_segments(peer.node);
+    RemoteSegmentsPtr remote_segments = allocator->get_remote_segments(context_, peer.node);
     remote_segments->remote_start_addr_ = peer.pool_start_addr;
     urma_seg_t seg_copy = peer.seg;
     Result ret = allocator->store_remote_target_seg(context_, remote_segments, seg_copy, remote_ctrl_target_seg_);
     if (UNLIKELY(ret != UBS_OK)) {
         UBS_SLOG_ERR("UrmaSocket: store remote segments failed, ret=" << ret << ", fd=" << raw_socket_);
-        allocator->rm_remote_segments(peer.node);
+        allocator->rm_remote_segments(context_, peer.node);
         return ret;
     }
 
@@ -932,8 +932,8 @@ void UrmaSocket::CommitRemotePeer(const UrmaSockSegExInfo &peer) noexcept
     rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
     rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
     remote_uasid_ = peer.uasid;
-    peer_eid_ = peer.node.eid;
-    SetBindRemote(true);
+    peer_node_ = peer.node;
+    SetSocketFlags(URMA_SOCKET_MASK_BIND_REMOTE);
 }
 
 } // namespace urma

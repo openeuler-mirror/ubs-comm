@@ -239,7 +239,7 @@ TEST_F(ConnBufferTest, LpReaderRead_FullFrameInOneRecv_ReturnsDone)
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kComplete, reader.Read(TEST_FD, buf, "ut"));
     EXPECT_TRUE(reader.Done());
     EXPECT_EQ(0, memcmp(payload, frame.payload, 8));
 }
@@ -254,10 +254,10 @@ TEST_F(ConnBufferTest, LpReaderRead_PrefixSplitAcrossRecvs_ReturnsPendingThenDon
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(0, reader.Read(TEST_FD, buf, "ut")); /* 前缀半包，等后续字节 */
+    EXPECT_EQ(LpReadResult::kPartial, reader.Read(TEST_FD, buf, "ut")); /* 前缀半包，等后续字节 */
 
     PushRecvData(wire.data() + 2, wire.size() - 2); /* 后到：前缀后半 + body */
-    EXPECT_EQ(1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kComplete, reader.Read(TEST_FD, buf, "ut"));
     EXPECT_EQ(0, memcmp(payload, frame.payload, 4));
 }
 
@@ -271,7 +271,7 @@ TEST_F(ConnBufferTest, LpReaderRead_BodyLenZero_ReturnsError)
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(-1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kError, reader.Read(TEST_FD, buf, "ut"));
 }
 
 TEST_F(ConnBufferTest, LpReaderRead_PeerBodyShorter_ZeroFillsTail)
@@ -286,7 +286,7 @@ TEST_F(ConnBufferTest, LpReaderRead_PeerBodyShorter_ZeroFillsTail)
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kComplete, reader.Read(TEST_FD, buf, "ut"));
     EXPECT_EQ(5, frame.payload[0]);
     EXPECT_EQ(6, frame.payload[1]);
     /* 对端结构体较短：缺失字段补零 */
@@ -305,7 +305,7 @@ TEST_F(ConnBufferTest, LpReaderRead_PeerBodyLonger_DiscardsExtraBytes)
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kComplete, reader.Read(TEST_FD, buf, "ut"));
     /* 本地结构体 8B，read body 取 min(10, 8)，多余 2B 被丢弃 */
     EXPECT_EQ(0, memcmp(body, frame.payload, 8));
 }
@@ -321,7 +321,7 @@ TEST_F(ConnBufferTest, LpReaderRead_BodyLenExceedsDiscardCap_ReturnsError)
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(-1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kError, reader.Read(TEST_FD, buf, "ut"));
 }
 
 TEST_F(ConnBufferTest, LpReaderRead_BodyEagain_ReturnsPendingThenDone)
@@ -335,10 +335,10 @@ TEST_F(ConnBufferTest, LpReaderRead_BodyEagain_ReturnsPendingThenDone)
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(0, reader.Read(TEST_FD, buf, "ut")); /* body 半包 */
+    EXPECT_EQ(LpReadResult::kPartial, reader.Read(TEST_FD, buf, "ut")); /* body 半包 */
 
     PushRecvData(payload + 2, 2);
-    EXPECT_EQ(1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kComplete, reader.Read(TEST_FD, buf, "ut"));
     EXPECT_EQ(0, memcmp(payload, frame.payload, 4));
 }
 
@@ -353,10 +353,10 @@ TEST_F(ConnBufferTest, LpReaderRead_DiscardPhaseEagain_ReturnsPendingThenDone)
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(0, reader.Read(TEST_FD, buf, "ut")); /* 超量字节未到齐 */
+    EXPECT_EQ(LpReadResult::kPartial, reader.Read(TEST_FD, buf, "ut")); /* 超量字节未到齐 */
 
     PushRecvData(body + 9, 1);
-    EXPECT_EQ(1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kComplete, reader.Read(TEST_FD, buf, "ut"));
 }
 
 TEST_F(ConnBufferTest, LpReaderRead_PeerClosedInBody_ReturnsError)
@@ -369,10 +369,10 @@ TEST_F(ConnBufferTest, LpReaderRead_PeerClosedInBody_ReturnsError)
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(0, reader.Read(TEST_FD, buf, "ut")); /* body 半包 */
+    EXPECT_EQ(LpReadResult::kPartial, reader.Read(TEST_FD, buf, "ut")); /* body 半包 */
 
     PushRecvEof();
-    EXPECT_EQ(-1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kError, reader.Read(TEST_FD, buf, "ut"));
 }
 
 TEST_F(ConnBufferTest, LpReaderRead_RecvErrorInBody_ReturnsError)
@@ -386,7 +386,7 @@ TEST_F(ConnBufferTest, LpReaderRead_RecvErrorInBody_ReturnsError)
     LengthPrefixedReader reader;
     AsyncConnBuffer buf;
     reader.Begin(&frame, sizeof(frame));
-    EXPECT_EQ(-1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kError, reader.Read(TEST_FD, buf, "ut"));
 }
 
 TEST_F(ConnBufferTest, LpReaderRead_PrefixRecvError_ReturnsError)
@@ -397,5 +397,5 @@ TEST_F(ConnBufferTest, LpReaderRead_PrefixRecvError_ReturnsError)
     reader.Begin(&frame, sizeof(frame));
 
     PushRecvError(ECONNREFUSED);
-    EXPECT_EQ(-1, reader.Read(TEST_FD, buf, "ut"));
+    EXPECT_EQ(LpReadResult::kError, reader.Read(TEST_FD, buf, "ut"));
 }

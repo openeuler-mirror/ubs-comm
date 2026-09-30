@@ -91,6 +91,10 @@ void CleanAllSocketEpollMappers()
 
 void OnSocketClosed(int socket_fd)
 {
+    if (g_socket_epoll_lock == nullptr) {
+        return; /* ubsocket 未初始化: rwlock 未创建且 LockRegistry 未加载, 纯 TCP/应用 fd close 直通 */
+    }
+
     std::vector<int> epfds;
     {
         ReadLocker s_lock(g_socket_epoll_lock);

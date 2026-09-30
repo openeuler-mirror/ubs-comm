@@ -35,10 +35,10 @@ uint32_t NegotiateServerConnFlag(uint32_t peer_flag)
 {
     uint32_t ret_flag = 0;
     if (GlobalSetting::UBS_ENABLE_DEGRADE) {
-        ret_flag |= (peer_flag & UBS_DEGRADABLE_MASK);
+        ret_flag |= (peer_flag & URMA_SOCKET_MASK_DEGRADE);
     }
     if (GlobalSetting::UBS_ENABLE_LINK_SWITCH) {
-        ret_flag |= (peer_flag & UBS_RETRYABLE_MASK);
+        ret_flag |= (peer_flag & URMA_SOCKET_MASK_LINK_SWITCH);
     }
     return ret_flag;
 }
@@ -244,14 +244,40 @@ void UrmaConnOps::ServerOnConnFailed()
     }
     /* 对齐同步路径：段已写入分配器后失败则清理 remote 段（map 条目由其它在途连接自行保活） */
     if (peer_imported_.exchange(false, std::memory_order_acq_rel)) {
-        UrmaBackend::Instance().GetAllocator()->rm_remote_segments(peer_seg_ex_.node);
+        if (urma_sock_ != nullptr && urma_sock_->GetContext() != nullptr) {
+            UrmaBackend::Instance().GetAllocator()->rm_remote_segments(urma_sock_->GetContext(), peer_seg_ex_.node);
+        }
     }
+}
+
+void UrmaConnOps::CleanStaleSock(uint64_t stale_conn_id)
+{
+    /* 对齐同步路径：遍历 ArraySet，清理同 conn_id 的陈旧 URMA accept 连接（本连接尚未注册，无自清理风险） */
+    ArraySet<Socket>::GetInstance().ForEach([&](int stale_fd, Socket *stale_sock) {
+        if (stale_sock == nullptr || stale_sock->Type() != SocketType::SOCK_TYPE_URMA ||
+            stale_sock->create_type_ != SOCK_CREATE_TYPE_ACCEPT || stale_fd == fd_) {
+            return;
+        }
+        auto *stale_urma = RefStaticCastToRaw<UrmaSocket, Socket>(stale_sock);
+        if (stale_urma->GetConnId() != stale_conn_id ||
+            stale_urma->State() == SocketState::SOCK_STAT_BROKEN) {
+            return;
+        }
+        UrmaBackend::Instance().GetAllocator()->rm_remote_segments(stale_urma->GetContext(), stale_urma->GetPeerNode());
+        stale_urma->State(SocketState::SOCK_STAT_BROKEN);
+        LibcApi::shutdown(stale_fd, SHUT_RD);
+        stale_urma->NotifySocketReadable();
+        UBS_VLOG_TRACE("UrmaConnOps negotiate fd=%d, stale conn_id=%lu cleaned, stale fd=%d", fd_,
+                       (unsigned long)stale_conn_id, stale_fd);
+    });
 }
 
 void UrmaConnOps::OnConnCleanup()
 {
     if (peer_imported_) {
-        UrmaBackend::Instance().GetAllocator()->rm_remote_segments(peer_seg_ex_.node);
+        if (urma_sock_ != nullptr && urma_sock_->GetContext() != nullptr) {
+            UrmaBackend::Instance().GetAllocator()->rm_remote_segments(urma_sock_->GetContext(), peer_seg_ex_.node);
+        }
         peer_imported_ = false;
     }
     if (urma_sock_ != nullptr) {
@@ -266,6 +292,10 @@ Result UrmaConnOps::BuildNegotiateReq()
     if (!pending_send_buf_.empty()) {
         return UBS_OK; /* 已构建，等待 poll 线程续发 */
     }
+    if (urma_sock_ == nullptr) {
+        UBS_VLOG_ERR("UrmaConnOps build negotiate req urma_sock null, fd: %d\n", fd_);
+        return UBS_ERROR;
+    }
 
     UBSVersion local_version = UBS_PROTOCOL_VERSION;
     UrmaNegotiateReq req = {};
@@ -273,8 +303,21 @@ Result UrmaConnOps::BuildNegotiateReq()
     req.trans_mode = UrmaSetting::UB_TANS_MODE;
     req.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
     req.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
-    req.conn_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? UBS_DEGRADABLE_MASK : 0;
-    req.conn_flag |= GlobalSetting::UBS_ENABLE_LINK_SWITCH ? UBS_RETRYABLE_MASK : 0;
+    req.conn_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? URMA_SOCKET_MASK_DEGRADE : 0;
+    req.conn_flag |= GlobalSetting::UBS_ENABLE_LINK_SWITCH ? URMA_SOCKET_MASK_LINK_SWITCH : 0;
+
+    /* 本端 context 健康列表：server 据此选择健康 context pair，选中 index 由 rsp 带回 */
+    sorted_contexts_ = UrmaBackend::Instance().GetContextPoll()->SortedContexts();
+    req.context_count = std::min(static_cast<uint32_t>(sorted_contexts_.size()), URMA_MAX_CONTEXT_COUNT);
+    for (uint32_t i = 0; i < req.context_count; ++i) {
+        const auto &ctx = sorted_contexts_[i];
+        req.context_health[i].eid_index = ctx->EidInfo().eid_index;
+        req.context_health[i].is_bad = ctx->IsBadPort() ? 1 : 0;
+    }
+
+    /* 携带对端上次坏链的 conn_id，server 据此清理陈旧连接 */
+    sent_last_conn_id_ = UrmaBackend::Instance().TakeBrokenConnId(urma_sock_->GetPeerAddrId());
+    req.last_conn_id = sent_last_conn_id_;
 
     uint32_t body_len = sizeof(req);
     pending_send_buf_.resize(sizeof(uint32_t) + sizeof(req));
@@ -307,9 +350,18 @@ Result UrmaConnOps::BuildNegotiateReply()
     /* 协商结果先缓存到本状态机：socket 对象由共享 executor 创建后再写回（见 ApplyNegotiatedConfig） */
     negotiated_version_ = negotiated.GetWhole();
     peer_version_ = peer_version.GetWhole();
-    peer_eid_ = req_.local_eid;
     trans_mode_ = std::min(req_.trans_mode, UrmaSetting::UB_TANS_MODE);
     conn_flag_ = NegotiateServerConnFlag(req_.conn_flag);
+
+    /* 对端上次坏链遗留的陈旧连接先清理，并分配本连接号（同步/异步共用全局分配器） */
+    if (req_.last_conn_id != 0) {
+        CleanStaleSock(req_.last_conn_id);
+    }
+    conn_id_ = UrmaBackend::Instance().AllocConnId();
+
+    /* 对端 context 健康列表 × 本端 context 列表 → 选出健康 pair（无则 selected_context_ 为空，rsp 携带 -1） */
+    selected_context_ = UrmaBackend::Instance().GetContextPoll()->SelectContext(
+        UrmaPortSelectionPolicy::PSP_ROUND_ROBIN, &selected_context_index_, req_.context_health, req_.context_count);
 
     UrmaNegotiateRsp rsp = {};
     rsp.ret_code = 0;
@@ -318,6 +370,8 @@ Result UrmaConnOps::BuildNegotiateReply()
     rsp.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
     rsp.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
     rsp.conn_flag = conn_flag_;
+    rsp.selected_context_index = selected_context_index_;
+    rsp.conn_id = conn_id_;
 
     uint32_t body_len = sizeof(rsp);
     pending_send_buf_.resize(sizeof(uint32_t) + sizeof(rsp));
@@ -331,10 +385,12 @@ Result UrmaConnOps::BuildNegotiateReply()
 void UrmaConnOps::ApplyNegotiatedConfig()
 {
     /* 协商结果已由各自分支缓存到统一字段（client 来自 rsp_，server 来自 req_/协商结果）；仅 peer 版本为 server 专有 */
-    urma_sock_->SetNegotiatedVersion(negotiated_version_);
     urma_sock_->SetTransMode(trans_mode_);
-    urma_sock_->SetConnFlag(conn_flag_);
-    urma_sock_->SetPeerEid(peer_eid_);
+    urma_sock_->SetSocketFlags(conn_flag_); /* wire 上的 conn_flag 已是 URMA_SOCKET_MASK 域 */
+    urma_sock_->SetConnId(conn_id_);
+    if (selected_context_ != nullptr) {
+        urma_sock_->context_ = selected_context_; /* friend 访问，与同步路径一致 */
+    }
     if (role_ == ConnRole::kServer) {
         urma_sock_->SetPeerVersion(peer_version_);
     }
@@ -491,6 +547,11 @@ ConnStageResult UrmaConnOps::DoWaitTcpConnect()
 
     SocketConnHelper::SetTcpNoDelay(fd_);
 
+    /* 记录对端地址 id（坏链记录以 peer 地址为 key，对齐同步路径 Connector::Connect） */
+    if (sock_ != nullptr) {
+        sock_->conn_add_id = SocketConnHelper::PackSockAddrToId(&addr_);
+    }
+
     /* 非 UB 连接：降级为纯 TCP（对齐同步路径 ubsocket_socket_connector.cpp:46 早返回语义） */
     if (!SocketConnHelper::IsUbsConnection(fd_)) {
         if (!DegradeToTcp()) {
@@ -529,9 +590,9 @@ ConnStageResult UrmaConnOps::DoWaitNegotiate()
     }
 
     if (!lp_reader_.Done()) {
-        int recv_ret = lp_reader_.Read(fd_, buf_, is_client ? "UrmaConnOps recv rsp" : "UrmaConnOps recv req");
-        if (recv_ret != 1) {
-            if (recv_ret == 0) {
+        LpReadResult recv_ret = lp_reader_.Read(fd_, buf_, is_client ? "UrmaConnOps recv rsp" : "UrmaConnOps recv req");
+        if (recv_ret != LpReadResult::kComplete) {
+            if (recv_ret == LpReadResult::kPartial) {
                 return ConnStageResult::kPending;
             }
             MarkFailure(ECONNREFUSED, false);
@@ -555,11 +616,29 @@ ConnStageResult UrmaConnOps::DoWaitNegotiate()
             MarkFailure(ECONNREFUSED, false);
             return ConnStageResult::kFailed;
         }
+
+        /* 协商成功：清除本端坏链记录 */
+        if (sent_last_conn_id_ != 0) {
+            UrmaBackend::Instance().EraseBrokenConn(urma_sock_->GetPeerAddrId());
+            sent_last_conn_id_ = 0;
+        }
+
         negotiated_version_ = rsp_.negotiated_version;
         trans_mode_ = rsp_.trans_mode;
         conn_flag_ = rsp_.conn_flag;
-        peer_eid_ = rsp_.local_eid;
+        conn_id_ = rsp_.conn_id;
+
+        /* 按 server 选中的 index 解析 context；先写回 flags（失败路径据此判定可降级性，对齐同步顺序） */
+        if (rsp_.selected_context_index >= 0 &&
+            static_cast<uint32_t>(rsp_.selected_context_index) < sorted_contexts_.size()) {
+            selected_context_ = sorted_contexts_[static_cast<uint32_t>(rsp_.selected_context_index)];
+        }
         ApplyNegotiatedConfig();
+        if (selected_context_ == nullptr) {
+            UBS_VLOG_WARN("UrmaConnOps negotiate has no context valid: %d, fd: %d\n", rsp_.selected_context_index, fd_);
+            MarkFailure(ECONNREFUSED, urma_sock_->DegradeEnable());
+            return ConnStageResult::kFailed;
+        }
     } else {
         Result build_ret = BuildNegotiateReply();
         if (build_ret != UBS_OK) {
@@ -573,6 +652,12 @@ ConnStageResult UrmaConnOps::DoWaitNegotiate()
         }
         if (flush == ConnFlushOutcome::kFailed) {
             UBS_VLOG_WARN("UrmaConnOps send negotiate reply failed, fd: %d\n", fd_);
+            return ConnStageResult::kFailed;
+        }
+        /* 无健康 context pair：rsp 已携带 selected_context_index=-1 发回，对齐同步路径在此直接失败 */
+        if (selected_context_ == nullptr) {
+            UBS_VLOG_WARN("UrmaConnOps negotiate has no context valid, fd: %d\n", fd_);
+            MarkFailure(ECONNREFUSED, false);
             return ConnStageResult::kFailed;
         }
     }
@@ -658,7 +743,7 @@ ConnStageResult UrmaConnOps::DoWaitPeerAck()
     }
 
     if (urma_sock_ != nullptr) {
-        urma_sock_->CommitRemotePeer(peer_seg_ex_); /* 内部含 SetBindRemote(true) */
+        urma_sock_->CommitRemotePeer(peer_seg_ex_); /* 内部含 SetSocketFlags(BIND_REMOTE) */
     }
     OnConnEstablished(); /* Server：State(ESTABLISHED) + 恢复 blocking；Client：no-op */
     state_.store(ConnState::kConnEstablished, std::memory_order_release);
