@@ -992,8 +992,8 @@ static void umq_jetty_port_info(char *buf, int size, ub_queue_t *queue)
     int remain = size;
 
     for (uint8_t i = 0; i < queue->used_port_num; i++) {
-        ret = snprintf(buf + offset, remain, " [chip: %hhu, die: %hhu, port: %hhu]", queue->used_port[i].chip_id,
-                       queue->used_port[i].die_id, queue->used_port[i].port_idx);
+        ret = snprintf(buf + offset, remain, " [chip: %hhu, die: %hhu, port: %hhu]", queue->used_port[i].bs.chip_id,
+                       queue->used_port[i].bs.die_id, queue->used_port[i].bs.port_idx);
         if (ret < 0 || ret >= remain) {
             buf[0] = 0;
             UMQ_VLOG_ERR(VLOG_UMQ, "format jetty port info failed, port_num %d, error %d\n", queue->used_port_num, ret);
