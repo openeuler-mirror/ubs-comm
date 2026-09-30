@@ -26,28 +26,28 @@ namespace {
 constexpr uint32_t kMaxDiscardBytes = 64 * 1024; /* 对齐同步路径 RecvLengthPrefixed 的丢弃上限 */
 } // namespace
 
-int LengthPrefixedReader::Read(int fd, AsyncConnBuffer &buf, const char *tag)
+LpReadResult LengthPrefixedReader::Read(int fd, AsyncConnBuffer &buf, const char *tag)
 {
     for (;;) {
         switch (stage_) {
             case Stage::kPrefix: {
                 ssize_t n = buf.Advance(fd, sizeof(body_len_));
                 if (n < 0) {
-                    return -1;
+                    return LpReadResult::kError;
                 }
                 if (!buf.Ready(sizeof(body_len_))) {
-                    return 0;
+                    return LpReadResult::kPartial;
                 }
                 memcpy(&body_len_, buf.Data(), sizeof(body_len_));
                 if (body_len_ == 0) {
                     UBS_VLOG_ERR("%s recv body_len=0, fd: %d\n", tag, fd);
-                    return -1;
+                    return LpReadResult::kError;
                 }
                 read_body_ = std::min(body_len_, static_cast<uint32_t>(target_size_));
                 extra_ = (body_len_ > target_size_) ? (body_len_ - static_cast<uint32_t>(target_size_)) : 0;
                 if (extra_ > kMaxDiscardBytes) {
                     UBS_VLOG_ERR("%s body_len(%u) exceeds discard cap, fd: %d\n", tag, body_len_, fd);
-                    return -1;
+                    return LpReadResult::kError;
                 }
                 buf.Reset(); /* 前缀已解析：body 直读 target_，buf_ 留给 discard 复用 */
                 have_ = 0;
@@ -65,16 +65,16 @@ int LengthPrefixedReader::Read(int fd, AsyncConnBuffer &buf, const char *tag)
                     }
                     if (n == 0) {
                         UBS_VLOG_DEBUG("%s recv body peer closed, fd: %d\n", tag, fd);
-                        return -1;
+                        return LpReadResult::kError;
                     }
                     if (errno == EINTR) {
                         continue;
                     }
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                        return 0; /* 半包：等下次可读续读 */
+                        return LpReadResult::kPartial; /* 半包：等下次可读续读 */
                     }
                     UBS_VLOG_ERR("%s recv body failed, fd: %d, errno: %d\n", tag, fd, errno);
-                    return -1;
+                    return LpReadResult::kError;
                 }
                 if (read_body_ < target_size_) { /* 对端结构体较短：缺失字段补零（对齐跨版本语义） */
                     memset(target_ + read_body_, 0, target_size_ - read_body_);
@@ -87,11 +87,11 @@ int LengthPrefixedReader::Read(int fd, AsyncConnBuffer &buf, const char *tag)
                     uint32_t chunk = std::min(extra_, static_cast<uint32_t>(CONN_CTRL_BUF_SIZE));
                     ssize_t n = buf.Advance(fd, chunk);
                     if (n < 0) {
-                        return -1;
+                        return LpReadResult::kError;
                     }
                     size_t avail = static_cast<size_t>(std::min(static_cast<ssize_t>(chunk), n));
                     if (avail == 0) {
-                        return 0; /* 超量字节尚未到齐 */
+                        return LpReadResult::kPartial; /* 超量字节尚未到齐 */
                     }
                     buf.Consume(avail);
                     extra_ -= static_cast<uint32_t>(avail);
@@ -100,7 +100,7 @@ int LengthPrefixedReader::Read(int fd, AsyncConnBuffer &buf, const char *tag)
                 continue;
             }
             default:
-                return 1; /* kDone */
+                return LpReadResult::kComplete; /* kDone */
         }
     }
 }

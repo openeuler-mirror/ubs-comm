@@ -23,9 +23,6 @@ namespace ock {
 namespace ubs {
 namespace urma {
 
-/* global monotonic connection id generator, 0 is reserved as invalid */
-static std::atomic<uint64_t> g_conn_id{0};
-
 UrmaAcceptorOps::UrmaAcceptorOps(int listen_fd)
 {
     fd = listen_fd;
@@ -110,7 +107,7 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
     urma_sock->SetPeerVersion(peer_version.GetWhole());
     urma_sock->SetTransMode(std::min(req.trans_mode, UrmaSetting::UB_TANS_MODE));
     urma_sock->SetSocketFlags(NegotiateConnFlag(req.conn_flag));
-    urma_sock->SetConnId(g_conn_id.fetch_add(1) + 1);
+    urma_sock->SetConnId(UrmaBackend::Instance().AllocConnId());
 
     if (req.last_conn_id != 0) {
         CleanStaleSock(req.last_conn_id, urma_sock);

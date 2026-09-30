@@ -81,6 +81,9 @@ public:
 
     void EraseBrokenConn(uint64_t conn_addr_id) noexcept;
 
+    /* 全局单调递增连接号分配器（同步/异步建链共用，保证 conn_id 全局唯一） */
+    uint64_t AllocConnId() noexcept;
+
 private:
     void UnInitInner() noexcept;
 

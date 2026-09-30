@@ -513,6 +513,14 @@ void UrmaBackend::EraseBrokenConn(uint64_t conn_addr_id) noexcept
     broken_conns_.erase(conn_addr_id);
 }
 
+/* global monotonic connection id generator, shared by sync/async accept paths, 0 is reserved as invalid */
+static std::atomic<uint64_t> g_conn_id{0};
+
+uint64_t UrmaBackend::AllocConnId() noexcept
+{
+    return g_conn_id.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+
 void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
 {
     int sock_fd = -1;
@@ -536,6 +544,7 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
     }
 
     auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
+    SenderCRContext cr_context{cr->user_ctx}; /* 错误 CQE 的 sender 上下文（type/fd/seq_no） */
     switch (cr->status) {
         case URMA_CR_SUCCESS:
             break;
@@ -554,7 +563,7 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
             }
             if (urma_sock->State() == SocketState::SOCK_STAT_BROKEN) {
                 UBS_VLOG_TRACE("handle error cr success: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd=%d, sender_type=%d", cr->status,
-                               cr->user_ctx, cr->opcode, cr->flag.value, sock_fd, cr_context.type);
+                               cr->user_ctx, cr->opcode, cr->flag.value, sock_fd, static_cast<int>(cr_context.type));
                 break;
             }
             urma_sock->GetContext()->RecordPortError(cr->status);
@@ -565,8 +574,9 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
             urma_sock->State(SocketState::SOCK_STAT_BROKEN);
             LibcApi::shutdown(urma_sock->Fd(), SHUT_RD);
             urma_sock->NotifySocketReadable();
-            UBS_VLOG_WARN("handle error cr for channel broken: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd=%d, sender_type=%d, conn_id=%d", cr->status,
-                           cr->user_ctx, cr->opcode, cr->flag.value, sock_fd, cr_context.type, urma_sock->GetConnId());
+            UBS_VLOG_WARN("handle error cr for channel broken: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd=%d, sender_type=%d, conn_id=%lu", cr->status,
+                           cr->user_ctx, cr->opcode, cr->flag.value, sock_fd, static_cast<int>(cr_context.type),
+                           (unsigned long)urma_sock->GetConnId());
             break;
         }
         /* connection-level error: reset the socket, inject HUP|RDHUP and release waiters */

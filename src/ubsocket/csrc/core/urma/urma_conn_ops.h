@@ -16,6 +16,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "core/ubsocket_conn_lp_reader.h"
 #include "core/ubsocket_conn_ops_base.h"
@@ -88,6 +89,8 @@ private:
 
     /* Server 失败收尾 */
     void ServerOnConnFailed();
+    /* 清理对端上次坏链遗留的陈旧连接（req.last_conn_id != 0 时调用） */
+    void CleanStaleSock(uint64_t stale_conn_id);
 
     /* 交换骨架：续发暂存帧 / 非阻塞增量读固定长度帧，消除 R1/R2/R3 样板 */
     ConnFlushOutcome FlushStaged();
@@ -103,6 +106,8 @@ private:
     bool tcp_connect_started_ = false; /* 阶段 A 是否已发起非阻塞 connect */
     bool degradable_ = false;          /* 仅 poll 线程访问：本次失败是否可降级 */
     bool degraded_ = false; /* 仅 poll 线程访问：是否已降级为纯 TCP（阶段 A 提前判定） */
+    std::vector<UrmaContextPtr> sorted_contexts_; /* 本端 context 排序快照：req 填充与 rsp index 解析共用 */
+    uint64_t sent_last_conn_id_ = 0; /* 已随 req 发出的对端坏链 conn_id（0 = 无），协商成功后流转 EraseBrokenConn */
 
     /* Server 专有 */
     std::atomic<bool> registered_{false}; /* socket 是否已注册进 ArraySet（poll 线程在 DoWaitPeerRes 内联注册） */
@@ -118,9 +123,11 @@ private:
     /* poll 阶段解析出的协商结果：socket 创建后才写回（见 ApplyNegotiatedConfig） */
     uint32_t negotiated_version_ = 0;
     uint32_t peer_version_ = 0;
-    urma_eid_t peer_eid_{};
     ub_trans_mode trans_mode_{RM_CTP};
     uint32_t conn_flag_ = 0;
+    UrmaContextPtr selected_context_{nullptr}; /* 协商选出的 context（server: SelectContext；client: index 解析） */
+    int32_t selected_context_index_{-1};
+    uint64_t conn_id_{0}; /* 本连接号：server 分配 / client 来自 rsp */
 
     UrmaSockSegExInfo local_seg_ex_{};
     UrmaSockSegExInfo peer_seg_ex_{};
