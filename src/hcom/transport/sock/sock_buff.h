@@ -13,9 +13,9 @@
 #ifndef OCK_HCOM_SOCK_BUFF_H
 #define OCK_HCOM_SOCK_BUFF_H
 
-#include <sys/ioctl.h>
 #include <linux/sockios.h>
- 
+#include <sys/ioctl.h>
+
 #include "net_common.h"
 
 namespace ock {
@@ -104,6 +104,6 @@ private:
     uint32_t mSize = 0;
     uint32_t mActualDataSize = 0;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

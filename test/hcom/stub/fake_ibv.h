@@ -52,7 +52,7 @@ typedef struct {
 #define list_for_each_safe(pos, n, head) \
     for ((pos) = (head)->next, (n) = (pos)->next; (pos) != (head); (pos) = (n), (n) = (pos)->next)
 
-#define list_entry(ptr, type, member) ((type *)(void *)((char *)(ptr) - offsetof(type, member)))
+#define list_entry(ptr, type, member) ((type *)(void *)((char *)(ptr)-offsetof(type, member)))
 
 static inline void __list_add(struct list_head *newnode, struct list_head *prevnode, struct list_head *nextnode)
 {
@@ -148,7 +148,6 @@ typedef struct {
     fake_lock_list_t cq_list;
 } fake_cc_t;
 
-
 struct ibv_mr *ibv_reg_umm_page_mr(struct ibv_pd *pd, void *addr, void *knl_addr, size_t length, int access_flag);
 int ibv_dereg_umm_page_mr(struct ibv_mr *mr);
 int ibv_check_qp(struct ibv_context *context, pid_t pid);
@@ -173,7 +172,7 @@ void fake_flash_all_recv_wr(fake_qp_t *fqp);
 #undef ibv_query_port
 #endif
 static int fake_ibv_query_port(struct ibv_context *context, uint8_t port_num,
-    struct _compat_ibv_port_attr *port_attr_in)
+                               struct _compat_ibv_port_attr *port_attr_in)
 {
     struct ibv_port_attr *port_attr = (struct ibv_port_attr *)port_attr_in;
     port_attr->state = IBV_PORT_ACTIVE;

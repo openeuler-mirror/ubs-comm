@@ -12,8 +12,8 @@
 
 #include "test_sock_wrapper.h"
 #include "hcom.h"
-#include "net_sock_common.h"
 #include "net_oob_ssl.h"
+#include "net_sock_common.h"
 
 using namespace ock::hcom;
 
@@ -73,8 +73,8 @@ static int RequestReceivedSglClient(const UBSHcomNetRequestContext &ctx) // 2
     memcpy(remoteMrInfo, ctx.Message()->Data(), ctx.Message()->DataLen());
     NN_LOG_INFO("get remote Mr info");
     for (uint16_t i = 0; i < NN_NO4; i++) {
-        NN_LOG_INFO("idx:" << i << " key:" << remoteMrInfo[i].lKey << " address:" << remoteMrInfo[i].lAddress <<
-            " size" << remoteMrInfo[i].size);
+        NN_LOG_INFO("idx:" << i << " key:" << remoteMrInfo[i].lKey << " address:" << remoteMrInfo[i].lAddress << " size"
+                           << remoteMrInfo[i].size);
     }
     sem_post(&sem_sock);
     return 0;
@@ -93,8 +93,8 @@ static int RequestReceivedSglServer(const UBSHcomNetRequestContext &ctx) // 3
 
     NN_LOG_INFO("request rsp Mr info");
     for (uint16_t i = 0; i < NN_NO4; i++) {
-        NN_LOG_INFO("idx:" << i << " key:" << serverMrInfo[i].lKey << " address:" << serverMrInfo[i].lAddress <<
-            " size" << serverMrInfo[i].size);
+        NN_LOG_INFO("idx:" << i << " key:" << serverMrInfo[i].lKey << " address:" << serverMrInfo[i].lAddress << " size"
+                           << serverMrInfo[i].size);
     }
     return 0;
 }
@@ -150,7 +150,6 @@ static void SockWrapperDestoryMem(UBSHcomNetDriver *driver, std::vector<UBSHcomN
         mrs.pop_back();
     }
 }
-
 
 static void SetCB(UBSHcomNetDriver *driver, bool isServer, uint8_t reqHandlerMode)
 {
@@ -232,12 +231,12 @@ void TestSockWrapper::TearDown()
 TEST_F(TestSockWrapper, SockInitializeSuccess)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-1", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_OK, result);
     NetFunc::NN_SafeCloseFd(connFd);
@@ -246,12 +245,12 @@ TEST_F(TestSockWrapper, SockInitializeSuccess)
 TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidType)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_UDS_TCP, "sock-2", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_PARAM_INVALID, result);
     NetFunc::NN_SafeCloseFd(connFd);
@@ -260,12 +259,12 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidType)
 TEST_F(TestSockWrapper, SockInitializeTwice)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-3", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_OK, result);
     result = sock->Initialize(sockWorkerOptions);
@@ -276,12 +275,12 @@ TEST_F(TestSockWrapper, SockInitializeTwice)
 TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidFd)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-4", newSockId, -1, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_PARAM_INVALID, result);
     NetFunc::NN_SafeCloseFd(connFd);
@@ -290,12 +289,12 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidFd)
 TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidReceiveBuf)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-5", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     MOCKER(setsockopt).defaults().will(returnValue(-1));
     SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_TCP_SET_OPTION_FAILED, result);
@@ -305,12 +304,12 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidReceiveBuf)
 TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidSendBuf)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-6", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     MOCKER(setsockopt).defaults().will(returnValue(0)).then(returnValue(-1));
     SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_TCP_SET_OPTION_FAILED, result);
@@ -320,12 +319,12 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidSendBuf)
 TEST_F(TestSockWrapper, SockInitializeFailedWithUDS)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_UDS, "sock-7", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(NN_OK, result);
     NetFunc::NN_SafeCloseFd(connFd);
@@ -334,13 +333,13 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithUDS)
 TEST_F(TestSockWrapper, SockInitializeFailedWithExpand)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     option.receiveBufSizeKB = 0;
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-8", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     sockWorkerOptions.keepaliveIdleTime = -1;
     sockWorkerOptions.keepaliveProbeInterval = -1;
     sockWorkerOptions.keepaliveProbeTimes = -1;
@@ -373,12 +372,12 @@ TEST_F(TestSockWrapper, SockInitializeFailedWithNoDelay)
 TEST_F(TestSockWrapper, SockSendSuccess)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-10", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     sockWorkerOptions.tcpEnableNoDelay = false;
     SResult result;
     sock->Initialize(sockWorkerOptions);
@@ -399,12 +398,12 @@ TEST_F(TestSockWrapper, SockSendSuccess)
 TEST_F(TestSockWrapper, SockSendFailedWithInvalidFdBuf)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-11", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result = sock->Initialize(sockWorkerOptions);
     EXPECT_EQ(SS_OK, result);
     void *tmpBuf1 = nullptr;
@@ -416,12 +415,12 @@ TEST_F(TestSockWrapper, SockSendFailedWithInvalidFdBuf)
 TEST_F(TestSockWrapper, SockReceiveFailedWithInvalidFdBuf)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-12", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result;
     sock->Initialize(sockWorkerOptions);
     std::string payload = "hello world";
@@ -436,12 +435,12 @@ TEST_F(TestSockWrapper, SockReceiveFailedWithInvalidFdBuf)
 TEST_F(TestSockWrapper, SockReceiveFailedWithInvalidSize2)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-14", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     sock->Initialize(sockWorkerOptions);
     std::string payload = "hello world";
     void *tmpBuf = const_cast<char *>(payload.c_str());
@@ -456,16 +455,16 @@ TEST_F(TestSockWrapper, SockReceiveFailedWithInvalidSize2)
 TEST_F(TestSockWrapper, SockPostSendSglFailed)
 {
     auto connFd = SockConnect(9982);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-15", newSockId, connFd, option);
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result;
     sock->Initialize(sockWorkerOptions);
     UBSHcomNetTransSglRequest req(iovPtr, 0, 0);
 
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.immData = 1;
     header.seqNo = 1;
     header.flags = NTH_TWO_SIDE_SGL;
@@ -482,17 +481,17 @@ TEST_F(TestSockWrapper, SockPostSendSglFailed)
 TEST_F(TestSockWrapper, SockPostSendInvalidAddress)
 {
     auto connFd = SockConnect(9983);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-16", newSockId, connFd, option);
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result;
     sock->Initialize(sockWorkerOptions);
     std::string payload = "hello world";
     static char data[1023] = {};
     UBSHcomNetTransRequest req(0, sizeof(data), 0);
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     header.opCode = 1;
     header.seqNo = 1;
     header.flags = NTH_TWO_SIDE;
@@ -506,10 +505,10 @@ TEST_F(TestSockWrapper, SockPostReceiveHeaderNormalReceive)
 {
     static char data[1023] = {};
     UBSHcomNetTransRequest req(0, sizeof(data), 0);
-    SockTransHeader header {};
+    SockTransHeader header{};
     header.dataLength = req.size;
     auto connFd = SockConnect(9983);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "test", newSockId, connFd, option);
     MOCKER_CPP(setsockopt).stubs().will(returnValue(0));
@@ -525,15 +524,14 @@ TEST_F(TestSockWrapper, SockPostReceiveHeaderMultipleReceives)
 {
     static char data[1023] = {};
     UBSHcomNetTransRequest req(0, sizeof(data), 0);
-    SockTransHeader header {};
+    SockTransHeader header{};
     header.dataLength = req.size;
     auto connFd = SockConnect(9983);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "test", newSockId, connFd, option);
     MOCKER_CPP(setsockopt).stubs().will(returnValue(0));
-    MOCKER_CPP(::recv).stubs()
-        .will(returnValue(sizeof(SockTransHeader) / NN_NO2));
+    MOCKER_CPP(::recv).stubs().will(returnValue(sizeof(SockTransHeader) / NN_NO2));
     MOCKER_CPP(NetFunc::ValidateHeader).stubs().will(returnValue(0));
 
     SResult result = sock->PostReceiveHeader(header, 1);
@@ -547,7 +545,7 @@ TEST_F(TestSockWrapper, SockPostReceiveBodyNormalReceive)
     uint32_t dataLength = NN_NO1024;
     bool isOneSide = true;
     auto connFd = SockConnect(9983);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "test", newSockId, connFd, option);
     sock->mEnableTls = false;
@@ -565,7 +563,7 @@ TEST_F(TestSockWrapper, SockPostReceiveBodyMultipleReceives)
     uint32_t dataLength = NN_NO1024;
     bool isOneSide = true;
     auto connFd = SockConnect(9983);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "test", newSockId, connFd, option);
     sock->mEnableTls = false;
@@ -583,7 +581,7 @@ TEST_F(TestSockWrapper, SockPostReceiveBodyTlsNormalReceive)
     uint32_t dataLength = NN_NO1024;
     bool isOneSide = false;
     auto connFd = SockConnect(9983);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "test", newSockId, connFd, option);
     sock->mEnableTls = true;
@@ -601,7 +599,7 @@ TEST_F(TestSockWrapper, SockPostReceiveBodyTlsMultipleReceives)
     uint32_t dataLength = NN_NO1024;
     bool isOneSide = false;
     auto connFd = SockConnect(9983);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "test", newSockId, connFd, option);
     sock->mEnableTls = true;
@@ -619,7 +617,7 @@ TEST_F(TestSockWrapper, SockPostReceiveHeaderSuccess)
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
     uint16_t testPort = 9990;
-    UBSHcomNetDriverOptions sockOptions {};
+    UBSHcomNetDriverOptions sockOptions{};
     SetDriverOptions(sockOptions);
     NResult result;
     serverDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "sock-server-9000", true);
@@ -637,7 +635,7 @@ TEST_F(TestSockWrapper, SockPostReceiveHeaderSuccess)
     EXPECT_EQ(SS_OK, result);
 
     static char data[100] = {};
-    UBSHcomNetResponseContext respCtx {};
+    UBSHcomNetResponseContext respCtx{};
     UBSHcomNetTransRequest req((void *)(data), sizeof(data), 0);
     result = clientEp->PostSend(1, req);
     EXPECT_EQ(SS_OK, result);
@@ -654,7 +652,7 @@ TEST_F(TestSockWrapper, SockPostWriteSglSuccess)
     UBSHcomNetDriver *clientDriver = nullptr;
     UBSHcomNetEndpointPtr clientEp = nullptr;
 
-    UBSHcomNetDriverOptions sockOptions {};
+    UBSHcomNetDriverOptions sockOptions{};
     SetDriverOptions(sockOptions);
     NResult result;
     uint16_t testPort = 9992;
@@ -713,7 +711,7 @@ TEST_F(TestSockWrapper, SockPostWriteSglFailedRead)
     UBSHcomNetEndpointPtr clientEp = nullptr;
 
     NResult result;
-    UBSHcomNetDriverOptions sockOptions {};
+    UBSHcomNetDriverOptions sockOptions{};
     SetDriverOptions(sockOptions);
     sem_init(&sem_sock, 0, 0);
     uint16_t testPort = 9993;
@@ -731,7 +729,7 @@ TEST_F(TestSockWrapper, SockPostWriteSglFailedRead)
     clientDriver->Initialize(sockOptions);
     clientDriver->Start();
     clientDriver->Connect("hello world", clientEp, 0);
-    UBSHcomEpOptions epOptions {};
+    UBSHcomEpOptions epOptions{};
     epOptions.tcpBlockingIo = true;
     clientEp->SetEpOption(epOptions);
     std::vector<UBSHcomNetMemoryRegionPtr> clientMrs;
@@ -767,12 +765,12 @@ TEST_F(TestSockWrapper, SockPostWriteSglFailedRead)
 TEST_F(TestSockWrapper, SockInitializeFailedWithInvalidAliveTime)
 {
     auto connFd = SockConnect(9984);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-17", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     sockWorkerOptions.keepaliveIdleTime = -1;
     sockWorkerOptions.keepaliveProbeInterval = -1;
     sockWorkerOptions.keepaliveProbeTimes = -1;
@@ -788,7 +786,7 @@ TEST_F(TestSockWrapper, SockPostWriteSglFailedWrite)
     UBSHcomNetEndpointPtr clientEp = nullptr;
 
     NResult result;
-    UBSHcomNetDriverOptions sockOptions {};
+    UBSHcomNetDriverOptions sockOptions{};
     SetDriverOptions(sockOptions);
     uint16_t testPort = 9994;
     sem_init(&sem_sock, 0, 0);
@@ -806,7 +804,7 @@ TEST_F(TestSockWrapper, SockPostWriteSglFailedWrite)
     clientDriver->Initialize(sockOptions);
     clientDriver->Start();
     clientDriver->Connect("hello world", clientEp, 0);
-    UBSHcomEpOptions epOptions {};
+    UBSHcomEpOptions epOptions{};
     epOptions.tcpBlockingIo = true;
     clientEp->SetEpOption(epOptions);
     std::vector<UBSHcomNetMemoryRegionPtr> clientMrs;
@@ -840,12 +838,12 @@ TEST_F(TestSockWrapper, SockPostWriteSglFailedWrite)
 TEST_F(TestSockWrapper, SockSendFail)
 {
     auto connFd = SockConnect(9981);
-    SockOptions option {};
+    SockOptions option{};
     uint64_t newSockId = NetUuid::GenerateUuid();
     auto sock = new (std::nothrow) Sock(SockType::SOCK_TCP, "sock-18", newSockId, connFd, option);
 
     NetLocalAutoDecreasePtr<Sock> autoDecSock(sock);
-    SockWorkerOptions sockWorkerOptions {};
+    SockWorkerOptions sockWorkerOptions{};
     SResult result;
     sock->Initialize(sockWorkerOptions);
     std::string payload = "hello world";

@@ -2,19 +2,19 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
 
-#include <unistd.h>
 #include <getopt.h>
+#include <unistd.h>
 
 #include "hcom/hcom.h"
 
-#include "common/perf_test_config.h"
 #include "common/perf_test_common.h"
+#include "common/perf_test_config.h"
 #include "common/perf_test_logger.h"
-#include "test_case/perf_test_base.h"
-#include "test_case/perf_test_factory.h"
+#include "hcom/hcom_num_def.h"
 #include "report/perf_test_report_base.h"
 #include "report/perf_test_report_factory.h"
-#include "hcom/hcom_num_def.h"
+#include "test_case/perf_test_base.h"
+#include "test_case/perf_test_factory.h"
 
 namespace hcom {
 namespace perftest {
@@ -30,7 +30,7 @@ static bool IsUbcProtocol(ock::hcom::UBSHcomNetDriverProtocol &protocol)
 static bool IsSendType(PERF_TEST_TYPE &type)
 {
     if ((type == PERF_TEST_TYPE::TRANSPORT_SEND_BW || type == PERF_TEST_TYPE::SERVICE_SEND_BW ||
-        type == PERF_TEST_TYPE::TRANSPORT_SEND_LAT || type == PERF_TEST_TYPE::SERVICE_SEND_LAT)) {
+         type == PERF_TEST_TYPE::TRANSPORT_SEND_LAT || type == PERF_TEST_TYPE::SERVICE_SEND_LAT)) {
         return true;
     }
     return false;
@@ -141,8 +141,8 @@ void RunTest(const PerfTestConfig &cfg, PerfTestReportBase *report)
     report->PrintReportTail();
     pTest->UnInitialize();
 }
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 using namespace hcom::perftest;
 int main(int argc, char *argv[])

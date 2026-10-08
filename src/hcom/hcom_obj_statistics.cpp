@@ -12,6 +12,7 @@
 #include "hcom.h"
 #include "hcom_obj_statistics.h"
 
+
 namespace ock {
 namespace hcom {
 DEFINE_OBJ_GC(NetService);
@@ -158,5 +159,5 @@ void NetObjStatistic::Dump()
 #endif
     NN_LOG_INFO(ossDump.str());
 }
-}
-}
+} // namespace hcom
+} // namespace ock

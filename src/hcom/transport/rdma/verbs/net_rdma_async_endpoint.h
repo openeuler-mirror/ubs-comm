@@ -14,19 +14,19 @@
 #ifdef RDMA_BUILD_ENABLED
 
 #include "hcom.h"
-#include "transport/net_endpoint_impl.h"
-#include "rdma_composed_endpoint.h"
+#include "hcom_utils.h"
 #include "net_monotonic.h"
 #include "net_rdma_driver_oob.h"
 #include "net_security_alg.h"
-#include "hcom_utils.h"
+#include "rdma_composed_endpoint.h"
+#include "transport/net_endpoint_impl.h"
 
 namespace ock {
 namespace hcom {
 class NetAsyncEndpoint : public NetEndpointImpl {
 public:
     NetAsyncEndpoint(uint64_t id, RDMAAsyncEndPoint *ep, NetDriverRDMAWithOob *driver,
-        const UBSHcomNetWorkerIndex &workerIndex);
+                     const UBSHcomNetWorkerIndex &workerIndex);
     ~NetAsyncEndpoint() override;
 
     NResult SetEpOption(UBSHcomEpOptions &epOptions) override
@@ -54,10 +54,10 @@ public:
 
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNO) override;
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo) override;
+                     const UBSHcomNetTransOpInfo &opInfo) override;
 
     NResult PostSendSglInline(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo) override;
+                              const UBSHcomNetTransOpInfo &opInfo) override;
 
     /*
      * @brief raw data to peer without opcode
@@ -264,8 +264,8 @@ private:
     friend class NetDriverRDMAWithOob;
     friend class NetHeartbeat;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // OCK_HCOM_NET_ASYNC_ENDPOINT_RDMA_H

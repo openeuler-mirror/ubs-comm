@@ -70,7 +70,7 @@ void NetDelayReleaseTimer::RunDelayReleaseThread()
     if (eFd < 0) {
         char buf[NET_STR_ERROR_BUF_SIZE] = {0};
         NN_LOG_ERROR("NetDelayReleaseTimer thread failed to create epoll by "
-                << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                     << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         return;
     }
 
@@ -79,7 +79,8 @@ void NetDelayReleaseTimer::RunDelayReleaseThread()
         DequeueDelayRelease();
         auto spendTime = NetMonotonic::TimeMs() - startTime;
 
-        struct epoll_event ev {};
+        struct epoll_event ev {
+        };
         int waitTimeMs = 0; // wait for 1000ms
         if (spendTime >= EPOLL_WAIT_TIMEOUT) {
             continue;
@@ -118,5 +119,5 @@ void NetDelayReleaseTimer::EnqueueDelayRelease(UBSHcomNetEndpointPtr &ep)
     auto epRes = NetDelayReleaseResource(ep, NN_NO20);
     mDelayReleaseQueue.push(epRes);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

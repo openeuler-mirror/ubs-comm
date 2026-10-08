@@ -10,15 +10,15 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "cmd_handler.h"
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <thread>
-#include <fstream>
 #include "cmd_helper.h"
+#include "hcom/hcom_num_def.h"
 #include "htracer_client.h"
 #include "htracer_utils.h"
-#include "hcom/hcom_num_def.h"
-#include "cmd_handler.h"
 
 using namespace ock::hcom;
 
@@ -26,9 +26,9 @@ static CmdHelper g_cmdHelper;
 
 void HTracerCliHelper::Initialize()
 {
-    std::map<std::string, std::shared_ptr<CmdHandler>> cmdHandlers = { { "show", std::make_shared<ShowCmdHandler>() },
-                                                                       { "reset", std::make_shared<ResetCmdHandler>() },
-                                                                       { "conf", std::make_shared<ConfCmdHandler>() } };
+    std::map<std::string, std::shared_ptr<CmdHandler>> cmdHandlers = {{"show", std::make_shared<ShowCmdHandler>()},
+                                                                      {"reset", std::make_shared<ResetCmdHandler>()},
+                                                                      {"conf", std::make_shared<ConfCmdHandler>()}};
     g_cmdHelper.UpdateHost();
     cmdHandlers.swap(mCmdHandlers);
 }
@@ -81,14 +81,14 @@ SerCode ShowCmdHandler::Handle(std::vector<std::string> cmds)
 }
 
 uint32_t ShowCmdHandler::ParseUintOption(const std::vector<std::string> &cmds, const std::string &opt,
-    uint32_t defaultValue)
+                                         uint32_t defaultValue)
 {
     auto param = HTracerUtils::GetCmdOption(cmds, opt);
     return param.empty() ? defaultValue : std::atol(param.c_str());
 }
 
 double ShowCmdHandler::ParseDoubleOption(const std::vector<std::string> &cmds, const std::string &opt,
-    double defaultValue, double min, double max)
+                                         double defaultValue, double min, double max)
 {
     auto param = HTracerUtils::GetCmdOption(cmds, opt);
     if (param.empty()) {
@@ -125,10 +125,10 @@ void ShowCmdHandler::ProcessTraceData(std::ostream &out, double quantile)
 std::string ShowCmdHandler::HelpInfo()
 {
     std::stringstream ss;
-    ss << "\t -i print interval. "<< std::endl <<
-      "\t -n number of times. "<< std::endl <<
-      "\t -d dump trace point information. -d /opt/dump.text " << std::endl <<
-      "\t -tp show percentile of latency, need to use \'conf -p\' to enable it first!" << std::endl;
+    ss << "\t -i print interval. " << std::endl
+       << "\t -n number of times. " << std::endl
+       << "\t -d dump trace point information. -d /opt/dump.text " << std::endl
+       << "\t -tp show percentile of latency, need to use \'conf -p\' to enable it first!" << std::endl;
     return ss.str();
 }
 
@@ -136,12 +136,12 @@ SerCode HTracerCliHelper::HandleCmd(std::string cmd)
 {
     auto cmds = HTracerUtils::StrSplit(cmd, ' ');
     if (cmds.empty()) {
-        std::cout << "Invalid command!" << std::endl <<
-               "\tshow : show trace information" << std::endl <<
-               "\treset : clear invalid host and reset trace" << std::endl <<
-               "\tconf : config trace" << std::endl <<
-               "\tquit : quit trace" << std::endl <<
-               "\tcommand -h : show help information for command. e.g. show -h" << std::endl;
+        std::cout << "Invalid command!" << std::endl
+                  << "\tshow : show trace information" << std::endl
+                  << "\treset : clear invalid host and reset trace" << std::endl
+                  << "\tconf : config trace" << std::endl
+                  << "\tquit : quit trace" << std::endl
+                  << "\tcommand -h : show help information for command. e.g. show -h" << std::endl;
         return SER_ERROR;
     }
 
@@ -149,12 +149,12 @@ SerCode HTracerCliHelper::HandleCmd(std::string cmd)
     cmds.erase(cmds.begin());
     auto cmdHandlerIt = mCmdHandlers.find(cmdType);
     if (cmdHandlerIt == mCmdHandlers.end()) {
-        std::cout << "Invalid command!" << std::endl <<
-               "\tshow : show trace information" << std::endl <<
-               "\treset : clear invalid host and reset trace" << std::endl <<
-               "\tconf : config trace" << std::endl <<
-               "\tquit : quit trace" << std::endl <<
-               "\tcommand -h : show help information for command. e.g. show -h" << std::endl;
+        std::cout << "Invalid command!" << std::endl
+                  << "\tshow : show trace information" << std::endl
+                  << "\treset : clear invalid host and reset trace" << std::endl
+                  << "\tconf : config trace" << std::endl
+                  << "\tquit : quit trace" << std::endl
+                  << "\tcommand -h : show help information for command. e.g. show -h" << std::endl;
         return SER_ERROR;
     }
     return cmdHandlerIt->second->Handle(cmds);

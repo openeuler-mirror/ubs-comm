@@ -10,17 +10,19 @@
  * See the Mulan PSL v2 for more details.
  */
 #ifdef RDMA_BUILD_ENABLED
+#include "net_rdma_sync_endpoint.h"
 #include "net_common.h"
 #include "net_rdma_driver_oob.h"
 #include "net_security_rand.h"
 #include "rdma_validation.h"
-#include "net_rdma_sync_endpoint.h"
 
 namespace ock {
 namespace hcom {
 NetSyncEndpoint::NetSyncEndpoint(uint64_t id, RDMASyncEndpoint *ep, NetDriverRDMAWithOob *driver,
-    const UBSHcomNetWorkerIndex &workerIndex)
-    : NetEndpointImpl(id, workerIndex), mEp(ep), mDriver(driver)
+                                 const UBSHcomNetWorkerIndex &workerIndex)
+    : NetEndpointImpl(id, workerIndex),
+      mEp(ep),
+      mDriver(driver)
 {
     if (mEp != nullptr) {
         mEp->IncreaseRef();
@@ -32,8 +34,8 @@ NetSyncEndpoint::NetSyncEndpoint(uint64_t id, RDMASyncEndpoint *ep, NetDriverRDM
 
     if (mEp != nullptr && mDriver != nullptr) {
         mSegSize = mDriver->mOptions.mrSendReceiveSegSize < mEp->Qp()->PostSendMaxSize() ?
-            mDriver->mOptions.mrSendReceiveSegSize :
-            mEp->Qp()->PostSendMaxSize();
+                       mDriver->mOptions.mrSendReceiveSegSize :
+                       mEp->Qp()->PostSendMaxSize();
         mAllowedSize = mSegSize - sizeof(UBSHcomNetTransHeader);
     }
 
@@ -62,8 +64,8 @@ NetSyncEndpoint::~NetSyncEndpoint()
 NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNO)
 {
     NResult result = NN_OK;
-    if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize, mIsNeedEncrypt,
+                                                 mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to sync post send as validate fail");
         return result;
     }
@@ -87,7 +89,7 @@ NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest 
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("RDMA Failed to sync post send with seq no as encryption failure");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ENCRYPT_FAILED;
@@ -97,8 +99,8 @@ NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest 
         // copy message
         verbsHeader->dataLength = request.size;
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
-            mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader),
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("RDMA Failed to copy request to mrBufAddress");
             return NN_INVALID_PARAM;
@@ -139,11 +141,11 @@ NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest 
 }
 
 NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo)
+                                  const UBSHcomNetTransOpInfo &opInfo)
 {
     NResult result = NN_OK;
-    if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize, mIsNeedEncrypt,
+                                                 mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to sync post send as validate fail");
         return result;
     }
@@ -169,7 +171,7 @@ NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest 
     if (mIsNeedEncrypt) {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
+                          reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)), cipherLen)) {
             NN_LOG_ERROR("RDMA Failed to sync post send with op info as encryption failure");
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             return NN_ENCRYPT_FAILED;
@@ -180,8 +182,8 @@ NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest 
         verbsHeader->dataLength = request.size;
 
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress + sizeof(UBSHcomNetTransHeader)),
-            mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 mDriver->mDriverSendMR->GetSingleSegSize() - sizeof(UBSHcomNetTransHeader),
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("Failed to copy request to mrBufAddress");
             return NN_INVALID_PARAM;
@@ -222,8 +224,8 @@ NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest 
 }
 
 NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-    const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType, const void *extHeader,
-    uint32_t extHeaderSize)
+                                  const UBSHcomNetTransOpInfo &opInfo, const UBSHcomExtHeaderType extHeaderType,
+                                  const void *extHeader, uint32_t extHeaderSize)
 {
     if (NN_UNLIKELY(extHeaderType == UBSHcomExtHeaderType::RAW)) {
         NN_LOG_ERROR("You shouldn't use RAW type when extHeader is given in sync ep");
@@ -238,7 +240,7 @@ NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest 
     // 保证 extHeaderSize + request.size <= mAllowedSize.
     NResult result = NN_OK;
     if (NN_UNLIKELY((result = PostSendValidation(mState, mId, mDriver, opCode, request, mAllowedSize - extHeaderSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+                                                 mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to sync post send as validate fail");
         return result;
     }
@@ -303,7 +305,7 @@ NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest 
             TRACE_DELAY_END(RDMA_EP_SYNC_POST_SEND, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
-            usleep(100UL);  // LWT situation is not suitable for calling system sleep
+            usleep(100UL); // LWT situation is not suitable for calling system sleep
             continue;
         }
         // no retry result or timeout = 0
@@ -319,8 +321,8 @@ NResult NetSyncEndpoint::PostSend(uint16_t opCode, const UBSHcomNetTransRequest 
 NResult NetSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo)
 {
     NResult result = NN_OK;
-    if (NN_UNLIKELY((result = PostSendRawValidation(mState, mId, mDriver, seqNo, request, mSegSize,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+    if (NN_UNLIKELY((result = PostSendRawValidation(mState, mId, mDriver, seqNo, request, mSegSize, mIsNeedEncrypt,
+                                                    mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to sync post send raw as validate fail");
         return result;
     }
@@ -335,7 +337,7 @@ NResult NetSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uint
 
     if (!mIsNeedEncrypt) {
         if (NN_UNLIKELY(memcpy_s(reinterpret_cast<void *>(mrBufAddress), mDriver->mDriverSendMR->GetSingleSegSize(),
-            reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
+                                 reinterpret_cast<const void *>(request.lAddress), request.size) != NN_OK)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("Failed to memcpy request to mrBufAddress");
             return NN_INVALID_PARAM;
@@ -344,7 +346,7 @@ NResult NetSyncEndpoint::PostSendRaw(const UBSHcomNetTransRequest &request, uint
     } else {
         uint32_t cipherLen = 0;
         if (!mAes.Encrypt(mSecrets, reinterpret_cast<void *>(request.lAddress), request.size,
-            reinterpret_cast<void *>(mrBufAddress), cipherLen)) {
+                          reinterpret_cast<void *>(mrBufAddress), cipherLen)) {
             mDriver->mDriverSendMR->ReturnBuffer(mrBufAddress);
             NN_LOG_ERROR("Failed send raw message as encryption failure");
             return NN_ENCRYPT_FAILED;
@@ -389,12 +391,12 @@ NResult NetSyncEndpoint::PostSendRawSgl(const UBSHcomNetTransSglRequest &request
     size_t size = 0;
     NResult result = NN_OK;
     if (NN_UNLIKELY((result = PostSendSglValidation(mState, mId, mDriver, seqNo, request, mSegSize, size,
-        mIsNeedEncrypt, mAes)) != NN_OK)) {
+                                                    mIsNeedEncrypt, mAes)) != NN_OK)) {
         NN_LOG_ERROR("RDMA failed to sync post send raw sgl as validate fail");
         return result;
     }
 
-    UBSHcomNetTransRequest tlsReq {};
+    UBSHcomNetTransRequest tlsReq{};
     uintptr_t mrBufAddress = 0;
     if (mIsNeedEncrypt) {
         if (NN_UNLIKELY(EncryptRawSgl(tlsReq, mrBufAddress, size, mAes, mDriver, request, mSecrets) != NN_OK)) {
@@ -637,14 +639,14 @@ NResult NetSyncEndpoint::Receive(int32_t timeout, UBSHcomNetResponseContext &ctx
         }
         auto msgReady = mRespMessage.AllocateIfNeed(realDataSize);
         if (NN_UNLIKELY(!msgReady)) {
-            NN_LOG_ERROR("Verbs Failed to allocate memory for response size " << realDataSize <<
-                ", probably out of memory");
+            NN_LOG_ERROR("Verbs Failed to allocate memory for response size " << realDataSize
+                                                                              << ", probably out of memory");
             result = NN_MALLOC_FAILED;
             break;
         }
 
         if (NN_UNLIKELY(memcpy_s(&(mRespCtx.mHeader), sizeof(UBSHcomNetTransHeader), tmpHeader,
-            sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
+                                 sizeof(UBSHcomNetTransHeader)) != NN_OK)) {
             NN_LOG_WARN("Invalid operation to memcpy_s in Receive");
             result = NN_ERROR;
             break;
@@ -661,7 +663,7 @@ NResult NetSyncEndpoint::Receive(int32_t timeout, UBSHcomNetResponseContext &ctx
             mRespMessage.mDataLen = decryptLen;
         } else {
             if (NN_UNLIKELY(memcpy_s(mRespMessage.mBuf, mRespMessage.GetBufLen(), tmpDataAddress,
-                tmpHeader->dataLength) != NN_OK)) {
+                                     tmpHeader->dataLength) != NN_OK)) {
                 NN_LOG_ERROR("Failed to copy tmpDataAddress to mRespMessage");
                 result = NN_ERROR;
                 break;
@@ -680,7 +682,7 @@ NResult NetSyncEndpoint::Receive(int32_t timeout, UBSHcomNetResponseContext &ctx
             break;
         }
         if (NeedRetry(rePostResult) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
-            usleep(100UL);  // LWT situation is not suitable for calling system sleep
+            usleep(100UL); // LWT situation is not suitable for calling system sleep
             continue;
         }
         // no retry rePostResult or timeout = 0
@@ -735,8 +737,8 @@ NResult NetSyncEndpoint::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContext &
         auto dataSize = opCtx->dataSize;
         auto msgReady = mRespMessage.AllocateIfNeed(dataSize);
         if (NN_UNLIKELY(!msgReady)) {
-            NN_LOG_ERROR("Failed to allocate memory for response size " << opCtx->dataSize <<
-                ", probably out of memory");
+            NN_LOG_ERROR("Failed to allocate memory for response size " << opCtx->dataSize
+                                                                        << ", probably out of memory");
             verbsResult = NN_MALLOC_FAILED;
             break;
         }
@@ -792,6 +794,6 @@ NResult NetSyncEndpoint::ReceiveRaw(int32_t timeout, UBSHcomNetResponseContext &
 
     return verbsResult;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

@@ -12,8 +12,8 @@
 
 #ifdef UB_BUILD_ENABLED
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <malloc.h>
+#include <mockcpp/mockcpp.hpp>
 
 #include "ub_common.h"
 #include "ub_mr_fixed_buf.h"
@@ -197,6 +197,6 @@ TEST_F(TestUbMemRegion, InitializeForOneSideFailTwo)
     EXPECT_EQ(MemRegion->InitializeForOneSide(), UB_MR_REG_FAILED);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

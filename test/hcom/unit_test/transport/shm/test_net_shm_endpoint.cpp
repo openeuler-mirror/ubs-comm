@@ -12,13 +12,37 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 #include "hcom.h"
-#include "net_shm_sync_endpoint.h"
 #include "net_shm_async_endpoint.h"
+#include "net_shm_sync_endpoint.h"
 
 namespace ock {
 namespace hcom {
 uint8_t mockData[8];
 UBSHcomNetTransHeader mockReq{};
+UBSHcomNetTransHeader gMockPrevReq{};
+UBSHcomNetTransHeader gMockCurReq{};
+ShmChannel *gMockChannel = nullptr;
+uint32_t gMockCallIndex = 0;
+
+static HResult MockDequeueEventReceiveWithChannel(int32_t timeout, ShmEvent &opEvent)
+{
+    opEvent.opType = ShmOpContextInfo::SH_RECEIVE;
+    opEvent.peerChannelAddress = reinterpret_cast<uintptr_t>(gMockChannel);
+    /* 第一次调用返回 prevReq 的 offset，第二次返回 curReq 的 offset */
+    gMockCallIndex++;
+    opEvent.dataOffset = (gMockCallIndex == 1) ? 0 : 1;
+    return 0;
+}
+
+static HResult MockGetPeerDataAddressByOffsetWithSeq(uint64_t offset, uintptr_t &address)
+{
+    if (offset == 0) {
+        address = reinterpret_cast<uintptr_t>(&gMockPrevReq);
+    } else {
+        address = reinterpret_cast<uintptr_t>(&gMockCurReq);
+    }
+    return 0;
+}
 
 class TestNetShmEndpoint : public testing::Test {
 public:
@@ -42,6 +66,12 @@ static HResult MockDequeueEvent(int32_t timeout, ShmEvent &opEvent)
     opEvent.peerChannelAddress = 0;
     return 0;
 }
+static HResult MockDequeueEventReceive(int32_t timeout, ShmEvent &opEvent)
+{
+    opEvent.opType = ShmOpContextInfo::SH_RECEIVE;
+    opEvent.peerChannelAddress = 0;
+    return 0;
+}
 void TestNetShmEndpoint::SetUp() {}
 
 void TestNetShmEndpoint::TearDown()
@@ -61,8 +91,8 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSend)
     NetMemPoolFixedPtr opMemPool;
     NetMemPoolFixedPtr opCtxMemPool;
     NetMemPoolFixedPtr sglOpMemPool;
-    ShmWorker *mWorker = new (std::nothrow) ShmWorker("NetAsyncEndpointShmPostSend", indexWorker, options, opMemPool,
-        opCtxMemPool, sglOpMemPool);
+    ShmWorker *mWorker = new (std::nothrow)
+        ShmWorker("NetAsyncEndpointShmPostSend", indexWorker, options, opMemPool, opCtxMemPool, sglOpMemPool);
     ASSERT_NE(mWorker, nullptr);
     // shmEp create
     UBSHcomNetWorkerIndex index;
@@ -81,8 +111,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSend)
         .will(returnValue(1))
         .then(returnValue(0))
         .then(returnValue(static_cast<int>(SH_SEND_COMPLETION_CALLBACK_FAILURE)));
-    MOCKER_CPP(&AesGcm128::Encrypt,
-        bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -94,7 +123,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSend)
     ret = ep->PostSend(0, request, 0);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendTwo)
@@ -109,8 +138,8 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendTwo)
     NetMemPoolFixedPtr opMemPool;
     NetMemPoolFixedPtr opCtxMemPool;
     NetMemPoolFixedPtr sglOpMemPool;
-    ShmWorker *mWorker = new (std::nothrow) ShmWorker("NetAsyncEndpointShmPostSendTwo", indexWorker, options, opMemPool,
-        opCtxMemPool, sglOpMemPool);
+    ShmWorker *mWorker = new (std::nothrow)
+        ShmWorker("NetAsyncEndpointShmPostSendTwo", indexWorker, options, opMemPool, opCtxMemPool, sglOpMemPool);
     ASSERT_NE(mWorker, nullptr);
     // shmEp create
     UBSHcomNetWorkerIndex index;
@@ -135,7 +164,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendTwo)
     ret = ep->PostSend(0, request, 0);
     EXPECT_EQ(ret, static_cast<int>(SH_SEND_COMPLETION_CALLBACK_FAILURE));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSend)
@@ -159,16 +188,13 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSend)
     ep->mAllowedSize = NN_NO128;
     UBSHcomNetTransOpInfo opInfo{};
 
-    MOCKER_CPP(&AesGcm128::Encrypt,
-        bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     MOCKER(NetFunc::CalcHeaderCrc32, uint32_t(UBSHcomNetTransHeader *))
         .stubs()
         .will(returnValue(static_cast<uint32_t>(0)));
-    MOCKER_CPP(&ShmSyncEndpoint::PostSend)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&ShmSyncEndpoint::PostSend).stubs().will(returnValue(1));
 
     ep->mIsNeedEncrypt = true;
     ret = ep->PostSend(0, request, 0);
@@ -178,7 +204,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSend)
     ret = ep->PostSend(0, request, 0);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendTwo)
@@ -216,7 +242,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendTwo)
     ret = ep->PostSend(0, request, 0);
     EXPECT_EQ(ret, static_cast<int>(SH_SEND_COMPLETION_CALLBACK_FAILURE));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendThree)
@@ -226,8 +252,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendThree)
     ShmChannelPtr ch;
     ShmChannel::CreateAndInit("NetSyncEndpointShmPostSendThree", 0, NN_NO128, NN_NO4, ch);
     // ShmSyncEndpoint create
-    ShmSyncEndpoint *shmEp = new (std::nothrow) ShmSyncEndpoint("NetSyncEndpointShmPostSendThree", 0,
-        SHM_EVENT_POLLING);
+    ShmSyncEndpoint *shmEp = new (std::nothrow)
+        ShmSyncEndpoint("NetSyncEndpointShmPostSendThree", 0, SHM_EVENT_POLLING);
     ASSERT_NE(shmEp, nullptr);
     // shmEp create
     UBSHcomNetWorkerIndex index;
@@ -241,10 +267,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendThree)
     ep->mAllowedSize = NN_NO128;
     UBSHcomNetTransOpInfo opInfo{};
 
-    MOCKER_CPP(&ShmSyncEndpoint::PostSend)
-        .stubs()
-        .will(returnValue(1))
-        .then(returnValue(0));
+    MOCKER_CPP(&ShmSyncEndpoint::PostSend).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER(NetFunc::CalcHeaderCrc32, uint32_t(UBSHcomNetTransHeader *))
         .stubs()
         .will(returnValue(static_cast<uint32_t>(0)));
@@ -257,7 +280,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendThree)
     ret = ep->PostSend(0, request, opInfo);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRaw)
@@ -281,11 +304,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRaw)
     ep->mAllowedSize = NN_NO128;
     ep->mSegSize = NN_NO128;
 
-    MOCKER_CPP(&ShmSyncEndpoint::PostSend)
-        .stubs()
-        .will(returnValue(1))
-        .then(returnValue(0));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&ShmSyncEndpoint::PostSend).stubs().will(returnValue(1)).then(returnValue(0));
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -297,7 +317,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRaw)
     ret = ep->PostSendRaw(request, 0);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawTwo)
@@ -307,8 +327,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawTwo)
     ShmChannelPtr ch;
     ShmChannel::CreateAndInit("NetSyncEndpointShmPostSendRawTwo", 0, NN_NO128, NN_NO4, ch);
     // ShmSyncEndpoint create
-    ShmSyncEndpoint *shmEp = new (std::nothrow) ShmSyncEndpoint("NetSyncEndpointShmPostSendRawTwo", 0,
-        SHM_EVENT_POLLING);
+    ShmSyncEndpoint *shmEp = new (std::nothrow)
+        ShmSyncEndpoint("NetSyncEndpointShmPostSendRawTwo", 0, SHM_EVENT_POLLING);
     ASSERT_NE(shmEp, nullptr);
     // shmEp create
     UBSHcomNetWorkerIndex index;
@@ -322,15 +342,13 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawTwo)
     request.lAddress = reinterpret_cast<uintptr_t>(&index);
     request.size = 1;
 
-    MOCKER_CPP(&ShmSyncEndpoint::PostSend)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmSyncEndpoint::PostSend).stubs().will(returnValue(0));
 
     ep->mIsNeedEncrypt = false;
     ret = ep->PostSendRaw(request, 0);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawThree)
@@ -340,8 +358,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawThree)
     ShmChannelPtr ch;
     ShmChannel::CreateAndInit("NetSyncEndpointShmPostSendRawThree", 0, NN_NO128, NN_NO4, ch);
     // ShmSyncEndpoint create
-    ShmSyncEndpoint *shmEp = new (std::nothrow) ShmSyncEndpoint("NetSyncEndpointShmPostSendRawThree", 0,
-        SHM_EVENT_POLLING);
+    ShmSyncEndpoint *shmEp = new (std::nothrow)
+        ShmSyncEndpoint("NetSyncEndpointShmPostSendRawThree", 0, SHM_EVENT_POLLING);
     ASSERT_NE(shmEp, nullptr);
     // shmEp create
     UBSHcomNetWorkerIndex index;
@@ -355,14 +373,12 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawThree)
     ep->mAllowedSize = NN_NO128;
     ep->mSegSize = NN_NO128;
 
-    MOCKER_CPP(&ShmChannel::DCGetFreeBuck)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&ShmChannel::DCGetFreeBuck).stubs().will(returnValue(1));
 
     ret = ep->PostSendRaw(request, 0);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawSgl)
@@ -372,12 +388,12 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawSgl)
     ShmChannelPtr ch;
     ShmChannel::CreateAndInit("NetSyncEndpointShmPostSendRawSgl", 0, NN_NO128, NN_NO4, ch);
     // ShmSyncEndpoint create
-    ShmSyncEndpoint *shmEp = new (std::nothrow) ShmSyncEndpoint("NetSyncEndpointShmPostSendRawSgl", 0,
-        SHM_EVENT_POLLING);
+    ShmSyncEndpoint *shmEp = new (std::nothrow)
+        ShmSyncEndpoint("NetSyncEndpointShmPostSendRawSgl", 0, SHM_EVENT_POLLING);
     ASSERT_NE(shmEp, nullptr);
     // driver create
-    NetDriverShmWithOOB *driver = new (std::nothrow) NetDriverShmWithOOB("NetSyncEndpointShmPostSendRawSgl", false,
-        SHM);
+    NetDriverShmWithOOB *driver = new (std::nothrow)
+        NetDriverShmWithOOB("NetSyncEndpointShmPostSendRawSgl", false, SHM);
     ASSERT_NE(driver, nullptr);
     // shmEp create
     UBSHcomNetWorkerIndex index;
@@ -395,10 +411,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawSgl)
     ep->mSegSize = NN_NO128;
 
     MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion).stubs().will(returnValue(0));
-    MOCKER_CPP(&ShmSyncEndpoint::PostSendRawSgl)
-        .stubs()
-        .will(returnValue(1));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&ShmSyncEndpoint::PostSendRawSgl).stubs().will(returnValue(1));
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -410,7 +424,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawSgl)
     ret = ep->PostSendRawSgl(request, 1);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawSglTwo)
@@ -420,12 +434,12 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawSglTwo)
     ShmChannelPtr ch;
     ShmChannel::CreateAndInit("NetSyncEndpointShmPostSendRawSglTwo", 0, NN_NO128, NN_NO4, ch);
     // ShmSyncEndpoint create
-    ShmSyncEndpoint *shmEp = new (std::nothrow) ShmSyncEndpoint("NetSyncEndpointShmPostSendRawSglTwo", 0,
-        SHM_EVENT_POLLING);
+    ShmSyncEndpoint *shmEp = new (std::nothrow)
+        ShmSyncEndpoint("NetSyncEndpointShmPostSendRawSglTwo", 0, SHM_EVENT_POLLING);
     ASSERT_NE(shmEp, nullptr);
     // driver create
-    NetDriverShmWithOOB *driver = new (std::nothrow) NetDriverShmWithOOB("NetSyncEndpointShmPostSendRawSglTwo", false,
-        SHM);
+    NetDriverShmWithOOB *driver = new (std::nothrow)
+        NetDriverShmWithOOB("NetSyncEndpointShmPostSendRawSglTwo", false, SHM);
     ASSERT_NE(driver, nullptr);
     // shmEp create
     UBSHcomNetWorkerIndex index;
@@ -443,15 +457,13 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawSglTwo)
     ep->mSegSize = NN_NO128;
 
     MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion).stubs().will(returnValue(0));
-    MOCKER_CPP(&ShmSyncEndpoint::PostSendRawSgl)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmSyncEndpoint::PostSendRawSgl).stubs().will(returnValue(0));
 
     ep->mIsNeedEncrypt = false;
     ret = ep->PostSendRawSgl(request, 1);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostRead)
@@ -481,8 +493,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostRead)
     UBSHcomNetTransOpInfo opInfo{};
 
     MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion).stubs().will(returnValue(0));
-    MOCKER_CPP(&ShmSyncEndpoint::PostRead, HResult(ShmSyncEndpoint::*)(ShmChannel *, const UBSHcomNetTransRequest &,
-        ShmMRHandleMap &))
+    MOCKER_CPP(&ShmSyncEndpoint::PostRead,
+               HResult(ShmSyncEndpoint::*)(ShmChannel *, const UBSHcomNetTransRequest &, ShmMRHandleMap &))
         .stubs()
         .will(returnValue(1))
         .then(returnValue(0));
@@ -493,7 +505,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostRead)
     ret = ep->PostRead(request);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostReadTwo)
@@ -526,8 +538,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostReadTwo)
     UBSHcomNetTransOpInfo opInfo{};
 
     MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion).stubs().will(returnValue(0));
-    MOCKER_CPP(&ShmSyncEndpoint::PostRead, HResult(ShmSyncEndpoint::*)(ShmChannel *, const UBSHcomNetTransSglRequest &,
-        ShmMRHandleMap &))
+    MOCKER_CPP(&ShmSyncEndpoint::PostRead,
+               HResult(ShmSyncEndpoint::*)(ShmChannel *, const UBSHcomNetTransSglRequest &, ShmMRHandleMap &))
         .stubs()
         .will(returnValue(1))
         .then(returnValue(0));
@@ -538,7 +550,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostReadTwo)
     ret = ep->PostRead(request);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostWrite)
@@ -568,8 +580,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostWrite)
     UBSHcomNetTransOpInfo opInfo{};
 
     MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion).stubs().will(returnValue(0));
-    MOCKER_CPP(&ShmSyncEndpoint::PostWrite, HResult(ShmSyncEndpoint::*)(ShmChannel *, const UBSHcomNetTransRequest &,
-        ShmMRHandleMap &))
+    MOCKER_CPP(&ShmSyncEndpoint::PostWrite,
+               HResult(ShmSyncEndpoint::*)(ShmChannel *, const UBSHcomNetTransRequest &, ShmMRHandleMap &))
         .stubs()
         .will(returnValue(1))
         .then(returnValue(0));
@@ -580,7 +592,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostWrite)
     ret = ep->PostWrite(request);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostWriteTwo)
@@ -613,8 +625,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostWriteTwo)
     UBSHcomNetTransOpInfo opInfo{};
 
     MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion).stubs().will(returnValue(0));
-    MOCKER_CPP(&ShmSyncEndpoint::PostWrite, HResult(ShmSyncEndpoint::*)(ShmChannel *, const UBSHcomNetTransSglRequest &,
-        ShmMRHandleMap &))
+    MOCKER_CPP(&ShmSyncEndpoint::PostWrite,
+               HResult(ShmSyncEndpoint::*)(ShmChannel *, const UBSHcomNetTransSglRequest &, ShmMRHandleMap &))
         .stubs()
         .will(returnValue(1))
         .then(returnValue(0));
@@ -625,7 +637,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostWriteTwo)
     ret = ep->PostWrite(request);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointSetEpOption)
@@ -641,7 +653,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointSetEpOption)
 
     ret = ep->SetEpOption(epOptions);
     EXPECT_EQ(ret, 0);
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointGetSendQueueCount)
@@ -656,7 +668,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointGetSendQueueCount)
 
     ret = ep->GetSendQueueCount();
     EXPECT_EQ(ret, 0);
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointPeerIpAndPort)
@@ -671,7 +683,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointPeerIpAndPort)
 
     ret = ep->PeerIpAndPort();
     EXPECT_EQ(ret, CONST_EMPTY_STRING);
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointPeerIpAndPortTwo)
@@ -690,7 +702,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointPeerIpAndPortTwo)
 
     result = ep->PeerIpAndPort();
     EXPECT_EQ(result, "");
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointUdsName)
@@ -705,7 +717,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointUdsName)
 
     ret = ep->UdsName();
     EXPECT_EQ(ret, CONST_EMPTY_STRING);
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointUdsNameTwo)
@@ -724,7 +736,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointUdsNameTwo)
 
     result = ep->UdsName();
     EXPECT_EQ(result, "");
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointInvalidOperation)
@@ -743,7 +755,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointInvalidOperation)
 
     ret = ep->Receive(0, ctx);
     EXPECT_EQ(ret, static_cast<int>(NN_INVALID_OPERATION));
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointInvalidOperationTwo)
@@ -759,7 +771,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointInvalidOperationTwo)
 
     ret = ep->ReceiveRaw(0, ctx);
     EXPECT_EQ(ret, static_cast<int>(NN_INVALID_OPERATION));
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointEnableEncrypt)
@@ -780,7 +792,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEnableEncrypt)
 
     ep->SetSecrets(shmSecrets);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointEstimatedEncryptLen)
@@ -793,16 +805,14 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEstimatedEncryptLen)
     ASSERT_NE(ep, nullptr);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen).stubs().will(returnValue(1));
     ret = ep->EstimatedEncryptLen(0);
     EXPECT_EQ(ret, 0);
 
     ret = ep->EstimatedEncryptLen(1);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointEstimatedEncryptLenTwo)
@@ -815,15 +825,13 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEstimatedEncryptLenTwo)
     ASSERT_NE(ep, nullptr);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen).stubs().will(returnValue(1));
 
     ep->mIsNeedEncrypt = true;
     ret = ep->EstimatedEncryptLen(1);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointEncrypt)
@@ -840,7 +848,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEncrypt)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen;
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     ret = ep->Encrypt(&encryptData, 1, cipher, cipherLen);
@@ -850,7 +858,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEncrypt)
     ret = ep->Encrypt(&encryptData, 1, cipher, cipherLen);
     EXPECT_EQ(ret, static_cast<int>(NN_ERROR));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointEncryptTwo)
@@ -867,7 +875,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEncryptTwo)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen = 0;
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(true));
 
@@ -875,7 +883,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEncryptTwo)
     ret = ep->Encrypt(&encryptData, 1, cipher, cipherLen);
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointEstimatedDecryptLen)
@@ -888,9 +896,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEstimatedDecryptLen)
     ASSERT_NE(ep, nullptr);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&AesGcm128::GetRawLen)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&AesGcm128::GetRawLen).stubs().will(returnValue(1));
     ret = ep->EstimatedDecryptLen(1);
     EXPECT_EQ(ret, 0);
 
@@ -898,7 +904,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEstimatedDecryptLen)
     ret = ep->EstimatedDecryptLen(1);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointDecrypt)
@@ -915,7 +921,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointDecrypt)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen;
 
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     ret = ep->Decrypt(&encryptData, 1, cipher, cipherLen);
@@ -925,7 +931,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointDecrypt)
     ret = ep->Decrypt(&encryptData, 1, cipher, cipherLen);
     EXPECT_EQ(ret, static_cast<int>(NN_ERROR));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointDecryptTwo)
@@ -942,14 +948,14 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointDecryptTwo)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen = 0;
 
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(true));
     ep->mIsNeedEncrypt = true;
     ret = ep->Decrypt(&encryptData, 1, cipher, cipherLen);
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointSendFds)
@@ -970,7 +976,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointSendFds)
     ret = ep->SendFds(fds, 1);
     EXPECT_EQ(ret, static_cast<int>(NN_EP_NOT_ESTABLISHED));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointReceiveFds)
@@ -988,9 +994,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointReceiveFds)
     int fds[1] = {1};
 
     MOCKER_CPP(&ShmChannel::Close).stubs();
-    MOCKER_CPP(&ShmChannel::RemoveUserFds)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmChannel::RemoveUserFds).stubs().will(returnValue(0));
 
     ret = ep->ReceiveFds(fds, 0, 0);
     EXPECT_EQ(ret, static_cast<int>(NN_PARAM_INVALID));
@@ -998,7 +1002,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointReceiveFds)
     ret = ep->ReceiveFds(fds, 1, 0);
     EXPECT_EQ(ret, static_cast<int>(NN_EP_NOT_ESTABLISHED));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointReceiveFdsTwo)
@@ -1015,9 +1019,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointReceiveFdsTwo)
     // ReceiveFds data
     int fds[1] = {1};
 
-    MOCKER_CPP(&ShmChannel::RemoveUserFds)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmChannel::RemoveUserFds).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmChannel::Close).stubs();
 
     ep->mState.Set(NEP_ESTABLISHED);
@@ -1025,15 +1027,15 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointReceiveFdsTwo)
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
     ep->Close();
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointGetRemoteUdsIdInfo)
 {
     int ret;
     // driver create
-    NetDriverShmWithOOB *driver = new (std::nothrow) NetDriverShmWithOOB("NetAsyncEndpointGetRemoteUdsIdInfo", false,
-        SHM);
+    NetDriverShmWithOOB *driver = new (std::nothrow)
+        NetDriverShmWithOOB("NetAsyncEndpointGetRemoteUdsIdInfo", false, SHM);
     ASSERT_NE(driver, nullptr);
     // shmEp create
     UBSHcomNetWorkerIndex index;
@@ -1053,15 +1055,15 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointGetRemoteUdsIdInfo)
     EXPECT_EQ(ret, static_cast<int>(NN_UDS_ID_INFO_NOT_SUPPORT));
 
     ep->Close();
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointGetRemoteUdsIdInfoTwo)
 {
     int ret;
     // driver create
-    NetDriverShmWithOOB *driver = new (std::nothrow) NetDriverShmWithOOB("NetAsyncEndpointGetRemoteUdsIdInfo", false,
-        SHM);
+    NetDriverShmWithOOB *driver = new (std::nothrow)
+        NetDriverShmWithOOB("NetAsyncEndpointGetRemoteUdsIdInfo", false, SHM);
     ASSERT_NE(driver, nullptr);
     // shmEp create
     UBSHcomNetWorkerIndex index;
@@ -1079,7 +1081,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointGetRemoteUdsIdInfoTwo)
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
 
     ep->Close();
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointGetPeerIpPort)
@@ -1098,7 +1100,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointGetPeerIpPort)
     ret = ep->GetPeerIpPort(ip, port);
     EXPECT_EQ(ret, false);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointSetEpOption)
@@ -1117,7 +1119,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointSetEpOption)
 
     ret = ep->SetEpOption(epOptions);
     EXPECT_EQ(ret, 0);
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointGetSendQueueCount)
@@ -1133,7 +1135,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointGetSendQueueCount)
 
     ret = ep->GetSendQueueCount();
     EXPECT_EQ(ret, 0);
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointPeerIpAndPort)
@@ -1149,7 +1151,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointPeerIpAndPort)
 
     ret = ep->PeerIpAndPort();
     EXPECT_EQ(ret, CONST_EMPTY_STRING);
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointPeerIpAndPortTwo)
@@ -1172,7 +1174,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointPeerIpAndPortTwo)
 
     result = ep->PeerIpAndPort();
     EXPECT_EQ(result, "");
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointUdsName)
@@ -1188,7 +1190,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointUdsName)
 
     ret = ep->UdsName();
     EXPECT_EQ(ret, CONST_EMPTY_STRING);
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointUdsNameTwo)
@@ -1211,7 +1213,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointUdsNameTwo)
 
     result = ep->UdsName();
     EXPECT_EQ(result, "");
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointEnableEncrypt)
@@ -1233,7 +1235,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointEnableEncrypt)
 
     ep->SetSecrets(shmSecrets);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointEstimatedEncryptLen)
@@ -1247,16 +1249,14 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointEstimatedEncryptLen)
     NetSyncEndpointShm *ep = new NetSyncEndpointShm(0, 0, 0, index, shmEp, map);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen).stubs().will(returnValue(1));
     ret = ep->EstimatedEncryptLen(0);
     EXPECT_EQ(ret, 0);
 
     ret = ep->EstimatedEncryptLen(1);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointEstimatedEncryptLenTwo)
@@ -1270,15 +1270,13 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointEstimatedEncryptLenTwo)
     NetSyncEndpointShm *ep = new NetSyncEndpointShm(0, 0, 0, index, shmEp, map);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&AesGcm128::EstimatedEncryptLen).stubs().will(returnValue(1));
 
     ep->mIsNeedEncrypt = true;
     ret = ep->EstimatedEncryptLen(1);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointEncrypt)
@@ -1299,7 +1297,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointEncrypt)
     ret = ep->Encrypt(&encryptData, 1, cipher, cipherLen);
     EXPECT_EQ(ret, static_cast<int>(NN_ERROR));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointEncryptTwo)
@@ -1317,7 +1315,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointEncryptTwo)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen = 0;
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false))
         .then(returnValue(true));
@@ -1329,7 +1327,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointEncryptTwo)
     ret = ep->Encrypt(&encryptData, 1, cipher, cipherLen);
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointEstimatedDecryptLen)
@@ -1343,9 +1341,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointEstimatedDecryptLen)
     NetSyncEndpointShm *ep = new NetSyncEndpointShm(0, 0, 0, index, shmEp, map);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&AesGcm128::GetRawLen)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&AesGcm128::GetRawLen).stubs().will(returnValue(1));
     ret = ep->EstimatedDecryptLen(1);
     EXPECT_EQ(ret, 0);
 
@@ -1353,7 +1349,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointEstimatedDecryptLen)
     ret = ep->EstimatedDecryptLen(1);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointDecrypt)
@@ -1374,7 +1370,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointDecrypt)
     ret = ep->Decrypt(&encryptData, 1, cipher, cipherLen);
     EXPECT_EQ(ret, static_cast<int>(NN_ERROR));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointDecryptTwo)
@@ -1392,7 +1388,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointDecryptTwo)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen = 0;
 
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false))
         .then(returnValue(true));
@@ -1404,7 +1400,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointDecryptTwo)
     ret = ep->Decrypt(&encryptData, 1, cipher, cipherLen);
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointSendFds)
@@ -1425,7 +1421,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointSendFds)
     ret = ep->SendFds(fds, 1);
     EXPECT_EQ(ret, static_cast<int>(NN_EP_NOT_ESTABLISHED));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointReceiveFds)
@@ -1447,9 +1443,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointReceiveFds)
     // ReceiveFds data
     int fds[1] = {1};
 
-    MOCKER_CPP(&ShmChannel::RemoveUserFds)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmChannel::RemoveUserFds).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmChannel::Close).stubs();
 
     ret = ep->ReceiveFds(fds, 0, 0);
@@ -1459,7 +1453,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointReceiveFds)
     EXPECT_EQ(ret, static_cast<int>(NN_EP_NOT_ESTABLISHED));
     ep->Close();
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointReceiveFdsTwo)
@@ -1481,9 +1475,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointReceiveFdsTwo)
     // ReceiveFds data
     int fds[1] = {1};
 
-    MOCKER_CPP(&ShmChannel::RemoveUserFds)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmChannel::RemoveUserFds).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmChannel::Close).stubs();
 
     ep->mState.Set(NEP_ESTABLISHED);
@@ -1491,7 +1483,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointReceiveFdsTwo)
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
     ep->Close();
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointGetRemoteUdsIdInfo)
@@ -1516,7 +1508,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointGetRemoteUdsIdInfo)
     ret = ep->GetRemoteUdsIdInfo(idInfo);
     EXPECT_EQ(ret, static_cast<int>(NN_UDS_ID_INFO_NOT_SUPPORT));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointGetRemoteUdsIdInfoTwo)
@@ -1538,7 +1530,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointGetRemoteUdsIdInfoTwo)
     ret = ep->GetRemoteUdsIdInfo(idInfo);
     EXPECT_EQ(ret, static_cast<int>(NN_OK));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointGetPeerIpPort)
@@ -1558,7 +1550,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointGetPeerIpPort)
     ret = ep->GetPeerIpPort(ip, port);
     EXPECT_EQ(ret, false);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointReceive)
@@ -1581,13 +1573,8 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointReceive)
     UBSHcomNetResponseContext ctx{};
     int32_t timeout = 0;
 
-    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset)
-        .stubs()
-        .will(returnValue(1))
-        .then(returnValue(0));
-    MOCKER_CPP(&ShmSyncEndpoint::Receive)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).stubs().will(returnValue(1)).then(returnValue(0));
+    MOCKER_CPP(&ShmSyncEndpoint::Receive).stubs().will(returnValue(1));
 
     ep->mExistDelayEvent = true;
     ep->mDelayHandleReceiveEvent.peerChannelAddress = 0;
@@ -1599,7 +1586,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointReceive)
     ret = ep->Receive(0, ctx);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointWaitCompletion)
@@ -1616,14 +1603,12 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointWaitCompletion)
     NetSyncEndpointShm *ep = new NetSyncEndpointShm(ch->Id(), ch.Get(), 0, index, shmEp, map);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent).stubs().will(returnValue(1));
 
     ret = ep->WaitCompletion(0);
     EXPECT_EQ(ret, 1);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointWaitCompletionTwo)
@@ -1640,20 +1625,27 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointWaitCompletionTwo)
     NetSyncEndpointShm *ep = new NetSyncEndpointShm(ch->Id(), ch.Get(), 0, index, shmEp, map);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent)
-        .stubs()
-        .will(invoke(MockDequeueEvent));
-
-    mockData[0] = static_cast<uint8_t>(ShmOpContextInfo::SH_RECEIVE);
-    ep->mExistDelayEvent = true;
-    ret = ep->WaitCompletion(0);
-    EXPECT_EQ(ret, static_cast<int>(SH_ERROR));
+    // 双收场景：prev seq=1(stale)，cur seq=2(匹配)，应丢弃 prev 保留 cur
+    gMockChannel = ch.Get();
+    gMockCallIndex = 0;
+    gMockPrevReq.seqNo = 1;
+    gMockCurReq.seqNo = 2;
+    ep->mLastSendSeqNo = 2;
 
     mockData[0] = static_cast<uint8_t>(ShmOpContextInfo::SH_SEND);
+    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent)
+        .stubs()
+        .will(invoke(MockDequeueEventReceiveWithChannel))
+        .then(invoke(MockDequeueEventReceiveWithChannel))
+        .then(invoke(MockDequeueEvent));
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).stubs().will(invoke(MockGetPeerDataAddressByOffsetWithSeq));
+
+    ep->mExistDelayEvent = false;
     ret = ep->WaitCompletion(0);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
+    gMockChannel = nullptr;
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointWaitCompletionThree)
@@ -1670,9 +1662,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointWaitCompletionThree)
     NetSyncEndpointShm *ep = new NetSyncEndpointShm(ch->Id(), ch.Get(), 0, index, shmEp, map);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent)
-        .stubs()
-        .will(invoke(MockDequeueEvent));
+    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent).stubs().will(invoke(MockDequeueEvent));
 
     ep->mExistDelayEvent = true;
     mockData[0] = static_cast<uint8_t>(ShmOpContextInfo::SH_SGL_WRITE);
@@ -1683,7 +1673,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointWaitCompletionThree)
     ret = ep->WaitCompletion(0);
     EXPECT_EQ(ret, static_cast<int>(SH_ERROR));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendRawSgl)
@@ -1698,8 +1688,8 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendRawSgl)
     NetMemPoolFixedPtr opMemPool;
     NetMemPoolFixedPtr opCtxMemPool;
     NetMemPoolFixedPtr sglOpMemPool;
-    ShmWorker *mWorker = new ShmWorker("NetAsyncEndpointShmPostSendRawSgl", indexWorker, options, opMemPool,
-        opCtxMemPool, sglOpMemPool);
+    ShmWorker *mWorker =
+        new ShmWorker("NetAsyncEndpointShmPostSendRawSgl", indexWorker, options, opMemPool, opCtxMemPool, sglOpMemPool);
     // shmEp create
     UBSHcomNetWorkerIndex index;
     ShmMRHandleMap map;
@@ -1715,17 +1705,12 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendRawSgl)
     iov.lAddress = reinterpret_cast<uintptr_t>(&data);
     ep->mSegSize = NN_NO128;
 
-    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed)
-        .stubs()
-        .will(returnValue(false))
-        .then(returnValue(true));
+    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).stubs().will(returnValue(false)).then(returnValue(true));
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
-    MOCKER_CPP(&MemoryRegionChecker::Validate)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&MemoryRegionChecker::Validate).stubs().will(returnValue(0));
 
     ep->mIsNeedEncrypt = 1;
     ret = ep->PostSendRawSgl(request, 1);
@@ -1733,7 +1718,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendRawSgl)
 
     ret = ep->PostSendRawSgl(request, 1);
     EXPECT_EQ(ret, static_cast<int>(NN_INVALID_PARAM));
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendRawSglTwo)
@@ -1749,7 +1734,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendRawSglTwo)
     NetMemPoolFixedPtr opCtxMemPool;
     NetMemPoolFixedPtr sglOpMemPool;
     ShmWorker *mWorker = new ShmWorker("NetAsyncEndpointShmPostSendRawSgl2", indexWorker, options, opMemPool,
-        opCtxMemPool, sglOpMemPool);
+                                       opCtxMemPool, sglOpMemPool);
     // shmEp create
     UBSHcomNetWorkerIndex index;
     ShmMRHandleMap map;
@@ -1765,9 +1750,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendRawSglTwo)
     iov.lAddress = reinterpret_cast<uintptr_t>(&data);
     ep->mSegSize = NN_NO128;
 
-    MOCKER_CPP(&MemoryRegionChecker::Validate)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&MemoryRegionChecker::Validate).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmWorker::PostSendRawSgl)
         .stubs()
         .will(returnValue(static_cast<int>(SH_SEND_COMPLETION_CALLBACK_FAILURE)))
@@ -1779,7 +1762,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendRawSglTwo)
 
     ret = ep->PostSendRawSgl(request, 1);
     EXPECT_EQ(ret, static_cast<int>(SH_PEER_FD_ERROR));
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostReadTwo)
@@ -1796,8 +1779,8 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostReadTwo)
     NetMemPoolFixedPtr opMemPool;
     NetMemPoolFixedPtr opCtxMemPool;
     NetMemPoolFixedPtr sglOpMemPool;
-    ShmWorker *mWorker = new ShmWorker("NetAsyncEndpointShmPostRead2", indexWorker, options, opMemPool,
-        opCtxMemPool, sglOpMemPool);
+    ShmWorker *mWorker =
+        new ShmWorker("NetAsyncEndpointShmPostRead2", indexWorker, options, opMemPool, opCtxMemPool, sglOpMemPool);
     // shmEp create
     UBSHcomNetWorkerIndex index;
     ShmMRHandleMap map;
@@ -1810,9 +1793,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostReadTwo)
     request.size = 1;
     ep->mAllowedSize = NN_NO128;
 
-    MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmWorker::PostRead)
         .stubs()
         .will(returnValue(static_cast<int>(SH_OP_CTX_FULL)))
@@ -1823,7 +1804,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostReadTwo)
     ret = ep->PostRead(request);
     EXPECT_EQ(ret, static_cast<int>(SH_SEND_COMPLETION_CALLBACK_FAILURE));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, SyncReceiveFailWithErrorOpType)
@@ -1849,9 +1830,7 @@ TEST_F(TestNetShmEndpoint, SyncReceiveFailWithErrorOpType)
         .stubs()
         .will(returnValue(1))
         .then(invoke(MockGetPeerDataAddressByOffset));
-    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree).stubs().will(returnValue(0));
 
     ret = ep->Receive(timeout, ctx);
     EXPECT_EQ(ret, 1);
@@ -1860,7 +1839,7 @@ TEST_F(TestNetShmEndpoint, SyncReceiveFailWithErrorOpType)
     ret = ep->Receive(timeout, ctx);
     EXPECT_EQ(ret, static_cast<int32_t>(NN_ERROR));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, SyncReceiveFailWithOverDataSize)
@@ -1880,7 +1859,7 @@ TEST_F(TestNetShmEndpoint, SyncReceiveFailWithOverDataSize)
     // dataLength is over NET_SGE_MAX_SIZE
     mockReq.dataLength = NET_SGE_MAX_SIZE + NN_NO1;
     int32_t timeout = 0;
-    UBSHcomNetResponseContext ctx {};
+    UBSHcomNetResponseContext ctx{};
     ep->mExistDelayEvent = true;
     ep->mDelayHandleReceiveEvent.peerChannelAddress = reinterpret_cast<uintptr_t>(&mockReq);
     ep->mDelayHandleReceiveEvent.opType = ShmOpContextInfo::SH_RECEIVE;
@@ -1923,21 +1902,15 @@ TEST_F(TestNetShmEndpoint, SyncReceiveFailWithErrorSeqNo)
     ep->mDelayHandleReceiveEvent.peerChannelAddress = reinterpret_cast<uintptr_t>(&mockReq);
     ep->mDelayHandleReceiveEvent.dataSize = NN_NO1024;
 
-    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset)
-        .stubs()
-        .will(invoke(MockGetPeerDataAddressByOffset));
-    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree)
-        .stubs()
-        .will(returnValue(0));
-    MOCKER(NetFunc::ValidateHeaderCrc32, bool(UBSHcomNetTransHeader *))
-        .stubs()
-        .will(returnValue(false));
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).stubs().will(invoke(MockGetPeerDataAddressByOffset));
+    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree).stubs().will(returnValue(0));
+    MOCKER(NetFunc::ValidateHeaderCrc32, bool(UBSHcomNetTransHeader *)).stubs().will(returnValue(false));
 
     ep->mDelayHandleReceiveEvent.opType = ShmOpContextInfo::SH_RECEIVE;
     ret = ep->Receive(timeout, ctx);
     EXPECT_EQ(ret, static_cast<int32_t>(NN_SEQ_NO_NOT_MATCHED));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, SyncReceiveFailWithErrDataLen)
@@ -1957,7 +1930,7 @@ TEST_F(TestNetShmEndpoint, SyncReceiveFailWithErrDataLen)
     mockReq.seqNo = 0;
     mockReq.dataLength = NN_NO2048;
     int32_t timeout = 0;
-    UBSHcomNetResponseContext ctx {};
+    UBSHcomNetResponseContext ctx{};
     ep->mExistDelayEvent = true;
     ep->mDelayHandleReceiveEvent.peerChannelAddress = reinterpret_cast<uintptr_t>(&mockReq);
     // data length in header is not equal to dataSize in event
@@ -1993,7 +1966,7 @@ TEST_F(TestNetShmEndpoint, SyncReceiveFailWithInvalidHeader)
     mockReq.seqNo = 0;
     mockReq.dataLength = NN_NO1024 - sizeof(UBSHcomNetTransHeader);
     int32_t timeout = 0;
-    UBSHcomNetResponseContext ctx {};
+    UBSHcomNetResponseContext ctx{};
     ep->mExistDelayEvent = true;
     ep->mDelayHandleReceiveEvent.peerChannelAddress = reinterpret_cast<uintptr_t>(&mockReq);
     ep->mDelayHandleReceiveEvent.opType = ShmOpContextInfo::SH_RECEIVE;
@@ -2035,25 +2008,17 @@ TEST_F(TestNetShmEndpoint, SyncReceiveFailToAllocate)
     ep->mDelayHandleReceiveEvent.opType = ShmOpContextInfo::SH_RECEIVE;
     ep->mDelayHandleReceiveEvent.dataSize = NN_NO1024;
 
-    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset)
-        .stubs()
-        .will(invoke(MockGetPeerDataAddressByOffset));
-    MOCKER(NetFunc::ValidateHeaderCrc32, bool(UBSHcomNetTransHeader *))
-        .stubs()
-        .will(returnValue(true));
-    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed)
-        .stubs()
-        .will(returnValue(false));
-    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).stubs().will(invoke(MockGetPeerDataAddressByOffset));
+    MOCKER(NetFunc::ValidateHeaderCrc32, bool(UBSHcomNetTransHeader *)).stubs().will(returnValue(true));
+    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).stubs().will(returnValue(false));
+    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree).stubs().will(returnValue(0));
 
     ep->mExistDelayEvent = true;
     ep->mIsNeedEncrypt = true;
     ret = ep->Receive(timeout, ctx);
     EXPECT_EQ(ret, static_cast<int32_t>(NN_MALLOC_FAILED));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmReceiveFour)
@@ -2082,22 +2047,14 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmReceiveFour)
     ep->mDelayHandleReceiveEvent.opType = ShmOpContextInfo::SH_RECEIVE;
     ep->mDelayHandleReceiveEvent.dataSize = NN_NO1024;
 
-    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset)
-        .stubs()
-        .will(invoke(MockGetPeerDataAddressByOffset));
-    MOCKER(NetFunc::ValidateHeaderCrc32, bool(UBSHcomNetTransHeader *))
-        .stubs()
-        .will(returnValue(true));
-    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed)
-        .stubs()
-        .will(returnValue(true));
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).stubs().will(invoke(MockGetPeerDataAddressByOffset));
+    MOCKER(NetFunc::ValidateHeaderCrc32, bool(UBSHcomNetTransHeader *)).stubs().will(returnValue(true));
+    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).stubs().will(returnValue(true));
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false))
         .then(returnValue(true));
-    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree).stubs().will(returnValue(0));
 
     ep->mExistDelayEvent = true;
     ret = ep->Receive(timeout, ctx);
@@ -2107,7 +2064,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmReceiveFour)
     ret = ep->Receive(timeout, ctx);
     EXPECT_EQ(ret, 0);
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointShmReceiveFailFive)
@@ -2136,23 +2093,11 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmReceiveFailFive)
     ep->mDelayHandleReceiveEvent.opType = ShmOpContextInfo::SH_RECEIVE;
     ep->mDelayHandleReceiveEvent.dataSize = NN_NO1024;
 
-    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset)
-        .stubs()
-        .will(invoke(MockGetPeerDataAddressByOffset));
-    MOCKER(NetFunc::ValidateHeaderCrc32, bool(UBSHcomNetTransHeader *))
-        .stubs()
-        .will(returnValue(true));
-    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed)
-        .stubs()
-        .will(returnValue(false))
-        .then(returnValue(true));
-    MOCKER_CPP(&memcpy_s)
-        .stubs()
-        .will(returnValue(0))
-        .then(returnValue(1));
-    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree)
-        .stubs()
-        .will(returnValue(0));
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).stubs().will(invoke(MockGetPeerDataAddressByOffset));
+    MOCKER(NetFunc::ValidateHeaderCrc32, bool(UBSHcomNetTransHeader *)).stubs().will(returnValue(true));
+    MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).stubs().will(returnValue(false)).then(returnValue(true));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0)).then(returnValue(1));
+    MOCKER_CPP(&ShmChannel::DCMarkPeerBuckFree).stubs().will(returnValue(0));
 
     ep->mExistDelayEvent = true;
     ret = ep->Receive(timeout, ctx);
@@ -2166,7 +2111,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmReceiveFailFive)
     ret = ep->Receive(timeout, ctx);
     EXPECT_EQ(ret, static_cast<int32_t>(NN_INVALID_PARAM));
 
-    delete(ep);
+    delete (ep);
 }
 
 TEST_F(TestNetShmEndpoint, ShmWorkerInitializeFail)
@@ -2176,16 +2121,16 @@ TEST_F(TestNetShmEndpoint, ShmWorkerInitializeFail)
     NetMemPoolFixedPtr opMemPool;
     NetMemPoolFixedPtr opCtxMemPool;
     NetMemPoolFixedPtr sglOpMemPool;
-    ShmWorker *worker = new (std::nothrow) ShmWorker("shm", indexWorker, options, opMemPool,
-        opCtxMemPool, sglOpMemPool);
- 
+    ShmWorker *worker = new (std::nothrow)
+        ShmWorker("shm", indexWorker, options, opMemPool, opCtxMemPool, sglOpMemPool);
+
     MOCKER_CPP(&ShmWorker::Validate).stubs().will(returnValue(1)).then(returnValue(0));
     MOCKER_CPP(&ShmWorker::CreateEventQueue).stubs().will(returnValue(1));
-    
+
     EXPECT_NE(worker->Initialize(), 0);
     EXPECT_NE(worker->Initialize(), 0);
- 
+
     delete worker;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

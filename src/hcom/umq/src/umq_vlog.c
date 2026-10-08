@@ -19,12 +19,12 @@ static umq_vlog_config_t g_umq_log_config = {
         .level = UTIL_VLOG_LEVEL_INFO,
         .vlog_name = "UMQ",
         .vlog_output_func = default_vlog_output,
+        .vlog_output_ext_func = NULL,
         .rate_limited = {
             .interval_ms = UTIL_VLOG_PRINT_PERIOD_MS,
             .num = UTIL_VLOG_PRINT_TIMES,
         },
     },
-    .log_lock = PTHREAD_MUTEX_INITIALIZER,
 };
 
 umq_vlog_config_t *umq_get_log_config(void)

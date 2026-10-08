@@ -29,7 +29,7 @@ extern "C" {
 #define EXAMPLE_SLEEP_TIME_US     100
 #define EXAMPLE_MAX_WAIT_TIME_MS  3000
 #define EXAMPLE_FLUSH_TIME_MS     1000
-#define EXAMPLE_TEST_IMM_DATA     123456
+#define EXAMPLE_TEST_IMM_DATA     1234
 
 typedef enum instance_mode {
     NONE,
@@ -46,6 +46,11 @@ typedef enum example_case_type {
 struct urpc_example_config {
     char *dev_name;                                 /* device name */
     char *server_ip;                                /* server host IP addr */
+    umq_eid_t src_eid;
+    umq_eid_t dst_eid;
+    umq_port_id_t src_port_id;
+    umq_port_id_t dst_port_id;
+    umq_dev_assign_t dev_info;
     uint16_t tcp_port;                              /* server TCP port */
     int case_type;                                  /* case type */
     bool is_ipv6;                                   /* ipv6 case */
@@ -54,8 +59,6 @@ struct urpc_example_config {
     uint32_t feature;
     umq_trans_mode_t trans_mode;
     int16_t eid_idx;
-    uint16_t cna;
-    uint32_t deid;
     umq_tp_mode_t tp_mode;
     umq_tp_type_t tp_type;
     uint32_t queue_num;
@@ -70,13 +73,16 @@ struct req_cb_arg {
     struct urpc_buffer_allocator *allocator;
 };
 
-uint64_t init_and_create_umq(struct urpc_example_config *cfg, uint8_t *local_bind_info, uint32_t *bind_info_size);
+int example_init_umq(struct urpc_example_config *cfg);
+uint64_t example_create_umq(struct urpc_example_config *cfg, uint8_t *local_bind_info, uint32_t *bind_info_size);
 
-int client_exchange_bind_info(const char *ip, uint16_t port, uint8_t *send_data, uint32_t send_len,
-    uint8_t *recv_data, uint32_t *recv_len);
+int client_connect(const char *ip, uint16_t port);
+void client_dsiconnect(void);
+int client_exchange_data(uint8_t *send_data, uint32_t send_len, uint8_t *recv_data, uint32_t *recv_len);
 
-int server_exchange_bind_info(const char *ip, uint16_t port, uint8_t *send_data, uint32_t send_len,
-    uint8_t *recv_data, uint32_t *recv_len);
+int server_accept(const char *ip, uint16_t port);
+void server_dsiconnect(void);
+int server_exchange_data(uint8_t *send_data, uint32_t send_len, uint8_t *recv_data, uint32_t *recv_len);
 
 int parse_trans_info(struct urpc_example_config *cfg, umq_init_cfg_t *init_cfg);
 
@@ -106,6 +112,9 @@ void print_config(struct urpc_example_config *cfg);
 } while (0)
 
 void log_get_current_time(char *buffer, uint32_t len);
+
+int dev_eid_query(struct urpc_example_config *cfg, umq_eid_t *dev_eid);
+int used_port_query(struct urpc_example_config *cfg);
 
 #ifdef __cplusplus
 }

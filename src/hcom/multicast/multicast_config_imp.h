@@ -4,8 +4,8 @@
 #ifndef HCOM_MULTICAST_CONFIG_IMP_H
 #define HCOM_MULTICAST_CONFIG_IMP_H
 
-#include "include/multicast_def.h"
 #include "include/multicast_config.h"
+#include "include/multicast_def.h"
 
 namespace ock {
 namespace hcom {
@@ -17,6 +17,7 @@ struct MulticastServiceOptionsInner {
     uint32_t qpPrePostSize = 64;
     uint32_t maxSendRecvDataSize = 1024;
     uint32_t maxSendRecvDataCount = 8192;
+    uint32_t multicastIoContextCount = 8192;
     uint32_t maxConnCount = 250;
     uint32_t timeOutDetectThreadNum = 1;
     uint16_t pollingBatchSize = 4;
@@ -36,6 +37,7 @@ struct MulticastServiceOptionsInner {
     uint32_t qpBatchRePostSize = 10;
     bool enableTls = true;
     CipherSuite cipherSuite = AES_GCM_128;
+    int periodicCpuId = -1;
 };
 
 class MulticastConfigImp : public MulticastConfig {
@@ -83,7 +85,13 @@ public:
     void SetMaxSubscriberNum(uint32_t maxSubscriberNum) override;
     const uint32_t GetMaxSubscriberNum() const override;
 
+    void SetPeriodicCpuId(int cpuId) override;
+    const int GetPeriodicCpuId() const override;
+
     void AddWorkerGroup(UBSHcomWorkerGroupInfo &groupInfo);
+
+    UBSHcomNetDriverProtocol GetProtocol() const override;
+
 public:
     /*****************************************************************
      * 仅在内部类中使用，不对外暴露
@@ -102,12 +110,14 @@ public:
     void SetPublisherWkrGroupNo(uint8_t groupNo);
     const uint8_t GetPublisherWkrGroupNo() const;
 
+    const uint32_t GetMulticastIoContextCount() const;
+
     NetDriverOobType GetOobType() const;
 
 private:
     MulticastServiceOptionsInner mOptions;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

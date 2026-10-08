@@ -13,15 +13,15 @@
 #define OCK_HCOM_SHM_COMMON_H
 
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/mman.h>
+#include <unistd.h>
 #include <thread>
 
-#include "securec.h"
 #include "hcom.h"
 #include "net_ctx_info_pool.h"
 #include "net_delay_release_timer.h"
 #include "net_mem_pool_fixed.h"
+#include "securec.h"
 #include "shm_lock_guard.h"
 #include "shm_mr_handle_map.h"
 
@@ -29,7 +29,8 @@ namespace ock {
 namespace hcom {
 class ShmHandle;
 class ShmDataChannel;
-template <typename T> class ShmQueue;
+template <typename T>
+class ShmQueue;
 class ShmChannel;
 class ShmWorker;
 class ShmChannelKeeper;
@@ -43,7 +44,8 @@ using ShmChannelKeeperPtr = NetRef<ShmChannelKeeper>;
 using DelayReleaseTimerPtr = NetRef<NetDelayReleaseTimer>;
 using ShmSyncEndpointPtr = NetRef<ShmSyncEndpoint>;
 
-enum ShmPollingMode : uint8_t {
+enum ShmPollingMode : uint8_t
+{
     SHM_EVENT_POLLING = 0,
     SHM_BUSY_POLLING = 1,
 };
@@ -58,8 +60,8 @@ inline std::string &ShmPollingModeToStr(ShmPollingMode v)
  * @brief exchange info for uds
  */
 struct ShmConnExchangeInfo {
-    char qName[NN_NO32] {};
-    char dcName[NN_NO64] {};
+    char qName[NN_NO32]{};
+    char dcName[NN_NO64]{};
     uint64_t channelId = 0;
     int channelFd = 0;
     uintptr_t channelAddress = 0;
@@ -93,8 +95,8 @@ struct ShmConnExchangeInfo {
     inline std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "qName: " << GetQueueName() << ", dcName " << dcName << ", chId " << channelId << ", qCap: " <<
-            qCapacity << ", dcBuckSize: " << dcBuckSize << ", dcBuckCnt: " << dcBuckCount;
+        oss << "qName: " << GetQueueName() << ", dcName " << dcName << ", chId " << channelId << ", qCap: " << qCapacity
+            << ", dcBuckSize: " << dcBuckSize << ", dcBuckCnt: " << dcBuckCount;
         return oss.str();
     }
 } __attribute__((packed));
@@ -106,7 +108,8 @@ using ShmIdleHandler = UBSHcomNetDriverIdleHandler;
  * make sure it is 64bits which equal to one cache line of CPU
  */
 struct ShmOpContextInfo {
-    enum ShmOpType : uint8_t {
+    enum ShmOpType : uint8_t
+    {
         SH_SEND = 0,
         SH_RECEIVE = 1,
         SH_WRITE = 2,
@@ -118,7 +121,8 @@ struct ShmOpContextInfo {
         SH_SEND_RAW_SGL = 8,
     };
 
-    enum ShmErrorType : uint8_t {
+    enum ShmErrorType : uint8_t
+    {
         SH_NO_ERROR = 0,
         SH_OPERATE_FAILURE = 1,
         SH_RESET_BY_PEER = 2,
@@ -141,8 +145,13 @@ struct ShmOpContextInfo {
     ShmOpContextInfo() = default;
 
     ShmOpContextInfo(ShmChannel *ch, uintptr_t da, uint32_t ds, ShmOpType op, ShmErrorType et)
-        : channel(ch), dataAddress(da), dataSize(ds), opType(op), errType(et)
-    {}
+        : channel(ch),
+          dataAddress(da),
+          dataSize(ds),
+          opType(op),
+          errType(et)
+    {
+    }
 
     static inline NResult GetNResult(ShmErrorType opResult)
     {
@@ -168,9 +177,9 @@ struct ShmSglOpContextInfo {
 } __attribute__((packed));
 
 struct ShmOpCompInfo {
-    UBSHcomNetTransHeader header {};
+    UBSHcomNetTransHeader header{};
     ShmChannel *channel = nullptr; /* shm channel */
-    UBSHcomNetTransRequest request {};
+    UBSHcomNetTransRequest request{};
     uint16_t upCtxSize = 0;        /* up context size */
     char upCtx[NN_NO16] = {};      /* 16 bytes for upper context */
     ShmOpCompInfo *prev = nullptr; /* previous one for bi-direct link */
@@ -209,7 +218,8 @@ struct ShmEvent {
           peerChannelId(pId),
           peerChannelAddress(pa),
           opType(static_cast<ShmOpContextInfo::ShmOpType>(op))
-    {}
+    {
+    }
 
     ShmEvent(uintptr_t pa, uint8_t op) : peerChannelAddress(pa), opType(static_cast<ShmOpContextInfo::ShmOpType>(op)) {}
 
@@ -221,14 +231,15 @@ struct ShmEvent {
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "imm-data " << immData << ", ch-id " << channelId << ", peer-ch-id " << peerChannelId <<
-            ", peer-channel-address: " << peerChannelAddress << ", data-offset " << dataOffset << ", data-size: " <<
-            dataSize << ", opType: " << opType;
+        oss << "imm-data " << immData << ", ch-id " << channelId << ", peer-ch-id " << peerChannelId
+            << ", peer-channel-address: " << peerChannelAddress << ", data-offset " << dataOffset
+            << ", data-size: " << dataSize << ", opType: " << opType;
         return oss.str();
     }
 };
 
-enum ShmChannelState : uint8_t {
+enum ShmChannelState : uint8_t
+{
     CH_NEW = 0,
     CH_BROKEN = 1,
 };
@@ -243,7 +254,8 @@ const std::string SHM_F_EVENT_QUEUE_PREFIX = "hcom-eq";
 const std::string SHM_F_DC_PREFIX = "hcom-dc";
 
 using HResult = int32_t;
-enum ShCode {
+enum ShCode
+{
     SH_OK = 0,
     SH_ERROR = 300,
     SH_PARAM_INVALID = 301,
@@ -268,7 +280,7 @@ enum ShCode {
 using ShmOpCompInfoPool = OpContextInfoPool<ShmOpCompInfo>;
 using ShmOpContextInfoPool = OpContextInfoPool<ShmOpContextInfo>;
 using ShmSglContextInfoPool = OpContextInfoPool<ShmSglOpContextInfo>;
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_SHM_COMMON_H

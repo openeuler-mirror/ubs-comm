@@ -10,8 +10,8 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <unistd.h>
+#include <mockcpp/mockcpp.hpp>
 #include <utility>
 
 #include "hcom_utils.h"
@@ -27,9 +27,7 @@ public:
     virtual void TearDown(void);
 };
 
-void TestNetOobSecure::SetUp()
-{
-}
+void TestNetOobSecure::SetUp() {}
 
 void TestNetOobSecure::TearDown()
 {
@@ -38,7 +36,7 @@ void TestNetOobSecure::TearDown()
 
 TEST_F(TestNetOobSecure, SecProcessCompareEpNum)
 {
-    OOBSecureProcess proc {};
+    OOBSecureProcess proc{};
     std::vector<NetOOBServer *> oobServers;
     NetOOBServer *server = new (std::nothrow) OOBTCPServer("127.0.0.1", 9980);
     server->mStarted = false;
@@ -57,7 +55,7 @@ TEST_F(TestNetOobSecure, SecProcessCompareEpNum)
 
 TEST_F(TestNetOobSecure, SecProcessDelEpNum)
 {
-    OOBSecureProcess proc {};
+    OOBSecureProcess proc{};
     std::vector<NetOOBServer *> oobServers;
     NetOOBServer *server = new (std::nothrow) OOBTCPServer("127.0.0.1", 9980);
     server->mStarted = false;
@@ -72,21 +70,20 @@ TEST_F(TestNetOobSecure, SecProcessDelEpNum)
 
 TEST_F(TestNetOobSecure, SecProcessInOOBServer)
 {
-    OOBSecureProcess proc {};
+    OOBSecureProcess proc{};
     UBSHcomNetDriverEndpointSecInfoProvider provider = nullptr;
     UBSHcomNetDriverEndpointSecInfoValidator validator = nullptr;
     OOBTCPConnection *tcpConn = new (std::nothrow) OOBTCPConnection(-1);
-    MOCKER_CPP(OOBSecureProcess::ValidateSecInfo).stubs()
+    MOCKER_CPP(OOBSecureProcess::ValidateSecInfo)
+        .stubs()
         .will(returnValue(static_cast<int>(NN_OOB_SEC_PROCESS_ERROR)))
         .then(returnValue(static_cast<int>(NN_OK)));
-    MOCKER_CPP_VIRTUAL(*tcpConn, &OOBTCPConnection::Send)
-        .stubs()
-        .will(returnValue(static_cast<int>((NN_ERROR))));
-    EXPECT_EQ(proc.SecProcessInOOBServer(provider, validator, *tcpConn, "name",
-        UBSHcomNetDriverSecType::NET_SEC_DISABLED),
+    MOCKER_CPP_VIRTUAL(*tcpConn, &OOBTCPConnection::Send).stubs().will(returnValue(static_cast<int>((NN_ERROR))));
+    EXPECT_EQ(
+        proc.SecProcessInOOBServer(provider, validator, *tcpConn, "name", UBSHcomNetDriverSecType::NET_SEC_DISABLED),
         static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
-    EXPECT_EQ(proc.SecProcessInOOBServer(provider, validator, *tcpConn, "name",
-        UBSHcomNetDriverSecType::NET_SEC_DISABLED),
+    EXPECT_EQ(
+        proc.SecProcessInOOBServer(provider, validator, *tcpConn, "name", UBSHcomNetDriverSecType::NET_SEC_DISABLED),
         static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
 
     if (tcpConn != nullptr) {
@@ -97,7 +94,7 @@ TEST_F(TestNetOobSecure, SecProcessInOOBServer)
 
 TEST_F(TestNetOobSecure, SecProcessInOOBClient)
 {
-    OOBSecureProcess proc {};
+    OOBSecureProcess proc{};
     UBSHcomNetDriverEndpointSecInfoProvider provider = nullptr;
     UBSHcomNetDriverEndpointSecInfoValidator validator = nullptr;
     OOBTCPConnection *tcpConn = new (std::nothrow) OOBTCPConnection(-1);
@@ -105,16 +102,14 @@ TEST_F(TestNetOobSecure, SecProcessInOOBClient)
         .stubs()
         .will(returnValue(static_cast<int>((NN_ERROR))))
         .then(returnValue(static_cast<int>((NN_OK))));
-    EXPECT_EQ(proc.SecProcessInOOBClient(provider, validator, tcpConn, "name", 0,
-        UBSHcomNetDriverSecType::NET_SEC_DISABLED),
+    EXPECT_EQ(
+        proc.SecProcessInOOBClient(provider, validator, tcpConn, "name", 0, UBSHcomNetDriverSecType::NET_SEC_DISABLED),
         static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
 
-    MOCKER_CPP_VIRTUAL(*tcpConn, &OOBTCPConnection::Receive)
-        .stubs()
-        .will(returnValue(static_cast<int>((NN_ERROR))));
+    MOCKER_CPP_VIRTUAL(*tcpConn, &OOBTCPConnection::Receive).stubs().will(returnValue(static_cast<int>((NN_ERROR))));
 
-    EXPECT_EQ(proc.SecProcessInOOBClient(provider, validator, tcpConn, "name", 0,
-        UBSHcomNetDriverSecType::NET_SEC_DISABLED),
+    EXPECT_EQ(
+        proc.SecProcessInOOBClient(provider, validator, tcpConn, "name", 0, UBSHcomNetDriverSecType::NET_SEC_DISABLED),
         static_cast<int>(NN_ERROR));
 
     if (tcpConn != nullptr) {
@@ -125,29 +120,27 @@ TEST_F(TestNetOobSecure, SecProcessInOOBClient)
 
 TEST_F(TestNetOobSecure, SendSecInfo)
 {
-    OOBSecureProcess proc {};
-    UBSHcomNetDriverEndpointSecInfoProvider provider =
-        [](uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen,
-            bool &needAutoFree) {
-            outLen = NN_NO2147483646 + 1;
-            return 0;
-        };
+    OOBSecureProcess proc{};
+    UBSHcomNetDriverEndpointSecInfoProvider provider = [](uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type,
+                                                          char *&output, uint32_t &outLen, bool &needAutoFree) {
+        outLen = NN_NO2147483646 + 1;
+        return 0;
+    };
     UBSHcomNetDriverEndpointSecInfoValidator validator = nullptr;
     OOBTCPConnection *tcpConn = new (std::nothrow) OOBTCPConnection(-1);
     UBSHcomNetDriverSecType type = UBSHcomNetDriverSecType::NET_SEC_DISABLED;
     EXPECT_EQ(proc.SendSecInfo(provider, validator, nullptr, "name", type, 0),
-        static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
+              static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
 
     EXPECT_EQ(proc.SendSecInfo(provider, validator, tcpConn, "name", type, 0),
-        static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
+              static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
 
-    provider =
-        [](uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen,
-            bool &needAutoFree) {
-            outLen = 0;
-            type = UBSHcomNetDriverSecType::NET_SEC_VALID_ONE_WAY;
-            return 0;
-        };
+    provider = [](uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen,
+                  bool &needAutoFree) {
+        outLen = 0;
+        type = UBSHcomNetDriverSecType::NET_SEC_VALID_ONE_WAY;
+        return 0;
+    };
     MOCKER_CPP_VIRTUAL(*tcpConn, &OOBTCPConnection::Send)
         .stubs()
         .will(returnValue(static_cast<int>((NN_ERROR))))
@@ -155,10 +148,10 @@ TEST_F(TestNetOobSecure, SendSecInfo)
         .then(returnValue(static_cast<int>((NN_ERROR))));
 
     EXPECT_EQ(proc.SendSecInfo(provider, validator, tcpConn, "name", type, 0),
-        static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
+              static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
 
     EXPECT_EQ(proc.SendSecInfo(provider, validator, tcpConn, "name", type, 0),
-        static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
+              static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
 
     if (tcpConn != nullptr) {
         delete tcpConn;
@@ -190,7 +183,7 @@ NResult FakeReceive2(void *&buf, uint32_t size)
 
 TEST_F(TestNetOobSecure, ValidateSecInfo)
 {
-    OOBSecureProcess proc {};
+    OOBSecureProcess proc{};
     OOBTCPConnection *tcpConn = new (std::nothrow) OOBTCPConnection(-1);
     UBSHcomNetDriverSecType type = UBSHcomNetDriverSecType::NET_SEC_DISABLED;
     UBSHcomNetDriverEndpointSecInfoProvider provider = nullptr;
@@ -204,47 +197,47 @@ TEST_F(TestNetOobSecure, ValidateSecInfo)
         .then(invoke(FakeReceive2))
         .then(returnValue(1));
     EXPECT_EQ(proc.SendSecInfo(provider, validator, tcpConn, "name", type, 0),
-        static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
+              static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
     EXPECT_EQ(proc.SendSecInfo(provider, validator, tcpConn, "name", type, 0),
-        static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
+              static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
     EXPECT_EQ(proc.SendSecInfo(provider, validator, tcpConn, "name", type, 0),
-        static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
+              static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
     EXPECT_EQ(proc.SendSecInfo(provider, validator, tcpConn, "name", type, 0),
-        static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
+              static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
     EXPECT_EQ(proc.SendSecInfo(provider, validator, tcpConn, "name", type, 0),
-        static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
+              static_cast<int>(NN_OOB_SEC_PROCESS_ERROR));
 }
 
 TEST_F(TestNetOobSecure, SecCheckConnectionHeader)
 {
-    OOBSecureProcess proc {};
-    ConnectHeader header {};
-    UBSHcomNetDriverOptions options {};
+    OOBSecureProcess proc{};
+    ConnectHeader header{};
+    UBSHcomNetDriverOptions options{};
     bool enableTls = true;
     UBSHcomNetDriverProtocol protocol = UBSHcomNetDriverProtocol::TCP;
     uint32_t majorVersion = 1;
     uint32_t minorVersion = 0;
-    ConnRespWithUId resp {};
+    ConnRespWithUId resp{};
 
     options.magic = header.magic;
     header.protocol = UBSHcomNetDriverProtocol::RDMA;
     EXPECT_EQ(proc.SecCheckConnectionHeader(header, options, enableTls, protocol, majorVersion, minorVersion, resp),
-        static_cast<int>(NN_ERROR));
+              static_cast<int>(NN_ERROR));
 
     header.protocol = UBSHcomNetDriverProtocol::TCP;
     header.majorVersion = majorVersion + 1;
     EXPECT_EQ(proc.SecCheckConnectionHeader(header, options, enableTls, protocol, majorVersion, minorVersion, resp),
-        static_cast<int>(VERSION_MISMATCH));
+              static_cast<int>(VERSION_MISMATCH));
 
     header.majorVersion = majorVersion;
     header.minorVersion = minorVersion + 1;
     EXPECT_EQ(proc.SecCheckConnectionHeader(header, options, enableTls, protocol, majorVersion, minorVersion, resp),
-        static_cast<int>(VERSION_MISMATCH));
+              static_cast<int>(VERSION_MISMATCH));
 
     header.minorVersion = minorVersion;
     header.tlsVersion = TLS_1_3 + 1;
     EXPECT_EQ(proc.SecCheckConnectionHeader(header, options, enableTls, protocol, majorVersion, minorVersion, resp),
-        static_cast<int>(NN_ERROR));
+              static_cast<int>(NN_ERROR));
 }
-}
-}
+} // namespace hcom
+} // namespace ock

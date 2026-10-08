@@ -91,7 +91,8 @@ TEST_F(TestNetSecurity, EncryptInnerCtxNewFail)
     EVP_CIPHER_CTX *ctx = nullptr;
     MOCKER_CPP(&HcomSsl::EvpCipherCtxNew).stubs().will(returnValue(ctx));
     NResult ret = mAes.EncryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()),
-        static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen, mCipher, mCipherLen);
+                                    static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen,
+                                    mCipher, mCipherLen);
     EXPECT_EQ(ret, NN_ENCRYPT_FAILED);
 }
 
@@ -102,7 +103,8 @@ TEST_F(TestNetSecurity, EncryptInnerSetEncryptInfoFail)
     MOCKER_CPP(&HcomSsl::EvpCipherCtxFree).stubs().will(returnValue(0));
     MOCKER_CPP(&AesGcm128::SetEncryptInfo).stubs().will(returnValue(result));
     NResult ret = mAes.EncryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()),
-        static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen, mCipher, mCipherLen);
+                                    static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen,
+                                    mCipher, mCipherLen);
     EXPECT_EQ(ret, NN_ENCRYPT_FAILED);
 }
 
@@ -114,7 +116,8 @@ TEST_F(TestNetSecurity, EncryptInnerUpdateFail)
     MOCKER_CPP(&AesGcm128::SetEncryptInfo).stubs().will(returnValue(result));
     MOCKER_CPP(&HcomSsl::EvpEncryptUpdate).stubs().will(returnValue(-1));
     NResult ret = mAes.EncryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()),
-        static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen, mCipher, mCipherLen);
+                                    static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen,
+                                    mCipher, mCipherLen);
     EXPECT_EQ(ret, NN_ENCRYPT_FAILED);
 }
 
@@ -127,7 +130,8 @@ TEST_F(TestNetSecurity, EncryptInnerFinalExFail)
     MOCKER_CPP(&HcomSsl::EvpEncryptUpdate).stubs().will(returnValue(1));
     MOCKER_CPP(&HcomSsl::EvpEncryptFinalEx).stubs().will(returnValue(-1));
     NResult ret = mAes.EncryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()),
-        static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen, mCipher, mCipherLen);
+                                    static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen,
+                                    mCipher, mCipherLen);
     EXPECT_EQ(ret, NN_ENCRYPT_FAILED);
 }
 
@@ -141,7 +145,8 @@ TEST_F(TestNetSecurity, EncryptInnerCipherCtxCtrlFail)
     MOCKER_CPP(&HcomSsl::EvpEncryptFinalEx).stubs().will(returnValue(1));
     MOCKER_CPP(&HcomSsl::EvpCipherCtxCtrl).stubs().will(returnValue(-1));
     NResult ret = mAes.EncryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()),
-        static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen, mCipher, mCipherLen);
+                                    static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen,
+                                    mCipher, mCipherLen);
     EXPECT_EQ(ret, NN_ENCRYPT_FAILED);
 }
 
@@ -155,7 +160,8 @@ TEST_F(TestNetSecurity, EncryptInnerSuccess)
     MOCKER_CPP(&HcomSsl::EvpEncryptFinalEx).stubs().will(returnValue(1));
     MOCKER_CPP(&HcomSsl::EvpCipherCtxCtrl).stubs().will(returnValue(1));
     NResult ret = mAes.EncryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()),
-        static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen, mCipher, mCipherLen);
+                                    static_cast<const unsigned char *>(mSecrets.GetAADSecret()), mRawData, mRawLen,
+                                    mCipher, mCipherLen);
     EXPECT_EQ(ret, NN_OK);
 }
 
@@ -197,7 +203,7 @@ TEST_F(TestNetSecurity, DecryptInnerCtxNewFail)
     EVP_CIPHER_CTX *ctx = nullptr;
     MOCKER_CPP(&HcomSsl::EvpCipherCtxNew).stubs().will(returnValue(ctx));
     NResult ret = mAes.DecryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()), mCipher, mCipherLen,
-        mRawData, mRawLen);
+                                    mRawData, mRawLen);
     EXPECT_EQ(ret, NN_DECRYPT_FAILED);
 }
 
@@ -208,7 +214,7 @@ TEST_F(TestNetSecurity, DecryptInnerSetDecryptInfoFail)
     MOCKER_CPP(&HcomSsl::EvpCipherCtxFree).stubs().will(returnValue(0));
     MOCKER_CPP(&AesGcm128::SetDecryptInfo).stubs().will(returnValue(result));
     NResult ret = mAes.DecryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()), mCipher, mCipherLen,
-        mRawData, mRawLen);
+                                    mRawData, mRawLen);
     EXPECT_EQ(ret, NN_DECRYPT_FAILED);
 }
 
@@ -220,7 +226,7 @@ TEST_F(TestNetSecurity, DecryptInnerUpdateFail)
     MOCKER_CPP(&AesGcm128::SetDecryptInfo).stubs().will(returnValue(result));
     MOCKER_CPP(&HcomSsl::EvpDecryptUpdate).stubs().will(returnValue(-1));
     NResult ret = mAes.DecryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()), mCipher, mCipherLen,
-        mRawData, mRawLen);
+                                    mRawData, mRawLen);
     EXPECT_EQ(ret, NN_DECRYPT_FAILED);
 }
 
@@ -233,7 +239,7 @@ TEST_F(TestNetSecurity, DecryptInnerCipherCtxCtrlFail)
     MOCKER_CPP(&HcomSsl::EvpDecryptUpdate).stubs().will(returnValue(1));
     MOCKER_CPP(&HcomSsl::EvpCipherCtxCtrl).stubs().will(returnValue(-1));
     NResult ret = mAes.DecryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()), mCipher, mCipherLen,
-        mRawData, mRawLen);
+                                    mRawData, mRawLen);
     EXPECT_EQ(ret, NN_DECRYPT_FAILED);
 }
 
@@ -247,8 +253,8 @@ TEST_F(TestNetSecurity, DecryptInnerSuccess)
     MOCKER_CPP(&HcomSsl::EvpDecryptFinalEx).stubs().will(returnValue(1));
     MOCKER_CPP(&HcomSsl::EvpCipherCtxCtrl).stubs().will(returnValue(1));
     NResult ret = mAes.DecryptInner(static_cast<const unsigned char *>(mSecrets.GetKeySecret()), mCipher, mCipherLen,
-        mRawData, mRawLen);
+                                    mRawData, mRawLen);
     EXPECT_EQ(ret, NN_OK);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

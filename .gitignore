@@ -1,3 +1,16 @@
 .vscode/
 .DS_Store
-
+**/build/
+!./build/
+dist/
+tmp_build_dir/
+compile_commands.json
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-ubs-comm
+bazel-ubs-comm_refactor
+MODULE.bazel.lock
+.clangd
+.cache/
+*.patch

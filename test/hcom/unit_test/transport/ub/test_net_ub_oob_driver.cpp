@@ -10,19 +10,19 @@
  * See the Mulan PSL v2 for more details.
  */
 #ifdef UB_BUILD_ENABLED
-#include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
-#include <sys/poll.h>
 #include <fcntl.h>
+#include <gtest/gtest.h>
+#include <sys/poll.h>
+#include <mockcpp/mockcpp.hpp>
 
 #include "hcom.h"
-#include "ub_common.h"
 #include "net_ub_driver_oob.h"
 #include "net_ub_endpoint.h"
+#include "ub_common.h"
 
+#include "hcom_utils.h"
 #include "net_monotonic.h"
 #include "net_security_alg.h"
-#include "hcom_utils.h"
 #include "ub_urma_wrapper_jetty.h"
 
 namespace ock {
@@ -85,6 +85,6 @@ TEST_F(TestNetUBOobDriver, NetUBDriverRunInUbEventThread)
     delete ubCtx->mUrmaContext;
     ubCtx->mUrmaContext = nullptr;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

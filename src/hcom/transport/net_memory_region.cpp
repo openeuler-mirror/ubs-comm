@@ -101,7 +101,7 @@ void NormalMemoryRegion::UnInitialize()
 
 /* NormalMemoryRegionFixedBuffer */
 NResult NormalMemoryRegionFixedBuffer::Create(const std::string &name, uint32_t singleSegSize, uint32_t segCount,
-    NormalMemoryRegionFixedBuffer *&buf)
+                                              NormalMemoryRegionFixedBuffer *&buf)
 {
     auto tmp = new (std::nothrow) NormalMemoryRegionFixedBuffer(name, singleSegSize, segCount);
     if (tmp == nullptr) {
@@ -111,7 +111,6 @@ NResult NormalMemoryRegionFixedBuffer::Create(const std::string &name, uint32_t 
     buf = tmp;
     return NN_OK;
 }
-
 
 NResult NormalMemoryRegionFixedBuffer::Initialize()
 {
@@ -141,5 +140,5 @@ void NormalMemoryRegionFixedBuffer::UnInitialize()
     mUnAllocated.UnInitialize();
     NormalMemoryRegion::UnInitialize();
 }
-}
-}
+} // namespace hcom
+} // namespace ock

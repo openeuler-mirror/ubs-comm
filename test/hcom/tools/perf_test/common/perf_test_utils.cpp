@@ -6,8 +6,7 @@
 namespace hcom {
 namespace perftest {
 
-
-bool PerfTestUtils::IsStringCaseInsensitiveEqual(const std::string& left, const std::string& right)
+bool PerfTestUtils::IsStringCaseInsensitiveEqual(const std::string &left, const std::string &right)
 {
     if (left.size() != right.size()) {
         return false;
@@ -21,5 +20,5 @@ bool PerfTestUtils::IsStringCaseInsensitiveEqual(const std::string& left, const 
     return true;
 }
 
-}
-}
+} // namespace perftest
+} // namespace hcom

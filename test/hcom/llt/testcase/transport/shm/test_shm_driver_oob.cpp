@@ -10,17 +10,17 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <dlfcn.h>
-#include <fstream>
-#include <map>
 #include <sys/epoll.h>
 #include <sys/mman.h>
+#include <fstream>
+#include <map>
 
 #include "hcom.h"
 #include "net_mem_pool_fixed.h"
 #include "openssl_api_wrapper.h"
 #include "shm_common.h"
-#include "shm_handle.h"
 #include "shm_composed_endpoint.h"
+#include "shm_handle.h"
 #include "shm_mr_pool.h"
 #include "test_shm_common.h"
 #include "test_shm_driver_oob.h"
@@ -29,7 +29,7 @@ using namespace ock::hcom;
 TestShmDriverOob::TestShmDriverOob() {}
 
 UBSHcomNetEndpointPtr shmEp = nullptr;
-UBSHcomNetDriverOptions shmOptions {};
+UBSHcomNetDriverOptions shmOptions{};
 static int port = 8091;
 UBSHcomNetDriver *shmServerDriver;
 UBSHcomNetDriver *shmClientDriver;
@@ -61,13 +61,11 @@ int shmOobRequestPosted(const UBSHcomNetRequestContext &ctx)
     return 0;
 }
 
-
 int shmOobOneSideDone(const UBSHcomNetRequestContext &ctx)
 {
     NN_LOG_INFO("one side done");
     return 0;
 }
-
 
 void SetCallBack(UBSHcomNetDriver *driver)
 {
@@ -80,7 +78,7 @@ void SetCallBack(UBSHcomNetDriver *driver)
 }
 
 bool RegisterShmMemory(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov iovs[],
-    std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
+                       std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
 {
     for (int i = 0; i < NN_NO4; i++) {
         auto &iov = iovs[i];
@@ -118,15 +116,15 @@ void TestShmDriverOob::SetUp()
     shmOptions.oobType = ock::hcom::NET_OOB_UDS;
     shmOptions.enableTls = false;
 
-    shmServerDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM,
-        "shm_oob" + std::to_string(g_nameSeed++), true);
+    shmServerDriver =
+        UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM, "shm_oob" + std::to_string(g_nameSeed++), true);
     UBSHcomNetOobUDSListenerOptions listenOpt;
     listenOpt.Name(UDSNAME);
     listenOpt.perm = 0;
     shmServerDriver->AddOobUdsOptions(listenOpt);
 
-    shmClientDriver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM,
-        "shm_oob" + std::to_string(g_nameSeed++), false);
+    shmClientDriver =
+        UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::SHM, "shm_oob" + std::to_string(g_nameSeed++), false);
     shmServerDriver->OobIpAndPort(BASE_IP, port);
     shmClientDriver->OobIpAndPort(BASE_IP, port++);
     SetCallBack(shmServerDriver);
@@ -198,7 +196,7 @@ TEST_F(TestShmDriverOob, InitSuccessWithoutSetWorkGroup)
 
 TEST_F(TestShmDriverOob, InitFailWithFailToInitWorker)
 {
-    MOCKER((int(*)(int))syscall).defaults().will(returnValue(-1));
+    MOCKER((int (*)(int))syscall).defaults().will(returnValue(-1));
     NResult result = shmServerDriver->Initialize(shmOptions);
     EXPECT_EQ(ShCode::SH_PARAM_INVALID, result);
 }
@@ -209,7 +207,7 @@ TEST_F(TestShmDriverOob, ConnectFailWithCreateChannelFail)
     shmServerDriver->Start();
     shmClientDriver->Initialize(shmOptions);
     shmClientDriver->Start();
-    MOCKER((int(*)(int))syscall).defaults().will(returnValue(-1));
+    MOCKER((int (*)(int))syscall).defaults().will(returnValue(-1));
     NResult result = shmClientDriver->Connect(UDSNAME, 0, "halo", shmEp);
     EXPECT_EQ(ShCode::SH_FILE_OP_FAILED, result);
 }

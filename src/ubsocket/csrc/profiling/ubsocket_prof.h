@@ -1,0 +1,185 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+ * ubs-hcom is licensed under the Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *      http://license.coscl.org.cn/MulanPSL2
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
+ */
+#ifndef UBS_COMM_UBSOCKET_PROF_H
+#define UBS_COMM_UBSOCKET_PROF_H
+
+#include <cstdint>
+#include <cstring>
+#include <ctime>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern int ubsocket_prof_enabled;
+extern uint64_t ubsocket_arm_cpu_freq;
+
+enum ProfilingTPId : uint32_t
+{
+    CORE_CONNECT = 0,
+    CORE_ACCEPT,
+    CORE_WRITE,
+    CORE_READ,
+    CORE_READ_EAGAIN,
+    CORE_READ_POLL_RX,
+    CORE_READ_HANDLE_BUF,
+    CORE_READ_RX_DATA_SET,
+    CORE_READ_REARM,
+    CORE_EPOLL_REARM,
+    CORE_EPOLL_POLL_RX,
+    CORE_EPOLL_ALLOC_BUF,
+    CORE_EPOLL_POST_RX,
+    CORE_PROCESS_JRF_END,
+    CORE_EPOLL_ENQUEUE,
+    CORE_WRITE_POLL_TX,
+    CORE_WRITE_POST_SEND,
+    CORE_WRITE_BUILD_IOV,
+    CORE_WRITE_MEM_COPY,
+    CORE_WRITE_UMQ_POST,
+    CORE_WRITE_POLL_CQE,
+    CORE_WRITE_DO_TX_POLL,
+    CORE_WRITE_REARM,
+    CORE_WRITE_POLL_TX_FIRST,
+    CORE_WRITE_POLL_TX_SECOND,
+    CORE_WRITE_POLL_TX_THIRD,
+    // 当前为了快速分析CTP性能，brpc复用ubsocket打点和cli查询能力, 点位先放一起。后续有需要考虑解耦开
+    BRPC_CLIENT_CALL,
+    BRPC_SERIALIZE,
+    BRPC_WRITEV,
+    BRPC_DESERIALIZE,
+    BRPC_READV,
+    BRPC_READV_EAGAIN,
+    BRPC_SERVER_PROCESS_REQ,
+    BRPC_CLIENT_PROCESS_RSP,
+
+    CORE_WRITE_UMQ_POLL,
+    CORE_WRITE_ALLOC_TX_BUF,
+
+    CORE_WRITE_POLL_CQE_DECREF,
+    CORE_WRITE_POLL_CQE_FREE,
+
+    CORE_READ_RX_DATA_SET_REARM,
+    CORE_READ_RX_DATA_SET_RECV,
+
+    // umq函数级打点
+    UMQ_BIND_INFO_GET,
+    UMQ_BIND,
+    UMQ_DEV_ADD,
+    UMQ_BUF_ALLOC,
+    UMQ_INTERRUPT_FD_GET,
+    UMQ_STATE_GET,
+    UMQ_REARM_INTERRUPT,
+    UMQ_BUF_FREE,
+    UMQ_GET_CQ_EVENT,
+    UMQ_ACK_INTERRUPT,
+    UMQ_DEV_INFO_GET,
+    UMQ_GET_ROUTE_LIST,
+    UMQ_POLL_WRITE,
+    UMQ_POLL_READ,
+    UMQ_POST_RX,
+    UMQ_CFG_GET,
+    UMQ_CREATE,
+
+    // count the number of ProfilingTPId
+    UBSOCKET_PROF_COUNT,
+};
+
+typedef struct {
+    uint32_t tracepoint_count;  /* how many trace points to be recorded */
+    int32_t enable_dump;        /* dump to file or not */
+    const char *dump_file_path; /* dump file path */
+    uint16_t dump_interval_min; /* dump interval in min */
+} ubsocket_prof_option_t;
+
+int ubsocket_prof_init(ubsocket_prof_option_t *option);
+
+int ubsocket_prof_uninit();
+
+/* 高性能打点接口（默认）- 使用 thread_local，无锁写入 */
+int ubsocket_prof_record(uint32_t tracepoint_id, const char *tracepoint_name, uint64_t timestamp, bool good);
+
+int ubsocket_prof_combind(char **out_buf);
+
+void ubsocket_prof_reset();
+
+/*
+ * ubsocket_get_timeNs_compile
+ * 受 UBS_SPLIT_TRACE_ENABLED_COMPILE 控制，编译时未使能，无法使用
+ * 
+ * ubsocket_get_timeNs
+ * 受到 ubsocket_prof_enabled 控制，只用于 高性能打点宏
+ * 主流程中不调用该函数
+ */
+#ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+#define ubsocket_get_timeNs_compile()                              \
+    ({                                                             \
+        uint64_t _timeValue = 0;                                   \
+        __asm__ volatile("mrs %0, cntvct_el0" : "=r"(_timeValue)); \
+        _timeValue * 1000L / ubsocket_arm_cpu_freq;                \
+    })
+#else
+#define ubsocket_get_timeNs_compile()                                                 \
+    ({                                                                                \
+        uint64_t _result = 0;                                                         \
+        do {                                                                          \
+            struct timespec _tpDelay = {0, 0};                                        \
+            clock_gettime(CLOCK_MONOTONIC, &_tpDelay);                                \
+            _result = (uint64_t)(_tpDelay.tv_sec * 1000000000ULL + _tpDelay.tv_nsec); \
+        } while (0);                                                                  \
+        _result;                                                                      \
+    })
+#endif
+#else // UBS_SPLIT_TRACE_ENABLED_COMPILE
+#define ubsocket_get_timeNs_compile() 0
+#endif // UBS_SPLIT_TRACE_ENABLED_COMPILE
+
+static __always_inline uint64_t ubsocket_get_timeNs()
+{
+#if defined(ENABLE_CPU_MONOTONIC) && defined(__aarch64__)
+    uint64_t timeValue = 0;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(timeValue));
+    return timeValue * 1000L / ubsocket_arm_cpu_freq;
+#else
+    struct timespec tpDelay = {0, 0};
+    clock_gettime(CLOCK_MONOTONIC, &tpDelay);
+    return tpDelay.tv_sec * 1000000000ULL + tpDelay.tv_nsec;
+#endif
+}
+
+/* 高性能打点宏（默认）*/
+#define PROF_START(TP_ID)                           \
+    uint64_t tpBegin##TP_ID = 0;                    \
+    do {                                            \
+        if (ubsocket_prof_enabled == 1) {           \
+            tpBegin##TP_ID = ubsocket_get_timeNs(); \
+        }                                           \
+    } while (0)
+
+#define PROF_END(TP_ID, GOOD)                                                                  \
+    do {                                                                                       \
+        if (ubsocket_prof_enabled == 1) {                                                      \
+            ubsocket_prof_record(TP_ID, #TP_ID, ubsocket_get_timeNs() - tpBegin##TP_ID, GOOD); \
+        }                                                                                      \
+    } while (0)
+
+#define PROF_RECORD(TP_ID, TP_NUM, GOOD)                       \
+    do {                                                       \
+        if (ubsocket_prof_enabled == 1) {                      \
+            ubsocket_prof_record(TP_ID, #TP_ID, TP_NUM, GOOD); \
+        }                                                      \
+    } while (0)
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // UBS_COMM_UBSOCKET_PROFILING_H

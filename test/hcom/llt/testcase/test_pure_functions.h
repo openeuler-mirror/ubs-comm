@@ -15,10 +15,9 @@
 #include <gtest/gtest.h>
 class TestPureFunctions : public testing::Test {
 public:
-  TestPureFunctions();
-  virtual void SetUp(void);
-  virtual void TearDown(void);
+    TestPureFunctions();
+    virtual void SetUp(void);
+    virtual void TearDown(void);
 };
-
 
 #endif // HCOM_TEST_PURE_FUNCTIONS_H

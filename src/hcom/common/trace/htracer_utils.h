@@ -13,19 +13,19 @@
 #ifndef HTRACE_UTILS_H
 #define HTRACE_UTILS_H
 
-#include <vector>
-#include <cstring>
-#include <memory>
-#include <algorithm>
-#include <iomanip>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sstream>
 #include <linux/limits.h>
-#include "securec.h"
+#include <sys/stat.h>
+#include <unistd.h>
+#include <algorithm>
+#include <cstring>
+#include <iomanip>
+#include <memory>
+#include <sstream>
+#include <vector>
 #include "hcom_num_def.h"
 #include "htracer_tdigest.h"
 #include "net_common.h"
+#include "securec.h"
 
 namespace ock {
 namespace hcom {
@@ -47,32 +47,30 @@ public:
         (void)time(&rawTime);
         auto tmInfo = localtime(&rawTime);
         std::stringstream ss;
-        ss << std::setfill('0') << std::setw(NN_NO4) << std::right << (NN_NO1900 + tmInfo->tm_year) << "-" <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << (NN_NO1 + tmInfo->tm_mon) << "-" <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_mday << " " <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_hour << ":" <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_min << ":" <<
-        std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_sec;
+        ss << std::setfill('0') << std::setw(NN_NO4) << std::right << (NN_NO1900 + tmInfo->tm_year) << "-"
+           << std::setfill('0') << std::setw(NN_NO2) << std::right << (NN_NO1 + tmInfo->tm_mon) << "-"
+           << std::setfill('0') << std::setw(NN_NO2) << std::right << tmInfo->tm_mday << " " << std::setfill('0')
+           << std::setw(NN_NO2) << std::right << tmInfo->tm_hour << ":" << std::setfill('0') << std::setw(NN_NO2)
+           << std::right << tmInfo->tm_min << ":" << std::setfill('0') << std::setw(NN_NO2) << std::right
+           << tmInfo->tm_sec;
         return ss.str();
     }
 
     static std::string FormatString(std::string &name, uint64_t begin, uint64_t goodEnd, uint64_t badEnd, uint64_t min,
-        uint64_t max, uint64_t total)
+                                    uint64_t max, uint64_t total)
     {
         std::string str;
         std::ostringstream os(str);
         os.flags(std::ios::fixed);
         os.precision(NN_NO3);
         auto unitStep = NN_NO1000;
-        os << std::left << std::setw(NN_NO50) << name
-           << "\t" << std::left << std::setw(NN_NO15) << begin
-           << "\t" << std::left << std::setw(NN_NO15) << goodEnd
-           << "\t" << std::left << std::setw(NN_NO15) << badEnd
-           << "\t" << std::left << std::setw(NN_NO15) << ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0)
-           << "\t" << std::left << std::setw(NN_NO15) << (min == UINT64_MAX ? 0 : ((double)min / unitStep))
-           << "\t" << std::left << std::setw(NN_NO15) << (double)max / unitStep
-           << "\t" << std::left << std::setw(NN_NO15) << (goodEnd == 0 ? 0 : (double)total / goodEnd / unitStep)
-           << "\t" << std::left << std::setw(NN_NO15) << (double)total / unitStep;
+        os << std::left << std::setw(NN_NO50) << name << "\t" << std::left << std::setw(NN_NO15) << begin << "\t"
+           << std::left << std::setw(NN_NO15) << goodEnd << "\t" << std::left << std::setw(NN_NO15) << badEnd << "\t"
+           << std::left << std::setw(NN_NO15) << ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0) << "\t"
+           << std::left << std::setw(NN_NO15) << (min == UINT64_MAX ? 0 : ((double)min / unitStep)) << "\t" << std::left
+           << std::setw(NN_NO15) << (double)max / unitStep << "\t" << std::left << std::setw(NN_NO15)
+           << (goodEnd == 0 ? 0 : (double)total / goodEnd / unitStep) << "\t" << std::left << std::setw(NN_NO15)
+           << (double)total / unitStep;
         return os.str();
     }
 
@@ -121,6 +119,6 @@ public:
         return true;
     }
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HTRACE_UTILS_H

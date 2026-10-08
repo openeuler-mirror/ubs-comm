@@ -14,7 +14,8 @@
 
 namespace ock {
 namespace hcom {
-enum NetRbColor : uint8_t {
+enum NetRbColor : uint8_t
+{
     RB_RED,
     RB_BLACK
 };
@@ -23,7 +24,8 @@ enum NetRbColor : uint8_t {
  * @brief red-black tree node
  * @tparam T data type stored in tree node
  */
-template <typename T> struct NetRbNode {
+template <typename T>
+struct NetRbNode {
     T data;
 
     uint64_t rbParentColor = 0;
@@ -157,7 +159,8 @@ template <typename T> struct NetRbNode {
     }
 } __attribute__((aligned(sizeof(long))));
 
-template <typename T> struct NetRbTree {
+template <typename T>
+struct NetRbTree {
     NetRbNode<T> *ref = nullptr;
 
     inline void RotateLeft(NetRbNode<T> *node)
@@ -465,7 +468,7 @@ template <typename T> struct NetRbTree {
      * @brief subroutine of Erase when node has two children
      */
     inline void EraseWithTwoChildren(NetRbNode<T> *&node, NetRbNode<T> *&parent, NetRbNode<T> *&child,
-        NetRbColor &color)
+                                     NetRbColor &color)
     {
         NetRbNode<T> *old = node;
         NetRbNode<T> *left = nullptr;
@@ -592,6 +595,6 @@ template <typename T> struct NetRbTree {
         newNode->right = victim->right;
     }
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // LOCKFREES_RBTREEWRAPPER_H

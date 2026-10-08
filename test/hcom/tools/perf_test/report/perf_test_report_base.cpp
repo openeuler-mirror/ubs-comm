@@ -8,11 +8,10 @@
 namespace hcom {
 namespace perftest {
 
-
 void PerfTestReportBase::PrintReportTail()
 {
     std::cout << PERF_TEST_RESULT_LINE << std::endl;
 }
 
-}
-}
+} // namespace perftest
+} // namespace hcom

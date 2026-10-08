@@ -13,11 +13,11 @@
 #define OCK_HCOM_OOB_1233432457233_H
 
 #include <arpa/inet.h>
-#include <cstdint>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <cstdint>
 
 #include "hcom.h"
 #include "hcom_def.h"
@@ -51,7 +51,7 @@ union ConnectHeader {
 };
 
 inline void SetConnHeader(ConnectHeader &h, uint32_t magic, uint32_t version, uint32_t groupIndex, uint32_t protocol,
-    uint32_t majorVersion, uint32_t minorVersion, uint32_t tlsVersion)
+                          uint32_t majorVersion, uint32_t minorVersion, uint32_t tlsVersion)
 {
     h.magic = magic;
     h.version = version;
@@ -62,14 +62,14 @@ inline void SetConnHeader(ConnectHeader &h, uint32_t magic, uint32_t version, ui
     h.tlsVersion = tlsVersion;
 }
 
-
 inline void SetDriverConnHeader(ConnectHeader &h, uint8_t bandWidth, uint8_t devIndex)
 {
     h.bandWidth = bandWidth;
     h.devIndex = devIndex;
 }
 
-enum class ConnectState : int8_t {
+enum class ConnectState : int8_t
+{
     DISCONNECTED,
     CONNECTED,
 };
@@ -81,7 +81,8 @@ enum class ConnectState : int8_t {
  * >1 means no error and use this protocol for further processing
  * <0 means error
  */
-enum ConnectResp : int16_t {
+enum ConnectResp : int16_t
+{
     OK_PROTOCOL_TCP = 2, /* tell client using tcp socket to connect real worker */
     OK_PROTOCOL_UDS = 1, /* tell client using uds to connect real worker */
     OK = 0,
@@ -121,7 +122,10 @@ struct ConnSecHeader {
 
     ConnSecHeader() = default;
     ConnSecHeader(int64_t flag, uint64_t ctx, uint32_t len, uint8_t type)
-        : flag(flag), ctx(ctx), secInfoLen(len), type(type){};
+        : flag(flag),
+          ctx(ctx),
+          secInfoLen(len),
+          type(type){};
 };
 
 struct OOBServerIndex {
@@ -198,6 +202,11 @@ public:
         }
     }
 
+    inline void SetCpuId(int cpuId)
+    {
+        mCpuId = cpuId;
+    }
+
     inline void SetMultiRail(bool flags)
     {
         enableMultiRail = flags;
@@ -229,6 +238,17 @@ public:
     inline void Index(const OOBServerIndex &value)
     {
         mIndex = value;
+    }
+
+    inline uint32_t GetEpNum(const std::string &ip)
+    {
+        std::lock_guard<std::mutex> guard(mEpNumMutex);
+        auto iter = mIpEpNumberMap.find(ip);
+        if (iter == mIpEpNumberMap.end()) {
+            return NN_NO0;
+        }
+
+        return iter->second;
     }
 
     inline NResult CompareEpNum(const std::string &ip)
@@ -275,6 +295,11 @@ public:
         mMaxConnectionNum = maxConnectionNum;
     }
 
+    inline uint32_t GetMaxConnectionNum() const
+    {
+        return mMaxConnectionNum;
+    }
+
     DEFINE_RDMA_REF_COUNT_FUNCTIONS
 
 protected:
@@ -295,12 +320,13 @@ protected:
     uint16_t mUdsPerm = 0;                          /* perm of uds file, if 0 means don't use file */
     bool mCheckUdsPerm = true;                      /* whether to verify the permission on the UDS file */
 
-    OOBServerIndex mIndex {};
+    OOBServerIndex mIndex{};
     std::thread mAcceptThread;
     bool mStarted = false;
-    std::atomic<bool> mThreadStarted { false };
+    std::atomic<bool> mThreadStarted{false};
     volatile bool mNeedStop = false;
     int mListenFD = -1;
+    int mCpuId = -1;
 
     NewConnectionHandler mNewConnectionHandler = nullptr;
     NetWorkerLB *mWorkerLb = nullptr;
@@ -350,7 +376,7 @@ public:
         return NN_ERROR;
     }
 
-    inline const std::string& GetServerIp() const
+    inline const std::string &GetServerIp() const
     {
         return mServerIP;
     }
@@ -360,7 +386,7 @@ public:
         return mServerPort;
     }
 
-    inline const std::string& GetServerUdsName() const
+    inline const std::string &GetServerUdsName() const
     {
         return mServerUdsName;
     }
@@ -369,7 +395,7 @@ public:
     {
         return mOobType;
     }
-    
+
     inline static std::string mLocalEid = "";
 
     /*
@@ -392,6 +418,7 @@ protected:
     std::string mServerUdsName;
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
+
 private:
     static void ConfigureSocketTimeouts(int &tmpFD, long &maxConnRetryTimes, long &maxConnRetryInterval);
 };
@@ -493,8 +520,11 @@ public:
     using NewConnectionHandler = std::function<int(OOBTCPConnection &)>;
 
     ConnectCbTask(const NewConnectionHandler &cb, int fd, const NetWorkerLBPtr &workerLb)
-        : mNewConnectionHandler(cb), mFd(fd), mWorkerLb(workerLb)
-    {}
+        : mNewConnectionHandler(cb),
+          mFd(fd),
+          mWorkerLb(workerLb)
+    {
+    }
 
     void SetIpPort(const std::string &clientIp, uint32_t clientPort, uint32_t serverPort)
     {
@@ -518,8 +548,9 @@ public:
         ConnectResp resp = ConnectResp::OK;
         if (::send(mFd, &resp, sizeof(ConnectResp), 0) <= 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to send connect status to peer on oob @ " << mClientIP << ":" << mClientPort <<
-                ", as " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to send connect status to peer on oob @ "
+                         << mClientIP << ":" << mClientPort << ", as "
+                         << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return;
         }
 
@@ -540,8 +571,8 @@ public:
         auto result = mNewConnectionHandler(conn);
         if (result != 0) {
             mFd = conn.TransferFd();
-            NN_LOG_ERROR("Failed to handshake and exchange address with client " << conn.GetIpAndPort() << ",result:" <<
-                result << " continue to accept future connection");
+            NN_LOG_ERROR("Failed to handshake and exchange address with client "
+                         << conn.GetIpAndPort() << ",result:" << result << " continue to accept future connection");
             return;
         }
         NN_LOG_INFO("ConnectCbTask::Run handler succeeded for fd=" << mFd << " client=" << conn.GetIpAndPort());
@@ -561,10 +592,10 @@ protected:
     uint32_t mClientPort = 0;                             /* port of connector */
     uint32_t mListenPort = 0;                             /* listener port */
     std::string mUdsName;
-    NetWorkerLBPtr mWorkerLb = nullptr;                   /* load balancer of worker */
+    NetWorkerLBPtr mWorkerLb = nullptr; /* load balancer of worker */
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_OOB_1233432457233_H

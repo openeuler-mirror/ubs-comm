@@ -25,9 +25,7 @@ public:
 
 TestShmChannel::TestShmChannel() {}
 
-void TestShmChannel::SetUp()
-{
-}
+void TestShmChannel::SetUp() {}
 
 void TestShmChannel::TearDown()
 {
@@ -43,9 +41,7 @@ TEST_F(TestShmChannel, ShmChannelCreateAndInit)
     int ret;
     ShmChannelPtr ch;
 
-    MOCKER_CPP(&ShmChannelPtr::Get)
-        .stubs()
-        .will(invoke(MockShmChannelGet));
+    MOCKER_CPP(&ShmChannelPtr::Get).stubs().will(invoke(MockShmChannelGet));
 
     ret = ShmChannel::CreateAndInit("ShmChannelCreateAndInit", 0, NN_NO128, NN_NO4, ch);
     EXPECT_EQ(ret, static_cast<int>(SH_NEW_OBJECT_FAILED));
@@ -56,9 +52,7 @@ TEST_F(TestShmChannel, ShmChannelCreateAndInitTwo)
     int ret;
     ShmChannelPtr ch;
 
-    MOCKER_CPP(&ShmChannel::Initialize)
-        .stubs()
-        .will(returnValue(1));
+    MOCKER_CPP(&ShmChannel::Initialize).stubs().will(returnValue(1));
 
     ret = ShmChannel::CreateAndInit("ShmChannelCreateAndInit2", 0, NN_NO128, NN_NO4, ch);
     EXPECT_EQ(ret, 1);
@@ -218,5 +212,5 @@ TEST_F(TestShmChannel, ShmChannelGValidateExchangeInfoThree)
     ret = ch->ValidateExchangeInfo(info);
     EXPECT_EQ(ret, static_cast<int>(SH_PARAM_INVALID));
 }
-}
-}
+} // namespace hcom
+} // namespace ock

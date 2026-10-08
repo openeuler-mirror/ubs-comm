@@ -1,16 +1,16 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
-#include <unistd.h>
-#include <thread>
 #include <getopt.h>
-#include <cstdio>
-#include <sched.h>
 #include <pthread.h>
+#include <sched.h>
+#include <unistd.h>
 #include <atomic>
+#include <cstdio>
+#include <thread>
 
-#include "multicast/multicast_publisher_service.h"
 #include "multicast/multicast_publisher.h"
+#include "multicast/multicast_publisher_service.h"
 
 using namespace ock::hcom;
 
@@ -18,11 +18,13 @@ constexpr uint16_t NO_SUBSCRIBER_EXIST = 501;
 
 std::string g_oobIp = "";
 uint16_t g_oobPort = 9981;
+uint16_t g_driverProtocol = 0;
 std::string g_ipSeg = "192.168.100.0/24";
 int32_t g_dataSize = 2048;
 int16_t g_asyncWorkerCpuId = -1;
 bool g_start = false;
 int g_threadNum = 1;
+int g_sendThreadCpuId = -1;
 int g_workerGroupNums = 1;
 int g_verbose = 0;
 int g_userChar = 0;
@@ -32,7 +34,7 @@ int g_pingCount = 500;
 bool g_isBroken = false;
 PublisherService *g_publisherService = nullptr;
 NetRef<ock::hcom::Publisher> g_publisher = nullptr;
-std::atomic<bool> g_isCbDone { false };
+std::atomic<bool> g_isCbDone{false};
 bool g_enableTls = true;
 CipherSuite g_cipherSuite = AES_GCM_128;
 std::string g_envCertPath = "TLS_CERT_PATH";
@@ -71,7 +73,7 @@ void PublisherSubscriberEpBroken(const ock::hcom::UBSHcomNetEndpointPtr &ep)
 }
 
 static int DefaultNewEp(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                        const std::string &payload)
 {
     return 0;
 }
@@ -89,7 +91,7 @@ bool CertCallback(const std::string &name, std::string &value)
 }
 
 bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                        UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "keypass";
     keyPass = reinterpret_cast<void *>(content);
@@ -101,7 +103,7 @@ bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyP
 }
 
 bool CACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = g_certPath + "/CA/cacert.pem";
     std::string crlFile = g_certPath + "/CA/ca.crl";
@@ -131,6 +133,10 @@ bool CreatePublisherService()
     options.completionQueueDepth = 16384; // 测试8节点8并发需要设置大一些
     options.enableTls = g_enableTls;
     options.cipherSuite = g_cipherSuite;
+    options.periodicCpuId = -1; // 实际业务根据需要绑定超时定时器线程cpuId
+    if (g_driverProtocol == 1) {
+        options.protocol = UBSHcomNetDriverProtocol::TCP;
+    }
     g_publisherService = ock::hcom::PublisherService::Create("Publisher", options);
     if (g_publisherService == nullptr) {
         NN_LOG_ERROR("Failed to create service.");
@@ -143,17 +149,19 @@ bool CreatePublisherService()
 
     std::string url = "tcp://" + g_oobIp + ":" + std::to_string(g_oobPort);
 
-    g_publisherService->GetConfig().SetDeviceIpMask({ g_ipSeg });
-    g_publisherService->Bind(url, NewSubscriptionCallBack);
+    g_publisherService->GetConfig().SetDeviceIpMask({g_ipSeg});
+    g_publisherService->Bind(url, NewSubscriptionCallBack, -1);
     g_publisherService->RegisterBrokenHandler(PublisherSubscriberEpBroken);
 
     if (g_enableTls) {
-        g_publisherService->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1,
-            std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+        g_publisherService->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
+                                                            std::placeholders::_3, std::placeholders::_4,
+                                                            std::placeholders::_5));
         g_publisherService->RegisterTLSCertificationCallback(
             std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
         g_publisherService->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1,
-            std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                                    std::placeholders::_2, std::placeholders::_3,
+                                                                    std::placeholders::_4, std::placeholders::_5));
     }
 
     NN_LOG_INFO("PublisherService Created!");
@@ -191,8 +199,8 @@ void ListAllSubscribers()
 {
     std::vector<SubscriptionInfoPtr> subInfos = g_publisher->GetAllSubscriberInfo();
     for (const auto &subInfo : subInfos) {
-        NN_LOG_INFO("subInfo id " << subInfo->GetId() << " name " << subInfo->GetName() << " ip " <<
-            subInfo->GetIp() << " port " << subInfo->GetPort());
+        NN_LOG_INFO("subInfo id " << subInfo->GetId() << " name " << subInfo->GetName() << " ip " << subInfo->GetIp()
+                                  << " port " << subInfo->GetPort());
     }
 }
 
@@ -208,16 +216,17 @@ void MultiCast()
                 g_isCbDone.store(true);
                 return;
             }
-            const auto& infos = context.GetSubscriberRspInfo();
+            const auto &infos = context.GetSubscriberRspInfo();
             NN_LOG_DEBUG("pubCtx subscriber size " << infos.size());
-            for (const auto& info : infos) {
+            for (const auto &info : infos) {
                 auto status = info.GetStatus();
                 auto subInfo = info.GetSubInfos();
                 auto msgInfo = info.GetMultiResponse();
-                NN_LOG_INFO("pubCtx subscribe status " << static_cast<int>(status) << " subInfo id " <<
-                    (subInfo.Get() != nullptr ? subInfo->GetId() : 0) << " name " <<
-                    (subInfo.Get() != nullptr ? subInfo->GetName() : "") << " subscriber data size " <<
-                    msgInfo.size << " data msg " << reinterpret_cast<char *>(msgInfo.data));
+                NN_LOG_INFO("pubCtx subscribe status " << static_cast<int>(status) << " subInfo id "
+                                                       << (subInfo.Get() != nullptr ? subInfo->GetId() : 0) << " name "
+                                                       << (subInfo.Get() != nullptr ? subInfo->GetName() : "")
+                                                       << " subscriber data size " << msgInfo.size << " data msg "
+                                                       << reinterpret_cast<char *>(msgInfo.data));
             }
 
             g_isCbDone.store(true);
@@ -228,7 +237,7 @@ void MultiCast()
         return;
     }
 
-    MultiRequest req(reinterpret_cast<void*>(g_localMrInfo.lAddress), g_localMrInfo.size, g_localMrInfo.lKey);
+    MultiRequest req(reinterpret_cast<void *>(g_localMrInfo.lAddress), g_localMrInfo.size, g_localMrInfo.lKey);
     callRes = g_publisher->Call(opInfo, req, newCallback);
     if (callRes == NO_SUBSCRIBER_EXIST) {
         g_isCbDone.store(true);
@@ -249,8 +258,7 @@ void RunInThread(int coreId)
         case '0':
             for (int32_t i = 0; i < g_pingCount; i++) {
                 MultiCast();
-                while (!g_isCbDone.load() && !g_isBroken) {
-                }
+                while (!g_isCbDone.load() && !g_isBroken) {}
                 g_isCbDone.store(false);
                 if (g_isBroken) {
                     g_isBroken = false;
@@ -268,38 +276,25 @@ void Test()
     NN_LOG_INFO("input 0:mullticast, q mean quit!");
     while (true) {
         g_userChar = getchar();
-        if (g_threadNum > 1) {
-            std::vector<std::thread> threads(g_threadNum);
-            int numCores = g_threadNum;
-            g_start = false;
-            g_startTime = MONOTONIC_TIME_NS();
-            for (int i = 0; i < g_threadNum; ++i) {
-                int coreId = i % numCores;
-                threads[i] = std::thread(RunInThread, coreId);
+
+        std::vector<std::thread> threads(g_threadNum);
+        g_start = false;
+        g_startTime = MONOTONIC_TIME_NS();
+        for (int i = 0; i < g_threadNum; ++i) {
+            int cpuId = -1;
+            if (g_sendThreadCpuId > 0) {
+                cpuId = g_sendThreadCpuId + i;
             }
-            NN_LOG_INFO("Wait for finish");
-            g_start = true;
-            for (auto &t : threads) {
-                t.join();
-            }
+            threads[i] = std::thread(RunInThread, cpuId);
+        }
+        NN_LOG_INFO("Wait for finish");
+        g_start = true;
+        for (auto &t : threads) {
+            t.join();
         }
 
         switch (g_userChar) {
             case '0':
-                if (g_threadNum > 1) {
-                    break;
-                }
-                g_startTime = MONOTONIC_TIME_NS();
-                for (int32_t i = 0; i < g_pingCount; i++) {
-                    MultiCast();
-                    while (!g_isCbDone.load() && !g_isBroken) {
-                    }
-                    g_isCbDone.store(false);
-                    if (g_isBroken) {
-                        g_isBroken = false;
-                        break;
-                    }
-                }
                 break;
             case 'l':
                 ListAllSubscribers();
@@ -324,7 +319,7 @@ void Test()
         printf("\tMultiCall postSend Total time(s):\t\t%f\n", (g_finishTime - g_startTime) / 1000000000.0);
         printf("\tMultiCall postSend Latency(us):\t\t%f\n", (g_finishTime - g_startTime) / g_pingCount / 1000.0);
         printf("\tMultiCall postSend Avg ops:\t\t%f pp/s\n",
-            (g_pingCount * 1000000000.0) / (g_finishTime - g_startTime) * g_threadNum);
+               (g_pingCount * 1000000000.0) / (g_finishTime - g_startTime) * g_threadNum);
     }
 }
 
@@ -382,15 +377,16 @@ void MultiCastTest()
     ock::hcom::PublisherService::Destroy("Publisher");
 }
 
-
 int main(int argc, char *argv[])
 {
     struct option options[] = {
         {"ip", required_argument, nullptr, 'i'},
         {"port", required_argument, nullptr, 'p'},
+        {"driver", required_argument, nullptr, 'd'},
         {"pingpongtimes", required_argument, nullptr, 't'},
         {"size", required_argument, nullptr, 's'},
-        {"cpuId", required_argument, nullptr, 'c'},
+        {"workerCpuId", required_argument, nullptr, 'c'},
+        {"multiSendCpuId", required_argument, nullptr, 'm'},
         {"threadnums", required_argument, nullptr, 'n'},
         {"workernums", required_argument, nullptr, 'w'},
         {"verbose", required_argument, nullptr, 'v'},
@@ -399,12 +395,15 @@ int main(int argc, char *argv[])
         {nullptr, 0, nullptr, 0},
     };
 
-    const char *usage = "usage\n"
+    const char *usage =
+        "usage\n"
         "        -i, --ip,                     coord server ip mask, e.g. 10.175.118.1;\n"
         "        -p, --port,                   coord server port, by default 9981; jetty id for UBC, e.g. 998\n"
+        "        -d, --driver,                 multicast driver protocol, 0 means RDMA, 1 means TCP\n"
         "        -t, --pingpongtimes,          ping pong times\n"
         "        -s, --size,                   max data size\n"
-        "        -c, --cpuId,                  cpu to bind\n"
+        "        -c, --workerCpuId,            worker cpu to bind\n"
+        "        -m, --multiSendCpuId,         multicast send thread cpu to bind\n"
         "        -n, --threadnums,             multicast send thread nums\n"
         "        -w, --workerGroupNums         publisher worker group nums\n"
         "        -v, --verbose                 verbose for detail\n"
@@ -415,7 +414,7 @@ int main(int argc, char *argv[])
     int ret = 0;
     int index = 0;
 
-    std::string str = "i:p:t:s:c:n:w:v:T:C:";
+    std::string str = "i:p:d:t:s:c:m:n:w:v:T:C:";
     while ((ret = getopt_long(argc, argv, str.c_str(), options, &index)) != -1) {
         switch (ret) {
             case 'i':
@@ -425,6 +424,9 @@ int main(int argc, char *argv[])
             case 'p':
                 g_oobPort = static_cast<uint16_t>(strtoul(optarg, nullptr, 0));
                 break;
+            case 'd':
+                g_driverProtocol = static_cast<uint16_t>(strtoul(optarg, nullptr, 0));
+                break;
             case 't':
                 g_pingCount = static_cast<int32_t>(strtoul(optarg, nullptr, 0));
                 break;
@@ -433,6 +435,9 @@ int main(int argc, char *argv[])
                 break;
             case 'c':
                 g_asyncWorkerCpuId = static_cast<int16_t>(strtoul(optarg, nullptr, 0));
+                break;
+            case 'm':
+                g_sendThreadCpuId = static_cast<int16_t>(strtoul(optarg, nullptr, 0));
                 break;
             case 'n':
                 g_threadNum = static_cast<int32_t>(strtoul(optarg, nullptr, 0));

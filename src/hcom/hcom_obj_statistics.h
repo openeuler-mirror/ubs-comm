@@ -113,7 +113,7 @@ public:
 
     static void Dump();
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_OBJ_STATISTICS_H

@@ -10,9 +10,9 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "test_load_balance.h"
-#include "ut_helper.h"
 #include "hcom_def.h"
 #include "mockcpp/mockcpp.hpp"
+#include "ut_helper.h"
 
 using namespace ock::hcom;
 TestLoadBalance::TestLoadBalance() {}
@@ -32,12 +32,12 @@ TEST_F(TestLoadBalance, OK)
     UBSHcomNetDriver *server = nullptr;
     UBSHcomNetDriver *client = nullptr;
     std::unordered_map<uintptr_t, sem_t *> semMap;
-    Handlers handlers {};
+    Handlers handlers{};
     handlers.receivedHandler = [&](const UBSHcomNetRequestContext &ctx) -> int {
         sem_post(&sem);
         return 0;
     };
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.mrSendReceiveSegSize = 1024;
     options.mrSendReceiveSegCount = 8192;
@@ -63,12 +63,12 @@ TEST_F(TestLoadBalance, WrongGroups)
     UBSHcomNetDriver *server = nullptr;
     UBSHcomNetDriver *client = nullptr;
     std::unordered_map<uintptr_t, sem_t *> semMap;
-    Handlers handlers {};
+    Handlers handlers{};
     handlers.receivedHandler = [&](const UBSHcomNetRequestContext &ctx) -> int {
         sem_post(&sem);
         return 0;
     };
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.mrSendReceiveSegSize = 1024;
     options.mrSendReceiveSegCount = 8192;
@@ -90,12 +90,12 @@ TEST_F(TestLoadBalance, WrongPolicy)
     UBSHcomNetDriver *server = nullptr;
     UBSHcomNetDriver *client = nullptr;
     std::unordered_map<uintptr_t, sem_t *> semMap;
-    Handlers handlers {};
+    Handlers handlers{};
     handlers.receivedHandler = [&](const UBSHcomNetRequestContext &ctx) -> int {
         sem_post(&sem);
         return 0;
     };
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.mrSendReceiveSegSize = 1024;
     options.mrSendReceiveSegCount = 8192;

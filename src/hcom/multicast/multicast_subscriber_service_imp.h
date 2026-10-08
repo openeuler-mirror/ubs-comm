@@ -4,8 +4,8 @@
 #ifndef HCOM_MULTICAST_SUBSCRIBER_SERVICE_IMP_H
 #define HCOM_MULTICAST_SUBSCRIBER_SERVICE_IMP_H
 
-#include "include/multicast_subscriber_service.h"
 #include "include/multicast_subscriber.h"
+#include "include/multicast_subscriber_service.h"
 #include "multicast_config_imp.h"
 
 namespace ock {
@@ -17,6 +17,8 @@ public:
     void Stop() override;
 
     SerResult CreateSubscriber(const std::string &serverUrl, NetRef<Subscriber> &subscriber) override;
+    SerResult CreateSubscriber(const std::string &serverUrl, uint16_t publisherGroupIdx,
+                               NetRef<Subscriber> &subscriber) override;
     void DestroySubscriber(const NetRef<Subscriber> &subscriber) override;
 
     MulticastConfig &GetConfig() override;
@@ -61,7 +63,7 @@ private:
     UBSHcomTLSCertificationCallback mSubTLSCertificationCallback = nullptr;
     UBSHcomTLSPrivateKeyCallback mSubTLSPrivateKeyCallback = nullptr;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

@@ -11,9 +11,7 @@ namespace hcom {
 
 class TestNetDriver : public testing::Test {
 public:
-    virtual void SetUp(void)
-    {
-    }
+    virtual void SetUp(void) {}
 
     virtual void TearDown(void)
     {
@@ -31,5 +29,5 @@ TEST_F(TestNetDriver, VersionParseFailed)
     driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::TCP, "test", false);
     EXPECT_NE(driver, nullptr);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -26,7 +26,8 @@ public:
 public:
     NormalMemoryRegion(const std::string &name, bool extMem, uintptr_t extMemAddress, uint64_t size)
         : UBSHcomNetMemoryRegion(name, extMem, extMemAddress, size)
-    {}
+    {
+    }
 
     NResult Initialize() override;
     void UnInitialize() override;
@@ -57,7 +58,7 @@ private:
 class NormalMemoryRegionFixedBuffer : public NormalMemoryRegion {
 public:
     static NResult Create(const std::string &name, uint32_t singleSegSize, uint32_t segCount,
-        NormalMemoryRegionFixedBuffer *&buf);
+                          NormalMemoryRegionFixedBuffer *&buf);
 
 public:
     NormalMemoryRegionFixedBuffer(const std::string &name, uint32_t singleSegSize, uint32_t segCount)
@@ -65,7 +66,8 @@ public:
           mSingleSegSize(singleSegSize),
           mSegCount(segCount),
           mUnAllocated(segCount)
-    {}
+    {
+    }
 
     ~NormalMemoryRegionFixedBuffer() override
     {
@@ -101,8 +103,9 @@ public:
     std::string ToString()
     {
         std::ostringstream oss;
-        oss << "NormalMemoryRegionFixedBuffer info: mBuf " << mBuf << ", mSingleSegSize " << mSingleSegSize <<
-            ", mSegCount " << mSegCount << ", unAllocatedSize " << mUnAllocated.Size() << ", total buf size " << mSize;
+        oss << "NormalMemoryRegionFixedBuffer info: mBuf " << mBuf << ", mSingleSegSize " << mSingleSegSize
+            << ", mSegCount " << mSegCount << ", unAllocatedSize " << mUnAllocated.Size() << ", total buf size "
+            << mSize;
         return oss.str();
     }
 
@@ -118,7 +121,7 @@ private:
     // uintptr_p store the start address of each mr segment
     NetRingBuffer<uintptr_t> mUnAllocated;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_MEMORY_REGION_H_23234

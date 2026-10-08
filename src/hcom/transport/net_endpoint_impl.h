@@ -40,7 +40,9 @@ public:
 
 protected:
     NetEndpointImpl(uint64_t id, const UBSHcomNetWorkerIndex &workerWholeIndex)
-        : UBSHcomNetEndpoint(id, workerWholeIndex) {}
+        : UBSHcomNetEndpoint(id, workerWholeIndex)
+    {
+    }
 
 protected:
     bool mIsNeedEncrypt = false;
@@ -48,7 +50,7 @@ protected:
     NetSecrets mSecrets;
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HCOM_NET_ENDPOINT_IMPL_H

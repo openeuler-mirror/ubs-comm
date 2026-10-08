@@ -46,9 +46,9 @@ public:
 
     UBContext() = delete;
     UBContext(const UBContext &) = delete;
-    UBContext &operator = (const UBContext &) = delete;
+    UBContext &operator=(const UBContext &) = delete;
     UBContext(UBContext &&) = delete;
-    UBContext &operator = (UBContext &&) = delete;
+    UBContext &operator=(UBContext &&) = delete;
 
     std::string ToString();
 
@@ -96,8 +96,13 @@ private:
         return tp_type.value == mDevAttr->dev_cap.priority_info[ubPriority].tp_type.value;
     }
 
+    UResult SetBondingMode(UBSHcomUbcMode ubcMode);
+    UResult DisableMSN();
+    UResult SetUBPriority(uint32_t ubPriority, UBSHcomUbcMode ubcMode);
+
     std::string mName;
     urma_context_t *mUrmaContext = nullptr;
+    urma_context_t *mPublicUrmaContext = nullptr;
     urma_device_attr_t *mDevAttr = nullptr;
     uint8_t mPortNumber = 1;
     uint32_t mMaxJfs = 0;
@@ -115,7 +120,7 @@ private:
     friend NetDriverUB;
     friend class UBPublicJetty;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_URMA_WRAPPER_CTX_H

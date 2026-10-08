@@ -108,14 +108,13 @@ git_repository(
 )
 
 
-hcom_urma_repository(
-    name = "urma",
-    build_file = "//src/hcom/umq/third_party/urma:BUILD.bazel",
-)
-
 git_repository(
 	name = "libboundscheck",
 	remote = "https://atomgit.com/openeuler/libboundscheck.git",
 	branch = "master",  # optional: pin to a specific branch
 	build_file = "//src/ubsocket/3rdparty/boundscheck:BUILD.bazel",
+)
+hcom_urma_repository( 
+    name = "urma", 
+    build_file = "//src/hcom/umq/third_party/urma:BUILD.bazel", 
 )

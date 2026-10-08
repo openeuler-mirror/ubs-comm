@@ -19,6 +19,7 @@ public:
     TestNegativeRdmaEndpoint();
     virtual void SetUp(void);
     virtual void TearDown(void);
+
 protected:
     UBSHcomNetDriver *client = nullptr;
     UBSHcomNetDriver *server = nullptr;

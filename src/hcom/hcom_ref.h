@@ -20,7 +20,8 @@ namespace hcom {
 /**
  * @brief Smart pointer object
  */
-template <typename T> class NetRef {
+template <typename T>
+class NetRef {
 public:
     // constructor
     NetRef() noexcept = default;
@@ -65,13 +66,13 @@ public:
     }
 
     // operator =
-    inline NetRef<T> &operator = (T *newObj)
+    inline NetRef<T> &operator=(T *newObj)
     {
         this->Set(newObj);
         return *this;
     }
 
-    inline NetRef<T> &operator = (const NetRef<T> &other)
+    inline NetRef<T> &operator=(const NetRef<T> &other)
     {
         if (this != &other) {
             this->Set(other.mObj);
@@ -79,7 +80,7 @@ public:
         return *this;
     }
 
-    NetRef<T> &operator = (NetRef<T> &&other) noexcept
+    NetRef<T> &operator=(NetRef<T> &&other) noexcept
     {
         if (this != &other) {
             auto tmp = mObj;
@@ -96,22 +97,22 @@ public:
     }
 
     // equal operator
-    inline bool operator == (const NetRef<T> &other) const
+    inline bool operator==(const NetRef<T> &other) const
     {
         return mObj == other.mObj;
     }
 
-    inline bool operator == (T *other) const
+    inline bool operator==(T *other) const
     {
         return mObj == other;
     }
 
-    inline bool operator != (const NetRef<T> &other) const
+    inline bool operator!=(const NetRef<T> &other) const
     {
         return mObj != other.mObj;
     }
 
-    inline bool operator != (T *other) const
+    inline bool operator!=(T *other) const
     {
         return mObj != other;
     }
@@ -144,7 +145,8 @@ public:
         mObj = newObj;
     }
 
-    template <typename C> C *ToChild()
+    template <typename C>
+    C *ToChild()
     {
         if (mObj != nullptr) {
             return dynamic_cast<C *>(mObj);
@@ -156,7 +158,7 @@ private:
     T *mObj = nullptr;
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_CPP_REF_H

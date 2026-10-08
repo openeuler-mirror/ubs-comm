@@ -13,14 +13,13 @@
 #ifdef UB_BUILD_ENABLED
 
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <unistd.h>
+#include <mockcpp/mockcpp.hpp>
 #include <utility>
 
 #include "hcom_utils.h"
 #include "net_common.h"
 #include "ub_worker.h"
-
 
 namespace ock {
 namespace hcom {
@@ -558,8 +557,8 @@ TEST_F(TestUbWorker, PostRead)
     req.upCtxSize = 1;
     MOCKER_CPP(&UBJetty::GetOneSideWr).stubs().will(returnValue(true));
     MOCKER_CPP(&UBJetty::GetProtocol).stubs().will(returnValue(UBSHcomNetDriverProtocol::UBC));
-    MOCKER_CPP(&UBJetty::PostRead, UResult(UBJetty::*)(uintptr_t, urma_target_seg_t *,
-        uintptr_t, uint64_t, uint32_t, uint64_t))
+    MOCKER_CPP(&UBJetty::PostRead,
+               UResult(UBJetty::*)(uintptr_t, urma_target_seg_t *, uintptr_t, uint64_t, uint32_t, uint64_t))
         .stubs()
         .will(returnValue(1));
     qp->IncreaseRef();
@@ -610,8 +609,8 @@ TEST_F(TestUbWorker, PostWrite)
     req.upCtxSize = 1;
     MOCKER_CPP(&UBJetty::GetOneSideWr).stubs().will(returnValue(true));
     MOCKER_CPP(&UBJetty::GetProtocol).stubs().will(returnValue(UBSHcomNetDriverProtocol::UBC));
-    MOCKER_CPP(&UBJetty::PostWrite, UResult(UBJetty::*)(uintptr_t, urma_target_seg_t *,
-        uintptr_t, uint64_t, uint32_t, uint64_t))
+    MOCKER_CPP(&UBJetty::PostWrite,
+               UResult(UBJetty::*)(uintptr_t, urma_target_seg_t *, uintptr_t, uint64_t, uint32_t, uint64_t))
         .stubs()
         .will(returnValue(1));
     qp->IncreaseRef();
@@ -695,9 +694,7 @@ TEST_F(TestUbWorker, PostOneSideSgl)
     UBSendSglRWRequest rwReq{};
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
     MOCKER_CPP(&UBWorker::CreateOneSideCtx).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(&UBJetty::GetProtocol)
-        .stubs()
-        .will(returnValue(UBSHcomNetDriverProtocol::UBC));
+    MOCKER_CPP(&UBJetty::GetProtocol).stubs().will(returnValue(UBSHcomNetDriverProtocol::UBC));
     MOCKER_CPP(&UBJetty::PostOneSideSgl).stubs().will(returnValue(0));
 
     EXPECT_EQ(worker->PostOneSideSgl(qp, rwReq, false), NN_NO1);
@@ -870,6 +867,6 @@ TEST_F(TestUbWorker, TestProcessPollingResultTwo)
     ep->mJetty = nullptr;
     delete ep;
 }
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock
 #endif

@@ -11,8 +11,8 @@
  */
 
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <unistd.h>
+#include <mockcpp/mockcpp.hpp>
 #include <utility>
 #include "hcom.h"
 #include "net_oob.h"
@@ -22,7 +22,6 @@ namespace hcom {
 
 const std::string SERVER_IP("127.0.0.1");
 constexpr uint16_t SERVER_PORT_ZERO = 0;
-
 
 class TestNetOob : public testing::Test {
 public:
@@ -193,5 +192,5 @@ TEST_F(TestNetOob, BindAndListenAutoFailed2)
     EXPECT_NE(ret, NN_OK);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

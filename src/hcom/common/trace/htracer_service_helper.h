@@ -66,7 +66,7 @@ public:
     }
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HTRACE_HELPER_H

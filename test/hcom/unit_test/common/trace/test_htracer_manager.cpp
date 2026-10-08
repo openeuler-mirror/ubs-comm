@@ -1,7 +1,7 @@
 // Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
 #include "htracer_manager.h"
@@ -20,13 +20,13 @@ public:
 
 TEST_F(TestHTracerManager, TestCreateInstanceSuccess)
 {
-    TraceManager traceManager {};
+    TraceManager traceManager{};
     EXPECT_NE(traceManager.CreateInstance(), nullptr);
 }
 
 TEST_F(TestHTracerManager, TestCreateInstanceMemSetFailed)
 {
-    TraceManager traceManager {};
+    TraceManager traceManager{};
     MOCKER_CPP(memset_s).stubs().will(returnValue(1)).then(returnValue(-1));
     EXPECT_EQ(traceManager.CreateInstance(), nullptr);
 }

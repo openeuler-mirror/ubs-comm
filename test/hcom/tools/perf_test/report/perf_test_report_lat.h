@@ -15,7 +15,7 @@ public:
     void PrintReportHead() override;
     bool isDuplex(const PERF_TEST_TYPE &type);
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

@@ -14,25 +14,25 @@
 #define HCOM_UB_COMMON_H
 #ifdef UB_BUILD_ENABLED
 
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <strings.h>
+#include <unistd.h>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <ctime>
-#include <fcntl.h>
 #include <functional>
 #include <mutex>
-#include <netinet/in.h>
 #include <sstream>
-#include <strings.h>
-#include <unistd.h>
 #include <unordered_map>
 #include <vector>
 
 #include "hcom.h"
 #include "hcom_def.h"
-#include "hcom_num_def.h"
 #include "hcom_log.h"
+#include "hcom_num_def.h"
 #include "net_common.h"
 #include "net_obj_pool.h"
 #include "under_api/urma/urma_api_wrapper.h"
@@ -44,7 +44,8 @@ namespace hcom {
  */
 using UResult = int;
 
-enum UBCode {
+enum UBCode
+{
     UB_OK = 0,
     UB_PARAM_INVALID = 200,
     UB_MEMORY_ALLOCATE_FAILED = 201,
@@ -105,6 +106,31 @@ constexpr uint32_t JFC_COUNT = NN_NO1024;
 constexpr uint32_t JETTY_MAX_CTP_SEND_BUFF_SIZE = 4096;
 
 /*
+ * 聚合设备(bonding)的 imm_data 是 64 bit, 其中 bit[21:39] 被 urma bondp provider 占用
+ * (reserved/vjetty_id/cr_opcode), 用户只有 bit[20:0] 可用; MSN 保序关闭后 bit[63:40] 也归用户。
+ * 因此 32 bit 的 raw seqNo 需要拼接后搬运, 不能在低 32 bit 内直接承载。
+ */
+constexpr uint32_t UB_IMM_LOW_BITS = 21;
+constexpr uint32_t UB_IMM_LOW_MASK = (1U << UB_IMM_LOW_BITS) - 1;
+constexpr uint32_t UB_IMM_HIGH_SHIFT = 40;
+constexpr uint32_t UB_IMM_HIGH_BITS = 32 - UB_IMM_LOW_BITS;
+constexpr uint32_t UB_IMM_HIGH_MASK = (1U << UB_IMM_HIGH_BITS) - 1;
+
+/* 发送侧: seqNo 低 21 bit 放 bit[20:0], 剩余 11 bit 放 bit[40:50] */
+inline uint64_t PackUbImm(uint32_t seqNo)
+{
+    return (static_cast<uint64_t>(seqNo) & UB_IMM_LOW_MASK) |
+           (static_cast<uint64_t>(seqNo >> UB_IMM_LOW_BITS) << UB_IMM_HIGH_SHIFT);
+}
+
+/* 接收侧: 从 imm_data 还原 32 bit seqNo */
+inline uint32_t UnpackUbImm(uint64_t immData)
+{
+    return static_cast<uint32_t>((immData & UB_IMM_LOW_MASK) |
+                                 (((immData >> UB_IMM_HIGH_SHIFT) & UB_IMM_HIGH_MASK) << UB_IMM_LOW_BITS));
+}
+
+/*
  * class forward declaration
  */
 class UBMemoryRegionFixedBuffer;
@@ -132,7 +158,8 @@ using UBSendSglRWRequest = UBSHcomNetTransSglRequest;
 
 // the size of UBOpContextInfo is 64 bytes which fit to single CPU cache line
 struct UBOpContextInfo {
-    enum OpType : uint8_t {
+    enum OpType : uint8_t
+    {
         SEND = 0,
         SEND_RAW = 1,
         SEND_RAW_SGL = 2,
@@ -146,7 +173,8 @@ struct UBOpContextInfo {
         SEND_SGL_INLINE = 10,
     };
 
-    enum OpResultType : uint8_t {
+    enum OpResultType : uint8_t
+    {
         SUCCESS = 0,
         ERR_TIMEOUT = 1,
         ERR_CANCELED = 2,
@@ -270,7 +298,8 @@ struct UBSgeCtxInfo {
     explicit UBSgeCtxInfo(UBSglContextInfo *sglCtx) : ctx(sglCtx) {}
 } __attribute__((packed));
 
-enum UBPollingMode : uint8_t {
+enum UBPollingMode : uint8_t
+{
     UB_BUSY_POLLING = 0,
     UB_EVENT_POLLING = 1,
 };
@@ -303,7 +332,7 @@ struct UBVaSge {
     urma_target_seg_t *targetSeg = nullptr;
     urma_target_seg_t *dstSeg = nullptr;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_COMMON_H

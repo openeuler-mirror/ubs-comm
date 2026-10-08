@@ -22,18 +22,18 @@ struct MultiResponse {
     void *data = nullptr; /* 数据地址 */
     uint32_t size = 0;    /* 数据大小 */
 
-    MultiResponse() {};
+    MultiResponse(){};
     MultiResponse(void *d, uint32_t s) : data(d), size(s) {}
 };
 
-using MulticastNewEpHandler = std::function<int(const std::string &ipPort,
-    const ock::hcom::UBSHcomNetEndpointPtr &ep, const std::string &payload)>;
+using MulticastNewEpHandler = std::function<int(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
+                                                const std::string &payload)>;
 using MulticastEpBrokenHandler = std::function<void(const ock::hcom::UBSHcomNetEndpointPtr &ep)>;
 
 using MulticastPubReqRecvHandler = std::function<int(ock::hcom::PublisherContext &ctx)>;
 using MulticastReqRecvHandler = std::function<int(ock::hcom::UBSHcomServiceContext &ctx)>;
 using MulticastReqPostedHandler = std::function<int(ock::hcom::UBSHcomServiceContext &ctx)>;
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

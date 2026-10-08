@@ -14,12 +14,12 @@
 
 #include "hcom.h"
 #include "net_common.h"
-#include "net_memory_region.h"
 #include "net_mem_pool_fixed.h"
+#include "net_memory_region.h"
 #include "net_oob.h"
 #include "net_oob_ssl.h"
-#include "shm_common.h"
 #include "shm_channel.h"
+#include "shm_common.h"
 #include "shm_worker.h"
 
 namespace ock {
@@ -29,7 +29,7 @@ class NetSyncEndpointShm;
 
 class NetDriverShmWithOOB;
 
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HCOM_NET_SHM_COMMON_H

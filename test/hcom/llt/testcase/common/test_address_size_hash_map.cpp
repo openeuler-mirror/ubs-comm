@@ -10,10 +10,9 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include "net_addr_size_map.h"
-#include "hcom_num_def.h"
 #include "test_address_size_hash_map.h"
 #include "hcom_num_def.h"
+#include "net_addr_size_map.h"
 
 using namespace ock::hcom;
 
@@ -23,7 +22,7 @@ void TestAddress2SizeHashmap::TearDown() {}
 
 TEST_F(TestAddress2SizeHashmap, PutRemove)
 {
-    NetAddress2SizeHashMap<NetHeapAllocator> hMap {};
+    NetAddress2SizeHashMap<NetHeapAllocator> hMap{};
     auto result = hMap.Initialize(NN_NO1024);
     ASSERT_EQ(result, 0);
     result = hMap.Put(1, 1);
@@ -37,7 +36,7 @@ TEST_F(TestAddress2SizeHashmap, PutRemove)
 
 TEST_F(TestAddress2SizeHashmap, DoubleInitialize)
 {
-    NetAddress2SizeHashMap<NetHeapAllocator> hMap {};
+    NetAddress2SizeHashMap<NetHeapAllocator> hMap{};
     hMap.Initialize(NN_NO1024);
     auto result = hMap.Initialize(NN_NO1024);
     ASSERT_EQ(result, 0);
@@ -86,7 +85,7 @@ TEST_F(TestAddress2SizeHashmap, HashBucketPutAndRemove)
 
 TEST_F(TestAddress2SizeHashmap, RemoveAbsentAddress)
 {
-    NetAddress2SizeHashMap<NetHeapAllocator> hMap {};
+    NetAddress2SizeHashMap<NetHeapAllocator> hMap{};
     hMap.Initialize(NN_NO1024);
     uint32_t size = 0;
     auto result = hMap.Remove(1, size);

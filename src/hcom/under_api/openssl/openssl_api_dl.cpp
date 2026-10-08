@@ -180,22 +180,22 @@ int SSLAPI::LoadSSLSymbols(void *sslHandle)
     DLSYM(sslHandle, FuncUseCertChainFile, useCertChainFile, "SSL_CTX_use_certificate_chain_file");
     DLSYM(sslHandle, FuncSslCtxSetVerify, sslCtxSetVerify, "SSL_CTX_set_verify");
     DLSYM(sslHandle, FuncSetDefaultPasswdCbUserdata, setDefaultPasswdCbUserdata,
-        "SSL_CTX_set_default_passwd_cb_userdata");
+          "SSL_CTX_set_default_passwd_cb_userdata");
     DLSYM(sslHandle, FuncSetCertVerifyCallback, setCertVerifyCallback, "SSL_CTX_set_cert_verify_callback");
     DLSYM(sslHandle, FuncLoadVerifyLocations, loadVerifyLocations, "SSL_CTX_load_verify_locations");
     DLSYM(sslHandle, FuncCheckPrivateKey, checkPrivateKey, "SSL_CTX_check_private_key");
     DLSYM(sslHandle, FuncSslGetVerifyResult, sslGetVerifyResult, "SSL_get_verify_result");
     DLSYM_UPDATE(sslHandle, FuncSslGetPeerCertificate, sslGetPeerCertificate, "SSL_get_peer_certificate",
-        "SSL_get1_peer_certificate");
+                 "SSL_get1_peer_certificate");
     DLSYM(sslHandle, FuncSslCtxSetOptions, SslCtxSetOptions, "SSL_CTX_set_options");
     DLSYM(sslHandle, FuncSslCtxSetPskFindSessionCallback, SslCtxSetPskFindSessionCallback,
-        "SSL_CTX_set_psk_find_session_callback");
+          "SSL_CTX_set_psk_find_session_callback");
     DLSYM(sslHandle, FuncSslCtxSetPskUseSessionCallback, SslCtxSetPskUseSessionCallback,
-        "SSL_CTX_set_psk_use_session_callback");
+          "SSL_CTX_set_psk_use_session_callback");
     DLSYM(sslHandle, FuncSslSessionNew, SslSessionNew, "SSL_SESSION_new");
     DLSYM(sslHandle, FuncSslSessionSet1MasterKey, SslSessionSet1MasterKey, "SSL_SESSION_set1_master_key");
     DLSYM(sslHandle, FuncSslSessionSetProtocolVersion, SslSessionSetProtocolVersion,
-        "SSL_SESSION_set_protocol_version");
+          "SSL_SESSION_set_protocol_version");
     DLSYM(sslHandle, FuncSslSessionSetCipher, SslSessionSetCipher, "SSL_SESSION_set_cipher");
     DLSYM(sslHandle, FuncSslCipherFind, SslCipherFind, "SSL_CIPHER_find");
     return 0;
@@ -277,5 +277,5 @@ int SSLAPI::LoadOpensslAPI()
     gLoaded = true;
     return 0;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

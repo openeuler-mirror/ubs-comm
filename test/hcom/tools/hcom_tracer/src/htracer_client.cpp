@@ -11,8 +11,8 @@
  */
 
 #include "htracer_client.h"
-#include "rpc_client.h"
 #include "htracer_msg.h"
+#include "rpc_client.h"
 
 HTracerClient::HTracerClient()
 {

@@ -13,8 +13,8 @@
 #ifndef HTRACE_CLIENT_H
 #define HTRACE_CLIENT_H
 
-#include <string>
 #include <cstring>
+#include <string>
 #include <vector>
 #include "hcom/hcom_err.h"
 #include "htracer_msg.h"
@@ -41,6 +41,5 @@ private:
     const static uint32_t mQueryRecvBufferSize =
         sizeof(QueryTraceInfoResponse) + sizeof(TTraceInfo) * MAX_INNER_ID_NUM * MAX_SERVICE_NUM;
 };
-
 
 #endif // HTRACE_CLIENT_H

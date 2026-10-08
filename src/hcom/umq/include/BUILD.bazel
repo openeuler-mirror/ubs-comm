@@ -23,22 +23,8 @@ cc_library(
 )
 
 cc_library(
-    name = "umq_ipc_headers",
-    hdrs = glob(["src/hcom/umq/umq_ipc/*.h"]),
-    includes = ["src/hcom/umq/umq_ipc/"],
-    visibility = ["//visibility:public"],
-)
-
-cc_library(
     name = "umq_ub_headers",
     hdrs = glob(["src/hcom/umq/umq_ub/*.h"]),
     includes = ["src/hcom/umq/umq_ub/"],
-    visibility = ["//visibility:public"],
-)
-
-cc_library(
-    name = "umq_ubmm_headers",
-    hdrs = glob(["src/hcom/umq/umq_ubmm/*.h"]),
-    includes = ["src/hcom/umq/umq_ubmm/"],
     visibility = ["//visibility:public"],
 )

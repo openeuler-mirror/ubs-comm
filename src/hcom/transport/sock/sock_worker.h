@@ -12,6 +12,7 @@
 #ifndef OCK_HCOM_SOCK_WORKER_H_234214
 #define OCK_HCOM_SOCK_WORKER_H_234214
 
+#include <sys/epoll.h>
 #include <sys/resource.h>
 
 #include "hcom.h"
@@ -36,8 +37,8 @@ using SockIdleHandler = UBSHcomNetDriverIdleHandler;
 class SockWorker {
 public:
     SockWorker(SockType t, const std::string &name, const UBSHcomNetWorkerIndex &index,
-        const NetMemPoolFixedPtr &opCtxMemPool, const NetMemPoolFixedPtr &sglCtxMemPool,
-        const NetMemPoolFixedPtr &headerReqMemPool, const SockWorkerOptions &options)
+               const NetMemPoolFixedPtr &opCtxMemPool, const NetMemPoolFixedPtr &sglCtxMemPool,
+               const NetMemPoolFixedPtr &headerReqMemPool, const SockWorkerOptions &options)
         : mType(t),
           mName(name),
           mIndex(index),
@@ -170,6 +171,7 @@ public:
     SResult PostRead(Sock *sock, SockTransHeader &header, const UBSHcomNetTransSglRequest &request);
     SResult PostWrite(Sock *sock, SockTransHeader &header, const UBSHcomNetTransRequest &request);
     SResult PostWrite(Sock *sock, SockTransHeader &header, const UBSHcomNetTransSglRequest &request);
+    SResult PostSendNoCpy(Sock *sock, SockTransHeader &header, const UBSHcomNetTransRequest &req);
 
 #define SET_EPOLL_EVENT(selfSock, events, evNewFd) \
     do {                                           \
@@ -185,14 +187,15 @@ public:
             return SS_PARAM_INVALID;
         }
 
-        struct epoll_event evNewFd {};
+        struct epoll_event evNewFd {
+        };
         SET_EPOLL_EVENT(sock, events, evNewFd);
-        NN_LOG_TRACE_INFO("Adding sock " << sock->Id() << " address " << sock << " fd " << sock->FD() <<
-            " into sock worker " << mName);
+        NN_LOG_TRACE_INFO("Adding sock " << sock->Id() << " address " << sock << " fd " << sock->FD()
+                                         << " into sock worker " << mName);
 
         if (NN_UNLIKELY(epoll_ctl(mEpollHandle, EPOLL_CTL_ADD, sock->FD(), &evNewFd) != 0)) {
-            NN_LOG_ERROR("Failed to add fd " << sock->FD() << " into epoll for sock worker " << mName <<
-                ", errno " << errno);
+            NN_LOG_ERROR("Failed to add fd " << sock->FD() << " into epoll for sock worker " << mName << ", errno "
+                                             << errno);
             return SS_SOCK_EPOLL_OP_FAILED;
         }
 
@@ -210,7 +213,8 @@ public:
 
         NN_LOG_TRACE_INFO("Modifying sock " << sock->Id() << " fd " << sock->FD() << " in sock worker " << mName);
 
-        struct epoll_event evNewFd {};
+        struct epoll_event evNewFd {
+        };
         SET_EPOLL_EVENT(sock, events, evNewFd);
 
         if (NN_UNLIKELY(epoll_ctl(mEpollHandle, EPOLL_CTL_MOD, sock->FD(), &evNewFd) != 0)) {
@@ -219,8 +223,9 @@ public:
                 return SS_SOCK_EPOLL_OP_FAILED;
             }
             char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Failed to modify fd in epoll for sock worker " << mName << ", errno:" << errno << " error:" <<
-                NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Failed to modify fd in epoll for sock worker "
+                         << mName << ", errno:" << errno
+                         << " error:" << NetFunc::NN_GetStrError(errno, errBuf, NET_STR_ERROR_BUF_SIZE));
             return SS_SOCK_EPOLL_OP_FAILED;
         }
 
@@ -239,8 +244,8 @@ public:
 
         if (NN_UNLIKELY(epoll_ctl(mEpollHandle, EPOLL_CTL_DEL, sock->FD(), nullptr) != 0)) {
             if (errno == ENOENT) {
-                NN_LOG_ERROR("Sock " << sock->Id() << " fd " << sock->FD() <<
-                    " has been removed from epoll in worker " << mName);
+                NN_LOG_ERROR("Sock " << sock->Id() << " fd " << sock->FD() << " has been removed from epoll in worker "
+                                     << mName);
                 return SS_OK;
             }
             NN_LOG_ERROR("Failed to remove from epoll for sock worker " << mName << ", errno " << errno);
@@ -269,7 +274,7 @@ private:
     SResult PostReadSglAck(SockOpContextInfo &opCtx);
     SResult PostReadSglAckHandle(SockOpContextInfo &opCtx);
     SResult GenerateReadSglAckOpCtxInfo(SockOpContextInfo *&opCtxInfo, SockOpContextInfo &opCtx,
-        UBSHcomNetTransSgeIov *&rawIov, uint16_t iovCount, uint32_t dataSize);
+                                        UBSHcomNetTransSgeIov *&rawIov, uint16_t iovCount, uint32_t dataSize);
     SResult GenerateWriteSglAckOpCtxInfo(SockOpContextInfo *&opCtxInfo, SockOpContextInfo &opCtx);
     inline SResult CheckIovLen(SockOpContextInfo &opCtx, uint16_t &iovCount);
     SResult GenerateWriteAckOpCtxInfo(SockOpContextInfo *&opCtxInfo, SockOpContextInfo &opCtx);
@@ -289,27 +294,27 @@ private:
         std::string workerName = mType == SOCK_TCP ? "SockWkr" : "UDSWkr";
         workerName += mIndex.ToString();
         pthread_setname_np(pthread_self(), workerName.c_str());
-        NN_LOG_INFO("SockWorker [name: " << mName << ", index: " << mIndex.ToString() << ", cpuId: " << cpuId <<
-            ", more " << mOptions.ToShortString() << "] working thread started");
+        NN_LOG_INFO("SockWorker [name: " << mName << ", index: " << mIndex.ToString() << ", cpuId: " << cpuId
+                                         << ", more " << mOptions.ToShortString() << "] working thread started");
     }
 
 private:
     SockType mType = SOCK_TCP;
     std::string mName;
     std::mutex mMutex;
-    UBSHcomNetWorkerIndex mIndex {};
+    UBSHcomNetWorkerIndex mIndex{};
     bool mInited = false;
     NetMemPoolFixedPtr mOpCtxMemPool = nullptr;
     NetMemPoolFixedPtr mSglCtxMemPool = nullptr;
     NetMemPoolFixedPtr mHeaderReqMemPool = nullptr;
 
-    SockWorkerOptions mOptions {};
+    SockWorkerOptions mOptions{};
 
     /* variable for thread */
-    std::thread mProgressThr;                       /* thread object of progress */
-    bool mStarted = false;                          /* thread already started or not */
-    std::atomic_bool mProgressThrStarted { false }; /* started flag */
-    volatile bool mNeedToStop = false;              /* flag to be stopped */
+    std::thread mProgressThr;                    /* thread object of progress */
+    bool mStarted = false;                       /* thread already started or not */
+    std::atomic_bool mProgressThrStarted{false}; /* started flag */
+    volatile bool mNeedToStop = false;           /* flag to be stopped */
 
     SockNewReqHandler mNewRequestHandler = nullptr;   /* request process related */
     SockPostedHandler mSendPostedHandler = nullptr;   /* send request posted process related */
@@ -324,7 +329,7 @@ private:
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_SOCK_WORKER_H_234214

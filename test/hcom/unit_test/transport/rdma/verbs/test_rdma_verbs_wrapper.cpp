@@ -10,16 +10,16 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <unistd.h>
+#include <mockcpp/mockcpp.hpp>
 #include <utility>
 
 #include "hcom_utils.h"
 #include "net_common.h"
-#include "rdma_verbs_wrapper_qp.h"
 #include "rdma_mr_dm_buf.h"
 #include "rdma_mr_fixed_buf.h"
 #include "rdma_verbs_wrapper_ctx.h"
+#include "rdma_verbs_wrapper_qp.h"
 
 namespace ock {
 namespace hcom {
@@ -29,13 +29,9 @@ public:
     virtual void TearDown(void);
 };
 
-void TestRdmaVerbsWrapper::SetUp()
-{
-}
+void TestRdmaVerbsWrapper::SetUp() {}
 
-void TestRdmaVerbsWrapper::TearDown()
-{
-}
+void TestRdmaVerbsWrapper::TearDown() {}
 
 TEST_F(TestRdmaVerbsWrapper, DeviceHelperUnInitialize)
 {
@@ -79,7 +75,7 @@ TEST_F(TestRdmaVerbsWrapper, DeviceHelperGetEnableDeviceCountWithMatchIp)
     RResult result = RDMADeviceHelper::GetEnableDeviceCount("192.168.0.0/24", enableCount, enableIps, "");
     EXPECT_EQ(result, RR_DEVICE_FAILED_OPEN);
 
-    RDMADeviceSimpleInfo simpleInfo {};
+    RDMADeviceSimpleInfo simpleInfo{};
     simpleInfo.active = true;
     RDMADeviceHelper::G_RDMADevMap[0] = simpleInfo;
     MOCKER_CPP(&RDMADeviceHelper::GetDeviceByIp).stubs().will(invoke(MockGetDeviceByIp));
@@ -90,7 +86,7 @@ TEST_F(TestRdmaVerbsWrapper, DeviceHelperGetEnableDeviceCountWithMatchIp)
 
 TEST_F(TestRdmaVerbsWrapper, OpResult)
 {
-    ibv_wc wc {};
+    ibv_wc wc{};
     wc.status = IBV_WC_SUCCESS;
     EXPECT_EQ(RDMAOpContextInfo::OpResult(wc), RDMAOpContextInfo::OpResultType::SUCCESS);
     wc.status = IBV_WC_RETRY_EXC_ERR;
@@ -121,8 +117,7 @@ TEST_F(TestRdmaVerbsWrapper, GetNResult)
 
 TEST_F(TestRdmaVerbsWrapper, DoInitialize)
 {
-    MOCKER_CPP(RDMADeviceHelper::DoUpdate).stubs()
-        .will(returnValue(static_cast<int>(RR_DEVICE_FAILED_OPEN)));
+    MOCKER_CPP(RDMADeviceHelper::DoUpdate).stubs().will(returnValue(static_cast<int>(RR_DEVICE_FAILED_OPEN)));
     EXPECT_EQ(RDMADeviceHelper::DoInitialize(), RR_DEVICE_FAILED_OPEN);
     EXPECT_NO_FATAL_FAILURE(RDMADeviceHelper::Update());
 }
@@ -132,13 +127,15 @@ TEST_F(TestRdmaVerbsWrapper, DoUpdate)
     std::vector<RDMAGId> outGidVec;
     EXPECT_NO_FATAL_FAILURE(RDMADeviceHelper::GetGidVec(nullptr, "name", 0, 0, 0, outGidVec));
 
-    ibv_context ctx {};
-    VerbsAPI::hcomInnerQueryGid =
-        [](struct ibv_context *context, uint8_t port_num, int index, union ibv_gid *gid) { return 1; };
+    ibv_context ctx{};
+    VerbsAPI::hcomInnerQueryGid = [](struct ibv_context *context, uint8_t port_num, int index, union ibv_gid *gid) {
+        return 1;
+    };
     EXPECT_NO_FATAL_FAILURE(RDMADeviceHelper::GetGidVec(&ctx, "name", 0, 0, 1, outGidVec));
 
-    VerbsAPI::hcomInnerQueryGid =
-        [](struct ibv_context *context, uint8_t port_num, int index, union ibv_gid *gid) { return 0; };
+    VerbsAPI::hcomInnerQueryGid = [](struct ibv_context *context, uint8_t port_num, int index, union ibv_gid *gid) {
+        return 0;
+    };
     EXPECT_NO_FATAL_FAILURE(RDMADeviceHelper::GetGidVec(&ctx, "name", 0, 0, 1, outGidVec));
 }
 
@@ -151,13 +148,12 @@ TEST_F(TestRdmaVerbsWrapper, StrToRoCEVersion)
 
 TEST_F(TestRdmaVerbsWrapper, RDMAContextInitializeFail)
 {
-    RDMAGId gid {};
-    RDMAContext ctx {"name", false, gid};
-    ibv_context ctx1 {};
+    RDMAGId gid{};
+    RDMAContext ctx{"name", false, gid};
+    ibv_context ctx1{};
     ctx.mContext = &ctx1;
 
-    MOCKER_CPP(RDMAContext::UnInitialize).stubs()
-        .will(returnValue(static_cast<int>(RR_OK)));
+    MOCKER_CPP(RDMAContext::UnInitialize).stubs().will(returnValue(static_cast<int>(RR_OK)));
 
     EXPECT_EQ(ctx.Initialize(), RR_OK);
     ctx.mContext = nullptr;
@@ -165,9 +161,10 @@ TEST_F(TestRdmaVerbsWrapper, RDMAContextInitializeFail)
 
 TEST_F(TestRdmaVerbsWrapper, Initialize)
 {
-    RDMAGId gid {};
-    RDMAContext ctx {"name", false, gid};
-    MOCKER_CPP(RDMADeviceHelper::Update).stubs()
+    RDMAGId gid{};
+    RDMAContext ctx{"name", false, gid};
+    MOCKER_CPP(RDMADeviceHelper::Update)
+        .stubs()
         .will(returnValue(static_cast<int>(RR_DEVICE_FAILED_OPEN)))
         .then(returnValue(static_cast<int>(RR_OK)));
     EXPECT_NO_FATAL_FAILURE(ctx.UpdateGid("IP"));
@@ -176,11 +173,10 @@ TEST_F(TestRdmaVerbsWrapper, Initialize)
 
 TEST_F(TestRdmaVerbsWrapper, RDMACqInitializeFail)
 {
-    RDMACq cq {"name", nullptr};
+    RDMACq cq{"name", nullptr};
 
-    MOCKER_CPP(RDMACq::UnInitialize).stubs()
-        .will(returnValue(static_cast<int>(RR_OK)));
-    ibv_cq ibvCq {};
+    MOCKER_CPP(RDMACq::UnInitialize).stubs().will(returnValue(static_cast<int>(RR_OK)));
+    ibv_cq ibvCq{};
     EXPECT_EQ(cq.Initialize(), RR_PARAM_INVALID);
     cq.mCompletionQueue = &ibvCq;
     EXPECT_EQ(cq.Initialize(), RR_OK);
@@ -190,19 +186,17 @@ TEST_F(TestRdmaVerbsWrapper, RDMACqInitializeFail)
 
 TEST_F(TestRdmaVerbsWrapper, RDMAQpCreateFail)
 {
-    RDMAQp qp {"name", 0, nullptr, nullptr};
-    MOCKER_CPP(RDMAQp::UnInitialize).stubs()
-        .will(returnValue(static_cast<int>(RR_OK)));
+    RDMAQp qp{"name", 0, nullptr, nullptr};
+    MOCKER_CPP(RDMAQp::UnInitialize).stubs().will(returnValue(static_cast<int>(RR_OK)));
     EXPECT_EQ(qp.CreateIbvQp(), RR_PARAM_INVALID);
-    RDMAQpExchangeInfo info {};
+    RDMAQpExchangeInfo info{};
     EXPECT_EQ(qp.ChangeToReady(info), RR_QP_CHANGE_STATE_FAILED);
     EXPECT_EQ(qp.GetExchangeInfo(info), RR_QP_NOT_INITIALIZED);
 
-    MOCKER_CPP(RDMAMemoryRegionFixedBuffer::Create).stubs()
-        .will(returnValue(static_cast<int>(RR_PARAM_INVALID)));
+    MOCKER_CPP(RDMAMemoryRegionFixedBuffer::Create).stubs().will(returnValue(static_cast<int>(RR_PARAM_INVALID)));
     EXPECT_EQ(qp.CreateQpMr(), RR_PARAM_INVALID);
 
-    RDMAMemoryRegionFixedBuffer mr {"name", nullptr, 0, 0};
+    RDMAMemoryRegionFixedBuffer mr{"name", nullptr, 0, 0};
     qp.mQpMr = &mr;
 
     uintptr_t item = 0;
@@ -230,5 +224,5 @@ TEST_F(TestRdmaVerbsWrapper, GetMaxRdAtomic)
     EXPECT_EQ(ret, RESULT);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

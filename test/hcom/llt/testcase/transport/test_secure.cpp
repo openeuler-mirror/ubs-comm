@@ -42,9 +42,10 @@ static int OneSideDone(const UBSHcomNetRequestContext &ctx)
 
 // one way, provider registered, return valid
 static int SecInfoProviderValidOne(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output,
-    uint32_t &outLen, bool &needAutoFree)
+                                   uint32_t &outLen, bool &needAutoFree)
 {
-    const char *kToken = "6G5NXCPJZB-"
+    const char *kToken =
+        "6G5NXCPJZB-"
         "eyJsaWNlbnNlSWQiOiI2RzVOWENQSlpCIiwibGljZW5zZWVOYW1lIjoic2lnbnVwIHNjb290ZXIiLCJhc3NpZ25lZU5hbWUiOiIiLCJhc3NpZ2"
         "5lZUVtYWlsIjoiIiwibGljZW5zZVJlc3RyaWN0aW9uIjoiIiwiY2hlY2tDb25jdXJyZW50VXNlIjpmYWxzZSwicHJvZHVjdHMiOlt7ImNvZGUi"
         "OiJQU0kiLCJmYWxsYmFja0RhdGUiOiIyMDI1LTA4LTAxIiwicGFpZFVwVG8iOiIyMDI1LTA4LTAxIiwiZXh0ZW5kZWQiOnRydWV9LHsiY29kZS"
@@ -86,14 +87,14 @@ static int SecInfoProviderValidOne(uint64_t ctx, int64_t &flag, UBSHcomNetDriver
     outLen = strlen(kToken);
     type = ock::hcom::NET_SEC_VALID_ONE_WAY;
     needAutoFree = false;
-    NN_LOG_INFO("client auth info " << output << " len:" << outLen << " flag:" << flag << " sec type:" <<
-        UBSHcomNetDriverSecTypeToString(type));
+    NN_LOG_INFO("client auth info " << output << " len:" << outLen << " flag:" << flag
+                                    << " sec type:" << UBSHcomNetDriverSecTypeToString(type));
     return 0;
 }
 
 // two way, provider registered, return valid
 static int SecInfoProviderValidTwo(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output,
-    uint32_t &outLen, bool &needAutoFree)
+                                   uint32_t &outLen, bool &needAutoFree)
 {
     const char *kToken = "clientservertoken";
     flag = 1;
@@ -101,14 +102,14 @@ static int SecInfoProviderValidTwo(uint64_t ctx, int64_t &flag, UBSHcomNetDriver
     outLen = strlen(kToken);
     type = ock::hcom::NET_SEC_VALID_TWO_WAY;
     needAutoFree = false;
-    NN_LOG_INFO("client auth info " << output << " len:" << outLen << " flag:" << flag << " sec type:" <<
-        UBSHcomNetDriverSecTypeToString(type));
+    NN_LOG_INFO("client auth info " << output << " len:" << outLen << " flag:" << flag
+                                    << " sec type:" << UBSHcomNetDriverSecTypeToString(type));
     return 0;
 }
 
 // token is empty string
 static int SecInfoProviderValid(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output,
-    uint32_t &outLen, bool &needAutoFree)
+                                uint32_t &outLen, bool &needAutoFree)
 {
     const char *kToken = "";
     flag = 1;
@@ -116,14 +117,14 @@ static int SecInfoProviderValid(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSec
     outLen = strlen(kToken);
     type = ock::hcom::NET_SEC_VALID_ONE_WAY;
     needAutoFree = false;
-    NN_LOG_INFO("client auth info " << output << " len:" << outLen << " flag:" << flag << " sec type:" <<
-        UBSHcomNetDriverSecTypeToString(type));
+    NN_LOG_INFO("client auth info " << output << " len:" << outLen << " flag:" << flag
+                                    << " sec type:" << UBSHcomNetDriverSecTypeToString(type));
     return 0;
 }
 
 // provider not registered, return valid
-static int ProviderValid(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output,
-    uint32_t &outLen, bool &needAutoFree)
+static int ProviderValid(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output, uint32_t &outLen,
+                         bool &needAutoFree)
 {
     NN_LOG_WARN("client provider is not registered, but return valid");
     return 0;
@@ -131,7 +132,7 @@ static int ProviderValid(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &t
 
 // provider not registered, return invalid
 static int SecInfoProviderInvalid(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type, char *&output,
-    uint32_t &outLen, bool &needAutoFree)
+                                  uint32_t &outLen, bool &needAutoFree)
 {
     NN_LOG_ERROR("invalid sec info");
     return -1;
@@ -175,8 +176,8 @@ static NResult SendSingleRequest(UBSHcomNetEndpointPtr clientEp)
 }
 
 static void SetCB(UBSHcomNetDriver *&driver, uint16_t port, bool isServer,
-    const UBSHcomNetDriverEndpointSecInfoProvider &SecInfoProvider,
-    const UBSHcomNetDriverEndpointSecInfoValidator &SecInfoValidator)
+                  const UBSHcomNetDriverEndpointSecInfoProvider &SecInfoProvider,
+                  const UBSHcomNetDriverEndpointSecInfoValidator &SecInfoValidator)
 {
     if (isServer) {
         driver->RegisterNewEPHandler(
@@ -190,14 +191,16 @@ static void SetCB(UBSHcomNetDriver *&driver, uint16_t port, bool isServer,
         driver->RegisterEndpointSecInfoProvider(nullptr);
     } else {
         driver->RegisterEndpointSecInfoProvider(std::bind(SecInfoProvider, std::placeholders::_1, std::placeholders::_2,
-            std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                                                          std::placeholders::_3, std::placeholders::_4,
+                                                          std::placeholders::_5, std::placeholders::_6));
     }
 
     if (SecInfoValidator == nullptr) {
         driver->RegisterEndpointSecInfoValidator(nullptr);
     } else {
         driver->RegisterEndpointSecInfoValidator(std::bind(SecInfoValidator, std::placeholders::_1,
-            std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+                                                           std::placeholders::_2, std::placeholders::_3,
+                                                           std::placeholders::_4));
     }
 
     driver->OobIpAndPort(BASE_IP, port);

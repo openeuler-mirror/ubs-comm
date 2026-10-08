@@ -7,9 +7,9 @@
 #include "multicast_config.h"
 #include "multicast_def.h"
 #include "multicast_message.h"
-#include "multicast_subscriber.h"
-#include "multicast_subscriber_service.h"
 #include "multicast_publisher.h"
 #include "multicast_publisher_service.h"
+#include "multicast_subscriber.h"
+#include "multicast_subscriber_service.h"
 
 #endif

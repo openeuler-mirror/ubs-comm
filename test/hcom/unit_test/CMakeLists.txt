@@ -44,6 +44,7 @@ set(HCOM_STUB_SRC_DIR ${CMAKE_SOURCE_DIR}/test/hcom/stub)
 file(GLOB_RECURSE SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/hcom/*.cpp
     ${CMAKE_SOURCE_DIR}/src/hcom/*.h)
+list(FILTER SOURCE_FILES EXCLUDE REGEX "umq/build/")
 
 # remove jni file from hcom source files
 file(GLOB_RECURSE HCOM_JNI_SRCS "${HCOM_SRC_DIR}/src/api/java_sdk/*.cpp"
@@ -160,7 +161,8 @@ set(CXX_FLAGS
     -fstack-protector-strong
     #-fPIC will cause failure while mocking system functions
 )
-string(REPLACE ";" " " CMAKE_CXX_FLAGS "${CXX_FLAGS}")
+string(REPLACE ";" " " CXX_FLAGS_STR "${CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_FLAGS_STR}")
 set(DEPEND_LIBS rt pthread gtest gcov mockcpp dl fake_ibv_static boundscheck)
 target_compile_options(${HCOM_UT} PUBLIC -D_GNU_SOURCE)
 set_target_properties(${HCOM_UT} PROPERTIES CLEAN_DIRECT_OUTPUT 1)

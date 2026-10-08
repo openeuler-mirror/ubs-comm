@@ -20,7 +20,8 @@ public:
     SerResult CreatePublisher(NetRef<Publisher> &publisher) override;
     void DestroyPublisher(NetRef<Publisher> &publisher) override;
 
-    SerResult Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler) override;
+    SerResult Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler,
+                   const int cpuId = -1) override;
     MulticastConfig &GetConfig() override;
     void RegisterSubscriptionExceptionHandler(const SubscriptionExceptionHandler &handler) override;
     void RegisterBrokenHandler(const MulticastEpBrokenHandler &handler);
@@ -39,18 +40,19 @@ public:
     SerResult RegisterMemoryRegion(uint64_t size, UBSHcomNetMemoryRegionPtr &mr);
     SerResult RegisterMemoryRegion(uintptr_t address, uint64_t size, UBSHcomNetMemoryRegionPtr &mr);
     void DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr);
+
 private:
     SerResult InitDriver();
     SerResult CreateResource(uint32_t threadNum);
-    SerResult AddTcpOobListener(const std::string &url, uint16_t workerCount = UINT16_MAX);
+    SerResult AddTcpOobListener(const std::string &url, int cpuId, uint16_t workerCount = UINT16_MAX);
     SerResult StartDriver();
     SerResult EpBrokenCallback(const ock::hcom::UBSHcomNetEndpointPtr &ep);
     SerResult NewSubscriptionCallback(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-        const std::string &payload);
+                                      const std::string &payload);
     SerResult ServiceRequestReceived(const UBSHcomNetRequestContext &ctx);
     SerResult DelayEraseEp(const UBSHcomNetEndpointPtr &ep, uint16_t delayTime);
-    void DirectEraseEp(UBSHcomNetEndpointPtr ep);
-    void EraseEpCb(PublisherContext &ctx, uintptr_t epPtr);
+    void DirectEraseEp(const UBSHcomNetEndpointPtr &ep);
+    void EraseEpCb(PublisherContext &, const UBSHcomNetEndpointPtr &ep);
 
 private:
     MulticastConfigImp mCfg;
@@ -73,9 +75,8 @@ private:
     PublisherPtr mPublisher = nullptr;
     MultiCastPeriodicManagerPtr mPeriodicMgr = nullptr;
     NetMemPoolFixedPtr mCtxMemPool = nullptr;
-    NetMemPoolFixedPtr mPubCtxMemPool = nullptr;
     uint32_t mCtxStoreCapacity = NN_NO2097152;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

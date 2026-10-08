@@ -13,21 +13,21 @@
 #define OCK_HCOM_SOCK_COMMON_H_2344
 
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/tcp.h>
+#include <sys/epoll.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/un.h>
+#include <unistd.h>
 #include <atomic>
 #include <cstdint>
 #include <functional>
-#include <fcntl.h>
 #include <mutex>
-#include <netinet/tcp.h>
 #include <string>
-#include <sys/epoll.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/uio.h>
 #include <thread>
 #include <unordered_map>
-#include <unistd.h>
 #include "hcom.h"
 #include "hcom_def.h"
 #include "hcom_log.h"
@@ -45,7 +45,8 @@ using SockPtr = NetRef<Sock>;
 
 using SockTransHeader = UBSHcomNetTransHeader;
 
-enum SockType : uint8_t {
+enum SockType : uint8_t
+{
     SOCK_UDS = 0,     /* uds as transfer protocol */
     SOCK_TCP = 1,     /* tcp as transfer protocol */
     SOCK_UDS_TCP = 2, /* both tcp and uds, if local host use uds, otherwise use tcp */
@@ -81,14 +82,17 @@ struct SockWorkerOptions {
     int tcpUserTimeout = -1;
     bool tcpEnableNoDelay = true;
     bool tcpSendZCopy = false;
+    /* epoll default is ET, set true enable to LT (multicast or call for hlc will use this option) */
+    bool tcpEpollLT = false;
 
     inline std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "options polling-timeout-us: " << pollingTimeoutMs << "us, polling-batch-size: " << pollingBatchSize <<
-            ", is-server: " << isServer << ", recv-buf-size: " << sockReceiveBufKB << "KB, send-buf-size: " <<
-            sockSendBufKB << "KB, keepalive-idle-time: " << keepaliveIdleTime << "s, keepalive-probe-times: " <<
-            keepaliveProbeTimes << ", keepalive-probe-interval: " << keepaliveProbeInterval << "s";
+        oss << "options polling-timeout-us: " << pollingTimeoutMs << "us, polling-batch-size: " << pollingBatchSize
+            << ", is-server: " << isServer << ", recv-buf-size: " << sockReceiveBufKB
+            << "KB, send-buf-size: " << sockSendBufKB << "KB, keepalive-idle-time: " << keepaliveIdleTime
+            << "s, keepalive-probe-times: " << keepaliveProbeTimes
+            << ", keepalive-probe-interval: " << keepaliveProbeInterval << "s";
         return oss.str();
     }
 
@@ -99,7 +103,7 @@ struct SockWorkerOptions {
         return oss.str();
     }
 
-    void SetValue(const UBSHcomNetDriverOptions& opt, bool isStartOobServer)
+    void SetValue(const UBSHcomNetDriverOptions &opt, bool isStartOobServer)
     {
         pollingTimeoutMs = opt.eventPollingTimeout;
         pollingBatchSize = opt.pollingBatchSize;
@@ -114,16 +118,21 @@ struct SockWorkerOptions {
         tcpUserTimeout = opt.tcpUserTimeout;
         tcpEnableNoDelay = opt.tcpEnableNoDelay;
         tcpSendZCopy = opt.tcpSendZCopy;
+        tcpEpollLT = opt.tcpEpollLT;
     }
 };
 
 struct SockSglContextInfo {
-    SockTransHeader sendHeader {}; // record header for raw/raw sgl/read/write/
-    uint16_t iovCount = 0;         // max count:NET_SGE_MAX_IOV
+    SockTransHeader sendHeader{}; // record header for raw/raw sgl/read/write/
+    uint16_t iovCount = 0;        // max count:NET_SGE_MAX_IOV
     UBSHcomNetTransSgeIov iov[NET_SGE_MAX_IOV] = {};
 
     inline void Clone(SockTransHeader newHeader, UBSHcomNetTransSgeIov *newIov, uint16_t newIovCnt)
     {
+        if (newIovCnt > NET_SGE_MAX_IOV) {
+            NN_LOG_ERROR("Failed to clone SockSglContextInfo as new iov count " << newIovCnt);
+            return;
+        }
         sendHeader = newHeader;
         iovCount = newIovCnt;
         for (uint16_t i = 0; i < iovCount; i++) {
@@ -138,7 +147,8 @@ struct SockHeaderReqInfo {
 } __attribute__((packed));
 
 struct SockOpContextInfo {
-    enum SockOpType : uint8_t {
+    enum SockOpType : uint8_t
+    {
         SS_SEND = 0,
         SS_SEND_RAW = 1,
         SS_SEND_RAW_SGL = 2,
@@ -153,7 +163,8 @@ struct SockOpContextInfo {
         SS_SGL_READ_ACK = 11,
     };
 
-    enum SockErrorType : uint8_t {
+    enum SockErrorType : uint8_t
+    {
         SS_NO_ERROR = 0,
         SS_OPERATE_FAILURE = 1,
         SS_RESET_BY_PEER = 2,
@@ -196,7 +207,8 @@ struct SockOpContextInfo {
 
 using SResult = int32_t;
 
-enum SCode {
+enum SCode
+{
     SS_OK = 0,
     SS_ERROR = 400, /* general error */
     SS_PARAM_INVALID = 401,
@@ -223,7 +235,7 @@ enum SCode {
 };
 
 constexpr uint32_t SOCK_CTX_MAP_RESERVATION = 8192;
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_SOCK_COMMON_H_2344

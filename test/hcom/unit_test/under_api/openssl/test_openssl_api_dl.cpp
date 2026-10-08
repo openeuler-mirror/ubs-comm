@@ -38,5 +38,5 @@ TEST_F(TestOpenSSLApiDl, TestLoadOpensslApiSuccess)
     int res = SSLAPI::LoadOpensslAPI();
     EXPECT_EQ(res, 0);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -10,11 +10,11 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <iostream>
-#include "hcom/hcom_num_def.h"
-#include "hcom/hcom_err.h"
-#include "rpc_client.h"
-#include "htracer_utils.h"
 #include "cmd_handler.h"
+#include "hcom/hcom_err.h"
+#include "hcom/hcom_num_def.h"
+#include "htracer_utils.h"
+#include "rpc_client.h"
 
 using namespace ock::hcom;
 
@@ -29,9 +29,9 @@ using namespace ock::hcom;
 
 void InvalidParamPrint()
 {
-    std::cout << "Invalid parameters!"<<std::endl <<
-           "\t -s server name." << std::endl <<
-           "\t The server name is registerd when init" <<std::endl;
+    std::cout << "Invalid parameters!" << std::endl
+              << "\t -s server name." << std::endl
+              << "\t The server name is registerd when init" << std::endl;
 }
 
 int main(int argc, char **argv)

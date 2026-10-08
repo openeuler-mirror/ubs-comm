@@ -9,13 +9,13 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "net_pgtable.h"
 #include <cstring>
 #include <vector>
 #include "hcom_def.h"
 #include "hcom_err.h"
 #include "hcom_log.h"
 #include "securec.h"
-#include "net_pgtable.h"
 
 namespace ock {
 namespace hcom {
@@ -118,7 +118,7 @@ void PgTable::PgtDirRelease(PgtDir *pgd)
 }
 
 void PgTable::PgtDumpSubtree(uint32_t indent, const PgtEntry &pgtEntry, uint32_t pteIndex, PgtAddress base,
-    PgtAddress mask, uint32_t shift)
+                             PgtAddress mask, uint32_t shift)
 {
     if (pgtEntry.HasFlag(EntryFlags::REGION)) {
         auto region = pgtEntry.GetRegion();
@@ -131,8 +131,8 @@ void PgTable::PgtDumpSubtree(uint32_t indent, const PgtEntry &pgtEntry, uint32_t
         if (pgd == nullptr) {
             return;
         }
-        NN_LOG_DEBUG("indent: " << indent << " pte_index:" << pteIndex << " dir count:"
-        << pgd->count << " shift:" << shift);
+        NN_LOG_DEBUG("indent: " << indent << " pte_index:" << pteIndex << " dir count:" << pgd->count
+                                << " shift:" << shift);
         shift -= PTE_SHIFT_PER_DIR;
         mask |= PTE_INDEX_MASK << shift;
         for (uint32_t i = 0; i < PTE_ENTRY_NUM_PER_DIR; ++i) {
@@ -252,7 +252,7 @@ bool PgTable::PgtShrink()
 
     mIndexShift -= PTE_SHIFT_PER_DIR;
     mVirBaseAddr |= static_cast<PgtAddress>(idx) << mIndexShift; // 将idx的偏移
-    mSpaceMask |= PTE_INDEX_MASK << mIndexShift;                 // 缩小mask不再覆盖最高的PTE_SHIFT_PER_DIR位置
+    mSpaceMask |= PTE_INDEX_MASK << mIndexShift; // 缩小mask不再覆盖最高的PTE_SHIFT_PER_DIR位置
     mRootEntry = *pgtEntry;
     NN_LOG_INFO("pgtable shrink, shift:" << mIndexShift << ", count:" << mRegionCount);
     PgtDirRelease(pgd);
@@ -398,7 +398,7 @@ ROLLBACK:
 }
 
 NResult PgTable::UnlinkRegion(PgtAddress address, uint32_t order, PgtDir &pgd, PgtEntry &pgtEntry, uint32_t shift,
-    PgtRegion &region)
+                              PgtRegion &region)
 {
     if (pgtEntry.HasFlag(EntryFlags::REGION)) {
         if (shift != order) {
@@ -591,10 +591,10 @@ PgtRegion *PgTable::Lookup(PgtAddress address) const
 }
 
 void PgTable::SearchSubtree(PgtAddress address, uint32_t order, const PgtEntry &pgtEntry, uint32_t currentShift,
-    PgtSearchCb cb, void *arg, PgtRegion *&lastRegion)
+                            PgtSearchCb cb, void *arg, PgtRegion *&lastRegion)
 {
-    NN_LOG_DEBUG("Begin to search subtree, order " << order << " currentShift " << currentShift <<
-        " entry is region " << pgtEntry.HasFlag(EntryFlags::REGION));
+    NN_LOG_DEBUG("Begin to search subtree, order " << order << " currentShift " << currentShift << " entry is region "
+                                                   << pgtEntry.HasFlag(EntryFlags::REGION));
     if (pgtEntry.HasFlag(EntryFlags::REGION)) {
         auto region = pgtEntry.GetRegion();
         if (region == nullptr || lastRegion == region) {
@@ -623,8 +623,8 @@ void PgTable::SearchSubtree(PgtAddress address, uint32_t order, const PgtEntry &
             return;
         }
         if (currentShift < PTE_SHIFT_PER_DIR) {
-            NN_LOG_ERROR("Failed to search, current shift " << currentShift
-            << " is less than entry mIndexShift per level " << PTE_SHIFT_PER_DIR);
+            NN_LOG_ERROR("Failed to search, current shift "
+                         << currentShift << " is less than entry mIndexShift per level " << PTE_SHIFT_PER_DIR);
             return;
         }
 
@@ -640,7 +640,7 @@ void PgTable::SearchSubtree(PgtAddress address, uint32_t order, const PgtEntry &
             SearchSubtree(address, order, *nextPte, nextShift, cb, arg, lastRegion);
         } else {
             // search region covers the range of current dir, need to search all entries.
-            for (const auto& nextPte : dir->entries) {
+            for (const auto &nextPte : dir->entries) {
                 SearchSubtree(address, order, nextPte, nextShift, cb, arg, lastRegion);
             }
         }
@@ -720,9 +720,9 @@ void PgTable::Cleanup()
         NN_LOG_WARN("unable to purge pgtable, entry already exist after clean");
     }
     if (mIndexShift != PAGE_SHIFT_MIN || mVirBaseAddr != 0 || mRegionCount != 0) {
-        NN_LOG_WARN("unable to purge pgtable, patable mIndexShift:" << mIndexShift << " base:"
-        << mVirBaseAddr << " num regions " << mRegionCount);
+        NN_LOG_WARN("unable to purge pgtable, patable mIndexShift:" << mIndexShift << " base:" << mVirBaseAddr
+                                                                    << " num regions " << mRegionCount);
     }
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -106,6 +106,14 @@ get_filename_component(PROJECT_ROOT_DIR ${CMAKE_SOURCE_DIR}/../../.. ABSOLUTE)
 set(URMA_INCLUDE_DIR ${PROJECT_ROOT_DIR}/dist/hcom_3rdparty/umdk/urma/include)
 message(STATUS "UMQ: URMA_INCLUDE_DIR = ${URMA_INCLUDE_DIR}")
 
+if(USE_URMA_STUB)
+    # Use stub headers instead of external URMA
+    set(URMA_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/stub/urma)
+    message(STATUS "Using URMA stub headers from: ${URMA_INCLUDE_DIR}")
+    add_compile_definitions(USE_URMA_STUB)
+endif()
+
+
 if(EXISTS "${URMA_INCLUDE_DIR}/uvs_api.h")
     message(STATUS "uvs_api.h has found, it shows that urma comes from 3rdparty.")
 else()

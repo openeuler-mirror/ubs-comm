@@ -97,8 +97,8 @@ void NetHeartbeat::Stop()
 void NetHeartbeat::RunInHbThread()
 {
     mHBStarted.store(true);
-    NN_LOG_INFO("Heartbeat thread for driver " << mDriver->Name() << ", HCOMHb" << std::to_string(mDriver->GetId()) <<
-        " started, idle time " << mHeartBeatIdleTime);
+    NN_LOG_INFO("Heartbeat thread for driver " << mDriver->Name() << ", HCOMHb" << std::to_string(mDriver->GetId())
+                                               << " started, idle time " << mHeartBeatIdleTime);
 
     /* set thread name */
     pthread_setname_np(pthread_self(), ("HCOMHb" + std::to_string(mDriver->GetId())).c_str());
@@ -112,8 +112,8 @@ void NetHeartbeat::RunInHbThread()
         }
         usleep(mHeartBeatProbeInterval);
     }
-    NN_LOG_INFO("Heartbeat thread for driver " << mDriver->Name() << ", HCOMHb" << std::to_string(mDriver->GetId()) <<
-        " exiting");
+    NN_LOG_INFO("Heartbeat thread for driver " << mDriver->Name() << ", HCOMHb" << std::to_string(mDriver->GetId())
+                                               << " exiting");
     mHBStarted.store(false);
 }
 
@@ -165,8 +165,8 @@ template <typename T, typename T1, typename T2>
 NResult NetHeartbeat::SendHeartBeat(T *ep, T1 *driver, UBSHcomNetTransRequest &request, T2 opType)
 {
     if (NN_UNLIKELY(!ep->mState.Compare(NEP_ESTABLISHED))) {
-        NN_LOG_ERROR("Endpoint " << ep->mId << " is not established, state is " <<
-            UBSHcomNEPStateToString(ep->mState.Get()));
+        NN_LOG_ERROR("Endpoint " << ep->mId << " is not established, state is "
+                                 << UBSHcomNEPStateToString(ep->mState.Get()));
         return NN_EP_NOT_ESTABLISHED;
     }
 
@@ -252,7 +252,7 @@ void NetHeartbeat::DetectSingleEpHbState(T *ep, T1 *driver, UBSHcomNetTransReque
 
 template <typename T>
 void NetHeartbeat::DetectSingleEpHbState(NetUBAsyncEndpoint *ep, NetDriverUBWithOob *driver,
-    UBSHcomNetTransRequest &request, T opType)
+                                         UBSHcomNetTransRequest &request, T opType)
 {
     if (NN_UNLIKELY(ep == nullptr || driver == nullptr)) {
         NN_LOG_WARN("Invalid operation to dynamic cast");
@@ -279,7 +279,8 @@ void NetHeartbeat::DetectSingleEpHbState(NetUBAsyncEndpoint *ep, NetDriverUBWith
     }
 }
 
-template <typename T, typename T1> void NetHeartbeat::DetectSingleEpHbState(T *ep, T1 *driver)
+template <typename T, typename T1>
+void NetHeartbeat::DetectSingleEpHbState(T *ep, T1 *driver)
 {
     if (NN_UNLIKELY(ep == nullptr || driver == nullptr)) {
         NN_LOG_WARN("Invalid operation to dynamic cast");
@@ -320,21 +321,23 @@ void NetHeartbeat::DetectSingleEpHbState(UBSHcomNetTransRequest &request, UBSHco
 #ifdef RDMA_BUILD_ENABLED
         case UBSHcomNetDriverProtocol::RDMA:
             return DetectSingleEpHbState(dynamic_cast<NetAsyncEndpoint *>(endPoint),
-                dynamic_cast<NetDriverRDMAWithOob *>(mDriver), request, RDMAOpContextInfo::HB_WRITE);
+                                         dynamic_cast<NetDriverRDMAWithOob *>(mDriver), request,
+                                         RDMAOpContextInfo::HB_WRITE);
 #endif
 
 #ifdef UB_BUILD_ENABLED
         case UBSHcomNetDriverProtocol::UBC:
             return DetectSingleEpHbState(dynamic_cast<NetUBAsyncEndpoint *>(endPoint),
-                dynamic_cast<NetDriverUBWithOob *>(mDriver), request, UBOpContextInfo::HB_WRITE);
+                                         dynamic_cast<NetDriverUBWithOob *>(mDriver), request,
+                                         UBOpContextInfo::HB_WRITE);
 #endif
 
         default:
-            NN_LOG_ERROR("Invalid protocol " << UBSHcomNetDriverProtocolToString(mDriver->Protocol()) <<
-                " to send heartbeat");
+            NN_LOG_ERROR("Invalid protocol " << UBSHcomNetDriverProtocolToString(mDriver->Protocol())
+                                             << " to send heartbeat");
             return;
     }
     return;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

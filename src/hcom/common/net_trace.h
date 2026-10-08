@@ -12,10 +12,10 @@
 #ifndef HCOM_TRACE_H
 #define HCOM_TRACE_H
 
-#include <mutex>
-#include <iomanip>
-#include <sstream>
 #include <functional>
+#include <iomanip>
+#include <mutex>
+#include <sstream>
 #include "hcom_def.h"
 #include "hcom_utils.h"
 #include "trace/htracer.h"
@@ -24,14 +24,16 @@ namespace ock {
 namespace hcom {
 #define GENERATE_TRACE_ID(level, innerId) ((level) << NN_NO24 | ((innerId)&0xFFFFFF))
 
-enum NetTraceLevel : uint8_t {
+enum NetTraceLevel : uint8_t
+{
     LEVEL0 = 0, // disable
     LEVEL1,     // High priority , LEVEL1 enable
     LEVEL2,     // Middle priority, LEVEL1 + LEVEL2 enable
     LEVEL3,     // Low priority , LEVEL1 + LEVEL2+LEVEL3 enable
 };
 
-enum NetTracePointId : uint32_t {
+enum NetTracePointId : uint32_t
+{
     SERVICE_INSTANCE_INNER = 0,
     SERVICE_START_INNER,
     SERVICE_STOP_INNER,
@@ -203,7 +205,8 @@ enum NetTracePointId : uint32_t {
     MAX_MODULE_ID_INNER,
 };
 
-enum NetTracePointIdWithLevel : uint32_t {
+enum NetTracePointIdWithLevel : uint32_t
+{
     SERVICE_INSTANCE = TRACE_ID(SERVICE_INSTANCE_INNER, LEVEL1),
     SERVICE_START = TRACE_ID(SERVICE_START_INNER, LEVEL1),
     SERVICE_STOP = TRACE_ID(SERVICE_STOP_INNER, LEVEL1),
@@ -456,7 +459,8 @@ public:
         }
 
         for (uint32_t i = 0; i < MAX_MODULE_ID_INNER; i++) {
-            struct NetTraceItem recordItem {};
+            struct NetTraceItem recordItem {
+            };
             bzero(&recordItem, sizeof(recordItem));
             for (auto &j : gTraceInst->mPoint[i].mItem) {
                 recordItem.count += __sync_fetch_and_add(&j.count, 0);
@@ -526,7 +530,7 @@ public:
 
     // Disable copy and assignment
     TraceDefer(const TraceDefer &) = delete;
-    TraceDefer &operator = (const TraceDefer &) = delete;
+    TraceDefer &operator=(const TraceDefer &) = delete;
 
 private:
     std::function<void()> mBeginFunc;
@@ -538,7 +542,7 @@ private:
     NetTracePointIdWithLevel level = tracePoint;                                                           \
     std::string name = #tracePoint;                                                                        \
     TraceDefer defer([level, name, &tpBegin]() { TRACE_DELAY_DEFER_BEGIN(level, name.c_str(), tpBegin); }, \
-        [level, &result, &tpBegin]() { TRACE_DELAY_DEFER_END(level, (result), tpBegin); })
-}
-}
+                     [level, &result, &tpBegin]() { TRACE_DELAY_DEFER_END(level, (result), tpBegin); })
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_TRACE_H

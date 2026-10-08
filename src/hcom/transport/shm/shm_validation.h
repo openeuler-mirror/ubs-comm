@@ -21,27 +21,26 @@
 #include "net_shm_common.h"
 #include "net_shm_driver_oob.h"
 
-
 namespace ock {
 namespace hcom {
-#define VALIDATE_ENCRYPT_LENGTH(encryptLen, calLen, mShmCh, address)                                                  \
-    if (NN_UNLIKELY((encryptLen) != (calLen))) {                                                                      \
-        NN_LOG_ERROR("Failed to encrypt data as encrypt length " << (encryptLen) << " is not equal to cal length " << \
-            (calLen));                                                                                                \
-        (mShmCh)->DCMarkBuckFree((address));                                                                          \
-        return NN_ENCRYPT_FAILED;                                                                                     \
+#define VALIDATE_ENCRYPT_LENGTH(encryptLen, calLen, mShmCh, address)                                               \
+    if (NN_UNLIKELY((encryptLen) != (calLen))) {                                                                   \
+        NN_LOG_ERROR("Failed to encrypt data as encrypt length " << (encryptLen) << " is not equal to cal length " \
+                                                                 << (calLen));                                     \
+        (mShmCh)->DCMarkBuckFree((address));                                                                       \
+        return NN_ENCRYPT_FAILED;                                                                                  \
     }
 
-#define VALIDATE_DECRYPT_LENGTH(decryptLen, calLen, opCtx)                                                            \
-    if (NN_UNLIKELY((decryptLen) != (calLen))) {                                                                      \
-        NN_LOG_ERROR("Failed to decrypt data as decrypt length " << (decryptLen) << " is not equal to cal length " << \
-            (calLen));                                                                                                \
-        (opCtx).channel->DCMarkPeerBuckFree((opCtx).dataAddress);                                                     \
-        return NN_DECRYPT_FAILED;                                                                                     \
+#define VALIDATE_DECRYPT_LENGTH(decryptLen, calLen, opCtx)                                                         \
+    if (NN_UNLIKELY((decryptLen) != (calLen))) {                                                                   \
+        NN_LOG_ERROR("Failed to decrypt data as decrypt length " << (decryptLen) << " is not equal to cal length " \
+                                                                 << (calLen));                                     \
+        (opCtx).channel->DCMarkPeerBuckFree((opCtx).dataAddress);                                                  \
+        return NN_DECRYPT_FAILED;                                                                                  \
     }
 
 static __always_inline NResult PostSendValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    uint16_t opCode, const UBSHcomNetTransRequest &request)
+                                                  uint16_t opCode, const UBSHcomNetTransRequest &request)
 {
     if (NN_UNLIKELY(!state.Compare(NEP_ESTABLISHED))) {
         NN_LOG_ERROR("Endpoint " << id << " is not established, state is " << UBSHcomNEPStateToString(state.Get()));
@@ -59,7 +58,7 @@ static __always_inline NResult PostSendValidation(UBSHcomNetAtomicState<UBSHcomN
 }
 
 static __always_inline NResult PostSendRawValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    const UBSHcomNetTransRequest &request)
+                                                     const UBSHcomNetTransRequest &request)
 {
     if (NN_UNLIKELY(!state.Compare(NEP_ESTABLISHED))) {
         NN_LOG_ERROR("Endpoint " << id << " is not established, state is " << UBSHcomNEPStateToString(state.Get()));
@@ -74,7 +73,7 @@ static __always_inline NResult PostSendRawValidation(UBSHcomNetAtomicState<UBSHc
 }
 
 static __always_inline NResult PostSendValidationMaxSize(const UBSHcomNetTransRequest &request, uint32_t allowedSize,
-    bool mIsNeedEncrypt, AesGcm128 mAes)
+                                                         bool mIsNeedEncrypt, AesGcm128 mAes)
 {
     size_t size = request.size;
     if (mIsNeedEncrypt) {
@@ -88,7 +87,8 @@ static __always_inline NResult PostSendValidationMaxSize(const UBSHcomNetTransRe
 }
 
 static __always_inline NResult PostSendSglValidationInner(uint64_t &size, const UBSHcomNetTransSglRequest &request,
-    NetDriverShmWithOOB *driver, uint32_t allowedSize, bool mIsNeedEncrypt, AesGcm128 mAes)
+                                                          NetDriverShmWithOOB *driver, uint32_t allowedSize,
+                                                          bool mIsNeedEncrypt, AesGcm128 mAes)
 {
     for (uint16_t i = 0; i < request.iovCount; ++i) {
         auto &&iov = request.iov[i];
@@ -112,8 +112,9 @@ static __always_inline NResult PostSendSglValidationInner(uint64_t &size, const 
 }
 
 static __always_inline NResult PostSendSglValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    NetDriverShmWithOOB *driver, uint32_t seqNo, const UBSHcomNetTransSglRequest &request, uint32_t allowedSize,
-    bool mIsNeedEncrypt, AesGcm128 mAes)
+                                                     NetDriverShmWithOOB *driver, uint32_t seqNo,
+                                                     const UBSHcomNetTransSglRequest &request, uint32_t allowedSize,
+                                                     bool mIsNeedEncrypt, AesGcm128 mAes)
 {
     if (NN_UNLIKELY(request.iov == nullptr || request.iovCount > NET_SGE_MAX_IOV || request.iovCount == 0)) {
         NN_LOG_ERROR("Invalid iov ptr:" << request.iov << " or iov cnt:" << request.iovCount);
@@ -129,7 +130,7 @@ static __always_inline NResult PostSendSglValidation(UBSHcomNetAtomicState<UBSHc
         NN_LOG_ERROR("Failed to post raw sgl message as seqNo must > 0");
         return NN_INVALID_PARAM;
     }
-    
+
     uint64_t size = 0;
     if (NN_UNLIKELY(PostSendSglValidationInner(size, request, driver, allowedSize, mIsNeedEncrypt, mAes) != NN_OK)) {
         return NN_INVALID_PARAM;
@@ -138,7 +139,8 @@ static __always_inline NResult PostSendSglValidation(UBSHcomNetAtomicState<UBSHc
 }
 
 static __always_inline NResult ReadWriteValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state, uint64_t id,
-    NetDriverShmWithOOB *driver, ShmChannel *shmCh, const UBSHcomNetTransRequest &request)
+                                                   NetDriverShmWithOOB *driver, ShmChannel *shmCh,
+                                                   const UBSHcomNetTransRequest &request)
 {
     if (NN_UNLIKELY(!state.Compare(NEP_ESTABLISHED))) {
         NN_LOG_ERROR("Endpoint " << id << " is not established, state is " << UBSHcomNEPStateToString(state.Get()));
@@ -158,7 +160,8 @@ static __always_inline NResult ReadWriteValidation(UBSHcomNetAtomicState<UBSHcom
 }
 
 static __always_inline NResult PostReadWriteSglValidation(UBSHcomNetAtomicState<UBSHcomNetEndPointState> &state,
-    uint32_t id, NetDriverShmWithOOB *driver, ShmChannel *shmCh, const UBSHcomNetTransSglRequest &request)
+                                                          uint32_t id, NetDriverShmWithOOB *driver, ShmChannel *shmCh,
+                                                          const UBSHcomNetTransSglRequest &request)
 {
     if (NN_UNLIKELY(request.iov == nullptr || request.iovCount > NET_SGE_MAX_IOV || request.iovCount == 0)) {
         NN_LOG_ERROR("Invalid iov ptr: " << request.iov << " or iov cnt: " << request.iovCount);
@@ -185,7 +188,7 @@ static __always_inline NResult PostReadWriteSglValidation(UBSHcomNetAtomicState<
     }
     return NN_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // OCK_HCOM_NET_SHM_VALIDATION_H

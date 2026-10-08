@@ -14,19 +14,19 @@
 #ifdef RDMA_BUILD_ENABLED
 
 #include "hcom.h"
-#include "transport/net_endpoint_impl.h"
-#include "rdma_composed_endpoint.h"
+#include "hcom_utils.h"
 #include "net_monotonic.h"
 #include "net_rdma_driver_oob.h"
 #include "net_security_alg.h"
-#include "hcom_utils.h"
+#include "rdma_composed_endpoint.h"
+#include "transport/net_endpoint_impl.h"
 
 namespace ock {
 namespace hcom {
 class NetSyncEndpoint : public NetEndpointImpl {
 public:
     NetSyncEndpoint(uint64_t id, RDMASyncEndpoint *ep, NetDriverRDMAWithOob *driver,
-        const UBSHcomNetWorkerIndex &workerIndex);
+                    const UBSHcomNetWorkerIndex &workerIndex);
     ~NetSyncEndpoint() override;
 
     NResult SetEpOption(UBSHcomEpOptions &epOptions) override
@@ -63,7 +63,7 @@ public:
 
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNO) override;
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo) override;
+                     const UBSHcomNetTransOpInfo &opInfo) override;
 
     NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNO) override;
     NResult PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo = 0) override;
@@ -179,8 +179,8 @@ private:
 
     friend class NetDriverRDMAWithOob;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // OCK_HCOM_NET_SYNC_ENDPOINT_RDMA_H

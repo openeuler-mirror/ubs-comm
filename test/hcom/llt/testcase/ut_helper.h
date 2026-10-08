@@ -37,11 +37,21 @@ using namespace ock::hcom;
 
 using Handlers = struct hdlrs {
     UBSHcomNetDriverNewEndPointHandler newEpHandler = [](const std::string &ipPort, const UBSHcomNetEndpointPtr &,
-        const std::string &payload) { return 0; };
-    UBSHcomNetDriverEndpointBrokenHandler epBrokenHandler = [](const UBSHcomNetEndpointPtr &) { return 0; };
-    UBSHcomNetDriverSentHandler sentHandler = [](const UBSHcomNetRequestContext &) { return 0; };
-    UBSHcomNetDriverOneSideDoneHandler oneSideDoneHandler = [](const UBSHcomNetRequestContext &) { return 0; };
-    UBSHcomNetDriverReceivedHandler receivedHandler = [](const UBSHcomNetRequestContext &) { return 0; };
+                                                         const std::string &payload) {
+        return 0;
+    };
+    UBSHcomNetDriverEndpointBrokenHandler epBrokenHandler = [](const UBSHcomNetEndpointPtr &) {
+        return 0;
+    };
+    UBSHcomNetDriverSentHandler sentHandler = [](const UBSHcomNetRequestContext &) {
+        return 0;
+    };
+    UBSHcomNetDriverOneSideDoneHandler oneSideDoneHandler = [](const UBSHcomNetRequestContext &) {
+        return 0;
+    };
+    UBSHcomNetDriverReceivedHandler receivedHandler = [](const UBSHcomNetRequestContext &) {
+        return 0;
+    };
 };
 
 struct DummyObj {
@@ -53,13 +63,15 @@ struct DummyObj {
     ~DummyObj() {}
 };
 
-using OBJ_LIFE_CYCLE = enum _o_l_c_ {
+using OBJ_LIFE_CYCLE = enum _o_l_c_
+{
     NONE = 0,
     INIT,
     DEINIT
 };
 
-using DRIVER_STATE = enum _d_s_ {
+using DRIVER_STATE = enum _d_s_
+{
     DRIVER_STATE_NONE = 0,
     DRIVER_STATE_INIT = 1 << 0,
     DRIVER_STATE_START = 1 << 1,
@@ -83,31 +95,27 @@ struct NoisyObj {
 
 #define UT_CHECK_RESULT_TRUE(result) ASSERT_EQ(true, (result));
 
-
 #define UT_CHECK_RESULT_FALSE(result) ASSERT_EQ(false, (result));
 
 #define UT_CHECK_RESULT_OK(result) ASSERT_EQ(NN_OK, (result));
 
-
 #define UT_CHECK_RESULT_NOK(result) ASSERT_NE(NN_OK, result);
 
-
 #define UT_CHECK_RESULT_NOT_NULL(result) ASSERT_NE(nullptr, result);
-
 
 class UTHelper {
 public:
     static bool ServerCreateDriver(UBSHcomNetDriver *&serverDriver, Handlers &handlers,
-        UBSHcomNetDriverOptions &options, uint16_t port);
+                                   UBSHcomNetDriverOptions &options, uint16_t port);
     static bool ClientCreateDriver(UBSHcomNetDriver *&clientDriver, Handlers &handlers,
-        UBSHcomNetDriverOptions &options, uint16_t port);
+                                   UBSHcomNetDriverOptions &options, uint16_t port);
     static bool ClientConnect(UBSHcomNetDriver *clientDriver, UBSHcomNetEndpointPtr &clientEp, uint16_t srvNo = 0,
-        uint16_t clientNo = 0);
+                              uint16_t clientNo = 0);
     static bool ClientSend(UBSHcomNetEndpointPtr &clientEp, sem_t *sem);
     static NResult GetDriver(UBSHcomNetDriver *&driver, DRIVER_STATE state, bool isServer,
-        UBSHcomNetDriverProtocol protocol = UBSHcomNetDriverProtocol::RDMA);
+                             UBSHcomNetDriverProtocol protocol = UBSHcomNetDriverProtocol::RDMA);
     static NResult GetDriverStateMask(UBSHcomNetDriver *&driver, uint16_t stateMask, bool isServer,
-        UBSHcomNetDriverProtocol protocol = UBSHcomNetDriverProtocol::RDMA);
+                                      UBSHcomNetDriverProtocol protocol = UBSHcomNetDriverProtocol::RDMA);
     static NResult ForwardDriverState(UBSHcomNetDriver *&driver, DRIVER_STATE state);
     static NResult ForwardDriverStateMask(UBSHcomNetDriver *&driver, uint16_t state);
 };

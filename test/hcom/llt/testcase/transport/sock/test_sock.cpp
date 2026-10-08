@@ -9,11 +9,11 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "test_sock.h"
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 #include "hcom.h"
 #include "ut_helper.h"
-#include "test_sock.h"
 
 using namespace ock::hcom;
 TestCaseSock::TestCaseSock() {}
@@ -35,10 +35,10 @@ using TestRegMrInfo = struct _reg_sgl_info_test_ {
     uint32_t size = 0;
 } __attribute__((packed));
 
-#define SOCK_CHECK_RESULT_TRUE(result)   \
-    EXPECT_EQ(true, (result));           \
-    if (!(result)) {                     \
-        return;                          \
+#define SOCK_CHECK_RESULT_TRUE(result) \
+    EXPECT_EQ(true, (result));         \
+    if (!(result)) {                   \
+        return;                        \
     }
 
 static UBSHcomNetDriver *sockServerDriver = nullptr;
@@ -75,8 +75,8 @@ int SockServerRequestReceived(const UBSHcomNetRequestContext &ctx)
 
     NN_LOG_INFO("request rsp Mr info");
     for (uint16_t i = 0; i < 4; i++) {
-        NN_LOG_TRACE_INFO("idx:" << i << " key:" << localMrInfo[i].lKey << " address:" << localMrInfo[i].lAddress <<
-            " size" << localMrInfo[i].size);
+        NN_LOG_TRACE_INFO("idx:" << i << " key:" << localMrInfo[i].lKey << " address:" << localMrInfo[i].lAddress
+                                 << " size" << localMrInfo[i].size);
     }
     return 0;
 }
@@ -93,7 +93,6 @@ int SockServerOneSideDone(const UBSHcomNetRequestContext &ctx)
     return 0;
 }
 
-
 bool SockServerCreateDriver()
 {
     if (sockServerDriver != nullptr) {
@@ -107,7 +106,7 @@ bool SockServerCreateDriver()
         return false;
     }
 
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.enableTls = false;
     options.SetNetDeviceIpMask(ipSeg);
@@ -177,8 +176,8 @@ int SockClientRequestReceived(const UBSHcomNetRequestContext &ctx)
     memcpy(remoteMrInfo, ctx.Message()->Data(), ctx.Message()->DataLen());
     NN_LOG_INFO("get remote Mr info");
     for (uint16_t i = 0; i < NN_NO4; i++) {
-        NN_LOG_TRACE_INFO("idx:" << i << " key:" << remoteMrInfo[i].lKey << " address:" << remoteMrInfo[i].lAddress <<
-            " size" << remoteMrInfo[i].size);
+        NN_LOG_TRACE_INFO("idx:" << i << " key:" << remoteMrInfo[i].lKey << " address:" << remoteMrInfo[i].lAddress
+                                 << " size" << remoteMrInfo[i].size);
     }
 
     sem_post(&sem);
@@ -209,7 +208,7 @@ bool SockClientCreateDriver()
         return false;
     }
 
-    UBSHcomNetDriverOptions options {};
+    UBSHcomNetDriverOptions options{};
     options.mode = UBSHcomNetDriverWorkingMode::NET_EVENT_POLLING;
     options.enableTls = false;
     options.SetNetDeviceIpMask(ipSeg);

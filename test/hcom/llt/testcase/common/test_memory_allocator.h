@@ -16,9 +16,9 @@
 
 class TestMemoryAllocator : public testing::Test {
 public:
-  TestMemoryAllocator();
-  virtual void SetUp(void);
-  virtual void TearDown(void);
+    TestMemoryAllocator();
+    virtual void SetUp(void);
+    virtual void TearDown(void);
 };
 
 #endif // HCOM_TEST_MEMORY_ALLOCATOR_H

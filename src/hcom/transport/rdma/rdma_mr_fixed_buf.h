@@ -22,7 +22,7 @@ namespace hcom {
 class RDMAMemoryRegionFixedBuffer : public RDMAMemoryRegion {
 public:
     static RResult Create(const std::string &name, RDMAContext *ctx, uint32_t singleSegSize, uint32_t segCount,
-        RDMAMemoryRegionFixedBuffer *&buf);
+                          RDMAMemoryRegionFixedBuffer *&buf);
 
 public:
     RDMAMemoryRegionFixedBuffer(const std::string &name, RDMAContext *ctx, uint32_t singleSegSize, uint32_t segCount)
@@ -60,8 +60,8 @@ public:
     std::string ToString()
     {
         std::ostringstream oss;
-        oss << "buf-address " << mBuf << ", mSingleSegSize " << mSingleSegSize << ", mSegCount " << mSegCount <<
-            ", total buf size " << mSize;
+        oss << "buf-address " << mBuf << ", mSingleSegSize " << mSingleSegSize << ", mSegCount " << mSegCount
+            << ", total buf size " << mSize;
         if (mMemReg != nullptr) {
             oss << ", mrLKey " << mMemReg->lkey << ", mrRKey " << mMemReg->rkey << ", mrSize " << mMemReg->length;
         }
@@ -83,7 +83,7 @@ private:
     // uintptr_p store the start address of each mr segment
     NetBucketLinkedList mLinkList;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_RDMA_MR_FIXED_BUF_H

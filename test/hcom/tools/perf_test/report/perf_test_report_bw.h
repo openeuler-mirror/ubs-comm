@@ -14,6 +14,6 @@ public:
     void PrintReportElement(PerfTestContext *ctx) override;
     void PrintReportHead() override;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 #endif

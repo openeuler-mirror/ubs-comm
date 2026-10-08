@@ -17,7 +17,7 @@
 
 using namespace ock::hcom;
 
-UVS_GET_ROUTE_LIST TpsaAPI::hcomUvsGetRouteList = nullptr;
+UVS_GET_PATH_SET TpsaAPI::hcomInnerUvsGetPathSet = nullptr;
 
 bool TpsaAPI::gLoaded = false;
 
@@ -26,15 +26,15 @@ bool TpsaAPI::IsLoaded()
     return gLoaded;
 }
 
-#define DLSYM(type, ptr, sym)                                                                 \
-    do {                                                                                      \
-        auto ptr1 = dlsym(handle, sym);                                                       \
-        if (ptr1 == nullptr) {                                                                \
+#define DLSYM(type, ptr, sym)                                                           \
+    do {                                                                                \
+        auto ptr1 = dlsym(handle, sym);                                                 \
+        if (ptr1 == nullptr) {                                                          \
             NN_LOG_ERROR("Failed to load function " << sym << ", error " << dlerror()); \
-            dlclose(handle);                                                                  \
-            return -1;                                                                        \
-        }                                                                                     \
-        ptr = (type)ptr1;                                                                     \
+            dlclose(handle);                                                            \
+            return -1;                                                                  \
+        }                                                                               \
+        ptr = (type)ptr1;                                                               \
     } while (0)
 
 int TpsaAPI::LoadTpsaAPI()
@@ -49,7 +49,7 @@ int TpsaAPI::LoadTpsaAPI()
         return -1;
     }
 
-    DLSYM(UVS_GET_ROUTE_LIST, TpsaAPI::hcomUvsGetRouteList, "uvs_get_route_list");
+    DLSYM(UVS_GET_PATH_SET, TpsaAPI::hcomInnerUvsGetPathSet, "uvs_get_path_set");
 
     NN_LOG_INFO("Success to load Tpsa api");
     gLoaded = true;
