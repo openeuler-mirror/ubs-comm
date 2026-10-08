@@ -90,7 +90,6 @@ public:
     static SplitTraceLevel UBS_SPLIT_TRACE_LEVEL;      /* split trace level 0 only ubsocket trace, 1 ubsocket and umq */
     static bool UBS_CLI_ENABLED;
     static bool UBS_PROBE_ENABLED;
-    static bool UBS_BACKUP_LINK_ENABLED;
     static bool UBS_INITED;                          /* if ubsocket initialized, from API */
     static std::string UBS_TRANS_MODE;               /* transport mode, from env */
     static int16_t UBS_ACCEPTOR_ASYNC_THREAD_COUNT;  /* if enable async acceptor, from API override by env */
@@ -104,7 +103,7 @@ public:
     static bool UBS_ENABLE_SHARE_JFR;                /* if enable share jfr, from env */
     static bool UBS_SHARE_JFR_LOOP_POLL_ENABLED;     /* if enable share jfr loop poll, from env */
     static bool UBS_ENABLE_DEGRADE;                  /* if enable degrade, from env */
-    static bool UBS_ENABLE_LINK_SWITCH;              /* if enable primary-standby switch, from env */
+    static bool UBS_BACKUP_LINK_ENABLED;             /* if enable primary-standby switch, from env */
     static uint32_t UBS_TX_DEPTH;                    /* tx queue depth, from env */
     static uint32_t UBS_RX_DEPTH;                    /* rx queue depth, from env */
     static bool UBS_PROF_ENABLE;

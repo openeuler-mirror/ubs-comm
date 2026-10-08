@@ -53,6 +53,9 @@ public:
     /* setting for epoll handle mode */
     static EpollHandleMode UB_EPOLL_HANDLE_MODE;
     static uint64_t UB_BAD_PORT_RECOVER_SECONDS;
+    static uint32_t UB_KEEPALIVE_TIME;
+    static uint32_t UB_KEEPALIVE_INTVL;
+    static uint32_t UB_KEEPALIVE_PROBES;
 
 private:
     static void AddRules();

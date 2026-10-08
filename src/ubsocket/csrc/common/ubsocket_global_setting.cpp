@@ -36,7 +36,7 @@ bool GlobalSetting::UBS_READV_UNLIMITED = true;
 bool GlobalSetting::UBS_ENABLE_SHARE_JFR = true;
 bool GlobalSetting::UBS_SHARE_JFR_LOOP_POLL_ENABLED = true;
 bool GlobalSetting::UBS_ENABLE_DEGRADE = true;
-bool GlobalSetting::UBS_ENABLE_LINK_SWITCH = true;
+bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = true;
 uint32_t GlobalSetting::UBS_TX_DEPTH = 1024;
 uint32_t GlobalSetting::UBS_RX_DEPTH = 2048;
 UBHandshakeMode GlobalSetting::UBS_HAND_SHAKE_MODE = UBHandshakeMode::UB_SOCK_OPT;
@@ -52,7 +52,6 @@ uint64_t GlobalSetting::UBS_TRACE_FILE_SIZE = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
 std::string GlobalSetting::UBS_TRACE_FILE_PATH = "/tmp/ubsocket/log";
 uint32_t GlobalSetting::UBS_PROBE_MS = 1000;
 uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
-bool GlobalSetting::UBS_BACKUP_LINK_ENABLED = true;
 LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::BONDING_BACKUP;
 uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 

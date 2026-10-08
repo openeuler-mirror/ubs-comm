@@ -51,7 +51,7 @@ uint32_t NegotiateConnFlag(uint32_t peer_flag)
 {
     uint32_t ret_flag = 0;
     ret_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? (peer_flag & URMA_SOCKET_MASK_DEGRADE) : 0;
-    ret_flag |= GlobalSetting::UBS_ENABLE_LINK_SWITCH ? (peer_flag & URMA_SOCKET_MASK_LINK_SWITCH) : 0;
+    ret_flag |= GlobalSetting::UBS_BACKUP_LINK_ENABLED ? (peer_flag & URMA_SOCKET_MASK_LINK_SWITCH) : 0;
     return ret_flag;
 }
 

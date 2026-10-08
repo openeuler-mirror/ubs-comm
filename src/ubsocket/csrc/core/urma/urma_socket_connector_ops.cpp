@@ -82,7 +82,7 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     req.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
     req.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
     req.conn_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? URMA_SOCKET_MASK_DEGRADE : 0;
-    req.conn_flag |= GlobalSetting::UBS_ENABLE_LINK_SWITCH ? URMA_SOCKET_MASK_LINK_SWITCH : 0;
+    req.conn_flag |= GlobalSetting::UBS_BACKUP_LINK_ENABLED ? URMA_SOCKET_MASK_LINK_SWITCH : 0;
 
     /* fill local context health list from sorted_contexts_ */
     auto sorted_contexts = UrmaBackend::Instance().GetContextPoll()->SortedContexts();

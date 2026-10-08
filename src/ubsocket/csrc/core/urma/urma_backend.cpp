@@ -127,6 +127,13 @@ Result UrmaBackend::Init(bool initUrmaOnly) noexcept
             return UBS_ERROR;
         }
 
+        /* step8: init keep-alive manager */
+        result = InitKeepAliveManager();
+        if (UNLIKELY(result != UBS_OK)) {
+            UnInitInner();
+            UBS_VLOG_ERR("Failed to initialize backend as init object pool failed");
+            return UBS_ERROR;
+        }
         /* only a full init (context/poller/jetty/object pools) marks the backend usable */
         inited_ = true;
     }
@@ -155,6 +162,7 @@ void UrmaBackend::UnInitInner() noexcept
 {
     /* do reverse step with init; upper layers exist only after a full (non urma-only) init */
     if (!init_urma_only_) {
+        UnInitKeepAliveManager();
         /*
          * Stop the CQE pollers first: while they run they may still AcquireSlot/Free from the
          * object pools below, so the pools must not be torn down under a live poller thread.
@@ -196,6 +204,29 @@ void UrmaBackend::UnLoadUrmaApi() noexcept
     UBS_VLOG_DEBUG("urma api unloaded");
 }
 
+Result UrmaBackend::InitKeepAliveManager()
+{
+    auto tmp_alive_manager = MakeRef<UrmaAliveManager>();
+    if (tmp_alive_manager == nullptr) {
+        UBS_VLOG_ERR("Create alive_manager object failed, probably out of memory");
+        return UBS_ERROR;
+    }
+
+    UrmaAliveConf conf;
+    conf.keepalive_time = UrmaSetting::UB_KEEPALIVE_TIME;
+    conf.keepalive_intvl = UrmaSetting::UB_KEEPALIVE_INTVL;
+    conf.keepalive_probes = UrmaSetting::UB_KEEPALIVE_PROBES;
+    Result result = tmp_alive_manager->Init(conf);
+    if (result != UBS_OK) {
+        UBS_VLOG_ERR("Failed to initialize urma context pool, result: %d", result);
+        return result;
+    }
+
+    alive_manager_ = tmp_alive_manager;
+
+    return UBS_OK;
+}
+
 Result UrmaBackend::InitUrma() noexcept
 {
     UBS_VLOG_DEBUG("enter");
@@ -232,6 +263,14 @@ void UrmaBackend::UnInitUrma() noexcept
 
     UrmaApi::urma_uninit();
     urma_inited_ = false;
+}
+
+void UrmaBackend::UnInitKeepAliveManager()
+{
+    if (alive_manager_ != nullptr) {
+        alive_manager_->UnInit();
+        alive_manager_ = nullptr;
+    }
 }
 
 Result UrmaBackend::InitContextPool() noexcept
@@ -545,6 +584,13 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
 
     auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
     SenderCRContext cr_context{cr->user_ctx}; /* 错误 CQE 的 sender 上下文（type/fd/seq_no） */
+    if (cr_context.type == KEEP_ALIVE_PROBE) {
+        // no need switch route for keep_alive probe
+        UBS_VLOG_WARN("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
+                      cr->user_ctx, cr->opcode, cr->flag.value);
+        urma_sock->OnPeerReset();
+        return;
+    }
     switch (cr->status) {
         case URMA_CR_SUCCESS:
             break;
@@ -555,7 +601,6 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
         case URMA_CR_RNR_RETRY_CNT_EXC_ERR:
         case URMA_CR_LOC_DATA_POISON:
         {
-            SenderCRContext cr_context{cr->user_ctx};
             if (!urma_sock->LinkSwitchEnable()) {
                 UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd: %d", cr->status,
                              cr->user_ctx, cr->opcode, cr->flag.value, sock_fd);
@@ -617,15 +662,24 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
                     ReleasePendingClose(cr_context.fd);
                     continue;
                 }
-                if (cr_context.type == SHUTDOWN_NOTIFY) {
-                    /* SHUTDOWN WR flushed — release the ctrl slot.
-                     * Unlike CLOSE, the socket is still alive in the ArraySet. */
+                if (cr_context.type == SHUTDOWN_NOTIFY || cr_context.type == KEEP_ALIVE_PROBE) {
+                    // release the ctrl slot
                     auto sock = ArraySet<Socket>::GetInstance().GetItem(cr_context.fd);
                     if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
                         UBS_VLOG_ERR("socket is invalid for fd: %d", cr_context.fd);
                         continue;
                     }
-                    RefStaticCastToRaw<UrmaSocket>(sock)->OnShutdownWriteFinished(cr_context.seq_no);
+                    RefStaticCastToRaw<UrmaSocket>(sock)->OnPostCtrlOnlyNotificationFinished(cr_context.seq_no);
+                    continue;
+                }
+                if (cr_context.type == CTRL_DATA_REQUEST && alive_manager_->KeepAliveEnable()) {
+                    // send and update active time
+                    auto sock = ArraySet<Socket>::GetInstance().GetItem(cr_context.fd);
+                    if (UNLIKELY(sock == nullptr || sock->Type() != SocketType::SOCK_TYPE_URMA)) {
+                        UBS_VLOG_ERR("socket is invalid for fd: %d", cr_context.fd);
+                        continue;
+                    }
+                    RefStaticCastToRaw<UrmaSocket>(sock)->GetAliveInfo()->UpdateActiveTime();
                     continue;
                 }
                 if (cr_context.type != READ_DATA_REQUEST) {
@@ -643,6 +697,7 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
                 urma_sock->DataReadFinished(seq_no);
                 continue;
             }
+            continue;
         }
 
         // receiver side
@@ -660,6 +715,10 @@ Result UrmaBackend::HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr)
 
             auto urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
             urma_sock->HandleRecvCqe(cr[i].imm_data);
+            if (alive_manager_->KeepAliveEnable()) {
+                // receive and update active time
+                urma_sock->GetAliveInfo()->UpdateActiveTime();
+            }
             urma_sock->PostEmptyRecvWorkerRecords();
         } else {
             // TODO: other opcode
@@ -749,9 +808,15 @@ UrmaContextPoolPtr UrmaBackend::GetContextPoll() noexcept
 {
     return context_pool_;
 }
+
 UrmaAggPollerSetPtr UrmaBackend::GetPollerSet() noexcept
 {
     return poller_set_;
+}
+
+UrmaAliveManagerPtr UrmaBackend::GetAliveManager() noexcept
+{
+    return alive_manager_;
 }
 } // namespace urma
 } // namespace ubs
