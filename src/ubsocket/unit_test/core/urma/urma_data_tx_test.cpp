@@ -103,7 +103,7 @@ static uintptr_t MockMiniBlockHead(uintptr_t addr)
     return 0;
 }
 
-static urma_target_seg_t *MockGetLocalTargetSeg(uintptr_t)
+static urma_target_seg_t *MockGetLocalTargetSeg(UrmaContextPtr ctx, uintptr_t)
 {
     return &g_local_tseg;
 }

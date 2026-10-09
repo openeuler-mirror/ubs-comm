@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <gtest/gtest.h>
+#include <atomic>
 #include <cerrno>
 #include <list>
 #include <vector>
@@ -245,9 +246,14 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_ProducesContiguousAtOffsetZero)
     ASSERT_TRUE(buf.Allocate(100, offset));
 
     EXPECT_EQ(0U, offset);
+    EXPECT_EQ(0U, base->release_calls_.size());
+    EXPECT_EQ(200U, buf.wrap_end_offset_.load(std::memory_order_relaxed));
+
+    buf.Release(0, 100);
     ASSERT_EQ(1U, base->release_calls_.size());
     EXPECT_EQ(200U, base->release_calls_[0].offset);
-    EXPECT_EQ(56U, base->release_calls_[0].size);
+    EXPECT_EQ(156U, base->release_calls_[0].size);
+    EXPECT_EQ(0U, buf.wrap_end_offset_.load(std::memory_order_relaxed));
 }
 
 TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_SecondAllocFails_Rollback)
@@ -259,9 +265,15 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_SecondAllocFails_Rollback)
     uint64_t offset = 0;
     EXPECT_FALSE(buf.Allocate(100, offset));
 
-    ASSERT_EQ(1U, base->release_calls_.size());
+    EXPECT_EQ(0U, base->release_calls_.size());
+    EXPECT_EQ(1U, buf.later_release_node_count.load(std::memory_order_relaxed));
+
+    buf.Release(42, 10);
+    ASSERT_EQ(2U, base->release_calls_.size());
     EXPECT_EQ(200U, base->release_calls_[0].offset);
     EXPECT_EQ(100U, base->release_calls_[0].size);
+    EXPECT_EQ(42U, base->release_calls_[1].offset);
+    EXPECT_EQ(10U, base->release_calls_[1].size);
 }
 
 TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_WrongAppendOffset_Rollback)
@@ -272,11 +284,17 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_WrongAppendOffset_Rollback)
     uint64_t offset = 0;
     EXPECT_FALSE(buf.Allocate(100, offset));
 
-    ASSERT_EQ(2U, base->release_calls_.size());
+    EXPECT_EQ(0U, base->release_calls_.size());
+    EXPECT_EQ(2U, buf.later_release_node_count.load(std::memory_order_relaxed));
+
+    buf.Release(42, 10);
+    ASSERT_EQ(3U, base->release_calls_.size());
     EXPECT_EQ(200U, base->release_calls_[0].offset);
     EXPECT_EQ(100U, base->release_calls_[0].size);
     EXPECT_EQ(128U, base->release_calls_[1].offset);
     EXPECT_EQ(56U, base->release_calls_[1].size);
+    EXPECT_EQ(42U, base->release_calls_[2].offset);
+    EXPECT_EQ(10U, base->release_calls_[2].size);
 }
 
 TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_AtNonZeroBaseOffset_ProducesContiguous)
@@ -288,9 +306,13 @@ TEST_F(UrmaSockContinuousBufTest, Allocate_Wrap_AtNonZeroBaseOffset_ProducesCont
     ASSERT_TRUE(buf.Allocate(128, offset));
 
     EXPECT_EQ(0U, offset);
+    EXPECT_EQ(0U, base->release_calls_.size());
+    EXPECT_EQ(192U, buf.wrap_end_offset_.load(std::memory_order_relaxed));
+
+    buf.Release(0, 128);
     ASSERT_EQ(1U, base->release_calls_.size());
     EXPECT_EQ(192U, base->release_calls_[0].offset);
-    EXPECT_EQ(64U, base->release_calls_[0].size);
+    EXPECT_EQ(192U, base->release_calls_[0].size);
 }
 
 TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_NoWrap_ReturnsUnchanged)
@@ -324,9 +346,12 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapLessThanMax_WrapSizeSuffici
     EXPECT_EQ(wrap_size, buf.Allocate(TEST_CHUNK, 256, offset));
     EXPECT_EQ(0U, offset);
 
+    EXPECT_EQ(0U, base->release_calls_.size());
+    EXPECT_EQ(200U, buf.wrap_end_offset_.load(std::memory_order_relaxed));
+    buf.Release(0, wrap_size);
     ASSERT_EQ(1U, base->release_calls_.size());
     EXPECT_EQ(200U, base->release_calls_[0].offset);
-    EXPECT_EQ(TEST_CAPACITY - 200, base->release_calls_[0].size);
+    EXPECT_EQ(128U, base->release_calls_[0].size);
 }
 
 TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapLessThanMax_WrapSizeInsufficient_ReturnsZero)
@@ -338,9 +363,15 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapLessThanMax_WrapSizeInsuffi
     uint64_t offset = 0;
     EXPECT_EQ(0U, buf.Allocate(128, 256, offset));
 
-    ASSERT_EQ(1U, base->release_calls_.size());
+    EXPECT_EQ(0U, base->release_calls_.size());
+    EXPECT_EQ(1U, buf.later_release_node_count.load(std::memory_order_relaxed));
+
+    buf.Release(42, 10);
+    ASSERT_EQ(2U, base->release_calls_.size());
     EXPECT_EQ(240U, base->release_calls_[0].offset);
     EXPECT_EQ(128U, base->release_calls_[0].size);
+    EXPECT_EQ(42U, base->release_calls_[1].offset);
+    EXPECT_EQ(10U, base->release_calls_[1].size);
 }
 
 TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapEqualsMax_SecondAllocSucceeds_ReturnsFull)
@@ -354,9 +385,13 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapEqualsMax_SecondAllocSuccee
     EXPECT_EQ(128U, buf.Allocate(TEST_CHUNK, 128, offset));
     EXPECT_EQ(0U, offset);
 
+    EXPECT_EQ(0U, base->release_calls_.size());
+    EXPECT_EQ(200U, buf.wrap_end_offset_.load(std::memory_order_relaxed));
+
+    buf.Release(0, 128);
     ASSERT_EQ(1U, base->release_calls_.size());
     EXPECT_EQ(200U, base->release_calls_[0].offset);
-    EXPECT_EQ(56U, base->release_calls_[0].size);
+    EXPECT_EQ(184U, base->release_calls_[0].size);
 }
 
 TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapEqualsMax_SecondAllocFails_ReturnsWrapSize)
@@ -384,8 +419,9 @@ TEST_F(UrmaSockContinuousBufTest, AllocateMinMax_WrapEqualsMax_WrongAppendOffset
     EXPECT_EQ(wrap_size, buf.Allocate(TEST_CHUNK, 128, offset));
     EXPECT_EQ(0U, offset);
 
-    ASSERT_GE(base->release_calls_.size(), 1U);
-    EXPECT_EQ(64U, base->release_calls_.back().offset);
+    EXPECT_EQ(0U, base->release_calls_.size());
+    EXPECT_EQ(0U, buf.later_release_node_count.load(std::memory_order_relaxed));
+    EXPECT_EQ(200U, buf.wrap_end_offset_.load(std::memory_order_relaxed));
 }
 
 TEST_F(UrmaSockContinuousBufTest, Release_PassThrough)

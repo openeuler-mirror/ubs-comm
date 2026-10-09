@@ -131,7 +131,7 @@ Result UrmaBackend::Init(bool initUrmaOnly) noexcept
         result = InitKeepAliveManager();
         if (UNLIKELY(result != UBS_OK)) {
             UnInitInner();
-            UBS_VLOG_ERR("Failed to initialize backend as init object pool failed");
+            UBS_VLOG_ERR("Failed to initialize backend as init keep_alive manager failed");
             return UBS_ERROR;
         }
         /* only a full init (context/poller/jetty/object pools) marks the backend usable */

@@ -100,12 +100,12 @@ static ssize_t MockRecvFail(int, const void *buf, size_t, uint32_t)
     return -1;
 }
 
-static RemoteSegmentsPtr MockGetRemoteSegments(const IdentifyNode &)
+static RemoteSegmentsPtr MockGetRemoteSegments(UrmaContextPtr ctx, const IdentifyNode &)
 {
     return g_fake_remote;
 }
 
-using StoreRemoteSeg3Arg = ock::ubs::Result (UrmaIoBufferPool::*)(RemoteSegmentsPtr &, urma_seg_t &,
+using StoreRemoteSeg3Arg = ock::ubs::Result (UrmaIoBufferPool::*)(UrmaContextPtr ctx, RemoteSegmentsPtr &, urma_seg_t &,
                                                                   urma_target_seg_t *&);
 
 static int g_sendCall = 0;
@@ -180,11 +180,6 @@ protected:
         sock_->context_ = ctx_;
 
         UrmaBackend::Instance().GetAllocator()->local_start_addr_ = 0x1000;
-        UrmaBackend::Instance().local_identify_node_.eid = {};
-        UrmaBackend::Instance().local_identify_node_.pid = 1234;
-        memset(UrmaBackend::Instance().local_identify_node_.ns, 0,
-               sizeof(UrmaBackend::Instance().local_identify_node_.ns));
-        strncpy(UrmaBackend::Instance().local_identify_node_.ns, "test_ns", NAME_MAX + 1);
     }
 
     void TearDown() override
@@ -281,7 +276,7 @@ TEST_F(ExchangeSocketResourcesTest, SendFirst_RecvSocketDataFails_ReturnsTcpExch
     GlobalMockObject::verify();
 }
 
-TEST_F(ExchangeSocketResourcesTest, SendFirst_ImportRemoteJettyFails_ReturnsError)
+TEST_F(ExchangeSocketResourcesTest, SendFirst_ImportRemoteJettyFails_ReturnsTcpExchange)
 {
     MOCKER_CPP(&UrmaSocket::CreateUrmaResources).stubs().will(returnValue(static_cast<int32_t>(UBS_OK)));
     MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(returnValue(&g_fake_urg_seg));
@@ -290,7 +285,7 @@ TEST_F(ExchangeSocketResourcesTest, SendFirst_ImportRemoteJettyFails_ReturnsErro
     MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvSuccess));
 
     ock::ubs::Result ret = sock_->ExchangeSocketResources(true);
-    EXPECT_EQ(UBS_ERROR, ret);
+    EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
     GlobalMockObject::verify();
 }
 

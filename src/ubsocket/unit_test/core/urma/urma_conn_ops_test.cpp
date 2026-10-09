@@ -160,7 +160,8 @@ static int MockSetSockoptOk(int, int, int, const void *, socklen_t)
     return 0;
 }
 
-static void MockRmRemoteSegments(const IdentifyNode &)
+/* 生产签名: rm_remote_segments(UrmaContextPtr ctx, const IdentifyNode &remote), handler 参数须一致 */
+static void MockRmRemoteSegments(UrmaContextPtr, const IdentifyNode &)
 {
     ++g_rm_remote_calls;
 }
@@ -271,7 +272,7 @@ static UrmaNegotiateReq MakeCompatReq()
     req.trans_mode = RM_CTP;
     req.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
     req.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
-    req.conn_flag = UBS_DEGRADABLE_MASK;
+    req.conn_flag = URMA_SOCKET_MASK_DEGRADE;
     return req;
 }
 
@@ -283,7 +284,7 @@ static UrmaNegotiateRsp MakeCompatRsp(int ret_code = 0)
     rsp.trans_mode = RM_CTP;
     rsp.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
     rsp.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
-    rsp.conn_flag = UBS_DEGRADABLE_MASK;
+    rsp.conn_flag = URMA_SOCKET_MASK_DEGRADE;
     return rsp;
 }
 
@@ -303,7 +304,7 @@ protected:
         GlobalSetting::UBS_TRACE_ENABLED = false;
         GlobalSetting::UBS_SPLIT_TRACE_ENABLED = false;
         GlobalSetting::UBS_ENABLE_DEGRADE = true;
-        GlobalSetting::UBS_ENABLE_LINK_SWITCH = false;
+        GlobalSetting::UBS_BACKUP_LINK_ENABLED = false;
         LockRegistry::RegisterDefaultOps();
         ArraySet<Socket>::GetInstance().Init();
         UrmaSetting::Init();
@@ -442,6 +443,8 @@ TEST_F(UrmaConnOpsTest, DoWaitTcpConnect_UbsConnection_StagesNegotiateReq)
     ops->tcp_connect_started_ = true;
 
     MOCKER_CPP(&SocketConnHelper::IsUbsConnection).stubs().will(returnValue(true));
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
     EXPECT_EQ(ConnStageResult::kPending, ops->Execute(1000));
     EXPECT_EQ(ConnState::kWaitNegotiate, ops->State());
@@ -456,7 +459,7 @@ TEST_F(UrmaConnOpsTest, DoWaitTcpConnect_UbsConnection_StagesNegotiateReq)
     memcpy(&req, ops->pending_send_buf_.data() + sizeof(body_len), sizeof(req));
     EXPECT_EQ(UBS_PROTOCOL_VERSION.GetWhole(), req.peer_version);
     EXPECT_EQ(UrmaSetting::UB_TANS_MODE, req.trans_mode);
-    EXPECT_NE(0u, req.conn_flag & UBS_DEGRADABLE_MASK);
+    EXPECT_NE(0u, req.conn_flag & URMA_SOCKET_MASK_DEGRADE);
     GlobalMockObject::verify();
 }
 
@@ -527,8 +530,10 @@ TEST_F(UrmaConnOpsTest, ClientDoWaitNegotiate_CreateResourcesFail_DegradableByCo
     SocketPtr sock_ptr;
     ConnectorOpsPtr conn_ops;
     auto ops = MakeClientOpsInState(sock_ptr, conn_ops, ConnState::kWaitNegotiate);
+    auto dev = MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{});
+    ops->sorted_contexts_.push_back(MakeRef<UrmaContext>(nullptr, dev, urma_eid_info_t{}));
     UrmaNegotiateRsp rsp = MakeCompatRsp();
-    rsp.conn_flag = UBS_DEGRADABLE_MASK;
+    rsp.conn_flag = URMA_SOCKET_MASK_DEGRADE;
     std::vector<uint8_t> wire = MakeLpFrame(&rsp, sizeof(rsp));
     PushSendOk();
     PushRecvData(wire.data(), wire.size());
@@ -550,6 +555,8 @@ TEST_F(UrmaConnOpsTest, ClientDoWaitNegotiate_Happy_StagesLocalSegAndSwitchesSta
     SocketPtr sock_ptr;
     ConnectorOpsPtr conn_ops;
     auto ops = MakeClientOpsInState(sock_ptr, conn_ops, ConnState::kWaitNegotiate);
+    auto dev = MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{});
+    ops->sorted_contexts_.push_back(MakeRef<UrmaContext>(nullptr, dev, urma_eid_info_t{}));
     UrmaNegotiateRsp rsp = MakeCompatRsp();
     std::vector<uint8_t> wire = MakeLpFrame(&rsp, sizeof(rsp));
     PushSendOk();
@@ -572,7 +579,6 @@ TEST_F(UrmaConnOpsTest, ClientDoWaitNegotiate_Happy_StagesLocalSegAndSwitchesSta
 
     /* 协商配置已应用到 socket */
     UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(sock_ptr);
-    EXPECT_EQ(rsp.negotiated_version, urma_sock->GetNegotiatedVersion());
     EXPECT_EQ(rsp.trans_mode, urma_sock->trans_mode);
     GlobalMockObject::verify();
 }
@@ -631,6 +637,8 @@ TEST_F(UrmaConnOpsTest, ServerDoWaitNegotiate_FlushRspEagain_ReturnsPending)
     PushRecvData(wire.data(), wire.size());
     PushSendOk(1);
     PushSendWouldBlock();
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
     EXPECT_EQ(ConnStageResult::kPending, ops->Execute(1000));
     EXPECT_EQ(ConnState::kWaitNegotiate, ops->State());
@@ -657,6 +665,12 @@ TEST_F(UrmaConnOpsTest, ServerDoWaitNegotiate_Happy_CreatesSocketAndStagesLocalS
     MOCKER_CPP(&UrmaSocket::BuildLocalSegExInfo)
         .stubs()
         .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    auto dev = MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{});
+    auto tmp_ctx = MakeRef<UrmaContext>(nullptr, dev, urma_eid_info_t{});
+    tmp_ctx->SetAffinity(false);
+    tmp_context_pool->sorted_contexts_.push_back(tmp_ctx);
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
     EXPECT_EQ(ConnStageResult::kPending, ops->Execute(1000));
     EXPECT_EQ(ConnState::kWaitPeerRes, ops->State());
@@ -681,6 +695,8 @@ TEST_F(UrmaConnOpsTest, DoWaitPeerRes_FlushLocalSegEagain_ReturnsPending)
     ops->StageControl("abcd", 4);
     PushSendOk(1);
     PushSendWouldBlock();
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
     EXPECT_EQ(ConnStageResult::kPending, ops->Execute(1000));
     EXPECT_TRUE(ops->WantsWritable());
@@ -696,6 +712,8 @@ TEST_F(UrmaConnOpsTest, DoWaitPeerRes_PeerSegHalfFrame_ReturnsPending)
     UrmaSockSegExInfo peer = {};
     PushSendOk();
     PushRecvData(&peer, sizeof(peer) / 2); /* 半包 */
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
     EXPECT_EQ(ConnStageResult::kPending, ops->Execute(1000));
     EXPECT_EQ(ConnState::kWaitPeerRes, ops->State());
@@ -709,6 +727,8 @@ TEST_F(UrmaConnOpsTest, DoWaitPeerRes_RecvError_ReturnsFailed)
     ops->state_.store(ConnState::kWaitPeerRes, std::memory_order_release);
     PushSendOk();
     PushRecvError(ECONNRESET);
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
     EXPECT_EQ(ConnStageResult::kFailed, ops->Execute(1000));
     EXPECT_EQ(ECONNREFUSED, ops->FailureErrno());
@@ -728,6 +748,8 @@ TEST_F(UrmaConnOpsTest, DoWaitPeerRes_ImportPeerFails_ReturnsFailed)
     MOCKER_CPP(&UrmaSocket::ImportPeerSegments)
         .stubs()
         .will(returnValue(static_cast<ock::ubs::Result>(UBS_ERROR)));
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
     EXPECT_EQ(ConnStageResult::kFailed, ops->Execute(1000));
     EXPECT_FALSE(ops->peer_imported_.load());
@@ -748,6 +770,8 @@ TEST_F(UrmaConnOpsTest, ServerDoWaitPeerRes_Happy_RegistersAndStagesAck)
     MOCKER_CPP(&UrmaSocket::ImportPeerSegments)
         .stubs()
         .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
     EXPECT_EQ(ConnStageResult::kPending, ops->Execute(1000));
     EXPECT_EQ(ConnState::kWaitPeerAck, ops->State());
@@ -801,7 +825,7 @@ TEST_F(UrmaConnOpsTest, ClientDoWaitPeerAck_Happy_CommitsAndReturnsDone)
     EXPECT_EQ(ConnState::kConnEstablished, ops->State());
     UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(sock_ptr);
     EXPECT_TRUE(urma_sock->IsBindRemote()); /* CommitRemotePeer 内 SetBindRemote(true) */
-    EXPECT_EQ(42u, urma_sock->GetPeerEid().in4.addr);
+    EXPECT_EQ(42u, urma_sock->GetPeerNode().eid.in4.addr);
 }
 
 TEST_F(UrmaConnOpsTest, ServerDoWaitPeerAck_Happy_SetsEstablishedAndRestoresBlocking)
@@ -911,6 +935,10 @@ TEST_F(UrmaConnOpsTest, ServerOnConnFailed_CleansRegisteredAndRemoteSegments)
     ops->peer_seg_ex_.node.eid.in4.addr = 7;
 
     UrmaSocketPtr reg_sock = MakeTestUrmaSocket();
+    reg_sock->context_ = MakeRef<UrmaContext>(nullptr, MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{}),
+                                             urma_eid_info_t{});
+    ops->sock_ = RefConvert<UrmaSocket, Socket>(reg_sock);
+    ops->urma_sock_ = reg_sock.Get();
     ArraySet<Socket>::GetInstance().OverrideItem(TEST_FD, reg_sock.Get());
     MOCKER_CPP(&UrmaIoBufferPool::rm_remote_segments).stubs().will(invoke(MockRmRemoteSegments));
 
