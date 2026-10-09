@@ -220,9 +220,8 @@ public:
     explicit ObjectThreadCache(ObjectGlobalCache *sharePool);
     ~ObjectThreadCache()
     {
-        FreeAllToGlobalCache();
-
         if (global_cache_ != nullptr) {
+            FreeAllToGlobalCache();
             global_cache_->DecreaseRef();
             global_cache_ = nullptr;
         }
@@ -244,8 +243,8 @@ public:
         }
 
         /* return cached mini blocks to the previous cache only if it is still usable */
-        FreeAllToGlobalCache();
         if (global_cache_ != nullptr) {
+            FreeAllToGlobalCache();
             global_cache_->DecreaseRef();
         }
 
