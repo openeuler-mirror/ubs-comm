@@ -20,7 +20,8 @@ namespace ubs {
 namespace allocator {
 class FixedThreadCache2 {
 public:
-    FixedThreadCache2(FixedGlobalCache *pool, uint16_t gcAllocBatchSize, uint16_t gcFreeBatchSize)
+    explicit FixedThreadCache2(FixedGlobalCache *pool = nullptr, uint16_t gcAllocBatchSize = FIX_GC_BATCH_ALLOC_SIZE,
+                               uint16_t gcFreeBatchSize = FIX_GC_BATCH_FREE_SIZE) noexcept
         : gc_alloc_batch_size_(gcAllocBatchSize),
           gc_free_batch_size_(gcFreeBatchSize),
           gc_(pool)
@@ -33,6 +34,13 @@ public:
     }
 
     void UnInit() noexcept;
+
+    /**
+     * @brief Rebind this thread cache to the given global cache
+     *
+     * @param pool    [in] the cache to be bound to
+     */
+    void Rebind(FixedGlobalCache *pool) noexcept;
 
     /**
      * @brief Allocate one buffer from thread cache, if there are no enough buffer, allocate from global cache
@@ -71,6 +79,7 @@ private:
     FixedMiniBlock *AllocateFromGC(uint16_t requestSize, uint16_t &allocatedCount) noexcept;
     void FreeAllToGC() noexcept;
     void FreeToGC() noexcept;
+    void DropAll() noexcept;
 
     void TryFreeToNMAligned() noexcept;
 
@@ -90,7 +99,7 @@ private:
     FixedMiniBlock *unaligned_tail_ = nullptr;   /* tail of unaligned blocks */
     FixedMiniBlock *n_m_aligned_head_ = nullptr; /* aligned blocks with n*m */
     FixedMiniBlock *n_m_aligned_tail_ = nullptr; /* tail of aligned blocks with n*m */
-    FixedGlobalCache *gc_ = nullptr;             /* point to global cache */
+    Ref<FixedGlobalCache> gc_{nullptr};          /* point to global cache */
     uint64_t reserved[2]{};                      /* reserved */
 };
 
@@ -106,8 +115,39 @@ ALWAYS_INLINE void FixedThreadCache2::UnInit() noexcept
         return;
     }
 
-    FreeAllToGC();
+    if (LIKELY(gc_->IsInit())) {
+        FreeAllToGC();
+    } else {
+        /* the pool has already been released, the mini blocks held here died together with it */
+        DropAll();
+    }
+
     gc_ = nullptr;
+}
+
+ALWAYS_INLINE void FixedThreadCache2::Rebind(FixedGlobalCache *pool) noexcept
+{
+    if (gc_.Get() == pool) {
+        return;
+    }
+
+    if (gc_ != nullptr && gc_->IsInit()) {
+        FreeAllToGC();
+    } else {
+        DropAll();
+    }
+
+    gc_ = pool;
+}
+
+ALWAYS_INLINE void FixedThreadCache2::DropAll() noexcept
+{
+    unaligned_head_ = nullptr;
+    unaligned_tail_ = nullptr;
+    unaligned_free_count_ = 0;
+    n_m_aligned_head_ = nullptr;
+    n_m_aligned_tail_ = nullptr;
+    n_m_aligned_free_count_ = 0;
 }
 
 ALWAYS_INLINE FixedMiniBlock *FixedThreadCache2::AllocateFromGC(uint16_t requestSize, uint16_t &allocatedCount) noexcept

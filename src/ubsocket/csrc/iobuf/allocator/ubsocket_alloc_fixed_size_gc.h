@@ -12,6 +12,7 @@
 #define UBS_COMM_UBSOCKET_ALLOC_GLOBAL_CACHE_H
 
 #include <semaphore.h>
+#include <atomic>
 #include <condition_variable>
 
 #include "ubsocket_alloc_fixed_size_ra.h"
@@ -20,13 +21,18 @@
 namespace ock {
 namespace ubs {
 namespace allocator {
-class FixedGlobalCache {
+class FixedGlobalCache : public Referable {
 public:
     static Result VerifyOptions(FixedAllocatorOptions &options) noexcept;
 
 public:
     FixedGlobalCache() = default;
     virtual ~FixedGlobalCache() = default;
+
+    ALWAYS_INLINE bool IsInit() const noexcept
+    {
+        return init_.load(std::memory_order_acquire);
+    }
 
     /**
      * @brief Initialize global cache
@@ -130,7 +136,7 @@ private:
     pthread_spinlock_t spinlock_unaligned_;           /* allocate first lock spin lock from unaligned */
     uint64_t total_mini_blocks_ = 0;                  /* total mini blocks created, protected by spinlock_aligned_ */
     bool async_expand_enable_ = false;                /* whether use async expand */
-    bool init_ = false;                               /* inited or not */
+    std::atomic<bool> init_{false};                   /* inited or not, also read by thread caches */
 
     /* not-hot used variables */
     std::mutex mutex_;                            /* mutex for init/un-init, direct allocate/free */
@@ -206,7 +212,7 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
     UBS_VLOG_INFO("enter");
     /* step1: check if init */
     std::lock_guard<std::mutex> lock(mutex_);
-    if (init_) {
+    if (IsInit()) {
         UBS_VLOG_INFO("Already initialized");
         return UBS_OK;
     }
@@ -275,7 +281,7 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
         StartAsyncExpandThread();
     }
 
-    init_ = true;
+    init_.store(true, std::memory_order_release);
     UBS_VLOG_INFO("Initialized");
     return UBS_OK;
 }
@@ -283,13 +289,13 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
 ALWAYS_INLINE void FixedGlobalCache::UnInit() noexcept
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!init_) {
+    if (!IsInit()) {
         UBS_VLOG_DEBUG("Uninitialized");
         return;
     }
 
+    init_.store(false, std::memory_order_release);
     UnInitInner();
-    init_ = false;
 }
 
 ALWAYS_INLINE Result FixedGlobalCache::ReserveSpace() noexcept
@@ -742,7 +748,7 @@ ALWAYS_INLINE bool FixedGlobalCache::BatchInRange(uint16_t batchSize, uintptr_t 
 
 ALWAYS_INLINE bool FixedGlobalCache::DirectAllocate(uint32_t size, uintptr_t &address) noexcept
 {
-    if (UNLIKELY(!init_)) {
+    if (UNLIKELY(!IsInit())) {
         UBS_VLOG_ERR("Failed to allocate memory as global cache not initialized");
         return false;
     }
@@ -752,7 +758,7 @@ ALWAYS_INLINE bool FixedGlobalCache::DirectAllocate(uint32_t size, uintptr_t &ad
 
 ALWAYS_INLINE void FixedGlobalCache::DirectFree(uintptr_t address) noexcept
 {
-    if (UNLIKELY(!init_)) {
+    if (UNLIKELY(!IsInit())) {
         UBS_VLOG_ERR("Failed to free memory as global cache not initialized");
         return;
     }

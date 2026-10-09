@@ -72,7 +72,6 @@ void FixedAllocator::UnInitInner() noexcept
 
     if (gc_ != nullptr) {
         gc_->UnInit();
-        delete gc_;
         gc_ = nullptr;
     }
 }
