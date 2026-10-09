@@ -31,7 +31,7 @@ int umq_stats_flow_control_get(uint64_t umqh, umq_flow_control_stats_t *flow_con
  * @param[in] flow_control_stats: flow control statistical results
  * @param[out] buf: buffer to store the string
  * @param[in] max_buf_len: length of the buffer
- * Return 0 on success, error code on failure
+ * Return string len on success, error code on failure
  */
 int umq_flow_control_stats_to_str(const umq_flow_control_stats_t *flow_control_stats, char *buf, int max_buf_len);
 
@@ -101,7 +101,7 @@ int umq_io_stats_to_str(const umq_packet_stats_t *packet_stats, char *buf, int m
 
 /**
  * Thread safety function
- * Get io packet statistical results.
+ * Get perf statistical results.
  * @param[out] umq_perf_stats: perf statistical results
  * Return 0 on success, error code on failure
  */
@@ -127,15 +127,77 @@ int umq_stats_perf_start(void);
 int umq_stats_perf_stop(void);
 
 /**
+ * Start trace statistics.
+ * @param[in] cfg: trace cfg
+ * Return 0 on success, error code on failure
+ */
+int umq_stats_trace_start(umq_trace_cfg_t *cfg);
+
+/**
+ * Stop trace statistics.
+ * Return 0 on success, error code on failure
+ */
+int umq_stats_trace_stop(void);
+
+/**
  * Thread safety function
  * Convert the perf statistics result to a string.
  * @param[in] umq_perf_stats: perf statistical results
  * @param[in] buf: buffer to store the string
- * @param[in] max_buf_szie: length of the buffer
- * Return string len on success, the length of the character to be written.
- * -UMQ_ERR_EINVAL: Invalid parameter
+ * @param[in] max_buf_len: length of the buffer
+ * Return string len on success, error code on failure.
  */
 int umq_stats_perf_to_str(umq_perf_stats_t *umq_perf_stats, char *buf, int max_buf_len);
+
+/**
+ * start tp performance statistics.
+ * @param[in] trans_mode: umq trans mode
+ * Return: 0 on success, other value on error
+ */
+int umq_stats_tp_perf_start(umq_trans_mode_t trans_mode);
+
+/**
+ * Stop tp performance statistics.
+ * @param[in] trans_mode: umq trans mode
+ * Return: 0 on success, other value on error
+ */
+int umq_stats_tp_perf_stop(umq_trans_mode_t trans_mode);
+
+/**
+ * Get tp performance info statistical results.
+ * @param[in] trans_mode: umq trans mode
+ * @param[out] perf_buf: buffer to store performance information;
+ * @param[out] length: length of performance information;
+ * Return: 0 on success, other value on error
+ */
+int umq_stats_tp_perf_info_get(umq_trans_mode_t trans_mode, char *perf_buf, uint32_t *length);
+
+/**
+ * Register umq_io_perf_callback.
+ * @param[in] func: umq_io_perf_callback_t to process perf data
+ * Return: 0 on success, other value on error
+ */
+int umq_io_perf_callback_register(umq_io_perf_callback_t func);
+
+/**
+ * Thread safety function
+ * Get transport pool statistical results.
+ * @param[in] umqh: umq handle
+ * @param[out] umq_transport_pool_stats: transport pool statistical results
+ * Return 0 on success, error code on failure
+ */
+int umq_stats_transport_pool_get(uint64_t umqh, umq_transport_pool_stats_t *umq_transport_pool_stats);
+
+/**
+ * Thread safety function
+ * Convert the transport pool statistics result to a string.
+ * @param[in] umq_transport_pool_stats: transport pool statistical results
+ * @param[in] buf: buffer to store the string
+ * @param[in] max_buf_len: length of the buffer
+ * Return string len on success, error code on failure.
+ */
+int umq_transport_pool_stats_to_str(const umq_transport_pool_stats_t *umq_transport_pool_stats,
+    char *buf, int max_buf_len);
 
 #ifdef __cplusplus
 }

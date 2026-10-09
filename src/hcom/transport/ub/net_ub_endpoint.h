@@ -14,12 +14,12 @@
 #define HCOM_NET_UB_ENDPOINT_H
 #ifdef UB_BUILD_ENABLED
 
-#include "transport/net_endpoint_impl.h"
+#include "hcom_utils.h"
 #include "net_monotonic.h"
 #include "net_security_alg.h"
-#include "hcom_utils.h"
-#include "ub_urma_wrapper_jetty.h"
 #include "net_ub_driver_oob.h"
+#include "transport/net_endpoint_impl.h"
+#include "ub_urma_wrapper_jetty.h"
 
 namespace ock {
 namespace hcom {
@@ -56,10 +56,10 @@ public:
 
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNO) override;
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo) override;
+                     const UBSHcomNetTransOpInfo &opInfo) override;
 
     NResult PostSendSglInline(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo) override;
+                              const UBSHcomNetTransOpInfo &opInfo) override;
 
     NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNO) override;
     NResult PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo) override;
@@ -249,7 +249,7 @@ private:
 class NetUBSyncEndpoint : public NetEndpointImpl {
 public:
     NetUBSyncEndpoint(uint64_t id, UBJetty *qp, UBJfc *cq, uint32_t ubOpCtxPoolSize, NetDriverUBWithOob *driver,
-        const UBSHcomNetWorkerIndex &workerIndex);
+                      const UBSHcomNetWorkerIndex &workerIndex);
     ~NetUBSyncEndpoint() override;
 
     NResult SetEpOption(UBSHcomEpOptions &epOptions) override
@@ -286,7 +286,7 @@ public:
 
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNO) override;
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo) override;
+                     const UBSHcomNetTransOpInfo &opInfo) override;
 
     NResult PostSendRaw(const UBSHcomNetTransRequest &request, uint32_t seqNo) override;
     NResult PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo = 0) override;
@@ -307,13 +307,13 @@ public:
     NResult InnerPostWrite(const UBSendReadWriteRequest &req);
     UResult PostOneSideSgl(const UBSendSglRWRequest &req, bool isRead = true);
     UResult CreateOneSideCtx(const UBSgeCtxInfo &sgeInfo, const UBSHcomNetTransSgeIov *iov, uint32_t iovCount,
-        uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead);
+                             uint64_t (&ctxArr)[NET_SGE_MAX_IOV], bool isRead);
 
     NResult PollingCompletion(UBOpContextInfo *&ctx, int32_t timeout, uint32_t &immData);
     NResult PostReceive(uintptr_t bufAddress, uint32_t bufSize, urma_target_seg_t *localSeg);
     NResult RePostReceive(UBOpContextInfo *ctx);
     static NResult CreateResources(const std::string &name, UBContext *ctx, UBPollingMode pollMode,
-        const JettyOptions &options, UBJetty *&qp, UBJfc *&cq);
+                                   const JettyOptions &options, UBJetty *&qp, UBJfc *&cq);
 
     inline UBJetty *GetQp() const
     {
@@ -422,9 +422,8 @@ private:
 
     friend class NetDriverUBWithOob;
 };
-}
-}
-
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // HCOM_NET_UB_ENDPOINT_H

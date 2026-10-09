@@ -47,15 +47,15 @@ if(NOT LIBBOUNDCHECK_INCLUDE_DIR OR NOT LIBBOUNDCHECK_SHARED_LIBRARY)
                 # 假设 umdk-urma 仓库包含 urma 的头文件
                 FetchContent_Declare(
                         libboundscheck
-                        GIT_REPOSITORY https://gitee.com/openeuler/libboundscheck.git
-                        GIT_TAG        master
+                        GIT_REPOSITORY https://atomgit.com/openeuler/libboundscheck.git
+                        GIT_TAG        v1.1.16
                 )
                 FetchContent_MakeAvailable(libboundscheck)
                 # 获取 hcom 源码路径
                 FetchContent_GetProperties(libboundscheck)
                 set(SECUREC_SRC_DIR ${libboundscheck_SOURCE_DIR}/src/hcom)
                 execute_process(
-                        COMMAND make CC=gcc
+                        COMMAND make CC=${CMAKE_C_COMPILER}
                         WORKING_DIRECTORY ${libboundscheck_SOURCE_DIR}
                         RESULT_VARIABLE MAKE_RESULT
                 )

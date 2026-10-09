@@ -8,11 +8,12 @@
 #include "multicast_periodic_manager.h"
 #include "net_common.h"
 #include "net_oob.h"
-#include "utils/multicast_utils.h"
 #include "utils/multicast_lock_guard.h"
+#include "utils/multicast_utils.h"
 
 namespace ock {
 namespace hcom {
+
 PublisherServiceImp::~PublisherServiceImp()
 {
     Stop();
@@ -59,7 +60,7 @@ void PublisherServiceImp::RegisterTLSPrivateKeyCallback(const UBSHcomTLSPrivateK
 }
 
 void PublisherServiceImp::AddWorkerGroup(uint16_t workerGroupId, uint32_t threadCount,
-    const std::pair<uint32_t, uint32_t> &cpuIdsRange, int8_t priority)
+                                         const std::pair<uint32_t, uint32_t> &cpuIdsRange, int8_t priority)
 {
     UBSHcomWorkerGroupInfo groupInfo;
     groupInfo.threadPriority = priority;
@@ -90,45 +91,23 @@ void PublisherServiceImp::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
 SerResult PublisherServiceImp::ServiceRequestReceived(const UBSHcomNetRequestContext &ctx)
 {
     HcomSeqNo netSeqNo(ctx.Header().seqNo);
-
-    PublisherContext *pubCtx = nullptr;
-    mPublisher->mPubCtxStore->GetBySeqNo(netSeqNo.wholeSeq, pubCtx);
-    if (NN_UNLIKELY(pubCtx == nullptr)) {
-        NN_LOG_ERROR("Publisher context is nullptr, maybe timeout or broken before handle, ep Id " <<
-            ctx.EndPoint()->Id() << " seqNo " << netSeqNo.wholeSeq);
+    MultiCastIoContext *ioContext = mPeriodicMgr->GetIoContext(netSeqNo.wholeSeq);
+    if (NN_UNLIKELY(ioContext == nullptr)) {
+        NN_LOG_WARN("Multicast IO context is unavailable, seq no " << netSeqNo.wholeSeq << ".");
         return SER_ERROR;
     }
 
     SubscriptionInfoPtr subscriberInfo = reinterpret_cast<SubscriptionInfo *>(ctx.EndPoint()->UpCtx());
     if (NN_UNLIKELY(subscriberInfo == nullptr)) {
         NN_LOG_ERROR("Get subscribe info failed, maybe broken then handle, ep Id " << ctx.EndPoint()->Id());
+        ioContext->ReleaseAccess();
         return SER_ERROR;
     }
 
     // ctx和msg都是thread local的变量，在线程销毁（即接收worker线程）的时候会被销毁
-    uint32_t repliedCount = pubCtx->MarkRepliedAndGetReplyCount(subscriberInfo, ctx.Message());
-    if (repliedCount < pubCtx->GetSendCount()) {
-        return SER_OK;
-    }
-
-    MultiCastServiceTimer *timer = nullptr;
-    if (NN_UNLIKELY(mPublisher->mCtxStore->GetSeqNoAndRemove(netSeqNo.wholeSeq, timer) != SER_OK)) {
-        HcomSeqNo dumpSeq(netSeqNo.wholeSeq);
-        NN_LOG_ERROR("publisher fetch " << dumpSeq.ToString() << " context failed");
-        return SER_ERROR;
-    }
-    timer->RunCallBack(*pubCtx);
-    timer->MarkFinished();
-    timer->DecreaseRef();
-
-    // 仅在所有请求都到了之后才销毁
-    PublisherContext *context = nullptr;
-    if (NN_UNLIKELY(mPublisher->mPubCtxStore->GetSeqNoAndRemove(netSeqNo.wholeSeq, context) != SER_OK)) {
-        HcomSeqNo dumpSeq(netSeqNo.wholeSeq);
-        NN_LOG_ERROR("publisher fetch " << dumpSeq.ToString() << " context failed");
-        return SER_ERROR;
-    }
-    mPublisher->mPubCtxStore->Return(context);
+    ioContext->mPublisherCtx.MarkReplied(subscriberInfo, ctx.Message());
+    ioContext->mPublisher->TryCompleteIoContext(ioContext);
+    ioContext->ReleaseAccess();
     return SER_OK;
 }
 
@@ -142,19 +121,21 @@ void PublisherServiceImp::RegisterSubscriptionExceptionHandler(const Subscriptio
     mSubscriptionExceptionHandler = handler;
 }
 
-void PublisherServiceImp::DirectEraseEp(UBSHcomNetEndpointPtr ep)
+void PublisherServiceImp::DirectEraseEp(const UBSHcomNetEndpointPtr &ep)
 {
     NN_LOG_INFO("erase ep from map " << ep->Id());
-    RWLockGuard(mPublisher->mRwLock).LockWrite();
-    mPublisher->mEpMap.erase(ep->Id());
-    mPublisher->mSubCount--;
+    auto info = mPublisher->GetSubscribeByEpId(ep->Id());
+    if (info.Get() == nullptr) {
+        NN_LOG_WARN("Subscription of ep " << ep->Id() << " is nullptr when erase ep");
+        return;
+    }
+    mPublisher->DelSubscription(info);
 }
 
-void PublisherServiceImp::EraseEpCb(PublisherContext &ctx, uintptr_t epPtr)
+void PublisherServiceImp::EraseEpCb(PublisherContext &, const UBSHcomNetEndpointPtr &ep)
 {
-    auto ep = reinterpret_cast<UBSHcomNetEndpoint *>(epPtr);
     if (ep == nullptr) {
-        NN_LOG_WARN("Erase ep is null");
+        NN_LOG_WARN("Erase endpoint is null.");
         return;
     }
 
@@ -164,9 +145,8 @@ void PublisherServiceImp::EraseEpCb(PublisherContext &ctx, uintptr_t epPtr)
 SerResult PublisherServiceImp::DelayEraseEp(const UBSHcomNetEndpointPtr &ep, uint16_t delayTime)
 {
     NN_LOG_INFO("delay erase ep " << ep->Id());
-    auto epPtr = reinterpret_cast<uintptr_t>(ep.Get());
     MultiCastCallback *newCallback =
-        NewMultiCastCallback(&PublisherServiceImp::EraseEpCb, this, std::placeholders::_1, epPtr);
+        NewMultiCastCallback(&PublisherServiceImp::EraseEpCb, this, std::placeholders::_1, ep);
     if (newCallback == nullptr) {
         NN_LOG_ERROR("Failed to new callback obj.");
         return SER_NEW_OBJECT_FAILED;
@@ -175,40 +155,40 @@ SerResult PublisherServiceImp::DelayEraseEp(const UBSHcomNetEndpointPtr &ep, uin
     auto ctxStorePtr = mPublisher->mCtxStore;
     if (ctxStorePtr == nullptr) {
         NN_LOG_ERROR("Failed to get channel ctx store.");
-        delete newCallback;
+        DestroyCallback(newCallback);
         return SER_ERROR;
     }
     auto timerPtr = ctxStorePtr->GetCtxObj<HcomServiceTimer>();
     if (NN_UNLIKELY(timerPtr == nullptr)) {
         NN_LOG_ERROR("Failed to get context object from memory pool.");
-        delete newCallback;
+        DestroyCallback(newCallback);
         return SER_NEW_OBJECT_FAILED;
     }
 
-    auto timer = new (timerPtr)MultiCastServiceTimer(mPublisher.Get(), ctxStorePtr, delayTime,
-        reinterpret_cast<uintptr_t>(newCallback), MultiCastSyncCBType::BROKEN);
+    auto timer = new (timerPtr)
+        MultiCastServiceTimer(mPublisher.Get(), ctxStorePtr, delayTime, reinterpret_cast<uintptr_t>(newCallback),
+                              MultiCastSyncCBType::BROKEN);
+    timer->IncreaseRef();
 
     uint32_t seqNo = NN_NO0;
     auto result = ctxStorePtr->PutAndGetSeqNo(timer, seqNo);
     if (NN_UNLIKELY(result != SER_OK)) {
         NN_LOG_ERROR("Failed to generate seqNo by context store pool.");
-        ctxStorePtr->Return(timerPtr);
-        delete newCallback;
+        timer->DeleteCallBack();
+        timer->DecreaseRef();
         return SER_NEW_OBJECT_FAILED;
     }
 
-    timer->IncreaseRef();
     timer->SeqNo(seqNo);
 
     result = mPeriodicMgr->AddTimer(timer);
     if (NN_UNLIKELY(result != SER_OK)) {
         NN_LOG_ERROR("Failed to add timer in for timeout control.");
         timer->EraseSeqNo();
-        ctxStorePtr->Return(timerPtr);
-        delete newCallback;
+        timer->DeleteCallBack();
+        timer->DecreaseRef();
         return result;
     }
-    timer->IncreaseRef();
     return SER_OK;
 }
 
@@ -225,14 +205,15 @@ SerResult PublisherServiceImp::EpBrokenCallback(const UBSHcomNetEndpointPtr &ep)
 }
 
 SerResult PublisherServiceImp::NewSubscriptionCallback(const std::string &ipPort,
-    const ock::hcom::UBSHcomNetEndpointPtr &ep, const std::string &payload)
+                                                       const ock::hcom::UBSHcomNetEndpointPtr &ep,
+                                                       const std::string &payload)
 {
     if (mPublisher.Get() == nullptr) {
         NN_LOG_ERROR("new subscriber, but publisher is not ready");
         return SER_ERROR;
     }
 
-    if (mPublisher->mSubCount == mCfg.GetMaxSubscriberNum()) {
+    if (mPublisher->mSubCount.load(std::memory_order_acquire) == mCfg.GetMaxSubscriberNum()) {
         NN_LOG_ERROR("subscriber num is over limit " << mCfg.GetMaxSubscriberNum());
         return SER_ERROR;
     }
@@ -262,8 +243,7 @@ SerResult PublisherServiceImp::NewSubscriptionCallback(const std::string &ipPort
 
 SerResult PublisherServiceImp::InitDriver()
 {
-    UBSHcomNetDriver *driver = UBSHcomNetDriver::Instance(UBSHcomNetDriverProtocol::RDMA,
-        mCfg.GetName(), mCfg.GetStartOobServer());
+    UBSHcomNetDriver *driver = UBSHcomNetDriver::Instance(mCfg.GetProtocol(), mCfg.GetName(), mCfg.GetStartOobServer());
     if (driver == nullptr) {
         NN_LOG_ERROR("failed to create driver for service " << mCfg.GetName());
         return SER_ERROR;
@@ -287,7 +267,7 @@ SerResult PublisherServiceImp::InitDriver()
     mDriverPtr->RegisterOneSideDoneHandler(DefaultOneSideDone);
 
     mDriverPtr->RegisterNewEPHandler(std::bind(&PublisherServiceImp::NewSubscriptionCallback, this,
-        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+                                               std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     mDriverPtr->RegisterEPBrokenHandler(std::bind(&PublisherServiceImp::EpBrokenCallback, this, std::placeholders::_1));
 
     if (driverOpt.enableTls) {
@@ -311,9 +291,18 @@ SerResult PublisherServiceImp::CreateResource(uint32_t threadNum)
         NN_LOG_ERROR("Invalid periodicThreadNum " << threadNum << ", must range in [1, 4]");
         return SER_INVALID_PARAM;
     }
+    if (NN_UNLIKELY(!MultiCastCallbackPool::Instance().Initialize())) {
+        NN_LOG_WARN("Initialize multicast callback pool failed, fallback to heap allocation.");
+    }
 
-    MultiCastPeriodicManagerPtr periodicMgr =
-        new (std::nothrow) MultiCastPeriodicManager(NN_NO1, GetConfig().GetName());
+    int cpuId = -1;
+    if (GetConfig().GetPeriodicCpuId() > 0) {
+        cpuId = GetConfig().GetPeriodicCpuId();
+    }
+
+    MultiCastPeriodicManagerPtr periodicMgr = new (std::nothrow)
+        MultiCastPeriodicManager(static_cast<uint16_t>(threadNum), GetConfig().GetName(), cpuId,
+                                 mCfg.GetMulticastIoContextCount(), GetConfig().GetMaxSubscriberNum());
     if (NN_UNLIKELY(periodicMgr.Get() == nullptr)) {
         NN_LOG_ERROR("Create periodic manager failed");
         return SER_NEW_OBJECT_FAILED;
@@ -324,10 +313,15 @@ SerResult PublisherServiceImp::CreateResource(uint32_t threadNum)
         return SER_TIMER_NOT_WORK;
     }
 
+    static_assert(sizeof(MultiCastServiceTimer) <= NN_NO128, "Multicast timer exceeds memory pool block size");
     NetMemPoolFixedOptions options = {};
     options.superBlkSizeMB = NN_NO1;
-    options.minBlkSize = NN_NO64;
+    options.minBlkSize = NN_NO128;
     options.tcExpandBlkCnt = NN_NO256;
+
+    options.tlsPolicy.enabled = true;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
+    options.tlsPolicy.flushMs = 0;
     NetMemPoolFixedPtr ctxMemPool = new (std::nothrow) NetMemPoolFixed("PublisherServiceCtxTimer", options);
     if (NN_UNLIKELY(ctxMemPool.Get() == nullptr)) {
         NN_LOG_ERROR("Create mem pool failed");
@@ -340,25 +334,8 @@ SerResult PublisherServiceImp::CreateResource(uint32_t threadNum)
         return SER_NEW_OBJECT_FAILED;
     }
 
-    NetMemPoolFixedOptions pubOptions = {};
-    pubOptions.superBlkSizeMB = NN_NO1;
-    pubOptions.minBlkSize = NN_NO32;
-    pubOptions.tcExpandBlkCnt = NN_NO256;
-    NetMemPoolFixedPtr pubCtxMemPool = new (std::nothrow) NetMemPoolFixed("PublisherServiceCtxSubInfo", options);
-    if (NN_UNLIKELY(pubCtxMemPool.Get() == nullptr)) {
-        NN_LOG_ERROR("Create mem pool failed");
-        return SER_NEW_OBJECT_FAILED;
-    }
-
-    auto result = pubCtxMemPool->Initialize();
-    if (NN_UNLIKELY(result != SER_OK)) {
-        NN_LOG_ERROR("Init mem pool failed");
-        return SER_NEW_OBJECT_FAILED;
-    }
-
     mPeriodicMgr = periodicMgr;
     mCtxMemPool = ctxMemPool;
-    mPubCtxMemPool = pubCtxMemPool;
     return SER_OK;
 }
 
@@ -459,16 +436,13 @@ void PublisherServiceImp::Stop()
         mCtxMemPool.Set(nullptr);
     }
 
-    if (mPubCtxMemPool.Get() != nullptr) {
-        mPubCtxMemPool.Set(nullptr);
-    }
-
     UBSHcomNetDriver::DestroyInstance(mDriverPtr->Name());
 
     mStarted = false;
 }
 
-SerResult PublisherServiceImp::Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler)
+SerResult PublisherServiceImp::Bind(const std::string &listenerUrl, const NewSubscriptionHandler &handler,
+                                    const int cpuId)
 {
     if (NN_UNLIKELY(listenerUrl.empty())) {
         NN_LOG_ERROR("Invalid url: " << listenerUrl);
@@ -491,13 +465,18 @@ SerResult PublisherServiceImp::Bind(const std::string &listenerUrl, const NewSub
         return SER_INVALID_PARAM;
     }
 
+    int listenCpuId = -1;
+    if (cpuId > 0) {
+        listenCpuId = cpuId;
+    }
+
     mCfg.SetStartOobServer(true);
     mCfg.SetOobType(NET_OOB_TCP);
     mNewSubScriptionHandler = handler;
-    return AddTcpOobListener(url);
+    return AddTcpOobListener(url, listenCpuId);
 }
 
-SerResult PublisherServiceImp::AddTcpOobListener(const std::string &url, uint16_t workerCount)
+SerResult PublisherServiceImp::AddTcpOobListener(const std::string &url, int cpuId, uint16_t workerCount)
 {
     std::string ip;
     uint16_t port;
@@ -507,7 +486,7 @@ SerResult PublisherServiceImp::AddTcpOobListener(const std::string &url, uint16_
     }
 
     UBSHcomNetOobListenerOptions option;
-    if (NN_UNLIKELY(!option.Set(ip, port, workerCount))) {
+    if (NN_UNLIKELY(!option.SetWithCpuId(ip, port, workerCount, cpuId))) {
         NN_LOG_ERROR("Oob Tcp listener set failed");
         return SER_INVALID_PARAM;
     }
@@ -530,8 +509,8 @@ SerResult PublisherServiceImp::CreatePublisher(NetRef<Publisher> &publisher)
     }
 
     if (NN_UNLIKELY(tmpPub->Initialize(reinterpret_cast<uintptr_t>(mCtxMemPool.Get()),
-        reinterpret_cast<uintptr_t>(mPubCtxMemPool.Get()), reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
-        mCtxStoreCapacity))) {
+                                       reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()), mCtxStoreCapacity,
+                                       mCfg.GetProtocol()))) {
         NN_LOG_ERROR("Failed to initialize publisher");
         delete tmpPub;
         return SER_NEW_OBJECT_FAILED;
@@ -548,5 +527,5 @@ void PublisherServiceImp::DestroyPublisher(NetRef<Publisher> &publisher)
         publisher.Set(nullptr);
     }
 }
-}
-}
+} // namespace hcom
+} // namespace ock

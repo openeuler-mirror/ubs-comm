@@ -13,11 +13,11 @@
 #ifndef CMD_HANDLER
 #define CMD_HANDLER
 
-#include <string>
-#include <vector>
 #include <map>
 #include <memory>
 #include <set>
+#include <string>
+#include <vector>
 #include "hcom/hcom_err.h"
 
 using namespace ock::hcom;
@@ -37,7 +37,7 @@ public:
     uint32_t ParseUintOption(const std::vector<std::string> &cmds, const std::string &opt, uint32_t defaultValue);
 
     double ParseDoubleOption(const std::vector<std::string> &cmds, const std::string &opt, double defaultValue,
-        double min, double max);
+                             double min, double max);
 
     void ProcessTraceData(std::ostream &out, double quantile);
 };

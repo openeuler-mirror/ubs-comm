@@ -12,10 +12,10 @@
 #ifndef HCOM_SHM_HANDLE_H
 #define HCOM_SHM_HANDLE_H
 
+#include <linux/version.h>
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
-#include <linux/version.h>
 #include "net_common.h"
 #include "shm_common.h"
 
@@ -24,14 +24,23 @@ namespace hcom {
 class ShmHandle {
 public:
     ShmHandle(const std::string &name, const std::string &filePrefix, uint64_t id, uint64_t dataSize, bool isOwner)
-        : mName(name), mFilePrefix(filePrefix), mId(id), mDataSize(dataSize), mIsOwner(isOwner)
+        : mName(name),
+          mFilePrefix(filePrefix),
+          mId(id),
+          mDataSize(dataSize),
+          mIsOwner(isOwner)
     {
         OBJ_GC_INCREASE(ShmHandle);
     }
 
     ShmHandle(const std::string &name, const std::string &filePrefix, uint64_t id, uint64_t dataSize, int fd,
-        bool isOwner)
-        : mName(name), mFilePrefix(filePrefix), mId(id), mDataSize(dataSize), mFd(fd), mIsOwner(isOwner)
+              bool isOwner)
+        : mName(name),
+          mFilePrefix(filePrefix),
+          mId(id),
+          mDataSize(dataSize),
+          mFd(fd),
+          mIsOwner(isOwner)
     {
         OBJ_GC_INCREASE(ShmHandle);
     }
@@ -72,17 +81,17 @@ public:
 #endif
             if (tmpFd < 0) {
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("Failed to create shm file for " << mName << ", error "
-                        << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE) <<
-                    ", please check if fd is out of limit");
+                NN_LOG_ERROR("Failed to create shm file for "
+                             << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE)
+                             << ", please check if fd is out of limit");
                 return SH_FILE_OP_FAILED;
             }
             /* truncate */
             if (ftruncate(tmpFd, mDataSize) != 0) {
                 NetFunc::NN_SafeCloseFd(tmpFd);
                 char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-                NN_LOG_ERROR("Failed to truncate file for " << mName << ", error "
-                        << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                NN_LOG_ERROR("Failed to truncate file for "
+                             << mName << ", error " << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
                 return SH_FILE_OP_FAILED;
             }
             mFd = tmpFd;
@@ -93,7 +102,7 @@ public:
         if (NN_UNLIKELY(flock(mFd, LOCK_EX | LOCK_NB) != 0)) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             NN_LOG_ERROR("Failed to lock file for " << mName << ", error "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             NetFunc::NN_SafeCloseFd(mFd);
             return SH_FILE_OP_FAILED;
         }
@@ -103,10 +112,10 @@ public:
         auto mappedAddress = mmap(nullptr, mDataSize, PROT_READ | PROT_WRITE, MAP_SHARED, mFd, 0);
         if (mappedAddress == MAP_FAILED) {
             NetFunc::NN_SafeCloseFd(mFd);
-            
+
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             NN_LOG_ERROR("Failed to mmap file for " << mName << ", error "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return SH_FILE_OP_FAILED;
         }
 
@@ -140,14 +149,14 @@ public:
         if (munmap(reinterpret_cast<void *>(mAddress), mDataSize) != 0) {
             NN_LOG_ERROR("Failed to munmap address in shm handle " << mName);
         }
-        
+
         NetFunc::NN_SafeCloseFd(mFd);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
         if (mIsOwner && shm_unlink(mFullPath.c_str()) != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
             NN_LOG_ERROR("Failed to remove file for " << mName << " error "
-                    << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+                                                      << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
 #endif
         mInited = false;
@@ -156,8 +165,8 @@ public:
     std::string ToString() const
     {
         std::ostringstream oss;
-        oss << "name: " << mName << ", id: " << mId << ", data-size: " << mDataSize << ", address: " << mAddress <<
-            ", fd: " << mFd << ", is-owner: " << mIsOwner << ", inited: " << mInited << ", full-path: " << mFullPath;
+        oss << "name: " << mName << ", id: " << mId << ", data-size: " << mDataSize << ", address: " << mAddress
+            << ", fd: " << mFd << ", is-owner: " << mIsOwner << ", inited: " << mInited << ", full-path: " << mFullPath;
         return oss.str();
     }
 
@@ -216,7 +225,7 @@ private:
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // HCOM_SHM_HANDLE_H

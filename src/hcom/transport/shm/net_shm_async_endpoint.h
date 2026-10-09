@@ -13,7 +13,6 @@
 #define OCK_HCOM_NET_SHM_ASYNC_ENDPOINT_H
 
 #include "hcom.h"
-#include "transport/net_endpoint_impl.h"
 #include "hcom_utils.h"
 #include "net_common.h"
 #include "net_monotonic.h"
@@ -22,13 +21,14 @@
 #include "net_shm_driver_oob.h"
 #include "shm_composed_endpoint.h"
 #include "shm_handle_fds.h"
+#include "transport/net_endpoint_impl.h"
 
 namespace ock {
 namespace hcom {
 class NetAsyncEndpointShm : public NetEndpointImpl {
 public:
     NetAsyncEndpointShm(uint64_t id, ShmChannel *ch, ShmWorker *worker, NetDriverShmWithOOB *driver,
-        const UBSHcomNetWorkerIndex &workerIndex, ShmMRHandleMap &handleMap);
+                        const UBSHcomNetWorkerIndex &workerIndex, ShmMRHandleMap &handleMap);
     ~NetAsyncEndpointShm() override;
 
     NResult SetEpOption(UBSHcomEpOptions &epOptions) override
@@ -64,7 +64,7 @@ public:
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request, uint32_t seqNO) override;
 
     NResult PostSend(uint16_t opCode, const UBSHcomNetTransRequest &request,
-        const UBSHcomNetTransOpInfo &opInfo) override;
+                     const UBSHcomNetTransOpInfo &opInfo) override;
 
     NResult PostSendRawSgl(const UBSHcomNetTransSglRequest &request, uint32_t seqNo) override;
 
@@ -104,8 +104,8 @@ public:
         }
 
         if (NN_UNLIKELY(!mState.Compare(NEP_ESTABLISHED))) {
-            NN_LOG_ERROR("Shm Failed to send fds in shm async ep as endpoint " << mId <<
-                " is not established, state is " << UBSHcomNEPStateToString(mState.Get()));
+            NN_LOG_ERROR("Shm Failed to send fds in shm async ep as endpoint "
+                         << mId << " is not established, state is " << UBSHcomNEPStateToString(mState.Get()));
             return NN_EP_NOT_ESTABLISHED;
         }
 
@@ -119,13 +119,13 @@ public:
         }
 
         std::lock_guard<std::mutex> guard(mShmCh->mFdMutex);
-        ShmChKeeperMsgHeader header {};
+        ShmChKeeperMsgHeader header{};
         header.msgType = ShmChKeeperMsgType::EXCHANGE_USER_FD;
         header.dataSize = len;
         if (NN_UNLIKELY(::send(mShmCh->UdsFD(), &header, sizeof(ShmChKeeperMsgHeader), MSG_NOSIGNAL) <= 0)) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_ERROR("Shm Failed to send header info of exchange external fd to peer, error " <<
-                NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_ERROR("Shm Failed to send header info of exchange external fd to peer, error "
+                         << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
             return NN_ERROR;
         }
 
@@ -140,8 +140,8 @@ public:
         }
 
         if (NN_UNLIKELY(!mState.Compare(NEP_ESTABLISHED))) {
-            NN_LOG_ERROR("Shm Failed to receive fds in shm async ep as endpoint " << mId <<
-                " is not established, state is " << UBSHcomNEPStateToString(mState.Get()));
+            NN_LOG_ERROR("Shm Failed to receive fds in shm async ep as endpoint "
+                         << mId << " is not established, state is " << UBSHcomNEPStateToString(mState.Get()));
             return NN_EP_NOT_ESTABLISHED;
         }
 
@@ -211,7 +211,7 @@ private:
 
     friend class NetDriverShmWithOOB;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_SHM_ASYNC_ENDPOINT_H

@@ -47,6 +47,6 @@ private:
     char *mDataAddr = nullptr;
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 #endif // HCOM_TRANSPORT_SEND_BW_TEST_H

@@ -21,5 +21,4 @@ public:
     virtual void TearDown(void);
 };
 
-
 #endif // HCOM_TEST_ADDRESS_SIZE_HASH_MAP_H

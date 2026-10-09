@@ -26,8 +26,7 @@ public:
     ShmMemoryRegion *noExternalMr = nullptr;
 };
 
-TestShmMemoryRegion::TestShmMemoryRegion()
-{}
+TestShmMemoryRegion::TestShmMemoryRegion() {}
 
 void TestShmMemoryRegion::SetUp()
 {
@@ -87,5 +86,5 @@ TEST_F(TestShmMemoryRegion, InitializeHandlerMallocFail)
     EXPECT_EQ(ret, NN_MALLOC_FAILED);
 }
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

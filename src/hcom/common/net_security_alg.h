@@ -52,18 +52,19 @@ public:
             return false;
         }
         ret = EncryptInner(static_cast<const unsigned char *>(secrets.GetKeySecret()),
-            static_cast<const unsigned char *>(secrets.GetAADSecret()), static_cast<const unsigned char *>(rawData),
-            rawLen, static_cast<unsigned char *>(cipher), cipherLen);
+                           static_cast<const unsigned char *>(secrets.GetAADSecret()),
+                           static_cast<const unsigned char *>(rawData), rawLen, static_cast<unsigned char *>(cipher),
+                           cipherLen);
         if (NN_UNLIKELY(ret != 0) || NN_UNLIKELY(cipherLen != estimateLen)) {
-            NN_LOG_ERROR("Failed to encrypt as ret:" << ret << " cipher length:" << cipherLen <<
-                " estimateLen length:" << estimateLen);
+            NN_LOG_ERROR("Failed to encrypt as ret:" << ret << " cipher length:" << cipherLen
+                                                     << " estimateLen length:" << estimateLen);
             return false;
         }
         return true;
     }
 
     NResult EncryptInner(const unsigned char *key, const unsigned char *aad, const unsigned char *rawData,
-        uint32_t rawLen, unsigned char *cipher, uint32_t &cipherLen);
+                         uint32_t rawLen, unsigned char *cipher, uint32_t &cipherLen);
 
     NResult SetEncryptInfo(EVP_CIPHER_CTX *ctx, const unsigned char *key, unsigned char *cipher);
     /*
@@ -96,17 +97,18 @@ public:
             return false;
         }
         ret = DecryptInner(static_cast<const unsigned char *>(secrets.GetKeySecret()),
-            static_cast<const unsigned char *>(cipher), cipherLen, static_cast<unsigned char *>(rawData), rawLen);
+                           static_cast<const unsigned char *>(cipher), cipherLen, static_cast<unsigned char *>(rawData),
+                           rawLen);
         if (NN_UNLIKELY(ret != 0) || NN_UNLIKELY(rawLen != estimateLen)) {
-            NN_LOG_ERROR("Failed to decrypt as ret:" << ret << " raw length:" << rawLen <<
-                " estimateLen length:" << estimateLen);
+            NN_LOG_ERROR("Failed to decrypt as ret:" << ret << " raw length:" << rawLen
+                                                     << " estimateLen length:" << estimateLen);
             return false;
         }
         return true;
     }
 
     NResult DecryptInner(const unsigned char *key, const unsigned char *cipher, uint32_t cipherLen,
-        unsigned char *rawData, uint32_t &rawLen);
+                         unsigned char *rawData, uint32_t &rawLen);
 
     NResult SetDecryptInfo(EVP_CIPHER_CTX *ctx, const unsigned char *key, const unsigned char *cipher);
 
@@ -170,7 +172,7 @@ private:
     off_t mTagOffset = mAADOffset + mAADLen;
     off_t mCipherOffset = mTagOffset + mTagLen;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

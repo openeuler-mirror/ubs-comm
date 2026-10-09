@@ -16,8 +16,8 @@
 #include <thread>
 #include "gtest/gtest.h"
 #include "htracer_manager.h"
-#include "rpc_server.h"
 #include "htracer_msg.h"
+#include "rpc_server.h"
 
 class TestRpc : public testing::Test {
 public:
@@ -33,6 +33,5 @@ public:
     void TearDown();
     ock::hcom::RpcServer *mRpcServer = nullptr;
 };
-
 
 #endif // DFS_TRACER_TEST_TRACE_RPC_H

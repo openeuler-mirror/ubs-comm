@@ -143,5 +143,5 @@ void NetExecutorService::RunInThread(int16_t cpuId)
 
     NN_LOG_INFO("Thread for executor service <" << threadName << "> cpuId " << cpuId << " exiting");
 }
-}
-}
+} // namespace hcom
+} // namespace ock

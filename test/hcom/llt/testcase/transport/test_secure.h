@@ -17,7 +17,7 @@
 
 class TestSecure : public testing::Test {
 public:
-    TestSecure() =default;
+    TestSecure() = default;
     ~TestSecure() = default;
     void SetUp()
     {

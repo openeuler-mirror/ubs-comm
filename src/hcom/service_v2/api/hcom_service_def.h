@@ -28,7 +28,7 @@ constexpr uint16_t MAX_MULTI_RAIL_NUM = 4;
 
 using SerResult = int;
 using UBSHcomDriverSecInfoProvider = std::function<int(uint64_t ctx, int64_t &flag, UBSHcomNetDriverSecType &type,
-    char *&output, uint32_t &outLen, bool &needAutoFree)>;
+                                                       char *&output, uint32_t &outLen, bool &needAutoFree)>;
 using UBSHcomDriverSecInfoValidator =
     std::function<int(uint64_t ctx, int64_t flag, const char *input, uint32_t inputLen)>;
 using UBSHcomWorkerMode = UBSHcomNetDriverWorkingMode;
@@ -36,48 +36,53 @@ using UBSHcomChTypeIndex = uint16_t;
 using UBSHcomCipherSuite = UBSHcomNetCipherSuite;
 using UBSHcomMemoryRegionPtr = UBSHcomNetMemoryRegionPtr;
 
-enum class UBSHcomChannelBrokenPolicy : uint8_t {
+enum class UBSHcomChannelBrokenPolicy : uint8_t
+{
     BROKEN_ALL, /* when one ep broken, all eps broken */
-    RECONNECT, /* when one ep broken, try re-connect first. If re-connect fail, broken all eps */
+    RECONNECT,  /* when one ep broken, try re-connect first. If re-connect fail, broken all eps */
     KEEP_ALIVE, /* when one ep broken, keep left eps alive until all eps broken */
 };
 
-enum class UBSHcomClientPollingMode : uint8_t {
+enum class UBSHcomClientPollingMode : uint8_t
+{
     WORKER_POLL = 0,
     SELF_POLL_BUSY = 1,
     SELF_POLL_EVENT = 2,
     UNKNOWN = 255,
 };
 
-enum class UBSHcomChannelCallBackType : uint8_t {
+enum class UBSHcomChannelCallBackType : uint8_t
+{
     CHANNEL_FUNC_CB,
     CHANNEL_GLOBAL_CB,
 };
 
-enum class UBSHcomOobType : uint8_t {
+enum class UBSHcomOobType : uint8_t
+{
     TCP,
     UDS,
 };
 
-enum class UBSHcomSecType : uint8_t {
+enum class UBSHcomSecType : uint8_t
+{
     NET_SEC_DISABLED,
     NET_SEC_VALID_ONE_WAY,
     NET_SEC_VALID_TWO_WAY,
 };
 struct UBSHcomRequest {
-    void *address = nullptr;                    /* pointer of data */
-    uint32_t size = 0;                          /* size of data */
+    void *address = nullptr; /* pointer of data */
+    uint32_t size = 0;       /* size of data */
     uint64_t key = 0;
-    uint16_t opcode = 0;                        /* operation code of request */
+    uint16_t opcode = 0; /* operation code of request */
 
     UBSHcomRequest() = default;
     UBSHcomRequest(void *addr, uint32_t sz, uint16_t op) : address(addr), size(sz), opcode(op) {}
 };
 
 struct UBSHcomResponse {
-    void *address = nullptr;                    /* pointer of data */
-    uint32_t size = 0;                          /* size of data */
-    int16_t errorCode = 0;                      /* error code of response */
+    void *address = nullptr; /* pointer of data */
+    uint32_t size = 0;       /* size of data */
+    int16_t errorCode = 0;   /* error code of response */
 
     UBSHcomResponse() = default;
     UBSHcomResponse(void *addr, uint32_t sz) : address(addr), size(sz) {}
@@ -103,7 +108,7 @@ struct UBSHcomOneSideRequest {
 };
 
 struct UBSHcomOneSideSglRequest {
-    UBSHcomOneSideRequest *iov  = nullptr;
+    UBSHcomOneSideRequest *iov = nullptr;
     uint16_t iovCount = 0;
 
     inline uint64_t Size() const
@@ -129,26 +134,27 @@ struct UBSHcomReplyContext {
 };
 
 struct UBSHcomServiceOptions {
-    uint32_t maxSendRecvDataSize = 1024;    // 发送数据块最大值
-    uint16_t workerGroupId = 0;     // group id of the worker group, must increment from 0 and be unique
-    uint16_t workerGroupThreadCount = 1;    // worker线程数，如果设置为0的话，不启动worker线程
-    UBSHcomWorkerMode workerGroupMode = NET_BUSY_POLLING;  // worker线程工作模式，默认busy_polling
-    int8_t workerThreadPriority = 0;    // 线程优先级[-20,19]，19优先级最低，-20优先级最高，同nice值
-    std::pair<uint32_t, uint32_t> workerGroupCpuIdsRange = {UINT32_MAX, UINT32_MAX};  // default not bind
+    uint32_t maxSendRecvDataSize = 1024; // 发送数据块最大值
+    uint16_t workerGroupId = 0;          // group id of the worker group, must increment from 0 and be unique
+    uint16_t workerGroupThreadCount = 1; // worker线程数，如果设置为0的话，不启动worker线程
+    UBSHcomWorkerMode workerGroupMode = NET_BUSY_POLLING; // worker线程工作模式，默认busy_polling
+    int8_t workerThreadPriority = 0; // 线程优先级[-20,19]，19优先级最低，-20优先级最高，同nice值
+    std::pair<uint32_t, uint32_t> workerGroupCpuIdsRange = {UINT32_MAX, UINT32_MAX}; // default not bind
+    bool enableMemPoolThreadCache = true; // 内存池线程本地缓存开关，默认为true，false表示不启用threadlocal cache
 };
 
 struct UBSHcomConnectOptions {
-    uint16_t clientGroupId = 0;     // worker group id of client
-    uint16_t serverGroupId = 0;     // worker group id of server
-    uint8_t linkCount = 1;     // actual link count of the channel
+    uint16_t clientGroupId = 0; // worker group id of client
+    uint16_t serverGroupId = 0; // worker group id of server
+    uint8_t linkCount = 1;      // actual link count of the channel
     UBSHcomClientPollingMode mode = UBSHcomClientPollingMode::WORKER_POLL;
     UBSHcomChannelCallBackType cbType = UBSHcomChannelCallBackType::CHANNEL_FUNC_CB;
     std::string payload;
 };
 
 struct UBSHcomMultiRailOptions {
-    uint32_t threshold = 8192;     // threshold of multirail
-    bool enable = true;                 // multi switch
+    uint32_t threshold = 8192; // threshold of multirail
+    bool enable = true;        // multi switch
 };
 
 struct UBSHcomTlsOptions {
@@ -171,12 +177,13 @@ struct UBSHcomConnSecureOptions {
 };
 
 struct UBSHcomHeartBeatOptions {
-    uint16_t heartBeatIdleSec = 60;    // 发送心跳保活消息间隔时间
-    uint16_t heartBeatProbeTimes = 7;  // 发送心跳探测失败/没收到回复重试次数，超了认为连接已经断开
-    uint16_t heartBeatProbeIntervalSec = 2;    // 发送心跳后再次发送时间
+    uint16_t heartBeatIdleSec = 60; // 发送心跳保活消息间隔时间
+    uint16_t heartBeatProbeTimes = 7; // 发送心跳探测失败/没收到回复重试次数，超了认为连接已经断开
+    uint16_t heartBeatProbeIntervalSec = 2; // 发送心跳后再次发送时间
 };
 
-enum class UBSHcomFlowCtrlLevel : uint8_t {
+enum class UBSHcomFlowCtrlLevel : uint8_t
+{
     HIGH_LEVEL_BLOCK, /* spin-wait by busy loop */
     LOW_LEVEL_BLOCK,  /* full sleep */
 };
@@ -188,10 +195,10 @@ struct UBSHcomFlowCtrlOptions {
 };
 
 struct UBSHcomTwoSideThreshold {
-    uint32_t splitThreshold = UINT32_MAX;  // UBC 专用。此值表示拆包发送的阈值，也可以当做拆包发送时每个小包的
-                                      // 最大长度(含额外头部). 一般将其配置成小于等于 SegSize 的值，可配置范围
-                                      // 为 [128, maxSendRecvDataSize]. 特别的配置成 UINT32_MAX 会禁用拆包功能。
-    uint32_t rndvThreshold = UINT32_MAX;  // rndv阈值，请求长度大于等于该值,则启用RNDV。
+    uint32_t splitThreshold = UINT32_MAX; // UBC 专用。此值表示拆包发送的阈值，也可以当做拆包发送时每个小包的
+        // 最大长度(含额外头部). 一般将其配置成小于等于 SegSize 的值，可配置范围
+        // 为 [128, maxSendRecvDataSize]. 特别的配置成 UINT32_MAX 会禁用拆包功能。
+    uint32_t rndvThreshold = UINT32_MAX; // rndv阈值，请求长度大于等于该值,则启用RNDV。
 };
 
 class UBSHcomRegMemoryRegion {
@@ -231,7 +238,7 @@ public:
         return mHcomMrs[0]->Size();
     }
 
-    inline std::vector<UBSHcomMemoryRegionPtr>& GetHcomMrs()
+    inline std::vector<UBSHcomMemoryRegionPtr> &GetHcomMrs()
     {
         return mHcomMrs;
     }
@@ -239,6 +246,6 @@ public:
 private:
     std::vector<UBSHcomMemoryRegionPtr> mHcomMrs;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_API_HCOM_CLASSES_H_

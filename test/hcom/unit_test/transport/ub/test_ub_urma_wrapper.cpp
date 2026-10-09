@@ -13,8 +13,8 @@
 #ifdef UB_BUILD_ENABLED
 
 #include <gtest/gtest.h>
-#include <mockcpp/mockcpp.hpp>
 #include <sys/poll.h>
+#include <mockcpp/mockcpp.hpp>
 
 #include "net_monotonic.h"
 #include "ub_common.h"
@@ -78,13 +78,14 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperInitialize)
     mUBDeviceHelper->G_InitRef = 1;
     urma_device_attr_t *devAttr = nullptr;
     urma_context_t *ctx = nullptr;
-    UBEId eid {};
-    UResult ret = mUBDeviceHelper->Initialize(devAttr, ctx, eid);
+    urma_context_t *publicCtx = nullptr;
+    UBEId eid{};
+    UResult ret = mUBDeviceHelper->Initialize(devAttr, ctx, publicCtx, eid);
     EXPECT_EQ(ret, UB_OK);
 
     mUBDeviceHelper->G_InitRef = 0;
     MOCKER_CPP(&UBDeviceHelper::DoInitialize).stubs().will(returnValue(0));
-    ret = mUBDeviceHelper->Initialize(devAttr, ctx, eid);
+    ret = mUBDeviceHelper->Initialize(devAttr, ctx, publicCtx, eid);
     EXPECT_EQ(ret, UB_OK);
 }
 
@@ -97,28 +98,30 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperUnInitialize)
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoInitialize)
 {
     MOCKER_CPP(&UBDeviceHelper::DoUpdate).stubs().will(returnValue(1)).then(returnValue(0));
-    
+
     urma_device_attr_t *devAttr = nullptr;
     urma_context_t *ctx = nullptr;
-    UBEId eid {};
-    UResult ret = mUBDeviceHelper->DoInitialize(devAttr, ctx, eid);
+    urma_context_t *publicCtx = nullptr;
+    UBEId eid{};
+    UResult ret = mUBDeviceHelper->DoInitialize(devAttr, ctx, publicCtx, eid);
     EXPECT_EQ(ret, 1);
-    ret = mUBDeviceHelper->DoInitialize(devAttr, ctx, eid);
+    ret = mUBDeviceHelper->DoInitialize(devAttr, ctx, publicCtx, eid);
     EXPECT_EQ(ret, UB_OK);
     mUBDeviceHelper->G_InitRef = 0;
 }
 
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoUpdate)
 {
-    MOCKER_CPP(HcomUrma::Init).stubs().will(returnValue(0)).then(returnValue(1));
+    MOCKER_CPP(HcomUrma::Init).stubs().will(returnValue(0)).then(returnValue(1)); 
     urma_device_t **devList = nullptr;
     MOCKER_CPP(HcomUrma::GetDeviceList).stubs().will(returnValue(devList));
     urma_device_attr_t *devAttr = nullptr;
     urma_context_t *ctx = nullptr;
-    UBEId eid {};
-    UResult ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
+    urma_context_t *publicCtx = nullptr;
+    UBEId eid{};
+    UResult ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, publicCtx, eid);
     EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
-    ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
+    ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, publicCtx, eid);
     EXPECT_EQ(ret, 1);
 }
 
@@ -134,25 +137,26 @@ TEST_F(TestUbUrmaWrapper, UBDeviceHelperDoUpdateErr)
     urma_device_attr_t *devAttr = nullptr;
     MOCKER_CPP(&HcomUrma::FreeDeviceList).stubs().will(invoke(MockFreeDeviceList));
     urma_context_t *ctx = nullptr;
+    urma_context_t *publicCtx = nullptr;
     UBEId eid{};
-    UResult ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, eid);
+    UResult ret = mUBDeviceHelper->DoUpdate(devAttr, ctx, publicCtx, eid);
     EXPECT_EQ(ret, UB_DEVICE_FAILED_OPEN);
 }
 
 TEST_F(TestUbUrmaWrapper, UBDeviceHelperCompareName)
 {
-    urma_device_t bonding3 {};
-    urma_device_t bonding0 {};
+    urma_device_t bonding3{};
+    urma_device_t bonding0{};
     ASSERT_EQ(strcpy_s(bonding3.name, URMA_MAX_NAME, "bonding_dev_3"), EOK);
     ASSERT_EQ(strcpy_s(bonding0.name, URMA_MAX_NAME, "bonding_dev_0"), EOK);
-    urma_device_t *devList[] = { &bonding3, &bonding0 };
+    urma_device_t *devList[] = {&bonding3, &bonding0};
 
     const char bondingDev0[] = "bonding_dev_0";
     const char bondingPrefix[] = "bonding_dev_";
     EXPECT_EQ(mUBDeviceHelper->CompareName(bondingDev0, strlen(bondingDev0), devList, NN_NO2), 1);
     EXPECT_EQ(mUBDeviceHelper->CompareName(bondingPrefix, strlen(bondingPrefix), devList, NN_NO2), 0);
 }
-    
+
 urma_device_t **MockGetDeviceList(int *num_devices)
 {
     *num_devices = NN_NO8;
@@ -517,6 +521,6 @@ TEST_F(TestUbUrmaWrapper, GetNResult)
     EXPECT_EQ(UBOpContextInfo::GetNResult(opResult), NN_URMA_ACK_TIMEOUT);
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

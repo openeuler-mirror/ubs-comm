@@ -8,13 +8,13 @@
 
 static void test_allocate_dynamic_buffer(char **malloc_buf_addr, char **calloc_buf_addr)
 {
-    for (uint32_t i = 0; i < URPC_DBUF_TYPE_MAX ; i++) {
+    for (uint32_t i = 0; i < URPC_DBUF_TYPE_MAX; i++) {
         uint32_t buf_size = 128 * (i + 1);
         malloc_buf_addr[i] = (char *)urpc_dbuf_malloc((urpc_dbuf_type_t)i, buf_size);
         EXPECT_EQ(malloc_buf_addr[i] != NULL, true);
     }
 
-    for (uint32_t i = 0; i < URPC_DBUF_TYPE_MAX ; i++) {
+    for (uint32_t i = 0; i < URPC_DBUF_TYPE_MAX; i++) {
         uint32_t buf_size = 128 * (URPC_DBUF_TYPE_MAX - i);
         calloc_buf_addr[i] = (char *)urpc_dbuf_calloc((urpc_dbuf_type_t)i, 1, buf_size);
         EXPECT_EQ(calloc_buf_addr[i] != NULL, true);
@@ -23,11 +23,11 @@ static void test_allocate_dynamic_buffer(char **malloc_buf_addr, char **calloc_b
 
 static void test_free_dynamic_buffer(char **malloc_buf_addr, char **calloc_buf_addr)
 {
-    for (uint32_t i = 0; i < URPC_DBUF_TYPE_MAX ; i++) {
+    for (uint32_t i = 0; i < URPC_DBUF_TYPE_MAX; i++) {
         urpc_dbuf_free(malloc_buf_addr[i]);
     }
 
-    for (uint32_t i = 0; i < URPC_DBUF_TYPE_MAX ; i++) {
+    for (uint32_t i = 0; i < URPC_DBUF_TYPE_MAX; i++) {
         urpc_dbuf_free(calloc_buf_addr[i]);
     }
 }

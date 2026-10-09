@@ -11,11 +11,11 @@
 # (6) HCOM_BUILD_SOCK(optional, default is on) => build sock (tcp/uds) or not.(on/off)
 # (7) HCOM_BUILD_SHM(optional, default is on) => build shm or not.(on/off)
 # (8) HCOM_BUILD_EXAMPLE(optional, default is off) => build example and perf.(on/off)
-# (9) HCOM_ENABLE_ARM_KP(optional, default is on) => check kunpeng or not.(on/off)
+# (9) HCOM_ENABLE_ARM_KP(optional, default is off) => check kunpeng or not.(on/off)
 # (10) HCOM_TEST_TOOL_PATH(optional) => test tool install path.(mockcpp/gtest/dtfuzz)
 # (11) HCOM_CI_WORKSPACE(optional) => ci workspace, for buildInfo.properties file.
 # (12) HCOM_BUILD_RPM(optional, default is off) => build rpm.(on/off)
-# (13) HCOM_BUILD_TOOLS_PERF(optional, default is off) => build rpm.(on/off)
+# (13) HCOM_BUILD_TOOLS_PERF(optional, default is off) => build perf tools, for Bazel build only (on/off)
 # (14) HCOM_BUILD_HW_CRC(optional, default is off) => build with hardware based crc.(on/off)
 # (15) BUILD_HCOM(optional, default is ON) => build hcom.(ON/OFF)
 # (16) HCOM_BUILD_MULTICAST(optional, default is off) => build multicast or not.(on/off)
@@ -99,6 +99,15 @@ echo "${HCOM_LOG_TAG} hcom build multicast: ${HCOM_BUILD_MULTICAST}"
 HCOM_ENABLE_ARM_KP="${HCOM_ENABLE_ARM_KP:-off}"
 echo "${HCOM_LOG_TAG} hcom enable arm kunpeng check: ${HCOM_ENABLE_ARM_KP}"
 
+# auto detect cpu type, default is arm_64
+HCOM_CPU_TYPE="${HCOM_CPU_TYPE:-$(uname -m)}"
+case "${HCOM_CPU_TYPE}" in
+    aarch64) HCOM_CPU_TYPE="arm_64" ;;
+    x86_64)  HCOM_CPU_TYPE="x86_64" ;;
+    *)       HCOM_CPU_TYPE="arm_64" ;;
+esac
+echo "${HCOM_LOG_TAG} hcom cpu type: ${HCOM_CPU_TYPE}"
+
 # check whether build java sdk, default is off.
 HCOM_BUILD_JAVA_SDK="${HCOM_BUILD_JAVA_SDK:-off}"
 echo "${HCOM_LOG_TAG} hcom build java sdk: ${HCOM_BUILD_JAVA_SDK}"
@@ -142,6 +151,7 @@ cmake -S"${HCOM_ROOT_DIR}" -B"${HCOM_BUILD_DIR}" \
     -DBUILD_WITH_SOCK=${HCOM_BUILD_SOCK} \
     -DBUILD_WITH_SHM=${HCOM_BUILD_SHM} \
     -DBUILD_WITH_MULTICAST=${HCOM_BUILD_MULTICAST} \
+    -DCPU_TYPE=${HCOM_CPU_TYPE} \
     -DENABLE_ARM_KP=${HCOM_ENABLE_ARM_KP} \
     -DHCOM_COMPONENT_VERSION="${HCOM_COMPONENT_VERSION}"
 
@@ -154,7 +164,7 @@ cmake --build "${HCOM_BUILD_DIR}" --target install
 output=$(HCOM_COMPONENT_VERSION=${HCOM_COMPONENT_VERSION} bash "${HCOM_ROOT_DIR}/build/make_software_package.sh" -t "${HCOM_BUILD_TYPE}")
 
 # build example and perf
-[[ "${HCOM_BUILD_EXAMPLE,,}" == "on" ]] && bash "${HCOM_ROOT_DIR}/build/build_example_perf.sh"
+[[ "${HCOM_BUILD_EXAMPLE,,}" == "on" ]] && bash "${HCOM_ROOT_DIR}/build/build_tools_perf.sh"
 
 bash "${HCOM_ROOT_DIR}/build/build_umq_and_ubsocket.sh"
 

@@ -23,7 +23,10 @@ namespace hcom {
 class UBJfc {
 public:
     UBJfc(const std::string &name, UBContext *ctx, bool createCompletionChannel = false, uintptr_t work = 0)
-        : mName(name), mCreateCompletionChannel(createCompletionChannel), mWork(work), mUBContext(ctx)
+        : mName(name),
+          mCreateCompletionChannel(createCompletionChannel),
+          mWork(work),
+          mUBContext(ctx)
     {
         if (mUBContext != nullptr) {
             mUBContext->IncreaseRef();
@@ -49,6 +52,7 @@ public:
     }
 
     UResult Initialize();
+    UResult InitializeForPublicJetty();
     UResult UnInitialize();
 
     UResult ProgressV(urma_cr_t *cr, uint32_t &countInOut);
@@ -59,6 +63,8 @@ public:
 private:
     UResult CreatePollingCq();
     UResult CreateEventCq();
+    UResult CreatePollingCqForPublicJetty();
+    UResult CreateEventCqForPublicJetty();
     std::string mName;
     uint32_t mJfcCount = JFC_COUNT;
     bool mCreateCompletionChannel = false;
@@ -72,7 +78,7 @@ private:
     friend class UBJetty;
     friend class UBPublicJetty;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_URMA_WRAPPER_JFC_H

@@ -1,10 +1,10 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
+#include "test_case/service_v2/service_read_bw_test.h"
 #include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "test_case/service_v2/service_read_bw_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -42,7 +42,7 @@ int ServiceReadBwTest::DoPostRead()
 }
 
 int ServiceReadBwTest::NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch,
-    const std::string &payload)
+                                  const std::string &payload)
 {
     mCh = ch;
     LOG_DEBUG("New connection from " << ipPort << " !");
@@ -190,5 +190,5 @@ bool ServiceReadBwTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::SERVICE_READ_BW, ServiceReadBwTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

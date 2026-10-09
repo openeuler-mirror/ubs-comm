@@ -8,9 +8,9 @@
 
 #include "hcom.h"
 #include "hcom_def.h"
-#include "multicast_message.h"
 #include "hcom_service.h"
 #include "hcom_service_context.h"
+#include "multicast_message.h"
 
 namespace ock {
 namespace hcom {
@@ -36,7 +36,11 @@ private:
 class Subscriber {
 public:
     Subscriber(std::string ip, uint16_t port, UBSHcomNetEndpointPtr ep)
-        : mIp(std::move(ip)), mPort(port), mEp(std::move(ep)) {}
+        : mIp(std::move(ip)),
+          mPort(port),
+          mEp(std::move(ep))
+    {
+    }
 
     // 仅用于SubscriberService::DestorySubscriber
     inline UBSHcomNetEndpointPtr &GetEp()
@@ -44,7 +48,7 @@ public:
         return mEp;
     }
 
-    inline const std::string& GetIp() const
+    inline const std::string &GetIp() const
     {
         return mIp;
     }
@@ -66,6 +70,6 @@ private:
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock
 #endif

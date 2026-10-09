@@ -68,8 +68,8 @@ private:
     // uintptr_p store the start address of each mr segment
     NetBucketLinkedList mLinkList;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif
 #endif // HCOM_RDMA_MR_DM_BUF_H

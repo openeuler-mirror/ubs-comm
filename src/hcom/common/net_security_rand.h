@@ -16,12 +16,12 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
-#include <cstring>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 
-#include "securec.h"
 #include "openssl_api_wrapper.h"
+#include "securec.h"
 
 namespace ock {
 namespace hcom {
@@ -163,8 +163,8 @@ public:
     inline bool Serialize(char *dest, size_t len) const
     {
         if (NN_UNLIKELY(dest == nullptr) || NN_UNLIKELY(len != GetSerializeLen())) {
-            NN_LOG_ERROR("Invalid param secret is null or length:" << len << " is not equal to serialized len:" <<
-                GetSerializeLen());
+            NN_LOG_ERROR("Invalid param secret is null or length:" << len << " is not equal to serialized len:"
+                                                                   << GetSerializeLen());
             return false;
         }
 
@@ -195,8 +195,8 @@ public:
     inline bool Deserialize(const char *secret, size_t len)
     {
         if (NN_UNLIKELY(secret == nullptr) || NN_UNLIKELY(len != GetSerializeLen())) {
-            NN_LOG_ERROR("Invalid param secret is null or length:" << len << " is not equal to serialized len:" <<
-                GetSerializeLen());
+            NN_LOG_ERROR("Invalid param secret is null or length:" << len << " is not equal to serialized len:"
+                                                                   << GetSerializeLen());
             return false;
         }
 
@@ -223,11 +223,11 @@ public:
 
 private:
     // reserve for secret time out
-    uint8_t mSN = { 0 };
+    uint8_t mSN = {0};
 
-    char mKeySecret[NN_NO32] = { 0 } ;
-    char mAADSecret[NN_NO32] = { 0 } ;
-    char mIVSecret[NN_NO32] = { 0 } ;
+    char mKeySecret[NN_NO32] = {0};
+    char mAADSecret[NN_NO32] = {0};
+    char mIVSecret[NN_NO32] = {0};
 
     /* the real secret length */
     size_t mKeySecretLen = NN_NO0;
@@ -236,7 +236,7 @@ private:
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif

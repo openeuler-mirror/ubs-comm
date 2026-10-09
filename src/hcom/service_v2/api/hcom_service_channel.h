@@ -29,7 +29,8 @@ using UBSHcomEndpointPtr = NetRef<UBSHcomNetEndpoint>;
 using UBSHcomChannelPtr = NetRef<UBSHcomChannel>;
 using UBSHcomServiceChannelBrokenHandler = std::function<void(const UBSHcomChannelPtr &)>;
 
-enum UBSHcomChannelState : uint16_t {
+enum UBSHcomChannelState : uint16_t
+{
     CH_NEW,
     CH_ESTABLISHED,
     CH_CLOSE,
@@ -50,10 +51,14 @@ public:
  *
  * @param ClosureFunction
  */
-template <typename ClosureFunction> class InnerClosureCallback : public Callback {
+template <typename ClosureFunction>
+class InnerClosureCallback : public Callback {
 public:
     explicit InnerClosureCallback(ClosureFunction &&function, bool deleteSelf)
-        : mFunction(std::move(function)), mDeleteSelf(deleteSelf) {}
+        : mFunction(std::move(function)),
+          mDeleteSelf(deleteSelf)
+    {
+    }
 
     ~InnerClosureCallback() override = default;
 
@@ -97,7 +102,8 @@ private:
  * coding, std::bind is used to implement closure. If the cost of std::bind
  * is found to be high, then optimize it.
  */
-template <typename... Args> Callback *UBSHcomNewCallback(Args... args)
+template <typename... Args>
+Callback *UBSHcomNewCallback(Args... args)
 {
     auto closure = std::bind(args...);
     return new (std::nothrow) InnerClosureCallback<decltype(closure)>(std::move(closure), true);
@@ -136,6 +142,28 @@ public:
      */
     virtual int32_t Reply(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback *done) = 0;
     int32_t Reply(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req);
+
+    /**
+     * @brief 发送双边消息，需要回复，HLC劫持专用；固定为阻塞模式及免拷贝，推荐设置epoll为LT模式
+     *
+     * @param req 发送双边消息请求
+     * @param rsp 出参，发送双边消息请求后对端回复
+     * @param done nullptr：同步发送；非nullptr：异步发送，发送完成后回调函数
+     * @return int32_t 0：成功；非0：失败错误码
+     */
+    virtual int32_t CallWithHlc(const UBSHcomRequest &req, UBSHcomResponse &rsp, const Callback *done) = 0;
+    int32_t CallWithHlc(const UBSHcomRequest &req, UBSHcomResponse &rsp);
+
+    /**
+     * @brief 回复双边消息，接收端配合Call使用，HLC劫持专用；固定为阻塞模式及免拷贝，推荐设置epoll为LT模式
+     *
+     * @param ctx 回复上下文
+     * @param req 回复数据
+     * @param done nullptr：同步发送；非nullptr：异步发送，发送完成后回调函数
+     * @return int32_t 0：成功；非0：失败错误码
+     */
+    virtual int32_t ReplyWithHlc(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req, const Callback *done) = 0;
+    int32_t ReplyWithHlc(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req);
 
     /**
      * @brief 发送单边写请求
@@ -187,7 +215,7 @@ public:
      * @return int32_t 0：成功；非0：失败错误码
      */
     virtual int32_t Recv(const UBSHcomServiceContext &context, uintptr_t address, uint32_t size,
-        const Callback *done = nullptr) = 0;
+                         const Callback *done = nullptr) = 0;
 
     /**
      * @brief 流控设置
@@ -233,12 +261,12 @@ public:
 
 protected:
     virtual auto SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
-            -> std::tuple<SpliceMessageResultType, SerResult, std::string> = 0;
+        -> std::tuple<SpliceMessageResultType, SerResult, std::string> = 0;
 
-    uint32_t mUserSplitSendThreshold = UINT32_MAX;  // 用户 payload 拆包阈值，已去除额外头部大小
+    uint32_t mUserSplitSendThreshold = UINT32_MAX; // 用户 payload 拆包阈值，已去除额外头部大小
 private:
     virtual SerResult Initialize(std::vector<UBSHcomEndpointPtr> &ep, uintptr_t ctxMemPool, uintptr_t periodicMgr,
-        uintptr_t pgTable, uint32_t ctxStoreCapacity = NN_NO2097152) = 0;
+                                 uintptr_t pgTable, uint32_t ctxStoreCapacity = NN_NO2097152) = 0;
     virtual void UnInitialize() = 0;
     virtual std::string ToString() = 0;
 
@@ -287,6 +315,16 @@ inline int32_t UBSHcomChannel::Reply(const UBSHcomReplyContext &ctx, const UBSHc
     return this->Reply(ctx, req, nullptr);
 }
 
+inline int32_t UBSHcomChannel::CallWithHlc(const UBSHcomRequest &req, UBSHcomResponse &rsp)
+{
+    return this->CallWithHlc(req, rsp, nullptr);
+}
+
+inline int32_t UBSHcomChannel::ReplyWithHlc(const UBSHcomReplyContext &ctx, const UBSHcomRequest &req)
+{
+    return this->ReplyWithHlc(ctx, req, nullptr);
+}
+
 inline int32_t UBSHcomChannel::Put(const UBSHcomOneSideRequest &req)
 {
     return this->Put(req, nullptr);
@@ -296,6 +334,6 @@ inline int32_t UBSHcomChannel::Get(const UBSHcomOneSideRequest &req)
 {
     return this->Get(req, nullptr);
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_API_HCOM_CHANNEL_H_

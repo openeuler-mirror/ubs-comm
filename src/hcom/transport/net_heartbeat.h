@@ -52,8 +52,8 @@ private:
 
     /// UBC 专用
     template <typename T>
-    void DetectSingleEpHbState(NetUBAsyncEndpoint *ep, NetDriverUBWithOob *driver,
-        UBSHcomNetTransRequest &request, T opType);
+    void DetectSingleEpHbState(NetUBAsyncEndpoint *ep, NetDriverUBWithOob *driver, UBSHcomNetTransRequest &request,
+                               T opType);
 
     /// 使用双边心跳，目前hshmem专用
     template <typename T, typename T1>
@@ -85,7 +85,7 @@ private:
 
     bool mNeedStopHb = false;
     std::thread mHbThread;
-    std::atomic<bool> mHBStarted { false };
+    std::atomic<bool> mHBStarted{false};
     UBSHcomNetMemoryRegionPtr mHBLocalOpMr;
     uint64_t mLocalNextOffset = 0;
     UBSHcomNetMemoryRegionPtr mHBRemoteOpMr;
@@ -95,7 +95,7 @@ private:
     uint64_t mTarSec = 0;
     uint64_t mCurrentSec = 0;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_NET_HEARTBEAT_H

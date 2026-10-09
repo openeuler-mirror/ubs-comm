@@ -10,13 +10,13 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include "hcom.h"
-#include "net_shm_sync_endpoint.h"
-#include "net_shm_async_endpoint.h"
-#include "shm_worker.h"
-#include "shm_composed_endpoint.h"
-#include "test_shm_common.h"
 #include "test_shm_endpoint.h"
+#include "hcom.h"
+#include "net_shm_async_endpoint.h"
+#include "net_shm_sync_endpoint.h"
+#include "shm_composed_endpoint.h"
+#include "shm_worker.h"
+#include "test_shm_common.h"
 
 using namespace ock::hcom;
 TestShmEndpoint::TestShmEndpoint() {}
@@ -60,9 +60,8 @@ static int OneSideDone(const UBSHcomNetRequestContext &ctx)
     return 0;
 }
 
-
 static bool RegSglMem(UBSHcomNetDriver *driver, UBSHcomNetTransSgeIov mrInfo[],
-    std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
+                      std::vector<UBSHcomNetMemoryRegionPtr> &mrs)
 {
     for (int i = 0; i < NN_NO4; ++i) {
         UBSHcomNetMemoryRegionPtr mr;
@@ -89,7 +88,7 @@ static void DestorySglMem(UBSHcomNetDriver *driver, std::vector<UBSHcomNetMemory
 }
 
 static bool RegReadWriteMem(UBSHcomNetDriver *driver, TestRegMrInfo mrInfo[],
-    std::vector<UBSHcomNetMemoryRegionPtr> &mrReadWrite)
+                            std::vector<UBSHcomNetMemoryRegionPtr> &mrReadWrite)
 {
     UBSHcomNetMemoryRegionPtr mr;
     auto result = driver->CreateMemoryRegion(NN_NO16, mr);
@@ -107,7 +106,7 @@ static bool RegReadWriteMem(UBSHcomNetDriver *driver, TestRegMrInfo mrInfo[],
 }
 
 static bool RegReadWriteSglMem(UBSHcomNetDriver *driver, TestRegMrInfo mrInfo[],
-    std::vector<UBSHcomNetMemoryRegionPtr> &mrReadWrite)
+                               std::vector<UBSHcomNetMemoryRegionPtr> &mrReadWrite)
 {
     for (int i = 0; i < NN_NO4; ++i) {
         UBSHcomNetMemoryRegionPtr mr;
@@ -140,8 +139,8 @@ static int RequestReceivedServer(const UBSHcomNetRequestContext &ctx)
 
     NN_LOG_INFO("request rsp Mr info");
     std::string readValue((char *)asyncServerMrInfo[0].lAddress, asyncServerMrInfo[0].size);
-    NN_LOG_INFO("idx:" << 0 << " key:" << asyncServerMrInfo[0].lKey << " address:" << asyncServerMrInfo[0].lAddress <<
-        " size: " << asyncServerMrInfo[0].size << "string: " << readValue);
+    NN_LOG_INFO("idx:" << 0 << " key:" << asyncServerMrInfo[0].lKey << " address:" << asyncServerMrInfo[0].lAddress
+                       << " size: " << asyncServerMrInfo[0].size << "string: " << readValue);
     return 0;
 }
 static int RequestReceivedSglServer(const UBSHcomNetRequestContext &ctx)
@@ -157,8 +156,8 @@ static int RequestReceivedSglServer(const UBSHcomNetRequestContext &ctx)
 
     NN_LOG_INFO("request rsp Mr info");
     for (uint16_t i = 0; i < NN_NO4; i++) {
-        NN_LOG_INFO("idx:" << i << " key:" << asyncServerMrInfo[i].lKey << " address:" <<
-            asyncServerMrInfo[i].lAddress << " size: " << asyncServerMrInfo[i].size);
+        NN_LOG_INFO("idx:" << i << " key:" << asyncServerMrInfo[i].lKey << " address:" << asyncServerMrInfo[i].lAddress
+                           << " size: " << asyncServerMrInfo[i].size);
     }
     return 0;
 }
@@ -171,8 +170,8 @@ static int RequestReceivedClient(const UBSHcomNetRequestContext &ctx)
     memcpy(getRemoteMrInfo, ctx.Message()->Data(), ctx.Message()->DataLen());
     NN_LOG_INFO("get remote Mr info");
     std::string readValue((char *)getRemoteMrInfo[0].lAddress, getRemoteMrInfo[0].size);
-    NN_LOG_INFO("idx:" << 0 << " key:" << getRemoteMrInfo[0].lKey << " address:" << getRemoteMrInfo[0].lAddress <<
-        " size:" << getRemoteMrInfo[0].size << "string: " << readValue);
+    NN_LOG_INFO("idx:" << 0 << " key:" << getRemoteMrInfo[0].lKey << " address:" << getRemoteMrInfo[0].lAddress
+                       << " size:" << getRemoteMrInfo[0].size << "string: " << readValue);
 
     sem_post(&sem);
     return 0;
@@ -186,9 +185,8 @@ static int RequestReceivedSglClient(const UBSHcomNetRequestContext &ctx)
     return 0;
 }
 
-
 static bool CreateServerDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(const UBSHcomNetRequestContext &),
-    UBSHcomNetDriverOptions &asyncShmOptions)
+                               UBSHcomNetDriverOptions &asyncShmOptions)
 {
     auto name = "server_ep_" + std::to_string(g_nameSeed++);
 
@@ -229,7 +227,7 @@ static bool CreateServerDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(cons
 }
 
 static bool CreateClientDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(const UBSHcomNetRequestContext &),
-    UBSHcomNetDriverOptions &asyncShmOptions)
+                               UBSHcomNetDriverOptions &asyncShmOptions)
 {
     auto name = "client_ep_" + std::to_string(g_nameSeed++);
 
@@ -261,7 +259,6 @@ static bool CreateClientDriver(UBSHcomNetDriver *&driver, int (*reqHandler)(cons
     NN_LOG_INFO("asyncClientDriver started");
     return true;
 }
-
 
 void CloseShmDriver(UBSHcomNetDriver *&asyncClientDriver, UBSHcomNetDriver *&asyncServerDriver)
 {
@@ -298,12 +295,11 @@ void TestShmEndpoint::TearDown()
     GlobalMockObject::verify();
 }
 
-
 TEST_F(TestShmEndpoint, PostSendRetry)
 {
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriverOptions asyncShmOptions {};
+    UBSHcomNetDriverOptions asyncShmOptions{};
     UBSHcomNetDriver *asyncClientDriver = nullptr;
     UBSHcomNetDriver *asyncServerDriver = nullptr;
     CreateServerDriver(asyncServerDriver, RequestReceived, asyncShmOptions);
@@ -387,7 +383,7 @@ TEST_F(TestShmEndpoint, PostSendRawSglRetry)
 {
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriverOptions asyncShmOptions {};
+    UBSHcomNetDriverOptions asyncShmOptions{};
     UBSHcomNetDriver *asyncClientDriver = nullptr;
     UBSHcomNetDriver *asyncServerDriver = nullptr;
     CreateServerDriver(asyncServerDriver, RequestReceived, asyncShmOptions);
@@ -481,7 +477,7 @@ TEST_F(TestShmEndpoint, PostReadWrite)
 {
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriverOptions asyncShmOptions {};
+    UBSHcomNetDriverOptions asyncShmOptions{};
     UBSHcomNetDriver *asyncClientDriver = nullptr;
     UBSHcomNetDriver *asyncServerDriver = nullptr;
     CreateServerDriver(asyncServerDriver, RequestReceivedServer, asyncShmOptions);
@@ -574,7 +570,7 @@ TEST_F(TestShmEndpoint, PostReadWriteSgl)
 {
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriverOptions asyncShmOptions {};
+    UBSHcomNetDriverOptions asyncShmOptions{};
     UBSHcomNetDriver *asyncClientDriver = nullptr;
     UBSHcomNetDriver *asyncServerDriver = nullptr;
     CreateServerDriver(asyncServerDriver, RequestReceivedSglServer, asyncShmOptions);
@@ -665,23 +661,23 @@ TEST_F(TestShmEndpoint, GetRemoteUdsIdInfo)
 {
     NResult result;
     UBSHcomNetEndpointPtr ep = nullptr;
-    UBSHcomNetDriverOptions asyncShmOptions {};
+    UBSHcomNetDriverOptions asyncShmOptions{};
     UBSHcomNetDriver *asyncClientDriver = nullptr;
     UBSHcomNetDriver *asyncServerDriver = nullptr;
     CreateServerDriver(asyncServerDriver, RequestReceived, asyncShmOptions);
     CreateClientDriver(asyncClientDriver, RequestReceived, asyncShmOptions);
     asyncClientDriver->Connect(UDSNAME, 0, "hello server", ep);
 
-    UBSHcomEpOptions epOptions {};
+    UBSHcomEpOptions epOptions{};
     result = ep->SetEpOption(epOptions);
     EXPECT_EQ(NN_OK, result);
 
-    UBSHcomNetUdsIdInfo idInfo {};
+    UBSHcomNetUdsIdInfo idInfo{};
     if (asyncEp != nullptr) {
         result = asyncEp->GetRemoteUdsIdInfo(idInfo);
         EXPECT_EQ(NN_OK, result);
-        NN_LOG_INFO("=======new endpoint remote uds ids, pid: " << idInfo.pid << " uid: " << idInfo.uid << " gid: " <<
-            idInfo.gid << " result:" << result);
+        NN_LOG_INFO("=======new endpoint remote uds ids, pid: " << idInfo.pid << " uid: " << idInfo.uid
+                                                                << " gid: " << idInfo.gid << " result:" << result);
     }
 
     GlobalMockObject::verify();

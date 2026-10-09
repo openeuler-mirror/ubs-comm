@@ -12,8 +12,8 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
-#include "sock_wrapper.h"
 #include "openssl_api_wrapper.h"
+#include "sock_wrapper.h"
 
 namespace ock {
 namespace hcom {
@@ -272,7 +272,8 @@ TEST_F(TestSockWrapper, TestPostSendSglHeaderSSLSendFail)
     mSock->mEnableTls = true;
     ssize_t size = NN_NO128;
     MOCKER_CPP(&writev).stubs().will(returnValue(size));
-    MOCKER_CPP(&Sock::SSLSend).stubs()
+    MOCKER_CPP(&Sock::SSLSend)
+        .stubs()
         .will(returnValue(static_cast<int>(SS_OOB_SSL_WRITE_ERROR)))
         .then(returnValue(static_cast<int>(SS_TIMEOUT)));
     SResult ret = mSock->PostSendSgl(header, req);
@@ -366,7 +367,7 @@ TEST_F(TestSockWrapper, TestPostWriteFail)
 
 TEST_F(TestSockWrapper, TestPostReceiveHeaderFail)
 {
-    SockTransHeader header {};
+    SockTransHeader header{};
     mSock->mRevTimeoutSecond = -1;
 
     MOCKER_CPP(setsockopt).stubs().will(returnValue(-1)).then(returnValue(0));
@@ -415,7 +416,8 @@ TEST_F(TestSockWrapper, TestPostReceiveBodyTlsFail)
     uint32_t dataLength = NN_NO1024;
     bool isOneSide = false;
     mSock->mEnableTls = true;
-    MOCKER_CPP(&Sock::SSLRead).stubs()
+    MOCKER_CPP(&Sock::SSLRead)
+        .stubs()
         .will(returnValue(static_cast<int>(SS_TIMEOUT)))
         .then(returnValue(static_cast<int>(SS_SSL_READ_FAILED)));
 
@@ -528,7 +530,8 @@ TEST_F(TestSockWrapper, TestPostSendSglSsl)
     EXPECT_EQ(ret, SS_SOCK_SEND_FAILED);
 
     ssize_t size = NN_NO128;
-    MOCKER_CPP(&writev).stubs()
+    MOCKER_CPP(&writev)
+        .stubs()
         .will(returnValue(static_cast<ssize_t>(0)))
         .then(returnValue(sizeof(SockTransHeader) - 1))
         .then(returnValue(size));
@@ -538,8 +541,9 @@ TEST_F(TestSockWrapper, TestPostSendSglSsl)
     errno = 0;
     ret = mSock->PostSendSglSsl(ctx, iov);
     EXPECT_EQ(ret, SS_TIMEOUT);
-    
-    MOCKER_CPP(&Sock::SSLSend).stubs()
+
+    MOCKER_CPP(&Sock::SSLSend)
+        .stubs()
         .will(returnValue(static_cast<int>(SS_OOB_SSL_WRITE_ERROR)))
         .then(returnValue(static_cast<int>(SS_TIMEOUT)));
     errno = 0;
@@ -549,8 +553,8 @@ TEST_F(TestSockWrapper, TestPostSendSglSsl)
 
     ret = mSock->PostSendSglSsl(ctx, iov);
     EXPECT_EQ(ret, SS_TIMEOUT);
-    
+
     ctx->sendBuff = nullptr;
 }
-}
-}
+} // namespace hcom
+} // namespace ock

@@ -10,16 +10,16 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <functional>
-#include <fstream>
-#include <memory>
+#include "htracer_service.h"
 #include <unistd.h>
+#include <fstream>
+#include <functional>
+#include <memory>
 #include <utility>
+#include "htracer_manager.h"
 #include "htracer_msg.h"
 #include "htracer_service_helper.h"
 #include "htracer_utils.h"
-#include "htracer_manager.h"
-#include "htracer_service.h"
 
 namespace ock {
 namespace hcom {
@@ -41,7 +41,7 @@ int32_t HTracerService::StartUp(const std::string &serverName)
         return SER_OK;
     }
 
-    std::unique_ptr<RpcServer> mRpcServerTmp(new RpcServer());      // compatible with c++11
+    std::unique_ptr<RpcServer> mRpcServerTmp(new RpcServer()); // compatible with c++11
     mRpcServer = std::move(mRpcServerTmp);
     if (mRpcServer == nullptr) {
         NN_LOG_WARN("[HTRACER] failed to create rpc server");
@@ -89,7 +89,7 @@ SerCode HTracerService::HandleRequest(const Message &request, Message &response)
         case TRACE_OP_QUERY: {
             auto queryRequest = reinterpret_cast<const QueryTraceInfoRequest *>(request.GetData());
             auto tTranceInfos = TracerServiceHelper::GetTraceInfos(queryRequest->serviceId, queryRequest->quantile,
-                TraceManager::IsLatencyQuantileEnable());
+                                                                   TraceManager::IsLatencyQuantileEnable());
             SerCode ret = QueryTraceInfoResponse::BuildMessage(tTranceInfos, response);
             if (ret != SER_OK) {
                 NN_LOG_WARN("[HTRACER] failed to build response message");
@@ -133,5 +133,5 @@ void HTracerService::SentResponse(SerCode result, Message &response)
         data = nullptr;
     }
 }
-}
-}
+} // namespace hcom
+} // namespace ock

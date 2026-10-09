@@ -1,0 +1,39 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+cc_library(
+    name = "multi_sender_test_lib",
+    srcs = [
+        "multi_sender_test.cpp",
+    ],
+    hdrs = [
+        "multi_sender_test.h",
+    ],
+    copts = [
+        "-D_GNU_SOURCE",
+        "-std=c++14",
+        "-fPIC",
+    ],
+    includes = [".", "//src/ubsocket"],
+    deps = [
+        "//src:ubsocket_io",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "multi_sender_test",
+    srcs = [
+        "main.cpp",
+    ],
+    copts = [
+        "-D_GNU_SOURCE",
+        "-std=c++14",
+        "-fPIC",
+    ],
+    includes = [".", "//src/ubsocket"],
+    deps = [
+        ":multi_sender_test_lib",
+        "//src:ubsocket_io",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -47,6 +47,6 @@ public:
 private:
     static Crc32Function gCrc32Func;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_CRC32_H

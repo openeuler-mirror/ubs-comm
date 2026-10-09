@@ -19,7 +19,8 @@ namespace hcom {
 class NetDriverSockWithOOB : public UBSHcomNetDriver {
 public:
     NetDriverSockWithOOB(const std::string &name, bool startOobSvr, UBSHcomNetDriverProtocol protocol, SockType t)
-        : UBSHcomNetDriver(name, startOobSvr, protocol), mSockType(t)
+        : UBSHcomNetDriver(name, startOobSvr, protocol),
+          mSockType(t)
     {
         OBJ_GC_INCREASE(NetDriverSockWithOOB);
     }
@@ -47,13 +48,13 @@ public:
     }
 
     NResult Connect(const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags, uint8_t serverGrpNo,
-        uint8_t clientGrpNo) override;
+                    uint8_t clientGrpNo) override;
 
     NResult Connect(const std::string &oobIp, uint16_t oobPort, const std::string &payload, UBSHcomNetEndpointPtr &ep,
-        uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx) override;
+                    uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx) override;
 
     NResult Connect(const std::string &serverUrl, const std::string &payload, UBSHcomNetEndpointPtr &ep, uint32_t flags,
-        uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0, uint64_t ctx = 0) override;
+                    uint8_t serverGrpNo = 0, uint8_t clientGrpNo = 0, uint64_t ctx = 0) override;
 
     NResult MultiRailNewConnection(OOBTCPConnection &conn);
     void DestroyEndpoint(UBSHcomNetEndpointPtr &ep) override;
@@ -82,9 +83,9 @@ protected:
     NResult HandleEpClose(Sock *sock);
 
     NResult Connect(const OOBTCPClientPtr &client, const std::string &payload, UBSHcomNetEndpointPtr &outEp,
-       uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx);
+                    uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx);
     NResult ConnectSyncEp(const OOBTCPClientPtr &client, const std::string &payload, UBSHcomNetEndpointPtr &outEp,
-        uint8_t serverGrpNo, uint64_t ctx);
+                          uint8_t serverGrpNo, uint64_t ctx);
 
     inline bool Remove(uint64_t id)
     {
@@ -113,12 +114,29 @@ protected:
         }
     }
 
+    inline std::shared_ptr<std::atomic<uint32_t>> GetOrCreateIpActiveCounter(const std::string &mIpAndPort)
+    {
+        std::lock_guard<std::mutex> guard(mIpActiveConnMapMutex);
+        size_t pos = mIpAndPort.find(':');
+        std::string remoteIp = mIpAndPort.substr(0, pos);
+        auto it = mIpActiveConnMap.find(remoteIp);
+        if (it != mIpActiveConnMap.end()) {
+            return it->second;
+        }
+        auto counter = std::make_shared<std::atomic<uint32_t>>(0u);
+        mIpActiveConnMap.emplace(remoteIp, counter);
+        return counter;
+    }
+
 protected:
     SockType mSockType = SockType::SOCK_TCP;
     std::vector<SockWorker *> mWorkers;
     std::vector<std::string> mFilteredIps;
     MemoryRegionChecker mMrChecker;
     NormalMemoryRegionFixedBuffer *mSockDriverSendMR = nullptr;
+
+    std::mutex mIpActiveConnMapMutex;
+    std::unordered_map<std::string, std::shared_ptr<std::atomic<uint32_t>>> mIpActiveConnMap;
 
     NResult CreateWorkerResource();
     NResult CreateOpCtxMemPool();
@@ -135,7 +153,7 @@ protected:
     friend class NetAsyncEndpointSock;
     friend class NetSyncEndpointSock;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_NET_SOCK_DRIVER_OOB_H_234234

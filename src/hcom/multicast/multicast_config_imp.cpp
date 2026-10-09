@@ -12,10 +12,11 @@ constexpr uint16_t MAX_TIME_OUT_DETECT_THREAD_NUM = 4;
 
 bool MulticastConfigImp::Init(const std::string &name, const MulticastServiceOptions &opt)
 {
-    mOptions.protocol = UBSHcomNetDriverProtocol::RDMA;
+    mOptions.protocol = opt.protocol;
     mOptions.name = name;
     mOptions.maxSendRecvDataSize = opt.maxSendRecvDataSize;
     mOptions.maxSendRecvDataCount = opt.maxSendRecvDataCount;
+    mOptions.multicastIoContextCount = opt.multicastIoContextCount;
     mOptions.workerGroupMode = opt.workerGroupMode;
     if (NN_LIKELY(opt.workerGroupThreadCount != 0)) {
         UBSHcomWorkerGroupInfo groupInfo;
@@ -34,6 +35,7 @@ bool MulticastConfigImp::Init(const std::string &name, const MulticastServiceOpt
     mOptions.qpBatchRePostSize = opt.qpBatchRePostSize;
     mOptions.enableTls = opt.enableTls;
     mOptions.cipherSuite = opt.cipherSuite;
+    mOptions.periodicCpuId = opt.periodicCpuId;
     return true;
 }
 
@@ -45,7 +47,7 @@ const std::string &MulticastConfigImp::GetName() const
 int32_t MulticastConfigImp::ValidateMulticastServiceOption()
 {
     if (NN_UNLIKELY(mOptions.timeOutDetectThreadNum == 0 ||
-        mOptions.timeOutDetectThreadNum > MAX_TIME_OUT_DETECT_THREAD_NUM)) {
+                    mOptions.timeOutDetectThreadNum > MAX_TIME_OUT_DETECT_THREAD_NUM)) {
         NN_LOG_ERROR("Invalid time out detect thread num " << mOptions.timeOutDetectThreadNum << ", must range [1, 4]");
         return SER_INVALID_PARAM;
     }
@@ -187,6 +189,9 @@ bool MulticastConfigImp::FillNetDriverOpt(ock::hcom::UBSHcomNetDriverOptions &dr
     driverOpt.prePostReceiveSizePerQP = mOptions.qpPrePostSize;
     driverOpt.maxConnectionNum = mOptions.maxConnCount;
     driverOpt.qpBatchRePostSize = mOptions.qpBatchRePostSize;
+
+    driverOpt.tcpSendZCopy = true;
+    driverOpt.tcpEpollLT = true;
     return true;
 }
 
@@ -240,6 +245,11 @@ const uint32_t MulticastConfigImp::GetPeriodicThreadNum() const
     return mOptions.periodicThreadNum;
 }
 
+const uint32_t MulticastConfigImp::GetMulticastIoContextCount() const
+{
+    return mOptions.multicastIoContextCount;
+}
+
 void MulticastConfigImp::SetMaxSubscriberNum(uint32_t maxSubscriberNum)
 {
     mOptions.maxSubscriberNum = maxSubscriberNum;
@@ -259,5 +269,20 @@ const uint8_t MulticastConfigImp::GetPublisherWkrGroupNo() const
 {
     return mOptions.publisherGroupNo;
 }
+
+void MulticastConfigImp::SetPeriodicCpuId(int cpuId)
+{
+    mOptions.periodicCpuId = cpuId;
 }
+
+const int MulticastConfigImp::GetPeriodicCpuId() const
+{
+    return mOptions.periodicCpuId;
 }
+
+UBSHcomNetDriverProtocol MulticastConfigImp::GetProtocol() const
+{
+    return mOptions.protocol;
+}
+} // namespace hcom
+} // namespace ock

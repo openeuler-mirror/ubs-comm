@@ -44,7 +44,7 @@ private:
     static int DefaultSslCertVerify(X509_STORE_CTX *x509ctx, const char *arg);
     static int PskFindCallbackWrapper(SSL *ssl, const unsigned char *identity, size_t identityLen, SSL_SESSION **sess);
     static int PskUseCallbackWrapper(SSL *ssl, const EVP_MD *md, const unsigned char **id, size_t *idlen,
-        SSL_SESSION **sess);
+                                     SSL_SESSION **sess);
     static UBSHcomPskFindSessionCb mOpenSslPskFindSessionCb;
     static UBSHcomPskUseSessionCb mOpenSslPskUseSessionCb;
     NResult SetPSKCallback(bool isServer);
@@ -52,7 +52,7 @@ private:
     SSL *mSsl = nullptr;
     SSL_CTX *mSslCtx = nullptr;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_OOB_OPENSSL_12334324233_H

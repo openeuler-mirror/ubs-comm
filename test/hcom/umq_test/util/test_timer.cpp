@@ -5,16 +5,16 @@
  */
 #include <stdlib.h>
 
-#include "mockcpp/mockcpp.hpp"
 #include "gtest/gtest.h"
+#include "mockcpp/mockcpp.hpp"
 
 #include "urpc_framework_api.h"
-#include "urpc_manage.h"
 #include "urpc_framework_errno.h"
-#include "urpc_lib_log.h"
-#include "urpc_util.h"
 #include "urpc_hmap.h"
+#include "urpc_lib_log.h"
+#include "urpc_manage.h"
 #include "urpc_thread.h"
+#include "urpc_util.h"
 
 #include "urpc_timer.h"
 
@@ -43,12 +43,10 @@ public:
     }
 
     // SetUpTestCase 在所有 TEST_F 测试开始前执行一次
-    static void SetUpTestCase()
-    {}
+    static void SetUpTestCase() {}
 
     // TearDownTestCase 在所有 TEST_F 测试完成后执行一次
-    static void TearDownTestCase()
-    {}
+    static void TearDownTestCase() {}
 };
 
 static inline void test_timer_cb(void *arg)
@@ -127,7 +125,7 @@ TEST_F(timer_test, TestTimerMassive)
         t[i] = urpc_timer_create(URPC_INVALID_ID_U32, false);
         ASSERT_NE(t[i], nullptr);
 
-        timeout_ms = rand() % 1000 + 10;  // 10ms ~ 1.01s
+        timeout_ms = rand() % 1000 + 10; // 10ms ~ 1.01s
 
         ret = urpc_timer_start(t[i], timeout_ms, test_timer_massive_cb, (void *)&cycles, true);
         ASSERT_EQ(ret, 0);
@@ -142,7 +140,7 @@ TEST_F(timer_test, TestTimerMassive)
             t[idx] = urpc_timer_create(i, false);
             ASSERT_NE(t[idx], nullptr);
 
-            timeout_ms = rand() % 1000 + 10;  // 10ms ~ 1.01s
+            timeout_ms = rand() % 1000 + 10; // 10ms ~ 1.01s
 
             ret = urpc_timer_start(t[idx], timeout_ms, test_timer_massive_cb, (void *)&cycles, true);
             ASSERT_EQ(ret, 0);

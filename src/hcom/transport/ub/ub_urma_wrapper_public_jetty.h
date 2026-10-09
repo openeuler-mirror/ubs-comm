@@ -14,17 +14,18 @@
 #define HCOM_UB_URMA_WRAPPER_PUBLIC_JETTY_H
 #ifdef UB_BUILD_ENABLED
 
-#include "net_oob.h"
 #include "net_load_balance.h"
+#include "net_oob.h"
 #include "ub_common.h"
 #include "ub_fixed_mem_pool.h"
-#include "ub_urma_wrapper_jetty.h"
 #include "ub_thread_pool.h"
+#include "ub_urma_wrapper_jetty.h"
 
 namespace ock {
 namespace hcom {
 
-enum UrmaConnectMsgType : uint8_t {
+enum UrmaConnectMsgType : uint8_t
+{
     CONNECT_REQ = 1,
     EXCHANGE_MSG = 2,
 };
@@ -50,7 +51,7 @@ struct JettyConnHeader {
     char payload[1024];
 
     inline void SetConnHeader(uint32_t magic, uint32_t version, uint32_t groupIndex, uint32_t protocol,
-    uint32_t majorVersion, uint32_t minorVersion, uint32_t tlsVersion)
+                              uint32_t majorVersion, uint32_t minorVersion, uint32_t tlsVersion)
     {
         ConnectHeader.magic = magic;
         ConnectHeader.version = version;
@@ -73,14 +74,19 @@ struct JettyConnResp {
 
 #define PUBLIC_JETTY_SEG_SIZE 2560
 
-
 class UBPublicJetty {
 public:
     using NewConnectionHandler = std::function<NResult(UBOpContextInfo *)>;
 
     UBPublicJetty(const std::string &name, uint32_t id, UBContext *ctx, UBJfc *jfc, bool isServer = false,
-        JettyOptions jettyOptions = {}) : mName(name), mId(id), mUBContext(ctx), mSendJfc(jfc), mRecvJfc(jfc),
-        isServer(isServer), mJettyOptions(jettyOptions)
+                  JettyOptions jettyOptions = {})
+        : mName(name),
+          mId(id),
+          mUBContext(ctx),
+          mSendJfc(jfc),
+          mRecvJfc(jfc),
+          isServer(isServer),
+          mJettyOptions(jettyOptions)
     {
         mIsStarted = false;
         if (mUBContext != nullptr) {
@@ -224,7 +230,7 @@ private:
 
     static uint32_t G_INDEX;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_URMA_WRAPPER_PUBLIC_JETTY_H

@@ -6,6 +6,7 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../../include/umq/umq_ub)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/../dfx)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/core)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/core/flow_control)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/core/jetty_pool)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/core/private)
 include(${CMAKE_SOURCE_DIR}/src/dfx/CMakeLists.txt)
 include(${CMAKE_CURRENT_LIST_DIR}/core/CMakeLists.txt)
@@ -23,6 +24,7 @@ set_target_properties(umq_ub PROPERTIES
 target_include_directories(umq_ub
     PUBLIC
         ${CMAKE_SOURCE_DIR}/urma/lib/urma/core/include
+        ${CMAKE_SOURCE_DIR}/urma/lib/urma/bond/include
         ${CMAKE_SOURCE_DIR}/urma/lib/uvs/core/include
     PRIVATE
         ${OPENSSL_INCLUDE_DIR}

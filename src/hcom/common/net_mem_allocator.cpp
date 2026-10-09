@@ -9,8 +9,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "net_common.h"
 #include "net_mem_allocator.h"
+#include "net_common.h"
 
 #define MEM_ALLOCATOR_ATOMIC_INC(x) __sync_add_and_fetch((x), 1)
 #define MEM_ALLOCATOR_ATOMIC_DEC(x) __sync_sub_and_fetch((x), 1)
@@ -105,6 +105,10 @@ void MemoryRegion::MemoryAreaInsertPre(NetRbNode<MemoryArea> *newMa, NetRbNode<M
             CAST_TO_LIST_NODE(neighMa)->RemoveSelf();
             MEM_ALLOCATOR_ATOMIC_DEC(&freeCnt[neighMa->index]);
             index = neighMa->length >> MEM_ALLOCATOR_BASE_SHIFT;
+            if (index == 0) {
+                NN_LOG_ERROR("Memory block length is invalid, length " << neighMa->length);
+                return;
+            }
             index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index - 1);
             neighMa->index = index;
             CAST_TO_LIST(&freeHead[index])->Append(CAST_TO_LIST_NODE(neighMa));
@@ -252,7 +256,7 @@ NResult NetMemAllocator::RegionMalloc(uint64_t &startAddress, uint64_t length, u
             auto metaReqLenAddress = reinterpret_cast<uint64_t *>(metaBaseAddr + MA_CANARY_LEN + MA_LEN_LEN);
 
             if (NN_UNLIKELY(memcpy_s(metaCanaryAddress, MA_CANARY_LEN, needReserve ? "#c_r" : "#c_a", MA_CANARY_LEN) !=
-                NN_OK)) {
+                            NN_OK)) {
                 NN_LOG_WARN("Invalid operation to memcpy_s in RegionMalloc");
                 return NN_ERROR;
             }
@@ -477,6 +481,10 @@ NResult MemoryRegion::MemoryAreaRemove(uint64_t *startAddress, uint64_t length, 
  */
 NResult MemoryRegion::MemoryAreaInsert(uint64_t startAddress, uint64_t length)
 {
+    if (NN_UNLIKELY(startAddress == 0)) {
+        NN_LOG_ERROR("startAddress is zero in MemoryAreaInsert");
+        return NN_ERROR;
+    }
     auto root = &mRoot;
     auto newMa = reinterpret_cast<MemoryAreaRawPtr>(startAddress);
     uint32_t index = 0;
@@ -525,6 +533,10 @@ NResult MemoryRegion::MemoryAreaInsert(uint64_t startAddress, uint64_t length)
      * freeHead, which speed up taking operation
      */
     index = newMa->length >> MEM_ALLOCATOR_BASE_SHIFT;
+    if (index == 0) {
+        NN_LOG_ERROR("Memory block length is invalid, length " << newMa->length);
+        return NN_ERROR;
+    }
     index = (index >= FREE_LIST_NUM) ? (FREE_LIST_NUM - 1) : (index - 1);
     newMa->index = index;
     freeHead[index].Append(CAST_TO_LIST_NODE(newMa));

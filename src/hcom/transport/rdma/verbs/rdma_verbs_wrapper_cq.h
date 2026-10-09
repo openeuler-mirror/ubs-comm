@@ -28,7 +28,10 @@ struct RDMACqPollResult {
 class RDMACq {
 public:
     RDMACq(const std::string &name, RDMAContext *ctx, bool createCompletionChannel = false, uintptr_t work = 0)
-        : mName(name), mCreateCompletionChannel(createCompletionChannel), mWork(work), mRDMAContext(ctx)
+        : mName(name),
+          mCreateCompletionChannel(createCompletionChannel),
+          mWork(work),
+          mRDMAContext(ctx)
     {
         if (mRDMAContext != nullptr) {
             mRDMAContext->IncreaseRef();
@@ -76,7 +79,7 @@ private:
 
     friend class RDMAQp;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_RDMA_VERBS_WRAPPER_CQ_H

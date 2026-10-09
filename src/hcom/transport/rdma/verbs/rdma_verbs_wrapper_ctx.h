@@ -62,7 +62,10 @@ public:
 
 public:
     RDMAContext(const std::string &name, bool useDevX, const RDMAGId &gid)
-        : mName(name), mDevIndex(gid.devIndex), mBestGid(gid), mUseDevX(useDevX)
+        : mName(name),
+          mDevIndex(gid.devIndex),
+          mBestGid(gid),
+          mUseDevX(useDevX)
     {
         OBJ_GC_INCREASE(RDMAContext);
     }
@@ -80,18 +83,18 @@ public:
 
     RDMAContext() = delete;
     RDMAContext(const RDMAContext &) = delete;
-    RDMAContext &operator = (const RDMAContext &) = delete;
+    RDMAContext &operator=(const RDMAContext &) = delete;
     RDMAContext(RDMAContext &&) = delete;
-    RDMAContext &operator = (RDMAContext &&) = delete;
+    RDMAContext &operator=(RDMAContext &&) = delete;
 
     std::string ToString()
     {
         std::ostringstream oss;
-        oss << "RDMAContext info: mName " << mName << ", use DevX " << mUseDevX << ", mContext " << mContext <<
-            ", mProtectDomain " << mProtectDomain << ", mDevIndex " << mDevIndex << ", mPortAttr " <<
-            HcomIbv::PortStateStr(mPortAttr.state) << "|" << mPortAttr.lid << "|" << mPortAttr.max_mtu <<
-            ", mBestGid " << mBestGid.devIndex << "|" << mBestGid.gid << "|" << mBestGid.ibvGid.global.interface_id <<
-            "|" << mBestGid.RoCEVersion;
+        oss << "RDMAContext info: mName " << mName << ", use DevX " << mUseDevX << ", mContext " << mContext
+            << ", mProtectDomain " << mProtectDomain << ", mDevIndex " << mDevIndex << ", mPortAttr "
+            << HcomIbv::PortStateStr(mPortAttr.state) << "|" << mPortAttr.lid << "|" << mPortAttr.max_mtu
+            << ", mBestGid " << mBestGid.devIndex << "|" << mBestGid.gid << "|" << mBestGid.ibvGid.global.interface_id
+            << "|" << mBestGid.RoCEVersion;
         return oss.str();
     }
 
@@ -120,11 +123,12 @@ private:
 #ifdef RDMA_CX5_BUILD_ENABLED
     ibv_dm *mDeviceMemory = nullptr;
 #endif
-    struct ibv_port_attr mPortAttr {};
+    struct ibv_port_attr mPortAttr {
+    };
     uint8_t mPortNumber = 1;
     uint16_t mDevIndex = 0;
     int mMaxSge = NN_NO16;
-    RDMAGId mBestGid {};
+    RDMAGId mBestGid{};
     bool mUseDevX = false;
 
     DEFINE_RDMA_REF_COUNT_VARIABLE;
@@ -140,7 +144,7 @@ private:
     friend RDMAMlx5Worker;
 #endif
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_RDMA_VERBS_WRAPPER_CTX_H

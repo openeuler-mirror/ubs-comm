@@ -3,8 +3,6 @@ load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_import", "cc_library")
 
 cc_library(
     name = "boundscheck_lib",
-
-   
     deps = ["@libboundscheck//:boundscheck",],
 #    linkstatic = True,  # 关键参数：指示生成静态库
 #    alwayslink = 1,     # 关键参数：强制包含所有符号
@@ -20,14 +18,26 @@ cc_binary(
 
 cc_import(
   name = "libboundscheck",
-#  hdrs = ["mylib.h"],
   shared_library = ":libboundscheck.so",
   visibility = ["//visibility:public"],
 )
 
+genrule(
+    name = "generate_ubsocket_version_defs",
+    srcs = ["ubsocket/UBSOCKET_VERSION"],
+    outs = ["ubsocket_version_defs.h"],
+    cmd = "V=$$(cat $<); M=$$(echo $$V | cut -d. -f1); m=$$(echo $$V | cut -d. -f2); p=$$(echo $$V | cut -d. -f3); cat > $@ << EOF\n#ifndef UBS_COMM_UBSOCKET_VERSION_DEFS_H\n#define UBS_COMM_UBSOCKET_VERSION_DEFS_H\n#define UBS_VERSION_MAJOR $$M\n#define UBS_VERSION_MINOR $$m\n#define UBS_VERSION_PATCH $$p\n#define UBS_VERSION_STR \"$$V\"\n#define UBS_VERSION_FULL_STR \"$$V\"\n#endif\nEOF\n",
+)
+
+cc_library(
+    name = "ubsocket_version_defs",
+    hdrs = [":generate_ubsocket_version_defs"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
 cc_import(
   name = "libumq",
-#  hdrs = ["mylib.h"],
   shared_library = ":libumq.so",
 )
 
@@ -65,7 +75,6 @@ cc_binary(
 #        ":libumq_buf",
         "//src/hcom/umq/src:umq_aggregate",
         ":libumq",
-#        ":libumq_ipc",
 #        ":libumq_ub",
     ],
     linkshared = True, 
@@ -75,25 +84,60 @@ cc_binary(
 cc_library(
     name = "ubsocket",
     srcs = glob([
-        "ubsocket/*.cpp",
-        "ubsocket/*.c",
-        "ubsocket/brpc/*.cpp",
-        "ubsocket/trace/*.cpp",
-    ]) + glob([  # 头文件现在也放在 srcs 里
-        "ubsocket/*.h",
-        "ubsocket/brpc/*.h",
-        "ubsocket/brpc/**/*.h",
-        "ubsocket/trace/*.h",
+        "ubsocket/csrc/**/*.cpp",
+        "ubsocket/csrc/**/*.h"
     ]),
+
+    # 对外公开的.h文件
+    hdrs = glob(["ubsocket/include/*.h"]),
+    copts = [
+        "-D_GNU_SOURCE",
+        # 指定和umq一起编译
+        "-DUMQ_ADAPTER_BACKEND_ENABLED",
+        "-std=c++14",
+        "-fPIC",
+    ],
+    includes = [
+        "ubsocket/include",
+        "ubsocket",
+        "ubsocket/csrc",
+        "ubsocket/csrc/common",
+        "ubsocket/csrc/core",
+        "ubsocket/csrc/core/umq",
+        "ubsocket/csrc/iobuf",
+        "ubsocket/csrc/profiling",
+        "ubsocket/csrc/under_api",
+
+        # 需要使用hcom中的umq头文件
+        "hcom/"
+    ],
+    deps = [
+        ":boundscheck_lib",
+        ":ubsocket_version_defs",
+        "//src/hcom/umq:umq",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "golden",
+    srcs = glob([
+        "ubsocket/tools/golden/*.cpp",
+        "ubsocket/tools/golden/*.h"
+    ]),
+    includes = [
+        "ubsocket/include",
+        "ubsocket/tools/golden",
+        "ubsocket/csrc"
+    ],
     copts = [
         "-D_GNU_SOURCE",
         "-std=c++14",
         "-fPIC",
+        "-Wno-unused-function"
     ],
-    includes = [".", "ubsocket", "ubsocket/brpc", "ubsocket/trace"],
     deps = [
-        ":boundscheck_lib",  # 依赖 boundscheck 库
-        "//src/hcom/umq:umq",
+        "//src:ubsocket"
     ],
     visibility = ["//visibility:public"],
 )
@@ -101,18 +145,16 @@ cc_library(
 cc_binary(
     name = "ubstat",
     srcs = glob([
-        "ubsocket/cli/*.cpp",
-        "ubsocket/trace/*.cpp",
+        "ubsocket/csrc/cli/*.cpp",
     ]) + glob([  # 头文件现在也放在 srcs 里
-        "ubsocket/cli/*.h",
-        "ubsocket/trace/*.h",
+        "ubsocket/csrc/cli/*.h",
     ]),
     copts = [
         "-D_GNU_SOURCE",
         "-std=c++14",
         "-fPIC"
     ],
-    includes = [".", "ubsocket", "ubsocket/brpc", "ubsocket/cli", "ubsocket/trace"],
+    includes = [".", "ubsocket", "ubsocket/csrc/cli"],
     deps = [
         ":boundscheck_lib",  # 依赖 boundscheck 库
         "//src/hcom/umq:umq",
@@ -182,20 +224,14 @@ cc_library(
     linkstatic = True,
 )
 
-
-
-
-
 # 4. 聚合目标保持不变
 filegroup(
     name = "release_package",
     srcs = [
         ":libubsocket.so",
-        #":libboundscheck.so",
         ":libboundscheck",
         "//src/hcom/umq/src:umq",
         "//src/hcom/umq/src/qbuf:umq_buf",
-        "//src/hcom/umq/src/umq_ipc:umq_ipc",
         "//src/hcom/umq/src/umq_ub:umq_ub",
 
     ],

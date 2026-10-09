@@ -10,10 +10,10 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "test_memory_region.h"
-#include "ut_helper.h"
 #include "hcom_def.h"
-#include "transport/net_memory_region.h"
 #include "mockcpp/mockcpp.hpp"
+#include "transport/net_memory_region.h"
+#include "ut_helper.h"
 
 using namespace ock::hcom;
 TestMemoryRegion::TestMemoryRegion() {}

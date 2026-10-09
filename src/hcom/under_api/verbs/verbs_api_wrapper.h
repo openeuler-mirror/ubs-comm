@@ -90,7 +90,7 @@ public:
     }
 
     static inline struct ibv_cq *CreateCq(struct ibv_context *context, int cqe, void *cq_context,
-        struct ibv_comp_channel *channel, int comp_vector)
+                                          struct ibv_comp_channel *channel, int comp_vector)
     {
         return VerbsAPI::hcomInnerCreateCQ(context, cqe, cq_context, channel, comp_vector);
     }
@@ -147,8 +147,8 @@ public:
 #endif
     }
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif
 #endif // HCOM_VERBS_API_WRAPPER_H

@@ -40,7 +40,7 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
         NN_LOG_ERROR("Failed to malloc for urma device attr");
         return UB_MEMORY_ALLOCATE_FAILED;
     }
-    ret = UBDeviceHelper::Initialize(mDevAttr, mUrmaContext, mBestEid);
+    ret = UBDeviceHelper::Initialize(mDevAttr, mUrmaContext, mPublicUrmaContext, mBestEid);
     if (ret != 0) {
         NN_LOG_ERROR("Failed to initialize urma device");
         free(mDevAttr);
@@ -48,6 +48,64 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
         return ret;
     }
 
+    ret = SetBondingMode(ubcMode);
+    if (ret != 0) {
+        free(mDevAttr);
+        mDevAttr = nullptr;
+        return ret;
+    }
+
+    if (g_is_activate_backup) {
+        bondp_set_bonding_mode_in_t bondInBackup = {
+            .bonding_mode = BONDP_BONDING_MODE_ACTIVE_BACKUP,
+            .bonding_level = BONDP_BONDING_LEVEL_PORT,
+        };
+        urma_user_ctl_in_t in = {
+            .addr = (uint64_t)&bondInBackup, .len = sizeof(bondInBackup), .opcode = BONDP_USER_CTL_SET_BONDING_MODE};
+        urma_user_ctl_out_t out = {0};
+        ret = HcomUrma::UserCtl(mUrmaContext, &in, &out);
+        if (ret != 0) {
+            NN_LOG_ERROR("Failed to set bonding mode for device , ret " << ret);
+            free(mDevAttr);
+            mDevAttr = nullptr;
+            return ret;
+        }
+        NN_LOG_INFO("Set bonding mode for device successfully");
+    }
+
+    // 聚合设备 imm_data 的高 24 bit 只有在 MSN 保序关闭后才承载用户数据, 必须显式关闭
+    ret = DisableMSN();
+    if (ret != 0) {
+        free(mDevAttr);
+        mDevAttr = nullptr;
+        return ret;
+    }
+
+    int tmpMaxSge = std::min(mDevAttr->dev_cap.max_jfs_sge, mDevAttr->dev_cap.max_jfr_sge);
+    mMaxSge = tmpMaxSge < mMaxSge ? tmpMaxSge : mMaxSge;
+
+    NN_LOG_INFO("Device info: max_qp " << mDevAttr->dev_cap.max_jetty << " ,max_qp_wr "
+                                       << mDevAttr->dev_cap.max_jfs_depth << " ,max_sge " << tmpMaxSge
+                                       << " ,adapter max_cqe " << mMaxSge << " ,max_cq " << mDevAttr->dev_cap.max_jfc
+                                       << " ,max_cqe " << mDevAttr->dev_cap.max_jfc_depth);
+
+    mMaxJfr = mDevAttr->dev_cap.max_jfr_depth;
+    mMaxJfs = mDevAttr->dev_cap.max_jfs_depth;
+
+    // get ctp and rtp default SL priority
+    ret = SetUBPriority(ubPriority, ubcMode);
+    if (ret != 0) {
+        free(mDevAttr);
+        mDevAttr = nullptr;
+        return ret;
+    }
+
+    bandWidth = mBestEid.bandWidth;
+    return UB_OK;
+}
+
+UResult UBContext::SetBondingMode(UBSHcomUbcMode ubcMode)
+{
     bondp_set_bonding_mode_in_t bondInBackup = {
         .bonding_mode = BONDP_BONDING_MODE_STANDALONE,
         .bonding_level = BONDP_BONDING_LEVEL_PORT,
@@ -62,49 +120,66 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
     }
 
     urma_user_ctl_in_t in = {
-        .addr = (uint64_t)&bondInBackup,
-        .len = sizeof(bondInBackup),
-        .opcode = BONDP_USER_CTL_SET_BONDING_MODE
-    };
+        .addr = (uint64_t)&bondInBackup, .len = sizeof(bondInBackup), .opcode = BONDP_USER_CTL_SET_BONDING_MODE};
     urma_user_ctl_out_t out = {0};
-    ret = HcomUrma::UserCtl(mUrmaContext, &in, &out);
+    UResult ret = HcomUrma::UserCtl(mUrmaContext, &in, &out);
     if (ret != 0) {
         NN_LOG_ERROR("Failed to set bonding mode for device , ret " << ret);
+        free(mDevAttr);
+        mDevAttr = nullptr;
         return ret;
     }
     NN_LOG_INFO("Set bonding mode for device successfully");
+    return UB_OK;
+}
 
-    int tmpMaxSge = std::min(mDevAttr->dev_cap.max_jfs_sge, mDevAttr->dev_cap.max_jfr_sge);
-    mMaxSge = tmpMaxSge < mMaxSge ? tmpMaxSge : mMaxSge;
+/* 与 urma_ubagg.h 中 bondp_user_ctl_opcode 的取值保持一致 */
+static const uint32_t BONDP_USER_CTL_DISABLE_MSN = 11;
 
-    NN_LOG_INFO("Device info: max_qp " << mDevAttr->dev_cap.max_jetty << " ,max_qp_wr " <<
-        mDevAttr->dev_cap.max_jfs_depth << " ,max_sge " << tmpMaxSge << " ,adapter max_cqe " << mMaxSge <<
-        " ,max_cq " << mDevAttr->dev_cap.max_jfc << " ,max_cqe " << mDevAttr->dev_cap.max_jfc_depth);
+UResult UBContext::DisableMSN()
+{
+    urma_user_ctl_in_t in = {.addr = 0, .len = 0, .opcode = BONDP_USER_CTL_DISABLE_MSN};
+    urma_user_ctl_out_t out = {0};
+    UResult ret = HcomUrma::UserCtl(mUrmaContext, &in, &out);
+    if (ret != 0) {
+        NN_LOG_ERROR("Failed to disable MSN for bonding device, ret " << ret);
+        return ret;
+    }
+    NN_LOG_INFO("Disable MSN for bonding device successfully");
+    return UB_OK;
+}
 
-    mMaxJfr = mDevAttr->dev_cap.max_jfr_depth;
-    mMaxJfs = mDevAttr->dev_cap.max_jfs_depth;
-
-    // get ctp and rtp default SL priority
-    union urma_tp_type_en tp_type_ctp {};
-    union urma_tp_type_en tp_type_rtp {};
+UResult UBContext::SetUBPriority(uint32_t ubPriority, UBSHcomUbcMode ubcMode)
+{
+    union urma_tp_type_en tp_type_ctp {
+    };
+    union urma_tp_type_en tp_type_rtp {
+    };
     tp_type_ctp.bs.ctp = 1;
     tp_type_rtp.bs.rtp = 1;
 
     mCtpPri = GetPriByTpType(tp_type_ctp);
     if (mCtpPri == -1) {
         NN_LOG_ERROR("Failed to get priority by ctp type");
+        free(mDevAttr);
+        mDevAttr = nullptr;
         return UB_ERROR;
     }
     mRtpPri = GetPriByTpType(tp_type_rtp);
     if (mRtpPri == -1) {
         NN_LOG_ERROR("Failed to get priority by rtp type");
+        free(mDevAttr);
+        mDevAttr = nullptr;
         return UB_ERROR;
     }
 
     if (ubcMode == UBSHcomUbcMode::HighBandwidth) {
         if (!CheckPriByTpType(ubPriority, tp_type_ctp)) {
-            NN_LOG_ERROR("UbPriority " << ubPriority <<
-                " is invalid, please set priority with ctp type when ubc mode is high bandwidth");
+            NN_LOG_ERROR(
+                "UbPriority " << ubPriority
+                              << " is invalid, please set priority with ctp type when ubc mode is high bandwidth");
+            free(mDevAttr);
+            mDevAttr = nullptr;
             return UB_ERROR;
         }
         // if user set priority, use user set priority, else use ctp default priority
@@ -114,8 +189,11 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
     }
     if (ubcMode == UBSHcomUbcMode::LowLatency) {
         if (!CheckPriByTpType(ubPriority, tp_type_rtp)) {
-            NN_LOG_ERROR("UbPriority " << ubPriority <<
-                " is invalid, please set priority with rtp type when ubc mode is low latency");
+            NN_LOG_ERROR(
+                "UbPriority " << ubPriority
+                              << " is invalid, please set priority with rtp type when ubc mode is low latency");
+            free(mDevAttr);
+            mDevAttr = nullptr;
             return UB_ERROR;
         }
         // if user set priority, use user set priority, else use rtp default priority
@@ -123,21 +201,28 @@ UResult UBContext::Initialize(uint8_t &bandWidth, uint32_t ubPriority, UBSHcomUb
             mRtpPri = ubPriority;
         }
     }
-
-    bandWidth = mBestEid.bandWidth;
     return UB_OK;
 }
 
 UResult UBContext::UnInitialize()
 {
+    int res = 0;
     if (mUrmaContext != nullptr) {
-        int res = 0;
         if ((res = HcomUrma::DeleteContext(mUrmaContext)) != 0) {
             char buf[NET_STR_ERROR_BUF_SIZE] = {0};
-            NN_LOG_WARN("Unable to delete UB Context " << res << ", as " <<
-                NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+            NN_LOG_WARN("Unable to delete UB Context " << res << ", as "
+                                                       << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
         }
         mUrmaContext = nullptr;
+    }
+
+    if (mPublicUrmaContext != nullptr) {
+        if ((res = HcomUrma::DeleteContext(mPublicUrmaContext)) != 0) {
+            char buf[NET_STR_ERROR_BUF_SIZE] = {0};
+            NN_LOG_WARN("Unable to delete UB Context " << res << ", as "
+                                                       << NetFunc::NN_GetStrError(errno, buf, NET_STR_ERROR_BUF_SIZE));
+        }
+        mPublicUrmaContext = nullptr;
     }
 
     if (mDevAttr != nullptr) {
@@ -148,5 +233,5 @@ UResult UBContext::UnInitialize()
     return UB_OK;
 }
 } // namespace hcom
-}
+} // namespace ock
 #endif

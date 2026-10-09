@@ -1,11 +1,11 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
-#include <functional>
+#include "transport_send_bw_test.h"
 #include <unistd.h>
+#include <functional>
 #include "common/perf_test_logger.h"
 #include "test_case/perf_test_factory.h"
-#include "transport_send_bw_test.h"
 
 namespace hcom {
 namespace perftest {
@@ -28,7 +28,7 @@ int TransportSendBwTest::DoPostSend()
 }
 
 int TransportSendBwTest::NewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                                     const std::string &payload)
 {
     mEp = ep;
     LOG_DEBUG("new connection from " << ipPort << " !");
@@ -51,7 +51,7 @@ bool TransportSendBwTest::Initialize()
     sem_init(&mSem, 0, 0);
     // create UBSHcomNetDriver
     NewEpHandler funcNewEndpoint = bind(&TransportSendBwTest::NewEndPoint, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+                                        std::placeholders::_2, std::placeholders::_3);
     ReqPostedHandler funcReqPosted = bind(&TransportSendBwTest::RequestPosted, this, std::placeholders::_1);
     mHelper.RegisterNewEPHandler(funcNewEndpoint);
     mHelper.RegisterReqPostedHandler(funcReqPosted);
@@ -134,5 +134,5 @@ bool TransportSendBwTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::TRANSPORT_SEND_BW, TransportSendBwTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

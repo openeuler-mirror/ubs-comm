@@ -7,7 +7,6 @@
 #include "test_case/perf_test_factory.h"
 #include "test_case/transport/transport_send_lat_test.h"
 
-
 namespace hcom {
 namespace perftest {
 using namespace ock::hcom;
@@ -37,7 +36,7 @@ int TransportSendLatTest::DoPostSend()
 }
 
 int TransportSendLatTest::NewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                                      const std::string &payload)
 {
     mEp = ep;
     LOG_DEBUG("new connection from " << ipPort << " !");
@@ -62,7 +61,7 @@ bool TransportSendLatTest::Initialize()
 
     // create UBSHcomNetDriver
     NewEpHandler funcNewEndpoint = bind(&TransportSendLatTest::NewEndPoint, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+                                        std::placeholders::_2, std::placeholders::_3);
     ReqRecvHandler funcReqReceived = bind(&TransportSendLatTest::RequestReceived, this, std::placeholders::_1);
     mHelper.RegisterNewEPHandler(funcNewEndpoint);
     mHelper.RegisterReqRecvHandler(funcReqReceived);
@@ -141,5 +140,5 @@ bool TransportSendLatTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::TRANSPORT_SEND_LAT, TransportSendLatTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

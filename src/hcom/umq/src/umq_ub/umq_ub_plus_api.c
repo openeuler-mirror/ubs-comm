@@ -14,6 +14,17 @@
 #include "umq_ub_impl.h"
 #include "umq_ub_api.h"
 #include "umq_vlog.h"
+#include "umq_symbol_private.h"
+
+static int umq_tp_ub_plus_symbol_load(void)
+{
+    umq_symbol_urma_t *sym = umq_symbol_urma();
+    if (umq_symbol_urma_load(sym) != 0) {
+        UMQ_VLOG_ERR(VLOG_UMQ, "Failed to load urma/uvs symbols\n");
+        return -1;
+    }
+    return 0;
+}
 
 static uint8_t *umq_tp_ub_plus_init(umq_init_cfg_t *cfg)
 {
@@ -25,8 +36,15 @@ static uint8_t *umq_tp_ub_plus_init(umq_init_cfg_t *cfg)
 
     int ret = umq_ub_register_memory_impl(umq_io_buf_addr(), umq_io_buf_size());
     if (ret != UMQ_SUCCESS) {
-        UMQ_VLOG_ERR(VLOG_UMQ, "register memory failed, status: %u\n", ret);
+        UMQ_VLOG_ERR(VLOG_UMQ, "register memory failed, status: %d\n", ret);
         goto UNINIT;
+    }
+    if (cfg->buf_pool_cfg.enable_tiny_pool) {
+        ret = umq_ub_register_tiny_memory_impl();
+        if (ret != UMQ_SUCCESS) {
+            UMQ_VLOG_ERR(VLOG_UMQ, "register tiny memory failed, status: %d\n", ret);
+            goto UNINIT_MEM;
+        }
     }
     ret = umq_ub_huge_qbuf_pool_init(cfg);
     if (ret != UMQ_SUCCESS) {
@@ -126,9 +144,9 @@ static void umq_tp_ub_plus_notify(uint64_t umqh_tp)
     return;
 }
 
-static int umq_tp_ub_plus_rearm_interrupt(uint64_t umqh_tp, bool solicated, umq_interrupt_option_t *option)
+static int umq_tp_ub_plus_rearm_interrupt(uint64_t umqh_tp, bool solicited, umq_interrupt_option_t *option)
 {
-    return umq_ub_rearm_impl(umqh_tp, solicated, option);
+    return umq_ub_rearm_impl(umqh_tp, solicited, option);
 }
 
 static int umq_tp_ub_plus_wait_interrupt(uint64_t wait_umqh_tp, int time_out, umq_interrupt_option_t *option)
@@ -161,14 +179,14 @@ static int umq_tp_ub_plus_dev_add_impl(umq_trans_info_t *trans_info, umq_init_cf
     return umq_ub_dev_add_impl(trans_info, cfg);
 }
 
-static int umq_tp_ub_plus_get_route_list_impl(const umq_route_t *route, umq_route_list_t *route_list)
+static int umq_tp_ub_plus_get_route_list_impl(const umq_route_key_t *route_key, umq_route_list_t *route_list)
 {
-    return umq_ub_get_route_list_impl(route, route_list);
+    return umq_ub_get_route_list_impl(route_key, route_list);
 }
 
 static int umq_tp_ub_plus_buf_headroom_reset(umq_buf_t *qbuf, uint16_t headroom_size)
 {
-    if (qbuf->mempool_id == UMQ_QBUF_DEFAULT_MEMPOOL_ID) {
+    if (!is_huge_mempool_pool(qbuf->mempool_id)) {
         return umq_qbuf_headroom_reset(qbuf, headroom_size);
     } else {
         return umq_huge_qbuf_headroom_reset(qbuf, headroom_size);
@@ -204,9 +222,29 @@ static int umq_tp_ub_plus_cfg_get(uint64_t umqh_tp, umq_cfg_get_t *cfg)
     return umq_ub_cfg_get_impl(umqh_tp, cfg);
 }
 
+static int umq_tp_ub_plus_transport_pool_eventfd_get(void)
+{
+    return umq_ub_transport_pool_eventfd_get_impl();
+}
+
+static int umq_tp_ub_plus_transport_pool_resource_modify(uint64_t umqh_tp, uint32_t tp_handle_idx)
+{
+    return umq_ub_transport_pool_resource_modify_impl(umqh_tp, tp_handle_idx);
+}
+
+static uint32_t umq_tp_ub_plus_transport_pool_resource_create(uint64_t umqh_tp, umq_tp_resource_create_option_t *option)
+{
+    return umq_ub_transport_pool_resource_create_impl(umqh_tp, option);
+}
+
+static int umq_tp_ub_plus_transport_pool_resource_destroy(uint64_t umqh_tp, uint32_t tp_handle_idx)
+{
+    return umq_ub_transport_pool_resource_destroy_impl(umqh_tp, tp_handle_idx);
+}
 static umq_ops_t g_umq_ub_plus_ops = {
     .mode = UMQ_TRANS_MODE_UB_PLUS,
     // control plane api
+    .umq_tp_load_symbol = umq_tp_ub_plus_symbol_load,
     .umq_tp_init = umq_tp_ub_plus_init,
     .umq_tp_uninit = umq_tp_ub_plus_uninit,
     .umq_tp_create = umq_tp_ub_plus_create,
@@ -227,6 +265,10 @@ static umq_ops_t g_umq_ub_plus_ops = {
     .umq_tp_dev_info_list_get = umq_tp_ub_plus_dev_info_list_get,
     .umq_tp_dev_info_list_free = umq_tp_ub_plus_dev_info_list_free,
     .umq_tp_cfg_get = umq_tp_ub_plus_cfg_get,
+    .umq_tp_transport_pool_eventfd_get = umq_tp_ub_plus_transport_pool_eventfd_get,
+    .umq_tp_transport_pool_resource_modify = umq_tp_ub_plus_transport_pool_resource_modify,
+    .umq_tp_transport_pool_resource_create = umq_tp_ub_plus_transport_pool_resource_create,
+    .umq_tp_transport_pool_resource_destroy = umq_tp_ub_plus_transport_pool_resource_destroy,
 
     // datapath plane api
     .umq_tp_buf_alloc = umq_tp_ub_plus_buf_alloc,
@@ -246,4 +288,3 @@ umq_ops_t *umq_ub_plus_ops_get(void)
 {
     return &g_umq_ub_plus_ops;
 }
-

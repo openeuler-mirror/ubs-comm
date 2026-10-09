@@ -3,14 +3,14 @@
  */
 #include "securec.h"
 #include "common/perf_test_logger.h"
-#include "test_case/transport/transport_helper.h"
+#include "securec.h"
 
 namespace hcom {
 namespace perftest {
 using namespace ock::hcom;
 
 static int NewEndPoint(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                       const std::string &payload)
 {
     return 0;
 }
@@ -179,5 +179,5 @@ bool TransportHelper::CreateMemoryRegion(MrInfo &mrInfo)
     LOG_DEBUG("register addr: " << mrInfo.lAddress << ", lKey = " << mrInfo.lKey << ", size = " << MAX_MESSAGE_SIZE);
     return true;
 }
-}
-}
+} // namespace perftest
+} // namespace hcom

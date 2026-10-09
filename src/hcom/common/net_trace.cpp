@@ -185,8 +185,8 @@ void NetTrace::Initialize()
 {
     uint32_t stringArraySize = sizeof(g_idToString) / sizeof(g_idToString[0]);
     if (NN_UNLIKELY(stringArraySize != MAX_MODULE_ID_INNER)) {
-        NN_LOG_WARN("Id to string table size " << stringArraySize << " different from trace size " <<
-            MAX_MODULE_ID_INNER);
+        NN_LOG_WARN("Id to string table size " << stringArraySize << " different from trace size "
+                                               << MAX_MODULE_ID_INNER);
     }
     for (uint32_t traceId = 0; traceId < MAX_MODULE_ID_INNER; traceId++) {
         if (traceId < stringArraySize) {
@@ -244,5 +244,5 @@ void NetTrace::HtraceInit(const std::string &name)
     }
     EnableHtrace(gEnableHtrace);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

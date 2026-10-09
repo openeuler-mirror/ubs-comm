@@ -13,18 +13,18 @@
 #ifndef HTRACE_MSG_H
 #define HTRACE_MSG_H
 
+#include <unistd.h>
 #include <cstring>
+#include <iomanip>
 #include <ios>
 #include <ostream>
-#include <string>
-#include <unistd.h>
-#include <vector>
 #include <sstream>
-#include <iomanip>
-#include "rpc_msg.h"
-#include "htracer_log.h"
-#include "hcom/hcom_num_def.h"
+#include <string>
+#include <vector>
 #include "hcom/hcom_err.h"
+#include "hcom/hcom_num_def.h"
+#include "htracer_log.h"
+#include "rpc_msg.h"
 #include "securec.h"
 
 #define TRACE_INFO_MAX_LEN 63
@@ -33,7 +33,8 @@ using namespace ock::hcom;
 
 constexpr uint32_t LOG_PATH_LENGTH = 260;
 
-enum MessageOpcode {
+enum MessageOpcode
+{
     TRACE_OP_PING = 0,
     TRACE_OP_QUERY = 1,
     TRACE_OP_ENABLE_TRACE = 2,
@@ -47,7 +48,9 @@ struct HandlerConfPara {
     char reserved[1];
     char logPath[LOG_PATH_LENGTH];
     HandlerConfPara(bool enable1, bool enable2, bool enable3, const std::string &path)
-        : enable(enable1), enableTp(enable2), enableLog(enable3)
+        : enable(enable1),
+          enableTp(enable2),
+          enableLog(enable3)
     {
         if (path.size() < sizeof(logPath) && (strcpy_s(logPath, path.length() + 1, path.c_str()) != 0)) {
             LOG_ERR("Failed to strcpy logPath");
@@ -74,7 +77,7 @@ struct TTraceInfo {
         }
     }
 
-    void operator += (const TTraceInfo &other)
+    void operator+=(const TTraceInfo &other)
     {
         begin += other.begin;
         goodEnd += other.goodEnd;
@@ -88,7 +91,8 @@ struct TTraceInfo {
         total += other.total;
     }
 
-    enum TracePointTimeUnit {
+    enum TracePointTimeUnit
+    {
         NANO_SECOND,
         MICRO_SECOND,
         MILLI_SECOND,
@@ -98,19 +102,9 @@ struct TTraceInfo {
 
     std::string ToString(TracePointTimeUnit unit = MICRO_SECOND) const
     {
-        static uint64_t timeUnitStep[TP_TIME_UNIT] = {
-            1,
-            NN_NO1000,
-            NN_NO1000000,
-            NN_NO1000000000
-        };
+        static uint64_t timeUnitStep[TP_TIME_UNIT] = {1, NN_NO1000, NN_NO1000000, NN_NO1000000000};
 
-        static std::string timeUnitName[TP_TIME_UNIT] = {
-            "ns",
-            "us",
-            "ms",
-            "s"
-        };
+        static std::string timeUnitName[TP_TIME_UNIT] = {"ns", "us", "ms", "s"};
         std::string str;
         std::ostringstream os(str);
         os.flags(std::ios::fixed);
@@ -118,14 +112,14 @@ struct TTraceInfo {
         auto unitStep = timeUnitStep[unit];
         auto unitName = timeUnitName[unit];
         os << "[" << std::left << std::setw(NN_NO50) << name << "]"
-           << "\t" << std::left << std::setw(NN_NO15) << begin << "\t" << std::left << std::setw(NN_NO15) << goodEnd <<
-            "\t" << std::left << std::setw(NN_NO15) << badEnd << "\t" << std::left << std::setw(NN_NO15) <<
-            ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0) << "\t" << std::left << std::setw(NN_NO15) <<
-            (min == UINT64_MAX ? 0 : ((double)min / unitStep)) << "\t" << std::left << std::setw(NN_NO15) <<
-            (double)max / unitStep << "\t" << std::left << std::setw(NN_NO15) <<
-            (goodEnd == 0 ? 0 : (double)total / goodEnd / unitStep) << "\t" << std::left << std::setw(NN_NO15) <<
-            (double)total / unitStep << "\t" << std::left << std::setw(NN_NO15) <<
-            (latencyQuentile > 0 ? std::to_string(latencyQuentile) : "OFF");
+           << "\t" << std::left << std::setw(NN_NO15) << begin << "\t" << std::left << std::setw(NN_NO15) << goodEnd
+           << "\t" << std::left << std::setw(NN_NO15) << badEnd << "\t" << std::left << std::setw(NN_NO15)
+           << ((begin > goodEnd - badEnd) ? (begin - goodEnd - badEnd) : 0) << "\t" << std::left << std::setw(NN_NO15)
+           << (min == UINT64_MAX ? 0 : ((double)min / unitStep)) << "\t" << std::left << std::setw(NN_NO15)
+           << (double)max / unitStep << "\t" << std::left << std::setw(NN_NO15)
+           << (goodEnd == 0 ? 0 : (double)total / goodEnd / unitStep) << "\t" << std::left << std::setw(NN_NO15)
+           << (double)total / unitStep << "\t" << std::left << std::setw(NN_NO15)
+           << (latencyQuentile > 0 ? std::to_string(latencyQuentile) : "OFF");
         return os.str();
     }
 

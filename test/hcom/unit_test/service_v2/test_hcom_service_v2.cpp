@@ -9,14 +9,14 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <cstdint>
 #include <gtest/gtest.h>
+#include <cstdint>
 #include <mockcpp/mockcpp.hpp>
 
 #include "hcom.h"
-#include "service_channel_imp.h"
-#include "service_callback.h"
 #include "net_rdma_async_endpoint.h"
+#include "service_callback.h"
+#include "service_channel_imp.h"
 #include "under_api/urma/urma_api_wrapper.h"
 
 namespace ock {
@@ -28,8 +28,7 @@ public:
     virtual void TearDown(void);
 };
 
-void TestHcomServiceV2::SetUp()
-{}
+void TestHcomServiceV2::SetUp() {}
 
 void TestHcomServiceV2::TearDown()
 {
@@ -156,7 +155,7 @@ TEST_F(TestHcomServiceV2, TestHexStringToBuff2)
     EXPECT_FALSE(HexStringToBuff("1A2B3C5", NN_NO4, buff2));
 
     uint8_t buff3[NN_NO4] = {0};
-    std::string invalidInput = "1G";  // 'G' 不是有效的十六进制字符
+    std::string invalidInput = "1G"; // 'G' 不是有效的十六进制字符
     EXPECT_FALSE(HexStringToBuff(invalidInput, NN_NO4, buff3));
 }
 
@@ -192,7 +191,7 @@ TEST_F(TestHcomServiceV2, TestDeserialize)
     std::string payload = "00000000000000000000000000000000"
                           "00000000000000000000000000000000"
                           "00000000000000000000000000000000"
-                          "0000000000000000DEADBEEF";  // 大于sizeof(SerConnInfo)*2
+                          "0000000000000000DEADBEEF"; // 大于sizeof(SerConnInfo)*2
     std::string userPayload;
 
     MOCKER_CPP(&SerConnInfo::Validate).stubs().will(returnValue(true));
@@ -206,13 +205,13 @@ TEST_F(TestHcomServiceV2, TestDeserializeFail)
     std::string userPayload;
     EXPECT_EQ(SerConnInfo::Deserialize(payload1, connInfo, userPayload), SER_INVALID_PARAM);
 
-    std::string payload2 = "1A2B";  // 长度不足 sizeof(SerConnInfo) * 2
+    std::string payload2 = "1A2B"; // 长度不足 sizeof(SerConnInfo) * 2
     EXPECT_EQ(SerConnInfo::Deserialize(payload2, connInfo, userPayload), SER_INVALID_PARAM);
 
-    std::string payload3 = "1A2B3C4DGG";  // 包含无效字符 'GG'
+    std::string payload3 = "1A2B3C4DGG"; // 包含无效字符 'GG'
     EXPECT_EQ(SerConnInfo::Deserialize(payload3, connInfo, userPayload), SER_INVALID_PARAM);
 
-    std::string payload4 = "00000000FFFFFFFF0000000000000000";  // CRC 校验失败
+    std::string payload4 = "00000000FFFFFFFF0000000000000000"; // CRC 校验失败
     EXPECT_EQ(SerConnInfo::Deserialize(payload4, connInfo, userPayload), SER_INVALID_PARAM);
 }
 
@@ -363,17 +362,15 @@ TEST_F(TestHcomServiceV2, TestMemoryRegion)
 
 TEST_F(TestHcomServiceV2, TestGetServiceTransNeedPostedCall)
 {
-    SerTransContext ctxData {};
-    char *ctx = reinterpret_cast<char*>(&ctxData);
+    SerTransContext ctxData{};
+    char *ctx = reinterpret_cast<char *>(&ctxData);
     EXPECT_EQ(GetServiceTransNeedPostedCall(ctx), true);
 }
 
 TEST_F(TestHcomServiceV2, TestIsNeedInvokeCallback)
 {
     UBSHcomRequestContext ctx{};
-    MOCKER_CPP(&GetServiceTransNeedPostedCall)
-        .stubs()
-        .will(returnValue(true));
+    MOCKER_CPP(&GetServiceTransNeedPostedCall).stubs().will(returnValue(true));
     EXPECT_EQ(IsNeedInvokeCallback(ctx), false);
     ctx.mResult = 1;
     ctx.mOpType = UBSHcomRequestContext::NN_SENT;
@@ -395,5 +392,5 @@ TEST_F(TestHcomServiceV2, TestSetTraceIdInner)
     EXPECT_NO_FATAL_FAILURE(SetTraceIdInner(traceId));
 #endif
 }
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

@@ -14,13 +14,13 @@
 #define CMD_HELPER
 
 #include <csignal>
-#include <vector>
 #include <map>
-#include <set>
 #include <mutex>
-#include "htracer_msg.h"
+#include <set>
+#include <vector>
 #include "hcom/hcom_err.h"
 #include "htracer_client.h"
+#include "htracer_msg.h"
 
 class ProcessInfo {
 public:

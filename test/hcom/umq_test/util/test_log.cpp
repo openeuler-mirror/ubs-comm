@@ -4,11 +4,12 @@
  * Description: urpc util test
  */
 #include "gtest/gtest.h"
-#include "urpc_lib_log.h"
 #include "urpc_framework_api.h"
 #include "urpc_framework_errno.h"
+#include "urpc_lib_log.h"
 
-TEST(UrpcLogTest, TestLevel) {
+TEST(UrpcLogTest, TestLevel)
+{
     urpc_log_level_t level = URPC_LOG_LEVEL_DEBUG;
     bool res = util_vlog_drop(urpc_lib_get_vlog_ctx(), (util_vlog_level_t)level);
     ASSERT_EQ(res, true);
@@ -28,11 +29,13 @@ TEST(UrpcLogTest, TestLevel) {
     ASSERT_EQ(ret, URPC_FAIL);
 }
 
-void default_output(int level, char *log_msg) {
-    (void) fprintf(stdout, "%s\n", log_msg);
+void default_output(int level, char *log_msg)
+{
+    (void)fprintf(stdout, "%s\n", log_msg);
 }
 
-TEST(UrpcLogTest, TestRegister) {
+TEST(UrpcLogTest, TestRegister)
+{
     urpc_log_config_t log_cfg;
     memset(&log_cfg, 0, sizeof(log_cfg));
     log_cfg.log_flag = URPC_LOG_FLAG_FUNC;

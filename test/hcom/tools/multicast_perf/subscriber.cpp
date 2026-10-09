@@ -1,19 +1,20 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  */
-#include <thread>
-#include <unistd.h>
 #include <getopt.h>
+#include <unistd.h>
 #include <cstdio>
+#include <thread>
 #include "securec.h"
 
-#include "multicast/multicast_subscriber_service.h"
 #include "multicast/multicast_subscriber.h"
+#include "multicast/multicast_subscriber_service.h"
 
 using namespace ock::hcom;
 int g_userChar = 0;
 std::string g_oobIp = "";
 uint16_t g_oobPort = 9981;
+uint16_t g_driverProtocol = 0;
 
 std::string g_ipSeg = "192.168.100.0/24";
 int32_t g_dataSize = 64;
@@ -36,7 +37,7 @@ void BrokenSubscriber(const UBSHcomNetEndpointPtr &ep)
 }
 
 static int DefaultNewEp(const std::string &ipPort, const ock::hcom::UBSHcomNetEndpointPtr &ep,
-    const std::string &payload)
+                        const std::string &payload)
 {
     return 0;
 }
@@ -76,7 +77,7 @@ bool CertCallback(const std::string &name, std::string &value)
 }
 
 bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyPass, int &len,
-    UBSHcomTLSEraseKeypass &erase)
+                        UBSHcomTLSEraseKeypass &erase)
 {
     static char content[] = "keypass";
     keyPass = reinterpret_cast<void *>(content);
@@ -88,7 +89,7 @@ bool PrivateKeyCallback(const std::string &name, std::string &value, void *&keyP
 }
 
 bool CACallback(const std::string &name, std::string &caPath, std::string &crlPath,
-    UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
+                UBSHcomPeerCertVerifyType &peerCertVerifyType, UBSHcomTLSCertVerifyCallback &cb)
 {
     caPath = g_certPath + "/CA/cacert.pem";
     std::string crlFile = g_certPath + "/CA/ca.crl";
@@ -115,6 +116,9 @@ bool CreateSubscriberService()
     options.publisherWrkGroupNo = g_serverGroupNo;
     options.enableTls = g_enableTls;
     options.cipherSuite = g_cipherSuite;
+    if (g_driverProtocol == 1) {
+        options.protocol = UBSHcomNetDriverProtocol::TCP;
+    }
 
     g_subscriberService = ock::hcom::SubscriberService::Create("Subscriber", options);
     if (g_subscriberService == nullptr) {
@@ -122,17 +126,19 @@ bool CreateSubscriberService()
         return false;
     }
 
-    g_subscriberService->GetConfig().SetDeviceIpMask({ g_ipSeg });
+    g_subscriberService->GetConfig().SetDeviceIpMask({g_ipSeg});
     g_subscriberService->RegisterRecvHandler(ReceivedRequest);
     g_subscriberService->RegisterBrokenHandler(BrokenSubscriber);
 
     if (g_enableTls) {
-        g_subscriberService->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1,
-            std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+        g_subscriberService->RegisterTLSCaCallback(std::bind(&CACallback, std::placeholders::_1, std::placeholders::_2,
+                                                             std::placeholders::_3, std::placeholders::_4,
+                                                             std::placeholders::_5));
         g_subscriberService->RegisterTLSCertificationCallback(
             std::bind(&CertCallback, std::placeholders::_1, std::placeholders::_2));
         g_subscriberService->RegisterTLSPrivateKeyCallback(std::bind(&PrivateKeyCallback, std::placeholders::_1,
-            std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+                                                                     std::placeholders::_2, std::placeholders::_3,
+                                                                     std::placeholders::_4, std::placeholders::_5));
     }
     NN_LOG_INFO("SubscriberService Created!");
     return true;
@@ -214,18 +220,17 @@ void Test()
 int main(int argc, char *argv[])
 {
     struct option options[] = {
-        {"ip", required_argument, nullptr, 'i'},
-        {"port", required_argument, nullptr, 'p'},
-        {"size", required_argument, nullptr, 's'},
-        {"cpuId", required_argument, nullptr, 'c'},
-        {"TLS enabled", required_argument, nullptr, 'T'},
-        {"cipherSuite", required_argument, nullptr, 'C'},
-        {nullptr, 0, nullptr, 0},
+        {"ip", required_argument, nullptr, 'i'},          {"port", required_argument, nullptr, 'p'},
+        {"driver", required_argument, nullptr, 'd'},      {"size", required_argument, nullptr, 's'},
+        {"cpuId", required_argument, nullptr, 'c'},       {"TLS enabled", required_argument, nullptr, 'T'},
+        {"cipherSuite", required_argument, nullptr, 'C'}, {nullptr, 0, nullptr, 0},
     };
 
-    const char *usage = "usage\n"
+    const char *usage =
+        "usage\n"
         "        -i, --ip,                     coord server ip mask, e.g. 10.175.118.1;\n"
         "        -p, --port,                   coord server port, by default 9981; jetty id for UBC, e.g. 998\n"
+        "        -d, --driver,                 multicast driver protocol, 0 means RDMA, 1 means TCP\n"
         "        -s, --size,                   max data size\n"
         "        -c, --cpuId,                  cpu to bind\n"
         "        -g, --serverWkrGroupNo,       server worker group no, default is 0\n"
@@ -236,7 +241,7 @@ int main(int argc, char *argv[])
     int ret = 0;
     int index = 0;
 
-    std::string str = "i:p:s:c:g:T:C:";
+    std::string str = "i:p:d:s:c:g:T:C:";
     while ((ret = getopt_long(argc, argv, str.c_str(), options, &index)) != -1) {
         switch (ret) {
             case 'i':
@@ -245,6 +250,9 @@ int main(int argc, char *argv[])
                 break;
             case 'p':
                 g_oobPort = static_cast<uint16_t>(strtoul(optarg, nullptr, 0));
+                break;
+            case 'd':
+                g_driverProtocol = static_cast<uint16_t>(strtoul(optarg, nullptr, 0));
                 break;
             case 's':
                 g_dataSize = static_cast<int32_t>(strtoul(optarg, nullptr, 0));

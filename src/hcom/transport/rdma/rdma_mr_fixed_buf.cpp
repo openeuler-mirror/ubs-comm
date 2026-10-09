@@ -17,7 +17,7 @@ namespace ock {
 namespace hcom {
 
 RResult RDMAMemoryRegionFixedBuffer::Create(const std::string &name, RDMAContext *ctx, uint32_t singleSegSize,
-    uint32_t segCount, RDMAMemoryRegionFixedBuffer *&buf)
+                                            uint32_t segCount, RDMAMemoryRegionFixedBuffer *&buf)
 {
     auto tmp = new (std::nothrow) RDMAMemoryRegionFixedBuffer(name, ctx, singleSegSize, segCount);
     if (tmp == nullptr) {
@@ -50,6 +50,6 @@ void RDMAMemoryRegionFixedBuffer::UnInitialize()
 {
     RDMAMemoryRegion::UnInitialize();
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif

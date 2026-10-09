@@ -1,9 +1,9 @@
 // Copyright (c) Huawei Technologies Co., Ltd. 2021-2025. All rights reserved.
 // Author: bao
 
+#include "net_util.h"
 #include <fstream>
 #include "net_common.h"
-#include "net_util.h"
 
 namespace ock {
 namespace hcom {
@@ -70,7 +70,7 @@ uint32_t GenerateSecureRandomUint32()
     if (!urandom.is_open()) {
         NN_LOG_ERROR("Failed to open urandom");
     }
-    urandom.read(reinterpret_cast<char*>(&rand), sizeof(uint32_t));
+    urandom.read(reinterpret_cast<char *>(&rand), sizeof(uint32_t));
     if (!urandom) {
         urandom.close();
         NN_LOG_ERROR("Failed to read from urandom");

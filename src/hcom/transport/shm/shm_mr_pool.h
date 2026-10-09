@@ -67,7 +67,7 @@ private:
     ShmHandlePtr mMrHandle = nullptr;
     static std::atomic<uint32_t> shmLocalKeyIndex;
 };
-}
-}
+} // namespace hcom
+} // namespace ock
 
 #endif // OCK_HCOM_SHM_MEMORY_REGION_H_23234

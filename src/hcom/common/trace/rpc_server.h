@@ -13,11 +13,11 @@
 #ifndef RPC_SERVER_H
 #define RPC_SERVER_H
 
-#include <string>
 #include <stdint.h>
 #include <functional>
-#include "rpc_msg.h"
+#include <string>
 #include "hcom_err.h"
+#include "rpc_msg.h"
 
 namespace ock {
 namespace hcom {
@@ -56,6 +56,6 @@ private:
     uint16_t mPort = 0xFFFF;
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // RPC_SERVER_H

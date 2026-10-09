@@ -4,6 +4,7 @@
 #ifndef HCOM_PERF_TEST_SERVICE_WRITE_LAT_H
 #define HCOM_PERF_TEST_SERVICE_WRITE_LAT_H
 #include <semaphore.h>
+#include "common/perf_test_logger.h"
 #include "hcom/hcom.h"
 #include "test_case/perf_test_base.h"
 #include "test_case/service_v2/service_helper.h"
@@ -22,20 +23,20 @@ private:
 
     inline int DoPostWrite()
     {
-        volatile uint64_t *pollData = reinterpret_cast<uint64_t *>(mPollMrInfo.lAddress);
-        volatile uint64_t *postData = reinterpret_cast<uint64_t *>(mPostMrInfo.lAddress);
+        PerfTestContext *ctx = GetPerfTestContext();
+        volatile uint64_t *pollData = reinterpret_cast<uint64_t *>(mPollMrInfo.lAddress + ctx->mSize - 1);
+        volatile uint64_t *postData = reinterpret_cast<uint64_t *>(mPostMrInfo.lAddress + ctx->mSize - 1);
         uint64_t num = 0;
         *pollData = num;
         *postData = num;
-        PerfTestContext *ctx = GetPerfTestContext();
         ctx->cnt = 0;
         rcnt = 0;
         ccnt.store(0);
         while (ctx->cnt < ctx->mIterations || rcnt < ctx->mIterations ||
-            static_cast<uint64_t>(ccnt.load()) < ctx->mIterations) {
+               static_cast<uint64_t>(ccnt.load()) < ctx->mIterations) {
             if (rcnt < ctx->mIterations && !(ctx->cnt < 1 && !mCfg.GetIsServer())) {
                 rcnt++;
-                while ((*pollData != rcnt) && ctx->cnt < ctx->mIterations)
+                while ((*pollData != rcnt % UINT8_MAX) && ctx->cnt < ctx->mIterations)
                     ;
             }
             if (ctx->cnt < ctx->mIterations) {
@@ -48,8 +49,8 @@ private:
                     sem_post(&mSem);
                     return -1;
                 }
-                *postData = ctx->cnt;
-                ctx->tposted[mCtx->cnt - 1] = ock::hcom::MONOTONIC_TIME_NS();
+                *postData = ctx->cnt % UINT8_MAX;
+                ctx->tposted[ctx->cnt - 1] = ock::hcom::MONOTONIC_TIME_NS();
                 int res = mCh->Put(mReq, newCallback);
                 if (res != 0) {
                     LOG_ERROR("failed to write to server");
@@ -99,11 +100,11 @@ private:
     RegMrInfo mPollMrInfo;
     RegMrInfo mPeerMrInfo;
     uint64_t rcnt = 0;
-    std::atomic<int> ccnt{ 0 };
-    std::atomic<bool> isConnect{ false };
+    std::atomic<int> ccnt{0};
+    std::atomic<bool> isConnect{false};
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

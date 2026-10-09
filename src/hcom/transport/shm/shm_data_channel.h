@@ -20,7 +20,8 @@ namespace hcom {
 /*
  * @brief buck state
  */
-enum ShmBuckState : uint8_t {
+enum ShmBuckState : uint8_t
+{
     HCOM_SHM_FREE = 0,
     HCOM_SHM_OCCUPIED = 1,
 };
@@ -68,11 +69,20 @@ struct ShmDataChannelOptions {
 
     ShmDataChannelOptions() = default;
     ShmDataChannelOptions(uint64_t i, uint32_t buckS, uint16_t bCnt, bool own)
-        : buckSize(buckS), buckCount(bCnt), isOwner(own), id(i)
-    {}
+        : buckSize(buckS),
+          buckCount(bCnt),
+          isOwner(own),
+          id(i)
+    {
+    }
     ShmDataChannelOptions(uint64_t i, uint32_t buckS, uint16_t bCnt, int fd, bool own)
-        : buckSize(buckS), mFd(fd), buckCount(bCnt), isOwner(own), id(i)
-    {}
+        : buckSize(buckS),
+          mFd(fd),
+          buckCount(bCnt),
+          isOwner(own),
+          id(i)
+    {
+    }
 
     std::string ToString() const
     {
@@ -99,8 +109,10 @@ public:
 
 public:
     ShmDataChannel(const std::string &name, const ShmDataChannelOptions &opt,
-        UBSHcomNetAtomicState<ShmChannelState> *state)
-        : mOptions(opt), mName(name), mState(state)
+                   UBSHcomNetAtomicState<ShmChannelState> *state)
+        : mOptions(opt),
+          mName(name),
+          mState(state)
     {
         OBJ_GC_INCREASE(ShmDataChannel);
     }
@@ -207,8 +219,8 @@ public:
      * @return 0 if occupied
      *
      */
-    inline HResult TryOccupyWithWait(
-        uintptr_t &address, uint64_t &offset, uint16_t waitPeriodUs = NN_NO100, int32_t timeoutSecond = -1)
+    inline HResult TryOccupyWithWait(uintptr_t &address, uint64_t &offset, uint16_t waitPeriodUs = NN_NO100,
+                                     int32_t timeoutSecond = -1)
     {
         if (NN_UNLIKELY(!mInited)) {
             NN_LOG_ERROR("Failed to occupy one buck from shm data channel " << mName << ", as not initialized");
@@ -343,6 +355,6 @@ private:
     std::string mName;
     UBSHcomNetAtomicState<ShmChannelState> *mState = nullptr;
 };
-}  // namespace hcom
-}  // namespace ock
-#endif  // OCK_HCOM_SHM_DATA_CHANNEL_H
+} // namespace hcom
+} // namespace ock
+#endif // OCK_HCOM_SHM_DATA_CHANNEL_H

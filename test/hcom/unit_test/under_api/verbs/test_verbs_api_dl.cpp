@@ -13,9 +13,9 @@
 #include <gtest/gtest.h>
 #include <mockcpp/mockcpp.hpp>
 
+#include "../../common/net_common.h"
 #include "hcom_log.h"
 #include "verbs_api_dl.h"
-#include "../../common/net_common.h"
 namespace ock {
 namespace hcom {
 
@@ -59,5 +59,5 @@ TEST_F(TestVerbsApiDl, TestLoadVerbsApiFail)
     }
     free(ptr1);
 }
-}
-}
+} // namespace hcom
+} // namespace ock

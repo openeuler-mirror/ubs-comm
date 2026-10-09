@@ -1,12 +1,12 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
-#include <functional>
-#include "securec.h"
-
-#include "common/perf_test_logger.h"
-#include "test_case/perf_test_factory.h"
 #include "test_case/service_v2/service_write_lat_test.h"
+
+#include <functional>
+#include "common/perf_test_logger.h"
+#include "securec.h"
+#include "test_case/perf_test_factory.h"
 
 namespace hcom {
 namespace perftest {
@@ -14,7 +14,7 @@ using namespace ock::hcom;
 constexpr uint16_t OP_SERVICE_WRITE_LAT = 205;
 
 int ServiceWriteLatTest::NewChannel(const std::string &ipPort, const ock::hcom::UBSHcomChannelPtr &ch,
-    const std::string &payload)
+                                    const std::string &payload)
 {
     mCh = ch;
     isConnect.store(true);
@@ -64,11 +64,11 @@ bool ServiceWriteLatTest::Initialize()
 
     // create NetService
     UBSHcomServiceNewChannelHandler funcNewChannel = bind(&ServiceWriteLatTest::NewChannel, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3);
+                                                          std::placeholders::_2, std::placeholders::_3);
     UBSHcomServiceRecvHandler funcReqReceived =
         bind(&ServiceWriteLatTest::RequestReceived, this, std::placeholders::_1);
-    UBSHcomServiceChannelBrokenHandler funcChBroken = bind(&ServiceWriteLatTest::ChannelBroken, this,
-        std::placeholders::_1);
+    UBSHcomServiceChannelBrokenHandler funcChBroken =
+        bind(&ServiceWriteLatTest::ChannelBroken, this, std::placeholders::_1);
 
     mHelper.RegisterRecvHandler(funcReqReceived);
     mHelper.RegisterNewChHandler(funcNewChannel);
@@ -183,5 +183,5 @@ bool ServiceWriteLatTest::RunTest(PerfTestContext *ctx)
 }
 
 REGIST_PERF_TEST_CREATOR(PERF_TEST_TYPE::SERVICE_WRITE_LAT, ServiceWriteLatTest);
-}
-}
+} // namespace perftest
+} // namespace hcom

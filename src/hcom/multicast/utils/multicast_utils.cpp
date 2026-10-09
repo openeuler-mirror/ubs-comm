@@ -7,7 +7,7 @@
 namespace ock {
 namespace hcom {
 
-std::string MulticastUtils::GetFilteredDeviceIP(const std::string& ipMask)
+std::string MulticastUtils::GetFilteredDeviceIP(const std::string &ipMask)
 {
     std::string res;
     std::vector<std::string> filterVec;
@@ -50,12 +50,12 @@ bool MulticastUtils::ParseUrl(const std::string &url, std::string &ip, uint16_t 
 
     std::string tmpUrl = url.substr(pos + separator.size());
     if (NN_UNLIKELY(!NetFunc::NN_ConvertIpAndPort(tmpUrl, ip, port))) {
-        NN_LOG_ERROR("Invalid url: " << url <<" should be like 127.0.0.1:9981");
+        NN_LOG_ERROR("Invalid url: " << url << " should be like 127.0.0.1:9981");
         return false;
     }
 
     return true;
 }
 
-}
-}
+} // namespace hcom
+} // namespace ock

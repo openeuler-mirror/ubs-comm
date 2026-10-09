@@ -53,7 +53,7 @@ private:
     MrInfo mPeerMrInfo;
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif // HCOM_TRANSPORT_WRITE_BW_TEST_H

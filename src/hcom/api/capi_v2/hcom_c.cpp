@@ -19,19 +19,19 @@
 #include "securec.h"
 
 #include "hcom_def.h"
+#include "hcom_def_inner_c.h"
 #include "hcom_err.h"
 #include "hcom_log.h"
-#include "hcom_def_inner_c.h"
 #include "net_load_balance.h"
 
 using namespace ock::hcom;
 
-#define VALIDATE_DRIVER(driver)                                                     \
-    do {                                                                            \
-        if (NN_UNLIKELY((driver) == 0)) {                                           \
-            NN_LOG_ERROR("Invalid param, driver must be correct driver address");   \
-            return NN_INVALID_PARAM;                                                \
-        }                                                                           \
+#define VALIDATE_DRIVER(driver)                                                   \
+    do {                                                                          \
+        if (NN_UNLIKELY((driver) == 0)) {                                         \
+            NN_LOG_ERROR("Invalid param, driver must be correct driver address"); \
+            return NN_INVALID_PARAM;                                              \
+        }                                                                         \
     } while (0)
 
 #define VALIDATE_DRIVER_NO_RET(driver)                                            \
@@ -90,65 +90,65 @@ using namespace ock::hcom;
         }                                               \
     } while (0)
 
-#define VALIDATE_SEQ(seqNo)                             \
-    do {                                                \
-        if (NN_UNLIKELY((seqNo) == 0)) {                \
-            NN_LOG_ERROR("Invalid param, seqNo is 0");  \
-            return NN_INVALID_PARAM;                    \
-        }                                               \
+#define VALIDATE_SEQ(seqNo)                            \
+    do {                                               \
+        if (NN_UNLIKELY((seqNo) == 0)) {               \
+            NN_LOG_ERROR("Invalid param, seqNo is 0"); \
+            return NN_INVALID_PARAM;                   \
+        }                                              \
     } while (0)
 
-#define VALIDATE_NAME_NO_RET(name)                                          \
-    do {                                                                    \
-        if (NN_UNLIKELY((name) == nullptr)) {                               \
-            NN_LOG_ERROR("Invalid param, name must be correct address");    \
-            return;                                                         \
-        }                                                                   \
+#define VALIDATE_NAME_NO_RET(name)                                       \
+    do {                                                                 \
+        if (NN_UNLIKELY((name) == nullptr)) {                            \
+            NN_LOG_ERROR("Invalid param, name must be correct address"); \
+            return;                                                      \
+        }                                                                \
     } while (0)
 
-#define VALIDATE_ALLOCATOR(allocator)                   \
-    do {                                                \
-        if (NN_UNLIKELY((allocator) == 0)) {            \
-            NN_LOG_ERROR("Invalid allocator ptr");      \
-            return NN_INVALID_PARAM;                    \
-        }                                               \
+#define VALIDATE_ALLOCATOR(allocator)              \
+    do {                                           \
+        if (NN_UNLIKELY((allocator) == 0)) {       \
+            NN_LOG_ERROR("Invalid allocator ptr"); \
+            return NN_INVALID_PARAM;               \
+        }                                          \
     } while (0)
 
-#define VALIDATE_OFFSET(offset)                         \
-    do {                                                \
-        if (NN_UNLIKELY((offset) == 0)) {               \
-            NN_LOG_ERROR("Invalid offset ptr");         \
-            return NN_INVALID_PARAM;                    \
-        }                                               \
+#define VALIDATE_OFFSET(offset)                 \
+    do {                                        \
+        if (NN_UNLIKELY((offset) == 0)) {       \
+            NN_LOG_ERROR("Invalid offset ptr"); \
+            return NN_INVALID_PARAM;            \
+        }                                       \
     } while (0)
 
-#define VALIDATE_SIZE(size)                             \
-    do {                                                \
-        if (NN_UNLIKELY((size) == 0)) {                 \
-            NN_LOG_ERROR("Invalid size ptr");           \
-            return NN_INVALID_PARAM;                    \
-        }                                               \
+#define VALIDATE_SIZE(size)                   \
+    do {                                      \
+        if (NN_UNLIKELY((size) == 0)) {       \
+            NN_LOG_ERROR("Invalid size ptr"); \
+            return NN_INVALID_PARAM;          \
+        }                                     \
     } while (0)
 
-#define VALIDATE_NOT_NULL(ptr, errorMsg)                \
-    do {                                                \
-        if (NN_UNLIKELY((ptr) == nullptr)) {            \
-            NN_LOG_ERROR(errorMsg);                     \
-            return NN_INVALID_PARAM;                    \
-        }                                               \
-    } while (0)                                         \
+#define VALIDATE_NOT_NULL(ptr, errorMsg)     \
+    do {                                     \
+        if (NN_UNLIKELY((ptr) == nullptr)) { \
+            NN_LOG_ERROR(errorMsg);          \
+            return NN_INVALID_PARAM;         \
+        }                                    \
+    } while (0)
 
-#define VALIDATE_DRIVER_GET_OOB_IP_AND_PORT_PARAM(driver, ipArray, portArray, length)               \
-    do {                                                                                            \
-        if (NN_UNLIKELY((driver) == 0)) {                                                           \
-            NN_LOG_ERROR("Invalid param, driver must be correct driver address");                   \
-            return false;                                                                           \
-        }                                                                                           \
-        if (NN_UNLIKELY((ipArray) == nullptr || (portArray) == nullptr || (length) == nullptr)) {   \
-            NN_LOG_ERROR("Invalid param, ipArray/portArray/length cann't be nullptr");              \
-            return false;                                                                           \
-        }                                                                                           \
-    } while (0)                                                                                     \
+#define VALIDATE_DRIVER_GET_OOB_IP_AND_PORT_PARAM(driver, ipArray, portArray, length)             \
+    do {                                                                                          \
+        if (NN_UNLIKELY((driver) == 0)) {                                                         \
+            NN_LOG_ERROR("Invalid param, driver must be correct driver address");                 \
+            return false;                                                                         \
+        }                                                                                         \
+        if (NN_UNLIKELY((ipArray) == nullptr || (portArray) == nullptr || (length) == nullptr)) { \
+            NN_LOG_ERROR("Invalid param, ipArray/portArray/length cann't be nullptr");            \
+            return false;                                                                         \
+        }                                                                                         \
+    } while (0)
 
 static int ChangeAllocatorType(ubs_hcom_memory_allocator_options *options, UBSHcomNetMemoryAllocatorOptions &out)
 {
@@ -200,7 +200,7 @@ inline UBSHcomNetDriverProtocol ChangeDriverTypeToDriverProto(ubs_hcom_driver_ty
 }
 
 int ubs_hcom_mem_allocator_create(ubs_hcom_memory_allocator_type t, ubs_hcom_memory_allocator_options *options,
-    ubs_hcom_memory_allocator *allocator)
+                                  ubs_hcom_memory_allocator *allocator)
 {
     if (NN_UNLIKELY(options == nullptr || allocator == nullptr)) {
         NN_LOG_ERROR("Invalid options " << options << " or allocator " << allocator);
@@ -265,7 +265,7 @@ int ubs_hcom_mem_allocator_get_free_size(ubs_hcom_memory_allocator allocator, ui
 }
 
 int ubs_hcom_mem_allocator_allocate(ubs_hcom_memory_allocator allocator, uint64_t size, uintptr_t *address,
-    uint64_t *key)
+                                    uint64_t *key)
 {
     VALIDATE_ALLOCATOR(allocator);
     VALIDATE_NOT_NULL(address, "Invalid out address");
@@ -410,7 +410,7 @@ bool ubs_hcom_driver_get_ipport(ubs_hcom_driver driver, char ***ipArray, uint16_
         **(portArray + i) = res[i].second;
     }
     // prepare ip result
-    *ipArray = static_cast<char**>(malloc(res.size() * sizeof(char *)));
+    *ipArray = static_cast<char **>(malloc(res.size() * sizeof(char *)));
     if (*ipArray == nullptr) {
         NN_LOG_ERROR("malloc ipArray failed!");
         ClearIpAndPortArray(ipArray, portArray, length);
@@ -418,7 +418,7 @@ bool ubs_hcom_driver_get_ipport(ubs_hcom_driver driver, char ***ipArray, uint16_
     }
     bzero(*ipArray, res.size() * sizeof(char *));
     for (int i = 0; i < static_cast<int>(res.size()); ++i) {
-        auto temp = static_cast<char*>(malloc(MAX_IP_LENGTH * sizeof(char)));
+        auto temp = static_cast<char *>(malloc(MAX_IP_LENGTH * sizeof(char)));
         if (temp == nullptr) {
             NN_LOG_ERROR("malloc ipArray[" << i << "] failed!");
             ClearIpAndPortArray(ipArray, portArray, length);
@@ -446,7 +446,7 @@ void ubs_hcom_driver_set_udsname(ubs_hcom_driver driver, const char *name)
 void ubs_hcom_driver_add_uds_opt(ubs_hcom_driver driver, ubs_hcom_driver_uds_listen_opts option)
 {
     VALIDATE_DRIVER_NO_RET(driver);
-    UBSHcomNetOobUDSListenerOptions innerOpt {};
+    UBSHcomNetOobUDSListenerOptions innerOpt{};
     innerOpt.Name(option.name);
     innerOpt.perm = option.perm;
     innerOpt.targetWorkerCount = option.targetWorkerCount;
@@ -457,8 +457,8 @@ void ubs_hcom_driver_add_oob_opt(ubs_hcom_driver driver, ubs_hcom_driver_listen_
 {
     VALIDATE_DRIVER_NO_RET(driver);
 
-    UBSHcomNetOobListenerOptions innerOpt {};
-    std::string ip = { options.ip, strlen(options.ip) <= sizeof(options.ip) ? strlen(options.ip) : sizeof(options.ip) };
+    UBSHcomNetOobListenerOptions innerOpt{};
+    std::string ip = {options.ip, strlen(options.ip) <= sizeof(options.ip) ? strlen(options.ip) : sizeof(options.ip)};
     innerOpt.Set(ip, options.port, options.targetWorkerCount);
     reinterpret_cast<UBSHcomNetDriver *>(driver)->AddOobOptions(innerOpt);
 }
@@ -467,7 +467,7 @@ int ubs_hcom_driver_initialize(ubs_hcom_driver driver, ubs_hcom_driver_opts opti
 {
     VALIDATE_DRIVER(driver);
 
-    UBSHcomNetDriverOptions driverOps {};
+    UBSHcomNetDriverOptions driverOps{};
     driverOps.mode = NET_BUSY_POLLING;
     if (options.mode == C_EVENT_POLLING) {
         driverOps.mode = ock::hcom::NET_EVENT_POLLING;
@@ -479,8 +479,8 @@ int ubs_hcom_driver_initialize(ubs_hcom_driver driver, ubs_hcom_driver_opts opti
     driverOps.SetNetDeviceIpGroup(options.netDeviceIpGroup);
     driverOps.completionQueueDepth = options.completionQueueDepth != 0 ? options.completionQueueDepth : NN_NO2048;
     driverOps.maxPostSendCountPerQP = options.maxPostSendCountPerQP != 0 ? options.maxPostSendCountPerQP : NN_NO64;
-    driverOps.prePostReceiveSizePerQP =
-        options.prePostReceiveSizePerQP != 0 ? options.prePostReceiveSizePerQP : NN_NO64;
+    driverOps.prePostReceiveSizePerQP = options.prePostReceiveSizePerQP != 0 ? options.prePostReceiveSizePerQP :
+                                                                               NN_NO64;
     driverOps.pollingBatchSize = options.pollingBatchSize != 0 ? options.pollingBatchSize : NN_NO4;
     driverOps.qpSendQueueSize = options.qpSendQueueSize != 0 ? options.qpSendQueueSize : NN_NO256;
     driverOps.qpReceiveQueueSize = options.qpReceiveQueueSize != 0 ? options.qpReceiveQueueSize : NN_NO256;
@@ -490,12 +490,12 @@ int ubs_hcom_driver_initialize(ubs_hcom_driver driver, ubs_hcom_driver_opts opti
     driverOps.tcpReceiveBufSize = options.tcpReceiveBufSize != 0 ? NN_NextPower2(options.tcpReceiveBufSize) : 0;
 
     if (NN_UNLIKELY(memcpy_s(driverOps.workerGroups, sizeof(driverOps.workerGroups), options.workerGroups,
-        sizeof(options.workerGroups)) != NN_OK)) {
+                             sizeof(options.workerGroups)) != NN_OK)) {
         NN_LOG_ERROR("Failed to copy worker groups");
         return NN_INVALID_PARAM;
     }
     if (NN_UNLIKELY(memcpy_s(driverOps.workerGroupsCpuSet, sizeof(driverOps.workerGroupsCpuSet),
-        options.workerGroupsCpuSet, sizeof(options.workerGroupsCpuSet)) != NN_OK)) {
+                             options.workerGroupsCpuSet, sizeof(options.workerGroupsCpuSet)) != NN_OK)) {
         NN_LOG_ERROR("Failed to copy worker cpu set");
         return NN_INVALID_PARAM;
     }
@@ -507,8 +507,8 @@ int ubs_hcom_driver_initialize(ubs_hcom_driver driver, ubs_hcom_driver_opts opti
     driverOps.heartBeatProbeTimes = options.heartBeatProbeTimes != 0 ? options.heartBeatProbeTimes : NN_NO7;
     driverOps.heartBeatProbeInterval = options.heartBeatProbeInterval != 0 ? options.heartBeatProbeInterval : NN_NO2;
     driverOps.enableTls = options.enableTls;
-    driverOps.tlsVersion =
-        options.tlsVersion != 0 ? static_cast<UBSHcomTlsVersion>(options.tlsVersion) : (ock::hcom::TLS_1_3);
+    driverOps.tlsVersion = options.tlsVersion != 0 ? static_cast<UBSHcomTlsVersion>(options.tlsVersion) :
+                                                     (ock::hcom::TLS_1_3);
     driverOps.cipherSuite = static_cast<UBSHcomNetCipherSuite>(options.cipherSuite);
     driverOps.oobType = NET_OOB_TCP;
     driverOps.tcpSendBufSize = options.tcpSendBufSize;
@@ -518,7 +518,7 @@ int ubs_hcom_driver_initialize(ubs_hcom_driver driver, ubs_hcom_driver_opts opti
         driverOps.oobType = ock::hcom::NET_OOB_UDS;
     }
     if (NN_UNLIKELY(memcpy_s(driverOps.oobPortRange, sizeof(driverOps.oobPortRange), options.oobPortRange,
-        sizeof(options.oobPortRange)) != 0)) {
+                             sizeof(options.oobPortRange)) != 0)) {
         NN_LOG_ERROR("Failed to copy oob port range");
         return NN_INVALID_PARAM;
     }
@@ -537,7 +537,7 @@ int ubs_hcom_driver_connect(ubs_hcom_driver driver, const char *payloadData, ubs
 }
 
 int ubs_hcom_driver_connect_with_grpno(ubs_hcom_driver driver, const char *payloadData, ubs_hcom_endpoint *ep,
-    uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo)
+                                       uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo)
 {
     VALIDATE_DRIVER(driver);
     VALIDATE_EP(ep);
@@ -545,8 +545,8 @@ int ubs_hcom_driver_connect_with_grpno(ubs_hcom_driver driver, const char *paylo
     std::string payload = payloadData != nullptr ? payloadData : "";
 
     UBSHcomNetEndpointPtr realEp;
-    auto result = reinterpret_cast<UBSHcomNetDriver *>(driver)->Connect(payload, realEp, flags, serverGrpNo,
-        clientGrpNo);
+    auto result =
+        reinterpret_cast<UBSHcomNetDriver *>(driver)->Connect(payload, realEp, flags, serverGrpNo, clientGrpNo);
     if (NN_UNLIKELY(result != NN_OK)) {
         return result;
     }
@@ -560,21 +560,22 @@ int ubs_hcom_driver_connect_with_grpno(ubs_hcom_driver driver, const char *paylo
 }
 
 int ubs_hcom_driver_connect_to_ipport(ubs_hcom_driver driver, const char *serverIp, uint16_t serverPort,
-    const char *payloadData, ubs_hcom_endpoint *ep, uint32_t flags)
+                                      const char *payloadData, ubs_hcom_endpoint *ep, uint32_t flags)
 {
     return ubs_hcom_driver_connect_to_ipport_with_groupno(driver, serverIp, serverPort, payloadData, ep, flags, 0, 0);
 }
 
 int ubs_hcom_driver_connect_to_ipport_with_groupno(ubs_hcom_driver driver, const char *serverIp, uint16_t serverPort,
-    const char *payloadData, ubs_hcom_endpoint *ep, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo)
+                                                   const char *payloadData, ubs_hcom_endpoint *ep, uint32_t flags,
+                                                   uint8_t serverGrpNo, uint8_t clientGrpNo)
 {
-    return ubs_hcom_driver_connect_to_ipport_with_ctx(driver, serverIp, serverPort, payloadData, ep, flags,
-        serverGrpNo, clientGrpNo, 0);
+    return ubs_hcom_driver_connect_to_ipport_with_ctx(driver, serverIp, serverPort, payloadData, ep, flags, serverGrpNo,
+                                                      clientGrpNo, 0);
 }
 
 int ubs_hcom_driver_connect_to_ipport_with_ctx(ubs_hcom_driver driver, const char *serverIp, uint16_t serverPort,
-    const char *payloadData, ubs_hcom_endpoint *ep, uint32_t flags, uint8_t serverGrpNo, uint8_t clientGrpNo,
-    uint64_t ctx)
+                                               const char *payloadData, ubs_hcom_endpoint *ep, uint32_t flags,
+                                               uint8_t serverGrpNo, uint8_t clientGrpNo, uint64_t ctx)
 {
     if (serverIp == nullptr || serverPort == 0) {
         NN_LOG_ERROR("Failed to connect as server ip is null or port " << serverPort << " is invalid");
@@ -588,7 +589,7 @@ int ubs_hcom_driver_connect_to_ipport_with_ctx(ubs_hcom_driver driver, const cha
 
     UBSHcomNetEndpointPtr realEp;
     auto result = reinterpret_cast<UBSHcomNetDriver *>(driver)->Connect(serverIp, serverPort, payload, realEp, flags,
-        serverGrpNo, clientGrpNo, ctx);
+                                                                        serverGrpNo, clientGrpNo, ctx);
     if (NN_UNLIKELY(result != NN_OK)) {
         return result;
     }
@@ -619,8 +620,8 @@ int ubs_hcom_driver_destroy(ubs_hcom_driver driver)
     return UBSHcomNetDriver::DestroyInstance(name);
 }
 
-uintptr_t ubs_hcom_driver_register_ep_handler(ubs_hcom_driver driver, ubs_hcom_ep_handler_type t,
-    ubs_hcom_ep_handler h, uint64_t usrCtx)
+uintptr_t ubs_hcom_driver_register_ep_handler(ubs_hcom_driver driver, ubs_hcom_ep_handler_type t, ubs_hcom_ep_handler h,
+                                              uint64_t usrCtx)
 {
     if (NN_UNLIKELY(driver == 0)) {
         NN_LOG_ERROR("Invalid param, driver must be correct driver address");
@@ -639,8 +640,8 @@ uintptr_t ubs_hcom_driver_register_ep_handler(ubs_hcom_driver driver, ubs_hcom_e
     }
 
     if (t == C_EP_NEW) {
-        reinterpret_cast<UBSHcomNetDriver *>(driver)->RegisterNewEPHandler(std::bind(&EpHdlAdp::NewEndPoint, tmpHandle,
-            std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+        reinterpret_cast<UBSHcomNetDriver *>(driver)->RegisterNewEPHandler(std::bind(
+            &EpHdlAdp::NewEndPoint, tmpHandle, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     } else if (t == C_EP_BROKEN) {
         reinterpret_cast<UBSHcomNetDriver *>(driver)->RegisterEPBrokenHandler(
             std::bind(&EpHdlAdp::EndPointBroken, tmpHandle, std::placeholders::_1));
@@ -656,7 +657,7 @@ uintptr_t ubs_hcom_driver_register_ep_handler(ubs_hcom_driver driver, ubs_hcom_e
 }
 
 uintptr_t ubs_hcom_driver_register_op_handler(ubs_hcom_driver driver, ubs_hcom_op_handler_type t,
-    ubs_hcom_request_handler h, uint64_t usrCtx)
+                                              ubs_hcom_request_handler h, uint64_t usrCtx)
 {
     if (NN_UNLIKELY(driver == 0)) {
         NN_LOG_ERROR("Invalid param, driver must be correct driver address");
@@ -740,7 +741,7 @@ uintptr_t ubs_hcom_driver_register_secinfo_provider(ubs_hcom_driver driver, ubs_
 
     reinterpret_cast<UBSHcomNetDriver *>(driver)->RegisterEndpointSecInfoProvider(
         std::bind(&OOBSecInfoProviderAdp::CreateSecInfo, tmpHandle, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+                  std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
 
     return reinterpret_cast<uintptr_t>(tmpHandle);
 }
@@ -765,13 +766,13 @@ uintptr_t ubs_hcom_driver_register_secinfo_validator(ubs_hcom_driver driver, ubs
 
     reinterpret_cast<UBSHcomNetDriver *>(driver)->RegisterEndpointSecInfoValidator(
         std::bind(&OOBSecInfoValidatorAdp::SecInfoValidate, tmpHandle, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4));
+                  std::placeholders::_3, std::placeholders::_4));
 
     return reinterpret_cast<uintptr_t>(tmpHandle);
 }
 
 uintptr_t ubs_hcom_driver_register_tls_cb(ubs_hcom_driver driver, ubs_hcom_tls_get_cert_cb certCb,
-    ubs_hcom_tls_get_pk_cb priKeyCb, ubs_hcom_tls_get_ca_cb caCb)
+                                          ubs_hcom_tls_get_pk_cb priKeyCb, ubs_hcom_tls_get_ca_cb caCb)
 {
     if (NN_UNLIKELY(driver == 0)) {
         NN_LOG_ERROR("Invalid param, driver must be correct driver address");
@@ -792,17 +793,16 @@ uintptr_t ubs_hcom_driver_register_tls_cb(ubs_hcom_driver driver, ubs_hcom_tls_g
     tmpHandle->SetTLSCertCb(certCb);
     tmpHandle->SetTLSPrivateKeyCb(priKeyCb);
     tmpHandle->SetTLSCaCb(caCb);
-    reinterpret_cast<UBSHcomNetDriver *>(driver)->RegisterTLSCertificationCallback(
-        (std::bind(&EpTLSHdlAdp::UBSHcomTLSCertificationCallback, tmpHandle, std::placeholders::_1,
-        std::placeholders::_2)));
+    reinterpret_cast<UBSHcomNetDriver *>(driver)->RegisterTLSCertificationCallback((std::bind(
+        &EpTLSHdlAdp::UBSHcomTLSCertificationCallback, tmpHandle, std::placeholders::_1, std::placeholders::_2)));
 
     reinterpret_cast<UBSHcomNetDriver *>(driver)->RegisterTLSPrivateKeyCallback(
         (std::bind(&EpTLSHdlAdp::UBSHcomTLSPrivateKeyCallback, tmpHandle, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5)));
+                   std::placeholders::_3, std::placeholders::_4, std::placeholders::_5)));
 
     reinterpret_cast<UBSHcomNetDriver *>(driver)->RegisterTLSCaCallback(
         (std::bind(&EpTLSHdlAdp::UBSHcomTLSCaCallback, tmpHandle, std::placeholders::_1, std::placeholders::_2,
-        std::placeholders::_3, std::placeholders::_4, std::placeholders::_5)));
+                   std::placeholders::_3, std::placeholders::_4, std::placeholders::_5)));
 
     return reinterpret_cast<uintptr_t>(tmpHandle);
 }
@@ -844,7 +844,7 @@ int ubs_hcom_driver_create_memory_region(ubs_hcom_driver driver, uint64_t size, 
 }
 
 int ubs_hcom_driver_create_assign_memory_region(ubs_hcom_driver driver, uintptr_t address, uint64_t size,
-    ubs_hcom_memory_region *mr)
+                                                ubs_hcom_memory_region *mr)
 {
     VALIDATE_DRIVER(driver);
     VALIDATE_MR_POINT(mr);
@@ -989,7 +989,7 @@ int ubs_hcom_ep_post_send(ubs_hcom_endpoint ep, uint16_t opcode, ubs_hcom_send_r
 
     UBSHcomNetTransRequest transReq(reinterpret_cast<void *>(req->data), req->size, req->upCtxSize);
     if (NN_UNLIKELY(memcpy_s(transReq.upCtxData, sizeof(transReq.upCtxData), req->upCtxData, sizeof(req->upCtxData)) !=
-        NN_OK)) {
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to copy up ctx data");
         return NN_INVALID_PARAM;
     }
@@ -998,7 +998,7 @@ int ubs_hcom_ep_post_send(ubs_hcom_endpoint ep, uint16_t opcode, ubs_hcom_send_r
 }
 
 int ubs_hcom_ep_post_send_with_opinfo(ubs_hcom_endpoint ep, uint16_t opcode, ubs_hcom_send_request *req,
-    ubs_hcom_opinfo *opInfo)
+                                      ubs_hcom_opinfo *opInfo)
 {
     VALIDATE_EP(ep);
     VALIDATE_REQ(req);
@@ -1010,7 +1010,7 @@ int ubs_hcom_ep_post_send_with_opinfo(ubs_hcom_endpoint ep, uint16_t opcode, ubs
 
     UBSHcomNetTransRequest transReq(reinterpret_cast<void *>(req->data), req->size, req->upCtxSize);
     if (NN_UNLIKELY(memcpy_s(transReq.upCtxData, sizeof(transReq.upCtxData), req->upCtxData, sizeof(req->upCtxData)) !=
-        NN_OK)) {
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to copy up ctx data");
         return NN_INVALID_PARAM;
     }
@@ -1028,7 +1028,7 @@ int ubs_hcom_ep_post_send_raw(ubs_hcom_endpoint ep, ubs_hcom_send_request *req, 
 
     UBSHcomNetTransRequest transReq(reinterpret_cast<void *>(req->data), req->size, req->upCtxSize);
     if (NN_UNLIKELY(memcpy_s(transReq.upCtxData, sizeof(transReq.upCtxData), req->upCtxData, sizeof(req->upCtxData)) !=
-        NN_OK)) {
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to copy up ctx data");
         return NN_INVALID_PARAM;
     }
@@ -1041,7 +1041,7 @@ int ubs_hcom_ep_post_send_raw_sgl(ubs_hcom_endpoint ep, ubs_hcom_readwrite_reque
     VALIDATE_EP(ep);
     VALIDATE_REQ(req);
     VALIDATE_SEQ(seqNo);
-    UBSHcomNetTransSglRequest transReq {};
+    UBSHcomNetTransSglRequest transReq{};
     UBSHcomNetTransSgeIov iov[C_NET_SGE_MAX_IOV];
     bzero(&transReq, sizeof(UBSHcomNetTransSglRequest));
 
@@ -1052,7 +1052,7 @@ int ubs_hcom_ep_post_send_raw_sgl(ubs_hcom_endpoint ep, ubs_hcom_readwrite_reque
     transReq.iovCount = req->iovCount;
     transReq.upCtxSize = req->upCtxSize;
     if (NN_UNLIKELY(memcpy_s(transReq.upCtxData, sizeof(transReq.upCtxData), req->upCtxData, sizeof(req->upCtxData)) !=
-        NN_OK)) {
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to copy up ctx data");
         return NN_INVALID_PARAM;
     }
@@ -1061,14 +1061,14 @@ int ubs_hcom_ep_post_send_raw_sgl(ubs_hcom_endpoint ep, ubs_hcom_readwrite_reque
 }
 
 int ubs_hcom_ep_post_send_with_seqno(ubs_hcom_endpoint ep, uint16_t opcode, ubs_hcom_send_request *req,
-    uint32_t replySeqNo)
+                                     uint32_t replySeqNo)
 {
     VALIDATE_EP(ep);
     VALIDATE_REQ(req);
 
     UBSHcomNetTransRequest transReq(reinterpret_cast<void *>(req->data), req->size, req->upCtxSize);
     if (NN_UNLIKELY(memcpy_s(transReq.upCtxData, sizeof(transReq.upCtxData), req->upCtxData, sizeof(req->upCtxData)) !=
-        NN_OK)) {
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to copy up ctx data");
         return NN_INVALID_PARAM;
     }
@@ -1083,7 +1083,7 @@ int ubs_hcom_ep_post_read(ubs_hcom_endpoint ep, ubs_hcom_readwrite_request *req)
 
     UBSHcomNetTransRequest transReq(req->lMRA, req->rMRA, req->lKey, req->rKey, req->size, req->upCtxSize);
     if (NN_UNLIKELY(memcpy_s(transReq.upCtxData, sizeof(transReq.upCtxData), req->upCtxData, sizeof(req->upCtxData)) !=
-        NN_OK)) {
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to post read by copy up ctx data err");
         return NN_INVALID_PARAM;
     }
@@ -1101,9 +1101,9 @@ int ubs_hcom_ep_post_read_sgl(ubs_hcom_endpoint ep, ubs_hcom_readwrite_request_s
         return NN_INVALID_PARAM;
     }
 
-    UBSHcomNetTransSglRequest transReq { iov, req->iovCount, req->upCtxSize };
+    UBSHcomNetTransSglRequest transReq{iov, req->iovCount, req->upCtxSize};
     if (NN_UNLIKELY(memcpy_s(transReq.upCtxData, sizeof(transReq.upCtxData), req->upCtxData, sizeof(req->upCtxData)) !=
-        NN_OK)) {
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to post read sgl by copy up ctx data err");
         return NN_INVALID_PARAM;
     }
@@ -1118,7 +1118,7 @@ int ubs_hcom_ep_post_write(ubs_hcom_endpoint ep, ubs_hcom_readwrite_request *req
 
     UBSHcomNetTransRequest transReq(req->lMRA, req->rMRA, req->lKey, req->rKey, req->size, req->upCtxSize);
     if (NN_UNLIKELY(memcpy_s(transReq.upCtxData, sizeof(transReq.upCtxData), req->upCtxData, sizeof(req->upCtxData)) !=
-        NN_OK)) {
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to post write by copy up ctx data err");
         return NN_INVALID_PARAM;
     }
@@ -1137,9 +1137,9 @@ int ubs_hcom_ep_post_write_sgl(ubs_hcom_endpoint ep, ubs_hcom_readwrite_request_
         return NN_INVALID_PARAM;
     }
 
-    UBSHcomNetTransSglRequest transReq { iov, req->iovCount, req->upCtxSize };
+    UBSHcomNetTransSglRequest transReq{iov, req->iovCount, req->upCtxSize};
     if (NN_UNLIKELY(memcpy_s(transReq.upCtxData, sizeof(transReq.upCtxData), req->upCtxData, sizeof(req->upCtxData)) !=
-        NN_OK)) {
+                    NN_OK)) {
         NN_LOG_ERROR("Failed to post write sgl by copy up ctx data err");
         return NN_INVALID_PARAM;
     }
@@ -1285,7 +1285,7 @@ int ubs_hcom_get_remote_uds_info(ubs_hcom_endpoint ep, ubs_hcom_uds_id_info *idI
         return NN_INVALID_PARAM;
     }
 
-    UBSHcomNetUdsIdInfo udsIdInfo {};
+    UBSHcomNetUdsIdInfo udsIdInfo{};
     auto result = reinterpret_cast<UBSHcomNetEndpoint *>(ep)->GetRemoteUdsIdInfo(udsIdInfo);
     if (NN_UNLIKELY(result != NN_OK)) {
         return result;

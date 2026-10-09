@@ -16,9 +16,9 @@
 
 class TestMemoryRegion : public testing::Test {
 public:
-  TestMemoryRegion();
-  virtual void SetUp(void);
-  virtual void TearDown(void);
+    TestMemoryRegion();
+    virtual void SetUp(void);
+    virtual void TearDown(void);
 };
 
 #endif // HCOM_TEST_MEMORY_REGION_H

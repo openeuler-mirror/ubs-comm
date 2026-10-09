@@ -17,20 +17,22 @@
 #include "hcom_def.h"
 #include "hcom_obj_statistics.h"
 #include "net_monotonic.h"
+#include "shm_channel.h"
 #include "shm_common.h"
 #include "shm_handle.h"
 #include "shm_queue.h"
-#include "shm_channel.h"
 namespace ock {
 namespace hcom {
 class ShmSyncEndpoint {
 public:
     static HResult Create(const std::string &name, uint16_t eventQueueLength, ShmPollingMode mode,
-        ShmSyncEndpointPtr &ep);
+                          ShmSyncEndpointPtr &ep);
 
 public:
     ShmSyncEndpoint(const std::string &name, uint16_t eventQueueLength, ShmPollingMode mode)
-        : mName(name), mEventQueueLength(eventQueueLength), mShmMode(mode)
+        : mName(name),
+          mEventQueueLength(eventQueueLength),
+          mShmMode(mode)
     {
         OBJ_GC_INCREASE(ShmSyncEndpoint);
     }
@@ -45,10 +47,10 @@ public:
     }
 
     HResult PostSend(ShmChannel *ch, const UBSHcomNetTransRequest &req, uint64_t offset, uint32_t immData,
-        int32_t defaultTimeout);
+                     int32_t defaultTimeout);
 
     HResult PostSendRawSgl(ShmChannel *ch, const UBSHcomNetTransRequest &req, const UBSHcomNetTransSglRequest &sglReq,
-        uint64_t offset, uint32_t immData, int32_t defaultTimeout);
+                           uint64_t offset, uint32_t immData, int32_t defaultTimeout);
     HResult PostRead(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap);
     HResult PostRead(ShmChannel *ch, const UBSHcomNetTransSglRequest &req, ShmMRHandleMap &mrHandleMap);
     HResult PostWrite(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap);
@@ -83,10 +85,10 @@ private:
     HResult FillSglCtx(ShmSglOpContextInfo *sglCtx, const UBSHcomNetTransSglRequest &sglReq);
     HResult SendLocalEventForOneSideDone(ShmOpContextInfo *ctx, ShmOpContextInfo::ShmOpType type);
     HResult PostReadWriteSgl(ShmChannel *ch, const UBSHcomNetTransSglRequest &req, ShmMRHandleMap &mrHandleMap,
-        ShmOpContextInfo::ShmOpType type);
+                             ShmOpContextInfo::ShmOpType type);
 
     HResult PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap,
-        ShmOpContextInfo::ShmOpType type);
+                          ShmOpContextInfo::ShmOpType type);
 
     uint64_t inline GetFinishTime()
     {
@@ -119,29 +121,28 @@ private:
     DEFINE_RDMA_REF_COUNT_VARIABLE;
 };
 
-inline HResult ShmSyncEndpoint::PostRead(ShmChannel *ch, const UBSHcomNetTransRequest &req,
-    ShmMRHandleMap &mrHandleMap)
+inline HResult ShmSyncEndpoint::PostRead(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap)
 {
     return PostReadWrite(ch, req, mrHandleMap, ShmOpContextInfo::ShmOpType::SH_READ);
 }
 
 inline HResult ShmSyncEndpoint::PostRead(ShmChannel *ch, const UBSHcomNetTransSglRequest &req,
-    ShmMRHandleMap &mrHandleMap)
+                                         ShmMRHandleMap &mrHandleMap)
 {
     return PostReadWriteSgl(ch, req, mrHandleMap, ShmOpContextInfo::ShmOpType::SH_SGL_READ);
 }
 
 inline HResult ShmSyncEndpoint::PostWrite(ShmChannel *ch, const UBSHcomNetTransRequest &req,
-    ShmMRHandleMap &mrHandleMap)
+                                          ShmMRHandleMap &mrHandleMap)
 {
     return PostReadWrite(ch, req, mrHandleMap, ShmOpContextInfo::ShmOpType::SH_WRITE);
 }
 
 inline HResult ShmSyncEndpoint::PostWrite(ShmChannel *ch, const UBSHcomNetTransSglRequest &req,
-    ShmMRHandleMap &mrHandleMap)
+                                          ShmMRHandleMap &mrHandleMap)
 {
     return PostReadWriteSgl(ch, req, mrHandleMap, ShmOpContextInfo::ShmOpType::SH_SGL_WRITE);
 }
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif // HCOM_SHM_COMPOSED_ENDPOINT_H

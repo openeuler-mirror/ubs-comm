@@ -10,13 +10,9 @@ namespace hcom {
 
 class TestNetUtil : public testing::Test {
 public:
-    void SetUp() override
-    {
-    }
+    void SetUp() override {}
 
-    void TearDown() override
-    {
-    }
+    void TearDown() override {}
 };
 
 TEST_F(TestNetUtil, ScopeExitSimple)
@@ -74,5 +70,5 @@ TEST_F(TestNetUtil, BuffToHexStringOk)
     std::string out = "01234567";
     EXPECT_TRUE(BuffToHexString(buf, sizeof(buf), out));
 }
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

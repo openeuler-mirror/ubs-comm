@@ -50,7 +50,7 @@ TEST_F(TestMsg, test_msg_response_give_new_return_true)
 
     uint32_t bodySize = sizeof(uint32_t) + sizeof(TTraceInfo) * tTranceInfos.size();
     uint32_t messageSize = sizeof(MessageHeader) + bodySize;
-    Message queryResponse {};
+    Message queryResponse{};
 
     EXPECT_EQ(QueryTraceInfoResponse::BuildMessage(tTranceInfos, queryResponse), NN_OK);
 

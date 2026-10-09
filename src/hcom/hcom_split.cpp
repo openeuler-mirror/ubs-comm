@@ -22,8 +22,8 @@ namespace hcom {
 /// - 如果发现需要拼包，则会在出参 acc 中分配内存，当拼包完成时设置出参 data、
 /// dataLen 表明实际收到的数据、数据长度。在拼包阶段发生任意错误都会提前返回。
 /// \seealso SpliceMessage
-SerResult SyncSpliceMessage(UBSHcomNetResponseContext &ctx, UBSHcomNetEndpoint *ep, int32_t timeout,
-    std::string &acc, void *&data, uint32_t &dataLen)
+SerResult SyncSpliceMessage(UBSHcomNetResponseContext &ctx, UBSHcomNetEndpoint *ep, int32_t timeout, std::string &acc,
+                            void *&data, uint32_t &dataLen)
 {
     SerResult result = ep->Receive(timeout, ctx);
     if (NN_UNLIKELY(result != SER_OK)) {
@@ -72,8 +72,8 @@ SerResult SyncSpliceMessage(UBSHcomNetResponseContext &ctx, UBSHcomNetEndpoint *
             acc.resize(totalLength);
         }
         if (totalLength != static_cast<uint32_t>(acc.size())) {
-            NN_LOG_ERROR("SyncSpliceMessage: the totalLength does not match with the first fragment. " <<
-                totalLength << " != " << acc.size());
+            NN_LOG_ERROR("SyncSpliceMessage: the totalLength does not match with the first fragment. "
+                         << totalLength << " != " << acc.size());
             return SER_SPLIT_INVALID_MSG;
         }
 
@@ -125,5 +125,5 @@ SerResult SyncSpliceMessage(UBSHcomNetResponseContext &ctx, UBSHcomNetEndpoint *
     return SER_OK;
 }
 
-}  // namespace hcom
-}  // namespace ock
+} // namespace hcom
+} // namespace ock

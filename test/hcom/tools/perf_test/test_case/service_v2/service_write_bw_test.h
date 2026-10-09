@@ -49,7 +49,7 @@ private:
     RegMrInfo mPeerMrInfo;
     sem_t mSem;
 };
-}
-}
+} // namespace perftest
+} // namespace hcom
 
 #endif

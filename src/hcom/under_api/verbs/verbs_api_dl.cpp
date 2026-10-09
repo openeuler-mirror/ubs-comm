@@ -15,9 +15,9 @@
 #if defined(TEST_LLT) && defined(MOCK_VERBS)
 #include "fake_ibv.h"
 #endif
+#include "../../common/net_common.h"
 #include "hcom_log.h"
 #include "verbs_api_dl.h"
-#include "../../common/net_common.h"
 using namespace ock::hcom;
 
 // ibv APIs

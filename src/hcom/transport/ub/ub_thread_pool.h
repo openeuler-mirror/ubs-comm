@@ -13,13 +13,13 @@
 #ifndef HCOM_UB_THREAD_POOL_H
 #define HCOM_UB_THREAD_POOL_H
 #ifdef UB_BUILD_ENABLED
-#include <vector>
-#include <queue>
-#include <thread>
-#include <mutex>
+#include <atomic>
 #include <condition_variable>
 #include <functional>
-#include <atomic>
+#include <mutex>
+#include <queue>
+#include <thread>
+#include <vector>
 
 #include "hcom.h"
 #include "ub_common.h"
@@ -34,15 +34,15 @@ public:
     {
         Stop();
     }
-    UBThreadPool(const UBThreadPool&) = delete;
-    UBThreadPool& operator=(const UBThreadPool&) = delete;
+    UBThreadPool(const UBThreadPool &) = delete;
+    UBThreadPool &operator=(const UBThreadPool &) = delete;
     void Initialize();
     void Stop();
     void Submit(std::function<void()> task);
 
 private:
     void RunInThread();
-    
+
     uint16_t mThreadCount;
     std::vector<std::thread> mThreads;
     std::queue<std::function<void()>> mTasks;
@@ -51,7 +51,7 @@ private:
     std::atomic<bool> mIsRunning;
 };
 
-}
-}
+} // namespace hcom
+} // namespace ock
 #endif
 #endif // HCOM_UB_THREAD_POOL_H

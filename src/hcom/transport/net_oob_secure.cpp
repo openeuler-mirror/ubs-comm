@@ -13,10 +13,12 @@
 
 namespace ock {
 namespace hcom {
-NResult OOBSecureProcess::SecProcessCompareEpNum(uint32_t localIpAddr, uint32_t listenPort,
-    const std::string &mIpAndPort, const std::vector<NetOOBServer *> &oobServers)
+uint32_t OOBSecureProcess::SecProcessGetRemainEpNum(uint32_t localIpAddr, uint32_t listenPort,
+                                                    const std::string &mIpAndPort,
+                                                    const std::vector<NetOOBServer *> &oobServers)
 {
-    struct sockaddr_in addr {};
+    struct sockaddr_in addr {
+    };
     bzero(&addr, sizeof(addr));
     addr.sin_addr.s_addr = localIpAddr;
     char ipStr[INET_ADDRSTRLEN] = {0};
@@ -30,6 +32,49 @@ NResult OOBSecureProcess::SecProcessCompareEpNum(uint32_t localIpAddr, uint32_t 
     uint16_t port;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
+        result = static_cast<uint32_t>(oobServer->GetListenIp(ip));
+        result |= static_cast<uint32_t>(oobServer->GetListenPort(port));
+        if (result != NN_OK) {
+            continue;
+        }
+        if (ip == localIP || port == listenPort) {
+            size_t pos = mIpAndPort.find(':');
+            std::string remoteIp = mIpAndPort.substr(0, pos);
+            uint32_t maxConnectionNum = oobServer->GetMaxConnectionNum();
+            uint32_t currentEpNum = oobServer->GetEpNum(remoteIp);
+            uint32_t remain = (maxConnectionNum >= currentEpNum ? maxConnectionNum - currentEpNum : 0);
+            return remain;
+        }
+    }
+
+    return NN_NO0;
+}
+
+NResult OOBSecureProcess::SecProcessCompareEpNum(uint32_t localIpAddr, uint32_t listenPort,
+                                                 const std::string &mIpAndPort,
+                                                 const std::vector<NetOOBServer *> &oobServers)
+{
+    struct sockaddr_in addr {
+    };
+    bzero(&addr, sizeof(addr));
+    addr.sin_addr.s_addr = localIpAddr;
+    char ipStr[INET_ADDRSTRLEN] = {0};
+    if (inet_ntop(AF_INET, &(addr.sin_addr), ipStr, INET_ADDRSTRLEN) == nullptr) {
+        NN_LOG_ERROR("Failed to convert ip number to string");
+        return NN_INVALID_IP;
+    }
+    std::string localIP(ipStr);
+    std::string ip;
+    uint32_t result;
+    uint16_t port;
+
+    for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = static_cast<uint32_t>(oobServer->GetListenIp(ip));
         result |= static_cast<uint32_t>(oobServer->GetListenPort(port));
         if (result != NN_OK) {
@@ -46,12 +91,15 @@ NResult OOBSecureProcess::SecProcessCompareEpNum(uint32_t localIpAddr, uint32_t 
 }
 
 NResult OOBSecureProcess::SecProcessCompareEpNum(const std::string &localUdsName, const std::string &mIpAndPort,
-    const std::vector<NetOOBServer *> &oobServers)
+                                                 const std::vector<NetOOBServer *> &oobServers)
 {
     std::string udsName;
     int result;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = oobServer->GetUdsName(udsName);
         if (result != NN_OK) {
             continue;
@@ -67,9 +115,10 @@ NResult OOBSecureProcess::SecProcessCompareEpNum(const std::string &localUdsName
 }
 
 void OOBSecureProcess::SecProcessAddEpNum(uint32_t localIpAddr, uint32_t listenPort, const std::string &mIpAndPort,
-    const std::vector<NetOOBServer *> &oobServers)
+                                          const std::vector<NetOOBServer *> &oobServers)
 {
-    struct sockaddr_in addr {};
+    struct sockaddr_in addr {
+    };
     bzero(&addr, sizeof(addr));
     addr.sin_addr.s_addr = localIpAddr;
     char ipStr[INET_ADDRSTRLEN] = {0};
@@ -83,6 +132,9 @@ void OOBSecureProcess::SecProcessAddEpNum(uint32_t localIpAddr, uint32_t listenP
     uint16_t port;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = static_cast<uint32_t>(oobServer->GetListenIp(ip));
         result |= static_cast<uint32_t>(oobServer->GetListenPort(port));
         if (result != NN_OK) {
@@ -98,12 +150,15 @@ void OOBSecureProcess::SecProcessAddEpNum(uint32_t localIpAddr, uint32_t listenP
 }
 
 void OOBSecureProcess::SecProcessAddEpNum(const std::string &localUdsName, const std::string &mIpAndPort,
-    const std::vector<NetOOBServer *> &oobServers)
+                                          const std::vector<NetOOBServer *> &oobServers)
 {
     std::string udsName;
     int result;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = oobServer->GetUdsName(udsName);
         if (result != NN_OK) {
             continue;
@@ -118,9 +173,10 @@ void OOBSecureProcess::SecProcessAddEpNum(const std::string &localUdsName, const
 }
 
 void OOBSecureProcess::SecProcessDelEpNum(uint32_t localIpAddr, uint32_t listenPort, const std::string &mIpAndPort,
-    const std::vector<NetOOBServer *> &oobServers)
+                                          const std::vector<NetOOBServer *> &oobServers)
 {
-    struct sockaddr_in addr {};
+    struct sockaddr_in addr {
+    };
     bzero(&addr, sizeof(addr));
     addr.sin_addr.s_addr = localIpAddr;
     char ipStr[INET_ADDRSTRLEN] = {0};
@@ -134,6 +190,9 @@ void OOBSecureProcess::SecProcessDelEpNum(uint32_t localIpAddr, uint32_t listenP
     uint32_t result;
 
     for (auto &oobServer : oobServers) {
+        if (NN_UNLIKELY(oobServer == nullptr)) {
+            continue;
+        }
         result = static_cast<uint32_t>(oobServer->GetListenIp(ip));
         result |= static_cast<uint32_t>(oobServer->GetListenPort(port));
         if (result != NN_OK) {
@@ -149,7 +208,7 @@ void OOBSecureProcess::SecProcessDelEpNum(uint32_t localIpAddr, uint32_t listenP
 }
 
 void OOBSecureProcess::SecProcessDelEpNum(const std::string &localUdsName, const std::string &mIpAndPort,
-    const std::vector<NetOOBServer *> &oobServers)
+                                          const std::vector<NetOOBServer *> &oobServers)
 {
     std::string udsName;
     int result;
@@ -169,8 +228,9 @@ void OOBSecureProcess::SecProcessDelEpNum(const std::string &localUdsName, const
 }
 
 NResult OOBSecureProcess::SecProcessInOOBServer(const UBSHcomNetDriverEndpointSecInfoProvider &secInfoProvider,
-    const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator, OOBTCPConnection &conn,
-    const std::string &driverName, UBSHcomNetDriverSecType sType)
+                                                const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator,
+                                                OOBTCPConnection &conn, const std::string &driverName,
+                                                UBSHcomNetDriverSecType sType)
 {
     int result = 0;
     auto secType = static_cast<UBSHcomNetDriverSecType>(0);
@@ -181,8 +241,8 @@ NResult OOBSecureProcess::SecProcessInOOBServer(const UBSHcomNetDriverEndpointSe
     if (NN_UNLIKELY(ValidateSecInfo(secInfoValidator, conn, driverName, secType, ctx, sType) != NN_OK)) {
         resp = ConnectResp::SEC_VALID_FAILED;
         if (NN_UNLIKELY((result = conn.Send(&resp, sizeof(ConnectResp))) != NN_OK)) {
-            NN_LOG_ERROR("Failed to send secure validate result to " << conn.GetIpAndPort() << " in driver " <<
-                driverName);
+            NN_LOG_ERROR("Failed to send secure validate result to " << conn.GetIpAndPort() << " in driver "
+                                                                     << driverName);
             return NN_OOB_SEC_PROCESS_ERROR;
         }
         return NN_OOB_SEC_PROCESS_ERROR;
@@ -206,8 +266,9 @@ NResult OOBSecureProcess::SecProcessInOOBServer(const UBSHcomNetDriverEndpointSe
 }
 
 NResult OOBSecureProcess::SecProcessInOOBClient(const UBSHcomNetDriverEndpointSecInfoProvider &secInfoProvider,
-    const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator, OOBTCPConnection *conn,
-    const std::string &driverName, uint64_t ctx, UBSHcomNetDriverSecType sType)
+                                                const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator,
+                                                OOBTCPConnection *conn, const std::string &driverName, uint64_t ctx,
+                                                UBSHcomNetDriverSecType sType)
 {
     // create and send secure info
     int result = 0;
@@ -216,8 +277,8 @@ NResult OOBSecureProcess::SecProcessInOOBClient(const UBSHcomNetDriverEndpointSe
         // send header no valid to server (case 5)
         ConnSecHeader header(0, 0, 0, secType);
         if (NN_UNLIKELY((result = conn->Send(&header, sizeof(ConnSecHeader))) != NN_OK)) {
-            NN_LOG_ERROR("Failed to send conn secure header to oob server " << conn->GetIpAndPort() << " in driver " <<
-                driverName);
+            NN_LOG_ERROR("Failed to send conn secure header to oob server " << conn->GetIpAndPort() << " in driver "
+                                                                            << driverName);
             return NN_OOB_SEC_PROCESS_ERROR;
         }
     }
@@ -227,8 +288,8 @@ NResult OOBSecureProcess::SecProcessInOOBClient(const UBSHcomNetDriverEndpointSe
         if (NN_UNLIKELY(SendSecInfo(secInfoProvider, secInfoValidator, conn, driverName, secType, ctx) != NN_OK)) {
             return NN_OOB_SEC_PROCESS_ERROR;
         }
-        NN_LOG_TRACE_INFO("Secure info send to peer oob " << conn->GetIpAndPort() << " successfully, in driver " <<
-            driverName);
+        NN_LOG_TRACE_INFO("Secure info send to peer oob " << conn->GetIpAndPort() << " successfully, in driver "
+                                                          << driverName);
     }
 
     // receive oob server validate result
@@ -238,8 +299,8 @@ NResult OOBSecureProcess::SecProcessInOOBClient(const UBSHcomNetDriverEndpointSe
         return result;
     }
     if (resp != ConnectResp::OK) {
-        NN_LOG_ERROR("Received failed response:" << resp << " for validate secure info from " << conn->GetIpAndPort() <<
-            " in driver " << driverName);
+        NN_LOG_ERROR("Received failed response:" << resp << " for validate secure info from " << conn->GetIpAndPort()
+                                                 << " in driver " << driverName);
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
@@ -257,14 +318,15 @@ NResult OOBSecureProcess::SecProcessInOOBClient(const UBSHcomNetDriverEndpointSe
 }
 
 NResult OOBSecureProcess::SendSecInfo(const UBSHcomNetDriverEndpointSecInfoProvider &secInfoProvider,
-    const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator, OOBTCPConnection *conn,
-    const std::string &driverName, UBSHcomNetDriverSecType &secType, uint64_t ctx)
+                                      const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator,
+                                      OOBTCPConnection *conn, const std::string &driverName,
+                                      UBSHcomNetDriverSecType &secType, uint64_t ctx)
 {
     int result = 0;
     // two-way case server provider not set return error (case 13)
     if (NN_UNLIKELY(secInfoProvider == nullptr)) {
-        NN_LOG_ERROR("Failed to send secure info as secure info provider is null and secure type is " <<
-            UBSHcomNetDriverSecTypeToString(secType) << " in driver " << driverName);
+        NN_LOG_ERROR("Failed to send secure info as secure info provider is null and secure type is "
+                     << UBSHcomNetDriverSecTypeToString(secType) << " in driver " << driverName);
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
@@ -286,8 +348,8 @@ NResult OOBSecureProcess::SendSecInfo(const UBSHcomNetDriverEndpointSecInfoProvi
     // client provider registered but call provider failed, return error (case 1)
     // or server provider registered but call provider failed, return error (case 9)
     if (NN_UNLIKELY(result != 0)) {
-        NN_LOG_ERROR("Failed to create secure info in driver " << driverName << " as do provider callback result is:" <<
-            result);
+        NN_LOG_ERROR("Failed to create secure info in driver " << driverName
+                                                               << " as do provider callback result is:" << result);
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
@@ -297,31 +359,34 @@ NResult OOBSecureProcess::SendSecInfo(const UBSHcomNetDriverEndpointSecInfoProvi
     }
 
     if (secType != NET_SEC_VALID_ONE_WAY && secType != NET_SEC_VALID_TWO_WAY) {
-        NN_LOG_ERROR("Failed to create secure info in driver " << driverName << ", as secure type:" <<
-            UBSHcomNetDriverSecTypeToString(secType) << " in provider is invalid");
+        NN_LOG_ERROR("Failed to create secure info in driver "
+                     << driverName << ", as secure type:" << UBSHcomNetDriverSecTypeToString(secType)
+                     << " in provider is invalid");
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
     // two-way case client should register validator (case 8/10)
     if (secType == NET_SEC_VALID_TWO_WAY && secInfoValidator == nullptr) {
-        NN_LOG_ERROR("Failed to create secure info in driver " << driverName << ", as secure type is:" <<
-            UBSHcomNetDriverSecTypeToString(secType) << " but validator callback not set");
+        NN_LOG_ERROR("Failed to create secure info in driver "
+                     << driverName << ", as secure type is:" << UBSHcomNetDriverSecTypeToString(secType)
+                     << " but validator callback not set");
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
-    NN_LOG_TRACE_INFO("Secure info should send to server:" << output << " len:" << outLen << " flag:" << flag <<
-        " ctx:" << ctx << " sec type:" << UBSHcomNetDriverSecTypeToString(secType));
+    NN_LOG_TRACE_INFO("Secure info should send to server:" << output << " len:" << outLen << " flag:" << flag
+                                                           << " ctx:" << ctx
+                                                           << " sec type:" << UBSHcomNetDriverSecTypeToString(secType));
 
     ConnSecHeader header(flag, ctx, outLen, secType);
     if (NN_UNLIKELY((result = conn->Send(&header, sizeof(ConnSecHeader))) != NN_OK)) {
-        NN_LOG_ERROR("Failed to send conn secure header to oob server " << conn->GetIpAndPort() << " in driver " <<
-            driverName);
+        NN_LOG_ERROR("Failed to send conn secure header to oob server " << conn->GetIpAndPort() << " in driver "
+                                                                        << driverName);
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
     if (NN_UNLIKELY((result = conn->Send(output, outLen)) != NN_OK)) {
-        NN_LOG_ERROR("Failed to send conn secure info to oob server " << conn->GetIpAndPort() << " in driver " <<
-            driverName);
+        NN_LOG_ERROR("Failed to send conn secure info to oob server " << conn->GetIpAndPort() << " in driver "
+                                                                      << driverName);
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
@@ -329,15 +394,16 @@ NResult OOBSecureProcess::SendSecInfo(const UBSHcomNetDriverEndpointSecInfoProvi
 }
 
 NResult OOBSecureProcess::ValidateSecInfo(const UBSHcomNetDriverEndpointSecInfoValidator &secInfoValidator,
-    OOBTCPConnection &conn, const std::string &driverName, UBSHcomNetDriverSecType &secType, uint64_t &ctx,
-    UBSHcomNetDriverSecType sType)
+                                          OOBTCPConnection &conn, const std::string &driverName,
+                                          UBSHcomNetDriverSecType &secType, uint64_t &ctx,
+                                          UBSHcomNetDriverSecType sType)
 {
     int result = 0;
-    ConnSecHeader header {};
+    ConnSecHeader header{};
     void *headerBuf = &header;
     if (NN_UNLIKELY((result = conn.Receive(headerBuf, sizeof(ConnSecHeader))) != 0)) {
-        NN_LOG_ERROR("Failed to read secure header from " << conn.GetIpAndPort() << " in driver " << driverName <<
-            ", result " << result);
+        NN_LOG_ERROR("Failed to read secure header from " << conn.GetIpAndPort() << " in driver " << driverName
+                                                          << ", result " << result);
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
@@ -355,15 +421,15 @@ NResult OOBSecureProcess::ValidateSecInfo(const UBSHcomNetDriverEndpointSecInfoV
         }
 
         // oob server register validator but client not register provider (case 5/6)
-        NN_LOG_ERROR("Failed to validate header as secure type is 0, oob " << conn.GetIpAndPort() <<
-            " may not set provider");
+        NN_LOG_ERROR("Failed to validate header as secure type is 0, oob " << conn.GetIpAndPort()
+                                                                           << " may not set provider");
         return NN_OOB_SEC_PROCESS_ERROR;
     }
 
     secType = static_cast<UBSHcomNetDriverSecType>(header.type);
 
-    NN_LOG_TRACE_INFO("Secure header flag:" << header.flag << " ctx:" << header.ctx << " len:" << header.secInfoLen <<
-        " sec type:" << UBSHcomNetDriverSecTypeToString(secType));
+    NN_LOG_TRACE_INFO("Secure header flag:" << header.flag << " ctx:" << header.ctx << " len:" << header.secInfoLen
+                                            << " sec type:" << UBSHcomNetDriverSecTypeToString(secType));
     if (NN_UNLIKELY(header.secInfoLen > NN_NO2147483646)) {
         NN_LOG_ERROR("Receive secInfoLen greater than 2147483646 in " << driverName);
         return NN_OOB_SEC_PROCESS_ERROR;
@@ -376,8 +442,8 @@ NResult OOBSecureProcess::ValidateSecInfo(const UBSHcomNetDriverEndpointSecInfoV
     NetLocalAutoFreePtr<char> secInfoAutoFree(secInfo, true);
     void *secBuf = static_cast<void *>(secInfo);
     if (NN_UNLIKELY((result = conn.Receive(secBuf, header.secInfoLen)) != 0)) {
-        NN_LOG_ERROR("Failed to read secure info from " << conn.GetIpAndPort() << " in driver " << driverName <<
-            ", result " << result);
+        NN_LOG_ERROR("Failed to read secure info from " << conn.GetIpAndPort() << " in driver " << driverName
+                                                        << ", result " << result);
         return NN_OOB_SEC_PROCESS_ERROR;
     }
     secInfo[header.secInfoLen] = '\0';
@@ -385,8 +451,8 @@ NResult OOBSecureProcess::ValidateSecInfo(const UBSHcomNetDriverEndpointSecInfoV
     // client provider registered but server validator not registered, validate pass (case 2)
     int validateResult = 0;
     if (NN_UNLIKELY(secInfoValidator == nullptr)) {
-        NN_LOG_WARN("Validator is null and secure type is:" << UBSHcomNetDriverSecTypeToString(secType) <<
-            " in driver " << driverName << " , skip secure info validate");
+        NN_LOG_WARN("Validator is null and secure type is:" << UBSHcomNetDriverSecTypeToString(secType) << " in driver "
+                                                            << driverName << " , skip secure info validate");
         return NN_OK;
     }
 
@@ -394,21 +460,23 @@ NResult OOBSecureProcess::ValidateSecInfo(const UBSHcomNetDriverEndpointSecInfoV
     // client provider and server validator registered, but server validator validate failed (case 3)
     // or two-way case server provider and client validator registered, client validator but validate failed (case 11)
     if (validateResult != 0) {
-        NN_LOG_ERROR("Failed to validate secure info received from " << conn.GetIpAndPort() << " in driver " <<
-            driverName << ", validate result is:" << validateResult);
+        NN_LOG_ERROR("Failed to validate secure info received from " << conn.GetIpAndPort() << " in driver "
+                                                                     << driverName
+                                                                     << ", validate result is:" << validateResult);
         return NN_OOB_SEC_PROCESS_ERROR;
     }
     // client provider and server validator registered and validate success, pass (case 4)
     // or two-way case server provider and client validator registered and validate success, pass (case 12)
-    NN_LOG_INFO("Validate secure info from peer oob " << conn.GetIpAndPort() << " successfully, in driver " <<
-        driverName);
+    NN_LOG_INFO("Validate secure info from peer oob " << conn.GetIpAndPort() << " successfully, in driver "
+                                                      << driverName);
 
     return NN_OK;
 }
 
 NResult OOBSecureProcess::SecCheckConnectionHeader(const ConnectHeader &header, const UBSHcomNetDriverOptions &option,
-    const bool &enableTls, const UBSHcomNetDriverProtocol &protocol, const uint32_t &majorVersion,
-    const uint32_t &minorVersion, ConnRespWithUId &respWithUId)
+                                                   const bool &enableTls, const UBSHcomNetDriverProtocol &protocol,
+                                                   const uint32_t &majorVersion, const uint32_t &minorVersion,
+                                                   ConnRespWithUId &respWithUId)
 {
     if (header.magic != option.magic) {
         NN_LOG_ERROR("Failed to match magic number from client, connection refused header.magic");
@@ -417,30 +485,29 @@ NResult OOBSecureProcess::SecCheckConnectionHeader(const ConnectHeader &header, 
     }
 
     if (header.protocol != protocol) {
-        NN_LOG_ERROR("Failed to match protocol " << protocol << " from client " << header.protocol <<
-            ", connection refused");
+        NN_LOG_ERROR("Failed to match protocol " << protocol << " from client " << header.protocol
+                                                 << ", connection refused");
         respWithUId.connResp = PROTOCOL_MISMATCH;
         return NN_ERROR;
     }
 
     if (header.majorVersion != majorVersion) {
-        NN_LOG_ERROR("Failed to match majorVersion " << majorVersion << " from client " <<
-            header.majorVersion << ", connection refused");
+        NN_LOG_ERROR("Failed to match majorVersion " << majorVersion << " from client " << header.majorVersion
+                                                     << ", connection refused");
         respWithUId.connResp = VERSION_MISMATCH;
         return VERSION_MISMATCH;
     }
 
     if (header.minorVersion > minorVersion) {
-        NN_LOG_ERROR("Failed to match minorVersion " << minorVersion << " from client " <<
-            header.minorVersion << ", connection refused");
+        NN_LOG_ERROR("Failed to match minorVersion " << minorVersion << " from client " << header.minorVersion
+                                                     << ", connection refused");
         respWithUId.connResp = VERSION_MISMATCH;
         return VERSION_MISMATCH;
     }
 
     if (enableTls) {
         if (header.tlsVersion < TLS_1_2 || header.tlsVersion > TLS_1_3) {
-            NN_LOG_ERROR("Failed to match tls version from client " << header.tlsVersion <<
-                ", connection refused");
+            NN_LOG_ERROR("Failed to match tls version from client " << header.tlsVersion << ", connection refused");
             respWithUId.connResp = TLS_VERSION_MISMATCH;
             return NN_ERROR;
         }
@@ -448,5 +515,5 @@ NResult OOBSecureProcess::SecCheckConnectionHeader(const ConnectHeader &header, 
 
     return NN_OK;
 }
-}
-}
+} // namespace hcom
+} // namespace ock
