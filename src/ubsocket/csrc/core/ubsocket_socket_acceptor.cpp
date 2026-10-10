@@ -18,6 +18,7 @@
 #include "ubsocket_core_types.h"
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
+#include "ubsocket_raw_socket.h"
 #include "ubsocket_wakeup_event.h"
 
 namespace ock {
@@ -96,6 +97,11 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         // 前置判断，如果不是TFO连接，作为普通TCP连接处理
         if (!SocketConnHelper::IsUbsConnection(fd)) {
             UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d, not TFO return", sock->Fd(), fd);
+            Result ret = RawSocket::SetRawSocket(fd, SOCK_CREATE_TYPE_ACCEPT);
+            if (ret != UBS_OK) {
+                LibcApi::close(fd);
+                return -1;
+            }
             return fd;
         }
         int tcpNoDelayRet = SocketConnHelper::SetTcpNoDelay(fd);
@@ -118,10 +124,6 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
             sockBase->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
         }
     }
-    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
-        UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d state established", sock->Fd(), fd);
-        return fd;
-    }
     if (fd < 0) {
         /*
          * 1. 若全连接队列不为空：
@@ -137,6 +139,15 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
             return fd;
         }
         UBS_VLOG_DEBUG("tcp accept need try again, fd: %d, %d, %s\n", sock->raw_socket_, errno, Func::Error2Str(errno));
+        return fd;
+    }
+    if (sock->State() == SOCK_STAT_RAW_ESTABLISHED) {
+        UBS_VLOG_TRACE("accept on socket(%d) raw tcp connected fd=%d state established", sock->Fd(), fd);
+        Result ret = RawSocket::SetRawSocket(fd, SOCK_CREATE_TYPE_ACCEPT);
+        if (ret != UBS_OK) {
+            LibcApi::close(fd);
+            return -1;
+        }
         return fd;
     }
     UBS_VLOG_DEBUG("tcp accept ip %s port %d fd: %d\n", peerIp.c_str(),
@@ -327,14 +338,10 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
     }
     if (ret != UBS_OK) {
         if (IsDegradable(ret)) {
-            SocketPtr socketPtr;
-            ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_TCP, socketPtr);
+            ret = RawSocket::SetRawSocket(new_fd, SOCK_CREATE_TYPE_ACCEPT);
             if (ret != UBS_OK) {
-                UBS_VLOG_ERR("Create raw socketFd failed, fd: %d, ret: %d\n", new_fd, ret);
                 return ret;
             }
-            socketPtr->create_type_ = SOCK_CREATE_TYPE_ACCEPT;
-            ArraySet<Socket>::GetInstance().OverrideItem(new_fd, socketPtr.Get());
             UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
             return UBS_OK;
         }
