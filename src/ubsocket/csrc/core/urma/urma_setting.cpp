@@ -45,7 +45,7 @@ uint16_t UrmaSetting::UB_BUF_INIT_MEM_SIZE_MB = 256;
 uint16_t UrmaSetting::UB_BUF_PAGE_SIZE_KB = 64;
 uint64_t UrmaSetting::UB_BAD_PORT_RECOVER_SECONDS = 300;
 uint32_t UrmaSetting::UB_KEEPALIVE_TIME = 0;
-uint32_t UrmaSetting::UB_KEEPALIVE_INTVL = 75;
+uint32_t UrmaSetting::UB_KEEPALIVE_INTVL = 0;
 uint32_t UrmaSetting::UB_KEEPALIVE_PROBES = 1;
 
 bool UrmaSetting::UB_BUF_ASYNC_EXPAND = false;

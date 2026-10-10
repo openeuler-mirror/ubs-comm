@@ -567,7 +567,7 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
         sock_fd = static_cast<int>(SenderCRContext{cr->user_ctx}.fd);
     }
     if (sock_fd < 0) {
-        UBS_VLOG_ERR("error cr has no valid user_ctx, skip notify: status=%u", cr->status);
+        UBS_VLOG_TRACE("error cr has no valid user_ctx, skip notify: status=%u", cr->status);
         return;
     }
 
@@ -586,9 +586,8 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
     SenderCRContext cr_context{cr->user_ctx}; /* 错误 CQE 的 sender 上下文（type/fd/seq_no） */
     if (cr_context.type == KEEP_ALIVE_PROBE) {
         // no need switch route for keep_alive probe
-        UBS_VLOG_WARN("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
+        UBS_VLOG_WARN("handle error cr for keepalive probe: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
                       cr->user_ctx, cr->opcode, cr->flag.value);
-        urma_sock->OnPeerReset();
         return;
     }
     switch (cr->status) {
