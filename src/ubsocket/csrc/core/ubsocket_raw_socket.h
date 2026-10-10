@@ -20,21 +20,29 @@ public:
     explicit RawSocket(int fd) noexcept : SocketBase(fd, SocketType::SOCK_TYPE_TCP){}
     ~RawSocket() override {}
 
+    static Result SetRawSocket(int new_fd, SocketCreateType type)
+    {
+        SocketPtr socketPtr;
+        Result ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_TCP, socketPtr);
+        if (ret != UBS_OK) {
+            UBS_VLOG_ERR("Create raw socketFd failed, fd: %d, ret: %d\n", new_fd, ret);
+            return ret;
+        }
+        socketPtr->create_type_ = type;
+        ArraySet<Socket>::GetInstance().OverrideItem(new_fd, socketPtr.Get());
+        return UBS_OK;
+    }
+
     ALWAYS_INLINE int Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t *address_len) override
     {
         int fd = LibcApi::accept(sock->Fd(), address, address_len);
         if (fd < 0) {
             return fd;
         }
-        SocketPtr socketPtr;
-        int ret = SocketBase::Create(fd, SocketType::SOCK_TYPE_TCP, socketPtr);
-        if (ret != UBS_OK) {
-            UBS_VLOG_ERR("CreateSocketFd() failed, fd: %d, ret: %d\n", fd, ret);
+        if (SetRawSocket(fd, SOCK_CREATE_TYPE_ACCEPT) != UBS_OK) {
             LibcApi::close(fd);
             return -1;
         }
-        socketPtr->create_type_ = SOCK_CREATE_TYPE_ACCEPT;
-        ArraySet<Socket>::GetInstance().OverrideItem(fd, socketPtr.Get());
         return fd;
     }
 

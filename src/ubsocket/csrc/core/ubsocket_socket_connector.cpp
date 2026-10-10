@@ -15,6 +15,7 @@
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_scope_exit.h"
 #include "profiling/statistics/statistics_statsmgr.h"
+#include "ubsocket_raw_socket.h"
 #include "ubsocket_socket.h"
 #include "ubsocket_socket_helper.h"
 
@@ -183,14 +184,10 @@ int Connector::Connect(SocketPtr &sock, const struct sockaddr *address, socklen_
     }
 
     if (ret != UBS_OK && IsDegradable(ret)) {
-        SocketPtr socketPtr;
-        ret = SocketBase::Create(raw_fd_, SocketType::SOCK_TYPE_TCP, socketPtr);
+        ret = RawSocket::SetRawSocket(raw_fd_, SOCK_CREATE_TYPE_CONNECT);
         if (ret != UBS_OK) {
-            UBS_VLOG_ERR("Create raw socketFd failed, fd: %d, ret: %d\n", raw_fd_, ret);
             return ret;
         }
-        socketPtr->create_type_ = SOCK_CREATE_TYPE_CONNECT;
-        ArraySet<Socket>::GetInstance().OverrideItem(raw_fd_, socketPtr.Get());
         UBS_VLOG_INFO("ubsocket is degraded to TCP.\n");
         return UBS_OK;
     }
