@@ -61,6 +61,7 @@ enum OneSideSenderType : uint8_t {
     READ_DATA_REQUEST,     /* pre-write large IO: RDMA READ completion, data now in local blocks */
     CLOSE_NOTIFY,          /* pending-close hold: CLOSE WR flushed to peer, may release the held socket */
     SHUTDOWN_NOTIFY,       /* SHUT_WR half-close: SHUTDOWN WR flushed, release the ctrl slot (socket stays alive) */
+    KEEP_ALIVE_PROBE,      /* probe message for check health status of the connection */
 };
 
 /*
@@ -127,6 +128,8 @@ enum IOOpcode : uint8_t {
     WRITE_IN_BAND_ACK = 3, /* small IO write acknowledgment */
     CLOSE = 4,             /* FIN-like orderly close : sender has no more data to send */
     SHUTDOWN = 5,          /* FIN-like half-close (SHUT_WR): no more data to send, but socket stays open */
+    KEEP_ALIVE = 6,        /* keep alive probe msg */
+    KEEP_ALIVE_ACK = 7,    /* ack for keep alive probe msg */
 };
 
 /*

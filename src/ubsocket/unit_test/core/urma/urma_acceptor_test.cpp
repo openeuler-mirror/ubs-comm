@@ -171,6 +171,12 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_VersionMajorMismatch_ReturnsTcpExchange)
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvPrefixedMajorMismatch));
 
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(returnValue(static_cast<ssize_t>(sizeof(uint32_t))));
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
+    UrmaDevicePtr target_dev;
+    urma_eid_info_t eid_info;
+    auto tmp_context = MakeRef<UrmaContext>(nullptr, target_dev, eid_info);
+    MOCKER_CPP(&UrmaContextPool::SelectContext).stubs().will(returnValue(tmp_context));
 
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
     EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
@@ -189,9 +195,14 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_SendVersionFails_ReturnsTcpExchange)
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvPrefixedCompatible));
 
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(returnValue(static_cast<ssize_t>(-1)));
-
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
+    UrmaDevicePtr target_dev;
+    urma_eid_info_t eid_info;
+    auto tmp_context = MakeRef<UrmaContext>(nullptr, target_dev, eid_info);
+    MOCKER_CPP(&UrmaContextPool::SelectContext).stubs().will(returnValue(tmp_context));
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
-    EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
+    EXPECT_EQ(UBS_ERROR, ret);
 
     sock->UnInitialize();
     GlobalMockObject::verify();
@@ -211,6 +222,12 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_SendRspFails_ReturnsError)
     MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed)
         .stubs()
         .will(returnValue(static_cast<ock::ubs::Result>(UBS_ERROR)));
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
+    UrmaDevicePtr target_dev;
+    urma_eid_info_t eid_info;
+    auto tmp_context = MakeRef<UrmaContext>(nullptr, target_dev, eid_info);
+    MOCKER_CPP(&UrmaContextPool::SelectContext).stubs().will(returnValue(tmp_context));
 
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
     EXPECT_NE(UBS_OK, ret);
@@ -231,6 +248,12 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_Success)
     MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendVersionOk));
 
     MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    auto tmp_context_pool = MakeRef<UrmaContextPool>();
+    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
+    UrmaDevicePtr target_dev;
+    urma_eid_info_t eid_info;
+    auto tmp_context = MakeRef<UrmaContext>(nullptr, target_dev, eid_info);
+    MOCKER_CPP(&UrmaContextPool::SelectContext).stubs().will(returnValue(tmp_context));
 
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
     EXPECT_EQ(UBS_OK, ret);

@@ -88,6 +88,23 @@ target_sources(urma_connector_test PRIVATE
         urma_connector_test.cpp
 )
 
+add_urma_test(urma_alive_manager_test)
+target_include_directories(urma_alive_manager_test PRIVATE
+        ${UBSOCKET_BASE_DIR}/csrc
+        ${UBSOCKET_BASE_DIR}/csrc/core
+        ${UBSOCKET_BASE_DIR}/csrc/common
+        ${UBSOCKET_BASE_DIR}/csrc/iobuf
+        ${UBSOCKET_BASE_DIR}/csrc/under_api
+        ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
+        ${UBSOCKET_BASE_DIR}/include
+)
+target_link_libraries(urma_alive_manager_test PRIVATE
+        ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
+)
+target_sources(urma_alive_manager_test PRIVATE
+        urma_alive_manager_test.cpp
+)
+
 add_urma_test(urma_conn_ops_test)
 target_include_directories(urma_conn_ops_test PRIVATE
         ${UBSOCKET_BASE_DIR}/csrc

@@ -46,6 +46,7 @@ UrmaSocket::UrmaSocket(int fd) noexcept : SocketBase(fd, SocketType::SOCK_TYPE_U
     empty_recv_wr_.src.num_sge = 1;
     empty_recv_wr_.user_ctx = SenderCRContext{CTRL_DATA_RECEiVE, 0, fd}.value;
     empty_recv_wr_.next = nullptr;
+    socket_flags = 0;
 
     pthread_mutex_init(&block_mutex_, nullptr);
     pthread_condattr_t cond_attr;
@@ -69,6 +70,15 @@ Result UrmaSocket::Initialize() noexcept
     }
     recv_buf_addr_ = reinterpret_cast<uintptr_t>(buffer);
     send_buf_addr_ = recv_buf_addr_ + recv_buf_size_;
+
+    auto aliveMgr = UrmaBackend::Instance().GetAliveManager();
+    if (aliveMgr != nullptr && aliveMgr->KeepAliveEnable()) {
+        alive_Info_ = new (std::nothrow) UrmaAliveInfo();
+        if (UNLIKELY(alive_Info_ == nullptr)) {
+            UBS_SLOG_ERR("UrmaSocket: alive_Info_ alloc failed, fd=" << raw_socket_);
+            return UBS_MALLOC_FAILED;
+        }
+    }
 
     UrmaSockBuf *base_ring_buf = new (std::nothrow) UrmaSockRingBuf(send_buf_size_);
     if (UNLIKELY(base_ring_buf == nullptr)) {
@@ -96,7 +106,7 @@ void UrmaSocket::UnInitialize() noexcept
 {
     UrmaBackend::Instance().GetAllocator()->rm_remote_segments(context_, peer_node_);
     DestroyUrmaResources();
-
+    alive_Info_ = nullptr;
     send_buf_ = nullptr;
     auto buffer = reinterpret_cast<void *>(recv_buf_addr_);
     if (buffer != 0) {
@@ -213,7 +223,7 @@ void UrmaSocket::OnPeerReset() noexcept
 }
 
 /* CLOSE/SHUTDOWN 通知的序号发生器: 独立于数据通道 */
-static std::atomic<uint32_t> g_close_seq_gen{0};
+static std::atomic<uint32_t> g_ctrl_seq_gen{0};
 
 int UrmaSocket::SetLingerOpt(const struct linger &value) noexcept
 {
@@ -248,7 +258,7 @@ Result UrmaSocket::PostCtrlOnlyNotification(IOOpcode opcode, OneSideSenderType n
     dst_sge.len = static_cast<uint32_t>(real_size);
     dst_sge.tseg = remote_ctrl_target_seg_;
 
-    auto seq_no = g_close_seq_gen.fetch_add(1, std::memory_order_relaxed);
+    auto seq_no = g_ctrl_seq_gen.fetch_add(1, std::memory_order_relaxed);
     auto *head = reinterpret_cast<UrmaMessageHead *>(send_buf_addr_ + buf_offset);
     head->request_id = (static_cast<uint64_t>(raw_socket_) << 32) | (seq_no & 0xFFFFFFFFUL);
     head->sequence_no = seq_no;
@@ -263,9 +273,9 @@ Result UrmaSocket::PostCtrlOnlyNotification(IOOpcode opcode, OneSideSenderType n
     rw.notify_data = WriteImmData{opcode, buf_offset / unit}.data;
 
     /* ctx 第二字段语义随 notify 类型: CLOSE→seq_no (CQE 侧仅按 fd 释放 hold),
-     * SHUTDOWN→buf_offset_units (CQE 侧据此 Release ctrl 槽, 不释放会在后续
+     * 其他→buf_offset_units (CQE 侧据此 Release ctrl 槽, 不释放会在后续
      * linger close 的 drain 检查中空等到超时) */
-    const uint64_t ctx_arg = (notify == SHUTDOWN_NOTIFY) ? (buf_offset / unit) : seq_no;
+    const uint64_t ctx_arg = (notify == CLOSE_NOTIFY) ? seq_no : (buf_offset / unit);
     const auto user_ctx = SenderCRContext{notify, ctx_arg, raw_socket_}.value;
     UBS_VLOG_TRACE("urma_socket_message: socket(%d) send ctrl notification (opcode %u, imm off %u)", raw_socket_,
                    static_cast<unsigned>(opcode), static_cast<unsigned>(buf_offset / unit));
@@ -402,9 +412,9 @@ Result UrmaSocket::PostShutdownWriteToPeer() noexcept
     return PostCtrlOnlyNotification(SHUTDOWN, SHUTDOWN_NOTIFY);
 }
 
-void UrmaSocket::OnShutdownWriteFinished(uint64_t buf_offset_units) noexcept
+void UrmaSocket::OnPostCtrlOnlyNotificationFinished(uint64_t buf_offset_units) noexcept
 {
-    /* SHUTDOWN WR: 释放 ctrl 占用 (socket 存活, 不随 close 整体释放) */
+    // 释放 ctrl 占用
     if (send_buf_ != nullptr) {
         send_buf_->Release(buf_offset_units * URMA_SND_BUFF_ALLOC_UNIT, URMA_CTRL_ONLY_BUF_SIZE);
     }
@@ -608,6 +618,12 @@ void UrmaSocket::HandleRecvCqe(const WriteImmData &imm)
             break;
         case SHUTDOWN:
             OnPeerShutdownWrite();
+            break;
+        case KEEP_ALIVE:
+            UrmaBackend::Instance().GetAliveManager()->SendResponsePacket(this);
+            break;
+        case KEEP_ALIVE_ACK:
+            UrmaBackend::Instance().GetAliveManager()->HandleAckPacket(this);
             break;
         default:
             UBS_SLOG_ERR("UrmaSocket: poll unknown imm ubsocket opcode: " << imm.ubsocket.opcode);

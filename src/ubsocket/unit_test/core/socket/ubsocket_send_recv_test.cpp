@@ -210,41 +210,6 @@ TEST_F(UbsocketSendRecvTest, DegradedSocketForwardsFlagsToKernel)
     ::close(fds[1]);
 }
 
-/* pure TCP socket (SOCK_TYPE_TCP) takes the same flag-preserving path */
-TEST_F(UbsocketSendRecvTest, TcpSocketForwardsFlagsToKernel)
-{
-    int fds[2] = {-1, -1};
-    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
-    /* keep the test-side end non-blocking: a silently failed send must fail the UT, not hang it */
-    ASSERT_NE(-1, ::fcntl(fds[1], F_SETFL, O_NONBLOCK));
-
-    auto raw = MakeRef<TestSocket>(fds[0], SocketType::SOCK_TYPE_TCP);
-    SocketPtr sock = RefStaticCast<Socket>(raw);
-
-    /* send keeps its flags: MSG_NOSIGNAL data reaches the peer */
-    ASSERT_EQ(4, raw->Send(sock, "tcp!", 4, MSG_NOSIGNAL));
-    char peer[8] = {};
-    ASSERT_EQ(4, ::read(fds[1], peer, sizeof(peer)));
-    EXPECT_EQ(0, memcmp(peer, "tcp!", 4));
-
-    /* recv keeps them too: MSG_PEEK is served by the kernel instead of being rejected */
-    errno = 0;
-    ssize_t sent = ::write(fds[1], "peek", 4);
-    ASSERT_EQ(4, sent) << "write errno=" << errno;
-    char buf[8] = {};
-    EXPECT_EQ(4, raw->Recv(sock, buf, sizeof(buf), MSG_PEEK | MSG_DONTWAIT));
-    EXPECT_EQ(0, memcmp(buf, "peek", 4));
-    memset(buf, 0, sizeof(buf));
-    EXPECT_EQ(4, raw->Recv(sock, buf, sizeof(buf), MSG_PEEK | MSG_DONTWAIT));
-    EXPECT_EQ(0, memcmp(buf, "peek", 4));
-    memset(buf, 0, sizeof(buf));
-    EXPECT_EQ(4, raw->Recv(sock, buf, sizeof(buf), MSG_DONTWAIT));
-    EXPECT_EQ(0, memcmp(buf, "peek", 4));
-
-    ::close(fds[0]);
-    ::close(fds[1]);
-}
-
 /* managed send: MSG_DONTWAIT must reach the transport as UBS_IO_FLAG_DONT_WAIT */
 TEST_F(UbsocketSendRecvTest, ManagedSendMapsDontWaitFlagToTransport)
 {

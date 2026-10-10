@@ -152,6 +152,11 @@ public:
         return (socket_flags & URMA_SOCKET_MASK_LINK_SWITCH) != 0;
     }
 
+    UrmaAliveInfoPtr GetAliveInfo()
+    {
+        return alive_Info_;
+    }
+
     int NotifySocketReadable();
     int NotifyClosed();
     /* Closed state check: after NotifyClosed injects, HUP bit is persistent */
@@ -199,7 +204,7 @@ public:
      * SHUT_RD gates local reads. return 0 on success, -1 with errno (EINVAL/ENOTCONN) */
     int Shutdown(int how) noexcept override;
     /* SHUTDOWN WR flushed (send CQE) — release the ctrl slot; */
-    void OnShutdownWriteFinished(uint64_t buf_offset_units) noexcept;
+    void OnPostCtrlOnlyNotificationFinished(uint64_t buf_offset_units) noexcept;
 
     bool PostCloseToPeer(int timeout_ms = -1) noexcept override;
 
@@ -328,6 +333,7 @@ private:
     urma_target_seg_t *local_ctrl_target_seg_{nullptr};
     urma_target_seg_t *remote_ctrl_target_seg_{nullptr};
     RemoteSegmentsPtr remote_target_segs_{nullptr};
+    UrmaAliveInfoPtr alive_Info_{nullptr};
 
     ub_trans_mode trans_mode{RM_CTP};
     uint32_t socket_flags : 3;
@@ -369,6 +375,7 @@ private:
     friend class UrmaRxOps;
     friend class BlockingWaiter;    /* shared blocking readv/writev wait bookkeeping (BLOCKING_FLAG_*) */
     friend class QueueRxDispatcher; /* drains deferred events: re-reads seq from recv_buf */
+    friend class UrmaAliveManager;
 };
 using UrmaSocketPtr = Ref<UrmaSocket>;
 

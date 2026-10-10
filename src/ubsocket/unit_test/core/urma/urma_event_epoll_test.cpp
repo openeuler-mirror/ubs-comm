@@ -25,6 +25,7 @@
 #include "core/urma/urma_backend.h"
 #include "core/urma/urma_event_epoll.h"
 #include "core/urma/urma_poller.h"
+#include "core/urma/urma_poller_agg.h"
 #include "core/urma/urma_setting.h"
 #include "core/urma/urma_socket.h"
 #include "core/urma/urma_wrapper.h"
@@ -965,7 +966,9 @@ struct DispatcherPollerEnv {
     UrmaDevicePtr device{nullptr};
     UrmaContextPtr context{nullptr};
     UrmaJfcPtr jfc{nullptr};
+    UrmaJfcePtr jfce{nullptr};
     UrmaPollerPtr poller{nullptr};
+    UrmaAggPollerPtr aggPoller{nullptr};
 };
 
 DispatcherPollerEnv MakeDispatcherPollerEnv()
@@ -979,6 +982,13 @@ DispatcherPollerEnv MakeDispatcherPollerEnv()
     env.context = MakeRef<UrmaContext>(env.rawContext.get(), env.device, urma_eid_info_t{});
     env.jfc = MakeRef<UrmaJfc>(EVENT_POLLING, env.rawJfc.get(), env.rawJfce.get(), env.context);
     env.poller = MakeRef<UrmaPoller>(0, MockCqeHandler, env.jfc);
+    env.jfce = MakeRef<UrmaJfce>(env.rawJfce.get(), env.context);
+    auto agg = MakeRef<UrmaDedicatedJfcAggPoller>();
+    agg->jfce_ = env.jfce;
+    agg->handler_ = MockCqeHandler;
+    agg->index_ = 0;
+    agg->jfc_vector_.push_back(env.jfc);
+    env.aggPoller = RefStaticCast<UrmaAggPoller>(agg);
     return env;
 }
 } // namespace
@@ -1048,11 +1058,17 @@ protected:
         auto &set = UrmaPollerSet::Instance();
         set.pollers_.clear();
         set.inited_ = false;
+        UrmaBackend::Instance().poller_set_ = nullptr;
     }
 
     void RegisterPoller(DispatcherPollerEnv &env)
     {
-        UrmaPollerSet::Instance().pollers_.push_back(env.poller);
+        auto &backend = UrmaBackend::Instance();
+        if (backend.poller_set_ == nullptr) {
+            backend.poller_set_ = MakeRef<UrmaAggPollerSet>();
+        }
+        backend.poller_set_->pollers_.clear();
+        backend.poller_set_->pollers_.emplace(0, env.aggPoller);
     }
 
     void SetUpMocks()
@@ -1271,7 +1287,7 @@ TEST_F(UrmaEventPollDispatcherTest, EpollWait_JfceEvent_NotReturned_InlinePollIn
 
     struct epoll_event kernelEvt {};
     EpollEvent jfceEvent(EPOLL_EVENT_JFCE_FD, TEST_JFCE_FD, kernelEvt);
-    jfceEvent.event.data.ptr = env.poller.Get();
+    jfceEvent.event.data.ptr = env.aggPoller.Get();
     kernelEvt.data.ptr = &jfceEvent;
 
     g_epollWaitReturn = 1;

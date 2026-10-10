@@ -16,6 +16,7 @@
 #include "common/ubsocket_defines.h"
 #include "common/ubsocket_obj_pool.h"
 #include "core/ubsocket_socket.h"
+#include "urma_alive_manager.h"
 #include "urma_context_pool.h"
 #include "urma_io_buf_pool.h"
 #include "urma_jetty_pool.h"
@@ -52,6 +53,8 @@ public:
     UrmaContextPoolPtr GetContextPoll() noexcept;
 
     UrmaAggPollerSetPtr GetPollerSet() noexcept;
+
+    UrmaAliveManagerPtr GetAliveManager() noexcept;
 
     /*
      * Pending-close hold: after PostCloseToPeer succeeds, the socket's fd has
@@ -108,6 +111,9 @@ private:
     Result InitObjectPool() noexcept;
     void UnInitObjectPool() noexcept;
 
+    Result InitKeepAliveManager();
+    void UnInitKeepAliveManager();
+
     Result HandleCqe(uint32_t flags, int cr_count, urma_cr_t *cr);
     void HandleErrorCqe(urma_cr_t *cr);
 
@@ -117,6 +123,7 @@ private:
     UrmaContextPoolPtr context_pool_;  /* urma context pool */
     UrmaAggPollerSetPtr poller_set_;   /* urma poller set */
     UrmaJettyPoolPtr jetty_pool_;      /* jetty pool */
+    UrmaAliveManagerPtr alive_manager_;  /* alive manager */
 
     /* non-hot variables */
     std::mutex mutex_;         /* mutex for things */

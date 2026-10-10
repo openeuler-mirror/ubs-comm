@@ -380,6 +380,7 @@ TEST_F(UmqConnectorOpsTest, PrepareConnect_HandshakeOpt_SetsockoptSuccess_Connec
     LibcApi::setsockopt_ptr = MockSetsockoptSuccess;
     LibcApi::connect_ptr = MockConnectSuccess;
     LibcApi::fcntl_ptr = MockFcntlBlocking;
+    LibcApi::LOADED = true;
 
     UmqSocketPtr umqSocket = MakeRef<UmqSocket>(TEST_FD);
     umqSocket->state_ = SOCK_STAT_RAW_ESTABLISHED;

@@ -37,7 +37,7 @@ uint32_t NegotiateServerConnFlag(uint32_t peer_flag)
     if (GlobalSetting::UBS_ENABLE_DEGRADE) {
         ret_flag |= (peer_flag & URMA_SOCKET_MASK_DEGRADE);
     }
-    if (GlobalSetting::UBS_ENABLE_LINK_SWITCH) {
+    if (GlobalSetting::UBS_BACKUP_LINK_ENABLED) {
         ret_flag |= (peer_flag & URMA_SOCKET_MASK_LINK_SWITCH);
     }
     return ret_flag;
@@ -304,7 +304,7 @@ Result UrmaConnOps::BuildNegotiateReq()
     req.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
     req.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
     req.conn_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? URMA_SOCKET_MASK_DEGRADE : 0;
-    req.conn_flag |= GlobalSetting::UBS_ENABLE_LINK_SWITCH ? URMA_SOCKET_MASK_LINK_SWITCH : 0;
+    req.conn_flag |= GlobalSetting::UBS_BACKUP_LINK_ENABLED ? URMA_SOCKET_MASK_LINK_SWITCH : 0;
 
     /* 本端 context 健康列表：server 据此选择健康 context pair，选中 index 由 rsp 带回 */
     sorted_contexts_ = UrmaBackend::Instance().GetContextPoll()->SortedContexts();

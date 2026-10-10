@@ -265,6 +265,9 @@ constexpr uint8_t BRPC_TRACE_FIRST_STR_SIZE = 4;
 constexpr uint8_t BRPC_TRACE_SECOND_VALUE_SIZE = 4;
 constexpr uint8_t BRPC_TRACE_HEADER_SIZE = 12;
 constexpr uint32_t BRPC_TRACE_FIRST_MAGIC = 0x50525043U;
+
+static constexpr uint64_t UBSOCKET_MS_TO_NS = 1000000ULL;
+static constexpr uint64_t UBSOCKET_S_TO_NS = 1000000000ULL;
 } // namespace ubs
 } // namespace ock
 
