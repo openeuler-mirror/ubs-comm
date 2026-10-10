@@ -135,14 +135,21 @@ private:
     static uint32_t AlignUp4K(uint32_t size) noexcept;
 
 private:
-    FixedGlobalCache *gc_ = nullptr;
+    Ref<FixedGlobalCache> gc_{nullptr};
     uint64_t mini_block_head_mask_ = 0;
     std::mutex mutex_;
 };
 
 ALWAYS_INLINE FixedThreadCache2 &FixedAllocator::GetTC() noexcept
 {
-    static thread_local FixedThreadCache2 tc(gc_, FIX_GC_BATCH_ALLOC_SIZE, FIX_GC_BATCH_FREE_SIZE);
+    /*
+     * The thread cache is thread local while the allocator is not: it may have been UnInit()ed and
+     * Init()ed again (with a brand new global cache) since this thread used it the last time. So it
+     * must be rebound to the current global cache on every call - Rebind is only a pointer compare
+     * when the binding is unchanged.
+     */
+    static thread_local FixedThreadCache2 tc;
+    tc.Rebind(gc_.Get());
     return tc;
 }
 
