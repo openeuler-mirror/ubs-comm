@@ -191,10 +191,14 @@ ALWAYS_INLINE uint32_t Func::SecureRandUInt32() noexcept
 ALWAYS_INLINE uint64_t Func::CurrentTimeNs() noexcept
 {
 #if defined(__aarch64__)
-    const static uint64_t freq = GetCpuFreq();
-    uint64_t timeValue = 0;
-    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(timeValue));
-    return timeValue / freq;
+    const static uint64_t freq = GetCpuFreq(); /* system counter frequency, in Hz */
+    uint64_t ticks = 0;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(ticks));
+    /* ns = ticks * 1e9 / freq. 拆成商+余数分步计算, 避免 ticks*1e9 一步相乘溢出 64 位;
+     * rem < freq (cntfrq 现实值 <= ~GHz), 故 rem*1e9 无溢出风险 */
+    const uint64_t sec = ticks / freq;
+    const uint64_t rem = ticks % freq;
+    return sec * 1000000000ULL + rem * 1000000000ULL / freq;
 #else
     struct timespec tpDelay = {0, 0};
     clock_gettime(CLOCK_MONOTONIC, &tpDelay);
@@ -205,15 +209,15 @@ ALWAYS_INLINE uint64_t Func::CurrentTimeNs() noexcept
 ALWAYS_INLINE uint64_t Func::GetCpuFreq() noexcept
 {
 #if defined(__aarch64__)
-    /* get frequ */
+    /* 读取系统计数器频率 cntfrq_el0, 返回原始 Hz (换算交给调用方) */
     uint64_t tmpFreq = 0;
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(tmpFreq));
 
     if (tmpFreq != 0) {
-        return tmpFreq / 1000L;
+        return tmpFreq;
     }
 #endif
-    return 1;
+    return 1; /* cntfrq_el0 读取失败时兜底 1Hz, 避免调用方除零 */
 }
 } // namespace ubs
 } // namespace ock
