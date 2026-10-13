@@ -134,6 +134,9 @@ Result UrmaBackend::Init(bool initUrmaOnly) noexcept
             UBS_VLOG_ERR("Failed to initialize backend as init keep_alive manager failed");
             return UBS_ERROR;
         }
+        /* step7.5: 预热 pending-close 无锁注册表(65K 槽位零初始化耗时毫秒级), 移出 close 热路径 */
+        EnsurePendingCloseRegistry();
+
         /* only a full init (context/poller/jetty/object pools) marks the backend usable */
         inited_ = true;
     }
@@ -452,64 +455,136 @@ void UrmaBackend::SetLogLevel(int level) noexcept
     UrmaApi::urma_log_set_level(UrmaGetLogLevel());
 }
 
+namespace {
+/* 与 ArraySet<Socket>::FD_CAPACITY_HARD_LIMIT(65536, private) 对齐的硬上限 */
+constexpr uint32_t kPendingCloseCapacityHardLimit = 65536;
+
+/* 懒初始化容量来源: 与 ArraySet<Socket> 对齐覆盖进程合法 fd 范围; 未初始化(UT)时退回硬上限 */
+uint32_t GetPendingCloseCapacity()
+{
+    uint32_t cap = ArraySet<Socket>::GetInstance().Capacity();
+    return (cap > 0) ? cap : kPendingCloseCapacityHardLimit;
+}
+} // namespace
+
+void UrmaBackend::EnsurePendingCloseRegistry() noexcept
+{
+    if (pending_close_slots_.load(std::memory_order_acquire) != nullptr) {
+        return;
+    }
+    std::call_once(pending_close_once_, [this] {
+        const uint32_t cap = GetPendingCloseCapacity();
+        auto *slots = new (std::nothrow) PendingCloseSlot[cap]();
+        if (slots == nullptr) {
+            UBS_VLOG_ERR("pending-close registry alloc failed (capacity=%u), degrade to disabled\n", cap);
+            return;
+        }
+        pending_close_capacity_.store(cap, std::memory_order_release);
+        pending_close_slots_.store(slots, std::memory_order_release);
+    });
+}
+
 void UrmaBackend::HoldPendingClose(int fd, Socket *sock) noexcept
 {
-    std::lock_guard<std::mutex> locker(pending_close_mutex_);
-    /* SocketPtr(raw) constructor takes a reference; re-hold on same fd replaces stale entry */
-    pending_close_holds_[fd] = PendingCloseEntry{SocketPtr(sock), false};
+    EnsurePendingCloseRegistry();
+    auto *slots = pending_close_slots_.load(std::memory_order_acquire);
+    if (UNLIKELY(slots == nullptr || fd < 0 ||
+                 static_cast<uint32_t>(fd) >= pending_close_capacity_.load(std::memory_order_acquire))) {
+        return;
+    }
+
+    /* 先取 hold 引用再发布槽位: 若先 exchange 后增引用, Release 可能抢在中间 drop 掉未持有的引用 */
+    sock->IncreaseRef();
+    Socket *old = slots[fd].sock.exchange(sock, std::memory_order_acq_rel);
+    slots[fd].placeholder_taken.store(false, std::memory_order_release);
+    if (UNLIKELY(old != nullptr)) {
+        /* 覆盖陈旧条目 (占位机制保证正常不会发生; 与旧 map 覆盖语义一致) */
+        old->DecreaseRef();
+    }
 }
 
 void UrmaBackend::ReleasePendingClose(int fd) noexcept
 {
-    std::lock_guard<std::mutex> locker(pending_close_mutex_);
-    auto it = pending_close_holds_.find(fd);
-    if (it != pending_close_holds_.end()) {
-        if (it->second.placeholder_taken) {
-            /* return the placeholder-held fd number to the kernel pool */
-            (void)LibcApi::close(fd);
-        }
-        /* erase drops the held reference; refcount reaching 0 triggers ~UrmaSocket safely */
-        pending_close_holds_.erase(it);
-        UBS_VLOG_TRACE("pending-close hold released for fd(%d)", fd);
+    auto *slots = pending_close_slots_.load(std::memory_order_acquire);
+    if (UNLIKELY(slots == nullptr || fd < 0 ||
+                 static_cast<uint32_t>(fd) >= pending_close_capacity_.load(std::memory_order_acquire))) {
+        return;
     }
+
+    auto &slot = slots[fd];
+    Socket *sock = slot.sock.exchange(nullptr, std::memory_order_acq_rel);
+    if (sock == nullptr) {
+        return;
+    }
+    const bool taken = slot.placeholder_taken.exchange(false, std::memory_order_acq_rel);
+    if (taken) {
+        /*
+         * return the placeholder-held fd number to the kernel pool: 占位 fd 号在 close 前仍被
+         * 内核占用, 不可能重分配给新连接, 先 exchange 指针再 close 是安全的。
+         */
+        (void)LibcApi::close(fd);
+    }
+    sock->DecreaseRef(); /* refcount 归零触发 ~UrmaSocket 安全析构 */
+    UBS_VLOG_TRACE("pending-close hold released for fd(%d)", fd);
 }
 
 bool UrmaBackend::HasPendingClose(int fd) noexcept
 {
-    std::lock_guard<std::mutex> locker(pending_close_mutex_);
-    return pending_close_holds_.find(fd) != pending_close_holds_.end();
+    auto *slots = pending_close_slots_.load(std::memory_order_acquire);
+    if (UNLIKELY(slots == nullptr || fd < 0 ||
+                 static_cast<uint32_t>(fd) >= pending_close_capacity_.load(std::memory_order_acquire))) {
+        return false;
+    }
+    return slots[fd].sock.load(std::memory_order_acquire) != nullptr;
 }
 
 void UrmaBackend::ClearPendingClose() noexcept
 {
-    std::lock_guard<std::mutex> locker(pending_close_mutex_);
-    for (auto &kv : pending_close_holds_) {
-        if (kv.second.placeholder_taken) {
-            (void)LibcApi::close(kv.first);
-        }
+    auto *slots = pending_close_slots_.load(std::memory_order_acquire);
+    if (slots == nullptr) {
+        return;
     }
-    pending_close_holds_.clear();
+    const uint32_t cap = pending_close_capacity_.load(std::memory_order_acquire);
+    for (uint32_t i = 0; i < cap; ++i) {
+        Socket *sock = slots[i].sock.exchange(nullptr, std::memory_order_acq_rel);
+        if (sock == nullptr) {
+            continue;
+        }
+        const bool taken = slots[i].placeholder_taken.exchange(false, std::memory_order_acq_rel);
+        if (taken) {
+            (void)LibcApi::close(static_cast<int>(i));
+        }
+        sock->DecreaseRef();
+    }
 }
 
 bool UrmaBackend::TakeFdPlaceholder(int fd) noexcept
 {
-    std::lock_guard<std::mutex> locker(pending_close_mutex_);
-    auto it = pending_close_holds_.find(fd);
-    if (it == pending_close_holds_.end()) {
-        /* send CQE already arrived and released the hold (race window): the WR is
-         * done, the caller closing the fd itself */
-        return false;
-    }
-    if (it->second.placeholder_taken) {
-        return true;
-    }
-    /* shared /dev/null placeholder source, opened lazily once per process */
+    /* shared /dev/null placeholder source, opened lazily once per process.
+     * 函数局部 static 初始化本身线程安全, 与注册表无关, 循环调用零开销。 */
     static const int devnull_fd = LibcApi::open("/dev/null", O_RDWR | O_CLOEXEC);
     if (devnull_fd < 0) {
         const int openErrno = errno;
         UBS_VLOG_WARN("open /dev/null for fd(%d) placeholder failed (errno=%d), degrade to no placeholder",
                       fd, openErrno);
         return false;
+    }
+
+    auto *slots = pending_close_slots_.load(std::memory_order_acquire);
+    if (UNLIKELY(slots == nullptr || fd < 0 ||
+                 static_cast<uint32_t>(fd) >= pending_close_capacity_.load(std::memory_order_acquire))) {
+        return false;
+    }
+
+    auto &slot = slots[fd];
+    Socket *sock = slot.sock.load(std::memory_order_acquire);
+    if (sock == nullptr) {
+        /* send CQE already arrived and released the hold (race window): the WR is
+         * done, the caller closing the fd itself */
+        return false;
+    }
+    if (slot.placeholder_taken.load(std::memory_order_acquire)) {
+        return true; /* 幂等: 仅 owner 线程写入该标志 */
     }
     /* dup3 atomically replaces the TCP socket with /dev/null under the fd number:
      * the original socket is closed by the kernel (FIN sent), while the number
@@ -523,7 +598,14 @@ bool UrmaBackend::TakeFdPlaceholder(int fd) noexcept
                       fd, devnull_fd, dupRet, dupErrno);
         return false;
     }
-    it->second.placeholder_taken = true;
+    /* 竞态复查: dup3 期间 CLOSE CQE 抢先到达会 exchange 掉槽位指针。此时 fd 已换为 /dev/null
+     * 占位(原始 socket 已被 dup3 关闭), 返回 false 由调用方 close(fd) 归还 fd 号 —
+     * 不泄漏、不双关。 */
+    Socket *expected = sock;
+    if (!slot.sock.compare_exchange_strong(expected, sock, std::memory_order_acquire, std::memory_order_relaxed)) {
+        return false;
+    }
+    slot.placeholder_taken.store(true, std::memory_order_release);
     return true;
 }
 

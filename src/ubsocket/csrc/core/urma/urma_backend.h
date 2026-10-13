@@ -11,6 +11,7 @@
 #ifndef UBS_COMM_URMA_BACKEND_H
 #define UBS_COMM_URMA_BACKEND_H
 
+#include <atomic>
 #include <mutex>
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_defines.h"
@@ -131,14 +132,23 @@ private:
     bool urma_inited_ = false; /* init flag for urma init */
     bool init_urma_only_ = false;
 
-    /* pending-close hold registry: fd → held SocketPtr (guards in-flight CLOSE WR);
-     * placeholder_taken marks the fd number being held by a /dev/null placeholder */
-    struct PendingCloseEntry {
-        SocketPtr sock;
-        bool placeholder_taken = false;
+    /*
+     * pending-close hold registry — 无锁 fd 直接寻址, 容量与 ArraySet<Socket> 对齐。
+     * 1000+ 并发 close 下, 任何共享互斥锁(单锁或分片锁)都会因抢锁排队 + 过载时 futex
+     * 唤醒的调度延迟产生毫秒级长尾; 本表每个 fd 一个独立槽位, Hold/Has/Take/Release 全部
+     * 原子操作完成, 无锁、无 malloc、无等待。同一 fd 的访问者只有 close 线程(生产者)与
+     * poller 线程(Release 消费者), 引用计数借用 ArraySet 同款 IncreaseRef/DecreaseRef。
+     */
+    struct PendingCloseSlot {
+        std::atomic<Socket *> sock{nullptr};
+        std::atomic<bool> placeholder_taken{false};
     };
-    std::unordered_map<int, PendingCloseEntry> pending_close_holds_;
-    std::mutex pending_close_mutex_;
+
+    /* 首次使用时懒分配(一次): 槽位数组 + 容量; 分配失败保持 nullptr, 各操作安全降级为 no-op */
+    std::atomic<PendingCloseSlot *> pending_close_slots_{nullptr};
+    std::atomic<uint32_t> pending_close_capacity_{0};
+    std::once_flag pending_close_once_;
+    void EnsurePendingCloseRegistry() noexcept;
 
     std::mutex broken_conn_mutex_;                   /* guards broken_conns_ */
     std::map<uint64_t, uint64_t> broken_conns_{};    /* peer addr id -> last broken conn_id */
