@@ -659,6 +659,7 @@ ALWAYS_INLINE void FixedGlobalCache::TidyUnaligned() noexcept
             tmp_iter->next = aligned_mini_blocks_;
             aligned_mini_blocks_ = unaligned_mini_blocks_;
             free_mini_blocks_aligned_ += FIX_GC_BATCH_FREE_SIZE;
+            free_mini_blocks_unaligned_ -= FIX_GC_BATCH_FREE_SIZE;
             pthread_spin_unlock(&spinlock_aligned_);
 
             /* set unaligned_mini_blocks */
