@@ -8,9 +8,9 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <gtest/gtest.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <gtest/gtest.h>
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -20,8 +20,8 @@
 #include <cerrno>
 #include <cstring>
 #include <ctime>
-#include <string>
 #include <mockcpp/mockcpp.hpp>
+#include <string>
 #include <thread>
 
 #include "common/ubsocket_global_setting.h"
@@ -31,9 +31,11 @@
 #include "core/urma/urma_backend.h"
 #include "core/urma/urma_data_rx_ops.h"
 #include "core/urma/urma_data_tx_ops.h"
+#include "core/urma/urma_event_dispatch.h"
 #include "core/urma/urma_setting.h"
 #include "core/urma/urma_socket.h"
 #include "core/urma/urma_socket_buf.h"
+#include "core/urma/urma_socket_seg_ex.h"
 #include "core/urma/urma_socket_types.h"
 #include "core/urma/urma_wrapper.h"
 #include "iobuf/ubsocket_zcopy_adapter.h"
@@ -47,6 +49,8 @@ using namespace ock::ubs::urma;
 
 namespace {
 static const int TEST_FD = 100;
+static constexpr uint64_t TEST_CAPACITY = 256;
+static constexpr uint64_t TEST_CHUNK = UrmaSockBuf::kChunkSize;
 static char g_mock_buf[256 * 1024];
 static UrmaJetty *dummy_jetty_ = nullptr; /* 文件级: 供匿名 namespace 助手函数共享 */
 
@@ -63,6 +67,7 @@ static void *MockDirectAllocate(size_t)
     return g_mock_buf;
 }
 static void MockDirectRelease(void *) {}
+
 } // namespace
 
 class UrmaSocketTest : public ::testing::Test {
@@ -131,6 +136,186 @@ TEST_F(UrmaSocketTest, SetBindRemoteFlag_IsBindRemoteReturnsTrue)
     UrmaSocket sock(TEST_FD);
     sock.SetSocketFlags(URMA_SOCKET_MASK_BIND_REMOTE);
     EXPECT_TRUE(sock.IsBindRemote());
+}
+
+TEST_F(UrmaSocketTest, ReceiveHandlersDispatchAndNotifyForSuccessfulInlineData)
+{
+    MOCKER(eventfd_write).expects(never());
+    auto sock = MakeRef<UrmaSocket>(TEST_FD);
+    sock->event_fd_ = 7;
+    sock->recv_buf_addr_ = reinterpret_cast<uintptr_t>(g_mock_buf);
+    sock->recv_buf_size_ = sizeof(g_mock_buf);
+    auto *message = reinterpret_cast<UrmaCtrlMessage *>(g_mock_buf);
+    message->head.sequence_no = 123;
+
+    const auto savedMode = UrmaSetting::UB_EPOLL_HANDLE_MODE;
+    UrmaSetting::UB_EPOLL_HANDLE_MODE = THREAD_PER_CONNECTION;
+    UrmaRxOps rxOps(TEST_FD);
+    UrmaSetting::UB_EPOLL_HANDLE_MODE = savedMode;
+    sock->rx_.rx_ops_ = &rxOps;
+    MOCKER_CPP(&UrmaRxOps::ProcessDataReached)
+        .expects(exactly(2))
+        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&UrmaRxOps::ProcessDataReadFinished)
+        .expects(once())
+        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+
+    sock->HandleRecvCqe(WriteImmData{PRE_WRITE, 0});
+    EXPECT_FALSE(sock->socket_readable_ready_.load());
+    sock->HandleRecvCqe(WriteImmData{WRITE_IN_BAND, 0});
+    EXPECT_TRUE(sock->socket_readable_ready_.load());
+
+    sock->socket_readable_ready_.store(false);
+    sock->DataReadFinished(456);
+    EXPECT_TRUE(sock->socket_readable_ready_.load());
+    sock->rx_.rx_ops_ = nullptr;
+    sock->event_fd_ = -1;
+}
+
+TEST_F(UrmaSocketTest, ReceiveHandlersAcceptDeferredAndErrorResults)
+{
+    auto sock = MakeRef<UrmaSocket>(TEST_FD);
+    sock->recv_buf_addr_ = reinterpret_cast<uintptr_t>(g_mock_buf);
+    sock->recv_buf_size_ = sizeof(g_mock_buf);
+    auto *message = reinterpret_cast<UrmaCtrlMessage *>(g_mock_buf);
+    message->head.sequence_no = 321;
+
+    const auto savedMode = UrmaSetting::UB_EPOLL_HANDLE_MODE;
+    UrmaSetting::UB_EPOLL_HANDLE_MODE = THREAD_PER_CONNECTION;
+    UrmaRxOps rxOps(TEST_FD);
+    UrmaSetting::UB_EPOLL_HANDLE_MODE = savedMode;
+    sock->rx_.rx_ops_ = &rxOps;
+    const ock::ubs::Result results[] = {UBS_LATER_SEQ, UBS_DEFERRED, UBS_ERROR};
+    for (auto result : results) {
+        SCOPED_TRACE(result);
+        MOCKER(eventfd_write).expects(never());
+        MOCKER_CPP(&UrmaRxOps::ProcessDataReached).expects(exactly(2)).will(returnValue(result));
+        MOCKER_CPP(&UrmaRxOps::ProcessDataReadFinished).expects(once()).will(returnValue(result));
+        sock->HandlePreWrite(WriteImmData{PRE_WRITE, 0});
+        sock->HandleWriteInBand(WriteImmData{WRITE_IN_BAND, 0});
+        sock->DataReadFinished(1);
+        EXPECT_FALSE(sock->socket_readable_ready_.load());
+        GlobalMockObject::verify();
+    }
+    sock->rx_.rx_ops_ = nullptr;
+}
+
+TEST_F(UrmaSocketTest, HandlePreWriteRejectsOffsetOutsideReceiveBuffer)
+{
+    UrmaSocket sock(TEST_FD);
+    sock.recv_buf_size_ = URMA_SND_BUFF_ALLOC_UNIT;
+    sock.HandlePreWrite(WriteImmData{PRE_WRITE, 1});
+}
+
+TEST_F(UrmaSocketTest, SendAcknowledgementsReleaseAllocatedBuffer)
+{
+    MOCKER(eventfd_write).stubs().will(returnValue(0));
+    UrmaSocket sock(TEST_FD);
+    sock.event_fd_ = 8;
+    sock.send_buf_addr_ = reinterpret_cast<uintptr_t>(g_mock_buf);
+    auto rbTreeBuf = MakeRef<UrmaSockRbTreeBuf>(TEST_CAPACITY);
+    sock.send_buf_ = RefConvert<UrmaSockRbTreeBuf, UrmaSockBuf>(rbTreeBuf);
+
+    uint64_t offset = UINT64_MAX;
+    ASSERT_TRUE(sock.send_buf_->Allocate(TEST_CHUNK, offset));
+    auto *message = reinterpret_cast<UrmaCtrlMessage *>(sock.send_buf_addr_ + offset);
+    message->head.message_size = TEST_CHUNK;
+    message->head.user_ctx = 0;
+    sock.HandleRecvCqe(WriteImmData{POST_WRITE, static_cast<uint32_t>(offset / URMA_SND_BUFF_ALLOC_UNIT)});
+    EXPECT_EQ(TEST_CAPACITY, sock.send_buf_->Available());
+
+    ASSERT_TRUE(sock.send_buf_->Allocate(TEST_CHUNK, offset));
+    message = reinterpret_cast<UrmaCtrlMessage *>(sock.send_buf_addr_ + offset);
+    message->head.message_size = TEST_CHUNK;
+    sock.HandleRecvCqe(WriteImmData{WRITE_IN_BAND_ACK, static_cast<uint32_t>(offset / URMA_SND_BUFF_ALLOC_UNIT)});
+    EXPECT_EQ(TEST_CAPACITY, sock.send_buf_->Available());
+}
+
+TEST_F(UrmaSocketTest, SegmentExchangeHelpersRejectMissingResourcesAndCommitPeer)
+{
+    UrmaSocket sock(TEST_FD);
+    UrmaSockSegExInfo info{};
+    EXPECT_EQ(UBS_ERROR, sock.BuildLocalSegExInfo(info));
+    EXPECT_EQ(UBS_ERROR, sock.ImportPeerSegments(info));
+
+    info.ex.my_send_buf.buf = 101;
+    info.ex.my_recv_buf.buf = 202;
+    info.uasid = 303;
+    sock.CommitRemotePeer(info);
+    EXPECT_EQ(101U, sock.rmt_send_buf_addr_);
+    EXPECT_EQ(202U, sock.rmt_recv_buf_addr_);
+    EXPECT_EQ(303U, sock.remote_uasid_);
+    EXPECT_TRUE(sock.IsBindRemote());
+}
+
+TEST_F(UrmaSocketTest, TransportModeMappingsCoverAllModes)
+{
+    EXPECT_EQ(URMA_TM_RM, UrmaTransModeOf(RM_CTP));
+    EXPECT_EQ(URMA_TM_RM, UrmaTransModeOf(RM_TP));
+    EXPECT_EQ(URMA_TM_RC, UrmaTransModeOf(RC_TP));
+    EXPECT_EQ(URMA_CTP, UrmaTpTypeOf(RM_CTP));
+    EXPECT_EQ(URMA_RTP, UrmaTpTypeOf(RM_TP));
+    EXPECT_EQ(URMA_RTP, UrmaTpTypeOf(RC_TP));
+
+    UrmaSocket sock(TEST_FD);
+    sock.SetTransMode(RM_TP);
+    EXPECT_EQ(URMA_TM_RM, sock.GetUrmaTransMode());
+    EXPECT_EQ(URMA_RTP, sock.GetUrmaTpType());
+    sock.SetTransMode(RC_TP);
+    EXPECT_EQ(URMA_TM_RC, sock.GetUrmaTransMode());
+    EXPECT_EQ(URMA_RTP, sock.GetUrmaTpType());
+}
+
+TEST_F(UrmaSocketTest, ResourceHelpersHandleMissingContextAndClearReferences)
+{
+    UrmaSocket sock(TEST_FD);
+    EXPECT_EQ(UBS_ERROR, sock.CreateUrmaResources());
+
+    auto device = MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{});
+    sock.context_ = MakeRef<UrmaContext>(nullptr, device, urma_eid_info_t{});
+    sock.jfc_ = MakeRef<UrmaJfc>(EVENT_POLLING, nullptr, nullptr, sock.context_);
+    sock.remote_target_segs_ = MakeRef<RemoteSegments>();
+    sock.DestroyUrmaResources();
+    EXPECT_EQ(nullptr, sock.context_.Get());
+    EXPECT_EQ(nullptr, sock.jfc_.Get());
+    EXPECT_EQ(nullptr, sock.remote_target_segs_.Get());
+}
+
+TEST_F(UrmaSocketTest, CreateUrmaResourcesPropagatesSelectionAndHelperResult)
+{
+    urma_jfc_t rawJfc{};
+    urma_jfce_t rawJfce{};
+    UrmaSocket sock(TEST_FD);
+    auto device = MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{});
+    sock.context_ = MakeRef<UrmaContext>(nullptr, device, urma_eid_info_t{});
+    const auto savedPollerSet = UrmaBackend::Instance().poller_set_;
+    UrmaBackend::Instance().poller_set_ = MakeRef<UrmaAggPollerSet>();
+
+    MOCKER_CPP(&UrmaAggPollerSet::SelectJfc).expects(once()).will(returnValue(static_cast<int32_t>(UBS_ERROR)));
+    MOCKER_CPP(&UrmaContext::CreateJfsJfrJetty).expects(never());
+    EXPECT_EQ(UBS_ERROR, sock.CreateUrmaResources());
+    GlobalMockObject::verify();
+
+    sock.jfc_ = MakeRef<UrmaJfc>(EVENT_POLLING, &rawJfc, &rawJfce, sock.context_);
+    MOCKER_CPP(&UrmaAggPollerSet::SelectJfc).expects(once()).will(returnValue(static_cast<int32_t>(UBS_OK)));
+    MOCKER_CPP(&UrmaContext::CreateJfsJfrJetty).expects(once()).will(returnValue(static_cast<int32_t>(UBS_ERROR)));
+    EXPECT_EQ(UBS_ERROR, sock.CreateUrmaResources());
+    GlobalMockObject::verify();
+
+    MOCKER_CPP(&UrmaAggPollerSet::SelectJfc).expects(once()).will(returnValue(static_cast<int32_t>(UBS_OK)));
+    MOCKER_CPP(&UrmaContext::CreateJfsJfrJetty).expects(once()).will(returnValue(static_cast<int32_t>(UBS_OK)));
+    EXPECT_EQ(UBS_OK, sock.CreateUrmaResources());
+    GlobalMockObject::verify();
+    UrmaBackend::Instance().poller_set_ = savedPollerSet;
+}
+
+TEST_F(UrmaSocketTest, HandleRecvCqeCoversKeepAliveAndUnknownOpcodes)
+{
+    auto sock = MakeRef<UrmaSocket>(TEST_FD);
+    UrmaBackend::Instance().alive_manager_ = MakeRef<UrmaAliveManager>();
+    sock->HandleRecvCqe(WriteImmData{KEEP_ALIVE_ACK, 0});
+    sock->HandleRecvCqe(WriteImmData{static_cast<IOOpcode>(UINT8_MAX), 0});
+    UrmaBackend::Instance().alive_manager_ = nullptr;
 }
 
 TEST_F(UrmaSocketTest, WriteV_NullIov_ReturnsEinval)
@@ -257,48 +442,58 @@ public:
 };
 } // namespace
 
-/* Step1 CQE error fallback (close-path gap G-C3): connection-level errors must
- * reach NotifyClosed so the app sees EPOLLHUP|EPOLLRDHUP; retriable errors stay
- * log-only. Receiver-side error CQEs carry SenderCRContext{CTRL_DATA_RECEiVE, 0, fd}
- * in user_ctx (as posted by empty_recv_wr_, HandleErrorCqe decodes the fd bitfield). */
-TEST_F(UrmaSocketTest, HandleCqe_ConnectionError_ReceiverSide_TriggersNotifyClosed)
+/* Current CQE policy logs connection errors without changing peer-close state.
+ * Receiver-side CQEs locate the socket through SenderCRContext in user_ctx. */
+TEST_F(UrmaSocketTest, HandleCqe_ConnectionError_ReceiverSide_LogsWithoutClosing)
 {
     auto urma_sock = MakeRef<UrmaSocket>(TEST_FD);
+    urma_sock->State(SOCK_STAT_ESTABLISHED);
     auto sock = RefConvert<UrmaSocket, Socket>(urma_sock);
     ArraySet<Socket>::GetInstance().OverrideItem(TEST_FD, sock.Get());
 
     g_eventfd_write_count = 0;
     MOCKER(::eventfd_write).stubs().will(invoke(MockEventfdWriteCounting));
+    ScopedErrLogCapture capture;
 
     auto cr = MakeErrorCr(URMA_CR_REM_ACCESS_ABORT_ERR, SenderCRContext{CTRL_DATA_RECEiVE, 0, TEST_FD}.value, 1);
     UrmaBackend::Instance().HandleCqe(0, 1, &cr);
 
-    EXPECT_TRUE(urma_sock->IsClosed());
-    EXPECT_EQ(static_cast<uint32_t>(EPOLLHUP | EPOLLRDHUP), urma_sock->GetReachEpollEvents());
-    EXPECT_EQ(1, g_eventfd_write_count);
-    /* blocked readv/writev waiters must also be released (BLOCKING_FLAG_PEER_CLOSED) */
-    EXPECT_NE(0u, urma_sock->block_flags_ & BLOCKING_FLAG_PEER_CLOSED);
+    EXPECT_GE(g_errLogCount, 1);
+    EXPECT_NE(std::string::npos, g_lastErrLog.find("handle error cr:"));
+    EXPECT_EQ(SOCK_STAT_ESTABLISHED, urma_sock->State());
+    EXPECT_FALSE(urma_sock->IsPeerReset());
+    EXPECT_FALSE(urma_sock->IsClosed());
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents());
+    EXPECT_EQ(0, g_eventfd_write_count);
+    EXPECT_EQ(0u, urma_sock->block_flags_ & BLOCKING_FLAG_PEER_CLOSED);
 
     GlobalMockObject::verify();
 }
 
 /* Sender-side error CQEs carry a SenderCRContext in user_ctx; the fd field locates the socket */
-TEST_F(UrmaSocketTest, HandleCqe_ConnectionError_SenderSide_TriggersNotifyClosed)
+TEST_F(UrmaSocketTest, HandleCqe_ConnectionError_SenderSide_LogsWithoutClosing)
 {
     auto urma_sock = MakeRef<UrmaSocket>(TEST_FD);
+    urma_sock->State(SOCK_STAT_ESTABLISHED);
     auto sock = RefConvert<UrmaSocket, Socket>(urma_sock);
     ArraySet<Socket>::GetInstance().OverrideItem(TEST_FD, sock.Get());
 
     g_eventfd_write_count = 0;
     MOCKER(::eventfd_write).stubs().will(invoke(MockEventfdWriteCounting));
+    ScopedErrLogCapture capture;
 
     SenderCRContext ctx{READ_DATA_REQUEST, 7, TEST_FD};
     auto cr = MakeErrorCr(URMA_CR_WR_FLUSH_ERR, ctx.value, 0);
     UrmaBackend::Instance().HandleCqe(0, 1, &cr);
 
-    EXPECT_TRUE(urma_sock->IsClosed());
-    EXPECT_EQ(static_cast<uint32_t>(EPOLLHUP | EPOLLRDHUP), urma_sock->GetReachEpollEvents());
-    EXPECT_EQ(1, g_eventfd_write_count);
+    EXPECT_GE(g_errLogCount, 1);
+    EXPECT_NE(std::string::npos, g_lastErrLog.find("handle error cr:"));
+    EXPECT_EQ(SOCK_STAT_ESTABLISHED, urma_sock->State());
+    EXPECT_FALSE(urma_sock->IsPeerReset());
+    EXPECT_FALSE(urma_sock->IsClosed());
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents());
+    EXPECT_EQ(0, g_eventfd_write_count);
+    EXPECT_EQ(0u, urma_sock->block_flags_ & BLOCKING_FLAG_PEER_CLOSED);
 
     GlobalMockObject::verify();
 }
@@ -343,23 +538,30 @@ TEST_F(UrmaSocketTest, HandleCqe_ConnectionError_UnknownFd_NoCrashNoNotify)
     GlobalMockObject::verify();
 }
 
-/* a batch mixing connection-level and retriable errors notifies exactly once */
-TEST_F(UrmaSocketTest, HandleCqe_MixedErrors_OnlyConnectionLevelNotifiesClosed)
+/* A mixed error batch preserves the current log-only peer-close policy. */
+TEST_F(UrmaSocketTest, HandleCqe_MixedErrors_LogWithoutClosing)
 {
     auto urma_sock = MakeRef<UrmaSocket>(TEST_FD);
+    urma_sock->State(SOCK_STAT_ESTABLISHED);
     auto sock = RefConvert<UrmaSocket, Socket>(urma_sock);
     ArraySet<Socket>::GetInstance().OverrideItem(TEST_FD, sock.Get());
 
     g_eventfd_write_count = 0;
     MOCKER(::eventfd_write).stubs().will(invoke(MockEventfdWriteCounting));
+    ScopedErrLogCapture capture;
 
     urma_cr_t crs[2];
     crs[0] = MakeErrorCr(URMA_CR_REM_ACCESS_ABORT_ERR, SenderCRContext{CTRL_DATA_RECEiVE, 0, TEST_FD}.value, 1);
     crs[1] = MakeErrorCr(URMA_CR_RNR_RETRY_CNT_EXC_ERR, SenderCRContext{CTRL_DATA_RECEiVE, 0, TEST_FD}.value, 1);
     UrmaBackend::Instance().HandleCqe(0, 2, crs);
 
-    EXPECT_TRUE(urma_sock->IsClosed());
-    EXPECT_EQ(1, g_eventfd_write_count);
+    EXPECT_GE(g_errLogCount, 1);
+    EXPECT_EQ(SOCK_STAT_ESTABLISHED, urma_sock->State());
+    EXPECT_FALSE(urma_sock->IsPeerReset());
+    EXPECT_FALSE(urma_sock->IsClosed());
+    EXPECT_EQ(0u, urma_sock->GetReachEpollEvents());
+    EXPECT_EQ(0, g_eventfd_write_count);
+    EXPECT_EQ(0u, urma_sock->block_flags_ & BLOCKING_FLAG_PEER_CLOSED);
 
     GlobalMockObject::verify();
 }
@@ -486,8 +688,7 @@ static LoopbackTcpPair MakeLoopbackTcpPair()
         return pair;
     }
     pair.conn = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    if (pair.conn < 0 ||
-        ::connect(pair.conn, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) != 0) {
+    if (pair.conn < 0 || ::connect(pair.conn, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) != 0) {
         if (pair.conn >= 0) {
             ::close(pair.conn);
             pair.conn = -1;
@@ -539,7 +740,7 @@ static int MockLibcShutdownPassthrough(int, int)
 }
 } // namespace
 
-/* 对端关闭语义: CLOSE opcode → PeerCloseState::CLOSED + HUP 注入+唤醒阻塞读; 连接级错误 CQE → RESET */
+/* CLOSE notifies peer closure; an error CQE alone does not mark the peer reset. */
 TEST_F(UrmaSocketTest, HandleCqe_PeerCloseSemantics)
 {
     /* graceful: 对端 CLOSE opcode 到达 */
@@ -564,22 +765,27 @@ TEST_F(UrmaSocketTest, HandleCqe_PeerCloseSemantics)
 
         GlobalMockObject::verify();
     }
-    /* abnormal: 连接级错误 CQE 置 RESET 而非 CLOSED */
+    /* Current error-CQE handling only logs the failure. */
     {
-        SCOPED_TRACE("case: connection_error_marks_peer_reset");
+        SCOPED_TRACE("case: connection_error_does_not_mark_peer_reset");
         auto urma_sock = MakeRef<UrmaSocket>(TEST_FD);
         auto sock = RefConvert<UrmaSocket, Socket>(urma_sock);
         ArraySet<Socket>::GetInstance().OverrideItem(TEST_FD, sock.Get());
 
         g_eventfd_write_count = 0;
         MOCKER(::eventfd_write).stubs().will(invoke(MockEventfdWriteCounting));
+        ScopedErrLogCapture capture;
 
         auto cr = MakeErrorCr(URMA_CR_REM_ACCESS_ABORT_ERR, SenderCRContext{CTRL_DATA_RECEiVE, 0, TEST_FD}.value, 1);
         UrmaBackend::Instance().HandleCqe(0, 1, &cr);
 
-        EXPECT_TRUE(urma_sock->IsPeerReset());
+        EXPECT_GE(g_errLogCount, 1);
+        EXPECT_FALSE(urma_sock->IsPeerReset());
         EXPECT_FALSE(urma_sock->IsPeerClosed());
-        EXPECT_TRUE(urma_sock->IsClosed());
+        EXPECT_FALSE(urma_sock->IsClosed());
+        EXPECT_EQ(0u, urma_sock->GetReachEpollEvents());
+        EXPECT_EQ(0, g_eventfd_write_count);
+        EXPECT_EQ(0u, urma_sock->block_flags_ & BLOCKING_FLAG_PEER_CLOSED);
 
         GlobalMockObject::verify();
     }
@@ -590,17 +796,17 @@ TEST_F(UrmaSocketTest, PostCloseToPeer_Behavior)
 {
     struct CloseBehaviorCase {
         const char *name;
-        bool use_timeout_arg;    /* true: 显式 timeout_ms 覆盖 linger; false: 走 linger 影子配置 */
+        bool use_timeout_arg; /* true: 显式 timeout_ms 覆盖 linger; false: 走 linger 影子配置 */
         int timeout_ms;
-        bool abortive_linger;    /* 设置 linger{1,0} */
-        int positive_linger_s;   /* >0: 设置 linger{1,N} */
+        bool abortive_linger;  /* 设置 linger{1,0} */
+        int positive_linger_s; /* >0: 设置 linger{1,N} */
         uint32_t in_flight_bytes;
         uint32_t release_delay_us; /* >0: 启动 releaser 线程, 延迟后释放占用 */
         bool deliver_close_cqe;    /* releaser 释放后再投递 CLOSE CQE */
         int expect_post_count;
-        bool expect_close_imm;     /* 断言 WR opcode 与 imm 携带的 CLOSE opcode */
-        int64_t max_elapsed_ms;    /* >0: 断言耗时上限 (不 drain) */
-        int expect_hold;           /* -1: 不校验; 0/1: HasPendingClose 期望值 */
+        bool expect_close_imm;  /* 断言 WR opcode 与 imm 携带的 CLOSE opcode */
+        int64_t max_elapsed_ms; /* >0: 断言耗时上限 (不 drain) */
+        int expect_hold;        /* -1: 不校验; 0/1: HasPendingClose 期望值 */
     };
     static const CloseBehaviorCase cases[] = {
         /* 已建链+jetty 且无在途占用: 立即 post CLOSE write_imm */
@@ -655,8 +861,8 @@ TEST_F(UrmaSocketTest, PostCloseToPeer_Behavior)
 
         const auto start = std::chrono::steady_clock::now();
         auto ret = c.use_timeout_arg ? env.sock->PostCloseToPeer(c.timeout_ms) : env.sock->PostCloseToPeer();
-        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - start).count();
+        const auto elapsed_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
         if (releaser.joinable()) {
             releaser.join();
         }
@@ -735,12 +941,12 @@ TEST_F(UrmaSocketTest, PostCloseToPeer_PeerReset_SkipsImmediatelyWithoutDrain)
 
     const auto start = std::chrono::steady_clock::now();
     auto ret = env.sock->PostCloseToPeer(500);
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start).count();
+    const auto elapsed_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
 
-    EXPECT_FALSE(ret); /* 跳过视为成功 (fd 仍归调用方) */
-    EXPECT_EQ(0, g_postSendWrCalls);              /* 不向已断链对端 post */
-    EXPECT_LT(elapsed_ms, 200);                   /* 立即返回, 不 drain 空等 */
+    EXPECT_FALSE(ret);               /* 跳过视为成功 (fd 仍归调用方) */
+    EXPECT_EQ(0, g_postSendWrCalls); /* 不向已断链对端 post */
+    EXPECT_LT(elapsed_ms, 200);      /* 立即返回, 不 drain 空等 */
 
     DestroyCloseEnv(env);
 }
@@ -933,8 +1139,8 @@ TEST_F(UrmaSocketTest, PendingCloseHold_CqeWaitAndTimeout)
 
         const auto start = std::chrono::steady_clock::now();
         ASSERT_TRUE(env.sock->PostCloseToPeer()); /* post 成功, fd 号已被占位接管 */
-        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - start).count();
+        const auto elapsed_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
         cqe_deliverer.join();
 
         EXPECT_GE(elapsed_ms, 10);
@@ -952,8 +1158,8 @@ TEST_F(UrmaSocketTest, PendingCloseHold_CqeWaitAndTimeout)
 
         const auto start = std::chrono::steady_clock::now();
         ASSERT_TRUE(env.sock->PostCloseToPeer(200)); /* post 成功, fd 号已被占位接管 */
-        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - start).count();
+        const auto elapsed_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
 
         /* 超时返回但仍在注册表 (持有待清扫), ClearPendingClose 模拟清扫/UnInit 兜底 */
         EXPECT_GE(elapsed_ms, 180);
@@ -1069,7 +1275,7 @@ TEST_F(UrmaSocketTest, PostFailure_NoPlaceholder)
     auto env = MakeBoundCloseEnv(true, pair.conn);
     UrmaApi::urma_post_jetty_send_wr_ptr = MockPostSendWrFail;
 
-    EXPECT_FALSE(env.sock->PostCloseToPeer(0)); /* post 失败: fd 仍归调用方 */
+    EXPECT_FALSE(env.sock->PostCloseToPeer(0));                       /* post 失败: fd 仍归调用方 */
     EXPECT_FALSE(UrmaBackend::Instance().HasPendingClose(pair.conn)); /* post 失败已回滚 */
 
     struct stat st = {};
@@ -1155,7 +1361,7 @@ TEST_F(UrmaSocketTest, Shutdown_EntryAndFlags)
         bool with_jetty;
         bool call_twice;
         int expect_rc;
-        int expect_errno;      /* -1: 不校验 errno */
+        int expect_errno; /* -1: 不校验 errno */
         int expect_post_count;
         bool expect_wr_opcode; /* 校验 WR opcode == URMA_OPC_WRITE_IMM */
         bool expect_imm_shutdown;

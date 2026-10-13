@@ -120,6 +120,7 @@ static int g_cqeHandlerLastCnt = 0;
 static int g_ackJfcCalls = 0;
 static uint32_t g_ackJfcLastNevents = 0;
 static int g_deleteJfcCalls = 0;
+static int g_pollJfcCallsAtDelete = 0;
 static int g_waitJfcCalls = 0;
 static int g_waitJfcSeq[4] = {0};
 static int g_waitJfcSeqLen = 0;
@@ -165,6 +166,7 @@ static void MockAckJfc(urma_jfc_t *[], uint32_t nevents[], uint32_t cnt)
 static urma_status_t MockDeleteJfc(urma_jfc_t *)
 {
     g_deleteJfcCalls++;
+    g_pollJfcCallsAtDelete = g_pollJfcCalls;
     return URMA_SUCCESS;
 }
 
@@ -214,6 +216,7 @@ static void ResetMockCounters()
     g_ackJfcCalls = 0;
     g_ackJfcLastNevents = 0;
     g_deleteJfcCalls = 0;
+    g_pollJfcCallsAtDelete = 0;
     g_waitJfcCalls = 0;
     g_waitJfcSeq[0] = 0;
     g_waitJfcSeq[1] = 0;
@@ -925,7 +928,7 @@ TEST_F(UrmaEventPollTest, EpollWait_ClosedSocket_ReportsHupUnconditionally)
     GlobalMockObject::verify();
 }
 
-TEST_F(UrmaEventPollTest, EpollWait_LtMode_ClosedSocket_NoEventfdRewrite)
+TEST_F(UrmaEventPollTest, EpollWait_LtMode_ClosedSocket_RewritesEventfdAndPreservesHup)
 {
     struct epoll_event kernel_evt {};
     kernel_evt.events = EPOLLIN; /* LT */
@@ -937,18 +940,22 @@ TEST_F(UrmaEventPollTest, EpollWait_LtMode_ClosedSocket_NoEventfdRewrite)
     auto urma_sock = RefConvert<Socket, UrmaSocket>(sock);
     SetUpMocks();
     ASSERT_EQ(0, urma_sock->NotifyClosed());
-    g_eventfdWriteFd = -1; /* 清除 NotifyClosed 的唤醒记录，仅观察 EpollWait 是否回写 */
+    g_eventfdWriteFd = -1;
+    g_eventfdWriteCount = 0;
     g_epollWaitReturn = 1;
     UrmaEventPoll poll(TEST_EPOLL_FD);
 
-    struct epoll_event evt {};
-    evt.data.ptr = &event_data;
-    int ret = poll.EpollWait(&evt, 1, 100);
-    EXPECT_EQ(1, ret);
-    EXPECT_NE(0u, evt.events & EPOLLHUP); /* LT 下关闭同样无条件上报 */
-    EXPECT_NE(0u, evt.events & EPOLLRDHUP);
-    EXPECT_EQ(-1, g_eventfdWriteFd);      /* 不回写，防关闭后 LT 空转 */
-    EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLHUP); /* HUP 达位保留（终态） */
+    for (int waitIndex = 0; waitIndex < 2; ++waitIndex) {
+        struct epoll_event evt {};
+        evt.data.ptr = &event_data;
+        EXPECT_EQ(1, poll.EpollWait(&evt, 1, 0));
+        EXPECT_NE(0u, evt.events & EPOLLHUP);
+        EXPECT_NE(0u, evt.events & EPOLLRDHUP);
+        EXPECT_EQ(TEST_EVENT_FD, g_eventfdWriteFd);
+        EXPECT_EQ(waitIndex + 1, g_eventfdWriteCount);
+        EXPECT_TRUE(urma_sock->IsClosed());
+        EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLRDHUP);
+    }
     GlobalMockObject::verify();
 }
 
@@ -965,8 +972,8 @@ struct DispatcherPollerEnv {
     std::unique_ptr<urma_jfc_t> rawJfc;
     UrmaDevicePtr device{nullptr};
     UrmaContextPtr context{nullptr};
-    UrmaJfcPtr jfc{nullptr};
     UrmaJfcePtr jfce{nullptr};
+    UrmaJfcPtr jfc{nullptr};
     UrmaPollerPtr poller{nullptr};
     UrmaAggPollerPtr aggPoller{nullptr};
 };
@@ -980,9 +987,9 @@ DispatcherPollerEnv MakeDispatcherPollerEnv()
     env.rawJfce->fd = TEST_JFCE_FD;
     env.device = MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{});
     env.context = MakeRef<UrmaContext>(env.rawContext.get(), env.device, urma_eid_info_t{});
+    env.jfce = MakeRef<UrmaJfce>(env.rawJfce.get(), env.context);
     env.jfc = MakeRef<UrmaJfc>(EVENT_POLLING, env.rawJfc.get(), env.rawJfce.get(), env.context);
     env.poller = MakeRef<UrmaPoller>(0, MockCqeHandler, env.jfc);
-    env.jfce = MakeRef<UrmaJfce>(env.rawJfce.get(), env.context);
     auto agg = MakeRef<UrmaDedicatedJfcAggPoller>();
     agg->jfce_ = env.jfce;
     agg->handler_ = MockCqeHandler;
@@ -997,6 +1004,8 @@ class UrmaEventPollDispatcherTest : public ::testing::Test {
 protected:
     void SetUp() override
     {
+        savedApiLoaded_ = UrmaApi::LOADED;
+        UrmaApi::LOADED = true;
         errno = 0;
         GlobalSetting::UBS_TRACE_ENABLED = false;
         GlobalSetting::UBS_SPLIT_TRACE_ENABLED = false;
@@ -1013,6 +1022,7 @@ protected:
         g_epollCtlReturn = 0;
         g_epollWaitReturn = 0;
         ClearPollerSet();
+        UrmaBackend::Instance().poller_set_ = MakeRef<UrmaAggPollerSet>();
         SetUpMocks();
         RegisterDriverMocks();
     }
@@ -1020,11 +1030,13 @@ protected:
     void TearDown() override
     {
         ClearPollerSet();
+        UrmaBackend::Instance().poller_set_ = nullptr;
         UrmaSetting::UB_EPOLL_HANDLE_MODE = savedMode_;
-        UnregisterDriverMocks();
         errno = 0;
         GlobalMockObject::verify();
         ArraySet<Socket>::GetInstance().ReleaseAll();
+        UnregisterDriverMocks();
+        UrmaApi::LOADED = savedApiLoaded_;
         if (g_socket_epoll_lock != nullptr) {
             LockRegistry::RW_LOCK_OPS.destroy(g_socket_epoll_lock);
             g_socket_epoll_lock = nullptr;
@@ -1091,6 +1103,7 @@ protected:
     }
 
     EpollHandleMode savedMode_;
+    bool savedApiLoaded_{false};
 };
 
 TEST_F(UrmaEventPollDispatcherTest, Init_NoPoller_ReturnsError)
@@ -1098,6 +1111,34 @@ TEST_F(UrmaEventPollDispatcherTest, Init_NoPoller_ReturnsError)
     UrmaEventPoll poll(TEST_EPOLL_FD);
     EXPECT_EQ(UBS_ERROR, poll.Init());
     EXPECT_EQ(0u, poll.jfce_handlers_.size());
+}
+
+TEST_F(UrmaEventPollDispatcherTest, Init_NullPoller_ReturnsError)
+{
+    UrmaBackend::Instance().poller_set_->pollers_.emplace(0, UrmaAggPollerPtr{});
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    EXPECT_EQ(UBS_ERROR, poll.Init());
+    EXPECT_TRUE(poll.jfce_handlers_.empty());
+}
+
+TEST_F(UrmaEventPollDispatcherTest, Init_InvalidJfceFd_ReturnsError)
+{
+    auto env = MakeDispatcherPollerEnv();
+    env.rawJfce->fd = -1;
+    RegisterPoller(env);
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    EXPECT_EQ(UBS_ERROR, poll.Init());
+    EXPECT_TRUE(poll.jfce_handlers_.empty());
+}
+
+TEST_F(UrmaEventPollDispatcherTest, Init_EpollCtlFailureRollsBack)
+{
+    auto env = MakeDispatcherPollerEnv();
+    RegisterPoller(env);
+    g_epollCtlReturn = -1;
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    EXPECT_EQ(UBS_ERROR, poll.Init());
+    EXPECT_TRUE(poll.jfce_handlers_.empty());
 }
 
 TEST_F(UrmaEventPollDispatcherTest, Init_RegistersJfceFd_DestructorRemoves)
@@ -1152,6 +1193,73 @@ TEST_F(UrmaEventPollDispatcherTest, NotifySocketReadable_NotWatchingIn_NoEventfd
     EXPECT_EQ(0, ret);
     EXPECT_EQ(-1, g_eventfdWriteFd);
     EXPECT_TRUE(urma_sock->socket_readable_ready_.load(std::memory_order_acquire));
+}
+
+TEST_F(UrmaEventPollDispatcherTest, NotifyReadableOutsideWaitThreadReturnsFalse)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = RefConvert<Socket, UrmaSocket>(ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD));
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    EXPECT_FALSE(poll.NotifyReadable(*sock.Get()));
+}
+
+TEST_F(UrmaEventPollDispatcherTest, RecordReadableWithoutEpollInReturnsFalse)
+{
+    auto env = MakeDispatcherPollerEnv();
+    RegisterPoller(env);
+    CreateAndRegisterUrmaSocket();
+    auto sock = RefConvert<Socket, UrmaSocket>(ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD));
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    ASSERT_EQ(UBS_OK, poll.Init());
+    struct epoll_event event {};
+    event.events = EPOLLOUT;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &event));
+    sock->SetReachEpollEvents(EPOLLIN);
+    EXPECT_FALSE(poll.RecordReadableSocket(sock.Get()));
+}
+
+TEST_F(UrmaEventPollDispatcherTest, AddAndModConsumeReadableReadyState)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = RefConvert<Socket, UrmaSocket>(ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD));
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    struct epoll_event event {};
+    event.events = EPOLLIN;
+    sock->socket_readable_ready_.store(true, std::memory_order_release);
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &event));
+    sock->socket_readable_ready_.store(true, std::memory_order_release);
+    EXPECT_EQ(0, poll.EpollCtl(EPOLL_CTL_MOD, TEST_SOCK_FD, &event));
+}
+
+TEST_F(UrmaEventPollDispatcherTest, ModFailureAndDelUnregisteredUrmaSocketReturnErrors)
+{
+    CreateAndRegisterUrmaSocket();
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    struct epoll_event event {};
+    event.events = EPOLLIN;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &event));
+    g_epollCtlReturn = -1;
+    EXPECT_EQ(-1, poll.EpollCtl(EPOLL_CTL_MOD, TEST_SOCK_FD, &event));
+    g_epollCtlReturn = 0;
+    ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_DEL, TEST_SOCK_FD, nullptr));
+    EXPECT_EQ(-1, poll.EpollCtl(EPOLL_CTL_DEL, TEST_SOCK_FD, nullptr));
+    EXPECT_EQ(ENOENT, errno);
+}
+
+TEST_F(UrmaEventPollDispatcherTest, ConnectingSocketDefersAddModAndDel)
+{
+    CreateAndRegisterUrmaSocket();
+    auto sock = RefConvert<Socket, UrmaSocket>(ArraySet<Socket>::GetInstance().GetItem(TEST_SOCK_FD));
+    sock->State(SOCK_STAT_CONNECTING);
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    struct epoll_event event {};
+    event.events = EPOLLIN;
+    event.data.u64 = 1;
+    EXPECT_EQ(0, poll.EpollCtl(EPOLL_CTL_ADD, TEST_SOCK_FD, &event));
+    event.events = EPOLLOUT;
+    event.data.u64 = 2;
+    EXPECT_EQ(0, poll.EpollCtl(EPOLL_CTL_MOD, TEST_SOCK_FD, &event));
+    EXPECT_EQ(0, poll.EpollCtl(EPOLL_CTL_DEL, TEST_SOCK_FD, nullptr));
 }
 
 TEST_F(UrmaEventPollDispatcherTest, RecordReadable_ThenEpollWait_DrainsInlineEvent)
@@ -1324,6 +1432,33 @@ TEST_F(UrmaEventPollDispatcherTest, EpollWait_JfceEvent_NullPoller_Ignored)
     EXPECT_EQ(0, g_cqeHandlerCalls);
 }
 
+TEST_F(UrmaEventPollDispatcherTest, EpollWait_NullKernelEventData_Ignored)
+{
+    auto env = MakeDispatcherPollerEnv();
+    RegisterPoller(env);
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    ASSERT_EQ(UBS_OK, poll.Init());
+
+    g_epollWaitReturn = 1;
+    struct epoll_event event {};
+    event.data.ptr = nullptr;
+    EXPECT_EQ(0, poll.EpollWait(&event, 1, 0));
+}
+
+TEST_F(UrmaEventPollDispatcherTest, EpollWait_NullOutputWithPendingReadableReturnsEfault)
+{
+    auto env = MakeDispatcherPollerEnv();
+    RegisterPoller(env);
+    UrmaEventPoll poll(TEST_EPOLL_FD);
+    ASSERT_EQ(UBS_OK, poll.Init());
+    struct epoll_event event {};
+    ASSERT_TRUE(poll.readable_events_.TryRecord(TEST_SOCK_FD, event));
+
+    errno = 0;
+    EXPECT_EQ(-1, poll.EpollWait(nullptr, 1, 0));
+    EXPECT_EQ(EFAULT, errno);
+}
+
 TEST_F(UrmaEventPollDispatcherTest, Poller_StartStop_SkipIndependentThread)
 {
     auto poller = MakeRef<UrmaPoller>(7, MockCqeHandler, UrmaJfcPtr{});
@@ -1359,8 +1494,8 @@ TEST_F(UrmaEventPollDispatcherTest, Poller_EventPoll_AcksAfterEachWait)
 
     env.poller->EventPoll();
 
-    EXPECT_EQ(2, g_waitJfcCalls);      /* 一次事件 + 一次退出 */
-    EXPECT_EQ(1, g_ackJfcCalls);       /* 每个 wait 事件恰好 ack 一次 */
+    EXPECT_EQ(2, g_waitJfcCalls);       /* 一次事件 + 一次退出 */
+    EXPECT_EQ(1, g_ackJfcCalls);        /* 每个 wait 事件恰好 ack 一次 */
     EXPECT_EQ(1u, g_ackJfcLastNevents); /* nevents=1 */
     EXPECT_GE(g_rearmJfcCalls, 1);
 }
@@ -1377,13 +1512,12 @@ TEST_F(UrmaEventPollDispatcherTest, Poller_EventPoll_WaitError_NoAck)
     EXPECT_EQ(0, g_ackJfcCalls); /* 错误返回无事件，不得 ack */
 }
 
-/* Destroy 兜底：停止竞态残留事件（stop 前最后一波）也必须排空并 ack，
- * 否则 delete_jfc 仍会失败 */
-TEST_F(UrmaEventPollDispatcherTest, Jfc_Destroy_DrainsAndAcksResidualEvents)
+/* Per-JFC destruction drains its CQEs without consuming notifications from the shared JFCE. */
+TEST_F(UrmaEventPollDispatcherTest, Jfc_Destroy_DrainsCqesWithoutConsumingJfceEvents)
 {
     auto env = MakeDispatcherPollerEnv();
     g_waitJfcOut = env.rawJfc.get();
-    g_waitJfcSeq[0] = 1; /* 一条残留事件，随后 wait 返回 -1 表示无更多 */
+    g_waitJfcSeq[0] = 1; /* An unread notification remains available to the event-channel owner. */
     g_waitJfcSeqLen = 1;
     g_pollJfcSeq[0] = 3; /* 残留 CQE 一批 3 条，随后 0 表示排空 */
     g_pollJfcSeq[1] = 0;
@@ -1391,9 +1525,18 @@ TEST_F(UrmaEventPollDispatcherTest, Jfc_Destroy_DrainsAndAcksResidualEvents)
 
     env.jfc->Destroy();
 
-    EXPECT_EQ(1, g_ackJfcCalls);       /* 残留事件被 ack */
-    EXPECT_GE(g_pollJfcCalls, 2);      /* CQE 轮询到排空 */
-    EXPECT_EQ(1, g_deleteJfcCalls);    /* delete_jfc 正常执行 */
+    EXPECT_EQ(0, g_waitJfcCalls);
+    EXPECT_EQ(0, g_ackJfcCalls);
+    EXPECT_EQ(2, g_pollJfcCalls);
+    EXPECT_EQ(2, g_pollJfcCallsAtDelete);
+    EXPECT_EQ(1, g_deleteJfcCalls);
+    EXPECT_EQ(nullptr, env.jfc->Handle());
+
+    env.jfc->Destroy();
+    EXPECT_EQ(0, g_waitJfcCalls);
+    EXPECT_EQ(0, g_ackJfcCalls);
+    EXPECT_EQ(2, g_pollJfcCalls);
+    EXPECT_EQ(1, g_deleteJfcCalls);
 }
 
 /* ===================== P4: EPOLLONESHOT =====================
@@ -1423,7 +1566,7 @@ TEST_F(UrmaEventPollTest, Oneshot_FirstWaitReports_SecondWaitSilent)
     /* 数据未消费，第二次 wait 应静默（disabled 门控） */
     struct epoll_event wait_evt2 {};
     ASSERT_EQ(0, poll.EpollWait(&wait_evt2, 1, 100)); /* 禁用门控：空事件被过滤，返回 0 */
-    EXPECT_EQ(0u, wait_evt2.events); /* 上报一次后禁用 */
+    EXPECT_EQ(0u, wait_evt2.events);                  /* 上报一次后禁用 */
     GlobalMockObject::verify();
 }
 
@@ -1449,8 +1592,8 @@ TEST_F(UrmaEventPollTest, Oneshot_Disabled_NewDataStillSilent)
     /* 禁用期间新数据注入：达位累计但不上报 */
     urma_sock->FetchOrReachEpollEvents(EPOLLIN);
     struct epoll_event wait_evt2 {};
-    ASSERT_EQ(0, poll.EpollWait(&wait_evt2, 1, 100)); /* 禁用即静默：空事件被过滤，返回 0 */
-    EXPECT_EQ(0u, wait_evt2.events); /* 禁用即静默 */
+    ASSERT_EQ(0, poll.EpollWait(&wait_evt2, 1, 100));          /* 禁用即静默：空事件被过滤，返回 0 */
+    EXPECT_EQ(0u, wait_evt2.events);                           /* 禁用即静默 */
     EXPECT_NE(0u, urma_sock->GetReachEpollEvents() & EPOLLIN); /* 达位保留待重武装 */
     GlobalMockObject::verify();
 }
@@ -1633,7 +1776,7 @@ TEST_F(UrmaEventPollTest, Oneshot_FreelistReuse_NotDisabled)
     g_epollWaitAutoFill = true; /* wait 经内核回传真实内部条目，禁用标记落在其上 */
     struct epoll_event wait_evt {};
     ASSERT_EQ(1, poll.EpollWait(&wait_evt, 1, 100));
-    EXPECT_NE(0u, wait_evt.events & EPOLLIN); /* A 触发上报 */
+    EXPECT_NE(0u, wait_evt.events & EPOLLIN);                          /* A 触发上报 */
     ASSERT_EQ(0, poll.EpollCtl(EPOLL_CTL_DEL, TEST_SOCK_FD, nullptr)); /* 禁用条目回收 */
     GlobalMockObject::verify();
 
@@ -1744,8 +1887,7 @@ TEST_F(UrmaEventPollTest, OnSocketClosed_ConcurrentCalls_NoUafNoDoubleFree)
 
         std::atomic<int> go(0);
         auto racer = [&go]() {
-            while (go.load(std::memory_order_acquire) == 0) {
-            }
+            while (go.load(std::memory_order_acquire) == 0) {}
             OnSocketClosed(TEST_SOCK_FD); /* 与主线程竞速同一 mapper 的清理 */
         };
         std::thread t(racer);

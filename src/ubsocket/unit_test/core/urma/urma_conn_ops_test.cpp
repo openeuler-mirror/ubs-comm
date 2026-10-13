@@ -6,8 +6,8 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <gtest/gtest.h>
 #include <fcntl.h>
+#include <gtest/gtest.h>
 #include <netinet/in.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
@@ -156,6 +156,11 @@ static int MockGetsockoptZero(int, int, int, void *optval, socklen_t *optlen)
 }
 
 static int MockSetSockoptOk(int, int, int, const void *, socklen_t)
+{
+    return 0;
+}
+
+static int MockShutdownOk(int, int)
 {
     return 0;
 }
@@ -538,12 +543,8 @@ TEST_F(UrmaConnOpsTest, ClientDoWaitNegotiate_CreateResourcesFail_DegradableByCo
     PushSendOk();
     PushRecvData(wire.data(), wire.size());
 
-    MOCKER_CPP(&SocketBase::GenerateSocketCommOps)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
-    MOCKER_CPP(&UrmaSocket::CreateUrmaResources)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_ERROR)));
+    MOCKER_CPP(&SocketBase::GenerateSocketCommOps).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&UrmaSocket::CreateUrmaResources).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_ERROR)));
 
     EXPECT_EQ(ConnStageResult::kFailed, ops->Execute(1000));
     EXPECT_TRUE(ops->degradable_); /* rsp conn_flag 带 DEGRADABLE → 失败可降级 */
@@ -562,15 +563,9 @@ TEST_F(UrmaConnOpsTest, ClientDoWaitNegotiate_Happy_StagesLocalSegAndSwitchesSta
     PushSendOk();
     PushRecvData(wire.data(), wire.size());
 
-    MOCKER_CPP(&SocketBase::GenerateSocketCommOps)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
-    MOCKER_CPP(&UrmaSocket::CreateUrmaResources)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
-    MOCKER_CPP(&UrmaSocket::BuildLocalSegExInfo)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&SocketBase::GenerateSocketCommOps).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&UrmaSocket::CreateUrmaResources).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&UrmaSocket::BuildLocalSegExInfo).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
 
     EXPECT_EQ(ConnStageResult::kPending, ops->Execute(1000));
     EXPECT_EQ(ConnState::kWaitPeerRes, ops->State());
@@ -656,15 +651,9 @@ TEST_F(UrmaConnOpsTest, ServerDoWaitNegotiate_Happy_CreatesSocketAndStagesLocalS
 
     MOCKER(eventfd).stubs().will(returnValue(TEST_EVENT_FD));
     MOCKER_CPP(&SocketBase::Create).stubs().will(invoke(MockCreateUrmaSocket));
-    MOCKER_CPP(&SocketBase::GenerateSocketCommOps)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
-    MOCKER_CPP(&UrmaSocket::CreateUrmaResources)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
-    MOCKER_CPP(&UrmaSocket::BuildLocalSegExInfo)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&SocketBase::GenerateSocketCommOps).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&UrmaSocket::CreateUrmaResources).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&UrmaSocket::BuildLocalSegExInfo).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
     auto tmp_context_pool = MakeRef<UrmaContextPool>();
     auto dev = MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{});
     auto tmp_ctx = MakeRef<UrmaContext>(nullptr, dev, urma_eid_info_t{});
@@ -745,9 +734,7 @@ TEST_F(UrmaConnOpsTest, DoWaitPeerRes_ImportPeerFails_ReturnsFailed)
     PushSendOk(3);
     PushRecvData(&peer, sizeof(peer));
 
-    MOCKER_CPP(&UrmaSocket::ImportPeerSegments)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_ERROR)));
+    MOCKER_CPP(&UrmaSocket::ImportPeerSegments).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_ERROR)));
     auto tmp_context_pool = MakeRef<UrmaContextPool>();
     MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
@@ -767,9 +754,7 @@ TEST_F(UrmaConnOpsTest, ServerDoWaitPeerRes_Happy_RegistersAndStagesAck)
     PushSendOk(3);
     PushRecvData(&peer, sizeof(peer));
 
-    MOCKER_CPP(&UrmaSocket::ImportPeerSegments)
-        .stubs()
-        .will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&UrmaSocket::ImportPeerSegments).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
     auto tmp_context_pool = MakeRef<UrmaContextPool>();
     MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
@@ -830,7 +815,7 @@ TEST_F(UrmaConnOpsTest, ClientDoWaitPeerAck_Happy_CommitsAndReturnsDone)
 
 TEST_F(UrmaConnOpsTest, ServerDoWaitPeerAck_Happy_SetsEstablishedAndRestoresBlocking)
 {
-    g_fcntl_flags = 0; /* 建链前 fd 为阻塞态 */
+    g_fcntl_flags = 0;          /* 建链前 fd 为阻塞态 */
     auto ops = MakeServerOps(); /* was_blocking_ = true */
     /* EnsureSocketCreated 阶段会切非阻塞：模拟该效果，使 OnConnEstablished 的 SetBlocking 进入 SETFL 分支 */
     g_fcntl_flags = O_NONBLOCK;
@@ -927,7 +912,7 @@ TEST_F(UrmaConnOpsTest, ClientOnConnFailed_NoFailureErrno_DefaultsEconnrefused)
     GlobalMockObject::verify();
 }
 
-TEST_F(UrmaConnOpsTest, ServerOnConnFailed_CleansRegisteredAndRemoteSegments)
+TEST_F(UrmaConnOpsTest, ServerOnConnFailed_UnregistersWithoutEvictingSharedSegments)
 {
     auto ops = MakeServerOps();
     ops->registered_.store(true);
@@ -935,8 +920,8 @@ TEST_F(UrmaConnOpsTest, ServerOnConnFailed_CleansRegisteredAndRemoteSegments)
     ops->peer_seg_ex_.node.eid.in4.addr = 7;
 
     UrmaSocketPtr reg_sock = MakeTestUrmaSocket();
-    reg_sock->context_ = MakeRef<UrmaContext>(nullptr, MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{}),
-                                             urma_eid_info_t{});
+    reg_sock->context_ =
+        MakeRef<UrmaContext>(nullptr, MakeRef<UrmaDevice>("ut_dev", "", urma_device_attr_t{}), urma_eid_info_t{});
     ops->sock_ = RefConvert<UrmaSocket, Socket>(reg_sock);
     ops->urma_sock_ = reg_sock.Get();
     ArraySet<Socket>::GetInstance().OverrideItem(TEST_FD, reg_sock.Get());
@@ -945,9 +930,50 @@ TEST_F(UrmaConnOpsTest, ServerOnConnFailed_CleansRegisteredAndRemoteSegments)
     ops->OnConnFailed();
     EXPECT_EQ(nullptr, ArraySet<Socket>::GetInstance().GetItem(TEST_FD).Get());
     EXPECT_FALSE(ops->registered_.load());
-    EXPECT_FALSE(ops->peer_imported_.load());
-    EXPECT_EQ(1, g_rm_remote_calls);
+    /* This callback unregisters the socket without evicting the shared segment cache. */
+    EXPECT_TRUE(ops->peer_imported_.load());
+    EXPECT_EQ(0, g_rm_remote_calls);
+
+    ops->OnConnFailed();
+    EXPECT_EQ(nullptr, ArraySet<Socket>::GetInstance().GetItem(TEST_FD).Get());
+    EXPECT_FALSE(ops->registered_.load());
+    EXPECT_TRUE(ops->peer_imported_.load());
+    EXPECT_EQ(0, g_rm_remote_calls);
     GlobalMockObject::verify();
+}
+
+TEST_F(UrmaConnOpsTest, CleanStaleSockMarksMatchingAcceptedSocketBroken)
+{
+    auto ops = MakeServerOps();
+    constexpr int staleFd = TEST_FD + 1;
+    constexpr uint64_t staleConnId = 99;
+    auto stale = MakeTestUrmaSocket(staleFd);
+    stale->create_type_ = SOCK_CREATE_TYPE_ACCEPT;
+    stale->SetConnId(staleConnId);
+    stale->State(SOCK_STAT_ESTABLISHED);
+    ArraySet<Socket>::GetInstance().OverrideItem(staleFd, stale.Get());
+    LibcApi::shutdown_ptr = MockShutdownOk;
+    MOCKER_CPP(&UrmaIoBufferPool::rm_remote_segments).expects(never());
+
+    ops->CleanStaleSock(staleConnId);
+    EXPECT_EQ(SOCK_STAT_BROKEN, stale->State());
+    EXPECT_TRUE(stale->socket_readable_ready_.load());
+    EXPECT_EQ(0, g_rm_remote_calls);
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaConnOpsTest, DegradeToTcpReplacesRegisteredSocket)
+{
+    SocketPtr sockPtr;
+    ConnectorOpsPtr connectorOps;
+    auto ops = MakeClientOps(sockPtr, connectorOps);
+    ArraySet<Socket>::GetInstance().OverrideItem(TEST_FD, sockPtr.Get());
+
+    EXPECT_TRUE(ops->DegradeToTcp());
+    auto replacement = ArraySet<Socket>::GetInstance().GetItem(TEST_FD);
+    ASSERT_NE(nullptr, replacement.Get());
+    EXPECT_EQ(SocketType::SOCK_TYPE_TCP, replacement->Type());
+    EXPECT_EQ(SOCK_CREATE_TYPE_CONNECT, replacement->create_type_);
 }
 
 /* ==================== Abort ==================== */

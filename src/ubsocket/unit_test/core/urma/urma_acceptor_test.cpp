@@ -21,6 +21,7 @@
 #include "core/ubsocket_socket.h"
 #include "core/ubsocket_socket_acceptor.h"
 #include "core/ubsocket_socket_helper.h"
+#include "core/urma/urma_backend.h"
 #include "core/urma/urma_setting.h"
 #include "core/urma/urma_socket.h"
 #include "core/urma/urma_socket_acceptor_ops.h"
@@ -36,26 +37,6 @@ static const uint32_t TEST_VERSION = 0x00000101;
 
 static int g_send_call_count = 0;
 static int g_recv_call_count = 0;
-
-static ssize_t MockSendVersionOk(int, const void *, size_t size, uint32_t)
-{
-    g_send_call_count++;
-    return static_cast<ssize_t>(size);
-}
-
-static ssize_t MockSendFail(int, const void *, size_t, uint32_t)
-{
-    return static_cast<ssize_t>(-1);
-}
-
-static ssize_t MockSendVersionOkThenFail(int, const void *, size_t size, uint32_t)
-{
-    g_send_call_count++;
-    if (g_send_call_count == 1) {
-        return static_cast<ssize_t>(size);
-    }
-    return static_cast<ssize_t>(-1);
-}
 
 static ock::ubs::Result MockRecvPrefixedFail(int, void *, uint32_t, uint32_t)
 {
@@ -82,6 +63,13 @@ static ock::ubs::Result MockRecvPrefixedCompatible(int, void *body, uint32_t, ui
     return UBS_OK;
 }
 
+static ock::ubs::Result MockRecvPrefixedWithStaleConn(int fd, void *body, uint32_t size, uint32_t timeout)
+{
+    auto result = MockRecvPrefixedCompatible(fd, body, size, timeout);
+    static_cast<UrmaNegotiateReq *>(body)->last_conn_id = 0x1234;
+    return result;
+}
+
 static ock::ubs::Result MockSendPrefixedOk(int, const void *, uint32_t, uint32_t)
 {
     return UBS_OK;
@@ -105,6 +93,13 @@ protected:
         LockRegistry::RegisterDefaultOps();
         ArraySet<Socket>::GetInstance().Init();
         UrmaSetting::Init();
+        UrmaBackend::Instance().context_pool_ = MakeRef<UrmaContextPool>();
+        urma_device_attr_t dev_attr = {};
+        urma_eid_info_t eid_info = {};
+        auto dev = MakeRef<UrmaDevice>("ut_dev", "", dev_attr);
+        auto ctx = MakeRef<UrmaContext>(nullptr, dev, eid_info);
+        ctx->affinity_ = false;
+        UrmaBackend::Instance().context_pool_->sorted_contexts_.push_back(ctx);
     }
 
     void TearDown() override
@@ -112,6 +107,7 @@ protected:
         errno = 0;
         GlobalMockObject::verify();
         ArraySet<Socket>::GetInstance().ReleaseAll();
+        UrmaBackend::Instance().context_pool_ = nullptr;
     }
 };
 
@@ -147,7 +143,6 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_RecvPrefixedFails_ReturnsError)
 {
     UrmaAcceptorOps ops(TEST_FD);
     auto sock = MakeRef<UrmaSocket>(TEST_FD);
-    sock->Initialize();
     auto sockPtr = RefConvert<UrmaSocket, Socket>(sock);
 
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed)
@@ -157,7 +152,6 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_RecvPrefixedFails_ReturnsError)
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
     EXPECT_NE(UBS_OK, ret);
 
-    sock->UnInitialize();
     GlobalMockObject::verify();
 }
 
@@ -165,7 +159,6 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_VersionMajorMismatch_ReturnsTcpExchange)
 {
     UrmaAcceptorOps ops(TEST_FD);
     auto sock = MakeRef<UrmaSocket>(TEST_FD);
-    sock->Initialize();
     auto sockPtr = RefConvert<UrmaSocket, Socket>(sock);
 
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvPrefixedMajorMismatch));
@@ -181,16 +174,15 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_VersionMajorMismatch_ReturnsTcpExchange)
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
     EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
 
-    sock->UnInitialize();
     GlobalMockObject::verify();
 }
 
-TEST_F(UrmaAcceptorOpsTest, Negotiate_SendVersionFails_ReturnsTcpExchange)
+TEST_F(UrmaAcceptorOpsTest, Negotiate_NoContext_ReturnsTcpExchange)
 {
     UrmaAcceptorOps ops(TEST_FD);
     auto sock = MakeRef<UrmaSocket>(TEST_FD);
-    sock->Initialize();
     auto sockPtr = RefConvert<UrmaSocket, Socket>(sock);
+    UrmaBackend::Instance().context_pool_->sorted_contexts_.clear();
 
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvPrefixedCompatible));
 
@@ -204,7 +196,6 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_SendVersionFails_ReturnsTcpExchange)
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
     EXPECT_EQ(UBS_ERROR, ret);
 
-    sock->UnInitialize();
     GlobalMockObject::verify();
 }
 
@@ -212,12 +203,9 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_SendRspFails_ReturnsError)
 {
     UrmaAcceptorOps ops(TEST_FD);
     auto sock = MakeRef<UrmaSocket>(TEST_FD);
-    sock->Initialize();
     auto sockPtr = RefConvert<UrmaSocket, Socket>(sock);
 
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvPrefixedCompatible));
-
-    MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendVersionOkThenFail));
 
     MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed)
         .stubs()
@@ -232,7 +220,6 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_SendRspFails_ReturnsError)
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
     EXPECT_NE(UBS_OK, ret);
 
-    sock->UnInitialize();
     GlobalMockObject::verify();
 }
 
@@ -240,12 +227,9 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_Success)
 {
     UrmaAcceptorOps ops(TEST_FD);
     auto sock = MakeRef<UrmaSocket>(TEST_FD);
-    sock->Initialize();
     auto sockPtr = RefConvert<UrmaSocket, Socket>(sock);
 
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvPrefixedCompatible));
-
-    MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(invoke(MockSendVersionOk));
 
     MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
     auto tmp_context_pool = MakeRef<UrmaContextPool>();
@@ -258,7 +242,6 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_Success)
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
     EXPECT_EQ(UBS_OK, ret);
 
-    sock->UnInitialize();
     GlobalMockObject::verify();
 }
 
@@ -269,8 +252,58 @@ TEST_F(UrmaAcceptorOpsTest, CreateSocketResources_NullSocket_ReturnsInvalidParam
     EXPECT_EQ(UBS_INVALID_PARAM, ret);
 }
 
+TEST_F(UrmaAcceptorOpsTest, CreateSocketResources_GenerateOpsFails_ReturnsError)
+{
+    UrmaAcceptorOps ops(TEST_FD);
+    auto sock = MakeRef<UrmaSocket>(TEST_FD);
+    SocketPtr sockPtr = RefConvert<UrmaSocket, Socket>(sock);
+    MOCKER_CPP(&SocketBase::GenerateSocketCommOps).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_ERROR)));
+
+    EXPECT_EQ(UBS_ERROR, ops.CreateSocketResources(sockPtr));
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaAcceptorOpsTest, CreateSocketResources_PropagatesExchangeResult)
+{
+    UrmaAcceptorOps ops(TEST_FD);
+    auto sock = MakeRef<UrmaSocket>(TEST_FD);
+    SocketPtr sockPtr = RefConvert<UrmaSocket, Socket>(sock);
+    MOCKER_CPP(&SocketBase::GenerateSocketCommOps).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    MOCKER_CPP(&UrmaSocket::ExchangeSocketResources)
+        .stubs()
+        .will(returnValue(static_cast<ock::ubs::Result>(UBS_TCP_EXCHANGE)));
+
+    EXPECT_EQ(UBS_TCP_EXCHANGE, ops.CreateSocketResources(sockPtr));
+    GlobalMockObject::verify();
+}
+
 TEST_F(UrmaAcceptorOpsTest, DestroySocketResources_NoCrashWhenNotCreated)
 {
     UrmaAcceptorOps ops(TEST_FD);
     ops.DestroySocketResources();
+}
+
+TEST_F(UrmaAcceptorOpsTest, CleanStaleSockBreaksMatchingAcceptedSocket)
+{
+    constexpr int STALE_FD = 101;
+    constexpr uint64_t STALE_CONN_ID = 0x1234;
+    UrmaAcceptorOps ops(TEST_FD);
+    auto current = MakeRef<UrmaSocket>(TEST_FD);
+    auto stale = MakeRef<UrmaSocket>(STALE_FD);
+    current->SetConnId(0x5678);
+    stale->SetConnId(STALE_CONN_ID);
+    stale->create_type_ = SOCK_CREATE_TYPE_ACCEPT;
+    stale->event_fd_ = 102;
+    stale->State(SOCK_STAT_ESTABLISHED);
+    ArraySet<Socket>::GetInstance().OverrideItem(STALE_FD, stale.Get());
+
+    MOCKER_CPP(&UrmaIoBufferPool::rm_remote_segments).stubs();
+    MOCKER(eventfd_write).stubs().will(returnValue(0));
+
+    SocketPtr currentSocket = RefConvert<UrmaSocket, Socket>(current);
+    MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvPrefixedWithStaleConn));
+    MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
+    EXPECT_EQ(UBS_OK, ops.Negotiate(currentSocket));
+
+    EXPECT_EQ(SOCK_STAT_BROKEN, stale->State());
 }

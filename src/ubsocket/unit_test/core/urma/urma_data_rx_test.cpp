@@ -48,6 +48,12 @@ static uint8_t g_recv_buf[BUF_SIZE];
 alignas(8192) static uint8_t g_zc_mem[2 * ZC_BLOCK_SIZE];
 static UrmaIoBufferPool g_dummy_alloc;
 static int g_zc_block_idx = 0;
+static urma_target_seg_t g_target_seg;
+
+static urma_status_t MockPostReadWrSuccess(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **)
+{
+    return URMA_SUCCESS;
+}
 
 /* bypass ubsocket/libc wrappers: set a real SO_*TIMEO on a test socketpair */
 static int RawSetSockTimeout(int fd, int optname, long usec)
@@ -87,7 +93,7 @@ static uintptr_t MockMiniBlockHead(uintptr_t addr)
     if (addr >= base && addr < base + sizeof(g_zc_mem)) {
         return base + ((addr - base) / ZC_BLOCK_SIZE) * ZC_BLOCK_SIZE;
     }
-    return 0;
+    return g_dummy_alloc.fixed_allocator_.MiniBlockHead(addr);
 }
 } // namespace
 
@@ -127,6 +133,7 @@ protected:
 
     void TearDown() override
     {
+        g_dummy_alloc.fixed_allocator_.UnInit();
         errno = 0;
         GlobalMockObject::verify();
         ArraySet<Socket>::GetInstance().ReleaseAll();
@@ -901,7 +908,9 @@ TEST_F(UrmaDataRxTest, ReadV_PeerClosedNoData_ReturnsZeroEof)
 
     UrmaRxOps rx(TEST_FD);
     uint8_t buf[64] = {};
-    struct iovec iov { buf, sizeof(buf) };
+    struct iovec iov {
+        buf, sizeof(buf)
+    };
     errno = 0;
     EXPECT_EQ(0, rx.ReadV(sock_, &iov, 1, 0));
 }
@@ -928,7 +937,9 @@ TEST_F(UrmaDataRxTest, ReadV_PeerClosedWithData_DrainsInOrderThenEof)
     urma_sock->HandleRecvCqe(close_imm);
 
     uint8_t buf[64] = {};
-    struct iovec iov { buf, sizeof(buf) };
+    struct iovec iov {
+        buf, sizeof(buf)
+    };
     EXPECT_EQ(static_cast<ssize_t>(body_size), rx.ReadV(sock_, &iov, 1, 0)); /* 先读尽滞留数据 */
     EXPECT_EQ(0, memcmp(buf, "0123456789", body_size));
 
@@ -944,8 +955,246 @@ TEST_F(UrmaDataRxTest, ReadV_PeerReset_ReturnsEconnreset)
 
     UrmaRxOps rx(TEST_FD);
     uint8_t buf[64] = {};
-    struct iovec iov { buf, sizeof(buf) };
+    struct iovec iov {
+        buf, sizeof(buf)
+    };
     errno = 0;
     EXPECT_EQ(-1, rx.ReadV(sock_, &iov, 1, 0));
     EXPECT_EQ(ECONNRESET, errno);
+}
+
+TEST_F(UrmaDataRxTest, SlotList_InsertFindRemoveAndRetireInOrder)
+{
+    UrmaRxOps rx(TEST_FD);
+    auto *slot2 = rx.InsertSlot(2);
+    auto *slot0 = rx.InsertSlot(0);
+    auto *slot1 = rx.InsertSlot(1);
+    ASSERT_NE(nullptr, slot0);
+    ASSERT_NE(nullptr, slot1);
+    ASSERT_NE(nullptr, slot2);
+    EXPECT_EQ(slot0, rx.HeadSlot());
+    EXPECT_EQ(slot1, rx.FindSlot(1));
+    EXPECT_EQ(slot1, rx.InsertSlot(1));
+    EXPECT_EQ(nullptr, rx.FindSlot(3));
+
+    rx.RemoveSlot(slot1);
+    EXPECT_EQ(nullptr, rx.FindSlot(1));
+    rx.RetireHead(slot2);
+    EXPECT_EQ(slot0, rx.HeadSlot());
+    rx.RetireHead(slot0);
+    EXPECT_EQ(1u, rx.consume_seq_no_.load());
+    EXPECT_EQ(slot2, rx.HeadSlot());
+    rx.ReleaseAllSlots();
+    EXPECT_EQ(nullptr, rx.HeadSlot());
+}
+
+TEST_F(UrmaDataRxTest, SlotList_NullOperationsAreNoOps)
+{
+    UrmaRxOps rx(TEST_FD);
+    rx.ReleaseSlot(nullptr);
+    rx.RemoveSlot(nullptr);
+    rx.RetireHead(nullptr);
+    rx.ReleaseAllSlots();
+    EXPECT_EQ(nullptr, rx.HeadSlot());
+}
+
+TEST_F(UrmaDataRxTest, ConsumeBlockDataSupportsPartialAndFullReads)
+{
+    UrmaRxOps rx(TEST_FD);
+    uint8_t source[12] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+    Block block(reinterpret_cast<char *>(source), sizeof(source));
+    block.nshared.store(2, std::memory_order_relaxed);
+    UrmaRxOps::DataSlot slot;
+    slot.seq_no = 0;
+    slot.data_block = &block;
+    WriteImmData imm{PRE_WRITE, 0};
+    slot.write_imm = imm.data;
+
+    uint8_t first[5]{};
+    struct iovec firstIov = {first, sizeof(first)};
+    UrmaRxOps::IovWriter firstWriter{};
+    firstWriter.iov = &firstIov;
+    firstWriter.iovcnt = 1;
+    EXPECT_FALSE(rx.ConsumeBlockData(sock_, slot, firstWriter, 0));
+    EXPECT_EQ(5u, firstWriter.written);
+    EXPECT_EQ(5u, rx.consume_offset_);
+
+    uint8_t second[7]{};
+    struct iovec secondIov = {second, sizeof(second)};
+    UrmaRxOps::IovWriter secondWriter{};
+    secondWriter.iov = &secondIov;
+    secondWriter.iovcnt = 1;
+    EXPECT_TRUE(rx.ConsumeBlockData(sock_, slot, secondWriter, 0));
+    EXPECT_EQ(7u, secondWriter.written);
+    EXPECT_EQ(0, std::memcmp(source, first, sizeof(first)));
+    EXPECT_EQ(0, std::memcmp(source + sizeof(first), second, sizeof(second)));
+    slot.data_block = nullptr;
+}
+
+TEST_F(UrmaDataRxTest, ConsumeBlockDataRejectsMissingBlock)
+{
+    UrmaRxOps rx(TEST_FD);
+    UrmaRxOps::DataSlot slot;
+    uint8_t output[4]{};
+    struct iovec iov = {output, sizeof(output)};
+    UrmaRxOps::IovWriter writer{};
+    writer.iov = &iov;
+    writer.iovcnt = 1;
+    EXPECT_FALSE(rx.ConsumeBlockData(sock_, slot, writer, 0));
+}
+
+TEST_F(UrmaDataRxTest, ConsumeInlineDataSupportsPartialAndFullReads)
+{
+    UrmaRxOps rx(TEST_FD);
+    WriteImmData imm{WRITE_IN_BAND, 1};
+    auto *message = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + CTRL_OFF1);
+    message->head.data_count = 10;
+    auto *body = g_recv_buf + CTRL_OFF1 + URMA_INLINE_MESSAGE_CTRL_COST;
+    std::memcpy(body, "0123456789", 10);
+    UrmaRxOps::DataSlot slot;
+    slot.seq_no = 0;
+    slot.write_imm = imm.data;
+
+    char first[4]{};
+    struct iovec firstIov = {first, sizeof(first)};
+    UrmaRxOps::IovWriter firstWriter{};
+    firstWriter.iov = &firstIov;
+    firstWriter.iovcnt = 1;
+    EXPECT_FALSE(rx.ConsumeInlineData(sock_, slot, firstWriter, 0));
+    EXPECT_EQ(4u, rx.consume_offset_);
+
+    char second[6]{};
+    struct iovec secondIov = {second, sizeof(second)};
+    UrmaRxOps::IovWriter secondWriter{};
+    secondWriter.iov = &secondIov;
+    secondWriter.iovcnt = 1;
+    EXPECT_TRUE(rx.ConsumeInlineData(sock_, slot, secondWriter, 0));
+    EXPECT_EQ(std::string("0123"), std::string(first, sizeof(first)));
+    EXPECT_EQ(std::string("456789"), std::string(second, sizeof(second)));
+}
+
+TEST_F(UrmaDataRxTest, TriggerPollInAndTraceTimeCoverStateTransitions)
+{
+    UrmaRxOps rx(TEST_FD);
+    EXPECT_EQ(UBS_OK, rx.TriggerPollIn(sock_, 0));
+    auto saved = ubsocket_prof_enabled;
+    ubsocket_prof_enabled = 1;
+    auto *slot = rx.InsertSlot(0);
+    ASSERT_NE(nullptr, slot);
+    slot->start_read_time = 1234;
+    slot->rx_state.store(URMA_RX_STS_DATA_READY, std::memory_order_release);
+    EXPECT_EQ(1234u, rx.CurrentTraceNsTime());
+    slot->rx_state.store(URMA_RX_STS_READING, std::memory_order_release);
+    EXPECT_EQ(0u, rx.CurrentTraceNsTime());
+    ubsocket_prof_enabled = saved;
+}
+
+TEST_F(UrmaDataRxTest, AllocBlocksForRequestReturnsNullWhenAllocatorIsNotInitialized)
+{
+    UrmaRxOps rx(TEST_FD);
+    EXPECT_EQ(nullptr, rx.AllocBlocksForReq(300));
+}
+
+TEST_F(UrmaDataRxTest, BuildReadWrsSplitsRemotePagesAcrossLocalBlocks)
+{
+    using GetLocalSeg = urma_target_seg_t *(UrmaIoBufferPool::*)(UrmaContextPtr, uintptr_t) const noexcept;
+    using GetRemoteSeg = urma_target_seg_t *(UrmaIoBufferPool::*)(RemoteSegmentsPtr &, uintptr_t) const noexcept;
+    MOCKER_CPP((static_cast<GetLocalSeg>(&UrmaIoBufferPool::get_local_target_seg)))
+        .stubs()
+        .will(returnValue(&g_target_seg));
+    MOCKER_CPP((static_cast<GetRemoteSeg>(&UrmaIoBufferPool::get_remote_target_seg)))
+        .stubs()
+        .will(returnValue(&g_target_seg));
+
+    auto *message = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + CTRL_OFF1);
+    message->head.data_count = 2;
+    auto *pages = reinterpret_cast<PageBufferInMessage *>(g_recv_buf + CTRL_OFF1 + sizeof(UrmaMessageHead));
+    pages[0].addr = 0x1000;
+    pages[0].size = 7;
+    pages[1].addr = 0x2000;
+    pages[1].size = 5;
+
+    uint8_t localData1[8]{};
+    uint8_t localData2[8]{};
+    Block block1(reinterpret_cast<char *>(localData1), sizeof(localData1));
+    Block block2(reinterpret_cast<char *>(localData2), sizeof(localData2));
+    block1.SetNext(&block2);
+    block1.nshared.store(100, std::memory_order_relaxed);
+    block2.nshared.store(100, std::memory_order_relaxed);
+
+    auto *urmaSocket = static_cast<UrmaSocket *>(sock_.Get());
+    urmaSocket->remote_target_segs_ = MakeRef<RemoteSegments>();
+    UrmaRxOps::BuildReadWrCtx ctx{&g_dummy_alloc, urmaSocket, 123};
+    UrmaSetting::UB_USING_BOUNDING_DEV = true;
+    UrmaRxOps rx(TEST_FD);
+    rx.BuildReadWrs(2, CTRL_OFF1, &block1, ctx);
+
+    ASSERT_EQ(3u, ctx.wrs.size());
+    EXPECT_EQ(&ctx.wrs[1], ctx.wrs[0].next);
+    EXPECT_EQ(&ctx.wrs[2], ctx.wrs[1].next);
+    EXPECT_EQ(nullptr, ctx.wrs[2].next);
+    EXPECT_EQ(123u, ctx.wrs[2].user_ctx);
+    EXPECT_EQ(1u, ctx.wrs[2].flag.bs.complete_enable);
+    EXPECT_EQ(12u, ctx.src_sges[0].len + ctx.src_sges[1].len + ctx.src_sges[2].len);
+}
+
+TEST_F(UrmaDataRxTest, IssueReadRequestAllocatesBlocksBuildsWrsAndPosts)
+{
+    using GetLocalSeg = urma_target_seg_t *(UrmaIoBufferPool::*)(UrmaContextPtr, uintptr_t) const noexcept;
+    using GetRemoteSeg = urma_target_seg_t *(UrmaIoBufferPool::*)(RemoteSegmentsPtr &, uintptr_t) const noexcept;
+    using StoreRemoteSeg = ock::ubs::Result (UrmaIoBufferPool::*)(UrmaContextPtr, RemoteSegmentsPtr &, urma_eid_t &,
+                                                                  uint32_t, uintptr_t, uint32_t) noexcept;
+    MOCKER_CPP((static_cast<GetLocalSeg>(&UrmaIoBufferPool::get_local_target_seg)))
+        .stubs()
+        .will(returnValue(&g_target_seg));
+    MOCKER_CPP((static_cast<GetRemoteSeg>(&UrmaIoBufferPool::get_remote_target_seg)))
+        .stubs()
+        .will(returnValue(&g_target_seg));
+    MOCKER_CPP((static_cast<StoreRemoteSeg>(&UrmaIoBufferPool::store_remote_target_seg)))
+        .stubs()
+        .will(returnValue(static_cast<int32_t>(UBS_OK)));
+
+    allocator::FixedAllocatorOptions options;
+    options.pool_space_start_tb = 104;
+    options.pool_space_size_gb = 2;
+    options.block_size_mb = 2;
+    options.init_block_count = 1;
+    options.mini_block_size_kb = 8;
+    options.expanded_callback = [](uintptr_t, uint64_t, uint32_t) {
+        return UBS_OK;
+    };
+    g_dummy_alloc.options_ = options;
+    ASSERT_EQ(UBS_OK, g_dummy_alloc.fixed_allocator_.Init(options));
+
+    auto *urmaSocket = static_cast<UrmaSocket *>(sock_.Get());
+    auto *rawJetty = static_cast<UrmaJetty *>(malloc(sizeof(UrmaJetty)));
+    ASSERT_NE(nullptr, rawJetty);
+    memset(rawJetty, 0, sizeof(UrmaJetty));
+    rawJetty->ref_count_ = 1;
+    urmaSocket->jetty_ = rawJetty;
+    urmaSocket->remote_target_segs_ = MakeRef<RemoteSegments>();
+    UrmaApi::urma_post_jetty_send_wr_ptr = MockPostReadWrSuccess;
+
+    auto *message = reinterpret_cast<UrmaCtrlMessage *>(g_recv_buf + CTRL_OFF1);
+    message->head.data_count = 2;
+    auto *pages = reinterpret_cast<PageBufferInMessage *>(g_recv_buf + CTRL_OFF1 + sizeof(UrmaMessageHead));
+    pages[0].addr = 0x100000;
+    pages[0].size = 5000;
+    pages[0].flags = 7;
+    pages[1].addr = 0x200000;
+    pages[1].size = 5000;
+    pages[1].flags = 8;
+
+    UrmaRxOps rx(TEST_FD);
+    UrmaRxOps::DataSlot slot;
+    WriteImmData imm{PRE_WRITE, CTRL_OFF1 / URMA_SND_BUFF_ALLOC_UNIT};
+    EXPECT_EQ(UBS_OK, rx.IssueReadRequest(sock_, 9, imm.data, slot));
+    EXPECT_EQ(URMA_RX_STS_READING, slot.rx_state.load(std::memory_order_acquire));
+    ASSERT_NE(nullptr, slot.data_block);
+    EXPECT_NE(nullptr, slot.data_block->GetNext());
+
+    rx.ReleaseBlockInSlot(slot);
+    urmaSocket->jetty_ = nullptr;
+    free(rawJetty);
+    UrmaApi::urma_post_jetty_send_wr_ptr = nullptr;
 }
