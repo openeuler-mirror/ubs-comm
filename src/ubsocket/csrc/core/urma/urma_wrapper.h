@@ -191,6 +191,9 @@ class UrmaContext : public Referable {
 public:
     static Result CreateContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out);
     static Result LookupContext(const std::string &devName, uint32_t eidIndex, UrmaContextPtr &out);
+
+    static void ClearAllContexts() noexcept;
+
     static uint32_t NewJettyId() noexcept;
 
 public:

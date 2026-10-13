@@ -184,6 +184,11 @@ public:
     static Result Load() noexcept;
     static void UnLoad() noexcept;
 
+    static bool IsLoaded() noexcept
+    {
+        return LOADED;
+    }
+
     static urma_status_t urma_init(urma_init_attr_t *conf)
     {
         return urma_init_ptr(conf);
