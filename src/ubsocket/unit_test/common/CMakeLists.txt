@@ -66,3 +66,35 @@ target_sources(ubsocket_epoll_test
 		PRIVATE
 		ubsocket_epoll_test.cpp
 		)
+
+add_executable(ubsocket_fd_table_test "")
+add_test(NAME ubsocket_fd_table_test COMMAND ubsocket_fd_table_test)
+set_target_properties(ubsocket_fd_table_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+
+target_compile_features(ubsocket_fd_table_test
+		PRIVATE
+		cxx_std_17
+		)
+
+target_compile_definitions(ubsocket_fd_table_test
+		PRIVATE
+		UBSOCKET_UNIT_TEST
+		)
+
+target_include_directories(ubsocket_fd_table_test
+		PRIVATE
+		${UBSOCKET_BASE_DIR}/csrc
+		${UBSOCKET_BASE_DIR}/csrc/common
+		)
+
+target_link_libraries(ubsocket_fd_table_test
+		PRIVATE
+		ubsocket_static
+		boundscheck
+		GTest::gtest_main
+		pthread
+		)
+target_sources(ubsocket_fd_table_test
+		PRIVATE
+		ubsocket_fd_table_test.cpp
+		)

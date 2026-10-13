@@ -128,6 +128,11 @@ public:
 
     // 故障 port 口冷却时间
     static uint32_t UBS_PORT_COOLDOWN_SEC;
+
+    /* fd 表预扩容目标（见 ubsocket_fd_table.h）：ubsocket_init 一开始就把进程 fd 表撑到能容纳这个 fd 号，
+     * 避免建链途中多线程扩容等 RCU 宽限期。按"单进程最大链接数 × 每条链的 fd 数"取值；45000 对应 65536 档。
+     * 0 = 关闭。env UBSOCKET_PRE_ALLOC_SYSTEM_FD_NUM，范围 0..1048576。 */
+    static uint32_t UBS_PRE_ALLOC_SYSTEM_FD_NUM;
 };
 
 ALWAYS_INLINE bool GlobalSetting::GetEnv(const std::string &name, int64_t &out) noexcept

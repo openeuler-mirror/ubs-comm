@@ -48,7 +48,7 @@ uint32_t UrmaSetting::UB_KEEPALIVE_TIME = 0;
 uint32_t UrmaSetting::UB_KEEPALIVE_INTVL = 0;
 uint32_t UrmaSetting::UB_KEEPALIVE_PROBES = 1;
 
-bool UrmaSetting::UB_BUF_ASYNC_EXPAND = false;
+bool UrmaSetting::UB_BUF_ASYNC_EXPAND = true;
 EpollHandleMode UrmaSetting::UB_EPOLL_HANDLE_MODE = THREAD_PER_CONNECTION;
 
 void UrmaSetting::Init() noexcept

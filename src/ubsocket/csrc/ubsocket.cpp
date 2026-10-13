@@ -11,6 +11,7 @@
 #include <iostream>
 
 #include "common/ubsocket_common_includes.h"
+#include "common/ubsocket_fd_table.h"
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_signal_handler.h"
 #include "common/ubsocket_version.h"
@@ -100,6 +101,10 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         errno = EINVAL;
         return UBS_ERROR;
     }
+
+    /* fd 表预扩容：必须排在下面所有会打开 fd、会起线程的步骤之前——进程此刻若还是单线程，扩容是微秒级；
+     * 即便已是多线程也只等一次 RCU 宽限期，后面 umq 初始化和建链期间不再扩容。失败只告警，不影响初始化。 */
+    (void)PreExpandFdTable(GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM);
 
     /* step2: load under api */
     UBS_VLOG_DEBUG("load under api");

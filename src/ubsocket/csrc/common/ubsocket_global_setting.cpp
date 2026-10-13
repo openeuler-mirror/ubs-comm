@@ -54,6 +54,7 @@ uint32_t GlobalSetting::UBS_PROBE_MS = 1000;
 uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::BONDING_BACKUP;
 uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
+uint32_t GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM = 45000; /* fd table pre-expansion target, 0 = off */
 
 /* environment variable name */
 #define ENV_TRACE_ENABLED "UBSOCKET_MONITOR_ENABLE"
@@ -89,6 +90,7 @@ uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 #define ENV_BACKUP_LINK_ENABLED "UBSOCKET_BACKUP_LINK_ENABLE"
 #define ENV_PORT_COOLDOWN_SEC "UBSOCKET_PORT_COOLDOWN_SEC"
 #define ENV_READV_UNLIMITED "UBSOCKET_READV_UNLIMITED"
+#define ENV_PRE_ALLOC_SYSTEM_FD_NUM "UBSOCKET_PRE_ALLOC_SYSTEM_FD_NUM"
 
 void GlobalSetting::AddRules() noexcept
 {
@@ -110,6 +112,7 @@ void GlobalSetting::AddRules() noexcept
         {ENV_CONN_POLL_THREAD_NUM, false, 0, UINT32_MAX},
         {ENV_SERVER_HANDLER_NUM_DEPRECATED, false, 0, UINT32_MAX},
         {ENV_PORT_COOLDOWN_SEC, false, 1, 300},
+        {ENV_PRE_ALLOC_SYSTEM_FD_NUM, false, 0, 1048576},
     };
 
     /* str enum rules: name, required, enum */
@@ -368,6 +371,10 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidate(ENV_PORT_COOLDOWN_SEC, envValue)) {
         UBS_PORT_COOLDOWN_SEC = static_cast<uint32_t>(envValue);
+    }
+
+    if (GetEnvAndValidate(ENV_PRE_ALLOC_SYSTEM_FD_NUM, envValue)) {
+        UBS_PRE_ALLOC_SYSTEM_FD_NUM = static_cast<uint32_t>(envValue); /* 0 = off; range 0..1048576 by validator */
     }
 
     if (GetEnvAndValidateNotEmpty(ENV_SPLIT_TRACE_LEVEL, strEnvValue)) {
