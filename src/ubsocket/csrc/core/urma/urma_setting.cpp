@@ -19,6 +19,7 @@ namespace urma {
 #define ENV_URMA_BUSY_POLLING "UBSOCKET_UB_BUSY_POLLING"
 #define ENV_URMA_EPOLL_HANDLE_MODE "UBSOCKET_EPOLL_HANDLE_MODE"
 #define ENV_URMA_KEEPALIVE_TIME "UBSOCKET_KEEPALIVE_TIME"
+#define ENV_URMA_BUF_DIRECT_INIT_COUNT "UBSOCKET_UB_BUF_DIRECT_INIT_COUNT"
 
 bool UrmaSetting::UB_USING_BOUNDING_DEV = true;
 std::string UrmaSetting::UB_DEV_NAME = "";
@@ -42,13 +43,14 @@ bool UrmaSetting::UB_POLLER_BUSY_POLLING = false;
 uint32_t UrmaSetting::UB_BUF_POOL_SPACE_SIZE = 32;
 uint16_t UrmaSetting::UB_BUF_BLOCK_SIZE_MB = 16;
 uint16_t UrmaSetting::UB_BUF_INIT_MEM_SIZE_MB = 256;
+uint16_t UrmaSetting::UB_BUF_DIRECT_INIT_BLOCK_COUNT = 4;
 uint16_t UrmaSetting::UB_BUF_PAGE_SIZE_KB = 64;
 uint64_t UrmaSetting::UB_BAD_PORT_RECOVER_SECONDS = 300;
 uint32_t UrmaSetting::UB_KEEPALIVE_TIME = 0;
 uint32_t UrmaSetting::UB_KEEPALIVE_INTVL = 0;
 uint32_t UrmaSetting::UB_KEEPALIVE_PROBES = 1;
 
-bool UrmaSetting::UB_BUF_ASYNC_EXPAND = true;
+bool UrmaSetting::UB_BUF_ASYNC_EXPAND = false;
 EpollHandleMode UrmaSetting::UB_EPOLL_HANDLE_MODE = THREAD_PER_CONNECTION;
 
 void UrmaSetting::Init() noexcept
@@ -68,7 +70,8 @@ void UrmaSetting::AddRules()
                                {ENV_URMA_BOUNDING_DEV, false, 0, 1},
                                {ENV_URMA_BUSY_POLLING, false, 0, 1},
                                {ENV_URMA_EPOLL_HANDLE_MODE, false, EPOLL_HANDLE_MODE_MIN, EPOLL_HANDLE_MODE_COUNT - 1},
-                               {ENV_URMA_KEEPALIVE_TIME, false, 0, 86400},};
+                               {ENV_URMA_KEEPALIVE_TIME, false, 0, 86400},
+                               {ENV_URMA_BUF_DIRECT_INIT_COUNT, false, 1, 2048}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {};
@@ -118,6 +121,9 @@ Result UrmaSetting::LoadEnv()
     }
     if (GS::GetEnvAndValidate(ENV_URMA_KEEPALIVE_TIME, int64EnvValue)) {
         UB_KEEPALIVE_TIME = static_cast<uint32_t>(int64EnvValue);
+    }
+    if (GS::GetEnvAndValidate(ENV_URMA_BUF_DIRECT_INIT_COUNT, int64EnvValue)) {
+        UB_BUF_DIRECT_INIT_BLOCK_COUNT = static_cast<uint16_t>(int64EnvValue);
     }
     return UBS_OK;
 }

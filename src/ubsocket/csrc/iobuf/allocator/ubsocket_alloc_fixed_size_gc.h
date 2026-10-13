@@ -191,11 +191,20 @@ ALWAYS_INLINE Result FixedGlobalCache::VerifyOptions(FixedAllocatorOptions &opti
         return UBS_ERROR;
     }
 
-    auto init_mem_size = SIZE_1M * options.block_size_mb * options.init_block_count;
+    if (options.init_direct_block_count == 0) {
+        UBS_VLOG_INFO("Option 'init_direct_block_count':%u is invalid, set to default value 1",
+                      options.init_direct_block_count);
+        options.init_direct_block_count = 1;
+    }
+
+    auto init_mem_size = SIZE_1M * static_cast<uint64_t>(options.block_size_mb) *
+                         (static_cast<uint64_t>(options.init_block_count) + options.init_direct_block_count);
     if (init_mem_size > SIZE_1G * options.pool_space_size_gb) {
         UBS_VLOG_ERR(
-            "Option 'init_block_count':%d is too large, result in total init cache size %ld exceed space size %dGB",
-            options.init_block_count, init_mem_size, options.pool_space_size_gb);
+            "Option 'init_block_count':%d and 'init_direct_block_count':%d is too large, result in total init cache "
+            "size %llu exceed space size %dGB",
+            options.init_block_count, options.init_direct_block_count,
+            static_cast<unsigned long long>(init_mem_size), options.pool_space_size_gb);
         return UBS_ERROR;
     }
 
@@ -231,11 +240,13 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
         return result;
     }
 
-    /* step4: Expand mem */
-    result = ExpandBlock(true);
-    if (result != UBS_OK) {
-        UnInitInner();
-        return result;
+    /* step4: Expand mem (direct 池按 init_direct_block_count 预扩，mini 池按 init_block_count) */
+    for (uint16_t i = 0; i < options_.init_direct_block_count; i++) {
+        result = ExpandBlock(true);
+        if (result != UBS_OK) {
+            UnInitInner();
+            return result;
+        }
     }
 
     for (uint16_t i = 0; i < options_.init_block_count; i++) {
@@ -274,6 +285,10 @@ ALWAYS_INLINE Result FixedGlobalCache::Init(const FixedAllocatorOptions &options
         UnInitInner();
         return result;
     }
+
+    /* 预扩的 direct block(索引 1..N-1) 直接并入 range allocator，
+     * 后续 DirectAllocate 耗尽首块后直接切块，不再同步触发 ExpandBlock/register_mem */
+    direct_allocator_.InitExtraBlocks(direct_alloc_blocks_);
 
     /* step7: create thread for dynamic expand for thread cache in background */
     if (options_.async_expand) {

@@ -29,7 +29,8 @@ struct FixedAllocatorOptions {
     uint32_t pool_space_start_tb = 2;                /* desired start virtual address of pool from os */
     uint32_t pool_space_size_gb = 4;                 /* capacity of pool */
     uint16_t block_size_mb = 8;                      /* size of one block, expand one from os one time */
-    uint16_t init_block_count = 32;                  /* how many blocks expand  */
+    uint16_t init_block_count = 32;                  /* how many blocks expand (mini-block pool) */
+    uint16_t init_direct_block_count = 1;            /* how many blocks expand for direct pool */
     uint32_t mini_block_size_kb = 8;                 /* size of one mini block */
     bool async_expand = false;                       /* expand in dedicated thread */
     float async_expand_threshold = 0.8;              /* expand memory when the threshold reached */
@@ -98,7 +99,8 @@ inline std::ostream &operator<<(std::ostream &os, const FixedAllocatorOptions &o
 {
     os << "FixedAllocatorOptions [pool_space_start_tb: " << o.pool_space_start_tb
        << ", pool_space_size_gb: " << o.pool_space_size_gb << ", block_size_mb: " << o.block_size_mb
-       << ", init_block_count: " << o.init_block_count << ", mini_block_size_kb: " << o.mini_block_size_kb
+       << ", init_block_count: " << o.init_block_count << ", init_direct_block_count: " << o.init_direct_block_count
+       << ", mini_block_size_kb: " << o.mini_block_size_kb
        << ", expanded_callback: " << (o.expanded_callback == nullptr ? 0 : 1) << "]";
     return os;
 }

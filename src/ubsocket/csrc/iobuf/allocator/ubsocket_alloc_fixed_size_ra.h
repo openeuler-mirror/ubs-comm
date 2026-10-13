@@ -15,6 +15,8 @@
 #include <semaphore.h>
 #include <memory_resource>
 
+#include <vector>
+
 #include "ubsocket_alloc_fixed_size_types.h"
 
 namespace ock {
@@ -225,6 +227,8 @@ public:
     }
 
     Result Init(const FixedBlock &firstBlock, const FixedExpandHandler &handler) noexcept;
+    /* 并入 Init 前已预扩、注册完成的 block（blocks[0] 即 Init 的首块，此处跳过；余下须按地址递增） */
+    void InitExtraBlocks(const std::vector<FixedBlock> &blocks) noexcept;
     void UnInit() noexcept;
 
     /* async expand related */
@@ -285,6 +289,20 @@ ALWAYS_INLINE void FixedRangeAllocator::UnInit() noexcept
     expand_handler_ = nullptr;
     async_expand_enable_ = false;
     async_expand_sem_ = nullptr;
+}
+
+ALWAYS_INLINE void FixedRangeAllocator::InitExtraBlocks(const std::vector<FixedBlock> &blocks) noexcept
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (UNLIKELY(sub_allocator_ == nullptr || blocks.size() <= 1)) {
+        return;
+    }
+
+    /* blocks[0] 已由 Init 建范围，预扩块按地址序并入同一 sub allocator */
+    for (size_t i = 1; i < blocks.size(); ++i) {
+        sub_allocator_->ExpandRange(blocks[i].address, SIZE_1K * blocks[i].size_kb);
+    }
+    UBS_VLOG_DEBUG("Range allocator merged %zu pre-expanded blocks", blocks.size() - 1);
 }
 
 ALWAYS_INLINE void FixedRangeAllocator::AsyncExpandEnable(sem_t &sem, float threshold) noexcept
