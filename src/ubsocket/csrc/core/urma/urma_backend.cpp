@@ -179,6 +179,8 @@ void UrmaBackend::UnInitInner() noexcept
         UnInitContextPool();
     }
 
+    UrmaContext::ClearAllContexts();
+
     UnInitUrma();
 
     UnLoadUrmaApi();
