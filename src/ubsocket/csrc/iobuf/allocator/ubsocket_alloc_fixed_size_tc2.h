@@ -244,6 +244,10 @@ ALWAYS_INLINE void FixedThreadCache2::Free(uintptr_t address) noexcept
     /* step1: add to unaligned list */
     FixedMiniBlock *new_mini_block = reinterpret_cast<FixedMiniBlock *>(address);
     new_mini_block->next = unaligned_head_;
+    new_mini_block->next_n = nullptr;
+    new_mini_block->next_n_count = 0;
+    new_mini_block->next_n_m = nullptr;
+    new_mini_block->next_n_m_count = 0;
     unaligned_head_ = new_mini_block;
     unaligned_tail_ = (unaligned_free_count_ == 0) ? new_mini_block : unaligned_tail_;
     ++unaligned_free_count_;
