@@ -428,7 +428,7 @@ int UmqTxOps::PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, con
     return tx_total_len;
 }
 
-int UmqTxOps::PollTx(Socket *sock)
+int UmqTxOps::PollTx(Socket *sock) noexcept
 {
     if (get_and_ack_event_) {
         // handle tx epollin epoll event

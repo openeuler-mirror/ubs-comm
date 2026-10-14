@@ -13,7 +13,6 @@
 #include "common/ubsocket_thread_pool.h"
 #include "common/ubsocket_version.h"
 #include "core/ubsocket_conn_reactor.h"
-#include "core/umq/umq_socket_acceptor.h"
 #include "profiling/statistics/statistics_statsmgr.h"
 #include "ubsocket_core_types.h"
 #include "ubsocket_event_epoll.h"

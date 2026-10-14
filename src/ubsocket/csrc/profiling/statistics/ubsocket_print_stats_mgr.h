@@ -14,6 +14,8 @@
 #ifndef UBSOCKET_PRINT_STATS_MGR_H
 #define UBSOCKET_PRINT_STATS_MGR_H
 
+#ifdef UMQ_BACKEND_ENABLED
+
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -236,5 +238,7 @@ private:
 };
 
 }; // namespace Statistics
+
+#endif // UMQ_BACKEND_ENABLED
 
 #endif

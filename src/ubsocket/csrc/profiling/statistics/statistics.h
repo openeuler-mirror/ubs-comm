@@ -9,6 +9,8 @@
 #ifndef STATISTICS_H
 #define STATISTICS_H
 
+#ifdef UMQ_BACKEND_ENABLED
+
 #include <arpa/inet.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
@@ -1004,5 +1006,7 @@ private:
 };
 
 }; // namespace Statistics
+
+#endif // UMQ_BACKEND_ENABLED
 
 #endif

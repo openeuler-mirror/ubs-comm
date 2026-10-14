@@ -54,7 +54,7 @@ public:
     // 发送请求
     int PostSend(const SocketPtr &sock, uintptr_t buf, uint32_t batch, const ConverterPtr &cvt);
 
-    int PollTx(Socket *sock);
+    int PollTx(Socket *sock) noexcept override;
 
     uint32_t IOBufSize();
 

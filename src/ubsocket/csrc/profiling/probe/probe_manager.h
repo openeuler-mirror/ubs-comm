@@ -10,6 +10,8 @@
 #ifndef PROBE_MANAGER_H
 #define PROBE_MANAGER_H
 
+#ifdef UMQ_BACKEND_ENABLED
+
 #include <pthread.h>
 #include <sched.h>
 #include <semaphore.h>
@@ -596,4 +598,6 @@ private:
     uint32_t mQueueEd;
 };
 } // namespace Statistics
+#endif // UMQ_BACKEND_ENABLED
+
 #endif // PROBE_MANAGER_H

@@ -9,6 +9,8 @@
 #include "statistics.h"
 #include "umq_dfx_api.h"
 
+#ifdef UMQ_BACKEND_ENABLED
+
 uint32_t Statistics::Recorder::m_title_len = 0;
 volatile bool Statistics::GlobalStatsMgr::m_running = true;
 
@@ -93,3 +95,4 @@ void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode
         }
     }
 }
+#endif // UMQ_BACKEND_ENABLED

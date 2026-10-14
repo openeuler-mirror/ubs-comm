@@ -57,6 +57,14 @@ public:
      * @return 0 if successful
      */
     virtual Result TriggerPollOut(const SocketPtr &sock, uint32_t flags) noexcept = 0;
+
+    /**
+     * @brief Poll completed send events (TX CQE). Default no-op; umq backend overrides.
+     *
+     * @param sock         [in] the socket object to poll
+     * @return 0 if successful
+     */
+    virtual int PollTx(Socket *sock) noexcept { return 0; }
 };
 
 // 通用层：流控、数据切分、故障回退
