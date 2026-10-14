@@ -225,6 +225,8 @@ SplitTraceLevel SplitTraceLevelFromStr(const std::string &env_str) noexcept
             level = level | SplitTraceLevel::LEVEL_UBSOCKET;
         } else if (level_str == "umq") {
             level = level | SplitTraceLevel::LEVEL_UMQ;
+        } else if (level_str == "urma") {
+            level = level | SplitTraceLevel::LEVEL_URMA;
         } else if (level_str == "all") {
             level = SplitTraceLevel::LEVEL_ALL;
         } else {

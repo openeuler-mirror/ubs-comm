@@ -5,15 +5,22 @@
  *Create: 2025-07-16
  *Note:
  *History: 2025-07-16
-*/
+ */
 #include "statistics.h"
-#include "umq_dfx_api.h"
 
 #ifdef UMQ_BACKEND_ENABLED
+#include "umq_dfx_api.h"
+#endif
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
+#include "under_api/urma/dl_urma_api.h"
+#endif
 
 uint32_t Statistics::Recorder::m_title_len = 0;
 volatile bool Statistics::GlobalStatsMgr::m_running = true;
 
+/* TryGetRetryCount: pure text parsing, no backend dependency.
+ * Both UMQ (umq_stats_tp_perf_info_get) and URMA (urma_get_perf_info) return
+ * perf info text containing "retry_count: N", this helper parses it. */
 namespace {
 constexpr const char *PREFIX = "retry_count: ";
 
@@ -45,10 +52,8 @@ bool TryGetRetryCount(const char *perfBuf, size_t bufLen, uint64_t &retryCount)
         size_t processedCharCount = 0;
         retryCount = std::stoull(numStr, &processedCharCount);
 
-        // 检查是否转换了所有字符
         return processedCharCount > 0;
     } catch (const std::exception &e) {
-        // 处理转换失败（如：非数字字符、数值溢出等）
         UBS_VLOG_ERR("Failed to parse retry_count: %s\n", e.what());
         return false;
     }
@@ -57,6 +62,7 @@ bool TryGetRetryCount(const char *perfBuf, size_t bufLen, uint64_t &retryCount)
 
 void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode)
 {
+#ifdef UMQ_BACKEND_ENABLED
     if (!UmqApi::IsLoaded()) {
         return;
     }
@@ -69,12 +75,10 @@ void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode
     const bool profEnabled = GlobalSetting::UBS_PROF_ENABLE;
     if (!profEnabled) {
         if (UmqApi::umq_stats_tp_perf_start(umq_trans_mode) != 0) {
-            // UBS_VLOG_ERR("Failed to start tp perf: umq_trans_mode=%d\n", static_cast<int>(umq_trans_mode));
             return;
         }
     }
 
-    // umq_stats_tp_perf_info_get 不支持多次 get, 待后续完善
     char perfBuf[4096] = {};
     uint32_t perfLen = sizeof(perfBuf);
     ret = UmqApi::umq_stats_tp_perf_info_get(umq_trans_mode, perfBuf, &perfLen);
@@ -94,5 +98,22 @@ void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode
             UBS_VLOG_ERR("Failed to stop tp perf: umq_trans_mode=%d\n", static_cast<int>(umq_trans_mode));
         }
     }
+#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
+    (void)umq_trans_mode;
+    if (!UrmaApi::IsLoaded()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(gTpPerfSeqMutex);
+
+    char perfBuf[4096] = {};
+    uint32_t perfLen = sizeof(perfBuf);
+    auto ret = UrmaApi::urma_get_perf_info(perfBuf, &perfLen);
+    if (ret == URMA_SUCCESS && perfLen > 0) {
+        uint64_t retryCount = 0;
+        if (TryGetRetryCount(perfBuf, perfLen, retryCount)) {
+            mReTxCount.store(retryCount);
+        }
+    }
+#endif
 }
-#endif // UMQ_BACKEND_ENABLED

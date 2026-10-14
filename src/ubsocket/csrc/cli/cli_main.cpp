@@ -31,9 +31,11 @@ int main(int argc, char *argv[])
             client.Query(args, response);
             player.DisplaySocketInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
+#ifdef UMQ_BACKEND_ENABLED
     } else if (args.command == Statistics::CLICommand::TOPO) {
         client.Query(args, response);
         player.DisplayTopoInfo(reinterpret_cast<umq_route_list_t *>(response.Data()), response.DataLen());
+#endif
     } else if (args.command == Statistics::CLICommand::FLOW_CONTROL) {
         client.Query(args, response);
         player.DisplayFlowControlInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());

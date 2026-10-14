@@ -89,6 +89,7 @@ int CLIClient::ProcessFlowControl(int sockfd, CLIMessage &response)
     return 0;
 }
 
+#ifdef UMQ_BACKEND_ENABLED
 int CLIClient::ProcessTopo(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args)
 {
     CLIControlHeader header{};
@@ -120,6 +121,7 @@ int CLIClient::ProcessTopo(int sockfd, CLIMessage &response, CLIArgsParser::Pars
 
     return 0;
 }
+#endif /* UMQ_BACKEND_ENABLED */
 
 int CLIClient::ProcessProbeQuery(int sockfd, CLIMessage &response)
 {
@@ -380,10 +382,12 @@ int CLIClient::Query(CLIArgsParser::ParsedArgs &args, CLIMessage &response)
         return ret;
     }
 
+#ifdef UMQ_BACKEND_ENABLED
     if (args.command == CLICommand::TOPO) {
         ret = ProcessTopo(sockfd, response, args);
         return ret;
     }
+#endif
 
     if (args.command == CLICommand::DELAY) {
         ret = ProcessDelayQuery(sockfd, response, args);

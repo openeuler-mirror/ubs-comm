@@ -170,15 +170,21 @@ ssize_t UrmaTxOps::WriteVOnce(const SocketPtr &sock, const struct iovec *iov, in
         return -1;
     }
 
+    ssize_t ret;
     if (total_size <= URMA_INLINE_DATA_THRESHOLD) {
-        return WriteInline(sock, iov, iovcnt, total_size, flags);
+        ret = WriteInline(sock, iov, iovcnt, total_size, flags);
+    } else if ((flags & UBS_IO_FLAG_USE_BRPC_BLOCK) == UBS_IO_FLAG_USE_BRPC_BLOCK) {
+        ret = WriteZeroCopy(sock, iov, iovcnt, total_size, flags);
+    } else {
+        ret = WriteLargeIO(sock, iov, iovcnt, total_size, flags);
     }
 
-    if ((flags & UBS_IO_FLAG_USE_BRPC_BLOCK) == UBS_IO_FLAG_USE_BRPC_BLOCK) {
-        return WriteZeroCopy(sock, iov, iovcnt, total_size, flags);
+    if (ret > 0 && GlobalSetting::UBS_TRACE_ENABLED) {
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_PACKET_COUNT, 1);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::TX_BYTE_COUNT, ret);
     }
-
-    return WriteLargeIO(sock, iov, iovcnt, total_size, flags);
+    return ret;
 }
 
 Result UrmaTxOps::Flush(const SocketPtr &sock, uint32_t flags) noexcept

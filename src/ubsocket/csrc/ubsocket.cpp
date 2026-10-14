@@ -216,12 +216,13 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         }
     }
 
-#ifdef UMQ_BACKEND_ENABLED
-    /* TODO(urma-decouple): urma 模式缺失 umq trans mode 传 GlobalStatsMgr，待阶段二抽象 UBS_TRANS_MODE */
     if (GlobalSetting::UBS_CLI_ENABLED) {
+#ifdef UMQ_BACKEND_ENABLED
         (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr(umq::UmqSetting::UMQ_TRANS_MODE);
-    }
+#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
+        (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr(static_cast<umq_trans_mode_t>(0));
 #endif
+    }
 
 #ifdef UMQ_BACKEND_ENABLED
     /* TODO(urma-decouple): urma 模式缺失 umq probe，待阶段二补 urma probe 等价实现 */
@@ -236,15 +237,16 @@ UBS_API int ubsocket_init(u_init_options_t *options)
 
     UBS_VLOG_DEBUG("UBSOCKET_ASYNC_ACCEPT_ENABLE:%d\n", GlobalSetting::AsyncAcceptorEnabled() ? 1 : 0);
     /* do trace log initial */
-#ifdef UMQ_BACKEND_ENABLED
-    /* TODO(urma-decouple): urma 模式缺失 umq trans mode 传 trace，待阶段二抽象 UBS_TRANS_MODE */
     if (GlobalSetting::UBS_TRACE_ENABLED) {
+#ifdef UMQ_BACKEND_ENABLED
         umq_trans_mode_t transMode = umq::UmqSetting::UMQ_TRANS_MODE;
+#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
+        umq_trans_mode_t transMode = static_cast<umq_trans_mode_t>(0);
+#endif
         Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_TRACE_TIME,
                                                         GlobalSetting::UBS_TRACE_FILE_PATH,
                                                         GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
     }
-#endif
 #ifdef UBS_SPLIT_TRACE_ENABLED_COMPILE
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
@@ -263,6 +265,12 @@ UBS_API int ubsocket_init(u_init_options_t *options)
             if (trace_ret != 0) {
                 UBS_VLOG_WARN("umq stats trace start failed, ret: %d\n", trace_ret);
             }
+#endif
+        }
+
+        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_URMA) != SplitTraceLevel::LEVEL_NONE) {
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
+            /* liburma 当前无 trace API，no-op；未来 liburma 如新增 trace API 可在此补充 */
 #endif
         }
     }
@@ -286,18 +294,20 @@ void ubsocket_uninit()
 
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UMQ) != SplitTraceLevel::LEVEL_NONE) {
 #ifdef UMQ_BACKEND_ENABLED
-            /* TODO(urma-decouple): urma 模式缺失 umq split trace stop，待阶段二补 urma 等价 */
             UmqApi::umq_stats_trace_stop();
+#endif
+        }
+
+        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_URMA) != SplitTraceLevel::LEVEL_NONE) {
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
+            /* liburma 无 trace stop API，no-op */
 #endif
         }
     }
 #endif
-#ifdef UMQ_BACKEND_ENABLED
-    /* TODO(urma-decouple): urma 模式缺失 umq trace，待阶段二补 urma trace 等价 */
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         Statistics::PrintStatsMgr::StopStatsCollection();
     }
-#endif
 
     // 用户需要在程序退出时调用 ubsocket_uninit 保证所有的 socket ref 释放，否则会延迟至 ArraySet 单例析构。在 brpc 场
     // 景下，由于 brpc worker 不会主动 join, worker 可能仍会尝试访问 ArraySet<Socket> 或者 ArraySet<EventPoll>

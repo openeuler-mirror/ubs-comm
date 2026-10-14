@@ -151,6 +151,7 @@ DL_API_DEFINE(UrmaApi, urma_get_eid_by_ip);
 DL_API_DEFINE(UrmaApi, urma_get_ip_by_eid);
 DL_API_DEFINE(UrmaApi, urma_get_smac);
 DL_API_DEFINE(UrmaApi, urma_get_dmac);
+DL_API_DEFINE(UrmaApi, urma_get_perf_info);
 
 Result UrmaApi::Load() noexcept
 {
@@ -303,6 +304,7 @@ Result UrmaApi::Load() noexcept
     DL_API_LOAD(urma_get_ip_by_eid);
     DL_API_LOAD(urma_get_smac);
     DL_API_LOAD(urma_get_dmac);
+    DL_API_LOAD(urma_get_perf_info);
 
     /* step3: close handle */
     dlclose(handle);
@@ -461,6 +463,7 @@ void UrmaApi::UnLoadInner() noexcept
     DL_API_SET_NULL(urma_get_ip_by_eid);
     DL_API_SET_NULL(urma_get_smac);
     DL_API_SET_NULL(urma_get_dmac);
+    DL_API_SET_NULL(urma_get_perf_info);
 }
 
 } // namespace ubs

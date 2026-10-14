@@ -36,7 +36,9 @@ public:
 
     int ProcessFlowControl(int sockfd, CLIMessage &response);
 
+#ifdef UMQ_BACKEND_ENABLED
     int ProcessTopo(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
+#endif
 
     int ProcessQbufPool(int sockfd, CLIMessage &response);
 
