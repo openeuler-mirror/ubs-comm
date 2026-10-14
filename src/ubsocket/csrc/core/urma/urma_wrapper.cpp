@@ -782,17 +782,9 @@ void UrmaJfc::Destroy() noexcept
                 UBS_VLOG_WARN("[URMA_API] Delete jfc, errno: %d", errno);
             }
         }
-
-        if (raw_jfce_ != nullptr) {
-            auto result = UrmaApi::urma_delete_jfce(raw_jfce_);
-            if (result != URMA_SUCCESS) {
-                UBS_VLOG_WARN("[URMA_API] Delete jfce, errno: %d", errno);
-            }
-        }
     }
 
     raw_jfc_ = nullptr;
-    raw_jfce_ = nullptr;
 }
 
 /* urma jfs function */

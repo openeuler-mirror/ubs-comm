@@ -137,16 +137,33 @@ private:
     Result DrainCqes(urma_jfc_t **ev_jfc, uint32_t jfc_cnt) noexcept;
     void BusyPoll() noexcept;
 
+    /*
+     * Message-triggered wakeup: a dedicated loopback jetty (jfs/jfr bound to the poller jfc) is
+     * created on Start. StopInner() posts a local message through it so a completion event lands
+     * on the poller jfc and releases the blocking urma_wait_jfc, replacing the former
+     * signal-based interrupt (SIGUSR1 via pthread_kill).
+     */
+    Result SetupWakeupJetty() noexcept;
+    void Wakeup() noexcept;
+    void DestroyWakeupJetty() noexcept;
+
 private:
     UrmaJfcePtr jfce_;                   /* jfce ref */
     UrmaCqeHandler cqe_handler_;         /* callback function of  */
     uint16_t index_;                     /* index of the poller */
     bool busy_poll_ = false;             /* is busy poll or not */
     std::atomic<bool> started_{false};   /* started sign */
-    bool stopping_{false};               /* stop sign to stop poller thread */
+    std::atomic<bool> stopping_{false};  /* stop sign to stop poller thread */
     std::thread thread_;                 /* thread to call urma poll or epoll_wait */
     std::vector<UrmaJfcPtr> jfc_vector_; /* one poller contains one urma poller */
     std::atomic<uint64_t> seq_{0};
+
+    /* loopback wakeup resources */
+    UrmaJettyPtr wakeup_jetty_;              /* loopback jetty bound to the poller jfc */
+    urma_target_seg_t *wakeup_seg_{nullptr}; /* registered segment for the wakeup buffer */
+    void *wakeup_buf_{nullptr};              /* registered buffer used as message payload */
+    urma_jfr_wr_t wakeup_recv_wr_{};         /* pre-posted recv WR consumed by the wakeup send */
+    urma_sge_t wakeup_recv_sge_{};           /* backing sge of the pre-posted recv WR */
 };
 
 class UrmaAggPollerSet : public Referable {
