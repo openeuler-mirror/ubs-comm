@@ -510,24 +510,10 @@ Result UrmaSocket::CreateUrmaResources()
         return ret;
     }
 
-    urma_jfs_cfg_t jfs_cfg = context_->CreateJfsCfg(kDefaultQueueDepth, GetUrmaTransMode(), 0);
-    ret = context_->CreateJfs(jfs_cfg, jfc_, jfs_);
+    ret =
+        context_->CreateJfsJfrJetty(jfc_, kDefaultQueueDepth, GetUrmaTransMode(), GetUrmaTpType(), jfs_, jfr_, jetty_);
     if (ret != UBS_OK) {
-        UBS_SLOG_ERR("UrmaSocket: CreateJfs failed, fd=" << raw_socket_);
-        return ret;
-    }
-
-    urma_jfr_cfg_t jfr_cfg = context_->CreateJfrCfg(kDefaultQueueDepth, GetUrmaTransMode(), 0, 0);
-    ret = context_->CreateJfr(jfr_cfg, jfc_, jfr_);
-    if (ret != UBS_OK) {
-        UBS_SLOG_ERR("UrmaSocket: CreateJfr failed, fd=" << raw_socket_);
-        return ret;
-    }
-
-    urma_jetty_cfg_t jetty_cfg = context_->CreateJettyCfg(0);
-    ret = context_->CreateJetty(jetty_cfg, GetUrmaTpType(), jfs_, jfr_, jetty_);
-    if (ret != UBS_OK) {
-        UBS_SLOG_ERR("UrmaSocket: CreateJetty failed, fd=" << raw_socket_);
+        UBS_SLOG_ERR("UrmaSocket: create jfs/jfr/jetty failed, fd=" << raw_socket_);
         return ret;
     }
 

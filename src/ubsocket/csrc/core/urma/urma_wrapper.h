@@ -223,6 +223,25 @@ public:
     Result CreateJetty(urma_jetty_cfg_t &cfg, urma_tp_type_t rtp_ctp_utp, const UrmaJfsPtr &jfs, const UrmaJfrPtr &jfr,
                        UrmaJettyPtr &out);
 
+    /**
+     * @brief Create a jfs and a jfr both bound to jfc, then a jetty over them.
+     *
+     * Centralizes the jfs + jfr + jetty creation sequence shared by UrmaSocket and the
+     * agg-poller wakeup channel, so the two paths cannot drift apart.
+     *
+     * @param jfc          [in] jfc the jfs and jfr are bound to
+     * @param queueDepth   [in] queue depth of the jfs and jfr
+     * @param transMode    [in] transport mode of the jfs and jfr
+     * @param tpType       [in] tp type (rc/rm)
+     * @param jfs          [out] the created jfs
+     * @param jfr          [out] the created jfr
+     * @param jetty        [out] the created jetty (also holds jfs/jfr references)
+     *
+     * @return 0 if successful
+     */
+    Result CreateJfsJfrJetty(const UrmaJfcPtr &jfc, uint32_t queueDepth, urma_transport_mode_t transMode,
+                             urma_tp_type_t tpType, UrmaJfsPtr &jfs, UrmaJfrPtr &jfr, UrmaJettyPtr &jetty);
+
     const urma_eid_info_t &EidInfo() const noexcept;
 
     uint32_t Id() const noexcept;

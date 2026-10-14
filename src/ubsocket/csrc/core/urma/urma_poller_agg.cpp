@@ -258,26 +258,14 @@ Result UrmaSharedJfcAggPollerWithThread::SetupWakeupJetty() noexcept
         return UBS_ERROR;
     }
 
-    /* step2: create a jfs/jfr bound to the poller jfc, then the loopback jetty */
-    urma_jfs_cfg_t jfs_cfg = ctx->CreateJfsCfg(WAKEUP_QUEUE_DEPTH, UrmaSetting::UB_JETTY_TRANS_MODE);
+    /* step2: create a jfs/jfr bound to the poller jfc and the loopback jetty, reusing the same
+     * sequence as the data path (UrmaSocket::CreateUrmaResources) through the shared helper. */
     UrmaJfsPtr wakeup_jfs;
-    if (UNLIKELY(ctx->CreateJfs(jfs_cfg, jfc_vector_[0], wakeup_jfs) != UBS_OK)) {
-        UBS_VLOG_ERR("Failed to create wakeup jfs for poller(%d)", index_);
-        DestroyWakeupJetty();
-        return UBS_ERROR;
-    }
-
-    urma_jfr_cfg_t jfr_cfg = ctx->CreateJfrCfg(WAKEUP_QUEUE_DEPTH, UrmaSetting::UB_JETTY_TRANS_MODE, 0);
     UrmaJfrPtr wakeup_jfr;
-    if (UNLIKELY(ctx->CreateJfr(jfr_cfg, jfc_vector_[0], wakeup_jfr) != UBS_OK)) {
-        UBS_VLOG_ERR("Failed to create wakeup jfr for poller(%d)", index_);
-        DestroyWakeupJetty();
-        return UBS_ERROR;
-    }
-
-    urma_jetty_cfg_t jetty_cfg = ctx->CreateJettyCfg();
-    if (UNLIKELY(ctx->CreateJetty(jetty_cfg, UrmaSetting::UB_JETTY_TP_TYPE, wakeup_jfs, wakeup_jfr, wakeup_jetty_) !=
-                 UBS_OK)) {
+    auto trans_mode = UrmaTransModeOf(UrmaSetting::UB_TANS_MODE);
+    auto tp_type = UrmaTpTypeOf(UrmaSetting::UB_TANS_MODE);
+    if (UNLIKELY(ctx->CreateJfsJfrJetty(jfc_vector_[0], WAKEUP_QUEUE_DEPTH, trans_mode, tp_type, wakeup_jfs, wakeup_jfr,
+                                        wakeup_jetty_) != UBS_OK)) {
         UBS_VLOG_ERR("Failed to create wakeup jetty for poller(%d)", index_);
         DestroyWakeupJetty();
         return UBS_ERROR;
@@ -423,6 +411,14 @@ void UrmaSharedJfcAggPollerWithThread::EventPoll() noexcept
         try {
             /* block indefinitely; the loopback wakeup message posted by StopInner() releases it */
             auto cnt = UrmaApi::urma_wait_jfc(jfce_->GetRawJfce(), jfc_cnt, -1, ev_jfc);
+            /*
+             * Ack the returned jfc events before any early exit. The loopback wakeup message is a
+             * real jfc event; if it is left unacked, urma_delete_jfc later fails with
+             * "There is jfc event and it must be acked".
+             */
+            if (cnt > 0) {
+                UrmaApi::urma_ack_jfc(ev_jfc, ack, cnt);
+            }
             if (stopping_) {
                 break;
             }
@@ -436,7 +432,6 @@ void UrmaSharedJfcAggPollerWithThread::EventPoll() noexcept
             if (UNLIKELY(cnt == 0)) {
                 continue;
             }
-            UrmaApi::urma_ack_jfc(ev_jfc, ack, cnt);
             DrainCqes(ev_jfc, static_cast<uint32_t>(cnt));
         } catch (...) {
             UBS_VLOG_ERR("Exception caught in UrmaPoller");
