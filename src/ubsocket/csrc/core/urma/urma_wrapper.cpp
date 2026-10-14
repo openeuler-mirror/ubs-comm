@@ -619,6 +619,35 @@ Result UrmaContext::CreateJetty(urma_jetty_cfg_t &cfg, urma_tp_type_t rtp_ctp_ut
     return UBS_OK;
 }
 
+Result UrmaContext::CreateJfsJfrJetty(const UrmaJfcPtr &jfc, uint32_t queueDepth, urma_transport_mode_t transMode,
+                                      urma_tp_type_t tpType, UrmaJfsPtr &jfs, UrmaJfrPtr &jfr, UrmaJettyPtr &jetty)
+{
+    if (UNLIKELY(jfc == nullptr)) {
+        UBS_VLOG_ERR("Create jfs/jfr/jetty failed as jfc is null");
+        return UBS_INVALID_PARAM;
+    }
+
+    urma_jfs_cfg_t jfs_cfg = CreateJfsCfg(queueDepth, transMode, 0);
+    if (UNLIKELY(CreateJfs(jfs_cfg, jfc, jfs) != UBS_OK)) {
+        UBS_VLOG_ERR("Failed to create jfs while creating jfs/jfr/jetty");
+        return UBS_ERROR;
+    }
+
+    urma_jfr_cfg_t jfr_cfg = CreateJfrCfg(queueDepth, transMode, 0, 0);
+    if (UNLIKELY(CreateJfr(jfr_cfg, jfc, jfr) != UBS_OK)) {
+        UBS_VLOG_ERR("Failed to create jfr while creating jfs/jfr/jetty");
+        return UBS_ERROR;
+    }
+
+    urma_jetty_cfg_t jetty_cfg = CreateJettyCfg(0);
+    if (UNLIKELY(CreateJetty(jetty_cfg, tpType, jfs, jfr, jetty) != UBS_OK)) {
+        UBS_VLOG_ERR("Failed to create jetty while creating jfs/jfr/jetty");
+        return UBS_ERROR;
+    }
+
+    return UBS_OK;
+}
+
 urma_jfc_cfg_t UrmaContext::CreateJfcCfg(uint32_t queueDepth, uint64_t userCtx)
 {
     urma_jfc_cfg_t cfg{};
@@ -782,17 +811,9 @@ void UrmaJfc::Destroy() noexcept
                 UBS_VLOG_WARN("[URMA_API] Delete jfc, errno: %d", errno);
             }
         }
-
-        if (raw_jfce_ != nullptr) {
-            auto result = UrmaApi::urma_delete_jfce(raw_jfce_);
-            if (result != URMA_SUCCESS) {
-                UBS_VLOG_WARN("[URMA_API] Delete jfce, errno: %d", errno);
-            }
-        }
     }
 
     raw_jfc_ = nullptr;
-    raw_jfce_ = nullptr;
 }
 
 /* urma jfs function */

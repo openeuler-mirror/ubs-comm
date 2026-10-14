@@ -8,13 +8,22 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <csignal>
+#include <cerrno>
+#include <cstdlib>
 
 #include "urma_poller_agg.h"
+#include "urma_setting.h"
 
 namespace ock {
 namespace ubs {
 namespace urma {
+namespace {
+/* the wakeup message carries no payload; a 1-byte sge is enough to satisfy the verbs */
+constexpr uint32_t WAKEUP_MSG_LEN = 1;
+constexpr uint32_t WAKEUP_BUF_SIZE = 64;
+constexpr uint32_t WAKEUP_BUF_ALIGN = 4096;
+constexpr uint32_t WAKEUP_QUEUE_DEPTH = 16;
+} // namespace
 
 Result UrmaDedicatedJfcAggPoller::Start(const UrmaAppPollerStartOptions &options) noexcept
 {
@@ -153,6 +162,16 @@ Result UrmaSharedJfcAggPollerWithThread::Start(const UrmaAppPollerStartOptions &
         return UBS_ERROR;
     }
 
+    /* busy poll exits on its own by re-checking stopping_, so the loopback wakeup jetty is
+     * only needed for the blocking event-poll path. */
+    if (!busy_poll_) {
+        auto wakeup_result = SetupWakeupJetty();
+        if (UNLIKELY(wakeup_result != UBS_OK)) {
+            UBS_VLOG_ERR("Failed to start urma agg poller %d as wakeup jetty setup failed", index_);
+            return wakeup_result;
+        }
+    }
+
     thread_ = std::thread(&UrmaSharedJfcAggPollerWithThread::RunInThread, this);
 
     /* wait for 5 seconds to ensure the thread is started */
@@ -181,19 +200,162 @@ void UrmaSharedJfcAggPollerWithThread::Stop() noexcept
 
 void UrmaSharedJfcAggPollerWithThread::StopInner() noexcept
 {
-    stopping_ = true;
-    // TODO 后续改为jfr消息触发
-    struct sigaction sa = {0};
-    sa.sa_handler = [](int) {
-    };
-    sa.sa_flags = 0;
-    sigaction(SIGUSR1, &sa, NULL);
-
-    pthread_kill(thread_.native_handle(), SIGUSR1);
+    /*
+     * Message-triggered wakeup. Setting stopping_ alone cannot release the indefinitely blocking
+     * urma_wait_jfc(-1); posting a loopback message generates a completion on the poller jfc so
+     * the thread wakes up, observes stopping_ and exits. No signal is sent, which avoids the
+     * harmless-but-noisy "wait jfc ioctl failed, errno=EINTR" logs from liburma.
+     */
+    stopping_.store(true);
+    Wakeup();
 
     if (thread_.joinable()) {
         thread_.join();
     }
+
+    DestroyWakeupJetty();
+}
+
+Result UrmaSharedJfcAggPollerWithThread::SetupWakeupJetty() noexcept
+{
+    if (UNLIKELY(jfc_vector_.empty())) {
+        UBS_VLOG_ERR("Failed to setup wakeup jetty for poller(%d) as there is no jfc", index_);
+        return UBS_ERROR;
+    }
+
+    auto ctx = jfc_vector_[0]->Context();
+    if (UNLIKELY(ctx == nullptr)) {
+        UBS_VLOG_ERR("Failed to setup wakeup jetty for poller(%d) as context is null", index_);
+        return UBS_ERROR;
+    }
+
+    /* step1: allocate and register a small local buffer as the loopback message payload */
+    if (UNLIKELY(posix_memalign(&wakeup_buf_, WAKEUP_BUF_ALIGN, WAKEUP_BUF_SIZE) != 0 || wakeup_buf_ == nullptr)) {
+        UBS_VLOG_ERR("Failed to allocate wakeup buffer for poller(%d)", index_);
+        wakeup_buf_ = nullptr;
+        return UBS_ERROR;
+    }
+    memset(wakeup_buf_, 0, WAKEUP_BUF_SIZE);
+
+    urma_reg_seg_flag_t seg_flag{};
+    seg_flag.value = 0;
+    seg_flag.bs.token_policy = URMA_TOKEN_NONE;
+    seg_flag.bs.cacheable = URMA_NON_CACHEABLE;
+    seg_flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE;
+
+    urma_seg_cfg_t seg_cfg{};
+    seg_cfg.va = reinterpret_cast<uint64_t>(wakeup_buf_);
+    seg_cfg.len = WAKEUP_BUF_SIZE;
+    seg_cfg.token_id = nullptr;
+    seg_cfg.flag = seg_flag;
+    seg_cfg.user_ctx = 0;
+    seg_cfg.iova = 0;
+
+    wakeup_seg_ = UrmaApi::urma_register_seg(ctx->Handle(), &seg_cfg);
+    if (UNLIKELY(wakeup_seg_ == nullptr)) {
+        UBS_VLOG_ERR("Failed to register wakeup segment for poller(%d), errno: %d", index_, errno);
+        DestroyWakeupJetty();
+        return UBS_ERROR;
+    }
+
+    /* step2: create a jfs/jfr bound to the poller jfc and the loopback jetty, reusing the same
+     * sequence as the data path (UrmaSocket::CreateUrmaResources) through the shared helper. */
+    UrmaJfsPtr wakeup_jfs;
+    UrmaJfrPtr wakeup_jfr;
+    auto trans_mode = UrmaTransModeOf(UrmaSetting::UB_TANS_MODE);
+    auto tp_type = UrmaTpTypeOf(UrmaSetting::UB_TANS_MODE);
+    if (UNLIKELY(ctx->CreateJfsJfrJetty(jfc_vector_[0], WAKEUP_QUEUE_DEPTH, trans_mode, tp_type, wakeup_jfs, wakeup_jfr,
+                                        wakeup_jetty_) != UBS_OK)) {
+        UBS_VLOG_ERR("Failed to create wakeup jetty for poller(%d)", index_);
+        DestroyWakeupJetty();
+        return UBS_ERROR;
+    }
+
+    /* step3: import the local jetty as the loopback target used by the send WR */
+    auto jetty_id = wakeup_jetty_->RawJettyId();
+    uint32_t token = wakeup_jetty_->Token();
+    if (UNLIKELY(wakeup_jetty_->ImportRemoteJetty(jetty_id, token) != UBS_OK)) {
+        UBS_VLOG_ERR("Failed to import loopback wakeup jetty for poller(%d)", index_);
+        DestroyWakeupJetty();
+        return UBS_ERROR;
+    }
+
+    /* step4: pre-post a recv WR so the loopback send always finds a buffer (no RNR retry) */
+    wakeup_recv_sge_.addr = reinterpret_cast<uint64_t>(wakeup_buf_);
+    wakeup_recv_sge_.len = WAKEUP_MSG_LEN;
+    wakeup_recv_sge_.tseg = wakeup_seg_;
+    wakeup_recv_sge_.user_tseg = nullptr;
+    wakeup_recv_wr_.src.sge = &wakeup_recv_sge_;
+    wakeup_recv_wr_.src.num_sge = 1;
+    wakeup_recv_wr_.user_ctx = 0;
+    wakeup_recv_wr_.next = nullptr;
+
+    urma_jfr_wr_t *bad_recv_wr = nullptr;
+    if (UNLIKELY(wakeup_jetty_->PostRecvWr(&wakeup_recv_wr_, &bad_recv_wr) != URMA_SUCCESS)) {
+        UBS_VLOG_ERR("Failed to pre-post wakeup recv WR for poller(%d), errno: %d", index_, errno);
+        DestroyWakeupJetty();
+        return UBS_ERROR;
+    }
+
+    UBS_VLOG_TRACE("wakeup jetty for poller(%d) is ready", index_);
+    return UBS_OK;
+}
+
+void UrmaSharedJfcAggPollerWithThread::Wakeup() noexcept
+{
+    if (UNLIKELY(wakeup_jetty_ == nullptr || wakeup_seg_ == nullptr)) {
+        /* normal for busy-poll pollers, which never create a wakeup jetty */
+        UBS_VLOG_TRACE("Wakeup poller(%d) skipped as wakeup jetty is not ready", index_);
+        return;
+    }
+
+    urma_sge_t src_sge{};
+    src_sge.addr = reinterpret_cast<uint64_t>(wakeup_buf_);
+    src_sge.len = WAKEUP_MSG_LEN;
+    src_sge.tseg = wakeup_seg_;
+    src_sge.user_tseg = nullptr;
+
+    /* user_ctx = 0 so the sender completion is ignored by HandleCqe; the recv completion uses
+     * URMA_CR_OPC_SEND which HandleCqe does not act on. */
+    urma_jfs_wr_t wr{};
+    wr.opcode = URMA_OPC_SEND;
+    wr.user_ctx = 0;
+    wr.send.src.sge = &src_sge;
+    wr.send.src.num_sge = 1;
+    wr.send.imm_data = 0;
+    wr.next = nullptr;
+    wr.flag.bs.complete_enable = 1;
+    wr.flag.bs.inline_flag = 0;
+
+    urma_jfs_wr_t *bad_wr = nullptr;
+    auto ret = wakeup_jetty_->PostSendWr(&wr, &bad_wr);
+    if (UNLIKELY(ret != URMA_SUCCESS)) {
+        UBS_VLOG_ERR("Failed to post wakeup message for poller(%d), ret: %d, errno: %d", index_, ret, errno);
+    }
+}
+
+void UrmaSharedJfcAggPollerWithThread::DestroyWakeupJetty() noexcept
+{
+    /* release the jetty first: it unimports the loopback target and releases jfs/jfr */
+    wakeup_jetty_ = nullptr;
+
+    if (wakeup_seg_ != nullptr) {
+        if (LIKELY(UrmaApi::IsLoaded())) {
+            auto ret = UrmaApi::urma_unregister_seg(wakeup_seg_);
+            if (UNLIKELY(ret != URMA_SUCCESS)) {
+                UBS_VLOG_WARN("Failed to unregister wakeup segment, errno: %d", errno);
+            }
+        }
+        wakeup_seg_ = nullptr;
+    }
+
+    if (wakeup_buf_ != nullptr) {
+        free(wakeup_buf_);
+        wakeup_buf_ = nullptr;
+    }
+
+    wakeup_recv_wr_ = {};
+    wakeup_recv_sge_ = {};
 }
 
 void UrmaSharedJfcAggPollerWithThread::RunInThread() noexcept
@@ -247,18 +409,29 @@ void UrmaSharedJfcAggPollerWithThread::EventPoll() noexcept
     uint32_t ack[MAX_EV_JFC_CNT] = {1};
     while (!stopping_) {
         try {
+            /* block indefinitely; the loopback wakeup message posted by StopInner() releases it */
             auto cnt = UrmaApi::urma_wait_jfc(jfce_->GetRawJfce(), jfc_cnt, -1, ev_jfc);
+            /*
+             * Ack the returned jfc events before any early exit. The loopback wakeup message is a
+             * real jfc event; if it is left unacked, urma_delete_jfc later fails with
+             * "There is jfc event and it must be acked".
+             */
+            if (cnt > 0) {
+                UrmaApi::urma_ack_jfc(ev_jfc, ack, cnt);
+            }
             if (stopping_) {
                 break;
             }
             if (cnt < 0) {
-                UBS_VLOG_ERR("Failed to wait jfc cnt: %d", cnt);
+                if (errno == EINTR) {
+                    continue; /* interrupted by an unrelated signal, re-check stopping_ */
+                }
+                UBS_VLOG_ERR("Failed to wait jfc cnt: %d, errno: %d", cnt, errno);
                 continue;
             }
             if (UNLIKELY(cnt == 0)) {
                 continue;
             }
-            UrmaApi::urma_ack_jfc(ev_jfc, ack, cnt);
             DrainCqes(ev_jfc, static_cast<uint32_t>(cnt));
         } catch (...) {
             UBS_VLOG_ERR("Exception caught in UrmaPoller");
