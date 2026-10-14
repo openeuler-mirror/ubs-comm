@@ -426,6 +426,7 @@ Result UrmaBackend::InitIoBufPool() noexcept
     options.init_block_count = UrmaSetting::UB_BUF_INIT_MEM_SIZE_MB / options.block_size_mb;
     options.mini_block_size_kb = UrmaSetting::UB_BUF_PAGE_SIZE_KB;
     options.async_expand = UrmaSetting::UB_BUF_ASYNC_EXPAND;
+    options.init_direct_block_count = UrmaSetting::UB_BUF_DIRECT_INIT_BLOCK_COUNT;
 
     auto result = tmp_io_buf_pool->init(options, context_pool_);
     if (result != UBS_OK) {

@@ -48,6 +48,7 @@ public:
     static uint32_t UB_BUF_POOL_SPACE_SIZE;
     static uint16_t UB_BUF_BLOCK_SIZE_MB;
     static uint16_t UB_BUF_INIT_MEM_SIZE_MB;
+    static uint16_t UB_BUF_DIRECT_INIT_BLOCK_COUNT;
     static uint16_t UB_BUF_PAGE_SIZE_KB;
     static bool UB_BUF_ASYNC_EXPAND;
     /* setting for epoll handle mode */
