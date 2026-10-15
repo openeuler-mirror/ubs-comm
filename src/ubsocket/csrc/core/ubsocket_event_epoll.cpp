@@ -15,10 +15,12 @@
 #include "ubsocket_event_epoll.h"
 #include "ubsocket_socket.h"
 #include "ubsocket_tx_cqe_poller.h"
+#ifdef UMQ_BACKEND_ENABLED
 #include "umq/umq_share_jfr_epoll_runner_ops.h"
 #include "umq/umq_socket.h"
 #include "umq/umq_tp_event_epoll_runner_ops.h"
 #include "umq/umq_tp_tx_epoll_runner_ops.h"
+#endif
 
 namespace ock {
 namespace ubs {
@@ -254,6 +256,7 @@ int EpollRunner<T>::Start()
             return -1;
         }
 
+#ifdef UMQ_BACKEND_ENABLED
         if (T == EpollRunnerType::SHARE_JFR_RX_RUNNER) {
             ops_ = new umq::UmqShareJfrEpollRunnerOps();
         } else if (T == EpollRunnerType::TRANSPORT_POOL_TX_RUNNER) {
@@ -263,6 +266,10 @@ int EpollRunner<T>::Start()
         } else {
             ops_ = new EpollRunnerOps();
         }
+#else
+        /* TODO(urma-decouple): urma 模式已用 UrmaPoller 替代 umq EpollRunner，功能等价无需补 */
+        ops_ = new EpollRunnerOps();
+#endif
 
         backend_ = CreateBackend();
         if (backend_ == nullptr || backend_->Start() != 0) {
@@ -582,6 +589,7 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
             UBS_VLOG_ERR("async_epoll(%d) wait get invalid socket(%d)\n", epoll_fd_, event_data->socket_fd);
             continue;
         }
+#ifdef UMQ_BACKEND_ENABLED
         if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_OUT) {
             auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
             umqSock->ProcessEpollEvent(events[i]);
@@ -590,6 +598,7 @@ int AsyncEventPoll::ArrangeWakeUpEvents(struct epoll_event *events, int input_co
             real_count++;
             continue;
         }
+#endif
 
         if (event_data->event_type == EPOLL_EVENT_UB_SOCKET_IN) {
             socket_readable = true;
@@ -681,6 +690,8 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
     }
 
     // 4. add proto ex exent
+#ifdef UMQ_BACKEND_ENABLED
+    /* TODO(urma-decouple): urma 模式已用 UrmaEventPoll 替代 AsyncEventPoll umq 事件处理，功能等价 */
     if (sock->Type() == SocketType::SOCK_TYPE_UMQ) {
         auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
         if (umqSock->ShouldRegisterTxEvent()) {
@@ -693,6 +704,7 @@ int AsyncEventPoll::EpollCtlAdd(int fd, struct epoll_event *event)
             }
         }
     }
+#endif
 
     return 0;
 }
@@ -727,6 +739,7 @@ int AsyncEventPoll::AddRawSocketEvent(int fd, struct epoll_event *event)
 
 int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *event)
 {
+#ifdef UMQ_BACKEND_ENABLED
     auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
     if (UNLIKELY(IsSocketEventDataExist(umqSock->GetTxFd()))) {
         return 0;
@@ -754,10 +767,17 @@ int AsyncEventPoll::AddProtoTxEvent(const SocketPtr &sock, struct epoll_event *e
         return -1;
     }
     return 0;
+#else
+    /* TODO(urma-decouple): urma 模式已用 UrmaEventPoll 替代，功能等价 */
+    (void)sock;
+    (void)event;
+    return -1;
+#endif
 }
 
 int AsyncEventPoll::DelProtoTxEvent(const SocketPtr &sock)
 {
+#ifdef UMQ_BACKEND_ENABLED
     auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
     int ret = umqSock->DelTxEvent(sock, epoll_fd_);
     if (UNLIKELY(ret < 0)) {
@@ -766,6 +786,11 @@ int AsyncEventPoll::DelProtoTxEvent(const SocketPtr &sock)
     }
     RemoveSocketEventData(umqSock->GetTxFd());
     return 0;
+#else
+    /* TODO(urma-decouple): urma 模式已用 UrmaEventPoll 替代，功能等价 */
+    (void)sock;
+    return -1;
+#endif
 }
 
 int AsyncEventPoll::DelRawSocketEvent(int fd)
@@ -881,12 +906,14 @@ int AsyncEventPoll::EpollCtlDel(int fd, struct epoll_event *event)
         return 0;
     }
 
+#ifdef UMQ_BACKEND_ENABLED
     if (sock->Type() == SocketType::SOCK_TYPE_UMQ) {
         auto umqSock = RefConvert<Socket, umq::UmqSocket>(sock);
         if (umqSock->ShouldRegisterTxEvent()) {
             DelProtoTxEvent(sock);
         }
     }
+#endif
     auto sk_base = RefStaticCast<SocketBase>(sock);
     sk_base->SetEvents(0);
     sk_base->SetEpollData({});

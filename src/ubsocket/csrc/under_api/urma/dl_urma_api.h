@@ -179,6 +179,8 @@ using urma_get_ip_by_eid_api = urma_status_t (*)(const urma_context_t *ctx, cons
 using urma_get_smac_api = urma_status_t (*)(const urma_context_t *ctx, uint8_t *mac);
 using urma_get_dmac_api = urma_status_t (*)(const urma_context_t *ctx, const urma_net_addr_t *net_addr, uint8_t *mac);
 
+using urma_get_perf_info_api = urma_status_t (*)(char *perf_buf, uint32_t *length);
+
 class UrmaApi {
 public:
     static Result Load() noexcept;
@@ -823,6 +825,11 @@ public:
         return urma_get_dmac_ptr(ctx, net_addr, mac);
     }
 
+    static urma_status_t urma_get_perf_info(char *perf_buf, uint32_t *length)
+    {
+        return urma_get_perf_info_ptr(perf_buf, length);
+    }
+
 private:
     DL_API_DECLARE(urma_init);
     DL_API_DECLARE(urma_uninit);
@@ -960,6 +967,7 @@ private:
     DL_API_DECLARE(urma_get_ip_by_eid);
     DL_API_DECLARE(urma_get_smac);
     DL_API_DECLARE(urma_get_dmac);
+    DL_API_DECLARE(urma_get_perf_info);
 
 private:
     static void UnLoadInner() noexcept;

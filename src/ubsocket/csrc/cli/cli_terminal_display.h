@@ -15,7 +15,9 @@
 #include <vector>
 
 #include "profiling/statistics/cli_message.h"
+#ifdef UMQ_BACKEND_ENABLED
 #include "umq_dfx_api.h"
+#endif
 
 namespace Statistics {
 class TerminalDisplay {
@@ -46,7 +48,9 @@ public:
         return mIstty;
     }
     void DisplaySocketInfo(uint8_t *data, const uint32_t dataLen);
+#ifdef UMQ_BACKEND_ENABLED
     void DisplayTopoInfo(umq_route_list_t *data, const uint32_t dataLen);
+#endif
     void DisplayProbeInfo(uint8_t *data, const uint32_t dataLen);
     // data display
     void PrintHeader(CLIDataHeader &header);

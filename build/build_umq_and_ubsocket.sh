@@ -82,8 +82,9 @@ function ubsocket_build() {
 
     echo "Building ubsocket ..."
 
-    if [ "${UMQ_BUILD}" != "on" ]; then
-        echo "[Error]: ubsocket build needs UMQ_BUILD is on! You should build umq first."
+    # urma 模式（默认 URMA_BACKEND=ON, UMQ_BACKEND=OFF）不需要 libumq.so；umq 模式（UMQ_BACKEND=on）需先 build umq
+    if [ "${UMQ_BACKEND:-OFF}" = "on" ] && [ "${UMQ_BUILD}" != "on" ]; then
+        echo "[Error]: UMQ_BACKEND=on needs UMQ_BUILD=on! You should build umq first."
         exit 1
     fi
 
@@ -91,8 +92,16 @@ function ubsocket_build() {
 
     cd "${ubsocket_dir}"
 
+    # UMQ_BACKEND=on 时自动关闭 URMA_BACKEND（互斥，避免 FATAL_ERROR）
+    if [ "${UMQ_BACKEND:-OFF}" = "on" ]; then
+        URMA_BACKEND=off
+    fi
+
     if cmake -S. -Bbuild \
-        -DBUILD_WITH_UBS_SHM=${UBSOCKET_BUILD_SHM} -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
+        -DBUILD_WITH_UBS_SHM=${UBSOCKET_BUILD_SHM} \
+        -DBUILD_URMA_DLOPEN_BACKEND=${URMA_BACKEND:-ON} \
+        -DBUILD_UMQ_DLOPEN_BACKEND=${UMQ_BACKEND:-OFF} \
+        -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
         -DUMQ_LIB="${ROOT_DIR}/src/hcom/umq/build/src/libumq.so"; then
         echo "ubsocket cmake successfully"
     else

@@ -10,8 +10,10 @@
  */
 #include <pthread.h>
 #include <semaphore.h>
+#ifdef UMQ_BACKEND_ENABLED
 #include <umq_api.h>
 #include <umq_types.h>
+#endif
 
 #include "ubsocket_lock.h"
 #include "ubsocket_logger.h"
@@ -215,6 +217,7 @@ Result LockRegistry::RegisterLockOps(u_external_lock_ops_t *ops)
     }
 
     LOCK_OPS = *ops;
+#ifdef UMQ_BACKEND_ENABLED
     if (!UmqApi::IsLoaded()) {
         return UBS_OK;
     }
@@ -226,6 +229,10 @@ Result LockRegistry::RegisterLockOps(u_external_lock_ops_t *ops)
         .unlock = (int (*)(umq_external_mutex_t *))ops->unlock,
         .trylock = (int (*)(umq_external_mutex_t *))ops->try_lock};
     return UmqApi::umq_external_mutex_lock_ops_register(&umq_mutex_ops);
+#else
+    /* TODO(urma-decouple): urma 模式不注册 umq mutex ops（urma 无 external mutex 注册机制） */
+    return UBS_OK;
+#endif
 }
 
 Result LockRegistry::RegisterRwLockOps(u_external_rw_lock_ops_t *ops)
@@ -237,6 +244,7 @@ Result LockRegistry::RegisterRwLockOps(u_external_rw_lock_ops_t *ops)
 
     RW_LOCK_OPS = *ops;
 
+#ifdef UMQ_BACKEND_ENABLED
     umq_external_rw_lock_ops umq_rwlock_ops = {.create = (umq_external_rwlock_t * (*)(void)) ops->create,
                                                .destroy = (int (*)(umq_external_rwlock_t *))ops->destroy,
                                                .read_lock = (int (*)(umq_external_rwlock_t *))ops->lock_read,
@@ -245,6 +253,10 @@ Result LockRegistry::RegisterRwLockOps(u_external_rw_lock_ops_t *ops)
                                                .try_read_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_read,
                                                .try_write_lock = (int (*)(umq_external_rwlock_t *))ops->try_lock_write};
     return UmqApi::umq_external_rwlock_ops_register(&umq_rwlock_ops);
+#else
+    /* TODO(urma-decouple): urma 模式不注册 umq rwlock ops */
+    return UBS_OK;
+#endif
 }
 
 Result LockRegistry::RegisterSemOps(u_external_semaphore_ops_t *ops)

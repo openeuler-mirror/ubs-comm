@@ -10,8 +10,10 @@
 #include <sstream>
 
 #include "cli_terminal_display.h"
+#ifdef UMQ_BACKEND_ENABLED
 #include "umq_dfx_types.h"
 #include "umq_types.h"
+#endif
 
 namespace Statistics {
 
@@ -50,6 +52,7 @@ char *In6AddrToFullStr(const struct in6_addr *in6Addr, char *dstBuf, size_t bufS
     return dstBuf;
 }
 
+#ifdef UMQ_BACKEND_ENABLED
 void TerminalDisplay::DisplayTopoInfo(umq_route_list_t *routeList, const uint32_t dataLen)
 {
     if (dataLen != sizeof(umq_route_list_t)) {
@@ -82,6 +85,7 @@ void TerminalDisplay::DisplayTopoInfo(umq_route_list_t *routeList, const uint32_
         data += 1;
     }
 }
+#endif /* UMQ_BACKEND_ENABLED */
 
 void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
 {
@@ -116,6 +120,7 @@ void TerminalDisplay::DisplaySocketInfo(uint8_t *data, const uint32_t dataLen)
     printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
 }
 
+#ifdef UMQ_BACKEND_ENABLED
 void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataLen)
 {
     if (data == nullptr) {
@@ -153,6 +158,15 @@ void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, const uint32_t dataL
     NewLine();
     printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
 }
+
+#else /* urma 模式：umq 专属命令仅提示不支持 */
+void TerminalDisplay::DisplayFlowControlInfo(uint8_t *data, uint32_t dataLen)
+{
+    (void)data;
+    (void)dataLen;
+    printf("This command is only supported in UMQ backend mode\n");
+}
+#endif /* UMQ_BACKEND_ENABLED */
 
 // --- 辅助函数：打印表头 ---
 void PrintProbeHeader()
@@ -336,9 +350,9 @@ void TerminalDisplay::PrintData(CLISocketData *sockData)
     PrintDelimiter();
     PrintDataItem("Remote Ip      ", sockData->remoteIp, colorGrey, false);
     PrintDelimiter();
-    PrintDataItem("Local Eid", ConvertEidToString(sockData->localEid, UMQ_EID_SIZE), colorBlue, false);
+    PrintDataItem("Local Eid", ConvertEidToString(sockData->localEid, CLI_EID_SIZE), colorBlue, false);
     PrintDelimiter();
-    PrintDataItem("Remote Eid", ConvertEidToString(sockData->remoteEid, UMQ_EID_SIZE), colorBlue, false);
+    PrintDataItem("Remote Eid", ConvertEidToString(sockData->remoteEid, CLI_EID_SIZE), colorBlue, false);
     PrintDelimiter();
     PrintDataItem("Recv Packets", std::to_string(sockData->recvPackets), colorGreen, sockData->recvPackets == 0);
     printf(" ");
@@ -411,6 +425,7 @@ std::string TerminalDisplay::ConvertEidToString(const uint8_t *eidArray, size_t 
     return ss.str();
 }
 
+#ifdef UMQ_BACKEND_ENABLED
 void TerminalDisplay::DisplayQbufPoolInfo(uint8_t *data, uint32_t dataLen)
 {
     if (data == nullptr) {
@@ -570,6 +585,41 @@ void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
     NewLine();
     printf("%sPress Ctrl+C to exit%s\n", colorBold, colorReset);
 }
+
+#else /* urma 模式：umq 专属命令仅提示不支持 */
+static void PrintUmqCommandUnsupported()
+{
+    printf("This command is only supported in UMQ backend mode\n");
+}
+
+void TerminalDisplay::DisplayQbufPoolInfo(uint8_t *data, uint32_t dataLen)
+{
+    (void)data;
+    (void)dataLen;
+    PrintUmqCommandUnsupported();
+}
+
+void TerminalDisplay::DisplayUmqInfo(uint8_t *data, uint32_t dataLen)
+{
+    (void)data;
+    (void)dataLen;
+    PrintUmqCommandUnsupported();
+}
+
+void TerminalDisplay::DisplayIoPacketInfo(uint8_t *data, uint32_t dataLen)
+{
+    (void)data;
+    (void)dataLen;
+    PrintUmqCommandUnsupported();
+}
+
+void TerminalDisplay::DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen)
+{
+    (void)data;
+    (void)dataLen;
+    PrintUmqCommandUnsupported();
+}
+#endif /* UMQ_BACKEND_ENABLED */
 
 void TerminalDisplay::DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen)
 {

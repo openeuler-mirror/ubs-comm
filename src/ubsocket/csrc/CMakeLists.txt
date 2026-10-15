@@ -24,8 +24,10 @@ target_compile_options(entry_objects PRIVATE -fPIC)
 file(GLOB CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/*.cpp)
 
 ### umq source
-file(GLOB UMQ_CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/umq/*.cpp)
-list(APPEND CORE_SRCS ${UMQ_CORE_SRCS})
+if (BUILD_UMQ_DLOPEN_BACKEND OR BUILD_UMQ_ADAPTER_BACKEND)
+    file(GLOB UMQ_CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/umq/*.cpp)
+    list(APPEND CORE_SRCS ${UMQ_CORE_SRCS})
+endif ()
 
 if (BUILD_URMA_DLOPEN_BACKEND)
     ### urma source

@@ -99,8 +99,9 @@ enum class SplitTraceLevel : uint8_t {
     LEVEL_NONE = 0,
     LEVEL_UBSOCKET = 1 << 0, // 0x01
     LEVEL_UMQ = 1 << 1,      // 0x02
+    LEVEL_URMA = 1 << 2,     // 0x04
 
-    LEVEL_ALL = LEVEL_UBSOCKET | LEVEL_UMQ
+    LEVEL_ALL = LEVEL_UBSOCKET | LEVEL_UMQ | LEVEL_URMA
 };
 
 /**

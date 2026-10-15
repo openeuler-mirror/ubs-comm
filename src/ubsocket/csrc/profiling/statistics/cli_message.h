@@ -20,7 +20,15 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#ifdef UMQ_BACKEND_ENABLED
 #include "umq_dfx_types.h"
+#endif
+
+namespace Statistics {
+/* Backend-agnostic constants (same values as UMQ_IPV6_SIZE / UMQ_EID_SIZE) */
+constexpr size_t CLI_IPV6_SIZE = 46;
+constexpr size_t CLI_EID_SIZE = 16;
+} // namespace Statistics
 
 #define CLI_LOG(fmt, ...)                                                           \
     do {                                                                            \
@@ -64,8 +72,8 @@ struct __attribute__((packed)) CLIControlHeader {
     CLICommand mCmdId;
     CLIErrorCode mErrorCode;
     uint32_t mDataSize;
-    umq_eid_t srcEid;
-    umq_eid_t dstEid;
+    uint8_t srcEid[CLI_EID_SIZE];  /* same size as umq_eid_t (16 bytes) */
+    uint8_t dstEid[CLI_EID_SIZE];
     CLITypeParam mType;
     uint16_t mSwitch;
     double mValue;
@@ -114,9 +122,9 @@ struct __attribute__((packed)) CLIDataHeader {
 struct __attribute__((packed)) CLISocketData {
     uint64_t socketId;
     uint64_t createTime;
-    char remoteIp[UMQ_IPV6_SIZE];
-    uint8_t localEid[UMQ_EID_SIZE];
-    uint8_t remoteEid[UMQ_EID_SIZE];
+    char remoteIp[CLI_IPV6_SIZE];
+    uint8_t localEid[CLI_EID_SIZE];
+    uint8_t remoteEid[CLI_EID_SIZE];
     uint64_t recvPackets;
     uint64_t sendPackets;
     uint64_t recvBytes;
@@ -125,6 +133,7 @@ struct __attribute__((packed)) CLISocketData {
     uint64_t lostPackets;
 };
 
+#ifdef UMQ_BACKEND_ENABLED
 struct CLIFlowControlData {
     uint64_t socketId;
     uint64_t createTime;
@@ -156,6 +165,7 @@ struct CLIUmqPerfData {
     char umqTpPerfBuf[4096];
     uint32_t umqTpPerfLen;
 };
+#endif /* UMQ_BACKEND_ENABLED */
 
 struct __attribute__((packed)) CLIProbeHeader {
     uint32_t socketNum;

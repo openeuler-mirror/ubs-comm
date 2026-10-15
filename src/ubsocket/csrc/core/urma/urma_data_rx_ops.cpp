@@ -379,21 +379,25 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
 
     BlockingWaiter waiter(urma_sock, BLOCKING_FLAG_READABLE, SO_RCVTIMEO);
 
+    ssize_t result = -1;
     for (;;) {
         if (UNLIKELY(urma_sock->State() == SOCK_STAT_CLOSE)) {
             errno = EBADF;
-            return -1;
+            break;
         }
 
         const ssize_t ret = ReadVOnce(sock, iov, iovcnt, flags);
         if (shortReadAllowed) {
-            return ret; /* POSIX: hand the partial count, EOF or EAGAIN straight back to the caller */
+            result = ret;
+            break;
         }
         if (ret >= 0) {
-            return ret; /* data consumed, or 0 for EOF */
+            result = ret;
+            break;
         }
         if (errno != EAGAIN) {
-            return ret;
+            result = ret;
+            break;
         }
 
         switch (waiter.Wait()) {
@@ -401,23 +405,33 @@ ssize_t UrmaRxOps::ReadV(const SocketPtr &sock, const struct iovec *iov, int iov
                 continue;
             case WaitOutcome::LOCAL_CLOSED:
                 errno = EBADF;
-                return -1;
+                break;
             case WaitOutcome::PEER_CLOSED:
                 /* EOF/异常语义由 ReadVOnce 根据对端状态 (CLOSED/RESET) 判定 */
                 continue;
             case WaitOutcome::TIMEOUT:
                 break;
         }
+        break;
+    }
 
-        /* explicit SO_RCVTIMEO expiry: retry once to close the race, then report EAGAIN */
+    /* timeout retry path (outside the for-loop to avoid re-entering the wait switch) */
+    if (result < 0 && errno == EAGAIN && !shortReadAllowed) {
         const ssize_t last = ReadVOnce(sock, iov, iovcnt, flags);
         if (last >= 0 || errno != EAGAIN) {
-            return last;
+            result = last;
+        } else {
+            UBS_VLOG_INFO("UrmaRxOps::ReadV fd=%d: SO_RCVTIMEO expired, final retry still EAGAIN", sock->Fd());
+            errno = EAGAIN;
         }
-        UBS_VLOG_INFO("UrmaRxOps::ReadV fd=%d: SO_RCVTIMEO expired, final retry still EAGAIN", sock->Fd());
-        errno = EAGAIN;
-        return -1;
     }
+
+    if (result > 0 && GlobalSetting::UBS_TRACE_ENABLED) {
+        SocketBasePtr sockptr = RefConvert<Socket, SocketBase>(sock);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_PACKET_COUNT, 1);
+        sockptr->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::RX_BYTE_COUNT, result);
+    }
+    return result;
 }
 
 ssize_t UrmaRxOps::ReadVOnce(const SocketPtr &sock, const struct iovec *iov, int iovcnt, uint32_t flags)

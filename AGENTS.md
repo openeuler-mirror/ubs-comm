@@ -18,17 +18,25 @@ HCOM_BUILD_TYPE=debug HCOM_BUILD_TESTS=on ./build.sh  # debug + test build
 测试工具需先安装: `./build/install_test_tools.sh` (安装 gtest 1.12.1 + mockcpp v2.7)。
 
 ### UBSocket (sub-component)
-```bash
-# 优先
-cmake -S. -Bout -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  -DBUILD_UBSOCKET=ON -DBUILD_HCOM=OFF -DUBSOCKET_BUILD_TESTS=ON # build only
 
-# 如果需要运行 UT, 则选择
-UMQ_BUILD=on UBSOCKET_BUILD=on ./build/build_umq_and_ubsocket.sh          # build only
-UMQ_BUILD=on UBSOCKET_UT=on ./build/build_umq_and_ubsocket.sh             # build + run UT
-UMQ_BUILD=on UBSOCKET_BUILD=on UBSOCKET_UT=on ./build/build_umq_and_ubsocket.sh  # full cycle
+UBSocket 支持 **urma**（默认）和 **umq** 两种 UB 传输后端。umq 后端有两种 libumq.so 链接方式：dlopen（运行时加载，`BUILD_UMQ_DLOPEN_BACKEND`）和 adapter（编译期 link，`BUILD_UMQ_ADAPTER_BACKEND`），二者互斥；urma 与 umq（dlopen 或 adapter）也互斥。解耦代码用 `UMQ_BACKEND_ENABLED` 宏（umq dlopen 或 adapter）包裹 umq 通用逻辑。详见 `doc/ubsocket/URMA-BUILD-GUIDE.md`。
+
+```bash
+# urma 模式（默认，不依赖 libumq.so，运行时 dlopen liburma.so）
+URMA_BACKEND=on UBSOCKET_BUILD=on ./build/build_umq_and_ubsocket.sh
+
+# umq dlopen 模式（需先 build libumq.so；脚本自动设 URMA_BACKEND=off 避免互斥）
+UMQ_BUILD=on UMQ_BACKEND=on UBSOCKET_BUILD=on ./build/build_umq_and_ubsocket.sh          # build only
+UMQ_BUILD=on UMQ_BACKEND=on UBSOCKET_UT=on ./build/build_umq_and_ubsocket.sh             # build + run UT
+UMQ_BUILD=on UMQ_BACKEND=on UBSOCKET_BUILD=on UBSOCKET_UT=on ./build/build_umq_and_ubsocket.sh  # full cycle
+
+# 直接 cmake（src/ubsocket 下）
+cmake -S src/ubsocket -B build -DBUILD_URMA_DLOPEN_BACKEND=ON  -DBUILD_UMQ_DLOPEN_BACKEND=OFF -DBUILD_UMQ_ADAPTER_BACKEND=OFF  # urma（默认）
+cmake -S src/ubsocket -B build -DBUILD_URMA_DLOPEN_BACKEND=OFF -DBUILD_UMQ_DLOPEN_BACKEND=ON  -DBUILD_UMQ_ADAPTER_BACKEND=OFF  # umq dlopen
+cmake -S src/ubsocket -B build -DBUILD_URMA_DLOPEN_BACKEND=OFF -DBUILD_UMQ_DLOPEN_BACKEND=OFF -DBUILD_UMQ_ADAPTER_BACKEND=ON   # umq adapter
 ```
 
-UBSocket UT使用**ctest**运行(不是直接跑gtest binary)。UMQ必须先构建——ubsocket依赖`libumq.so`。
+UBSocket UT使用**ctest**运行(不是直接跑gtest binary)。**umq dlopen** 需先构建 libumq.so（`UMQ_BUILD=on`）；**umq adapter** CMake 自动构建 libumq.so（编译期 link）；**urma 模式**（默认）不需 libumq.so，运行时 dlopen liburma.so。
 
 ### Bazel (alternative)
 ```bash

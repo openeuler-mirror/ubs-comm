@@ -9,7 +9,7 @@
 # See the Mulan PSL v2 for more details.
 #
 option(BUILD_UMQ_ADAPTER_BACKEND "build umq adapter backend" OFF)
-option(BUILD_UMQ_DLOPEN_BACKEND "build umq dlopen backend" ON)
+option(BUILD_UMQ_DLOPEN_BACKEND "build umq dlopen backend" OFF)
 option(BUILD_URMA_DLOPEN_BACKEND "build urma dlopen backend" ON)
 option(ENABLE_OBJECT_COUNTING "enable object couting to detect memory leak" OFF)
 option(UBSOCKET_ENABLE_COVERAGE "Enable coverage reporting for ubsocket UT" OFF)
@@ -18,6 +18,18 @@ option(ENABLE_CPU_HARDWARE_ACCELERATION "Enable cpu instruction acceleration" OF
 
 if (BUILD_UMQ_ADAPTER_BACKEND AND BUILD_UMQ_DLOPEN_BACKEND)
     message(FATAL_ERROR "BUILD_UMQ_ADAPTER_BACKEND and BUILD_UMQ_DLOPEN_BACKEND cannot both be ON")
+endif ()
+
+if (BUILD_UMQ_DLOPEN_BACKEND AND BUILD_URMA_DLOPEN_BACKEND)
+    message(FATAL_ERROR "BUILD_UMQ_DLOPEN_BACKEND and BUILD_URMA_DLOPEN_BACKEND cannot both be ON (choose umq or urma backend)")
+endif ()
+
+if (BUILD_UMQ_ADAPTER_BACKEND AND BUILD_URMA_DLOPEN_BACKEND)
+    message(FATAL_ERROR "BUILD_UMQ_ADAPTER_BACKEND and BUILD_URMA_DLOPEN_BACKEND cannot both be ON (choose umq or urma backend)")
+endif ()
+
+if (NOT BUILD_URMA_DLOPEN_BACKEND AND NOT BUILD_UMQ_DLOPEN_BACKEND AND NOT BUILD_UMQ_ADAPTER_BACKEND)
+    message(FATAL_ERROR "At least one backend must be enabled (BUILD_URMA_DLOPEN_BACKEND / BUILD_UMQ_DLOPEN_BACKEND / BUILD_UMQ_ADAPTER_BACKEND)")
 endif ()
 
 message(STATUS "ubsocket: BUILD_UMQ_ADAPTER_BACKEND = ${BUILD_UMQ_ADAPTER_BACKEND}")
@@ -74,6 +86,10 @@ endif ()
 
 if (BUILD_UMQ_DLOPEN_BACKEND)
     add_definitions(-DUMQ_DLOPEN_BACKEND_ENABLED)
+endif ()
+
+if (BUILD_UMQ_DLOPEN_BACKEND OR BUILD_UMQ_ADAPTER_BACKEND)
+    add_definitions(-DUMQ_BACKEND_ENABLED)
 endif ()
 
 if (BUILD_UMQ_ADAPTER_BACKEND)

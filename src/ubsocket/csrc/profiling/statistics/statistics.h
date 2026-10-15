@@ -16,6 +16,7 @@
 #include <sys/time.h>
 #include <sys/un.h>
 #include <cmath>
+#include <cstring>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
@@ -26,27 +27,40 @@
 #include <thread>
 #include "cli_message.h"
 #include "common/ubsocket_common_includes.h"
+#include "core/ubsocket_socket.h"
 #include "core/ubsocket_socket_helper.h"
+#include "statistics_statsmgr.h"
+#include "under_api/dl_libc_api.h"
+#ifdef UMQ_BACKEND_ENABLED
 #include "core/umq/umq_eid_table.h"
 #include "core/umq/umq_setting.h"
 #include "core/umq/umq_socket.h"
 #include "profiling/probe/probe_manager.h"
-#include "statistics_statsmgr.h"
 #include "umq_api.h"
 #include "umq_dfx_api.h"
 #include "umq_dfx_types.h"
 #include "umq_errno.h"
-#include "under_api/dl_libc_api.h"
 #include "under_api/dl_umq_api.h"
+#endif
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
+#include "core/urma/urma_socket.h"
+#endif
 
 using namespace ock::ubs;
+using ock::ubs::ArraySet;
 using ock::ubs::ArraySet;
 using ock::ubs::LibcApi;
 using ock::ubs::ReadLocker;
 using ock::ubs::SocketConnHelper;
 using ock::ubs::SocketType;
+#ifdef UMQ_BACKEND_ENABLED
 using ock::ubs::UmqApi;
+using ock::ubs::umq::UmqSetting;
 using ock::ubs::umq::UmqSocket;
+#endif
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
+using ock::ubs::urma::UrmaSocket;
+#endif
 
 namespace Statistics {
 
@@ -223,7 +237,11 @@ public:
                 return;
             }
             data->socketId = fd;
+#ifdef UMQ_BACKEND_ENABLED
             ((UmqSocket *)sock)->GetSocketCLIData(data);
+#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
+            static_cast<SocketBase *>(sock)->GetStatsMgr()->GetSocketCLIData(data);
+#endif
             data += 1;
             doneNum += 1;
         });
@@ -231,9 +249,12 @@ public:
 
     void GetAllProbeData(std::vector<CLIProbeData> &outDataVec)
     {
+#ifdef UMQ_BACKEND_ENABLED
         Statistics::ProbeManager::GetInstance().GetCLIProbeData(outDataVec);
+#endif
     }
 
+#ifdef UMQ_BACKEND_ENABLED
     void GetAllFlowControlData(CLIFlowControlData *data, uint32_t sockNum)
     {
         uint32_t doneNum = 0;
@@ -335,6 +356,7 @@ public:
             doneNum += 1;
         });
     }
+#endif /* UMQ_BACKEND_ENABLED */
 
     void Poll(void)
     {
@@ -434,6 +456,7 @@ public:
         }
     }
 
+#ifdef UMQ_BACKEND_ENABLED
     void GetUmqPoolStats(CLIDataHeader &header)
     {
         uint64_t umqHandle = GetFirstUmqHandle();
@@ -453,6 +476,7 @@ public:
         header.poolAvailableNum = transportPoolStats.global_num + transportPoolStats.cache_num;
         header.poolInUseNum = transportPoolStats.in_use_num;
     }
+#endif /* UMQ_BACKEND_ENABLED */
 
     void ProcessStatRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
     {
@@ -472,7 +496,13 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         CLIheader.reTxCount = StatsMgr::GetReTxCount();
+#ifdef UMQ_BACKEND_ENABLED
         GetUmqPoolStats(CLIheader);
+#else
+        CLIheader.poolTotalNum = 0;
+        CLIheader.poolAvailableNum = 0;
+        CLIheader.poolInUseNum = 0;
+#endif
         // collect data
         memcpy(msg.Data(), &CLIheader, headerSize);
 
@@ -492,6 +522,7 @@ public:
         }
     }
 
+#ifdef UMQ_BACKEND_ENABLED
     void ProcessFlowControlRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
     {
         // collect socket count
@@ -583,8 +614,8 @@ public:
     void ProcessTopoRequest(int fd, CLIControlHeader &header)
     {
         umq_route_key_t route{};
-        route.src_bonding_eid = header.srcEid;
-        route.dst_bonding_eid = header.dstEid;
+        memcpy(route.src_bonding_eid.raw, header.srcEid, sizeof(route.src_bonding_eid.raw));
+        memcpy(route.dst_bonding_eid.raw, header.dstEid, sizeof(route.dst_bonding_eid.raw));
         route.tp_type = UMQ_TP_TYPE_RTP;
 
         umq_route_list_t route_list;
@@ -792,6 +823,7 @@ public:
     {
         return static_cast<umq::UmqSocket *>(socket.Get())->UmqHandle();
     }
+#endif /* UMQ_BACKEND_ENABLED */
 
     void Process(uint32_t events)
     {
@@ -829,10 +861,12 @@ public:
 
         if (header.mCmdId == CLICommand::STAT) {
             ProcessStatRequest(fd, msg, header);
-        } else if (header.mCmdId == CLICommand::TOPO) {
-            ProcessTopoRequest(fd, header);
         } else if (header.mCmdId == CLICommand::DELAY) {
             ProcessDelayRequest(fd, msg, header);
+        }
+#ifdef UMQ_BACKEND_ENABLED
+        else if (header.mCmdId == CLICommand::TOPO) {
+            ProcessTopoRequest(fd, header);
         } else if (header.mCmdId == CLICommand::FLOW_CONTROL) {
             ProcessFlowControlRequest(fd, msg, header);
         } else if (header.mCmdId == CLICommand::QBUF_POOL) {
@@ -846,6 +880,7 @@ public:
         } else if (header.mCmdId == CLICommand::PROBE) {
             ProcessProbeRequest(fd, msg, header);
         }
+#endif
         return;
     }
 
@@ -930,11 +965,15 @@ protected:
                 if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
                     return;
                 }
+#ifdef UMQ_BACKEND_ENABLED
                 UmqSocket *umqSock = (UmqSocket *)sock;
                 if (umqSock == nullptr) {
                     return;
                 }
                 umqSock->OutputStats(m_oss);
+#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
+                static_cast<SocketBase *>(sock)->GetStatsMgr()->OutputStats(fd, m_oss);
+#endif
             });
         }
         Statistics::Recorder::FillEmptyForm(m_oss);
