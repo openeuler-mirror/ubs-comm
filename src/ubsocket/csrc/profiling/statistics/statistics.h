@@ -16,6 +16,7 @@
 #include <sys/time.h>
 #include <sys/un.h>
 #include <cmath>
+#include <cstring>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
@@ -613,8 +614,8 @@ public:
     void ProcessTopoRequest(int fd, CLIControlHeader &header)
     {
         umq_route_key_t route{};
-        route.src_bonding_eid = header.srcEid;
-        route.dst_bonding_eid = header.dstEid;
+        memcpy(route.src_bonding_eid.raw, header.srcEid, sizeof(route.src_bonding_eid.raw));
+        memcpy(route.dst_bonding_eid.raw, header.dstEid, sizeof(route.dst_bonding_eid.raw));
         route.tp_type = UMQ_TP_TYPE_RTP;
 
         umq_route_list_t route_list;
