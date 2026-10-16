@@ -9,6 +9,8 @@
 
 #include "cli_args_parser.h"
 
+#include <cstdint>
+
 namespace Statistics {
 
 const struct option CLIArgsParser::options[] = {
