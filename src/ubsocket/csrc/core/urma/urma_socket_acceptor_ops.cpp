@@ -41,10 +41,15 @@ Result UrmaAcceptorOps::PrepareConnect(int new_fd)
 
 int UrmaAcceptorOps::ValidateProtocol(int fd, uint64_t &protocol_negotiation, ssize_t &protocol_negotiation_recv_size)
 {
-    (void)fd;
     (void)protocol_negotiation;
     (void)protocol_negotiation_recv_size;
-    return 0;
+    /* 非 TFO 模式：urma 控制面协商报文无 magic，无需校验 */
+    if (GlobalSetting::UBS_HAND_SHAKE_MODE != UBHandshakeMode::TFO) {
+        return 0;
+    }
+    /* TFO 模式：客户端 BuildTfoPayload 在 SYN 中携带前导 magic(8B)+version(4B)，
+     * 复用基类校验 magic(8B)；version(4B) 由 Negotiate 开头的 DoVersionNegotiate 消费 */
+    return AcceptorOps::ValidateProtocol(fd, protocol_negotiation, protocol_negotiation_recv_size);
 }
 
 uint32_t NegotiateConnFlag(uint32_t peer_flag)
@@ -80,31 +85,52 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
 {
     UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(socketPtr);
     if (urma_sock == nullptr) {
-        UBS_VLOG_ERR("negotiate fd=%d, socket not urma-socket.");
+        UBS_VLOG_ERR("negotiate fd=%d, socket not urma-socket.", fd);
         return UBS_INVALID_PARAM;
+    }
+
+    /* TFO 模式：消费 SYN 前导中的 version(4B) 并完成版本协商，与 umq 基类链路同构；
+     * Major mismatch 时由 DoVersionNegotiate 通知对端并丢弃后续 body，实现早期降级 */
+    bool is_tfo = GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::TFO;
+    uint32_t tfo_negotiated_version = 0;
+    uint32_t tfo_peer_version = 0;
+    if (is_tfo) {
+        Result ver_ret = DoVersionNegotiate(fd, tfo_negotiated_version, tfo_peer_version);
+        if (ver_ret != UBS_OK) {
+            return ver_ret;
+        }
     }
 
     UrmaNegotiateReq req = {};
     Result ret = SocketConnHelper::RecvLengthPrefixed(fd, &req, sizeof(req), NEGOTIATE_ACCEPT_TIMEOUT_MS);
     if (ret != UBS_OK) {
-        UBS_VLOG_ERR("negotiate fd=%d, recv rsp of size=%zu failed: %d", fd, sizeof(req), ret);
+        UBS_VLOG_ERR("negotiate fd=%d, recv req of size=%zu failed: %d", fd, sizeof(req), ret);
         return ret;
     }
 
-    UBSVersion local_version = UBS_PROTOCOL_VERSION;
-    UBSVersion peer_version(req.peer_version);
-    UBSVersion negotiated;
-    VersionCheckResult ver_result = local_version.Negotiate(peer_version, negotiated);
-    uint32_t negotiated_version = negotiated.GetWhole();
+    uint32_t negotiated_version = 0;
+    if (is_tfo) {
+        /* TFO：版本协商已在 DoVersionNegotiate 完成（peer_version 取自 SYN 前导），
+         * req.peer_version 仅保留解析，不再用于协商 */
+        negotiated_version = tfo_negotiated_version;
+        urma_sock->SetPeerVersion(tfo_peer_version);
+    } else {
+        UBSVersion local_version = UBS_PROTOCOL_VERSION;
+        UBSVersion peer_version(req.peer_version);
+        UBSVersion negotiated;
+        VersionCheckResult ver_result = local_version.Negotiate(peer_version, negotiated);
+        negotiated_version = negotiated.GetWhole();
 
-    if (ver_result == VersionCheckResult::kMajorMismatch) {
-        UBS_VLOG_ERR("negotiate fd=%d, ValidateNegotiated negotiated_version failed: %d", fd, ver_result);
-        uint32_t mismatch_version = local_version.GetWhole();
-        SocketConnHelper::SendSocketData(fd, &mismatch_version, sizeof(mismatch_version), NEGOTIATE_ACCEPT_TIMEOUT_MS);
-        return UBS_TCP_EXCHANGE;
+        if (ver_result == VersionCheckResult::kMajorMismatch) {
+            UBS_VLOG_ERR("negotiate fd=%d, ValidateNegotiated negotiated_version failed: %d", fd, ver_result);
+            uint32_t mismatch_version = local_version.GetWhole();
+            SocketConnHelper::SendSocketData(fd, &mismatch_version, sizeof(mismatch_version), NEGOTIATE_ACCEPT_TIMEOUT_MS);
+            return UBS_TCP_EXCHANGE;
+        }
+
+        urma_sock->SetPeerVersion(peer_version.GetWhole());
     }
 
-    urma_sock->SetPeerVersion(peer_version.GetWhole());
     urma_sock->SetTransMode(std::min(req.trans_mode, UrmaSetting::UB_TANS_MODE));
     urma_sock->SetSocketFlags(NegotiateConnFlag(req.conn_flag));
     urma_sock->SetConnId(UrmaBackend::Instance().AllocConnId());
