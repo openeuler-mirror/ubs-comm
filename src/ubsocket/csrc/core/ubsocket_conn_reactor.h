@@ -79,7 +79,9 @@ class ConnReactorThread {
 public:
     using DoneCallback = std::function<void(int fd, const struct sockaddr &addr, socklen_t addr_len)>;
 
-    ConnReactorThread() = default;
+    /* 两个 MPSCRingQueue 成员容量恒为编译期 2 的幂（kEventQueueCapacity），构造不会抛异常；
+     * 显式 noexcept 让编译器不再为该默认构造生成不可达的异常清理分支 */
+    ConnReactorThread() noexcept {}
     ~ConnReactorThread()
     {
         Stop();

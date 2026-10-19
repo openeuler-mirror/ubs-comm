@@ -8,20 +8,25 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <gtest/gtest.h>
 #include <fcntl.h>
+#include <gtest/gtest.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
+#include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <memory>
 #include <mockcpp/mockcpp.hpp>
+#include <stdexcept>
+#include <thread>
 
 #include "common/ubsocket_global_setting.h"
 #include "common/ubsocket_lock.h"
+#include "common/ubsocket_logger.h"
 #include "core/ubsocket_conn_ops_base.h"
 #include "core/ubsocket_conn_reactor.h"
 #include "core/ubsocket_socket_helper.h"
@@ -124,6 +129,101 @@ public:
     int done_calls = 0;
     int failed_calls = 0;
 };
+
+class ThrowingConnOps : public TestConnOps {
+public:
+    ThrowingConnOps(ConnRole role, int fd) : TestConnOps(role, fd) {}
+
+    ConnStageResult DoWaitNegotiate() override
+    {
+        throw std::runtime_error("execute boom");
+    }
+};
+
+static std::atomic<int> g_exec_count{0};
+
+class CountingPendingOps : public TestConnOps {
+public:
+    CountingPendingOps(ConnRole role, int fd) : TestConnOps(role, fd)
+    {
+        negotiate_result = ConnStageResult::kPending;
+    }
+
+    ConnStageResult DoWaitNegotiate() override
+    {
+        g_exec_count.fetch_add(1);
+        return ConnStageResult::kPending;
+    }
+};
+
+static std::atomic<int> g_done_count{0};
+
+static ssize_t MockReadZeroCount(int, void *buf, size_t)
+{
+    *static_cast<uint64_t *>(buf) = 0;
+    return static_cast<ssize_t>(sizeof(uint64_t));
+}
+
+/* 让下一次 poll 报告指定 fd 可读并返回 1；每次只消费一个信号。
+ * 必须先清零全部 revents（真 poll 会重置），否则残留的 revents 会掩盖 revents==0 分支 */
+static std::atomic<int> g_signal_fd{-1};
+static int MockPollSignalFd(struct pollfd *fds, nfds_t nfds, int)
+{
+    int target = g_signal_fd.exchange(-1);
+    for (nfds_t i = 0; i < nfds; ++i) {
+        fds[i].revents = 0;
+    }
+    if (target < 0) {
+        return 0;
+    }
+    for (nfds_t i = 0; i < nfds; ++i) {
+        if (fds[i].fd == target) {
+            fds[i].revents = POLLIN;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* 阻塞直到目标线程 stopped_ 置位，然后返回 -1(EIO)：驱动 RunLoop 的 poll 错误 + stop 后 break 分支 */
+static ConnReactorThread *g_reactor_for_poll = nullptr;
+static std::atomic<int> g_poll_entered{0};
+static int MockPollBlockUntilStoppedThenError(struct pollfd *, nfds_t, int)
+{
+    g_poll_entered.fetch_add(1);
+    while (g_reactor_for_poll != nullptr && !g_reactor_for_poll->stopped_.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+    }
+    errno = EIO;
+    return -1;
+}
+
+/* 1=EINTR，2=其它错误（EIO），其余返回 0；用于驱动 RunLoop 的 poll 错误分支 */
+static std::atomic<int> g_poll_errno_mode{0};
+static std::atomic<int> g_poll_errno_calls{0};
+static int MockPollErrnoMode(struct pollfd *, nfds_t, int)
+{
+    g_poll_errno_calls.fetch_add(1);
+    int mode = g_poll_errno_mode.load();
+    if (mode == 1) {
+        errno = EINTR;
+        return -1;
+    }
+    if (mode == 2) {
+        errno = EIO;
+        return -1;
+    }
+    return 0;
+}
+
+template <typename Pred>
+static bool WaitUntil(Pred pred, int timeout_ms = 500)
+{
+    for (int i = 0; i < timeout_ms && !pred(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return pred();
+}
 } // namespace
 
 class ConnReactorTest : public ::testing::Test {
@@ -325,7 +425,9 @@ TEST_F(ConnReactorTest, FinishConnection_Done_CallsOnConnDoneAndCallback)
     int done_fd = -1;
     auto ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
     thread.conn_ops_map_[TEST_FD].ops = ops;
-    thread.conn_ops_map_[TEST_FD].done_cb = [&done_fd](int fd, const struct sockaddr &, socklen_t) { done_fd = fd; };
+    thread.conn_ops_map_[TEST_FD].done_cb = [&done_fd](int fd, const struct sockaddr &, socklen_t) {
+        done_fd = fd;
+    };
 
     thread.FinishConnection(TEST_FD, ConnStageResult::kDone);
     EXPECT_EQ(1, ops->done_calls);
@@ -516,5 +618,383 @@ TEST_F(ConnReactorTest, Dispatcher_StartStop_RealThreads)
 
     dispatcher.Stop();
     EXPECT_FALSE(dispatcher.started_.load());
+    GlobalMockObject::verify();
+}
+
+/* ==================== 补充：未覆盖分支/路径 ==================== */
+
+TEST_F(ConnReactorTest, EventFdTable_DecLoad_DecrementsActiveLoad)
+{
+    ConnEventFdTable &table = ConnEventFdTable::Instance();
+    table.Register(TEST_EVENT_FD, 1);
+    table.Register(TEST_EVENT_FD + 1, 2);
+    table.IncLoad(TEST_EVENT_FD);
+    table.IncLoad(TEST_EVENT_FD + 1); /* 两者 load 均为 1 */
+    table.DecLoad(TEST_EVENT_FD);     /* f1 load 1->0，成为最轻者 */
+    EXPECT_EQ(1, table.GetLeastLoadedIndex());
+    table.Unregister(TEST_EVENT_FD);
+    table.Unregister(TEST_EVENT_FD + 1);
+}
+
+TEST_F(ConnReactorTest, Init_SecondCall_Idempotent)
+{
+    MOCKER(eventfd).stubs().will(returnValue(TEST_EVENT_FD));
+    LibcApi::poll_ptr = MockPollZero;
+    LibcApi::close_ptr = MockCloseCount;
+
+    ConnReactorThread thread;
+    EXPECT_EQ(UBS_OK, thread.Init(0));
+    EXPECT_EQ(UBS_OK, thread.Init(1)); /* started_ 已置位：幂等直接返回，不再建线程 */
+    thread.Stop();
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, AddConnection_EventQueueFull_ReturnsError)
+{
+    ConnReactorThread thread;
+    thread.started_.store(true);
+    thread.event_fd_ = TEST_EVENT_FD;
+    LibcApi::fcntl_ptr = MockFcntlNonBlocking;
+    for (uint64_t i = 0; i < ConnReactorThread::kEventQueueCapacity; ++i) {
+        ASSERT_TRUE(thread.event_queue_.Push(static_cast<int>(i)));
+    }
+
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
+    EXPECT_EQ(UBS_ERROR, thread.AddConnection(TEST_FD, ops, ConnReactorThread::DoneCallback()));
+    EXPECT_TRUE(thread.conn_ops_map_.empty());
+}
+
+TEST_F(ConnReactorTest, AddConnection_EventfdWriteFail_ReturnsOk)
+{
+    MOCKER(eventfd_write).stubs().will(returnValue(-1));
+    ConnReactorThread thread;
+    thread.started_.store(true);
+    thread.event_fd_ = TEST_EVENT_FD;
+    LibcApi::fcntl_ptr = MockFcntlNonBlocking;
+
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
+    EXPECT_EQ(UBS_OK, thread.AddConnection(TEST_FD, ops, ConnReactorThread::DoneCallback()));
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, Cancel_StoppedThread_EarlyReturn)
+{
+    ConnReactorThread thread;
+    thread.stopped_.store(true);
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
+    thread.conn_ops_map_[TEST_FD].ops = ops;
+
+    thread.Cancel(TEST_FD);
+    EXPECT_FALSE(ops->IsAborted());
+}
+
+TEST_F(ConnReactorTest, Cancel_EventfdWriteFail_StillQueues)
+{
+    MOCKER(eventfd_write).stubs().will(returnValue(-1));
+    ConnReactorThread thread;
+    thread.event_fd_ = TEST_EVENT_FD;
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
+    thread.conn_ops_map_[TEST_FD].ops = ops;
+
+    thread.Cancel(TEST_FD);
+    EXPECT_TRUE(ops->IsAborted());
+    int fd = -1;
+    EXPECT_TRUE(thread.cancel_queue_.Pop(fd));
+    EXPECT_EQ(TEST_FD, fd);
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, HandleEventFd_ReadReturnsZeroCount_Breaks)
+{
+    ConnReactorThread thread;
+    thread.event_fd_ = TEST_EVENT_FD;
+    LibcApi::read_ptr = MockReadZeroCount;
+
+    thread.HandleEventFd(1000); /* read 返回 8 字节但 count==0 → 立即 break */
+    EXPECT_TRUE(thread.conn_ops_map_.empty());
+}
+
+TEST_F(ConnReactorTest, HandleSocketFd_UnknownFd_NoOp)
+{
+    ConnReactorThread thread;
+    thread.HandleSocketFd(TEST_FD, 1000); /* 映射中无该 fd，直接返回 */
+    EXPECT_TRUE(thread.poll_fds_.empty());
+}
+
+TEST_F(ConnReactorTest, HandleSocketFd_ExecuteThrows_FinishesFailed)
+{
+    LibcApi::close_ptr = MockCloseCount;
+    ConnReactorThread thread;
+    thread.event_fd_ = TEST_EVENT_FD;
+    auto ops = std::make_shared<ThrowingConnOps>(ConnRole::kServer, TEST_FD);
+    ops->SetState(ConnState::kWaitNegotiate);
+    thread.conn_ops_map_[TEST_FD].ops = ops;
+
+    thread.HandleSocketFd(TEST_FD, 1000); /* Execute 抛异常 → 视为 kFailed 收尾 */
+    EXPECT_TRUE(ops->IsAborted());
+    EXPECT_EQ(1, ops->failed_calls);
+    EXPECT_TRUE(thread.conn_ops_map_.empty());
+}
+
+TEST_F(ConnReactorTest, ScanTimeoutConnections_EmptyMap_NoOp)
+{
+    ConnReactorThread thread;
+    thread.ScanTimeoutConnections(); /* 空映射直接返回 */
+    EXPECT_TRUE(thread.conn_ops_map_.empty());
+}
+
+TEST_F(ConnReactorTest, ScanTimeoutConnections_ActiveNotIdle_Keeps)
+{
+    ConnReactorThread thread;
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kServer, TEST_FD);
+    ops->SetState(ConnState::kWaitNegotiate);
+    ops->last_active_ms_ = SocketConnHelper::GetTimeMs(); /* 刚活跃，未超时 */
+    thread.conn_ops_map_[TEST_FD].ops = ops;
+
+    thread.ScanTimeoutConnections();
+    EXPECT_EQ(0, ops->failed_calls);
+    EXPECT_FALSE(thread.conn_ops_map_.empty());
+}
+
+TEST_F(ConnReactorTest, ScanTimeoutConnections_BusyClockAhead_Skips)
+{
+    ConnReactorThread thread;
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kServer, TEST_FD);
+    ops->last_active_ms_ = 0; /* 未首帧驱动：跳过 */
+    thread.conn_ops_map_[TEST_FD].ops = ops;
+    thread.busy_ms_ = UINT64_MAX; /* 有效时钟回绕保护分支 */
+
+    thread.ScanTimeoutConnections();
+    EXPECT_EQ(0, ops->failed_calls);
+    EXPECT_FALSE(thread.conn_ops_map_.empty());
+}
+
+TEST_F(ConnReactorTest, FinishConnection_DoneWithoutCallback_OnlyOnConnDone)
+{
+    ConnReactorThread thread;
+    thread.event_fd_ = TEST_EVENT_FD;
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
+    thread.conn_ops_map_[TEST_FD].ops = ops; /* 未设置 done_cb */
+
+    thread.FinishConnection(TEST_FD, ConnStageResult::kDone);
+    EXPECT_EQ(1, ops->done_calls);
+    EXPECT_TRUE(thread.conn_ops_map_.empty());
+}
+
+TEST_F(ConnReactorTest, RemovePollFd_NotFound_NoOp)
+{
+    ConnReactorThread thread;
+    thread.AddPollFd(TEST_FD, POLLIN);
+    thread.RemovePollFd(TEST_FD + 1); /* 未命中 */
+    ASSERT_EQ(static_cast<size_t>(1), thread.poll_fds_.size());
+    EXPECT_EQ(TEST_FD, thread.poll_fds_[0].fd);
+}
+
+TEST_F(ConnReactorTest, Stop_WithPendingServerConnection_AbortsAndCloses)
+{
+    LibcApi::close_ptr = MockCloseCount;
+    MOCKER(eventfd_write).stubs().will(returnValue(0));
+
+    ConnReactorThread thread;
+    thread.started_.store(true);
+    thread.event_fd_ = TEST_EVENT_FD;
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kServer, TEST_FD);
+    thread.conn_ops_map_[TEST_FD].ops = ops;
+
+    thread.Stop();
+    EXPECT_TRUE(ops->IsAborted());
+    EXPECT_EQ(1, ops->failed_calls);
+    EXPECT_EQ(2, g_close_calls); /* 待建链 server fd + 线程 event fd */
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, Dispatcher_StartInitThreadFail_ReturnsError)
+{
+    MOCKER(eventfd).stubs().will(returnValue(-1)); /* 首个线程 Init 失败 */
+    ConnDispatcher &dispatcher = ConnDispatcher::Instance();
+    dispatcher.Stop();
+    EXPECT_EQ(UBS_ERROR, dispatcher.Start(1));
+    EXPECT_FALSE(dispatcher.started_.load());
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, Dispatcher_StartTwice_Idempotent)
+{
+    MOCKER(eventfd).stubs().will(returnValue(TEST_EVENT_FD));
+    LibcApi::poll_ptr = MockPollZero;
+    LibcApi::close_ptr = MockCloseCount;
+
+    ConnDispatcher &dispatcher = ConnDispatcher::Instance();
+    dispatcher.Stop();
+    EXPECT_EQ(UBS_OK, dispatcher.Start(1));
+    EXPECT_EQ(UBS_OK, dispatcher.Start(1)); /* 幂等：不再创建线程池 */
+    dispatcher.Stop();
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, Dispatcher_SubmitAndCancel_RealThread)
+{
+    MOCKER(eventfd).stubs().will(returnValue(TEST_EVENT_FD));
+    MOCKER(eventfd_write).stubs().will(returnValue(0));
+    LibcApi::poll_ptr = MockPollZero;
+    LibcApi::close_ptr = MockCloseCount;
+    LibcApi::fcntl_ptr = MockFcntlNonBlocking;
+
+    ConnDispatcher &dispatcher = ConnDispatcher::Instance();
+    dispatcher.Stop();
+    ASSERT_EQ(UBS_OK, dispatcher.Start(1));
+
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
+    EXPECT_EQ(UBS_OK, dispatcher.Submit(TEST_FD, TestAddr(), sizeof(struct sockaddr_in),
+                                        ConnReactorThread::DoneCallback(), ops));
+    dispatcher.Cancel(TEST_FD); /* 已启动：遍历线程转发 Cancel，命中者置 Abort */
+    EXPECT_TRUE(ops->IsAborted());
+
+    dispatcher.Stop();
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, RunLoop_ProcessesReadyFds)
+{
+    MOCKER(eventfd).stubs().will(returnValue(TEST_EVENT_FD));
+    MOCKER(eventfd_write).stubs().will(returnValue(0));
+    LibcApi::read_ptr = MockReadEagain;
+    LibcApi::close_ptr = MockCloseCount;
+    LibcApi::fcntl_ptr = MockFcntlNonBlocking;
+    LibcApi::poll_ptr = MockPollSignalFd;
+
+    g_done_count.store(0);
+    g_exec_count.store(0);
+    g_signal_fd.store(-1);
+
+    ConnReactorThread thread;
+    ASSERT_EQ(UBS_OK, thread.Init(0));
+
+    /* 连接 A：一次 Execute 即建链完成 */
+    auto done_ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
+    done_ops->SetState(ConnState::kConnEstablished);
+    ASSERT_EQ(UBS_OK, thread.AddConnection(TEST_FD, done_ops,
+                                           [](int, const struct sockaddr &, socklen_t) { g_done_count.fetch_add(1); }));
+
+    /* 连接 B：半包挂起，保留监听等可读 */
+    auto pending_ops = std::make_shared<CountingPendingOps>(ConnRole::kClient, TEST_FD + 1);
+    pending_ops->SetState(ConnState::kWaitNegotiate);
+    ASSERT_EQ(UBS_OK, thread.AddConnection(TEST_FD + 1, pending_ops, ConnReactorThread::DoneCallback()));
+
+    /* 唤醒 event fd：RunLoop 就绪分支 -> HandleEventFd 取出两个任务 */
+    g_signal_fd.store(TEST_EVENT_FD);
+    EXPECT_TRUE(WaitUntil([] { return g_done_count.load() > 0 && g_exec_count.load() > 0; }));
+
+    /* B 已加入监听数组：再次唤醒 RunLoop 走 socket fd（else）分支 */
+    g_signal_fd.store(TEST_FD + 1);
+    EXPECT_TRUE(WaitUntil([] { return g_exec_count.load() >= 2; }));
+
+    thread.Stop();
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, RunLoop_ScanIntervalAndPollErrorPaths)
+{
+    int saved_level = Logger::Instance().GetLogLevel();
+    Logger::Instance().SetLogLevel(LEVEL_COUNT); /* 静默错误日志，避免刷屏 */
+
+    MOCKER(eventfd).stubs().will(returnValue(TEST_EVENT_FD));
+    MOCKER(eventfd_write).stubs().will(returnValue(0));
+    LibcApi::poll_ptr = MockPollErrnoMode;
+    LibcApi::close_ptr = MockCloseCount;
+
+    g_poll_errno_mode.store(1); /* EINTR */
+    g_poll_errno_calls.store(0);
+    ConnReactorThread thread;
+    ASSERT_EQ(UBS_OK, thread.Init(0));
+    thread.last_scan_ms_ = 0; /* 强制触发空闲扫描分支（空映射安全返回） */
+    EXPECT_TRUE(WaitUntil([] { return g_poll_errno_calls.load() >= 1; })); /* EINTR 分支 */
+
+    g_poll_errno_mode.store(2); /* 非 EINTR 错误：记录日志后继续 */
+    EXPECT_TRUE(WaitUntil([] { return g_poll_errno_calls.load() >= 3; }));
+
+    thread.Stop(); /* stopped 后 poll 仍失败 -> break 退出循环 */
+    g_poll_errno_mode.store(0);
+    Logger::Instance().SetLogLevel(saved_level);
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, RunLoop_NonEintrPollErrorAfterStop_Breaks)
+{
+    MOCKER(eventfd).stubs().will(returnValue(TEST_EVENT_FD));
+    MOCKER(eventfd_write).stubs().will(returnValue(0));
+    LibcApi::poll_ptr = MockPollBlockUntilStoppedThenError;
+    LibcApi::close_ptr = MockCloseCount;
+
+    g_reactor_for_poll = nullptr;
+    g_poll_entered.store(0);
+
+    ConnReactorThread thread;
+    g_reactor_for_poll = &thread; /* 先绑定，确保 RunLoop 一进入 poll 即被 mock 阻塞 */
+    ASSERT_EQ(UBS_OK, thread.Init(0));
+
+    /* 确保线程已进入 poll（被 mock 阻塞），再置 stopped_：poll 返回 -1(EIO) 且非 EINTR -> break */
+    EXPECT_TRUE(WaitUntil([] { return g_poll_entered.load() > 0; }));
+    thread.Stop();
+    g_reactor_for_poll = nullptr;
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, AddConnection_StoppedWhileLockHeld_ReturnsError)
+{
+    MOCKER(eventfd_write).stubs().will(returnValue(0));
+    LibcApi::close_ptr = MockCloseCount;
+
+    ConnReactorThread thread;
+    thread.started_.store(true);
+    thread.stopped_.store(false);
+
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
+    ConnReactorThread::DoneCallback cb;
+
+    /* 主线程先持锁，worker 通过首道 started_/stopped_ 检查后阻塞在锁上；随后置 stopped_ 再放锁，
+     * 命中锁内二次校验（stopped_ 已变真）分支 */
+    std::atomic<int> worker_go{0};
+    ock::ubs::Result res = UBS_OK;
+    thread.conn_map_mutex_.lock();
+    std::thread worker([&] {
+        worker_go.store(1);
+        res = thread.AddConnection(TEST_FD, ops, cb);
+    });
+    EXPECT_TRUE(WaitUntil([&] { return worker_go.load() > 0; }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    thread.stopped_.store(true);
+    thread.conn_map_mutex_.unlock();
+    worker.join();
+    EXPECT_EQ(UBS_ERROR, res);
+
+    thread.stopped_.store(false);
+    thread.started_.store(false);
+    GlobalMockObject::verify();
+}
+
+TEST_F(ConnReactorTest, Cancel_CancelQueueFullThenStopped_Returns)
+{
+    MOCKER(eventfd_write).stubs().will(returnValue(0));
+    Logger::Instance().SetLogLevel(LEVEL_COUNT);
+
+    ConnReactorThread thread; /* 未 Init：stopped_ 默认 false，Cancel 正常入队 */
+    const uint64_t cap = static_cast<uint64_t>(ConnReactorThread::kEventQueueCapacity);
+    for (uint64_t i = 0; i < cap; ++i) {
+        thread.Cancel(static_cast<int>(i + 1)); /* 灌满 cancel_queue_，无 RunLoop 消费 */
+    }
+
+    /* 队列已满：再 Cancel 进入 while(!Push) 自旋；另起线程置 stopped_ 后应从 stopped_ 分支返回 */
+    std::atomic<int> spinner_go{0};
+    std::thread spinner([&] {
+        spinner_go.store(1);
+        thread.Cancel(TEST_FD); /* Push 失败 -> 自旋 -> stopped_ 置位后 return */
+    });
+    EXPECT_TRUE(WaitUntil([&] { return spinner_go.load() > 0; }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    thread.stopped_.store(true);
+    spinner.join();
+
+    thread.stopped_.store(false);
     GlobalMockObject::verify();
 }
