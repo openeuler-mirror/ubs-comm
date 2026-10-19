@@ -72,7 +72,6 @@ void UrmaAcceptorOps::CleanStaleSock(uint64_t stale_conn_id, Socket *cur_sock)
             stale_urma->State() == SocketState::SOCK_STAT_BROKEN) {
             return;
         }
-        UrmaBackend::Instance().GetAllocator()->rm_remote_segments(stale_urma->GetContext(), stale_urma->GetPeerNode());
         stale_urma->State(SocketState::SOCK_STAT_BROKEN);
         LibcApi::shutdown(stale_fd, SHUT_RD);
         stale_urma->NotifySocketReadable();

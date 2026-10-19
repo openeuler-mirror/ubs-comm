@@ -37,7 +37,7 @@ urma_transport_mode_t UrmaSetting::UB_JETTY_TRANS_MODE = URMA_TM_RM;
 urma_tp_type_t UrmaSetting::UB_JETTY_TP_TYPE = URMA_CTP;
 
 uint16_t UrmaSetting::UB_POLLER_COUNT = 2;
-uint32_t UrmaSetting::UB_POLLER_JFC_DEPTH = 1024;
+uint32_t UrmaSetting::UB_POLLER_JFC_DEPTH = 8192;
 bool UrmaSetting::UB_POLLER_BUSY_POLLING = false;
 
 uint32_t UrmaSetting::UB_BUF_POOL_SPACE_SIZE = 32;

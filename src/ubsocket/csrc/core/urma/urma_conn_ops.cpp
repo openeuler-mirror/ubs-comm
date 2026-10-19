@@ -242,12 +242,6 @@ void UrmaConnOps::ServerOnConnFailed()
     if (registered_.compare_exchange_strong(expected, false)) {
         ArraySet<Socket>::GetInstance().OverrideItem(fd_, nullptr);
     }
-    /* 对齐同步路径：段已写入分配器后失败则清理 remote 段（map 条目由其它在途连接自行保活） */
-    if (peer_imported_.exchange(false, std::memory_order_acq_rel)) {
-        if (urma_sock_ != nullptr && urma_sock_->GetContext() != nullptr) {
-            UrmaBackend::Instance().GetAllocator()->rm_remote_segments(urma_sock_->GetContext(), peer_seg_ex_.node);
-        }
-    }
 }
 
 void UrmaConnOps::CleanStaleSock(uint64_t stale_conn_id)
@@ -263,7 +257,6 @@ void UrmaConnOps::CleanStaleSock(uint64_t stale_conn_id)
             stale_urma->State() == SocketState::SOCK_STAT_BROKEN) {
             return;
         }
-        UrmaBackend::Instance().GetAllocator()->rm_remote_segments(stale_urma->GetContext(), stale_urma->GetPeerNode());
         stale_urma->State(SocketState::SOCK_STAT_BROKEN);
         LibcApi::shutdown(stale_fd, SHUT_RD);
         stale_urma->NotifySocketReadable();
@@ -275,9 +268,6 @@ void UrmaConnOps::CleanStaleSock(uint64_t stale_conn_id)
 void UrmaConnOps::OnConnCleanup()
 {
     if (peer_imported_) {
-        if (urma_sock_ != nullptr && urma_sock_->GetContext() != nullptr) {
-            UrmaBackend::Instance().GetAllocator()->rm_remote_segments(urma_sock_->GetContext(), peer_seg_ex_.node);
-        }
         peer_imported_ = false;
     }
     if (urma_sock_ != nullptr) {

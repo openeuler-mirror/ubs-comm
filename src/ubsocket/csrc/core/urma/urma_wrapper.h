@@ -155,20 +155,21 @@ constexpr uint8_t URMA_JFS_ERROR_TIMEOUT = 2;
 /**
  * @brief Unique identifier for a remote node
  *
- * A remote node is identified by the triple (EID, process-id, namespace).
+ * A remote node is identified by the triple (EID, process-id, namespace, conn_id).
  * Used as the key in unordered_map for remote segment lookup.
  */
 struct IdentifyNode {
     urma_eid_t eid;        /**< URMA endpoint identifier (16 bytes) */
     uint32_t pid;          /**< OS process identifier */
     char ns[NAME_MAX + 1]; /**< Logical namespace for multi-tenancy */
+    uint32_t ctx_id;      /**< Context id  */
 
-    IdentifyNode() noexcept : eid({0}), pid(0)
+    IdentifyNode() noexcept : eid({0}), pid(0), ctx_id(0)
     {
         ns[0] = '\0';
     }
 
-    explicit IdentifyNode(urma_eid_t e, uint32_t p, const char *n) noexcept : eid(e), pid(p)
+    explicit IdentifyNode(urma_eid_t e, uint32_t p, const char *n, uint64_t c = 0) noexcept : eid(e), pid(p), ctx_id(c)
     {
         strncpy(ns, n, NAME_MAX + 1);
         ns[NAME_MAX] = '\0';
@@ -178,13 +179,28 @@ struct IdentifyNode {
     {
         return eid.in6.subnet_prefix == other.eid.in6.subnet_prefix &&
                eid.in6.interface_id == other.eid.in6.interface_id && pid == other.pid &&
-               strncmp(ns, other.ns, NAME_MAX + 1) == 0;
+               strncmp(ns, other.ns, NAME_MAX + 1) == 0 && ctx_id == other.ctx_id;
     }
 };
 
 struct UrmaBadPortRecord {
     int16_t last_error = 0;
     uint64_t error_occurred_time = 0;
+};
+
+/**
+ * @brief Hash functor for IdentifyNode
+ *
+ * Combines hashes of all five fields (subnet_prefix, interface_id, pid, ns, conn_id)
+ * using XOR, suitable for use as the hash policy of std::unordered_map.
+ */
+struct RemoteNodeHash {
+    size_t operator()(const IdentifyNode &node) const noexcept
+    {
+        return std::hash<uint64_t>()(node.eid.in6.subnet_prefix) ^ std::hash<uint64_t>()(node.eid.in6.interface_id) ^
+               std::hash<uint32_t>()(node.pid) ^ std::hash<std::string>()(node.ns) ^
+               std::hash<uint64_t>()(node.ctx_id);
+    }
 };
 
 class UrmaContext : public Referable {
