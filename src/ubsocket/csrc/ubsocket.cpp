@@ -316,6 +316,18 @@ void ubsocket_uninit()
     // Stop() 幂等，开关关闭时是 no-op。
     ConnDispatcher::Instance().Stop();
     TxCqePoller::Instance().Stop();
+    /*
+     * Graceful URMA close before teardown: post a CLOSE WR on every still-open urma socket so the
+     * peer receives an orderly EOF. The pending-close registry holds the socket (and the imported
+     * target jetty that represents the peer's jetty) alive until the CLOSE send CQE arrives, so an
+     * in-flight CLOSE WR is never aborted by an early jetty destroy. UrmaBackend::UnInit() then
+     * waits for those CQEs before force-releasing any leftover holds.
+     */
+    ArraySet<Socket>::GetInstance().ForEach([](int /*fd*/, Socket *sock) {
+        if (sock != nullptr && sock->Type() == SocketType::SOCK_TYPE_URMA) {
+            (void)sock->PostCloseToPeer();
+        }
+    });
     ArraySet<Socket>::GetInstance().ReleaseAll();
     ArraySet<EventPoll>::GetInstance().ReleaseAll();
     CleanAllSocketEpollMappers();

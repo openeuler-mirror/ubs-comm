@@ -194,7 +194,6 @@ Result UrmaIoBufferPool::store_remote_target_seg(UrmaContextPtr ctx, RemoteSegme
         return UBS_ERROR;
     }
     if (LIKELY((tgt = remote->remote_target_segs_[block_index]) != nullptr)) {
-        UBS_VLOG_INFO("store_remote_target_seg: block_index = %d already set.", block_index);
         return UBS_OK;
     }
 
