@@ -548,6 +548,7 @@ void UrmaBackend::ClearPendingClose() noexcept
         return;
     }
     const uint32_t cap = pending_close_capacity_.load(std::memory_order_acquire);
+
     for (uint32_t i = 0; i < cap; ++i) {
         Socket *sock = slots[i].sock.exchange(nullptr, std::memory_order_acq_rel);
         if (sock == nullptr) {
@@ -708,6 +709,7 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
                            (unsigned long)urma_sock->GetConnId());
             break;
         }
+
         /* connection-level error: reset the socket, inject HUP|RDHUP and release waiters */
         case URMA_CR_UNSUPPORTED_OPCODE_ERR:
         case URMA_CR_LOC_OPERATION_ERR:
@@ -715,11 +717,11 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
         case URMA_CR_REM_UNSUPPORTED_REQ_ERR:
         case URMA_CR_REM_OPERATION_ERR:
         case URMA_CR_REM_ACCESS_ABORT_ERR:
+        case URMA_CR_REM_DATA_POISON:
         case URMA_CR_WR_FLUSH_ERR:
         case URMA_CR_WR_SUSPEND_DONE:
         case URMA_CR_WR_FLUSH_ERR_DONE:
         case URMA_CR_WR_UNHANDLED:
-        case URMA_CR_REM_DATA_POISON:
         default:
             UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
                          cr->user_ctx, cr->opcode, cr->flag.value);

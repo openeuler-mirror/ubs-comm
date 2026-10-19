@@ -406,7 +406,16 @@ void UrmaSharedJfcAggPollerWithThread::EventPoll() noexcept
         return;
     }
     urma_jfc_t *ev_jfc[MAX_EV_JFC_CNT] = {nullptr};
-    uint32_t ack[MAX_EV_JFC_CNT] = {1};
+    /*
+     * nevents[i] must be 1 for *every* jfc reported by urma_wait_jfc, not only the first one.
+     * With UB_POLLER_COUNT>1 several jfcs share one jfce, so a wait can return more than one
+     * event; leaving the rest at 0 means those jfc events are never acked and urma_delete_jfc
+     * later fails with "There is jfc event and it must be acked".
+     */
+    uint32_t ack[MAX_EV_JFC_CNT];
+    for (uint32_t i = 0; i < MAX_EV_JFC_CNT; ++i) {
+        ack[i] = 1;
+    }
     while (!stopping_) {
         try {
             /* block indefinitely; the loopback wakeup message posted by StopInner() releases it */

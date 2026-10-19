@@ -781,21 +781,13 @@ void UrmaJfc::DrainEventsBeforeDelete() noexcept
 
     /* bounded: defensive against stuck jfc */
     constexpr uint32_t MAX_DRAIN_ROUNDS = 64;
-    urma_jfc_t *ev_jfc = nullptr;
-    for (uint32_t i = 0; i < MAX_DRAIN_ROUNDS; i++) {
-        auto cnt = UrmaApi::urma_wait_jfc(raw_jfce_, 1, 0, &ev_jfc);
-        if (cnt <= 0) {
-            break;
-        }
-        Ack(1); /* per-event ack */
-    }
-
-    /* discard residual completions */
     constexpr int32_t POLL_BATCH_SIZE = 32;
     urma_cr_t crs[POLL_BATCH_SIZE];
+
     for (uint32_t i = 0; i < MAX_DRAIN_ROUNDS; i++) {
-        auto cnt = UrmaApi::urma_poll_jfc(raw_jfc_, POLL_BATCH_SIZE, crs);
-        if (cnt <= 0) {
+        /* discard residual completions of this jfc so its CQ is empty before delete */
+        auto poll_cnt = UrmaApi::urma_poll_jfc(raw_jfc_, POLL_BATCH_SIZE, crs);
+        if (poll_cnt <= 0) {
             break;
         }
     }

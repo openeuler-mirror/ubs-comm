@@ -311,13 +311,6 @@ int UrmaEventPoll::EpollWait(struct epoll_event *events, int maxevents, int time
              * clear normal bits but preserve closed_bits terminal state for immediate re-check after re-arm */
             event_data->oneshot_disabled.store(true, std::memory_order_release);
             urma_sock->FetchAndReachEpollEvents(reported & ~closed_bits);
-            if (closed_bits != 0) {
-                UBS_VLOG_INFO("urma epoll(%d) socket(%d) closed, oneshot fired once(0x%x)", epoll_fd_,
-                              event_data->socket_fd, closed_bits);
-            }
-        } else if (closed_bits != 0) {
-            UBS_VLOG_INFO("urma epoll(%d) socket(%d) closed, report HUP(0x%x)", epoll_fd_, event_data->socket_fd,
-                          closed_bits);
         } else if (reported != 0) {
             if ((event_data->event.events & EPOLLET) != 0) {
                 /* ET: event reported and consumed, clear bits to avoid duplicate notification */
