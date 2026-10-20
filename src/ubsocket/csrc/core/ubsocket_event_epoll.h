@@ -123,10 +123,22 @@ private:
     u_mutex_t *mutex_ = nullptr;
     std::unordered_set<int> epoll_set_;
 };
+
+/* 注册表(g_socket_epoll_mappers)持有的 shared_ptr 即“基引用”;
+ * Get/Create 返回的拷贝即“借出引用”, 调用方无需手工 delete,
+ * 最后一个持有者释放后对象自动析构 */
+using EpollMapperPtr = std::shared_ptr<EpollMapper>;
 extern u_rw_lock_t *g_socket_epoll_lock;
-EpollMapper *GetSocketEpollMapper(int socket_fd);
-bool CreateSocketEpollMapper(int socket_fd, EpollMapper *&mapper);
-void CleanSocketEpollMapper(int socket_fd);
+EpollMapperPtr GetSocketEpollMapper(int socket_fd);
+bool CreateSocketEpollMapper(int socket_fd, EpollMapperPtr &mapper);
+/**
+ * @brief 从注册表摘除 fd 的注册项(只摘“基引用”, 真正析构由最后一个持有者完成)
+ * @param socket_fd socket fd
+ * @param expect   非空时仅当表中仍是该对象才摘除。调用方持有借出引用时应传自身指针,
+ *                 避免并发 close 后同 fd 号重新 ADD 出来的新对象被误删;
+ *                 传 nullptr 表示按 fd 无条件摘除(仅 close/uninit 语义下使用)
+ */
+void CleanSocketEpollMapper(int socket_fd, const EpollMapper *expect = nullptr);
 void CleanAllSocketEpollMappers();
 void OnSocketClosed(int socket_fd);
 

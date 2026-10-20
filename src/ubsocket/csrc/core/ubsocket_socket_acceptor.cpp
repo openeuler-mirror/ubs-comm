@@ -386,7 +386,7 @@ void Acceptor::InitWakeupEvent()
         }
 
         // 2. 初始化 wakeup_event_：获取 epoll_fd，注册 eventfd 进 epoll
-        EpollMapper *mapper = GetSocketEpollMapper(raw_fd_);
+        EpollMapperPtr mapper = GetSocketEpollMapper(raw_fd_);
         if (mapper == nullptr) {
             UBS_VLOG_ERR("async accept: mapper==nullptr, fd=%d\n", raw_fd_);
             return;

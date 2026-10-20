@@ -177,7 +177,8 @@ int UrmaEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
 
     int ret = -1;
     bool mapper_create = false;
-    EpollMapper *mapper = nullptr;
+    EpollMapperPtr mapper = nullptr;
+    /* ADD 需要“新建/复用”注册项, DEL/MOD 只需要复用; MOD 不维护 epoll_set_, 不做查找 */
     if (op == EPOLL_CTL_ADD) {
         mapper_create = CreateSocketEpollMapper(fd, mapper);
     } else {
@@ -189,8 +190,8 @@ int UrmaEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
             if (ret == 0 && mapper != nullptr) {
                 mapper->Add(epoll_fd_);
             } else if (mapper_create) {
-                CleanSocketEpollMapper(fd);
-                mapper = nullptr;
+                /* 本次新建的条目注册失败: 只摘除“表中仍是该对象”的基引用, 本函数返回时借出引用释放、对象析构 */
+                CleanSocketEpollMapper(fd, mapper.get());
             }
             break;
         case EPOLL_CTL_MOD:
@@ -198,11 +199,9 @@ int UrmaEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
             break;
         case EPOLL_CTL_DEL:
             ret = EpollCtlDel(fd);
-            if (ret == 0 && mapper != nullptr) {
-                if (mapper->Del(epoll_fd_)) {
-                    CleanSocketEpollMapper(fd);
-                    mapper = nullptr;
-                }
+            if (ret == 0 && mapper != nullptr && mapper->Del(epoll_fd_)) {
+                /* 该 fd 已不在任何 epoll 中: 摘除“表中仍是该对象”的基引用 */
+                CleanSocketEpollMapper(fd, mapper.get());
             }
             break;
         default:
