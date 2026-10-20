@@ -104,7 +104,6 @@ Result UrmaSocket::Initialize() noexcept
 
 void UrmaSocket::UnInitialize() noexcept
 {
-    UrmaBackend::Instance().GetAllocator()->rm_remote_segments(context_, peer_node_);
     DestroyUrmaResources();
     alive_Info_ = nullptr;
     send_buf_ = nullptr;
@@ -806,7 +805,7 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
     if (ack_ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: Failed to store remote segments(0x"
                      << std::hex << peer.seg.ubva.va << ", 0x" << peer.seg.len << ") return: " << std::oct << ack_ret);
-        goto CLEAN_REMOTE_SEG;
+        goto CLEAN_URMA_RESOURCE;
     }
 
     local_ctrl_target_seg_ = local_seg;
@@ -816,19 +815,19 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
         if (SocketConnHelper::SendSocketData(raw_socket_, &local, sizeof(local), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local)) {
             UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", raw_socket_, sizeof(local));
             ack_ret = UBS_TCP_EXCHANGE;
-            goto CLEAN_REMOTE_SEG;
+            goto CLEAN_URMA_RESOURCE;
         }
     }
 
     if (SocketConnHelper::SendSocketData(raw_socket_, &ack_ret, sizeof(ack_ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(ack_ret)) {
         UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", raw_socket_, sizeof(ack_ret));
         ack_ret = UBS_TCP_EXCHANGE;
-        goto CLEAN_REMOTE_SEG;
+        goto CLEAN_URMA_RESOURCE;
     }
     if (SocketConnHelper::RecvSocketData(raw_socket_, &peer_ret, sizeof(peer_ret), CONTROL_PLANE_TIMEOUT_MS) != sizeof(peer_ret)) {
         UBS_VLOG_ERR("UrmaSocket recv socket(%d) data size(%zu) failed.", raw_socket_, sizeof(ack_ret));
         ack_ret = UBS_TCP_EXCHANGE;
-        goto CLEAN_REMOTE_SEG;
+        goto CLEAN_URMA_RESOURCE;
     }
 
     empty_recv_sge_.tseg = local_ctrl_target_seg_;
@@ -842,9 +841,6 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
                    peer.ex.my_send_buf.buf, peer.ex.my_recv_buf.buf, local.ex.my_send_buf.buf,
                    local.ex.my_recv_buf.buf);
     return UBS_OK;
-
-CLEAN_REMOTE_SEG:
-    allocator->rm_remote_segments(context_, peer.node);
 
 CLEAN_URMA_RESOURCE:
     DestroyUrmaResources();
@@ -915,7 +911,6 @@ Result UrmaSocket::ImportPeerSegments(const UrmaSockSegExInfo &peer) noexcept
     Result ret = allocator->store_remote_target_seg(context_, remote_segments, seg_copy, remote_ctrl_target_seg_);
     if (UNLIKELY(ret != UBS_OK)) {
         UBS_SLOG_ERR("UrmaSocket: store remote segments failed, ret=" << ret << ", fd=" << raw_socket_);
-        allocator->rm_remote_segments(context_, peer.node);
         return ret;
     }
 

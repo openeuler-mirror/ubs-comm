@@ -140,12 +140,10 @@ Result UrmaPoller::DrainCqes() noexcept
 {
     constexpr int32_t POLL_BATCH_SIZE = 32;
     urma_cr_t crs[POLL_BATCH_SIZE]{};
-
-    bool first_time = true;
+    jfc_->Rearm(false);
     while (!stopping_) {
         auto cnt = jfc_->Poll(POLL_BATCH_SIZE, crs);
         if (UNLIKELY(cnt == 0)) {
-            jfc_->Rearm(false);
             break;
         }
 
@@ -161,10 +159,6 @@ Result UrmaPoller::DrainCqes() noexcept
 #else
         (void)result;
 #endif
-        if (first_time) {
-            first_time = false;
-            jfc_->Rearm(false);
-        }
     }
     return UBS_OK;
 }

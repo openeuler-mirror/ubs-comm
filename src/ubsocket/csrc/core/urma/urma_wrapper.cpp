@@ -286,6 +286,7 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
         return UBS_MALLOC_FAILED;
     }
 
+    tmp_context->context_id_ = AUTO_INCREASE_CONTEXT_ID.fetch_add(1);
     /* step7: init local identify info */
     auto result = tmp_context->InitLocalIdentifyNodeInfo();
     if (UNLIKELY(result != UBS_OK)) {
@@ -293,8 +294,6 @@ Result UrmaContext::CreateContext(const std::string &devName, uint32_t eidIndex,
         UBS_VLOG_ERR("Failed to initialize backend as init local identify node failed");
         return UBS_ERROR;
     }
-
-    tmp_context->context_id_ = AUTO_INCREASE_CONTEXT_ID.fetch_add(1);
 
     /* step8: insert into all context */
     auto tmp_key = std::pair<std::string, uint32_t>(target_dev_name, eidIndex);
@@ -322,6 +321,7 @@ Result UrmaContext::InitLocalIdentifyNodeInfo() noexcept
 
     local_identify_node_.eid = eid_info_.eid;
     local_identify_node_.pid = getpid();
+    local_identify_node_.ctx_id = Id();
     local_identify_node_.ns[len] = '\0';
     return UBS_OK;
 }

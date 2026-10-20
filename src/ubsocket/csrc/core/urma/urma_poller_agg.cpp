@@ -80,21 +80,16 @@ Result UrmaDedicatedJfcAggPoller::poll() noexcept
 
     constexpr int32_t POLL_BATCH_SIZE = 32;
     urma_cr_t crs[POLL_BATCH_SIZE]{};
-    bool first_time = true;
+
     uint32_t jfc_cnt = jfc_vector_.size();
-    uint32_t try_count[jfc_cnt];
-    memset(try_count, 0, sizeof(try_count));
-    uint32_t try_max = 1;
+    for (uint32_t i = 0; i < jfc_cnt; ++i) {
+        jfc_vector_[i]->Rearm(false);
+    }
     while (!stopping_) {
         bool finish = true;
         for (uint32_t i = 0; i < jfc_cnt; ++i) {
-            if (try_count[i] >= try_max) {
-                continue;
-            }
             auto cnt = jfc_vector_[i]->Poll(POLL_BATCH_SIZE, crs);
             if (UNLIKELY(cnt == 0)) {
-                jfc_vector_[i]->Rearm(false);
-                try_count[i]++;
                 continue;
             }
             if (UNLIKELY(cnt < 0)) {
@@ -109,11 +104,6 @@ Result UrmaDedicatedJfcAggPoller::poll() noexcept
 #else
             (void)result;
 #endif
-            if (first_time) {
-                first_time = false;
-                jfc_vector_[i]->Rearm(false);
-                try_count[i] = 0;
-            }
         }
         if (finish) {
             break;
@@ -406,15 +396,9 @@ void UrmaSharedJfcAggPollerWithThread::EventPoll() noexcept
         return;
     }
     urma_jfc_t *ev_jfc[MAX_EV_JFC_CNT] = {nullptr};
-    /*
-     * nevents[i] must be 1 for *every* jfc reported by urma_wait_jfc, not only the first one.
-     * With UB_POLLER_COUNT>1 several jfcs share one jfce, so a wait can return more than one
-     * event; leaving the rest at 0 means those jfc events are never acked and urma_delete_jfc
-     * later fails with "There is jfc event and it must be acked".
-     */
     uint32_t ack[MAX_EV_JFC_CNT];
-    for (uint32_t i = 0; i < MAX_EV_JFC_CNT; ++i) {
-        ack[i] = 1;
+    for (auto &ackCnt : ack) {
+        ackCnt = 1;
     }
     while (!stopping_) {
         try {
@@ -453,23 +437,24 @@ Result UrmaSharedJfcAggPollerWithThread::DrainCqes(urma_jfc_t **ev_jfc, uint32_t
     constexpr int32_t POLL_BATCH_SIZE = 32;
     urma_cr_t crs[POLL_BATCH_SIZE]{};
 
-    bool first_time = true;
-    uint32_t try_count[jfc_cnt];
-    memset(try_count, 0, sizeof(try_count));
-    uint32_t try_max = 1;
+    for (uint32_t i = 0; i < jfc_cnt; ++i) {
+        if (UNLIKELY(ev_jfc[i] == nullptr)) {
+            continue;
+        }
+        auto rearmRet = UrmaApi::urma_rearm_jfc(ev_jfc[i], false);
+        if (UNLIKELY(rearmRet != URMA_SUCCESS)) {
+            UBS_VLOG_ERR("rearm jfc(%u) failed return: %d", ev_jfc[i]->jfc_id.id, rearmRet);
+        }
+    }
+
     while (!stopping_) {
         bool finish = true;
         for (uint32_t i = 0; i < jfc_cnt; ++i) {
             if (UNLIKELY(ev_jfc[i] == nullptr)) {
                 continue;
             }
-            if (try_count[i] >= try_max) {
-                continue;
-            }
             auto cnt = UrmaApi::urma_poll_jfc(ev_jfc[i], POLL_BATCH_SIZE, crs);
             if (UNLIKELY(cnt == 0)) {
-                UrmaApi::urma_rearm_jfc(ev_jfc[i], false);
-                try_count[i]++;
                 continue;
             }
 
@@ -485,10 +470,6 @@ Result UrmaSharedJfcAggPollerWithThread::DrainCqes(urma_jfc_t **ev_jfc, uint32_t
 #else
             (void)result;
 #endif
-            if (first_time) {
-                first_time = false;
-                UrmaApi::urma_rearm_jfc(ev_jfc[i], false);
-            }
         }
         if (finish) {
             break;

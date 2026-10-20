@@ -114,7 +114,7 @@ private:
     bool was_blocking_ = true;            /* 建链前 fd 是否阻塞态，成功后恢复 */
 
     /* 双方共用 */
-    std::atomic<bool> peer_imported_{false}; /* 对端段是否已写入分配器（失败时需 rm_remote_segments） */
+    std::atomic<bool> peer_imported_{false}; /* 对端段是否已写入分配器 */
 
     LengthPrefixedReader lp_reader_; /* Client 读 NegotiateRsp / Server 读 NegotiateReq */
     UrmaNegotiateReq req_{};

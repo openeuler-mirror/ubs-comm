@@ -29,20 +29,6 @@ namespace ubs {
 namespace urma {
 
 /**
- * @brief Hash functor for IdentifyNode
- *
- * Combines hashes of all four fields (subnet_prefix, interface_id, pid, ns)
- * using XOR, suitable for use as the hash policy of std::unordered_map.
- */
-struct RemoteNodeHash {
-    size_t operator()(const IdentifyNode &node) const noexcept
-    {
-        return std::hash<uint64_t>()(node.eid.in6.subnet_prefix) ^ std::hash<uint64_t>()(node.eid.in6.interface_id) ^
-               std::hash<uint32_t>()(node.pid) ^ std::hash<std::string>()(node.ns);
-    }
-};
-
-/**
  * @brief Per-remote-node segment tracking
  *
  * Holds the remote peer's buffer base address and a vector of URMA target

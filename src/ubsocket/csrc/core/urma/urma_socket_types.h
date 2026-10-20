@@ -27,7 +27,7 @@ constexpr uint32_t URMA_RECV_BUF_DEFAULT_KB = 128;
 constexpr uint32_t URMA_SEND_BUF_OFFSET_GRANULARITY = 8192;     /* 8K */
 constexpr uint32_t URMA_SEND_LEN_GRANULARITY = 1024;            /* 1K */
 constexpr size_t URMA_SHARED_BUF_DEFAULT_PAGE_SIZE = 16 * 1024; /* 16KB */
-constexpr uint32_t kDefaultQueueDepth = 1024;
+constexpr uint32_t kDefaultQueueDepth = 8192;
 constexpr uint32_t kDefaultCqPollBatch = 32;
 
 /*

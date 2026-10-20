@@ -700,7 +700,6 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
             if (urma_sock->create_type_ == SOCK_CREATE_TYPE_CONNECT) {
                 UrmaBackend::Instance().RecordBrokenConn(urma_sock->GetPeerAddrId(), urma_sock->GetConnId());
             }
-            io_buff_pool_->rm_remote_segments(urma_sock->GetContext(), urma_sock->GetPeerNode());
             urma_sock->State(SocketState::SOCK_STAT_BROKEN);
             LibcApi::shutdown(urma_sock->Fd(), SHUT_RD);
             urma_sock->NotifySocketReadable();
@@ -725,7 +724,6 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
         default:
             UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
                          cr->user_ctx, cr->opcode, cr->flag.value);
-            urma_sock->OnPeerReset();
             break;
     }
 }
