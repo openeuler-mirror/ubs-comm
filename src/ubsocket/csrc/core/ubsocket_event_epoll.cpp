@@ -9,6 +9,8 @@
  * See the Mulan PSL v2 for more details.
  */
 #include <cerrno>
+#include <new>
+#include <utility>
 
 #include "common/ubsocket_common_includes.h"
 #include "common/ubsocket_global_setting.h"
@@ -25,54 +27,62 @@
 namespace ock {
 namespace ubs {
 
-std::unordered_map<int, EpollMapper *> g_socket_epoll_mappers{};
+/* 注册表: socket_fd -> 该 fd 注册过的所有 epoll 归属对象。
+ * map 中的 shared_ptr 是“基引用”, Get/Create 返回的拷贝是“借出引用”; Clean 只从 map 摘除基引用,
+ * 对象在最后一个持有者释放后自动析构, 因此不会再出现 close/ADD 失败路径提前 delete 的 use-after-free */
+std::unordered_map<int, EpollMapperPtr> g_socket_epoll_mappers{};
 u_rw_lock_t *g_socket_epoll_lock = nullptr;
 
-EpollMapper *GetSocketEpollMapper(int socket_fd)
+EpollMapperPtr GetSocketEpollMapper(int socket_fd)
 {
     ReadLocker s_lock(g_socket_epoll_lock);
     auto iter = g_socket_epoll_mappers.find(socket_fd);
     if (iter == g_socket_epoll_mappers.end()) {
         return nullptr;
     }
-    return iter->second;
+    return iter->second; /* 拷贝 shared_ptr: 借出引用, 调用方出作用域自动归还 */
 }
 
-bool CreateSocketEpollMapper(int socket_fd, EpollMapper *&mapper)
+bool CreateSocketEpollMapper(int socket_fd, EpollMapperPtr &mapper)
 {
-    bool result = false;
     WriteLocker s_lock(g_socket_epoll_lock);
     auto iter = g_socket_epoll_mappers.find(socket_fd);
     if (iter != g_socket_epoll_mappers.end()) {
         mapper = iter->second;
-    } else {
-        mapper = new (std::nothrow) EpollMapper(socket_fd);
-        if (mapper == nullptr) {
-            return false;
-        }
-        g_socket_epoll_mappers[socket_fd] = mapper;
-        result = true;
+        return false;
     }
-    return result;
+
+    EpollMapperPtr created(new (std::nothrow) EpollMapper(socket_fd));
+    if (created == nullptr) {
+        mapper = nullptr;
+        return false;
+    }
+    g_socket_epoll_mappers.emplace(socket_fd, created); /* 注册表持有基引用 */
+    mapper = std::move(created);
+    return true;
 }
 
-void CleanSocketEpollMapper(int socket_fd)
+void CleanSocketEpollMapper(int socket_fd, const EpollMapper *expect)
 {
-    EpollMapper *mapper = nullptr;
+    EpollMapperPtr mapper = nullptr;
     {
-        /* find+erase 同一临界区: 只有真正 erase 掉的线程拿到删除权,
-         * 并发调用者 find 不到直接返回——杜绝 double free */
+        /* find+erase 同一临界区: 只有真正 erase 掉的线程拿到摘除权, 并发调用者 find 不到直接返回,
+         * 杜绝 double free; 对象不在此处析构——其它线程可能仍持有借出的 shared_ptr,
+         * 由最后一个持有者负责释放, 杜绝 use-after-free。
+         * expect 非空时只摘“表中仍是该对象”的条目: 并发 close 之后同 fd 号重新 ADD 出来的新对象
+         * 不会被误删, 否则新连接的 epoll 注册就失去追踪 */
         WriteLocker s_lock(g_socket_epoll_lock);
         auto iter = g_socket_epoll_mappers.find(socket_fd);
         if (iter == g_socket_epoll_mappers.end()) {
             return;
         }
-        mapper = iter->second;
+        if (expect != nullptr && iter->second.get() != expect) {
+            return;
+        }
+        mapper = std::move(iter->second);
         g_socket_epoll_mappers.erase(iter);
     }
     mapper->Clear();
-    delete mapper;
-    mapper = nullptr;
 }
 
 void CleanAllSocketEpollMappers()
@@ -81,14 +91,17 @@ void CleanAllSocketEpollMappers()
         return;
     }
 
-    WriteLocker s_lock(g_socket_epoll_lock);
-    for (auto &mapper : g_socket_epoll_mappers) {
+    /* 锁内只做表搬运, 析构(可能触发 N 次 ~EpollMapper)放到锁外, 避免长时间持写锁 */
+    std::unordered_map<int, EpollMapperPtr> removed;
+    {
+        WriteLocker s_lock(g_socket_epoll_lock);
+        removed.swap(g_socket_epoll_mappers);
+    }
+    for (auto &mapper : removed) {
         if (mapper.second != nullptr) {
-            delete mapper.second;
-            mapper.second = nullptr;
+            mapper.second->Clear();
         }
     }
-    g_socket_epoll_mappers.clear();
 }
 
 void OnSocketClosed(int socket_fd)
@@ -97,6 +110,7 @@ void OnSocketClosed(int socket_fd)
         return; /* ubsocket 未初始化: rwlock 未创建且 LockRegistry 未加载, 纯 TCP/应用 fd close 直通 */
     }
 
+    EpollMapperPtr mapper = nullptr;
     std::vector<int> epfds;
     {
         ReadLocker s_lock(g_socket_epoll_lock);
@@ -104,7 +118,8 @@ void OnSocketClosed(int socket_fd)
         if (iter == g_socket_epoll_mappers.end() || iter->second == nullptr) {
             return; /* fd 从未注册进任何 EventPoll (纯 TCP fd/eventfd 等), 零开销返回 */
         }
-        epfds = iter->second->GetEpollFds();
+        mapper = iter->second; /* 借出引用: 保证快照与后续清理期间对象存活 */
+        epfds = mapper->GetEpollFds();
     }
     /* 通知该 fd 注册过的每个 EventPoll 清理实例级注册表 (socket_data_ 等) */
     for (int epfd : epfds) {
@@ -113,7 +128,7 @@ void OnSocketClosed(int socket_fd)
             poll->OnSocketClosed(socket_fd);
         }
     }
-    CleanSocketEpollMapper(socket_fd);
+    CleanSocketEpollMapper(socket_fd, mapper.get());
 }
 
 template <EpollRunnerType T>
@@ -455,8 +470,9 @@ int AsyncEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
 {
     int ret = -1;
     bool mapper_create = false;
-    EpollMapper *mapper = nullptr;
+    EpollMapperPtr mapper = nullptr;
     Locker sLock(ctl_mutex_);
+    /* ADD 需要“新建/复用”注册项, DEL/MOD 只需要复用; MOD 不维护 epoll_set_, 不做查找 */
     if (op == EPOLL_CTL_ADD) {
         mapper_create = CreateSocketEpollMapper(fd, mapper);
     } else {
@@ -468,12 +484,8 @@ int AsyncEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
             if (ret == 0 && mapper != nullptr) {
                 mapper->Add(epoll_fd_);
             } else if (mapper_create) {
-                WriteLocker s_lock(g_socket_epoll_lock);
-                g_socket_epoll_mappers.erase(fd);
-                if (mapper != nullptr) {
-                    delete mapper;
-                    mapper = nullptr;
-                }
+                /* 本次新建的条目注册失败: 只摘除“表中仍是该对象”的基引用, 本函数返回时借出引用释放、对象析构 */
+                CleanSocketEpollMapper(fd, mapper.get());
             }
             break;
         case EPOLL_CTL_MOD:
@@ -481,11 +493,9 @@ int AsyncEventPoll::EpollCtl(int op, int fd, struct epoll_event *event)
             break;
         case EPOLL_CTL_DEL:
             ret = EpollCtlDel(fd, event);
-            if (ret == 0 && mapper != nullptr) {
-                if (mapper->Del(epoll_fd_)) {
-                    CleanSocketEpollMapper(fd);
-                    mapper = nullptr;
-                }
+            if (ret == 0 && mapper != nullptr && mapper->Del(epoll_fd_)) {
+                /* 该 fd 已不在任何 epoll 中: 摘除“表中仍是该对象”的基引用 */
+                CleanSocketEpollMapper(fd, mapper.get());
             }
             break;
         default:
