@@ -528,6 +528,9 @@ TEST_F(UrmaConnOpsTest, ClientDoWaitNegotiate_VersionMajorMismatch_ReturnsFailed
     PushRecvData(wire.data(), wire.size());
 
     EXPECT_EQ(ConnStageResult::kFailed, ops->Execute(1000));
+    /* mismatch 置 degradable_ 后由 ClientOnConnFailed 走 DegradeToTcp 带内降级 */
+    EXPECT_TRUE(ops->degradable_);
+    EXPECT_EQ(ECONNREFUSED, ops->FailureErrno());
 }
 
 TEST_F(UrmaConnOpsTest, ClientDoWaitNegotiate_CreateResourcesFail_DegradableByConnFlag)
@@ -608,20 +611,30 @@ TEST_F(UrmaConnOpsTest, ServerDoWaitNegotiate_RecvError_ReturnsFailed)
     EXPECT_EQ(ConnStageResult::kFailed, ops->Execute(1000));
 }
 
-TEST_F(UrmaConnOpsTest, ServerDoWaitNegotiate_MajorMismatch_SendsMismatchVersionAndFails)
+TEST_F(UrmaConnOpsTest, ServerDoWaitNegotiate_MajorMismatch_SendsRspAndDegradesToTcp)
 {
     auto ops = MakeServerOps();
     UrmaNegotiateReq req = MakeCompatReq();
     req.peer_version = 0xFF010101; /* Major mismatch */
     std::vector<uint8_t> wire = MakeLpFrame(&req, sizeof(req));
     PushRecvData(wire.data(), wire.size());
-    PushSendOk(4);
+    PushSendOk(); /* 一次发完 [len][rsp] */
 
-    EXPECT_EQ(ConnStageResult::kFailed, ops->Execute(1000));
-    /* 必须发 server 自身版本（绝不发 0）：Major=0 的 client 会误判兼容 */
-    uint32_t mismatch_version = UBS_PROTOCOL_VERSION.GetWhole();
-    ASSERT_EQ(sizeof(mismatch_version), g_sent_bytes.size());
-    EXPECT_EQ(0, memcmp(&mismatch_version, g_sent_bytes.data(), sizeof(mismatch_version)));
+    MOCKER_CPP(&UrmaConnOps::DegradeToTcp).stubs().will(returnValue(true));
+
+    /* mismatch rsp 发完后带内降级：kDone 触发 reactor done_cb，brpc 以普通 TCP 接受该 fd */
+    EXPECT_EQ(ConnStageResult::kDone, ops->Execute(1000));
+    EXPECT_EQ(ConnState::kConnEstablished, ops->State());
+    EXPECT_TRUE(ops->degraded_);
+
+    /* mismatch rsp：ret_code=0，negotiated_version=server 自身版本（绝不发 0），selected_context_index=-1 */
+    UrmaNegotiateRsp expect_rsp = {};
+    expect_rsp.ret_code = 0;
+    expect_rsp.negotiated_version = UBS_PROTOCOL_VERSION.GetWhole();
+    expect_rsp.selected_context_index = -1;
+    std::vector<uint8_t> expect_frame = MakeLpFrame(&expect_rsp, sizeof(expect_rsp));
+    ASSERT_EQ(expect_frame.size(), g_sent_bytes.size());
+    EXPECT_EQ(0, memcmp(expect_frame.data(), g_sent_bytes.data(), expect_frame.size()));
 }
 
 TEST_F(UrmaConnOpsTest, ServerDoWaitNegotiate_FlushRspEagain_ReturnsPending)

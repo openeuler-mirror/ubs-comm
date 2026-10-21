@@ -141,7 +141,7 @@ void UrmaConnOps::MarkDegraded()
     degraded_ = true;
 }
 
-bool UrmaConnOps::DegradeToTcp()
+bool UrmaConnOps::DegradeToTcp(SocketCreateType create_type)
 {
     SocketPtr raw;
     Result ret = SocketBase::Create(fd_, SocketType::SOCK_TYPE_TCP, raw);
@@ -149,7 +149,7 @@ bool UrmaConnOps::DegradeToTcp()
         UBS_VLOG_ERR("UrmaConnOps degrade create raw socket failed, fd: %d, ret: %d\n", fd_, ret);
         return false;
     }
-    raw->create_type_ = SOCK_CREATE_TYPE_CONNECT;
+    raw->create_type_ = create_type;
     ArraySet<Socket>::GetInstance().OverrideItem(fd_, raw.Get());
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
@@ -331,10 +331,19 @@ Result UrmaConnOps::BuildNegotiateReply()
     if (ver_result == VersionCheckResult::kMajorMismatch) {
         UBS_VLOG_WARN("UrmaConnOps version major mismatch, peer=%u, local=%u, fd=%d\n", peer_version.major,
                       local_version.major, fd_);
-        uint32_t mismatch_version = local_version.GetWhole();
-        size_t sent = 0;
-        (void)SendControlNonBlocking(&mismatch_version, sizeof(mismatch_version), sent);
-        return UBS_TCP_EXCHANGE;
+        /* 版本 major 不匹配：negotiated_version 发本端版本号，供对端 ValidateNegotiated 判定降级；
+         * rsp 照常经 FlushStaged 发出，降级决策由 DoWaitNegotiate 依据 negotiate_mismatch_ 执行 */
+        UrmaNegotiateRsp rsp = {};
+        rsp.negotiated_version = local_version.GetWhole();
+        rsp.selected_context_index = -1; /* mismatch 通知不携带 context，对齐正常路径 -1 表示无 context 的约定 */
+        uint32_t body_len = sizeof(rsp);
+        pending_send_buf_.resize(sizeof(uint32_t) + sizeof(rsp));
+        memcpy(pending_send_buf_.data(), &body_len, sizeof(body_len));
+        memcpy(pending_send_buf_.data() + sizeof(body_len), &rsp, sizeof(rsp));
+        pending_send_off_ = 0;
+        wants_writable_ = false;
+        negotiate_mismatch_ = true;
+        return UBS_OK;
     }
 
     /* 协商结果先缓存到本状态机：socket 对象由共享 executor 创建后再写回（见 ApplyNegotiatedConfig） */
@@ -601,9 +610,11 @@ ConnStageResult UrmaConnOps::DoWaitNegotiate()
         }
         UBSVersion local_version = UBS_PROTOCOL_VERSION;
         UBSVersion negotiated_ver(rsp_.negotiated_version);
-        if (negotiated_ver.ValidateNegotiated(local_version) != VersionCheckResult::kCompatible) {
-            UBS_VLOG_WARN("UrmaConnOps ValidateNegotiated failed, fd: %d\n", fd_);
-            MarkFailure(ECONNREFUSED, false);
+        if (negotiated_ver.ValidateNegotiated(local_version) == VersionCheckResult::kMajorMismatch) {
+            /* 置 degradable_ 后由 ClientOnConnFailed 走 DegradeToTcp 带内降级 */
+            UBS_VLOG_WARN("UrmaConnOps version major mismatch, server version=%u.%u.%u, fd: %d\n",
+                          negotiated_ver.major, negotiated_ver.minor, negotiated_ver.patch, fd_);
+            MarkFailure(ECONNREFUSED, true);
             return ConnStageResult::kFailed;
         }
 
@@ -643,6 +654,16 @@ ConnStageResult UrmaConnOps::DoWaitNegotiate()
         if (flush == ConnFlushOutcome::kFailed) {
             UBS_VLOG_WARN("UrmaConnOps send negotiate reply failed, fd: %d\n", fd_);
             return ConnStageResult::kFailed;
+        }
+        /* mismatch rsp 已发回对端，本侧带内降级为 TCP；kDone 触发 done_cb，brpc 以普通 TCP 接受该 fd */
+        if (negotiate_mismatch_) {
+            if (!DegradeToTcp(SOCK_CREATE_TYPE_ACCEPT)) {
+                UBS_VLOG_ERR("UrmaConnOps negotiate mismatch degrade to TCP failed, fd: %d\n", fd_);
+                return ConnStageResult::kFailed;
+            }
+            MarkDegraded();
+            state_.store(ConnState::kConnEstablished, std::memory_order_release);
+            return ConnStageResult::kDone;
         }
         /* 无健康 context pair：rsp 已携带 selected_context_index=-1 发回，对齐同步路径在此直接失败 */
         if (selected_context_ == nullptr) {

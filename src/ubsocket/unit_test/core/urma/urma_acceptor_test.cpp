@@ -70,6 +70,16 @@ static ock::ubs::Result MockRecvPrefixedWithStaleConn(int fd, void *body, uint32
     return result;
 }
 
+/* 捕获 SendLengthPrefixed 发出的 rsp 内容，供 mismatch 用例断言 */
+static UrmaNegotiateRsp g_captured_rsp = {};
+static ock::ubs::Result MockSendPrefixedCaptureRsp(int, const void *body, uint32_t, uint32_t)
+{
+    if (body != nullptr) {
+        g_captured_rsp = *static_cast<const UrmaNegotiateRsp *>(body);
+    }
+    return UBS_OK;
+}
+
 static ock::ubs::Result MockSendPrefixedOk(int, const void *, uint32_t, uint32_t)
 {
     return UBS_OK;
@@ -155,7 +165,7 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_RecvPrefixedFails_ReturnsError)
     GlobalMockObject::verify();
 }
 
-TEST_F(UrmaAcceptorOpsTest, Negotiate_VersionMajorMismatch_ReturnsTcpExchange)
+TEST_F(UrmaAcceptorOpsTest, Negotiate_VersionMajorMismatch_ReturnsDegradableTcpExchange)
 {
     UrmaAcceptorOps ops(TEST_FD);
     auto sock = MakeRef<UrmaSocket>(TEST_FD);
@@ -163,16 +173,15 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_VersionMajorMismatch_ReturnsTcpExchange)
 
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvPrefixedMajorMismatch));
 
-    MOCKER_CPP(&SocketConnHelper::SendSocketData).stubs().will(returnValue(static_cast<ssize_t>(sizeof(uint32_t))));
-    auto tmp_context_pool = MakeRef<UrmaContextPool>();
-    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
-    UrmaDevicePtr target_dev;
-    urma_eid_info_t eid_info;
-    auto tmp_context = MakeRef<UrmaContext>(nullptr, target_dev, eid_info);
-    MOCKER_CPP(&UrmaContextPool::SelectContext).stubs().will(returnValue(tmp_context));
+    /* mismatch 回帧：ret_code=0，negotiated_version=本端版本，供对端判定降级 */
+    g_captured_rsp = {};
+    MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed).stubs().will(invoke(MockSendPrefixedCaptureRsp));
 
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
-    EXPECT_EQ(UBS_TCP_EXCHANGE, ret);
+    EXPECT_EQ(UBS_TCP_EXCHANGE | UBS_DEGRADABLE_MASK, ret);
+    EXPECT_EQ(0, g_captured_rsp.ret_code);
+    EXPECT_EQ(UBS_PROTOCOL_VERSION.GetWhole(), g_captured_rsp.negotiated_version);
+    EXPECT_EQ(-1, g_captured_rsp.selected_context_index); /* mismatch 通知不携带 context */
 
     GlobalMockObject::verify();
 }
@@ -193,6 +202,24 @@ TEST_F(UrmaAcceptorOpsTest, Negotiate_NoContext_ReturnsTcpExchange)
     urma_eid_info_t eid_info;
     auto tmp_context = MakeRef<UrmaContext>(nullptr, target_dev, eid_info);
     MOCKER_CPP(&UrmaContextPool::SelectContext).stubs().will(returnValue(tmp_context));
+    ock::ubs::Result ret = ops.Negotiate(sockPtr);
+    EXPECT_EQ(UBS_ERROR, ret);
+
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaAcceptorOpsTest, Negotiate_MismatchSendRspFails_ReturnsError)
+{
+    UrmaAcceptorOps ops(TEST_FD);
+    auto sock = MakeRef<UrmaSocket>(TEST_FD);
+    auto sockPtr = RefConvert<UrmaSocket, Socket>(sock);
+
+    MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvPrefixedMajorMismatch));
+
+    MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed)
+        .stubs()
+        .will(returnValue(static_cast<ock::ubs::Result>(UBS_ERROR)));
+
     ock::ubs::Result ret = ops.Negotiate(sockPtr);
     EXPECT_EQ(UBS_ERROR, ret);
 

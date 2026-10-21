@@ -83,7 +83,7 @@ private:
     /* Client 降级与收尾 */
     void MarkFailure(int err_no, bool degradable);
     void MarkDegraded();
-    bool DegradeToTcp();
+    bool DegradeToTcp(SocketCreateType create_type = SOCK_CREATE_TYPE_CONNECT);
     void OnConnCleanup();
     void ClientOnConnFailed();
 
@@ -112,6 +112,7 @@ private:
     /* Server 专有 */
     std::atomic<bool> registered_{false}; /* socket 是否已注册进 ArraySet（poll 线程在 DoWaitPeerRes 内联注册） */
     bool was_blocking_ = true;            /* 建链前 fd 是否阻塞态，成功后恢复 */
+    bool negotiate_mismatch_ = false; /* 仅 poll 线程访问：版本 major mismatch，mismatch rsp 发完后带内降级为 TCP */
 
     /* 双方共用 */
     std::atomic<bool> peer_imported_{false}; /* 对端段是否已写入分配器 */
