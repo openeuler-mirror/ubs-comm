@@ -116,6 +116,8 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 >
 > - 环境变量仅在通过`LD_PRELOAD`方式使用`UBSocket`时生效；`bRPC`与`UBSocket`集成在一起的场景下，`bRPC`在启动时通过gflags重新设置了全部环境变量的值，故此时各配置的值以gflags的值为准。
 > - `UBSocket`支持使用bonding设备和普通udma设备，默认使用bonding设备（不需要用户配置`UBSOCKET_DEV_NAME`、`UBSOCKET_EID_IDX`、`UBSOCKET_DEV_NAME`等）。普通udma设备通常在调试时使用，需通过`urma_admin show`查看设备情况和填充对应信息。
+> - 裸设备相关配置项的范围和限制：`UBSOCKET_DEV_NAME`须为本机已存在的udma裸设备名（以`udma`为前缀，否则不按裸设备处理），长度须小于64字节；`UBSOCKET_EID_IDX`取值范围为[0, 1024]，且不能超出该设备通过`urma_admin show`查询到的实际EID个数。urma后端下对应配置项为`UBSOCKET_UB_DEV`（设备名，非空，限制同上）与`UBSOCKET_UB_EID_IDX`（[0, 1024]），并通过`UBSOCKET_UB_BOUNDING_DEV=0`显式指定不使用bonding设备、直接走裸设备。
+> - 裸设备（普通udma设备）的配置依赖于实际组网连线：`UBSOCKET_DEV_NAME`、`UBSOCKET_EID_IDX`等配置项的取值并非任意，必须与本机和对端设备的实际物理连线情况一致。配置前需通过`urma_admin show`确认各设备的名称、EID及端口连接状态（端口须为`up`），并确保通信两端所配置的设备/EID之间物理链路可达；若配置的设备与实际连线不匹配，将导致建链失败或降级为TCP。组网连线调整后，相关配置需同步更新。
 > - `UBSOCKET_JETTY_POOL_SIZE`参数设定值初始化时需要占用fd，因此需要确保有足够的fd，建议ulimit -n 65535。
 > - `UBSOCKET_POOL_INITIAL_SIZE` 最小值参考（单位 MB）：((UBSOCKET_RX_DEPTH * 4 + UBSOCKET_BUF_POOL_DEPTH) * (UBSOCKET_BLOCK_TYPE分片 + 128)) / 1024 / 1024；若 `UBSOCKET_UMQ_TINY_POOL_ENABLE=true`，还需加上 ((UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE + 128) * UBSOCKET_UMQ_TINY_POOL_BLOCK_COUNT) / 1024 / 1024。该参数是在初始化时需要分配的内存池的大小，必须配置充足保证初始化成功；若运行时内存池不足，会在 `UBSOCKET_POOL_MAX_SIZE` 限制范围内弹性扩容。
 > - `UBSOCKET_UB_TRANS_MODE` 设置为 CTP 模式（`RM_CTP`/`RC_CTP`）时，`UBSOCKET_BLOCK_TYPE` 设为 `default`此时size大小为4k，且 `UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE` 最大不超过 4096，否则会超出分片大小。
