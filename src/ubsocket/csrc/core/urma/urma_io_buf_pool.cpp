@@ -293,7 +293,7 @@ Result UrmaIoBufferPool::register_mem(const UrmaContextPoolPtr &ctx_pool, uintpt
     flag.bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE | URMA_ACCESS_ATOMIC;
 
     urma_seg_cfg_t seg_cfg = {
-        .va = ptr, .len = size, .token_id = nullptr, .token_value = 0, .flag = flag, .user_ctx = 0, .iova = 0};
+        .va = ptr, .len = size, .token_id = nullptr, .token_value = {}, .flag = flag, .user_ctx = 0, .iova = 0};
     auto all_contexts = ctx_pool->Contexts();
     for (auto &iter : all_contexts) {
         auto &ctx = iter.second;
