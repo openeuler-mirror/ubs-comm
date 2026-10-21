@@ -201,7 +201,8 @@ ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidate(const std::string &name, int
     }
 
     if (!Validator::Instance().Validate(name, static_cast<int64_t>(out))) {
-        UBS_SLOG_ERR(Validator::Instance().LastErrMsg());
+        /* invalid env value is non-fatal: value not assigned, valid default kept, so warn instead of err */
+        UBS_SLOG_WARN(Validator::Instance().LastErrMsg());
         return false;
     }
 
@@ -215,7 +216,7 @@ ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidate(const std::string &name, flo
     }
 
     if (!Validator::Instance().Validate(name, static_cast<float>(out))) {
-        UBS_SLOG_ERR(Validator::Instance().LastErrMsg());
+        UBS_SLOG_WARN(Validator::Instance().LastErrMsg());
         return false;
     }
 
@@ -229,7 +230,7 @@ ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidate(const std::string &name, std
     }
 
     if (!Validator::Instance().ValidateStrEnum(name, out)) {
-        UBS_SLOG_ERR(Validator::Instance().LastErrMsg());
+        UBS_SLOG_WARN(Validator::Instance().LastErrMsg());
         return false;
     }
 
@@ -243,7 +244,7 @@ ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidateNotEmpty(const std::string &n
     }
 
     if (!Validator::Instance().ValidateStrEmpty(name, out)) {
-        UBS_SLOG_ERR(Validator::Instance().LastErrMsg());
+        UBS_SLOG_WARN(Validator::Instance().LastErrMsg());
         return false;
     }
 
