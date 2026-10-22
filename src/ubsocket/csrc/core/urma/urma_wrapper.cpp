@@ -620,14 +620,16 @@ Result UrmaContext::CreateJetty(urma_jetty_cfg_t &cfg, urma_tp_type_t rtp_ctp_ut
 }
 
 Result UrmaContext::CreateJfsJfrJetty(const UrmaJfcPtr &jfc, uint32_t queueDepth, urma_transport_mode_t transMode,
-                                      urma_tp_type_t tpType, UrmaJfsPtr &jfs, UrmaJfrPtr &jfr, UrmaJettyPtr &jetty)
+                                      urma_tp_type_t tpType, UrmaJfsPtr &jfs, 
+                                      UrmaJfrPtr &jfr, UrmaJettyPtr &jetty, 
+                                      uint8_t priority)
 {
     if (UNLIKELY(jfc == nullptr)) {
         UBS_VLOG_ERR("Create jfs/jfr/jetty failed as jfc is null");
         return UBS_INVALID_PARAM;
     }
 
-    urma_jfs_cfg_t jfs_cfg = CreateJfsCfg(queueDepth, transMode, 0);
+    urma_jfs_cfg_t jfs_cfg = CreateJfsCfg(queueDepth, transMode, 0, priority);
     if (UNLIKELY(CreateJfs(jfs_cfg, jfc, jfs) != UBS_OK)) {
         UBS_VLOG_ERR("Failed to create jfs while creating jfs/jfr/jetty");
         return UBS_ERROR;
