@@ -508,9 +508,12 @@ Result UrmaSocket::CreateUrmaResources()
         UBS_SLOG_ERR("UrmaSocket: SelectPoller failed, fd=" << raw_socket_);
         return ret;
     }
+    uint8_t priority = (UrmaSetting::UB_LINK_PRIORITY == UBSOCKET_LINK_PRIORITY_NOT_SET)
+                           ? UINT8_MAX
+                           : static_cast<uint8_t>(UrmaSetting::UB_LINK_PRIORITY);
 
     ret =
-        context_->CreateJfsJfrJetty(jfc_, kDefaultQueueDepth, GetUrmaTransMode(), GetUrmaTpType(), jfs_, jfr_, jetty_);
+        context_->CreateJfsJfrJetty(jfc_, kDefaultQueueDepth, GetUrmaTransMode(), GetUrmaTpType(), jfs_, jfr_, jetty_, priority);
     if (ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: create jfs/jfr/jetty failed, fd=" << raw_socket_);
         return ret;

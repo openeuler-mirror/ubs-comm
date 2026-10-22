@@ -249,14 +249,19 @@ public:
      * @param queueDepth   [in] queue depth of the jfs and jfr
      * @param transMode    [in] transport mode of the jfs and jfr
      * @param tpType       [in] tp type (rc/rm)
+     * @param priority     [in] jetty priority in [0, URMA_MAX_PRIORITY]
      * @param jfs          [out] the created jfs
      * @param jfr          [out] the created jfr
      * @param jetty        [out] the created jetty (also holds jfs/jfr references)
      *
      * @return 0 if successful
      */
-    Result CreateJfsJfrJetty(const UrmaJfcPtr &jfc, uint32_t queueDepth, urma_transport_mode_t transMode,
-                             urma_tp_type_t tpType, UrmaJfsPtr &jfs, UrmaJfrPtr &jfr, UrmaJettyPtr &jetty);
+    Result CreateJfsJfrJetty(const UrmaJfcPtr &jfc, uint32_t queueDepth,
+    urma_transport_mode_t transMode,
+                             urma_tp_type_t tpType, UrmaJfsPtr &jfs, UrmaJfrPtr &
+                             jfr, UrmaJettyPtr &jetty, 
+                             uint8_t priority = UINT8_MAX);
+    
 
     const urma_eid_info_t &EidInfo() const noexcept;
 

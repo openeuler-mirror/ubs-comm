@@ -20,6 +20,7 @@ namespace urma {
 #define ENV_URMA_EPOLL_HANDLE_MODE "UBSOCKET_EPOLL_HANDLE_MODE"
 #define ENV_URMA_KEEPALIVE_TIME "UBSOCKET_KEEPALIVE_TIME"
 #define ENV_URMA_BUF_DIRECT_INIT_COUNT "UBSOCKET_UB_BUF_DIRECT_INIT_COUNT"
+#define ENV_URMA_LINK_PRIORITY "UBSOCKET_LINK_PRIORITY"
 
 bool UrmaSetting::UB_USING_BOUNDING_DEV = true;
 std::string UrmaSetting::UB_DEV_NAME = "";
@@ -34,6 +35,7 @@ uint16_t UrmaSetting::UB_JETTY_JFR_COUNT = 2;
 uint16_t UrmaSetting::UB_JETTY_JFS_DEPTH = 256;
 uint16_t UrmaSetting::UB_JETTY_JFR_DEPTH = 256;
 urma_transport_mode_t UrmaSetting::UB_JETTY_TRANS_MODE = URMA_TM_RM;
+int8_t UrmaSetting::UB_LINK_PRIORITY = UBSOCKET_LINK_PRIORITY_NOT_SET;
 urma_tp_type_t UrmaSetting::UB_JETTY_TP_TYPE = URMA_CTP;
 
 uint16_t UrmaSetting::UB_POLLER_COUNT = 2;
@@ -70,8 +72,9 @@ void UrmaSetting::AddRules()
                                {ENV_URMA_BOUNDING_DEV, false, 0, 1},
                                {ENV_URMA_BUSY_POLLING, false, 0, 1},
                                {ENV_URMA_EPOLL_HANDLE_MODE, false, EPOLL_HANDLE_MODE_MIN, EPOLL_HANDLE_MODE_COUNT - 1},
-                               {ENV_URMA_KEEPALIVE_TIME, false, 0, 86400},
-                               {ENV_URMA_BUF_DIRECT_INIT_COUNT, false, 1, 2048}};
+                                {ENV_URMA_KEEPALIVE_TIME, false, 0, 86400},
+                               {ENV_URMA_BUF_DIRECT_INIT_COUNT, false, 1, 2048},
+                               {ENV_URMA_LINK_PRIORITY, false, UBSOCKET_LINK_PRIORITY_NOT_SET, URMA_MAX_PRIORITY}};
 
     /* str enum rules: name, required, enum */
     StrEnumRule rules_str_enum[] = {};
@@ -120,7 +123,10 @@ Result UrmaSetting::LoadEnv()
         UB_EPOLL_HANDLE_MODE = static_cast<EpollHandleMode>(int64EnvValue);
     }
     if (GS::GetEnvAndValidate(ENV_URMA_KEEPALIVE_TIME, int64EnvValue)) {
-        UB_KEEPALIVE_TIME = static_cast<uint32_t>(int64EnvValue);
+        UB_KEEPALIVE_TIME = static_cast<uint32_t>(int64EnvValue);   
+    }
+    if (GS::GetEnvAndValidate(ENV_URMA_LINK_PRIORITY, int64EnvValue)) {
+        UB_LINK_PRIORITY = static_cast<int8_t>(int64EnvValue);
     }
     if (GS::GetEnvAndValidate(ENV_URMA_BUF_DIRECT_INIT_COUNT, int64EnvValue)) {
         UB_BUF_DIRECT_INIT_BLOCK_COUNT = static_cast<uint16_t>(int64EnvValue);
