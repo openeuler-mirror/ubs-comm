@@ -104,13 +104,14 @@ private:
     void AddPollFd(int fd, short events);
     void RemovePollFd(int fd);
     void FinishConnection(int fd, ConnStageResult result);
-    void ScanTimeoutConnections();
+    /* 扫描超时连接并完成失败收尾；返回本轮 poll 应等待的毫秒数：按最近 deadline 收窄（≤ kPollTimeoutMs），
+     * 使短预算阶段（如 client 等协商响应，见 IdleTimeoutMs）的超时触发精度贴近同步路径 */
+    int ScanTimeoutConnections();
     uint64_t EffectiveNow() const; /* 有效时钟 = GetTimeMs() - busy_ms_，扣除本线程内联重活耗时 */
 
 private:
     static constexpr int kPollTimeoutMs = 100;
     static constexpr uint64_t kEventQueueCapacity = 8192; /* 对齐 RPC_ADPT_FD_MAX */
-    static constexpr uint64_t kScanIntervalMs = 1000;
 
     int event_fd_ = -1;
     std::thread thread_;
@@ -128,7 +129,6 @@ private:
 
     std::atomic<bool> started_{false};
     std::atomic<bool> stopped_{false};
-    uint64_t last_scan_ms_ = 0;
     uint64_t busy_ms_ = 0; /* 累计"处理就绪 fd"耗时（含内联重活），仅 poll 线程访问 */
 };
 

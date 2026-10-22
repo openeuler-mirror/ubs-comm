@@ -136,9 +136,15 @@ void UrmaConnOps::MarkFailure(int err_no, bool degradable)
     degradable_ = degradable;
 }
 
-void UrmaConnOps::MarkDegraded()
+uint64_t UrmaConnOps::IdleTimeoutMs() const
 {
-    degraded_ = true;
+    /* client 等 NegotiateRsp 阶段对齐同步路径预算（NEGOTIATE_REPLY_TIMEOUT_MS=2s，见同步
+     * UrmaConnectorOps::Negotiate 收 rsp 预算）；其余阶段（含 server 等 req、双方资源交换）
+     * 沿用全局宽松空闲超时：重活内联在共享 poll 线程，收紧会误杀仍在合法交换窗口内的连接 */
+    if (role_ == ConnRole::kClient && State() == ConnState::kWaitNegotiate) {
+        return NEGOTIATE_REPLY_TIMEOUT_MS;
+    }
+    return CONN_IDLE_TIMEOUT_MS;
 }
 
 bool UrmaConnOps::DegradeToTcp(SocketCreateType create_type)
@@ -177,13 +183,6 @@ void UrmaConnOps::OnConnDone()
     }
 
     sockBase->connect_error_.store(0, std::memory_order_release);
-
-    if (degraded_) {
-        /* 阶段 A 已换 RawSocket：State 已是 RAW_ESTABLISHED，只需按最终类型注册应用 epoll */
-        sockBase->SetWritableReady(true);
-        sockBase->RegisterPendingEpollAdd();
-        return;
-    }
 
     if (connector_ops_ != nullptr) {
         connector_ops_->conn_info.type_fd = 1;
@@ -551,17 +550,10 @@ ConnStageResult UrmaConnOps::DoWaitTcpConnect()
         sock_->conn_add_id = SocketConnHelper::PackSockAddrToId(&addr_);
     }
 
-    /* 非 UB 连接：降级为纯 TCP（对齐同步路径 ubsocket_socket_connector.cpp:46 早返回语义） */
-    if (!SocketConnHelper::IsUbsConnection(fd_)) {
-        if (!DegradeToTcp()) {
-            MarkFailure(ECONNREFUSED, false);
-            return ConnStageResult::kFailed;
-        }
-        MarkDegraded();
-        state_.store(ConnState::kConnEstablished, std::memory_order_release);
-        return ConnStageResult::kDone;
-    }
-
+    /* 对端非 UB（如 client UB + server TCP）时不做提前降级，继续走 Negotiate，与同步路径
+     * Connector::Connect 保持一致：同步路径同样是协商失败而非直接降级（协商告吹的错误不含
+     * UBS_DEGRADABLE_MASK，Connector::Connect 收敛为建链失败）。仅 server 协商回带 DEGRADE
+     * 标志（如版本 mismatch、无健康 context）时才降级，与同步语义一致。 */
     if (BuildNegotiateReq() != UBS_OK) {
         MarkFailure(ECONNREFUSED, false);
         return ConnStageResult::kFailed;
@@ -661,7 +653,6 @@ ConnStageResult UrmaConnOps::DoWaitNegotiate()
                 UBS_VLOG_ERR("UrmaConnOps negotiate mismatch degrade to TCP failed, fd: %d\n", fd_);
                 return ConnStageResult::kFailed;
             }
-            MarkDegraded();
             state_.store(ConnState::kConnEstablished, std::memory_order_release);
             return ConnStageResult::kDone;
         }

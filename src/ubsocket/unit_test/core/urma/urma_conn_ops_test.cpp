@@ -372,6 +372,31 @@ TEST_F(UrmaConnOpsTest, ServerConstruct_BlockingFd_WasBlockingTrue)
     EXPECT_TRUE(ops->was_blocking_);
 }
 
+/* ==================== IdleTimeoutMs ==================== */
+
+TEST_F(UrmaConnOpsTest, IdleTimeoutMs_ClientWaitNegotiate_MatchesSyncReplyBudget)
+{
+    SocketPtr sock_ptr;
+    ConnectorOpsPtr conn_ops;
+    auto ops = MakeClientOpsInState(sock_ptr, conn_ops, ConnState::kWaitNegotiate);
+
+    /* client 等 NegotiateRsp 阶段对齐同步路径收 rsp 预算，而非全局 10s 空闲超时 */
+    EXPECT_EQ(static_cast<uint64_t>(NEGOTIATE_REPLY_TIMEOUT_MS), ops->IdleTimeoutMs());
+}
+
+TEST_F(UrmaConnOpsTest, IdleTimeoutMs_OtherStagesAndServer_UseGlobalIdleTimeout)
+{
+    SocketPtr sock_ptr;
+    ConnectorOpsPtr conn_ops;
+    auto client = MakeClientOpsInState(sock_ptr, conn_ops, ConnState::kWaitPeerRes);
+    EXPECT_EQ(CONN_IDLE_TIMEOUT_MS, client->IdleTimeoutMs());
+
+    /* server 等 req 由共享 poll 线程承载，不能套用同步 worker 的短预算，仍用全局宽松值 */
+    auto server = MakeServerOps();
+    EXPECT_EQ(ConnState::kWaitNegotiate, server->State());
+    EXPECT_EQ(CONN_IDLE_TIMEOUT_MS, server->IdleTimeoutMs());
+}
+
 /* ==================== DoWaitTcpConnect (Client 阶段 A) ==================== */
 
 TEST_F(UrmaConnOpsTest, DoWaitTcpConnect_PrepareConnectFails_ReturnsFailed)
@@ -409,45 +434,16 @@ TEST_F(UrmaConnOpsTest, DoWaitTcpConnect_SoErrorNonZero_ReturnsFailedWithErrno)
     EXPECT_EQ(EADDRNOTAVAIL, ops->FailureErrno());
 }
 
-TEST_F(UrmaConnOpsTest, DoWaitTcpConnect_NotUbsConnection_DegradesToTcpAndDone)
+TEST_F(UrmaConnOpsTest, DoWaitTcpConnect_NotUbsConnection_StagesNegotiateReq)
 {
     SocketPtr sock_ptr;
     ConnectorOpsPtr conn_ops;
     auto ops = MakeClientOps(sock_ptr, conn_ops);
     ops->tcp_connect_started_ = true;
 
+    /* 对端非 UB（如 client UB + server TCP）不再提前降级为纯 TCP，必须与同步路径 Connector::Connect
+     * 一致地继续走 Negotiate；协商失败后收敛为建链失败（非降级） */
     MOCKER_CPP(&SocketConnHelper::IsUbsConnection).stubs().will(returnValue(false));
-    MOCKER_CPP(&UrmaConnOps::DegradeToTcp).stubs().will(returnValue(true));
-
-    EXPECT_EQ(ConnStageResult::kDone, ops->Execute(1000));
-    EXPECT_EQ(ConnState::kConnEstablished, ops->State());
-    EXPECT_TRUE(ops->degraded_);
-    GlobalMockObject::verify();
-}
-
-TEST_F(UrmaConnOpsTest, DoWaitTcpConnect_NotUbsConnection_DegradeFails_ReturnsFailed)
-{
-    SocketPtr sock_ptr;
-    ConnectorOpsPtr conn_ops;
-    auto ops = MakeClientOps(sock_ptr, conn_ops);
-    ops->tcp_connect_started_ = true;
-
-    MOCKER_CPP(&SocketConnHelper::IsUbsConnection).stubs().will(returnValue(false));
-    MOCKER_CPP(&UrmaConnOps::DegradeToTcp).stubs().will(returnValue(false));
-
-    EXPECT_EQ(ConnStageResult::kFailed, ops->Execute(1000));
-    EXPECT_EQ(ECONNREFUSED, ops->FailureErrno());
-    GlobalMockObject::verify();
-}
-
-TEST_F(UrmaConnOpsTest, DoWaitTcpConnect_UbsConnection_StagesNegotiateReq)
-{
-    SocketPtr sock_ptr;
-    ConnectorOpsPtr conn_ops;
-    auto ops = MakeClientOps(sock_ptr, conn_ops);
-    ops->tcp_connect_started_ = true;
-
-    MOCKER_CPP(&SocketConnHelper::IsUbsConnection).stubs().will(returnValue(true));
     auto tmp_context_pool = MakeRef<UrmaContextPool>();
     MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
 
@@ -625,7 +621,6 @@ TEST_F(UrmaConnOpsTest, ServerDoWaitNegotiate_MajorMismatch_SendsRspAndDegradesT
     /* mismatch rsp 发完后带内降级：kDone 触发 reactor done_cb，brpc 以普通 TCP 接受该 fd */
     EXPECT_EQ(ConnStageResult::kDone, ops->Execute(1000));
     EXPECT_EQ(ConnState::kConnEstablished, ops->State());
-    EXPECT_TRUE(ops->degraded_);
 
     /* mismatch rsp：ret_code=0，negotiated_version=server 自身版本（绝不发 0），selected_context_index=-1 */
     UrmaNegotiateRsp expect_rsp = {};
@@ -846,20 +841,6 @@ TEST_F(UrmaConnOpsTest, ServerDoWaitPeerAck_Happy_SetsEstablishedAndRestoresBloc
 }
 
 /* ==================== OnConnDone ==================== */
-
-TEST_F(UrmaConnOpsTest, ClientOnConnDone_Degraded_OnlyMarksWritable)
-{
-    SocketPtr sock_ptr;
-    ConnectorOpsPtr conn_ops;
-    auto ops = MakeClientOps(sock_ptr, conn_ops);
-    ops->degraded_ = true;
-
-    ops->OnConnDone();
-    auto *sock_base = RefStaticCastToRaw<SocketBase>(sock_ptr);
-    EXPECT_EQ(0, sock_base->connect_error_.load());
-    EXPECT_TRUE(sock_base->writable_ready_.load());
-    EXPECT_NE(SOCK_STAT_ESTABLISHED, sock_ptr->State()); /* 降级路径 State 已是 RAW_ESTABLISHED，不重复置位 */
-}
 
 TEST_F(UrmaConnOpsTest, ClientOnConnDone_Normal_SetsEstablishedAndConnectorInfo)
 {
