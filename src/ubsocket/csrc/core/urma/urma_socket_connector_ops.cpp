@@ -34,14 +34,11 @@ UrmaConnectorOps::~UrmaConnectorOps()
 
 Result UrmaConnectorOps::BuildTfoPayload(uint8_t *buf, int &buf_len, const SocketPtr &sock)
 {
+    /* SYN 前导仅携带 magic(8B) 用于协议识别；版本协商统一走 req body 的 peer_version */
     int offset = 0;
     uint64_t magic = CONTROL_PLANE_PROTOCOL_NEGOTIATION;
     memcpy(buf + offset, &magic, sizeof(magic));
     offset += sizeof(magic);
-
-    uint32_t version = UBS_PROTOCOL_VERSION.GetWhole();
-    memcpy(buf + offset, &version, sizeof(version));
-    offset += sizeof(version);
 
     buf_len = offset;
     (void)sock;
@@ -119,9 +116,10 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     uint32_t negotiated_version = rsp.negotiated_version;
     UBSVersion negotiated_ver(negotiated_version);
     VersionCheckResult ver_result = negotiated_ver.ValidateNegotiated(local_version);
-    if (ver_result != VersionCheckResult::kCompatible) {
-        UBS_VLOG_ERR("negotiate fd=%d, ValidateNegotiated negotiated_version failed: %d", raw_fd_, ver_result);
-        return UBS_TCP_EXCHANGE;
+    if (ver_result == VersionCheckResult::kMajorMismatch) {
+        UBS_VLOG_ERR("negotiate fd=%d, version major mismatch (server version %u.%u.%u), degrade to TCP", raw_fd_,
+                     negotiated_ver.major, negotiated_ver.minor, negotiated_ver.patch);
+        return UBS_TCP_EXCHANGE | UBS_DEGRADABLE_MASK;
     }
     /* negotiate succeeded: drop the broken record for this peer */
     if (req.last_conn_id != 0) {

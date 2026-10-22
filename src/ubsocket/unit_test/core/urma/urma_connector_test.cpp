@@ -47,23 +47,6 @@ static ock::ubs::Result MockSendPrefixedFail(int, const void *, uint32_t, uint32
     return UBS_ERROR;
 }
 
-static ssize_t MockRecvVersionCompatible(int, const void *buf, size_t size, uint32_t)
-{
-    *const_cast<uint32_t *>(static_cast<const uint32_t *>(buf)) = TEST_VERSION;
-    return static_cast<ssize_t>(size);
-}
-
-static ssize_t MockRecvVersionMismatch(int, const void *buf, size_t size, uint32_t)
-{
-    *const_cast<uint32_t *>(static_cast<const uint32_t *>(buf)) = 0xFF000000;
-    return static_cast<ssize_t>(size);
-}
-
-static ssize_t MockRecvFail(int, const void *, size_t, uint32_t)
-{
-    return static_cast<ssize_t>(-1);
-}
-
 static ock::ubs::Result MockRecvRspOk(int, void *body, uint32_t, uint32_t)
 {
     UrmaNegotiateRsp *rsp = static_cast<UrmaNegotiateRsp *>(body);
@@ -134,21 +117,18 @@ TEST_F(UrmaConnectorOpsTest, Construct_Destruct_NoCrash)
     UrmaConnectorOps ops(TEST_FD);
 }
 
-TEST_F(UrmaConnectorOpsTest, BuildTfoPayloadWritesMagicAndVersion)
+TEST_F(UrmaConnectorOpsTest, BuildTfoPayloadWritesMagic)
 {
     UrmaConnectorOps ops(TEST_FD);
     uint8_t payload[32]{};
     int payloadLen = 0;
     SocketPtr socket;
     EXPECT_EQ(UBS_OK, ops.BuildTfoPayload(payload, payloadLen, socket));
-    ASSERT_EQ(static_cast<int>(sizeof(uint64_t) + sizeof(uint32_t)), payloadLen);
+    ASSERT_EQ(static_cast<int>(sizeof(uint64_t)), payloadLen);
 
     uint64_t magic = 0;
-    uint32_t version = 0;
     memcpy(&magic, payload, sizeof(magic));
-    memcpy(&version, payload + sizeof(magic), sizeof(version));
     EXPECT_EQ(CONTROL_PLANE_PROTOCOL_NEGOTIATION, magic);
-    EXPECT_EQ(UBS_PROTOCOL_VERSION.GetWhole(), version);
 }
 
 TEST_F(UrmaConnectorOpsTest, PrepareConnectPropagatesFailure)
@@ -198,46 +178,6 @@ TEST_F(UrmaConnectorOpsTest, Negotiate_SendPrefixedFails_ReturnsError)
     GlobalMockObject::verify();
 }
 
-TEST_F(UrmaConnectorOpsTest, Negotiate_RecvVersionFails_ReturnsTcpExchange)
-{
-    UrmaConnectorOps ops(TEST_FD);
-
-    auto sock = MakeRef<UrmaSocket>(TEST_FD);
-    sock->Initialize();
-    auto sockPtr = RefConvert<UrmaSocket, Socket>(sock);
-
-    MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed).stubs().will(returnValue(static_cast<ock::ubs::Result>(UBS_OK)));
-
-    MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvFail));
-    auto tmp_context_pool = MakeRef<UrmaContextPool>();
-    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
-    ock::ubs::Result ret = ops.Negotiate(TEST_NEW_FD, sockPtr);
-    EXPECT_EQ(UBS_ERROR, ret);
-
-    sock->UnInitialize();
-    GlobalMockObject::verify();
-}
-
-TEST_F(UrmaConnectorOpsTest, Negotiate_VersionMismatch_ReturnsTcpExchange)
-{
-    UrmaConnectorOps ops(TEST_FD);
-
-    auto sock = MakeRef<UrmaSocket>(TEST_FD);
-    sock->Initialize();
-    auto sockPtr = RefConvert<UrmaSocket, Socket>(sock);
-
-    MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed).stubs().will(invoke(MockSendPrefixedOk));
-
-    MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvVersionMismatch));
-    auto tmp_context_pool = MakeRef<UrmaContextPool>();
-    MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(tmp_context_pool));
-    ock::ubs::Result ret = ops.Negotiate(TEST_NEW_FD, sockPtr);
-    EXPECT_EQ(UBS_ERROR, ret);
-
-    sock->UnInitialize();
-    GlobalMockObject::verify();
-}
-
 TEST_F(UrmaConnectorOpsTest, Negotiate_RecvRspFails_ReturnsError)
 {
     UrmaConnectorOps ops(TEST_FD);
@@ -247,8 +187,6 @@ TEST_F(UrmaConnectorOpsTest, Negotiate_RecvRspFails_ReturnsError)
     auto sockPtr = RefConvert<UrmaSocket, Socket>(sock);
 
     MOCKER_CPP(&SocketConnHelper::SendLengthPrefixed).stubs().will(invoke(MockSendPrefixedOk));
-
-    MOCKER_CPP(&SocketConnHelper::RecvSocketData).stubs().will(invoke(MockRecvVersionCompatible));
 
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvRspFail));
     auto tmp_context_pool = MakeRef<UrmaContextPool>();
@@ -273,7 +211,7 @@ TEST_F(UrmaConnectorOpsTest, Negotiate_PeerRejects_ReturnsTcpExchange)
     EXPECT_EQ(UBS_TCP_EXCHANGE, ops.Negotiate(TEST_NEW_FD, sockPtr));
 }
 
-TEST_F(UrmaConnectorOpsTest, Negotiate_IncompatibleVersion_ReturnsTcpExchange)
+TEST_F(UrmaConnectorOpsTest, Negotiate_IncompatibleVersion_ReturnsDegradableTcpExchange)
 {
     UrmaConnectorOps ops(TEST_FD);
     auto sock = MakeRef<UrmaSocket>(TEST_FD);
@@ -283,7 +221,7 @@ TEST_F(UrmaConnectorOpsTest, Negotiate_IncompatibleVersion_ReturnsTcpExchange)
     MOCKER_CPP(&SocketConnHelper::RecvLengthPrefixed).stubs().will(invoke(MockRecvRspVersionMismatch));
     MOCKER_CPP(&UrmaBackend::GetContextPoll).stubs().will(returnValue(contextPool));
 
-    EXPECT_EQ(UBS_TCP_EXCHANGE, ops.Negotiate(TEST_NEW_FD, sockPtr));
+    EXPECT_EQ(UBS_TCP_EXCHANGE | UBS_DEGRADABLE_MASK, ops.Negotiate(TEST_NEW_FD, sockPtr));
 }
 
 TEST_F(UrmaConnectorOpsTest, Negotiate_InvalidContextReturnsTcpExchangeWithNegotiatedFlags)
