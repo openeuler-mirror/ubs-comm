@@ -94,6 +94,101 @@ private:
 
 } // namespace
 
+class UrmaSockRbTreeBufTest : public ::testing::Test {};
+
+TEST_F(UrmaSockRbTreeBufTest, ConstructorRejectsInvalidCapacity)
+{
+    EXPECT_THROW(UrmaSockRbTreeBuf(0), std::invalid_argument);
+    EXPECT_THROW(UrmaSockRbTreeBuf(UrmaSockBuf::kMaxCapacity + TEST_CHUNK), std::invalid_argument);
+    EXPECT_THROW(UrmaSockRbTreeBuf(TEST_CAPACITY + 1), std::invalid_argument);
+}
+
+TEST_F(UrmaSockRbTreeBufTest, AllocateRoundsSizeAndTracksSpace)
+{
+    UrmaSockRbTreeBuf buf(TEST_CAPACITY);
+    EXPECT_EQ(TEST_CAPACITY, buf.Capacity());
+    EXPECT_EQ(TEST_CAPACITY, buf.Available());
+    EXPECT_EQ(0U, buf.Used());
+
+    uint64_t first = UINT64_MAX;
+    uint64_t second = UINT64_MAX;
+    EXPECT_TRUE(buf.Allocate(1, first));
+    EXPECT_TRUE(buf.Allocate(TEST_CHUNK + 1, second));
+    EXPECT_EQ(0U, first);
+    EXPECT_EQ(TEST_CHUNK, second);
+    EXPECT_EQ(TEST_CHUNK, buf.Available());
+    EXPECT_EQ(TEST_CAPACITY - TEST_CHUNK, buf.Used());
+
+    uint64_t failed = UINT64_MAX;
+    EXPECT_FALSE(buf.Allocate(TEST_CHUNK + 1, failed));
+    EXPECT_EQ(UINT64_MAX, failed);
+}
+
+TEST_F(UrmaSockRbTreeBufTest, ReleaseCoalescesPredecessorAndSuccessor)
+{
+    UrmaSockRbTreeBuf buf(TEST_CAPACITY);
+    uint64_t offsets[4]{};
+    for (auto &offset : offsets) {
+        ASSERT_TRUE(buf.Allocate(TEST_CHUNK, offset));
+    }
+    EXPECT_EQ(0U, buf.Available());
+
+    buf.Release(offsets[0], TEST_CHUNK);
+    buf.Release(offsets[2], TEST_CHUNK);
+    EXPECT_EQ(TEST_CHUNK * 2, buf.Available());
+
+    uint64_t bestFit = UINT64_MAX;
+    ASSERT_TRUE(buf.Allocate(TEST_CHUNK, bestFit));
+    EXPECT_EQ(offsets[0], bestFit);
+    buf.Release(bestFit, TEST_CHUNK);
+
+    buf.Release(offsets[1], TEST_CHUNK);
+    buf.Release(offsets[3], TEST_CHUNK);
+    EXPECT_EQ(TEST_CAPACITY, buf.Available());
+    EXPECT_EQ(0U, buf.Used());
+
+    uint64_t whole = UINT64_MAX;
+    EXPECT_TRUE(buf.Allocate(TEST_CAPACITY, whole));
+    EXPECT_EQ(0U, whole);
+}
+
+TEST_F(UrmaSockRbTreeBufTest, AllocateRangePrefersMaximumWhenAvailable)
+{
+    UrmaSockRbTreeBuf buf(TEST_CAPACITY);
+    uint64_t offset = UINT64_MAX;
+    EXPECT_EQ(TEST_CHUNK * 3, buf.Allocate(1, TEST_CHUNK * 3 - 1, offset));
+    EXPECT_EQ(0U, offset);
+    EXPECT_EQ(TEST_CHUNK, buf.Available());
+}
+
+TEST_F(UrmaSockRbTreeBufTest, AllocateRangeFallsBackToLargestBlock)
+{
+    UrmaSockRbTreeBuf buf(TEST_CAPACITY * 2);
+    uint64_t offsets[4]{};
+    for (auto &offset : offsets) {
+        ASSERT_TRUE(buf.Allocate(TEST_CHUNK * 2, offset));
+    }
+    buf.Release(offsets[0], TEST_CHUNK * 2);
+    buf.Release(offsets[2], TEST_CHUNK * 2);
+
+    uint64_t offset = UINT64_MAX;
+    EXPECT_EQ(TEST_CHUNK * 2, buf.Allocate(TEST_CHUNK, TEST_CHUNK * 3, offset));
+    EXPECT_EQ(offsets[2], offset);
+}
+
+TEST_F(UrmaSockRbTreeBufTest, AllocateRangeReturnsZeroForEmptyOrSmallBlocks)
+{
+    UrmaSockRbTreeBuf buf(TEST_CAPACITY);
+    uint64_t whole = UINT64_MAX;
+    ASSERT_TRUE(buf.Allocate(TEST_CAPACITY, whole));
+
+    uint64_t offset = UINT64_MAX;
+    EXPECT_EQ(0U, buf.Allocate(TEST_CHUNK, TEST_CHUNK * 2, offset));
+    buf.Release(whole, TEST_CHUNK);
+    EXPECT_EQ(0U, buf.Allocate(TEST_CHUNK * 2, TEST_CHUNK * 3, offset));
+    EXPECT_EQ(UINT64_MAX, offset);
+}
+
 class UrmaSockShiftBufTest : public ::testing::Test {
 protected:
     void SetUp() override

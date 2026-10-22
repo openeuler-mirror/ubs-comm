@@ -84,6 +84,8 @@ static const size_t BLOCK_SIZE = 8192;
 alignas(8192) static uint8_t g_io_mem[4 * BLOCK_SIZE];
 static UrmaIoBufferPool g_dummy_alloc;
 static int g_next_io_block = 0;
+static std::vector<uintptr_t> g_largeIoAddrs;
+static std::vector<uint32_t> g_largeIoLens;
 
 static char *AllocIoBlock()
 {
@@ -100,12 +102,27 @@ static uintptr_t MockMiniBlockHead(uintptr_t addr)
     if (addr >= base && addr < base + sizeof(g_io_mem)) {
         return base + ((addr - base) / BLOCK_SIZE) * BLOCK_SIZE;
     }
-    return 0;
+    return g_dummy_alloc.fixed_allocator_.MiniBlockHead(addr);
 }
 
 static urma_target_seg_t *MockGetLocalTargetSeg(UrmaContextPtr ctx, uintptr_t)
 {
     return &g_local_tseg;
+}
+
+static urma_status_t MockPostSendWrCaptureLargeIoAndFail(urma_jetty_t *, urma_jfs_wr_t *wr, urma_jfs_wr_t **)
+{
+    g_largeIoAddrs.clear();
+    g_largeIoLens.clear();
+    if (wr != nullptr && wr->rw.src.sge != nullptr) {
+        const auto *ctrl = reinterpret_cast<const UrmaCtrlMessage *>(wr->rw.src.sge[0].addr);
+        const auto *bufs = reinterpret_cast<const PageBufferInMessage *>(ctrl + 1);
+        for (uint32_t i = 0; i < ctrl->head.data_count; ++i) {
+            g_largeIoAddrs.push_back(bufs[i].addr);
+            g_largeIoLens.push_back(bufs[i].size);
+        }
+    }
+    return URMA_FAIL;
 }
 
 /* Records the head.data_count of every posted control message. Atomics keep it race-free: the
@@ -169,6 +186,8 @@ protected:
         UrmaApi::urma_post_jetty_send_wr_ptr = MockPostSendWrSuccess;
 
         g_next_io_block = 0;
+        g_largeIoAddrs.clear();
+        g_largeIoLens.clear();
         MOCKER_CPP(&UrmaBackend::GetAllocator).stubs().will(returnValue(&g_dummy_alloc));
         MOCKER_CPP(&UrmaIoBufferPool::get_mini_block_head).stubs().will(invoke(MockMiniBlockHead));
         MOCKER_CPP(&UrmaIoBufferPool::get_local_target_seg).stubs().will(invoke(MockGetLocalTargetSeg));
@@ -182,6 +201,7 @@ protected:
 
     void TearDown() override
     {
+        g_dummy_alloc.fixed_allocator_.UnInit();
         errno = 0;
         GlobalMockObject::verify();
         ArraySet<Socket>::GetInstance().ReleaseAll();
@@ -423,6 +443,52 @@ TEST_F(UrmaTxOpsTest, WriteV_LargeIo_AllocFail_ReturnsEagain)
     auto ret = tx.WriteV(sock, &iov, 1, flags);
     EXPECT_EQ(-1, ret);
     EXPECT_EQ(EAGAIN, errno);
+}
+
+TEST_F(UrmaTxOpsTest, WriteV_LargeIoCopiesSparseIovAcrossAllocatedBlocks)
+{
+    allocator::FixedAllocatorOptions options;
+    options.pool_space_start_tb = 96;
+    options.pool_space_size_gb = 2;
+    options.block_size_mb = 2;
+    options.init_block_count = 1;
+    options.mini_block_size_kb = 8;
+    options.expanded_callback = [](uintptr_t, uint64_t, uint32_t) {
+        return UBS_OK;
+    };
+    g_dummy_alloc.options_ = options;
+    ASSERT_EQ(UBS_OK, g_dummy_alloc.fixed_allocator_.Init(options));
+
+    UrmaTxOps tx(TEST_FD);
+    auto sock = MakeTestSocket();
+    UrmaApi::urma_post_jetty_send_wr_ptr = MockPostSendWrCaptureLargeIoAndFail;
+
+    std::vector<char> first(4000);
+    std::vector<char> second(5000);
+    FillTestPayload(first, 17);
+    FillTestPayload(second, 29);
+    struct iovec iov[4] = {};
+    iov[0].iov_len = 13;
+    iov[1].iov_base = first.data();
+    iov[1].iov_len = first.size();
+    iov[2].iov_len = 7;
+    iov[3].iov_base = second.data();
+    iov[3].iov_len = second.size();
+
+    errno = 0;
+    EXPECT_EQ(-1, tx.WriteV(sock, iov, 4, 0));
+    EXPECT_EQ(EAGAIN, errno);
+    ASSERT_EQ(2U, g_largeIoAddrs.size());
+    ASSERT_EQ(2U, g_largeIoLens.size());
+
+    const size_t firstBlockSize = BLOCK_SIZE - sizeof(Block);
+    EXPECT_EQ(firstBlockSize, g_largeIoLens[0]);
+    EXPECT_EQ(first.size() + second.size() - firstBlockSize, g_largeIoLens[1]);
+    EXPECT_EQ(0, memcmp(reinterpret_cast<const void *>(g_largeIoAddrs[0]), first.data(), first.size()));
+    EXPECT_EQ(0, memcmp(reinterpret_cast<const char *>(g_largeIoAddrs[0]) + first.size(), second.data(),
+                        firstBlockSize - first.size()));
+    EXPECT_EQ(0, memcmp(reinterpret_cast<const void *>(g_largeIoAddrs[1]),
+                        second.data() + firstBlockSize - first.size(), g_largeIoLens[1]));
 }
 
 TEST_F(UrmaTxOpsTest, WriteV_Inline_Success)

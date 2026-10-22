@@ -190,42 +190,30 @@ target_sources(urma_event_epoll_test PRIVATE
         urma_event_epoll_test.cpp
 )
 
-# NOTE: urma_context_pool_test / urma_poller_agg_test 为硬件冒烟测试 —— 无 driver mock, 依赖真实 URMA
-# 设备枚举/context 创建(poller_agg 用例还以 getchar() 阻塞等待), 在无驱动 CI/UT 环境必然空指针
-# SegFault, 不满足 UT 单用例<=1s/禁止阻塞约束。故默认不纳入自动化 UT; 有驱动环境可临时放开。
-# add_urma_test(urma_context_pool_test)
-# target_include_directories(urma_context_pool_test PRIVATE
-#         ${UBSOCKET_BASE_DIR}/csrc
-#         ${UBSOCKET_BASE_DIR}/csrc/core
-#         ${UBSOCKET_BASE_DIR}/csrc/common
-#         ${UBSOCKET_BASE_DIR}/csrc/iobuf
-#         ${UBSOCKET_BASE_DIR}/csrc/under_api
-#         ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
-#         ${UBSOCKET_BASE_DIR}/include
-# )
-# target_link_libraries(urma_context_pool_test PRIVATE
-#         ubsocket_static GTest::gtest_main pthread
-# )
-# target_sources(urma_context_pool_test PRIVATE
-#         urma_context_pool_test.cpp
-# )
-#
-# add_urma_test(urma_poller_agg_test)
-# target_include_directories(urma_poller_agg_test PRIVATE
-#         ${UBSOCKET_BASE_DIR}/csrc
-#         ${UBSOCKET_BASE_DIR}/csrc/core
-#         ${UBSOCKET_BASE_DIR}/csrc/common
-#         ${UBSOCKET_BASE_DIR}/csrc/iobuf
-#         ${UBSOCKET_BASE_DIR}/csrc/under_api
-#         ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
-#         ${UBSOCKET_BASE_DIR}/include
-# )
-# target_link_libraries(urma_poller_agg_test PRIVATE
-#         ubsocket_static GTest::gtest_main pthread
-# )
-# target_sources(urma_poller_agg_test PRIVATE
-#         urma_poller_agg.cpp
-# )
+function(add_urma_full_test TARGET_NAME SOURCE_FILE)
+    add_urma_test(${TARGET_NAME})
+    target_include_directories(${TARGET_NAME} PRIVATE
+            ${UBSOCKET_BASE_DIR}/csrc
+            ${UBSOCKET_BASE_DIR}/csrc/core
+            ${UBSOCKET_BASE_DIR}/csrc/common
+            ${UBSOCKET_BASE_DIR}/csrc/iobuf
+            ${UBSOCKET_BASE_DIR}/csrc/under_api
+            ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
+            ${UBSOCKET_BASE_DIR}/include
+    )
+    target_link_libraries(${TARGET_NAME} PRIVATE
+            ubsocket_static boundscheck mockcpp GTest::gtest_main pthread
+    )
+    target_sources(${TARGET_NAME} PRIVATE ${SOURCE_FILE})
+endfunction()
+
+add_urma_full_test(urma_context_pool_test urma_context_pool_test.cpp)
+add_urma_full_test(urma_poller_agg_test urma_poller_agg.cpp)
+add_urma_full_test(urma_backend_test urma_backend_test.cpp)
+add_urma_full_test(urma_io_buf_pool_test urma_io_buf_pool_test.cpp)
+add_urma_full_test(urma_poller_test urma_poller_test.cpp)
+add_urma_full_test(urma_wrapper_test urma_wrapper_test.cpp)
+
 
 add_urma_test(urma_socket_buf_test)
 target_include_directories(urma_socket_buf_test PRIVATE
