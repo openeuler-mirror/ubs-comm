@@ -112,7 +112,7 @@ int UrmaClient::Run() noexcept
 
 #ifdef URMA_BACKEND_ENABLED
     /* step0: create thread pool */
-    GlobalSetting::UBS_THREAD_POOL_SIZE = cmd_.thread_count_;
+    GlobalSetting::UBS_CONNECTS_POLL_THREAD_NUM = cmd_.thread_count_;
     if (!thread_pool_.Start()) {
         std::cout << "Failed to start thread pool for server" << std::endl;
         return -1;
@@ -316,7 +316,7 @@ int UrmaServer::Run() noexcept
     LOG_DEBUG("start enter");
 #ifdef URMA_BACKEND_ENABLED
     /* step0: create thread pool */
-    GlobalSetting::UBS_THREAD_POOL_SIZE = cmd_.thread_count_;
+    GlobalSetting::UBS_CONNECTS_POLL_THREAD_NUM = cmd_.thread_count_;
     if (!thread_pool_.Start()) {
         std::cout << "Failed to start thread pool for server" << std::endl;
         return -1;

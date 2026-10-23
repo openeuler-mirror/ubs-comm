@@ -252,10 +252,10 @@ Result UrmaSharedJfcAggPollerWithThread::SetupWakeupJetty() noexcept
      * sequence as the data path (UrmaSocket::CreateUrmaResources) through the shared helper. */
     UrmaJfsPtr wakeup_jfs;
     UrmaJfrPtr wakeup_jfr;
-    auto trans_mode = UrmaTransModeOf(UrmaSetting::UB_TANS_MODE);
-    auto tp_type = UrmaTpTypeOf(UrmaSetting::UB_TANS_MODE);
-    if (UNLIKELY(ctx->CreateJfsJfrJetty(jfc_vector_[0], WAKEUP_QUEUE_DEPTH, trans_mode, tp_type, wakeup_jfs, wakeup_jfr,
-                                        wakeup_jetty_) != UBS_OK)) {
+    auto trans_mode = UrmaTransModeOf(UrmaSetting::UBS_TRANS_MODE);
+    auto tp_type = UrmaTpTypeOf(UrmaSetting::UBS_TRANS_MODE);
+    if (UNLIKELY(ctx->CreateJfsJfrJetty(jfc_vector_[0], WAKEUP_QUEUE_DEPTH, WAKEUP_QUEUE_DEPTH, trans_mode, tp_type,
+                                        wakeup_jfs, wakeup_jfr, wakeup_jetty_) != UBS_OK)) {
         UBS_VLOG_ERR("Failed to create wakeup jetty for poller(%d)", index_);
         DestroyWakeupJetty();
         return UBS_ERROR;
@@ -482,7 +482,7 @@ Result UrmaSharedJfcAggPollerWithThread::DrainCqes(urma_jfc_t **ev_jfc, uint32_t
 Result UrmaAggPollerSet::VerifyOptions() noexcept
 {
     if (options_.poller_count_per_context > 16L) {
-        UBS_VLOG_ERR("Option poller_count_per_context(%d) is valid, which should be <=16",
+        UBS_VLOG_ERR("Option poller_count_per_context(%d) is invalid, which should be <=16",
                      options_.poller_count_per_context);
         return UBS_INVALID_PARAM;
     }

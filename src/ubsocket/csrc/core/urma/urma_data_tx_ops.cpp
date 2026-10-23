@@ -17,6 +17,7 @@
 #include "core/ubsocket_socket_helper.h"
 #include "iobuf/ubsocket_iobuf.h"
 #include "urma_socket.h"
+#include "urma_setting.h"
 #include "urma_socket_types.h"
 
 namespace ock {
@@ -171,7 +172,7 @@ ssize_t UrmaTxOps::WriteVOnce(const SocketPtr &sock, const struct iovec *iov, in
     }
 
     ssize_t ret;
-    if (total_size <= URMA_INLINE_DATA_THRESHOLD) {
+    if (total_size <= UrmaInlineDataThreshold(UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT)) {
         ret = WriteInline(sock, iov, iovcnt, total_size, flags);
     } else if ((flags & UBS_IO_FLAG_USE_BRPC_BLOCK) == UBS_IO_FLAG_USE_BRPC_BLOCK) {
         ret = WriteZeroCopy(sock, iov, iovcnt, total_size, flags);
@@ -206,7 +207,7 @@ bool UrmaTxOps::Writable(const SocketPtr &sock) noexcept
     /* here we already hold the reference by input param, use raw pointer directly,
      * to avoid increase and def ref */
     auto urma_sock = dynamic_cast<UrmaSocket *>(sock.Get());
-    return urma_sock->send_buf_->Available() >= URMA_SND_BUFF_ALLOC_UNIT;
+    return urma_sock->send_buf_->Available() >= UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
 }
 
 void UrmaTxOps::CopyFromIovToSendBuf(const std::vector<iovec> &iov, const std::vector<urma_sge_t> &dest) noexcept
@@ -260,7 +261,7 @@ ssize_t UrmaTxOps::WriteInline(const SocketPtr &sock, const iovec *iov, int iovc
         return -1;
     }
 
-    constexpr size_t unit = URMA_SND_BUFF_ALLOC_UNIT;
+    const uint32_t unit = UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     auto min_bytes = ((URMA_INLINE_MESSAGE_CTRL_COST + 1UL + unit - 1) / unit) * unit;
     auto max_bytes = ((URMA_INLINE_MESSAGE_CTRL_COST + total + unit - 1) / unit) * unit;
     uint64_t buf_offset = 0;
@@ -380,7 +381,7 @@ ssize_t UrmaTxOps::WriteZeroCopy(const SocketPtr &sock, const iovec *iov, int io
     BuildBlockRefs(iov, iovcnt, block_refs);
     auto valid_count = static_cast<uint32_t>(block_refs.size());
 
-    constexpr size_t unit = URMA_SND_BUFF_ALLOC_UNIT;
+    const uint32_t unit = UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     auto need_size = sizeof(UrmaCtrlMessage) + valid_count * sizeof(PageBufferInMessage);
     need_size = ((need_size + unit - 1) / unit) * unit;
 

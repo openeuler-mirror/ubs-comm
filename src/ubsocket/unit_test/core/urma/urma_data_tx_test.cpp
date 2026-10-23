@@ -506,7 +506,7 @@ TEST_F(UrmaTxOpsTest, WriteV_Inline_Success)
 
     auto *ctrl = reinterpret_cast<UrmaCtrlMessage *>(g_send_buf);
     EXPECT_EQ(static_cast<uint32_t>(sizeof(data)), ctrl->head.data_count);
-    EXPECT_EQ(URMA_SND_BUFF_ALLOC_UNIT, ctrl->head.message_size);
+    EXPECT_EQ(UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT, ctrl->head.message_size);
     EXPECT_EQ(0, memcmp(ctrl->small_io.data, data, sizeof(data)));
 }
 

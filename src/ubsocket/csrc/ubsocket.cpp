@@ -74,7 +74,6 @@ UBS_API int ubsocket_init_options(u_init_options_t *options)
     options->rw_lock_ops = nullptr;
     options->sem_ops = nullptr;
     options->rpc_id_ops = nullptr;
-    options->poller_ops = nullptr;
     return UBS_OK;
 }
 
@@ -98,26 +97,8 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     GlobalSetting::LoadEnv();
 
     GlobalSetting::UBS_ALLOWED_PROTOCOL = options->allowed_protocol;
-    // 只有当命令行参数非默认值时，才覆盖环境变量的值
-    // 0 是默认值，表示用户没有显式设置
-    if (options->async_acceptor_thread_count > 0) {
-        GlobalSetting::UBS_ACCEPTOR_ASYNC_THREAD_COUNT = options->async_acceptor_thread_count;
-    }
-    if (options->async_connector_thread_count > 0) {
-        GlobalSetting::UBS_CONNECTOR_ASYNC_THREAD_COUNT = options->async_connector_thread_count;
-    }
-    if (options->async_connector_enable) {
-        GlobalSetting::UBS_CONNECTOR_ASYNC_ENABLE = true;
-    }
-    if (options->async_epoll_thread_count > 0) {
-        GlobalSetting::UBS_EPOLL_ASYNC_THREAD_COUNT = options->async_epoll_thread_count;
-    }
-    if (options->server_async_enable > 0) {
-        GlobalSetting::UBS_SERVER_ASYNC_ENABLE = true;
-    }
-    if (options->poller_ops != nullptr) {
-        GlobalSetting::UBS_POLLER_OPS = options->poller_ops;
-    }
+    // Conn modes unified into the single UBS_CONNECTS_MODE switch (sync/half_async/full_async).
+    // Legacy API overrides (async_acceptor/connector/epoll thread counts, server_async/connector_enable) removed accordingly.
 
     auto result = GlobalSetting::VerifySetting();
     if (result != UBS_OK) {
@@ -191,15 +172,12 @@ UBS_API int ubsocket_init(u_init_options_t *options)
         return UBS_ERROR;
     }
 
-    /* step5.5: Server/Client 共享全异步建链 poll 线程池启动（每 thread 创建专属 event fd 并注册进
-     * ConnEventFdTable）。Server accept 侧与 Client connect 侧投递到同一池，按统一负载均衡选线程。
-     * 重活内联在 poll 线程执行，线程数须满足吞吐约束；配置为 0 时回退 UBS_THREAD_POOL_SIZE。 */
-    if (GlobalSetting::ServerAsyncEnabled() || GlobalSetting::AllAsyncConnectorEnabled()) {
-        uint32_t poll_threads = GlobalSetting::UBS_CONN_POLL_THREAD_NUM;
-        if (poll_threads == 0) {
-            poll_threads = GlobalSetting::UBS_THREAD_POOL_SIZE;
-        }
-        result = ConnDispatcher::Instance().Start(poll_threads);
+    /* step5.5: Server/Client shared conn-establishment poll thread pool start (each thread creates its own
+     * event fd registered into ConnEventFdTable). Server accept side and client connect side submit to the same
+     * pool with unified load balancing. Heavy work is inlined in poll threads; thread count must satisfy
+     * throughput constraints. Only the full_async tier needs this pool. */
+    if (GlobalSetting::GetConnMode() == ConnMode::FULL_ASYNC) {
+        result = ConnDispatcher::Instance().Start(GlobalSetting::UBS_CONNECTS_POLL_THREAD_NUM);
         if (result != UBS_OK) {
             UBS_VLOG_WARN("conn dispatcher start failed, ret: %d, fallback to sync conn\n", result);
         }
@@ -235,7 +213,9 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
 
-    UBS_VLOG_DEBUG("UBSOCKET_ASYNC_ACCEPT_ENABLE:%d\n", GlobalSetting::AsyncAcceptorEnabled() ? 1 : 0);
+    UBS_VLOG_DEBUG("UBS_CONNECTS_MODE:%s, connects poll thread num:%u\n",
+                   GlobalSetting::ConnModeToStr(GlobalSetting::UBS_CONNECTS_MODE),
+                   GlobalSetting::UBS_CONNECTS_POLL_THREAD_NUM);
     /* do trace log initial */
     if (GlobalSetting::UBS_TRACE_ENABLED) {
 #ifdef UMQ_BACKEND_ENABLED

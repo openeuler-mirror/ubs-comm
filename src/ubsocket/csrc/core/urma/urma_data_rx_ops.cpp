@@ -14,6 +14,7 @@
 
 #include "core/ubsocket_socket_helper.h"
 #include "urma_backend.h"
+#include "urma_setting.h"
 #include "urma_socket.h"
 
 namespace ock {
@@ -581,13 +582,13 @@ Result UrmaRxOps::ResponseCtrlMessage(const SocketPtr &sock, IOOpcode opcode, ui
     (void)flags;
     WriteImmData imm_data{opcode, offset};
     UrmaSocket *urma_sock = RefStaticCastToRaw<UrmaSocket>(sock);
-    auto recv_offset = imm_data.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+    auto recv_offset = imm_data.ubsocket.buffer_offset * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     auto resp = reinterpret_cast<UrmaCtrlMessage *>(urma_sock->recv_buf_addr_ + recv_offset);
 
     urma_sge_t src_sge;
     urma_sge_t dst_sge;
     uint32_t len = static_cast<uint32_t>(sizeof(UrmaMessageHead));
-    len = ((len + URMA_SND_BUFF_ALLOC_UNIT - 1) / URMA_SND_BUFF_ALLOC_UNIT) * URMA_SND_BUFF_ALLOC_UNIT;
+    len = ((len + UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT - 1) / UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT) * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     src_sge.addr = urma_sock->recv_buf_addr_ + recv_offset;
     src_sge.len = len;
     src_sge.tseg = urma_sock->local_ctrl_target_seg_;
@@ -618,12 +619,12 @@ Result UrmaRxOps::IssueReadRequest(const SocketPtr &sock, uint64_t seq_no, uint6
 {
     WriteImmData imm_data{write_imm};
     auto urma_sock = static_cast<UrmaSocket *>(sock.Get());
-    auto offset = imm_data.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+    auto offset = imm_data.ubsocket.buffer_offset * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(urma_sock->recv_buf_addr_ + offset);
     auto data_count = req->head.data_count;
 
     auto need_size = sizeof(UrmaMessageHead) + data_count * sizeof(PageBufferInMessage);
-    need_size = ((need_size + URMA_SND_BUFF_ALLOC_UNIT - 1) / URMA_SND_BUFF_ALLOC_UNIT) * URMA_SND_BUFF_ALLOC_UNIT;
+    need_size = ((need_size + UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT - 1) / UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT) * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
 
     uint32_t total_bytes = 0;
     for (auto i = 0U; i < data_count; i++) {
@@ -710,9 +711,6 @@ void UrmaRxOps::BuildReadWrs(uint32_t data_count, uint64_t msg_offset, Block *he
     uint32_t local_offset = 0;
 
     uint32_t common_complete_enable = 0;
-    if (UrmaSetting::UB_USING_BOUNDING_DEV) {
-        common_complete_enable = 1;
-    }
     while (remote_idx < data_count && local_block != nullptr) {
         uint64_t entry_offset = msg_offset + sizeof(UrmaMessageHead) + remote_idx * sizeof(PageBufferInMessage);
         const auto *buf = reinterpret_cast<const PageBufferInMessage *>(ctx.urma_sock->recv_buf_addr_ + entry_offset);
@@ -845,7 +843,7 @@ bool UrmaRxOps::ConsumeInlineData(const SocketPtr &sock, DataSlot &slot, IovWrit
     auto seq = slot.seq_no;
     auto urma_sock = static_cast<UrmaSocket *>(sock.Get());
 
-    auto recv_offset = imm_data.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+    auto recv_offset = imm_data.ubsocket.buffer_offset * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(urma_sock->recv_buf_addr_ + recv_offset);
     auto body_start = recv_offset + URMA_INLINE_MESSAGE_CTRL_COST;
     auto available = static_cast<size_t>(req->head.data_count) - consume_offset_;

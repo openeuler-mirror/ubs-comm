@@ -14,6 +14,7 @@
 #include <cstring>
 
 #include "core/ubsocket_event_epoll.h"
+#include "core/urma/urma_setting.h"
 #include "umq_conn_helper.h"
 #include "umq_eid_table.h"
 #include "umq_errno_converter.h"
@@ -95,7 +96,9 @@ Result UmqBackend::Init() noexcept
     umq_config.flow_control.initial_credit = UmqSetting::UMQ_FC_DEFAULT_CREDIT;
     umq_config.flow_control.max_credits_request = UmqSetting::UMQ_FC_MAX_CREDIT;
     umq_config.flow_control.min_reserved_credit = UmqSetting::UMQ_FC_MIN_CREDIT;
-    umq_config.buf_pool_cfg.small_block_size = UmqSetting::IO_BLOCK_TYPE;
+    /* page type unified with urma: "large"=64K, "tiny"=4K (pure CTP) */
+    umq_config.buf_pool_cfg.small_block_size =
+        (UrmaSetting::UBS_BUF_PAGE_SIZE_KB == "tiny") ? BLOCK_SIZE_4K : BLOCK_SIZE_64K;
     umq_config.trans_info[0].dev_info.assign_mode = UMQ_DEV_ASSIGN_MODE_DUMMY;
     umq_config.trans_info[0].trans_mode = UmqSetting::UMQ_TRANS_MODE;
     umq_config.buf_pool_cfg.umq_mem_pool_init_size = UmqSetting::UMQ_MEM_POOL_INIT_SIZE_MB * IO_SIZE_MB;

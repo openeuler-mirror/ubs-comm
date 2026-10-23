@@ -160,11 +160,11 @@ TEST_F(UbsocketEpollTest, EpollCreate1_InitFailure_ReturnsError)
 {
     // Dispatcher 模式（无 poller 注册）下 UrmaEventPoll::Init() 返回 UBS_ERROR，
     // epoll_create1 必须调用 Init() 并在失败时返回 -1（对齐 epoll_create）。
-    EpollHandleMode saved = UrmaSetting::UB_EPOLL_HANDLE_MODE;
-    UrmaSetting::UB_EPOLL_HANDLE_MODE = DISPATCHER_THREAD_POOL;
+    EpollHandleMode saved = UrmaSetting::UBS_EPOLL_MODE;
+    UrmaSetting::UBS_EPOLL_MODE = DISPATCHER_THREAD_POOL;
 
     errno = 0;
     EXPECT_EQ(-1, ubsocket_epoll_create1(0));
 
-    UrmaSetting::UB_EPOLL_HANDLE_MODE = saved;
+    UrmaSetting::UBS_EPOLL_MODE = saved;
 }

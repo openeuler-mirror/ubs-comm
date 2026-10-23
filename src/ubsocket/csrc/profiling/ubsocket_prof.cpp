@@ -56,7 +56,7 @@ int ubsocket_prof_init(ubsocket_prof_option_t *option)
         }
     }
 
-    // 根据环境变量 UBSOCKET_PROF_MODE 决定初始化哪种模式
+    // 根据环境变量 UBS_PROF_MODE 决定初始化哪种模式
     ubsocket_prof_mode_ext = (GlobalSetting::UBS_PROF_MODE == "ext") ? 1 : 0;
 
     if (ubsocket_prof_mode_ext == 1) {

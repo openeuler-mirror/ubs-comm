@@ -116,7 +116,7 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
     uint32_t negotiated_version = negotiated.GetWhole();
     urma_sock->SetPeerVersion(peer_version.GetWhole());
 
-    urma_sock->SetTransMode(std::min(req.trans_mode, UrmaSetting::UB_TANS_MODE));
+    urma_sock->SetTransMode(std::min(req.trans_mode, UrmaSetting::UBS_TRANS_MODE));
     urma_sock->SetSocketFlags(NegotiateConnFlag(req.conn_flag));
     urma_sock->SetConnId(UrmaBackend::Instance().AllocConnId());
 
@@ -136,8 +136,8 @@ Result UrmaAcceptorOps::Negotiate(SocketPtr socketPtr)
     rsp.ret_code = 0;
     rsp.negotiated_version = negotiated_version;
     rsp.trans_mode = urma_sock->trans_mode;
-    rsp.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
-    rsp.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
+    rsp.send_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
+    rsp.recv_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
     rsp.conn_flag = urma_sock->socket_flags;
     rsp.selected_context_index = selected_index;
     rsp.conn_id = urma_sock->GetConnId();

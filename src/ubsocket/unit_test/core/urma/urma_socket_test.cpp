@@ -1503,7 +1503,7 @@ TEST_F(UrmaSocketTest, Shutdown_Wr_SendCqe_ReleasesCtrlBuf)
 
     WriteImmData imm{g_lastNotifyData};
     const auto buf_offset_units = static_cast<uint64_t>(imm.ubsocket.buffer_offset);
-    EXPECT_EQ(static_cast<uint64_t>(URMA_CTRL_ONLY_BUF_SIZE), env.sock->send_buf_->Used()); /* ctrl 占用 */
+    EXPECT_EQ(static_cast<uint64_t>(UrmaCtrlOnlyBufSize(UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT)), env.sock->send_buf_->Used()); /* ctrl 占用 */
 
     /* WR 上屏: 发送 CQE 到达 → 释放 ctrl 占用 */
     auto cr = MakeShutdownSendCqe(buf_offset_units, TEST_FD);

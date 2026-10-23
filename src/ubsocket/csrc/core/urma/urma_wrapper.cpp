@@ -331,7 +331,7 @@ bool UrmaContext::IsBadPort() noexcept
     if (bad_record_.error_occurred_time == 0) {
         return false;
     }
-    return (ubsocket_get_timeNs() - bad_record_.error_occurred_time) < (UrmaSetting::UB_BAD_PORT_RECOVER_SECONDS * 1000000000UL);
+    return (ubsocket_get_timeNs() - bad_record_.error_occurred_time) < (UrmaSetting::UBS_BAD_UBPORT_TTL * 1000000000UL);
 }
 
 void UrmaContext::RecordPortError(int16_t errorCode) noexcept
@@ -619,23 +619,22 @@ Result UrmaContext::CreateJetty(urma_jetty_cfg_t &cfg, urma_tp_type_t rtp_ctp_ut
     return UBS_OK;
 }
 
-Result UrmaContext::CreateJfsJfrJetty(const UrmaJfcPtr &jfc, uint32_t queueDepth, urma_transport_mode_t transMode,
-                                      urma_tp_type_t tpType, UrmaJfsPtr &jfs, 
-                                      UrmaJfrPtr &jfr, UrmaJettyPtr &jetty, 
-                                      uint8_t priority)
+Result UrmaContext::CreateJfsJfrJetty(const UrmaJfcPtr &jfc, uint32_t jfsDepth, uint32_t jfrDepth,
+                                      urma_transport_mode_t transMode, urma_tp_type_t tpType, UrmaJfsPtr &jfs,
+                                      UrmaJfrPtr &jfr, UrmaJettyPtr &jetty, uint8_t priority)
 {
     if (UNLIKELY(jfc == nullptr)) {
         UBS_VLOG_ERR("Create jfs/jfr/jetty failed as jfc is null");
         return UBS_INVALID_PARAM;
     }
 
-    urma_jfs_cfg_t jfs_cfg = CreateJfsCfg(queueDepth, transMode, 0, priority);
+    urma_jfs_cfg_t jfs_cfg = CreateJfsCfg(jfsDepth, transMode, 0, priority);
     if (UNLIKELY(CreateJfs(jfs_cfg, jfc, jfs) != UBS_OK)) {
         UBS_VLOG_ERR("Failed to create jfs while creating jfs/jfr/jetty");
         return UBS_ERROR;
     }
 
-    urma_jfr_cfg_t jfr_cfg = CreateJfrCfg(queueDepth, transMode, 0, 0);
+    urma_jfr_cfg_t jfr_cfg = CreateJfrCfg(jfrDepth, transMode, 0, 0);
     if (UNLIKELY(CreateJfr(jfr_cfg, jfc, jfr) != UBS_OK)) {
         UBS_VLOG_ERR("Failed to create jfr while creating jfs/jfr/jetty");
         return UBS_ERROR;

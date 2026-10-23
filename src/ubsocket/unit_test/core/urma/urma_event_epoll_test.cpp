@@ -1016,8 +1016,8 @@ protected:
         }
         ArraySet<Socket>::GetInstance().Init();
         UrmaSetting::Init();
-        savedMode_ = UrmaSetting::UB_EPOLL_HANDLE_MODE;
-        UrmaSetting::UB_EPOLL_HANDLE_MODE = DISPATCHER_THREAD_POOL;
+        savedMode_ = UrmaSetting::UBS_EPOLL_MODE;
+        UrmaSetting::UBS_EPOLL_MODE = DISPATCHER_THREAD_POOL;
         ResetMockCounters();
         g_epollCtlReturn = 0;
         g_epollWaitReturn = 0;
@@ -1031,11 +1031,11 @@ protected:
     {
         ClearPollerSet();
         UrmaBackend::Instance().poller_set_ = nullptr;
-        UrmaSetting::UB_EPOLL_HANDLE_MODE = savedMode_;
+        UrmaSetting::UBS_EPOLL_MODE = savedMode_;
+        UnregisterDriverMocks();
         errno = 0;
         GlobalMockObject::verify();
         ArraySet<Socket>::GetInstance().ReleaseAll();
-        UnregisterDriverMocks();
         UrmaApi::LOADED = savedApiLoaded_;
         if (g_socket_epoll_lock != nullptr) {
             LockRegistry::RW_LOCK_OPS.destroy(g_socket_epoll_lock);

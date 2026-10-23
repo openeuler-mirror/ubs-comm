@@ -144,23 +144,16 @@ TEST(FdTableSettingTest, DefaultAndEnv)
 {
     EXPECT_EQ(GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM, 45000u);
     GlobalSetting::AddRules();
-    /* LoadEnv 要求这几个 required env 在场（与 ubsocket_global_setting_test 同法） */
-    setenv("UBSOCKET_MONITOR_ENABLE", "true", 1);
-    setenv("UBSOCKET_BACKUP_LINK_ENABLE", "true", 1);
-    setenv("UBSOCKET_READV_UNLIMITED", "true", 1);
     struct Case {
         const char *env;
         uint32_t expect;
     } cases[] = {{"0", 0}, {"70000", 70000}, {"1048576", 1048576}, {"-1", 45000}, {"1048577", 45000}};
     for (const auto &c : cases) {
         GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM = 45000;
-        setenv("UBSOCKET_PRE_ALLOC_SYSTEM_FD_NUM", c.env, 1);
+        setenv("UBS_PRE_ALLOC_SYSTEM_FD_NUM", c.env, 1);
         EXPECT_EQ(GlobalSetting::LoadEnv(), UBS_OK) << "env=" << c.env;
         EXPECT_EQ(GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM, c.expect) << "env=" << c.env;
     }
-    unsetenv("UBSOCKET_PRE_ALLOC_SYSTEM_FD_NUM");
-    unsetenv("UBSOCKET_MONITOR_ENABLE");
-    unsetenv("UBSOCKET_BACKUP_LINK_ENABLE");
-    unsetenv("UBSOCKET_READV_UNLIMITED");
+    unsetenv("UBS_PRE_ALLOC_SYSTEM_FD_NUM");
     GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM = 45000;
 }

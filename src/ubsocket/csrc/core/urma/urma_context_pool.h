@@ -253,7 +253,7 @@ ALWAYS_INLINE void UrmaContextPool::InitSortedContexts() noexcept
         const auto dev_name = item.first.first;
         const auto eid_index = item.first.second;
         /* skip the first one */
-        if (SKIP_PRIMARY_EID && UrmaSetting::UB_DEV_NAME.empty() && !UrmaSetting::UB_USING_BOUNDING_DEV && first_eid_index == UINT32_MAX) {
+        if (SKIP_PRIMARY_EID && UrmaSetting::UBS_DEV_NAME.empty() && first_eid_index == UINT32_MAX) {
             UBS_VLOG_TRACE("Skip primary eid, dev name (%s) eid (%d)", dev_name.c_str(), eid_index);
             first_eid_index = eid_index;
             continue;

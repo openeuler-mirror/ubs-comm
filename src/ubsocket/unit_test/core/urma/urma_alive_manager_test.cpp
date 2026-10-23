@@ -534,9 +534,9 @@ TEST_F(UrmaAliveManagerTest, RunInThread_ListenSocket_Skipped)
 
 TEST_F(UrmaAliveManagerTest, Backend_InitKeepAliveManager_EnabledBySetting)
 {
-    UrmaSetting::UB_KEEPALIVE_TIME = 30;
-    UrmaSetting::UB_KEEPALIVE_INTVL = 5;
-    UrmaSetting::UB_KEEPALIVE_PROBES = 3;
+    UrmaSetting::UBS_KEEPALIVE_TIME = 30;
+    UrmaSetting::UBS_KEEPALIVE_INTVL = 5;
+    UrmaSetting::UBS_KEEPALIVE_PROBES = 3;
     ASSERT_EQ(UBS_OK, UrmaBackend::Instance().InitKeepAliveManager());
     auto mgr = UrmaBackend::Instance().GetAliveManager();
     ASSERT_NE(nullptr, mgr.Get());
@@ -553,9 +553,9 @@ TEST_F(UrmaAliveManagerTest, Backend_UnInitKeepAliveManager_WithoutInit_Safe)
 
 TEST_F(UrmaAliveManagerTest, SocketInitialize_KeepAliveEnabled_CreatesAliveInfo)
 {
-    UrmaSetting::UB_KEEPALIVE_TIME = 30;
-    UrmaSetting::UB_KEEPALIVE_INTVL = 5;
-    UrmaSetting::UB_KEEPALIVE_PROBES = 3;
+    UrmaSetting::UBS_KEEPALIVE_TIME = 30;
+    UrmaSetting::UBS_KEEPALIVE_INTVL = 5;
+    UrmaSetting::UBS_KEEPALIVE_PROBES = 3;
     ASSERT_EQ(UBS_OK, UrmaBackend::Instance().InitKeepAliveManager());
 
     MOCKER_CPP(&UrmaIoBufferPool::direct_allocate).stubs().will(invoke(MockDirectAllocate));
@@ -572,7 +572,7 @@ TEST_F(UrmaAliveManagerTest, SocketInitialize_KeepAliveEnabled_CreatesAliveInfo)
 
 TEST_F(UrmaAliveManagerTest, SocketInitialize_KeepAliveDisabled_NoAliveInfo)
 {
-    UrmaSetting::UB_KEEPALIVE_TIME = 0; /* 关闭保活 */
+    UrmaSetting::UBS_KEEPALIVE_TIME = 0; /* 关闭保活 */
     ASSERT_EQ(UBS_OK, UrmaBackend::Instance().InitKeepAliveManager());
     ASSERT_NE(nullptr, UrmaBackend::Instance().GetAliveManager().Get());
     EXPECT_FALSE(UrmaBackend::Instance().GetAliveManager()->KeepAliveEnable());
@@ -592,7 +592,7 @@ TEST_F(UrmaAliveManagerTest, SocketInitialize_KeepAliveDisabled_NoAliveInfo)
 /* receiver 侧收到 KEEP_ALIVE: 回 KEEP_ALIVE_ACK + 刷新活跃时间 */
 TEST_F(UrmaAliveManagerTest, HandleCqe_KeepAliveImm_RespondsAckAndRefreshesActive)
 {
-    UrmaSetting::UB_KEEPALIVE_TIME = 30;
+    UrmaSetting::UBS_KEEPALIVE_TIME = 30;
     ASSERT_EQ(UBS_OK, UrmaBackend::Instance().InitKeepAliveManager());
 
     auto env = MakeProbeReadySocket();
@@ -618,7 +618,7 @@ TEST_F(UrmaAliveManagerTest, HandleCqe_KeepAliveImm_RespondsAckAndRefreshesActiv
 /* receiver 侧收到 KEEP_ALIVE_ACK: 本端探测计数被对端 ACK 响应重置 */
 TEST_F(UrmaAliveManagerTest, HandleCqe_KeepAliveAckImm_ResetsProbes)
 {
-    UrmaSetting::UB_KEEPALIVE_TIME = 30;
+    UrmaSetting::UBS_KEEPALIVE_TIME = 30;
     ASSERT_EQ(UBS_OK, UrmaBackend::Instance().InitKeepAliveManager());
 
     auto env = MakeProbeReadySocket();
@@ -663,7 +663,7 @@ TEST_F(UrmaAliveManagerTest, HandleCqe_ProbeSendDone_ReleasesCtrlSlot)
 /* sender 侧普通数据发送完成 CQE + 保活开启: 数据流也刷新活跃时间 */
 TEST_F(UrmaAliveManagerTest, HandleCqe_CtrlDataRequestDone_RefreshesActiveTime)
 {
-    UrmaSetting::UB_KEEPALIVE_TIME = 30;
+    UrmaSetting::UBS_KEEPALIVE_TIME = 30;
     ASSERT_EQ(UBS_OK, UrmaBackend::Instance().InitKeepAliveManager());
 
     auto sock = MakeRef<UrmaSocket>(TEST_FD);
@@ -683,7 +683,7 @@ TEST_F(UrmaAliveManagerTest, HandleCqe_CtrlDataRequestDone_RefreshesActiveTime)
 /* 保活关闭: receiver 侧 KEEP_ALIVE 仍回 ACK (协议语义), 但不刷新活跃时间 */
 TEST_F(UrmaAliveManagerTest, HandleCqe_KeepAliveDisabled_RespondsButNoRefresh)
 {
-    UrmaSetting::UB_KEEPALIVE_TIME = 0;
+    UrmaSetting::UBS_KEEPALIVE_TIME = 0;
     ASSERT_EQ(UBS_OK, UrmaBackend::Instance().InitKeepAliveManager());
     ASSERT_FALSE(UrmaBackend::Instance().GetAliveManager()->KeepAliveEnable());
 

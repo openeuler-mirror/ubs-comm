@@ -289,9 +289,9 @@ Result UrmaConnOps::BuildNegotiateReq()
     UBSVersion local_version = UBS_PROTOCOL_VERSION;
     UrmaNegotiateReq req = {};
     req.peer_version = local_version.GetWhole();
-    req.trans_mode = UrmaSetting::UB_TANS_MODE;
-    req.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
-    req.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
+    req.trans_mode = UrmaSetting::UBS_TRANS_MODE;
+    req.send_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
+    req.recv_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
     req.conn_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? URMA_SOCKET_MASK_DEGRADE : 0;
     req.conn_flag |= GlobalSetting::UBS_BACKUP_LINK_ENABLED ? URMA_SOCKET_MASK_LINK_SWITCH : 0;
 
@@ -348,7 +348,7 @@ Result UrmaConnOps::BuildNegotiateReply()
     /* 协商结果先缓存到本状态机：socket 对象由共享 executor 创建后再写回（见 ApplyNegotiatedConfig） */
     negotiated_version_ = negotiated.GetWhole();
     peer_version_ = peer_version.GetWhole();
-    trans_mode_ = std::min(req_.trans_mode, UrmaSetting::UB_TANS_MODE);
+    trans_mode_ = std::min(req_.trans_mode, UrmaSetting::UBS_TRANS_MODE);
     conn_flag_ = NegotiateServerConnFlag(req_.conn_flag);
 
     /* 对端上次坏链遗留的陈旧连接先清理，并分配本连接号（同步/异步共用全局分配器） */
@@ -365,8 +365,8 @@ Result UrmaConnOps::BuildNegotiateReply()
     rsp.ret_code = 0;
     rsp.negotiated_version = negotiated_version_;
     rsp.trans_mode = trans_mode_;
-    rsp.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
-    rsp.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
+    rsp.send_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
+    rsp.recv_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
     rsp.conn_flag = conn_flag_;
     rsp.selected_context_index = selected_context_index_;
     rsp.conn_id = conn_id_;

@@ -44,7 +44,7 @@ UrmaHandleModeCaps CapsOf(EpollHandleMode mode) noexcept
 
 UrmaHandleModeCaps UrmaHandleModeCapsNow() noexcept
 {
-    return CapsOf(UrmaSetting::UB_EPOLL_HANDLE_MODE);
+    return CapsOf(UrmaSetting::UBS_EPOLL_MODE);
 }
 
 /*
@@ -131,7 +131,7 @@ public:
                 EpollDispatchCommandUnion command{events[i]};
                 if (command.Type() == EpollDispatchCommandType::DATA_REACHED) {
                     WriteImmData imm_data{command.ImmData()};
-                    auto recv_offset = imm_data.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+                    auto recv_offset = imm_data.ubsocket.buffer_offset * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
                     auto req = reinterpret_cast<UrmaCtrlMessage *>(urma_sock->recv_buf_addr_ + recv_offset);
                     ops.ProcessDataReached(sock, req->head.sequence_no, imm_data.data);
                 } else if (command.Type() == EpollDispatchCommandType::DATA_READ_FINISHED) {
@@ -169,7 +169,7 @@ private:
 
 std::unique_ptr<UrmaRxDispatcher> CreateUrmaRxDispatcher()
 {
-    if (CapsOf(UrmaSetting::UB_EPOLL_HANDLE_MODE).epoll_wait_driven) {
+    if (CapsOf(UrmaSetting::UBS_EPOLL_MODE).epoll_wait_driven) {
         return std::unique_ptr<UrmaRxDispatcher>(new QueueRxDispatcher());
     }
     return std::unique_ptr<UrmaRxDispatcher>(new InlineRxDispatcher());
