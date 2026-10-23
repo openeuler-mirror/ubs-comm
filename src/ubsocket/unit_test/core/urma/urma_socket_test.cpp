@@ -486,8 +486,8 @@ TEST_F(UrmaSocketTest, HandleCqe_ConnectionError_SenderSide_LogsWithoutClosing)
     auto cr = MakeErrorCr(URMA_CR_WR_FLUSH_ERR, ctx.value, 0);
     UrmaBackend::Instance().HandleCqe(0, 1, &cr);
 
-    EXPECT_GE(g_errLogCount, 1);
-    EXPECT_NE(std::string::npos, g_lastErrLog.find("handle error cr:"));
+    /* WR_FLUSH_ERR 属 flush 完成类, 日志级别为 TRACE, 不得污染 ERROR 通道 */
+    EXPECT_EQ(0, g_errLogCount);
     EXPECT_EQ(SOCK_STAT_ESTABLISHED, urma_sock->State());
     EXPECT_FALSE(urma_sock->IsPeerReset());
     EXPECT_FALSE(urma_sock->IsClosed());
@@ -566,14 +566,36 @@ TEST_F(UrmaSocketTest, HandleCqe_MixedErrors_LogWithoutClosing)
     GlobalMockObject::verify();
 }
 
-/* regression guard: a genuine (non-fake) error CQE must still reach the ERROR channel */
-TEST_F(UrmaSocketTest, HandleErrorCqe_RealError_StillLoggedAsError)
+/* regression guard: invalid-fd 路径已降为 TRACE, 真实错误 CQE 不得污染 ERROR 通道 */
+TEST_F(UrmaSocketTest, HandleErrorCqe_RealError_InvalidFdNotLoggedAsError)
 {
     static const int UNKNOWN_FD = 9001;
     ScopedErrLogCapture capture;
     auto cr = MakeErrorCr(URMA_CR_ACK_TIMEOUT_ERR, SenderCRContext{CTRL_DATA_RECEiVE, 0, UNKNOWN_FD}.value, 1);
     UrmaBackend::Instance().HandleCqe(0, 1, &cr);
-    EXPECT_GT(g_errLogCount, 0) << "real error CQE must remain visible";
+    EXPECT_EQ(0, g_errLogCount) << "fd invalid path must stay on TRACE level";
+}
+
+/* 拆链 flush 产生的 CQE（status 12/13 为硬件 flush 专用假 CQE）走 TRACE 级别，
+ * 不污染 ERROR 通道；fd invalid 时正常回收 pending-close hold */
+TEST_F(UrmaSocketTest, HandleErrorCqe_FakeSuspendFlushDoneCqe_TraceOnlyAndRecyclesHold)
+{
+    static const int HELD_FD = 101; /* 不进 ArraySet, 模拟 pending-close 期 fd 已移出的真实状态 */
+    auto held_sock = MakeRef<UrmaSocket>(HELD_FD);
+    UrmaBackend::Instance().HoldPendingClose(HELD_FD, RefConvert<UrmaSocket, Socket>(held_sock).Get());
+
+    ScopedErrLogCapture capture;
+
+    const urma_cr_status_t fake_statuses[] = {URMA_CR_WR_SUSPEND_DONE, URMA_CR_WR_FLUSH_ERR_DONE};
+    for (auto status : fake_statuses) {
+        /* 复刻实测形态: flag=0x2(仅 jetty 位), user_ctx={CTRL_DATA_RECEiVE,0,fd} */
+        auto cr = MakeErrorCr(status, SenderCRContext{CTRL_DATA_RECEiVE, 0, HELD_FD}.value, 0);
+        cr.flag.bs.jetty = 1;
+        UrmaBackend::Instance().HandleCqe(0, 1, &cr);
+    }
+
+    EXPECT_EQ(0, g_errLogCount) << "fake CQE must not pollute the ERROR channel";
+    EXPECT_FALSE(UrmaBackend::Instance().HasPendingClose(HELD_FD)) << "flush CQE must recycle the pending-close hold";
 }
 
 /* ===================== CLOSE opcode (模拟 FIN) ===================== */
