@@ -39,16 +39,6 @@ UBS_API int UB_API_WRAP(epoll_create)(int size)
         return -1;
     }
     EventPoll *eventPoll = urma_poll;
-#elif defined(UMQ_BACKEND_ENABLED)
-    /* TODO(urma-decouple): urma 模式已用 UrmaEventPoll 替代 umq AsyncEventPoll，功能等价 */
-    auto umq_poll = new AsyncEventPoll(epollFd);
-    if (UNLIKELY(umq_poll == nullptr)) {
-        UBS_VLOG_ERR("create async event poll failed, epoll fd: %d\n", epollFd);
-        delete umq_poll;
-        LibcApi::close(epollFd);
-        return -1;
-    }
-    EventPoll *eventPoll = umq_poll;
 #endif
 
     /* Ensure the registry exists even if the caller creates an epoll before ubsocket_init(). */
@@ -127,17 +117,6 @@ UBS_API int UB_API_WRAP(epoll_create1)(int flags)
     }
 
     EventPoll *eventPoll = urma_poll;
-#elif defined(UMQ_BACKEND_ENABLED)
-    /* TODO(urma-decouple): urma 模式已用 UrmaEventPoll 替代，功能等价 */
-    auto umq_poll = new AsyncEventPoll(epollFd);
-    if (UNLIKELY(umq_poll == nullptr)) {
-        UBS_VLOG_ERR("create event poll failed, epoll fd: %d\n", epollFd);
-        LibcApi::close(epollFd);
-        errno = ENOMEM;
-        return -1;
-    }
-
-    EventPoll *eventPoll = umq_poll;
 #endif
     /* Ensure the registry exists even if the caller creates an epoll before ubsocket_init(). */
     (void)ArraySet<EventPoll>::GetInstance().Init();

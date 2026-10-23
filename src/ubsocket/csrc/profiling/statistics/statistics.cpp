@@ -1,6 +1,6 @@
 /*
  *Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- *Description: Provide the utility for umq buffer, iov, etc
+ *Description: Provide the statistics utility for ubsocket, etc
  *Author:
  *Create: 2025-07-16
  *Note:
@@ -8,9 +8,6 @@
  */
 #include "statistics.h"
 
-#ifdef UMQ_BACKEND_ENABLED
-#include "umq_dfx_api.h"
-#endif
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
 #include "under_api/urma/dl_urma_api.h"
 #endif
@@ -19,8 +16,8 @@ uint32_t Statistics::Recorder::m_title_len = 0;
 volatile bool Statistics::GlobalStatsMgr::m_running = true;
 
 /* TryGetRetryCount: pure text parsing, no backend dependency.
- * Both UMQ (umq_stats_tp_perf_info_get) and URMA (urma_get_perf_info) return
- * perf info text containing "retry_count: N", this helper parses it. */
+ * URMA (urma_get_perf_info) returns perf info text containing "retry_count: N",
+ * this helper parses it. */
 namespace {
 constexpr const char *PREFIX = "retry_count: ";
 
@@ -60,46 +57,10 @@ bool TryGetRetryCount(const char *perfBuf, size_t bufLen, uint64_t &retryCount)
 }
 } // namespace
 
-void Statistics::StatsMgr::UpdateReTxCount(const umq_trans_mode_t umq_trans_mode)
+void Statistics::StatsMgr::UpdateReTxCount(const UbsTransMode trans_mode)
 {
-#ifdef UMQ_BACKEND_ENABLED
-    if (!UmqApi::IsLoaded()) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(gTpPerfSeqMutex);
-
-    int ret = 0;
-    int umqTransModeInt = umq_trans_mode;
-
-    const bool profEnabled = GlobalSetting::UBS_PROF_ENABLE;
-    if (!profEnabled) {
-        if (UmqApi::umq_stats_tp_perf_start(umq_trans_mode) != 0) {
-            return;
-        }
-    }
-
-    char perfBuf[4096] = {};
-    uint32_t perfLen = sizeof(perfBuf);
-    ret = UmqApi::umq_stats_tp_perf_info_get(umq_trans_mode, perfBuf, &perfLen);
-    if (ret == 0 && perfLen > 0) {
-        uint64_t retryCount = 0;
-        if (TryGetRetryCount(perfBuf, perfLen, retryCount)) {
-            mReTxCount.store(retryCount);
-        } else {
-            UBS_VLOG_ERR("Failed to parse retry_count from perf info.\n");
-        }
-    } else {
-        UBS_VLOG_ERR("Failed to get tp perf info: umq_trans_mode=%d\n", umqTransModeInt);
-    }
-
-    if (!profEnabled) {
-        if (UmqApi::umq_stats_tp_perf_stop(umq_trans_mode) != 0) {
-            UBS_VLOG_ERR("Failed to stop tp perf: umq_trans_mode=%d\n", static_cast<int>(umq_trans_mode));
-        }
-    }
-#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
-    (void)umq_trans_mode;
+    (void)trans_mode;
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
     if (!UrmaApi::IsLoaded()) {
         return;
     }

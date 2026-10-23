@@ -132,7 +132,6 @@ public:
         return writable_ready_.store(b, std::memory_order_release);
     }
 
-    int NotifyReadable(bool epollout = false);
     int NotifyWritable();
 
     /*
@@ -265,24 +264,6 @@ ALWAYS_INLINE void SocketBase::SetAddedEpollFd(EventPoll *fd, const epoll_data_t
     added_epoll_data_ = data;
 }
 
-ALWAYS_INLINE int SocketBase::NotifyReadable(bool epollout)
-{
-    if (added_epoll_fd_ == nullptr) {
-        return eventfd_write(event_fd_, 1);
-    }
-
-    if (epollout && !(GetEvents() & EPOLLOUT)) {
-        UBS_VLOG_DEBUG("An EPOLLOUT event generated even if the socket(fd=%d) is not interested in EPOLLOUT", Fd());
-    }
-
-    auto *ep = static_cast<AsyncEventPoll *>(added_epoll_fd_);
-    if (ep->AddReadableEvent(EPOLLIN | (epollout ? +EPOLLOUT : 0), added_epoll_data_) != 0) {
-        return -1;
-    }
-
-    return ((AsyncEventPoll *)added_epoll_fd_)->SetReadableEventFd();
-}
-
 ALWAYS_INLINE int SocketBase::NotifyWritable()
 {
     const uint32_t current = events_.load(std::memory_order_acquire);
@@ -303,18 +284,13 @@ ALWAYS_INLINE int SocketBase::NotifyWritable()
     return DoNotifyWritable();
 }
 
+/*
+ * 基类默认实现：经 event_fd_ 唤醒应用 epoll（urma 模式下 registered socket 的 added_epoll_fd_ 恒为
+ * nullptr，具体唤醒细节由 UrmaSocket::DoNotifyWritable 覆写实现）。
+ */
 ALWAYS_INLINE int SocketBase::DoNotifyWritable()
 {
-    if (added_epoll_fd_ == nullptr) {
-        return eventfd_write(event_fd_, 1);
-    }
-
-    auto *ep = static_cast<AsyncEventPoll *>(added_epoll_fd_);
-    if (ep->AddReadableEvent(EPOLLOUT, added_epoll_data_) != 0) {
-        return -1;
-    }
-
-    return ((AsyncEventPoll *)added_epoll_fd_)->SetReadableEventFd();
+    return eventfd_write(event_fd_, 1);
 }
 
 } // namespace ubs

@@ -23,15 +23,6 @@ enum InnerCode : int32_t {
     UBS_INVALID_PARAM,
     UBS_MALLOC_FAILED,
 
-    // UMQ 相关错误
-    UBS_UMQ_CREATE = static_cast<int32_t>(0x80000401u),
-    UBS_UMQ_DEV_ADD,
-    UBS_UMQ_BIND_INFO_GET,
-    UBS_UMQ_BIND,
-    UBS_UMQ_BUF_ALLOC,
-    UBS_UMQ_POST,
-    UBS_UMQ_MAX,
-
     // ubsocket 相关错误
     UBS_SET_DEV_INFO = static_cast<int32_t>(0x80001001u),
     UBS_PREFILL_RX,
@@ -39,10 +30,8 @@ enum InnerCode : int32_t {
     UBS_NEW_SOCKET_FD,
     UBS_TCP_EXCHANGE,
     UBS_UB_ACCEPT,
-    UBS_NO_MAIN_UMQ,
     UBS_MAX,
     UBS_UB_DEV_ERROR,
-    UBS_UMQ_ERROR,
     UBS_CONN_RETRY_FAILED,
     UBS_CONN_ROUTE,
     UBS_LATER_SEQ,

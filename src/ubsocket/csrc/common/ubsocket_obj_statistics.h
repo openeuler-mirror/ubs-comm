@@ -28,9 +28,6 @@ enum ObjectEnum {
     UBS_URMA_JFC,
     UBS_URMA_JFCE,
 
-    /* umq related */
-    UBS_UMQ_SOCKET,
-
     /* add before count */
     OBJECT_COUNT
 };

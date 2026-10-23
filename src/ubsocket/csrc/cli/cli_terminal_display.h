@@ -15,9 +15,6 @@
 #include <vector>
 
 #include "profiling/statistics/cli_message.h"
-#ifdef UMQ_BACKEND_ENABLED
-#include "umq_dfx_api.h"
-#endif
 
 namespace Statistics {
 class TerminalDisplay {
@@ -48,10 +45,6 @@ public:
         return mIstty;
     }
     void DisplaySocketInfo(uint8_t *data, const uint32_t dataLen);
-#ifdef UMQ_BACKEND_ENABLED
-    void DisplayTopoInfo(umq_route_list_t *data, const uint32_t dataLen);
-#endif
-    void DisplayProbeInfo(uint8_t *data, const uint32_t dataLen);
     // data display
     void PrintHeader(CLIDataHeader &header);
     void PrintTitle(std::string title);
@@ -67,16 +60,6 @@ public:
     std::string BytesToHumanReadable(uint64_t bytes);
     std::string ConvertTimeToString(uint64_t timestamp);
     std::string ConvertEidToString(const uint8_t *eidArray, size_t length);
-    // flow control display
-    void DisplayFlowControlInfo(uint8_t *data, uint32_t dataLen);
-    // qbuf pool display
-    void DisplayQbufPoolInfo(uint8_t *data, uint32_t dataLen);
-    // umq info display
-    void DisplayUmqInfo(uint8_t *data, uint32_t dataLen);
-    // io packet display
-    void DisplayIoPacketInfo(uint8_t *data, uint32_t dataLen);
-    // umq perf display
-    void DisplayUmqPerfInfo(uint8_t *data, uint32_t dataLen);
 
     void DisplayDelayTraceInfo(uint8_t *data, uint32_t dataLen);
 

@@ -1,6 +1,6 @@
 /*
   * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
-  * Description: Provide the utility for umq buffer, iov, etc
+  * Description: Provide the utility for ubsocket ring buffer, iov, etc
   * Author:
   * Create: 2026-05-08
   * Note:

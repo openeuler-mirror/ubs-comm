@@ -53,6 +53,9 @@ enum ub_trans_mode {
     RC_CTP
 };
 
+/* 统计/trace 采集的传输层模式标记（urma-only，仅保留 UB 模式占位） */
+enum UbsTransMode : uint32_t { UBS_TRANS_MODE_UB = 0 };
+
 // 描述在 Connect/Accept 间的握手状态
 enum class UBHandshakeState : uint32_t {
     kOK = 0,
@@ -98,10 +101,9 @@ enum class LinkSelectionPolicy : uint8_t {
 enum class SplitTraceLevel : uint8_t {
     LEVEL_NONE = 0,
     LEVEL_UBSOCKET = 1 << 0, // 0x01
-    LEVEL_UMQ = 1 << 1,      // 0x02
     LEVEL_URMA = 1 << 2,     // 0x04
 
-    LEVEL_ALL = LEVEL_UBSOCKET | LEVEL_UMQ | LEVEL_URMA
+    LEVEL_ALL = LEVEL_UBSOCKET | LEVEL_URMA
 };
 
 /**
@@ -175,7 +177,6 @@ inline SplitTraceLevel operator|(SplitTraceLevel lhs, SplitTraceLevel rhs)
 
 constexpr uint64_t CONTROL_PLANE_PROTOCOL_NEGOTIATION = 0xff52504341445054;
 constexpr uint32_t NEGOTIATE_SOCKET_ID_MAX_NUM = 256;
-constexpr uint32_t UMQ_BIND_INFO_SIZE_MAX = 8192;
 constexpr uint32_t NEGOTIATE_REQ_BUFFER_SIZE = 64;
 constexpr uint32_t DIVIDED_NUMBER = 2;
 constexpr uint32_t CACHE_LINE_ALIGNMENT = 64;
@@ -199,7 +200,6 @@ constexpr uint32_t CONTROL_PLANE_TIMEOUT_MS = 2000;
  *    每连接独占 worker，短超时可及时回收"只连不发"的连接；放大到秒级会让少数坏连接钉死 worker。 */
 constexpr uint32_t NEGOTIATE_REPLY_TIMEOUT_MS = 2000;
 constexpr uint32_t NEGOTIATE_ACCEPT_TIMEOUT_MS = 10;
-constexpr uint64_t UMQ_MEM_MIN_EXPAND_SIZE_MB = 64;
 
 constexpr uint64_t SIZE_1K = 1024;
 constexpr uint64_t SIZE_4K = 4096;
@@ -248,12 +248,6 @@ constexpr uint32_t UBSOCKET_TRACE_FILE_SIZE_MAX = 300;
 
 constexpr uint32_t UBSOCKET_TRACE_FILE_PATH_LEN_MIN = 1;
 constexpr uint32_t UBSOCKET_TRACE_FILE_PATH_LEN_MAX = 512;
-
-constexpr uint32_t UBSOCKET_PROBE_TIME_MS_MIN = 1;
-constexpr uint32_t UBSOCKET_PROBE_TIME_MS_MAX = 360000;
-
-constexpr uint32_t UBSOCKET_PROBE_BATCH_MIN = 1;
-constexpr uint32_t UBSOCKET_PROBE_BATCH_MAX = 500;
 
 constexpr int8_t UBSOCKET_LINK_PRIORITY_NOT_SET = -1;
 constexpr int8_t UBSOCKET_LINK_PRIORITY_DEFAULT = 4;

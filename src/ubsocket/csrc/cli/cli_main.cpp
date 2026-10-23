@@ -31,64 +31,11 @@ int main(int argc, char *argv[])
             client.Query(args, response);
             player.DisplaySocketInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
         }
-#ifdef UMQ_BACKEND_ENABLED
-    } else if (args.command == Statistics::CLICommand::TOPO) {
-        client.Query(args, response);
-        player.DisplayTopoInfo(reinterpret_cast<umq_route_list_t *>(response.Data()), response.DataLen());
-#endif
-    } else if (args.command == Statistics::CLICommand::FLOW_CONTROL) {
-        client.Query(args, response);
-        player.DisplayFlowControlInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        while (args.watch) {
-            sleep(1);
-            client.Query(args, response);
-            player.DisplayFlowControlInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        }
     } else if (args.command == Statistics::CLICommand::DELAY) {
         if (client.Query(args, response) != 0) {
             return 0;
         }
         player.DisplayDelayTraceInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-    } else if (args.command == Statistics::CLICommand::QBUF_POOL) {
-        client.Query(args, response);
-        player.DisplayQbufPoolInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        while (args.watch) {
-            sleep(1);
-            client.Query(args, response);
-            player.DisplayQbufPoolInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        }
-    } else if (args.command == Statistics::CLICommand::UMQ_INFO) {
-        client.Query(args, response);
-        player.DisplayUmqInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        while (args.watch) {
-            sleep(1);
-            client.Query(args, response);
-            player.DisplayUmqInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        }
-    } else if (args.command == Statistics::CLICommand::IO) {
-        client.Query(args, response);
-        player.DisplayIoPacketInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        while (args.watch) {
-            sleep(1);
-            client.Query(args, response);
-            player.DisplayIoPacketInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        }
-    } else if (args.command == Statistics::CLICommand::UMQ) {
-        client.Query(args, response);
-        player.DisplayUmqPerfInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        while (args.watch) {
-            sleep(1);
-            client.Query(args, response);
-            player.DisplayUmqPerfInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        }
-    } else if (args.command == Statistics::CLICommand::PROBE) {
-        client.Query(args, response);
-        player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        while (args.watch) {
-            sleep(1);
-            client.Query(args, response);
-            player.DisplayProbeInfo(reinterpret_cast<uint8_t *>(response.Data()), response.DataLen());
-        }
     } else {
         CLI_LOG("Invalid command\n");
     }

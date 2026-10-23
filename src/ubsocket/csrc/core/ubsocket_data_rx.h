@@ -22,7 +22,7 @@ namespace ock {
 namespace ubs {
 /*
  * Operation interface for data receive:
- * urma backend, shm backend, rdma backend, umq backend, need to implement this for data tx
+ * urma backend, shm backend, rdma backend, need to implement this for data rx
  */
 class DataRxOps {
 public:

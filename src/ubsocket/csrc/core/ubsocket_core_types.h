@@ -33,7 +33,6 @@ enum SocketState : uint8_t {
 
 enum class SocketType : uint8_t {
     SOCK_TYPE_TCP = 0, /* only contains raw socket */
-    SOCK_TYPE_UMQ,     /* an ubsocket based on umq */
     SOCK_TYPE_SHM,     /* an ubsocket based on shm */
     SOCK_TYPE_URMA,    /* an ubsocket based on urma */
     SOCK_TYPE_COUNT    /* add type before COUNT */
@@ -46,12 +45,6 @@ enum SocketCreateType : uint8_t {
     SOCK_CREATE_TYPE_ACCEPT,      /* created because of accept */
                                   /* add here */
     SOCK_CREATE_TYPE_COUNT
-};
-
-enum class EpollRunnerType : uint8_t {
-    SHARE_JFR_RX_RUNNER = 0,     /* Share JFR Rx Epoll Runner */
-    TRANSPORT_POOL_TX_RUNNER,    /* Transport Pool Tx Epoll Runner */
-    TRANSPORT_POOL_EVENT_RUNNER, /* Transport Pool Event Epoll Runner */
 };
 
 class Socket;

@@ -18,7 +18,7 @@
 #include "core/ubsocket_conn_reactor.h"
 #include "core/ubsocket_event_epoll.h"
 #include "core/ubsocket_tx_cqe_poller.h"
-/* ubsocket backend selection: urma (default) or umq, mutually exclusive (see CMakeLists.txt) */
+/* ubsocket backend selection: urma only (see CMakeLists.txt) */
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
     #include "core/urma/urma_backend.h"
     #define UBS_BACKEND_INIT()            urma::UrmaBackend::Instance().Init()
@@ -26,27 +26,10 @@
     #define UBS_BACKEND_SET_LOG_LEVEL(l)   urma::UrmaBackend::Instance().SetLogLevel(l)
     #define UBS_BACKEND_GET_ALLOCATOR()   urma::UrmaBackend::Instance().GetAllocator()
     #define UBS_LOAD_FLAGS                (LOAD_LIBC | LOAD_URMA)
-#elif defined(UMQ_DLOPEN_BACKEND_ENABLED)
-    #include "core/umq/umq_backend.h"
-    #include "core/umq/umq_setting.h"
-    #define UBS_BACKEND_INIT()            umq::UmqBackend::Init()
-    #define UBS_BACKEND_UNINIT()          umq::UmqBackend::UnInit()
-    #define UBS_BACKEND_SET_LOG_LEVEL(l)  umq::UmqBackend::SetLogLevel(l)
-    #define UBS_BACKEND_GET_ALLOCATOR()   (new umq::UmqZeroCopyAllocator())
-    #define UBS_LOAD_FLAGS                (LOAD_LIBC | LOAD_UMQ)
-#elif defined(UMQ_ADAPTER_BACKEND_ENABLED)
-    #include "core/umq/umq_backend.h"
-    #include "core/umq/umq_setting.h"
-    #define UBS_BACKEND_INIT()            umq::UmqBackend::Init()
-    #define UBS_BACKEND_UNINIT()          umq::UmqBackend::UnInit()
-    #define UBS_BACKEND_SET_LOG_LEVEL(l)  umq::UmqBackend::SetLogLevel(l)
-    #define UBS_BACKEND_GET_ALLOCATOR()   (new umq::UmqZeroCopyAllocator())
-    #define UBS_LOAD_FLAGS                (LOAD_LIBC)
 #else
-    #error "No backend enabled. Enable one of BUILD_URMA_DLOPEN_BACKEND / BUILD_UMQ_DLOPEN_BACKEND / BUILD_UMQ_ADAPTER_BACKEND"
+    #error "No backend enabled. Enable BUILD_URMA_DLOPEN_BACKEND"
 #endif
 #include "include/ubsocket.h"
-#include "profiling/probe/probe_manager.h"
 #include "profiling/statistics/statistics.h"
 #include "profiling/statistics/ubsocket_print_stats_mgr.h"
 #include "profiling/trace/ubsocket_trace.h"
@@ -108,7 +91,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
 
     /* fd 表预扩容：必须排在下面所有会打开 fd、会起线程的步骤之前——进程此刻若还是单线程，扩容是微秒级；
-     * 即便已是多线程也只等一次 RCU 宽限期，后面 umq 初始化和建链期间不再扩容。失败只告警，不影响初始化。 */
+     * 即便已是多线程也只等一次 RCU 宽限期，后面 urma 初始化和建链期间不再扩容。失败只告警，不影响初始化。 */
     (void)PreExpandFdTable(GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM);
 
     /* step2: load under api */
@@ -195,20 +178,10 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     }
 
     if (GlobalSetting::UBS_CLI_ENABLED) {
-#ifdef UMQ_BACKEND_ENABLED
-        (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr(umq::UmqSetting::UMQ_TRANS_MODE);
-#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
-        (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr(static_cast<umq_trans_mode_t>(0));
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
+        (void)Statistics::GlobalStatsMgr::GetGlobalStatsMgr(UBS_TRANS_MODE_UB);
 #endif
     }
-
-#ifdef UMQ_BACKEND_ENABLED
-    /* TODO(urma-decouple): urma 模式缺失 umq probe，待阶段二补 urma probe 等价实现 */
-    if (GlobalSetting::UBS_PROBE_ENABLED) {
-        (void)Statistics::ProbeManager::GetInstance().Start(GlobalSetting::UBS_PROBE_MS, GlobalSetting::UBS_PROBE_BATCH,
-                                                            -1);
-    }
-#endif
 
     /* last step: set initialized */
     GlobalSetting::UBS_INITED = true;
@@ -218,11 +191,7 @@ UBS_API int ubsocket_init(u_init_options_t *options)
                    GlobalSetting::UBS_CONNECTS_POLL_THREAD_NUM);
     /* do trace log initial */
     if (GlobalSetting::UBS_TRACE_ENABLED) {
-#ifdef UMQ_BACKEND_ENABLED
-        umq_trans_mode_t transMode = umq::UmqSetting::UMQ_TRANS_MODE;
-#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
-        umq_trans_mode_t transMode = static_cast<umq_trans_mode_t>(0);
-#endif
+        UbsTransMode transMode = UBS_TRANS_MODE_UB;
         Statistics::PrintStatsMgr::StartStatsCollection(GlobalSetting::UBS_TRACE_TIME,
                                                         GlobalSetting::UBS_TRACE_FILE_PATH,
                                                         GlobalSetting::UBS_TRACE_FILE_SIZE, transMode);
@@ -231,21 +200,6 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     if (GlobalSetting::UBS_SPLIT_TRACE_ENABLED) {
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
             TracePrintThread::Instance().Start();
-        }
-
-        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UMQ) != SplitTraceLevel::LEVEL_NONE) {
-#ifdef UMQ_BACKEND_ENABLED
-            /* TODO(urma-decouple): urma 模式缺失 umq split trace，待阶段二补 urma trace 等价实现 */
-            umq_trace_cfg_t cfg = {};
-            cfg.flag = UMQ_TRACE_FLAG_RECORD_NUM | UMQ_TRACE_FLAG_OUTPUT_LIMIT;
-            cfg.record_num = GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY;
-            cfg.output_limit = 1;
-
-            int trace_ret = UmqApi::umq_stats_trace_start(&cfg);
-            if (trace_ret != 0) {
-                UBS_VLOG_WARN("umq stats trace start failed, ret: %d\n", trace_ret);
-            }
-#endif
         }
 
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_URMA) != SplitTraceLevel::LEVEL_NONE) {
@@ -270,12 +224,6 @@ void ubsocket_uninit()
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UBSOCKET) != SplitTraceLevel::LEVEL_NONE) {
             TracePrintThread::Instance().Stop();
             ArraySet<Socket>::GetInstance().ForEach([](int, Socket *sock) { TRACE_FLUSH(sock->split_trace_); });
-        }
-
-        if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_UMQ) != SplitTraceLevel::LEVEL_NONE) {
-#ifdef UMQ_BACKEND_ENABLED
-            UmqApi::umq_stats_trace_stop();
-#endif
         }
 
         if ((GlobalSetting::UBS_SPLIT_TRACE_LEVEL & SplitTraceLevel::LEVEL_URMA) != SplitTraceLevel::LEVEL_NONE) {
@@ -311,17 +259,6 @@ void ubsocket_uninit()
     ArraySet<Socket>::GetInstance().ReleaseAll();
     ArraySet<EventPoll>::GetInstance().ReleaseAll();
     CleanAllSocketEpollMappers();
-
-    // EpollRunner 是 LeakySingleton, 进程退出时不会自动析构、后台 poller 线程不会自动 join。必须在 umq_uninit 之前
-    // 停止这些 runner, 否则线程仍会对已释放的 umq/mempool/tseg 执行 umq_poll, 触发 "mempool tseg not exist"。
-    // 注意顺序: TRANSPORT_POOL_TX_RUNNER 必须在 ReleaseAll(Socket) 之后停止, 因为 socket 析构链
-    // (UmqSocket::UnInitialize) 会调用其 DelEpollEvent, 而 Stop() 会将 ops_ 置空, 提前 stop 会导致空指针。
-#ifdef UMQ_BACKEND_ENABLED
-    /* TODO(urma-decouple): urma 模式已用 UrmaPoller 替代 umq EpollRunner，功能等价无需补 */
-    EpollRunnerFactory::GetInstance(EpollRunnerType::SHARE_JFR_RX_RUNNER).Stop();
-    EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_TX_RUNNER).Stop();
-    EpollRunnerFactory::GetInstance(EpollRunnerType::TRANSPORT_POOL_EVENT_RUNNER).Stop();
-#endif
 
     UBS_BACKEND_UNINIT();
     return;

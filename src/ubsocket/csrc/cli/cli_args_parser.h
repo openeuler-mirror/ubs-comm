@@ -10,7 +10,6 @@
 #ifndef CLI_ARGS_PARSER
 #define CLI_ARGS_PARSER
 
-#include <arpa/inet.h>
 #include <getopt.h>
 #include <algorithm>
 #include <cstring>
@@ -25,8 +24,6 @@ public:
         int pid = -1;
         CLICommand command;
         bool watch = false;
-        char srcEid[INET6_ADDRSTRLEN];
-        char dstEid[INET6_ADDRSTRLEN];
         std::string type;
         std::string enable;
         double value = 0;

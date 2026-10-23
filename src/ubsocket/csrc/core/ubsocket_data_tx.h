@@ -20,7 +20,7 @@ namespace ock {
 namespace ubs {
 /*
  * Operation interface for data sending:
- * urma backend, shm backend, rdma backend, umq backend, need to implement this for data tx
+ * urma backend, shm backend, rdma backend, need to implement this for data tx
  */
 class DataTxOps {
 public:
@@ -59,7 +59,7 @@ public:
     virtual Result TriggerPollOut(const SocketPtr &sock, uint32_t flags) noexcept = 0;
 
     /**
-     * @brief Poll completed send events (TX CQE). Default no-op; umq backend overrides.
+     * @brief Poll completed send events (TX CQE). Default no-op; urma backend overrides.
      *
      * @param sock         [in] the socket object to poll
      * @return 0 if successful
