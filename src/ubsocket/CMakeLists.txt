@@ -8,32 +8,16 @@
 # IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 #
-option(BUILD_UMQ_ADAPTER_BACKEND "build umq adapter backend" OFF)
-option(BUILD_UMQ_DLOPEN_BACKEND "build umq dlopen backend" OFF)
 option(BUILD_URMA_DLOPEN_BACKEND "build urma dlopen backend" ON)
 option(ENABLE_OBJECT_COUNTING "enable object couting to detect memory leak" OFF)
 option(UBSOCKET_ENABLE_COVERAGE "Enable coverage reporting for ubsocket UT" OFF)
 option(UBSOCKET_BUILD_CLI "Enable CLI component build" OFF)
 option(ENABLE_CPU_HARDWARE_ACCELERATION "Enable cpu instruction acceleration" OFF)
 
-if (BUILD_UMQ_ADAPTER_BACKEND AND BUILD_UMQ_DLOPEN_BACKEND)
-    message(FATAL_ERROR "BUILD_UMQ_ADAPTER_BACKEND and BUILD_UMQ_DLOPEN_BACKEND cannot both be ON")
+if (NOT BUILD_URMA_DLOPEN_BACKEND)
+    message(FATAL_ERROR "BUILD_URMA_DLOPEN_BACKEND must be ON (urma is the only backend)")
 endif ()
 
-if (BUILD_UMQ_DLOPEN_BACKEND AND BUILD_URMA_DLOPEN_BACKEND)
-    message(FATAL_ERROR "BUILD_UMQ_DLOPEN_BACKEND and BUILD_URMA_DLOPEN_BACKEND cannot both be ON (choose umq or urma backend)")
-endif ()
-
-if (BUILD_UMQ_ADAPTER_BACKEND AND BUILD_URMA_DLOPEN_BACKEND)
-    message(FATAL_ERROR "BUILD_UMQ_ADAPTER_BACKEND and BUILD_URMA_DLOPEN_BACKEND cannot both be ON (choose umq or urma backend)")
-endif ()
-
-if (NOT BUILD_URMA_DLOPEN_BACKEND AND NOT BUILD_UMQ_DLOPEN_BACKEND AND NOT BUILD_UMQ_ADAPTER_BACKEND)
-    message(FATAL_ERROR "At least one backend must be enabled (BUILD_URMA_DLOPEN_BACKEND / BUILD_UMQ_DLOPEN_BACKEND / BUILD_UMQ_ADAPTER_BACKEND)")
-endif ()
-
-message(STATUS "ubsocket: BUILD_UMQ_ADAPTER_BACKEND = ${BUILD_UMQ_ADAPTER_BACKEND}")
-message(STATUS "ubsocket: BUILD_UMQ_DLOPEN_BACKEND = ${BUILD_UMQ_DLOPEN_BACKEND}")
 message(STATUS "ubsocket: BUILD_URMA_DLOPEN_BACKEND = ${BUILD_URMA_DLOPEN_BACKEND}")
 message(STATUS "ubsocket: ENABLE_OBJECT_COUNTING = ${ENABLE_OBJECT_COUNTING}")
 message(STATUS "ubsocket: UBSOCKET_BUILD_CLI = ${UBSOCKET_BUILD_CLI}")
@@ -84,44 +68,6 @@ if (BUILD_URMA_DLOPEN_BACKEND)
     add_definitions(-DURMA_BACKEND_ENABLED)
 endif ()
 
-if (BUILD_UMQ_DLOPEN_BACKEND)
-    add_definitions(-DUMQ_DLOPEN_BACKEND_ENABLED)
-endif ()
-
-if (BUILD_UMQ_DLOPEN_BACKEND OR BUILD_UMQ_ADAPTER_BACKEND)
-    add_definitions(-DUMQ_BACKEND_ENABLED)
-endif ()
-
-if (BUILD_UMQ_ADAPTER_BACKEND)
-    add_definitions(-DUMQ_ADAPTER_BACKEND_ENABLED)
-
-    set(UMQ_BUILD_DIR "${UBSOCKET_BASE_DIR}/../hcom/umq/build")
-    set(UMQ_LIB_DIR "${UMQ_BUILD_DIR}/src")
-    set(UMQ_QBUF_LIB_DIR "${UMQ_LIB_DIR}/qbuf")
-
-    if (NOT EXISTS "${UMQ_LIB_DIR}/libumq.so")
-        message(STATUS "ubsocket: libumq.so not found, building umq automatically...")
-        file(MAKE_DIRECTORY "${UMQ_BUILD_DIR}")
-        execute_process(
-                COMMAND ${CMAKE_COMMAND} -DUSE_URMA_STUB=ON -S "${UBSOCKET_BASE_DIR}/../hcom/umq" -B "${UMQ_BUILD_DIR}"
-                RESULT_VARIABLE UMQ_CMAKE_RESULT
-        )
-        if (NOT UMQ_CMAKE_RESULT EQUAL 0)
-            message(FATAL_ERROR "ubsocket: umq cmake failed: ${UMQ_CMAKE_RESULT}")
-        endif ()
-        execute_process(
-                COMMAND ${CMAKE_COMMAND} --build "${UMQ_BUILD_DIR}" -j ${CMAKE_BUILD_PARALLEL_LEVEL}
-                RESULT_VARIABLE UMQ_BUILD_RESULT
-        )
-        if (NOT UMQ_BUILD_RESULT EQUAL 0)
-            message(FATAL_ERROR "ubsocket: umq build failed: ${UMQ_BUILD_RESULT}")
-        endif ()
-        message(STATUS "ubsocket: umq built successfully")
-    else ()
-        message(STATUS "ubsocket: libumq.so found at ${UMQ_LIB_DIR}")
-    endif ()
-endif ()
-
 if (ENABLE_OBJECT_COUNTING)
     add_definitions(-DOBJ_COUNTING_ENABLED)
 endif ()
@@ -134,8 +80,6 @@ include_directories(
         ${UBSOCKET_BASE_DIR}/
         ${UBSOCKET_BASE_DIR}/csrc
         ${CMAKE_CURRENT_BINARY_DIR}/csrc/common   # generated ubsocket_version_defs.h
-        ${UBSOCKET_BASE_DIR}/../hcom
-        ${UBSOCKET_BASE_DIR}/../hcom/umq/include/umq
 )
 
 add_subdirectory(csrc)

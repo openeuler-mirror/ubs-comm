@@ -1,14 +1,13 @@
 #!/bin/bash
 # ***********************************************************************
 # Copyright: (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-# Script for building UMQ and UBSOCKET.
+# Script for building UBSOCKET.
 # Build options can be configured through environment variables.
-# (1) UMQ_BUILD(optional, default is off) => build umq or not.(on/off)
-# (2) UBSOCKET_BUILD(optional, default is off) => build ubsocket or not.(on/off)
+# (1) UBSOCKET_BUILD(optional, default is off) => build ubsocket or not.(on/off)
+# (2) UBSOCKET_BUILD_SHM(optional, default is off) => build ubsocket shm or not.(on/off)
 # (3) UBSOCKET_UT(optional, default is off) => run ubsocket ut or not.(on/off)
-# (4) USE_URMA_STUB(optional, default is OFF) => in CI environment, use urma stub or not.(ON/OFF)
-# (5) UBSOCKET_PASS_RATE(optional, default is off) => run ubsocket ut pass rate or not.(on/off)
-# (6) UBSOCKET_COVERAGE(optional, default is off) => run ubsocket ut coverage or not.(on/off)
+# (4) UBSOCKET_PASS_RATE(optional, default is off) => run ubsocket ut pass rate or not.(on/off)
+# (5) UBSOCKET_COVERAGE(optional, default is off) => run ubsocket ut coverage or not.(on/off)
 # version: 1.0.0
 # change log:
 # ***********************************************************************
@@ -16,10 +15,6 @@ set -e
 (set -o pipefail) 2>/dev/null && set -o pipefail
 
 readonly ROOT_DIR=$(dirname "$(realpath "$(dirname "${0}")")")
-
-# check whether build umq, default is off
-UMQ_BUILD="${UMQ_BUILD:-off}"
-echo "build umq: ${UMQ_BUILD}"
 
 # check whether build ubsocket, default is off
 UBSOCKET_BUILD="${UBSOCKET_BUILD:-off}"
@@ -33,10 +28,6 @@ echo "build ubsocket shm: ${UBSOCKET_BUILD_SHM}"
 UBSOCKET_UT="${UBSOCKET_UT:-off}"
 echo "run ubsocket ut: ${UBSOCKET_UT}"
 
-# when in CI environment, open it
-USE_URMA_STUB="${USE_URMA_STUB:-OFF}"
-echo "use urma stub: ${USE_URMA_STUB}"
-
 # check whether run ubsocket ut pass rate, default is off
 UBSOCKET_PASS_RATE="${UBSOCKET_PASS_RATE:-off}"
 echo "run ubsocket ut pass rate: ${UBSOCKET_PASS_RATE}"
@@ -45,34 +36,6 @@ echo "run ubsocket ut pass rate: ${UBSOCKET_PASS_RATE}"
 UBSOCKET_COVERAGE="${UBSOCKET_COVERAGE:-off}"
 echo "run ubsocket ut coverage: ${UBSOCKET_COVERAGE}"
 
-# build umq, .so will store in "./src/hcom/umq/build/src"
-function umq_build() {
-    if [ "${UMQ_BUILD}" != "on" ]; then
-        echo "UMQ_BUILD is off, skipping umq build."
-        return 0
-    fi
-
-    local umq_dir="${ROOT_DIR}/src/hcom/umq"
-
-    echo "Building UMQ ..."
-    cd "${umq_dir}"
-    mkdir -p build
-    cd build
-
-    if ! cmake -DUSE_URMA_STUB="${USE_URMA_STUB}" ..; then
-        echo "[Error]: umq cmake failed."
-        exit 1
-    fi
-    echo "umq cmake successfully."
-
-    local num_cores=$(nproc 2>/dev/null || echo 4)
-
-    if ! make -j"${num_cores}"; then
-        echo "[Error]: umq make failed."
-        exit 1
-    fi
-    echo "umq make successfully."
-}
 # build ubsocket, .so will store in "./src/ubsocket/build/brpc/librpc_adapter_brpc.so"
 function ubsocket_build() {
     if [ "${UBSOCKET_BUILD}" != "on" ]; then
@@ -82,27 +45,13 @@ function ubsocket_build() {
 
     echo "Building ubsocket ..."
 
-    # urma 模式（默认 URMA_BACKEND=ON, UMQ_BACKEND=OFF）不需要 libumq.so；umq 模式（UMQ_BACKEND=on）需先 build umq
-    if [ "${UMQ_BACKEND:-OFF}" = "on" ] && [ "${UMQ_BUILD}" != "on" ]; then
-        echo "[Error]: UMQ_BACKEND=on needs UMQ_BUILD=on! You should build umq first."
-        exit 1
-    fi
-
     local ubsocket_dir="${ROOT_DIR}/src/ubsocket"
 
     cd "${ubsocket_dir}"
 
-    # UMQ_BACKEND=on 时自动关闭 URMA_BACKEND（互斥，避免 FATAL_ERROR）
-    if [ "${UMQ_BACKEND:-OFF}" = "on" ]; then
-        URMA_BACKEND=off
-    fi
-
     if cmake -S. -Bbuild \
         -DBUILD_WITH_UBS_SHM=${UBSOCKET_BUILD_SHM} \
-        -DBUILD_URMA_DLOPEN_BACKEND=${URMA_BACKEND:-ON} \
-        -DBUILD_UMQ_DLOPEN_BACKEND=${UMQ_BACKEND:-OFF} \
-        -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
-        -DUMQ_LIB="${ROOT_DIR}/src/hcom/umq/build/src/libumq.so"; then
+        -DBUILD_URMA_DLOPEN_BACKEND=ON; then
         echo "ubsocket cmake successfully"
     else
         echo "[Error]: ubsocket cmake failed."
@@ -129,11 +78,6 @@ function run_ubsocket_ut_tests() {
 
     echo "Building ubsocket UT tests ..."
 
-    if [ "${UMQ_BUILD}" != "on" ]; then
-        echo "[Error]: ubsocket ut needs UMQ_BUILD is on! You should build umq first."
-        exit 1
-    fi
-
     local ubsocket_dir="${ROOT_DIR}/src/ubsocket"
     cd "${ubsocket_dir}"
 
@@ -145,10 +89,7 @@ function run_ubsocket_ut_tests() {
     if cmake -S. -Bbuild \
         -DCMAKE_BUILD_TYPE=Debug \
         -DUBSOCKET_BUILD_TESTS=ON \
-        -DUBSOCKET_ENABLE_COVERAGE=${coverage_flag} \
-        -DUMQ_INCLUDE="${ROOT_DIR}/src/hcom/umq/include/umq" \
-        -DUMQ_LIB="${ROOT_DIR}/src/hcom/umq/build/src/libumq.so" \
-        -DUMQ_BUF_LIB="${ROOT_DIR}/src/hcom/umq/build/src/qbuf/libumq_buf.so"; then
+        -DUBSOCKET_ENABLE_COVERAGE=${coverage_flag}; then
         echo "UT tests cmake successfully."
     else
         echo "[Error]: UT tests cmake failed."
@@ -258,7 +199,6 @@ function run_ubsocket_coverage() {
     fi
 }
 
-umq_build
 ubsocket_build
 run_ubsocket_ut_tests
 run_ubsocket_pass_rate

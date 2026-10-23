@@ -23,12 +23,6 @@ target_compile_options(entry_objects PRIVATE -fPIC)
 # core objects
 file(GLOB CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/*.cpp)
 
-### umq source
-if (BUILD_UMQ_DLOPEN_BACKEND OR BUILD_UMQ_ADAPTER_BACKEND)
-    file(GLOB UMQ_CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/umq/*.cpp)
-    list(APPEND CORE_SRCS ${UMQ_CORE_SRCS})
-endif ()
-
 if (BUILD_URMA_DLOPEN_BACKEND)
     ### urma source
     file(GLOB URMA_CORE_SRCS ${UBSOCKET_CSRC_DIR}/core/urma/*.cpp)
@@ -64,10 +58,6 @@ add_library(ubsocket_static STATIC
         $<TARGET_OBJECTS:profiling_objects>
 )
 set_target_properties(ubsocket_static PROPERTIES OUTPUT_NAME "ubsocket")
-if(BUILD_UMQ_ADAPTER_BACKEND)
-    target_link_directories(ubsocket_static PUBLIC ${UMQ_LIB_DIR} ${UMQ_QBUF_LIB_DIR})
-    target_link_libraries(ubsocket_static PUBLIC umq umq_buf)
-endif()
 
 # shared library
 add_library(ubsocket_shared SHARED
@@ -80,10 +70,6 @@ add_library(ubsocket_shared SHARED
 )
 set_target_properties(ubsocket_shared PROPERTIES OUTPUT_NAME "ubsocket")
 target_link_libraries(ubsocket_shared PUBLIC pthread)
-if(BUILD_UMQ_ADAPTER_BACKEND)
-    target_link_directories(ubsocket_shared PUBLIC ${UMQ_LIB_DIR} ${UMQ_QBUF_LIB_DIR})
-    target_link_libraries(ubsocket_shared PUBLIC umq umq_buf)
-endif()
 
 if(UBSOCKET_BUILD_CLI)
   message(STATUS "Building CLI component...")
