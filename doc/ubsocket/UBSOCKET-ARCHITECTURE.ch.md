@@ -2,7 +2,7 @@
 
 ## 1. 定位与总览
 
-UBSocket 是**用户态无感加速库**：北向提供与 POSIX socket/epoll 完全一致的 C API (`ubsocket_<func>`)，南向通过 UMQ(RDMA-like) 传输数据。应用只需将 `socket()` → `ubsocket_socket()` 即可完成 TCP→UB 的劫持替换。
+UBSocket 是**用户态无感加速库**：北向提供与 POSIX socket/epoll 完全一致的 C API (`ubsocket_<func>`)，南向通过 URMA 传输数据。应用只需将 `socket()` → `ubsocket_socket()` 即可完成 TCP→UB 的劫持替换。
 
 ### 1.1 层次架构总图
 
@@ -27,27 +27,23 @@ graph TD
     end
 
     subgraph CORE["Core Layer — csrc/core/"]
-        subgraph ABSTRACT["通用抽象层（禁止引用umq/urma/）"]
+        subgraph ABSTRACT["通用抽象层（禁止引用urma/）"]
             SOCKET_BASE["Socket / SocketBase"]
             DATA_TX["DataTx / DataTxOps"]
             DATA_RX["DataRx / DataRxOps"]
             CONNECTOR["Connector / ConnectorOps"]
             ACCEPTOR["Acceptor / AcceptorOps"]
-            EVENT_EPOLL["EventPoll / AsyncEventPoll / EpollRunner"]
+            EVENT_EPOLL["EventPoll"]
             TX_CQE["TxCqePoller"]
             WAKEUP["UbsocketWakeupEvent"]
         end
-        subgraph UMQ["UMQ具体实现 — csrc/core/umq/"]
-            UMQSOCKET["UmqSocket"]
-            UMQ_TX["UmqTxOps / UmqRxOps"]
-            UMQ_CONN["UmqConnectorOps / UmqAcceptorOps"]
-            UMQ_BACKEND["UmqBackend"]
-            UMQ_EPOLL_RUNNER["3个EpollRunner Ops变体"]
-            UMQ_ERRNO["UmqErrnoConverter（冻结）"]
-            UMQ_TP["UmqTransportPool"]
-        end
-        subgraph URMA["URMA壳实现 — csrc/core/urma/"]
-            URMA_SOCKET["UrmaSocket（空壳）/ UrmaWrapper"]
+        subgraph URMA["URMA实现 — csrc/core/urma/"]
+            URMA_SOCKET["UrmaSocket / UrmaWrapper"]
+            URMA_OPS["UrmaTxOps / UrmaRxOps"]
+            URMA_CONN["UrmaConnectorOps / UrmaAcceptorOps"]
+            URMA_BACKEND["UrmaBackend"]
+            URMA_POLLER["UrmaPoller / UrmaEventPoll"]
+            URMA_ERRNO["UrmaErrnoConverter"]
         end
     end
 
@@ -57,28 +53,26 @@ graph TD
         C_LOCK["Lock / LockRegistry"]
         C_RING["SPSCRingQueue / QbufQueue"]
         C_THREAD["ThreadPool / ExecutorService"]
-        C_COOLDOWN["PortCooldownManager"]
     end
 
     subgraph UNDER["Under API Layer — csrc/under_api/"]
-        DL["DlApi → dlopen libumq.so + libc.so.6"]
-        LIBC["LibcApi / UmqApi"]
+        DL["DlApi → dlopen liburma.so + libc.so.6"]
+        LIBC["LibcApi / UrmaApi"]
     end
 
     subgraph PROF["Profiling — csrc/profiling/"]
         PROF_TRACER["ProfTracer / Tracepoint / StatsMgr / ProbeManager"]
     end
 
-    subgraph TRANSPORT["Transport — libumq.so → UB内核驱动 → RDMA-like硬件"]
+    subgraph TRANSPORT["Transport — liburma.so → UB内核驱动 → RDMA-like硬件"]
     end
 
     APP_API -->|UB_API_WRAP劫持| ENTRY
     ENTRY -->|Guard: UBS_NATIVE_TCP_MODE| LIBC
     ENTRY -->|Guard: domain!=AF_SMC| LIBC
     ENTRY --> CORE
-    ABSTRACT --> UMQ
     ABSTRACT --> URMA
-    UMQ --> UNDER
+    URMA --> UNDER
     UNDER --> TRANSPORT
 ```
 
@@ -107,8 +101,7 @@ src/ubsocket/
 │   ├── common/                  # 基础设施（28个文件）
 │   ├── core/                    # 核心层
 │   │   ├── ubsocket_*.h/cpp     # 通用抽象层（14个文件）
-│   │   ├── umq/                 # UMQ传输实现（32个文件）
-│   │   └── urma/                # URMA壳实现（9个文件，条件编译）
+│   │   └── urma/                # URMA实现（44个文件）
 │   ├── under_api/               # 动态库加载封装（7个文件）
 │   ├── iobuf/                   # 零拷贝Block/BlockCache（3个文件）
 │   ├── profiling/               # 维测基础设施（19个文件）
@@ -153,19 +146,6 @@ classDiagram
         +NotifyReadable() int
     }
 
-    class UmqSocket {
-        -uint64_t umq_handle_
-        -uint64_t share_umq_handle_
-        -ub_trans_mode trans_mode_
-        -umq_topo_type_t topo_type_
-        -uint32_t negotiated_version_
-        -uint32_t peer_version_
-        -UmqBufferReceiveQueue* rxQueue
-        +CreateLocalUmq() Result
-        +UpdateRxQueueAvailNum() Result
-        +CheckDevAdd() Result
-    }
-
     class UrmaSocket {
         空壳 — 无成员/方法覆盖
     }
@@ -178,14 +158,12 @@ classDiagram
         +PollTx()* int
         +FlushTx()*
     }
-    class UmqTxOps { }
     class DataRxOps {
         <<interface>>
         +PollRx()* int
         +RearmRxInterrupt()* int
         -block_cache_ BlockCache
     }
-    class UmqRxOps { }
     class ConnectorOps {
         <<interface>>
         +PrepareConnect()* Result
@@ -193,7 +171,6 @@ classDiagram
         +CreateSocketResources()* Result
         +DestroySocketResources()*
     }
-    class UmqConnectorOps { }
     class AcceptorOps {
         <<interface>>
         +PrepareConnect()* Result
@@ -202,15 +179,9 @@ classDiagram
         +DestroySocketResources()*
         +ValidateProtocol()* int
     }
-    class UmqAcceptorOps { }
 
     Socket <|-- SocketBase
-    SocketBase <|-- UmqSocket
     SocketBase <|-- UrmaSocket
-    DataTxOps <|-- UmqTxOps
-    DataRxOps <|-- UmqRxOps
-    ConnectorOps <|-- UmqConnectorOps
-    AcceptorOps <|-- UmqAcceptorOps
     SocketBase o-- DataTx
     SocketBase o-- DataRx
     SocketBase o-- Acceptor
@@ -227,14 +198,14 @@ classDiagram
 stateDiagram-v2
     [*] --> INIT : socket()
     INIT --> RAW_ESTABLISHED : connect()/accept() TCP完成
-    RAW_ESTABLISHED --> ESTABLISHED : CreateLocalUmq + bind + PrefillRx
+    RAW_ESTABLISHED --> ESTABLISHED : Negotiate + CreateUrmaResources + 段信息交换
     ESTABLISHED --> SHUTDOWN : shutdown()
     SHUTDOWN --> CLOSE : close()
     INIT --> CLOSE : close()（未建立时）
     RAW_ESTABLISHED --> CLOSE : close()
 
-    note right of RAW_ESTABLISHED : TCP已连但UMQ未建立\n数据走TCP fallback
-    note right of ESTABLISHED : UMQ通道就绪\n数据走RDMA通道
+    note right of RAW_ESTABLISHED : TCP已连但UB通道未建立\n数据走TCP fallback
+    note right of ESTABLISHED : URMA通道就绪\n数据走RDMA通道
 ```
 
 ---
@@ -269,7 +240,7 @@ sequenceDiagram
         S->>S: 协商：取较低全版本（直接整数比较）
         S-->>C: negotiated_version (4B) + NegotiateRsp body
         C->>C: ValidateNegotiatedVersion() → ok
-        Note over S: 随Rsp发送：ret_code + trans_mode + EID + socket_ids
+        Note over S: 随Rsp发送：ret_code + trans_mode + conn_flag + conn_id
     end
 ```
 
@@ -308,27 +279,24 @@ sequenceDiagram
     participant C as Client(Connector)
     participant TCP as TCP通道
     participant S as Server(Acceptor)
-    participant UMQ as UMQ后端
+    participant UB as URMA后端
 
     Note over C: step0 — PrepareConnect
     C->>TCP: TFO/UB_SOCK_OPT/Normal connect
     C->>C: SetTcpNoDelay + SetNonBlocking
 
-    Note over C,S: step1 — Negotiate（版本+路由协商）
+    Note over C,S: step1 — Negotiate（版本+连接参数协商）
     C->>TCP: NegotiateReq（magic + version + body）
     S->>S: NegotiateVersion → 校验Major
-    S-->>C: negotiated_version (4B) + NegotiateRsp（ret_code + trans_mode + EID + socket_ids）
+    S-->>C: negotiated_version (4B) + NegotiateRsp（ret_code + trans_mode + conn_flag + conn_id）
     C->>C: ValidateNegotiatedVersion
-    C->>C: DoRoute → 选择主路由+备路组（一主三备）
-    C->>TCP: NegotiateRoute（topo_type + master_route + back_routes）
 
     Note over C,S: step2 — CreateSocketResources
-    C->>UMQ: CreateLocalUmq → umq_create（子UMQ+主UMQ）
-    C->>C: GenerateSocketCommOps → UmqTxOps + UmqRxOps
-    C->>TCP: 交换 CpMsg（bind_info序列化）
-    C->>UMQ: umq_bind(handle, remote_bind_info)
-    C->>C: PrefillRx → umq_buf_alloc + umq_post
-    C->>C: WaitUntilReady → umq_state_get直到READY
+    C->>UB: CreateUrmaResources → 创建jetty/JFS/JFR等URMA资源
+    C->>C: GenerateSocketCommOps → UrmaTxOps + UrmaRxOps
+    C->>TCP: ExchangeSocketResources（TCP交换段信息：buf地址/jetty-id/seg）
+    C->>UB: ImportRemoteJetty + 注册对端段
+    C->>C: 绑定本地收包seg + 预投空recv WR
     C->>C: state = ESTABLISHED
 ```
 
@@ -340,7 +308,7 @@ sequenceDiagram
     participant A as Acceptor
     participant TCP as TCP通道
     participant SOCK as SocketBase
-    participant UMQ as UMQ后端
+    participant UB as URMA后端
     participant TP as ThreadPool
 
     A->>L: LibcApi::accept()
@@ -354,10 +322,9 @@ sequenceDiagram
     end
 
     A->>A: ValidateProtocol → 校验magic
-    A->>SOCK: SocketBase::Create → UmqSocket
+    A->>SOCK: SocketBase::Create → UrmaSocket
     A->>TCP: AcceptNegotiate → 收Req + 发Rsp
-    A->>TCP: AcceptExchangeSocketIDs
-    A->>UMQ: CreateLocalUmq + umq_bind + PrefillRx
+    A->>UB: ExchangeSocketResources（CreateUrmaResources + 段交换 + 预投recv WR）
     A->>SOCK: SocketSet::OverrideItem(new_fd, socket_obj)
 ```
 
@@ -389,7 +356,7 @@ sequenceDiagram
     AEP->>WK: ProcessReadyEvents → 注入EPOLLIN
     APP->>A: 再次accept()
     A->>A: TryPopAsyncReadyFd → ready_queue返回已建链fd
-    A-->>APP: return new_fd（UMQ已就绪）
+    A-->>APP: return new_fd（UB通道已就绪）
 ```
 
 ### 4.5 建链重试/降级状态机
@@ -411,32 +378,8 @@ stateDiagram-v2
 
     kDEGRADE --> [*] : 降级到纯TCP
     kFAILED --> [*] : 建链失败
-    kOK --> [*] : UMQ通道就绪，state=ESTABLISHED
+    kOK --> [*] : URMA通道就绪，state=ESTABLISHED
 ```
-
-### 4.6 路由选择（Bonding场景）
-
-```mermaid
-flowchart TD
-    START[获取路由列表 umq_get_route_list] -->|cache miss| FETCH[从UMQ查询路由]
-    START -->|cache hit| CACHE[RouteListRegistry缓存]
-    FETCH --> CACHE
-    CACHE --> TOPO{拓扑类型?}
-
-    TOPO -->|FULLMESH_1D| RR["GetConnEid → 纯RR轮询单路<br/>无备路"]
-    TOPO -->|CLOS| CPU["GetCpuAffinityUmqRoute<br/>亲和组: src/dst同芯片<br/>不亲和组: src/dst异芯片"]
-
-    CPU --> MERGE["合并亲和+不亲和 = all_routes"]
-    MERGE --> PICK["RRChooseMainRoute<br/>从all_routes RR选择主路<br/>+最多3条备路（一主三备）"]
-    PICK --> NONAFF["不亲和组另存为non_aff_route_list_<br/>用于容灾重试"]
-
-    TOPO --> CLOS_CONN[is_bonding → CheckDevAdd<br/>CLOS: 检查主路+备路所有端口]
-    CLOS_CONN --> COOLDOWN{端口冷却?}
-    COOLDOWN -->|冷却中| SKIP[跳过该端口]
-    COOLDOWN -->|可用| PROCEED[进入CreateSocketResources]
-```
-
-**端口冷却**：`umq_bind()`在CLOS组网下失败时，`PortCooldownManager::MarkPortInCooldown`标记端口冷却，后续建链跳过该端口。
 
 ---
 
@@ -449,88 +392,65 @@ sequenceDiagram
     participant APP as 用户
     participant SOCK as SocketBase
     participant TX as DataTx
-    participant TXOPS as UmqTxOps
-    participant UMQ as UMQ后端
+    participant TXOPS as UrmaTxOps
+    participant URMA as URMA后端
 
     APP->>SOCK: ubsocket_writev(fd, iov, iovcnt)
     SOCK->>SOCK: UBS_NATIVE_TCP_MODE/RAW_ESTABLISHED → TCP fallback
     SOCK->>TX: WriteV(sock, iov, iovcnt)
 
-    TX->>TXOPS: PollTx(sock)
+    TX->>TXOPS: WriteV(sock, iov, iovcnt, flags)
     activate TXOPS
-    TXOPS->>TXOPS: GetAndAckEvent → umq_get_cq_event + umq_ack_interrupt
-    TXOPS->>TXOPS: DoUmqTxPoll → umq_poll(TX) 清理已完成发送
-    TXOPS->>TXOPS: DpRearmTxInterrupt → umq_rearm_interrupt
-    Note over TXOPS: 失败→UmqErrnoConverter::Convert
+    alt total ≤ URMA_INLINE_DATA_THRESHOLD
+        TXOPS->>TXOPS: WriteInline → 控制头+用户数据拷入send_buf
+        TXOPS->>URMA: 下发RDMA WRITE_IMM（WRITE_IN_BAND）
+    else 携带UBS_IO_FLAG_USE_BRPC_BLOCK（零拷贝）
+        TXOPS->>TXOPS: WriteZeroCopy → 构建BlockRef描述符
+        TXOPS->>URMA: 下发RDMA WRITE_IMM（PRE_WRITE）+ Block::IncRef
+    else 大IO非零拷贝
+        TXOPS->>TXOPS: WriteLargeIO → 分配Block并拷贝用户数据
+        TXOPS->>TXOPS: 复用WriteZeroCopy路径下发
+    end
+    Note over TXOPS: 失败→UrmaErrnoConverter::Convert(WRITEV)
     deactivate TXOPS
-
-    TX->>TXOPS: BuildIovConverter → UmqBufConverter
-    loop 切分用户数据为UMQ buf块
-        TX->>TXOPS: AllocTxBuf → umq_buf_alloc
-        TX->>TX: MemCopy → iov数据拷贝到umq_buf_t链
-        TX->>TX: Block::IncRef
-        TX->>TXOPS: PostSend → umq_post(TX)
-        alt 成功
-            TX->>TX: tx_queue_avail_num_ -= batch
-        else 失败
-            TX->>TX: UmqErrnoConverter::Convert(WRITEV)
-        end
-    end
-    TX-->>APP: return tx_total_len
+    TX-->>APP: return 已发送字节数（inline路径可能短写）
 ```
 
-### 5.2 接收流程（ReadV + EpollRunner）
+### 5.2 接收流程（ReadV + UrmaPoller）
 
-#### Share-JFR模式（默认）
+#### CQE 派发（UrmaPoller后台线程）
 
 ```mermaid
 sequenceDiagram
-    participant RUNNER as EpollRunner(ShareJFR, 后台daemon)
-    participant UMQ as 主UMQ
-    participant RXQUEUE as UmqBufferReceiveQueue
-    participant ASYNC as AsyncEventPoll
+    participant POLLER as UrmaPoller(后台线程)
+    participant URMA as URMA后端(JFC)
+    participant BACKEND as UrmaBackend
+    participant RX as UrmaRxOps
     participant APP as 用户
-    participant RX as UmqRxOps
 
-    Note over RUNNER: 后台线程永久循环
     loop
-        RUNNER->>RUNNER: epoll_wait(runner_epfd)
-        RUNNER->>RUNNER: ProcessShareJfrEvent
-        RUNNER->>UMQ: ProcessMainUmqRearm → get_cq_event + rearm
-        RUNNER->>UMQ: umq_poll(main_umq, RX) → RX数据
-        RUNNER->>RUNNER: SiftSocketEventsWithUmqBuffers
-        Note over RUNNER: 按fd(ctx)分发buf到各socket的rxQueue
-        RUNNER->>ASYNC: SetReadableEventFd → eventfd通知
+        POLLER->>URMA: EventPolling/BusyPolling → poll JFC CQE
+        URMA-->>BACKEND: CQE（WRITE_IMM / RDMA READ完成）
+        BACKEND->>RX: HandleCqe → DataReached(seq_no, write_imm)
+        RX->>RX: WRITE_IN_BAND→slot置DATA_READY<br/>PRE_WRITE→发起RDMA READ（slot置READING）
+        RX->>APP: eventfd唤醒 / NotifyReadable内联记录
     end
 
-    APP->>ASYNC: ubsocket_epoll_wait
-    ASYNC->>ASYNC: ArrangeWakeUpEvents → 内核事件+SPSC队列
-    ASYNC-->>APP: 可读事件
-
     APP->>RX: ubsocket_readv(fd, iov)
-    RX->>RXQUEUE: GetAndPopQbuf → 取已分发的buf
-    RX->>RX: HandleBadQBuf / HandleErrorRxCqe
-    RX->>RX: block_cache_.CutAndInsertAfter → 链入brpc Block
-    RX->>RX: RearmRxInterrupt
+    RX->>RX: ReadV → 按seq_no顺序消费slot
+    alt WRITE_IN_BAND
+        RX->>RX: ConsumeInlineData（从recv_buf拷入iov）+ 回WRITE_IN_BAND_ACK
+    else PRE_WRITE零拷贝
+        RX->>RX: ZeroCopyRead → block_cache_.CutAndInsertAfter 链入brpc Block
+    else RDMA READ完成
+        RX->>RX: ConsumeBlockData（Block数据拷入iov）+ 回POST_WRITE
+    end
     RX-->>APP: return rx_total_len
 ```
 
-#### 非Share-JFR模式
-
-```mermaid
-sequenceDiagram
-    participant APP as 用户
-    participant RX as UmqRxOps
-    participant UMQ as 子UMQ
-
-    APP->>RX: ubsocket_readv(fd, iov)
-    RX->>RX: PollRx(sock)
-    RX->>RX: GetAndAckEvent → umq_get_cq_event
-    RX->>UMQ: umq_poll(sub_umq, RX) → 直接拉取
-    RX->>RX: 按fd将buf处理到block_cache
-    RX->>RX: RxDataSet → CutAndInsertAfter 链入brpc Block
-    RX-->>APP: return rx_total_len
-```
+说明：
+> - CQE 事件有两种派发策略：Inline 模式由 poller 线程立即处理；Dispatcher 模式事件入队（ReadableEventQueue），由 readv 排空时推进。
+> - DISPATCHER 模式下，JFCE 中断 fd 注册进用户 epoll（UrmaEventPoll），JFC 轮询与派发在 epoll_wait 内联完成。
 
 ---
 
@@ -541,25 +461,21 @@ sequenceDiagram
 ```mermaid
 graph TD
     subgraph USER["用户层 (User)"]
-        AEP["AsyncEventPoll — 用户epoll_fd"]
-        KERNEL["内核epoll: raw_socket_fd + event_fd + tx_fd"]
-        RING["SPSCRingQueue — EpollRunner事件队列"]
+        AEP["UrmaEventPoll — 用户epoll_fd"]
+        KERNEL["内核epoll: raw_socket_fd + event_fd + JFCE中断fd"]
+        QUEUE["ReadableEventQueue — 可读事件缓冲队列"]
         AEP -->|epoll_wait| KERNEL
-        AEP -->|MultiPop| RING
+        AEP -->|DrainPendingReadable| QUEUE
     end
 
     subgraph INTERNAL["内部层 (Background Threads)"]
-        S_JFR["EpollRunner SHARE_JFR_RX<br/>ops=UmqShareJfrEpollRunnerOps<br/>监听share_jfr_fd → 分发RX数据"]
-        TP_TX["EpollRunner TRANSPORT_POOL_TX<br/>ops=UmqTpTxEpollRunnerOps<br/>处理TX CQE + 流控恢复"]
-        TP_EV["EpollRunner TRANSPORT_POOL_EVENT<br/>ops=UmqTpEventEpollRunnerOps<br/>处理事件通知"]
+        POLLER["UrmaPollerSet — UrmaPoller后台线程<br/>EventPolling/BusyPolling poll JFC CQE<br/>经HandleCqe按连接派发"]
     end
 
-    S_JFR -->|eventfd write| RING
-    TP_TX -->|epoll_wait TX完成| INTERNAL
-    TP_EV -->|epoll_wait 事件| INTERNAL
+    POLLER -->|eventfd write / inline记录| QUEUE
 ```
 
-### 6.2 AsyncEventPoll 内部结构
+### 6.2 UrmaEventPoll 内部结构
 
 ```mermaid
 classDiagram
@@ -571,44 +487,23 @@ classDiagram
         +EpollWait(events, max, timeout)* int
     }
 
-    class AsyncEventPoll {
-        -int sock_readable_fd_
-        -SPSCRingQueue readable_sockets_event_queue_
+    class UrmaEventPoll {
+        -unordered_map jfce_handlers_（JFCE中断fd→注册事件）
         -unordered_map socket_data_（fd→EpollEvent*）
         -EpollEvent* removed_head_（延迟释放链表）
-        -EpollEvent* ready_event_（异步Accept唤醒）
-        -function wakeup_callback_
-        +EpollCtl() 按fd类型分派: raw_socket / tx / readable
-        +EpollWait() 合并内核事件+SPSC队列+ready事件
-        +AddReadableEvent(data) + SetReadableEventFd()
-        +SetWakeupCallback(ready, cb)
+        -ReadableEventQueue readable_events_（可读事件缓冲）
+        +EpollCtl() 按fd类型分派: raw_socket / urma_socket / JFCE
+        +EpollWait() 合并内核事件+pending可读事件
+        +NotifyReadable(sock) 内联记录可读事件
     }
 
-    EventPoll <|-- AsyncEventPoll
+    EventPoll <|-- UrmaEventPoll
 ```
 
 **EpollCtl分派逻辑**:
 - `raw_socket_fd` → 透传到内核epoll
-- `sock_readable_fd` → 内部创建一次（`AddSockReadableEvent`）
-- TX fd → `AddProtoTxEvent` + 注册到`EpollRunner`
-
-### 6.3 RunnerEventData 编码
-
-64位union：高4位`type`（`RUNNER_EVENT_TYPE_SHARE_JFR / SUB_UMQ_RX / TP_TX / TP_EVENT / STOP`），低60位`data`（对象指针或umq_handle）。
-
-### 6.4 TransportPool
-
-```mermaid
-graph TD
-    subgraph TP["UmqTransportPool"]
-        WARM[WarmUp — 预创建TP]
-        CREATE[CreatePool — 创建指定数量TP]
-        REBUILD[RebuildTp — 重建故障TP]
-    end
-    TP -->|Umqh2TpIdxMap| UMQH[umq_handle → tp_idx → vector of fds]
-```
-
-TransportPool为每个主UMQ handle维护一组传输资源，支持预热（减少建链延迟）和故障重建。
+- urma socket fd → 内部托管（`AddUrmaSocketEvent`），不透传内核
+- JFCE中断fd → 注册到`jfce_handlers_`，事件到来时内联poll CQE
 
 ---
 
@@ -662,16 +557,14 @@ classDiagram
 
 ```mermaid
 sequenceDiagram
-    participant RX as UmqRxOps::PollRx
+    participant RX as UrmaRxOps::ReadV
     participant CACHE as BlockCache
     participant BRPC as brpc Block链
 
-    RX->>RX: umq_poll → umq_buf_t
-    RX->>CACHE: Insert(buf_data, data_size)
-    Note over CACHE: 在buf_data前创建Block
+    RX->>RX: ZeroCopyRead → 就绪Block链
+    RX->>CACHE: 接收侧data_block链移入block_cache_
 
-    APP->>RX: ubsocket_readv → RxDataSet(buf, size)
-    RX->>CACHE: CutAndInsertAfter(cut_size, brpc_block)
+    APP->>RX: ubsocket_readv → CutAndInsertAfter(cut_size, brpc_block)
     Note over CACHE: 切割缓存Block链后插入brpc Block链
     CACHE-->>BRPC: brpc_block → ... → [Block 1] → [Block 2] → ... → original_next
 ```
@@ -685,19 +578,16 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     START[ubsocket_init] --> STEP1["step1: GlobalSetting::AddRules + LoadEnv<br/>+ options覆盖 + VerifySetting"]
-    STEP1 --> STEP2["step2: DlApi::Load - dlopen libumq.so + libc.so.6"]
+    STEP1 --> STEP2["step2: DlApi::Load - dlopen liburma.so + libc.so.6"]
     STEP2 --> STEP3["step3: LockRegistry::RegisterDefaultOps<br/>+ 外部锁/信号量/RPC追踪注入"]
     STEP3 --> STEP4["step4: SocketSet/ArraySet EpollPoll Init"]
-    STEP4 --> STEP5{USE_BRPC_ZCOPY?}
-    STEP5 -->|yes| ZCOPY["ZeroCopyPrepare: UbsZcopyAdapter hook brpc allocator"]
-    STEP5 -->|no| STEP6
-    ZCOPY --> STEP6["step5: UmqBackend::Init → umq_init → AddUbDev"]
+    STEP4 --> STEP6["step5: UrmaBackend::Init → urma_init<br/>+ ContextPool/JettyPool/PollerSet/IoBufPool初始化<br/>（注册零拷贝分配器）"]
     STEP6 --> STEP7["step6: signal SIGUSR2 → dump handler"]
     STEP7 --> STEP8{维测开关?}
     STEP8 -->|prof| PROF["Profiling::Init"]
     STEP8 -->|cli| CLI["GlobalStatsMgr"]
     STEP8 -->|probe| PROBE["ProbeManager::Start"]
-    STEP8 -->|trace| TRACE["PrintStatsMgr + SplitTrace + umq_stats_trace_start"]
+    STEP8 -->|trace| TRACE["PrintStatsMgr + SplitTrace"]
     PROF --> DONE
     CLI --> DONE
     PROBE --> DONE
@@ -720,40 +610,36 @@ flowchart TD
 
 ---
 
-## 9. UmqErrnoConverter
+## 9. UrmaErrnoConverter
 
-### 9.1 三种映射路径
+### 9.1 两种映射路径
 
 ```mermaid
 flowchart LR
     subgraph INPUT["输入"]
-        OP["UmqOperation枚举<br/>CREATE/CONNECT/ACCEPT/..."]
-        RET["umq返回值 int"]
-        STATUS["umq_buf_status_t"]
+        OP["UrmaOperation枚举<br/>CONNECT/ACCEPT/WRITEV/READV/<br/>CREATE_CTX/CREATE_JETTY/IMPORT_JETTY/BIND"]
+        STATUS["urma_status_t"]
+        CR_STATUS["urma_cr_status_t"]
         ERRNO["原始errno"]
     end
 
     subgraph MAP["映射路径"]
-        CONV["Convert(op, umqRet, errno)<br/>通用int返回值映射表"]
-        BUF["ConvertBufStatus(op, bufStatus, errno)<br/>缓冲状态方向映射<br/>WRITEV→EPIPE / READV→ECONNRESET"]
-        HDL["ConvertHandleResult(op, errno)<br/>handle返回值有限映射<br/>CREATE→EINVAL/EPERM"]
+        CONV["Convert(op, urmaStatus)<br/>urma_status_t映射表<br/>EAGAIN/ENOMEM/EINVAL<br/>按op兜底：CONNECT/ACCEPT→ECONNREFUSED"]
+        CR["ConvertCrStatus(op, crStatus)<br/>建链完成状态映射<br/>RNR重试超限→EAGAIN / ACK超时→ETIMEDOUT"]
     end
 
     OP --> CONV
-    RET --> CONV
+    STATUS --> CONV
     ERRNO --> CONV
-    OP --> BUF
-    STATUS --> BUF
-    ERRNO --> BUF
-    OP --> HDL
-    ERRNO --> HDL
+    OP --> CR
+    CR_STATUS --> CR
+    ERRNO --> CR
 
     CONV --> OUTPUT[mapped errno]
-    BUF --> OUTPUT
-    HDL --> OUTPUT
+    CR --> OUTPUT
 ```
 
-覆盖14种UmqOperation，errno在生产代码调用UMQ API后**立即保存**（errno必须在调用被测函数之前设置）。
+覆盖8种UrmaOperation，errno在生产代码调用URMA API后**立即保存**（errno必须在调用被测函数之前设置）。
 
 ---
 
@@ -765,50 +651,23 @@ flowchart LR
 | **Strategy(Ops)** | 5组虚接口 | 可插拔传输实现 |
 | **Factory** | `SocketBase::Create / GenerateSocketCommOps` | 按SocketType创建ops |
 | **Template Method** | `Connector::Connect / Acceptor::Accept` | 固定步骤: Prepare→Negotiate→CreateResources |
-| **Singleton** | `SocketSet / ArraySet / UmqEidTable` | 全局注册表 |
-| **Leaky Singleton** | `EidRegistry / RouteListRegistry / EpollRunner / TxCqePoller` | 进程生命周期，不析构 |
-| **Bridge/Adapter** | `UmqApi / LibcApi / DlApi` | 抽象dlopen vs 直接链接 |
+| **Singleton** | `SocketSet / ArraySet` | 全局注册表 |
+| **Leaky Singleton** | `TxCqePoller / UrmaPollerSet` | 进程生命周期，不析构 |
+| **Bridge/Adapter** | `UrmaApi / LibcApi / DlApi` | 抽象dlopen vs 直接链接 |
 | **Guard/Bypass** | `UBS_NATIVE_TCP_MODE` 检查 | UB不可用时回退TCP |
 | **Ref Counting** | `DECLARE_REF_COUNT_VARIABLE` | Socket / EventPoll / Ops生命周期 |
-| **SPSC Ring Queue** | `AsyncEventPoll::readable_sockets_event_queue_` | 无锁通知 |
 | **State Machine** | `UBHandshakeState` | 建链重试/降级控制 |
 | **Scope Exit** | `MakeScopeExit()` | RAII资源恢复 |
-| **Port Cooldown** | `PortCooldownManager` | 端口故障冷却 |
-| **Route Cache** | `RouteListRegistry` | 缓存路由查询结果 |
 
 ---
 
-## 11. UMQ API 使用汇总
-
-| UMQ API | 作用 | 调用方 |
-|---------|------|--------|
-| `umq_init` | 全局初始化 | `UmqBackend::Init()` |
-| `umq_create` | 创建UMQ队列 | `UmqSocket::CreateLocalUmq()` |
-| `umq_bind` | 远端绑定 | `UmqConnectorOps/AcceptorOps` |
-| `umq_bind_info_get` | 获取序列化绑定信息 | `UmqConnectorOps/AcceptorOps` |
-| `umq_post` | 提交发送/接收请求 | `UmqTxOps::PostSend`, `PrefillRx` |
-| `umq_poll` | 获取完成缓冲 | `UmqTxOps/UmqRxOps/EpollRunnerOps` |
-| `umq_buf_alloc/free` | 缓冲管理 | `UmqTxOps`, `PrefillRx` |
-| `umq_rearm_interrupt` | 重触发中断通知 | `UmqTxOps/UmqRxOps/EpollRunnerOps` |
-| `umq_interrupt_fd_get` | 获取中断fd | `UmqSocket::AddTxEvent/GetTxFd` |
-| `umq_get_cq_event` | 获取CQE | `UmqTxOps/UmqRxOps/EpollRunnerOps` |
-| `umq_ack_interrupt` | 确认中断 | 同上 |
-| `umq_state_get` | 查询队列状态（IDLE→READY） | `UmqSocket::WaitUntilReady` |
-| `umq_dev_add` | 注册UB设备 | `UmqBackend::AddUbDev` |
-| `umq_dev_info_list_get` | 发现UB设备 | `UmqBackend::FindDevName` |
-| `umq_get_route_list` | 获取路由拓扑 | `UmqConnectorOps::GetDevRouteList` |
-| `umq_stats_trace_start/stop` | 维测跟踪 | `ubsocket_init/uninit` |
-| `umq_log_config_set` | 日志配置 | `ubsocket_set_log_level/set_logger` |
-
----
-
-## 12. 关键概念速查
+## 11. 关键概念速查
 
 ### Share-JFR（共享接收队列）
-默认模式。同一EID下多个子UMQ共享主UMQ的接收队列：主UMQ由EpollRunner后台poll，RX数据按fd(ctx)分发到各socket的`rxQueue`；子UMQ只负责TX。
+URMA支持`URMA_SHARE_JFR`共享接收模式：多个连接可共享JFR（共享接收队列），CQE由UrmaPoller后台统一poll并按连接派发；连接也可使用独占jetty。
 
 ### 双层Epoll
-**用户层**（AsyncEventPoll）：合并内核事件 + SPSC队列 + 异步Accept ready事件。**内部层**（3个EpollRunner）：后台线程分别处理Share-JFR RX分发、TX CQE轮询、事件通知。
+**用户层**（UrmaEventPoll）：合并内核事件 + 可读事件缓冲队列（ReadableEventQueue）。**内部层**（UrmaPollerSet）：后台线程poll JFC CQE并按连接派发；Dispatcher模式下JFCE事件在用户epoll_wait内联处理。
 
 ### TCP Fallback
 `UBS_NATIVE_TCP_MODE`守卫 + `RAW_ESTABLISHED`状态时走TCP。建链失败时通过`IsDegradable()`判断是否可降级到纯TCP。
@@ -816,13 +675,7 @@ flowchart LR
 ### 外部锁注入
 `u_init_options_t`提供mutex/rwlock/semaphore/rpc_id四个函数指针表，brpc可注入自己的butex/semaphore实现。
 
-### 端口冷却（PortCooldownManager）
-CLOS组网`umq_bind()`失败后标记端口冷却，后续建链跳过。配合retry→degrade状态机实现容错。
-
-### 一主三备路由
-CLOS组网RRChooseMainRoute：从亲和+非亲和合并路由中RR选择1主+最多3备。不亲和组另存为容灾备路池，首次重试失败后从池中选路。
-
 ### 依赖方向规则
 - 通用层（`core/ubsocket_*`）禁止引用任何具体实现子目录头文件
 - 工厂方法（`ubsocket_socket.cpp`）是唯一例外——它根据`SocketType`创建具体对象
-- 具体实现层（`core/umq/*`, `core/urma/*`）可引用通用层头文件
+- 具体实现层（`core/urma/*`）可引用通用层头文件

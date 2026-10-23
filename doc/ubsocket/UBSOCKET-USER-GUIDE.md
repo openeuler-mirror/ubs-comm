@@ -94,9 +94,6 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 | UBSOCKET_INITIAL_CREDIT | 首次流控请求所申请的信用个数, 单个 WR 消耗 1 个信用 | [1, 1024] | 16| 否 |
 | UBSOCKET_MAX_CREDIT_PER_REQUEST | 流控信用被耗尽后会在前一次的申请个数基础上翻倍申请<br>例如第1次如果申请 16, 被耗尽后会申请 256 信令。但是最多不会超过此值 | [1, 1024] | 256| 否 |
 | UBSOCKET_MIN_RESERVED_CREDIT | 单个连接最小保留的的流控信用。如果连接所持有的流控信用小于此值，这些信用不会因连接无活动而归还给上层 | [1, 1024] | 2 | 否 |
-| UBSOCKET_UMQ_TINY_POOL_ENABLE         | 是否启用UMQ tiny pool                           | false, true                                                                                                                                                           | true                              | 否                                  |
-| UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE     | UMQ tiny pool块大小                              | 512, 1024, 2048, 4096, 8192                                                                                                                                           | 1024                              | 否                                  |
-| UBSOCKET_UMQ_TINY_POOL_BLOCK_COUNT    | UMQ tiny pool块数量                              | 正整数                                                                                                                                                                 | 8192                              | 否                                  |
 
 
 
@@ -108,8 +105,8 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 > - 裸设备相关配置项的范围和限制：`UBSOCKET_DEV_NAME`须为本机已存在的udma裸设备名（以`udma`为前缀，否则不按裸设备处理），长度须小于64字节；`UBSOCKET_EID_IDX`取值范围为[0, 1024]，且不能超出该设备通过`urma_admin show`查询到的实际EID个数。urma后端下对应配置项为`UBSOCKET_UB_DEV`（设备名，非空，限制同上）与`UBSOCKET_UB_EID_IDX`（[0, 1024]），并通过`UBSOCKET_UB_BOUNDING_DEV=0`显式指定不使用bonding设备、直接走裸设备。
 > - 裸设备（普通udma设备）的配置依赖于实际组网连线：`UBSOCKET_DEV_NAME`、`UBSOCKET_EID_IDX`等配置项的取值并非任意，必须与本机和对端设备的实际物理连线情况一致。配置前需通过`urma_admin show`确认各设备的名称、EID及端口连接状态（端口须为`up`），并确保通信两端所配置的设备/EID之间物理链路可达；若配置的设备与实际连线不匹配，将导致建链失败或降级为TCP。组网连线调整后，相关配置需同步更新。
 > - `UBSOCKET_JETTY_POOL_SIZE`参数设定值初始化时需要占用fd，因此需要确保有足够的fd，建议ulimit -n 65535。
-> - `UBSOCKET_POOL_INITIAL_SIZE` 最小值参考（单位 MB）：((UBSOCKET_RX_DEPTH * 4 + UBSOCKET_BUF_POOL_DEPTH) * (UBS_BUF_PAGE_SIZE_KB分片 + 128)) / 1024 / 1024；若 `UBSOCKET_UMQ_TINY_POOL_ENABLE=true`，还需加上 ((UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE + 128) * UBSOCKET_UMQ_TINY_POOL_BLOCK_COUNT) / 1024 / 1024。该参数是在初始化时需要分配的内存池的大小，必须配置充足保证初始化成功；若运行时内存池不足，会在 `UBSOCKET_POOL_MAX_SIZE` 限制范围内弹性扩容。
-> - `UBSOCKET_UB_TRANS_MODE` 设置为 CTP 模式（`RM_CTP`/`RC_CTP`）时，`UBS_BUF_PAGE_SIZE_KB` 设为 `default`此时size大小为4k，且 `UBSOCKET_UMQ_TINY_POOL_BLOCK_SIZE` 最大不超过 4096，否则会超出分片大小。
+> - `UBSOCKET_POOL_INITIAL_SIZE` 最小值参考（单位 MB）：((UBSOCKET_RX_DEPTH * 4 + UBSOCKET_BUF_POOL_DEPTH) * (UBS_BUF_PAGE_SIZE_KB分片 + 128)) / 1024 / 1024。该参数是在初始化时需要分配的内存池的大小，必须配置充足保证初始化成功；若运行时内存池不足，会在 `UBSOCKET_POOL_MAX_SIZE` 限制范围内弹性扩容。
+> - `UBSOCKET_UB_TRANS_MODE` 设置为 CTP 模式（`RM_CTP`/`RC_CTP`）时，`UBS_BUF_PAGE_SIZE_KB` 设为 `default`此时size大小为4k。
 
 参考如下命令进行环境变量配置即可。
 
@@ -216,25 +213,7 @@ $ 9c414246b70a3d61a6da314a2bd7c996 *ubs-comm-master.zip
 
 ### 4.4 编译构建
 
-`UBSocket`归属于在`UBS Comm`项目，使用了该项目的部分公共能力，故需要分两部分编译。进行源码编译前，请先下载[UBS Comm源码](https://atomgit.com/openeuler/ubs-comm)源码，并切换到目标分支或tag。
-
-```shell
-# 编译UMQ
-cd ubs-comm/src/hcom/umq
-mkdir build && cd build
-cmake ..
-make -j32
-```
-
-完成`UMQ`的编译后，可以得到如下目标编译产物：
-
-- `build/src/libumq.so`
-- `build/src/qbuf/libumq_buf.so`
-- `build/src/umq_ub/libumq_ub.so`
-
-> 说明：
->
-> 在编译UMQ时，可以通过`-DOPENSSL_ROOT_DIR=/path/to/openssl`指定`openssl`路径。
+`UBSocket`归属于在`UBS Comm`项目，使用了该项目的部分公共能力，进行源码编译前，请先下载[UBS Comm源码](https://atomgit.com/openeuler/ubs-comm)源码，并切换到目标分支或tag。
 
 ```shell
 # 编译ubsocket
@@ -248,7 +227,6 @@ make -j32
 
 > 说明：
 >
-> 在编译UBSocket时，可以通过`-DUMQ_INCLUDE=/path/to/umq_include -DUMQ_LIB=/path/to/umq_lib`来指定umq的头文件和lib库文件路径（如`=-DUMQ_INCLUDE=/prefix/ubs-comm/src/hcom/umq/include/umq/  -DUMQ_LIB=/prefix/ubs-comm/src/hcom/umq/build/src/libumq.so`）。
 > 默认情况下，ubsocket 会构建 `socket`, `accept`, `connect` 等 posix socket API 的覆盖，如果你的应用程序已使用 `ubsocket_socket`, `ubsocket_accept` 这些带有 `ubsocket_` 前缀的 API，那么可以使用 `-DUBSOCKET_ENABLE_INTERCEPT=OFF` 来关闭 `socket`, `accept` 和 `connect` 等 posix socket API 的生成以减少影响面。
 
 ### 4.5 用例执行
@@ -561,7 +539,7 @@ UBSocket接口返回值含义与原生Socket接口保持一致，返回-1表示�
 <tr id="row1179876788"><td class="cellrowborder" valign="top" headers="mcps1.2.6.1.1 "><p id="p16798166489"><a name="p16798166489"></a><a name="p16798166489"></a>EIO</p>
 </td>
 <td class="cellrowborder" valign="top" headers="mcps1.2.6.1.2 "><p id="p179896686"><a name="p179896686"></a><a name="p179896686"></a>1. 创建UB资源失败，结合UBSocket错误日志"Failed to create..."错误信息进行佐证</p>
-<p id="p9113111111145"><a name="p9113111111145"></a><a name="p9113111111145"></a>2. UB建连失败，结合UBSocket错误日志"Failed to execute umq_bind"错误信息进行佐证</p>
+<p id="p9113111111145"><a name="p9113111111145"></a><a name="p9113111111145"></a>2. UB建连失败，结合UBSocket错误日志中UB建链失败相关错误信息进行佐证</p>
 </td>
 <td class="cellrowborder" valign="top" headers="mcps1.2.6.1.3 "><p id="p5178129141515"><a name="p5178129141515"></a><a name="p5178129141515"></a>1. 查看UB设备状态是否正常（执行urma_admin show查看UB设备是否存在，EID是否存在）</p>
 <p id="p0159151818165"><a name="p0159151818165"></a><a name="p0159151818165"></a>2. 执行urma_ping检查UB链路是否正常</p>
@@ -592,7 +570,7 @@ UBSocket接口返回值含义与原生Socket接口保持一致，返回-1表示�
 <tr id="row32117216203"><td class="cellrowborder" valign="top" headers="mcps1.2.6.1.1 "><p id="p532216112213"><a name="p532216112213"></a><a name="p532216112213"></a>EIO</p>
 </td>
 <td class="cellrowborder" valign="top" headers="mcps1.2.6.1.2 "><p id="p143221211192114"><a name="p143221211192114"></a><a name="p143221211192114"></a>1. 创建UB资源失败，结合UBSocket错误日志"Failed to create..."错误信息进行佐证</p>
-<p id="p1232251112113"><a name="p1232251112113"></a><a name="p1232251112113"></a>2. UB建连失败，结合UBSocket错误日志"Failed to execute umq_bind"错误信息进行佐证</p>
+<p id="p1232251112113"><a name="p1232251112113"></a><a name="p1232251112113"></a>2. UB建连失败，结合UBSocket错误日志中UB建链失败相关错误信息进行佐证</p>
 </td>
 <td class="cellrowborder" valign="top" headers="mcps1.2.6.1.3 "><p id="p132215114214"><a name="p132215114214"></a><a name="p132215114214"></a>1. 查看UB设备状态是否正常（执行urma_admin show查看UB设备是否存在，EID是否存在）</p>
 <p id="p53221411102117"><a name="p53221411102117"></a><a name="p53221411102117"></a>2. 执行urma_ping检查UB链路是否正常</p>
@@ -738,7 +716,7 @@ UBSocket接口返回值含义与原生Socket接口保持一致，返回-1表示�
 
 为了更好的管理和使用内存，部分业界通信框架（如bRPC）自己实现了内存池功能。`UBSocket`也实现了内存池，提升内存管理和使用效率，同时能够更便捷对接现有的通信框架。
 
-在`UBSocket`使用过程中，如果有类似`umq_qbuf_alloc: fetch from global failed`的打印，则发生了内存耗尽。建议通过如下两个方向排查和解决：
+在`UBSocket`使用过程中，如果出现类似`fetch from global failed`的内存池分配失败打印，则发生了内存耗尽。建议通过如下两个方向排查和解决：
 
 - 确认应用的通信线程数是否合理
 
@@ -890,9 +868,7 @@ bazel build @ubsocket//src:ubstat -c dbg --fission=no --strip=never
 | `delay` | 查看或操作指定进程的trace打点时延 |
 | `fc` | 查询指定进程的流控（Flow Control）统计信息 |
 | `qbuf` | 查询指定进程的Qbuf内存池统计信息 |
-| `umqinfo` | 查询指定进程的UMQ配置信息 |
 | `io` | 查询指定进程的IO收发包统计信息 |
-| `umq` | 查询指定进程的UMQ性能统计信息 |
 | `probe`   | 查询指定进程中探测包的打点数据和通信时延           |
 
 #### 9.3.3 全局通用选项（所有命令适用）
@@ -908,7 +884,7 @@ bazel build @ubsocket//src:ubstat -c dbg --fission=no --strip=never
 
 不同命令有专属参数要求，需严格按规则使用：
 
-##### 9.3.4.1 适用于 `stat`、`fc`、`qbuf`、`umqinfo`、`io`、`umq`、`probe` 命令的选项
+##### 9.3.4.1 适用于 `stat`、`fc`、`qbuf`、`io`、`probe` 命令的选项
 
 | 选项格式          | 必选 / 可选 | 说明                                                           |
 | ------------------- | ------------- | ---------------------------------------------------------------- |
@@ -943,7 +919,7 @@ bazel build @ubsocket//src:ubstat -c dbg --fission=no --strip=never
 | ReTx Count | 累计重传次数 | 数据发送失败后重新发送的累计次数 |
 | Pool Total Capacity | UB通信内存池总容量 | 池中当前总共存在多少节点，用来确认资源规模 |
 | Pool Available Count | UB通信内存池当前可用空闲节点数 | 池中活跃且未被借出节点（`global_num`）与线程本地缓存节点（`cache_num`）之和 |
-| Pool In Use Count | UB通信内存池当前已被借用节点数 | 当前被logic umq借走的节点，反映真实负载 |
+| Pool In Use Count | UB通信内存池当前已被借用节点数 | 当前已被UB连接借走的节点，反映真实负载 |
 
 #### 9.3.6 实操示例
 
@@ -1001,43 +977,19 @@ bazel build @ubsocket//src:ubstat -c dbg --fission=no --strip=never
 ./ubstat qbuf -p 1234 -w
 ```
 
-##### 示例 10：查询进程 1234 的UMQ配置信息
-
-```
-./ubstat umqinfo -p 1234
-```
-
-##### 示例 11：实时监控进程 1234 的UMQ配置信息（每秒刷新）
-
-```
-./ubstat umqinfo -p 1234 -w
-```
-
-##### 示例 12：查询进程 1234 的IO收发包统计信息
+##### 示例 10：查询进程 1234 的IO收发包统计信息
 
 ```
 ./ubstat io -p 1234
 ```
 
-##### 示例 13：实时监控进程 1234 的IO收发包统计信息（每秒刷新）
+##### 示例 11：实时监控进程 1234 的IO收发包统计信息（每秒刷新）
 
 ```
 ./ubstat io -p 1234 -w
 ```
 
-##### 示例 14：查询进程 1234 的UMQ性能统计信息
-
-```
-./ubstat umq -p 1234
-```
-
-##### 示例 15：实时监控进程 1234 的UMQ性能统计信息（每秒刷新）
-
-```
-./ubstat umq -p 1234 -w
-```
-
-##### 示例 16：查询进程 1234 的探测包打点数据和通信时延
+##### 示例 12：查询进程 1234 的探测包打点数据和通信时延
 
 ```
 ./ubstat probe -p 1234
@@ -1046,7 +998,7 @@ bazel build @ubsocket//src:ubstat -c dbg --fission=no --strip=never
 #### 9.3.7 总结
 
 1. 所有命令均​**必须指定 `-p` 参数**​（进程 ID），否则无法执行查询；
-2. `stat`、`fc`、`qbuf`、`umqinfo`、`io`、`umq`、`probe` 命令支持 `-w` 实时监控，但不支持 `-s/-d`；`topo` 命令必须指定 `-s/-d`（IPv6 格式），但不支持 `-w`；`delay` 命令使用 `-t/-v/-e` 控制打点操作；
+2. `stat`、`fc`、`qbuf`、`io`、`probe` 命令支持 `-w` 实时监控，但不支持 `-s/-d`；`topo` 命令必须指定 `-s/-d`（IPv6 格式），但不支持 `-w`；`delay` 命令使用 `-t/-v/-e` 控制打点操作；
 3. 执行 `./ubstat -h` 可快速查看内置帮助信息。
 
 ## 10 流量优先级配置说明

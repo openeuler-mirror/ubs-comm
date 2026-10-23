@@ -32,7 +32,7 @@
 |------|------|
 | 需求 | UBSocket Client 侧建链全异步化改造（复用共享 poll 池） |
 | 前置 | **已完成**：Server 侧已泛化为共享 `ConnReactorThread` / `ConnDispatcher` / `ConnEventFdTable` + `UBConnOpsBase`（§5.0） |
-| 目标传输层 | URMA（`csrc/core/urma/`，当前活跃路径）；UMQ 后续按同模式扩展 |
+| 目标传输层 | URMA（`csrc/core/urma/`，唯一 UB 传输后端） |
 | 控制开关 | `u_init_options_t::async_connector_enable`（bool，`ubsocket_def.h`，env `UBSOCKET_ASYNC_CONNECTOR_ENABLE` 覆盖） |
 | 开关判定 | `GlobalSetting::AsyncConnectorEnabled()`（`ubsocket_global_setting.h`，读 `UBS_CONNECTOR_ASYNC_ENABLE` bool） |
 | poll 线程数 | `GlobalSetting::UBS_CONN_POLL_THREAD_NUM`（env `UBSOCKET_CONN_POLL_THREAD_NUM`，默认 1），Server/Client 共用（见 Server 文档 §7.2） |
@@ -164,7 +164,7 @@ Server 侧已实现"poll 线程内联重活 + 有效时钟"。为让 Client 复�
 | `NotifyWritable` 链路 | `ubsocket_socket.h:232` -> `DoNotifyWritable` `:252` | 建链成功向应用注入 `EPOLLOUT` |
 | ~~`ExecutorService`~~ | ~~`ubsocket_thread_pool.h`~~ | **全异步建链不使用**；仅半异步 accept 使用 |
 
-> 依赖方向：通用层（`core/ubsocket_conn_*.{h,cpp}`）不得 `#include "urma/..."` / `"umq/..."`；
+> 依赖方向：通用层（`core/ubsocket_conn_*.{h,cpp}`）不得 `#include "urma/..."`；
 > 具体实现经工厂 `SocketBase::CreateClientConnOps` 创建，与 `CreateServerConnOps`
 > （`ubsocket_socket.cpp:255`）同款。
 
@@ -177,7 +177,6 @@ Server 侧已实现"poll 线程内联重活 + 有效时钟"。为让 Client 复�
 | `ConnReactorThread` | 通用（共享） | poll 线程：event fd + 任务队列 + 监听数组；**无 completion 队列** |
 | `ConnDispatcher` | 通用（共享） | 共享 poll 池：启动、按负载选线程、`Submit` / `Cancel` |
 | `UrmaClientConnOps` | urma | URMA Client 状态机实现（poll 非阻塞 IO + 内联本地重活） |
-| `UmqClientConnOps` | umq（后续） | UMQ Client 状态机实现 |
 
 ### 5.3 执行模型：poll 线程内联重活 + 非阻塞 IO
 
@@ -628,7 +627,7 @@ if (level == SOL_SOCKET && optname == SO_ERROR) {
 ## 10. 生命周期
 
 - 共享 `ConnDispatcher::Stop()` 由 `ubsocket_uninit` 统一调用（`ubsocket.cpp:250` 附近），必须在
-  `UmqBackend::UnInit()` / `UrmaBackend::UnInit()` **之前**，且遵循 AGENTS.md 已记录的停止顺序陷阱：
+  `UrmaBackend::UnInit()` **之前**，且遵循 AGENTS.md 已记录的停止顺序陷阱：
   先停 poll 线程（join）、再 backend `UnInit()`。
 - `Stop()` 幂等，开关关闭时 no-op。**Client 不再自建池**，无独立生命周期。
 - **无共享 executor**：本设计不启停 `ExecutorService`；其生命周期归半异步 accept，**保持现状、本版不改**。
@@ -664,7 +663,7 @@ if (level == SOL_SOCKET && optname == SO_ERROR) {
 - **`CONNECTING` 期 API 必须有确定行为**：见 §8.6 矩阵；尤其 `connect` 二次调用不得重复提交，数据面
   必须拒绝而非落进 UB 路径。
 - **空闲超时必须用有效时钟**：见 §7.9 / Server 文档 §7.7；用墙钟会误杀被内联重活挤占的连接。
-- **`ConnectorOps` per-socket 有状态**（`umq_conn_info_` / route / retry_state）：异步必须复用
+- **`ConnectorOps` per-socket 有状态**（`conn_info` / route / retry_state）：异步必须复用
   同一实例，不能重新 `new`，否则路由/重试状态丢失。
 - **fd 亲和 + 单线程推进**：一个连接所有阶段固定同一 poll 线程；`conn_ops_map_` 加锁
   （dispatcher 插入 / poll 读写）；跨线程只用 `event_queue_` + eventfd，不共享状态。
@@ -675,7 +674,7 @@ if (level == SOL_SOCKET && optname == SO_ERROR) {
 - **`static constexpr` ODR-use**：`CLIENT_CONN_IDLE_TIMEOUT_MS` 等传给 `std::min` / 日志 `%llu` 时
   加 `static_cast`，C++11 下否则链接 undefined。
 - **热路径不加日志**：poll 线程 `Execute()`/`HandleSocketFd` 是热路径，仅状态跃迁/错误处打日志。
-- **通用层依赖方向**：`core/ubsocket_conn_*.{h,cpp}` 不得引用 `urma/`、`umq/`，只能经工厂
+- **通用层依赖方向**：`core/ubsocket_conn_*.{h,cpp}` 不得引用 `urma/`，只能经工厂
   `SocketBase::CreateClientConnOps`。
 
 ---
@@ -690,7 +689,6 @@ if (level == SOL_SOCKET && optname == SO_ERROR) {
 | `csrc/core/ubsocket_client_conn_types.h` | 通用 | `ClientConnState`、`CLIENT_CONN_IDLE_TIMEOUT_MS` |
 | `csrc/core/ubsocket_client_conn_ops.h/.cpp` | 通用 | `UBClientConnOps : UBConnOpsBase`（`Execute` 分发，无重活提交） |
 | `csrc/core/urma/urma_client_conn_ops.h/.cpp` | urma | `UrmaClientConnOps`（poll 阶段 + 内联本地重活） |
-| `csrc/core/umq/umq_client_conn_ops.h/.cpp` | umq（后续） | `UmqClientConnOps` |
 | `csrc/core/ubsocket_core_types.h` | 通用 | `SOCK_STAT_CONNECTING`（置于 `SOCK_STATE_COUNT` 前） |
 | `csrc/core/ubsocket_socket.h/.cpp` | 通用 | `ConnectAsync` + `CreateClientConnOps` 工厂 + `connect_error_`/`connect_inflight_` + `pending_epoll_*` + `RegisterPendingEpollAdd` + `NotifyConnectFailed` |
 | `csrc/core/ubsocket_event_epoll.cpp/.h` | 通用 | `AsyncEventPoll` 建链中延迟注册 + `EPOLLOUT` 守卫 |
@@ -713,7 +711,7 @@ if (level == SOL_SOCKET && optname == SO_ERROR) {
 | P0（已完成） | **Server 泛化**（§5.0：`ServerConnReactorThread`→`ConnReactorThread`、`ServerConnDispatcher`→`ConnDispatcher`、`ServerConnEventFdTable`→`ConnEventFdTable`、抽 `UBConnOpsBase` 并新增 `StateName()`/`CloseOnFailure()`/`IdleTimeoutMs()`/`OnConnDone()` 虚接口 + `Cancel(fd)`） |
 | P0（Client） | `SOCK_STAT_CONNECTING` + `ConnectAsync` 分流 + `SO_ERROR` + **epoll 延迟注册 + EPOLLOUT 守卫** + 成功/失败通知 |
 | P1 | `UrmaClientConnOps` 完整四阶段（含内联重活、降级、超时、取消） + `UrmaEventPoll` 延迟注册 |
-| P2 | 链路切换重试（v2）+ `UmqClientConnOps` |
+| P2 | 链路切换重试（v2） |
 
 ### 13.2 测试点
 

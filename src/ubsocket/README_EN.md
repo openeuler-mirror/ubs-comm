@@ -45,33 +45,13 @@ sysctl -p
 
 ### 2.2 Compilation
 
-`UBSocket` belongs to the `UBS Comm` project and uses some common capabilities of the project. Therefore, the compilation has two parts. Before compiling the source code, download the `UBS Comm` source code and switch to the target branch or tag.
-
-```shell
-# Compiling the UMQ
-cd ubs-comm/src/hcom/umq
-mkdir build && cd build
-cmake ..
-make -j32
-```
-
-After `UMQ` is compiled, the following target compilation products are obtained:
-
-- `build/src/libumq.so`
-
-- `build/src/qbuf/libumq_buf.so`
-
-- `build/src/umq_ub/libumq_ub.so`
-
-> Note:
->
-> When compiling the UMQ, you can use `-DOPENSSL_ROOT_DIR=/path/to/openssl` to specify the `openssl` path.
+`UBSocket` belongs to the `UBS Comm` project and uses some common capabilities of the project. Before compiling the source code, download the `UBS Comm` source code and switch to the target branch or tag.
 
 ```shell
 # Compiling ubsocket
 cd ubs-comm/src/ubsocket
 mkdir build && cd build
-cmake ..
+cmake .. -DBUILD_URMA_DLOPEN_BACKEND=ON
 make -j32
 ```
 
@@ -79,7 +59,8 @@ After `UBSocket` is compiled, the `build/csrc/libubsocket.so` target compilation
 
 > Note:
 >
-> When compiling UBSocket, you can use `-DUMQ_INCLUDE=/path/to/umq_include -DUMQ_LIB=/path/to/umq_lib` to specify the paths of the UMQ header file and library file (for example, `=-DUMQ_INCLUDE=/prefix/ubs-comm/src/hcom/umq/include/umq/ -DUMQ_LIB=/prefix/ubs-comm/src/hcom/umq/build/src/libumq.so`).
+> - `urma` is the only UB backend of `UBSocket`. `BUILD_URMA_DLOPEN_BACKEND` must be `ON`. `liburma.so` is loaded at runtime through `dlopen`, and no pre-built backend library is required.
+> - You can also build the whole project (including `UBSocket`) from the repository root by running `./build.sh` with `UBSOCKET_BUILD=on`.
 
 ### 2.3 Use
 
