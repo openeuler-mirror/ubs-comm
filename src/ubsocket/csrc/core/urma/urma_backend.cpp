@@ -663,7 +663,7 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
         if (sock == nullptr) {
             ReleasePendingClose(sock_fd);
         }
-        UBS_VLOG_ERR("handle error cr failed for fd invalid: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd: %d",
+        UBS_VLOG_TRACE("handle error cr failed for fd invalid: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx, fd: %d",
                 cr->status, cr->user_ctx, cr->opcode, cr->flag.value, sock_fd);
         return;
     }
@@ -709,21 +709,30 @@ void UrmaBackend::HandleErrorCqe(urma_cr_t *cr)
             break;
         }
 
-        /* connection-level error: reset the socket, inject HUP|RDHUP and release waiters */
-        case URMA_CR_UNSUPPORTED_OPCODE_ERR:
-        case URMA_CR_LOC_OPERATION_ERR:
+        /* connection-level error: reset the socket, inject HUP|RDHUP and release waiters
+         * 日志级别按 status 分组: 远端类错误 E / flush 完成类 T / 本地与未知类 W */
+        case URMA_CR_WR_FLUSH_ERR:
+        case URMA_CR_WR_SUSPEND_DONE:
+        case URMA_CR_WR_FLUSH_ERR_DONE:
+            UBS_VLOG_TRACE("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
+                           cr->user_ctx, cr->opcode, cr->flag.value);
+            break;
+
         case URMA_CR_REM_RESP_LEN_ERR:
         case URMA_CR_REM_UNSUPPORTED_REQ_ERR:
         case URMA_CR_REM_OPERATION_ERR:
         case URMA_CR_REM_ACCESS_ABORT_ERR:
         case URMA_CR_REM_DATA_POISON:
-        case URMA_CR_WR_FLUSH_ERR:
-        case URMA_CR_WR_SUSPEND_DONE:
-        case URMA_CR_WR_FLUSH_ERR_DONE:
-        case URMA_CR_WR_UNHANDLED:
-        default:
             UBS_VLOG_ERR("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
                          cr->user_ctx, cr->opcode, cr->flag.value);
+            break;
+
+        case URMA_CR_LOC_OPERATION_ERR:
+        case URMA_CR_UNSUPPORTED_OPCODE_ERR:
+        case URMA_CR_WR_UNHANDLED:
+        default:
+            UBS_VLOG_WARN("handle error cr: status=%u, user_ctx=0x%lx, op_code=%u, flag=0x%hhx", cr->status,
+                          cr->user_ctx, cr->opcode, cr->flag.value);
             break;
     }
 }
