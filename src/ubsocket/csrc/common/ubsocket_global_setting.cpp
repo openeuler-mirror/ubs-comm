@@ -16,6 +16,7 @@ namespace ubs {
 std::mutex GlobalSetting::MUTEX;
 uint32_t GlobalSetting::UBS_ALLOWED_PROTOCOL = 0; /* no protocol by default */
 bool GlobalSetting::UBS_NATIVE_TCP_MODE = false;  /* use ubsocket by default */
+bool GlobalSetting::UBS_DIRECT_IO_ENABLE = false;
 bool GlobalSetting::UBS_TRACE_ENABLED = true;
 bool GlobalSetting::UBS_SPLIT_TRACE_ENABLED = false;
 uint32_t GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY = 65535;
@@ -90,6 +91,7 @@ uint32_t GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM = 45000; /* fd table pre-exp
 #define ENV_BACKUP_LINK_ENABLED "UBSOCKET_BACKUP_LINK_ENABLE"
 #define ENV_PORT_COOLDOWN_SEC "UBSOCKET_PORT_COOLDOWN_SEC"
 #define ENV_READV_UNLIMITED "UBSOCKET_READV_UNLIMITED"
+#define ENV_DIRECT_IO_ENABLE "UBSOCKET_DIRECT_IO_ENABLE"
 #define ENV_PRE_ALLOC_SYSTEM_FD_NUM "UBSOCKET_PRE_ALLOC_SYSTEM_FD_NUM"
 
 void GlobalSetting::AddRules() noexcept
@@ -130,7 +132,8 @@ void GlobalSetting::AddRules() noexcept
                                     {ENV_VAR_CLI, false, "true|false"},
                                     {ENV_VAR_PROBE, false, "true|false"},
                                     {ENV_BACKUP_LINK_ENABLED, true, "true|false"},
-                                    {ENV_READV_UNLIMITED, true, "true|false"}};
+                                    {ENV_READV_UNLIMITED, true, "true|false"},
+                                    {ENV_DIRECT_IO_ENABLE, false, "true|false"}};
 
     /* str not empty rules: name, required, maxLen */
     StrNotEmptyRule rules_str_not_empty[] = {{ENV_PROF_DUMP_PATH, false, UBSOCKET_TRACE_FILE_PATH_LEN_MAX},
@@ -384,6 +387,10 @@ Result GlobalSetting::LoadEnv() noexcept
     }
     if (GetEnvAndValidate(ENV_READV_UNLIMITED, strEnvValue)) {
         UBS_READV_UNLIMITED = Func::BoolFromStr(strEnvValue);
+    }
+
+    if (GetEnvAndValidate(ENV_DIRECT_IO_ENABLE, strEnvValue)) {
+        UBS_DIRECT_IO_ENABLE = Func::BoolFromStr(strEnvValue);
     }
     return UBS_OK;
 }

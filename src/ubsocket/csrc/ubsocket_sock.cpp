@@ -105,6 +105,9 @@ UBS_API int UB_API_WRAP(accept)(int fd, struct sockaddr *address, socklen_t *add
 
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
+        if (GlobalSetting::UBS_DIRECT_IO_ENABLE) {
+            return LibcApi::accept(fd, address, address_len);
+        }
         errno = EBADF;
         return -1;
     }
@@ -142,6 +145,9 @@ UBS_API int UB_API_WRAP(listen)(int fd, int backlog)
 
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
+        if (GlobalSetting::UBS_DIRECT_IO_ENABLE) {
+            return LibcApi::listen(fd, backlog);
+        }
         errno = EBADF;
         return -1;
     }
@@ -177,6 +183,9 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
+        if (GlobalSetting::UBS_DIRECT_IO_ENABLE) {
+            return LibcApi::connect(fd, address, address_len);
+        }
         errno = EBADF;
         return -1;
     }
@@ -209,6 +218,9 @@ UBS_API ssize_t UB_API_WRAP(readv)(int fd, const struct iovec *iov, int iovcnt)
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
+        if (GlobalSetting::UBS_DIRECT_IO_ENABLE) {
+            return LibcApi::readv(fd, iov, iovcnt);
+        }
         errno = EBADF;
         return -1;
     }
@@ -224,6 +236,9 @@ UBS_API ssize_t UB_API_WRAP(writev)(int fd, const struct iovec *iov, int iovcnt)
     }
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
+        if (GlobalSetting::UBS_DIRECT_IO_ENABLE) {
+            return LibcApi::writev(fd, iov, iovcnt);
+        }
         errno = EBADF;
         return -1;
     }
@@ -240,7 +255,11 @@ UBS_API ssize_t UB_API_WRAP(send)(int fd, const void *buf, size_t len, int flags
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
         UBS_VLOG_TRACE("send on fd(%d) not ubsocket, use libc send.", fd);
-        return LibcApi::send(fd, buf, len, flags);
+        if (GlobalSetting::UBS_DIRECT_IO_ENABLE) {
+            return LibcApi::send(fd, buf, len, flags);
+        }
+        errno = EBADF;
+        return -1;
     }
     if (len == 0) {
         return 0;
@@ -259,7 +278,11 @@ UBS_API ssize_t UB_API_WRAP(recv)(int fd, void *buf, size_t len, int flags)
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
         UBS_VLOG_TRACE("recv on fd(%d) not ubsocket, use libc recv.", fd);
-        return LibcApi::recv(fd, buf, len, flags);
+        if (GlobalSetting::UBS_DIRECT_IO_ENABLE) {
+            return LibcApi::recv(fd, buf, len, flags);
+        }
+        errno = EBADF;
+        return -1;
     }
     if (len == 0) {
         return 0;
@@ -384,6 +407,9 @@ UBS_API int UB_API_WRAP(getsockopt)(int fd, int level, int optname, void *optval
 
     SocketPtr sock = ArraySet<Socket>::GetInstance().GetItem(fd);
     if (sock == nullptr) {
+        if (GlobalSetting::UBS_DIRECT_IO_ENABLE) {
+            return LibcApi::getsockopt(fd, level, optname, optval, optlen);
+        }
         errno = EBADF;
         return -1;
     }
