@@ -28,7 +28,6 @@ namespace ubs {
 /* C++11 static constexpr ODR-use 防护：类外定义 */
 constexpr int ConnReactorThread::kPollTimeoutMs;
 constexpr uint64_t ConnReactorThread::kEventQueueCapacity;
-constexpr uint64_t ConnReactorThread::kScanIntervalMs;
 
 /* ======================== ConnEventFdTable ======================== */
 
@@ -118,7 +117,6 @@ Result ConnReactorThread::Init(int thread_index)
     poll_fds_.push_back(pfd);
     ConnEventFdTable::Instance().Register(event_fd_, thread_index);
     stopped_.store(false);
-    last_scan_ms_ = SocketConnHelper::GetTimeMs();
 
     try {
         thread_ = std::thread(&ConnReactorThread::RunLoop, this);
@@ -219,13 +217,11 @@ void ConnReactorThread::RunLoop()
     UBS_VLOG_DEBUG("ConnReactorThread running, event_fd: %d\n", event_fd_);
 
     while (!stopped_.load(std::memory_order_acquire)) {
-        uint64_t now_ms = SocketConnHelper::GetTimeMs();
-        if (now_ms - last_scan_ms_ >= kScanIntervalMs) {
-            last_scan_ms_ = now_ms;
-            ScanTimeoutConnections();
-        }
+        /* 每轮扫描空闲超时连接，并以最近 deadline 收窄本次 poll 等待：短预算阶段（如 client 等协商
+         * 响应 2s）在 deadline 到点即被唤醒回收，避免固定扫描间隔导致的迟到；无在途连接时为默认心跳 */
+        int poll_timeout = ScanTimeoutConnections();
 
-        int poll_ret = LibcApi::poll(poll_fds_.data(), static_cast<nfds_t>(poll_fds_.size()), kPollTimeoutMs);
+        int poll_ret = LibcApi::poll(poll_fds_.data(), static_cast<nfds_t>(poll_fds_.size()), poll_timeout);
         if (poll_ret < 0) {
             if (errno == EINTR) {
                 continue;
@@ -401,10 +397,11 @@ uint64_t ConnReactorThread::EffectiveNow() const
     return (now_ms > busy_ms_) ? (now_ms - busy_ms_) : 0;
 }
 
-void ConnReactorThread::ScanTimeoutConnections()
+int ConnReactorThread::ScanTimeoutConnections()
 {
+    int wait_ms = kPollTimeoutMs;
     if (conn_ops_map_.empty()) {
-        return;
+        return wait_ms;
     }
 
     /* 用有效时钟：扣除本线程处理耗时（含内联重活），避免线程忙于其它连接时误杀等待中的连接 */
@@ -420,13 +417,22 @@ void ConnReactorThread::ScanTimeoutConnections()
         for (auto &kv : conn_ops_map_) {
             uint64_t last_active = kv.second.ops->LastActiveMs();
             /* last_active==0 表示刚提交尚未首帧驱动，跳过防御误杀 */
-            if (last_active != 0 && (effective_now_ms - last_active) > kv.second.ops->IdleTimeoutMs()) {
+            if (last_active == 0) {
+                continue;
+            }
+            uint64_t deadline_ms = last_active + kv.second.ops->IdleTimeoutMs();
+            if (effective_now_ms >= deadline_ms) {
                 kv.second.ops->SetFailureErrno(ETIMEDOUT);
                 TimeoutEntry entry;
                 entry.fd = kv.first;
                 entry.state = kv.second.ops->StateName();
                 entry.idle_ms = effective_now_ms - last_active;
                 timed_out.push_back(entry);
+                continue;
+            }
+            uint64_t remaining_ms = deadline_ms - effective_now_ms;
+            if (remaining_ms < static_cast<uint64_t>(wait_ms)) {
+                wait_ms = static_cast<int>(remaining_ms); /* 按最近 deadline 收窄 poll 等待 */
             }
         }
     }
@@ -435,6 +441,7 @@ void ConnReactorThread::ScanTimeoutConnections()
                       entry.state, static_cast<unsigned long long>(entry.idle_ms));
         FinishConnection(entry.fd, ConnStageResult::kFailed);
     }
+    return wait_ms;
 }
 
 void ConnReactorThread::Stop()

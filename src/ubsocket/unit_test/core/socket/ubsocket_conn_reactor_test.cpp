@@ -756,6 +756,21 @@ TEST_F(ConnReactorTest, ScanTimeoutConnections_ActiveNotIdle_Keeps)
     EXPECT_FALSE(thread.conn_ops_map_.empty());
 }
 
+TEST_F(ConnReactorTest, ScanTimeoutConnections_NearDeadline_ShrinksPollWait)
+{
+    ConnReactorThread thread;
+    auto ops = std::make_shared<TestConnOps>(ConnRole::kClient, TEST_FD);
+    /* 已空闲 (10s - 90ms)：最近 deadline 剩余约 90ms，返回值应小于默认 100ms 心跳以按点唤醒 */
+    ops->last_active_ms_ = SocketConnHelper::GetTimeMs() - (CONN_IDLE_TIMEOUT_MS - 90);
+    thread.conn_ops_map_[TEST_FD].ops = ops;
+
+    int wait_ms = thread.ScanTimeoutConnections();
+    EXPECT_GT(wait_ms, 0);
+    EXPECT_LT(wait_ms, 100);
+    EXPECT_EQ(0, ops->failed_calls); /* 未超时：不误杀 */
+    EXPECT_FALSE(thread.conn_ops_map_.empty());
+}
+
 TEST_F(ConnReactorTest, ScanTimeoutConnections_BusyClockAhead_Skips)
 {
     ConnReactorThread thread;
@@ -893,7 +908,7 @@ TEST_F(ConnReactorTest, RunLoop_ProcessesReadyFds)
     GlobalMockObject::verify();
 }
 
-TEST_F(ConnReactorTest, RunLoop_ScanIntervalAndPollErrorPaths)
+TEST_F(ConnReactorTest, RunLoop_ScanAndPollErrorPaths)
 {
     int saved_level = Logger::Instance().GetLogLevel();
     Logger::Instance().SetLogLevel(LEVEL_COUNT); /* 静默错误日志，避免刷屏 */
@@ -906,8 +921,7 @@ TEST_F(ConnReactorTest, RunLoop_ScanIntervalAndPollErrorPaths)
     g_poll_errno_mode.store(1); /* EINTR */
     g_poll_errno_calls.store(0);
     ConnReactorThread thread;
-    ASSERT_EQ(UBS_OK, thread.Init(0));
-    thread.last_scan_ms_ = 0; /* 强制触发空闲扫描分支（空映射安全返回） */
+    ASSERT_EQ(UBS_OK, thread.Init(0)); /* 每轮 poll 前扫描（空映射安全返回） */
     EXPECT_TRUE(WaitUntil([] { return g_poll_errno_calls.load() >= 1; })); /* EINTR 分支 */
 
     g_poll_errno_mode.store(2); /* 非 EINTR 错误：记录日志后继续 */

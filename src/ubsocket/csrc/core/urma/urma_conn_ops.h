@@ -40,7 +40,7 @@ enum class ConnFlushOutcome : uint8_t
 /*
  * URMA Client/Server 统一全异步建链状态机（wire 与同步路径逐段等价，继承统一 ConnState）。
  * 握手是对称的 3 轮交换，R2/R3 两侧逐行同构，R1 仅方向相反（发起方先 send），故合并为单一类：
- *   阶段 A kWaitTcpConnect(仅 Client：poll 非阻塞 TCP 握手 + 校验 SO_ERROR；非 UB 则降级纯 TCP)
+ *   阶段 A kWaitTcpConnect(仅 Client：poll 非阻塞 TCP 握手 + 校验 SO_ERROR；不做对端非 UB 的提前降级)
  *   阶段 B kWaitNegotiate(Client 续发 Req -> 收 Rsp；Server 收 Req -> 回 Rsp；收满后内联建资源+组 local seg)
  *   阶段 C kWaitPeerRes(续发 local seg -> 收 peer seg -> 内联 ImportPeerSegments + 组 ack)
  *   阶段 D kWaitPeerAck(续发 ack -> 收 peer ack -> 内联 CommitRemotePeer)
@@ -56,6 +56,9 @@ public:
 
     void OnConnDone() override;
     void OnConnFailed() override;
+
+    /* 空闲超时按角色/阶段覆盖：client 等 NegotiateRsp 对齐同步路径 NEGOTIATE_REPLY_TIMEOUT_MS，其余全局值 */
+    uint64_t IdleTimeoutMs() const override;
 
 protected:
     ConnStageResult DoWaitTcpConnect() override;
@@ -82,7 +85,6 @@ private:
 
     /* Client 降级与收尾 */
     void MarkFailure(int err_no, bool degradable);
-    void MarkDegraded();
     bool DegradeToTcp(SocketCreateType create_type = SOCK_CREATE_TYPE_CONNECT);
     void OnConnCleanup();
     void ClientOnConnFailed();
@@ -105,7 +107,6 @@ private:
     /* Client 专有 */
     bool tcp_connect_started_ = false; /* 阶段 A 是否已发起非阻塞 connect */
     bool degradable_ = false;          /* 仅 poll 线程访问：本次失败是否可降级 */
-    bool degraded_ = false; /* 仅 poll 线程访问：是否已降级为纯 TCP（阶段 A 提前判定） */
     std::vector<UrmaContextPtr> sorted_contexts_; /* 本端 context 排序快照：req 填充与 rsp index 解析共用 */
     uint64_t sent_last_conn_id_ = 0; /* 已随 req 发出的对端坏链 conn_id（0 = 无），协商成功后流转 EraseBrokenConn */
 

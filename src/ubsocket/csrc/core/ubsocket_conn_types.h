@@ -20,7 +20,9 @@ namespace ubs {
 constexpr uint32_t CONN_CTRL_BUF_SIZE = 512;
 
 /*
- * 全异步建链连接空闲超时（毫秒），Client/Server 共用。对端任一 recv 阶段的最大静默时长。
+ * 全异步建链连接空闲超时（毫秒），Client/Server 共用默认值；派生类可用 IdleTimeoutMs() 按角色/阶段
+ * 收窄（如 client 等协商响应对齐同步路径 NEGOTIATE_REPLY_TIMEOUT_MS），其余阶段沿用本宽松值。
+ * 对端任一 recv 阶段的最大静默时长。
  * 取值必须显著大于对端控制面单阶段阻塞预算（CONTROL_PLANE_TIMEOUT_MS=2000ms）：
  * 高并发下对端（尤其客户端）URMA 资源创建/导入本身可能耗时接近该预算，若用同一紧值做回收，
  * 会在对端仍处于合法交换窗口内时抢先误杀连接。真正的死连接会被对端 close 触发 recv=0 快速回收，
@@ -47,7 +49,7 @@ enum class ConnRole : uint8_t
  */
 enum class ConnState : uint8_t
 {
-    kWaitTcpConnect = 0, /* Client 阶段 A：非阻塞 TCP 握手 + 校验 SO_ERROR；非 UB 则降级纯 TCP */
+    kWaitTcpConnect = 0, /* Client 阶段 A：非阻塞 TCP 握手 + 校验 SO_ERROR；对端非 UB 时不做提前降级 */
     kWaitNegotiate,      /* Client：续发 NegotiateReq -> 收 Rsp；Server：收 NegotiateReq -> 回 Rsp */
     kWaitPeerRes,        /* 双方：续发 local seg -> 收 peer seg -> 内联 ImportPeerSegments */
     kWaitPeerAck,        /* 双方：续发 ack -> 收 peer ack -> 内联 CommitRemotePeer */

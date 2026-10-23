@@ -45,8 +45,9 @@ public:
     /* 当前状态名（仅用于超时/错误日志；kWaitNegotiate 按角色细分 Req/Rsp） */
     const char *StateName() const;
 
-    /* 每连接空闲超时阈值（毫秒） */
-    uint64_t IdleTimeoutMs() const
+    /* 每连接空闲超时阈值（毫秒）：默认全局宽松值，派生类可按角色/阶段收窄
+     * （如 client 等协商响应对齐同步路径响应预算，见 UrmaConnOps::IdleTimeoutMs） */
+    virtual uint64_t IdleTimeoutMs() const
     {
         return CONN_IDLE_TIMEOUT_MS;
     }
