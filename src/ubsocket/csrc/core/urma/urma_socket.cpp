@@ -782,6 +782,13 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
         local_seg->seg.len, local_seg->seg.attr, local_seg->seg.token_id, local_seg->user_ctx, local_seg->mva,
         local_seg->token_id);
     local.seg = local_seg->seg;
+
+    /* jetty 建好即预挂空 recv WR：对端 import 本端 jetty 后随时可能发首包。
+     * 原先在 exchange 收尾（收到对端 ack）才挂，高并发建链风暴下本端收尾被拖慢超过 RNR 重试窗口时，
+     * 对端首包无 recv WR 可用 → status=10(RNR耗尽) → context 熔断 300s → 全量降级 TCP */
+    empty_recv_sge_.tseg = local_seg;
+    PostEmptyRecvWorkerRecords(128U); // TODO : post recv count
+
     if (send_first) {
         if (SocketConnHelper::SendSocketData(raw_socket_, &local, sizeof(local), CONTROL_PLANE_TIMEOUT_MS) != sizeof(local)) {
             UBS_VLOG_ERR("UrmaSocket send socket(%d) data size(%zu) failed.", raw_socket_, sizeof(local));
@@ -833,8 +840,6 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
         goto CLEAN_URMA_RESOURCE;
     }
 
-    empty_recv_sge_.tseg = local_ctrl_target_seg_;
-    PostEmptyRecvWorkerRecords(128U); // TODO : post recv count
     rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
     rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
     remote_uasid_ = peer.uasid;
