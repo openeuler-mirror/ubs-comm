@@ -1960,14 +1960,25 @@ SerResult HcomChannelImp::AsyncReplyInner(const UBSHcomReplyContext &ctx, const 
         return AsyncReplySplitWithWorkerPoll(ctx, ep, req, fragmentNum, done);
     }
 
+    TimerCtx context{};
+    res = PrepareTimerContext(const_cast<Callback *>(done), mOptions.twoSideTimeout, context);
+    if (NN_UNLIKELY(res != SER_OK)) {
+        NN_LOG_ERROR("Failed to prepare timer context for async reply, result " << res);
+        DestroyCallback(done);
+        return res;
+    }
+
+    // upCtx 只保存 seqNo，回调由 timer 持有：发送完成、响应到达、失败清队等任一路径
+    // 都只能通过 GetSeqNoAndRemove 的 CAS 摘除一次，避免裸 Callback* 被重复触发。
     UBSHcomNetTransRequest transReq(req.address, req.size, sizeof(SerTransContext));
-    uint32_t newSeqNo = 0;
-    SetServiceTransCtx(transReq.upCtxData, const_cast<Callback *>(done));
-    MarkOpCodeBySeqNo(newSeqNo, ctx.rspCtx, mRespOriginalSeqNo);
-    UBSHcomNetTransOpInfo transOp(newSeqNo, mOptions.twoSideTimeout, ctx.errorCode, 0);
+    SetServiceTransCtx(transReq.upCtxData, context.seqNo);
+    uint32_t userSeqNo = context.seqNo;
+    MarkOpCodeBySeqNo(userSeqNo, ctx.rspCtx, mRespOriginalSeqNo);
+    UBSHcomNetTransOpInfo transOp(userSeqNo, mOptions.twoSideTimeout, ctx.errorCode, 0);
     res = ep->PostSend(req.opcode, transReq, transOp);
     if (NN_UNLIKELY(res != SER_OK)) {
-        DestroyCallback(done);
+        NN_LOG_ERROR("Channel async reply failed " << res << " ep id " << ep->Id());
+        DestroyTimerContext(context);
     }
     return res;
 }
