@@ -83,6 +83,7 @@ public:
     static std::mutex MUTEX;
     static uint32_t UBS_ALLOWED_PROTOCOL;              /* allowed protocol, from API */
     static bool UBS_NATIVE_TCP_MODE;                   /* native tcp mode, pass all logic of this library, from API */
+    static bool UBS_DIRECT_IO_ENABLE;                  /* if pass unmanaged fd through to libc directly, from env */
     static bool UBS_TRACE_ENABLED;                     /* if enable tracing, from env */
     static bool UBS_SPLIT_TRACE_ENABLED;               /* if enable split trace, from env */
     static uint32_t UBS_SPLIT_TRACE_BUF_CAPACITY;      /* split trace buffer capacity per socket, from env */
