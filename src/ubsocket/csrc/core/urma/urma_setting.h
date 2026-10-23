@@ -25,39 +25,34 @@ public:
     static void Init() noexcept;
 
 public:
-    static bool UB_USING_BOUNDING_DEV;
-    static std::string UB_DEV_NAME;
-    static std::string UB_DEV_EID;
-    static uint32_t UB_EID_INDEX;
+    static std::string UBS_DEV_NAME;
+    static std::string UBS_DEV_EID;
+    static uint32_t UBS_DEV_EID_INDEX;
     /* setting for tp */
-    static ub_trans_mode UB_TANS_MODE;
-    static int8_t UB_LINK_PRIORITY;
-    /* setting for jetty pool */
-    static bool UB_JETTY_SHARED_ENABLED;
-    static uint16_t UB_JETTY_INIT_COUNT;
-    static uint16_t UB_JETTY_MAX_COUNT;
-    static uint16_t UB_JETTY_JFR_COUNT;
-    static uint16_t UB_JETTY_JFS_DEPTH;
-    static uint16_t UB_JETTY_JFR_DEPTH;
-    static urma_transport_mode_t UB_JETTY_TRANS_MODE;
-    static urma_tp_type_t UB_JETTY_TP_TYPE;
+    static ub_trans_mode UBS_TRANS_MODE;
+    static int8_t UBS_LINK_PRIORITY;
     /* setting for poller */
-    static uint16_t UB_POLLER_COUNT;
-    static uint32_t UB_POLLER_JFC_DEPTH;
-    static bool UB_POLLER_BUSY_POLLING;
+    static uint16_t UBS_POLLER_COUNT;
+    static uint32_t UBS_POLLER_CQ_DEPTH;
+    static bool UBS_POLLER_BUSY_POLLING;
     /* setting for ub buffer pool */
-    static uint32_t UB_BUF_POOL_SPACE_SIZE;
-    static uint16_t UB_BUF_BLOCK_SIZE_MB;
-    static uint16_t UB_BUF_INIT_MEM_SIZE_MB;
-    static uint16_t UB_BUF_DIRECT_INIT_BLOCK_COUNT;
-    static uint16_t UB_BUF_PAGE_SIZE_KB;
-    static bool UB_BUF_ASYNC_EXPAND;
+    static uint32_t UBS_BUF_POOL_SPACE_SIZE;
+    static uint16_t UBS_BUF_EXPAND_SIZE_MB;
+    static uint16_t UBS_BUF_INIT_SIZE_MB;
+    static uint16_t UBS_BUF_DIRECT_INIT_BLOCK_COUNT;
+    static std::string UBS_BUF_PAGE_SIZE_KB; /* page type: "large"(64K) | "tiny"(4K, pure CTP), unified with legacy umq block_type */
+    static bool UBS_BUF_ASYNC_EXPAND;
+    /* externalized from constants */
+    static uint32_t UBS_CONNECTS_BUF_DEFAULT_KB; /* unified send/recv buffer default KB, negotiated via handshake */
+    static uint32_t UBS_JFS_DEPTH;           /* default JFS queue depth */
+    static uint32_t UBS_JFR_DEPTH;           /* default JFR queue depth */
+    static uint32_t UBS_SND_BUFF_ALLOC_UNIT; /* wire offset granularity in bytes; both ends MUST be configured identically */
     /* setting for epoll handle mode */
-    static EpollHandleMode UB_EPOLL_HANDLE_MODE;
-    static uint64_t UB_BAD_PORT_RECOVER_SECONDS;
-    static uint32_t UB_KEEPALIVE_TIME;
-    static uint32_t UB_KEEPALIVE_INTVL;
-    static uint32_t UB_KEEPALIVE_PROBES;
+    static EpollHandleMode UBS_EPOLL_MODE;
+    static uint64_t UBS_BAD_UBPORT_TTL;
+    static uint32_t UBS_KEEPALIVE_TIME;
+    static uint32_t UBS_KEEPALIVE_INTVL;
+    static uint32_t UBS_KEEPALIVE_PROBES;
 
 private:
     static void AddRules();

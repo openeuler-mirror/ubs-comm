@@ -80,10 +80,9 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     int fd = -1;
     UBS_VLOG_TRACE("accept on socket(%d)", sock->Fd());
     // 1. 异步accept模式下，从ready_queue中取fd
-    // 二次 accept 门槛：半异步线程池（AsyncAcceptorEnabled）与全异步 reactor（ServerAsyncEnabled）共享同一套
+    // 二次 accept 门槛：半异步线程池（half_async）与全异步 reactor（full_async）共享同一套
     // ready_queue + wakeup_event_ 完成通知，两者任一开启都允许从 ready_queue 取 fd。
-    if ((GlobalSetting::AsyncAcceptorEnabled() || GlobalSetting::ServerAsyncEnabled()) &&
-        TryPopAsyncReadyFd(fd, address, address_len)) {
+    if (GlobalSetting::GetConnMode() != ConnMode::SYNC && TryPopAsyncReadyFd(fd, address, address_len)) {
         UBS_VLOG_TRACE("accept on socket(%d) async got fd=%d", sock->Fd(), fd);
         return fd;
     }
@@ -168,7 +167,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
     // 异步/同步
     // 全异步建链路径优先于半异步线程池：recv 状态机与重活均在 poll 线程内联驱动，
     // 完成后经注入的 done_cb push ready_queue + WakeUpReadyEventFd，此处返回 EAGAIN。
-    if (GlobalSetting::ServerAsyncEnabled()) {
+    if (GlobalSetting::GetConnMode() == ConnMode::FULL_ASYNC) {
         UBS_VLOG_TRACE("server async(reactor) acceptor enabled.");
         // 懒初始化 wakeup_event_（与半异步共享 ready_queue 通知机制）
         InitWakeupEvent();
@@ -202,7 +201,7 @@ int Acceptor::Accept(const SocketPtr &sock, struct sockaddr *address, socklen_t 
         return fd;
     }
 
-    if (GlobalSetting::AsyncAcceptorEnabled()) {
+    if (GlobalSetting::GetConnMode() == ConnMode::HALF_ASYNC) {
         UBS_VLOG_TRACE("async acceptor enabled.");
         // 懒初始化：启动 ExecutorService + 初始化 wakeup_event_
         InitWakeupEvent();
@@ -378,7 +377,7 @@ void Acceptor::InitWakeupEvent()
     std::call_once(initFlag, [this]() {
         // 1. 启动 ExecutorService 线程池（半异步 accept 跑 ProcessUBConnection）。
         //    全异步建链重活已内联在 poll 线程，不再使用共享 ExecutorService，故仅半异步时启动。
-        if (GlobalSetting::AsyncAcceptorEnabled()) {
+        if (GlobalSetting::GetConnMode() == ConnMode::HALF_ASYNC) {
             auto exec_service = ExecutorService::GetExecutorService();
             if (!exec_service->Start()) {
                 UBS_VLOG_ERR("Failed to start ExecutorService for async accept");

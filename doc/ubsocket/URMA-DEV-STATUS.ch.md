@@ -61,8 +61,8 @@ urma 目录现有 5 个文件，umq 同职能有 30+ 文件。除 `urma_wrapper`
 | 项 | 位置 | 内容 |
 |----|------|------|
 | `AddRules` 框架 | `urma_setting.cpp:23` | 三类规则容器（`Int64Rule`/`StrEnumRule`/`StrNotEmptyRule`）注册到 `Validator`，但 int64/enum 数组为空 `{}`，仅 1 条 `StrNotEmptyRule{ENV_URMA_DEV_NAME, true}` |
-| 静态成员 | `:18-19` / `.h:27-28` | `UB_DEV_NAME`、`UB_DEV_EID`（均 string，全仓无人读取） |
-| 环境变量宏 | `:16` | `ENV_URMA_DEV_NAME = "UBSOCKET_UB_DEV"` |
+| 静态成员 | `:18-19` / `.h:27-28` | `UBS_DEV_NAME`、`UBS_DEV_EID`（均 string，全仓无人读取；`UB_DEV_NAME` 2026-10-19 改名，`UB_DEV_EID` 2026-10-21 改名） |
+| 环境变量宏 | `:16` | `ENV_URMA_DEV_NAME = "UBS_DEV_NAME"`（2026-10-19 改名，原名 `UBSOCKET_UB_DEV`） |
 | 基础设施依赖 | - | 复用 common 层 `Validator`（`ubsocket_setting_validator.h`）+ `GlobalSetting`（`ubsocket_global_setting.h`） |
 
 ### 3.2 待补充
@@ -70,12 +70,12 @@ urma 目录现有 5 个文件，umq 同职能有 30+ 文件。除 `urma_wrapper`
 | 项 | 对照 umq | 待做 | 优先级 |
 |----|---------|------|--------|
 | `Init()` 实现 | umq `Init()` 调 `AddRules`+`LoadEnv`+`VerifySetting` 三步（`umq_setting.cpp:249`） | 当前空（`:21`）。填为 `AddRules()` → `LoadEnv()` → （可选）`VerifySetting()` | P0 |
-| `LoadEnv()` 实现 | umq 逐项 `GS::GetEnvAndValidate` 读 17 个 env 赋静态成员（`:111-227`） | 当前空返回 `UBS_OK`（`:49`）。用 `GlobalSetting::GetEnvAndValidate` 读 `UBSOCKET_UB_DEV` 赋 `UB_DEV_NAME`，读 eid 赋 `UB_DEV_EID` | P0 |
-| `UB_DEV_EID` 解析 | umq `UBSOCKET_SRC_EID` → `UMQ_DEV_SRC_EID_STR` + `inet_pton(AF_INET6,...)` → `umq_eid_t`（`:191`） | `urma_eid_t` 是 16 字节 raw（`urma_wrapper.cpp:696` 格式化印证为 IPv6 地址形态），需 `inet_pton(AF_INET6)` 解析。补 `UB_DEV_EID` 对应的环境变量宏 + 解析逻辑 | P0 |
+| `LoadEnv()` 实现 | umq 逐项 `GS::GetEnvAndValidate` 读 17 个 env 赋静态成员（`:111-227`） | 当前空返回 `UBS_OK`（`:49`）。用 `GlobalSetting::GetEnvAndValidate` 读 `UBS_DEV_NAME` 赋 `UBS_DEV_NAME`，读 eid 赋 `UBS_DEV_EID` | P0 |
+| `UBS_DEV_EID` 解析 | umq `UBSOCKET_SRC_EID` → `UMQ_DEV_SRC_EID_STR` + `inet_pton(AF_INET6,...)` → `umq_eid_t`（`:191`） | `urma_eid_t` 是 16 字节 raw（`urma_wrapper.cpp:696` 格式化印证为 IPv6 地址形态），需 `inet_pton(AF_INET6)` 解析。补 `UBS_DEV_EID` 对应的环境变量宏 + 解析逻辑 | P0 |
 | 扩展配置项 | umq 17 个 env（传输模式/队列深度/流控 credit/内存池/block 大小/调度策略/TP 类型/链接优先级等） | 按 urma 需求增量补环境变量宏 + `AddRules` 规则 + `LoadEnv` 读取。建议至少补：传输模式（`URMA_TM_RC`/`URMA_TM_RM` 映射）、队列深度、流控、内存池 | P1 |
 | `VerifySetting()` | umq 做跨字段约束（如 `max ≥ init+64M`，`:229`） | 视 urma 配置项间的约束关系，可选补 | P2 |
 | `XxxFromStr()` 辅助 | umq `BlockTypeFromStr`/`TransModeFromStr`/`SchedulePolicyFromStr`（`:304-336`） | 补 urma 的字符串转枚举辅助（如 `TransModeFromStr` 把 "RC"/"RM" 转成 `urma_transport_mode_t`） | 随扩展项 |
-| 下游消费打通 | umq 的 `UMQ_DEV_NAME` 等被 `UmqBackend`/`UmqSocket` 大量读取 | `UrmaSocket`/`UrmaConnector` 等创建 context 时读 `UrmaSetting::UB_DEV_NAME` 调 `UrmaContext::CreateContext(devName, eidIndex)`。当前全仓零引用，需接入 | P1 |
+| 下游消费打通 | umq 的 `UMQ_DEV_NAME` 等被 `UmqBackend`/`UmqSocket` 大量读取 | `UrmaSocket`/`UrmaConnector` 等创建 context 时读 `UrmaSetting::UBS_DEV_NAME` 调 `UrmaContext::CreateContext(devName, eidIndex)`。当前全仓零引用，需接入 | P1 |
 
 ## 4. urma_socket.cpp
 
@@ -145,7 +145,7 @@ AGENTS.md 已记录："EpollRunnerFactory 尚未添加 `SOCK_TYPE_URMA` case（�
 
 ```
 P0（基础，阻塞后续）：
-  1. urma_setting.cpp 补全 Init/LoadEnv/UB_DEV_EID 解析
+  1. urma_setting.cpp 补全 Init/LoadEnv/UBS_DEV_EID 解析
      - 让 UrmaSetting::Init() 真正加载配置
   2. urma_backend.cpp Init 配置联动
      - init_attr 填充（flow control/mem pool/trans mode 等）

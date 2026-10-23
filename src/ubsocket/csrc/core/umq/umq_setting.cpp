@@ -14,6 +14,7 @@
 #include <sys/socket.h> // 包含 AF_INET、AF_INET6 等地址族常量
 #include <cstdlib>
 #include "core/ubsocket_socket_helper.h"
+#include "core/urma/urma_setting.h"
 
 namespace ock {
 namespace ubs {
@@ -21,7 +22,6 @@ namespace umq {
 #define ENV_UMQ_INITIAL_CREDIT "UBSOCKET_INITIAL_CREDIT"
 #define ENV_UMQ_MAX_CREDIT_PER_REQUEST "UBSOCKET_MAX_CREDIT_PER_REQUEST"
 #define ENV_UMQ_MIN_RESERVED_CREDIT "UBSOCKET_MIN_RESERVED_CREDIT"
-#define ENV_UMQ_BLOCK_TYPE "UBSOCKET_BLOCK_TYPE"
 #define ENV_UMQ_MEM_POOL_INIT_SIZE "UBSOCKET_POOL_INITIAL_SIZE"
 #define ENV_UMQ_MEM_POOL_MAX_SIZE "UBSOCKET_POOL_MAX_SIZE"
 #define ENV_UMQ_UBF_POOL_DEPTH "UBSOCKET_BUF_POOL_DEPTH"
@@ -44,7 +44,7 @@ namespace umq {
 #define CPU_AFFINITY_DEV_SCHEDULE_POLICY "affinity"
 #define CPU_AFFINITY_PRIORITY_DEV_SCHEDULE_POLICY "affinity_priority"
 
-umq_buf_block_size_t UmqSetting::IO_BLOCK_TYPE = BLOCK_SIZE_8K;
+uint16_t UmqSetting::IO_BLOCK_SIZE_KB = 64; /* derived from unified UrmaSetting::UBS_BUF_PAGE_SIZE_KB: large=64, default=CTP 4 / TP 8 */
 uint16_t UmqSetting::UMQ_FC_DEFAULT_CREDIT = 16L;
 uint16_t UmqSetting::UMQ_FC_MAX_CREDIT = 256L;
 uint16_t UmqSetting::UMQ_FC_MIN_CREDIT = 2;
@@ -96,8 +96,7 @@ void UmqSetting::AddRules() noexcept
                                {ENV_UMQ_UBF_POOL_DEPTH, false, 1, std::numeric_limits<int64_t>::max()}};
 
     /* str enum rules: name, required, enum */
-    StrEnumRule rules_str_enum[] = {{ENV_UMQ_BLOCK_TYPE, false, "default|large"},
-                                    {ENV_UMQ_TINY_POOL_ENABLE, false, "true|false"},
+    StrEnumRule rules_str_enum[] = {{ENV_UMQ_TINY_POOL_ENABLE, false, "true|false"},
                                     {ENV_UMQ_TINY_POOL_BLOCK_SIZE, false, "512|1024|2048|4096|8192|1K|2K|4K|8K"},
                                     {ENV_UMQ_SCHEDULE_POLICY, false, "rr|affinity|affinity_priority"},
                                     {ENV_UMQ_UB_TRANS_MODE, false, "RC_TP|RM_TP|RM_CTP|RC_CTP"},
@@ -221,11 +220,9 @@ Result UmqSetting::LoadEnv() noexcept
         UBS_VLOG_INFO("Current ub trans mode");
     }
 
-    if (GS::GetEnvAndValidate(ENV_UMQ_BLOCK_TYPE, strEnvValue)) {
-        IO_BLOCK_TYPE = BlockTypeFromStr(strEnvValue);
-    } else {
-        IO_BLOCK_TYPE = DefaultBlockTypeCheck();
-    }
+    /* block_type has been unified into UrmaSetting::UBS_BUF_PAGE_SIZE_KB ("large"/"tiny"):
+     * large=64K; tiny=4K (pure CTP). */
+    IO_BLOCK_SIZE_KB = (UrmaSetting::UBS_BUF_PAGE_SIZE_KB == "tiny") ? 4 : 64;
 
     return UBS_OK;
 }
@@ -271,54 +268,12 @@ Result UmqSetting::Init() noexcept
 
 uint32_t UmqSetting::GetIOBufSize() noexcept
 {
-    switch (IO_BLOCK_TYPE) {
-        case BLOCK_SIZE_4K:
-            return SIZE_4K - IOBUF_DIFF;
-        case BLOCK_SIZE_8K:
-            return SIZE_8K - IOBUF_DIFF;
-        case BLOCK_SIZE_16K:
-            return SIZE_16K - IOBUF_DIFF;
-        case BLOCK_SIZE_32K:
-            return SIZE_32K - IOBUF_DIFF;
-        case BLOCK_SIZE_64K:
-            return SIZE_64K - IOBUF_DIFF;
-        default:
-            return SIZE_8K - IOBUF_DIFF;
-    }
+    return static_cast<uint32_t>(IO_BLOCK_SIZE_KB * 1024ULL - IOBUF_DIFF);
 }
 
 uint64_t UmqSetting::FloorMask() noexcept
 {
-    switch (IO_BLOCK_TYPE) {
-        case BLOCK_SIZE_4K:
-            return SIZE_4K - MASK_DIFF;
-        case BLOCK_SIZE_8K:
-            return SIZE_8K - MASK_DIFF;
-        case BLOCK_SIZE_16K:
-            return SIZE_16K - MASK_DIFF;
-        case BLOCK_SIZE_32K:
-            return SIZE_32K - MASK_DIFF;
-        case BLOCK_SIZE_64K:
-            return SIZE_64K - MASK_DIFF;
-        default:
-            return SIZE_8K - MASK_DIFF;
-    }
-}
-
-umq_buf_block_size_t UmqSetting::DefaultBlockTypeCheck() noexcept
-{
-    if (UMQ_UB_TRANS_MODE == ub_trans_mode::RM_CTP || UMQ_UB_TRANS_MODE == ub_trans_mode::RC_CTP) {
-        return BLOCK_SIZE_4K;
-    }
-    return BLOCK_SIZE_8K;
-}
-
-umq_buf_block_size_t UmqSetting::BlockTypeFromStr(const std::string &typeStr) noexcept
-{
-    if (typeStr == LARGE_QBUF_BLOCK_TYPE) {
-        return BLOCK_SIZE_64K;
-    }
-    return DefaultBlockTypeCheck();
+    return static_cast<uint64_t>(IO_BLOCK_SIZE_KB * 1024ULL) - MASK_DIFF;
 }
 
 umq_tiny_buf_block_size_t UmqSetting::TinyBlockSizeFromStr(const std::string &typeStr) noexcept

@@ -218,9 +218,9 @@ Result UrmaBackend::InitKeepAliveManager()
     }
 
     UrmaAliveConf conf;
-    conf.keepalive_time = UrmaSetting::UB_KEEPALIVE_TIME;
-    conf.keepalive_intvl = UrmaSetting::UB_KEEPALIVE_INTVL;
-    conf.keepalive_probes = UrmaSetting::UB_KEEPALIVE_PROBES;
+    conf.keepalive_time = UrmaSetting::UBS_KEEPALIVE_TIME;
+    conf.keepalive_intvl = UrmaSetting::UBS_KEEPALIVE_INTVL;
+    conf.keepalive_probes = UrmaSetting::UBS_KEEPALIVE_PROBES;
     Result result = tmp_alive_manager->Init(conf);
     if (result != UBS_OK) {
         UBS_VLOG_ERR("Failed to initialize urma context pool, result: %d", result);
@@ -291,10 +291,8 @@ Result UrmaBackend::InitContextPool() noexcept
      * case2: if not set in ENV, get first available dev
      */
     Result result = UBS_OK;
-    if (!UrmaSetting::UB_DEV_NAME.empty()) {
-        result = tmp_context_pool->AddEidIndex(UrmaSetting::UB_DEV_NAME, UrmaSetting::UB_EID_INDEX);
-    } else if (UrmaSetting::UB_USING_BOUNDING_DEV) {
-        result = tmp_context_pool->AutoAddEidIndex();
+    if (!UrmaSetting::UBS_DEV_NAME.empty()) {
+        result = tmp_context_pool->AddEidIndex(UrmaSetting::UBS_DEV_NAME, UrmaSetting::UBS_DEV_EID_INDEX);
     } else {
         result = tmp_context_pool->AutoAddEidIndex(false);
     }
@@ -334,14 +332,6 @@ Result UrmaBackend::InitJettyPool() noexcept
     }
 
     UrmaJettyPoolOptions options;
-    options.pool_type = UrmaSetting::UB_JETTY_SHARED_ENABLED ? PT_SHARED : PT_DEDICATED;
-    options.init_jetty_count = UrmaSetting::UB_JETTY_INIT_COUNT;
-    options.max_jetty_count = UrmaSetting::UB_JETTY_MAX_COUNT;
-    options.jfr_count = UrmaSetting::UB_JETTY_JFR_COUNT;
-    options.jfs_depth = UrmaSetting::UB_JETTY_JFS_DEPTH;
-    options.jfr_depth = UrmaSetting::UB_JETTY_JFR_DEPTH;
-    options.transport_mode = UrmaSetting::UB_JETTY_TRANS_MODE;
-    options.tp_type = UrmaSetting::UB_JETTY_TP_TYPE;
     options.context_pool = context_pool_;
 
     auto tmp_jetty_pool = MakeRef<UrmaJettyPool>(options);
@@ -384,10 +374,10 @@ Result UrmaBackend::InitPollerSet() noexcept
 
     UrmaAggPollerOptions options;
     options.context_pool = context_pool_;
-    options.run_in_thread = UrmaSetting::UB_EPOLL_HANDLE_MODE == THREAD_PER_CONNECTION;
-    options.polling_type = UrmaSetting::UB_POLLER_BUSY_POLLING ? BUSY_POLLING : EVENT_POLLING;;
-    options.poller_count_per_context = UrmaSetting::UB_POLLER_COUNT;
-    options.jfc_depth = UrmaSetting::UB_POLLER_JFC_DEPTH;
+    options.run_in_thread = UrmaSetting::UBS_EPOLL_MODE == THREAD_PER_CONNECTION;
+    options.polling_type = UrmaSetting::UBS_POLLER_BUSY_POLLING ? BUSY_POLLING : EVENT_POLLING;
+    options.poller_count_per_context = UrmaSetting::UBS_POLLER_COUNT;
+    options.jfc_depth = UrmaSetting::UBS_POLLER_CQ_DEPTH;
     options.cqe_handler = std::bind(&UrmaBackend::HandleCqe, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
     auto result = tmp_poller_set->Init(options);
@@ -421,12 +411,14 @@ Result UrmaBackend::InitIoBufPool() noexcept
     }
 
     allocator::FixedAllocatorOptions options;
-    options.pool_space_size_gb = UrmaSetting::UB_BUF_POOL_SPACE_SIZE;
-    options.block_size_mb = UrmaSetting::UB_BUF_BLOCK_SIZE_MB;
-    options.init_block_count = UrmaSetting::UB_BUF_INIT_MEM_SIZE_MB / options.block_size_mb;
-    options.mini_block_size_kb = UrmaSetting::UB_BUF_PAGE_SIZE_KB;
-    options.async_expand = UrmaSetting::UB_BUF_ASYNC_EXPAND;
-    options.init_direct_block_count = UrmaSetting::UB_BUF_DIRECT_INIT_BLOCK_COUNT;
+    options.pool_space_size_gb = UrmaSetting::UBS_BUF_POOL_SPACE_SIZE;
+    options.block_size_mb = UrmaSetting::UBS_BUF_EXPAND_SIZE_MB;
+    options.init_block_count = UrmaSetting::UBS_BUF_INIT_SIZE_MB / options.block_size_mb;
+    /* page type unified with legacy umq block_type: "large"=64K, "tiny"=4K (pure CTP).
+     * Both levels divide the 16MB block evenly (FixedAllocator hard constraint). */
+    options.mini_block_size_kb = (UrmaSetting::UBS_BUF_PAGE_SIZE_KB == "tiny") ? 4 : 64;
+    options.async_expand = UrmaSetting::UBS_BUF_ASYNC_EXPAND;
+    options.init_direct_block_count = UrmaSetting::UBS_BUF_DIRECT_INIT_BLOCK_COUNT;
 
     auto result = tmp_io_buf_pool->init(options, context_pool_);
     if (result != UBS_OK) {

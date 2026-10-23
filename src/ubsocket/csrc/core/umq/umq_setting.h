@@ -50,7 +50,7 @@ public:
     static uint32_t UMQ_TINY_POOL_BLOCK_COUNT;
     static uint64_t UMQ_TLS_TINY_POOL_DEPTH;
     static uint32_t UMQ_POST_BATCH_MAX;
-    static umq_buf_block_size_t IO_BLOCK_TYPE;
+    static uint16_t IO_BLOCK_SIZE_KB; /* derived from unified UrmaSetting::UBS_BUF_PAGE_SIZE_KB: default=64, tiny=4 */
     static umq_trans_mode_t IO_TRANS_MODE;
     static umq_trans_mode_t UMQ_TRANS_MODE;
     static int UMQ_PROCESS_SOCKET_ID;
@@ -84,8 +84,6 @@ private:
     static Result LoadEnv() noexcept;
     static Result VerifySetting() noexcept;
 
-    static umq_buf_block_size_t DefaultBlockTypeCheck() noexcept;
-    static umq_buf_block_size_t BlockTypeFromStr(const std::string &typeStr) noexcept;
     static umq_tiny_buf_block_size_t TinyBlockSizeFromStr(const std::string &typeStr) noexcept;
     static umq_trans_mode_t TransModeFromStr(const std::string &typeStr) noexcept;
     static dev_schedule_policy SchedulePolicyFromStr(const std::string &policyStr) noexcept;

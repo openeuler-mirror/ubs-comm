@@ -75,9 +75,9 @@ Result UrmaConnectorOps::Negotiate(int new_fd, const SocketPtr &sock)
     UBSVersion local_version = UBS_PROTOCOL_VERSION;
     UrmaNegotiateReq req = {};
     req.peer_version = local_version.GetWhole();
-    req.trans_mode = UrmaSetting::UB_TANS_MODE;
-    req.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
-    req.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
+    req.trans_mode = UrmaSetting::UBS_TRANS_MODE;
+    req.send_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
+    req.recv_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
     req.conn_flag |= GlobalSetting::UBS_ENABLE_DEGRADE ? URMA_SOCKET_MASK_DEGRADE : 0;
     req.conn_flag |= GlobalSetting::UBS_BACKUP_LINK_ENABLED ? URMA_SOCKET_MASK_LINK_SWITCH : 0;
 

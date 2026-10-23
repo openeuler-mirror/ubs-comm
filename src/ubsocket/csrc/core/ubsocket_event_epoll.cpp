@@ -157,66 +157,8 @@ private:
 };
 
 template <EpollRunnerType T>
-class ExternalPollerEpollRunnerBackend : public EpollRunnerBackend {
-public:
-    explicit ExternalPollerEpollRunnerBackend(EpollRunner<T> *runner) : runner_(runner) {}
-
-    int Start() override
-    {
-        ops_ = GlobalSetting::UBS_POLLER_OPS;
-        if (ops_ == nullptr || ops_->add_consumer == nullptr || ops_->remove_consumer == nullptr) {
-            UBS_VLOG_ERR("async_epoll external poller ops is invalid\n");
-            errno = EINVAL;
-            return -1;
-        }
-
-        if (ops_->add_consumer(runner_->epoll_fd_, this, DrainReadyEvents, &consumer_) != 0) {
-            UBS_VLOG_ERR("async_epoll external poller add consumer failed: %d : %s\n", errno, strerror(errno));
-            return -1;
-        }
-        started_ = true;
-        return 0;
-    }
-
-    void Stop() override
-    {
-        if (!started_) {
-            return;
-        }
-        ops_->remove_consumer(consumer_, runner_->epoll_fd_);
-        consumer_ = nullptr;
-        started_ = false;
-    }
-
-private:
-    static void DrainReadyEvents(void *arg)
-    {
-        auto *backend = static_cast<ExternalPollerEpollRunnerBackend<T> *>(arg);
-        if (UNLIKELY(backend == nullptr || backend->runner_ == nullptr)) {
-            return;
-        }
-
-        bool hasEvents = false;
-        do {
-            hasEvents = false;
-            if (backend->runner_->DrainReadyEvents(0, &hasEvents)) {
-                return;
-            }
-        } while (hasEvents);
-    }
-
-    EpollRunner<T> *runner_;
-    u_external_poller_ops_t *ops_{nullptr};
-    void *consumer_{nullptr};
-    bool started_{false};
-};
-
-template <EpollRunnerType T>
 std::unique_ptr<EpollRunnerBackend> EpollRunner<T>::CreateBackend()
 {
-    if (GlobalSetting::UBS_POLLER_OPS != nullptr) {
-        return std::unique_ptr<EpollRunnerBackend>(new ExternalPollerEpollRunnerBackend<T>(this));
-    }
     return std::unique_ptr<EpollRunnerBackend>(new PthreadEpollRunnerBackend<T>(this));
 }
 

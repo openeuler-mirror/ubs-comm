@@ -225,10 +225,6 @@ constexpr uint32_t POLL_TX_RETRY_MAX_CNT = 50;
 
 constexpr const uint32_t NET_STR_ERROR_BUF_SIZE = 128;
 
-constexpr uint32_t BLOCK_TYPE_STR_LEN_MAX = 64;
-constexpr const char *DEFAULT_QBUF_BLOCK_TYPE = "default"; // CTP:4k TP:8k
-constexpr const char *LARGE_QBUF_BLOCK_TYPE = "large";     // 64k
-
 constexpr uint32_t BRPC_SYM_STR_LEN_MAX = 128;
 constexpr uint32_t BRPC_ALLOC_DEFAULT_BUF_NUM = 1;
 constexpr uint32_t DEV_NAME_STR_LEN_MAX = 64;

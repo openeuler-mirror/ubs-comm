@@ -22,7 +22,7 @@ bool ExecutorService::Start(uint32_t queueCapacity)
         return true;
     }
 
-    uint32_t threadNum = GlobalSetting::UBS_THREAD_POOL_SIZE;
+    uint32_t threadNum = GlobalSetting::UBS_CONNECTS_POLL_THREAD_NUM;
     if (threadNum == 0) {
         UBS_VLOG_ERR("set thread pool size is zero");
         return false;

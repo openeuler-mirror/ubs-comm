@@ -221,9 +221,6 @@ template <EpollRunnerType T>
 class PthreadEpollRunnerBackend;
 
 template <EpollRunnerType T>
-class ExternalPollerEpollRunnerBackend;
-
-template <EpollRunnerType T>
 class EpollRunner
     : public EpollRunnerBase
     , public LeakySingleton<EpollRunner<T>> {
@@ -292,7 +289,6 @@ protected:
 
 private:
     friend class PthreadEpollRunnerBackend<T>;
-    friend class ExternalPollerEpollRunnerBackend<T>;
 
     EpollRunner() = default;
     /**

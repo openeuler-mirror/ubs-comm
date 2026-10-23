@@ -27,13 +27,25 @@
 
 namespace ock {
 namespace ubs {
+
+/* conn mode tier (enum parsed from env UBS_CONNECTS_MODE / gflag ubsocket_connects_mode via interface) */
+enum class ConnMode : uint8_t {
+    SYNC = 0,       /* sync establishment */
+    HALF_ASYNC = 1, /* server half-async thread pool (client unsupported, falls back to sync) */
+    FULL_ASYNC = 2  /* server full-async reactor + client full-async connect */
+};
+
 class GlobalSetting {
 public:
-    static bool AsyncAcceptorEnabled() noexcept;
-    static bool AsyncConnectorEnabled() noexcept;
-    static bool AllAsyncConnectorEnabled() noexcept;
+    /* conn mode getter (server/client share one UBS_CONNECTS_MODE tier), callers compare with ConnMode::XXX directly */
+    static ConnMode GetConnMode() noexcept;
+    /* client-role policy: true only in full_async tier (no half-async impl on client connect path, half_async falls back to sync) */
+    static bool ClientAsyncConnectEnabled() noexcept;
     static bool AsyncEpollEnabled() noexcept;
-    static bool ServerAsyncEnabled() noexcept;
+
+    /* interface: conn mode string (from gflag/env) <-> enum conversion */
+    static ConnMode ConnModeFromStr(const std::string &modeStr) noexcept;
+    static const char *ConnModeToStr(ConnMode mode) noexcept;
 
     static uint16_t GetTxDepth() noexcept;
 
@@ -93,12 +105,8 @@ public:
     static bool UBS_PROBE_ENABLED;
     static bool UBS_INITED;                          /* if ubsocket initialized, from API */
     static std::string UBS_TRANS_MODE;               /* transport mode, from env */
-    static int16_t UBS_ACCEPTOR_ASYNC_THREAD_COUNT;  /* if enable async acceptor, from API override by env */
-    static int16_t UBS_CONNECTOR_ASYNC_THREAD_COUNT; /* if enable async connector, from API override by env */
-    static bool UBS_CONNECTOR_ASYNC_ENABLE;          /* if enable client fully-async connector, from API/env */
+    static ConnMode UBS_CONNECTS_MODE;               /* conn mode enum (server/client share one tier): SYNC | HALF_ASYNC(client falls back to SYNC) | FULL_ASYNC */
     static int16_t UBS_EPOLL_ASYNC_THREAD_COUNT;     /* if enable async epoll_wait, from API override by env */
-    static bool UBS_ACCEPTOR_ASYNC_ENABLED;          /* if enable async acceptor, from API override by env */
-    static bool UBS_SERVER_ASYNC_ENABLE;             /* if enable server fully-async conn, from API override by env */
     static bool UBS_AUTO_FALLBACK_TCP;               /* if auto fallback to tcp, from API override by from env */
     static bool UBS_READV_UNLIMITED;                 /* if enable readv limit report, from env */
     static bool UBS_ENABLE_SHARE_JFR;                /* if enable share jfr, from env */
@@ -115,9 +123,7 @@ public:
     static uint32_t UBS_PROBE_BATCH;
 
     static UBHandshakeMode UBS_HAND_SHAKE_MODE;
-    static uint32_t UBS_THREAD_POOL_SIZE;     /* 半异步 accept / 共享 ExecutorService 线程数 */
-    static uint32_t UBS_CONN_POLL_THREAD_NUM; /* 全异步建链 poll 线程数，0=跟随 UBS_THREAD_POOL_SIZE */
-    static u_external_poller_ops_t *UBS_POLLER_OPS;
+    static uint32_t UBS_CONNECTS_POLL_THREAD_NUM; /* unified conn-establishment thread count, shared by half-async ExecutorService and full-async ConnDispatcher */
 
     /* trace statistic related */
     static uint64_t UBS_TRACE_TIME;
@@ -252,29 +258,20 @@ ALWAYS_INLINE bool GlobalSetting::GetEnvAndValidateNotEmpty(const std::string &n
     return true;
 }
 
-ALWAYS_INLINE bool GlobalSetting::AsyncAcceptorEnabled() noexcept
+ALWAYS_INLINE ConnMode GlobalSetting::GetConnMode() noexcept
 {
-    return UBS_ACCEPTOR_ASYNC_THREAD_COUNT > 0 || UBS_ACCEPTOR_ASYNC_ENABLED;
+    return UBS_CONNECTS_MODE;
 }
 
-ALWAYS_INLINE bool GlobalSetting::AsyncConnectorEnabled() noexcept
+ALWAYS_INLINE bool GlobalSetting::ClientAsyncConnectEnabled() noexcept
 {
-    return UBS_CONNECTOR_ASYNC_THREAD_COUNT > 0;
-}
-
-ALWAYS_INLINE bool GlobalSetting::AllAsyncConnectorEnabled() noexcept
-{
-    return UBS_CONNECTOR_ASYNC_ENABLE;
+    /* no half-async establishment on client (ExecutorService consumed by acceptor only), half_async tier falls back to sync, so check full_async only */
+    return GetConnMode() == ConnMode::FULL_ASYNC;
 }
 
 ALWAYS_INLINE bool GlobalSetting::AsyncEpollEnabled() noexcept
 {
     return UBS_EPOLL_ASYNC_THREAD_COUNT > 0;
-}
-
-ALWAYS_INLINE bool GlobalSetting::ServerAsyncEnabled() noexcept
-{
-    return UBS_SERVER_ASYNC_ENABLE;
 }
 
 ALWAYS_INLINE uint16_t GlobalSetting::GetTxDepth() noexcept

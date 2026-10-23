@@ -58,8 +58,16 @@ UrmaSocket::UrmaSocket(int fd) noexcept : SocketBase(fd, SocketType::SOCK_TYPE_U
 
 Result UrmaSocket::Initialize() noexcept
 {
-    send_buf_size_ = URMA_SEND_BUF_DEFAULT_KB * 1024;
-    recv_buf_size_ = URMA_RECV_BUF_DEFAULT_KB * 1024;
+    send_buf_size_ = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB * 1024;
+    recv_buf_size_ = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB * 1024;
+    /* wire buffer_offset is a 16-bit field in alloc-unit slots: cap each ring to the addressable range */
+    const uint64_t max_ring_bytes = (1ULL << 16) * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
+    if (send_buf_size_ > max_ring_bytes || recv_buf_size_ > max_ring_bytes) {
+        UBS_SLOG_ERR("UrmaSocket: buffer size (" << send_buf_size_ << "/" << recv_buf_size_
+                     << ") exceeds wire offset addressing limit " << max_ring_bytes
+                     << " bytes (16bit x alloc_unit=" << UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT << ")");
+        return UBS_ERROR;
+    }
 
     auto buffer = UrmaBackend::Instance().GetAllocator()->direct_allocate(recv_buf_size_ + send_buf_size_);
     if (UNLIKELY(buffer == nullptr)) {
@@ -238,8 +246,8 @@ int UrmaSocket::GetLingerOpt(struct linger &value) noexcept
 
 Result UrmaSocket::PostCtrlOnlyNotification(IOOpcode opcode, OneSideSenderType notify) noexcept
 {
-    constexpr uint64_t unit = URMA_SND_BUFF_ALLOC_UNIT;
-    constexpr uint64_t need_size = URMA_CTRL_ONLY_BUF_SIZE;
+    const uint64_t unit = UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
+    const uint64_t need_size = UrmaCtrlOnlyBufSize(unit);
     uint64_t buf_offset = 0;
     const uint64_t real_size = send_buf_->Allocate(need_size, need_size, buf_offset);
     if (real_size < need_size) {
@@ -415,7 +423,8 @@ void UrmaSocket::OnPostCtrlOnlyNotificationFinished(uint64_t buf_offset_units) n
 {
     // 释放 ctrl 占用
     if (send_buf_ != nullptr) {
-        send_buf_->Release(buf_offset_units * URMA_SND_BUFF_ALLOC_UNIT, URMA_CTRL_ONLY_BUF_SIZE);
+        send_buf_->Release(buf_offset_units * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT,
+                       UrmaCtrlOnlyBufSize(UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT));
     }
 }
 
@@ -508,12 +517,13 @@ Result UrmaSocket::CreateUrmaResources()
         UBS_SLOG_ERR("UrmaSocket: SelectPoller failed, fd=" << raw_socket_);
         return ret;
     }
-    uint8_t priority = (UrmaSetting::UB_LINK_PRIORITY == UBSOCKET_LINK_PRIORITY_NOT_SET)
+    uint8_t priority = (UrmaSetting::UBS_LINK_PRIORITY == UBSOCKET_LINK_PRIORITY_NOT_SET)
                            ? UINT8_MAX
-                           : static_cast<uint8_t>(UrmaSetting::UB_LINK_PRIORITY);
+                           : static_cast<uint8_t>(UrmaSetting::UBS_LINK_PRIORITY);
 
     ret =
-        context_->CreateJfsJfrJetty(jfc_, kDefaultQueueDepth, GetUrmaTransMode(), GetUrmaTpType(), jfs_, jfr_, jetty_, priority);
+        context_->CreateJfsJfrJetty(jfc_, UrmaSetting::UBS_JFS_DEPTH, UrmaSetting::UBS_JFR_DEPTH, GetUrmaTransMode(),
+                                    GetUrmaTpType(), jfs_, jfr_, jetty_, priority);
     if (ret != UBS_OK) {
         UBS_SLOG_ERR("UrmaSocket: create jfs/jfr/jetty failed, fd=" << raw_socket_);
         return ret;
@@ -623,7 +633,7 @@ void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
 {
     PROF_START(_URMA_IMM_REACH_PROC);
     auto rdma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
-    auto recv_ctl_off = static_cast<uint32_t>(imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT);
+    auto recv_ctl_off = static_cast<uint32_t>(imm.ubsocket.buffer_offset * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT);
     if (UNLIKELY(recv_ctl_off >= recv_buf_size_)) {
         UBS_VLOG_ERR("socket fd(%d) receive invalid imm(opcode: %u, off:%u) off_by_bytes: %u", raw_socket_,
                      static_cast<unsigned>(imm.ubsocket.opcode), static_cast<unsigned>(imm.ubsocket.buffer_offset),
@@ -648,7 +658,7 @@ void UrmaSocket::HandlePreWrite(const WriteImmData &imm)
 
 void UrmaSocket::HandlePostWrite(const WriteImmData &imm)
 {
-    auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+    auto send_offset = imm.ubsocket.buffer_offset * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
     UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv resp write_imm(%u:%u) req_id(%lu) seq(%lu)", raw_socket_,
                    static_cast<unsigned>(imm.ubsocket.opcode), static_cast<unsigned>(imm.ubsocket.buffer_offset),
@@ -677,7 +687,7 @@ void UrmaSocket::HandleWriteInBand(const WriteImmData &imm)
 {
     PROF_START(_URMA_IMM_REACH_PROC);
     auto urma_rx_ops = reinterpret_cast<UrmaRxOps *>(rx_.GetRxOps());
-    auto recv_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+    auto recv_offset = imm.ubsocket.buffer_offset * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(recv_buf_addr_ + recv_offset);
     UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv req write_imm(%u:%u) req_id(%lu) seq(%lu)", raw_socket_,
                    static_cast<unsigned>(imm.ubsocket.opcode), static_cast<unsigned>(imm.ubsocket.buffer_offset),
@@ -707,7 +717,7 @@ void UrmaSocket::DataReadFinished(uint32_t seq_no)
 
 void UrmaSocket::HandleWriteInBandAck(const WriteImmData &imm)
 {
-    auto send_offset = imm.ubsocket.buffer_offset * URMA_SND_BUFF_ALLOC_UNIT;
+    auto send_offset = imm.ubsocket.buffer_offset * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     auto req = reinterpret_cast<UrmaCtrlMessage *>(send_buf_addr_ + send_offset);
     UBS_VLOG_TRACE("urma_socket_message: socket(%d) recv resp write_imm(%u:%u) req_id(%lu) seq(%lu)", raw_socket_,
                    static_cast<unsigned>(imm.ubsocket.opcode), static_cast<unsigned>(imm.ubsocket.buffer_offset),

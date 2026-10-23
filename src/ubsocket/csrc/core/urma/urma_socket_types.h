@@ -20,14 +20,14 @@ namespace ubs {
 namespace urma {
 
 constexpr uint32_t URMA_CONTROL_PLANE_MAGIC = 0x55424C49;                /* "UBLI" */
-constexpr uint32_t URMA_SND_BUFF_ALLOC_UNIT = 1024;                      /* 1KB: inline WRITE_IN_BAND allocate unit */
-constexpr uint32_t URMA_INLINE_THRESHOLD = 2 * URMA_SND_BUFF_ALLOC_UNIT; /* 2KB: with head size */
-constexpr uint32_t URMA_SEND_BUF_DEFAULT_KB = 128;
-constexpr uint32_t URMA_RECV_BUF_DEFAULT_KB = 128;
+/* wire offset granularity is configured via UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT
+ * (default 1024; both ends MUST be identical) — it is the interpretation scale
+ * of the 16-bit wire field buffer_offset below */
+/* URMA_SEND_BUF_DEFAULT_KB / URMA_RECV_BUF_DEFAULT_KB externalized to UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
+ * kDefaultQueueDepth externalized to UrmaSetting::UBS_JFS_DEPTH / UBS_JFR_DEPTH */
 constexpr uint32_t URMA_SEND_BUF_OFFSET_GRANULARITY = 8192;     /* 8K */
 constexpr uint32_t URMA_SEND_LEN_GRANULARITY = 1024;            /* 1K */
 constexpr size_t URMA_SHARED_BUF_DEFAULT_PAGE_SIZE = 16 * 1024; /* 16KB */
-constexpr uint32_t kDefaultQueueDepth = 8192;
 constexpr uint32_t kDefaultCqPollBatch = 32;
 
 /*
@@ -105,7 +105,7 @@ union WriteImmData {
     } urma;
     struct {
         uint64_t opcode : 4;         /* bits 0~5 UBSocket ring buffer io op code (0~15) */
-        uint64_t buffer_offset : 16; /* offset in ring buffer, 1KB (URMA_SND_BUFF_ALLOC_UNIT) granularity (0 ~ 64M) */
+        uint64_t buffer_offset : 16; /* offset in ring buffer, UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT granularity (default 1KB, 0~64M at 1KB) */
         uint64_t urma_reserved : 44; /* bits 20~63 URMA reserved */
     } ubsocket;
 
@@ -197,10 +197,19 @@ struct UrmaCtrlMessage {
     };
 };
 constexpr uint32_t URMA_INLINE_MESSAGE_CTRL_COST = sizeof(UrmaMessageHead);
-constexpr uint32_t URMA_INLINE_DATA_THRESHOLD = URMA_INLINE_THRESHOLD - URMA_INLINE_MESSAGE_CTRL_COST;
+
+/* runtime helpers: unit comes from UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT, replacing the former
+ * compile-time URMA_INLINE_DATA_THRESHOLD / URMA_CTRL_ONLY_BUF_SIZE */
+inline uint32_t UrmaInlineDataThreshold(uint32_t unit)
+{
+    return 2 * unit - sizeof(UrmaMessageHead);
+}
+
+inline uint64_t UrmaCtrlOnlyBufSize(uint32_t unit)
+{
+    return ((sizeof(UrmaMessageHead) + unit - 1) / unit) * unit;
+}
 /* ctrl-only notification size (CLOSE/SHUTDOWN carry no payload) */
-constexpr uint32_t URMA_CTRL_ONLY_BUF_SIZE =
-    ((sizeof(UrmaMessageHead) + URMA_SND_BUFF_ALLOC_UNIT - 1) / URMA_SND_BUFF_ALLOC_UNIT) * URMA_SND_BUFF_ALLOC_UNIT;
 
 constexpr uint32_t URMA_MAX_CONTEXT_COUNT = 32;
 

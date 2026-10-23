@@ -195,7 +195,7 @@ UBS_API int UB_API_WRAP(connect)(int fd, const struct sockaddr *address, socklen
     /* 全异步 connect 分流：仅非阻塞 fd、非 TFO、非纯 TCP。TFO 会临时切阻塞，不能污染共享 poll 线程。 */
     bool nonblocking = !SocketConnHelper::IsBlocking(fd);
     bool tfo = (GlobalSetting::UBS_HAND_SHAKE_MODE == UBHandshakeMode::TFO);
-    if (GlobalSetting::AllAsyncConnectorEnabled() && nonblocking && !tfo && sock->Type() != SocketType::SOCK_TYPE_TCP) {
+    if (GlobalSetting::ClientAsyncConnectEnabled() && nonblocking && !tfo && sock->Type() != SocketType::SOCK_TYPE_TCP) {
         /* 建链中二次 connect：不重复提交，透传 libc 得到 EALREADY/EISCONN/0（对齐 POSIX） */
         if (sock->State() == SOCK_STAT_CONNECTING) {
             return LibcApi::connect(fd, address, address_len);

@@ -246,7 +246,8 @@ public:
      * agg-poller wakeup channel, so the two paths cannot drift apart.
      *
      * @param jfc          [in] jfc the jfs and jfr are bound to
-     * @param queueDepth   [in] queue depth of the jfs and jfr
+     * @param jfsDepth     [in] queue depth of the jfs
+     * @param jfrDepth     [in] queue depth of the jfr
      * @param transMode    [in] transport mode of the jfs and jfr
      * @param tpType       [in] tp type (rc/rm)
      * @param priority     [in] jetty priority in [0, URMA_MAX_PRIORITY]
@@ -256,12 +257,9 @@ public:
      *
      * @return 0 if successful
      */
-    Result CreateJfsJfrJetty(const UrmaJfcPtr &jfc, uint32_t queueDepth,
-    urma_transport_mode_t transMode,
-                             urma_tp_type_t tpType, UrmaJfsPtr &jfs, UrmaJfrPtr &
-                             jfr, UrmaJettyPtr &jetty, 
+    Result CreateJfsJfrJetty(const UrmaJfcPtr &jfc, uint32_t jfsDepth, uint32_t jfrDepth, urma_transport_mode_t transMode,
+                             urma_tp_type_t tpType, UrmaJfsPtr &jfs, UrmaJfrPtr &jfr, UrmaJettyPtr &jetty,
                              uint8_t priority = UINT8_MAX);
-    
 
     const urma_eid_info_t &EidInfo() const noexcept;
 

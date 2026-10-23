@@ -275,8 +275,8 @@ static UrmaNegotiateReq MakeCompatReq()
     UrmaNegotiateReq req = {};
     req.peer_version = UBS_PROTOCOL_VERSION.GetWhole();
     req.trans_mode = RM_CTP;
-    req.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
-    req.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
+    req.send_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
+    req.recv_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
     req.conn_flag = URMA_SOCKET_MASK_DEGRADE;
     return req;
 }
@@ -287,8 +287,8 @@ static UrmaNegotiateRsp MakeCompatRsp(int ret_code = 0)
     rsp.ret_code = ret_code;
     rsp.negotiated_version = UBS_PROTOCOL_VERSION.GetWhole();
     rsp.trans_mode = RM_CTP;
-    rsp.send_buf_kb = URMA_SEND_BUF_DEFAULT_KB;
-    rsp.recv_buf_kb = URMA_RECV_BUF_DEFAULT_KB;
+    rsp.send_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
+    rsp.recv_buf_kb = UrmaSetting::UBS_CONNECTS_BUF_DEFAULT_KB;
     rsp.conn_flag = URMA_SOCKET_MASK_DEGRADE;
     return rsp;
 }
@@ -459,7 +459,7 @@ TEST_F(UrmaConnOpsTest, DoWaitTcpConnect_NotUbsConnection_StagesNegotiateReq)
     UrmaNegotiateReq req = {};
     memcpy(&req, ops->pending_send_buf_.data() + sizeof(body_len), sizeof(req));
     EXPECT_EQ(UBS_PROTOCOL_VERSION.GetWhole(), req.peer_version);
-    EXPECT_EQ(UrmaSetting::UB_TANS_MODE, req.trans_mode);
+    EXPECT_EQ(UrmaSetting::UBS_TRANS_MODE, req.trans_mode);
     EXPECT_NE(0u, req.conn_flag & URMA_SOCKET_MASK_DEGRADE);
     GlobalMockObject::verify();
 }
