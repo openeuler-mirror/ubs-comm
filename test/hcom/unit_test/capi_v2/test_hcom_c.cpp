@@ -192,13 +192,23 @@ int CertCb(const char *name, char **certPath)
     return 0;
 }
 
-int PriKeyCb(const char *name, char **priKeyPath, char **keyPass, ubs_hcom_tls_keypass_erase *erase)
+int PriKeyCb(const char *name, char **priKeyPath, char **keyPass, int *keyPassLen, ubs_hcom_tls_keypass_erase *erase)
 {
     return 0;
 }
 
 int CaCb(const char *name, char **caPath, char **crlPath, ubs_hcom_peer_cert_verify_type *verifyType,
          ubs_hcom_tls_cert_verify *verify)
+{
+    return 0;
+}
+
+int PskUseCb(void *ssl, const void *md, const unsigned char **id, size_t *idlen, void **sess)
+{
+    return 0;
+}
+
+int PskFindCb(void *ssl, const unsigned char *identity, size_t identityLen, void **sess)
 {
     return 0;
 }
@@ -210,21 +220,24 @@ TEST_F(TestHcomCapi, TestSetTlsOptions)
     int ret = ubs_hcom_service_create(C_SERVICE_RDMA, "service0", opt, &service);
     ASSERT_EQ(ret, 0);
     EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, false, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128,
-                                                         nullptr, nullptr, nullptr));
-    EXPECT_NO_FATAL_FAILURE(
-        ubs_hcom_service_set_tls_opt(0, false, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128, nullptr, nullptr, nullptr));
+                                                         nullptr, nullptr, nullptr, nullptr, nullptr));
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(0, false, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128, nullptr,
+                                                         nullptr, nullptr, nullptr, nullptr));
     EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128,
-                                                         nullptr, nullptr, nullptr));
-    EXPECT_NO_FATAL_FAILURE(
-        ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128, CertCb, PriKeyCb, CaCb));
-    EXPECT_NO_FATAL_FAILURE(
-        ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_3, C_SERVICE_AES_GCM_128, CertCb, PriKeyCb, CaCb));
-    EXPECT_NO_FATAL_FAILURE(
-        ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_256, CertCb, PriKeyCb, CaCb));
-    EXPECT_NO_FATAL_FAILURE(
-        ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_CCM_128, CertCb, PriKeyCb, CaCb));
+                                                         nullptr, nullptr, nullptr, nullptr, nullptr));
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128,
+                                                         CertCb, PriKeyCb, CaCb, PskUseCb, PskFindCb));
+    // PSK only mode: no cert callback is provided, the call should still be accepted
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_128,
+                                                         nullptr, nullptr, nullptr, PskUseCb, PskFindCb));
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_3, C_SERVICE_AES_GCM_128,
+                                                         CertCb, PriKeyCb, CaCb, nullptr, nullptr));
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_GCM_256,
+                                                         CertCb, PriKeyCb, CaCb, nullptr, nullptr));
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_AES_CCM_128,
+                                                         CertCb, PriKeyCb, CaCb, nullptr, nullptr));
     EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tls_opt(service, true, C_SERVICE_TLS_1_2, C_SERVICE_CHACHA20_POLY1305,
-                                                         CertCb, PriKeyCb, CaCb));
+                                                         CertCb, PriKeyCb, CaCb, nullptr, nullptr));
     ubs_hcom_service_destroy(service, "service0");
 }
 
@@ -293,6 +306,272 @@ TEST_F(TestHcomCapi, SetTwoSideThreshold)
 
     channel = 0;
     delete ch;
+}
+
+TEST_F(TestHcomCapi, TestChannelGetIdAndUpCtx)
+{
+    EXPECT_EQ(ubs_hcom_channel_get_id(0), static_cast<uint64_t>(0));
+    EXPECT_EQ(ubs_hcom_channel_get_up_ctx(0), static_cast<uint64_t>(0));
+
+    InnerConnectOptions opt{};
+    UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    EXPECT_NE(ch, nullptr);
+    ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
+    MOCKER_CPP_VIRTUAL(*ch, &UBSHcomChannel::GetId).stubs().will(returnValue(static_cast<uint64_t>(1234)));
+    EXPECT_EQ(ubs_hcom_channel_get_id(channel), static_cast<uint64_t>(1234));
+
+    channel = 0;
+    delete ch;
+}
+
+int32_t GetRemoteUdsIdInfoStub(UBSHcomNetUdsIdInfo &idInfo)
+{
+    idInfo.pid = NN_NO100;
+    idInfo.uid = NN_NO200;
+    idInfo.gid = NN_NO300;
+    return NN_OK;
+}
+
+int32_t GetRemoteUdsIdInfoFailStub(UBSHcomNetUdsIdInfo &idInfo)
+{
+    return SER_NOT_ESTABLISHED;
+}
+
+TEST_F(TestHcomCapi, TestChannelGetRemoteUdsIdInfoInvalid)
+{
+    ubs_hcom_uds_id_info idInfo{};
+    EXPECT_EQ(ubs_hcom_channel_get_remote_uds_id_info(0, &idInfo), static_cast<int>(SER_INVALID_PARAM));
+
+    InnerConnectOptions opt{};
+    UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    ASSERT_NE(ch, nullptr);
+    ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
+    // 出参为空：直接返回非法参数，不触达底层实现
+    EXPECT_EQ(ubs_hcom_channel_get_remote_uds_id_info(channel, nullptr), static_cast<int>(SER_INVALID_PARAM));
+    channel = 0;
+    delete ch;
+}
+
+TEST_F(TestHcomCapi, TestChannelGetRemoteUdsIdInfoFail)
+{
+    InnerConnectOptions opt{};
+    UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    ASSERT_NE(ch, nullptr);
+    ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
+    // 底层失败：错误码按多族错误码体系原样透传，不重新包装成 SER_
+    MOCKER_CPP_VIRTUAL(*ch, &UBSHcomChannel::GetRemoteUdsIdInfo).stubs().will(invoke(GetRemoteUdsIdInfoFailStub));
+
+    ubs_hcom_uds_id_info idInfo{};
+    EXPECT_EQ(ubs_hcom_channel_get_remote_uds_id_info(channel, &idInfo), static_cast<int>(SER_NOT_ESTABLISHED));
+    channel = 0;
+    delete ch;
+}
+
+TEST_F(TestHcomCapi, TestChannelGetRemoteUdsIdInfoNormal)
+{
+    InnerConnectOptions opt{};
+    UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    ASSERT_NE(ch, nullptr);
+    ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
+    MOCKER_CPP_VIRTUAL(*ch, &UBSHcomChannel::GetRemoteUdsIdInfo).stubs().will(invoke(GetRemoteUdsIdInfoStub));
+
+    ubs_hcom_uds_id_info idInfo{};
+    EXPECT_EQ(ubs_hcom_channel_get_remote_uds_id_info(channel, &idInfo), 0);
+    EXPECT_EQ(idInfo.pid, static_cast<uint32_t>(NN_NO100));
+    EXPECT_EQ(idInfo.uid, static_cast<uint32_t>(NN_NO200));
+    EXPECT_EQ(idInfo.gid, static_cast<uint32_t>(NN_NO300));
+    channel = 0;
+    delete ch;
+}
+
+TEST_F(TestHcomCapi, TestChannelSetTraceId)
+{
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_channel_set_trace_id(0, "trace001"));
+
+    InnerConnectOptions opt{};
+    UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    ASSERT_NE(ch, nullptr);
+    ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
+    // traceId 为空：直接返回，不触达底层
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_channel_set_trace_id(channel, nullptr));
+
+    MOCKER_CPP_VIRTUAL(*ch, &UBSHcomChannel::SetTraceId).expects(once());
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_channel_set_trace_id(channel, "trace001"));
+    channel = 0;
+    delete ch;
+}
+
+TEST_F(TestHcomCapi, TestChannelGetPeerConnectPayloadInvalid)
+{
+    uint32_t len = 0;
+    EXPECT_EQ(ubs_hcom_channel_get_peer_connect_payload(0, nullptr, &len), static_cast<int>(SER_INVALID_PARAM));
+
+    InnerConnectOptions opt{};
+    UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    ASSERT_NE(ch, nullptr);
+    ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
+    // len 为空：直接返回非法参数
+    EXPECT_EQ(ubs_hcom_channel_get_peer_connect_payload(channel, nullptr, nullptr),
+              static_cast<int>(SER_INVALID_PARAM));
+    channel = 0;
+    delete ch;
+}
+
+TEST_F(TestHcomCapi, TestChannelGetPeerConnectPayloadNormal)
+{
+    InnerConnectOptions opt{};
+    UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    ASSERT_NE(ch, nullptr);
+    ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
+    MOCKER_CPP_VIRTUAL(*ch, &UBSHcomChannel::GetPeerConnectPayload).stubs().will(returnValue(std::string("payload")));
+
+    // payload 传空：只回填所需长度（含结尾 '\0'）
+    uint32_t len = 0;
+    EXPECT_EQ(ubs_hcom_channel_get_peer_connect_payload(channel, nullptr, &len), 0);
+    EXPECT_EQ(len, static_cast<uint32_t>(sizeof("payload")));
+
+    // 缓冲区不足：返回 508 并把所需长度回填给调用方
+    char small[NN_NO4] = {0};
+    len = sizeof(small);
+    EXPECT_EQ(ubs_hcom_channel_get_peer_connect_payload(channel, small, &len),
+              static_cast<int>(SER_RSP_SIZE_TOO_SMALL));
+    EXPECT_EQ(len, static_cast<uint32_t>(sizeof("payload")));
+
+    // 缓冲区足够：拷贝成功并回填实际长度（不含结尾 '\0'）
+    char buffer[NN_NO64] = {0};
+    len = sizeof(buffer);
+    EXPECT_EQ(ubs_hcom_channel_get_peer_connect_payload(channel, buffer, &len), 0);
+    EXPECT_STREQ(buffer, "payload");
+    EXPECT_EQ(len, static_cast<uint32_t>(sizeof("payload") - NN_NO1));
+    channel = 0;
+    delete ch;
+}
+
+TEST_F(TestHcomCapi, TestChannelGetPeerConnectPayloadCopyFail)
+{
+    InnerConnectOptions opt{};
+    UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    ASSERT_NE(ch, nullptr);
+    ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
+    MOCKER_CPP_VIRTUAL(*ch, &UBSHcomChannel::GetPeerConnectPayload).stubs().will(returnValue(std::string("payload")));
+    MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
+
+    char buffer[NN_NO64] = {0};
+    uint32_t len = sizeof(buffer);
+    EXPECT_EQ(ubs_hcom_channel_get_peer_connect_payload(channel, buffer, &len), static_cast<int>(SER_INVALID_PARAM));
+    channel = 0;
+    delete ch;
+}
+
+TEST_F(TestHcomCapi, TestChannelSetAndGetUpCtx)
+{
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_channel_set_up_ctx(0, NN_NO1024));
+    EXPECT_EQ(ubs_hcom_channel_get_up_ctx(0), static_cast<uint64_t>(0));
+
+    InnerConnectOptions opt{};
+    UBSHcomChannel *ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    ASSERT_NE(ch, nullptr);
+    ubs_hcom_channel channel = reinterpret_cast<ubs_hcom_channel>(ch);
+
+    MOCKER_CPP_VIRTUAL(*ch, &UBSHcomChannel::SetUpCtx).expects(once());
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_channel_set_up_ctx(channel, NN_NO1024));
+
+    MOCKER_CPP_VIRTUAL(*ch, &UBSHcomChannel::GetUpCtx).stubs().will(returnValue(static_cast<uint64_t>(NN_NO1024)));
+    EXPECT_EQ(ubs_hcom_channel_get_up_ctx(channel), static_cast<uint64_t>(NN_NO1024));
+    channel = 0;
+    delete ch;
+}
+
+TEST_F(TestHcomCapi, TestContextGetErrorCode)
+{
+    int32_t errorCode = 0;
+    EXPECT_EQ(ubs_hcom_context_get_error_code(0, &errorCode), static_cast<int>(SER_INVALID_PARAM));
+
+    UBSHcomServiceContext ctx{};
+    ubs_hcom_service_context serviceContext = reinterpret_cast<ubs_hcom_service_context>(&ctx);
+    // 出参为空：直接返回非法参数
+    EXPECT_EQ(ubs_hcom_context_get_error_code(serviceContext, nullptr), static_cast<int>(SER_INVALID_PARAM));
+
+    ctx.mErrorCode = static_cast<int32_t>(SER_NOT_ESTABLISHED);
+    EXPECT_EQ(ubs_hcom_context_get_error_code(serviceContext, &errorCode), 0);
+    EXPECT_EQ(errorCode, static_cast<int32_t>(SER_NOT_ESTABLISHED));
+    serviceContext = 0;
+}
+
+TEST_F(TestHcomCapi, TestContextCloneEx)
+{
+    EXPECT_EQ(ubs_hcom_context_clone_ex(0, true), static_cast<ubs_hcom_service_context>(0));
+
+    // 源 ctx 声明了数据长度但数据指针为空：Clone 失败，包装层返回 0 并自行释放临时对象
+    UBSHcomServiceContext broken{};
+    broken.mDataLen = NN_NO8;
+    broken.mData = nullptr;
+    ubs_hcom_service_context brokenCtx = reinterpret_cast<ubs_hcom_service_context>(&broken);
+    EXPECT_EQ(ubs_hcom_context_clone_ex(brokenCtx, true), static_cast<ubs_hcom_service_context>(0));
+
+    UBSHcomServiceContext ctx{};
+    ctx.mResult = static_cast<int32_t>(SER_NOT_ESTABLISHED);
+    ubs_hcom_service_context serviceContext = reinterpret_cast<ubs_hcom_service_context>(&ctx);
+
+    // copyData=false：成功返回新句柄，不带数据体，由调用方负责 free
+    ubs_hcom_service_context cloned = ubs_hcom_context_clone_ex(serviceContext, false);
+    ASSERT_NE(cloned, static_cast<ubs_hcom_service_context>(0));
+    auto clonedCtx = reinterpret_cast<UBSHcomServiceContext *>(cloned);
+    EXPECT_EQ(static_cast<int32_t>(clonedCtx->Result()), static_cast<int32_t>(SER_NOT_ESTABLISHED));
+    EXPECT_EQ(clonedCtx->MessageDataLen(), static_cast<uint32_t>(0));
+    ubs_hcom_context_free(cloned);
+}
+
+TEST_F(TestHcomCapi, TestServiceSetActiveBackup)
+{
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_active_backup(0, true));
+
+    ubs_hcom_service_options opt{};
+    ubs_hcom_service service = 0;
+    ASSERT_EQ(ubs_hcom_service_create(C_SERVICE_RDMA, "service0", opt, &service), 0);
+    UBSHcomService *servicePtr = reinterpret_cast<UBSHcomService *>(service);
+    MOCKER_CPP_VIRTUAL(*servicePtr, &UBSHcomService::SetActiveBackup).expects(once());
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_active_backup(service, true));
+    ubs_hcom_service_destroy(service, "service0");
+}
+
+TEST_F(TestHcomCapi, TestServiceSetCtxStoreCapacity)
+{
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_ctx_store_capacity(0, NN_NO1024));
+
+    ubs_hcom_service_options opt{};
+    ubs_hcom_service service = 0;
+    ASSERT_EQ(ubs_hcom_service_create(C_SERVICE_RDMA, "service0", opt, &service), 0);
+    UBSHcomService *servicePtr = reinterpret_cast<UBSHcomService *>(service);
+    MOCKER_CPP_VIRTUAL(*servicePtr, &UBSHcomService::SetCtxStoreCapacity).expects(once());
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_ctx_store_capacity(service, NN_NO1024));
+    ubs_hcom_service_destroy(service, "service0");
+}
+
+TEST_F(TestHcomCapi, TestServiceSetTcpEpollMode)
+{
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tcp_epoll_mode(0, true));
+
+    ubs_hcom_service_options opt{};
+    ubs_hcom_service service = 0;
+    ASSERT_EQ(ubs_hcom_service_create(C_SERVICE_RDMA, "service0", opt, &service), 0);
+    UBSHcomService *servicePtr = reinterpret_cast<UBSHcomService *>(service);
+    MOCKER_CPP_VIRTUAL(*servicePtr, &UBSHcomService::SetTcpEpollMode).expects(once());
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_tcp_epoll_mode(service, true));
+    ubs_hcom_service_destroy(service, "service0");
+}
+
+TEST_F(TestHcomCapi, TestServiceSetEnableMemPoolThreadCache)
+{
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_enable_mem_pool_thread_cache(0, true));
+
+    ubs_hcom_service_options opt{};
+    ubs_hcom_service service = 0;
+    ASSERT_EQ(ubs_hcom_service_create(C_SERVICE_RDMA, "service0", opt, &service), 0);
+    UBSHcomService *servicePtr = reinterpret_cast<UBSHcomService *>(service);
+    MOCKER_CPP_VIRTUAL(*servicePtr, &UBSHcomService::SetEnableMemPoolThreadCache).expects(once());
+    EXPECT_NO_FATAL_FAILURE(ubs_hcom_service_set_enable_mem_pool_thread_cache(service, true));
+    ubs_hcom_service_destroy(service, "service0");
 }
 
 TEST_F(TestHcomCapi, TestCreateAllocator)
@@ -640,7 +919,8 @@ int certCbStub(const char *name, char **certPath)
     return NN_OK;
 }
 
-int PriKeyCbStub(const char *name, char **priKeyPath, char **keyPass, ubs_hcom_tls_keypass_erase *erase)
+int PriKeyCbStub(const char *name, char **priKeyPath, char **keyPass, int *keyPassLen,
+                 ubs_hcom_tls_keypass_erase *erase)
 {
     return NN_OK;
 }

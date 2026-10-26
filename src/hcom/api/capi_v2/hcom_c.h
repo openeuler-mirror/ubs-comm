@@ -418,9 +418,10 @@ typedef int (*ubs_hcom_tls_get_cert_cb)(const char *name, char **certPath);
  * @param name             [out] the name
  * @param priKeyPath       [out] the path of private key
  * @param keyPass          [out] the keyPass
+ * @param keyPassLen       [out] the length of keyPass
  * @param erase            [out] the erase function
  */
-typedef int (*ubs_hcom_tls_get_pk_cb)(const char *name, char **priKeyPath, char **keyPass,
+typedef int (*ubs_hcom_tls_get_pk_cb)(const char *name, char **priKeyPath, char **keyPass, int *keyPassLen,
                                       ubs_hcom_tls_keypass_erase *erase);
 
 /*

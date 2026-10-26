@@ -82,9 +82,10 @@ typedef int (*ubs_hcom_tls_get_cert_cb)(const char *name, char **certPath);
  * @param name             [out] the name
  * @param priKeyPath       [out] the path of private key
  * @param keyPass          [out] the keyPass
+ * @param keyPassLen       [out] the length of keyPass
  * @param erase            [out] the erase function
  */
-typedef int (*ubs_hcom_tls_get_pk_cb)(const char *name, char **priKeyPath, char **keyPass,
+typedef int (*ubs_hcom_tls_get_pk_cb)(const char *name, char **priKeyPath, char **keyPass, int *keyPassLen,
                                       ubs_hcom_tls_keypass_erase *erase);
 
 /*
@@ -525,8 +526,18 @@ void ubs_hcom_service_register_idle_handler(ubs_hcom_service service, ubs_hcom_s
 void ubs_hcom_service_register_handler(ubs_hcom_service service, ubs_hcom_service_handler_type t,
                                        ubs_hcom_service_request_handler h, uint64_t usrCtx);
 
+/*
+ * @brief Add a workerGroup
+ *
+ * @param service          [in] service handler
+ * @param priority         [in] same as the thread nice value, range [-20, 19], -20 is the highest and 19 the lowest
+ * @param workerGroupId    [in] id of the workerGroup
+ * @param threadCount      [in] thread count of the workerGroup
+ * @param cpuIdsRange      [in] cpu id range bound to the workerGroup, for example 1-2 means cpu 1 to cpu 2
+ * @param multirailIdx     [in] rail index the workerGroup is bound to, only used in multirail scenario
+ */
 void ubs_hcom_service_add_workergroup(ubs_hcom_service service, int8_t priority, uint16_t workerGroupId,
-                                      uint32_t threadCount, const char *cpuIdsRange);
+                                      uint32_t threadCount, const char *cpuIdsRange, uint16_t multirailIdx);
 
 /*
  * @brief Add a listener, multiple urls are supported
@@ -548,9 +559,26 @@ void ubs_hcom_service_add_listener(ubs_hcom_service service, const char *url, ui
  */
 void ubs_hcom_service_set_lbpolicy(ubs_hcom_service service, ubs_hcom_service_lb_policy lbPolicy);
 
+/*
+ * @brief TLS related options, TLS is disabled by default if not configured
+ *
+ * @param service          [in] service handler
+ * @param enableTls        [in] whether to enable TLS
+ * @param version          [in] TLS version
+ * @param cipherSuite      [in] cipher suite
+ * @param certCb           [in] callback to get the certificate file, required unless PSK mode is used
+ * @param priKeyCb         [in] callback to get the private key file and the keyPass, required unless PSK mode is used
+ * @param caCb             [in] callback to get the CA and verify, required unless PSK mode is used
+ * @param pskUseCb         [in] PSK callback for client, could be nullptr
+ * @param pskFindCb        [in] PSK callback for server, could be nullptr
+ *
+ * Note: when enableTls is true, at least one of the cert callbacks group (certCb/priKeyCb/caCb) and the
+ * PSK callbacks group (pskUseCb/pskFindCb) must be provided, otherwise the call is ignored
+ */
 void ubs_hcom_service_set_tls_opt(ubs_hcom_service service, bool enableTls, ubs_hcom_service_tls_version version,
                                   ubs_hcom_service_cipher_suite cipherSuite, ubs_hcom_tls_get_cert_cb certCb,
-                                  ubs_hcom_tls_get_pk_cb priKeyCb, ubs_hcom_tls_get_ca_cb caCb);
+                                  ubs_hcom_tls_get_pk_cb priKeyCb, ubs_hcom_tls_get_ca_cb caCb,
+                                  ubs_hcom_psk_use_session_cb pskUseCb, ubs_hcom_psk_find_session_cb pskFindCb);
 
 /*
  * @brief Set the options related to connection secure authentication

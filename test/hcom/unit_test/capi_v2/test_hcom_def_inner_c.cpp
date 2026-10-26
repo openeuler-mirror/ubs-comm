@@ -552,11 +552,14 @@ int TestGetCert(const char *name, char **certPath)
     return 0;
 }
 
-int TestGetPk(const char *name, char **priKeyPath, char **keyPass, ubs_hcom_tls_keypass_erase *erase)
+int TestGetPk(const char *name, char **priKeyPath, char **keyPass, int *keyPassLen, ubs_hcom_tls_keypass_erase *erase)
 {
     (void)name;
     *priKeyPath = g_keyPathToReturn;
     *keyPass = g_keyPassToReturn;
+    if (keyPassLen != nullptr) {
+        *keyPassLen = static_cast<int>(sizeof(TEST_KEY_PASS));
+    }
     *erase = g_eraseToReturn;
     return 0;
 }
@@ -814,19 +817,20 @@ TEST_F(TestHcomDefInnerC, TestTlsPrivateKeyCallback)
     EpTLSHdlAdp adp;
     std::string path;
     void *keyPass = nullptr;
+    int keyPassLen = 0;
     UBSHcomTLSEraseKeypass callback;
     // callback not set
-    EXPECT_FALSE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, 0, callback));
+    EXPECT_FALSE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, keyPassLen, callback));
 
     adp.SetTLSPrivateKeyCb(&TestGetPk);
     // all outputs null -> false
-    EXPECT_FALSE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, 0, callback));
+    EXPECT_FALSE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, keyPassLen, callback));
     g_keyPathToReturn = const_cast<char *>(TEST_KEY_PATH);
-    EXPECT_FALSE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, 0, callback));
+    EXPECT_FALSE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, keyPassLen, callback));
     g_keyPassToReturn = const_cast<char *>(TEST_KEY_PASS);
-    EXPECT_FALSE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, 0, callback));
+    EXPECT_FALSE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, keyPassLen, callback));
     g_eraseToReturn = &TestEraseCb;
-    EXPECT_TRUE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, 0, callback));
+    EXPECT_TRUE(adp.UBSHcomTLSPrivateKeyCallback("svc", path, keyPass, keyPassLen, callback));
     EXPECT_EQ(path, TEST_KEY_PATH);
     EXPECT_STREQ(static_cast<const char *>(keyPass), TEST_KEY_PASS);
     // the bound erase callback forwards to the C function
