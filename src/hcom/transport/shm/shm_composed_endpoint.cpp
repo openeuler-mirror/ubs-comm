@@ -10,6 +10,9 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "shm_composed_endpoint.h"
+
+#include "shm_mr_handle_map.h"
+
 namespace ock {
 namespace hcom {
 HResult ShmSyncEndpoint::Create(const std::string &name, uint16_t eventQueueLength, ShmPollingMode mode,

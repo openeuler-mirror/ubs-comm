@@ -17,6 +17,8 @@
 namespace ock {
 namespace hcom {
 constexpr uint32_t EPOLL_WAIT_TIMEOUT = NN_NO1000 * NN_NO10; // 10 second
+/* the thread must observe the stop flag quickly, otherwise the driver stop blocks for the whole timeout */
+constexpr uint32_t EPOLL_WAIT_SLICE = NN_NO100; // 100 ms
 NResult NetDelayReleaseTimer::Start()
 {
     std::lock_guard<std::mutex> guard(mMutex);
@@ -81,11 +83,15 @@ void NetDelayReleaseTimer::RunDelayReleaseThread()
 
         struct epoll_event ev {
         };
-        int waitTimeMs = 0; // wait for 1000ms
+        int waitTimeMs = 0;
         if (spendTime >= EPOLL_WAIT_TIMEOUT) {
             continue;
         } else {
             waitTimeMs = static_cast<int32_t>(EPOLL_WAIT_TIMEOUT - spendTime);
+        }
+        /* wait in short slices so that the stop flag is checked in time */
+        if (waitTimeMs > static_cast<int32_t>(EPOLL_WAIT_SLICE)) {
+            waitTimeMs = static_cast<int32_t>(EPOLL_WAIT_SLICE);
         }
 
         epoll_wait(eFd, &ev, NN_NO1, waitTimeMs);

@@ -72,6 +72,9 @@ public:
     HResult AddShmChannel(const ShmChannelPtr &ch);
     HResult RemoveShmChannel(uint64_t id);
 
+    /* release all channels held by the keeper, used when stopping the driver */
+    void ReleaseAllChannels();
+
     inline void RegisterMsgHandler(const NewKeeperMsgHandler &handler)
     {
         mMsgHandler = handler;

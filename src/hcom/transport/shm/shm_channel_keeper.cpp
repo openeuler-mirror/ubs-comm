@@ -82,6 +82,25 @@ void ShmChannelKeeper::StopInner()
         NetFunc::NN_SafeCloseFd(mEpollHandle);
         mEpollHandle = -1;
     }
+
+    ReleaseAllChannels();
+}
+
+void ShmChannelKeeper::ReleaseAllChannels()
+{
+    std::map<uint64_t, ShmChannelPtr> channels;
+    {
+        std::lock_guard<std::mutex> guard(mChMapMutex);
+        channels.swap(mShmChannels);
+    }
+
+    for (auto &item : channels) {
+        if (NN_LIKELY(item.second.Get() != nullptr)) {
+            item.second->ReleasePostedCtxQuiet();
+        }
+    }
+
+    NN_LOG_INFO("ShmChannelKeeper " << mName << " released " << channels.size() << " channels on stop");
 }
 
 HResult ShmChannelKeeper::AddShmChannel(const ShmChannelPtr &ch)

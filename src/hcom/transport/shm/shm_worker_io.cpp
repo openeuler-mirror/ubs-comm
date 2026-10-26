@@ -10,6 +10,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "shm_handle.h"
+#include "shm_mr_handle_map.h"
 #include "shm_queue.h"
 #include "shm_worker.h"
 

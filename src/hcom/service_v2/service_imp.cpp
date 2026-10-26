@@ -143,21 +143,25 @@ int32_t HcomServiceImp::Start()
 
     if (NN_UNLIKELY((result = CreateResource()) != SER_OK)) {
         NN_LOG_ERROR("CreateResource failed, res:" << result);
+        ForceStop();
         return result;
     }
     if (NN_UNLIKELY((result = InitDriver()) != SER_OK)) {
         NN_LOG_ERROR("Driver start failed, res:" << result);
+        ForceStop();
         return result;
     }
 
     if (NN_UNLIKELY((result = StartDriver()) != SER_OK)) {
         NN_LOG_ERROR("Driver start failed, res:" << result);
+        ForceStop();
         return result;
     }
 
     NetPgTable *pgtable = new (std::nothrow) NetPgTable(pgdAlloc, pgdFree);
     if (NN_UNLIKELY(pgtable == nullptr)) {
         NN_LOG_ERROR("Fail to create pgTable ");
+        ForceStop();
         return SER_ERROR;
     }
     mPgtable = pgtable;
@@ -586,9 +590,9 @@ SerResult HcomServiceImp::CreateCtxMemPool()
 
 int32_t HcomServiceImp::DoDestroy(const std::string &name)
 {
-    if (mStarted) {
-        ForceStop();
-    }
+    /* serialize with Start(), a partially started service is cleaned up by ForceStop which is idempotent */
+    std::lock_guard<std::mutex> locker(mStartMutex);
+    ForceStop();
     return SER_OK;
 }
 
