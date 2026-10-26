@@ -14,6 +14,7 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -54,7 +55,13 @@ public:
     Logger() = default;
     ~Logger()
     {
-        mLogFunc = nullptr;
+        /*
+         * 最后兜底地解除宿主日志钩子：第三方库（例如 liburma）可能仍会在自己的终结器中输出日志，
+         * 而该终结器可能在此析构函数之后运行。若将此类日志转发给已经关闭的宿主日志记录器
+         * （例如调用 ShutdownGoogleLogging() 之后的 glog），会导致中止。
+         * mLogFunc 是 std::atomic，保证这次清零不会被编译器当作死存储删除。
+         */
+        mLogFunc.store(nullptr, std::memory_order_release);
     }
 
     void SetLogLevel(int level) noexcept;
@@ -93,7 +100,7 @@ private:
 
 private:
     LogLevel logLevel = LEVEL_INFO;
-    ExternalLog mLogFunc = nullptr;
+    std::atomic<ExternalLog> mLogFunc{nullptr};
 };
 
 #ifndef UBS_LOG_LINE
@@ -123,7 +130,7 @@ ALWAYS_INLINE void Logger::SetLogLevel(int level) noexcept
 
 ALWAYS_INLINE void Logger::SetExternalLogFunction(ExternalLog func)
 {
-    mLogFunc = func;
+    mLogFunc.store(func, std::memory_order_release);
 }
 
 ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const char *filename, int line) const noexcept
@@ -151,8 +158,9 @@ ALWAYS_INLINE void Logger::LogDefault(int level, const std::string &msg, const c
 
 ALWAYS_INLINE void Logger::Log(int level, const std::ostringstream &oss, const char *filename, int line) const noexcept
 {
-    if (mLogFunc != nullptr) {
-        mLogFunc(level, oss.str().c_str(), filename, line);
+    ExternalLog func = mLogFunc.load(std::memory_order_acquire);
+    if (func != nullptr) {
+        func(level, oss.str().c_str(), filename, line);
     } else {
         LogDefault(level, oss.str(), filename, line);
     }
