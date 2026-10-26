@@ -247,7 +247,7 @@ public:
         mGetPriKey = h;
     }
 
-    bool UBSHcomTLSPrivateKeyCallback(const std::string &name, std::string &path, void *&keyPass, int len,
+    bool UBSHcomTLSPrivateKeyCallback(const std::string &name, std::string &path, void *&keyPass, int &len,
                                       ::ock::hcom::UBSHcomTLSEraseKeypass &callback)
     {
         if (NN_UNLIKELY(mGetPriKey == nullptr)) {
@@ -256,9 +256,10 @@ public:
 
         char *privateKeyPath = nullptr;
         char *keyPassWd = nullptr;
+        int keyPassLen = 0;
         ubs_hcom_tls_keypass_erase erase;
 
-        mGetPriKey(name.c_str(), &privateKeyPath, &keyPassWd, &erase);
+        mGetPriKey(name.c_str(), &privateKeyPath, &keyPassWd, &keyPassLen, &erase);
 
         if (NN_UNLIKELY(privateKeyPath == nullptr) || NN_UNLIKELY(keyPassWd == nullptr) ||
             NN_UNLIKELY(erase == nullptr)) {
@@ -268,6 +269,7 @@ public:
 
         path = privateKeyPath;
         keyPass = keyPassWd;
+        len = keyPassLen;
         callback = std::bind(&EraseCB, erase, std::placeholders::_1, std::placeholders::_2);
 
         return true;

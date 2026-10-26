@@ -81,16 +81,16 @@ using namespace ock::hcom;
         return SER_INVALID_PARAM;                                    \
     }
 
-#define VALIDATE_CHANNEL(channel)                                       \
-    if (NN_UNLIKELY((channel) == 0)) {                                  \
-        NN_LOG_ERROR("Invalid param, channel must be correct address"); \
-        return SER_INVALID_PARAM;                                       \
-    }
-
 #define VALIDATE_CHANNEL_NO_RET(channel)                                \
     if (NN_UNLIKELY((channel) == 0)) {                                  \
         NN_LOG_ERROR("Invalid param, channel must be correct address"); \
         return;                                                         \
+    }
+
+#define VALIDATE_CHANNEL_RETURN_ZERO(channel)                           \
+    if (NN_UNLIKELY((channel) == 0)) {                                  \
+        NN_LOG_ERROR("Invalid param, channel must be correct address"); \
+        return 0;                                                       \
     }
 
 #define VALIDATE_MESSAGE(req)                                           \
@@ -184,6 +184,7 @@ static bool ConvertServiceOptionsToInnerOptions(const ubs_hcom_service_options &
     } else if (options.workerGroupMode == C_SERVICE_EVENT_POLLING) {
         innerOptions.workerGroupMode = UBSHcomWorkerMode::NET_EVENT_POLLING;
     }
+    innerOptions.workerThreadPriority = options.workerThreadPriority;
 
     std::pair<uint32_t, uint32_t> cpuIdsRange = {UINT32_MAX, UINT32_MAX};
     if (NN_UNLIKELY(!ConvertCpuIdsRangeStrToPair(options.workerGroupCpuRange, cpuIdsRange))) {
@@ -257,6 +258,7 @@ int ubs_hcom_channel_send(ubs_hcom_channel channel, ubs_hcom_channel_request req
     VALIDATE_CHANNEL(channel)
 
     UBSHcomRequest request(req.address, req.size, req.opcode);
+    request.key = req.key;
     auto innerChannel = reinterpret_cast<UBSHcomChannel *>(channel);
 
     if (cb == nullptr) {
@@ -289,6 +291,7 @@ int ubs_hcom_channel_call(ubs_hcom_channel channel, ubs_hcom_channel_request req
     VALIDATE_CHANNEL(channel)
     VALIDATE_MESSAGE(rsp)
     UBSHcomRequest request(req.address, req.size, req.opcode);
+    request.key = req.key;
     UBSHcomResponse response(rsp->address, rsp->size);
     auto innerChannel = reinterpret_cast<UBSHcomChannel *>(channel);
 
@@ -327,6 +330,7 @@ int ubs_hcom_channel_reply(ubs_hcom_channel channel, ubs_hcom_channel_request re
     VALIDATE_CHANNEL(channel)
 
     UBSHcomRequest request(req.address, req.size, req.opcode);
+    request.key = req.key;
     UBSHcomReplyContext replyCtx(reinterpret_cast<uintptr_t>(ctx.rspCtx), ctx.errorCode);
     auto innerChannel = reinterpret_cast<UBSHcomChannel *>(channel);
 
@@ -347,6 +351,79 @@ int ubs_hcom_channel_reply(ubs_hcom_channel channel, ubs_hcom_channel_request re
     }
 
     auto result = innerChannel->Reply(replyCtx, request, newCallback);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        return result;
+    }
+
+    return SER_OK;
+}
+
+int ubs_hcom_channel_call_with_hlc(ubs_hcom_channel channel, ubs_hcom_channel_request req,
+                                   ubs_hcom_channel_response *rsp, ubs_hcom_channel_callback *cb)
+{
+    VALIDATE_CHANNEL(channel)
+    VALIDATE_MESSAGE(rsp)
+    UBSHcomRequest request(req.address, req.size, req.opcode);
+    request.key = req.key;
+    UBSHcomResponse response(rsp->address, rsp->size);
+    auto innerChannel = reinterpret_cast<UBSHcomChannel *>(channel);
+
+    SerResult ret = SER_OK;
+    if (cb == nullptr) {
+        ret = innerChannel->CallWithHlc(request, response, nullptr);
+        rsp->address = response.address;
+        rsp->size = response.size;
+        rsp->errorCode = response.errorCode;
+        return ret;
+    }
+
+    ubs_hcom_channel_cb_func cbFunc = cb->cb;
+    void *arg = cb->arg;
+    Callback *newCallback = UBSHcomNewCallback(
+        [cbFunc, arg](UBSHcomServiceContext &context) {
+            cbFunc(arg, reinterpret_cast<ubs_hcom_service_context>(&context));
+        },
+        std::placeholders::_1);
+    if (NN_UNLIKELY(newCallback == nullptr)) {
+        NN_LOG_ERROR("ubs_hcom_channel_call_with_hlc malloc callback failed");
+        return SER_NEW_OBJECT_FAILED;
+    }
+
+    auto result = innerChannel->CallWithHlc(request, response, newCallback);
+    if (NN_UNLIKELY(result != SER_OK)) {
+        return result;
+    }
+
+    return SER_OK;
+}
+
+int ubs_hcom_channel_reply_with_hlc(ubs_hcom_channel channel, ubs_hcom_channel_request req,
+                                    ubs_hcom_channel_reply_context ctx, ubs_hcom_channel_callback *cb)
+{
+    VALIDATE_CHANNEL(channel)
+
+    UBSHcomRequest request(req.address, req.size, req.opcode);
+    request.key = req.key;
+    UBSHcomReplyContext replyCtx(reinterpret_cast<uintptr_t>(ctx.rspCtx), ctx.errorCode);
+    auto innerChannel = reinterpret_cast<UBSHcomChannel *>(channel);
+
+    if (cb == nullptr) {
+        return innerChannel->ReplyWithHlc(replyCtx, request, nullptr);
+    }
+
+    ubs_hcom_channel_cb_func cbFunc = cb->cb;
+    void *arg = cb->arg;
+    Callback *newCallback = UBSHcomNewCallback(
+        [cbFunc, arg](UBSHcomServiceContext &context) {
+            cbFunc(arg, reinterpret_cast<ubs_hcom_service_context>(&context));
+        },
+        std::placeholders::_1);
+    if (NN_UNLIKELY(newCallback == nullptr)) {
+        NN_LOG_ERROR("ubs_hcom_channel_reply_with_hlc malloc callback failed");
+        return SER_NEW_OBJECT_FAILED;
+    }
+
+    auto result = innerChannel->ReplyWithHlc(replyCtx, request, newCallback);
     if (NN_UNLIKELY(result != SER_OK)) {
         return result;
     }
@@ -588,10 +665,86 @@ int ubs_hcom_channel_set_twoside_threshold(ubs_hcom_channel channel, ubs_hcom_tw
 
 uint64_t ubs_hcom_channel_get_id(ubs_hcom_channel channel)
 {
-    VALIDATE_CHANNEL(channel)
+    VALIDATE_CHANNEL_RETURN_ZERO(channel)
     auto innerChannel = reinterpret_cast<UBSHcomChannel *>(channel);
 
     return innerChannel->GetId();
+}
+
+int ubs_hcom_channel_get_remote_uds_id_info(ubs_hcom_channel channel, ubs_hcom_uds_id_info *idInfo)
+{
+    VALIDATE_CHANNEL(channel)
+    if (NN_UNLIKELY(idInfo == nullptr)) {
+        NN_LOG_ERROR("Invalid param, idInfo must be correct address");
+        return SER_INVALID_PARAM;
+    }
+
+    UBSHcomNetUdsIdInfo udsIdInfo{};
+    auto result = reinterpret_cast<UBSHcomChannel *>(channel)->GetRemoteUdsIdInfo(udsIdInfo);
+    if (NN_UNLIKELY(result != NN_OK)) {
+        return result;
+    }
+
+    idInfo->pid = udsIdInfo.pid;
+    idInfo->uid = udsIdInfo.uid;
+    idInfo->gid = udsIdInfo.gid;
+    return SER_OK;
+}
+
+void ubs_hcom_channel_set_trace_id(ubs_hcom_channel channel, const char *traceId)
+{
+    VALIDATE_CHANNEL_NO_RET(channel)
+    if (NN_UNLIKELY(traceId == nullptr)) {
+        NN_LOG_ERROR("Invalid param, traceId must be correct address");
+        return;
+    }
+
+    reinterpret_cast<UBSHcomChannel *>(channel)->SetTraceId(traceId);
+}
+
+int ubs_hcom_channel_get_peer_connect_payload(ubs_hcom_channel channel, char *payload, uint32_t *len)
+{
+    VALIDATE_CHANNEL(channel)
+    if (NN_UNLIKELY(len == nullptr)) {
+        NN_LOG_ERROR("Invalid param, len must be correct address");
+        return SER_INVALID_PARAM;
+    }
+
+    auto payloadStr = reinterpret_cast<UBSHcomChannel *>(channel)->GetPeerConnectPayload();
+    uint32_t needLen = static_cast<uint32_t>(payloadStr.size()) + 1;
+
+    /* only query the needed length */
+    if (payload == nullptr) {
+        *len = needLen;
+        return SER_OK;
+    }
+
+    if (NN_UNLIKELY(*len < needLen)) {
+        *len = needLen;
+        NN_LOG_ERROR("Payload buffer length is smaller than needed " << needLen);
+        return SER_RSP_SIZE_TOO_SMALL;
+    }
+
+    if (NN_UNLIKELY(memcpy_s(payload, *len, payloadStr.c_str(), needLen) != NN_OK)) {
+        NN_LOG_ERROR("Failed to copy peer connect payload");
+        return SER_INVALID_PARAM;
+    }
+
+    *len = static_cast<uint32_t>(payloadStr.size());
+    return SER_OK;
+}
+
+void ubs_hcom_channel_set_up_ctx(ubs_hcom_channel channel, uint64_t ctx)
+{
+    VALIDATE_CHANNEL_NO_RET(channel)
+    reinterpret_cast<UBSHcomChannel *>(channel)->SetUpCtx(ctx);
+}
+
+uint64_t ubs_hcom_channel_get_up_ctx(ubs_hcom_channel channel)
+{
+    VALIDATE_CHANNEL_RETURN_ZERO(channel)
+
+    return reinterpret_cast<UBSHcomChannel *>(channel)->GetUpCtx();
 }
 
 int ubs_hcom_context_get_rspctx(ubs_hcom_service_context context, ubs_hcom_channel_reply_context *rspCtx)
@@ -645,6 +798,19 @@ int ubs_hcom_context_get_result(ubs_hcom_service_context context, int *result)
     return SER_OK;
 }
 
+int ubs_hcom_context_get_error_code(ubs_hcom_service_context context, int32_t *errorCode)
+{
+    VALIDATE_CONTEXT(context)
+    if (NN_UNLIKELY(errorCode == nullptr)) {
+        NN_LOG_ERROR("Invalid param, errorCode must be correct address");
+        return SER_INVALID_PARAM;
+    }
+
+    auto innerContext = reinterpret_cast<UBSHcomServiceContext *>(context);
+    *errorCode = innerContext->ErrorCode();
+    return SER_OK;
+}
+
 uint16_t ubs_hcom_context_get_opcode(ubs_hcom_service_context context)
 {
     VALIDATE_CONTEXT(context);
@@ -666,6 +832,28 @@ uint32_t ubs_hcom_context_get_datalen(ubs_hcom_service_context context)
 
     auto innerContext = reinterpret_cast<UBSHcomServiceContext *>(context);
     return innerContext->MessageDataLen();
+}
+
+bool ubs_hcom_context_is_timeout(ubs_hcom_service_context context)
+{
+    if (NN_UNLIKELY(context == 0)) {
+        NN_LOG_ERROR("Invalid param, context should be correct address");
+        return false;
+    }
+
+    auto innerContext = reinterpret_cast<UBSHcomServiceContext *>(context);
+    return innerContext->IsTimeout();
+}
+
+void ubs_hcom_context_invalidate(ubs_hcom_service_context context)
+{
+    if (NN_UNLIKELY(context == 0)) {
+        NN_LOG_ERROR("Invalid param, context should be correct address");
+        return;
+    }
+
+    auto innerContext = reinterpret_cast<UBSHcomServiceContext *>(context);
+    innerContext->Invalidate();
 }
 
 int ubs_hcom_service_create(ubs_hcom_service_type t, const char *name, ubs_hcom_service_options options,
@@ -826,6 +1014,10 @@ int ubs_hcom_service_register_assign_memory_region(ubs_hcom_service service, uin
 int ubs_hcom_reg_seg(ubs_hcom_service service, uintptr_t address, uint64_t size, ubs_hcom_oneside_key *key)
 {
     VALIDATE_SERVICE(service);
+    if (NN_UNLIKELY(key == nullptr)) {
+        NN_LOG_ERROR("Invalid param, key must be correct address");
+        return SER_INVALID_PARAM;
+    }
 
     UBSHcomMemoryKey mrKey;
     auto result = memcpy_s(&mrKey, sizeof(UBSHcomMemoryKey), key, sizeof(ubs_hcom_oneside_key));
@@ -949,7 +1141,7 @@ void ubs_hcom_service_register_handler(ubs_hcom_service service, ubs_hcom_servic
 }
 
 void ubs_hcom_service_add_workergroup(ubs_hcom_service service, int8_t priority, uint16_t workerGroupId,
-                                      uint32_t threadCount, const char *cpuIdsRange)
+                                      uint32_t threadCount, const char *cpuIdsRange, uint16_t multirailIdx)
 {
     VALIDATE_SERVICE_NO_RET(service);
     if (NN_UNLIKELY(cpuIdsRange == nullptr)) {
@@ -962,7 +1154,8 @@ void ubs_hcom_service_add_workergroup(ubs_hcom_service service, int8_t priority,
         NN_LOG_ERROR("Invalid cpuIdsRange, for example: 1-2 means cpu 1 to cpu 2");
         return;
     }
-    reinterpret_cast<UBSHcomService *>(service)->AddWorkerGroup(workerGroupId, threadCount, cpuIdsPair, priority);
+    reinterpret_cast<UBSHcomService *>(service)->AddWorkerGroup(workerGroupId, threadCount, cpuIdsPair, priority,
+                                                                multirailIdx);
 }
 
 void ubs_hcom_service_add_listener(ubs_hcom_service service, const char *url, uint16_t workerCount)
@@ -987,7 +1180,8 @@ void ubs_hcom_service_set_lbpolicy(ubs_hcom_service service, ubs_hcom_service_lb
 
 void ubs_hcom_service_set_tls_opt(ubs_hcom_service service, bool enableTls, ubs_hcom_service_tls_version version,
                                   ubs_hcom_service_cipher_suite cipherSuite, ubs_hcom_tls_get_cert_cb certCb,
-                                  ubs_hcom_tls_get_pk_cb priKeyCb, ubs_hcom_tls_get_ca_cb caCb)
+                                  ubs_hcom_tls_get_pk_cb priKeyCb, ubs_hcom_tls_get_ca_cb caCb,
+                                  ubs_hcom_psk_use_session_cb pskUseCb, ubs_hcom_psk_find_session_cb pskFindCb)
 {
     VALIDATE_SERVICE_NO_RET(service);
 
@@ -997,9 +1191,18 @@ void ubs_hcom_service_set_tls_opt(ubs_hcom_service service, bool enableTls, ubs_
         reinterpret_cast<UBSHcomService *>(service)->SetTlsOptions(opt);
         return;
     }
-    if (NN_UNLIKELY(certCb == nullptr) || NN_UNLIKELY(priKeyCb == nullptr) || NN_UNLIKELY(caCb == nullptr)) {
-        NN_LOG_ERROR("Failed to set tls options as cb is nullptr");
+
+    // PSK mode needs no cert callbacks; otherwise the three cert callbacks are mandatory
+    bool certCbMissing = (certCb == nullptr) || (priKeyCb == nullptr) || (caCb == nullptr);
+    if (NN_UNLIKELY(certCbMissing) && NN_UNLIKELY(pskUseCb == nullptr) && NN_UNLIKELY(pskFindCb == nullptr)) {
+        NN_LOG_ERROR("Failed to set tls options as both cert callbacks and psk callbacks are not set");
         return;
+    }
+    if (pskUseCb != nullptr) {
+        opt.pskUseCb = pskUseCb;
+    }
+    if (pskFindCb != nullptr) {
+        opt.pskFindCb = pskFindCb;
     }
     opt.tlsVersion = version == C_SERVICE_TLS_1_2 ? UBSHcomTlsVersion::TLS_1_2 : UBSHcomTlsVersion::TLS_1_3;
     if (cipherSuite == C_SERVICE_AES_GCM_128) {
@@ -1017,15 +1220,23 @@ void ubs_hcom_service_set_tls_opt(ubs_hcom_service service, bool enableTls, ubs_
         NN_LOG_ERROR("Failed to new service tls handler adapter, probably out of memory");
         return;
     }
-    tmpH->SetTLSCertCb(certCb);
-    tmpH->SetTLSPrivateKeyCb(priKeyCb);
-    tmpH->SetTLSCaCb(caCb);
-    opt.caCb = (std::bind(&EpTLSHdlAdp::UBSHcomTLSCaCallback, tmpH, std::placeholders::_1, std::placeholders::_2,
-                          std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
-    opt.cfCb =
-        (std::bind(&EpTLSHdlAdp::UBSHcomTLSCertificationCallback, tmpH, std::placeholders::_1, std::placeholders::_2));
-    opt.pkCb = (std::bind(&EpTLSHdlAdp::UBSHcomTLSPrivateKeyCallback, tmpH, std::placeholders::_1,
-                          std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+    // only bind the cert callbacks actually provided, so that a PSK-only configuration keeps them empty
+    if (caCb != nullptr) {
+        tmpH->SetTLSCaCb(caCb);
+        opt.caCb = (std::bind(&EpTLSHdlAdp::UBSHcomTLSCaCallback, tmpH, std::placeholders::_1, std::placeholders::_2,
+                              std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+    }
+    if (certCb != nullptr) {
+        tmpH->SetTLSCertCb(certCb);
+        opt.cfCb = (std::bind(&EpTLSHdlAdp::UBSHcomTLSCertificationCallback, tmpH, std::placeholders::_1,
+                              std::placeholders::_2));
+    }
+    if (priKeyCb != nullptr) {
+        tmpH->SetTLSPrivateKeyCb(priKeyCb);
+        opt.pkCb =
+            (std::bind(&EpTLSHdlAdp::UBSHcomTLSPrivateKeyCallback, tmpH, std::placeholders::_1, std::placeholders::_2,
+                       std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+    }
     g_TlsHdl.AddHdlAdp(service, reinterpret_cast<uintptr_t>(tmpH));
     reinterpret_cast<UBSHcomService *>(service)->SetTlsOptions(opt);
 }
@@ -1207,6 +1418,30 @@ void ubs_hcom_service_set_ub_priority(ubs_hcom_service service, uint32_t ubPrior
     reinterpret_cast<UBSHcomService *>(service)->SetUbPriority(ubPriority);
 }
 
+void ubs_hcom_service_set_active_backup(ubs_hcom_service service, bool enable)
+{
+    VALIDATE_SERVICE_NO_RET(service);
+    reinterpret_cast<UBSHcomService *>(service)->SetActiveBackup(enable);
+}
+
+void ubs_hcom_service_set_ctx_store_capacity(ubs_hcom_service service, uint32_t ctxStoreCapacity)
+{
+    VALIDATE_SERVICE_NO_RET(service);
+    reinterpret_cast<UBSHcomService *>(service)->SetCtxStoreCapacity(ctxStoreCapacity);
+}
+
+void ubs_hcom_service_set_tcp_epoll_mode(ubs_hcom_service service, bool isTcpEpollLT)
+{
+    VALIDATE_SERVICE_NO_RET(service);
+    reinterpret_cast<UBSHcomService *>(service)->SetTcpEpollMode(isTcpEpollLT);
+}
+
+void ubs_hcom_service_set_enable_mem_pool_thread_cache(ubs_hcom_service service, bool enable)
+{
+    VALIDATE_SERVICE_NO_RET(service);
+    reinterpret_cast<UBSHcomService *>(service)->SetEnableMemPoolThreadCache(enable);
+}
+
 ubs_hcom_service_context ubs_hcom_context_clone(ubs_hcom_service_context context)
 {
     VALIDATE_CONTEXT_RETURN_ZERO(context)
@@ -1221,6 +1456,26 @@ ubs_hcom_service_context ubs_hcom_context_clone(ubs_hcom_service_context context
     if (NN_UNLIKELY(UBSHcomServiceContext::Clone(*tmpCtx, *innerContext) != SER_OK)) {
         delete tmpCtx;
         NN_LOG_ERROR("Failed to new service ctx by oom");
+        return 0;
+    }
+
+    return reinterpret_cast<ubs_hcom_service_context>(tmpCtx);
+}
+
+ubs_hcom_service_context ubs_hcom_context_clone_ex(ubs_hcom_service_context context, bool copyData)
+{
+    VALIDATE_CONTEXT_RETURN_ZERO(context)
+
+    auto innerContext = reinterpret_cast<UBSHcomServiceContext *>(context);
+    auto tmpCtx = new (std::nothrow) UBSHcomServiceContext;
+    if (NN_UNLIKELY(tmpCtx == nullptr)) {
+        NN_LOG_ERROR("Failed to new service ctx by oom");
+        return 0;
+    }
+
+    if (NN_UNLIKELY(UBSHcomServiceContext::Clone(*tmpCtx, *innerContext, copyData) != SER_OK)) {
+        delete tmpCtx;
+        NN_LOG_ERROR("Failed to clone service ctx");
         return 0;
     }
 
