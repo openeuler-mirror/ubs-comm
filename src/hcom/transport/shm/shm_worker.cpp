@@ -345,6 +345,78 @@ HResult ShmWorker::Start()
     return SH_OK;
 }
 
+void ShmWorker::ReleaseLocalEvents()
+{
+    if (NN_UNLIKELY(mEventQueue == nullptr)) {
+        return;
+    }
+
+    uint32_t releasedComp = 0;
+    uint32_t releasedCtx = 0;
+    ShmEvent event{};
+    while (mEventQueue->Dequeue(event) == SH_OK) {
+        /* a receive event carries no channel ref, give the peer bucket back before dropping it */
+        if (event.opType == ShmOpContextInfo::ShmOpType::SH_RECEIVE) {
+            auto *recvCh = reinterpret_cast<ShmChannel *>(event.peerChannelAddress);
+            if (recvCh != nullptr && recvCh->State().Compare(CH_NEW)) {
+                uintptr_t address = 0;
+                if (recvCh->GetPeerDataAddressByOffset(event.dataOffset, address) == SH_OK) {
+                    recvCh->DCMarkPeerBuckFree(address);
+                }
+            }
+            continue;
+        }
+
+        auto *ch = event.shmChannel;
+        if (NN_UNLIKELY(ch == nullptr)) {
+            continue;
+        }
+
+        /* the keeper thread has already removed and returned the contexts of a broken channel */
+        if (NN_UNLIKELY(ch->State().Compare(CH_BROKEN))) {
+            ch->DecreaseRef();
+            continue;
+        }
+
+        if (event.opType == ShmOpContextInfo::ShmOpType::SH_SEND ||
+            event.opType == ShmOpContextInfo::ShmOpType::SH_SEND_RAW_SGL) {
+            auto *comp = reinterpret_cast<ShmOpCompInfo *>(event.peerChannelAddress);
+            /* if the keeper has taken the channel posted list, the comp info is removed already */
+            if (NN_LIKELY(comp != nullptr) && ch->RemoveOpCompInfo(comp) == SH_OK) {
+                ShmSglOpContextInfo *sglCtx = nullptr;
+                if (comp->opType == ShmOpContextInfo::ShmOpType::SH_SEND_RAW_SGL) {
+                    sglCtx = reinterpret_cast<ShmSglOpCompInfo *>(comp->upCtx)->ctx;
+                }
+                ReturnOpCompInfo(comp);
+                ReturnSglContextInfo(sglCtx);
+                ++releasedComp;
+            }
+        } else if (event.opType == ShmOpContextInfo::ShmOpType::SH_READ ||
+                   event.opType == ShmOpContextInfo::ShmOpType::SH_WRITE ||
+                   event.opType == ShmOpContextInfo::ShmOpType::SH_SGL_READ ||
+                   event.opType == ShmOpContextInfo::ShmOpType::SH_SGL_WRITE) {
+            auto *ctx = reinterpret_cast<ShmOpContextInfo *>(event.peerChannelAddress);
+            /* if the keeper has taken the channel posted list, the op ctx is removed already */
+            if (NN_LIKELY(ctx != nullptr) && ch->RemoveOpCtxInfo(ctx) == SH_OK) {
+                ShmSglOpContextInfo *sglCtx = nullptr;
+                if (ctx->opType == ShmOpContextInfo::ShmOpType::SH_SGL_READ ||
+                    ctx->opType == ShmOpContextInfo::ShmOpType::SH_SGL_WRITE) {
+                    sglCtx = reinterpret_cast<ShmSglOpCompInfo *>(ctx->upCtx)->ctx;
+                }
+                ReturnOpContextInfo(ctx);
+                ReturnSglContextInfo(sglCtx);
+                ++releasedCtx;
+            }
+        }
+
+        /* the ref taken by SendLocalEvent for this event */
+        ch->DecreaseRef();
+    }
+
+    NN_LOG_INFO("Shm worker " << mName << " released " << releasedComp << " comp ctx and " << releasedCtx
+                              << " op ctx on stop");
+}
+
 void ShmWorker::Stop()
 {
     std::lock_guard<std::mutex> guard(mMutex);
@@ -361,6 +433,8 @@ void ShmWorker::Stop()
     if (mProgressThr.joinable()) {
         mProgressThr.join();
     }
+
+    ReleaseLocalEvents();
 
     mStarted = false;
 }

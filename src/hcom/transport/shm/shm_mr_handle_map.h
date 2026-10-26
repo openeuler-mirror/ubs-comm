@@ -12,23 +12,25 @@
 
 #ifndef OCK_HCOM_SHM_HANDLE_MAP_H
 #define OCK_HCOM_SHM_HANDLE_MAP_H
+#include "shm_handle.h"
 #include "shm_lock_guard.h"
 
 namespace ock {
 namespace hcom {
-class ShmHandle;
 using ShmHandlePtr = NetRef<ShmHandle>;
 
 class ShmMRHandleMap {
 public:
+    ShmMRHandleMap() = default;
+
+    ~ShmMRHandleMap()
+    {
+        ClearLocalMap();
+        ClearRemoteMap();
+    }
+
     ShmMRHandleMap(const ShmMRHandleMap &) = delete;
     ShmMRHandleMap &operator=(const ShmMRHandleMap &) = delete;
-
-    static ShmMRHandleMap &GetInstance()
-    {
-        static ShmMRHandleMap shmMrHandleMap;
-        return shmMrHandleMap;
-    }
 
     inline NResult AddToLocalMap(uint32_t key, const ShmHandlePtr &shmHandle)
     {
@@ -36,6 +38,13 @@ public:
         guard.LockWrite();
         mMrLKeyFdMap.emplace(key, shmHandle);
         return NN_OK;
+    }
+
+    inline void RemoveFromLocalMap(uint32_t key)
+    {
+        RWLockGuard guard(mLRwLock);
+        guard.LockWrite();
+        mMrLKeyFdMap.erase(key);
     }
 
     inline void ClearLocalMap()
@@ -84,14 +93,6 @@ public:
             return nullptr;
         }
         return iter->second;
-    }
-
-private:
-    ShmMRHandleMap() = default;
-    ~ShmMRHandleMap()
-    {
-        ClearLocalMap();
-        ClearRemoteMap();
     }
 
 private:

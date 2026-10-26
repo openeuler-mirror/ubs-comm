@@ -137,6 +137,10 @@ void NetDriverShmWithOOB::UnInitialize()
 
     UnInitializeInner();
     mInited = false;
+
+    /* the mr handle map belongs to this driver, clear it so that the handles are released before the driver dies */
+    mMrHandleMap.ClearLocalMap();
+    mMrHandleMap.ClearRemoteMap();
 }
 
 NResult NetDriverShmWithOOB::ValidateOptions()
@@ -406,8 +410,9 @@ NResult NetDriverShmWithOOB::Start()
     }
 
     if ((result = mDelayReleaseTimer->Start()) != NN_OK) {
-        ClearWorkers();
+        /* the keeper still holds channels referencing the workers, it must be stopped before the workers die */
         mChannelKeeper->Stop();
+        ClearWorkers();
         return result;
     }
 
@@ -824,7 +829,7 @@ void NetDriverShmWithOOB::HandleKeeperMsgGetMrFd(const ShmChKeeperMsgHeader &hea
         return;
     }
 
-    ShmHandlePtr shmHandle = ShmMRHandleMap::GetInstance().GetFromLocalMap(lKey);
+    ShmHandlePtr shmHandle = mMrHandleMap.GetFromLocalMap(lKey);
     if (shmHandle.Get() == nullptr) {
         NN_LOG_ERROR("Get shmHandle from local map failed");
         return;
@@ -1024,7 +1029,7 @@ NResult NetDriverShmWithOOB::ConnectSyncEp(const std::string &oobIp, uint16_t oo
     /* create ep */
     const UBSHcomNetWorkerIndex netWorkerIndex{};
     UBSHcomNetEndpointPtr newEp = new (std::nothrow)
-        NetSyncEndpointShm(ch->Id(), ch.Get(), this, netWorkerIndex, shmEp.Get(), ShmMRHandleMap::GetInstance());
+        NetSyncEndpointShm(ch->Id(), ch.Get(), this, netWorkerIndex, shmEp.Get(), mMrHandleMap);
     if (NN_UNLIKELY(newEp.Get() == nullptr)) {
         NN_LOG_ERROR("Failed to new async shm ep in driver " << mName << ", probably out of memory");
         return NN_NEW_OBJECT_FAILED;
@@ -1118,7 +1123,7 @@ NResult NetDriverShmWithOOB::CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryR
         return NN_INVALID_PARAM;
     }
 
-    ShmMRHandleMap::GetInstance().AddToLocalMap(static_cast<uint32_t>(tmp->mLKey), tmp->GetMrHandle());
+    mMrHandleMap.AddToLocalMap(static_cast<uint32_t>(tmp->mLKey), tmp->GetMrHandle());
 
     mr.Set(static_cast<UBSHcomNetMemoryRegion *>(tmp));
 
@@ -1326,7 +1331,7 @@ NResult NetDriverShmWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
 
     /* create ep */
     UBSHcomNetEndpointPtr newEp = new (std::nothrow)
-        NetAsyncEndpointShm(ch->Id(), ch.Get(), worker, this, worker->Index(), ShmMRHandleMap::GetInstance());
+        NetAsyncEndpointShm(ch->Id(), ch.Get(), worker, this, worker->Index(), mMrHandleMap);
     if (NN_UNLIKELY(newEp.Get() == nullptr)) {
         NN_LOG_ERROR("Failed to new async shm ep in driver " << mName << ", probably out of memory");
         return NN_NEW_OBJECT_FAILED;
@@ -1562,7 +1567,7 @@ NResult NetDriverShmWithOOB::Connect(const std::string &oobIp, uint16_t oobPort,
 
     /* create ep */
     UBSHcomNetEndpointPtr newEp = new (std::nothrow)
-        NetAsyncEndpointShm(ch->Id(), ch.Get(), worker, this, worker->Index(), ShmMRHandleMap::GetInstance());
+        NetAsyncEndpointShm(ch->Id(), ch.Get(), worker, this, worker->Index(), mMrHandleMap);
     if (NN_UNLIKELY(newEp.Get() == nullptr)) {
         NN_LOG_ERROR("Failed to new async shm ep in driver " << mName << ", probably out of memory");
         return NN_NEW_OBJECT_FAILED;
@@ -1638,6 +1643,11 @@ void NetDriverShmWithOOB::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
         return;
     }
     mMrChecker.UnRegister(mr->GetLKey());
+    /* the entry must be removed when the mr is destroyed, otherwise the map keeps the handle and its fd alive */
+    auto lKey = mr->GetLKey();
+    if (lKey <= UINT32_MAX) {
+        mMrHandleMap.RemoveFromLocalMap(static_cast<uint32_t>(lKey));
+    }
     mr->UnInitialize();
 }
 } // namespace hcom

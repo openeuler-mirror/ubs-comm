@@ -20,6 +20,7 @@
 #include "shm_channel_keeper.h"
 #include "shm_common.h"
 #include "shm_data_channel.h"
+#include "shm_mr_handle_map.h"
 #include "shm_queue.h"
 
 namespace ock {
@@ -185,6 +186,9 @@ public:
     // need to call this when qp broken, to get these contexts to return mrs
     void GetCtxPosted(ShmOpContextInfo *&remaining);
     void GetCompPosted(ShmOpCompInfo *&remaining);
+
+    /* return all posted contexts to the worker pool without invoking upper callbacks, used when stopping */
+    void ReleasePostedCtxQuiet();
 
     inline uint64_t PeerChannelId() const
     {

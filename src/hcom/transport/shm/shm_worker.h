@@ -158,6 +158,9 @@ private:
     void DoEventPolling();
     void DoBusyPolling();
 
+    /* release the local completion events left in the queue when the polling thread is stopped */
+    void ReleaseLocalEvents();
+
     HResult PostReadWrite(ShmChannel *ch, const UBSHcomNetTransRequest &req, ShmMRHandleMap &mrHandleMap,
                           ShmOpContextInfo::ShmOpType type);
 
