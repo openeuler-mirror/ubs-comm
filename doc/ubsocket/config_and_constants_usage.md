@@ -38,7 +38,7 @@
 | `UBS_PROF_MODE` | std::string | "fast" | fast/ext | 打点模式（fast 高性能 7 字段, ext 含百分位 11 字段） | 是 | `UBS_PROF_MODE` | `ubsocket_prof_mode` | — |
 | `UBS_PROF_DUMP_INTERVAL_MIN` | uint16_t | 1 | 1-5 | 打点 dump 周期（分钟） | 是 | `UBS_PROF_DUMP_INTERVAL_MIN` | `ubsocket_prof_dump_interval_min` | — |
 | `UBS_PROF_DUMP_PATH` | std::string | "/tmp/ubsocket/profiling" | 非空,长度≤512 | 打点 dump 路径 | 是 | `UBS_PROF_DUMP_FILE_PATH` | `ubsocket_prof_dump_file_path` | — |
-| `UBS_OPT_LINK_HANDSHAKE_ENABLE` | bool | true | TRUE/FALSE | UB 优化链路握手开关（当前恒为 ub_sock_opt 行为，TFO 已移除） | 是 | `UBS_OPT_LINK_HANDSHAKE_ENABLE` | `ubsocket_opt_link_handshake_enable` | — |
+| `UBS_OPT_LINK_HANDSHAKE_ENABLE` | bool | true | TRUE/FALSE | UB 通信建链握手开关：TRUE=UB 优化链路握手（ub_sock_opt，默认）；FALSE=TFO 握手 | 是 | `UBS_OPT_LINK_HANDSHAKE_ENABLE` | `ubsocket_opt_link_handshake_enable` | — |
 | `UBS_ENABLE_DEGRADE` | bool | true | true/false | 允许降级 TCP（env 入口已去除，恒默认值） | 否 | — | — | — |
 | `UBS_BACKUP_LINK_ENABLED` | bool | true | true/false | 主备链路开关（env 入口已去除，恒默认值） | 否 | — | — | — |
 | `UBS_READV_UNLIMITED` | bool | true | true/false | readv 读取 max_size 开关（env 入口已去除，恒默认值） | 否 | — | — | — |
