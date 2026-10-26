@@ -25,5 +25,20 @@ function(add_cpp_executable NAME)
     target_link_libraries(${EXECUTABLE} hcom pthread rt dl boundscheck)
 endfunction()
 
+function(add_c_executable NAME)
+    set(EXECUTABLE ${NAME})
+    add_executable(${EXECUTABLE} ${EXECUTABLE}.c)
+    # hcom is a C++ library, use the C++ linker driver to pull in the C++ runtime
+    set_target_properties(${EXECUTABLE} PROPERTIES LINKER_LANGUAGE CXX)
+    target_include_directories(${EXECUTABLE} PRIVATE ${HCOM_INCLUDE_DIR})
+    target_include_directories(${EXECUTABLE} PRIVATE ${HCOM_INSTALL_DIR}/../hcom_3rdparty/libboundscheck/include)
+    target_link_directories(${EXECUTABLE} PRIVATE ${HCOM_LIB_DIR})
+    target_link_directories(${EXECUTABLE} PRIVATE ${HCOM_INSTALL_DIR}/../hcom_3rdparty/libboundscheck/lib)
+    target_link_libraries(${EXECUTABLE} hcom pthread rt dl boundscheck)
+endfunction()
+
 add_cpp_executable(publisher)
 add_cpp_executable(subscriber)
+
+add_c_executable(publisher_c)
+add_c_executable(subscriber_c)
