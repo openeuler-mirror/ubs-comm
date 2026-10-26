@@ -189,7 +189,7 @@ inline UBSHcomNetDriverProtocol ChangeDriverTypeToDriverProto(ubs_hcom_driver_ty
         case C_DRIVER_SHM:
             protocol = UBSHcomNetDriverProtocol::SHM;
             break;
-        case C_SERVICE_UBC:
+        case C_DRIVER_UBC:
             protocol = UBSHcomNetDriverProtocol::UBC;
             break;
         default:
@@ -510,6 +510,7 @@ int ubs_hcom_driver_initialize(ubs_hcom_driver driver, ubs_hcom_driver_opts opti
     driverOps.tlsVersion = options.tlsVersion != 0 ? static_cast<UBSHcomTlsVersion>(options.tlsVersion) :
                                                      (ock::hcom::TLS_1_3);
     driverOps.cipherSuite = static_cast<UBSHcomNetCipherSuite>(options.cipherSuite);
+    driverOps.secType = static_cast<UBSHcomNetDriverSecType>(options.secType);
     driverOps.oobType = NET_OOB_TCP;
     driverOps.tcpSendBufSize = options.tcpSendBufSize;
     driverOps.tcpReceiveBufSize = options.tcpReceiveBufSize;
@@ -905,6 +906,49 @@ uint64_t ubs_hcom_ep_get_context(ubs_hcom_endpoint ep)
 {
     VALIDATE_EP(ep);
     return reinterpret_cast<UBSHcomNetEndpoint *>(ep)->UpCtx();
+}
+
+uint64_t ubs_hcom_ep_get_id(ubs_hcom_endpoint ep)
+{
+    if (NN_UNLIKELY(ep == 0)) {
+        NN_LOG_ERROR("Invalid param, endpoint must be correct address");
+        return 0;
+    }
+
+    return reinterpret_cast<UBSHcomNetEndpoint *>(ep)->Id();
+}
+
+int ubs_hcom_ep_get_peer_ipport(ubs_hcom_endpoint ep, char *ip, uint32_t *ipLen, uint16_t *port)
+{
+    if (NN_UNLIKELY(ep == 0)) {
+        NN_LOG_ERROR("Invalid param, endpoint must be correct address");
+        return NN_INVALID_PARAM;
+    }
+    if (NN_UNLIKELY(ip == nullptr || ipLen == nullptr || port == nullptr)) {
+        NN_LOG_ERROR("Invalid param, ip/ipLen/port cann't be nullptr");
+        return NN_INVALID_PARAM;
+    }
+
+    std::string peerIp;
+    uint16_t peerPort = 0;
+    if (NN_UNLIKELY(!reinterpret_cast<UBSHcomNetEndpoint *>(ep)->GetPeerIpPort(peerIp, peerPort))) {
+        NN_LOG_ERROR("Failed to get peer ip and port");
+        return NN_ERROR;
+    }
+
+    auto capacity = static_cast<size_t>(*ipLen);
+    if (NN_UNLIKELY(capacity < peerIp.size() + 1)) {
+        NN_LOG_ERROR("Invalid ip buffer, capacity " << *ipLen << ", need " << (peerIp.size() + 1));
+        return NN_INVALID_PARAM;
+    }
+    if (NN_UNLIKELY(memcpy_s(ip, capacity, peerIp.c_str(), peerIp.size() + 1) != NN_OK)) {
+        NN_LOG_ERROR("Failed to copy peer ip");
+        return NN_INVALID_PARAM;
+    }
+
+    *ipLen = static_cast<uint32_t>(peerIp.size());
+    *port = peerPort;
+    return NN_OK;
 }
 
 uint16_t ubs_hcom_ep_get_worker_idx(ubs_hcom_endpoint ep)

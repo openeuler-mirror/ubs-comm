@@ -83,6 +83,17 @@ SerResult UBSHcomServiceContext::CopyData(void *data, uint32_t dataLen)
     return SER_OK;
 }
 
+bool UBSHcomServiceContext::IsTimeout() const
+{
+    if (mResult == SER_TIMEOUT) {
+        return true;
+    }
+    if (mTimeoutTraceMs == 0) {
+        return false;
+    }
+    return NetMonotonic::TimeMs() >= mTimeoutTraceMs;
+}
+
 SerResult UBSHcomServiceContext::Clone(UBSHcomServiceContext &newOne, const UBSHcomServiceContext &oldOne,
                                        bool copyData)
 {
