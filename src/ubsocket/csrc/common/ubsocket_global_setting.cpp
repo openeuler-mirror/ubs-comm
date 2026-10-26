@@ -58,7 +58,7 @@ uint32_t GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM = 45000; /* fd table pre-exp
 #define ENV_ENABLE_SHARE_JFR "UBS_SHARE_JFR_ENABLE"
 #define ENV_UBS_RX_DEPTH "UBS_RX_DEPTH"
 #define ENV_UBS_TX_DEPTH "UBS_TX_DEPTH"
-#define ENV_OPT_LINK_HANDSHAKE_ENABLE "UBS_OPT_LINK_HANDSHAKE_ENABLE" /* UB optimized-link handshake switch, TRUE/FALSE; TFO removed from configuration */
+#define ENV_OPT_LINK_HANDSHAKE_ENABLE "UBS_OPT_LINK_HANDSHAKE_ENABLE" /* UB optimized-link handshake switch, TRUE/FALSE; FALSE = TFO handshake mode */
 #define ENV_CONN_POLL_THREAD_NUM "UBS_CONNECTS_POLL_THREAD_NUM"          /* unified conn-establishment thread count (half-async + full-async shared) */
 #define ENV_SERVER_HANDLER_NUM_DEPRECATED "UBSOCKET_SERVER_ASYNC_HANDLER_NUM" /* legacy name, kept for compatibility */
 #define ENV_PROF_ENABLE "UBS_PROF_ENABLE"
@@ -173,10 +173,10 @@ const char *GlobalSetting::ConnModeToStr(ConnMode mode) noexcept
 
 UBHandshakeMode HandShakeFromStr(const std::string &typeStr) noexcept
 {
-    if (typeStr == "true" || typeStr == "ub_sock_opt") {
-        return UBHandshakeMode::UB_SOCK_OPT;
+    /* FALSE = TFO handshake; TRUE/ub_sock_opt = UB optimized-link handshake (default) */
+    if (typeStr == "false") {
+        return UBHandshakeMode::TFO;
     }
-    /* false also falls back to UB_SOCK_OPT: TFO removed from configuration, UB optimized-link handshake is the only mode */
     return UBHandshakeMode::UB_SOCK_OPT;
 }
 
@@ -257,7 +257,7 @@ Result GlobalSetting::LoadEnv() noexcept
     }
 
     if (GetEnvAndValidate(ENV_OPT_LINK_HANDSHAKE_ENABLE, strEnvValue)) {
-        /* true = UB optimized-link handshake; false reserved (TFO removed, UB_SOCK_OPT is the only handshake mode) */
+        /* true = UB optimized-link handshake; false = TFO handshake mode */
         UBS_HAND_SHAKE_MODE = HandShakeFromStr(strEnvValue);
     }
 
