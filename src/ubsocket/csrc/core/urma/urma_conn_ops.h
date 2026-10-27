@@ -37,6 +37,14 @@ enum class ConnFlushOutcome : uint8_t
     kFailed,  /* 发送错误 */
 };
 
+/* Server + TFO：SYN 前导 magic(8B) 的消费结果 */
+enum class TfoPreambleOutcome : uint8_t
+{
+    kOk,      /* 已消费（或非 TFO 模式无需消费），可进入长度前缀帧解析 */
+    kPending, /* 前导未收全，等 fd 可读重入续读 */
+    kFailed,  /* magic 校验失败 / 对端关闭 / recv 出错，连接终止 */
+};
+
 /*
  * URMA Client/Server 统一全异步建链状态机（wire 与同步路径逐段等价，继承统一 ConnState）。
  * 握手是对称的 3 轮交换，R2/R3 两侧逐行同构，R1 仅方向相反（发起方先 send），故合并为单一类：
@@ -98,6 +106,9 @@ private:
     ConnFlushOutcome FlushStaged();
     int RecvFixedRaw(void *dst, size_t size);
 
+    /* Server + TFO 前导：非阻塞消费并校验 SYN 前导 magic(8B)，对齐同步路径 ValidateProtocol 的消费顺序 */
+    TfoPreambleOutcome RecvTfoPreamble();
+
 private:
     SocketPtr sock_;                /* Client: 应用传入并保活；Server: EnsureSocketCreated 时创建 */
     ConnectorOpsPtr connector_ops_; /* Client per-socket 有状态 ops（route/retry 状态必须复用同一实例） */
@@ -114,6 +125,7 @@ private:
     std::atomic<bool> registered_{false}; /* socket 是否已注册进 ArraySet（poll 线程在 DoWaitPeerRes 内联注册） */
     bool was_blocking_ = true;            /* 建链前 fd 是否阻塞态，成功后恢复 */
     bool negotiate_mismatch_ = false; /* 仅 poll 线程访问：版本 major mismatch，mismatch rsp 发完后带内降级为 TCP */
+    bool tfo_preamble_done_ = false;  /* 仅 poll 线程访问：server+TFO 的 SYN 前导 magic(8B) 已消费 */
 
     /* 双方共用 */
     std::atomic<bool> peer_imported_{false}; /* 对端段是否已写入分配器 */

@@ -88,6 +88,39 @@ int UrmaConnOps::RecvFixedRaw(void *dst, size_t size)
     return 1;
 }
 
+/* Server + TFO：同步路径在协商前由 AcceptorOps::ValidateProtocol 消费 SYN 前导 magic(8B)，
+ * reactor 路径无该调用点；若不消费，magic 前 4 字节（"TPDA" = 0x41445054）会被
+ * LengthPrefixedReader 误当 body_len 触发丢弃上限，建链必然失败。
+ * 因此这里按同一 wire 布局 [magic 8B][4B body_len][body] 先非阻塞消费并校验前导，再进入帧解析。 */
+TfoPreambleOutcome UrmaConnOps::RecvTfoPreamble()
+{
+    /* 非 TFO 模式：URMA 控制面无前导（对齐 UrmaAcceptorOps::ValidateProtocol 的非 TFO 空实现） */
+    if (GlobalSetting::UBS_HAND_SHAKE_MODE != UBHandshakeMode::TFO) {
+        tfo_preamble_done_ = true;
+        return TfoPreambleOutcome::kOk;
+    }
+
+    /* Advance 只累积到 expected，不会多读 body；对端关闭/recv 出错返回 kFailed */
+    if (buf_.Advance(fd_, sizeof(uint64_t)) < 0) {
+        UBS_VLOG_WARN("UrmaConnOps recv tfo preamble failed, fd: %d, errno: %d\n", fd_, errno);
+        return TfoPreambleOutcome::kFailed;
+    }
+    if (!buf_.Ready(sizeof(uint64_t))) {
+        return TfoPreambleOutcome::kPending; /* 前导未收全：保持监听，可读后重入续读 */
+    }
+
+    uint64_t magic = 0;
+    memcpy(&magic, buf_.Data(), sizeof(magic));
+    buf_.Reset();
+    if (magic != CONTROL_PLANE_PROTOCOL_NEGOTIATION) {
+        UBS_VLOG_ERR("UrmaConnOps tfo preamble mismatch, fd: %d, magic: 0x%lx\n", fd_,
+                     static_cast<unsigned long>(magic));
+        return TfoPreambleOutcome::kFailed;
+    }
+    tfo_preamble_done_ = true;
+    return TfoPreambleOutcome::kOk;
+}
+
 /* ==================== 角色钩子 ==================== */
 
 Result UrmaConnOps::PrepareSocket()
@@ -576,6 +609,19 @@ ConnStageResult UrmaConnOps::DoWaitNegotiate()
         if (flush == ConnFlushOutcome::kFailed) {
             UBS_VLOG_WARN("UrmaConnOps send negotiate req failed, fd: %d\n", fd_);
             MarkFailure(ECONNREFUSED, false);
+            return ConnStageResult::kFailed;
+        }
+    }
+
+    /* Server + TFO：先非阻塞消费并校验 SYN 前导 magic(8B)，再解析长度前缀帧（对齐同步路径
+     * ProcessUBConnection -> ValidateProtocol 的消费顺序）；非 TFO 模式无前导，helper 内部直接放行 */
+    if (role_ == ConnRole::kServer && !tfo_preamble_done_) {
+        TfoPreambleOutcome preamble_outcome = RecvTfoPreamble();
+        if (preamble_outcome == TfoPreambleOutcome::kPending) {
+            return ConnStageResult::kPending; /* 前导未收全：保持监听，可读后重入续读 */
+        }
+        if (preamble_outcome == TfoPreambleOutcome::kFailed) {
+            MarkFailure(ECONNREFUSED, false); /* 对齐同步路径 magic 校验失败即关闭，不降级 */
             return ConnStageResult::kFailed;
         }
     }
