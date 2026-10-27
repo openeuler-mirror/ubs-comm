@@ -19,7 +19,7 @@ public:
     SerResult CreateSubscriber(const std::string &serverUrl, NetRef<Subscriber> &subscriber) override;
     SerResult CreateSubscriber(const std::string &serverUrl, uint16_t publisherGroupIdx,
                                NetRef<Subscriber> &subscriber) override;
-    void DestroySubscriber(const NetRef<Subscriber> &subscriber) override;
+    void DestroySubscriber(NetRef<Subscriber> &subscriber) override;
 
     MulticastConfig &GetConfig() override;
     /* *

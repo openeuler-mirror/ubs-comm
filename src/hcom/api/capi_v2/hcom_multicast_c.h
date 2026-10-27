@@ -988,6 +988,24 @@ uint32_t ubs_hcom_multicast_config_get_max_subscriber_num(ubs_hcom_multicast_con
  */
 void ubs_hcom_multicast_config_set_periodic_cpu_id(ubs_hcom_multicast_config config, int32_t cpuId);
 
+/*
+ * @brief Get the cpu id bound to the periodic timer thread
+ *
+ * @param config           [in] config handle
+ *
+ * @return cpu id, -1 if unbound
+ */
+int32_t ubs_hcom_multicast_config_get_periodic_cpu_id(ubs_hcom_multicast_config config);
+
+/*
+ * @brief Get the protocol of the multicast config
+ *
+ * @param config           [in] config handle
+ *
+ * @return protocol type
+ */
+ubs_hcom_multicast_protocol ubs_hcom_multicast_config_get_protocol(ubs_hcom_multicast_config config);
+
 #ifdef __cplusplus
 }
 #endif

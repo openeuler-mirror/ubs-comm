@@ -56,7 +56,7 @@ public:
      * @brief 销毁subscriber
      * @param subscriber 待销毁的subscriber
      */
-    virtual void DestroySubscriber(const NetRef<Subscriber> &subscriber) = 0;
+    virtual void DestroySubscriber(NetRef<Subscriber> &subscriber) = 0;
 
     /**
      * @brief 获取MulticastConfig，用于做高级配置

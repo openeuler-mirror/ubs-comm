@@ -225,7 +225,7 @@ SerResult SubscriberServiceImp::CreateSubscriber(const std::string &serverUrl, u
     return SER_OK;
 }
 
-void SubscriberServiceImp::DestroySubscriber(const NetRef<Subscriber> &subscriber)
+void SubscriberServiceImp::DestroySubscriber(NetRef<Subscriber> &subscriber)
 {
     if (subscriber == nullptr) {
         return;
@@ -235,7 +235,8 @@ void SubscriberServiceImp::DestroySubscriber(const NetRef<Subscriber> &subscribe
     if (mDriverPtr) {
         mDriverPtr->DestroyEndpoint(subscriber->GetEp());
     }
-    subscriber->DecreaseRef();
+    // Set(nullptr) 会释放最后一个引用并销毁 Subscriber，避免调用方 NetRef 析构时对已释放对象二次 DecreaseRef
+    subscriber.Set(nullptr);
 }
 
 MulticastConfig &SubscriberServiceImp::GetConfig()

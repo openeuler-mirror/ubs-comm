@@ -459,6 +459,7 @@ int g_chnCalls = 0;
 int g_svcReqCalls = 0;
 uint64_t g_lastUsrCtx = 0;
 ubs_hcom_request_context *g_lastReqCtx = nullptr;
+std::string g_lastIpPort;
 
 int TestEpNewHandler(ubs_hcom_endpoint ep, uint64_t usrCtx, const char *payLoad)
 {
@@ -494,11 +495,12 @@ void TestIdleHandler(uint8_t wkrGrpIdx, uint16_t idxInGrp, uint64_t usrCtx)
     g_lastUsrCtx = usrCtx;
 }
 
-int TestChannelHandler(ubs_hcom_channel channel, uint64_t usrCtx, const char *payLoad)
+int TestChannelHandler(ubs_hcom_channel channel, const char *ipPort, uint64_t usrCtx, const char *payLoad)
 {
     (void)channel;
     (void)payLoad;
     g_chnCalls++;
+    g_lastIpPort = (ipPort == nullptr) ? "" : ipPort;
     g_lastUsrCtx = usrCtx;
     return TEST_HANDLER_RET;
 }
@@ -593,6 +595,7 @@ void ResetCounters()
     g_eraseCalls = 0;
     g_lastUsrCtx = 0;
     g_lastReqCtx = nullptr;
+    g_lastIpPort.clear();
     g_secTypeToReturn = C_NET_SEC_DISABLED;
     g_needFreeToReturn = 0;
     g_certPathToReturn = nullptr;
@@ -913,6 +916,7 @@ TEST_F(TestHcomDefInnerC, TestServiceHdlAdpNewChannel)
     int32_t refBefore = ch->GetRef();
     EXPECT_EQ(valid.NewChannel(TCP_URL, chPtr, TEST_PAYLOAD), TEST_HANDLER_RET);
     EXPECT_EQ(g_chnCalls, 1);
+    EXPECT_EQ(g_lastIpPort, TCP_URL);
     EXPECT_EQ(ch->GetRef(), refBefore + 1);
     ch->DecreaseRef();
 
@@ -924,6 +928,7 @@ TEST_F(TestHcomDefInnerC, TestServiceHdlAdpNewChannel)
     EXPECT_EQ(g_chnCalls, 1);
     brokenAdp.ChannelBroken(chPtr);
     EXPECT_EQ(g_chnCalls, 2);
+    EXPECT_TRUE(g_lastIpPort.empty());
     ServiceHdlAdp nullBroken(C_CHANNEL_BROKEN, nullptr, TEST_USR_CTX);
     nullBroken.ChannelBroken(chPtr);
     EXPECT_EQ(g_chnCalls, 2);

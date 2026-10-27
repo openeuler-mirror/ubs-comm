@@ -414,7 +414,7 @@ public:
         // increase ref and need call ep_destroy
         newCh->IncreaseRef();
 
-        return mHandler(reinterpret_cast<ubs_hcom_endpoint>(newCh.Get()), mUsrCtx, payload.c_str());
+        return mHandler(reinterpret_cast<ubs_hcom_channel>(newCh.Get()), ipPort.c_str(), mUsrCtx, payload.c_str());
     }
 
     void ChannelBroken(const UBSHcomChannelPtr &ch)
@@ -423,7 +423,7 @@ public:
             return;
         }
 
-        mHandler(reinterpret_cast<ubs_hcom_endpoint>(ch.Get()), mUsrCtx, ch->GetPeerConnectPayload().c_str());
+        mHandler(reinterpret_cast<ubs_hcom_channel>(ch.Get()), "", mUsrCtx, ch->GetPeerConnectPayload().c_str());
     }
 
 private:

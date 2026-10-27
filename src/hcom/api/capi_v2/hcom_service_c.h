@@ -46,10 +46,16 @@ typedef uintptr_t ubs_hcom_service_context;
 typedef void (*ubs_hcom_channel_cb_func)(void *arg, ubs_hcom_service_context context);
 /*
  * @brief Callback function definition
- * 1) new endpoint connected from client, only need to register this at sever side
- * 2) endpoint is broken, called when RDMA qp detection error or broken
+ * 1) new channel connected from client, only need to register this at server side
+ *    ipPort: peer address in the form of "ip:port"
+ *    usrCtx: user context, always 0 when the handler is registered by ubs_hcom_service_bind
+ *    returning a value other than SER_OK makes the server destroy the channel
+ * 2) channel is broken, called when RDMA qp detection error or broken
+ *    ipPort: always an empty string, the peer address is not available in this case
+ *    usrCtx: user context passed when registering the handler
  */
-typedef int (*ubs_hcom_service_channel_handler)(ubs_hcom_channel channel, uint64_t usrCtx, const char *payLoad);
+typedef int (*ubs_hcom_service_channel_handler)(ubs_hcom_channel channel, const char *ipPort, uint64_t usrCtx,
+                                                const char *payLoad);
 typedef void (*ubs_hcom_service_idle_handler)(uint8_t wkrGrpIdx, uint16_t idxInGrp, uint64_t usrCtx);
 typedef int (*ubs_hcom_service_request_handler)(ubs_hcom_service_context ctx, uint64_t usrCtx);
 
