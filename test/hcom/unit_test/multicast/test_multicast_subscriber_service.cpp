@@ -247,12 +247,11 @@ TEST_F(TestMulticastSubscriberService, TestDestroySubscriberWithEndpoint)
 {
     SubscriberServiceImp service;
     auto *ep = new SubscriberTestEndpoint();
-    // note: DestroySubscriber takes a const NetRef and releases the object,
-    // the caller's NetRef is not cleared (kept non-null here on purpose)
+    // DestroySubscriber releases the object and clears the caller's NetRef,
+    // so the wrapper is null afterwards and no second DecreaseRef happens on destruction
     NetRef<Subscriber> subscriber(new Subscriber(SUBSCRIBER_IP_A, TEST_SUB_PORT, UBSHcomNetEndpointPtr(ep)));
-    Subscriber *raw = subscriber.Get();
     service.DestroySubscriber(subscriber);
-    EXPECT_EQ(subscriber.Get(), raw);
+    EXPECT_EQ(subscriber.Get(), nullptr);
 }
 
 TEST_F(TestMulticastSubscriberService, TestSubscriberServiceSingletonLifecycle)

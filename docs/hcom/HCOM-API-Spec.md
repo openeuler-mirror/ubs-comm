@@ -3932,6 +3932,14 @@ int ubs_hcom_service_create(ubs_hcom_service_type t, const char \*name, ubs_hcom
 
 int ubs_hcom_service_bind(ubs_hcom_service service, const char \*listenerUrl, ubs_hcom_service_channel_handler h);
 
+回调类型说明：
+
+typedef int (\*ubs_hcom_service_channel_handler)(ubs_hcom_channel channel, const char \*ipPort, uint64_t usrCtx, const char \*payLoad).
+
+- ipPort：对端地址，形如 "ip:port"（仅建链回调提供；断链回调恒为空串）。
+- usrCtx：用户上下文，由 ubs_hcom_service_bind 注册时恒为 0。
+- 返回值：建链回调返回非 0（非 SER_OK）时，服务端销毁该 channel。
+
 3.  参数说明
 
     1.  参数说明
@@ -4143,6 +4151,8 @@ void ubs_hcom_service_register_broken_handler(ubs_hcom_service service, ubs_hcom
 
 ubs_hcom_service_channel_policy policy, uint64_t usrCtx);
 
+回调函数签名与 ubs_hcom_service_bind 相同（ubs_hcom_service_channel_handler）；断链回调中 ipPort 恒为空串。
+
 3.  参数说明
 
     1.  参数说明
@@ -4151,7 +4161,7 @@ ubs_hcom_service_channel_policy policy, uint64_t usrCtx);
 |----|----|----|----|
 | service | ubs_hcom_service | 入参 | 之前创建的ubs_hcom_service对象。 |
 | t | [ubs_hcom_service_handler_type](#ZH-CN_TOPIC_0000002465536462) | 入参 | 句柄的类型。 |
-| h | ubs_hcom_service_channel_handler | 入参 | 回调函数句柄。 |
+| h | ubs_hcom_service_channel_handler | 入参 | 回调函数句柄，签名见 ubs_hcom_service_bind 的回调类型说明。 |
 | policy | [ubs_hcom_service_channel_policy](#ZH-CN_TOPIC_0000002465536134) | 入参 | 链路断开时的策略，策略可选。 |
 | usrCtx | uint64_t | 入参 | 用户上下文。 |
 
@@ -7952,7 +7962,7 @@ Bool类型，表示回调函数是否执行成功
 
       函数定义
 
-typedef int (\*ubs_hcom_tls_get_pk_cb)(const char \*name, char \*\*priKeyPath, char \*\*keyPass, ubs_hcom_tls_keypass_erase \*erase)
+typedef int (\*ubs_hcom_tls_get_pk_cb)(const char \*name, char \*\*priKeyPath, char \*\*keyPass, int \*keyPassLen, ubs_hcom_tls_keypass_erase \*erase)
 
 3.  参数说明
 
@@ -7963,6 +7973,7 @@ typedef int (\*ubs_hcom_tls_get_pk_cb)(const char \*name, char \*\*priKeyPath, c
 | name | char \* | 出参 | 句柄名字。 |
 | \*priKeyPath | char \* | 出参 | 提供的私钥证书路径。 |
 | \*keyPass | void\* | 出参 | 私钥加载的明文密码。 |
+| \*keyPassLen | int \* | 出参 | 私钥加载的明文密码长度。 |
 | erase | [ubs_hcom_tls_keypass_erase](#ZH-CN_TOPIC_0000002498495445) \* | 出参 | 擦除私钥密码的回调函数，当加载完私钥的时候调用。 |
 
 4.  返回值

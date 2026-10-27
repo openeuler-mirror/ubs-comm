@@ -929,6 +929,15 @@ int ubs\_hcom\_service\_bind\(ubs\_hcom\_service service, const char \*listenerU
 
 返回值为0则表示bind成功。
 
+>[!NOTE]说明
+>
+>数据类型解释如下：
+>typedef int \(\*ubs\_hcom\_service\_channel\_handler\)\(ubs\_hcom\_channel channel, const char \*ipPort, uint64\_t usrCtx, const char \*payLoad\).
+>
+>- ipPort：对端地址，形如 "ip:port"（仅建链回调提供；断链回调恒为空串）。
+>- usrCtx：用户上下文，由 ubs\_hcom\_service\_bind 注册时恒为 0。
+>- 返回值非 0（非 SER_OK）时，服务端销毁该 channel（仅建链回调）。
+
 ##### ubs\_hcom\_service\_start<a name="ZH-CN_TOPIC_0000002596758711"></a>
 
 **函数定义<a name="section4292195611128"></a>**
@@ -1148,6 +1157,10 @@ ubs\_hcom\_service\_channel\_policy policy, uint64\_t usrCtx\);
 **返回值<a name="section851917373122"></a>**
 
 uintptr\_t，返回内部句柄地址。
+
+>[!NOTE]说明
+>
+>回调函数签名与 ubs_hcom_service_bind 相同（ubs_hcom_service_channel_handler）；断链回调中 ipPort 恒为空串。
 
 ##### ubs\_hcom\_service\_register\_idle\_handler<a name="ZH-CN_TOPIC_0000002565998472"></a>
 
@@ -5219,7 +5232,7 @@ in32\_t。成功时返回0，失败时返回错误码。
 
 **实现方法<a name="section660624014504"></a>**
 
-void DestroySubscriber\(const NetRef<Subscriber\> &subscriber\)
+void DestroySubscriber\(NetRef<Subscriber\> &subscriber\)
 
 **参数说明<a name="section8984192751117"></a>**
 

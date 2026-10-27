@@ -993,3 +993,115 @@ void ubs_hcom_multicast_config_set_max_send_recv_data_count(ubs_hcom_multicast_c
     VALIDATE_MULTICAST_VOID(config);
     reinterpret_cast<MulticastConfig *>(config)->SetMaxSendRecvDataCount(count);
 }
+
+uint32_t ubs_hcom_multicast_config_get_max_send_recv_data_count(ubs_hcom_multicast_config config)
+{
+    VALIDATE_MULTICAST_ZERO(config);
+    return reinterpret_cast<MulticastConfig *>(config)->GetMaxSendRecvDataCount();
+}
+
+void ubs_hcom_multicast_config_set_max_send_recv_data_size(ubs_hcom_multicast_config config, uint32_t size)
+{
+    VALIDATE_MULTICAST_VOID(config);
+    reinterpret_cast<MulticastConfig *>(config)->SetMaxSendRecvDataSize(size);
+}
+
+uint32_t ubs_hcom_multicast_config_get_max_send_recv_data_size(ubs_hcom_multicast_config config)
+{
+    VALIDATE_MULTICAST_ZERO(config);
+    return reinterpret_cast<MulticastConfig *>(config)->GetMaxSendRecvDataSize();
+}
+
+void ubs_hcom_multicast_config_set_worker_group_info(ubs_hcom_multicast_config config,
+                                                     const ubs_hcom_multicast_worker_group_info *info, uint32_t count)
+{
+    VALIDATE_MULTICAST_VOID(config);
+
+    std::vector<UBSHcomWorkerGroupInfo> groups;
+    if (info != nullptr) {
+        groups.reserve(count);
+        for (uint32_t i = 0; i < count; i++) {
+            UBSHcomWorkerGroupInfo group;
+            group.threadPriority = info[i].threadPriority;
+            group.threadCount = info[i].threadCount;
+            group.groupId = info[i].groupId;
+            group.cpuIdsRange = {info[i].cpuIdsRangeFirst, info[i].cpuIdsRangeSecond};
+            groups.emplace_back(group);
+        }
+    }
+    reinterpret_cast<MulticastConfig *>(config)->SetWorkerGroupInfo(groups);
+}
+
+uint32_t ubs_hcom_multicast_config_get_worker_group_info_count(ubs_hcom_multicast_config config)
+{
+    VALIDATE_MULTICAST_ZERO(config);
+    return static_cast<uint32_t>(reinterpret_cast<MulticastConfig *>(config)->GetWorkerGroupInfo().size());
+}
+
+int ubs_hcom_multicast_config_get_worker_group_info(ubs_hcom_multicast_config config, uint32_t index,
+                                                    ubs_hcom_multicast_worker_group_info *info)
+{
+    VALIDATE_MULTICAST_ERR(config);
+    if (NN_UNLIKELY(info == nullptr)) {
+        NN_LOG_ERROR("Invalid param, info must be correct address");
+        return SER_INVALID_PARAM;
+    }
+
+    const auto &groups = reinterpret_cast<MulticastConfig *>(config)->GetWorkerGroupInfo();
+    if (NN_UNLIKELY(index >= groups.size())) {
+        NN_LOG_ERROR("Invalid index " << index << " for worker group info size " << groups.size());
+        return SER_INVALID_PARAM;
+    }
+
+    const UBSHcomWorkerGroupInfo &group = groups[index];
+    info->threadPriority = group.threadPriority;
+    info->threadCount = group.threadCount;
+    info->groupId = group.groupId;
+    info->cpuIdsRangeFirst = group.cpuIdsRange.first;
+    info->cpuIdsRangeSecond = group.cpuIdsRange.second;
+    return SER_OK;
+}
+
+void ubs_hcom_multicast_config_set_periodic_thread_num(ubs_hcom_multicast_config config, uint32_t threadNum)
+{
+    VALIDATE_MULTICAST_VOID(config);
+    reinterpret_cast<MulticastConfig *>(config)->SetPeriodicThreadNum(threadNum);
+}
+
+uint32_t ubs_hcom_multicast_config_get_periodic_thread_num(ubs_hcom_multicast_config config)
+{
+    VALIDATE_MULTICAST_ZERO(config);
+    return reinterpret_cast<MulticastConfig *>(config)->GetPeriodicThreadNum();
+}
+
+void ubs_hcom_multicast_config_set_max_subscriber_num(ubs_hcom_multicast_config config, uint32_t maxSubscriberNum)
+{
+    VALIDATE_MULTICAST_VOID(config);
+    reinterpret_cast<MulticastConfig *>(config)->SetMaxSubscriberNum(maxSubscriberNum);
+}
+
+uint32_t ubs_hcom_multicast_config_get_max_subscriber_num(ubs_hcom_multicast_config config)
+{
+    VALIDATE_MULTICAST_ZERO(config);
+    return reinterpret_cast<MulticastConfig *>(config)->GetMaxSubscriberNum();
+}
+
+void ubs_hcom_multicast_config_set_periodic_cpu_id(ubs_hcom_multicast_config config, int32_t cpuId)
+{
+    VALIDATE_MULTICAST_VOID(config);
+    reinterpret_cast<MulticastConfig *>(config)->SetPeriodicCpuId(static_cast<int>(cpuId));
+}
+
+int32_t ubs_hcom_multicast_config_get_periodic_cpu_id(ubs_hcom_multicast_config config)
+{
+    VALIDATE_MULTICAST_ZERO(config);
+    return static_cast<int32_t>(reinterpret_cast<MulticastConfig *>(config)->GetPeriodicCpuId());
+}
+
+ubs_hcom_multicast_protocol ubs_hcom_multicast_config_get_protocol(ubs_hcom_multicast_config config)
+{
+    if (NN_UNLIKELY(config == 0)) {
+        return C_MULTICAST_UNKNOWN;
+    }
+    return ConvertProtocolToC(reinterpret_cast<MulticastConfig *>(config)->GetProtocol());
+}

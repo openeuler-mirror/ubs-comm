@@ -203,6 +203,7 @@ file(GLOB_RECURSE HCOM_UB_SRCS
     "${HCOM_SRC_DIR}/src/hcom/transport/ub/*"
     "${HCOM_SRC_DIR}/src/hcom/under_api/urma/*")
 file(GLOB_RECURSE HCOM_MULTICAST_SRCS "${HCOM_SRC_DIR}/src/hcom/multicast/*")
+file(GLOB HCOM_MULTICAST_CAPI_SRCS "${HCOM_SRC_DIR}/src/hcom/api/capi_v2/hcom_multicast_c.*")
 
 if(NOT BUILD_WITH_RDMA)
     list(REMOVE_ITEM HCOM ${HCOM_RDMA_COMMON})
@@ -223,6 +224,7 @@ endif ()
 
 if (NOT BUILD_WITH_MULTICAST)
     list(REMOVE_ITEM HCOM ${HCOM_MULTICAST_SRCS})
+    list(REMOVE_ITEM HCOM ${HCOM_MULTICAST_CAPI_SRCS})
 endif ()
 add_library(hcom_static_obj STATIC ${HCOM})
 target_link_libraries(hcom_static_obj
@@ -274,6 +276,7 @@ set(TARGET_INSTALL_LIB ${CMAKE_INSTALL_PREFIX}/lib)
 
 if (${BUILD_WITH_MULTICAST})
     file(GLOB MULTICAST_INCLUDE_HEADERS multicast/include/multicast*.h)
+    list(APPEND C_INCLUDE_HEADERS api/capi_v2/hcom_multicast_c.h)
 endif ()
 
 install(FILES ${INCLUDE_HEADERS} DESTINATION ${TARGET_INSTALL_INCLUDE} PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ)
