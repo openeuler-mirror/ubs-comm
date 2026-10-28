@@ -16,7 +16,6 @@ target_include_directories(ubsocket_send_recv_test PRIVATE
         ${UBSOCKET_BASE_DIR}/csrc/under_api
         ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
         ${UBSOCKET_BASE_DIR}/include
-        ${UBSOCKET_BASE_DIR}/../hcom/umq/include/umq
 )
 target_link_libraries(ubsocket_send_recv_test PRIVATE
         ubsocket_static GTest::gtest_main pthread
@@ -40,7 +39,6 @@ function(add_conn_test TARGET_NAME)
             ${UBSOCKET_BASE_DIR}/csrc/under_api
             ${UBSOCKET_BASE_DIR}/csrc/under_api/urma
             ${UBSOCKET_BASE_DIR}/include
-            ${UBSOCKET_BASE_DIR}/../hcom/umq/include/umq
     )
 endfunction()
 

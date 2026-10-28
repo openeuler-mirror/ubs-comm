@@ -4,7 +4,6 @@ add_compile_options(-fno-access-control)
 
 set(URMA_INCLUDE_DIRS
         ${UBSOCKET_BASE_DIR}/csrc/core/urma
-        ${UBSOCKET_BASE_DIR}/../hcom/umq/include/umq
 )
 
 function(add_urma_test TARGET_NAME)

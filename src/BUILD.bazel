@@ -36,24 +36,6 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
-cc_import(
-  name = "libumq",
-  shared_library = ":libumq.so",
-)
-
-
-
-cc_binary(
-    name = "libumq.so",
-    linkshared = True,
-    deps = [
-        "//src/hcom/umq/src:umq_lib",
-    ],
-    dynamic_deps = ["//src/hcom/umq/src/qbuf:umq_buf"],
-    visibility = ["//visibility:public"],
-)
-
-
 cc_binary(
     name = "libubsocket.so",
     srcs = glob([
@@ -72,10 +54,6 @@ cc_binary(
     includes = [".", "ubsocket", "ubsocket/brpc"],
     deps = [
         ":boundscheck_lib",  # 依赖 boundscheck 库
-#        ":libumq_buf",
-        "//src/hcom/umq/src:umq_aggregate",
-        ":libumq",
-#        ":libumq_ub",
     ],
     linkshared = True, 
     visibility = ["//visibility:public"],
@@ -86,8 +64,6 @@ cc_library(
     srcs = glob([
         "ubsocket/csrc/**/*.cpp",
         "ubsocket/csrc/**/*.h"
-    ], exclude=[
-        "ubsocket/csrc/core/umq/**",
     ]),
 
     # 对外公开的.h文件
@@ -106,21 +82,16 @@ cc_library(
         "ubsocket/csrc",
         "ubsocket/csrc/common",
         "ubsocket/csrc/core",
-        "ubsocket/csrc/core/umq",
         "ubsocket/csrc/core/urma",
         "ubsocket/csrc/core/urma/credit_scheduler",
         "ubsocket/csrc/iobuf",
         "ubsocket/csrc/profiling",
         "ubsocket/csrc/under_api",
         "ubsocket/csrc/under_api/urma",
-
-        # 需要使用hcom中的umq头文件
-        "hcom/"
     ],
     deps = [
         ":boundscheck_lib",
         ":ubsocket_version_defs",
-        "//src/hcom/umq:umq",
     ],
     visibility = ["//visibility:public"],
 )
@@ -163,71 +134,9 @@ cc_binary(
     includes = [".", "ubsocket", "ubsocket/csrc/cli"],
     deps = [
         ":boundscheck_lib",  # 依赖 boundscheck 库
-        "//src/hcom/umq:umq",
         ":ubsocket"
     ],
     visibility = ["//visibility:public"],
-)
-
-load("//src/hcom/umq/bazel:copts.bzl", "UMQ_DEFAULT_STATIC_COPTS")
-
-cc_library(
-    name = "ubsocketall",
-    srcs = glob([
-        "src/hcom/umq/src/dfx/*.c",
-        "src/hcom/umq/src/qbuf/*.c",
-        "src/hcom/umq/src/umq_ub/**/*.c",
-        "src/hcom/umq/src/*.c",
-        "src/hcom/umq/util/*.c",
-        "src/hcom/umq/util/*.cpp",
-        "ubsocket/*.cpp",
-        "ubsocket/*.c",
-        "ubsocket/brpc/*.cpp",
-    ]),
-    hdrs = glob([
-        "src/hcom/umq/src/dfx/*.h",
-        "src/hcom/umq/src/qbuf/*.h",
-        "src/hcom/umq/src/umq_ub/**/*.h",
-        "src/hcom/umq/src/*.h",
-        "src/hcom/umq/util/*.h",
-        "ubsocket/*.h",
-        "ubsocket/brpc/*.h",
-    ]),
-    includes = [
-    ".", "ubsocket", "ubsocket/brpc",
-        "src/hcom/umq/src/dfx",
-        "src/hcom/umq/src/qbuf",
-        "src/hcom/umq/src/umq_ub",
-        "src/hcom/umq/src/umq_ub/core",
-        "src/hcom/umq/src/umq_ub/core/flow_control",
-        "src/hcom/umq/src/umq_ub/core/private",
-        "src/hcom/umq/src/umq_ub/core/private",
-        "src/hcom/umq/src",
-        "src/hcom/umq/util",
-    ],
-    copts = UMQ_DEFAULT_STATIC_COPTS + [
-        "-DUMQ_STATIC_LIB",
-    ],
-    linkopts = ["-lpthread"],
-    deps = [
-        "//src/hcom/umq/include:umq_headers",
-        "//src/hcom/umq/include:umq_tp_headers",
-        "//src/hcom/umq/include:umq_ub_headers",
-        "//src/hcom/umq/include/umq:umq_headers",
-        "@boringssl//:ssl",
-        "@boringssl//:crypto",
-        "@urma//:urma_headers",
-        "@urma//:urma_lib",
-        "@urma//:tpsa_lib",
-        "//src/hcom/umq/include:framework_headers",
-        ":boundscheck_lib",
-    ],
-    features = [
-        "static_library",
-        "-pic",
-        "-supports_pic",
-    ],
-    linkstatic = True,
 )
 
 # 4. 聚合目标保持不变
@@ -236,10 +145,6 @@ filegroup(
     srcs = [
         ":libubsocket.so",
         ":libboundscheck",
-        "//src/hcom/umq/src:umq",
-        "//src/hcom/umq/src/qbuf:umq_buf",
-        "//src/hcom/umq/src/umq_ub:umq_ub",
-
     ],
     visibility = ["//visibility:public"],
 )

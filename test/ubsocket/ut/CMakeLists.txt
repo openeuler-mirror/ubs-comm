@@ -25,7 +25,6 @@ target_include_directories(test_urma_backend
     PRIVATE ${CMAKE_SOURCE_DIR}/src/ubsocket/csrc/under_api
     PRIVATE ${CMAKE_SOURCE_DIR}/src/ubsocket/csrc/under_api/urma
     PRIVATE ${CMAKE_SOURCE_DIR}/src/ubsocket/include
-    PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom
-    PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/include/umq)
+    PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom)
 target_compile_options(test_urma_backend PRIVATE -fno-access-control)
 gtest_discover_tests(test_urma_backend)
