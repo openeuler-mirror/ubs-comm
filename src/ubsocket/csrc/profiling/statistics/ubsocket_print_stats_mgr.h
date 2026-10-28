@@ -35,6 +35,8 @@
 
 namespace Statistics {
 
+using ock::ubs::UbsTransMode;
+
 class PrintStatsMgr {
 public:
     static ALWAYS_INLINE PrintStatsMgr *GetPrintStatsMgr()
@@ -65,7 +67,7 @@ public:
     }
 
     static void StartStatsCollection(uint64_t traceTime, const std::string &tracePath, uint64_t traceFileSize,
-                                     const umq_trans_mode_t trans_mode = UMQ_TRANS_MODE_UB)
+                                     const UbsTransMode trans_mode = UBS_TRANS_MODE_UB)
     {
         PrintStatsMgr *mgr = GetPrintStatsMgr();
         mgr->ubsocketTraceTime = traceTime;
@@ -230,7 +232,7 @@ private:
     std::thread *m_event_loop;
     uint32_t pidVal;
     std::string ubsocketTraceFilePath;
-    umq_trans_mode_t m_trans_mode;
+    UbsTransMode m_trans_mode;
     std::mutex m_mutex;
     std::condition_variable m_cv;
 };

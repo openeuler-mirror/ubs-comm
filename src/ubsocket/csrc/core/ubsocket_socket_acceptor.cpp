@@ -308,7 +308,6 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 
     // TODO；使用 Socket 工厂方法统一创建, create 增加三种create fd透传
     SocketPtr new_socket_obj;
-    // ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_UMQ, new_socket_obj);
     ret = SocketBase::Create(new_fd, SocketType::SOCK_TYPE_URMA, new_socket_obj);
     if (ret != UBS_OK) {
         LibcApi::close(event_fd);
@@ -352,13 +351,6 @@ Result Acceptor::DoAccept(int new_fd, const std::string &peerIp)
 
     new_socket_obj->create_type_ = SOCK_CREATE_TYPE_ACCEPT;
     newSocket->acceptor_->acceptor_ops_->conn_info.create_time = std::chrono::system_clock::now();
-#if 0 // TODO: umq / urma socket 识别
-    auto *umqOps = static_cast<umq::UmqAcceptorOps *>(newSocket->acceptor_->acceptor_ops_.Get());
-    umqOps->umq_conn_info_.peer_ip = peerIp;
-    umqOps->umq_conn_info_.peer_fd = new_fd;
-    umqOps->umq_conn_info_.type_fd = 0;
-    umqOps->umq_conn_info_.create_time = std::chrono::system_clock::now();
-#endif
 
     if (GlobalSetting::UBS_TRACE_ENABLED) {
         newSocket->GetStatsMgr()->UpdateTraceStats(Statistics::StatsMgr::CONN_COUNT, 1);

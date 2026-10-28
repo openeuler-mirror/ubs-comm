@@ -23,7 +23,6 @@ uint32_t GlobalSetting::UBS_SPLIT_TRACE_BUF_CAPACITY = 65535;
 uint32_t GlobalSetting::UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS = 10;
 SplitTraceLevel GlobalSetting::UBS_SPLIT_TRACE_LEVEL = SplitTraceLevel::LEVEL_ALL;
 bool GlobalSetting::UBS_CLI_ENABLED = true;
-bool GlobalSetting::UBS_PROBE_ENABLED = false;
 bool GlobalSetting::UBS_INITED = false;                      /* not inited by default */
 std::string GlobalSetting::UBS_TRANS_MODE = "ub";            /* transport mode, from env */
 ConnMode GlobalSetting::UBS_CONNECTS_MODE = ConnMode::FULL_ASYNC; /* conn mode: SYNC | HALF_ASYNC | FULL_ASYNC */
@@ -45,8 +44,6 @@ std::string GlobalSetting::UBS_PROF_DUMP_PATH = "/tmp/ubsocket/profiling";
 uint64_t GlobalSetting::UBS_TRACE_TIME = UBSOCKET_TRACE_TIME_DEFAULT;
 uint64_t GlobalSetting::UBS_TRACE_FILE_SIZE = UBSOCKET_TRACE_FILE_SIZE_DEFAULT;
 std::string GlobalSetting::UBS_TRACE_FILE_PATH = "/tmp/ubsocket/log";
-uint32_t GlobalSetting::UBS_PROBE_MS = 1000;
-uint32_t GlobalSetting::UBS_PROBE_BATCH = 10;
 LinkSelectionPolicy GlobalSetting::LINK_SELECTION_POLICY = LinkSelectionPolicy::BONDING_BACKUP;
 uint32_t GlobalSetting::UBS_PORT_COOLDOWN_SEC = 60;
 uint32_t GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM = 45000; /* fd table pre-expansion target, 0 = off */
@@ -68,8 +65,6 @@ uint32_t GlobalSetting::UBS_PRE_ALLOC_SYSTEM_FD_NUM = 45000; /* fd table pre-exp
 #define ENV_TRACE_TIME "UBS_MONITOR_INTERVAL"
 #define ENV_TRACE_FILE_SIZE "UBS_MONITOR_FILE_SIZE"
 #define ENV_TRACE_FILE_PATH "UBS_MONITOR_FILE_PATH"
-#define ENV_VAR_PROBE_TIME "UBS_PROBE_INTERVAL_MS"
-#define ENV_VAR_PROBE_BATCH "UBS_PROBE_BATCH_SIZE"
 #define ENV_PORT_COOLDOWN_SEC "UBS_PORT_COOLDOWN_SEC"
 #define ENV_DIRECT_IO_ENABLE "UBS_DIRECT_IO_ENABLE"
 #define ENV_PRE_ALLOC_SYSTEM_FD_NUM "UBS_PRE_ALLOC_SYSTEM_FD_NUM"
@@ -91,8 +86,6 @@ void GlobalSetting::AddRules() noexcept
         {ENV_PROF_DUMP_INTERVAL_MIN, false, 1, 5},
         {ENV_TRACE_TIME, false, UBSOCKET_TRACE_TIME_MIN, UBSOCKET_TRACE_TIME_MAX},
         {ENV_TRACE_FILE_SIZE, false, UBSOCKET_TRACE_FILE_SIZE_MIN, UBSOCKET_TRACE_FILE_SIZE_MAX},
-        {ENV_VAR_PROBE_TIME, false, UBSOCKET_PROBE_TIME_MS_MIN, UBSOCKET_PROBE_TIME_MS_MAX},
-        {ENV_VAR_PROBE_BATCH, false, UBSOCKET_PROBE_BATCH_MIN, UBSOCKET_PROBE_BATCH_MAX},
         {ENV_CONN_POLL_THREAD_NUM, false, 1, UINT32_MAX},
         {ENV_SERVER_HANDLER_NUM_DEPRECATED, false, 1, UINT32_MAX},
         {ENV_PORT_COOLDOWN_SEC, false, 1, 300},
@@ -197,7 +190,7 @@ SplitTraceLevel SplitTraceLevelFromStr(const std::string &env_str) noexcept
         // 去除可能存在的前后空格
         size_t start = token.find_first_not_of(" \t");
         size_t end = token.find_last_not_of(" \t");
-        // 3. 处理连续逗号导致的空串（如 "ubsocket,,umq"），直接跳过
+        // 3. 处理连续逗号导致的空串（如 "ubsocket,,"），直接跳过
         if (start == std::string::npos) {
             continue;
         }
@@ -206,8 +199,6 @@ SplitTraceLevel SplitTraceLevelFromStr(const std::string &env_str) noexcept
         UBS_VLOG_DEBUG("split trace level config str: [%s].\n", level_str.c_str());
         if (level_str == "ubsocket") {
             level = level | SplitTraceLevel::LEVEL_UBSOCKET;
-        } else if (level_str == "umq") {
-            level = level | SplitTraceLevel::LEVEL_UMQ;
         } else if (level_str == "urma") {
             level = level | SplitTraceLevel::LEVEL_URMA;
         } else if (level_str == "all") {
@@ -294,14 +285,6 @@ Result GlobalSetting::LoadEnv() noexcept
 
     if (GetEnvAndValidateNotEmpty(ENV_TRACE_FILE_PATH, strEnvValue)) {
         UBS_TRACE_FILE_PATH = strEnvValue;
-    }
-
-    if (GetEnvAndValidate(ENV_VAR_PROBE_TIME, envValue)) {
-        UBS_PROBE_MS = static_cast<uint32_t>(envValue);
-    }
-
-    if (GetEnvAndValidate(ENV_VAR_PROBE_BATCH, envValue)) {
-        UBS_PROBE_BATCH = static_cast<uint32_t>(envValue);
     }
 
     if (GetEnvAndValidate(ENV_PORT_COOLDOWN_SEC, envValue)) {

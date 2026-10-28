@@ -24,8 +24,7 @@ namespace ubs {
 #define DL_API_SET_NULL(__api_name) __api_name##_ptr = nullptr;
 
 #define LOAD_LIBC 1 << 0L
-#define LOAD_UMQ 1 << 1L
-#define LOAD_URMA 1 << 2L
+#define LOAD_URMA 1 << 1L
 
 class DlApi {
 public:

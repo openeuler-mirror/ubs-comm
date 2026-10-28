@@ -24,7 +24,7 @@ const std::string &SocketStateToStr(const SocketState value)
 }
 const std::string &SocketTypeToStr(SocketType value)
 {
-    static std::string strings[static_cast<uint8_t>(SocketType::SOCK_TYPE_COUNT) + 1L] = {"TCP", "UMQ", "SHM", "URMA"};
+    static std::string strings[static_cast<uint8_t>(SocketType::SOCK_TYPE_COUNT) + 1L] = {"TCP", "SHM", "URMA"};
     if (SocketTypeValid(value)) {
         return strings[static_cast<uint8_t>(value)];
     }

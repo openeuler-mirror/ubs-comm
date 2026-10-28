@@ -34,23 +34,7 @@ public:
 
     int ProcessStat(int sockfd, CLIMessage &response);
 
-    int ProcessFlowControl(int sockfd, CLIMessage &response);
-
-#ifdef UMQ_BACKEND_ENABLED
-    int ProcessTopo(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
-#endif
-
-    int ProcessQbufPool(int sockfd, CLIMessage &response);
-
-    int ProcessUmqInfo(int sockfd, CLIMessage &response);
-
-    int ProcessIo(int sockfd, CLIMessage &response);
-
-    int ProcessUmq(int sockfd, CLIMessage &response);
-
     int ProcessDelayQuery(int sockfd, CLIMessage &response, CLIArgsParser::ParsedArgs &args);
-
-    int ProcessProbeQuery(int sockfd, CLIMessage &response);
 
 private:
     std::string mServerPath;

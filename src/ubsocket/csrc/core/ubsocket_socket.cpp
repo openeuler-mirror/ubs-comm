@@ -14,13 +14,6 @@
 #include "ubsocket_data_tx.h"
 #include "ubsocket_raw_socket.h"
 #include "ubsocket_tx_cqe_poller.h"
-#ifdef UMQ_BACKEND_ENABLED
-#include "umq/umq_data_rx_ops.h"
-#include "umq/umq_data_tx_ops.h"
-#include "umq/umq_socket.h"
-#include "umq/umq_socket_acceptor.h"
-#include "umq/umq_socket_connector.h"
-#endif
 #include "urma/urma_conn_ops.h"
 #include "urma/urma_data_rx_ops.h"
 #include "urma/urma_data_tx_ops.h"
@@ -115,57 +108,6 @@ Result SocketBase::Create(int fd, ock::ubs::SocketType t, SocketPtr &outSocket)
         return UBS_OK;
     }
 
-#ifdef UMQ_BACKEND_ENABLED
-    if (t == SocketType::SOCK_TYPE_UMQ) {
-        /* step1: create umq socket */
-        using namespace umq;
-        auto umqSock = MakeRef<UmqSocket>(fd);
-        if (umqSock == nullptr) {
-            return UBS_MALLOC_FAILED;
-        }
-
-        /* step2: do initialize */
-        auto result = umqSock->Initialize();
-        if (result != UBS_OK) {
-            return result;
-        }
-
-        auto sock = RefConvert<UmqSocket, Socket>(umqSock);
-        auto sockBase = RefConvert<UmqSocket, SocketBase>(umqSock);
-
-        AcceptorOps *acceptorOps = nullptr;
-        result = CreateAcceptorOps(t, sock, acceptorOps);
-        if (result != UBS_OK) {
-            return result;
-        }
-
-        ConnectorOps *connectorOps = nullptr;
-        result = CreateConnectorOps(t, sock, connectorOps);
-        if (result != UBS_OK) {
-            delete acceptorOps;
-            return result;
-        }
-
-        sockBase->acceptor_ = new Acceptor(sock, acceptorOps);
-        sockBase->connector_ = new Connector(sock, connectorOps);
-
-        if (UmqSetting::UMQ_TP_TYPE == SINGLE) {
-            // 启动后台 tx cqe poller
-            result = TxCqePoller::Instance().Start();
-        }
-
-        if (result != UBS_OK) {
-            return result;
-        }
-        // TODO：资源回收时进行销毁
-
-        /* assign out */
-        outSocket = sock;
-
-        return UBS_OK;
-    }
-#endif
-
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
     if (t == SocketType::SOCK_TYPE_URMA) {
         using namespace urma;
@@ -233,23 +175,6 @@ Result SocketBase::CreateTxOps(SocketType value, const SocketPtr &sock, DataTxOp
         return UBS_INVALID_PARAM;
     }
 
-#ifdef UMQ_BACKEND_ENABLED
-    if (value == SocketType::SOCK_TYPE_UMQ) {
-        using namespace umq;
-        /* convert to umq socket */
-        UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-
-        /* create umq ops */
-        auto umqOps = new (std::nothrow) UmqTxOps(umqSock->raw_socket_, umqSock->UmqHandle());
-        if (umqOps == nullptr) {
-            return UBS_MALLOC_FAILED;
-        }
-
-        /* set out ops */
-        ops = umqOps;
-        return UBS_OK;
-    }
-#endif
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
     if (value == SocketType::SOCK_TYPE_URMA) {
         return urma::UrmaBackend::CreateTxOps(value, sock, ops);
@@ -266,23 +191,6 @@ Result SocketBase::CreateRxOps(SocketType value, const SocketPtr &sock, DataRxOp
         return UBS_INVALID_PARAM;
     }
 
-#ifdef UMQ_BACKEND_ENABLED
-    if (value == SocketType::SOCK_TYPE_UMQ) {
-        using namespace umq;
-        /* convert to umq socket */
-        UmqSocketPtr umqSock = RefConvert<Socket, UmqSocket>(sock);
-
-        /* create umq ops */
-        auto umqOps = new (std::nothrow) UmqRxOps(umqSock->raw_socket_, umqSock->UmqHandle());
-        if (umqOps == nullptr) {
-            return UBS_MALLOC_FAILED;
-        }
-
-        /* set out ops */
-        ops = umqOps;
-        return UBS_OK;
-    }
-#endif
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
     if (value == SocketType::SOCK_TYPE_URMA) {
         return urma::UrmaBackend::CreateRxOps(value, sock, ops);
@@ -298,19 +206,6 @@ Result SocketBase::CreateAcceptorOps(SocketType value, const SocketPtr &sock, Ac
         return UBS_INVALID_PARAM;
     }
 
-#ifdef UMQ_BACKEND_ENABLED
-    if (value == SocketType::SOCK_TYPE_UMQ) {
-        /* create umq acceptor */
-        auto umqOps = new (std::nothrow) umq::UmqAcceptorOps(sock->raw_socket_);
-        if (umqOps == nullptr) {
-            return UBS_MALLOC_FAILED;
-        }
-
-        /* set out ops */
-        acceptorOps = umqOps;
-        return UBS_OK;
-    }
-#endif
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
     if (value == SocketType::SOCK_TYPE_URMA) {
         return urma::UrmaBackend::CreateAcceptorOps(value, sock, acceptorOps);
@@ -326,20 +221,6 @@ Result SocketBase::CreateConnectorOps(SocketType value, const SocketPtr &sock, C
         return UBS_INVALID_PARAM;
     }
 
-#ifdef UMQ_BACKEND_ENABLED
-    if (value == SocketType::SOCK_TYPE_UMQ) {
-        /* create umq acceptor */
-        auto umqOps = new (std::nothrow) umq::UmqConnectorOps(sock->raw_socket_);
-        if (umqOps == nullptr) {
-            return UBS_MALLOC_FAILED;
-        }
-
-        /* set out ops */
-        connectorOps = umqOps;
-
-        return UBS_OK;
-    }
-#endif
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
     if (value == SocketType::SOCK_TYPE_URMA) {
         return urma::UrmaBackend::CreateConnectorOps(value, sock, connectorOps);
@@ -370,7 +251,6 @@ Result SocketBase::CreateConnOps(ConnRole role, int fd, const SocketPtr &sock, c
     ops = std::move(conn_ops);
     return UBS_OK;
 #else
-    /* TODO(urma-decouple): umq 模式无 UrmaConnOps，umq 用自有 conn ops 路径 */
     (void)role; (void)fd; (void)sock; (void)connector_ops; (void)addr; (void)addr_len;
     return UBS_INVALID_PARAM;
 #endif

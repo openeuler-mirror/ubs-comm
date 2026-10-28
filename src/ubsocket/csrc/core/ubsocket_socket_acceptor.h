@@ -32,7 +32,7 @@ public:
 
     // 阶段1：协商信息
     virtual Result Negotiate(SocketPtr socketPtr) = 0;
-    // 阶段2：创建资源（例如：umq create + bind + prefill rx）
+    // 阶段2：创建资源（例如：urma jetty/jfr 资源创建 + prefill rx）
     virtual Result CreateSocketResources(SocketPtr socketPtr) = 0;
     // 阶段3：销毁资源（握手失败/重试时清理已创建的资源）
     virtual void DestroySocketResources() = 0;

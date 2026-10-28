@@ -20,12 +20,9 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#ifdef UMQ_BACKEND_ENABLED
-#include "umq_dfx_types.h"
-#endif
 
 namespace Statistics {
-/* Backend-agnostic constants (same values as UMQ_IPV6_SIZE / UMQ_EID_SIZE) */
+/* Backend-agnostic constants */
 constexpr size_t CLI_IPV6_SIZE = 46;
 constexpr size_t CLI_EID_SIZE = 16;
 } // namespace Statistics
@@ -38,15 +35,8 @@ constexpr size_t CLI_EID_SIZE = 16;
 namespace Statistics {
 enum class CLICommand : uint8_t {
     INVALID = 0,
-    TOPO = 1,
     STAT = 2,
     DELAY = 3,
-    FLOW_CONTROL = 4,
-    QBUF_POOL = 5,
-    UMQ_INFO = 6,
-    IO = 7,
-    UMQ = 8,
-    PROBE = 9,
 };
 
 enum class CLITypeParam : uint8_t {
@@ -72,8 +62,6 @@ struct __attribute__((packed)) CLIControlHeader {
     CLICommand mCmdId;
     CLIErrorCode mErrorCode;
     uint32_t mDataSize;
-    uint8_t srcEid[CLI_EID_SIZE];  /* same size as umq_eid_t (16 bytes) */
-    uint8_t dstEid[CLI_EID_SIZE];
     CLITypeParam mType;
     uint16_t mSwitch;
     double mValue;
@@ -131,64 +119,6 @@ struct __attribute__((packed)) CLISocketData {
     uint64_t sendBytes;
     uint64_t errorPackets;
     uint64_t lostPackets;
-};
-
-#ifdef UMQ_BACKEND_ENABLED
-struct CLIFlowControlData {
-    uint64_t socketId;
-    uint64_t createTime;
-    umq_flow_control_stats_t umqFlowControlStat;
-};
-
-struct CLIQbufPoolData {
-    uint64_t socketId;
-    uint64_t createTime;
-    umq_qbuf_pool_stats_t umqQbufPoolStat;
-};
-
-struct CLIUmqInfoData {
-    uint64_t socketId;
-    uint64_t createTime;
-    umq_info_t umqInfo;
-};
-
-struct CLIIoPacketData {
-    uint64_t socketId;
-    uint64_t createTime;
-    umq_packet_stats_t umqPacketStat;
-};
-
-struct CLIUmqPerfData {
-    uint64_t socketId;
-    uint64_t createTime;
-    umq_perf_stats_t umqPerfStat;
-    char umqTpPerfBuf[4096];
-    uint32_t umqTpPerfLen;
-};
-#endif /* UMQ_BACKEND_ENABLED */
-
-struct __attribute__((packed)) CLIProbeHeader {
-    uint32_t socketNum;
-    uint32_t probeNum;
-    uint32_t reserved;
-};
-
-struct __attribute__((packed)) CLIProbeData {
-    int32_t fd;
-
-    // --- Client Side Timestamps (纳秒) ---
-    uint64_t client_send_time_ns;
-    uint64_t client_recv_rsp_time_ns;
-    uint64_t umq_client_post_time_ns;
-    uint64_t umq_client_recv_time_ns;
-
-    // --- Server Side Timestamps (纳秒) ---
-    uint64_t server_recv_time_ns;
-    uint64_t server_rsp_time_ns;
-    uint64_t umq_server_recv_time_ns;
-    uint64_t umq_server_rsp_time_ns;
-
-    uint64_t rtt; // 最终计算出的 RTT
 };
 
 struct __attribute__((packed)) CLIDelayHeader {

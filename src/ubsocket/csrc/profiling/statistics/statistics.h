@@ -1,6 +1,6 @@
 /*
  *Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- *Description: Provide the utility for umq buffer, iov, etc
+ *Description: Provide the statistics utility for ubsocket, etc
  *Author:
  *Create: 2025-09-20
  *Note:
@@ -31,17 +31,6 @@
 #include "core/ubsocket_socket_helper.h"
 #include "statistics_statsmgr.h"
 #include "under_api/dl_libc_api.h"
-#ifdef UMQ_BACKEND_ENABLED
-#include "core/umq/umq_eid_table.h"
-#include "core/umq/umq_setting.h"
-#include "core/umq/umq_socket.h"
-#include "profiling/probe/probe_manager.h"
-#include "umq_api.h"
-#include "umq_dfx_api.h"
-#include "umq_dfx_types.h"
-#include "umq_errno.h"
-#include "under_api/dl_umq_api.h"
-#endif
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
 #include "core/urma/urma_socket.h"
 #endif
@@ -53,11 +42,6 @@ using ock::ubs::LibcApi;
 using ock::ubs::ReadLocker;
 using ock::ubs::SocketConnHelper;
 using ock::ubs::SocketType;
-#ifdef UMQ_BACKEND_ENABLED
-using ock::ubs::UmqApi;
-using ock::ubs::umq::UmqSetting;
-using ock::ubs::umq::UmqSocket;
-#endif
 #ifdef URMA_DLOPEN_BACKEND_ENABLED
 using ock::ubs::urma::UrmaSocket;
 #endif
@@ -237,126 +221,11 @@ public:
                 return;
             }
             data->socketId = fd;
-#ifdef UMQ_BACKEND_ENABLED
-            ((UmqSocket *)sock)->GetSocketCLIData(data);
-#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
             static_cast<SocketBase *>(sock)->GetStatsMgr()->GetSocketCLIData(data);
-#endif
             data += 1;
             doneNum += 1;
         });
     }
-
-    void GetAllProbeData(std::vector<CLIProbeData> &outDataVec)
-    {
-#ifdef UMQ_BACKEND_ENABLED
-        Statistics::ProbeManager::GetInstance().GetCLIProbeData(outDataVec);
-#endif
-    }
-
-#ifdef UMQ_BACKEND_ENABLED
-    void GetAllFlowControlData(CLIFlowControlData *data, uint32_t sockNum)
-    {
-        uint32_t doneNum = 0;
-        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
-            if (doneNum >= sockNum) {
-                return;
-            }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
-                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
-                return;
-            }
-            data->socketId = fd;
-            ((UmqSocket *)sock)->GetSocketFlowControlData(data);
-            data += 1;
-            doneNum += 1;
-        });
-    }
-
-    void GetAllQbufPoolData(CLIQbufPoolData *data, uint32_t sockNum)
-    {
-        if (data == nullptr) {
-            return;
-        }
-        uint32_t doneNum = 0;
-        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
-            if (doneNum >= sockNum) {
-                return;
-            }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
-                return;
-            }
-            data->socketId = fd;
-            ((UmqSocket *)sock)->GetSocketQbufPoolData(data);
-            data += 1;
-            doneNum += 1;
-        });
-    }
-
-    void GetAllUmqInfoData(CLIUmqInfoData *data, uint32_t sockNum)
-    {
-        if (data == nullptr) {
-            return;
-        }
-        uint32_t doneNum = 0;
-        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
-            if (doneNum >= sockNum) {
-                return;
-            }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
-                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
-                return;
-            }
-            data->socketId = fd;
-            ((UmqSocket *)sock)->GetSocketUmqInfoData(data);
-            data += 1;
-            doneNum += 1;
-        });
-    }
-
-    void GetAllIoPacketData(CLIIoPacketData *data, uint32_t sockNum)
-    {
-        if (data == nullptr) {
-            return;
-        }
-        uint32_t doneNum = 0;
-        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
-            if (doneNum >= sockNum) {
-                return;
-            }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
-                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
-                return;
-            }
-            data->socketId = fd;
-            ((UmqSocket *)sock)->GetSocketIoPacketData(data);
-            data += 1;
-            doneNum += 1;
-        });
-    }
-
-    void GetAllUmqPerfData(CLIUmqPerfData *data, uint32_t sockNum)
-    {
-        if (data == nullptr) {
-            return;
-        }
-
-        uint32_t doneNum = 0;
-        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
-            if (doneNum >= sockNum) {
-                return;
-            }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP ||
-                sock->create_type_ == SOCK_CREATE_TYPE_LISTEN) {
-                return;
-            }
-            data->socketId = fd;
-            ((UmqSocket *)sock)->GetSocketUmqPerfData(data);
-            data += 1;
-            doneNum += 1;
-        });
-    }
-#endif /* UMQ_BACKEND_ENABLED */
 
     void Poll(void)
     {
@@ -456,28 +325,6 @@ public:
         }
     }
 
-#ifdef UMQ_BACKEND_ENABLED
-    void GetUmqPoolStats(CLIDataHeader &header)
-    {
-        uint64_t umqHandle = GetFirstUmqHandle();
-        if (umqHandle == UMQ_INVALID_HANDLE) {
-            UBS_VLOG_ERR("umqHandle is INVALID, skipping pool stats\n");
-            return;
-        }
-
-        umq_transport_pool_stats_t transportPoolStats{};
-        int poolGetRet = UmqApi::umq_stats_transport_pool_get(umqHandle, &transportPoolStats);
-        if (poolGetRet != 0) {
-            UBS_VLOG_ERR("umq_stats_transport_pool_get failed, ret: %d\n", poolGetRet);
-            return;
-        }
-
-        header.poolTotalNum = transportPoolStats.total_num;
-        header.poolAvailableNum = transportPoolStats.global_num + transportPoolStats.cache_num;
-        header.poolInUseNum = transportPoolStats.in_use_num;
-    }
-#endif /* UMQ_BACKEND_ENABLED */
-
     void ProcessStatRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
     {
         // collect socket count
@@ -496,13 +343,9 @@ public:
         CLIheader.connNum = StatsMgr::GetConnCount();
         CLIheader.activeConn = StatsMgr::GetActiveConnCount();
         CLIheader.reTxCount = StatsMgr::GetReTxCount();
-#ifdef UMQ_BACKEND_ENABLED
-        GetUmqPoolStats(CLIheader);
-#else
         CLIheader.poolTotalNum = 0;
         CLIheader.poolAvailableNum = 0;
         CLIheader.poolInUseNum = 0;
-#endif
         // collect data
         memcpy(msg.Data(), &CLIheader, headerSize);
 
@@ -521,309 +364,6 @@ public:
             return;
         }
     }
-
-#ifdef UMQ_BACKEND_ENABLED
-    void ProcessFlowControlRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
-    {
-        // collect socket count
-        uint32_t headerSize = sizeof(CLIDataHeader);
-        uint32_t sockNum = GetSockNum();
-        uint32_t sockDataSize = sockNum * sizeof(CLIFlowControlData);
-        uint32_t totalSize = headerSize + sockDataSize;
-        // malloc mem base on socket cnt
-        if (!msg.AllocateIfNeed(totalSize)) {
-            UBS_VLOG_ERR("Failed to alloc response memory\n");
-            return;
-        }
-        msg.ResetBuf();
-        CLIDataHeader CLIheader{};
-        CLIheader.socketNum = sockNum;
-        CLIheader.connNum = StatsMgr::GetConnCount();
-        CLIheader.activeConn = StatsMgr::GetActiveConnCount();
-        CLIheader.reTxCount = StatsMgr::GetReTxCount();
-        GetUmqPoolStats(CLIheader);
-        // collect data
-        memcpy(msg.Data(), &CLIheader, headerSize);
-
-        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
-        GetAllFlowControlData(reinterpret_cast<CLIFlowControlData *>(data), sockNum);
-        header.Reset();
-        header.mDataSize = totalSize;
-        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
-            sizeof(CLIControlHeader)) {
-            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
-            return;
-        }
-
-        if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            UBS_VLOG_ERR("Failed to send CLIFlowControlData\n");
-            return;
-        }
-    }
-
-    void ProcessProbeRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
-    {
-        // 1. 获取数据
-        std::vector<CLIProbeData> probeDataList;
-        GetAllProbeData(probeDataList);
-
-        uint32_t sockNum = static_cast<uint32_t>(probeDataList.size());
-
-        // 2. 计算大小并分配内存
-        uint32_t headerSize = sizeof(CLIProbeHeader);
-        uint32_t sockDataSize = sockNum * sizeof(CLIProbeData);
-        uint32_t totalSize = headerSize + sockDataSize;
-
-        if (!msg.AllocateIfNeed(totalSize)) {
-            UBS_VLOG_ERR("Failed to alloc response memory\n");
-            return;
-        }
-        msg.ResetBuf();
-
-        // 3. 填充 Header
-        CLIProbeHeader cliHeader{};
-        cliHeader.socketNum = sockNum;
-
-        // 拷贝 Header
-        memcpy(msg.Data(), &cliHeader, headerSize);
-
-        // 4. 填充 Data 利用 vector 的连续内存特性，可以直接内存拷贝
-        uint8_t *dataPtr = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIProbeHeader);
-
-        if (sockNum > 0) {
-            // 一次性把整个数组拷贝过去，效率最高
-            memcpy(dataPtr, probeDataList.data(), sockDataSize);
-        }
-
-        // 5. 发送数据
-        header.Reset();
-        header.mDataSize = totalSize;
-
-        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
-            sizeof(CLIControlHeader)) {
-            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
-            return;
-        }
-
-        if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            UBS_VLOG_ERR("Failed to send payload data\n");
-            return;
-        }
-    }
-
-    void ProcessTopoRequest(int fd, CLIControlHeader &header)
-    {
-        umq_route_key_t route{};
-        memcpy(route.src_bonding_eid.raw, header.srcEid, sizeof(route.src_bonding_eid.raw));
-        memcpy(route.dst_bonding_eid.raw, header.dstEid, sizeof(route.dst_bonding_eid.raw));
-        route.tp_type = UMQ_TP_TYPE_RTP;
-
-        umq_route_list_t route_list;
-        int ret = UmqApi::umq_get_route_list(&route, UMQ_TRANS_MODE_UB, &route_list);
-        if (ret != 0) {
-            UBS_VLOG_ERR("Failed to get urma topo\n");
-            return;
-        }
-        umq_route_list_t filteredList{};
-        uint32_t filterNum = 0;
-        for (uint32_t i = 0; i < route_list.route_num; ++i) {
-            filteredList.routes[filterNum++] = route_list.routes[i];
-        }
-
-        filteredList.route_num = filterNum;
-        if (filteredList.route_num == 0) {
-            UBS_VLOG_ERR("Failed to get urma topo is zero\n");
-            return;
-        }
-
-        if (SocketConnHelper::SendSocketData(fd, &filteredList, sizeof(umq_route_list_t),
-                                             LISTENER_SEND_RECV_TIMEOUT_MS) != sizeof(umq_route_list_t)) {
-            UBS_VLOG_ERR("Failed to send umq route list\n");
-        }
-
-        return;
-    }
-
-    void ProcessQbufPoolRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
-    {
-        // collect socket count
-        uint32_t headerSize = sizeof(CLIDataHeader);
-        uint32_t sockNum = GetSockNum();
-        uint32_t sockDataSize = sockNum * sizeof(CLIQbufPoolData);
-        uint32_t totalSize = headerSize + sockDataSize;
-        // malloc mem base on socket cnt
-        if (!msg.AllocateIfNeed(totalSize)) {
-            UBS_VLOG_ERR("Failed to alloc response memory\n");
-            return;
-        }
-        msg.ResetBuf();
-        CLIDataHeader CLIheader{};
-        CLIheader.socketNum = sockNum;
-        CLIheader.connNum = StatsMgr::GetConnCount();
-        CLIheader.activeConn = StatsMgr::GetActiveConnCount();
-        GetUmqPoolStats(CLIheader);
-        // collect data
-        memcpy(msg.Data(), &CLIheader, headerSize);
-
-        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
-        GetAllQbufPoolData(reinterpret_cast<CLIQbufPoolData *>(data), sockNum);
-        header.Reset();
-        header.mDataSize = totalSize;
-        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
-            sizeof(CLIControlHeader)) {
-            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
-            return;
-        }
-
-        if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            UBS_VLOG_ERR("Failed to send CLIQbufPoolData\n");
-            return;
-        }
-    }
-
-    void ProcessUmqInfoRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
-    {
-        // collect socket count
-        uint32_t headerSize = sizeof(CLIDataHeader);
-        uint32_t sockNum = GetSockNum();
-        uint32_t sockDataSize = sockNum * sizeof(CLIUmqInfoData);
-        uint32_t totalSize = headerSize + sockDataSize;
-        // malloc mem base on socket cnt
-        if (!msg.AllocateIfNeed(totalSize)) {
-            UBS_VLOG_ERR("Failed to alloc response memory\n");
-            return;
-        }
-        msg.ResetBuf();
-        CLIDataHeader CLIheader{};
-        CLIheader.socketNum = sockNum;
-        CLIheader.connNum = StatsMgr::GetConnCount();
-        CLIheader.activeConn = StatsMgr::GetActiveConnCount();
-        GetUmqPoolStats(CLIheader);
-        // collect data
-        memcpy(msg.Data(), &CLIheader, headerSize);
-
-        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
-        GetAllUmqInfoData(reinterpret_cast<CLIUmqInfoData *>(data), sockNum);
-        header.Reset();
-        header.mDataSize = totalSize;
-        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
-            sizeof(CLIControlHeader)) {
-            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
-            return;
-        }
-
-        if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            UBS_VLOG_ERR("Failed to send CLIUmqInfoData\n");
-            return;
-        }
-    }
-
-    void ProcessIoRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
-    {
-        // collect socket count
-        uint32_t headerSize = sizeof(CLIDataHeader);
-        uint32_t sockNum = GetSockNum();
-        uint32_t sockDataSize = sockNum * sizeof(CLIIoPacketData);
-        uint32_t totalSize = headerSize + sockDataSize;
-        // malloc mem base on socket cnt
-        if (!msg.AllocateIfNeed(totalSize)) {
-            UBS_VLOG_ERR("Failed to alloc response memory\n");
-            return;
-        }
-        msg.ResetBuf();
-        CLIDataHeader CLIheader{};
-        CLIheader.socketNum = sockNum;
-        CLIheader.connNum = StatsMgr::GetConnCount();
-        CLIheader.activeConn = StatsMgr::GetActiveConnCount();
-        GetUmqPoolStats(CLIheader);
-        // collect data
-        memcpy(msg.Data(), &CLIheader, headerSize);
-
-        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
-        GetAllIoPacketData(reinterpret_cast<CLIIoPacketData *>(data), sockNum);
-        header.Reset();
-        header.mDataSize = totalSize;
-        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
-            sizeof(CLIControlHeader)) {
-            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
-            return;
-        }
-
-        if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            UBS_VLOG_ERR("Failed to send CLIIoPacketData\n");
-            return;
-        }
-    }
-
-    void ProcessUmqRequest(int fd, CLIMessage &msg, CLIControlHeader &header)
-    {
-        // collect socket count
-        uint32_t headerSize = sizeof(CLIDataHeader);
-        uint32_t sockNum = GetSockNum();
-        uint32_t sockDataSize = sockNum * sizeof(CLIUmqPerfData);
-        uint32_t totalSize = headerSize + sockDataSize;
-        // malloc mem base on socket cnt
-        if (!msg.AllocateIfNeed(totalSize)) {
-            UBS_VLOG_ERR("Failed to alloc response memory\n");
-            return;
-        }
-        msg.ResetBuf();
-        CLIDataHeader CLIheader{};
-        CLIheader.socketNum = sockNum;
-        CLIheader.connNum = StatsMgr::GetConnCount();
-        CLIheader.activeConn = StatsMgr::GetActiveConnCount();
-        GetUmqPoolStats(CLIheader);
-        // collect data
-        memcpy(msg.Data(), &CLIheader, headerSize);
-
-        uint8_t *data = reinterpret_cast<uint8_t *>(msg.Data()) + sizeof(CLIDataHeader);
-        GetAllUmqPerfData(reinterpret_cast<CLIUmqPerfData *>(data), sockNum);
-        header.Reset();
-        header.mDataSize = totalSize;
-        if (SocketConnHelper::SendSocketData(fd, &header, sizeof(CLIControlHeader), LISTENER_SEND_RECV_TIMEOUT_MS) !=
-            sizeof(CLIControlHeader)) {
-            UBS_VLOG_ERR("Failed to send CLIControlHeader\n");
-            return;
-        }
-
-        if (SocketConnHelper::SendSocketData(fd, msg.Data(), totalSize, LISTENER_SEND_RECV_TIMEOUT_MS) != totalSize) {
-            UBS_VLOG_ERR("Failed to send CLIUmqPerfData\n");
-            return;
-        }
-    }
-
-    uint64_t GetFirstUmqHandle()
-    {
-        auto mainUmq =
-            umq::UmqEidTable::Instance().GetFirst(umq::UmqSetting::UMQ_LOCAL_EID, umq::UmqSetting::UMQ_UB_TRANS_MODE);
-        if (mainUmq != nullptr) {
-            uint64_t handle = mainUmq->GetUmqHandle();
-            UBS_VLOG_DEBUG("[GetFirstUmqHandle] got handle from UmqEidTable: %llu", (unsigned long long)handle);
-            return handle;
-        }
-
-        uint64_t result = UMQ_INVALID_HANDLE;
-        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *sock) {
-            if (result != UMQ_INVALID_HANDLE) {
-                return;
-            }
-            if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
-                return;
-            }
-            SocketPtr socketPtr(sock);
-            uint64_t umqh = GetMainUmqHandleFromSocket(socketPtr);
-            if (umqh != UMQ_INVALID_HANDLE) {
-                result = umqh;
-            }
-        });
-        return result;
-    }
-
-    uint64_t GetMainUmqHandleFromSocket(SocketPtr socket)
-    {
-        return static_cast<umq::UmqSocket *>(socket.Get())->UmqHandle();
-    }
-#endif /* UMQ_BACKEND_ENABLED */
 
     void Process(uint32_t events)
     {
@@ -864,23 +404,6 @@ public:
         } else if (header.mCmdId == CLICommand::DELAY) {
             ProcessDelayRequest(fd, msg, header);
         }
-#ifdef UMQ_BACKEND_ENABLED
-        else if (header.mCmdId == CLICommand::TOPO) {
-            ProcessTopoRequest(fd, header);
-        } else if (header.mCmdId == CLICommand::FLOW_CONTROL) {
-            ProcessFlowControlRequest(fd, msg, header);
-        } else if (header.mCmdId == CLICommand::QBUF_POOL) {
-            ProcessQbufPoolRequest(fd, msg, header);
-        } else if (header.mCmdId == CLICommand::UMQ_INFO) {
-            ProcessUmqInfoRequest(fd, msg, header);
-        } else if (header.mCmdId == CLICommand::IO) {
-            ProcessIoRequest(fd, msg, header);
-        } else if (header.mCmdId == CLICommand::UMQ) {
-            ProcessUmqRequest(fd, msg, header);
-        } else if (header.mCmdId == CLICommand::PROBE) {
-            ProcessProbeRequest(fd, msg, header);
-        }
-#endif
         return;
     }
 
@@ -965,15 +488,7 @@ protected:
                 if (sock == nullptr || sock->Type() == SocketType::SOCK_TYPE_TCP) {
                     return;
                 }
-#ifdef UMQ_BACKEND_ENABLED
-                UmqSocket *umqSock = (UmqSocket *)sock;
-                if (umqSock == nullptr) {
-                    return;
-                }
-                umqSock->OutputStats(m_oss);
-#elif defined(URMA_DLOPEN_BACKEND_ENABLED)
                 static_cast<SocketBase *>(sock)->GetStatsMgr()->OutputStats(fd, m_oss);
-#endif
             });
         }
         Statistics::Recorder::FillEmptyForm(m_oss);
@@ -991,13 +506,13 @@ protected:
  * avoid creating and occupying unnecessary memory when the statistic-related functionality is not enabled. */
 class GlobalStatsMgr final : public Listener {
 public:
-    static ALWAYS_INLINE GlobalStatsMgr *GetGlobalStatsMgr(const umq_trans_mode_t trans_mode)
+    static ALWAYS_INLINE GlobalStatsMgr *GetGlobalStatsMgr(const UbsTransMode trans_mode)
     {
         static GlobalStatsMgr mgr(trans_mode);
         return &mgr;
     }
 
-    static void GlobalStatsMgrEventLoop(const umq_trans_mode_t trans_mode)
+    static void GlobalStatsMgrEventLoop(const UbsTransMode trans_mode)
     {
         GlobalStatsMgr *mgr = GetGlobalStatsMgr(trans_mode);
         while (m_running) {
@@ -1012,7 +527,7 @@ public:
     }
 
 private:
-    explicit GlobalStatsMgr(umq_trans_mode_t trans_mode)
+    explicit GlobalStatsMgr(UbsTransMode trans_mode)
     {
         m_trans_mode = trans_mode;
         if (InternalEpollEnable() != 0) {
@@ -1039,7 +554,7 @@ private:
 
     std::thread *m_event_loop = nullptr;
     static volatile bool m_running;
-    umq_trans_mode_t m_trans_mode;
+    UbsTransMode m_trans_mode;
 };
 
 }; // namespace Statistics

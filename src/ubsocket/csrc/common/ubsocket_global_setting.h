@@ -100,9 +100,8 @@ public:
     static bool UBS_SPLIT_TRACE_ENABLED;               /* if enable split trace, from env */
     static uint32_t UBS_SPLIT_TRACE_BUF_CAPACITY;      /* split trace buffer capacity per socket, from env */
     static uint32_t UBS_SPLIT_TRACE_DRAIN_INTERVAL_MS; /* split trace drain interval in ms, from env */
-    static SplitTraceLevel UBS_SPLIT_TRACE_LEVEL;      /* split trace level 0 only ubsocket trace, 1 ubsocket and umq */
+    static SplitTraceLevel UBS_SPLIT_TRACE_LEVEL;      /* split trace level bitmask: ubsocket / urma */
     static bool UBS_CLI_ENABLED;
-    static bool UBS_PROBE_ENABLED;
     static bool UBS_INITED;                          /* if ubsocket initialized, from API */
     static std::string UBS_TRANS_MODE;               /* transport mode, from env */
     static ConnMode UBS_CONNECTS_MODE;               /* conn mode enum (server/client share one tier): SYNC | HALF_ASYNC(client falls back to SYNC) | FULL_ASYNC */
@@ -117,10 +116,8 @@ public:
     static uint32_t UBS_RX_DEPTH;                    /* rx queue depth, from env */
     static bool UBS_PROF_ENABLE;
     static std::string UBS_PROF_MODE; /* profiling mode: "fast" or "ext" */
-    static uint16_t UBS_PROF_DUMP_INTERVAL_MIN;
     static std::string UBS_PROF_DUMP_PATH;
-    static uint32_t UBS_PROBE_MS;
-    static uint32_t UBS_PROBE_BATCH;
+    static uint16_t UBS_PROF_DUMP_INTERVAL_MIN;
 
     static UBHandshakeMode UBS_HAND_SHAKE_MODE;
     static uint32_t UBS_CONNECTS_POLL_THREAD_NUM; /* unified conn-establishment thread count, shared by half-async ExecutorService and full-async ConnDispatcher */

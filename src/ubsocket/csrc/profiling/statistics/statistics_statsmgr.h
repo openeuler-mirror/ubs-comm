@@ -21,12 +21,15 @@
 #include <vector>
 
 #include "cli_message.h"
+#include "common/ubsocket_defines.h"
 #include "common/ubsocket_logger.h"
-#include "under_api/umq_api.h"
 
 #define RPC_VAR (2)
 
 namespace Statistics {
+
+using ock::ubs::UbsTransMode;
+
 class Recorder {
 public:
     const static uint32_t NAME_WIDTH_MAX = 30;
@@ -246,7 +249,7 @@ public:
         oss << "}" << "}";
     }
 
-    static void UpdateReTxCount(umq_trans_mode_t umq_trans_mode);
+    static void UpdateReTxCount(UbsTransMode trans_mode);
 
     // data plane interface, caller ensure input validation
     ALWAYS_INLINE void UpdateTraceStats(enum trace_stats_type type, uint32_t value)
