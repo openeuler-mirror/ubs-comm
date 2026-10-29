@@ -28,7 +28,7 @@
 | 项目 | 内容 |
 |------|------|
 | 需求 | UBSocket Server/Client 侧建链全异步化，统一共享 poll 线程池 + 两侧内联重活 |
-| 目标传输层 | URMA（`csrc/core/urma/`，当前活跃路径）；UMQ 后续按同模式扩展 |
+| 目标传输层 | URMA（`csrc/core/urma/`，唯一 UB 传输后端） |
 | Server 开关 | `ubsocket_server_async_enable`（`ServerAsyncEnabled()`） |
 | Client 开关 | `u_init_options_t::async_connector_enable`（bool，`AsyncConnectorEnabled()`） |
 | poll 线程数 | `GlobalSetting::UBS_CONN_POLL_THREAD_NUM`（env `UBSOCKET_CONN_POLL_THREAD_NUM`，默认 1），Server/Client 共用 |
@@ -100,7 +100,7 @@ eventfd 自旋保不丢、executor 线程与 poll 线程并发改同一 socket �
 | `UrmaServerConnOps` | urma | server 派生实现 |
 | `UrmaClientConnOps` | urma | client 派生实现 |
 
-依赖方向：通用层（`core/ubsocket_conn_*.{h,cpp}`）不得 `#include "urma/..."` / `"umq/..."`；具体实现经
+依赖方向：通用层（`core/ubsocket_conn_*.{h,cpp}`）不得 `#include "urma/..."`；具体实现经
 工厂 `SocketBase::CreateServerConnOps` / `CreateClientConnOps` 创建。
 
 ### 3.2 组件总览
@@ -609,7 +609,7 @@ stateDiagram-v2
 - **超时扫描不能依赖 `nfds == 0`**：必须按固定间隔（`kScanIntervalMs`）触发。
 - **版本不匹配**：发 4B `mismatch_version`（server 自身版本）后失败关闭；不能发 0。
 - **热路径不加日志**：poll 线程 `Execute()` / `HandleSocketFd` 是热路径，仅状态跃迁/错误处打日志。
-- **通用层依赖方向**：`core/ubsocket_conn_*.{h,cpp}` 不得引用 `urma/`、`umq/`，只能经工厂创建。
+- **通用层依赖方向**：`core/ubsocket_conn_*.{h,cpp}` 不得引用 `urma/`，只能经工厂创建。
 
 ## 10. 文件规划
 
@@ -638,7 +638,7 @@ stateDiagram-v2
 |------|------|
 | P0 | 泛化 `ConnReactorThread` / `ConnDispatcher` / `ConnEventFdTable` + 抽 `UBConnOpsBase` + `ConnStageResult` 去 `kHeavyPending` + 共享池启动/停止接入 + `UBS_SERVER_HANDLER_NUM` 重命名 + `InitWakeupEvent` 摘掉 `ServerAsyncEnabled` |
 | P1 | `UrmaServerConnOps` 去 `SubmitHeavyWork`、重活内联、去重活中间态 + 超时/close 策略下放 |
-| P2 | `UrmaClientConnOps` 接入共享池（见 Client 文档）+ `UmqServerConnOps` / `UmqClientConnOps` |
+| P2 | `UrmaClientConnOps` 接入共享池（见 Client 文档） |
 | P3 | 并发压测标定线程数 + 重活耗时打点 |
 
 ### 11.2 测试点

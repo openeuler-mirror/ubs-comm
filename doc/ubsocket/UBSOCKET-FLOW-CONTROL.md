@@ -29,14 +29,14 @@
 
 ## 3 参考
 ### 3.1 URMA流控算法
-当前`URMA`支持多种流控机制，参见 [over_urma/ubsocket-flow-control.md](over_urma/ubsocket-flow-control.md)，流控算法基于URMA流控机制设计，不同方案使用不同的URMA语义，可用的流控机制不同。比如`UMQ`使用`URMA`的双边消息，基于信用量流控(`credit`)。
+当前`URMA`支持多种流控机制，参见 [over_urma/ubsocket-flow-control.md](over_urma/ubsocket-flow-control.md)，流控算法基于URMA流控机制设计，不同方案使用不同的URMA语义，可用的流控机制不同。比如`UBSocket`使用`URMA`的双边消息，基于信用量流控(`credit`)。
 
 **流控机制对比总表**
 
 | 机制 | 层次 | 适用范围 | 触发条件 | 控制粒度 | 延迟影响 | 是否涉及网络 |
 |---|---|---|---|---|---|---|
 | RNR 重试 | 硬件链路层 | 所有操作 | 接收端 JFR 满 | 包级别 | 中等（ms 级） | ✅ RNR NACK |
-| 信用量流控 | 传输层 | UMQ 双边 SEND/RECV | 信用量耗尽 | 消息级别 | 低（μs 级） | ✅ IMM 消息 |
+| 信用量流控 | 传输层 | URMA 双边 SEND/RECV | 信用量耗尽 | 消息级别 | 低（μs 级） | ✅ IMM 消息 |
 | JFS/JFR Depth | 排队层 | 所有操作 | 队列满 | WR 级别 | 无（本地排队） | ❌ |
 | err_timeout | 链路层 | RC/RM 可靠模式 | 网络故障 | 连接级别 | 高（数百 ms） | ✅ ACK 超时 |
 | UMS 信用量 | 传输层 | UMS socket | 信用量耗尽 | 消息级别 | 低 | ✅ CDC 消息 |

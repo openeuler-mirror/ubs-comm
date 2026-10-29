@@ -1,5 +1,7 @@
 # URMA 独立编译与 umq 解耦方案
 
+> **注记（2026-10-20）**：umq 模块已于 `br_urma_remove_umq_20261020` 分支整体移除，ubsocket 收敛为 urma-only 后端。本文为历史记录，正文中 umq 相关内容仅作参考，不再反映当前代码状态。
+
 > 范围：`src/ubsocket/csrc/ubsocket.cpp` + `src/ubsocket/CMakeLists.txt` + `src/ubsocket/csrc/CMakeLists.txt` + `src/ubsocket/csrc/ubsocket_epoll.cpp` + `src/ubsocket/csrc/core/ubsocket_socket.cpp` + `src/ubsocket/csrc/core/ubsocket_event_epoll.cpp` + `src/ubsocket/csrc/core/ubsocket_tx_cqe_poller.cpp` + `src/ubsocket/csrc/common/ubsocket_lock.cpp` + `src/ubsocket/csrc/profiling/probe/*` + `src/ubsocket/csrc/profiling/statistics/*` + `src/ubsocket/csrc/cli/*` + `src/ubsocket/csrc/under_api/dl_umq_api.h` + `build/build_umq_and_ubsocket.sh`
 > 分支：`br_urma_rw_0728`
 > 状态：方案待实施（已确认决策，未落地代码）

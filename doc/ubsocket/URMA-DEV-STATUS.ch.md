@@ -1,5 +1,7 @@
 # URMA 传输层开发现状与待办
 
+> **注记（2026-10-20）**：umq 模块已于 `br_urma_remove_umq_20261020` 分支整体移除，ubsocket 收敛为 urma-only 后端。本文为历史记录，正文中 umq 相关对照内容仅作参考，不再反映当前代码状态。
+
 > 范围：`src/ubsocket/csrc/core/urma/` 下 `urma_backend.cpp`、`urma_setting.cpp`、`urma_socket.cpp` 三个文件。
 > 对照基准：`src/ubsocket/csrc/core/umq/` 下已完整实现的同名/同职能文件。
 > 用途：供后续 URMA 传输层快速开发认领与排期。
