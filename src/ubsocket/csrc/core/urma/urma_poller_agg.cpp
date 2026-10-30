@@ -82,6 +82,24 @@ Result UrmaDedicatedJfcAggPoller::poll() noexcept
     urma_cr_t crs[POLL_BATCH_SIZE]{};
 
     uint32_t jfc_cnt = jfc_vector_.size();
+    constexpr uint32_t MAX_JFC_CNT = 16; /* aligned with UrmaAggPollerSet::VerifyOptions limit */
+    uint32_t wait_cnt = jfc_cnt < MAX_JFC_CNT ? jfc_cnt : MAX_JFC_CNT;
+    urma_jfc_t *ev_jfc[MAX_JFC_CNT]{};
+    uint32_t ack[MAX_JFC_CNT];
+    for (auto &ackCnt : ack) {
+        ackCnt = 1;
+    }
+
+    auto jfce_cnt = UrmaApi::urma_wait_jfc(jfce_->GetRawJfce(), wait_cnt, 0, ev_jfc);
+    if (UNLIKELY(jfce_cnt < 0)) {
+        UBS_VLOG_ERR("wait jfc failed return: %d, errno: %d", jfce_cnt, errno);
+        return UBS_ERROR;
+    }
+    if (jfce_cnt == 0) {
+        return UBS_OK; /* nothing pending: fd is clear until the next completion re-fires it */
+    }
+    UrmaApi::urma_ack_jfc(ev_jfc, ack, static_cast<uint32_t>(jfce_cnt));
+
     for (uint32_t i = 0; i < jfc_cnt; ++i) {
         jfc_vector_[i]->Rearm(false);
     }
