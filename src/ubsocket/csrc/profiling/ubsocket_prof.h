@@ -85,11 +85,18 @@ enum ProfilingTPId : uint32_t {
     UBSOCKET_PROF_COUNT,
 };
 
+/* extra prof type: none or urma (底层库性能统计) */
+typedef enum {
+    EXTRA_PROF_NONE = 0, /* 不启用额外性能统计 */
+    EXTRA_PROF_URMA = 1, /* 启用 urma 库性能统计 */
+} extra_prof_type_t;
+
 typedef struct {
     uint32_t tracepoint_count;  /* how many trace points to be recorded */
     int32_t enable_dump;        /* dump to file or not */
     const char *dump_file_path; /* dump file path */
     uint16_t dump_interval_min; /* dump interval in min */
+    extra_prof_type_t extra_prof_type; /* 额外性能统计类型 */
 } ubsocket_prof_option_t;
 
 int ubsocket_prof_init(ubsocket_prof_option_t *option);
@@ -188,6 +195,15 @@ static __always_inline uint64_t ubsocket_get_timeNs()
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+#include <ostream>
+/*
+ * 获取额外性能统计信息（如 urma 库统计），直接写入 stream，避免中间 buffer 拷贝
+ * 内部执行: stop_perf → get_perf_info → start_perf（重启统计）
+ */
+void ubsocket_prof_get_extra_info_stream(std::ostream &os);
 #endif
 
 #endif // UBS_COMM_UBSOCKET_PROFILING_H

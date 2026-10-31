@@ -75,7 +75,7 @@ UBS_API int UB_API_WRAP(epoll_wait)(int epfd, struct epoll_event *events, int ma
         return -1;
     }
 
-    EventPollPtr eventPoll = ArraySet<EventPoll>::GetInstance().GetItem(epfd);
+    EventPoll *eventPoll = ArraySet<EventPoll>::GetInstance().GetRawItem(epfd);
     if (UNLIKELY(eventPoll == nullptr)) {
         UBS_VLOG_ERR("event poll can not been find, epoll fd: %d\n", epfd);
         errno = EBADF;
