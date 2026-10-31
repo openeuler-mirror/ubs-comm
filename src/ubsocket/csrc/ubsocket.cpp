@@ -170,8 +170,13 @@ UBS_API int ubsocket_init(u_init_options_t *options)
     std::signal(SIGUSR2, ubsocket_handle_signal);
 
     if (GlobalSetting::UBS_PROF_ENABLE) {
+#ifdef URMA_DLOPEN_BACKEND_ENABLED
+        auto extraProfType = UrmaApi::IsLoaded() ? EXTRA_PROF_URMA : EXTRA_PROF_NONE;
+#else
+        auto extraProfType = EXTRA_PROF_NONE;
+#endif
         result = Profiling::Init(ProfilingTPId::UBSOCKET_PROF_COUNT, GlobalSetting::UBS_PROF_DUMP_PATH.c_str(),
-                                 GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN);
+                                 GlobalSetting::UBS_PROF_DUMP_INTERVAL_MIN, extraProfType);
         if (result != UBS_OK) {
             UBS_VLOG_WARN("Profiling is not initialize \n");
         }

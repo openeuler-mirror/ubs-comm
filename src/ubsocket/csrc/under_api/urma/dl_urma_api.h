@@ -181,6 +181,10 @@ using urma_get_dmac_api = urma_status_t (*)(const urma_context_t *ctx, const urm
 
 using urma_get_perf_info_api = urma_status_t (*)(char *perf_buf, uint32_t *length);
 
+using urma_start_perf_api = urma_status_t (*)(void);
+
+using urma_stop_perf_api = urma_status_t (*)(void);
+
 class UrmaApi {
 public:
     static Result Load() noexcept;
@@ -830,6 +834,16 @@ public:
         return urma_get_perf_info_ptr(perf_buf, length);
     }
 
+    static urma_status_t urma_start_perf(void)
+    {
+        return urma_start_perf_ptr();
+    }
+
+    static urma_status_t urma_stop_perf(void)
+    {
+        return urma_stop_perf_ptr();
+    }
+
 private:
     DL_API_DECLARE(urma_init);
     DL_API_DECLARE(urma_uninit);
@@ -968,6 +982,8 @@ private:
     DL_API_DECLARE(urma_get_smac);
     DL_API_DECLARE(urma_get_dmac);
     DL_API_DECLARE(urma_get_perf_info);
+    DL_API_DECLARE(urma_start_perf);
+    DL_API_DECLARE(urma_stop_perf);
 
 private:
     static void UnLoadInner() noexcept;

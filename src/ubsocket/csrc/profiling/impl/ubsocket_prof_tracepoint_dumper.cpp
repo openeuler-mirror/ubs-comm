@@ -19,6 +19,12 @@ void DumpThread::DumpData() noexcept
     std::ostringstream oss;
     WriteDumpTitle(oss);
     Tracer::Instance().Combine(oss);
+
+    /* 追加额外性能统计信息（如 urma 库统计），直接写入 stream 避免中间 buffer */
+    oss << "\n--- Extra Perf Info ---\n";
+    ubsocket_prof_get_extra_info_stream(oss);
+    oss << "\n";
+
     if (WriteDumpData(oss) != 0) {
         UBS_VLOG_WARN("Profiling data write skipped, please check path and permissions.\n");
         return;

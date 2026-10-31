@@ -65,6 +65,14 @@ public:
         return Ref<T>(set_obj_[idx].load(std::memory_order_acquire));
     }
 
+    ALWAYS_INLINE T *GetRawItem(int idx)
+    {
+        if (idx < 0 || static_cast<uint32_t>(idx) >= capacity_) {
+            return nullptr;
+        }
+        return set_obj_[idx].load(std::memory_order_acquire);
+    }
+
     Ref<T> OverrideItem(int idx, T *new_item)
     {
         if (idx < 0 || static_cast<uint32_t>(idx) >= capacity_) {
