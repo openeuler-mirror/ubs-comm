@@ -1,4 +1,4 @@
-option(BUILD_HCOM "Build hcom" OFF)
+option(BUILD_HCOM "Build hcom" ON)
 option(BUILD_UBSOCKET "Build ubsocket" ON)
 
 if(BUILD_HCOM)
