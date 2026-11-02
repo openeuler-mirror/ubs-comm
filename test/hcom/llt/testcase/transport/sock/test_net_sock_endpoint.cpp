@@ -950,14 +950,7 @@ TEST_F(TestNetSockEndpoint, SyncPostReadWriteSglRetry)
 
 int SockValidateTlsCert()
 {
-    char *buffer;
-    if ((buffer = getcwd(NULL, 0)) == NULL) {
-        NN_LOG_ERROR("Cet path for TLS cert failed");
-        return -1;
-    }
-
-    std::string currentPath = buffer;
-    certPath1 = currentPath + "/../test/hcom/opensslcrt/normalCert1";
+    certPath1 = HCOM_TEST_OPENSSLCRT_DIR "/normalCert1";
 
     if (!CanonicalPath(certPath1)) {
         NN_LOG_ERROR("TLS cert path check failed " << certPath1);

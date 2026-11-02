@@ -9,7 +9,10 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include <arpa/inet.h>
 #include <gtest/gtest.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
 #include <cstdint>
 #include <mockcpp/mockcpp.hpp>
 
@@ -46,6 +49,7 @@ void TestHcomServiceImp::TearDown()
 {
     if (service != nullptr) {
         delete service;
+        service = nullptr;
     }
     GlobalMockObject::verify();
 }
@@ -992,6 +996,185 @@ TEST_F(TestHcomServiceImp, TestServiceConnectFailed)
         .then(returnValue(static_cast<int>(SER_OK)));
     EXPECT_EQ(service->Connect("tcp://" + serviceIpInfo + ":" + oobPort, ch, opt),
               static_cast<int>(SER_CHANNEL_ID_DUP));
+}
+
+TEST_F(TestHcomServiceImp, TestServiceSetOptions4)
+{
+    service->SetEnableMemPoolThreadCache(false);
+    service->SetDeviceIpMask({serviceIpInfo});
+    service->SetDeviceIpGroups({serviceIpInfo});
+    service->SetUbcMode(UBSHcomUbcMode::LowLatency);
+    service->SetTcpEpollMode(true);
+
+    service->SetCtxStoreCapacity(NN_NO128);
+    service->SetCtxStoreCapacity(NN_NO16777216);
+    service->SetCtxStoreCapacity(NN_NO64); // 非法值，保持上次配置
+    EXPECT_EQ(service->mOptions.ctxStoreCapacity, static_cast<uint32_t>(NN_NO16777216));
+
+    service->SetUbPriority(NN_NO15);
+    EXPECT_EQ(service->mOptions.ubPriority, static_cast<uint32_t>(NN_NO15));
+    service->SetUbPriority(NN_NO16); // 非法值，保持上次配置
+    EXPECT_EQ(service->mOptions.ubPriority, static_cast<uint32_t>(NN_NO15));
+
+    // 已启动时不允许修改
+    service->mStarted = true;
+    service->SetCtxStoreCapacity(NN_NO128);
+    EXPECT_EQ(service->mOptions.ctxStoreCapacity, static_cast<uint32_t>(NN_NO16777216));
+    service->SetUbPriority(NN_NO0);
+    EXPECT_EQ(service->mOptions.ubPriority, static_cast<uint32_t>(NN_NO15));
+    service->mStarted = false;
+
+    service->SetActiveBackup(true);
+    EXPECT_TRUE(service->mOptions.activateBackup);
+    service->SetActiveBackup(false);
+    EXPECT_FALSE(service->mOptions.activateBackup);
+    g_is_activate_backup = false;
+}
+
+TEST_F(TestHcomServiceImp, TestServiceForceStop)
+{
+    NetDriverPtr driverPtr = new (std::nothrow) NetDriverRDMAWithOob(name, false, RDMA);
+    service->mDriverPtrs.push_back(driverPtr);
+    MOCKER_CPP_VIRTUAL(*(driverPtr.Get()), &UBSHcomNetDriver::Stop).stubs();
+    MOCKER_CPP_VIRTUAL(*(driverPtr.Get()), &UBSHcomNetDriver::UnInitialize).stubs();
+    MOCKER_CPP(&UBSHcomNetDriver::DestroyInstance).stubs().will(returnValue(static_cast<int>(NN_OK)));
+
+    InnerConnectOptions opt{};
+    UBSHcomChannelPtr ch = new (std::nothrow) HcomChannelImp(0, false, opt);
+    ASSERT_NE(ch.Get(), nullptr);
+    service->mChannelMap.emplace("channel-1", ch);
+    MOCKER_CPP_VIRTUAL(*(ch.Get()), &UBSHcomChannel::UnInitialize).stubs();
+    NetMemPoolFixedOptions poolOptions = {};
+    service->mContextMemPool = new (std::nothrow) NetMemPoolFixed("ServiceContextTimer-force-stop", poolOptions);
+    service->mPeriodicMgr = new (std::nothrow) HcomPeriodicManager(NN_NO1, name);
+    MOCKER_CPP(&HcomPeriodicManager::Stop).stubs();
+    service->mPgtable = new NetPgTable(HcomServiceImp::pgdAlloc, HcomServiceImp::pgdFree);
+    MOCKER_CPP(&PgTable::Cleanup).stubs();
+    service->mStarted = true;
+
+    EXPECT_NO_FATAL_FAILURE(service->ForceStop());
+    EXPECT_TRUE(service->mDriverPtrs.empty());
+    EXPECT_TRUE(service->mChannelMap.empty());
+    EXPECT_EQ(service->mPeriodicMgr.Get(), nullptr);
+    EXPECT_EQ(service->mContextMemPool.Get(), nullptr);
+    EXPECT_EQ(service->mPgtable.Get(), nullptr);
+    EXPECT_FALSE(service->mStarted);
+
+    ch.Set(nullptr);
+}
+
+TEST_F(TestHcomServiceImp, TestServiceImportUrmaSeg)
+{
+    UBSHcomMemoryKey key{};
+    uintptr_t address = reinterpret_cast<uintptr_t>(&key);
+    EXPECT_EQ(service->ImportUrmaSeg(address, NN_NO1024, key), static_cast<int>(NN_ERROR));
+
+    NetDriverPtr driverPtr = new (std::nothrow) NetDriverRDMAWithOob(name, false, RDMA);
+    service->mDriverPtrs.push_back(driverPtr);
+    MOCKER_CPP_VIRTUAL(*(driverPtr.Get()), &UBSHcomNetDriver::Stop).stubs();
+    MOCKER_CPP_VIRTUAL(*(driverPtr.Get()), &UBSHcomNetDriver::UnInitialize).stubs();
+    MOCKER_CPP_VIRTUAL(*(driverPtr.Get()), &UBSHcomNetDriver::ImportUrmaSeg,
+                       NResult(UBSHcomNetDriver::*)(uintptr_t, uint64_t, uint64_t, void **, uint8_t *, uint32_t))
+        .stubs()
+        .will(returnValue(static_cast<int>(NN_ERROR)))
+        .then(returnValue(static_cast<int>(NN_OK)));
+
+    EXPECT_EQ(service->ImportUrmaSeg(address, NN_NO1024, key), static_cast<int>(NN_ERROR));
+    EXPECT_EQ(service->ImportUrmaSeg(address, NN_NO1024, key), static_cast<int>(NN_OK));
+    EXPECT_EQ(key.tokens[0], static_cast<uint64_t>(NN_NO0));
+}
+
+UBSHcomNetDriver *g_mockMultiRailDriver = nullptr;
+
+SerResult MockChooseDriverSetDriver(OOBTCPConnection &conn, UBSHcomNetDriver *&driver)
+{
+    driver = g_mockMultiRailDriver;
+    return SER_OK;
+}
+
+TEST_F(TestHcomServiceImp, TestServiceNewConnectionCB)
+{
+    NetDriverPtr driverPtr = new (std::nothrow) NetDriverRDMAWithOob(name, false, RDMA);
+    service->mDriverPtrs.push_back(driverPtr);
+    MOCKER_CPP_VIRTUAL(*(driverPtr.Get()), &UBSHcomNetDriver::Stop).stubs();
+    MOCKER_CPP_VIRTUAL(*(driverPtr.Get()), &UBSHcomNetDriver::UnInitialize).stubs();
+    OOBTCPConnection conn(NN_NO6);
+    MOCKER_CPP(&HcomServiceImp::ChooseDriver)
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_INVALID_PARAM)))
+        .then(invoke(MockChooseDriverSetDriver));
+    MOCKER_CPP_VIRTUAL(*(driverPtr.Get()), &UBSHcomNetDriver::MultiRailNewConnection)
+        .stubs()
+        .will(returnValue(static_cast<int>(SER_OK)));
+
+    EXPECT_EQ(service->NewConnectionCB(conn), static_cast<int>(SER_INVALID_PARAM));
+    g_mockMultiRailDriver = driverPtr.Get();
+    EXPECT_EQ(service->NewConnectionCB(conn), static_cast<int>(SER_OK));
+    g_mockMultiRailDriver = nullptr;
+}
+
+int MockGetIfAddrsLoopback(struct ifaddrs **ifap)
+{
+    static struct sockaddr_in loopbackAddr = {};
+    static struct ifaddrs loopbackEntries[NN_NO2] = {};
+
+    loopbackAddr.sin_family = AF_INET;
+    loopbackAddr.sin_addr.s_addr = inet_addr(serviceIpInfo.c_str());
+    loopbackEntries[0].ifa_next = &loopbackEntries[NN_NO1];
+    loopbackEntries[0].ifa_addr = reinterpret_cast<struct sockaddr *>(&loopbackAddr);
+    loopbackEntries[NN_NO1].ifa_next = nullptr;
+    loopbackEntries[NN_NO1].ifa_addr = nullptr;
+    *ifap = loopbackEntries;
+    return 0;
+}
+
+TEST_F(TestHcomServiceImp, TestServiceGetFilteredDeviceIP)
+{
+    EXPECT_TRUE(service->GetFilteredDeviceIP("").empty());
+    EXPECT_TRUE(service->GetFilteredDeviceIP("invalid-mask").empty());
+
+    // 网卡枚举是环境相关的系统调用，打桩保证结果确定；FilterIp 末尾会调用 freeifaddrs，必须同步打桩
+    MOCKER(::getifaddrs).stubs().will(invoke(MockGetIfAddrsLoopback));
+    MOCKER(::freeifaddrs).stubs();
+    EXPECT_EQ(service->GetFilteredDeviceIP(serviceIpInfo + "/32"), serviceIpInfo);
+}
+
+TEST_F(TestHcomServiceImp, TestServiceGetFilteredDeviceIPFail)
+{
+    MOCKER(::getifaddrs).stubs().will(returnValue(static_cast<int>(NN_NOF1)));
+    EXPECT_TRUE(service->GetFilteredDeviceIP(serviceIpInfo + "/32").empty());
+}
+
+TEST_F(TestHcomServiceImp, TestServiceSecInfoCacheReuse)
+{
+    uint32_t providerCount = 0;
+    uint32_t validatorCount = 0;
+    service->mOptions.connSecOption.provider = [&providerCount](uint64_t ctx, int64_t &flag,
+                                                                UBSHcomNetDriverSecType &type, char *&output,
+                                                                uint32_t &outLen, bool &needAutoFree) {
+        ++providerCount;
+        return 0;
+    };
+    service->mOptions.connSecOption.validator = [&validatorCount](uint64_t ctx, int64_t flag, const char *input,
+                                                                  uint32_t inputLen) {
+        ++validatorCount;
+        return 0;
+    };
+
+    int64_t flag = 0;
+    UBSHcomNetDriverSecType type = UBSHcomNetDriverSecType::NET_SEC_VALID_ONE_WAY;
+    char *output = nullptr;
+    uint32_t outLen = 0;
+    bool needAutoFree = false;
+    ASSERT_EQ(service->ServiceSecInfoProvider(NN_NO1, flag, type, output, outLen, needAutoFree), 0);
+    ASSERT_EQ(providerCount, static_cast<uint32_t>(NN_NO1));
+    ASSERT_EQ(service->ServiceSecInfoProvider(NN_NO1, flag, type, output, outLen, needAutoFree), 0);
+    ASSERT_EQ(providerCount, static_cast<uint32_t>(NN_NO1));
+
+    ASSERT_EQ(service->ServiceSecInfoValidator(NN_NO1, flag, nullptr, NN_NO0), 0);
+    ASSERT_EQ(validatorCount, static_cast<uint32_t>(NN_NO1));
+    ASSERT_EQ(service->ServiceSecInfoValidator(NN_NO1, flag, nullptr, NN_NO0), 0);
+    ASSERT_EQ(validatorCount, static_cast<uint32_t>(NN_NO1));
 }
 } // namespace hcom
 } // namespace ock

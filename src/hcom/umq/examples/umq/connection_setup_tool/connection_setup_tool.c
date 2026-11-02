@@ -112,6 +112,11 @@ static int init_umq(struct urpc_example_config *cfg)
     init_cfg->feature = cfg->feature;
     init_cfg->flow_control.use_atomic_window = true;
     init_cfg->flow_control.initial_credit = TOOL_INITIAL_CREDIT;
+    init_cfg->buf_pool_cfg.small_block_size = BLOCK_SIZE_4K;
+    init_cfg->buf_pool_cfg.size_class_count = 3;
+    init_cfg->buf_pool_cfg.explicit_block_sizes[0] = 4096;
+    init_cfg->buf_pool_cfg.explicit_block_sizes[1] = 32768;
+    init_cfg->buf_pool_cfg.explicit_block_sizes[2] = 131072;
 
     if (cfg->instance_mode == SERVER) {
         if (parse_m_trans_info(cfg, init_cfg) != 0) {

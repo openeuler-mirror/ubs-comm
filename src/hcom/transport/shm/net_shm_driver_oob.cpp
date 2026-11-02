@@ -137,6 +137,10 @@ void NetDriverShmWithOOB::UnInitialize()
 
     UnInitializeInner();
     mInited = false;
+
+    /* the mr handle map belongs to this driver, clear it so that the handles are released before the driver dies */
+    mMrHandleMap.ClearLocalMap();
+    mMrHandleMap.ClearRemoteMap();
 }
 
 NResult NetDriverShmWithOOB::ValidateOptions()
@@ -189,6 +193,10 @@ NResult NetDriverShmWithOOB::CreateWorkerResource()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NextPower2(sizeof(ShmOpCompInfo));
     options.tcExpandBlkCnt = NN_NO64;
+    // per-thread cache switch, see UBSHcomServiceOptions::enableMemPoolThreadCache
+    options.tlsPolicy.enabled = mMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
+    options.tlsPolicy.flushMs = 0;
     mOpCompMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mOpCompMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for op completion info pool in driver "
@@ -203,6 +211,10 @@ NResult NetDriverShmWithOOB::CreateWorkerResource()
         return result;
     }
 
+    // per-thread cache switch, see UBSHcomServiceOptions::enableMemPoolThreadCache
+    options.tlsPolicy.enabled = mMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
+    options.tlsPolicy.flushMs = 0;
     mOpCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mOpCtxMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for op ctx info pool in driver " << mName
@@ -220,6 +232,10 @@ NResult NetDriverShmWithOOB::CreateWorkerResource()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NO512; // the sgl context is 448, not power of 2, set to the closest num 512
     options.tcExpandBlkCnt = NN_NO64;
+    // per-thread cache switch, see UBSHcomServiceOptions::enableMemPoolThreadCache
+    options.tlsPolicy.enabled = mMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
+    options.tlsPolicy.flushMs = 0;
     mSglCompMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mSglCompMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for sgl op context in driver " << mName
@@ -394,8 +410,9 @@ NResult NetDriverShmWithOOB::Start()
     }
 
     if ((result = mDelayReleaseTimer->Start()) != NN_OK) {
-        ClearWorkers();
+        /* the keeper still holds channels referencing the workers, it must be stopped before the workers die */
         mChannelKeeper->Stop();
+        ClearWorkers();
         return result;
     }
 
@@ -420,7 +437,7 @@ void NetDriverShmWithOOB::ClearShmLeftFile()
             continue;
         }
 
-        auto tmpFd = shm_open(ent->d_name, O_CREAT | O_RDWR, NN_NO400);
+        auto tmpFd = shm_open(ent->d_name, O_RDONLY, 0);
         if (NN_UNLIKELY(tmpFd < 0)) {
             continue;
         }
@@ -812,7 +829,7 @@ void NetDriverShmWithOOB::HandleKeeperMsgGetMrFd(const ShmChKeeperMsgHeader &hea
         return;
     }
 
-    ShmHandlePtr shmHandle = ShmMRHandleMap::GetInstance().GetFromLocalMap(lKey);
+    ShmHandlePtr shmHandle = mMrHandleMap.GetFromLocalMap(lKey);
     if (shmHandle.Get() == nullptr) {
         NN_LOG_ERROR("Get shmHandle from local map failed");
         return;
@@ -1011,7 +1028,7 @@ NResult NetDriverShmWithOOB::ConnectSyncEp(const std::string &oobIp, uint16_t oo
     /* create ep */
     const UBSHcomNetWorkerIndex netWorkerIndex{};
     UBSHcomNetEndpointPtr newEp = new (std::nothrow)
-        NetSyncEndpointShm(ch->Id(), ch.Get(), this, netWorkerIndex, shmEp.Get(), ShmMRHandleMap::GetInstance());
+        NetSyncEndpointShm(ch->Id(), ch.Get(), this, netWorkerIndex, shmEp.Get(), mMrHandleMap);
     if (NN_UNLIKELY(newEp.Get() == nullptr)) {
         NN_LOG_ERROR("Failed to new async shm ep in driver " << mName << ", probably out of memory");
         return NN_NEW_OBJECT_FAILED;
@@ -1105,7 +1122,7 @@ NResult NetDriverShmWithOOB::CreateMemoryRegion(uint64_t size, UBSHcomNetMemoryR
         return NN_INVALID_PARAM;
     }
 
-    ShmMRHandleMap::GetInstance().AddToLocalMap(static_cast<uint32_t>(tmp->mLKey), tmp->GetMrHandle());
+    mMrHandleMap.AddToLocalMap(static_cast<uint32_t>(tmp->mLKey), tmp->GetMrHandle());
 
     mr.Set(static_cast<UBSHcomNetMemoryRegion *>(tmp));
 
@@ -1311,7 +1328,7 @@ NResult NetDriverShmWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
 
     /* create ep */
     UBSHcomNetEndpointPtr newEp = new (std::nothrow)
-        NetAsyncEndpointShm(ch->Id(), ch.Get(), worker, this, worker->Index(), ShmMRHandleMap::GetInstance());
+        NetAsyncEndpointShm(ch->Id(), ch.Get(), worker, this, worker->Index(), mMrHandleMap);
     if (NN_UNLIKELY(newEp.Get() == nullptr)) {
         NN_LOG_ERROR("Failed to new async shm ep in driver " << mName << ", probably out of memory");
         return NN_NEW_OBJECT_FAILED;
@@ -1546,7 +1563,7 @@ NResult NetDriverShmWithOOB::Connect(const std::string &oobIp, uint16_t oobPort,
 
     /* create ep */
     UBSHcomNetEndpointPtr newEp = new (std::nothrow)
-        NetAsyncEndpointShm(ch->Id(), ch.Get(), worker, this, worker->Index(), ShmMRHandleMap::GetInstance());
+        NetAsyncEndpointShm(ch->Id(), ch.Get(), worker, this, worker->Index(), mMrHandleMap);
     if (NN_UNLIKELY(newEp.Get() == nullptr)) {
         NN_LOG_ERROR("Failed to new async shm ep in driver " << mName << ", probably out of memory");
         return NN_NEW_OBJECT_FAILED;
@@ -1622,6 +1639,11 @@ void NetDriverShmWithOOB::DestroyMemoryRegion(UBSHcomNetMemoryRegionPtr &mr)
         return;
     }
     mMrChecker.UnRegister(mr->GetLKey());
+    /* the entry must be removed when the mr is destroyed, otherwise the map keeps the handle and its fd alive */
+    auto lKey = mr->GetLKey();
+    if (lKey <= UINT32_MAX) {
+        mMrHandleMap.RemoveFromLocalMap(static_cast<uint32_t>(lKey));
+    }
     mr->UnInitialize();
 }
 } // namespace hcom

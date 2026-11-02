@@ -166,9 +166,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
 
 # add header path and add source files
-set(HCOM_SRC_DIR ${CMAKE_SOURCE_DIR})
-set(HCOM_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/dist)
-set(HCOM_BUILD_PATH ${CMAKE_SOURCE_DIR}/build)
+get_filename_component(HCOM_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+set(HCOM_OUTPUT_PATH ${HCOM_SRC_DIR}/dist)
+set(HCOM_BUILD_PATH ${HCOM_SRC_DIR}/build)
 set(HCOM_SRC_INCLUDE_PATH
     ${HCOM_SRC_DIR}/src/hcom/under_api/verbs
     ${HCOM_SRC_DIR}/src/hcom/under_api/urma
@@ -190,6 +190,7 @@ set(HCOM_SRC_INCLUDE_PATH
 )
 
 file(GLOB_RECURSE HCOM *.cpp *.h)
+list(FILTER HCOM EXCLUDE REGEX "umq/build/")
 
 file(GLOB HCOM_RDMA_COMMON "${HCOM_SRC_DIR}/src/hcom/transport/rdma/*")
 file(GLOB_RECURSE HCOM_RDMA_SRCS
@@ -202,6 +203,7 @@ file(GLOB_RECURSE HCOM_UB_SRCS
     "${HCOM_SRC_DIR}/src/hcom/transport/ub/*"
     "${HCOM_SRC_DIR}/src/hcom/under_api/urma/*")
 file(GLOB_RECURSE HCOM_MULTICAST_SRCS "${HCOM_SRC_DIR}/src/hcom/multicast/*")
+file(GLOB HCOM_MULTICAST_CAPI_SRCS "${HCOM_SRC_DIR}/src/hcom/api/capi_v2/hcom_multicast_c.*")
 
 if(NOT BUILD_WITH_RDMA)
     list(REMOVE_ITEM HCOM ${HCOM_RDMA_COMMON})
@@ -222,6 +224,7 @@ endif ()
 
 if (NOT BUILD_WITH_MULTICAST)
     list(REMOVE_ITEM HCOM ${HCOM_MULTICAST_SRCS})
+    list(REMOVE_ITEM HCOM ${HCOM_MULTICAST_CAPI_SRCS})
 endif ()
 add_library(hcom_static_obj STATIC ${HCOM})
 target_link_libraries(hcom_static_obj
@@ -273,6 +276,7 @@ set(TARGET_INSTALL_LIB ${CMAKE_INSTALL_PREFIX}/lib)
 
 if (${BUILD_WITH_MULTICAST})
     file(GLOB MULTICAST_INCLUDE_HEADERS multicast/include/multicast*.h)
+    list(APPEND C_INCLUDE_HEADERS api/capi_v2/hcom_multicast_c.h)
 endif ()
 
 install(FILES ${INCLUDE_HEADERS} DESTINATION ${TARGET_INSTALL_INCLUDE} PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ)

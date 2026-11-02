@@ -131,7 +131,9 @@ SResult Sock::SetSockOption(const SockWorkerOptions &workerOptions)
             NN_LOG_ERROR("send buffer size should be greater than 0 for sock" << mId);
             return SS_TCP_GET_OPTION_FAILED;
         }
-        mOptions.sendBufSizeKB = sendBufSize / NN_NO1024;
+        /* kernel default send buffer (net.core.wmem_default) may reach 64MB, i.e. 65536KB. sendBufSizeKB is uint32_t
+         * here, so the KB value cannot wrap to 0 (a uint16_t would overflow and stall sends) */
+        mOptions.sendBufSizeKB = static_cast<uint32_t>(sendBufSize) / NN_NO1024;
     }
 
     /* stop here if uds */

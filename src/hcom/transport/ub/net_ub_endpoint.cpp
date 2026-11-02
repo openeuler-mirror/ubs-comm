@@ -1676,7 +1676,7 @@ NResult NetUBSyncEndpoint::PollingCompletion(UBOpContextInfo *&ctx, int32_t time
         NN_LOG_ERROR("Poll cq failed in UBSyncEndpoint, wcStatus " << wc.status << ", opType " << contextInfo->opType);
         return UB_CQ_WC_WRONG;
     }
-    immData = wc.imm_data;
+    immData = UnpackUbImm(wc.imm_data);
 
     return UB_OK;
 }

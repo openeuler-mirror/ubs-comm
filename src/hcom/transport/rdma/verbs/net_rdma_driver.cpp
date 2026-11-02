@@ -172,6 +172,11 @@ NResult NetDriverRDMA::CreateContext()
         if (result != NN_OK) {
             return result;
         }
+
+        if (NN_UNLIKELY(enableIps.empty() || static_cast<size_t>(mDevIndex) >= enableIps.size())) {
+            NN_LOG_ERROR("Invalid dev index " << mDevIndex << ", enable ip count " << enableIps.size());
+            return NN_INVALID_PARAM;
+        }
         mMatchIp = enableIps[mDevIndex];
     } else {
         // filter ip by mask
@@ -257,6 +262,10 @@ NResult NetDriverRDMA::CreateOpCtxMemPool()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NextPower2(sizeof(RDMAOpContextInfo));
     options.tcExpandBlkCnt = NN_NO64;
+    // per-thread cache switch, see UBSHcomServiceOptions::enableMemPoolThreadCache
+    options.tlsPolicy.enabled = mMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
+    options.tlsPolicy.flushMs = 0;
     mOpCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mOpCtxMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for rdma op context pool " << mName << ", probably out of memory");
@@ -280,6 +289,10 @@ NResult NetDriverRDMA::CreateSglCtxMemPool()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NextPower2(sizeof(RDMASglContextInfo));
     options.tcExpandBlkCnt = NN_NO64;
+    // per-thread cache switch, see UBSHcomServiceOptions::enableMemPoolThreadCache
+    options.tlsPolicy.enabled = mMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
+    options.tlsPolicy.flushMs = 0;
     mSglCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mSglCtxMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for rdma sgl op context in driver " << mName

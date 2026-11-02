@@ -591,6 +591,11 @@ public:
         }
 
         int32_t timeoutInMs = TimeSecToMs(timeout);
+#ifdef TEST_LLT
+        if (timeoutInMs > NN_NO200) {
+            timeoutInMs = NN_NO200;
+        }
+#endif
         ibv_wc wc{};
         int pollCount = 1;
         RResult result = RR_OK;

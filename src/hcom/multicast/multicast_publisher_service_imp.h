@@ -51,8 +51,8 @@ private:
                                       const std::string &payload);
     SerResult ServiceRequestReceived(const UBSHcomNetRequestContext &ctx);
     SerResult DelayEraseEp(const UBSHcomNetEndpointPtr &ep, uint16_t delayTime);
-    void DirectEraseEp(UBSHcomNetEndpointPtr ep);
-    void EraseEpCb(PublisherContext &ctx, uintptr_t epPtr);
+    void DirectEraseEp(const UBSHcomNetEndpointPtr &ep);
+    void EraseEpCb(PublisherContext &, const UBSHcomNetEndpointPtr &ep);
 
 private:
     MulticastConfigImp mCfg;
@@ -75,7 +75,6 @@ private:
     PublisherPtr mPublisher = nullptr;
     MultiCastPeriodicManagerPtr mPeriodicMgr = nullptr;
     NetMemPoolFixedPtr mCtxMemPool = nullptr;
-    NetMemPoolFixedPtr mPubCtxMemPool = nullptr;
     uint32_t mCtxStoreCapacity = NN_NO2097152;
 };
 } // namespace hcom

@@ -11,7 +11,6 @@
  */
 #ifndef HCOM_SERVICE_V2_SERVICE_PERIODIC_MANAGER_H_
 #define HCOM_SERVICE_V2_SERVICE_PERIODIC_MANAGER_H_
-#include <queue>
 #include <thread>
 #include <vector>
 
@@ -67,7 +66,7 @@ public:
 
         AddLinkedList(timer);
         std::lock_guard<std::mutex> guard(mQueue[tId].lock[index]);
-        mQueue[tId].queue[index].push(timer);
+        mQueue[tId].queue[index].push_back(timer);
         return SER_OK;
     }
 
@@ -113,8 +112,10 @@ private:
 
     struct QueueManager {
         std::mutex lock[M_MAX_BATCH_NUM];
-        std::priority_queue<HcomServiceTimer *, std::vector<HcomServiceTimer *>, HcomServiceTimerCompare>
-            queue[M_MAX_BATCH_NUM];
+        // 改用无序 vector 而非 priority_queue：priority_queue 只能取堆顶，配合 ProcessTimeOut 的 break
+        // 会形成"队头阻塞"（见 hlc_udp_multicast_mem_leak_root_cause.md §12）。vector 支持整表扫描，
+        // 任意位置的已完成/已超时 timer 都可在本轮回收。HcomServiceTimerCompare 仅保留以兼容既有用例。
+        std::vector<HcomServiceTimer *> queue[M_MAX_BATCH_NUM];
         uint32_t nextIndex = 0;
         QueueManager() = default;
 

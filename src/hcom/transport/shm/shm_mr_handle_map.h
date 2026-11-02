@@ -12,34 +12,45 @@
 
 #ifndef OCK_HCOM_SHM_HANDLE_MAP_H
 #define OCK_HCOM_SHM_HANDLE_MAP_H
+#include "shm_handle.h"
 #include "shm_lock_guard.h"
 
 namespace ock {
 namespace hcom {
-class ShmHandle;
 using ShmHandlePtr = NetRef<ShmHandle>;
 
 class ShmMRHandleMap {
 public:
+    ShmMRHandleMap() = default;
+
+    ~ShmMRHandleMap()
+    {
+        ClearLocalMap();
+        ClearRemoteMap();
+    }
+
     ShmMRHandleMap(const ShmMRHandleMap &) = delete;
     ShmMRHandleMap &operator=(const ShmMRHandleMap &) = delete;
 
-    static ShmMRHandleMap &GetInstance()
-    {
-        static ShmMRHandleMap shmMrHandleMap;
-        return shmMrHandleMap;
-    }
-
     inline NResult AddToLocalMap(uint32_t key, const ShmHandlePtr &shmHandle)
     {
-        RWLockGuard(mLRwLock).LockWrite();
+        RWLockGuard guard(mLRwLock);
+        guard.LockWrite();
         mMrLKeyFdMap.emplace(key, shmHandle);
         return NN_OK;
     }
 
+    inline void RemoveFromLocalMap(uint32_t key)
+    {
+        RWLockGuard guard(mLRwLock);
+        guard.LockWrite();
+        mMrLKeyFdMap.erase(key);
+    }
+
     inline void ClearLocalMap()
     {
-        RWLockGuard(mLRwLock).LockWrite();
+        RWLockGuard guard(mLRwLock);
+        guard.LockWrite();
         if (!mMrLKeyFdMap.empty()) {
             mMrLKeyFdMap.clear();
         }
@@ -47,7 +58,8 @@ public:
 
     inline ShmHandlePtr GetFromLocalMap(uint32_t key)
     {
-        RWLockGuard(mLRwLock).LockRead();
+        RWLockGuard guard(mLRwLock);
+        guard.LockRead();
         auto iter = mMrLKeyFdMap.find(key);
         if (iter == mMrLKeyFdMap.end()) {
             return nullptr;
@@ -57,14 +69,16 @@ public:
 
     inline NResult AddToRemoteMap(uint32_t key, const ShmHandlePtr &shmHandle)
     {
-        RWLockGuard(mRRwLock).LockWrite();
+        RWLockGuard guard(mRRwLock);
+        guard.LockWrite();
         mMrRKeyFdMap.emplace(key, shmHandle);
         return NN_OK;
     }
 
     inline void ClearRemoteMap()
     {
-        RWLockGuard(mRRwLock).LockWrite();
+        RWLockGuard guard(mRRwLock);
+        guard.LockWrite();
         if (!mMrRKeyFdMap.empty()) {
             mMrRKeyFdMap.clear();
         }
@@ -72,20 +86,13 @@ public:
 
     inline ShmHandlePtr GetFromRemoteMap(uint32_t key)
     {
-        RWLockGuard(mRRwLock).LockRead();
+        RWLockGuard guard(mRRwLock);
+        guard.LockRead();
         auto iter = mMrRKeyFdMap.find(key);
         if (iter == mMrRKeyFdMap.end()) {
             return nullptr;
         }
         return iter->second;
-    }
-
-private:
-    ShmMRHandleMap() = default;
-    ~ShmMRHandleMap()
-    {
-        ClearLocalMap();
-        ClearRemoteMap();
     }
 
 private:

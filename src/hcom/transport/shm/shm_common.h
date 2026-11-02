@@ -23,11 +23,11 @@
 #include "net_mem_pool_fixed.h"
 #include "securec.h"
 #include "shm_lock_guard.h"
-#include "shm_mr_handle_map.h"
 
 namespace ock {
 namespace hcom {
 class ShmHandle;
+class ShmMRHandleMap;
 class ShmDataChannel;
 template <typename T>
 class ShmQueue;

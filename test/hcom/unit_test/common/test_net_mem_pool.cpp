@@ -49,7 +49,7 @@ TEST_F(TestNetMemPool, Fixed)
     EXPECT_EQ(ret, 0);
     globalPool->mFreeCount = 0;
 
-    thread_local NetTCacheFixed tc(globalPool.Get());
+    thread_local NetTCacheFixed tc(globalPool.Get(), globalPool->TlsPolicy());
     NN_LOG_INFO("mem pool mFreeCount " << globalPool->mFreeCount);
     char *pointer = tc.Allocate<char>();
     EXPECT_NE(pointer, nullptr);
@@ -63,6 +63,11 @@ TEST_F(TestNetMemPool, KeyedThreadLocalCache)
     options.superBlkSizeMB = NN_NO1;
     options.tcExpandBlkCnt = NN_NO8; // 每个扩容时小块个数
     options.minBlkSize = NN_NO64;    // 每个小块大小
+    // NetTCacheFixed::mFreeSteps == tlsPolicy.cacheBlkCnt（见 net_mem_pool_fixed.h 文档）。
+    // 此处必须把 cacheBlkCnt 设为与 tcExpandBlkCnt 一致(8)，否则 mFreeSteps 取默认 128，
+    // Free 的归还阈值 2*mFreeSteps=256 远高于本测试 free 的 16，从不触发归还，
+    // 末态 mCurrentFree 会是 16 而非测试断言的 8（"一次性归还 16，归还一半，剩 8"）。
+    options.tlsPolicy.cacheBlkCnt = NN_NO8;
 
     NetLocalAutoDecreasePtr<NetMemPoolFixed> mempool(new (std::nothrow) NetMemPoolFixed("keyed", options));
     mempool.Get()->Initialize();

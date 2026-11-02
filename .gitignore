@@ -6,6 +6,7 @@ out/
 dist/
 tmp_build_dir/
 /Testing/
+build_qbuf_tool/
 compile_commands.json
 bazel-bin
 bazel-out

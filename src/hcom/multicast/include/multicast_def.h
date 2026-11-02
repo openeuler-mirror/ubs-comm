@@ -14,6 +14,7 @@ using CipherSuite = UBSHcomNetCipherSuite;
 struct MulticastServiceOptions {
     uint32_t maxSendRecvDataSize = 1024;           // 发送数据块最大值
     uint32_t maxSendRecvDataCount = 8192;          // 同时最大发送的数据个数
+    uint32_t multicastIoContextCount = 8192;       // 组播在途IO上下文数量
     uint16_t workerGroupId = 0;                    // worker组的id ,需要从0开始， 并且保持唯一
     uint16_t workerGroupThreadCount = 1;           // worker线程数, 如果设置为0的话，不启动worker
     WorkerMode workerGroupMode = NET_BUSY_POLLING; // worker线程工作模式，默认busy_polling

@@ -4,6 +4,7 @@
 #ifndef HCOM_MULTICAST_UTILS_H
 #define HCOM_MULTICAST_UTILS_H
 
+#include <cstdint>
 #include <string>
 
 namespace ock {

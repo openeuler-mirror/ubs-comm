@@ -11,6 +11,8 @@
  */
 #include "shm_channel.h"
 
+#include "shm_worker.h"
+
 namespace ock {
 namespace hcom {
 /* get channel fd queue size */
@@ -57,6 +59,24 @@ void ShmChannel::UnInitialize()
         mPeerEventQueue->DecreaseRef();
         mPeerEventQueue = nullptr;
     }
+
+    /* the fds left in the exchange queues are never consumed, close them to avoid fd leak */
+    {
+        std::lock_guard<std::mutex> guard(mMrFdQueueMutex);
+        while (!mMrFdQueue.empty()) {
+            NetFunc::NN_SafeCloseFd(mMrFdQueue.front());
+            mMrFdQueue.pop();
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> guard(mUserFdQueueMutex);
+        while (!mUserFdQueue.empty()) {
+            NetFunc::NN_SafeCloseFd(mUserFdQueue.front());
+            mUserFdQueue.pop();
+        }
+    }
+
     NetFunc::NN_SafeCloseFd(mFd);
 }
 
@@ -159,6 +179,41 @@ HResult ShmChannel::ChangeToReady(const ShmConnExchangeInfo &info)
     mPeerChAddress = info.channelAddress;
 
     return SH_OK;
+}
+
+void ShmChannel::ReleasePostedCtxQuiet()
+{
+    auto *worker = reinterpret_cast<ShmWorker *>(UpContext1());
+    if (NN_UNLIKELY(worker == nullptr)) {
+        return;
+    }
+
+    ShmOpCompInfo *comp = nullptr;
+    GetCompPosted(comp);
+    while (comp != nullptr) {
+        auto *next = comp->next;
+        ShmSglOpContextInfo *sglCtx = nullptr;
+        if (comp->opType == ShmOpContextInfo::ShmOpType::SH_SEND_RAW_SGL) {
+            sglCtx = reinterpret_cast<ShmSglOpCompInfo *>(comp->upCtx)->ctx;
+        }
+        worker->ReturnOpCompInfo(comp);
+        worker->ReturnSglContextInfo(sglCtx);
+        comp = next;
+    }
+
+    ShmOpContextInfo *ctx = nullptr;
+    GetCtxPosted(ctx);
+    while (ctx != nullptr) {
+        auto *next = ctx->next;
+        ShmSglOpContextInfo *sglCtx = nullptr;
+        if (ctx->opType == ShmOpContextInfo::ShmOpType::SH_SGL_READ ||
+            ctx->opType == ShmOpContextInfo::ShmOpType::SH_SGL_WRITE) {
+            sglCtx = reinterpret_cast<ShmSglOpCompInfo *>(ctx->upCtx)->ctx;
+        }
+        worker->ReturnOpContextInfo(ctx);
+        worker->ReturnSglContextInfo(sglCtx);
+        ctx = next;
+    }
 }
 } // namespace hcom
 } // namespace ock

@@ -41,6 +41,7 @@ endif ()
 file(GLOB_RECURSE SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/hcom/*.cpp
     ${CMAKE_SOURCE_DIR}/src/hcom/*.h)
+list(FILTER SOURCE_FILES EXCLUDE REGEX "umq/build/")
 set(HCOM_STUB_SRC_DIR ${CMAKE_SOURCE_DIR}/test/hcom/stub)
 # collect hcom unittest files
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/testcase)
@@ -127,9 +128,11 @@ set(CXX_FLAGS
     -fstack-protector-strong
     #-fPIC will cause failure while mocking system functions
 )
-string(REPLACE ";" " " CMAKE_CXX_FLAGS "${CXX_FLAGS}")
+string(REPLACE ";" " " CXX_FLAGS_STR "${CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_FLAGS_STR}")
 set(DEPEND_LIBS rt pthread gtest gcov mockcpp dl fake_ibv_static boundscheck)
 target_compile_options(Hcomtest PUBLIC -D_GNU_SOURCE)
+target_compile_definitions(Hcomtest PUBLIC -DHCOM_TEST_OPENSSLCRT_DIR="${CMAKE_SOURCE_DIR}/test/hcom/opensslcrt")
 set_target_properties(Hcomtest PROPERTIES OUTPUT_NAME "hcom_test")
 set_target_properties(Hcomtest PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 set_target_properties(Hcomtest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")

@@ -7,8 +7,8 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
 # define macro that will be used in source code
-add_compile_options(-DMOCK_VERBS -DTEST_LLT)
-message(STATUS "LIBBOUNDCHECK_SHARED_LIBRARY: ${LIBBOUNDCHECK_SHARED_LIBRARY}")
+add_compile_options(-DMOCK_VERBS -DTEST_LLT -DUMQ_QBUF_DEBUG)
+message(STATUS "LIBBOUNDSCHECK_SHARED_LIBRARY: ${LIBBOUNDSCHECK_SHARED_LIBRARY}")
 option(BUILD_WITH_HW_CRC "Build with hardware crc" OFF)
 option(BUILD_WITH_SERVICE "Build with SERVICE" ON)
 option(BUILD_WITH_RDMA "Build with RDMA" ON)
@@ -44,6 +44,7 @@ set(HCOM_STUB_SRC_DIR ${CMAKE_SOURCE_DIR}/test/hcom/stub)
 file(GLOB_RECURSE SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/hcom/*.cpp
     ${CMAKE_SOURCE_DIR}/src/hcom/*.h)
+list(FILTER SOURCE_FILES EXCLUDE REGEX "umq/build/")
 
 # remove jni file from hcom source files
 file(GLOB_RECURSE HCOM_JNI_SRCS "${HCOM_SRC_DIR}/src/api/java_sdk/*.cpp"
@@ -64,8 +65,10 @@ aux_source_directory(transport/shm SOURCE_FILES)
 aux_source_directory(transport/sock SOURCE_FILES)
 aux_source_directory(transport/ub SOURCE_FILES)
 aux_source_directory(transport/common SOURCE_FILES)
+aux_source_directory(multicast SOURCE_FILES)
 aux_source_directory(under_api/openssl SOURCE_FILES)
 aux_source_directory(under_api/urma SOURCE_FILES)
+aux_source_directory(umq SOURCE_FILES)
 
 if (BUILD_WITH_HTRACER)
 aux_source_directory(common/trace SOURCE_FILES)
@@ -88,6 +91,7 @@ endif()
 set(HCOM_UT hcom_ut)
 
 link_directories(${GTEST_INSTALL_DIR}/lib64)
+link_directories(${GTEST_INSTALL_DIR}/lib)
 
 message("TEST_TOOL_INSTALL_PATH: ${TEST_TOOL_INSTALL_PATH}")
 # include&link mockcpp
@@ -119,11 +123,20 @@ target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/trans
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/common)
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/api/capi_v2)
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/common/trace)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/multicast)
 target_include_directories(${HCOM_UT} PRIVATE ${HCOM_OUTPUT_PATH}/hcom_3rdparty/umdk/urma/include)
 target_include_directories(${HCOM_UT} PRIVATE ${HCOM_OUTPUT_PATH}/hcom_3rdparty/libboundscheck/include)
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${HCOM_UT} PRIVATE ${HCOM_STUB_SRC_DIR})
 target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/api/capi_v2/)
+# umq qbuf pool multi-level test includes umq_qbuf_pool.c directly
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/src/qbuf)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/include/umq)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/include)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/src)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/util)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/include/umq/transport_layer)
+target_include_directories(${HCOM_UT} PRIVATE ${CMAKE_SOURCE_DIR}/src/hcom/umq/include/umq/umq_ub)
 # enable gcov
 target_compile_options(${HCOM_UT} PUBLIC --coverage)
 target_link_options(${HCOM_UT} PUBLIC --coverage)
@@ -160,7 +173,8 @@ set(CXX_FLAGS
     -fstack-protector-strong
     #-fPIC will cause failure while mocking system functions
 )
-string(REPLACE ";" " " CMAKE_CXX_FLAGS "${CXX_FLAGS}")
+string(REPLACE ";" " " CXX_FLAGS_STR "${CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_FLAGS_STR}")
 set(DEPEND_LIBS rt pthread gtest gcov mockcpp dl fake_ibv_static boundscheck)
 target_compile_options(${HCOM_UT} PUBLIC -D_GNU_SOURCE)
 set_target_properties(${HCOM_UT} PROPERTIES CLEAN_DIRECT_OUTPUT 1)

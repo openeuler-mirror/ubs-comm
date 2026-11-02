@@ -227,6 +227,48 @@ TEST_F(TestUbUrmaJetty, PostSendSgl)
     EXPECT_EQ(jetty->PostSendSgl(&iov, iovCount, 0, 0), UB_OK);
 }
 
+static urma_jfs_wr_t gCapturedUbSendWr{};
+
+static urma_status_t MockCaptureUbSendWr(urma_jetty_t *jetty, urma_jfs_wr_t *wr, urma_jfs_wr_t **badWr)
+{
+    (void)jetty;
+    (void)badWr;
+    gCapturedUbSendWr = *wr;
+    return 0;
+}
+
+TEST_F(TestUbUrmaJetty, PackUnpackBondingImmData)
+{
+    const uint32_t seqNos[] = {1, 0x1FFFFF, 0x200000, 0x00A5A5A5, 0xFFFFFFFF};
+    for (uint32_t i = 0; i < sizeof(seqNos) / sizeof(seqNos[0]); i++) {
+        uint64_t immData = PackUbImm(seqNos[i]);
+        EXPECT_EQ(UnpackUbImm(immData), seqNos[i]);
+        /* bondp provider 占用的 bit[21:39] 必须为空 */
+        EXPECT_EQ(immData & 0xFFFFE00000ULL, 0ULL);
+        /* 高 24 bit 区只使用低 11 bit, 其余必须为空 */
+        EXPECT_EQ(immData >> (UB_IMM_HIGH_SHIFT + UB_IMM_HIGH_BITS), 0ULL);
+    }
+    /* 普通消息 imm 仍为 0, 保持 "非 0 即 raw" 的判定语义 */
+    EXPECT_EQ(PackUbImm(0), 0ULL);
+}
+
+TEST_F(TestUbUrmaJetty, PostSendSglPackImmData)
+{
+    UBSHcomNetTransSgeIov iov[1] = {};
+    iov[0].lAddress = 0x1000;
+    iov[0].size = 16;
+    /* seqNo 高位非 0, 未拼接时 bit21~31 会被 provider 的位域覆盖 */
+    const uint32_t seqNo = 0x00A5A5A5;
+    gCapturedUbSendWr = urma_jfs_wr_t{};
+    MOCKER(HcomUrma::PostJettySendWr, urma_status_t(urma_jetty_t *, urma_jfs_wr_t *, urma_jfs_wr_t **))
+        .stubs()
+        .will(invoke(MockCaptureUbSendWr));
+    EXPECT_EQ(jetty->PostSendSgl(iov, 1, 0, seqNo), UB_OK);
+    EXPECT_EQ(gCapturedUbSendWr.opcode, URMA_OPC_SEND_IMM);
+    EXPECT_EQ(gCapturedUbSendWr.send.imm_data, PackUbImm(seqNo));
+    EXPECT_EQ(UnpackUbImm(gCapturedUbSendWr.send.imm_data), seqNo);
+}
+
 TEST_F(TestUbUrmaJetty, PostReadParamErr)
 {
     jetty->mUrmaJetty = nullptr;

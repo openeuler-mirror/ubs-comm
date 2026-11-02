@@ -19,6 +19,30 @@ namespace ock {
 namespace hcom {
 uint8_t mockData[8];
 UBSHcomNetTransHeader mockReq{};
+UBSHcomNetTransHeader gMockPrevReq{};
+UBSHcomNetTransHeader gMockCurReq{};
+ShmChannel *gMockChannel = nullptr;
+uint32_t gMockCallIndex = 0;
+
+static HResult MockDequeueEventReceiveWithChannel(int32_t timeout, ShmEvent &opEvent)
+{
+    opEvent.opType = ShmOpContextInfo::SH_RECEIVE;
+    opEvent.peerChannelAddress = reinterpret_cast<uintptr_t>(gMockChannel);
+    /* 第一次调用返回 prevReq 的 offset，第二次返回 curReq 的 offset */
+    gMockCallIndex++;
+    opEvent.dataOffset = (gMockCallIndex == 1) ? 0 : 1;
+    return 0;
+}
+
+static HResult MockGetPeerDataAddressByOffsetWithSeq(uint64_t offset, uintptr_t &address)
+{
+    if (offset == 0) {
+        address = reinterpret_cast<uintptr_t>(&gMockPrevReq);
+    } else {
+        address = reinterpret_cast<uintptr_t>(&gMockCurReq);
+    }
+    return 0;
+}
 
 class TestNetShmEndpoint : public testing::Test {
 public:
@@ -39,6 +63,12 @@ static HResult MockGetPeerDataAddressByOffset(uint64_t offset, uintptr_t &addres
 static HResult MockDequeueEvent(int32_t timeout, ShmEvent &opEvent)
 {
     opEvent.opType = static_cast<ShmOpContextInfo::ShmOpType>(mockData[0]);
+    opEvent.peerChannelAddress = 0;
+    return 0;
+}
+static HResult MockDequeueEventReceive(int32_t timeout, ShmEvent &opEvent)
+{
+    opEvent.opType = ShmOpContextInfo::SH_RECEIVE;
     opEvent.peerChannelAddress = 0;
     return 0;
 }
@@ -1595,18 +1625,27 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointWaitCompletionTwo)
     NetSyncEndpointShm *ep = new NetSyncEndpointShm(ch->Id(), ch.Get(), 0, index, shmEp, map);
     ep->mState.Set(NEP_ESTABLISHED);
 
-    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent).stubs().will(invoke(MockDequeueEvent));
-
-    mockData[0] = static_cast<uint8_t>(ShmOpContextInfo::SH_RECEIVE);
-    ep->mExistDelayEvent = true;
-    ret = ep->WaitCompletion(0);
-    EXPECT_EQ(ret, static_cast<int>(SH_ERROR));
+    // 双收场景：prev seq=1(stale)，cur seq=2(匹配)，应丢弃 prev 保留 cur
+    gMockChannel = ch.Get();
+    gMockCallIndex = 0;
+    gMockPrevReq.seqNo = 1;
+    gMockCurReq.seqNo = 2;
+    ep->mLastSendSeqNo = 2;
 
     mockData[0] = static_cast<uint8_t>(ShmOpContextInfo::SH_SEND);
+    MOCKER_CPP(&ShmSyncEndpoint::DequeueEvent)
+        .stubs()
+        .will(invoke(MockDequeueEventReceiveWithChannel))
+        .then(invoke(MockDequeueEventReceiveWithChannel))
+        .then(invoke(MockDequeueEvent));
+    MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).stubs().will(invoke(MockGetPeerDataAddressByOffsetWithSeq));
+
+    ep->mExistDelayEvent = false;
     ret = ep->WaitCompletion(0);
     EXPECT_EQ(ret, 0);
 
     delete (ep);
+    gMockChannel = nullptr;
 }
 
 TEST_F(TestNetShmEndpoint, NetSyncEndpointWaitCompletionThree)

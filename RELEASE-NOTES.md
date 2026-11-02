@@ -1,4 +1,9 @@
-1.0.0
+# UBS Comm
+ 
+简体中文 | [English](./RELEASE-NOTES_EN.md)
+
+## 1.0.0
+
 初始版本
 
 `HCOM`主要支持以下特性：

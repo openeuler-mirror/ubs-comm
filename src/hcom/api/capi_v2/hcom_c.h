@@ -81,7 +81,8 @@ typedef enum {
     C_DRIVER_TCP = 1,
     C_DRIVER_UDS = 2,
     C_DRIVER_SHM = 3,
-    C_DRIVER_UBC = 6,
+    C_DRIVER_UBC = 7,
+    C_DRIVER_UNKNOWN = 255,
 } ubs_hcom_driver_type;
 
 /*
@@ -404,9 +405,10 @@ typedef int (*ubs_hcom_tls_get_cert_cb)(const char *name, char **certPath);
  * @param name             [out] the name
  * @param priKeyPath       [out] the path of private key
  * @param keyPass          [out] the keyPass
+ * @param keyPassLen       [out] the length of keyPass
  * @param erase            [out] the erase function
  */
-typedef int (*ubs_hcom_tls_get_pk_cb)(const char *name, char **priKeyPath, char **keyPass,
+typedef int (*ubs_hcom_tls_get_pk_cb)(const char *name, char **priKeyPath, char **keyPass, int *keyPassLen,
                                       ubs_hcom_tls_keypass_erase *erase);
 
 /*
@@ -831,6 +833,30 @@ void ubs_hcom_ep_set_context(ubs_hcom_endpoint ep, uint64_t ctx);
  * @return the context set by ubs_hcom_ep_set_context
  */
 uint64_t ubs_hcom_ep_get_context(ubs_hcom_endpoint ep);
+
+/*
+ * @brief Get the unique id of the endpoint
+ *
+ * Note: the id is also used to identify the peer of an endpoint, e.g. it can be passed to
+ * ubs_hcom_publisher_get_subscribe_by_ep_id() to find the subscription whose peer is this endpoint
+ *
+ * @param ep               [in] address of ep
+ *
+ * @return the endpoint id, 0 if the ep is invalid
+ */
+uint64_t ubs_hcom_ep_get_id(ubs_hcom_endpoint ep);
+
+/*
+ * @brief Get the peer ip and port of the endpoint, which is used to identify where the peer comes from
+ *
+ * @param ep               [in] address of ep
+ * @param ip               [out] buffer to store the peer ip (with ending '\0')
+ * @param ipLen            [in,out] in: capacity of the ip buffer; out: actual length excluding '\0'
+ * @param port             [out] peer port
+ *
+ * @return 0 if successful, error code if failed
+ */
+int ubs_hcom_ep_get_peer_ipport(ubs_hcom_endpoint ep, char *ip, uint32_t *ipLen, uint16_t *port);
 
 #define NET_INVALID_WORKER_INDEX 0xffff
 #define NET_INVALID_WORKER_GROUP_INDEX 0xff

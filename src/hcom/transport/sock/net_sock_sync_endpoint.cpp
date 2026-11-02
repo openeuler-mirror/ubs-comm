@@ -333,8 +333,11 @@ NResult NetSyncEndpointSock::PostRead(const UBSHcomNetTransRequest &request)
     do {
         result = mSock->PostRead(ctx);
         if (result == SS_OK) {
-            mSglCtxInfoPool.Return(sglCtx);
-            mOpCtxInfoPool.Return(ctx);
+            /* opCtx and sglCtx must stay alive until WaitCompletion consumes them: it reads
+               originalCtx->sock and originalCtx->sendCtx (via WriteData). Returning them here is
+               unsafe under the bypass op-ctx pool (TCAllocOne/TCFreeOne to the shared free-list),
+               where another op/thread can reuse the block and clobber these fields before
+               WaitCompletion runs. */
             TRACE_DELAY_END(SOCK_EP_SYNC_POST_READ, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
@@ -406,8 +409,7 @@ NResult NetSyncEndpointSock::PostRead(const UBSHcomNetTransSglRequest &request)
     do {
         result = mSock->PostReadSgl(opCtx);
         if (result == SS_OK) {
-            mSglCtxInfoPool.Return(sglCtx);
-            mOpCtxInfoPool.Return(opCtx);
+            /* Keep opCtx/sglCtx alive for WaitCompletion (see PostRead non-sgl note). */
             TRACE_DELAY_END(SOCK_EP_SYNC_POST_READ_SGL, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
@@ -484,8 +486,7 @@ NResult NetSyncEndpointSock::PostWrite(const UBSHcomNetTransRequest &request)
     do {
         result = mSock->PostWrite(ctx);
         if (result == SS_OK) {
-            mSglCtxInfoPool.Return(sglCtx);
-            mOpCtxInfoPool.Return(ctx);
+            /* Keep opCtx/sglCtx alive for WaitCompletion (see PostRead non-sgl note). */
             TRACE_DELAY_END(SOCK_EP_SYNC_POST_WRITE, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
@@ -557,8 +558,7 @@ NResult NetSyncEndpointSock::PostWrite(const UBSHcomNetTransSglRequest &request)
     do {
         result = mSock->PostWriteSgl(opCtx);
         if (result == SS_OK) {
-            mSglCtxInfoPool.Return(sglCtx);
-            mOpCtxInfoPool.Return(opCtx);
+            /* Keep opCtx/sglCtx alive for WaitCompletion (see PostRead non-sgl note). */
             TRACE_DELAY_END(SOCK_EP_SYNC_POST_WRITE_SGL, result);
             return NN_OK;
         } else if (NeedRetry(result) && mDefaultTimeout != 0 && NetMonotonic::TimeNs() < finishTime) {
@@ -674,7 +674,12 @@ NResult NetSyncEndpointSock::WaitCompletion(int32_t timeout)
             return SS_PARAM_INVALID;
         }
 
-        return WriteData(mSock, mRespCtx.mHeader, originalReadCtx, mRespMessage.mBuf);
+        auto readResult = WriteData(mSock, mRespCtx.mHeader, originalReadCtx, mRespMessage.mBuf);
+        /* opCtx/sglCtx were kept alive since PostRead; return them now that WaitCompletion has
+           consumed them (mirrors the PostRead success path, which no longer frees them). */
+        mSglCtxInfoPool.Return(originalReadCtx->sendCtx);
+        mOpCtxInfoPool.Return(originalReadCtx);
+        return readResult;
     } else if (mRespCtx.mHeader.flags == NTH_WRITE_ACK || mRespCtx.mHeader.flags == NTH_WRITE_SGL_ACK) {
         NN_LOG_TRACE_INFO("Post receive header successfully: sock "
                           << mSock->Id() << ", head imm data " << mRespCtx.mHeader.immData << ", flags "
@@ -694,6 +699,10 @@ NResult NetSyncEndpointSock::WaitCompletion(int32_t timeout)
             NN_LOG_ERROR("Failed to check sock with sock" << mSock->Name() << " as size different.");
             return SS_PARAM_INVALID;
         }
+        /* opCtx/sglCtx were kept alive since PostWrite; return them now that WaitCompletion has
+           consumed them (mirrors the PostWrite success path, which no longer frees them). */
+        mSglCtxInfoPool.Return(originalWriteCtx->sendCtx);
+        mOpCtxInfoPool.Return(originalWriteCtx);
     }
 
     return NN_OK;

@@ -97,6 +97,7 @@ private:
     }
 
     UResult SetBondingMode(UBSHcomUbcMode ubcMode);
+    UResult DisableMSN();
     UResult SetUBPriority(uint32_t ubPriority, UBSHcomUbcMode ubcMode);
 
     std::string mName;

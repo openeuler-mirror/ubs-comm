@@ -21,6 +21,7 @@
 #include "securec.h"
 #include "shm_channel_keeper.h"
 #include "shm_handle.h"
+#include "shm_mr_handle_map.h"
 #include "shm_mr_pool.h"
 
 namespace ock {
@@ -134,6 +135,7 @@ protected:
     ShmChannelKeeperPtr mChannelKeeper = nullptr;
     DelayReleaseTimerPtr mDelayReleaseTimer = nullptr;
     MemoryRegionChecker mMrChecker;
+    ShmMRHandleMap mMrHandleMap;
     std::thread mClearThread;
     std::atomic_bool mClearThreadStarted{false};
 

@@ -77,6 +77,7 @@ SerResult HcomChannelImp::Initialize(std::vector<UBSHcomNetEndpointPtr> &ep, uin
         return SER_NEW_OBJECT_FAILED;
     }
     ctxStore->IncreaseRef();
+    ctxStore->SetTraceTag(mOptions.id);
     mCtxStore = ctxStore;
 
     auto periodicMgrPtr = reinterpret_cast<HcomPeriodicManager *>(periodicMgr);
@@ -422,26 +423,46 @@ SerResult HcomChannelImp::PrepareTimerContext(const Callback *cb, int16_t timeou
 
     context.timer = new (timerPtr)
         HcomServiceTimer(this, mCtxStore, timeout, reinterpret_cast<uintptr_t>(cb), HcomAsyncCBType::CBS_IO);
+    // [TIMER-TRACE] timeout < 0 意味着 mTimeout==0（永不超时），周期线程的超时兜底对它完全无效：
+    // 一旦响应未命中 seqNo，这个 timer 就再也没有任何路径能回收，是最严重的泄漏形态。
+    if (NN_UNLIKELY(timeout < 0)) {
+        mCtxStore->TraceMark(HcomTimerEvent::NEVER_TIMEOUT);
+    }
+    // ① 调用方 TimerCtx 引用：构造后即持有，保证 seqNo/入队过程中对象不被回收。
+    //    放在 PutAndGetSeqNo 之前，使 seqNo 失败分支的 mRefCount==1，可用单次 DecreaseRef()
+    //    走完归零清理（释放构造函数加的通道引用 + 还池），避免直接 Return 泄漏通道引用。
+    context.timer->IncreaseRef();
+
     NResult ret = mCtxStore->PutAndGetSeqNo(context.timer, context.seqNo);
     if (NN_UNLIKELY(ret != SER_OK)) {
         NN_LOG_ERROR("Failed to generate seqNo by context store pool.");
-        mCtxStore->Return(timerPtr);
+        mCtxStore->TraceMark(HcomTimerEvent::SEQ_FAIL);
+        // mRefCount==1，单次 DecreaseRef() 归零即完成通道引用释放 + 还池；
+        // 不要直接 mCtxStore->Return，否则会泄漏构造函数加的通道引用。
+        context.timer->DecreaseRef();
         return SER_NEW_OBJECT_FAILED;
     }
+    mCtxStore->TraceMark(HcomTimerEvent::SEQ_PUT);
 
-    context.timer->IncreaseRef();
     // timer seqNo is invalid, here need update by EmplaceContext() build seqNo.
     context.timer->SeqNo(context.seqNo);
 
     HcomPeriodicManagerPtr periodicMgrPtr = reinterpret_cast<HcomPeriodicManager *>(mPeriodicMgr);
+    // ③ 超时队列引用：在把指针交给队列之前先加，消除 AddTimer 入队后、本线程尚未
+    // IncreaseRef 的极小窗口内被超时线程 DecreaseRef 导致引用下溢（mRefCount 变负）的竞态。
+    context.timer->IncreaseRef();
     ret = periodicMgrPtr->AddTimer(context.timer);
     if (NN_UNLIKELY(ret != SER_OK)) {
         NN_LOG_ERROR("Failed to add timer in for timeout control.");
+        mCtxStore->TraceMark(HcomTimerEvent::ADD_TIMER_FAIL);
         context.timer->EraseSeqNo();
-        mCtxStore->Return(timerPtr);
+        // 失败路径：③(队列) + ①(调用方) 两个引用都需释放；mRefCount 2->1->0，
+        // 归零时触发通道引用释放 + 还池。AddTimer 仅在 VALIDATE 处即返回，②(通道链表)
+        // 引用本就未加，不会多减。
+        context.timer->DecreaseRef();
+        context.timer->DecreaseRef();
         return ret;
     }
-    context.timer->IncreaseRef();
     return SER_OK;
 }
 
@@ -454,6 +475,7 @@ void HcomChannelImp::DestroyTimerContext(TimerCtx &context)
     // `DeleteCallBack()` 必须要被保护起来，否则可能会发生超时线程先被调度到，之后运行定时器关联的
     // callback 的同时将 callback 删除的极限情况。这时就可能会出现运行时错误了。
     if (NN_LIKELY(context.timer->EraseSeqNoWithRet())) {
+        mCtxStore->TraceMark(HcomTimerEvent::SEND_FAIL);
         context.timer->DeleteCallBack();
         context.timer->MarkFinished();
         context.timer->DecreaseRef();
@@ -633,8 +655,18 @@ SerResult HcomChannelImp::SyncSendSplitWithWorkerPoll(UBSHcomNetEndpoint *&ep, c
     return syncParam.Result();
 }
 
-auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx,
-                                   bool isResp) -> std::tuple<SpliceMessageResultType, SerResult, std::string>
+void HcomChannelImp::RollbackSplicedEntry(UBSHcomFragmentMessageId msgId,
+                                          const std::shared_ptr<std::pair<uint32_t, std::string>> &inserted)
+{
+    std::lock_guard<std::mutex> lock(mMsgReceivedMutex);
+    auto it = mMsgReceived.find(msgId);
+    if (it != mMsgReceived.end() && it->second == inserted) {
+        mMsgReceived.erase(it);
+    }
+}
+
+auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx, bool isResp)
+    -> std::tuple<SpliceMessageResultType, SerResult, std::string>
 {
     if (NN_UNLIKELY(ctx.Message() == nullptr)) {
         NN_LOG_ERROR("SpliceMessage: ctx.Message() is null");
@@ -699,6 +731,7 @@ auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx,
                 std::placeholders::_1, NetRef<HcomChannelImp>{this});
             if (!cb) {
                 NN_LOG_ERROR("SpliceMessage malloc callback failed");
+                RollbackSplicedEntry(msgId, incompleteMsg);
                 return std::make_tuple(SpliceMessageResultType::ERROR, SER_NEW_OBJECT_FAILED, "");
             }
 
@@ -716,6 +749,7 @@ auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx,
             if (result != SER_OK) {
                 NN_LOG_ERROR("Prepare timer context failed when creating timer for SpliceMessage");
                 delete cb;
+                RollbackSplicedEntry(msgId, incompleteMsg);
                 return std::make_tuple(SpliceMessageResultType::ERROR, result, "");
             }
 
@@ -765,6 +799,7 @@ auto HcomChannelImp::SpliceMessage(const UBSHcomNetRequestContext &ctx,
 
         HcomServiceTimer *timer = nullptr;
         if (NN_UNLIKELY(mCtxStore->GetSeqNoAndRemove(incompleteMsg->first, timer) == SER_OK)) {
+            mCtxStore->TraceMark(HcomTimerEvent::FRAG_HIT);
             timer->MarkFinished();
             timer->DeleteCallBack();
             timer->DecreaseRef();
@@ -1925,14 +1960,25 @@ SerResult HcomChannelImp::AsyncReplyInner(const UBSHcomReplyContext &ctx, const 
         return AsyncReplySplitWithWorkerPoll(ctx, ep, req, fragmentNum, done);
     }
 
+    TimerCtx context{};
+    res = PrepareTimerContext(const_cast<Callback *>(done), mOptions.twoSideTimeout, context);
+    if (NN_UNLIKELY(res != SER_OK)) {
+        NN_LOG_ERROR("Failed to prepare timer context for async reply, result " << res);
+        DestroyCallback(done);
+        return res;
+    }
+
+    // upCtx 只保存 seqNo，回调由 timer 持有：发送完成、响应到达、失败清队等任一路径
+    // 都只能通过 GetSeqNoAndRemove 的 CAS 摘除一次，避免裸 Callback* 被重复触发。
     UBSHcomNetTransRequest transReq(req.address, req.size, sizeof(SerTransContext));
-    uint32_t newSeqNo = 0;
-    SetServiceTransCtx(transReq.upCtxData, const_cast<Callback *>(done));
-    MarkOpCodeBySeqNo(newSeqNo, ctx.rspCtx, mRespOriginalSeqNo);
-    UBSHcomNetTransOpInfo transOp(newSeqNo, mOptions.twoSideTimeout, ctx.errorCode, 0);
+    SetServiceTransCtx(transReq.upCtxData, context.seqNo);
+    uint32_t userSeqNo = context.seqNo;
+    MarkOpCodeBySeqNo(userSeqNo, ctx.rspCtx, mRespOriginalSeqNo);
+    UBSHcomNetTransOpInfo transOp(userSeqNo, mOptions.twoSideTimeout, ctx.errorCode, 0);
     res = ep->PostSend(req.opcode, transReq, transOp);
     if (NN_UNLIKELY(res != SER_OK)) {
-        DestroyCallback(done);
+        NN_LOG_ERROR("Channel async reply failed " << res << " ep id " << ep->Id());
+        DestroyTimerContext(context);
     }
     return res;
 }
@@ -2338,7 +2384,7 @@ int32_t HcomChannelImp::Recv(const UBSHcomServiceContext &context, uintptr_t add
     }
     uintptr_t endAddr = address + size - NN_NO1;
     if (endAddr < address) { //溢出判断
-        NN_LOG_ERROR(" Address overflow, address " << std::hex << address << ", size " << size);
+        NN_LOG_ERROR(" Address overflow, size " << size);
         DestroyCallback(done);
         return SER_INVALID_PARAM;
     }
@@ -2508,6 +2554,13 @@ SerResult HcomChannelImp::OneSideSglAsyncWithWorkerPoll(const UBSHcomOneSideSglR
 
 SerResult HcomChannelImp::OneSideSglInner(const UBSHcomOneSideSglRequest &request, const Callback *done, bool isWrite)
 {
+    if (NN_UNLIKELY(request.iov == nullptr || request.iovCount == 0 || request.iovCount > NET_SGE_MAX_IOV)) {
+        NN_LOG_ERROR("Invalid sgl iov ptr " << request.iov << " or count " << request.iovCount
+                                            << " in OneSideSglInner, max " << NET_SGE_MAX_IOV);
+        DestroyCallback(done);
+        return SER_INVALID_PARAM;
+    }
+
     if (mOptions.enableMultiRail) {
         NN_LOG_DEBUG("Multirail not supported in oneside sgl, using single rail.");
     }
@@ -2671,6 +2724,12 @@ void HcomChannelImp::SetChannelTimeOut(int16_t oneSideTimeout, int16_t twoSideTi
     }
     mOptions.oneSideTimeout = oneSideTimeout;
     mOptions.twoSideTimeout = twoSideTimeout;
+    // [TIMER-TRACE] twoSideTimeout 决定了 timer 是否有超时兜底：为 -1 时 mTimeout==0，周期线程
+    // 永远不会收集该 timer，一旦响应未命中 seqNo 就是永久泄漏。低频调用，直接打一条 WARN 便于现网确认。
+    NN_LOG_INFO(
+        "[TIMER-TRACE] channel " << mOptions.id << " timeout configured, oneSide " << oneSideTimeout << ", twoSide "
+                                 << twoSideTimeout
+                                 << (twoSideTimeout < 0 ? " (never timeout, timer relies on response only)" : ""));
 }
 
 void HcomChannelImp::SetEpUpCtx()

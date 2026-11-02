@@ -20,8 +20,7 @@ static int DefaultNewEndPoint(const std::string &ipPort, const ock::hcom::UBSHco
 int SubscriberServiceImp::ServiceRequestReceived(const UBSHcomNetRequestContext &ctx)
 {
     SubscriberContext context(ctx);
-    mSubscribeRecvHandler(context);
-    return 0;
+    return mSubscribeRecvHandler(context);
 }
 
 static int DefaultRequestPosted(const ock::hcom::UBSHcomNetRequestContext &ctx)
@@ -79,7 +78,7 @@ SerResult SubscriberServiceImp::InitDriver()
 
     int32_t res = mDriverPtr->Initialize(driverOpt);
     if (NN_UNLIKELY(res != SER_OK)) {
-        Stop();
+        ReleaseDriver();
         return res;
     }
 
@@ -122,7 +121,7 @@ SerResult SubscriberServiceImp::StartDriver()
     SerResult result = SER_OK;
     result = mDriverPtr->Start();
     if (NN_UNLIKELY(result != SER_OK)) {
-        Stop();
+        ReleaseDriver();
         return result;
     }
 
@@ -147,6 +146,17 @@ SerResult SubscriberServiceImp::StartDriver()
     return SER_OK;
 }
 
+void SubscriberServiceImp::ReleaseDriver()
+{
+    if (mDriverPtr == nullptr) {
+        return;
+    }
+    mDriverPtr->Stop();
+    mDriverPtr->UnInitialize();
+    UBSHcomNetDriver::DestroyInstance(mDriverPtr->Name());
+    mDriverPtr = nullptr;
+}
+
 void SubscriberServiceImp::Stop()
 {
     std::lock_guard<std::mutex> locker(mStartMutex);
@@ -159,9 +169,7 @@ void SubscriberServiceImp::Stop()
     }
     mOobServers.clear();
 
-    mDriverPtr->Stop();
-    mDriverPtr->UnInitialize();
-    UBSHcomNetDriver::DestroyInstance(mDriverPtr->Name());
+    ReleaseDriver();
 
     mStarted = false;
 }
@@ -172,6 +180,12 @@ SubscriberServiceImp::~SubscriberServiceImp()
 }
 
 SerResult SubscriberServiceImp::CreateSubscriber(const std::string &serverUrl, NetRef<Subscriber> &subscriber)
+{
+    return CreateSubscriber(serverUrl, mCfg.GetPublisherWkrGroupNo(), subscriber);
+}
+
+SerResult SubscriberServiceImp::CreateSubscriber(const std::string &serverUrl, uint16_t publisherGroupIdx,
+                                                 NetRef<Subscriber> &subscriber)
 {
     if (!mStarted) {
         NN_LOG_ERROR("Failed to validate state as service is not started");
@@ -191,7 +205,7 @@ SerResult SubscriberServiceImp::CreateSubscriber(const std::string &serverUrl, N
     }
 
     UBSHcomNetEndpointPtr ep;
-    auto result = mDriverPtr->Connect(serverUrl, "multicast", ep, 0, mCfg.GetPublisherWkrGroupNo(), 0, 0);
+    auto result = mDriverPtr->Connect(serverUrl, "multicast", ep, 0, publisherGroupIdx, 0, 0);
     if (NN_UNLIKELY(result != SER_OK)) {
         NN_LOG_ERROR("Connect to " << serverUrl << " failed, errno = " << result);
         return result;
@@ -211,7 +225,7 @@ SerResult SubscriberServiceImp::CreateSubscriber(const std::string &serverUrl, N
     return SER_OK;
 }
 
-void SubscriberServiceImp::DestroySubscriber(const NetRef<Subscriber> &subscriber)
+void SubscriberServiceImp::DestroySubscriber(NetRef<Subscriber> &subscriber)
 {
     if (subscriber == nullptr) {
         return;
@@ -221,7 +235,8 @@ void SubscriberServiceImp::DestroySubscriber(const NetRef<Subscriber> &subscribe
     if (mDriverPtr) {
         mDriverPtr->DestroyEndpoint(subscriber->GetEp());
     }
-    subscriber->DecreaseRef();
+    // Set(nullptr) 会释放最后一个引用并销毁 Subscriber，避免调用方 NetRef 析构时对已释放对象二次 DecreaseRef
+    subscriber.Set(nullptr);
 }
 
 MulticastConfig &SubscriberServiceImp::GetConfig()

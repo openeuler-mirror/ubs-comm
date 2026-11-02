@@ -6,7 +6,7 @@ description: Skill for adding SplitTrace/PROF instrumentation tracepoints to ubs
 # Skill: add-tracepoint
 
 > **权威参考**: `AGENTS.md` §关键陷阱(SplitTrace/Profiling tracepoint新增) — 8 个陷阱的完整描述。
-> **架构参考**: `doc/ubsocket/UBSOCKET-ARCHITECTURE.ch.md` — profiling 模块位置。
+> **架构参考**: `docs/ubsocket/UBSOCKET-ARCHITECTURE.ch.md` — profiling 模块位置。
 
 ## 模块范围
 
@@ -223,4 +223,4 @@ bthread(单线程) → Channel::CallMethod → queue_depth 允许堆积 N 个 Wr
 | `src/ubsocket/csrc/core/umq/umq_tx_helper.cpp` | PollUmqTxInternal 打点 |
 | `src/ubsocket/csrc/core/umq/umq_data_tx_ops.cpp` | DoUmqTxPoll/PostSend 打点 |
 | `AGENTS.md` §关键陷阱 | 8 个陷阱完整描述 |
-| `doc/ubsocket/POLLTX_PERF_ANALYSIS.md` | Write 侧性能分析 |
+| `docs/ubsocket/POLLTX_PERF_ANALYSIS.md` | Write 侧性能分析 |

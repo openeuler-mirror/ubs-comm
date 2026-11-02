@@ -7,6 +7,7 @@
 
 #include <semaphore.h>
 #include <atomic>
+#include "common/perf_test_logger.h"
 #include "hcom/hcom.h"
 #include "test_case/perf_test_base.h"
 #include "test_case/transport/transport_helper.h"

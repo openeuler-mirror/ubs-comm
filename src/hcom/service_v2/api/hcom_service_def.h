@@ -135,6 +135,7 @@ struct UBSHcomServiceOptions {
     UBSHcomWorkerMode workerGroupMode = NET_BUSY_POLLING; // worker线程工作模式，默认busy_polling
     int8_t workerThreadPriority = 0; // 线程优先级[-20,19]，19优先级最低，-20优先级最高，同nice值
     std::pair<uint32_t, uint32_t> workerGroupCpuIdsRange = {UINT32_MAX, UINT32_MAX}; // default not bind
+    bool enableMemPoolThreadCache = true; // 内存池线程本地缓存开关，默认为true，false表示不启用threadlocal cache
 };
 
 struct UBSHcomConnectOptions {
@@ -202,10 +203,13 @@ public:
             if (i >= MAX_MULTI_RAIL_NUM) {
                 break;
             }
+            if (mHcomMrs[i] == nullptr) {
+                continue;
+            }
             mrKey.keys[i] = mHcomMrs[i]->GetLKey();
             mrKey.tokens[i] = reinterpret_cast<uint64_t>(mHcomMrs[i]->GetMemorySeg());
         }
-        if (mHcomMrs.size() > 0 && mHcomMrs[0]->GetEidRaw() != nullptr) {
+        if (mHcomMrs.size() > 0 && mHcomMrs[0] != nullptr && mHcomMrs[0]->GetEidRaw() != nullptr) {
             auto ret = memcpy_s(mrKey.eid, sizeof(mrKey.eid), mHcomMrs[0]->GetEidRaw(), sizeof(mrKey.eid));
             if (ret != 0) {
                 NN_LOG_WARN("memcpy eid failed");

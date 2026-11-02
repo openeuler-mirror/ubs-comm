@@ -10,6 +10,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "net_mem_pool_fixed.h"
+#include "hcom_env.h"
 #include "net_monotonic.h"
 
 namespace ock {
@@ -18,6 +19,10 @@ NetMemPoolFixed::NetMemPoolFixed(const std::string &name, const NetMemPoolFixedO
     : mOptions(options),
       mName(name)
 {
+    NN_LOG_INFO("Fixed size memory pool "
+                << name << " thread-local cache "
+                << (mOptions.tlsPolicy.enabled ? "ENABLED" : "BYPASSED (TCAllocOne/TCFreeOne)") << " ("
+                << mOptions.tlsPolicy.ToString() << ")");
     OBJ_GC_INCREASE(NetMemPoolFixed);
 }
 
@@ -57,6 +62,7 @@ void NetMemPoolFixed::DoUnInitialize()
     mSuperBlocks.clear();
     mTotalSuperBlkSize = 0;
     mFreeCount = 0;
+    mTotalMinBlkCount = 0;
 }
 
 NResult NetMemPoolFixed::Validate()
@@ -73,6 +79,13 @@ NResult NetMemPoolFixed::Validate()
         NN_LOG_ERROR("Invalid tcExpandBlkCnt " << mOptions.tcExpandBlkCnt << " in mem pool " << mName << ", which be "
                                                << NN_NO8 << "~" << NN_NO256 << ", reset to " << NN_NO128);
         return NN_INVALID_PARAM;
+    }
+
+    /* validate tls cache block count (options-constructed pools; clamp out-of-range) */
+    if (mOptions.tlsPolicy.cacheBlkCnt < NN_NO8 || mOptions.tlsPolicy.cacheBlkCnt > 4096) {
+        NN_LOG_ERROR("Invalid tlsPolicy.cacheBlkCnt " << mOptions.tlsPolicy.cacheBlkCnt << " in mem pool " << mName
+                                                      << ", reset to " << NN_NO256);
+        mOptions.tlsPolicy.cacheBlkCnt = NN_NO256;
     }
 
     /* validate size of min block */
@@ -105,8 +118,7 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
 {
     uint64_t startTime = NetMonotonic::TimeNs();
     /* allocate memory */
-    auto superBlkSize = (mTotalSuperBlkSize == 0) ? (mOptions.superBlkSizeMB * NN_NO1024 * NN_NO1024) :
-                                                    mTotalSuperBlkSize;
+    auto superBlkSize = mOptions.superBlkSizeMB * NN_NO1024 * NN_NO1024;
     auto mem = memalign(NN_NO4096, superBlkSize);
     if (mem == nullptr) {
         NN_LOG_ERROR("Failed to malloc memory for supper block in mem pool " << mName);
@@ -129,8 +141,14 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
     uint32_t count = 0;
     NResult result = NN_OK;
     if ((result = MakeFreeList(blk, head, tail, count)) != NN_OK) {
+        /* rollback: this super block never became usable, undo the list/counter updates above */
+        mSuperBlocks.pop_back();
+        mTotalSuperBlkSize -= superBlkSize;
+        free(mem);
         return result;
     }
+
+    mTotalMinBlkCount += count;
 
     /* attach free linked list */
     if (holdFreeListLock) {
@@ -141,6 +159,11 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
         if (holdFreeListLock) {
             mTcMutex.Unlock();
         }
+        /* rollback: free list not attached, the blocks are invisible, undo everything */
+        mTotalMinBlkCount -= count;
+        mTotalSuperBlkSize -= superBlkSize;
+        mSuperBlocks.pop_back();
+        free(mem);
         return result;
     }
 
@@ -148,11 +171,31 @@ NResult NetMemPoolFixed::ExpandFromOs(bool holdFreeListLock)
         mTcMutex.Unlock();
     }
 
-    NN_LOG_INFO("Fixed size memory pool " << mName << " allocated " << mOptions.superBlkSizeMB
-                                          << "MB memory from os, total block size " << mTotalSuperBlkSize
-                                          << " and split to " << count << " min block with size " << mOptions.minBlkSize
-                                          << " which took " << (NetMonotonic::TimeNs() - startTime) / NN_NO1000
-                                          << "us, current free min block is " << mFreeCount);
+    /*
+     * [leak-trace] the old log always printed mOptions.superBlkSizeMB ("1MB"), which is only the size of the
+     * FIRST super block. Every later expansion actually doubles the pool (superBlkSize == mTotalSuperBlkSize
+     * before the expansion), so the real size is printed here instead.
+     */
+    NN_LOG_INFO("Fixed size memory pool "
+                << mName << "@" << this << " allocated " << (superBlkSize / NN_NO1024 / NN_NO1024)
+                << "MB memory from os, total block size " << mTotalSuperBlkSize << " and split to " << count
+                << " min block with size " << mOptions.minBlkSize << " which took "
+                << (NetMonotonic::TimeNs() - startTime) / NN_NO1000 << "us, current free min block is " << mFreeCount
+                << " | " << WaterMark());
+
+    /*
+     * [leak-trace] outstanding == blocks taken by thread caches and never given back.
+     * A healthy pool converges; a leaking pool keeps outstanding ~= total-min-blk on every expansion.
+     */
+    const uint64_t outstanding =
+        mTcAllocBlks.load(std::memory_order_relaxed) - mTcFreeBlks.load(std::memory_order_relaxed);
+    if (mSuperBlocks.size() > 1 && outstanding * NN_NO2 >= mTotalMinBlkCount) {
+        NN_LOG_WARN("[MEMPOOL-LEAK] Fixed size memory pool "
+                    << mName << "@" << this << " keeps expanding: outstanding " << outstanding << " of "
+                    << mTotalMinBlkCount << " min blocks are held by callers and never returned, expanded "
+                    << mSuperBlocks.size() << " times to " << (mTotalSuperBlkSize / NN_NO1024 / NN_NO1024)
+                    << "MB. Check the caller that allocates from this pool without a matching Return()");
+    }
 
     return NN_OK;
 }
@@ -166,10 +209,13 @@ NResult NetMemPoolFixed::TCAlloc(NetMemPoolMinBlock &head)
         mTcMutex.Lock();
         if (mFreeCount > 0) {
             head.next = mFreeMinBlkList.next;
+            /* [leak-trace] blocks handed out to the calling thread cache in this batch */
+            const uint32_t gotBlks = mFreeMinBlkList.next->count;
             mFreeCount -= mFreeMinBlkList.next->count;
             mFreeMinBlkList.next = head.next->nextN->next;
             head.next->nextN->next = nullptr;
             mTcMutex.Unlock();
+            mTcAllocBlks.fetch_add(gotBlks, std::memory_order_relaxed);
             flag = false;
             return NN_OK;
         }
@@ -230,15 +276,27 @@ std::string NetMemPoolFixed::ToString()
 }
 
 /* NetTCacheFixed */
-NetTCacheFixed::NetTCacheFixed(NetMemPoolFixed *sharePool) : mSharedPool(sharePool)
+NetTCacheFixed::NetTCacheFixed(NetMemPoolFixed *sharePool, const NetMemPoolTlsPolicy &policy) : mSharedPool(sharePool)
 {
     if (NN_UNLIKELY(mSharedPool == nullptr)) {
         return;
     }
 
     mSharedPool->IncreaseRef();
+    mSharedPool->mActiveCacheCount.fetch_add(1, std::memory_order_relaxed);
 
-    mFreeSteps = mSharedPool->mOptions.tcExpandBlkCnt;
+    mFreeSteps = policy.cacheBlkCnt;
+    mFlushMs = policy.flushMs;
+}
+
+void NetTCacheFixed::MaybeFlushIdle()
+{
+    const uint64_t now = NetMonotonic::TimeMs();
+    if (mFlushMs != 0 && mSharedPool != nullptr && mLastActiveMs != 0 &&
+        (now - mLastActiveMs) >= static_cast<uint64_t>(mFlushMs) && mCurrentFree > 0) {
+        FreeAllToPool();
+    }
+    mLastActiveMs = now;
 }
 
 std::string NetTCacheFixed::ToString()

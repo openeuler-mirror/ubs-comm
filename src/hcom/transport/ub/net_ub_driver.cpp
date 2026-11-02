@@ -243,6 +243,10 @@ NResult NetDriverUB::CreateOpCtxMemPool()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NextPower2(sizeof(UBOpContextInfo));
     options.tcExpandBlkCnt = NN_NO64;
+    // per-thread cache switch, see UBSHcomServiceOptions::enableMemPoolThreadCache
+    options.tlsPolicy.enabled = mMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
+    options.tlsPolicy.flushMs = 0;
     mOpCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mOpCtxMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for UB op context pool " << mName << ", probably out of memory");
@@ -265,6 +269,10 @@ NResult NetDriverUB::CreateSglCtxMemPool()
     options.superBlkSizeMB = NN_NO1;
     options.minBlkSize = NN_NextPower2(sizeof(UBSglContextInfo));
     options.tcExpandBlkCnt = NN_NO64;
+    // per-thread cache switch, see UBSHcomServiceOptions::enableMemPoolThreadCache
+    options.tlsPolicy.enabled = mMemPoolThreadCache;
+    options.tlsPolicy.cacheBlkCnt = options.tcExpandBlkCnt;
+    options.tlsPolicy.flushMs = 0;
     mSglCtxMemPool = new (std::nothrow) NetMemPoolFixed(mName, options);
     if (mSglCtxMemPool.Get() == nullptr) {
         NN_LOG_ERROR("Failed to create memory pool for UB sgl op context in driver " << mName
@@ -300,6 +308,7 @@ NResult NetDriverUB::CreateWorkerResource()
     result = CreateSglCtxMemPool();
     if (NN_UNLIKELY(result != NN_OK)) {
         NN_LOG_ERROR("UB failed to create Sgl ctx memory pool");
+        return result;
     }
 
     return NN_OK;

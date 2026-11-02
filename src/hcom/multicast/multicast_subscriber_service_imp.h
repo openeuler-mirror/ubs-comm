@@ -17,7 +17,9 @@ public:
     void Stop() override;
 
     SerResult CreateSubscriber(const std::string &serverUrl, NetRef<Subscriber> &subscriber) override;
-    void DestroySubscriber(const NetRef<Subscriber> &subscriber) override;
+    SerResult CreateSubscriber(const std::string &serverUrl, uint16_t publisherGroupIdx,
+                               NetRef<Subscriber> &subscriber) override;
+    void DestroySubscriber(NetRef<Subscriber> &subscriber) override;
 
     MulticastConfig &GetConfig() override;
     /* *
@@ -41,6 +43,7 @@ public:
 private:
     SerResult InitDriver();
     SerResult StartDriver();
+    void ReleaseDriver();
 
 private:
     int ServiceRequestReceived(const UBSHcomNetRequestContext &ctx);
