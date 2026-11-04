@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <condition_variable>
+#include <mutex>
 
 #include <mockcpp/mockcpp.hpp>
 
@@ -43,6 +45,17 @@ static std::atomic<uint64_t> g_lastNotifyData{0};
 static std::atomic<int> g_shutdownCalls{0};
 static std::atomic<int> g_lastShutdownHow{-1};
 static int (*g_origShutdown)(int, int) = nullptr;
+static std::atomic<bool> g_pausePost{false};
+static std::atomic<bool> g_postEntered{false};
+static std::atomic<bool> g_releasePost{false};
+static std::atomic<bool> g_destroyEntered{false};
+static std::mutex g_postMutex;
+static std::condition_variable g_postCv;
+
+static void MockDestroyJetty()
+{
+    g_destroyEntered.store(true);
+}
 
 /* 测试内部 helper 需要访问 UrmaApi 函数指针: 生产代码通过 UrmaApi::xxx_ptr 全局直连 */
 
@@ -51,6 +64,12 @@ static urma_status_t MockPostSendWrCapture(urma_jetty_t *, urma_jfs_wr_t *wr, ur
     if (wr != nullptr) {
         g_postSendWrCalls.fetch_add(1);
         g_lastNotifyData.store(wr->rw.notify_data);
+    }
+    if (g_pausePost.load()) {
+        std::unique_lock<std::mutex> lock(g_postMutex);
+        g_postEntered.store(true);
+        g_postCv.notify_all();
+        g_postCv.wait_for(lock, std::chrono::milliseconds(100), []() { return g_releasePost.load(); });
     }
     return URMA_SUCCESS;
 }
@@ -123,11 +142,14 @@ static ProbeTestEnv MakeProbeReadySocket(int fd = TEST_FD)
 {
     ProbeTestEnv env;
     env.sock = MakeRef<UrmaSocket>(fd);
+    env.sock->recv_buf_addr_ = 0;
     env.sock->send_buf_addr_ = reinterpret_cast<uintptr_t>(g_mock_buf);
     env.sock->send_buf_size_ = ProbeTestEnv::SEND_BUF_SIZE;
     env.sock->send_buf_ = new UrmaSockRingBuf(ProbeTestEnv::SEND_BUF_SIZE);
     env.sock->rmt_recv_buf_addr_ = reinterpret_cast<uintptr_t>(g_mock_buf);
     AttachDummyJetty(env.sock);
+    env.sock->SetSocketFlags(URMA_SOCKET_MASK_BIND_REMOTE);
+    env.sock->State(SOCK_STAT_ESTABLISHED);
     return env;
 }
 
@@ -188,6 +210,10 @@ protected:
         (void)LibcApi::Load();
         g_origShutdown = LibcApi::shutdown_ptr;
         g_postSendWrCalls.store(0);
+        g_pausePost.store(false);
+        g_postEntered.store(false);
+        g_releasePost.store(false);
+        g_destroyEntered.store(false);
         g_postRecvWrCalls.store(0);
         g_lastNotifyData.store(0);
         g_shutdownCalls.store(0);
@@ -491,6 +517,7 @@ TEST_F(UrmaAliveManagerTest, RunInThread_ProbesExhausted_InjectsHupAndPeerReset)
     mgr->mIntervalMs = 10;
     auto sock = MakeRef<UrmaSocket>(TEST_FD);
     sock->create_type_ = SOCK_CREATE_TYPE_ACCEPT;
+    sock->SetSocketFlags(URMA_SOCKET_MASK_BIND_REMOTE);
     sock->alive_Info_ = MakeRef<UrmaAliveInfo>();
     sock->alive_Info_->IncProbesSent();
     sock->alive_Info_->IncProbesSent();
@@ -517,6 +544,7 @@ TEST_F(UrmaAliveManagerTest, RunInThread_ListenSocket_Skipped)
     mgr->mIntervalMs = 10;
     auto env = MakeProbeReadySocket();
     env.sock->create_type_ = SOCK_CREATE_TYPE_LISTEN; /* listen socket 不探测 */
+    env.sock->socket_flags.store(0);                  /* listeners have no bound peer */
     env.sock->alive_Info_ = MakeRef<UrmaAliveInfo>();
     RegisterProbeSocket(env);
     MakeSocketIdle(env, 10);
@@ -722,5 +750,150 @@ TEST_F(UrmaAliveManagerTest, SocketInitialize_ManagerNotInited_NoAliveInfoNoCras
     EXPECT_EQ(nullptr, sock->GetAliveInfo().Get()); /* manager 为空不应挂 alive info */
     sock->UnInitialize();
 
+    GlobalMockObject::verify();
+}
+
+// Reproduce a client published to ArraySet before its asynchronous URMA setup.
+TEST_F(UrmaAliveManagerTest, CheckSocket_ConnectingWithoutJetty_SkipsProbeAndReset)
+{
+    auto mgr = MakeRef<UrmaAliveManager>();
+    mgr->options = MakeConf(180, 0, 1);
+    auto sock = MakeRef<UrmaSocket>(TEST_FD);
+    sock->recv_buf_addr_ = 0;
+    sock->create_type_ = SOCK_CREATE_TYPE_CONNECT;
+    sock->State(SOCK_STAT_CONNECTING);
+    sock->alive_Info_ = MakeRef<UrmaAliveInfo>();
+    const uint64_t scanTime = sock->alive_Info_->GetLastActiveTime() - 1;
+    mgr->CheckSocket(sock.Get(), scanTime);
+    EXPECT_EQ(0u, sock->alive_Info_->GetProbesSent());
+    EXPECT_EQ(0, g_postSendWrCalls.load());
+    EXPECT_EQ(SOCK_STAT_CONNECTING, sock->State());
+    EXPECT_EQ(UBS_ERROR, mgr->SendProbePacket(sock.Get()));
+    EXPECT_EQ(0u, sock->alive_Info_->GetProbesSent());
+    sock->alive_Info_->IncProbesSent();
+    mgr->CheckSocket(sock.Get(), scanTime);
+    EXPECT_FALSE(sock->IsPeerReset());
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaAliveManagerTest, CheckSocket_TimestampBoundaries_OnlyExpiredConnectionsProbe)
+{
+    constexpr uint64_t SCAN_TIME = 20 * UBSOCKET_S_TO_NS;
+    struct TimeCase {
+        uint64_t activeTime;
+        uint64_t sendTime;
+        uint32_t interval;
+        bool expectProbe;
+    };
+    const TimeCase cases[] = {
+        {SCAN_TIME - 5 * UBSOCKET_S_TO_NS + 1, SCAN_TIME - 2 * UBSOCKET_S_TO_NS, 2, false},
+        {SCAN_TIME - 5 * UBSOCKET_S_TO_NS, SCAN_TIME - 2 * UBSOCKET_S_TO_NS, 2, true},
+        {SCAN_TIME - 5 * UBSOCKET_S_TO_NS - 1, SCAN_TIME - 2 * UBSOCKET_S_TO_NS, 2, true},
+        {SCAN_TIME - 5 * UBSOCKET_S_TO_NS, SCAN_TIME - 2 * UBSOCKET_S_TO_NS + 1, 2, false},
+        {SCAN_TIME - 5 * UBSOCKET_S_TO_NS, SCAN_TIME - 2 * UBSOCKET_S_TO_NS - 1, 2, true},
+        {SCAN_TIME + 1, SCAN_TIME - 2 * UBSOCKET_S_TO_NS, 2, false},
+        {SCAN_TIME - 5 * UBSOCKET_S_TO_NS, SCAN_TIME + 1, 0, false},
+        {SCAN_TIME + 1, SCAN_TIME + 1, 0, false},
+    };
+    for (const auto &c : cases) {
+        SCOPED_TRACE(c.activeTime);
+        auto mgr = MakeRef<UrmaAliveManager>();
+        mgr->options = MakeConf(5, c.interval, 9);
+        auto env = MakeProbeReadySocket();
+        env.sock->alive_Info_ = MakeRef<UrmaAliveInfo>();
+        env.sock->alive_Info_->last_active_time_ns_ = c.activeTime;
+        env.sock->alive_Info_->last_probes_sent_ns_ = c.sendTime;
+        g_postSendWrCalls.store(0);
+        mgr->CheckSocket(env.sock.Get(), SCAN_TIME);
+        EXPECT_EQ(c.expectProbe ? 1 : 0, g_postSendWrCalls.load());
+        EXPECT_EQ(c.expectProbe ? 1u : 0u, env.sock->alive_Info_->GetProbesSent());
+        DestroyProbeEnv(env);
+    }
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaAliveManagerTest, PostCtrlOnlyNotification_MissingResources_ReturnsErrorWithoutAllocation)
+{
+    constexpr int MISSING_RESOURCE_COUNT = 3;
+    for (int missing = 0; missing < MISSING_RESOURCE_COUNT; ++missing) {
+        auto env = MakeProbeReadySocket();
+        if (missing == 0) {
+            env.sock->socket_flags.store(0);
+        } else if (missing == 1) {
+            env.sock->jetty_ = nullptr;
+        } else {
+            env.sock->send_buf_ = nullptr;
+        }
+        EXPECT_EQ(UBS_ERROR, env.sock->PostCtrlOnlyNotification(KEEP_ALIVE, KEEP_ALIVE_PROBE));
+        EXPECT_EQ(UBS_ERROR, env.sock->PostCtrlOnlyNotification(KEEP_ALIVE_ACK, KEEP_ALIVE_PROBE));
+        EXPECT_EQ(0, g_postSendWrCalls.load());
+        if (env.sock->send_buf_ != nullptr) {
+            EXPECT_EQ(0u, env.sock->send_buf_->Used());
+        }
+        DestroyProbeEnv(env);
+    }
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaAliveManagerTest, CheckSocket_LocallyClosed_SkipsKeepAlive)
+{
+    auto mgr = MakeRef<UrmaAliveManager>();
+    mgr->options = MakeConf(1, 0, 1);
+    auto env = MakeProbeReadySocket();
+    env.sock->alive_Info_ = MakeRef<UrmaAliveInfo>();
+    env.sock->OnLocalClose();
+    mgr->CheckSocket(env.sock.Get(), env.sock->alive_Info_->GetLastActiveTime() + UBSOCKET_S_TO_NS);
+    EXPECT_EQ(UBS_ERROR, mgr->SendResponsePacket(env.sock.Get()));
+    EXPECT_EQ(0u, env.sock->alive_Info_->GetProbesSent());
+    EXPECT_EQ(0, g_postSendWrCalls.load());
+    DestroyProbeEnv(env);
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaAliveManagerTest, PostCtrlOnlyNotification_ConcurrentCleanup_WaitsForInFlightPost)
+{
+    auto env = MakeProbeReadySocket();
+    MOCKER_CPP(&UrmaJetty::Destroy).expects(once()).will(invoke(MockDestroyJetty));
+    g_pausePost.store(true);
+    ock::ubs::Result postResult = UBS_ERROR;
+    std::thread sender([&]() { postResult = env.sock->PostCtrlOnlyNotification(KEEP_ALIVE, KEEP_ALIVE_PROBE); });
+    EXPECT_TRUE(PollFor([]() { return g_postEntered.load(); }, 100));
+    std::atomic<bool> cleanupStarted{false};
+    std::thread cleanup([&]() {
+        cleanupStarted.store(true);
+        env.sock->DestroyUrmaResources();
+    });
+    EXPECT_TRUE(PollFor([&]() { return cleanupStarted.load(); }, 100));
+    EXPECT_FALSE(PollFor([]() { return g_destroyEntered.load(); }, 20));
+    {
+        std::lock_guard<std::mutex> lock(g_postMutex);
+        g_releasePost.store(true);
+    }
+    g_postCv.notify_all();
+    sender.join();
+    cleanup.join();
+    EXPECT_EQ(UBS_OK, postResult);
+    EXPECT_TRUE(g_destroyEntered.load());
+    EXPECT_FALSE(env.sock->IsBindRemote());
+    EXPECT_EQ(UBS_ERROR, env.sock->PostCtrlOnlyNotification(KEEP_ALIVE, KEEP_ALIVE_PROBE));
+    EXPECT_EQ(1, g_postSendWrCalls.load());
+    DestroyProbeEnv(env);
+    GlobalMockObject::verify();
+}
+
+TEST_F(UrmaAliveManagerTest, CheckSocket_PeerClosedOrReset_SkipsProbeAndAck)
+{
+    auto mgr = MakeRef<UrmaAliveManager>();
+    mgr->options = MakeConf(1, 0, 1);
+    for (auto state : {PeerCloseState::CLOSED, PeerCloseState::RESET}) {
+        auto env = MakeProbeReadySocket();
+        env.sock->alive_Info_ = MakeRef<UrmaAliveInfo>();
+        env.sock->peer_close_.store(state);
+        mgr->CheckSocket(env.sock.Get(), env.sock->alive_Info_->GetLastActiveTime() + UBSOCKET_S_TO_NS);
+        EXPECT_EQ(UBS_ERROR, mgr->SendResponsePacket(env.sock.Get()));
+        EXPECT_EQ(0u, env.sock->alive_Info_->GetProbesSent());
+        EXPECT_EQ(0, g_postSendWrCalls.load());
+        DestroyProbeEnv(env);
+    }
     GlobalMockObject::verify();
 }

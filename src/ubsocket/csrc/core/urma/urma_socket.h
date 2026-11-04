@@ -12,6 +12,7 @@
 #define UBS_COMM_URMA_SOCKET_H
 
 #include <pthread.h>
+#include <mutex>
 
 #include "core/ubsocket_socket.h"
 #include "urma_backend.h"
@@ -129,7 +130,7 @@ public:
 
     void SetSocketFlags(uint32_t mask)
     {
-        socket_flags |= mask;
+        socket_flags.fetch_or(mask, std::memory_order_release);
     }
 
     uint64_t GetConnId() const
@@ -144,12 +145,12 @@ public:
 
     bool DegradeEnable()
     {
-        return (socket_flags & URMA_SOCKET_MASK_DEGRADE) != 0;
+        return (socket_flags.load(std::memory_order_relaxed) & URMA_SOCKET_MASK_DEGRADE) != 0;
     }
 
     bool LinkSwitchEnable()
     {
-        return (socket_flags & URMA_SOCKET_MASK_LINK_SWITCH) != 0;
+        return (socket_flags.load(std::memory_order_relaxed) & URMA_SOCKET_MASK_LINK_SWITCH) != 0;
     }
 
     UrmaAliveInfoPtr GetAliveInfo()
@@ -313,6 +314,7 @@ private:
     Result DoExchangeSocketResources(bool send_first);
     Result PostShutdownWriteToPeer() noexcept;
     Result PostCtrlOnlyNotification(IOOpcode opcode, OneSideSenderType notify) noexcept;
+    bool CanKeepAlive() noexcept;
     /* 对端状态推进: 终态 (CLOSED/RESET) 吸收后续事件, 其余按序前进  */
     void AdvancePeerCloseState(PeerCloseState next) noexcept;
     /* 本端半关闭置位: 位或合并 (SHUT_WR + SHUT_RD → SHUT_RDWR) */
@@ -336,7 +338,8 @@ private:
     UrmaAliveInfoPtr alive_Info_{nullptr};
 
     ub_trans_mode trans_mode{RM_CTP};
-    uint32_t socket_flags : 3;
+    std::atomic<uint32_t> socket_flags{0};
+    std::mutex ctrl_mutex_; /* serializes control posts with transport resource destruction */
 
     IdentifyNode peer_node_{};
     uint32_t remote_uasid_{0};
