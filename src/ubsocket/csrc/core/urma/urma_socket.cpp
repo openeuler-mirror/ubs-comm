@@ -246,6 +246,12 @@ int UrmaSocket::GetLingerOpt(struct linger &value) noexcept
 
 Result UrmaSocket::PostCtrlOnlyNotification(IOOpcode opcode, OneSideSenderType notify) noexcept
 {
+    std::lock_guard<std::mutex> guard(ctrl_mutex_);
+    if (!IsBindRemote() || jetty_ == nullptr || send_buf_ == nullptr ||
+        ((opcode == KEEP_ALIVE || opcode == KEEP_ALIVE_ACK) && !CanKeepAlive())) {
+        return UBS_ERROR;
+    }
+
     const uint64_t unit = UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     const uint64_t need_size = UrmaCtrlOnlyBufSize(unit);
     uint64_t buf_offset = 0;
@@ -535,6 +541,8 @@ Result UrmaSocket::CreateUrmaResources()
 
 void UrmaSocket::DestroyUrmaResources()
 {
+    std::lock_guard<std::mutex> guard(ctrl_mutex_);
+    socket_flags.fetch_and(~URMA_SOCKET_MASK_BIND_REMOTE, std::memory_order_acq_rel);
     if (jetty_ != nullptr) {
         jetty_->Destroy();
         jetty_ = nullptr;
@@ -555,7 +563,13 @@ void UrmaSocket::DestroyUrmaResources()
 
 bool UrmaSocket::IsBindRemote()
 {
-    return (socket_flags & URMA_SOCKET_MASK_BIND_REMOTE) != 0;
+    return (socket_flags.load(std::memory_order_acquire) & URMA_SOCKET_MASK_BIND_REMOTE) != 0;
+}
+
+bool UrmaSocket::CanKeepAlive() noexcept
+{
+    return IsBindRemote() && !IsPeerClosed() && !IsPeerReset() &&
+           (block_flags_.load(std::memory_order_acquire) & BLOCKING_FLAG_CLOSED) == 0;
 }
 
 int UrmaSocket::NotifySocketReadable()
@@ -850,11 +864,14 @@ Result UrmaSocket::DoExchangeSocketResources(bool send_first)
         goto CLEAN_URMA_RESOURCE;
     }
 
-    rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
-    rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
-    remote_uasid_ = peer.uasid;
-    peer_node_ = peer.node;
-    SetSocketFlags(URMA_SOCKET_MASK_BIND_REMOTE);
+    {
+        std::lock_guard<std::mutex> guard(ctrl_mutex_);
+        rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
+        rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
+        remote_uasid_ = peer.uasid;
+        peer_node_ = peer.node;
+        SetSocketFlags(URMA_SOCKET_MASK_BIND_REMOTE);
+    }
     UBS_VLOG_TRACE("urma socket exchange socket result success, peer buf=(0x%lx:0x%lx), local buf=(0x%lx:0x%lx)",
                    peer.ex.my_send_buf.buf, peer.ex.my_recv_buf.buf, local.ex.my_send_buf.buf,
                    local.ex.my_recv_buf.buf);
@@ -944,6 +961,7 @@ Result UrmaSocket::ImportPeerSegments(const UrmaSockSegExInfo &peer) noexcept
 
 void UrmaSocket::CommitRemotePeer(const UrmaSockSegExInfo &peer) noexcept
 {
+    std::lock_guard<std::mutex> guard(ctrl_mutex_);
     rmt_send_buf_addr_ = peer.ex.my_send_buf.buf;
     rmt_recv_buf_addr_ = peer.ex.my_recv_buf.buf;
     remote_uasid_ = peer.uasid;

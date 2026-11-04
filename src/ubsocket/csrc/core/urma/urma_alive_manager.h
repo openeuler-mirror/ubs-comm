@@ -107,6 +107,7 @@ public:
 private:
     Result SendProbePacket(Socket *socket);
     void RunInThread();
+    void CheckSocket(Socket *socket, uint64_t now);
 
 private:
     std::thread mWorkerThread;

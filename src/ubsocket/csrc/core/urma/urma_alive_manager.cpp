@@ -77,7 +77,14 @@ Result UrmaAliveManager::SendProbePacket(Socket *socket)
         return UBS_ERROR;
     }
     auto *urmaSocket = RefStaticCastToRaw<UrmaSocket, Socket>(socket);
-    urmaSocket->GetAliveInfo()->IncProbesSent();
+    if (!urmaSocket->CanKeepAlive()) {
+        return UBS_ERROR;
+    }
+    auto info = urmaSocket->GetAliveInfo();
+    if (info == nullptr) {
+        return UBS_ERROR;
+    }
+    info->IncProbesSent();
     return urmaSocket->PostCtrlOnlyNotification(IOOpcode::KEEP_ALIVE, OneSideSenderType::KEEP_ALIVE_PROBE);
 }
 
@@ -101,10 +108,6 @@ void UpdateTimespec(struct timespec *t, uint64_t ms)
 void UrmaAliveManager::RunInThread()
 {
     pthread_setname_np(pthread_self(), "ub_keep_alive");
-    uint64_t aliveTimeNs = options.keepalive_time * UBSOCKET_S_TO_NS;
-    uint64_t aliveIntvlNs = options.keepalive_intvl * UBSOCKET_S_TO_NS;
-    uint32_t maxProbes = options.keepalive_probes;
-
     struct timespec exceptTime;
     // 初始化wait超时时间
     clock_gettime(CLOCK_REALTIME, &exceptTime);
@@ -116,37 +119,44 @@ void UrmaAliveManager::RunInThread()
         if (!mRunning) {
             break;
         }
-        uint64_t now = ubsocket_get_timeNs();
-        ArraySet<Socket>::GetInstance().ForEach([&](int fd, Socket *socket) {
-            if (socket == nullptr || socket->Type() != SocketType::SOCK_TYPE_URMA ||
-                (socket->create_type_ != SOCK_CREATE_TYPE_ACCEPT && socket->create_type_ != SOCK_CREATE_TYPE_CONNECT)) {
-                return;
-            }
-            auto *urmaSocket = RefStaticCastToRaw<UrmaSocket, Socket>(socket);
-            UrmaAliveInfoPtr info = urmaSocket->GetAliveInfo();
-            if (info == nullptr) {
-                return;
-            }
-
-            uint32_t probesSent = info->GetProbesSent();
-            if (probesSent >= maxProbes) {
-                UBS_VLOG_WARN("UrmaAlive reaching the set threshold: %d, closing socket fd: %d\n", maxProbes,
-                              urmaSocket->raw_socket_);
-                urmaSocket->OnPeerReset();
-                return;
-            }
-            uint64_t lastActive = info->GetLastActiveTime();
-            uint64_t lastSend = info->GetProbesSendTime();
-            if (now - lastActive < aliveTimeNs || now - lastSend < aliveIntvlNs) {
-                return;
-            }
-            SendProbePacket(urmaSocket);
-        });
+        ArraySet<Socket>::GetInstance().ForEach(
+            [&](int fd, Socket *socket) { CheckSocket(socket, ubsocket_get_timeNs()); });
 
         // 刷新wait的超时时间
         clock_gettime(CLOCK_REALTIME, &exceptTime);
         UpdateTimespec(&exceptTime, mIntervalMs);
     }
+}
+
+void UrmaAliveManager::CheckSocket(Socket *socket, uint64_t now)
+{
+    if (socket == nullptr || socket->Type() != SocketType::SOCK_TYPE_URMA) {
+        return;
+    }
+    auto *urmaSocket = RefStaticCastToRaw<UrmaSocket, Socket>(socket);
+    // The acquire in CanKeepAlive observes resources published after peer import/ack.
+    if (!urmaSocket->CanKeepAlive()) {
+        return;
+    }
+    auto info = urmaSocket->GetAliveInfo();
+    if (info == nullptr) {
+        return;
+    }
+    if (info->GetProbesSent() >= options.keepalive_probes) {
+        UBS_VLOG_WARN("UrmaAlive reaching the set threshold: %d, closing socket fd: %d\n", options.keepalive_probes,
+                      urmaSocket->raw_socket_);
+        urmaSocket->OnPeerReset();
+        return;
+    }
+    const uint64_t lastActive = info->GetLastActiveTime();
+    const uint64_t lastSend = info->GetProbesSendTime();
+    const uint64_t aliveTimeNs = options.keepalive_time * UBSOCKET_S_TO_NS;
+    const uint64_t aliveIntvlNs = options.keepalive_intvl * UBSOCKET_S_TO_NS;
+    // New sockets and concurrent activity can have timestamps newer than this scan.
+    if (now < lastActive || now < lastSend || now - lastActive < aliveTimeNs || now - lastSend < aliveIntvlNs) {
+        return;
+    }
+    SendProbePacket(urmaSocket);
 }
 
 bool UrmaAliveManager::KeepAliveEnable()
