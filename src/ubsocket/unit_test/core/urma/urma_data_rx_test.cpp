@@ -1125,7 +1125,6 @@ TEST_F(UrmaDataRxTest, BuildReadWrsSplitsRemotePagesAcrossLocalBlocks)
     auto *urmaSocket = static_cast<UrmaSocket *>(sock_.Get());
     urmaSocket->remote_target_segs_ = MakeRef<RemoteSegments>();
     UrmaRxOps::BuildReadWrCtx ctx{&g_dummy_alloc, urmaSocket, 123};
-    UrmaSetting::UB_USING_BOUNDING_DEV = true;
     UrmaRxOps rx(TEST_FD);
     rx.BuildReadWrs(2, CTRL_OFF1, &block1, ctx);
 
@@ -1187,7 +1186,7 @@ TEST_F(UrmaDataRxTest, IssueReadRequestAllocatesBlocksBuildsWrsAndPosts)
 
     UrmaRxOps rx(TEST_FD);
     UrmaRxOps::DataSlot slot;
-    WriteImmData imm{PRE_WRITE, CTRL_OFF1 / URMA_SND_BUFF_ALLOC_UNIT};
+    WriteImmData imm{PRE_WRITE, CTRL_OFF1 / UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT};
     EXPECT_EQ(UBS_OK, rx.IssueReadRequest(sock_, 9, imm.data, slot));
     EXPECT_EQ(URMA_RX_STS_READING, slot.rx_state.load(std::memory_order_acquire));
     ASSERT_NE(nullptr, slot.data_block);

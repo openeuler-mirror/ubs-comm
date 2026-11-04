@@ -1332,7 +1332,8 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
         }
 
         if (ctx.sock->mType == SOCK_UDS) {
-            struct ucred remoteIds {};
+            struct ucred remoteIds {
+            };
             socklen_t len = static_cast<socklen_t>(sizeof(struct ucred));
             if (NN_UNLIKELY(getsockopt(ctx.sock->FD(), SOL_SOCKET, SO_PEERCRED, &remoteIds, &len) != 0)) {
                 char errBuf[NET_STR_ERROR_BUF_SIZE] = {0};

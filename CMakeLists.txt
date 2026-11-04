@@ -17,17 +17,13 @@ add_subdirectory(src)
 
 option(BUILD_TESTS "Build unit tests" OFF)
 if (BUILD_TESTS)
+    if (TEST_TOOL_INSTALL_PATH)
+        list(INSERT CMAKE_PREFIX_PATH 0 "${TEST_TOOL_INSTALL_PATH}/googletest")
+    endif()
     find_package(GTest REQUIRED)
     enable_testing()
     add_definitions(-DBUILD_TESTS)
 
-    # GTest can be found via find_package.
-    #   find_package(GTest CONFIG REQUIRED)
-    #   target_link_libraries(foo GTest::gtest_main)  # or GTest::gtest w/o the main function
-    # if(NOT EXISTS ${TEST_TOOL_INSTALL_PATH})
-    #     message(FATAL_ERROR "Specify -DTEST_TOOL_INSTALL_PATH=/path/to/dir in cmake command args.")
-    # endif()
-    list(APPEND CMAKE_PREFIX_PATH ${TEST_TOOL_INSTALL_PATH}/googletest/lib64/cmake)
     add_subdirectory(test)
 endif ()
 message(STATUS "BUILD_TESTS: ${BUILD_TESTS}")

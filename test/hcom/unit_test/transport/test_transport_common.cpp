@@ -246,4 +246,4 @@ TEST_F(TestTransportCommon, NormalMemoryRegionFixedBufferGetFreeBufferN)
 }
 } // namespace hcom
 } // namespace ock
-//#endif
+  //#endif

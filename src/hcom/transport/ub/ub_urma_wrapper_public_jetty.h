@@ -24,7 +24,8 @@
 namespace ock {
 namespace hcom {
 
-enum UrmaConnectMsgType : uint8_t {
+enum UrmaConnectMsgType : uint8_t
+{
     CONNECT_REQ = 1,
     EXCHANGE_MSG = 2,
 };

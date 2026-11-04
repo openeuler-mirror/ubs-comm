@@ -51,7 +51,8 @@ int fake_post_write(fake_qp_t *my_qp, struct ibv_send_wr *wr);
 #endif
 #endif
 // cpp case
-using TestOpCode = enum {
+using TestOpCode = enum
+{
     GET_MR = 1,
     CHECK_SYNC_RESPONSE,
     SEND_RAW,

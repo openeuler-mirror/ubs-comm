@@ -427,8 +427,8 @@ TEST_F(TestShmTls, PostSendTls)
     result = tlsShmClientEp->PostSend(1, req);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
-                                                       const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                        const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -456,8 +456,8 @@ TEST_F(TestShmTls, PostSendTlsCipherSuite256)
     result = tlsShmClientEp->PostSend(1, req);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
-                                                       const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                        const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -495,8 +495,8 @@ TEST_F(TestShmTls, PostSendOpInfoTls)
     result = tlsShmClientEp->PostSend(1, req, innerOpInfo);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
-                                                       const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                        const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -522,8 +522,8 @@ TEST_F(TestShmTls, PostSendRawTls)
     result = tlsShmClientEp->PostSendRaw(req, 1);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
-                                                       const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                        const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -550,8 +550,8 @@ TEST_F(TestShmTls, PostSendRawSglTls)
     result = tlsShmClientEp->PostSendRawSgl(reqSgl, 1);
     EXPECT_EQ(SH_OK, result);
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
-                                                       const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                        const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
 
@@ -658,8 +658,8 @@ TEST_F(TestShmTls, PostTlsEncryptFail)
     void *cipher = malloc(encryptLen);
 
     /* Set Client Encrypt Value ,AesGcm128::Encrypt is fail */
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
-                                                       const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                        const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
     result = tlsShmClientEp->Encrypt(value.c_str(), value.length(), cipher, encryptLen);
@@ -748,7 +748,7 @@ TEST_F(TestShmTls, PostTlsDecryptFail)
 
     /* Set Decrypt ,AesGcm128::Decrypt is fail */
     MOCKER_CPP(&AesGcm128::Decrypt,
-               bool(AesGcm128::*)(const unsigned char *, const unsigned char *, size_t, unsigned char *, size_t &))
+               bool (AesGcm128::*)(const unsigned char *, const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
     result = tlsShmClientEp->Decrypt(readValue, req.size, rawValue, rawLen);
@@ -891,8 +891,8 @@ TEST_F(TestShmTls, SyncPostTlsEncryptFail)
     value = "value from client";
     encryptLen = tlsShmClientEp->EstimatedEncryptLen(value.length());
     void *cipher = malloc(encryptLen);
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(const unsigned char *, const unsigned char *,
-                                                       const unsigned char *, size_t, unsigned char *, size_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(const unsigned char *, const unsigned char *,
+                                                        const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
     result = tlsShmClientEp->Encrypt(value.c_str(), value.length(), cipher, encryptLen);
@@ -981,7 +981,7 @@ TEST_F(TestShmTls, SyncPostTlsDecryptFail)
 
     /* Set Decrypt ,AesGcm128::Decrypt is fail */
     MOCKER_CPP(&AesGcm128::Decrypt,
-               bool(AesGcm128::*)(const unsigned char *, const unsigned char *, size_t, unsigned char *, size_t &))
+               bool (AesGcm128::*)(const unsigned char *, const unsigned char *, size_t, unsigned char *, size_t &))
         .defaults()
         .will(returnValue(false));
     result = tlsShmClientEp->Decrypt(readValue, req.size, rawValue, rawLen);

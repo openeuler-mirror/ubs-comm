@@ -27,7 +27,8 @@ class NetAsyncEndpointSock;
 class NetSyncEndpointSock;
 class NetDriverSockWithOOB;
 
-enum SockExchangeOp : int16_t {
+enum SockExchangeOp : int16_t
+{
     REAL_CONNECT = -1,
 };
 

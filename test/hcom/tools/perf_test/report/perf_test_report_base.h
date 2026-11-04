@@ -12,7 +12,8 @@
 namespace hcom {
 namespace perftest {
 
-enum class PERF_TEST_REPORT_TYPE {
+enum class PERF_TEST_REPORT_TYPE
+{
     LATENCY = 0,
     BAND_WIDTH = 1
 };

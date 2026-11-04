@@ -52,7 +52,7 @@ typedef struct {
 #define list_for_each_safe(pos, n, head) \
     for ((pos) = (head)->next, (n) = (pos)->next; (pos) != (head); (pos) = (n), (n) = (pos)->next)
 
-#define list_entry(ptr, type, member) ((type *)(void *)((char *)(ptr) - offsetof(type, member)))
+#define list_entry(ptr, type, member) ((type *)(void *)((char *)(ptr)-offsetof(type, member)))
 
 static inline void __list_add(struct list_head *newnode, struct list_head *prevnode, struct list_head *nextnode)
 {

@@ -26,6 +26,9 @@ uint32_t g_rearmCount = 0;
 uint32_t g_pollCountAtRearm = 0;
 uint32_t g_handlerCount = 0;
 uint32_t g_handlerCqeCount = 0;
+int g_waitReturn = 0;
+urma_jfc_t *g_waitJfc = nullptr;
+uint32_t g_ackCount = 0;
 urma_jfce_t g_createdJfce{};
 urma_jfc_t g_createdJfc[2]{};
 uint32_t g_createdJfcCount = 0;
@@ -45,12 +48,18 @@ urma_status_t MockRearmJfc(urma_jfc_t *, bool)
     return URMA_SUCCESS;
 }
 
-int MockWaitJfc(urma_jfce_t *, uint32_t, int, urma_jfc_t *[])
+int MockWaitJfc(urma_jfce_t *, uint32_t count, int, urma_jfc_t *events[])
 {
-    return 0;
+    if (g_waitReturn > 0 && count > 0) {
+        events[0] = g_waitJfc;
+    }
+    return g_waitReturn;
 }
 
-void MockAckJfc(urma_jfc_t *[], uint32_t[], uint32_t) {}
+void MockAckJfc(urma_jfc_t *[], uint32_t[], uint32_t)
+{
+    ++g_ackCount;
+}
 
 urma_status_t MockDeleteJfc(urma_jfc_t *)
 {
@@ -100,6 +109,9 @@ protected:
         g_pollCountAtRearm = 0;
         g_handlerCount = 0;
         g_handlerCqeCount = 0;
+        g_waitReturn = 0;
+        g_waitJfc = nullptr;
+        g_ackCount = 0;
         g_createdJfcCount = 0;
         g_failCreateJfce = false;
         g_failCreateJfc = false;
@@ -228,6 +240,8 @@ TEST_F(UrmaPollerAggTest, Dedicated_PollValidatesState)
 
 TEST_F(UrmaPollerAggTest, Dedicated_PollDispatchesAndRearms)
 {
+    g_waitReturn = 1;
+    g_waitJfc = jfc1_->Handle();
     g_pollReturns[0] = 2;
     g_pollReturns[1] = 0;
     UrmaDedicatedJfcAggPoller poller;
@@ -238,14 +252,32 @@ TEST_F(UrmaPollerAggTest, Dedicated_PollDispatchesAndRearms)
     EXPECT_EQ(0u, g_pollCountAtRearm);
     EXPECT_EQ(1u, g_handlerCount);
     EXPECT_EQ(2u, g_handlerCqeCount);
+    EXPECT_EQ(1u, g_ackCount);
 }
 
 TEST_F(UrmaPollerAggTest, Dedicated_PollPropagatesDriverFailure)
 {
+    g_waitReturn = 1;
+    g_waitJfc = jfc1_->Handle();
     g_pollReturns[0] = -1;
     UrmaDedicatedJfcAggPoller poller;
     ASSERT_EQ(UBS_OK, poller.Start(MakeStartOptions()));
     EXPECT_EQ(UBS_ERROR, poller.poll());
+}
+
+TEST_F(UrmaPollerAggTest, Dedicated_WaitEmptyOrError_SkipsDispatch)
+{
+    for (int result : {0, -1}) {
+        g_waitReturn = result;
+        UrmaDedicatedJfcAggPoller poller;
+        ASSERT_EQ(UBS_OK, poller.Start(MakeStartOptions()));
+        EXPECT_EQ(result == 0 ? UBS_OK : UBS_ERROR, poller.poll());
+        EXPECT_EQ(0u, g_pollCount);
+        EXPECT_EQ(0u, g_rearmCount);
+        EXPECT_EQ(0u, g_handlerCount);
+        EXPECT_EQ(0u, g_ackCount);
+    }
+    GlobalMockObject::verify();
 }
 
 TEST_F(UrmaPollerAggTest, Shared_SelectAndPollCoverStoredState)

@@ -44,7 +44,8 @@ using ShmChannelKeeperPtr = NetRef<ShmChannelKeeper>;
 using DelayReleaseTimerPtr = NetRef<NetDelayReleaseTimer>;
 using ShmSyncEndpointPtr = NetRef<ShmSyncEndpoint>;
 
-enum ShmPollingMode : uint8_t {
+enum ShmPollingMode : uint8_t
+{
     SHM_EVENT_POLLING = 0,
     SHM_BUSY_POLLING = 1,
 };
@@ -107,7 +108,8 @@ using ShmIdleHandler = UBSHcomNetDriverIdleHandler;
  * make sure it is 64bits which equal to one cache line of CPU
  */
 struct ShmOpContextInfo {
-    enum ShmOpType : uint8_t {
+    enum ShmOpType : uint8_t
+    {
         SH_SEND = 0,
         SH_RECEIVE = 1,
         SH_WRITE = 2,
@@ -119,7 +121,8 @@ struct ShmOpContextInfo {
         SH_SEND_RAW_SGL = 8,
     };
 
-    enum ShmErrorType : uint8_t {
+    enum ShmErrorType : uint8_t
+    {
         SH_NO_ERROR = 0,
         SH_OPERATE_FAILURE = 1,
         SH_RESET_BY_PEER = 2,
@@ -235,7 +238,8 @@ struct ShmEvent {
     }
 };
 
-enum ShmChannelState : uint8_t {
+enum ShmChannelState : uint8_t
+{
     CH_NEW = 0,
     CH_BROKEN = 1,
 };
@@ -250,7 +254,8 @@ const std::string SHM_F_EVENT_QUEUE_PREFIX = "hcom-eq";
 const std::string SHM_F_DC_PREFIX = "hcom-dc";
 
 using HResult = int32_t;
-enum ShCode {
+enum ShCode
+{
     SH_OK = 0,
     SH_ERROR = 300,
     SH_PARAM_INVALID = 301,

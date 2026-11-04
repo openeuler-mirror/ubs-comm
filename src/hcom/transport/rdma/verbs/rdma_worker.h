@@ -41,7 +41,8 @@ using RDMASendSglRWRequest = UBSHcomNetTransSglRequest;
 using RDMAOpContextInfoPool = OpContextInfoPool<RDMAOpContextInfo>;
 using RDMASglContextInfoPool = OpContextInfoPool<RDMASglContextInfo>;
 
-enum RDMAWorkerType : uint8_t {
+enum RDMAWorkerType : uint8_t
+{
     SENDER = 0,
     RECEIVER = 1,
     SENDER_RECEIVER = 2,

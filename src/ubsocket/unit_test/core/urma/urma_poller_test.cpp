@@ -72,8 +72,8 @@ class UrmaPollerTest : public testing::Test {
 protected:
     void SetUp() override
     {
-        savedMode_ = UrmaSetting::UB_EPOLL_HANDLE_MODE;
-        UrmaSetting::UB_EPOLL_HANDLE_MODE = DISPATCHER_THREAD_POOL;
+        savedMode_ = UrmaSetting::UBS_EPOLL_MODE;
+        UrmaSetting::UBS_EPOLL_MODE = DISPATCHER_THREAD_POOL;
         memset(g_rawJfcs, 0, sizeof(g_rawJfcs));
         memset(&rawContext_, 0, sizeof(rawContext_));
         g_createJfcCalls = 0;
@@ -96,7 +96,7 @@ protected:
     {
         context_ = nullptr;
         device_ = nullptr;
-        UrmaSetting::UB_EPOLL_HANDLE_MODE = savedMode_;
+        UrmaSetting::UBS_EPOLL_MODE = savedMode_;
         g_busyPoller = nullptr;
         g_eventPoller = nullptr;
         GlobalMockObject::verify();

@@ -166,13 +166,17 @@ TEST(MemPoolTargetSegmentsTest, ConstructAndInit)
     EXPECT_TRUE(mpts.remote_target_segs_.empty());
 }
 
-TEST(MemPoolTargetSegmentsTest, LocalSegsResizeAndAccess)
+TEST(MemPoolTargetSegmentsTest, LocalSegsPerContextResizeAndAccess)
 {
+    constexpr uint32_t TEST_CONTEXT_ID = 1;
     MemPoolTargetSegments mpts;
-    mpts.local_target_segs_.resize(10, nullptr);
-    EXPECT_EQ(mpts.local_target_segs_.size(), 10u);
-    EXPECT_EQ(mpts.local_target_segs_[0], nullptr);
-    EXPECT_EQ(mpts.local_target_segs_[9], nullptr);
+    auto &segments = mpts.local_target_segs_[TEST_CONTEXT_ID];
+    segments.resize(10, nullptr);
+    EXPECT_EQ(mpts.local_target_segs_.size(), 1u);
+    EXPECT_EQ(segments.size(), 10u);
+    EXPECT_EQ(segments.front(), nullptr);
+    EXPECT_EQ(segments.back(), nullptr);
+    EXPECT_EQ(mpts.local_target_segs_.count(TEST_CONTEXT_ID + 1), 0u);
 }
 
 TEST(MemPoolTargetSegmentsTest, RemoteSegsInsertAndFind)
@@ -212,7 +216,10 @@ TEST_F(UrmaIoBufferPoolTest, AllocateSizeExceedsLimit)
 TEST_F(UrmaIoBufferPoolTest, GetLocalTargetSegOutOfBounds)
 {
     UrmaIoBufferPool alloc;
-    urma_target_seg_t *seg = alloc.get_local_target_seg(0xFFFFFFFF);
+    const uintptr_t poolEnd =
+        alloc.get_local_start_addr() + (static_cast<uintptr_t>(alloc.options_.pool_space_size_gb) << 30);
+    // The bounds check rejects this address before looking up the context.
+    urma_target_seg_t *seg = alloc.get_local_target_seg(UrmaContextPtr{}, poolEnd);
     EXPECT_EQ(seg, nullptr);
 }
 

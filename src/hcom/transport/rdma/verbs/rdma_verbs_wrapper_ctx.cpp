@@ -57,7 +57,8 @@ RResult RDMAContext::Initialize()
         return RR_DEVICE_OPEN_FAILED;
     }
 
-    struct ibv_device_attr attr {};
+    struct ibv_device_attr attr {
+    };
     if (HcomIbv::QueryDevice(tmpCtx, &attr) != 0) {
         NN_LOG_ERROR("Failed to query device info");
         HcomIbv::CloseDev(tmpCtx);

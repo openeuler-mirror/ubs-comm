@@ -35,7 +35,8 @@ RResult RDMAQp::CreateIbvQp()
     mCtxPosted.next = nullptr;
     mCtxPosted.prev = nullptr;
 
-    struct ibv_qp_init_attr initAttr {};
+    struct ibv_qp_init_attr initAttr {
+    };
     bzero(&initAttr, sizeof(ibv_qp_init_attr));
     initAttr.qp_context = this;
     initAttr.send_cq = mSendCQ->mCompletionQueue;
@@ -268,7 +269,8 @@ RResult RDMAQp::ChangeToReady(RDMAQpExchangeInfo &exInfo)
         return ret;
     }
 
-    struct ibv_qp_attr attr {};
+    struct ibv_qp_attr attr {
+    };
     ret = ChangeToInit(attr);
     if (ret != RR_OK) {
         return ret;

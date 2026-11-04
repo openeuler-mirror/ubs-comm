@@ -12,13 +12,15 @@
 namespace ock {
 namespace hcom {
 class MultiCastTimerListHeader;
-enum class MultiCastAsyncCBState {
+enum class MultiCastAsyncCBState
+{
     INIT = 0,
     FINISHED = 1,
     TIMEOUT = 2,
 };
 
-enum class MultiCastSyncCBType {
+enum class MultiCastSyncCBType
+{
     IO = 0,
     BROKEN = 1,
 };
