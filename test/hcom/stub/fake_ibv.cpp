@@ -38,7 +38,7 @@ extern "C" {
 #define FAKE_NULL_FD (-1)
 #define FAKE_NULL_DWORD 0XFFFFFFFF
 #ifndef container_of
-#define container_of(ptr, type, member) ((type *)(void *)((char *)(ptr) - offsetof(type, member)))
+#define container_of(ptr, type, member) ((type *)(void *)((char *)(ptr)-offsetof(type, member)))
 #endif
 
 struct ibv_device g_ibvdevice[FAKE_IBV_DEVICE_NUM] = {

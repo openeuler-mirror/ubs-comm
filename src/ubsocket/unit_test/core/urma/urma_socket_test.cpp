@@ -148,10 +148,10 @@ TEST_F(UrmaSocketTest, ReceiveHandlersDispatchAndNotifyForSuccessfulInlineData)
     auto *message = reinterpret_cast<UrmaCtrlMessage *>(g_mock_buf);
     message->head.sequence_no = 123;
 
-    const auto savedMode = UrmaSetting::UB_EPOLL_HANDLE_MODE;
-    UrmaSetting::UB_EPOLL_HANDLE_MODE = THREAD_PER_CONNECTION;
+    const auto savedMode = UrmaSetting::UBS_EPOLL_MODE;
+    UrmaSetting::UBS_EPOLL_MODE = THREAD_PER_CONNECTION;
     UrmaRxOps rxOps(TEST_FD);
-    UrmaSetting::UB_EPOLL_HANDLE_MODE = savedMode;
+    UrmaSetting::UBS_EPOLL_MODE = savedMode;
     sock->rx_.rx_ops_ = &rxOps;
     MOCKER_CPP(&UrmaRxOps::ProcessDataReached)
         .expects(exactly(2))
@@ -180,10 +180,10 @@ TEST_F(UrmaSocketTest, ReceiveHandlersAcceptDeferredAndErrorResults)
     auto *message = reinterpret_cast<UrmaCtrlMessage *>(g_mock_buf);
     message->head.sequence_no = 321;
 
-    const auto savedMode = UrmaSetting::UB_EPOLL_HANDLE_MODE;
-    UrmaSetting::UB_EPOLL_HANDLE_MODE = THREAD_PER_CONNECTION;
+    const auto savedMode = UrmaSetting::UBS_EPOLL_MODE;
+    UrmaSetting::UBS_EPOLL_MODE = THREAD_PER_CONNECTION;
     UrmaRxOps rxOps(TEST_FD);
-    UrmaSetting::UB_EPOLL_HANDLE_MODE = savedMode;
+    UrmaSetting::UBS_EPOLL_MODE = savedMode;
     sock->rx_.rx_ops_ = &rxOps;
     const ock::ubs::Result results[] = {UBS_LATER_SEQ, UBS_DEFERRED, UBS_ERROR};
     for (auto result : results) {
@@ -203,7 +203,7 @@ TEST_F(UrmaSocketTest, ReceiveHandlersAcceptDeferredAndErrorResults)
 TEST_F(UrmaSocketTest, HandlePreWriteRejectsOffsetOutsideReceiveBuffer)
 {
     UrmaSocket sock(TEST_FD);
-    sock.recv_buf_size_ = URMA_SND_BUFF_ALLOC_UNIT;
+    sock.recv_buf_size_ = UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT;
     sock.HandlePreWrite(WriteImmData{PRE_WRITE, 1});
 }
 
@@ -221,13 +221,14 @@ TEST_F(UrmaSocketTest, SendAcknowledgementsReleaseAllocatedBuffer)
     auto *message = reinterpret_cast<UrmaCtrlMessage *>(sock.send_buf_addr_ + offset);
     message->head.message_size = TEST_CHUNK;
     message->head.user_ctx = 0;
-    sock.HandleRecvCqe(WriteImmData{POST_WRITE, static_cast<uint32_t>(offset / URMA_SND_BUFF_ALLOC_UNIT)});
+    sock.HandleRecvCqe(WriteImmData{POST_WRITE, static_cast<uint32_t>(offset / UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT)});
     EXPECT_EQ(TEST_CAPACITY, sock.send_buf_->Available());
 
     ASSERT_TRUE(sock.send_buf_->Allocate(TEST_CHUNK, offset));
     message = reinterpret_cast<UrmaCtrlMessage *>(sock.send_buf_addr_ + offset);
     message->head.message_size = TEST_CHUNK;
-    sock.HandleRecvCqe(WriteImmData{WRITE_IN_BAND_ACK, static_cast<uint32_t>(offset / URMA_SND_BUFF_ALLOC_UNIT)});
+    sock.HandleRecvCqe(
+        WriteImmData{WRITE_IN_BAND_ACK, static_cast<uint32_t>(offset / UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT)});
     EXPECT_EQ(TEST_CAPACITY, sock.send_buf_->Available());
 }
 

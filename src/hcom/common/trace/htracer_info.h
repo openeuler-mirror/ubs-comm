@@ -23,7 +23,7 @@
 #include "htracer_utils.h"
 
 #define SERVICE_ID(TP_ID_) (((TP_ID_) >> 16) & 0xFFFF)
-#define INNER_ID(TP_ID_) ((TP_ID_) & 0xFFFF)
+#define INNER_ID(TP_ID_) ((TP_ID_)&0xFFFF)
 #define INVALID_SERVICE_ID (0xFFFF)
 #define MAX_SERVICE_NUM (256)
 #define MAX_INNER_ID_NUM (2)

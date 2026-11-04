@@ -42,3 +42,10 @@
          ${UBSOCKET_BASE_DIR}/csrc/profiling/impl/ubsocket_prof_tracepoint_dumper_ext.cpp
          ${UBSOCKET_BASE_DIR}/csrc/common/ubsocket_global_setting.cpp
   )
+
+if (BUILD_URMA_DLOPEN_BACKEND)
+    target_sources(profiling_test PRIVATE
+        ${UBSOCKET_BASE_DIR}/csrc/under_api/urma/dl_urma_api.cpp
+    )
+    target_link_libraries(profiling_test PRIVATE ${CMAKE_DL_LIBS})
+endif()

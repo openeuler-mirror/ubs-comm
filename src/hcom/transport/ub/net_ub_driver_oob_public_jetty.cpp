@@ -561,7 +561,8 @@ NResult NetDriverUBWithOob::ServerCreateEp(UBJettyExchangeInfo &info, UBJetty *q
         exchangeInfo->payload[payloadLen] = '\0';
         payload = std::string(exchangeInfo->payload, payloadLen);
     }
-    struct in_addr ipAddr {};
+    struct in_addr ipAddr {
+    };
     char ipStr[INET_ADDRSTRLEN]{};
     ipAddr.s_addr = exchangeInfo->info.eid.in4.addr;
     if (inet_ntop(AF_INET, &ipAddr, ipStr, INET_ADDRSTRLEN) == NULL) {

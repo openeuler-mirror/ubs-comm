@@ -111,7 +111,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSend)
         .will(returnValue(1))
         .then(returnValue(0))
         .then(returnValue(static_cast<int>(SH_SEND_COMPLETION_CALLBACK_FAILURE)));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -188,7 +188,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSend)
     ep->mAllowedSize = NN_NO128;
     UBSHcomNetTransOpInfo opInfo{};
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     MOCKER(NetFunc::CalcHeaderCrc32, uint32_t(UBSHcomNetTransHeader *))
@@ -305,7 +305,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRaw)
     ep->mSegSize = NN_NO128;
 
     MOCKER_CPP(&ShmSyncEndpoint::PostSend).stubs().will(returnValue(1)).then(returnValue(0));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -412,7 +412,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmPostSendRawSgl)
 
     MOCKER_CPP(&NetDriverShmWithOOB::ValidateMemoryRegion).stubs().will(returnValue(0));
     MOCKER_CPP(&ShmSyncEndpoint::PostSendRawSgl).stubs().will(returnValue(1));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -848,7 +848,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEncrypt)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen;
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     ret = ep->Encrypt(&encryptData, 1, cipher, cipherLen);
@@ -875,7 +875,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointEncryptTwo)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen = 0;
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(true));
 
@@ -921,7 +921,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointDecrypt)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen;
 
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     ret = ep->Decrypt(&encryptData, 1, cipher, cipherLen);
@@ -948,7 +948,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointDecryptTwo)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen = 0;
 
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(true));
     ep->mIsNeedEncrypt = true;
@@ -1315,7 +1315,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointEncryptTwo)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen = 0;
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false))
         .then(returnValue(true));
@@ -1388,7 +1388,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointDecryptTwo)
     uint8_t *cipher = reinterpret_cast<uint8_t *>(&index);
     uint64_t cipherLen = 0;
 
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false))
         .then(returnValue(true));
@@ -1707,7 +1707,7 @@ TEST_F(TestNetShmEndpoint, NetAsyncEndpointShmPostSendRawSgl)
 
     MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).stubs().will(returnValue(false)).then(returnValue(true));
 
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
     MOCKER_CPP(&MemoryRegionChecker::Validate).stubs().will(returnValue(0));
@@ -2050,7 +2050,7 @@ TEST_F(TestNetShmEndpoint, NetSyncEndpointShmReceiveFour)
     MOCKER_CPP(&ShmChannel::GetPeerDataAddressByOffset).stubs().will(invoke(MockGetPeerDataAddressByOffset));
     MOCKER(NetFunc::ValidateHeaderCrc32, bool(UBSHcomNetTransHeader *)).stubs().will(returnValue(true));
     MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).stubs().will(returnValue(true));
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false))
         .then(returnValue(true));

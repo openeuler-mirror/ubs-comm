@@ -213,7 +213,8 @@ void HcomPeriodicManager::RunInThread(int16_t tId)
         }
         auto duration = NetMonotonic::TimeMs() - startTime;
 
-        struct epoll_event ev {};
+        struct epoll_event ev {
+        };
         int waitTimeMs = 0; // wait for 500ms
         if (duration >= gMaxTimeout) {
             continue;

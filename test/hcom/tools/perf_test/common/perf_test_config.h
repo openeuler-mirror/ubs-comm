@@ -18,7 +18,8 @@ constexpr uint32_t MAX_MESSAGE_SIZE = 2097152; // 2MB = 2^21B
 constexpr uint32_t HCOM_HEADER_SIZE = 1024; // 需要内存对齐
 constexpr uint32_t MAX_ITERATIONS = 200000;
 
-enum class PERF_TEST_TYPE {
+enum class PERF_TEST_TYPE
+{
     // 固定使用偶数枚举值代表时延，奇数枚举值代表带宽
     TRANSPORT_SEND_LAT = 0,
     TRANSPORT_SEND_BW = 1,

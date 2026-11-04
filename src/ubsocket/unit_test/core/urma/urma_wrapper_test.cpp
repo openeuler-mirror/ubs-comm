@@ -12,6 +12,7 @@
 #include <mockcpp/mockcpp.hpp>
 
 #include <sstream>
+#include <vector>
 
 #include "urma_data_rx_ops.h"
 #include "urma_socket.h"
@@ -541,7 +542,7 @@ TEST_F(UrmaWrapperTest, Context_CreateJfsJfrJettyRejectsNullJfc)
     UrmaJfrPtr jfr;
     UrmaJettyPtr jetty;
     MOCKER_CPP(&UrmaApi::urma_create_jfs).expects(never());
-    EXPECT_EQ(UBS_INVALID_PARAM, context_->CreateJfsJfrJetty(nullptr, 16, URMA_TM_RM, URMA_CTP, jfs, jfr, jetty));
+    EXPECT_EQ(UBS_INVALID_PARAM, context_->CreateJfsJfrJetty(nullptr, 16, 16, URMA_TM_RM, URMA_CTP, jfs, jfr, jetty));
 }
 
 TEST_F(UrmaWrapperTest, Context_CreateJfsJfrJettyStopsAtFailedStage)
@@ -564,7 +565,7 @@ TEST_F(UrmaWrapperTest, Context_CreateJfsJfrJettyStopsAtFailedStage)
                 .expects(once())
                 .will(returnValue(static_cast<urma_jetty_t *>(nullptr)));
         }
-        EXPECT_EQ(UBS_ERROR, context_->CreateJfsJfrJetty(jfc, 16, URMA_TM_RM, URMA_CTP, jfs, jfr, jetty));
+        EXPECT_EQ(UBS_ERROR, context_->CreateJfsJfrJetty(jfc, 16, 16, URMA_TM_RM, URMA_CTP, jfs, jfr, jetty));
         EXPECT_EQ(stage > 0, jfs != nullptr);
         EXPECT_EQ(stage > 1, jfr != nullptr);
         EXPECT_EQ(nullptr, jetty.Get());
@@ -578,7 +579,7 @@ TEST_F(UrmaWrapperTest, Context_CreateJfsJfrJettyPopulatesResources)
     UrmaJfsPtr jfs;
     UrmaJfrPtr jfr;
     UrmaJettyPtr jetty;
-    ASSERT_EQ(UBS_OK, context_->CreateJfsJfrJetty(jfc, 16, URMA_TM_RM, URMA_CTP, jfs, jfr, jetty));
+    ASSERT_EQ(UBS_OK, context_->CreateJfsJfrJetty(jfc, 16, 16, URMA_TM_RM, URMA_CTP, jfs, jfr, jetty));
     ASSERT_NE(nullptr, jfs.Get());
     ASSERT_NE(nullptr, jfr.Get());
     ASSERT_NE(nullptr, jetty.Get());
@@ -701,15 +702,15 @@ TEST_F(UrmaWrapperTest, RxResponseCtrlMessageBuildsWriteImmediateRequest)
     auto jetty = MakeRef<UrmaJetty>(URMA_UTP, 1, &g_jetty, context_, jfs, jfr);
     jetty->raw_target_jetty_ = &g_targetJetty;
 
-    alignas(64) uint8_t recvBuf[2 * URMA_SND_BUFF_ALLOC_UNIT]{};
+    std::vector<uint8_t> recvBuf(2 * UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT);
     auto urmaSocket = MakeRef<UrmaSocket>(91);
-    urmaSocket->recv_buf_addr_ = reinterpret_cast<uintptr_t>(recvBuf);
+    urmaSocket->recv_buf_addr_ = reinterpret_cast<uintptr_t>(recvBuf.data());
     urmaSocket->rmt_send_buf_addr_ = 0x8000;
     urmaSocket->local_ctrl_target_seg_ = &g_targetSeg;
     urmaSocket->remote_ctrl_target_seg_ = &g_targetSeg;
     urmaSocket->jetty_ = jetty;
     SocketPtr socket = RefConvert<UrmaSocket, Socket>(urmaSocket);
-    auto *response = reinterpret_cast<UrmaCtrlMessage *>(recvBuf + URMA_SND_BUFF_ALLOC_UNIT);
+    auto *response = reinterpret_cast<UrmaCtrlMessage *>(recvBuf.data() + UrmaSetting::UBS_SND_BUFF_ALLOC_UNIT);
     response->head.request_id = 7;
     response->head.sequence_no = 9;
 

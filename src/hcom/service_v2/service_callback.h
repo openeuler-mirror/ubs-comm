@@ -21,13 +21,15 @@ namespace ock {
 namespace hcom {
 class SerTimerListHeader;
 
-enum class HcomAsyncCBState : uint8_t {
+enum class HcomAsyncCBState : uint8_t
+{
     CBS_INIT = 0,
     CBS_FINISHED = 1,
     CBS_TIMEOUT = 2,
 };
 
-enum class HcomAsyncCBType : uint8_t {
+enum class HcomAsyncCBType : uint8_t
+{
     CBS_IO = 0,
     CBS_CHANNEL_BROKEN = 1,
 };

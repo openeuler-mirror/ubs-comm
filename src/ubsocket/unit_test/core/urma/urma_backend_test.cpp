@@ -134,13 +134,13 @@ TEST_F(UrmaBackendTest, LoadAndUnloadUrmaApiForwardToDlApi)
 
 TEST_F(UrmaBackendTest, KeepAliveManagerInitializesDisabledAndUninitializes)
 {
-    uint32_t savedTime = UrmaSetting::UB_KEEPALIVE_TIME;
-    UrmaSetting::UB_KEEPALIVE_TIME = 0;
+    uint32_t savedTime = UrmaSetting::UBS_KEEPALIVE_TIME;
+    UrmaSetting::UBS_KEEPALIVE_TIME = 0;
     EXPECT_EQ(UBS_OK, backend_->InitKeepAliveManager());
     EXPECT_NE(nullptr, backend_->alive_manager_.Get());
     backend_->UnInitKeepAliveManager();
     EXPECT_EQ(nullptr, backend_->alive_manager_.Get());
-    UrmaSetting::UB_KEEPALIVE_TIME = savedTime;
+    UrmaSetting::UBS_KEEPALIVE_TIME = savedTime;
 }
 
 TEST_F(UrmaBackendTest, SetLogLevelOnlyUpdatesInitializedBackend)

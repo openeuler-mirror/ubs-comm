@@ -29,7 +29,7 @@
 #endif
 
 #define MEM_ALLOCATOR_ROUND_UP_TO(x, align) \
-    (((x) + (align) - 1) / ((align)) * ((align))) /* round x to align, etc round(3,4) = 4 */
+    (((x) + (align)-1) / ((align)) * ((align))) /* round x to align, etc round(3,4) = 4 */
 
 #define MA_LEN_LEN (NN_NO4)
 #define MA_CANARY_LEN (NN_NO4)

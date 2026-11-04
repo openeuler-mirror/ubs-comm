@@ -27,10 +27,12 @@ class UrmaContextPoolTest : public testing::Test {
 protected:
     void SetUp() override
     {
-        savedDevName_ = UrmaSetting::UB_DEV_NAME;
-        savedBonding_ = UrmaSetting::UB_USING_BOUNDING_DEV;
-        UrmaSetting::UB_DEV_NAME = "configured";
-        UrmaSetting::UB_USING_BOUNDING_DEV = false;
+        savedDevName_ = UrmaSetting::UBS_DEV_NAME;
+        savedEidIndex_ = UrmaSetting::UBS_DEV_EID_INDEX;
+        savedPollerCount_ = UrmaSetting::UBS_POLLER_COUNT;
+        savedCqDepth_ = UrmaSetting::UBS_POLLER_CQ_DEPTH;
+        savedMode_ = UrmaSetting::UBS_EPOLL_MODE;
+        UrmaSetting::UBS_DEV_NAME = "configured";
         UrmaDevice::ALL_DEVICES.clear();
         UrmaDevice::LOADED = true;
         UrmaApi::urma_delete_context_ptr = MockDeleteContext;
@@ -53,8 +55,11 @@ protected:
         context2_ = nullptr;
         context1_ = nullptr;
         device_ = nullptr;
-        UrmaSetting::UB_DEV_NAME = savedDevName_;
-        UrmaSetting::UB_USING_BOUNDING_DEV = savedBonding_;
+        UrmaSetting::UBS_DEV_NAME = savedDevName_;
+        UrmaSetting::UBS_DEV_EID_INDEX = savedEidIndex_;
+        UrmaSetting::UBS_POLLER_COUNT = savedPollerCount_;
+        UrmaSetting::UBS_POLLER_CQ_DEPTH = savedCqDepth_;
+        UrmaSetting::UBS_EPOLL_MODE = savedMode_;
     }
 
     urma_context_t raw_contexts_[2]{};
@@ -62,7 +67,10 @@ protected:
     UrmaContextPtr context1_{nullptr};
     UrmaContextPtr context2_{nullptr};
     std::string savedDevName_;
-    bool savedBonding_ = false;
+    uint32_t savedEidIndex_ = 0;
+    uint16_t savedPollerCount_ = 0;
+    uint32_t savedCqDepth_ = 0;
+    EpollHandleMode savedMode_ = THREAD_PER_CONNECTION;
 };
 
 TEST_F(UrmaContextPoolTest, AddGetClearAndLifecycle)
@@ -156,11 +164,11 @@ TEST_F(UrmaContextPoolTest, SelectContextRoundRobinAndInvalidPolicy)
     EXPECT_EQ(nullptr, pool.SelectContext(PSP_COUNT, &selected, health, 2).Get());
 }
 
-TEST_F(UrmaContextPoolTest, SettingLoadEnvAppliesAllUrmaOptions)
+TEST_F(UrmaContextPoolTest, SettingLoadEnvAppliesSupportedUrmaOptions)
 {
-    const char *names[] = {"UBSOCKET_UB_DEV", "UBSOCKET_UB_EID_IDX", "UBSOCKET_UB_BOUNDING_DEV",
-                           "UBSOCKET_UB_BUSY_POLLING", "UBSOCKET_EPOLL_HANDLE_MODE"};
-    const char *values[] = {"ut_dev", "17", "1", "1", "1"};
+    const char *names[] = {"UBS_DEV_NAME", "UBS_DEV_EID_INDEX", "UBS_POLLER_COUNT", "UBS_POLLER_CQ_DEPTH",
+                           "UBS_EPOLL_MODE"};
+    const char *values[] = {"ut_dev", "17", "3", "8192", "1"};
     std::string saved[5];
     bool existed[5]{};
     for (size_t i = 0; i < 5; ++i) {
@@ -172,11 +180,11 @@ TEST_F(UrmaContextPoolTest, SettingLoadEnvAppliesAllUrmaOptions)
 
     UrmaSetting::AddRules();
     EXPECT_EQ(UBS_OK, UrmaSetting::LoadEnv());
-    EXPECT_EQ("ut_dev", UrmaSetting::UB_DEV_NAME);
-    EXPECT_EQ(17u, UrmaSetting::UB_EID_INDEX);
-    EXPECT_TRUE(UrmaSetting::UB_USING_BOUNDING_DEV);
-    EXPECT_TRUE(UrmaSetting::UB_POLLER_BUSY_POLLING);
-    EXPECT_EQ(DISPATCHER_THREAD_POOL, UrmaSetting::UB_EPOLL_HANDLE_MODE);
+    EXPECT_EQ("ut_dev", UrmaSetting::UBS_DEV_NAME);
+    EXPECT_EQ(17u, UrmaSetting::UBS_DEV_EID_INDEX);
+    EXPECT_EQ(3u, UrmaSetting::UBS_POLLER_COUNT);
+    EXPECT_EQ(8192u, UrmaSetting::UBS_POLLER_CQ_DEPTH);
+    EXPECT_EQ(DISPATCHER_THREAD_POOL, UrmaSetting::UBS_EPOLL_MODE);
 
     for (size_t i = 0; i < 5; ++i) {
         if (existed[i]) {

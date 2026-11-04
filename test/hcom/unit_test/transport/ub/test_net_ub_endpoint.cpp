@@ -141,7 +141,7 @@ static NResult FakePollingCompletion(UBOpContextInfo *&ctx, int32_t timeout, uin
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendSeqFailed)
 {
     name = "NetUBAsyncEndpointPostSendSeqFailed";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     int ret = NEP->PostSend(0, request, 0);
@@ -152,7 +152,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendSeqMemcpyFailed)
 {
     name = "NetUBAsyncEndpointPostSendSeqMemcpyFailed";
     NEP->mIsNeedEncrypt = false;
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
@@ -163,7 +163,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendSeqMemcpyFailed)
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendSeq)
 {
     name = "NetUBAsyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
 
@@ -187,7 +187,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendSeq)
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendSeqTwo)
 {
     name = "NetUBAsyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&UBWorker::PostSend)
@@ -248,7 +248,7 @@ TEST_F(TestNetUBAsyncEndpoint, PostSendSglInlineEncrypt)
     name = "NetUBAsyncEndpointPostSendSglInline";
     NEP->mIsNeedEncrypt = true;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&UBWorker::PostSend).stubs().will(returnValue(0));
@@ -265,7 +265,7 @@ TEST_F(TestNetUBAsyncEndpoint, PostSendSglInlineNotUB)
     NEP->mIsNeedEncrypt = false;
     NEP->mJetty->mUBContext->protocol = UBSHcomNetDriverProtocol::RDMA;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&UBWorker::PostSend).stubs().will(returnValue(0));
@@ -292,7 +292,7 @@ TEST_F(TestNetUBAsyncEndpoint, PostSendSglInlineUBSuccess)
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendInfoFailed)
 {
     name = "NetUBAsyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     UBSHcomNetTransOpInfo OpInfo{};
@@ -304,7 +304,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendInfoMemcpyFailed)
 {
     name = "NetUBAsyncEndpointPostSend";
     NEP->mIsNeedEncrypt = false;
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
@@ -316,7 +316,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendInfoMemcpyFailed)
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendOpInfo)
 {
     name = "NetUBAsyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
 
@@ -341,7 +341,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendOpInfo)
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendOpInfoTwo)
 {
     name = "NetUBAsyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&UBWorker::PostSend)
@@ -455,7 +455,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendAll)
 {
     name = "NetUBAsyncEndpointPostSendAll";
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
 
@@ -526,7 +526,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawAllTwo)
 
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawGetBufferErr)
 {
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     int ret = NEP->PostSendRaw(request, 1);
@@ -535,11 +535,11 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawGetBufferErr)
 
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawCopyErr)
 {
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -554,7 +554,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawCopyErr)
 
 TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRaw)
 {
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&UBWorker::PostSend)
@@ -597,7 +597,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawSglEncryptCopyErr)
     mDriver->mMapTseg.emplace(key, nullptr);
     NEP->mIsNeedEncrypt = true;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
@@ -612,7 +612,7 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawSglEncryptSecondGetB
     mDriver->mMapTseg.emplace(key, nullptr);
     NEP->mIsNeedEncrypt = true;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer))
         .then(returnValue(false));
@@ -628,12 +628,12 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawSglEncryptEncryptFai
     mDriver->mMapTseg.emplace(key, nullptr);
     NEP->mIsNeedEncrypt = true;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer))
         .then(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -647,11 +647,11 @@ TEST_F(TestNetUBAsyncEndpoint, NetUBAsyncEndpointPostSendRawSglEncryptPostFail)
     mDriver->mMapTseg.emplace(key, nullptr);
     NEP->mIsNeedEncrypt = true;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(true));
     MOCKER_CPP(&UBWorker::PostSendSgl).stubs().will(returnValue(1));
@@ -961,7 +961,7 @@ void TestNetUBSyncEndpoint::TearDown()
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendSeqFailed)
 {
     name = "NetUBSyncEndpointPostSendSeqFailed";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     int ret = NEP->PostSend(0, request, 0);
@@ -972,7 +972,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendSeqMemcpyFailed)
 {
     name = "NetUBSyncEndpointPostSendSeqMemcpyFailed";
     NEP->mIsNeedEncrypt = false;
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
@@ -983,7 +983,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendSeqMemcpyFailed)
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendSeq)
 {
     name = "NetUBSyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
 
@@ -1007,7 +1007,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendSeq)
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendSeqTwo)
 {
     name = "NetUBSyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&NetUBSyncEndpoint::InnerPostSend)
@@ -1060,7 +1060,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostWrite)
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendInfoFailed)
 {
     name = "NetUBSyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     UBSHcomNetTransOpInfo OpInfo{};
@@ -1072,7 +1072,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendInfoMemcpyFailed)
 {
     name = "NetUBSyncEndpointPostSend";
     NEP->mIsNeedEncrypt = false;
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
@@ -1084,7 +1084,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendInfoMemcpyFailed)
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendOpInfo)
 {
     name = "NetUBSyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
 
@@ -1109,7 +1109,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendOpInfo)
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendOpInfoTwo)
 {
     name = "NetUBSyncEndpointPostSend";
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&NetUBSyncEndpoint::InnerPostSend)
@@ -1265,7 +1265,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawAllTwo)
 
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawGetBufferErr)
 {
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(returnValue(false));
     int ret = NEP->PostSendRaw(request, 1);
@@ -1274,11 +1274,11 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawGetBufferErr)
 
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawCopyErr)
 {
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -1293,7 +1293,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawCopyErr)
 
 TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRaw)
 {
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&NetUBSyncEndpoint::InnerPostSend)
@@ -1387,7 +1387,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawSglEncryptCopyErr)
     mDriver->mMapTseg.emplace(key, nullptr);
     NEP->mIsNeedEncrypt = true;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(1));
@@ -1402,7 +1402,7 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawSglEncryptSecondGetBuf
     mDriver->mMapTseg.emplace(key, nullptr);
     NEP->mIsNeedEncrypt = true;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer))
         .then(returnValue(false));
@@ -1418,12 +1418,12 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawSglEncryptEncryptFail)
     mDriver->mMapTseg.emplace(key, nullptr);
     NEP->mIsNeedEncrypt = true;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer))
         .then(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 
@@ -1437,11 +1437,11 @@ TEST_F(TestNetUBSyncEndpoint, NetUBSyncEndpointPostSendRawSglEncryptInnerPostFai
     mDriver->mMapTseg.emplace(key, nullptr);
     NEP->mIsNeedEncrypt = true;
 
-    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool(UBMemoryRegionFixedBuffer::*)(uintptr_t &))
+    MOCKER_CPP(&UBMemoryRegionFixedBuffer::GetFreeBuffer, bool (UBMemoryRegionFixedBuffer::*)(uintptr_t &))
         .stubs()
         .will(invoke(MockGetFreeBuffer));
     MOCKER_CPP(&memcpy_s).stubs().will(returnValue(0));
-    MOCKER_CPP(&AesGcm128::Encrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Encrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(true));
     MOCKER_CPP(&NetUBSyncEndpoint::InnerPostSendSgl).stubs().will(returnValue(1));
@@ -1875,7 +1875,7 @@ TEST_F(TestNetUBSyncEndpoint, SyncReceiveDecryptErr)
 
     MOCKER_CPP(&UBSHcomNetMessage::AllocateIfNeed).stubs().will(returnValue(true));
 
-    MOCKER_CPP(&AesGcm128::Decrypt, bool(AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
+    MOCKER_CPP(&AesGcm128::Decrypt, bool (AesGcm128::*)(NetSecrets &, const void *, uint32_t, void *, uint32_t &))
         .stubs()
         .will(returnValue(false));
 

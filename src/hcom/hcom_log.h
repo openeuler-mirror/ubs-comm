@@ -87,7 +87,8 @@ public:
         // See NN_LOG_DEBUG, NN_LOG_INFO, NN_LOG_WARN and NN_LOG_ERROR
         const char *levelStr[] = {"DEBUG", "INFO", "WARN", "ERROR"};
 
-        struct timeval tv {};
+        struct timeval tv {
+        };
         char strTime[24];
 
         int ret = gettimeofday(&tv, nullptr);
@@ -95,7 +96,8 @@ public:
             std::cout << "Fail to get the current system time, " << ret << ".\n";
         }
         time_t timeStamp = tv.tv_sec;
-        struct tm localTime {};
+        struct tm localTime {
+        };
         struct tm *resultTime = localtime_r(&timeStamp, &localTime);
         if ((resultTime != nullptr) &&
             (strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S.", resultTime) != NN_NO0)) {

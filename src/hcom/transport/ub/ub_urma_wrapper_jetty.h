@@ -48,7 +48,8 @@ struct UBJettyExchangeInfo {
     bool isNeedSendHb = true;
 } __attribute__((packed));
 
-enum class UBJettyState : uint8_t {
+enum class UBJettyState : uint8_t
+{
     RESET, ///< 初始状态
     READY, ///< 可收发数据
     ERROR, ///< 调用 modify jetty error之后

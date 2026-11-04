@@ -68,7 +68,8 @@ inline void SetDriverConnHeader(ConnectHeader &h, uint8_t bandWidth, uint8_t dev
     h.devIndex = devIndex;
 }
 
-enum class ConnectState : int8_t {
+enum class ConnectState : int8_t
+{
     DISCONNECTED,
     CONNECTED,
 };
@@ -80,7 +81,8 @@ enum class ConnectState : int8_t {
  * >1 means no error and use this protocol for further processing
  * <0 means error
  */
-enum ConnectResp : int16_t {
+enum ConnectResp : int16_t
+{
     OK_PROTOCOL_TCP = 2, /* tell client using tcp socket to connect real worker */
     OK_PROTOCOL_UDS = 1, /* tell client using uds to connect real worker */
     OK = 0,

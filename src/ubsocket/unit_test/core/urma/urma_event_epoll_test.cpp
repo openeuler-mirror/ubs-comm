@@ -1399,6 +1399,9 @@ TEST_F(UrmaEventPollDispatcherTest, EpollWait_JfceEvent_NotReturned_InlinePollIn
     kernelEvt.data.ptr = &jfceEvent;
 
     g_epollWaitReturn = 1;
+    g_waitJfcOut = env.rawJfc.get();
+    g_waitJfcSeq[0] = 1;
+    g_waitJfcSeqLen = 1;
     g_pollJfcSeq[0] = 1;
     g_pollJfcSeq[1] = 0;
     g_pollJfcSeqLen = 2;
@@ -1408,7 +1411,7 @@ TEST_F(UrmaEventPollDispatcherTest, EpollWait_JfceEvent_NotReturned_InlinePollIn
 
     EXPECT_EQ(0, ret); /* JFCE 事件本身不外发给应用 */
     EXPECT_GE(g_cqeHandlerCalls, 1);
-    EXPECT_EQ(0, g_ackJfcCalls); /* jfc_->Ack removed */
+    EXPECT_EQ(1, g_ackJfcCalls); /* The aggregate poller acknowledges the JFCE notification. */
     EXPECT_GE(g_rearmJfcCalls, 1);
 }
 
