@@ -1,0 +1,483 @@
+name: UBS-comm-Validation
+
+on:
+  workflow_call:
+    inputs:
+      pr_id:
+        description: Pull request number
+        required: true
+        type: string
+      target_branch:
+        description: Pull request target branch
+        required: true
+        type: string
+      merge_commit_sha:
+        description: Pull request merge commit
+        required: true
+        type: string
+
+env:
+  PR_ID: ${{ inputs.pr_id }}
+  TARGET_BRANCH: ${{ inputs.target_branch }}
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  repository: read
+  pr: none
+  issue: none
+  note: none
+  project: none
+
+stages:
+  checks_stage:
+    name: Checks
+    fail_fast: false
+    jobs:
+      pre_commit:
+        name: pre-commit
+        if: ${{ inputs.target_branch == 'master' || inputs.target_branch == 'openEuler-24.03-LTS-SP3' }}
+        runs-on: [self-hosted, ubse, arm, cpu=8]
+        timeout-minutes: 30
+        container:
+          image: swr.cn-north-4.myhuaweicloud.com/ubscore/soe:latest
+
+        steps:
+          - name: Checkout PR merge code
+            uses: checkout
+            with:
+              ref: ${{ inputs.merge_commit_sha }}
+              allow-unsafe-pr-checkout: true
+
+          - name: Install pre-commit dependencies
+            run: |
+              set -euxo pipefail
+
+              sudo dnf install -y \
+                clang-tools-extra \
+                python3 \
+                python3-pip
+                
+              if ! command -v python >/dev/null 2>&1; then
+                sudo ln -s "$(command -v python3)" /usr/bin/python
+              fi
+              python --version
+              python3 --version
+              clang-format --version
+
+          - name: Prepare clang-format check
+            run: |
+              set -euxo pipefail
+
+              sed -i 's/, -i/, -n, --Werror/g' .pre-commit-config.yaml
+
+          - name: Run pre-commit
+            uses: openlibing/pre-commit-action@v1.0.1
+            env:
+              SKIP: run-build,run-build-test,clang-tidy,clang-tidy-test
+            with:
+              extra_args: --all-files
+
+          - name: Save result
+            if: ${{ always() }}
+            env:
+              CURRENT_JOB_STATUS: ${{ job.status }}
+            run: |
+              mkdir -p .ci-results
+              if [[ "${CURRENT_JOB_STATUS}" == "success" ]]; then
+                echo "SUCCESS" > .ci-results/pre-commit
+              else
+                echo "FAILED" > .ci-results/pre-commit
+              fi
+
+              echo "pre-commit: ${CURRENT_JOB_STATUS}" >> "${ATOMGIT_STEP_SUMMARY}"
+
+          - name: Upload result
+            if: ${{ always() }}
+            uses: upload-artifact
+            with:
+              name: ci-result-pre-commit
+              path: .ci-results/pre-commit
+
+      build_x86_64:
+        name: build-x86-64
+        if: ${{ inputs.target_branch == 'br_BeiMing.26.0.RC1' || inputs.target_branch == 'master' || inputs.target_branch == 'openEuler-24.03-LTS-SP3' }}
+        runs-on: [self-hosted, ubse, x86, cpu=16]
+        timeout-minutes: 90
+        container:
+          image: swr.cn-north-4.myhuaweicloud.com/ubscore/soe:latest
+
+        steps:
+          - name: Checkout PR merge code
+            uses: checkout
+            with:
+              ref: ${{ inputs.merge_commit_sha }}
+              allow-unsafe-pr-checkout: true
+
+          - name: Install dependencies
+            run: |
+              set -euxo pipefail
+
+              sudo yum install -y \
+                gcc \
+                gcc-c++ \
+                make \
+                cmake \
+                libboundscheck \
+                rdma-core-devel
+
+              gcc --version
+              g++ --version
+              cmake --version
+
+          - name: Build ubs-comm release
+            run: |
+              set -euxo pipefail
+
+              export PATH=/usr/bin:${PATH}
+              if [[ -f /opt/rh/devtoolset-7/enable ]]; then
+                source /opt/rh/devtoolset-7/enable
+              fi
+
+              export HCOM_CI_WORKSPACE="${PWD}"
+              export HCOM_BUILD_TYPE=release
+              export HCOM_BUILD_UB=ON
+              export HCOM_BUILD_HTRACER=on
+              export HCOM_BUILD_MULTICAST=on
+
+              bash build.sh
+
+          - name: Upload build output
+            uses: upload-artifact
+            with:
+              name: ubs-comm-release-x86_64
+              path: dist/
+
+          - name: Save result
+            if: ${{ always() }}
+            env:
+              CURRENT_JOB_STATUS: ${{ job.status }}
+            run: |
+              mkdir -p .ci-results
+              if [[ "${CURRENT_JOB_STATUS}" == "success" ]]; then
+                echo "SUCCESS" > .ci-results/x86_64
+              else
+                echo "FAILED" > .ci-results/x86_64
+              fi
+
+              echo "x86_64: ${CURRENT_JOB_STATUS}" >> "${ATOMGIT_STEP_SUMMARY}"
+
+          - name: Upload result
+            if: ${{ always() }}
+            uses: upload-artifact
+            with:
+              name: ci-result-x86-64
+              path: .ci-results/x86_64
+
+      build_aarch64:
+        name: build-aarch64
+        if: ${{ inputs.target_branch == 'br_BeiMing.26.0.RC1' || inputs.target_branch == 'master' || inputs.target_branch == 'openEuler-24.03-LTS-SP3' }}
+        runs-on: [self-hosted, ubse, arm, cpu=16]
+        timeout-minutes: 90
+        container:
+          image: swr.cn-north-4.myhuaweicloud.com/ubscore/soe:latest
+
+        steps:
+          - name: Checkout PR merge code
+            uses: checkout
+            with:
+              ref: ${{ inputs.merge_commit_sha }}
+              allow-unsafe-pr-checkout: true
+
+          - name: Install dependencies
+            run: |
+              set -euxo pipefail
+
+              export PATH=/usr/bin:${PATH}
+              if [[ -f /opt/rh/devtoolset-7/enable ]]; then
+                source /opt/rh/devtoolset-7/enable
+              fi
+
+              sudo yum install -y \
+                gcc \
+                gcc-c++ \
+                make \
+                cmake \
+                libboundscheck \
+                rdma-core-devel \
+                openssl \
+                openssl-devel
+
+              find /usr -name "libssl.so*"
+
+          - name: Build ubs-comm release
+            run: |
+              set -euxo pipefail
+
+              export PATH=/usr/bin:${PATH}
+              if [[ -f /opt/rh/devtoolset-7/enable ]]; then
+                source /opt/rh/devtoolset-7/enable
+              fi
+
+              export HCOM_CI_WORKSPACE="${PWD}"
+              export HCOM_BUILD_TYPE=release
+              export HCOM_BUILD_UB=ON
+              export HCOM_BUILD_HTRACER=on
+              export HCOM_BUILD_MULTICAST=on
+              export HCOM_BUILD_TESTS=on
+
+              bash build.sh
+
+          - name: Upload build output
+            uses: upload-artifact
+            with:
+              name: ubs-comm-release-aarch64
+              path: dist/
+
+          - name: Save result
+            if: ${{ always() }}
+            env:
+              CURRENT_JOB_STATUS: ${{ job.status }}
+            run: |
+              mkdir -p .ci-results
+              if [[ "${CURRENT_JOB_STATUS}" == "success" ]]; then
+                echo "SUCCESS" > .ci-results/aarch64
+              else
+                echo "FAILED" > .ci-results/aarch64
+              fi
+
+              echo "aarch64: ${CURRENT_JOB_STATUS}" >> "${ATOMGIT_STEP_SUMMARY}"
+
+          - name: Upload result
+            if: ${{ always() }}
+            uses: upload-artifact
+            with:
+              name: ci-result-aarch64
+              path: .ci-results/aarch64
+
+      dt:
+        name: DT
+        if: ${{ inputs.target_branch == 'br_BeiMing.26.0.RC1' || inputs.target_branch == 'master' || inputs.target_branch == 'openEuler-24.03-LTS-SP3' }}
+        runs-on: [self-hosted, ubse, arm, cpu=16]
+        timeout-minutes: 120
+        container:
+          image: swr.cn-north-4.myhuaweicloud.com/ubscore/openeuler-24.03-lts-sp3_ci_build:latest
+
+        steps:
+          - name: Checkout PR merge code
+            uses: checkout
+            with:
+              ref: ${{ inputs.merge_commit_sha }}
+              allow-unsafe-pr-checkout: true
+
+          - name: Install dependencies
+            run: |
+              set -euxo pipefail
+
+              export PATH=/usr/bin:${PATH}
+              if [[ -f /opt/rh/devtoolset-7/enable ]]; then
+                source /opt/rh/devtoolset-7/enable
+              fi
+
+              sudo yum install -y \
+                rpm-build \
+                make \
+                cmake \
+                gcc \
+                gcc-c++ \
+                glibc-devel \
+                openssl \
+                openssl-devel \
+                glib2-devel \
+                libnl3-devel \
+                kernel-devel \
+                libboundscheck \
+                rdma-core-devel \
+                libibverbs-devel \
+                git \
+                curl \
+                patch \
+                bc \
+                diffutils \
+                python3
+
+              find /usr -name "libssl.so*"
+
+          - name: Build ubs-comm and run tests
+            run: |
+              set -euxo pipefail
+
+              export PATH=/usr/bin:${PATH}
+              if [[ -f /opt/rh/devtoolset-7/enable ]]; then
+                source /opt/rh/devtoolset-7/enable
+              fi
+
+              export HCOM_CI_WORKSPACE="${PWD}"
+              export USE_URMA_STUB=ON
+              export UMQ_BUILD=on
+              export UBSOCKET_BUILD=on
+              export UBSOCKET_UT=on
+              export UBSOCKET_PASS_RATE=on
+              export UBSOCKET_COVERAGE=on
+              export HCOM_BUILD_TYPE=debug
+              export HCOM_BUILD_TESTS=on
+              export HCOM_BUILD_UB=on
+
+              bash build.sh
+
+          - name: Generate test and coverage reports
+            run: |
+              set -euxo pipefail
+
+              bash build/generate_gtest_report.sh
+              bash build/generate_lcov_report.sh
+
+          - name: Enforce UT and coverage thresholds
+            run: |
+              set -euxo pipefail
+
+              ubsocket_pass_file="src/ubsocket/build/pass_rate_summary.txt"
+              ubsocket_coverage_file="src/ubsocket/build/coverage_summary.txt"
+              hcom_gtest_report="tmp_build_dir/gtest_report.xml"
+              hcom_coverage_info="tmp_build_dir/lcov_report_filterd.info"
+
+              for file in \
+                "${ubsocket_pass_file}" \
+                "${ubsocket_coverage_file}" \
+                "${hcom_gtest_report}" \
+                "${hcom_coverage_info}"; do
+                if [[ ! -f "${file}" ]]; then
+                  echo "Required DT report not found: ${file}" >&2
+                  exit 1
+                fi
+              done
+
+              ubsocket_pass_rate="$(
+                awk -F': ' '/Pass Rate:/ {gsub(/%/, "", $2); print $2}' \
+                  "${ubsocket_pass_file}"
+              )"
+              if [[ -z "${ubsocket_pass_rate}" ]]; then
+                echo "Unable to read UBSocket pass rate" >&2
+                exit 1
+              fi
+              echo "UBSocket pass rate: ${ubsocket_pass_rate}%"
+              if ! awk -v actual="${ubsocket_pass_rate}" \
+                'BEGIN { exit !(actual >= 100) }'; then
+                echo "UBSocket pass rate is below 100%" >&2
+                exit 1
+              fi
+
+              cat "${ubsocket_coverage_file}"
+
+              python3 - "${hcom_gtest_report}" <<'PY'
+              import sys
+              import xml.etree.ElementTree as ET
+
+              root = ET.parse(sys.argv[1]).getroot()
+              tests = sum(
+                  int(node.attrib.get("tests", 0))
+                  for node in root.iter("testsuites")
+              )
+              failures = sum(
+                  int(node.attrib.get("failures", 0))
+                  + int(node.attrib.get("errors", 0))
+                  + int(node.attrib.get("disabled", 0))
+                  for node in root.iter("testsuites")
+              )
+              print(f"HCOM tests={tests}, failed/errors/disabled={failures}")
+              if tests == 0 or failures != 0:
+                  raise SystemExit(1)
+              PY
+
+              coverage_summary="$(
+                lcov --summary "${hcom_coverage_info}" \
+                  --rc branch_coverage=1 2>&1
+              )"
+              echo "${coverage_summary}"
+
+              hcom_lines="$(
+                awk '/lines/ {
+                  for (i = 1; i <= NF; i++) {
+                    if ($i ~ /%$/) {
+                      gsub(/%/, "", $i)
+                      print $i
+                      exit
+                    }
+                  }
+                }' <<<"${coverage_summary}"
+              )"
+              hcom_branches="$(
+                awk '/branches/ {
+                  for (i = 1; i <= NF; i++) {
+                    if ($i ~ /%$/) {
+                      gsub(/%/, "", $i)
+                      print $i
+                      exit
+                    }
+                  }
+                }' <<<"${coverage_summary}"
+              )"
+
+              if [[ -z "${hcom_lines}" ]]; then
+                echo "Unable to read HCOM line coverage" >&2
+                exit 1
+              fi
+
+              echo "HCOM line coverage: ${hcom_lines}%"
+              awk -v actual="${hcom_lines}" \
+                'BEGIN { exit !(actual >= 70) }' || {
+                echo "HCOM line coverage is below 70%" >&2
+                exit 1
+              }
+
+              if [[ -z "${hcom_branches}" ]]; then
+                if [[ "${coverage_summary}" == *"branches...: no data found"* ]]; then
+                  echo "HCOM branch coverage: no data collected; skip branch threshold"
+                else
+                  echo "Unable to read HCOM branch coverage" >&2
+                  exit 1
+                fi
+              else
+                echo "HCOM branch coverage: ${hcom_branches}%"
+                awk -v actual="${hcom_branches}" \
+                  'BEGIN { exit !(actual >= 40) }' || {
+                  echo "HCOM branch coverage is below 40%" >&2
+                  exit 1
+                }
+              fi
+
+          - name: Upload DT reports
+            if: ${{ always() }}
+            uses: upload-artifact
+            with:
+              name: ubs-comm-dt
+              path: |
+                tmp_build_dir/gtest_report.xml
+                tmp_build_dir/lcov_report_filterd.info
+                tmp_build_dir/gcover_report/
+                src/ubsocket/build/pass_rate_summary.txt
+                src/ubsocket/build/coverage_summary.txt
+                src/ubsocket/build/coverage_report/
+
+          - name: Save result
+            if: ${{ always() }}
+            env:
+              CURRENT_JOB_STATUS: ${{ job.status }}
+            run: |
+              mkdir -p .ci-results
+              if [[ "${CURRENT_JOB_STATUS}" == "success" ]]; then
+                echo "SUCCESS" > .ci-results/DT
+              else
+                echo "FAILED" > .ci-results/DT
+              fi
+
+              echo "DT: ${CURRENT_JOB_STATUS}" >> "${ATOMGIT_STEP_SUMMARY}"
+
+          - name: Upload result
+            if: ${{ always() }}
+            uses: upload-artifact
+            with:
+              name: ci-result-dt
+              path: .ci-results/DT
