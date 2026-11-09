@@ -104,7 +104,7 @@ stages:
       build_x86_64:
         name: build-x86-64
         if: ${{ inputs.target_branch == 'br_BeiMing.26.0.RC1' || inputs.target_branch == 'master' || inputs.target_branch == 'openEuler-24.03-LTS-SP3' }}
-        runs-on: [self-hosted, ubse, x86, cpu=16]
+        runs-on: [self-hosted, ubse, x86, cpu=8]
         timeout-minutes: 90
         container:
           image: swr.cn-north-4.myhuaweicloud.com/ubscore/soe:latest
