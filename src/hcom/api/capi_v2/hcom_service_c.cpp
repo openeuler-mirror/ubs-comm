@@ -921,13 +921,23 @@ int ubs_hcom_service_destroy(ubs_hcom_service service, const char *name)
         NN_LOG_ERROR("Failed to destroy as name is nullptr");
         return SER_INVALID_PARAM;
     }
-    g_serviceHandlerManager.RemoveAll(service);
-    g_serviceIdleHandlerManager.RemoveAll(service);
-    g_channelHandlerManager.RemoveAll(service);
-    g_secProVider.RemoveAll(service);
-    g_secValidator.RemoveAll(service);
-    g_TlsHdl.RemoveAll(service);
-    return reinterpret_cast<UBSHcomService *>(service)->Destroy(name);
+    auto *innerService = reinterpret_cast<UBSHcomService *>(service);
+    /* The service pointer is the key of the handler managers below, while Destroy() releases the last reference,
+       which deletes the service object itself. Take a temporary reference so the key stays valid until the adapters
+       are released; the release must happen after Destroy(), because transport threads (e.g. OOB TLS handshake
+       tasks) may still invoke these callbacks while they are winding down. */
+    innerService->IncreaseRef();
+    int32_t ret = innerService->Destroy(name);
+    if (ret == SER_OK) {
+        g_serviceHandlerManager.RemoveAll(service);
+        g_serviceIdleHandlerManager.RemoveAll(service);
+        g_channelHandlerManager.RemoveAll(service);
+        g_secProVider.RemoveAll(service);
+        g_secValidator.RemoveAll(service);
+        g_TlsHdl.RemoveAll(service);
+    }
+    innerService->DecreaseRef();
+    return ret;
 }
 
 int ubs_hcom_service_connect(ubs_hcom_service service, const char *serverUrl, ubs_hcom_channel *channel,
