@@ -16,6 +16,7 @@
 #include <malloc.h>
 #include <semaphore.h>
 #include <sys/time.h>
+#include <unistd.h>
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -502,19 +503,25 @@ class NetUuid {
 public:
     static inline uint64_t GenerateUuid()
     {
-        // 高32位：时间戳（ns级）
-        uint64_t timestamp = static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
+        /* High 32 bits: process-wide random prefix (generated and cached on first call) mixed with
+         * the current pid; low 32 bits: process-local auto-increment sequence. No time buckets are
+         * used; mixing pid keeps a forked child's prefix different from its parent, preventing both
+         * from producing duplicate (prefix, sequence) pairs. */
+        static const uint32_t procPrefix = ProcPrefix();
 
         gLock.Lock();
         uint32_t seqNo = gSeqNo++;
         gLock.Unlock();
 
-        return (timestamp << NN_NO32) | seqNo;
+        uint32_t prefix = procPrefix ^ static_cast<uint32_t>(getpid());
+        return (static_cast<uint64_t>(prefix) << NN_NO32) | seqNo;
     }
 
     static uint64_t GenerateUuid(const std::string &ip);
 
 private:
+    static uint32_t ProcPrefix();
+
     static uint32_t gSeqNo;
     static NetSpinLock gLock;
 };

@@ -1242,18 +1242,30 @@ NResult NetDriverSockWithOOB::HandleNewOobConn(OOBTCPConnection &conn)
         /* added worker as up context */
         sock->UpContext1(reinterpret_cast<uint64_t>(worker));
 
+        /* increase the per-ip connection number before the sock is exposed to the worker,
+         * so that the counter is always paired with the sock lifecycle and released exactly once */
+        OOBSecureProcess::SecProcessAddEpNum(ip, conn.ListenPort(), conn.GetIpAndPort(), mOobServers);
+        sock->MarkIpEpNumAdded();
+
         /* add to worker epoll */
         if (NN_UNLIKELY(worker->AddToEpoll(sock, EPOLLIN) != NN_OK)) {
             NN_LOG_ERROR("Failed to add sock " << sock->Name() << " to the epoll handle.");
+            DecreaseIpEpNum(sock);
             return NN_ERROR;
         }
     } else {
         NN_ASSERT_LOG_RETURN(false, NN_ERROR);
     }
 
-    OOBSecureProcess::SecProcessAddEpNum(ip, conn.ListenPort(), conn.GetIpAndPort(), mOobServers);
-
     return NN_OK;
+}
+
+void NetDriverSockWithOOB::DecreaseIpEpNum(Sock *sock)
+{
+    if (sock == nullptr || !sock->TakeIpEpNumOnce()) {
+        return;
+    }
+    OOBSecureProcess::SecProcessDelEpNum(sock->mLocalIp, sock->mListenPort, sock->PeerIpPort(), mOobServers);
 }
 
 NResult NetDriverSockWithOOB::HandleSockError(Sock *sock)
@@ -1279,7 +1291,7 @@ NResult NetDriverSockWithOOB::HandleSockError(Sock *sock)
     worker->RemoveFromEpoll(sock);
     sock->DealCbWithFailure();
     sock->Close();
-    OOBSecureProcess::SecProcessDelEpNum(sock->mLocalIp, sock->mListenPort, sock->PeerIpPort(), mOobServers);
+    DecreaseIpEpNum(sock);
     /* remove ep */
     sock->DecreaseRef();
     NN_ASSERT_LOG_RETURN(brokenEp.Get() != nullptr, NN_ERROR);
@@ -1311,8 +1323,7 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
     worker = reinterpret_cast<SockWorker *>((ctx).sock->UpContext1());
     if (NN_UNLIKELY(worker == nullptr)) {
         ctx.sock->Close();
-        OOBSecureProcess::SecProcessDelEpNum(ctx.sock->mLocalIp, ctx.sock->mListenPort, ctx.sock->PeerIpPort(),
-                                             mOobServers);
+        DecreaseIpEpNum(ctx.sock);
         NN_LOG_ERROR("Invalid worker for driver " << mName);
         return NN_EP_CLOSE;
     }
@@ -1409,8 +1420,7 @@ NResult NetDriverSockWithOOB::HandleSockRealConnect(SockOpContextInfo &ctx)
     if (result != NN_OK) {
         worker->RemoveFromEpoll(ctx.sock);
         ctx.sock->Close();
-        OOBSecureProcess::SecProcessDelEpNum(ctx.sock->mLocalIp, ctx.sock->mListenPort, ctx.sock->PeerIpPort(),
-                                             mOobServers);
+        DecreaseIpEpNum(ctx.sock);
         result = NN_EP_CLOSE;
     }
 

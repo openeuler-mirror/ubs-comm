@@ -15,6 +15,8 @@
 #include <linux/sockios.h>
 #include <sys/ioctl.h>
 
+#include <atomic>
+
 #include "net_common.h"
 #include "net_ctx_info_pool.h"
 #include "net_memory_region.h"
@@ -1542,6 +1544,22 @@ protected:
         mVersion = version;
     }
 
+    /*
+     * @brief mark that this sock has been counted into the per-ip connection number table
+     */
+    inline void MarkIpEpNumAdded()
+    {
+        mIpEpNumAdded = true;
+    }
+
+    /*
+     * @brief consume the counter exactly once, only the first caller gets true
+     */
+    inline bool TakeIpEpNumOnce()
+    {
+        return mIpEpNumAdded.exchange(false);
+    }
+
     int SSLSend(const void *buf, uint32_t size, uint32_t &writeLen)
     {
         int ret = HcomSsl::SslWrite(mSsl, buf, size);
@@ -1594,9 +1612,10 @@ protected:
     uint32_t mLocalIp = INVALID_IP;
     uint16_t mListenPort = 0;
     uint8_t mVersion = 0;
-    uint64_t mId = 0;          /* uid */
-    SockType mType = SOCK_TCP; /* sock type */
-    bool mInited = false;      /* inited or not */
+    std::atomic<bool> mIpEpNumAdded{false}; /* whether the per-ip connection number has been increased */
+    uint64_t mId = 0;                       /* uid */
+    SockType mType = SOCK_TCP;              /* sock type */
+    bool mInited = false;                   /* inited or not */
 
     std::mutex mIoMutex;
 

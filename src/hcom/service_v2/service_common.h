@@ -273,9 +273,21 @@ public:
             return false;
         }
 
+        /* CAS the connecting state before writing mEpVector: during the handshake tail,
+         * ServiceNewChannel iterates mEpVector without holding mLock. Enqueueing first and CAS-ing
+         * afterwards would leave a new ep in the connecting list when CAS fails, causing data races
+         * and dirty eps. */
+        if (NN_UNLIKELY(!mConnState.CAS(ConnectingEpState::NEW_EP, ConnectingEpState::NEW_EP))) {
+            NN_LOG_WARN("Failed to add ep as connecting state is not NEW_EP, uuid " << mUuid << ", ep size "
+                                                                                    << mEpVector.size());
+            return false;
+        }
+
         mEpState[mEpVector.size()].Set(NEP_ESTABLISHED);
         mEpVector.emplace_back(ep.Get());
-        return mConnState.CAS(ConnectingEpState::NEW_EP, ConnectingEpState::NEW_EP);
+        NN_LOG_DEBUG("Add ep " << ep->Id() << " into connecting channel, uuid " << mUuid << ", ep size "
+                               << mEpVector.size() << ", total link count " << mConnInfo.totalLinkCount);
+        return true;
     }
 
     bool AllEPBroken(uint16_t index);

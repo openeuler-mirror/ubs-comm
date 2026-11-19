@@ -10,8 +10,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <arpa/inet.h>
 #include <unistd.h>
+#include <fstream>
 #include <thread>
 
 #include "hcom_utils.h"
@@ -22,42 +22,43 @@ namespace hcom {
 NetSpinLock NetUuid::gLock;
 uint32_t NetUuid::gSeqNo = 0;
 
-uint64_t NetUuid::GenerateUuid(const std::string &ip)
-{
-    struct Uuid {
-        union {
-            struct {
-                uint64_t ip : 8;
-                uint64_t pid : 20;
-                uint64_t tid : 20;
-                uint64_t seqNo : 16;
-            };
-            uint64_t value;
-        };
-    };
+namespace {
 
-    if (ip.empty()) {
-        return GenerateUuid();
+/* Process-unique prefix: prefer /dev/urandom, fall back to pid and start time on failure.
+ * It does not depend on pid or time buckets, so duplicate ids cannot be produced when pids
+ * collide inside containers or the sequence restarts from zero after a process restart. */
+uint32_t GenerateUuidProcPrefix()
+{
+    uint32_t prefix = 0;
+    std::ifstream urandom("/dev/urandom", std::ios::in | std::ios::binary);
+    if (urandom.is_open()) {
+        urandom.read(reinterpret_cast<char *>(&prefix), sizeof(prefix));
+        if (!urandom) {
+            prefix = 0;
+        }
+        urandom.close();
     }
 
-    // 仅使用最低位ip地址，如"xx1.xx2.xx3.xx4"中的"xx4"
-    uint32_t ipNum = inet_addr(ip.c_str());
-    ipNum >>= 0x18;
+    if (prefix == NN_NO0) {
+        auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+        prefix = static_cast<uint32_t>(now) ^ (static_cast<uint32_t>(getpid()) << NN_NO16);
+    }
+    return prefix;
+}
 
-    int32_t pid = getpid();
-    auto tid = pthread_self();
+} // namespace
 
-    struct Uuid res;
-    res.ip = ipNum;
-    res.tid = tid;
-    res.pid = static_cast<uint64_t>(pid);
+uint32_t NetUuid::ProcPrefix()
+{
+    return GenerateUuidProcPrefix();
+}
 
-    gLock.Lock();
-    gSeqNo += 1;
-    res.seqNo = gSeqNo;
-    gLock.Unlock();
-
-    return res.value;
+uint64_t NetUuid::GenerateUuid(const std::string & /* ip */)
+{
+    /* Share the same generator with the no-arg version: ip is carried separately by SerUuid.ip and
+     * is no longer encoded into channelId, avoiding periodic id duplication caused by bit-field
+     * truncation (ip last octet only, pid/tid 20 bits each, seqNo 16 bits). */
+    return GenerateUuid();
 }
 
 } // namespace hcom

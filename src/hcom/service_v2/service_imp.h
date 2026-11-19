@@ -491,7 +491,8 @@ private:
         std::lock_guard<std::mutex> lockerChannel(mChannelMutex);
         auto ret = mChannelMap.emplace(channel.Get()->GetUuid(), channel);
         if (NN_UNLIKELY(!ret.second)) {
-            NN_LOG_ERROR("Failed to emplace channel " << channel.Get()->GetId() << ", already exist");
+            NN_LOG_ERROR("Failed to emplace channel " << channel.Get()->GetId() << ", already exist, uuid "
+                                                      << channel.Get()->GetUuid());
             return SER_ERROR;
         }
         return SER_OK;

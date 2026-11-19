@@ -12,6 +12,7 @@
 #include "service_imp.h"
 
 #include <arpa/inet.h>
+#include <unistd.h>
 #include <cstdint>
 #include <mutex>
 #include "securec.h"
@@ -604,10 +605,13 @@ int32_t HcomServiceImp::Connect(const std::string &serverUrl, UBSHcomChannelPtr 
 
     UBSHcomChannelPtr tmpChannel;
     const uint32_t version = 0;
-    SerConnInfo connInfo(version, NetUuid::GenerateUuid(mOobIp), mDriverPtrs.size(), mOptions.chBrokenPolicy, opt);
+    uint64_t newChannelId = NetUuid::GenerateUuid(mOobIp);
+    SerConnInfo connInfo(version, newChannelId, mDriverPtrs.size(), mOptions.chBrokenPolicy, opt);
 
     res = DoConnect(serverUrl, connInfo, opt.payload, tmpChannel);
     if (NN_UNLIKELY(res != SER_OK)) {
+        NN_LOG_ERROR("Failed to connect, channel id " << newChannelId << ", server url '" << serverUrl << "', result "
+                                                      << res);
         return res;
     }
 
@@ -632,10 +636,12 @@ int32_t HcomServiceImp::Connect(const std::string &serverUrl, UBSHcomChannelPtr 
     tmpChannel->SetBrokenInfo(connInfo.policy, mOptions.chBrokenHandler);
     if (NN_UNLIKELY(EmplaceChannelUuid(tmpChannel) != SER_OK)) {
         res = SER_CHANNEL_ID_DUP;
-        NN_LOG_ERROR("Failed to Emplace uuid");
+        NN_LOG_ERROR("Failed to emplace channel uuid " << uuid << ", channel id " << tmpChannel->GetId()
+                                                       << " already exist");
         Disconnect(tmpChannel);
         return res;
     }
+    NN_LOG_DEBUG("Connect channel success, uuid " << uuid << ", channel id " << tmpChannel->GetId());
     tmpChannel->SetMultiRail(mOptions.enableMultiRail, mOptions.multiRailThresh);
     tmpChannel->SetDriverNum(mDriverPtrs.size());
     tmpChannel->SetPayload(opt.payload);
@@ -1257,6 +1263,8 @@ SerResult HcomServiceImp::EmplaceNewEndpoint(const UBSHcomNetEndpointPtr &newEp,
             return SER_NEW_OBJECT_FAILED;
         }
         mNewEpMap.emplace(uuid, epInfo);
+        NN_LOG_DEBUG("Create connecting ep info, uuid " << uuid << ", channel id " << connInfo.channelId
+                                                        << ", expect total link count " << connInfo.totalLinkCount);
     } else {
         epInfo = iter->second;
         if (NN_UNLIKELY(epInfo == nullptr)) {
@@ -1298,9 +1306,26 @@ int32_t HcomServiceImp::ServiceHandleNewEndPoint(const std::string &ipPort, cons
         return SER_INVALID_PARAM;
     }
 
+    /* Idempotent guard: duplicate handshakes for the same channel id (client resend / reconnect /
+     * late link) may only create one channel. Otherwise the duplicate runs through the whole flow
+     * and fails at EmplaceChannelUuid, while the new ep has already overwritten the original ep's
+     * context, which looks like an existing channel being torn down ("Channel broken" on the peer). */
+    bool channelExist = false;
+    {
+        std::lock_guard<std::mutex> lockerChannel(mChannelMutex);
+        channelExist = (mChannelMap.find(uuid) != mChannelMap.end());
+    }
+    if (NN_UNLIKELY(channelExist)) {
+        NN_LOG_WARN("Duplicate channel handshake, uuid " << uuid << ", channel id " << connInfo.channelId << " from "
+                                                         << ipPort << ", reject the new ep");
+        std::lock_guard<std::mutex> lockerEp(mNewEpMutex);
+        mSecInfoMap.erase(connInfo.channelId);
+        return SER_CHANNEL_ID_DUP;
+    }
+
     ConnectingEpInfoPtr epInfo = nullptr;
     if (NN_UNLIKELY(EmplaceNewEndpoint(newEp, epInfo, connInfo, uuid) != SER_OK)) {
-        NN_LOG_ERROR("Failed to emplace new ep");
+        NN_LOG_ERROR("Failed to emplace new ep, uuid " << uuid << ", channel id " << connInfo.channelId);
         return SER_INVALID_PARAM;
     }
 
@@ -1309,14 +1334,37 @@ int32_t HcomServiceImp::ServiceHandleNewEndPoint(const std::string &ipPort, cons
 
     if (epInfo->mEpVector.size() < connInfo.totalLinkCount) {
         // not last one
+        NN_LOG_DEBUG("Channel connecting not finished, uuid " << uuid << ", received eps " << epInfo->mEpVector.size()
+                                                              << "/" << connInfo.totalLinkCount);
         return SER_OK;
     }
     // last one
     if (NN_UNLIKELY(!epInfo->mConnState.CAS(ConnectingEpState::NEW_EP, ConnectingEpState::NEW_CHANNEL))) {
-        NN_LOG_ERROR("Failed to validate ep state, maybe some eps has broken");
+        NN_LOG_ERROR("Failed to validate ep state, maybe some eps has broken, uuid " << uuid << ", ep size "
+                                                                                     << epInfo->mEpVector.size());
+        /* CAS can fail for two reasons: 1) the state is NEW_CHANNEL, meaning another thread has
+         * taken over channel creation and will adopt these eps, so UpCtx must not be touched;
+         * 2) the state is EP_BROKEN, meaning the connection group has failed and no channel will
+         * adopt them. In the latter case each ep's UpCtx must be cleared before the connecting info
+         * is released, otherwise the driver's broken callback dereferences the freed
+         * HcomConnectingEpInfo; stale handshake records are erased as well so that a later
+         * reconnect with the same channel id is not disturbed. */
+        if (epInfo->mConnState.Compare(ConnectingEpState::EP_BROKEN)) {
+            std::lock_guard<std::mutex> lockerEp(mNewEpMutex);
+            std::lock_guard<std::mutex> lockerInfo(epInfo->mLock);
+            for (auto &connectingEp : epInfo->mEpVector) {
+                if (connectingEp != nullptr) {
+                    connectingEp->UpCtx(0);
+                }
+            }
+            mNewEpMap.erase(uuid);
+            mSecInfoMap.erase(connInfo.channelId);
+        }
         return SER_EP_BROKEN_DURING_CONNECTING;
     }
     auto result = ServiceNewChannel(ipPort, connInfo, userPayLoad, epInfo->mEpVector);
+    NN_LOG_DEBUG("Channel handshake finished, uuid " << uuid << ", channel id " << connInfo.channelId << ", result "
+                                                     << result);
 
     std::lock_guard<std::mutex> lockerEp(mNewEpMutex);
     mNewEpMap.erase(uuid);
@@ -1338,27 +1386,30 @@ int32_t HcomServiceImp::ServiceNewChannel(const std::string &ipPort, SerConnInfo
     if (NN_UNLIKELY(channel->Initialize(ep, reinterpret_cast<uintptr_t>(mContextMemPool.Get()),
                                         reinterpret_cast<uintptr_t>(mPeriodicMgr.Get()),
                                         reinterpret_cast<uintptr_t>(mPgtable.Get()), mOptions.ctxStoreCapacity))) {
-        NN_LOG_ERROR("Failed to initialize channel");
+        NN_LOG_ERROR("Failed to initialize channel, channel id " << connInfo.channelId << ", ep size " << ep.size());
         return SER_NEW_OBJECT_FAILED;
     }
 
     NN_LOG_INFO(channel->ToString());
     std::string uuid;
     if (NN_UNLIKELY(GenerateUuid(ipPort, channel->GetId(), uuid) != SER_OK)) {
+        NN_LOG_ERROR("Failed to generate uuid, channel id " << channel->GetId());
         channel->UnInitialize();
         return SER_INVALID_PARAM;
     }
 
     channel->SetUuid(uuid);
     if (NN_UNLIKELY(EmplaceChannelUuid(channel) != SER_OK)) {
-        NN_LOG_ERROR("Failed to emplace uuid ");
+        NN_LOG_ERROR("Failed to emplace uuid " << uuid << ", channel id " << channel->GetId() << " already exist");
         channel->UnInitialize();
         return SER_CHANNEL_ID_DUP;
     }
+    NN_LOG_DEBUG("Create channel success, uuid " << uuid << ", channel id " << channel->GetId() << ", ep size "
+                                                 << ep.size());
 
     channel->SetBrokenInfo(static_cast<UBSHcomChannelBrokenPolicy>(connInfo.policy), mOptions.chBrokenHandler);
     if (NN_UNLIKELY(mOptions.chNewHandler == nullptr)) {
-        NN_LOG_ERROR("Failed to invoke user cb as handler is nullptr");
+        NN_LOG_ERROR("Failed to invoke user cb as handler is nullptr, channel id " << channel->GetId());
         EraseChannel(reinterpret_cast<uintptr_t>(channel.Get()));
         channel->UnInitialize();
         return SER_INVALID_PARAM;
@@ -1428,6 +1479,7 @@ void HcomServiceImp::EraseChannel(uintptr_t chPtr)
 {
     UBSHcomChannelPtr channel = reinterpret_cast<UBSHcomChannel *>(chPtr);
     std::lock_guard<std::mutex> lockerChannel(mChannelMutex);
+    NN_LOG_DEBUG("Erase channel, uuid " << channel->GetUuid() << ", channel id " << channel->GetId());
     mChannelMap.erase(channel->GetUuid());
 }
 
@@ -1447,9 +1499,13 @@ void HcomServiceImp::ServiceEndPointBroken(const UBSHcomNetEndpointPtr &netEp)
     if (ctx.connected == 0) {
         ConnectingEpInfoPtr epInfo = reinterpret_cast<HcomConnectingEpInfo *>(ctx.Ptr());
         if (NN_UNLIKELY(!epInfo->AllEPBroken(ctx.EpIdx()))) {
+            NN_LOG_DEBUG("Connecting ep broken, uuid " << epInfo->mUuid << ", ep index " << ctx.EpIdx()
+                                                       << ", wait for other eps");
             return;
         }
 
+        NN_LOG_WARN("All connecting eps broken, drop connecting channel, uuid " << epInfo->mUuid << ", channel id "
+                                                                                << epInfo->mConnInfo.channelId);
         std::lock_guard<std::mutex> lockerEp(mNewEpMutex);
         mNewEpMap.erase(epInfo->mUuid);
         mSecInfoMap.erase(epInfo->mConnInfo.channelId);
@@ -1463,6 +1519,8 @@ void HcomServiceImp::ServiceEndPointBroken(const UBSHcomNetEndpointPtr &netEp)
         return;
     }
 
+    NN_LOG_DEBUG("Endpoint broken, uuid " << channel->GetUuid() << ", channel id " << channel->GetId() << ", ep index "
+                                          << ctx.EpIdx());
     channel->SetEpBroken(ctx.EpIdx());
     if (!channel->AllEpBroken()) {
         NN_LOG_INFO("channel is not all broken");
