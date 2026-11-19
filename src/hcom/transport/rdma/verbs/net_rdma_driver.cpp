@@ -351,11 +351,17 @@ void NetDriverRDMA::DestroyEndpoint(UBSHcomNetEndpointPtr &ep)
     }
 
     NN_LOG_INFO("Verbs Destroy endpoint id " << ep->Id());
+    bool matched = false;
     mEndPointsMutex.lock();
-    auto result = mEndPoints.erase(ep->Id());
+    auto iter = mEndPoints.find(ep->Id());
+    /* Verify pointer identity to avoid erasing another ep that shares the same id on collision */
+    if (iter != mEndPoints.end() && iter->second.Get() == ep.Get()) {
+        mEndPoints.erase(iter);
+        matched = true;
+    }
     mEndPointsMutex.unlock();
 
-    if (result == 0) {
+    if (!matched) {
         NN_LOG_WARN("Verbs unable to destroy endpoint as ep " << ep->Id() << " doesn't exist, maybe cleaned already");
         return;
     }

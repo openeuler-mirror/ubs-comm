@@ -13,6 +13,7 @@
 #define OCK_NET_CLIENT_SERVER_RDMA_1234244441233_H
 #ifdef RDMA_BUILD_ENABLED
 #include <unordered_map>
+#include <vector>
 
 #include "hcom.h"
 
@@ -103,6 +104,7 @@ private:
                           uint32_t flags, uint8_t serverGrpNo, uint64_t ctx);
 
     void DestroyEpInWorker(RDMAWorker *worker);
+    void AbortCreateEp(UBSHcomNetEndpointPtr &ep);
     void DestroyEpByPortNum(int portNum);
     void HandleCqEvent(struct ibv_async_event *event);
     void HandlePortDown(int portNum);
@@ -155,6 +157,9 @@ private:
     std::thread mRdmaEventThread;
     std::atomic<bool> mEventStarted{false};
     NetHeartbeat *mHeartBeat = nullptr;
+    /* Eps that could not be parked in mEndPoints due to id collisions during aborted connection
+     * setup; kept alive here until the worker finishes reclamation. */
+    std::vector<UBSHcomNetEndpointPtr> mAbortingEndPoints;
     friend class NetHeartbeat;
 };
 } // namespace hcom

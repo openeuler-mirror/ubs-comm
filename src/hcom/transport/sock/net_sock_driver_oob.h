@@ -34,6 +34,9 @@ public:
 
     void UnInitialize() override;
 
+    /* decrease the per-ip connection number of this sock, valid only once per sock */
+    void DecreaseIpEpNum(Sock *sock);
+
     NResult Start() override;
     void Stop() override;
 

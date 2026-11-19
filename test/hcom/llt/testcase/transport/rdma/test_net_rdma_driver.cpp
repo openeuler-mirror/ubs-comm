@@ -671,6 +671,11 @@ TEST_F(TestNetDriverRDMA, DriverOobConnectEmplaceFailed)
     EXPECT_NE(ep.Get(), nullptr);
     driver->mEndPoints.emplace(epId, ep);
     MOCKER_CPP(&UBSHcomNetEndpoint::Id).stubs().will(returnValue(epId));
+    /* After a failed connection setup AbortCreateEp keeps qp->UpContext and closes the QP, so the
+     * worker thread reclaims it asynchronously; during reclamation it calls the mocked Id() again,
+     * which races with GlobalMockObject::verify() and triggers a mockcpp exception. This case only
+     * checks the Connect return value, so stub out that asynchronous side effect here. */
+    MOCKER_CPP(&NetDriverRDMAWithOob::AbortCreateEp).stubs();
 
     UBSHcomNetEndpointPtr ep1 = nullptr;
     NResult result = driver->Connect(BASE_IP, 9989, "a", ep1, 0, 0);

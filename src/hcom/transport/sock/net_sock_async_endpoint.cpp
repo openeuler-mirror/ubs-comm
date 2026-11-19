@@ -41,6 +41,11 @@ NetAsyncEndpointSock::NetAsyncEndpointSock(uint64_t id, Sock *sock, NetDriverSoc
 
 NetAsyncEndpointSock::~NetAsyncEndpointSock()
 {
+    /* release the per-ip connection number even if the ep is freed before the sock error event is handled */
+    if (mDriver != nullptr) {
+        mDriver->DecreaseIpEpNum(mSock);
+    }
+
     if (mWorker != nullptr && mSock != nullptr) {
         mWorker->RemoveFromEpoll(mSock);
     }

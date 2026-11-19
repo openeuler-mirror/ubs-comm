@@ -650,24 +650,26 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
     result = mNewEndPointHandler(conn.GetIpAndPort(), ep, payload);
     if (NN_UNLIKELY(result != RR_OK)) {
         NN_LOG_ERROR("Called new end point handler failed, result " << result);
-        // do later, remove mr for prepost
+        AbortCreateEp(ep);
         return NN_ERROR;
     }
 
     int8_t ready = 1;
     if ((result = conn.Send(&ready, sizeof(int8_t))) != RR_OK) {
         NN_LOG_ERROR("Failed to send ready signal to client, result " << result);
-        // do later, remove mr for prepost
+        AbortCreateEp(ep);
         return NN_ERROR;
     }
 
+    bool emplaced = false;
     {
         std::lock_guard<std::mutex> locker(mEndPointsMutex);
-        auto ret = mEndPoints.emplace(ep->Id(), ep);
-        if (!ret.second) {
-            NN_LOG_ERROR("Failed to emplace ep, ep Id " << ep->Id());
-            return NN_ERROR;
-        }
+        emplaced = mEndPoints.emplace(ep->Id(), ep).second;
+    }
+    if (NN_UNLIKELY(!emplaced)) {
+        NN_LOG_ERROR("Failed to emplace ep, ep Id " << ep->Id());
+        AbortCreateEp(ep);
+        return NN_ERROR;
     }
     reinterpret_cast<NetAsyncEndpoint *>(ep.Get())->GetRdmaEp()->Qp()->UpId(ep->Id());
     auto endCreateEp = NetMonotonic::TimeUs();
@@ -676,6 +678,9 @@ int NetDriverRDMAWithOob::NewConnectionCB(OOBTCPConnection &conn)
         NN_LOG_WARN("Create endpoint time too long :" << createEpTime << " us.");
     }
 
+    /* Mark before counting: a stale mark only makes DelEpNum find no match and become a no-op;
+     * it can never miss a decrement. */
+    asyncEp->MarkIpEpNumAdded();
     OOBSecureProcess::SecProcessAddEpNum(ip, conn.ListenPort(), conn.GetIpAndPort(), mOobServers);
 
     NN_LOG_INFO("New connection from " << conn.GetIpAndPort() << " established, async ep id " << ep->Id()
@@ -1286,17 +1291,20 @@ NResult NetDriverRDMAWithOob::Connect(const OOBTCPClientPtr &client, const std::
     if (result != 0 || ready != 1) {
         NN_LOG_ERROR("Failed to connect to server as server not responses or return not ready, result " << result);
         // do later: handle pre post-ed mr
+        AbortCreateEp(ep);
         return NN_ERROR;
     }
 
     ep->State().Set(NEP_ESTABLISHED);
+    bool emplaced = false;
     {
         std::lock_guard<std::mutex> locker(mEndPointsMutex);
-        auto ret = mEndPoints.emplace(ep->Id(), ep);
-        if (!ret.second) {
-            NN_LOG_ERROR("Failed to emplace ep, ep Id " << ep->Id());
-            return NN_ERROR;
-        }
+        emplaced = mEndPoints.emplace(ep->Id(), ep).second;
+    }
+    if (NN_UNLIKELY(!emplaced)) {
+        NN_LOG_ERROR("Failed to emplace ep, ep Id " << ep->Id());
+        AbortCreateEp(ep);
+        return NN_ERROR;
     }
 
     NN_LOG_INFO("New connect to tcp:" << client->GetServerIp() << ":" << client->GetServerPort()
@@ -1601,6 +1609,41 @@ void NetDriverRDMAWithOob::ProcessErrorOneSideDone(RDMAOpContextInfo *ctx)
     OneSideDoneCB(ctx);
 }
 
+void NetDriverRDMAWithOob::AbortCreateEp(UBSHcomNetEndpointPtr &ep)
+{
+    auto asyncEp = ep.ToChild<NetAsyncEndpoint>();
+    if (NN_UNLIKELY(asyncEp == nullptr)) {
+        NN_LOG_WARN("Abort create ep failed as ep is invalid in Driver " << mName);
+        return;
+    }
+
+    /* When connection setup fails, the QP's UpContext still points to this ep and the pre-posted
+     * RECV WRs have not been reclaimed. Releasing the ep directly would make the worker dereference
+     * a freed QP/ep while handling flush completions. Keep the ep alive here, leave qp->UpContext
+     * unchanged and close the QP to trigger WR flush; the worker thread then reclaims everything in
+     * ProcessEpError after draining the context. Do not clear UpContext here, otherwise the worker
+     * skips reclamation and the QP is destroyed too early. */
+    /* The service-layer context may already be released with mNewEpMap; clear it to prevent the
+     * broken handler from dereferencing a dangling pointer. */
+    ep->UpCtx(0);
+
+    {
+        std::lock_guard<std::mutex> locker(mEndPointsMutex);
+        if (NN_UNLIKELY(!mEndPoints.emplace(ep->Id(), ep).second)) {
+            /* On id collision the ep cannot be parked by id; hold a reference in a separate
+             * container so that it stays alive until the worker finishes reclamation. */
+            NN_LOG_WARN("Ep id " << ep->Id() << " already exists, cache aborting ep in abort list");
+            mAbortingEndPoints.push_back(ep);
+        }
+    }
+
+    /* Mark heartbeat broken: if the worker never produces a flush completion event, the heartbeat
+     * thread calls ProcessEpError as a fallback for reclamation, preventing the ep/QP from
+     * lingering in mEndPoints until the driver is destroyed. */
+    asyncEp->SetHbBrokenEp();
+    ep->Close();
+}
+
 void NetDriverRDMAWithOob::ProcessEpError(uintptr_t ep)
 {
     auto epPtr = reinterpret_cast<NetAsyncEndpoint *>(ep);
@@ -1649,9 +1692,27 @@ void NetDriverRDMAWithOob::ProcessEpError(uintptr_t ep)
     NN_LOG_WARN("Handle Ep state " << UBSHcomNEPStateToString(epPtr->State().Get()) << ", Ep id " << epPtr->Id()
                                    << " , try call Ep broken handle");
     UBSHcomNetEndpointPtr netEp = reinterpret_cast<UBSHcomNetEndpoint *>(epPtr);
-    OOBSecureProcess::SecProcessDelEpNum(epPtr->LocalIp(), epPtr->ListenPort(), epPtr->PeerIpAndPort(), mOobServers);
+    /* Only eps that were actually counted into the per-ip connection number are decremented;
+     * eps from failed connection setup or the client side were never counted. */
+    if (epPtr->TakeIpEpNumOnce()) {
+        OOBSecureProcess::SecProcessDelEpNum(epPtr->LocalIp(), epPtr->ListenPort(), epPtr->PeerIpAndPort(),
+                                             mOobServers);
+    }
     mEndPointBrokenHandler(netEp);
     DestroyEndpoint(netEp);
+
+    /* Release the last reference of an ep parked by AbortCreateEp once the worker is done. */
+    UBSHcomNetEndpointPtr abortingEp;
+    {
+        std::lock_guard<std::mutex> locker(mEndPointsMutex);
+        for (auto iter = mAbortingEndPoints.begin(); iter != mAbortingEndPoints.end(); ++iter) {
+            if (iter->Get() == epPtr) {
+                abortingEp = *iter;
+                mAbortingEndPoints.erase(iter);
+                break;
+            }
+        }
+    }
 }
 
 void NetDriverRDMAWithOob::ProcessQPError(RDMAOpContextInfo *ctx)

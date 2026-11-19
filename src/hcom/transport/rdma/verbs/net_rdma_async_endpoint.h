@@ -13,6 +13,8 @@
 #define OCK_HCOM_NET_ASYNC_ENDPOINT_RDMA_H
 #ifdef RDMA_BUILD_ENABLED
 
+#include <atomic>
+
 #include "hcom.h"
 #include "hcom_utils.h"
 #include "net_monotonic.h"
@@ -247,6 +249,22 @@ private:
         return reinterpret_cast<RDMAWorker *>(mEp->Qp()->UpContext1());
     }
 
+    /*
+     * @brief mark that the per-ip connection number has been increased
+     */
+    inline void MarkIpEpNumAdded()
+    {
+        mIpEpNumAdded = true;
+    }
+
+    /*
+     * @brief consume the counter exactly once, only the first caller gets true
+     */
+    inline bool TakeIpEpNumOnce()
+    {
+        return mIpEpNumAdded.exchange(false);
+    }
+
     NResult PostSendRawNoCpyEncrypt(const UBSHcomNetTransRequest &request, uint32_t seqNo);
 
     RDMAAsyncEndPoint *mEp = nullptr;
@@ -260,6 +278,7 @@ private:
     uint64_t mHbMrSize = 0;
     uint64_t mTargetHbTime = 0;
     uint16_t mHeartBeatIdleTime = NN_NO60;
+    std::atomic<bool> mIpEpNumAdded{false}; /* whether the per-ip connection number has been increased */
 
     friend class NetDriverRDMAWithOob;
     friend class NetHeartbeat;
