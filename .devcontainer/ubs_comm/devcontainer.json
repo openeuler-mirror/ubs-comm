@@ -1,0 +1,43 @@
+{
+    // 1.使用vscode，安装remote SSH，Dev Container插件。
+    // 2.本地vscode远程连接仿真环境，并在仿真环境命令行git拉取当前分支代码。
+    // 3.-在远程vscode窗口，按 Ctrl+Shift+P 打开命令面板
+    //    - 输入并选择: Dev Containers: Reopen in Container
+    //    - VSCode 会扫描 .devcontainer/ 下的配置，并根据镜像拉起容器，列表里会出现 "UBSE UT (openEuler aarch64)" (因为它在 .devcontainer/ubse/ 子目录下)
+    // 4.等待容器就绪，在容器里代码默认存放在/workspace目录，运行bash build.sh ut即可运行UT。
+      "name": "UBS-COMM UT (openEuler aarch64)",
+      "image": "swr.cn-north-4.myhuaweicloud.com/ubscore/soe:latest",
+      "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+      "workspaceFolder": "/workspace",
+      "customizations": {
+        "vscode": {
+          "extensions": [
+            "ms-vscode.cpptools",
+            "ms-vscode.cpptools-extension-pack",
+            "ms-vscode.cmake-tools",
+            "twxs.cmake",
+            "editorconfig.editorconfig",
+            "redhat.vscode-yaml"
+          ],
+          "settings": {
+            "C_Cpp.intelliSenseEngine": "default",
+            "C_Cpp.formatting": "clangFormat",
+            "cmake.configureOnOpen": false,
+            "[c]": {
+              "editor.formatOnSave": true,
+              "editor.defaultFormatter": "ms-vscode.cpptools"
+            },
+            "[cpp]": {
+              "editor.formatOnSave": true,
+              "editor.defaultFormatter": "ms-vscode.cpptools"
+            },
+            "files.eol": "\n",
+            "files.trimTrailingWhitespace": true,
+            "files.insertFinalNewline": true
+          }
+        }
+      },
+      "postCreateCommand": "dnf install -y ninja-build || echo 'ninja-build install skipped; build.sh will fall back to Makefiles'",
+      "remoteUser": "root"
+    }
+    
